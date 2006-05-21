@@ -1,0 +1,291 @@
+/*
+ * NTLM and NTLMv2 authentication mechanism.
+ *
+ * Copyright (c) 2004 Andrey Panin <pazke@donpac.ru>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published 
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+
+#include "common.h"
+#include "mech.h"
+#include "passdb.h"
+#include "str.h"
+#include "buffer.h"
+#include "hex-binary.h"
+#include "safe-memset.h"
+
+#include "ntlm.h"
+
+struct ntlm_auth_request {
+	struct auth_request auth_request;
+
+	pool_t pool;
+
+	/* requested: */
+	bool ntlm2_negotiated;
+	bool unicode_negotiated;
+	const unsigned char *challenge;
+
+	/* received: */
+	struct ntlmssp_response *response;
+};
+
+static int lm_verify_credentials(struct ntlm_auth_request *request,
+				 const char *credentials)
+{
+	const unsigned char *client_response;
+	unsigned char lm_response[LM_RESPONSE_SIZE];
+	unsigned char hash[LM_HASH_SIZE];
+	unsigned int response_length;
+	buffer_t *hash_buffer;
+
+	response_length =
+		ntlmssp_buffer_length(request->response, lm_response);
+	client_response = ntlmssp_buffer_data(request->response, lm_response);
+
+	if (response_length < LM_RESPONSE_SIZE) {
+                auth_request_log_error(&request->auth_request, "ntlm",
+			"LM response length is too small");
+		return FALSE;
+	}
+
+	hash_buffer = buffer_create_data(request->auth_request.pool,
+					 hash, sizeof(hash));
+	if (hex_to_binary(credentials, hash_buffer) < 0) {
+                auth_request_log_error(&request->auth_request, "ntlm",
+				       "passdb credentials are not in hex");
+		return FALSE;
+	}
+
+	ntlmssp_v1_response(hash, request->challenge, lm_response);
+	return memcmp(lm_response, client_response, LM_RESPONSE_SIZE) == 0;
+}
+
+static void
+lm_credentials_callback(enum passdb_result result,
+			const char *credentials,
+			struct auth_request *auth_request)
+{
+	struct ntlm_auth_request *request =
+		(struct ntlm_auth_request *)auth_request;
+
+	switch (result) {
+	case PASSDB_RESULT_OK:
+		if (lm_verify_credentials(request, credentials))
+			auth_request_success(auth_request, NULL, 0);
+		else
+			auth_request_fail(auth_request);
+		break;
+	case PASSDB_RESULT_INTERNAL_FAILURE:
+		auth_request_internal_failure(auth_request);
+		break;
+	default:
+		auth_request_fail(auth_request);
+		break;
+	}
+}
+
+static int ntlm_verify_credentials(struct ntlm_auth_request *request,
+				   const char *credentials)
+{
+        struct auth_request *auth_request = &request->auth_request;
+	const unsigned char *client_response;
+	unsigned char hash[NTLMSSP_HASH_SIZE];
+	unsigned int response_length;
+	buffer_t *hash_buffer;
+
+	response_length =
+		ntlmssp_buffer_length(request->response, ntlm_response);
+	client_response = ntlmssp_buffer_data(request->response, ntlm_response);
+
+	if (response_length == 0) {
+		/* try LM authentication unless NTLM2 was negotiated */
+		return request->ntlm2_negotiated ? -1 : 0;
+	}
+
+	hash_buffer = buffer_create_data(auth_request->pool,
+					 hash, sizeof(hash));
+	if (hex_to_binary(credentials, hash_buffer) < 0) {
+                auth_request_log_error(&request->auth_request, "ntlm",
+				       "passdb credentials are not in hex");
+		return 0;
+	}
+
+	if (response_length > NTLMSSP_RESPONSE_SIZE) {
+		unsigned char ntlm_v2_response[NTLMSSP_V2_RESPONSE_SIZE];
+		const unsigned char *blob =
+			client_response + NTLMSSP_V2_RESPONSE_SIZE;
+
+		/*
+		 * Authentication target == NULL because we are acting
+		 * as a standalone server, not as NT domain member.
+		 */
+		ntlmssp_v2_response(auth_request->user, NULL,
+				    hash, request->challenge, blob,
+				    response_length - NTLMSSP_V2_RESPONSE_SIZE,
+				    ntlm_v2_response);
+
+		return memcmp(ntlm_v2_response, client_response,
+			      NTLMSSP_V2_RESPONSE_SIZE) == 0 ? 1 : -1;
+	} else {
+		unsigned char ntlm_response[NTLMSSP_RESPONSE_SIZE];
+		const unsigned char *client_lm_response =
+			ntlmssp_buffer_data(request->response, lm_response);
+
+		if (request->ntlm2_negotiated)
+			ntlmssp2_response(hash, request->challenge,
+					  client_lm_response,
+					  ntlm_response);
+		else 
+			ntlmssp_v1_response(hash, request->challenge,
+					    ntlm_response);
+
+		return memcmp(ntlm_response, client_response,
+			      NTLMSSP_RESPONSE_SIZE) == 0 ? 1 : -1;
+	}
+}
+
+static void
+ntlm_credentials_callback(enum passdb_result result,
+			  const char *credentials,
+			  struct auth_request *auth_request)
+{
+	struct ntlm_auth_request *request =
+		(struct ntlm_auth_request *)auth_request;
+	int ret;
+
+	switch (result) {
+	case PASSDB_RESULT_OK:
+		ret = ntlm_verify_credentials(request, credentials);
+		if (ret > 0) {
+			auth_request_success(auth_request, NULL, 0);
+			return;
+		}
+		if (ret < 0) {
+			auth_request_fail(auth_request);
+			return;
+		}
+		break;
+	case PASSDB_RESULT_INTERNAL_FAILURE:
+		auth_request_internal_failure(auth_request);
+		return;
+	default:
+		break;
+	}
+
+	/* NTLM credentials not found or didn't want to use them,
+	   try with LM credentials */
+	auth_request_lookup_credentials(auth_request, PASSDB_CREDENTIALS_LANMAN,
+					lm_credentials_callback);
+}
+
+static void
+mech_ntlm_auth_continue(struct auth_request *auth_request,
+			const unsigned char *data, size_t data_size)
+{
+	struct ntlm_auth_request *request =
+		(struct ntlm_auth_request *)auth_request;
+	const char *error;
+
+	if (!request->challenge) {
+		const struct ntlmssp_request *ntlm_request =
+			(const struct ntlmssp_request *)data;
+		const struct ntlmssp_challenge *message;
+		size_t message_size;
+		uint32_t flags;
+
+		if (!ntlmssp_check_request(ntlm_request, data_size, &error)) {
+			auth_request_log_info(auth_request, "ntlm",
+				"invalid NTLM request: %s", error);
+			auth_request_fail(auth_request);
+			return;
+		}
+
+		message = ntlmssp_create_challenge(request->pool, ntlm_request,
+						   &message_size);
+		flags = read_le32(&message->flags);
+		request->ntlm2_negotiated = flags & NTLMSSP_NEGOTIATE_NTLM2;
+		request->unicode_negotiated = flags & NTLMSSP_NEGOTIATE_UNICODE;
+		request->challenge = message->challenge;
+
+		auth_request->callback(auth_request,
+				       AUTH_CLIENT_RESULT_CONTINUE,
+				       message, message_size);
+	} else {
+		const struct ntlmssp_response *response =
+			(const struct ntlmssp_response *)data;
+		const char *username;
+
+		if (!ntlmssp_check_response(response, data_size, &error)) {
+			auth_request_log_info(auth_request, "ntlm",
+				"invalid NTLM response: %s", error);
+			auth_request_fail(auth_request);
+			return;
+		}
+
+		request->response = p_malloc(request->pool, data_size);
+		memcpy(request->response, response, data_size);
+
+		username = ntlmssp_t_str(request->response, user, 
+					 request->unicode_negotiated);
+
+		if (!auth_request_set_username(auth_request, username, &error)) {
+			auth_request_log_info(auth_request, "ntlm",
+					      "%s", error);
+			auth_request_fail(auth_request);
+			return;
+		}
+
+		auth_request_lookup_credentials(auth_request,
+						PASSDB_CREDENTIALS_NTLM,
+						ntlm_credentials_callback);
+	}
+}
+
+static void
+mech_ntlm_auth_initial(struct auth_request *request,
+		       const unsigned char *data, size_t data_size)
+{
+	if (data_size == 0) {
+		request->callback(request, AUTH_CLIENT_RESULT_CONTINUE,
+				  NULL, 0);
+	} else {
+		mech_ntlm_auth_continue(request, data, data_size);
+	}
+}
+
+static void
+mech_ntlm_auth_free(struct auth_request *request)
+{
+	pool_unref(request->pool);
+}
+
+static struct auth_request *mech_ntlm_auth_new(void)
+{
+	struct ntlm_auth_request *request;
+	pool_t pool;
+
+	pool = pool_alloconly_create("ntlm_auth_request", 1024);
+	request = p_new(pool, struct ntlm_auth_request, 1);
+	request->pool = pool;
+
+	request->auth_request.pool = pool;
+	return &request->auth_request;
+}
+
+const struct mech_module mech_ntlm = {
+	"NTLM",
+
+	MEMBER(flags) MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE,
+
+	MEMBER(passdb_need_plain) FALSE,
+	MEMBER(passdb_need_credentials) TRUE,
+
+	mech_ntlm_auth_new,
+	mech_ntlm_auth_initial,
+	mech_ntlm_auth_continue,
+	mech_ntlm_auth_free
+};

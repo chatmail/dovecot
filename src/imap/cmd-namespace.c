@@ -1,0 +1,53 @@
+/* Copyright (C) 2003 Timo Sirainen */
+
+#include "common.h"
+#include "str.h"
+#include "imap-quote.h"
+#include "commands.h"
+#include "namespace.h"
+
+static void list_namespaces(struct namespace *ns, enum namespace_type type,
+			    string_t *str)
+{
+	bool found = FALSE;
+
+	while (ns != NULL) {
+		if (ns->type == type && !ns->hidden) {
+			if (!found) {
+				str_append_c(str, '(');
+				found = TRUE;
+			}
+			str_append_c(str, '(');
+			imap_quote_append_string(str, ns->prefix, FALSE);
+			str_append(str, " \"");
+			str_append(str, ns->sep_str);
+			str_append(str, "\")");
+		}
+
+		ns = ns->next;
+	}
+
+	if (found)
+		str_append_c(str, ')');
+	else
+		str_append(str, "NIL");
+}
+
+bool cmd_namespace(struct client_command_context *cmd)
+{
+	struct client *client = cmd->client;
+	string_t *str;
+
+	str = t_str_new(256);
+	str_append(str, "* NAMESPACE ");
+
+        list_namespaces(client->namespaces, NAMESPACE_PRIVATE, str);
+	str_append_c(str, ' ');
+	list_namespaces(client->namespaces, NAMESPACE_SHARED, str);
+	str_append_c(str, ' ');
+        list_namespaces(client->namespaces, NAMESPACE_PUBLIC, str);
+
+	client_send_line(client, str_c(str));
+	client_send_tagline(cmd, "OK Namespace completed.");
+	return TRUE;
+}

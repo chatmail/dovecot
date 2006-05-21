@@ -1,0 +1,1729 @@
+AC_PREREQ([2.59])
+AC_INIT([dovecot],[1.0.beta8],[dovecot@dovecot.org])
+AC_CONFIG_SRCDIR([src])
+
+AM_INIT_AUTOMAKE
+
+AM_MAINTAINER_MODE
+
+AC_ISC_POSIX
+AC_PROG_CC
+AC_PROG_CPP
+AC_HEADER_STDC
+AC_C_INLINE
+AC_PROG_LIBTOOL
+AM_ICONV
+
+AC_CHECK_HEADERS(strings.h stdint.h unistd.h dirent.h \
+  sys/uio.h sys/sysmacros.h sys/resource.h sys/select.h libgen.h \
+  sys/quota.h sys/fs/ufs_quota.h ufs/ufs/quota.h jfs/quota.h \
+  mntent.h sys/mnttab.h sys/event.h sys/time.h sys/mkdev.h)
+
+AC_ARG_ENABLE(ipv6,
+[  --enable-ipv6           Enable IPv6 support (default)],
+	if test x$enableval = xno; then
+		want_ipv6=no
+	else
+		want_ipv6=yes
+	fi,
+	want_ipv6=yes)
+
+AC_ARG_ENABLE(debug,
+[  --enable-debug          Enable some extra checks for debugging],
+	if test x$enableval = xyes; then
+		AC_DEFINE(DEBUG,, Build with extra debugging checks)
+	fi)
+
+AC_ARG_ENABLE(asserts,
+[  --enable-asserts        Enable asserts (default)],
+	if test x$enableval = xno; then
+		AC_DEFINE(DISABLE_ASSERTS,, Disable asserts)
+	fi)
+
+AC_ARG_WITH(file-offset-size,
+[  --with-file-offset-size=BITS  Set size of file offsets. Usually 32 or 64.
+                          (default: 64 if available)],
+	preferred_off_t_bits=$withval,
+	preferred_off_t_bits=64)
+
+AC_ARG_WITH(mem-align,
+[  --with-mem-align=BYTES  Set the memory alignment (default: 8)],
+	mem_align=$withval,
+	mem_align=8)
+
+AC_ARG_WITH(ioloop,
+[  --with-ioloop=IOLOOP    Specify the I/O loop method to use
+                          (epoll, kqueue, poll; default is poll)],
+	ioloop=$withval,
+	ioloop=)
+
+AC_ARG_WITH(notify,
+[  --with-notify=IOLOOP    Specify the file system notification method to use
+                          (dnotify, inotify, kqueue, none;
+                           default dnotify if compilable, otherwise none)],
+	notify=$withval,
+	notify=)
+
+AC_ARG_WITH(passwd,
+[  --with-passwd           Build with /etc/passwd support (default)],
+	if test x$withval = xno; then
+		want_passwd=no
+	else
+		want_passwd=yes
+	fi,
+	want_passwd=yes)
+
+AC_ARG_WITH(passwd-file,
+[  --with-passwd-file      Build with passwd-like file support (default)],
+	if test x$withval = xno; then
+		want_passwd_file=no
+	else
+		want_passwd_file=yes
+	fi,
+	want_passwd_file=yes)
+
+AC_ARG_WITH(shadow,
+[  --with-shadow           Build with shadow password support (default)],
+	if test x$withval = xno; then
+		want_shadow=no
+	else
+		want_shadow=yes
+	fi,
+	want_shadow=yes)
+
+AC_ARG_WITH(pam,
+[  --with-pam              Build with PAM support (default)],
+	if test x$withval = xno; then
+		want_pam=no
+	else
+		want_pam=yes
+	fi,
+	want_pam=yes)
+
+AC_ARG_WITH(checkpassword,
+[  --with-checkpassword    Build with checkpassword support (default)],
+	if test x$withval = xno; then
+		want_checkpassword=no
+	else
+		want_checkpassword=yes
+	fi,
+	want_checkpassword=yes)
+
+AC_ARG_WITH(bsdauth,
+[  --with-bsdauth          Build with BSD authentication support (default)],
+	if test x$withval = xno; then
+		want_bsdauth=no
+	else
+		want_bsdauth=yes
+	fi,
+	want_bsdauth=yes)
+
+AC_ARG_WITH(gssapi,
+[  --with-gssapi           Build with GSSAPI authentication support (default)],
+    if test x$withval = xno; then
+		want_gssapi=no
+	else
+		want_gssapi=yes
+	fi,
+	want_gssapi=yes)
+
+AC_ARG_WITH(ldap,
+[  --with-ldap             Build with LDAP support],
+	if test x$withval = xno; then
+		want_ldap=no
+	else
+		want_ldap=yes
+	fi,
+	want_ldap=no)
+
+AC_ARG_WITH(vpopmail,
+[  --with-vpopmail         Build with vpopmail support (default)],
+	if test x$withval = xno; then
+		want_vpopmail=no
+	else
+		want_vpopmail=yes
+	fi,
+	want_vpopmail=yes)
+
+AC_ARG_WITH(static-userdb,
+[  --with-static-userdb    Build with static userdb support (default)],
+	if test x$withval = xno; then
+		want_static_userdb=no
+	else
+		want_static_userdb=yes
+	fi,
+	want_static_userdb=yes)
+
+AC_ARG_WITH(prefetch-userdb,
+[  --with-prefetch-userdb  Build with prefetch userdb support (default)],
+	if test x$withval = xno; then
+		want_prefetch_userdb=no
+	else
+		want_prefetch_userdb=yes
+	fi,
+	want_prefetch_userdb=yes)
+
+dnl The --with-sql is useful only if Dovecot is being built with all the SQL
+dnl drivers as modules. If any SQL driver is built-in, this option is ignored.
+AC_ARG_WITH(sql,
+[  --with-sql              Build with generic SQL support],
+	if test x$withval = xno; then
+		want_sql=no
+	else
+		want_sql=yes
+	fi,
+	want_sql=no)
+
+AC_ARG_WITH(pgsql,
+[  --with-pgsql            Build with PostgreSQL driver support],
+	if test x$withval = xno; then
+		want_pgsql=no
+	else
+		want_pgsql=yes
+	fi,
+	want_pgsql=no)
+
+AC_ARG_WITH(mysql,
+[  --with-mysql            Build with MySQL driver support],
+	if test x$withval = xno; then
+		want_mysql=no
+	else
+		want_mysql=yes
+	fi,
+	want_mysql=no)
+
+AC_ARG_WITH(sqlite,
+[  --with-sqlite            Build with SQLite3 driver support],
+	if test x$withval = xno; then
+		want_sqlite=no
+	else
+	want_sqlite=yes
+	fi,
+	want_sqlite=no)
+
+AC_ARG_WITH(ssl,
+[  --with-ssl=[gnutls|openssl] Build with GNUTLS or OpenSSL (default)],
+	if test x$withval = xno; then
+		want_gnutls=no
+		want_openssl=no
+	elif test x$withval = xgnutls; then
+		want_gnutls=yes
+		want_openssl=no
+	elif test x$withval = xopenssl; then
+		want_gnutls=no
+		want_openssl=yes
+	else
+		want_gnutls=no
+		want_openssl=yes
+	fi, [
+		want_gnutls=no
+		want_openssl=yes
+	])
+
+AC_ARG_WITH(ssldir,
+[  --with-ssldir=DIR       SSL base directory for certificates (/etc/ssl)],
+	ssldir="$withval",
+	ssldir=/etc/ssl
+)
+AC_SUBST(ssldir)
+
+AC_ARG_WITH(rundir,
+[  --with-rundir=DIR       Runtime data directory (LOCALSTATEDIR/run/dovecot)],
+	rundir="$withval",
+	rundir=$localstatedir/run/$PACKAGE_NAME
+)
+AC_SUBST(rundir)
+
+AC_ARG_WITH(gc,
+[  --with-gc               Use Boehm garbage collector (currently broken)],
+	if test x$withval = xyes; then
+		want_gc=yes
+	else
+		if test "x$withval" = xno; then
+			want_gc=no
+		else
+			want_gc=yes
+		fi
+	fi,
+	want_gc=no)
+
+AC_ARG_WITH(pop3d,
+[  --with-pop3d            Build POP3 server (default)],
+	if test x$withval = xno; then
+		want_pop3d=no
+	else
+		want_pop3d=yes
+	fi,
+	want_pop3d=yes)
+AM_CONDITIONAL(BUILD_POP3D, test "$want_pop3d" = "yes")
+
+AC_ARG_WITH(deliver,
+[  --with-deliver          Build mail delivery agent (default)],
+	if test x$withval = xno; then
+		want_deliver=no
+	else
+		want_deliver=yes
+	fi,
+	want_deliver=yes)
+AM_CONDITIONAL(BUILD_DELIVER, test "$want_deliver" = "yes")
+
+AC_ARG_WITH(storages,
+[  --with-storages         Build with specified mail storage formats (maildir,mbox)], [
+	if test "$withval" = "yes" -o "$withval" = "no"; then
+		AC_MSG_ERROR([--with-storages needs storage list as parameter])
+	fi
+	mail_storages=`echo "$withval"|sed 's/,/ /g'` ],
+	mail_storages="maildir mbox dbox")
+AC_SUBST(mail_storages)
+
+AC_ARG_WITH(sql-drivers,
+[  --with-sql-drivers      Build with specified SQL drivers (all)], [
+	sql_drivers=`echo "$withval"|sed 's/,/ /g'` ],
+	sql_drivers="all")
+
+if test "$sql_drivers" = "all" -o "$sql_drivers" = "yes"; then
+  all_sql_drivers=yes
+  sql_drivers=
+elif test "$sql_drivers" = "no"; then
+  # --without-sql-drivers given
+  sql_drivers=
+fi
+
+AC_ARG_WITH(moduledir,
+[  --with-moduledir=DIR    Base directory for dynamically loadable modules],
+	moduledir="$withval",
+	moduledir=$libdir/dovecot
+)
+AC_SUBST(moduledir)
+
+AC_ARG_WITH(docs,
+[  --with-docs            Install documentation (default)],
+	if test x$withval = xno; then
+		want_docs=no
+	else
+		want_docs=yes
+	fi,
+	want_docs=yes)
+AM_CONDITIONAL(BUILD_DOCS, test "$want_docs" = "yes")
+
+dnl * gcc specific options
+if test "x$ac_cv_c_compiler_gnu" = "xyes"; then
+	# -Wcast-qual -Wcast-align -Wconversion # too many warnings
+	# -Wstrict-prototypes -Wredundant-decls # may give warnings in some systems
+	# -Wmissing-format-attribute -Wmissing-noreturn -Wwrite-strings # a couple of warnings
+	# -Wstrict-aliasing=2 # requires new gcc
+	CFLAGS="$CFLAGS -Wall -W -Wmissing-prototypes -Wmissing-declarations -Wpointer-arith -Wchar-subscripts -Wformat=2 -Wbad-function-cast"
+
+	# Use std=gnu99 if we have new enough gcc
+	old_cflags=$CFLAGS
+	CFLAGS="-std=gnu99"
+	AC_TRY_COMPILE([
+	],, [
+	  CFLAGS="$CFLAGS $old_cflags"
+	], [
+	  CFLAGS="$old_cflags"
+	])
+fi
+
+dnl **
+dnl ** just some generic stuff...
+dnl **
+
+AC_CHECK_FUNC(socket, [], [
+	AC_CHECK_LIB(socket, socket, [
+		LIBS="$LIBS -lsocket"
+	])
+])
+
+AC_CHECK_FUNC(inet_addr, [], [
+	AC_CHECK_LIB(nsl, inet_addr, [
+		LIBS="$LIBS -lnsl"
+	])
+])
+
+AC_CHECK_FUNC(fdatasync, [
+	have_fdatasync=yes
+], [
+	AC_CHECK_LIB(rt, fdatasync, [
+		have_fdatasync=yes
+		LIBS="$LIBS -lrt"
+	])
+])
+
+if test "$have_fdatasync" = "yes"; then
+	AC_DEFINE(HAVE_FDATASYNC,, Define if you have fdatasync())
+fi
+
+dnl * after -lsocket and -lnsl tests, inet_aton() may be in them
+AC_CHECK_FUNCS(fcntl flock lockf inet_aton sigaction getpagesize madvise \
+               strcasecmp stricmp vsnprintf vsyslog writev pread \
+	       setrlimit setproctitle seteuid setreuid setegid setresgid \
+	       strtoull strtouq setpriority quotactl getmntent kqueue kevent \
+           getrusage)
+
+dnl * I/O loop function
+have_ioloop=no
+
+dnl we currently don't use epoll automatically because it fails at runtime
+dnl if we're not running 2.6 kernel
+if test "$ioloop" = "epoll"; then
+  AC_CHECK_FUNC(epoll_create, [
+    AC_DEFINE(IOLOOP_EPOLL,, Implement I/O loop with Linux 2.6 epoll())
+    have_ioloop=yes
+  ], [
+    ioloop=""
+  ])
+fi
+
+if test "$ioloop" = "kqueue"; then
+  if test "$ac_cv_func_kqueue" != yes ; then
+    AC_MSG_WARN([kqueue ioloop requested but kqueue() is not available])
+    ioloop=""
+  elif test "$ac_cv_func_kevent" != yes ; then
+    AC_MSG_WARN([kqueue ioloop requested but kevent() is not available])
+    ioloop=""
+  else
+    AC_DEFINE(IOLOOP_KQUEUE,, [Implement I/O loop with BSD kqueue()])
+    ioloop=kqueue
+    have_ioloop=yes
+  fi
+fi
+
+if test "$ioloop" = "" || test "$ioloop" = "poll"; then
+  AC_CHECK_FUNC(poll, [
+    AC_DEFINE(IOLOOP_POLL,, Implement I/O loop with poll())
+    ioloop=poll
+    have_ioloop=yes
+  ])
+fi
+
+if test "$have_ioloop" = "no"; then
+  AC_DEFINE(IOLOOP_SELECT,, Implement I/O loop with select())
+  ioloop="select"
+fi
+
+have_notify=none
+
+if test "$notify" = "" || test "$notify" = "dnotify"; then
+  dnl * dnotify?
+  AC_TRY_COMPILE([
+    #define _GNU_SOURCE
+    #include <fcntl.h>
+    #include <signal.h>
+    #include <unistd.h>
+  ], [
+    fcntl(0, F_SETSIG, SIGRTMIN);
+    fcntl(0, F_NOTIFY, DN_CREATE | DN_DELETE | DN_RENAME | DN_MULTISHOT);
+  ], [
+    AC_DEFINE(IOLOOP_NOTIFY_DNOTIFY,, Use Linux dnotify)
+    have_notify=dnotify
+  ], [
+    if test "$notify" = "dnotify"; then
+      AC_MSG_ERROR([dnotify requested but not available])
+    fi
+  ])
+elif test "$notify" = "inotify"; then
+  dnl * inotify?
+  AC_TRY_COMPILE([
+    #define _GNU_SOURCE
+    #include <sys/ioctl.h>
+    #include <fcntl.h>
+    #include <sys/inotify.h>
+    #include <stdio.h>
+  ], [
+    int wd, fd;
+    char * fn = "/tmp";
+    
+    fd = inotify_init ();
+    if (fd < 0)
+      perror ("inotify_init");
+
+    wd = inotify_add_watch (fd, fn, IN_ALL_EVENTS);
+
+    if (wd < 0)
+      perror ("inotify_add_watch");
+
+    inotify_rm_watch (fd, wd);
+
+    close (fd);
+  ], [
+    have_notify=inotify
+    AC_DEFINE(IOLOOP_NOTIFY_INOTIFY,, Use Linux inotify)
+  ], [
+    AC_MSG_ERROR([inotify requested but not available, check for existence of <sys/inotify.h>])
+  ])
+elif test "$notify" = "kqueue"; then
+  dnl * BSD kqueue() notify
+  if test "$ac_cv_func_kqueue" != yes ; then
+    AC_MSG_WARN([kqueue notify requested but kqueue() is not available])
+    notify=""
+  elif test "$ac_cv_func_kevent" != yes ; then
+    AC_MSG_WARN([kqueue notify requested but kevent() is not available])
+    notify=""
+  else
+    have_notify=kqueue
+    AC_DEFINE(IOLOOP_NOTIFY_KQUEUE,,
+      Use BSD kqueue directory changes notificaton)
+  fi
+else
+  AC_MSG_ERROR([Unknown notify method: $notify])
+fi
+
+if test "$have_notify" = "none"; then
+  AC_DEFINE(IOLOOP_NOTIFY_NONE,, No special notify support)
+fi
+
+dnl * GLIBC?
+AC_TRY_COMPILE([
+  #include <stdlib.h>
+  #ifdef __GLIBC__
+    we have glibc
+  #endif
+],,, [
+  AC_DEFINE(PREAD_WRAPPERS,, Define if pread/pwrite needs _XOPEN_SOURCE 500)
+])
+
+dnl * OS specific options
+case "$host_os" in
+	hpux*)
+		CFLAGS="$CFLAGS -D_XOPEN_SOURCE_EXTENDED"
+		;;
+	*)
+		;;
+esac
+
+AC_CHECK_SIZEOF(int)
+AC_CHECK_SIZEOF(long)
+AC_CHECK_SIZEOF(void *)
+AC_CHECK_SIZEOF(long long)
+
+AC_DEFUN([AC_TYPEOF], [
+  dnl * first check if we can get the size with redefining typedefs
+
+  order="$2"
+  if test "$2" = ""; then
+    order="int long long-long"
+  fi
+
+  result=""
+  visible="unknown"
+  AC_MSG_CHECKING([type of $1])
+
+  if test "x$ac_cv_c_compiler_gnu" = "xyes"; then
+    dnl * try with printf() + -Werror
+    old_CFLAGS="$CFLAGS"
+    CFLAGS="$CFLAGS -Werror"
+
+    for type in $order; do
+      case "$type" in
+        int)
+	  fmt="%d"
+	  ;;
+        unsigned-int)
+	  fmt="%u"
+	  ;;
+        long)
+	  fmt="%ld"
+	  ;;
+        unsigned-long)
+	  fmt="%lu"
+	  ;;
+        long-long)
+	  fmt="%lld"
+	  ;;
+        unsigned-long-long)
+	  fmt="%llu"
+	  ;;
+	*)
+	  fmt=""
+	  ;;
+      esac
+
+      if test "$fmt" != ""; then
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+	  #include <sys/types.h>
+	  #include <stdio.h>
+	]], [[
+	  printf("$fmt", ($1)0);
+	]])],[
+	  if test "$result" != ""; then
+	    dnl * warning check isn't working
+	    result=""
+	    visible="unknown"
+	    break
+	  fi
+	  result="`echo $type|sed 's/-/ /g'`"
+	  visible="$result"
+	],[])
+      fi
+    done
+    CFLAGS="$old_CFLAGS"
+  fi
+
+  if test "$result" = ""; then
+    for type in $order; do
+      type="`echo $type|sed 's/-/ /g'`"
+      AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+	#include <sys/types.h>
+	typedef $type $1;
+      ]], [[]])],[
+	if test "$result" != ""; then
+	  dnl * compiler allows redefining to anything
+	  result=""
+	  visible="unknown"
+	  break
+	fi
+	result="$type"
+	visible="$type"
+      ],[])
+    done
+  fi
+
+  if test "$result" = ""; then
+    dnl * check with sizes
+
+    dnl * older autoconfs don't include sys/types.h, so do it manually
+    AC_RUN_IFELSE([AC_LANG_SOURCE([[
+      #include <stdio.h>
+      #include <sys/types.h>
+      int main() {
+	FILE *f=fopen("conftestval", "w");
+	if (!f) exit(1);
+	fprintf(f, "%d\n", sizeof($1));
+	exit(0);
+      }
+    ]])],[
+      size=`cat conftestval`
+      rm -f conftestval
+
+      for type in $order; do
+        actype="ac_cv_sizeof_`echo $type|sed 's/-/_/g'`"
+        if test "$size" = "`eval \"echo \\$$actype\"`"; then
+	  result="`echo $type|sed 's/-/ /g'`"
+	  visible="`expr $size \* 8`bit (using $result)"
+	  break
+	fi
+      done
+      if test "$result" = ""; then
+        result=unknown
+	visible="`expr $size \* 8`bit (unknown type)"
+      fi
+    ],[],[])
+  fi
+
+  typeof_$1=$result
+  AC_MSG_RESULT($visible)
+])
+
+dnl * off_t checks, try to make it 64bit
+AC_DEFINE_UNQUOTED(_FILE_OFFSET_BITS, $preferred_off_t_bits,
+  [If set to 64, enables 64bit off_t for some systems (eg. Linux, Solaris)])
+
+AC_CHECK_TYPES(_Bool)
+
+AC_CHECK_TYPE(uoff_t, [
+  have_uoff_t=yes
+  AC_DEFINE(HAVE_UOFF_T,, Define if you have a native uoff_t type)
+], [
+  have_uoff_t=no
+])
+
+AC_TYPEOF(off_t, long int long-long)
+case "$typeof_off_t" in
+  int)
+    offt_max=INT_MAX
+    uofft_fmt="u"
+    if test "$have_uoff_t" != "yes"; then
+      AC_DEFINE(UOFF_T_INT,, Define if off_t is int)
+    fi
+    offt_bits=`expr 8 \* $ac_cv_sizeof_int`
+    ;;
+  long)
+    offt_max=LONG_MAX
+    uofft_fmt="lu"
+    if test "$have_uoff_t" != "yes"; then
+      AC_DEFINE(UOFF_T_LONG,, Define if off_t is long)
+    fi
+    offt_bits=`expr 8 \* $ac_cv_sizeof_long`
+    ;;
+  "long long")
+    offt_max=LLONG_MAX
+    uofft_fmt="llu"
+    if test "$have_uoff_t" != "yes"; then
+      AC_DEFINE(UOFF_T_LONG_LONG,, Define if off_t is long long)
+    fi
+    offt_bits=`expr 8 \* $ac_cv_sizeof_long_long`
+    ;;
+  *)
+    AC_MSG_ERROR([Unsupported off_t type])
+    ;;
+esac
+
+dnl * Do we have struct dirent->d_type
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  #include <dirent.h>
+]], [[
+  struct dirent d;
+  d.d_type = DT_DIR;
+]])],[
+  AC_DEFINE(HAVE_DIRENT_D_TYPE,, Define if you have struct dirent->d_type)
+],[])
+
+dnl * Do we have OFF_T_MAX?
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  #include <limits.h>
+  #include <sys/types.h>
+]], [[
+  off_t i = OFF_T_MAX;
+]])],[
+  :
+],[
+  AC_DEFINE_UNQUOTED(OFF_T_MAX, $offt_max, Maximum value of off_t)
+])
+
+AC_DEFINE_UNQUOTED(PRIuUOFF_T, "$uofft_fmt", printf() format for uoff_t)
+
+dnl * make sure size_t isn't signed. we'd probably work fine with it, but
+dnl * it's more likely vulnerable to buffer overflows. Anyway, C99 specifies
+dnl * that it's unsigned and only some old systems define it as signed.
+AC_MSG_CHECKING([whether size_t is signed])
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
+  #include <sys/types.h>
+  int main() {
+    /* return 0 if we're signed */
+    exit((size_t)(int)-1 <= 0 ? 0 : 1);
+  }
+]])],[
+  AC_MSG_RESULT(yes)
+
+  echo
+  echo "Your system's size_t is a signed integer, Dovecot isn't designed to"
+  echo "support it. It probably works just fine, but it's less resistant to"
+  echo "buffer overflows. If you're not worried about this and still want to"
+  echo "compile Dovecot, set ignore_signed_size=1 environment."
+
+  if test "$ignore_signed_size" = ""; then
+    AC_MSG_ERROR([aborting])
+  fi
+  echo "..ignoring as requested.."
+],[
+  AC_MSG_RESULT(no)
+],[])
+
+dnl Note: we check size_t rather than ssize_t here, because on OSX 10.2
+dnl ssize_t = int and size_t = unsigned long. We're mostly concerned about
+dnl printf format here, so check the size_t one.
+AC_TYPEOF(size_t, unsigned-int unsigned-long unsigned-long-long)
+case "$typeof_size_t" in
+  "unsigned long")
+    ssizet_max=LONG_MAX
+    sizet_fmt="lu"
+    ;;
+  "unsigned long long")
+    ssizet_max=LLONG_MAX
+    sizet_fmt="llu"
+    ;;
+  *)
+    dnl older systems didn't have ssize_t, default to int
+    ssizet_max=INT_MAX
+    sizet_fmt="u"
+
+    if test "$typeof_size_t" = ""; then
+      AC_DEFINE(size_t, unsigned int, Define to 'unsigned int' if you don't have it)
+      AC_DEFINE(ssize_t, int, Define to 'int' if you don't have it)
+    fi
+    ;;
+esac
+
+AC_DEFINE_UNQUOTED(SSIZE_T_MAX, $ssizet_max, Maximum value of ssize_t)
+AC_DEFINE_UNQUOTED(PRIuSIZE_T, "$sizet_fmt", printf() format for size_t)
+
+AC_DEFUN([AC_CHECKTYPE2], [
+  AC_MSG_CHECKING([for $1])
+  AC_CACHE_VAL(i_cv_type_$1,
+  [AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  #include <sys/types.h>
+  $2]], [[$1 t;]])],[i_cv_type_$1=yes],[i_cv_type_$1=no])])
+  AC_MSG_RESULT($i_cv_type_$1)
+])
+
+dnl some systems don't have stdint.h, but still have some of the types
+dnl defined elsewhere
+AC_CHECK_HEADER(stdint.h, [
+  stdint_include="#include <stdint.h>"
+])
+
+AC_CHECKTYPE2(uintmax_t, [$stdint_include])
+if test $i_cv_type_uintmax_t = yes; then
+  AC_DEFINE(HAVE_UINTMAX_T,, Define if you have uintmax_t (C99 type))
+fi
+
+dnl use separate check, eg. Solaris 8 has uintmax_t but not uint_fast32_t
+AC_CHECKTYPE2(uint_fast32_t, [$stdint_include])
+if test $i_cv_type_uint_fast32_t = yes; then
+  AC_DEFINE(HAVE_UINT_FAST32_T,, Define if you have uint_fast32_t (C99 type))
+fi
+
+AC_CHECKTYPE2(socklen_t, [#include <sys/socket.h>])
+if test $i_cv_type_socklen_t = yes; then
+  AC_DEFINE(HAVE_SOCKLEN_T,, Define to 'int' if you don't have socklen_t)
+fi
+
+AC_DEFINE_UNQUOTED(MEM_ALIGN_SIZE, $mem_align, Required memory alignment)
+
+dnl * find random source
+AC_MSG_CHECKING([for /dev/urandom])
+if test -c /dev/urandom || test -s /dev/urandom; then
+  AC_MSG_RESULT(yes)
+  AC_DEFINE(HAVE_DEV_URANDOM,, Define if you have /dev/urandom)
+  have_random_source=yes
+else
+  AC_MSG_RESULT(no)
+
+  AC_CHECK_HEADER(openssl/rand.h, [
+    AC_DEFINE(HAVE_OPENSSL_RAND_H,, Define if you have openssl/rand.h)
+    RAND_LIBS=-lcrypto
+  ])
+fi
+AC_SUBST(RAND_LIBS)
+
+dnl * do we have tm_gmtoff
+AC_MSG_CHECKING([for tm_gmtoff])
+AC_CACHE_VAL(i_cv_field_tm_gmtoff,
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <time.h>]],
+[[struct tm *tm; return tm->tm_gmtoff;]])],
+[i_cv_field_tm_gmtoff=yes],
+[i_cv_field_tm_gmtoff=no])])
+if test $i_cv_field_tm_gmtoff = yes; then
+	AC_DEFINE(HAVE_TM_GMTOFF,, Define if you have struct tm->tm_gmtoff)
+fi
+AC_MSG_RESULT($i_cv_field_tm_gmtoff)
+
+dnl * how large time_t values does gmtime() accept?
+AC_MSG_CHECKING([how large time_t values gmtime() accepts])
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
+  #include <stdio.h>
+  #include <time.h>
+  int main() {
+    FILE *f;
+    int bits;
+    time_t t;
+
+    for (bits = 1, t = 1; t > 0; ++bits, t <<= 1) {
+      if (gmtime(&t) == NULL) {
+        bits--;
+	break;
+      }
+    }
+    if (bits > 40) {
+      /* Solaris 9 breaks after 55 bits. Perhaps other systems break earlier.
+         Let's just do the same as Cyrus folks and limit it to 40 bits. */
+      bits = 40;
+    }
+
+    f = fopen("conftest.temp", "w");
+    if (f == NULL) {
+      perror("fopen()");
+      return 1;
+    }
+    fprintf(f, "%d", bits);
+    fclose(f);
+    return 0;
+  }
+]])],[
+  max_bits=`cat conftest.temp`
+  rm -f conftest.temp
+  AC_MSG_RESULT($max_bits)
+], [
+  AC_MSG_RESULT([check failed, assuming 31])
+  max_bits=31
+],[])
+AC_DEFINE_UNQUOTED(TIME_T_MAX_BITS, $max_bits, max. time_t bits gmtime() can handle)
+
+dnl * do we have struct iovec
+AC_MSG_CHECKING([for struct iovec])
+AC_CACHE_VAL(i_cv_struct_iovec,
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <unistd.h>]],
+[[struct iovec *iovec;]])],
+[i_cv_struct_iovec=yes],
+[i_cv_struct_iovec=no])])
+
+if test $i_cv_struct_iovec = yes; then
+	AC_DEFINE(HAVE_STRUCT_IOVEC,, Define if you have struct iovec)
+fi
+AC_MSG_RESULT($i_cv_struct_iovec)
+
+dnl * is dev_t an integer or something else?
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  #include <sys/types.h>
+  struct test { dev_t a; };
+  static struct test t = { 0 };
+]], [[]])],[],[
+  AC_DEFINE(DEV_T_STRUCT,, Define if your dev_t is a structure instead of integer type)
+
+  dnl we can't initialize structures, so don't warn about them either
+  if test "x$ac_cv_c_compiler_gnu" = "xyes"; then
+    CFLAGS=`echo $CFLAGS|sed 's/ -W\b//'`
+  fi
+])
+
+dnl * Do we have RLIMIT_AS?
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  #include <sys/types.h>
+  #include <sys/time.h>
+  #include <sys/resource.h>
+]], [[
+  struct rlimit r;
+  getrlimit(RLIMIT_AS, &r);
+]])],[
+  AC_DEFINE(HAVE_RLIMIT_AS,, Define if you have RLIMIT_AS for setrlimit())
+],[])
+
+dnl * Do we have RLIMIT_NPROC?
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+  #include <sys/types.h>
+  #include <sys/time.h>
+  #include <sys/resource.h>
+]], [[
+  struct rlimit r;
+  getrlimit(RLIMIT_NPROC, &r);
+]])],[
+  AC_DEFINE(HAVE_RLIMIT_NPROC,, Define if you have RLIMIT_NPROC for setrlimit())
+],[])
+
+dnl * Linux compatible mremap()
+AC_MSG_CHECKING([Linux compatible mremap()])
+AC_TRY_LINK([
+  #include <unistd.h>
+  #define __USE_GNU
+  #include <sys/mman.h>
+], [
+  mremap(0, 0, 0, MREMAP_MAYMOVE);
+], [
+  AC_DEFINE(HAVE_LINUX_MREMAP,, Define if you have Linux-compatible mremap())
+  AC_MSG_RESULT(yes)
+], [
+  AC_MSG_RESULT(no)
+])
+
+dnl * If mmap() plays nicely with write()
+AC_MSG_CHECKING([whether shared mmaps get updated by write()s])
+AC_TRY_RUN([
+  #include <stdio.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #include <unistd.h>
+  #include <fcntl.h>
+  #include <sys/mman.h>
+  int main() {
+    /* return 0 if we're signed */
+    int f = open("conftest.mmap", O_RDWR|O_CREAT|O_TRUNC);
+    void *mem;
+    if (f == -1) {
+      perror("open()");
+      return 1;
+    }
+    unlink("conftest.mmap");
+
+    write(f, "1", 2);
+    mem = mmap(NULL, 2, PROT_READ|PROT_WRITE, MAP_SHARED, f, 0);
+    if (mem == MAP_FAILED) {
+      perror("mmap()");
+      return 1;
+    }
+    strcpy(mem, "2");
+    msync(mem, 2, MS_SYNC);
+    lseek(f, 0, SEEK_SET);
+    write(f, "3", 2);
+  
+    return strcmp(mem, "3") == 0 ? 0 : 1;
+  }
+], [
+  AC_MSG_RESULT(yes)
+], [
+  AC_MSG_RESULT(no)
+  AC_DEFINE(MMAP_CONFLICTS_WRITE,, [Define if shared mmaps don't get updated by write()s])
+])
+
+dnl * see if fd passing works
+AC_MSG_CHECKING([whether fd passing works])
+for i in 1 2; do
+  old_cflags="$CFLAGS"
+  CFLAGS="$CFLAGS -I$srcdir/src/lib $srcdir/src/lib/fdpass.c"
+  if test $i = 2; then
+    CFLAGS="$CFLAGS -DBUGGY_CMSG_MACROS"
+  fi
+
+  AC_TRY_RUN([
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <sys/wait.h>
+    #include <sys/stat.h>
+    #include <unistd.h>
+    #include <fcntl.h>
+    #include "fdpass.h"
+    
+    int main(void)
+    {
+	    int fd[2], send_fd, recv_fd, status;
+	    struct stat st, st2;
+	    char data;
+    
+	    send_fd = open("conftest.fdpass", O_CREAT|O_WRONLY);
+	    if (send_fd == -1) return 2;
+	    unlink("conftest.fdpass");
+	    if (fstat(send_fd, &st) < 0) return 2;
+	    if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) < 0) return 2;
+    
+	    switch (fork()) {
+	    case -1:
+		    return 2;
+	    case 0:
+		    alarm(1);
+		    if (fd_send(fd[0], send_fd, &data, 1) != 1) return 2;
+		    return 0;
+	    default:
+		    alarm(2);
+		    if (wait(&status) == -1)
+		      return 2;
+		    if (status != 0)
+		      return status;
+		    if (fd_read(fd[1], &data, 1, &recv_fd) != 1) return 1;
+		    if (fstat(recv_fd, &st2) < 0) return 2;
+		    return st.st_ino == st2.st_ino ? 0 : 1;
+	    }
+    }
+  ], [
+    CFLAGS=$old_cflags
+    if test $i = 2; then
+      AC_DEFINE(BUGGY_CMSG_MACROS,, Define if you have buggy CMSG macros)
+    fi
+    AC_MSG_RESULT(yes)
+    break
+  ], [
+    dnl no, try with BUGGY_CMSG_MACROS
+    CFLAGS=$old_cflags
+    if test $i = 2; then
+      AC_MSG_RESULT(no)
+    fi
+  ])
+done
+
+dnl * Solaris compatible sendfile()
+AC_CHECK_LIB(sendfile, sendfile, [
+  LIBS="$LIBS -lsendfile"
+  AC_DEFINE(HAVE_SOLARIS_SENDFILE,, Define if you have Solaris-compatible sendfile())
+], [
+  dnl * Linux compatible sendfile() - don't check if Solaris one was found.
+  dnl * This seems to pass with Solaris for some reason..
+  AC_MSG_CHECKING([Linux compatible sendfile()])
+  AC_TRY_LINK([
+    #undef _FILE_OFFSET_BITS
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <sys/sendfile.h>
+  ], [
+    sendfile(0, 0, (void *) 0, 0);
+  ], [
+    AC_DEFINE(HAVE_LINUX_SENDFILE,, Define if you have Linux-compatible sendfile())
+    AC_MSG_RESULT(yes)
+  ], [
+    AC_MSG_RESULT(no)
+  ])
+
+  dnl * FreeBSD compatible sendfile()
+  AC_MSG_CHECKING([FreeBSD compatible sendfile()])
+  AC_TRY_LINK([
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <sys/uio.h>
+  ], [
+    struct sf_hdtr hdtr;
+    sendfile(0, 0, 0, 0, &hdtr, (void *) 0, 0);
+  ], [
+    AC_DEFINE(HAVE_FREEBSD_SENDFILE,, Define if you have FreeBSD-compatible sendfile())
+    AC_MSG_RESULT(yes)
+  ], [
+    AC_MSG_RESULT(no)
+  ])
+])
+
+dnl * Check for crypt() if unistd.h compiles with _XOPEN_SOURCE + _XPG6
+dnl * Add other macros there too "just in case".
+AC_MSG_CHECKING([if we should use _XPG6 macro for crypt()])
+AC_TRY_COMPILE([
+  #define _XOPEN_SOURCE 4
+  #define _XOPEN_SOURCE_EXTENDED 1
+  #define _XOPEN_VERSION 4
+  #define _XPG4_2
+  #define _XPG6
+  #include <unistd.h>
+], [
+  crypt("a", "b");
+], [
+  AC_DEFINE(CRYPT_USE_XPG6,, Define if _XPG6 macro is needed for crypt())
+  AC_MSG_RESULT(yes)
+], [
+  AC_MSG_RESULT(no)
+])
+
+dnl * Check if statfs() can be used to find out block device for files
+AC_MSG_CHECKING([if statfs.f_mntfromname exists])
+AC_TRY_COMPILE([
+  #include <sys/param.h>
+  #include <sys/mount.h>
+], [
+  struct statfs buf;
+  char *p = buf.f_mntfromname;
+
+  statfs(".", &buf);
+], [
+  AC_DEFINE(HAVE_STATFS_MNTFROMNAME,, Define if you have statfs.f_mntfromname)
+  AC_MSG_RESULT(yes)
+], [
+  AC_MSG_RESULT(no)
+])
+
+dnl * Check if we have struct dqblk.dqb_curblocks
+AC_MSG_CHECKING([if struct dqblk.dqb_curblocks exists])
+AC_TRY_COMPILE([
+  #include <sys/types.h>
+  #include "$srcdir/src/plugins/quota/quota-fs.h"
+], [
+  struct dqblk dqblk;
+  unsigned int x = dqblk.dqb_curblocks;
+], [
+  AC_DEFINE(HAVE_STRUCT_DQBLK_CURBLOCKS,, Define if struct sqblk.dqb_curblocks exists)
+  AC_MSG_RESULT(yes)
+], [
+  AC_MSG_RESULT(no)
+])
+
+dnl * Check if we have struct dqblk.dqb_curspace
+AC_MSG_CHECKING([if struct dqblk.dqb_curspace exists])
+AC_TRY_COMPILE([
+  #include <sys/types.h>
+  #include "$srcdir/src/plugins/quota/quota-fs.h"
+], [
+  struct dqblk dqblk;
+  unsigned int x = dqblk.dqb_curspace;
+], [
+  AC_DEFINE(HAVE_STRUCT_DQBLK_CURSPACE,, Define if struct sqblk.dqb_curspace exists)
+  AC_MSG_RESULT(yes)
+], [
+  AC_MSG_RESULT(no)
+])
+
+dnl * Check if we have Q_QUOTACTL ioctl (Solaris)
+AC_MSG_CHECKING([if struct Q_QUOTACTL ioctl exists])
+AC_TRY_COMPILE([
+  #include <sys/types.h>
+  #include <sys/fs/ufs_quota.h>
+], [
+  struct quotctl ctl;
+  ioctl(0, Q_QUOTACTL, &ctl);
+], [
+  AC_DEFINE(HAVE_Q_QUOTACTL,, Define if Q_QUOTACTL exists)
+  AC_MSG_RESULT(yes)
+], [
+  AC_MSG_RESULT(no)
+])
+
+dnl ***
+dnl *** va_copy checks (from GLIB)
+dnl ***
+
+AC_CACHE_CHECK([for an implementation of va_copy()],lib_cv_va_copy,[
+	AC_RUN_IFELSE([AC_LANG_SOURCE([[
+	#include <stdarg.h>
+	void f (int i, ...) {
+	va_list args1, args2;
+	va_start (args1, i);
+	va_copy (args2, args1);
+	if (va_arg (args2, int) != 42 || va_arg (args1, int) != 42)
+	  exit (1);
+	va_end (args1); va_end (args2);
+	}
+	int main() {
+	  f (0, 42);
+	  return 0;
+	}]])],
+	[lib_cv_va_copy=yes],
+	[lib_cv_va_copy=no],[])
+])
+AC_CACHE_CHECK([for an implementation of __va_copy()],lib_cv___va_copy,[
+	AC_RUN_IFELSE([AC_LANG_SOURCE([[
+	#include <stdarg.h>
+	void f (int i, ...) {
+	va_list args1, args2;
+	va_start (args1, i);
+	__va_copy (args2, args1);
+	if (va_arg (args2, int) != 42 || va_arg (args1, int) != 42)
+	  exit (1);
+	va_end (args1); va_end (args2);
+	}
+	int main() {
+	  f (0, 42);
+	  return 0;
+	}]])],
+	[lib_cv___va_copy=yes],
+	[lib_cv___va_copy=no],[])
+])
+
+if test "x$lib_cv_va_copy" = "xyes"; then
+  va_copy_func=va_copy
+else if test "x$lib_cv___va_copy" = "xyes"; then
+  va_copy_func=__va_copy
+fi
+fi
+
+if test -n "$va_copy_func"; then
+  AC_DEFINE_UNQUOTED(VA_COPY,$va_copy_func,[A 'va_copy' style function])
+fi
+
+AC_CACHE_CHECK([whether va_lists can be copied by value],lib_cv_va_val_copy,[
+	AC_RUN_IFELSE([AC_LANG_SOURCE([[
+	#include <stdarg.h>
+	void f (int i, ...) {
+	va_list args1, args2;
+	va_start (args1, i);
+	args2 = args1;
+	if (va_arg (args2, int) != 42 || va_arg (args1, int) != 42)
+	  exit (1);
+	va_end (args1); va_end (args2);
+	}
+	int main() {
+	  f (0, 42);
+	  return 0;
+	}]])],
+	[lib_cv_va_val_copy=yes],
+	[lib_cv_va_val_copy=no],[])
+])
+
+if test "x$lib_cv_va_val_copy" = "xno"; then
+  AC_DEFINE(VA_COPY_AS_ARRAY,1, ['va_lists' cannot be copies as values])
+fi
+
+dnl **
+dnl ** SSL
+dnl **
+
+have_ssl=no
+
+if test "$want_openssl" = "yes" && test "$have_ssl" = "no"; then
+  if pkg-config --exists openssl 2>/dev/null; then
+    PKG_CHECK_MODULES(SSL, openssl)
+    CFLAGS="$CFLAGS $SSL_CFLAGS"
+    have_openssl=yes
+  else
+    AC_CHECK_LIB(ssl, SSL_read, [
+      AC_CHECK_HEADERS(openssl/ssl.h openssl/err.h, [
+        SSL_LIBS="-lssl -lcrypto"
+        AC_SUBST(SSL_LIBS)
+	have_openssl=yes
+      ])
+    ],, -lcrypto)
+  fi
+  if test "$have_openssl" = "yes"; then
+    AC_DEFINE(HAVE_OPENSSL,, Build with OpenSSL support)
+    have_ssl="yes (OpenSSL)"
+  fi
+fi
+
+if test $want_gnutls = yes && test "$have_ssl" = no; then
+	AC_CHECK_LIB(gnutls, gnutls_global_init, [
+		AC_CHECK_HEADERS(gnutls/gnutls.h, [
+			AC_DEFINE(HAVE_GNUTLS,, Build with GNUTLS support)
+			SSL_LIBS="-lgnutls -lgcrypt"
+			AC_SUBST(SSL_LIBS)
+			have_ssl="yes (GNUTLS)"
+			have_gnutls=yes
+		])
+	],, -lgcrypt)
+fi
+
+if test "$have_ssl" != "no"; then
+	AC_DEFINE(HAVE_SSL,, Build with SSL/TLS support)
+fi
+
+dnl **
+dnl ** Garbage Collector
+dnl ** 
+
+if test "$want_gc" = "yes"; then
+  AC_CHECK_LIB(gc, GC_malloc, [
+    AC_CHECK_HEADERS(gc/gc.h gc.h)
+    AC_DEFINE(USE_GC,, Define if you want to use Boehm GC)
+    LIBS="$LIBS -lgc"
+  ], [
+    want_gc=no
+  ])
+fi
+
+dnl **
+dnl ** userdb and passdb checks
+dnl **
+
+need_crypt=no
+userdb=""
+passdb=""
+
+if test $want_static_userdb = yes; then
+	need_crypt=yes
+        AC_DEFINE(USERDB_STATIC,, Build with static userdb support)
+	userdb="$userdb static"
+fi
+
+if test $want_prefetch_userdb = yes; then
+        AC_DEFINE(USERDB_PREFETCH,, Build with prefetch userdb support)
+	userdb="$userdb prefetch"
+fi
+
+if test $want_passwd = yes; then
+	need_crypt=yes
+        AC_DEFINE(USERDB_PASSWD,, Build with passwd support)
+        AC_DEFINE(PASSDB_PASSWD,, Build with passwd support)
+	userdb="$userdb passwd"
+	passdb="$passdb passwd"
+fi
+
+if test $want_passwd_file = yes; then
+	need_crypt=yes
+        AC_DEFINE(USERDB_PASSWD_FILE,, Build with passwd-file support)
+        AC_DEFINE(PASSDB_PASSWD_FILE,, Build with passwd-file support)
+	userdb="$userdb passwd-file"
+	passdb="$passdb passwd-file"
+fi
+
+if test $want_shadow = yes; then
+	AC_CHECK_FUNC(getspnam, [
+		AC_CHECK_HEADER(shadow.h, [
+			need_crypt=yes
+			AC_DEFINE(PASSDB_SHADOW,, Build with shadow support)
+			passdb="$passdb shadow"
+		])
+	])
+fi
+
+if test $want_pam = yes; then
+	AC_CHECK_LIB(pam, pam_start, [
+		have_pam=no
+		AC_CHECK_HEADER(security/pam_appl.h, [
+			AC_DEFINE(HAVE_SECURITY_PAM_APPL_H,,
+				  Define if you have security/pam_appl.h)
+			have_pam=yes
+		])
+
+		AC_CHECK_HEADER(pam/pam_appl.h, [
+			AC_DEFINE(HAVE_PAM_PAM_APPL_H,,
+				  Define if you have pam/pam_appl.h)
+			have_pam=yes
+		])
+
+		if test "$have_pam" = "yes"; then
+			AUTH_LIBS="$AUTH_LIBS -lpam"
+			AC_DEFINE(PASSDB_PAM,, Build with PAM support)
+			passdb="$passdb pam"
+
+			AC_CHECK_LIB(pam, pam_setcred, [
+				AC_DEFINE(HAVE_PAM_SETCRED,,
+					  Define if you have pam_setcred())
+			])
+		fi
+	])
+fi
+
+if test $want_checkpassword = yes; then
+        AC_DEFINE(USERDB_CHECKPASSWORD,, Build with checkpassword userdb support)
+        AC_DEFINE(PASSDB_CHECKPASSWORD,, Build with checkpassword passdb support)
+	userdb="$userdb checkpassword"
+	passdb="$passdb checkpassword"
+fi
+
+if test $want_bsdauth = yes; then
+	AC_CHECK_FUNC(auth_userokay, [
+		AC_DEFINE(PASSDB_BSDAUTH,, Build with BSD authentication support)
+		passdb="$passdb bsdauth"
+	])
+fi
+
+have_gssapi=no
+if test $want_gssapi = yes; then
+	AC_CHECK_PROG(KRB5CONFIG, krb5-config, YES, NO)
+	if test $KRB5CONFIG = YES; then
+		# we have a kludgy check here to check that we have
+		# version >= v1.3. Although this doesn't work right with
+		# non-MIT kerberos versioning..
+		if `krb5-config --version|grep -qv '1\.2'`; then
+			AUTH_LIBS="$AUTH_LIBS `krb5-config --libs gssapi`"
+			AUTH_CFLAGS="$AUTH_CFLAGS `krb5-config --cflags gssapi`"
+			
+			# Although krb5-config exists, all systems still don't
+			# have gssapi.h
+			old_CFLAGS=$CFLAGS
+			CFLAGS="$CFLAGS `krb5-config --cflags gssapi`"
+			AC_CHECK_HEADER([gssapi/gssapi.h], [
+				AC_DEFINE(HAVE_GSSAPI,, Build with GSSAPI support)
+				have_gssapi=yes
+			])
+			CFLAGS=$old_CFLAGS
+		fi
+	fi
+fi
+
+if test $want_ldap = yes; then
+	AC_CHECK_LIB(ldap, ldap_init, [
+		AC_CHECK_HEADER(ldap.h, [
+			AC_CHECK_LIB(ldap, ldap_initialize, [
+				AC_DEFINE(LDAP_HAVE_INITIALIZE,, Define if you have ldap_initialize)
+			])
+			AUTH_LIBS="$AUTH_LIBS -lldap"
+
+        		AC_DEFINE(USERDB_LDAP,, Build with LDAP support)
+		        AC_DEFINE(PASSDB_LDAP,, Build with LDAP support)
+			userdb="$userdb ldap"
+			passdb="$passdb ldap"
+		])
+	])
+fi
+
+if test $want_pgsql = yes; then
+	# based on code from PHP
+	for i in /usr /usr/local /usr/local/pgsql; do
+		for j in include include/pgsql include/postgres include/postgresql ""; do
+			if test -r "$i/$j/libpq-fe.h"; then
+				PGSQL_INCLUDE=$i/$j
+			fi
+		done
+		for lib in lib lib64; do
+		  for j in $lib $lib/pgsql $lib/postgres $lib/postgresql ""; do
+			if test -f "$i/$j/libpq.so" || test -f "$i/$j/libpq.a"; then
+				PGSQL_LIBDIR=$i/$j
+			fi
+		  done
+		done
+	done
+
+	old_LIBS=$LIBS
+	if test "$PGSQL_LIBDIR" != ""; then
+		LIBS="$LIBS -L$PGSQL_LIBDIR"
+	fi
+
+	AC_CHECK_LIB(pq, PQconnectdb, [
+		old_CPPFLAGS=$CPPFLAGS
+		if test "$PGSQL_INCLUDE" != ""; then
+			CPPFLAGS="$CPPFLAGS -I $PGSQL_INCLUDE"
+		fi
+		AC_CHECK_HEADER(libpq-fe.h, [
+			if test "$PGSQL_INCLUDE" != ""; then
+				SQL_CFLAGS="$SQL_CFLAGS -I$PGSQL_INCLUDE"
+			fi
+			if test "$PGSQL_LIBDIR" != ""; then
+				SQL_LIBS="$SQL_LIBS -L$PGSQL_LIBDIR"
+			fi
+			SQL_LIBS="$SQL_LIBS -lpq"
+			AC_DEFINE(HAVE_PGSQL,, Build with PostgreSQL support)
+			found_sql_drivers="$found_sql_drivers pgsql"
+
+                        if test "$all_sql_drivers" = "yes"; then
+			  sql_drivers="$sql_drivers pgsql"
+			fi
+		])
+		CPPFLAGS=$old_CPPFLAGS
+	])
+	LIBS=$old_LIBS
+fi
+
+if test $want_mysql = yes; then
+	# based on code from PHP
+	for i in /usr /usr/local /usr/local/mysql; do
+		for j in include include/mysql ""; do
+			if test -r "$i/$j/mysql.h"; then
+				MYSQL_INCLUDE=$i/$j
+			fi
+		done
+		for j in lib lib/mysql lib64 lib64/mysql ""; do
+			if test -f "$i/$j/libmysqlclient.so" || test -f "$i/$j/libmysqlclient.a"; then
+				MYSQL_LIBDIR=$i/$j
+			fi
+		done
+	done
+
+	old_LIBS=$LIBS
+	if test "$MYSQL_LIBDIR" != ""; then
+		LIBS="$LIBS -L$MYSQL_LIBDIR"
+	fi
+
+	mysql_lib=""
+	LIBS="$LIBS -lz -lm"
+	AC_CHECK_LIB(mysqlclient, mysql_init, [
+		mysql_lib="-lmysqlclient -lz -lm"
+	])
+
+	if test "$mysql_lib" != ""; then
+		old_CPPFLAGS=$CPPFLAGS
+		if test "$MYSQL_INCLUDE" != ""; then
+			CPPFLAGS="$CPPFLAGS -I $MYSQL_INCLUDE"
+		fi
+		AC_CHECK_HEADER(mysql.h, [
+			if test "$MYSQL_INCLUDE" != ""; then
+				SQL_CFLAGS="$SQL_CFLAGS -I$MYSQL_INCLUDE"
+			fi
+			if test "$MYSQL_LIBDIR" != ""; then
+				SQL_LIBS="$SQL_LIBS -L$MYSQL_LIBDIR"
+			fi
+			SQL_LIBS="$SQL_LIBS $mysql_lib"
+
+			AC_CHECK_LIB(mysqlclient, mysql_ssl_set, [
+				AC_DEFINE(HAVE_MYSQL_SSL,, Define if your MySQL library has SSL functions)
+				if test "x$have_openssl" = "yes"; then
+				  ssl_define="#define HAVE_OPENSSL"
+				else
+				  ssl_define=""
+				fi
+				AC_TRY_COMPILE([
+				  $ssl_define
+				  #include <mysql.h>
+				], [
+				  mysql_set_ssl(0, 0, 0, 0, 0, 0);
+				], [
+					AC_DEFINE(HAVE_MYSQL_SSL_CIPHER,, Define if your MySQL library supports setting cipher)
+				])
+			])
+			
+			AC_DEFINE(HAVE_MYSQL,, Build with MySQL support)
+			found_sql_drivers="$found_sql_drivers mysql"
+		])
+		CPPFLAGS=$old_CPPFLAGS
+	fi
+
+	LIBS=$old_LIBS
+fi
+
+if test $want_sqlite = yes; then
+	AC_CHECK_LIB(sqlite3, sqlite3_open, [
+		AC_CHECK_HEADER(sqlite3.h, [
+			SQL_LIBS="$SQL_LIBS -lsqlite3 -lz"
+
+			AC_DEFINE(HAVE_SQLITE,, Build with SQLite3 support)
+			found_sql_drivers="$found_sql_drivers sqlite"
+		])
+	])
+fi
+
+if test "$found_sql_drivers" != "" -o "$want_sql" = "yes"; then
+	if test "$all_sql_drivers" = "yes"; then
+	  sql_drivers="$found_sql_drivers"
+	fi
+
+	AC_DEFINE(PASSDB_SQL,, Build with SQL support)
+	AC_DEFINE(USERDB_SQL,, Build with SQL support)
+	AUTH_LIBS="$AUTH_LIBS $SQL_LIBS"
+	passdb="$passdb sql"
+	userdb="$userdb sql"
+fi
+
+if test $want_vpopmail = yes; then
+	vpopmail_home="`echo ~vpopmail`"
+	vpop_libdeps="$vpopmail_home/etc/lib_deps"
+
+	AC_MSG_CHECKING([for vpopmail configuration at $vpop_libdeps])
+	if test -f $vpop_libdeps; then
+		need_crypt=yes
+		AUTH_CFLAGS="$AUTH_CFLAGS `cat $vpopmail_home/etc/inc_deps` $CFLAGS"
+		AUTH_LIBS="$AUTH_LIBS `cat $vpop_libdeps`"
+		AC_DEFINE(USERDB_VPOPMAIL,, Build with vpopmail support)
+		AC_DEFINE(PASSDB_VPOPMAIL,, Build with vpopmail support)
+		userdb="$userdb vpopmail"
+		passdb="$passdb vpopmail"
+		AC_MSG_RESULT(found)
+	else
+		want_vpopmail=no
+		AC_MSG_RESULT(not found)
+	fi
+fi
+
+if test $need_crypt = yes; then
+	AC_CHECK_LIB(crypt, crypt, [
+		AUTH_LIBS="-lcrypt $AUTH_LIBS"
+	], [
+		AC_CHECK_FUNC(crypt,, [
+			AC_MSG_ERROR([crypt() wasn't found])
+		])
+	])
+fi
+
+dnl * dynamic modules?
+have_modules=no
+AC_CHECK_FUNC(dlopen, [
+  have_modules=yes
+  MODULE_LIBS="-export-dynamic"
+], [
+  AC_CHECK_LIB(dl, dlopen, [
+    have_modules=yes
+    MODULE_LIBS="-export-dynamic -ldl"
+  ])
+])
+
+if test $have_modules = yes; then
+  AC_DEFINE(HAVE_MODULES,, Define if you have dynamic module support)
+  userdb="$userdb (modules)"
+  passdb="$passdb (modules)"
+
+  AC_SUBST(MODULE_LIBS)
+fi
+
+AC_SUBST(AUTH_CFLAGS)
+AC_SUBST(AUTH_LIBS)
+AC_SUBST(SQL_CFLAGS)
+AC_SUBST(SQL_LIBS)
+
+dnl **
+dnl ** Index file compatibility flags
+dnl **
+
+dnl * currently just checking for endianess
+
+AC_C_BIGENDIAN
+
+if test $ac_cv_c_bigendian = yes; then
+	flags=0
+else
+	flags=1
+fi
+
+AC_DEFINE_UNQUOTED(MAIL_INDEX_COMPAT_FLAGS, $flags, Index file compatibility flags)
+
+dnl **
+dnl ** IPv6 support
+dnl **
+
+if test "x$want_ipv6" = "xyes"; then
+	AC_MSG_CHECKING([for IPv6])
+	AC_CACHE_VAL(i_cv_type_in6_addr,
+	[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+	#include <sys/types.h>
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <netdb.h>
+	#include <arpa/inet.h>]],
+	[[struct in6_addr i;]])],
+	[i_cv_type_in6_addr=yes],
+	[i_cv_type_in6_addr=no])])
+	if test $i_cv_type_in6_addr = yes; then
+		AC_DEFINE(HAVE_IPV6,, Build with IPv6 support)
+	fi
+	AC_MSG_RESULT($i_cv_type_in6_addr)
+fi
+
+dnl **
+dnl ** storage classes
+dnl **
+
+maildir_libs='$(top_builddir)/src/lib-storage/index/maildir/libstorage_maildir.a'
+mbox_libs='$(top_builddir)/src/lib-storage/index/mbox/libstorage_mbox.a'
+dbox_libs='$(top_builddir)/src/lib-storage/index/dbox/libstorage_dbox.a'
+index_libs='$(top_builddir)/src/lib-storage/index/libstorage_index.a $(top_builddir)/src/lib-index/libindex.a'
+
+STORAGE_LIBS=
+for storage in $mail_storages; do
+  STORAGE_LIBS="$STORAGE_LIBS `eval \"echo \\$${storage}_libs\"`"
+done
+STORAGE_LIBS="$STORAGE_LIBS $index_libs"
+AC_SUBST(STORAGE_LIBS)
+
+dnl **
+dnl ** SQL drivers
+dnl **
+
+for driver in $sql_drivers; do
+  if test "$driver" = "pgsql"; then
+    AC_DEFINE(BUILD_PGSQL,, Built-in PostgreSQL support)
+  elif test "$driver" = "mysql"; then
+    AC_DEFINE(BUILD_MYSQL,, Built-in MySQL support)
+  elif test "$driver" = "sqlite"; then
+    AC_DEFINE(BUILD_SQLITE,, Built-in SQLite support)
+  fi
+done
+
+AC_SUBST(sql_drivers)
+
+dnl **
+dnl ** Plugins
+dnl **
+
+have_zlib=no
+AC_CHECK_HEADER(zlib.h, [
+  have_zlib=yes
+])
+AM_CONDITIONAL(BUILD_ZLIB, test "$have_zlib" = "yes")
+
+dnl **
+dnl ** capabilities
+dnl **
+
+capability="IMAP4rev1 SORT THREAD=REFERENCES MULTIAPPEND UNSELECT LITERAL+ IDLE CHILDREN NAMESPACE LOGIN-REFERRALS"
+AC_DEFINE_UNQUOTED(CAPABILITY_STRING, "$capability", IMAP capabilities)
+
+CFLAGS="$CFLAGS $EXTRA_CFLAGS"
+
+AC_CONFIG_HEADERS([config.h])
+AC_CONFIG_FILES([
+Makefile
+doc/Makefile
+src/Makefile
+src/lib/Makefile
+src/lib-sql/Makefile
+src/lib-auth/Makefile
+src/lib-charset/Makefile
+src/lib-dict/Makefile
+src/lib-imap/Makefile
+src/lib-index/Makefile
+src/lib-mail/Makefile
+src/lib-ntlm/Makefile
+src/lib-settings/Makefile
+src/lib-storage/Makefile
+src/lib-storage/index/Makefile
+src/lib-storage/index/maildir/Makefile
+src/lib-storage/index/mbox/Makefile
+src/lib-storage/index/dbox/Makefile
+src/lib-storage/subscription-file/Makefile
+src/lib-storage/register/Makefile
+src/auth/Makefile
+src/dict/Makefile
+src/imap/Makefile
+src/imap-login/Makefile
+src/login-common/Makefile
+src/master/Makefile
+src/pop3/Makefile
+src/pop3-login/Makefile
+src/util/Makefile
+src/plugins/Makefile
+src/plugins/acl/Makefile
+src/plugins/convert/Makefile
+src/plugins/quota/Makefile
+src/plugins/imap-quota/Makefile
+src/plugins/trash/Makefile
+src/plugins/zlib/Makefile
+stamp.h
+dovecot-config])
+
+AC_OUTPUT
+
+echo
+echo "Install prefix ...................... : $prefix"
+echo "File offsets ........................ : ${offt_bits}bit"
+echo "I/O loop method ..................... : $ioloop"
+echo "File change notification method ..... : $have_notify"
+echo "Building with SSL support ........... : $have_ssl"
+echo "Building with IPv6 support .......... : $want_ipv6"
+echo "Building with pop3 server ........... : $want_pop3d"
+#echo "Building with mail delivery agent  .. : $want_deliver"
+echo "Building with GSSAPI support ........ : $have_gssapi"
+echo "Building with user database modules . :$userdb"
+echo "Building with password lookup modules :$passdb"
+echo "Building with SQL drivers ............:$sql_drivers"

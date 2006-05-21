@@ -1,0 +1,82 @@
+/* Copyright (C) 2002-2003 Timo Sirainen */
+
+#include "common.h"
+
+#ifdef PASSDB_PASSWD
+
+#include "safe-memset.h"
+#include "passdb.h"
+#include "mycrypt.h"
+
+#include <pwd.h>
+
+#define PASSWD_CACHE_KEY "%u"
+#define PASSWD_PASS_SCHEME "CRYPT"
+
+static void
+passwd_verify_plain(struct auth_request *request, const char *password,
+		    verify_plain_callback_t *callback)
+{
+	struct passwd *pw;
+	bool result;
+
+	pw = getpwnam(request->user);
+	if (pw == NULL) {
+		auth_request_log_info(request, "passwd", "unknown user");
+		callback(PASSDB_RESULT_USER_UNKNOWN, request);
+		return;
+	}
+
+	if (!IS_VALID_PASSWD(pw->pw_passwd)) {
+		auth_request_log_info(request, "passwd",
+			"invalid password field '%s'", pw->pw_passwd);
+		callback(PASSDB_RESULT_USER_DISABLED, request);
+		return;
+	}
+
+	/* save the password so cache can use it */
+	auth_request_set_field(request, "password", pw->pw_passwd,
+			       PASSWD_PASS_SCHEME);
+
+	/* check if the password is valid */
+	result = strcmp(mycrypt(password, pw->pw_passwd), pw->pw_passwd) == 0;
+
+	/* clear the passwords from memory */
+	safe_memset(pw->pw_passwd, 0, strlen(pw->pw_passwd));
+
+	if (!result) {
+		auth_request_log_info(request, "passwd", "password mismatch");
+		callback(PASSDB_RESULT_PASSWORD_MISMATCH, request);
+		return;
+	}
+
+	/* make sure we're using the username exactly as it's in the database */
+        auth_request_set_field(request, "user", pw->pw_name, NULL);
+
+	callback(PASSDB_RESULT_OK, request);
+}
+
+static void passwd_init(struct passdb_module *module,
+			const char *args __attr_unused__)
+{
+	module->cache_key = PASSWD_CACHE_KEY;
+	module->default_pass_scheme = PASSWD_PASS_SCHEME;
+}
+
+static void passwd_deinit(struct passdb_module *module __attr_unused__)
+{
+	endpwent();
+}
+
+struct passdb_module_interface passdb_passwd = {
+	"passwd",
+
+	NULL,
+	passwd_init,
+	passwd_deinit,
+
+	passwd_verify_plain,
+	NULL
+};
+
+#endif

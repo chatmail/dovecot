@@ -1,0 +1,14 @@
+noinst_LIBRARIES = libauth.a
+
+AM_CPPFLAGS = \
+	-I$(top_srcdir)/src/lib
+
+libauth_a_SOURCES = \
+	auth-client.c \
+	auth-server-connection.c \
+	auth-server-request.c
+
+noinst_HEADERS = \
+	auth-client.h \
+	auth-server-connection.h \
+	auth-server-request.h

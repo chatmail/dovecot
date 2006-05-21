@@ -1,0 +1,809 @@
+/* Copyright (C) 2004 Timo Sirainen */
+
+#include "lib.h"
+#include "ioloop.h"
+#include "array.h"
+#include "buffer.h"
+#include "file-set-size.h"
+#include "mmap-util.h"
+#include "mail-index-view-private.h"
+#include "mail-index-sync-private.h"
+#include "mail-transaction-log.h"
+#include "mail-transaction-log-private.h"
+#include "mail-transaction-util.h"
+
+void mail_index_sync_replace_map(struct mail_index_sync_map_ctx *ctx,
+				 struct mail_index_map *map)
+{
+        struct mail_index_view *view = ctx->view;
+
+	/* if map still exists after this, it's only in views. */
+	view->map->write_to_disk = FALSE;
+
+	mail_index_unmap(view->index, &view->map);
+	view->map = map;
+	view->map->refcount++;
+	mail_index_unmap(view->index, &view->index->map);
+	view->index->map = map;
+	view->index->hdr = &map->hdr;
+
+	if (ctx->type == MAIL_INDEX_SYNC_HANDLER_INDEX) {
+		map->write_to_disk = TRUE;
+		map->write_atomic = TRUE;
+	}
+
+	i_assert(view->hdr.messages_count == map->hdr.messages_count);
+}
+
+static void
+mail_index_header_update_counts(struct mail_index *index,
+				struct mail_index_header *hdr,
+				uint8_t old_flags, uint8_t new_flags)
+{
+	if (((old_flags ^ new_flags) & MAIL_RECENT) != 0) {
+		/* different recent-flag */
+		if ((old_flags & MAIL_RECENT) == 0)
+			hdr->recent_messages_count++;
+		else if (hdr->recent_messages_count == 0 ||
+			 hdr->recent_messages_count > hdr->messages_count) {
+                        hdr->flags |= MAIL_INDEX_HDR_FLAG_FSCK;
+			mail_index_set_error(index,
+				"Recent counter wrong in index file %s",
+				index->filepath);
+		} else if (--hdr->recent_messages_count == 0)
+			hdr->first_recent_uid_lowwater = hdr->next_uid;
+	}
+
+	if (((old_flags ^ new_flags) & MAIL_SEEN) != 0) {
+		/* different seen-flag */
+		if ((old_flags & MAIL_SEEN) != 0)
+			hdr->seen_messages_count--;
+		else if (hdr->seen_messages_count >= hdr->messages_count) {
+                        hdr->flags |= MAIL_INDEX_HDR_FLAG_FSCK;
+			mail_index_set_error(index,
+				"Seen counter wrong in index file %s",
+				index->filepath);
+		} else if (++hdr->seen_messages_count == hdr->messages_count)
+			hdr->first_unseen_uid_lowwater = hdr->next_uid;
+	}
+
+	if (((old_flags ^ new_flags) & MAIL_DELETED) != 0) {
+		/* different deleted-flag */
+		if ((old_flags & MAIL_DELETED) == 0)
+			hdr->deleted_messages_count++;
+		else if (hdr->deleted_messages_count == 0 ||
+			 hdr->deleted_messages_count > hdr->messages_count) {
+                        hdr->flags |= MAIL_INDEX_HDR_FLAG_FSCK;
+			mail_index_set_error(index,
+				"Deleted counter wrong in index file %s",
+				index->filepath);
+		} else if (--hdr->deleted_messages_count == 0)
+			hdr->first_deleted_uid_lowwater = hdr->next_uid;
+	}
+}
+
+void mail_index_view_recalc_counters(struct mail_index_view *view)
+{
+	struct mail_index_map *map = view->map;
+	const struct mail_index_record *rec;
+	unsigned int i;
+
+	map->hdr.recent_messages_count = 0;
+	map->hdr.seen_messages_count = 0;
+	map->hdr.deleted_messages_count = 0;
+
+	for (i = 0; i < view->hdr.messages_count; i++) {
+		rec = MAIL_INDEX_MAP_IDX(map, i);
+		mail_index_header_update_counts(view->index, &map->hdr,
+						0, rec->flags);
+	}
+
+	view->hdr.recent_messages_count = map->hdr.recent_messages_count;
+	view->hdr.seen_messages_count = map->hdr.seen_messages_count;
+	view->hdr.deleted_messages_count = map->hdr.deleted_messages_count;
+
+	view->broken_counters = FALSE;
+}
+
+static void
+mail_index_header_update_lowwaters(struct mail_index_header *hdr,
+				   const struct mail_index_record *rec)
+{
+	if ((rec->flags & MAIL_RECENT) != 0 &&
+	    rec->uid < hdr->first_recent_uid_lowwater)
+		hdr->first_recent_uid_lowwater = rec->uid;
+	if ((rec->flags & MAIL_SEEN) == 0 &&
+	    rec->uid < hdr->first_unseen_uid_lowwater)
+		hdr->first_unseen_uid_lowwater = rec->uid;
+	if ((rec->flags & MAIL_DELETED) != 0 &&
+	    rec->uid < hdr->first_deleted_uid_lowwater)
+		hdr->first_deleted_uid_lowwater = rec->uid;
+}
+
+static int sync_expunge(const struct mail_transaction_expunge *e,
+			struct mail_index_sync_map_ctx *ctx)
+{
+	struct mail_index_view *view = ctx->view;
+	struct mail_index_map *map = view->map;
+	struct mail_index_record *rec;
+	uint32_t count, seq, seq1, seq2;
+        const struct mail_index_expunge_handler *expunge_handlers, *eh;
+	unsigned int i, expunge_handlers_count;
+
+	if (e->uid1 > e->uid2 || e->uid1 == 0) {
+		mail_transaction_log_view_set_corrupted(ctx->view->log_view,
+				"Invalid UID range in expunge (%u .. %u)",
+				e->uid1, e->uid2);
+		return -1;
+	}
+
+	if (!view->map->write_to_disk || view->map->refcount != 1) {
+		/* expunges have to be atomic. so we'll have to copy
+		   the mapping, do the changes there and then finally
+		   replace the whole index file. to avoid extra disk
+		   I/O we copy the index into memory rather than to
+		   temporary file */
+		map = mail_index_map_clone(map, map->hdr.record_size);
+		mail_index_sync_replace_map(ctx, map);
+	}
+	i_assert(MAIL_INDEX_MAP_IS_IN_MEMORY(map));
+
+	/* we want atomic rename()ing */
+	map->write_atomic = TRUE;
+
+	if (mail_index_lookup_uid_range(view, e->uid1, e->uid2,
+					&seq1, &seq2) < 0)
+		return -1;
+
+	if (seq1 == 0)
+		return 1;
+
+	/* don't call expunge handlers if we're syncing view */
+	if (ctx->type != MAIL_INDEX_SYNC_HANDLER_VIEW &&
+	    !ctx->expunge_handlers_set)
+		mail_index_sync_init_expunge_handlers(ctx);
+
+	if (ctx->type != MAIL_INDEX_SYNC_HANDLER_VIEW &&
+	    array_is_created(&ctx->expunge_handlers)) {
+		expunge_handlers = array_get(&ctx->expunge_handlers,
+					     &expunge_handlers_count);
+	} else {
+		expunge_handlers = NULL;
+		expunge_handlers_count = 0;
+	}
+
+	if (ctx->unreliable_flags || view->broken_counters)
+		view->broken_counters = TRUE;
+	else {
+		for (seq = seq1; seq <= seq2; seq++) {
+			rec = MAIL_INDEX_MAP_IDX(map, seq-1);
+			mail_index_header_update_counts(view->index, &map->hdr,
+							rec->flags, 0);
+		}
+	}
+
+	for (i = 0; i < expunge_handlers_count; i++) {
+		eh = &expunge_handlers[i];
+
+		for (seq = seq1; seq <= seq2; seq++) {
+			rec = MAIL_INDEX_MAP_IDX(map, seq-1);
+			eh->handler(ctx, seq,
+				    PTR_OFFSET(rec, eh->record_offset),
+				    eh->context);
+		}
+	}
+
+	/* @UNSAFE */
+	count = seq2 - seq1 + 1;
+	memmove(MAIL_INDEX_MAP_IDX(map, seq1-1), MAIL_INDEX_MAP_IDX(map, seq2),
+		(map->records_count - seq2) * map->hdr.record_size);
+
+	map->records_count -= count;
+	map->hdr.messages_count -= count;
+	view->hdr.messages_count -= count;
+
+	if (map->buffer != NULL) {
+		buffer_set_used_size(map->buffer, map->records_count *
+				     map->hdr.record_size);
+		map->records = buffer_get_modifyable_data(map->buffer, NULL);
+	}
+	return 1;
+}
+
+static void write_seq_update(struct mail_index_map *map,
+			     uint32_t seq1, uint32_t seq2)
+{
+	if (map->write_seq_first == 0 ||
+	    map->write_seq_first > seq1)
+		map->write_seq_first = seq1;
+	if (map->write_seq_last < seq2)
+		map->write_seq_last = seq2;
+}
+
+static int sync_append(const struct mail_index_record *rec,
+		       struct mail_index_sync_map_ctx *ctx)
+{
+	struct mail_index_view *view = ctx->view;
+	struct mail_index_map *map = view->map;
+	void *dest;
+
+	if (rec->uid < map->hdr.next_uid) {
+		mail_transaction_log_view_set_corrupted(view->log_view,
+			"Append with UID %u, but next_uid = %u",
+			rec->uid, map->hdr.next_uid);
+		return -1;
+	}
+
+	if (MAIL_INDEX_MAP_IS_IN_MEMORY(map)) {
+		i_assert(map->records_count * map->hdr.record_size ==
+			 buffer_get_used_size(map->buffer));
+		dest = buffer_append_space_unsafe(map->buffer,
+						  map->hdr.record_size);
+		map->records = buffer_get_modifyable_data(map->buffer, NULL);
+	} else {
+		i_assert((map->records_count+1) * map->hdr.record_size <=
+			 map->mmap_size);
+		dest = MAIL_INDEX_MAP_IDX(map, map->records_count);
+	}
+	memcpy(dest, rec, sizeof(*rec));
+	memset(PTR_OFFSET(dest, sizeof(*rec)), 0,
+	       map->hdr.record_size - sizeof(*rec));
+
+	map->hdr.messages_count++;
+	map->hdr.next_uid = rec->uid+1;
+	map->records_count++;
+	view->hdr.messages_count++;
+
+	write_seq_update(map, map->hdr.messages_count, map->hdr.messages_count);
+
+	if ((rec->flags & MAIL_INDEX_MAIL_FLAG_DIRTY) != 0)
+		map->hdr.flags |= MAIL_INDEX_HDR_FLAG_HAVE_DIRTY;
+
+	if (!view->broken_counters) {
+		mail_index_header_update_counts(view->index, &map->hdr,
+						0, rec->flags);
+		mail_index_header_update_lowwaters(&map->hdr, rec);
+	}
+	return 1;
+}
+
+static int sync_flag_update(const struct mail_transaction_flag_update *u,
+			    struct mail_index_sync_map_ctx *ctx)
+{
+	struct mail_index_view *view = ctx->view;
+	struct mail_index_header *hdr;
+	struct mail_index_record *rec;
+	uint8_t flag_mask, old_flags;
+	uint32_t idx, seq1, seq2;
+
+	if (u->uid1 > u->uid2 || u->uid1 == 0) {
+		mail_transaction_log_view_set_corrupted(ctx->view->log_view,
+				"Invalid UID range in flag update (%u .. %u)",
+				u->uid1, u->uid2);
+		return -1;
+	}
+
+	if (mail_index_lookup_uid_range(view, u->uid1, u->uid2,
+					&seq1, &seq2) < 0)
+		return -1;
+
+	if (seq1 == 0)
+		return 1;
+
+	write_seq_update(view->map, seq1, seq2);
+
+	hdr = &view->map->hdr;
+	if ((u->add_flags & MAIL_INDEX_MAIL_FLAG_DIRTY) != 0)
+		hdr->flags |= MAIL_INDEX_HDR_FLAG_HAVE_DIRTY;
+
+        flag_mask = ~u->remove_flags;
+
+	if (view->broken_counters ||
+	    (ctx->unreliable_flags &&
+	     ((u->add_flags | u->remove_flags) &
+	      (MAIL_SEEN | MAIL_DELETED | MAIL_RECENT)) != 0)) {
+		view->broken_counters = TRUE;
+		for (idx = seq1-1; idx < seq2; idx++) {
+			rec = MAIL_INDEX_MAP_IDX(view->map, idx);
+			rec->flags = (rec->flags & flag_mask) | u->add_flags;
+
+			mail_index_header_update_lowwaters(hdr, rec);
+		}
+	} else {
+		for (idx = seq1-1; idx < seq2; idx++) {
+			rec = MAIL_INDEX_MAP_IDX(view->map, idx);
+
+			old_flags = rec->flags;
+			rec->flags = (rec->flags & flag_mask) | u->add_flags;
+
+			mail_index_header_update_counts(view->index, hdr,
+							old_flags, rec->flags);
+			mail_index_header_update_lowwaters(hdr, rec);
+		}
+	}
+	return 1;
+}
+
+static int sync_header_update(const struct mail_transaction_header_update *u,
+			      struct mail_index_sync_map_ctx *ctx)
+{
+	struct mail_index_map *map = ctx->view->map;
+
+	if (u->offset >= map->hdr.base_header_size ||
+	    u->offset + u->size > map->hdr.base_header_size) {
+		mail_transaction_log_view_set_corrupted(ctx->view->log_view,
+			"Header update outside range: %u + %u > %u",
+			u->offset, u->size, map->hdr.base_header_size);
+		return -1;
+	}
+
+	buffer_write(map->hdr_copy_buf, u->offset, u + 1, u->size);
+	map->hdr_base = map->hdr_copy_buf->data;
+
+	/* @UNSAFE */
+	if ((uint32_t)(u->offset + u->size) <= sizeof(map->hdr)) {
+		memcpy(PTR_OFFSET(&map->hdr, u->offset),
+		       u + 1, u->size);
+	} else if (u->offset < sizeof(map->hdr)) {
+		memcpy(PTR_OFFSET(&map->hdr, u->offset),
+		       u + 1, sizeof(map->hdr) - u->offset);
+	}
+	return 1;
+}
+
+static int mail_index_grow(struct mail_index *index, struct mail_index_map *map,
+			   unsigned int count)
+{
+	void *hdr_copy;
+	size_t size, hdr_copy_size;
+
+	if (MAIL_INDEX_MAP_IS_IN_MEMORY(map))
+		return 0;
+
+	i_assert(map == index->map);
+	i_assert(!index->mapping); /* mail_index_sync_from_transactions() */
+
+	size = map->hdr.header_size +
+		(map->records_count + count) * map->hdr.record_size;
+	if (size <= map->mmap_size)
+		return 0;
+
+	/* when we grow fast, do it exponentially */
+	if (count < index->last_grow_count)
+		count = index->last_grow_count;
+	if (count < MAIL_INDEX_MAX_POWER_GROW)
+		count = nearest_power(count);
+	index->last_grow_count = count;
+
+	size = map->hdr.header_size +
+		(map->records_count + count) * map->hdr.record_size;
+	if (file_set_size(index->fd, (off_t)size) < 0)
+		return mail_index_set_syscall_error(index, "file_set_size()");
+
+	/* we only wish to grow the file, but mail_index_map() updates the
+	   headers as well and may break our modified hdr_copy. so, take
+	   a backup of it and put it back afterwards */
+	t_push();
+	i_assert(map->hdr_copy_buf->used == map->hdr.header_size);
+        hdr_copy_size = map->hdr_copy_buf->used;
+	hdr_copy = t_malloc(hdr_copy_size);
+	memcpy(hdr_copy, map->hdr_copy_buf->data, hdr_copy_size);
+	memcpy(hdr_copy, &map->hdr, sizeof(map->hdr));
+
+	if (mail_index_map(index, TRUE) <= 0) {
+		t_pop();
+		return -1;
+	}
+
+	map = index->map;
+	buffer_reset(map->hdr_copy_buf);
+	buffer_append(map->hdr_copy_buf, hdr_copy, hdr_copy_size);
+
+	map->hdr_base = map->hdr_copy_buf->data;
+	memcpy(&map->hdr, hdr_copy, sizeof(map->hdr));
+	map->records_count = map->hdr.messages_count;
+
+	i_assert(map->mmap_size >= size);
+	t_pop();
+	return 0;
+}
+
+static void
+mail_index_update_day_headers(struct mail_index_header *hdr, uint32_t uid)
+{
+	const int max_days =
+		sizeof(hdr->day_first_uid) / sizeof(hdr->day_first_uid[0]);
+	struct tm tm;
+	time_t stamp;
+	int i, days;
+
+	/* get beginning of today */
+	tm = *localtime(&ioloop_time);
+	tm.tm_hour = 0;
+	tm.tm_min = 0;
+	tm.tm_sec = 0;
+	stamp = mktime(&tm);
+	if (stamp == (time_t)-1)
+		i_panic("mktime(today) failed");
+
+	if ((time_t)hdr->day_stamp >= stamp)
+		return;
+
+	/* get number of days since last message */
+	days = (stamp - hdr->day_stamp) / (3600*24);
+	if (days > max_days)
+		days = max_days;
+
+	/* @UNSAFE: move days forward and fill the missing days with old
+	   day_first_uid[0]. */
+	memcpy(hdr->day_first_uid + days,
+	       hdr->day_first_uid, max_days - days);
+	for (i = 1; i < days; i++)
+		hdr->day_first_uid[i] = hdr->day_first_uid[0];
+
+	hdr->day_stamp = stamp;
+	hdr->day_first_uid[0] = uid;
+}
+
+int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
+			   const struct mail_transaction_header *hdr,
+			   const void *data)
+{
+	int ret = 0;
+
+	t_push();
+	switch (hdr->type & MAIL_TRANSACTION_TYPE_MASK) {
+	case MAIL_TRANSACTION_APPEND: {
+		const struct mail_index_record *rec, *end;
+
+		end = CONST_PTR_OFFSET(data, hdr->size);
+		for (rec = data; rec < end; rec++) {
+			ret = sync_append(rec, ctx);
+			if (ret <= 0)
+				break;
+		}
+		break;
+	}
+	case MAIL_TRANSACTION_EXPUNGE:
+	case MAIL_TRANSACTION_EXPUNGE|MAIL_TRANSACTION_EXPUNGE_PROT: {
+		const struct mail_transaction_expunge *rec, *end;
+
+		end = CONST_PTR_OFFSET(data, hdr->size);
+		for (rec = data; rec < end; rec++) {
+			ret = sync_expunge(rec, ctx);
+			if (ret <= 0)
+				break;
+		}
+		break;
+	}
+	case MAIL_TRANSACTION_FLAG_UPDATE: {
+		const struct mail_transaction_flag_update *rec, *end;
+
+		end = CONST_PTR_OFFSET(data, hdr->size);
+		for (rec = data; rec < end; rec++) {
+			ret = sync_flag_update(rec, ctx);
+			if (ret <= 0)
+				break;
+		}
+		break;
+	}
+	case MAIL_TRANSACTION_HEADER_UPDATE: {
+		const struct mail_transaction_header_update *rec;
+		unsigned int i;
+
+		for (i = 0; i < hdr->size; ) {
+			rec = CONST_PTR_OFFSET(data, i);
+			ret = sync_header_update(rec, ctx);
+			if (ret <= 0)
+				break;
+
+			i += sizeof(*rec) + rec->size;
+			if ((i % 4) != 0)
+				i += 4 - (i % 4);
+		}
+		break;
+	}
+	case MAIL_TRANSACTION_EXT_INTRO: {
+		const struct mail_transaction_ext_intro *rec = data;
+		unsigned int i;
+
+		for (i = 0; i < hdr->size; ) {
+			if (i + sizeof(*rec) > hdr->size) {
+				/* should be just extra padding */
+				break;
+			}
+
+			rec = CONST_PTR_OFFSET(data, i);
+			ret = mail_index_sync_ext_intro(ctx, rec);
+			if (ret <= 0)
+				break;
+
+			i += sizeof(*rec) + rec->name_size;
+			if ((i % 4) != 0)
+				i += 4 - (i % 4);
+		}
+		break;
+	}
+	case MAIL_TRANSACTION_EXT_RESET: {
+		const struct mail_transaction_ext_reset *rec = data;
+		ret = mail_index_sync_ext_reset(ctx, rec);
+		break;
+	}
+	case MAIL_TRANSACTION_EXT_HDR_UPDATE: {
+		const struct mail_transaction_ext_hdr_update *rec = data;
+		unsigned int i;
+
+		for (i = 0; i < hdr->size; ) {
+			rec = CONST_PTR_OFFSET(data, i);
+			ret = mail_index_sync_ext_hdr_update(ctx, rec);
+			if (ret <= 0)
+				break;
+
+			i += sizeof(*rec) + rec->size;
+			if ((i % 4) != 0)
+				i += 4 - (i % 4);
+		}
+		break;
+	}
+	case MAIL_TRANSACTION_EXT_REC_UPDATE: {
+		const struct mail_transaction_ext_rec_update *rec, *end;
+		const struct mail_index_ext *ext;
+		unsigned int record_size;
+
+		if (ctx->cur_ext_id == (uint32_t)-1) {
+			mail_transaction_log_view_set_corrupted(
+				ctx->view->log_view,
+				"Extension record update update "
+				"without intro prefix");
+			ret = -1;
+			break;
+		}
+
+		if (ctx->cur_ext_ignore) {
+			ret = 1;
+			break;
+		}
+
+		ext = array_idx(&ctx->view->map->extensions, ctx->cur_ext_id);
+		record_size = sizeof(*rec) + ext->record_size;
+
+		rec = data;
+		end = CONST_PTR_OFFSET(data, hdr->size);
+		while (rec < end) {
+			ret = mail_index_sync_ext_rec_update(ctx, rec);
+			if (ret <= 0)
+				break;
+
+			rec = CONST_PTR_OFFSET(rec, record_size);
+		}
+		break;
+	}
+	case MAIL_TRANSACTION_KEYWORD_UPDATE: {
+		const struct mail_transaction_keyword_update *rec = data;
+
+		ret = mail_index_sync_keywords(ctx, hdr, rec);
+		break;
+	}
+	case MAIL_TRANSACTION_KEYWORD_RESET: {
+		const struct mail_transaction_keyword_reset *rec = data;
+
+		ret = mail_index_sync_keywords_reset(ctx, hdr, rec);
+		break;
+	}
+	default:
+		i_unreached();
+	}
+	t_pop();
+
+	i_assert(ctx->view->map->records_count ==
+		 ctx->view->map->hdr.messages_count);
+	i_assert(ctx->view->hdr.messages_count ==
+		 ctx->view->map->hdr.messages_count);
+	return ret;
+}
+
+void mail_index_sync_map_init(struct mail_index_sync_map_ctx *sync_map_ctx,
+			      struct mail_index_view *view,
+			      enum mail_index_sync_handler_type type)
+{
+	memset(sync_map_ctx, 0, sizeof(*sync_map_ctx));
+	sync_map_ctx->view = view;
+	sync_map_ctx->cur_ext_id = (uint32_t)-1;
+	sync_map_ctx->type = type;
+
+	mail_index_sync_init_handlers(sync_map_ctx);
+}
+
+void mail_index_sync_map_deinit(struct mail_index_sync_map_ctx *sync_map_ctx)
+{
+	if (sync_map_ctx->expunge_handlers_used)
+		mail_index_sync_deinit_expunge_handlers(sync_map_ctx);
+	mail_index_sync_deinit_handlers(sync_map_ctx);
+}
+
+static void mail_index_sync_remove_recent(struct mail_index_sync_ctx *sync_ctx)
+{
+	struct mail_index_map *map = sync_ctx->view->map;
+	struct mail_index_record *rec;
+	unsigned int i;
+
+	for (i = 0; i < map->records_count; i++) {
+		rec = MAIL_INDEX_MAP_IDX(map, i);
+		if ((rec->flags & MAIL_RECENT) != 0) {
+			rec->flags &= ~MAIL_RECENT;
+
+			write_seq_update(map, i + 1, i + 1);
+		}
+	}
+
+	map->hdr.recent_messages_count = 0;
+	map->hdr.first_recent_uid_lowwater = map->hdr.next_uid;
+}
+
+int mail_index_sync_update_index(struct mail_index_sync_ctx *sync_ctx,
+				 bool sync_only_external)
+{
+	struct mail_index *index = sync_ctx->index;
+	struct mail_index_view *view = sync_ctx->view;
+	struct mail_index_map *map;
+        struct mail_index_sync_map_ctx sync_map_ctx;
+	const struct mail_transaction_header *thdr;
+	const void *data;
+	unsigned int count, old_lock_id;
+	uint32_t seq, i, first_append_uid;
+	uoff_t offset;
+	int ret;
+	bool had_dirty, skipped, check_ext_offsets;
+
+	mail_index_sync_map_init(&sync_map_ctx, view,
+				 MAIL_INDEX_SYNC_HANDLER_INDEX);
+
+	/* we'll have to update view->lock_id to avoid mail_index_view_lock()
+	   trying to update the file later. */
+	old_lock_id = view->lock_id;
+	if (mail_index_lock_exclusive(index, &view->lock_id) < 0)
+		return -1;
+	mail_index_unlock(index, old_lock_id);
+
+	/* NOTE: locking may change index->map so make sure the assignment is
+	   after locking */
+	map = index->map;
+	if (MAIL_INDEX_MAP_IS_IN_MEMORY(map))
+		map->write_to_disk = TRUE;
+
+	if (map->hdr_base != map->hdr_copy_buf->data) {
+		buffer_reset(map->hdr_copy_buf);
+		buffer_append(map->hdr_copy_buf, map->hdr_base,
+			      map->hdr.header_size);
+		map->hdr_base = map->hdr_copy_buf->data;
+	}
+	i_assert(map->hdr.base_header_size >= sizeof(map->hdr));
+
+	mail_index_unmap(index, &view->map);
+	view->map = map;
+	view->map->refcount++;
+
+	i_assert(view->hdr.messages_count == map->hdr.messages_count);
+
+	had_dirty = (map->hdr.flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) != 0;
+	if (had_dirty)
+		map->hdr.flags &= ~MAIL_INDEX_HDR_FLAG_HAVE_DIRTY;
+
+	if (sync_ctx->sync_recent) {
+		/* mark all messages non-recent */
+		mail_index_sync_remove_recent(sync_ctx);
+	}
+
+	/* make sure we don't go doing fsck while modifying the index */
+	index->sync_update = TRUE;
+
+	first_append_uid = 0;
+	check_ext_offsets = TRUE;
+	while ((ret = mail_transaction_log_view_next(view->log_view, &thdr,
+						     &data, &skipped)) > 0) {
+		if ((thdr->type & MAIL_TRANSACTION_EXTERNAL) == 0) {
+			if (sync_only_external) {
+				/* we're syncing only external changes. */
+				continue;
+			}
+		} else if (check_ext_offsets) {
+			if (mail_index_is_ext_synced(view->log_view, view->map))
+				continue;
+			check_ext_offsets = FALSE;
+		}
+
+		if ((thdr->type & MAIL_TRANSACTION_APPEND) != 0) {
+			const struct mail_index_record *rec = data;
+
+			if (first_append_uid == 0)
+				first_append_uid = rec->uid;
+
+			map = view->map;
+			count = thdr->size / sizeof(*rec);
+			if (mail_index_grow(index, map, count) < 0) {
+				ret = -1;
+				break;
+			}
+			if (map != index->map) {
+				map = index->map;
+				mail_index_unmap(view->index, &view->map);
+				view->map = map;
+				view->map->refcount++;
+			}
+		}
+
+		if (mail_index_sync_record(&sync_map_ctx, thdr, data) < 0) {
+			ret = -1;
+			break;
+		}
+
+		/* mail_index_sync_record() might have changed map to anything.
+		   make sure we don't accidentally try to use it. */
+		map = NULL;
+	}
+	map = view->map;
+        mail_index_sync_map_deinit(&sync_map_ctx);
+
+	index->sync_update = FALSE;
+
+	if (ret < 0) {
+		mail_index_view_unlock(view);
+		return -1;
+	}
+
+	i_assert(map->records_count == map->hdr.messages_count);
+
+	mail_transaction_log_get_head(index->log, &seq, &offset);
+
+	if (!sync_only_external)
+		map->hdr.log_file_int_offset = offset;
+	else if (map->hdr.log_file_seq != seq) {
+		/* log sequence changed. update internal offset to
+		   beginning of the new file. */
+		i_assert(map->hdr.log_file_int_offset ==
+			 index->log->head->hdr.prev_file_offset);
+		map->hdr.log_file_int_offset = index->log->head->hdr.hdr_size;
+	}
+	map->hdr.log_file_seq = seq;
+	map->hdr.log_file_ext_offset = offset;
+
+	if (first_append_uid != 0)
+		mail_index_update_day_headers(&map->hdr, first_append_uid);
+
+	if ((map->hdr.flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) == 0 &&
+	    had_dirty) {
+		/* do we have dirty flags anymore? */
+		const struct mail_index_record *rec;
+
+		for (i = 0; i < map->records_count; i++) {
+			rec = MAIL_INDEX_MAP_IDX(map, i);
+			if ((rec->flags & MAIL_INDEX_MAIL_FLAG_DIRTY) != 0) {
+				map->hdr.flags |=
+					MAIL_INDEX_HDR_FLAG_HAVE_DIRTY;
+				break;
+			}
+		}
+	}
+
+	if (!MAIL_INDEX_MAP_IS_IN_MEMORY(map)) {
+		unsigned int base_size;
+
+		base_size = I_MIN(map->hdr.base_header_size, sizeof(map->hdr));
+		map->mmap_used_size = index->hdr->header_size +
+			map->records_count * map->hdr.record_size;
+
+		memcpy(map->mmap_base, &map->hdr, base_size);
+		memcpy(PTR_OFFSET(map->mmap_base, base_size),
+		       CONST_PTR_OFFSET(map->hdr_base, base_size),
+		       map->hdr.header_size - base_size);
+		if (msync(map->mmap_base, map->mmap_used_size, MS_SYNC) < 0) {
+			mail_index_set_syscall_error(index, "msync()");
+			ret = -1;
+		}
+	}
+	i_assert(view->map == index->map);
+	view->hdr = map->hdr;
+
+        mail_index_view_unlock(view);
+	return ret;
+}
