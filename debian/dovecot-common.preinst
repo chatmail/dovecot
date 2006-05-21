@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+if [ ! -e /etc/dovecot ];
+then
+  mkdir /etc/dovecot
+fi
+
+for i in dovecot.conf dovecot-ldap.conf dovecot-mysql.conf dovecot-pgsql.conf;
+do
+  if [ -f /etc/$i ];
+  then
+    mv /etc/$i /etc/dovecot/$i
+    for j in dpkg-dist dpkg-new dpkg-old bak;
+    do
+      if [ -f /etc/$i.$j ];
+      then
+        mv /etc/$i.$j /etc/dovecot/$i.$j
+      fi
+    done
+  fi
+done
+
+#DEBHELPER#

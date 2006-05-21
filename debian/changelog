@@ -1,0 +1,604 @@
+dovecot (1.0.beta8-1) unstable; urgency=high
+
+  * New upstream release.
+  * Set urgency to high: this version fixes a security bug 
+    (see: http://www.dovecot.org/list/dovecot-news/2006-May/000006.html).
+  * Standards-Version: 3.7.2, no changes needed.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sat, 13 May 2006 22:46:16 +0200
+
+dovecot (1.0.beta7-1) unstable; urgency=low
+
+  * New upstream version.
+  * Added sqlite support.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 12 Apr 2006 23:25:41 -0400
+
+dovecot (1.0.beta5-1) unstable; urgency=low
+
+  * New upstream version.  Also updated dovecot-lda from CVS.
+  * debian/control.  Added build-depends on flex to prevent FTBS.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu,  6 Apr 2006 16:22:46 -0400
+
+dovecot (1.0.beta3-3) unstable; urgency=low
+
+  * Compile against the newer mysql library. (Closes: #356729)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Wed, 22 Mar 2006 13:43:04 +0000
+
+dovecot (1.0.beta3-2) unstable; urgency=low
+
+  [Fabio Tranchitella]
+  * debian/control: added build-depends on byacc.
+  * debian/rules: removed --with-vpopmail option, because libvpopmail-dev
+    is in contrib and we don't wanto to have dovecot build-depends on it.
+  * debian/patches/dovecot-example.dpatch: added two small commented 
+    block of configuration for dovecot-lda.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 26 Feb 2006 20:59:06 +0000
+
+dovecot (1.0.beta3-1) unstable; urgency=high
+
+  [Fabio Tranchitella]
+  * New upstream release, which fixes two security related bugs.
+    CVE-2006-0730 (Closes: #353341)
+  * Included dovecot-lda (ver. 20060209). (Closes: #353307, #347348, #333962)
+
+  [ Jaldhar H. Vyas ]
+  * Removed the code for upgrading impad.pem.  This might bite if you if
+    you try and upgrade a woody version of dovecot to this one.  So
+    don't do that.  (Closes: #337715)
+  * dovecot-imapd,dovecot-pop3d: depend on dovecot-common >= 1.0beta3-1 
+    as the way SSL parameters are generated has changed.  (Closes: #353404)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 17 Feb 2006 22:06:21 -0500
+
+dovecot (1.0.beta2-1) unstable; urgency=low
+
+  [Fabio Tranchitella]
+  * New upstream release.
+  * debian/rules: compile with vpopmail support. (Closes: #347838)
+  * debian/patches: removed zlib patch (merged with upstream).
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu,  2 Feb 2006 21:38:32 +0000
+
+dovecot (1.0.alpha5-1) unstable; urgency=low
+
+  [Fabio Tranchitella]
+  * New upstream release.
+  * Compile dovecot with Kerberos support. (Closes: #338384)
+  * Fixed a small typo in mbox specification. (Closes: #339789)
+  * Added man page for maildirmake.dovecot, thanks to Henry Precheur.
+    (Closes: #340498)
+  * Use /usr/lib/dovecot/modules as basedir for dynamic modules.
+    Upstream suggests /usr/lib/dovecot, but we already use it as 
+    libexec directory.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Wed, 21 Dec 2005 13:44:38 +0000
+
+dovecot (1.0.alpha4-1) unstable; urgency=low
+
+  [Jaldhar H. Vyas]
+  * New upstream version.
+  * Made sure the default dovecot.conf includes mail_extra_groups=mail
+    (Closes: #336476) somehow this edit got lost at some point.
+  * use ISO8601 date format as default value for log_timestamp in
+    /etc/dovecot/dovecot.conf  (Closes: #333059)
+  * stop shipping {arch} directories in source (Closes: #334646)
+  * Include plugin for compressed mboxen (Closes: #332384)
+  * updated NEWS.Debian to warn users that the dovecot.conf syntax has
+    changed (Closes: #334209)
+  * Remember, remember, the 5th of November.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat,  5 Nov 2005 23:19:19 -0500
+
+dovecot (1.0.alpha3-2) unstable; urgency=low
+
+  [Jaldhar H. Vyas]
+  * dovecot-common: When creating the dovecot user in the postinst,
+    the --ingroup option to adduser to add dovecot to group
+    mail isn't used anymore.
+    (Closes: #330960, #331106)
+  * commented out userdb passdb from default configuration.  Most 
+    people won't need that. (Closes: #330978)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu,  6 Oct 2005 14:25:33 -0400
+
+dovecot (1.0.alpha3-1) unstable; urgency=low
+
+  [ Fabio Tranchitella ]
+  * New upstream release (dovecot-1.0.alpha.3)
+  * debian/patches/ipv6_v6only.dpatch: removed, upstream accepted it.
+  * debian/dovecot-common.postinst: removed bashisms.
+  * debian/dovecot-common.postinst: add dovecot user to group mail.
+    (Closes: #323921)
+  * debian/control: removed conflicts with imap-server and pop3-server,
+    added replaces instead. (Closes: #324480)
+  [ Jaldhar H. Vyas ]
+  * No longer crashes when using LDAP as userdb/passdb (Closes: #320388)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 26 Sep 2005 01:42:09 -0400
+
+dovecot (0.99.20050712-2) unstable; urgency=low
+
+  * Fabio Tranchitella <kobold@debian.org>
+    + debian/control: dovecot-common has to depend on adduser.
+    + debian/patches/documentation.dpatch: some cosmetic fixes about mysql
+      backend.
+  * Jaldhar H. Vyas <jaldhar@debian.org>
+    + debian/control: tighten dovecot-imapd and dovecot-pop3d's dependency on 
+      dovecot-common (Closes: #319465)
+    + debian/patches/dovecot-example.dpatch: some more fixes to default
+      configuration.  (Closes: #319413, #319941)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 29 Jul 2005 15:37:52 -0400
+
+dovecot (0.99.20050712-1) unstable; urgency=low
+
+  * Fabio Tranchitella <kobold@debian.org>
+    + New upstream version (dovecot-stable, last update 20050712).
+      (Closes: #312893)
+    + debian/control: Standards-Version: 3.6.2 (no changes needed).
+    + debian/patches/dovecot-sql.dpatch: use the right path for mysql socket.
+      (Closes: #298874)
+  * Jaldhar H. Vyas <jaldhar@debian.org>
+    + Removed dovecot package as it was just a woody->sarge transitional
+      pseudo-package.
+    + Apply patch to debian/dovecot-common.init to help when manually
+      starting dovecot.  Thanks Roland Stigge.  (Closes: #309679)
+    + Apply patch to src/lib/network.c to support IPV6_V6ONLY.  Thanks
+      Marco D'Itri. (Closes: #308652)
+    + depend on the latest postgresql library.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 20 Jul 2005 06:30:37 -0400
+
+dovecot (0.99.14-1) unstable; urgency=low
+
+  * New upstream version.
+  * dovecot-common: another postinst regexp fix for SSL cert/key files.
+    (Closes: #294989)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 12 Feb 2005 21:34:33 -0500
+
+dovecot (0.99.13-6) unstable; urgency=high
+
+  * dovecot-common: *sigh* another init script fix.  Hopefully we now
+    fully deal with dovecot being run from inetd.  Thanks again to Magnus
+    Holmgren.  (Closes: #293348)
+  * High again so -5 doesn't get into sarge.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon,  7 Feb 2005 02:58:30 -0500
+
+dovecot (0.99.13-5) unstable; urgency=high
+
+  * dovecot-common: typo in postinst resulted in incorrect generation of
+    keys for first-time installers.  Hence urgency high.
+  * dovecot-common: In init script, make extra check to make sure an 
+    IMAP or POP3 server called from inetd is dovecot and not some other 
+    random inferior product.  (Closes: #293348)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat,  5 Feb 2005 13:56:31 -0500
+
+dovecot (0.99.13-4) unstable; urgency=low
+
+  * build depend on libmysqlclient12
+  * dovecot-common: Allow STARTTLS to work when dovecot is run from inetd
+    Thanks Magnus Holmgren (Closes: #290985)
+  * dovecot-common: let init script exit if dovecot is being run from inetd
+    Thanks Magnus Holmgren (Closes: #292195)
+  * dovecot-common: fix a number of problems in postinst
+    + fails if /etc/ssl/certs or /etc/ssl/private doesn't exist
+    + certs cannot be generated and upgrade fails if openssl is not
+      configured.  Fail more gracefully if this is the case.
+    + read the name and path for the cert from dovecot.conf instead of
+      hardcoding it.
+      Thanks Frederic Pauget (Closes: #292344)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 30 Jan 2005 15:20:03 -0500
+
+dovecot (0.99.13-3) unstable; urgency=high
+
+  * Oops -2 had to be urgency=high so -1 doesn't get into sarge.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat,  8 Jan 2005 12:11:38 -0500
+
+dovecot (0.99.13-2) unstable; urgency=low
+
+  * dovecot-imapd, dovecot-pop3d:  It occurred to me that the effects of 
+    fixing #288391 will cause confusion in the minds of new installers so I 
+    should add a warning in README.Debian and NEWS.Debian in a vain 
+    effort to stave off swarms of bug reports.  (Vain, because no one 
+    actually reads documentation anyway.)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat,  8 Jan 2005 11:29:59 -0500
+
+dovecot (0.99.13-1) unstable; urgency=high
+
+  * New upstream version.
+  * dovecot-imapd, dovecot-pop3d: No longer mess with dovecot.conf in postinst
+    (Closes: #288391)
+  * urgency high due to #288391 being a release-critical bug.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri,  7 Jan 2005 17:37:08 -0500
+
+dovecot (0.99.12-1) unstable; urgency=low
+
+  * New upstream version.  (Yes I know 0.99.13 is just around the corner.)
+  * SASL is reenabled so this bug ("Dovecot seems not to require SASL")
+    is no longer valid (Closes: #272093)
+  * Configuration files moved to /etc/dovecot (Closes: #276183)
+  * Permissions on /var/run/dovecot and /var/run/dovecot/login no longer
+    give warnings. (Closes: #283996)
+  * SSL certificate is world readable (Closes #277114).
+  * Thanks to Jan Buren, much extra documentation has been added to
+    /usr/share/doc/dovecot-common/README.Debian
+  * Lintian overrides added.
+  * Happy new year to all you Gregorians
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 31 Dec 2004 15:55:07 -0500
+
+dovecot (0.99.11-3) unstable; urgency=medium
+
+  * applied dovecot-large-header-fix patch to prevent 100% CPU 
+    utilization when dealing with really large headers.
+    (Closes: #271458)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 13 Sep 2004 20:20:23 -0400
+
+dovecot (0.99.11-2) unstable; urgency=low
+
+  * Eliminated duplicate stanza in dovecot.conf (Closes: #270181)
+  * Reapplied CRAM-MD5 patch.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon,  6 Sep 2004 01:24:53 -0400
+
+dovecot (0.99.11-1) unstable; urgency=low
+
+  * New upstream release.
+  * patch to give bug reporting address in configure.ac.
+    Thanks Matthias Andree.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat,  4 Sep 2004 14:24:57 -0400
+
+dovecot (0.99.10.9-2) unstable; urgency=low
+
+  * screw mipsel.
+  * Added PAM_RHOST patch.  Thanks Dean Gaudet.  (Closes: #264712)
+  * Added CRAM-MD5 patch.  Thanks Joshua Goodall.
+  * Added unexpected EOF patch from Timo.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 17 Aug 2004 01:13:20 -0400
+
+dovecot (0.99.10.9-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon,  2 Aug 2004 18:56:02 -0400
+
+dovecot (0.99.10.8-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 30 Jul 2004 08:17:51 -0400
+
+dovecot (0.99.10.7-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 14 Jul 2004 07:29:49 -0400
+
+dovecot (0.99.10.6-3) unstable; urgency=low
+
+  * Patched so dovecot follows symlinks to directories again.
+    (Closes: #256061)
+  * Changed the priority of init script so it is run after postgresql
+    (Closes: #256068)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 24 Jun 2004 23:57:50 -0400
+
+dovecot (0.99.10.6-2) unstable; urgency=high
+
+  * I needed to enable one more parameter in the configuration in order 
+    to get dot-locking working.  Hence this should still be high urgency.
+    (Really Closes: #185335)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 21 Jun 2004 20:02:29 -0400
+
+dovecot (0.99.10.6-1) unstable; urgency=high
+
+  * New upstream version.
+    + finally fixes dot-locking so I think it deserves high priority for
+      sarge.  (Closes: #185335)
+  * dovecot: fixed a typo in description (Closes: #254415)
+  * dovecot-common: man page for dovecot added.  Thanks Kai Hendry.
+    (Closes: #253482)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 19 Jun 2004 23:18:39 -0400
+
+dovecot (0.99.10.5-4) unstable; urgency=high
+
+  * Crap, typo in dovecot-common.postinst sorry.  This should only 
+    affect new installs though.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 11 Jun 2004 22:30:41 -0400
+
+dovecot (0.99.10.5-3) unstable; urgency=high
+
+  * SECURITY:  set permissions on config files to 0600 to prevent
+    disclosure of sensitive information to local users. (Closes: #253760)
+  * SECURITY: Tightened permissions on generated SSL certificate.
+    (Closes: #253833)
+  * Made a note that dovecot-openssl.conf is not needed on Debian
+    because we generate a certificate in dovecot-commons' postinst.
+    (Closes: #253774)
+  * Added maildir-autocreate patch.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 11 Jun 2004 09:12:07 -0400
+
+dovecot (0.99.10.5-2) unstable; urgency=low
+
+  * Added maildir-stat patch.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 10 Jun 2004 14:39:28 -0400
+
+dovecot (0.99.10.5-1) unstable; urgency=low
+
+  * New upstream version.
+  * Enabled mysql support.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 27 May 2004 13:21:42 -0400
+
+dovecot (0.99.10.4-5) unstable; urgency=high
+
+  * Switched to using openssl as dovecot segfaults with gnutls7 and is
+    not compatible with gnutls10 (Closes: #244570)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 19 Apr 2004 22:45:21 -0400
+
+dovecot (0.99.10.4-4) unstable; urgency=low
+
+  * Added a patch to src/auth/db-pgsql.c from Zsolt VARGA.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 30 Mar 2004 12:49:31 -0500
+
+dovecot (0.99.10.4-3) unstable; urgency=high
+
+  * dovecot-common: Fix postinst to no longer delete /etc/pam.d/imap 
+    (Closes: #232832)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 15 Mar 2004 10:27:52 -0500
+
+dovecot (0.99.10.4-2) unstable; urgency=low
+
+  * dovecot-common: now replaces: dovecot for smoother upgrades.
+    (Closes: #223666)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 11 Dec 2003 09:18:12 -0500
+
+dovecot (0.99.10.4-1) unstable; urgency=low
+
+  * New upstream version
+    + This fixes the curruption of .subscriptions files wth folders in
+      maildir format. (Closes: #222272)
+  * Some extra information included in dovecot-common.README.Debian.
+    (Closes: #221106)  There should probaly be more so if you have ideas 
+    let me know.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon,  1 Dec 2003 23:41:00 -0500
+
+dovecot (0.99.10.2-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 11 Nov 2003 17:21:45 -0500
+
+dovecot (0.99.10-11) unstable; urgency=low
+
+  * Build depend on gnutls 7 instead of 5 (Closes: #219523)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu,  6 Nov 2003 22:25:00 -0500
+
+dovecot (0.99.10-10) unstable; urgency=low
+
+  * maildirmake.dovecot will now let you create maildirs whose names 
+   have spaces in them and chown them to a specified user.  Thanks Paul
+   Slootman (Closes: #219168)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue,  4 Nov 2003 20:00:25 +0000
+
+dovecot (0.99.10-9) unstable; urgency=low
+
+  * Don't use SASL2 as upstream says the support is broken.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 23 Sep 2003 16:27:11 +0000
+
+dovecot (0.99.10-8) unstable; urgency=low
+
+  * Patched so suid works on 2.6 kernels.  Thanks Peter Gervai.
+    (Closes: #211420)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 17 Sep 2003 17:59:10 +0000
+
+dovecot (0.99.10-7) unstable; urgency=low
+
+  * Yet another init script fix.  It should be ok now.  Thanks once again
+    to Alexis Iglauer.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 27 Aug 2003 10:56:04 -0400
+
+dovecot (0.99.10-6) unstable; urgency=low
+
+  * fix some errors in init script (closes: #207464)
+    Thanks to Adam Lackorzynski and Alexis Iglauer.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 27 Aug 2003 09:02:23 -0400
+
+dovecot (0.99.10-5) unstable; urgency=high
+
+  * dovecot-pop3d, dovecot-imapd: make sure init script doesn't 
+    attempt to start the daemons if unconfigured thus preventing 
+    segfault on startup.  (Closes: #206992, #207140)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 25 Aug 2003 16:40:53 -0400
+
+dovecot (0.99.10-4) unstable; urgency=low
+
+  * Updated PAM configuration to the new scheme and added appropriate 
+    dependency.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 22 Aug 2003 12:54:54 -0400
+
+dovecot (0.99.10-3) unstable; urgency=low
+
+  * dovecot-pop3d: Patch for proper PAM service name.
+  * dovecot-imapd, dovecot-pop3d: Make sure there is an appropriate 
+    entry in the protocol = line in /etc/dovecot.conf so the service 
+    will start up without errors. (Closes: #204213)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 21 Aug 2003 13:47:00 -0400
+
+dovecot (0.99.10-2.1) unstable; urgency=low
+
+  * Non-maintainer upload at request of maintainer.
+  * Fix segfault on alpha caused by time_t size. Closes: #203892.
+  * Fix segfault when user's home directory is left empty.
+
+ -- Scott James Remnant <scott@netsplit.com>  Wed,  6 Aug 2003 01:47:16 +0100
+
+dovecot (0.99.10-2) unstable; urgency=low
+
+  * corrected paths to example and configuration files in sample config
+    (Closes: #199740)
+  * Added postgresql support.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu,  3 Jul 2003 16:45:49 -0400
+
+dovecot (0.99.10-1) unstable; urgency=low
+
+  * New upstream release.
+  * PAM service name has changed to dovecot (for IMAP and POP3.)  I've included 
+    code to move /etc/pam.d/imap to /etc/pam.d/dovecot but if things suddenly 
+    stop working, this is the first thing to check.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 26 Jun 2003 22:31:07 -0400
+
+dovecot (0.99.10-0.rc2) unstable; urgency=low
+
+  * New upstream release.  Fixes broken imaps support.
+  * Typo in configure options that broke LDAP support on woody corrected.
+  * Only start /usr/sbin/dovecot if either the IMAP or POP3 servers are 
+    installed. (Closes: #192066)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 23 Jun 2003 23:26:04 -0400
+
+dovecot (0.99.9.1-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun,  4 May 2003 21:49:55 -0400
+
+dovecot (0.99.9-1) unstable; urgency=low
+
+  * New upstream release.
+  * The IMAP and POP3 servers have been split into seperate package so you
+    don't have to install both.  There is also a dovecot-common package
+    for the parts they share.  The dovecot package is now a dummy just for 
+    transitioning to this new scheme.  (Closes: #187826)
+  * Allow chmod in maildirmake.dovecot to fail gracefully (Closes: #191244)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 30 Apr 2003 08:53:46 -0400
+
+dovecot (0.99.8.1-4) unstable; urgency=low
+
+  * Added a build-depends on libsasl-dev (Closes: #187516)
+  * Enabled pop3 service.  However it is still turned off in the config file by
+    default so as to not surprise anyone who thought they only had an IMAP
+    server.
+  * Consequently, changed "IMAP server" in descriptions etc. to "mail server".
+  * only skip key generation if both /etc/ssl/certs/dovecot.pem and
+    /etc/ssl/private/dovecot.pem exist.  (Closes: #187638)
+  * post-0.99.8.1 patch: Fix renaming subfolders with maildir.
+  * post-0.99.8.1 patch: Fix other maildir subfolder problems.
+  * post-0.99.8.1 patch: Fix partial body fetches.
+  * post-0.99.8.1 patch: Fix using LITERAL+APPEND.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat,  5 Apr 2003 14:13:52 -0500
+
+dovecot (0.99.8.1-3) unstable; urgency=low
+
+  * Fixed bashism and perlism(!) in maildirmake.dovecot.  Thanks Clint
+    Adams. (Closes: #185768)
+  * Enabled LDAP support.  The configuration is in /etc/dovecot-ldap.conf
+    but is commented out.
+  * Happy new year to all Debian users still on the Julian calendar.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 25 Mar 2003 09:25:37 -0500
+
+dovecot (0.99.8.1-2) unstable; urgency=low
+
+  * Make a seperate check for /etc/ssl/private/imapd.pem in case we don't
+    have it. (Closes: #185334)
+  * Move check for dovecot user and creation code to postinsts' configure 
+    phase. (Closes: #185333)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 19 Mar 2003 01:50:10 -0500
+
+dovecot (0.99.8.1-1) unstable; urgency=low
+
+  * new upstream release.  (Closes: #184131)  Does not include the POP3
+    server or LDAP and SASL support for now so we can get into the archive
+    quickly.  Fixes segfaults in imap-master (Closes: #184231)  Fixes
+    faulty mail autodetection presets (Closes: #179625)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 16 Mar 2003 15:47:54 -0500
+
+dovecot (0.99.7-4) unstable; urgency=low
+
+  * Fixed location of handlers. (Closes: #179273)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 31 Jan 2003 18:37:23 -0500
+
+dovecot (0.99.7-3) unstable; urgency=low
+
+  * doh pam file should be called imap not dovecot (Closes: #179180)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 31 Jan 2003 14:12:29 -0500
+
+dovecot (0.99.7-2) unstable; urgency=low
+
+  * Added two upstream patches to fix broken plain authentication and 
+    building with vpopmail support (which is not enabled in the Debian 
+    package yet.)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 17 Jan 2003 14:24:22 -0500
+
+dovecot (0.99.7-1) unstable; urgency=low
+
+  * New upstream release.
+  * Syslog no longer fills up with entries when dovecot is misconfigured.
+    (Closes: #175507)
+  * startup is logged now. shutdowns were already logged. (Closes: #175509)
+  * dovecot will not remove your SSL certificates now.  (Closes: #175282)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 15 Jan 2003 00:58:23 -0500
+
+dovecot (0.99.6rc2-1) unstable; urgency=low
+
+  * New upstream release.
+  * Includes patch which stops dovecot from dying on alpha (Closes: #175577)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed,  8 Jan 2003 14:22:09 -0500
+
+dovecot (0.99.5-1) unstable; urgency=low
+
+  * New upstream release with many fixes and improvements.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri,  3 Jan 2003 00:53:26 -0500
+
+dovecot (0.99.4-1) unstable; urgency=low
+
+  * Initial Release.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 18 Dec 2002 09:44:39 -0500
+

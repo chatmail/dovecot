@@ -1,0 +1,17 @@
+#!/bin/sh
+
+set -e
+
+#perl -pi.bak -e 'if (/^\s*protocols =/i) { s/$/ imap imaps/ unless /imap/; };'\
+#   /etc/dovecot/dovecot.conf
+
+
+if [ -x "/etc/init.d/dovecot" ]; then
+	if [ -x /usr/sbin/invoke-rc.d ]; then
+		invoke-rc.d dovecot start
+	else
+		/etc/init.d/dovecot start
+	fi
+fi
+
+#DEBHELPER#

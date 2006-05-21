@@ -1,0 +1,55 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]; then
+
+  if [ -n "`id -u imapd 2> /dev/null`" ]; then
+    /usr/sbin/deluser imapd || true
+    /usr/sbin/delgroup imapd || true
+  fi
+
+  if [ -z "`id -u dovecot 2> /dev/null`" ]; then
+    /usr/sbin/adduser --system --group --home /usr/lib/dovecot --gecos "Dovecot mail server" \
+                      --disabled-password --quiet dovecot || true
+  fi
+
+  if [ -z "`id dovecot | grep '(mail)' 2> /dev/null`" ]; then
+    /usr/sbin/adduser dovecot mail || true
+  fi
+  
+  ## SSL Certs
+  # Certs and key file
+  SSL_CERT=$( (egrep -s "^[^#]*ssl_cert_file" /etc/dovecot/dovecot.conf  || echo '/etc/ssl/certs/dovecot.pem') | cut -d'=' -f2)
+  SSL_KEY=$( (grep -s "^[^#]*ssl_key_file" /etc/dovecot/dovecot.conf || echo '/etc/ssl/private/dovecot.pem') | cut -d'=' -f2)
+  
+  # Generate new certs if needed
+  if [ -f $SSL_CERT ] && [ -f $SSL_KEY ]; then
+    echo "You already have ssl certs for dovecot."
+  else
+    echo "Creating generic self-signed certificate: $SSL_CERT"
+    echo "(replace with hand-crafted or authorized one if needed)."
+    cd /etc/ssl/certs
+    PATH=$PATH:/usr/bin/ssl
+    HOSTNAME=`hostname -s`
+    FQDN=`hostname -f`
+    MAILNAME=`cat /etc/mailname 2> /dev/null || hostname -f`
+    (openssl req -new -x509 -days 365 -nodes -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
+.
+.
+.
+Dovecot mail server
+$HOSTNAME.$DOMAINNAME
+$FQDN
+root@$MAILNAME
++
+) || echo "Warning : Bad SSL config, can't generate certificate"
+  fi
+  chown root $SSL_CERT || true
+  chgrp dovecot $SSL_CERT || true
+  chmod 0644 $SSL_CERT || true
+  chown root $SSL_KEY || true
+  chgrp dovecot $SSL_KEY || true
+  chmod 0600 $SSL_KEY || true
+fi
+
+#DEBHELPER#

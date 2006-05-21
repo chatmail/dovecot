@@ -1,0 +1,70 @@
+#! /bin/sh -e
+
+## DP: Small cosmetic changes for the documentation
+## DP: Author: Jaldhar H. Vyas <jaldhar@debian.org>
+
+. $(dirname $0)/DPATCH
+
+exit 0
+@DPATCH@
+--- dovecot/doc/auth.txt	2005-07-21 08:26:46.017518952 +0000
++++ dovecot/doc/auth.txt.debian	2005-07-21 08:27:44.536622696 +0000
+@@ -23,6 +23,7 @@
+  - passwd-file: /etc/passwd-like file in specified location
+  - ldap: Lightweight Directory Access Protocol
+  - vpopmail: External software used to handle virtual domains
++ - mysql: A MySQL database.
+  - pgsql: A PostgreSQL database.
+ 
+ Currently supported user databases:
+@@ -32,6 +33,7 @@
+  - ldap: Lightweight Directory Access Protocol
+  - vpopmail: External software used to handle virtual domains
+  - static: Static UID and GID, home directory from given template
++ - mysql: A MySQL database.
+  - pgsql: A PostgreSQL database.
+ 
+ Most password databases support only plaintext authentication. passwd-file
+@@ -145,12 +147,12 @@
+ %n and %d variables, see default_mail_env description in dovecot-example.conf.
+ 
+ 
+-PostgreSQL
+-----------
++PostgreSQL and MySQL
++--------------------
+ 
+-See dovecot-pgsql.conf for more information. Password and user databases may
++See dovecot-sql.conf for more information. Password and user databases may
+ use different configuration files to keep the information in separate
+-locations. If both refer to same file, they share the same PostgreSQL
++locations. If both refer to same file, they share the same database
+ connection.
+ 
+ 
+diff -urN dovecot-0.99.14/doc/configuration.txt dovecot-0.99.14.debian/doc/configuration.txt
+--- dovecot-0.99.14/doc/configuration.txt	2003-02-20 17:06:00.000000000 +0000
++++ dovecot-0.99.14.debian/doc/configuration.txt	2005-06-30 13:35:52.000000000 +0000
+@@ -9,7 +9,10 @@
+ If you need to create new SSL certificate, edit dovecot-openssl.cnf and
+ run mkcert.sh.
+ 
+-Going through settings in dovecot-example.conf is a good idea, they should
++[NOTE: The above paragraph does not apply to the Debian packages because 
++they generate a self-signed certificate in dovecot-commons postinst script.]
++
++Going through settings in /etc/dovecot/dovecot.conf is a good idea, they should
+ be well commented.
+ 
+ 
+--- dovecot-1.0.alpha5/doc/mail-storages.txt	2005-01-07 15:37:28.000000000 +0100
++++ dovecot-1.0.alpha5/doc/mail-storages.txt.debian	2005-12-21 13:22:42.000000000 +0100
+@@ -26,7 +26,7 @@
+ Dovecot's indexes are stored in ".imap/<mailbox name>/" directories under
+ the folder directories.
+ 
+-MAIL environment for mbox is: <root folder>|<INBOX path>[:INBOX=<path>].
++MAIL environment for mbox is: <INBOX path>|<root folder>[:INBOX=<path>].
+ For example ~/Mail:INBOX=/var/mail/username.
+ 
+ indexes

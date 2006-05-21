@@ -1,0 +1,54 @@
+#! /bin/sh -e
+
+## DP: Make configure use pg_config  if it is available.
+## DP: Author: Jaldhar H. Vyas <jaldhar@debian.org>
+
+. $(dirname $0)/DPATCH
+
+exit 0
+@DPATCH@
+--- dovecot-1.0.beta7/configure.in	2006-04-13 00:28:20.000000000 -0400
++++ dovecot-1.0.beta7/configure.in.debian	2006-04-13 00:42:04.000000000 -0400
+@@ -1392,21 +1392,29 @@
+ fi
+ 
+ if test $want_pgsql = yes; then
+-	# based on code from PHP
+-	for i in /usr /usr/local /usr/local/pgsql; do
+-		for j in include include/pgsql include/postgres include/postgresql ""; do
+-			if test -r "$i/$j/libpq-fe.h"; then
+-				PGSQL_INCLUDE=$i/$j
+-			fi
++	PGSQL_INCLUDE="`pg_config --includedir`"
++	if test "$PGSQL_INCLUDE" = ""; then
++		# based on code from PHP
++		for i in /usr /usr/local /usr/local/pgsql; do
++			for j in include include/pgsql include/postgres include/postgresql ""; do
++				if test -r "$i/$j/libpq-fe.h"; then
++					PGSQL_INCLUDE=$i/$j
++				fi
++			done
+ 		done
+-		for lib in lib lib64; do
+-		  for j in $lib $lib/pgsql $lib/postgres $lib/postgresql ""; do
+-			if test -f "$i/$j/libpq.so" || test -f "$i/$j/libpq.a"; then
+-				PGSQL_LIBDIR=$i/$j
+-			fi
+-		  done
++	fi
++	PGSQL_LIBDIR="`pg_config --libdir`"
++	if test "$PGSQL_LIBDIR" = ""; then
++		for i in /usr /usr/local /usr/local/pgsql; do
++			for lib in lib lib64; do
++			  for j in $lib $lib/pgsql $lib/postgres $lib/postgresql ""; do
++				if test -f "$i/$j/libpq.so" || test -f "$i/$j/libpq.a"; then
++					PGSQL_LIBDIR=$i/$j
++				fi
++		  	  done
++			done
+ 		done
+-	done
++	fi
+ 
+ 	old_LIBS=$LIBS
+ 	if test "$PGSQL_LIBDIR" != ""; then

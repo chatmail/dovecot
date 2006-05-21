@@ -1,0 +1,35 @@
+dovecot (1.0.beta3-1) unstable; urgency=low
+
+  * Starting from this release, dovecot-lda is included in dovecot-common.
+    The previous executable deliver has been removed from the upstream 
+    source package.
+  * Other new features recently added include
+    + vpopmail support
+    + quota support
+    + GSSAPI support
+  * All these new features mean there are some configuration file changes 
+    please review the default /etc/dovecot/dovecot.conf and merge in any
+    new bits.  (If you don't use any new features, your configuration should
+    remain compatible.)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 17 Feb 2006 17:05:37 +0000
+
+dovecot (1.0.alpha4-1) unstable; urgency=low
+
+  * This is the 1.0alpha branch.  Once again there have been incompatible 
+    changes to the syntax of /etc/dovecot/dovecot.conf. 
+  * The dovecot-common package now includes the zlib plugin for compressed
+    mboxen.  Make sure you have mail_use_modules=yes in imap and/or pop3 
+    section in /etc/dovecot/dovecot.conf if you want to use this.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 20 Jul 2005 06:30:37 -0400
+
+dovecot (0.99.20050712-1) unstable; urgency=low
+
+  * This is the 1.0stable development branch.  There have been major 
+    changes and new features have been added so check your configuration 
+    carefully.  In particular, /etc/dovecot/dovecot-mysql.conf and 
+    /etc/dovecot/dovecot-pgsql.conf have been replaced by
+    /etc/dovecot/dovecot-sql.conf .
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 20 Jul 2005 06:30:37 -0400

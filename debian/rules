@@ -1,0 +1,109 @@
+#!/usr/bin/make -f
+# Sample debian/rules that uses debhelper.
+# GNU copyright 1997 to 1999 by Joey Hess.
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+# These are used for cross-compiling and for saving the configure script
+# from having to guess our platform (since we know it already)
+DEB_HOST_GNU_TYPE   ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+
+
+ifneq (,$(findstring debug,$(DEB_BUILD_OPTIONS)))
+	CFLAGS += -g
+endif
+ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
+	INSTALL_PROGRAM += -s
+endif
+
+config.status: patch-stamp configure
+	dh_testdir
+	# Add here commands to configure the package.
+	./configure --with-ldap --with-ssl=openssl --with-pgsql --with-mysql --with-sqlite --with-cyrus-sasl2 --with-gssapi --without-deliver --host=$(DEB_HOST_GNU_TYPE) --build=$(DEB_BUILD_GNU_TYPE) --prefix=/usr --sysconfdir=/etc/dovecot --libexecdir=\$${prefix}/lib --localstatedir=/var --mandir=\$${prefix}/share/man --infodir=\$${prefix}/share/info --with-moduledir=\$${prefix}/lib/dovecot/modules
+	-test -r /usr/share/misc/config.sub && cp -f /usr/share/misc/config.sub src/dovecot-lda/config.sub
+	-test -r /usr/share/misc/config.guess && cp -f /usr/share/misc/config.guess src/dovecot-lda/config.guess
+	cd src/dovecot-lda && chmod 755 autogen.sh && ./autogen.sh && chmod 755 configure config.sub config.guess && ./configure --prefix=/usr --sysconfdir=/etc/dovecot --libexecdir=\$${prefix}/lib --localstatedir=/var --mandir=\$${prefix}/share/man --infodir=\$${prefix}/share/info --with-dovecot=../..
+
+build: build-stamp
+
+build-stamp:  config.status
+	dh_testdir
+
+	# Add here commands to compile the package.
+	$(MAKE)
+	cd src/dovecot-lda && $(MAKE)
+	#cd src/drac && $(MAKE)
+	#/usr/bin/docbook-to-man debian/dovecot.sgml > dovecot.1
+
+	touch build-stamp
+
+clean: unpatch
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp 
+
+	# Add here commands to clean up after the build process.
+	rm -fr src/zlib-plugin src/dovecot-lda # src/drac
+	-$(MAKE) distclean
+	rm -f conftest conftest.o config.log config.cache config.status ylwrap
+	-test -r /usr/share/misc/config.sub && \
+	  cp -f /usr/share/misc/config.sub config.sub
+	-test -r /usr/share/misc/config.guess && \
+	  cp -f /usr/share/misc/config.guess config.guess
+
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k
+	dh_installdirs
+
+	# Add here commands to install the package into debian/dovecot.
+	$(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
+	cd src/dovecot-lda && $(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
+	#cp $(CURDIR)/src/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
+	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot.conf
+	chmod 0600 $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot.conf
+	install -o root -g root -m 0600 $(CURDIR)/doc/dovecot-ldap.conf $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-ldap.conf
+	install -o root -g root -m 0600 $(CURDIR)/doc/dovecot-sql.conf $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-sql.conf
+	install -D -m 0755 -o root -g root debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-common/usr/bin/maildirmake.dovecot
+	install -o root -g root -m 0644 $(CURDIR)/debian/dovecot-common.overrides $(CURDIR)/debian/dovecot-common/usr/share/lintian/overrides/dovecot-common
+	mv $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot
+	chmod 0700 $(CURDIR)/debian/dovecot-common/var/run/dovecot
+	chmod 0750 $(CURDIR)/debian/dovecot-common/var/run/dovecot/login
+
+# Build architecture-independent files here.
+binary-indep: build install
+	# nothing to do here
+
+# Build architecture-dependent files here.
+binary-arch: build install
+	dh_testdir -a
+	dh_testroot -a
+	dh_installdocs -a
+	dh_installexamples -a
+	dh_installpam -a
+	mv $(CURDIR)/debian/dovecot-common/etc/pam.d/dovecot-common $(CURDIR)/debian/dovecot-common/etc/pam.d/dovecot
+	dh_installinit -pdovecot-common --init-script=dovecot -u"defaults 21"
+	dh_installman -a
+	dh_installman -p dovecot-common debian/maildirmake.dovecot.1
+	dh_installchangelogs -a ChangeLog
+	dh_link -a
+	dh_strip -a
+	dh_compress -a
+	dh_fixperms -a -Xetc/dovecot/dovecot.conf -Xetc/dovecot/dovecot-ldap.conf -Xetc/dovecot/dovecot-sql.conf -Xvar/run/dovecot -Xvar/run/dovecot/login
+	dh_installdeb -a
+	dh_shlibdeps -a
+	dh_gencontrol -a
+	dh_md5sums -a
+	dh_builddeb -a
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install 
+
+include /usr/share/dpatch/dpatch.make

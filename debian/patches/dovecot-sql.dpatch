@@ -1,0 +1,21 @@
+#! /bin/sh -e
+
+## DP: Small cosmetic changes for dovecot-sql.conf
+## DP: Author: Jaldhar H. Vyas <jaldhar@debian.org>
+
+. $(dirname $0)/DPATCH
+
+exit 0
+@DPATCH@
+diff -urN dovecot-0.99.20050712/doc/dovecot-sql.conf* >> dovecot-0.99.20050712/debian/patches/dovecot-sql.dpatch
+--- dovecot-0.99.20050712/doc/dovecot-sql.conf	2005-06-05 21:45:25.000000000 +0000
++++ dovecot-0.99.20050712/doc/dovecot-sql.conf.debian	2005-07-13 12:54:23.188829784 +0000
+@@ -39,7 +39,7 @@
+ #     ssl_cert, ssl_key   - For sending client-side certificates to server
+ #     ssl_cipher          - Set minimum allowed cipher security (default: HIGH)
+ # 
+-#   You can connect to UNIX sockets by using host: host=/var/run/mysql.sock
++#   You can connect to UNIX sockets by using host: host=/var/run/mysqld/mysqld.sock
+ #   Note that currently you can't use spaces in parameters.
+ #
+ # Examples:

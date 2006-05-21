@@ -1,0 +1,83 @@
+#! /bin/sh
+#
+#		Written by Miquel van Smoorenburg <miquels@cistron.nl>.
+#		Modified for Debian GNU/Linux
+#		by Ian Murdock <imurdock@gnu.ai.mit.edu>.
+#
+#
+
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+DAEMON=/usr/sbin/dovecot
+NAME=dovecot
+DESC="mail server"
+
+test -x $DAEMON || exit 0
+
+set -e
+
+# The init script should do nothing if dovecot is being run from inetd
+for p in `sed -r "s/^ *(([^:]+|\[[^]]+]|\*):)?(pop3s?|imaps?)[ \t].*/\3/;t;d" \
+  /etc/inetd.conf`
+do
+  for q in `sed -r "s/^ *protocols[ \t]*=[ \t]*(([^\"]*)|\"(.*)\")/\2\3/;t;d" \
+    /etc/dovecot/dovecot.conf`
+  do
+    if [ $p = $q ]; then
+      exit 0
+    fi
+  done
+done
+
+case "$1" in
+  start)
+    if grep protocols /etc/dovecot/dovecot.conf | sed 's/#.*$//' | tr -d '"' | \
+    egrep -q '[^#]*(\bpop3s?\b|\bimaps?\b)';
+    then 
+      if [ -x /usr/lib/dovecot/imap-login -a -x /usr/lib/dovecot/imap ] \
+        || [ -x /usr/lib/dovecot/pop3-login -a -x /usr/lib/dovecot/pop3 ];
+      then 
+        echo -n "Starting $DESC: $NAME"
+        start-stop-daemon --start --quiet --oknodo --exec $DAEMON
+        echo "."
+      fi
+    fi
+    ;;
+  stop)
+    echo -n "Stopping $DESC: $NAME "
+    start-stop-daemon --stop --quiet --oknodo --exec $DAEMON
+    echo "."
+    ;;
+  #reload)
+    #
+    #	If the daemon can reload its config files on the fly
+    #	for example by sending it SIGHUP, do it here.
+    #
+    #	If the daemon responds to changes in its config file
+    #	directly anyway, make this a do-nothing entry.
+    #
+    # echo -n "Reloading $DESC configuration..."
+    # start-stop-daemon --stop --signal 1 --quiet --pidfile \
+    #	/var/run/$NAME.pid --exec $DAEMON
+    # echo "done."
+    #;;
+  restart|force-reload)
+    #
+    #	If the "reload" option is implemented, move the "force-reload"
+    #	option to the "reload" entry above. If not, "force-reload" is
+    #	just the same as "restart".
+    #
+    echo -n "Restarting $DESC: $NAME"
+    start-stop-daemon --stop --quiet --oknodo --exec $DAEMON
+    sleep 1
+    start-stop-daemon --start --quiet --oknodo --exec $DAEMON
+    echo "."
+    ;;
+  *)
+    N=/etc/init.d/$NAME
+    # echo "Usage: $N {start|stop|restart|reload|force-reload}" >&2
+    echo "Usage: $N {start|stop|restart|force-reload}" >&2
+    exit 1
+    ;;
+esac
+
+exit 0

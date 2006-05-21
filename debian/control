@@ -1,0 +1,46 @@
+Source: dovecot
+Section: mail
+Priority: optional
+Maintainer: Jaldhar H. Vyas <jaldhar@debian.org>
+Uploaders: Fabio Tranchitella <kobold@debian.org>
+Build-Depends: debhelper (>= 5.0.0), automake1.9, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient15-dev, libsqlite3-dev, libsasl2-dev | libsasl-dev, zlib1g-dev, libkrb5-dev, dpatch, byacc, flex
+Standards-Version: 3.7.2
+
+Package: dovecot-common
+Architecture: any
+Depends: ${shlibs:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser
+Replaces: dovecot
+Description: secure mail server that supports mbox and maildir mailboxes
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It should
+ also be pretty fast, extensible, and portable.
+ .
+ This package contains the files used by both the dovecot IMAP and POP3 
+ servers.
+
+Package: dovecot-imapd
+Architecture: any
+Depends: ${shlibs:Depends}, dovecot-common (>= 1.0.beta3-1)
+Provides: imap-server
+Replaces: imap-server
+Description: secure IMAP server that supports mbox and maildir mailboxes
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It should
+ also be pretty fast, extensible, and portable.
+ .
+ This package contains the dovecot IMAP server.
+
+Package: dovecot-pop3d
+Architecture: any
+Depends: ${shlibs:Depends}, dovecot-common (>= 1.0.beta3-1)
+Provides: pop3-server
+Replaces: pop3-server
+Description: secure POP3 server that supports mbox and maildir mailboxes
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It should
+ also be pretty fast, extensible, and portable.
+ .
+ This package contains the dovecot POP3 server.
