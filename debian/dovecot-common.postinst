@@ -43,13 +43,13 @@ $FQDN
 root@$MAILNAME
 +
 ) || echo "Warning : Bad SSL config, can't generate certificate"
-  fi
   chown root $SSL_CERT || true
   chgrp dovecot $SSL_CERT || true
   chmod 0644 $SSL_CERT || true
   chown root $SSL_KEY || true
   chgrp dovecot $SSL_KEY || true
   chmod 0600 $SSL_KEY || true
+  fi
 fi
 
 #DEBHELPER#
