@@ -1,11 +1,12 @@
 dovecot (1.0.beta8-1bpo1) sarge-backports; urgency=low
 
   * Rebuilt for sarge.
-  * Only change needed was build dependency on libpq-dev changed back to
-    postgresql-dev and libmysqlclient15-dev changed back to libmysqlclient12-dev
+  * Only changes needed was build dependency on libpq-dev changed back to
+    postgresql-dev, libmysqlclient15-dev changed back to 
+    libmysqlclient12-dev, and debhelper version relaxed to 4.
   * Please look at the security warning in changelog for 1.0.beta8-1
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 21 May 2006 16:05:50 -0400
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 21 May 2006 20:52:44 -0400
 
 dovecot (1.0.beta8-2) unstable; urgency=high
 
