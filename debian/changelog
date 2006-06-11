@@ -1,3 +1,12 @@
+dovecot (1.0.beta8-3) unstable; urgency=high
+
+  * [SECURITY] SQL injection could occur in the postgresql module with
+    certain client character encodings. (See CVE-2006-2314)
+    Used the patch from upstream and Martin Pitt <martin.pitt@ubuntu.com>.
+    Thanks Martin.  (Closes: #369359)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 11 Jun 2006 15:33:55 -0400
+
 dovecot (1.0.beta8-2) unstable; urgency=high
 
   * Don't chown/chmod ssl certificate unless we created it.
