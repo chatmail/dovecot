@@ -247,7 +247,7 @@ diff -urNad dovecot-1.0.beta3~/src/lib-sql/driver-mysql.c dovecot-1.0.beta3/src/
 +	/* All the connections should be identical, so just use the first one */
 +	conn = buffer_get_modifyable_data(db->connections, &size);
 +	to = t_buffer_get(len * 2 + 1);
-+	len = mysql_real_escape_string(&conn[0], to, string, len);
++	len = mysql_real_escape_string(conn->mysql, to, string, len);
 +	t_buffer_alloc(len + 1);
 +	return to;
 +}

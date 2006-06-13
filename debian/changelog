@@ -1,3 +1,10 @@
+dovecot (1.0.beta8-4) unstable; urgency=high
+
+  * Unfortunately, the patch in the last version broke the mysql module.
+    Fixed thanks to Martin Pitt.  (Closes: #369359, #373227)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 11 Jun 2006 16:27:43 -0400
+
 dovecot (1.0.beta8-3) unstable; urgency=high
 
   * [SECURITY] SQL injection could occur in the postgresql module with
