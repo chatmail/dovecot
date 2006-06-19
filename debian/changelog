@@ -1,8 +1,10 @@
-dovecot (1.0.beta9-1) UNRELEASED; urgency=low
+dovecot (1.0.beta9-1) unstable; urgency=low
 
-  * (NOT RELEASED YET) New upstream release
+  * New upstream release
+  * Added XFS quota support.  Thanks  Pawel Jarosz <pj@rsi.pl> 
+    (Closes #373936)
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 19 Jun 2006 15:18:18 -0400
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 19 Jun 2006 16:55:20 -0400
 
 dovecot (1.0.beta8-4) unstable; urgency=high
 
