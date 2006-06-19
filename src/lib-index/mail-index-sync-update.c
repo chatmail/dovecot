@@ -17,19 +17,27 @@ void mail_index_sync_replace_map(struct mail_index_sync_map_ctx *ctx,
 {
         struct mail_index_view *view = ctx->view;
 
+	i_assert(view->map != map);
+
 	/* if map still exists after this, it's only in views. */
 	view->map->write_to_disk = FALSE;
 
 	mail_index_unmap(view->index, &view->map);
 	view->map = map;
-	view->map->refcount++;
-	mail_index_unmap(view->index, &view->index->map);
-	view->index->map = map;
-	view->index->hdr = &map->hdr;
 
-	if (ctx->type == MAIL_INDEX_SYNC_HANDLER_INDEX) {
-		map->write_to_disk = TRUE;
-		map->write_atomic = TRUE;
+	if ((ctx->type & (MAIL_INDEX_SYNC_HANDLER_FILE |
+			  MAIL_INDEX_SYNC_HANDLER_HEAD)) != 0) {
+		i_assert(view->index->map != map);
+
+		mail_index_unmap(view->index, &view->index->map);
+		view->index->map = map;
+		view->index->hdr = &map->hdr;
+		map->refcount++;
+
+		if (ctx->type == MAIL_INDEX_SYNC_HANDLER_FILE) {
+			map->write_to_disk = TRUE;
+			map->write_atomic = TRUE;
+		}
 	}
 
 	i_assert(view->hdr.messages_count == map->hdr.messages_count);
@@ -131,7 +139,7 @@ static int sync_expunge(const struct mail_transaction_expunge *e,
 	unsigned int i, expunge_handlers_count;
 
 	if (e->uid1 > e->uid2 || e->uid1 == 0) {
-		mail_transaction_log_view_set_corrupted(ctx->view->log_view,
+		mail_index_sync_set_corrupted(ctx,
 				"Invalid UID range in expunge (%u .. %u)",
 				e->uid1, e->uid2);
 		return -1;
@@ -158,12 +166,12 @@ static int sync_expunge(const struct mail_transaction_expunge *e,
 	if (seq1 == 0)
 		return 1;
 
-	/* don't call expunge handlers if we're syncing view */
-	if (ctx->type != MAIL_INDEX_SYNC_HANDLER_VIEW &&
+	/* call expunge handlers only when syncing index file */
+	if (ctx->type == MAIL_INDEX_SYNC_HANDLER_FILE &&
 	    !ctx->expunge_handlers_set)
 		mail_index_sync_init_expunge_handlers(ctx);
 
-	if (ctx->type != MAIL_INDEX_SYNC_HANDLER_VIEW &&
+	if (ctx->type == MAIL_INDEX_SYNC_HANDLER_FILE &&
 	    array_is_created(&ctx->expunge_handlers)) {
 		expunge_handlers = array_get(&ctx->expunge_handlers,
 					     &expunge_handlers_count);
@@ -228,7 +236,7 @@ static int sync_append(const struct mail_index_record *rec,
 	void *dest;
 
 	if (rec->uid < map->hdr.next_uid) {
-		mail_transaction_log_view_set_corrupted(view->log_view,
+		mail_index_sync_set_corrupted(ctx,
 			"Append with UID %u, but next_uid = %u",
 			rec->uid, map->hdr.next_uid);
 		return -1;
@@ -277,7 +285,7 @@ static int sync_flag_update(const struct mail_transaction_flag_update *u,
 	uint32_t idx, seq1, seq2;
 
 	if (u->uid1 > u->uid2 || u->uid1 == 0) {
-		mail_transaction_log_view_set_corrupted(ctx->view->log_view,
+		mail_index_sync_set_corrupted(ctx,
 				"Invalid UID range in flag update (%u .. %u)",
 				u->uid1, u->uid2);
 		return -1;
@@ -331,7 +339,7 @@ static int sync_header_update(const struct mail_transaction_header_update *u,
 
 	if (u->offset >= map->hdr.base_header_size ||
 	    u->offset + u->size > map->hdr.base_header_size) {
-		mail_transaction_log_view_set_corrupted(ctx->view->log_view,
+		mail_index_sync_set_corrupted(ctx,
 			"Header update outside range: %u + %u > %u",
 			u->offset, u->size, map->hdr.base_header_size);
 		return -1;
@@ -551,8 +559,7 @@ int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
 		unsigned int record_size;
 
 		if (ctx->cur_ext_id == (uint32_t)-1) {
-			mail_transaction_log_view_set_corrupted(
-				ctx->view->log_view,
+		mail_index_sync_set_corrupted(ctx,
 				"Extension record update update "
 				"without intro prefix");
 			ret = -1;
@@ -656,7 +663,7 @@ int mail_index_sync_update_index(struct mail_index_sync_ctx *sync_ctx,
 	bool had_dirty, skipped, check_ext_offsets;
 
 	mail_index_sync_map_init(&sync_map_ctx, view,
-				 MAIL_INDEX_SYNC_HANDLER_INDEX);
+				 MAIL_INDEX_SYNC_HANDLER_FILE);
 
 	/* we'll have to update view->lock_id to avoid mail_index_view_lock()
 	   trying to update the file later. */
@@ -766,6 +773,8 @@ int mail_index_sync_update_index(struct mail_index_sync_ctx *sync_ctx,
 	}
 	map->hdr.log_file_seq = seq;
 	map->hdr.log_file_ext_offset = offset;
+
+	i_assert(map->hdr_copy_buf->used <= map->hdr.header_size);
 
 	if (first_append_uid != 0)
 		mail_index_update_day_headers(&map->hdr, first_append_uid);

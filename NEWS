@@ -1,3 +1,36 @@
+v1.0.beta9 2006-06-13  Timo Sirainen <tss@iki.fi>
+
+	* PAM: Don't call pam_setcred() unless setcred=yes PAM passdb
+	  argument was given.
+	* Moved around settings in dovecot-example.conf to be in more logical
+	  groups.
+
+	+ Local delivery agent (deliver binary) works again.
+	+ LDAP: Added support for SASL binding. Patch by Geert Jansen
+	+ ssl_verify_client_cert: Check CRLs. If auth_verbose=yes, log
+	  invalid sent certificates. If verbose_ssl=yes, log even the valid
+	  certificates. When using the username from the certificate, use
+	  CommonName. Based on patch by HenkJan Wolthuis
+	+ PAM: Set PAM_TTY which is needed by some PAM plugins
+	+ dovecot --exec-mail ext <binary path> can now be used to start
+	  binaries which want dovecot.conf to be read, for example the
+	  convert-tool.
+	- Expunging needed to be done twice if client used STORE +FLAGS.SILENT
+	  command to set the \Deleted flags
+	- Added sql_escape_string() to lib-sql API and use it instead of
+	  normal \-escaping.
+	- ACL plugin fixes
+	- DIGEST-MD5: Trying to use subsequent authentication crashed
+	  dovecot-auth.
+	- Fetching BODY when BODYSTRUCTURE was already cached caused the
+	  reply to be broken in some cases
+	- Lots of fixes for index file handling
+	- dbox fixes and changes
+	- mbox syncing broke if some extraneous/broken headers were removed
+	  (eg. extra X-IMAPbase headers in mails)
+	- Running Dovecot from inetd work now properly with POP3
+	- Quota plugin fixes for calculating the quota correctly
+
 v1.0.beta8 2006-05-12  Timo Sirainen <tss@iki.fi>
 
 	* Fixed a security hole with mbox: "1 LIST .. *" command could

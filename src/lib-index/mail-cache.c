@@ -242,6 +242,7 @@ int mail_cache_map(struct mail_cache *cache, size_t offset, size_t size)
 
 	if (!mail_cache_verify_header(cache)) {
 		cache->need_compress_file_seq =
+			!MAIL_CACHE_IS_UNUSABLE(cache) &&
 			cache->hdr->file_seq != 0 ?
 			cache->hdr->file_seq : (uint32_t)-1;
 		return -1;
@@ -304,7 +305,8 @@ static struct mail_cache *mail_cache_alloc(struct mail_index *index)
 					    mail_cache_expunge_handler);
 	mail_index_register_sync_handler(index, cache->ext_id,
 					 mail_cache_sync_handler,
-                                         MAIL_INDEX_SYNC_HANDLER_INDEX |
+                                         MAIL_INDEX_SYNC_HANDLER_FILE |
+                                         MAIL_INDEX_SYNC_HANDLER_HEAD |
 					 (cache->file_cache == NULL ? 0 :
 					  MAIL_INDEX_SYNC_HANDLER_VIEW));
 

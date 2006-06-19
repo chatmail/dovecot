@@ -150,6 +150,9 @@
 /* Build with PostgreSQL support */
 #undef HAVE_PGSQL
 
+/* Define if libpq has PQescapeStringConn function */
+#undef HAVE_PQESCAPE_STRING_CONN
+
 /* Define to 1 if you have the `pread' function. */
 #undef HAVE_PREAD
 

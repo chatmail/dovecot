@@ -74,7 +74,7 @@ static struct pool static_alloconly_pool = {
 #ifdef DEBUG
 static void check_nuls(struct pool_block *block)
 {
-	const unsigned char *data = POOL_BLOCK_DATA(block);
+	const char *data = POOL_BLOCK_DATA(block);
 	size_t i;
 
 	for (i = block->size - block->left; i < block->size; i++) {
@@ -82,7 +82,7 @@ static void check_nuls(struct pool_block *block)
 			i_unreached();
 	}
 	if (block->prev != NULL)
-		check_nuls(block->prev, 0);
+		check_nuls(block->prev);
 }
 #endif
 

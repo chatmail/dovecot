@@ -140,8 +140,10 @@ static void settings_reload(void)
 	if (!master_settings_read(configfile, FALSE))
 		i_warning("Invalid configuration, keeping old one");
 	else {
-		listen_fds_close(old_set);
-		listen_fds_open(TRUE);
+		if (!IS_INETD()) {
+			listen_fds_close(old_set);
+			listen_fds_open(TRUE);
+		}
                 set_logfile(settings_root->defaults);
 	}
 }
@@ -246,7 +248,7 @@ static void resolve_ip(const char *name, struct ip_addr *ip, unsigned int *port)
 	const char *p;
 	int ret, ips_count;
 
-	if (name == NULL) {
+	if (*name == '\0') {
                 /* defaults to "*" or "[::]" */
 		ip->family = 0;
 		return;

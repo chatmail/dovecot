@@ -61,7 +61,7 @@ typedef linux_const void *pam_item_t;
 struct pam_passdb_module {
 	struct passdb_module module;
 
-	bool pam_session;
+	bool pam_setcred, pam_session;
 	const char *service_name, *pam_cache_key;
 	struct timeout *to_wait;
 };
@@ -187,10 +187,13 @@ static int pam_auth(struct auth_request *request,
 	}
 
 #ifdef HAVE_PAM_SETCRED
-	if ((status = pam_setcred(pamh, PAM_ESTABLISH_CRED)) != PAM_SUCCESS) {
-		*error = t_strdup_printf("pam_setcred() failed: %s",
-					 pam_strerror(pamh, status));
-		return status;
+	if (module->pam_setcred) {
+		if ((status = pam_setcred(pamh, PAM_ESTABLISH_CRED)) !=
+		    PAM_SUCCESS) {
+			*error = t_strdup_printf("pam_setcred() failed: %s",
+						 pam_strerror(pamh, status));
+			return status;
+		}
 	}
 #endif
 
@@ -253,15 +256,30 @@ pam_verify_plain_child(struct auth_request *request, const char *service,
 				      pam_strerror(pamh, status));
 	} else {
 		const char *host = net_ip2addr(&request->remote_ip);
+
+		/* Set some PAM items. They shouldn't fail, and we don't really
+		   care if they do. */
 		if (host != NULL)
-			pam_set_item(pamh, PAM_RHOST, host);
+			(void)pam_set_item(pamh, PAM_RHOST, host);
+		/* TTY is needed by eg. pam_access module */
+		(void)pam_set_item(pamh, PAM_TTY, "dovecot");
 
 		status = pam_auth(request, pamh, &str);
 		if ((status2 = pam_end(pamh, status)) == PAM_SUCCESS) {
-			/* FIXME: check for PASSDB_RESULT_UNKNOWN_USER
-			   somehow? */
-			result = status == PAM_SUCCESS ? PASSDB_RESULT_OK :
-				PASSDB_RESULT_PASSWORD_MISMATCH;
+			switch (status) {
+			case PAM_SUCCESS:
+				result = PASSDB_RESULT_OK;
+				break;
+			case PAM_USER_UNKNOWN:
+				result = PASSDB_RESULT_USER_UNKNOWN;
+				break;
+			case PAM_ACCT_EXPIRED:
+				result = PASSDB_RESULT_PASS_EXPIRED;
+				break;
+			default:
+				result = PASSDB_RESULT_PASSWORD_MISMATCH;
+				break;
+			}
 		} else {
 			result = PASSDB_RESULT_INTERNAL_FAILURE;
 			str = t_strdup_printf("pam_end() failed: %s",
@@ -433,6 +451,8 @@ pam_preinit(struct auth_passdb *auth_passdb, const char *args)
 		if (strcmp(t_args[i], "-session") == 0 ||
 		    strcmp(t_args[i], "session=yes") == 0)
 			module->pam_session = TRUE;
+		else if (strcmp(t_args[i], "setcred=yes") == 0)
+			module->pam_setcred = TRUE;
 		else if (strncmp(t_args[i], "cache_key=", 10) == 0) {
 			module->module.cache_key =
 				p_strdup(auth_passdb->auth->pool,

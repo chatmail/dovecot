@@ -1,9 +1,9 @@
 #ifndef __DBOX_FORMAT_H
 #define __DBOX_FORMAT_H
 
-#define DBOX_SUBSCRIPTION_FILE_NAME "dovecot.subscriptions"
+#define DBOX_SUBSCRIPTION_FILE_NAME "subscriptions"
 #define DBOX_INDEX_PREFIX "dovecot.index"
-#define DBOX_MAILDIR_NAME "Mails"
+#define DBOX_MAILDIR_NAME "dbox-Mails"
 #define DBOX_MAIL_FILE_PREFIX "msg."
 #define DBOX_MAIL_FILE_FORMAT DBOX_MAIL_FILE_PREFIX"%u"
 

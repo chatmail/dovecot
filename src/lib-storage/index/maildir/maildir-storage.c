@@ -653,14 +653,16 @@ static int maildir_mailbox_delete(struct mail_storage *_storage,
 		return -1;
 	}
 
+	/* Make sure the indexes are closed before trying to delete the
+	   directory that contains them. It can still fail with some NFS
+	   implementations if indexes are opened by another session, but
+	   can't really help that. */
+	index_storage_destroy_unrefed();
+
 	if (storage->index_dir != NULL && *name != '/' && *name != '~' &&
 	    strcmp(storage->index_dir, storage->dir) != 0) {
 		index_dir = t_strconcat(storage->index_dir,
 					"/"MAILDIR_FS_SEP_S, name, NULL);
-		index_storage_destroy_unrefed();
-
-		/* it can fail with some NFS implementations if indexes are
-		   opened by another session.. can't really help it. */
 		if (unlink_directory(index_dir, TRUE) < 0 &&
 		    errno != ENOTEMPTY) {
 			mail_storage_set_critical(_storage,
@@ -676,7 +678,9 @@ static int maildir_mailbox_delete(struct mail_storage *_storage,
 	} else {
 		count = 0;
 		while (rename(src, dest) < 0 && count < 2) {
-			if (errno != EEXIST && errno != ENOTEMPTY) {
+			/* EBUSY is given by some NFS implementations */
+			if (errno != EEXIST && errno != ENOTEMPTY &&
+			    errno != EBUSY) {
 				mail_storage_set_critical(_storage,
 					"rename(%s, %s) failed: %m", src, dest);
 				return -1;

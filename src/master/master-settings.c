@@ -268,7 +268,7 @@ struct settings default_settings = {
 	/* general */
 	MEMBER(protocols) "imap imaps",
 	MEMBER(listen) "*",
-	MEMBER(ssl_listen) NULL,
+	MEMBER(ssl_listen) "",
 
 	MEMBER(ssl_disable) FALSE,
 	MEMBER(ssl_ca_file) NULL,
@@ -366,7 +366,6 @@ struct settings default_settings = {
 	MEMBER(pop3_logout_format) "top=%t/%p, retr=%r/%b, del=%d/%m, size=%s",
 
 	/* .. */
-	MEMBER(login_uid) 0,
 	MEMBER(listen_fd) -1,
 	MEMBER(ssl_listen_fd) -1
 };

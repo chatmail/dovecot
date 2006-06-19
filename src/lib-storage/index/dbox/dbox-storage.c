@@ -132,7 +132,7 @@ static bool dbox_autodetect(const char *data, enum mail_storage_flags flags)
 
 	data = t_strcut(data, ':');
 
-	path = t_strconcat(data, "/inbox/Mails", NULL);
+	path = t_strconcat(data, "/inbox/"DBOX_MAILDIR_NAME, NULL);
 	if (stat(path, &st) < 0) {
 		if (debug)
 			i_info("dbox autodetect: stat(%s) failed: %m", path);
@@ -177,7 +177,7 @@ bool dbox_is_valid_mask(struct mail_storage *storage, const char *mask)
 				    sizeof(DBOX_MAILDIR_NAME)-1) == 0 &&
 			    (p[sizeof(DBOX_MAILDIR_NAME)-1] == '\0' ||
 			     p[sizeof(DBOX_MAILDIR_NAME)-1] == '/')) {
-				/* don't allow the Mails directory to be
+				/* don't allow the dbox-Mails directory to be
 				   used as part of the mask */
 				return FALSE;
 			}
@@ -488,6 +488,10 @@ static int dbox_mailbox_delete(struct mail_storage *_storage,
 		return -1;
 	}
 
+	/* make sure the indexes are closed before trying to delete the
+	   directory that contains them */
+	index_storage_destroy_unrefed();
+
 	if (unlink_directory(mail_path, TRUE) < 0) {
 		if (!dbox_handle_errors(istorage)) {
 			mail_storage_set_critical(_storage,
@@ -655,7 +659,7 @@ dbox_notify_changes(struct mailbox *box, unsigned int min_interval,
 	}
 
 	index_mailbox_check_add(&mbox->ibox,
-		t_strconcat(mbox->path, "/Mails", NULL));
+		t_strconcat(mbox->path, "/"DBOX_MAILDIR_NAME, NULL));
 }
 
 struct mail_storage dbox_storage = {

@@ -103,43 +103,43 @@ static int mailbox_convert_list_item(struct mail_storage *source_storage,
 				     struct mailbox_list *list,
 				     struct dotlock *dotlock)
 {
+	const char *name;
 	struct mailbox *srcbox, *destbox;
 	int ret = 0;
 
 	if ((list->flags & (MAILBOX_NONEXISTENT|MAILBOX_PLACEHOLDER)) != 0)
 		return 0;
 
+	name = strcasecmp(list->name, "INBOX") == 0 ? "INBOX" : list->name;
 	if ((list->flags & MAILBOX_NOSELECT) != 0) {
-		if (mail_storage_mailbox_create(dest_storage,
-						list->name, TRUE) < 0) {
+		if (mail_storage_mailbox_create(dest_storage, name, TRUE) < 0) {
 			i_error("Mailbox conversion: Couldn't create mailbox "
-				"directory %s", list->name);
+				"directory %s", name);
 			return -1;
 		}
 		return 0;
 	}
 
 	/* It's a real mailbox. First create the destination mailbox. */
-	if (mail_storage_mailbox_create(dest_storage, list->name, FALSE) < 0) {
-		i_error("Mailbox conversion: Couldn't create mailbox %s",
-			list->name);
+	if (mail_storage_mailbox_create(dest_storage, name, FALSE) < 0) {
+		i_error("Mailbox conversion: Couldn't create mailbox %s", name);
 		return -1;
 	}
 
 	/* Open both the mailboxes.. */
-	srcbox = mailbox_open(source_storage, list->name, NULL,
+	srcbox = mailbox_open(source_storage, name, NULL,
 			   MAILBOX_OPEN_READONLY | MAILBOX_OPEN_KEEP_RECENT);
 	if (srcbox == NULL) {
 		i_error("Mailbox conversion: Couldn't open source mailbox %s",
-			list->name);
+			name);
 		return -1;
 	}
 
-	destbox = mailbox_open(dest_storage, list->name, NULL,
+	destbox = mailbox_open(dest_storage, name, NULL,
 			       MAILBOX_OPEN_KEEP_RECENT);
 	if (destbox == NULL) {
 		i_error("Mailbox conversion: Couldn't open dest mailbox %s",
-			list->name);
+			name);
 		mailbox_close(&srcbox);
 		return -1;
 	}
@@ -174,6 +174,28 @@ static int mailbox_list_copy(struct mail_storage *source_storage,
 		/* In case there are lots of mailboxes. Also the other touch
 		   is done only after 100 mails. */
 		(void)file_dotlock_touch(dotlock);
+	}
+	if (mail_storage_mailbox_list_deinit(&iter) < 0)
+		ret = -1;
+	return ret;
+}
+
+static int mailbox_list_copy_subscriptions(struct mail_storage *source_storage,
+					   struct mail_storage *dest_storage)
+{
+	struct mailbox_list_context *iter;
+	struct mailbox_list *list;
+	int ret = 0;
+
+	iter = mail_storage_mailbox_list_init(source_storage, "", "*",
+					      MAILBOX_LIST_SUBSCRIBED |
+					      MAILBOX_LIST_FAST_FLAGS);
+	while ((list = mail_storage_mailbox_list_next(iter)) != NULL) {
+		if (mail_storage_set_subscribed(dest_storage, list->name,
+						TRUE) < 0) {
+			ret = -1;
+			break;
+		}
 	}
 	if (mail_storage_mailbox_list_deinit(&iter) < 0)
 		ret = -1;
@@ -225,6 +247,10 @@ int convert_storage(const char *user, const char *home_dir,
 		ret = -1;
 	} else {
 		ret = mailbox_list_copy(source_storage, dest_storage, dotlock);
+		if (ret == 0) {
+			ret = mailbox_list_copy_subscriptions(source_storage,
+							      dest_storage);
+		}
 	}
 
 	if (ret == 0) {

@@ -192,6 +192,7 @@ static void auth_request_save_cache(struct auth_request *request,
 		/* can be cached */
 		break;
 	case PASSDB_RESULT_USER_DISABLED:
+	case PASSDB_RESULT_PASS_EXPIRED:
 		/* FIXME: we can't cache this now, or cache lookup would
 		   return success. */
 		return;
@@ -316,6 +317,9 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 				return FALSE;
 			}
 		}
+	} else if (*result == PASSDB_RESULT_PASS_EXPIRED) {
+		auth_stream_reply_add(request->extra_fields, "reason",
+				      "Password expired");
 	} else if (request->passdb->next != NULL &&
 		   *result != PASSDB_RESULT_USER_DISABLED) {
 		/* try next passdb. */
@@ -570,7 +574,8 @@ auth_request_fix_username(struct auth_request *request, const char *username,
 
 		t_push();
 		dest = t_str_new(256);
-		table = auth_request_get_var_expand_table(request, str_escape);
+		table = auth_request_get_var_expand_table(request,
+						auth_request_str_escape);
 		var_expand(dest, request->auth->username_format, table);
 		user = p_strdup(request->pool, str_c(dest));
 		t_pop();
@@ -843,14 +848,23 @@ int auth_request_password_verify(struct auth_request *request,
 	return ret;
 }
 
-static const char *escape_none(const char *str)
+static const char *
+escape_none(const char *string,
+	    const struct auth_request *request __attr_unused__)
 {
-	return str;
+	return string;
+}
+
+const char *
+auth_request_str_escape(const char *string,
+			const struct auth_request *request __attr_unused__)
+{
+	return str_escape(string);
 }
 
 const struct var_expand_table *
 auth_request_get_var_expand_table(const struct auth_request *auth_request,
-				  const char *(*escape_func)(const char *))
+				  auth_request_escape_func_t *escape_func)
 {
 	static struct var_expand_table static_tab[] = {
 		{ 'u', NULL },
@@ -872,11 +886,12 @@ auth_request_get_var_expand_table(const struct auth_request *auth_request,
 	tab = t_malloc(sizeof(static_tab));
 	memcpy(tab, static_tab, sizeof(static_tab));
 
-	tab[0].value = escape_func(auth_request->user);
-	tab[1].value = escape_func(t_strcut(auth_request->user, '@'));
+	tab[0].value = escape_func(auth_request->user, auth_request);
+	tab[1].value = escape_func(t_strcut(auth_request->user, '@'),
+				   auth_request);
 	tab[2].value = strchr(auth_request->user, '@');
 	if (tab[2].value != NULL)
-		tab[2].value = escape_func(tab[2].value+1);
+		tab[2].value = escape_func(tab[2].value+1, auth_request);
 	tab[3].value = auth_request->service;
 	/* tab[4] = we have no home dir */
 	if (auth_request->local_ip.family != 0)
@@ -884,8 +899,10 @@ auth_request_get_var_expand_table(const struct auth_request *auth_request,
 	if (auth_request->remote_ip.family != 0)
 		tab[6].value = net_ip2addr(&auth_request->remote_ip);
 	tab[7].value = dec2str(auth_request->client_pid);
-	if (auth_request->mech_password != NULL)
-		tab[8].value = escape_func(auth_request->mech_password);
+	if (auth_request->mech_password != NULL) {
+		tab[8].value = escape_func(auth_request->mech_password,
+					   auth_request);
+	}
 	return tab;
 }
 

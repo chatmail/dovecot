@@ -1,5 +1,5 @@
 AC_PREREQ([2.59])
-AC_INIT([dovecot],[1.0.beta8],[dovecot@dovecot.org])
+AC_INIT([dovecot],[1.0.beta9],[dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE
@@ -119,13 +119,13 @@ AC_ARG_WITH(bsdauth,
 	want_bsdauth=yes)
 
 AC_ARG_WITH(gssapi,
-[  --with-gssapi           Build with GSSAPI authentication support (default)],
+[  --with-gssapi           Build with GSSAPI authentication support],
     if test x$withval = xno; then
 		want_gssapi=no
 	else
 		want_gssapi=yes
 	fi,
-	want_gssapi=yes)
+	want_gssapi=no)
 
 AC_ARG_WITH(ldap,
 [  --with-ldap             Build with LDAP support],
@@ -193,7 +193,7 @@ AC_ARG_WITH(mysql,
 	want_mysql=no)
 
 AC_ARG_WITH(sqlite,
-[  --with-sqlite            Build with SQLite3 driver support],
+[  --with-sqlite           Build with SQLite3 driver support],
 	if test x$withval = xno; then
 		want_sqlite=no
 	else
@@ -297,7 +297,7 @@ AC_ARG_WITH(moduledir,
 AC_SUBST(moduledir)
 
 AC_ARG_WITH(docs,
-[  --with-docs            Install documentation (default)],
+[  --with-docs             Install documentation (default)],
 	if test x$withval = xno; then
 		want_docs=no
 	else
@@ -1414,6 +1414,9 @@ if test $want_pgsql = yes; then
 	fi
 
 	AC_CHECK_LIB(pq, PQconnectdb, [
+		AC_CHECK_LIB(pq, PQescapeStringConn, [
+			AC_DEFINE(HAVE_PQESCAPE_STRING_CONN,, Define if libpq has PQescapeStringConn function)
+		])
 		old_CPPFLAGS=$CPPFLAGS
 		if test "$PGSQL_INCLUDE" != ""; then
 			CPPFLAGS="$CPPFLAGS -I $PGSQL_INCLUDE"
@@ -1694,6 +1697,7 @@ src/lib-storage/index/dbox/Makefile
 src/lib-storage/subscription-file/Makefile
 src/lib-storage/register/Makefile
 src/auth/Makefile
+src/deliver/Makefile
 src/dict/Makefile
 src/imap/Makefile
 src/imap-login/Makefile
@@ -1710,7 +1714,7 @@ src/plugins/imap-quota/Makefile
 src/plugins/trash/Makefile
 src/plugins/zlib/Makefile
 stamp.h
-dovecot-config])
+dovecot-config.in])
 
 AC_OUTPUT
 

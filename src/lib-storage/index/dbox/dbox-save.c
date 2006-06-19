@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "array.h"
 #include "ioloop.h"
+#include "istream.h"
 #include "hex-dec.h"
 #include "write-full.h"
 #include "ostream.h"
@@ -21,7 +22,6 @@ struct dbox_save_context {
 	struct mail_index_transaction *trans;
 	struct dbox_uidlist_append_ctx *append_ctx;
 
-	uint32_t first_append_seq;
 	struct mail_index_sync_ctx *index_sync_ctx;
 
 	/* updated for each appended mail: */
@@ -106,6 +106,7 @@ int dbox_save_init(struct mailbox_transaction_context *_t,
 	struct dbox_mailbox *mbox = (struct dbox_mailbox *)t->ictx.ibox;
 	struct dbox_save_context *ctx = t->save_ctx;
 	struct dbox_mail_header hdr;
+	const struct stat *st;
 	buffer_t *file_keywords = NULL;
 	enum mail_flags save_flags;
 	unsigned int i, pos, left;
@@ -137,7 +138,13 @@ int dbox_save_init(struct mailbox_transaction_context *_t,
 	}
 	ctx->input = input;
 
-	if (dbox_uidlist_append_locked(ctx->append_ctx, &ctx->file) < 0) {
+	/* get the size of the mail to be saved, if possible */
+	st = i_stream_stat(input, TRUE);
+	if (st != NULL && st->st_size == -1)
+		st = NULL;
+
+	if (dbox_uidlist_append_locked(ctx->append_ctx, &ctx->file,
+				       st != NULL ? st->st_size : 0) < 0) {
 		ctx->failed = TRUE;
 		return -1;
 	}
@@ -212,8 +219,8 @@ int dbox_save_init(struct mailbox_transaction_context *_t,
 			      mbox->dbox_offset_ext_idx, &ctx->hdr_offset,
 			      NULL);
 
-	if (ctx->first_append_seq == 0)
-		ctx->first_append_seq = ctx->seq;
+	if (t->first_saved_mail_seq == 0)
+		t->first_saved_mail_seq = ctx->seq;
 	t_pop();
 
 	*ctx_r = &ctx->ctx;
@@ -302,8 +309,8 @@ void dbox_save_cancel(struct mail_save_context *_ctx)
 
 int dbox_transaction_save_commit_pre(struct dbox_save_context *ctx)
 {
-	struct index_transaction_context *idx_trans =
-		(struct index_transaction_context *)ctx->ctx.transaction;
+	struct dbox_transaction_context *t =
+		(struct dbox_transaction_context *)ctx->ctx.transaction;
 	struct dbox_mail_header hdr;
 	struct dbox_file *file;
 	struct mail_index_view *view;
@@ -337,8 +344,8 @@ int dbox_transaction_save_commit_pre(struct dbox_save_context *ctx)
 	mail_index_append_assign_uids(ctx->trans, uid, &last_uid);
 
 	/* update UIDs */
-	for (seq = ctx->first_append_seq; seq <= ctx->seq; seq++, uid++) {
-		ret = dbox_mail_lookup_offset(idx_trans, seq,
+	for (seq = t->first_saved_mail_seq; seq <= ctx->seq; seq++, uid++) {
+		ret = dbox_mail_lookup_offset(&t->ictx, seq,
 					      &file_seq, &offset);
 		i_assert(ret > 0); /* it's in memory, shouldn't fail! */
 
@@ -346,13 +353,13 @@ int dbox_transaction_save_commit_pre(struct dbox_save_context *ctx)
 
 		file = dbox_uidlist_append_lookup_file(ctx->append_ctx,
 						       file_seq);
-		if (pwrite_full(ctx->file->fd, hdr.uid_hex,
+		if (pwrite_full(file->fd, hdr.uid_hex,
 				sizeof(hdr.uid_hex), offset +
 				offsetof(struct dbox_mail_header,
 					 uid_hex)) < 0) {
 			mail_storage_set_critical(STORAGE(ctx->mbox->storage),
 						  "pwrite_full(%s) failed: %m",
-						  ctx->file->path);
+						  file->path);
 			ctx->failed = TRUE;
                         dbox_transaction_save_rollback(ctx);
 			return -1;
