@@ -1,0 +1,91 @@
+#! /bin/sh -e
+
+## DP: Add support for quotas on XFS
+## DP: Author:  Pawel Jarosz <pj@rsi.pl>
+
+. $(dirname $0)/DPATCH
+
+exit 0
+@DPATCH@
+--- src/plugins/quota/quota-fs.c.orig	2006-06-19 16:36:57.000000000 -0400
++++ src/plugins/quota/quota-fs.c	2006-06-19 16:40:40.000000000 -0400
+@@ -16,6 +16,10 @@
+ #include <fcntl.h>
+ #include <unistd.h>
+ #include <sys/stat.h>
++#include <linux/dqblk_xfs.h>
++
++#define xfs_kern_dqblk  fs_disk_quota
++typedef u_int64_t qsize_t;
+ 
+ #ifdef HAVE_STRUCT_DQBLK_CURSPACE
+ #  define dqb_curblocks dqb_curspace
+@@ -166,6 +170,22 @@
+ 	return resources;
+ }
+ 
++/*
++ * Convert XFS kernel quota format to utility format (from quota utility)
++ */
++static inline void xfs_kern2utildqblk(struct dqblk *u, struct xfs_kern_dqblk * k)
++{
++   u->dqb_ihardlimit = k->d_ino_hardlimit;
++   u->dqb_isoftlimit = k->d_ino_softlimit;
++   u->dqb_bhardlimit = k->d_blk_hardlimit >> 1;
++   u->dqb_bsoftlimit = k->d_blk_softlimit >> 1;
++   u->dqb_curinodes = k->d_icount;
++   u->dqb_curspace = ((qsize_t)k->d_bcount) << 9;
++   u->dqb_itime = k->d_itimer;
++   u->dqb_btime = k->d_btimer;
++}
++
++
+ static int
+ fs_quota_get_resource(struct quota_root *_root, const char *name,
+ 		      uint64_t *value_r, uint64_t *limit_r)
+@@ -183,20 +203,39 @@
+ 		return 0;
+ 
+ #ifdef HAVE_QUOTACTL
++	#ifdef HAVE_SYS_QUOTA_H
++		/* Linux - XFS */ 
++		struct xfs_kern_dqblk xdqblk;
++		if (quotactl(
++			QCMD(Q_XGETQUOTA,USRQUOTA), root->mount->device_path,
++			root->uid, (void *)&xdqblk) < 0) {
++    			/* Linux - ext2, ext3 */
++				i_error("quotactl(Q_XGETQUOTA, %s) failed: %m",
++					root->mount->device_path);
++					quota_set_error(_root->setup->quota, "Internal quota error"); 
++				if (quotactl(
++				     QCMD(Q_GETQUOTA, USRQUOTA), root->mount->device_path,
++				     root->uid, (void *)&dqblk) < 0) {
++						i_error("quotactl(Q_GETQUOTA, %s) failed: %m",
++						root->mount->device_path);
++						quota_set_error(_root->setup->quota, "Internal quota error");
++					return -1;
++			}
++	} else {
++		/* ALL OK, let's convert XFS quota format to standard one */
++		xfs_kern2utildqblk(&dqblk, &xdqblk);
++	}
++	#else
++	/* BSD, AIX */
+ 	if (quotactl(
+-#ifdef HAVE_SYS_QUOTA_H
+-		     /* Linux */
+-		     QCMD(Q_GETQUOTA, USRQUOTA), root->mount->device_path,
+-#else
+-		     /* BSD, AIX */
+ 		     root->mount->device_path, QCMD(Q_GETQUOTA, USRQUOTA),
+-#endif
+ 		     root->uid, (void *)&dqblk) < 0) {
+ 		i_error("quotactl(Q_GETQUOTA, %s) failed: %m",
+ 			root->mount->device_path);
+ 		quota_set_error(_root->setup->quota, "Internal quota error");
+ 		return -1;
+ 	}
++   #endif
+ #else
+ 	/* Solaris */
+ 	if (root->mount->fd == -1)
