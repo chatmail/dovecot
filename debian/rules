@@ -32,6 +32,7 @@ build-stamp:  config.status
 	dh_testdir
 
 	# Add here commands to compile the package.
+	$(MAKE) dovecot-config
 	$(MAKE)
 	cd src/dovecot-lda && $(MAKE)
 	#cd src/drac && $(MAKE)
