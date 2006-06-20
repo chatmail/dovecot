@@ -7,8 +7,8 @@
 
 exit 0
 @DPATCH@
---- src/plugins/quota/quota-fs.c.orig	2006-06-19 16:36:57.000000000 -0400
-+++ src/plugins/quota/quota-fs.c	2006-06-19 16:40:40.000000000 -0400
+--- dovecot/src/plugins/quota/quota-fs.c.orig	2006-06-19 16:36:57.000000000 -0400
++++ dovecot/src/plugins/quota/quota-fs.c	2006-06-19 16:40:40.000000000 -0400
 @@ -16,6 +16,10 @@
  #include <fcntl.h>
  #include <unistd.h>
