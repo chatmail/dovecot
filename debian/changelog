@@ -1,14 +1,12 @@
-dovecot (1.0.rc1-1) UNRELEASED; urgency=low
+dovecot (1.0.rc1-1) unstable; urgency=low
 
-  * (NOT RELEASED YET) New upstream release
+  * New upstream release.
+  * Add a build-dependency on linux-kernel-headers for the xfs quotas 
+    stuff.  Make it higher than the version in sarge because sarges xfs
+    includes are too old.  If any knowledgeable person would like to 
+    give me a patch for this, please do.  (Closes: #374793)
 
- -- Jaldhar H. Vyas <jaldhar@jaldhar-laptop.intranet.braincells.com>  Wed, 28 Jun 2006 08:50:20 -0400
-
-dovecot (1.0.beta9-2) UNRELEASED; urgency=low
-
-  * NOT RELEASED YET
-
- -- Jaldhar H. Vyas <jaldhar@jaldhar-laptop.intranet.braincells.com>  Tue, 20 Jun 2006 22:13:04 -0400
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 28 Jun 2006 11:42:07 -0400
 
 dovecot (1.0.beta9-1) unstable; urgency=low
 
