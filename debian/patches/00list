@@ -3,4 +3,3 @@ dovecot-example
 dovecot-sql
 postgres_configure
 dovecot-lda
-xfs_quotas
