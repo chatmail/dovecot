@@ -360,20 +360,13 @@ static void unlink_child(struct thread_context *ctx,
 		add_root(ctx, child);
 }
 
-static bool find_child(struct node *node, struct node *child)
+static bool find_parent(struct node *node, struct node *parent)
 {
-	do {
-		if (node == child)
+	while (node != NULL) {
+		if (node == parent)
 			return TRUE;
-
-		if (node->first_child != NULL) {
-			if (find_child(node->first_child, child))
-				return TRUE;
-		}
-
-		node = node->next;
-	} while (node != NULL);
-
+		node = node->parent;
+	}
 	return FALSE;
 }
 
@@ -396,7 +389,7 @@ static void link_node(struct thread_context *ctx, const char *parent_msgid,
 		return;
 	}
 
-	if (find_child(child, parent)) {
+	if (find_parent(parent, child)) {
 		/* this would create a loop, not allowed */
 		return;
 	}

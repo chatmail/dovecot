@@ -1702,8 +1702,8 @@ int mail_index_reopen_if_needed(struct mail_index *index)
 		if (errno != ENOENT)
 			return -1;
 
-		/* lost it? recreate */
-		(void)mail_index_mark_corrupted(index);
+		/* lost it? recreate later */
+		mail_index_mark_corrupted(index);
 		return -1;
 	}
 
@@ -1781,6 +1781,9 @@ int mail_index_move_to_memory(struct mail_index *index)
 {
 	struct mail_index_map *map;
 	int ret = 0;
+
+	if (MAIL_INDEX_IS_IN_MEMORY(index))
+		return 0;
 
 	/* set the index as being into memory */
 	i_free_and_null(index->dir);

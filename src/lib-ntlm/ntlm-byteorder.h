@@ -3,16 +3,13 @@
  *
  * Copyright (c) 2004 Andrey Panin <pazke@donpac.ru>
  *
- * This library is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published 
- * by the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * This software is released under the MIT license.
  */
 
 #ifndef __NTLM_BYTEORDER_H__
 #define __NTLM_BYTEORDER_H__
 
-#if defined(__i386__) || defined(__vax__)
+#if defined(__i386__) || defined(__x86_64__) || defined(__vax__)
 
 static inline uint16_t read_le16(const void *addr)
 {

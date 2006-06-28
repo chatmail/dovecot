@@ -314,16 +314,20 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 				/* this wasn't the final passdb lookup,
 				   continue to next passdb */
 				request->passdb = request->passdb->next;
+				request->passdb_password = NULL;
 				return FALSE;
 			}
 		}
 	} else if (*result == PASSDB_RESULT_PASS_EXPIRED) {
-		auth_stream_reply_add(request->extra_fields, "reason",
+	        if (request->extra_fields == NULL)
+		        request->extra_fields = auth_stream_reply_init(request);
+	        auth_stream_reply_add(request->extra_fields, "reason",
 				      "Password expired");
 	} else if (request->passdb->next != NULL &&
 		   *result != PASSDB_RESULT_USER_DISABLED) {
 		/* try next passdb. */
                 request->passdb = request->passdb->next;
+		request->passdb_password = NULL;
 
                 if (*result == PASSDB_RESULT_INTERNAL_FAILURE) {
 			/* remember that we have had an internal failure. at
@@ -723,6 +727,8 @@ static void auth_request_validate_networks(struct auth_request *request,
 
 	t_push();
 	for (net = t_strsplit_spaces(networks, ", "); *net != NULL; net++) {
+		auth_request_log_debug(request, "auth",
+			"allow_nets: Matching for network %s", *net);
 		switch (is_ip_in_network(*net, &request->remote_ip)) {
 		case 1:
 			found = TRUE;

@@ -183,6 +183,7 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sql_drivers = @sql_drivers@
 ssldir = @ssldir@
+statedir = @statedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 @BUILD_POP3D_TRUE@POP3D = pop3-login pop3

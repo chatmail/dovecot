@@ -99,6 +99,9 @@
 /* Define to 1 if you have the <libgen.h> header file. */
 #undef HAVE_LIBGEN_H
 
+/* Define to 1 if you have the <linux/dqblk_xfs.h> header file. */
+#undef HAVE_LINUX_DQBLK_XFS_H
+
 /* Define if you have Linux-compatible mremap() */
 #undef HAVE_LINUX_MREMAP
 
@@ -167,6 +170,12 @@
 
 /* Define if you have RLIMIT_NPROC for setrlimit() */
 #undef HAVE_RLIMIT_NPROC
+
+/* Define to 1 if you have the <sasl.h> header file. */
+#undef HAVE_SASL_H
+
+/* Define to 1 if you have the <sasl/sasl.h> header file. */
+#undef HAVE_SASL_SASL_H
 
 /* Define if you have security/pam_appl.h */
 #undef HAVE_SECURITY_PAM_APPL_H
@@ -338,6 +347,9 @@
 
 /* Define if you have ldap_initialize */
 #undef LDAP_HAVE_INITIALIZE
+
+/* Define if you have ldap_start_tls_s */
+#undef LDAP_HAVE_START_TLS_S
 
 /* Index file compatibility flags */
 #undef MAIL_INDEX_COMPAT_FLAGS

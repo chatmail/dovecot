@@ -345,7 +345,7 @@ int main(int argc, char *argv[])
 	const char *config_path = DEFAULT_CONFIG_FILE;
 	const char *mailbox = "INBOX";
 	const char *auth_socket, *env_tz;
-	const char *home, *destination, *user, *mail_env, *str;
+	const char *home, *destination, *user, *mail_env;
         const struct var_expand_table *table;
         enum mail_storage_flags flags;
         enum mail_storage_lock_method lock_method;
@@ -480,20 +480,15 @@ int main(int argc, char *argv[])
 		mail_env = expand_mail_env(mail_env, table);
 	}
 
-	str = getenv("POP3_UIDL_FORMAT");
-	if (str != NULL && (str = strchr(str, '%')) != NULL &&
-	    str != NULL && var_get_key(str + 1) == 'm')
-		flags |= MAIL_STORAGE_FLAG_KEEP_HEADER_MD5;
-
-	if (getenv("MAIL_PLUGIN_DIR") == NULL)
+	if (getenv("MAIL_PLUGINS") == NULL)
 		modules = NULL;
 	else {
-		if (getenv("MAIL_PLUGIN_DIR") == NULL) {
-			i_fatal("MAIL_PLUGINS given but "
-				"MAIL_PLUGIN_DIR was not");
-		}
-		modules = module_dir_load(getenv("MAIL_PLUGIN_DIR"),
-					  getenv("MAIL_PLUGINS"), TRUE);
+		const char *plugin_dir = getenv("MAIL_PLUGIN_DIR");
+
+		if (plugin_dir == NULL)
+			plugin_dir = MODULEDIR"/lda";
+		modules = module_dir_load(plugin_dir, getenv("MAIL_PLUGINS"),
+					  TRUE);
 	}
 
 	/* FIXME: how should we handle namespaces? */

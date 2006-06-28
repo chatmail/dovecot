@@ -228,6 +228,12 @@ static void driver_mysql_parse_connect_string(struct mysql_db *db,
 	}
 	t_pop();
 
+#ifdef CLIENT_MULTI_STATEMENTS
+	/* Updates require this because everything is committed in one large
+	   SQL statement. */
+	db->client_flags |= CLIENT_MULTI_STATEMENTS;
+#endif
+
 	if (array_count(&db->connections) == 0)
 		i_fatal("mysql: No hosts given in connect string");
 }
@@ -341,15 +347,40 @@ static char *
 driver_mysql_escape_string(struct sql_db *_db, const char *string)
 {
 	struct mysql_db *db = (struct mysql_db *)_db;
-	const struct mysql_connection *conn;
+	struct mysql_connection *conn;
+	unsigned int i, count;
 	size_t len = strlen(string);
 	char *to;
 
-	/* All the connections should be identical, so just use the first one */
-	conn = array_idx(&db->connections, 0);
+	/* All the connections should be identical, so just use the first
+	   connected one */
+	conn = array_get_modifyable(&db->connections, &count);
+	for (i = 0; i < count; i++) {
+		if (conn[i].connected)
+			break;
+	}
+	if (i == count) {
+		/* so, try connecting.. */
+		for (i = 0; i < count; i++) {
+			if (driver_mysql_connect(&conn[i]))
+				break;
+		}
+		if (i == count) {
+			/* FIXME: we don't have a valid connection, so fallback
+			   to using default escaping. the next query will most
+			   likely fail anyway so it shouldn't matter that much
+			   what we return here.. Anyway, this API needs
+			   changing so that the escaping function could already
+			   fail the query reliably. */
+			to = t_buffer_get(len * 2 + 1);
+			len = mysql_escape_string(to, string, len);
+			t_buffer_alloc(len + 1);
+			return to;
+		}
+	}
 
 	to = t_buffer_get(len * 2 + 1);
-	len = mysql_real_escape_string(conn->mysql, to, string, len);
+	len = mysql_real_escape_string(conn[i].mysql, to, string, len);
 	t_buffer_alloc(len + 1);
 	return to;
 }
@@ -393,7 +424,7 @@ driver_mysql_query_s(struct sql_db *_db, const char *query)
 	case 1:
 		/* query ok */
 		result->result = mysql_store_result(conn->mysql);
-		if (result->result != NULL)
+		if (result->result != NULL || mysql_errno(conn->mysql) == 0)
 			break;
 		/* fallback */
 	case -1:
@@ -422,11 +453,16 @@ static int driver_mysql_result_next_row(struct sql_result *_result)
 {
 	struct mysql_result *result = (struct mysql_result *)_result;
 
+	if (result->result == NULL) {
+		/* no results */
+		return 0;
+	}
+
 	result->row = mysql_fetch_row(result->result);
 	if (result->row != NULL)
 		return 1;
 
-	return mysql_errno(result->conn->mysql) ? -1 : 0;
+	return mysql_errno(result->conn->mysql) != 0 ? -1 : 0;
 }
 
 static void driver_mysql_result_fetch_fields(struct mysql_result *result)

@@ -66,7 +66,7 @@ static bool validate_chroot(struct settings *set, const char *dir)
 	if (*dir == '\0')
 		return FALSE;
 
-	if (set->valid_chroot_dirs == NULL)
+	if (*set->valid_chroot_dirs == '\0')
 		return FALSE;
 
 	chroot_dirs = t_strsplit(set->valid_chroot_dirs, ":");
@@ -274,14 +274,15 @@ mail_process_set_environment(struct settings *set, const char *mail,
 				set->dbox_rotate_days));
 
 	if (*set->mail_plugins != '\0') {
-		env_put(t_strconcat("MODULE_DIR=", set->mail_plugin_dir, NULL));
-		env_put(t_strconcat("MODULE_LIST=", set->mail_plugins, NULL));
+		env_put(t_strconcat("MAIL_PLUGIN_DIR=",
+				    set->mail_plugin_dir, NULL));
+		env_put(t_strconcat("MAIL_PLUGINS=", set->mail_plugins, NULL));
 	}
 
 	/* user given environment - may be malicious. virtual_user comes from
 	   auth process, but don't trust that too much either. Some auth
 	   mechanism might allow leaving extra data there. */
-	if ((mail == NULL || *mail == '\0') && set->default_mail_env != NULL)
+	if ((mail == NULL || *mail == '\0') && *set->default_mail_env != '\0')
 		mail = expand_mail_env(set->default_mail_env, var_expand_table);
 	env_put(t_strconcat("MAIL=", mail, NULL));
 
@@ -452,7 +453,7 @@ bool create_mail_process(enum process_type process_type, struct settings *set,
 			return FALSE;
 	}
 
-	if (*chroot_dir == '\0' && set->mail_chroot != NULL)
+	if (*chroot_dir == '\0' && *set->mail_chroot != '\0')
 		chroot_dir = set->mail_chroot;
 
 	if (*chroot_dir != '\0' && !validate_chroot(set, chroot_dir)) {

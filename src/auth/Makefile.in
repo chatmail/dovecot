@@ -237,6 +237,7 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sql_drivers = @sql_drivers@
 ssldir = @ssldir@
+statedir = @statedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 noinst_LIBRARIES = libpassword.a
@@ -250,6 +251,7 @@ AM_CPPFLAGS = \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
 	$(AUTH_CFLAGS)
 
+dovecot_auth_LDFLAGS = -export-dynamic
 libpassword_a_SOURCES = \
 	mycrypt.c \
 	password-scheme.c \

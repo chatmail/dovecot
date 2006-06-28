@@ -67,7 +67,8 @@ static void checkpassword_request_finish(struct chkpw_auth_request *request,
 
 	hash_remove(module->clients, POINTER_CAST(request->pid));
 
-	if (strchr(str_c(request->input_buf), '\n') != NULL) {
+	if (request->input_buf != NULL &&
+	    strchr(str_c(request->input_buf), '\n') != NULL) {
 		auth_request_log_error(request->request, "checkpassword",
 				       "LF characters in checkpassword reply");
 		result = PASSDB_RESULT_INTERNAL_FAILURE;
@@ -100,18 +101,18 @@ checkpassword_request_half_finish(struct chkpw_auth_request *request)
 		return;
 
 	switch (request->exit_status) {
+	case 1:
+		auth_request_log_info(request->request, "checkpassword",
+				      "Password not accepted");
+		checkpassword_request_finish(request,
+					     PASSDB_RESULT_PASSWORD_MISMATCH);
+		break;
 	case 0:
 		if (request->input_buf != NULL) {
 			checkpassword_request_finish(request, PASSDB_RESULT_OK);
 			break;
 		}
 		/* missing input - fall through */
-	case 1:
-		auth_request_log_info(request->request, "checkpassword",
-				      "Unknown user");
-		checkpassword_request_finish(request,
-					     PASSDB_RESULT_USER_UNKNOWN);
-		break;
 	case 2:
 		/* checkpassword is called with wrong
 		   parameters? unlikely */
@@ -160,12 +161,13 @@ static void wait_timeout(void *context)
 			i_error("checkpassword: Child %s died with signal %d",
 				dec2str(pid), WTERMSIG(status));
 		} else if (WIFEXITED(status)) {
+			request->exited = TRUE;
+			request->exit_status = WEXITSTATUS(status);
+
 			auth_request_log_debug(request->request,
 				"checkpassword", "exit_status=%d",
 				request->exit_status);
 
-			request->exited = TRUE;
-			request->exit_status = WEXITSTATUS(status);
 			checkpassword_request_half_finish(request);
 			request = NULL;
 		} else {

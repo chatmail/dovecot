@@ -195,6 +195,7 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sql_drivers = @sql_drivers@
 ssldir = @ssldir@
+statedir = @statedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 noinst_LIBRARIES = libdict.a

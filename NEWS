@@ -1,3 +1,40 @@
+v1.0.rc1 2006-06-28  Timo Sirainen <tss@iki.fi>
+
+	* PAM: If user's password is expired, give "Password expired" error
+	  message to the user. Now actually working thanks to Vaidas Pilkauskas
+	* Relicensed dovecot-auth, lib-sql and lib-ntlm to MIT license. See
+	  COPYING file for more information.
+	* Abuse prevention: When creating a mailbox, limit the number of
+	  hierarchies (up to 20) and the length of the mailbox name within
+	  a hierarchy (up to 200 characters).
+	* mbox: If saved mail doesn't end with LF, add it ourself so that the
+	  mails always have one empty line before the next From-line.
+
+	+ Added --with-statedir configure option which defaults to
+	  $localstatedir/lib/dovecot. ssl-parameters.dat is permanently
+	  stored in that directory and is copied to login_dirs from there.
+	+ IMAP: Support SASL-IR extension (SASL initial response)
+	+ Support initial SASL response with LOGIN mechanism. Patch by Anders
+	  Karlsson
+	+ Added PLAIN-MD4 password scheme. Patch by Andrey Panin.
+	+ Added support for XFS disk quotas. Patch by Pawel Jarosz
+	+ If another process deletes the opened mailbox, try to handle it
+	  without writing errors to log file. Handles the most common cases.
+	+ Added TLS support for LDAP if the library supports it.
+	- SEARCH command was more or less broken with OR and NOT conditions
+	- Dovecot corrupted mbox files which had CR+LF linefeeds in headers
+	- MySQL code could have crashed while escaping strings
+	- MD4 code with NTLM authentication was broken with 64bit systems.
+	  Patch by Andrey Panin
+	- Plugin loading was broken in some OSes (eg. FreeBSD)
+	- Several fixes to handling empty values in configuration file
+	- Several fixes to dictionary quota backend and dict server.
+	  Also changed how they're configured.
+	- deliver: Fixed plugin handling settings
+	- mbox_min_index_size handling was somewhat broken
+	- passdb passwd-file: extra_args field wasn't read unless the file
+	  was also used as userdb.
+
 v1.0.beta9 2006-06-13  Timo Sirainen <tss@iki.fi>
 
 	* PAM: Don't call pam_setcred() unless setcred=yes PAM passdb

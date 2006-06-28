@@ -55,11 +55,12 @@ am_liblib_a_OBJECTS = base64.$(OBJEXT) bsearch-insert-pos.$(OBJEXT) \
 	buffer.$(OBJEXT) close-keep-errno.$(OBJEXT) compat.$(OBJEXT) \
 	data-stack.$(OBJEXT) env-util.$(OBJEXT) failures.$(OBJEXT) \
 	fd-close-on-exec.$(OBJEXT) fd-set-nonblock.$(OBJEXT) \
-	fdpass.$(OBJEXT) file-cache.$(OBJEXT) file-dotlock.$(OBJEXT) \
-	file-lock.$(OBJEXT) file-set-size.$(OBJEXT) hash.$(OBJEXT) \
-	hex-binary.$(OBJEXT) hex-dec.$(OBJEXT) hmac-md5.$(OBJEXT) \
-	home-expand.$(OBJEXT) hostpid.$(OBJEXT) imem.$(OBJEXT) \
-	iostream.$(OBJEXT) istream.$(OBJEXT) istream-data.$(OBJEXT) \
+	fdpass.$(OBJEXT) file-cache.$(OBJEXT) file-copy.$(OBJEXT) \
+	file-dotlock.$(OBJEXT) file-lock.$(OBJEXT) \
+	file-set-size.$(OBJEXT) hash.$(OBJEXT) hex-binary.$(OBJEXT) \
+	hex-dec.$(OBJEXT) hmac-md5.$(OBJEXT) home-expand.$(OBJEXT) \
+	hostpid.$(OBJEXT) imem.$(OBJEXT) iostream.$(OBJEXT) \
+	istream.$(OBJEXT) istream-data.$(OBJEXT) \
 	istream-file.$(OBJEXT) istream-limit.$(OBJEXT) \
 	istream-mmap.$(OBJEXT) istream-seekable.$(OBJEXT) \
 	ioloop.$(OBJEXT) ioloop-notify-none.$(OBJEXT) \
@@ -226,6 +227,7 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sql_drivers = @sql_drivers@
 ssldir = @ssldir@
+statedir = @statedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 noinst_LIBRARIES = liblib.a
@@ -242,6 +244,7 @@ liblib_a_SOURCES = \
 	fd-set-nonblock.c \
 	fdpass.c \
 	file-cache.c \
+	file-copy.c \
 	file-dotlock.c \
 	file-lock.c \
 	file-set-size.c \
@@ -326,6 +329,7 @@ noinst_HEADERS = \
 	fd-set-nonblock.h \
 	fdpass.h \
 	file-cache.h \
+	file-copy.h \
 	file-dotlock.h \
 	file-lock.h \
 	file-set-size.h \
@@ -440,6 +444,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fd-set-nonblock.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fdpass.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/file-cache.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/file-copy.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/file-dotlock.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/file-lock.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/file-set-size.Po@am__quote@

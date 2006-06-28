@@ -9,7 +9,10 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-storage \
 	-I$(top_srcdir)/src/lib-storage/index/mbox \
 	-DSYSCONFDIR=\""$(sysconfdir)"\" \
-	-DPKG_RUNDIR=\""$(rundir)"\"
+	-DPKG_RUNDIR=\""$(rundir)"\" \
+	-DMODULEDIR=\""$(moduledir)"\"
+
+deliver_LDFLAGS = -export-dynamic
 
 # get some functions included which only plugins use. liblib should probably
 # be a shared library so this wouldn't be needed..

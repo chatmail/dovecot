@@ -1,3 +1,491 @@
+2006-06-27 22:18  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, TODO, configure.in: Released 1.0.rc1
+
+2006-06-27 22:00  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-fs.c: Attempting to fix quota block
+	  calculations to be correct.
+
+2006-06-27 21:13  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-list.c: We could have
+	  skipped INBOX if there wasn't .INBOX directory.
+
+2006-06-27 21:03  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap/Makefile.am, imap/main.c, master/mail-process.c,
+	  pop3/Makefile.am, pop3/main.c: Changed the
+	  mail_plugins/mail_plugin_dir settings to be passed as the same
+	  environments. If MAIL_PLUGIN_DIR environment isn't given, use the
+	  built-in default.
+
+2006-06-27 10:27  Timo Sirainen <tss@iki.fi>
+
+	* src/: deliver/deliver.c, lib-storage/mail-storage.c:
+	  MAIL_STORAGE_FLAG_KEEP_HEADER_MD5 flag was supposed to be set if
+	  pop3_uidl_format contained %m. Added it now to
+	  mail_storage_parse_env() so it's used everywhere.
+
+2006-06-27 09:25  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-sql/driver-sqlite.c: Escape ' with '' instead of with \'.
+
+2006-06-27 07:20  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Don't try to use any weird _syscall()s when
+	  detecting epoll.
+
+2006-06-26 18:51  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Fix kqueue notify checking.
+
+2006-06-26 17:48  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-storage.c: If
+	  dovecot-shared file exists in the Maildir++ root, use the file's
+	  mode and gid when creating mailboxes under it.
+
+2006-06-26 08:56  Timo Sirainen <tss@iki.fi>
+
+	* src/master/ssl-init.c: Don't leak a file descriptor when
+	  regenerating ssl-parameters.dat
+
+2006-06-26 08:35  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/index-search.c: Searching (storing,
+	  fetching) with sequence sets containing commas was broken
+
+2006-06-24 21:29  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/index-search.c: Don't crash when different
+	  search conditions reduce the search range so that minimum
+	  sequence becomes larger than maximum..
+
+2006-06-24 21:03  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/acl/acl-backend.c: Don't crash when checking "owner"
+	  ACLs with shared namespaces.
+
+2006-06-24 20:54  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-rewrite.c: We assert-crashed
+	  in wrong conditions.
+
+2006-06-24 20:53  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: istream-raw-mbox.c,
+	  mbox-sync-rewrite.c, mbox-sync-update.c: Fixes to handling CR+LF
+	  linefeeds.
+
+2006-06-24 19:02  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-passwd-file.c: When using non-plaintext
+	  authentication with passdb passwd-file we didn't support
+	  extra_fields and we crashed if password scheme wasn't explicitly
+	  specified in the passwd-file.
+
+2006-06-24 18:24  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: fix
+
+2006-06-20 15:29  Timo Sirainen <timo.sirainen@movial.fi>
+
+	* src/lib-storage/index/index-search.c: Don't crash if seqset
+	  restrictions caused no messages to be searched.
+
+2006-06-20 15:16  Timo Sirainen <timo.sirainen@movial.fi>
+
+	* src/lib-storage/: mail-search.c, index/index-search.c: NOT
+	  condition wasn't handled correctly in SEARCH.
+
+2006-06-20 13:59  Timo Sirainen <timo.sirainen@movial.fi>
+
+	* src/auth/passdb-checkpassword.c: If checkpassword lookup failed,
+	  we crashed. auth_debug logged checkpassword's exit_status wrong.
+
+2006-06-20 13:13  Timo Sirainen <timo.sirainen@movial.fi>
+
+	* src/auth/passdb-checkpassword.c: Return value 1 from
+	  checkpassword can mean either password mismatch or unknown user.
+	  Treat it as password mismatch instead of as unknown user.
+
+2006-06-19 18:15  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/file-copy.c: If destination file already existed, we
+	  didn't overwrite it with link() copying.
+
+2006-06-19 16:14  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.c: Prefer sasl/sasl.h. Require SASL v2,
+	  otherwise disable it.
+
+2006-06-19 16:10  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/auth/db-ldap.c, src/auth/db-ldap.h: Check for
+	  sasl.h and sasl/sasl.h existence and use the one that's found. If
+	  neither is found, disable support for LDAP SASL.
+
+2006-06-19 14:16  Timo Sirainen <timo.sirainen@movial.fi>
+
+	* src/imap/imap-thread.c: Optimization for checking loops.
+
+2006-06-18 19:47  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-ntlm/ntlm-des.c: Don't include stdint.h directly.
+
+2006-06-18 09:49  Timo Sirainen <tss@iki.fi>
+
+	* src/: auth/Makefile.am, deliver/Makefile.am, dict/Makefile.am,
+	  imap/Makefile.am, pop3/Makefile.am: Added -export-dynamic.
+
+2006-06-18 01:34  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Fixes to io notify detection. Patch by Marcus
+	  Rueckert
+
+2006-06-18 00:24  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Include linux/unistd.h instead of asm/unistd.h when
+	  checking for epoll.
+
+2006-06-17 22:44  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-mail.c: If requested mail
+	  isn't found from uidlist, mark the mail as expunged.
+
+2006-06-17 21:03  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: auth_debug: If allow_nets is given,
+	  print debug messages when matching
+
+2006-06-17 21:02  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-passwd-file.c: extra_args field was ignored if the
+	  passwd-file wasn't also used as a userdb.
+
+2006-06-17 20:15  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/index-mail-headers.c: Crashfix if mail's
+	  data is fetched in specific order (I'm not sure how to reproduce
+	  this though, but the crash has happened to others)
+
+2006-06-17 20:03  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync.c: Removed assert. In normal
+	  situations it doesn't happen and in error cases (cached offset is
+	  invalid) it causes a crash.
+
+2006-06-17 19:48  Timo Sirainen <tss@iki.fi>
+
+	* src/imap-login/client-authenticate.c: Don't crash if the initial
+	  response isn't given for AUTHENTICATE..
+
+2006-06-17 19:32  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/auth/db-ldap.c, src/auth/db-ldap.h: Added TLS
+	  support for LDAP if the library supports it.
+
+2006-06-17 19:15  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: mech-anonymous.c, mech-apop.c, mech-cram-md5.c,
+	  mech-digest-md5.c, mech-login.c, mech-ntlm.c, mech-plain.c,
+	  mech-rpa.c, mech.c, mech.h: Added mech_generic_auth_internal()
+	  and mech_generic_auth_free() functions and used them wherever
+	  possible to reduce code duplication. Patch by Andrey Panin.
+
+2006-06-17 18:03  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/: acl/Makefile.am, convert/Makefile.am,
+	  quota/Makefile.am, trash/Makefile.am: mkdir_p doesn't accept
+	  multiple directories in some systems, so do it one at a time.
+	  This also cleans up the code.
+
+2006-06-17 18:00  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-save.c: If saved mail's body
+	  doesn't end with LF, add it ourself.
+
+2006-06-17 17:19  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/imap-login/client-authenticate.c: Added support
+	  for SASL-IR extension.
+
+2006-06-17 17:11  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-parse.c: If mbox headers
+	  have CRLF linefeeds, handle them properly instead of corrupting
+	  the headers.
+
+2006-06-17 17:10  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-mail/: message-parser.c, message-parser.h: Added
+	  crlf_newline flag to header parser, which is set if the header
+	  ended with CR+LF instead of LF.
+
+2006-06-17 16:49  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: Changed the created state dir's
+	  default permissions to be 0750. Although this doesn't currently
+	  really matter.
+
+2006-06-17 16:26  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/master/Makefile.am,
+	  src/master/master-settings.c, src/master/ssl-init.c: Added
+	  --with-statedir configure option which defaults to
+	  localstatedir/lib/dovecot. ssl-parameters.dat is permanently
+	  stored in that directory and copied to login_dirs from there.
+
+2006-06-17 16:24  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: Makefile.am, file-copy.c, file-copy.h: Added
+	  file_copy().
+
+2006-06-17 16:01  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: db-ldap.c, password-scheme.c: Compiler warning fixes
+	  and some coding style cleanups.
+
+2006-06-17 15:56  Timo Sirainen <tss@iki.fi>
+
+	* src/: lib/compat.h, lib-storage/index/maildir/maildir-copy.c:
+	  Handle EMLINK and EPERM errors the same way as EXDEV when
+	  handling hardlink failures. Added ECANTLINK() macro for this.
+
+2006-06-17 15:38  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-storage.c: When renaming a
+	  mailbox's subfolders, read the list of them first into memory to
+	  avoid the possibility of readdir() skipping some of the
+	  mailboxes.
+
+2006-06-17 15:22  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: If multiple passdbs were configured and
+	  we tried to authenticate as user which was in more than one of
+	  them with different passwords, we gave "multiple passwords not
+	  supported" error.
+
+2006-06-17 15:14  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request-handler.c: Fixed memory leak in error
+	  handling.
+
+2006-06-17 15:06  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/plugins/trash/trash-plugin.c: Removed
+	  hardcoded trash plugin configuration paths. Added information
+	  about it to dovecot-example.conf
+
+2006-06-17 14:45  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-auth/auth-server-request.c: Check that initial response
+	  doesn't contain invalid characters. Give better error message in
+	  case that happens.
+
+2006-06-17 14:02  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/commands-util.c: Fixes to checking if mailbox name is
+	  valid. In case mailbox name is invalid, put it through
+	  str_sanitize() before giving it in an error message.
+
+2006-06-17 13:55  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/: maildir-sync.c,
+	  maildir-uidlist.c, maildir-uidlist.h: Don't go fixing duplicate
+	  maildir filenames without properly checking that they really are
+	  such.
+
+2006-06-17 13:42  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index.c, mail-transaction-log.c: Handle
+	  transaction log deletions silently. Handle whole index directory
+	  deletions silently (the most common cases anyway).
+
+2006-06-17 13:01  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/: mail-storage-private.h, mail-storage.c,
+	  index/dbox/dbox-storage.c, index/maildir/maildir-storage.c,
+	  index/mbox/mbox-storage.c: When creating a mailbox, limit the
+	  number of hierarchies (to 20) and the length of the mailbox name
+	  within a hierarchy (to 200).
+
+2006-06-17 12:40  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: mail_index_move_to_memory(): Don't
+	  break if the index is already in memory.  Fixes
+	  mbox_min_index_size.
+
+2006-06-17 12:24  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/dict/dict-server.c,
+	  src/lib-dict/dict-client.h, src/master/dict-process.c,
+	  src/master/dict-process.h, src/master/log.c, src/master/log.h,
+	  src/master/main.c, src/master/master-settings.c,
+	  src/master/master-settings.h: Instead of passing URIs directly to
+	  dictionary server, it now accepts only named dictionaries which
+	  are configured in config file. SIGHUPing master now restarts dict
+	  server.
+
+2006-06-17 12:21  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-dict.c: Don't crash if dict_lookup()
+	  didn't return success.
+
+2006-06-17 12:20  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-sql/driver-mysql.c: Escaping a string crashed if we
+	  weren't connected to mysql.
+
+2006-06-17 11:24  Timo Sirainen <tss@iki.fi>
+
+	* src/dict/main.c: Make sure the process dies when the master
+	  process dies.
+
+2006-06-16 18:37  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/auth-client.c: If USER query doesn't return non-zero
+	  uid and gid, give a nice error message.
+
+2006-06-16 18:13  Timo Sirainen <tss@iki.fi>
+
+	* src/master/: auth-process.c, login-process.c, mail-process.c,
+	  main.c, master-settings.c: Settings parser nowadays returns ""
+	  instead of NULL when it reads an empty value from config file
+	  (due to some good reason I unfortunately didn't write to commit
+	  message and can't remember anymore). Fixed a lot of existing
+	  checks which checked for empty strings with NULL instead of ""
+	  checks.
+
+2006-06-16 13:24  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/plugins/quota/quota-fs.c: Added support for XFS
+	  disk quotas. Patch by Pawel Jarosz
+
+2006-06-16 11:47  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Better detection for ioloop and notify methods.
+	  Patch by Roy Marples
+
+2006-06-16 11:42  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-dict/dict-client.c: Fixes
+
+2006-06-16 11:42  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-sql/driver-mysql.c: Fixes to handling database updates.
+
+2006-06-16 11:09  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Default mail_plugin_dir was wrong for lda.
+
+2006-06-16 10:38  Timo Sirainen <tss@iki.fi>
+
+	* COPYING, src/auth/mech-apop.c, src/auth/mech-gssapi.c,
+	  src/auth/mech-login.c, src/auth/mech-ntlm.c, src/auth/mech-rpa.c,
+	  src/lib/hmac-md5.c, src/lib/ioloop-epoll.c,
+	  src/lib-ntlm/ntlm-byteorder.h, src/lib-ntlm/ntlm-encrypt.c,
+	  src/lib-ntlm/ntlm-flags.h, src/lib-ntlm/ntlm-message.c,
+	  src/lib-ntlm/ntlm-types.h: Relicensed dovecot-auth to MIT.
+
+2006-06-16 10:28  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/password-scheme.c: Added PLAIN-MD4 password scheme.
+	  Patch by Andrey Panin.
+
+2006-06-16 10:28  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: md4.c, md5.c: MD4 was broken with 64bit systems. Added
+	  a few x86-64 optimizations. Patch by Andrey Panin
+
+2006-06-16 10:26  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-ntlm/ntlm-byteorder.h: X68_64 CPU can do little-endian
+	  accesses itself. This patch updates ntlm-byteorder.h to reflect
+	  this fact. Patch by Andrey Panin.
+
+2006-06-16 10:25  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-ntlm/ntlm-des.c: Replaced LGPL licensed DES
+	  implementation with MIT licensed one taken from PuTTY SSH client.
+	  Patch by Andrey Panin.
+
+2006-06-16 10:21  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/mech-login.c: Support initial SASL response with LOGIN
+	  mechanism. Patch by Anders Karlsson
+
+2006-06-16 10:15  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/module-dir.c: Handle errors more correctly. Fixes
+	  problems with some OSes.
+
+2006-06-16 10:11  Timo Sirainen <tss@iki.fi>
+
+	* src/master/main.c: We broke if ssl_listen wasn't explicitly set
+	  in config file. Patch by Jonathan C. Broome
+
+2006-06-16 09:59  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: auth-request.c, passdb-pam.c: Fixes to handling PAM
+	  password expiring. Patch by Vaidas Pilkauskas
+
+2006-06-16 09:09  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/: Makefile.am, deliver.c: If mail_plugin_dir isn't
+	  given, use the default path for it instead of ignoring
+	  mail_plugins completely.
+
+2006-06-16 08:59  Timo Sirainen <tss@iki.fi>
+
+	* src/dict/dict-server.c: Minor error message update
+
+2006-06-16 08:47  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-dict/dict-sql.c: Fixes to SQL update statements
+
+2006-06-16 08:42  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-dict.c: Don't return "no quota" even
+	  though current quota for user doesn't exist yet.
+
+2006-06-16 08:37  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/dbox-uidlist.c: Crashfix in error
+	  cases
+
+2006-06-15 10:33  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/: dbox-format.h, dbox-save.c: Added
+	  save_time field into dbox mails.
+
+2006-06-14 12:46  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-dict/dict-client.c: Fixes to dict proxy
+
+2006-06-14 12:20  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-dict/dict-client.c: t_pop() calls were missing from some
+	  error handling paths
+
+2006-06-14 11:16  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-dict/dict-sql.c: Use sql_escape_string() instead of
+	  str_escape()
+
+2006-06-13 12:23  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: Released 1.0.beta9
+
+2006-06-13 12:23  Timo Sirainen <tss@iki.fi>
+
+	* Makefile.am: Delete dovecot-config in distclean.
+
+2006-06-13 11:26  Timo Sirainen <tss@iki.fi>
+
+	* TODO: Updated
+
 2006-06-13 09:10  Timo Sirainen <tss@iki.fi>
 
 	* src/deliver/Makefile.am: Added mountpoint.o to unused objects

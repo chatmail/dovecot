@@ -718,6 +718,7 @@ int message_parse_header_next(struct message_header_parser_ctx *ctx,
 
 	last_no_newline = line->no_newline;
 	line->no_newline = FALSE;
+	line->crlf_newline = FALSE;
 
 	if (line->continues) {
 		if (line->use_full_value && !line->continued) {
@@ -777,9 +778,10 @@ int message_parse_header_next(struct message_header_parser_ctx *ctx,
 				size = 0;
 				if (ctx->hdr_size != NULL)
 					ctx->hdr_size->lines++;
-				if (msg[0] == '\r')
+				if (msg[0] == '\r') {
+					line->crlf_newline = TRUE;
 					ctx->skip = 2;
-				else {
+				} else {
 					ctx->skip = 1;
 					if (ctx->hdr_size != NULL)
 						ctx->hdr_size->virtual_size++;
@@ -860,6 +862,7 @@ int message_parse_header_next(struct message_header_parser_ctx *ctx,
 					ctx->hdr_size->virtual_size++;
 				size = i;
 			} else {
+				line->crlf_newline = TRUE;
 				size = i-1;
 			}
 

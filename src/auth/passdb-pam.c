@@ -273,6 +273,7 @@ pam_verify_plain_child(struct auth_request *request, const char *service,
 			case PAM_USER_UNKNOWN:
 				result = PASSDB_RESULT_USER_UNKNOWN;
 				break;
+			case PAM_NEW_AUTHTOK_REQD:
 			case PAM_ACCT_EXPIRED:
 				result = PASSDB_RESULT_PASS_EXPIRED;
 				break;

@@ -233,21 +233,26 @@ static void sasl_callback(struct client *_client, enum sasl_server_reply reply,
 
 int cmd_authenticate(struct imap_client *client, struct imap_arg *args)
 {
-	const char *mech_name;
+	const char *mech_name, *init_resp = NULL;
 
 	/* we want only one argument: authentication mechanism name */
 	if (args[0].type != IMAP_ARG_ATOM && args[0].type != IMAP_ARG_STRING)
 		return -1;
-	if (args[1].type != IMAP_ARG_EOL)
-		return -1;
+	if (args[1].type != IMAP_ARG_EOL) {
+		/* optional SASL initial response */
+		if (args[1].type != IMAP_ARG_ATOM ||
+		    args[2].type != IMAP_ARG_EOL)
+			return -1;
+		init_resp = IMAP_ARG_STR(&args[1]);
+	}
 
 	mech_name = IMAP_ARG_STR(&args[0]);
 	if (*mech_name == '\0')
 		return 0;
 
 	client_ref(client);
-	sasl_server_auth_begin(&client->common, "IMAP", mech_name, NULL,
-			       sasl_callback);
+	sasl_server_auth_begin(&client->common, "IMAP", mech_name,
+			       init_resp, sasl_callback);
 	if (!client->common.authenticating)
 		return 1;
 

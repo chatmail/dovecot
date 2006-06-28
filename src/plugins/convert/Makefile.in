@@ -217,6 +217,7 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sql_drivers = @sql_drivers@
 ssldir = @ssldir@
+statedir = @statedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 AM_CPPFLAGS = \
@@ -544,8 +545,8 @@ uninstall-am: uninstall-info-am uninstall-moduleLTLIBRARIES
 
 
 install-exec-local:
-	$(mkdir_p) $(DESTDIR)$(moduledir)/imap $(DESTDIR)$(moduledir)/pop3 $(DESTDIR)$(moduledir)/lda
 	for d in imap pop3 lda; do \
+	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
 	  rm -f $(DESTDIR)$(moduledir)/$$d/lib01_convert_plugin.so; \
 	  $(LN_S) ../lib01_convert_plugin.so $(DESTDIR)$(moduledir)/$$d; \
 	done

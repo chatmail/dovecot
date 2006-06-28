@@ -111,7 +111,7 @@ static void set_logfile(struct settings *set)
 {
 	int facility;
 
-	if (set->log_path == NULL) {
+	if (*set->log_path == '\0') {
 		if (!syslog_facility_find(set->syslog_facility, &facility))
 			facility = LOG_MAIL;
 
@@ -121,7 +121,7 @@ static void set_logfile(struct settings *set)
 		i_set_failure_file(set->log_path, "dovecot");
 	}
 
-	if (set->info_log_path != NULL)
+	if (*set->info_log_path != '\0')
 		i_set_info_file(set->info_log_path);
 
 	i_set_failure_timestamp_format(set->log_timestamp);
@@ -136,6 +136,7 @@ static void settings_reload(void)
 	/* restart auth and login processes */
         login_processes_destroy_all();
         auth_processes_destroy_all();
+        dict_process_kill();
 
 	if (!master_settings_read(configfile, FALSE))
 		i_warning("Invalid configuration, keeping old one");
@@ -355,7 +356,9 @@ static void listen_protocols(struct settings *set, bool retry)
 	resolve_ip(set->listen, &set->listen_ip, &set->listen_port);
 	resolve_ip(set->ssl_listen, &set->ssl_listen_ip, &set->ssl_listen_port);
 
-	if (set->ssl_listen_ip.family == 0 && set->ssl_listen == NULL)
+	/* if ssl_listen wasn't explicitly set in the config file,
+	   use the non-ssl IP settings for the ssl listener, too. */
+	if (set->ssl_listen_ip.family == 0 && *set->ssl_listen == '\0')
 		set->ssl_listen_ip = set->listen_ip;
 
 	/* register wanted protocols */
@@ -464,11 +467,11 @@ static void listen_fds_close(struct server_settings *server)
 
 static bool have_stderr_set(struct settings *set)
 {
-	if (set->log_path != NULL &&
+	if (*set->log_path != '\0' &&
 	    strcmp(set->log_path, "/dev/stderr") == 0)
 		return TRUE;
 
-	if (set->info_log_path != NULL &&
+	if (*set->info_log_path != '\0' &&
 	    strcmp(set->info_log_path, "/dev/stderr") == 0)
 		return TRUE;
 

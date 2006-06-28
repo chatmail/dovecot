@@ -3,10 +3,7 @@
  *
  * Copyright (c) 2004 Andrey Panin <pazke@donpac.ru>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published 
- * by the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * This software is released under the MIT license.
  */
 
 #include "common.h"
@@ -57,18 +54,16 @@ mech_login_auth_continue(struct auth_request *request,
 
 static void
 mech_login_auth_initial(struct auth_request *request,
-			const unsigned char *data __attr_unused__,
-			size_t data_size __attr_unused__)
+			const unsigned char *data, size_t data_size)
 {
 	static const char prompt1[] = "Username:";
 
-	request->callback(request, AUTH_CLIENT_RESULT_CONTINUE,
-			  prompt1, strlen(prompt1));
-}
-
-static void mech_login_auth_free(struct auth_request *request)
-{
-	pool_unref(request->pool);
+	if (data_size == 0) {
+		request->callback(request, AUTH_CLIENT_RESULT_CONTINUE,
+				  prompt1, strlen(prompt1));
+	} else {
+		mech_login_auth_continue(request, data, data_size);
+	}
 }
 
 static struct auth_request *mech_login_auth_new(void)
@@ -93,5 +88,5 @@ const struct mech_module mech_login = {
 	mech_login_auth_new,
 	mech_login_auth_initial,
 	mech_login_auth_continue,
-        mech_login_auth_free
+	mech_generic_auth_free
 };

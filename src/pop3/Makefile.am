@@ -6,7 +6,10 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-mail \
-	-I$(top_srcdir)/src/lib-storage
+	-I$(top_srcdir)/src/lib-storage \
+	-DMODULEDIR=\""$(moduledir)"\"
+
+pop3_LDFLAGS = -export-dynamic
 
 # get some functions included which only plugins use. liblib should probably
 # be a shared library so this wouldn't be needed..
