@@ -2,8 +2,8 @@ dovecot (1.0.rc1-2) UNRELEASED; urgency=low
 
   * NOT RELEASED YET
   * In the init-script, create /var/run/dovecot if it is missing.  This 
-    is handy for people who have it mounted on e.g. tmpfs.
-    (Closes: #376143)
+    is handy for people who have it mounted on e.g. tmpfs.  Thanks Martin Pitt 
+    <martin.pitt@ubuntu.com> for the patch. (Closes: #376143)  
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 30 Jun 2006 10:05:33 -0400
 
