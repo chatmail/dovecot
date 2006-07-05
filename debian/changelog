@@ -1,11 +1,12 @@
 dovecot (1.0.rc2-1) UNRELEASED; urgency=low
 
   * (NOT RELEASED YET) New upstream release
-  * In the init-script, create /var/run/dovecot if it is missing.  This 
-    is handy for people who have it mounted on e.g. tmpfs.  Thanks Martin Pitt 
-    <martin.pitt@ubuntu.com> for the patch. (Closes: #376143)  
+  * In the init-script, create /var/run/dovecot if it is missing.  This
+    is handy for people who have it mounted on e.g. tmpfs.  Thanks Martin Pitt
+    <martin.pitt@ubuntu.com> for the patch. (Closes: #376143)
+  * Update dovecot-lda to the latest version (05132006)
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 30 Jun 2006 10:05:33 -0400
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed,  5 Jul 2006 09:23:51 -0400
 
 dovecot (1.0.rc1-1) unstable; urgency=low
 
