@@ -216,14 +216,11 @@ static void consume_results(void *context)
 	struct pgsql_db *db = context;
 
 	do {
-		if (!PQconsumeInput(db->pg)) {
-			db->connected = FALSE;
+		if (!PQconsumeInput(db->pg))
 			break;
 
-		}
 		if (PQisBusy(db->pg))
 			return;
-
 	} while (PQgetResult(db->pg) != NULL);
 
 	io_remove(&db->io);
@@ -275,6 +272,11 @@ static void result_finish(struct pgsql_result *result)
 	}
 	if (free_result)
 		driver_pgsql_result_free(&result->api);
+
+	if (PQstatus(db->pg) == CONNECTION_BAD) {
+		/* disconnected */
+		driver_pgsql_close(db);
+	}
 }
 
 static void get_result(void *context)
@@ -441,7 +443,8 @@ static void exec_callback(struct sql_result *result,
 	i_error("pgsql: sql_exec() failed: %s", last_error(db));
 }
 
-static char *driver_pgsql_escape_string(struct sql_db *_db, const char *string)
+static const char *
+driver_pgsql_escape_string(struct sql_db *_db, const char *string)
 {
 	struct pgsql_db *db = (struct pgsql_db *)_db;
 	size_t len = strlen(string);

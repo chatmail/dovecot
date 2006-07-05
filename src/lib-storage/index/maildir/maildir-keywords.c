@@ -16,6 +16,7 @@
 #include "maildir-uidlist.h"
 #include "maildir-keywords.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <utime.h>
@@ -76,6 +77,15 @@ static void maildir_keywords_clear(struct maildir_keywords *mk)
 	p_clear(mk->pool);
 }
 
+static bool maildir_keywords_convert_099(struct maildir_keywords *mk)
+{
+	/* FIXME: for backwards compatibility only. remove this some day. */
+	const char *path;
+
+	path = t_strconcat(mk->mbox->control_dir, "/.customflags", NULL);
+	return rename(path, mk->path) == 0;
+}
+
 static int maildir_keywords_sync(struct maildir_keywords *mk)
 {
 	struct istream *input;
@@ -89,14 +99,18 @@ static int maildir_keywords_sync(struct maildir_keywords *mk)
            errors. */
 
 	if (stat(mk->path, &st) < 0) {
-		if (errno == ENOENT) {
-			maildir_keywords_clear(mk);
-			mk->synced = TRUE;
-			return 0;
+		if (errno != ENOENT) {
+			mail_storage_set_critical(STORAGE(mk->mbox->storage),
+				"stat(%s) failed: %m", mk->path);
+			return -1;
 		}
-                mail_storage_set_critical(STORAGE(mk->mbox->storage),
-					  "stat(%s) failed: %m", mk->path);
-		return -1;
+
+		if (maildir_keywords_convert_099(mk))
+			return maildir_keywords_sync(mk);
+
+		maildir_keywords_clear(mk);
+		mk->synced = TRUE;
+		return 0;
 	}
 
 	if (st.st_mtime == mk->synced_mtime) {

@@ -1,3 +1,162 @@
+2006-07-04 17:51  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: 1.0.rc2 released
+
+2006-07-04 17:03  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/: maildir-keywords.c,
+	  maildir-storage.c: Added automatic upgrades from 0.99:
+	  .subscriptions and .customflags are renamed to their new names
+	  automatically.
+
+2006-07-03 13:08  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: --with-ioloop=auto changed to --with-ioloop=best
+
+2006-07-02 19:19  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: mail_cache_min_mail_count is
+	  supposed to be an integer, not a string.
+
+2006-07-02 17:54  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: Added missing t_pop().
+
+2006-07-02 15:30  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Don't use epoll/kqueue by default unless
+	  --with-ioloop=auto is given.	They're not necessarily as stable.
+
+2006-07-02 13:55  Timo Sirainen <tss@iki.fi>
+
+	* src/master/main.c: If something in io_loop_create() failed, we
+	  logged the error to /dev/null.
+
+2006-07-02 13:47  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/failures.c: If writing to log file fails, restore errno
+	  before %m is used. Although the log writing most likely fails
+	  anyway at that point, but at least strace logs show it right. :)
+
+2006-07-02 11:03  Timo Sirainen <tss@iki.fi>
+
+	* src/master/main.c: List -n and -a in short help. Fixes to
+	  --build-options.
+
+2006-07-01 22:54  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/ssl-proxy-openssl.c: Second try with SSL proxy
+	  rewrite. Did some fixes since last try.
+
+2006-07-01 22:27  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/imap-quota/imap-quota-plugin.c: If there is no quota
+	  for the user, GETQUOTAROOT leaked memory
+
+2006-07-01 21:19  Timo Sirainen <tss@iki.fi>
+
+	* src/master/auth-process.c: anonymous_username setting wasn't
+	  being passed to auth process.
+
+2006-07-01 21:15  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/ssl-proxy-openssl.c: If verbose_ssl=yes set
+	  ssl_info_callback and print any alerts and BIO errors.
+
+2006-07-01 20:26  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap/cmd-close.c, imap/imap-expunge.c, pop3/commands.c:
+	  Don't try to expunge messages if the mailbox is read-only. It'll
+	  just cause our index files to go out of sync with the real
+	  mailbox and cause errors.
+
+2006-07-01 20:14  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/mountpoint.c: mountpoint_get() returned broken mount_path
+	  and type with BSDs.
+
+2006-07-01 20:13  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-fs.c: BSD's quotactl() wants a file path,
+	  not a device path.
+
+2006-07-01 20:09  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/imap-login/client.c,
+	  src/pop3-login/client.c: Removed hardcoded 127.* and ::1 IP
+	  checks. Instead just check that local IP matches remote IP to
+	  assume the connection is secure.
+
+2006-07-01 19:42  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-passwd-file.c: Don't require valid uid/gid fields if
+	  passwd-file isn't being used as a userdb.
+
+2006-07-01 19:15  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-sql/driver-pgsql.c: Try to handle failures better.
+
+2006-07-01 18:44  Timo Sirainen <tss@iki.fi>
+
+	* src/master/main.c: Print the used configuration file's path with
+	  -n and -a.
+
+2006-07-01 18:40  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: auth-client-connection.c, auth.h, passdb-ldap.c: Moved
+	  the <hidden> string into a macro. Hide the password also from
+	  LDAP replies.
+
+2006-07-01 18:33  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-save.c: Messages' received
+	  time wasn't saved properly when saving/copying multiple messages
+	  at a time. Also if using quota plugin the S= size was only set
+	  for the first saved file, and even that was wrong.
+
+2006-07-01 17:53  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-mail.c:
+	  mail_get_physical_size() was broken with non-committed mails,
+	  which broke quota plugin.
+
+2006-07-01 17:45  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/file-copy.c: Try to preserve file's mode and group when
+	  copying it.
+
+2006-07-01 17:44  Timo Sirainen <tss@iki.fi>
+
+	* src/master/mail-process.c: If namespace's location field wasn't
+	  set, the default location was supposed to be used.
+
+2006-07-01 17:24  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-sql/: driver-mysql.c, driver-pgsql.c, driver-sqlite.c,
+	  sql-api-private.h, sql-api.c, sql-api.h: sql_escape_string()
+	  should return const char *, not char *.
+
+2006-06-30 14:49  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/safe-mkdir.c: safe_mkdir() should return 1 always when it
+	  creates a new directory, even if it changes the group/permissions
+	  when doing it.
+
+2006-06-29 12:49  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Added tpop3d's pop3_uidl_format.
+
+2006-06-28 20:21  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Allow log_path settings in config file to
+	  be empty without trying to use empty files then.
+
+2006-06-27 22:51  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/: maildir-mail.c, maildir-sync.c,
+	  maildir-util.c: Don't break if mailbox path contains ':'
+	  characters.
+
 2006-06-27 22:18  Timo Sirainen <tss@iki.fi>
 
 	* NEWS, TODO, configure.in: Released 1.0.rc1

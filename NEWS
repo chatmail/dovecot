@@ -1,3 +1,33 @@
+v1.0.rc2 2006-07-04  Timo Sirainen <tss@iki.fi>
+
+	* disable_plaintext_auth=yes: Removed hardcoded 127.* and ::1 IP
+	  checks. Now we just assume that the connection is secure if the
+	  local IP matches the remote IP address.
+	* SSL code rewrite which hopefully makes it work better than before.
+	  Seems to work correctly, but if you suddently have trouble with SSL
+	  connections this is likely the reason.
+
+	+ verbose_ssl=yes: Log also SSL alerts and BIO errors
+	- If namespace's location field wasn't set, the default location
+	  was supposed to be used but it wasn't.
+	- When copying ssl-parameters.dat file from /var/lib to /var/run its
+	  permissions went wrong if it couldn't be copied with hard linking.
+	- Fixed filesystem quota plugin to work with BSDs.
+	- Maildir: Saving mails didn't work if quota plugin was enabled (again)
+	- Maildir: Messages' received time wasn't saved properly when
+	  saving/copying multiple messages at a time. Also if using quota
+	  plugin the S= size was only set for the first saved file, and even
+	  that was wrong.
+	- passdb passwd-file: Don't require valid uid/gid fields if file
+	  isn't also being used as a userdb.
+	- PostgreSQL: Handle failures better so that there won't be
+	  "invalid fd" errors in logs.
+	- Don't try to expunge messages if the mailbox is read-only. It'll
+	  just cause our index files to go out of sync with the real
+	  mailbox and cause errors.
+	- ANONYMOUS authentication mechanism couldn't work because
+	  anonymous_username setting wasn't passed from master process.
+
 v1.0.rc1 2006-06-28  Timo Sirainen <tss@iki.fi>
 
 	* PAM: If user's password is expired, give "Password expired" error

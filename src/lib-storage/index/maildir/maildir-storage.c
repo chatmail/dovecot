@@ -36,6 +36,24 @@ static const char *maildirs[] = { "cur", "new", "tmp", NULL  };
 
 static int verify_inbox(struct maildir_storage *storage);
 
+static void maildir_subscriptions_convert_099(struct maildir_storage *storage)
+{
+	/* FIXME: for backwards compatibility only. remove this some day. */
+	const char *path, *oldpath;
+	struct stat st;
+
+	path = t_strconcat(storage->control_dir != NULL ?
+			   storage->control_dir : INDEX_STORAGE(storage)->dir,
+			   "/" SUBSCRIPTION_FILE_NAME, NULL);
+	if (stat(path, &st) == 0 || errno != ENOENT)
+		return;
+
+	oldpath = t_strconcat(storage->control_dir != NULL ?
+			      storage->control_dir : INDEX_STORAGE(storage)->dir,
+			      "/.subscriptions", NULL);
+	(void)rename(oldpath, path);
+}
+
 static struct mail_storage *
 maildir_create(const char *data, const char *user,
 	       enum mail_storage_flags flags,
@@ -144,6 +162,8 @@ maildir_create(const char *data, const char *user,
 	istorage->user = p_strdup(pool, user);
 	istorage->callbacks = p_new(pool, struct mail_storage_callbacks, 1);
 	index_storage_init(istorage, flags, lock_method);
+
+	maildir_subscriptions_convert_099(storage);
 
 	(void)verify_inbox(storage);
 	return STORAGE(storage);
