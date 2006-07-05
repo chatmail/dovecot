@@ -60917,6 +60917,12 @@ diff -ruN dovecot-1.0.rc2.orig/src/dovecot-lda/src/xmalloc.h dovecot-1.0.rc2/src
 +#define lcase str_lcase
 +
 +#endif
+diff -ruN dovecot-1.0.rc2.orig/src/dovecot-lda/stamp.h.in dovecot-1.0.rc2/src/dovecot-lda/stamp.h.in
+--- dovecot-1.0.rc2.orig/src/dovecot-lda/stamp.h.in	1969-12-31 19:00:00.000000000 -0500
++++ dovecot-1.0.rc2/src/dovecot-lda/stamp.h.in	2006-07-05 13:33:00.000000000 -0400
+@@ -0,0 +1 @@
++ 
+\ No newline at end of file
 diff -ruN dovecot-1.0.rc2.orig/src/dovecot-lda/ylwrap dovecot-1.0.rc2/src/dovecot-lda/ylwrap
 --- dovecot-1.0.rc2.orig/src/dovecot-lda/ylwrap	1969-12-31 19:00:00.000000000 -0500
 +++ dovecot-1.0.rc2/src/dovecot-lda/ylwrap	2004-09-19 18:51:50.000000000 -0400
@@ -61143,4 +61149,3 @@ diff -ruN dovecot-1.0.rc2.orig/src/dovecot-lda/ylwrap dovecot-1.0.rc2/src/doveco
 +# time-stamp-format: "%:y-%02m-%02d.%02H"
 +# time-stamp-end: "$"
 +# End:
-
