@@ -20,6 +20,7 @@ endif
 
 config.status: patch-stamp configure
 	dh_testdir
+	automake-1.9; libtoolize -f -c;  aclocal-1.9; autoconf
 	# Add here commands to configure the package.
 	./configure --with-ldap --with-ssl=openssl --with-pgsql --with-mysql --with-sqlite --with-cyrus-sasl2 --with-gssapi --without-deliver --host=$(DEB_HOST_GNU_TYPE) --build=$(DEB_BUILD_GNU_TYPE) --prefix=/usr --sysconfdir=/etc/dovecot --libexecdir=\$${prefix}/lib --localstatedir=/var --mandir=\$${prefix}/share/man --infodir=\$${prefix}/share/info --with-moduledir=\$${prefix}/lib/dovecot/modules
 	-test -r /usr/share/misc/config.sub && cp -f /usr/share/misc/config.sub src/dovecot-lda/config.sub
