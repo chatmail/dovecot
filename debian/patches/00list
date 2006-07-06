@@ -4,4 +4,3 @@ dovecot-sql
 postgres_configure
 dovecot-lda
 quota_mountpoint
-configure
