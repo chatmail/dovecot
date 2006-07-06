@@ -10,7 +10,7 @@ exit 0
 @DPATCH@
 diff -ruN dovecot-1.0.rc2.orig/src/plugins/quota/Makefile.am dovecot-1.0.rc2/src/plugins/quota/Makefile.am
 --- dovecot-1.0.rc2.orig/src/plugins/quota/Makefile.am	2006-06-17 14:02:55.000000000 -0400
-+++ dovecot-1.0.rc2/src/plugins/quota/Makefile.am	2006-07-06 06:18:21.000000000 -0400
++++ dovecot-1.0.rc2/src/plugins/quota/Makefile.am	2006-07-06 16:21:25.000000000 -0400
 @@ -12,6 +12,11 @@
  module_LTLIBRARIES = \
  	lib01_quota_plugin.la
@@ -23,13 +23,12 @@ diff -ruN dovecot-1.0.rc2.orig/src/plugins/quota/Makefile.am dovecot-1.0.rc2/src
  lib01_quota_plugin_la_SOURCES = \
  	quota.c \
  	quota-fs.c \
-@@ -19,7 +24,8 @@
- 	quota-dirsize.c \
- 	quota-maildir.c \
+@@ -21,6 +26,8 @@
          quota-plugin.c \
--	quota-storage.c
-+	quota-storage.c \
-+	$(unused_objects)
+ 	quota-storage.c
  
++lib01_quota_plugin_la_LDADD = $(unused_objects)
++
  noinst_HEADERS = \
  	quota.h \
+ 	quota-fs.h \
