@@ -1,3 +1,12 @@
+#! /bin/sh -e
+
+## DP: Fix a syntax error caused by autoconf 2.59
+## DP: Author: Jaldhar H. Vyas <jaldhar@debian.org>
+
+. $(dirname $0)/DPATCH
+
+exit 0
+@DPATCH@
 diff -ruN dovecot-1.0.rc2.orig/configure.in dovecot-1.0.rc2/configure.in
 --- dovecot-1.0.rc2.orig/configure.in	2006-07-03 09:10:25.000000000 -0400
 +++ dovecot-1.0.rc2/configure.in	2006-07-06 13:18:47.000000000 -0400
