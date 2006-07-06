@@ -27,7 +27,7 @@ diff -ruN dovecot-1.0.rc2.orig/src/plugins/quota/Makefile.am dovecot-1.0.rc2/src
          quota-plugin.c \
  	quota-storage.c
  
-+lib01_quota_plugin_la_LDADD = $(unused_objects)
++lib01_quota_plugin_la_LIBADD = $(unused_objects)
 +
  noinst_HEADERS = \
  	quota.h \
