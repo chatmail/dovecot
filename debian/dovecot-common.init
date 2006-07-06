@@ -15,12 +15,6 @@ test -x $DAEMON || exit 0
 
 set -e
 
-if [ ! -d /var/run/dovecot/login ]; then
-	mkdir -p /var/run/dovecot/login
-	chmod 0750 /var/run/dovecot/login
-	chmod 0700 /var/run/dovecot
-fi
-
 # The init script should do nothing if dovecot is being run from inetd
 for p in `sed -r "s/^ *(([^:]+|\[[^]]+]|\*):)?(pop3s?|imaps?)[ \t].*/\3/;t;d" \
   /etc/inetd.conf`
