@@ -1,9 +1,15 @@
+dovecot (1.0.rc2-2) unstable; urgency=low
+
+  * patched the quota plugin to fix a missing symbol (Closes: #377018)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri,  7 Jul 2006 10:50:04 -0400
+
 dovecot (1.0.rc2-1) unstable; urgency=high
 
   * New upstream release
   * Update dovecot-lda to the latest version (05132006)
   * IPv6 with SSL/TLS should work now.  (Closes: #374783)
-  * go back to using poll instead of epoll.  (Closes #376222)
+  * go back to using poll instead of epoll.  (Closes: #376222)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu,  6 Jul 2006 00:47:56 -0400
 
