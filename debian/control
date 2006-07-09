@@ -3,7 +3,7 @@ Section: mail
 Priority: optional
 Maintainer: Jaldhar H. Vyas <jaldhar-dovecot@debian.org>
 Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>, Fabio Tranchitella <kobold@debian.org>
-Build-Depends: debhelper (>= 5.0.0), automake1.9, autoconf, libtool, pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient15-dev, libsqlite3-dev, libsasl2-dev | libsasl-dev, zlib1g-dev, libkrb5-dev, dpatch, byacc, flex, linux-kernel-headers (>> 2.5.999-test7-bk-17)
+Build-Depends: debhelper (>= 4.0.0), automake1.9, autoconf, libtool, pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, postgresql-dev, libmysqlclient12-dev, libsqlite3-dev, libsasl2-dev | libsasl-dev, zlib1g-dev, libkrb5-dev, dpatch, byacc, flex
 Standards-Version: 3.7.2
 
 Package: dovecot-common

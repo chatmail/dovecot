@@ -1,3 +1,13 @@
+dovecot (1.0.rc2-1bpo1) sarge-backports; urgency=low
+
+  * Rebuilt for sarge.
+  * Only changes needed were build dependency on libpq-dev changed back to
+    postgresql-dev, libmysqlclient15-dev changed back to
+    libmysqlclient12-dev, kernel-headers versioned build-dependency 
+    removed and debhelper version relaxed to 4.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun,  9 Jul 2006 07:42:40 -0400
+
 dovecot (1.0.rc2-2) unstable; urgency=low
 
   * patched the quota plugin to fix a missing symbol (Closes: #377018)
