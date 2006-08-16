@@ -22,6 +22,7 @@
 #include <utime.h>
 #include <sys/stat.h>
 
+#define DBOX_SYNC_SECS 1
 #define DBOX_APPEND_MAX_OPEN_FDS 64
 
 #define DBOX_UIDLIST_VERSION 1
@@ -44,6 +45,7 @@ struct dbox_uidlist {
 
 	struct dotlock *dotlock;
 	int lock_fd;
+	unsigned int lock_count;
 
 	unsigned int version;
 	uint32_t uid_validity, last_uid, last_file_seq;
@@ -103,6 +105,8 @@ const struct dotlock_settings dbox_file_dotlock_set = {
 
 	MEMBER(use_excl_lock) FALSE
 };
+
+static int dbox_uidlist_full_rewrite(struct dbox_uidlist *uidlist);
 
 struct dbox_uidlist *dbox_uidlist_init(struct dbox_mailbox *mbox)
 {
@@ -334,6 +338,11 @@ static int dbox_uidlist_read(struct dbox_uidlist *uidlist)
 	struct stat st;
 	int ret;
 
+	if (uidlist->lock_count > 0 && uidlist->need_full_rewrite) {
+		i_assert(uidlist->mbox->ibox.keep_locked);
+		return 1;
+	}
+
 	if (uidlist->fd != -1) {
 		if (stat(uidlist->path, &st) < 0) {
 			if (errno != ENOENT) {
@@ -443,9 +452,15 @@ static int dbox_uidlist_read(struct dbox_uidlist *uidlist)
 	return ret;
 }
 
-static int dbox_uidlist_lock(struct dbox_uidlist *uidlist)
+int dbox_uidlist_lock(struct dbox_uidlist *uidlist)
 {
-	i_assert(uidlist->lock_fd == -1);
+	if (uidlist->lock_count == 0)
+		i_assert(uidlist->lock_fd == -1);
+	else {
+		i_assert(uidlist->mbox->ibox.keep_locked);
+		uidlist->lock_count++;
+		return 0;
+	}
 
 	uidlist->lock_fd = file_dotlock_open(&uidlist_dotlock_settings,
 					     uidlist->path, 0,
@@ -456,12 +471,26 @@ static int dbox_uidlist_lock(struct dbox_uidlist *uidlist)
 		return -1;
 	}
 
+	uidlist->lock_count++;
 	return 0;
 }
 
-static void dbox_uidlist_unlock(struct dbox_uidlist *uidlist)
+void dbox_uidlist_unlock(struct dbox_uidlist *uidlist)
 {
 	i_assert(uidlist->lock_fd != -1);
+
+	if (--uidlist->lock_count > 0) {
+		i_assert(uidlist->mbox->ibox.keep_locked);
+		return;
+	}
+
+	if (uidlist->need_full_rewrite) {
+		i_assert(uidlist->mbox->ibox.keep_locked);
+
+		(void)dbox_uidlist_full_rewrite(uidlist);
+		if (uidlist->lock_fd == -1)
+			return;
+	} 
 
 	(void)file_dotlock_delete(&uidlist->dotlock);
 	uidlist->lock_fd = -1;
@@ -542,6 +571,12 @@ static int dbox_uidlist_full_rewrite(struct dbox_uidlist *uidlist)
 	int ret = 0;
 
 	i_assert(uidlist->lock_fd != -1);
+
+	if (uidlist->lock_count > 1) {
+		i_assert(uidlist->mbox->ibox.keep_locked);
+		uidlist->need_full_rewrite = TRUE;
+		return 0;
+	}
 
 	output = o_stream_create_file(uidlist->lock_fd, default_pool, 0, FALSE);
 
@@ -633,6 +668,7 @@ static int dbox_uidlist_full_rewrite(struct dbox_uidlist *uidlist)
 	/* now, finish the uidlist update by renaming the lock file to
 	   uidlist */
 	uidlist->lock_fd = -1;
+	uidlist->lock_count--;
 	if (file_dotlock_replace(&uidlist->dotlock, 0) < 0)
 		return -1;
 
@@ -701,10 +737,21 @@ static int dbox_uidlist_append_changes(struct dbox_uidlist_append_ctx *ctx)
 	unsigned int i, count;
 	uint32_t uid_start;
 	string_t *str;
-	int ret = 0;
+	int ret = 1;
 
 	i_assert(ctx->uidlist->fd != -1);
 	i_assert(ctx->uidlist->lock_fd != -1);
+
+	if (fstat(ctx->uidlist->fd, &st) < 0) {
+		mail_storage_set_critical(STORAGE(ctx->uidlist->mbox->storage),
+			"fstat(%s) failed: %m", ctx->uidlist->path);
+		return -1;
+	}
+	if (st.st_mtime >= ioloop_time-DBOX_SYNC_SECS) {
+		/* we can't update this file without temporarily moving mtime
+		   backwards */
+		return 0;
+	}
 
 	if (lseek(ctx->uidlist->fd, 0, SEEK_END) < 0) {
 		mail_storage_set_critical(STORAGE(ctx->uidlist->mbox->storage),
@@ -756,7 +803,7 @@ static int dbox_uidlist_append_changes(struct dbox_uidlist_append_ctx *ctx)
 
 	ctx->uidlist->ino = st.st_ino;
 	ctx->uidlist->mtime = ut.modtime;
-	return 0;
+	return 1;
 }
 
 static int
@@ -803,14 +850,19 @@ int dbox_uidlist_append_commit(struct dbox_uidlist_append_ctx *ctx,
 	if (dbox_uidlist_write_append_offsets(ctx) < 0)
 		ret = -1;
 	else {
-		ctx->uidlist->need_full_rewrite = TRUE; // FIXME
+		if (!ctx->uidlist->need_full_rewrite) {
+			ret = dbox_uidlist_append_changes(ctx);
+			if (ret < 0)
+				return -1;
+			if (ret == 0)
+				ctx->uidlist->need_full_rewrite = TRUE;
+		}
+
 		if (ctx->uidlist->need_full_rewrite) {
 			dbox_uidlist_update_changes(ctx);
 			ret = dbox_uidlist_full_rewrite(ctx->uidlist);
 			if (ctx->uidlist->dotlock == NULL)
 				ctx->locked = FALSE;
-		} else {
-			ret = dbox_uidlist_append_changes(ctx);
 		}
 	}
 
@@ -826,8 +878,10 @@ void dbox_uidlist_append_rollback(struct dbox_uidlist_append_ctx *ctx)
 
 	/* unlock files */
 	files = array_get(&ctx->files, &count);
-	for (i = 0; i < count; i++)
+	for (i = 0; i < count; i++) {
 		file_dotlock_delete(&files[i]->dotlock);
+		dbox_file_close(files[i]->file);
+	}
 
 	if (ctx->locked)
 		dbox_uidlist_unlock(ctx->uidlist);
@@ -1245,6 +1299,7 @@ void dbox_uidlist_sync_rollback(struct dbox_uidlist_sync_ctx *ctx)
 	array_clear(&ctx->uidlist->entries);
 	ctx->uidlist->ino = 0;
 	ctx->uidlist->mtime = 0;
+	ctx->uidlist->need_full_rewrite = FALSE;
 
 	dbox_uidlist_unlock(ctx->uidlist);
 	i_free(ctx);

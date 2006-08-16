@@ -1,3 +1,42 @@
+v1.0.rc6 2006-08-07  Timo Sirainen <tss@iki.fi>
+
+	* Removed login_max_logging_users setting since it was somewhat weird
+	  in how it worked. Added login_max_connections to replace it with
+	  login_process_per_connection=no, and with =yes its functionality
+	  is now within login_max_processes_count.
+
+	+ Added --with-linux-quota configure option to specify which Linux
+	  quota version to use, in case it's not correct in sys/quota.h.
+	  Usually used as --with-linux-quota=2
+	+ acl plugins: If .DEFAULT file exists in global ACL root directory,
+	  use it as the default ACLs for all mailboxes.
+	- Fixes to login process handling, especially with
+	  login_process_per_connection=no. 
+	- Back to the original SSL proxy code but with one small fix, which
+	  hopefully fixes the occational hangs with it
+	- Several fixes to handling LIST command more correctly.
+
+v1.0.rc5 2006-08-02  Timo Sirainen <tss@iki.fi>
+
+	- Saving to mboxes still caused assert-crashes
+
+v1.0.rc4 2006-08-02  Timo Sirainen <tss@iki.fi>
+
+	- Saving to mboxes caused assert-crashes
+
+v1.0.rc3 2006-08-02  Timo Sirainen <tss@iki.fi>
+
+	- SSL connections hanged sometimes, especially when saving messages.
+	- mbox: Mail bodies were saved with CR+LF linefeeds
+	- Mail forwarding was broken with deliver/Sieve
+	- dbox fixes. Might actually be usable now.
+	- Index file handling fixes with keywords
+	- Cache file was incorrectly used in some situations, which probably
+	  caused problems sometimes.
+	- Maildir++ quota: Don't count "." and ".." directory sizes to quota.
+	  After rewriting maildirsize file keep its fd open so that we can
+	  later update it. Patch by Alexander Zagrebin
+
 v1.0.rc2 2006-07-04  Timo Sirainen <tss@iki.fi>
 
 	* disable_plaintext_auth=yes: Removed hardcoded 127.* and ::1 IP

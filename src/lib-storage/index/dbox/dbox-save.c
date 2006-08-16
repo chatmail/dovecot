@@ -152,6 +152,18 @@ int dbox_save_init(struct mailbox_transaction_context *_t,
 
 	t_push();
 	if (keywords != NULL && keywords->count > 0) {
+		uint32_t uid;
+		time_t mtime;
+
+		/* uidlist must be locked while we're reading or modifying
+		   file's header */
+		if (dbox_uidlist_append_get_first_uid(ctx->append_ctx,
+						      &uid, &mtime) < 0) {
+			ctx->failed = TRUE;
+			t_pop();
+			return -1;
+		}
+
 		/* write keywords to the file */
 		file_keywords = buffer_create_dynamic(pool_datastack_create(),
 						      DBOX_KEYWORD_COUNT);
@@ -323,19 +335,7 @@ int dbox_transaction_save_commit_pre(struct dbox_save_context *ctx)
 
 	i_assert(ctx->finished);
 
-	/* we want the index file to be locked from here until the appends
-	   have been written to transaction log. this is so that the
-	   transaction log gets locked before uidlist, not after */
-	if (mail_index_sync_begin(ctx->mbox->ibox.index, &ctx->index_sync_ctx,
-				  &view, (uint32_t)-1, (uoff_t)-1,
-				  FALSE, FALSE) < 0) {
-		ctx->failed = TRUE;
-		dbox_transaction_save_rollback(ctx);
-		return -1;
-	}
-
-	/* uidlist gets locked here. do it after starting index syncing to
-	   avoid deadlocks */
+	/* uidlist locking is done before index locking. */
 	if (dbox_uidlist_append_get_first_uid(ctx->append_ctx,
 					      &uid, &old_mtime) < 0) {
 		ctx->failed = TRUE;
@@ -365,6 +365,15 @@ int dbox_transaction_save_commit_pre(struct dbox_save_context *ctx)
                         dbox_transaction_save_rollback(ctx);
 			return -1;
 		}
+	}
+
+	/* lock index lock before dropping uidlist lock in _append_commit() */
+	if (mail_index_sync_begin(ctx->mbox->ibox.index, &ctx->index_sync_ctx,
+				  &view, (uint32_t)-1, (uoff_t)-1,
+				  FALSE, FALSE) < 0) {
+		ctx->failed = TRUE;
+		dbox_transaction_save_rollback(ctx);
+		return -1;
 	}
 
 	if (dbox_uidlist_append_commit(ctx->append_ctx, &new_mtime) < 0) {

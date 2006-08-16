@@ -1,3 +1,7 @@
+ - ssl_verify_client_cert isn't working if the SSL cert doesn't have CRL
+ - Courier-compatible INBOX. namespace gives "invalid namespace" errors
+    - lsub "" IN% -> doesn't show anything
+
  - keywords:
     - add some limits to how many there can be
        - don't return \* in PERMANENTFLAGS when we're full
@@ -47,7 +51,6 @@
  - dbox
    - keyword list header locking isn't correct now. saving uses file's
      dotlock, sync uses sync lock. and what about reading?...
-   - dbox is leaking index fds
    - append_offset in header shouldn't be trusted
    - show in index if there are expunge-flagged mails in the mailbox
    - pop3_lock_session doesn't work

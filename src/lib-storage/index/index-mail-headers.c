@@ -72,7 +72,8 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 						    mail->data.seq,
 						    match_idx) == 0) {
 				/* this header doesn't exist. remember that. */
-				index_mail_cache_add(mail, match_idx, NULL, 0);
+				index_mail_cache_add_idx(mail, match_idx,
+							 NULL, 0);
 			}
 			match_idx++;
 		}
@@ -121,7 +122,8 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 		}
 
 		data = buffer_get_data(buf, &data_size);
-		index_mail_cache_add(mail, lines[i].field_idx, data, data_size);
+		index_mail_cache_add_idx(mail, lines[i].field_idx,
+					 data, data_size);
 	}
 
 	for (; match_idx < match_count; match_idx++) {
@@ -129,7 +131,7 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 		    mail_cache_field_exists(mail->trans->cache_view,
 					    mail->data.seq, match_idx) == 0) {
 			/* this header doesn't exist. remember that. */
-			index_mail_cache_add(mail, match_idx, NULL, 0);
+			index_mail_cache_add_idx(mail, match_idx, NULL, 0);
 		}
 	}
 
@@ -149,7 +151,7 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 		/* check that it hadn't been added in some older session */
 		if (mail_cache_field_exists(mail->trans->cache_view,
 					    mail->data.seq, cache_field) == 0)
-			index_mail_cache_add(mail, cache_field, NULL, 0);
+			index_mail_cache_add_idx(mail, cache_field, NULL, 0);
 	}
 	t_pop();
 }
@@ -347,6 +349,9 @@ int index_mail_parse_headers(struct index_mail *mail,
 			     struct mailbox_header_lookup_ctx *headers)
 {
 	struct index_mail_data *data = &mail->data;
+	uoff_t old_offset;
+
+	old_offset = data->stream == NULL ? 0 : data->stream->v_offset;
 
 	if (mail_get_stream(&mail->mail.mail, NULL, NULL) == NULL)
 		return -1;
@@ -371,6 +376,7 @@ int index_mail_parse_headers(struct index_mail *mail,
 	data->hdr_size_set = TRUE;
 	data->access_part &= ~PARSE_HDR;
 
+	i_stream_seek(data->stream, old_offset);
 	return 0;
 }
 
@@ -391,6 +397,10 @@ void index_mail_headers_get_envelope(struct index_mail *mail)
 {
 	struct mailbox_header_lookup_ctx *header_ctx;
 	struct istream *stream;
+	uoff_t old_offset;
+
+	old_offset = mail->data.stream == NULL ? 0 :
+		mail->data.stream->v_offset;
 
 	mail->data.save_envelope = TRUE;
 	header_ctx = mailbox_header_lookup_init(&mail->ibox->box,
@@ -404,6 +414,9 @@ void index_mail_headers_get_envelope(struct index_mail *mail)
 		mail->data.save_envelope = FALSE;
 	}
 	mailbox_header_lookup_deinit(&header_ctx);
+
+	if (mail->data.stream != NULL)
+		i_stream_seek(mail->data.stream, old_offset);
 }
 
 static size_t get_header_size(buffer_t *buffer, size_t pos)

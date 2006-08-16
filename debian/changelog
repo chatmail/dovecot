@@ -1,3 +1,16 @@
+dovecot (1.0.rc6-1) unstable; urgency=low
+
+  * New upstream release:
+    + Fixed imap segfaults on small mbox files (2 bytes). (Closes: #377840)
+    + Fixed a known bug in dovecot's IDLE handler. (Closes: #351828)
+    + Added support for quota2. (Closes: #377563)
+  * debian/control: converted build-depends on linux-kernel-headers to
+    build-conflicts to help the GNU/kFreeBSD port. (Closes: #377479)
+  * debian/control: changed maintainer to "Dovecot Maintainers"; no changes
+    to the email addresses.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Tue, 15 Aug 2006 10:58:57 +0200
+
 dovecot (1.0.rc2-2) unstable; urgency=low
 
   * patched the quota plugin to fix a missing symbol (Closes: #377018)

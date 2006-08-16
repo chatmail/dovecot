@@ -11,6 +11,8 @@ struct mail_index_view_transaction {
 	struct mail_index_view view;
 	struct mail_index_view_methods *parent;
 	struct mail_index_transaction *t;
+
+	struct mail_index_header hdr;
 };
 
 static void _tview_close(struct mail_index_view *view)
@@ -37,9 +39,24 @@ _tview_get_header(struct mail_index_view *view)
 {
 	struct mail_index_view_transaction *tview =
                 (struct mail_index_view_transaction *)view;
+	const struct mail_index_header *hdr;
+	const struct mail_index_record *recs;
+	unsigned int count;
 
 	/* FIXME: header counters may not be correct */
-	return tview->parent->get_header(view);
+	hdr = tview->parent->get_header(view);
+
+	if (array_is_created(&tview->t->appends)) {
+		/* update next_uid from appends, if UIDs have been given yet */
+		recs = array_get(&tview->t->appends, &count);
+		if (count > 0 && recs[count-1].uid != 0) {
+			i_assert(recs[count-1].uid >= hdr->next_uid);
+			tview->hdr = *hdr;
+			tview->hdr.next_uid = recs[count-1].uid + 1;
+			hdr = &tview->hdr;
+		}
+	}
+	return hdr;
 }
 
 static int _tview_lookup_full(struct mail_index_view *view, uint32_t seq,

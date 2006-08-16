@@ -20,12 +20,14 @@
 #  include <linux/dqblk_xfs.h>
 #endif
 
-#ifdef HAVE_STRUCT_DQBLK_CURSPACE
-#  define dqb_curblocks dqb_curspace
-#endif
-
 #ifndef DEV_BSIZE
 #  define DEV_BSIZE 512
+#endif
+
+/* Older sys/quota.h doesn't define _LINUX_QUOTA_VERSION at all, which means
+   it supports only v1 quota */
+#ifndef _LINUX_QUOTA_VERSION
+#  define _LINUX_QUOTA_VERSION 1
 #endif
 
 struct fs_quota_mountpoint {
@@ -217,12 +219,22 @@ fs_quota_get_resource(struct quota_root *_root, const char *name,
 			     root->uid, (caddr_t)&dqblk) < 0) {
 			i_error("quotactl(Q_GETQUOTA, %s) failed: %m",
 				root->mount->device_path);
+			if (errno == EINVAL) {
+				i_error("Dovecot was compiled with Linux quota "
+					"v%d support, try changing it "
+					"(--with-linux-quota configure option)",
+					_LINUX_QUOTA_VERSION);
+			}
 			quota_set_error(_root->setup->quota,
 					"Internal quota error");
 			return -1;
 		}
 
+#if _LINUX_QUOTA_VERSION < 2
 		*value_r = dqblk.dqb_curblocks / 1024;
+#else
+		*value_r = dqblk.dqb_curspace / 1024;
+#endif
 		*limit_r = dqblk.dqb_bsoftlimit;
 	}
 #elif defined(HAVE_QUOTACTL)

@@ -243,12 +243,6 @@
 /* Define to 1 if you have the `strtouq' function. */
 #undef HAVE_STRTOUQ
 
-/* Define if struct sqblk.dqb_curblocks exists */
-#undef HAVE_STRUCT_DQBLK_CURBLOCKS
-
-/* Define if struct sqblk.dqb_curspace exists */
-#undef HAVE_STRUCT_DQBLK_CURSPACE
-
 /* Define if you have struct iovec */
 #undef HAVE_STRUCT_IOVEC
 
@@ -417,16 +411,16 @@
 /* printf() format for uoff_t */
 #undef PRIuUOFF_T
 
-/* The size of a `int', as computed by sizeof. */
+/* The size of `int', as computed by sizeof. */
 #undef SIZEOF_INT
 
-/* The size of a `long', as computed by sizeof. */
+/* The size of `long', as computed by sizeof. */
 #undef SIZEOF_LONG
 
-/* The size of a `long long', as computed by sizeof. */
+/* The size of `long long', as computed by sizeof. */
 #undef SIZEOF_LONG_LONG
 
-/* The size of a `void *', as computed by sizeof. */
+/* The size of `void *', as computed by sizeof. */
 #undef SIZEOF_VOID_P
 
 /* Maximum value of ssize_t */
@@ -489,6 +483,9 @@
 
 /* If set to 64, enables 64bit off_t for some systems (eg. Linux, Solaris) */
 #undef _FILE_OFFSET_BITS
+
+/* Linux quota version to use */
+#undef _LINUX_QUOTA_VERSION
 
 /* Define to `__inline__' or `__inline' if that's what the C compiler
    calls it, or to nothing if 'inline' is not supported under any name.  */

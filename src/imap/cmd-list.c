@@ -123,7 +123,10 @@ list_namespace_mailboxes(struct client *client, struct cmd_list_context *ctx)
 	name_str = t_str_new(256);
 	while ((list = mail_storage_mailbox_list_next(ctx->list_ctx)) != NULL) {
 		str_truncate(name_str, 0);
-		str_append(name_str, ctx->ns->prefix);
+		/* when listing INBOX from inbox=yes namespace, don't insert
+		   the namespace prefix */
+		if (strcasecmp(list->name, "INBOX") != 0 || !ctx->ns->inbox)
+			str_append(name_str, ctx->ns->prefix);
 		str_append(name_str, list->name);
 
 		if (ctx->ns->sep != ctx->ns->real_sep) {
@@ -141,7 +144,7 @@ list_namespace_mailboxes(struct client *client, struct cmd_list_context *ctx)
 			if (ctx->glob != NULL &&
 			    imap_match(ctx->glob, name) != IMAP_MATCH_YES)
 				continue;
-		} else if (strcasecmp(list->name, "INBOX") == 0) {
+		} else if (strcasecmp(name, "INBOX") == 0) {
 			if (!ctx->ns->inbox)
 				continue;
 
@@ -219,6 +222,8 @@ list_namespace_init(struct client_command_context *cmd,
 	const char *cur_ns_prefix, *cur_ref, *cur_mask;
 	enum imap_match_result match;
 	enum mailbox_list_flags list_flags;
+	enum imap_match_result inbox_match;
+	struct imap_match_glob *inbox_glob;
 	unsigned int count;
 	size_t len;
 
@@ -261,11 +266,19 @@ list_namespace_init(struct client_command_context *cmd,
 		}
 	}
 
-	/* INBOX check is done only in the beginning of mask.
-	   Reference parameter doesn't affect it. */
+	/* if the original reference and mask combined produces something
+	   that matches INBOX, the INBOX casing is on. */
+	inbox_glob = imap_match_init(cmd->pool,
+				     t_strconcat(ctx->ref, ctx->mask, NULL),
+				     TRUE, ns->sep);
+	inbox_match = imap_match(inbox_glob, "INBOX");
+	ctx->match_inbox = inbox_match == IMAP_MATCH_YES;
+
 	ctx->glob = imap_match_init(cmd->pool, ctx->mask,
-                                    cur_mask == ctx->mask, ns->sep);
-	ctx->match_inbox = imap_match(ctx->glob, "INBOX") == IMAP_MATCH_YES;
+				    (inbox_match == IMAP_MATCH_YES ||
+				     inbox_match == IMAP_MATCH_PARENT) &&
+				    cur_mask == ctx->mask,
+				    ns->sep);
 
 	if (*cur_ns_prefix != '\0') {
 		/* namespace prefix still wasn't completely skipped over.
@@ -367,7 +380,7 @@ list_namespace_init(struct client_command_context *cmd,
 	cur_mask = namespace_fix_sep(ns, cur_mask);
 
 	list_flags = ctx->list_flags;
-	if (*ns->prefix == '\0' || ns->inbox)
+	if ((*ns->prefix == '\0' || ns->inbox) && ctx->match_inbox)
 		list_flags |= MAILBOX_LIST_INBOX;
 	ctx->list_ctx = mail_storage_mailbox_list_init(ns->storage,
 						       cur_ref, cur_mask,

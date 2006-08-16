@@ -1,3 +1,280 @@
+2006-08-06 22:22  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-fs.c: Default _LINUX_QUOTA_VERSION to 1
+	  instead of 2, since older Linux v1 sys/quota.h didn't define it
+	  at all.
+
+2006-08-06 22:01  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-list.c: When listing INBOX from inbox=yes namespace,
+	  don't insert the namespace prefix
+
+2006-08-06 21:45  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-list.c: Fixes to handling INBOX in LIST.
+
+2006-08-06 21:43  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/mail-storage.h: MAILBOX_LIST_INBOX flag
+	  conflicted with MAILBOX_LIST_CHILDREN flag, causing problems.
+
+2006-08-06 21:00  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/: maildir/maildir-list.c, mbox/mbox-list.c,
+	  dbox/dbox-list.c: Handle reference parameter more like UW-IMAP:
+	  If it doesn't begin with separator, just use it as a prefix to
+	  mask. I'm not sure where I got the earlier rules..
+
+2006-08-06 20:58  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-list.c: Don't show INBOX if reference parameter is
+	  given.
+
+2006-08-06 20:37  Timo Sirainen <tss@iki.fi>
+
+	* src/master/: mail-process.c, master-settings.c: Run imap
+	  dump-capability process only after all the settings have been
+	  verified to be correct. Added checks against trying
+	  mail_drop_priv_before_exec=yes and chrooting, since we can't exec
+	  the imap process if that's done. Fixed NFS check with chrooting.
+
+2006-08-06 20:35  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/main.c: Changed max_connections default value to
+	  be 1, not that it should matter.
+
+2006-08-06 20:08  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/ssl-proxy-openssl.c: Minor cleanup, but more
+	  importantly last commit message didn't say that the SSL proxy
+	  rewrite was once again reverted to the original one, but with
+	  SSL_pending() fix from the new one. Hopefully this will finally
+	  work with everyone.
+
+2006-08-06 20:05  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/imap-login/client.c,
+	  src/login-common/common.h, src/login-common/login-proxy.c,
+	  src/login-common/login-proxy.h, src/login-common/main.c,
+	  src/login-common/master.c, src/login-common/master.h,
+	  src/login-common/ssl-proxy-openssl.c,
+	  src/login-common/ssl-proxy.c, src/login-common/ssl-proxy.h,
+	  src/master/login-process.c, src/master/login-process.h,
+	  src/master/main.c, src/master/master-login-interface.h,
+	  src/master/master-settings.c, src/master/master-settings.h,
+	  src/pop3-login/client.c: Fixes to login process handling,
+	  especially with login_process_per_connection=no. Removed
+	  login_max_logging_users setting since it was somewhat weird in
+	  how it worked. Added login_max_connections to replace it with
+	  login_process_per_connection=no, and with =yes its functionality
+	  is now within login_max_processes_count.
+
+2006-08-04 17:46  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-idle.c: When mailbox changes are noticed and they're
+	  sent to client, cork before doing it so each command isn't sent
+	  in a separate packet.
+
+2006-08-04 16:32  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/acl/acl-cache.c: Crashfix
+
+2006-08-04 16:28  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/acl/: acl-api-private.h, acl-api.c, acl-backend.c: If
+	  .DEFAULT file exists in global ACL root directory, use it as the
+	  default ACLs for all mailboxes.
+
+2006-08-03 16:21  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: If master login failed because of
+	  non-password failure (eg. allow_nets) don't continue the
+	  authentication to non-master passdbs.
+
+2006-08-03 16:20  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: If we logged in with IPv6 address and
+	  allow_nets contained IPv4 address, we assert-crashed.
+
+2006-08-03 15:37  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request-handler.c: When logging in as master user,
+	  send it as "master_user" field to master among other userdb
+	  fields.
+
+2006-08-03 15:27  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-checkpassword.c: Call io_remove() before closing
+	  the fd.
+
+2006-08-02 22:39  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/plugins/quota/quota-fs.c,
+	  src/plugins/quota/quota-fs.h: Added --with-linux-quota configure
+	  option to specify which Linux quota version to use. Don't bother
+	  looking into struct dqblk to see if curblocks or curspace field
+	  exists, we can figure it out from the quota version. If
+	  quotactl() returns EINVAL, it could have been because wrong quota
+	  version was used, so give a friendly message suggesting to look
+	  at --with-linux-quota.
+
+2006-08-02 21:22  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: And 1.0.rc5
+
+2006-08-02 20:14  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-transaction-view.c: And fix for previous
+	  change..
+
+2006-08-02 19:44  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: And 1.0.rc4..
+
+2006-08-02 19:41  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-transaction-view.c: Transaction view:
+	  mail_index_get_header() returns now updated next_uid field after
+	  appends.
+
+2006-08-02 16:22  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, TODO, configure.in: Released 1.0.rc3.
+
+2006-08-02 00:16  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-save.c: We wrote mail bodies
+	  through raw output stream, instead of the one that made sure that
+	  CR+LF linefeeds were as configured.
+
+2006-07-30 23:05  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-master-connection.c: Debug: Don't log empty error
+	  when writing "master out" debug lines.
+
+2006-07-30 23:03  Timo Sirainen <tss@iki.fi>
+
+	* src/: dict/dict-server.c, lib-dict/dict-client.c: dict proxy:
+	  Dictionary iteration was broken.
+
+2006-07-30 23:02  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/: index-mail-headers.c, index-mail.c,
+	  index-mail.h: index_mail_cache_add() was used with lib-storage's
+	  internal indexes for most of the received date, physical size and
+	  virtual size cache additions. This may have caused all kinds of
+	  trouble, but since it went unnoticed this long perhaps not..
+
+2006-07-24 01:57  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-maildir.c: Don't count "." and ".."
+	  directory sizes to quota. After rewriting maildirsize file keep
+	  its fd open so that we can later update it. Patch by Alexander
+	  Zagrebin
+
+2006-07-24 00:26  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/: index-mail-headers.c, index-mail.c:
+	  Restore data stream's offset after it has been internally
+	  changed, so that it doesn't have much visible effect on the
+	  stream returned by mail_get_stream(). The buffered data will
+	  still be lost, but this should help with the most common use
+	  cases.
+
+2006-07-23 23:32  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/ssl-proxy-openssl.c: Use SSL_pending() to figure
+	  out if we should call SSL_read() again.  Otherwise it breaks..
+
+2006-07-23 23:19  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/ssl-proxy-openssl.c: Don't constantly re-read
+	  ssl-parameters.dat. Make sure that in input handler we read
+	  everything that SSL_read() has buffered so we don't get stuck.
+
+2006-07-23 22:42  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/dbox-uidlist.c: Don't crash if sync
+	  needs to be rollbacked.
+
+2006-07-23 22:41  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/dbox-mail.c: Slightly improved error
+	  message.
+
+2006-07-23 22:40  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/dbox-save.c: When saving a mail with
+	  initial keywords, lock the uidlist before doing anything with the
+	  file's header.
+
+2006-07-23 21:41  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-sync-keywords.c,
+	  mail-index-sync-update.c: In some conditions a keyword could have
+	  been added to the index twice. Also a few cleanups.
+
+2006-07-23 19:08  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/: dbox-sync-expunge.c, dbox-uidlist.c:
+	  Memory/fd leak fixes
+
+2006-07-23 19:01  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/dbox-uidlist.c: When saving new mails,
+	  append the changes to uidlist file, but only when doing so
+	  doesn't temporarily move the file's mtime backwards.
+
+2006-07-23 17:32  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-update.c: If header counters got
+	  broken when updating internal views, say it clearly in error
+	  messages instead of saying they're broken in the files
+	  themselves.
+
+2006-07-23 16:50  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/dbox-sync.c: Fixes to writing flags
+
+2006-07-23 15:37  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/: dbox-save.c, dbox-sync.c,
+	  dbox-uidlist.c: Fixes for pop3_lock_session=yes. Wasn't as easy
+	  as I thought. :)
+
+2006-07-23 14:22  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: Small memory usage optimization.
+
+2006-07-23 14:20  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/: dbox-storage.c, dbox-uidlist.c,
+	  dbox-uidlist.h: Make pop3_lock_session work with dbox.
+
+2006-07-23 14:20  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/dbox-sync-expunge.c: If we find
+	  unexpected messages from dbox, rebuild index files to fix the
+	  problem.
+
+2006-07-08 15:57  Timo Sirainen <tss@iki.fi>
+
+	* doc/variables.txt: Example fix: %Lp -> %Ls
+
+2006-07-05 19:52  Timo Sirainen <tss@iki.fi>
+
+	* src/master/main.c: dovecot -n and -a: Print the config file path
+	  before parsing it so if there are errors you can see what file is
+	  being used.
+
+2006-07-05 19:51  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Comment updates
+
+2006-07-04 18:54  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Updated namespace separator's comments.
+
 2006-07-04 17:51  Timo Sirainen <tss@iki.fi>
 
 	* NEWS, configure.in: 1.0.rc2 released

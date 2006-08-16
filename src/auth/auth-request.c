@@ -263,6 +263,9 @@ static void auth_request_save_cache(struct auth_request *request,
 
 static bool auth_request_master_lookup_finish(struct auth_request *request)
 {
+	if (request->passdb_failure)
+		return TRUE;
+
 	/* master login successful. update user and master_user variables. */
 	auth_request_log_info(request, "passdb", "Master user logging in as %s",
 			      request->requested_login_user);
@@ -681,7 +684,7 @@ static int is_ip_in_network(const char *network, const struct ip_addr *ip)
 	if (net_addr2ip(network, &net_ip) < 0)
 		return -1;
 
-	if (IPADDR_IS_V4(ip) && !IPADDR_IS_V4(&net_ip)) {
+	if (IPADDR_IS_V4(ip) != IPADDR_IS_V4(&net_ip)) {
 		/* one is IPv6 and one is IPv4 */
 		return 0;
 	}

@@ -1,5 +1,5 @@
 AC_PREREQ([2.59])
-AC_INIT([dovecot],[1.0.rc2],[dovecot@dovecot.org])
+AC_INIT([dovecot],[1.0.rc6],[dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE
@@ -65,6 +65,12 @@ AC_ARG_WITH(notify,
                            default dnotify if compilable, otherwise none)],
 	notify=$withval,
 	notify=)
+
+AC_ARG_WITH(linux-quota,
+[  --with-linux-quota=n    Linux quota version to use (default: system's)],
+	AC_DEFINE_UNQUOTED(_LINUX_QUOTA_VERSION, $withval,
+		[Linux quota version to use])
+)
 
 AC_ARG_WITH(passwd,
 [  --with-passwd           Build with /etc/passwd support (default)],
@@ -1121,36 +1127,6 @@ AC_TRY_COMPILE([
   statfs(".", &buf);
 ], [
   AC_DEFINE(HAVE_STATFS_MNTFROMNAME,, Define if you have statfs.f_mntfromname)
-  AC_MSG_RESULT(yes)
-], [
-  AC_MSG_RESULT(no)
-])
-
-dnl * Check if we have struct dqblk.dqb_curblocks
-AC_MSG_CHECKING([if struct dqblk.dqb_curblocks exists])
-AC_TRY_COMPILE([
-  #include <sys/types.h>
-  #include "$srcdir/src/plugins/quota/quota-fs.h"
-], [
-  struct dqblk dqblk;
-  unsigned int x = dqblk.dqb_curblocks;
-], [
-  AC_DEFINE(HAVE_STRUCT_DQBLK_CURBLOCKS,, Define if struct sqblk.dqb_curblocks exists)
-  AC_MSG_RESULT(yes)
-], [
-  AC_MSG_RESULT(no)
-])
-
-dnl * Check if we have struct dqblk.dqb_curspace
-AC_MSG_CHECKING([if struct dqblk.dqb_curspace exists])
-AC_TRY_COMPILE([
-  #include <sys/types.h>
-  #include "$srcdir/src/plugins/quota/quota-fs.h"
-], [
-  struct dqblk dqblk;
-  unsigned int x = dqblk.dqb_curspace;
-], [
-  AC_DEFINE(HAVE_STRUCT_DQBLK_CURSPACE,, Define if struct sqblk.dqb_curspace exists)
   AC_MSG_RESULT(yes)
 ], [
   AC_MSG_RESULT(no)

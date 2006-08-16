@@ -57,9 +57,10 @@ am__installdirs = "$(DESTDIR)$(moduledir)"
 moduleLTLIBRARIES_INSTALL = $(INSTALL)
 LTLIBRARIES = $(module_LTLIBRARIES)
 lib01_quota_plugin_la_LIBADD =
+am__objects_1 = mountpoint.lo
 am_lib01_quota_plugin_la_OBJECTS = quota.lo quota-fs.lo quota-dict.lo \
 	quota-dirsize.lo quota-maildir.lo quota-plugin.lo \
-	quota-storage.lo
+	quota-storage.lo $(am__objects_1)
 lib01_quota_plugin_la_OBJECTS = $(am_lib01_quota_plugin_la_OBJECTS)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -117,6 +118,7 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 F77 = @F77@
 FFLAGS = @FFLAGS@
+GREP = @GREP@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
@@ -155,13 +157,9 @@ SSL_LIBS = @SSL_LIBS@
 STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
 VERSION = @VERSION@
-ac_ct_AR = @ac_ct_AR@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_CXX = @ac_ct_CXX@
 ac_ct_F77 = @ac_ct_F77@
-ac_ct_RANLIB = @ac_ct_RANLIB@
-ac_ct_STRIP = @ac_ct_STRIP@
-ac_pt_PKG_CONFIG = @ac_pt_PKG_CONFIG@
 am__fastdepCC_FALSE = @am__fastdepCC_FALSE@
 am__fastdepCC_TRUE = @am__fastdepCC_TRUE@
 am__fastdepCXX_FALSE = @am__fastdepCXX_FALSE@
@@ -178,25 +176,32 @@ build_cpu = @build_cpu@
 build_os = @build_os@
 build_vendor = @build_vendor@
 datadir = @datadir@
+datarootdir = @datarootdir@
+docdir = @docdir@
+dvidir = @dvidir@
 exec_prefix = @exec_prefix@
 host = @host@
 host_alias = @host_alias@
 host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
+htmldir = @htmldir@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
 libdir = @libdir@
 libexecdir = @libexecdir@
+localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
 oldincludedir = @oldincludedir@
+pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
+psdir = @psdir@
 rundir = @rundir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
@@ -218,6 +223,12 @@ lib01_quota_plugin_la_LDFLAGS = -module -avoid-version
 module_LTLIBRARIES = \
 	lib01_quota_plugin.la
 
+
+# get some functions included which only plugins use. liblib should probably
+# be a shared library so this wouldn't be needed.
+unused_sources = \
+	../../lib/mountpoint.c
+
 lib01_quota_plugin_la_SOURCES = \
 	quota.c \
 	quota-fs.c \
@@ -225,7 +236,8 @@ lib01_quota_plugin_la_SOURCES = \
 	quota-dirsize.c \
 	quota-maildir.c \
         quota-plugin.c \
-	quota-storage.c
+	quota-storage.c \
+	$(unused_sources)
 
 noinst_HEADERS = \
 	quota.h \
@@ -302,6 +314,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mountpoint.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/quota-dict.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/quota-dirsize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/quota-fs.Plo@am__quote@
@@ -330,6 +343,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LTCOMPILE) -c -o $@ $<
+
+mountpoint.lo: ../../lib/mountpoint.c
+@am__fastdepCC_TRUE@	if $(LIBTOOL) --tag=CC --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT mountpoint.lo -MD -MP -MF "$(DEPDIR)/mountpoint.Tpo" -c -o mountpoint.lo `test -f '../../lib/mountpoint.c' || echo '$(srcdir)/'`../../lib/mountpoint.c; \
+@am__fastdepCC_TRUE@	then mv -f "$(DEPDIR)/mountpoint.Tpo" "$(DEPDIR)/mountpoint.Plo"; else rm -f "$(DEPDIR)/mountpoint.Tpo"; exit 1; fi
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='../../lib/mountpoint.c' object='mountpoint.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL) --tag=CC --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o mountpoint.lo `test -f '../../lib/mountpoint.c' || echo '$(srcdir)/'`../../lib/mountpoint.c
 
 mostlyclean-libtool:
 	-rm -f *.lo
