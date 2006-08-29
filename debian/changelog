@@ -1,8 +1,10 @@
 dovecot (1.0.rc7-1) unstable; urgency=low
 
-  * New upstream release. (Closes #377840)
+  * New upstream release. (Closes: #377840, #385101)
+  * debian/patches/dovecot-example.dpatch: set a default value for
+    pop3_uidl_format. (Closes: #383883)
 
- -- Fabio Tranchitella <kobold@debian.org>  Tue, 29 Aug 2006 09:15:12 +0200
+ -- Fabio Tranchitella <kobold@debian.org>  Tue, 29 Aug 2006 10:38:17 +0200
 
 dovecot (1.0.rc6-1) unstable; urgency=low
 

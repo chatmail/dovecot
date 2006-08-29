@@ -7,8 +7,9 @@
 
 exit 0
 @DPATCH@
---- dovecot/dovecot-example.conf.orig	2006-06-19 15:17:03.000000000 -0400
-+++ dovecot/dovecot-example.conf	2006-06-20 11:19:45.000000000 -0400
+diff -urN dovecot-1.0.rc7/dovecot-example.conf dovecot-1.0.rc7.debian/dovecot-example.conf
+--- dovecot-1.0.rc7/dovecot-example.conf	2006-08-29 10:36:20.000000000 +0200
++++ dovecot-1.0.rc7.debian/dovecot-example.conf	2006-08-29 10:37:30.000000000 +0200
 @@ -17,6 +17,7 @@
  
  # Protocols we want to be serving: imap imaps pop3 pop3s
@@ -36,7 +37,7 @@ exit 0
  #ssl_cert_file = /etc/ssl/certs/dovecot.pem
  #ssl_key_file = /etc/ssl/private/dovecot.pem
  
-@@ -179,14 +179,15 @@
+@@ -178,14 +178,15 @@
  
  # Default MAIL environment to use when it's not set. By leaving this empty
  # dovecot tries to do some automatic detection as described in
@@ -131,7 +132,16 @@ exit 0
  
    # Don't try to set mails non-recent or seen with POP3 sessions. This is
    # mostly intended to reduce disk I/O. With maildir it doesn't move files
-@@ -590,7 +593,7 @@
+@@ -576,7 +579,7 @@
+   # installations. %08Xu%08Xv will be the new default, so use it for new
+   # installations.
+   #
+-  #pop3_uidl_format = 
++  pop3_uidl_format = %08Xu%08Xv
+ 
+   # POP3 logout format string:
+   #  %t - number of TOP commands
+@@ -591,7 +594,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -140,7 +150,7 @@ exit 0
  
    # Workarounds for various client bugs:
    #   outlook-no-nuls:
-@@ -628,11 +631,31 @@
+@@ -629,11 +632,31 @@
  }
  
  ##
@@ -173,7 +183,7 @@ exit 0
  
  # Set max. process size in megabytes.
  #auth_process_size = 256
-@@ -711,6 +734,18 @@
+@@ -712,6 +735,18 @@
    #   plain login digest-md5 cram-md5 ntlm rpa apop anonymous gssapi
    mechanisms = plain
  
@@ -192,7 +202,7 @@ exit 0
    #
    # Password database is used to verify user's password (and nothing more).
    # You can have multiple passdbs and userdbs. This is useful if you want to
-@@ -759,7 +794,8 @@
+@@ -760,7 +795,8 @@
      # because PAM modules can do all kinds of checks besides checking password,
      # such as checking IP address. Dovecot can't know about these checks
      # without some help. cache_key is simply a list of variables (see
@@ -202,7 +212,7 @@ exit 0
      # Here are some examples:
      #   %u - Username must match. Probably sufficient for most uses.
      #   %u%r - Username and remote IP address must match.
-@@ -805,13 +841,15 @@
+@@ -806,13 +842,15 @@
  
    # SQL database
    #passdb sql {
@@ -220,7 +230,7 @@ exit 0
      #args = 
    #}
  
-@@ -856,13 +894,15 @@
+@@ -857,13 +895,15 @@
  
    # SQL database
    #userdb sql {
