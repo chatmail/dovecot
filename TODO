@@ -1,3 +1,13 @@
+ - something should be done to umask setting. we should be creating files with
+   0666 or 0777 and rely on umask, but we shouldn't do that unless we're sure
+   that the umask is the wanted one (ie. imap/pop3 process wasn't started
+   directly)
+ - filesystem group quota patch
+ - avoid duplicate flag change notifications, or in case the message is
+   also expunged don't bother notifying its flag changes at all
+ - HFS+ avoid-hardlinks patch?
+ - 32bit -> 64bit upgrade still doesn't work without assert-crashing:
+   mail-cache-transaction.c: line 709 (mail_cache_add): assertion failed: (fixed_size == (unsigned int)-1 || fixed_size == data_size)
  - ssl_verify_client_cert isn't working if the SSL cert doesn't have CRL
  - Courier-compatible INBOX. namespace gives "invalid namespace" errors
     - lsub "" IN% -> doesn't show anything

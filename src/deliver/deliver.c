@@ -347,7 +347,7 @@ int main(int argc, char *argv[])
 	const char *config_path = DEFAULT_CONFIG_FILE;
 	const char *mailbox = "INBOX";
 	const char *auth_socket, *env_tz;
-	const char *home, *destination, *user, *mail_env;
+	const char *home, *destination, *user, *mail_env, *value;
         const struct var_expand_table *table;
         enum mail_storage_flags flags;
         enum mail_storage_lock_method lock_method;
@@ -455,6 +455,11 @@ int main(int argc, char *argv[])
 		destination = user;
 	}
 
+	value = getenv("UMASK");
+	if (value == NULL || sscanf(value, "%i", &i) != 1 || i < 0)
+		i = 0077;
+	(void)umask(i);
+
 	deliver_set = i_new(struct deliver_settings, 1);
 	deliver_set->hostname = getenv("HOSTNAME");
 	if (deliver_set->hostname == NULL)
@@ -510,7 +515,8 @@ int main(int argc, char *argv[])
 					   MAIL_STORAGE_LOCK_FCNTL);
 	input = create_mbox_stream(0);
 	box = mailbox_open(mbox_storage, "Dovecot Delivery Mail", input,
-			   MAILBOX_OPEN_NO_INDEX_FILES);
+			   MAILBOX_OPEN_NO_INDEX_FILES |
+			   MAILBOX_OPEN_MBOX_ONE_MSG_ONLY);
 	if (box == NULL)
 		i_fatal("Can't open delivery mail as mbox");
         if (sync_quick(box) < 0)

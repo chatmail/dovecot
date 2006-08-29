@@ -243,6 +243,12 @@
 /* Define to 1 if you have the `strtouq' function. */
 #undef HAVE_STRTOUQ
 
+/* Define if struct sqblk.dqb_curblocks exists */
+#undef HAVE_STRUCT_DQBLK_CURBLOCKS
+
+/* Define if struct sqblk.dqb_curspace exists */
+#undef HAVE_STRUCT_DQBLK_CURSPACE
+
 /* Define if you have struct iovec */
 #undef HAVE_STRUCT_IOVEC
 
@@ -308,6 +314,9 @@
 
 /* Define to 1 if you have the `writev' function. */
 #undef HAVE_WRITEV
+
+/* Define to 1 if you have the <xfs/xqm.h> header file. */
+#undef HAVE_XFS_XQM_H
 
 /* Define to 1 if the system has the type `_Bool'. */
 #undef HAVE__BOOL

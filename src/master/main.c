@@ -82,6 +82,8 @@ void child_process_init_env(void)
 		facility = LOG_MAIL;
 	env_put(t_strdup_printf("SYSLOG_FACILITY=%d", facility));
 
+	if (settings_root != NULL && !settings_root->defaults->version_ignore)
+		env_put("DOVECOT_VERSION="PACKAGE_VERSION);
 #ifdef DEBUG
 	if (gdb) env_put("GDB=1");
 #endif
@@ -424,8 +426,8 @@ static void listen_protocols(struct settings *set, bool retry)
 			if (*fd == -1)
 				i_fatal("listen(%d) failed: %m", port);
 			net_set_nonblock(*fd, TRUE);
+			fd_close_on_exec(*fd, TRUE);
 		}
-		fd_close_on_exec(*fd, TRUE);
 	}
 
 	if (set->listen_fd == -1)
@@ -506,6 +508,8 @@ static void open_fds(void)
 	/* make sure all fds between 0..3 are used. */
 	while (null_fd < 4) {
 		null_fd = dup(null_fd);
+		if (null_fd == -1)
+			i_fatal("dup(null_fd) failed: %m");
 		fd_close_on_exec(null_fd, TRUE);
 	}
 

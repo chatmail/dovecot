@@ -24,6 +24,7 @@ struct io *io_add(int fd, enum io_condition condition,
 	i_assert((condition & IO_NOTIFY) == 0);
 
 	io = p_new(current_ioloop->pool, struct io, 1);
+	io->refcount = 1;
 	io->fd = fd;
         io->condition = condition;
 
@@ -52,6 +53,7 @@ struct io *io_add_notify(const char *path, io_callback_t *callback,
 	if (io == NULL)
 		return NULL;
 
+	io->refcount = 1;
 	io->condition |= IO_NOTIFY;
 	io->next = current_ioloop->notifys;
 	current_ioloop->notifys = io;
@@ -66,6 +68,8 @@ void io_remove(struct io **_io)
 	struct io *io = *_io;
 
 	*_io = NULL;
+
+	i_assert(io->refcount > 0);
 
 	/* unlink from linked list */
 	if (io->prev != NULL)
@@ -90,7 +94,10 @@ void io_remove(struct io **_io)
 		io_loop_notify_remove(current_ioloop, io);
 	}
 
-	p_free(current_ioloop->pool, io);
+	io->callback = NULL;
+
+	if (--io->refcount == 0)
+		p_free(current_ioloop->pool, io);
 }
 
 static void timeout_list_insert(struct ioloop *ioloop, struct timeout *timeout)

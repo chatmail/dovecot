@@ -18,10 +18,18 @@
 #include <sys/stat.h>
 #ifdef HAVE_LINUX_DQBLK_XFS_H
 #  include <linux/dqblk_xfs.h>
+#  define HAVE_XFS_QUOTA
+#elif defined (HAVE_XFS_XQM_H)
+#  include <xfs/xqm.h> /* CentOS 4.x at least uses this */
+#  define HAVE_XFS_QUOTA
 #endif
 
 #ifndef DEV_BSIZE
 #  define DEV_BSIZE 512
+#endif
+
+#ifdef HAVE_STRUCT_DQBLK_CURSPACE
+#  define dqb_curblocks dqb_curspace
 #endif
 
 /* Older sys/quota.h doesn't define _LINUX_QUOTA_VERSION at all, which means
@@ -192,7 +200,7 @@ fs_quota_get_resource(struct quota_root *_root, const char *name,
 
 #if defined (HAVE_QUOTACTL) && defined(HAVE_SYS_QUOTA_H)
 	/* Linux */
-#ifdef HAVE_LINUX_DQBLK_XFS_H
+#ifdef HAVE_XFS_QUOTA
 	if (strcmp(root->mount->type, "xfs") == 0) {
 		/* XFS */
 		struct fs_disk_quota xdqblk;
@@ -230,11 +238,7 @@ fs_quota_get_resource(struct quota_root *_root, const char *name,
 			return -1;
 		}
 
-#if _LINUX_QUOTA_VERSION < 2
 		*value_r = dqblk.dqb_curblocks / 1024;
-#else
-		*value_r = dqblk.dqb_curspace / 1024;
-#endif
 		*limit_r = dqblk.dqb_bsoftlimit;
 	}
 #elif defined(HAVE_QUOTACTL)

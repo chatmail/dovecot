@@ -31,9 +31,8 @@ dict_quota_init(struct quota_setup *setup, const char *name)
 
 	uri = strchr(setup->data, ' ');
 	if (uri == NULL) {
-		i_error("dict quota: URI missing from parameters: %s",
+		i_fatal("dict quota: URI missing from parameters: %s",
 			setup->data);
-		return NULL;
 	}
 
 	t_push();
@@ -55,7 +54,7 @@ dict_quota_init(struct quota_setup *setup, const char *name)
 
 	dict = dict_init(uri, getenv("USER"));
 	if (dict == NULL)
-		return NULL;
+		i_fatal("dict quota: dict_init() failed");
 
 	root = i_new(struct dict_quota_root, 1);
 	root->root.name = i_strdup(name);

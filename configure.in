@@ -1,5 +1,5 @@
 AC_PREREQ([2.59])
-AC_INIT([dovecot],[1.0.rc6],[dovecot@dovecot.org])
+AC_INIT([dovecot],[1.0.rc7],[dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE
@@ -18,7 +18,7 @@ AC_CHECK_HEADERS(strings.h stdint.h unistd.h dirent.h \
   sys/uio.h sys/sysmacros.h sys/resource.h sys/select.h libgen.h \
   sys/quota.h sys/fs/ufs_quota.h ufs/ufs/quota.h jfs/quota.h \
   mntent.h sys/mnttab.h sys/event.h sys/time.h sys/mkdev.h linux/dqblk_xfs.h \
-  sasl.h sasl/sasl.h)
+  xfs/xqm.h sasl.h sasl/sasl.h)
 
 AC_ARG_ENABLE(ipv6,
 [  --enable-ipv6           Enable IPv6 support (default)],
@@ -30,7 +30,7 @@ AC_ARG_ENABLE(ipv6,
 	want_ipv6=yes)
 
 AC_ARG_ENABLE(debug,
-[  --enable-debug          Enable some extra checks for debugging],
+[  --enable-debug          Enable some extra expensive checks for developers],
 	if test x$enableval = xyes; then
 		AC_DEFINE(DEBUG,, Build with extra debugging checks)
 	fi)
@@ -60,9 +60,9 @@ AC_ARG_WITH(ioloop,
 	ioloop=poll)
 
 AC_ARG_WITH(notify,
-[  --with-notify=IOLOOP    Specify the file system notification method to use
-                          (dnotify, inotify, kqueue, none;
-                           default dnotify if compilable, otherwise none)],
+[  --with-notify=NOTIFY    Specify the file system notification method to use
+                          (inotify, kqueue, dnotify, none;
+                           default is detected in the above order)],
 	notify=$withval,
 	notify=)
 
@@ -471,7 +471,7 @@ if test "$notify" = "" || test "$notify" = "inotify" ; then
   ])
 fi
 
-if test "$notify" = "" || test "$notify" = "kqueue"; then
+if (test "$notify" = "" && test "$ioloop" = kqueue) || test "$notify" = "kqueue"; then
   AC_MSG_CHECKING([if we can use BSD kqueue() notify])
   dnl * BSD kqueue() notify
   if test "$ac_cv_func_kqueue" = yes && test "$ac_cv_func_kevent" = yes ; then
@@ -642,7 +642,7 @@ AC_DEFUN([AC_TYPEOF], [
 
       for type in $order; do
         actype="ac_cv_sizeof_`echo $type|sed 's/-/_/g'`"
-        if test "$size" = "`eval \"echo \\$$actype\"`"; then
+        if test "$size" = "`eval echo \\$$actype`"; then
 	  result="`echo $type|sed 's/-/ /g'`"
 	  visible="`expr $size \* 8`bit (using $result)"
 	  break
@@ -1127,6 +1127,36 @@ AC_TRY_COMPILE([
   statfs(".", &buf);
 ], [
   AC_DEFINE(HAVE_STATFS_MNTFROMNAME,, Define if you have statfs.f_mntfromname)
+  AC_MSG_RESULT(yes)
+], [
+  AC_MSG_RESULT(no)
+])
+
+dnl * Check if we have struct dqblk.dqb_curblocks
+AC_MSG_CHECKING([if struct dqblk.dqb_curblocks exists])
+AC_TRY_COMPILE([
+  #include <sys/types.h>
+  #include "$srcdir/src/plugins/quota/quota-fs.h"
+], [
+  struct dqblk dqblk;
+  unsigned int x = dqblk.dqb_curblocks;
+], [
+  AC_DEFINE(HAVE_STRUCT_DQBLK_CURBLOCKS,, Define if struct sqblk.dqb_curblocks exists)
+  AC_MSG_RESULT(yes)
+], [
+  AC_MSG_RESULT(no)
+])
+
+dnl * Check if we have struct dqblk.dqb_curspace
+AC_MSG_CHECKING([if struct dqblk.dqb_curspace exists])
+AC_TRY_COMPILE([
+  #include <sys/types.h>
+  #include "$srcdir/src/plugins/quota/quota-fs.h"
+], [
+  struct dqblk dqblk;
+  unsigned int x = dqblk.dqb_curspace;
+], [
+  AC_DEFINE(HAVE_STRUCT_DQBLK_CURSPACE,, Define if struct sqblk.dqb_curspace exists)
   AC_MSG_RESULT(yes)
 ], [
   AC_MSG_RESULT(no)
@@ -1655,7 +1685,7 @@ for storage in $mail_storages; do
   if test "$storage" = "$deliver_storage"; then
     deliver_storage=""
   fi
-  STORAGE_LIBS="$STORAGE_LIBS `eval \"echo \\$${storage}_libs\"`"
+  STORAGE_LIBS="$STORAGE_LIBS `eval echo \\$${storage}_libs`"
 done
 STORAGE_LIBS="$STORAGE_LIBS $index_libs"
 AC_SUBST(STORAGE_LIBS)

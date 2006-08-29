@@ -3,6 +3,10 @@
 
 #include "ioloop.h"
 
+#ifndef IOLOOP_INITIAL_FD_COUNT
+#  define IOLOOP_INITIAL_FD_COUNT 128
+#endif
+
 struct ioloop {
         struct ioloop *prev;
 
@@ -22,6 +26,8 @@ struct ioloop {
 struct io {
 	/* use a doubly linked list so that io_remove() is quick */
 	struct io *prev, *next;
+
+	int refcount;
 
 	int fd;
 	enum io_condition condition;

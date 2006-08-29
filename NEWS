@@ -1,3 +1,25 @@
+v1.0.rc7 2006-08-18  Timo Sirainen <tss@iki.fi>
+
+	* Require that Dovecot master process's version number matches the
+	  child process's, unless version_ignore=yes. Usually it's an
+	  accidental installation problem if the version numbers don't match.
+	* Maildir: Create maildirfolder file when creating new maildirs.
+
+	+ ldap+prefetch: Use global uid/gid settings if LDAP query doesn't
+	  return them
+	+ %variables: Negative offsets count from the end of the string.
+	  Patch by Johannes Berg.
+	- kqueue ioloop code rewrite
+	- notify=kqueue might have caused connection hangs sometimes
+	- deliver: If message body contained a valid mbox From_ line, it
+	  and the rest of the message was skipped.
+	- mbox: We got into infinite loops if trying to open a 2 byte sized
+	  file as mbox.
+	- Don't crash with ssl_disable=yes
+	- quota plugin caused compiling problems with some OSes
+	- mbox: After saving a mail to a synced mbox, we lost the sync which
+	  caused worse performance
+
 v1.0.rc6 2006-08-07  Timo Sirainen <tss@iki.fi>
 
 	* Removed login_max_logging_users setting since it was somewhat weird

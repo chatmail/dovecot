@@ -1,3 +1,217 @@
+2006-08-17 22:17  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, TODO, configure.in: 1.0.rc7 released
+
+2006-08-17 21:16  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop.c: io_add_notify() didn't set refcount so
+	  io_remove() crashed for it.
+
+2006-08-17 19:48  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-checkpassword.c: Crashfix
+
+2006-08-17 18:52  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop-kqueue.c: Reference IOs before calling timeout
+	  handlers, in case they call io_remove().
+
+2006-08-17 18:46  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: ioloop-internal.h, ioloop-kqueue.c, ioloop.c, ioloop.h:
+	  OK, so the original kqueue code wasn't actually broken, but it
+	  could have been made much simpler. Updated comments in ioloop.h
+	  about IO_READ and IO_ERROR usage.
+
+2006-08-17 18:17  Timo Sirainen <tss@iki.fi>
+
+	* src/master/main.c: Cleanup + handle dup() failure.
+
+2006-08-17 17:43  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop-kqueue.c: Fixes
+
+2006-08-16 21:33  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: ioloop-epoll.c, ioloop-kqueue.c: Fixes
+
+2006-08-16 20:48  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: Non-plaintext auth: If
+	  auth_debug_passwords=yes, show looked up credentials.
+
+2006-08-16 17:58  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: ioloop-kqueue.c, ioloop-notify-kqueue.c: Compiling
+	  fixes
+
+2006-08-16 15:54  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: Makefile.am, ioloop-epoll.c, ioloop-internal.h,
+	  ioloop-iolist.c, ioloop-iolist.h, ioloop-kqueue.c,
+	  ioloop-notify-kqueue.c, ioloop-poll.c: Rewrote much of the kqueue
+	  code. It didn't work correctly if there were both input and
+	  output I/O handlers added for the same file descriptor. The code
+	  works now very much like epoll code. Did also several cleanups.
+
+2006-08-16 13:31  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Use notify=kqueue automatically only if
+	  ioloop=kqueue.
+
+2006-08-16 12:54  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Changed --enable-debug's description.
+
+2006-08-16 12:16  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/: client-common.c, ssl-proxy-openssl.c,
+	  ssl-proxy.c, ssl-proxy.h: If SSL/TLS handshake didn't finish,
+	  show "TLS handshaking" instead of "TLS" in logout line.
+
+2006-08-11 15:03  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: passdb-checkpassword.c, passdb-pam.c: Set SIGCHLD
+	  handler in init, not in preinit when lib_signals_init() hasn't
+	  yet been called.
+
+2006-08-11 01:12  Timo Sirainen <tss@iki.fi>
+
+	* src/master/mail-process.c: Check log_creaate_pipe() and dup()
+	  return values and handle failures.
+
+2006-08-10 23:21  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: eval doesn't need to have its parameters quoted.
+	  The previous \" quoting was broken with POSIX shells (and
+	  autoconf 2.60 now sets POSIX mode to non-bash/zsh shells also
+	  where this was previously working wrong). So, all in all this
+	  should fix OpenBSD compiling problems.
+
+2006-08-10 22:32  Timo Sirainen <tss@iki.fi>
+
+	* src/pop3/: client.c, client.h, commands.c: Show number of
+	  actually expunged messages in logout message, instead of number
+	  of messages marked as deleted.
+
+2006-08-10 22:03  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/plugins/quota/quota-fs.c: Check for XFS quota
+	  also from xfs/xqm.h
+
+2006-08-10 21:59  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: passdb-checkpassword.c, passdb-pam.c: Use SIGCHLD
+	  handler to check for killed child processes instead of a timeout
+	  loop.
+
+2006-08-10 21:48  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Set umask from dovecot.conf, or default to
+	  0077.
+
+2006-08-10 21:40  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-save.c: After saving a mail with
+	  index being in synced state, update the sync_stamp and sync_size
+	  fields in the index so that it actually stays synced.
+
+2006-08-10 21:21  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Updated login_max_connections comment.
+
+2006-08-10 21:14  Timo Sirainen <tss@iki.fi>
+
+	* src/: login-common/client-common.h, login-common/common.h,
+	  login-common/main.c, imap-login/client.c,
+	  imap-login/imap-proxy.c, pop3-login/client.c,
+	  pop3-login/pop3-proxy.c: Fixes for handling near-full connection
+	  queues.
+
+2006-08-10 20:36  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-storage.c: Create
+	  maildirfolder file when creating new maildirs.
+
+2006-08-10 20:22  Timo Sirainen <tss@iki.fi>
+
+	* doc/variables.txt, src/lib/var-expand.c: Negative offsets count
+	  from the end of the string. Patch by Johannes Berg.
+
+2006-08-10 20:08  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-dict.c: If dict_init() fails, die with a
+	  i_fatal() message instead of crashing.
+
+2006-08-10 19:44  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-ldap.c: If password query returns userdb_
+	  prefixed fields (ie. for userdb prefetch) but not userdb_uid or
+	  userdb_gid, add them based on the global uid/gid settings.
+
+2006-08-10 19:15  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: Allow empty protocols line when
+	  using --exec-mail.
+
+2006-08-10 19:06  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/istream-raw-mbox.c: We got into
+	  infinite loops if trying to open a 2 byte sized file as mbox.
+
+2006-08-10 18:52  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: Allow base_dir to point to a
+	  symlink.
+
+2006-08-10 18:46  Timo Sirainen <tss@iki.fi>
+
+	* src/: auth/main.c, dict/main.c, imap/main.c, login-common/main.c,
+	  master/main.c, master/master-settings.c,
+	  master/master-settings.h, pop3/main.c: Require that master's
+	  version number matches the child's, unless version_ignore=yes.
+	  Usually it's an accidental installation problem if the version
+	  numbers don't match.
+
+2006-08-10 17:45  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/plugins/quota/quota-fs.c,
+	  src/plugins/quota/quota-fs.h: Put back specific checks for struct
+	  dqblk.dqb_curblocks vs curspace. The removal broke compiling for
+	  some OSes such as OSX.
+
+2006-08-10 17:28  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Updated --with-notify description.
+
+2006-08-10 15:54  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop-notify-dn.c: Silently disable dnotify if kernel
+	  doesn't support RT signals, instead of just dying.
+
+2006-08-07 15:01  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/ssl-proxy-openssl.c: Don't crash if SSL is
+	  disabled.
+
+2006-08-07 12:42  Timo Sirainen <tss@iki.fi>
+
+	* src/: deliver/deliver.c, lib-storage/mail-storage.h,
+	  lib-storage/index/index-storage.c,
+	  lib-storage/index/index-storage.h,
+	  lib-storage/index/mbox/istream-raw-mbox.c,
+	  lib-storage/index/mbox/istream-raw-mbox.h,
+	  lib-storage/index/mbox/mbox-file.c: Added
+	  MAILBOX_OPEN_MBOX_ONE_MSG_ONLY flag for mailbox_open() which
+	  makes it ignore all but the first From-line in a mbox. This
+	  kludge is required for deliver which builds a temporary mbox
+	  stream from the input. Later it should be fixed to use some
+	  plain-mailbox format instead of mbox.
+
+2006-08-06 23:29  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, TODO, configure.in: Released 1.0 rc6
+
 2006-08-06 22:22  Timo Sirainen <tss@iki.fi>
 
 	* src/plugins/quota/quota-fs.c: Default _LINUX_QUOTA_VERSION to 1

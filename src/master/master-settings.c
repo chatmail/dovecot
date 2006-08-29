@@ -77,6 +77,7 @@ static struct setting_def setting_defs[] = {
 	DEF(SET_BOOL, verbose_ssl),
 	DEF(SET_BOOL, shutdown_clients),
 	DEF(SET_BOOL, nfs_check),
+	DEF(SET_BOOL, version_ignore),
 
 	/* login */
 	DEF(SET_STR, login_dir),
@@ -283,6 +284,7 @@ struct settings default_settings = {
 	MEMBER(verbose_ssl) FALSE,
 	MEMBER(shutdown_clients) TRUE,
 	MEMBER(nfs_check) TRUE,
+	MEMBER(version_ignore) FALSE,
 
 	/* login */
 	MEMBER(login_dir) "login",
@@ -537,6 +539,11 @@ static const char *get_directory(const char *path)
 
 static bool settings_is_active(struct settings *set)
 {
+	if (*set->protocols == '\0') {
+		/* we're probably using this with --exec-mail */
+		return TRUE;
+	}
+
 	if (set->protocol == MAIL_PROTOCOL_IMAP) {
 		if (strstr(set->protocols, "imap") == NULL)
 			return FALSE;
@@ -762,8 +769,9 @@ static bool settings_verify(struct settings *set)
 		i_error("mkdir(%s) failed: %m", set->base_dir);
 		return FALSE;
 	}
-	if (lstat(set->base_dir, &st) < 0) {
-		i_error("lstat(%s) failed: %m", set->base_dir);
+	/* allow base_dir to be a symlink, so don't use lstat() */
+	if (stat(set->base_dir, &st) < 0) {
+		i_error("stat(%s) failed: %m", set->base_dir);
 		return FALSE;
 	}
 	if ((st.st_mode & 0750) != 0750 || (st.st_mode & 0777) == 0777) {
@@ -1385,6 +1393,8 @@ bool master_settings_read(const char *path, bool nochecks)
 			prev = server;
 		}
 	}
+
+	i_assert(ctx.root != NULL);
 
 	/* settings ok, swap them */
 	temp = settings_pool;

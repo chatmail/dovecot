@@ -32,6 +32,7 @@ liblib_a_SOURCES = \
 	istream-mmap.c \
 	istream-seekable.c \
 	ioloop.c \
+	ioloop-iolist.c \
 	ioloop-notify-none.c \
 	ioloop-notify-dn.c \
 	ioloop-notify-inotify.c \
@@ -114,6 +115,7 @@ noinst_HEADERS = \
 	istream-internal.h \
 	istream-seekable.h \
 	ioloop.h \
+	ioloop-iolist.h \
 	ioloop-internal.h \
 	lib.h \
 	lib-signals.h \

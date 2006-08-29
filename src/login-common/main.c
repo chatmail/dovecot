@@ -184,6 +184,33 @@ void main_listen_stop(void)
 				   LOGIN_STATE_FULL_PRELOGINS);
 }
 
+void connection_queue_add(unsigned int connection_count)
+{
+	unsigned int current_count;
+
+	if (process_per_connection)
+		return;
+
+	current_count = clients_get_count() + ssl_proxy_get_count() +
+		login_proxy_get_count();
+	if (current_count + connection_count + 1 >= max_connections) {
+		/* after this client we've reached max users count,
+		   so stop listening for more. reserve +1 extra for SSL
+		   connections. */
+		main_listen_stop();
+
+		if (current_count >= max_connections) {
+			/* already reached max. users count, kill few of the
+			   oldest connections.
+
+			   this happens when we've maxed out the login process
+			   count and master has told us to start listening for
+			   new connections even though we're full. */
+			client_destroy_oldest();
+		}
+	}
+}
+
 static void auth_connect_notify(struct auth_client *client __attr_unused__,
 				bool connected, void *context __attr_unused__)
 {
@@ -227,6 +254,13 @@ static void drop_privileges(void)
 static void main_init(void)
 {
 	const char *value;
+
+	value = getenv("DOVECOT_VERSION");
+	if (value != NULL && strcmp(value, PACKAGE_VERSION) != 0) {
+		i_fatal("Dovecot version mismatch: "
+			"Master is v%s, login is v"PACKAGE_VERSION" "
+			"(if you don't care, set version_ignore=yes)", value);
+	}
 
 	lib_signals_init();
         lib_signals_set_handler(SIGINT, TRUE, sig_die, NULL);
