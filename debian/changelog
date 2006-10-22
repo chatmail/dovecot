@@ -1,8 +1,17 @@
 dovecot (1.0.rc10-1) unstable; urgency=low
 
   * New upstream release. (Closes: #393004)
+  * debian/patches/dovecot-example.dpatch:
+    + added specific comments to the mail_extra_groups option.
+      (Closes: #383453)
+    + removed duplicated LDA section. (Closes: #391632)
+  * debian/dovecot.8: fixed a layout error. (Closes: #393080)
+  * debian/dovecot-common.init: added LSB headers.
+  * Switched to the upstream dovecot deliver (LDA).
+  * debian/patches/quota_v2.dpatch: added, thanks to Jonas Smedegaard.
+    (Closes: #377563)
 
- -- Fabio Tranchitella <kobold@debian.org>  Sun, 22 Oct 2006 07:23:02 +0000
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 22 Oct 2006 08:55:16 +0000
 
 dovecot (1.0.rc7-1) unstable; urgency=low
 

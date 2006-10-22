@@ -7,27 +7,26 @@
 
 exit 0
 @DPATCH@
-diff -urN dovecot-1.0.rc7/dovecot-example.conf dovecot-1.0.rc7.debian/dovecot-example.conf
---- dovecot-1.0.rc7/dovecot-example.conf	2006-08-29 10:36:20.000000000 +0200
-+++ dovecot-1.0.rc7.debian/dovecot-example.conf	2006-08-29 10:37:30.000000000 +0200
-@@ -17,6 +17,7 @@
- 
+diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
+--- trunk/dovecot-example.conf	2006-10-22 07:22:36.000000000 +0000
++++ trunk.debian/dovecot-example.conf	2006-10-22 08:25:06.000000000 +0000
+@@ -18,6 +18,7 @@
  # Protocols we want to be serving: imap imaps pop3 pop3s
+ # If you only want to use dovecot-auth, you can set this to "none".
  #protocols = imap imaps
-+protocols = 
++protocols =
  
  # IP or host address where to listen in for connections. It's not currently
  # possible to specify multiple addresses. "*" listens in all IPv4 interfaces.
-@@ -64,7 +65,7 @@
- 
+@@ -66,6 +67,7 @@
  # Prefix for each line written to log file. % codes are in strftime(3)
  # format.
--#log_timestamp = "%b %d %H:%M:%S "
+ #log_timestamp = "%b %d %H:%M:%S "
 +log_timestamp = "%Y-%m-%d %H:%M:%S "
  
  # Syslog facility to use if you're logging to syslog. Usually if you don't
  # want to use "mail", you'll use local0..local7. Also other standard
-@@ -84,8 +85,7 @@
+@@ -85,8 +87,7 @@
  
  # PEM encoded X.509 SSL/TLS certificate and private key. They're opened before
  # dropping root privileges, so keep the key file unreadable by anyone but
@@ -37,12 +36,12 @@ diff -urN dovecot-1.0.rc7/dovecot-example.conf dovecot-1.0.rc7.debian/dovecot-ex
  #ssl_cert_file = /etc/ssl/certs/dovecot.pem
  #ssl_key_file = /etc/ssl/private/dovecot.pem
  
-@@ -178,14 +178,15 @@
+@@ -181,14 +182,15 @@
  
  # Default MAIL environment to use when it's not set. By leaving this empty
  # dovecot tries to do some automatic detection as described in
 -# doc/mail-storages.txt. There are a few special variables you can use, eg.:
-+# /usr/share/doc/dovecot-common/mail-storages.txt. There are a few special 
++# /usr/share/doc/dovecot-common/mail-storages.txt. There are a few special
 +# variables you can use, eg.:
  #
  #   %u - username
@@ -55,38 +54,38 @@ diff -urN dovecot-1.0.rc7/dovecot-example.conf dovecot-1.0.rc7.debian/dovecot-ex
  #
  #   default_mail_env = maildir:/var/mail/%1u/%u/Maildir
  #   default_mail_env = mbox:~/mail/:INBOX=/var/mail/%u
-@@ -234,7 +235,7 @@
+@@ -237,7 +239,10 @@
  
  # Grant access to these extra groups for mail processes. Typical use would be
  # to give "mail" group write access to /var/mail to be able to create dotlocks.
--#mail_extra_groups =
++# The dovecot processes get these groups' privileges in addition to the dovecot
++# ones; the list of groups must be separated by spaces.
+ #mail_extra_groups =
 +mail_extra_groups = mail
  
  # Allow full filesystem access to clients. There's no access checks other than
  # what the operating system does for the active UID/GID. It works with both
-@@ -250,8 +251,9 @@
+@@ -253,7 +258,8 @@
  # isn't finding your mails.
  #mail_debug = no
  
 -# Log prefix for mail processes. See doc/variables.txt for list of possible
--# variables you can use.
-+# Log prefix for mail processes. See 
-+# /usr/share/doc/dovecot-common/variables.txt for list of possible variables 
-+#you can use.
++# Log prefix for mail processes. See
++# /usr/share/doc/dovecot-common/variables.txt for list of possible
+ # variables you can use.
  #mail_log_prefix = "%Us(%u): "
  
- # Use mmap() instead of read() to read mail files. read() seems to be a bit
-@@ -317,7 +319,8 @@
+@@ -320,7 +326,8 @@
  # This setting doesn't affect login_chroot or auth_chroot variables.
  # WARNING: Never add directories here which local users can modify, that
  # may lead to root exploit. Usually this should be done only if you don't
 -# allow shell access for users. See doc/configuration.txt for more information.
-+# allow shell access for users. See 
++# allow shell access for users. See
 +# /usr/share/doc/dovecot-common/configuration.txt for more information.
  #valid_chroot_dirs = 
  
  # Default chroot directory for mail processes. This can be overridden for
-@@ -467,19 +470,19 @@
+@@ -470,19 +477,19 @@
  
  protocol imap {
    # Login executable location.
@@ -98,19 +97,18 @@ diff -urN dovecot-1.0.rc7/dovecot-example.conf dovecot-1.0.rc7.debian/dovecot-ex
    #
    # This would write rawlogs into ~/dovecot.rawlog/ directory:
 -  #   mail_executable = /usr/libexec/dovecot/rawlog /usr/libexec/dovecot/imap
-+  #   mail_executable = /usr/lib/dovecot/rawlog /usr/lib/dovecot/imap
++  #   mail_executable = usr/lib/dovecot/rawlog /usr/lib/dovecot/imap
    #
    # This would attach gdb into the imap process and write backtraces into
    # /tmp/gdbhelper.* files:
--  #   mail_executable = /usr/libexec/dovecot/gdbhelper /usr/libexec/dovecot/imap
-+  #   mail_executable = /usr/lib/dovecot/gdbhelper /usr/lib/dovecot/imap
+   #   mail_executable = /usr/libexec/dovecot/gdbhelper /usr/libexec/dovecot/imap
    #
 -  #mail_executable = /usr/libexec/dovecot/imap
 +  #mail_executable = /usr/lib/dovecot/imap
  
    # Maximum IMAP command line length in bytes. Some clients generate very long
    # command lines with huge mailboxes, so you may need to raise this if you get
-@@ -489,7 +492,7 @@
+@@ -492,7 +499,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -119,20 +117,21 @@ diff -urN dovecot-1.0.rc7/dovecot-example.conf dovecot-1.0.rc7.debian/dovecot-ex
  
    # Send IMAP capabilities in greeting message. This makes it unnecessary for
    # clients to request it with CAPABILITY command, so it saves one round-trip.
-@@ -529,10 +532,10 @@
+@@ -532,11 +539,11 @@
  
  protocol pop3 {
    # Login executable location.
 -  #login_executable = /usr/libexec/dovecot/pop3-login
 +  #login_executable = /usr/lib/dovecot/pop3-login
  
-   # POP3 executable location
+   # POP3 executable location. See IMAP's mail_executable above for examples
+   # how this could be changed.
 -  #mail_executable = /usr/libexec/dovecot/pop3
 +  #mail_executable = /usr/lib/dovecot/pop3
  
    # Don't try to set mails non-recent or seen with POP3 sessions. This is
    # mostly intended to reduce disk I/O. With maildir it doesn't move files
-@@ -576,7 +579,7 @@
+@@ -580,7 +587,7 @@
    # installations. %08Xu%08Xv will be the new default, so use it for new
    # installations.
    #
@@ -141,7 +140,7 @@ diff -urN dovecot-1.0.rc7/dovecot-example.conf dovecot-1.0.rc7.debian/dovecot-ex
  
    # POP3 logout format string:
    #  %t - number of TOP commands
-@@ -591,7 +594,7 @@
+@@ -595,7 +602,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -150,31 +149,28 @@ diff -urN dovecot-1.0.rc7/dovecot-example.conf dovecot-1.0.rc7.debian/dovecot-ex
  
    # Workarounds for various client bugs:
    #   outlook-no-nuls:
-@@ -629,11 +632,31 @@
- }
- 
+@@ -612,9 +619,9 @@
+ ## LDA specific settings
  ##
-+## dovecot-lda specific settings
-+##
-+
+ 
+-protocol lda {
 +# protocol lda {
-+  # If you wish to use plugins you need to specify plugin directory
-+  # For example quota enforcing is implemented by plugin
-+  #module_dir = /usr/lib/dovecot/modules/lda
-+
-+  # Address from LDA should send MDNs like out of quota
-+  # postmaster_address = postmaster@your.dom
-+
-+  # If there is no user-specific Sieve-script, global Sieve script is
-+  # executed if set.
-+  #global_script_path =
-+
-+  # UNIX socket path to master authentication server to find users.
-+  #auth_socket_path = /var/run/dovecot-auth-master
-+# }
-+
-+##
- ## Authentication processes
+   # Address to use when sending rejection mails.
+-  postmaster_address = postmaster@example.com
++  # postmaster_address = postmaster@example.com
+ 
+   # Hostname to use in various parts of sent mails, eg. in Message-Id.
+   # Default is the system's real hostname.
+@@ -623,7 +630,7 @@
+   # Support for dynamically loadable plugins. mail_plugins is a space separated
+   # list of plugins to load.
+   #mail_plugins = 
+-  #mail_plugin_dir = /usr/lib/dovecot/lda
++  #mail_plugin_dir = /usr/lib/dovecot/modules/lda
+ 
+   # Binary to use for sending mails.
+   #sendmail_path = /usr/lib/sendmail
+@@ -637,7 +644,7 @@
  ##
  
  # Executable location
@@ -183,68 +179,64 @@ diff -urN dovecot-1.0.rc7/dovecot-example.conf dovecot-1.0.rc7.debian/dovecot-ex
  
  # Set max. process size in megabytes.
  #auth_process_size = 256
-@@ -712,6 +735,18 @@
-   #   plain login digest-md5 cram-md5 ntlm rpa apop anonymous gssapi
-   mechanisms = plain
- 
-+  ##
-+  ## dovecot-lda specific settings
-+  ##
-+  # socket listen {
-+  #   master {
-+  #     path = /var/run/dovecot-auth-master
-+  #     mode = 0600
-+  #     user = vmail # User running Dovecot LDA
-+  #     #group = mail # Or alternatively mode 0660 + LDA user in this group
-+  #   }
-+  # }
-+
-   #
-   # Password database is used to verify user's password (and nothing more).
-   # You can have multiple passdbs and userdbs. This is useful if you want to
-@@ -760,7 +795,8 @@
+@@ -766,7 +773,8 @@
      # because PAM modules can do all kinds of checks besides checking password,
      # such as checking IP address. Dovecot can't know about these checks
      # without some help. cache_key is simply a list of variables (see
 -    # doc/variables.txt) which must match for the cached data to be used.
-+    # /usr/share/doc/dovecot-common/variables.txt) which must match for the 
-+    # cached data to be used.
++    # /usr/share/doc/dovecot-common/variables.txt) which must match for
++    # the cached data to be used.
      # Here are some examples:
      #   %u - Username must match. Probably sufficient for most uses.
      #   %u%r - Username and remote IP address must match.
-@@ -806,13 +842,15 @@
+@@ -813,13 +821,13 @@
  
    # SQL database
    #passdb sql {
 -    # Path for SQL configuration file, see doc/dovecot-sql.conf for example
-+    # Path for SQL configuration file, see /etc/dovecot/dovecot-sql.conf  for
-+    #  example
++    # Path for SQL configuration file, see /etc/dovecot/dovecot-sql.conf for example
      #args = 
    #}
  
    # LDAP database
    #passdb ldap {
 -    # Path for LDAP configuration file, see doc/dovecot-ldap.conf for example
-+    # Path for LDAP configuration file, see /etc/dovecot/dovecot-ldap.conf for 
-+    # example
++    # Path for LDAP configuration file, see /etc/dovecot/dovecot-ldap.conf for example
      #args = 
    #}
  
-@@ -857,13 +895,15 @@
+@@ -864,13 +872,13 @@
  
    # SQL database
    #userdb sql {
 -    # Path for SQL configuration file, see doc/dovecot-sql.conf for example
-+    # Path for SQL configuration file, see /etc/dovecot/dovecot-sql.conf for 
-+    # example
++    # Path for SQL configuration file, see /etc/dovecot/dovecot-sql.conf for example
      #args = 
    #}
  
    # LDAP database
    #userdb ldap {
 -    # Path for LDAP configuration file, see doc/dovecot-ldap.conf for example
-+    # Path for LDAP configuration file, see /etc/dovecot/dovecot-ldap.conf for 
-+    # example
++    # Path for LDAP configuration file, see /etc/dovecot/dovecot-ldap.conf for example
      #args = 
    #}
  
+@@ -932,6 +940,18 @@
+       #mode = 0660
+     #}
+   #}
++
++  ## dovecot-lda specific settings
++  ##
++  # socket listen {
++  #   master {
++  #     path = /var/run/dovecot/auth-master
++  #     mode = 0600
++  #     user = mail # User running Dovecot LDA
++  #     #group = mail # Or alternatively mode 0660 + LDA user in this group
++  #   }
++  # }
++
+ }
+ 
+ # If you wish to use another authentication server than dovecot-auth, you can

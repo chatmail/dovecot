@@ -21,13 +21,24 @@ endif
 config.status: patch-stamp configure
 	dh_testdir
 	automake-1.9; libtoolize -f -c;  aclocal-1.9; autoconf
-	cat debian/patches/dovecot-lda.dpatch | patch -p1
 	# Add here commands to configure the package.
-	./configure --with-ldap --with-ssl=openssl --with-pgsql --with-mysql --with-sqlite --with-cyrus-sasl2 --with-gssapi --without-deliver --host=$(DEB_HOST_GNU_TYPE) --build=$(DEB_BUILD_GNU_TYPE) --prefix=/usr --sysconfdir=/etc/dovecot --libexecdir=\$${prefix}/lib --localstatedir=/var --mandir=\$${prefix}/share/man --infodir=\$${prefix}/share/info --with-moduledir=\$${prefix}/lib/dovecot/modules
-	-test -r /usr/share/misc/config.sub && cp -f /usr/share/misc/config.sub src/dovecot-lda/config.sub
-	-test -r /usr/share/misc/config.guess && cp -f /usr/share/misc/config.guess src/dovecot-lda/config.guess
-	$(MAKE) dovecot-config
-	cd src/dovecot-lda && chmod 755 configure config.sub config.guess && ./configure --prefix=/usr --sysconfdir=/etc/dovecot --libexecdir=\$${prefix}/lib --localstatedir=/var --mandir=\$${prefix}/share/man --infodir=\$${prefix}/share/info --with-dovecot=../..
+	./configure --with-ldap \
+	            --with-ssl=openssl \
+	            --with-pgsql \
+	            --with-mysql \
+	            --with-sqlite \
+	            --with-cyrus-sasl \
+	            --with-gssap \
+	            --with-deliver \
+	            --host=$(DEB_HOST_GNU_TYPE) \
+	            --build=$(DEB_BUILD_GNU_TYPE) \
+	            --prefix=/usr \
+	            --sysconfdir=/etc/dovecot \
+	            --libexecdir=\$${prefix}/lib \
+	            --localstatedir=/var \
+	            --mandir=\$${prefix}/share/man \
+	            --infodir=\$${prefix}/share/info \
+	            --with-moduledir=\$${prefix}/lib/dovecot/modules
 
 build: build-stamp
 
@@ -36,7 +47,6 @@ build-stamp:  config.status
 
 	# Add here commands to compile the package.
 	$(MAKE)
-	cd src/dovecot-lda && $(MAKE)
 	#cd src/drac && $(MAKE)
 	#/usr/bin/docbook-to-man debian/dovecot.sgml > dovecot.1
 
@@ -48,7 +58,6 @@ clean: unpatch
 	rm -f build-stamp 
 
 	# Add here commands to clean up after the build process.
-	rm -fr src/dovecot-lda
 	-$(MAKE) distclean
 	rm -f conftest conftest.o config.log config.cache config.status ylwrap
 	-test -r /usr/share/misc/config.sub && \
@@ -66,8 +75,7 @@ install: build
 
 	# Add here commands to install the package into debian/dovecot.
 	$(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
-	cd src/dovecot-lda && $(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
-	#cp $(CURDIR)/src/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
+	# cp $(CURDIR)/src/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot.conf
 	chmod 0600 $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot.conf
 	install -o root -g root -m 0600 $(CURDIR)/doc/dovecot-ldap.conf $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-ldap.conf

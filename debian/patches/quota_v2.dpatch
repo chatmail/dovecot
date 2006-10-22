@@ -1,0 +1,70 @@
+#! /bin/sh -e
+
+## DP: Hack to support quota v2, Based heavily on email found here:
+## DP: http://dovecot.org/list/dovecot/2006-June/014015.html
+## DP: Author: Jonas Smedegaard <dr@jones.dk>
+
+. $(dirname $0)/DPATCH
+
+exit 0
+@DPATCH@
+diff -ruN dovecot-1.0.rc2.orig/src/plugins/quota/quota-fs.c dovecot-1.0.rc2/src/plugins/quota/quota-fs.c
+--- dovecot-1.0.rc2.orig/src/plugins/quota/quota-fs.c	2006-07-01 22:13:10.000000000 +0200
++++ dovecot-1.0.rc2/src/plugins/quota/quota-fs.c	2006-07-10 05:03:52.000000000 +0200
+@@ -177,6 +177,21 @@
+ 		      uint64_t *value_r, uint64_t *limit_r)
+ {
+ 	struct fs_quota_root *root = (struct fs_quota_root *)_root;
++#ifndef _LINUX_QUOTA_VERSION
++	struct fake_dq_struct {
++		u_int64_t dqb_bhardlimit;   /* absolute limit on disk quota blocks alloc */
++		u_int64_t dqb_bsoftlimit;   /* preferred limit on disk quota blocks */
++		u_int64_t dqb_curblocks;    /* current quota block count */
++		u_int64_t dqb_ihardlimit;   /* maximum # allocated inodes */
++		u_int64_t dqb_isoftlimit;   /* preferred inode limit */
++		u_int64_t dqb_curinodes;    /* current # allocated inodes */
++		u_int64_t dqb_btime;        /* time limit for excessive disk use */
++		u_int64_t dqb_itime;        /* time limit for excessive files */
++		u_int32_t dqb_valid;        /* bitmask of QIF_* constants */
++	};
++
++	struct fake_dq_struct fake_dqblk;
++#endif
+ 	struct dqblk dqblk;
+ #ifdef HAVE_Q_QUOTACTL
+ 	struct quotctl ctl;
+@@ -210,8 +225,25 @@
+ 		*limit_r = xdqblk.d_blk_softlimit >> 1;
+ 	} else
+ #endif
++#ifndef _LINUX_QUOTA_VERSION
++	{
++		/* ext2, ext3; quota v2 */
++		if (quotactl(0x80000700,
++			     root->mount->device_path,
++			     root->uid, (caddr_t)&fake_dqblk) < 0) {
++			i_error("quotactl(Q_GETQUOTA, %s) failed: %m",
++				root->mount->device_path);
++			quota_set_error(_root->setup->quota,
++					"Internal quota error");
++			return -1;
++		}
++
++		*value_r = fake_dqblk.dqb_curblocks / 1024;
++		*limit_r = fake_dqblk.dqb_bsoftlimit;
++	}
++#else
+ 	{
+-		/* ext2, ext3 */
++		/* ext2, ext3; quota v1 */
+ 		if (quotactl(QCMD(Q_GETQUOTA, USRQUOTA),
+ 			     root->mount->device_path,
+ 			     root->uid, (caddr_t)&dqblk) < 0) {
+@@ -225,6 +257,7 @@
+ 		*value_r = dqblk.dqb_curblocks / 1024;
+ 		*limit_r = dqblk.dqb_bsoftlimit;
+ 	}
++#endif
+ #elif defined(HAVE_QUOTACTL)
+ 	/* BSD, AIX */
+ 	if (quotactl(root->mount->mount_path, QCMD(Q_GETQUOTA, USRQUOTA),
