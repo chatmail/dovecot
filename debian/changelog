@@ -1,4 +1,4 @@
-dovecot (1.0.rc10-1) UNRELEASED; urgency=low
+dovecot (1.0.rc10-1) unstable; urgency=low
 
   * New upstream release. (Closes: #393004)
 
