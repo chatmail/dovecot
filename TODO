@@ -1,13 +1,14 @@
+ - ldap auth is leaking memory?
+ - master leaks log fds with kqueue
+ - login -> master UNIX socket handling handling is a bit broken
+     - added sanity checks now. see if errors changed?
+
  - something should be done to umask setting. we should be creating files with
    0666 or 0777 and rely on umask, but we shouldn't do that unless we're sure
    that the umask is the wanted one (ie. imap/pop3 process wasn't started
    directly)
  - filesystem group quota patch
- - avoid duplicate flag change notifications, or in case the message is
-   also expunged don't bother notifying its flag changes at all
  - HFS+ avoid-hardlinks patch?
- - 32bit -> 64bit upgrade still doesn't work without assert-crashing:
-   mail-cache-transaction.c: line 709 (mail_cache_add): assertion failed: (fixed_size == (unsigned int)-1 || fixed_size == data_size)
  - ssl_verify_client_cert isn't working if the SSL cert doesn't have CRL
  - Courier-compatible INBOX. namespace gives "invalid namespace" errors
     - lsub "" IN% -> doesn't show anything
@@ -57,6 +58,7 @@
     - when sorting maildir files, sort based on Mxxxx first so the files are
       sorted always in ascending order. required for proper out-of-quota
       uidlist handling
+    - physical separator could be configurable
 
  - dbox
    - keyword list header locking isn't correct now. saving uses file's
@@ -133,6 +135,9 @@
  - auth
     - ability to specify default password scheme with passwd-file
     - with blocking passdb we're not caching lookups if the password was wrong
+    - non-plaintext authentication doesn't support all features:
+        - multiple passdbs don't work, only the first one is used
+	- auth cache's last_success password change check doesn't exist
     - if PAM child process doesn't finish within a minute, kill it
     - PAM / checkpassword should use passdb-blocking
     - support specifying hex/base64 encoding in password scheme. for example
@@ -141,7 +146,6 @@
     - remove system_user and allow returning multiple gids instead.
     - SIGHUP restarts auth processes .. but does it wait until they've finished
       with all requests? no.
-    - post-login-sql-command (userdb command doesn't do because of deliver)
     - does dovecot-auth really break when it runs out of fds?
     - dovecot-auth should limit how fast authentication requests are allowed
       from login processes. especially if there's one login/connection the speed

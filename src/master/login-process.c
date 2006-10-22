@@ -18,6 +18,7 @@
 
 #include <unistd.h>
 #include <syslog.h>
+#include <sys/stat.h>
 
 struct login_process {
 	struct login_group *group;
@@ -53,6 +54,7 @@ static bool logins_stalled = FALSE;
 static struct hash_table *processes;
 static struct login_group *login_groups;
 
+static void login_processes_stall(void);
 static void login_process_destroy(struct login_process *p);
 static void login_process_unref(struct login_process *p);
 static bool login_process_init_group(struct login_process *p);
@@ -63,6 +65,7 @@ static void login_group_create(struct settings *set)
 	struct login_group *group;
 
 	group = i_new(struct login_group, 1);
+	group->refcount = 1;
 	group->set = set;
 	group->process_type = set->protocol == MAIL_PROTOCOL_IMAP ?
 		PROCESS_TYPE_IMAP : PROCESS_TYPE_POP3;
@@ -71,8 +74,13 @@ static void login_group_create(struct settings *set)
 	login_groups = group;
 }
 
-static void login_group_destroy(struct login_group *group)
+static void login_group_unref(struct login_group *group)
 {
+	i_assert(group->refcount > 0);
+
+	if (--group->refcount > 0)
+		return;
+
 	i_free(group);
 }
 
@@ -169,6 +177,20 @@ static void process_mark_listening(struct login_process *p)
 	process_remove_from_prelogin_lists(p);
 }
 
+static void login_process_set_initialized(struct login_process *p)
+{
+	p->initialized = TRUE;
+
+	if (logins_stalled) {
+		/* processes were created successfully */
+		i_info("Created login processes successfully, unstalling");
+
+		logins_stalled = FALSE;
+		timeout_remove(&to);
+		to = timeout_add(1000, login_processes_start_missing, NULL);
+	}
+}
+
 static void
 login_process_set_state(struct login_process *p, enum master_login_state state)
 {
@@ -177,6 +199,7 @@ login_process_set_state(struct login_process *p, enum master_login_state state)
 		i_error("login: tried to change state %d -> %d "
 			"(if you can't login at all, see src/lib/fdpass.c)",
 			p->state, state);
+		login_process_destroy(p);
 		return;
 	}
 
@@ -276,6 +299,65 @@ static bool login_process_read_group(struct login_process *p)
 	return FALSE;
 }
 
+static int
+login_read_request(struct login_process *p, struct master_login_request *req,
+		   int *client_fd_r)
+{
+	struct stat st;
+	ssize_t ret;
+
+	*client_fd_r = -1;
+
+	ret = fd_read(p->fd, req, sizeof(*req), client_fd_r);
+	if (ret >= (ssize_t)sizeof(req->version) &&
+	    req->version != MASTER_LOGIN_PROTOCOL_VERSION) {
+		i_error("login: Protocol version mismatch "
+			"(mixed old and new binaries?)");
+		return -1;
+	}
+
+	if (ret != sizeof(*req)) {
+		if (ret == 0) {
+			/* disconnected, ie. the login process died */
+		} else if (ret > 0) {
+			/* request wasn't fully read */
+			i_error("login: fd_read() returned partial %d", ret);
+		} else {
+			if (errno == EAGAIN)
+				return 0;
+
+			i_error("login: fd_read() failed: %m");
+		}
+		return -1;
+	}
+
+	if (req->ino == (ino_t)-1) {
+		if (*client_fd_r != -1) {
+			i_error("login: Notification request sent "
+				"a file descriptor");
+			return -1;
+		}
+		return 1;
+	}
+
+	if (*client_fd_r == -1) {
+		i_error("login: Login request missing a file descriptor");
+		return -1;
+	}
+
+	if (fstat(*client_fd_r, &st) < 0) {
+		i_error("login: fstat(mail client) failed: %m");
+		return -1;
+	}
+
+	if (st.st_ino != req->ino) {
+		i_error("login: Login request inode mismatch: %s != %s",
+			dec2str(st.st_ino), dec2str(req->ino));
+		return -1;
+	}
+	return 1;
+}
+
 static void login_process_input(void *context)
 {
 	struct login_process *p = context;
@@ -292,45 +374,36 @@ static void login_process_input(void *context)
 		return;
 	}
 
-	ret = fd_read(p->fd, &req, sizeof(req), &client_fd);
-	if (ret >= (ssize_t)sizeof(req.version) &&
-	    req.version != MASTER_LOGIN_PROTOCOL_VERSION) {
-		i_error("login: Protocol version mismatch "
-			"(mixed old and new binaries?)");
-		login_process_destroy(p);
+	ret = login_read_request(p, &req, &client_fd);
+	if (ret == 0)
 		return;
-	}
-
-	if (ret != sizeof(req)) {
-		if (ret == 0) {
-			/* disconnected, ie. the login process died */
-		} else if (ret > 0) {
-			/* req wasn't fully read */
-			i_error("login: fd_read() couldn't read all req");
-		} else {
-			i_error("login: fd_read() failed: %m");
-		}
-
+	if (ret < 0) {
 		if (client_fd != -1) {
 			if (close(client_fd) < 0)
-				i_error("close(mail client) failed: %m");
+				i_error("login: close(mail client) failed: %m");
 		}
-
 		login_process_destroy(p);
 		return;
 	}
 
-	if (client_fd == -1) {
-		/* just a notification that the login process */
+	if (req.ino == (ino_t)-1) {
+		/* state notification */
 		enum master_login_state state = req.tag;
 
 		if (!p->initialized) {
 			/* initialization notify */
-			p->initialized = TRUE;;
+			login_process_set_initialized(p);
+			login_process_set_initialized(p);
 		} else {
 			/* change "listening for new connections" status */
 			login_process_set_state(p, state);
 		}
+		return;
+	}
+
+	if (!p->initialized) {
+		i_error("login: trying to log in before initialization");
+		login_process_destroy(p);
 		return;
 	}
 
@@ -366,7 +439,7 @@ login_process_new(struct login_group *group, pid_t pid, int fd)
 
 	p = i_new(struct login_process, 1);
 	p->group = group;
-	p->refcount = 1;
+	p->refcount = 2; /* once for fd close, another for process exit */
 	p->pid = pid;
 	p->fd = fd;
 	p->io = io_add(fd, IO_READ, login_process_input, p);
@@ -380,6 +453,7 @@ login_process_new(struct login_group *group, pid_t pid, int fd)
 	p->state = LOGIN_STATE_LISTENING;
 
 	if (p->group != NULL) {
+		p->group->refcount++;
 		p->group->processes++;
 		p->group->listening_processes++;
 	}
@@ -401,10 +475,8 @@ static void login_process_destroy(struct login_process *p)
 		return;
 	p->destroyed = TRUE;
 
-	if (!p->initialized && io_loop_is_running(ioloop)) {
-		i_error("Login process died too early - shutting down");
-		io_loop_stop(ioloop);
-	}
+	if (!p->initialized)
+		login_processes_stall();
 
 	o_stream_close(p->output);
 	io_remove(&p->io);
@@ -415,12 +487,17 @@ static void login_process_destroy(struct login_process *p)
 
 	if (p->inetd_child)
 		login_process_exited(p);
+	login_process_unref(p);
 }
 
 static void login_process_unref(struct login_process *p)
 {
+	i_assert(p->refcount > 0);
 	if (--p->refcount > 0)
 		return;
+
+	if (p->group != NULL)
+		login_group_unref(p->group);
 
 	o_stream_unref(&p->output);
 	i_free(p);
@@ -479,7 +556,7 @@ static void login_process_init_env(struct login_group *group, pid_t pid)
 
 	if (set->login_process_per_connection) {
 		env_put("PROCESS_PER_CONNECTION=1");
-		env_put("MAX_LOGGING_USERS=1");
+		env_put("MAX_CONNECTIONS=1");
 	} else {
 		env_put(t_strdup_printf("MAX_CONNECTIONS=%u",
 					set->login_max_connections));
@@ -614,27 +691,24 @@ void login_process_destroyed(pid_t pid, bool abnormal_exit)
 			p->group->wanted_processes_count = 0;
 	}
 
-	login_process_destroy(p);
 	login_process_exited(p);
 }
 
-void login_processes_destroy_all(bool unref)
+void login_processes_destroy_all(void)
 {
 	struct hash_iterate_context *iter;
 	void *key, *value;
 
 	iter = hash_iterate_init(processes);
-	while (hash_iterate(iter, &key, &value)) {
+	while (hash_iterate(iter, &key, &value))
 		login_process_destroy(value);
-		if (unref) login_process_unref(value);
-	}
 	hash_iterate_deinit(iter);
 
 	while (login_groups != NULL) {
 		struct login_group *group = login_groups;
 
 		login_groups = group->next;
-		login_group_destroy(group);
+		login_group_unref(group);
 	}
 }
 
@@ -664,7 +738,8 @@ static int login_group_start_missings(struct login_group *group)
 		/* destroy the oldest listening process. non-listening
 		   processes are logged in users who we don't want to kick out
 		   because someone's started flooding */
-		if (group->oldest_prelogin_process != NULL)
+		if (group->oldest_prelogin_process != NULL &&
+		    group->oldest_prelogin_process->initialized)
 			login_process_destroy(group->oldest_prelogin_process);
 	}
 
@@ -702,7 +777,7 @@ static int login_group_start_missings(struct login_group *group)
 
 static void login_processes_stall(void)
 {
-	if (logins_stalled)
+	if (logins_stalled || IS_INETD())
 		return;
 
 	i_error("Temporary failure in creating login processes, "
@@ -712,7 +787,6 @@ static void login_processes_stall(void)
 	timeout_remove(&to);
 	to = timeout_add(60*1000, login_processes_start_missing, NULL);
 }
-
 
 static void
 login_processes_start_missing(void *context __attr_unused__)
@@ -727,15 +801,6 @@ login_processes_start_missing(void *context __attr_unused__)
 			login_processes_stall();
 			return;
 		}
-	}
-
-	if (logins_stalled) {
-		/* processes were created successfully */
-		i_info("Created login processes successfully, unstalling");
-
-		logins_stalled = FALSE;
-		timeout_remove(&to);
-		to = timeout_add(1000, login_processes_start_missing, NULL);
 	}
 }
 
@@ -827,11 +892,11 @@ void login_processes_init(void)
 
 void login_processes_deinit(void)
 {
+        login_processes_destroy_all();
+	hash_destroy(processes);
+
 	if (to != NULL)
 		timeout_remove(&to);
 	if (io_listen != NULL)
 		io_remove(&io_listen);
-
-        login_processes_destroy_all(TRUE);
-	hash_destroy(processes);
 }

@@ -3,6 +3,7 @@
 #include "common.h"
 #include "ioloop.h"
 #include "istream.h"
+#include "fd-set-nonblock.h"
 #include "fd-close-on-exec.h"
 #include "log.h"
 
@@ -30,7 +31,7 @@ static struct timeout *to;
 static unsigned int throttle_count;
 
 static int log_it(struct log_io *log_io, const char *line, bool continues);
-static void log_read(void *context);
+static int log_read(struct log_io *log_io);
 static void log_throttle_timeout(void *context);
 
 static bool log_write_pending(struct log_io *log_io)
@@ -58,12 +59,23 @@ static void log_throttle(struct log_io *log_io)
 		       FALSE);
 	}
 
-	if (log_io->io != NULL)
-		io_remove(&log_io->io);
+	if (log_io->io == NULL) {
+		i_assert(to != NULL);
+		return;
+	}
+
+	io_remove(&log_io->io);
+        throttle_count++;
 
 	if (to == NULL)
 		to = timeout_add(1000, log_throttle_timeout, NULL);
-        throttle_count++;
+}
+
+static void log_read_callback(void *context)
+{
+	struct log_io *log_io = context;
+
+	(void)log_read(log_io);
 }
 
 static void log_unthrottle(struct log_io *log_io)
@@ -74,7 +86,7 @@ static void log_unthrottle(struct log_io *log_io)
 	if (--throttle_count == 0 && to != NULL)
 		timeout_remove(&to);
 	log_io->io = io_add(i_stream_get_fd(log_io->stream),
-			    IO_READ, log_read, log_io);
+			    IO_READ, log_read_callback, log_io);
 }
 
 static int log_it(struct log_io *log_io, const char *line, bool continues)
@@ -118,23 +130,22 @@ static int log_it(struct log_io *log_io, const char *line, bool continues)
 	return 1;
 }
 
-static void log_read(void *context)
+static int log_read(struct log_io *log_io)
 {
-	struct log_io *log_io = context;
 	const unsigned char *data;
 	const char *line;
 	size_t size;
 	int ret;
 
 	if (!log_write_pending(log_io))
-		return;
+		return 0;
 
 	ret = i_stream_read(log_io->stream);
 	if (ret < 0) {
 		if (ret == -1) {
 			/* closed */
 			log_unref(log_io);
-			return;
+			return -1;
 		}
 
 		/* buffer full. treat it as one line */
@@ -143,14 +154,15 @@ static void log_read(void *context)
 		i_stream_skip(log_io->stream, size);
 
 		if (!log_it(log_io, line, TRUE))
-			return;
+			return 0;
 	}
 
 	if (!log_write_pending(log_io))
-		return;
+		return 0;
 
 	if (log_io->log_counter < log_io->max_lines_per_sec)
 		log_unthrottle(log_io);
+	return 0;
 }
 
 int log_create_pipe(struct log_io **log_r, unsigned int max_lines_per_sec)
@@ -163,6 +175,7 @@ int log_create_pipe(struct log_io **log_r, unsigned int max_lines_per_sec)
 		return -1;
 	}
 
+	fd_set_nonblock(fd[0], TRUE);
 	fd_close_on_exec(fd[0], TRUE);
 	fd_close_on_exec(fd[1], TRUE);
 
@@ -276,7 +289,10 @@ void log_deinit(void)
 
 	while (log_ios != NULL) {
 		next = log_ios->next;
-		log_unref(log_ios);
+		/* do one final log read in case there's still something
+		   waiting */
+		if (log_read(log_ios) == 0)
+			log_unref(log_ios);
 		log_ios = next;
 	}
 

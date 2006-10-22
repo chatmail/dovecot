@@ -216,7 +216,7 @@ static void auth_request_save_cache(struct auth_request *request,
 		/* lookup failed. */
 		if (result == PASSDB_RESULT_USER_UNKNOWN) {
 			auth_cache_insert(passdb_cache, request,
-					  passdb->cache_key, "");
+					  passdb->cache_key, "", FALSE);
 		}
 		return;
 	}
@@ -258,7 +258,8 @@ static void auth_request_save_cache(struct auth_request *request,
 		str_append_c(str, '\t');
 		str_append(str, "nodelay");
 	}
-	auth_cache_insert(passdb_cache, request, passdb->cache_key, str_c(str));
+	auth_cache_insert(passdb_cache, request, passdb->cache_key, str_c(str),
+			  result == PASSDB_RESULT_OK);
 }
 
 static bool auth_request_master_lookup_finish(struct auth_request *request)
@@ -352,6 +353,23 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 	return TRUE;
 }
 
+static void
+auth_request_verify_plain_callback_finish(enum passdb_result result,
+					  struct auth_request *request)
+{
+	if (!auth_request_handle_passdb_callback(&result, request)) {
+		/* try next passdb */
+		auth_request_verify_plain(request, request->mech_password,
+			request->private_callback.verify_plain);
+	} else {
+		auth_request_ref(request);
+		request->private_callback.verify_plain(result, request);
+		safe_memset(request->mech_password, 0,
+			    strlen(request->mech_password));
+		auth_request_unref(&request);
+	}
+}
+
 void auth_request_verify_plain_callback(enum passdb_result result,
 					struct auth_request *request)
 {
@@ -375,17 +393,7 @@ void auth_request_verify_plain_callback(enum passdb_result result,
 		}
 	}
 
-	if (!auth_request_handle_passdb_callback(&result, request)) {
-		/* try next passdb */
-		auth_request_verify_plain(request, request->mech_password,
-			request->private_callback.verify_plain);
-	} else {
-		auth_request_ref(request);
-		request->private_callback.verify_plain(result, request);
-		safe_memset(request->mech_password, 0,
-			    strlen(request->mech_password));
-		auth_request_unref(&request);
-	}
+	auth_request_verify_plain_callback_finish(result, request);
 }
 
 void auth_request_verify_plain(struct auth_request *request,
@@ -417,7 +425,7 @@ void auth_request_verify_plain(struct auth_request *request,
 	cache_key = passdb_cache == NULL ? NULL : passdb->cache_key;
 	if (passdb_cache_verify_plain(request, cache_key, password,
 				      &result, FALSE)) {
-		callback(result, request);
+		auth_request_verify_plain_callback_finish(result, request);
 		return;
 	}
 
@@ -429,6 +437,26 @@ void auth_request_verify_plain(struct auth_request *request,
 	else {
 		passdb->iface.verify_plain(request, password,
 					   auth_request_verify_plain_callback);
+	}
+}
+
+static void
+auth_request_lookup_credentials_callback_finish(enum passdb_result result,
+						const char *password,
+						struct auth_request *request)
+{
+	if (!auth_request_handle_passdb_callback(&result, request)) {
+		/* try next passdb */
+		auth_request_lookup_credentials(request, request->credentials,
+                	request->private_callback.lookup_credentials);
+	} else {
+		if (request->auth->verbose_debug_passwords &&
+		    result == PASSDB_RESULT_OK) {
+			auth_request_log_debug(request, "password",
+				"Credentials: %s", password);
+		}
+		request->private_callback.
+			lookup_credentials(result, password, request);
 	}
 }
 
@@ -463,19 +491,8 @@ void auth_request_lookup_credentials_callback(enum passdb_result result,
 		}
 	}
 
-	if (!auth_request_handle_passdb_callback(&result, request)) {
-		/* try next passdb */
-		auth_request_lookup_credentials(request, request->credentials,
-                	request->private_callback.lookup_credentials);
-	} else {
-		if (request->auth->verbose_debug_passwords &&
-		    result == PASSDB_RESULT_OK) {
-			auth_request_log_debug(request, "password",
-				"Credentials: %s", password);
-		}
-		request->private_callback.
-			lookup_credentials(result, password, request);
-	}
+	auth_request_lookup_credentials_callback_finish(result, password,
+							request);
 }
 
 void auth_request_lookup_credentials(struct auth_request *request,
@@ -495,8 +512,11 @@ void auth_request_lookup_credentials(struct auth_request *request,
 		if (passdb_cache_lookup_credentials(request, cache_key,
 						    &password, &scheme,
 						    &result, FALSE)) {
-			passdb_handle_credentials(result, password, scheme,
-						  callback, request);
+			password = result != PASSDB_RESULT_OK ? NULL :
+				passdb_get_credentials(request, password,
+						       scheme);
+			auth_request_lookup_credentials_callback_finish(
+				result, password, request);
 			return;
 		}
 	}
@@ -668,10 +688,13 @@ bool auth_request_set_login_username(struct auth_request *request,
 static int is_ip_in_network(const char *network, const struct ip_addr *ip)
 {
 	const uint32_t *ip1, *ip2;
-	struct ip_addr net_ip;
+	struct ip_addr src_ip, net_ip;
 	const char *p;
 	unsigned int max_bits, bits, pos, i;
 	uint32_t mask;
+
+	if (net_ipv6_mapped_ipv4_convert(ip, &src_ip) == 0)
+		ip = &src_ip;
 
 	max_bits = IPADDR_IS_V4(ip) ? 32 : 128;
 	p = strchr(network, '/');
@@ -844,6 +867,11 @@ int auth_request_password_verify(struct auth_request *request,
 		return 1;
 	}
 
+	if (request->passdb->deny) {
+		/* this is a deny database, we don't care about the password */
+		return 0;
+	}
+
 	ret = password_verify(plain_password, crypted_password, scheme,
 			      request->original_username);
 	if (ret < 0) {
@@ -890,6 +918,7 @@ auth_request_get_var_expand_table(const struct auth_request *auth_request,
 		{ 'r', NULL },
 		{ 'p', NULL },
 		{ 'w', NULL },
+		{ '!', NULL },
 		{ '\0', NULL }
 	};
 	struct var_expand_table *tab;
@@ -917,6 +946,8 @@ auth_request_get_var_expand_table(const struct auth_request *auth_request,
 		tab[8].value = escape_func(auth_request->mech_password,
 					   auth_request);
 	}
+	tab[9].value = auth_request->passdb == NULL ? "" :
+		dec2str(auth_request->passdb->id);
 	return tab;
 }
 

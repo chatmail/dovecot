@@ -11,9 +11,6 @@
 enum mail_index_open_flags {
 	/* Create index if it doesn't exist */
 	MAIL_INDEX_OPEN_FLAG_CREATE		= 0x01,
-	/* Open the index as fast as possible - do only minimal checks and
-	   delay opening cache/log files unless they're needed. */
-	MAIL_INDEX_OPEN_FLAG_FAST		= 0x02,
 	/* Don't try to mmap() index files */
 	MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE	= 0x04,
 	/* Don't try to write() to mmap()ed index files. Required for the few
@@ -265,9 +262,8 @@ int mail_index_view_sync_begin(struct mail_index_view *view,
 /* Returns -1 if error, 0 if sync is finished, 1 if record was filled. */
 int mail_index_view_sync_next(struct mail_index_view_sync_ctx *ctx,
 			      struct mail_index_view_sync_rec *sync_rec);
-const uint32_t *
-mail_index_view_sync_get_expunges(struct mail_index_view_sync_ctx *ctx,
-				 unsigned int *count_r);
+const array_t *
+mail_index_view_sync_get_expunges(struct mail_index_view_sync_ctx *ctx);
 void mail_index_view_sync_end(struct mail_index_view_sync_ctx **ctx);
 
 /* Returns the index header. */

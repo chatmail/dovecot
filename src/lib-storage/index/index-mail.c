@@ -20,7 +20,7 @@ struct mail_cache_field global_cache_fields[MAIL_CACHE_FIELD_COUNT] = {
 	{ "date.sent", 0, MAIL_CACHE_FIELD_FIXED_SIZE,
 	  sizeof(struct mail_sent_date), 0 },
 	{ "date.received", 0, MAIL_CACHE_FIELD_FIXED_SIZE,
-	  sizeof(time_t), 0 },
+	  sizeof(uint32_t), 0 },
 	{ "size.virtual", 0, MAIL_CACHE_FIELD_FIXED_SIZE,
 	  sizeof(uoff_t), 0 },
 	{ "size.physical", 0, MAIL_CACHE_FIELD_FIXED_SIZE,
@@ -136,11 +136,11 @@ static uoff_t index_mail_get_cached_physical_size(struct index_mail *mail)
 
 time_t index_mail_get_cached_received_date(struct index_mail *mail)
 {
-	time_t t;
+	uint32_t t;
 
 	if (!index_mail_get_fixed_field(mail, MAIL_CACHE_RECEIVED_DATE,
 					&t, sizeof(t)))
-		t = (time_t)-1;
+		return (time_t)-1;
 	return t;
 }
 
@@ -236,9 +236,8 @@ time_t index_mail_get_date(struct mail *_mail, int *timezone)
 	struct index_mail *mail = (struct index_mail *) _mail;
 	struct index_mail_data *data = &mail->data;
 	const char *str;
-	int tz;
 
-	if (data->sent_date.time != (time_t)-1) {
+	if (data->sent_date.time != (uint32_t)-1) {
 		if (timezone != NULL)
 			*timezone = data->sent_date.timezone;
 		return data->sent_date.time;
@@ -248,16 +247,19 @@ time_t index_mail_get_date(struct mail *_mail, int *timezone)
 					 &data->sent_date,
 					 sizeof(data->sent_date));
 
-	if (data->sent_date.time == (time_t)-1) {
+	if (data->sent_date.time == (uint32_t)-1) {
+		time_t t;
+		int tz;
+
 		str = mail_get_first_header(_mail, "Date");
 		if (str == NULL ||
 		    !message_date_parse((const unsigned char *)str,
-					strlen(str),
-					&data->sent_date.time, &tz)) {
+					strlen(str), &t, &tz)) {
 			/* 0 = not found / invalid */
-			data->sent_date.time = 0;
+			t = 0;
 			tz = 0;
 		}
+		data->sent_date.time = t;
 		data->sent_date.timezone = tz;
 		index_mail_cache_add(mail, MAIL_CACHE_SENT_DATE,
 				     &data->sent_date, sizeof(data->sent_date));
@@ -735,7 +737,7 @@ index_mail_alloc(struct mailbox_transaction_context *_t,
 	const struct mail_index_header *hdr;
 	pool_t pool;
 
-	pool = pool_alloconly_create("mail", 512);
+	pool = pool_alloconly_create("mail", 1024);
 	mail = p_new(pool, struct index_mail, 1);
 	mail->mail.pool = pool;
 	array_create(&mail->mail.module_contexts, pool, sizeof(void *), 5);
@@ -794,7 +796,7 @@ int index_mail_set_seq(struct mail *_mail, uint32_t seq)
 	data->virtual_size = (uoff_t)-1;
 	data->physical_size = (uoff_t)-1;
 	data->received_date = (time_t)-1;
-	data->sent_date.time = (time_t)-1;
+	data->sent_date.time = (uint32_t)-1;
 
 	if (!index_mail_get_fixed_field(mail, MAIL_CACHE_FLAGS,
 					&data->cache_flags,

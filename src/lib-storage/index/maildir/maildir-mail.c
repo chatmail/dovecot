@@ -80,6 +80,7 @@ static time_t maildir_mail_get_received_date(struct mail *_mail)
 	struct index_mail_data *data = &mail->data;
 	struct stat st;
 	const char *path;
+	uint32_t t;
 	int fd;
 
 	(void)index_mail_get_received_date(_mail);
@@ -110,9 +111,8 @@ static time_t maildir_mail_get_received_date(struct mail *_mail)
 			return (time_t)-1;
 	}
 
-	data->received_date = st.st_mtime;
-	index_mail_cache_add(mail, MAIL_CACHE_RECEIVED_DATE,
-			     &data->received_date, sizeof(data->received_date));
+	data->received_date = t = st.st_mtime;
+	index_mail_cache_add(mail, MAIL_CACHE_RECEIVED_DATE, &t, sizeof(t));
 	return data->received_date;
 }
 

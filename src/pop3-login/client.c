@@ -313,6 +313,8 @@ struct client *client_create(int fd, bool ssl, const struct ip_addr *local_ip,
 {
 	struct pop3_client *client;
 
+	i_assert(fd != -1);
+
 	connection_queue_add(1);
 
 	/* always use nonblocking I/O */
@@ -386,6 +388,9 @@ void client_destroy(struct pop3_client *client, const char *reason)
 	if (client->proxy != NULL) {
 		login_proxy_free(client->proxy);
 		client->proxy = NULL;
+
+		i_assert(client->refcount > 1);
+		client_unref(client);
 	}
 
 	if (client->common.proxy != NULL)
@@ -393,6 +398,7 @@ void client_destroy(struct pop3_client *client, const char *reason)
 	client_unref(client);
 
 	main_listen_start();
+	main_unref();
 }
 
 void client_destroy_internal_failure(struct pop3_client *client)
@@ -426,7 +432,6 @@ bool client_unref(struct pop3_client *client)
 	i_free(client->common.auth_mech_name);
 	i_free(client);
 
-	main_unref();
 	return FALSE;
 }
 

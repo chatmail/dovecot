@@ -1,5 +1,5 @@
-AC_PREREQ([2.59])
-AC_INIT([dovecot],[1.0.rc7],[dovecot@dovecot.org])
+xAC_PREREQ([2.59])
+AC_INIT([dovecot],[1.0.rc10],[dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE
@@ -135,6 +135,15 @@ AC_ARG_WITH(gssapi,
 	fi,
 	want_gssapi=no)
 
+AC_ARG_WITH(sia,
+[  --with-sia              Build with Tru64 SIA support],
+      if test x$withval = xno; then
+              want_sia=no
+      else
+              want_sia=yes
+      fi,
+      want_sia=no)
+
 AC_ARG_WITH(ldap,
 [  --with-ldap             Build with LDAP support],
 	if test x$withval = xno; then
@@ -250,7 +259,7 @@ AC_ARG_WITH(statedir,
 AC_SUBST(statedir)
 
 AC_ARG_WITH(gc,
-[  --with-gc               Use Boehm garbage collector (currently broken)],
+[  --with-gc               Use Boehm garbage collector],
 	if test x$withval = xyes; then
 		want_gc=yes
 	else
@@ -1417,6 +1426,14 @@ if test $want_gssapi = yes; then
 			CFLAGS=$old_CFLAGS
 		fi
 	fi
+fi
+
+if test $want_sia = yes; then
+	AC_CHECK_FUNC(sia_validate_user, [
+		AC_DEFINE(PASSDB_SIA,, Build with Tru64 SIA support)
+		passdb="$passdb sia"
+		AUTH_LIBS="$AUTH_LIBS -depth_ring_search"
+	])
 fi
 
 if test $want_ldap = yes; then

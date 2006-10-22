@@ -454,6 +454,8 @@ int ssl_proxy_new(int fd, struct ip_addr *ip, struct ssl_proxy **proxy_r)
 	SSL *ssl;
 	int sfd[2];
 
+	i_assert(fd != -1);
+
 	*proxy_r = NULL;
 
 	if (!ssl_initialized) {
@@ -475,7 +477,7 @@ int ssl_proxy_new(int fd, struct ip_addr *ip, struct ssl_proxy **proxy_r)
 		return -1;
 	}
 
-	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sfd) == -1) {
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sfd) < 0) {
 		i_error("socketpair() failed: %m");
 		SSL_free(ssl);
 		return -1;
@@ -630,7 +632,7 @@ static int ssl_verify_client_cert(int preverify_ok, X509_STORE_CTX *ctx)
 		(void)X509_NAME_oneline(subject, buf, sizeof(buf));
 		buf[sizeof(buf)-1] = '\0'; /* just in case.. */
 		if (!preverify_ok)
-			i_info("Invalid certificate: %s", buf);
+			i_info("Invalid certificate: %s: %s", X509_verify_cert_error_string(ctx->error),buf);
 		else
 			i_info("Valid certificate: %s", buf);
 	}

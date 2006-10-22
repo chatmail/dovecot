@@ -4,13 +4,14 @@
 #include "array.h"
 #include "seq-range-array.h"
 
-static bool seq_range_lookup(array_t *array, uint32_t seq, unsigned int *idx_r)
+static bool
+seq_range_lookup(const array_t *array, uint32_t seq, unsigned int *idx_r)
 {
         ARRAY_SET_TYPE(array, struct seq_range);
-	struct seq_range *data;
+	const struct seq_range *data;
 	unsigned int idx, left_idx, right_idx, count;
 
-	data = array_get_modifyable(array, &count);
+	data = array_get(array, &count);
 
 	idx = 0; left_idx = 0; right_idx = count;
 	while (left_idx < right_idx) {
@@ -174,7 +175,7 @@ void seq_range_array_remove(array_t *array, uint32_t seq)
 	}
 }
 
-bool seq_range_exists(array_t *array, uint32_t seq)
+bool seq_range_exists(const array_t *array, uint32_t seq)
 {
 	unsigned int idx;
 

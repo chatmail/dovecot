@@ -1,3 +1,62 @@
+v1.0.rc10 2006-10-16  Timo Sirainen <tss@iki.fi>
+
+	* When matching allowed_nets IPs, convert IPv6-mapped-IPv4 addresses
+	  to actual IPv4 addresses first.
+
+	+ IMAP: Try to avoid sending duplicate/useless message flag updates
+	+ Added support for non-plaintext authentication for vpopmail if it
+	  returns plaintext passwords. Based on patch by Remi Gacogne.
+	+ Added %D modified to return "sub.domain.org" as
+	  "sub,dc=domain,dc=org" (for LDAP queries). Patch by Andrey Panin.
+	- rc9 broke cache files in 64bit systems
+	- deliver works now with mail_chroot
+	- auth cache didn't work properly with multiple passdbs
+	- Fixes to handling CRLF linefeeds in mboxes.
+
+v1.0.rc9 2006-10-14  Timo Sirainen <tss@iki.fi>
+
+	* 64bit systems: dovecot.index.cache file will be rebuilt because
+	  some time fields have been changed from 64bit fields to 32bit
+	  fields. Now the same cache file can be used in both 32bit and
+	  64bit systems without it being rebuilt.
+	* Added libmysqlclient workaround to conflicting sha1_result symbol,
+	  which caused Dovecot to fail logging into MySQL.
+
+	+ dovecot.index.cache file opening is delayed until it's actually
+	  needed. This reduces disk accesses a bit with eg. STATUS commands.
+	+ auth_cache: Try to handle changing passwords automatically: If
+	  password verification fails, but the last one had succeeded, don't
+	  use the cache. This works only with plaintext auth.
+	- dovecot.index.cache: We didn't properly detect if some fields were
+	  different length than we expected, which caused assert crashes
+	- Lots of fixes to login/master process handling
+	- mbox: Fixed a bug causing "X-IMAPbase uid-last unexpectedly lost
+	  in mbox file" errors, and possibly others.
+
+v1.0.rc8 2006-10-09  Timo Sirainen <tss@iki.fi>
+
+	* GSSAPI: Changed POP3 service name to "pop", which is what the
+	  standard says
+	* "mbox:/var/mail/%u" no longer works as the mail location. You'll
+	  have to specify the mail root explicitly, just like the examples
+	  always have: "mbox:~/mail:INBOX=/var/mail/%u"
+
+	+ SHA1, LDAP-MD5, PLAIN-MD5, PLAIN-MD4: The password can be now either
+	  hex or base64 encoded. The encoding is detected automatically based
+	  on the password string length.	  
+	+ Allow running only Dovecot master and dovecot-auth processes with
+	  protocols=none setting
+	+ deliver: -f <envelope sender> parameter can be used to set mbox
+	  From_-line's sender address
+	+ deliver: Log all mail saves and failures
+	+ Tru64 SIA passdb support. Patch by Simon L Jackson.
+	- INBOX was listed twice in mailbox list if namespace prefix was used
+	- INBOX-prefixed namespaces were a bit broken
+	- kqueue: Fix 100% CPU usage
+	- deliver: Duplicate storage was a bit broken
+	- dictionary code was broken (ie. dict quota)
+	- SIGHUP caused crashes sometimes
+
 v1.0.rc7 2006-08-18  Timo Sirainen <tss@iki.fi>
 
 	* Require that Dovecot master process's version number matches the

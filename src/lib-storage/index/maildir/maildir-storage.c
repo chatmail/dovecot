@@ -72,6 +72,11 @@ maildir_create(const char *data, const char *user,
 	inbox_dir = root_dir = index_dir = control_dir = NULL;
 
 	if (data == NULL || *data == '\0') {
+		if ((flags & MAIL_STORAGE_FLAG_NO_AUTODETECTION) != 0) {
+			i_error("maildir: root directory not given");
+			return NULL;
+		}
+
 		/* we'll need to figure out the maildir location ourself.
 		   It's $HOME/Maildir unless we are chrooted. */
 		if ((home = getenv("HOME")) != NULL) {
@@ -811,7 +816,8 @@ static int rename_subfolders(struct index_storage *storage,
 	   other processes though. */
 	pool = pool_alloconly_create("Maildir subfolders list", 1024);
 	ARRAY_CREATE(&names_arr, default_pool, const char *, 64);
-	ctx = maildir_mailbox_list_init(&storage->storage, oldname, "*",
+	ctx = maildir_mailbox_list_init(&storage->storage, oldname,
+					MAILDIR_FS_SEP_S"*",
 					MAILBOX_LIST_FAST_FLAGS);
 	while ((list = maildir_mailbox_list_next(ctx)) != NULL) {
 		const char *name;

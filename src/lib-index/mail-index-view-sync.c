@@ -520,14 +520,10 @@ int mail_index_view_sync_next(struct mail_index_view_sync_ctx *ctx,
 	return 1;
 }
 
-const uint32_t *
-mail_index_view_sync_get_expunges(struct mail_index_view_sync_ctx *ctx,
-				  unsigned int *count_r)
+const array_t *
+mail_index_view_sync_get_expunges(struct mail_index_view_sync_ctx *ctx)
 {
-	const struct mail_transaction_expunge *data;
-
-	data = array_get(&ctx->expunges, count_r);
-	return (const uint32_t *)data;
+	return &ctx->expunges;
 }
 
 static void

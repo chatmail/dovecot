@@ -271,7 +271,7 @@ void index_mail_parse_header(struct message_part *part,
 
 	if (hdr == NULL) {
 		/* end of headers */
-		if (data->sent_date.time != (time_t)-1) {
+		if (data->sent_date.time != (uint32_t)-1) {
 			index_mail_cache_add(mail, MAIL_CACHE_SENT_DATE,
 					     &data->sent_date,
 					     sizeof(data->sent_date));
@@ -686,7 +686,7 @@ index_header_lookup_init(struct mailbox *box, const char *const headers[])
 	}
 	mail_cache_register_fields(ibox->cache, fields, count);
 
-	pool = pool_alloconly_create("index_header_lookup_ctx", 512);
+	pool = pool_alloconly_create("index_header_lookup_ctx", 1024);
 	ctx = p_new(pool, struct index_header_lookup_ctx, 1);
 	ctx->ctx.box = box;
 	ctx->pool = pool;

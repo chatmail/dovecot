@@ -405,6 +405,9 @@
 /* Build with shadow support */
 #undef PASSDB_SHADOW
 
+/* Build with Tru64 SIA support */
+#undef PASSDB_SIA
+
 /* Build with SQL support */
 #undef PASSDB_SQL
 

@@ -128,18 +128,9 @@ static bool mail_cache_verify_header(struct mail_cache *cache)
 		/* version changed - upgrade silently */
 		return FALSE;
 	}
-	if (hdr->compat_sizeof_uoff_t != sizeof(uoff_t) ||
-	    hdr->compat_sizeof_time_t != sizeof(time_t)) {
-		if (hdr->compat_sizeof_uoff_t == 0 &&
-		    hdr->compat_sizeof_time_t == 0) {
-			/* FIXME: keep backwards compatibility for a while.
-			   set hdr_modified=TRUE so header gets fixed the next
-			   time cache is locked. */
-			cache->hdr_modified = TRUE;
-		} else {
-			/* architecture change - handle silently(?) */
-			return -1;
-		}
+	if (hdr->compat_sizeof_uoff_t != sizeof(uoff_t)) {
+		/* architecture change - handle silently(?) */
+		return FALSE;
 	}
 
 	if (cache->hdr->indexid != cache->index->indexid) {
@@ -251,8 +242,10 @@ int mail_cache_map(struct mail_cache *cache, size_t offset, size_t size)
 	return 0;
 }
 
-static int mail_cache_open_and_verify(struct mail_cache *cache)
+static int mail_cache_try_open(struct mail_cache *cache)
 {
+	cache->opened = TRUE;
+
 	if (MAIL_INDEX_IS_IN_MEMORY(cache->index))
 		return 0;
 
@@ -273,7 +266,22 @@ static int mail_cache_open_and_verify(struct mail_cache *cache)
 	if (mail_cache_map(cache, 0, sizeof(struct mail_cache_header)) < 0)
 		return -1;
 
-	return mail_cache_header_fields_read(cache);
+	return 1;
+}
+
+int mail_cache_open_and_verify(struct mail_cache *cache)
+{
+	int ret;
+
+	ret = mail_cache_try_open(cache);
+	if (ret > 0)
+		ret = mail_cache_header_fields_read(cache);
+	if (ret < 0) {
+		/* failed for some reason - doesn't really matter,
+		   it's disabled for now. */
+		mail_cache_file_close(cache);
+	}
+	return ret;
 }
 
 static struct mail_cache *mail_cache_alloc(struct mail_index *index)
@@ -322,11 +330,6 @@ struct mail_cache *mail_cache_open_or_create(struct mail_index *index)
 	struct mail_cache *cache;
 
 	cache = mail_cache_alloc(index);
-	if (mail_cache_open_and_verify(cache) < 0) {
-		/* failed for some reason - doesn't really matter,
-		   it's disabled for now. */
-		mail_cache_file_close(cache);
-	}
 	return cache;
 }
 
@@ -335,6 +338,7 @@ struct mail_cache *mail_cache_create(struct mail_index *index)
 	struct mail_cache *cache;
 
 	cache = mail_cache_alloc(index);
+	cache->opened = TRUE;
 	cache->need_compress_file_seq = (uint32_t)-1;
 	return cache;
 }
@@ -387,6 +391,9 @@ int mail_cache_lock(struct mail_cache *cache)
 	int i, ret;
 
 	i_assert(!cache->locked);
+
+	if (!cache->opened)
+		(void)mail_cache_open_and_verify(cache);
 
 	if (MAIL_CACHE_IS_UNUSABLE(cache) ||
 	    MAIL_INDEX_IS_IN_MEMORY(cache->index))
@@ -485,10 +492,6 @@ int mail_cache_unlock(struct mail_cache *cache)
 	}
 
 	if (cache->hdr_modified) {
-		/* FIXME: for backwards compatibility - keep them for a while */
-		cache->hdr_copy.compat_sizeof_uoff_t = sizeof(uoff_t);
-		cache->hdr_copy.compat_sizeof_time_t = sizeof(time_t);
-
 		cache->hdr_modified = FALSE;
 		if (mail_cache_write(cache, &cache->hdr_copy,
 				     sizeof(cache->hdr_copy), 0) < 0)

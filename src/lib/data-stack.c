@@ -91,7 +91,6 @@ unsigned int t_push(void)
 			frame_block = calloc(sizeof(*frame_block), 1);
 #else
 			frame_block = GC_malloc(sizeof(*frame_block));
-                        memset(frame_block, 0, sizeof(*frame_block));
 #endif
 			if (frame_block == NULL) {
 				i_fatal_status(FATAL_OUTOFMEM,
@@ -189,7 +188,7 @@ static struct stack_block *mem_block_alloc(size_t min_size)
 #ifndef USE_GC
 	block = malloc(SIZEOF_MEMBLOCK + alloc_size);
 #else
-	block = GC_malloc_atomic(SIZEOF_MEMBLOCK + alloc_size);
+	block = GC_malloc(SIZEOF_MEMBLOCK + alloc_size);
 #endif
 	if (block == NULL) {
 		i_fatal_status(FATAL_OUTOFMEM, "mem_block_alloc(): "

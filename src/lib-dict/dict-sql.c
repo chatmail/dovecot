@@ -310,8 +310,8 @@ static void sql_dict_set(struct dict_transaction_context *_ctx,
 			"ON DUPLICATE KEY UPDATE %s = '%s'",
 			dict->table, dict->select_field, dict->where_field,
 			dict->username_field,
-			sql_escape_string(dict->db, key),
 			sql_escape_string(dict->db, value),
+			sql_escape_string(dict->db, key),
 			sql_escape_string(dict->db, dict->username),
 			dict->select_field,
 			sql_escape_string(dict->db, value));
@@ -320,8 +320,8 @@ static void sql_dict_set(struct dict_transaction_context *_ctx,
 			"INSERT INTO %s (%s, %s) VALUES ('%s', '%s') "
 			"ON DUPLICATE KEY UPDATE %s = '%s'",
 			dict->table, dict->select_field, dict->where_field,
-			sql_escape_string(dict->db, key),
 			sql_escape_string(dict->db, value),
+			sql_escape_string(dict->db, key),
                         dict->select_field,
 			sql_escape_string(dict->db, value));
 	}
@@ -344,19 +344,19 @@ static void sql_dict_atomic_inc(struct dict_transaction_context *_ctx,
 	t_push();
 	if (priv) {
 		query = t_strdup_printf(
-			"INSERT INTO %s (%s, %s, %s) VALUES ('%s', %lld, '%s') "
+			"INSERT INTO %s (%s, %s, %s) VALUES (%lld, '%s', '%s') "
 			"ON DUPLICATE KEY UPDATE %s = %s + %lld",
 			dict->table, dict->select_field, dict->where_field,
 			dict->username_field,
-                        sql_escape_string(dict->db, key), diff,
+                        diff, sql_escape_string(dict->db, key),
 			sql_escape_string(dict->db, dict->username),
                         dict->select_field, dict->select_field, diff);
 	} else {
 		query = t_strdup_printf(
-			"INSERT INTO %s (%s, %s) VALUES (%s, %lld) "
+			"INSERT INTO %s (%s, %s) VALUES (%lld, '%s') "
 			"ON DUPLICATE KEY UPDATE %s = %s + %lld",
 			dict->table, dict->select_field, dict->where_field,
-                        sql_escape_string(dict->db, key), diff,
+                        diff, sql_escape_string(dict->db, key),
                         dict->select_field, dict->select_field, diff);
 	}
 	sql_update(ctx->sql_ctx, query);

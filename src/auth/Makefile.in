@@ -82,12 +82,12 @@ am_dovecot_auth_OBJECTS = auth.$(OBJEXT) auth-cache.$(OBJEXT) \
 	passdb-ldap.$(OBJEXT) passdb-passwd.$(OBJEXT) \
 	passdb-passwd-file.$(OBJEXT) passdb-pam.$(OBJEXT) \
 	passdb-checkpassword.$(OBJEXT) passdb-shadow.$(OBJEXT) \
-	passdb-vpopmail.$(OBJEXT) passdb-sql.$(OBJEXT) \
-	userdb.$(OBJEXT) userdb-blocking.$(OBJEXT) \
-	userdb-ldap.$(OBJEXT) userdb-passwd.$(OBJEXT) \
-	userdb-passwd-file.$(OBJEXT) userdb-prefetch.$(OBJEXT) \
-	userdb-static.$(OBJEXT) userdb-vpopmail.$(OBJEXT) \
-	userdb-sql.$(OBJEXT)
+	passdb-sia.$(OBJEXT) passdb-vpopmail.$(OBJEXT) \
+	passdb-sql.$(OBJEXT) userdb.$(OBJEXT) \
+	userdb-blocking.$(OBJEXT) userdb-ldap.$(OBJEXT) \
+	userdb-passwd.$(OBJEXT) userdb-passwd-file.$(OBJEXT) \
+	userdb-prefetch.$(OBJEXT) userdb-static.$(OBJEXT) \
+	userdb-vpopmail.$(OBJEXT) userdb-sql.$(OBJEXT)
 dovecot_auth_OBJECTS = $(am_dovecot_auth_OBJECTS)
 am__DEPENDENCIES_1 =
 dovecot_auth_DEPENDENCIES = libpassword.a \
@@ -310,6 +310,7 @@ dovecot_auth_SOURCES = \
 	passdb-pam.c \
 	passdb-checkpassword.c \
 	passdb-shadow.c \
+	passdb-sia.c \
 	passdb-vpopmail.c \
 	passdb-sql.c \
 	userdb.c \
@@ -473,6 +474,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-passwd-file.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-passwd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-shadow.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-sia.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-sql.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-vpopmail.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb.Po@am__quote@

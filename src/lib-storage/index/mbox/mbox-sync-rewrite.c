@@ -118,9 +118,8 @@ void mbox_sync_headers_add_space(struct mbox_sync_mail_context *ctx,
 
 	/* pos points to end of header now, and start_pos to beginning
 	   of whitespace. */
+	mbox_sync_move_buffer(ctx, pos, size, 0);
 
-	buffer_copy(ctx->header, pos + size,
-		    ctx->header, pos, (size_t)-1);
 	p = buffer_get_space_unsafe(ctx->header, pos, size);
 	memset(p, ' ', size);
 
@@ -321,6 +320,7 @@ static void mbox_sync_read_next(struct mbox_sync_context *sync_ctx,
 				uoff_t expunged_space)
 {
 	uint32_t old_prev_msg_uid;
+	unsigned int first_mail_expunge_extra;
 
 	memset(mail_ctx, 0, sizeof(*mail_ctx));
 	mail_ctx->sync_ctx = sync_ctx;
@@ -335,13 +335,17 @@ static void mbox_sync_read_next(struct mbox_sync_context *sync_ctx,
 	   so we have to fool it. */
 	old_prev_msg_uid = sync_ctx->prev_msg_uid;
 	sync_ctx->prev_msg_uid = mails[idx].uid == 0 ? 0 : mails[idx].uid-1;
-	if (mails[idx].from_offset+1 - expunged_space != 0) {
+
+	first_mail_expunge_extra = 1 +
+		sync_ctx->first_mail_crlf_expunged ? 1 : 0;
+	if (mails[idx].from_offset +
+	    first_mail_expunge_extra - expunged_space != 0) {
 		sync_ctx->dest_first_mail = mails[idx].from_offset == 0;
 	} else {
 		/* we need to skip over the initial \n (it's already counted in
 		   expunged_space) */
 		sync_ctx->dest_first_mail = TRUE;
-		mails[idx].from_offset++;
+		mails[idx].from_offset += first_mail_expunge_extra;
 	}
 
 	mbox_sync_parse_next_mail(sync_ctx->input, mail_ctx);
