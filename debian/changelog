@@ -1,3 +1,10 @@
+dovecot (1.0.rc10-2) unstable; urgency=low
+
+  * debian/patches/dovecot-example.dpatch: commented out a close brace.
+    (Closes: #394785)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Mon, 23 Oct 2006 08:17:13 +0000
+
 dovecot (1.0.rc10-1) unstable; urgency=low
 
   * New upstream release. (Closes: #393004)
