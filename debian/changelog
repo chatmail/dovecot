@@ -1,3 +1,9 @@
+dovecot (1.0.rc10-3) unstable; urgency=low
+
+  * debian/rules: fixed two typos in the configure call. (Closes: #395016)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Tue, 24 Oct 2006 15:09:25 +0000
+
 dovecot (1.0.rc10-2) unstable; urgency=low
 
   * debian/patches/dovecot-example.dpatch: commented out a close brace.
