@@ -42,6 +42,7 @@ config.status: patch-stamp configure
 
 build: build-stamp
 
+
 build-stamp:  config.status
 	dh_testdir
 
@@ -75,6 +76,9 @@ install: build
 
 	# Add here commands to install the package into debian/dovecot.
 	$(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
+	# dovecot-sieve plugin
+	(cd dovecot-sieve; sh autogen.sh; ./configure --with-dovecot=..)
+	$(MAKE) -C dovecot-sieve install prefix=$(CURDIR)/debian/dovecot-common/usr
 	# cp $(CURDIR)/src/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot.conf
 	chmod 0600 $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot.conf

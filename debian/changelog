@@ -1,6 +1,7 @@
 dovecot (1.0.rc10-3) unstable; urgency=low
 
   * debian/rules: fixed two typos in the configure call. (Closes: #395016)
+  * Included dovecot-sieve plug-in from CVS. (Closes: #394885)
 
  -- Fabio Tranchitella <kobold@debian.org>  Tue, 24 Oct 2006 15:09:25 +0000
 
