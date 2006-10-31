@@ -1,9 +1,11 @@
-dovecot (1.0.rc10-3) unstable; urgency=low
+dovecot (1.0.rc10-3) unstable; urgency=medium
 
   * debian/rules: fixed two typos in the configure call. (Closes: #395016)
   * Included dovecot-sieve plug-in from CVS. (Closes: #394885)
+  * Urgency medium: we are near the freeze, and this release must be part
+    of etch.
 
- -- Fabio Tranchitella <kobold@debian.org>  Tue, 24 Oct 2006 15:09:25 +0000
+ -- Fabio Tranchitella <kobold@debian.org>  Tue, 31 Oct 2006 06:30:45 +0000
 
 dovecot (1.0.rc10-2) unstable; urgency=low
 
