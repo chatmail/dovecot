@@ -31,7 +31,7 @@
 #define DEFAULT_CONFIG_FILE SYSCONFDIR"/dovecot.conf"
 #define DEFAULT_AUTH_SOCKET_PATH PKG_RUNDIR"/auth-master"
 #define DEFAULT_SENDMAIL_PATH "/usr/lib/sendmail"
-#define DEFAULT_ENVELOPE_SENDER "dovecot.deliver"
+#define DEFAULT_ENVELOPE_SENDER "MAILER-DAEMON"
 
 /* After buffer grows larger than this, create a temporary file to /tmp
    where to read the mail. */
@@ -313,7 +313,7 @@ static const char *address_sanitize(const char *address)
 	addr = message_address_parse(pool, (const unsigned char *)address,
 				     strlen(address), 1, FALSE);
 
-	if (addr->mailbox == NULL || addr->domain == NULL ||
+	if (addr == NULL || addr->mailbox == NULL || addr->domain == NULL ||
 	    *addr->mailbox == '\0')
 		ret = DEFAULT_ENVELOPE_SENDER;
 	else if (*addr->domain == '\0')
@@ -373,7 +373,9 @@ static void open_logfile(const char *username)
 
 static void print_help(void)
 {
-	printf("Usage: deliver [-c <config file>] [-d <destination user>] [-m <mailbox>]\n");
+	printf(
+"Usage: deliver [-c <config file>] [-d <destination user>] [-m <mailbox>]\n"
+"               [-f <envelope sender>]\n");
 }
 
 int main(int argc, char *argv[])
@@ -446,7 +448,7 @@ int main(int argc, char *argv[])
 			i++;
 			if (i == argc) {
 				i_fatal_status(EX_USAGE,
-					       "Missing envleope argument");
+					       "Missing envelope argument");
 			}
 			envelope_sender = argv[i];
 		} else {
@@ -477,6 +479,9 @@ int main(int argc, char *argv[])
 
 	config_file_init(config_path);
 	open_logfile(user);
+
+	if (getenv("MAIL_DEBUG") != NULL)
+		env_put("DEBUG=1");
 
 	if (destination != NULL) {
 		auth_socket = getenv("AUTH_SOCKET_PATH");
@@ -522,10 +527,14 @@ int main(int argc, char *argv[])
         mail_storage_init();
 	mail_storage_register_all();
 
-	/* MAIL comes from userdb, DEFAULT_MAIL_ENV from dovecot.conf */
+	/* MAIL comes from userdb, MAIL_LOCATION from dovecot.conf */
 	mail_env = getenv("MAIL");
 	if (mail_env == NULL) 
+		mail_env = getenv("MAIL_LOCATION");
+	if (mail_env == NULL)  {
+		/* Keep this for backwards compatibility */
 		mail_env = getenv("DEFAULT_MAIL_ENV");
+	}
 	if (mail_env != NULL) {
 		table = get_var_expand_table(destination, getenv("HOME"));
 		mail_env = expand_mail_env(mail_env, table);

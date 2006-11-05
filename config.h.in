@@ -219,6 +219,9 @@
 /* Define if you have statfs.f_mntfromname */
 #undef HAVE_STATFS_MNTFROMNAME
 
+/* Define if you have statvfs.f_mntfromname */
+#undef HAVE_STATVFS_MNTFROMNAME
+
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H
 

@@ -32,6 +32,7 @@ struct trash_mailbox {
 	/* temporarily set while cleaning: */
 	struct mailbox *box;
 	struct mailbox_transaction_context *trans;
+        struct mail_search_arg search_arg;
 	struct mail_search_context *search_ctx;
 	struct mail *mail;
 
@@ -48,19 +49,29 @@ static pool_t config_pool;
 /* trash_boxes ordered by priority, highest first */
 static array_t ARRAY_DEFINE(trash_boxes, struct trash_mailbox);
 
+static int sync_mailbox(struct mailbox *box)
+{
+	struct mailbox_sync_context *ctx;
+        struct mailbox_sync_rec sync_rec;
+        struct mailbox_status status;
+
+	ctx = mailbox_sync_init(box, MAILBOX_SYNC_FLAG_FULL_READ);
+	while (mailbox_sync_next(ctx, &sync_rec) > 0)
+		;
+	return mailbox_sync_deinit(&ctx, &status);
+}
+
 static int trash_clean_mailbox_open(struct trash_mailbox *trash)
 {
-        struct mail_search_arg search_arg;
-
 	trash->box = mailbox_open(trash->storage, trash->name, NULL,
 				  MAILBOX_OPEN_KEEP_RECENT);
+	if (sync_mailbox(trash->box) < 0)
+		return -1;
+
 	trash->trans = mailbox_transaction_begin(trash->box, 0);
 
-	memset(&search_arg, 0, sizeof(search_arg));
-	search_arg.type = SEARCH_ALL;
-
-	trash->search_ctx =
-		mailbox_search_init(trash->trans, NULL, &search_arg, NULL);
+	trash->search_ctx = mailbox_search_init(trash->trans, NULL,
+						&trash->search_arg, NULL);
 	trash->mail = mail_alloc(trash->trans, MAIL_FETCH_PHYSICAL_SIZE |
 				 MAIL_FETCH_RECEIVED_DATE, NULL);
 
@@ -88,7 +99,8 @@ static int trash_clean_mailbox_get_next(struct trash_mailbox *trash,
 	return 1;
 }
 
-static int trash_try_clean_mails(uint64_t size_needed)
+static int trash_try_clean_mails(struct quota_root_transaction_context *ctx,
+				 uint64_t size_needed)
 {
 	struct trash_mailbox *trashes;
 	unsigned int i, j, count, oldest_idx;
@@ -98,6 +110,14 @@ static int trash_try_clean_mails(uint64_t size_needed)
 
 	trashes = array_get_modifyable(&trash_boxes, &count);
 	for (i = 0; i < count; ) {
+		if (trashes[i].storage == NULL) {
+			/* FIXME: this is really ugly. it'll do however until
+			   we get proper namespace support for lib-storage. */
+			struct mail_storage *const *storage;
+
+			storage = array_idx(&ctx->root->storages, 0);
+			trashes[i].storage = *storage;
+		}
 		/* expunge oldest mails first in all trash boxes with
 		   same priority */
 		oldest_idx = count;
@@ -141,6 +161,7 @@ __err:
 	for (i = 0; i < count; i++) {
 		struct trash_mailbox *trash = &trashes[i];
 
+		trash->mail_set = FALSE;
 		mail_free(&trash->mail);
 		(void)mailbox_search_deinit(&trash->search_ctx);
 
@@ -178,7 +199,55 @@ trash_quota_root_try_alloc(struct quota_root_transaction_context *ctx,
 		}
 
 		/* not enough space. try deleting some from mailbox. */
-		ret = trash_try_clean_mails(mail_get_physical_size(mail));
+		ret = trash_try_clean_mails(ctx, mail_get_physical_size(mail));
+		if (ret <= 0)
+			return 0;
+	}
+
+	return 0;
+}
+
+static int
+trash_quota_root_try_alloc_bytes(struct quota_root_transaction_context *ctx,
+				 uoff_t size, bool *too_large_r)
+{
+	struct trash_quota_root *troot = TRASH_CONTEXT(ctx->root);
+	int ret, i;
+
+	for (i = 0; ; i++) {
+		ret = troot->super.try_alloc_bytes(ctx, size, too_large_r);
+		if (ret != 0 || *too_large_r)
+			return ret;
+
+		if (i == MAX_RETRY_COUNT)
+			break;
+
+		/* not enough space. try deleting some from mailbox. */
+		ret = trash_try_clean_mails(ctx, size);
+		if (ret <= 0)
+			return 0;
+	}
+
+	return 0;
+}
+
+static int
+trash_quota_root_test_alloc_bytes(struct quota_root_transaction_context *ctx,
+				  uoff_t size, bool *too_large_r)
+{
+	struct trash_quota_root *troot = TRASH_CONTEXT(ctx->root);
+	int ret, i;
+
+	for (i = 0; ; i++) {
+		ret = troot->super.test_alloc_bytes(ctx, size, too_large_r);
+		if (ret != 0 || *too_large_r)
+			return ret;
+
+		if (i == MAX_RETRY_COUNT)
+			break;
+
+		/* not enough space. try deleting some from mailbox. */
+		ret = trash_try_clean_mails(ctx, size);
 		if (ret <= 0)
 			return 0;
 	}
@@ -208,6 +277,8 @@ static void trash_quota_root_created(struct quota_root *root)
 	troot->super = root->v;
 	root->v.deinit = trash_quota_root_deinit;
 	root->v.try_alloc = trash_quota_root_try_alloc;
+	root->v.try_alloc_bytes = trash_quota_root_try_alloc_bytes;
+	root->v.test_alloc_bytes = trash_quota_root_test_alloc_bytes;
 
 	trash_quota_module_id = quota_module_id++;
 	array_idx_set(&root->quota_module_contexts,
@@ -247,6 +318,7 @@ static int read_configuration(const char *path)
 		trash = array_append_space(&trash_boxes);
 		trash->name = p_strdup(config_pool, name+1);
 		trash->priority = atoi(t_strdup_until(line, name));
+		trash->search_arg.type = SEARCH_ALL;
 	}
 	i_stream_destroy(&input);
 	(void)close(fd);

@@ -115,7 +115,10 @@ struct mbox_sync_context {
 	array_t ARRAY_DEFINE(syncs, struct mail_index_sync_rec);
 	struct mail_index_sync_rec sync_rec;
 
+	/* per-mail pool */
 	pool_t mail_keyword_pool;
+	/* used for mails[].keywords */
+	pool_t saved_keywords_pool;
 
 	uint32_t prev_msg_uid, next_uid, idx_next_uid;
 	uint32_t seq, idx_seq, need_space_seq;

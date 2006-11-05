@@ -1,7 +1,7 @@
+ - still problems with CRLF mboxes..
+ - mbox_min_index_size != 0 causes Invalid new transaction log sequence (4 >= 4)
  - ldap auth is leaking memory?
- - master leaks log fds with kqueue
- - login -> master UNIX socket handling handling is a bit broken
-     - added sanity checks now. see if errors changed?
+ - master leaks log fds with kqueue (can't reproduce)
 
  - something should be done to umask setting. we should be creating files with
    0666 or 0777 and rely on umask, but we shouldn't do that unless we're sure
@@ -10,8 +10,6 @@
  - filesystem group quota patch
  - HFS+ avoid-hardlinks patch?
  - ssl_verify_client_cert isn't working if the SSL cert doesn't have CRL
- - Courier-compatible INBOX. namespace gives "invalid namespace" errors
-    - lsub "" IN% -> doesn't show anything
 
  - keywords:
     - add some limits to how many there can be
@@ -62,7 +60,8 @@
 
  - dbox
    - keyword list header locking isn't correct now. saving uses file's
-     dotlock, sync uses sync lock. and what about reading?...
+     dotlock, sync uses sync lock. and what about reading?... (I think this
+     is fixed?)
    - append_offset in header shouldn't be trusted
    - show in index if there are expunge-flagged mails in the mailbox
    - pop3_lock_session doesn't work
@@ -97,7 +96,6 @@
  - lib-storage
     - calls fsync()s etc. less often (when copying). optionally disable them.
     - x search charset asdf all -> should fail
-    - index_removal_timeout gets leaked in some conditions. how?
     - subscribe: IMAP(anonymous): open(anonymous/mail/.temp...) failed: Permission denied
     - should we allow following symlinks in mbox/maildirs? they are now.
        - if we implement shared mailboxes with shared indexes, never do that or
@@ -211,7 +209,6 @@
        be only one or two charsets which are used for nearly all conversions.
 
  - deliver
-    - empty mail gives an error.
     - We should always return EX_* failures and never our own 89 etc.
 
  - general

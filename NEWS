@@ -1,3 +1,37 @@
+v1.0.rc12 2006-11-05  Timo Sirainen <tss@iki.fi>
+
+	- rc11 didn't compile with some compilers
+	- default_mail_env fallbacking was broken with --exec-mail
+
+v1.0.rc11 2006-11-05  Timo Sirainen <tss@iki.fi>
+
+	* Renamed default_mail_env to mail_location. default_mail_env still
+	  works for backwards compatibility.
+	* deliver: When sending rejects, don't include Content-Type in the
+	  rejected mail's headers.
+	* LDAP changes:
+            * If auth binds are used, bind back to the default dn before doing
+	      a search. Otherwise it could fail if a user gave an invalid
+	      password.
+	    * Initial binding at connect is now done asynchronously.
+	    * Use pass_attrs even with auth_bind=yes since it may contain
+	      useful non-password fields.
+
+	+ passdb checkpassword: Give TCPLOCALIP and TCPREMOTEIP and PROTO=TCP
+	  environments to the checkpassword binary so we're UCSPI (and vchkpw)
+	  compatible.
+	- mbox handling was a bit broken in rc10
+	- Using Dovecot via inetd kept crashing dovecot master
+	- deliver: Don't crash with -f "". Changed the default from envelope
+	  to be "MAILER-DAEMON".
+	- INBOX wasn't shown with LSUB command if only prefixed namespaces
+	  were used.
+	- passdb ldap: Reconnecting to LDAP server wasn't working with
+	  auth binds.
+	- passdb sql: Non-plaintext authentication didn't work
+	- MySQL passdb ignored all non-password checks, such as allow_nets
+	- trash plugin was broken
+
 v1.0.rc10 2006-10-16  Timo Sirainen <tss@iki.fi>
 
 	* When matching allowed_nets IPs, convert IPv6-mapped-IPv4 addresses

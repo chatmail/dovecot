@@ -91,6 +91,7 @@ void auth_master_callback(const char *user, const char *const *args,
 	struct master_login_reply master_reply;
 	ssize_t ret;
 
+	memset(&master_reply, 0, sizeof(master_reply));
 	if (user == NULL)
 		master_reply.success = FALSE;
 	else {
@@ -321,7 +322,8 @@ login_read_request(struct login_process *p, struct master_login_request *req,
 			/* disconnected, ie. the login process died */
 		} else if (ret > 0) {
 			/* request wasn't fully read */
-			i_error("login: fd_read() returned partial %d", ret);
+			i_error("login: fd_read() returned partial %d",
+				(int)ret);
 		} else {
 			if (errno == EAGAIN)
 				return 0;
@@ -843,6 +845,7 @@ static int login_process_send_env(struct login_process *p)
 
 static bool login_process_init_group(struct login_process *p)
 {
+	p->group->refcount++;
 	p->group->processes++;
 	p->group->listening_processes++;
 

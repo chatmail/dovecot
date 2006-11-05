@@ -1,3 +1,226 @@
+2006-11-05 10:58  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: default_mail_env fallbacking was
+	  broken with --exec-mail.
+
+2006-11-04 23:04  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/mountpoint.c: Compile fix
+
+2006-11-04 21:20  Timo Sirainen <tss@iki.fi>
+
+	* TODO: Update
+
+2006-11-04 21:09  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, TODO, configure.in: Released 1.0.rc11.
+
+2006-11-04 21:08  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-ldap.c: Fixes to auth_bind.
+
+2006-11-04 20:55  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.c: Fixes
+
+2006-11-04 20:22  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: passdb-ldap.c, userdb-ldap.c: Do better logging.
+
+2006-11-04 20:09  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.c: Don't call ldap_parse_sasl_bind_result() in
+	  ldap_bind()'s callback. We're not doing SASL authentication.
+
+2006-11-04 19:51  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/trash/trash-plugin.c: Trash plugin was completely
+	  broken before.
+
+2006-11-04 19:49  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/module-dir.c: Call deinit() for all modules first before
+	  unloading them.
+
+2006-11-04 18:43  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/lib.h: Include stddef.h always to make NULL expand
+	  correctly in Solaris.
+
+2006-11-04 15:51  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.c: Cleanup
+
+2006-11-04 15:09  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: db-ldap.c, db-ldap.h, passdb-ldap.c: Crashfixes
+
+2006-11-04 15:00  Timo Sirainen <tss@iki.fi>
+
+	* doc/dovecot-ldap.conf, src/auth/db-ldap.c, src/auth/db-ldap.h,
+	  src/auth/passdb-ldap.c, src/auth/userdb-ldap.c: LDAP code
+	  changes: If auth binds are used, bind back to the default dn
+	  before doing a search. Otherwise it could fail if user gave an
+	  invalid password. Initial binding is now also done
+	  asynchronously. Reconnecting to LDAP server wasn't working with
+	  auth binds. Use pass_attrs even with auth_bind=yes since it may
+	  contain other non-password fields also. Updated dovecot-ldap.conf
+	  to contain sasl_bind settings and reflect these changes.
+
+2006-11-04 12:05  Timo Sirainen <tss@iki.fi>
+
+	* src/master/login-process.c: inetd logins kept crashing dovecot
+	  master.
+
+2006-11-04 11:22  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request-handler.c: If passdb returned only userdb_
+	  prefixed extra fields, don't add an extra TAB to the auth
+	  client's OK reply.
+
+2006-11-03 22:00  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/userdb.c: Error message string update.
+
+2006-11-03 14:19  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: ioloop-kqueue.c, ioloop-notify-kqueue.c: Removed
+	  compiler warnings with NetBSD.
+
+2006-11-03 14:04  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/lib/mountpoint.c: Added support for statvfs(),
+	  which is what the newer BSDs use.
+
+2006-11-03 13:21  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-ntlm/ntlm-message.c: Use i_toupper()
+
+2006-11-03 12:59  Timo Sirainen <tss@iki.fi>
+
+	* src/master/login-process.c: Error message fix for 64bit systems.
+
+2006-11-03 09:03  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/index-storage.c: Fix
+
+2006-11-02 21:34  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-checkpassword.c: Give TCPLOCALIP and TCPREMOTEIP
+	  and PROTO=TCP environments to checkpassword binary so we're UCSPI
+	  (and vchkpw) compatible.
+
+2006-11-02 21:19  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: passdb-ldap.c, passdb-sql.c: Non-plaintext
+	  authentication didn't work with sql as passdb. Cleaned up the
+	  same code for LDAP also.
+
+2006-11-02 20:53  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/mail-send.c: When sending rejects, don't include
+	  Content-Type in the rejected mail's headers.
+
+2006-11-02 20:42  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-list.c: If we had only prefixed namespaces and we
+	  listed for "%", INBOX's flags weren't correct and it wasn't shown
+	  at all with LSUB.
+
+2006-11-02 20:05  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Make mail_debug=yes work with deliver too.
+
+2006-11-02 19:55  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Added -f parameter to usage help.
+
+2006-11-02 19:53  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-mail/message-address.h: Comment update
+
+2006-11-02 19:52  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Don't crash with -f "". Changed the
+	  default from envelope to be MAILER-DAEMON.
+
+2006-11-02 18:18  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/: index-mail.c, index-mail.h: Compiling fix
+
+2006-11-02 18:11  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/auth-client.c: If we can't get auth user reply in a
+	  minute log timeout error and quit.
+
+2006-11-02 17:49  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-cache-fields.c, mail-cache.h: If cache file
+	  contains broken field type or decision type mark the cache
+	  corrupted instead of assert-crashing later.
+
+2006-11-02 17:26  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync.c: Last changes broke it
+	  badly.
+
+2006-11-01 18:47  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: failures.c, failures.h, imem.h, macros.h, str.h,
+	  strfuncs.h: Added sentinel GCC attribute to *_strconcat()
+	  functions. Added format printf-attribute to vprintf-type
+	  functions.
+
+2006-10-26 11:28  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync.c: Crashfix
+
+2006-10-26 00:17  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-sync-private.h, mbox-sync.c:
+	  Last keyword pool clearing optimization broke the keywords if we
+	  had to move mails around in the file.
+
+2006-10-24 16:10  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-lock.c: flock isn't anymore the default
+	  locking method, so don't bother giving a special error message if
+	  it fails.
+
+2006-10-17 11:26  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: auth-worker-client.c, passdb-blocking.c: Fixes to
+	  handling blocking passdb (ie. MySQL) failures. It ignored any
+	  non-password related checks, such as allow_nets.
+
+2006-10-17 11:06  Timo Sirainen <tss@iki.fi>
+
+	* doc/variables.txt: default_mail_env -> mail_location.
+
+2006-10-17 11:02  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/lib-storage/index/mbox/mbox-storage.c:
+	  Use the name "mail root directory" to describe where the
+	  non-INBOX mbox mailboxes are and describe what it is in the
+	  config file.
+
+2006-10-17 10:55  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/deliver/deliver.c,
+	  src/master/mail-process.c, src/master/master-settings.c,
+	  src/master/master-settings.h: Renamed default_mail_env to
+	  mail_location. Keep the default_mail_env working anyway for
+	  backwards compatibility.
+
+2006-10-16 11:12  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-settings/settings.c: Handle the last line even if it
+	  doesn't end with LF.
+
+2006-10-15 23:31  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, TODO, configure.in: 1.0.rc10 released.
+
 2006-10-15 23:11  Timo Sirainen <tss@iki.fi>
 
 	* src/lib/network.c: Fix net_ipv6_mapped_ipv4_convert() to be

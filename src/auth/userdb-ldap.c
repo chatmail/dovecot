@@ -197,7 +197,7 @@ static void userdb_ldap_lookup(struct auth_request *auth_request,
 
 	request->request.attributes = conn->user_attr_names;
 
-	auth_request_log_debug(auth_request, "ldap",
+	auth_request_log_debug(auth_request, "ldap", "user search: "
 			       "base=%s scope=%s filter=%s fields=%s",
 			       request->request.base, conn->set.scope,
 			       request->request.filter,
@@ -219,7 +219,7 @@ userdb_ldap_preinit(struct auth_userdb *auth_userdb, const char *args)
 			    (hash_cmp_callback_t *)strcmp);
 
 	db_ldap_set_attrs(conn, conn->set.user_attrs, &conn->user_attr_names,
-			  conn->user_attr_map, default_attr_map);
+			  conn->user_attr_map, default_attr_map, NULL);
 	return &module->module;
 }
 

@@ -34,84 +34,108 @@ struct passdb_ldap_request {
 	} callback;
 };
 
+struct ldap_query_save_context {
+	struct ldap_connection *conn;
+	struct auth_request *auth_request;
+	LDAPMessage *entry;
+
+	string_t *debug;
+	unsigned int userdb_fields:1;
+	unsigned int add_userdb_uid:1;
+	unsigned int add_userdb_gid:1;
+};
+
+static void
+ldap_query_save_attr(struct ldap_query_save_context *ctx, const char *attr)
+{
+	struct auth *auth = ctx->auth_request->auth;
+	const char *name;
+	char **vals;
+	unsigned int i;
+
+	name = hash_lookup(ctx->conn->pass_attr_map, attr);
+
+	if (auth->verbose_debug) {
+		if (ctx->debug == NULL)
+			ctx->debug = t_str_new(256);
+		else
+			str_append_c(ctx->debug, ' ');
+		str_append(ctx->debug, attr);
+		str_printfa(ctx->debug, "(%s)=",
+			    name != NULL ? name : "?unknown?");
+	}
+
+	if (name == NULL)
+		return;
+
+	if (strncmp(name, "userdb_", 7) == 0) {
+		/* in case we're trying to use prefetch userdb,
+		   see if we need to add global uid/gid */
+		if (!ctx->userdb_fields) {
+			ctx->add_userdb_uid = ctx->add_userdb_gid = TRUE;
+			ctx->userdb_fields = TRUE;
+		}
+		if (strcmp(name, "userdb_uid") == 0)
+			ctx->add_userdb_uid = FALSE;
+		else if (strcmp(name, "userdb_gid") == 0)
+			ctx->add_userdb_gid = FALSE;
+	}
+
+	vals = ldap_get_values(ctx->conn->ld, ctx->entry, attr);
+	if (vals != NULL && *name != '\0') {
+		for (i = 0; vals[i] != NULL; i++) {
+			if (ctx->debug != NULL) {
+				if (i != 0)
+					str_append_c(ctx->debug, '/');
+				if (auth->verbose_debug_passwords ||
+				    strcmp(name, "password") != 0)
+					str_append(ctx->debug, vals[i]);
+				else {
+					str_append(ctx->debug,
+						   PASSWORD_HIDDEN_STR);
+				}
+			}
+			auth_request_set_field(ctx->auth_request, name, vals[i],
+					ctx->conn->set.default_pass_scheme);
+		}
+	}
+
+	ldap_value_free(vals);
+}
+
 static void
 ldap_query_save_result(struct ldap_connection *conn, LDAPMessage *entry,
 		       struct auth_request *auth_request)
 {
-	struct auth *auth = auth_request->auth;
+	struct ldap_query_save_context ctx;
 	BerElement *ber;
-	const char *name;
-	char *attr, **vals;
-	unsigned int i;
-	string_t *debug = NULL;
-	bool userdb_fields = FALSE;
-	bool add_userdb_uid = FALSE, add_userdb_gid = FALSE;
+	char *attr;
+
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.conn = conn;
+	ctx.auth_request = auth_request;
+	ctx.entry = entry;
 
 	attr = ldap_first_attribute(conn->ld, entry, &ber);
 	while (attr != NULL) {
-		name = hash_lookup(conn->pass_attr_map, attr);
-		vals = ldap_get_values(conn->ld, entry, attr);
-
-		if (auth->verbose_debug) {
-			if (debug == NULL)
-				debug = t_str_new(256);
-			else
-				str_append_c(debug, ' ');
-			str_append(debug, attr);
-			str_printfa(debug, "(%s)=",
-				    name != NULL ? name : "?unknown?");
-		}
-
-		if (strncmp(name, "userdb_", 7) == 0) {
-			/* in case we're trying to use prefetch userdb,
-			   see if we need to add global uid/gid */
-			if (!userdb_fields) {
-				add_userdb_uid = add_userdb_gid = TRUE;
-				userdb_fields = TRUE;
-			}
-			if (strcmp(name, "userdb_uid") == 0)
-				add_userdb_uid = FALSE;
-			else if (strcmp(name, "userdb_gid") == 0)
-				add_userdb_gid = FALSE;
-		}
-
-		if (name != NULL && vals != NULL && *name != '\0') {
-			for (i = 0; vals[i] != NULL; i++) {
-				if (debug != NULL) {
-					if (i != 0)
-						str_append_c(debug, '/');
-					if (auth->verbose_debug_passwords ||
-					    strcmp(name, "password") != 0)
-						str_append(debug, vals[i]);
-					else {
-						str_append(debug,
-							   PASSWORD_HIDDEN_STR);
-					}
-				}
-				auth_request_set_field(auth_request,
-						name, vals[i],
-						conn->set.default_pass_scheme);
-			}
-		}
-
-		ldap_value_free(vals);
+		ldap_query_save_attr(&ctx, attr);
 		ldap_memfree(attr);
 
 		attr = ldap_next_attribute(conn->ld, entry, ber);
 	}
 
-	if (add_userdb_uid && conn->set.uid != (uid_t)-1) {
+	if (ctx.add_userdb_uid && conn->set.uid != (uid_t)-1) {
 		auth_request_set_field(auth_request, "userdb_uid",
 				       dec2str(conn->set.uid), NULL);
 	}
-	if (add_userdb_gid && conn->set.gid != (gid_t)-1) {
+	if (ctx.add_userdb_gid && conn->set.gid != (gid_t)-1) {
 		auth_request_set_field(auth_request, "userdb_gid",
 				       dec2str(conn->set.gid), NULL);
 	}
 
-	if (debug != NULL) {
+	if (ctx.debug != NULL) {
 		auth_request_log_debug(auth_request, "ldap",
-				       "%s", str_c(debug));
+				       "result: %s", str_c(ctx.debug));
 	}
 }
 
@@ -131,7 +155,8 @@ handle_request_get_entry(struct ldap_connection *conn,
 		ret = ldap_result2error(conn->ld, res, 0);
 		if (ret != LDAP_SUCCESS) {
 			auth_request_log_error(auth_request, "ldap",
-					       "ldap_search() failed: %s",
+					       "ldap_search(%s) failed: %s",
+					       request->request.filter,
 					       ldap_err2string(ret));
 		} else {
 			/* get the reply */
@@ -180,7 +205,9 @@ static void handle_request(struct ldap_connection *conn,
 		auth_request_log_error(auth_request, "ldap",
 				       "Multiple password replies");
 	} else {
-		password = p_strdup(auth_request->pool, auth_request->passdb_password);
+		/* passdb_password may change on the way,
+		   so we'll need to strdup. */
+		password = t_strdup(auth_request->passdb_password);
 		if (password == NULL)
 			auth_request->no_password = TRUE;
 		passdb_result = PASSDB_RESULT_OK;
@@ -216,13 +243,48 @@ static void handle_request(struct ldap_connection *conn,
 	auth_request_unref(&auth_request);
 }
 
-static void
-handle_request_authbind(struct ldap_connection *conn,
-			struct ldap_request *request, LDAPMessage *res)
+static void authbind_start(struct ldap_connection *conn,
+			   struct ldap_request *ldap_request)
 {
 	struct passdb_ldap_request *passdb_ldap_request =
-		(struct passdb_ldap_request *)request;
-	struct auth_request *auth_request = request->context;
+		(struct passdb_ldap_request *)ldap_request;
+	struct auth_request *auth_request = ldap_request->context;
+	int msgid;
+
+	if (!conn->connecting) {
+		/* switch back to the default dn before doing the next search
+		   request */
+		conn->last_auth_bind = TRUE;
+
+		/* the DN is kept in base variable, a bit ugly.. */
+		msgid = ldap_bind(conn->ld, ldap_request->base,
+				  auth_request->mech_password,
+				  LDAP_AUTH_SIMPLE);
+		if (msgid == -1) {
+			i_error("ldap_bind(%s) failed: %s",
+				ldap_request->base, ldap_get_error(conn));
+			passdb_ldap_request->callback.
+				verify_plain(PASSDB_RESULT_INTERNAL_FAILURE,
+					     auth_request);
+			return;
+		}
+
+		auth_request_log_debug(auth_request, "ldap", "bind: dn=%s",
+				       ldap_request->base);
+	}
+
+	/* Bind started */
+	auth_request_ref(auth_request);
+	hash_insert(conn->requests, POINTER_CAST(msgid), ldap_request);
+}
+
+static void
+handle_request_authbind(struct ldap_connection *conn,
+			struct ldap_request *ldap_request, LDAPMessage *res)
+{
+	struct passdb_ldap_request *passdb_ldap_request =
+		(struct passdb_ldap_request *)ldap_request;
+	struct auth_request *auth_request = ldap_request->context;
 	enum passdb_result passdb_result;
 	int ret;
 
@@ -232,40 +294,25 @@ handle_request_authbind(struct ldap_connection *conn,
 		ret = ldap_result2error(conn->ld, res, 0);
 		if (ret == LDAP_SUCCESS)
 			passdb_result = PASSDB_RESULT_OK;
-		else if (ret == LDAP_INVALID_CREDENTIALS)
+		else if (ret == LDAP_INVALID_CREDENTIALS) {
+			auth_request_log_info(auth_request, "ldap",
+					      "invalid credentials");
 			passdb_result = PASSDB_RESULT_PASSWORD_MISMATCH;
-		else {
-			auth_request_log_error(request->context, "ldap",
+		} else {
+			auth_request_log_error(auth_request, "ldap",
 					       "ldap_bind() failed: %s",
 					       ldap_err2string(ret));
 		}
 	}
 
-	passdb_ldap_request->callback.verify_plain(passdb_result, auth_request);
-        auth_request_unref(&auth_request);
-}
-
-static void authbind_start(struct ldap_connection *conn,
-			   struct ldap_request *ldap_request, const char *dn)
-{
-	struct passdb_ldap_request *passdb_ldap_request =
-		(struct passdb_ldap_request *)ldap_request;
-	struct auth_request *auth_request = ldap_request->context;
-	int msgid;
-
-	msgid = ldap_bind(conn->ld, dn, auth_request->mech_password,
-			  LDAP_AUTH_SIMPLE);
-	if (msgid == -1) {
-		i_error("ldap_bind(%s) failed: %s", dn, ldap_get_error(conn));
+	if (conn->retrying && res == NULL) {
+		/* reconnected, retry binding */
+		authbind_start(conn, ldap_request);
+	} else {
 		passdb_ldap_request->callback.
-			verify_plain(PASSDB_RESULT_INTERNAL_FAILURE,
-				     auth_request);
-		return;
+			verify_plain(passdb_result, auth_request);
 	}
-
-	/* Bind started */
-	auth_request_ref(auth_request);
-	hash_insert(conn->requests, POINTER_CAST(msgid), ldap_request);
+        auth_request_unref(&auth_request);
 }
 
 static void
@@ -283,10 +330,15 @@ handle_request_authbind_search(struct ldap_connection *conn,
 	if (entry == NULL)
 		return;
 
+	ldap_query_save_result(conn, entry, auth_request);
+
 	/* switch the handler to the authenticated bind handler */
+	ldap_request->base =
+		p_strdup(auth_request->pool, ldap_get_dn(conn->ld, entry));
+	ldap_request->filter = NULL;
 	ldap_request->callback = handle_request_authbind;
 
-        authbind_start(conn, ldap_request, ldap_get_dn(conn->ld, entry));
+        authbind_start(conn, ldap_request);
 	auth_request_unref(&auth_request);
 }
 
@@ -316,7 +368,7 @@ static void ldap_lookup_pass(struct auth_request *auth_request,
 	ldap_request->context = auth_request;
 	ldap_request->attributes = conn->pass_attr_names;
 
-	auth_request_log_debug(auth_request, "ldap",
+	auth_request_log_debug(auth_request, "ldap", "pass search: "
 			       "base=%s scope=%s filter=%s fields=%s",
 			       ldap_request->base, conn->set.scope,
 			       ldap_request->filter,
@@ -343,7 +395,8 @@ ldap_verify_plain_auth_bind_userdn(struct auth_request *auth_request,
 	ldap_request->callback = handle_request_authbind;
 	ldap_request->context = auth_request;
 
-        authbind_start(conn, ldap_request, str_c(dn));
+	ldap_request->base = p_strdup(auth_request->pool, str_c(dn));
+        authbind_start(conn, ldap_request);
 }
 
 static void
@@ -367,9 +420,10 @@ ldap_verify_plain_authbind(struct auth_request *auth_request,
 	var_expand(str, conn->set.pass_filter, vars);
 	ldap_request->filter = p_strdup(auth_request->pool, str_c(str));
 
-	/* we don't want any attributes in our search results;
-	   we only need the DN. */
-	ldap_request->attributes = p_new(auth_request->pool, char *, 1);
+	/* we don't need the attributes to perform authentication, but they
+	   may contain some extra parameters. if a password is returned,
+	   it's just ignored. */
+	ldap_request->attributes = conn->pass_attr_names;
 
 	auth_request_ref(auth_request);
 	ldap_request->context = auth_request;
@@ -392,6 +446,13 @@ ldap_verify_plain(struct auth_request *request,
 		(struct ldap_passdb_module *)_module;
 	struct ldap_connection *conn = module->conn;
 	struct passdb_ldap_request *ldap_request;
+
+	/* reconnect if needed. this is also done by db_ldap_search(), but
+	   with auth binds we'll have to do it ourself */
+	if (db_ldap_connect(conn)< 0) {
+		callback(PASSDB_RESULT_INTERNAL_FAILURE, request);
+		return;
+	}
 
 	ldap_request = p_new(request->pool, struct passdb_ldap_request, 1);
 	ldap_request->callback.verify_plain = callback;
@@ -427,8 +488,11 @@ passdb_ldap_preinit(struct auth_passdb *auth_passdb, const char *args)
 		hash_create(default_pool, conn->pool, 0, str_hash,
 			    (hash_cmp_callback_t *)strcmp);
 
+	if (conn->set.auth_bind_userdn != NULL)
+		conn->set.auth_bind = TRUE;
 	db_ldap_set_attrs(conn, conn->set.pass_attrs, &conn->pass_attr_names,
-			  conn->pass_attr_map, default_attr_map);
+			  conn->pass_attr_map, default_attr_map,
+			  conn->set.auth_bind ? "password" : NULL);
 	module->module.cache_key =
 		auth_cache_parse_key(auth_passdb->auth->pool,
 				     conn->set.pass_filter);
