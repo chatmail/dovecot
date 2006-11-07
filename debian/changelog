@@ -1,3 +1,15 @@
+dovecot (1.0.rc12-2) unstable; urgency=low
+
+  * debian/rules:
+    + preserve upstream config.guess and config.sub. (Closes: #397404)
+    + really clean dovecot-sieve/src on clean target. (Closes: #397407)
+  * debian/control: added build-conflict with automake1.4. (Closes: #397409)
+  * dovecot-sieve/src/Makefile.am: move sieve plug-ins under
+    usr/lib/dovecot/lda/modules; thanks to Chris Vanden Berghe for pointing
+    this out.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Tue,  7 Nov 2006 09:26:56 +0100
+
 dovecot (1.0.rc12-1) unstable; urgency=low
 
   * New upstream release.
