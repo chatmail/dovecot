@@ -8,8 +8,8 @@
 exit 0
 @DPATCH@
 diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
---- trunk/dovecot-example.conf	2006-11-05 16:52:35.000000000 +0100
-+++ trunk.debian/dovecot-example.conf	2006-11-05 17:02:12.000000000 +0100
+--- trunk/dovecot-example.conf	2006-11-09 10:30:01.000000000 +0100
++++ trunk.debian/dovecot-example.conf	2006-11-09 10:33:41.000000000 +0100
 @@ -18,6 +18,7 @@
  # Protocols we want to be serving: imap imaps pop3 pop3s
  # If you only want to use dovecot-auth, you can set this to "none".
@@ -108,7 +108,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # Send IMAP capabilities in greeting message. This makes it unnecessary for
    # clients to request it with CAPABILITY command, so it saves one round-trip.
-@@ -542,11 +548,11 @@
+@@ -545,11 +551,11 @@
  
  protocol pop3 {
    # Login executable location.
@@ -122,7 +122,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # Don't try to set mails non-recent or seen with POP3 sessions. This is
    # mostly intended to reduce disk I/O. With maildir it doesn't move files
-@@ -590,7 +596,7 @@
+@@ -593,7 +599,7 @@
    # installations. %08Xu%08Xv will be the new default, so use it for new
    # installations.
    #
@@ -131,7 +131,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # POP3 logout format string:
    #  %t - number of TOP commands
-@@ -605,7 +611,7 @@
+@@ -608,7 +614,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -140,7 +140,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # Workarounds for various client bugs:
    #   outlook-no-nuls:
-@@ -622,9 +628,9 @@
+@@ -625,9 +631,9 @@
  ## LDA specific settings
  ##
  
@@ -152,7 +152,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # Hostname to use in various parts of sent mails, eg. in Message-Id.
    # Default is the system's real hostname.
-@@ -633,21 +639,21 @@
+@@ -636,21 +642,24 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -165,6 +165,9 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
    # UNIX socket path to master authentication server to find users.
    #auth_socket_path = /var/run/dovecot/auth-master
 -}
++
++  # Enabling Sieve plugin for server-side mail filtering
++  # mail_plugins = cmusieve
 +# }
  
  ##
@@ -177,7 +180,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
  # Set max. process size in megabytes.
  #auth_process_size = 256
-@@ -776,7 +782,8 @@
+@@ -780,7 +789,8 @@
      # because PAM modules can do all kinds of checks besides checking password,
      # such as checking IP address. Dovecot can't know about these checks
      # without some help. cache_key is simply a list of variables (see
@@ -187,9 +190,9 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
      # Here are some examples:
      #   %u - Username must match. Probably sufficient for most uses.
      #   %u%r - Username and remote IP address must match.
-@@ -823,13 +830,13 @@
- 
+@@ -832,14 +842,14 @@
    # SQL database
+   # http://wiki.dovecot.org/AuthDatabase/SQL
    #passdb sql {
 -    # Path for SQL configuration file, see doc/dovecot-sql.conf for example
 +    # Path for SQL configuration file, see /etc/dovecot/dovecot-sql.conf for example
@@ -197,15 +200,16 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
    #}
  
    # LDAP database
+   # http://wiki.dovecot.org/AuthDatabase/LDAP
    #passdb ldap {
 -    # Path for LDAP configuration file, see doc/dovecot-ldap.conf for example
 +    # Path for LDAP configuration file, see /etc/dovecot/dovecot-ldap.conf for example
      #args = 
    #}
  
-@@ -874,13 +881,13 @@
- 
+@@ -886,14 +896,14 @@
    # SQL database
+   # http://wiki.dovecot.org/AuthDatabase/SQL
    #userdb sql {
 -    # Path for SQL configuration file, see doc/dovecot-sql.conf for example
 +    # Path for SQL configuration file, see /etc/dovecot/dovecot-sql.conf for example
@@ -213,13 +217,14 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
    #}
  
    # LDAP database
+   # http://wiki.dovecot.org/AuthDatabase/LDAP
    #userdb ldap {
 -    # Path for LDAP configuration file, see doc/dovecot-ldap.conf for example
 +    # Path for LDAP configuration file, see /etc/dovecot/dovecot-ldap.conf for example
      #args = 
    #}
  
-@@ -942,6 +949,18 @@
+@@ -956,6 +966,18 @@
        #mode = 0660
      #}
    #}
