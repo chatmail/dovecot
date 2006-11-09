@@ -360,8 +360,10 @@ void client_destroy(struct pop3_client *client, const char *reason)
 		o_stream_close(client->output);
 
 	if (client->common.auth_request != NULL) {
-		auth_client_request_abort(client->common.auth_request);
-                client->common.auth_request = NULL;
+		i_assert(client->common.authenticating);
+		sasl_server_auth_client_error(&client->common, NULL);
+	} else {
+		i_assert(!client->common.authenticating);
 	}
 
 	if (client->common.master_tag != 0)
@@ -388,9 +390,6 @@ void client_destroy(struct pop3_client *client, const char *reason)
 	if (client->proxy != NULL) {
 		login_proxy_free(client->proxy);
 		client->proxy = NULL;
-
-		i_assert(client->refcount > 1);
-		client_unref(client);
 	}
 
 	if (client->common.proxy != NULL)

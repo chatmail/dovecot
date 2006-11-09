@@ -1,3 +1,17 @@
+v1.0.rc13 2006-11-08  Timo Sirainen <tss@iki.fi>
+
+	+ deliver: If we're executing as a normal system user, get the HOME
+	  environment from passwd if it's not set. This makes it possible to
+	  run deliver from .forward.
+	- Older compilers caused LDAP authentication to crash
+	- Dying LDAP connections weren't handled exactly correctly in rc11,
+	  although it seemed to work usually
+	- Fixed crashes and memory leaks with AUTHENTICATE command
+	- Fixed crashes and leaks with IMAP/POP3 proxying
+	- maildir: Changing a mailbox while another process was saving a
+	  message there at the same may have caused the changes to not be made
+	  into the maildir, which could have caused other problems later..
+
 v1.0.rc12 2006-11-05  Timo Sirainen <tss@iki.fi>
 
 	- rc11 didn't compile with some compilers

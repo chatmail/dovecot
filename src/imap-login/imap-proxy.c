@@ -15,6 +15,8 @@ static int proxy_input_line(struct imap_client *client,
 {
 	string_t *str;
 
+	i_assert(!client->destroyed);
+
 	if (!client->proxy_login_sent) {
 		/* this is a banner */
 		if (strncmp(line, "* OK ", 5) != 0) {
@@ -123,6 +125,7 @@ int imap_proxy_new(struct imap_client *client, const char *host,
 		   unsigned int port, const char *user, const char *password)
 {
 	i_assert(user != NULL);
+	i_assert(!client->destroyed);
 
 	if (password == NULL) {
 		i_error("proxy(%s): password not given",
@@ -133,7 +136,12 @@ int imap_proxy_new(struct imap_client *client, const char *host,
 	i_assert(client->refcount > 1);
 	connection_queue_add(1);
 
-	client_ref(client);
+	if (client->destroyed) {
+		/* connection_queue_add() decided that we were the oldest
+		   connection and killed us. */
+		return -1;
+	}
+
 	client->proxy = login_proxy_new(&client->common, host, port,
 					proxy_input, client);
 	if (client->proxy == NULL)

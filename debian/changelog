@@ -1,3 +1,9 @@
+dovecot (1.0.rc13-1) UNRELEASED; urgency=low
+
+  * (NOT RELEASED YET) New upstream release
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu,  9 Nov 2006 10:30:11 +0100
+
 dovecot (1.0.rc12-2) unstable; urgency=low
 
   * debian/rules:

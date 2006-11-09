@@ -1,3 +1,111 @@
+2006-11-07 21:33  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: When verifying the header, check that
+	  next_uid is larger than last message's UID.
+
+2006-11-07 21:22  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/: maildir-save.c,
+	  maildir-storage.h, maildir-sync.c: Saving mails could have
+	  skipped over transactions, which caused different kinds of
+	  problems.
+
+2006-11-07 19:37  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/client.c: Crashfix at quit
+
+2006-11-07 16:16  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: db-ldap.c, db-ldap.h, passdb-ldap.c: Handle LDAP
+	  requests while being disconnected more correctly.
+
+2006-11-07 15:19  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap-login/client.c, imap-login/imap-proxy.c,
+	  pop3-login/client.c, pop3-login/pop3-proxy.c: Memory leak fix
+
+2006-11-07 15:06  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap-login/client-authenticate.c, imap-login/client.c,
+	  imap-login/imap-proxy.c, login-common/client-common.h,
+	  login-common/sasl-server.c, pop3-login/client-authenticate.c,
+	  pop3-login/client.c, pop3-login/pop3-proxy.c: Crashfixes and more
+	  asserts. Mostly related to use of AUTHENTICATE/AUTH commands.
+
+2006-11-07 14:55  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-auth/auth-server-connection.c: Reduce memory usage in
+	  case we read a lot of auth replies at once.
+
+2006-11-07 14:01  Timo Sirainen <tss@iki.fi>
+
+	* src/imap-login/imap-proxy.c: If client disconnects before logging
+	  into remote server is complete, don't crash/leak memory.
+
+2006-11-07 13:59  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request-handler.c: Missing TAB before "pass" broke
+	  proxying.
+
+2006-11-07 13:58  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: istream-file.c, istream-mmap.c, ostream-file.c: When
+	  i/ostream is closed, change the fd to be -1 so it won't be
+	  accidentally used.
+
+2006-11-07 13:57  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop-epoll.c: Free all the used memory when destroying
+	  the ioloop.
+
+2006-11-07 12:52  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.h: Remove sasl_props from here too.
+
+2006-11-05 20:47  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: If we're executing as a normal system
+	  user, get the HOME environment from passwd if it's not set. This
+	  makes it possible to run deliver from .forward.
+
+2006-11-05 20:12  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/index-fetch.h: This file hasn't been used
+	  for a long time.
+
+2006-11-05 17:55  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: If both mail_location and
+	  default_mail_env are set in the config file, give an error.
+
+2006-11-05 17:30  Timo Sirainen <tss@iki.fi>
+
+	* doc/dovecot-ldap.conf: Comment updates
+
+2006-11-05 16:38  Timo Sirainen <tss@iki.fi>
+
+	* doc/: dovecot-ldap.conf, dovecot-sql.conf: Added comments that
+	  the files should be owned by root and 0600. Some cleanups to
+	  dovecot-ldap.conf.
+
+2006-11-05 16:12  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request-handler.c: Don't send "pass" back if it's
+	  already set, or if it's not known.
+
+2006-11-05 16:01  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Added missing imap_capability setting.
+
+2006-11-05 15:51  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: If proxy is returned, set also no_login
+	  automatically, since it's always wanted in such case anyway.
+
+2006-11-05 11:25  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: Released 1.0.rc12
+
 2006-11-05 10:58  Timo Sirainen <tss@iki.fi>
 
 	* src/master/master-settings.c: default_mail_env fallbacking was

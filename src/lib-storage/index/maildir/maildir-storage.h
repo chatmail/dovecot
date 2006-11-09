@@ -111,7 +111,7 @@ int maildir_sync_index_begin(struct maildir_mailbox *mbox,
 int maildir_sync_index(struct maildir_index_sync_context *sync_ctx,
 		       bool partial);
 int maildir_sync_index_finish(struct maildir_index_sync_context **sync_ctx,
-			      bool failed);
+			      bool failed, bool cancel);
 
 struct mailbox_transaction_context *
 maildir_transaction_begin(struct mailbox *box,

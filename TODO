@@ -1,3 +1,5 @@
+ - mmap_disable=yes: somtimes hdr.next_uid <= last_rec.uid
+ - auth_cache doesn't automatically take into account allow_nets
  - still problems with CRLF mboxes..
  - mbox_min_index_size != 0 causes Invalid new transaction log sequence (4 >= 4)
  - ldap auth is leaking memory?
@@ -210,6 +212,7 @@
 
  - deliver
     - We should always return EX_* failures and never our own 89 etc.
+    - recipient_delimiter setting so user+mailbox@domain works directly
 
  - general
     - add imap_logout_format
