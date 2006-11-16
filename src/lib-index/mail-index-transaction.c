@@ -777,13 +777,6 @@ void mail_index_ext_reset(struct mail_index_transaction *t, uint32_t ext_id,
 	array_idx_set(&t->ext_resets, ext_id, &reset_id);
 }
 
-void mail_index_update_header_ext(struct mail_index_transaction *t,
-				  uint32_t ext_id, size_t offset,
-				  const void *data, size_t size)
-{
-	// FIXME
-}
-
 void mail_index_update_ext(struct mail_index_transaction *t, uint32_t seq,
 			   uint32_t ext_id, const void *data, void *old_data_r)
 {

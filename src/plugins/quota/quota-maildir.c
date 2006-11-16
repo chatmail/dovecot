@@ -403,7 +403,7 @@ static int maildirsize_read(struct maildir_quota_root *root,
 	const char *path;
 	char buf[5120+1];
 	unsigned int size;
-	int fd, ret;
+	int fd, ret = 0;
 
 	t_push();
 	path = maildirsize_get_path(storage);

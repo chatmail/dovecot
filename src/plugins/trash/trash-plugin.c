@@ -339,7 +339,7 @@ void trash_plugin_init(void)
 	if (env == NULL)
 		return;
 
-	if (quota == NULL) {
+	if (quota_set == NULL) {
 		i_error("trash plugin: quota plugin not initialized");
 		return;
 	}

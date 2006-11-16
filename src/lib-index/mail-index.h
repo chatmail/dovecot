@@ -398,10 +398,6 @@ int mail_index_ext_get_size(struct mail_index_view *view,
 			    uint32_t ext_id, struct mail_index_map *map,
 			    uint32_t *hdr_size_r, uint16_t *record_size_r,
 			    uint16_t *record_align_r);
-/* Update extension header field. */
-void mail_index_update_header_ext(struct mail_index_transaction *t,
-				  uint32_t ext_id, size_t offset,
-				  const void *data, size_t size);
 /* Update extension record. If old_data_r is non-NULL and the record extension
    was already updated in this transaction, it's set to contain the data it's
    now overwriting. */

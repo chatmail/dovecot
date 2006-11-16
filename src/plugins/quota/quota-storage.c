@@ -125,7 +125,7 @@ static int quota_check(struct mailbox_transaction_context *t, struct mail *mail)
 		return -1;
 	} else {
 		mail_storage_set_error(t->box->storage,  "%s",
-				       quota_last_error(quota));
+				       quota_last_error(quota_set));
 		return -1;
 	}
 }
@@ -190,7 +190,7 @@ quota_save_init(struct mailbox_transaction_context *t,
 			return -1;
 		} else if (ret < 0) {
 			mail_storage_set_error(t->box->storage,  "%s",
-					       quota_last_error(quota));
+					       quota_last_error(quota_set));
 			return -1;
 		}
 	}
@@ -343,7 +343,7 @@ void quota_mail_storage_created(struct mail_storage *storage)
 
 	if ((storage->flags & MAIL_STORAGE_FLAG_SHARED_NAMESPACE) == 0) {
 		/* register to user's quota roots */
-		quota_add_user_storage(quota, storage);
+		quota_add_user_storage(quota_set, storage);
 	}
 }
 

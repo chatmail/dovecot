@@ -86,8 +86,6 @@ struct quota_root_iter {
 };
 
 struct quota_transaction_context {
-	struct quota *quota;
-
 	array_t ARRAY_DEFINE(root_transactions,
 			     struct quota_root_transaction_context *);
 };

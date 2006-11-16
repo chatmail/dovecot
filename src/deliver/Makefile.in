@@ -55,7 +55,7 @@ am_deliver_OBJECTS = auth-client.$(OBJEXT) deliver.$(OBJEXT) \
 	duplicate.$(OBJEXT) mail-send.$(OBJEXT) smtp-client.$(OBJEXT)
 deliver_OBJECTS = $(am_deliver_OBJECTS)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = ../lib/mountpoint.o ../lib/str-sanitize.o
+am__DEPENDENCIES_2 = ../lib/mountpoint.o
 am__DEPENDENCIES_3 = ../lib-storage/register/libstorage-register.a \
 	$(am__DEPENDENCIES_1) ../lib-storage/libstorage.a \
 	../lib-storage/subscription-file/libstorage_subscription_file.a \
@@ -226,8 +226,7 @@ deliver_LDFLAGS = -export-dynamic
 # get some functions included which only plugins use. liblib should probably
 # be a shared library so this wouldn't be needed..
 unused_objects = \
- 	../lib/mountpoint.o \
-	../lib/str-sanitize.o
+ 	../lib/mountpoint.o
 
 libs = \
 	../lib-storage/register/libstorage-register.a \

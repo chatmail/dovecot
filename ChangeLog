@@ -1,3 +1,116 @@
+2006-11-12 19:54  Timo Sirainen <tss@iki.fi>
+
+	* doc/auth-protocol.txt, src/auth/auth-master-connection.c: Removed
+	  "DIE" command from auth protocol. It wasn't implemented, and I'm
+	  not sure if it's such a good idea anyway.
+
+2006-11-12 19:52  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-transaction.c, mail-index.h: Removed
+	  mail_index_update_header_ext(). It's not implemented, it's not
+	  currently needed and it won't make it into v1.0 anyway.
+
+2006-11-12 19:50  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: Minor fix
+
+2006-11-12 19:34  Timo Sirainen <tss@iki.fi>
+
+	* src/util/.cvsignore: Added gdbhelper
+
+2006-11-12 18:48  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/: imap-quota/imap-quota-plugin.c,
+	  quota/quota-plugin.c, quota/quota-plugin.h,
+	  quota/quota-private.h, quota/quota-storage.c,
+	  trash/trash-plugin.c: s/quota/quota_set/ so we don't conflict
+	  with the quota symbol already present in Mac OS X.
+
+2006-11-12 18:02  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-cache-compress.c, mail-index.c: Removed code
+	  which is never called.
+
+2006-11-12 15:20  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync.c: Don't crash if syncing breaks.
+
+2006-11-12 14:06  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/Makefile.am: Removed str-sanitize.o from
+	  unused_objects list because we do use it nowadays.
+
+2006-11-12 13:07  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-ldap.c: Don't try to use ldap_bind() with empty
+	  passwords, since Windows 2003 AD skips password checking with
+	  them and just returns success.
+
+2006-11-12 12:59  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-ldap.c: Cleanups, extra assert
+
+2006-11-12 12:41  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap-login/client-authenticate.c, imap-login/client.c,
+	  login-common/master.c, pop3-login/client-authenticate.c,
+	  pop3-login/client.c: Fixed potential problems with client
+	  disconnecting while master was handling the login.
+
+2006-11-12 12:13  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-ldap.c: auth_bind=yes crashfix
+
+2006-11-12 12:06  Timo Sirainen <tss@iki.fi>
+
+	* doc/variables.txt, src/lib/var-expand.c: Fixed zero padding
+	  handling and documented it. %0.1n shouldn't enable it, and it
+	  really shouldn't stay for the next %variable. -sign also
+	  shouldn't stay for the next variable.
+
+2006-11-12 11:32  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/client.c: Don't crash if client disconnected while
+	  IDLEing.
+
+2006-11-12 11:31  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-idle.c: If mailbox is changed while syncing is being
+	  done, and the second sync's changes aren't fully sent to the
+	  client, we hanged (quite rare I think).
+
+2006-11-12 11:15  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-transaction-log-private.h,
+	  mail-transaction-log-view.c, mail-transaction-log.c: Code cleanup
+
+2006-11-12 11:13  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log-view.c: Memory/fd leak fix
+
+2006-11-08 20:51  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/ssl-proxy-openssl.c: Don't bother logging
+	  "syscall failed: EOF" messages. No-one cares about them.
+
+2006-11-08 17:03  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-transaction-log-private.h,
+	  mail-transaction-log.c: Don't leak opened .log.2 transaction
+	  logs.
+
+2006-11-08 13:26  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: 1.0.rc13 released
+
+2006-11-08 13:18  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, TODO: 1.0.rc13 released.
+
+2006-11-08 13:17  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Comment updates, wiki link updates.
+
 2006-11-07 21:33  Timo Sirainen <tss@iki.fi>
 
 	* src/lib-index/mail-index.c: When verifying the header, check that

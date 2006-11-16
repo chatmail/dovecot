@@ -38,7 +38,7 @@ quota_send(struct client_command_context *cmd, struct quota_root *root)
 			i++;
 		} else if (ret < 0) {
 			client_send_line(cmd->client, t_strconcat(
-				"* BAD ", quota_last_error(quota), NULL));
+				"* BAD ", quota_last_error(quota_set), NULL));
 		}
 	}
 	str_append_c(str, ')');
@@ -72,7 +72,7 @@ static bool cmd_getquotaroot(struct client_command_context *cmd)
 		return TRUE;
 	}
 
-	if (quota == NULL) {
+	if (quota_set == NULL) {
 		mailbox_close(&box);
 		client_send_tagline(cmd, "OK No quota.");
 		return TRUE;
@@ -112,12 +112,12 @@ static bool cmd_getquota(struct client_command_context *cmd)
 	if (!client_read_string_args(cmd, 1, &root_name))
 		return FALSE;
 
-	if (quota == NULL) {
+	if (quota_set == NULL) {
 		client_send_tagline(cmd, "OK No quota.");
 		return TRUE;
 	}
 
-	root = quota_root_lookup(quota, root_name);
+	root = quota_root_lookup(quota_set, root_name);
 	if (root == NULL) {
 		client_send_tagline(cmd, "NO Quota root doesn't exist.");
 		return TRUE;
@@ -145,12 +145,12 @@ static bool cmd_setquota(struct client_command_context *cmd)
 		return TRUE;
 	}
 
-	if (quota == NULL) {
+	if (quota_set == NULL) {
 		client_send_tagline(cmd, "OK No quota.");
 		return TRUE;
 	}
 
-	root = quota_root_lookup(quota, root_name);
+	root = quota_root_lookup(quota_set, root_name);
 	if (root == NULL) {
 		client_send_tagline(cmd, "NO Quota root doesn't exist.");
 		return TRUE;
@@ -168,7 +168,7 @@ static bool cmd_setquota(struct client_command_context *cmd)
                 value = strtoull(IMAP_ARG_STR_NONULL(&arg[1]), NULL, 10);
 		if (quota_set_resource(root, name, value) < 0) {
 			client_send_command_error(cmd,
-						  quota_last_error(quota));
+						  quota_last_error(quota_set));
 			return TRUE;
 		}
 	}

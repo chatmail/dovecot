@@ -1,3 +1,23 @@
+v1.0.rc14 2006-11-12  Timo Sirainen <tss@iki.fi>
+
+	* LDAP: Don't try to use ldap_bind() with empty passwords, since
+	  Windows 2003 AD skips password checking with them and just returns
+	  success.
+	* verbose_ssl=yes: Don't bother logging "syscall failed: EOF"
+	  messages. No-one cares about them.
+
+	+ Dovecot sources should now compile without any warnings with gcc 3.2+
+	- rc13 crashed if client disconnected while IDLEing
+	- LDAP: auth_bind=yes fixes
+        - %variables: Fixed zero padding handling and documented it. %0.1n
+	  shouldn't enable it, and it really shouldn't stay for the next
+	  %variable. -sign also shouldn't stay for the next variable.
+	- Don't leak opened .log.2 transaction logs.
+	- Fixed a potential hang in IDLE command (probably really rare).
+	- Fixed potential problems with client disconnecting while master was
+	  handling the login.
+	- quota plugin didn't work in Mac OS X
+
 v1.0.rc13 2006-11-08  Timo Sirainen <tss@iki.fi>
 
 	+ deliver: If we're executing as a normal system user, get the HOME
