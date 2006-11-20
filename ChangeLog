@@ -1,3 +1,94 @@
+2006-11-18 23:31  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: ostream-file.c, ostream.c: If connection is closed
+	  while buffer is being flushed in uncorking, don't assert-crash.
+
+2006-11-18 23:26  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/file-cache.c: And another off-by-one buffer overflow fix.
+
+2006-11-18 23:14  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/file-cache.c: Off-by-one buffer overflow fix. The code
+	  gets executed only with mmap_disable=yes when it's reading cache
+	  file.
+
+2006-11-18 22:17  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-checkpassword.c: Handle vpopmail's nonstandard
+	  exit codes.
+
+2006-11-18 22:02  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: When invalid character is found from
+	  username, say what character it is in the log message. Also with
+	  auth_debug=yes log the whole username (sanitized).
+
+2006-11-18 21:48  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-keywords.c: If we can't
+	  open dovecot-keywords file, don't crash.
+
+2006-11-18 21:34  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/client.c: Added asserts
+
+2006-11-18 21:29  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-idle.c: If syncing finished with an error and client
+	  had disconnected, we assert-crashed in io_add().
+
+2006-11-18 21:09  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/compat.c: my_strncasecmp() was broken.
+
+2006-11-18 21:01  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-transaction-log-private.h,
+	  mail-transaction-log-view.c, mail-transaction-log.c: Reference
+	  counting fixes. Fixes an assert crash when closing the index.
+
+2006-11-18 20:27  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/ssl-proxy-openssl.c: Call ssl_step() at startup
+	  instead of ssl_handshake(). If the first input packet was sent
+	  along with the handshake, we hanged.
+
+2006-11-15 14:22  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-storage.c: Maildir
+	  separator was still hardcoded to '.' in one place.
+
+2006-11-12 23:10  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.c: Solaris LDAP compiling fix.
+
+2006-11-12 21:31  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: If user has a home directory, but we can't
+	  chdir() there, log an error (but don't fail).
+
+2006-11-12 21:31  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/mail-send.c: Handle fwrite() failure early.
+
+2006-11-12 21:30  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync.c: If ftruncate() fails in
+	  error handling (it really shouldn't), log an error about it
+	  anyway.
+
+2006-11-12 20:08  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, TODO, configure.in: 1.0.rc14 released
+
+2006-11-12 20:04  Timo Sirainen <tss@iki.fi>
+
+	* src/: lib-storage/index/dbox/dbox-uidlist.c,
+	  lib-storage/index/maildir/maildir-storage.c,
+	  plugins/acl/acl-backend-vfile.c, plugins/quota/quota-maildir.c:
+	  Fixed some warnings with older gccs.
+
 2006-11-12 19:54  Timo Sirainen <tss@iki.fi>
 
 	* doc/auth-protocol.txt, src/auth/auth-master-connection.c: Removed

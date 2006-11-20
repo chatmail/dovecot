@@ -1,3 +1,15 @@
+v1.0.rc15 2006-11-19  Timo Sirainen <tss@iki.fi>
+
+	* Fixed an off-by-one buffer overflow in cache file handling. The
+	  code is executed only with mmap_disable=yes and only if index files
+	  are used (ie. INDEX=MEMORY is safe).
+	* passdb checkpassword: Handle vpopmail's non-standard exit codes.
+
+	- rc14 sometimes assert-crashed if .log.2 file existed in a mailbox
+	  (earlier versions leaked memory and file descriptors)
+	- io_add() assert-crashfixes
+	- Potential SSL hang fix at the beginning of the connection
+
 v1.0.rc14 2006-11-12  Timo Sirainen <tss@iki.fi>
 
 	* LDAP: Don't try to use ldap_bind() with empty passwords, since

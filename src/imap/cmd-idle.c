@@ -173,11 +173,6 @@ static bool cmd_idle_continue(struct client_command_context *cmd)
 	struct client *client = cmd->client;
 	struct cmd_idle_context *ctx = cmd->context;
 
-	if (client->output->closed) {
-		idle_finish(ctx, FALSE);
-		return TRUE;
-	}
-
 	if (ctx->manual_cork)  {
 		/* we're coming from idle_callback instead of a normal
 		   I/O handler, so we'll have to do corking manually */
@@ -220,6 +215,10 @@ static bool cmd_idle_continue(struct client_command_context *cmd)
 		o_stream_uncork(client->output);
 	}
 
+	if (client->output->closed) {
+		idle_finish(ctx, FALSE);
+		return TRUE;
+	}
 	if (client->io == NULL) {
 		/* input is pending */
 		client->io = io_add(i_stream_get_fd(client->input),
