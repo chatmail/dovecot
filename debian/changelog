@@ -10,6 +10,8 @@ dovecot (1.0.rc15-2) UNRELEASED; urgency=low
 dovecot (1.0.rc15-1) unstable; urgency=medium
 
   * New upstream release.
+  * Fixes a security bug: Off-by-one buffer overflow with mmap_disable=yes.
+    (See: http://www.dovecot.org/list/dovecot-news/2006-November/000023.html)
 
  -- Fabio Tranchitella <kobold@debian.org>  Mon, 20 Nov 2006 12:47:39 +0100
 
