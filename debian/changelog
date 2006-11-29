@@ -1,3 +1,12 @@
+dovecot (1.0.rc15-2) UNRELEASED; urgency=low
+
+  * debian/dovecot-common.README.Debian: updated details about raw logging;
+    thanks Chris Moore for providing a patch. (Closes: #400689)
+  * debian/patches/dovecot-example.dpatch: added a missing slash for an
+    absolute path. (Closes: #400830)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Wed, 29 Nov 2006 09:18:26 +0100
+
 dovecot (1.0.rc15-1) unstable; urgency=medium
 
   * New upstream release.

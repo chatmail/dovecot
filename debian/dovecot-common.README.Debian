@@ -239,11 +239,9 @@ Leave it blank.
 
 7. Why isn't raw logging working?
 
-The Debian package isn't compiled with the --with-rawlog flag. You have to 
-download the source package add this to the configure flags in debian/rules and
-rebuild the package.
-
-Other possible reasons: 
+ * You haven't configured raw logging in /etc/dovecot/dovecot.conf.
+   See the comments in the "protocol imap" section of /etc/dovecot/dovecot.conf
+   for more information.
 
  * Your user database doesn't specify the home directory for the user.
    Dovecot doesn't know where to put raw logs if the user database doesn't
