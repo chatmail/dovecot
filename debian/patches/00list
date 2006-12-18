@@ -4,3 +4,4 @@ dovecot-sql
 postgres_configure
 quota_mountpoint
 quota_v2
+dovecotpw
