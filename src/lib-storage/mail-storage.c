@@ -72,6 +72,8 @@ void mail_storage_parse_env(enum mail_storage_flags *flags_r,
 		*flags_r |= MAIL_STORAGE_FLAG_MMAP_DISABLE;
 	if (getenv("MMAP_NO_WRITE") != NULL)
 		*flags_r |= MAIL_STORAGE_FLAG_MMAP_NO_WRITE;
+	if (getenv("DOTLOCK_USE_EXCL") != NULL)
+		*flags_r |= MAIL_STORAGE_FLAG_DOTLOCK_USE_EXCL;
 	if (getenv("MAIL_READ_MMAPED") != NULL)
 		*flags_r |= MAIL_STORAGE_FLAG_MMAP_MAILS;
 	if (getenv("MAIL_SAVE_CRLF") != NULL)

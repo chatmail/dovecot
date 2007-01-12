@@ -1565,6 +1565,8 @@ int mail_index_open(struct mail_index *index, enum mail_index_open_flags flags,
 			(flags & MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE) != 0;
 		index->mmap_no_write =
 			(flags & MAIL_INDEX_OPEN_FLAG_MMAP_NO_WRITE) != 0;
+		index->use_excl_dotlocks =
+			(flags & MAIL_INDEX_OPEN_FLAG_DOTLOCK_USE_EXCL) != 0;
 		index->lock_method = lock_method;
 
 		/* don't even bother to handle dotlocking without mmap being
@@ -1630,7 +1632,7 @@ int mail_index_reopen(struct mail_index *index, int fd)
 	int ret, old_fd, old_lock_type;
 
 	i_assert(!MAIL_INDEX_IS_IN_MEMORY(index));
-	i_assert(index->copy_lock_path == NULL || index->excl_lock_count == 0);
+	i_assert(index->excl_lock_count == 0);
 
 	old_map = index->map;
 	old_fd = index->fd;
@@ -1651,7 +1653,6 @@ int mail_index_reopen(struct mail_index *index, int fd)
 		index->fd = fd;
 		ret = 0;
 	} else {
-		i_assert(index->excl_lock_count == 0);
 		ret = mail_index_try_open_only(index);
 		if (ret > 0)
 			ret = mail_index_lock_shared(index, FALSE, &lock_id);

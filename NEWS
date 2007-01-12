@@ -1,3 +1,55 @@
+v1.0.rc17 2007-01-07  Timo Sirainen <tss@iki.fi>
+
+	- MySQL authentication caused username to show up as "OK" in rc16.
+
+v1.0.rc16 2007-01-05  Timo Sirainen <tss@iki.fi>
+
+	* IMAP: When trying to fetch an already expunged message, Dovecot used
+	  to just disconnect client. Now it instead replies with dummy NIL
+	  data.
+	* Priority numbers in plugin names have changed. If you're installing
+	  from source, you should delete the existing plugin files before
+	  installing the new ones, otherwise you'll get errors.
+	* Maildir: We're using rename() to move files from tmp/ to new/ now.
+	  See http://wiki.dovecot.org/MailboxFormat/Maildir -> "Issues with
+	  the specification" for reasoning why this is safe. This makes saving
+	  mails faster, and also makes Dovecot usable with Mac OS X's HFS+
+	  (after you also set dotlock_use_excl=yes, see below).
+
+	+ Added dotlock_use_excl setting. If enabled, dotlocks are created
+	  directly using O_EXCL flag, instead of by creating a temporary file
+	  which is hardlinked. O_EXCL is faster, but may not work with NFS.
+	+ If Dovecot crashes with Linux or Solaris, it'll log a
+	  "Raw backtrace". It's worse than gdb's backtrace, but better than
+	  nothing.
+	+ Added maildir_copy_preserve_filename=yes setting.
+	+ Added a lazy-expunge plugin to allow users to unexpunge their mails.
+	+ maildir quota: Added ignore setting to maildir quota, which allows
+	  ignoring quota in Trash mailbox.
+	+ dict quota: If dictionary doesn't yet contain the quota, calculate
+	  it by going through all the mails in all the mailboxes.
+	+ login_log_format_elements: Added %a=local port and %b=remote port
+	+ Added -i and -o options to rawlog to restrict logging only to
+	  input or output.
+	- Doing a STATUS command for a selected mailbox (not a recommended
+	  IMAP client behavior) caused Dovecot to sync the mailbox silently.
+	  This could have lost eg. EXPUNGE events from clients, causing them
+	  to use wrong sequence numbers.
+	- deliver was treating boolean settings set to "no" as if they were
+	  "yes" (they were supposed to be commented out for "no")
+	- Running "dovecot" with -a or -n option while Dovecot was running
+	  deleted all authentication sockets, which caused all the future
+	  logins to fail.
+	- maildir: RENAME and DELETE didn't touch control directory if it was
+	  different from maildir or index dir.
+	- We treated internal userdb lookup errors as "user unknown" errors.
+	  In such situations this caused deliver to think the user didn't
+	  exist and the mail get bounced.
+	- pam: Setting cache_key crashed
+	- shared maildir: dovecot-keywords file's mode wasn't taken from
+	  dovecot-shared file.
+	- dovecotpw wasn't working with PowerPC
+
 v1.0.rc15 2006-11-19  Timo Sirainen <tss@iki.fi>
 
 	* Fixed an off-by-one buffer overflow in cache file handling. The

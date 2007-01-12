@@ -6,6 +6,8 @@
 #include "lib-signals.h"
 #include "convert-storage.h"
 
+#include <stdlib.h>
+
 /* ugly, but automake doesn't like having it built as both static and
    dynamic object.. */
 #include "convert-storage.c"
@@ -23,12 +25,14 @@ int main(int argc, const char *argv[])
 
 	if (argc <= 4) {
 		i_fatal("Usage: <username> <home dir> "
-			"<source mail env> <dest mail env>");
+			"<source mail env> <dest mail env> "
+			"[<1=skip broken mailboxes>]");
 	}
 
 	ioloop = io_loop_create(system_pool);
 
-	ret = convert_storage(argv[1], argv[2], argv[3], argv[4]);
+	ret = convert_storage(argv[1], argv[2], argv[3], argv[4],
+			      argv[5] != NULL && atoi(argv[5]) == 1);
 	if (ret > 0)
 		i_info("Successfully converted");
 	else if (ret == 0)

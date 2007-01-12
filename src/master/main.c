@@ -139,7 +139,7 @@ static void settings_reload(void)
         auth_processes_destroy_all();
         dict_process_kill();
 
-	if (!master_settings_read(configfile, FALSE))
+	if (!master_settings_read(configfile, FALSE, FALSE))
 		i_warning("Invalid configuration, keeping old one");
 	else {
 		if (!IS_INETD()) {
@@ -248,7 +248,8 @@ static void sigchld_handler(int signo __attr_unused__,
 		i_warning("waitpid() failed: %m");
 }
 
-static void resolve_ip(const char *name, struct ip_addr *ip, unsigned int *port)
+static void resolve_ip(const char *set_name, const char *name,
+		       struct ip_addr *ip, unsigned int *port)
 {
 	struct ip_addr *ip_list;
 	const char *p;
@@ -263,16 +264,19 @@ static void resolve_ip(const char *name, struct ip_addr *ip, unsigned int *port)
 	if (name[0] == '[') {
 		/* IPv6 address */
 		p = strchr(name, ']');
-		if (p == NULL)
-			i_fatal("Missing ']' in address %s", name);
-
+		if (p == NULL) {
+			i_fatal("%s: Missing ']' in address %s",
+				set_name, name);
+		}
 		name = t_strdup_until(name+1, p);
 
 		p++;
 		if (*p == '\0')
 			p = NULL;
-		else if (*p != ':')
-			i_fatal("Invalid data after ']' in address %s", name);
+		else if (*p != ':') {
+			i_fatal("%s: Invalid data after ']' in address %s",
+				set_name, name);
+		}
 	} else {
 		p = strrchr(name, ':');
 		if (p != NULL)
@@ -280,8 +284,10 @@ static void resolve_ip(const char *name, struct ip_addr *ip, unsigned int *port)
 	}
 
 	if (p != NULL) {
-		if (!is_numeric(p+1, '\0'))
-			i_fatal("Invalid port in address %s", name);
+		if (!is_numeric(p+1, '\0')) {
+			i_fatal("%s: Invalid port in address %s",
+				set_name, name);
+		}
 		*port = atoi(p+1);
 	}
 
@@ -300,12 +306,12 @@ static void resolve_ip(const char *name, struct ip_addr *ip, unsigned int *port)
 	/* Return the first IP if there happens to be multiple. */
 	ret = net_gethostbyname(name, &ip_list, &ips_count);
 	if (ret != 0) {
-		i_fatal("Can't resolve address %s: %s",
-			name, net_gethosterror(ret));
+		i_fatal("%s: Can't resolve address %s: %s",
+			set_name, name, net_gethosterror(ret));
 	}
 
 	if (ips_count < 1)
-		i_fatal("No IPs for address: %s", name);
+		i_fatal("%s: No IPs for address: %s", set_name, name);
 
 	*ip = ip_list[0];
 }
@@ -358,8 +364,11 @@ static void listen_protocols(struct settings *set, bool retry)
 #endif
 
 	/* resolve */
-	resolve_ip(set->listen, &set->listen_ip, &set->listen_port);
-	resolve_ip(set->ssl_listen, &set->ssl_listen_ip, &set->ssl_listen_port);
+	resolve_ip("listen", set->listen, &set->listen_ip, &set->listen_port);
+	if (!set->ssl_disable) {
+		resolve_ip("ssl_listen", set->ssl_listen, &set->ssl_listen_ip,
+			   &set->ssl_listen_port);
+	}
 
 	/* if ssl_listen wasn't explicitly set in the config file,
 	   use the non-ssl IP settings for the ssl listener, too. */
@@ -751,7 +760,7 @@ int main(int argc, char *argv[])
 			if (i == argc) i_fatal("Missing config file argument");
 			configfile = argv[i];
 		} else if (strcmp(argv[i], "-n") == 0) {
-			dump_config_nondefaults = TRUE;
+			dump_config_nondefaults = dump_config = TRUE;
 		} else if (strcmp(argv[i], "-p") == 0) {
 			/* Ask SSL private key password */
 			ask_key_pass = TRUE;
@@ -784,7 +793,7 @@ int main(int argc, char *argv[])
 		foreground = TRUE;
 	}
 
-	if (dump_config || dump_config_nondefaults) {
+	if (dump_config) {
 		/* print the config file path before parsing it, so in case
 		   of errors it's still shown */
 		printf("# %s\n", configfile);
@@ -793,11 +802,12 @@ int main(int argc, char *argv[])
 	/* read and verify settings before forking */
 	t_push();
 	master_settings_init();
-	if (!master_settings_read(configfile, exec_protocol != NULL))
+	if (!master_settings_read(configfile, exec_protocol != NULL,
+				  dump_config))
 		exit(FATAL_DEFAULT);
 	t_pop();
 
-	if (dump_config || dump_config_nondefaults) {
+	if (dump_config) {
 		master_settings_dump(settings_root, dump_config_nondefaults);
 		return 0;
 	}

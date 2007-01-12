@@ -16,11 +16,13 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
+#define MAILDIR_TRASH_MAILBOX "Trash"
 #define MAILDIRSIZE_FILENAME "maildirsize"
 #define MAILDIRSIZE_STALE_SECS (60*15)
 
 struct maildir_quota_root {
 	struct quota_root root;
+	char *ignore;
 
 	uint64_t message_bytes_limit;
 	uint64_t message_count_limit;
@@ -34,6 +36,8 @@ struct maildir_quota_root {
 };
 
 struct maildir_list_context {
+	struct maildir_quota_root *root;
+
 	struct mailbox_list_context *ctx;
 	struct mailbox_list *list;
 
@@ -43,7 +47,7 @@ struct maildir_list_context {
 
 extern struct quota_backend quota_backend_maildir;
 
-const struct dotlock_settings dotlock_settings = {
+struct dotlock_settings dotlock_settings = {
 	MEMBER(temp_prefix) NULL,
 	MEMBER(lock_suffix) NULL,
 
@@ -127,11 +131,12 @@ static int maildir_sum_dir(struct mail_storage *storage, const char *dir,
 }
 
 static struct maildir_list_context *
-maildir_list_init(struct mail_storage *storage)
+maildir_list_init(struct maildir_quota_root *root, struct mail_storage *storage)
 {
 	struct maildir_list_context *ctx;
 
 	ctx = i_new(struct maildir_list_context, 1);
+	ctx->root = root;
 	ctx->path = str_new(default_pool, 512);
 	ctx->ctx = mail_storage_mailbox_list_init(storage, "", "*",
 						  MAILBOX_LIST_FAST_FLAGS |
@@ -152,6 +157,10 @@ maildir_list_next(struct maildir_list_context *ctx, time_t *mtime_r)
 			if (ctx->list == NULL)
 				return NULL;
 		}
+
+		if (ctx->root->ignore != NULL &&
+		    strcmp(ctx->list->name, ctx->root->ignore) == 0)
+			continue;
 
 		t_push();
 		path = mail_storage_get_mailbox_path(ctx->ctx->storage,
@@ -190,14 +199,15 @@ static int maildir_list_deinit(struct maildir_list_context *ctx)
 }
 
 static int
-maildirs_check_have_changed(struct mail_storage *storage, time_t latest_mtime)
+maildirs_check_have_changed(struct maildir_quota_root *root,
+			    struct mail_storage *storage, time_t latest_mtime)
 {
 	struct maildir_list_context *ctx;
 	const char *dir;
 	time_t mtime;
 	int ret = 0;
 
-	ctx = maildir_list_init(storage);
+	ctx = maildir_list_init(root, storage);
 	while ((dir = maildir_list_next(ctx, &mtime)) != NULL) {
 		if (mtime > latest_mtime) {
 			ret = 1;
@@ -218,6 +228,8 @@ static int maildirsize_write(struct maildir_quota_root *root,
 
 	i_assert(root->fd == -1);
 
+	dotlock_settings.use_excl_lock =
+		(storage->flags & MAIL_STORAGE_FLAG_DOTLOCK_USE_EXCL) != 0;
 	fd = file_dotlock_open(&dotlock_settings, path,
 			       DOTLOCK_CREATE_FLAG_NONBLOCK, &dotlock);
 	if (fd == -1) {
@@ -279,7 +291,7 @@ static int maildirsize_recalculate(struct maildir_quota_root *root,
 
 	root->total_bytes = root->total_count = 0;
 
-	ctx = maildir_list_init(storage);
+	ctx = maildir_list_init(root, storage);
 	while ((dir = maildir_list_next(ctx, &mtime)) != NULL) {
 		if (mtime > last_stamp)
 			last_stamp = mtime;
@@ -295,7 +307,7 @@ static int maildirsize_recalculate(struct maildir_quota_root *root,
 		ret = -1;
 
 	if (ret == 0)
-		ret = maildirs_check_have_changed(storage, last_stamp);
+		ret = maildirs_check_have_changed(root, storage, last_stamp);
 
 	t_push();
 	path = maildirsize_get_path(storage);
@@ -534,7 +546,7 @@ maildir_quota_init(struct quota_setup *setup, const char *name __attr_unused__)
 	t_push();
 	args = t_strsplit(setup->data, ":");
 
-	for (; *args != '\0'; args++) {
+	for (args++; *args != '\0'; args++) {
 		if (strncmp(*args, "storage=", 8) == 0) {
 			size = strtoull(*args + 8, NULL, 10) * 1024;
 			if (size != 0)
@@ -545,6 +557,11 @@ maildir_quota_init(struct quota_setup *setup, const char *name __attr_unused__)
 			if (size != 0)
 				root->message_count_limit = size;
 			root->master_message_limits = TRUE;
+		} else if (strncmp(*args, "ignore=", 7) == 0) {
+			i_free(root->ignore);
+			root->ignore = i_strdup(*args + 7);
+		} else {
+			i_error("maildir quota: Unknown setting: %s", *args);
 		}
 	}
 	t_pop();
@@ -556,6 +573,10 @@ static void maildir_quota_deinit(struct quota_root *_root)
 {
 	struct maildir_quota_root *root = (struct maildir_quota_root *)_root;
 
+	if (root->fd != -1)
+		(void)close(root->fd);
+
+	i_free(root->ignore);
 	i_free(root->root.name);
 	i_free(root);
 }
@@ -644,7 +665,8 @@ maildir_quota_set_resource(struct quota_root *root,
 
 static struct quota_root_transaction_context *
 maildir_quota_transaction_begin(struct quota_root *_root,
-				struct quota_transaction_context *_ctx)
+				struct quota_transaction_context *_ctx,
+				struct mailbox *box)
 {
 	struct maildir_quota_root *root = (struct maildir_quota_root *)_root;
 	struct quota_root_transaction_context *ctx;
@@ -652,6 +674,13 @@ maildir_quota_transaction_begin(struct quota_root *_root,
 	ctx = i_new(struct quota_root_transaction_context, 1);
 	ctx->root = _root;
 	ctx->ctx = _ctx;
+
+	if (root->ignore != NULL &&
+	    strcmp(mailbox_get_name(box), root->ignore) == 0) {
+		ctx->bytes_limit = (uint64_t)-1;
+		ctx->count_limit = (uint64_t)-1;
+		return ctx;
+	}
 
 	if (maildirquota_refresh(root,
 				 maildir_quota_root_get_storage(_root)) < 0) {

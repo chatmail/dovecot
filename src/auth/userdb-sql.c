@@ -66,36 +66,41 @@ sql_query_get_result(struct sql_result *result,
 
 	if (uid == (uid_t)-1) {
 		auth_request_log_error(auth_request, "sql",
-			"Password query didn't return uid, or it was NULL");
+			"User query didn't return uid, or it was NULL");
 		return NULL;
 	}
 	if (gid == (gid_t)-1) {
 		auth_request_log_error(auth_request, "sql",
-			"Password query didn't return gid, or it was NULL");
+			"User query didn't return gid, or it was NULL");
 		return NULL;
 	}
 
 	return reply;
 }
 
-static void sql_query_callback(struct sql_result *result, void *context)
+static void sql_query_callback(struct sql_result *sql_result, void *context)
 {
 	struct userdb_sql_request *sql_request = context;
 	struct auth_request *auth_request = sql_request->auth_request;
 	struct auth_stream_reply *reply = NULL;
+	enum userdb_result result = USERDB_RESULT_INTERNAL_FAILURE;
 	int ret;
 
-	ret = sql_result_next_row(result);
+	ret = sql_result_next_row(sql_result);
 	if (ret < 0) {
 		auth_request_log_error(auth_request, "sql",
-			"User query failed: %s", sql_result_get_error(result));
+				       "User query failed: %s",
+				       sql_result_get_error(sql_result));
 	} else if (ret == 0) {
+		result = USERDB_RESULT_USER_UNKNOWN;
 		auth_request_log_info(auth_request, "sql", "User not found");
 	} else {
-                reply = sql_query_get_result(result, auth_request);
+		reply = sql_query_get_result(sql_result, auth_request);
+		if (reply != NULL)
+			result = USERDB_RESULT_OK;
 	}
 
-	sql_request->callback(reply, auth_request);
+	sql_request->callback(result, reply, auth_request);
 	auth_request_unref(&auth_request);
 	i_free(sql_request);
 }

@@ -1,3 +1,11 @@
+ - maildir_copy_with_hardlinks=yes is problematic with shared folders where
+   the file mode should change..
+ - rename: allow moving between storages, as long as they're of same type
+ - we should be checking tmp/ once in a while and delete old files.
+     - use atime?
+ - trying to use proxying with cram-md5 / ntlm crashes (null password on purpose):
+    - Error: auth(default): file passdb-cache.c: line 120 (passdb_cache_lookup_credentials): assertion failed: (*scheme_r != NULL)
+    - Error: auth-worker(default): file passdb.c: line 120 (passdb_handle_credentials): assertion failed: (password != NULL)
  - dovecot.index breaks: first_recent_uid_lowwater 1413 -> 1381,
    Duplicate header extension keywords (13 of them in the file!)
  - mmap_disable=yes: somtimes hdr.next_uid <= last_rec.uid

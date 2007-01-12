@@ -50,6 +50,7 @@ static int file_cache_set_size(struct file_cache *cache, uoff_t size)
 {
 	size_t page_size = mmap_get_page_size();
 	uoff_t diff = size % page_size;
+	void *new_base;
 
 	if (diff != 0)
 		size += page_size - diff;
@@ -73,14 +74,14 @@ static int file_cache_set_size(struct file_cache *cache, uoff_t size)
 			return -1;
 		}
 	} else {
-		cache->mmap_base = mremap_anon(cache->mmap_base,
-					       cache->mmap_length,
-					       size, MREMAP_MAYMOVE);
-		if (cache->mmap_base == MAP_FAILED) {
+		new_base = mremap_anon(cache->mmap_base, cache->mmap_length,
+				       size, MREMAP_MAYMOVE);
+		if (new_base == MAP_FAILED) {
 			i_error("mremap_anon(%"PRIuUOFF_T") failed: %m", size);
-			cache->mmap_length = 0;
 			return -1;
 		}
+
+		cache->mmap_base = new_base;
 	}
 	cache->mmap_length = size;
 	return 0;
@@ -99,6 +100,8 @@ ssize_t file_cache_read(struct file_cache *cache, uoff_t offset, size_t size)
 		   doesn't have to deal with any extra checks. */
 		size = SSIZE_T_MAX;
 	}
+	if (offset >= (uoff_t)-1 - size)
+		size = (uoff_t)-1 - offset;
 
 	if (offset + size > cache->mmap_length &&
 	    offset + size - cache->mmap_length > 1024*1024) {
@@ -220,6 +223,8 @@ void file_cache_write(struct file_cache *cache, const void *data, size_t size,
 	size_t page_size = mmap_get_page_size();
 	unsigned char *bits;
 	unsigned int first_page, last_page;
+
+	i_assert((uoff_t)-1 - offset > size);
 
 	if (file_cache_set_size(cache, offset + size) < 0) {
 		/* couldn't grow mapping. just make sure the written memory

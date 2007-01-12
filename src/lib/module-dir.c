@@ -155,6 +155,25 @@ static bool module_want_load(const char **names, const char *name)
 	return FALSE;
 }
 
+static void check_duplicates(array_t *names, const char *name, const char *dir)
+{
+	ARRAY_SET_TYPE(names, const char *);
+	const char *const *names_p, *base_name, *tmp;
+	unsigned int i, count;
+
+	t_push();
+	base_name = module_file_get_name(name);
+	names_p = array_get(names, &count);
+	for (i = 0; i < count; i++) {
+		tmp = module_file_get_name(names_p[i]);
+
+		if (strcmp(tmp, base_name) == 0)
+			i_fatal("Multiple files for module %s: %s/%s, %s/%s",
+				base_name, dir, name, dir, names_p[i]);
+	}
+	t_pop();
+}
+
 struct module *module_dir_load(const char *dir, const char *module_names,
 			       bool require_init_funcs)
 {
@@ -172,6 +191,11 @@ struct module *module_dir_load(const char *dir, const char *module_names,
 
 	dirp = opendir(dir);
 	if (dirp == NULL) {
+		if (module_names != NULL) {
+			/* we were given a list of modules to load.
+			   we can't fail. */
+			i_fatal("opendir(%s) failed: %m", dir);
+		}
 		if (errno != ENOENT)
 			i_error("opendir(%s) failed: %m", dir);
 		return NULL;
@@ -191,6 +215,8 @@ struct module *module_dir_load(const char *dir, const char *module_names,
 		if (p == NULL || strlen(p) != 3)
 			continue;
 
+		check_duplicates(&names, name, dir);
+
 		name = p_strdup(pool, d->d_name);
 		array_append(&names, &name, 1);
 	}
@@ -205,7 +231,7 @@ struct module *module_dir_load(const char *dir, const char *module_names,
 	else {
 		module_names_arr = t_strsplit_spaces(module_names, ", ");
 		/* allow giving the module names also in non-base form.
-		   conver them in here. */
+		   convert them in here. */
 		for (i = 0; module_names_arr[i] != NULL; i++) {
 			module_names_arr[i] =
 				module_file_get_name(module_names_arr[i]);

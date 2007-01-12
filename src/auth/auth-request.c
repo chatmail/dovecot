@@ -536,24 +536,34 @@ void auth_request_lookup_credentials(struct auth_request *request,
 	}
 }
 
-void auth_request_userdb_callback(struct auth_stream_reply *reply,
+void auth_request_userdb_callback(enum userdb_result result,
+				  struct auth_stream_reply *reply,
 				  struct auth_request *request)
 {
-	if (reply == NULL && request->userdb->next != NULL) {
+	if (result != USERDB_RESULT_OK && request->userdb->next != NULL) {
 		/* try next userdb. */
+		if (result == USERDB_RESULT_INTERNAL_FAILURE)
+			request->userdb_internal_failure = TRUE;
+
 		request->userdb = request->userdb->next;
 		auth_request_lookup_user(request,
 					 request->private_callback.userdb);
 		return;
 	}
 
-	if (reply == NULL && request->client_pid != 0) {
-		/* this was actual login attempt */
+	if (request->userdb_internal_failure && result != USERDB_RESULT_OK) {
+		/* one of the userdb lookups failed. the user might have been
+		   in there, so this is an internal failure */
+		result = USERDB_RESULT_INTERNAL_FAILURE;
+	} else if (result == USERDB_RESULT_USER_UNKNOWN &&
+		   request->client_pid != 0) {
+		/* this was an actual login attempt, the user should
+		   have been found. */
 		auth_request_log_error(request, "userdb",
 				       "user not found from userdb");
 	}
 
-        request->private_callback.userdb(reply, request);
+        request->private_callback.userdb(result, reply, request);
 }
 
 void auth_request_lookup_user(struct auth_request *request,
@@ -878,8 +888,12 @@ int auth_request_password_verify(struct auth_request *request,
 		return 0;
 	}
 
+	/* If original_username is set, use it. It may be important for some
+	   password schemes (eg. digest-md5). Otherwise the username is used
+	   only for logging purposes. */
 	ret = password_verify(plain_password, crypted_password, scheme,
-			      request->original_username);
+			      request->original_username != NULL ?
+			      request->original_username : request->user);
 	if (ret < 0) {
 		auth_request_log_error(request, subsystem,
 				       "Unknown password scheme %s", scheme);

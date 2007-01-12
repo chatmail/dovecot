@@ -305,6 +305,9 @@ mbox_create(const char *data, const char *user, enum mail_storage_flags flags,
 	}
 
 	if (root_dir == NULL) {
+		if ((flags & MAIL_STORAGE_FLAG_NO_AUTOCREATE) != 0)
+			return NULL;
+
 		root_dir = create_root_dir(debug);
 		if (root_dir == NULL)
 			return NULL;
@@ -320,6 +323,8 @@ mbox_create(const char *data, const char *user, enum mail_storage_flags flags,
 			/* yep, go ahead */
 		} else if (errno != ENOENT && errno != ENOTDIR) {
 			i_error("lstat(%s) failed: %m", root_dir);
+			return NULL;
+		} else if ((flags & MAIL_STORAGE_FLAG_NO_AUTOCREATE) != 0) {
 			return NULL;
 		} else if (mkdir_parents(root_dir, CREATE_MODE) < 0 &&
 			   errno != EEXIST) {
@@ -443,10 +448,14 @@ static const char *mbox_get_index_dir(struct index_storage *storage,
 
 	if ((storage->storage.flags & MAIL_STORAGE_FLAG_FULL_FS_ACCESS) != 0 &&
 	    (*name == '/' || *name == '~')) {
-		name = home_expand(name);
-		p = strrchr(name, '/');
-		return t_strconcat(t_strdup_until(name, p),
-				   "/"MBOX_INDEX_DIR_NAME"/", p+1, NULL);
+		if (home_try_expand(&name) == 0) {
+			p = strrchr(name, '/');
+			return t_strconcat(p == NULL ? name :
+					   t_strdup_until(name, p),
+					   "/"MBOX_INDEX_DIR_NAME"/",
+					   p+1, NULL);
+		}
+		/* home expansion failed. just create the directory as ~dir. */
 	}
 
 	p = strrchr(name, '/');
@@ -500,8 +509,11 @@ mbox_get_path(struct index_storage *storage, const char *name)
 	if (strcmp(name, "INBOX") == 0)
 		return storage->inbox_path;
 	if ((storage->storage.flags & MAIL_STORAGE_FLAG_FULL_FS_ACCESS) != 0 &&
-	    (*name == '/' || *name == '~'))
-		return home_expand(name);
+	    (*name == '/' || *name == '~')) {
+		if (home_try_expand(&name) == 0)
+			return name;
+		/* fallback to using ~dir */
+	}
 	return t_strconcat(storage->dir, "/", name, NULL);
 }
 

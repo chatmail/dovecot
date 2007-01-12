@@ -80,9 +80,11 @@ struct settings {
 	bool mail_read_mmaped;
 	bool mmap_disable;
 	bool mmap_no_write;
+	bool dotlock_use_excl;
 	const char *lock_method;
 	bool maildir_stat_dirs;
 	bool maildir_copy_with_hardlinks;
+	bool maildir_copy_preserve_filename;
 	const char *mbox_read_locks;
 	const char *mbox_write_locks;
 	unsigned int mbox_lock_timeout;
@@ -232,7 +234,7 @@ struct server_settings {
 
 extern struct server_settings *settings_root;
 
-bool master_settings_read(const char *path, bool nochecks);
+bool master_settings_read(const char *path, bool nochecks, bool nofixes);
 
 void master_settings_dump(struct server_settings *set, bool nondefaults);
 

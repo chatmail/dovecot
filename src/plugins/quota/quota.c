@@ -180,7 +180,7 @@ void quota_add_user_storage(struct quota *quota, struct mail_storage *storage)
 		/* create a new quota root for the storage */
 		struct quota_root *root;
 
-		root = quota_root_init(setups[0], ""); // FIXME: name?
+		root = quota_root_init(setups[0], ""); /* FIXME: name? */
 		found = quota_mail_storage_add_root(storage, root);
 		i_assert(found);
 	}
@@ -238,7 +238,7 @@ struct quota_transaction_context *quota_transaction_begin(struct mailbox *box)
 
 	iter = quota_root_iter_init(box);
 	while ((root = quota_root_iter_next(iter)) != NULL) {
-		root_ctx = root->v.transaction_begin(root, ctx);
+		root_ctx = root->v.transaction_begin(root, ctx, box);
 		array_append(&ctx->root_transactions, &root_ctx, 1);
 	}
 	quota_root_iter_deinit(iter);

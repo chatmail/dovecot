@@ -119,8 +119,8 @@ static const char *crypt_generate(const char *plaintext,
 	return t_strdup(mycrypt(plaintext, salt));
 }
 
-static bool md5_verify(const char *plaintext, const char *password,
-		       const char *user __attr_unused__)
+static bool md5_crypt_verify(const char *plaintext, const char *password,
+			     const char *user __attr_unused__)
 {
 	const char *str;
 
@@ -128,8 +128,8 @@ static bool md5_verify(const char *plaintext, const char *password,
 	return strcmp(str, password) == 0;
 }
 
-static const char *md5_generate(const char *plaintext,
-				const char *user __attr_unused__)
+static const char *md5_crypt_generate(const char *plaintext,
+				      const char *user __attr_unused__)
 {
 	char salt[9];
 	int i;
@@ -180,7 +180,7 @@ password_decode(const char *password, unsigned int result_len)
 }
 
 static bool sha1_verify(const char *plaintext, const char *password,
-			const char *user __attr_unused__)
+			const char *user)
 {
 	unsigned char sha1_digest[SHA1_RESULTLEN];
 	const char *data;
@@ -312,13 +312,13 @@ static const char *plain_generate(const char *plaintext,
 	return plaintext;
 }
 
-static bool hmac_md5_verify(const char *plaintext, const char *password,
+static bool cram_md5_verify(const char *plaintext, const char *password,
 			    const char *user __attr_unused__)
 {
 	return strcmp(password_generate_cram_md5(plaintext), password) == 0;
 }
 
-static const char *hmac_md5_generate(const char *plaintext,
+static const char *cram_md5_generate(const char *plaintext,
 				     const char *user __attr_unused__)
 {
 	return password_generate_cram_md5(plaintext);
@@ -361,7 +361,7 @@ static const char *digest_md5_generate(const char *plaintext, const char *user)
 }
 
 static bool plain_md4_verify(const char *plaintext, const char *password,
-			     const char *user __attr_unused__)
+			     const char *user)
 {
 	unsigned char digest[MD4_RESULTLEN];
 	const void *data;
@@ -387,7 +387,7 @@ static const char *plain_md4_generate(const char *plaintext,
 }
 
 static bool plain_md5_verify(const char *plaintext, const char *password,
-			     const char *user __attr_unused__)
+			     const char *user)
 {
 	unsigned char digest[MD5_RESULTLEN];
 	const void *data;
@@ -462,14 +462,16 @@ static const char *rpa_generate(const char *plaintext,
 
 static const struct password_scheme default_schemes[] = {
 	{ "CRYPT", crypt_verify, crypt_generate },
-	{ "MD5", md5_verify, md5_generate },
+	{ "MD5", md5_crypt_verify, md5_crypt_generate },
+	{ "MD5-CRYPT", md5_crypt_verify, md5_crypt_generate },
  	{ "SHA", sha1_verify, sha1_generate },
  	{ "SHA1", sha1_verify, sha1_generate },
 	{ "SMD5", smd5_verify, smd5_generate },
 	{ "SSHA", ssha_verify, ssha_generate },
 	{ "PLAIN", plain_verify, plain_generate },
 	{ "CLEARTEXT", plain_verify, plain_generate },
-	{ "HMAC-MD5", hmac_md5_verify, hmac_md5_generate },
+	{ "CRAM-MD5", cram_md5_verify, cram_md5_generate },
+	{ "HMAC-MD5", cram_md5_verify, cram_md5_generate },
 	{ "DIGEST-MD5", digest_md5_verify, digest_md5_generate },
 	{ "PLAIN-MD4", plain_md4_verify, plain_md4_generate },
 	{ "PLAIN-MD5", plain_md5_verify, plain_md5_generate },

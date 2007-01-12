@@ -66,6 +66,7 @@ maildir_create(const char *data, const char *user,
 	struct index_storage *istorage;
 	const char *root_dir, *inbox_dir, *index_dir, *control_dir;
 	const char *home, *path, *p;
+	struct stat st;
 	size_t len;
 	pool_t pool;
 
@@ -137,6 +138,15 @@ maildir_create(const char *data, const char *user,
 	if (root_dir[len-1] == '/')
 		root_dir = t_strndup(root_dir, len-1);
 
+	/* normally the maildir is created in verify_inbox() */
+	if ((flags & MAIL_STORAGE_FLAG_NO_AUTOCREATE) != 0) {
+		if (stat(root_dir, &st) < 0) {
+			if (errno != ENOENT)
+				i_error("stat(%s) failed: %m", root_dir);
+			return NULL;
+		}
+	}
+
 	if (index_dir == NULL)
 		index_dir = root_dir;
 	else if (strcmp(index_dir, "MEMORY") == 0)
@@ -154,6 +164,8 @@ maildir_create(const char *data, const char *user,
 	storage->control_dir = p_strdup(pool, home_expand(control_dir));
 	storage->copy_with_hardlinks =
 		getenv("MAILDIR_COPY_WITH_HARDLINKS") != NULL;
+	storage->copy_preserve_filename =
+		getenv("MAILDIR_COPY_PRESERVE_FILENAME") != NULL;
 
 	istorage = INDEX_STORAGE(storage);
 	istorage->storage = maildir_storage;
@@ -266,7 +278,10 @@ static const char *maildir_get_absolute_path(const char *name)
 {
 	const char *p;
 
-	name = home_expand(name);
+	if (home_try_expand(&name) < 0) {
+		/* fallback to using as ~name */
+		return name;
+	}
 
 	p = strrchr(name, '/');
 	if (p == NULL)
@@ -686,9 +701,10 @@ static int maildir_mailbox_create(struct mail_storage *_storage,
 static int maildir_mailbox_delete(struct mail_storage *_storage,
 				  const char *name)
 {
-	struct index_storage *storage = (struct index_storage *)_storage;
+	struct maildir_storage *mstorage = (struct maildir_storage *)_storage;
+	struct index_storage *storage = &mstorage->storage;
 	struct stat st;
-	const char *src, *dest, *index_dir;
+	const char *src, *dest, *index_dir, *control_dir;
 	int count;
 
 	mail_storage_clear_error(_storage);
@@ -720,7 +736,7 @@ static int maildir_mailbox_delete(struct mail_storage *_storage,
 	   can't really help that. */
 	index_storage_destroy_unrefed();
 
-	if (storage->index_dir != NULL && *name != '/' && *name != '~' &&
+	if (storage->index_dir != NULL && dest != NULL &&
 	    strcmp(storage->index_dir, storage->dir) != 0) {
 		index_dir = t_strconcat(storage->index_dir,
 					"/"MAILDIR_FS_SEP_S, name, NULL);
@@ -728,6 +744,19 @@ static int maildir_mailbox_delete(struct mail_storage *_storage,
 		    errno != ENOTEMPTY) {
 			mail_storage_set_critical(_storage,
 				"unlink_directory(%s) failed: %m", index_dir);
+			return -1;
+		}
+	}
+	if (mstorage->control_dir != NULL && dest != NULL &&
+	    strcmp(mstorage->control_dir, storage->dir) != 0 &&
+	    (storage->index_dir == NULL ||
+	     strcmp(storage->index_dir, mstorage->control_dir) != 0)) {
+		control_dir = t_strconcat(mstorage->control_dir,
+					  "/"MAILDIR_FS_SEP_S, name, NULL);
+		if (unlink_directory(control_dir, TRUE) < 0 &&
+		    errno != ENOTEMPTY) {
+			mail_storage_set_critical(_storage,
+				"unlink_directory(%s) failed: %m", control_dir);
 			return -1;
 		}
 	}
@@ -739,9 +768,7 @@ static int maildir_mailbox_delete(struct mail_storage *_storage,
 	} else {
 		count = 0;
 		while (rename(src, dest) < 0 && count < 2) {
-			/* EBUSY is given by some NFS implementations */
-			if (errno != EEXIST && errno != ENOTEMPTY &&
-			    errno != EBUSY) {
+			if (!EDESTDIREXISTS(errno)) {
 				mail_storage_set_critical(_storage,
 					"rename(%s, %s) failed: %m", src, dest);
 				return -1;
@@ -764,6 +791,31 @@ static int maildir_mailbox_delete(struct mail_storage *_storage,
 
 		/* it's already renamed to ..dir, which means it's deleted
 		   as far as client is concerned. Report success. */
+	}
+
+	return 0;
+}
+
+static int rename_control(struct index_storage *istorage,
+			  const char *oldname, const char *newname)
+{
+	struct maildir_storage *storage = (struct maildir_storage *)istorage;
+	const char *oldpath, *newpath;
+
+	if (storage->control_dir == NULL ||
+	    strcmp(storage->control_dir, istorage->dir) == 0)
+		return 0;
+
+	oldpath = t_strconcat(storage->control_dir, "/"MAILDIR_FS_SEP_S,
+			      oldname, NULL);
+	newpath = t_strconcat(storage->control_dir, "/"MAILDIR_FS_SEP_S,
+			      newname, NULL);
+
+	if (rename(oldpath, newpath) < 0 && errno != ENOENT) {
+		mail_storage_set_critical(&istorage->storage,
+					  "rename(%s, %s) failed: %m",
+					  oldpath, newpath);
+		return -1;
 	}
 
 	return 0;
@@ -850,8 +902,7 @@ static int rename_subfolders(struct index_storage *storage,
 		   Anyway, the bug with merging is that if both folders have
 		   identically named subfolder they conflict. Just ignore those
 		   and leave them under the old folder. */
-		if (rename(oldpath, newpath) == 0 ||
-		    errno == EEXIST || errno == ENOTEMPTY)
+		if (rename(oldpath, newpath) == 0 || EDESTDIREXISTS(errno))
 			ret = 1;
 		else {
 			mail_storage_set_critical(&storage->storage,
@@ -862,6 +913,7 @@ static int rename_subfolders(struct index_storage *storage,
 			break;
 		}
 
+		(void)rename_control(storage, old_listname, new_listname);
 		(void)rename_indexes(storage, old_listname, new_listname);
 		t_pop();
 	}
@@ -900,6 +952,7 @@ static int maildir_mailbox_rename(struct mail_storage *_storage,
 
 	ret = rename(oldpath, newpath);
 	if (ret == 0 || errno == ENOENT) {
+		(void)rename_control(storage, oldname, newname);
 		(void)rename_indexes(storage, oldname, newname);
 
 		found = ret == 0;
@@ -915,7 +968,7 @@ static int maildir_mailbox_rename(struct mail_storage *_storage,
 		return 0;
 	}
 
-	if (errno == EEXIST) {
+	if (EDESTDIREXISTS(errno)) {
 		mail_storage_set_error(_storage,
 				       "Target mailbox already exists");
 		return -1;

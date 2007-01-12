@@ -42,7 +42,8 @@ struct quota_backend_vfuncs {
 
 	struct quota_root_transaction_context *
 		(*transaction_begin)(struct quota_root *root,
-				     struct quota_transaction_context *ctx);
+				     struct quota_transaction_context *ctx,
+				     struct mailbox *box);
 	int (*transaction_commit)(struct quota_root_transaction_context *ctx);
 	void (*transaction_rollback)
 		(struct quota_root_transaction_context *ctx);
@@ -128,5 +129,8 @@ void quota_default_alloc(struct quota_root_transaction_context *ctx,
 			 struct mail *mail);
 void quota_default_free(struct quota_root_transaction_context *ctx,
 			struct mail *mail);
+
+int quota_count_storage(struct mail_storage *storage,
+			uint64_t *bytes_r, uint64_t *count_r);
 
 #endif

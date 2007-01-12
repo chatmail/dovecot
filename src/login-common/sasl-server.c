@@ -60,7 +60,8 @@ static void authenticate_callback(struct auth_request *request, int status,
 				i_free(client->virtual_user);
 				client->virtual_user = i_strdup(args[i] + 5);
 			}
-			if (strcmp(args[i], "nologin") == 0) {
+			if (strcmp(args[i], "nologin") == 0 ||
+			    strcmp(args[i], "proxy") == 0) {
 				/* user can't login */
 				nologin = TRUE;
 			}
@@ -108,7 +109,7 @@ void sasl_server_auth_begin(struct client *client,
 
 	client->authenticating = TRUE;
 	i_free(client->auth_mech_name);
-	client->auth_mech_name = i_strdup(mech_name);
+	client->auth_mech_name = str_ucase(i_strdup(mech_name));
 	client->sasl_callback = callback;
 
 	mech = auth_client_find_mech(auth_client, mech_name);

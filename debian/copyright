@@ -1,7 +1,7 @@
 This package was debianized by Jaldhar H. Vyas <jaldhar@debian.org> on
 Tue,  3 Dec 2002 01:10:07 -0500.
 
-It was downloaded from http://dovecot.procontrol.fi/
+It was downloaded from http://www.dovecot.org/
 
 The sieve dovecot plugin, contained in the directory dovecot-sieve,
 has been exported from CVS since there is no official release on

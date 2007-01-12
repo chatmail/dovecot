@@ -172,6 +172,9 @@ struct maildir_uidlist *maildir_uidlist_init(struct maildir_mailbox *mbox)
 				     maildir_hash, maildir_cmp);
 	uidlist->next_uid = 1;
 
+	uidlist->dotlock_settings.use_excl_lock =
+		(STORAGE(mbox->storage)->flags &
+		 MAIL_STORAGE_FLAG_DOTLOCK_USE_EXCL) != 0;
 	uidlist->dotlock_settings.timeout = UIDLIST_LOCK_STALE_TIMEOUT + 2;
 	uidlist->dotlock_settings.stale_timeout = UIDLIST_LOCK_STALE_TIMEOUT;
 	uidlist->dotlock_settings.temp_prefix =
@@ -300,7 +303,8 @@ maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
 
 	if (uidlist->record_pool == NULL) {
 		uidlist->record_pool =
-			pool_alloconly_create("uidlist record_pool",
+			pool_alloconly_create(MEMPOOL_GROWING
+					      "uidlist record_pool",
 					      nearest_power(st.st_size -
 							    st.st_size/8));
 	}
@@ -682,8 +686,8 @@ int maildir_uidlist_sync_init(struct maildir_uidlist *uidlist, bool partial,
 		return 1;
 	}
 
-	ctx->record_pool =
-		pool_alloconly_create("maildir_uidlist_sync", 16384);
+	ctx->record_pool = pool_alloconly_create(MEMPOOL_GROWING
+						 "maildir_uidlist_sync", 16384);
 	ctx->files = hash_create(default_pool, ctx->record_pool, 4096,
 				 maildir_hash, maildir_cmp);
 
@@ -714,7 +718,8 @@ maildir_uidlist_sync_next_partial(struct maildir_uidlist_sync_ctx *ctx,
 
 		if (uidlist->record_pool == NULL) {
 			uidlist->record_pool =
-				pool_alloconly_create("uidlist record_pool",
+				pool_alloconly_create(MEMPOOL_GROWING
+						      "uidlist record_pool",
 						      1024);
 		}
 
@@ -811,6 +816,16 @@ maildir_uidlist_sync_get_full_filename(struct maildir_uidlist_sync_ctx *ctx,
 	struct maildir_uidlist_rec *rec;
 
 	rec = hash_lookup(ctx->files, filename);
+	return rec == NULL ? NULL : rec->filename;
+}
+
+const char *
+maildir_uidlist_get_full_filename(struct maildir_uidlist *uidlist,
+				  const char *filename)
+{
+	struct maildir_uidlist_rec *rec;
+
+	rec = hash_lookup(uidlist->files, filename);
 	return rec == NULL ? NULL : rec->filename;
 }
 

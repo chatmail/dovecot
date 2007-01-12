@@ -21,6 +21,9 @@
 #include <sys/stat.h>
 #include <utime.h>
 
+/* how many seconds to wait before overriding dovecot-keywords.lock */
+#define KEYWORDS_LOCK_STALE_TIMEOUT (60*2)
+
 struct maildir_keywords {
 	struct maildir_mailbox *mbox;
 	char *path;
@@ -53,11 +56,19 @@ struct maildir_keywords *maildir_keywords_init(struct maildir_mailbox *mbox)
 	mk->mbox = mbox;
 	mk->path = i_strconcat(mbox->control_dir,
 			       "/" MAILDIR_KEYWORDS_NAME, NULL);
-	mk->pool = pool_alloconly_create("maildir keywords", 256);
+	mk->pool = pool_alloconly_create("maildir keywords", 512);
 	ARRAY_CREATE(&mk->list, default_pool,
 		     const char *, MAILDIR_MAX_KEYWORDS);
 	mk->hash = hash_create(default_pool, mk->pool, 0,
 			       strcase_hash, (hash_cmp_callback_t *)strcasecmp);
+
+	mk->dotlock_settings.use_excl_lock =
+		(STORAGE(mbox->storage)->flags &
+		 MAIL_STORAGE_FLAG_DOTLOCK_USE_EXCL) != 0;
+	mk->dotlock_settings.timeout = KEYWORDS_LOCK_STALE_TIMEOUT + 2;
+	mk->dotlock_settings.stale_timeout = KEYWORDS_LOCK_STALE_TIMEOUT;
+	mk->dotlock_settings.temp_prefix =
+		INDEX_STORAGE(mbox->storage)->temp_prefix;
 	return mk;
 }
 
@@ -266,6 +277,7 @@ static int maildir_keywords_commit(struct maildir_keywords *mk)
 	unsigned int i, count;
 	struct utimbuf ut;
 	string_t *str;
+	mode_t old_mask;
 	int fd;
 
 	mk->synced = FALSE;
@@ -279,8 +291,10 @@ static int maildir_keywords_commit(struct maildir_keywords *mk)
 	t_push();
 	lock_path = t_strconcat(mk->path, ".lock", NULL);
 	(void)unlink(lock_path);
+        old_mask = umask(0777 & ~mk->mbox->mail_create_mode);
 	fd = file_dotlock_open(&mk->dotlock_settings, mk->path,
 			       DOTLOCK_CREATE_FLAG_NONBLOCK, &dotlock);
+	umask(old_mask);
 	if (fd == -1) {
 		mail_storage_set_critical(STORAGE(mk->mbox->storage),
 			"file_dotlock_open(%s) failed: %m", mk->path);

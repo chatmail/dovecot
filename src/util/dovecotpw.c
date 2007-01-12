@@ -32,7 +32,7 @@ usage(const char *s)
 	exit(1);
 }
 
-int main(int argc, char *argv[] __attr_unused__)
+int main(int argc, char *argv[])
 {
 	extern char *optarg;
 	extern int optind;
@@ -40,8 +40,7 @@ int main(int argc, char *argv[] __attr_unused__)
 	const char *user = NULL;
 	char *scheme = NULL;
 	char *plaintext = NULL;
-	char ch;
-	int lflag = 0, Vflag = 0;
+	int ch, lflag = 0, Vflag = 0;
 
 	lib_init();
 	random_init();

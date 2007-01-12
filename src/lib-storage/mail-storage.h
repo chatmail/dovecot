@@ -26,7 +26,12 @@ enum mail_storage_flags {
 	MAIL_STORAGE_FLAG_SHARED_NAMESPACE	= 0x80,
 	/* Don't try to autodetect anything, require that the given data 
 	   contains all the necessary information. */
-	MAIL_STORAGE_FLAG_NO_AUTODETECTION	= 0x100
+	MAIL_STORAGE_FLAG_NO_AUTODETECTION	= 0x100,
+	/* Don't autocreate any directories. If they don't exist,
+	   fail to create the storage. */
+	MAIL_STORAGE_FLAG_NO_AUTOCREATE		= 0x200,
+	/* Rely on O_EXCL when creating dotlocks */
+	MAIL_STORAGE_FLAG_DOTLOCK_USE_EXCL	= 0x400
 };
 
 enum mail_storage_lock_method {

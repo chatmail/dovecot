@@ -282,7 +282,8 @@ fs_quota_set_resource(struct quota_root *root,
 
 static struct quota_root_transaction_context *
 fs_quota_transaction_begin(struct quota_root *root,
-			   struct quota_transaction_context *ctx)
+			   struct quota_transaction_context *ctx,
+			   struct mailbox *box __attr_unused__)
 {
 	struct quota_root_transaction_context *root_ctx;
 

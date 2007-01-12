@@ -66,6 +66,7 @@ static void idle_finish(struct cmd_idle_context *ctx, bool done_ok)
 	client->bad_counter = 0;
 	_client_reset_command(client);
 
+	/* we may have read something else besides "DONE" into the buffer */
 	if (client->input_pending)
 		_client_input(client);
 }

@@ -231,10 +231,14 @@ mail_process_set_environment(struct settings *set, const char *mail,
 		env_put("MMAP_DISABLE=1");
 	if (set->mmap_no_write)
 		env_put("MMAP_NO_WRITE=1");
+	if (set->dotlock_use_excl)
+		env_put("DOTLOCK_USE_EXCL=1");
 	if (set->maildir_stat_dirs)
 		env_put("MAILDIR_STAT_DIRS=1");
 	if (set->maildir_copy_with_hardlinks)
 		env_put("MAILDIR_COPY_WITH_HARDLINKS=1");
+	if (set->maildir_copy_preserve_filename)
+		env_put("MAILDIR_COPY_PRESERVE_FILENAME=1");
 	if (set->mail_debug)
 		env_put("DEBUG=1");
 	if (set->mail_full_filesystem_access)
@@ -409,7 +413,7 @@ bool create_mail_process(enum process_type process_type, struct settings *set,
 	int err, ret, log_fd, nice;
 	bool home_given, nfs_check;
 
-	// FIXME: per-group
+	/* FIXME: per-group? */
 	if (mail_process_count == set->max_mail_processes) {
 		i_error("Maximum number of mail processes exceeded");
 		return FALSE;

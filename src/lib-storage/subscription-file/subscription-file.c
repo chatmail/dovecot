@@ -90,6 +90,8 @@ int subsfile_set_subscribed(struct mail_storage *storage, const char *path,
 		name = "INBOX";
 
 	memset(&dotlock_set, 0, sizeof(dotlock_set));
+	dotlock_set.use_excl_lock =
+		(storage->flags & MAIL_STORAGE_FLAG_DOTLOCK_USE_EXCL) != 0;
 	dotlock_set.temp_prefix = temp_prefix;
 	dotlock_set.timeout = SUBSCRIPTION_FILE_LOCK_TIMEOUT;
 	dotlock_set.stale_timeout = SUBSCRIPTION_FILE_CHANGE_TIMEOUT;

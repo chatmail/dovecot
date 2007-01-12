@@ -27,6 +27,9 @@
 /* Disable asserts */
 #undef DISABLE_ASSERTS
 
+/* Define to 1 if you have the `backtrace_symbols' function. */
+#undef HAVE_BACKTRACE_SYMBOLS
+
 /* Define if you have /dev/urandom */
 #undef HAVE_DEV_URANDOM
 
@@ -38,6 +41,9 @@
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
+
+/* Define to 1 if you have the <execinfo.h> header file. */
+#undef HAVE_EXECINFO_H
 
 /* Define to 1 if you have the `fcntl' function. */
 #undef HAVE_FCNTL
@@ -74,6 +80,12 @@
 
 /* Build with GSSAPI support */
 #undef HAVE_GSSAPI
+
+/* GSSAPI headers in gssapi/gssapi.h */
+#undef HAVE_GSSAPI_GSSAPI_H
+
+/* GSSAPI headers in gssapi.h */
+#undef HAVE_GSSAPI_H
 
 /* Define if you have the iconv() function. */
 #undef HAVE_ICONV
@@ -294,6 +306,9 @@
 /* Define if you have struct tm->tm_gmtoff */
 #undef HAVE_TM_GMTOFF
 
+/* Define to 1 if you have the <ucontext.h> header file. */
+#undef HAVE_UCONTEXT_H
+
 /* Define to 1 if you have the <ufs/ufs/quota.h> header file. */
 #undef HAVE_UFS_UFS_QUOTA_H
 
@@ -314,6 +329,9 @@
 
 /* Define to 1 if you have the `vsyslog' function. */
 #undef HAVE_VSYSLOG
+
+/* Define to 1 if you have the `walkcontext' function. */
+#undef HAVE_WALKCONTEXT
 
 /* Define to 1 if you have the `writev' function. */
 #undef HAVE_WRITEV

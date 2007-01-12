@@ -330,9 +330,17 @@ static bool client_handle_input(struct client_command_context *cmd)
 		/* command is being executed - continue it */
 		if (cmd->func(cmd) || cmd->param_error) {
 			/* command execution was finished */
-                        client->bad_counter = 0;
+			if (!cmd->param_error)
+				client->bad_counter = 0;
 			_client_reset_command(client);
 			return TRUE;
+		} else {
+			/* unfinished */
+			if (client->command_pending) {
+				o_stream_set_flush_pending(client->output,
+							   TRUE);
+			}
+			return FALSE;
 		}
 		return FALSE;
 	}
@@ -369,27 +377,15 @@ static bool client_handle_input(struct client_command_context *cmd)
 		cmd->func = command_find(cmd->name);
 	}
 
+	client->input_skip_line = TRUE;
 	if (cmd->func == NULL) {
 		/* unknown command */
 		client_send_command_error(cmd, "Unknown command.");
-		client->input_skip_line = TRUE;
 		_client_reset_command(client);
 	} else {
 		i_assert(!client->disconnected);
 
-		client->input_skip_line = TRUE;
-		if (cmd->func(cmd) || cmd->param_error) {
-			/* command execution was finished. */
-                        client->bad_counter = 0;
-			_client_reset_command(client);
-		} else {
-			/* unfinished */
-			if (client->command_pending) {
-				o_stream_set_flush_pending(client->output,
-							   TRUE);
-			}
-			return FALSE;
-		}
+		client_handle_input(cmd);
 	}
 
 	return TRUE;
@@ -431,7 +427,7 @@ void _client_input(void *context)
 		t_push();
 		ret = client_handle_input(cmd);
 		t_pop();
-	} while (ret);
+	} while (ret && !client->disconnected);
 	o_stream_uncork(client->output);
 
 	if (client->command_pending)

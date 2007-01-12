@@ -23,6 +23,45 @@
    problems when they reach the limit. */
 #define DBOX_MAX_MAILBOX_NAME_LENGTH (PATH_MAX/2)
 
+const struct dotlock_settings default_uidlist_dotlock_set = {
+	MEMBER(temp_prefix) NULL,
+	MEMBER(lock_suffix) NULL,
+
+	MEMBER(timeout) 120,
+	MEMBER(stale_timeout) 60,
+
+	MEMBER(callback) NULL,
+	MEMBER(context) NULL,
+
+	MEMBER(use_excl_lock) FALSE
+};
+
+const struct dotlock_settings default_file_dotlock_set = {
+	MEMBER(temp_prefix) NULL,
+	MEMBER(lock_suffix) NULL,
+
+	MEMBER(timeout) 120,
+	MEMBER(stale_timeout) 60,
+
+	MEMBER(callback) NULL,
+	MEMBER(context) NULL,
+
+	MEMBER(use_excl_lock) FALSE
+};
+
+static const struct dotlock_settings default_new_file_dotlock_set = {
+	MEMBER(temp_prefix) NULL,
+	MEMBER(lock_suffix) NULL,
+
+	MEMBER(timeout) 60,
+	MEMBER(stale_timeout) 30,
+
+	MEMBER(callback) NULL,
+	MEMBER(context) NULL,
+
+	MEMBER(use_excl_lock) FALSE
+};
+
 extern struct mail_storage dbox_storage;
 extern struct mailbox dbox_mailbox;
 
@@ -50,6 +89,7 @@ dbox_create(const char *data, const char *user,
 	struct dbox_storage *storage;
 	struct index_storage *istorage;
 	const char *root_dir, *index_dir, *p;
+	struct stat st;
 	size_t len;
 	pool_t pool;
 
@@ -95,6 +135,14 @@ dbox_create(const char *data, const char *user,
 	}
 
         root_dir = home_expand(root_dir);
+	if ((flags & MAIL_STORAGE_FLAG_NO_AUTOCREATE) != 0) {
+		if (stat(root_dir, &st) < 0) {
+			if (errno != ENOENT)
+				i_error("stat(%s) failed: %m", root_dir);
+			return NULL;
+		}
+	}
+
 	if (mkdir_parents(root_dir, CREATE_MODE) < 0 && errno != EEXIST) {
 		i_error("mkdir_parents(%s) failed: %m", root_dir);
 		return NULL;
@@ -102,6 +150,15 @@ dbox_create(const char *data, const char *user,
 
 	pool = pool_alloconly_create("storage", 512);
 	storage = p_new(pool, struct dbox_storage, 1);
+
+	storage->uidlist_dotlock_set = default_uidlist_dotlock_set;
+	storage->file_dotlock_set = default_file_dotlock_set;
+	storage->new_file_dotlock_set = default_new_file_dotlock_set;
+	if ((flags & MAIL_STORAGE_FLAG_DOTLOCK_USE_EXCL) != 0) {
+		storage->uidlist_dotlock_set.use_excl_lock = TRUE;
+		storage->file_dotlock_set.use_excl_lock = TRUE;
+		storage->new_file_dotlock_set.use_excl_lock = TRUE;
+	}
 
 	istorage = INDEX_STORAGE(storage);
 	istorage->storage = dbox_storage;
@@ -228,8 +285,11 @@ static const char *
 dbox_get_path(struct index_storage *storage, const char *name)
 {
 	if ((storage->storage.flags & MAIL_STORAGE_FLAG_FULL_FS_ACCESS) != 0 &&
-	    (*name == '/' || *name == '~'))
-		return home_expand(name);
+	    (*name == '/' || *name == '~')) {
+		if (home_try_expand(&name) == 0)
+			return name;
+		/* fallback to using ~dir */
+	}
 
 	return t_strconcat(storage->dir, "/", name, NULL);
 }
@@ -287,10 +347,13 @@ dbox_get_index_dir(struct index_storage *storage, const char *name)
 
 	if ((storage->storage.flags & MAIL_STORAGE_FLAG_FULL_FS_ACCESS) != 0 &&
 	    (*name == '/' || *name == '~')) {
-		name = home_expand(name);
-		p = strrchr(name, '/');
-		return t_strconcat(t_strdup_until(name, p),
-				   "/"DBOX_MAILDIR_NAME"/", p+1, NULL);
+		if (home_try_expand(&name) == 0) {
+			p = strrchr(name, '/');
+			return t_strconcat(p == NULL ? name :
+					   t_strdup_until(name, p),
+					   "/"DBOX_MAILDIR_NAME"/", p+1, NULL);
+		}
+		/* home expansion failed. just create the directory as ~dir. */
 	}
 
 	return t_strconcat(storage->index_dir,

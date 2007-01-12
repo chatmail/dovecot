@@ -1,3 +1,10 @@
+dovecot (1.0.rc17-1) unstable; urgency=low
+
+  * New upstream release.
+  * Updated dovecot-sieve from CVS.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 12 Jan 2007 09:42:47 +0100
+
 dovecot (1.0.rc15-2) unstable; urgency=medium
 
   * debian/dovecot-common.README.Debian: updated details about raw logging;

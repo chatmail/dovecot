@@ -49,117 +49,7 @@ struct settings_parse_ctx {
 	int level;
 };
 
-#define DEF(type, name) \
-	{ type, #name, offsetof(struct settings, name) }
-
-static struct setting_def setting_defs[] = {
-	/* common */
-	DEF(SET_STR, base_dir),
-	DEF(SET_STR, log_path),
-	DEF(SET_STR, info_log_path),
-	DEF(SET_STR, log_timestamp),
-	DEF(SET_STR, syslog_facility),
-
-	/* general */
-	DEF(SET_STR, protocols),
-	DEF(SET_STR, listen),
-	DEF(SET_STR, ssl_listen),
-
-	DEF(SET_BOOL, ssl_disable),
-	DEF(SET_STR, ssl_ca_file),
-	DEF(SET_STR, ssl_cert_file),
-	DEF(SET_STR, ssl_key_file),
-	DEF(SET_STR, ssl_key_password),
-	DEF(SET_INT, ssl_parameters_regenerate),
-	DEF(SET_STR, ssl_cipher_list),
-	DEF(SET_BOOL, ssl_verify_client_cert),
-	DEF(SET_BOOL, disable_plaintext_auth),
-	DEF(SET_BOOL, verbose_ssl),
-	DEF(SET_BOOL, shutdown_clients),
-	DEF(SET_BOOL, nfs_check),
-	DEF(SET_BOOL, version_ignore),
-
-	/* login */
-	DEF(SET_STR, login_dir),
-	DEF(SET_STR, login_executable),
-	DEF(SET_STR, login_user),
-	DEF(SET_STR, login_greeting),
-	DEF(SET_STR, login_log_format_elements),
-	DEF(SET_STR, login_log_format),
-
-	DEF(SET_BOOL, login_process_per_connection),
-	DEF(SET_BOOL, login_chroot),
-	DEF(SET_BOOL, login_greeting_capability),
-
-	DEF(SET_INT, login_process_size),
-	DEF(SET_INT, login_processes_count),
-	DEF(SET_INT, login_max_processes_count),
-	DEF(SET_INT, login_max_connections),
-
-	/* mail */
-	DEF(SET_STR, valid_chroot_dirs),
-	DEF(SET_STR, mail_chroot),
-	DEF(SET_INT, max_mail_processes),
-	DEF(SET_BOOL, verbose_proctitle),
-
-	DEF(SET_INT, first_valid_uid),
-	DEF(SET_INT, last_valid_uid),
-	DEF(SET_INT, first_valid_gid),
-	DEF(SET_INT, last_valid_gid),
-	DEF(SET_STR, mail_extra_groups),
-
-	DEF(SET_STR, default_mail_env),
-	DEF(SET_STR, mail_location),
-	DEF(SET_STR, mail_cache_fields),
-	DEF(SET_STR, mail_never_cache_fields),
-	DEF(SET_INT, mail_cache_min_mail_count),
-	DEF(SET_INT, mailbox_idle_check_interval),
-	DEF(SET_BOOL, mail_debug),
-	DEF(SET_BOOL, mail_full_filesystem_access),
-	DEF(SET_INT, mail_max_keyword_length),
-	DEF(SET_BOOL, mail_save_crlf),
-	DEF(SET_BOOL, mail_read_mmaped),
-	DEF(SET_BOOL, mmap_disable),
-	DEF(SET_BOOL, mmap_no_write),
-	DEF(SET_STR, lock_method),
-	DEF(SET_BOOL, maildir_stat_dirs),
-	DEF(SET_BOOL, maildir_copy_with_hardlinks),
-	DEF(SET_STR, mbox_read_locks),
-	DEF(SET_STR, mbox_write_locks),
-	DEF(SET_INT, mbox_lock_timeout),
-	DEF(SET_INT, mbox_dotlock_change_timeout),
-	DEF(SET_INT, mbox_min_index_size),
-	DEF(SET_BOOL, mbox_dirty_syncs),
-	DEF(SET_BOOL, mbox_very_dirty_syncs),
-	DEF(SET_BOOL, mbox_lazy_writes),
-	DEF(SET_INT, dbox_rotate_size),
-	DEF(SET_INT, dbox_rotate_min_size),
-	DEF(SET_INT, dbox_rotate_days),
-	DEF(SET_INT, umask),
-	DEF(SET_BOOL, mail_drop_priv_before_exec),
-
-	DEF(SET_STR, mail_executable),
-	DEF(SET_INT, mail_process_size),
-	DEF(SET_STR, mail_plugins),
-	DEF(SET_STR, mail_plugin_dir),
-	DEF(SET_STR, mail_log_prefix),
-
-	/* imap */
-	DEF(SET_INT, imap_max_line_length),
-	DEF(SET_STR, imap_capability),
-	DEF(SET_STR, imap_client_workarounds),
-
-	/* pop3 */
-	DEF(SET_BOOL, pop3_no_flag_updates),
-	DEF(SET_BOOL, pop3_enable_last),
-	DEF(SET_BOOL, pop3_reuse_xuidl),
-	DEF(SET_BOOL, pop3_lock_session),
-	DEF(SET_STR, pop3_uidl_format),
-	DEF(SET_STR, pop3_client_workarounds),
-	DEF(SET_STR, pop3_logout_format),
-
-	{ 0, NULL, 0 }
-};
+#include "master-settings-defs.c"
 
 #undef DEF
 #define DEF(type, name) \
@@ -333,9 +223,11 @@ struct settings default_settings = {
 #else
 	MEMBER(mmap_no_write) FALSE,
 #endif
+	MEMBER(dotlock_use_excl) FALSE,
 	MEMBER(lock_method) "fcntl",
 	MEMBER(maildir_stat_dirs) FALSE,
 	MEMBER(maildir_copy_with_hardlinks) FALSE,
+	MEMBER(maildir_copy_preserve_filename) FALSE,
 	MEMBER(mbox_read_locks) "fcntl",
 	MEMBER(mbox_write_locks) "dotlock fcntl",
 	MEMBER(mbox_lock_timeout) 300,
@@ -700,7 +592,6 @@ static bool get_imap_capability(struct settings *set)
 static bool settings_verify(struct settings *set)
 {
 	const char *dir;
-	struct stat st;
 	int facility;
 
 	if (!get_login_uid(set))
@@ -762,6 +653,63 @@ static bool settings_verify(struct settings *set)
 	}
 #endif
 
+	if (set->max_mail_processes < 1) {
+		i_error("max_mail_processes must be at least 1");
+		return FALSE;
+	}
+
+	if (set->last_valid_uid != 0 &&
+	    set->first_valid_uid > set->last_valid_uid) {
+		i_error("first_valid_uid can't be larger than last_valid_uid");
+		return FALSE;
+	}
+	if (set->last_valid_gid != 0 &&
+	    set->first_valid_gid > set->last_valid_gid) {
+		i_error("first_valid_gid can't be larger than last_valid_gid");
+		return FALSE;
+	}
+	if (set->mail_drop_priv_before_exec && *set->mail_chroot != '\0') {
+		i_error("mail_drop_priv_before_exec=yes and mail_chroot "
+			"don't work together");
+		return FALSE;
+	}
+
+	if (access(t_strcut(set->login_executable, ' '), X_OK) < 0) {
+		i_error("Can't use login executable %s: %m",
+			t_strcut(set->login_executable, ' '));
+		return FALSE;
+	}
+
+	if (set->login_processes_count < 1) {
+		i_error("login_processes_count must be at least 1");
+		return FALSE;
+	}
+	if (set->login_max_connections < 1) {
+		i_error("login_max_connections must be at least 1");
+		return FALSE;
+	}
+
+#ifdef HAVE_MODULES
+	if (*set->mail_plugins != '\0' &&
+	    access(set->mail_plugin_dir, R_OK | X_OK) < 0) {
+		i_error("Can't access mail module directory: %s: %m",
+			set->mail_plugin_dir);
+		return FALSE;
+	}
+#else
+	if (*set->mail_plugins != '\0') {
+		i_error("Module support wasn't built into Dovecot, "
+			"can't load modules: %s", set->mail_plugins);
+		return FALSE;
+	}
+#endif
+	return TRUE;
+}
+
+static bool settings_do_fixes(struct settings *set)
+{
+	struct stat st;
+
 	/* since base dir is under /var/run by default, it may have been
 	   deleted. */
 	if (mkdir_parents(set->base_dir, 0777) < 0 && errno != EEXIST) {
@@ -808,65 +756,17 @@ static bool settings_verify(struct settings *set)
 		unlink_auth_sockets(set->login_dir);
 	}
 
-	if (set->max_mail_processes < 1) {
-		i_error("max_mail_processes must be at least 1");
-		return FALSE;
-	}
-
-	if (set->last_valid_uid != 0 &&
-	    set->first_valid_uid > set->last_valid_uid) {
-		i_error("first_valid_uid can't be larger than last_valid_uid");
-		return FALSE;
-	}
-	if (set->last_valid_gid != 0 &&
-	    set->first_valid_gid > set->last_valid_gid) {
-		i_error("first_valid_gid can't be larger than last_valid_gid");
-		return FALSE;
-	}
-	if (set->mail_drop_priv_before_exec && *set->mail_chroot != '\0') {
-		i_error("mail_drop_priv_before_exec=yes and mail_chroot "
-			"don't work together");
-		return FALSE;
-	}
-
-	if (access(t_strcut(set->login_executable, ' '), X_OK) < 0) {
-		i_error("Can't use login executable %s: %m",
-			t_strcut(set->login_executable, ' '));
-		return FALSE;
-	}
-
-	if (set->login_processes_count < 1) {
-		i_error("login_processes_count must be at least 1");
-		return FALSE;
-	}
-	if (set->login_max_connections < 1) {
-		i_error("login_max_connections must be at least 1");
-		return FALSE;
-	}
-
 #ifdef HAVE_MODULES
-	if (*set->mail_plugins != '\0' &&
-	    access(set->mail_plugin_dir, R_OK | X_OK) < 0) {
-		i_error("Can't access mail module directory: %s: %m",
-			set->mail_plugin_dir);
-		return FALSE;
-	}
 	if (*set->mail_plugins != '\0' && set->protocol == MAIL_PROTOCOL_IMAP &&
 	    *set->imap_capability == '\0') {
 		if (!get_imap_capability(set))
 			return FALSE;
 	}
-#else
-	if (*set->mail_plugins != '\0') {
-		i_error("Module support wasn't built into Dovecot, "
-			"can't load modules: %s", set->mail_plugins);
-		return FALSE;
-	}
 #endif
 	return TRUE;
 }
 
-static bool settings_fix(struct settings *set, bool nochecks)
+static bool settings_fix(struct settings *set, bool nochecks, bool nofixes)
 {
 	/* fix relative paths */
 	fix_base_path(set, &set->login_dir);
@@ -879,7 +779,11 @@ static bool settings_fix(struct settings *set, bool nochecks)
 			"Use only one of them.");
 		return FALSE;
 	}
-	return nochecks ? TRUE : settings_verify(set);
+	if (nochecks)
+		return TRUE;
+	if (!settings_verify(set))
+		return FALSE;
+	return nofixes ? TRUE : settings_do_fixes(set);
 }
 
 static struct auth_settings *
@@ -1326,7 +1230,7 @@ static bool parse_section(const char *type, const char *name, void *context,
 	return FALSE;
 }
 
-bool master_settings_read(const char *path, bool nochecks)
+bool master_settings_read(const char *path, bool nochecks, bool nofixes)
 {
 	struct settings_parse_ctx ctx;
 	struct server_settings *server, *prev;
@@ -1366,13 +1270,14 @@ bool master_settings_read(const char *path, bool nochecks)
 		}
 		if (!settings_is_active(server->imap)) {
 			if (strcmp(server->imap->protocols, "none") == 0) {
-				if (!settings_fix(server->imap, nochecks))
+				if (!settings_fix(server->imap, nochecks,
+						  nofixes))
 					return FALSE;
 				server->defaults = server->imap;
 			}
 			server->imap = NULL;
 		} else {
-			if (!settings_fix(server->imap, nochecks))
+			if (!settings_fix(server->imap, nochecks, nofixes))
 				return FALSE;
 			server->defaults = server->imap;
 		}
@@ -1380,7 +1285,7 @@ bool master_settings_read(const char *path, bool nochecks)
 		if (!settings_is_active(server->pop3))
 			server->pop3 = NULL;
 		else {
-			if (!settings_fix(server->pop3, nochecks))
+			if (!settings_fix(server->pop3, nochecks, nofixes))
 				return FALSE;
 			if (server->defaults == NULL)
 				server->defaults = server->pop3;

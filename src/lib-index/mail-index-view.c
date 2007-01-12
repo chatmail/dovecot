@@ -49,10 +49,26 @@ static void _view_close(struct mail_index_view *view)
 	i_free(view);
 }
 
+#ifdef DEBUG
+static void mail_index_view_check_nextuid(struct mail_index_view *view)
+{
+	struct mail_index_record *rec;
+
+	if (view->hdr.messages_count == 0)
+		return;
+
+	rec = MAIL_INDEX_MAP_IDX(view->map, view->hdr.messages_count-1);
+	i_assert(rec->uid < view->hdr.next_uid);
+}
+#endif
+
 int mail_index_view_lock_head(struct mail_index_view *view, bool update_index)
 {
 	unsigned int lock_id;
 
+#ifdef DEBUG
+	mail_index_view_check_nextuid(view);
+#endif
 	if (MAIL_INDEX_MAP_IS_IN_MEMORY(view->index->map))
 		return 0;
 
@@ -91,6 +107,9 @@ int mail_index_view_lock(struct mail_index_view *view)
 
 	if (view->map != view->index->map) {
 		/* not head mapping, no need to lock */
+#ifdef DEBUG
+		mail_index_view_check_nextuid(view);
+#endif
 		return 0;
 	}
 
@@ -99,7 +118,11 @@ int mail_index_view_lock(struct mail_index_view *view)
 
 void mail_index_view_unlock(struct mail_index_view *view)
 {
-	if (view->lock_id != 0) {
+#ifdef DEBUG
+	mail_index_view_check_nextuid(view);
+#endif
+
+	if (view->lock_id != 0 && view->transactions == 0) {
 		mail_index_unlock(view->index, view->lock_id);
 		view->lock_id = 0;
 	}
@@ -196,6 +219,12 @@ static int _view_lookup_full(struct mail_index_view *view, uint32_t seq,
 
 	/* look up the record */
 	rec = MAIL_INDEX_MAP_IDX(view->map, seq-1);
+	if (rec->uid == 0) {
+		mail_index_set_error(view->index, "Corrupted Index file %s: "
+			"Record [%u].uid=0", view->index->filepath, seq);
+		mail_index_mark_corrupted(view->index);
+		return -1;
+	}
 	if (view->map == view->index->map) {
 		/* view's mapping is latest. we can use it directly. */
 		*map_r = view->map;
@@ -452,6 +481,9 @@ void mail_index_view_close(struct mail_index_view **_view)
 	if (--view->refcount > 0)
 		return;
 
+	i_assert(view->transactions == 0);
+
+	mail_index_view_unlock(view);
 	view->methods.close(view);
 }
 
