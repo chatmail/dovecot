@@ -15,7 +15,7 @@ static void proxy_input(struct istream *input, struct ostream *output,
 {
 	struct pop3_client *client = context;
 	string_t *str;
-	const char *line;
+	const char *line, *msg;
 
 	i_assert(!client->destroyed);
 
@@ -97,6 +97,11 @@ static void proxy_input(struct istream *input, struct ostream *output,
 		(void)o_stream_send_str(client->output, line);
 		(void)o_stream_send(client->output, "\r\n", 2);
 
+		msg = t_strdup_printf("proxy(%s): started proxying to %s:%u",
+				      client->common.virtual_user,
+				      login_proxy_get_host(client->proxy),
+				      login_proxy_get_port(client->proxy));
+
 		login_proxy_detach(client->proxy, client->input,
 				   client->output);
 
@@ -104,9 +109,7 @@ static void proxy_input(struct istream *input, struct ostream *output,
 		client->input = NULL;
 		client->output = NULL;
 		client->common.fd = -1;
-		client_destroy(client,
-			       t_strdup_printf("proxy(%s): started",
-					       client->common.virtual_user));
+		client_destroy(client, msg);
 		return;
 	}
 

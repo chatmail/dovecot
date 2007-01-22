@@ -12,6 +12,7 @@
 #include "module-dir.h"
 #include "str.h"
 #include "str-sanitize.h"
+#include "strescape.h"
 #include "var-expand.h"
 #include "message-address.h"
 #include "dict-client.h"
@@ -19,6 +20,8 @@
 #include "auth-client.h"
 #include "mail-send.h"
 #include "duplicate.h"
+#include "../master/syslog-util.h"
+#include "../master/syslog-util.c" /* ugly, ugly.. */
 #include "deliver.h"
 
 #include <stdio.h>
@@ -248,6 +251,13 @@ static void config_file_init(const char *path)
 			value++;
 		} while (*value == ' ');
 
+		len = strlen(value);
+		if (len > 0 &&
+		    ((*value == '"' && value[len-1] == '"') ||
+		     (*value == '\'' && value[len-1] == '\''))) {
+			value = str_unescape(p_strndup(unsafe_data_stack_pool,
+						       value+1, len - 2));
+		}
 		if (setting_is_bool(key) && strcasecmp(value, "yes") != 0)
 			continue;
 
@@ -369,14 +379,17 @@ static struct istream *create_mbox_stream(int fd, const char *envelope_sender)
 
 static void open_logfile(const char *username)
 {
-	const char *prefix, *log_path;
+	const char *prefix, *log_path, *stamp;
 
 	prefix = t_strdup_printf("deliver(%s)", username);
 	log_path = getenv("LOG_PATH");
 	if (log_path == NULL || *log_path == '\0') {
 		const char *env = getenv("SYSLOG_FACILITY");
-		i_set_failure_syslog(prefix, LOG_NDELAY,
-				     env == NULL ? LOG_MAIL : atoi(env));
+		int facility;
+
+		if (env == NULL || !syslog_facility_find(env, &facility))
+			facility = LOG_MAIL;
+		i_set_failure_syslog(prefix, LOG_NDELAY, facility);
 	} else {
 		/* log to file or stderr */
 		i_set_failure_file(log_path, prefix);
@@ -386,7 +399,10 @@ static void open_logfile(const char *username)
 	if (log_path != NULL && *log_path != '\0')
 		i_set_info_file(log_path);
 
-	i_set_failure_timestamp_format(getenv("LOG_TIMESTAMP"));
+	stamp = getenv("LOG_TIMESTAMP");
+	if (stamp == NULL)
+		stamp = DEFAULT_FAILURE_STAMP_FORMAT;
+	i_set_failure_timestamp_format(stamp);
 }
 
 static void print_help(void)
@@ -469,10 +485,10 @@ int main(int argc, char *argv[])
 					       "Missing envelope argument");
 			}
 			envelope_sender = argv[i];
-		} else {
+		} else if (argv[i][0] != '\0') {
 			print_help();
 			i_fatal_status(EX_USAGE,
-				       "Unknown argument: %s", argv[1]);
+				       "Unknown argument: %s", argv[i]);
 		}
 	}
 

@@ -1,6 +1,7 @@
 /* Copyright (C) 2002-2006 Timo Sirainen */
 
 #include "lib.h"
+#include "ioloop.h"
 #include "array.h"
 #include "hostpid.h"
 #include "home-expand.h"
@@ -33,8 +34,6 @@ struct rename_context {
 
 extern struct mail_storage maildir_storage;
 extern struct mailbox maildir_mailbox;
-
-static const char *maildirs[] = { "cur", "new", "tmp", NULL  };
 
 static int verify_inbox(struct maildir_storage *storage);
 
@@ -159,7 +158,7 @@ maildir_create(const char *data, const char *user,
 		       inbox_dir == NULL ? "" : inbox_dir);
 	}
 
-	pool = pool_alloconly_create("storage", 512);
+	pool = pool_alloconly_create("storage", 512+256);
 	storage = p_new(pool, struct maildir_storage, 1);
 	storage->control_dir = p_strdup(pool, home_expand(control_dir));
 	storage->copy_with_hardlinks =
@@ -351,52 +350,58 @@ static int mkdir_verify(struct index_storage *storage,
 	struct stat st;
 
 	if (verify) {
-		if (lstat(dir, &st) == 0)
+		if (stat(dir, &st) == 0)
 			return 0;
 
 		if (errno != ENOENT) {
 			mail_storage_set_critical(&storage->storage,
-						  "lstat(%s) failed: %m", dir);
+						  "stat(%s) failed: %m", dir);
 			return -1;
 		}
 	}
 
-	if (mkdir_parents(dir, CREATE_MODE) < 0 &&
-	    (errno != EEXIST || !verify)) {
-		if (errno != EEXIST && (!verify || errno != ENOENT)) {
+	if (mkdir_parents(dir, CREATE_MODE) < 0) {
+		if (errno == EEXIST) {
+			if (!verify)
+				return -1;
+		} else {
 			mail_storage_set_critical(&storage->storage,
 						  "mkdir(%s) failed: %m", dir);
+			return -1;
 		}
-		return -1;
 	}
-
 	return 0;
 }
 
-/* create or fix maildir, ignore if it already exists */
 static int create_maildir(struct index_storage *storage,
 			  const char *dir, bool verify)
 {
-	const char **tmp, *path;
+	const char *path;
+	struct stat st;
 
-	if (!verify && mkdir_verify(storage, dir, verify) < 0)
+	if (mkdir_verify(storage, t_strconcat(dir, "/cur", NULL), verify) < 0)
+		return -1;
+	if (mkdir_verify(storage, t_strconcat(dir, "/new", NULL), verify) < 0)
 		return -1;
 
-	for (tmp = maildirs; *tmp != NULL; tmp++) {
-		path = t_strconcat(dir, "/", *tmp, NULL);
-
-		if (mkdir_verify(storage, path, verify) < 0) {
-			if (!verify || errno != ENOENT)
-				return -1;
-
-			/* small optimization. if we're verifying, we don't
-			   check that the root dir actually exists unless we
-			   fail here. */
-			if (mkdir_verify(storage, dir, verify) < 0)
-				return -1;
-			if (mkdir_verify(storage, path, verify) < 0)
-				return -1;
+	/* if tmp/ directory exists, we need to clean it up once in a while */
+	path = t_strconcat(dir, "/tmp", NULL);
+	if (stat(path, &st) == 0) {
+		if (st.st_atime >
+		    st.st_ctime + MAILDIR_TMP_DELETE_SECS) {
+			/* the directory should be empty. we won't do anything
+			   until ctime changes. */
+		} else if (st.st_atime < ioloop_time - MAILDIR_TMP_SCAN_SECS) {
+			/* time to scan */
+			(void)maildir_tmp_cleanup(&storage->storage, path);
 		}
+	} else if (errno == ENOENT) {
+		if (mkdir_verify(storage, path, verify) < 0)
+			return -1;
+	} else {
+		mail_storage_set_critical(&storage->storage,
+					  "stat(%s) failed: %m", path);
+		return -1;
 	}
 
 	return 0;
@@ -517,10 +522,12 @@ maildir_open(struct maildir_storage *storage, const char *name,
 	mbox->uidlist = maildir_uidlist_init(mbox);
 	mbox->keywords = maildir_keywords_init(mbox);
 
-	if (!shared)
+	if (!shared) {
 		mbox->mail_create_mode = 0600;
-	else {
+		mbox->mail_create_gid = (gid_t)-1;
+	} else {
 		mbox->mail_create_mode = st.st_mode & 0666;
+		mbox->mail_create_gid = st.st_gid;
 		mbox->private_flags_mask = MAIL_SEEN;
 	}
 

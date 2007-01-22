@@ -22,7 +22,7 @@ void mail_index_sync_replace_map(struct mail_index_sync_map_ctx *ctx,
 	/* if map still exists after this, it's only in views. */
 	view->map->write_to_disk = FALSE;
 	/* keywords aren't parsed for the new map yet */
-	ctx->keywords_read = FALSE;
+	view->map->keywords_read = FALSE;
 
 	mail_index_unmap(view->index, &view->map);
 	view->map = map;
@@ -597,8 +597,8 @@ int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
 		unsigned int record_size;
 
 		if (ctx->cur_ext_id == (uint32_t)-1) {
-		mail_index_sync_set_corrupted(ctx,
-				"Extension record update update "
+			mail_index_sync_set_corrupted(ctx,
+				"Extension record updated "
 				"without intro prefix");
 			ret = -1;
 			break;
@@ -655,6 +655,9 @@ void mail_index_sync_map_init(struct mail_index_sync_map_ctx *sync_map_ctx,
 	sync_map_ctx->view = view;
 	sync_map_ctx->cur_ext_id = (uint32_t)-1;
 	sync_map_ctx->type = type;
+
+	/* make sure we re-read it in case it has changed */
+	sync_map_ctx->view->map->keywords_read = FALSE;
 
 	mail_index_sync_init_handlers(sync_map_ctx);
 }

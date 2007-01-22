@@ -115,6 +115,7 @@ mbox_sync_read_next_mail(struct mbox_sync_context *sync_ctx,
 		istream_raw_mbox_get_start_offset(sync_ctx->input);
 	mail_ctx->mail.offset =
 		istream_raw_mbox_get_header_offset(sync_ctx->input);
+	sync_ctx->prev_next_uid = sync_ctx->next_uid;
 
 	mbox_sync_parse_next_mail(sync_ctx->input, mail_ctx);
 	i_assert(sync_ctx->input->v_offset != mail_ctx->mail.from_offset ||
@@ -760,6 +761,10 @@ static int mbox_sync_handle_header(struct mbox_sync_mail_context *mail_ctx)
 		sync_ctx->need_space_seq = sync_ctx->seq;
 		sync_ctx->space_diff = 0;
 
+		/* remember what the next_uid was before we parsed this mail,
+		   so that rewriting can set it back */
+		sync_ctx->need_space_next_uid = sync_ctx->prev_next_uid;
+
 		if (sync_ctx->expunged_space > 0) {
 			/* create dummy message to describe the expunged data */
 			struct mbox_sync_mail mail;
@@ -1022,7 +1027,7 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 	uint32_t uid, messages_count;
 	uoff_t offset;
 	int ret;
-	bool expunged, skipped_mails;
+	bool expunged, skipped_mails, uids_broken;
 
 	messages_count =
 		mail_index_view_get_messages_count(sync_ctx->sync_view);
@@ -1033,7 +1038,7 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 	if (ret <= 0)
 		return ret;
 
-	skipped_mails = FALSE;
+	skipped_mails = uids_broken = FALSE;
 	while ((ret = mbox_sync_read_next_mail(sync_ctx, mail_ctx)) > 0) {
 		uid = mail_ctx->mail.uid;
 
@@ -1067,6 +1072,8 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 			sync_ctx->mbox->mbox_sync_dirty = TRUE;
 			return 0;
 		}
+		if (mail_ctx->mail.uid_broken)
+			uids_broken = TRUE;
 
 		if (mail_ctx->pseudo)
 			uid = 0;
@@ -1191,6 +1198,13 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 
 	if (!skipped_mails)
 		sync_ctx->mbox->mbox_sync_dirty = FALSE;
+
+	if (uids_broken && sync_ctx->delay_writes) {
+		/* once we get around to writing the changes, we'll need to do
+		   a full sync to avoid the "UIDs broken in partial sync"
+		   error */
+		sync_ctx->mbox->mbox_sync_dirty = TRUE;
+	}
 	return 1;
 }
 

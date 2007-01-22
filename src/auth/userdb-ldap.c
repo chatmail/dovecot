@@ -7,6 +7,7 @@
 #include "hash.h"
 #include "str.h"
 #include "var-expand.h"
+#include "auth-cache.h"
 #include "db-ldap.h"
 #include "userdb.h"
 
@@ -141,12 +142,14 @@ static void handle_request(struct ldap_connection *conn,
 	enum userdb_result result = USERDB_RESULT_INTERNAL_FAILURE;
 	int ret;
 
-	ret = ldap_result2error(conn->ld, res, 0);
-	if (ret != LDAP_SUCCESS) {
-		auth_request_log_error(auth_request, "ldap",
-			"ldap_search() failed: %s", ldap_err2string(ret));
-		urequest->userdb_callback(result, NULL, auth_request);
-		return;
+	if (res != NULL) {
+		ret = ldap_result2error(conn->ld, res, 0);
+		if (ret != LDAP_SUCCESS) {
+			auth_request_log_error(auth_request, "ldap",
+					       "ldap_search() failed: %s", ldap_err2string(ret));
+			urequest->userdb_callback(result, NULL, auth_request);
+			return;
+		}
 	}
 
 	entry = res == NULL ? NULL : ldap_first_entry(conn->ld, res);
@@ -224,6 +227,9 @@ userdb_ldap_preinit(struct auth_userdb *auth_userdb, const char *args)
 
 	db_ldap_set_attrs(conn, conn->set.user_attrs, &conn->user_attr_names,
 			  conn->user_attr_map, default_attr_map, NULL);
+	module->module.cache_key =
+		auth_cache_parse_key(auth_userdb->auth->pool,
+				     conn->set.user_filter);
 	return &module->module;
 }
 

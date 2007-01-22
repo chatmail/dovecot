@@ -127,7 +127,7 @@ static int scope2str(const char *str)
 	i_fatal("LDAP: Unknown scope option '%s'", str);
 }
 
-const char *ldap_get_error(struct ldap_connection *conn)
+static int ldap_get_errno(struct ldap_connection *conn)
 {
 	int ret, err;
 
@@ -135,17 +135,20 @@ const char *ldap_get_error(struct ldap_connection *conn)
 	if (ret != LDAP_SUCCESS) {
 		i_error("LDAP: Can't get error number: %s",
 			ldap_err2string(ret));
-		return "??";
+		return -1;
 	}
 
-	return ldap_err2string(err);
+	return err;
+}
+
+const char *ldap_get_error(struct ldap_connection *conn)
+{
+	return ldap_err2string(ldap_get_errno(conn));
 }
 
 void db_ldap_add_delayed_request(struct ldap_connection *conn,
 				 struct ldap_request *request)
 {
-	i_assert(!conn->connected);
-
 	request->next = NULL;
 
 	if (conn->delayed_requests_head == NULL)
@@ -153,6 +156,26 @@ void db_ldap_add_delayed_request(struct ldap_connection *conn,
 	else
 		conn->delayed_requests_tail->next = request;
 	conn->delayed_requests_tail = request;
+}
+
+static void db_ldap_handle_next_delayed_request(struct ldap_connection *conn)
+{
+	struct ldap_request *request;
+
+	if (conn->delayed_requests_head == NULL)
+		return;
+
+	request = conn->delayed_requests_head;
+	conn->delayed_requests_head = request->next;
+	if (conn->delayed_requests_head == NULL)
+		conn->delayed_requests_tail = NULL;
+
+	conn->retrying = TRUE;
+	if (request->filter == NULL)
+		request->callback(conn, request, NULL);
+	else
+		db_ldap_search(conn, request, conn->set.ldap_scope);
+	conn->retrying = FALSE;
 }
 
 void db_ldap_search(struct ldap_connection *conn, struct ldap_request *request,
@@ -165,7 +188,7 @@ void db_ldap_search(struct ldap_connection *conn, struct ldap_request *request,
 		return;
 	}
 
-	if (conn->connected) {
+	if (conn->connected && !conn->binding) {
 		if (conn->last_auth_bind) {
 			/* switch back to the default dn before doing the
 			   search request. */
@@ -284,7 +307,10 @@ static void ldap_input(void *context)
 	LDAPMessage *res;
 	int ret, msgid;
 
-	while (conn->ld != NULL) {
+	for (;;) {
+		if (conn->ld == NULL)
+			return;
+
 		memset(&timeout, 0, sizeof(timeout));
 		ret = ldap_result(conn->ld, LDAP_RES_ANY, 1, &timeout, &res);
 #ifdef OPENLDAP_ASYNC_WORKAROUND
@@ -294,14 +320,8 @@ static void ldap_input(void *context)
 					  &timeout, &res);
 		}
 #endif
-		if (ret <= 0) {
-			if (ret < 0) {
-				i_error("LDAP: ldap_result() failed: %s",
-					ldap_get_error(conn));
-				ldap_conn_reconnect(conn);
-			}
-			return;
-		}
+		if (ret <= 0)
+			break;
 
 		msgid = ldap_msgid(res);
 		request = hash_lookup(conn->requests, POINTER_CAST(msgid));
@@ -314,6 +334,15 @@ static void ldap_input(void *context)
 		}
 
 		ldap_msgfree(res);
+	}
+
+	if (ret < 0) {
+		i_error("LDAP: ldap_result() failed: %s",
+			ldap_get_error(conn));
+		ldap_conn_reconnect(conn);
+	} else {
+		if (!conn->binding)
+			db_ldap_handle_next_delayed_request(conn);
 	}
 }
 
@@ -384,6 +413,7 @@ static void db_ldap_bind_callback(struct ldap_connection *conn,
 {
 	int ret;
 
+	conn->binding = FALSE;
 	conn->connecting = FALSE;
 	i_free(ldap_request);
 
@@ -404,20 +434,22 @@ static int db_ldap_bind(struct ldap_connection *conn)
 	struct ldap_request *ldap_request;
 	int msgid;
 
+	i_assert(!conn->binding);
+
 	ldap_request = i_new(struct ldap_request, 1);
 	ldap_request->callback = db_ldap_bind_callback;
 	ldap_request->context = conn;
 
-	msgid = ldap_bind(conn->ld, conn->set.dn, conn->set.
-			  dnpass, LDAP_AUTH_SIMPLE);
+	msgid = ldap_bind(conn->ld, conn->set.dn, conn->set.dnpass,
+			  LDAP_AUTH_SIMPLE);
 	if (msgid == -1) {
-		i_error("ldap_bind(%s) failed: %s",
-			conn->set.dn, ldap_get_error(conn));
+		db_ldap_connect_finish(conn, ldap_get_errno(conn));
 		i_free(ldap_request);
 		return -1;
 	}
 
 	conn->connecting = TRUE;
+	conn->binding = TRUE;
 	hash_insert(conn->requests, POINTER_CAST(msgid), ldap_request);
 
 	/* we're binding back to the original DN, not doing an
@@ -447,6 +479,7 @@ int db_ldap_connect(struct ldap_connection *conn)
 
 	if (conn->connected || conn->connecting)
 		return 0;
+	i_assert(!conn->binding);
 
 	if (conn->ld == NULL) {
 		if (conn->set.uris != NULL) {
@@ -557,6 +590,7 @@ static void ldap_conn_close(struct ldap_connection *conn, bool flush_requests)
 	}
 
 	conn->connected = FALSE;
+	conn->binding = FALSE;
 
 	if (conn->io != NULL)
 		io_remove(&conn->io);

@@ -45,7 +45,7 @@ dict_quota_init(struct quota_setup *setup, const char *name)
 			message_bytes_limit =
 				strtoull(*args + 8, NULL, 10) * 1024;
 		} else if (strncmp(*args, "messages=", 9) == 0)
-			message_bytes_limit = strtoull(*args + 9, NULL, 10);
+			message_count_limit = strtoull(*args + 9, NULL, 10);
 	}
 	t_pop();
 

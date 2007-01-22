@@ -1,3 +1,333 @@
+2007-01-22 15:21  Timo Sirainen <tss@iki.fi>
+
+	* src/: lib-storage/index/maildir/maildir-save.c,
+	  lib-index/mail-index-transaction.c: Added asserts
+
+2007-01-22 12:44  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-sync-private.h,
+	  mbox-sync-rewrite.c, mbox-sync-update.c, mbox-sync.c: Restore
+	  sync_ctx->next_uid to original value when beginning a rewrite.
+	  This could fix some problems with broken UIDs causing crashes.
+
+2007-01-22 12:11  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync.c: If mbox had broken UIDs
+	  and we didn't rewrite them, don't mark the index as being synced.
+
+2007-01-22 12:10  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-parse.c: If message had one
+	  invalid X-UID and another valid X-UID, we still marked the valid
+	  one with uid_broken=TRUE.
+
+2007-01-22 11:54  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-keywords.c: Removed accidentally
+	  committed debug assert.
+
+2007-01-22 10:57  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: If config file contained quoted "value",
+	  the quotes weren't stripped.	syslog_facility wasn't converted
+	  from name to numeric value.
+
+2007-01-21 15:49  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: If log_timestamp isn't uncommented in
+	  dovecot.conf, use the default.
+
+2007-01-21 10:35  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/: login-proxy.c, login-proxy.h: Forgot to commit
+	  for the "log proxy destination" change.
+
+2007-01-19 21:59  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/acl/acl-backend-vfile.c: Moved dovecot-acl file from
+	  control dir to mail directory, except with mboxes. If the file
+	  still exists in control dir, Dovecot kills itself (rather than
+	  give full access to the mailbox).
+
+2007-01-19 21:19  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap-login/imap-proxy.c, pop3-login/pop3-proxy.c: Log the
+	  proxy destination host:port.
+
+2007-01-19 21:07  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-status.c: Doing a STATUS for unknown storage
+	  shouldn't return with "needs more data" from the function.
+
+2007-01-19 20:49  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-dict.c: messages=n actually updated
+	  storage.
+
+2007-01-19 20:26  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Ignore empty parameters. "Unknown
+	  argument: xx" printed wrong argument.  Patch by Jan Srzednicki
+
+2007-01-19 18:25  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/failures.c: If we can't open the log file, write the
+	  error to stderr instead of relying on the existing fatal handler
+	  which may not do anything.
+
+2007-01-19 16:45  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Removed umask setting from here. It's just
+	  confusing here because changing it won't anyway work as intended.
+
+2007-01-19 16:33  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/Makefile.am: Forgot to add mail-log here.
+
+2007-01-19 15:27  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.c: Removed accidentally committed debugging
+	  code.
+
+2007-01-19 15:25  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: auth cache: If passdb didn't provide the
+	  password, we used the user-given plaintext password, but we
+	  cached it with wrong scheme unless the passdb's default scheme
+	  was plain.
+
+2007-01-19 15:19  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: auth-master-connection.c, auth-master-connection.h,
+	  auth-request-handler.c, auth.c, db-ldap.h, main.c, userdb-ldap.c:
+	  Several fixes to handling deinitialization without crashing.
+
+2007-01-19 15:18  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: db-ldap.c, passdb-ldap.c: Do ldap_bind() only when
+	  there are no requests waiting, and don't do anything until
+	  ldap_bind() has finished. This fixes several problems with
+	  auth_bind=yes.
+
+2007-01-19 13:27  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: If request fails with internal failure,
+	  don't crash if auth cache is disabled.
+
+2007-01-18 19:51  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Allow --with-vpopmail=path specify the
+	  vpopmail_home path.
+
+2007-01-18 18:45  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/plugins/mail-log/.cvsignore,
+	  src/plugins/mail-log/Makefile.am,
+	  src/plugins/mail-log/mail-log-plugin.c,
+	  src/plugins/mail-log/mail-log-plugin.h: Added mail_log plugin to
+	  log various mail operations. Currently it logs mail copies,
+	  deletions, expunges and mailbox deletions.
+
+2007-01-18 17:20  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/: maildir-keywords.c,
+	  maildir-storage.c, maildir-storage.h, maildir-uidlist.c,
+	  maildir-util.c: Saved mails and dovecot-keywords file didn't set
+	  the group from dovecot-shared file.
+
+2007-01-18 16:53  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Removed mail_read_mmaped setting from the
+	  example config. It still exists, but since it might not work too
+	  well, it's better to just hide it so new people won't enable it..
+
+2007-01-18 16:44  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop-notify-inotify.c: If inotify_add_watch() fails
+	  with ESTALE, don't log an error.
+
+2007-01-18 16:36  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: base_dir doesn't need to be
+	  group-readable, don't force it.
+
+2007-01-18 15:36  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-cache-compress.c: debug: Don't bother warning
+	  about cache compressions. It has lived its usefulness.
+
+2007-01-18 15:33  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: mempool-alloconly.c, mempool-datastack.c,
+	  mempool-system.c, mempool-unsafe-datastack.c, mempool.h: Don't
+	  keep the memory pool virtual functions in the pool structure
+	  itself, rather access them via a pointer to a shared virtual
+	  function struct.  Reduces memory usage a bit.
+
+2007-01-18 15:31  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/buffer.c: cleanup
+
+2007-01-17 23:33  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-private.h, mail-index-sync-keywords.c,
+	  mail-index-sync-private.h, mail-index-sync-update.c,
+	  mail-index.c: Keywords were sometimes being re-added to the index
+	  even while they already existed, causing the record size to
+	  bloat.
+
+2007-01-17 18:53  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log.c: Don't rename() .log to
+	  .log.2, because it temporarily loses the log file.  Use unlink()
+	  + link() instead.
+
+2007-01-17 18:47  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view-sync.c: unreliable_flags wasn't
+	  always set correctly, which caused "xxx counter wrong" errors and
+	  such.
+
+2007-01-17 18:45  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-fsck.c: cleanup
+
+2007-01-17 17:59  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop-notify-dn.c: Disable dnotify silently if it's not
+	  supported by the kernel. We were missing one check.
+
+2007-01-17 16:17  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-lock.c, mail-index-view.c,
+	  mail-index.c, mail-transaction-log-view.c,
+	  mail-transaction-log.c: Fixes to error handling paths.
+
+2007-01-17 14:57  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-ext.c: A new "extension
+	  introduction" in transaction log could have left some existing
+	  views to contain an invalid mapping where it contained the new
+	  extension, but with a wrong record_size.
+
+2007-01-16 22:39  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log.c: And now really fix the log
+	  rotation race.
+
+2007-01-16 22:00  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-cache.c: Make sure file_seq isn't zero in
+	  cache file header.
+
+2007-01-16 21:58  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-transaction-log-append.c,
+	  mail-transaction-log.c: Fixed a race condition in transaction log
+	  rotation, which could have caused log data to be overwritten.
+
+2007-01-16 18:27  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-update.c: cleanup
+
+2007-01-16 18:27  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: Make sure that extensions don't point
+	  outside allocated record size.
+
+2007-01-16 16:59  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, src/lib-storage/index/maildir/maildir-storage.c,
+	  src/lib-storage/index/maildir/maildir-storage.h,
+	  src/lib-storage/index/maildir/maildir-util.c: When opening
+	  maildir, check if tmp/'s atime is over 8h old. If it is, delete
+	  old files in it. However if atime - ctime > 36h, it means there's
+	  nothing to be deleted so the scanning isn't done then. We update
+	  atime if filesystem is mounted with noatime.
+
+2007-01-16 15:07  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-private.h, mail-index.c: Added some
+	  extra checks/asserts
+
+2007-01-16 14:09  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view.c: UID -> seq lookup: Optimize
+	  UID=1 and UID=<next_uid>-1 cases.
+
+2007-01-16 13:25  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.c: Last change for making ldap_bind() error
+	  handling better was actually broken.
+
+2007-01-16 13:23  Timo Sirainen <timo.sirainen@movial.fi>
+
+	* src/auth/: auth-cache.c, auth-request.c, auth-request.h,
+	  userdb-ldap.c, userdb-passwd-file.c, userdb-passwd.c,
+	  userdb-sql.c, userdb-vpopmail.c, userdb.h: Authentication cache
+	  caches now also userdb data. Code by Tommi Saviranta.
+
+2007-01-16 13:18  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: auth-request-handler.c, auth-stream.c, auth-stream.h,
+	  passdb-blocking.c, userdb-prefetch.c: extra_fields == NULL and
+	  empty extra_fields (reset after each passdb lookup) should be
+	  treated the same. Fixes some assert crashes.
+
+2007-01-14 04:01  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view-sync.c: We could have synced
+	  external transactions multiple times, causing corrupted view
+	  errors.
+
+2007-01-14 03:37  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view-sync.c: View syncing could have
+	  caused some transactions to be synced multiple times in some
+	  situations.
+
+2007-01-14 03:17  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-cache-lookup.c, mail-cache-private.h:
+	  Removed file offset caching from mail_cache_foreach(). It didn't
+	  work correctly when cache file was just compressed, and caused
+	  "cache file corrupted" errors.
+
+2007-01-14 01:49  Timo Sirainen <tss@iki.fi>
+
+	* autogen.sh: Copy config.rpath before running autoreconf.
+
+2007-01-14 01:47  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/: dbox/dbox-storage.c,
+	  maildir/maildir-storage.c, mbox/mbox-storage.c: Grow the initial
+	  pool sizes a bit.
+
+2007-01-09 20:30  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: Delete all auth-worker.* files from
+	  Dovecot's base_dir when starting.
+
+2007-01-09 20:19  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-mail/message-body-search.c: When searching MIME body
+	  headers, make sure we don't go out of bounds with broken MIME
+	  messages and cause assert-crash.
+
+2007-01-09 11:40  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.c: If ldap_bind() fails directly, log the "ldap
+	  server down" errors more nicely.
+
+2007-01-07 07:26  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: 1.0.rc17 released
+
+2007-01-07 07:24  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/userdb-blocking.c: We sent extra "OK" to master, causing
+	  it to think it was the username.
+
 2007-01-05 18:48  Timo Sirainen <tss@iki.fi>
 
 	* src/imap/client.c: Don't assert-crash if a command is waiting in

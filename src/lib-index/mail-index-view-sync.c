@@ -200,7 +200,6 @@ int mail_index_view_sync_begin(struct mail_index_view *view,
                                enum mail_index_sync_type sync_mask,
 			       struct mail_index_view_sync_ctx **ctx_r)
 {
-	const struct mail_index_header *hdr;
 	struct mail_index_view_sync_ctx *ctx;
 	struct mail_index_map *map;
 	enum mail_transaction_type log_get_mask, visible_mask;
@@ -220,7 +219,6 @@ int mail_index_view_sync_begin(struct mail_index_view *view,
 	if (mail_index_view_lock_head(view, TRUE) < 0)
 		return -1;
 
-	hdr = view->index->hdr;
 	if ((sync_mask & MAIL_INDEX_SYNC_TYPE_EXPUNGE) != 0) {
 		/* get list of all expunges first */
 		if (view_sync_get_expunges(view, &expunges) < 0)
@@ -270,16 +268,22 @@ int mail_index_view_sync_begin(struct mail_index_view *view,
 		uint32_t old_records_count = view->map->records_count;
 
 		if (view->map != view->index->map) {
+			const struct mail_index_header *hdr;
+
 			/* Using non-head mapping. We have to apply
 			   transactions to it to get latest changes into it. */
 			ctx->sync_map_update = TRUE;
+
 			/* Unless map was synced at the exact same position as
 			   view, the message flags can't be reliably used to
-			   update flag counters. */
+			   update flag counters. note that map->hdr may contain
+			   old information if another process updated the
+			   index file since. */
+			hdr = view->map->mmap_base != NULL ?
+				view->map->mmap_base : &view->map->hdr;
 			ctx->sync_map_ctx.unreliable_flags =
-				!(view->map->hdr.log_file_seq ==
-				  view->log_file_seq &&
-				  view->map->hdr.log_file_int_offset ==
+				!(hdr->log_file_seq == view->log_file_seq &&
+				  hdr->log_file_int_offset ==
 				  view->log_file_offset);
 
 			/* Copy only the mails that we see currently, since
@@ -350,6 +354,14 @@ mail_index_view_sync_get_next_transaction(struct mail_index_view_sync_ctx *ctx)
 		/* Get the next transaction from log. */
 		ret = mail_transaction_log_view_next(log_view, &ctx->hdr,
 						     &ctx->data, &skipped);
+
+		if (skipped) {
+			/* We skipped some (visible) transactions that were
+			   outside our sync mask. Note that we may get here
+			   even when ret=0. */
+			ctx->skipped_some = TRUE;
+		}
+
 		if (ret <= 0) {
 			if (ret < 0)
 				return -1;
@@ -361,11 +373,7 @@ mail_index_view_sync_get_next_transaction(struct mail_index_view_sync_ctx *ctx)
 
 		mail_transaction_log_view_get_prev_pos(log_view, &seq, &offset);
 
-		if (skipped) {
-			/* We skipped some (visible) transactions that were
-			   outside our sync mask. */
-			ctx->skipped_some = TRUE;
-		} else if (!ctx->skipped_some) {
+		if (!ctx->skipped_some) {
 			/* We haven't skipped anything while syncing this view.
 			   Update this view's synced log offset. */
 			view->log_file_seq = seq;
@@ -374,6 +382,13 @@ mail_index_view_sync_get_next_transaction(struct mail_index_view_sync_ctx *ctx)
 		}
 
 		/* skip everything we've already synced */
+		if (offset < view->hdr.log_file_ext_offset &&
+		    seq == view->hdr.log_file_seq &&
+		    (ctx->hdr->type & MAIL_TRANSACTION_EXTERNAL) != 0) {
+			/* view->log_file_offset contains the minimum of
+			   int/ext offsets. */
+			continue;
+		}
 		if (view_sync_pos_find(&view->syncs_done, seq, offset))
 			continue;
 

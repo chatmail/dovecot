@@ -465,12 +465,13 @@ static bool settings_have_connect_sockets(struct settings *set)
 	return FALSE;
 }
 
-static void unlink_auth_sockets(const char *path)
+static void unlink_auth_sockets(const char *path, const char *prefix)
 {
 	DIR *dirp;
 	struct dirent *dp;
 	struct stat st;
 	string_t *str;
+	unsigned int prefix_len;
 
 	dirp = opendir(path);
 	if (dirp == NULL) {
@@ -478,9 +479,13 @@ static void unlink_auth_sockets(const char *path)
 		return;
 	}
 
+	prefix_len = strlen(prefix);
 	str = t_str_new(256);
 	while ((dp = readdir(dirp)) != NULL) {
 		if (dp->d_name[0] == '.')
+			continue;
+
+		if (strncmp(dp->d_name, prefix, prefix_len) != 0)
 			continue;
 
 		str_truncate(str, 0);
@@ -721,7 +726,7 @@ static bool settings_do_fixes(struct settings *set)
 		i_error("stat(%s) failed: %m", set->base_dir);
 		return FALSE;
 	}
-	if ((st.st_mode & 0750) != 0750 || (st.st_mode & 0777) == 0777) {
+	if ((st.st_mode & 0310) != 0310 || (st.st_mode & 0777) == 0777) {
 		/* FIXME: backwards compatibility: fix permissions so that
 		   login processes can find ssl-parameters file. Group rx is
 		   enough, but change it to world-rx so that we don't have to
@@ -734,6 +739,9 @@ static bool settings_do_fixes(struct settings *set)
 		if (chmod(set->base_dir, 0755) < 0)
 			i_error("chmod(%s) failed: %m", set->base_dir);
 	}
+
+	/* remove auth worker sockets left by unclean exits */
+	unlink_auth_sockets(set->base_dir, "auth-worker.");
 
 	/* Make sure our permanent state directory exists */
 	if (mkdir_parents(PKG_STATEDIR, 0750) < 0 && errno != EEXIST) {
@@ -753,7 +761,7 @@ static bool settings_do_fixes(struct settings *set)
 				  "%s", set->login_dir);
 		}
 
-		unlink_auth_sockets(set->login_dir);
+		unlink_auth_sockets(set->login_dir, "");
 	}
 
 #ifdef HAVE_MODULES

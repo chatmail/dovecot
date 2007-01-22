@@ -1,3 +1,34 @@
+v1.0.rc18 2007-01-22  Timo Sirainen <tss@iki.fi>
+
+	* ACL plugin + Maildir: Moved dovecot-acl file from control directory
+	  to maildir. To prevent accidents caused by this change, Dovecot
+	  kills itself if it finds dovecot-acl file from the control directory.
+	* When opening a maildir, check if tmp/'s atime is over 8h old. If it
+	  is, delete files in it with ctime older than 36h. However if
+	  atime - ctime > 36h, it means that there's nothing to be deleted and
+	  the scanning isn't done. We update atime ourself if filesystem is
+	  mounted with noatime.
+	* base_dir doesn't need to be group-readable, don't force it.
+	* mail_read_mmaped setting is deprecated and possibly broken. It's now
+	  removed from dovecot-example.conf, but it still works for now.
+	* Removed also umask setting from dovecot-example.conf since currently
+	  it doesn't do what it's supposed to.
+
+	+ Authentication cache caches now also userdb data.
+	+ Added mail_log plugin to log various mail operations. Currently it
+	  logs mail copies, deletions, expunges and mailbox deletions.
+	- dict quota: messages=n parameter actually changed storage limit.
+	- A lot of fixes to handling index files. This should fix almost all
+	  of the problems ever reported.
+	- LDAP: auth_bind=yes was more or less broken.
+	- Saved mails and dovecot-keywords file didn't set the group from
+	  dovecot-shared file.
+	- Fixed potential assert-crash while searching messages
+	- Fixed some crashes with invalid X-UID headers in mboxes
+	- If you didn't have a namespace with empty prefix, giving STATUS
+	  command for a non-existing namespace caused the connection to give
+	  "NO Unknown namespace" errors for all the future commands.
+
 v1.0.rc17 2007-01-07  Timo Sirainen <tss@iki.fi>
 
 	- MySQL authentication caused username to show up as "OK" in rc16.

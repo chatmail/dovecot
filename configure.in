@@ -1,5 +1,5 @@
 xAC_PREREQ([2.59])
-AC_INIT([dovecot],[1.0.rc17],[dovecot@dovecot.org])
+AC_INIT([dovecot],[1.0.rc18],[dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE
@@ -159,8 +159,15 @@ AC_ARG_WITH(vpopmail,
 		want_vpopmail=no
 	else
 		want_vpopmail=yes
-	fi,
-	want_vpopmail=yes)
+		if test x$withval = xyes; then
+			vpopmail_home="`echo ~vpopmail`"
+		else
+			vpopmail_home="$withval"
+		fi
+	fi, [
+		want_vpopmail=yes
+		vpopmail_home="`echo ~vpopmail`"
+	])
 
 AC_ARG_WITH(static-userdb,
 [  --with-static-userdb    Build with static userdb support (default)],
@@ -383,7 +390,7 @@ AC_CHECK_FUNCS(fcntl flock lockf inet_aton sigaction getpagesize madvise \
                strcasecmp stricmp vsnprintf vsyslog writev pread \
 	       setrlimit setproctitle seteuid setreuid setegid setresgid \
 	       strtoull strtouq setpriority quotactl getmntent kqueue kevent \
-	       getrusage backtrace_symbols walkcontext)
+	       getrusage backtrace_symbols walkcontext dirfd)
 
 dnl * I/O loop function
 have_ioloop=no
@@ -1619,7 +1626,6 @@ if test "$found_sql_drivers" != "" -o "$want_sql" = "yes"; then
 fi
 
 if test $want_vpopmail = yes; then
-	vpopmail_home="`echo ~vpopmail`"
 	vpop_libdeps="$vpopmail_home/etc/lib_deps"
 
 	AC_MSG_CHECKING([for vpopmail configuration at $vpop_libdeps])
@@ -1808,6 +1814,7 @@ src/plugins/convert/Makefile
 src/plugins/quota/Makefile
 src/plugins/imap-quota/Makefile
 src/plugins/lazy-expunge/Makefile
+src/plugins/mail-log/Makefile
 src/plugins/trash/Makefile
 src/plugins/zlib/Makefile
 stamp.h

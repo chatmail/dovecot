@@ -338,6 +338,17 @@ static int mail_index_parse_extensions(struct mail_index *index,
 			return -1;
 		}
 
+		if (map->hdr.record_size <
+		    ext_hdr->record_offset + ext_hdr->record_size) {
+			mail_index_set_error(index, "Corrupted index file %s: "
+				"Record field %s points outside record size "
+				"(%u < %u+%u)", index->filepath, name,
+				map->hdr.record_size,
+				ext_hdr->record_offset, ext_hdr->record_size);
+			t_pop();
+			return -1;
+		}
+
 		if ((ext_hdr->record_offset % ext_hdr->record_align) != 0 ||
 		    (map->hdr.record_size % ext_hdr->record_align) != 0) {
 			mail_index_set_error(index, "Corrupted index file %s: "
@@ -346,7 +357,6 @@ static int mail_index_parse_extensions(struct mail_index *index,
 			t_pop();
 			return -1;
 		}
-
 		mail_index_map_register_ext(index, map, name,
 					    offset, ext_hdr->hdr_size,
 					    ext_hdr->record_offset,
@@ -397,6 +407,8 @@ int mail_index_map_parse_keywords(struct mail_index *index,
 	const char *name;
 	unsigned int i, name_area_end_offset, old_count;
 	uint32_t ext_id;
+
+	map->keywords_read = TRUE;
 
 	ext_id = mail_index_map_lookup_ext(map, "keywords");
 	if (ext_id == (uint32_t)-1) {
@@ -559,11 +571,12 @@ static int mail_index_check_header(struct mail_index *index,
 		return 0;
 
 	if (map->records_count > 0) {
-		/* last message's UID must be smaller than next_uid */
+		/* last message's UID must be smaller than next_uid.
+		   also make sure it's not zero. */
 		const struct mail_index_record *rec;
 
 		rec = MAIL_INDEX_MAP_IDX(map, map->records_count-1);
-		if (rec->uid >= hdr->next_uid)
+		if (rec->uid == 0 || rec->uid >= hdr->next_uid)
 			return 0;
 	}
 
@@ -987,10 +1000,12 @@ static int mail_index_read_map_with_retry(struct mail_index *index,
 	}
 }
 
-static int mail_index_map_try_existing(struct mail_index_map *map)
+static int mail_index_map_try_existing(struct mail_index *index)
 {
+	struct mail_index_map *map = index->map;
 	const struct mail_index_header *hdr;
 	size_t used_size;
+	int ret;
 
 	if (MAIL_INDEX_MAP_IS_IN_MEMORY(map))
 		return 0;
@@ -1005,7 +1020,14 @@ static int mail_index_map_try_existing(struct mail_index_map *map)
 	if (map->mmap_size >= used_size && map->hdr_base == hdr) {
 		map->records_count = hdr->messages_count;
 		mail_index_map_copy_hdr(map, hdr);
-		return 1;
+
+		/* make sure the header is still valid. it also re-parses
+		   extensions although they shouldn't change without the whole
+		   index being recreated */
+		ret = mail_index_check_header(index, map);
+		if (ret > 0)
+			return 1;
+		/* broken. fallback to re-mmaping which will catch it */
 	}
 	return 0;
 }
@@ -1029,7 +1051,7 @@ int mail_index_map(struct mail_index *index, bool force)
 
 	if (!force && index->map != NULL) {
 		i_assert(index->hdr != NULL);
-		ret = mail_index_map_try_existing(index->map);
+		ret = mail_index_map_try_existing(index);
 		if (ret != 0) {
 			index->mapping = FALSE;
 			return ret;
@@ -1151,7 +1173,7 @@ int mail_index_get_latest_header(struct mail_index *index,
 }
 
 struct mail_index_map *
-mail_index_map_clone(struct mail_index_map *map, uint32_t new_record_size)
+mail_index_map_clone(const struct mail_index_map *map, uint32_t new_record_size)
 {
 	struct mail_index_map *mem_map;
 	struct mail_index_header *hdr;
@@ -1219,6 +1241,8 @@ mail_index_map_clone(struct mail_index_map *map, uint32_t new_record_size)
 		/* fix the name pointers to use our own pool */
 		extensions = array_get_modifyable(&mem_map->extensions, &count);
 		for (i = 0; i < count; i++) {
+			i_assert(extensions[i].record_offset +
+				 extensions[i].record_size <= hdr->record_size);
 			extensions[i].name = p_strdup(mem_map->extension_pool,
 						      extensions[i].name);
 		}
@@ -1492,21 +1516,25 @@ static int mail_index_open_files(struct mail_index *index,
 	index->indexid = hdr.indexid;
 
 	index->log = mail_transaction_log_open_or_create(index);
-	if (index->log == NULL)
+	if (index->log == NULL) {
+		if (ret == 0)
+			index->hdr = NULL;
 		return -1;
+	}
 
 	if (index->fd == -1) {
-		if (index->indexid != hdr.indexid) {
-			/* looks like someone else created the transaction log
-			   before we had the chance. use its indexid so we
-			   don't try to create conflicting ones. */
-			hdr.indexid = index->indexid;
-		}
+		mail_index_header_init(&hdr);
+		index->hdr = &hdr;
+
+		/* index->indexid may be updated by transaction log opening,
+		   in case someone else had already created a new log file */
+		hdr.indexid = index->indexid;
 
 		if (lock_id != 0) {
 			mail_index_unlock(index, lock_id);
 			lock_id = 0;
 		}
+
 		if (!MAIL_INDEX_IS_IN_MEMORY(index)) {
 			if (mail_index_create(index, &hdr) < 0) {
 				/* fallback to in-memory index */
@@ -1518,6 +1546,7 @@ static int mail_index_open_files(struct mail_index *index,
 		}
 		created = TRUE;
 	}
+	i_assert(index->hdr != &hdr);
 
 	if (lock_id == 0) {
 		if (mail_index_lock_shared(index, FALSE, &lock_id) < 0)

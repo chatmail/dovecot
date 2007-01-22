@@ -8,6 +8,7 @@
 #include "str.h"
 #include "str-sanitize.h"
 #include "auth-request.h"
+#include "auth-master-connection.h"
 #include "auth-request-handler.h"
 
 #include <stdlib.h>
@@ -117,7 +118,7 @@ static const char *get_client_extra_fields(struct auth_request *request)
 		auth_stream_reply_export(request->extra_fields);
 
 	if (!request->proxy) {
-		if (extra_fields == NULL)
+		if (auth_stream_is_empty(request->extra_fields))
 			return NULL;
 
 		/* we only wish to remove all fields prefixed with "userdb_" */
@@ -426,6 +427,7 @@ static void userdb_callback(enum userdb_result result,
 	}
 	handler->master_callback(str_c(str), request->master);
 
+	auth_master_connection_unref(&request->master);
 	auth_request_unref(&request);
         auth_request_handler_unref(&handler);
 }
@@ -468,7 +470,9 @@ void auth_request_handler_master_request(struct auth_request_handler *handler,
 		request->context = handler;
 		request->master = master;
 
-		/* handler is referenced until userdb_callback is called. */
+		/* master and handler are referenced until userdb_callback i
+		   s called. */
+		auth_master_connection_ref(master);
 		handler->refcount++;
 		auth_request_lookup_user(request, userdb_callback);
 	}
@@ -504,6 +508,7 @@ void auth_request_handler_init(void)
 
 void auth_request_handler_deinit(void)
 {
+	auth_request_handler_flush_failures();
 	buffer_free(auth_failures_buf);
 	timeout_remove(&to_auth_failures);
 }
