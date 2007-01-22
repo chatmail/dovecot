@@ -1,6 +1,6 @@
-dovecot (1.0.rc18-1) UNRELEASED; urgency=low
+dovecot (1.0.rc18-1) unstable; urgency=low
 
-  * (NOT RELEASED YET) New upstream release
+  * New upstream release.
 
  -- Fabio Tranchitella <kobold@debian.org>  Mon, 22 Jan 2007 18:15:02 +0100
 
