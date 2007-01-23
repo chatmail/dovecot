@@ -1,3 +1,9 @@
+dovecot (1.0.rc19-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Wed, 24 Jan 2007 00:03:38 +0100
+
 dovecot (1.0.rc18-2) unstable; urgency=low
 
   * dovecot-sieve: updated to cvs version 1.0.1.

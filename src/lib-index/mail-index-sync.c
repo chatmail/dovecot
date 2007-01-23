@@ -393,6 +393,7 @@ int mail_index_sync_begin(struct mail_index *index,
 	     				index->hdr->log_file_seq,
 					index->hdr->log_file_ext_offset))) {
 		/* broken sync positions. fix them. */
+		mail_index_set_error(index, "broken sync positions");
 		if (mail_index_fsck(index) <= 0) {
 			mail_index_unlock(index, lock_id);
 			mail_transaction_log_sync_unlock(index->log);
@@ -754,7 +755,8 @@ void mail_index_sync_set_corrupted(struct mail_index_sync_map_ctx *ctx,
 							"%s", error);
 	} else {
 		mail_index_set_error(ctx->view->index,
-			"View synchronization from transaction log failed: %s",
+			"View synchronization from transaction log "
+			"for index %s failed: %s", ctx->view->index->filepath,
 			error);
 	}
 	t_pop();

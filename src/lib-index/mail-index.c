@@ -724,10 +724,12 @@ mail_index_read_map(struct mail_index *index, struct mail_index_map *map,
 		    bool *retry_r, bool try_retry)
 {
 	const struct mail_index_header *hdr;
+	struct stat st;
 	unsigned char buf[512];
 	void *data = NULL;
 	ssize_t ret;
 	size_t pos, records_size;
+	unsigned int records_count;
 
 	i_assert(map->mmap_base == NULL);
 
@@ -741,6 +743,11 @@ mail_index_read_map(struct mail_index *index, struct mail_index_map *map,
 		return 0;
 	}
 
+	if (fstat(index->fd, &st) < 0) {
+		mail_index_set_syscall_error(index, "fstat()");
+		return -1;
+	}
+
 	if (ret >= 0 && pos >= MAIL_INDEX_HEADER_MIN_SIZE &&
 	    (ret > 0 || pos >= hdr->base_header_size)) {
 		if (hdr->base_header_size < MAIL_INDEX_HEADER_MIN_SIZE ||
@@ -749,6 +756,13 @@ mail_index_read_map(struct mail_index *index, struct mail_index_map *map,
 				"Corrupted header sizes (base %u, full %u)",
 				index->filepath, hdr->base_header_size,
 				hdr->header_size);
+			return 0;
+		}
+		if (hdr->header_size > (uoff_t)st.st_size) {
+			mail_index_set_error(index, "Corrupted index file %s: "
+				"Corrupted header size (%u > %"PRIuUOFF_T")",
+				index->filepath, hdr->header_size,
+				st.st_size);
 			return 0;
 		}
 
@@ -771,7 +785,19 @@ mail_index_read_map(struct mail_index *index, struct mail_index_map *map,
 
 	if (ret > 0) {
 		/* header read, read the records now. */
-		records_size = hdr->messages_count * hdr->record_size;
+		records_size = (size_t)hdr->messages_count * hdr->record_size;
+
+		if ((uoff_t)st.st_size - hdr->header_size < records_size ||
+		    (hdr->record_size != 0 &&
+		     records_size / hdr->record_size != hdr->messages_count)) {
+			records_count = (st.st_size - hdr->header_size) /
+				hdr->record_size;
+			mail_index_set_error(index, "Corrupted index file %s: "
+				"messages_count too large (%u > %u)",
+				index->filepath, hdr->messages_count,
+				records_count);
+			return 0;
+		}
 
 		if (map->buffer == NULL) {
 			map->buffer = buffer_create_dynamic(default_pool,

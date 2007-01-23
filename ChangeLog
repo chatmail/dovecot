@@ -1,3 +1,59 @@
+2007-01-23 16:10  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-sync-private.h,
+	  mail-index-sync-update.c, mail-index-view-sync.c: Some
+	  mmap_disable=no fixes. Some debug additions. Some generic index
+	  fixes.
+
+2007-01-23 13:30  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-fsck.c, mail-index-sync.c: Log a
+	  warning when we're starting fsck. Log error before calling fsck.
+
+2007-01-23 13:29  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-update.c: cleanups
+
+2007-01-23 11:41  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/acl/acl-backend-vfile.c: If control_dir wasn't
+	  specified, we complained about ACL file existing in it.
+
+2007-01-23 11:19  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: Fix for last check
+
+2007-01-23 10:01  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: cleanups
+
+2007-01-23 09:57  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: mmap_disable=yes: Verify that
+	  header_size and messages_count are low enough so we don't try to
+	  allocate too much memory.
+
+2007-01-22 16:30  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: Released 1.0.rc18
+
+2007-01-22 16:29  Timo Sirainen <tss@iki.fi>
+
+	* TODO: updated
+
+2007-01-22 16:29  Timo Sirainen <tss@iki.fi>
+
+	* autogen.sh: Removed -f option from autoreconf, since it
+	  overwrites our INSTALL file.
+
+2007-01-22 16:21  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-copy.c:
+	  maildir_copy_with_hardlinks=yes could have caused "Duplicate file
+	  in uidlist" errors. The fix slows it down a bit though, the files
+	  are now always first hardlinked to tmp/ and later rename()d from
+	  there to cur/ or new/.
+
 2007-01-22 15:21  Timo Sirainen <tss@iki.fi>
 
 	* src/: lib-storage/index/maildir/maildir-save.c,
