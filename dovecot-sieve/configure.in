@@ -1,4 +1,4 @@
-AC_INIT(dovecot-sieve, 1.0, [dovecot@dovecot.org])
+AC_INIT(dovecot-sieve, 1.0.1, [dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AC_CONFIG_HEADERS([dsieve-config.h])
@@ -35,8 +35,8 @@ eval `cat $dovecotdir/dovecot-config|sed 's,\$(top_builddir)/,$dovecotdir/,g'`
 
 dnl * Regexp library check, from Cyrus IMAP
 AC_SEARCH_LIBS(regcomp, rx regex, [
-		AC_DEFINE(ENABLE_REGEX,[],[Do we have a decent regex library?])
-		AC_CHECK_HEADER(rxposix.h, AC_DEFINE(HAVE_RX,[],[Do we have rxposix.h?]))])
+  CFLAGS="$CFLAGS -DENABLE_REGEX"
+  AC_CHECK_HEADER(rxposix.h, CFLAGS="$CFLAGS -DHAVE_RX")])
 
 AC_SUBST(STORAGE_LIBS)
 AC_SUBST(LIBICONV)

@@ -1,3 +1,11 @@
+dovecot (1.0.rc18-2) unstable; urgency=low
+
+  * dovecot-sieve: updated to cvs version 1.0.1.
+  * debian/README.Debian: updated for the new setting mail_location, which
+    substitutes the old default_mail_env. (Closes: #408025)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Tue, 23 Jan 2007 10:15:36 +0100
+
 dovecot (1.0.rc18-1) unstable; urgency=low
 
   * New upstream release.
