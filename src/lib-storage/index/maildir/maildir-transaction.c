@@ -33,8 +33,12 @@ int maildir_transaction_commit(struct mailbox_transaction_context *_t,
 
 	save_ctx = t->save_ctx;
 
-	if (index_transaction_commit(_t) < 0)
-		ret = -1;
+	if (ret < 0)
+		index_transaction_rollback(_t);
+	else {
+		if (index_transaction_commit(_t) < 0)
+			ret = -1;
+	}
 
 	/* transaction is destroyed. */
 	t = NULL; _t = NULL;

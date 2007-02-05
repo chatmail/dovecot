@@ -411,7 +411,8 @@ int mbox_save_init(struct mailbox_transaction_context *_t,
 		/* parse and cache the mail headers as we read it */
 		if (ctx->mail == NULL)
 			ctx->mail = index_mail_alloc(_t, 0, NULL);
-		mail_set_seq(ctx->mail, ctx->seq);
+		if (mail_set_seq(ctx->mail, ctx->seq) < 0)
+			i_unreached();
 		index_mail_parse_header_init((struct index_mail *)ctx->mail,
 					     NULL);
 	}

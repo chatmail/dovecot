@@ -290,25 +290,22 @@ static int _view_lookup_uid(struct mail_index_view *view, uint32_t seq,
 }
 
 static uint32_t mail_index_bsearch_uid(struct mail_index_view *view,
-				       uint32_t uid, uint32_t *left_idx_p,
+				       uint32_t uid, uint32_t left_idx,
 				       int nearest_side)
 {
 	const struct mail_index_record *rec_base, *rec;
-	uint32_t idx, left_idx, right_idx, record_size;
+	uint32_t idx, right_idx, record_size;
 
 	i_assert(view->hdr.messages_count <= view->map->records_count);
 
 	if (uid == 1) {
 		/* optimization: the message can be only the first one */
-		if (view->hdr.messages_count == 0)
-			return 0;
-		*left_idx_p = 1;
 		return 1;
 	}
 	rec_base = view->map->records;
 	record_size = view->map->hdr.record_size;
 
-	idx = left_idx = *left_idx_p;
+	idx = left_idx;
 	right_idx = view->hdr.messages_count;
 
 	while (left_idx < right_idx) {
@@ -322,13 +319,8 @@ static uint32_t mail_index_bsearch_uid(struct mail_index_view *view,
 		else
 			break;
 	}
+	i_assert(idx < view->hdr.messages_count);
 
-	if (idx == view->hdr.messages_count) {
-		/* no messages available */
-		return 0;
-	}
-
-        *left_idx_p = left_idx;
 	rec = CONST_PTR_OFFSET(rec_base, idx * record_size);
 	if (rec->uid != uid) {
 		if (nearest_side > 0) {
@@ -348,16 +340,18 @@ static int _view_lookup_uid_range(struct mail_index_view *view,
 				  uint32_t first_uid, uint32_t last_uid,
 				  uint32_t *first_seq_r, uint32_t *last_seq_r)
 {
-	uint32_t left_idx;
-
 	i_assert(first_uid > 0);
 	i_assert(first_uid <= last_uid);
 
 	if (mail_index_view_lock(view) < 0)
 		return -1;
 
-	left_idx = 0;
-	*first_seq_r = mail_index_bsearch_uid(view, first_uid, &left_idx, 1);
+	if (view->hdr.messages_count == 0) {
+		*first_seq_r = *last_seq_r = 0;
+		return 0;
+	}
+
+	*first_seq_r = mail_index_bsearch_uid(view, first_uid, 0, 1);
 	if (*first_seq_r == 0 ||
 	    MAIL_INDEX_MAP_IDX(view->map, *first_seq_r-1)->uid > last_uid) {
 		*first_seq_r = *last_seq_r = 0;
@@ -376,13 +370,13 @@ static int _view_lookup_uid_range(struct mail_index_view *view,
 		return 0;
 	}
 
-	if (first_uid == last_uid) {
+	if (first_uid == last_uid)
 		*last_seq_r = *first_seq_r;
-		return 0;
+	else {
+		/* optimization - binary lookup only from right side: */
+		*last_seq_r = mail_index_bsearch_uid(view, last_uid,
+						     *first_seq_r - 1, -1);
 	}
-
-	/* optimization - binary lookup only from right side: */
-	*last_seq_r = mail_index_bsearch_uid(view, last_uid, &left_idx, -1);
 	i_assert(*last_seq_r >= *first_seq_r);
 	return 0;
 }

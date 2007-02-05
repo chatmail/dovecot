@@ -203,12 +203,11 @@ maildirs_check_have_changed(struct maildir_quota_root *root,
 			    struct mail_storage *storage, time_t latest_mtime)
 {
 	struct maildir_list_context *ctx;
-	const char *dir;
 	time_t mtime;
 	int ret = 0;
 
 	ctx = maildir_list_init(root, storage);
-	while ((dir = maildir_list_next(ctx, &mtime)) != NULL) {
+	while (maildir_list_next(ctx, &mtime) != NULL) {
 		if (mtime > latest_mtime) {
 			ret = 1;
 			break;
@@ -471,7 +470,7 @@ static int maildirsize_read(struct maildir_quota_root *root,
 		ret = 1;
 	} else {
 		/* broken file / need recalculation */
-		(void)close(root->fd);
+		(void)close(fd);
 		root->fd = -1;
 		ret = 0;
 	}

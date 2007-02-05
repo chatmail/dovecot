@@ -561,6 +561,10 @@ maildir_get_mailbox_control_dir(struct mail_storage *_storage, const char *name)
 {
 	struct maildir_storage *storage = (struct maildir_storage *)_storage;
 
+	if (*name == '\0') {
+		return storage->control_dir != NULL ?
+			storage->control_dir : storage->storage.dir;
+	}
 	return maildir_get_control_path(storage, name);
 }
 

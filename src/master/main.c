@@ -203,7 +203,8 @@ static void sigchld_handler(int signo __attr_unused__,
 	while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
 		/* get the type and remove from hash */
 		process_type = PID_GET_PROCESS_TYPE(pid);
-		PID_REMOVE_PROCESS_TYPE(pid);
+		if (process_type != PROCESS_TYPE_UNKNOWN)
+			PID_REMOVE_PROCESS_TYPE(pid);
 
 		abnormal_exit = TRUE;
 
@@ -211,9 +212,13 @@ static void sigchld_handler(int signo __attr_unused__,
 		process_type_name = process_names[process_type];
 		if (WIFEXITED(status)) {
 			status = WEXITSTATUS(status);
-			if (status == 0)
+			if (status == 0) {
 				abnormal_exit = FALSE;
-			else {
+				if (process_type == PROCESS_TYPE_UNKNOWN) {
+					i_error("unknown child %s exited "
+						"successfully", dec2str(pid));
+				}
+			} else {
 				msg = get_exit_status_message(status);
 				msg = msg == NULL ? "" :
 					t_strconcat(" (", msg, ")", NULL);
@@ -420,8 +425,18 @@ static void listen_protocols(struct settings *set, bool retry)
 		else {
 			for (i = 0; i < 10; i++) {
 				*fd = net_listen(ip, &port, 8);
-				if (*fd != -1 || errno != EADDRINUSE)
+				if (*fd != -1)
 					break;
+				if (errno == EADDRINUSE) {
+					/* retry */
+				} else if (errno == EINTR &&
+					   io_loop_is_running(ioloop)) {
+					/* SIGHUPing sometimes gets us here.
+					   we don't want to die. */
+				} else {
+					/* error */
+					break;
+				}
 
 				check_conflicts(ip, port, *proto);
 				if (!retry)
@@ -547,7 +562,7 @@ static void create_pid_file(const char *path)
 	(void)close(fd);
 }
 
-static void main_init(void)
+static void main_init(bool log_error)
 {
 	/* deny file access from everyone else except owner */
         (void)umask(0077);
@@ -564,6 +579,9 @@ static void main_init(void)
 	i_info("Dovecot v"VERSION" starting up");
 
 	log_init();
+
+	if (log_error)
+		i_fatal("This is Dovecot's error log");
 
 	lib_signals_init();
         lib_signals_set_handler(SIGINT, TRUE, sig_die, NULL);
@@ -737,7 +755,7 @@ int main(int argc, char *argv[])
 {
 	/* parse arguments */
 	const char *exec_protocol = NULL, *exec_section = NULL, *user, *home;
-	bool foreground = FALSE, ask_key_pass = FALSE;
+	bool foreground = FALSE, ask_key_pass = FALSE, log_error = FALSE;
 	bool dump_config = FALSE, dump_config_nondefaults = FALSE;
 	int i;
 
@@ -778,6 +796,9 @@ int main(int argc, char *argv[])
 		} else if (strcmp(argv[i], "--build-options") == 0) {
 			print_build_options();
 			return 0;
+		} else if (strcmp(argv[i], "--log-error") == 0) {
+			log_error = TRUE;
+			foreground = TRUE;
 		} else {
 			print_help();
 			i_fatal("Unknown argument: %s", argv[1]);
@@ -851,7 +872,7 @@ int main(int argc, char *argv[])
 
 	ioloop = io_loop_create(system_pool);
 
-	main_init();
+	main_init(log_error);
         io_loop_run(ioloop);
 	main_deinit();
 

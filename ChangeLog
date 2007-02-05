@@ -1,3 +1,150 @@
+2007-02-02 11:20  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/master/mail-process.c,
+	  src/master/master-settings-defs.c, src/master/master-settings.c,
+	  src/master/master-settings.h: Added mail_log_max_lines_per_sec
+	  setting.
+
+2007-02-02 11:14  Timo Sirainen <tss@iki.fi>
+
+	* src/pop3/Makefile.am: Make sure str-sanitize.o is linked so
+	  mail_log plugin works.
+
+2007-02-02 10:30  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view.c: Another lookup_uid_range() seq2
+	  bugfix/crashfix.
+
+2007-02-01 22:34  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/index-mail.c: Minor optimization
+
+2007-02-01 22:23  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-cache-transaction.c: If cache file wasn't
+	  opened yet when flushing a transaction, the changes weren't
+	  written to the file. Also fixes a "invalid record size" bug which
+	  could have happened when transaction flush failed.
+
+2007-02-01 21:08  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-update.c: Setting flags other than
+	  seen/deleted was broken.
+
+2007-01-30 11:04  Timo Sirainen <tss@iki.fi>
+
+	* doc/variables.txt: Added a note about %E not needed with SQL
+	  queries.
+
+2007-01-28 15:45  Timo Sirainen <tss@iki.fi>
+
+	* src/pop3/client.c: If mailbox initialization failed, log an error
+	  instead of just telling about it to the client.
+
+2007-01-27 01:44  Timo Sirainen <tss@iki.fi>
+
+	* src/master/main.c: Added --log-error command line option.
+
+2007-01-26 13:58  Timo Sirainen <tss@iki.fi>
+
+	* src/: auth/auth-request-handler.c, auth/mech-rpa.c,
+	  auth/passdb-checkpassword.c, imap/imap-sync.c, lib/lib-signals.c,
+	  lib-auth/auth-server-request.c,
+	  lib-index/mail-transaction-log-view.c,
+	  lib-index/mail-transaction-log.c, lib-storage/index/index-mail.c,
+	  lib-storage/index/mbox/mbox-save.c, login-common/main.c,
+	  master/login-process.c, master/ssl-init-openssl.c,
+	  plugins/quota/quota-maildir.c, pop3/commands.c, util/rawlog.c:
+	  Cleanups and minor fixes
+
+2007-01-26 13:40  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/mech-apop.c: Verify the APOP input before passing it to
+	  sscanf() to make sure it's NUL-terminated.
+
+2007-01-26 00:42  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/istream-seekable.c: cleanup
+
+2007-01-26 00:31  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request-handler.c: code cleanup
+
+2007-01-25 17:24  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-transaction.c: If
+	  save_commit_pre() fails, rollback the transaction.
+
+2007-01-25 17:13  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view.c: lookup_uid_range(): Last change
+	  could have caused the returned seq2 to be too high, causing all
+	  kinds of problems.
+
+2007-01-25 16:01  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-sync.c: Error handling
+	  fixes
+
+2007-01-25 15:59  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/imap-fetch-body.c: If we disconnect the client because
+	  message ended unexpectedly, log an error.
+
+2007-01-25 14:58  Timo Sirainen <tss@iki.fi>
+
+	* src/master/main.c: If we see exit for unknown child process, log
+	  an error but don't crash. If net_listen() fails with EINTR, try
+	  again unless it was interrupted by INT/TERM signal.
+
+2007-01-25 09:39  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-mail.c: If we can't find the mail
+	  from dirty mbox even after syncing, fail with error instead of
+	  looping forever.
+
+2007-01-25 09:38  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-parse.c: When verifying a
+	  mail's location in dirty mbox with invalid X-UID headers that
+	  weren't yet rewritten, we would trust the X-UID header and cause
+	  the verification to fail. Now we trust it only if it's valid,
+	  otherwise fallback to MD5 sum of the header.
+
+2007-01-24 20:45  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view.c: Crashfix
+
+2007-01-24 20:10  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-storage.c: Don't append
+	  "/." to control dir when asking it for "".
+
+2007-01-24 17:39  Timo Sirainen <tss@iki.fi>
+
+	* src/master/mail-process.c: If exec() fails, don't close 0..3 fds
+	  before logging the error. There's really no point, and it closes
+	  the logging fd so the exec() error can't be logged.
+
+2007-01-24 17:14  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-maildir.c: Fixed a file descriptor leak.
+
+2007-01-24 16:37  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: If auth_cache was enabled and userdb
+	  returned "user unknown" (typically only deliver can do that), we
+	  crashed.
+
+2007-01-23 16:30  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync.c: "View synchronization from
+	  transaction log failed": Log also the index filename.
+
+2007-01-23 16:28  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: 1.0.rc19 released
+
 2007-01-23 16:10  Timo Sirainen <tss@iki.fi>
 
 	* src/lib-index/: mail-index-sync-private.h,

@@ -410,7 +410,7 @@ bool create_mail_process(enum process_type process_type, struct settings *set,
 	gid_t gid;
 	array_t ARRAY_DEFINE(extra_args, const char *);
 	unsigned int i, count;
-	int err, ret, log_fd, nice;
+	int ret, log_fd, nice;
 	bool home_given, nfs_check;
 
 	/* FIXME: per-group? */
@@ -480,7 +480,7 @@ bool create_mail_process(enum process_type process_type, struct settings *set,
 	}
 
 	if (!dump_capability) {
-		log_fd = log_create_pipe(&log, 10);
+		log_fd = log_create_pipe(&log, set->mail_log_max_lines_per_sec);
 		if (log_fd == -1)
 			return FALSE;
 	} else {
@@ -657,12 +657,6 @@ bool create_mail_process(enum process_type process_type, struct settings *set,
 		restrict_access_by_env(TRUE);
 
 	client_process_exec(set->mail_executable, title);
-	err = errno;
-
-	for (i = 0; i < 3; i++)
-		(void)close(i);
-
-	errno = err;
 	i_fatal_status(FATAL_EXEC, "execv(%s) failed: %m",
 		       set->mail_executable);
 

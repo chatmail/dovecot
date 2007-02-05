@@ -1,3 +1,5 @@
+ - quota: delay counting the quota until it's really needed
+ - login_max_processes_count shouldn't count proxying processes
  - maildir_copy_with_hardlinks: We're currently first hardlinking to tmp/ and
    then rename()ing. This wouldn't be necessary if uidlist syncing noticed
    that someone else already had added them to uidlist, and the existing UIDs

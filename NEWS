@@ -1,3 +1,22 @@
+v1.0.rc21 2007-02-02  Timo Sirainen <tss@iki.fi>
+
+	- Cache file handling could have crashed rc20
+
+v1.0.rc20 2007-02-02  Timo Sirainen <tss@iki.fi>
+
+	+ dovecot: Added --log-error command line option to log an error, so
+	  the error log is easily found.
+	+ Added mail_log_max_lines_per_sec setting. Change it to avoid log
+	  throttling with mail_log plugin.
+	- Changing message flags was more or less broken in rc19
+	- ACL plugin still didn't work without separate control directory
+	- Some mbox handling fixes, including fixing an infinite loop
+	- Some index file handling fixes
+	- maildir quota: Fixed a file descriptor leak
+	- If auth_cache was enabled and userdb returned "user unknown"
+	  (typically only deliver can do that), dovecot-auth crashed.
+	- mail_log plugin didn't work with pop3
+
 v1.0.rc19 2007-01-23  Timo Sirainen <tss@iki.fi>
 
 	- ACL plugin didn't work unless control dir was separate from maildir
