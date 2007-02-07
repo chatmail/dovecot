@@ -272,7 +272,8 @@ list_namespace_init(struct client_command_context *cmd,
 	inbox_glob = imap_match_init(cmd->pool,
 				     t_strconcat(ctx->ref, ctx->mask, NULL),
 				     TRUE, ns->sep);
-	inbox_match = imap_match(inbox_glob, "INBOX");
+	inbox_match = *ns->prefix == '\0' || ns->inbox ?
+		imap_match(inbox_glob, "INBOX") : FALSE;
 	ctx->match_inbox = inbox_match == IMAP_MATCH_YES;
 
 	ctx->glob = imap_match_init(cmd->pool, ctx->mask,
@@ -381,7 +382,7 @@ list_namespace_init(struct client_command_context *cmd,
 	cur_mask = namespace_fix_sep(ns, cur_mask);
 
 	list_flags = ctx->list_flags;
-	if ((*ns->prefix == '\0' || ns->inbox) && ctx->match_inbox)
+	if (ctx->match_inbox)
 		list_flags |= MAILBOX_LIST_INBOX;
 	ctx->list_ctx = mail_storage_mailbox_list_init(ns->storage,
 						       cur_ref, cur_mask,

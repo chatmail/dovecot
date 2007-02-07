@@ -305,12 +305,18 @@ static bool cmd_append_continue_message(struct client_command_context *cmd)
 	struct cmd_append_context *ctx = cmd->context;
 	size_t size;
 	bool failed;
+	int ret;
 
 	if (ctx->save_ctx != NULL) {
-		if (mailbox_save_continue(ctx->save_ctx) < 0) {
-			/* we still have to finish reading the message
-			   from client */
-			mailbox_save_cancel(&ctx->save_ctx);
+		while (ctx->input->v_offset != ctx->msg_size) {
+			ret = i_stream_read(ctx->input);
+			if (mailbox_save_continue(ctx->save_ctx) < 0) {
+				/* we still have to finish reading the message
+				   from client */
+				mailbox_save_cancel(&ctx->save_ctx);
+			}
+			if (ret == -1)
+				break;
 		}
 	}
 

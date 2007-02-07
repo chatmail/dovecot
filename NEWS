@@ -1,3 +1,16 @@
+v1.0.rc22 2007-02-06  Timo Sirainen <tss@iki.fi>
+
+	+ pop3: Commit the transaction even if client didn't QUIT so cached
+	  data gets saved.
+	- Fixed another indexing bug in rc19 and later which caused
+	  transactions to be skipped in some situations, causing all kinds of
+	  problems.
+	- mail_log_max_lines_per_sec was a bit broken and caused crashes with
+	  dovecot -a
+	- BSD filesystem quota was counted wrong. Patch by Manuel Bouyer
+	- LIST: If namespace has a prefix and inbox=no, don't list
+	  prefix.inbox if it happens to exist when listing for %.
+
 v1.0.rc21 2007-02-02  Timo Sirainen <tss@iki.fi>
 
 	- Cache file handling could have crashed rc20

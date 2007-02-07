@@ -672,7 +672,8 @@ int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
 		}
 
 		ext = array_idx(&ctx->view->map->extensions, ctx->cur_ext_id);
-		record_size = sizeof(*rec) + ext->record_size;
+		/* the record is padded to 32bits in the transaction log */
+		record_size = (sizeof(*rec) + ext->record_size + 3) & ~3;
 
 		rec = data;
 		end = CONST_PTR_OFFSET(data, hdr->size);
@@ -766,6 +767,7 @@ int mail_index_sync_update_index(struct mail_index_sync_ctx *sync_ctx,
 
 	mail_index_sync_map_init(&sync_map_ctx, view,
 				 MAIL_INDEX_SYNC_HANDLER_FILE);
+	sync_map_ctx.sync_only_external = sync_only_external;
 
 	/* we'll have to update view->lock_id to avoid mail_index_view_lock()
 	   trying to update the file later. */

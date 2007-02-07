@@ -250,8 +250,8 @@ fs_quota_get_resource(struct quota_root *_root, const char *name,
 		quota_set_error(_root->setup->quota, "Internal quota error");
 		return -1;
 	}
-	*value_r = (uint64_t)dqblk.dqb_curblocks * 1024 / DEV_BSIZE;
-	*limit_r = (uint64_t)dqblk.dqb_bsoftlimit * 1024 / DEV_BSIZE;
+	*value_r = (uint64_t)dqblk.dqb_curblocks * DEV_BSIZE / 1024;
+	*limit_r = (uint64_t)dqblk.dqb_bsoftlimit * DEV_BSIZE / 1024;
 #else
 	/* Solaris */
 	if (root->mount->fd == -1)

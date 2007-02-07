@@ -1,5 +1,5 @@
 xAC_PREREQ([2.59])
-AC_INIT([dovecot],[1.0.rc21],[dovecot@dovecot.org])
+AC_INIT([dovecot],[1.0.rc22],[dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE
@@ -1435,7 +1435,7 @@ if test $want_gssapi = yes; then
 		# we have a kludgy check here to check that we have
 		# version >= v1.3. Although this doesn't work right with
 		# non-MIT kerberos versioning..
-		if `krb5-config --version|grep -qv '1\.2'`; then
+		if `krb5-config --version|grep -v '1\.2' > /dev/null`; then
 			AUTH_LIBS="$AUTH_LIBS `krb5-config --libs gssapi`"
 			AUTH_CFLAGS="$AUTH_CFLAGS `krb5-config --cflags gssapi`"
 			
