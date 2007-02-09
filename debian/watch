@@ -1,0 +1,4 @@
+# watch control file for uscan
+version=2
+# Site                                      Version Script
+http://dovecot.org/releases/dovecot-(.*).tar.gz debian uupdate
