@@ -1,8 +1,10 @@
 dovecot (1.0.rc23-1) unstable; urgency=low
 
   * New upstream release.
+  * debian/patches/documentation.dpatch, debian/patches/xfs_quotas.dpatch:
+    removed, applied upstream.
 
- -- Fabio Tranchitella <kobold@debian.org>  Wed, 21 Feb 2007 09:27:56 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Wed, 21 Feb 2007 09:34:44 +0100
 
 dovecot (1.0.rc22-2) UNRELEASED; urgency=low
 
