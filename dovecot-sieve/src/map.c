@@ -27,6 +27,12 @@ void map_refresh(int fd, int onceonly __attr_unused__, const char **base,
 	ssize_t ret;
 	void *p;
 
+	if (newlen == 0) {
+		/* the file is a broken zero-byte file */
+		*len = 0;
+		return;
+	}
+
 	*base = p = i_malloc(newlen);
 	*len = newlen;
 

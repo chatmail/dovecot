@@ -10,25 +10,31 @@
 int main(void)
 {
 	string_t *str;
+	const char *user, *home;
 	const char *extra_env, *value, *const *tmp;
 
 	lib_init();
 	str = t_str_new(1024);
 
-	if (strchr(getenv("USER"), '\t') != NULL) {
-		i_error("USER contains TAB");
-		return 1;
-	}
-	if (strchr(getenv("HOME"), '\t') != NULL) {
-		i_error("HOME contains TAB");
-		return 1;
+	user = getenv("USER");
+	if (user != NULL) {
+		if (strchr(user, '\t') != NULL) {
+			i_error("checkpassword: USER contains TAB");
+			return 1;
+		}
+		str_printfa(str, "user=%s\t", user);
 	}
 
-	str_printfa(str, "userdb_user=%s\t"
-		    "userdb_home=%s\t"
-		    "userdb_uid=%s\t"
-		    "userdb_gid=%s\t",
-		    getenv("USER"), getenv("HOME"),
+	home = getenv("HOME");
+	if (home != NULL) {
+		if (strchr(home, '\t') != NULL) {
+			i_error("checkpassword: HOME contains TAB");
+			return 1;
+		}
+		str_printfa(str, "userdb_home=%s\t", home);
+	}
+
+	str_printfa(str, "userdb_uid=%s\tuserdb_gid=%s\t",
 		    dec2str(getuid()), dec2str(getgid()));
 
 	extra_env = getenv("EXTRA");
@@ -43,7 +49,7 @@ int main(void)
 	}
 
 	if (write_full(4, str_data(str), str_len(str)) < 0) {
-		i_error("write_full() failed: %m");
+		i_error("checkpassword: write_full() failed: %m");
 		exit(111);
 	}
 	return 0;

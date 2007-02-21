@@ -43,7 +43,7 @@ unsigned int imap_max_line_length;
 enum client_workarounds client_workarounds = 0;
 static struct io *log_io = NULL;
 
-static struct module *modules;
+static struct module *modules = NULL;
 static char log_prefix[128]; /* syslog() needs this to be permanent */
 static pool_t namespace_pool;
 
@@ -135,6 +135,16 @@ static void drop_privileges(void)
 	   chrooting. */
 	random_init();
 
+	/* Load the plugins before chrooting. Their init() is called later. */
+	if (getenv("MAIL_PLUGINS") != NULL) {
+		const char *plugin_dir = getenv("MAIL_PLUGIN_DIR");
+
+		if (plugin_dir == NULL)
+			plugin_dir = MODULEDIR"/imap";
+		modules = module_dir_load(plugin_dir, getenv("MAIL_PLUGINS"),
+					  TRUE);
+	}
+
 	restrict_access_by_env(!IS_STANDALONE());
 }
 
@@ -165,8 +175,12 @@ static void main_init(void)
 	}
 
 	if (getenv("DEBUG") != NULL) {
-		i_info("Effective uid=%s, gid=%s",
-		       dec2str(geteuid()), dec2str(getegid()));
+		const char *home;
+
+		home = getenv("HOME");
+		i_info("Effective uid=%s, gid=%s, home=%s",
+		       dec2str(geteuid()), dec2str(getegid()),
+		       home != NULL ? home : "(none)");
 	}
 
 	if (getenv("STDERR_CLOSE_SHUTDOWN") != NULL) {
@@ -184,16 +198,7 @@ static void main_init(void)
 	clients_init();
 	commands_init();
 
-	if (getenv("MAIL_PLUGINS") == NULL)
-		modules = NULL;
-	else {
-		const char *plugin_dir = getenv("MAIL_PLUGIN_DIR");
-
-		if (plugin_dir == NULL)
-			plugin_dir = MODULEDIR"/imap";
-		modules = module_dir_load(plugin_dir, getenv("MAIL_PLUGINS"),
-					  TRUE);
-	}
+	module_dir_init(modules);
 
 	if (getenv("DUMP_CAPABILITY") != NULL) {
 		printf("%s\n", str_c(capability_string));

@@ -203,9 +203,6 @@ static void auth_request_save_cache(struct auth_request *request,
 
 	extra_fields = request->extra_fields == NULL ? NULL :
 		auth_stream_reply_export(request->extra_fields);
-	i_assert(extra_fields == NULL ||
-		 (strstr(extra_fields, "\tpass=") == NULL &&
-		  strncmp(extra_fields, "pass=", 5) != 0));
 
 	if (passdb_cache == NULL)
 		return;
@@ -252,13 +249,17 @@ static void auth_request_save_cache(struct auth_request *request,
 		str_append(str, request->passdb_password);
 	}
 
-	if (extra_fields != NULL) {
+	if (extra_fields != NULL && *extra_fields != '\0') {
 		str_append_c(str, '\t');
 		str_append(str, extra_fields);
 	}
-	if (request->no_failure_delay) {
-		str_append_c(str, '\t');
-		str_append(str, "nodelay");
+	if (request->extra_cache_fields != NULL) {
+		extra_fields =
+			auth_stream_reply_export(request->extra_cache_fields);
+		if (*extra_fields != '\0') {
+			str_append_c(str, '\t');
+			str_append(str, extra_fields);
+		}
 	}
 	auth_cache_insert(passdb_cache, request, passdb->cache_key, str_c(str),
 			  result == PASSDB_RESULT_OK);
@@ -488,8 +489,6 @@ void auth_request_lookup_credentials_callback(enum passdb_result result,
 			password = result != PASSDB_RESULT_OK ? NULL :
 				passdb_get_credentials(request, password,
 						       scheme);
-			if (password == NULL && result == PASSDB_RESULT_OK)
-				result = PASSDB_RESULT_SCHEME_NOT_AVAILABLE;
 		}
 	}
 
@@ -904,48 +903,79 @@ void auth_request_set_field(struct auth_request *request,
 	if (strcmp(name, "user") == 0) {
 		/* update username to be exactly as it's in database */
 		if (strcmp(request->user, value) != 0) {
+			/* remember the original username for cache */
+			if (request->original_username == NULL) {
+				request->original_username =
+					p_strdup(request->pool, request->user);
+			}
+
 			auth_request_log_debug(request, "auth",
 				"username changed %s -> %s",
 				request->user, value);
 			request->user = p_strdup(request->pool, value);
 		}
-		return;
-	}
-
-	if (strcmp(name, "nodelay") == 0) {
+	} else if (strcmp(name, "nodelay") == 0) {
 		/* don't delay replying to client of the failure */
 		request->no_failure_delay = TRUE;
-		return;
-	}
-
-	if (strcmp(name, "nopassword") == 0) {
+	} else if (strcmp(name, "nopassword") == 0) {
 		/* NULL password - anything goes */
 		i_assert(request->passdb_password == NULL);
 		request->no_password = TRUE;
-		return;
-	}
-
-	if (strcmp(name, "allow_nets") == 0) {
+	} else if (strcmp(name, "allow_nets") == 0) {
 		auth_request_validate_networks(request, value);
+	} else {
+		if (strcmp(name, "nologin") == 0) {
+			/* user can't actually login - don't keep this
+			   reply for master */
+			request->no_login = TRUE;
+			value = NULL;
+		} else if (strcmp(name, "proxy") == 0) {
+			/* we're proxying authentication for this user. send
+			   password back if using plaintext authentication. */
+			request->proxy = TRUE;
+			request->no_login = TRUE;
+			value = NULL;
+		}
+
+		if (request->extra_fields == NULL)
+			request->extra_fields = auth_stream_reply_init(request);
+		auth_stream_reply_add(request->extra_fields, name, value);
 		return;
 	}
 
-	if (strcmp(name, "nologin") == 0) {
-		/* user can't actually login - don't keep this
-		   reply for master */
-		request->no_login = TRUE;
-		value = NULL;
-	} else if (strcmp(name, "proxy") == 0) {
-		/* we're proxying authentication for this user. send
-		   password back if using plaintext authentication. */
-		request->proxy = TRUE;
-		request->no_login = TRUE;
-		value = NULL;
+	if (passdb_cache != NULL &&
+	    request->passdb->passdb->cache_key != NULL) {
+		/* we'll need to get this field stored into cache */
+		if (request->extra_cache_fields == NULL) {
+			request->extra_cache_fields =
+				auth_stream_reply_init(request);
+		}
+		auth_stream_reply_add(request->extra_cache_fields, name, value);
 	}
+}
 
-	if (request->extra_fields == NULL)
-		request->extra_fields = auth_stream_reply_init(request);
-	auth_stream_reply_add(request->extra_fields, name, value);
+void auth_request_set_fields(struct auth_request *request,
+			     const char *const *fields,
+			     const char *default_scheme)
+{
+	const char *key, *value;
+
+	t_push();
+	for (; *fields != NULL; fields++) {
+		if (**fields == '\0')
+			continue;
+
+		value = strchr(*fields, '=');
+		if (value == NULL) {
+			key = *fields;
+			value = "";
+		} else {
+			key = t_strdup_until(*fields, value);
+			value++;
+		}
+		auth_request_set_field(request, key, value, default_scheme);
+	}
+	t_pop();
 }
 
 int auth_request_password_verify(struct auth_request *request,

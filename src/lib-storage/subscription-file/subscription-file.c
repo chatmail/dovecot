@@ -147,6 +147,12 @@ int subsfile_set_subscribed(struct mail_storage *storage, const char *path,
 		}
 	}
 
+	if (!failed && fsync(fd_out) < 0) {
+		mail_storage_set_critical(storage,
+			"fsync(%s) failed: %m", path);
+		failed = TRUE;
+	}
+
 	if (input != NULL)
 		i_stream_destroy(&input);
 	o_stream_destroy(&output);

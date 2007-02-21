@@ -1,6 +1,8 @@
 #ifndef __AUTH_PROCESS_H
 #define __AUTH_PROCESS_H
 
+extern bool have_initialized_auth_processes;
+
 void auth_master_callback(const char *user, const char *const *args,
 			  void *context);
 

@@ -115,7 +115,6 @@ mbox_sync_read_next_mail(struct mbox_sync_context *sync_ctx,
 		istream_raw_mbox_get_start_offset(sync_ctx->input);
 	mail_ctx->mail.offset =
 		istream_raw_mbox_get_header_offset(sync_ctx->input);
-	sync_ctx->prev_next_uid = sync_ctx->next_uid;
 
 	mbox_sync_parse_next_mail(sync_ctx->input, mail_ctx);
 	i_assert(sync_ctx->input->v_offset != mail_ctx->mail.from_offset ||
@@ -760,10 +759,6 @@ static int mbox_sync_handle_header(struct mbox_sync_mail_context *mail_ctx)
 		/* first mail with no space to write it */
 		sync_ctx->need_space_seq = sync_ctx->seq;
 		sync_ctx->space_diff = 0;
-
-		/* remember what the next_uid was before we parsed this mail,
-		   so that rewriting can set it back */
-		sync_ctx->need_space_next_uid = sync_ctx->prev_next_uid;
 
 		if (sync_ctx->expunged_space > 0) {
 			/* create dummy message to describe the expunged data */
@@ -1775,14 +1770,6 @@ __again:
 		/* Rewrite uid_last in X-IMAPbase header if we've seen it
 		   (ie. the file isn't empty) */
                 ret = mbox_rewrite_base_uid_last(&sync_ctx);
-	}
-
-	if (ret == 0 && mbox->mbox_lock_type == F_WRLCK &&
-	    !mbox->mbox_writeonly) {
-		if (fsync(mbox->mbox_fd) < 0) {
-			mbox_set_syscall_error(mbox, "fsync()");
-			ret = -1;
-		}
 	}
 
 	if (lock_id != 0 && mbox->mbox_lock_type != F_RDLCK) {

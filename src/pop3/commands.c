@@ -452,12 +452,8 @@ static int cmd_rset(struct client *client, const char *args __attr_unused__)
 		client->deleted_size = 0;
 	}
 
-	/* forget all our seen flag updates as well.. */
-	mailbox_transaction_rollback(&client->trans);
-	client->trans = mailbox_transaction_begin(client->mailbox, 0);
-
 	if (enable_last_command) {
-		/* remove all \Seen flags */
+		/* remove all \Seen flags (as specified by RFC 1460) */
 		memset(&seqset, 0, sizeof(seqset));
 		memset(&search_arg, 0, sizeof(search_arg));
 		seqset.seq1 = 1;
@@ -475,6 +471,11 @@ static int cmd_rset(struct client *client, const char *args __attr_unused__)
 		}
 		mail_free(&mail);
 		(void)mailbox_search_deinit(&search_ctx);
+	} else {
+		/* forget all our seen flag updates.
+		   FIXME: is this needed? it loses data added to cache file */
+		mailbox_transaction_rollback(&client->trans);
+		client->trans = mailbox_transaction_begin(client->mailbox, 0);
 	}
 
 	client_send_line(client, "+OK");
@@ -554,9 +555,7 @@ static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
 							MAIL_FETCH_HEADER_MD5);
 			if (tab[2].value == NULL) {
 				/* broken */
-				i_error("UIDL: Header MD5 not found");
-				t_pop();
-				break;
+				i_fatal("UIDL: Header MD5 not found");
 			}
 		}
 		if ((uidl_keymask & UIDL_FILE_NAME) != 0) {
@@ -565,9 +564,7 @@ static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
 						 MAIL_FETCH_UIDL_FILE_NAME);
 			if (tab[3].value == NULL) {
 				/* broken */
-				i_error("UIDL: File name not found");
-				t_pop();
-				break;
+				i_fatal("UIDL: File name not found");
 			}
 		}
 

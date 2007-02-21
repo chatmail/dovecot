@@ -1,18 +1,15 @@
+ - file_cache: we're growing the mmap in page size blocks, which is horribly
+   slow if mremap() doesn't exist.
  - quota: delay counting the quota until it's really needed
  - login_max_processes_count shouldn't count proxying processes
  - maildir_copy_with_hardlinks: We're currently first hardlinking to tmp/ and
    then rename()ing. This wouldn't be necessary if uidlist syncing noticed
    that someone else already had added them to uidlist, and the existing UIDs
    could be assigned to them in the index.
- - append to nonselected mailbox sends FLAGS update
  - o_stream_send_istream(..1169315700.P40238Q3873..): failed: Disc quota exceeded
  - maildir_copy_with_hardlinks=yes is problematic with shared folders where
    the file mode should change..
  - rename: allow moving between storages, as long as they're of same type
- - trying to use proxying with cram-md5 / ntlm crashes (null password on purpose):
-    - Error: auth(default): file passdb-cache.c: line 120 (passdb_cache_lookup_credentials): assertion failed: (*scheme_r != NULL)
-    - Error: auth-worker(default): file passdb.c: line 120 (passdb_handle_credentials): assertion failed: (password != NULL)
- - auth_cache doesn't automatically take into account allow_nets
  - still problems with CRLF mboxes..
  - mbox_min_index_size != 0 causes Invalid new transaction log sequence (4 >= 4)
 
@@ -140,6 +137,8 @@
       maybe just log the IP immediately.
 
  - auth
+    - pam service name could contain %vars
+    - add %c to dovecot-auth
     - ability to specify default password scheme with passwd-file
     - with blocking passdb we're not caching lookups if the password was wrong
     - non-plaintext authentication doesn't support all features:

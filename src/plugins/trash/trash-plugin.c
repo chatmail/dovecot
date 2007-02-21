@@ -65,6 +65,9 @@ static int trash_clean_mailbox_open(struct trash_mailbox *trash)
 {
 	trash->box = mailbox_open(trash->storage, trash->name, NULL,
 				  MAILBOX_OPEN_KEEP_RECENT);
+	if (trash->box == NULL)
+		return -1;
+
 	if (sync_mailbox(trash->box) < 0)
 		return -1;
 
@@ -105,7 +108,7 @@ static int trash_try_clean_mails(struct quota_root_transaction_context *ctx,
 	struct trash_mailbox *trashes;
 	unsigned int i, j, count, oldest_idx;
 	time_t oldest, received;
-	uint64_t size;
+	uint64_t size, size_expunged = 0, expunged_count = 0;
 	int ret = 0;
 
 	trashes = array_get_modifyable(&trash_boxes, &count);
@@ -140,17 +143,21 @@ static int trash_try_clean_mails(struct quota_root_transaction_context *ctx,
 		}
 
 		if (oldest_idx < count) {
+			size = mail_get_physical_size(trashes[oldest_idx].mail);
+			if (size == (uoff_t)-1) {
+				/* maybe expunged already? */
+				trashes[oldest_idx].mail_set = FALSE;
+				continue;
+			}
+
 			if (mail_expunge(trashes[oldest_idx].mail) < 0)
 				break;
 
-			size = mail_get_physical_size(trashes[oldest_idx].mail);
-			if (size >= size_needed) {
-				size_needed = 0;
+			expunged_count++;
+			size_expunged += size;
+			if (size_expunged >= size_needed)
 				break;
-			}
 			trashes[oldest_idx].mail_set = FALSE;
-
-			size_needed -= size;
 		} else {
 			/* find more mails from next priority's mailbox */
 			i = j;
@@ -161,11 +168,14 @@ __err:
 	for (i = 0; i < count; i++) {
 		struct trash_mailbox *trash = &trashes[i];
 
+		if (trash->box == NULL)
+			continue;
+
 		trash->mail_set = FALSE;
 		mail_free(&trash->mail);
 		(void)mailbox_search_deinit(&trash->search_ctx);
 
-		if (size_needed == 0) {
+		if (size_expunged >= size_needed) {
 			(void)mailbox_transaction_commit(&trash->trans,
 				MAILBOX_SYNC_FLAG_FULL_WRITE);
 		} else {
@@ -175,7 +185,15 @@ __err:
 
 		mailbox_close(&trash->box);
 	}
-	return size_needed == 0;
+
+	if (size_expunged < size_needed)
+		return FALSE;
+
+	ctx->bytes_current = ctx->bytes_current > size_expunged ?
+		ctx->bytes_current - size_expunged : 0;
+	ctx->count_current = ctx->count_current > expunged_count ?
+		ctx->count_current - expunged_count : 0;
+	return TRUE;
 }
 
 static int

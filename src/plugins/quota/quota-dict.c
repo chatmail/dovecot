@@ -126,7 +126,11 @@ static int dict_quota_lookup(struct dict_quota_root *root, const char *path,
 	t_push();
 	ret = dict_lookup(root->dict, unsafe_data_stack_pool, path, &value);
 	if (ret > 0) {
-		*value_r = strtoull(value, NULL, 10);
+		long long tmp;
+
+		/* don't break in case the quota value is negative. */
+		tmp = strtoll(value, NULL, 10);
+		*value_r = tmp < 0 ? 0 : tmp;
 		t_pop();
 		return 0;
 	}

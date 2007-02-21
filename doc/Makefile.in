@@ -180,14 +180,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 doc_DATA = \
 	USE-WIKI-INSTEAD \
-	auth.txt \
 	auth-protocol.txt \
-	configuration.txt \
-	design.txt \
-	index.txt \
-	mail-storages.txt \
-	multiaccess.txt \
-	nfs.txt \
 	securecoding.txt \
 	variables.txt
 

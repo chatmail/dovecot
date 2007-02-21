@@ -45,6 +45,10 @@ deliver_mail_func_t *deliver_mail = NULL;
 
 void (*hook_mail_storage_created)(struct mail_storage *storage) = NULL;
 
+/* FIXME: these two should be in some context struct instead of as globals.. */
+static const char *default_mailbox_name = NULL;
+static bool tried_default_save = FALSE;
+
 static struct module *modules;
 static struct ioloop *ioloop;
 
@@ -110,6 +114,9 @@ int deliver_save(struct mail_storage *storage, const char *mailbox,
 	struct mail_keywords *kw;
 	const char *msgid;
 	int ret = 0;
+
+	if (strcmp(mailbox, default_mailbox_name) == 0)
+		tried_default_save = TRUE;
 
 	box = mailbox_open_or_create_synced(storage, mailbox);
 	if (box == NULL)
@@ -184,7 +191,7 @@ static void config_file_init(const char *path)
 	struct istream *input;
 	const char *key, *value;
 	char *line, *p, quote;
-	int fd, sections = 0, lda_section = FALSE;
+	int fd, sections = 0, lda_section = FALSE, pop3_section = FALSE;
 	size_t len;
 
 	fd = open(path, O_RDONLY);
@@ -232,20 +239,26 @@ static void config_file_init(const char *path)
 				if (strcmp(line, "protocol lda {") == 0 ||
 				    strcmp(line, "plugin {") == 0)
 					lda_section = TRUE;
+				if (strcmp(line, "protocol pop3 {") == 0)
+					pop3_section = TRUE;
 				sections++;
 			}
 			if (*line == '}') {
 				sections--;
 				lda_section = FALSE;
+				pop3_section = FALSE;
 			}
 			continue;
 		}
 
-		if (sections > 0 && !lda_section)
-			continue;
-
 		while (p > line && p[-1] == ' ') p--;
 		key = t_strdup_until(line, p);
+
+		if (sections > 0 && !lda_section) {
+			if (!pop3_section ||
+			    strcmp(key, "pop3_uidl_format") != 0)
+				continue;
+		}
 
 		do {
 			value++;
@@ -377,6 +390,21 @@ static struct istream *create_mbox_stream(int fd, const char *envelope_sender)
 	return input;
 }
 
+static void failure_exit_callback(int *status)
+{
+	/* we want all our exit codes to be sysexits.h compatible */
+	switch (*status) {
+	case FATAL_LOGOPEN:
+	case FATAL_LOGWRITE:
+	case FATAL_LOGERROR:
+	case FATAL_OUTOFMEM:
+	case FATAL_EXEC:
+	case FATAL_DEFAULT:
+		*status = EX_TEMPFAIL;
+		break;
+	}
+}
+
 static void open_logfile(const char *username)
 {
 	const char *prefix, *log_path, *stamp;
@@ -398,6 +426,8 @@ static void open_logfile(const char *username)
 	log_path = getenv("INFO_LOG_PATH");
 	if (log_path != NULL && *log_path != '\0')
 		i_set_info_file(log_path);
+
+	i_set_failure_exit_callback(failure_exit_callback);
 
 	stamp = getenv("LOG_TIMESTAMP");
 	if (stamp == NULL)
@@ -590,6 +620,7 @@ int main(int argc, char *argv[])
 			plugin_dir = MODULEDIR"/lda";
 		modules = module_dir_load(plugin_dir, getenv("MAIL_PLUGINS"),
 					  TRUE);
+		module_dir_init(modules);
 	}
 
 	/* FIXME: how should we handle namespaces? */
@@ -621,28 +652,31 @@ int main(int argc, char *argv[])
 	if (mail_set_seq(mail, 1) < 0)
 		i_fatal("mail_set_seq() failed");
 
+	default_mailbox_name = mailbox;
 	ret = deliver_mail == NULL ? 0 :
 		deliver_mail(storage, mail, destination, mailbox);
 
-	if (ret <= 0) {
-		/* plugins didn't handle this. save into INBOX. */
+	if (ret == 0 || (ret < 0 && !tried_default_save)) {
+		/* plugins didn't handle this. save into the default mailbox. */
 		i_stream_seek(input, 0);
-		if (deliver_save(storage, mailbox, mail, 0, NULL) < 0) {
-			const char *error;
-			bool syntax, temporary_error;
-			int ret;
+		ret = deliver_save(storage, mailbox, mail, 0, NULL);
+	}
 
-			error = mail_storage_get_last_error(storage, &syntax,
-							    &temporary_error);
-			if (temporary_error)
-				return EX_TEMPFAIL;
+	if (ret < 0) {
+		const char *error;
+		bool syntax, temporary_error;
+		int ret;
 
-			/* we'll have to reply with permanent failure */
-			ret = mail_send_rejection(mail, destination, error);
-			if (ret != 0)
-				return ret < 0 ? EX_TEMPFAIL : ret;
-			/* ok, rejection sent */
-		}
+		error = mail_storage_get_last_error(storage, &syntax,
+						    &temporary_error);
+		if (temporary_error)
+			return EX_TEMPFAIL;
+
+		/* we'll have to reply with permanent failure */
+		ret = mail_send_rejection(mail, destination, error);
+		if (ret != 0)
+			return ret < 0 ? EX_TEMPFAIL : ret;
+		/* ok, rejection sent */
 	}
 	i_stream_unref(&input);
 

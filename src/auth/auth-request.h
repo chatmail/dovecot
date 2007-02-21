@@ -42,6 +42,9 @@ struct auth_request {
            with "userdb_" are skipped. If prefetch userdb is used, it uses
            the "userdb_" prefixed fields. */
         struct auth_stream_reply *extra_fields;
+	/* extra_fields that aren't supposed to be sent to the client, but
+	   are supposed to be stored to auth cache. */
+	struct auth_stream_reply *extra_cache_fields;
 
 	struct mech_module *mech;
 	struct auth *auth;
@@ -124,6 +127,9 @@ bool auth_request_set_login_username(struct auth_request *request,
 void auth_request_set_field(struct auth_request *request,
 			    const char *name, const char *value,
 			    const char *default_scheme);
+void auth_request_set_fields(struct auth_request *request,
+			     const char *const *fields,
+			     const char *default_scheme);
 
 int auth_request_password_verify(struct auth_request *request,
 				 const char *plain_password,

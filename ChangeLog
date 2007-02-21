@@ -1,3 +1,355 @@
+2007-02-20 12:01  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, TODO, configure.in: Released 1.0.rc23.
+
+2007-02-20 12:00  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-fs.c: Linux quota v1 apparently returns
+	  current quota in kilobytes, not bytes as v2.
+
+2007-02-20 11:51  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap-login/client-authenticate.c,
+	  pop3-login/client-authenticate.c: If authentication failed but it
+	  still returns proxy, don't do the proxying.
+
+2007-02-20 10:25  Timo Sirainen <tss@iki.fi>
+
+	* src/master/master-settings.c: dovecot -n/-a dumps now also
+	  dict/plugin settings.
+
+2007-02-19 23:28  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-sync-private.h,
+	  mbox-sync-rewrite.c, mbox-sync.c: Rewriting still wasn't
+	  replacing broken X-UID headers correctly always, causing
+	  assert-crashes.
+
+2007-02-19 20:00  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: proxy and nologin was broken in last
+	  changes.
+
+2007-02-19 19:59  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-blocking.c: Removed unused variable
+
+2007-02-19 14:45  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-save.c, mbox-storage.c,
+	  mbox-storage.h: Drop X-Delivery-ID header when saving the
+	  message.
+
+2007-02-19 14:35  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-save.c: If pop3_uidl_format=%m,
+	  add a unique X-Delivery-ID header to all saved mails. Without it
+	  it's possible to get duplicate UIDLs which some clients don't
+	  handle all that well. (eg. mail sent to two accounts where one is
+	  alias to another will get the exact same Received/Delivered-To
+	  headers with Postfix)
+
+2007-02-19 14:27  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Get pop3_uidl_format even if it's inside
+	  protocol pop3 {}
+
+2007-02-17 12:28  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Added AC_CACHE_CHECK()s to all AC_TRY_RUN and
+	  AC_RUN_IFELSE checks so that cross compiling is possible.
+
+2007-02-17 11:45  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/mech-plain.c: If authorization and authentication IDs
+	  are the same, and both contain the master user, the master login
+	  failed.
+
+2007-02-17 11:21  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: auth_request_set_fields(): Don't crash
+	  with empty fields.
+
+2007-02-16 19:01  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-sync-private.h,
+	  mbox-sync-rewrite.c, mbox-sync-update.c: Fixed some wrong
+	  "uid-last unexpectedly lost" errors.
+
+2007-02-16 18:43  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/module-dir.c: Don't crash at deinit if no modules are
+	  loaded.
+
+2007-02-16 18:31  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/trash/trash-plugin.c: Although messages were
+	  expunged, the expunges weren't counted in that same transaction
+	  and the APPEND failed.
+
+2007-02-16 18:01  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/trash/trash-plugin.c: If trash mailbox couldn't be
+	  opened, don't crash later either.
+
+2007-02-16 17:55  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/module-dir.c: module_dir_init() was calling the init()
+	  functions in reverse order.
+
+2007-02-16 17:28  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/checkpassword-reply.c: If USER environment is set,
+	  return it in "user" field and not "userdb_user".  Also don't
+	  require that the USER environment exists.
+
+2007-02-16 17:26  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-checkpassword.c: Use auth_request_set_fields() to
+	  set the fields returned by checkpassword script instead of
+	  auth_stream_import()ing directly into extra_fields. This way
+	  checkpassword can set special extra fields.
+
+2007-02-16 17:22  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: auth-request.c, auth-request.h, passdb-blocking.c,
+	  passdb-cache.c: Added auth_request_set_fields() and used it
+	  instead of duplicating the code in multiple places.
+
+2007-02-16 17:13  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/checkpassword-reply.c: Don't crash if USER or HOME
+	  environment is missing. Allow HOME environment not to exist.
+
+2007-02-16 14:03  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-append.c: APPEND ate all CPU if client didn't send
+	  the message fast enough (since rc22).
+
+2007-02-16 13:41  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap-login/client-authenticate.c,
+	  pop3-login/client-authenticate.c: If authentication fails and
+	  we've already destroyed the client, don't go io_add()ing the
+	  client anywhere.
+
+2007-02-16 13:40  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/sasl-server.c: Make sure we crash if we're
+	  trying to call sasl_callback() too many times.
+
+2007-02-16 13:12  Timo Sirainen <tss@iki.fi>
+
+	* src/: auth/password-scheme.c, deliver/deliver.c, dict/main.c,
+	  imap/main.c, lib/module-dir.c, lib/module-dir.h, pop3/main.c:
+	  module_dir_load() doesn't call init() functions anymore. Added a
+	  new module_dir_init() which does it. This way imap/pop3 can load
+	  the modules before chrooting and initialize them after.
+
+2007-02-16 12:15  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/trash/trash-plugin.c: If trash mailbox can't be
+	  opened, don't crash.
+
+2007-02-16 12:08  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-worker-client.c: Blocking passdbs didn't work as
+	  masterdbs.
+
+2007-02-16 10:54  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-cache.c: Allocate cache file's size amount of
+	  memory for the file cache so it doesn't have to grow it
+	  constantly while reading the file.
+
+2007-02-16 10:53  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: file-cache.c, file-cache.h: Made file_cache_set_size()
+	  public.
+
+2007-02-15 17:38  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Don't bother trying to save the mail twice
+	  into the default mailbox (eg. if it's over quota).
+
+2007-02-15 17:00  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Cleaned up the log_file and info_log_file
+	  comments.
+
+2007-02-15 14:26  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Hook all exit()s and if the exit code is
+	  one of Dovecot's own FATAL_* ones, replace them with EX_TEMPFAIL.
+
+2007-02-15 14:25  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: failures.c, failures.h: Added
+	  i_set_failure_exit_callback()
+
+2007-02-15 13:57  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop.c: Delay initializing I/O notify backend until the
+	  first notify is added.  Non-IMAP processes never need notifies.
+
+2007-02-15 13:31  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap-login/imap-proxy.c, pop3-login/pop3-proxy.c: Don't
+	  crash if the remote server disconnects before we're logged in.
+
+2007-02-15 13:10  Timo Sirainen <tss@iki.fi>
+
+	* src/master/auth-process.c: Do the delayed login process starting
+	  also after SIGHUPing.
+
+2007-02-15 13:08  Timo Sirainen <tss@iki.fi>
+
+	* src/master/: auth-process.c, auth-process.h, login-process.c:
+	  Start auth processes immediately at startup, not after one second
+	  delay.  Don't try to start any login processes before at least
+	  one auth process has sent back a handshake.
+
+2007-02-15 12:12  Timo Sirainen <tss@iki.fi>
+
+	* src/pop3/commands.c: RSET: Don't rollback the transaction if LAST
+	  is enabled (there's no point, because all the seen flags are
+	  removed anyway).
+
+2007-02-15 11:51  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: auth-request.c, passdb-cache.c, passdb.c: If looking
+	  up credentials for NULL passwords, return "scheme not available"
+	  instead of assert-crashing.
+
+2007-02-15 11:39  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/main.c: mail_debug=yes: Log also home directory.
+
+2007-02-15 11:38  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-append.c: If we've a mailbox selected and we're
+	  appending to another mailbox, we got extra FLAGS/PERMANENTFLAGS
+	  change notifications.
+
+2007-02-15 11:06  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: auth-cache.c, auth-cache.h, auth-request.c: If user is
+	  changed with "user=x" in extra_fields, cache the entry with the
+	  original username instead of with the changed username.
+
+2007-02-15 10:48  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: Removed assert. "pass" field is allowed
+	  to be in extra_fields.
+
+2007-02-15 10:46  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: auth-request.c, auth-request.h: Special extra_fields
+	  weren't saved to auth cache. This was especially problematic for
+	  allow_nets which was ignored if the user was already in cache.
+
+2007-02-15 10:31  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-cache.c: If last login was valid and the current
+	  one wasn't, we returned "not found from cache" but extra_fields
+	  still had been modified, which could have caused crashes later.
+
+2007-02-14 19:32  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-dict.c: Don't break if current quota
+	  value is negative.
+
+2007-02-14 18:32  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/: index/maildir/maildir-keywords.c,
+	  subscription-file/subscription-file.c: fsync() subscriptions file
+	  and maildir-keywords before rename()ing them.
+
+2007-02-14 18:26  Timo Sirainen <tss@iki.fi>
+
+	* src/pop3/commands.c: If UIDL command can't get the UID, die
+	  instead of not returning anything and still replying "OK".
+
+2007-02-14 18:23  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-save.c: When saving a message to
+	  an empty mbox file, write X-IMAPbase header so the UID doesn't
+	  change.
+
+2007-02-13 19:37  Timo Sirainen <tss@iki.fi>
+
+	* doc/Makefile.am: Removed deleted .txt file.
+
+2007-02-12 21:48  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/auth/userdb-passwd.c: Added
+	  blocking=yes setting to userdb passwd.
+
+2007-02-12 21:41  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/auth/passdb-pam.c: Added blocking=yes
+	  to PAM passdb to use auth workers instead of forking a new
+	  process for each lookup.
+
+2007-02-12 21:07  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-pam.c: If PAM child process hasn't responded in
+	  two minutes, send KILL signal to it.
+
+2007-02-12 18:14  Timo Sirainen <tss@iki.fi>
+
+	* src/master/mail-process.c: When running dump-capability, don't do
+	  stderr_close_shutdown since it could break and make epoll_ctl()
+	  return with EPERM.
+
+2007-02-12 17:27  Timo Sirainen <tss@iki.fi>
+
+	* doc/: Makefile.am, USE-WIKI-INSTEAD, auth.txt, configuration.txt,
+	  design.txt, index.txt, mail-storages.txt, multiaccess.txt,
+	  nfs.txt: Removed the old and wrong .txt files.
+
+2007-02-07 01:45  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/mail-log/mail-log-plugin.c: Don't crash with
+	  expunging mails with non-existing message-id header.
+
+2007-02-06 19:51  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync.c: Removed fsync() call. It
+	  doesn't really provide any data integrity guarantees, and it
+	  could make the performance worse.
+
+2007-02-06 16:13  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: Released 1.0.rc22
+
+2007-02-06 16:01  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-update.c: We could have skipped
+	  transactions completely (broken a few revisions ago).
+
+2007-02-06 14:58  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-update.c: If extension size wasn't
+	  32bit aligned, we broke when syncing it. However all the current
+	  extensions are 32bit aligned.
+
+2007-02-06 12:54  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-append.c: If client disconnects at the end of append
+	  without waiting for a reply, handle it properly.
+
+2007-02-06 10:43  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-mail/istream-header-filter.c: _read() could have returned
+	  "need more data" in wrong situations, which could have caused
+	  problems later.
+
+2007-02-06 09:49  Timo Sirainen <tss@iki.fi>
+
+	* src/: auth/passdb-blocking.c, login-common/sasl-server.c:
+	  Assert-crashfixes
+
 2007-02-05 14:15  Timo Sirainen <tss@iki.fi>
 
 	* src/imap/cmd-list.c: If namespace has a prefix and inbox=no,

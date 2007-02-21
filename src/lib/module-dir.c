@@ -86,7 +86,6 @@ static struct module *
 module_load(const char *path, const char *name, bool require_init_funcs)
 {
 	void *handle;
-	void (*init)(void);
 	struct module *module;
 
 	handle = dlopen(path, RTLD_GLOBAL | RTLD_NOW);
@@ -101,14 +100,17 @@ module_load(const char *path, const char *name, bool require_init_funcs)
 	module->handle = handle;
 
 	/* get our init func */
-	init = (void (*)(void))
+	module->init = (void (*)(void))
 		get_symbol(module, t_strconcat(name, "_init", NULL),
 			   !require_init_funcs);
-	module->deinit = init == NULL ? NULL : (void (*)(void))
+	module->deinit = module->init == NULL ? NULL : (void (*)(void))
 		get_symbol(module, t_strconcat(name, "_deinit", NULL),
 			   !require_init_funcs);
 
-	if ((init == NULL || module->deinit == NULL) && require_init_funcs) {
+	if ((module->init == NULL || module->deinit == NULL) &&
+	    require_init_funcs) {
+		i_error("Module doesn't have %s function: %s",
+			module->init == NULL ? "init" : "deinit", path);
 		module->deinit = NULL;
 		module_free(module);
 		return NULL;
@@ -116,9 +118,6 @@ module_load(const char *path, const char *name, bool require_init_funcs)
 
 	if (getenv("DEBUG") != NULL)
 		i_info("Module loaded: %s", path);
-
-	if (init != NULL)
-		init();
 	return module;
 }
 
@@ -181,7 +180,7 @@ struct module *module_dir_load(const char *dir, const char *module_names,
 	struct dirent *d;
 	const char *name, *path, *p, *stripped_name, **names_p;
 	const char **module_names_arr;
-	struct module *modules, *module;
+	struct module *modules, *module, **module_pos;
 	unsigned int i, count;
 	array_t ARRAY_DEFINE(names, const char *);
 	pool_t pool;
@@ -237,6 +236,8 @@ struct module *module_dir_load(const char *dir, const char *module_names,
 				module_file_get_name(module_names_arr[i]);
 		}
 	}
+
+	module_pos = &modules;
 	for (i = 0; i < count; i++) {
 		const char *name = names_p[i];
 
@@ -254,8 +255,8 @@ struct module *module_dir_load(const char *dir, const char *module_names,
 		t_pop();
 
 		if (module != NULL) {
-			module->next = modules;
-			modules = module;
+			*module_pos = module;
+			module_pos = &module->next;
 		}
 	}
 	if (module_names_arr != NULL) {
@@ -276,16 +277,42 @@ struct module *module_dir_load(const char *dir, const char *module_names,
 	return modules;
 }
 
-void module_dir_deinit(struct module *modules)
+void module_dir_init(struct module *modules)
 {
 	struct module *module;
 
 	for (module = modules; module != NULL; module = module->next) {
+		if (module->init != NULL)
+			module->init();
+	}
+}
+
+void module_dir_deinit(struct module *modules)
+{
+	struct module *module, **rev;
+	unsigned int i, count = 0;
+
+	for (module = modules; module != NULL; module = module->next)
+		count++;
+
+	if (count == 0)
+		return;
+
+	/* @UNSAFE: deinitialize in reverse order */
+	t_push();
+	rev = t_new(struct module *, count);
+	for (i = 0, module = modules; i < count; i++, module = module->next)
+		rev[count-i-1] = module;
+
+	for (i = 0; i < count; i++) {
+		module = rev[i];
+
 		if (module->deinit != NULL) {
 			module->deinit();
 			module->deinit = NULL;
 		}
 	}
+	t_pop();
 }
 
 void module_dir_unload(struct module **modules)

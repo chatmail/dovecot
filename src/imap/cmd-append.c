@@ -24,6 +24,7 @@ struct cmd_append_context {
 
 	struct imap_parser *save_parser;
 	struct mail_save_context *save_ctx;
+        struct mailbox_keywords old_keywords;
 };
 
 static void cmd_append_finish(struct cmd_append_context *ctx);
@@ -126,8 +127,12 @@ static void cmd_append_finish(struct cmd_append_context *ctx)
 	if (ctx->t != NULL)
 		mailbox_transaction_rollback(&ctx->t);
 
-	if (ctx->box != ctx->cmd->client->mailbox && ctx->box != NULL)
+	if (ctx->box != ctx->client->mailbox && ctx->box != NULL) {
 		mailbox_close(&ctx->box);
+
+		pool_unref(ctx->client->keywords.pool);
+		ctx->client->keywords = ctx->old_keywords;
+	}
 
 	ctx->client->bad_counter = 0;
 	o_stream_set_flush_callback(ctx->client->output,
@@ -315,7 +320,7 @@ static bool cmd_append_continue_message(struct client_command_context *cmd)
 				   from client */
 				mailbox_save_cancel(&ctx->save_ctx);
 			}
-			if (ret == -1)
+			if (ret == -1 || ret == 0)
 				break;
 		}
 	}
@@ -391,11 +396,34 @@ get_mailbox(struct client_command_context *cmd, const char *name)
 	return box;
 }
 
+static int get_keywords(struct cmd_append_context *ctx)
+{
+	struct client *client = ctx->client;
+	struct mailbox_status status;
+
+	/* we'll need to get the current keywords so that
+	   client_parse_mail_flags()'s keyword verification works.
+	   however if we're not appending to selected mailbox, we'll
+	   need to restore the keywords list. */
+	if (mailbox_get_status(ctx->box, STATUS_KEYWORDS,
+			       &status) < 0)
+		return -1;
+
+	if (ctx->box != client->mailbox) {
+		ctx->old_keywords = client->keywords;
+
+		memset(&client->keywords, 0, sizeof(client->keywords));
+		client->keywords.pool =
+			pool_alloconly_create("append keywords pool", 128);
+	}
+	client_save_keywords(&client->keywords, status.keywords);
+	return 0;
+}
+
 bool cmd_append(struct client_command_context *cmd)
 {
 	struct client *client = cmd->client;
         struct cmd_append_context *ctx;
-	struct mailbox_status status;
 	const char *mailbox;
 
 	/* <mailbox> */
@@ -409,17 +437,13 @@ bool cmd_append(struct client_command_context *cmd)
 	if (ctx->box != NULL) {
 		ctx->storage = mailbox_get_storage(ctx->box);
 
-		if (mailbox_get_status(ctx->box, STATUS_KEYWORDS,
-				       &status) < 0) {
+		if (get_keywords(ctx) < 0) {
 			client_send_storage_error(cmd, ctx->storage);
 			mailbox_close(&ctx->box);
 		} else {
-			client_save_keywords(&client->keywords,
-					     status.keywords);
+			ctx->t = mailbox_transaction_begin(ctx->box,
+					MAILBOX_TRANSACTION_FLAG_EXTERNAL);
 		}
-		ctx->t = ctx->box == NULL ? NULL :
-			mailbox_transaction_begin(ctx->box,
-				MAILBOX_TRANSACTION_FLAG_EXTERNAL);
 	}
 
 	io_remove(&client->io);

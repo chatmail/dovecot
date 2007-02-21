@@ -1,3 +1,43 @@
+v1.0.rc23 2007-02-20  Timo Sirainen <tss@iki.fi>
+
+	* deliver doesn't ever exit with Dovecot's internal exit codes anymore.
+	  All its internal exit codes are changed to EX_TEMPFAIL.
+	* mbox: X-Delivery-ID header is now dropped when saving mails.
+	* mbox: If pop3_uidl_format=%m, we generate a unique X-Delivery-ID
+	  header when saving mails to make sure the UIDL is unique.
+
+	+ PAM: blocking=yes in args uses an alternative way to do PAM checks.
+	  Try it if you're having problems with PAM.
+	+ userdb passwd: blocking=yes in args makes the userdb lookups be done
+	  in auth worker processes. Set it if you're doing remote NSS lookups
+	  (eg. nss_ldap problems are fixed by this).
+	+ If PAM child process hasn't responded in two minutes, send KILL
+	  signal to it (only with blocking=no)
+	- IMAP: APPEND ate all CPU while waiting for more data from the client
+	  (broken in rc22)
+	- mbox: Broken X-UID headers assert-crashed sometimes
+	- mbox: When saving a message to an empty mbox file it got an UID
+	  which immediately got incremented.
+	- mbox: Fixed some wrong "uid-last unexpectedly lost" errors.
+	- auth cache: In some situations we crashed if passdb had extra_fields.
+	- auth cache: Special extra_fields weren't saved to auth cache.
+	  For example allow_nets restrictions were ignored for cached entries.
+	- A lot of initial login processes could cause auth socket errors
+	  in log file at startup, if dovecot-auth started slowly. Now the
+	  login processes are started only after dovecot-auth has finished
+	  initializing itself.
+	- imap/pop3 proxy: Don't crash if the remote server disconnects before
+	  we're logged in.
+	- deliver: Don't bother trying to save the mail twice into the default
+	  mailbox (eg. if it's over quota).
+	- mmap_disable=yes + non-Linux was really slow with large
+	  dovecot.index.cache files
+	- MySQL couldn't be used as a masterdb
+	- Trash plugin was more or less broken
+	- imap/pop3 couldn't load plugins if they chrooted
+	- imap/pop3-login process could crash in some conditions
+	- checkpassword-reply crashed if USER/HOME wasn't set
+
 v1.0.rc22 2007-02-06  Timo Sirainen <tss@iki.fi>
 
 	+ pop3: Commit the transaction even if client didn't QUIT so cached

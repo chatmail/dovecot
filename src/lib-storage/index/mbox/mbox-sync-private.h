@@ -79,7 +79,7 @@ struct mbox_sync_mail_context {
 	uoff_t content_length;
 
 	size_t hdr_pos[MBOX_HDR_COUNT];
-	uint32_t parsed_uid;
+	uint32_t parsed_uid, last_uid_updated_value;
 	unsigned int last_uid_value_start_pos;
 
 	unsigned int have_eoh:1;
@@ -121,7 +121,6 @@ struct mbox_sync_context {
 	pool_t saved_keywords_pool;
 
 	uint32_t prev_msg_uid, next_uid, idx_next_uid;
-	uint32_t prev_next_uid, need_space_next_uid;
 	uint32_t seq, idx_seq, need_space_seq;
 	off_t expunged_space, space_diff;
 

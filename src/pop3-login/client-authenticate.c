@@ -88,12 +88,12 @@ static void client_auth_input(void *context)
 }
 
 static bool client_handle_args(struct pop3_client *client,
-			       const char *const *args, bool nologin)
+			       const char *const *args, bool success)
 {
 	const char *reason = NULL, *host = NULL, *destuser = NULL, *pass = NULL;
 	string_t *reply;
 	unsigned int port = 110;
-	bool proxy = FALSE, temp = FALSE;
+	bool proxy = FALSE, temp = FALSE, nologin = !success;
 
 	for (; *args != NULL; args++) {
 		if (strcmp(*args, "nologin") == 0)
@@ -119,8 +119,12 @@ static bool client_handle_args(struct pop3_client *client,
 
 	if (proxy) {
 		/* we want to proxy the connection to another server.
+		   don't do this unless authentication succeeded. with
+		   master user proxying we can get FAIL with proxy still set.
 
 		   proxy host=.. [port=..] [destuser=..] pass=.. */
+		if (!success)
+			return FALSE;
 		if (pop3_proxy_new(client, host, port, destuser, pass) < 0)
 			client_destroy_internal_failure(client);
 		return TRUE;
@@ -140,11 +144,13 @@ static bool client_handle_args(struct pop3_client *client,
 
 	client_send_line(client, str_c(reply));
 
-	/* get back to normal client input. */
-	if (client->io != NULL)
-		io_remove(&client->io);
-	client->io = io_add(client->common.fd, IO_READ,
-			    client_input, client);
+	if (!client->destroyed) {
+		/* get back to normal client input. */
+		if (client->io != NULL)
+			io_remove(&client->io);
+		client->io = io_add(client->common.fd, IO_READ,
+				    client_input, client);
+	}
 	return TRUE;
 }
 
@@ -163,7 +169,7 @@ static void sasl_callback(struct client *_client, enum sasl_server_reply reply,
 	switch (reply) {
 	case SASL_SERVER_REPLY_SUCCESS:
 		if (args != NULL) {
-			if (client_handle_args(client, args, FALSE))
+			if (client_handle_args(client, args, TRUE))
 				break;
 		}
 
@@ -173,7 +179,7 @@ static void sasl_callback(struct client *_client, enum sasl_server_reply reply,
 	case SASL_SERVER_REPLY_AUTH_FAILED:
 	case SASL_SERVER_REPLY_CLIENT_ERROR:
 		if (args != NULL) {
-			if (client_handle_args(client, args, TRUE))
+			if (client_handle_args(client, args, FALSE))
 				break;
 		}
 
@@ -181,11 +187,13 @@ static void sasl_callback(struct client *_client, enum sasl_server_reply reply,
 				  data : AUTH_FAILED_MSG, NULL);
 		client_send_line(client, msg);
 
-		/* get back to normal client input. */
-		if (client->io != NULL)
-			io_remove(&client->io);
-		client->io = io_add(client->common.fd, IO_READ,
-				    client_input, client);
+		if (!client->destroyed) {
+			/* get back to normal client input. */
+			if (client->io != NULL)
+				io_remove(&client->io);
+			client->io = io_add(client->common.fd, IO_READ,
+					    client_input, client);
+		}
 		break;
 	case SASL_SERVER_REPLY_MASTER_FAILED:
 		client_destroy_internal_failure(client);
