@@ -1,6 +1,7 @@
-/* Copyright (C) 2005 Timo Sirainen */
+/* Copyright (C) 2005-2007 Timo Sirainen */
 
 #include "lib.h"
+#include "ioloop.h"
 #include "home-expand.h"
 #include "mkdir-parents.h"
 #include "unlink-directory.h"
@@ -18,6 +19,9 @@
 #include <sys/stat.h>
 
 #define CREATE_MODE 0770 /* umask() should limit it more */
+
+/* How often to touch the uidlist lock file when using KEEP_LOCKED flag */
+#define DBOX_LOCK_TOUCH_MSECS (10*1000)
 
 /* Don't allow creating too long mailbox names. They could start causing
    problems when they reach the limit. */
@@ -382,6 +386,13 @@ dbox_get_mailbox_control_dir(struct mail_storage *_storage, const char *name)
 	return dbox_get_path(istorage, name);
 }
 
+static void dbox_lock_touch_timeout(void *context)
+{
+	struct dbox_mailbox *mbox = context;
+
+	(void)dbox_uidlist_lock_touch(mbox->uidlist);
+}
+
 static struct mailbox *
 dbox_open(struct dbox_storage *storage, const char *name,
 	  enum mailbox_open_flags flags)
@@ -409,12 +420,7 @@ dbox_open(struct dbox_storage *storage, const char *name,
 	mbox->ibox.storage = istorage;
 	mbox->ibox.mail_vfuncs = &dbox_mail_vfuncs;
 	mbox->ibox.is_recent = dbox_is_recent;
-
-	if (index_storage_mailbox_init(&mbox->ibox, index, name, flags,
-				       FALSE) < 0) {
-		/* the memory was already freed */
-		return NULL;
-	}
+	mbox->ibox.index = index;
 
 	value = getenv("DBOX_ROTATE_SIZE");
 	if (value != NULL)
@@ -442,14 +448,19 @@ dbox_open(struct dbox_storage *storage, const char *name,
 					sizeof(uint64_t), sizeof(uint64_t));
 
 	mbox->uidlist = dbox_uidlist_init(mbox);
-	if (mbox->ibox.keep_locked) {
+	if ((flags & MAILBOX_OPEN_KEEP_LOCKED) != 0) {
 		if (dbox_uidlist_lock(mbox->uidlist) < 0) {
 			struct mailbox *box = &mbox->ibox.box;
 
 			mailbox_close(&box);
 			return NULL;
 		}
+		mbox->keep_lock_to = timeout_add(DBOX_LOCK_TOUCH_MSECS,
+						 dbox_lock_touch_timeout,
+						 mbox);
 	}
+
+	index_storage_mailbox_init(&mbox->ibox, name, flags, FALSE);
 	return &mbox->ibox.box;
 }
 
@@ -712,8 +723,11 @@ static int dbox_storage_close(struct mailbox *box)
 {
 	struct dbox_mailbox *mbox = (struct dbox_mailbox *)box;
 
-	if (mbox->ibox.keep_locked)
+	if (mbox->keep_lock_to != NULL) {
 		dbox_uidlist_unlock(mbox->uidlist);
+		timeout_remove(&mbox->keep_lock_to);
+	}
+
 	dbox_uidlist_deinit(mbox->uidlist);
 	if (mbox->file != NULL)
 		dbox_file_close(mbox->file);

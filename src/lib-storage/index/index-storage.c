@@ -309,10 +309,9 @@ void index_storage_lock_notify_reset(struct index_mailbox *ibox)
 	ibox->last_notify_type = MAILBOX_LOCK_NOTIFY_NONE;
 }
 
-int index_storage_mailbox_init(struct index_mailbox *ibox,
-			       struct mail_index *index, const char *name,
-			       enum mailbox_open_flags flags,
-			       bool move_to_memory)
+void index_storage_mailbox_init(struct index_mailbox *ibox, const char *name,
+				enum mailbox_open_flags flags,
+				bool move_to_memory)
 {
 	struct mail_storage *storage = &ibox->storage->storage;
 	enum mail_index_open_flags index_flags;
@@ -352,35 +351,31 @@ int index_storage_mailbox_init(struct index_mailbox *ibox,
 	ibox->readonly = (flags & MAILBOX_OPEN_READONLY) != 0;
 	ibox->keep_recent = (flags & MAILBOX_OPEN_KEEP_RECENT) != 0;
 	ibox->keep_locked = (flags & MAILBOX_OPEN_KEEP_LOCKED) != 0;
-	ibox->index = index;
 
 	ibox->next_lock_notify = time(NULL) + LOCK_NOTIFY_INTERVAL;
 	ibox->commit_log_file_seq = 0;
 	ibox->mail_read_mmaped = (storage->flags &
 				  MAIL_STORAGE_FLAG_MMAP_MAILS) != 0;
 
-	ret = mail_index_open(index, index_flags, lock_method);
+	ret = mail_index_open(ibox->index, index_flags, lock_method);
 	if (ret <= 0 || move_to_memory) {
-		if (mail_index_move_to_memory(index) < 0) {
+		if (mail_index_move_to_memory(ibox->index) < 0) {
 			/* try opening once more. it should be created
 			   directly into memory now. */
-			ret = mail_index_open(index, index_flags, lock_method);
-			if (ret <= 0) {
-				mail_storage_set_index_error(ibox);
-				index_storage_mailbox_free(&ibox->box);
-				return -1;
-			}
+			ret = mail_index_open(ibox->index, index_flags,
+					      lock_method);
+			if (ret <= 0)
+				i_panic("in-memory index creation failed");
 		}
 	}
 
 	ibox->md5hdr_ext_idx =
-		mail_index_ext_register(index, "header-md5", 0, 16, 1);
+		mail_index_ext_register(ibox->index, "header-md5", 0, 16, 1);
 
-	ibox->cache = mail_index_get_cache(index);
+	ibox->cache = mail_index_get_cache(ibox->index);
 	index_cache_register_defaults(ibox);
-	ibox->view = mail_index_view_open(index);
-	ibox->keyword_names = mail_index_get_keywords(index);
-	return 0;
+	ibox->view = mail_index_view_open(ibox->index);
+	ibox->keyword_names = mail_index_get_keywords(ibox->index);
 }
 
 void index_storage_mailbox_free(struct mailbox *box)

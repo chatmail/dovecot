@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#define INIT_TRASH_MAILBOX_COUNT 4
 #define MAX_RETRY_COUNT 3
 
 #define TRASH_CONTEXT(obj) \
@@ -42,8 +43,11 @@ struct trash_mailbox {
 /* defined by imap, pop3, lda */
 extern void (*hook_quota_root_created)(struct quota_root *root);
 
+const char *trash_plugin_version = PACKAGE_VERSION;
+
 static void (*trash_next_hook_quota_root_created)(struct quota_root *root);
-static unsigned int trash_quota_module_id;
+static unsigned int trash_quota_module_id = 0;
+static bool trash_quota_module_id_set = FALSE;
 
 static pool_t config_pool;
 /* trash_boxes ordered by priority, highest first */
@@ -66,7 +70,7 @@ static int trash_clean_mailbox_open(struct trash_mailbox *trash)
 	trash->box = mailbox_open(trash->storage, trash->name, NULL,
 				  MAILBOX_OPEN_KEEP_RECENT);
 	if (trash->box == NULL)
-		return -1;
+		return 0;
 
 	if (sync_mailbox(trash->box) < 0)
 		return -1;
@@ -113,23 +117,25 @@ static int trash_try_clean_mails(struct quota_root_transaction_context *ctx,
 
 	trashes = array_get_modifyable(&trash_boxes, &count);
 	for (i = 0; i < count; ) {
-		if (trashes[i].storage == NULL) {
-			/* FIXME: this is really ugly. it'll do however until
-			   we get proper namespace support for lib-storage. */
-			struct mail_storage *const *storage;
-
-			storage = array_idx(&ctx->root->storages, 0);
-			trashes[i].storage = *storage;
-		}
 		/* expunge oldest mails first in all trash boxes with
 		   same priority */
 		oldest_idx = count;
 		oldest = (time_t)-1;
 		for (j = i; j < count; j++) {
-			if (trashes[j].priority != trashes[j].priority)
+			if (trashes[j].priority != trashes[i].priority)
 				break;
 
-			ret = trash_clean_mailbox_get_next(&trashes[i],
+			if (trashes[j].storage == NULL) {
+				/* FIXME: this is really ugly. it'll do however
+				   until we get proper namespace support for
+				   lib-storage. */
+				struct mail_storage *const *storage;
+
+				storage = array_idx(&ctx->root->storages, 0);
+				trashes[j].storage = *storage;
+			}
+
+			ret = trash_clean_mailbox_get_next(&trashes[j],
 							   &received);
 			if (ret < 0)
 				goto __err;
@@ -298,7 +304,10 @@ static void trash_quota_root_created(struct quota_root *root)
 	root->v.try_alloc_bytes = trash_quota_root_try_alloc_bytes;
 	root->v.test_alloc_bytes = trash_quota_root_test_alloc_bytes;
 
-	trash_quota_module_id = quota_module_id++;
+	if (!trash_quota_module_id_set) {
+		trash_quota_module_id_set = TRUE;
+		trash_quota_module_id = quota_module_id++;
+	}
 	array_idx_set(&root->quota_module_contexts,
 		      trash_quota_module_id, &troot);
 }
@@ -324,7 +333,8 @@ static int read_configuration(const char *path)
 	}
 
 	p_clear(config_pool);
-	ARRAY_CREATE(&trash_boxes, config_pool, struct trash_mailbox, 8);
+	ARRAY_CREATE(&trash_boxes, config_pool, struct trash_mailbox,
+		     INIT_TRASH_MAILBOX_COUNT);
 
 	input = i_stream_create_file(fd, default_pool, (size_t)-1, FALSE);
 	while ((line = i_stream_read_next_line(input)) != NULL) {
@@ -362,7 +372,11 @@ void trash_plugin_init(void)
 		return;
 	}
 
-	config_pool = pool_alloconly_create("trash config", 1024);
+	config_pool = pool_alloconly_create("trash config",
+					sizeof(trash_boxes) +
+					BUFFER_APPROX_SIZE +
+					INIT_TRASH_MAILBOX_COUNT *
+					(sizeof(struct trash_mailbox) + 32));
 	if (read_configuration(env) < 0)
 		return;
 

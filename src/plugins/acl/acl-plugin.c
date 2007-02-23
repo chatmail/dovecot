@@ -12,6 +12,8 @@ extern void (*hook_mail_storage_created)(struct mail_storage *storage);
 
 void (*acl_next_hook_mail_storage_created)(struct mail_storage *storage);
 
+const char *acl_plugin_version = PACKAGE_VERSION;
+
 void acl_plugin_init(void)
 {
 	if (getenv("ACL") != NULL) {

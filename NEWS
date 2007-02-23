@@ -1,3 +1,17 @@
+v1.0.rc24 2007-02-22  Timo Sirainen <tss@iki.fi>
+
+	* Dovecot now fails to load plugins that were compiled for different
+	  Dovecot version, unless version_ignore=yes is set. This needs to be
+	  explicitly set in plugins, so out-of-tree plugins won't have this
+	  check by default.
+
+	- pop3_lock_session=yes could cause deadlocks, and with maildir the
+	  uidlist lock could have been overridden after 2 minutes causing
+	  problems
+	- PAM wasted CPU by calling a timeout function 1000x too often
+	- Trash plugin was more or less broken with multiple namespaces and
+	  with multiple trash mailboxes
+
 v1.0.rc23 2007-02-20  Timo Sirainen <tss@iki.fi>
 
 	* deliver doesn't ever exit with Dovecot's internal exit codes anymore.

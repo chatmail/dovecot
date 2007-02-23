@@ -20,6 +20,9 @@
 
 #define CREATE_MODE 0777 /* umask() should limit it more */
 
+/* How often to touch the uidlist lock file when using KEEP_LOCKED flag */
+#define MAILDIR_LOCK_TOUCH_MSECS (10*1000)
+
 /* Don't allow creating too long mailbox names. They could start causing
    problems when they reach the limit. */
 #define MAILDIR_MAX_MAILBOX_NAME_LENGTH (PATH_MAX/2)
@@ -473,6 +476,13 @@ static bool maildir_is_recent(struct index_mailbox *ibox, uint32_t uid)
 	return maildir_uidlist_is_recent(mbox->uidlist, uid);
 }
 
+static void maildir_lock_touch_timeout(void *context)
+{
+	struct maildir_mailbox *mbox = context;
+
+	(void)maildir_uidlist_lock_touch(mbox->uidlist);
+}
+
 static struct mailbox *
 maildir_open(struct maildir_storage *storage, const char *name,
 	     enum mailbox_open_flags flags)
@@ -508,12 +518,7 @@ maildir_open(struct maildir_storage *storage, const char *name,
 	mbox->ibox.storage = istorage;
 	mbox->ibox.mail_vfuncs = &maildir_mail_vfuncs;
 	mbox->ibox.is_recent = maildir_is_recent;
-
-	if (index_storage_mailbox_init(&mbox->ibox, index, name, flags,
-				       FALSE) < 0) {
-		/* the memory was already freed */
-		return NULL;
-	}
+	mbox->ibox.index = index;
 
 	mbox->storage = storage;
 	mbox->path = p_strdup(pool, path);
@@ -531,15 +536,19 @@ maildir_open(struct maildir_storage *storage, const char *name,
 		mbox->private_flags_mask = MAIL_SEEN;
 	}
 
-	if (mbox->ibox.keep_locked) {
+	if ((flags & MAILBOX_OPEN_KEEP_LOCKED) != 0) {
 		if (maildir_uidlist_lock(mbox->uidlist) <= 0) {
 			struct mailbox *box = &mbox->ibox.box;
 
 			mailbox_close(&box);
 			return NULL;
 		}
+		mbox->keep_lock_to = timeout_add(MAILDIR_LOCK_TOUCH_MSECS,
+						 maildir_lock_touch_timeout,
+						 mbox);
 	}
 
+	index_storage_mailbox_init(&mbox->ibox, name, flags, FALSE);
 	return &mbox->ibox.box;
 }
 
@@ -1051,8 +1060,10 @@ static int maildir_storage_close(struct mailbox *box)
 		ret = -1;
 	}*/
 
-	if (mbox->ibox.keep_locked)
+	if (mbox->keep_lock_to != NULL) {
 		maildir_uidlist_unlock(mbox->uidlist);
+		timeout_remove(&mbox->keep_lock_to);
+	}
 
 	maildir_keywords_deinit(mbox->keywords);
 	maildir_uidlist_deinit(mbox->uidlist);

@@ -1,3 +1,100 @@
+2007-02-22 17:36  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: Released 1.0.rc24.
+
+2007-02-22 17:29  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-storage.c, mbox-storage.h:
+	  KEEP_LOCK: When using dotlock, touch it every 10 seconds.
+
+2007-02-22 15:42  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/trash/trash-plugin.c: Fixed priority handling.
+
+2007-02-22 15:38  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/trash/trash-plugin.c: Fixes for handling multiple
+	  storages.
+
+2007-02-22 15:03  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/trash/trash-plugin.c: Minor memory allocation
+	  optimizations.
+
+2007-02-22 14:35  Timo Sirainen <tss@iki.fi>
+
+	* src/: auth/password-scheme.c, deliver/deliver.c, dict/main.c,
+	  imap/main.c, lib/module-dir.c, lib/module-dir.h, pop3/main.c:
+	  Don't compare to PACKAGE_VERSION in lib/ core directly, rather
+	  make module_dir_load() have the version string as parameter.
+	  Plugin version checks can be skipped with version_ignore=yes.
+
+2007-02-22 14:27  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/: acl/acl-plugin.c, convert/convert-plugin.c,
+	  imap-quota/imap-quota-plugin.c,
+	  lazy-expunge/lazy-expunge-plugin.c, mail-log/mail-log-plugin.c,
+	  quota/quota-plugin.c, trash/trash-plugin.c, zlib/zlib-plugin.c:
+	  Added <plugin_name>_version string.
+
+2007-02-22 14:25  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/module-dir.c: If module contains a <module_name>_version
+	  string, fail if it doesn't match PACKAGE_VERSION.
+
+2007-02-22 14:10  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ostream.c: If o_stream_send_istream() fails, make sure
+	  errno is set to outstream.stream_errno.
+
+2007-02-22 14:08  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-save.c: cleanup
+
+2007-02-22 13:45  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-cache-transaction.c: Crashfix in error
+	  conditions.
+
+2007-02-22 13:39  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/dbox/dbox-uidlist.c: If uidlist locking
+	  fails because of a timeout, given timeout error message to user
+	  instead of internal error.
+
+2007-02-22 13:37  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/: index-storage.c, index-storage.h,
+	  dbox/dbox-storage.c, maildir/maildir-storage.c,
+	  mbox/mbox-storage.c: When using KEEP_LOCK, the mbox/uidlist file
+	  must be locked before index file is opened. Otherwise we can end
+	  up in a deadlock.
+
+2007-02-22 13:30  Timo Sirainen <tss@iki.fi>
+
+	* src/pop3/client.c: If INBOX can't be opened, give better error
+	  messages. The reason is never "INBOX doesn't exist for user".
+
+2007-02-22 13:08  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/: dbox/dbox-storage.c,
+	  maildir/maildir-storage.c: If KEEP_LOCK is set and we timeout,
+	  don't crash.
+
+2007-02-22 12:50  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/: dbox/dbox-storage.c, dbox/dbox-storage.h,
+	  dbox/dbox-uidlist.c, dbox/dbox-uidlist.h,
+	  maildir/maildir-storage.c, maildir/maildir-storage.h,
+	  maildir/maildir-uidlist.c, maildir/maildir-uidlist.h: If
+	  pop3_lock_session=yes, update maildir/dbox uidlist lock file
+	  every 10 seconds so it won't be treated as a stale lock.
+
+2007-02-22 12:23  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-pam.c: PAM dead-child timeout function was called
+	  1000 times too often.
+
 2007-02-20 12:01  Timo Sirainen <tss@iki.fi>
 
 	* NEWS, TODO, configure.in: Released 1.0.rc23.
