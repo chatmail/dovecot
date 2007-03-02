@@ -1,3 +1,76 @@
+2007-03-01 11:15  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-append.c: Don't crash if mail saving fails.
+
+2007-03-01 11:13  Timo Sirainen <tss@iki.fi>
+
+	* src/: lib/istream-limit.c, lib/ostream-crlf.c,
+	  lib-mail/istream-header-filter.c,
+	  lib-storage/index/mbox/istream-raw-mbox.c: Keep stream_errno
+	  updated in filter streams.
+
+2007-03-01 10:38  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/: client.c, client.h: Added asserts to make sure
+	  client_destroy() isn't called while we're handling commands.
+
+2007-03-01 10:18  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/client.h: Removed unused rawlog flag.
+
+2007-02-28 21:00  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/mail-log/mail-log-plugin.c: Fixed deleted/undeleted
+	  logging.
+
+2007-02-28 20:19  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop.c: If time moves backwards, kill ourself.
+
+2007-02-28 19:55  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-sync-parse.c,
+	  mbox-sync-private.h, mbox-sync.c: If next_uid field gets to
+	  2^31-1, handle it without crashing by creating a new uidvalidity
+	  and renumbering the UIDs (although it requires selecting the
+	  mailbox twice, first time to get index file deleted).
+
+2007-02-28 19:51  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-rewrite.c: The previous
+	  broken X-UID header fixing code was still broken...
+
+2007-02-27 16:56  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/mech-plain.c: Don't crash with invalid PLAIN input.
+
+2007-02-25 15:40  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/mempool-alloconly.c: alloconly pool: pool_unref()
+	  shouldn't set the pool pointer to NULL unless refcount=0.
+
+2007-02-23 18:29  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-list.c: If prefix.INBOX has children and we're
+	  listing under prefix.%, don't drop the prefix.
+
+2007-02-22 21:50  Timo Sirainen <tss@iki.fi>
+
+	* Makefile.am, configure.in, dovecot-config.in.in,
+	  src/auth/Makefile.am, src/deliver/Makefile.am,
+	  src/imap/Makefile.am, src/lib/Makefile.am,
+	  src/lib-auth/Makefile.am, src/lib-charset/Makefile.am,
+	  src/lib-dict/Makefile.am, src/lib-imap/Makefile.am,
+	  src/lib-index/Makefile.am, src/lib-mail/Makefile.am,
+	  src/lib-settings/Makefile.am, src/lib-sql/Makefile.am,
+	  src/lib-storage/Makefile.am, src/lib-storage/index/Makefile.am,
+	  src/lib-storage/index/dbox/Makefile.am,
+	  src/lib-storage/index/maildir/Makefile.am,
+	  src/lib-storage/index/mbox/Makefile.am,
+	  src/lib-storage/subscription-file/Makefile.am,
+	  src/pop3/Makefile.am: Added --with-headers configure option to
+	  install .h files.
+
 2007-02-22 17:36  Timo Sirainen <tss@iki.fi>
 
 	* NEWS, configure.in: Released 1.0.rc24.

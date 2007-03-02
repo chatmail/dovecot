@@ -1,3 +1,18 @@
+v1.0.rc25 2007-03-01  Timo Sirainen <tss@iki.fi>
+
+	* If time moves backwards, Dovecot kills itself instead of giving
+	  random problems.
+
+	+ Added --with-headers configure option to install .h files.
+	  Binary package builders could use this to create some dovecot-dev
+	  package to make compiling plugins easier.
+	- PLAIN authentication: Don't crash dovecot-auth with invalid input.
+	- IMAP APPEND: Don't crash if saving fails
+	- IMAP LIST: If prefix.INBOX has children and we're listing under
+	  prefix.%, don't drop the prefix.
+	- mbox: Broken X-UID headers still weren't handled correctly.
+	- mail-log plugin: Fixed deleted/undeleted logging.
+
 v1.0.rc24 2007-02-22  Timo Sirainen <tss@iki.fi>
 
 	* Dovecot now fails to load plugins that were compiled for different

@@ -20,6 +20,13 @@ libstorage_index_a_SOURCES = \
 	index-sync.c \
 	index-transaction.c
 
-noinst_HEADERS = \
+headers = \
 	index-mail.h \
 	index-storage.h
+
+if INSTALL_HEADERS
+  pkginc_libdir=$(pkgincludedir)/src/lib-storage/index
+  pkginc_lib_HEADERS = $(headers)
+else
+  noinst_HEADERS = $(headers)
+endif

@@ -64,6 +64,7 @@ void client_destroy(struct client *client, const char *reason)
 {
 	int ret;
 
+	i_assert(!client->handling_input);
 	i_assert(!client->destroyed);
 	client->destroyed = TRUE;
 
@@ -397,6 +398,8 @@ void _client_input(void *context)
 	struct client_command_context *cmd = &client->cmd;
 	int ret;
 
+	i_assert(!client->handling_input);
+
 	if (client->command_pending) {
 		/* already processing one command. wait. */
 		io_remove(&client->io);
@@ -422,6 +425,7 @@ void _client_input(void *context)
 		break;
 	}
 
+	client->handling_input = TRUE;
 	o_stream_cork(client->output);
 	do {
 		t_push();
@@ -429,6 +433,7 @@ void _client_input(void *context)
 		t_pop();
 	} while (ret && !client->disconnected);
 	o_stream_uncork(client->output);
+	client->handling_input = FALSE;
 
 	if (client->command_pending)
 		client->input_pending = TRUE;

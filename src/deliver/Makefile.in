@@ -35,7 +35,8 @@ build_triplet = @build@
 host_triplet = @host@
 pkglibexec_PROGRAMS = deliver$(EXEEXT)
 subdir = src/deliver
-DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
+DIST_COMMON = $(am__noinst_HEADERS_DIST) \
+	$(am__pkginc_lib_HEADERS_DIST) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.in
@@ -44,7 +45,8 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
-am__installdirs = "$(DESTDIR)$(pkglibexecdir)"
+am__installdirs = "$(DESTDIR)$(pkglibexecdir)" \
+	"$(DESTDIR)$(pkginc_libdir)"
 pkglibexecPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(pkglibexec_PROGRAMS)
 am_deliver_OBJECTS = auth-client.$(OBJEXT) deliver.$(OBJEXT) \
@@ -74,7 +76,18 @@ LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	$(LDFLAGS) -o $@
 SOURCES = $(deliver_SOURCES)
 DIST_SOURCES = $(deliver_SOURCES)
-HEADERS = $(noinst_HEADERS)
+am__noinst_HEADERS_DIST = auth-client.h deliver.h duplicate.h \
+	mail-send.h smtp-client.h
+am__pkginc_lib_HEADERS_DIST = auth-client.h deliver.h duplicate.h \
+	mail-send.h smtp-client.h
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
+pkginc_libHEADERS_INSTALL = $(INSTALL_HEADER)
+HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -248,13 +261,16 @@ deliver_SOURCES = \
 	mail-send.c \
 	smtp-client.c
 
-noinst_HEADERS = \
+headers = \
 	auth-client.h \
 	deliver.h \
 	duplicate.h \
 	mail-send.h \
 	smtp-client.h
 
+@INSTALL_HEADERS_TRUE@pkginc_libdir = $(pkgincludedir)/src/deliver
+@INSTALL_HEADERS_TRUE@pkginc_lib_HEADERS = $(headers)
+@INSTALL_HEADERS_FALSE@noinst_HEADERS = $(headers)
 all: all-am
 
 .SUFFIXES:
@@ -358,6 +374,23 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+install-pkginc_libHEADERS: $(pkginc_lib_HEADERS)
+	@$(NORMAL_INSTALL)
+	test -z "$(pkginc_libdir)" || $(MKDIR_P) "$(DESTDIR)$(pkginc_libdir)"
+	@list='$(pkginc_lib_HEADERS)'; for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  f=$(am__strip_dir) \
+	  echo " $(pkginc_libHEADERS_INSTALL) '$$d$$p' '$(DESTDIR)$(pkginc_libdir)/$$f'"; \
+	  $(pkginc_libHEADERS_INSTALL) "$$d$$p" "$(DESTDIR)$(pkginc_libdir)/$$f"; \
+	done
+
+uninstall-pkginc_libHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkginc_lib_HEADERS)'; for p in $$list; do \
+	  f=$(am__strip_dir) \
+	  echo " rm -f '$(DESTDIR)$(pkginc_libdir)/$$f'"; \
+	  rm -f "$(DESTDIR)$(pkginc_libdir)/$$f"; \
+	done
 
 ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
 	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \
@@ -437,7 +470,7 @@ check-am: all-am
 check: check-am
 all-am: Makefile $(PROGRAMS) $(HEADERS)
 installdirs:
-	for dir in "$(DESTDIR)$(pkglibexecdir)"; do \
+	for dir in "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -485,7 +518,7 @@ info: info-am
 
 info-am:
 
-install-data-am:
+install-data-am: install-pkginc_libHEADERS
 
 install-dvi: install-dvi-am
 
@@ -521,7 +554,7 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-pkglibexecPROGRAMS
+uninstall-am: uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS
 
 .MAKE: install-am install-strip
 
@@ -532,12 +565,13 @@ uninstall-am: uninstall-pkglibexecPROGRAMS
 	install install-am install-data install-data-am install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
 	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-pkglibexecPROGRAMS \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags uninstall uninstall-am uninstall-pkglibexecPROGRAMS
+	install-pdf install-pdf-am install-pkginc_libHEADERS \
+	install-pkglibexecPROGRAMS install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags uninstall uninstall-am \
+	uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

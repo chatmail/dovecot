@@ -124,8 +124,9 @@ list_namespace_mailboxes(struct client *client, struct cmd_list_context *ctx)
 	while ((list = mail_storage_mailbox_list_next(ctx->list_ctx)) != NULL) {
 		str_truncate(name_str, 0);
 		/* when listing INBOX from inbox=yes namespace, don't insert
-		   the namespace prefix */
-		if (strcasecmp(list->name, "INBOX") != 0 || !ctx->ns->inbox)
+		   the namespace prefix (note however that LIST prefix.% may
+		   return INBOX if it has children) */
+		if (!ctx->match_inbox || strcasecmp(list->name, "INBOX") != 0)
 			str_append(name_str, ctx->ns->prefix);
 		str_append(name_str, list->name);
 

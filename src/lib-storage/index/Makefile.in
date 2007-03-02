@@ -34,7 +34,8 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 subdir = src/lib-storage/index
-DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
+DIST_COMMON = $(am__noinst_HEADERS_DIST) \
+	$(am__pkginc_lib_HEADERS_DIST) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.in
@@ -74,7 +75,17 @@ RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
 	install-pdf-recursive install-ps-recursive install-recursive \
 	installcheck-recursive installdirs-recursive pdf-recursive \
 	ps-recursive uninstall-recursive
-HEADERS = $(noinst_HEADERS)
+am__noinst_HEADERS_DIST = index-mail.h index-storage.h
+am__pkginc_lib_HEADERS_DIST = index-mail.h index-storage.h
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
+am__installdirs = "$(DESTDIR)$(pkginc_libdir)"
+pkginc_libHEADERS_INSTALL = $(INSTALL_HEADER)
+HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 ETAGS = etags
@@ -226,10 +237,13 @@ libstorage_index_a_SOURCES = \
 	index-sync.c \
 	index-transaction.c
 
-noinst_HEADERS = \
+headers = \
 	index-mail.h \
 	index-storage.h
 
+@INSTALL_HEADERS_TRUE@pkginc_libdir = $(pkgincludedir)/src/lib-storage/index
+@INSTALL_HEADERS_TRUE@pkginc_lib_HEADERS = $(headers)
+@INSTALL_HEADERS_FALSE@noinst_HEADERS = $(headers)
 all: all-recursive
 
 .SUFFIXES:
@@ -313,6 +327,23 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+install-pkginc_libHEADERS: $(pkginc_lib_HEADERS)
+	@$(NORMAL_INSTALL)
+	test -z "$(pkginc_libdir)" || $(MKDIR_P) "$(DESTDIR)$(pkginc_libdir)"
+	@list='$(pkginc_lib_HEADERS)'; for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  f=$(am__strip_dir) \
+	  echo " $(pkginc_libHEADERS_INSTALL) '$$d$$p' '$(DESTDIR)$(pkginc_libdir)/$$f'"; \
+	  $(pkginc_libHEADERS_INSTALL) "$$d$$p" "$(DESTDIR)$(pkginc_libdir)/$$f"; \
+	done
+
+uninstall-pkginc_libHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkginc_lib_HEADERS)'; for p in $$list; do \
+	  f=$(am__strip_dir) \
+	  echo " rm -f '$(DESTDIR)$(pkginc_libdir)/$$f'"; \
+	  rm -f "$(DESTDIR)$(pkginc_libdir)/$$f"; \
+	done
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run `make' without going through this Makefile.
@@ -493,6 +524,9 @@ check: check-recursive
 all-am: Makefile $(LIBRARIES) $(HEADERS)
 installdirs: installdirs-recursive
 installdirs-am:
+	for dir in "$(DESTDIR)$(pkginc_libdir)"; do \
+	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
+	done
 install: install-recursive
 install-exec: install-exec-recursive
 install-data: install-data-recursive
@@ -538,7 +572,7 @@ info: info-recursive
 
 info-am:
 
-install-data-am:
+install-data-am: install-pkginc_libHEADERS
 
 install-dvi: install-dvi-recursive
 
@@ -574,7 +608,7 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am:
+uninstall-am: uninstall-pkginc_libHEADERS
 
 .MAKE: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) install-am \
 	install-strip
@@ -587,12 +621,13 @@ uninstall-am:
 	install install-am install-data install-data-am install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
 	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	installdirs-am maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-recursive \
-	uninstall uninstall-am
+	install-pdf install-pdf-am install-pkginc_libHEADERS \
+	install-ps install-ps-am install-strip installcheck \
+	installcheck-am installdirs installdirs-am maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-recursive uninstall uninstall-am \
+	uninstall-pkginc_libHEADERS
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

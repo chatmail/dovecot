@@ -225,25 +225,28 @@ bool dbox_is_valid_mask(struct mail_storage *storage, const char *mask)
 	   "./" and "//" could fool ACL checks. */
 	newdir = TRUE;
 	for (p = mask; *p != '\0'; p++) {
-		if (newdir) {
-			if (p[0] == '/')
-				return FALSE; /* // */
-			if (p[0] == '.') {
-				if (p[1] == '/')
-					return FALSE; /* ./ */
-				if (p[1] == '.' && p[2] == '/')
-					return FALSE; /* ../ */
-			}
-			if (strncmp(p, DBOX_MAILDIR_NAME,
-				    sizeof(DBOX_MAILDIR_NAME)-1) == 0 &&
-			    (p[sizeof(DBOX_MAILDIR_NAME)-1] == '\0' ||
-			     p[sizeof(DBOX_MAILDIR_NAME)-1] == '/')) {
-				/* don't allow the dbox-Mails directory to be
-				   used as part of the mask */
-				return FALSE;
-			}
+		if (!newdir) {
+			newdir = p[0] == '/';
+			continue;
 		}
-		newdir = p[0] == '/';
+
+		newdir = FALSE;
+		if (p[0] == '/')
+			return FALSE; /* // */
+		if (p[0] == '.') {
+			if (p[1] == '/' || p[1] == '\0')
+				return FALSE; /* ./ */
+			if (p[1] == '.' && (p[2] == '/' || p[2] == '\0'))
+				return FALSE; /* ../ */
+		}
+		if (strncmp(p, DBOX_MAILDIR_NAME,
+			    sizeof(DBOX_MAILDIR_NAME)-1) == 0 &&
+		    (p[sizeof(DBOX_MAILDIR_NAME)-1] == '\0' ||
+		     p[sizeof(DBOX_MAILDIR_NAME)-1] == '/')) {
+			/* don't allow the dbox-Mails directory to be
+			   used as part of the mask */
+			return FALSE;
+		}
 	}
 
 	if (mask[0] == '.' && (mask[1] == '\0' ||

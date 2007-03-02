@@ -1,3 +1,9 @@
+dovecot (1.0.rc25-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Fri,  2 Mar 2007 13:44:44 +0100
+
 dovecot (1.0.rc24-1) unstable; urgency=low
 
   * New upstream release.

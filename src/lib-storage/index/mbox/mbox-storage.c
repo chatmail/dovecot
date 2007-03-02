@@ -403,20 +403,29 @@ bool mbox_is_valid_mask(struct mail_storage *storage, const char *mask)
 
 	/* make sure the mailbox name doesn't contain any foolishness:
 	   "../" could give access outside the mailbox directory.
-	   "./" and "//" could fool ACL checks. */
+	   "./" and "//" could fool ACL checks.
+	   ".imap" could be used to accidentally break things. */
 	newdir = TRUE;
 	for (p = mask; *p != '\0'; p++) {
-		if (newdir) {
-			if (p[0] == '/')
-				return FALSE; /* // */
-			if (p[0] == '.') {
-				if (p[1] == '/')
-					return FALSE; /* ./ */
-				if (p[1] == '.' && p[2] == '/')
-					return FALSE; /* ../ */
-			}
+		if (!newdir) {
+			newdir = p[0] == '/';
+			continue;
+		}
+
+		newdir = FALSE;
+		if (p[0] == '/')
+			return FALSE; /* // */
+		if (p[0] == '.') {
+			if (p[1] == '/' || p[1] == '\0')
+				return FALSE; /* ./ */
+			if (p[1] == '.' && (p[2] == '/' || p[2] == '\0'))
+				return FALSE; /* ../ */
 		} 
-		newdir = p[0] == '/';
+		if (strncmp(p, MBOX_INDEX_DIR_NAME,
+			    sizeof(MBOX_INDEX_DIR_NAME)-1) == 0 &&
+		    (p[sizeof(MBOX_INDEX_DIR_NAME)-1] == '\0' ||
+		     p[sizeof(MBOX_INDEX_DIR_NAME)-1] == '/'))
+			return FALSE;
 	}
 	if (mask[0] == '.' && (mask[1] == '\0' ||
 			       (mask[1] == '.' && mask[2] == '\0'))) {

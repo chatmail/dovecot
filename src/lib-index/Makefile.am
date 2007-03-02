@@ -29,7 +29,7 @@ libindex_a_SOURCES = \
         mail-transaction-log-view.c \
         mail-transaction-util.c
 
-noinst_HEADERS = \
+headers = \
 	mail-cache.h \
 	mail-cache-private.h \
 	mail-index.h \
@@ -40,3 +40,10 @@ noinst_HEADERS = \
         mail-transaction-log.h \
 	mail-transaction-log-private.h \
         mail-transaction-util.h
+
+if INSTALL_HEADERS
+  pkginc_libdir=$(pkgincludedir)/src/lib-index
+  pkginc_lib_HEADERS = $(headers)
+else
+  noinst_HEADERS = $(headers)
+endif

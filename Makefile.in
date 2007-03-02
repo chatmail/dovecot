@@ -14,6 +14,7 @@
 
 @SET_MAKE@
 
+
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
 pkglibdir = $(libdir)/@PACKAGE@
@@ -33,12 +34,13 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 subdir = .
-DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
-	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
-	$(srcdir)/dovecot-config.in.in $(srcdir)/stamp.h.in \
-	$(top_srcdir)/configure AUTHORS COPYING ChangeLog INSTALL NEWS \
-	TODO config.guess config.rpath config.sub depcomp install-sh \
-	ltmain.sh missing
+DIST_COMMON = README $(am__configure_deps) \
+	$(am__pkginclude_HEADERS_DIST) $(noinst_HEADERS) \
+	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
+	$(srcdir)/config.h.in $(srcdir)/dovecot-config.in.in \
+	$(srcdir)/stamp.h.in $(top_srcdir)/configure AUTHORS COPYING \
+	ChangeLog INSTALL NEWS TODO config.guess config.rpath \
+	config.sub depcomp install-sh ltmain.sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -63,9 +65,14 @@ am__vpath_adj = case $$p in \
     *) f=$$p;; \
   esac;
 am__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
-am__installdirs = "$(DESTDIR)$(confdir)"
+am__installdirs = "$(DESTDIR)$(confdir)" "$(DESTDIR)$(pkglibdir)" \
+	"$(DESTDIR)$(pkgincludedir)"
 confDATA_INSTALL = $(INSTALL_DATA)
-DATA = $(conf_DATA) $(noinst_DATA)
+pkglibDATA_INSTALL = $(INSTALL_DATA)
+DATA = $(conf_DATA) $(noinst_DATA) $(pkglib_DATA)
+am__pkginclude_HEADERS_DIST = config.h
+pkgincludeHEADERS_INSTALL = $(INSTALL_HEADER)
+HEADERS = $(noinst_HEADERS) $(pkginclude_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 ETAGS = etags
@@ -219,7 +226,10 @@ EXTRA_DIST = \
 	COPYING.MIT \
 	$(conf_DATA)
 
-noinst_DATA = dovecot-config
+@INSTALL_HEADERS_TRUE@pkginclude_HEADERS = config.h
+@INSTALL_HEADERS_TRUE@pkglib_DATA = dovecot-config
+@INSTALL_HEADERS_FALSE@noinst_HEADERS = $(headers)
+@INSTALL_HEADERS_FALSE@noinst_DATA = dovecot-config
 CLEANFILES = $(noinst_DATA)
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
@@ -304,6 +314,40 @@ uninstall-confDATA:
 	  f=$(am__strip_dir) \
 	  echo " rm -f '$(DESTDIR)$(confdir)/$$f'"; \
 	  rm -f "$(DESTDIR)$(confdir)/$$f"; \
+	done
+install-pkglibDATA: $(pkglib_DATA)
+	@$(NORMAL_INSTALL)
+	test -z "$(pkglibdir)" || $(MKDIR_P) "$(DESTDIR)$(pkglibdir)"
+	@list='$(pkglib_DATA)'; for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  f=$(am__strip_dir) \
+	  echo " $(pkglibDATA_INSTALL) '$$d$$p' '$(DESTDIR)$(pkglibdir)/$$f'"; \
+	  $(pkglibDATA_INSTALL) "$$d$$p" "$(DESTDIR)$(pkglibdir)/$$f"; \
+	done
+
+uninstall-pkglibDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkglib_DATA)'; for p in $$list; do \
+	  f=$(am__strip_dir) \
+	  echo " rm -f '$(DESTDIR)$(pkglibdir)/$$f'"; \
+	  rm -f "$(DESTDIR)$(pkglibdir)/$$f"; \
+	done
+install-pkgincludeHEADERS: $(pkginclude_HEADERS)
+	@$(NORMAL_INSTALL)
+	test -z "$(pkgincludedir)" || $(MKDIR_P) "$(DESTDIR)$(pkgincludedir)"
+	@list='$(pkginclude_HEADERS)'; for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  f=$(am__strip_dir) \
+	  echo " $(pkgincludeHEADERS_INSTALL) '$$d$$p' '$(DESTDIR)$(pkgincludedir)/$$f'"; \
+	  $(pkgincludeHEADERS_INSTALL) "$$d$$p" "$(DESTDIR)$(pkgincludedir)/$$f"; \
+	done
+
+uninstall-pkgincludeHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkginclude_HEADERS)'; for p in $$list; do \
+	  f=$(am__strip_dir) \
+	  echo " rm -f '$(DESTDIR)$(pkgincludedir)/$$f'"; \
+	  rm -f "$(DESTDIR)$(pkgincludedir)/$$f"; \
 	done
 
 # This directory's subdirectories are mostly independent; you can cd
@@ -581,10 +625,10 @@ distcleancheck: distclean
 	       exit 1; } >&2
 check-am: all-am
 check: check-recursive
-all-am: Makefile $(DATA) config.h
+all-am: Makefile $(DATA) $(HEADERS) config.h
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(confdir)"; do \
+	for dir in "$(DESTDIR)$(confdir)" "$(DESTDIR)$(pkglibdir)" "$(DESTDIR)$(pkgincludedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-recursive
@@ -632,11 +676,11 @@ info: info-recursive
 
 info-am:
 
-install-data-am: install-confDATA
+install-data-am: install-confDATA install-pkgincludeHEADERS
 
 install-dvi: install-dvi-recursive
 
-install-exec-am:
+install-exec-am: install-pkglibDATA
 
 install-html: install-html-recursive
 
@@ -668,7 +712,8 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-confDATA
+uninstall-am: uninstall-confDATA uninstall-pkgincludeHEADERS \
+	uninstall-pkglibDATA
 
 .MAKE: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) install-am \
 	install-strip
@@ -683,16 +728,19 @@ uninstall-am: uninstall-confDATA
 	install-confDATA install-data install-data-am install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
 	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	installdirs-am maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-generic mostlyclean-libtool pdf pdf-am \
-	ps ps-am tags tags-recursive uninstall uninstall-am \
-	uninstall-confDATA
+	install-pdf install-pdf-am install-pkgincludeHEADERS \
+	install-pkglibDATA install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs installdirs-am \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-recursive uninstall uninstall-am uninstall-confDATA \
+	uninstall-pkgincludeHEADERS uninstall-pkglibDATA
 
 
-dovecot-config: dovecot-config.in
-	cat dovecot-config.in|sed "s|moduledir=|moduledir=$(moduledir)|" > dovecot-config
+dovecot-config: dovecot-config.in Makefile
+	cat dovecot-config.in | sed \
+	-e "s|^moduledir=|moduledir=$(moduledir)|" \
+	-e "s|^dovecot_incdir=|dovecot_incdir=$(pkgincludedir)|" > dovecot-config
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:
