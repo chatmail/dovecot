@@ -7,9 +7,8 @@
 
 exit 0
 @DPATCH@
-diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
---- trunk/dovecot-example.conf	2006-11-09 10:30:01.000000000 +0100
-+++ trunk.debian/dovecot-example.conf	2006-11-09 10:33:41.000000000 +0100
+--- trunk/dovecot-example.conf	2007-03-07 11:19:30.000000000 +0100
++++ trunk.2/dovecot-example.conf	2007-03-07 11:34:00.000000000 +0100
 @@ -18,6 +18,7 @@
  # Protocols we want to be serving: imap imaps pop3 pop3s
  # If you only want to use dovecot-auth, you can set this to "none".
@@ -18,7 +17,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
  # IP or host address where to listen in for connections. It's not currently
  # possible to specify multiple addresses. "*" listens in all IPv4 interfaces.
-@@ -66,6 +67,7 @@
+@@ -67,6 +68,7 @@
  # Prefix for each line written to log file. % codes are in strftime(3)
  # format.
  #log_timestamp = "%b %d %H:%M:%S "
@@ -26,7 +25,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
  # Syslog facility to use if you're logging to syslog. Usually if you don't
  # want to use "mail", you'll use local0..local7. Also other standard
-@@ -85,8 +87,7 @@
+@@ -86,8 +88,7 @@
  
  # PEM encoded X.509 SSL/TLS certificate and private key. They're opened before
  # dropping root privileges, so keep the key file unreadable by anyone but
@@ -36,7 +35,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  #ssl_cert_file = /etc/ssl/certs/dovecot.pem
  #ssl_key_file = /etc/ssl/private/dovecot.pem
  
-@@ -196,7 +197,7 @@
+@@ -197,7 +198,7 @@
  #   %d - domain part in user@domain, empty if there's no domain
  #   %h - home directory
  #
@@ -45,7 +44,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  #
  #   mail_location = maildir:~/Maildir
  #   mail_location = mbox:~/mail:INBOX=/var/mail/%u
-@@ -247,7 +248,10 @@
+@@ -248,7 +249,10 @@
  
  # Grant access to these extra groups for mail processes. Typical use would be
  # to give "mail" group write access to /var/mail to be able to create dotlocks.
@@ -56,7 +55,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
  # Allow full filesystem access to clients. There's no access checks other than
  # what the operating system does for the active UID/GID. It works with both
-@@ -263,7 +267,8 @@
+@@ -264,7 +268,8 @@
  # isn't finding your mails.
  #mail_debug = no
  
@@ -66,17 +65,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  # variables you can use.
  #mail_log_prefix = "%Us(%u): "
  
-@@ -330,7 +335,8 @@
- # This setting doesn't affect login_chroot or auth_chroot variables.
- # WARNING: Never add directories here which local users can modify, that
- # may lead to root exploit. Usually this should be done only if you don't
--# allow shell access for users. See doc/configuration.txt for more information.
-+# allow shell access for users. See
-+# /usr/share/doc/dovecot-common/configuration.txt for more information.
- #valid_chroot_dirs = 
- 
- # Default chroot directory for mail processes. This can be overridden for
-@@ -480,19 +486,19 @@
+@@ -489,19 +494,19 @@
  
  protocol imap {
    # Login executable location.
@@ -99,7 +88,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # Maximum IMAP command line length in bytes. Some clients generate very long
    # command lines with huge mailboxes, so you may need to raise this if you get
-@@ -502,7 +508,7 @@
+@@ -511,7 +516,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -108,7 +97,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # Send IMAP capabilities in greeting message. This makes it unnecessary for
    # clients to request it with CAPABILITY command, so it saves one round-trip.
-@@ -545,11 +551,11 @@
+@@ -554,11 +559,11 @@
  
  protocol pop3 {
    # Login executable location.
@@ -122,7 +111,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # Don't try to set mails non-recent or seen with POP3 sessions. This is
    # mostly intended to reduce disk I/O. With maildir it doesn't move files
-@@ -593,7 +599,7 @@
+@@ -603,7 +608,7 @@
    # installations. %08Xu%08Xv will be the new default, so use it for new
    # installations.
    #
@@ -131,7 +120,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # POP3 logout format string:
    #  %t - number of TOP commands
-@@ -608,7 +614,7 @@
+@@ -618,7 +623,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -140,7 +129,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # Workarounds for various client bugs:
    #   outlook-no-nuls:
-@@ -625,9 +631,9 @@
+@@ -635,9 +640,9 @@
  ## LDA specific settings
  ##
  
@@ -152,7 +141,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
    # Hostname to use in various parts of sent mails, eg. in Message-Id.
    # Default is the system's real hostname.
-@@ -636,21 +642,24 @@
+@@ -646,21 +651,24 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -180,7 +169,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
  
  # Set max. process size in megabytes.
  #auth_process_size = 256
-@@ -780,7 +789,8 @@
+@@ -794,7 +802,8 @@
      # because PAM modules can do all kinds of checks besides checking password,
      # such as checking IP address. Dovecot can't know about these checks
      # without some help. cache_key is simply a list of variables (see
@@ -190,7 +179,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
      # Here are some examples:
      #   %u - Username must match. Probably sufficient for most uses.
      #   %u%r - Username and remote IP address must match.
-@@ -832,14 +842,14 @@
+@@ -850,14 +859,14 @@
    # SQL database
    # http://wiki.dovecot.org/AuthDatabase/SQL
    #passdb sql {
@@ -207,7 +196,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
      #args = 
    #}
  
-@@ -886,14 +896,14 @@
+@@ -904,14 +913,14 @@
    # SQL database
    # http://wiki.dovecot.org/AuthDatabase/SQL
    #userdb sql {
@@ -224,7 +213,7 @@ diff -urN trunk/dovecot-example.conf trunk.debian/dovecot-example.conf
      #args = 
    #}
  
-@@ -956,6 +966,18 @@
+@@ -974,6 +983,18 @@
        #mode = 0660
      #}
    #}
