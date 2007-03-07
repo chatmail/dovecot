@@ -401,13 +401,13 @@
 #define PACKAGE_NAME "dovecot"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "dovecot 1.0.rc25"
+#define PACKAGE_STRING "dovecot 1.0.rc26"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "dovecot"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.0.rc25"
+#define PACKAGE_VERSION "1.0.rc26"
 
 /* Build with BSD authentication support */
 /* #undef PASSDB_BSDAUTH */
@@ -512,7 +512,7 @@
 #define VA_COPY_AS_ARRAY 1
 
 /* Version number of package */
-#define VERSION "1.0.rc25"
+#define VERSION "1.0.rc26"
 
 /* Define to 1 if your processor stores words with the most significant byte
    first (like Motorola and SPARC, unlike Intel and VAX). */

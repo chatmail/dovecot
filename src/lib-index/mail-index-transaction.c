@@ -283,14 +283,16 @@ static int uid_map_cmp(const void *p1, const void *p2)
 		(m1->uid > m2->uid ? 1 : 0);
 }
 
-static void
-mail_index_transaction_sort_appends(struct mail_index_transaction *t)
+void mail_index_transaction_sort_appends(struct mail_index_transaction *t)
 {
 	struct mail_index_record *recs, *sorted_recs;
 	struct uid_map *new_uid_map;
 	array_t *ext_rec_arrays;
 	uint32_t *old_to_new_map;
 	unsigned int i, j, count, ext_rec_array_count;
+
+	if (!t->appends_nonsorted)
+		return;
 
 	/* first make a copy of the UIDs and map them to sequences */
 	recs = array_get_modifyable(&t->appends, &count);
@@ -350,6 +352,8 @@ mail_index_transaction_sort_appends(struct mail_index_transaction *t)
 
 	i_free(new_uid_map);
 	i_free(old_to_new_map);
+
+	t->appends_nonsorted = FALSE;
 }
 
 int mail_index_transaction_commit(struct mail_index_transaction **_t,
@@ -369,8 +373,7 @@ int mail_index_transaction_commit(struct mail_index_transaction **_t,
                 t->cache_trans_ctx = NULL;
 	}
 
-	if (t->appends_nonsorted)
-		mail_index_transaction_sort_appends(t);
+	mail_index_transaction_sort_appends(t);
 
 	if (mail_index_transaction_convert_to_uids(t) < 0)
 		ret = -1;

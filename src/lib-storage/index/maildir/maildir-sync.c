@@ -198,6 +198,13 @@
    bet here, but I guess 5 will do just fine too. */
 #define MAILDIR_RENAME_RESCAN_COUNT 5
 
+/* After moving 100 mails from new/ to cur/, check if we need to touch the
+   uidlist lock. */
+#define MAILDIR_SLOW_MOVE_COUNT 100
+/* readdir() should be pretty fast to do, but check anyway every 10000 mails
+   to see if we need to touch the uidlist lock. */
+#define MAILDIR_SLOW_CHECK_COUNT 10000
+
 struct maildir_sync_context {
         struct maildir_mailbox *mbox;
 	const char *new_dir, *cur_dir;
@@ -689,9 +696,12 @@ static int maildir_scan_dir(struct maildir_sync_context *ctx, bool new_dir)
 	string_t *src, *dest;
 	struct dirent *dp;
 	enum maildir_uidlist_rec_flag flags;
-	unsigned int moves = 0;
+	time_t last_touch;
+	unsigned int moves = 0, count = 0;
 	int ret = 1;
-	bool move_new;
+	bool move_new, check_touch;
+
+	last_touch = ioloop_time;
 
 	dir = new_dir ? ctx->new_dir : ctx->cur_dir;
 	dirp = opendir(dir);
@@ -725,6 +735,7 @@ static int maildir_scan_dir(struct maildir_sync_context *ctx, bool new_dir)
 		if (ret < 0)
 			break;
 
+		check_touch = FALSE;
 		flags = 0;
 		if (move_new) {
 			str_truncate(src, 0);
@@ -757,9 +768,22 @@ static int maildir_scan_dir(struct maildir_sync_context *ctx, bool new_dir)
 					"rename(%s, %s) failed: %m",
 					str_c(src), str_c(dest));
 			}
+			if ((moves % MAILDIR_SLOW_MOVE_COUNT) == 0)
+				check_touch = TRUE;
 		} else if (new_dir) {
 			flags |= MAILDIR_UIDLIST_REC_FLAG_NEW_DIR |
 				MAILDIR_UIDLIST_REC_FLAG_RECENT;
+		}
+
+		count++;
+		if (check_touch || (count % MAILDIR_SLOW_CHECK_COUNT) == 0) {
+			time_t now = time(NULL);
+
+			if (now - last_touch > MAILDIR_LOCK_TOUCH_SECS) {
+				(void)maildir_uidlist_lock_touch(
+							ctx->mbox->uidlist);
+				last_touch = now;
+			}
 		}
 
 		ret = maildir_uidlist_sync_next(ctx->uidlist_sync_ctx,
@@ -944,7 +968,7 @@ int maildir_sync_index(struct maildir_index_sync_context *sync_ctx,
 	struct mail_index_transaction *trans;
 	const struct mail_index_header *hdr;
 	const struct mail_index_record *rec;
-	uint32_t seq, uid;
+	uint32_t seq, uid, prev_uid;
         enum maildir_uidlist_rec_flag uflags;
 	const char *filename;
 	enum mail_flags flags;
@@ -975,7 +999,7 @@ int maildir_sync_index(struct maildir_index_sync_context *sync_ctx,
 	sync_ctx->trans = trans =
 		mail_index_transaction_begin(sync_ctx->view, FALSE, TRUE);
 
-	seq = 0;
+	seq = prev_uid = 0;
 	ARRAY_CREATE(&keywords, pool_datastack_create(),
 		     unsigned int, MAILDIR_MAX_KEYWORDS);
 	ARRAY_CREATE(&idx_keywords, pool_datastack_create(),
@@ -984,6 +1008,9 @@ int maildir_sync_index(struct maildir_index_sync_context *sync_ctx,
 	while (maildir_uidlist_iter_next(iter, &uid, &uflags, &filename)) {
 		maildir_filename_get_flags(sync_ctx->keywords_sync_ctx,
 					   filename, &flags, &keywords);
+
+		i_assert(uid > prev_uid);
+		prev_uid = uid;
 
 		/* the private flags are kept only in indexes. don't use them
 		   at all even for newly seen mails */

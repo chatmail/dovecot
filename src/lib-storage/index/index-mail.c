@@ -785,9 +785,11 @@ int index_mail_set_seq(struct mail *_mail, uint32_t seq)
 		return -1;
 	}
 
+	/* FIXME: We get the header only to make sure the UID is valid.
+	   Remove this code once the below panic never occurs. */
 	hdr = mail_index_get_header(mail->trans->trans_view);
 	if (rec->uid >= hdr->next_uid)
-		i_unreached();
+		i_panic("uid %u >= next_uid %u", rec->uid, hdr->next_uid);
 
 	index_mail_close(mail);
 

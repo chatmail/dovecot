@@ -35,12 +35,12 @@ build_triplet = @build@
 host_triplet = @host@
 subdir = .
 DIST_COMMON = README $(am__configure_deps) \
-	$(am__pkginclude_HEADERS_DIST) $(noinst_HEADERS) \
-	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
-	$(srcdir)/config.h.in $(srcdir)/dovecot-config.in.in \
-	$(srcdir)/stamp.h.in $(top_srcdir)/configure AUTHORS COPYING \
-	ChangeLog INSTALL NEWS TODO config.guess config.rpath \
-	config.sub depcomp install-sh ltmain.sh missing
+	$(am__pkginclude_HEADERS_DIST) $(srcdir)/Makefile.am \
+	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
+	$(srcdir)/dovecot-config.in.in $(srcdir)/stamp.h.in \
+	$(top_srcdir)/configure AUTHORS COPYING ChangeLog INSTALL NEWS \
+	TODO config.guess config.rpath config.sub depcomp install-sh \
+	ltmain.sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -72,7 +72,7 @@ pkglibDATA_INSTALL = $(INSTALL_DATA)
 DATA = $(conf_DATA) $(noinst_DATA) $(pkglib_DATA)
 am__pkginclude_HEADERS_DIST = config.h
 pkgincludeHEADERS_INSTALL = $(INSTALL_HEADER)
-HEADERS = $(noinst_HEADERS) $(pkginclude_HEADERS)
+HEADERS = $(pkginclude_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 ETAGS = etags
@@ -226,11 +226,13 @@ EXTRA_DIST = \
 	COPYING.MIT \
 	$(conf_DATA)
 
+datafiles = \
+	dovecot-config
+
 @INSTALL_HEADERS_TRUE@pkginclude_HEADERS = config.h
-@INSTALL_HEADERS_TRUE@pkglib_DATA = dovecot-config
-@INSTALL_HEADERS_FALSE@noinst_HEADERS = $(headers)
-@INSTALL_HEADERS_FALSE@noinst_DATA = dovecot-config
-CLEANFILES = $(noinst_DATA)
+@INSTALL_HEADERS_TRUE@pkglib_DATA = $(datafiles)
+@INSTALL_HEADERS_FALSE@noinst_DATA = $(datafiles)
+CLEANFILES = $(datafiles)
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 

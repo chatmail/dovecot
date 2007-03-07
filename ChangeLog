@@ -1,3 +1,149 @@
+2007-03-07 00:17  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: Released 1.0.rc26.
+
+2007-03-07 00:14  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: Fixed a crash when non-plaintext
+	  mechanism used auth_cache.
+
+2007-03-06 23:59  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/sasl-server.c: After calling sasl_callback() the
+	  client may be destroyed already. Don't try to modify it.
+
+2007-03-06 23:43  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-sql/driver-pgsql.c: t_push/t_pop the callback.
+
+2007-03-06 23:36  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-sql/driver-pgsql.c: Queueing code was somewhat broken and
+	  caused queries to get lost.
+
+2007-03-06 20:36  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-sync.c: Added assert.
+
+2007-03-06 20:25  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/index-mail.c: Changed i_unreached() to more
+	  informative i_panic().
+
+2007-03-06 20:19  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-transaction-private.h,
+	  mail-index-transaction-view.c, mail-index-transaction.c: When
+	  adding mails to index in non-sorted UID order and then using
+	  mail_index_get_header(), the next_uid field could have been
+	  wrong.
+
+2007-03-06 20:06  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/convert/convert-storage.c: Log errors given by
+	  storage. Convert hierarchy separators in mailbox names.
+
+2007-03-06 19:54  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/index-storage.c: If moving to memory fails,
+	  make sure we open the index with create flag set.
+
+2007-03-06 19:51  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-update.c: When we were syncing
+	  in-memory maps, we still should have updated the log file offsets
+	  because other views could have used them.
+
+2007-03-06 19:11  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: mail_index_move_to_memory(): Mark
+	  index as being in memory even if the file hasn't been opened yet.
+
+2007-03-06 18:50  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: passdb-ldap.c, userdb-ldap.c: Don't crash if
+	  user_attrs or pass_attrs is empty. It means all the attributes
+	  are returned.
+
+2007-03-06 18:27  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop.c: If time moves backwards only max. 5 seconds,
+	  sleep instead of killing ourself.
+
+2007-03-06 17:43  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-list.c: With namespace prefixes LSUB prefix.* listed
+	  INBOX.INBOX.
+
+2007-03-06 16:57  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/smtp-client.c: Drop out DEBUG environment before
+	  calling sendmail binary.
+
+2007-03-06 16:35  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-maildir.c: comment typofix
+
+2007-03-06 16:32  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-maildir.c: If maildirsize contained NUL
+	  bytes at the beginning of the line (could happen with NFS), we
+	  stopped parsing the file at that point instead of rebuilding it.
+
+2007-03-06 15:52  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Changed --with-headers to --enable-header-install
+
+2007-03-06 15:48  Timo Sirainen <tss@iki.fi>
+
+	* Makefile.am: fix
+
+2007-03-06 15:43  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Updated valid_chroot_dirs and mail_chroot
+	  comments.
+
+2007-03-06 15:39  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/: maildir-storage.c,
+	  maildir-storage.h, maildir-sync.c: When syncing huge maildirs
+	  check once in a while if we need to update dovecot-uidlist.lock
+	  so that another process won't decide that it's stale and
+	  overwrite it. Check more often when moving mails from new/ to
+	  cur/.
+
+2007-03-06 14:28  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log.c: Don't try to fsck index
+	  file in error conditions if it's not yet opened.
+
+2007-03-06 14:23  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: Check index file's endianess earlier,
+	  otherwise we'll complain about other problems.
+
+2007-03-06 13:45  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-rewrite.c: X-UID brokeness
+	  fixing was worse than ever.
+
+2007-03-06 13:14  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/: Makefile.am, deliver.c: While parsing the input
+	  stream ignore the mbox hidden headers so that eg.  X-IMAP header
+	  won't cause us to crash.
+
+2007-03-01 12:57  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: v1.0.rc25 released.
+
+2007-03-01 12:30  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/: dbox/dbox-storage.c, mbox/mbox-storage.c:
+	  mbox: Don't allow using .imap directory in the mailbox name/mask.
+	  mbox+dbox: Don't allow using "foo/." or "foo/.." in the masks.
+	  Although that shouldn't really matter.
+
 2007-03-01 11:15  Timo Sirainen <tss@iki.fi>
 
 	* src/imap/cmd-append.c: Don't crash if mail saving fails.

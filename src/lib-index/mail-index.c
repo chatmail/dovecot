@@ -515,10 +515,8 @@ const array_t *mail_index_get_keywords(struct mail_index *index)
 	return &index->keywords;
 }
 
-static int mail_index_check_header(struct mail_index *index,
-				   struct mail_index_map *map)
+static bool mail_index_check_header_compat(const struct mail_index_header *hdr)
 {
-	const struct mail_index_header *hdr = &map->hdr;
         enum mail_index_header_compat_flags compat_flags = 0;
 
 #ifndef WORDS_BIGENDIAN
@@ -527,17 +525,28 @@ static int mail_index_check_header(struct mail_index *index,
 
 	if (hdr->major_version != MAIL_INDEX_MAJOR_VERSION) {
 		/* major version change - handle silently(?) */
-		return -1;
+		return FALSE;
 	}
 	if (hdr->compat_flags != compat_flags) {
 		/* architecture change - handle silently(?) */
-		return -1;
+		return FALSE;
 	}
 
-	if ((map->hdr.flags & MAIL_INDEX_HDR_FLAG_CORRUPTED) != 0) {
+	if ((hdr->flags & MAIL_INDEX_HDR_FLAG_CORRUPTED) != 0) {
 		/* we've already complained about it */
-		return -1;
+		return FALSE;
 	}
+
+	return TRUE;
+}
+
+static int mail_index_check_header(struct mail_index *index,
+				   struct mail_index_map *map)
+{
+	const struct mail_index_header *hdr = &map->hdr;
+
+	if (!mail_index_check_header_compat(hdr))
+		return -1;
 
 	/* following some extra checks that only take a bit of CPU */
 	if (hdr->uid_validity == 0 && hdr->next_uid != 1) {
@@ -674,6 +683,11 @@ static int mail_index_mmap(struct mail_index *index, struct mail_index_map *map)
 		return 0;
 	}
 
+	if (!mail_index_check_header_compat(hdr)) {
+		/* Can't use this file */
+		return 0;
+	}
+
 	map->mmap_used_size = hdr->header_size +
 		hdr->messages_count * hdr->record_size;
 
@@ -750,6 +764,11 @@ mail_index_read_map(struct mail_index *index, struct mail_index_map *map,
 
 	if (ret >= 0 && pos >= MAIL_INDEX_HEADER_MIN_SIZE &&
 	    (ret > 0 || pos >= hdr->base_header_size)) {
+		if (!mail_index_check_header_compat(hdr)) {
+			/* Can't use this file */
+			return 0;
+		}
+
 		if (hdr->base_header_size < MAIL_INDEX_HEADER_MIN_SIZE ||
 		    hdr->header_size < hdr->base_header_size) {
 			mail_index_set_error(index, "Corrupted index file %s: "
@@ -1856,15 +1875,15 @@ int mail_index_move_to_memory(struct mail_index *index)
 	if (MAIL_INDEX_IS_IN_MEMORY(index))
 		return 0;
 
+	/* set the index as being into memory */
+	i_free_and_null(index->dir);
+
 	if (index->map == NULL) {
-		/* mbox file was never even opened. just mark it as being in
+		/* index was never even opened. just mark it as being in
 		   memory and let the caller re-open the index. */
 		i_assert(index->fd == -1);
 		return -1;
 	}
-
-	/* set the index as being into memory */
-	i_free_and_null(index->dir);
 
 	/* move index map to memory */
 	map = mail_index_map_clone(index->map, index->map->hdr.record_size);

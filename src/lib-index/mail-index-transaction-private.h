@@ -49,6 +49,8 @@ mail_index_transaction_lookup(struct mail_index_transaction *t, uint32_t seq);
 void mail_index_transaction_ref(struct mail_index_transaction *t);
 void mail_index_transaction_unref(struct mail_index_transaction **t);
 
+void mail_index_transaction_sort_appends(struct mail_index_transaction *t);
+
 bool mail_index_seq_array_lookup(const array_t *buffer, uint32_t seq,
 				 unsigned int *idx_r);
 

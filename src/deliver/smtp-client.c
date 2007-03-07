@@ -1,9 +1,12 @@
 /* Copyright (C) 2006 Timo Sirainen */
 
 #include "lib.h"
+#include "array.h"
+#include "env-util.h"
 #include "deliver.h"
 #include "smtp-client.h"
 
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
 
@@ -24,6 +27,28 @@ static struct smtp_client *smtp_client_devnull(FILE **file_r)
 	return client;
 }
 
+static void smtp_env_clean(void)
+{
+	extern char **environ;
+	char **p;
+	array_t ARRAY_DEFINE(new_env, char *);
+	unsigned int i, count;
+
+	/* copy the environment, but drop out the unwanted fields. */
+	ARRAY_CREATE(&new_env, pool_datastack_create(), char *, 128);
+	for (p = environ; *p != NULL; p++) {
+		if (strncmp(*p, "DEBUG=", 6) != 0)
+			array_append(&new_env, p, 1);
+	}
+
+	/* then recreate the environment */
+	env_clean();
+
+	p = array_get_modifyable(&new_env, &count);
+	for (i = 0; i < count; i++)
+		env_put(p[i]);
+}
+
 static void smtp_client_run_sendmail(const char *destination,
 				     const char *return_path, int fd)
 {
@@ -40,6 +65,14 @@ static void smtp_client_run_sendmail(const char *destination,
 
 	if (dup2(fd, STDIN_FILENO) < 0)
 		i_fatal("dup2() failed: %m");
+
+	if (getenv("DEBUG") != NULL) {
+		/* Postfix's sendmail binary uses DEBUG environment for its own
+		   purposes, which pretty much break things. Remove it before
+		   continuing. FIXME: Perhaps the whole environment could be
+		   cleaned? */
+		smtp_env_clean();
+	}
 
 	(void)execv(deliver_set->sendmail_path, (char **)argv);
 	i_fatal("execv(%s) failed: %m", deliver_set->sendmail_path);

@@ -1,3 +1,31 @@
+v1.0.rc26 2007-03-07  Timo Sirainen <tss@iki.fi>
+
+	* Changed --with-headers to --enable-header-install
+	* If time moves backwards only max. 5 seconds, sleep until we're back
+	  in the original present instead of killing ourself. An error is
+	  still logged.
+
+	- IMAP: With namespace prefixes LSUB prefix.* listed INBOX.INBOX.
+	- deliver: Ignore mbox metadata headers from the message input.
+	  X-IMAP header crashed deliver.
+	- deliver: If mail_debug=yes, drop out DEBUG environment before
+	  calling sendmail binary. Postfix's sendmail didn't really like it.
+	- mbox: X-UID brokeness fixes broke rc25 even with valid X-UID headers.
+	  Now the code should finally work right.
+	- Maildir: When syncing a huge maildir, touch dovecot-uidlist.lock file
+	  once in a while to make sure it doesn't get overwritten by another
+	  process.
+	- Maildir++ quota: We didn't handle NUL bytes in maildirsize files very
+	  well. Now the file is rebuilt when they're seen (NFS problem).
+	- Index/view handling fix should fix some crashes/errors
+	- If index files were moved to a different endianess machine, Dovecot
+	  logged all sorts of errors instead of silently rebuilding them.
+	- Convert plugin didn't change hierarchy separators in mailbox names.
+	- PostgreSQL authentication could have lost requests once in a while
+	  with a heavily loaded server.
+	- Login processes could have crashed in some situations
+	- auth cache crashed with non-plaintext mechanisms
+
 v1.0.rc25 2007-03-01  Timo Sirainen <tss@iki.fi>
 
 	* If time moves backwards, Dovecot kills itself instead of giving
