@@ -1,8 +1,12 @@
 dovecot (1.0.rc26-1) unstable; urgency=low
 
   * New upstream release.
+  * Add support for ucf, thanks to Vincent Danjean for providing a full patch.
+    (Closes: #413081)
+  * debian/dovecot-common.init: create /var/run directories at start-up time.
+    (Closes: #376143)
 
- -- Fabio Tranchitella <kobold@debian.org>  Wed,  7 Mar 2007 11:20:11 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Wed,  7 Mar 2007 11:26:56 +0100
 
 dovecot (1.0.rc25-1) unstable; urgency=low
 

@@ -3,6 +3,15 @@ set -e
 
 if [ "$1" = "configure" ]; then
 
+  for conffile in dovecot.conf dovecot-ldap.conf dovecot-sql.conf ; do
+    # Tell ucf that the file in /usr/share/dovecot is the latest
+    # maintainer version, and let it handle how to manage the real
+    # configuration file in /etc/dovecot.
+    ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
+    ucfr dovecot-common /etc/dovecot/$conffile
+    chmod 600 /etc/dovecot/$conffile
+  done
+
   if [ -n "`id -u imapd 2> /dev/null`" ]; then
     /usr/sbin/deluser imapd || true
     /usr/sbin/delgroup imapd || true
