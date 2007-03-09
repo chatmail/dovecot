@@ -22,7 +22,7 @@ Description: secure mail server that supports mbox and maildir mailboxes
 
 Package: dovecot-imapd
 Architecture: any
-Depends: ${shlibs:Depends}, dovecot-common (>= 1.0.beta3-1)
+Depends: ${shlibs:Depends}, dovecot-common (>= ${Source-Version})
 Provides: imap-server
 Replaces: imap-server
 Description: secure IMAP server that supports mbox and maildir mailboxes
@@ -35,7 +35,7 @@ Description: secure IMAP server that supports mbox and maildir mailboxes
 
 Package: dovecot-pop3d
 Architecture: any
-Depends: ${shlibs:Depends}, dovecot-common (>= 1.0.beta3-1)
+Depends: ${shlibs:Depends}, dovecot-common (>= ${Source-Version})
 Provides: pop3-server
 Replaces: pop3-server
 Description: secure POP3 server that supports mbox and maildir mailboxes
