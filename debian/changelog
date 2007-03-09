@@ -1,11 +1,11 @@
-dovecot (1.0.rc26-2) UNRELEASED; urgency=low
+dovecot (1.0.rc26-2) unstable; urgency=low
 
   * debian/control:
     + dovecot-{imapd,pop3d}: depends on the same-source dovecot-common.
       (Closes: #414032)
   * debian/rules: fixed permission for dovecot.conf. (Closes: #413995)
 
- -- Fabio Tranchitella <kobold@debian.org>  Fri,  9 Mar 2007 12:06:08 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Fri,  9 Mar 2007 12:57:50 +0100
 
 dovecot (1.0.rc26-1) unstable; urgency=low
 
