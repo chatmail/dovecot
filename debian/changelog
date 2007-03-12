@@ -1,3 +1,11 @@
+dovecot (1.0.rc26-3) unstable; urgency=low
+
+  * debian/control: depends on ucf (>= 2.0020). (Closes: #414032)
+  * debian/dovecot-common.postinst: handles better chmod/chown on package
+    upgrade. (Closes: #414257)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Mon, 12 Mar 2007 10:03:34 +0100
+
 dovecot (1.0.rc26-2) unstable; urgency=low
 
   * debian/control:

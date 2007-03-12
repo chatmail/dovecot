@@ -9,9 +9,10 @@ if [ "$1" = "configure" ]; then
     # configuration file in /etc/dovecot.
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-common /etc/dovecot/$conffile
-    chmod 0600 /etc/dovecot/$conffile
+    if [ "$conffile" != "dovecot.conf"]; then
+      chmod 0600 /etc/dovecot/$conffile
+    fi
   done
-  chmod 0644 /etc/dovecot/dovecot.conf
 
   if [ -n "`id -u imapd 2> /dev/null`" ]; then
     /usr/sbin/deluser imapd || true
