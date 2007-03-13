@@ -9,7 +9,7 @@ if [ "$1" = "configure" ]; then
     # configuration file in /etc/dovecot.
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-common /etc/dovecot/$conffile
-    if [ "$conffile" != "dovecot.conf"]; then
+    if [ "$conffile" != "dovecot.conf" ]; then
       chmod 0600 /etc/dovecot/$conffile
     fi
   done

@@ -1,3 +1,9 @@
+dovecot (1.0.rc26-4) unstable; urgency=low
+
+  * debian/dovecot-common.postinst: fixed a typo. (Closes: #414672)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Tue, 13 Mar 2007 08:45:47 +0100
+
 dovecot (1.0.rc26-3) unstable; urgency=low
 
   * debian/control: depends on ucf (>= 2.0020). (Closes: #414032)
