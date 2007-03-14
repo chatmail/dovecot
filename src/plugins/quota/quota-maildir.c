@@ -370,6 +370,11 @@ static int maildirsize_parse(struct maildir_quota_root *root,
 		return 0;
 	}
 
+	if (*lines == NULL) {
+		/* no quota lines. rebuild it. */
+		return 0;
+	}
+
 	/* rest of the lines contains <bytes> <count> diffs */
 	total_bytes = 0; total_count = 0;
 	for (lines++; *lines != NULL; lines++, line_count++) {
@@ -687,6 +692,7 @@ maildir_quota_transaction_begin(struct quota_root *_root,
 	    strcmp(mailbox_get_name(box), root->ignore) == 0) {
 		ctx->bytes_limit = (uint64_t)-1;
 		ctx->count_limit = (uint64_t)-1;
+		ctx->ignored = TRUE;
 		return ctx;
 	}
 
@@ -710,7 +716,7 @@ maildir_quota_transaction_commit(struct quota_root_transaction_context *ctx)
 		(struct maildir_quota_root *)ctx->root;
 	int ret = ctx->bytes_current == (uint64_t)-1 ? -1 : 0;
 
-	if (root->fd != -1 && ret == 0) {
+	if (root->fd != -1 && ret == 0 && !ctx->ignored) {
 		/* if writing fails, we don't care all that much */
 		(void)maildirsize_update(root,
 				maildir_quota_root_get_storage(ctx->root),

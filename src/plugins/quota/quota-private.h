@@ -101,6 +101,7 @@ struct quota_root_transaction_context {
 	uint64_t bytes_limit, count_limit;
 	uint64_t bytes_current, count_current;
 
+	unsigned int ignored:1;
 	unsigned int disabled:1;
 };
 

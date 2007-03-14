@@ -12,7 +12,7 @@
 
 static int log_append_buffer(struct mail_transaction_log_file *file,
 			     const buffer_t *buf, const buffer_t *hdr_buf,
-			     enum mail_transaction_type type, int external)
+			     enum mail_transaction_type type, bool external)
 {
 	struct mail_transaction_header hdr;
 	const void *data, *hdr_data;
@@ -75,14 +75,22 @@ static int log_append_buffer(struct mail_transaction_log_file *file,
 		} while (0);
 
 		/* write failure. */
-		if (!ENOSPACE(errno)) {
+		mail_index_file_set_syscall_error(file->log->index,
+						  file->filepath,
+						  "pwrite_full()");
+		if (!ENOSPACE(errno))
+			return -1;
+
+		/* not enough space. fallback to in-memory indexes. first
+		   we need to truncate this latest write so that log syncing
+		   doesn't break */
+		if (ftruncate(file->fd, file->sync_offset) < 0) {
 			mail_index_file_set_syscall_error(file->log->index,
 							  file->filepath,
-							  "pwrite_full()");
+							  "ftruncate()");
 			return -1;
 		}
 
-		/* not enough space. fallback to in-memory indexes. */
 		if (mail_index_move_to_memory(file->log->index) < 0)
 			return -1;
 		i_assert(MAIL_TRANSACTION_LOG_FILE_IN_MEMORY(file));
@@ -355,6 +363,12 @@ static int log_append_keyword_updates(struct mail_transaction_log_file *file,
 	return 0;
 }
 
+#define LOG_WANT_ROTATE(file) \
+	(((file)->sync_offset > MAIL_TRANSACTION_LOG_ROTATE_MIN_SIZE && \
+	  (time_t)(file)->hdr.create_stamp < \
+	   ioloop_time - MAIL_TRANSACTION_LOG_ROTATE_TIME) || \
+	 ((file)->sync_offset > MAIL_TRANSACTION_LOG_ROTATE_MAX_SIZE))
+
 #define ARE_ALL_TRANSACTIONS_IN_INDEX(log, idx_hdr) \
 	((log)->head->hdr.file_seq == (idx_hdr)->log_file_seq && \
 	 (log)->head->sync_offset == (idx_hdr)->log_file_int_offset && \
@@ -386,9 +400,7 @@ mail_transaction_log_append_locked(struct mail_index_transaction *t,
 			return -1;
 	}
 
-	if (log->head->sync_offset > MAIL_TRANSACTION_LOG_ROTATE_SIZE &&
-	    (time_t)log->head->hdr.create_stamp <
-	    ioloop_time - MAIL_TRANSACTION_LOG_ROTATE_TIME &&
+	if (LOG_WANT_ROTATE(log->head) &&
 	    ARE_ALL_TRANSACTIONS_IN_INDEX(log, index->hdr)) {
 		/* we might want to rotate, but check first that everything is
 		   synced in index. */
@@ -405,7 +417,11 @@ mail_transaction_log_append_locked(struct mail_index_transaction *t,
 		mail_index_unlock(index, lock_id);
 
 		if (ARE_ALL_TRANSACTIONS_IN_INDEX(log, &idx_hdr)) {
-			if (mail_transaction_log_rotate(log, TRUE) < 0)
+			/* if rotation fails because there's not enough disk
+			   space, just continue. we'll probably move to
+			   in-memory indexes then. */
+			if (mail_transaction_log_rotate(log, TRUE) < 0 &&
+			    !index->nodiskspace)
 				return -1;
 		}
 	}
@@ -413,6 +429,9 @@ mail_transaction_log_append_locked(struct mail_index_transaction *t,
 	file = log->head;
 	file->first_append_size = 0;
 	append_offset = file->sync_offset;
+
+	if (file->sync_offset < file->buffer_offset)
+		file->sync_offset = file->buffer_offset;
 
 	old_hidden_syncs_count = !array_is_created(&view->syncs_hidden) ? 0 :
 		array_count(&view->syncs_hidden);
@@ -474,6 +493,20 @@ mail_transaction_log_append_locked(struct mail_index_transaction *t,
 					log_get_hdr_update_buffer(t, FALSE),
 					NULL, MAIL_TRANSACTION_HEADER_UPDATE,
 					t->external);
+	}
+
+	if (ret == 0 && file->sync_offset < file->last_size) {
+		/* there is some garbage at the end of the transaction log
+		   (eg. previous write failed). remove it so reader doesn't
+		   break because of it. */
+		buffer_set_used_size(file->buffer,
+				     file->sync_offset - file->buffer_offset);
+		if (!MAIL_TRANSACTION_LOG_FILE_IN_MEMORY(file)) {
+			if (ftruncate(file->fd, file->sync_offset) < 0) {
+				mail_index_file_set_syscall_error(index,
+					file->filepath, "ftruncate()");
+			}
+		}
 	}
 
 	if (ret == 0 && file->first_append_size != 0) {

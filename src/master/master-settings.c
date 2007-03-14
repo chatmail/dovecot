@@ -224,6 +224,7 @@ struct settings default_settings = {
 	MEMBER(mmap_no_write) FALSE,
 #endif
 	MEMBER(dotlock_use_excl) FALSE,
+	MEMBER(fsync_disable) FALSE,
 	MEMBER(lock_method) "fcntl",
 	MEMBER(maildir_stat_dirs) FALSE,
 	MEMBER(maildir_copy_with_hardlinks) FALSE,

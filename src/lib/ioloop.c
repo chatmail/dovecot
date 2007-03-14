@@ -226,6 +226,12 @@ void io_loop_handle_timeouts(struct ioloop *ioloop)
 	if (ioloop_time > ioloop_timeval.tv_sec) {
 		time_t diff = ioloop_time - ioloop_timeval.tv_sec;
 
+		/* Note that this code is here only because this is the easiest
+		   place to check for this. The I/O loop code itself could be
+		   easily fixed to work with time moving backwards, but there's
+		   really no point because there are a lot of other places
+		   which may break in more or less bad ways, such as files'
+		   timestamps moving backwards. */
 		if (diff > IOLOOP_MAX_TIME_BACKWARDS_SLEEP) {
 			i_fatal("Time just moved backwards by %ld seconds. "
 				"This might cause a lot of problems, "
@@ -235,8 +241,14 @@ void io_loop_handle_timeouts(struct ioloop *ioloop)
 				"I'll sleep now until we're back in present.",
 				(long)diff);
 			/* Sleep extra second to make sure usecs also grows. */
-			if (sleep(diff + 1) != 0)
-				i_fatal("Sleep interrupted, byebye.");
+			diff++;
+
+			while (diff > 0 && sleep(diff) != 0) {
+				/* don't use sleep()'s return value, because
+				   it could get us to a long loop in case
+				   interrupts just keep coming */
+				diff = ioloop_time - time(NULL) + 1;
+			}
 
 			/* Try again. */
 			io_loop_handle_timeouts(ioloop);

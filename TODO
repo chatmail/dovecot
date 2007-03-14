@@ -1,3 +1,7 @@
+ - mail_index_move_to_memory() should lock the index..
+ - mbox: UID renumbering doesn't really work after all?
+ - maildir: we could finish writing dovecot-uidlist.lock before rename()ing
+   any files from tmp/, so if it fails we'll abort the mail saving
  - file_cache: we're growing the mmap in page size blocks, which is horribly
    slow if mremap() doesn't exist.
  - quota: delay counting the quota until it's really needed
@@ -6,12 +10,9 @@
    then rename()ing. This wouldn't be necessary if uidlist syncing noticed
    that someone else already had added them to uidlist, and the existing UIDs
    could be assigned to them in the index.
- - o_stream_send_istream(..1169315700.P40238Q3873..): failed: Disc quota exceeded
  - maildir_copy_with_hardlinks=yes is problematic with shared folders where
    the file mode should change..
- - rename: allow moving between storages, as long as they're of same type
  - still problems with CRLF mboxes..
- - mbox_min_index_size != 0 causes Invalid new transaction log sequence (4 >= 4)
 
  - Allow %variables in mail_chroot setting
  - something should be done to umask setting. we should be creating files with
@@ -100,6 +101,7 @@
        - for shared/public namespaces default to "no"
 
  - lib-storage
+    - rename: allow moving between storages, as long as they're of same type
     - calls fsync()s etc. less often (when copying). optionally disable them.
     - x search charset asdf all -> should fail
     - subscribe: IMAP(anonymous): open(anonymous/mail/.temp...) failed: Permission denied

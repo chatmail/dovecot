@@ -14,7 +14,7 @@
 
 static void
 mail_index_sync_update_log_offset(struct mail_index_sync_map_ctx *ctx,
-				  struct mail_index_map *map)
+				  struct mail_index_map *map, bool eol)
 {
 	uint32_t prev_seq;
 	uoff_t prev_offset;
@@ -22,9 +22,24 @@ mail_index_sync_update_log_offset(struct mail_index_sync_map_ctx *ctx,
 	mail_transaction_log_view_get_prev_pos(ctx->view->log_view,
 					       &prev_seq, &prev_offset);
 
-	if (!ctx->sync_only_external)
+	if (prev_offset == ctx->ext_intro_offset + ctx->ext_intro_size &&
+	    prev_seq == ctx->ext_intro_seq && !eol) {
+		/* previous transaction was an extension introduction.
+		   we probably came here from mail_index_sync_ext_reset().
+		   if there are any more views which want to continue syncing
+		   it needs the intro. so back up a bit more.
+
+		   don't do this in case the last transaction in the log is
+		   the extension intro, so we don't keep trying to sync it
+		   over and over again. */
+		prev_offset = ctx->ext_intro_offset;
+	}
+
+	if (!ctx->sync_only_external) {
+		i_assert(prev_offset >= map->hdr.log_file_int_offset ||
+			 prev_seq > map->hdr.log_file_seq);
 		map->hdr.log_file_int_offset = prev_offset;
-	else if (map->hdr.log_file_seq != prev_seq && map == ctx->view->map) {
+	} else if (map->hdr.log_file_seq != prev_seq) {
 		/* log sequence changed. update internal offset to
 		   beginning of the new file. */
 		i_assert(map->hdr.log_file_int_offset ==
@@ -32,8 +47,17 @@ mail_index_sync_update_log_offset(struct mail_index_sync_map_ctx *ctx,
 		map->hdr.log_file_int_offset =
 			ctx->view->index->log->head->hdr.hdr_size;
 	}
-	map->hdr.log_file_seq = prev_seq;
-	map->hdr.log_file_ext_offset = prev_offset;
+
+	/* we might be in the middle of syncing internal transactions, with
+	   some of the following external transactions already synced. */
+	i_assert(prev_seq > map->hdr.log_file_seq ||
+		 prev_offset >= map->hdr.log_file_ext_offset ||
+		 (!eol && !ctx->sync_only_external));
+	if (map->hdr.log_file_seq != prev_seq ||
+	    prev_offset > map->hdr.log_file_ext_offset) {
+		map->hdr.log_file_seq = prev_seq;
+		map->hdr.log_file_ext_offset = prev_offset;
+	}
 }
 
 static int
@@ -94,7 +118,7 @@ void mail_index_sync_replace_map(struct mail_index_sync_map_ctx *ctx,
 	/* some views may still use the same mapping, and since we could have
 	   already updated the records, make sure we leave the header in a
 	   valid state as well */
-	mail_index_sync_update_log_offset(ctx, old_map);
+	mail_index_sync_update_log_offset(ctx, old_map, FALSE);
 	(void)mail_index_map_msync(view->index, old_map);
 	mail_index_unmap(view->index, &old_map);
 
@@ -464,7 +488,7 @@ static int mail_index_grow(struct mail_index *index, struct mail_index_map *map,
 	size_t size, hdr_copy_size;
 
 	if (MAIL_INDEX_MAP_IS_IN_MEMORY(map))
-		return 0;
+		return 1;
 
 	i_assert(map == index->map);
 	i_assert(!index->mapping); /* mail_index_sync_from_transactions() */
@@ -472,7 +496,7 @@ static int mail_index_grow(struct mail_index *index, struct mail_index_map *map,
 	size = map->hdr.header_size +
 		(map->records_count + count) * map->hdr.record_size;
 	if (size <= map->mmap_size)
-		return 0;
+		return 1;
 
 	/* when we grow fast, do it exponentially */
 	if (count < index->last_grow_count)
@@ -483,8 +507,11 @@ static int mail_index_grow(struct mail_index *index, struct mail_index_map *map,
 
 	size = map->hdr.header_size +
 		(map->records_count + count) * map->hdr.record_size;
-	if (file_set_size(index->fd, (off_t)size) < 0)
-		return mail_index_set_syscall_error(index, "file_set_size()");
+	if (file_set_size(index->fd, (off_t)size) < 0) {
+		mail_index_set_syscall_error(index, "file_set_size()");
+		return !ENOSPACE(errno) ? -1 :
+			mail_index_move_to_memory(index);
+	}
 
 	/* we only wish to grow the file, but mail_index_map() updates the
 	   headers as well and may break our modified hdr_copy. so, take
@@ -510,8 +537,9 @@ static int mail_index_grow(struct mail_index *index, struct mail_index_map *map,
 	map->records_count = map->hdr.messages_count;
 
 	i_assert(map->mmap_size >= size);
+
 	t_pop();
-	return 0;
+	return 1;
 }
 
 static void
@@ -612,6 +640,14 @@ int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
 	case MAIL_TRANSACTION_EXT_INTRO: {
 		const struct mail_transaction_ext_intro *rec = data;
 		unsigned int i;
+		uint32_t prev_seq;
+		uoff_t prev_offset;
+
+		mail_transaction_log_view_get_prev_pos(ctx->view->log_view,
+						       &prev_seq, &prev_offset);
+		ctx->ext_intro_seq = prev_seq;
+		ctx->ext_intro_offset = prev_offset;
+		ctx->ext_intro_size = hdr->size + sizeof(*hdr);
 
 		for (i = 0; i < hdr->size; ) {
 			if (i + sizeof(*rec) > hdr->size) {
@@ -749,6 +785,16 @@ static void mail_index_sync_remove_recent(struct mail_index_sync_ctx *sync_ctx)
 	map->hdr.first_recent_uid_lowwater = map->hdr.next_uid;
 }
 
+static void log_view_seek_back(struct mail_transaction_log_view *log_view)
+{
+	uint32_t prev_seq;
+	uoff_t prev_offset;
+
+	mail_transaction_log_view_get_prev_pos(log_view, &prev_seq,
+					       &prev_offset);
+	mail_transaction_log_view_seek(log_view, prev_seq, prev_offset);
+}
+
 int mail_index_sync_update_index(struct mail_index_sync_ctx *sync_ctx,
 				 bool sync_only_external)
 {
@@ -829,14 +875,20 @@ int mail_index_sync_update_index(struct mail_index_sync_ctx *sync_ctx,
 
 			map = view->map;
 			count = thdr->size / sizeof(*rec);
-			if (mail_index_grow(index, map, count) < 0) {
-				ret = -1;
+			if ((ret = mail_index_grow(index, map, count)) < 0)
 				break;
-			}
+
 			if (map != index->map) {
 				index->map->refcount++;
 				mail_index_sync_replace_map(&sync_map_ctx,
 							    index->map);
+			}
+
+			if (ret == 0) {
+				/* moved to memory. data pointer is invalid,
+				   seek back and do this append again. */
+				log_view_seek_back(view->log_view);
+				continue;
 			}
 		}
 
@@ -844,14 +896,12 @@ int mail_index_sync_update_index(struct mail_index_sync_ctx *sync_ctx,
 			ret = -1;
 			break;
 		}
-
-		/* mail_index_sync_record() might have changed map to anything.
-		   make sure we don't accidentally try to use it. */
-		map = NULL;
 	}
 
-	if (ret == 0)
-		mail_index_sync_update_log_offset(&sync_map_ctx, view->map);
+	if (ret == 0) {
+		mail_index_sync_update_log_offset(&sync_map_ctx, view->map,
+						  TRUE);
+	}
 	mail_index_sync_map_deinit(&sync_map_ctx);
 
 	index->sync_update = FALSE;

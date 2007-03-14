@@ -220,18 +220,21 @@ static bool parse_x_imap_base(struct mbox_sync_mail_context *ctx,
 			hdr->full_value_offset + uid_last_pos;
 	}
 
-	if (ctx->sync_ctx->next_uid-1 <= uid_last) {
-		/* new messages have been added since our last sync.
-		   just update our internal next_uid. */
-		ctx->sync_ctx->next_uid = uid_last+1;
-	}
-	i_assert(ctx->sync_ctx->next_uid > ctx->sync_ctx->prev_msg_uid);
-
 	if (ctx->sync_ctx->base_uid_validity == 0) {
 		/* first time parsing this (ie. we're not rewriting).
 		   save the values. */
 		ctx->sync_ctx->base_uid_validity = uid_validity;
 		ctx->sync_ctx->base_uid_last = uid_last;
+
+		if (ctx->sync_ctx->next_uid-1 <= uid_last) {
+			/* new messages have been added since our last sync.
+			   just update our internal next_uid. */
+			ctx->sync_ctx->next_uid = uid_last+1;
+		} else {
+			/* we need to rewrite the next-uid */
+			ctx->need_rewrite = TRUE;
+		}
+		i_assert(ctx->sync_ctx->next_uid > ctx->sync_ctx->prev_msg_uid);
 	}
 
 	ctx->hdr_pos[MBOX_HDR_X_IMAPBASE] = str_len(ctx->header);
@@ -250,7 +253,7 @@ static bool parse_x_imap(struct mbox_sync_mail_context *ctx,
 
 	/* this is the c-client style "FOLDER INTERNAL DATA" message.
 	   skip it. */
-	ctx->pseudo = TRUE;
+	ctx->mail.pseudo = TRUE;
 	return TRUE;
 }
 

@@ -9,6 +9,7 @@
 #include "read-full.h"
 #include "write-full.h"
 #include "mail-index-private.h"
+#include "mail-index-view-private.h"
 #include "mail-index-sync-private.h"
 #include "mail-transaction-log.h"
 #include "mail-cache.h"
@@ -877,7 +878,6 @@ static int mail_index_sync_from_transactions(struct mail_index *index,
 {
 	const struct mail_index_header *map_hdr = &(*map)->hdr;
 	struct mail_index_view *view;
-	struct mail_transaction_log_view *log_view;
 	struct mail_index_sync_map_ctx sync_map_ctx;
 	struct mail_index_header hdr;
 	const struct mail_transaction_header *thdr;
@@ -925,29 +925,29 @@ static int mail_index_sync_from_transactions(struct mail_index *index,
 		max_offset = (uoff_t)-1;
 	}
 
-	log_view = mail_transaction_log_view_open(index->log);
-	if (mail_transaction_log_view_set(log_view,
+	index->map = *map;
+
+	view = mail_index_view_open(index);
+	if (mail_transaction_log_view_set(view->log_view,
 					  map_hdr->log_file_seq,
 					  map_hdr->log_file_int_offset,
 					  max_seq, max_offset,
 					  MAIL_TRANSACTION_TYPE_MASK) <= 0) {
 		/* can't use it. sync by re-reading index. */
-		mail_transaction_log_view_close(&log_view);
+		mail_index_view_close(&view);
 		return 0;
 	}
 
-	index->map = *map;
-
-	view = mail_index_view_open(index);
 	mail_index_sync_map_init(&sync_map_ctx, view,
 				 MAIL_INDEX_SYNC_HANDLER_HEAD);
 
 	check_ext_offsets = TRUE; broken = FALSE;
-	while ((ret = mail_transaction_log_view_next(log_view, &thdr, &tdata,
-						     &skipped)) > 0) {
+	while ((ret = mail_transaction_log_view_next(view->log_view, &thdr,
+						     &tdata, &skipped)) > 0) {
 		if ((thdr->type & MAIL_TRANSACTION_EXTERNAL) != 0 &&
 		    check_ext_offsets) {
-			if (mail_index_is_ext_synced(log_view, index->map))
+			if (mail_index_is_ext_synced(view->log_view,
+						     index->map))
 				continue;
 			check_ext_offsets = FALSE;
 		}
@@ -961,7 +961,7 @@ static int mail_index_sync_from_transactions(struct mail_index *index,
 	if (ret == 0 && !broken)
 		ret = 1;
 
-	mail_transaction_log_view_get_prev_pos(log_view, &prev_seq,
+	mail_transaction_log_view_get_prev_pos(view->log_view, &prev_seq,
 					       &prev_offset);
 	i_assert(prev_seq <= max_seq &&
 		 (prev_seq != max_seq || prev_offset <= max_offset));
@@ -972,7 +972,6 @@ static int mail_index_sync_from_transactions(struct mail_index *index,
 
 	mail_index_sync_map_deinit(&sync_map_ctx);
 	mail_index_view_close(&view);
-	mail_transaction_log_view_close(&log_view);
 
 	*map = index->map;
 	index->map = NULL;
@@ -1179,6 +1178,11 @@ int mail_index_get_latest_header(struct mail_index *index,
 	size_t pos;
 	unsigned int i;
 	int ret;
+
+	if (MAIL_INDEX_IS_IN_MEMORY(index)) {
+		*hdr_r = *index->hdr;
+		return TRUE;
+	}
 
 	if (!index->mmap_disable) {
 		ret = mail_index_map(index, FALSE);
@@ -1543,7 +1547,7 @@ static int mail_index_open_files(struct mail_index *index,
 	struct mail_index_header hdr;
 	unsigned int lock_id = 0;
 	int ret;
-	bool created = FALSE;
+	bool create = FALSE, created = FALSE;
 
 	ret = mail_index_try_open(index, &lock_id);
 	if (ret > 0)
@@ -1555,19 +1559,22 @@ static int mail_index_open_files(struct mail_index *index,
 			return 0;
 		mail_index_header_init(&hdr);
 		index->hdr = &hdr;
+		create = TRUE;
 	} else if (ret < 0)
 		return -1;
 
 	index->indexid = hdr.indexid;
 
-	index->log = mail_transaction_log_open_or_create(index);
+	index->log = create ?
+		mail_transaction_log_create(index) :
+		mail_transaction_log_open_or_create(index);
 	if (index->log == NULL) {
 		if (ret == 0)
 			index->hdr = NULL;
 		return -1;
 	}
 
-	if (index->fd == -1) {
+	if (index->map == NULL) {
 		mail_index_header_init(&hdr);
 		index->hdr = &hdr;
 
@@ -1639,6 +1646,8 @@ int mail_index_open(struct mail_index *index, enum mail_index_open_flags flags,
 			(flags & MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE) != 0;
 		index->mmap_no_write =
 			(flags & MAIL_INDEX_OPEN_FLAG_MMAP_NO_WRITE) != 0;
+		index->fsync_disable =
+			(flags & MAIL_INDEX_OPEN_FLAG_FSYNC_DISABLE) != 0;
 		index->use_excl_dotlocks =
 			(flags & MAIL_INDEX_OPEN_FLAG_DOTLOCK_USE_EXCL) != 0;
 		index->lock_method = lock_method;
@@ -1878,6 +1887,9 @@ int mail_index_move_to_memory(struct mail_index *index)
 	/* set the index as being into memory */
 	i_free_and_null(index->dir);
 
+	i_free(index->filepath);
+	index->filepath = i_strdup("(in-memory index)");
+
 	if (index->map == NULL) {
 		/* index was never even opened. just mark it as being in
 		   memory and let the caller re-open the index. */
@@ -1886,10 +1898,13 @@ int mail_index_move_to_memory(struct mail_index *index)
 	}
 
 	/* move index map to memory */
-	map = mail_index_map_clone(index->map, index->map->hdr.record_size);
-	mail_index_unmap(index, &index->map);
-	index->map = map;
-	index->hdr = &map->hdr;
+	if (!MAIL_INDEX_MAP_IS_IN_MEMORY(index->map)) {
+		map = mail_index_map_clone(index->map,
+					   index->map->hdr.record_size);
+		mail_index_unmap(index, &index->map);
+		index->map = map;
+		index->hdr = &map->hdr;
+	}
 
 	if (index->log != NULL) {
 		/* move transaction log to memory */

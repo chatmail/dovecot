@@ -1,3 +1,352 @@
+2007-03-13 17:18  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-create.c: If trying to create <mailbox><real
+	  separator>, give an error instead of working like <virtual
+	  separator>.
+
+2007-03-13 17:17  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/: commands-util.c, commands-util.h: Added
+	  client_find_namespace(). Handle virtual != real hierarchy
+	  separators better. Give an error if real separator is tried to be
+	  used in the mailbox name.
+
+2007-03-13 16:01  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/trash/trash-plugin.c: compiler warning fix
+
+2007-03-13 15:55  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-append.c: Logout crashfix in some conditions.
+
+2007-03-13 15:42  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-append.c: Error handling fix
+
+2007-03-13 13:37  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/mail-send.c: Don't add rejection mails to duplicate
+	  database. They're never looked up from there.
+
+2007-03-12 21:05  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-maildir.c: If maildirsize file contains
+	  only the header, recalculate the quota.
+
+2007-03-12 20:36  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/: quota-maildir.c, quota-private.h: With
+	  ignore=box setting the quota was still updated for the mailbox
+	  even though it was allowed to go over quota (but quota recount
+	  ignored the box).
+
+2007-03-12 12:35  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/convert/convert-storage.c: Mailbox name conversion
+	  wasn't done for directories.
+
+2007-03-11 21:58  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: failure_exit_callback hook was set too
+	  late, so if log opening failed it exited with wrong exit code.
+
+2007-03-11 21:36  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/mech-gssapi.c: Crashfix in some error conditions
+
+2007-03-11 21:03  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-passwd-file.c: If passwd-file wasn't found, don't
+	  crash.
+
+2007-03-11 19:09  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view-sync.c: DEBUG crashfix
+
+2007-03-11 18:49  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log-append.c: If we can't rotate
+	  log file because there's no disk space, don't abort appending the
+	  transaction.
+
+2007-03-11 18:16  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-storage.c: If anything (syncing)
+	  fails because there's not enough disk space, give user a nice
+	  error message instead of internal error.
+
+2007-03-11 18:03  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-lock.c: Delete copy-lock file instead of
+	  rename()ing it if we've moved to in-memory indexes.
+
+2007-03-11 17:43  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-transaction-log-append.c,
+	  mail-transaction-log.c: If write to transaction log fails, we may
+	  later need to truncate the file so that after the write there
+	  won't be garbage after it.
+
+2007-03-11 17:38  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-append.c: Use a larger initial pool size for
+	  keywords.
+
+2007-03-11 16:40  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-transaction-log-append.c,
+	  mail-transaction-log-private.h: If transaction log grows larger
+	  than 1MB, rotate it even if it was created less than 5 minutes
+	  ago.
+
+2007-03-11 16:30  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-save.c: If
+	  o_stream_send_istream() fails with ENOSPC/EDQUOT, don't log a
+	  critical error but just give user a "not enough disk space"
+	  error.
+
+2007-03-11 16:27  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-save.c: o_stream_seek() may do
+	  buffer flushing internally and cause errors. Do flushing manually
+	  before seeking so that we don't confuse the errors. Also did some
+	  code cleanups.
+
+2007-03-11 16:26  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-rewrite.c: o_stream_seek()
+	  call was missing error handling.
+
+2007-03-11 16:25  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-append.c: Another failure handling fix
+
+2007-03-11 16:10  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-lock.c, mail-index-sync-update.c,
+	  mail-index-sync.c, mail-index.c, mail-transaction-log-append.c,
+	  mail-transaction-log-view.c, mail-transaction-log.h: If we run
+	  out of disk space, move to in-memory indexes.
+
+2007-03-11 16:02  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-append.c: When using MULTIAPPEND and LITERAL+ and
+	  message saving failed, we stopped parsing client input too early
+	  (for subsequent appends after the failure) which caused BAD
+	  replies.
+
+2007-03-10 23:47  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/imap-fetch-body.c: If mail was in CR+LF format in the
+	  disk and we used sendfile() call, but the call couldn't send
+	  everything, we hanged.
+
+2007-03-10 23:45  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ostream.h: Updated o_stream_send_istream() comments
+
+2007-03-10 20:58  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/lib-index/mail-cache-compress.c,
+	  src/lib-index/mail-cache-transaction.c,
+	  src/lib-index/mail-index-lock.c,
+	  src/lib-index/mail-index-private.h, src/lib-index/mail-index.c,
+	  src/lib-index/mail-index.h,
+	  src/lib-storage/index/index-storage.c,
+	  src/lib-storage/index/index-storage.h,
+	  src/lib-storage/index/dbox/dbox-uidlist.c,
+	  src/lib-storage/index/maildir/maildir-save.c,
+	  src/lib-storage/index/maildir/maildir-uidlist.c,
+	  src/lib-storage/index/mbox/mbox-save.c,
+	  src/master/mail-process.c, src/master/master-settings-defs.c,
+	  src/master/master-settings.c, src/master/master-settings.h: Added
+	  fsync_disable setting.
+
+2007-03-10 19:30  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: When moving index file to memory,
+	  change the filename to be "(in-memory index)".
+
+2007-03-10 19:29  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: Rotating in-memory transaction log
+	  crashed
+
+2007-03-10 19:22  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: mmap_disable=yes crashes with recent
+	  changes.
+
+2007-03-10 18:48  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-sync-update.c, mail-index-view-sync.c:
+	  View syncing fixes.
+
+2007-03-10 18:46  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view-sync.c: cleanups
+
+2007-03-10 18:25  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-update.c: View log file offset fix
+
+2007-03-10 17:03  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view-sync.c: We skipped some external
+	  transactions that shouldn't have been skipped.  The logic for
+	  figuring out if flags are unreliable was also a bit broken.
+
+2007-03-10 16:14  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-rewrite.c: comment update
+
+2007-03-10 16:05  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-sync-parse.c,
+	  mbox-sync-private.h, mbox-sync-rewrite.c, mbox-sync-update.c,
+	  mbox-sync.c: Cleaned up the code a bit. Fixed sync rewrite
+	  crashing with pseudo mails.
+
+2007-03-10 15:47  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-transaction.c: After saving mails
+	  we didn't update last-uid header in X-IMAP[base] if lazy writes
+	  were used.
+
+2007-03-10 15:46  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-parse.c: When parsing
+	  X-IMAP[base] header and its last-uid field is too low, mark it as
+	  needing rewrite.
+
+2007-03-10 14:09  Timo Sirainen <tss@iki.fi>
+
+	* doc/variables.txt: Added %m and %c to dovecot-auth.
+
+2007-03-10 14:08  Timo Sirainen <tss@iki.fi>
+
+	* doc/: dovecot-ldap.conf, dovecot-sql.conf: Added wiki links.
+
+2007-03-10 14:04  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: auth-request.c, auth-request.h: Added %c variable
+	  which expands to "secured" with SSL/TLS/localhost.
+
+2007-03-10 13:24  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/: db-passwd-file.c, passdb-bsdauth.c, passdb-cache.c,
+	  passdb-checkpassword.c, passdb-pam.c, passdb-passwd.c,
+	  passdb-shadow.c, passdb-sia.c, passdb-vpopmail.c,
+	  userdb-passwd.c, userdb-prefetch.c, userdb-vpopmail.c: Added more
+	  debug logging.
+
+2007-03-10 12:54  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/mail-log/mail-log-plugin.c: Log the mailbox name,
+	  unless it's INBOX.
+
+2007-03-10 11:54  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-sync-parse.c,
+	  mbox-sync-rewrite.c: When rewriting the first message we could
+	  have written next-uid field wrong.
+
+2007-03-09 21:20  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-transaction-log-append.c,
+	  mail-transaction-log-view.c: cleanups
+
+2007-03-09 21:17  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index-sync-private.h,
+	  mail-index-sync-update.c: Don't set log sync position right after
+	  extension introduction, unless it's at the end of the file. This
+	  should fix some "Extension reset without intro prefix" errors.
+
+2007-03-09 20:22  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-rewrite.c: Yet another try
+	  at fixing this piece of code. The mbox code is way too complex
+	  and could use better comments..
+
+2007-03-09 19:37  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/imap-quota/imap-quota-plugin.c: When returning
+	  mailbox name with GETQUOTAROOT, return the original name instead
+	  of the converted storage name.
+
+2007-03-09 15:35  Timo Sirainen <tss@iki.fi>
+
+	* doc/dovecot-ldap.conf: Added tls setting.
+
+2007-03-09 00:27  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: Added %m = mechanism name
+
+2007-03-08 20:02  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/: mail-index.c, mail-transaction-log.c,
+	  mail-transaction-log.h: If index file is corrupted, recreate
+	  transaction log file instead of trying to reuse it.
+
+2007-03-08 18:27  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/failures.c: Moved errno preserving to
+	  i_error/i_warning/i_info from the failure handler, so each
+	  failure handler doesn't have to do that itself.
+
+2007-03-08 13:42  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Added note about ssl_require_client_cert in
+	  ssl_verify_client_cert comments.
+
+2007-03-07 17:20  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Added LoginProcess wiki link.
+
+2007-03-07 16:07  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop.c: Added a comment about the time moving backwards
+	  code.
+
+2007-03-07 15:38  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-save.c, mbox-sync-private.h,
+	  mbox-sync.c: Keep track of the mbox dirty state better. Also when
+	  moving mails inside an mbox without changing the file's size,
+	  make sure the file's mtime changes even if it means sleeping for
+	  a second.
+
+2007-03-07 15:34  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync.c: minor cleanups
+
+2007-03-07 14:51  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/istream-file.c: Removed caching from i_stream_stat(). The
+	  changes could be important in mbox syncing.
+
+2007-03-07 13:40  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop.c: Don't die if "time moved backwards" sleep is
+	  interrupted.
+
+2007-03-07 00:47  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log.c: Fixed last change: Don't
+	  crash now when rotating non-locked log..
+
+2007-03-07 00:44  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log-append.c: If write fails with
+	  "not enough space" error, log it instead of silently handling it.
+
+2007-03-07 00:42  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log.c: Don't crash when rotating
+	  locked in-memory log file.
+
 2007-03-07 00:17  Timo Sirainen <tss@iki.fi>
 
 	* NEWS, configure.in: Released 1.0.rc26.

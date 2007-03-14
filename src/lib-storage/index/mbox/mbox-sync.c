@@ -51,9 +51,8 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <utime.h>
 #include <sys/stat.h>
-
-#define MBOX_SYNC_SECS 1
 
 /* The text below was taken exactly as c-client wrote it to my mailbox,
    so it's probably copyrighted by University of Washington. */
@@ -125,7 +124,8 @@ mbox_sync_read_next_mail(struct mbox_sync_context *sync_ctx,
 					       mail_ctx->content_length);
 	i_assert(mail_ctx->mail.body_size < OFF_T_MAX);
 
-	if ((mail_ctx->mail.flags & MAIL_RECENT) != 0 && !mail_ctx->pseudo) {
+	if ((mail_ctx->mail.flags & MAIL_RECENT) != 0 &&
+	    !mail_ctx->mail.pseudo) {
 		if (!sync_ctx->mbox->ibox.keep_recent) {
 			/* need to add 'O' flag to Status-header */
 			mail_ctx->need_rewrite = TRUE;
@@ -655,10 +655,10 @@ static void update_from_offsets(struct mbox_sync_context *sync_ctx)
 
 	mails = array_get(&sync_ctx->mails, &count);
 	for (i = 0; i < count; i++) {
-		if (mails[i].idx_seq == 0 ||
-		    (mails[i].flags & MBOX_EXPUNGED) != 0)
+		if (mails[i].idx_seq == 0 || mails[i].expunged)
 			continue;
 
+		sync_ctx->moved_offsets = TRUE;
 		offset = mails[i].from_offset;
 		mail_index_update_ext(sync_ctx->t, mails[i].idx_seq,
 				      ext_idx, &offset, NULL);
@@ -669,7 +669,7 @@ static void mbox_sync_handle_expunge(struct mbox_sync_mail_context *mail_ctx)
 {
 	struct mbox_sync_context *sync_ctx = mail_ctx->sync_ctx;
 
-	mail_ctx->mail.flags = MBOX_EXPUNGED;
+	mail_ctx->mail.expunged = TRUE;
 	mail_ctx->mail.offset = mail_ctx->mail.from_offset;
 	mail_ctx->mail.space =
 		mail_ctx->body_offset - mail_ctx->mail.from_offset +
@@ -765,7 +765,7 @@ static int mbox_sync_handle_header(struct mbox_sync_mail_context *mail_ctx)
 			struct mbox_sync_mail mail;
 
 			memset(&mail, 0, sizeof(mail));
-			mail.flags = MBOX_EXPUNGED;
+			mail.expunged = TRUE;
 			mail.offset = mail.from_offset =
 				(sync_ctx->dest_first_mail ? 1 : 0) +
 				mail_ctx->mail.from_offset -
@@ -945,7 +945,7 @@ mbox_sync_seek_to_uid(struct mbox_sync_context *sync_ctx, uint32_t uid)
 
 	if (seq1 == 0) {
 		/* doesn't exist anymore, seek to end of file */
-		st = i_stream_stat(sync_ctx->mbox->mbox_file_stream, TRUE);
+		st = i_stream_stat(sync_ctx->file_input, TRUE);
 		if (st == NULL) {
 			mbox_set_syscall_error(sync_ctx->mbox,
 					       "i_stream_stat()");
@@ -1078,7 +1078,7 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 		if (mail_ctx->mail.uid_broken)
 			uids_broken = TRUE;
 
-		if (mail_ctx->pseudo)
+		if (mail_ctx->mail.pseudo)
 			uid = 0;
 
 		rec = NULL; ret = 1;
@@ -1092,7 +1092,7 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 			/* UID found but it's broken */
 			uid = 0;
 		} else if (uid == 0 &&
-			   !mail_ctx->pseudo &&
+			   !mail_ctx->mail.pseudo &&
 			   (sync_ctx->delay_writes ||
 			    sync_ctx->idx_seq <= messages_count)) {
 			/* If we can't use/store X-UID header, use MD5 sum.
@@ -1113,11 +1113,11 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 		   message just get the first sync record so we can jump to
 		   it with partial seeking. */
 		if (mbox_sync_read_index_syncs(sync_ctx,
-					       mail_ctx->pseudo ? 1 : uid,
+					       mail_ctx->mail.pseudo ? 1 : uid,
 					       &expunged) < 0)
 			return -1;
 
-		if (mail_ctx->pseudo) {
+		if (mail_ctx->mail.pseudo) {
 			/* if it was set, it was for the next message */
 			expunged = FALSE;
 		} else {
@@ -1128,7 +1128,7 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 			}
 		}
 
-		if (uid == 0 && !mail_ctx->pseudo) {
+		if (uid == 0 && !mail_ctx->mail.pseudo) {
 			/* missing/broken X-UID. all the rest of the mails
 			   need new UIDs. */
 			while (sync_ctx->idx_seq <= messages_count) {
@@ -1153,7 +1153,7 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 			sync_ctx->prev_msg_uid = mail_ctx->mail.uid;
 		}
 
-		if (!mail_ctx->pseudo)
+		if (!mail_ctx->mail.pseudo)
 			mail_ctx->mail.idx_seq = sync_ctx->idx_seq;
 
 		if (!expunged) {
@@ -1165,7 +1165,7 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 			mbox_sync_handle_expunge(mail_ctx);
 		}
 
-		if (!mail_ctx->pseudo) {
+		if (!mail_ctx->mail.pseudo) {
 			if (!expunged) {
 				if (mbox_sync_update_index(mail_ctx, rec) < 0)
 					return -1;
@@ -1395,6 +1395,38 @@ static int mbox_sync_update_index_header(struct mbox_sync_context *sync_ctx)
 		return -1;
 	}
 
+	if (sync_ctx->moved_offsets &&
+	    ((uint64_t)st->st_size == sync_ctx->hdr->sync_size ||
+	     (uint64_t)st->st_size == sync_ctx->orig_size)) {
+		/* We moved messages inside the mbox file without changing
+		   the file's size. If mtime doesn't change, another process
+		   not using the same index file as us can't know that the file
+		   was changed. So make sure the mtime changes. This should
+		   happen rarely enough that the sleeping doesn't become a
+		   performance problem.
+
+		   Note that to do this perfectly safe we should do this wait
+		   whenever mails are moved or expunged, regardless of whether
+		   the file's size changed. That however could become a
+		   performance problem and the consequences of being wrong are
+		   quite minimal (an extra logged error message). */
+		while (sync_ctx->orig_mtime == st->st_mtime) {
+			usleep(500000);
+			if (utime(sync_ctx->mbox->path, NULL) < 0) {
+				mbox_set_syscall_error(sync_ctx->mbox,
+						       "utime()");
+				return -1;
+			}
+
+			st = i_stream_stat(sync_ctx->file_input, FALSE);
+			if (st == NULL) {
+				mbox_set_syscall_error(sync_ctx->mbox,
+						       "i_stream_stat()");
+				return -1;
+			}
+		}
+	}
+
 	/* only reason not to have UID validity at this point is if the file
 	   is entirely empty. In that case just make up a new one if needed. */
 	i_assert(sync_ctx->base_uid_validity != 0 || st->st_size == 0);
@@ -1481,10 +1513,11 @@ static int mbox_sync_do(struct mbox_sync_context *sync_ctx,
 
 	st = i_stream_stat(sync_ctx->file_input, FALSE);
 	if (st == NULL) {
-		mbox_set_syscall_error(sync_ctx->mbox,
-				       "i_stream_stat()");
+		mbox_set_syscall_error(sync_ctx->mbox, "i_stream_stat()");
 		return -1;
 	}
+	sync_ctx->orig_size = st->st_size;
+	sync_ctx->orig_mtime = st->st_mtime;
 
 	if ((flags & MBOX_SYNC_FORCE_SYNC) != 0) {
 		/* forcing a full sync. assume file has changed. */
@@ -1575,8 +1608,10 @@ int mbox_sync_has_changed(struct mbox_mailbox *mbox, bool leave_dirty)
 		return 0;
 	}
 
-	if (!mbox->mbox_sync_dirty || !leave_dirty)
+	if (!mbox->mbox_sync_dirty || !leave_dirty) {
+		mbox->mbox_sync_dirty = TRUE;
 		return 1;
+	}
 
 	return st->st_mtime != mbox->mbox_dirty_stamp ||
 		st->st_size != mbox->mbox_dirty_size;
@@ -1792,7 +1827,9 @@ __again:
                 ret = mbox_rewrite_base_uid_last(&sync_ctx);
 	}
 
-	if (lock_id != 0 && mbox->mbox_lock_type != F_RDLCK) {
+	i_assert(lock_id != 0);
+
+	if (mbox->mbox_lock_type != F_RDLCK) {
 		/* drop to read lock */
 		unsigned int read_lock_id = 0;
 
@@ -1805,11 +1842,7 @@ __again:
 		}
 	}
 
-	if (lock_id != 0 && (flags & MBOX_SYNC_LOCK_READING) == 0) {
-		/* FIXME: keep the lock MBOX_SYNC_SECS+1 to make sure we
-		   notice changes made by others .. and this has to be done
-		   even if lock_reading is set.. except if
-		   mbox_sync_dirty = TRUE */
+	if ((flags & MBOX_SYNC_LOCK_READING) == 0) {
 		if (mbox_unlock(mbox, lock_id) < 0)
 			ret = -1;
 	}

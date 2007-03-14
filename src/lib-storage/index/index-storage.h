@@ -81,6 +81,7 @@ struct index_mailbox {
 	unsigned int sent_readonly_flags_warning:1;
 	unsigned int notify_pending:1;
 	unsigned int mail_read_mmaped:1;
+	unsigned int fsync_disable:1;
 };
 
 struct index_transaction_context {

@@ -1,5 +1,5 @@
 xAC_PREREQ([2.59])
-AC_INIT([dovecot],[1.0.rc26],[dovecot@dovecot.org])
+AC_INIT([dovecot],[1.0.rc27],[dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE

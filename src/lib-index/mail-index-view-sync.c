@@ -99,6 +99,7 @@ static int view_sync_set_log_view_range(struct mail_index_view *view,
 	const struct mail_index_header *hdr = view->index->hdr;
 	int ret;
 
+	/* the view begins from the first non-synced transaction */
 	ret = mail_transaction_log_view_set(view->log_view,
 					    view->log_file_seq,
 					    view->log_file_offset,
@@ -131,6 +132,9 @@ view_sync_get_expunges(struct mail_index_view *view, array_t *expunges_r)
 	if (view_sync_set_log_view_range(view, MAIL_TRANSACTION_EXPUNGE) < 0)
 		return -1;
 
+	/* get a list of expunge transactions. there may be some that we have
+	   already synced, but it doesn't matter because they'll get dropped
+	   out when converting to sequences */
 	ARRAY_CREATE(expunges_r, default_pool,
 		     struct mail_transaction_expunge, 64);
 	while ((ret = mail_transaction_log_view_next(view->log_view,
@@ -232,6 +236,13 @@ static void mail_index_view_check(struct mail_index_view *view)
 }
 #endif
 
+#define VIEW_IS_SYNCED_TO_SAME(view, hdr) \
+	((hdr)->log_file_seq == (view)->log_file_seq && \
+	 (hdr)->log_file_int_offset == (view)->log_file_offset && \
+	 (hdr)->log_file_ext_offset == (view)->log_file_offset && \
+	 (!array_is_created(&view->syncs_done) || \
+	  array_count(&view->syncs_done) == 0))
+
 int mail_index_view_sync_begin(struct mail_index_view *view,
                                enum mail_index_sync_type sync_mask,
 			       struct mail_index_view_sync_ctx **ctx_r)
@@ -304,8 +315,6 @@ int mail_index_view_sync_begin(struct mail_index_view *view,
 		uint32_t old_records_count = view->map->records_count;
 
 		if (view->map != view->index->map) {
-			const struct mail_index_header *hdr;
-
 			/* Using non-head mapping. We have to apply
 			   transactions to it to get latest changes into it. */
 			ctx->sync_map_update = TRUE;
@@ -315,16 +324,14 @@ int mail_index_view_sync_begin(struct mail_index_view *view,
 			   update flag counters. note that map->hdr may contain
 			   old information if another process updated the
 			   index file since. */
-			if (view->map->mmap_base == NULL)
-				hdr = &view->map->hdr;
-			else {
+			if (view->map->mmap_base != NULL) {
+				const struct mail_index_header *hdr;
+
 				hdr = view->map->mmap_base;
 				view->map->hdr = *hdr;
 			}
 			ctx->sync_map_ctx.unreliable_flags =
-				!(hdr->log_file_seq == view->log_file_seq &&
-				  hdr->log_file_int_offset ==
-				  view->log_file_offset);
+				!VIEW_IS_SYNCED_TO_SAME(view, &view->map->hdr);
 
 			/* Copy only the mails that we see currently, since
 			   we're going to append the new ones when we see
@@ -334,8 +341,11 @@ int mail_index_view_sync_begin(struct mail_index_view *view,
 			view->map->records_count = view->hdr.messages_count;
 
 #ifdef DEBUG
-			if (!ctx->sync_map_ctx.unreliable_flags)
+			if (!ctx->sync_map_ctx.unreliable_flags) {
+				i_assert(view->map->hdr.messages_count ==
+					 view->hdr.messages_count);
 				mail_index_view_check(view);
+			}
 #endif
 		}
 
@@ -439,15 +449,18 @@ mail_index_view_sync_get_next_transaction(struct mail_index_view_sync_ctx *ctx)
 							       offset);
 		}
 
-		/* view->log_file_offset contains the minimum of
-		   int/ext offsets. */
+		/* if we started from a map that we didn't create ourself,
+		   some of the external transactions may already be synced.
+		   at the end of view sync we'll update the ext_offset in the
+		   header so that this check always becomes FALSE for
+		   subsequent syncs. */
 		synced_to_map = offset < view->hdr.log_file_ext_offset &&
 			seq == view->hdr.log_file_seq &&
 			(ctx->hdr->type & MAIL_TRANSACTION_EXTERNAL) != 0;
 
 		/* Apply transaction to view's mapping if needed (meaning we
 		   didn't just re-map the view to head mapping). */
-		if (ctx->sync_map_update && !synced_to_map) {
+		if (ctx->sync_map_update) {
 			i_assert((ctx->hdr->type &
 				  MAIL_TRANSACTION_EXPUNGE) == 0);
 
@@ -640,10 +653,17 @@ void mail_index_view_sync_end(struct mail_index_view_sync_ctx **_ctx)
 		view->map = view->sync_new_map;
 		view->sync_new_map = NULL;
 	}
+
+	if (ctx->sync_map_update) {
+		view->map->hdr.log_file_seq = view->log_file_seq;
+		view->map->hdr.log_file_int_offset =
+			view->map->hdr.log_file_ext_offset =
+			view->log_file_offset;
+	}
 	view->hdr = view->map->hdr;
 
 #ifdef DEBUG
-	if (!view->broken_counters)
+	if (!view->broken_counters && !ctx->sync_map_ctx.unreliable_flags)
 		mail_index_view_check(view);
 #endif
 

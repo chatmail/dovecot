@@ -155,6 +155,8 @@ bool auth_request_import(struct auth_request *request,
 		net_addr2ip(value, &request->local_ip);
 	else if (strcmp(key, "rip") == 0)
 		net_addr2ip(value, &request->remote_ip);
+	else if (strcmp(key, "secured") == 0)
+		request->secured = TRUE;
 	else
 		return FALSE;
 
@@ -1047,6 +1049,8 @@ auth_request_get_var_expand_table(const struct auth_request *auth_request,
 		{ 'p', NULL },
 		{ 'w', NULL },
 		{ '!', NULL },
+		{ 'm', NULL },
+		{ 'c', NULL },
 		{ '\0', NULL }
 	};
 	struct var_expand_table *tab;
@@ -1081,6 +1085,9 @@ auth_request_get_var_expand_table(const struct auth_request *auth_request,
 		tab[9].value = auth_request->passdb == NULL ? "" :
 			dec2str(auth_request->passdb->id);
 	}
+	tab[10].value = auth_request->mech == NULL ? "" :
+		auth_request->mech->mech_name;
+	tab[11].value = auth_request->secured ? "secured" : "";
 	return tab;
 }
 

@@ -314,7 +314,7 @@ void index_storage_mailbox_init(struct index_mailbox *ibox, const char *name,
 				bool move_to_memory)
 {
 	struct mail_storage *storage = &ibox->storage->storage;
-	enum mail_index_open_flags index_flags;
+	enum mail_index_open_flags index_flags = 0;
 	enum mail_index_lock_method lock_method = 0;
 	int ret;
 
@@ -325,7 +325,13 @@ void index_storage_mailbox_init(struct index_mailbox *ibox, const char *name,
 	array_create(&ibox->box.module_contexts,
 		     ibox->box.pool, sizeof(void *), 5);
 
-	index_flags = move_to_memory ? 0 : MAIL_INDEX_OPEN_FLAG_CREATE;
+	if (getenv("FSYNC_DISABLE") != NULL) {
+		ibox->fsync_disable = TRUE;
+		index_flags |= MAIL_INDEX_OPEN_FLAG_FSYNC_DISABLE;
+	}
+
+	if (!move_to_memory)
+		index_flags |= MAIL_INDEX_OPEN_FLAG_CREATE;
 	if ((storage->flags & MAIL_STORAGE_FLAG_MMAP_DISABLE) != 0)
 		index_flags |= MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE;
 #ifndef MMAP_CONFLICTS_WRITE

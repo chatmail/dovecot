@@ -24,11 +24,14 @@ struct cmd_append_context {
 
 	struct imap_parser *save_parser;
 	struct mail_save_context *save_ctx;
-        struct mailbox_keywords old_keywords;
+	struct mailbox_keywords old_keywords;
+
+	unsigned int failed:1;
 };
 
 static void cmd_append_finish(struct cmd_append_context *ctx);
 static bool cmd_append_continue_message(struct client_command_context *cmd);
+static bool cmd_append_continue_parsing(struct client_command_context *cmd);
 
 static void client_input(void *context)
 {
@@ -48,7 +51,7 @@ static void client_input(void *context)
 		return;
 	case -2:
 		cmd_append_finish(cmd->context);
-		if (client->command_pending) {
+		if (cmd->func != cmd_append_continue_parsing) {
 			/* message data, this is handled internally by
 			   mailbox_save_continue() */
 			break;
@@ -148,16 +151,29 @@ static bool cmd_append_continue_cancel(struct client_command_context *cmd)
 	(void)i_stream_get_data(ctx->input, &size);
 	i_stream_skip(ctx->input, size);
 
-	if (ctx->input->v_offset == ctx->msg_size ||
-	    cmd->client->input->closed) {
+	if (cmd->client->input->closed) {
 		cmd_append_finish(ctx);
 		return TRUE;
 	}
+
+	if (ctx->input->v_offset == ctx->msg_size) {
+		/* finished, but with MULTIAPPEND and LITERAL+ we may get
+		   more messages. */
+		i_stream_unref(&ctx->input);
+		ctx->input = NULL;
+
+		imap_parser_reset(ctx->save_parser);
+		cmd->func = cmd_append_continue_parsing;
+		return cmd_append_continue_parsing(cmd);
+	}
+
 	return FALSE;
 }
 
 static bool cmd_append_cancel(struct cmd_append_context *ctx, bool nonsync)
 {
+	ctx->failed = TRUE;
+
 	if (!nonsync) {
 		cmd_append_finish(ctx);
 		return TRUE;
@@ -195,8 +211,8 @@ static bool cmd_append_continue_parsing(struct client_command_context *cmd)
 	/* [<flags>] [<internal date>] <message literal> */
 	ret = imap_parser_read_args(ctx->save_parser, 0,
 				    IMAP_PARSE_FLAG_LITERAL_SIZE, &args);
-	if (ret == -1) {
-		if (ctx->box != NULL)
+	if (ret == -1 || client->output->closed) {
+		if (!ctx->failed)
 			client_send_command_error(cmd, NULL);
 		cmd_append_finish(ctx);
 		return TRUE;
@@ -213,7 +229,7 @@ static bool cmd_append_continue_parsing(struct client_command_context *cmd)
 		/* eat away the trailing CRLF */
 		client->input_skip_line = TRUE;
 
-		if (ctx->box == NULL) {
+		if (ctx->failed) {
 			/* we failed earlier, error message is sent */
 			cmd_append_finish(ctx);
 			return TRUE;
@@ -239,7 +255,7 @@ static bool cmd_append_continue_parsing(struct client_command_context *cmd)
 		return cmd_append_cancel(ctx, nonsync);
 	}
 
-	if (ctx->box == NULL) {
+	if (ctx->failed) {
 		/* we failed earlier, make sure we just eat nonsync-literal
 		   if it's given. */
 		return cmd_append_cancel(ctx, nonsync);
@@ -309,7 +325,6 @@ static bool cmd_append_continue_message(struct client_command_context *cmd)
 	struct client *client = cmd->client;
 	struct cmd_append_context *ctx = cmd->context;
 	size_t size;
-	bool failed;
 	int ret;
 
 	if (ctx->save_ctx != NULL) {
@@ -342,27 +357,24 @@ static bool cmd_append_continue_message(struct client_command_context *cmd)
 		if (ctx->save_ctx == NULL) {
 			/* failed above */
 			client_send_storage_error(cmd, ctx->storage);
-			failed = TRUE;
+			ctx->failed = TRUE;
 		} else if (!all_written) {
 			/* client disconnected before it finished sending the
 			   whole message. */
-			failed = TRUE;
+			ctx->failed = TRUE;
 			mailbox_save_cancel(&ctx->save_ctx);
 		} else if (mailbox_save_finish(&ctx->save_ctx, NULL) < 0) {
-			failed = TRUE;
+			ctx->failed = TRUE;
 			client_send_storage_error(cmd, ctx->storage);
-		} else {
-			failed = client->input->closed;
 		}
 		ctx->save_ctx = NULL;
 
-		if (failed) {
+		if (client->input->closed) {
 			cmd_append_finish(ctx);
 			return TRUE;
 		}
 
 		/* prepare for next message */
-		client->command_pending = FALSE;
 		imap_parser_reset(ctx->save_parser);
 		cmd->func = cmd_append_continue_parsing;
 		return cmd_append_continue_parsing(cmd);
@@ -415,7 +427,7 @@ static int get_keywords(struct cmd_append_context *ctx)
 
 		memset(&client->keywords, 0, sizeof(client->keywords));
 		client->keywords.pool =
-			pool_alloconly_create("append keywords pool", 128);
+			pool_alloconly_create("append keywords pool", 256);
 	}
 	client_save_keywords(&client->keywords, status.keywords);
 	return 0;
@@ -435,12 +447,15 @@ bool cmd_append(struct client_command_context *cmd)
 	ctx->cmd = cmd;
 	ctx->client = client;
 	ctx->box = get_mailbox(cmd, mailbox);
-	if (ctx->box != NULL) {
+	if (ctx->box == NULL)
+		ctx->failed = TRUE;
+	else {
 		ctx->storage = mailbox_get_storage(ctx->box);
 
 		if (get_keywords(ctx) < 0) {
 			client_send_storage_error(cmd, ctx->storage);
 			mailbox_close(&ctx->box);
+			ctx->failed = TRUE;
 		} else {
 			ctx->t = mailbox_transaction_begin(ctx->box,
 					MAILBOX_TRANSACTION_FLAG_EXTERNAL);

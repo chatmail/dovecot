@@ -1,3 +1,29 @@
+v1.0.rc27 2007-03-13  Timo Sirainen <tss@iki.fi>
+
+	+ mbox and index file code handles silently out of quota/disk
+	  space errors (maildir still has problems). They will give the user
+	  a "Not enough disk space" error instead of flooding the log file.
+	+ Added fsync_disable setting.
+	+ mail-log plugin: Log the mailbox name, except if it's INBOX
+	+ dovecot-auth: Added a lot more debug logging to passdbs and userdbs
+	+ dovecot-auth: Added %c variable which expands to "secured" with
+	  SSL/TLS/localhost.
+	+ dovecot-auth: Added %m variable which expands to auth mechanism name
+	- maildir++ quota: With ignore=box setting the quota was still updated
+	  for the mailbox even though it was allowed to go over quota (but
+	  quota recalculation ignored the box).
+	- Index file handling fixes
+	- mbox syncing fixes
+	- Wrong endianess index files still weren't silently rebuilt
+	- IMAP quota plugin: GETQUOTAROOT returned the mailbox name wrong the
+	  namespace had a prefix or if its separator was non-default
+	- IMAP: If client was appending multiple messages with MULTIAPPEND
+	  and LITERAL+ extensions and one of the appends failed, Dovecot
+	  treated the rest of the mail data as IMAP commands.
+	- If mail was sent to client with sendfile() call, we could have
+	  hanged the connection. This could happen only if mails were saved
+	  with CR+LF linefeeds.
+
 v1.0.rc26 2007-03-07  Timo Sirainen <tss@iki.fi>
 
 	* Changed --with-headers to --enable-header-install

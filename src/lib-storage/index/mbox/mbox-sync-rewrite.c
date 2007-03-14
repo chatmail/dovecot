@@ -29,7 +29,12 @@ int mbox_move(struct mbox_sync_context *sync_ctx,
 	output = o_stream_create_file(sync_ctx->write_fd, default_pool,
 				      4096, FALSE);
 	i_stream_seek(sync_ctx->file_input, source);
-	o_stream_seek(output, dest);
+	if (o_stream_seek(output, dest) < 0) {
+		mbox_set_syscall_error(sync_ctx->mbox,
+				       "o_stream_seek()");
+		o_stream_unref(&output);
+		return -1;
+	}
 
 	input = i_stream_create_limit(default_pool, sync_ctx->file_input,
 				      source, size);
@@ -86,7 +91,7 @@ void mbox_sync_headers_add_space(struct mbox_sync_mail_context *ctx,
 
 	i_assert(size < SSIZE_T_MAX);
 
-	if (ctx->pseudo)
+	if (ctx->mail.pseudo)
 		start_pos = ctx->hdr_pos[MBOX_HDR_X_IMAPBASE];
 	else if (ctx->mail.space > 0) {
 		/* update the header using the existing offset.
@@ -320,6 +325,7 @@ static void mbox_sync_read_next(struct mbox_sync_context *sync_ctx,
 				uoff_t expunged_space)
 {
 	unsigned int first_mail_expunge_extra;
+	uint32_t orig_next_uid;
 
 	memset(mail_ctx, 0, sizeof(*mail_ctx));
 	mail_ctx->sync_ctx = sync_ctx;
@@ -330,15 +336,17 @@ static void mbox_sync_read_next(struct mbox_sync_context *sync_ctx,
 		istream_raw_mbox_get_header_offset(sync_ctx->input);
 	mail_ctx->mail.body_size = mails[idx].body_size;
 
-	if (mails[idx].uid_broken || mails[idx].uid == 0) {
-		sync_ctx->next_uid = 1;
-		sync_ctx->prev_msg_uid = 0;
-	} else {
-		/* If we originally thought that the UID was broken, force the
-		   brokeness now also. Otherwise try to make the UID what we
-		   wanted it originally. */
+	orig_next_uid = sync_ctx->next_uid;
+	if (mails[idx].uid != 0) {
+		/* This will force the UID to be the one that we originally
+		   assigned to it, regardless of whether it's broken or not in
+		   the file. */
 		sync_ctx->next_uid = mails[idx].uid;
-		sync_ctx->prev_msg_uid = sync_ctx->next_uid - 1;
+		sync_ctx->prev_msg_uid = mails[idx].uid - 1;
+	} else {
+		/* Pseudo mail shouldn't have X-UID header at all */
+		i_assert(mails[idx].pseudo);
+		sync_ctx->prev_msg_uid = 0;
 	}
 
 	first_mail_expunge_extra = 1 +
@@ -354,6 +362,13 @@ static void mbox_sync_read_next(struct mbox_sync_context *sync_ctx,
 	}
 
 	mbox_sync_parse_next_mail(sync_ctx->input, mail_ctx);
+	i_assert(mail_ctx->mail.pseudo == mails[idx].pseudo);
+
+	/* set next_uid back before updating the headers. this is important
+	   if we're updating the first message to make X-IMAP[base] header
+	   have the correct value. */
+	sync_ctx->next_uid = orig_next_uid;
+
 	if (mails[idx].space != 0) {
 		if (mails[idx].space < 0) {
 			/* remove all possible spacing before updating */
@@ -457,7 +472,7 @@ int mbox_sync_rewrite(struct mbox_sync_context *sync_ctx,
 	uoff_t offset, dest_offset, next_end_offset, next_move_diff;
 	uoff_t start_offset, expunged_space;
 	uint32_t idx, first_nonexpunged_idx, padding_per_mail;
-	uint32_t orig_prev_msg_uid, orig_next_uid;
+	uint32_t orig_prev_msg_uid;
 	unsigned int count;
 	int ret = 0;
 
@@ -481,14 +496,13 @@ int mbox_sync_rewrite(struct mbox_sync_context *sync_ctx,
 	start_offset = mails[0].from_offset;
 	for (first_nonexpunged_idx = 0;; first_nonexpunged_idx++) {
 		i_assert(first_nonexpunged_idx != idx);
-		if ((mails[first_nonexpunged_idx].flags & MBOX_EXPUNGED) == 0)
+		if (!mails[first_nonexpunged_idx].expunged)
 			break;
                 expunged_space += mails[first_nonexpunged_idx].space;
 	}
 	i_assert(mails[first_nonexpunged_idx].space < 0);
 
 	orig_prev_msg_uid = sync_ctx->prev_msg_uid;
-	orig_next_uid = sync_ctx->next_uid;
 
 	/* start moving backwards. */
 	while (idx > first_nonexpunged_idx) {
@@ -503,8 +517,7 @@ int mbox_sync_rewrite(struct mbox_sync_context *sync_ctx,
 
 		next_end_offset = mails[idx].offset;
 
-		if (mails[idx].space <= 0 &&
-		    (mails[idx].flags & MBOX_EXPUNGED) == 0) {
+		if (mails[idx].space <= 0 && !mails[idx].expunged) {
 			/* give space to this mail. end_offset is left to
 			   contain this message's From-line (ie. below we
 			   move only headers + body). */
@@ -540,7 +553,7 @@ int mbox_sync_rewrite(struct mbox_sync_context *sync_ctx,
 			}
 
 			move_diff += mails[idx].space;
-			if ((mails[idx].flags & MBOX_EXPUNGED) == 0) {
+			if (!mails[idx].expunged) {
 				move_diff -= padding_per_mail;
 				mails[idx].space = padding_per_mail;
 
@@ -566,7 +579,6 @@ int mbox_sync_rewrite(struct mbox_sync_context *sync_ctx,
 	i_assert(move_diff + (off_t)expunged_space >= 0);
 
 	i_stream_sync(sync_ctx->input);
-	sync_ctx->next_uid = orig_next_uid;
 	sync_ctx->prev_msg_uid = orig_prev_msg_uid;
 	return ret;
 }

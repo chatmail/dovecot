@@ -1,3 +1,9 @@
+dovecot (1.0.rc27-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Wed, 14 Mar 2007 14:39:04 +0100
+
 dovecot (1.0.rc26-4) unstable; urgency=low
 
   * debian/dovecot-common.postinst: fixed a typo. (Closes: #414672)
