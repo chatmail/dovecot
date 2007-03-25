@@ -237,6 +237,9 @@
 /* Define if you have statvfs.f_mntfromname */
 #undef HAVE_STATVFS_MNTFROMNAME
 
+/* Define if you have tv_nsec fields in struct stat */
+#undef HAVE_STAT_TV_NSEC
+
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H
 

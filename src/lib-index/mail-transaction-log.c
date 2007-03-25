@@ -38,6 +38,9 @@ mail_transaction_log_file_create(struct mail_transaction_log_file *file,
 				 bool lock, dev_t dev, ino_t ino,
 				 uoff_t file_size);
 static int
+mail_transaction_log_file_fd_open_or_create(struct mail_transaction_log_file
+					    	*file, bool try_retry);
+static int
 mail_transaction_log_file_read(struct mail_transaction_log_file *file,
 			       uoff_t offset);
 
@@ -50,7 +53,9 @@ mail_transaction_log_file_set_corrupted(struct mail_transaction_log_file *file,
 	file->hdr.indexid = 0;
 	if (!MAIL_TRANSACTION_LOG_FILE_IN_MEMORY(file)) {
 		if (pwrite_full(file->fd, &file->hdr.indexid,
-				sizeof(file->hdr.indexid), 0) < 0) {
+				sizeof(file->hdr.indexid),
+				offsetof(struct mail_transaction_log_header,
+					 indexid)) < 0) {
 			mail_index_file_set_syscall_error(file->log->index,
 				file->filepath, "pwrite()");
 		}
@@ -311,7 +316,9 @@ mail_transaction_log_open_int(struct mail_index *index, bool create)
 			memset(&st, 0, sizeof(st));
 		if (mail_transaction_log_file_create(file, FALSE,
 						     st.st_dev, st.st_ino,
-						     st.st_size) < 0) {
+						     st.st_size) < 0 ||
+		    mail_transaction_log_file_fd_open_or_create(file,
+								FALSE) < 0) {
 			mail_transaction_log_file_free(file);
 			file = NULL;
 		}
@@ -330,6 +337,7 @@ mail_transaction_log_open_int(struct mail_index *index, bool create)
 	}
 	file->refcount++;
 	log->head = file;
+	i_assert(log->files != NULL);
 
 	if (index->fd != -1 &&
 	    INDEX_HAS_MISSING_LOGS(index, log->head)) {
@@ -959,6 +967,7 @@ int mail_transaction_log_rotate(struct mail_transaction_log *log, bool lock)
 		mail_transaction_log_file_unlock(log->head);
 
 	i_assert(log->head != file);
+	i_assert(log->files != NULL);
 	log->head = file;
 	log->head->refcount++;
 	return 0;
@@ -1004,6 +1013,7 @@ static int mail_transaction_log_refresh(struct mail_transaction_log *log,
 	if (--log->head->refcount == 0)
 		mail_transaction_logs_clean(log);
 
+	i_assert(log->files != NULL);
 	log->head = file;
 	log->head->refcount++;
 	return 0;
@@ -1110,7 +1120,7 @@ mail_transaction_log_file_sync(struct mail_transaction_log_file *file)
 {
         const struct mail_transaction_header *hdr;
 	const void *data;
-	size_t size;
+	size_t size, avail;
 	uint32_t hdr_size = 0;
 
 	data = buffer_get_data(file->buffer, &size);
@@ -1137,7 +1147,8 @@ mail_transaction_log_file_sync(struct mail_transaction_log_file *file)
 		file->sync_offset += hdr_size;
 	}
 
-	if (file->sync_offset - file->buffer_offset != size) {
+	avail = file->sync_offset - file->buffer_offset;
+	if (avail != size && avail >= sizeof(*hdr)) {
 		/* record goes outside the file we've seen. or if
 		   we're accessing the log file via unlocked mmaped
 		   memory, it may be just that the memory was updated

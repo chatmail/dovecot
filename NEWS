@@ -1,3 +1,37 @@
+v1.0.rc28 2007-03-23  Timo Sirainen <tss@iki.fi>
+
+	* deliver + userdb static: Verify the user's existence from passdb,
+	  unless allow_all_users=yes
+	* dovecot --exec-mail: Log to configured log files instead of stderr
+	* Added "-example" part to doc/dovecot-sql-example.conf and
+	  doc/dovecot-ldap-example.conf. They are now also installed to
+	  $sysconfdir with "make install".
+
+	+ When copying/syncing a lot of mails, send "* OK Hang in there"
+	  replies to client every 15 seconds so it doesn't just timeout the
+	  connection.
+	+ Added idxview and logview utilities to examine Dovecot's index files
+	+ passdb passwd and shadow support blocking=yes setting now also
+	+ mbox: If mbox file changes unexpectedly while we're writing to it,
+	  log an error.
+	+ deliver: Ignore -m "" parameter to make calling it easier.
+	+ deliver: Added new -n parameter to disable autocreating mailboxes.
+	  It affects both -m parameter and Sieve plugin's fileinto action
+	- mbox: Using ~/ in the mail root directory caused a ~ directory to be
+	  created (instead of expanding it to home directory)
+	- auth cache: If unknown user was found from cache, we didn't properly
+	  return "unknown user" status, which could have caused problems in
+	  deliver.
+	- mbox: Fixed "UID inserted in the middle of mailbox" in some
+	  conditions with broken X-UID headers
+	- Index view syncing fixes
+	- rc27 didn't compile with some non-GCC compilers
+	- vpopmail support didn't compile in rc27
+	- NFS check with chrooting broke home direcotry for the first login
+	- deliver: If user lookup returned "unknown user", it logged
+	  "BUG: Unexpected input"
+	- convert plugin didn't convert INBOX
+
 v1.0.rc27 2007-03-13  Timo Sirainen <tss@iki.fi>
 
 	+ mbox and index file code handles silently out of quota/disk

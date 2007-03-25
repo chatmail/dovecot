@@ -205,10 +205,17 @@
    to see if we need to touch the uidlist lock. */
 #define MAILDIR_SLOW_CHECK_COUNT 10000
 
+/* This is mostly to avoid infinite looping when filesystem breaks itself by
+   making rename() not unlink the source file (ext3, Linux 2.6.20) */
+#define MAILDIR_SCAN_DIR_MAX_COUNT 5
+
 struct maildir_sync_context {
         struct maildir_mailbox *mbox;
 	const char *new_dir, *cur_dir;
 	bool partial;
+
+	unsigned int move_count, check_count;
+	time_t last_touch, last_notify;
 
 	struct maildir_uidlist_sync_ctx *uidlist_sync_ctx;
         struct maildir_index_sync_context *index_sync_ctx;
@@ -216,6 +223,8 @@ struct maildir_sync_context {
 
 struct maildir_index_sync_context {
         struct maildir_mailbox *mbox;
+	struct maildir_sync_context *maildir_sync_ctx;
+
 	struct mail_index_view *view;
 	struct mail_index_sync_ctx *sync_ctx;
         struct maildir_keywords_sync_ctx *keywords_sync_ctx;
@@ -461,7 +470,7 @@ static int maildir_sync_flags(struct maildir_mailbox *mbox, const char *path,
 
 	if (ENOSPACE(errno) || errno == EACCES) {
 		mail_index_update_flags(ctx->trans, ctx->seq, MODIFY_ADD,
-					MAIL_INDEX_MAIL_FLAG_DIRTY);
+			(enum mail_flags)MAIL_INDEX_MAIL_FLAG_DIRTY);
 		ctx->dirty_state = 1;
 		return 1;
 	}
@@ -469,6 +478,45 @@ static int maildir_sync_flags(struct maildir_mailbox *mbox, const char *path,
 	mail_storage_set_critical(STORAGE(mbox->storage),
 				  "rename(%s, %s) failed: %m", path, newpath);
 	return -1;
+}
+
+static void
+maildir_sync_check_timeouts(struct maildir_sync_context *ctx, bool move)
+{
+	time_t now;
+
+	if (ctx == NULL) {
+		/* we got here from maildir-save.c. it has no
+		   maildir_sync_context,  */
+		return;
+	}
+
+	if (move) {
+		ctx->move_count++;
+		if ((ctx->move_count % MAILDIR_SLOW_MOVE_COUNT) != 0)
+			return;
+	} else {
+		ctx->check_count++;
+		if ((ctx->check_count % MAILDIR_SLOW_CHECK_COUNT) != 0)
+			return;
+	}
+
+	now = time(NULL);
+	if (now - ctx->last_touch > MAILDIR_LOCK_TOUCH_SECS) {
+		(void)maildir_uidlist_lock_touch(ctx->mbox->uidlist);
+		ctx->last_touch = now;
+	}
+	if (now - ctx->last_notify > MAIL_STORAGE_STAYALIVE_SECS) {
+		struct mailbox *box = &ctx->mbox->ibox.box;
+		struct index_storage *istorage = &ctx->mbox->storage->storage;
+
+		if (istorage->callbacks->notify_ok != NULL) {
+			istorage->callbacks->
+				notify_ok(box, "Hang in there..",
+					  istorage->callback_context);
+		}
+		ctx->last_notify = now;
+	}
 }
 
 static int
@@ -511,10 +559,14 @@ maildir_sync_record_commit_until(struct maildir_index_sync_context *ctx,
 
 		ctx->seq = seq;
 		if (expunged) {
+			maildir_sync_check_timeouts(ctx->maildir_sync_ctx,
+						    TRUE);
 			if (maildir_file_do(ctx->mbox, uid,
 					    maildir_expunge, ctx) < 0)
 				return -1;
 		} else if (flag_changed) {
+			maildir_sync_check_timeouts(ctx->maildir_sync_ctx,
+						    TRUE);
 			if (maildir_file_do(ctx->mbox, uid,
 					    maildir_sync_flags, ctx) < 0)
 				return -1;
@@ -624,6 +676,8 @@ maildir_sync_context_new(struct maildir_mailbox *mbox)
 	ctx->mbox = mbox;
 	ctx->new_dir = t_strconcat(mbox->path, "/new", NULL);
 	ctx->cur_dir = t_strconcat(mbox->path, "/cur", NULL);
+	ctx->last_touch = ioloop_time;
+	ctx->last_notify = ioloop_time;
 	return ctx;
 }
 
@@ -643,7 +697,8 @@ static int maildir_fix_duplicate(struct maildir_sync_context *ctx,
 	struct maildir_mailbox *mbox = ctx->mbox;
 	const char *existing_fname, *existing_path;
 	const char *new_fname, *old_path, *new_path;
-	struct stat st, st2;
+	struct stat ex_st, old_st, ex2_st, old2_st;
+	bool delete_old;
 	int ret = 0;
 
 	existing_fname =
@@ -656,18 +711,69 @@ static int maildir_fix_duplicate(struct maildir_sync_context *ctx,
 	existing_path = t_strconcat(dir, "/", existing_fname, NULL);
 	old_path = t_strconcat(dir, "/", old_fname, NULL);
 
-	if (stat(existing_path, &st) < 0 ||
-	    stat(old_path, &st2) < 0) {
+	if (stat(existing_path, &ex_st) < 0 ||
+	    stat(old_path, &old_st) < 0) {
 		/* most likely the files just don't exist anymore.
 		   don't really care about other errors much. */
 		t_pop();
 		return 0;
 	}
-	if (st.st_ino == st2.st_ino && CMP_DEV_T(st.st_dev, st2.st_dev)) {
+	if (ex_st.st_ino == old_st.st_ino &&
+	    CMP_DEV_T(ex_st.st_dev, old_st.st_dev)) {
 		/* files are the same. this means either a race condition
-		   between stat() calls, or someone has started link()ing the
-		   files. either way there's no data loss if we just leave it
-		   there. */
+		   between stat() calls, or that the files were link()ed.
+
+		   if the files really were link()ed, we want to get rid of
+		   them. however we can't just go directly rename() them
+		   because if this was a race between stat()s, we could reverse
+		   a flag change done by another process. so, stat again
+		   and hope that there wasn't another race condition changing
+		   the flag back.. */
+		if (!(stat(existing_path, &ex2_st) == 0 &&
+		      stat(old_path, &old2_st) == 0 &&
+#ifdef HAVE_STAT_TV_NSEC
+		      ex_st.st_ctim.tv_nsec == ex2_st.st_ctim.tv_nsec &&
+		      old_st.st_ctim.tv_nsec == old2_st.st_ctim.tv_nsec &&
+#endif
+		      ex_st.st_ctime == ex2_st.st_ctime &&
+		      old_st.st_ctime == old2_st.st_ctime)) {
+			/* changed again */
+			t_pop();
+			return 0;
+		}
+
+		/* don't unlink(), if this is a race condition after
+		   all we really don't want to delete the message
+		   accidentally.
+
+		   the ctime checks are only meant to help with stat() race
+		   conditions. the inode is shared between links, so there's
+		   no way to know which filename was created later. */
+		if (old_st.st_ctime != ex_st.st_ctime)
+			delete_old = old_st.st_ctime < ex_st.st_ctime;
+		else {
+#ifdef HAVE_STAT_TV_NSEC
+			delete_old = old_st.st_ctim.tv_nsec <
+				ex_st.st_ctim.tv_nsec;
+#else
+			delete_old = TRUE;
+#endif
+		}
+		if (delete_old)
+			new_path = existing_path;
+		else {
+			new_path = old_path;
+			old_path = existing_path;
+		}
+		ret = rename(old_path, new_path);
+		if (ret == 0) {
+			i_warning("Fixed a duplicate link: %s -> %s",
+				  old_path, new_path);
+		} else if (ret < 0 && errno != ENOENT) {
+			mail_storage_set_critical(STORAGE(mbox->storage),
+						  "rename(%s, %s) failed: %m",
+						  old_path, new_path);
+		}
 		t_pop();
 		return 0;
 	}
@@ -675,10 +781,9 @@ static int maildir_fix_duplicate(struct maildir_sync_context *ctx,
 	new_fname = maildir_generate_tmp_filename(&ioloop_timeval);
 	new_path = t_strconcat(mbox->path, "/new/", new_fname, NULL);
 
-	if (rename(old_path, new_path) == 0) {
-		i_warning("Fixed duplicate in %s: %s -> %s",
-			  mbox->path, old_fname, new_fname);
-	} else if (errno != ENOENT) {
+	if (rename(old_path, new_path) == 0)
+		i_warning("Fixed a duplicate: %s -> %s", old_fname, new_fname);
+	else if (errno != ENOENT) {
 		mail_storage_set_critical(STORAGE(mbox->storage),
 			"rename(%s, %s) failed: %m", old_path, new_path);
 		ret = -1;
@@ -696,12 +801,8 @@ static int maildir_scan_dir(struct maildir_sync_context *ctx, bool new_dir)
 	string_t *src, *dest;
 	struct dirent *dp;
 	enum maildir_uidlist_rec_flag flags;
-	time_t last_touch;
-	unsigned int moves = 0, count = 0;
 	int ret = 1;
 	bool move_new, check_touch;
-
-	last_touch = ioloop_time;
 
 	dir = new_dir ? ctx->new_dir : ctx->cur_dir;
 	dirp = opendir(dir);
@@ -715,6 +816,7 @@ static int maildir_scan_dir(struct maildir_sync_context *ctx, bool new_dir)
 	src = t_str_new(1024);
 	dest = t_str_new(1024);
 
+	ctx->move_count = 0;
 	move_new = new_dir && !mailbox_is_readonly(&ctx->mbox->ibox.box) &&
 		!ctx->mbox->ibox.keep_recent;
 	while ((dp = readdir(dirp)) != NULL) {
@@ -747,13 +849,13 @@ static int maildir_scan_dir(struct maildir_sync_context *ctx, bool new_dir)
 			}
 			if (rename(str_c(src), str_c(dest)) == 0) {
 				/* we moved it - it's \Recent for us */
-				moves++;
+				maildir_sync_check_timeouts(ctx, TRUE);
 				ctx->mbox->dirty_cur_time = ioloop_time;
 				flags |= MAILDIR_UIDLIST_REC_FLAG_MOVED |
 					MAILDIR_UIDLIST_REC_FLAG_RECENT;
 			} else if (ENOTFOUND(errno)) {
 				/* someone else moved it already */
-				moves++;
+				maildir_sync_check_timeouts(ctx, TRUE);
 				flags |= MAILDIR_UIDLIST_REC_FLAG_MOVED;
 			} else if (ENOSPACE(errno) || errno == EACCES) {
 				/* not enough disk space / read-only maildir,
@@ -768,23 +870,12 @@ static int maildir_scan_dir(struct maildir_sync_context *ctx, bool new_dir)
 					"rename(%s, %s) failed: %m",
 					str_c(src), str_c(dest));
 			}
-			if ((moves % MAILDIR_SLOW_MOVE_COUNT) == 0)
-				check_touch = TRUE;
 		} else if (new_dir) {
 			flags |= MAILDIR_UIDLIST_REC_FLAG_NEW_DIR |
 				MAILDIR_UIDLIST_REC_FLAG_RECENT;
 		}
 
-		count++;
-		if (check_touch || (count % MAILDIR_SLOW_CHECK_COUNT) == 0) {
-			time_t now = time(NULL);
-
-			if (now - last_touch > MAILDIR_LOCK_TOUCH_SECS) {
-				(void)maildir_uidlist_lock_touch(
-							ctx->mbox->uidlist);
-				last_touch = now;
-			}
-		}
+		maildir_sync_check_timeouts(ctx, FALSE);
 
 		ret = maildir_uidlist_sync_next(ctx->uidlist_sync_ctx,
 						dp->d_name, flags);
@@ -806,7 +897,8 @@ static int maildir_scan_dir(struct maildir_sync_context *ctx, bool new_dir)
 	}
 
 	t_pop();
-	return ret < 0 ? -1 : (moves <= MAILDIR_RENAME_RESCAN_COUNT ? 0 : 1);
+	return ret < 0 ? -1 :
+		(ctx->move_count <= MAILDIR_RENAME_RESCAN_COUNT ? 0 : 1);
 }
 
 static void
@@ -1199,7 +1291,7 @@ int maildir_sync_index(struct maildir_index_sync_context *sync_ctx,
 		   have to do it here before syncing index records, since after
 		   that the uidlist's next_uid value may have changed. */
 		next_uid = maildir_uidlist_get_next_uid(mbox->uidlist);
-		if (next_uid != 0 && hdr->next_uid != next_uid) {
+		if (hdr->next_uid < next_uid) {
 			mail_index_update_header(trans,
 				offsetof(struct mail_index_header, next_uid),
 				&next_uid, sizeof(next_uid), FALSE);
@@ -1249,11 +1341,12 @@ int maildir_sync_index(struct maildir_index_sync_context *sync_ctx,
 		if (uid_validity == 0) {
 			uid_validity = ioloop_time;
 			maildir_uidlist_set_uid_validity(mbox->uidlist,
-							 uid_validity);
+							 uid_validity, 0);
 		}
 	} else if (uid_validity == 0) {
 		maildir_uidlist_set_uid_validity(mbox->uidlist,
-						 hdr->uid_validity);
+						 hdr->uid_validity,
+						 hdr->next_uid);
 	}
 
 	if (uid_validity != hdr->uid_validity && uid_validity != 0) {
@@ -1344,15 +1437,20 @@ static int maildir_sync_context(struct maildir_sync_context *ctx, bool forced,
 		if (maildir_sync_index_begin(ctx->mbox,
 					     &ctx->index_sync_ctx) < 0)
 			return -1;
+		ctx->index_sync_ctx->maildir_sync_ctx = ctx;
 	}
 
 	if (new_changed || cur_changed) {
 		/* if we're going to check cur/ dir our current logic requires
 		   that new/ dir is checked as well. it's a good idea anyway. */
+		unsigned int count = 0;
+
 		while ((ret = maildir_scan_dir(ctx, TRUE)) > 0) {
 			/* rename()d at least some files, which might have
 			   caused some other files to be missed. check again
 			   (see MAILDIR_RENAME_RESCAN_COUNT). */
+			if (++count > MAILDIR_SCAN_DIR_MAX_COUNT)
+				break;
 		}
 		if (ret < 0)
 			return -1;

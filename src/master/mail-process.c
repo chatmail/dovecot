@@ -9,6 +9,7 @@
 #include "mountpoint.h"
 #include "restrict-access.h"
 #include "restrict-process-size.h"
+#include "home-expand.h"
 #include "var-expand.h"
 #include "mail-process.h"
 #include "login-process.h"
@@ -23,6 +24,12 @@
 #ifdef HAVE_SYS_RESOURCE_H
 #  include <sys/resource.h>
 #endif
+
+/* Timeout chdir() completely after this many seconds */
+#define CHDIR_TIMEOUT 30
+/* Give a warning about chdir() taking a while if it took longer than this
+   many seconds to finish. */
+#define CHDIR_WARN_SECS 10
 
 static unsigned int mail_process_count = 0;
 
@@ -351,6 +358,22 @@ void mail_process_exec(const char *protocol, const char *section)
 				     getenv("TCPREMOTEIP"),
 				     getpid(), geteuid());
 
+	/* set up logging */
+	env_put(t_strconcat("LOG_TIMESTAMP=", set->log_timestamp, NULL));
+	if (*set->log_path == '\0')
+		env_put("USE_SYSLOG=1");
+	else
+		env_put(t_strconcat("LOGFILE=", set->log_path, NULL));
+	if (*set->info_log_path != '\0')
+		env_put(t_strconcat("INFOLOGFILE=", set->info_log_path, NULL));
+	if (*set->mail_log_prefix != '\0') {
+		string_t *str = t_str_new(256);
+
+		str_append(str, "LOG_PREFIX=");
+		var_expand(str, set->mail_log_prefix, var_expand_table);
+		env_put(str_c(str));
+	}
+
 	mail_process_set_environment(set, getenv("MAIL"), var_expand_table,
 				     FALSE);
         client_process_exec(executable, "");
@@ -358,14 +381,13 @@ void mail_process_exec(const char *protocol, const char *section)
 	i_fatal_status(FATAL_EXEC, "execv(%s) failed: %m", executable);
 }
 
-static void nfs_warn_if_found(const char *mail, const char *chroot,
-			      const char *home)
+static void nfs_warn_if_found(const char *mail, const char *full_home_dir)
 {
 	struct mountpoint point;
 	const char *path;
 
 	if (mail == NULL || *mail == '\0')
-		path = home;
+		path = full_home_dir;
 	else {
 		path = strstr(mail, ":INDEX=");
 		if (path != NULL) {
@@ -383,9 +405,7 @@ static void nfs_warn_if_found(const char *mail, const char *chroot,
 				path++;
 			}
 		}
-		path = t_strcut(path, ':');
-		if (*chroot != '\0')
-			path = t_strconcat(chroot, "/", path, NULL);
+		path = home_expand_tilde(t_strcut(path, ':'), full_home_dir);
 	}
 
 	if (mountpoint_get(path, pool_datastack_create(), &point) <= 0)
@@ -415,8 +435,8 @@ bool create_mail_process(enum process_type process_type, struct settings *set,
 	uid_t uid;
 	gid_t gid;
 	array_t ARRAY_DEFINE(extra_args, const char *);
-	unsigned int i, count;
-	int ret, log_fd, nice;
+	unsigned int i, count, left;
+	int ret, log_fd, nice, chdir_errno;
 	bool home_given, nfs_check;
 
 	/* FIXME: per-group? */
@@ -573,9 +593,10 @@ bool create_mail_process(enum process_type process_type, struct settings *set,
 	if (dump_capability)
 		env_put("DUMP_CAPABILITY=1");
 
-	if (*home_dir == '\0')
+	if (*home_dir == '\0') {
+		full_home_dir = "";
 		ret = -1;
-	else {
+	} else {
 		full_home_dir = *chroot_dir == '\0' ? home_dir :
 			t_strconcat(chroot_dir, "/", home_dir, NULL);
 		/* NOTE: if home directory is NFS-mounted, we might not
@@ -587,7 +608,14 @@ bool create_mail_process(enum process_type process_type, struct settings *set,
 			if (seteuid(uid) < 0)
 				i_fatal("seteuid(%s) failed: %m", dec2str(uid));
 		}
+
+		alarm(CHDIR_TIMEOUT);
 		ret = chdir(full_home_dir);
+		chdir_errno = errno;
+		if ((left = alarm(0)) < CHDIR_TIMEOUT - CHDIR_WARN_SECS) {
+			i_warning("chdir(%s) blocked for %u secs",
+				  full_home_dir, CHDIR_TIMEOUT - left);
+		}
 
 		/* Change UID back. No need to change GID back, it doesn't
 		   really matter. */
@@ -598,8 +626,10 @@ bool create_mail_process(enum process_type process_type, struct settings *set,
 		   trying to chroot anywhere, fallback to /tmp as the mails
 		   could be stored elsewhere. The ENOTDIR check is mostly for
 		   /dev/null home directory. */
-		if (ret < 0 && ((errno != ENOENT && errno != ENOTDIR) ||
-				*chroot_dir != '\0')) {
+		if (ret < 0 && (*chroot_dir != '\0' ||
+				!(ENOTFOUND(chdir_errno) ||
+				  chdir_errno == EINTR))) {
+			errno = chdir_errno;
 			i_fatal("chdir(%s) failed with uid %s: %m",
 				full_home_dir, dec2str(uid));
 		}
@@ -634,11 +664,8 @@ bool create_mail_process(enum process_type process_type, struct settings *set,
 		}
 	}
 
-	if (nfs_check) {
-		if (*chroot_dir != '\0')
-			home_dir = t_strconcat(chroot_dir, "/", home_dir, NULL);
-		nfs_warn_if_found(getenv("MAIL"), chroot_dir, home_dir);
-	}
+	if (nfs_check)
+		nfs_warn_if_found(getenv("MAIL"), full_home_dir);
 
 	env_put("LOGGED_IN=1");
 	env_put(t_strconcat("HOME=", home_dir, NULL));

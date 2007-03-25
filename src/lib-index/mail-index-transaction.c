@@ -318,8 +318,13 @@ void mail_index_transaction_sort_appends(struct mail_index_transaction *t)
 	i_free(sorted_recs);
 
 	/* fix the order in extensions */
-	ext_rec_arrays = array_get_modifyable(&t->ext_rec_updates,
-					      &ext_rec_array_count);
+	if (!array_is_created(&t->ext_rec_updates)) {
+		ext_rec_arrays = NULL;
+		ext_rec_array_count = 0;
+	} else {
+		ext_rec_arrays = array_get_modifyable(&t->ext_rec_updates,
+						      &ext_rec_array_count);
+	}
 	for (j = 0; j < ext_rec_array_count; j++) {
 		array_t *old_array = &ext_rec_arrays[j];
 		ARRAY_SET_TYPE(old_array, void);

@@ -87,8 +87,8 @@ install: build
 	$(MAKE) -C dovecot-sieve install prefix=$(CURDIR)/debian/dovecot-common/usr
 	# cp $(CURDIR)/src/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot.conf
-	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-ldap.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-ldap.conf
-	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-sql.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-sql.conf
+	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-ldap-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-ldap.conf
+	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-sql-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-sql.conf
 	install -o root -g root -m 0644 $(CURDIR)/debian/conffile.md5sum/dovecot.conf.md5sum $(CURDIR)/debian/dovecot-common/usr/share/dovecot/
 	install -o root -g root -m 0644 $(CURDIR)/debian/conffile.md5sum/dovecot-ldap.conf.md5sum $(CURDIR)/debian/dovecot-common/usr/share/dovecot/
 	install -o root -g root -m 0644 $(CURDIR)/debian/conffile.md5sum/dovecot-sql.conf.md5sum $(CURDIR)/debian/dovecot-common/usr/share/dovecot/

@@ -1,3 +1,4 @@
+ - mmap_disable: updated cache header doesn't invalidate other processes' cache?
  - mail_index_move_to_memory() should lock the index..
  - mbox: UID renumbering doesn't really work after all?
  - maildir: we could finish writing dovecot-uidlist.lock before rename()ing
@@ -10,6 +11,9 @@
    then rename()ing. This wouldn't be necessary if uidlist syncing noticed
    that someone else already had added them to uidlist, and the existing UIDs
    could be assigned to them in the index.
+ - maildir_copy_preserve_filename=yes has a race condition causing "Append with
+   UID n, but next_uid = y" errors when quota plugin is loaded. Practically
+   won't happen except in stress testing.
  - maildir_copy_with_hardlinks=yes is problematic with shared folders where
    the file mode should change..
  - still problems with CRLF mboxes..

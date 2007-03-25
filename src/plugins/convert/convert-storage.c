@@ -201,6 +201,7 @@ static int mailbox_list_copy(struct mail_storage *source_storage,
 	int ret = 0;
 
 	iter = mail_storage_mailbox_list_init(source_storage, "", "*",
+                                              MAILBOX_LIST_INBOX |
                                               MAILBOX_LIST_FAST_FLAGS);
 	while ((list = mail_storage_mailbox_list_next(iter)) != NULL) {
 		if (mailbox_convert_list_item(source_storage, dest_storage,

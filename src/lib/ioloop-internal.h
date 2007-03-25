@@ -51,7 +51,7 @@ struct timeout {
 
 int io_loop_get_wait_time(struct timeout *timeout, struct timeval *tv,
 			  struct timeval *tv_now);
-void io_loop_handle_timeouts(struct ioloop *ioloop);
+void io_loop_handle_timeouts(struct ioloop *ioloop, bool update_run_now);
 
 /* call only when timeout->destroyed is TRUE */
 void timeout_destroy(struct ioloop *ioloop, struct timeout **timeout_p);

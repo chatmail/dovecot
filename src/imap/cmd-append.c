@@ -50,12 +50,12 @@ static void client_input(void *context)
 		client_destroy(client, "Disconnected in APPEND");
 		return;
 	case -2:
-		cmd_append_finish(cmd->context);
 		if (cmd->func != cmd_append_continue_parsing) {
 			/* message data, this is handled internally by
 			   mailbox_save_continue() */
 			break;
 		}
+		cmd_append_finish(cmd->context);
 
 		/* parameter word is longer than max. input buffer size.
 		   this is most likely an error, so skip the new data

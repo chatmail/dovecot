@@ -1,3 +1,330 @@
+2007-03-23 20:30  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-copy.c: comment update
+
+2007-03-23 20:23  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/: maildir-save.c,
+	  maildir-uidlist.c, maildir-uidlist.h: When saving/copying mails,
+	  we must not do any sorting based on the filename to saved mails
+	  when they're added to uidlist, otherwise they could be saved to
+	  index with wrong UID.
+
+2007-03-23 17:20  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-sync.c: If duplicate links
+	  are found, rename() one over the other to get rid of it.
+
+2007-03-23 16:38  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-sync.c: Avoid infinite
+	  looping when buggy filesystems.
+
+2007-03-23 15:53  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-sync.c: If saving to
+	  maildir causes flag/expunge syncs, don't crash.
+
+2007-03-23 03:41  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-cache-transaction.c: If we update the fields
+	  list in header, it's committed immediately so if the transaction
+	  gets rollbacked, don't overwrite the already committed header.
+
+2007-03-23 03:07  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/: maildir-sync.c,
+	  maildir-uidlist.c: Last fix broke creating new uidlists.
+
+2007-03-23 02:46  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-sync-parse.c, mbox-sync.c: If a
+	  broken X-UID header was found with a value larger than last seen
+	  X-UID (eg. empty mbox) but less than the expected UID value, we
+	  gave "UID inserted in the middle of mailbox" error.
+
+2007-03-23 00:07  Timo Sirainen <tss@iki.fi>
+
+	* src/master/mail-process.c: Fixed NFS check again with chroots
+
+2007-03-23 00:06  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: home-expand.c, home-expand.h: Added home_expand_tilde()
+
+2007-03-23 00:04  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, doc/Makefile.am,
+	  doc/dovecot-ldap-example.conf, doc/dovecot-ldap.conf,
+	  doc/dovecot-sql-example.conf, doc/dovecot-sql.conf: Renamed
+	  dovecot-sql/ldap.conf to dovecot-sql/ldap-example.conf. make
+	  install now installs them to sysconfdir.
+
+2007-03-22 23:32  Timo Sirainen <tss@iki.fi>
+
+	* src/master/mail-process.c: If chdir() failed, we still gave wrong
+	  reason
+
+2007-03-22 15:59  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-storage.c: ~ in mbox root path
+	  wasn't expanded early enough
+
+2007-03-22 01:36  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/auth/passdb-passwd.c,
+	  src/auth/passdb-shadow.c: Added blocking=yes setting for passdb
+	  passwd and shadow also.
+
+2007-03-22 00:06  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: Removed security warnings from auth-master
+	  socket. They're not actually true. The clients can only look up
+	  userdb data, which is practically the same thing as what they can
+	  find from /etc/passwd (with system users of course).
+
+2007-03-21 22:52  Timo Sirainen <tss@iki.fi>
+
+	* src/master/mail-process.c: Use alarm() to make sure that chdir()
+	  returns in 30 seconds (NFS..). Also if chdir() failed, we could
+	  have used wrong errno in the checks.
+
+2007-03-21 22:00  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Check if struct stat has tv_nsec fields
+
+2007-03-21 21:57  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-sync-private.h,
+	  mbox-sync-rewrite.c, mbox-sync.c: Check if mbox has been modified
+	  externally before doing any dangerous writes. Also changed the
+	  old "space needed changed unexpectedly" assert to a more
+	  informative panic.
+
+2007-03-21 21:12  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-rewrite.c: Changed assert to
+	  more informative panic message.
+
+2007-03-21 20:31  Timo Sirainen <tss@iki.fi>
+
+	* src/master/mail-process.c: NFS check + chroots broke home
+	  directory for the first login.
+
+2007-03-21 20:12  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf, src/auth/auth-master-connection.c,
+	  src/auth/userdb-static.c: If doing a plain userdb lookup with
+	  userdb static, verify the user's existence from passdb first,
+	  unless allow_all_users=yes
+
+2007-03-21 20:06  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/auth-client.c: FAIL reply doesn't necessarily have
+	  parameters. Don't give "BUG: Unexpected input" if that happens.
+
+2007-03-21 19:22  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/: maildir-sync.c,
+	  maildir-uidlist.c, maildir-uidlist.h: If uidlist is deleted and
+	  we set the uidvalidity from the index file, set also next_uid.
+
+2007-03-21 19:19  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap/cmd-copy.c, lib-storage/mail-storage.h,
+	  lib-storage/index/maildir/maildir-sync.c: When copying/syncing a
+	  lot of mails, send "* OK Hang in there" replies to client every
+	  15 seconds so it doesn't just timeout the connection.
+
+2007-03-21 19:16  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/client.c: Keep better track of client->last_output
+	  timestamp.
+
+2007-03-20 15:00  Timo Sirainen <tss@iki.fi>
+
+	* src/util/: Makefile.am, idxview.c, logview.c: Added idxview and
+	  logview to dump index/cache/log file contents.
+
+2007-03-19 13:59  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-uidlist.c: If uidlist file
+	  doesn't exist but index files do, resync the maildir to create
+	  the uidlist.
+
+2007-03-19 13:43  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-idle.c: Assert-crashfix
+
+2007-03-17 15:42  Timo Sirainen <tss@iki.fi>
+
+	* src/pop3/main.c: We defaulted plugin_dir to <moduledir>/imap
+	  instead of /pop3.
+
+2007-03-17 15:28  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/file-dotlock.c: Log "kept it for n seconds", not -n
+	  seconds.
+
+2007-03-17 12:07  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Ignore -m "" parameter. Added -n option to
+	  not autocreate the mailbox. If saving to given mailbox fails,
+	  fallback to saving to INBOX.
+
+2007-03-16 16:10  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-transaction.c: Crashfix with nonsorted
+	  appends
+
+2007-03-16 16:02  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log.c: When marking transaction
+	  log corrupted, set indexid=0 instead of version=0.  Version
+	  setting worked too, but indexid=0 makes it log a "marked
+	  corrupted" error message.
+
+2007-03-16 15:44  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log.c: Creating initial
+	  transaction log file leaked memory, created the file twice and
+	  caused potential locking problems.
+
+2007-03-16 15:23  Timo Sirainen <tss@iki.fi>
+
+	* src/: auth/auth-worker-server.c,
+	  lib-auth/auth-server-connection.c: If net_connect_unix() fails,
+	  assume also that ECONNREFUSED may be a temporary failure. It can
+	  happen if we exceeded the listener's backlog.
+
+2007-03-16 15:11  Timo Sirainen <tss@iki.fi>
+
+	* configure.in: Link dovecot-auth always with -lcrypto if it's
+	  needed for crypt(). It could possibly be used with any passdb, so
+	  don't bother doing it only for a few of them.
+
+2007-03-15 15:52  Timo Sirainen <tss@iki.fi>
+
+	* src/: auth/main.c, deliver/deliver.c, imap/main.c,
+	  master/mail-process.c, master/main.c, pop3/main.c: Fixes to
+	  handling log prefixes. imap/pop3 processes now log the
+	  mail_log_prefix even when started with --exec-mail.
+
+2007-03-15 15:51  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/failures.c: i_set_failure_file() no longer automatically
+	  appends ": " to log prefixes.
+
+2007-03-15 14:38  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/: ioloop-epoll.c, ioloop-internal.h, ioloop-kqueue.c,
+	  ioloop-poll.c, ioloop-select.c, ioloop.c: If poll()/etc.
+	  timeouts, we didn't handle time timeouts immediately but called
+	  poll()/etc again with zero timeout and then handled the timeouts.
+
+2007-03-15 14:31  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/index-storage.c: Check for the index
+	  destroy timeouts a bit less often.
+
+2007-03-15 14:28  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/ioloop.c: If timeout wait time was less than 1
+	  millisecond, we wasted CPU calling poll() (or whatever) with zero
+	  timeout multiple times until the millisecond had passed. Now we
+	  round the waits up to next millisecond.
+
+2007-03-15 13:59  Timo Sirainen <tss@iki.fi>
+
+	* src/master/mail-process.c: Make processes created with
+	  --exec-mail log to the configured location.
+
+2007-03-15 13:58  Timo Sirainen <tss@iki.fi>
+
+	* src/lib/failures.c: Added missing LF from error message
+
+2007-03-15 13:48  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/cmd-append.c: Crashfix
+
+2007-03-15 12:04  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: Error handling crashfix
+
+2007-03-15 11:48  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/convert/convert-storage.c: INBOX wasn't converted.
+
+2007-03-15 01:50  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-cache.c: Error handling crashfix
+
+2007-03-15 01:05  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log.c: Don't give "Unexpected
+	  garbage at EOF" error if we don't see a full transaction header's
+	  worth of data. It could be just that another process is in the
+	  middle of writing the first header.
+
+2007-03-14 19:39  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index.c: Error handling crashfix
+
+2007-03-14 18:20  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-example.conf: blocking=yes setting was accidentally added
+	  to passdb passwd instead of userdb passwd.
+
+2007-03-14 18:14  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-ext.c: If new extension was
+	  introduced while we had already expunged some messages in the
+	  sync, we cleared existing expunge/sync extension contexts, which
+	  probably caused assert-crash.
+
+2007-03-14 16:17  Timo Sirainen <tss@iki.fi>
+
+	* src/: imap/cmd-list.c, lib-storage/index/maildir/maildir-sync.c,
+	  lib-storage/index/mbox/mbox-sync.c: Added casts to some enums to
+	  avoid compiler warnings.
+
+2007-03-14 14:42  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/userdb-passwd-file.c: Reverted the last change, it was
+	  originally correct after all.
+
+2007-03-14 13:59  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/userdb-passwd-file.c: Don't expand %variables in extra
+	  fields, let dovecot master do that.
+
+2007-03-14 13:49  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-index/mail-index-view-sync.c: View syncing fixes
+
+2007-03-14 12:46  Timo Sirainen <tss@iki.fi>
+
+	* src/imap/client.c: Code cleanup
+
+2007-03-14 12:42  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/auth-request.c: If unknown user was found from auth
+	  cache, we returned an invalid value instead of
+	  USERDB_RESULT_USER_UNKNOWN.
+
+2007-03-14 12:09  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync-private.h: uint8_t:1 is GCC
+	  extension, changed back to using unsigned int:1 although it takes
+	  a bit more memory now.
+
+2007-03-14 11:52  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/userdb-vpopmail.c: Compile fix
+
+2007-03-13 18:52  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, TODO, configure.in: 1.0.rc27 released
+
 2007-03-13 17:18  Timo Sirainen <tss@iki.fi>
 
 	* src/imap/cmd-create.c: If trying to create <mailbox><real

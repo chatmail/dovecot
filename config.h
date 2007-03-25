@@ -238,6 +238,9 @@
 /* Define if you have statvfs.f_mntfromname */
 /* #undef HAVE_STATVFS_MNTFROMNAME */
 
+/* Define if you have tv_nsec fields in struct stat */
+#define HAVE_STAT_TV_NSEC 
+
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
 
@@ -401,13 +404,13 @@
 #define PACKAGE_NAME "dovecot"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "dovecot 1.0.rc27"
+#define PACKAGE_STRING "dovecot 1.0.rc28"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "dovecot"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.0.rc27"
+#define PACKAGE_VERSION "1.0.rc28"
 
 /* Build with BSD authentication support */
 /* #undef PASSDB_BSDAUTH */
@@ -512,7 +515,7 @@
 #define VA_COPY_AS_ARRAY 1
 
 /* Version number of package */
-#define VERSION "1.0.rc27"
+#define VERSION "1.0.rc28"
 
 /* Define to 1 if your processor stores words with the most significant byte
    first (like Motorola and SPARC, unlike Intel and VAX). */

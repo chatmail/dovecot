@@ -341,6 +341,7 @@ mbox_create(const char *data, const char *user, enum mail_storage_flags flags,
 		size_t len = strlen(root_dir);
 		if (root_dir[len-1] == '/')
 			root_dir = t_strndup(root_dir, len-1);
+		root_dir = home_expand(root_dir);
 
 		/* make sure the directory exists */
 		if (*root_dir == '\0' ||
@@ -378,7 +379,7 @@ mbox_create(const char *data, const char *user, enum mail_storage_flags flags,
 	istorage->storage = mbox_storage;
 	istorage->storage.pool = pool;
 
-	istorage->dir = p_strdup(pool, home_expand(root_dir));
+	istorage->dir = p_strdup(pool, root_dir);
 	istorage->inbox_path = p_strdup(pool, home_expand(inbox_file));
 	istorage->index_dir = p_strdup(pool, home_expand(index_dir));
 	istorage->user = p_strdup(pool, user);

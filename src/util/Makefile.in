@@ -32,7 +32,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-pkglibexec_PROGRAMS = rawlog$(EXEEXT) gdbhelper$(EXEEXT)
+pkglibexec_PROGRAMS = rawlog$(EXEEXT) gdbhelper$(EXEEXT) \
+	idxview$(EXEEXT) logview$(EXEEXT)
 sbin_PROGRAMS = dovecotpw$(EXEEXT)
 subdir = src/util
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
@@ -56,6 +57,12 @@ dovecotpw_DEPENDENCIES = ../auth/libpassword.a ../lib-ntlm/libntlm.a \
 am_gdbhelper_OBJECTS = gdbhelper.$(OBJEXT)
 gdbhelper_OBJECTS = $(am_gdbhelper_OBJECTS)
 gdbhelper_DEPENDENCIES = ../lib/liblib.a
+am_idxview_OBJECTS = idxview.$(OBJEXT)
+idxview_OBJECTS = $(am_idxview_OBJECTS)
+idxview_DEPENDENCIES = ../lib/liblib.a
+am_logview_OBJECTS = logview.$(OBJEXT)
+logview_OBJECTS = $(am_logview_OBJECTS)
+logview_DEPENDENCIES = ../lib/liblib.a
 am_rawlog_OBJECTS = rawlog.$(OBJEXT)
 rawlog_OBJECTS = $(am_rawlog_OBJECTS)
 rawlog_DEPENDENCIES = ../lib/liblib.a
@@ -71,9 +78,10 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(dovecotpw_SOURCES) $(gdbhelper_SOURCES) $(rawlog_SOURCES)
+SOURCES = $(dovecotpw_SOURCES) $(gdbhelper_SOURCES) $(idxview_SOURCES) \
+	$(logview_SOURCES) $(rawlog_SOURCES)
 DIST_SOURCES = $(dovecotpw_SOURCES) $(gdbhelper_SOURCES) \
-	$(rawlog_SOURCES)
+	$(idxview_SOURCES) $(logview_SOURCES) $(rawlog_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -205,6 +213,8 @@ top_srcdir = @top_srcdir@
 pkglibexecdir = $(libexecdir)/dovecot
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-mail \
+	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/auth
 
 rawlog_LDADD = \
@@ -218,6 +228,18 @@ gdbhelper_LDADD = \
 
 gdbhelper_SOURCES = \
 	gdbhelper.c
+
+idxview_LDADD = \
+	../lib/liblib.a
+
+idxview_SOURCES = \
+	idxview.c
+
+logview_LDADD = \
+	../lib/liblib.a
+
+logview_SOURCES = \
+	logview.c
 
 dovecotpw_LDADD = \
 	../auth/libpassword.a \
@@ -325,6 +347,12 @@ dovecotpw$(EXEEXT): $(dovecotpw_OBJECTS) $(dovecotpw_DEPENDENCIES)
 gdbhelper$(EXEEXT): $(gdbhelper_OBJECTS) $(gdbhelper_DEPENDENCIES) 
 	@rm -f gdbhelper$(EXEEXT)
 	$(LINK) $(gdbhelper_OBJECTS) $(gdbhelper_LDADD) $(LIBS)
+idxview$(EXEEXT): $(idxview_OBJECTS) $(idxview_DEPENDENCIES) 
+	@rm -f idxview$(EXEEXT)
+	$(LINK) $(idxview_OBJECTS) $(idxview_LDADD) $(LIBS)
+logview$(EXEEXT): $(logview_OBJECTS) $(logview_DEPENDENCIES) 
+	@rm -f logview$(EXEEXT)
+	$(LINK) $(logview_OBJECTS) $(logview_LDADD) $(LIBS)
 rawlog$(EXEEXT): $(rawlog_OBJECTS) $(rawlog_DEPENDENCIES) 
 	@rm -f rawlog$(EXEEXT)
 	$(LINK) $(rawlog_OBJECTS) $(rawlog_LDADD) $(LIBS)
@@ -337,6 +365,8 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dovecotpw.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gdbhelper.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/idxview.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/logview.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rawlog.Po@am__quote@
 
 .c.o:
