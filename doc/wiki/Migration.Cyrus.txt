@@ -1,0 +1,27 @@
+Cyrus
+=====
+
+See cyrus2courier [http://madness.at/projects/], it is Dovecot-compatible.
+Cyrus2courier is also mirrored at dovecot.org [http://dovecot.org/tools/].
+
+For POP3 UIDL compatibility, use one of:
+
+Cyrus versions up to v2.1.3:
+  ---%<-----------------------------------------------------------------------
+  #  Cyrus (old format - up to v2.1.3)
+  pop3_uidl_format = %u
+  ---%<-----------------------------------------------------------------------
+
+Cyrus versions v2.1.4 and newer:
+  ---%<-----------------------------------------------------------------------
+  #  Cyrus (new format - v2.1.4 and above)
+  pop3_uidl_format = %v.%u
+  ---%<-----------------------------------------------------------------------
+
+See http://www.majid.info/mylos/weblog/2006/03/08-1.html for an alternative
+migration script (in Python) for Cyrus IMAPd 2.2, which will preserve delivery
+timestamps and the \Seen flags.
+
+You can also use imapsync, as described in the <Migration.txt> page, but you'll
+
+(This file was created from the wiki on 2007-03-30 04:42)

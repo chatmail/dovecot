@@ -1,3 +1,23 @@
+v1.0.rc29 2007-03-28  Timo Sirainen <tss@iki.fi>
+
+	* Security fix: If zlib plugin was loaded, it was possible to open
+	  gzipped mbox files outside the user's mail directory.
+
+	+ Added auth_gssapi_hostname setting.
+	- IMAP: LIST "" "" didn't return anything if there didn't exist a
+	  namespace with empty prefix. This broke some clients.
+	- If Dovecot is tried to be started when it's already running, don't
+	  delete existing auth sockets and break the running Dovecot
+	- If deliver failed too early it still returned exit code 89 instead
+	  of EX_TEMPFAIL.
+	- deliver: INBOX fallbacking with -n parameter wasn't working.
+	- passdb passwd and shadow couldn't be used as master or deny databases
+	- IDLE: inotify didn't notice changes in mbox file
+	- If index file directory couldn't be created, disable indexes instead
+	  of failing to open the mailbox.
+	- rawlog wasn't working with chrooting
+	- Several other minor fixes
+
 v1.0.rc28 2007-03-23  Timo Sirainen <tss@iki.fi>
 
 	* deliver + userdb static: Verify the user's existence from passdb,

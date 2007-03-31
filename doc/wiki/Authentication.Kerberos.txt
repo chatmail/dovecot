@@ -1,0 +1,85 @@
+Kerberos
+========
+
+Dovecot supports Kerberos 5 using GSSAPI. The Kerberos authentication mechanism
+doesn't require having a<passdb> [PasswordDatabase.txt], but you do need a
+<userdb> [UserDatabase.txt] so Dovecot can lookup user-specific information,
+such as where their mailboxes are stored.
+
+*Note:* If you only wish to authenticate clients using their Kerberos
+/passphrase/ (as opposed to ticket authentication), you will probably want to
+use<PAM> [PasswordDatabase.PAM.txt] authentication with 'pam_krb5.so' instead.
+
+Pre-requisites
+--------------
+
+This document assumes that you already have a Kerberos Realm up and functioning
+correctly at your site, and that each host in your realm also has a host
+/keytab/ installed in the appropriate location.
+
+For Dovecot, you will need to install the appropriate /service/ keys on your
+server.  By default, Dovecot will look for these in the host's keytab file,
+typically '/etc/krb5.keytab', but you can specify an alternate path using the
+'auth_krb5_keytab' configuration entry in dovecot.conf.  If you wish to provide
+an IMAP service, you will need to install a service ticket of the form
+'imap/hostname@REALM'.  For POP3, you will need a service ticket of the form
+'pop/hostname@REALM'.
+
+Example dovecot.conf configurations
+-----------------------------------
+
+If you only want to use Kerberos ticket-based authentication:
+
+---%<-------------------------------------------------------------------------
+auth default {
+  mechanisms = gssapi
+  userdb static {
+    args = uid=vmail gid=vmail home=/var/vmail/%u
+  }
+}
+---%<-------------------------------------------------------------------------
+
+(In this virtual-hosting example, all mail is stored in /var/vmail/$username
+with uid and gid set to 'vmail')
+
+If you also want to support plaintext authentication in addition to
+ticket-based authentication, you will need something like:
+
+---%<-------------------------------------------------------------------------
+auth default {
+  mechanisms = plain gssapi
+  passdb pam {
+  }
+  userdb passwd {
+  }
+}
+---%<-------------------------------------------------------------------------
+
+(Note that in this example, you will also need to configure PAM to use
+whichever authentication backends are appropriate for your site.)
+
+Client support
+--------------
+
+Mail clients that support Kerberos GSSAPI authentication include:
+
+ * Evolution
+ * Mozilla Thunderbird
+ * Mutt
+ * UW Pine
+
+Testing
+-------
+
+*FIXME*: This section requires cleanup.
+
+The test:
+
+ * Setup mutt in /etc/Muttrc to use kerberos using gssapi and imap
+   configuration
+ * run kinit (type in password for kerb)
+ * run command mutt
+ * If you get error No Authentication Method
+    * run command klist (list all kerberos keys) should show imap/HOSTNAME
+
+(This file was created from the wiki on 2007-03-30 04:42)

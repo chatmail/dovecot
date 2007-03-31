@@ -1,0 +1,17 @@
+Listening on additional ports
+=============================
+
+Here's a little trick to get servers to listen on additional ports. This can be
+used for SMTP as well or any other protocol.
+
+with Linux
+==========
+
+This requires netfilter compiled into the kernel or loaded as module and the
+user-space iptables command:
+
+---%<-------------------------------------------------------------------------
+iptables -v -t nat -A PREROUTING -p tcp -j REDIRECT --dport 109 --to-ports 110
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2007-03-30 04:42)

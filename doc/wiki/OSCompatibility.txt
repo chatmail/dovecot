@@ -1,0 +1,13 @@
+Operating System Compatibility
+==============================
+
+There is one slightly problematic feature that Dovecot requires: *SCM_RIGHTS.*
+It is used for privilege separation. If it is not supported, you can still use
+inetd and mailfront [http://untroubled.org/mailfront/], which executes
+Dovecot's IMAP or POP3 binary.
+
+Dovecot should compile with any ANSI-C99 compiler. Besides GCC, Dovecot is
+known to compile (at least once in its lifetime:) with Intel CC
+[http://www.intel.com/software/products/compilers/clin/], Tiny CC
+
+(This file was created from the wiki on 2007-03-30 04:42)

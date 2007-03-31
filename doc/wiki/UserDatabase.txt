@@ -1,0 +1,33 @@
+User Databases
+==============
+
+Dovecot obtains a user's <UNIX user ID (UID), UNIX group ID (GID)>
+[UserIds.txt], home directory and<mail location> [MailLocation.txt] from the
+user database after the user has been authenticated. The user database may also
+return<extra fields> [UserDatabase.ExtraFields.txt] which are sent to the
+IMAP/POP3 process in environment variables.
+
+The user and password databases may be the same or they may be different
+depending on your needs. You can also have<multiple databases>
+[Authentication.MultipleDatabases.txt].
+
+For more information about UID and GID, see <UserIds.txt>.
+
+For more information about home directory and mail location, see
+<MailLocation.txt>.
+
+Currently supported user databases are:
+
+ * <Passwd> [AuthDatabase.Passwd.txt]: '/etc/passwd' or similiar (using
+   'getpwnam()' function)
+ * <Passwd-file> [AuthDatabase.PasswdFile.txt]: '/etc/passwd'-like file in
+   specified location
+ * <LDAP> [AuthDatabase.LDAP.txt]: Lightweight Directory Access Protocol
+ * <SQL> [AuthDatabase.SQL.txt]: SQL database (PostgreSQL, MySQL, SQLite)
+ * <Static> [UserDatabase.Static.txt]: Userdb information generated from a
+   given template
+ * <VPopMail> [AuthDatabase.VPopMail.txt]: External software used to handle
+   virtual domains
+ * <Prefetch> [UserDatabase.Prefetch.txt]: This assumes that the passdb already
+
+(This file was created from the wiki on 2007-03-30 04:42)

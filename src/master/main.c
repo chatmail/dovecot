@@ -41,7 +41,7 @@ static const char *env_tz;
 
 struct ioloop *ioloop;
 struct hash_table *pids;
-int null_fd, inetd_login_fd;
+int null_fd = -1, inetd_login_fd;
 uid_t master_uid;
 char program_path[PATH_MAX];
 char ssl_manual_key_password[100];
@@ -521,14 +521,16 @@ static bool have_stderr(struct server_settings *server)
 	return FALSE;
 }
 
-static void open_fds(void)
+static void open_null_fd(void)
 {
-	/* initialize fds. */
 	null_fd = open("/dev/null", O_RDONLY);
 	if (null_fd == -1)
 		i_fatal("Can't open /dev/null: %m");
 	fd_close_on_exec(null_fd, TRUE);
+}
 
+static void open_fds(void)
+{
 	/* make sure all fds between 0..3 are used. */
 	while (null_fd < 4) {
 		null_fd = dup(null_fd);
@@ -804,6 +806,9 @@ int main(int argc, char *argv[])
 			i_fatal("Unknown argument: %s", argv[1]);
 		}
 	}
+
+	/* need to have this open before reading settings */
+	open_null_fd();
 
 	if (getenv("DOVECOT_INETD") != NULL) {
 		/* starting through inetd. */

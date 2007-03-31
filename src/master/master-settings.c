@@ -70,6 +70,7 @@ static struct setting_def auth_setting_defs[] = {
 	DEF(SET_STR, master_user_separator),
 	DEF(SET_STR, anonymous_username),
 	DEF(SET_STR, krb5_keytab),
+	DEF(SET_STR, gssapi_hostname),
 
 	DEF(SET_BOOL, verbose),
 	DEF(SET_BOOL, debug),
@@ -288,6 +289,7 @@ struct auth_settings default_auth_settings = {
 	MEMBER(master_user_separator) "",
 	MEMBER(anonymous_username) "anonymous",
 	MEMBER(krb5_keytab) "",
+	MEMBER(gssapi_hostname) "",
 
 	MEMBER(verbose) FALSE,
 	MEMBER(debug) FALSE,
@@ -495,10 +497,27 @@ static void unlink_auth_sockets(const char *path, const char *prefix)
 		if (lstat(str_c(str), &st) < 0) {
 			if (errno != ENOENT)
 				i_error("lstat(%s) failed: %m", str_c(str));
-		} else if (S_ISSOCK(st.st_mode)) {
-			if (unlink(str_c(str)) < 0 && errno != ENOENT)
-				i_error("unlink(%s) failed: %m", str_c(str));
+			continue;
 		}
+		if (!S_ISSOCK(st.st_mode))
+			continue;
+
+		/* try to avoid unlinking sockets if someone's already
+		   listening in them. do this only at startup, because
+		   when SIGHUPing a child process might catch the new
+		   connection before it notices that it's supposed
+		   to die. null_fd == -1 check is a bit kludgy, but works.. */
+		if (null_fd == -1) {
+			int fd = net_connect_unix(str_c(str));
+			if (fd != -1 || errno != ECONNREFUSED) {
+				i_fatal("Dovecot is already running? "
+					"Socket already exists: %s",
+					str_c(str));
+			}
+		}
+
+		if (unlink(str_c(str)) < 0 && errno != ENOENT)
+			i_error("unlink(%s) failed: %m", str_c(str));
 	}
 	(void)closedir(dirp);
 }

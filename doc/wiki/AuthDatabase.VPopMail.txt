@@ -1,0 +1,12 @@
+VPopMail
+========
+
+This is an external software intended to make handling virtual domains easier.
+Supports Qmail and Postfix. See http://inter7.com/vpopmail.html
+
+If the vpopmail database contains plaintext passwords, it can be used for
+non-plaintext authentication as well.
+
+You can use auth_cache with VPopMail if you give 'cache_key' parameter. See
+
+(This file was created from the wiki on 2007-03-30 04:42)

@@ -1,0 +1,92 @@
+mbox problems
+=============
+
+External modifications
+----------------------
+
+In general Dovecot doesn't mind if you modify the mbox file externally. It's
+fine if external software expunges messages or appends new ones. However moving
+around existing messages, inserting messages in the middle of the file or
+modifying existing messages isn't allowed.
+
+Especially modifying existing messages (eg. removing attachments) may cause all
+kinds of problems. If you do that, at the minimum go and delete
+'dovecot.index.cache' file from the mailbox, otherwise weird things may happen.
+However IMAP protocol guarantees that messages don't change at all, and
+deleting Dovecot's cache file doesn't clear clients' local caches, so it still
+may not work right.
+
+If you insert messages, or if you "undelete" messages (eg. replace mbox from a
+backup), you may see errors in Dovecot's logs:
+
+---%<-------------------------------------------------------------------------
+mbox sync: UID inserted in the middle of mailbox /home/tss/mail/inbox (817 >
+787, seq=18, idx_msgs=32)
+---%<-------------------------------------------------------------------------
+
+This is normal. Dovecot just assigned new UIDs for the messages.
+
+Debugging UID insertions
+------------------------
+
+The above message can be read as: "18th message in the mbox file contained
+X-UID:787 header, however the index file at that position told the message was
+supposed to have UID 817. There are 32 messages currently in the index file."
+
+There are four possibilities why the error message could happen:
+
+ 1. Message with a X-UID: 787 header really was inserted in the mbox file.
+ 2. Something changed the X-UID headers. I don't think any existing software
+    can cause this.
+ 3. The message was expunged from the index file, but for some reason it wasn't
+    expunged from the mbox file. The index file is updated only after a
+    successful mbox file modification, so this shouldn't really happen either.
+ 4. If this problem happens constantly, it could mean that you're using the
+    same index file to access multiple different mboxes! For example this could
+    happen if you let Dovecot do mailbox autodetection and it sometimes uses
+    '/var/mail/%u' (when it exists) and other times '~/mail/inbox'.
+
+It's possible that broken X-UID headers in mails and 'mbox_lazy_writes=yes'
+combination has some bugs. If you're able to reproduce such an error, please
+let me know how. Dovecot versions earlier than 1.0.rc27 have some known bugs.
+
+Crashes
+-------
+
+Dovecot's mbox code is a bit fragile because of the way it works. However
+instead of just corrupting the mbox file, it usually assert-crashes whenever it
+notices an inconsistency. You may see crashes such as:
+
+---%<-------------------------------------------------------------------------
+file mbox-sync-rewrite.c: line 404 (mbox_sync_read_and_move): assertion failed:
+(need_space == (uoff_t)-mails[idx].space)
+---%<-------------------------------------------------------------------------
+
+This is a bit difficult problem to fix. Usually this crash has been related to
+Dovecot rewriting some headers that were broken. If you see these crashes, it
+would really help if you were able to reproduce the crash.
+
+If you have such a mailbox which crashes every time when it's tried to be
+opened, please put the mbox through mbox anonymizer
+[http://dovecot.org/tools/mbox-anonymize.pl] and send it, the mailbox's
+'dovecot.index' and 'dovecot.index.log' files to tss@iki.fi. None of those
+files contain any actual message contents so it's be safe to send them.
+
+Avoiding crashes and errors
+---------------------------
+
+Since the problems usually have been related to broken headers, you should be
+able to avoid them by filtering out all the Dovecot's internal metadata
+headers. This is a good idea to do in any case. If you use<Dovecot LDA>
+[LDA.txt] it does this filtering automatically. Otherwise you could do this in
+your SMTP server. The headers that you should filter out are:
+
+ * Content-Length
+ * Status
+ * X-IMAP
+ * X-IMAPbase
+ * X-Keywords
+ * X-Status
+ * X-UID
+
+(This file was created from the wiki on 2007-03-30 04:42)

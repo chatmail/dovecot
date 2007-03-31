@@ -421,8 +421,6 @@ static void open_logfile(const char *username)
 {
 	const char *prefix, *log_path, *stamp;
 
-	i_set_failure_exit_callback(failure_exit_callback);
-
 	prefix = t_strdup_printf("deliver(%s)", username);
 	log_path = getenv("LOG_PATH");
 	if (log_path == NULL || *log_path == '\0') {
@@ -471,6 +469,8 @@ int main(int argc, char *argv[])
 	struct mail *mail;
 	uid_t process_euid;
 	int i, ret;
+
+	i_set_failure_exit_callback(failure_exit_callback);
 
 	lib_init();
 	ioloop = io_loop_create(default_pool);
@@ -650,7 +650,7 @@ int main(int argc, char *argv[])
 	storage = mail_storage_create_with_data(mail_env, destination,
 						flags, lock_method);
 	if (storage == NULL) {
-		i_fatal_status(EX_CONFIG,
+		i_fatal_status(EX_TEMPFAIL,
 			"Failed to create storage for '%s' with mail '%s'",
 			destination, mail_env == NULL ? "(null)" : mail_env);
 	}
@@ -682,12 +682,12 @@ int main(int argc, char *argv[])
 		/* plugins didn't handle this. save into the default mailbox. */
 		i_stream_seek(input, 0);
 		ret = deliver_save(storage, mailbox, mail, 0, NULL);
-		if (ret < 0 && strcasecmp(mailbox, "INBOX") != 0) {
-			/* still didn't work. try once more to save it
-			   to INBOX. */
-			i_stream_seek(input, 0);
-			ret = deliver_save(storage, "INBOX", mail, 0, NULL);
-		}
+	}
+	if (ret < 0 && strcasecmp(mailbox, "INBOX") != 0) {
+		/* still didn't work. try once more to save it
+		   to INBOX. */
+		i_stream_seek(input, 0);
+		ret = deliver_save(storage, "INBOX", mail, 0, NULL);
 	}
 
 	if (ret < 0) {

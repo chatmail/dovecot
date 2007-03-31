@@ -65,7 +65,7 @@ static bool event_read_next(struct ioloop *ioloop)
 		i_fatal("gettimeofday(): %m");
 	ioloop_time = ioloop_timeval.tv_sec;
 
-	while ((size_t)required_bytes > sizeof(*event)) {
+	while ((size_t)required_bytes >= sizeof(*event)) {
 		for (io = ioloop->notifys; io != NULL; io = io->next) {
 			struct inotify_io *iio = (struct inotify_io *)io;
 

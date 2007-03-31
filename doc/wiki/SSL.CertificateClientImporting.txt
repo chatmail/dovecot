@@ -1,0 +1,35 @@
+SSL certificate importing to clients
+====================================
+
+You may import either the server's self-signed certificate or the CA
+certificate (see<SSL.CertificateCreation.txt>).
+
+Windows XP
+----------
+
+Import to Trusted Root Certification Authorities store: 
+http://www.microsoft.com/resources/documentation/windows/xp/all/proddocs/en-us/sag_cmprocsimport.mspx?mfr=true
+
+Outlook and Outlook Express uses the Windows's certificate store.
+
+Mac OS X
+--------
+
+ * Doubleclick the certificate
+ * Keychain should open
+ * Add the certificate to X509 Anchors keychain
+
+Apple Mail uses the OS X's certificate store.
+
+Thunderbird
+-----------
+
+Preferences -> Privacy -> Security -> View Certificates -> Authorities ->
+Import -> Trust this CA to identify email users.
+
+Evolution
+---------
+
+Preferences -> Certificates -> Authorities -> Import -> Trust this CA to
+
+(This file was created from the wiki on 2007-03-30 04:42)

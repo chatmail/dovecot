@@ -1,0 +1,14 @@
+SSL
+===
+
+ * <Creating SSL certificates> [SSL.CertificateCreation.txt]
+ * <Configuring Dovecot to use SSL certificates> [SSL.DovecotConfiguration.txt]
+
+ * <Importing CAs and self-signed SSL certificates to clients>
+   [SSL.CertificateClientImporting.txt]
+ * SSL works pretty much the same universally, so for more information about
+   SSL you can see for example Apache's documentation
+   [http://httpd.apache.org/docs/2.2/ssl/].
+ * Dovecot uses OpenSSL, so whatever information you find about it applies also
+
+(This file was created from the wiki on 2007-03-30 04:42)

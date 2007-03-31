@@ -1,0 +1,72 @@
+Dictionary quota
+================
+
+The /dictionary/ quota backend supports both *storage* and *messages* quota
+limits. The current quota is kept in a dictionary. Currently (as of 1.0.beta9
+and later), the only supported dictionary backend is MySQL.
+
+The plugin parameter format is 'dict:<quota limits> <dictionary URI>'. For
+example:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  # 10MB and 1000 messages quota limit
+  quota = dict:storage=10240:messages=1000 mysql:/etc/dovecot-dict-quota.conf
+}
+---%<-------------------------------------------------------------------------
+
+However, *the above example won't really work*. This is because it would
+require linking all the binaries with MySQL library, which I didn't really want
+to do. Currently you'll have to do this via the dictionary proxy (see below).
+Actually the performance is better that way anyway, and I don't really see a
+reason not to use it.
+
+Example 'dovecot-dict-quota.conf':
+
+---%<-------------------------------------------------------------------------
+connect = host=localhost dbname=mails user=mailuser
+table = quota
+select_field = current
+where_field = path
+username_field = username
+---%<-------------------------------------------------------------------------
+
+Create the table like this:
+
+---%<-------------------------------------------------------------------------
+create table quota (
+  username varchar(255) not null,
+  path varchar(255) not null,
+  current integer,
+  primary key (username, path)
+);
+---%<-------------------------------------------------------------------------
+
+Dictionary proxy server
+-----------------------
+
+To avoid each process making a new SQL connection, you can make all dictionary
+communications go through a dictionary server process which keeps the
+connections permanently open. (1.0 RC1 and later)
+
+The dictionary server is referenced with URI 'proxy:<dictionary server socket
+path>:<dictionary name>'. The socket path may be left empty if you haven't
+changed 'base_dir' setting in 'dovecot.conf'. Otherwise set it to
+'<base_dir>/dict-server'. The dictionary names are configured in dovecot.conf.
+For example:
+
+---%<-------------------------------------------------------------------------
+dict {
+  quotadict = mysql:/etc/dovecot-dict-quota.conf
+}
+---%<-------------------------------------------------------------------------
+
+Example quota plugin configuration for this:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  quota = dict:storage=10240:messages=1000 proxy::quotadict
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2007-03-30 04:42)

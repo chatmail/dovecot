@@ -1,0 +1,87 @@
+Login processes
+===============
+
+The main purpose of login processes is to handle the IMAP and POP3 connections
+before the user has logged in. The login processes don't need to be able to do
+anything else than let the user log in, so they can run in highly restricted
+environment. By default they are run as a non-privileged "dovecot" user
+chrooted into a non-writable directory containing only authentication UNIX
+sockets.
+
+Login processes also handle proxying the SSL and TLS connections even after the
+user has logged in. This way all the SSL code runs in the same restricted
+environment, which means that a security hole in the SSL library gives the
+attacker access only to the restricted chroot, rather than possibly all the
+users' mails.
+
+The default login settings should be good enough for small sites. There are two
+ways to run the login processes: the high-security mode and the
+high-performance mode. Both are discussed separately below.
+
+Login process creation
+----------------------
+
+'login_process_count' and 'login_max_processes_count' setting control how new
+login processes are created.'login_process_count' specifies the number of login
+processes that are tried to be kept listening for new connections. However when
+a lot of connections arrive at the same time this number will increase
+automatically as described below.
+
+To prevent fork-bombing Dovecot's login process creation works in a similiar
+way to Apache: Initially set "wanted listening process count" to same as
+'login_process_count' and start the processes. Then check every second if we
+need to start up new processes to keep the listening process count the same as
+the wanted count. If all the listening processes have been used, double the
+wanted count. If we haven't used all of them, decrease the wanted count by one
+(unless it goes below 'login_process_count'), but don't destroy already created
+processes.'login_max_processes_count' specifies the maximum number of login
+processes there can exist at a time (listening, non-listening and
+SSL/TLS-proxying processes combined).
+
+High-security mode
+------------------
+
+Setting 'login_process_per_connection=yes' enables the high-security mode. This
+is the default. It works by using a new imap-login or pop3-login process for
+each incoming connection. Since the processes run in a highly restricted
+chroot, running each connection in a separate process means that in case there
+is a security hole in Dovecot's pre-authentication code or in the SSL library,
+the attacker can't see other users' connections and can't really do anything
+destructive.
+
+Since one login process can handle only one connection,
+'login_max_processes_count' limits the number of users that can be logging in
+at the same time. Currently SSL/TLS proxying processes are also counted here,
+so if you're using SSL/TLS you'll need to make sure this count is higher than
+the maximum number of users that can be logged in simultaneously.
+
+If the maximum login process count is reached, the oldest process in logging-in
+state (ie. non-proxying) is destroyed.
+
+'login_max_connections' setting is completely ignored in this mode.
+
+'login_process_size' should be fine at its default 32MB value.
+
+High-performance mode
+---------------------
+
+Setting 'login_process_per_connection=no' enables the high-performance mode. It
+works by using a number of long running login processes, each handling a number
+of connections. This loses much of the security benefits of the login process
+design, because in case of a security hole the attacker is now able to see
+other users logging in and steal their passwords.
+
+Login process creation rules apply just the same for this mode, but a process
+is counted as "non-listening" only when it's handling 'login_max_connections'
+connections already. So a new login process is created only when one of the
+existing ones has used up all its connections and gone into non-listening
+state. The maximum number of users logging in at the same time (+ SSL/TLS
+proxying connections) is 'login_max_connections' * 'login_max_processes_count'.
+
+You should make sure that the process has at least 16 + 'login_max_connections'
+* 2 available file descriptors.
+
+If you're using SSL/TLS you might want to increase the 'login_process_size'.
+With the default 32MB Dovecot itself should be able to handle a few thousand
+
+(This file was created from the wiki on 2007-03-30 04:42)

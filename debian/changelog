@@ -1,3 +1,10 @@
+dovecot (1.0.rc29-1) unstable; urgency=low
+
+  * New upstream release.
+  * debian/rules: ship convert-tool in dovecot-common. (Closes: #416909)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sat, 31 Mar 2007 14:15:39 +0200
+
 dovecot (1.0.rc28-1) unstable; urgency=low
 
   * New upstream release.

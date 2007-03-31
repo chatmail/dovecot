@@ -1,0 +1,9 @@
+Dovecot Design
+==============
+
+ * <Overview of Dovecot processes> [Design.Processes.txt]
+ * <Design of index files> [Design.Indexes.txt]
+    * <API for accessing the index files> [Design.Indexes.MailIndexApi.txt]
+ * <Design of authentication process> [Design.AuthProcess.txt]
+
+(This file was created from the wiki on 2007-03-30 04:42)

@@ -1,0 +1,35 @@
+Multiple Authentication Databases
+=================================
+
+Dovecot supports defining multiple authentication databases, so that if the
+password doesn't match in the first database, it checks the next one. This can
+be useful if you want to easily support having both local system users in
+/etc/passwd and virtual users.
+
+Currently the fallbacking works only with PLAIN authentication mechanism.
+
+This can be configured in the following way:
+
+---%<-------------------------------------------------------------------------
+auth default {
+  mechanisms = plain
+
+  # try to authenticate using SQL database first
+  passdb sql {
+    args = /etc/dovecot-sql.conf
+  }
+  # fallback to PAM
+  passdb pam {
+  }
+
+  # look up users from SQL first (even if authentication was done using PAM!)
+  userdb sql {
+    args = /etc/dovecot-sql.conf
+  }
+  # if not found, fallback to /etc/passwd
+  userdb passwd {
+  }
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2007-03-30 04:42)

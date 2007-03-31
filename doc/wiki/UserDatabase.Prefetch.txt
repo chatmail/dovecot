@@ -1,0 +1,76 @@
+Prefetch User Database
+======================
+
+If you want to reduce the SQL or LDAP lookups from passdb + userdb lookup to
+just one lookup, you can do it by using prefetch userdb and making the passdb
+query return also the userdb information. The userdb field names must be
+prefixed with 'userdb_'.
+
+If you're using Dovecot's <local delivery agent> [LDA.txt], you'll still need a
+valid userdb which it can use to locate the users. You can do this by adding a
+normal sql/ldap userdb after userdb prefetch.
+
+LDAP's 'auth_bind_userdn=yes' setting is incompatible with prefetch, because no
+passdb lookup is done then.
+
+SQL example
+-----------
+
+'dovecot.conf':
+
+---%<-------------------------------------------------------------------------
+passdb sql {
+  args = /etc/dovecot-sql.conf
+}
+userdb prefetch {
+}
+# The userdb below is used only by deliver.
+userdb sql {
+  args = /etc/dovecot-sql.conf
+}
+---%<-------------------------------------------------------------------------
+
+'dovecot-sql.conf':
+
+---%<-------------------------------------------------------------------------
+# NOTE: '\' line splitting is used only for readability, currently Dovecot
+doesn't support it
+password_query = SELECT password, \
+  home AS userdb_home, uid AS userdb_uid, gid AS userdb_gid \
+  FROM users \
+  WHERE userid = '%u'
+
+# For deliver:
+user_query = SELECT home, uid, gid FROM users WHERE userid = '%u'
+---%<-------------------------------------------------------------------------
+
+LDAP example
+------------
+
+'dovecot.conf':
+
+---%<-------------------------------------------------------------------------
+passdb ldap {
+  args = /etc/dovecot-ldap.conf
+}
+userdb prefetch {
+}
+# The userdb below is used only by deliver.
+userdb ldap {
+  args = /etc/dovecot-ldap.conf
+}
+---%<-------------------------------------------------------------------------
+
+'dovecot-ldap.conf':
+
+---%<-------------------------------------------------------------------------
+# NOTE: '\' line splitting is used only for readability, currently Dovecot
+doesn't support it
+pass_attrs = uid=user,userPassword=password, \
+  homeDirectory=userdb_home,uidNumber=userdb_uid,gidNumber=userdb_gid
+
+# For deliver:
+user_attrs = homeDirectory=home,uidNumber=uid,gidNumber=gid
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2007-03-30 04:42)

@@ -1,0 +1,95 @@
+ 1. Dovecot Logging
+     1. Internal Errors
+     2. Changing Log File Paths
+     3. Rotating Logs
+
+Dovecot Logging
+===============
+
+By default Dovecot starts logging to syslog using mail facility. In most
+operating systems this goes to '/var/log/mail.log', '/var/log/maillog' or
+something similar. If there is anything wrong with your configuration or if
+something crashes,*Dovecot will always log the error message*. It's extremely
+rare that Dovecot dies without giving any sort of error message, so make sure
+you're looking at the correct log file.
+
+NOTE: Error messages may be logged into a different log file than the
+informational log lines! Some syslogs are by default configured to log mail
+error messages into a different log file.
+
+After you start Dovecot, make sure that you can find a line similar to this:
+
+---%<-------------------------------------------------------------------------
+dovecot: Jan 07 14:22:40 Info: Dovecot v1.0.rc19 starting up
+---%<-------------------------------------------------------------------------
+
+However, the above message is logged into informational log, which may or may
+not be where the error messages are logged.
+
+In 1.0.rc20 and later, you can use 'dovecot --log-error' command line option to
+find the error log. It will log a line:
+
+---%<-------------------------------------------------------------------------
+dovecot: Jan 27 03:44:21 Fatal: This is Dovecot's error log
+---%<-------------------------------------------------------------------------
+
+Internal Errors
+---------------
+
+If IMAP or POP3 processes encounter some error, they don't show the exact
+reason for clients. Instead they show:
+
+---%<-------------------------------------------------------------------------
+Internal error occurred. Refer to server log for more information. [2006-01-07
+22:35:11]
+---%<-------------------------------------------------------------------------
+
+The point is that whenever anything unexpected happens, Dovecot doesn't leak
+any extra information about it to clients. They don't need it and they might
+try to exploit it in some ways, so the less they know the better.
+
+The real error message is written to the error log file. The timestamp is meant
+to help you find it.
+
+Changing Log File Paths
+-----------------------
+
+If you don't want to use syslog, or if you just can't find the Dovecot's error
+logs, you can make Dovecot log elsewhere as well:
+
+---%<-------------------------------------------------------------------------
+log_path = /var/log/dovecot.log
+# If you want everything in one file, just don't specify log_info_path
+log_info_path = /var/log/dovecot-info.log
+---%<-------------------------------------------------------------------------
+
+The error messages will go to file specified by 'log_path', while everything
+else goes to 'log_info_path'. If you do this, make sure you're really looking
+at the 'log_path' file for error messages, since the "Starting up" message is
+written to 'log_info_path' file.
+
+Rotating Logs
+-------------
+
+If you change from syslog to an external log file, you can use logrotate
+(available on most recent linux distros) to maintain the Dovecot logfile so it
+doesn't grow beyond a manageable size. Save the below scriptlet as
+//etc/logrotate.d/dovecot/:
+
+---%<-------------------------------------------------------------------------
+# dovecot SIGUSR1: Re-opens the log files.
+/var/log/dovecot*.log {
+  missingok
+  notifempty
+  delaycompress
+  sharedscripts
+  postrotate
+    /bin/kill -USR1 `cat /var/run/dovecot/master.pid 2>/dev/null` 2> /dev/null
+|| true
+  endscript
+}
+---%<-------------------------------------------------------------------------
+
+*NOTE*: change the path to the logfile(s) and the master.pid file as
+
+(This file was created from the wiki on 2007-03-30 04:42)

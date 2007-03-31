@@ -1,0 +1,67 @@
+User database extra fields
+==========================
+
+A user database lookup typically returns these fields:
+
+ * 'uid': User's UNIX user ID which is used to access the user's mails. This is
+   a required field.
+ * 'gid': User's primary UNIX group ID which is used to access the user's
+   mails. This is a required field.
+ * 'home': Home directory for the user. Although not required, it's highly
+   recommended even for virtual users since some files are stored in the user's
+   home directory (currently only<deliver> [LDA.txt]). Note that the home
+   directory can be even under the mail directory
+   (eg.'/var/mail/%u/Maildir/home/')
+ * 'mail': Specifies where to find mails for the user (eg.
+   'maildir:/var/mail/user/Maildir'). Usually <mail_location>
+   [MailLocation.txt] setting is enough to specify the mail location template,
+   but if you can't use that for all users this field will override it.
+
+Some less commonly used special fields are:
+
+ * 'nice': Set the mail process's priority to be the given value.
+ * 'chroot': Chroot to given directory. Overrides 'mail_chroot' setting in
+   'dovecot.conf'.
+ * 'system_user': If this is given, the user's groups are read from
+   '/etc/group' (or wherever NSS is configured to taken them from). (This will
+   some day be replaced by group ID lists given by userdbs.)
+
+Most of the mail process settings in 'dovecot.conf' can be overridden by simply
+returning the same setting with a different value. For example if
+'dovecot.conf' has 'pop3_enable_last=no', but you want to enable it for a
+specific user, you can simply return 'pop3_enable_last=yes' extra field.
+However note that for boolean values the '=yes' value part is irrelevant,
+returning 'pop3_enable_last=no' would enable the setting just the same.
+
+Examples
+--------
+
+SQL
+---
+
+dovecot-sql.conf:
+
+---%<-------------------------------------------------------------------------
+user_query = SELECT home, uid, gid, 'Y' as pop3_enable_last, mail_plugins FROM
+users WHERE userid = '%u'
+---%<-------------------------------------------------------------------------
+
+LDAP
+----
+
+dovecot-ldap.conf:
+
+---%<-------------------------------------------------------------------------
+user_attrs =
+homeDirectory=home,uidNumber=uid,gidNumber=gid,pop3_enable_last,mail_plugins
+---%<-------------------------------------------------------------------------
+
+passwd-file
+-----------
+
+---%<-------------------------------------------------------------------------
+user:{plain}pass:1000:1000::/home/user::userdb_pop3_enable_last=y
+mail_plugins=quota,imap_quota
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2007-03-30 04:42)

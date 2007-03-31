@@ -1,0 +1,24 @@
+dbox
+====
+
+Introduced with Dovecot 1.0a4. The point is to have a high performance mail
+store combining all the best qualities of other mailbox formats. Some behavior
+can't be universally accepted as optimal, so dbox allows sysadmin to configure
+those:
+
+ * One mail per file, or multiple mails per file? If multiple,
+    * How large each file can grow? This is a tradeoff between read and expunge
+      performance.
+    * How old files do we still append new mails to? Helps with incremental
+      backups.
+ * How often should changed mail metadata (flags and keywords) be written to
+   dbox files, instead of only in Dovecot's index files? This is a tradeoff
+   between reliability and performance.
+
+dbox format isn't finished yet, so it should only be used for testing purposes.
+
+References
+----------
+
+
+(This file was created from the wiki on 2007-03-30 04:42)

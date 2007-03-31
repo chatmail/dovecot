@@ -1,0 +1,53 @@
+Dovecot LDA with Exim
+=====================
+
+System users
+------------
+
+Replace/rewrite the default 'local_delivery' transport and (replace it in the
+'localuser' router):
+
+---%<-------------------------------------------------------------------------
+dovecot_deliver:
+  driver = pipe
+  command = /usr/local/libexec/dovecot/deliver -d $local_part@$domain
+  message_prefix =
+  message_suffix =
+  log_output
+  delivery_date_add
+  envelope_to_add
+  return_path_add
+  #group = mail
+  #mode = 0660
+---%<-------------------------------------------------------------------------
+
+You should have the 'check_local_user' option in the corresponding router, so
+uid/gid are set correctly.
+
+Virtual users
+-------------
+
+It's easy if you have virtual setup with a single user for all virtual
+users/domains:
+
+---%<-------------------------------------------------------------------------
+dovecot_virtual_delivery:
+  driver = pipe
+  command = /usr/local/libexec/dovecot/deliver -d $local_part@$domain
+  message_prefix =
+  message_suffix =
+  delivery_date_add
+  envelope_to_add
+  return_path_add
+  log_output
+  user = vmail
+---%<-------------------------------------------------------------------------
+
+You could also use 'user = root' to make sure that Exim has write access to the
+socket, but Exim doesn't allow delivery as root by default (this is a build
+time setting and there are good reasons for that). So set the socket owner and
+permissions so the user 'vmail' has r/w access.
+
+If you use multiple system users for your virtual setup, you have to use a
+
+(This file was created from the wiki on 2007-03-30 04:42)

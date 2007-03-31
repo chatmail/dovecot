@@ -514,8 +514,10 @@ static int create_mbox_index_dirs(struct index_storage *storage,
 		return 0;
 
 	if (mkdir_parents(index_dir, CREATE_MODE) < 0) {
-		mail_storage_set_critical(&storage->storage,
-			"mkdir_parents(%s) failed: %m", index_dir);
+		if (!ENOSPACE(errno)) {
+			mail_storage_set_critical(&storage->storage,
+				"mkdir_parents(%s) failed: %m", index_dir);
+		}
 		return -1;
 	}
 
@@ -671,7 +673,7 @@ mbox_open(struct mbox_storage *storage, const char *name,
 	if (index_dir != NULL) {
 		/* make sure the index directories exist */
 		if (create_mbox_index_dirs(istorage, name) < 0)
-			return NULL;
+			index_dir = NULL;
 	}
 
 	index = index_storage_alloc(index_dir, path, MBOX_INDEX_PREFIX);
@@ -710,7 +712,7 @@ mbox_mailbox_open_stream(struct mbox_storage *storage, const char *name,
 
 		/* make sure the required directories are also there */
 		if (create_mbox_index_dirs(istorage, name) < 0)
-			return NULL;
+			index_dir = NULL;
 	}
 
 	index = index_storage_alloc(index_dir, path, MBOX_INDEX_PREFIX);
@@ -763,6 +765,11 @@ mbox_mailbox_open(struct mail_storage *_storage, const char *name,
 
 	mail_storage_clear_error(_storage);
 
+	if (!mbox_is_valid_existing_name(_storage, name)) {
+		mail_storage_set_error(_storage, "Invalid mailbox name");
+		return NULL;
+	}
+
 	if (input != NULL)
 		return mbox_mailbox_open_stream(storage, name, input, flags);
 
@@ -771,11 +778,6 @@ mbox_mailbox_open(struct mail_storage *_storage, const char *name,
 		if (verify_inbox(istorage) < 0)
 			return NULL;
 		return mbox_open(storage, "INBOX", flags);
-	}
-
-	if (!mbox_is_valid_existing_name(_storage, name)) {
-		mail_storage_set_error(_storage, "Invalid mailbox name");
-		return NULL;
 	}
 
 	path = mbox_get_path(istorage, name);

@@ -1,0 +1,144 @@
+NFS
+===
+
+NFS is commonly used in one of these ways:
+
+ 1. Run Dovecot in a single computer.
+ 2. Run Dovecot in multiple computers, redirect users more or less randomly to
+    different servers.
+ 3. Run Dovecot in multiple computers, assign each user a specific computer
+    which is used whenever possible.
+
+You should try to avoid the 2nd setup, see below.
+
+Common issues
+-------------
+
+Clock synchronization
+---------------------
+
+Run ntpd in the NFS server and all the NFS clients to make sure their clocks
+are synchronized. If the clocks are more than one second apart from each others
+and multiple computers access the same mailbox simultaneously, you may get
+errors.
+
+Attribute cache problems
+------------------------
+
+NFS attribute caching is a big problem when multiple computers are accessing
+the same mailbox simultaneously. The best fix for this is to prevent it from
+happening. Configure your setup so that a user always gets redirected to the
+same server (unless it's down), and you can safely keep the attribute cache
+enabled.
+
+If you really want to allow multiple computers to access the same mailbox at
+the same time, you'll need to disable the attribute cache. This can usually be
+done by giving 'actimeo=0' or 'noac' mount option. Note that doing this makes
+the performance much worse, could be as bad as 5 times slower for some
+operations.
+
+If you keep the attribute cache enabled while still accessing the mailbox
+simultaneously from multiple computers, you could end up having all kinds of
+index corruption errors in the logs and the client getting "internal error"
+messages. These should get fixed by themselves though.
+
+It's possible that future Dovecot versions will internally flush the attribute
+cache when needed.
+
+Index files
+-----------
+
+As described above, it's better to redirect users to the same server whenever
+possible. If you do this, then it's also a good idea to keep index files stored
+locally in that server. If the user gets occationally redirected to another
+server, the indexes will then be created locally there. This isn't a problem.
+However you might want to create a cronjob to delete old index directories.
+
+If you choose to keep the index files stored in NFS, you'll need to set
+'mmap_disable=yes'. This doesn't affect the performance much, but it makes
+Dovecot use somewhat more memory.
+
+If you're not running lockd you'll have to set 'lock_method=dotlock'. This
+makes the performance worse though. Note that many NFS installations have
+problems with lockd. If you're beginning to get all kinds of locking related
+errors, try if the problems go away with dotlocking.
+
+Indexes and POP3
+----------------
+
+If you keep index files in local disks and you move a large number of POP3
+users with a lot of mails to a different server, you'll most likely see a huge
+increase in disk I/O. This is because Dovecot needs to get the "virtual size"
+of all the messages, which requires reading all the messages' contents. The
+sizes are then stored into 'dovecot.index.cache' file so the reading isn't
+needed to be done the next time.
+
+To avoid this disk I/O increase, you can copy the users' 'dovecot.index' and
+'dovecot.index.cache' files to the new server before the actual move is done.
+
+With Maildir you can also use the special ',W=<vsize>' field in the filename.
+See<MailboxFormat.Maildir.txt>.
+
+Single computer setup
+---------------------
+
+This doesn't really differ from keeping mails stored locally. For better
+performance you should keep index files stored in a local disk.
+
+Random redirects to multiple servers
+------------------------------------
+
+You should avoid this setup whenever possible. Besides the attribute cache
+problems described above, mailbox contents can't be cached as well in the
+memory either. This is more problematic with mbox than with maildir, but in
+both cases if a client is redirected to a different server when reconnecting,
+the new server will have to read some data via the NFS into memory, while the
+original server might have had the data already cached.
+
+If you choose to use this setup, at the very least try to make connections for
+a single IP redirected into the same server. This avoids the biggest problems
+with clients that use multiple connections.
+
+Per-user redirects to multiple servers
+--------------------------------------
+
+This method performs a lot better than random redirects. It maximizes the
+caching possibilities. It's also pretty safe to keep attribute cache enabled
+(even 'actimeo=2' helps a lot), because other computers are never accessing the
+mailbox files.
+
+New mail deliveries are often still handled by different computers. This isn't
+a problem with maildir as long as you're not using Dovecot LDA (ie.
+dovecot-uidlist file or index files shouldn't get updated). It shouldn't be a
+problem with mboxes either because locking flushes the attribute cache (at
+least fcntl locking, do dotlocks?)
+
+NFS clients
+===========
+
+Here's a list of kernels that have been tried as NFS clients:
+
+ * Linux 2.6.16: 'utime()' is buggy, fix in here
+   [http://client.linux-nfs.org/Linux-2.6.x/2.6.16/linux-2.6.16-007-fix_setattr_clobber.dif].
+   With the fix applied, utime() seems to work perfectly.  High-volume systems
+   may experience VFS lock sync issues and for these the complete patchset at
+   http://www.linux-nfs.org/Linux-2.6.x/2.6.16/linux-2.6.16-NFS_ALL.dif is
+   suggested and appears to work well in production.
+ * Linux 2.6.18: Seems to have intermittent caching issues. The same .config
+   with 2.6.20.1 has been tested and appears to work well.
+ * Linux 2.4.8: Has caching problems, don't know if they can be solved
+ * Solaris: If it's completely broken, see
+   http://dovecot.org/list/dovecot/2006-December/018145.html
+ * The Connectathon test suite is very useful to verify a healthy NFS setup,
+   see http://www.connectathon.org/nfstests.html
+
+Misc notes
+==========
+
+ * Dovecot doesn't care about root_squash setting, all the root-owned files are
+   in /var/run typically which is not in NFS
+ * In an environment using Debian (2.6.18) clients with Isilon NFS cluster
+   nodes - the following mount options were found to be the most
+   successful:'rsize=32768,wsize=32768,hard,fg,lock,nfsvers=3,tcp,retrans=0,actimeo=0
+
+(This file was created from the wiki on 2007-03-30 04:42)

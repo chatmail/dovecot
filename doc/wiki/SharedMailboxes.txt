@@ -1,0 +1,211 @@
+Shared mailboxes
+================
+
+Dovecot has support for certain types of shared mailboxes. It's not yet
+possible for users themselves to share their mailboxes, but administrators can
+create them.
+
+There are two ways to do the actual sharing: Symlinking or defining a
+namespace. Symlinking is done simply by creating a symlink to destination
+mailbox in user's mail directory.
+
+File permissions
+----------------
+
+Both symlinking and namespaces have a common problem: Dovecot needs to have
+permissions to read, and possibly to write to the shared mailbox.
+
+Maildir
+-------
+
+Unless you're using a single UID for all the users, you'll need to have a
+'dovecot-shared' file in each shared maildir. The group and the file
+permissions for new files inside the maildir are taken from the
+'dovecot-shared' file. The file's contents should be empty. So for example:
+
+---%<-------------------------------------------------------------------------
+# ls -l dovecot-shared
+-rw-rw---- 1 root mail 0 2007-03-19 03:12 dovecot-shared
+---%<-------------------------------------------------------------------------
+
+This makes all the files inside the maildir created with "mail" group and 0660
+permissions.
+
+If you create 'dovecot-shared' file to the Maildir root directory, it's copied
+for all the created child mailboxes.
+
+mboxes
+------
+
+Since mbox is only a single file which is always modified in-place, you'll only
+need to make sure that the mbox file's permissions are wide enough to allow
+your users to read it.
+
+Note that you may have problems with dotlocking. It may be easier to just
+disable dotlocking completely, but before doing that make sure that it won't
+cause problems with other software (see<MboxLocking.txt>). Especially if you
+symlink a single mbox file elsewhere, the dotlock is now created to the symlink
+directory, not the mbox file's original directory, so the dotlock is completely
+useless.
+
+By default Dovecot creates index files into '.imap/' directory under the mbox
+file's directory. It may be better for you to explicitly define a separate
+per-user index file directory, for example:
+
+---%<-------------------------------------------------------------------------
+mail_location = mbox:~/mail:INDEX=~/mail-indexes
+---%<-------------------------------------------------------------------------
+
+Maildir symlinks
+----------------
+
+For example:
+
+---%<-------------------------------------------------------------------------
+# cd /home/user/Maildir
+ln -s "/home/public/Maildir/.Company News ."
+ln -s "/home/public/Maildir/.Team News" .
+---%<-------------------------------------------------------------------------
+
+Note that if a user creates for example "Team News.Child mailbox" it gets
+created into the user's own Maildir, not into '/home/public/Maildir/'.
+
+You can also use create_dovecot_shares
+[http://www.cpan.org/authors/id/G/GH/GHENRY/] command line tool (latest version
+in the Suretec [http://www.suretecsystems.com/services/] CPAN
+[http://www.cpan.org] directory). There's also a copy of it in Dovecot Tools
+[http://dovecot.org/tools/] page.
+
+Namespaces
+----------
+
+<Namespaces.txt> can be used to define more globally shared folders. For
+example:
+
+---%<-------------------------------------------------------------------------
+namespace public {
+  separator = /
+  prefix = Public/
+  # This assumes that the user has write access to the directory:
+  location = maildir:/var/mail/public
+}
+
+# If you create any namespaces, you must also create a namespace
+# for your private mailboxes.
+namespace private {
+  separator = /
+  prefix =
+  # If you don't set "location" here, it uses the mail_location setting
+  #location = maildir:~/Maildir
+  # Only one namespace contains the user's default INBOX:
+  inbox = yes
+}
+---%<-------------------------------------------------------------------------
+
+In the above example, you could then create maildir folders under the
+'/var/mail/public/' directory. For example:
+
+---%<-------------------------------------------------------------------------
+# ls -la /var/mail/public/
+-rw-r-s--- 1 root mail 0 2007-03-19 03:12 .
+-rw-rws--- 1 root mail 0 2007-03-19 03:12 .lkml
+-rw-rws--- 1 root mail 0 2007-03-19 03:12 .bugtraq
+-rw-rw---- 1 root mail 0 2007-03-19 03:12 dovecot-shared
+-rw-r----- 1 root mail 0 2007-03-19 03:12 subscriptions
+---%<-------------------------------------------------------------------------
+
+The set group ID bit in the directories is useful to make sure that if other
+software than Dovecot creates any files under the directories, they have the
+mail group instead of the user's primary group.
+
+See the example configuration file
+[http://dovecot.org/doc/dovecot-example.conf] for more information
+about<Namespaces.txt>.
+
+Read-only Maildirs
+------------------
+
+If your maildir is read-only, the control and index files need to be created
+under user's own Maildir. You can do this by appending
+':CONTROL=<path>:INDEX=<path>' to mail location.
+
+Note that if you use multiple namespaces, the CONTROL or INDEX paths must point
+to different directories. Otherwise if the namespaces have identically named
+mailboxes their control/index directories will conflict and cause all kinds of
+problems.
+
+If you put the control files to a per-user directory, you *must* also put the
+index files to a per-user directory, otherwise you'll get errors. It is however
+possible to use shared control files but per-user index files, assuming you've
+set up permissions properly.
+
+---%<-------------------------------------------------------------------------
+namespace public {
+  separator = /
+  prefix = Public/
+  location =
+maildir:/var/mail/public:CONTROL=~/Maildir/control/public:INDEX=~/Maildir/index/public
+}
+namespace public {
+  separator = /
+  prefix = Team/
+  location =
+maildir:/var/mail/team:CONTROL=~/Maildir/control/team:INDEX=~/Maildir/index/team
+}
+# Remember to create a private namespace also.
+---%<-------------------------------------------------------------------------
+
+Delivery agent permissions
+--------------------------
+
+Make sure the mail delivery agent gets the permissions correct. For example if
+Procmail is used to deliver mail into a shared Maildir, be sure to set
+'UMASK=007' in your '.procmailrc', otherwise the new mail will not be
+group-readable. Also ensure the user running procmail's primary group is
+correct (/mail/ in the example above).
+
+Subscriptions
+-------------
+
+When shared namespaces are used to share mailboxes between multiple users,
+permissions issues can arise on the 'subscriptions' file.  By default the
+'subscriptions' file is stored in the namespace's mail directory, and the first
+user to subscribe to a shared mailbox will have ownership of the subscriptions
+file. If the file isn't readable by other users, no-one else can now list the
+subscriptions or change the subscriptions. Note that the 'dovecot-shared'
+file's permissions are not used on the 'subscriptions' file.
+
+Another problem is that although the namespace prefix shows up as a normal
+looking mailbox, Dovecot doesn't allow subscribing to it because it's not a
+real mailbox. This will be fixed in later versions.
+
+Shared subscriptions
+--------------------
+
+If you do want to have all the users subscribed to all the shared mailboxes,
+you can do this by making the 'subscriptions' file readable and the directory
+non-writable to the group:
+
+---%<-------------------------------------------------------------------------
+# ls -la /var/mail/public/
+-rw-r-s--- 1 root mail 0 2007-03-19 03:12 .
+-rw-r----- 1 root mail 0 2007-03-19 03:12 subscriptions
+---%<-------------------------------------------------------------------------
+
+Note that the 'subscription' file is always updated by creating a temporary
+file and renaming it on top of the original, so only the directory's
+permissions matter, not the 'subscription' file's permissions.
+
+Private subscriptions
+---------------------
+
+This is only possible with Maildirs.
+
+The 'CONTROL' directive in the mail location setting primarily specifies the
+directory where to keep several Maildir-specific control files
+(see<MailLocation.Maildir.txt>), but it also specifies the location to
+'subscriptions' file. By setting the control directory to a user-specific
+directory the users can manipulate their own subscriptions.
+
+
+(This file was created from the wiki on 2007-03-30 04:42)

@@ -1,0 +1,30 @@
+Plugins
+=======
+
+Distributed with Dovecot:
+
+ * <quota> [Quota.txt]: Quota tracking and enforcing
+ * imap_quota: IMAP commands for requesting current quota
+ * <acl> [ACL.txt]: Access Control Lists for mailboxes
+ * <convert> [Plugins.Convert.txt]: Convert user's mailboxes from one format to
+   another on login
+ * <trash> [Plugins.Trash.txt]: Delete mails from Trash when user would go over
+   quota
+ * <lazy_expunge> [Plugins.Lazyexpunge.txt]: Make EXPUNGE and DELETE commands
+   just rename the mails elsewhere
+ * <expire> [Plugins.Expire.txt]: Delete mails from specified mailboxes after a
+   designated number of days
+ * zlib: Read-only access to gziped mboxes (for mboxes ending with .gz)
+ * <mail_log> [Plugins.MailLog.txt]: Log several mail actions
+
+External:
+
+ * dspam [http://johannes.sipsolutions.net/Projects/dovecot-dspam-integration]:
+   Integrates spam learning into Dovecot
+ * drac [http://dovecot.org/patches/drac.c]: Pop-before-SMTP plugin using DRAC
+ * whoson [ftp://ftp.ufanet.ru/pub/boco/dovecot/whoson-plugin/]:
+   Pop-before-SMTP plugin using WHOSON protocol [http://whoson.sourceforge.net]
+
+To enable / disable plugins per user you can make your userdb return
+
+(This file was created from the wiki on 2007-03-30 04:42)

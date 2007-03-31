@@ -1,0 +1,36 @@
+Maildrop is available at http://www.courier-mta.org/maildrop
+
+Although it is the default LDA for the courier mail server, it also works as a
+standalone LDA.  The install script can even build an rpm package if you prefer
+to manage software that way.  Maildrop can be used with sendmail as a drop-in
+replacement for procmail.  It has better maildir support than procmail and it
+has filtering capability using syntax that looks a lot like shell script
+language with a little bit of perl thrown in.
+
+To use dropmail with sendmail, make the following change in your sendmail.mc
+file, then make etc.
+
+---%<-------------------------------------------------------------------------
+dnl FEATURE(local_procmail,',procmail -t -Y -a $h -d $u')dnl
+dnl # replace above line with below line to use maildrop instead of procmail
+FEATURE(local_procmail', /usr/bin/maildrop', `maildrop -d $u')dnl
+
+---%<-------------------------------------------------------------------------
+
+A default system wide configuration file for maildir style mailboxes might look
+like the following:
+
+---%<-------------------------------------------------------------------------
+# file: /etc/maildroprc
+# system-wide settings for maildrop
+
+SHELL="/bin/bash"
+SENDMAIL="/usr/sbin/sendmail -oi -t"
+logfile "/var/log/maildrop.log"
+
+DEFAULT="$HOME/Maildir/"
+---%<-------------------------------------------------------------------------
+
+In the above configuration, the users should be a member of the same group and
+
+(This file was created from the wiki on 2007-03-30 04:42)

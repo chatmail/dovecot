@@ -1,0 +1,23 @@
+SASL
+====
+
+SASL stands for "Simple Authentication and Security Layer". SASL itself is
+nothing more than a list of requirements for<authentication mechanisms>
+[Authentication.Mechanisms.txt] and protocols to be SASL-compatible as
+described in RFC 2222 [http://www.ietf.org/rfc/rfc2222.txt]. IMAP, POP3 and
+SMTP protocols all have support for SASL.
+
+Many people confuse SASL with one specific SASL implementation: the Cyrus SASL
+library. Dovecot has its own SASL implementation which may at some point be
+separated from Dovecot itself to "compete" against Cyrus SASL library in server
+side. And it already can be:
+
+ * Postfix as of *version 2.3* supports Dovecot's SASL server implementation.
+   See http://www.postfix.org/SASL_README.html or <PostfixAndDovecotSASL.txt>
+   for details.
+ * There's a patch for Exim
+   [http://www.exim.org/eximwiki/AuthenticatedSmtpUsingDovecot] as well, which
+   has since been added to Exim snapshots.
+
+
+(This file was created from the wiki on 2007-03-30 04:42)

@@ -1,0 +1,28 @@
+Why doesn't Dovecot work?
+=========================
+
+ * Make sure you're looking at the correct log files. Debug messages may be
+   written to a different log file than error messages. See<Logging.txt>.
+ * Try logging in manually by sending IMAP commands. If you're trying with an
+   IMAP client you can't be sure if the problem is with the client's
+   configuration or Dovecot's configuration. See<TestInstallation.txt> (or
+   <TestPop3Installation.txt>).
+
+It says password mismatch
+-------------------------
+
+If you're using PAM:
+
+ * Make sure that dovecot-auth is running as root (assuming it's using
+   '/etc/shadow').
+ * PAM errors aren't written to Dovecot's own logs. Usually they go to
+   '/var/log/auth.log' or something similar.
+    * Unfortunately PAM's error messages aren't always all that helpful in
+      figuring out what exactly the problem is.
+ * Usually the problem is that you don't have a correctly named file in
+   '/etc/pam.d/'. See <PasswordDatabase.PAM.txt>
+
+For non-PAM set 'auth_debug_passwords=yes' and look at what it says in the
+logs. If it's trying to use a wrong password scheme, you can change that.
+
+(This file was created from the wiki on 2007-03-30 04:42)

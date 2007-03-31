@@ -1,0 +1,10 @@
+Authentication
+==============
+
+Authentication is split into four parts:
+
+ 1. <Authentication mechanisms> [Authentication.Mechanisms.txt]
+ 2. <Password schemes> [Authentication.PasswordSchemes.txt]
+ 3. <Password databases> [PasswordDatabase.txt]
+
+(This file was created from the wiki on 2007-03-30 04:42)

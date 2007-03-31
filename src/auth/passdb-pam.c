@@ -17,7 +17,6 @@
 #include "hash.h"
 #include "network.h"
 #include "passdb.h"
-#include "mycrypt.h"
 #include "safe-memset.h"
 
 #include <stdlib.h>

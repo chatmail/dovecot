@@ -1,0 +1,32 @@
+Expire plugin
+=============
+
+The /Expire/ plugin was created to keep track of mails in specific mailboxes,
+and expunge them when they've been there for a specified amount of time.  It
+keeps an internal database (Berkeley DB) of all such mailboxes, so it doesn't
+have to go through all the mailboxes for all the users.  Unfortunately, this
+plugin requires the CVS HEAD version of Dovecot, and it doesn't yet support
+wildcards in its list of tracked mailboxes.
+
+Example configuration
+---------------------
+
+---%<-------------------------------------------------------------------------
+plugin {
+  # Trash 7d, Spam 30d
+  expire = Trash 7 Spam 30
+}
+---%<-------------------------------------------------------------------------
+
+Cronjob equivalent
+------------------
+
+For Dovecot v1.0, this can be accomplished by running a daily shell script:
+
+---%<-------------------------------------------------------------------------
+# delete 30 day old mails
+find /var/virtualmail/ -regex '.*/\.\(Trash\|Junk\)\(/.*\)?\/\(cur\|new\)/.*'
+-type f  -ctime +30  -exec rm '{}'  \;
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2007-03-30 04:42)

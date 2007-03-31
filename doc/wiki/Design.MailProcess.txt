@@ -1,0 +1,11 @@
+Mail Process Design
+===================
+
+FIXME:
+
+ * IMAP/POP3 protocol specific code
+ * Mail storage API
+ * Index files under everything
+ * Plugins
+
+(This file was created from the wiki on 2007-03-30 04:42)

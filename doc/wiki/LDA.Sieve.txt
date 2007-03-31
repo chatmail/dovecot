@@ -1,0 +1,214 @@
+Dovecot Sieve plugin
+====================
+
+ 1. Dovecot Sieve plugin
+     1. Getting the sources
+     2. Compiling
+     3. Configuring
+     4. Features
+     5. ManageSieve server
+     6. Vacation auto-reply
+     7. Example scripts
+         1. SpamAssassin tagged mail filtering
+         2. Mail filtering by various headers
+         3. Vacation auto-reply
+     8. Migration from Procmail
+
+Getting the sources
+-------------------
+
+The Sieve plugin is distributed in a separate package. You can get it from
+Dovecot's download page [http://www.dovecot.org/download.html]. It's also in
+"dovecot-sieve" module in CVS.
+
+Compiling
+---------
+
+First of all you'll need to have built Dovecot sources available. It's also not
+a good idea to build the plugin against self-compiled Dovecot sources, but then
+actually use a prebuilt binary package of Dovecot. That might work if the
+Dovecot versions are the same, but it's not guaranteed.
+
+---%<-------------------------------------------------------------------------
+./configure --with-dovecot=../dovecot-1.0
+make
+sudo make install
+---%<-------------------------------------------------------------------------
+
+Configuring
+-----------
+
+First, you'll need to make sure you're using Dovecot's <deliver LDA> [LDA.txt]
+to deliver incoming mail to users' mailboxes.   Then you need to enable the
+cmusieve plugin:
+
+---%<-------------------------------------------------------------------------
+protocol lda {
+..
+  # If there is no user-specific Sieve-script, global Sieve script is
+  # executed if set.
+  #global_script_path =
+  # Support for dynamically loadable plugins. mail_plugins is a space separated
+  # list of plugins to load.
+  mail_plugins = cmusieve # ... other plugins like quota
+}
+---%<-------------------------------------------------------------------------
+
+Per-user Sieve script should be stored in user's home directory in file
+'.dovecot.sieve'. This works with virtual users also as long you have a
+directory set as the "home" for each mail account. When first executed, a new
+Sieve script is compiled by 'deliver' into a binary form and stored in a file
+called '.dovecot.sievec'. If you have a syntax error in the script you'll get a
+'.dovecot.sieve.err' file with the error messages.
+
+Features
+--------
+
+The Sieve plugin v1.0.x code is taken from Cyrus IMAP v2.2.12. Whatever
+information you can find about that version of Cyrus Sieve, it should also
+apply to Dovecot.
+
+The supported Sieve features are:
+
+ * fileinto
+ * reject
+ * envelope
+ * vacation
+ * imapflags
+ * notify
+ * regex
+ * subaddress
+ * relational
+
+ManageSieve server
+------------------
+
+ * Python implementation:
+   http://dovecot.org/list/dovecot/2007-February/019382.html
+ * Dovecot patch: http://dovecot.org/list/dovecot/2007-March/021130.html
+
+The Dovecot patch will most likely be added to Dovecot v1.2 version.
+
+Vacation auto-reply
+-------------------
+
+The vacation replies are sent to the envelope sender. Currently this is taken
+from the Return-Path: header in the message.
+
+List of autoreplied senders is stored in '.dovecot.lda-dupes' file in user's
+home directory. When you're testing the vacation feature, it's easy to forget
+that the reply is sent only once in the number of configured days. If you've
+problems getting the vacation reply, try deleting this file. If that didn't
+help, make sure the problem isn't related to sending mails in general by trying
+the "reject" Sieve command.
+
+The automatic replies aren't sent if any of the following is true:
+
+ * Auto-Submitted: header exists with any value except "no"
+ * Precedence: header exists with value "junk", "bulk" or "list"
+ * The envelope sender
+    * begins with "MAILER-DAEMON" (case-insensitive)
+    * begins with "LISTSERV" (case-insensitive)
+    * begins with "majordomo" (case-insensitive)
+    * begins with "owner-" (case-sensitive)
+    * contains the string "-request" anywhere within it (case-sensitive)
+ * The envelope sender and envelope recipient are the same
+ * The envelope recipient is not found in the message To:, Cc: or Bcc: fields.
+
+The envelope sender is taken from a Return-Path: header in the message. The
+envelope recipient is taken from -d option passed to deliver. A bare username
+without a domain gets canonicalised by the libsieve code to
+"<username>@unspecified-domain", which means it is highly unlikely to pass the
+last two tests in the list above.
+
+Example scripts
+---------------
+
+Below are some simple Sieve code examples, more can be found from
+http://libsieve.sourceforge.net/script1.php and
+http://wiki.fastmail.fm/index.php/SieveExamples.
+
+SpamAssassin tagged mail filtering
+----------------------------------
+
+Redirect <SpamAssassin.txt> tagged mails into mbox folder "spam":
+
+---%<-------------------------------------------------------------------------
+require "fileinto";
+if exists "X-Spam-Flag" {
+  fileinto "spam";
+}
+---%<-------------------------------------------------------------------------
+
+Discard <SpamAssassin.txt> tagged mails:
+
+---%<-------------------------------------------------------------------------
+if exists "X-Spam-Flag" {
+  discard;
+}
+---%<-------------------------------------------------------------------------
+
+Mail filtering by various headers
+---------------------------------
+
+Use if/elsif/else to store messages into various folders/subfolders:
+
+ * ---%<----------------------------------------------------------------------
+   require "fileinto";
+   if address :is "to" "dovecot@dovecot.org" {
+     fileinto "Dovecot-list";
+   } elsif address :is "Return-path" "owner-cipe-l@inka.de" {
+     fileinto "lists.cipe";
+   } elsif anyof (header :contains "X-listname" "lugog@cip.rz.fh-offenburg.de",
+                  header :contains "List-Id" "Linux User Group Offenburg") {
+     fileinto "ml.lugog";
+   } else {
+     # The rest goes into INBOX
+     # default is "implicit keep", we do it explicitly here
+     keep;
+   }
+   ---%<----------------------------------------------------------------------
+   "anyof" means logical OR, "allof" is AND.
+
+Forward mails with "order" or "buy" in their subject to another address:
+
+ * ---%<----------------------------------------------------------------------
+   if header :contains "subject" ["order", "buy"] {
+     redirect "orders@company.dom";
+   }
+   ---%<----------------------------------------------------------------------
+
+Message-ID and recipient of forwarded message are stored in a
+'.dovecot.lda-dupes' at users home directory to prevent mail loops.
+
+Vacation auto-reply
+-------------------
+
+---%<-------------------------------------------------------------------------
+require ["fileinto", "vacation"];
+# Move spam to spam folder
+if exists "X-Spam-Flag" {
+  fileinto "spam";
+  # Stop here so that we do not reply on spams
+  stop;
+}
+vacation
+  # Reply at most once a day to a same sender
+  :days 1
+  :subject "Out of office reply"
+  # List of allowed recipient addresses from auto reply should be sent.
+  :addresses ["j.doe@company.dom", "john.doe@company.dom"]
+"I'm out of office, please contact Joan Doe instead.
+Best regards
+John Doe";
+---%<-------------------------------------------------------------------------
+
+Migration from Procmail
+-----------------------
+
+There exists a script which attempts to translate simple Procmail rules into
+Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
+
+Here's the original post announcing it:
+
+(This file was created from the wiki on 2007-03-30 04:42)
