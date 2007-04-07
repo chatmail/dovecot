@@ -50,7 +50,7 @@ Index files
 
 As described above, it's better to redirect users to the same server whenever
 possible. If you do this, then it's also a good idea to keep index files stored
-locally in that server. If the user gets occationally redirected to another
+locally in that server. If the user gets occasionally redirected to another
 server, the indexes will then be created locally there. This isn't a problem.
 However you might want to create a cronjob to delete old index directories.
 
@@ -141,4 +141,4 @@ Misc notes
    nodes - the following mount options were found to be the most
    successful:'rsize=32768,wsize=32768,hard,fg,lock,nfsvers=3,tcp,retrans=0,actimeo=0
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

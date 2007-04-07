@@ -33,4 +33,4 @@ Note that these settings do not directly affect the memory usage:
  * 'login_max_processes_count', 'max_mail_processes' and
    'auth_worker_max_count': These are mostly to avoid DoS attacks using up all
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

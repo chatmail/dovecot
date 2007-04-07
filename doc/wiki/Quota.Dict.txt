@@ -2,8 +2,8 @@ Dictionary quota
 ================
 
 The /dictionary/ quota backend supports both *storage* and *messages* quota
-limits. The current quota is kept in a dictionary. Currently (as of 1.0.beta9
-and later), the only supported dictionary backend is MySQL.
+limits. The current quota is kept in a dictionary. Currently the only supported
+dictionary backend is MySQL.
 
 The plugin parameter format is 'dict:<quota limits> <dictionary URI>'. For
 example:
@@ -42,12 +42,28 @@ create table quota (
 );
 ---%<-------------------------------------------------------------------------
 
+Inaccuracy problems
+-------------------
+
+Quota plugin doesn't currently track expunges entirely correctly. If two IMAP
+clients do an expunge at the same time, the quota is reduced twice as much. The
+other quota backends have the same problem, but it's not that big of a problem
+with them because they recalculate the quota once in a while anyway. Dict quota
+is recalculated only if the quota goes below zero (even this is v1.0.rc30+).
+
+So either you'll have to trust your users not to abuse this problem, or you
+could create a nightly cronjob to delete all rows from the SQL quota table to
+force a daily recalculation. The recalculation will of course slow down the
+server.
+
+This problem will be fixed completely in later Dovecot versions.
+
 Dictionary proxy server
 -----------------------
 
 To avoid each process making a new SQL connection, you can make all dictionary
 communications go through a dictionary server process which keeps the
-connections permanently open. (1.0 RC1 and later)
+connections permanently open.
 
 The dictionary server is referenced with URI 'proxy:<dictionary server socket
 path>:<dictionary name>'. The socket path may be left empty if you haven't
@@ -69,4 +85,4 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

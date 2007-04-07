@@ -128,11 +128,15 @@ static int dict_quota_lookup(struct dict_quota_root *root, const char *path,
 	if (ret > 0) {
 		long long tmp;
 
-		/* don't break in case the quota value is negative. */
 		tmp = strtoll(value, NULL, 10);
-		*value_r = tmp < 0 ? 0 : tmp;
-		t_pop();
-		return 0;
+		if (tmp >= 0) {
+			*value_r = tmp;
+			t_pop();
+			return 0;
+		}
+		/* negative quota. recalculate it. we don't track expunges
+		   entirely correctly, so this can happen if two processes
+		   expunge at the same time. */
 	}
 	t_pop();
 

@@ -53,4 +53,4 @@ Be aware that 'sendmail' logs /stat=unknown mailer error 89/ if 'deliver'
 returns any unusual error.  This message is misleading and looks as though
 'sendmail' were failing to find the 'deliver' executable.  It actually means
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

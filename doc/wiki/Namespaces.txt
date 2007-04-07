@@ -88,4 +88,4 @@ namespace private {
 Without the 'hidden = yes' setting in the first namespace, clients see the
 "#mbox" namespace as a non-selectable mailbox named "#mbox" and having child
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

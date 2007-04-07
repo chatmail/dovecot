@@ -25,4 +25,4 @@ If you're using PAM:
 For non-PAM set 'auth_debug_passwords=yes' and look at what it says in the
 logs. If it's trying to use a wrong password scheme, you can change that.
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

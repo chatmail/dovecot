@@ -86,4 +86,4 @@ Then it's a bug in Dovecot. Please report it with your configuration file.
 If it simply quits without giving any error, then it wrote the error to a log
 file and you just didn't find it. Try specifying the log file manually and make
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

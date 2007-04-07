@@ -80,6 +80,8 @@ The supported Sieve features are:
  * subaddress
  * relational
 
+Sieve doesn't support running external programs.
+
 ManageSieve server
 ------------------
 
@@ -211,4 +213,4 @@ Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
 
 Here's the original post announcing it:
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

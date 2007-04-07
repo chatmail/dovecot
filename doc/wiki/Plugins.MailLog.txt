@@ -29,4 +29,4 @@ mail_log plugin however logs a lot, so it's incompatible with the log
 throttling feature. You probably want to disable the throttling completely.
 This is done by setting 'mail_log_max_lines_per_sec = 0' in dovecot.conf
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

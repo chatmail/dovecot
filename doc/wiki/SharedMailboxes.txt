@@ -208,4 +208,4 @@ directory where to keep several Maildir-specific control files
 directory the users can manipulate their own subscriptions.
 
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

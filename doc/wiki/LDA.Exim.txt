@@ -50,4 +50,4 @@ permissions so the user 'vmail' has r/w access.
 
 If you use multiple system users for your virtual setup, you have to use a
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

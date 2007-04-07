@@ -132,4 +132,4 @@ You may also want to disable the password checking completely. Doing this
 currently circumvents Dovecot's security model so it's not very recommended to
 use it, but it is possible by making the<passdb> [PasswordDatabase.txt] return
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

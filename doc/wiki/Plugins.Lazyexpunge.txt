@@ -102,4 +102,4 @@ amount of time. It keeps an internal database (Berkeley DB) of all such
 mailboxes, so it doesn't have to go through all the mailboxes for all the
 users. Unfortunately again this requires CVS HEAD version of Dovecot, and it
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

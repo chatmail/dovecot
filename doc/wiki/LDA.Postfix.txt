@@ -89,4 +89,4 @@ forcing Postfix to only deliver to the same recipient one at a time.
 dovecot_destination_concurrency_limit = 1
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

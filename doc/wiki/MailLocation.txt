@@ -136,4 +136,4 @@ exec /usr/local/libexec/dovecot/imap
 
 *NOTE*: If you're using namespaces, the MAIL environment is ignored. You'll
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

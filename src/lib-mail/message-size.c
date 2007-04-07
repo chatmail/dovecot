@@ -76,8 +76,10 @@ void message_get_body_size(struct istream *input, struct message_size *body,
 	if (i_stream_read_data(input, &msg, &size, 0) <= 0)
 		return;
 
-	if (msg[0] == '\n')
+	if (msg[0] == '\n') {
 		missing_cr_count++;
+		body->lines++;
+	}
 
 	do {
 		for (i = 1; i < size; i++) {

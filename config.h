@@ -11,7 +11,7 @@
 #define BUILD_PGSQL 
 
 /* Built-in SQLite support */
-/* #undef BUILD_SQLITE */
+#define BUILD_SQLITE 
 
 /* IMAP capabilities */
 #define CAPABILITY_STRING "IMAP4rev1 SASL-IR SORT THREAD=REFERENCES MULTIAPPEND UNSELECT LITERAL+ IDLE CHILDREN NAMESPACE LOGIN-REFERRALS"
@@ -227,7 +227,7 @@
 /* #undef HAVE_SOLARIS_SENDFILE */
 
 /* Build with SQLite3 support */
-/* #undef HAVE_SQLITE */
+#define HAVE_SQLITE 
 
 /* Build with SSL/TLS support */
 #define HAVE_SSL 
@@ -404,13 +404,13 @@
 #define PACKAGE_NAME "dovecot"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "dovecot 1.0.rc29"
+#define PACKAGE_STRING "dovecot 1.0.rc30"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "dovecot"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.0.rc29"
+#define PACKAGE_VERSION "1.0.rc30"
 
 /* Build with BSD authentication support */
 /* #undef PASSDB_BSDAUTH */
@@ -515,7 +515,7 @@
 #define VA_COPY_AS_ARRAY 1
 
 /* Version number of package */
-#define VERSION "1.0.rc29"
+#define VERSION "1.0.rc30"
 
 /* Define to 1 if your processor stores words with the most significant byte
    first (like Motorola and SPARC, unlike Intel and VAX). */

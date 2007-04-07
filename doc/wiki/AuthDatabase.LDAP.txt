@@ -192,4 +192,4 @@ userdb to use those fields. If you're using Dovecot's<deliver> [LDA.txt] you'll
 still need to have the userdb lookups working.
 
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

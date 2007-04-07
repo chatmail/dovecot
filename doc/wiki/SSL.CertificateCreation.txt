@@ -63,4 +63,4 @@ There are multiple different tools for managing your own CA. The simplest way
 is to use OpenSSL. See http://sial.org/howto/openssl/ca/ for example for a
 tutorial. Using OpenSSL for managing a CA is however a bit cumbersome, so you
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

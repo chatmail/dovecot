@@ -110,4 +110,4 @@ It is quite easy to script this for a number of users, assuming you have their
 passwords. Even if you do not, imapsync also supports logging in as an admin
 user that has the ability to copy message for sub users, and a variety of other
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

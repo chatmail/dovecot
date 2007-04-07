@@ -43,4 +43,4 @@ this reason there exists 'mail_index_map_get_header_ext()' and
 'mail_index_lookup_ext_full()' functions which take the map as parameter. The
 non-map versions return the data from the latest map if the message hasn't been
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

@@ -1,3 +1,34 @@
+2007-04-03 09:58  Timo Sirainen <tss@iki.fi>
+
+	* autogen.sh: Fixed to work with POSIX sh.
+
+2007-04-03 05:42  Timo Sirainen <tss@iki.fi>
+
+	* src/deliver/deliver.c: Load plugins before chrooting.
+
+2007-04-03 04:44  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/quota/quota-dict.c: Recalculate quota if it's
+	  negative.
+
+2007-04-03 03:36  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-pam.c: Lowercase the PAM service name when
+	  calling with "args = *". Linux PAM did this internally already,
+	  but at least BSD didn't.
+
+2007-04-02 10:23  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-ldap.c: Error message changed
+
+2007-03-30 14:52  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: Released 1.0.rc29
+
+2007-03-30 14:41  Timo Sirainen <tss@iki.fi>
+
+	* autogen.sh: Regenerate doc/wiki/Makefile.am always.
+
 2007-03-30 14:23  Timo Sirainen <tss@iki.fi>
 
 	* src/lib-storage/index/mbox/mbox-storage.c: Check that mailbox

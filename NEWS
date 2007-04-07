@@ -1,3 +1,16 @@
+v1.0.rc30 2007-04-06  Timo Sirainen <tss@iki.fi>
+
+	* PAM: Lowercase the PAM service name when calling with "args = *".
+	  Linux PAM did this internally already, but at least BSD didn't.
+	  If your PAM file used to be in /etc/pam.d/IMAP or POP3 file you'll
+	  need to lowercase it now.
+
+	+ Send list of CA names to client when using
+	  ssl_verify_client_cert=yes.
+	- IMAP: If message body started with line feed, it wasn't counted
+	  in BODY and BODYSTRUCTURE replies' line count field.
+	- deliver didn't load plugins before chrooting
+
 v1.0.rc29 2007-03-28  Timo Sirainen <tss@iki.fi>
 
 	* Security fix: If zlib plugin was loaded, it was possible to open

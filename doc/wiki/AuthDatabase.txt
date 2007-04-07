@@ -12,4 +12,4 @@ and<user databases> [UserDatabase.txt]:
  * <SQL> [AuthDatabase.SQL.txt]: SQL database (PostgreSQL, MySQL, SQLite)
  * <VPopMail> [AuthDatabase.VPopMail.txt]: External software used to handle
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

@@ -19,6 +19,12 @@ mailboxes in '~/mail/' are converted to Maildir mailboxes. Once everything is
 finished,'~/mail' is renamed to '~/mail-converted' and at next login the
 conversion isn't done, because the '~/mail' directory no longer exists.
 
+If the plugin does not appear to be doing anything, ensure you have enabled it:
+
+---%<-------------------------------------------------------------------------
+mail_plugins = convert
+---%<-------------------------------------------------------------------------
+
 UW-IMAP conversion
 ------------------
 
@@ -33,4 +39,4 @@ plugin {
 ---%<-------------------------------------------------------------------------
 
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

@@ -6,4 +6,4 @@ Dovecot Design
     * <API for accessing the index files> [Design.Indexes.MailIndexApi.txt]
  * <Design of authentication process> [Design.AuthProcess.txt]
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

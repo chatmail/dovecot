@@ -82,4 +82,4 @@ have access to any files at all.
 are usually configured to read '/etc/shadow' file. Even this doesn't need root
 access if you give /dovecot-auth/ user access to /shadow/ group, and make sure
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

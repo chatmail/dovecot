@@ -13,4 +13,4 @@ Common choices include:
  * <maildrop.txt>
  * procmail [http://www.procmail.org/] (appears to be unmaintained)
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

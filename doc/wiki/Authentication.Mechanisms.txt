@@ -14,8 +14,8 @@ impossible to use most mechanisms with commonly used DES and MD5 crypted
 passwords.
 
 Today however many people use SSL, and there's no problem with sending
-unencrypted password inside SSL secured connection. So if you're using SSL, you
-probably don't need to bother worrying about anything else than the PLAIN
+unencrypted password inside SSL secured connections. So if you're using SSL,
+you probably don't need to bother worrying about anything else than the PLAIN
 mechanism.
 
 Other non-PLAIN mechanisms include:
@@ -36,4 +36,4 @@ Other non-PLAIN mechanisms include:
    intending to provide publically accessible IMAP archive.
  * OTP and SKEY: One time password mechanisms. Supported only by Dovecot v1.1
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

@@ -429,7 +429,7 @@ pam_verify_plain(struct auth_request *request, const char *password,
 	pid_t pid;
 
 	service = module->service_name != NULL ?
-		module->service_name : request->service;
+		module->service_name : t_str_lcase(request->service);
 	auth_request_log_debug(request, "pam", "lookup service=%s", service);
 
 	if (worker) {

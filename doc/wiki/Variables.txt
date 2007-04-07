@@ -76,4 +76,4 @@ If the width is prefixed with zero, the string isn't truncated, but only padded
 with '0' character if the string is shorter. For example %04i may return
 "0001", "1000" and "12345". %1.04i for the same string would return "001",
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

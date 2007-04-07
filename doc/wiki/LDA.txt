@@ -182,4 +182,4 @@ Plugins
  * Most of the <Dovecot plugins> [Plugins.txt] work with deliver.
  * Virtual quota can be enforced using <Quota plugin> [Quota.txt].
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

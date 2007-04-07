@@ -50,4 +50,4 @@ starting configuration might look like:
 This would be defined as: /blocking=no pam, blocking=yes nss_ldap: No memory
 leaks. Fixes nss_ldap problems. Each PAM lookup is done in a forked process.
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)

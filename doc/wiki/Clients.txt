@@ -100,4 +100,4 @@ will just use the default. So, change the default from
 '/etc/imp3/servers.conf'. Search for ''folders' => 'mail/'' and remove the
 'mail/' part. For IMP2 edit 'defaults.php3', search for '$default->folders =
 
-(This file was created from the wiki on 2007-03-30 04:42)
+(This file was created from the wiki on 2007-04-06 04:42)
