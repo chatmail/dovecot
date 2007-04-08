@@ -34,17 +34,19 @@ if [ ! -d /var/run/dovecot/login ]; then
 fi
 
 # The init script should do nothing if dovecot is being run from inetd
-for p in `sed -r "s/^ *(([^:]+|\[[^]]+]|\*):)?(pop3s?|imaps?)[ \t].*/\3/;t;d" \
-  /etc/inetd.conf`
-do
-  for q in `sed -r "s/^ *protocols[ \t]*=[ \t]*(([^\"]*)|\"(.*)\")/\2\3/;t;d" \
-    /etc/dovecot/dovecot.conf`
+if [ -f /etc/inetd.conf ]; then
+  for p in `sed -r "s/^ *(([^:]+|\[[^]]+]|\*):)?(pop3s?|imaps?)[ \t].*/\3/;t;d" \
+    /etc/inetd.conf`
   do
-    if [ $p = $q ]; then
-      exit 0
-    fi
+    for q in `sed -r "s/^ *protocols[ \t]*=[ \t]*(([^\"]*)|\"(.*)\")/\2\3/;t;d" \
+      /etc/dovecot/dovecot.conf`
+    do
+      if [ $p = $q ]; then
+        exit 0
+      fi
+    done
   done
-done
+fi
 
 case "$1" in
   start)
