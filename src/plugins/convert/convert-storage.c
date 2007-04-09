@@ -225,13 +225,16 @@ static int mailbox_list_copy_subscriptions(struct mail_storage *source_storage,
 {
 	struct mailbox_list_context *iter;
 	struct mailbox_list *list;
+	const char *dest_name;
 	int ret = 0;
 
 	iter = mail_storage_mailbox_list_init(source_storage, "", "*",
 					      MAILBOX_LIST_SUBSCRIBED |
 					      MAILBOX_LIST_FAST_FLAGS);
 	while ((list = mail_storage_mailbox_list_next(iter)) != NULL) {
-		if (mail_storage_set_subscribed(dest_storage, list->name,
+		dest_name = mailbox_name_convert(dest_storage, source_storage,
+						 list->name);
+		if (mail_storage_set_subscribed(dest_storage, dest_name,
 						TRUE) < 0) {
 			ret = -1;
 			break;
@@ -248,15 +251,16 @@ int convert_storage(const char *user, const char *home_dir,
 {
 	struct mail_storage *source_storage, *dest_storage;
 	struct dotlock *dotlock;
-        enum mail_storage_flags flags;
+        enum mail_storage_flags src_flags, dest_flags;
         enum mail_storage_lock_method lock_method;
 	const char *path;
 	int ret;
 
-	mail_storage_parse_env(&flags, &lock_method);
-	flags |= MAIL_STORAGE_FLAG_NO_AUTOCREATE;
+	mail_storage_parse_env(&src_flags, &lock_method);
+	dest_flags = src_flags;
+	src_flags |= MAIL_STORAGE_FLAG_NO_AUTOCREATE;
 	source_storage = mail_storage_create_with_data(source_data, user,
-						       flags, lock_method);
+						       src_flags, lock_method);
 	if (source_storage == NULL) {
 		/* No need for conversion. */
 		return 0;
@@ -277,7 +281,7 @@ int convert_storage(const char *user, const char *home_dir,
 	   reopen the source storage */
 	mail_storage_destroy(&source_storage);
 	source_storage = mail_storage_create_with_data(source_data, user,
-						       flags, lock_method);
+						       src_flags, lock_method);
 	if (source_storage == NULL) {
 		/* No need for conversion anymore. */
 		file_dotlock_delete(&dotlock);
@@ -285,7 +289,7 @@ int convert_storage(const char *user, const char *home_dir,
 	}
 
 	dest_storage = mail_storage_create_with_data(dest_data, user,
-						     flags, lock_method);
+						     dest_flags, lock_method);
 	if (dest_storage == NULL) {
 		i_error("Mailbox conversion: Failed to create destination "
 			"storage with data: %s", dest_data);

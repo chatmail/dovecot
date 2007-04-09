@@ -1,3 +1,12 @@
+v1.0.rc31 2007-04-08  Timo Sirainen <tss@iki.fi>
+
+	- mbox: Give "mbox file was modified while we were syncing" error only
+	  if we detect some problems in the mbox file. The check can't be
+	  trusted with NFS.
+	- Convert plugin: If directory for destination storage doesn't exist,
+	  create it.
+	- Convert plugin: Mailbox names weren't converted in subscription list.
+
 v1.0.rc30 2007-04-06  Timo Sirainen <tss@iki.fi>
 
 	* PAM: Lowercase the PAM service name when calling with "args = *".

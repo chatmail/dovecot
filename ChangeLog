@@ -1,3 +1,39 @@
+2007-04-07 11:09  Timo Sirainen <tss@iki.fi>
+
+	* autogen.sh: Fixed to work with non-GNU sed.
+
+2007-04-07 08:07  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/convert/convert-storage.c: If directory for
+	  destination storage doesn't exist, create it.
+
+2007-04-07 08:04  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/convert/convert-storage.c: Mailbox names weren't
+	  converted in subscription list.
+
+2007-04-06 17:53  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/: mbox-sync-private.h,
+	  mbox-sync-rewrite.c, mbox-sync.c: Give "mbox file was modified
+	  while we were syncing" error only if we detect some problems in
+	  the mbox file. The check can't be trusted with NFS.
+
+2007-04-06 09:32  Timo Sirainen <tss@iki.fi>
+
+	* configure.in, NEWS: Released 1.0.rc30.
+
+2007-04-06 09:29  Timo Sirainen <tss@iki.fi>
+
+	* src/login-common/ssl-proxy-openssl.c: Send list of CA names to
+	  client when using ssl_verify_client_cert=yes.
+
+2007-04-06 09:21  Timo Sirainen <tss@iki.fi>
+
+	* src/lib-mail/message-size.c: If message body started with a LF,
+	  we didn't count it into number of lines.  This made BODY and
+	  BODYSTRUCTURE replies give wrong line counts for such messages.
+
 2007-04-03 09:58  Timo Sirainen <tss@iki.fi>
 
 	* autogen.sh: Fixed to work with POSIX sh.

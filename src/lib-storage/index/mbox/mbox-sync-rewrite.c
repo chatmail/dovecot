@@ -44,6 +44,7 @@ int mbox_move(struct mbox_sync_context *sync_ctx,
         if (ret == (off_t)size)
 		ret = 0;
 	else if (ret >= 0) {
+		mbox_sync_ext_modify_warning(sync_ctx);
 		mail_storage_set_critical(STORAGE(sync_ctx->mbox->storage),
 			"mbox_move(%"PRIuUOFF_T", %"PRIuUOFF_T", %"PRIuUOFF_T
 			") moved only %"PRIuUOFF_T" bytes in mbox file %s",
@@ -415,7 +416,7 @@ static int mbox_sync_read_and_move(struct mbox_sync_context *sync_ctx,
 		if (need_space != (uoff_t)-mails[idx].space) {
 			/* this check works only if we're doing the first
 			   write, or if the file size was changed externally */
-			if (mbox_sync_file_is_ext_modified(sync_ctx))
+			if (mbox_sync_file_is_ext_modified(sync_ctx, TRUE))
 				return -1;
 
 			i_panic("mbox %s: seq=%u uid=%u uid_broken=%d "
