@@ -76,5 +76,6 @@ encode_base64("myusername\@domain.tld\0myusername\@domain.tld\0mypassword");' |
 mmencode -u
 ---%<-------------------------------------------------------------------------
 
+to check that you have encoded correctly. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

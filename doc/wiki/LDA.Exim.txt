@@ -49,5 +49,6 @@ time setting and there are good reasons for that). So set the socket owner and
 permissions so the user 'vmail' has r/w access.
 
 If you use multiple system users for your virtual setup, you have to use a
+lookup to find the right user (and/or group) for delivery.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

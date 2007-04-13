@@ -219,5 +219,6 @@ mail_executable: /usr/local/bin/envdir /etc/relay-ctrl
 
 Restart Dovecot. Verify that your IMAP client still works. Verify that
 relay-ctrl has recorded your client IP. Hook 'relay-ctrl-check' into your SMTP
+service, as documented in the relay-ctrl README, and you're done.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

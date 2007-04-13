@@ -98,5 +98,6 @@ mail_extra_groups = mail
 ---%<-------------------------------------------------------------------------
 
 Note that it has to be done this way. Adding 'dovecot' user to 'mail' group
+doesn't help at all.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

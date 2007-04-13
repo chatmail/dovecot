@@ -14,4 +14,4 @@ user-space iptables command:
 iptables -v -t nat -A PREROUTING -p tcp -j REDIRECT --dport 109 --to-ports 110
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

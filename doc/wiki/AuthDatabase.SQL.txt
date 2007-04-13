@@ -144,4 +144,4 @@ password_query = SELECT userid || '@' || domain AS user, password \
 user_query = SELECT home, uid, gid FROM users WHERE userid = '%u'
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

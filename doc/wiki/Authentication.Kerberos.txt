@@ -81,5 +81,6 @@ The test:
  * run command mutt
  * If you get error No Authentication Method
     * run command klist (list all kerberos keys) should show imap/HOSTNAME
+ * /etc/hosts has to be set property so that kerberos can find server. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

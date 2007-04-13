@@ -8,5 +8,6 @@ If the vpopmail database contains plaintext passwords, it can be used for
 non-plaintext authentication as well.
 
 You can use auth_cache with VPopMail if you give 'cache_key' parameter. See
+<PAM> [PasswordDatabase.PAM.txt] for more information about it. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

@@ -10,5 +10,6 @@ SSL
    SSL you can see for example Apache's documentation
    [http://httpd.apache.org/docs/2.2/ssl/].
  * Dovecot uses OpenSSL, so whatever information you find about it applies also
+   to Dovecot.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

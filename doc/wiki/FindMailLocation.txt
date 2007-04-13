@@ -59,5 +59,6 @@ If you can't find the mail, you should check your SMTP server logs and
 configuration to see where it went or what went wrong.
 
 If you can find the mail, but it's in more exotic location, see if
+<MailLocation.txt> can help you to configure it. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

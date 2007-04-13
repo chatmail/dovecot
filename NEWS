@@ -1,3 +1,18 @@
+v1.0.0 2007-04-13  Timo Sirainen <tss@iki.fi>
+
+	+ Documentation updated.
+
+v1.0.rc32 2007-04-12  Timo Sirainen <tss@iki.fi>
+
+	- LDAP, auth_bind=no: Don't crash if doing non-plaintext ldap passdb
+	  lookup for unknown user. This also broke deliver when userdb static
+	  was used.
+	- LDAP, auth_bind=yes and userdb ldap: We didn't wait until bind was
+	  finished before sending the userdb request, which could have caused
+	  problems.
+	- LDAP: Don't break when compiling with OpenLDAP v2.3 library
+	- Convert plugin: Don't create "maildirfolder" file to Maildir root.
+
 v1.0.rc31 2007-04-08  Timo Sirainen <tss@iki.fi>
 
 	- mbox: Give "mbox file was modified while we were syncing" error only

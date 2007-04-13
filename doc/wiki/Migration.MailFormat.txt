@@ -182,5 +182,6 @@ works then:
  * Is this hassle actually necessary? I have run mailutil as root like this
    (mailutil as provided by the PINE 4.61 package for SUSE Linux
    10.0):'mailutil copy /tmp/foo.mbx.orig '#driver.unix//tmp/foo.test'' and did
+   not encounter any problems./-- <MatthiasAndree.txt>, 2006-05-18/ 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

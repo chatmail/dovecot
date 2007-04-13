@@ -42,5 +42,6 @@ depends on the extension header, they must be looked up from the same map. For
 this reason there exists 'mail_index_map_get_header_ext()' and
 'mail_index_lookup_ext_full()' functions which take the map as parameter. The
 non-map versions return the data from the latest map if the message hasn't been
+expunged.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

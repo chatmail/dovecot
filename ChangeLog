@@ -1,3 +1,35 @@
+2007-04-13 11:41  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: 1.0.0 released.
+
+2007-04-12 17:19  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: Released 1.0.rc32.
+
+2007-04-12 17:09  Timo Sirainen <tss@iki.fi>
+
+	* src/plugins/convert/convert-storage.c: Don't create INBOX
+	  mailbox, so with maildir the maildirfolder file won't be created
+	  there.
+
+2007-04-12 16:31  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.h: #define LDAP_DEPRECATED for now.
+
+2007-04-12 16:27  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/db-ldap.c: Queue userdb lookup request until bind is
+	  finished (with auth_bind=yes).
+
+2007-04-12 16:23  Timo Sirainen <tss@iki.fi>
+
+	* src/auth/passdb-ldap.c: Don't crash if doing non-plaintext ldap
+	  passdb lookup for unknown user.
+
+2007-04-08 09:10  Timo Sirainen <tss@iki.fi>
+
+	* NEWS, configure.in: Released 1.0.rc31.
+
 2007-04-07 11:09  Timo Sirainen <tss@iki.fi>
 
 	* autogen.sh: Fixed to work with non-GNU sed.

@@ -163,13 +163,18 @@ static int mailbox_convert_list_item(struct mail_storage *source_storage,
 		return -1;
 	}
 
-	/* Create and open the destination mailbox. */
+	/* Create and open the destination mailbox.
+	   Except INBOX, it always exists. */
 	dest_name = mailbox_name_convert(dest_storage, source_storage, name);
-	if (mail_storage_mailbox_create(dest_storage, dest_name, FALSE) < 0) {
-		i_error("Mailbox conversion: Couldn't create mailbox %s: %s",
-			dest_name, storage_error(dest_storage));
-		mailbox_close(&srcbox);
-		return -1;
+	if (strcmp(dest_name, "INBOX") != 0) {
+		if (mail_storage_mailbox_create(dest_storage, dest_name,
+						FALSE) < 0) {
+			i_error("Mailbox conversion: "
+				"Couldn't create mailbox %s: %s",
+				dest_name, storage_error(dest_storage));
+			mailbox_close(&srcbox);
+			return -1;
+		}
 	}
 
 	destbox = mailbox_open(dest_storage, dest_name, NULL,

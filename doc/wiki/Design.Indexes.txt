@@ -71,5 +71,6 @@ Dovecot uses the highest bit for this flag. So for example:
 Dovecot contains 'mail_index_uint32_to_offset()' and
 'mail_index_offset_to_uint32()' functions to translate values between integers
 and lockless integers. The "unset" value is returned as 0, so it's not possible
+to differentiate between "unset" and "set" 0 values.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

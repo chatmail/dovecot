@@ -36,7 +36,7 @@ Create the table like this:
 ---%<-------------------------------------------------------------------------
 create table quota (
   username varchar(255) not null,
-  path varchar(255) not null,
+  path varchar(100) not null,
   current integer,
   primary key (username, path)
 );
@@ -85,4 +85,4 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

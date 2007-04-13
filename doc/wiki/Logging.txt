@@ -91,5 +91,6 @@ doesn't grow beyond a manageable size. Save the below scriptlet as
 ---%<-------------------------------------------------------------------------
 
 *NOTE*: change the path to the logfile(s) and the master.pid file as
+appropriate for your system configuration.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

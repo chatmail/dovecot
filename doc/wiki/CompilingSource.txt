@@ -327,4 +327,4 @@ gcc -shared -fPIC -DHAVE_CONFIG_H -DBUILD_MYSQL \
 driver-mysql.c -o driver_mysql.so -lmysqlclient
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

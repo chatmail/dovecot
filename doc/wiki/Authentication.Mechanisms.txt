@@ -35,5 +35,6 @@ Other non-PLAIN mechanisms include:
  * ANONYMOUS: Support for logging in anonymously. This may be useful if you're
    intending to provide publically accessible IMAP archive.
  * OTP and SKEY: One time password mechanisms. Supported only by Dovecot v1.1
+   and later.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

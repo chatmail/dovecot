@@ -76,5 +76,6 @@ Restricting IP Access
 It's possible to allow user to authenticate only from a specific IP or network.
 This is especially useful for master users. This can be done by
 returning<allow_nets> [PasswordDatabase.ExtraFields.AllowNets.txt] extra field
+in passdb.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

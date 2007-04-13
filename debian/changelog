@@ -1,3 +1,11 @@
+dovecot (1:1.0.0-1) unstable; urgency=low
+
+  * New upstream release, the final 1.0.0. Bumped epoch, because we used the
+    wrong version scheming in the past and I think it is worth to do so now
+    that 1.0.0 has been released.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 13 Apr 2007 15:26:23 +0200
+
 dovecot (1.0.rc31-1) unstable; urgency=low
 
   * New upstream release.

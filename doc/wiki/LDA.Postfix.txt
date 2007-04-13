@@ -5,19 +5,20 @@ System users
 ------------
 
 If you wish you use 'deliver' for all system users on a single domain mail host
-you can do it by editing 'mailbox_command' parameter in '/etc/postfix/main.cf':
+you can do it by editing 'mailbox_command' parameter in
+
+'/etc/postfix/main.cf':
 
 ---%<-------------------------------------------------------------------------
 mailbox_command = /usr/local/libexec/dovecot/deliver
+#  or
+mailbox_command = /usr/libexec/dovecot/deliver
+#  or
+mailbox_command = /usr/lib/dovecot/deliver
+#  or wherever it was installed in your system.
 ---%<-------------------------------------------------------------------------
 
-Then run
-
----%<-------------------------------------------------------------------------
-postfix reload
----%<-------------------------------------------------------------------------
-
- * and that is it.
+Then run 'postfix reload' and that is it.
 
 Some detailed config files and examples at
 http://heinous.org/wiki/Virtual_Domains%2C_Postfix%2C_Dovecot_LDA%2C_and_LDAP
@@ -64,6 +65,12 @@ And remember to run
 postfix reload
 ---%<-------------------------------------------------------------------------
 
+Virtual users with multiple uids/gids
+-------------------------------------
+
+If you need multiple uids/gids you'll need to set deliver setuid root. See the
+<LDA.txt> main page how to do this securely.
+
 Postfix mail_debug caveat
 -------------------------
 
@@ -89,4 +96,4 @@ forcing Postfix to only deliver to the same recipient one at a time.
 dovecot_destination_concurrency_limit = 1
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

@@ -97,5 +97,6 @@ calculation:
 
 If you use <Dovecot's deliver> [LDA.txt] or IMAP APPEND and 'pop3_uidl_format =
 %m', it always appends the X-Delivery-ID: header to saved mailbox. Any existing
+X-Delivery-ID: headers in the saved mails are dropped.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

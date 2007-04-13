@@ -47,5 +47,6 @@ exit $?
 Adjust the log location and Thunderbird launch binary as appropriate. If you
 want to log all modules instead of just IMAP (SMTP, e.g.) then replace "IMAP"
 above with "all". The above will create a date/time stamped logfile for each
+run, so  you won't lose the previous logs.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

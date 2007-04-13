@@ -147,5 +147,6 @@ If you can see only INBOX,
  * Check if client is configured to show only "subscribed mailboxes". If so,
    you'll have to subscribe to the mailboxes you wish to see.
 
+Most IMAP clients have been tested with Dovecot and they work. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

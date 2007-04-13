@@ -98,5 +98,6 @@ you can work around the problem of not having the per-user directory:
    'mail_location = mbox:/var/empty:INBOX=/var/mail/%u:INDEX=MEMORY'
  * Note that if you have IMAP users, they'll see the '/var/empty' as the
    directory containing other mailboxes than INBOX. If the directory is
+   writable, all the users will have their mailboxes shared.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

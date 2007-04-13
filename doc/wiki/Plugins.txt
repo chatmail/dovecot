@@ -26,5 +26,6 @@ External:
    Pop-before-SMTP plugin using WHOSON protocol [http://whoson.sourceforge.net]
 
 To enable / disable plugins per user you can make your userdb return
+'mail_plugins' extra field. See <UserDatabase.ExtraFields.txt> for examples. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

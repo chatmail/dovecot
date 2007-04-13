@@ -5,5 +5,6 @@ Dovecot Design
  * <Design of index files> [Design.Indexes.txt]
     * <API for accessing the index files> [Design.Indexes.MailIndexApi.txt]
  * <Design of authentication process> [Design.AuthProcess.txt]
+ * <Design of IMAP/POP3 processes> [Design.MailProcess.txt] 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

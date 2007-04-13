@@ -8,9 +8,13 @@ the message can be saved within quota limits.
 The configuration file is a text file where each line is in format: '<priority>
 <mailbox name>'. Mails are deleted in lowest -> highest priority number order.
 
-*Example plugin section in dovecot.conf*
+*Example dovecot.conf:*
 
 ---%<-------------------------------------------------------------------------
+protocol imap {
+  mail_plugins = trash
+}
+
 plugin {
   trash = /etc/dovecot-trash.conf
 }
@@ -29,4 +33,4 @@ plugin {
 3 Sent Messages
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

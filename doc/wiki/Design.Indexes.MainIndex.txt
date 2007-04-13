@@ -240,5 +240,6 @@ perfect. If the extension size isn't the same as its alignmentation, it may
 create larger records than necessary. This will be fixed later.
 
 The records size is always divisible by the maximum alignmentation requirement.
+This isn't strictly necessary either, so it could be fixed later as well.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

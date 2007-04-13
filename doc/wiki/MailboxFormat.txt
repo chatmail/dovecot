@@ -66,5 +66,7 @@ References
 ----------
 
  * Mutt mailbox formats: http://rucus.ru.ac.za/docs/mutt/manual58.html
+ * Article on mailbox formats: http://www.livejournal.com/users/rfunk/1571.html
 
-(This file was created from the wiki on 2007-04-06 04:42)
+
+(This file was created from the wiki on 2007-04-13 14:32)

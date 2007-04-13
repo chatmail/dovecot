@@ -81,5 +81,6 @@ have access to any files at all.
 <PAM> [PasswordDatabase.PAM.txt] and <shadow> [PasswordDatabase.txt] passdbs
 are usually configured to read '/etc/shadow' file. Even this doesn't need root
 access if you give /dovecot-auth/ user access to /shadow/ group, and make sure
+that the '/etc/shadow' file is readable for the /shadow/ group. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

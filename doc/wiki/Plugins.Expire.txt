@@ -12,6 +12,13 @@ Example configuration
 ---------------------
 
 ---%<-------------------------------------------------------------------------
+protocol imap {
+  mail_plugins = expire
+}
+protocol pop3 {
+  mail_plugins = expire
+}
+
 plugin {
   # Trash 7d, Spam 30d
   expire = Trash 7 Spam 30
@@ -29,4 +36,4 @@ find /var/virtualmail/ -regex '.*/\.\(Trash\|Junk\)\(/.*\)?\/\(cur\|new\)/.*'
 -type f  -ctime +30  -exec rm '{}'  \;
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

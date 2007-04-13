@@ -29,5 +29,6 @@ Currently supported user databases are:
  * <VPopMail> [AuthDatabase.VPopMail.txt]: External software used to handle
    virtual domains
  * <Prefetch> [UserDatabase.Prefetch.txt]: This assumes that the passdb already
+   returned also all the required user database information
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

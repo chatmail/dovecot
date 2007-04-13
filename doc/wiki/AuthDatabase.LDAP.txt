@@ -191,5 +191,6 @@ make the passdb lookup return all the necessary userdb fields and use prefetch
 userdb to use those fields. If you're using Dovecot's<deliver> [LDA.txt] you'll
 still need to have the userdb lookups working.
 
+See <UserDatabase.Prefetch.txt> for example configuration. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

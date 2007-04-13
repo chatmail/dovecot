@@ -15,5 +15,6 @@ Downsides contain:
  * Messages don't get deleted from disk until there's only one client accessing
    the mailbox, so you may need to add some forced downtime to get it done.
  * Works only in local filesystem.
+ * Expunging is still as costly and as fragile as with mbox. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

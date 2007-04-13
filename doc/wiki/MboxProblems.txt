@@ -88,5 +88,6 @@ your SMTP server. The headers that you should filter out are:
  * X-Keywords
  * X-Status
  * X-UID
+ * X-UIDL (if you're using 'pop3_reuse_xuidl=yes') 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

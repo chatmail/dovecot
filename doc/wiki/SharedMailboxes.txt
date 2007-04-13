@@ -207,5 +207,6 @@ directory where to keep several Maildir-specific control files
 'subscriptions' file. By setting the control directory to a user-specific
 directory the users can manipulate their own subscriptions.
 
+See "Read-only Maildirs" above for an example how to do this. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

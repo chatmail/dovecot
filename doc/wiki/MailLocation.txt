@@ -135,5 +135,6 @@ exec /usr/local/libexec/dovecot/imap
 ---%<-------------------------------------------------------------------------
 
 *NOTE*: If you're using namespaces, the MAIL environment is ignored. You'll
+need to set NAMESPACE_1 (and maybe _2, _3, etc. for each namespace) instead.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

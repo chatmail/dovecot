@@ -47,5 +47,6 @@ Links
  * Original RAND MH [http://rand-mh.sourceforge.net] Code
  * MH-Book [http://rand-mh.sourceforge.net/book/]
  * Mutt Manual [http://www.mutt.org/doc/manual/manual-4.html#ss4.6]: Describing
+   how it handles MH folders
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

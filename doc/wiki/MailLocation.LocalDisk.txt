@@ -51,5 +51,6 @@ Dovecot Settings
  * 'mmap_disable=yes' appears to give better performance due to various
    reasons, but it also increases the memory usage.'mmap_disable=no' is
    supposed to be faster though, so in future Dovecot versions this will
+   probably be fixed.
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

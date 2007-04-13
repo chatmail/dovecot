@@ -100,4 +100,5 @@ Courier version 2 and early Courier version 3:
   pop3_uidl_format = %v-%u
   ---%<-----------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-06 04:42)
+
+(This file was created from the wiki on 2007-04-13 14:32)

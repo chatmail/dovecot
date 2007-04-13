@@ -46,5 +46,6 @@ These mail fetching utilities can be used to store mail for later retrieval by
 dovecot.
 
  Contrast this to the <message delivery agent (MDA)> [MDA.txt], sometimes
+called local delivery agent (LDA).
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

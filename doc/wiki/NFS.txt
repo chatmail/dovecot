@@ -140,5 +140,6 @@ Misc notes
  * In an environment using Debian (2.6.18) clients with Isilon NFS cluster
    nodes - the following mount options were found to be the most
    successful:'rsize=32768,wsize=32768,hard,fg,lock,nfsvers=3,tcp,retrans=0,actimeo=0
+    0 0' 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

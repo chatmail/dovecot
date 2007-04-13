@@ -250,5 +250,6 @@ References
  * Qmail's how to deliver to Maildir man page
    [http://www.qmail.org/man/man5/maildir.html]
  * Maildir++ [http://www.inter7.com/courierimap/README.maildirquota.html]
+ * Wikipedia [http://en.wikipedia.org/wiki/Maildir] 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

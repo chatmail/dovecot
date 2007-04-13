@@ -1,13 +1,34 @@
 Operating System Compatibility
 ==============================
 
+Dovecot is commonly used with Linux, Solaris, FreeBSD, OpenBSD, NetBSD and Mac
+OS X. The following operating systems have also worked at least at some point
+in Dovecot's existence:
+
+ * BSD/OS 4.2
+ * AIX 4.3
+ * HP-UX 11.11
+ * Tru64 ?.?
+ * <UnixWare.txt> 7.1.4
+ * IRIX 6.5 compiles, but SCM_RIGHTS seems to be broken.
+ * Cygwin works after a few code changes, but doesn't support SCM_RIGHTS.
+
 There is one slightly problematic feature that Dovecot requires: *SCM_RIGHTS.*
 It is used for privilege separation. If it is not supported, you can still use
 inetd and mailfront [http://untroubled.org/mailfront/], which executes
 Dovecot's IMAP or POP3 binary.
 
-Dovecot should compile with any ANSI-C99 compiler. Besides GCC, Dovecot is
-known to compile (at least once in its lifetime:) with Intel CC
-[http://www.intel.com/software/products/compilers/clin/], Tiny CC
+Compilers
+---------
 
-(This file was created from the wiki on 2007-04-06 04:42)
+Dovecot should compile with any ANSI-C99 compiler. Dovecot has been known to
+compile (at least once in its lifetime) with the following compilers:
+
+ * GCC
+ * Intel CC [http://www.intel.com/software/products/compilers/clin/]
+ * Tiny CC [http://www.tinycc.org]
+ * Sun Studio 11
+ * AIX xlC
+ * HP-UX cc 
+
+(This file was created from the wiki on 2007-04-13 14:32)

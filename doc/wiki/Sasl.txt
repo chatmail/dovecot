@@ -19,5 +19,6 @@ side. And it already can be:
    [http://www.exim.org/eximwiki/AuthenticatedSmtpUsingDovecot] as well, which
    has since been added to Exim snapshots.
 
+Hopefully more software will follow. 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)

@@ -212,5 +212,6 @@ There exists a script which attempts to translate simple Procmail rules into
 Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
 
 Here's the original post announcing it:
+http://dovecot.org/list/dovecot/2007-March/020895.html 
 
-(This file was created from the wiki on 2007-04-06 04:42)
+(This file was created from the wiki on 2007-04-13 14:32)
