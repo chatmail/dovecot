@@ -268,7 +268,7 @@ dovecot (1.0.beta9-1) unstable; urgency=low
 
   * New upstream release
   * Added XFS quota support.  Thanks  Pawel Jarosz <pj@rsi.pl> 
-    (Closes #373936)
+    (Closes: #373936)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 19 Jun 2006 16:55:20 -0400
 
@@ -533,7 +533,7 @@ dovecot (0.99.12-1) unstable; urgency=low
   * Configuration files moved to /etc/dovecot (Closes: #276183)
   * Permissions on /var/run/dovecot and /var/run/dovecot/login no longer
     give warnings. (Closes: #283996)
-  * SSL certificate is world readable (Closes #277114).
+  * SSL certificate is world readable (Closes: #277114).
   * Thanks to Jan Buren, much extra documentation has been added to
     /usr/share/doc/dovecot-common/README.Debian
   * Lintian overrides added.
