@@ -4,8 +4,10 @@ dovecot (1:1.0.0-1) unstable; urgency=low
     wrong version scheming in the past and I think it is worth to do so now
     that 1.0.0 has been released.
   * debian/watch: updated.
+  * Rebuilt with a new glibc in unstable, now we have inotify support.
+    (Closes: #395306)
 
- -- Fabio Tranchitella <kobold@debian.org>  Fri, 13 Apr 2007 15:26:23 +0200
+ -- Fabio Tranchitella <kobold@debian.org>  Mon, 16 Apr 2007 08:42:32 +0200
 
 dovecot (1.0.rc31-1) unstable; urgency=low
 
