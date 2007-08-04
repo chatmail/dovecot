@@ -3,11 +3,11 @@ NFS
 
 NFS is commonly used in one of these ways:
 
- 1. Run Dovecot in a single computer.
- 2. Run Dovecot in multiple computers, redirect users more or less randomly to
-    different servers.
- 3. Run Dovecot in multiple computers, assign each user a specific computer
-    which is used whenever possible.
+ 1. Dovecot is run in a single computer.
+ 2. Dovecot is run in multiple computers, users are redirected more or less
+    randomly to different computers.
+ 3. Dovecot is run in multiple computers, each user is assigned a specific
+    computer which is used whenever possible.
 
 You should try to avoid the 2nd setup, see below.
 
@@ -33,7 +33,7 @@ enabled.
 
 If you really want to allow multiple computers to access the same mailbox at
 the same time, you'll need to disable the attribute cache. This can usually be
-done by giving 'actimeo=0' or 'noac' mount option. Note that doing this makes
+done by giving 'actimeo=0' or 'noac' mount option. Note that doing this makes
 the performance much worse, could be as bad as 5 times slower for some
 operations.
 
@@ -104,7 +104,7 @@ Per-user redirects to multiple servers
 
 This method performs a lot better than random redirects. It maximizes the
 caching possibilities. It's also pretty safe to keep attribute cache enabled
-(even 'actimeo=2' helps a lot), because other computers are never accessing the
+(even 'actimeo=2' helps a lot), because other computers are never accessing the
 mailbox files.
 
 New mail deliveries are often still handled by different computers. This isn't
@@ -142,4 +142,4 @@ Misc notes
    successful:'rsize=32768,wsize=32768,hard,fg,lock,nfsvers=3,tcp,retrans=0,actimeo=0
     0 0' 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

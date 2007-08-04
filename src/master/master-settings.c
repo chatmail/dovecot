@@ -14,6 +14,7 @@
 
 #include <stdio.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -310,8 +311,10 @@ struct auth_settings default_auth_settings = {
 };
 
 struct socket_settings default_socket_settings = {
+#define DEFAULT_MASTER_SOCKET_PATH "auth-master"
+#define DEFAULT_CLIENT_SOCKET_PATH "auth-client"
 	MEMBER(path) "",
-	MEMBER(mode) 0,
+	MEMBER(mode) 0600,
 	MEMBER(user) "",
 	MEMBER(group) ""
 };
@@ -365,6 +368,7 @@ static bool get_login_uid(struct settings *set)
 static bool auth_settings_verify(struct auth_settings *auth)
 {
 	struct passwd *pw;
+	struct auth_socket_settings *s;
 
 	if ((pw = getpwnam(auth->user)) == NULL) {
 		i_error("Auth user doesn't exist: %s", auth->user);
@@ -401,6 +405,10 @@ static bool auth_settings_verify(struct auth_settings *auth)
 			auth->parent->imap->ssl_verify_client_cert = TRUE;
 	}
 
+	for (s = auth->sockets; s != NULL; s = s->next) {
+		fix_base_path(auth->parent->defaults, &s->master.path);
+		fix_base_path(auth->parent->defaults, &s->client.path);
+	}
 	return TRUE;
 }
 
@@ -623,6 +631,12 @@ static bool settings_verify(struct settings *set)
 	if (!get_login_uid(set))
 		return FALSE;
 
+	if (set->protocol == MAIL_PROTOCOL_POP3 &&
+	    *set->pop3_uidl_format == '\0') {
+		i_error("POP3 enabled but pop3_uidl_format not set");
+		return FALSE;
+	}
+
 	if (access(t_strcut(set->mail_executable, ' '), X_OK) < 0) {
 		i_error("Can't use mail executable %s: %m",
 			t_strcut(set->mail_executable, ' '));
@@ -815,6 +829,46 @@ static bool settings_fix(struct settings *set, bool nochecks, bool nofixes)
 	return nofixes ? TRUE : settings_do_fixes(set);
 }
 
+static int pid_file_is_running(const char *path)
+{
+	char buf[32];
+	int fd;
+	ssize_t ret;
+
+	fd = open(path, O_RDONLY);
+	if (fd == -1) {
+		if (errno == ENOENT)
+			return 0;
+		i_error("open(%s) failed: %m", path);
+		return -1;
+	}
+
+	ret = read(fd, buf, sizeof(buf));
+	if (ret <= 0) {
+		if (ret == 0)
+			i_error("Empty PID file in %s, overriding", path);
+		else
+			i_error("read(%s) failed: %m", path);
+	} else {
+		pid_t pid;
+
+		if (buf[ret-1] == '\n')
+			ret--;
+		buf[ret] = '\0';
+		pid = atoi(buf);
+		if (pid == getpid() || (kill(pid, 0) < 0 && errno == ESRCH)) {
+			/* doesn't exist */
+			ret = 0;
+		} else {
+			i_error("Dovecot is already running with PID %s "
+				"(read from %s)", buf, path);
+			ret = 1;
+		}
+	}
+	(void)close(fd);
+	return ret;
+}
+
 static struct auth_settings *
 auth_settings_new(struct server_settings *server, const char *name)
 {
@@ -902,6 +956,9 @@ auth_socket_settings_new(struct auth_settings *auth, const char *type)
 	as->type = str_lcase(p_strdup(settings_pool, type));
 	as->master = default_socket_settings;
 	as->client = default_socket_settings;
+
+	as->master.path = DEFAULT_MASTER_SOCKET_PATH;
+	as->client.path = DEFAULT_CLIENT_SOCKET_PATH;
 
 	as_p = &auth->sockets;
 	while (*as_p != NULL)
@@ -1211,11 +1268,13 @@ static bool parse_section(const char *type, const char *name, void *context,
 
 		if (strcmp(type, "master") == 0) {
 			ctx->socket = &ctx->auth_socket->master;
+			ctx->socket->used = TRUE;
 			return TRUE;
 		}
 
 		if (strcmp(type, "client") == 0) {
 			ctx->socket = &ctx->auth_socket->client;
+			ctx->socket->used = TRUE;
 			return TRUE;
 		}
 	}
@@ -1290,6 +1349,16 @@ bool master_settings_read(const char *path, bool nochecks, bool nofixes)
 	if (ctx.root->next != NULL)
 		ctx.root = ctx.root->next;
 
+	if (!nochecks && !nofixes) {
+		ctx.root->defaults = settings_is_active(ctx.root->imap) ?
+			ctx.root->imap : ctx.root->pop3;
+
+		path = t_strconcat(ctx.root->defaults->base_dir,
+				   "/master.pid", NULL);
+		if (pid_file_is_running(path) != 0)
+			return FALSE;
+	}
+
 	prev = NULL;
 	for (server = ctx.root; server != NULL; server = server->next) {
 		if ((*server->imap->protocols == '\0' ||
@@ -1297,7 +1366,9 @@ bool master_settings_read(const char *path, bool nochecks, bool nofixes)
 			i_error("No protocols given in configuration file");
 			return FALSE;
 		}
-		if (!settings_is_active(server->imap)) {
+		/* --exec-mail is used if nochecks=TRUE. Allow it regardless
+		   of what's in protocols setting. */
+		if (!settings_is_active(server->imap) && !nochecks) {
 			if (strcmp(server->imap->protocols, "none") == 0) {
 				if (!settings_fix(server->imap, nochecks,
 						  nofixes))
@@ -1311,7 +1382,7 @@ bool master_settings_read(const char *path, bool nochecks, bool nofixes)
 			server->defaults = server->imap;
 		}
 
-		if (!settings_is_active(server->pop3))
+		if (!settings_is_active(server->pop3) && !nochecks)
 			server->pop3 = NULL;
 		else {
 			if (!settings_fix(server->pop3, nochecks, nofixes))
@@ -1485,14 +1556,14 @@ static void auth_settings_dump(struct auth_settings *auth, bool nondefaults)
 			settings_dump(auth_socket_setting_defs, sets2, NULL, 2,
 				      nondefaults, 4);
 
-			if (socket->client.path != NULL) {
+			if (socket->client.used) {
 				printf("    client:\n");
 				sets2[1] = &socket->client;
 				settings_dump(socket_setting_defs, sets2, NULL,
 					      2, nondefaults, 6);
 			}
 
-			if (socket->master.path != NULL) {
+			if (socket->master.used) {
 				printf("    master:\n");
 				sets2[1] = &socket->master;
 				settings_dump(socket_setting_defs, sets2, NULL,

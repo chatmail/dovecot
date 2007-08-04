@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "lib-signals.h"
 #include "ioloop.h"
+#include "array.h"
 #include "hostpid.h"
 #include "home-expand.h"
 #include "env-util.h"
@@ -49,11 +50,15 @@ void (*hook_mail_storage_created)(struct mail_storage *storage) = NULL;
 
 /* FIXME: these two should be in some context struct instead of as globals.. */
 static const char *default_mailbox_name = NULL;
+static bool saved_mail = FALSE;
 static bool tried_default_save = FALSE;
 static bool no_mailbox_autocreate = FALSE;
 
 static struct module *modules;
 static struct ioloop *ioloop;
+
+static pool_t plugin_pool;
+static array_t ARRAY_DEFINE(plugin_envs, const char *);
 
 static void sig_die(int signo, void *context __attr_unused__)
 {
@@ -115,7 +120,7 @@ int deliver_save(struct mail_storage *storage, const char *mailbox,
 	struct mailbox *box;
 	struct mailbox_transaction_context *t;
 	struct mail_keywords *kw;
-	const char *msgid;
+	const char *msgid, *mailbox_name;
 	int ret = 0;
 
 	if (strcmp(mailbox, default_mailbox_name) == 0)
@@ -130,7 +135,7 @@ int deliver_save(struct mail_storage *storage, const char *mailbox,
 	kw = strarray_length(keywords) == 0 ? NULL :
 		mailbox_keywords_create(t, keywords);
 	if (mailbox_copy(t, mail, flags, kw, NULL) < 0)
-		ret = -1;
+		ret = mail->expunged ? -2 : -1;
 	mailbox_keywords_free(t, &kw);
 
 	if (ret < 0)
@@ -139,10 +144,21 @@ int deliver_save(struct mail_storage *storage, const char *mailbox,
 		ret = mailbox_transaction_commit(&t, 0);
 
 	msgid = mail_get_first_header(mail, "Message-ID");
-	i_info(ret < 0 ? "msgid=%s: save failed to %s" :
-	       "msgid=%s: saved mail to %s",
-	       msgid == NULL ? "" : str_sanitize(msgid, 80),
-	       str_sanitize(mailbox_get_name(box), 80));
+	msgid = msgid == NULL ? "" : str_sanitize(msgid, 80);
+	mailbox_name = str_sanitize(mailbox_get_name(box), 80);
+
+	if (ret == 0) {
+		saved_mail = TRUE;
+		i_info("msgid=%s: saved mail to %s", msgid, mailbox_name);
+	} else {
+		const char *error;
+		bool syntax, temp;
+
+		error = ret == -2 ? "BUG: Input mail got lost unexpectedly" :
+			mail_storage_get_last_error(storage, &syntax, &temp);
+		i_info("msgid=%s: save failed to %s: %s",
+		       msgid, mailbox_name, error);
+	}
 
 	mailbox_close(&box);
 	return ret;
@@ -158,7 +174,8 @@ const char *deliver_get_return_address(struct mail *mail)
 		message_address_parse(pool_datastack_create(),
 				      (const unsigned char *)str,
 				      strlen(str), 1, FALSE);
-	return addr == NULL || addr->mailbox == NULL || addr->domain == NULL ?
+	return addr == NULL || addr->mailbox == NULL || addr->domain == NULL ||
+		*addr->mailbox == '\0' || *addr->domain == '\0' ?
 		NULL : t_strconcat(addr->mailbox, "@", addr->domain, NULL);
 }
 
@@ -194,8 +211,12 @@ static void config_file_init(const char *path)
 	struct istream *input;
 	const char *key, *value;
 	char *line, *p, quote;
-	int fd, sections = 0, lda_section = FALSE, pop3_section = FALSE;
+	int fd, sections = 0;
+	bool lda_section = FALSE, pop3_section = FALSE, plugin_section = FALSE;
 	size_t len;
+
+	plugin_pool = pool_alloconly_create("Plugin strings", 512);
+	ARRAY_CREATE(&plugin_envs, default_pool, const char *, 16);
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0)
@@ -239,16 +260,19 @@ static void config_file_init(const char *path)
 		value = p = strchr(line, '=');
 		if (value == NULL) {
 			if (strchr(line, '{') != NULL) {
-				if (strcmp(line, "protocol lda {") == 0 ||
-				    strcmp(line, "plugin {") == 0)
+				if (strcmp(line, "protocol lda {") == 0)
 					lda_section = TRUE;
-				if (strcmp(line, "protocol pop3 {") == 0)
+				else if (strcmp(line, "plugin {") == 0) {
+					plugin_section = TRUE;
+					lda_section = TRUE;
+				} else if (strcmp(line, "protocol pop3 {") == 0)
 					pop3_section = TRUE;
 				sections++;
 			}
 			if (*line == '}') {
 				sections--;
 				lda_section = FALSE;
+				plugin_section = FALSE;
 				pop3_section = FALSE;
 			}
 			continue;
@@ -277,7 +301,25 @@ static void config_file_init(const char *path)
 		if (setting_is_bool(key) && strcasecmp(value, "yes") != 0)
 			continue;
 
-		env_put(t_strconcat(t_str_ucase(key), "=", value, NULL));
+		if (strcasecmp(key, "mail_debug") == 0) {
+			/* We'll internally use only DEBUG environment.
+			   Postfix's sendmail binary uses MAIL_DEBUG
+			   environment for different purposes and we really
+			   don't want to enable it. */
+			env_put("DEBUG=1");
+			continue;
+		}
+
+		if (!plugin_section) {
+			env_put(t_strconcat(t_str_ucase(key), "=",
+					    value, NULL));
+		} else {
+			/* %variables need to be expanded.
+			   store these for later. */
+			value = p_strconcat(plugin_pool,
+					    t_str_ucase(key), "=", value, NULL);
+			array_append(&plugin_envs, &value, 1);
+		}
 	}
 	i_stream_unref(&input);
 	t_pop();
@@ -445,11 +487,49 @@ static void open_logfile(const char *username)
 	i_set_failure_timestamp_format(stamp);
 }
 
+static const char *expand_envs(const char *destination)
+{
+        const struct var_expand_table *table;
+	const char *mail_env, *const *envs;
+	unsigned int i, count;
+	string_t *str;
+
+	str = t_str_new(256);
+	table = get_var_expand_table(destination, getenv("HOME"));
+	envs = array_get(&plugin_envs, &count);
+	for (i = 0; i < count; i++) {
+		str_truncate(str, 0);
+		var_expand(str, envs[i], table);
+		env_put(str_c(str));
+	}
+
+	/* get the table again in case plugin provided the home directory
+	   (yea, kludgy) */
+	table = get_var_expand_table(destination, getenv("HOME"));
+
+	/* MAIL comes from userdb, MAIL_LOCATION from dovecot.conf.
+	   We don't want to expand settings coming from userdb. */
+	mail_env = getenv("MAIL");
+	if (mail_env == NULL)  {
+		mail_env = getenv("MAIL_LOCATION");
+		if (mail_env == NULL)  {
+			/* Keep this for backwards compatibility */
+			mail_env = getenv("DEFAULT_MAIL_ENV");
+		}
+		if (mail_env != NULL) {
+			table = get_var_expand_table(destination,
+						     getenv("HOME"));
+			mail_env = expand_mail_env(mail_env, table);
+		}
+	}
+	return mail_env;
+}
+
 static void print_help(void)
 {
 	printf(
 "Usage: deliver [-c <config file>] [-d <destination user>] [-m <mailbox>]\n"
-"               [-n] [-f <envelope sender>]\n");
+"               [-n] [-e] [-f <envelope sender>]\n");
 }
 
 int main(int argc, char *argv[])
@@ -458,8 +538,7 @@ int main(int argc, char *argv[])
 	const char *envelope_sender = DEFAULT_ENVELOPE_SENDER;
 	const char *mailbox = "INBOX";
 	const char *auth_socket, *env_tz;
-	const char *home, *destination, *user, *mail_env, *value;
-        const struct var_expand_table *table;
+	const char *home, *destination, *user, *value, *mail_env;
         enum mail_storage_flags flags;
         enum mail_storage_lock_method lock_method;
 	struct mail_storage *storage, *mbox_storage;
@@ -468,6 +547,7 @@ int main(int argc, char *argv[])
 	struct mailbox_transaction_context *t;
 	struct mail *mail;
 	uid_t process_euid;
+	bool stderr_rejection = FALSE;
 	int i, ret;
 
 	i_set_failure_exit_callback(failure_exit_callback);
@@ -503,6 +583,8 @@ int main(int argc, char *argv[])
 					       "Missing destination argument");
 			}
 			destination = argv[i];
+		} else if (strcmp(argv[i], "-e") == 0) {
+			stderr_rejection = TRUE;
 		} else if (strcmp(argv[i], "-c") == 0) {
 			/* config file path */
 			i++;
@@ -564,9 +646,6 @@ int main(int argc, char *argv[])
 	config_file_init(config_path);
 	open_logfile(user);
 
-	if (getenv("MAIL_DEBUG") != NULL)
-		env_put("DEBUG=1");
-
 	if (getenv("MAIL_PLUGINS") == NULL)
 		modules = NULL;
 	else {
@@ -626,23 +705,12 @@ int main(int argc, char *argv[])
 	if (deliver_set->sendmail_path == NULL)
 		deliver_set->sendmail_path = DEFAULT_SENDMAIL_PATH;
 
+	mail_env = expand_envs(destination);
+
 	dict_client_register();
         duplicate_init();
         mail_storage_init();
 	mail_storage_register_all();
-
-	/* MAIL comes from userdb, MAIL_LOCATION from dovecot.conf */
-	mail_env = getenv("MAIL");
-	if (mail_env == NULL) 
-		mail_env = getenv("MAIL_LOCATION");
-	if (mail_env == NULL)  {
-		/* Keep this for backwards compatibility */
-		mail_env = getenv("DEFAULT_MAIL_ENV");
-	}
-	if (mail_env != NULL) {
-		table = get_var_expand_table(destination, getenv("HOME"));
-		mail_env = expand_mail_env(mail_env, table);
-	}
 
 	module_dir_init(modules);
 
@@ -676,10 +744,20 @@ int main(int argc, char *argv[])
 		i_fatal("mail_set_seq() failed");
 
 	default_mailbox_name = mailbox;
-	ret = deliver_mail == NULL ? 0 :
-		deliver_mail(storage, mail, destination, mailbox);
+	if (deliver_mail == NULL)
+		ret = -1;
+	else {
+		if (deliver_mail(storage, mail, destination, mailbox) <= 0) {
+			/* if message was saved, don't bounce it even though
+			   the script failed later. */
+			ret = saved_mail ? 0 : -1;
+		} else {
+			/* success. message may or may not have been saved. */
+			ret = 0;
+		}
+	}
 
-	if (ret == 0 || (ret < 0 && !tried_default_save)) {
+	if (ret < 0 && !tried_default_save) {
 		/* plugins didn't handle this. save into the default mailbox. */
 		i_stream_seek(input, 0);
 		ret = deliver_save(storage, mailbox, mail, 0, NULL);
@@ -692,7 +770,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (ret < 0) {
-		const char *error;
+		const char *error, *msgid;
 		bool syntax, temporary_error;
 		int ret;
 
@@ -701,7 +779,16 @@ int main(int argc, char *argv[])
 		if (temporary_error)
 			return EX_TEMPFAIL;
 
+		msgid = mail_get_first_header(mail, "Message-ID");
+		i_info("msgid=%s: Rejected: %s",
+		       msgid == NULL ? "" : str_sanitize(msgid, 80),
+		       str_sanitize(error, 512));
+
 		/* we'll have to reply with permanent failure */
+		if (stderr_rejection) {
+			fprintf(stderr, "%s\n", error);
+			return EX_NOPERM;
+		}
 		ret = mail_send_rejection(mail, destination, error);
 		if (ret != 0)
 			return ret < 0 ? EX_TEMPFAIL : ret;

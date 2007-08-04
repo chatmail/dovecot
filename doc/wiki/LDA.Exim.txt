@@ -4,13 +4,26 @@ Dovecot LDA with Exim
 System users
 ------------
 
-Replace/rewrite the default 'local_delivery' transport and (replace it in the
-'localuser' router):
+Change the localuser router to use dovecot_delivery transport:
 
 ---%<-------------------------------------------------------------------------
-dovecot_deliver:
+localuser:
+  driver = accept
+  check_local_user
+# local_part_suffix = +* : -*
+# local_part_suffix_optional
+  transport = dovecot_delivery
+---%<-------------------------------------------------------------------------
+
+'check_local_user' is required. It makes Exim execute the transport with the
+user's UID and GID and it also sets HOME environment.
+
+Next create a new transport for Dovecot deliver:
+
+---%<-------------------------------------------------------------------------
+dovecot_delivery:
   driver = pipe
-  command = /usr/local/libexec/dovecot/deliver -d $local_part@$domain
+  command = /usr/local/libexec/dovecot/deliver
   message_prefix =
   message_suffix =
   log_output
@@ -21,14 +34,21 @@ dovecot_deliver:
   #mode = 0660
 ---%<-------------------------------------------------------------------------
 
-You should have the 'check_local_user' option in the corresponding router, so
-uid/gid are set correctly.
+Deliver is now run using the local user's UID and GID. The mail is delivered to
+the location specified by<mail_location> [MailLocation.txt] setting. Note that
+the above configuration doesn't do any<userdb> [UserDatabase.txt] lookups, so
+you can't have any per-user configuration. If you want that, see the virtual
+user setup below.
 
 Virtual users
 -------------
 
-It's easy if you have virtual setup with a single user for all virtual
-users/domains:
+Make sure that 'check_local_user' isn't set in the router.
+
+Single UID
+----------
+
+Configure the transport to run as the user you want, for example vmail:
 
 ---%<-------------------------------------------------------------------------
 dovecot_virtual_delivery:
@@ -43,12 +63,16 @@ dovecot_virtual_delivery:
   user = vmail
 ---%<-------------------------------------------------------------------------
 
-You could also use 'user = root' to make sure that Exim has write access to the
-socket, but Exim doesn't allow delivery as root by default (this is a build
-time setting and there are good reasons for that). So set the socket owner and
-permissions so the user 'vmail' has r/w access.
+You'll also need to have a master authentication socket and give vmail user
+access to it. See<LDA.txt> for more information.
 
-If you use multiple system users for your virtual setup, you have to use a
-lookup to find the right user (and/or group) for delivery.
+Multiple UIDs
+-------------
 
-(This file was created from the wiki on 2007-04-13 14:32)
+If you need multiple uids/gids you'll need to set deliver setuid root. See the
+<LDA.txt> main page how to do this securely.
+
+You could alternatively set 'user = root', but this requires that you built
+Exim without root being in FIXED_NEVER_USERS list.
+
+(This file was created from the wiki on 2007-06-15 04:42)

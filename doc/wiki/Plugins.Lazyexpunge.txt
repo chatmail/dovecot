@@ -42,26 +42,19 @@ namespace private {
   prefix = .EXPUNGED/
   separator = /
   location = maildir:~/Maildir/expunged
-  hidden = yes
 }
 namespace private {
   prefix = .DELETED/
   separator = /
   location = maildir:~/Maildir/deleted
-  hidden = yes
 }
 namespace private {
   prefix = .DELETED/.EXPUNGED/
   separator = /
   location = maildir:~/Maildir/deleted/expunged
-  hidden = yes
 }
 
 protocol imap {
-  mail_plugins = lazy_expunge
-}
-protocol pop3 {
-  # works with POP3 too if you want it
   mail_plugins = lazy_expunge
 }
 
@@ -90,7 +83,7 @@ Trash plugin
 
 <Trash plugin> [Plugins.Trash.txt] with some help from <Quota plugin>
 [Quota.txt] could be used to keep the expunged and deleted mailboxes under a
-specified size. Unfortunately this requires CVS HEAD version of Dovecot, and
+specified size. Unfortunately this requires development version of Dovecot, and
 probably even still requires some changes to the code.
 
 Expire plugin
@@ -100,7 +93,7 @@ Expire plugin
 specific mailboxes, and expunge them when they've been there for a specified
 amount of time. It keeps an internal database (Berkeley DB) of all such
 mailboxes, so it doesn't have to go through all the mailboxes for all the
-users. Unfortunately again this requires CVS HEAD version of Dovecot, and it
+users. Unfortunately again this requires development version of Dovecot, and it
 doesn't yet support wildcards in its list of tracked mailboxes.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

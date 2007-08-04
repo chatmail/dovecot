@@ -34,4 +34,4 @@ DEFAULT="$HOME/Maildir/"
 In the above configuration, the users should be a member of the same group and
 the group should have write privileges to the logfile.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

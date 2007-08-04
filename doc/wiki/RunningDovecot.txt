@@ -4,21 +4,31 @@ Running Dovecot
 Starting
 --------
 
-Dovecot can simply be started by running 'dovecot' as root.
+Dovecot can simply be started by running 'dovecot' as root. If there are any
+problems, they're usually written to screen, but they may also be written
+to<error log> [Logging.txt] as well.
 
 If you wish to, you can also <start Dovecot from inetd or xinetd>
 [InetdInstall.txt], but don't try that before you know the Dovecot installation
 is actually working.
 
-A sample /etc/init.d script (as provided in Ubuntu 6.06) can be found in
-<DovecotInit.txt>
+ * A sample universal <init.d script> [DovecotInit.txt].
+ * A sample Mac OS X 10.4 <launchd plist file> [LaunchdInstall.txt]
 
 Stopping
 --------
 
-Just kill the Dovecot master process with a normal TERM signal, it does a clean
-shutdown.'shutdown_clients' setting controls whether existing IMAP and POP3
-sessions are killed.
+Killing the Dovecot master process with a normal TERM signal does a clean
+shutdown:
+
+---%<-------------------------------------------------------------------------
+# master.pid is written to directory pointed by base_dir setting.
+# /var/run/dovecot/master.pid is also a common location.
+kill `cat /usr/local/var/run/dovecot/master.pid`
+---%<-------------------------------------------------------------------------
+
+'shutdown_clients' setting controls whether existing IMAP and POP3 sessions are
+killed.
 
 Processes
 ---------
@@ -60,6 +70,29 @@ dovecot: Jan 08 00:36:45 Warning: SIGHUP received - reloading configuration
 Note that log file locations aren't changed unless you fully stop and restart
 Dovecot.
 
+Running Multiple Invocations of Dovecot
+---------------------------------------
+
+You may wish to invoke a second session (or even multiple sessions) of Dovecot
+for testing different functionality, configurations, etc.  In order to to run
+multiple instances of Dovecot, you must:
+
+ 1. Create a differently named copy of the dovecot.conf configuration file with
+    these changes:
+     1. Change 'base_dir' to the new run directory
+     2. Make sure that 'login_dir' is either commented out (default is relative
+        to 'base_dir'), or change it under the new directory as well
+     3. Change the 'listen' and 'ssl_listen' port numbers to new, unused values
+
+     4. If you're using authentication sockets (for SMTP AUTH or deliver),
+        you'll need to change them as well.'auth_socket_path' specifies the
+        socket path for deliver.
+         * Alternatively if all the instances have identical authentication
+           configuration, you can have only a single Dovecot instance serve the
+           auth sockets and have the other instances use them.
+ 2. Invoke 'dovecot' (and 'deliver') with the '-c' flag and the modified
+    configuration file, e.g.:'dovecot -c /usr/local/etc/dovecot2.conf'
+
 Rotating Log Files
 ------------------
 
@@ -87,4 +120,4 @@ If it simply quits without giving any error, then it wrote the error to a log
 file and you just didn't find it. Try specifying the log file manually and make
 sure you're really looking at the correct file.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

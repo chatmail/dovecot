@@ -8,14 +8,8 @@ Dovecot's index files consist of three different files:
    and 'dovecot.index.log.2')
  * <Cache file> [Design.Indexes.Cache.txt] ('dovecot.index.cache')
 
-Each mailbox has its own separate index files. If the index files are disabled,
-the same structures are still kept in the memory, except cache file is disabled
-completely (because the client probably won't fetch same data twice).
-
-If index files are missing, Dovecot creates them automatically when the mailbox
-is opened. If at any point creating a file or growing a file gives "not enough
-disk space" error, the indexes are transparently moved to memory for the rest
-of the session.
+See <IndexFiles.txt> for more generic information about what they contain and
+why.
 
 The index files can be accessed using <mail-index.h API>
 [Design.Indexes.MailIndexApi.txt].
@@ -73,4 +67,4 @@ Dovecot contains 'mail_index_uint32_to_offset()' and
 and lockless integers. The "unset" value is returned as 0, so it's not possible
 to differentiate between "unset" and "set" 0 values.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

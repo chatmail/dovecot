@@ -1,6 +1,10 @@
 Virtual Users
 =============
 
+There is no one way to configure Dovecot to use virtual users. If you have no
+idea how you want your users to be configured, select some<HOWTO> [HowTo.txt]
+and follow its instructions.
+
 Users are often categorized as being either system users (in '/etc/passwd') or
 virtual users (not in '/etc/passwd'). However from Dovecot's point of view
 there isn't much of a difference between them. If a<passwd>
@@ -54,42 +58,22 @@ UNIX UIDs
 ---------
 
 The most important thing you need to understand is that *Dovecot doesn't access
-the users' mails as the /dovecot/ user*! See <UserIds.txt> for more information
-about what /dovecot/ is really used for. So *don't* put /dovecot/ into /mail/
+the users' mails as the /dovecot/ user*! So *don't* put /dovecot/ into /mail/
 group, and don't make mails owned by /dovecot/ user. That will only make your
 Dovecot installation less secure.
 
 So, if not the /dovecot/ user, what then? You can decide that yourself. You can
 create for example one /vmail/ user which owns all the mails, or you can assign
-a separate UID for each user. Note the UIDs aren't required to be in
-'/etc/passwd'. Neither Dovecot nor your kernel cares about that. You just have
-to be careful with the UID allocation so that the virtual user's UID won't
-accidentally be used for something else as well.
-
-By default Dovecot allows users to log in only with UID numbers 500 and above.
-This check tries to make sure that no-one can ever log in as daemons or other
-system users. If you're using an UID lower than 500, you'll need to change the
-'first_valid_uid' setting.
+a separate UID for each user. See<UserIds#mailusers> [UserIds.txt] for more
+information about different ways to allocate UIDs for users.
 
 UNIX GIDs
 ---------
 
-Pretty much the same applies to GIDs as th UIDs above. By default Dovecot saves
-files using 0600 mode, so it doesn't matter much what the files' group is. If
-you use multiple UIDs and you wish to create shared mailboxes, setting up the
-groups properly may make your configuration more secure. For example if you
-have two teams and their mailboxes are shared only to their team members, you
-could create a group for each team and set the shared mailbox's group to the
-team's group and permissions to 0660, so neither team can even accidentally see
-each others' shared mailboxes.
-
-Currently Dovecot supports specifying only the primary group, however if your
-userdb returns 'system_user' field, the non-primary groups are taken from
-'/etc/group' for that user. In a future version the whole GID list will be
-configurable without help from '/etc/group'.
-
-It's also possible to give all the users an extra group with 'mail_extra_group'
-setting.
+Unless you're using <shared mailboxes> [SharedMailboxes.txt] and multiple UIDs,
+it doesn't really matter what GIDs you use. You can for example use a single
+GID for all users, or create a separate GID for each user. See<UserIds#gids>
+[UserIds.txt] for more information.
 
 Home directories
 ----------------
@@ -188,4 +172,4 @@ Existing virtual user management software
    <Migration.Linuxconf.txt>
  * Also see the Examples / Scenarios in <FrontPage.txt> 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

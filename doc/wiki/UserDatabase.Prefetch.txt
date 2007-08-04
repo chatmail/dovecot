@@ -1,17 +1,24 @@
 Prefetch User Database
 ======================
 
-If you want to reduce the SQL or LDAP lookups from passdb + userdb lookup to
-just one lookup, you can do it by using prefetch userdb and making the passdb
-query return also the userdb information. The userdb field names must be
-prefixed with 'userdb_'.
+Prefetch userdb can be used to combine passdb and userdb lookups into a single
+lookup. It's usually used with<SQL> [AuthDatabase.SQL.txt], <LDAP>
+[AuthDatabase.LDAP.txt] and <checkpassword>
+[PasswordDatabase.CheckPassword.txt] passdbs.
 
-If you're using Dovecot's <local delivery agent> [LDA.txt], you'll still need a
-valid userdb which it can use to locate the users. You can do this by adding a
-normal sql/ldap userdb after userdb prefetch.
+Prefetch basically works by requiring that the passdb returns the userdb
+information in<extra fields> [PasswordDatabase.ExtraFields.txt] with 'userdb_'
+prefixes. For example if a userdb typically returns 'uid', 'gid' and 'home'
+fields, the passdb would have to return 'userdb_uid', 'userdb_gid' and
+'userdb_home' fields.
+
+If you're using <deliver> [LDA.txt], you still need a valid userdb which can be
+used to locate the users. You can do this by adding a normal SQL/LDAP userdb
+after the userdb prefetch. See below for examples.
 
 LDAP's 'auth_bind_userdn=yes' setting is incompatible with prefetch, because no
-passdb lookup is done then.
+passdb lookup is done then. If you want zero LDAP lookups, you might want to
+user<static userdb> [UserDatabase.Static.txt] instead of prefetch.
 
 SQL example
 -----------
@@ -73,4 +80,4 @@ pass_attrs = uid=user,userPassword=password, \
 user_attrs = homeDirectory=home,uidNumber=uid,gidNumber=gid
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

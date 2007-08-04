@@ -19,6 +19,7 @@
 #elif defined(HAVE_SYS_MNTTAB_H)
 #  include <stdio.h>
 #  include <sys/mnttab.h> /* Solaris */
+#  include <sys/mntent.h>
 #else
 #  define MOUNTPOINT_UNKNOWN
 #endif
@@ -36,6 +37,7 @@
 #ifndef MNTTYPE_IGNORE
 #  define MNTTYPE_IGNORE "ignore"
 #endif
+
 
 int mountpoint_get(const char *path, pool_t pool, struct mountpoint *point_r)
 {
@@ -58,7 +60,11 @@ int mountpoint_get(const char *path, pool_t pool, struct mountpoint *point_r)
 
 	point_r->device_path = p_strdup(pool, buf.f_mntfromname);
 	point_r->mount_path = p_strdup(pool, buf.f_mntonname);
+#ifdef __osf__ /* Tru64 */
+	point_r->type = p_strdup(pool, getvfsbynumber(buf.f_type));
+#else
 	point_r->type = p_strdup(pool, buf.f_fstypename);
+#endif
 	point_r->block_size = buf.f_bsize;
 	return 1;
 #else
@@ -91,8 +97,11 @@ int mountpoint_get(const char *path, pool_t pool, struct mountpoint *point_r)
 		return -1;
 	}
 	while ((getmntent(f, &ent)) == 0) {
-		if (strcmp(ent.mnt_fstype, MNTTYPE_SWAP) == 0 ||
-		    strcmp(ent.mnt_fstype, MNTTYPE_IGNORE) == 0)
+		if (hasmntopt(&ent, MNTOPT_IGNORE) != NULL)
+			continue;
+
+		/* mnt_type contains tmpfs with swap */
+		if (strcmp(ent.mnt_special, MNTTYPE_SWAP) == 0)
 			continue;
 
 		if (stat(ent.mnt_mountp, &st2) == 0 &&

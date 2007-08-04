@@ -54,4 +54,4 @@ returns any unusual error.  This message is misleading and looks as though
 'sendmail' were failing to find the 'deliver' executable.  It actually means
 that the error is unknown. As of v1.0.rc27 this should never happen.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

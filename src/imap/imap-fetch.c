@@ -322,6 +322,7 @@ int imap_fetch(struct imap_fetch_context *ctx)
 		ctx->line_finished = TRUE;
 		if (o_stream_send(ctx->client->output, ")\r\n", 3) < 0)
 			return -1;
+		ctx->client->last_output = ioloop_time;
 
 		ctx->cur_mail = NULL;
 		ctx->cur_handler = 0;
@@ -362,12 +363,11 @@ int imap_fetch_deinit(struct imap_fetch_context *ctx)
 		mailbox_header_lookup_deinit(&ctx->all_headers_ctx);
 
 	if (ctx->trans != NULL) {
-		if (ctx->failed)
-			mailbox_transaction_rollback(&ctx->trans);
-		else {
-			if (mailbox_transaction_commit(&ctx->trans, 0) < 0)
-				ctx->failed = TRUE;
-		}
+		/* even if something failed, we want to commit changes to
+		   cache, as well as possible \Seen flag changes for FETCH
+		   replies we returned so far. */
+		if (mailbox_transaction_commit(&ctx->trans, 0) < 0)
+			ctx->failed = TRUE;
 	}
 	return ctx->failed ? -1 : 0;
 }

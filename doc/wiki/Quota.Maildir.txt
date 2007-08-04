@@ -72,4 +72,4 @@ However what this does is slightly different from the ignore setting, so
 perhaps it needs to be added back (maybe in a more configurable way to support
 more mailboxes?).
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

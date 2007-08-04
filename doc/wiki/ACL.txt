@@ -3,7 +3,8 @@ Access Control Lists
 
 Dovecot supports giving ACLs to mailboxes, although it doesn't yet support the
 actual IMAP ACL extension. The code allows multiple ACL backends, but currently
-Dovecot supports only virtual ACL files.
+Dovecot supports only virtual ACL files. See<SharedMailboxes.txt> for
+information how to implement them.
 
 ACLs can be enabled in dovecot.conf with:
 
@@ -19,8 +20,12 @@ plugin {
 ---%<-------------------------------------------------------------------------
 
 Groups aren't currently supported, but only because the groups can't be
-specified in userdb currently. If you really need groups, there are some
-workarounds that would allow you to pretty easily use them already.
+specified in userdb currently. If you really need groups, you could modify the
+sources:http://dovecot.org/list/dovecot/2007-May/022535.html
+
+The default ACLs for mailboxes is to give owner all permissions and other users
+none. Mailboxes in public namespaces don't have owners, so by default no-one
+can access them.
 
 vfile backend
 -------------
@@ -72,6 +77,19 @@ Where *identifier* is one of:
 The ACLS are processed in the order given above, so eg. if you have given
 read-access to some group, you can still remove that from some specific user.
 
+Group-override identifier allows you to override users' ACLs. Probably the most
+useful reason to do this is to temporarily disable access for some users. For
+example:
+
+---%<-------------------------------------------------------------------------
+user=timo rw
+group-override=tempdisabled
+---%<-------------------------------------------------------------------------
+
+Now if *timo* is in *tempdisabled* group, he has no access to the mailbox. This
+wouldn't be possible with a normal group identifier, because the 'user=timo'
+would override it.
+
 The currently supported ACLs and their corresponding named ACLs are: 
 
 +---+---------------+---------------------------------------------------------+
@@ -110,4 +128,4 @@ owner lrwstiekxa
 user=timo rl
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

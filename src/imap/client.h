@@ -52,6 +52,7 @@ struct client {
 	unsigned int input_pending:1;
 	unsigned int output_pending:1;
 	unsigned int handling_input:1;
+	unsigned int idling:1;
 	unsigned int input_skip_line:1; /* skip all the data until we've
 					   found a new line */
 };

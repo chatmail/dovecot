@@ -20,6 +20,7 @@ dbox format isn't finished yet, so it should only be used for testing purposes.
 References
 ----------
 
- * http://dovecot.org/pipermail/dovecot/2005-September/009294.html 
+ * http://dovecot.org/pipermail/dovecot/2005-September/009294.html
+ * Redesign plans: http://dovecot.org/list/dovecot/2007-May/022602.html 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

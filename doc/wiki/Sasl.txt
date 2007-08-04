@@ -10,15 +10,14 @@ SMTP protocols all have support for SASL.
 Many people confuse SASL with one specific SASL implementation: the Cyrus SASL
 library. Dovecot has its own SASL implementation which may at some point be
 separated from Dovecot itself to "compete" against Cyrus SASL library in server
-side. And it already can be:
+side.
 
- * Postfix as of *version 2.3* supports Dovecot's SASL server implementation.
-   See http://www.postfix.org/SASL_README.html or <PostfixAndDovecotSASL.txt>
-   for details.
- * There's a patch for Exim
-   [http://www.exim.org/eximwiki/AuthenticatedSmtpUsingDovecot] as well, which
-   has since been added to Exim snapshots.
+Dovecot SASL can already be used with:
+
+ * Postfix *v2.3* and later. See <HowTo.PostfixAndDovecotSASL.txt> for details.
+
+ * Exim *v4.64* and later. See <HowTo.EximAndDovecotSASL.txt> for details.
 
 Hopefully more software will follow. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

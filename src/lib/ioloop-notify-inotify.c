@@ -139,7 +139,8 @@ void io_loop_notify_remove(struct ioloop *ioloop, struct io *_io)
 		ioloop->notify_handler_context;
 	struct inotify_io *io = (struct inotify_io *)_io;
 
-	if (inotify_rm_watch(ctx->inotify_fd, io->wd) < 0)
+	/* EINVAL happens if the watched file itself is deleted */
+	if (inotify_rm_watch(ctx->inotify_fd, io->wd) < 0 && errno != EINVAL)
 		i_error("inotify_rm_watch() failed: %m");
 
 	if (ioloop->notifys == NULL)
@@ -155,7 +156,12 @@ void io_loop_notify_handler_init(struct ioloop *ioloop)
 
 	ctx->inotify_fd = inotify_init();
 	if (ctx->inotify_fd == -1) {
-		i_error("inotify_init() failed: %m");
+		if (errno != EMFILE)
+			i_error("inotify_init() failed: %m");
+		else {
+			i_warning("Inotify instance limit for user exceeded, "
+				  "disabling.");
+		}
 		ctx->disabled = TRUE;
 		return;
 	}

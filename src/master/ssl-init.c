@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <utime.h>
 #include <sys/stat.h>
 
 static struct timeout *to;
@@ -60,11 +61,14 @@ static void start_generate_process(const char *fname)
 	i_fatal_status(FATAL_EXEC, "execv(%s) failed: %m", binpath);
 }
 
-void ssl_parameter_process_destroyed(pid_t pid __attr_unused__)
+void ssl_parameter_process_destroyed(bool abnormal_exit)
 {
-	if (file_copy(SSL_PARAMETERS_PERM_PATH, generating_path, TRUE) <= 0) {
-		i_error("file_copy(%s, %s) failed: %m",
-			SSL_PARAMETERS_PERM_PATH, generating_path);
+	if (!abnormal_exit) {
+		if (file_copy(SSL_PARAMETERS_PERM_PATH,
+			      generating_path, TRUE) <= 0) {
+			i_error("file_copy(%s, %s) failed: %m",
+				SSL_PARAMETERS_PERM_PATH, generating_path);
+		}
 	}
 	i_free_and_null(generating_path);
 }
@@ -72,33 +76,42 @@ void ssl_parameter_process_destroyed(pid_t pid __attr_unused__)
 static bool check_parameters_file_set(struct settings *set)
 {
 	const char *path;
-	struct stat st;
+	struct stat st, st2;
 	time_t regen_time;
 
 	if (set->ssl_disable)
 		return TRUE;
 
 	path = t_strconcat(set->login_dir, "/"SSL_PARAMETERS_FILENAME, NULL);
-	if (lstat(path, &st) < 0) {
+	if (stat(path, &st) < 0) {
 		if (errno != ENOENT) {
-			i_error("lstat() failed for SSL parameters file %s: %m",
+			i_error("stat() failed for SSL parameters file %s: %m",
 				path);
 			return TRUE;
 		}
 
-		/* try to copy the permanent parameters file here if possible */
-		if (file_copy(SSL_PARAMETERS_PERM_PATH, path, TRUE) > 0) {
-			if (stat(path, &st) < 0) {
-				i_error("stat(%s) failed: %m", path);
-				st.st_mtime = 0;
-			}
-		} else {
-			st.st_mtime = 0;
-		}
+		st.st_mtime = 0;
 	} else if (st.st_size == 0) {
 		/* broken, delete it (mostly for backwards compatibility) */
 		st.st_mtime = 0;
 		(void)unlink(path);
+	}
+
+	if (stat(SSL_PARAMETERS_PERM_PATH, &st2) == 0 &&
+	    st.st_mtime < st2.st_mtime) {
+		/* permanent parameters file has changed. use it. */
+		if (file_copy(SSL_PARAMETERS_PERM_PATH, path, TRUE) > 0) {
+			if (st.st_ino != st2.st_ino) {
+				/* preserve the mtime */
+				struct utimbuf ut;
+
+				ut.actime = ut.modtime = st2.st_mtime;
+				if (utime(path, &ut) < 0)
+					i_error("utime(%s) failed: %m", path);
+			}
+			if (stat(path, &st) < 0)
+				st.st_mtime = 0;
+		}
 	}
 
 	/* make sure it's new enough, it's not 0 sized, and the permissions
@@ -155,7 +168,7 @@ void ssl_deinit(void)
 
 #else
 
-void ssl_parameter_process_destroyed(pid_t pid __attr_unused__) {}
+void ssl_parameter_process_destroyed(bool abnormal_exit __attr_unused__) {}
 void ssl_check_parameters_file(void) {}
 void ssl_init(void) {}
 void ssl_deinit(void) {}

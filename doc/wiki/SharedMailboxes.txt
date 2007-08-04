@@ -63,7 +63,7 @@ For example:
 
 ---%<-------------------------------------------------------------------------
 # cd /home/user/Maildir
-ln -s "/home/public/Maildir/.Company News ."
+ln -s "/home/public/Maildir/.Company News" .
 ln -s "/home/public/Maildir/.Team News" .
 ---%<-------------------------------------------------------------------------
 
@@ -75,6 +75,9 @@ You can also use create_dovecot_shares
 in the Suretec [http://www.suretecsystems.com/services/] CPAN
 [http://www.cpan.org] directory). There's also a copy of it in Dovecot Tools
 [http://dovecot.org/tools/] page.
+
+Trying to delete a symlinked maildir gives internal errors with Dovecot
+versions older than v1.0.1.
 
 Namespaces
 ----------
@@ -89,7 +92,6 @@ namespace public {
   # This assumes that the user has write access to the directory:
   location = maildir:/var/mail/public
 }
-
 # If you create any namespaces, you must also create a namespace
 # for your private mailboxes.
 namespace private {
@@ -107,9 +109,9 @@ In the above example, you could then create maildir folders under the
 
 ---%<-------------------------------------------------------------------------
 # ls -la /var/mail/public/
--rw-r-s--- 1 root mail 0 2007-03-19 03:12 .
--rw-rws--- 1 root mail 0 2007-03-19 03:12 .lkml
--rw-rws--- 1 root mail 0 2007-03-19 03:12 .bugtraq
+drwxr-s--- 1 root mail 0 2007-03-19 03:12 .
+drwxrws--- 1 root mail 0 2007-03-19 03:12 .lkml
+drwxrws--- 1 root mail 0 2007-03-19 03:12 .bugtraq
 -rw-rw---- 1 root mail 0 2007-03-19 03:12 dovecot-shared
 -rw-r----- 1 root mail 0 2007-03-19 03:12 subscriptions
 ---%<-------------------------------------------------------------------------
@@ -209,4 +211,4 @@ directory the users can manipulate their own subscriptions.
 
 See "Read-only Maildirs" above for an example how to do this. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

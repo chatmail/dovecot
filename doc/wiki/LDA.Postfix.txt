@@ -7,7 +7,7 @@ System users
 If you wish you use 'deliver' for all system users on a single domain mail host
 you can do it by editing 'mailbox_command' parameter in
 
-'/etc/postfix/main.cf':
+'/etc/postfix/main.cf' (postconf(5) [http://www.postfix.org/postconf.5.html]):
 
 ---%<-------------------------------------------------------------------------
 mailbox_command = /usr/local/libexec/dovecot/deliver
@@ -29,25 +29,23 @@ Virtual users
 
 Dovecot LDA is very easy to use on large scale installations with Postfix
 virtual domains support, just add a 'dovecot' service in
-'/etc/postfix/master.cf':
+'/etc/postfix/master.cf' (master(8) [http://www.postfix.org/master.5.html]):
 
 ---%<-------------------------------------------------------------------------
-# Dovecot LDA
 dovecot   unix  -       n       n       -       -       pipe
-  flags=DRhu user=vmail:vmail argv=/usr/local/libexec/dovecot/deliver -d
-${recipient}
+  flags=DRhu user=vmail:vmail argv=/usr/local/libexec/dovecot/deliver -f
+${sender} -d ${recipient}
 ---%<-------------------------------------------------------------------------
 
-An example using '+' extensions. In order to keep ${extension} with the proper
-case, the 'hu' flags are not used so be sure to utilize<Modifiers>
-[Variables.txt] in your dovecot.conf for mail locations and other configuration
-parameters.
+An example using '+' extensions. (If you wish to preserve the case of
+${extension}, remove the the 'hu'flags [http://www.postfix.org/pipe.8.html],
+and be sure to utilize<Modifiers> [Variables.txt] in your dovecot.conf for mail
+locations and other configuration parameters that are expecting lower case.)
 
 ---%<-------------------------------------------------------------------------
-# Dovecot LDA
 dovecot unix    -       n       n       -       -      pipe
-  flags=DR user=vmail:vmail argv=/usr/local/libexec/dovecot/deliver -d
-${user}@${nexthop} -n -m ${extension}
+  flags=DRhu user=vmail:vmail argv=/usr/local/libexec/dovecot/deliver -f
+${sender} -d ${user}@${nexthop} -n -m ${extension}
 ---%<-------------------------------------------------------------------------
 
 Replace 'vmail' above with your virtual mail user account.
@@ -74,7 +72,7 @@ If you need multiple uids/gids you'll need to set deliver setuid root. See the
 Postfix mail_debug caveat
 -------------------------
 
-This is a problem with Dovecot versions older than v1.0.rc26:
+This is a problem with Dovecot versions older than v1.0.1:
 
 Be sure that the 'mail_debug' setting is commented out in 'dovecot.conf',
 because otherwise the postfix sendmail replacement will be started in the
@@ -84,16 +82,17 @@ postfix's sendmail command checks for the existence of the MAIL_DEBUG
 environment variable, which is created by the dovecot lda as soon as a
 'mail_debug' setting is present.
 
-Postfix with a NFS mailstore tip
---------------------------------
+Postfix with a NFS mail store
+-----------------------------
 
 If you are experiencing problems with deliver processes hanging when delivering
-to an NFS mailstore, its likely the deliver process is hanging waiting for free
-locks.  The occurance of this can be greatly reduced, if not eradicated, by
-forcing Postfix to only deliver to the same recipient one at a time.
+to a NFS mail store, it's likely that the deliver process is hanging while
+waiting for free locks.  The occurrence of this can be greatly reduced, if not
+eradicated, by forcing Postfix to only deliver to the same recipient one at a
+time.
 
 ---%<-------------------------------------------------------------------------
 dovecot_destination_concurrency_limit = 1
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

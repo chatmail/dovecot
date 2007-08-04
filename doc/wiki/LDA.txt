@@ -47,7 +47,7 @@ Parameters accepted by deliver:
  * '-d <username>': Destination username. User information is looked up from
    dovecot-auth.
  * '-f <address>': Envelope sender address. Currently this is used only for
-   writing mbox's From_-header.
+   writing mbox's From_-header. The default is "MAILER-DAEMON".
  * '-c <path>': Alternative configuration file path.
  * '-m <mailbox>': Destination mailbox (default is INBOX). If the mailbox
    doesn't exist, it's created (unless -n is used). If message couldn't be
@@ -78,6 +78,9 @@ it's executed as the user itself.
 Virtual users
 -------------
 
+With a lookup
+-------------
+
 Give the destination username to deliver with '-d' parameter, for example:
 
 ---%<-------------------------------------------------------------------------
@@ -91,7 +94,7 @@ where to find mailboxes for the users:
 protocol lda {
 ..
   # UNIX socket path to master authentication server to find users.
-  #auth_socket_path = /var/run/dovecot-auth-master
+  #auth_socket_path = /var/run/dovecot/auth-master
 }
 auth default {
 ..
@@ -112,6 +115,29 @@ possible.
 ..
 }
 ---%<-------------------------------------------------------------------------
+
+The master socket can be used to do <userdb> [UserDatabase.txt] lookups for
+given usernames. Typically the result will contain the user's UID, GID and home
+directory, but depending on your configuration it may return other information
+as well. So the information is similar to what can be found from
+eg.'/etc/passwd' for system users. This means that it's probably not a problem
+to use mode=0666 for the socket, but you should try to restrict it more just to
+be safe.
+
+Without a lookup
+----------------
+
+If you have already looked up the user's home directory and you don't need a
+userdb lookup for any other reason either (such as overriding settings for
+specific users), you can run deliver similar to how it's run for system users:
+
+---%<-------------------------------------------------------------------------
+HOME=/path/to/user/homedir deliver -f $FROM_ENVELOPE
+---%<-------------------------------------------------------------------------
+
+This way you don't need to have a master listener socket. Note that you should
+verify the user's existence prior to running deliver, otherwise you'll end up
+having mail delivered to non-existing users as well.
 
 Multiple UIDs
 -------------
@@ -139,8 +165,11 @@ Problems with deliver
    can be delivered only to mailboxes specified by the<mail_location>
    [MailLocation.txt] setting.
  * If you are using <prefetch userdb> [UserDatabase.Prefetch.txt], keep in mind
-   that 'deliver' does not make a password query and thus will not work. The
-   <UserDatabase.Prefetch.txt> page explains how to fix this.
+   that 'deliver' does not make a password query and thus will not work if '-d'
+   parameter is used. The<UserDatabase.Prefetch.txt> page explains how to fix
+   this.
+    * See <Checkpassword> [PasswordDatabase.CheckPassword.txt] for how to make
+      deliver work with checkpassword.
 
 Logging
 -------
@@ -183,4 +212,4 @@ Plugins
  * Virtual quota can be enforced using <Quota plugin> [Quota.txt].
  * Sieve language support can be added with <Sieve plugin> [LDA.Sieve.txt]. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

@@ -21,12 +21,12 @@ convert the files for you.
 Check also the *User-Contributed Maildir Support* section on the qmail
 community site [http://www.qmail.org/top.html#usersoft] for more choices.
 
-Example (user's mail in '~someuser/mail' and inbox in '/var/mail/someuser'):
+Example (user's mail in '~someuser/mail' and INBOX in '/var/mail/someuser'):
 
 ---%<-------------------------------------------------------------------------
 cd ~someuser
 mb2md-3.20.pl -s mail -R
-mb2md-3.20.pl -m -d /var/mail/incoming/someuser
+mb2md-3.20.pl -m -s /var/mail/someuser
 mv mail mail.old
 ---%<-------------------------------------------------------------------------
 
@@ -55,7 +55,7 @@ use the prefix, or you can tell your users to remove the namespace prefix from
 their clients and change the subscriptions file:
 
 ---%<-------------------------------------------------------------------------
-sed 's/mail\.//' subscriptions > subscriptions.new
+sed 's/^mail\.//' subscriptions > subscriptions.new
 mv subscriptions.new subscriptions
 ---%<-------------------------------------------------------------------------
 
@@ -184,4 +184,4 @@ works then:
    10.0):'mailutil copy /tmp/foo.mbx.orig '#driver.unix//tmp/foo.test'' and did
    not encounter any problems./-- <MatthiasAndree.txt>, 2006-05-18/ 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

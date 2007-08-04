@@ -1,5 +1,5 @@
  1. Compiling Dovecot From Sources
- 2. Compiling Dovecot From CVS
+ 2. Compiling Dovecot From Mercurial
  3. Compiling Dovecot with rpmbuild (Mandriva, RedHat, etc.)
  4. SSL/TLS Support
      1. Solaris and OpenSSL problems
@@ -36,13 +36,13 @@ environment variables. For example:
 CPPFLAGS=-I/opt/openssl/include LDFLAGS=-L/opt/openssl/lib ./configure
 ---%<-------------------------------------------------------------------------
 
-Compiling Dovecot From CVS
-==========================
+Compiling Dovecot From Mercurial
+================================
 
-If you got Dovecot from CVS, for instance with
+If you got Dovecot from Mercurial, for instance with
 
 ---%<-------------------------------------------------------------------------
-cvs -d :pserver:anonymous@dovecot.org:/home/cvs checkout -r branch_1_0 dovecot
+hg clone http://hg.dovecot.org/dovecot/
 ---%<-------------------------------------------------------------------------
 
 you will first need to run './autogen.sh' to generate the 'configure' script
@@ -59,10 +59,12 @@ make
 sudo make install
 ---%<-------------------------------------------------------------------------
 
-For later updates from CVS, you can use:
+For later updates, you can use:
 
 ---%<-------------------------------------------------------------------------
-cvs update -dP
+hg pull
+hg merge # if you've done any changes yourself
+hg update
 make
 sudo make install
 ---%<-------------------------------------------------------------------------
@@ -77,9 +79,9 @@ be found in the cooker subtree. If the current release is newer; updating the
 source rpm is not difficult. Unpack the source rpm with 'rpm -ivh
 dovecot-10.rc26.src.rpm' to a build environment (/usr/src/rpm...) Copy the
 newer tarball from the dovecot site to the SOURCES directory of the build
-environment. Change the dovecot.spec file in the SPECS direcctory to reflect
-the new release and the new name of the tarball. The maintainer seems to work
-with a bz2 tarball; a tar.gz tarball makes no difference Issue a rpmbuild -ba
+environment. Change the dovecot.spec file in the SPECS directory to reflect the
+new release and the new name of the tarball. The maintainer seems to work with
+a bz2 tarball; a tar.gz tarball makes no difference Issue a rpmbuild -ba
 dovecot.spec. The resulting rpm will be placed in RPMS/i586 Install with rpm or
 urpmi.
 
@@ -95,9 +97,9 @@ cd ../RPMS/i586
 urpmi ./dovecot-1.0.rc28-1mdv2007.0.i586.rpm
 ---%<-------------------------------------------------------------------------
 
-During this proces missing prerequisits may be detected. Install them and rerun
-the build proces. The spec file also need updating for the new add-ons (idxview
-and logview).
+During this process missing prerequisites may be detected. Install them and
+rerun the build process. The spec file also need updating for the new add-ons
+(idxview and logview).
 
 SSL/TLS Support
 ===============
@@ -242,40 +244,67 @@ SQL Driver Options
 SQL drivers are typically used only for authentication, but they may be used as
 a lib-dict backend too, which can be used by plugins for different purposes.
 
----%<-------------------------------------------------------------------------
-  --with-sql-drivers      Build with specified SQL drivers. Defaults to all
-that were found with autodetection.
-  --with-pgsql            Build with PostgreSQL support
-  --with-mysql            Build with MySQL support
-  --with-sqlite           Build with SQLite3 driver support
----%<-------------------------------------------------------------------------
+--with-sql-drivers:
+  Build with specified SQL drivers. Defaults to all that were found with
+  autodetection.
+
+--with-pgsql:
+  Build with PostgreSQL support (requires pgsql-devel, libpq-dev or similar
+  package)
+
+--with-mysql:
+  Build with MySQL support (requires mysql-devel, libmysqlclient15-dev or
+  similar package)
+
+--with-sqlite:
+  Build with SQLite3 driver support (requires sqlite-devel, libsqlite3-dev or
+  similar package)
 
 Authentication Backend Options
 ------------------------------
 
 The basic backends are built if the system is detected to support them:
 
----%<-------------------------------------------------------------------------
-  --with-passwd           Build with /etc/passwd support
-  --with-passwd-file      Build with passwd-like file support
-  --with-shadow           Build with shadow password support
-  --with-pam              Build with PAM support
-  --with-checkpassword    Build with checkpassword support
-  --with-bsdauth          Build with BSD authentication support
-  --with-static-userdb    Build with static userdb support
-  --with-prefetch-userdb  Build with prefetch userdb support
----%<-------------------------------------------------------------------------
+--with-passwd:
+  Build with NSS (typically '/etc/passwd') support
+
+--with-passwd-file:
+  Build with passwd-like file support
+
+--with-shadow:
+  Build with shadow password support
+
+--with-pam:
+  Build with PAM support
+
+--with-checkpassword:
+  Build with checkpassword support
+
+--with-bsdauth:
+  Build with BSD authentication support (if supported by your OS)
+
+--with-static-userdb:
+  Build with static userdb support
+
+--with-prefetch-userdb:
+  Build with prefetch userdb support
 
 Some backends require extra libraries and are not necessarily wanted, so they
 are built only if specifically enabled:
 
----%<-------------------------------------------------------------------------
-  --with-sql              Build with generic SQL support (drivers are enabled
-separately)
-  --with-ldap             Build with LDAP support
-  --with-gssapi           Build with GSSAPI authentication support
-  --with-vpopmail         Build with vpopmail support
----%<-------------------------------------------------------------------------
+--with-sql:
+  Build with generic SQL support (drivers are enabled separately)
+
+--with-ldap:
+  Build with LDAP support (requires openldap-devel, libldap2-dev or similar
+  package)
+
+--with-gssapi:
+  Build with GSSAPI authentication support (requires krb5-devel, libkrb5-dev or
+  similar package)
+
+--with-vpopmail:
+  Build with vpopmail support (requires vpopmail sources or a devel package)
 
 Dynamic Authentication Modules
 ==============================
@@ -327,4 +356,4 @@ gcc -shared -fPIC -DHAVE_CONFIG_H -DBUILD_MYSQL \
 driver-mysql.c -o driver_mysql.so -lmysqlclient
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

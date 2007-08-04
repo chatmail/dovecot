@@ -218,6 +218,9 @@ static void sigchld_handler(int signo __attr_unused__,
 					i_error("unknown child %s exited "
 						"successfully", dec2str(pid));
 				}
+			} else if (status == 1 &&
+				   process_type == PROCESS_TYPE_SSL_PARAM) {
+				/* kludgy. hide this failure. */
 			} else {
 				msg = get_exit_status_message(status);
 				msg = msg == NULL ? "" :
@@ -241,7 +244,7 @@ static void sigchld_handler(int signo __attr_unused__,
 			mail_process_destroyed(pid);
 			break;
 		case PROCESS_TYPE_SSL_PARAM:
-			ssl_parameter_process_destroyed(pid);
+			ssl_parameter_process_destroyed(abnormal_exit);
 			break;
 		case PROCESS_TYPE_DICT:
 			dict_process_restart();
@@ -582,8 +585,11 @@ static void main_init(bool log_error)
 
 	log_init();
 
-	if (log_error)
-		i_fatal("This is Dovecot's error log");
+	if (log_error) {
+		i_warning("This is Dovecot's warning log");
+		i_error("This is Dovecot's error log");
+		i_fatal("This is Dovecot's fatal log");
+	}
 
 	lib_signals_init();
         lib_signals_set_handler(SIGINT, TRUE, sig_die, NULL);
@@ -822,7 +828,7 @@ int main(int argc, char *argv[])
 	if (dump_config) {
 		/* print the config file path before parsing it, so in case
 		   of errors it's still shown */
-		printf("# %s\n", configfile);
+		printf("# "VERSION": %s\n", configfile);
 	}
 
 	/* read and verify settings before forking */
@@ -830,7 +836,7 @@ int main(int argc, char *argv[])
 	master_settings_init();
 	if (!master_settings_read(configfile, exec_protocol != NULL,
 				  dump_config))
-		exit(FATAL_DEFAULT);
+		i_fatal("Invalid configuration in %s", configfile);
 	t_pop();
 
 	if (dump_config) {

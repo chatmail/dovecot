@@ -6,32 +6,39 @@
 Dovecot Logging
 ===============
 
-By default Dovecot starts logging to syslog using mail facility. In most
-operating systems this goes to '/var/log/mail.log', '/var/log/maillog' or
-something similar. If there is anything wrong with your configuration or if
-something crashes,*Dovecot will always log the error message*. It's extremely
-rare that Dovecot dies without giving any sort of error message, so make sure
-you're looking at the correct log file.
+*Dovecot always logs a detailed error message* if something goes wrong. If it
+doesn't, it's considered a bug and will be fixed. However almost always the
+problem is that you're looking at the wrong log file. By default Dovecot logs
+to syslog using *mail* facility. You can change the facility from
+'syslog_facility' setting. You can also configure Dovecot to write to log files
+directly, see below.
 
-NOTE: Error messages may be logged into a different log file than the
-informational log lines! Some syslogs are by default configured to log mail
-error messages into a different log file.
+When using syslog, Dovecot uses 4 different logging levels:
 
-After you start Dovecot, make sure that you can find a line similar to this:
+ * *info*: Informational and debug messages.
+ * *warning*: Warnings that don't cause an actual error, but are useful to know
+   about.
+ * *err*: Non-fatal errors.
+ * *crit*: Fatal errors that cause the process to die.
 
----%<-------------------------------------------------------------------------
-dovecot: Jan 07 14:22:40 Info: Dovecot v1.0.rc19 starting up
----%<-------------------------------------------------------------------------
+Where exactly these messages are logged depends entirely on your syslog
+configuration. Often everything is logged to '/var/log/mail.log' or
+'/var/log/maillog', and *err* and *crit* are logged to '/var/log/mail.err'.
+This is not necessarily true for your configuration though.
 
-However, the above message is logged into informational log, which may or may
-not be where the error messages are logged.
+You can find the correct log files using these methods:
 
-In 1.0.rc20 and later, you can use 'dovecot --log-error' command line option to
-find the error log. It will log a line:
-
----%<-------------------------------------------------------------------------
-dovecot: Jan 27 03:44:21 Fatal: This is Dovecot's error log
----%<-------------------------------------------------------------------------
+ * Info log: After starting Dovecot, 'grep "starting up" /var/log/*'. It should
+   show a line such as:'Dovecot v1.0.0 starting up'
+ * Error logs: Use 'dovecot --log-error' command. Then 'grep "This is
+   Dovecot's" /var/log/*' to find them. You should see:
+    * With Dovecot v1.0.0 you'll find only the *crit* log: 'This is Dovecot's
+      error log'
+    * With Dovecot v1.0.1 you'll find all of them:
+       * *warning*: 'This is Dovecot's warning log'
+       * *err*: 'This is Dovecot's error log'
+       * *crit*: 'This is Dovecot's fatal log'
+ * You can also check your '/etc/syslog.conf' to see how it's configured.
 
 Internal Errors
 ---------------
@@ -59,14 +66,14 @@ logs, you can make Dovecot log elsewhere as well:
 
 ---%<-------------------------------------------------------------------------
 log_path = /var/log/dovecot.log
-# If you want everything in one file, just don't specify log_info_path
-log_info_path = /var/log/dovecot-info.log
+# If you want everything in one file, just don't specify info_log_path
+info_log_path = /var/log/dovecot-info.log
 ---%<-------------------------------------------------------------------------
 
 The error messages will go to file specified by 'log_path', while everything
-else goes to 'log_info_path'. If you do this, make sure you're really looking
+else goes to 'info_log_path'. If you do this, make sure you're really looking
 at the 'log_path' file for error messages, since the "Starting up" message is
-written to 'log_info_path' file.
+written to 'info_log_path' file.
 
 Rotating Logs
 -------------
@@ -74,7 +81,7 @@ Rotating Logs
 If you change from syslog to an external log file, you can use logrotate
 (available on most recent linux distros) to maintain the Dovecot logfile so it
 doesn't grow beyond a manageable size. Save the below scriptlet as
-//etc/logrotate.d/dovecot/:
+'/etc/logrotate.d/dovecot':
 
 ---%<-------------------------------------------------------------------------
 # dovecot SIGUSR1: Re-opens the log files.
@@ -93,4 +100,4 @@ doesn't grow beyond a manageable size. Save the below scriptlet as
 *NOTE*: change the path to the logfile(s) and the master.pid file as
 appropriate for your system configuration.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

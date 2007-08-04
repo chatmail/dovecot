@@ -552,6 +552,10 @@ maildir_open(struct maildir_storage *storage, const char *name,
 	}
 
 	index_storage_mailbox_init(&mbox->ibox, name, flags, FALSE);
+
+	if (access(t_strconcat(path, "/cur", NULL), W_OK) < 0 &&
+	    errno == EACCES)
+		mbox->ibox.readonly = TRUE;
 	return &mbox->ibox.box;
 }
 
@@ -747,7 +751,7 @@ static int maildir_mailbox_delete(struct mail_storage *_storage,
 	   never see partially deleted mailboxes. */
 	src = maildir_get_path(storage, name);
 	dest = maildir_get_unlink_dest(storage, name);
-	if (stat(src, &st) != 0 && errno == ENOENT) {
+	if (lstat(src, &st) != 0 && errno == ENOENT) {
 		mail_storage_set_error(_storage,
 			MAIL_STORAGE_ERR_MAILBOX_NOT_FOUND, name);
 		return -1;
@@ -784,9 +788,20 @@ static int maildir_mailbox_delete(struct mail_storage *_storage,
 		}
 	}
 
+	if (!S_ISDIR(st.st_mode)) {
+		/* a symlink most likely */
+		if (unlink(src) < 0 && errno != ENOENT) {
+			mail_storage_set_critical(_storage,
+				"unlink(%s) failed: %m", src);
+			return -1;
+		}
+		return 0;
+	}
+
 	if (dest == NULL) {
-		/* absolute maildir path, delete the directory directly
-		   without any renaming */
+		/* a) absolute maildir path, delete the directory directly
+		   without any renaming
+		   b) not a directory (symlink most likely) */
 		dest = src;
 	} else {
 		count = 0;

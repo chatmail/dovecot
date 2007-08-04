@@ -8,6 +8,9 @@
 
 static void namespace_init_storage(struct namespace *ns)
 {
+	if (hook_mail_storage_created != NULL)
+		hook_mail_storage_created(ns->storage);
+
 	ns->prefix_len = strlen(ns->prefix);
 	ns->real_sep = mail_storage_get_hierarchy_sep(ns->storage);
 
@@ -20,9 +23,6 @@ static void namespace_init_storage(struct namespace *ns)
 	} else {
 		ns->sep_str[0] = ns->sep;
 	}
-
-	if (hook_mail_storage_created != NULL)
-		hook_mail_storage_created(ns->storage);
 }
 
 static struct namespace *
@@ -75,8 +75,8 @@ namespace_add_env(pool_t pool, const char *data, unsigned int num,
 	ns->storage = mail_storage_create_with_data(data, user, flags,
 						    lock_method);
 	if (ns->storage == NULL) {
-		i_fatal("Failed to create storage for '%s' with data: %s",
-			ns->prefix, data);
+		i_fatal("Namespace '%s' mail storage creation failed "
+			"with mail location: %s", ns->prefix, data);
 	}
 
 	if (sep != NULL)
@@ -129,16 +129,17 @@ struct namespace *namespace_init(pool_t pool, const char *user)
 	ns->storage = mail_storage_create_with_data(mail, user, flags,
 						    lock_method);
 	if (ns->storage == NULL) {
-		if (mail != NULL && *mail != '\0')
-			i_fatal("Failed to create storage with data: %s", mail);
-		else {
+		if (mail != NULL && *mail != '\0') {
+			i_fatal("Mail storage creation failed with "
+				"mail_location: %s", mail);
+		} else {
 			const char *home;
 
 			home = getenv("HOME");
-			if (home == NULL) home = "not set";
+			if (home == NULL || *home == '\0') home = "(not set)";
 
-			i_fatal("MAIL environment missing and "
-				"autodetection failed (home %s)", home);
+			i_fatal("mail_location not set and "
+				"autodetection failed with home=%s", home);
 		}
 	}
 

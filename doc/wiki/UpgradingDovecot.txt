@@ -71,8 +71,12 @@ Dovecot can convert the file automatically.
 POP3 UIDLs
 ----------
 
-If your users keep their mails in the POP3 server and you don't want to cause
-their mails to be downloaded again, you'll need to set:
+UIDLs are used by POP3 clients to keep track of what messages they've
+downloaded, typically only if you've enabled "keep messages in server" option.
+If the UIDL changes, the existing messages are re-downloaded as new messages,
+which you should try to avoid.
+
+For compatibility with Dovecot v0.99.x, use:
 
 ---%<-------------------------------------------------------------------------
 pop3_uidl_format = %v.%u
@@ -80,6 +84,8 @@ pop3_uidl_format = %v.%u
 
 However this doesn't work well for Outlook 2003 users (as it didn't with
 v0.99.x either), which is the reason this isn't the default anymore.
+See<POP3Server#uidl> [POP3Server.txt] for alternative (and better) UIDL
+formats.
 
 mbox errors
 -----------
@@ -127,4 +133,4 @@ different. This should work with new versions:
 rip=(\d+\.\d+\.\d+\.\d+),.*$/$2/i;
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

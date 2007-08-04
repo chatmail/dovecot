@@ -149,4 +149,4 @@ If you can see only INBOX,
 
 Most IMAP clients have been tested with Dovecot and they work. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

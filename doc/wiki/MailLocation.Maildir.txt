@@ -43,6 +43,16 @@ for example:
 mail_location = maildir:~/Maildir:CONTROL=/var/no-quota/%u
 ---%<-------------------------------------------------------------------------
 
+Index files
+-----------
+
+See <MailLocation#indexfiles> [MailLocation.txt] for full explanation of how to
+change the index path. For example:
+
+---%<-------------------------------------------------------------------------
+mail_location = maildir:~/Maildir:INDEX=/var/indexes/%u
+---%<-------------------------------------------------------------------------
+
 Optimizations
 -------------
 
@@ -68,4 +78,4 @@ Filesystem optimizations
 
 See "Maildir and filesystems" section in <MailboxFormat.Maildir.txt>. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

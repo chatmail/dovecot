@@ -1,3 +1,78 @@
+v1.0.3 2007-08-01  Timo Sirainen <tss@iki.fi>
+
+	- deliver: v1.0.2's bounce fix caused message to be always saved to
+	  INBOX even if Sieve script had discard, reject or redirect commands.
+	- LDAP: auth_bind=yes and empty auth_bind_userdn leaked memory
+	- ACL plugin: If user was given i (insert) right for a mailbox, but
+	  not all s/t/w (seen, deleted, other flags) rights, COPY and APPEND
+	  commands weren't supposed to allow saving those flags. This is
+	  technically a security fix, but it's unlikely this caused problems
+	  for anyone.
+	- ACL plugin: i (insert) right didn't work unless user was also given
+	  l (lookup) right.
+	- Solaris: Fixed filesystem quota for autofs mounts.
+
+v1.0.2 2007-07-15  Timo Sirainen <tss@iki.fi>
+
+	* dbox isn't built anymore by default. It will be redesigned so it
+	  shouldn't be used.
+
+	+ Maildir: Support reading dovecot-uidlist (v3) files created by
+	  Dovecot v1.1.
+	- Maildir: "UIDVALIDITY changed" errors could happen with newly
+	  created mailboxes
+	- If "INBOX." namespace was used, LIST returned it with \HasNoChildren
+	  which caused some clients not to show any other mailboxes.
+	- Maildir++ quota: If multiple processes were updating maildirsize
+	  at the same time, we failed with "Unknown error".
+	- IMAP: IDLE didn't actually disconnect client after 30 minutes of
+	  inactivity.
+	- LDAP passdb/userdb was leaking memory
+	- deliver: %variables in plugin {} weren't expanded
+	- deliver: Don't bounce the mail if Sieve plugin returns failure
+
+v1.0.1 2007-06-15  Timo Sirainen <tss@iki.fi>
+
+	* deliver: If Return-Path doesn't contain user and domain, don't try
+	  to bounce the mail (this is how it was supposed to work earlier too)
+	* deliver: %variables in mail setting coming from userdb aren't
+	  expanded anymore (again how it should have worked). The expansion
+	  could have caused problems if paths contained any '%' characters.
+
+	+ Print Dovecot version number with dovecot -n and -a
+	+ deliver: Added -e parameter to write rejection error to stderr and
+	  exit with EX_NOPERM instead of sending the rejection by executing
+	  sendmail. 
+	+ dovecot --log-error logs now a warning, an error and a fatal
+	- Trying to start Dovecot while it's already running doesn't anymore
+	  wipe out login_dir and break the running Dovecot.
+	- maildir: Fixed "UID larger than next_uid" errors which happened
+	  sometimes when dovecot-uidlist file didn't exist but index files did
+	  (usually because mailbox didn't have any messages when it was
+	  selected for the first time)
+	- maildir: We violated maildir spec a bit by not having keyword
+	  characters sorted in the filename.
+	- maildir: If we don't have write access to cur/ directory, treat the
+	  mailbox as read-only. This fixes some internal error problems with
+	  trying to use read-only maildirs.
+	- maildir: Deleting a symlinked maildir failed with internal error.
+	- mbox: pop3_uidl_format=%m wasn't working right
+	- mbox: If non-filesystem quota was enabled, we could have failed
+	  with "Unexpectedly lost From-line" errors while saving new messages
+	- mysql auth: %c didn't work. Patch by Andrey Panin
+	- APPEND / SEARCH: If internaldate was outside valid value for time_t,
+	  we returned BAD error for APPEND and SEARCH never matched. With 64bit
+	  systems this shouldn't have happened. With 32bit systems the valid
+	  range is usually for years 1902..2037.
+	- COPY: We sent "Hang in there.." too early sometimes and checked it
+	  too often (didn't break anything, but was slower than needed).
+	- deliver: Postfix's sendmail binary wasn't working with mail_debug=yes
+	- Don't corrupt ssl-parameters.dat files when running multiple Dovecot
+	  instances.
+	- Cache compression caused dovecot.index.cache to be completely deleted
+	  with big endian CPUs if 64bit file offsets were used (default)
+	- Fixed "(index_mail_parse_header): assertion failed" crash
+
 v1.0.0 2007-04-13  Timo Sirainen <tss@iki.fi>
 
 	+ Documentation updated.

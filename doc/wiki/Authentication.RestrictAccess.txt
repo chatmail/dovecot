@@ -78,4 +78,4 @@ This is especially useful for master users. This can be done by
 returning<allow_nets> [PasswordDatabase.ExtraFields.AllowNets.txt] extra field
 in passdb.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

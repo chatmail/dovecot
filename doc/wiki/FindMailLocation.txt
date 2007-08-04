@@ -61,4 +61,4 @@ configuration to see where it went or what went wrong.
 If you can find the mail, but it's in more exotic location, see if
 <MailLocation.txt> can help you to configure it. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

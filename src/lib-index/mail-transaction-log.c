@@ -1145,15 +1145,20 @@ mail_transaction_log_file_sync(struct mail_transaction_log_file *file)
 		if (file->sync_offset - file->buffer_offset + hdr_size > size)
 			break;
 		file->sync_offset += hdr_size;
+		hdr_size = 0;
 	}
 
 	avail = file->sync_offset - file->buffer_offset;
-	if (avail != size && avail >= sizeof(*hdr)) {
-		/* record goes outside the file we've seen. or if
-		   we're accessing the log file via unlocked mmaped
-		   memory, it may be just that the memory was updated
-		   after we checked the file size. */
-		if (file->locked || file->mmap_base == NULL) {
+	if (avail != size) {
+		/* There's more data than we could sync at the moment. If the
+		   last record's size wasn't valid, we can't know if it will
+		   be updated unless we've locked the log.
+
+		   Without locking we can be sure only if we're not using
+		   mmaping, because with mmaping the data and the file size
+		   can get updated at any time. */
+		if (file->locked ||
+		    (hdr_size != 0 && file->mmap_base == NULL)) {
 			if (hdr_size != 0) {
 				mail_transaction_log_file_set_corrupted(file,
 					"hdr.size too large (%u)", hdr_size);

@@ -102,7 +102,7 @@ static int init_mailbox(struct client *client)
 		mail_free(&mail);
 		if (mailbox_search_deinit(&ctx) < 0) {
 			client_send_storage_error(client);
-			mailbox_transaction_rollback(&t);
+			(void)mailbox_transaction_commit(&t, 0);
 			break;
 		}
 
@@ -113,8 +113,9 @@ static int init_mailbox(struct client *client)
 			return TRUE;
 		}
 
-		/* well, sync and try again */
-		mailbox_transaction_rollback(&t);
+		/* well, sync and try again. we might have cached virtual
+		   sizes, make sure they get committed. */
+		(void)mailbox_transaction_commit(&t, 0);
 	}
 
 	if (i == 2)

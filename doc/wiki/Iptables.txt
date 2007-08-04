@@ -14,4 +14,14 @@ user-space iptables command:
 iptables -v -t nat -A PREROUTING -p tcp -j REDIRECT --dport 109 --to-ports 110
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-13 14:32)
+using socat
+===========
+
+You can achieve the same result:
+
+---%<-------------------------------------------------------------------------
+socat tcp4-listen:109,setuid=nobody,fork,reuseaddr
+tcp4-connect:localhost:110,bind=localhost&
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2007-06-15 04:42)

@@ -64,4 +64,4 @@ user:{plain}pass:1000:1000::/home/user::userdb_pop3_enable_last=y
 userdb_quota=maildir:storage=102400
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

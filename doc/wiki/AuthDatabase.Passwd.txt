@@ -1,7 +1,7 @@
 Passwd
 ======
 
-User is looked up using 'getpwent()' call, which usually looks into
+User is looked up using 'getpwnam()' call, which usually looks into
 '/etc/passwd' file, but depending on NSS
 [http://en.wikipedia.org/wiki/Name_Service_Switch] configuration it may also
 look up the user from eg. LDAP database.
@@ -23,6 +23,9 @@ userdb passwd {
 }
 ---%<-------------------------------------------------------------------------
 
+The "blocking" name can be a bit confusing. It doesn't mean that the lookup
+blocks the whole dovecot-auth, exactly the opposite.
+
 nss_ldap
 --------
 
@@ -33,9 +36,7 @@ log in as each others. With 1.0.rc23 and later you can fix this by using the
 There's a nss_ldap bug about this in RedHat's Bugzilla
 [https://bugzilla.redhat.com/bugzilla/show_bug.cgi?id=154314].
 
-If you are using *PAM + nss_ldap* for all of your login needs (empty
-'/etc/passwd', '/etc/nsswitch.conf' uses 'passwd: ldap', etc.) then a good
-starting configuration might look like:
+A typical PAM + nss_ldap configuration looks like:
 
 ---%<-------------------------------------------------------------------------
 # NOTE: v1.0.rc23 and later only
@@ -47,8 +48,4 @@ starting configuration might look like:
   }
 ---%<-------------------------------------------------------------------------
 
-This would be defined as: /blocking=no pam, blocking=yes nss_ldap: No memory
-leaks. Fixes nss_ldap problems. Each PAM lookup is done in a forked process.
-NSSlookups are done in auth worker processes. No lookup blocks others./ 
-
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

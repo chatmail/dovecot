@@ -1,12 +1,17 @@
 Why doesn't Dovecot work?
 =========================
 
- * Make sure you're looking at the correct log files. Debug messages may be
-   written to a different log file than error messages. See<Logging.txt>.
+ * *Dovecot always logs an error message* if anything goes wrong, so make sure
+   you're looking at the correct log files. Debug messages may be written to a
+   different log file than error messages. See<Logging.txt>.
  * Try logging in manually by sending IMAP commands. If you're trying with an
    IMAP client you can't be sure if the problem is with the client's
    configuration or Dovecot's configuration. See<TestInstallation.txt> (or
    <TestPop3Installation.txt>).
+ * Are you using an older version than v1.0? RHEL 5 and Debian Etch distribute
+   v1.0.rc15, and there has been a LOT of fixes since then. If you have a
+   problem, see if NEWS [http://dovecot.org/doc/NEWS] file mentions anything
+   related to it.
 
 It says password mismatch
 -------------------------
@@ -26,4 +31,4 @@ For non-PAM set 'auth_debug_passwords=yes' and look at what it says in the
 logs. If it's trying to use a wrong password scheme, you can change that.
 See<Authentication.PasswordSchemes.txt> 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

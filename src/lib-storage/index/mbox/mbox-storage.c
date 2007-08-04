@@ -532,7 +532,14 @@ static int verify_inbox(struct index_storage *storage)
 	fd = open(storage->inbox_path, O_RDWR | O_CREAT | O_EXCL, 0660);
 	if (fd != -1)
 		(void)close(fd);
-	else if (errno != EEXIST) {
+	else if (errno == ENOTDIR &&
+		 strncmp(storage->inbox_path, storage->dir,
+			 strlen(storage->dir)) == 0) {
+		mail_storage_set_critical(&storage->storage,
+			"mbox root directory can't be a file: %s "
+			"(http://wiki.dovecot.org/MailLocation/Mbox)",
+			storage->dir);
+	} else if (errno != EEXIST) {
 		mail_storage_set_critical(&storage->storage,
 			"open(%s, O_CREAT) failed: %m", storage->inbox_path);
 	}

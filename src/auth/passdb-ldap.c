@@ -123,6 +123,7 @@ ldap_query_save_result(struct ldap_connection *conn, LDAPMessage *entry,
 
 		attr = ldap_next_attribute(conn->ld, entry, ber);
 	}
+	ber_free(ber, 0);
 
 	if (ctx.add_userdb_uid && conn->set.uid != (uid_t)-1) {
 		auth_request_set_field(auth_request, "userdb_uid",
@@ -343,6 +344,7 @@ handle_request_authbind_search(struct ldap_connection *conn,
 		(struct passdb_ldap_request *)ldap_request;
 	struct auth_request *auth_request = ldap_request->context;
 	LDAPMessage *entry;
+	char *dn;
 
 	entry = handle_request_get_entry(conn, auth_request,
 					 passdb_ldap_request, res);
@@ -352,8 +354,10 @@ handle_request_authbind_search(struct ldap_connection *conn,
 	ldap_query_save_result(conn, entry, auth_request);
 
 	/* switch the handler to the authenticated bind handler */
-	ldap_request->base =
-		p_strdup(auth_request->pool, ldap_get_dn(conn->ld, entry));
+	dn = ldap_get_dn(conn->ld, entry);
+	ldap_request->base = p_strdup(auth_request->pool, dn);
+	ldap_memfree(dn);
+
 	ldap_request->filter = NULL;
 	ldap_request->callback = handle_request_authbind;
 

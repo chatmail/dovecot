@@ -42,12 +42,22 @@ Index files
 
 Index files are by default stored under the same directory as mails. With
 maildir they are stored in the actual maildirs, with mbox they are stored under
-'.imap/' directory. You can change these by adding ':INDEX=location' to
-location string. For example:
+'.imap/' directory. You may want to change the index file location if you're
+using<NFS.txt> or if you're setting up <shared mailboxes>
+[SharedMailboxes.txt].
+
+You can change the index file location by adding ':INDEX=<path>' to
+mail_location. For example:
 
 ---%<-------------------------------------------------------------------------
-mail_location = mbox:~/mail:INBOX=/var/mail/%u:INDEX=~/indexes
+mail_location = maildir:~/Maildir:INDEX=/var/indexes/%u
 ---%<-------------------------------------------------------------------------
+
+The index directories are created automatically, but note that it requires that
+Dovecot has actually access to create the directories. Either make sure that
+the index root directory ('/var/indexes' in the above example) is writable to
+the logged in user, or create the user's directory with proper permissions
+before the user logs in.
 
 If you really want to, you can also disable the index files completely by
 appending ':INDEX=MEMORY'.
@@ -57,9 +67,10 @@ Homeless users
 
 Having a home directory for users is highly recommended. Dovecot's <Sieve
 plugin> [LDA.Sieve.txt] already requires a home directory to work, and it
-probably won't be the last feature to require a home. See "Home directories" in
-<VirtualUsers.txt> for more reasons why it's a good idea, and how to give
-Dovecot a home directory even if you don't have a "real home directory".
+probably won't be the last feature to require a home.
+See<VirtualUsers#homedirs> [VirtualUsers.txt] for more reasons why it's a good
+idea, and how to give Dovecot a home directory even if you don't have a "real
+home directory".
 
 If you really don't want to set any home directory, you can use something like:
 
@@ -137,4 +148,4 @@ exec /usr/local/libexec/dovecot/imap
 *NOTE*: If you're using namespaces, the MAIL environment is ignored. You'll
 need to set NAMESPACE_1 (and maybe _2, _3, etc. for each namespace) instead.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

@@ -7,4 +7,4 @@ Dovecot Design
  * <Design of authentication process> [Design.AuthProcess.txt]
  * <Design of IMAP/POP3 processes> [Design.MailProcess.txt] 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

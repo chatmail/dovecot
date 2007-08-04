@@ -135,6 +135,15 @@ list_namespace_mailboxes(struct client *client, struct cmd_list_context *ctx)
 					continue;
 				str_append(name_str, ctx->ns->prefix);
 			}
+			if ((list->flags & MAILBOX_NOCHILDREN) != 0 &&
+			    strncmp(ctx->ns->prefix, "INBOX", 5) == 0 &&
+			    ctx->ns->prefix[5] == ctx->ns->sep) {
+				/* FIXME: It's unlikely there's only a single
+				   INBOX mailbox, but it's possible. We should
+				   check that instead of assuming it. */
+				list->flags |= MAILBOX_CHILDREN;
+				list->flags &= ~MAILBOX_NOCHILDREN;
+			}
 		} else {
 			str_append(name_str, ctx->ns->prefix);
 		}

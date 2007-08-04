@@ -1,64 +1,100 @@
-UNIX User IDs used by Dovecot
-=============================
+System users used by Dovecot
+============================
 
-A UNIX User ID, or UID, means a system user ID number which typically exists in
-'/etc/passwd' file. However a UID is just a number from both Dovecot's and
-operating system's point of view, so it's possible to use numeric UIDs without
-them actually existing in '/etc/passwd' at all.
+Dovecot typically requires 3 or more system users:
 
-Dovecot isn't meant to be run under a single UID. Using multiple UIDs allows
-privilege separation, which makes it harder for attackers to compromise the
-whole system if a security hole is found from one component.
+ * /root/: Dovecot is started as root.
+ * /dovecot/: Dovecot uses an unprivileged /dovecot/ user for internal
+   purposes.
+ * mail user(s): Mails are accessed using yet another user. The mail user *IS
+   NOT /dovecot/ * user.
+
+Using multiple users allows privilege separation, which makes it harder for
+attackers to compromise the whole system if a security hole is found from one
+component. However, if you really want to run everything under a single
+user,<it's possible> [Rootless.txt].
 
 Dovecot user
 ============
 
-Usually you'll want to create a separate /dovecot/ user which doesn't have
-access to anything. It should also have its own group where no-one else belongs
-to. The /dovecot/ user is used *only* while Dovecot is processing users'
-logins. After the user has logged in, the UID is changed to whatever
-your<userdb> [UserDatabase.txt] is configured to return.
+/dovecot/ user is used internally for processing users' logins. It shouldn't
+have access to any files or anything else either. It should belong to its own
+private *dovecot* group where no-one else belongs to, and which doesn't have
+access to any files either (other than what Dovecot internally creates).
 
 * /dovecot/ user isn't used for any kind of mail processing - don't store
 users' mails as dovecot, and don't put /dovecot/ user to mail or any other
-groups*
+groups*.
 
 You can change the default /dovecot/ user to something else from 'login_user'
 setting.
 
-Authenticated users
-===================
+Mail users
+==========
 
-User configuration exists in <password databases> [PasswordDatabase.txt] and
-<user databases> [UserDatabase.txt]. The user database must always return a UID
-for the user logging in. You may configure users to have different UIDs, or you
-may configure everyone to use the same UID, or anything between.*The important
-thing is that none of these UIDs are the same as the /dovecot/ user*.
+You can use one or more system users for accessing users' mails. Most
+configurations can be placed to two categories:
 
-If your users are in '/etc/passwd', you don't have to worry about UIDs as
-they're already specified in there. Just store the mails for the users using
-their own UIDs.
+ 1. <System users> [SystemUsers.txt] where each Dovecot user has their own
+    system user in '/etc/passwd'. For system user setups you generally don't
+    have to worry about UIDs or GIDs.
+ 2. <Virtual users> [VirtualUsers.txt] where all Dovecot users run under a
+    single system user, for example 'vmail' (just NOT /dovecot/).
 
-With virtual users you have to decide your UID allocation policy. The important
-thing to consider is that if Dovecot has a security hole in its IMAP or POP3
-implementation, the attacker can read mails of other people who have the same
-UID. So clearly the most secure way is to allocate a different UID for each
-user. It can however be a bit of a pain and OSes don't always support more than
-65536 UIDs.
+However it's possible to use a setup that is anything between these two. For
+example use a separate system user for each domain.
 
-If you're serving multiple domains, a popular allocation policy is to give a
-separate UID for each domain. So for example "user@domain1.com" and
-"user2@domain1.com" both get UID 1000 while "user@domain2.com" gets UID 1001,
-and so on.
+UIDs
+----
 
-UNIX Group IDs
-==============
+Dovecot's <user database> [UserDatabase.txt] configuration calls system users
+UIDs. There are a few things you should know about them:
 
-UNIX Group IDs, or GIDs, are used for sharing files to other users belonging to
-the same group. Currently Dovecot doesn't really care about the groups, so you
-might as well put all the users into the same group. Perhaps in future when
-Dovecot has better support for shared mailboxes there's more point in using
-multiple groups.
+ * Although UID normally means a numeric ID (as specified by '/etc/passwd'),
+   it's anyway possible to use names as UID values and let Dovecot do the
+   lookup (eg. uid=vmail). However depending on where you used it, it may slow
+   down the authentication.
+ * The UIDs don't really have to exist in '/etc/passwd'. For example you could
+   decide to use UIDs 10000-59999 for 50000 virtual Dovecot users. You'll then
+   just have to be careful that the UIDs aren't used unintentionally elsewhere.
+ * The important thing to consider with your UID allocation policy is that if
+   Dovecot has a security hole in its IMAP or POP3 implementation, the attacker
+   can read mails of other people who are using the same UID. So clearly the
+   most secure way is to allocate a different UID for each user. It can however
+   be a bit of a pain and OSes don't always support more than 65536 UIDs.
+ * By default Dovecot allows users to log in only with UID numbers 500 and
+   above. This check tries to make sure that no-one can ever log in as daemons
+   or other system users. If you're using an UID lower than 500, you'll need to
+   change the 'first_valid_uid' setting.
+
+GIDs
+----
+
+System groups (GIDs) work very much the same way as UIDs described above: You
+can use names instead of numbers for GID values, and the used GIDs don't have
+to exist in '/etc/group'.
+
+System groups are useful for sharing mailboxes between users that have
+different UIDs but belong to a same group. Currently Dovecot doesn't try to do
+anything special with the groups, so if you're not sure how you should create
+them, you might as well place all the users into a single group or create a
+separate group for each user.
+
+If you use multiple UIDs and you wish to create <shared mailboxes>
+[SharedMailboxes.txt], setting up the groups properly may make your
+configuration more secure. For example if you have two teams and their
+mailboxes are shared only to their team members, you could create a group for
+each team and set the shared mailbox's group to the team's group and
+permissions to 0660, so neither team can even accidentally see each others'
+shared mailboxes.
+
+Currently Dovecot supports specifying only the primary group, but if your
+userdb returns 'system_user' <extra field> [UserDatabase.ExtraFields.txt], the
+non-primary groups are taken from '/etc/group' for that user. In a future
+version the whole GID list will be configurable without help from '/etc/group'.
+
+It's also possible to give all the users access to an extra group with
+'mail_extra_group' setting.
 
 Authentication process user
 ===========================
@@ -70,17 +106,21 @@ auth default {
 }
 ---%<-------------------------------------------------------------------------
 
-The auth user setting shouldn't be confused with UIDs of authenticated users.
-It only specifies the UID under which /dovecot-auth/ process is run. The
-default is root, because it's guaranteed to work with all the password
-databases. This is however pretty much always unnecessary, so you should
-instead create a new /dovecot-auth/ user that has access only to the password
-and user database files. If you're using SQL or LDAP, the user doesn't need to
-have access to any files at all.
+The auth user setting specifies the system user under which 'dovecot-auth'
+processes are run. The user must have access to your<password databases>
+[PasswordDatabase.txt] and <user databases> [UserDatabase.txt]. It's not used
+for anything else. The default is to use root, because it's guaranteed to have
+access to all the password databases.
+
+If you're using a virtual user setup, there's really no reason for you to use
+root. You could instead create a new auth user, such as /doveauth/. If you're
+using SQL or LDAP the user doesn't need access to any of Dovecot's
+configuration files, because they're read while Dovecot is still running as
+root.
 
 <PAM> [PasswordDatabase.PAM.txt] and <shadow> [PasswordDatabase.txt] passdbs
 are usually configured to read '/etc/shadow' file. Even this doesn't need root
-access if you give /dovecot-auth/ user access to /shadow/ group, and make sure
-that the '/etc/shadow' file is readable for the /shadow/ group. 
+access if you give the auth user access to /shadow/ group, and make sure that
+the '/etc/shadow' file is readable by the /shadow/ group. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

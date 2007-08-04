@@ -192,8 +192,15 @@ __err:
 		mailbox_close(&trash->box);
 	}
 
-	if (size_expunged < size_needed)
+	if (size_expunged < size_needed) {
+		if (getenv("DEBUG") != NULL) {
+			i_info("trash plugin: Failed to remove enough messages "
+			       "(needed %llu bytes, expunged only %llu bytes)",
+			       (unsigned long long)size_needed,
+			       (unsigned long long)size_expunged);
+		}
 		return FALSE;
+	}
 
 	ctx->bytes_current = ctx->bytes_current > size_expunged ?
 		ctx->bytes_current - size_expunged : 0;
@@ -211,8 +218,13 @@ trash_quota_root_try_alloc(struct quota_root_transaction_context *ctx,
 
 	for (i = 0; ; i++) {
 		ret = troot->super.try_alloc(ctx, mail, too_large_r);
-		if (ret != 0 || *too_large_r)
+		if (ret != 0 || *too_large_r) {
+			if (getenv("DEBUG") != NULL && *too_large_r) {
+				i_info("trash plugin: Mail is larger than "
+				       "quota, won't even try to handle");
+			}
 			return ret;
+		}
 
 		if (i == MAX_RETRY_COUNT) {
 			/* trash_try_clean_mails() should have returned 0 if
@@ -347,6 +359,11 @@ static int read_configuration(const char *path)
 		trash->name = p_strdup(config_pool, name+1);
 		trash->priority = atoi(t_strdup_until(line, name));
 		trash->search_arg.type = SEARCH_ALL;
+
+		if (getenv("DEBUG") != NULL) {
+			i_info("trash plugin: Added '%s' with priority %d",
+			       trash->name, trash->priority);
+		}
 	}
 	i_stream_destroy(&input);
 	(void)close(fd);
@@ -364,8 +381,11 @@ void trash_plugin_init(void)
 	trash_next_hook_quota_root_created = hook_quota_root_created;
 
 	env = getenv("TRASH");
-	if (env == NULL)
+	if (env == NULL) {
+		if (getenv("DEBUG") != NULL)
+			i_info("trash plugin: No trash setting, disabled");
 		return;
+	}
 
 	if (quota_set == NULL) {
 		i_error("trash plugin: quota plugin not initialized");

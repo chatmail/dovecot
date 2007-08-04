@@ -422,7 +422,8 @@ bool index_storage_is_inconsistent(struct mailbox *box)
 {
 	struct index_mailbox *ibox = (struct index_mailbox *) box;
 
-	return mail_index_view_is_inconsistent(ibox->view);
+	return mail_index_view_is_inconsistent(ibox->view) ||
+		ibox->mailbox_deleted;
 }
 
 void index_storage_set_callbacks(struct mail_storage *_storage,
@@ -445,7 +446,12 @@ const char *index_storage_get_last_error(struct mail_storage *storage,
 	/* We get here only in error situations, so we have to return some
 	   error. If storage->error is NULL, it means we forgot to set it at
 	   some point.. */
-	return storage->error != NULL ? storage->error : "Unknown error";
+	if (storage->error != NULL)
+		return storage->error;
+	else {
+		*temporary_error_r = TRUE;
+		return "BUG: Unknown internal error";
+	}
 }
 
 void mail_storage_set_index_error(struct index_mailbox *ibox)

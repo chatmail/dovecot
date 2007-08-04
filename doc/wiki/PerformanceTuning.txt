@@ -34,4 +34,4 @@ Note that these settings do not directly affect the memory usage:
    'auth_worker_max_count': These are mostly to avoid DoS attacks using up all
    your memory.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

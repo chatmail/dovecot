@@ -246,6 +246,15 @@ static int acl_get_mailbox_name_status(struct mail_storage *storage,
 	if (ret < 0)
 		return -1;
 
+	if (ret == 0) {
+		/* If we have INSERT right for the mailbox, we'll need to
+		   reveal its existence so that APPEND and COPY works. */
+		ret = acl_storage_have_right(storage, name,
+					     ACL_STORAGE_RIGHT_INSERT, NULL);
+		if (ret < 0)
+			return -1;
+	}
+
 	if (astorage->super.get_mailbox_name_status(storage, name, status) < 0)
 		return -1;
 	if (ret > 0)

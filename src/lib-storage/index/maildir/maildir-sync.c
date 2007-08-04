@@ -182,6 +182,7 @@
 
 #include <stdio.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -298,13 +299,20 @@ int maildir_filename_get_flags(struct maildir_keywords_sync_ctx *ctx,
 	return 1;
 }
 
+static int char_cmp(const void *p1, const void *p2)
+{
+	const unsigned char *c1 = p1, *c2 = p2;
+
+	return *c1 - *c2;
+}
+
 static void
 maildir_filename_append_keywords(struct maildir_keywords_sync_ctx *ctx,
 				 array_t *keywords, string_t *str)
 {
 	ARRAY_SET_TYPE(keywords, unsigned int);
 	const unsigned int *indexes;
-	unsigned int i, count;
+	unsigned int i, count, start = str_len(str);
 	char chr;
 
 	indexes = array_get(keywords, &count);
@@ -313,6 +321,8 @@ maildir_filename_append_keywords(struct maildir_keywords_sync_ctx *ctx,
 		if (chr != '\0')
 			str_append_c(str, chr);
 	}
+
+	qsort(str_c_modifyable(str) + start, str_len(str) - start, 1, char_cmp);
 }
 
 const char *maildir_filename_set_flags(struct maildir_keywords_sync_ctx *ctx,
@@ -756,7 +766,8 @@ static int maildir_fix_duplicate(struct maildir_sync_context *ctx,
 		i_warning("Fixed a duplicate: %s -> %s", old_fname, new_fname);
 	else if (errno != ENOENT) {
 		mail_storage_set_critical(STORAGE(mbox->storage),
-			"rename(%s, %s) failed: %m", old_path, new_path);
+			"Couldn't fix a duplicate: rename(%s, %s) failed: %m",
+			old_path, new_path);
 		ret = -1;
 	}
 	t_pop();
@@ -898,6 +909,12 @@ maildir_sync_quick_check(struct maildir_mailbox *mbox,
 	*new_changed_r = *cur_changed_r = FALSE;
 
 	if (stat(new_dir, &st) < 0) {
+		if (errno == ENOENT) {
+			/* mailbox was deleted under us. this isn't the only
+			   way it can break, but the most common one. */
+			ibox->mailbox_deleted = TRUE;
+			return -1;
+		}
 		mail_storage_set_critical(STORAGE(mbox->storage),
 					  "stat(%s) failed: %m", new_dir);
 		return -1;

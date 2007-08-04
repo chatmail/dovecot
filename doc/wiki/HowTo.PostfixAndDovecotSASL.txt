@@ -46,4 +46,4 @@ See also:
 
  * http://www.postfix.org/SASL_README.html#server_dovecot 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

@@ -28,6 +28,16 @@ just keeping everything in '~/mail/':
 mail_location = mbox:~/mail
 ---%<-------------------------------------------------------------------------
 
+Index files
+-----------
+
+See <MailLocation#indexfiles> [MailLocation.txt] for full explanation of how to
+change the index path. For example:
+
+---%<-------------------------------------------------------------------------
+mail_location = mbox:~/mail:INBOX=/var/mail/%u:INDEX=/var/indexes/%u
+---%<-------------------------------------------------------------------------
+
 Locking
 -------
 
@@ -45,8 +55,9 @@ your INBOXes are in '/var/mail/' directory you may have to give Dovecot write
 access to the directory. There are two ways the '/var/mail/' directory's
 permissions have traditionally been set up:
 
- * Sticky bit set, allowing anyone to create new files but not overwrite or
-   delete existing files owned by someone else (ie. same as /tmp)
+ * World-writable with sticky bit set, allowing anyone to create new files but
+   not overwrite or delete existing files owned by someone else (ie. same as
+   /tmp). You can do this with 'chmod a+rwxt /var/mail'
  * Directory owned by a mail group and the directory set to group-writable
 
 You can give Dovecot access to mail group by setting:
@@ -54,6 +65,10 @@ You can give Dovecot access to mail group by setting:
 ---%<-------------------------------------------------------------------------
 mail_extra_groups = mail
 ---%<-------------------------------------------------------------------------
+
+NOTE: With <deliver> [LDA.txt] the 'mail_extra_groups' setting unfortunately
+doesn't work, so you'll have to use the sticky bit or disable dotlocking
+completely.
 
 Optimizations
 -------------
@@ -100,4 +115,4 @@ you can work around the problem of not having the per-user directory:
    directory containing other mailboxes than INBOX. If the directory is
    writable, all the users will have their mailboxes shared.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

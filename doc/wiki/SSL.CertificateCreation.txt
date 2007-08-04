@@ -27,17 +27,17 @@ Self-signed certificate creation
 --------------------------------
 
 Dovecot includes a script to build self-signed SSL certificates using OpenSSL.
-In the source distribution this exists in 'doc/mkcert.sh'. In binary
-distributions it's probably somewhere under '/usr/share/doc/dovecot'. Some
-binary distributions also build the certificate automatically when installing
-Dovecot.
+In the source distribution this exists in doc/mkcert.sh
+[http://dovecot.org/doc/mkcert.sh]. Binary installations usually create the
+certificate automatically when installing Dovecot and don't include the script.
 
-The SSL certificate's configuration is taken from 'dovecot-openssl.cnf' file.
-Modify the file before running mkcert.sh. Especially important field is the CN
-(Common Name) field, which should contain your server's host name. The clients
-will verify that the CN matches the connected host name, otherwise they'll say
-the certificate is invalid. It's also possible to use wildcards (eg.
-*.domain.com) in the host name. They should work with most clients.
+The SSL certificate's configuration is taken from doc/dovecot-openssl.cnf
+[http://dovecot.org/doc/dovecot-openssl.cnf] file. Modify the file before
+running mkcert.sh. Especially important field is the CN (Common Name) field,
+which should contain your server's host name. The clients will verify that the
+CN matches the connected host name, otherwise they'll say the certificate is
+invalid. It's also possible to use wildcards (eg. *.domain.com) in the host
+name. They should work with most clients.
 
 By default the certificate is created to '/etc/ssl/certs/dovecot.pem' and the
 private key file is created to '/etc/ssl/private/dovecot.pem'. Also by default
@@ -64,4 +64,4 @@ is to use OpenSSL. See http://sial.org/howto/openssl/ca/ for example for a
 tutorial. Using OpenSSL for managing a CA is however a bit cumbersome, so you
 could try finding a better tool.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

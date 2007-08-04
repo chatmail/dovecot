@@ -1,9 +1,6 @@
 Cyrus
 =====
 
-See cyrus2courier [http://madness.at/projects/], it is Dovecot-compatible.
-Cyrus2courier is also mirrored at dovecot.org [http://dovecot.org/tools/].
-
 For POP3 UIDL compatibility, use one of:
 
 Cyrus versions up to v2.1.3:
@@ -18,11 +15,23 @@ Cyrus versions v2.1.4 and newer:
   pop3_uidl_format = %v.%u
   ---%<-----------------------------------------------------------------------
 
-See http://www.majid.info/mylos/weblog/2006/03/08-1.html for an alternative
-migration script (in Python) for Cyrus IMAPd 2.2, which will preserve delivery
-timestamps and the \Seen flags.
+Mail storage migration
+----------------------
+
+There exists several scripts which can be used to convert Cyrus mail storages
+to Maildir. They all read the Cyrus mail directories directly, so they don't
+need a running Cyrus installation.
+
+ * cyrus2courier [http://madness.at/projects/] is Dovecot-compatible. And older
+   version (known to work with Cyrus v2.0-v2.2) is also mirrored at dovecot.org
+   [http://dovecot.org/tools/]. It should be able to preserve all message flags
+   and message UIDs.
+ * cyrus2maildir.py [http://www.majid.info/mylos/weblog/2006/03/08-1.html] (for
+   Cyrus v2.2) preserves delivery timestamps and \Seen flags.
+ * cyrus2dovecot [http://trukenmueller.de/cyrus2dovecot] doesn't preserve
+   timestamps or flags.
 
 You can also use imapsync, as described in the <Migration.txt> page, but you'll
 lose all the message UIDs then.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

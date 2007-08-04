@@ -66,7 +66,8 @@ as secure:
 
 ---%<-------------------------------------------------------------------------
 # telnet your.host.org 110
-1 login username password
+user username
+pass password
 ---%<-------------------------------------------------------------------------
 
 The only difference here compared to step above is that you might get:
@@ -121,4 +122,4 @@ If you can't log in,
 
 Many POP3 clients have been tested with Dovecot and they work. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

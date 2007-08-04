@@ -36,12 +36,11 @@ If you wish to use system passwords, you'll want to use one of these passdbs:
    nowadays.
  * <BSDAuth> [PasswordDatabase.BSDAuth.txt]: BSD authentication is used by
    OpenBSD.
- * <passwd> [AuthDatabase.Passwd.txt]: '/etc/passwd', NSS
-   [http://en.wikipedia.org/wiki/Name_Service_Switch] or similar, using
-   'getpwnam()'. This may work instead of PAM (mostly in some BSDs).
- * <shadow> [PasswordDatabase.Shadow.txt]: '/etc/shadow' or similiar, using
-   'getspnam()'. Deprecated by PAM nowadays, but it should work with Linux and
-   Solaris.
+ * <Passwd> [AuthDatabase.Passwd.txt]: System users (NSS, '/etc/passwd', or
+   similiar). This may work instead of PAM (mostly in some BSDs).
+ * <Shadow> [PasswordDatabase.Shadow.txt]: Shadow passwords for system users
+   (NSS,'/etc/shadow' or similiar). Deprecated by PAM nowadays, but it should
+   work with Linux and Solaris.
 
 If you wish to use non-system passwords, you can use pretty much any of the
 Dovecot's<password databases> [PasswordDatabase.txt], but for simple
@@ -101,4 +100,4 @@ manually with:
 mail_location = maildir:~/Maildir
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

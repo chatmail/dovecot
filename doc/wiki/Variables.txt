@@ -79,4 +79,4 @@ with '0' character if the string is shorter. For example %04i may return
 
 Type in %% to get a literal percent sign. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

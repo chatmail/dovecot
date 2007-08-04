@@ -42,6 +42,23 @@ static int maildir_file_do_try(struct maildir_mailbox *mbox, uint32_t uid,
 	return ret;
 }
 
+static int do_racecheck(struct maildir_mailbox *mbox, const char *path,
+			void *context __attr_unused__)
+{
+	struct stat st;
+
+	if (lstat(path, &st) == 0 && (st.st_mode & S_IFLNK) != 0) {
+		/* most likely a symlink pointing to a non-existing file */
+		mail_storage_set_critical(STORAGE(mbox->storage),
+			"Maildir: Symlink destination doesn't exist: %s", path);
+		return -2;
+	} else {
+		mail_storage_set_critical(STORAGE(mbox->storage),
+			"maildir_file_do(%s): Filename keeps changing", path);
+		return -1;
+	}
+}
+
 int maildir_file_do(struct maildir_mailbox *mbox, uint32_t uid,
 		    maildir_file_do_func *func, void *context)
 {
@@ -58,11 +75,8 @@ int maildir_file_do(struct maildir_mailbox *mbox, uint32_t uid,
 		ret = maildir_file_do_try(mbox, uid, func, context);
 	}
 
-	if (i == 10) {
-		ret = -1;
-		mail_storage_set_critical(STORAGE(mbox->storage),
-			"maildir_file_do(%s) racing", mbox->path);
-	}
+	if (i == 10)
+		ret = maildir_file_do_try(mbox, uid, do_racecheck, context);
 
 	return ret == -2 ? 0 : ret;
 }
@@ -201,12 +215,7 @@ void maildir_tmp_cleanup(struct mail_storage *storage, const char *dir)
 #endif
 	else if (st.st_atime < ioloop_time) {
 		/* mounted with noatime. update it ourself. */
-		struct utimbuf ut;
-
-		ut.actime = ioloop_time;
-		ut.modtime = st.st_mtime;
-
-		if (utime(dir, &ut) < 0 && errno != ENOENT) {
+		if (utime(dir, NULL) < 0 && errno != ENOENT) {
 			mail_storage_set_critical(storage,
 				"utime(%s) failed: %m", dir);
 		}

@@ -422,7 +422,6 @@ int net_gethostbyname(const char *addr, struct ip_addr **ips, int *ips_count)
 #ifdef HAVE_IPV6
 	union sockaddr_union *so;
 	struct addrinfo hints, *ai, *origai;
-	char hbuf[NI_MAXHOST];
 	int host_error;
 #else
 	struct hostent *hp;
@@ -444,11 +443,6 @@ int net_gethostbyname(const char *addr, struct ip_addr **ips, int *ips_count)
 	host_error = getaddrinfo(addr, NULL, &hints, &ai);
 	if (host_error != 0)
 		return host_error;
-
-	if (getnameinfo(ai->ai_addr, ai->ai_addrlen, hbuf,
-			sizeof(hbuf), NULL, 0, NI_NUMERICHOST) != 0)
-		return 1;
-
 
         /* get number of IPs */
         origai = ai;
@@ -607,11 +601,6 @@ const char *net_gethosterror(int error)
 {
 #ifdef HAVE_IPV6
 	i_assert(error != 0);
-
-	if (error == 1) {
-		/* getnameinfo() failed */
-		return strerror(errno);
-	}
 
 	return gai_strerror(error);
 #else

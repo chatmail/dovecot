@@ -85,8 +85,9 @@ The standard filename definition is: "<base filename>:2,<flags>". Dovecot has
 extended the<flags> field to be "<flags>[,<non-standard fields>]". This means
 that if Dovecot sees a comma in the<flags> field while updating flags in the
 filename, it doesn't touch anything after the comma. However other maildir MUAs
-may mess them up, so it's still not such a good idea to do that.
-The<non-standard fields> isn't used by Dovecot for anything currently.
+may mess them up, so it's still not such a good idea to do that. Basic<flags>
+are described here [http://cr.yp.to/proto/maildir.html]. The <non-standard
+fields> isn't used by Dovecot for anything currently.
 
 Dovecot supports reading a few fields from the <base filename>:
 
@@ -199,7 +200,7 @@ this:
 
  1. Create a unique filename (only "time.pid.host" here, later Maildir spec has
     been updated to allow more uniqueness identifiers)
- 2. Do 'stat(tmp/<filename>)'. If the stat() found a file, wait 2 seconds and
+ 2. Do 'stat(tmp/<filename>)'. If the 'stat()' found a file, wait 2 seconds and
     go back to step 1.
  3. Create and write the message to the 'tmp/<filename>'.
  4. link() it into new/ directory. Although not mentioned here, the link()
@@ -222,6 +223,12 @@ In step 4 the link() would fail if an identical file already existed in the
 maildir, right? Wrong. The file may already have been moved to cur/ directory,
 and since it may contain any number of flags by then you can't check with a
 simple stat() anymore if it exists or not.
+
+Step 2 was pointed out to be useful if clock had moved backwards. However again
+this doesn't give any actual safety guarantees, because an identical base
+filename could already exist in cur/. Besides if the system was just rebooted,
+the file in tmp/ could probably be even overwritten safely (assuming it wasn't
+already link()ed to new/).
 
 So really, all that's important in not getting mails overwritten in your
 maildir is the step 1: Always create filenames that are guaranteed to be
@@ -252,4 +259,4 @@ References
  * Maildir++ [http://www.inter7.com/courierimap/README.maildirquota.html]
  * Wikipedia [http://en.wikipedia.org/wiki/Maildir] 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

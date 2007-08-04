@@ -85,4 +85,4 @@ If you're using SSL/TLS you might want to increase the 'login_process_size'.
 With the default 32MB Dovecot itself should be able to handle a few thousand
 connections, but SSL libraries might require more.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

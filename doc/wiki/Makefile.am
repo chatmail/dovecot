@@ -20,6 +20,7 @@ wiki_DATA = ACL.txt \
 	Authentication.txt \
 	BasicConfiguration.txt \
 	Chrooting.txt \
+	Clients.NegativeUIDs.txt \
 	Clients.txt \
 	CommandLine.txt \
 	CompilingSource.txt \
@@ -37,6 +38,11 @@ wiki_DATA = ACL.txt \
 	Design.txt \
 	FindMailLocation.txt \
 	FinishBasicConfiguration.txt \
+	HowTo.EximAndDovecotSASL.txt \
+	HowTo.PostfixAndDovecotSASL.txt \
+	HowTo.SimpleVirtualInstall.txt \
+	HowTo.txt \
+	IndexFiles.txt \
 	InetdInstall.txt \
 	Iptables.txt \
 	LDA.Exim.txt \
@@ -97,7 +103,6 @@ wiki_DATA = ACL.txt \
 	POP3Server.txt \
 	PopBSMTPAndDovecot.txt \
 	PopRelay.txt \
-	PostfixAndDovecotSASL.txt \
 	PostLoginScripting.txt \
 	QuickConfiguration.txt \
 	Quota.Dict.txt \
@@ -117,6 +122,7 @@ wiki_DATA = ACL.txt \
 	SystemUsers.txt \
 	TestInstallation.txt \
 	TestPop3Installation.txt \
+	TimeMovedBackwards.txt \
 	UpgradingDovecot.txt \
 	UserDatabase.ExtraFields.txt \
 	UserDatabase.Prefetch.txt \

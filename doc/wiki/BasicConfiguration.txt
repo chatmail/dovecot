@@ -4,13 +4,24 @@ Basic Configuration
 This page tells you the basics that you'll need to get a working Dovecot
 installation.
 
+Dovecot's configuration file exists usually in '/etc/dovecot.conf',
+'/etc/dovecot/dovecot.conf' or '/usr/local/etc/dovecot.conf'. If you installed
+from sources, the file is still called 'dovecot-example.conf', so you should
+first rename it:
+
+---%<-------------------------------------------------------------------------
+mv /usr/local/etc/dovecot-example.conf /usr/local/etc/dovecot.conf
+---%<-------------------------------------------------------------------------
+
 Authentication
 --------------
 
 Here we're going to create a simple passwd-like file to make sure that the
 authentication will work. Later when you know Dovecot is working, you can do it
-differently. If you're going to use PAM and don't want to bother with this
-step, you can skip over to PAM and SSL steps in<QuickConfiguration.txt>.
+differently:
+
+ * If you're going to use system users, see <PAM> [PasswordDatabase.PAM.txt].
+ * If you're going to use virtual users, see <VirtualUsers.txt>.
 
 Run as your own non-root user:
 
@@ -21,7 +32,7 @@ sudo mv passwd.dovecot /etc
 
 You can (and should) replace the "password" with whatever password you wish to
 use, but don't use any important password here as we'll be logging in with
-insecure plaintext authentication until SSL is configured.
+insecure plaintext authentication until<SSL.txt> is configured.
 
 Now, configure Dovecot to use the file by modifying 'dovecot.conf':
 
@@ -35,6 +46,17 @@ auth default {
 ---%<-------------------------------------------------------------------------
 
 Also comment out 'passdb pam' section so it's not tried to be used unneededly.
+Verify with 'dovecot -n' that the output looks like this:
+
+---%<-------------------------------------------------------------------------
+...
+auth default:
+  passdb:
+    driver: passwd-file
+    args: /etc/passwd.dovecot
+  userdb:
+    driver: passwd
+---%<-------------------------------------------------------------------------
 
 Plaintext Authentication
 ------------------------
@@ -100,4 +122,4 @@ mail_extra_groups = mail
 Note that it has to be done this way. Adding 'dovecot' user to 'mail' group
 doesn't help at all.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

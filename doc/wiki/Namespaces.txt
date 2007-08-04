@@ -89,4 +89,4 @@ Without the 'hidden = yes' setting in the first namespace, clients see the
 "#mbox" namespace as a non-selectable mailbox named "#mbox" and having child
 mailboxes (ie. like a directory).
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

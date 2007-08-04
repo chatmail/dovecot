@@ -24,7 +24,7 @@ reason not to use it.
 Example 'dovecot-dict-quota.conf':
 
 ---%<-------------------------------------------------------------------------
-connect = host=localhost dbname=mails user=mailuser
+connect = host=localhost dbname=mails user=sqluser password=sqlpass
 table = quota
 select_field = current
 where_field = path
@@ -85,4 +85,4 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

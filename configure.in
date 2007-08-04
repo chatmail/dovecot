@@ -1,5 +1,5 @@
-xAC_PREREQ([2.59])
-AC_INIT([dovecot],[1.0.0],[dovecot@dovecot.org])
+AC_PREREQ([2.59])
+AC_INIT([dovecot],[1.0.3],[dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE
@@ -304,7 +304,7 @@ AC_ARG_WITH(storages,
 		AC_MSG_ERROR([--with-storages needs storage list as parameter])
 	fi
 	mail_storages=`echo "$withval"|sed 's/,/ /g'` ],
-	mail_storages="maildir mbox dbox")
+	mail_storages="maildir mbox")
 AC_SUBST(mail_storages)
 
 AC_ARG_WITH(sql-drivers,

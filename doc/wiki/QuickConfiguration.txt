@@ -94,7 +94,7 @@ SSL
 
 If you intend to use SSL, set 'ssl_cert_file' and 'ssl_key_file' settings.
 Otherwise set 'ssl_disable = yes'. Easiest way to get SSL certificates built is
-to use Dovecot's 'doc/mkcert.sh' script.
+to use Dovecot's 'doc/mkcert.sh' script. See <SSL.txt>.
 
 By default Dovecot doesn't allow users to send passwords unencrypted to the
 server. Usually if SSL is enabled, it's a good idea not to allow this. However,
@@ -130,4 +130,4 @@ Running
 
 See <RunningDovecot.txt> and <Logging.txt>. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

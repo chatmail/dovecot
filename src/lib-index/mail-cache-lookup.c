@@ -485,6 +485,9 @@ int mail_cache_lookup_headers(struct mail_cache_view *view, string_t *dest,
 		}
 	}
 
+	for (i = 0; i < fields_count; i++)
+		mail_cache_decision_lookup(view, seq, fields[i]);
+
 	data = buffer_get_modifyable_data(ctx.data, &size);
 	size /= sizeof(*data);
 	qsort(data, size, sizeof(*data), header_lookup_data_cmp);
@@ -503,7 +506,7 @@ int mail_cache_lookup_headers(struct mail_cache_view *view, string_t *dest,
 		}
 		hdr_size = (size_t)(p - start);
 		data[i].data->offset += hdr_size;
-		data[i].data->data_size += hdr_size;
+		data[i].data->data_size -= hdr_size;
 		buffer_append(dest, start, hdr_size);
 	}
 

@@ -229,8 +229,7 @@ static int pam_auth(struct auth_request *request,
 	        }
 	}
 
-	/* FIXME: this doesn't actually work since we're in the child
-	   process.. */
+	/* FIXME: this works only with blocking=yes */
 	status = pam_get_item(pamh, PAM_USER, (linux_const void **)&item);
 	if (status != PAM_SUCCESS) {
 		*error = t_strdup_printf("pam_get_item() failed: %s",
@@ -373,10 +372,11 @@ static void pam_child_input(void *context)
 	}
 
 	request->callback(result, auth_request);
-	auth_request_unref(&auth_request);
 
-	if (--request->refcount == 0)
+	if (--request->refcount == 0) {
+		auth_request_unref(&auth_request);
 		i_free(request);
+	}
 }
 
 static void sigchld_handler(int signo __attr_unused__,
@@ -411,8 +411,10 @@ static void sigchld_handler(int signo __attr_unused__,
 		}
 
 		hash_remove(pam_requests, POINTER_CAST(request->pid));
-		if (--request->refcount == 0)
+		if (--request->refcount == 0) {
+			auth_request_unref(&request->request);
 			i_free(request);
+		}
 	}
 }
 

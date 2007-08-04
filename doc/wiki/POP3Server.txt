@@ -48,13 +48,15 @@ POP3 clients breaking with some broken mails.
 UIDL format
 -----------
 
-If a POP3 client is configured to keep the mail in the server, it uses the
-messages' UIDLs to figure out which messages it has already downloaded. Dovecot
-supports multiple different ways to set this UIDL format, mostly to make
-migrations from other POP3 servers transparent. If the UIDL format changes, the
-client downloads all the messages again, which the users don't really
-appreciate. See<Migration.txt> for how to set the UIDLs to be compatible with
-your previous POP3 server.
+UIDLs are used by POP3 clients to keep track of what messages they've
+downloaded, typically only if you've enabled "keep messages in server" option.
+If the UIDL changes, the existing messages are re-downloaded as new messages,
+which the users don't really appreciate.
+
+Dovecot supports multiple different ways to set the UIDL format, mostly to make
+migrations from other POP3 servers transparent by preserving the old UIDL
+values. See<Migration.txt> for how to set the UIDLs to be compatible with your
+previous POP3 server.
 
 For new POP3 servers, the easiest way to set up UIDLs is to use IMAP's
 UIDVALIDITY and UID values. The default for future Dovecot versions will be:
@@ -63,17 +65,33 @@ UIDVALIDITY and UID values. The default for future Dovecot versions will be:
 pop3_uidl_format = %08Xu%08Xv
 ---%<-------------------------------------------------------------------------
 
-Some formats, such as the previous default %v.%u, seem to have problems with
+Some formats, such as the previous default '%v.%u', seem to have problems with
 Outlook 2003.
 
 MD5 UIDL format
 ---------------
 
-Note: this works only with mbox format.
+Note: This works only with mbox format and there are some issues with it with
+Dovecot versions earlier than v1.0.1.
 
-If you're using 'pop3_uidl_format = %m' (MD5 sum from a couple of headers), you
-may have problems if you receive two identical messages. Usually the MD5 sum is
-taken from these headers:
+---%<-------------------------------------------------------------------------
+pop3_uidl_format = %m
+---%<-------------------------------------------------------------------------
+
+This works by getting the MD5 sum of a couple of message headers that uniquely
+identify the message. The one good thing about MD5 format is that it doesn't
+rely on the IMAP UID or UIDVALIDITY value. This allows you to modify the mbox
+files in ways that Dovecot doesn't like, without causing the UIDLs to change.
+For example:
+
+ * Inserting messages in the middle of mbox files (eg. restoring mbox files
+   from backups can cause "Expunged message reappeared" errors)
+ * Reordering messages inside mbox
+ * <Other random problems> [MboxProblems.txt] causing UID renumbering (although
+   you should figure out why they're happening)
+
+The MD5 summing method however doesn't work well if you receive two identical
+messages. Usually the MD5 sum is taken from these headers:
 
  * The first Received: header
  * Delivered-To: header
@@ -99,4 +117,4 @@ If you use <Dovecot's deliver> [LDA.txt] or IMAP APPEND and 'pop3_uidl_format =
 %m', it always appends the X-Delivery-ID: header to saved mailbox. Any existing
 X-Delivery-ID: headers in the saved mails are dropped.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

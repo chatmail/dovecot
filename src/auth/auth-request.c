@@ -33,7 +33,7 @@ auth_request_new(struct auth *auth, struct mech_module *mech,
 	request->userdb = auth->userdbs;
 
 	request->refcount = 1;
-	request->created = ioloop_time;
+	request->last_access = ioloop_time;
 	request->credentials = -1;
 
 	request->auth = auth;
@@ -53,7 +53,7 @@ struct auth_request *auth_request_new_dummy(struct auth *auth)
 	auth_request->pool = pool;
 
 	auth_request->refcount = 1;
-	auth_request->created = ioloop_time;
+	auth_request->last_access = ioloop_time;
 	auth_request->auth = auth;
 	auth_request->passdb = auth->passdbs;
 	auth_request->userdb = auth->userdbs;
@@ -75,6 +75,7 @@ void auth_request_success(struct auth_request *request,
 
 	request->state = AUTH_REQUEST_STATE_FINISHED;
 	request->successful = TRUE;
+	request->last_access = ioloop_time;
 	request->callback(request, AUTH_CLIENT_RESULT_SUCCESS,
 			  data, data_size);
 }
@@ -84,6 +85,7 @@ void auth_request_fail(struct auth_request *request)
 	i_assert(request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
 
 	request->state = AUTH_REQUEST_STATE_FINISHED;
+	request->last_access = ioloop_time;
 	request->callback(request, AUTH_CLIENT_RESULT_FAILURE, NULL, 0);
 }
 
@@ -133,6 +135,8 @@ void auth_request_export(struct auth_request *request, string_t *str)
 		str_append(str, "\trip=");
 		str_append(str, net_ip2addr(&request->remote_ip));
 	}
+	if (request->secured)
+		str_append(str, "\tsecured=1");
 }
 
 bool auth_request_import(struct auth_request *request,
@@ -177,6 +181,7 @@ void auth_request_continue(struct auth_request *request,
 {
 	i_assert(request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
 
+	request->last_access = ioloop_time;
 	request->mech->auth_continue(request, data, data_size);
 }
 

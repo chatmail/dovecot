@@ -234,7 +234,7 @@ static int maildirsize_write(struct maildir_quota_root *root,
 	if (fd == -1) {
 		if (errno == EAGAIN) {
 			/* someone's just in the middle of updating it */
-			return -1;
+			return 1;
 		}
 
 		mail_storage_set_critical(storage,

@@ -18,7 +18,7 @@ some instructions for client implementors:
      7. Thunderbird
      8. Mutt
      9. Pine
-     10. Squirrelmail
+     10. SquirrelMail
      11. Horde IMP
 
 Outlook
@@ -37,8 +37,7 @@ Outlook Express 6
    longer available on this server" error when opening a mail. This isn't
    Dovecot specific problem, and I'm not aware of any possible workarounds at
    the moment for this in server side.
- * You should enable 'outlook-idle' and 'oe6-fetch-no-newmail' workarounds for
-   IMAP.
+ * You should enable 'outlook-idle' and 'delay-newmail' workarounds for IMAP.
  * You should enable 'outlook-no-nuls' and 'oe-ns-eoh' workarounds for POP3.
 
 Netscape 4.x
@@ -83,14 +82,14 @@ Pine
 
 Seems to be OK.
 
-Squirrelmail
+SquirrelMail
 ------------
 
- * Configuration asks IMAP server name for some workarounds, I'm not aware of
-   Dovecot requiring any so just select the "other" option. By default it uses
-   INBOX-prefix, remove it.
- * Squirrelmail 1.4.5 has broken APPEND command
-   [http://www.squirrelmail.org/wiki/ComposeErrorOnSend1]. Upgrade to 1.4.6.
+ * Configuration asks IMAP server name for some workarounds. There has been a
+   Dovecot option since 1.4.6 and 1.5.1. For olderSquirrelMail versions, select
+   the "other" option and remove the default INBOX-prefix.
+ * SquirrelMail 1.4.5 has broken APPEND command
+   [http://squirrelmail.org/wiki/ComposeErrorOnSend]. Upgrade to 1.4.6.
 
 Horde IMP
 ---------
@@ -101,4 +100,4 @@ will just use the default. So, change the default from
 'mail/' part. For IMP2 edit 'defaults.php3', search for '$default->folders =
 'mail/';' and remove the 'mail/' part. 
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

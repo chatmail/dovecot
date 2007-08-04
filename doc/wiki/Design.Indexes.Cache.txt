@@ -134,4 +134,4 @@ decision was right. If decision hasn't matched for two months, it's changed. I
 picked two months because people go to at least one month vacations where they
 might still be reading mails, but with different clients.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

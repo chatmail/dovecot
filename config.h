@@ -191,7 +191,7 @@
 /* #undef HAVE_SASL_H */
 
 /* Define to 1 if you have the <sasl/sasl.h> header file. */
-/* #undef HAVE_SASL_SASL_H */
+#define HAVE_SASL_SASL_H 1
 
 /* Define if you have security/pam_appl.h */
 #define HAVE_SECURITY_PAM_APPL_H 
@@ -404,13 +404,13 @@
 #define PACKAGE_NAME "dovecot"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "dovecot 1.0.0"
+#define PACKAGE_STRING "dovecot 1.0.3"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "dovecot"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.0.0"
+#define PACKAGE_VERSION "1.0.3"
 
 /* Build with BSD authentication support */
 /* #undef PASSDB_BSDAUTH */
@@ -515,7 +515,7 @@
 #define VA_COPY_AS_ARRAY 1
 
 /* Version number of package */
-#define VERSION "1.0.0"
+#define VERSION "1.0.3"
 
 /* Define to 1 if your processor stores words with the most significant byte
    first (like Motorola and SPARC, unlike Intel and VAX). */

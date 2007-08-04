@@ -1,25 +1,28 @@
 User Databases
 ==============
 
-Dovecot obtains a user's <UNIX user ID (UID), UNIX group ID (GID)>
-[UserIds.txt], home directory and<mail location> [MailLocation.txt] from the
-user database after the user has been authenticated. The user database may also
-return<extra fields> [UserDatabase.ExtraFields.txt] which are sent to the
-IMAP/POP3 process in environment variables.
+After user has been successfully authenticated, Dovecot looks up the user's
+userdb information. The userdb lookup is also done by<deliver> [LDA.txt] to
+find out how to deliver mails for the user.
 
-The user and password databases may be the same or they may be different
-depending on your needs. You can also have<multiple databases>
+The user database lookup returns:
+
+ * User's <UID> [UserIds.txt] (UNIX user ID)
+ * User's <GID> [UserIds.txt] (UNIX group ID)
+ * <Home directory> [VirtualUsers.txt]
+ * <Mail location> [MailLocation.txt] (if needed to override the default
+   'mail_location' setting)
+ * Optional <extra fields> [UserDatabase.ExtraFields.txt] which are sent to the
+   IMAP/POP3 process in environment variables.
+
+The user and <password databases> [PasswordDatabase.txt] may be same or they
+may be different depending on your needs. You can also have<multiple databases>
 [Authentication.MultipleDatabases.txt].
-
-For more information about UID and GID, see <UserIds.txt>.
-
-For more information about home directory and mail location, see
-<MailLocation.txt>.
 
 Currently supported user databases are:
 
- * <Passwd> [AuthDatabase.Passwd.txt]: '/etc/passwd' or similiar (using
-   'getpwnam()' function)
+ * <Passwd> [AuthDatabase.Passwd.txt]: System users (NSS, '/etc/passwd', or
+   similiar)
  * <Passwd-file> [AuthDatabase.PasswdFile.txt]: '/etc/passwd'-like file in
    specified location
  * <LDAP> [AuthDatabase.LDAP.txt]: Lightweight Directory Access Protocol
@@ -31,4 +34,4 @@ Currently supported user databases are:
  * <Prefetch> [UserDatabase.Prefetch.txt]: This assumes that the passdb already
    returned also all the required user database information
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

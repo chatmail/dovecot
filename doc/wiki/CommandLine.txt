@@ -29,4 +29,4 @@ If --exec-mail is used, it must be the last argument on the command line, as
 <section> is an optional parameter, otherwise if no section is given but
 another parameter follows, this parameter is used as section.
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)

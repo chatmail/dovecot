@@ -123,7 +123,7 @@ mail_cache_copy(struct mail_cache *cache, struct mail_index_view *view, int fd)
 	struct mail_cache_record cache_rec;
 	struct ostream *output;
 	buffer_t *buffer;
-	uint32_t i, message_count, seq, first_new_seq, old_offset;
+	uint32_t i, message_count, seq, first_new_seq, ext_offset, old_offset;
 	uoff_t offset;
 
 	/* get sequence of first message which doesn't need its temp fields
@@ -179,7 +179,8 @@ mail_cache_copy(struct mail_cache *cache, struct mail_index_view *view, int fd)
 		if (cache_rec.size == sizeof(cache_rec))
 			continue;
 
-		mail_index_update_ext(t, seq, cache->ext_id, &output->offset,
+		ext_offset = output->offset;
+		mail_index_update_ext(t, seq, cache->ext_id, &ext_offset,
 				      &old_offset);
 
 		buffer_write(ctx.buffer, 0, &cache_rec, sizeof(cache_rec));

@@ -30,4 +30,4 @@ throttling feature. You probably want to disable the throttling completely.
 This is done by setting 'mail_log_max_lines_per_sec = 0' in dovecot.conf
 (v1.0.rc20 and later only).
 
-(This file was created from the wiki on 2007-04-13 14:32)
+(This file was created from the wiki on 2007-06-15 04:42)
