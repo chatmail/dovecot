@@ -17,6 +17,7 @@
 #include "cmusieve-plugin.h"
 
 #include <fcntl.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -73,6 +74,11 @@ static int getenvelope(void *mc, const char *field, const char ***contents)
     sieve_msgdata_t *m = (sieve_msgdata_t *) mc;
 
     if (!strcasecmp(field, "from")) {
+	if (m->return_path == NULL) {
+	    /* invalid or missing return path */
+	    *contents = NULL;
+	    return SIEVE_FAIL;
+	}
 	*contents = m->temp;
 	m->temp[0] = m->return_path;
 	m->temp[1] = NULL;
@@ -252,30 +258,89 @@ static int sieve_keep(void *ac,
     return SIEVE_OK;
 }
 
-static int sieve_notify(void *ac __attr_unused__,
-			void *interp_context __attr_unused__,
-			void *script_context __attr_unused__,
-			void *mc __attr_unused__,
-			const char **errmsg __attr_unused__)
+static bool contains_8bit(const char *msg)
 {
-#if 0
-    const char *notifier = config_getstring(IMAPOPT_SIEVENOTIFIER);
+	const unsigned char *s = (const unsigned char *)msg;
 
-    if (notifier) {
-	sieve_notify_context_t *nc = (sieve_notify_context_t *) ac;
-	script_data_t *sd = (script_data_t *) script_context;
-	int nopt = 0;
+	for (; *s != '\0'; s++) {
+		if ((*s & 0x80) != 0)
+			return TRUE;
+	}
+	return FALSE;
+}
 
-	/* count options */
-	while (nc->options[nopt]) nopt++;
+static int sieve_notify(void *ac,
+			void *ic __attr_unused__,
+			void *sc __attr_unused__,
+			void *mc,
+			const char **errmsg)
+{
+    sieve_notify_context_t *nc = (sieve_notify_context_t *) ac;
+    sieve_msgdata_t *m = mc;
 
-	/* "default" is a magic value that implies the default */
-	notify(!strcmp("default",nc->method) ? notifier : nc->method,
-	       "SIEVE", nc->priority, sd->username, NULL,
-	       nopt, nc->options, nc->message);
+    int nopt = 0;
+    FILE *f;
+    struct smtp_client *smtp_client;
+    const char *outmsgid;
+
+    /* "default" is "mailto" as only one... */
+    if (!strcasecmp(nc->method, "default")) nc->method = "mailto";
+    /* check method */
+    if (strcasecmp(nc->method, "mailto")) { 
+        *errmsg = "Unknown [unimplemented] notify method";
+	/* just log error, failed notify is not reason to abort all script. */
+        i_info("SIEVE ERROR: Unknown [unimplemented] notify method <%s>", 
+	nc->method);
+	return SIEVE_OK;
+    }    
+    /* count options */
+    while (nc->options[nopt]) {
+	smtp_client = smtp_client_open(nc->options[nopt], NULL, &f);
+	outmsgid = deliver_get_new_message_id();
+	fprintf(f, "Message-ID: %s\r\n", outmsgid);
+	fprintf(f, "Date: %s\r\n", message_date_create(ioloop_time));
+	fprintf(f, "X-Sieve: %s\r\n", SIEVE_VERSION);
+	if ( strcasecmp(nc->priority, "high") == 0 ) {
+            fprintf(f, "X-Priority: 1 (Highest)\r\n");
+	    fprintf(f, "Importance: High\r\n");
+        } else if ( strcasecmp(nc->priority, "normal") == 0 ) {
+            fprintf(f, "X-Priority: 3 (Normal)\r\n");
+	    fprintf(f, "Importance: Normal\r\n");
+	} else if ( strcasecmp(nc->priority, "low") == 0 ) {
+	    fprintf(f, "X-Priority: 5 (Lowest)\r\n");
+	    fprintf(f, "Importance: Low\r\n");
+	/* RFC: If no importance is given, the default value is "2 (Normal)" */
+	} else {
+	    fprintf(f, "X-Priority: 3 (Normal)\r\n");
+	    fprintf(f, "Importance: Normal\r\n");
+	} 
+	fprintf(f, "From: Postmaster <%s>\r\n",
+		deliver_set->postmaster_address);
+	fprintf(f, "To: <%s>\r\n", nc->options[nopt]);
+	fprintf(f, "Subject: [SIEVE] New mail notification\r\n");
+        fprintf(f, "Auto-Submitted: auto-generated (notify)\r\n");
+	fprintf(f, "Precedence: bulk\r\n");
+        if (contains_8bit(nc->message)) {
+            fprintf(f, "MIME-Version: 1.0\r\n");
+	    fprintf(f, "Content-Type: text/plain; charset=UTF-8\r\n");
+	    fprintf(f, "Content-Transfer-Encoding: 8bit\r\n");
+	}
+	fprintf(f, "\r\n");
+	fprintf(f, "%s\r\n", nc->message);
+	if (smtp_client_close(smtp_client) == 0) {
+		i_info("msgid=%s: sent notification to <%s> (method=%s)",
+		       m->id == NULL ? "" : str_sanitize(m->id, 80),
+		       str_sanitize(nc->options[nopt], 80), nc->method);
+	} else {
+		i_info("msgid=%s: ERROR sending notification to <%s> "
+		       "(method=%s)",
+		       m->id == NULL ? "" : str_sanitize(m->id, 80),
+		       str_sanitize(nc->options[nopt], 80), nc->method);
+		*errmsg = "Error sending notify mail";
+	}
+	nopt = nopt + 1;
     }
-#endif
-    return SIEVE_FAIL;
+    return SIEVE_OK;
 }
 
 static int autorespond(void *ac, 
@@ -452,8 +517,13 @@ dovecot_sieve_compile(sieve_interp_t *interp, script_data_t *sdata,
 	int fd, ret;
 
 	if (stat(script_path, &st) < 0) {
-		if (errno == ENOENT)
+		if (errno == ENOENT) {
+			if (getenv("DEBUG") != NULL) {
+				i_info("cmusieve: Script not found: %s",
+				       script_path);
+			}
 			return 0;
+		}
 		i_error("stat(%s) failed: %m", script_path);
 		return -1;
 	}
@@ -551,6 +621,11 @@ int cmu_sieve_run(struct mail_storage *storage, struct mail *mail,
 	ret = dovecot_sieve_compile(interp, &sdata, script_path, compiled_path);
 
 	if (sdata.errors != NULL) {
+		if (getenv("DEBUG") != NULL) {
+			i_info("cmusieve: Compilation failed for %s: %s",
+			       script_path,
+			       str_sanitize(str_c(sdata.errors), 80));
+		}
 		path = t_strconcat(script_path, ".err", NULL);
 		dovecot_sieve_write_error_file(&sdata, path);
 		str_free(&sdata.errors);
@@ -570,9 +645,14 @@ int cmu_sieve_run(struct mail_storage *storage, struct mail *mail,
 		return -1;
 	}
 
+	if (getenv("DEBUG") != NULL)
+		i_info("cmusieve: Executing script %s", compiled_path);
+
 	if (sieve_execute_bytecode(bytecode, interp,
-				   &sdata, &mdata) != SIEVE_OK)
+				   &sdata, &mdata) != SIEVE_OK) {
+		i_error("sieve_execute_bytecode(%s) failed", compiled_path);
 		return -1;
+	}
 
 	return 1;
 }

@@ -1,7 +1,7 @@
 %{
 /* sieve.y -- sieve parser
  * Larry Greenfield
- * $Id: sieve.y,v 1.2 2006-06-11 11:32:04 cras Exp $
+ * $Id$
  */
 /***********************************************************
         Copyright 1999 by Carnegie Mellon University

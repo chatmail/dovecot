@@ -1,4 +1,4 @@
-AC_INIT(dovecot-sieve, 1.0.1, [dovecot@dovecot.org])
+AC_INIT(dovecot-sieve, 1.0.2, [dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AC_CONFIG_HEADERS([dsieve-config.h])
@@ -26,12 +26,26 @@ AC_SUBST(dovecotdir)
 if ! test -f "$dovecotdir/dovecot-config"; then
   echo
   echo "dovecot-config not found from $dovecotdir, use --with-dovecot=PATH"
-  echo "to give path to compiled Dovecot sources."
+  echo "to give path to compiled Dovecot sources or to a directory with the"
+  echo "installed dovecot-config file."
   AC_MSG_ERROR([dovecot-config not found])
 fi
 
+if test -d "$dovecotdir/src"; then
+  # compiling against sources
+  have_dovecot_libs=yes
+else
+  # compiling against installed headers
+  have_dovecot_libs=no
+fi
+AM_CONDITIONAL(HAVE_DOVECOT_LIBS, test "$have_dovecot_libs" = "yes")
+
 dnl replace relative ../ paths in the file with full paths
 eval `cat $dovecotdir/dovecot-config|sed 's,\$(top_builddir)/,$dovecotdir/,g'`
+
+if test $have_dovecot_libs = yes; then
+  dovecot_incdir="$dovecotdir"
+fi
 
 dnl * Regexp library check, from Cyrus IMAP
 AC_SEARCH_LIBS(regcomp, rx regex, [
@@ -42,7 +56,7 @@ AC_SUBST(STORAGE_LIBS)
 AC_SUBST(LIBICONV)
 AC_SUBST(RAND_LIBS)
 AC_SUBST(MODULE_LIBS)
-AC_SUBST(dovecotdir)
+AC_SUBST(dovecot_incdir)
 AC_SUBST(moduledir)
 
 AC_CONFIG_FILES([

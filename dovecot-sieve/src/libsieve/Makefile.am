@@ -1,14 +1,12 @@
 pkglibexecdir = $(libexecdir)/dovecot
 
-pkglibexec_PROGRAMS = sievec sieved
-
 noinst_LTLIBRARIES = libsieve.la
 
 AM_YFLAGS = -d -p $*
 
 AM_CPPFLAGS = \
-	-I$(dovecotdir) \
-	-I$(dovecotdir)/src/lib \
+	-I$(dovecot_incdir) \
+	-I$(dovecot_incdir)/src/lib \
 	-I$(top_srcdir)/src
 
 addr-lex.c: addr-lex.l
@@ -16,23 +14,6 @@ addr-lex.c: addr-lex.l
 
 sieve-lex.c: sieve-lex.l
 	$(LEX) -t sieve-lex.l > sieve-lex.c
-
-sievec_SOURCES = \
-	sievec.c \
-	../map.c \
-	../imparse.c
-
-sieved_SOURCES = \
-	sieved.c \
-	../map.c
-
-sievec_LDADD = \
-	libsieve.la \
-	$(dovecotdir)/src/lib/liblib.a
-
-sieved_LDADD = \
-	libsieve.la \
-	$(dovecotdir)/src/lib/liblib.a
 
 libsieve_la_SOURCES = \
 	addr.y \
@@ -64,10 +45,36 @@ noinst_HEADERS = \
 	sieve_interface.h \
 	tree.h
 
+if HAVE_DOVECOT_LIBS
+pkglibexec_PROGRAMS = sievec sieved
+
+sievec_SOURCES = \
+	sievec.c \
+	../map.c \
+	../imparse.c
+
+sieved_SOURCES = \
+	sieved.c \
+	../map.c
+
+sievec_LDADD = \
+	libsieve.la \
+	$(dovecotdir)/src/lib/liblib.a
+
+sieved_LDADD = \
+	libsieve.la \
+	$(dovecotdir)/src/lib/liblib.a
+
+notbuilt_sources =
+else
+notbuilt_sources = sievec.c sieved.c
+endif
+
 EXTRA_DIST = \
 	addr-lex.l \
 	sieve-lex.l \
 	AUTHORS \
 	COPYING \
 	NEWS \
-	README
+	README \
+	$(notbuilt_sources)

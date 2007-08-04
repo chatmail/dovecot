@@ -1,14 +1,14 @@
 SUBDIRS = libsieve
 
 AM_CPPFLAGS = \
-	-I$(dovecotdir) \
-	-I$(dovecotdir)/src/lib \
-	-I$(dovecotdir)/src/lib-dict \
-	-I$(dovecotdir)/src/lib-mail \
-	-I$(dovecotdir)/src/lib-storage \
-	-I$(dovecotdir)/src/deliver
+	-I$(dovecot_incdir) \
+	-I$(dovecot_incdir)/src/lib \
+	-I$(dovecot_incdir)/src/lib-dict \
+	-I$(dovecot_incdir)/src/lib-mail \
+	-I$(dovecot_incdir)/src/lib-storage \
+	-I$(dovecot_incdir)/src/deliver
 
-lda_moduledir = $(libexecdir)/dovecot/modules/lda
+lda_moduledir = $(moduledir)/lda
 
 lib90_cmusieve_plugin_la_LDFLAGS = -module -avoid-version
 

@@ -1,6 +1,6 @@
 /* interp.h -- interpretor definition
  * Larry Greenfield
- * $Id: interp.h,v 1.1.1.1 2006-06-11 11:03:53 cras Exp $
+ * $Id$
  */
 /***********************************************************
         Copyright 1999 by Carnegie Mellon University

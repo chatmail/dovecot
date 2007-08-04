@@ -1,5 +1,5 @@
 /* bc_eval.c - evaluate the bytecode
- * $Id: bc_eval.c,v 1.2 2006-07-01 18:50:40 cras Exp $
+ * $Id$
  */
 /***********************************************************
         Copyright 2001 by Carnegie Mellon University

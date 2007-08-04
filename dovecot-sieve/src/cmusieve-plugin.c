@@ -50,7 +50,11 @@ static const char *get_sieve_path(void)
 			i_error("stat(%s) failed: %m", script_path);
 
 		/* use global script instead, if one exists */
-		script_path = getenv("GLOBAL_SCRIPT_PATH");
+		script_path = getenv("SIEVE_GLOBAL_PATH");
+		if (script_path == NULL) {
+			/* for backwards compatibility */
+			script_path = getenv("GLOBAL_SCRIPT_PATH");
+		}
 	}
 
 	return script_path;

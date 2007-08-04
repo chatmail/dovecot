@@ -1,6 +1,6 @@
 /* sievec.c -- compile a sieve script to bytecode manually
  * Rob Siemborski
- * $Id: sievec.c,v 1.2 2006-10-10 17:01:15 tss Exp $
+ * $Id$
  */
 /*
  * Copyright (c) 1999-2000 Carnegie Mellon University.  All rights reserved.
