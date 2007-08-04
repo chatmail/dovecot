@@ -71,8 +71,8 @@ clean: unpatch
 	dh_testroot
 	rm -f build-stamp 
 	# Add here commands to clean up after the build process.
-	-$(MAKE) distclean
-	-$(MAKE) -C dovecot-sieve distclean
+	[ ! -f Makefile ] || $(MAKE) distclean
+	[ ! -f dovecot-sieve/Makefile ] || $(MAKE) -C dovecot-sieve distclean
 	rm -f conftest conftest.o config.log config.cache config.status ylwrap
 	[ -f config.sub.orig ] && mv config.sub.orig config.sub || true
 	[ -f config.guess.orig ] && mv config.sub.orig config.guess || true

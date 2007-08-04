@@ -8,7 +8,7 @@ AM_CPPFLAGS = \
 	-I$(dovecot_incdir)/src/lib-storage \
 	-I$(dovecot_incdir)/src/deliver
 
-lda_moduledir = $(moduledir)/lda
+lda_moduledir = $(libexecdir)/dovecot/modules/lda
 
 lib90_cmusieve_plugin_la_LDFLAGS = -module -avoid-version
 
