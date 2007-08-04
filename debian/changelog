@@ -14,8 +14,9 @@ dovecot (1:1.0.3-1) unstable; urgency=low
   * debian/patches/00list: added dovecot-drac, again. (Closes: #353039)
   * debian/rules: build with inotify and epoll support. (Closes: #419281)
   * debian/dovecot.1: added a simple manpage for dovecot. (Closes: #426702)
+  * debian/copyright: added copyright exceptions as suggested by Timo.
 
- -- Fabio Tranchitella <kobold@debian.org>  Sat, 04 Aug 2007 19:51:49 +0200
+ -- Fabio Tranchitella <kobold@debian.org>  Sat, 04 Aug 2007 20:11:36 +0200
 
 dovecot (1:1.0.0-1) unstable; urgency=low
 
