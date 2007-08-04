@@ -8,6 +8,6 @@ port 993.)
 
 After making the change, do: 
 
-  # /etc/init.d/dovecot restart 
+  # invoke-rc.d dovecot restart
 
 to enable imapd. 

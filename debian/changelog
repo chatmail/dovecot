@@ -1,9 +1,21 @@
 dovecot (1:1.0.3-1) unstable; urgency=low
 
-  * New upstream release.
-  * dovecot-sieve: updated to the last hg's tip.
+  * New upstream release. (Closes: #434038, #432601)
+  * This release doesn't build dbox support out-of-the-box. (Closes: #431615)
+  * dovecot-sieve: updated to the last hg's tip. (Closes: #434079)
+  * debian/dovecot-*.README.Debian: don't call /etc/init.d scripts directly.
+    (Closes: #431991)
+  * debian/dovecot-common.init: updated with patches from Tom Metro, thanks!
+    (Closes: #426480, #422674)
+  * debian/dovecot-common.postinst: fixed a missing variable DOMAINNAME.
+    (Closes: #425917)
+  * debian/rules: moved the init script to the level 24, after the ntpdate
+    one. (Closes: #432723)
+  * debian/patches/00list: added dovecot-drac, again. (Closes: #353039)
+  * debian/rules: build with inotify and epoll support. (Closes: #419281)
+  * debian/dovecot.1: added a simple manpage for dovecot. (Closes: #426702)
 
- -- Fabio Tranchitella <kobold@debian.org>  Sat, 04 Aug 2007 19:27:15 +0200
+ -- Fabio Tranchitella <kobold@debian.org>  Sat, 04 Aug 2007 19:51:49 +0200
 
 dovecot (1:1.0.0-1) unstable; urgency=low
 

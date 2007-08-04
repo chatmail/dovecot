@@ -34,6 +34,8 @@ config.status: patch-stamp configure
 	            --with-cyrus-sasl2 \
 	            --with-gssapi \
 	            --with-deliver \
+				--with-notify=inotify \
+				--with-ioloop=epoll \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \
 	            --prefix=/usr \
@@ -113,9 +115,9 @@ binary-arch: build install
 	dh_installexamples -a
 	dh_installpam -a
 	mv $(CURDIR)/debian/dovecot-common/etc/pam.d/dovecot-common $(CURDIR)/debian/dovecot-common/etc/pam.d/dovecot
-	dh_installinit -pdovecot-common --init-script=dovecot -u"defaults 21"
+	dh_installinit -pdovecot-common --init-script=dovecot -u"defaults 24"
 	dh_installman -a
-	dh_installman -p dovecot-common debian/maildirmake.dovecot.1
+	dh_installman -p dovecot-common debian/maildirmake.dovecot.1 debian/dovecot.1
 	dh_installchangelogs -a ChangeLog
 	dh_link -a
 	dh_strip -a

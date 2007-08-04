@@ -273,7 +273,7 @@ kill -HUP <pid>
 
 You have to shutdown Dovecot and restart it: 
 
-/etc/init.d/dovecot restart
+invoke-rc.d dovecot restart
 
 9. Why can't users access their mail?
 
@@ -362,7 +362,7 @@ imap_listen = *
 
 Shut down Dovecot completely, and restart it.
 
-/etc/init.d/dovecot restart
+invoke-rc.d dovecot restart
 
 11. Nothing I do works! I'm losing my sanity! Give me some clues!
 

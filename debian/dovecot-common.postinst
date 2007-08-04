@@ -41,7 +41,6 @@ if [ "$1" = "configure" ]; then
     echo "(replace with hand-crafted or authorized one if needed)."
     cd /etc/ssl/certs
     PATH=$PATH:/usr/bin/ssl
-    HOSTNAME=`hostname -s`
     FQDN=`hostname -f`
     MAILNAME=`cat /etc/mailname 2> /dev/null || hostname -f`
     (openssl req -new -x509 -days 365 -nodes -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
@@ -49,7 +48,7 @@ if [ "$1" = "configure" ]; then
 .
 .
 Dovecot mail server
-$HOSTNAME.$DOMAINNAME
+$FQDN
 $FQDN
 root@$MAILNAME
 +

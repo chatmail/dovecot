@@ -7,7 +7,7 @@ POP3 on standard port 110) or pop3s (for POP3 over SSL on standard port 995.)
 
 After making the change, do:
 
-  # /etc/init.d/dovecot restart
+  # invoke-rc.d dovecot restart
 
 to enable pop3d.
 
