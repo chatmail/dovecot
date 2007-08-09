@@ -1,3 +1,10 @@
+dovecot (1:1.0.3-2) unstable; urgency=low
+
+  * debian/rules: removed the --with-notify=inotify switch, it should be
+    detected automatically.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 09 Aug 2007 09:39:50 +0200
+
 dovecot (1:1.0.3-1) unstable; urgency=low
 
   * New upstream release. (Closes: #434038, #432601)
