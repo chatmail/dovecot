@@ -21,7 +21,7 @@
 # PATH should only include /usr/* if it runs after the mountnfs.sh script
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DESC="IMAP/POP3 mail server"
-NAME=${0##*/}
+NAME=dovecot
 DAEMON=/usr/sbin/dovecot
 DAEMON_ARGS=""
 SCRIPTNAME=/etc/init.d/$NAME

@@ -1,3 +1,12 @@
+dovecot (1:1.0.3-3) unstable; urgency=low
+
+  * debian/dovecot-common.init: don't use the init script name to locate the
+    configuration file because it is not reliable. If you really want to start
+    multiple servers, just copy the init script and use the optional default
+    file to override the variables. (Closes: #437228)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 16 Aug 2007 09:17:01 +0200
+
 dovecot (1:1.0.3-2) unstable; urgency=low
 
   * debian/rules: removed the --with-notify=inotify switch, it should be
