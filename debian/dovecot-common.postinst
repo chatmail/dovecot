@@ -30,20 +30,27 @@ if [ "$1" = "configure" ]; then
   
   ## SSL Certs
   # Certs and key file
-  SSL_CERT=$( (egrep -s "^[^#]*ssl_cert_file" /etc/dovecot/dovecot.conf  || echo '/etc/ssl/certs/dovecot.pem') | cut -d'=' -f2)
-  SSL_KEY=$( (grep -s "^[^#]*ssl_key_file" /etc/dovecot/dovecot.conf || echo '/etc/ssl/private/dovecot.pem') | cut -d'=' -f2)
+  SSL_CERT="$(sed -ne 's,^[[:space:]]*ssl_cert_file[[:space:]]*=[[:space:]]*,,p')"
+  [ -z "$SSL_CERT" ] && SSL_CERT=/etc/ssl/certs/dovecot.pem
+  SSL_KEY="$(sed -ne 's,^[[:space:]]*ssl_key_file[[:space:]]*=[[:space:]]*,,p')"
+  [ -z "$SSL_KEY" ] && SSL_KEY=/etc/ssl/private/dovecot.pem
+
   
-  # Generate new certs if needed
-  if [ -f $SSL_CERT ] && [ -f $SSL_KEY ]; then
-    echo "You already have ssl certs for dovecot."
-  else
-    echo "Creating generic self-signed certificate: $SSL_CERT"
-    echo "(replace with hand-crafted or authorized one if needed)."
-    cd /etc/ssl/certs
-    PATH=$PATH:/usr/bin/ssl
-    FQDN=`hostname -f`
-    MAILNAME=`cat /etc/mailname 2> /dev/null || hostname -f`
-    (openssl req -new -x509 -days 365 -nodes -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
+  ## Generate new certs if needed but only if exactly one key is configured
+  # test whether SSL_* contains a space, and only proceed if this is not the case
+  if [ "$SSL_CERT" = "${SSL_CERT#* }" ] && [ "$SSL_KEY" = "${SSL_KEY#* }" ]; then
+
+    # Generate new certs if needed
+    if [ -e $SSL_CERT ] && [ -e $SSL_KEY ]; then
+      echo "You already have ssl certs for dovecot."
+    else
+      echo "Creating generic self-signed certificate: $SSL_CERT"
+      echo "(replace with hand-crafted or authorized one if needed)."
+      cd /etc/ssl/certs
+      PATH=$PATH:/usr/bin/ssl
+      FQDN=`hostname -f`
+      MAILNAME=`cat /etc/mailname 2> /dev/null || hostname -f`
+      (openssl req -new -x509 -days 365 -nodes -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
 .
 .
 .
@@ -52,14 +59,16 @@ $FQDN
 $FQDN
 root@$MAILNAME
 +
-) || echo "Warning : Bad SSL config, can't generate certificate"
-  chown root $SSL_CERT || true
-  chgrp dovecot $SSL_CERT || true
-  chmod 0644 $SSL_CERT || true
-  chown root $SSL_KEY || true
-  chgrp dovecot $SSL_KEY || true
-  chmod 0600 $SSL_KEY || true
-  fi
+      ) || echo "Warning : Bad SSL config, can't generate certificate."
+      chown root $SSL_CERT || true
+      chgrp dovecot $SSL_CERT || true
+      chmod 0644 $SSL_CERT || true
+      chown root $SSL_KEY || true
+      chgrp dovecot $SSL_KEY || true
+      chmod 0600 $SSL_KEY || true
+    fi
+  else
+    echo "My head asplode.  Finish certificate configuration yourself."
 fi
 
 #DEBHELPER#
