@@ -56,8 +56,8 @@ root@$MAILNAME
     ) || echo "Warning : Bad SSL config, can't generate certificate."
 
     if [ -e $SSL_CERT ] && [ -e $SSL_KEY ]; then
-      ucfr dovecot-common SSL_CERT
-      ucfr dovecot-common SSL_KEY
+      ucfr dovecot-common $SSL_CERT
+      ucfr dovecot-common $SSL_KEY
     
       chown root $SSL_CERT || true
       chgrp dovecot $SSL_CERT || true
