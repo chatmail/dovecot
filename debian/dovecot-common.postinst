@@ -59,14 +59,12 @@ root@$MAILNAME
       ucfr dovecot-common SSL_CERT
       ucfr dovecot-common SSL_KEY
     
-      if [ "$SET_CERT_PERMISSIONS" != "no" ]; then
-        chown root $SSL_CERT || true
-        chgrp dovecot $SSL_CERT || true
-        chmod 0644 $SSL_CERT || true
-        chown root $SSL_KEY || true
-        chgrp dovecot $SSL_KEY || true
-        chmod 0600 $SSL_KEY || true
-      fi
+      chown root $SSL_CERT || true
+      chgrp dovecot $SSL_CERT || true
+      chmod 0644 $SSL_CERT || true
+      chown root $SSL_KEY || true
+      chgrp dovecot $SSL_KEY || true
+      chmod 0600 $SSL_KEY || true
   fi
 fi
 
