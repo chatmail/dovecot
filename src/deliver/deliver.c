@@ -278,7 +278,7 @@ static void config_file_init(const char *path)
 			continue;
 		}
 
-		while (p > line && p[-1] == ' ') p--;
+		while (p > line && IS_WHITE(p[-1])) p--;
 		key = t_strdup_until(line, p);
 
 		if (sections > 0 && !lda_section) {
@@ -289,7 +289,7 @@ static void config_file_init(const char *path)
 
 		do {
 			value++;
-		} while (*value == ' ');
+		} while (IS_WHITE(*value));
 
 		len = strlen(value);
 		if (len > 0 &&
@@ -487,15 +487,17 @@ static void open_logfile(const char *username)
 	i_set_failure_timestamp_format(stamp);
 }
 
-static const char *expand_envs(const char *destination)
+static void expand_envs(const char *destination)
 {
         const struct var_expand_table *table;
-	const char *mail_env, *const *envs;
+	const char *mail_env, *const *envs, *home;
 	unsigned int i, count;
 	string_t *str;
 
+	home = getenv("HOME");
+
 	str = t_str_new(256);
-	table = get_var_expand_table(destination, getenv("HOME"));
+	table = get_var_expand_table(destination, home);
 	envs = array_get(&plugin_envs, &count);
 	for (i = 0; i < count; i++) {
 		str_truncate(str, 0);
@@ -503,26 +505,40 @@ static const char *expand_envs(const char *destination)
 		env_put(str_c(str));
 	}
 
-	/* get the table again in case plugin provided the home directory
-	   (yea, kludgy) */
-	table = get_var_expand_table(destination, getenv("HOME"));
-
-	/* MAIL comes from userdb, MAIL_LOCATION from dovecot.conf.
-	   We don't want to expand settings coming from userdb. */
-	mail_env = getenv("MAIL");
+	mail_env = getenv("MAIL_LOCATION");
 	if (mail_env == NULL)  {
-		mail_env = getenv("MAIL_LOCATION");
-		if (mail_env == NULL)  {
-			/* Keep this for backwards compatibility */
-			mail_env = getenv("DEFAULT_MAIL_ENV");
-		}
-		if (mail_env != NULL) {
-			table = get_var_expand_table(destination,
-						     getenv("HOME"));
-			mail_env = expand_mail_env(mail_env, table);
-		}
+		/* Keep this for backwards compatibility */
+		mail_env = getenv("DEFAULT_MAIL_ENV");
 	}
-	return mail_env;
+	if (mail_env != NULL) {
+		/* get the table again in case plugin envs provided the home
+		   directory (yea, kludgy) */
+		if (home == NULL)
+			home = getenv("HOME");
+		table = get_var_expand_table(destination, home);
+		mail_env = expand_mail_env(mail_env, table);
+	}
+	env_put(t_strconcat("MAIL=", mail_env, NULL));
+}
+
+static void putenv_extra_fields(array_t *extra_fields)
+{
+	ARRAY_SET_TYPE(extra_fields, char *);
+	char **fields;
+	const char *key, *p;
+	unsigned int i, count;
+
+	fields = array_get_modifyable(extra_fields, &count);
+	for (i = 0; i < count; i++) {
+		p = strchr(fields[i], '=');
+		if (p == NULL)
+			env_put(t_strconcat(fields[i], "=1", NULL));
+		else {
+			key = t_str_ucase(t_strdup_until(fields[i], p));
+			env_put(t_strconcat(key, p, NULL));
+		}
+		i_free(fields[i]);
+	}
 }
 
 static void print_help(void)
@@ -538,8 +554,9 @@ int main(int argc, char *argv[])
 	const char *envelope_sender = DEFAULT_ENVELOPE_SENDER;
 	const char *mailbox = "INBOX";
 	const char *auth_socket, *env_tz;
-	const char *home, *destination, *user, *value, *mail_env;
-        enum mail_storage_flags flags;
+	const char *home, *destination, *user, *value;
+	array_t ARRAY_DEFINE(extra_fields, char *);
+	enum mail_storage_flags flags;
         enum mail_storage_lock_method lock_method;
 	struct mail_storage *storage, *mbox_storage;
 	struct mailbox *box;
@@ -661,30 +678,36 @@ int main(int argc, char *argv[])
 					  TRUE, version);
 	}
 
+	ARRAY_CREATE(&extra_fields, pool_datastack_create(), char *, 64);
 	if (destination != NULL) {
 		auth_socket = getenv("AUTH_SOCKET_PATH");
 		if (auth_socket == NULL)
 			auth_socket = DEFAULT_AUTH_SOCKET_PATH;
 
-		ret = auth_client_put_user_env(ioloop, auth_socket,
-					       destination, process_euid);
+		ret = auth_client_lookup_and_restrict(ioloop, auth_socket,
+						      destination, process_euid,
+						      &extra_fields);
 		if (ret != 0)
 			return ret;
-
-		/* If possible chdir to home directory, so that core file
-		   could be written in case we crash. */
-		home = getenv("HOME");
-		if (home != NULL) {
-			if (chdir(home) < 0) {
-				if (errno != ENOENT)
-					i_error("chdir(%s) failed: %m", home);
-				else if (getenv("DEBUG") != NULL)
-					i_info("Home dir not found: %s", home);
-			}
-		}
 	} else {
 		destination = user;
 	}
+
+	expand_envs(destination);
+	putenv_extra_fields(&extra_fields);
+
+	/* If possible chdir to home directory, so that core file
+	   could be written in case we crash. */
+	home = getenv("HOME");
+	if (home != NULL) {
+		if (chdir(home) < 0) {
+			if (errno != ENOENT)
+				i_error("chdir(%s) failed: %m", home);
+			else if (getenv("DEBUG") != NULL)
+				i_info("Home dir not found: %s", home);
+		}
+	}
+
 	env_put(t_strconcat("USER=", destination, NULL));
 
 	value = getenv("UMASK");
@@ -705,8 +728,6 @@ int main(int argc, char *argv[])
 	if (deliver_set->sendmail_path == NULL)
 		deliver_set->sendmail_path = DEFAULT_SENDMAIL_PATH;
 
-	mail_env = expand_envs(destination);
-
 	dict_client_register();
         duplicate_init();
         mail_storage_init();
@@ -716,12 +737,13 @@ int main(int argc, char *argv[])
 
 	/* FIXME: how should we handle namespaces? */
 	mail_storage_parse_env(&flags, &lock_method);
-	storage = mail_storage_create_with_data(mail_env, destination,
+	storage = mail_storage_create_with_data(getenv("MAIL"), destination,
 						flags, lock_method);
 	if (storage == NULL) {
 		i_fatal_status(EX_TEMPFAIL,
 			"Failed to create storage for '%s' with mail '%s'",
-			destination, mail_env == NULL ? "(null)" : mail_env);
+			destination,
+			getenv("MAIL") == NULL ? "(null)" : getenv("MAIL"));
 	}
 
 	if (hook_mail_storage_created != NULL)

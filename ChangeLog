@@ -1,8 +1,203 @@
+2007-09-09  Timo Sirainen  <tss@iki.fi>
+
+	* .hgtags:
+	Added tag 1.0.5 for changeset 2625871ec9ea
+	[13b3b8c9eccc] [tip]
+
+	* NEWS, configure.in:
+	Released v1.0.5.
+	[2625871ec9ea] [1.0.5]
+
+	* src/lib-storage/index/maildir/maildir-storage.c:
+	When creating mailboxes, set cur/new/tmp directories' group to
+	dovecot-shared file's group.
+	[8c98ecd43a35]
+
+	* src/lib/module-dir.c:
+	Instead of exit()ing directly if loading plugins fail, use i_fatal()
+	so failure_callback can be called.
+	[cb3679cd91a1]
+
+	* src/plugins/quota/quota-dirsize.c:
+	If INBOX is a substring of already added path, don't assert-crash.
+	Also fixed handling cases where parent directory was added while its
+	multiple children were already added (probably never happened).
+	[a3f2f00cbd7c]
+
+	* src/deliver/auth-client.c, src/deliver/deliver.c:
+	Fixed home directory handling which got broken by previous changes.
+	[798963ca1f6f]
+
+2007-09-08  Timo Sirainen  <tss@iki.fi>
+
+	* .hgtags:
+	Added tag 1.0.4 for changeset f7edf7fbe162
+	[a3d748b7f6cc]
+
+	* NEWS, TODO, configure.in:
+	Released v1.0.4.
+	[f7edf7fbe162] [1.0.4]
+
+	* src/imap/imap-sync.c:
+	Fixed infinite loop if a transaction was seen for messages that
+	weren't visible in this session yet.
+	[8e86137a04fb]
+
+2007-08-27  Timo Sirainen  <tss@iki.fi>
+
+	* src/deliver/mail-send.c:
+	Changed human readable rejection message.
+	[34445ab6cd58]
+
+2007-08-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/deliver/auth-client.c, src/deliver/auth-client.h,
+	src/deliver/deliver.c:
+	Extra fields from userdb lookup should override everything. Fixed
+	the code to work the same way as master process handles it, so there
+	should be no more differences.
+	[bc2b06d0fba6]
+
+	* src/pop3/client.c:
+	Fix to last change: Don't continue if we can't get message's size.
+	[68f23f982234]
+
+	* src/pop3/client.c:
+	Handle initial syncing errors better.
+	[2c3124d7d2c2]
+
+	* src/imap/client.c:
+	Changed disconnection reason to "Connection closed"
+	[dfbe444f6fab]
+
+	* src/imap/client.c:
+	If read/write to client failed with some error, log it.
+	[a732e4d09ea3]
+
+2007-08-14  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap/cmd-create.c:
+	CREATE ns_prefix/box/ didn't work right when namespace prefix
+	existed.
+	[33690bb286af]
+
+2007-08-13  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-auth/auth-server-request.c:
+	If sending auth request to dovecot-auth fails, don't crash.
+	[a0c3daf7e501]
+
+	* src/auth/auth-request.c:
+	If auth cache contained credentials in wrong scheme, we crashed.
+	[59882181925a]
+
+2007-08-09  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/ostream-file.c:
+	Assert fix
+	[5e347c7daefd]
+
+	* src/lib/ostream-file.c:
+	If we do multiple writev() calls and the last one fails, we
+	shouldn't treat all of it as a failure because some data was already
+	sent. Also added some more asserts.
+	[bd113e9fe67b]
+
+	* src/plugins/convert/convert-storage.c:
+	If source mailbox name contain destination storage's separator,
+	replace it with '_'.
+	[7f620247ac5a]
+
+	* src/lib-sql/driver-pgsql.c:
+	Memory leak fixes
+	[bc683833b319]
+
+	* src/lib-sql/driver-pgsql.c:
+	Timeout queued queries after a while if we can't connect to server.
+	[e0e2a826528e]
+
+	* src/lib-storage/index/mbox/mbox-sync.c:
+	If we expunged the first message but there were no other changes, we
+	might have not actually expunged it.
+	[1b6c41524c6a]
+
+	* src/lib-storage/index/mbox/mbox-sync.c:
+	Reverted last commit. It contained unintended changes.
+	[3e284bbbb93d]
+
+	* src/lib-storage/index/mbox/mbox-sync.c:
+	If we expunged the first message but there were no other changes, we
+	might have not actually expunged it.
+	[25efd6b1fe44]
+
+	* src/auth/auth-request.c, src/auth/auth-worker-client.c:
+	Don't crash if blocking passdb doesn't support credential lookups.
+	[870e4d1cf2b3]
+
+	* src/auth/mech-gssapi.c:
+	Crashfix for failed GSSAPI requests.
+	[d2da308f55d3]
+
+	* src/auth/passdb-bsdauth.c, src/auth/passdb-pam.c, src/auth/passdb-
+	vpopmail.c:
+	Store cache_key via auth_cache_parse_key() which adds TABs between
+	the %variables, making it safer.
+	[1613913055eb]
+
+	* src/lib/sendfile-util.c:
+	Solaris: If sendfile() failed (e.g. EAGAIN) but some data was
+	already sent, don't return failure.
+	[696c9d5fcf71]
+
+2007-08-08  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-storage.c:
+	Don't rename() .subscriptions if it's not a regular file (ie. allow
+	"subscriptions" named mailbox).
+	[1c631fec9c68]
+
+	* src/deliver/deliver.c:
+	deliver didn't ignore TABs the same way spaces were ignored.
+	[f5f59b8a26a7]
+
+2007-08-06  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-index/mail-index-transaction.c:
+	mail_index_seq_array_lookup() didn't return idx_r correctly always,
+	which could have caused out-of-order mail_index_update_ext() calls
+	to break.
+	[010e46d57349]
+
+2007-08-02  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap/imap-search.c:
+	Last messageset changes broke FETCH *.
+	[827ee7c5f14c]
+
+	* src/lib-mail/message-parser.c:
+	Assume MIME message if Content-Type: exists even if Mime-Version:
+	doesn't.
+	[5c29a60f0960]
+
 2007-08-01  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap/imap-search.c:
+	FETCH/STORE n:* should also give BAD if n > number of messages in
+	mailbox.
+	[1b711744adf8]
+
+	* src/imap/imap-search.c:
+	FETCH/STORE n:* should give a BAD error if there are no messages in
+	mailbox.
+	[eee746061085]
+
+	* .hgtags:
+	Added tag 1.0.3 for changeset ab25de86a7e0
+	[b877f1434ba1]
 
 	* NEWS, configure.in:
 	Released v1.0.3.
-	[ab25de86a7e0] [tip]
+	[ab25de86a7e0] [1.0.3]
 
 	* src/imap-login/client.c, src/pop3-login/client.c:
 	If STARTTLS failed because max. number of connections for process

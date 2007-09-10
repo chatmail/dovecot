@@ -16,10 +16,7 @@
 #include <sys/wait.h>
 
 #define MAIL_REJECTION_HUMAN_REASON \
-"Your message was automatically rejected by Dovecot Mail Delivery Agent.\r\n" \
-"\r\n" \
-"The following reason was given:\r\n" \
-"%s\r\n"
+	"Your message to <%s> was automatically rejected:\r\n%s"
 
 int global_outgoing_count = 0;
 
@@ -69,7 +66,7 @@ int mail_send_rejection(struct mail *mail, const char *recipient,
     fprintf(f, "Content-Type: text/plain; charset=utf-8\r\n");
     fprintf(f, "Content-Disposition: inline\r\n");
     fprintf(f, "Content-Transfer-Encoding: 8bit\r\n\r\n");
-    fprintf(f, MAIL_REJECTION_HUMAN_REASON"\r\n", reason);
+    fprintf(f, MAIL_REJECTION_HUMAN_REASON"\r\n", recipient, reason);
 
     /* MDN status report */
     fprintf(f, "--%s\r\n"

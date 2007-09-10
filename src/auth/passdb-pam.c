@@ -18,6 +18,7 @@
 #include "network.h"
 #include "passdb.h"
 #include "safe-memset.h"
+#include "auth-cache.h"
 
 #include <stdlib.h>
 #include <fcntl.h>
@@ -502,8 +503,8 @@ pam_preinit(struct auth_passdb *auth_passdb, const char *args)
 			module->pam_setcred = TRUE;
 		else if (strncmp(t_args[i], "cache_key=", 10) == 0) {
 			module->module.cache_key =
-				p_strdup(auth_passdb->auth->pool,
-					 t_args[i] + 10);
+				auth_cache_parse_key(auth_passdb->auth->pool,
+						     t_args[i] + 10);
 		} else if (strcmp(t_args[i], "blocking=yes") == 0) {
 			module->module.blocking = TRUE;
 		} else if (strcmp(t_args[i], "*") == 0) {

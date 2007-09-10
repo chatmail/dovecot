@@ -493,9 +493,10 @@ void auth_request_lookup_credentials_callback(enum passdb_result result,
 						    &result, TRUE)) {
 			auth_request_log_info(request, "passdb",
 				"Fallbacking to expired data from cache");
-			password = result != PASSDB_RESULT_OK ? NULL :
-				passdb_get_credentials(request, password,
-						       scheme);
+			passdb_handle_credentials(result, password, scheme,
+				auth_request_lookup_credentials_callback_finish,
+				request);
+			return;
 		}
 	}
 
@@ -521,26 +522,24 @@ void auth_request_lookup_credentials(struct auth_request *request,
 		if (passdb_cache_lookup_credentials(request, cache_key,
 						    &password, &scheme,
 						    &result, FALSE)) {
-			password = result != PASSDB_RESULT_OK ? NULL :
-				passdb_get_credentials(request, password,
-						       scheme);
-			auth_request_lookup_credentials_callback_finish(
-				result, password, request);
+			passdb_handle_credentials(result, password, scheme,
+				auth_request_lookup_credentials_callback_finish,
+				request);
 			return;
 		}
 	}
 
 	request->state = AUTH_REQUEST_STATE_PASSDB;
 
-	if (passdb->blocking)
-		passdb_blocking_lookup_credentials(request);
-	else if (passdb->iface.lookup_credentials != NULL) {
-		passdb->iface.lookup_credentials(request,
-			auth_request_lookup_credentials_callback);
-	} else {
+	if (passdb->iface.lookup_credentials == NULL) {
 		/* this passdb doesn't support credentials */
 		auth_request_lookup_credentials_callback(
 			PASSDB_RESULT_SCHEME_NOT_AVAILABLE, NULL, request);
+	} else if (passdb->blocking) {
+		passdb_blocking_lookup_credentials(request);
+	} else {
+		passdb->iface.lookup_credentials(request,
+			auth_request_lookup_credentials_callback);
 	}
 }
 

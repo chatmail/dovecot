@@ -1,3 +1,23 @@
+v1.0.5 2007-09-09  Timo Sirainen <tss@iki.fi>
+
+	- deliver: v1.0.4 broke home directory handling
+	- maildir: Creating mailboxes didn't use dovecot-shared's group for
+	  cur/new/tmp directories.
+
+v1.0.4 2007-09-08  Timo Sirainen <tss@iki.fi>
+
+	* Assume a MIME message if Content-Type: header exists, even if
+	  Mime-Version: header doesn't.
+
+	- IMAP: CREATE ns_prefix/box/ didn't work right when namespace prefix
+	  existed.
+	- deliver: plugin {} settings were overriding settings from userdb.
+	- mbox: Expunging the first message might not have worked always
+	- PostgreSQL: If we can't connect to server, timeout queries after
+	  a while instead of trying forever.
+	- Solaris: sendfile() support was broken and could have caused
+	  100% CPU usage and the connection hanging.
+
 v1.0.3 2007-08-01  Timo Sirainen <tss@iki.fi>
 
 	- deliver: v1.0.2's bounce fix caused message to be always saved to

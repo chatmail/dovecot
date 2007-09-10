@@ -134,6 +134,8 @@ bool mail_index_seq_array_lookup(const array_t *array, uint32_t seq,
 				return TRUE;
 			}
 		}
+		if (left_idx > idx)
+			idx++;
 	}
 
 	*idx_r = idx;

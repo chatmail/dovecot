@@ -35,6 +35,9 @@ struct rename_context {
 extern struct mail_storage maildir_storage;
 extern struct mailbox maildir_mailbox;
 
+static const char *maildir_subdirs[] = { "cur", "new", "tmp" };
+#define N_MAILDIR_SUBDIRS (sizeof(maildir_subdirs)/sizeof(maildir_subdirs[0]))
+
 static int verify_inbox(struct maildir_storage *storage,
 			enum mailbox_open_flags *flags);
 
@@ -53,6 +56,8 @@ static void maildir_subscriptions_convert_099(struct maildir_storage *storage)
 	oldpath = t_strconcat(storage->control_dir != NULL ?
 			      storage->control_dir : INDEX_STORAGE(storage)->dir,
 			      "/.subscriptions", NULL);
+	if (stat(oldpath, &st) < 0 || !S_ISREG(st.st_mode))
+		return;
 	(void)rename(oldpath, path);
 }
 
@@ -641,6 +646,7 @@ static int maildir_create_shared(struct index_storage *storage,
 {
 	const char *path;
 	mode_t old_mask;
+	unsigned int i;
 	int fd;
 
 	/* add the execute bit if either read or write bit is set */
@@ -657,9 +663,12 @@ static int maildir_create_shared(struct index_storage *storage,
 		umask(old_mask);
 		return -1;
 	}
-	if (chown(dir, (uid_t)-1, gid) < 0) {
-		mail_storage_set_critical(&storage->storage,
-					  "chown(%s) failed: %m", dir);
+	for (i = 0; i < N_MAILDIR_SUBDIRS; i++) {
+		path = t_strconcat(dir, "/", maildir_subdirs[i], NULL);
+		if (chown(path, (uid_t)-1, gid) < 0) {
+			mail_storage_set_critical(&storage->storage,
+						  "chown(%s) failed: %m", path);
+		}
 	}
 
 	path = t_strconcat(dir, "/dovecot-shared", NULL);

@@ -1833,7 +1833,7 @@ __again:
 
 		if (mbox_sync_read_index_syncs(&sync_ctx, 1, &expunged) < 0)
 			return -1;
-		if (sync_ctx.sync_rec.uid1 == 0) {
+		if (sync_ctx.sync_rec.uid1 == 0 && !expunged) {
 			if (mail_index_transaction_commit(&sync_ctx.t,
 							  &seq, &offset) < 0) {
 				mail_storage_set_index_error(&mbox->ibox);

@@ -50,7 +50,7 @@ static int sync_mailbox(struct mailbox *box, struct mailbox_status *status)
 	return mailbox_sync_deinit(&ctx, status);
 }
 
-static int init_mailbox(struct client *client)
+static bool init_mailbox(struct client *client, const char **error_r)
 {
 	struct mail_search_arg search_arg;
         struct mailbox_transaction_context *t;
@@ -58,15 +58,16 @@ static int init_mailbox(struct client *client)
         struct mailbox_status status;
 	struct mail *mail;
 	buffer_t *message_sizes_buf;
+	uint32_t failed_uid = 0;
 	int i;
-	bool failed;
+	bool failed, expunged;
 
 	message_sizes_buf = buffer_create_dynamic(default_pool, 512);
 
 	memset(&search_arg, 0, sizeof(search_arg));
 	search_arg.type = SEARCH_ALL;
 
-	for (i = 0; i < 2; i++) {
+	for (i = 0; i < 3; i++) {
 		if (sync_mailbox(client->mailbox, &status) < 0) {
 			client_send_storage_error(client);
 			break;
@@ -80,13 +81,21 @@ static int init_mailbox(struct client *client)
 		client->total_size = 0;
 		buffer_set_used_size(message_sizes_buf, 0);
 
+		expunged = FALSE;
 		failed = FALSE;
 		mail = mail_alloc(t, MAIL_FETCH_VIRTUAL_SIZE, NULL);
 		while (mailbox_search_next(ctx, mail) > 0) {
 			uoff_t size = mail_get_virtual_size(mail);
 
 			if (size == (uoff_t)-1) {
+				expunged = mail->expunged;
 				failed = TRUE;
+				if (failed_uid == mail->uid) {
+					i_error("Getting size of message "
+						"UID=%u failed", mail->uid);
+					break;
+				}
+				failed_uid = mail->uid;
 				break;
 			}
 
@@ -100,7 +109,7 @@ static int init_mailbox(struct client *client)
 			message_sizes_buf->used / sizeof(uoff_t);
 
 		mail_free(&mail);
-		if (mailbox_search_deinit(&ctx) < 0) {
+		if (mailbox_search_deinit(&ctx) < 0 || (failed && !expunged)) {
 			client_send_storage_error(client);
 			(void)mailbox_transaction_commit(&t, 0);
 			break;
@@ -118,8 +127,17 @@ static int init_mailbox(struct client *client)
 		(void)mailbox_transaction_commit(&t, 0);
 	}
 
-	if (i == 2)
-		client_send_line(client, "-ERR [IN-USE] Couldn't sync mailbox.");
+	if (expunged) {
+		client_send_line(client,
+				 "-ERR [IN-USE] Couldn't sync mailbox.");
+		*error_r = "Can't sync mailbox: Messages keep getting expunged";
+	} else {
+		bool syntax_error, temporary_error;
+
+		*error_r = mail_storage_get_last_error(client->storage,
+						       &syntax_error,
+						       &temporary_error);
+	}
 	buffer_free(message_sizes_buf);
 	return FALSE;
 }
@@ -168,10 +186,8 @@ struct client *client_create(int fd_in, int fd_out,
 		return NULL;
 	}
 
-	if (!init_mailbox(client)) {
-		i_error("Couldn't init INBOX: %s",
-			mail_storage_get_last_error(storage, &syntax_error,
-						    &temporary_error));
+	if (!init_mailbox(client, &errmsg)) {
+		i_error("Couldn't init INBOX: %s", errmsg);
 		client_destroy(client, "Mailbox init failed");
 		return NULL;
 	}

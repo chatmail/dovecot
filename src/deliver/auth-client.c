@@ -1,6 +1,7 @@
 /* Copyright (C) 2005-2006 Timo Sirainen */
 
 #include "lib.h"
+#include "array.h"
 #include "ioloop.h"
 #include "network.h"
 #include "istream.h"
@@ -29,6 +30,7 @@ struct auth_connection {
 	struct ioloop *ioloop;
 	uid_t euid;
 	const char *user;
+	array_t *ARRAY_DEFINE_PTR(extra_fields, char *);
 
 	unsigned int handshaked:1;
 };
@@ -49,10 +51,9 @@ static void auth_connection_destroy(struct auth_connection *conn)
 
 static void auth_parse_input(struct auth_connection *conn, const char *args)
 {
-	const char *const *tmp, *key, *value;
+	const char *const *tmp;
 	uid_t uid = 0;
 	gid_t gid = 0;
-	int home_found = FALSE;
 	const char *chroot = getenv("MAIL_CHROOT");
 	bool debug = getenv("DEBUG") != NULL;
 
@@ -87,14 +88,13 @@ static void auth_parse_input(struct auth_connection *conn, const char *args)
 			}
 		} else if (strncmp(*tmp, "chroot=", 7) == 0) {
 			chroot = *tmp + 7;
-		} else if (strncmp(*tmp, "home=", 5) == 0) {
-			home_found = TRUE;
-			env_put(t_strconcat("HOME=", *tmp + 5, NULL));
 		} else {
-			key = t_str_ucase(t_strcut(*tmp, '='));
-			value = strchr(*tmp, '=');
-			if (value != NULL)
-				env_put(t_strconcat(key, "=", value+1, NULL));
+			char *field = i_strdup(*tmp);
+
+			if (strncmp(field, "home=", 5) == 0)
+				env_put(t_strconcat("HOME=", field + 5, NULL));
+
+			array_append(conn->extra_fields, &field, 1);
 		}
 	}
 
@@ -199,8 +199,10 @@ static void auth_client_timeout(void *context)
 	auth_connection_destroy(conn);
 }
 
-int auth_client_put_user_env(struct ioloop *ioloop, const char *auth_socket,
-			     const char *user, uid_t euid)
+int auth_client_lookup_and_restrict(struct ioloop *ioloop,
+				    const char *auth_socket,
+				    const char *user, uid_t euid,
+				    array_t *extra_fields_r)
 {
         struct auth_connection *conn;
 
@@ -213,6 +215,7 @@ int auth_client_put_user_env(struct ioloop *ioloop, const char *auth_socket,
 	conn->user = user;
 	conn->to = timeout_add(1000*AUTH_REQUEST_TIMEOUT,
 			       auth_client_timeout, conn);
+	conn->extra_fields = extra_fields_r;
 
 	o_stream_send_str(conn->output,
 			  t_strconcat("VERSION\t1\t0\n"
@@ -223,4 +226,3 @@ int auth_client_put_user_env(struct ioloop *ioloop, const char *auth_socket,
 	io_loop_run(ioloop);
 	return return_value;
 }
-

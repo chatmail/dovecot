@@ -1,3 +1,4 @@
+ - file ostream-crlf.c: line 339 (_send_istream): assertion failed: ((size_t)ret <= iov.iov_len)
  - mmap_disable: updated cache header doesn't invalidate other processes' cache?
  - mail_index_move_to_memory() should lock the index..
  - mbox: UID renumbering doesn't really work after all?
@@ -231,7 +232,6 @@
     - stop using atol(), atoi(), strtoul() etc. in places where we actually
       care about what they return, and rather create our own function which
       checks if the input overflows the integer, and if so call i_fatal()
-    - solaris sendfile is broken?
     - rfc2231 continuation support (useless?)
     - rfc2557 support for BODYSTRUCTURE, as specified by RFC3501
     - LMTP server

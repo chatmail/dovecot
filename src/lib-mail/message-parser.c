@@ -228,6 +228,10 @@ static void message_parse_part_header(struct message_parser_ctx *parser_ctx)
 		}
 
 		if (!hdr->eoh && strcasecmp(hdr->name, "Content-Type") == 0) {
+			/* Assume MIME message. Some mailers don't bother
+			   adding Mime-Version: header. */
+			part->flags |= MESSAGE_PART_FLAG_IS_MIME;
+
 			if (hdr->continues) {
 				hdr->use_full_value = TRUE;
 				continue;

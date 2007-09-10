@@ -166,25 +166,28 @@ static void quota_count_path_add(array_t *paths, const char *path, bool is_file)
 {
 	ARRAY_SET_TYPE(paths, struct quota_count_path);
 	struct quota_count_path *count_path;
-	unsigned int i, count;
+	unsigned int i, count, path_len;
 
+	path_len = strlen(path);
 	count_path = array_get_modifyable(paths, &count);
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < count; ) {
 		if (strncmp(count_path[i].path, path,
 			    strlen(count_path[i].path)) == 0) {
 			/* this path is already being counted */
 			return;
 		}
-		if (strncmp(count_path[i].path, path, strlen(path)) == 0) {
-			/* the new path contains the existing path */
-			i_assert(!is_file);
-			count_path += i;
-			break;
+		if (strncmp(count_path[i].path, path, path_len) == 0 &&
+		    count_path[i].path[path_len] == '/') {
+			/* the new path contains the existing path.
+			   drop it and see if there are more to drop. */
+			array_delete(paths, i, 1);
+			count_path = array_get_modifyable(paths, &count);
+		} else {
+			i++;
 		}
 	}
 
-	if (i == count)
-		count_path = array_append_space(paths);
+	count_path = array_append_space(paths);
 	count_path->path = t_strdup(path);
 	count_path->is_file = is_file;
 }

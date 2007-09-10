@@ -1,3 +1,9 @@
+dovecot (1:1.0.5-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Mon, 10 Sep 2007 09:25:59 +0200
+
 dovecot (1:1.0.3-3) unstable; urgency=low
 
   * debian/dovecot-common.init: don't use the init script name to locate the
