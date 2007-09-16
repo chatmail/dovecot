@@ -73,6 +73,7 @@ clean: unpatch
 	rm -f conftest conftest.o config.log config.cache config.status ylwrap
 	[ -f config.sub.orig ] && mv config.sub.orig config.sub || true
 	[ -f config.guess.orig ] && mv config.sub.orig config.guess || true
+	rm -f src/drac/drac.so
 	dh_clean
 
 install: build
