@@ -1,6 +1,7 @@
 dovecot (1:1.0.7-1) unstable; urgency=low
 
   * New upstream release.
+  * debian/rules: remove drac.so in the clean target. (Closes: #442548)
   * debian/dovecot-common.init: implemented the reload action.
     (Closes: #441032)
   * Update protocoles option in configuration when installing/removing
@@ -8,12 +9,6 @@ dovecot (1:1.0.7-1) unstable; urgency=low
     Ubuntu for providing a patch. (Closes: #447201)
 
  -- Fabio Tranchitella <kobold@debian.org>  Fri, 02 Nov 2007 23:06:17 +0100
-
-dovecot (1:1.0.5-2) unstable; urgency=low
-
-  * debian/rules: remove drac.so in the clean target. (Closes: #442548)
-
- -- Fabio Tranchitella <kobold@debian.org>  Sun, 16 Sep 2007 20:31:57 +0200
 
 dovecot (1:1.0.5-1) unstable; urgency=low
 
