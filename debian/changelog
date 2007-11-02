@@ -3,8 +3,11 @@ dovecot (1:1.0.7-1) unstable; urgency=low
   * New upstream release.
   * debian/dovecot-common.init: implemented the reload action.
     (Closes: #441032)
+  * Update protocoles option in configuration when installing/removing
+    -imapd/-pop3d packages. Thanks to Soren Hansen and Mathias Gug from
+    Ubuntu for providing a patch. (Closes: #447201)
 
- -- Fabio Tranchitella <kobold@debian.org>  Fri, 02 Nov 2007 22:50:31 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 02 Nov 2007 23:06:17 +0100
 
 dovecot (1:1.0.5-2) unstable; urgency=low
 

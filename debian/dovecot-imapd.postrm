@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+
+if [ "$1" = "remove" ]; then
+	# Remove the imaps and imap option from the protocols line
+	perl -pi.bak -e 'if (/^\s*protocols =/i) { s/imaps//; s/imap//; s/$/ none/ unless (/pop3/ or /none/); s/[ \t]+/ /g; };'\
+   /etc/dovecot/dovecot.conf
+fi
+
+# Restart dovecot because we've updated the configuration file.
+if [ -x "/etc/init.d/dovecot" ]; then
+	if [ -x /usr/sbin/invoke-rc.d ] ; then
+		invoke-rc.d dovecot start
+	else
+		/etc/init.d/dovecot start
+	fi
+fi
+
+#DEBHELPER#

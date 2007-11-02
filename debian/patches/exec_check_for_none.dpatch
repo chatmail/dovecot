@@ -1,0 +1,28 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## debug_protocols.dpatch by  <soren@ubuntu.com>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Inhibit access(.., X_OK) check for disabled protocols.
+
+@DPATCH@
+diff -urNad dovecot-1.0.3~/src/master/master-settings.c dovecot-1.0.3/src/master/master-settings.c
+--- dovecot-1.0.3~/src/master/master-settings.c	2007-10-08 11:53:00.767163713 +0200
++++ dovecot-1.0.3/src/master/master-settings.c	2007-10-08 11:53:16.187360629 +0200
+@@ -637,7 +637,7 @@
+ 		return FALSE;
+ 	}
+ 
+-	if (access(t_strcut(set->mail_executable, ' '), X_OK) < 0) {
++	if (strcmp(set->protocols, "none") && access(t_strcut(set->mail_executable, ' '), X_OK) < 0) {
+ 		i_error("Can't use mail executable %s: %m",
+ 			t_strcut(set->mail_executable, ' '));
+ 		return FALSE;
+@@ -714,7 +714,7 @@
+ 		return FALSE;
+ 	}
+ 
+-	if (access(t_strcut(set->login_executable, ' '), X_OK) < 0) {
++	if (strcmp(set->protocols, "none") && access(t_strcut(set->login_executable, ' '), X_OK) < 0) {
+ 		i_error("Can't use login executable %s: %m",
+ 			t_strcut(set->login_executable, ' '));
+ 		return FALSE;
