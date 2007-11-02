@@ -921,10 +921,13 @@ static int rename_subfolders(struct index_storage *storage,
 	while ((list = maildir_mailbox_list_next(ctx)) != NULL) {
 		const char *name;
 
-		i_assert(oldnamelen <= strlen(list->name));
-
-		name = p_strdup(pool, list->name + oldnamelen);
-		array_append(&names_arr, &name, 1);
+		/* verify that the prefix matches, otherwise we could have
+		   problems with mailbox names containing '%' and '*' chars */
+		if (strncmp(list->name, oldname, oldnamelen) == 0 &&
+		    list->name[oldnamelen] == MAILDIR_FS_SEP) {
+			name = p_strdup(pool, list->name + oldnamelen);
+			array_append(&names_arr, &name, 1);
+		}
 	}
 	if (maildir_mailbox_list_deinit(ctx) < 0) {
 		ret = -1;
@@ -937,6 +940,13 @@ static int rename_subfolders(struct index_storage *storage,
 		t_push();
 
 		old_listname = t_strconcat(oldname, names[i], NULL);
+		if (strcmp(old_listname, newname) == 0) {
+			/* When doing RENAME "a" "a.b" we see "a.b" here.
+			   We don't want to rename it anymore to "a.b.b". */
+			t_pop();
+			continue;
+		}
+
 		new_listname = t_strconcat(newname, names[i], NULL);
 		oldpath = maildir_get_path(storage, old_listname);
 		newpath = maildir_get_path(storage, new_listname);

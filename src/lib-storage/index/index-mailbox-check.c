@@ -58,8 +58,8 @@ static void notify_callback(void *context)
 	struct index_mailbox *ibox = context;
 
 	ibox->notify_last_check = ioloop_time;
-	if ((unsigned int)(ioloop_time - ibox->notify_last_sent) >=
-	    ibox->min_notify_interval) {
+	/* don't notify more often than once a second */
+	if (ioloop_time > ibox->notify_last_sent) {
 		ibox->notify_last_sent = ioloop_time;
                 ibox->notify_pending = FALSE;
 		ibox->notify_callback(&ibox->box, ibox->notify_context);

@@ -289,7 +289,9 @@ static ssize_t _read(struct _istream *stream)
 		new_pos = from_start_pos;
 	} else {
 		/* leave out the beginnings of potential From-line + CR */
-		new_pos = i - (fromp - mbox_from) - 1;
+		new_pos = i - (fromp - mbox_from);
+		if (new_pos > 0)
+			new_pos--;
 	}
 
 	stream->buffer = buf;

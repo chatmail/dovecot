@@ -14,6 +14,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+#define AUTH_HANDSHAKE_TIMEOUT (30*1000)
+
 static void auth_server_connection_unref(struct auth_server_connection *conn);
 
 static void update_available_auth_mechs(struct auth_server_connection *conn)
@@ -112,6 +114,9 @@ static bool auth_client_input_done(struct auth_server_connection *conn)
 		return FALSE;
 	}
 
+	if (conn->to != NULL)
+		timeout_remove(&conn->to);
+
 	conn->handshake_received = TRUE;
 	conn->client->conn_waiting_handshake_count--;
 	update_available_auth_mechs(conn);
@@ -193,6 +198,16 @@ static void auth_client_input(void *context)
 	auth_server_connection_unref(conn);
 }
 
+static void auth_client_handshake_timeout(void *context)
+{
+	struct auth_server_connection *conn = context;
+
+	i_error("Timeout waiting for handshake from auth server. "
+		"my pid=%u, input bytes=%"PRIuUOFF_T,
+		conn->client->pid, conn->input->v_offset);
+	auth_server_connection_destroy(&conn, TRUE);
+}
+
 struct auth_server_connection *
 auth_server_connection_new(struct auth_client *client, const char *path)
 {
@@ -239,6 +254,8 @@ auth_server_connection_new(struct auth_client *client, const char *path)
 	conn->requests = hash_create(default_pool, pool, 100, NULL, NULL);
 	conn->auth_mechs_buf = buffer_create_dynamic(default_pool, 256);
 
+	conn->to = timeout_add(AUTH_HANDSHAKE_TIMEOUT,
+			       auth_client_handshake_timeout, conn);
 	conn->next = client->connections;
 	client->connections = conn;
 
@@ -284,6 +301,8 @@ void auth_server_connection_destroy(struct auth_server_connection **_conn,
 		client->ext_input_remove(conn->ext_input_io);
 		conn->ext_input_io = NULL;
 	}
+	if (conn->to != NULL)
+		timeout_remove(&conn->to);
 	if (conn->io != NULL)
 		io_remove(&conn->io);
 

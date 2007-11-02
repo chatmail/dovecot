@@ -433,7 +433,8 @@ static void login_process_input(void *context)
 }
 
 static struct login_process *
-login_process_new(struct login_group *group, pid_t pid, int fd)
+login_process_new(struct login_group *group, pid_t pid, int fd,
+		  bool inetd_child)
 {
 	struct login_process *p;
 
@@ -444,12 +445,14 @@ login_process_new(struct login_group *group, pid_t pid, int fd)
 	p->refcount = 2; /* once for fd close, another for process exit */
 	p->pid = pid;
 	p->fd = fd;
+	p->inetd_child = inetd_child;
 	p->io = io_add(fd, IO_READ, login_process_input, p);
 	p->output = o_stream_create_file(fd, default_pool,
 					 sizeof(struct master_login_reply)*10,
 					 FALSE);
 
-	PID_ADD_PROCESS_TYPE(pid, PROCESS_TYPE_LOGIN);
+	if (!inetd_child)
+		PID_ADD_PROCESS_TYPE(pid, PROCESS_TYPE_LOGIN);
 	hash_insert(processes, POINTER_CAST(pid), p);
 
 	p->state = LOGIN_STATE_LISTENING;
@@ -623,7 +626,7 @@ static pid_t create_login_process(struct login_group *group)
 
 		net_set_nonblock(fd[0], TRUE);
 		fd_close_on_exec(fd[0], TRUE);
-		(void)login_process_new(group, pid, fd[0]);
+		(void)login_process_new(group, pid, fd[0], FALSE);
 		(void)close(fd[1]);
 		(void)close(log_fd);
 		return pid;
@@ -876,9 +879,8 @@ static void inetd_login_accept(void *context __attr_unused__)
 		net_set_nonblock(fd, TRUE);
 		fd_close_on_exec(fd, TRUE);
 
-		p = login_process_new(NULL, ++login_pid_counter, fd);
+		p = login_process_new(NULL, ++login_pid_counter, fd, TRUE);
 		p->initialized = TRUE;
-		p->inetd_child = TRUE;
 	}
 }
 

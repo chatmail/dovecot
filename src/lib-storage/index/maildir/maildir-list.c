@@ -331,7 +331,7 @@ int maildir_mailbox_list_deinit(struct mailbox_list_context *_ctx)
 }
 
 static struct mailbox_node *find_next(struct mailbox_node **node,
-				      string_t *path, char hierarchy_sep)
+				      string_t *path)
 {
 	struct mailbox_node *child;
 	size_t len;
@@ -343,11 +343,10 @@ static struct mailbox_node *find_next(struct mailbox_node **node,
 		if ((*node)->children != NULL) {
 			len = str_len(path);
 			if (len != 0)
-				str_append_c(path, hierarchy_sep);
+				str_append_c(path, MAILDIR_FS_SEP);
 			str_append(path, (*node)->name);
 
-			child = find_next(&(*node)->children, path,
-					  hierarchy_sep);
+			child = find_next(&(*node)->children, path);
 			if (child != NULL)
 				return child;
 
@@ -376,8 +375,7 @@ maildir_mailbox_list_next(struct mailbox_list_context *_ctx)
 			return NULL;
 
 		str_truncate(ctx->node_path, 0);
-		node = find_next(&ctx->root, ctx->node_path,
-				 ctx->mailbox_ctx.storage->hierarchy_sep);
+		node = find_next(&ctx->root, ctx->node_path);
                 ctx->parent_pos = str_len(ctx->node_path);
 
 		if (node == NULL)
@@ -389,10 +387,8 @@ maildir_mailbox_list_next(struct mailbox_list_context *_ctx)
 	node->flags &= ~MAILBOX_FLAG_MATCHED;
 
 	str_truncate(ctx->node_path, ctx->parent_pos);
-	if (ctx->parent_pos != 0) {
-		str_append_c(ctx->node_path,
-			     ctx->mailbox_ctx.storage->hierarchy_sep);
-	}
+	if (ctx->parent_pos != 0)
+		str_append_c(ctx->node_path, MAILDIR_FS_SEP);
 	str_append(ctx->node_path, node->name);
 
 	ctx->list.name = str_c(ctx->node_path);

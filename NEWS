@@ -1,3 +1,28 @@
+v1.0.7 2007-10-29  Timo Sirainen <tss@iki.fi>
+
+	- deliver: v1.0.6's "From " line ignoring could have written to a
+	  bad location in stack, possibly causing problems.
+
+v1.0.6 2007-10-28  Timo Sirainen <tss@iki.fi>
+
+	* IDLE: Interval between mailbox change notifies is now 1 second,
+	  because some clients keep a long-running IDLE connection and use
+	  other connections to actually read the mails.
+	* SORT: If Date: header is missing or broken, fallback to using
+	  INTERNALDATE (as the SORT draft nowadays specifies).
+
+	+ deliver: If message begins with a "From " line, ignore it.
+	+ zlib plugin: If maildir file has a "Z" flag, open it with zlib.
+	- CREATE: Don't assert-crash if trying to create namespace prefix.
+	- SEARCH: Fixes to handling NOT operator with sequence ranges.
+	- LDAP reconnection fixes
+	- Maildir: Don't break when renaming mailboxes with '*' or '%'
+	  characters and children.
+	- mbox: Fixed "file size unexpectedly shrinked" error in some
+	  conditions.
+	- quota+mbox: Don't fail if trying to delete a directory.
+	- Fixes to running from inetd
+
 v1.0.5 2007-09-09  Timo Sirainen <tss@iki.fi>
 
 	- deliver: v1.0.4 broke home directory handling

@@ -1,8 +1,239 @@
+2007-10-29  Timo Sirainen  <tss@iki.fi>
+
+	* .hgtags:
+	Added tag 1.0.7 for changeset cd2206f3404f
+	[1521674513a3] [tip]
+
+	* NEWS, configure.in:
+	Released v1.0.7.
+	[cd2206f3404f] [1.0.7]
+
+	* src/deliver/deliver.c:
+	From-line checking wrote to bad memory location in stack.
+	[f057b11c0e9e]
+
+2007-10-28  Timo Sirainen  <tss@iki.fi>
+
+	* .hgtags:
+	Added tag 1.0.6 for changeset fcaae2a5fb34
+	[a69af46e0926]
+
+	* NEWS, TODO, configure.in:
+	Released v1.0.6.
+	[fcaae2a5fb34] [1.0.6]
+
+	* src/lib-mail/message-header-parser.c, src/lib-mail/message-header-
+	parser.h:
+	Removed files that were accidentally added at some point.
+	[5e62d52eebe4]
+
+	* src/deliver/deliver.c:
+	Compile fix
+	[3ac41c6d8304]
+
+	* src/imap-login/client-authenticate.c, src/login-common/login-
+	proxy.c, src/login-common/login-proxy.h, src/pop3-login/client-
+	authenticate.c:
+	If proxy points to the same host/port/user combination as we
+	currently have, don't create an infinite connection loop.
+	[8c43fe6f89bc]
+
+2007-10-27  Timo Sirainen  <tss@iki.fi>
+
+	* doc/wiki/Makefile.am.in:
+	Use docdir
+	[5ca293be0ca2]
+
+	* src/plugins/quota/quota-storage.c:
+	Don't fail if trying to delete a nonselectable mailbox.
+	[e302a5949cf0]
+
+	* src/auth/auth-client-connection.c:
+	auth_debug: Log new auth connections and their PIDs.
+	[9c74f599bb2f]
+
+	* src/lib-auth/auth-server-connection.c, src/lib-auth/auth-server-
+	connection.h:
+	If auth server hasn't responded to handshake in 30 seconds, log an
+	error and reconnect.
+	[4dab9295cd95]
+
+	* src/imap-login/client.c, src/imap-login/client.h:
+	If we've been waiting auth server to respond for over 30 seconds,
+	send a "OK Waiting.." message to client.
+	[4bdab7e04a61]
+
+	* src/deliver/deliver.c:
+	If syncing internal dummy mbox fails, show the error message.
+	[d58f7f66faa3]
+
+2007-10-25  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/zlib/zlib-plugin.c:
+	If maildir file has a "Z" flag, open it with zlib.
+	[c09d0d958b33]
+
+2007-10-21  Timo Sirainen  <tss@iki.fi>
+
+	* src/deliver/auth-client.c:
+	If connect to auth socket fails with a temporary error, retry max.
+	10 times.
+	[8f43fd31eb40]
+
+	* src/lib-storage/index/maildir/maildir-storage.c:
+	Handle RENAME "a" "a.b" correctly. Based on patch by pod.
+	[c86684296ce8]
+
+	* src/auth/db-ldap.c:
+	If ldap_bind() failed because LDAP server was down, we never
+	reconnected. Patch by Brendan Braybrook.
+	[8dcc215fbc06]
+
+2007-10-16  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/istream-raw-mbox.c:
+	Fixed "file size unexpectedly shrinked" error in some conditions.
+	[74f69026f8e2]
+
+	* src/imap/imap-sort.c:
+	Nowadays the SORT draft specifies that if Date: header is missing or
+	broken, SORT should fallback to using INTERNALDATE.
+	[c65c5aeaf115]
+
+2007-10-06  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-storage.c:
+	Don't break when renaming mailboxes with '*' or '%' characters and
+	children.
+	[880d21a2a629]
+
+2007-10-01  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-dict/dict-client.c:
+	Error handling fix
+	[191b1cde3260]
+
+2007-09-30  Timo Sirainen  <tss@iki.fi>
+
+	* src/master/login-process.c:
+	Login processes started by inetd aren't ours, don't treat them as
+	such.
+	[8d6433652a33]
+
+2007-09-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/index-search.c:
+	Don't crash with empty messagesets.
+	[f85adea35b74]
+
+2007-09-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/index-search.c:
+	Small code optimization.
+	[678626efb942]
+
+	* src/lib-storage/index/index-search.c:
+	Merge also unnecessary sub-ORs.
+	[92b2bd6b6c2d]
+
+	* src/lib-storage/index/index-search.c:
+	Simplify search tree by canonicalizing message sets, converting NOT
+	away from NOT (list) and dropping extra sub lists. Fix also handling
+	NOT messagesets.
+	[fa89431f893e]
+
+2007-09-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/dict/dict-cache.c, src/dict/dict-cache.h, src/dict/dict-
+	server.c:
+	Don't cache dict to different users.
+	[d0dfd5ad40d4]
+
+	* src/lib-storage/index/maildir/maildir-list.c:
+	Use MAILDIR_FS_SEP directly instead of hierarchy_sep. It's done this
+	way in mail-storage.c as well, and this breaks listescape plugin.
+	[5c798e920045]
+
+	* src/deliver/deliver.c:
+	If the first line begins with "From ", ignore it.
+	[4c807839ac0c]
+
+	* src/lib-storage/index/index-mailbox-check.c:
+	Dropped interval between mailbox change notifies from
+	mailbox_idle_check_interval to 1 second. Some clients keep a long-
+	running IDLE connection and use other connections to check the new
+	mail.
+	[afb48abd91c0]
+
+	* src/plugins/lazy-expunge/lazy-expunge-plugin.c:
+	If rename() fails, log an error.
+	[f0ea8a04225d]
+
+	* src/lib-storage/index/maildir/maildir-mail.c:
+	If file doesn't exist, mark message as expunged when getting
+	received date or physical size.
+	[a3300666c111]
+
+	* src/imap/cmd-create.c:
+	Don't assert-crash if trying to create mailbox prefix.
+	[6bbb20cdaf1e]
+
+	* src/lib-storage/index/index-search.c:
+	Searching NOT sequence set with multiple search ranges containing
+	either first or last sequence caused some messages to be skipped.
+	[d144e54f09e6]
+
+2007-09-16  Timo Sirainen  <tss@iki.fi>
+
+	* README:
+	Updated.
+	[69a4d09ea3c0]
+
+	* src/deliver/duplicate.c:
+	Don't crash if duplicate database contains broken entries.
+	[9d4e89fa62d0]
+
+	* src/lib-index/mail-cache.c:
+	Don't bother complaining about indexid changes. The real reason for
+	the change was most likely logged already, and the "indexid changed"
+	error just confuses people.
+	[53d5fd13470d]
+
+2007-09-15  Timo Sirainen  <tss@iki.fi>
+
+	* dovecot-example.conf:
+	Updated mailbox_idle_check_interval comments.
+	[e17ebe5d8d10]
+
+	* src/imap/client.c:
+	If connection closed because of EPIPE, log it as "Connection closed"
+	instead of including "Broken pipe", which gets people worried.
+	[817aab069d6a]
+
+2007-09-11  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/db-ldap.c:
+	And a fix for last LDAP lookup changes.
+	[18f69979e596]
+
+2007-09-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/db-ldap.c:
+	Actually reconnect always if ldap_result() fails for any reason.
+	There really aren't any other choices.
+	[24397c9610d8]
+
+	* src/auth/db-ldap.c:
+	Reconnect if ldap_search() returns a failure related to connection
+	problems. Also if ldap_result() doesn't return a connection related
+	failure, don't reconnect.
+	[3801a497f97b]
+
 2007-09-09  Timo Sirainen  <tss@iki.fi>
 
 	* .hgtags:
 	Added tag 1.0.5 for changeset 2625871ec9ea
-	[13b3b8c9eccc] [tip]
+	[13b3b8c9eccc]
 
 	* NEWS, configure.in:
 	Released v1.0.5.

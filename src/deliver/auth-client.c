@@ -170,11 +170,19 @@ static void auth_input(void *context)
 static struct auth_connection *auth_connection_new(const char *auth_socket)
 {
 	struct auth_connection *conn;
-	int fd;
+	int fd, try;
 
-	fd = net_connect_unix(auth_socket);
-	if (fd < 0) {
-		i_error("net_connect(%s) failed: %m", auth_socket);
+	/* max. 1 second wait here. */
+	for (try = 0; try < 10; try++) {
+		fd = net_connect_unix(auth_socket);
+		if (fd != -1 || (errno != EAGAIN && errno != ECONNREFUSED))
+			break;
+
+		/* busy. wait for a while. */
+		usleep(((rand() % 10) + 1) * 10000);
+	}
+	if (fd == -1) {
+		i_error("Can't connect to auth server at %s: %m", auth_socket);
 		return NULL;
 	}
 

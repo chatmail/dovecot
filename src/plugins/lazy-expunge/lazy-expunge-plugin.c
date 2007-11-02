@@ -136,7 +136,12 @@ static int lazy_expunge_move(struct maildir_mailbox *mbox __attr_unused__,
 
 	if (rename(path, str_c(ctx->path)) == 0)
 		return 1;
-	return errno == ENOENT ? 0 : -1;
+	if (errno == ENOENT)
+		return 0;
+	mail_storage_set_critical(mbox->ibox.box.storage,
+				  "rename(%s, %s) failed: %m",
+				  path, str_c(ctx->path));
+	return -1;
 }
 
 static int lazy_expunge_move_expunges(struct mailbox *srcbox,

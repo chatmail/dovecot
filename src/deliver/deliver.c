@@ -16,6 +16,7 @@
 #include "strescape.h"
 #include "var-expand.h"
 #include "message-address.h"
+#include "message-parser.h"
 #include "istream-header-filter.h"
 #include "mbox-storage.h"
 #include "dict-client.h"
@@ -410,7 +411,21 @@ static const char *address_sanitize(const char *address)
 	return ret;
 }
 
-static struct istream *create_mbox_stream(int fd, const char *envelope_sender)
+
+static void save_header_callback(struct message_header_line *hdr,
+				 bool *matched, void *context)
+{
+	bool *first = context;
+
+	if (*first) {
+		*first = FALSE;
+		if (hdr != NULL && strncmp(hdr->name, "From ", 5) == 0)
+			*matched = TRUE;
+	}
+}
+
+static struct istream *
+create_mbox_stream(int fd, const char *envelope_sender, bool **first_r)
 {
 	const char *mbox_hdr;
 	struct istream *input_list[4], *input, *input_filter;
@@ -420,13 +435,19 @@ static struct istream *create_mbox_stream(int fd, const char *envelope_sender)
 	envelope_sender = address_sanitize(envelope_sender);
 	mbox_hdr = mbox_from_create(envelope_sender, ioloop_time);
 
+	/* kind of kludgy to allocate memory just for this, but since this
+	   has to live as long as the input stream itself, this is the safest
+	   way to do it without it breaking accidentally. */
+	*first_r = i_new(bool, 1);
+	**first_r = TRUE;
 	input = i_stream_create_file(fd, default_pool, 4096, FALSE);
 	input_filter = i_stream_create_header_filter(input,
 						     HEADER_FILTER_EXCLUDE |
 						     HEADER_FILTER_NO_CR,
 						     mbox_hide_headers,
 						     mbox_hide_headers_count,
-						     NULL, NULL);
+						     save_header_callback,
+						     *first_r);
 	i_stream_unref(&input);
 
 	input_list[0] = i_stream_create_from_data(default_pool, mbox_hdr,
@@ -565,6 +586,7 @@ int main(int argc, char *argv[])
 	struct mail *mail;
 	uid_t process_euid;
 	bool stderr_rejection = FALSE;
+	bool *input_first;
 	int i, ret;
 
 	i_set_failure_exit_callback(failure_exit_callback);
@@ -751,14 +773,20 @@ int main(int argc, char *argv[])
 
 	mbox_storage = mail_storage_create("mbox", "/tmp", destination, 0,
 					   MAIL_STORAGE_LOCK_FCNTL);
-	input = create_mbox_stream(0, envelope_sender);
+	input = create_mbox_stream(0, envelope_sender, &input_first);
 	box = mailbox_open(mbox_storage, "Dovecot Delivery Mail", input,
 			   MAILBOX_OPEN_NO_INDEX_FILES |
 			   MAILBOX_OPEN_MBOX_ONE_MSG_ONLY);
 	if (box == NULL)
 		i_fatal("Can't open delivery mail as mbox");
-        if (sync_quick(box) < 0)
-		i_fatal("Can't sync delivery mail");
+	if (sync_quick(box) < 0) {
+		const char *error;
+		bool syntax, temporary_error;
+
+		error = mail_storage_get_last_error(storage, &syntax,
+						    &temporary_error);
+		i_fatal("Can't sync delivery mail: %s", error);
+	}
 
 	t = mailbox_transaction_begin(box, 0);
 	mail = mail_alloc(t, 0, NULL);
@@ -817,6 +845,7 @@ int main(int argc, char *argv[])
 		/* ok, rejection sent */
 	}
 	i_stream_unref(&input);
+	i_free(input_first);
 
 	mail_free(&mail);
 	mailbox_transaction_rollback(&t);

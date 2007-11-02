@@ -301,6 +301,19 @@ static const char *get_first_mailbox(struct mail *mail, const char *field)
 	return addr != NULL ? addr->mailbox : NULL;
 }
 
+static time_t mail_sort_get_date(struct mail *mail)
+{
+	time_t t;
+
+	t = mail_get_date(mail, NULL);
+	if (t == 0) {
+		/* missing or broken Date: header,
+		   fallback to INTERNALDATE */
+		t = mail_get_received_date(mail);
+	}
+	return t;
+}
+
 static void mail_sort_check_flush(struct sort_context *ctx, struct mail *mail)
 {
 	const char *str;
@@ -329,7 +342,7 @@ static void mail_sort_check_flush(struct sort_context *ctx, struct mail *mail)
 	}
 
 	if (ctx->common_mask & MAIL_SORT_DATE) {
-		t = mail_get_date(mail, NULL);
+		t = mail_sort_get_date(mail);
 		if (t != ctx->last_date) {
 			ctx->last_date = t;
 			changed = TRUE;
@@ -417,7 +430,7 @@ static void mail_sort_input(struct sort_context *ctx, struct mail *mail)
 		if (ctx->common_mask & MAIL_SORT_DATE)
 			t = ctx->last_date;
 		else
-			t = mail_get_date(mail, NULL);
+			t = mail_sort_get_date(mail);
 		memcpy(buf + pos, &t, sizeof(t)); pos += sizeof(t);
 	}
 
@@ -531,7 +544,7 @@ static time_t get_time(enum mail_sort_type type, const unsigned char *buf,
 		case MAIL_SORT_ARRIVAL:
 			return mail_get_received_date(mail);
 		case MAIL_SORT_DATE:
-			t = mail_get_date(mail, NULL);
+			t = mail_sort_get_date(mail);
 			if (t == (time_t)-1)
 				t = 0;
 			return t;

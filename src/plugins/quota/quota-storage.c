@@ -269,8 +269,10 @@ static int quota_mailbox_delete(struct mail_storage *storage, const char *name)
 	   calculations by adding/removing mails while we're doing this. */
 	box = mailbox_open(storage, name, NULL, MAILBOX_OPEN_FAST |
 			   MAILBOX_OPEN_KEEP_RECENT | MAILBOX_OPEN_KEEP_LOCKED);
-	if (box == NULL)
-		return -1;
+	if (box == NULL) {
+		/* most likely the mailbox isn't selectable, just delete it */
+		return qstorage->super.mailbox_delete(storage, name);
+	}
 
 	memset(&search_arg, 0, sizeof(search_arg));
 	search_arg.type = SEARCH_ALL;
