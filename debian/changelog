@@ -1,3 +1,13 @@
+dovecot (1:1.0.7-2) unstable; urgency=low
+
+  * debian/dovecot-common.postinst:
+    + don't fail if dovecot-ldap.conf or dovecot-sql.conf are removed; thanks
+      to Mathias Gug. (Closes: #448401)
+    + fix permissions of /var/run/dovecot and /var/run/dovecot/login.
+      (Closes: #446051)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 04 Nov 2007 10:06:06 +0100
+
 dovecot (1:1.0.7-1) unstable; urgency=low
 
   * New upstream release.
