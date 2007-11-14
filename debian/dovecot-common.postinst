@@ -36,7 +36,7 @@ if [ "$1" = "configure" ]; then
   ## SSL Certs
   # Certs and key file
   SSL_CERT="/etc/ssl/certs/dovecot.pem"
-  SSL_KEY=/etc/ssl/private/dovecot.pem
+  SSL_KEY="/etc/ssl/private/dovecot.pem"
   
   # Generate new certs if needed
   if [ -e $SSL_CERT ] && [ -e $SSL_KEY ]; then
