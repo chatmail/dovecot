@@ -1,9 +1,15 @@
+dovecot (1:1.0.8-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 29 Nov 2007 12:52:29 +0100
+
 dovecot (1:1.0.7-3) unstable; urgency=low
 
   * debian/patches/dovecot-ssl.dpatch: provide mechanism to discover if ssl
     client certificate is verified, patch from Stephen Gran. (Closes: #446555)
   * debian/patches/pam-error-information.dpatch: fill auth information in pam
-    error, patch backported from upstream RCS . (Closes: #439246)
+    error, patch backported from upstream RCS. (Closes: #439246)
   * debian/patches/unsupported-sasl-mech.dpatch: should use NO (not BAD) for
     unsupported SASL mech, patch backported from upstream RCS. (Closes: #449324)
 
