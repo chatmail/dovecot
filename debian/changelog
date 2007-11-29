@@ -1,8 +1,9 @@
 dovecot (1:1.0.8-1) unstable; urgency=low
 
   * New upstream release.
+  * debian/patches/unsupported-sasl-mech.dpatch: merged with upstream.
 
- -- Fabio Tranchitella <kobold@debian.org>  Thu, 29 Nov 2007 12:52:29 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 29 Nov 2007 13:36:39 +0100
 
 dovecot (1:1.0.7-3) unstable; urgency=low
 
