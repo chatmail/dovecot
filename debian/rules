@@ -35,6 +35,7 @@ config.status: patch-stamp configure
 	            --with-gssapi \
 	            --with-deliver \
 	            --with-ioloop=epoll \
+	            --enable-header-install \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \
 	            --prefix=/usr \
@@ -98,6 +99,8 @@ install: build
 	mv $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include
+	rmdir $(CURDIR)/debian/dovecot-common/usr/include
 	chmod 0700 $(CURDIR)/debian/dovecot-common/var/run/dovecot
 	chmod 0750 $(CURDIR)/debian/dovecot-common/var/run/dovecot/login
 

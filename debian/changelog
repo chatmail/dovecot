@@ -1,3 +1,10 @@
+dovecot (1:1.0.8-2) unstable; urgency=low
+
+  * Provides a dovecot-dev package, thanks to Johannes Berg for providing a
+    patch. (Closes: #444812)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Tue, 04 Dec 2007 09:22:59 +0100
+
 dovecot (1:1.0.8-1) unstable; urgency=low
 
   * New upstream release.

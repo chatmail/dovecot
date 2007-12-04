@@ -20,6 +20,18 @@ Description: secure mail server that supports mbox and maildir mailboxes
  This package contains the files used by both the dovecot IMAP and POP3 
  servers.
 
+Package: dovecot-dev
+Architecture: any
+Depends: ${shlibs:Depends}, dovecot-common (= ${binary:Version})
+Description: header files for the dovecot mail server
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It should
+ also be pretty fast, extensible, and portable.
+ .
+ This package contains header files needed to compile plugins for the
+ dovecot mail server.
+
 Package: dovecot-imapd
 Architecture: any
 Depends: ${shlibs:Depends}, dovecot-common (= ${binary:Version})
