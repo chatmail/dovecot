@@ -1,8 +1,9 @@
-dovecot (1:1.0.8-3) UNRELEASED; urgency=low
+dovecot (1:1.0.9-1) unstable; urgency=low
 
+  * New upstream release.
   * debian/control: added the Vcs-Svn and Vcs-Browser fields.
 
- -- Fabio Tranchitella <kobold@debian.org>  Mon, 10 Dec 2007 22:14:41 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Wed, 12 Dec 2007 08:10:11 +0100
 
 dovecot (1:1.0.8-2) unstable; urgency=low
 
