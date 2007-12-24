@@ -1,3 +1,9 @@
+dovecot (1:1.0.9-1~bpo40+1) etch-backports; urgency=low
+
+  * Rebuilt for etch.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Mon, 24 Dec 2007 19:10:44 +0100
+
 dovecot (1:1.0.9-1) unstable; urgency=low
 
   * New upstream release.
