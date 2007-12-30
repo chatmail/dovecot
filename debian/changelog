@@ -1,7 +1,7 @@
 dovecot (1:1.0.10-1) unstable; urgency=high
 
   * New upstream release, fixes a security bug.
-  * debian/patches/exec_check_for_none.dpatch: removed, applied upstream.
+  * debian/patches/exec_check_for_none.dpatch: updated.
 
  -- Fabio Tranchitella <kobold@debian.org>  Sun, 30 Dec 2007 10:29:26 +0100
 
