@@ -1,3 +1,10 @@
+dovecot (1:1.0.10-2) unstable; urgency=low
+
+  * debian/patches/mbox_snarf.dpatch: added, thanks to Bernd Kuhls.
+    (Closes: #462319)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 24 Jan 2008 10:12:02 +0100
+
 dovecot (1:1.0.10-1) unstable; urgency=high
 
   * New upstream release, fixes a security bug.
