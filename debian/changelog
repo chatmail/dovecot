@@ -5,8 +5,9 @@ dovecot (1:1.0.10-3) unstable; urgency=low
   * debian/dovecot-common.init: added $time to Should-Start. (Closes: #461543)
   * debian/dovecot-common.postinst: do not add the dovecot user to the mail
     group, it is not required by upstream. (Closes: #457123)
+  * debian/control: updated Standards-Version to 3.7.3, no changes required.
 
- -- Fabio Tranchitella <kobold@debian.org>  Sun, 10 Feb 2008 18:04:36 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 10 Feb 2008 18:37:55 +0100
 
 dovecot (1:1.0.10-2) unstable; urgency=low
 
