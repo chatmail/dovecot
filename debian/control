@@ -3,7 +3,7 @@ Section: mail
 Priority: optional
 Maintainer: Dovecot Maintainers <jaldhar-dovecot@debian.org>
 Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>, Fabio Tranchitella <kobold@debian.org>
-Build-Depends: debhelper (>= 5.0.0), automake1.9, autoconf, libtool, pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient15-dev, libsqlite3-dev, libsasl2-dev | libsasl-dev, zlib1g-dev, libkrb5-dev, dpatch, byacc, flex, drac-dev (>= 1.12-5), libsieve2-dev
+Build-Depends: debhelper (>= 5.0.0), automake1.9, autoconf, libtool, pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient15-dev, libsqlite3-dev, libsasl2-dev | libsasl-dev, zlib1g-dev, libkrb5-dev, dpatch, byacc, flex, drac-dev (>= 1.12-5)
 Build-Conflicts: linux-kernel-headers (<= 2.5.999-test7-bk-17), automake1.4
 Standards-Version: 3.7.2.1
 Vcs-Svn: svn://svn.debian.org/svn/collab-maint/deb-maint/dovecot/trunk
