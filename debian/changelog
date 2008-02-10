@@ -2,8 +2,11 @@ dovecot (1:1.0.10-3) unstable; urgency=low
 
   * debian/patches/dovecot-MANAGESIEVE-9.1.dpatch: added, thanks to Aleksey
     Midenkov for providing a patch. (Closes: #416166)
+  * debian/dovecot-common.init: added $time to Should-Start. (Closes: #461543)
+  * debian/dovecot-common.postinst: do not add the dovecot user to the mail
+    group, it is not required by upstream. (Closes: #457123)
 
- -- Fabio Tranchitella <kobold@debian.org>  Sun, 10 Feb 2008 18:01:04 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 10 Feb 2008 18:04:36 +0100
 
 dovecot (1:1.0.10-2) unstable; urgency=low
 
