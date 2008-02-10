@@ -1,3 +1,4 @@
+dovecot-MANAGESIEVE-9.1
 dovecot-example
 dovecot-sql
 dovecot-drac
@@ -9,4 +10,3 @@ protocols_none_by_default
 dovecot-ssl
 pam-error-information
 mbox_snarf
-dovecot-MANAGESIEVE-9.1
