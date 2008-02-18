@@ -34,7 +34,7 @@ config.status: patch-stamp configure
 	            --with-cyrus-sasl2 \
 	            --with-gssapi \
 	            --with-deliver \
-	            --with-ioloop=epoll \
+	            --with-ioloop=best \
 	            --enable-header-install \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \

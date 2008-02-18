@@ -1,3 +1,11 @@
+dovecot (1:1.0.10-4) unstable; urgency=low
+
+  * debian/patches/autocreate.dpatch: added, thanks to Walter Reiner.
+  * debian/rules: use --with-ioloop=best instead of --with-ioloop=epoll, as
+    suggested by Timo. (Closes: #466296)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Mon, 18 Feb 2008 09:29:39 +0100
+
 dovecot (1:1.0.10-3) unstable; urgency=low
 
   * debian/patches/dovecot-MANAGESIEVE-9.1.dpatch: added, thanks to Aleksey
