@@ -85,7 +85,7 @@ install: build
 
 	# Add here commands to install the package into debian/dovecot.
 	$(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
-	$(MAKE) -C dovecot-sieve install prefix=$(CURDIR)/debian/dovecot-common/usr
+	$(MAKE) -C dovecot-sieve install DESTDIR=$(CURDIR)/debian/dovecot-common
 	cp $(CURDIR)/src/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-ldap-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-ldap.conf
