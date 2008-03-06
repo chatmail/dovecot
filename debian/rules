@@ -24,7 +24,7 @@ config.status: patch-stamp configure
 	  cp -f /usr/share/misc/config.sub config.sub
 	-test -r /usr/share/misc/config.guess && \
 	  cp -f /usr/share/misc/config.guess config.guess
-	aclocal; automake-1.9; libtoolize -f -c;  aclocal-1.9; autoconf
+	aclocal; automake-1.9 --add-missing; libtoolize -f -c;  aclocal-1.9; autoconf
 	# Add here commands to configure the package.
 	./configure --with-ldap \
 	            --with-ssl=openssl \
@@ -34,7 +34,7 @@ config.status: patch-stamp configure
 	            --with-cyrus-sasl2 \
 	            --with-gssapi \
 	            --with-deliver \
-	            --with-ioloop=epoll \
+	            --with-ioloop=best \
 	            --enable-header-install \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \
@@ -61,6 +61,7 @@ build-stamp:  config.status
 		--libexecdir=\$${prefix}/lib \
 		--with-moduledir=\$${prefix}/lib/dovecot/modules
 	$(MAKE) -C dovecot-sieve
+	cd src/drac && $(MAKE)
 	touch build-stamp
 
 clean: unpatch
@@ -73,6 +74,7 @@ clean: unpatch
 	rm -f conftest conftest.o config.log config.cache config.status ylwrap
 	[ -f config.sub.orig ] && mv config.sub.orig config.sub || true
 	[ -f config.guess.orig ] && mv config.sub.orig config.guess || true
+	rm -f src/drac/drac.so
 	dh_clean
 
 install: build
@@ -83,7 +85,8 @@ install: build
 
 	# Add here commands to install the package into debian/dovecot.
 	$(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
-	$(MAKE) -C dovecot-sieve install prefix=$(CURDIR)/debian/dovecot-common/usr
+	$(MAKE) -C dovecot-sieve install DESTDIR=$(CURDIR)/debian/dovecot-common
+	cp $(CURDIR)/src/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-ldap-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-ldap.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-sql-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-sql.conf

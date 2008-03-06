@@ -1,3 +1,12 @@
+dovecot (1:1.0.12-1) unstable; urgency=low
+
+  * mail_extra_groups=mail setting is often used insecurely to give Dovecot
+    access to create dotlocks to /var/mail directory. The setting has been
+    replaced by mail_privileged_group and mail_access_groups.
+    Read also: http://dovecot.org/list/dovecot/2008-March/029196.html
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 06 Mar 2008 15:46:03 +0100
+
 dovecot (1.0.beta3-1) unstable; urgency=low
 
   * Starting from this release, dovecot-lda is included in dovecot-common.
