@@ -1,21 +1,21 @@
 #! /bin/sh /usr/share/dpatch/dpatch-run
-## dovecot-MANAGESIEVE-9.1.dpatch by Aleksey Midenkov <asm@uezku.kemsu.ru>
+## dovecot-MANAGESIEVE-9.2.dpatch
 ##
 ## All lines beginning with `## DP:' are a description of the patch.
 ## DP: MANAGESIEVE patch v9.1
 ## DP: Origin: http://sinas.rename-it.nl/~sirius/
-## DP: Author: Stephan Bosch <stephan@rename-it.nl>
+## DP: Author: Marco Nenciarini <mnencia@debian.org>
 
 @DPATCH@
 
-comparing with http://hg.dovecot.org/dovecot-1.0
-searching for changes
-diff -r 848fd2e849df README.managesieve
+Updated v9.2 patch to dovecot-1.0.12
+
+diff -r 923786016963 README.managesieve
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/README.managesieve	Tue Jan 01 15:26:50 2008 +0100
-@@ -0,0 +1,269 @@
++++ b/README.managesieve	Wed Mar 05 10:10:39 2008 +0100
+@@ -0,0 +1,326 @@
 +
-+Dovecot-MANAGESIEVE patch v9 for dovecot-1.0
++Dovecot-MANAGESIEVE patch v9.2 for dovecot-1.0
 +
 +Compile
 +-------
@@ -106,6 +106,56 @@ diff -r 848fd2e849df README.managesieve
 +  sieve_storage=~/sieve  
 +}
 +
++Proxying
++--------
++
++Like Dovecot's imapd, the ManageSieve login daemon supports proxying to multiple
++backend servers. Although the underlying code is copied from the imapd sources
++for the most part, it has some ManageSieve-specifics that have not seen much
++testing.
++
++The proxy configuration wike page for POP3 and IMAP should apply to ManageSieve
++as well:
++
++http://wiki.dovecot.org/PasswordDatabase/ExtraFields/Proxy
++
++Contact Info
++------------
++
++Stephan Bosch <stephan at rename-it dot nl>
++IRC: Freenode, #dovecot, S[r]us
++
++Please use the Dovecot mailing list <dovecot at dovecot.org> for questions about
++this patch. You can post to the list without subscribing, the mail then waits
++in a moderator queue for a while. See http://dovecot.org/mailinglists.html
++
++Known Issues
++------------
++
++* Although this ManageSieve server should comply with the draft specification of
++  the ManageSieve protocol, quite a few clients don't. This is particularly true
++  for the TLS support. However, now that Cyrus' Timsieved has changed its
++  behavior towards protocol compliance, all those clients will follow
++  eventually.
++
++  Clients known to have TLS issues:
++    - Thunderbird Sieve add-on (author is working on it)
++    - KMail + kio_sieve
++
++  Unfortunately, there is no reliable way to provide a workaround for this
++  problem. We will have to wait for the authors of these clients to make the
++  proper adjustments.
++* Other client issues:
++  - SquirrelMail/AvelSieve:
++    For some users the avelsieve client stores scripts but fails to retrieve
++    them later. This problem is somehow hard to reproduce at my end. Someone
++    suggested that it might be TLS-related.
++* The current implementation of the daemon does not have quota enforcement as
++  recommended in the specification. So keep in mind that malicious users could  
++  fill your filesystem with loads of spurious scriptfiles.
++* The ANONYMOUS authentication mechanism is currently not supported and
++  explicitly denied.
++
 +Design
 +------------
 +
@@ -130,13 +180,20 @@ diff -r 848fd2e849df README.managesieve
 +HAVESPACE command which always says 'ok'. It also implements the required
 +support for UTF-8 strings. 
 +
-+Contact info
-+------------
-+
-+Stephan Bosch <stephan at rename-it dot nl>
-+
 +Changelog
 +---------
++
++* v9.2
++- Fixed bug in tmp file generation for sieve-storage: errors other than EEXIST
++  would cause the daemon to sleep() loop indefinitely.
+++ Improved log lines to be more recognizable as being generated from
++  managesieve.
+++ Added short proxy configuration explanation to the README.managesieve file
+++ Added 'Known Issues' section to the README.managesieve file
+++ Fixed assert bug in sieve-storage occuring when save is canceled.
++
++* v9.1
+++ Updated patch to apply cleanly on dovecot-1.0.10
 +
 +* V9
 ++ Definitively fixed the segfault mentioned in V8. It proved to be 
@@ -283,9 +340,9 @@ diff -r 848fd2e849df README.managesieve
 +
 +* Thorough testing...
 +
-diff -r 848fd2e849df configure.in
---- a/configure.in	Sat Dec 29 08:09:47 2007 +0200
-+++ b/configure.in	Tue Jan 01 15:26:50 2008 +0100
+diff -r 923786016963 configure.in
+--- a/configure.in	Wed Mar 05 09:12:44 2008 +0200
++++ b/configure.in	Wed Mar 05 10:10:39 2008 +0100
 @@ -9,6 +9,8 @@ AC_ISC_POSIX
  AC_ISC_POSIX
  AC_PROG_CC
@@ -347,9 +404,9 @@ diff -r 848fd2e849df configure.in
  src/master/Makefile
  src/pop3/Makefile
  src/pop3-login/Makefile
-diff -r 848fd2e849df dovecot-example.conf
---- a/dovecot-example.conf	Sat Dec 29 08:09:47 2007 +0200
-+++ b/dovecot-example.conf	Tue Jan 01 15:26:50 2008 +0100
+diff -r 923786016963 dovecot-example.conf
+--- a/dovecot-example.conf	Wed Mar 05 09:12:44 2008 +0200
++++ b/dovecot-example.conf	Wed Mar 05 10:10:39 2008 +0100
 @@ -18,7 +18,7 @@
  # Base directory where to store runtime data.
  #base_dir = /var/run/dovecot/
@@ -381,10 +438,13 @@ diff -r 848fd2e849df dovecot-example.conf
  #     ..
  #   }
  #listen = *
-@@ -641,6 +645,48 @@ protocol pop3 {
- }
- 
- ##
+@@ -646,6 +650,48 @@ protocol pop3 {
+   #     missing. This option simply sends it if it's missing.
+   # The list is space-separated.
+   #pop3_client_workarounds = 
++}
++
++##
 +## MANAGESIEVE specific settings
 +##
 +
@@ -424,15 +484,12 @@ diff -r 848fd2e849df dovecot-example.conf
 +  # specify the IMPLEMENTATION capability that the dovecot reports to clients 
 +  # (default: dovecot).
 +  #managesieve_implementation_string = Cyrus timsieved v2.2.13
-+}
-+
-+##
- ## LDA specific settings
- ##
+ }
  
-diff -r 848fd2e849df src/Makefile.am
---- a/src/Makefile.am	Sat Dec 29 08:09:47 2007 +0200
-+++ b/src/Makefile.am	Tue Jan 01 15:26:50 2008 +0100
+ ##
+diff -r 923786016963 src/Makefile.am
+--- a/src/Makefile.am	Wed Mar 05 09:12:44 2008 +0200
++++ b/src/Makefile.am	Wed Mar 05 10:10:39 2008 +0100
 @@ -4,6 +4,10 @@ endif
  
  if BUILD_DELIVER
@@ -451,9 +508,9 @@ diff -r 848fd2e849df src/Makefile.am
 +	$(MANAGESIEVE) \
  	util \
  	plugins
-diff -r 848fd2e849df src/lib-managesieve/Makefile.am
+diff -r 923786016963 src/lib-managesieve/Makefile.am
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-managesieve/Makefile.am	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-managesieve/Makefile.am	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,14 @@
 +noinst_LIBRARIES = libmanagesieve.a
 +
@@ -469,9 +526,9 @@ diff -r 848fd2e849df src/lib-managesieve/Makefile.am
 +noinst_HEADERS = \
 +	managesieve-quote.h \
 +	managesieve-parser.h 
-diff -r 848fd2e849df src/lib-managesieve/managesieve-parser.c
+diff -r 923786016963 src/lib-managesieve/managesieve-parser.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-managesieve/managesieve-parser.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-managesieve/managesieve-parser.c	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,672 @@
 +#include "lib.h"
 +#include "istream.h"
@@ -1145,9 +1202,9 @@ diff -r 848fd2e849df src/lib-managesieve/managesieve-parser.c
 +	i_panic("Tried to access managesieve_arg type %d as list", arg->type);
 +	return NULL;
 +}
-diff -r 848fd2e849df src/lib-managesieve/managesieve-parser.h
+diff -r 923786016963 src/lib-managesieve/managesieve-parser.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-managesieve/managesieve-parser.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-managesieve/managesieve-parser.h	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,189 @@
 +#ifndef __MANAGESIEVE_PARSER_H
 +#define __MANAGESIEVE_PARSER_H
@@ -1338,9 +1395,9 @@ diff -r 848fd2e849df src/lib-managesieve/managesieve-parser.h
 +struct managesieve_arg_list *_managesieve_arg_list_error(const struct managesieve_arg *arg);
 +
 +#endif
-diff -r 848fd2e849df src/lib-managesieve/managesieve-quote.c
+diff -r 923786016963 src/lib-managesieve/managesieve-quote.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-managesieve/managesieve-quote.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-managesieve/managesieve-quote.c	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,176 @@
 +#include "lib.h"
 +#include "str.h"
@@ -1518,9 +1575,9 @@ diff -r 848fd2e849df src/lib-managesieve/managesieve-quote.c
 +
 +	return ret;
 +}
-diff -r 848fd2e849df src/lib-managesieve/managesieve-quote.h
+diff -r 923786016963 src/lib-managesieve/managesieve-quote.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-managesieve/managesieve-quote.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-managesieve/managesieve-quote.h	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,17 @@
 +#ifndef __IMAP_QUOTE_H
 +#define __IMAP_QUOTE_H
@@ -1539,9 +1596,9 @@ diff -r 848fd2e849df src/lib-managesieve/managesieve-quote.h
 +			  (size_t)-1, compress_lwsp)
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/Makefile.am
+diff -r 923786016963 src/lib-sieve/Makefile.am
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/Makefile.am	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/Makefile.am	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,20 @@
 +noinst_LTLIBRARIES = libsieve.la
 +
@@ -1563,9 +1620,9 @@ diff -r 848fd2e849df src/lib-sieve/Makefile.am
 +noinst_HEADERS = \
 +	sieve-implementation.h \
 +	sieve-implementation-private.h
-diff -r 848fd2e849df src/lib-sieve/cmu/Makefile.am
+diff -r 923786016963 src/lib-sieve/cmu/Makefile.am
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/Makefile.am	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/Makefile.am	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,24 @@
 +noinst_LTLIBRARIES = libsieve_cmu.la
 +
@@ -1591,9 +1648,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/Makefile.am
 +    libconfig.h \
 +    map.h \
 +    xmalloc.h
-diff -r 848fd2e849df src/lib-sieve/cmu/cmu-sieve.c
+diff -r 923786016963 src/lib-sieve/cmu/cmu-sieve.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/cmu-sieve.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/cmu-sieve.c	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,498 @@
 +
 +/* Copyright (C) 2005-2006 Timo Sirainen */
@@ -2093,9 +2150,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/cmu-sieve.c
 +	}	
 +};
 +
-diff -r 848fd2e849df src/lib-sieve/cmu/imparse.c
+diff -r 923786016963 src/lib-sieve/cmu/imparse.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/imparse.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/imparse.c	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,57 @@
 +/*
 + * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
@@ -2154,9 +2211,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/imparse.c
 +    if (len >= 1024) return 0;
 +    return 1;
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/imparse.h
+diff -r 923786016963 src/lib-sieve/cmu/imparse.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/imparse.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/imparse.h	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,6 @@
 +#ifndef __IMPARSE_H
 +#define __IMPARSE_H
@@ -2164,9 +2221,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/imparse.h
 +extern int imparse_isatom (const char *s);
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/cmu/libconfig.h
+diff -r 923786016963 src/lib-sieve/cmu/libconfig.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libconfig.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libconfig.h	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,8 @@
 +#ifndef __LIBCONFIG_H
 +#define __LIBCONFIG_H
@@ -2176,9 +2233,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libconfig.h
 +#define config_getswitch(n) 1
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/AUTHORS
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/AUTHORS
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/AUTHORS	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/AUTHORS	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,9 @@
 +$Id$
 +
@@ -2189,9 +2246,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/AUTHORS
 +
 +Ken Murchison <ken@oceana.com> took the ball, added more extensions
 +than existed in the known world, and overall improved the code mightily.
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/Makefile.am
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/Makefile.am
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/Makefile.am	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/Makefile.am	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,76 @@
 +pkglibexecdir = $(libexecdir)/dovecot
 +
@@ -2269,9 +2326,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/Makefile.am
 +	NEWS \
 +	README \
 +	$(notbuilt_sources)
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/NEWS
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/NEWS
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/NEWS	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/NEWS	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,84 @@
 +$Id$
 +
@@ -2357,9 +2414,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/NEWS
 +-------------
 +
 +- prototype implementation
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/README
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/README
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/README	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/README	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,59 @@
 +$Id$
 +
@@ -2420,9 +2477,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/README
 +[SUBADDR] Murchison, K., "Sieve Email Filtering -- Subaddress Extension",
 +RFC 3598, September 2003.
 +
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/addr-lex.l
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/addr-lex.l
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/addr-lex.l	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/addr-lex.l	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,91 @@
 +%{
 +/*
@@ -2515,9 +2572,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/addr-lex.l
 +    }
 +    return n;
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/addr.y
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/addr.y
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/addr.y	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/addr.y	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,91 @@
 +%{
 +/*
@@ -2610,9 +2667,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/addr.y
 +    strlcpy(addrerr, s, sizeof(addrerr));
 +    return 0;
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/bc_dump.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/bc_dump.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/bc_dump.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/bc_dump.c	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,304 @@
 +/* bc_generate.c -- sieve bytecode- almost flattened bytecode
 + * Rob Siemborski
@@ -2918,9 +2975,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/bc_dump.c
 +}
 +#endif
 +
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/bc_emit.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/bc_emit.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/bc_emit.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/bc_emit.c	Wed Mar 05 10:10:39 2008 +0100
 @@ -0,0 +1,672 @@
 +/* bc_emit.c -- sieve bytecode - pass 2 of the compiler
 + * Rob Siemborski
@@ -3594,9 +3651,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/bc_emit.c
 +    return bc_action_emit(fd, 0, bc->scriptend, bc, sizeof(int) + BYTECODE_MAGIC_LEN);
 +}
 +
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/bc_eval.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/bc_eval.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/bc_eval.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/bc_eval.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,1146 @@
 +/* bc_eval.c - evaluate the bytecode
 + * $Id$
@@ -4744,9 +4801,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/bc_eval.c
 +    }
 +    return res;      
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/bc_generate.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/bc_generate.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/bc_generate.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/bc_generate.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,708 @@
 +/* bc_generate.c -- sieve bytecode- almost flattened bytecode
 + * Rob Siemborski
@@ -5456,9 +5513,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/bc_generate.c
 +    *p = NULL;
 +}
 + 
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/bytecode.h
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/bytecode.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/bytecode.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/bytecode.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,193 @@
 +/* bytecode.h -- bytecode definition
 + */
@@ -5653,9 +5710,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/bytecode.h
 +int unwrap_string(bytecode_input_t *bc, int pos, const char **str, int *len);
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/comparator.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/comparator.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/comparator.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/comparator.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,448 @@
 +/* comparator.c -- comparator functions
 + * Larry Greenfield
@@ -6105,9 +6162,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/comparator.c
 +      }
 +    return ret;
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/comparator.h
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/comparator.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/comparator.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/comparator.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,48 @@
 +/* comparator.h
 + * Larry Greenfield
@@ -6157,9 +6214,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/comparator.h
 +			  int relation, void **rock);
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/interp.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/interp.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/interp.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/interp.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,203 @@
 +/* interp.c -- sieve script interpretor builder
 + * Larry Greenfield
@@ -6364,9 +6421,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/interp.c
 +	return SIEVE_NOT_FINALIZED;
 +    }
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/interp.h
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/interp.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/interp.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/interp.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,56 @@
 +/* interp.h -- interpretor definition
 + * Larry Greenfield
@@ -6424,9 +6481,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/interp.h
 +int interp_verify(sieve_interp_t *interp);
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/message.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/message.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/message.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/message.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,580 @@
 +/* message.c -- message parsing functions
 + * Larry Greenfield
@@ -7008,9 +7065,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/message.c
 +    }
 +}
 +
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/message.h
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/message.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/message.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/message.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,140 @@
 +/* message.h
 + * Larry Greenfield
@@ -7152,9 +7209,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/message.h
 +		  const char **errmsg);
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/parseaddr.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/parseaddr.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/parseaddr.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/parseaddr.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,370 @@
 +/* parseaddr.c -- RFC 822 address parser
 + * $Id$
@@ -7526,9 +7583,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/parseaddr.c
 +    }
 +}
 +
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/parseaddr.h
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/parseaddr.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/parseaddr.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/parseaddr.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,69 @@
 +/* parseaddr.h -- RFC 822 address parser
 + $Id$
@@ -7599,9 +7656,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/parseaddr.h
 +
 +
 +#endif /* INCLUDED_PARSEADDR_H */
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/script.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/script.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/script.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/script.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,814 @@
 +/* script.c -- sieve script functions
 + * Larry Greenfield
@@ -8417,9 +8474,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/script.c
 +			  &imapflags, actions, notify_list, actions_string,
 +			  errmsg);
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/script.h
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/script.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/script.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/script.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,74 @@
 +/* script.h -- script definition
 + * Larry Greenfield
@@ -8495,9 +8552,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/script.h
 +int script_require(sieve_script_t *s, char *req);
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieve-lex.l
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/sieve-lex.l
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/sieve-lex.l	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/sieve-lex.l	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,162 @@
 +%{
 +/* sieve.l -- sieve lexer
@@ -8661,9 +8718,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieve-lex.l
 +    if (!str) return xstrdup("");
 +    else return str;
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieve.y
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/sieve.y
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/sieve.y	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/sieve.y	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,1090 @@
 +%{
 +/* sieve.y -- sieve parser
@@ -9755,9 +9812,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieve.y
 +
 +    return 1;
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieve_err.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/sieve_err.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/sieve_err.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/sieve_err.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,60 @@
 +/*
 + * sieve_err.c:
@@ -9819,9 +9876,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieve_err.c
 +    et->next = 0;
 +    *end = et;
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieve_err.h
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/sieve_err.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/sieve_err.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/sieve_err.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,24 @@
 +/*
 + * sieve_err.h:
@@ -9847,9 +9904,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieve_err.h
 +/* for compatibility with older versions... */
 +#define init_siev_err_tbl initialize_siev_error_table
 +#define siev_err_base ERROR_TABLE_BASE_siev
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieve_interface.h
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/sieve_interface.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/sieve_interface.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/sieve_interface.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,172 @@
 +/* sieve_interface.h -- interface for deliver
 + * $Id$
@@ -10023,9 +10080,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieve_interface.h
 +void sieve_free_bytecode(bytecode_info_t **p);
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sievec.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/sievec.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/sievec.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/sievec.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,273 @@
 +/* sievec.c -- compile a sieve script to bytecode manually
 + * Rob Siemborski
@@ -10300,9 +10357,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sievec.c
 +
 +    return (res == SIEVE_OK) ? TIMSIEVE_OK : TIMSIEVE_FAIL;
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieved.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/sieved.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/sieved.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/sieved.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,437 @@
 +/* dump.c -- bytecode decompiler
 + * Jen Smith
@@ -10741,9 +10798,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/sieved.c
 +}
 +
 +
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/tree.c
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/tree.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/tree.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/tree.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,224 @@
 +/* tree.c -- abstract syntax tree handling
 + * Larry Greenfield
@@ -10969,9 +11026,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/tree.c
 +	cl = cl2;
 +    }
 +}
-diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/tree.h
+diff -r 923786016963 src/lib-sieve/cmu/libsieve/tree.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/libsieve/tree.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/libsieve/tree.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,139 @@
 +/* tree.h -- abstract syntax tree
 + * Larry Greenfield
@@ -11112,9 +11169,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/libsieve/tree.h
 +void free_tree(commandlist_t *cl);
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/cmu/map.c
+diff -r 923786016963 src/lib-sieve/cmu/map.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/map.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/map.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,55 @@
 +#include "lib.h"
 +#include "map.h"
@@ -11171,9 +11228,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/map.c
 +	*base = NULL;
 +}
 +
-diff -r 848fd2e849df src/lib-sieve/cmu/map.h
+diff -r 923786016963 src/lib-sieve/cmu/map.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/map.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/map.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,10 @@
 +#ifndef __MAP_H
 +#define __MAP_H
@@ -11185,9 +11242,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/map.h
 +extern void map_free(const char **base, unsigned long *len);
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/cmu/xmalloc.h
+diff -r 923786016963 src/lib-sieve/cmu/xmalloc.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/cmu/xmalloc.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/cmu/xmalloc.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,26 @@
 +#ifndef __XMALLOC_H
 +#define __XMALLOC_H
@@ -11215,9 +11272,9 @@ diff -r 848fd2e849df src/lib-sieve/cmu/xmalloc.h
 +#define lcase str_lcase
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/sieve-implementation-private.h
+diff -r 923786016963 src/lib-sieve/sieve-implementation-private.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/sieve-implementation-private.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/sieve-implementation-private.h	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,62 @@
 +#ifndef __SIEVE_IMPLEMENTATION_PRIVATE_H
 +#define	__SIEVE_IMPLEMENTATION_PRIVATE_H
@@ -11281,9 +11338,9 @@ diff -r 848fd2e849df src/lib-sieve/sieve-implementation-private.h
 +#include "sieve-implementation.h"
 +
 +#endif
-diff -r 848fd2e849df src/lib-sieve/sieve-implementation.c
+diff -r 923786016963 src/lib-sieve/sieve-implementation.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/sieve-implementation.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/sieve-implementation.c	Wed Mar 05 10:10:40 2008 +0100
 @@ -0,0 +1,235 @@
 +#include "lib.h"
 +#include "array.h"
@@ -11520,9 +11577,9 @@ diff -r 848fd2e849df src/lib-sieve/sieve-implementation.c
 +
 +	return runenv->mail_save(context, mailbox, flags, nflags);
 +}
-diff -r 848fd2e849df src/lib-sieve/sieve-implementation.h
+diff -r 923786016963 src/lib-sieve/sieve-implementation.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sieve/sieve-implementation.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sieve/sieve-implementation.h	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,46 @@
 +#ifndef __SIEVE_IMPLEMENTATION_H
 +#define __SIEVE_IMPLEMENTATION_H
@@ -11570,9 +11627,9 @@ diff -r 848fd2e849df src/lib-sieve/sieve-implementation.h
 +
 +#endif
 +
-diff -r 848fd2e849df src/lib-sievestorage/Makefile.am
+diff -r 923786016963 src/lib-sievestorage/Makefile.am
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sievestorage/Makefile.am	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sievestorage/Makefile.am	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,19 @@
 +noinst_LIBRARIES = libsievestorage.a
 +
@@ -11593,9 +11650,9 @@ diff -r 848fd2e849df src/lib-sievestorage/Makefile.am
 +	sieve-list.h \
 +	sieve-storage.h \
 +	sieve-storage-private.h 
-diff -r 848fd2e849df src/lib-sievestorage/sieve-list.c
+diff -r 923786016963 src/lib-sievestorage/sieve-list.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sievestorage/sieve-list.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sievestorage/sieve-list.c	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,116 @@
 +#include "lib.h"
 +#include "str.h"
@@ -11713,9 +11770,9 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-list.c
 +
 +	
 +    
-diff -r 848fd2e849df src/lib-sievestorage/sieve-list.h
+diff -r 923786016963 src/lib-sievestorage/sieve-list.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sievestorage/sieve-list.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sievestorage/sieve-list.h	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,30 @@
 +#ifndef __SIEVE_LIST_H
 +#define __SIEVE_LIST_H
@@ -11747,10 +11804,10 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-list.h
 +
 +	
 +    
-diff -r 848fd2e849df src/lib-sievestorage/sieve-save.c
+diff -r 923786016963 src/lib-sievestorage/sieve-save.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sievestorage/sieve-save.c	Tue Jan 01 15:26:50 2008 +0100
-@@ -0,0 +1,309 @@
++++ b/src/lib-sievestorage/sieve-save.c	Wed Mar 05 10:10:41 2008 +0100
+@@ -0,0 +1,322 @@
 +#include "lib.h"
 +#include "hostpid.h"
 +#include "ioloop.h"
@@ -11813,7 +11870,8 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-save.c
 +	}
 +}
 +
-+static int sieve_create_tmp(struct sieve_storage *storage, const char *scriptname, const char **fname)
++static int sieve_create_tmp
++(struct sieve_storage *storage, const char *scriptname, const char **fpath_r)
 +{
 + 	const char *path, *tmp_fname;
 +	struct stat st;
@@ -11828,13 +11886,19 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-save.c
 +		tmp_fname = sieve_generate_tmp_filename(scriptname, tv);
 +
 +		path = p_strconcat(pool, storage->dir, "/tmp/", tmp_fname, ".sieve", NULL);
-+		if (stat(path, &st) < 0 && errno == ENOENT) {
-+			/* NICE! doesn't exist */
-+			fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
++		if ( stat(path, &st) < 0 ) {
++			if ( errno == ENOENT) {
++				/* NICE! doesn't exist */
++				fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
 +		  
-+			/* Something went wrong */
-+			if (fd != -1 || errno != EEXIST)
-+			  break;
++				/* Something went wrong */
++				if (fd != -1 || errno != EEXIST)
++			  		break;
++			} else {
++				sieve_storage_set_critical(storage,
++                	"stat(%s) failed: %m", path);
++				return -1;
++			}
 +		}
 +
 +		/* Wait and try again - very unlikely */
@@ -11844,9 +11908,16 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-save.c
 +			i_fatal("gettimeofday(): %m");
 +	}
 +	
-+	*fname = t_strdup(path);
-+	if (fd == -1)
-+		sieve_storage_set_error(storage, "Call to open() failed");
++	*fpath_r = t_strdup(path);
++	if (fd == -1) {
++		if (ENOSPACE(errno)) {
++			sieve_storage_set_error(storage,
++				"Not enough disk space");
++		} else {
++			sieve_storage_set_critical(storage,
++				"open(%s) failed: %m", path);
++        }
++    } 
 +
 +	pool_unref(pool);
 +	return fd;
@@ -11917,7 +11988,6 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-save.c
 +	ctx = p_new(pool, struct sieve_save_context, 1);
 +	ctx->pool = pool;
 +	ctx->storage = storage;
-+	ctx->finished = TRUE;
 +	ctx->scriptname = scriptname;
 +	ctx->scriptobject = NULL;
 +
@@ -12060,9 +12130,9 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-save.c
 +
 +	sieve_storage_save_destroy(ctx);
 +}
-diff -r 848fd2e849df src/lib-sievestorage/sieve-save.h
+diff -r 923786016963 src/lib-sievestorage/sieve-save.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sievestorage/sieve-save.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sievestorage/sieve-save.h	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,24 @@
 +#ifndef __SIEVE_SAVE_H
 +#define __SIEVE_SAVE_H
@@ -12088,9 +12158,9 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-save.h
 +
 +#endif
 +
-diff -r 848fd2e849df src/lib-sievestorage/sieve-script.c
+diff -r 923786016963 src/lib-sievestorage/sieve-script.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sievestorage/sieve-script.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sievestorage/sieve-script.c	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,634 @@
 +#include "lib.h"
 +#include "mempool.h"
@@ -12726,9 +12796,9 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-script.c
 +
 +
 +
-diff -r 848fd2e849df src/lib-sievestorage/sieve-script.h
+diff -r 923786016963 src/lib-sievestorage/sieve-script.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sievestorage/sieve-script.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sievestorage/sieve-script.h	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,49 @@
 +#ifndef __SIEVE_FILE_H
 +#define __SIEVE_FILE_H
@@ -12779,9 +12849,9 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-script.h
 +
 +#endif
 +
-diff -r 848fd2e849df src/lib-sievestorage/sieve-storage-private.h
+diff -r 923786016963 src/lib-sievestorage/sieve-storage-private.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sievestorage/sieve-storage-private.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sievestorage/sieve-storage-private.h	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,47 @@
 +#ifndef __SIEVE_STORAGE_PRIVATE_H
 +#define __SIEVE_STORAGE_PRIVATE_H
@@ -12830,10 +12900,10 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-storage-private.h
 +
 +#endif
 +
-diff -r 848fd2e849df src/lib-sievestorage/sieve-storage.c
+diff -r 923786016963 src/lib-sievestorage/sieve-storage.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sievestorage/sieve-storage.c	Tue Jan 01 15:26:50 2008 +0100
-@@ -0,0 +1,400 @@
++++ b/src/lib-sievestorage/sieve-storage.c	Wed Mar 05 10:10:41 2008 +0100
+@@ -0,0 +1,402 @@
 +#include "lib.h"
 +#include "home-expand.h"
 +#include "ioloop.h"
@@ -12877,7 +12947,7 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-storage.c
 +  } else {
 +    if (home == NULL) {
 +      /* we must have a home directory */
-+      i_error("userdb(%s) didn't return a home directory or "
++      i_error("sieve-storage: userdb(%s) didn't return a home directory or "
 +        "sieve script location, can't find it",
 +        getenv("USER"));
 +      return NULL;
@@ -12921,7 +12991,8 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-storage.c
 +		if (access("/sieve", R_OK|W_OK|X_OK) == 0)
 +			root_dir = "/";
 +		else {
-+			i_error("sieve: sieve storage directory not given and mail root provides no alternative.");
++			i_error("sieve-storage: sieve storage directory not given "
++				"and mail root provides no alternative.");
 +            return NULL;
 +		}
 +	} else {
@@ -12963,10 +13034,11 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-storage.c
 + 	 */
 +	if (stat(root_dir, &st) < 0 ) {
 +		if ( errno != ENOENT ) {
-+			i_error("stat(%s) failed: %m", root_dir);
++			i_error("sieve-storage: stat(%s) failed: %m", root_dir);
 +			return NULL;
 +		} else {
-+			i_error("root directory specified by mail data does not exist: %s", root_dir);
++			i_error("sieve-storage: root directory specified by "
++				"mail data does not exist: %s", root_dir);
 +			return NULL;
 +		}
 +	} 
@@ -13067,8 +13139,8 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-storage.c
 +
 +	if ( *active_fname == '\0' ) {	
 +		/* Link cannot be just a path */
-+		i_error("Path to active symlink must include the link's filename. Path is: %s", 
-+			active_path);
++		i_error("sieve-storage: Path to active symlink must include "
++			"the link's filename. Path is: %s", active_path);
 +
 +		t_pop();
 +		return NULL;
@@ -13142,7 +13214,7 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-storage.c
 +	 */
 +	tmp_dir = t_strconcat( storage_dir, "/tmp", NULL );	
 +	if (mkdir_parents(tmp_dir, CREATE_MODE) < 0 && errno != EEXIST) {
-+		i_error("mkdir_parents(%s, CREATE_MODE) failed: %m", tmp_dir);
++		i_error("sieve-storage: mkdir_parents(%s, CREATE_MODE) failed: %m", tmp_dir);
 +		t_pop();
 +		return NULL;
 +	}
@@ -13215,7 +13287,7 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-storage.c
 +	sieve_storage_clear_error(storage);
 +	if (fmt != NULL) {
 +		va_start(va, fmt);
-+		i_error("%s", t_strdup_vprintf(fmt, va));
++		i_error("sieve-storage: %s", t_strdup_vprintf(fmt, va));
 +		va_end(va);
 +		
 +		/* critical errors may contain sensitive data, so let user
@@ -13234,9 +13306,9 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-storage.c
 +}
 +
 +
-diff -r 848fd2e849df src/lib-sievestorage/sieve-storage.h
+diff -r 923786016963 src/lib-sievestorage/sieve-storage.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/lib-sievestorage/sieve-storage.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/lib-sievestorage/sieve-storage.h	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,19 @@
 +#ifndef __SIEVE_STORAGE_H
 +#define __SIEVE_STORAGE_H
@@ -13257,9 +13329,9 @@ diff -r 848fd2e849df src/lib-sievestorage/sieve-storage.h
 +const char *sieve_storage_get_last_error(struct sieve_storage *storage);
 +
 +#endif
-diff -r 848fd2e849df src/managesieve-login/Makefile.am
+diff -r 923786016963 src/managesieve-login/Makefile.am
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve-login/Makefile.am	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve-login/Makefile.am	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,29 @@
 +pkglibexecdir = $(libexecdir)/dovecot
 +
@@ -13290,9 +13362,9 @@ diff -r 848fd2e849df src/managesieve-login/Makefile.am
 +	client.h \
 +	client-authenticate.h \
 +	managesieve-proxy.h
-diff -r 848fd2e849df src/managesieve-login/client-authenticate.c
+diff -r 923786016963 src/managesieve-login/client-authenticate.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve-login/client-authenticate.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve-login/client-authenticate.c	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,330 @@
 +#include "common.h"
 +#include "base64.h"
@@ -13624,9 +13696,9 @@ diff -r 848fd2e849df src/managesieve-login/client-authenticate.c
 +	return 0;
 +}
 +
-diff -r 848fd2e849df src/managesieve-login/client-authenticate.h
+diff -r 923786016963 src/managesieve-login/client-authenticate.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve-login/client-authenticate.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve-login/client-authenticate.h	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,9 @@
 +#ifndef __CLIENT_AUTHENTICATE_H
 +#define __CLIENT_AUTHENTICATE_H
@@ -13637,9 +13709,9 @@ diff -r 848fd2e849df src/managesieve-login/client-authenticate.h
 +int cmd_authenticate(struct managesieve_client *client, struct managesieve_arg *args);
 +
 +#endif
-diff -r 848fd2e849df src/managesieve-login/client.c
+diff -r 923786016963 src/managesieve-login/client.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve-login/client.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve-login/client.c	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,680 @@
 +#include "common.h"
 +#include "buffer.h"
@@ -14321,9 +14393,9 @@ diff -r 848fd2e849df src/managesieve-login/client.c
 +	timeout_remove(&to_idle);
 +	sieve_deinit();
 +}
-diff -r 848fd2e849df src/managesieve-login/client.h
+diff -r 923786016963 src/managesieve-login/client.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve-login/client.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve-login/client.h	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,72 @@
 +#ifndef __CLIENT_H
 +#define __CLIENT_H
@@ -14397,9 +14469,9 @@ diff -r 848fd2e849df src/managesieve-login/client.h
 +#define client_send_byeresp(client, resp_code, msg) \
 +  _client_send_response(client, "BYE", resp_code, msg)
 +#endif
-diff -r 848fd2e849df src/managesieve-login/managesieve-proxy.c
+diff -r 923786016963 src/managesieve-login/managesieve-proxy.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve-login/managesieve-proxy.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve-login/managesieve-proxy.c	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,299 @@
 +/* Copyright (C) 2004 Timo Sirainen */
 +
@@ -14700,9 +14772,9 @@ diff -r 848fd2e849df src/managesieve-login/managesieve-proxy.c
 +
 +	return 0;
 +}
-diff -r 848fd2e849df src/managesieve-login/managesieve-proxy.h
+diff -r 923786016963 src/managesieve-login/managesieve-proxy.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve-login/managesieve-proxy.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve-login/managesieve-proxy.h	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,9 @@
 +#ifndef __MANAGESIEVE_PROXY_H
 +#define __MANAGESIEVE_PROXY_H
@@ -14713,9 +14785,9 @@ diff -r 848fd2e849df src/managesieve-login/managesieve-proxy.h
 +		   unsigned int port, const char *user, const char *password);
 +
 +#endif
-diff -r 848fd2e849df src/managesieve/Makefile.am
+diff -r 923786016963 src/managesieve/Makefile.am
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/Makefile.am	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/Makefile.am	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,56 @@
 +pkglibexecdir = $(libexecdir)/dovecot
 +
@@ -14773,9 +14845,9 @@ diff -r 848fd2e849df src/managesieve/Makefile.am
 +	client.h \
 +	commands.h \
 +	common.h 
-diff -r 848fd2e849df src/managesieve/client.c
+diff -r 923786016963 src/managesieve/client.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/client.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/client.c	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,541 @@
 +#include "common.h"
 +#include "str.h"
@@ -15318,9 +15390,9 @@ diff -r 848fd2e849df src/managesieve/client.c
 +	timeout_remove(&to_idle);
 +}
 +
-diff -r 848fd2e849df src/managesieve/client.h
+diff -r 923786016963 src/managesieve/client.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/client.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/client.h	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,103 @@
 +#ifndef __CLIENT_H
 +#define __CLIENT_H
@@ -15425,9 +15497,9 @@ diff -r 848fd2e849df src/managesieve/client.h
 +int _client_output(void *context);
 +
 +#endif
-diff -r 848fd2e849df src/managesieve/cmd-capability.c
+diff -r 923786016963 src/managesieve/cmd-capability.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/cmd-capability.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/cmd-capability.c	Wed Mar 05 10:10:41 2008 +0100
 @@ -0,0 +1,30 @@
 +#include "common.h"
 +#include "commands.h"
@@ -15459,9 +15531,9 @@ diff -r 848fd2e849df src/managesieve/cmd-capability.c
 +
 +}
 +
-diff -r 848fd2e849df src/managesieve/cmd-deletescript.c
+diff -r 923786016963 src/managesieve/cmd-deletescript.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/cmd-deletescript.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/cmd-deletescript.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,40 @@
 +#include "common.h"
 +#include "commands.h"
@@ -15503,9 +15575,9 @@ diff -r 848fd2e849df src/managesieve/cmd-deletescript.c
 +
 +	return TRUE;
 +}
-diff -r 848fd2e849df src/managesieve/cmd-getscript.c
+diff -r 923786016963 src/managesieve/cmd-getscript.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/cmd-getscript.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/cmd-getscript.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,122 @@
 +#include "common.h"
 +#include "ostream.h"
@@ -15629,9 +15701,9 @@ diff -r 848fd2e849df src/managesieve/cmd-getscript.c
 +
 +	return cmd_getscript_continue(cmd);
 +}
-diff -r 848fd2e849df src/managesieve/cmd-havespace.c
+diff -r 923786016963 src/managesieve/cmd-havespace.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/cmd-havespace.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/cmd-havespace.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,38 @@
 +#include "common.h"
 +#include "commands.h"
@@ -15671,9 +15743,9 @@ diff -r 848fd2e849df src/managesieve/cmd-havespace.c
 +	client_send_ok(client, "Putscript would succeed.");
 +	return TRUE;
 +}
-diff -r 848fd2e849df src/managesieve/cmd-listscripts.c
+diff -r 923786016963 src/managesieve/cmd-listscripts.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/cmd-listscripts.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/cmd-listscripts.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,46 @@
 +#include "common.h"
 +#include "commands.h"
@@ -15721,9 +15793,9 @@ diff -r 848fd2e849df src/managesieve/cmd-listscripts.c
 +	client_send_ok(client, "Listscripts completed.");
 +	return TRUE;
 +}
-diff -r 848fd2e849df src/managesieve/cmd-logout.c
+diff -r 923786016963 src/managesieve/cmd-logout.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/cmd-logout.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/cmd-logout.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,12 @@
 +#include "common.h"
 +#include "ostream.h"
@@ -15737,9 +15809,9 @@ diff -r 848fd2e849df src/managesieve/cmd-logout.c
 +	client_disconnect(client, "Logged out");
 +	return TRUE;
 +}
-diff -r 848fd2e849df src/managesieve/cmd-putscript.c
+diff -r 923786016963 src/managesieve/cmd-putscript.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/cmd-putscript.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/cmd-putscript.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,355 @@
 +#include "common.h"
 +#include "ioloop.h"
@@ -16096,9 +16168,9 @@ diff -r 848fd2e849df src/managesieve/cmd-putscript.c
 +	cmd->context = ctx;
 +	return cmd_putscript_continue_parsing(cmd);
 +}
-diff -r 848fd2e849df src/managesieve/cmd-setactive.c
+diff -r 923786016963 src/managesieve/cmd-setactive.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/cmd-setactive.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/cmd-setactive.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,53 @@
 +#include "common.h"
 +#include "commands.h"
@@ -16153,9 +16225,9 @@ diff -r 848fd2e849df src/managesieve/cmd-setactive.c
 +
 +	return TRUE;
 +}
-diff -r 848fd2e849df src/managesieve/commands.c
+diff -r 923786016963 src/managesieve/commands.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/commands.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/commands.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,112 @@
 +#include "common.h"
 +#include "array.h"
@@ -16269,9 +16341,9 @@ diff -r 848fd2e849df src/managesieve/commands.c
 +	command_unregister_array(managesieve_commands, MANAGESIEVE_COMMANDS_COUNT);
 +	array_free(&commands);
 +}
-diff -r 848fd2e849df src/managesieve/commands.h
+diff -r 923786016963 src/managesieve/commands.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/commands.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/commands.h	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,45 @@
 +#ifndef __COMMANDS_H
 +#define __COMMANDS_H
@@ -16318,9 +16390,9 @@ diff -r 848fd2e849df src/managesieve/commands.h
 +
 +
 +#endif
-diff -r 848fd2e849df src/managesieve/common.h
+diff -r 923786016963 src/managesieve/common.h
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/common.h	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/common.h	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,38 @@
 +#ifndef __COMMON_H
 +#define __COMMON_H
@@ -16360,9 +16432,9 @@ diff -r 848fd2e849df src/managesieve/common.h
 +extern void (*hook_client_created)(struct client **client);
 +
 +#endif
-diff -r 848fd2e849df src/managesieve/main.c
+diff -r 923786016963 src/managesieve/main.c
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/managesieve/main.c	Tue Jan 01 15:26:50 2008 +0100
++++ b/src/managesieve/main.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -0,0 +1,292 @@
 +#include "common.h"
 +#include "ioloop.h"
@@ -16656,9 +16728,9 @@ diff -r 848fd2e849df src/managesieve/main.c
 +
 +	return 0;
 +}
-diff -r 848fd2e849df src/master/common.h
---- a/src/master/common.h	Sat Dec 29 08:09:47 2007 +0200
-+++ b/src/master/common.h	Tue Jan 01 15:26:50 2008 +0100
+diff -r 923786016963 src/master/common.h
+--- a/src/master/common.h	Wed Mar 05 09:12:44 2008 +0200
++++ b/src/master/common.h	Wed Mar 05 10:10:42 2008 +0100
 @@ -17,6 +17,7 @@ enum process_type {
  	PROCESS_TYPE_SSL_PARAM,
  	PROCESS_TYPE_DICT,
@@ -16667,9 +16739,9 @@ diff -r 848fd2e849df src/master/common.h
  	PROCESS_TYPE_MAX
  };
  
-diff -r 848fd2e849df src/master/login-process.c
---- a/src/master/login-process.c	Sat Dec 29 08:09:47 2007 +0200
-+++ b/src/master/login-process.c	Tue Jan 01 15:26:50 2008 +0100
+diff -r 923786016963 src/master/login-process.c
+--- a/src/master/login-process.c	Wed Mar 05 09:12:44 2008 +0200
++++ b/src/master/login-process.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -67,8 +67,20 @@ static void login_group_create(struct se
  	group = i_new(struct login_group, 1);
  	group->refcount = 1;
@@ -16721,13 +16793,14 @@ diff -r 848fd2e849df src/master/login-process.c
  	}
  }
  
-diff -r 848fd2e849df src/master/mail-process.c
---- a/src/master/mail-process.c	Sat Dec 29 08:09:47 2007 +0200
-+++ b/src/master/mail-process.c	Tue Jan 01 15:26:50 2008 +0100
-@@ -232,6 +232,25 @@ mail_process_set_environment(struct sett
+diff -r 923786016963 src/master/mail-process.c
+--- a/src/master/mail-process.c	Wed Mar 05 09:12:44 2008 +0200
++++ b/src/master/mail-process.c	Wed Mar 05 10:10:42 2008 +0100
+@@ -231,6 +231,25 @@ mail_process_set_environment(struct sett
+ 			    set->pop3_client_workarounds, NULL));
  	env_put(t_strconcat("POP3_LOGOUT_FORMAT=",
  			    set->pop3_logout_format, NULL));
- 
++
 +	env_put(t_strdup_printf("MANAGESIEVE_MAX_LINE_LENGTH=%u",
 +				set->managesieve_max_line_length));
 +	env_put(t_strconcat("MANAGESIEVE_IMPLEMENTATION_STRING=",
@@ -16746,10 +16819,9 @@ diff -r 848fd2e849df src/master/mail-process.c
 +		env_put(t_strconcat("SIEVE=",
 +			expand_mail_env(set->sieve, var_expand_table), NULL));
 +	}
-+
+ 
  	if (set->mail_save_crlf)
  		env_put("MAIL_SAVE_CRLF=1");
- 	if (set->mail_read_mmaped)
 @@ -348,6 +367,8 @@ void mail_process_exec(const char *proto
  			set = server->imap;
  		else if (strcmp(protocol, "pop3") == 0)
@@ -16759,9 +16831,9 @@ diff -r 848fd2e849df src/master/mail-process.c
  		else
  			i_fatal("Unknown protocol: '%s'", protocol);
  		executable = set->mail_executable;
-diff -r 848fd2e849df src/master/main.c
---- a/src/master/main.c	Sat Dec 29 08:09:47 2007 +0200
-+++ b/src/master/main.c	Tue Jan 01 15:26:50 2008 +0100
+diff -r 923786016963 src/master/main.c
+--- a/src/master/main.c	Wed Mar 05 09:12:44 2008 +0200
++++ b/src/master/main.c	Wed Mar 05 10:10:42 2008 +0100
 @@ -33,7 +33,8 @@ const char *process_names[PROCESS_TYPE_M
  	"imap",
  	"pop3",
@@ -16804,9 +16876,10 @@ diff -r 848fd2e849df src/master/main.c
 +		set->ssl_listen_port = 993;
  #else
 -	set->ssl_listen_port = 0;
-+		set->ssl_listen_port = 0;
- #endif
+-#endif
 -
++		set->ssl_listen_port = 0;
++#endif
 +		break;
 +	case MAIL_PROTOCOL_POP3:
 +		set->listen_port = 110;
@@ -16827,19 +16900,19 @@ diff -r 848fd2e849df src/master/main.c
  	/* resolve */
  	resolve_ip("listen", set->listen, &set->listen_ip, &set->listen_port);
  	if (!set->ssl_disable) {
-@@ -412,6 +436,12 @@ static void listen_protocols(struct sett
- 				fd = &set->ssl_listen_fd;
+@@ -413,6 +437,12 @@ static void listen_protocols(struct sett
  				port = set->ssl_listen_port;
  				ip = &set->ssl_listen_ip;
-+			}
+ 			}
 +		} else if (strcasecmp(*proto, "managesieve") == 0) {
 +			if (set->protocol == MAIL_PROTOCOL_MANAGESIEVE) {
 +				fd = &set->listen_fd;
 +				port = set->listen_port;
 +				ip = &set->listen_ip;
- 			}
++			}
  		} else {
  			i_fatal("Unknown protocol %s", *proto);
+ 		}
 @@ -466,12 +496,14 @@ static void listen_fds_open(bool retry)
  static void listen_fds_open(bool retry)
  {
@@ -16856,18 +16929,18 @@ diff -r 848fd2e849df src/master/main.c
  	}
  }
  
-@@ -493,6 +525,11 @@ static void listen_fds_close(struct serv
- 			if (server->pop3->ssl_listen_fd != null_fd &&
+@@ -494,6 +526,11 @@ static void listen_fds_close(struct serv
  			    close(server->pop3->ssl_listen_fd) < 0)
  				i_error("close(pop3.ssl_listen_fd) failed: %m");
-+		}
+ 		}
 +		if (server->managesieve != NULL) {
 +			if (server->managesieve->listen_fd != null_fd &&
 +			    close(server->managesieve->listen_fd) < 0)
 +				i_error("close(managesieve.listen_fd) failed: %m");
- 		}
++		}
  	}
  }
+ 
 @@ -516,6 +553,8 @@ static bool have_stderr(struct server_se
  		if (server->imap != NULL && have_stderr_set(server->imap))
  			return TRUE;
@@ -16877,10 +16950,10 @@ diff -r 848fd2e849df src/master/main.c
  			return TRUE;
  
  		server = server->next;
-diff -r 848fd2e849df src/master/master-settings-defs.c
---- a/src/master/master-settings-defs.c	Sat Dec 29 08:09:47 2007 +0200
-+++ b/src/master/master-settings-defs.c	Tue Jan 01 15:26:50 2008 +0100
-@@ -113,5 +113,13 @@ static struct setting_def setting_defs[]
+diff -r 923786016963 src/master/master-settings-defs.c
+--- a/src/master/master-settings-defs.c	Wed Mar 05 09:12:44 2008 +0200
++++ b/src/master/master-settings-defs.c	Wed Mar 05 10:10:42 2008 +0100
+@@ -115,5 +115,13 @@ static struct setting_def setting_defs[]
  	DEF(SET_STR, pop3_client_workarounds),
  	DEF(SET_STR, pop3_logout_format),
  
@@ -16894,10 +16967,10 @@ diff -r 848fd2e849df src/master/master-settings-defs.c
 +
  	{ 0, NULL, 0 }
  };
-diff -r 848fd2e849df src/master/master-settings.c
---- a/src/master/master-settings.c	Sat Dec 29 08:09:47 2007 +0200
-+++ b/src/master/master-settings.c	Tue Jan 01 15:26:50 2008 +0100
-@@ -266,6 +266,14 @@ struct settings default_settings = {
+diff -r 923786016963 src/master/master-settings.c
+--- a/src/master/master-settings.c	Wed Mar 05 09:12:44 2008 +0200
++++ b/src/master/master-settings.c	Wed Mar 05 10:10:42 2008 +0100
+@@ -269,6 +269,14 @@ struct settings default_settings = {
  	MEMBER(pop3_client_workarounds) "",
  	MEMBER(pop3_logout_format) "top=%t/%p, retr=%r/%b, del=%d/%m, size=%s",
  
@@ -16912,7 +16985,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  	/* .. */
  	MEMBER(listen_fd) -1,
  	MEMBER(ssl_listen_fd) -1
-@@ -403,6 +411,8 @@ static bool auth_settings_verify(struct 
+@@ -425,6 +433,8 @@ static bool auth_settings_verify(struct 
  			auth->parent->pop3->ssl_verify_client_cert = TRUE;
  		if (auth->parent->imap != NULL)
  			auth->parent->imap->ssl_verify_client_cert = TRUE;
@@ -16921,7 +16994,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  	}
  
  	for (s = auth->sockets; s != NULL; s = s->next) {
-@@ -453,8 +463,11 @@ static bool settings_is_active(struct se
+@@ -475,8 +485,11 @@ static bool settings_is_active(struct se
  	if (set->protocol == MAIL_PROTOCOL_IMAP) {
  		if (strstr(set->protocols, "imap") == NULL)
  			return FALSE;
@@ -16934,7 +17007,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  			return FALSE;
  	}
  
-@@ -1037,7 +1050,7 @@ static const char *parse_setting(const c
+@@ -1081,7 +1094,7 @@ static const char *parse_setting(const c
  
  	if (strcmp(key, "login") == 0) {
  		i_warning("Ignoring deprecated 'login' section handling. "
@@ -16943,7 +17016,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  			  "Some settings may have been read incorrectly.");
  		return NULL;
  	}
-@@ -1060,6 +1073,15 @@ static const char *parse_setting(const c
+@@ -1104,6 +1117,15 @@ static const char *parse_setting(const c
  			error = parse_setting_from_defs(settings_pool,
  							setting_defs,
  							ctx->server->pop3,
@@ -16959,7 +17032,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  							key, value);
  		}
  
-@@ -1121,6 +1143,13 @@ static const char *parse_setting(const c
+@@ -1165,6 +1187,13 @@ static const char *parse_setting(const c
  			array_append(&ctx->server->pop3->plugin_envs,
  				     &value, 1);
  		}
@@ -16973,7 +17046,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  		return NULL;
  	}
  
-@@ -1130,7 +1159,8 @@ static struct server_settings *
+@@ -1174,7 +1203,8 @@ static struct server_settings *
  static struct server_settings *
  create_new_server(const char *name,
  		  struct settings *imap_defaults,
@@ -16983,7 +17056,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  {
  	struct server_settings *server;
  
-@@ -1138,15 +1168,19 @@ create_new_server(const char *name,
+@@ -1182,16 +1212,20 @@ create_new_server(const char *name,
  	server->name = p_strdup(settings_pool, name);
  	server->imap = p_new(settings_pool, struct settings, 1);
  	server->pop3 = p_new(settings_pool, struct settings, 1);
@@ -16998,12 +17071,13 @@ diff -r 848fd2e849df src/master/master-settings.c
  	ARRAY_CREATE(&server->imap->plugin_envs, settings_pool,
  		     const char *, 8);
  	ARRAY_CREATE(&server->pop3->plugin_envs, settings_pool,
-+		     const char *, 8);
-+	ARRAY_CREATE(&server->managesieve->plugin_envs, settings_pool,
  		     const char *, 8);
++	ARRAY_CREATE(&server->managesieve->plugin_envs, settings_pool,
++		     const char *, 8);
  
  	server->imap->server = server;
-@@ -1161,6 +1195,12 @@ create_new_server(const char *name,
+ 	server->imap->protocol = MAIL_PROTOCOL_IMAP;
+@@ -1205,6 +1239,12 @@ create_new_server(const char *name,
  	server->pop3->mail_executable = PKG_LIBEXECDIR"/pop3";
  	server->pop3->mail_plugin_dir = MODULEDIR"/pop3";
  
@@ -17016,7 +17090,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  	return server;
  }
  
-@@ -1204,8 +1244,8 @@ static bool parse_section(const char *ty
+@@ -1248,8 +1288,8 @@ static bool parse_section(const char *ty
  
  		ctx->type = SETTINGS_TYPE_SERVER;
  		ctx->server = create_new_server(name, ctx->server->imap,
@@ -17027,7 +17101,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  		while (server->next != NULL)
  			server = server->next;
  		server->next = ctx->server;
-@@ -1226,6 +1266,8 @@ static bool parse_section(const char *ty
+@@ -1270,6 +1310,8 @@ static bool parse_section(const char *ty
  			ctx->protocol = MAIL_PROTOCOL_POP3;
  		else if (strcmp(name, "lda") == 0)
  			ctx->protocol = MAIL_PROTOCOL_LDA;
@@ -17036,7 +17110,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  		else {
  			*errormsg = "Unknown protocol name";
  			return FALSE;
-@@ -1336,7 +1378,7 @@ bool master_settings_read(const char *pa
+@@ -1380,7 +1422,7 @@ bool master_settings_read(const char *pa
  	ctx.protocol = MAIL_PROTOCOL_ANY;
  	ctx.server = ctx.root =
  		create_new_server("default",
@@ -17045,7 +17119,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  	ctx.auth = &ctx.server->auth_defaults;
  
  	if (!settings_read(path, NULL, parse_setting, parse_section, &ctx))
-@@ -1353,7 +1395,9 @@ bool master_settings_read(const char *pa
+@@ -1397,7 +1439,9 @@ bool master_settings_read(const char *pa
  
  	if (!nochecks && !nofixes) {
  		ctx.root->defaults = settings_is_active(ctx.root->imap) ?
@@ -17056,7 +17130,7 @@ diff -r 848fd2e849df src/master/master-settings.c
  
  		path = t_strconcat(ctx.root->defaults->base_dir,
  				   "/master.pid", NULL);
-@@ -1364,7 +1408,8 @@ bool master_settings_read(const char *pa
+@@ -1407,7 +1451,8 @@ bool master_settings_read(const char *pa
  	prev = NULL;
  	for (server = ctx.root; server != NULL; server = server->next) {
  		if ((*server->imap->protocols == '\0' ||
@@ -17066,12 +17140,10 @@ diff -r 848fd2e849df src/master/master-settings.c
  			i_error("No protocols given in configuration file");
  			return FALSE;
  		}
-@@ -1392,6 +1437,15 @@ bool master_settings_read(const char *pa
- 				return FALSE;
- 			if (server->defaults == NULL)
+@@ -1437,6 +1482,15 @@ bool master_settings_read(const char *pa
  				server->defaults = server->pop3;
-+		}
-+
+ 		}
+ 
 +		if (!settings_is_active(server->managesieve) && !nochecks)
 +			server->managesieve = NULL;
 +		else {
@@ -17079,10 +17151,12 @@ diff -r 848fd2e849df src/master/master-settings.c
 +				return FALSE;
 +			if (server->defaults == NULL)
 +				server->defaults = server->managesieve;
- 		}
- 
++		}
++
  		if (server->defaults == NULL) {
-@@ -1610,8 +1664,8 @@ static void dict_settings_dump(const str
+ 			if (prev == NULL)
+ 				ctx.root = server->next;
+@@ -1653,8 +1707,8 @@ static void dict_settings_dump(const str
  
  void master_settings_dump(struct server_settings *set, bool nondefaults)
  {
@@ -17093,21 +17167,21 @@ diff -r 848fd2e849df src/master/master-settings.c
  	unsigned int count;
  
  	sets[0] = &default_settings;
-@@ -1629,6 +1683,11 @@ void master_settings_dump(struct server_
- 	if (set->pop3 != NULL) {
+@@ -1673,6 +1727,11 @@ void master_settings_dump(struct server_
  		sets[count] = set->pop3;
  		set_names[count] = "pop3";
-+		count++;
+ 		count++;
 +	}	
 +	if (set->managesieve != NULL) {
 +		sets[count] = set->managesieve;
 +		set_names[count] = "managesieve";
- 		count++;
++		count++;
  	}
  	settings_dump(setting_defs, sets, set_names, count, nondefaults, 0);
-diff -r 848fd2e849df src/master/master-settings.h
---- a/src/master/master-settings.h	Sat Dec 29 08:09:47 2007 +0200
-+++ b/src/master/master-settings.h	Tue Jan 01 15:26:50 2008 +0100
+ 	namespace_settings_dump(set->namespaces, nondefaults);
+diff -r 923786016963 src/master/master-settings.h
+--- a/src/master/master-settings.h	Wed Mar 05 09:12:44 2008 +0200
++++ b/src/master/master-settings.h	Wed Mar 05 10:10:42 2008 +0100
 @@ -4,10 +4,11 @@
  #include "network.h"
  
@@ -17123,7 +17197,7 @@ diff -r 848fd2e849df src/master/master-settings.h
  };
  
  struct settings {
-@@ -121,6 +122,14 @@ struct settings {
+@@ -123,6 +124,14 @@ struct settings {
  	const char *pop3_client_workarounds;
  	const char *pop3_logout_format;
  
@@ -17138,7 +17212,7 @@ diff -r 848fd2e849df src/master/master-settings.h
  	/* .. */
  	int listen_fd, ssl_listen_fd;
  
-@@ -228,9 +237,10 @@ struct server_settings {
+@@ -231,9 +240,10 @@ struct server_settings {
  	struct settings *defaults;
  	struct settings *imap;
  	struct settings *pop3;

@@ -1,8 +1,10 @@
 dovecot (1:1.0.12-1) unstable; urgency=low
 
   * New upstream release. (Closes: #469457)
+  * debian/patches/dovecot-MANAGESIEVE-9.2.dpatch: updated, thanks to Marco
+    Nenciarini for the patch.
 
- -- Fabio Tranchitella <kobold@debian.org>  Thu, 06 Mar 2008 15:45:11 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 06 Mar 2008 15:53:07 +0100
 
 dovecot (1:1.0.10-4) unstable; urgency=low
 
