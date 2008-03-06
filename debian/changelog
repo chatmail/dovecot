@@ -1,4 +1,11 @@
-dovecot (1:1.0.12-1) unstable; urgency=low
+dovecot (1:1.0.12-1~bpo40+1) etch-backports; urgency=high
+
+  * Rebuilt for etch-backports.
+  * Urgency high: security fix.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 06 Mar 2008 16:37:32 +0100
+
+dovecot (1:1.0.12-1) unstable; urgency=high
 
   * New upstream release. (Closes: #469457)
   * debian/patches/dovecot-MANAGESIEVE-9.2.dpatch: updated, thanks to Marco
