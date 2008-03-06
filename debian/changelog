@@ -1,4 +1,4 @@
-dovecot (1:1.0.12-1) unstable; urgency=low
+dovecot (1:1.0.12-1) unstable; urgency=high
 
   * New upstream release. (Closes: #469457)
   * debian/patches/dovecot-MANAGESIEVE-9.2.dpatch: updated, thanks to Marco
