@@ -1,3 +1,10 @@
+dovecot (1:1.0.13-1) unstable; urgency=high
+
+  * New upstream release, fixes a security issue:
+    http://www.dovecot.org/list/dovecot-news/2008-March/000064.html
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 09 Mar 2008 19:22:20 +0100
+
 dovecot (1:1.0.12-1) unstable; urgency=high
 
   * New upstream release. (Closes: #469457)
