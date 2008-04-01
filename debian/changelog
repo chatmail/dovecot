@@ -1,3 +1,9 @@
+dovecot (1:1.0.13-2) unstable; urgency=low
+
+  * debian/rules: use aclocal-1.9 instead of aclocal. (Closes: #473754)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Tue, 01 Apr 2008 15:30:32 +0200
+
 dovecot (1:1.0.13-1) unstable; urgency=high
 
   * New upstream release, fixes a security issue:
