@@ -1,9 +1,13 @@
 dovecot (1:1.0.13-3) unstable; urgency=low
 
-  * debian/dovecot-common.postinst: really chmod /etc/dovecot/dovecot-*.conf
-    files to 0600.
+  * debian/rules: do not install anymore the ldap and sql example
+    configuration files under /etc. (Closes: #472674)
+  * debian/dovecot-common.postinst: really chmod
+    /etc/dovecot/dovecot-{ldap,sql}.conf files to 0600.
+  * debian/devecot-common.init: do not start the service if dovecot.conf
+    doesn't exist. (Closes: #475888)
 
- -- Fabio Tranchitella <kobold@debian.org>  Sun, 27 Apr 2008 16:35:11 +0200
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 27 Apr 2008 22:42:37 +0200
 
 dovecot (1:1.0.13-2) unstable; urgency=low
 

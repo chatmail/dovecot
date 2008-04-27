@@ -33,6 +33,9 @@ CONF=/etc/dovecot/${NAME}.conf
 # Exit if the package is not installed
 [ -x "$DAEMON" ] || exit 0
 
+# Exit if the configuration file doesn't exist
+[ -f "$CONF" ] || exit 0
+
 # Load the VERBOSE setting and other rcS variables
 . /lib/init/vars.sh
 
