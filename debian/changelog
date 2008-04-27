@@ -1,3 +1,10 @@
+dovecot (1:1.0.13-3) unstable; urgency=low
+
+  * debian/dovecot-common.postinst: really chmod /etc/dovecot/dovecot-*.conf
+    files to 0600.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 27 Apr 2008 16:35:11 +0200
+
 dovecot (1:1.0.13-2) unstable; urgency=low
 
   * debian/rules: use aclocal-1.9 instead of aclocal. (Closes: #473754)
