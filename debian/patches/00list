@@ -1,4 +1,5 @@
-dovecot-MANAGESIEVE-9.2
+dovecot-MANAGESIEVE-9.3
+dovecot-sieve-1.0_unfold_header.dpatch
 dovecot-example
 dovecot-sql
 dovecot-drac

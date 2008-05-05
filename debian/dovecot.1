@@ -46,6 +46,13 @@ Use <config-file> as path to the configuration instead of /usr/local/etc/dovecot
 \fB--build-options\fP Print build options and exit
 .TP
 \fB--exec-mail <protocol> [<section>]\fP Start protocol from section
+.SH SIGNALS
+.TP
+Killing the Dovecot master process with a normal TERM signal does a clean shutdown.
+.TP
+To reload the configuration files, you can send a HUP signal to the dovecot process; an acknowledgement is written to log file.
+.TP
+If you specified log file paths manually in dovecot.conf instead of using syslog, you can send the USR1 signal to the dovecot process to make it close and reopen the log files.
 .SH AUTHOR
 .TP
 dovecot was written by Timo Sirainen <tss@iki.fi>.

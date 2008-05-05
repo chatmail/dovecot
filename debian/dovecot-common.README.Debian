@@ -160,6 +160,41 @@ popa3d (http://www.openwall.com/popa3d/) Generates MD5 sum from a couple
 of headers. Dovecot uses compatible MD5 sums internally.
 
 
+Logging to file rather than via syslog
+--------------------------------------
+
+If you'd like to log directly to files rather than via syslog, the 
+following may help:
+
+In /etc/dovecot/dovecot.conf set the following variables:
+log_path: /var/log/dovecot/error.log
+info_log_path: /var/log/dovecot/info.log
+
+Create the dovecot log directory and set the ownership and permissions 
+appropriately
+
+mkdir /var/log/dovecot
+chown dovecot.adm /var/log/dovecot 
+chmod 2755 /var/log/dovecot
+
+# Save this as /etc/logrotate.d/dovecot
+/var/log/dovecot/error.log /var/log/dovecot/info.log {
+        daily
+        missingok
+        rotate 60
+        compress
+        delaycompress
+        notifempty
+        create 640 dovecot adm
+        sharedscripts
+        postrotate
+                if [ -f /var/run/dovecot/master.pid ]; then
+                        /bin/kill -USR1 `cat /var/run/dovecot/master.pid`
+                fi
+        endscript
+}
+
+
 Question and Answers
 --------------------
 
