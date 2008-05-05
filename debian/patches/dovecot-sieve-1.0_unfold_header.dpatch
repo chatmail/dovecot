@@ -1,3 +1,9 @@
+#! /bin/sh -e
+
+. $(dirname $0)/DPATCH
+
+exit 0
+@DPATCH@
 diff -r 9137442dd18a -r 5c3ba11994cb src/cmusieve-plugin.c
 --- a/src/cmusieve-plugin.c	Wed Aug 01 15:02:51 2007 +0300
 +++ b/src/cmusieve-plugin.c	Fri Apr 25 02:54:13 2008 +0300
