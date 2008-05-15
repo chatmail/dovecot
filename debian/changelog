@@ -1,3 +1,11 @@
+dovecot (1:1.0.13-5) unstable; urgency=low
+
+  * debian/patches/allow_nets.dpatch: added, allow_nets didn't work correctly
+    with big endian machines; patch from upstream, thanks Timo:
+    http://hg.dovecot.org/dovecot-1.0/rev/71c02fdf1b59
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 15 May 2008 14:48:14 +0200
+
 dovecot (1:1.0.13-4) unstable; urgency=low
 
   * debian/patches/dovecot-MANAGESIEVE-9.3.dpatch: updated managesieve to
