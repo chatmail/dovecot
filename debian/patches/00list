@@ -11,5 +11,3 @@ dovecot-ssl
 pam-error-information
 mbox_snarf
 autocreate
-allow_nets
-inbox_creation

@@ -1,3 +1,11 @@
+dovecot (1:1.0.14-1) unstable; urgency=low
+
+  * New upstream release.
+  * debian/patches/inbox_creation.dpatch: removed, merged upstream.
+  * debian/patches/allow_nets.dpatch: removed, merged upstream.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Tue, 03 Jun 2008 10:07:13 +0200
+
 dovecot (1:1.0.13-6) unstable; urgency=low
 
   * debian/patches/inbox_creation.dpatch: added, use mail_privileged_group's
