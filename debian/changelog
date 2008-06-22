@@ -1,3 +1,9 @@
+dovecot (1:1.0.15-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 22 Jun 2008 09:06:01 +0200
+
 dovecot (1:1.0.14-1) unstable; urgency=low
 
   * New upstream release.
