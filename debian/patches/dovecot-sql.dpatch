@@ -7,15 +7,15 @@
 
 exit 0
 @DPATCH@
-diff -urN dovecot-0.99.20050712/doc/dovecot-sql.conf* >> dovecot-0.99.20050712/debian/patches/dovecot-sql.dpatch
---- dovecot-0.99.20050712/doc/dovecot-sql-example.conf	2005-06-05 21:45:25.000000000 +0000
-+++ dovecot-0.99.20050712/doc/dovecot-sql-example.conf.debian	2005-07-13 12:54:23.188829784 +0000
-@@ -39,7 +39,7 @@
- #     ssl_cert, ssl_key   - For sending client-side certificates to server
- #     ssl_cipher          - Set minimum allowed cipher security (default: HIGH)
+diff -urN dovecot-1.1.1/doc/dovecot-sql-example.conf dovecot-1.1.1-sql/doc/dovecot-sql-example.conf
+--- dovecot-1.1.1/doc/dovecot-sql-example.conf	2008-06-12 00:45:10.000000000 -0600
++++ dovecot-1.1.1-sql/doc/dovecot-sql-example.conf	2008-06-22 21:23:52.000000000 -0600
+@@ -47,7 +47,7 @@
+ #                           the default my.cnf location
+ #     option_group        - Read options from the given group (default: client)
  # 
 -#   You can connect to UNIX sockets by using host: host=/var/run/mysql.sock
 +#   You can connect to UNIX sockets by using host: host=/var/run/mysqld/mysqld.sock
  #   Note that currently you can't use spaces in parameters.
  #
- # Examples:
+ # sqlite:

@@ -14,7 +14,7 @@ diff -urN dovecot-1.0.12/dovecot-example.conf dovecot-1.0.12.debian/dovecot-exam
  # Protocols we want to be serving: imap imaps pop3 pop3s
  # If you only want to use dovecot-auth, you can set this to "none".
  #protocols = imap imaps
-+protocols =
++protocols = none
  
  # IP or host address where to listen in for connections. It's not currently
  # possible to specify multiple addresses. "*" listens in all IPv4 interfaces.

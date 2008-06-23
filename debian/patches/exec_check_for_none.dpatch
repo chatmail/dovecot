@@ -1,22 +1,25 @@
-#! /bin/sh /usr/share/dpatch/dpatch-run
+#! /bin/sh -e
 
+. $(dirname $0)/DPATCH
+exit 0
 @DPATCH@
-diff -urNad dovecot-1.0.10~/src/master/master-settings.c dovecot-1.0.10/src/master/master-settings.c
---- dovecot-1.0.10/src/master/master-settings.c	2007-12-21 16:10:24.000000000 +0100
-+++ dovecot-1.0.10/src/master/master-settings.c.debian	2007-12-30 10:46:02.000000000 +0100
-@@ -638,6 +638,7 @@
+
+diff -urN dovecot-1.1.1/src/master/master-settings.c dovecot-1.1.1-exec-check/src/master/master-settings.c
+--- dovecot-1.1.1/src/master/master-settings.c	2008-06-21 07:09:16.000000000 -0600
++++ dovecot-1.1.1-exec-check/src/master/master-settings.c	2008-06-22 20:49:57.000000000 -0600
+@@ -745,6 +745,7 @@
  	}
  
  	if (set->protocol != MAIL_PROTOCOL_ANY &&
-+        strcmp(set->protocols, "none") &&
++	    strcmp(set->protocols, "none") &&
  	    access(t_strcut(set->mail_executable, ' '), X_OK) < 0) {
  		i_error("Can't use mail executable %s: %m",
  			t_strcut(set->mail_executable, ' '));
-@@ -716,6 +717,7 @@
+@@ -823,6 +824,7 @@
  	}
  
  	if (set->protocol != MAIL_PROTOCOL_ANY &&
-+        strcmp(set->protocols, "none") &&
++	    strcmp(set->protocols, "none") &&
  	    access(t_strcut(set->login_executable, ' '), X_OK) < 0) {
  		i_error("Can't use login executable %s: %m",
  			t_strcut(set->login_executable, ' '));
