@@ -69,11 +69,11 @@ build-stamp:  config.status
 	$(MAKE) -C dovecot-sieve
 
 	# dovecot-managesieve module
-#	(cd dovecot-managesieve/ && ./configure --with-dovecot=../ \
-#		--with-dovecot-sieve=../dovecot-sieve/ \
-#		--prefix=/usr \
-#		--libexecdir=\$${prefix}/lib)
-#	$(MAKE) -C dovecot-managesieve
+	(cd dovecot-managesieve/ && ./configure --with-dovecot=../ \
+		--with-dovecot-sieve=../dovecot-sieve/ \
+		--prefix=/usr \
+		--libexecdir=\$${prefix}/lib)
+	$(MAKE) -C dovecot-managesieve
 
 	touch build-stamp
 

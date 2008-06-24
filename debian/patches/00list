@@ -1,4 +1,6 @@
 dovecot-sieve
+dovecot-managesieve-patch
+dovecot-managesieve
 dovecot-example
 dovecot-sql
 dovecot-drac
@@ -6,4 +8,4 @@ postgres_configure
 quota_mountpoint
 exec-check-for-none
 dovecot-ssl
-autocreate
+#autocreate
