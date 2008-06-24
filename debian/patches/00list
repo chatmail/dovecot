@@ -1,9 +1,9 @@
 dovecot-sieve
-#dovecot-example
+dovecot-example
 dovecot-sql
 dovecot-drac
-#postgres_configure
-#quota_mountpoint
+postgres_configure
+quota_mountpoint
 exec_check_for_none
 dovecot-ssl
-#autocreate
+autocreate
