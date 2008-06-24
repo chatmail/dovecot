@@ -10,12 +10,11 @@ dovecot (1:1.1.1-1~UNRELEASED) unstable; urgency=low
   * Removed MANAGESIEVE patch (replaced with updated approach)
   * Merged protocols_none_by_default patch into dovecot-example patch
   * Updated drac patch to build against 1.1
+  * Updated autocreate patch with 1.1 version
   * Added dovecot-sieve-1.1.5 as a patch, adds SIEVE support to deliver LDA
   *
   * TODO
   *  before release
-  *    Updated autocreate patch with 1.1 version (don't include
-       Makefile.am since it will be generated)
   *    scan for wiki references instead of /usr/share/doc, especially in
        patches
   *    Added dovecot-managesieve-patch for in-tree changes
