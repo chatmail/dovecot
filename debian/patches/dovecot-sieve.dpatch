@@ -22474,3 +22474,9 @@ diff -urN dovecot-1.1.1/dovecot-sieve/src/xmalloc.h dovecot-1.1.1-sieve/dovecot-
 +#define lcase str_lcase
 +
 +#endif
+diff -urN dovecot-1.1.1/dovecot-sieve/stamp.h.in dovecot-1.1.1-sieve/dovecot-sieve/stamp.h.in
+--- dovecot-1.1.1/dovecot-sieve/stamp.h.in	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.1.1-sieve/dovecot-sieve/stamp.h.in	2008-06-23 22:52:29.000000000 -0600
+@@ -0,0 +1 @@
++ 
+\ No newline at end of file

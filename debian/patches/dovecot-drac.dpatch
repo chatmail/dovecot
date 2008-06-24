@@ -107,3 +107,14 @@ diff -urN dovecot-1.1.1/src/plugins/drac/Makefile.am dovecot-1.1.1-drac/src/plug
 +	  rm -f $(DESTDIR)$(moduledir)/$$d/lib11_drac_plugin.so; \
 +	  $(LN_S) ../lib11_drac_plugin.so $(DESTDIR)$(moduledir)/$$d; \
 +	done
+diff -urN dovecot-1.1.1/src/plugins/Makefile.am dovecot-1.1.1-drac/src/plugins/Makefile.am
+--- dovecot-1.1.1/src/plugins/Makefile.am	2008-06-12 00:45:10.000000000 -0600
++++ dovecot-1.1.1-drac/src/plugins/Makefile.am	2008-06-23 23:08:32.000000000 -0600
+@@ -7,6 +7,6 @@
+ endif
+ 
+ SUBDIRS = \
+-	acl convert expire fts fts-squat lazy-expunge mail-log mbox-snarf \
++	acl convert expire fts fts-squat lazy-expunge mail-log mbox-snarf drac \
+ 	quota imap-quota trash \
+ 	$(ZLIB) $(FTS_LUCENE)

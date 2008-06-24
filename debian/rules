@@ -45,6 +45,12 @@ config.status: patch-stamp configure
 	            --mandir=\$${prefix}/share/man \
 	            --infodir=\$${prefix}/share/info \
 	            --with-moduledir=\$${prefix}/lib/dovecot/modules
+	
+	# dovecot-sieve plugin
+	(cd dovecot-sieve/ && aclocal-1.9; automake-1.9 --add-missing; libtoolize -f -c; aclocal-1.9; autoconf)
+
+	# dovecot-managesieve module
+	(cd dovecot-managesieve/ && aclocal-1.9; automake-1.9 --add-missing; libtoolize -f -c; aclocal-1.9; autoconf)
 
 build: build-stamp
 
@@ -56,7 +62,6 @@ build-stamp:  config.status
 	$(MAKE)
 
 	# dovecot-sieve plugin
-	(cd dovecot-sieve/ && aclocal-1.9; automake-1.9 --add-missing; libtoolize -f -c; aclocal-1.9; autoconf)
 	(cd dovecot-sieve/ && ./configure --with-dovecot=../ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib \
@@ -64,15 +69,12 @@ build-stamp:  config.status
 	$(MAKE) -C dovecot-sieve
 
 	# dovecot-managesieve module
-#	(cd dovecot-managesieve/ && aclocal-1.9; automake-1.9 --add-missing; libtoolize -f -c; aclocal-1.9; autoconf)
 #	(cd dovecot-managesieve/ && ./configure --with-dovecot=../ \
 #		--with-dovecot-sieve=../dovecot-sieve/ \
 #		--prefix=/usr \
 #		--libexecdir=\$${prefix}/lib)
 #	$(MAKE) -C dovecot-managesieve
 
-	# DRAC
-#	cd src/plugins/drac && $(MAKE)
 	touch build-stamp
 
 clean: unpatch
