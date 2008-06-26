@@ -8,4 +8,4 @@ postgres_configure
 quota_mountpoint
 exec-check-for-none
 dovecot-ssl
-#autocreate
+autocreate

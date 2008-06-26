@@ -21,6 +21,7 @@ dovecot (1:1.1.1-1~UNRELEASED) unstable; urgency=low
        patches
   *    Add listescape patch to allow periods in Maildir++ folder names
   *    audit configure flags (poll and notify specifically)
+  *    add attribution to dovecot-ssl patch
   *
   *  long term considerations
   *    consider antispam plugin as separate package (bug 456023)
