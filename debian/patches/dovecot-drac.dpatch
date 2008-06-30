@@ -8,17 +8,6 @@
 
 exit 0
 @DPATCH@
-diff -urN dovecot-1.1.1/configure.in dovecot-1.1.1-drac/configure.in
---- dovecot-1.1.1/configure.in	2008-06-22 05:02:27.000000000 -0600
-+++ dovecot-1.1.1-drac/configure.in	2008-06-23 21:12:49.000000000 -0600
-@@ -2243,6 +2243,7 @@
- src/plugins/mbox-snarf/Makefile
- src/plugins/quota/Makefile
- src/plugins/imap-quota/Makefile
-+src/plugins/drac/Makefile
- src/plugins/trash/Makefile
- src/plugins/zlib/Makefile
- stamp.h
 diff -urN dovecot-1.1.1/src/plugins/drac/drac.c dovecot-1.1.1-drac/src/plugins/drac/drac.c
 --- dovecot-1.1.1/src/plugins/drac/drac.c	1969-12-31 17:00:00.000000000 -0700
 +++ dovecot-1.1.1-drac/src/plugins/drac/drac.c	2008-06-22 20:39:12.000000000 -0600
@@ -83,38 +72,9 @@ diff -urN dovecot-1.1.1/src/plugins/drac/drac.c dovecot-1.1.1-drac/src/plugins/d
 +	if (to_drac != NULL)
 +		timeout_remove(&to_drac);
 +}
-diff -urN dovecot-1.1.1/src/plugins/drac/Makefile.am dovecot-1.1.1-drac/src/plugins/drac/Makefile.am
---- dovecot-1.1.1/src/plugins/drac/Makefile.am	1969-12-31 17:00:00.000000000 -0700
-+++ dovecot-1.1.1-drac/src/plugins/drac/Makefile.am	2008-06-23 22:39:24.000000000 -0600
-@@ -0,0 +1,20 @@
-+AM_CPPFLAGS = \
-+	-I$(top_srcdir)/src/lib
-+
-+lib11_drac_plugin_la_LDFLAGS = -module -avoid-version
-+
-+module_LTLIBRARIES = \
-+	lib11_drac_plugin.la
-+
-+lib11_drac_plugin_la_SOURCES = \
-+	drac.c
-+
-+#noinst_HEADERS = \
-+#	drac.h
-+
-+install-exec-local:
-+	for d in imap pop3; do \
-+	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
-+	  rm -f $(DESTDIR)$(moduledir)/$$d/lib11_drac_plugin.so; \
-+	  $(LN_S) ../lib11_drac_plugin.so $(DESTDIR)$(moduledir)/$$d; \
-+	done
-diff -urN dovecot-1.1.1/src/plugins/Makefile.am dovecot-1.1.1-drac/src/plugins/Makefile.am
---- dovecot-1.1.1/src/plugins/Makefile.am	2008-06-12 00:45:10.000000000 -0600
-+++ dovecot-1.1.1-drac/src/plugins/Makefile.am	2008-06-23 23:08:32.000000000 -0600
-@@ -7,6 +7,6 @@
- endif
- 
- SUBDIRS = \
--	acl convert expire fts fts-squat lazy-expunge mail-log mbox-snarf \
-+	acl convert expire fts fts-squat lazy-expunge mail-log mbox-snarf drac \
- 	quota imap-quota trash \
- 	$(ZLIB) $(FTS_LUCENE)
+diff -urN dovecot-1.1.1/src/plugins/drac/Makefile dovecot-1.1.1-drac/src/plugins/drac/Makefile
+--- dovecot-1.1.1/src/plugins/drac/Makefile	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.1.1-drac/src/plugins/drac/Makefile	2008-06-29 19:56:03.000000000 -0600
+@@ -0,0 +1,2 @@
++all:
++	gcc -Wall -W -shared -fPIC -DHAVE_CONFIG_H -I../../.. -I../../lib drac.c -o drac.so -ldrac

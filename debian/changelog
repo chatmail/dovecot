@@ -1,34 +1,22 @@
 dovecot (1:1.1.1-1~UNRELEASED) unstable; urgency=low
 
   * New upstream release
+  * Updated policy version to 3.8.0.1
   * Updated watch file to watch new release directory
   * Actually install dovecot.8 since we have it
   * Removed quota_v2 patch (was unreachable code): upstream now defaults
     to quota v1 if _LINUX_QUOTA_VERSION is not defined
   * Removed pam-error-information patch: included upstream
   * Removed mbox_snarf patch: included upstream
-  * Removed MANAGESIEVE patch (replaced with updated approach)
+  * Removed full MANAGESIEVE patch (replaced with new 1.1 approach)
   * Merged protocols_none_by_default patch into dovecot-example patch
   * Updated drac patch to build against 1.1
   * Updated autocreate patch with 1.1 version
-  * Added dovecot-sieve-1.1.5 as a patch, adds SIEVE support to deliver LDA
-  * Added dovecot-managesieve-patch patch against dovecot tree
-  * Added dovecot-managesieve patch for actual module source
-  *
-  * TODO
-  *  before release
-  *    scan for wiki references instead of /usr/share/doc, especially in
-       patches
-  *    Add listescape patch to allow periods in Maildir++ folder names
-  *    audit configure flags (poll and notify specifically)
-  *    add attribution to dovecot-ssl patch
-  *
-  *  long term considerations
-  *    consider antispam plugin as separate package (bug 456023)
-  *    any way to build dovecot-{mysql,pgsql,ldap} versions such that
-           all desired functions can be installed and used? (bug 251433)
+  * Updated dovecot-sieve to 1.1.5
+  * Added dovecot-managesieve patch against dovecot tree
+  * Added dovecot-managesieve source for building module
 
- -- Joel Johnson <mrjoel@lixil.net>  Sun, 22 Jun 2008 19:48:57 -0600
+ -- Joel Johnson <mrjoel@lixil.net>  Sun, 29 Jun 2008 19:48:57 -0600
 
 dovecot (1:1.0.15-1) unstable; urgency=low
 

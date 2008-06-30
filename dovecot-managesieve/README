@@ -1,0 +1,163 @@
+
+MANAGESIEVE implementation for Dovecot (1.1)
+
+Compile
+-------
+
+Refer to INSTALL file.
+ 
+Configure
+---------
+
+**NOTE**: If you have used the sieve plugin before and you have .dovecot.sieve 
+files in user directories, you are advised to make a backup first. Although the 
+managesieve daemon takes care to move these files to the sieve storage before it 
+is substituted with a symbolic link, this is not a very well tested operation, 
+meaning that there is a possibility that existing sieve scripts get lost.
+
+Along with all other binaries that dovecot uses, the managesieve and 
+managesieve-login binaries are installed during make install. The only thing you 
+need to do to activate the ManageSieve support in dovecot is to add managesieve 
+to the protocols= configuration line in your dovecot.conf. The managesieve 
+daemon will listen on port 2000 by default. As the implementation of the 
+managesieve daemon is largely based on the original IMAP implementation, it is 
+very similar in terms of configuration. In addition to most mail daemon config 
+settings, the managesieve daemon accepts a few more. The following settings can 
+be configured in the protocol managesieve section:
+
+listen = *:2000
+    IP or host address where to listen in for connections. 
+
+login_executable = /usr/libexec/dovecot/managesieve-login
+    Login executable location. 
+
+mail_executable = /usr/libexec/dovecot/managesieve
+    managesieve executable location. See mail_executable for IMAP for examples 
+    how this could be changed. 
+    
+managesieve_max_line_length = 65536
+    Maximum managesieve command line length in bytes. This setting is directly 
+    borrowed from IMAP. But, since long command lines are very unlikely with 
+    ManageSieve, changing this will not be very useful. 
+
+sieve_storage =
+    This specifies the path to the directory where the uploaded scripts are 
+    stored. In terms of '%' variable substitution it is identical to dovecot's 
+    mail_location setting used by the mail protocol daemons. Scripts are stored 
+    as separate files with extension .sieve, all other files are ignored when 
+    scripts are listed by a ManageSieve client. If this setting remains 
+    unspecified, the mail_location setting is used as explained below. 
+
+sieve = ~/.dovecot.sieve
+    Specifies the location of the symbolic link pointing to the active script in
+    the sieve storage directory. This must match the sieve setting used by 
+    deliver. Variable substitution with % is recognized. If a regular file 
+    exists at this location, it is moved to the sieve_storage location before 
+    the symbolic link is installed. It is renamed to dovecot.orig.sieve and 
+    therefore listed as dovecot.orig by a ManageSieve client. 
+
+mail_location =
+    If, for some inobvious reason, the sieve_storage remains unset, the 
+    managesieve daemon uses the specification of the mail_location to find out 
+    where to store the sieve files. However, this is provided only for backwards 
+    compatibility and you should always use the sieve_storage setting in stead. 
+
+managesieve_implementation_string = dovecot
+    To fool ManageSieve clients that are focused on CMU's timesieved you can 
+    specify the IMPLEMENTATION capability that the dovecot reports to clients 
+    (e.g. 'Cyrus timsieved v2.2.13'). 
+
+Scripts are stored at the location specified by the sieve_storage setting. The
+active sieve script is managed as a symbolic link pointing to the active script
+in the sieve storage direcotory. The location of this symlink can be specified
+with the 'sieve' setting. Make sure this setting is identical to what deliver is
+using for the Sieve plugin. The default location is ~/.dovecot.sieve. Note that
+if a file starting with '.' is placed inside a Maildir, it will be recognized as
+a folder, so try to avoid that.
+
+The current version of the managesieve daemon places the script storage 
+directory in the mail folder as specified by the 'mail_location' setting if no 
+'sieve_storage' is specified. Actually, it is placed in the CONTROL= directory 
+of 'mail_location' if specified, otherwise the sieve directory is placed in the 
+root of the mail location. In a mail or mail control directory, scripts are 
+always stored in a 'sieve' subdirectory. Note that for some mail storage types 
+(e.g. mbox) this script directory is listed as a mail folder, so be sure to put 
+the sieve scripts somewhere else if you can.
+
+A storage location specified by 'sieve_storage' is always generated 
+automatically if it does not exist (as far as the system permits the user to do 
+so; no root privileges are used). This is similar to the behaviour of the mail 
+daemons. Note that when 'mail_location' is used to specify the script storage 
+location, only the 'sieve' subdirectory is generated automatically.
+
+The following provides an example configuration for ManageSieve in dovecot.conf. 
+Only sections relevant to ManageSieve are shown. Refer to dovecot-example.conf 
+in your patched dovecot tree for a full example with comments, but don't forget 
+to add managesieve to the protocols setting if you use it.
+
+# Start imap, pop3 and managesieve services
+protocols = imap pop3 managesieve
+
+protocol managesieve {
+  # Specify an alternative address:port the daemon must listen on
+  # (default: *:2000)
+  #listen = localhost:2000
+
+  sieve=~/.dovecot.sieve
+  sieve_storage=~/sieve
+}
+
+Proxying
+--------
+
+Like Dovecot's imapd, the ManageSieve login daemon supports proxying to multiple
+backend servers. Although the underlying code is copied from the imapd sources
+for the most part, it has some ManageSieve-specifics that have not seen much
+testing. 
+
+The proxy configuration wiki page for POP3 and IMAP should apply to ManageSieve 
+as well:
+
+http://wiki.dovecot.org/PasswordDatabase/ExtraFields/Proxy
+
+Known Issues
+------------
+
+* Although this ManageSieve server should comply with the draft specification of 
+  the ManageSieve protocol, quite a few clients don't. This is particularly true 
+  for the TLS support. However, now that Cyrus' Timsieved has changed its 
+  behavior towards protocol compliance, all those clients will follow 
+  eventually. 
+
+  Clients known to have TLS issues:
+	- Thunderbird Sieve add-on: author is working on it
+	- AvelSieve: patch on the wiki:	http://wiki.dovecot.org/ManageSieve
+	- KMail + kio_sieve: ...?
+
+  Unfortunately, there is no reliable way to provide a workaround for this
+  problem. We will have to wait for the authors of these clients to make the
+  proper adjustments. 
+  
+* Other client issues:
+
+	- SmartSieve, WebSieve: 
+	    These clients are specifically written for Cyrus timsieved and fail on 
+	    multiple stages of the protocol when connected to Dovecot ManageSieve.
+	    
+* The current implementation of the daemon does not have quota enforcement as
+  recommended in the specification. So keep in mind that malicious users could
+  fill your filesystem with loads of spurious scriptfiles.
+  
+* The ANONYMOUS authentication mechanism is currently not supported and 
+  explicitly denied. 
+
+Contact Info
+------------
+
+Stephan Bosch <stephan at rename-it dot nl>
+IRC: Freenode, #dovecot, S[r]us
+
+Please use the Dovecot mailing list <dovecot at dovecot.org> for questions about 
+this package. You can post to the list without subscribing, the mail then waits 
+in a moderator queue for a while. See http://dovecot.org/mailinglists.html
+

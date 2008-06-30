@@ -147,7 +147,7 @@ diff -urN dovecot-1.1.1/src/plugins/Makefile.am dovecot-1.1.1-autocreate/src/plu
 @@ -8,5 +8,5 @@
  
  SUBDIRS = \
- 	acl convert expire fts fts-squat lazy-expunge mail-log mbox-snarf drac \
+ 	acl convert expire fts fts-squat lazy-expunge mail-log mbox-snarf \
 -	quota imap-quota trash \
 +	quota imap-quota trash autocreate \
  	$(ZLIB) $(FTS_LUCENE)

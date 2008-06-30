@@ -1,0 +1,10 @@
+Stephan Bosch <stephan@rename-it.nl>
+
+This package is partly based on and built for the Dovecot Secure 
+IMAP server written by Timo Sirainen <tss@iki.fi>. The managesieve
+service is a modified version of Dovecot's imap service 
+implementation.
+
+Currently depends on the CMU Sieve implementation located in the
+dovecot-sieve package. The AUTHORS file there references the CMU
+authors.
