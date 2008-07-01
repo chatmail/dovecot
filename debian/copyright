@@ -3,11 +3,9 @@ Tue,  3 Dec 2002 01:10:07 -0500.
 
 It was downloaded from http://www.dovecot.org/
 
-The sieve dovecot plugin, contained in the directory dovecot-sieve,
-has been exported from CVS since there is no official release on
-www.dovecot.org.
-
 Upstream Author: Timo Sirainen <tss@iki.fi>
+
+Managesieve Author: Stephan Bosch <stephan@rename-it.nl>
 
 Copyright:
     Copyright (c) 2001-2002 Timo Sirainen
