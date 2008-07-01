@@ -1,7 +1,7 @@
 dovecot (1:1.1.1-1~UNRELEASED) unstable; urgency=low
 
-  * New upstream release
-  * Updated policy version to 3.8.0.1
+  * New upstream release (Closes #487989)
+  * Updated policy version to 3.8.0.1 (no changes needed)
   * Updated watch file to watch new release directory
   * Actually install dovecot.8 since we have it
   * Removed quota_v2 patch (was unreachable code): upstream now defaults
