@@ -1,5 +1,2 @@
-dovecot-common: non-standard-file-perm etc/dovecot/dovecot.conf 0600 != 0644
-dovecot-common: non-standard-file-perm etc/dovecot/dovecot-ldap.conf 0600 != 0644
-dovecot-common: non-standard-file-perm etc/dovecot/dovecot-sql.conf 0600 != 0644
 dovecot-common: non-standard-dir-perm var/run/dovecot/ 0700 != 0755
 dovecot-common: non-standard-dir-perm var/run/dovecot/login/ 0750 != 0755
