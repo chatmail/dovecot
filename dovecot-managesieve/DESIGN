@@ -1,0 +1,28 @@
+Design
+------
+
+The overall design of the daemon is entirely borrowed from the existing
+imap daemon. I have tried to apply the dovecot framework and programming
+paradigms as much as possible. This package contains the following
+directories:
+
+lib-managesieve: parser and quote functions (bound to disappear)
+lib-sievestorage: defines a storage for the sieve scripts (a bit crude)
+managesieve-login: the initial login daemon (derived from src/imap-login)
+managesieve: the actual managesieve daemon (derived form src/imap)
+lib-cmusieve: wrapper around dovecot-sieve-1.x to give the old sieve
+  implementation an identical interface as the new library. This makes 
+  the choice for a specific implementation arbitrary and the transition to
+  the new version a seemless process. 
+
+This package currently still requires the dovecot tree to be patched to add
+support for the new managesieve daemons. For dovecot-1.0 (<= v9), the 
+contents of this package was included in the patch, but now the managesieve 
+implementation is separated from the changes in the dovecot tree. Eventually 
+the need for the patch will disappear when Timo adds support for defining 
+arbitrary new services.
+
+The daemon currently implements all existing MANAGESIEVE commands except the 
+HAVESPACE command which always says 'ok'. It also implements the required
+support for UTF-8 strings. 
+
