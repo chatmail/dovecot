@@ -1,3 +1,9 @@
+dovecot (1:1.0.15-2) unstable; urgency=low
+
+  * debian/rules: clean the package before unpatching. (Closes: #490201)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Mon, 14 Jul 2008 10:45:57 +0200
+
 dovecot (1:1.0.15-1) unstable; urgency=low
 
   * New upstream release.

@@ -64,7 +64,8 @@ build-stamp:  config.status
 	cd src/drac && $(MAKE)
 	touch build-stamp
 
-clean: unpatch
+clean: clean1 unpatch
+clean1:
 	dh_testdir
 	dh_testroot
 	rm -f build-stamp 
