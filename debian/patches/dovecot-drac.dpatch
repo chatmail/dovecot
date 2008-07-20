@@ -4,6 +4,8 @@
 
 # Based on patch from http://dovecot.org/patches/drac.c
 
+# TODO: add to automake config files, ala autocreate patch
+
 . $(dirname $0)/DPATCH
 
 exit 0
