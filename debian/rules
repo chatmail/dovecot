@@ -115,7 +115,7 @@ install: build
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/pop3/ $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot/modules/
 	mv $(CURDIR)/debian/dovecot-common/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include
-	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/covecot-config $(CURDIR)/debian/dovecot-dev/usr/lib/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/dovecot-config $(CURDIR)/debian/dovecot-dev/usr/lib/dovecot
 	rmdir $(CURDIR)/debian/dovecot-common/usr/include
 	rm $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-ldap-example.conf
 	rm $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-sql-example.conf
