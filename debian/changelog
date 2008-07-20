@@ -1,6 +1,7 @@
 dovecot (1:1.1.1-1) experimental; urgency=low
 
-  * New upstream release (Closes #487989)
+  [ Joel Johnson ]
+  * New upstream release (Closes: #487989)
   * Updated policy version to 3.8.0.1 (no changes needed)
   * Updated watch file to watch new release directory
   * Actually install dovecot.8 since we have it
@@ -16,7 +17,10 @@ dovecot (1:1.1.1-1) experimental; urgency=low
   * Added dovecot-managesieve patch against dovecot tree
   * Added dovecot-managesieve source for building module
 
- -- Joel Johnson <mrjoel@lixil.net>  Sun, 29 Jun 2008 19:48:57 -0600
+  [ Fabio Tranchitella ]
+  * Added Joel Johnson to the uploaders; thanks for your work!
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 20 Jul 2008 19:09:23 +0200
 
 dovecot (1:1.0.15-1) unstable; urgency=low
 
