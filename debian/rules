@@ -106,16 +106,16 @@ install: build
 	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-ldap-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-ldap.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-sql-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-sql.conf
-	install -o root -g root -m 0644 $(CURDIR)/debian/conffile.md5sum/dovecot.conf.md5sum $(CURDIR)/debian/dovecot-common/usr/share/dovecot/
-	install -o root -g root -m 0644 $(CURDIR)/debian/conffile.md5sum/dovecot-ldap.conf.md5sum $(CURDIR)/debian/dovecot-common/usr/share/dovecot/
-	install -o root -g root -m 0644 $(CURDIR)/debian/conffile.md5sum/dovecot-sql.conf.md5sum $(CURDIR)/debian/dovecot-common/usr/share/dovecot/
 	install -D -m 0755 -o root -g root $(CURDIR)/debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-common/usr/bin/maildirmake.dovecot
 	install -D -m 0755 -o root -g root $(CURDIR)/src/plugins/convert/convert-tool $(CURDIR)/debian/dovecot-common/usr/bin/convert-tool
 	install -o root -g root -m 0644 $(CURDIR)/debian/dovecot-common.overrides $(CURDIR)/debian/dovecot-common/usr/share/lintian/overrides/dovecot-common
 	mv $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/imap/ $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot/modules/
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/pop3/ $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot/modules/
 	mv $(CURDIR)/debian/dovecot-common/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/covecot-config $(CURDIR)/debian/dovecot-dev/usr/lib/dovecot
 	rmdir $(CURDIR)/debian/dovecot-common/usr/include
 	rm $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-ldap-example.conf
 	rm $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-sql-example.conf
