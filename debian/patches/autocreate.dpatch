@@ -150,4 +150,4 @@ diff -urN dovecot-1.1.1/src/plugins/Makefile.am dovecot-1.1.1-autocreate/src/plu
  	acl convert expire fts fts-squat lazy-expunge mail-log mbox-snarf \
 -	quota imap-quota trash \
 +	quota imap-quota trash autocreate \
- 	$(ZLIB) $(FTS_LUCENE)
+ 	$(ZLIB) $(FTS_LUCENE) $(FTS_SOLR)
