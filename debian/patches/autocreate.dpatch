@@ -8,26 +8,6 @@
 
 exit 0
 @DPATCH@
-diff -uNr ./dovecot_patched/dovecot-1.0.10/configure ./dovecot_compile/dovecot-1.0.10/configure
---- dovecot-1.0.10/configure	2008-02-15 15:45:32.000000000 +0100
-+++ dovecot-1.0.10/configure	2008-02-15 11:34:15.000000000 +0100
-@@ -32010,7 +32010,7 @@
- 
- ac_config_headers="$ac_config_headers config.h"
- 
--ac_config_files="$ac_config_files Makefile doc/Makefile doc/wiki/Makefile src/Makefile src/lib/Makefile src/lib-sql/Makefile src/lib-auth/Makefile src/lib-charset/Makefile src/lib-dict/Makefile src/lib-imap/Makefile src/lib-index/Makefile src/lib-mail/Makefile src/lib-ntlm/Makefile src/lib-settings/Makefile src/lib-storage/Makefile src/lib-storage/index/Makefile src/lib-storage/index/maildir/Makefile src/lib-storage/index/mbox/Makefile src/lib-storage/index/dbox/Makefile src/lib-storage/subscription-file/Makefile src/lib-storage/register/Makefile src/auth/Makefile src/deliver/Makefile src/dict/Makefile src/imap/Makefile src/imap-login/Makefile src/login-common/Makefile src/master/Makefile src/pop3/Makefile src/pop3-login/Makefile src/util/Makefile src/plugins/Makefile src/plugins/acl/Makefile src/plugins/convert/Makefile src/plugins/quota/Makefile src/plugins/imap-quota/Makefile src/plugins/lazy-expunge/Makefile src/plugins/mail-log/Makefile src/plugins/mbox-snarf/Makefile src/plugins/trash/Makefile src/plugins/zlib/Makefile stamp.h dovecot-config.in"
-+ac_config_files="$ac_config_files Makefile doc/Makefile doc/wiki/Makefile src/Makefile src/lib/Makefile src/lib-sql/Makefile src/lib-auth/Makefile src/lib-charset/Makefile src/lib-dict/Makefile src/lib-imap/Makefile src/lib-index/Makefile src/lib-mail/Makefile src/lib-ntlm/Makefile src/lib-settings/Makefile src/lib-storage/Makefile src/lib-storage/index/Makefile src/lib-storage/index/maildir/Makefile src/lib-storage/index/mbox/Makefile src/lib-storage/index/dbox/Makefile src/lib-storage/subscription-file/Makefile src/lib-storage/register/Makefile src/auth/Makefile src/deliver/Makefile src/dict/Makefile src/imap/Makefile src/imap-login/Makefile src/login-common/Makefile src/master/Makefile src/pop3/Makefile src/pop3-login/Makefile src/util/Makefile src/plugins/Makefile src/plugins/acl/Makefile src/plugins/convert/Makefile src/plugins/quota/Makefile src/plugins/imap-quota/Makefile src/plugins/lazy-expunge/Makefile src/plugins/mail-log/Makefile src/plugins/autocreate/Makefile src/plugins/mbox-snarf/Makefile src/plugins/trash/Makefile src/plugins/zlib/Makefile stamp.h dovecot-config.in"
- 
- 
- cat >confcache <<\_ACEOF
-@@ -32687,6 +32687,7 @@
-     "src/plugins/mail-log/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/mail-log/Makefile" ;;
-     "src/plugins/mbox-snarf/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/mbox-snarf/Makefile" ;;
-     "src/plugins/trash/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/trash/Makefile" ;;
-+    "src/plugins/autocreate/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/autocreate/Makefile" ;;
-     "src/plugins/zlib/Makefile") CONFIG_FILES="$CONFIG_FILES src/plugins/zlib/Makefile" ;;
-     "stamp.h") CONFIG_FILES="$CONFIG_FILES stamp.h" ;;
-     "dovecot-config.in") CONFIG_FILES="$CONFIG_FILES dovecot-config.in" ;;
 diff -uNr ./dovecot_patched/dovecot-1.0.10/configure.in ./dovecot_compile/dovecot-1.0.10/configure.in
 --- dovecot-1.0.10/configure.in	2008-02-15 15:45:32.000000000 +0100
 +++ dovecot-1.0.10/configure.in	2008-02-15 11:34:32.000000000 +0100

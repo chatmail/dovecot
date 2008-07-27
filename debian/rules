@@ -20,7 +20,6 @@ endif
 
 config.status: patch-stamp configure
 	dh_testdir
-	cp configure configure.orig
 	-test -r /usr/share/misc/config.sub && \
 	  cp -f /usr/share/misc/config.sub config.sub
 	-test -r /usr/share/misc/config.guess && \
@@ -76,7 +75,6 @@ clean1:
 	rm -f conftest conftest.o config.log config.cache config.status ylwrap
 	[ -f config.sub.orig ] && mv config.sub.orig config.sub || true
 	[ -f config.guess.orig ] && mv config.sub.orig config.guess || true
-	[ -f configure.orig ] && mv configure.orig configure || true
 	rm -f src/drac/drac.so
 	dh_clean
 
