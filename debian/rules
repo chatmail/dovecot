@@ -49,7 +49,7 @@ config.status: patch-stamp configure
 build: build-stamp
 
 
-build-stamp:  config.status
+build-stamp: config.status
 	dh_testdir
 
 	# Add here commands to compile the package.
