@@ -24,7 +24,7 @@ config.status: patch-stamp configure
 	  cp -f /usr/share/misc/config.sub config.sub
 	-test -r /usr/share/misc/config.guess && \
 	  cp -f /usr/share/misc/config.guess config.guess
-	aclocal-1.9; automake-1.9 --add-missing; libtoolize -f -c;  aclocal-1.9; autoconf
+	aclocal-1.9 && automake-1.9 --add-missing && libtoolize -f -c && aclocal-1.9 && autoconf
 	# Add here commands to configure the package.
 	./configure --with-ldap \
 	            --with-ssl=openssl \
@@ -44,42 +44,48 @@ config.status: patch-stamp configure
 	            --localstatedir=/var \
 	            --mandir=\$${prefix}/share/man \
 	            --infodir=\$${prefix}/share/info \
-	            --with-moduledir=\$${prefix}/lib/dovecot/modules
-	
+	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
+				--disable-static
 	# dovecot-sieve plugin
-	(cd dovecot-sieve/ && aclocal-1.9; automake-1.9 --add-missing; libtoolize -f -c; aclocal-1.9; autoconf)
-
+	-test -r /usr/share/misc/config.sub && \
+	  mv dovecot-sieve/config.sub dovecot-sieve/config.sub.orig && \
+	  cp -f /usr/share/misc/config.sub dovecot-sieve/config.sub
+	-test -r /usr/share/misc/config.guess && \
+	  mv dovecot-sieve/config.guess dovecot-sieve/config.guess.orig && \
+	  cp -f /usr/share/misc/config.guess dovecot-sieve/config.guess
+	(cd dovecot-sieve/ && aclocal-1.9 && automake-1.9 --add-missing && libtoolize -f -c && aclocal-1.9 && autoconf)
 	# dovecot-managesieve module
-	(cd dovecot-managesieve/ && aclocal-1.9; automake-1.9 --add-missing; libtoolize -f -c; aclocal-1.9; autoconf)
+	-test -r /usr/share/misc/config.sub && \
+	  mv dovecot-managesieve/config.sub dovecot-managesieve/config.sub.orig && \
+	  cp -f /usr/share/misc/config.sub dovecot-managesieve/config.sub
+	-test -r /usr/share/misc/config.guess && \
+	  mv dovecot-managesieve/config.guess dovecot-managesieve/config.guess.orig && \
+	  cp -f /usr/share/misc/config.guess dovecot-managesieve/config.guess
+	(cd dovecot-managesieve/ && aclocal-1.9 && automake-1.9 --add-missing && libtoolize -f -c && aclocal-1.9 && autoconf)
 
 build: build-stamp
-
-
 build-stamp:  config.status
 	dh_testdir
-
 	# Add here commands to compile the package.
 	$(MAKE)
-
 	# dovecot-sieve plugin
 	(cd dovecot-sieve/ && ./configure --with-dovecot=../ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib \
 		--with-moduledir=\$${prefix}/lib/dovecot/modules)
 	$(MAKE) -C dovecot-sieve
-
 	# dovecot-managesieve module
 	(cd dovecot-managesieve/ && ./configure --with-dovecot=../ \
 		--with-dovecot-sieve=../dovecot-sieve/ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib)
 	$(MAKE) -C dovecot-managesieve
-
 	# DRAC
 	cd src/plugins/drac && $(MAKE)
 	touch build-stamp
 
-clean: unpatch
+clean: clean1 unpatch
+clean1:
 	dh_testdir
 	dh_testroot
 	rm -f build-stamp 
@@ -88,7 +94,11 @@ clean: unpatch
 	[ ! -f dovecot-sieve/Makefile ] || $(MAKE) -C dovecot-sieve distclean
 	rm -f conftest conftest.o config.log config.cache config.status ylwrap
 	[ -f config.sub.orig ] && mv config.sub.orig config.sub || true
+	[ -f dovecot-sieve/config.sub.orig ] && mv dovecot-sieve/config.sub.orig dovecot-sieve/config.sub || true
+	[ -f dovecot-managesieve/config.sub.orig ] && mv dovecot-managesieve/config.sub.orig dovecot-managesieve/config.sub || true
 	[ -f config.guess.orig ] && mv config.sub.orig config.guess || true
+	[ -f dovecot-sieve/config.guess.orig ] && mv dovecot-sieve/config.sub.orig dovecot-sieve/config.guess || true
+	[ -f dovecot-managesieve/config.guess.orig ] && mv dovecot-managesieve/config.sub.orig dovecot-managesieve/config.guess || true
 	rm -f src/plugins/drac/drac.so
 	dh_clean
 
@@ -97,7 +107,6 @@ install: build
 	dh_testroot
 	dh_clean -k
 	dh_installdirs
-
 	# Add here commands to install the package into debian/dovecot.
 	$(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
 	$(MAKE) -C dovecot-sieve install DESTDIR=$(CURDIR)/debian/dovecot-common

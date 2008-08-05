@@ -1,3 +1,13 @@
+dovecot (1:1.1.2-2) experimental; urgency=low
+
+  * Merged changes in the unstable package.
+  * debian/control: added replaces for the imap and pop modules from the
+    -common to the the -imap and -pop packages. (Closes: #493798)
+  * debian/rules: applied suggestions from Matthias Kloses, thanks!
+    (Closes: #493803)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Tue, 05 Aug 2008 20:56:14 +0200
+
 dovecot (1:1.1.2-1) experimental; urgency=low
 
   * New upstream release
@@ -29,9 +39,19 @@ dovecot (1:1.1.1-1) experimental; urgency=low
 
  -- Fabio Tranchitella <kobold@debian.org>  Sun, 20 Jul 2008 19:09:23 +0200
 
+dovecot (1:1.0.15-2) unstable; urgency=low
+
+  * debian/dovecot.1: added "This includes doing a syntax check" to the -a
+    option.
+  * debian/rules: now the package builds two times in a row without problems.
+    (Closes: #490201)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 27 Jul 2008 19:56:18 +0200
+
 dovecot (1:1.0.15-1) unstable; urgency=low
 
   * New upstream release.
+  * debian/rules: clean the package before unpatching. (Closes: #490201)
 
  -- Fabio Tranchitella <kobold@debian.org>  Sun, 22 Jun 2008 09:06:01 +0200
 
