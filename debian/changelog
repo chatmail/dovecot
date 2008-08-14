@@ -1,3 +1,10 @@
+dovecot (1:1.1.2-3) experimental; urgency=low
+
+  * debian/control: added libbz2-dev to the Build-Depends to enable the bzip2
+    support. (Closes: #495129)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 14 Aug 2008 20:45:41 +0200
+
 dovecot (1:1.1.2-2) experimental; urgency=low
 
   * Merged changes in the unstable package.
