@@ -154,9 +154,9 @@ unchanged:
 --- dovecot-1.0.5.orig/src/auth/auth-request.c
 +++ dovecot-1.0.5/src/auth/auth-request.c
 @@ -146,6 +146,8 @@
- 		request->user = p_strdup(request->pool, value);
- 	else if (strcmp(key, "master_user") == 0)
  		request->master_user = p_strdup(request->pool, value);
+	else if (strcmp(key, "original_username") == 0)
+ 		request->original_username = p_strdup(request->pool, value);
 +	else if (strcmp(key, "cert_fingerprint") == 0)
 +		request->cert_fingerprint = p_strdup(request->pool, value);
  	else if (strcmp(key, "cert_username") == 0) {
