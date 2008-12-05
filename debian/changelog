@@ -1,3 +1,11 @@
+dovecot (1:1.1.2-4~UNRELEASED) experimental; urgency=low
+
+  * Fix package to support double compilation
+    - Properly clean dovecot-managesieve as pointed out by Stephan Bosch
+    - Add --copy directive to automake invocation
+
+ -- Joel Johnson <mrjoel@lixil.net>  Thu, 04 Dec 2008 17:29:31 -0700
+
 dovecot (1:1.1.2-3) experimental; urgency=low
 
   * debian/control: added libbz2-dev to the Build-Depends to enable the bzip2
