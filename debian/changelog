@@ -1,10 +1,12 @@
-dovecot (1:1.1.2-4~UNRELEASED) experimental; urgency=low
+dovecot (1:1.1.7-1~UNRELEASED) experimental; urgency=low
 
+  * New upstream release
+  * Updated MANAGESIEVE to 0.10.4
   * Fix package to support double compilation
     - Properly clean dovecot-managesieve as pointed out by Stephan Bosch
     - Add --copy directive to automake invocation
 
- -- Joel Johnson <mrjoel@lixil.net>  Thu, 04 Dec 2008 17:29:31 -0700
+ -- Joel Johnson <mrjoel@lixil.net>  Thu, 04 Dec 2008 20:52:11 -0700
 
 dovecot (1:1.1.2-3) experimental; urgency=low
 
