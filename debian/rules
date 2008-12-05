@@ -61,7 +61,7 @@ config.status: patch-stamp configure
 	-test -r /usr/share/misc/config.guess && \
 	  mv dovecot-managesieve/config.guess dovecot-managesieve/config.guess.orig && \
 	  cp -f /usr/share/misc/config.guess dovecot-managesieve/config.guess
-	mv dovecot-managesieve/README dovecot-managesieve/managesieve.README
+	cp dovecot-managesieve/README dovecot-managesieve/managesieve.README
 	(cd dovecot-managesieve/ && aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf)
 
 build: build-stamp
@@ -98,7 +98,7 @@ clean1:
 	[ -f config.sub.orig ] && mv config.sub.orig config.sub || true
 	[ -f dovecot-sieve/config.sub.orig ] && mv dovecot-sieve/config.sub.orig dovecot-sieve/config.sub || true
 	[ -f dovecot-managesieve/config.sub.orig ] && mv dovecot-managesieve/config.sub.orig dovecot-managesieve/config.sub || true
-	[ -f dovecot-managesieve/managesieve.README ] && mv dovecot-managesieve/managesieve.README dovecot-managesieve/README
+	[ -f dovecot-managesieve/managesieve.README ] && rm dovecot-managesieve/managesieve.README || true
 	[ -f config.guess.orig ] && mv config.sub.orig config.guess || true
 	[ -f dovecot-sieve/config.guess.orig ] && mv dovecot-sieve/config.sub.orig dovecot-sieve/config.guess || true
 	[ -f dovecot-managesieve/config.guess.orig ] && mv dovecot-managesieve/config.sub.orig dovecot-managesieve/config.guess || true
