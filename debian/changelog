@@ -1,4 +1,4 @@
-dovecot (1:1.1.7-1~UNRELEASED) experimental; urgency=low
+dovecot (1:1.1.7-1) experimental; urgency=low
 
   * New upstream release
   * Updated dovecot-ssh.patch for new release
