@@ -19,8 +19,8 @@ Description: secure mail server that supports mbox and maildir mailboxes
  that all data is valid, making it nearly impossible to crash. It should
  also be pretty fast, extensible, and portable.
  .
- This package contains the files used by both the dovecot IMAP and POP3 
- servers.
+ This package contains the files used by both the dovecot IMAP and POP3 servers
+ and the Dovecot LDA (deliver).
 
 Package: dovecot-dev
 Architecture: any
