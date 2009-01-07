@@ -1,3 +1,9 @@
+dovecot (1:1.0.15-3) UNRELEASED; urgency=low
+
+  * debian/control: added LDA to the description of dovecot-common.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Wed, 07 Jan 2009 19:36:58 +0100
+
 dovecot (1:1.0.15-2) unstable; urgency=low
 
   * debian/dovecot.1: added "This includes doing a syntax check" to the -a
