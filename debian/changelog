@@ -1,8 +1,9 @@
-dovecot (1:1.1.7-2) UNRELEASED; urgency=low
+dovecot (1:1.1.8-1) experimental; urgency=low
 
+  * New upstream release.
   * debian/control: added LDA to the description of dovecot-common.
 
- -- Fabio Tranchitella <kobold@debian.org>  Wed, 07 Jan 2009 19:37:48 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Wed, 07 Jan 2009 23:14:29 +0100
 
 dovecot (1:1.1.7-1) experimental; urgency=low
 
