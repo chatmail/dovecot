@@ -1,9 +1,13 @@
-dovecot (1:1.1.8-2) UNRELEASED; urgency=low
+dovecot (1:1.1.9-1) UNRELEASED; urgency=low
 
-  * NOT RELEASED YET
+  [ Fabio Tranchitella ]
   * debian/control: dovecot-common suggests ntp.
 
- -- Fabio Tranchitella <kobold@debian.org>  Thu, 08 Jan 2009 19:33:58 +0100
+  [ Joel Johnson ]
+  * New upstream release
+  * updated managesieve patch to apply against new version
+
+ -- Joel Johnson <mrjoel@lixil.net>  Sat, 24 Jan 2009 04:12:42 +0000
 
 dovecot (1:1.1.8-1) experimental; urgency=low
 

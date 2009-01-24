@@ -287,10 +287,10 @@ diff -urN dovecot-1.1.7/src/master/login-process.c dovecot-1.1.7-managesieve/src
 +	} else if (group->mail_process_type == PROCESS_TYPE_MANAGESIEVE) {
 +		env_put(t_strconcat("MANAGESIEVE_IMPLEMENTATION_STRING=",
 +			set->managesieve_implementation_string, NULL));
-+    }
++	}
+	env_put(t_strconcat("LOGIN_DIR=", set->login_dir, NULL));
  }
  
- static pid_t create_login_process(struct login_group *group)
 diff -urN dovecot-1.1.7/src/master/mail-process.c dovecot-1.1.7-managesieve/src/master/mail-process.c
 --- dovecot-1.1.7/src/master/mail-process.c	2008-11-15 10:36:54.000000000 -0700
 +++ dovecot-1.1.7-managesieve/src/master/mail-process.c	2008-12-04 20:05:46.000000000 -0700
