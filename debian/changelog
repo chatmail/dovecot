@@ -1,4 +1,4 @@
-dovecot (1:1.1.9-1) UNRELEASED; urgency=low
+dovecot (1:1.1.9-1) experimental; urgency=low
 
   [ Fabio Tranchitella ]
   * debian/control: dovecot-common suggests ntp.
