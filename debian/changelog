@@ -1,8 +1,10 @@
 dovecot (1:1.1.11-1) unstable; urgency=low
 
   * New upstream release, upload to unstable.
+  * debian/patches/dovecot-quota.dpatch: fixed a bug in the imap quota plugin.
+    (Closes: #484677)
 
- -- Fabio Tranchitella <kobold@debian.org>  Fri, 20 Feb 2009 19:50:41 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 20 Feb 2009 20:22:19 +0100
 
 dovecot (1:1.1.9-1) experimental; urgency=low
 

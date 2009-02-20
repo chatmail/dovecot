@@ -1,0 +1,19 @@
+#! /bin/sh -e
+
+## DP: Fix #484677
+
+. $(dirname $0)/DPATCH
+
+exit 0
+@DPATCH@
+diff -urN dovecot-1.1.11/src/plugins/imap-quota/Makefile.am dovecot-1.1.11.debian/src/plugins/imap-quota/Makefile.am
+--- dovecot-1.1.11/src/plugins/imap-quota/Makefile.am	2009-01-05 21:49:58.000000000 +0100
++++ dovecot-1.1.11.debian/src/plugins/imap-quota/Makefile.am	2009-02-20 20:19:02.000000000 +0100
+@@ -9,6 +9,7 @@
+ imap_moduledir = $(moduledir)/imap
+ 
+ lib11_imap_quota_plugin_la_LDFLAGS = -module -avoid-version
++lib11_imap_quota_plugin_la_LIBADD = ../quota/lib10_quota_plugin.la
+ 
+ imap_module_LTLIBRARIES = \
+ 	lib11_imap_quota_plugin.la

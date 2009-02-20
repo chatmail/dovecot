@@ -2,6 +2,7 @@ dovecot-managesieve
 dovecot-example
 dovecot-sql
 dovecot-drac
+dovecot-quota
 postgres_configure
 quota_mountpoint
 exec-check-for-none
