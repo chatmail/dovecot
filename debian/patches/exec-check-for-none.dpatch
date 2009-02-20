@@ -1,5 +1,7 @@
 #! /bin/sh -e
 
+## DP: Start dovecot if protocols is none
+
 . $(dirname $0)/DPATCH
 exit 0
 @DPATCH@

@@ -1,5 +1,7 @@
 #! /bin/sh -e
 
+## DP: SSL certificate fingerprint
+
 . $(dirname $0)/DPATCH
 
 exit 0
