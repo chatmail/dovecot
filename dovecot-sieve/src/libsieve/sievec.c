@@ -127,6 +127,9 @@ int main(int argc, char **argv)
 
     close(fd);
     
+    sieve_free_bytecode(&bc);
+    sieve_script_free(&s);
+
     return 0;
 }
 
@@ -142,18 +145,18 @@ sieve_vacation_t vacation = {
     (sieve_callback *) &foo	/* send_response() */
 };
 
-static int sieve_notify(void *ac __attr_unused__, 
-			void *interp_context __attr_unused__, 
-			void *script_context __attr_unused__,
-			void *message_context __attr_unused__,
-			const char **errmsg __attr_unused__)
+static int sieve_notify(void *ac ATTR_UNUSED, 
+			void *interp_context ATTR_UNUSED, 
+			void *script_context ATTR_UNUSED,
+			void *message_context ATTR_UNUSED,
+			const char **errmsg ATTR_UNUSED)
 {
     i_fatal("stub function called");
     return SIEVE_FAIL;
 }
 
 static int mysieve_error(int lineno, const char *msg,
-			 void *i __attr_unused__, void *s)
+			 void *i ATTR_UNUSED, void *s)
 {
     char buf[1024];
     char **errstr = (char **) s;
@@ -228,6 +231,18 @@ int is_script_parsable(FILE *stream, char **errstr, sieve_script_t **ret)
     res = sieve_register_envelope(i, (sieve_get_envelope *) &foo);
     if (res != SIEVE_OK) {
 	i_error("sieve_register_envelope() returns %d\n", res);
+	return TIMSIEVE_FAIL;
+    }
+  
+    res = sieve_register_body(i, (sieve_get_body *) &foo);
+    if (res != SIEVE_OK) {
+	i_error("sieve_register_body() returns %d\n", res);
+	return TIMSIEVE_FAIL;
+    }
+  
+    res = sieve_register_include(i, (sieve_get_include *) &foo);
+    if (res != SIEVE_OK) {
+	i_error("sieve_register_include() returns %d\n", res);
 	return TIMSIEVE_FAIL;
     }
   

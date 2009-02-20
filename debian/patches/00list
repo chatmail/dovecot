@@ -1,13 +1,9 @@
-dovecot-MANAGESIEVE-9.3
+dovecot-managesieve
 dovecot-example
 dovecot-sql
 dovecot-drac
 postgres_configure
 quota_mountpoint
-quota_v2
-exec_check_for_none
-protocols_none_by_default
+exec-check-for-none
 dovecot-ssl
-pam-error-information
-mbox_snarf
 autocreate

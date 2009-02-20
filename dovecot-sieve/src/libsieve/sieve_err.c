@@ -31,19 +31,14 @@ const struct error_table et_siev_error_table = { text, -1237848064L, 7 };
 
 static struct et_list link = { 0, 0 };
 
+void initialize_siev_error_table_r(struct et_list **list);
 void initialize_siev_error_table(void);
 
 void initialize_siev_error_table(void) {
-    if (!link.table) {
-        link.next = _et_list;
-        link.table = &et_siev_error_table;
-        _et_list = &link;
-    }
+    initialize_siev_error_table_r(&_et_list);
 }
 
 /* For Heimdal compatibility */
-void initialize_siev_error_table_r(struct et_list **list);
-
 void initialize_siev_error_table_r(struct et_list **list)
 {
     struct et_list *et, **end;
@@ -52,8 +47,12 @@ void initialize_siev_error_table_r(struct et_list **list)
         if (et->table->msgs == text)
             return;
     et = malloc(sizeof(struct et_list));
-    if (et == 0)
-        return;
+    if (et == 0) {
+        if (!link.table)
+            et = &link;
+        else
+            return;
+    }
     et->table = &et_siev_error_table;
     et->next = 0;
     *end = et;

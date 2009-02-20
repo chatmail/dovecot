@@ -31,10 +31,13 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #include <stdlib.h>
 
+#include "lib.h"
+#include "str.h"
 #include "xmalloc.h"
 
 #include "sieve_interface.h"
 #include "interp.h"
+#include "libconfig.h"
 
 /* build a sieve interpretor */
 int sieve_interp_alloc(sieve_interp_t **interp, void *interp_context)
@@ -57,6 +60,8 @@ int sieve_interp_alloc(sieve_interp_t **interp, void *interp_context)
     i->getsize = NULL;
     i->getheader = NULL;
     i->getenvelope = NULL;
+    i->getbody = NULL;
+    i->getinclude = NULL;
     i->vacation = NULL;
     i->notify = NULL;
 
@@ -69,18 +74,62 @@ int sieve_interp_alloc(sieve_interp_t **interp, void *interp_context)
     return SIEVE_OK;
 }
 
-static const char *sieve_extensions = "fileinto reject envelope vacation"
-                                      " imapflags notify subaddress relational"
-                                      " comparator-i;ascii-numeric"
-#ifdef ENABLE_REGEX
-" regex";
-#else
-"";
-#endif /* ENABLE_REGEX */
-
-const char *sieve_listextensions(void)
+const char *sieve_listextensions(sieve_interp_t *i)
 {
-    return sieve_extensions;
+    static int done = 0;
+    static string_t *extensions;
+
+    if (!done++) {
+	unsigned long config_sieve_extensions = EXTENSIONS_ALL;
+
+	/* add comparators */
+	extensions = str_new(default_pool, 128);
+	str_append(extensions, "comparator-i;ascii-numeric");
+
+	/* add actions */
+	if (i->fileinto &&
+	    (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_FILEINTO))
+	    str_append(extensions, " fileinto");
+	if (i->reject &&
+	    (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_REJECT))
+	    str_append(extensions, " reject");
+	if (i->vacation &&
+	    (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_VACATION))
+	    str_append(extensions, " vacation");
+	if (i->markflags &&
+	    (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_IMAPFLAGS))
+	    str_append(extensions, " imapflags");
+	if (i->notify &&
+	    (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_NOTIFY))
+	    str_append(extensions, " notify");
+	if (i->getinclude &&
+	    (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_INCLUDE))
+	    str_append(extensions, " include");
+
+	/* add tests */
+	if (i->getenvelope &&
+	    (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_ENVELOPE))
+	    str_append(extensions, " envelope");
+	if (i->getbody &&
+	    (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_BODY))
+	    str_append(extensions, " body");
+
+	/* add match-types */
+	if (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_RELATIONAL)
+	    str_append(extensions, " relational");
+#ifdef ENABLE_REGEX
+	if (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_REGEX)
+	    str_append(extensions, " regex");
+#endif
+
+	/* add misc extensions */
+	if (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_SUBADDRESS)
+	    str_append(extensions, " subaddress");
+	if (config_sieve_extensions & IMAP_ENUM_SIEVE_EXTENSIONS_COPY)
+	    str_append(extensions, " copy");
+    }
+
+    return str_c(extensions);
 }
 
 int sieve_interp_free(sieve_interp_t **interp)
@@ -161,6 +210,18 @@ int sieve_register_header(sieve_interp_t *interp, sieve_get_header *f)
 int sieve_register_envelope(sieve_interp_t *interp, sieve_get_envelope *f)
 {
     interp->getenvelope = f;
+    return SIEVE_OK;
+}
+
+int sieve_register_include(sieve_interp_t *interp, sieve_get_include *f)
+{
+    interp->getinclude = f;
+    return SIEVE_OK;
+}
+
+int sieve_register_body(sieve_interp_t *interp, sieve_get_body *f)
+{
+    interp->getbody = f;
     return SIEVE_OK;
 }
 

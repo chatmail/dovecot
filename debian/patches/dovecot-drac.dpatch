@@ -1,17 +1,20 @@
 #! /bin/sh -e
+## DP: Adds support for drac
+## DP: Author: Timo Sirainen
 
-## DP: Include drac module
-## DP: Author: Fabio Tranchitella <kobold@debian.org>
+# Based on patch from http://dovecot.org/patches/drac.c
+
+# TODO: add to automake config files, ala autocreate patch
 
 . $(dirname $0)/DPATCH
 
 exit 0
 @DPATCH@
-diff -urN dovecot-1.0.beta3/src/drac/drac.c dovecot-1.0.beta3.debian/src/drac/drac.c
---- dovecot-1.0.beta3/src/drac/drac.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.0.beta3.debian/src/drac/drac.c	2006-02-14 08:36:58.000000000 +0000
+diff -urN dovecot-1.1.1/src/plugins/drac/drac.c dovecot-1.1.1-drac/src/plugins/drac/drac.c
+--- dovecot-1.1.1/src/plugins/drac/drac.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.1.1-drac/src/plugins/drac/drac.c	2008-06-22 20:39:12.000000000 -0600
 @@ -0,0 +1,60 @@
-+/* Copyright (C) 2003 Timo Sirainen */
++/* Copyright (C) 2003 Timo Sirainen, LGPLv2.1 */
 +
 +/* Installation:
 +
@@ -38,7 +41,7 @@ diff -urN dovecot-1.0.beta3/src/drac/drac.c dovecot-1.0.beta3.debian/src/drac/dr
 +static struct timeout *to_drac = NULL;
 +static unsigned long in_ip;
 +
-+static void drac_timeout(void *context __attr_unused__)
++static void drac_timeout(void *context ATTR_UNUSED)
 +{
 +	char *err;
 +
@@ -59,7 +62,7 @@ diff -urN dovecot-1.0.beta3/src/drac/drac.c dovecot-1.0.beta3.debian/src/drac/dr
 +	else if (!IPADDR_IS_V4(&ip))
 +		i_error("DRAC: Only IPv4 addresses are supported (%s)", ip_str);
 +	else {
-+		in_ip = ((struct in_addr *) &ip.ip)->s_addr;
++		in_ip = ((struct in_addr *) &ip.u.ip4)->s_addr;
 +		drac_timeout(NULL);
 +		to_drac = timeout_add(1000*DRAC_TIMEOUT_SECS,
 +				      drac_timeout, NULL);
@@ -71,9 +74,9 @@ diff -urN dovecot-1.0.beta3/src/drac/drac.c dovecot-1.0.beta3.debian/src/drac/dr
 +	if (to_drac != NULL)
 +		timeout_remove(&to_drac);
 +}
-diff -urN dovecot-1.0.beta3/src/drac/Makefile dovecot-1.0.beta3.debian/src/drac/Makefile
---- dovecot-1.0.beta3/src/drac/Makefile	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.0.beta3.debian/src/drac/Makefile	2006-02-17 17:20:59.000000000 +0000
+diff -urN dovecot-1.1.1/src/plugins/drac/Makefile dovecot-1.1.1-drac/src/plugins/drac/Makefile
+--- dovecot-1.1.1/src/plugins/drac/Makefile	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.1.1-drac/src/plugins/drac/Makefile	2008-06-29 19:56:03.000000000 -0600
 @@ -0,0 +1,2 @@
 +all:
-+	gcc -Wall -W -shared -fPIC -DHAVE_CONFIG_H -I ../.. -I../lib drac.c -o drac.so -ldrac
++	gcc -Wall -W -shared -fPIC -DHAVE_CONFIG_H -I../../.. -I../../lib drac.c -o drac.so -ldrac

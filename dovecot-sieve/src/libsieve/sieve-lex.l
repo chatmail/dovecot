@@ -81,7 +81,7 @@ CRLF		(\r\n|\r|\n)
 			  mlcur = 0; mlbufsz = 0; mlbuf = NULL; }
 <INITIAL>\"        { BEGIN QSTRING;
                     mlcur = 0; mlbufsz = 0; mlbuf = NULL; }
-<INITIAL>[0-9]+[KMG]?	{ yylval.nval = tonum(yytext); return NUMBER; }
+<INITIAL>[0-9]+[KMGkmg]?	{ yylval.nval = tonum(yytext); return NUMBER; }
 <INITIAL>if		return IF;
 <INITIAL>elsif		return ELSIF;
 <INITIAL>else		return ELSE;
@@ -93,6 +93,7 @@ CRLF		(\r\n|\r|\n)
 <INITIAL>address	return ADDRESS;
 <INITIAL>envelope	return ENVELOPE;
 <INITIAL>header		return HEADER;
+<INITIAL>body		return BODY;
 <INITIAL>not		return NOT;
 <INITIAL>size		return SIZE;
 <INITIAL>reject		return REJCT;
@@ -120,6 +121,8 @@ CRLF		(\r\n|\r|\n)
 <INITIAL>:days		return DAYS;
 <INITIAL>:addresses	return ADDRESSES;
 <INITIAL>:subject	return SUBJECT;
+<INITIAL>:from		return FROM;
+<INITIAL>:handle	return HANDLE;
 <INITIAL>:mime		return MIME;
 <INITIAL>:comparator	return COMPARATOR;
 <INITIAL>:is		return IS;
@@ -135,6 +138,14 @@ CRLF		(\r\n|\r|\n)
 <INITIAL>:domain	return DOMAIN;
 <INITIAL>:user		return USER;
 <INITIAL>:detail	return DETAIL;
+<INITIAL>:raw		return RAW;
+<INITIAL>:text		return TEXT;
+<INITIAL>:content	return CONTENT;
+<INITIAL>include	return INCLUDE;
+<INITIAL>:personal	return PERSONAL;
+<INITIAL>:global	return GLOBAL;
+<INITIAL>return		return RETURN;
+<INITIAL>:copy		return COPY;
 <INITIAL>[ \t\n\r] ;	/* ignore whitespace */
 <INITIAL>#.* ;		/* ignore hash comments */
 <INITIAL>"/*"([^\*]|\*[^\/])*\*?"*/" ;	/* ignore bracket comments */
@@ -146,9 +157,9 @@ static int tonum(char *c)
 {
   int val = atoi(c);
   switch (c[strlen(c)-1]) {
-  case 'K': val *= (1 << 10); break;
-  case 'M': val *= (1 << 20); break;
-  case 'G': val *= (1 << 30); break;
+  case 'K': case 'k': val *= (1 << 10); break;
+  case 'M': case 'm': val *= (1 << 20); break;
+  case 'G': case 'g': val *= (1 << 30); break;
   default: break;
   }
   return val;

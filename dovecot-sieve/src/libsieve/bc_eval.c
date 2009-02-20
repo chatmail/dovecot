@@ -31,6 +31,7 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include "sieve_interface.h"
 #include "interp.h"
 #include "message.h"
+#include "script.h"
 
 #include "bytecode.h"
 
@@ -51,7 +52,7 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 /* Given a bytecode_input_t at the beginning of a string (the len block),
  * return the string, the length, and the bytecode index of the NEXT
  * item */
-int unwrap_string(bytecode_input_t *bc, int pos, const char **str, int *len)
+int unwrap_string(bytecode_input_t *bc, int pos, const char **str, int *len) 
 {
     int local_len = ntohl(bc[pos].value);
 
@@ -318,7 +319,7 @@ static int shouldRespond(void * m, sieve_interp_t *interp,
 	if (!found && (strcpy(buf, "bcc"),
 		       (interp->getheader(m, buf, &body) == SIEVE_OK)))
 	    found = look_for_me(myaddr, numaddresses, bc, i, body);
-	if (!found && (strcpy(buf, "resent-to"), 
+	if (!found && (strcpy(buf, "resent-to"),
 		       (interp->getheader(m, buf, &body) == SIEVE_OK)))
 	    found = look_for_me(myaddr, numaddresses ,bc, i, body);
 	if (!found && (strcpy(buf, "resent-cc"),
@@ -338,7 +339,8 @@ static int shouldRespond(void * m, sieve_interp_t *interp,
 }
 
 /* Evaluate a bytecode test */
-static int eval_bc_test(sieve_interp_t *interp, void* m,
+static int eval_bc_test(sieve_interp_t *interp,
+			struct hash_table *body_cache, void* m,
 			bytecode_input_t * bc, int * ip)
 {
     int res=0; 
@@ -361,7 +363,7 @@ static int eval_bc_test(sieve_interp_t *interp, void* m,
 
     case BC_NOT:/*2*/
 	i+=1;
-	res = eval_bc_test(interp,m, bc, &i);
+	res = eval_bc_test(interp, body_cache, m, bc, &i);
 	if(res >= 0) res = !res; /* Only invert in non-error case */
 	break;
 
@@ -420,7 +422,7 @@ static int eval_bc_test(sieve_interp_t *interp, void* m,
 	 * in the right place */
 	for (x=0; x<list_len && !res; x++) { 
 	    int tmp;
-	    tmp = eval_bc_test(interp,m,bc,&i);
+	    tmp = eval_bc_test(interp,body_cache,m,bc,&i);
 	    if(tmp < 0) {
 		res = tmp;
 		break;
@@ -440,7 +442,7 @@ static int eval_bc_test(sieve_interp_t *interp, void* m,
 	/* return 1 unless you find one that isn't true, then return 0 */
 	for (x=0; x<list_len && res; x++) {
 	    int tmp;
-	    tmp = eval_bc_test(interp,m,bc,&i);
+	    tmp = eval_bc_test(interp,body_cache,m,bc,&i);
 	    if(tmp < 0) {
 		res = tmp;
 		break;
@@ -585,15 +587,16 @@ static int eval_bc_test(sieve_interp_t *interp, void* m,
 				    goto alldone;
 				}
 
-				res |= comp(val[y], (const char *)reg,
-					    comprock);
+				res |= comp(val[y], strlen(val[y]),
+					    (const char *)reg, comprock);
 				free(reg);
 			    } else {
 #if VERBOSE
 				printf("%s compared to %s(from script)\n",
 				       addr, data_val);
 #endif 
-				res |= comp(addr, data_val, comprock);
+				res |= comp(addr, strlen(addr),
+					    data_val, comprock);
 			    }
 			} /* For each data */
 		    }
@@ -618,7 +621,7 @@ static int eval_bc_test(sieve_interp_t *interp, void* m,
 		
 		currd = unwrap_string(bc, currd, &data_val, NULL);
 
-		res |= comp(scount, data_val, comprock);
+		res |= comp(scount, strlen(scount), data_val, comprock);
 	    }
 	}
 
@@ -711,11 +714,12 @@ static int eval_bc_test(sieve_interp_t *interp, void* m,
 				goto alldone;
 			    }
 			    
-			    res |= comp(val[y], (const char *)reg,
-					comprock);
+			    res |= comp(val[y], strlen(val[y]),
+					(const char *)reg, comprock);
 			    free(reg);
 			} else {
-			    res |= comp(val[y], data_val, comprock);
+			    res |= comp(val[y], strlen(val[y]),
+					data_val, comprock);
 			}
 		    }
 		}
@@ -735,9 +739,119 @@ static int eval_bc_test(sieve_interp_t *interp, void* m,
 #if VERBOSE
 		printf("%d, %s \n", count, data_val);
 #endif
-		res |= comp(scount, data_val, comprock);
+		res |= comp(scount, strlen(scount), data_val, comprock);
 	    }
 	      
+	}
+
+	/* Update IP */
+	i=(ntohl(bc[datai+1].value)/4);
+	
+	break;
+    }
+    case BC_BODY:/*10*/
+    {
+	sieve_bodypart_t *val;
+	const char **content_types = NULL;
+
+	int typesi=i+6;/* the i value for the begining of the content-types */
+ 	int datai=(ntohl(bc[typesi+1].value)/4);
+
+	int numdata=ntohl(bc[datai].len);
+
+	int currd; /* current data */
+
+	int match=ntohl(bc[i+1].value);
+	int relation=ntohl(bc[i+2].value);
+	int comparator=ntohl(bc[i+3].value);
+	int transform=ntohl(bc[i+4].value);
+	/*int offset=ntohl(bc[i+5].value);*/
+	int count=0;
+	char scount[3];
+	int isReg = (match==B_REGEX);
+	int ctag = 0;
+	regex_t *reg;
+	char errbuf[100]; /* Basically unused, as regexps are tested at compile */
+
+	/* set up variables needed for compiling regex */
+	if (isReg)
+	{
+	    if (comparator== B_ASCIICASEMAP)
+	    {
+		ctag = REG_EXTENDED | REG_NOSUB | REG_ICASE;
+	    }
+	    else
+	    {
+		ctag = REG_EXTENDED | REG_NOSUB;
+	    }
+	}
+
+	/*find the correct comparator fcn*/
+	comp = lookup_comp(comparator, match, relation, &comprock);
+
+	if(!comp) {
+	    res = SIEVE_RUN_ERROR;
+	    break;
+	}
+	
+	/*find the part(s) of the body that we want*/
+	content_types = bc_makeArray(bc, &typesi);
+	if(interp->getbody(m, content_types, transform != B_RAW, &val) != SIEVE_OK) {
+	    res = SIEVE_RUN_ERROR;
+	    break;
+	}
+	free(content_types);
+	
+	/* bodypart(s) exist, now to test them */
+	    
+	for (y=0; val[y].content!=NULL && !res; y++) {
+
+	    if (match == B_COUNT) {
+		count++;
+	    } else {
+		const char *content = val[y].content;
+		size_t size = val[y].size;
+
+		/* search through all the data */ 
+		currd=datai+2;
+		for (z=0; z<numdata && !res; z++)
+		{
+		    const char *data_val;
+			    
+		    currd = unwrap_string(bc, currd, &data_val, NULL);
+
+		    if (isReg) {
+			reg = bc_compile_regex(data_val, ctag,
+					       errbuf, sizeof(errbuf));
+			if (!reg) {
+			    /* Oops */
+			    res=-1;
+			    goto alldone;
+			}
+
+			res |= comp(content, size, (const char *)reg, comprock);
+			free(reg);
+		    } else {
+			res |= comp(content, size, data_val, comprock);
+		    }
+		} /* For each data */
+	    }
+
+	} /* For each body part */
+
+	if  (match == B_COUNT)
+	{
+	    sprintf(scount, "%u", count);
+	    /* search through all the data */ 
+	    currd=datai+2;
+	    for (z=0; z<numdata && !res; z++)
+	    {
+		const char *data_val;
+		
+		currd = unwrap_string(bc, currd, &data_val, NULL);
+
+		res |= comp(scount, strlen(scount), data_val, comprock);
+	    }
 	}
 
 	/* Update IP */
@@ -761,26 +875,32 @@ static int eval_bc_test(sieve_interp_t *interp, void* m,
 }
 
 /* The entrypoint for bytecode evaluation */
-int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
-		  void *m, sieve_imapflags_t * imapflags,
-		  action_list_t *actions,
-		  notify_list_t *notify_list,
-		  const char **errmsg)
+int sieve_eval_bc(sieve_execute_t *exe, int is_incl, sieve_interp_t *i,
+		  struct hash_table *body_cache, void *sc, void *m,
+		  sieve_imapflags_t * imapflags, action_list_t *actions,
+		  notify_list_t *notify_list, const char **errmsg) 
 {
     const char *data;
-    int ip = 0, ip_max = (bc_len/sizeof(bytecode_input_t));
     int res=0;
     int op;
     int version;
-    
-    bytecode_input_t *bc = (bytecode_input_t *)bc_in;
+  
+    sieve_bytecode_t *bc_cur = exe->bc_cur;
+    bytecode_input_t *bc = (bytecode_input_t *) bc_cur->data;
+    int ip = 0, ip_max = (bc_cur->len/sizeof(bytecode_input_t));
+
+    if (bc_cur->is_executing) {
+	*errmsg = "Recursive Include";
+	return SIEVE_RUN_ERROR;
+    }
+    bc_cur->is_executing = 1;
     
     /* Check that we
      * a) have bytecode
      * b) it is atleast long enough for the magic number, the version
      *    and one opcode */
     if(!bc) return SIEVE_FAIL;
-    if(bc_len < (BYTECODE_MAGIC_LEN + 2*sizeof(bytecode_input_t)))
+    if(bc_cur->len < (BYTECODE_MAGIC_LEN + 2*sizeof(bytecode_input_t)))
        return SIEVE_FAIL;
 
     if(memcmp(bc, BYTECODE_MAGIC, BYTECODE_MAGIC_LEN)) {
@@ -805,7 +925,7 @@ int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
 	return SIEVE_FAIL;
     }
     
-    if( version != BYTECODE_VERSION) {
+    if((version < BYTECODE_MIN_VERSION) || (version > BYTECODE_VERSION)) {
 	if(errmsg) {
 	    *errmsg =
 		"Incorrect Bytecode Version, please recompile (use sievec)";
@@ -818,6 +938,8 @@ int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
 #endif
 
     for(ip++; ip<ip_max; ) { 
+	int copy = 0;
+
 	op=ntohl(bc[ip].op);
 	switch(op) {
 	case B_STOP:/*0*/
@@ -846,11 +968,15 @@ int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
 
 	    break;
 
-	case B_FILEINTO:/*4*/
+	case B_FILEINTO:/*19*/
+	    copy = ntohl(bc[ip+1].value);
+	    ip+=1;
+
+	case B_FILEINTO_ORIG:/*4*/
 	{
 	    ip = unwrap_string(bc, ip+1, &data, NULL);
 
-	    res = do_fileinto(actions, data, imapflags);
+	    res = do_fileinto(actions, data, !copy, imapflags);
 
 	    if (res == SIEVE_RUN_ERROR)
 		*errmsg = "Fileinto can not be used with Reject";
@@ -858,11 +984,15 @@ int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
 	    break;
 	}
 
-	case B_REDIRECT:/*5*/
+	case B_REDIRECT:/*20*/
+	    copy = ntohl(bc[ip+1].value);
+	    ip+=1;
+
+	case B_REDIRECT_ORIG:/*5*/
 	{
 	    ip = unwrap_string(bc, ip+1, &data, NULL);
 
-	    res = do_redirect(actions, data);
+	    res = do_redirect(actions, data, !copy);
 
 	    if (res == SIEVE_RUN_ERROR)
 		*errmsg = "Redirect can not be used with Reject";
@@ -876,7 +1006,7 @@ int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
 	    int result;
 	   
 	    ip+=2;
-	    result=eval_bc_test(i, m, bc, &ip);
+	    result=eval_bc_test(i, body_cache, m, bc, &ip);
 	    
 	    if (result<0) {
 		*errmsg = "Invalid test";
@@ -1099,7 +1229,9 @@ int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
 	    int respond;
 	    char *fromaddr = NULL; /* relative to message we send */
 	    char *toaddr = NULL; /* relative to message we send */
+	    const char *handle = NULL;
 	    const char *message = NULL;
+	    int days, mime;
 	    char buf[128];
 	    char subject[1024];
 	    int x;
@@ -1137,11 +1269,30 @@ int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
 		
 		ip = unwrap_string(bc, ip, &message, NULL);
 
-		res = do_vacation(actions, toaddr, fromaddr,
-				  xstrdup(subject), message,
-				  ntohl(bc[ip].value), ntohl(bc[ip+1].value));
+		days = ntohl(bc[ip].value);
+		mime = ntohl(bc[ip+1].value);
 
-		ip+=2;		
+		ip+=2;	
+
+		if (version >= 0x05) {
+		    ip = unwrap_string(bc, ip, &data, NULL);
+
+		    if (data) {
+			/* user specified from address */
+			free(fromaddr);
+			fromaddr = xstrdup(data);
+		    }
+
+		    ip = unwrap_string(bc, ip, &data, NULL);
+
+		    if (data) {
+			/* user specified handle */
+			handle = data;
+		    }
+		}
+
+		res = do_vacation(actions, toaddr, fromaddr, xstrdup(subject),
+				  message, days, mime, handle);
 
 		if (res == SIEVE_RUN_ERROR)
 		    *errmsg = "Vacation can not be used with Reject or Vacation";
@@ -1152,6 +1303,12 @@ int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
 		ip = unwrap_string(bc, ip, &data, NULL);
 
 		ip+=2;/*skip days and mime flag*/
+
+		if (version >= 0x05) {
+		    /* skip from and handle */
+		    ip = unwrap_string(bc, ip, &data, NULL);
+		    ip = unwrap_string(bc, ip, &data, NULL);
+		}
 	    } else {
 		res = SIEVE_RUN_ERROR; /* something is bad */ 
 	    }
@@ -1166,6 +1323,38 @@ int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
 	    ip= ntohl(bc[ip+1].jump);
 	    break;
 	    
+	case B_INCLUDE:/*17*/
+	{
+	    int isglobal = (ntohl(bc[ip+1].value) == B_GLOBAL);
+	    char fpath[4096];
+
+	    ip = unwrap_string(bc, ip+2, &data, NULL);
+
+	    res = i->getinclude(sc, data, isglobal, fpath, sizeof(fpath));
+	    if (res != SIEVE_OK)
+		*errmsg = "Include can not find script";
+
+	    if (!res) {
+		res = sieve_script_load(fpath, &exe);
+		if (res != SIEVE_OK)
+		*errmsg = "Include can not load script";
+	    }
+
+	    if (!res)
+		res = sieve_eval_bc(exe, 1, i, body_cache,
+				    sc, m, imapflags, actions,
+				    notify_list, errmsg);
+
+	    break;
+	}
+
+	case B_RETURN:/*18*/
+	    if (is_incl)
+		goto done;
+	    else
+		res=1;
+	    break;
+
 	default:
 	    if(errmsg) *errmsg = "Invalid sieve bytecode";
 	    return SIEVE_FAIL;
@@ -1174,5 +1363,9 @@ int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
 	if (res) /* we've either encountered an error or a stop */
 	    break;
     }
+
+  done:
+    bc_cur->is_executing = 0;
+
     return res;      
 }

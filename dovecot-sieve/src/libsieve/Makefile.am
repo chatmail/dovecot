@@ -55,7 +55,8 @@ sievec_SOURCES = \
 
 sieved_SOURCES = \
 	sieved.c \
-	../map.c
+	../map.c \
+	../imparse.c
 
 sievec_LDADD = \
 	libsieve.la \

@@ -1,4 +1,4 @@
-AC_INIT(dovecot-sieve, 1.0.2, [dovecot@dovecot.org])
+AC_INIT(dovecot-sieve, 1.1.5, [dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AC_CONFIG_HEADERS([dsieve-config.h])
@@ -13,7 +13,7 @@ AC_PROG_YACC
 AM_PROG_LIBTOOL
 
 AC_ARG_WITH(dovecot,
-[  --with-dovecot[=DIR]    Dovecot base directory (../)],
+[  --with-dovecot[=DIR]    Dovecot base directory (../dovecot)],
 	dovecotdir="$withval",
 	dovecotdir=../dovecot
 )

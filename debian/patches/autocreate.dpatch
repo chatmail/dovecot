@@ -1,33 +1,33 @@
 #! /bin/sh -e
 
-## DP: Hack to support mbox snarfing, Based heavily on email found here:
-## DP: http://dovecot.org/list/dovecot/2007-May/022803.html
+## DP: Plugin to allow automatic creation of mail folders
+## DP: http://dovecot.org/patches/1.1/autocreate-plugin.c
 ## DP: Author: Timo Sirainen
 
 . $(dirname $0)/DPATCH
 
 exit 0
 @DPATCH@
-diff -uNr ./dovecot_patched/dovecot-1.0.10/configure.in ./dovecot_compile/dovecot-1.0.10/configure.in
---- dovecot-1.0.10/configure.in	2008-02-15 15:45:32.000000000 +0100
-+++ dovecot-1.0.10/configure.in	2008-02-15 11:34:32.000000000 +0100
-@@ -1888,6 +1888,7 @@
- src/plugins/mail-log/Makefile
- src/plugins/mbox-snarf/Makefile
+diff -urN dovecot-1.1.1/configure.in dovecot-1.1.1-autocreate/configure.in
+--- dovecot-1.1.1/configure.in	2008-06-22 05:02:27.000000000 -0600
++++ dovecot-1.1.1-autocreate/configure.in	2008-06-23 21:12:30.000000000 -0600
+@@ -2244,6 +2244,7 @@
+ src/plugins/quota/Makefile
+ src/plugins/imap-quota/Makefile
  src/plugins/trash/Makefile
 +src/plugins/autocreate/Makefile
  src/plugins/zlib/Makefile
  stamp.h
  dovecot-config.in])
-diff -uNr ./dovecot_patched/dovecot-1.0.10/src/plugins/autocreate/autocreate-plugin.c ./dovecot_compile/dovecot-1.0.10/src/plugins/autocreate/autocreate-plugin.c
---- dovecot-1.0.10/src/plugins/autocreate/autocreate-plugin.c	1970-01-01 01:00:00.000000000 +0100
-+++ dovecot-1.0.10/src/plugins/autocreate/autocreate-plugin.c	2008-02-14 23:42:57.000000000 +0100
-@@ -0,0 +1,68 @@
-+/* Copyright (C) 2007 Timo Sirainen */
+diff -urN dovecot-1.1.1/src/plugins/autocreate/autocreate-plugin.c dovecot-1.1.1-autocreate/src/plugins/autocreate/autocreate-plugin.c
+--- dovecot-1.1.1/src/plugins/autocreate/autocreate-plugin.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.1.1-autocreate/src/plugins/autocreate/autocreate-plugin.c	2008-05-25 05:59:43.000000000 -0600
+@@ -0,0 +1,91 @@
++/* Copyright (C) 2007 Timo Sirainen, LGPLv2.1 */
 +
 +/*
-+   export DOVECOT=~/src/dovecot-1.0.0
-+   gcc -fPIC -shared -Wall -I$DOVECOT -I$DOVECOT/src/lib \
++   export DOVECOT=~/src/dovecot-1.1.0
++   gcc -fPIC -shared -g -Wall -I$DOVECOT -I$DOVECOT/src/lib \
 +     -I$DOVECOT/src/lib-storage -I$DOVECOT/src/lib-mail \
 +     -I$DOVECOT/src/lib-imap -DHAVE_CONFIG_H \
 +     autocreate-plugin.c -o autocreate_plugin.so
@@ -38,21 +38,22 @@ diff -uNr ./dovecot_patched/dovecot-1.0.10/src/plugins/autocreate/autocreate-plu
 +     autocreate = Trash
 +     autocreate2 = Spam
 +     #autocreate3 = ..etc..
++     autosubscribe = Trash
++     autosubscribe2 = Spam
++     #autosubscribe3 = ..etc..
 +   }
 +*/
 +
 +#include "lib.h"
-+#include "mail-storage-private.h"
++#include "mail-storage.h"
++#include "mail-namespace.h"
 +
 +#include <stdlib.h>
 +
-+/* defined by imap, pop3, lda */
-+extern void (*hook_mail_storage_created)(struct mail_storage *storage);
-+
 +const char *autocreate_plugin_version = PACKAGE_VERSION;
 +
-+static void (*autocreate_next_hook_mail_storage_created)
-+	(struct mail_storage *storage);
++static void (*autocreate_next_hook_mail_namespaces_created)
++	(struct mail_namespace *ns);
 +
 +static void autocreate_mailboxes(struct mail_storage *storage)
 +{
@@ -69,13 +70,33 @@ diff -uNr ./dovecot_patched/dovecot-1.0.10/src/plugins/autocreate/autocreate-plu
 +	}
 +}
 +
-+static void autocreate_mail_storage_created(struct mail_storage *storage)
++static void autosubscribe_mailboxes(struct mailbox_list *list)
 +{
-+	if (autocreate_next_hook_mail_storage_created != NULL)
-+		autocreate_next_hook_mail_storage_created(storage);
++	char env_name[20];
++	const char *env;
++	unsigned int i;
 +
-+	if ((storage->flags & MAIL_STORAGE_FLAG_SHARED_NAMESPACE) == 0)
-+		autocreate_mailboxes(storage);
++	i = 1;
++	env = getenv("AUTOSUBSCRIBE");
++	while (env != NULL) {
++		(void)mailbox_list_set_subscribed(list, env, TRUE);
++		i_snprintf(env_name, sizeof(env_name), "AUTOSUBSCRIBE%d", ++i);
++		env = getenv(env_name);
++	}
++}
++
++static void autocreate_mail_namespaces_created(struct mail_namespace *ns)
++{
++	if (autocreate_next_hook_mail_namespaces_created != NULL)
++		autocreate_next_hook_mail_namespaces_created(ns);
++
++	for (; ns != NULL; ns = ns->next) {
++		if (ns->type == NAMESPACE_PRIVATE) {
++			autocreate_mailboxes(ns->storage);
++			autosubscribe_mailboxes(ns->list);
++			break;
++		}
++	}
 +}
 +
 +void autocreate_plugin_init(void);
@@ -83,29 +104,20 @@ diff -uNr ./dovecot_patched/dovecot-1.0.10/src/plugins/autocreate/autocreate-plu
 +
 +void autocreate_plugin_init(void)
 +{
-+	autocreate_next_hook_mail_storage_created = hook_mail_storage_created;
-+	hook_mail_storage_created = autocreate_mail_storage_created;
++	autocreate_next_hook_mail_namespaces_created =
++		hook_mail_namespaces_created;
++	hook_mail_namespaces_created = autocreate_mail_namespaces_created;
 +}
 +
 +void autocreate_plugin_deinit(void)
 +{
-+	hook_mail_storage_created = autocreate_next_hook_mail_storage_created;
++	hook_mail_namespaces_created =
++		autocreate_next_hook_mail_namespaces_created;
 +}
-diff -uNr ./dovecot_patched/dovecot-1.0.10/src/plugins/autocreate/autocreate-plugin.h ./dovecot_compile/dovecot-1.0.10/src/plugins/autocreate/autocreate-plugin.h
---- dovecot-1.0.10/src/plugins/autocreate/autocreate-plugin.h	1970-01-01 01:00:00.000000000 +0100
-+++ dovecot-1.0.10/src/plugins/autocreate/autocreate-plugin.h	2008-02-14 23:42:57.000000000 +0100
-@@ -0,0 +1,7 @@
-+#ifndef __AUTOCREATE_PLUGIN_H
-+#define __AUTOCREATE_PLUGIN_H
-+
-+void autocreate_plugin_init(void);
-+void autocreate_plugin_deinit(void);
-+
-+#endif
-diff -uNr ./dovecot_patched/dovecot-1.0.10/src/plugins/autocreate/Makefile.am ./dovecot_compile/dovecot-1.0.10/src/plugins/autocreate/Makefile.am
---- dovecot-1.0.10/src/plugins/autocreate/Makefile.am	1970-01-01 01:00:00.000000000 +0100
-+++ dovecot-1.0.10/src/plugins/autocreate/Makefile.am	2008-02-15 11:27:22.000000000 +0100
-@@ -0,0 +1,24 @@
+diff -urN dovecot-1.1.1/src/plugins/autocreate/Makefile.am dovecot-1.1.1-autocreate/src/plugins/autocreate/Makefile.am
+--- dovecot-1.1.1/src/plugins/autocreate/Makefile.am	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.1.1-autocreate/src/plugins/autocreate/Makefile.am	2008-06-23 21:10:39.000000000 -0600
+@@ -0,0 +1,23 @@
 +AM_CPPFLAGS = \
 +	-I$(top_srcdir)/src/lib \
 +	-I$(top_srcdir)/src/lib-mail \
@@ -120,8 +132,8 @@ diff -uNr ./dovecot_patched/dovecot-1.0.10/src/plugins/autocreate/Makefile.am ./
 +lib11_autocreate_plugin_la_SOURCES = \
 +	autocreate-plugin.c
 +
-+noinst_HEADERS = \
-+	autocreate-plugin.h
++#noinst_HEADERS = \
++#	autocreate-plugin.h
 +
 +install-exec-local:
 +	for d in imap pop3 lda; do \
@@ -129,13 +141,13 @@ diff -uNr ./dovecot_patched/dovecot-1.0.10/src/plugins/autocreate/Makefile.am ./
 +	  rm -f $(DESTDIR)$(moduledir)/$$d/lib11_autocreate_plugin.so; \
 +	  $(LN_S) ../lib11_autocreate_plugin.so $(DESTDIR)$(moduledir)/$$d; \
 +	done
-+
-diff -uNr ./dovecot_patched/dovecot-1.0.10/src/plugins/Makefile.am ./dovecot_compile/dovecot-1.0.10/src/plugins/Makefile.am
---- dovecot-1.0.10/src/plugins/Makefile.am	2008-02-15 15:45:32.000000000 +0100
-+++ dovecot-1.0.10/src/plugins/Makefile.am	2008-02-15 11:28:59.000000000 +0100
-@@ -2,4 +2,4 @@
- ZLIB = zlib
- endif
+diff -urN dovecot-1.1.1/src/plugins/Makefile.am dovecot-1.1.1-autocreate/src/plugins/Makefile.am
+--- dovecot-1.1.1/src/plugins/Makefile.am	2008-06-12 00:45:10.000000000 -0600
++++ dovecot-1.1.1-autocreate/src/plugins/Makefile.am	2008-06-23 21:12:02.000000000 -0600
+@@ -8,5 +8,5 @@
  
--SUBDIRS = acl convert quota imap-quota lazy-expunge mail-log mbox-snarf trash $(ZLIB)
-+SUBDIRS = acl autocreate convert quota imap-quota lazy-expunge mail-log mbox-snarf trash $(ZLIB)
+ SUBDIRS = \
+ 	acl convert expire fts fts-squat lazy-expunge mail-log mbox-snarf \
+-	quota imap-quota trash \
++	quota imap-quota trash autocreate \
+ 	$(ZLIB) $(FTS_LUCENE) $(FTS_SOLR)

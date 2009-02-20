@@ -25,6 +25,8 @@ static const char *get_sieve_path(void)
 	if (script_path != NULL) {
 		if (*script_path == '\0') {
 			/* disabled */
+			if (getenv("DEBUG") != NULL)
+				i_info("cmusieve: Empty script path, disabled");
 			return NULL;
 		}
 		script_path = home_expand(script_path);
@@ -47,6 +49,8 @@ static const char *get_sieve_path(void)
 	if (stat(script_path, &st) < 0) {
 		if (errno != ENOENT)
 			i_error("stat(%s) failed: %m", script_path);
+		else if (getenv("DEBUG") != NULL)
+			i_info("cmusieve: %s doesn't exist", script_path);
 
 		/* use global script instead, if one exists */
 		script_path = getenv("SIEVE_GLOBAL_PATH");
@@ -60,8 +64,10 @@ static const char *get_sieve_path(void)
 }
 
 static int
-cmusieve_deliver_mail(struct mail_storage *storage, struct mail *mail,
-		      const char *username, const char *mailbox)
+cmusieve_deliver_mail(struct mail_namespace *namespaces,
+		      struct mail_storage **storage_r,
+		      struct mail *mail,
+		      const char *destaddr, const char *mailbox)
 {
 	const char *script_path;
 
@@ -72,7 +78,8 @@ cmusieve_deliver_mail(struct mail_storage *storage, struct mail *mail,
 	if (getenv("DEBUG") != NULL)
 		i_info("cmusieve: Using sieve path: %s", script_path);
 
-	return cmu_sieve_run(storage, mail, script_path, username, mailbox);
+	return cmu_sieve_run(namespaces, storage_r, mail, script_path,
+			     destaddr, getenv("USER"), mailbox);
 }
 
 void cmusieve_plugin_init(void)

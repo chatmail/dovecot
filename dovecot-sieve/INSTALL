@@ -1,23 +1,14 @@
 Compiling
 ---------
 
-Use --with-dovecot=<path> to point to dovecot-config file's directory.
-There are two possibilities where this could exist:
+First of all you'll need to have built Dovecot sources available. It's also
+not a good idea to build the plugin against self-compiled Dovecot sources,
+but then actually use a prebuilt binary package of Dovecot. That might work
+if the Dovecot versions are the same, but it's not guaranteed.
 
-1) If you configured Dovecot with --enable-header-install, you'll have
-dovecot-config installed in $prefix/lib/dovecot/ directory.
-
-2) Compiled Dovecot sources' root directory.
-
-So for example:
-
-./configure --with-dovecot=/usr/local/lib/dovecot
+./configure --with-dovecot=../dovecot-1.0
 make
 sudo make install
-
-sievec and sieved binaries are built only if you use 2) method, because
-they need to link with Dovecot's libraries. They can be used to compile and
-decompile Sieve scripts. You probably don't need these.
 
 Configuring
 -----------

@@ -1,0 +1,53 @@
+Compile
+-------
+
+Prerequisites:
+	* A patched and compiled dovecot-1.1 tree:
+		To enable support for the new managesieve service, Dovecot needs to be 
+		patched. The patch is available from the same source as this package. 
+		
+		Package and patch are named as follows:
+		  Patch: dovecot-1.1.X-managesieve-<managesieve version>.diff.gz
+		  Package: dovecot-1.1-managesieve-<managesieve version>.tar.gz
+		
+		Nothing special needs to be done to compile the patched tree. You can use:
+			./configure
+			make
+			sudo make install
+		as usual. 
+		
+		Note that this package will compile against an unpatched dovecot tree, but 
+		keep in mind that dovecot will not know about managesieve without the patch.
+
+	* A compiled dovecot-sieve-1.1 tree. 
+		Currently, no special version dependencies are known to compile against the
+		sieve plugin, but of course the most recent version is recommended. 
+
+If you downloaded this package using Mercurial, you have a script called 
+autogen.sh in your source tree. You should execute that first:
+
+./autogen.sh
+
+After this executed successfully or when you downloaded the tarball,
+configure needs to be executed with the following parameters:
+
+	--with-dovecot=<path>
+		Path to the patched and compiled dovecot-1.1 source tree
+	--with-dovecot-sieve=<path>	
+		Path to the compiled dovecot-sieve-1.1 source tree
+
+For example:
+
+./configure --with-dovecot=../dovecot-1.1 \
+	--with-dovecot-sieve=../dovecot-sieve-1.1
+
+As usual, to compile and install, execute the following:
+
+make
+sudo make install 
+
+Configure
+---------
+
+Refer to README file.
+ 

@@ -2,10 +2,10 @@ Source: dovecot
 Section: mail
 Priority: optional
 Maintainer: Dovecot Maintainers <jaldhar-dovecot@debian.org>
-Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>, Fabio Tranchitella <kobold@debian.org>
-Build-Depends: debhelper (>= 5.0.0), automake1.9, autoconf, libtool, pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient15-dev, libsqlite3-dev, libsasl2-dev | libsasl-dev, zlib1g-dev, libkrb5-dev, dpatch, byacc, flex, drac-dev (>= 1.12-5)
+Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>, Fabio Tranchitella <kobold@debian.org>, Joel Johnson <mrjoel@lixil.net>
+Build-Depends: debhelper (>= 5.0.0), automake1.9, autoconf, libtool, pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient15-dev, libsqlite3-dev, libsasl2-dev | libsasl-dev, zlib1g-dev, libkrb5-dev, dpatch, byacc, flex, drac-dev (>= 1.12-5), libbz2-dev
 Build-Conflicts: linux-kernel-headers (<= 2.5.999-test7-bk-17), automake1.4
-Standards-Version: 3.7.3
+Standards-Version: 3.8.0.1
 Vcs-Svn: svn://svn.debian.org/svn/collab-maint/deb-maint/dovecot/trunk
 Vcs-Browser: http://svn.debian.org/wsvn/collab-maint/deb-maint/dovecot/trunk/?op=log
 
@@ -39,7 +39,7 @@ Package: dovecot-imapd
 Architecture: any
 Depends: ${shlibs:Depends}, dovecot-common (= ${binary:Version})
 Provides: imap-server
-Replaces: imap-server
+Replaces: imap-server, dovecot-common
 Description: secure IMAP server that supports mbox and maildir mailboxes
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
@@ -52,7 +52,7 @@ Package: dovecot-pop3d
 Architecture: any
 Depends: ${shlibs:Depends}, dovecot-common (= ${binary:Version})
 Provides: pop3-server
-Replaces: pop3-server
+Replaces: pop3-server, dovecot-common
 Description: secure POP3 server that supports mbox and maildir mailboxes
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify

@@ -19,7 +19,7 @@
 #include "lib.h"
 
 /* we don't have strlcpy, but strocpy is the same except for return value */
-#define strlcpy strocpy
+#define strlcpy i_strocpy
 
 #define lcase str_lcase
 

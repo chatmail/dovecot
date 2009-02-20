@@ -1,6 +1,6 @@
 #! /bin/sh -e
 
-## DP: fixes missing get_mountpoint() error by statically linking in the 
+## DP: fixes missing get_mountpoint() error by statically linking in the
 ## mountpoint code.
 ## DP: Author: Jaldhar H. Vyas <jaldhar@debian.org>
 
@@ -8,22 +8,22 @@
 
 exit 0
 @DPATCH@
-diff -ruN dovecot-1.0.rc2.orig/src/plugins/quota/Makefile.am dovecot-1.0.rc2/src/plugins/quota/Makefile.am
---- dovecot-1.0.rc2.orig/src/plugins/quota/Makefile.am	2006-06-17 14:02:55.000000000 -0400
-+++ dovecot-1.0.rc2/src/plugins/quota/Makefile.am	2006-07-07 09:16:08.000000000 -0400
-@@ -12,6 +12,11 @@
- module_LTLIBRARIES = \
- 	lib10_quota_plugin.la
+diff -urN dovecot-1.1.1/src/plugins/quota/Makefile.am dovecot-1.1.1-quota-mountpoint/src/plugins/quota/Makefile.am
+--- dovecot-1.1.1/src/plugins/quota/Makefile.am	2008-06-20 02:16:14.000000000 -0600
++++ dovecot-1.1.1-quota-mountpoint/src/plugins/quota/Makefile.am	2008-06-23 22:07:46.000000000 -0600
+@@ -17,6 +17,11 @@
+ 	-lrpcsvc
+ endif
  
 +# get some functions included which only plugins use. liblib should probably
 +# be a shared library so this wouldn't be needed.
 +unused_sources = \
-+  ../../lib/mountpoint.c
++	../../lib/mountpoint.c
 +
- lib10_quota_plugin_la_SOURCES = \
+ quota_dist_sources = \
  	quota.c \
-         quota-count.c \
-@@ -20,7 +25,8 @@
+ 	quota-count.c \
+@@ -25,7 +30,8 @@
  	quota-dirsize.c \
  	quota-maildir.c \
          quota-plugin.c \
@@ -31,5 +31,5 @@ diff -ruN dovecot-1.0.rc2.orig/src/plugins/quota/Makefile.am dovecot-1.0.rc2/src
 +	quota-storage.c \
 +	$(unused_sources)
  
- noinst_HEADERS = \
- 	quota.h \
+ lib10_quota_plugin_la_SOURCES = \
+ 	$(quota_dist_sources) \

@@ -6,8 +6,12 @@
 #include "hostpid.h"
 #include "str.h"
 #include "str-sanitize.h"
+#include "istream.h"
 #include "write-full.h"
+#include "rfc822-parser.h"
 #include "message-date.h"
+#include "message-parser.h"
+#include "message-decoder.h"
 #include "mail-storage.h"
 #include "deliver.h"
 #include "duplicate.h"
@@ -25,9 +29,22 @@
 /* data per script */
 typedef struct script_data {
 	const char *username;
-	struct mail_storage *storage;
+	struct mail_namespace *namespaces;
+	struct mail_storage **storage_r;
+
+	sieve_interp_t *interp;
 	string_t *errors;
 } script_data_t;
+
+struct sieve_body_part {
+	const char *content_type;
+
+	const char *raw_body;
+	const char *decoded_body;
+	size_t raw_body_size;
+	size_t decoded_body_size;
+	bool have_body; /* there's the empty end-of-headers line */
+};
 
 typedef struct {
 	struct mail *mail;
@@ -35,9 +52,19 @@ typedef struct {
 	const char *id;
 	const char *return_path;
 	const char *authuser;
+	const char *destaddr;
+
+	pool_t body_parts_pool;
+	ARRAY_DEFINE(body_parts, struct sieve_body_part);
+	ARRAY_DEFINE(return_body_parts, sieve_bodypart_t);
 
 	const char *temp[10];
+	buffer_t *tmp_buffer;
 } sieve_msgdata_t;
+
+static int
+dovecot_sieve_compile(script_data_t *sdata, const char *script_path,
+		      const char *compiled_path);
 
 static const char *unfold_header(const char *str)
 {
@@ -98,12 +125,12 @@ static int getheader(void *v, const char *phead, const char ***body)
     const char *const *headers;
 
     if (phead==NULL) return SIEVE_FAIL;
-    headers = mail_get_headers(m->mail, phead);
-    if (headers != NULL)
-	    headers = unfold_multiline_headers(headers);
+    if (mail_get_headers_utf8(m->mail, phead, &headers) < 0)
+	    return SIEVE_FAIL;
+    headers = unfold_multiline_headers(headers);
     *body = (const char **)headers;
 
-    if (*body) {
+    if (**body) {
 	return SIEVE_OK;
     } else {
 	return SIEVE_FAIL;
@@ -115,8 +142,7 @@ static int getsize(void *mc, int *size)
     sieve_msgdata_t *md = mc;
     uoff_t psize;
 
-    psize = mail_get_physical_size(md->mail);
-    if (psize == (uoff_t)-1)
+    if (mail_get_physical_size(md->mail, &psize) < 0)
 	    return SIEVE_FAIL;
 
     *size = psize;
@@ -141,7 +167,7 @@ static int getenvelope(void *mc, const char *field, const char ***contents)
 	return SIEVE_OK;
     } else if (!strcasecmp(field, "to")) {
 	*contents = m->temp;
-	m->temp[0] = /*FIXME:msg_getrcptall(m, m->cur_rcpt)*/m->authuser;
+	m->temp[0] = m->destaddr;
 	m->temp[1] = NULL;
 	return SIEVE_OK;
     } else if (!strcasecmp(field, "auth") && m->authuser) {
@@ -155,8 +181,287 @@ static int getenvelope(void *mc, const char *field, const char ***contents)
     }
 }
 
+static bool
+is_wanted_content_type(const char **wanted_types, const char *content_type)
+{
+	const char *subtype = strchr(content_type, '/');
+	size_t type_len;
+
+	type_len = subtype == NULL ? strlen(content_type) :
+		(size_t)(subtype - content_type);
+
+	for (; *wanted_types != NULL; wanted_types++) {
+		const char *wanted_subtype = strchr(*wanted_types, '/');
+
+		if (**wanted_types == '\0') {
+			/* empty string matches everything */
+			return TRUE;
+		}
+		if (wanted_subtype == NULL) {
+			/* match only main type */
+			if (strlen(*wanted_types) == type_len &&
+			    strncasecmp(*wanted_types, content_type,
+					type_len) == 0)
+				return TRUE;
+		} else {
+			/* match whole type/subtype */
+			if (strcasecmp(*wanted_types, content_type) == 0)
+				return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+static bool get_return_body_parts(sieve_msgdata_t *m, const char **wanted_types,
+				  bool decode_to_plain)
+{
+	const struct sieve_body_part *body_parts;
+	unsigned int i, count;
+	sieve_bodypart_t *sieve_part;
+
+	body_parts = array_get(&m->body_parts, &count);
+	if (count == 0)
+		return FALSE;
+
+	array_clear(&m->return_body_parts);
+	for (i = 0; i < count; i++) {
+		if (!body_parts[i].have_body) {
+			/* doesn't match anything */
+			continue;
+		}
+
+		if (!is_wanted_content_type(wanted_types,
+					    body_parts[i].content_type))
+			continue;
+
+		sieve_part = array_append_space(&m->return_body_parts);
+		if (decode_to_plain) {
+			if (body_parts[i].decoded_body == NULL)
+				return FALSE;
+			sieve_part->content = body_parts[i].decoded_body;
+			sieve_part->size = body_parts[i].decoded_body_size;
+		} else {
+			if (body_parts[i].raw_body == NULL)
+				return FALSE;
+			sieve_part->content = body_parts[i].raw_body;
+			sieve_part->size = body_parts[i].raw_body_size;
+		}
+	}
+	return TRUE;
+}
+
+static void part_save(sieve_msgdata_t *m, struct message_part *part,
+		      struct sieve_body_part *body_part, bool decoded)
+{
+	buffer_t *buf = m->tmp_buffer;
+
+	buffer_append_c(buf, '\0');
+	if (!decoded) {
+		body_part->raw_body = p_strdup(m->body_parts_pool, buf->data);
+		body_part->raw_body_size = buf->used - 1;
+		i_assert(buf->used - 1 == part->body_size.physical_size);
+	} else {
+		body_part->decoded_body =
+			p_strdup(m->body_parts_pool, buf->data);
+		body_part->decoded_body_size = buf->used - 1;
+	}
+	buffer_set_used_size(buf, 0);
+}
+
+static const char *parse_content_type(const struct message_header_line *hdr)
+{
+	struct rfc822_parser_context parser;
+	string_t *content_type;
+
+	rfc822_parser_init(&parser, hdr->full_value, hdr->full_value_len, NULL);
+	(void)rfc822_skip_lwsp(&parser);
+
+	content_type = t_str_new(64);
+	if (rfc822_parse_content_type(&parser, content_type) < 0)
+		return "";
+	return str_c(content_type);
+}
+
+static int
+parts_add_missing(sieve_msgdata_t *m, const char **content_types,
+		  bool decode_to_plain)
+{
+	struct sieve_body_part *body_part = NULL;
+	struct message_parser_ctx *parser;
+	struct message_decoder_context *decoder;
+	struct message_block block, decoded;
+	const struct message_part *const_parts;
+	struct message_part *parts, *prev_part = NULL;
+	struct istream *input;
+	unsigned int idx = 0;
+	bool save_body = FALSE, have_all;
+	int ret;
+
+	if (get_return_body_parts(m, content_types, decode_to_plain))
+		return 0;
+
+	if (mail_get_stream(m->mail, NULL, NULL, &input) < 0)
+		return -1;
+	if (mail_get_parts(m->mail, &const_parts) < 0)
+		return -1;
+	parts = (struct message_part *)const_parts;
+
+	buffer_set_used_size(m->tmp_buffer, 0);
+	decoder = decode_to_plain ? message_decoder_init(FALSE) : NULL;
+	parser = message_parser_init_from_parts(parts, input, 0, 0);
+	while ((ret = message_parser_parse_next_block(parser, &block)) > 0) {
+		if (block.part != prev_part) {
+			if (body_part != NULL && save_body) {
+				part_save(m, prev_part, body_part,
+					  decoder != NULL);
+			}
+			prev_part = block.part;
+			body_part = array_idx_modifiable(&m->body_parts, idx);
+			idx++;
+			body_part->content_type = "text/plain";
+		}
+		if (block.hdr != NULL || block.size == 0) {
+			/* reading headers */
+			if (decoder != NULL) {
+				(void)message_decoder_decode_next_block(decoder,
+							&block, &decoded);
+			}
+
+			if (block.hdr == NULL) {
+				/* save bodies only if we have a wanted
+				   content-type */
+				save_body = is_wanted_content_type(
+						content_types,
+						body_part->content_type);
+				continue;
+			}
+			if (block.hdr->eoh)
+				body_part->have_body = TRUE;
+			/* We're interested of only Content-Type: header */
+			if (strcasecmp(block.hdr->name, "Content-Type") != 0)
+				continue;
+
+			if (block.hdr->continues) {
+				block.hdr->use_full_value = TRUE;
+				continue;
+			}
+			t_push();
+			body_part->content_type =
+				p_strdup(m->body_parts_pool,
+					 parse_content_type(block.hdr));
+			t_pop();
+			continue;
+		}
+
+		/* reading body */
+		if (save_body) {
+			if (decoder != NULL) {
+				(void)message_decoder_decode_next_block(decoder,
+							&block, &decoded);
+				buffer_append(m->tmp_buffer,
+					      decoded.data, decoded.size);
+			} else {
+				buffer_append(m->tmp_buffer,
+					      block.data, block.size);
+			}
+		}
+	}
+
+	if (body_part != NULL && save_body)
+		part_save(m, prev_part, body_part, decoder != NULL);
+
+	have_all = get_return_body_parts(m, content_types, decode_to_plain);
+	i_assert(have_all);
+
+	if (message_parser_deinit(&parser, &parts) < 0)
+		i_unreached();
+	if (decoder != NULL)
+		message_decoder_deinit(&decoder);
+	return input->stream_errno == 0 ? 0 : -1;
+}
+
+static int getbody(void *mc, const char **content_types,
+		   int decode_to_plain, sieve_bodypart_t **parts_r)
+{
+    sieve_msgdata_t *m = (sieve_msgdata_t *) mc;
+    int r = SIEVE_OK;
+
+    if (!array_is_created(&m->body_parts)) {
+	    m->body_parts_pool =
+		    pool_alloconly_create("sieve body parts", 1024*256);
+
+	    i_array_init(&m->body_parts, 8);
+	    i_array_init(&m->return_body_parts, array_count(&m->body_parts));
+	    m->tmp_buffer = buffer_create_dynamic(default_pool, 1024*64);
+    }
+
+    t_push();
+    if (parts_add_missing(m, content_types, decode_to_plain != 0) < 0)
+	    r = SIEVE_FAIL;
+    t_pop();
+
+    (void)array_append_space(&m->return_body_parts); /* NULL-terminate */
+    *parts_r = array_idx_modifiable(&m->return_body_parts, 0);
+
+    return r;
+}
+
+static int getinclude(void *sc, const char *script, int isglobal,
+		      char *fname, size_t size)
+{
+	script_data_t *sdata = (script_data_t *) sc;
+	const char *script_path, *compiled_path, *home, *script_dir;
+	int ret;
+
+	if (strchr(script, '/') != NULL) {
+		i_info("include: '/' not allowed in script names (%s)",
+		       str_sanitize(script, 80));
+		return SIEVE_FAIL;
+	}
+
+	if (isglobal) {
+		script_dir = getenv("SIEVE_GLOBAL_DIR");
+		if (script_dir == NULL) {
+			i_info("include: sieve_global_dir not set "
+			       "(wanted script %s)", str_sanitize(script, 80));
+			return SIEVE_FAIL;
+		}
+		script_path = t_strdup_printf("%s/%s", script_dir, script);
+	} else {
+		home = getenv("SIEVE_DIR");
+		if (home == NULL)
+			home = getenv("HOME");
+		if (home == NULL) {
+			i_info("include: sieve_dir and home not set "
+			       "(wanted script %s)", str_sanitize(script, 80));
+			return SIEVE_FAIL;
+		}
+		script_path = t_strdup_printf("%s/%s", home, script);
+	}
+
+	compiled_path = t_strconcat(script_path, "c", NULL);
+	ret = dovecot_sieve_compile(sdata, script_path, compiled_path);
+	if (ret < 0) {
+		i_info("include: Error compiling script '%s'",
+		       str_sanitize(script, 80));
+		return SIEVE_FAIL;
+	}
+	if (ret == 0) {
+		i_info("include: Script not found: '%s'",
+		       str_sanitize(script, 80));
+		return SIEVE_FAIL;
+	}
+
+	if (i_strocpy(fname, compiled_path, size) < 0) {
+		i_info("include: Script path too long: '%s'",
+		       str_sanitize(script, 80));
+		return SIEVE_FAIL;
+	}
+	return SIEVE_OK;
+}
+
 static int sieve_redirect(void *ac, 
-			  void *ic __attr_unused__, 
+			  void *ic ATTR_UNUSED, 
 			  void *sc, void *mc, const char **errmsg)
 {
     sieve_redirect_context_t *rc = (sieve_redirect_context_t *) ac;
@@ -193,10 +498,10 @@ static int sieve_redirect(void *ac,
     }
 }
 
-static int sieve_discard(void *ac __attr_unused__, 
-			 void *ic __attr_unused__, 
-			 void *sc __attr_unused__, void *mc,
-			 const char **errmsg __attr_unused__)
+static int sieve_discard(void *ac ATTR_UNUSED, 
+			 void *ic ATTR_UNUSED, 
+			 void *sc ATTR_UNUSED, void *mc,
+			 const char **errmsg ATTR_UNUSED)
 {
     sieve_msgdata_t *md = mc;
 
@@ -207,7 +512,7 @@ static int sieve_discard(void *ac __attr_unused__,
 }
 
 static int sieve_reject(void *ac, 
-			void *ic __attr_unused__, 
+			void *ic ATTR_UNUSED, 
 			void *sc, void *mc, const char **errmsg)
 {
     sieve_reject_context_t *rc = (sieve_reject_context_t *) ac;
@@ -241,13 +546,13 @@ static int sieve_reject(void *ac,
 static void get_flags(const sieve_imapflags_t *sieve_flags,
 		      enum mail_flags *flags_r, const char *const **keywords_r)
 {
-	array_t ARRAY_DEFINE(keywords, const char *);
+	ARRAY_DEFINE(keywords, const char *);
         const char *name;
 	int i;
 
 	*flags_r = 0;
 
-	ARRAY_CREATE(&keywords, default_pool, const char *, 16);
+	t_array_init(&keywords, 16);
 	for (i = 0; i < sieve_flags->nflags; i++) {
 		name = sieve_flags->flag[i];
 
@@ -273,14 +578,14 @@ static void get_flags(const sieve_imapflags_t *sieve_flags,
 	array_append(&keywords, &name, 1);
 
 	*keywords_r = array_count(&keywords) == 1 ? NULL :
-		array_get(&keywords, 0);
+		array_idx(&keywords, 0);
 }
 
 static int sieve_fileinto(void *ac, 
-			  void *ic __attr_unused__,
+			  void *ic ATTR_UNUSED,
 			  void *sc, 
 			  void *mc,
-			  const char **errmsg __attr_unused__)
+			  const char **errmsg ATTR_UNUSED)
 {
     sieve_fileinto_context_t *fc = (sieve_fileinto_context_t *) ac;
     script_data_t *sd = (script_data_t *) sc;
@@ -290,15 +595,16 @@ static int sieve_fileinto(void *ac,
 
     get_flags(fc->imapflags, &flags, &keywords);
 
-    if (deliver_save(sd->storage, fc->mailbox, md->mail, flags, keywords) < 0)
+    if (deliver_save(sd->namespaces, sd->storage_r, fc->mailbox,
+		     md->mail, flags, keywords) < 0)
 	    return SIEVE_FAIL;
 
     return SIEVE_OK;
 }
 
 static int sieve_keep(void *ac, 
-		      void *ic __attr_unused__,
-		      void *sc, void *mc, const char **errmsg __attr_unused__)
+		      void *ic ATTR_UNUSED,
+		      void *sc, void *mc, const char **errmsg ATTR_UNUSED)
 {
     sieve_keep_context_t *kc = (sieve_keep_context_t *) ac;
     script_data_t *sd = (script_data_t *) sc;
@@ -308,7 +614,7 @@ static int sieve_keep(void *ac,
 
     get_flags(kc->imapflags, &flags, &keywords);
 
-    if (deliver_save(sd->storage, md->mailbox, md->mail, flags, keywords) < 0)
+    if (deliver_save(sd->namespaces, sd->storage_r, md->mailbox, md->mail, flags, keywords) < 0)
 	    return SIEVE_FAIL;
 
     return SIEVE_OK;
@@ -326,8 +632,8 @@ static bool contains_8bit(const char *msg)
 }
 
 static int sieve_notify(void *ac,
-			void *ic __attr_unused__,
-			void *sc __attr_unused__,
+			void *ic ATTR_UNUSED,
+			void *sc ATTR_UNUSED,
 			void *mc,
 			const char **errmsg)
 {
@@ -400,31 +706,31 @@ static int sieve_notify(void *ac,
 }
 
 static int autorespond(void *ac, 
-		       void *ic __attr_unused__,
+		       void *ic ATTR_UNUSED,
 		       void *sc,
 		       void *mc,
-		       const char **errmsg __attr_unused__)
+		       const char **errmsg ATTR_UNUSED)
 {
     sieve_autorespond_context_t *arc = (sieve_autorespond_context_t *) ac;
     script_data_t *sd = (script_data_t *) sc;
     sieve_msgdata_t *md = mc;
 
     /* ok, let's see if we've responded before */
-    if (duplicate_check(arc->hash, arc->len,  sd->username)) {
+    if (duplicate_check(arc->hash, SIEVE_HASHLEN, sd->username)) {
 	i_info("msgid=%s: discarded duplicate vacation response to <%s>",
 	       md->id == NULL ? "" : str_sanitize(md->id, 80),
 	       str_sanitize(md->return_path, 80));
 	return SIEVE_DONE;
     }
 
-    duplicate_mark(arc->hash, arc->len, sd->username,
+    duplicate_mark(arc->hash, SIEVE_HASHLEN, sd->username,
                    ioloop_time + arc->days * (24 * 60 * 60));
 
     return SIEVE_OK;
 }
 
 static int send_response(void *ac, 
-			 void *ic __attr_unused__, 
+			 void *ic ATTR_UNUSED, 
 			 void *sc, void *mc,
 			 const char **errmsg)
 {
@@ -490,24 +796,22 @@ static char *markflags[] = { "\\flagged" };
 static sieve_imapflags_t mark = { markflags, 1 };
 
 static int sieve_parse_error_handler(int lineno, const char *msg, 
-				     void *ic __attr_unused__,
+				     void *ic ATTR_UNUSED,
 				     void *sc)
 {
     script_data_t *sd = (script_data_t *) sc;
 
-    if (sd->errors == NULL) {
+    if (sd->errors == NULL)
 	    sd->errors = str_new(default_pool, 1024);
-	    i_info("sieve parse error: line %d: %s", lineno, msg);
-    }
 
     str_printfa(sd->errors, "line %d: %s\n", lineno, msg);
     return SIEVE_OK;
 }
 
 static int sieve_execute_error_handler(const char *msg, 
-				       void *ic __attr_unused__,
-				       void *sc __attr_unused__,
-				       void *mc __attr_unused__)
+				       void *ic ATTR_UNUSED,
+				       void *sc ATTR_UNUSED,
+				       void *mc ATTR_UNUSED)
 {
     i_info("sieve runtime error: %s", msg);
     return SIEVE_OK;
@@ -553,6 +857,12 @@ static sieve_interp_t *setup_sieve(void)
     res = sieve_register_envelope(interp, &getenvelope);
     if (res != SIEVE_OK)
 	i_fatal("sieve_register_envelope() returns %d\n", res);
+    res = sieve_register_body(interp, &getbody);
+    if (res != SIEVE_OK)
+	i_fatal("sieve_register_body() returns %d\n", res);
+    res = sieve_register_include(interp, &getinclude);
+    if (res != SIEVE_OK)
+	i_fatal("sieve_registerinclude() returns %d\n", res);
     res = sieve_register_vacation(interp, &vacation);
     if (res != SIEVE_OK)
 	i_fatal("sieve_register_vacation() returns %d\n", res);
@@ -566,9 +876,27 @@ static sieve_interp_t *setup_sieve(void)
     return interp;
 }
 
+static void
+dovecot_sieve_write_error_file(script_data_t *sdata, const char *path)
+{
+	int fd;
+
+	fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
+	if (fd == -1) {
+		i_error("open(%s) failed: %m", path);
+		return;
+	}
+
+	if (write_full(fd, str_data(sdata->errors), str_len(sdata->errors)) < 0)
+		i_error("write_full(%s) failed: %m", path);
+
+	if (close(fd) < 0)
+		i_error("close() failed: %m");
+}
+
 static int
-dovecot_sieve_compile(sieve_interp_t *interp, script_data_t *sdata,
-		      const char *script_path, const char *compiled_path)
+dovecot_sieve_compile(script_data_t *sdata, const char *script_path,
+		      const char *compiled_path)
 {
 	struct stat st, st2;
 	sieve_script_t *script;
@@ -588,6 +916,10 @@ dovecot_sieve_compile(sieve_interp_t *interp, script_data_t *sdata,
 		i_error("stat(%s) failed: %m", script_path);
 		return -1;
 	}
+	if (S_ISDIR(st.st_mode)) {
+		i_error("%s should be a file, not a directory", script_path);
+		return -1;
+	}
 	if (stat(compiled_path, &st2) < 0) {
 		if (errno != ENOENT) {
 			i_error("stat(%s) failed: %m", script_path);
@@ -605,13 +937,25 @@ dovecot_sieve_compile(sieve_interp_t *interp, script_data_t *sdata,
 		return -1;
 	}
 
-	ret = sieve_script_parse(interp, f, sdata, &script);
+	temp_path = t_strconcat(script_path, ".err", NULL);
+	ret = sieve_script_parse(sdata->interp, f, sdata, &script);
 	if (ret != SIEVE_OK) {
 		if (sdata->errors == NULL) {
 			sdata->errors = str_new(default_pool, 128);
 			str_printfa(sdata->errors, "parse error %d", ret);
 		}
+
+		if (getenv("DEBUG") != NULL) {
+			i_info("cmusieve: Compilation failed for %s: %s",
+			       script_path,
+			       str_sanitize(str_c(sdata->errors), 80));
+		}
+		dovecot_sieve_write_error_file(sdata, temp_path);
+		str_free(&sdata->errors);
 		return -1;
+	} else {
+		if (unlink(temp_path) < 0 && errno != ENOENT)
+			i_error("unlink(%s) failed: %m", temp_path);
 	}
 
 	if (sieve_generate_bytecode(&bc, script) < 0) {
@@ -643,54 +987,25 @@ dovecot_sieve_compile(sieve_interp_t *interp, script_data_t *sdata,
 	return 1;
 }
 
-static void
-dovecot_sieve_write_error_file(script_data_t *sdata, const char *path)
+int cmu_sieve_run(struct mail_namespace *namespaces,
+		  struct mail_storage **storage_r, struct mail *mail,
+		  const char *script_path, const char *destaddr,
+		  const char *username, const char *mailbox)
 {
-	int fd;
-
-	fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
-	if (fd == -1) {
-		i_error("open(%s) failed: %m", path);
-		return;
-	}
-
-	if (write_full(fd, str_data(sdata->errors), str_len(sdata->errors)) < 0)
-		i_error("write_full(%s) failed: %m", path);
-
-	if (close(fd) < 0)
-		i_error("close() failed: %m");
-}
-
-int cmu_sieve_run(struct mail_storage *storage, struct mail *mail,
-		  const char *script_path, const char *username,
-		  const char *mailbox)
-{
-	sieve_interp_t *interp;
-	sieve_bytecode_t *bytecode;
+	sieve_execute_t *bytecode = NULL;
 	script_data_t sdata;
 	sieve_msgdata_t mdata;
-	const char *compiled_path, *path;
+	const char *compiled_path;
 	int ret;
-
-	interp = setup_sieve();
 
 	memset(&sdata, 0, sizeof(sdata));
 	sdata.username = username;
-	sdata.storage = storage;
+	sdata.namespaces = namespaces;
+	sdata.storage_r = storage_r;
+	sdata.interp = setup_sieve();
 
 	compiled_path = t_strconcat(script_path, "c", NULL);
-	ret = dovecot_sieve_compile(interp, &sdata, script_path, compiled_path);
-
-	if (sdata.errors != NULL) {
-		if (getenv("DEBUG") != NULL) {
-			i_info("cmusieve: Compilation failed for %s: %s",
-			       script_path,
-			       str_sanitize(str_c(sdata.errors), 80));
-		}
-		path = t_strconcat(script_path, ".err", NULL);
-		dovecot_sieve_write_error_file(&sdata, path);
-		str_free(&sdata.errors);
-	}
+	ret = dovecot_sieve_compile(&sdata, script_path, compiled_path);
 	if (ret <= 0)
 		return ret;
 
@@ -698,7 +1013,8 @@ int cmu_sieve_run(struct mail_storage *storage, struct mail *mail,
 	mdata.mail = mail;
 	mdata.mailbox = mailbox;
 	mdata.authuser = username;
-	mdata.id = mail_get_first_header(mail, "Message-ID");
+	mdata.destaddr = destaddr;
+	(void)mail_get_first_header(mail, "Message-ID", &mdata.id);
 	mdata.return_path = deliver_get_return_address(mail);
 
 	if ((ret = sieve_script_load(compiled_path, &bytecode)) != SIEVE_OK) {
@@ -709,11 +1025,18 @@ int cmu_sieve_run(struct mail_storage *storage, struct mail *mail,
 	if (getenv("DEBUG") != NULL)
 		i_info("cmusieve: Executing script %s", compiled_path);
 
-	if (sieve_execute_bytecode(bytecode, interp,
+	ret = 1;
+	if (sieve_execute_bytecode(bytecode, sdata.interp,
 				   &sdata, &mdata) != SIEVE_OK) {
 		i_error("sieve_execute_bytecode(%s) failed", compiled_path);
-		return -1;
+		ret = -1;
 	}
 
-	return 1;
+	if (array_is_created(&mdata.body_parts)) {
+		array_free(&mdata.body_parts);
+		array_free(&mdata.return_body_parts);
+		buffer_free(&mdata.tmp_buffer);
+		pool_unref(&mdata.body_parts_pool);
+	}
+	return ret;
 }

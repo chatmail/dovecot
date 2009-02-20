@@ -39,7 +39,7 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 /* compares pat to text; returns 1 if it's true, 0 otherwise 
    first arg is text, second arg is pat, third arg is rock */
-typedef int comparator_t(const char *, const char *, void *);
+typedef int comparator_t(const char *, size_t, const char *, void *);
 
 /* returns a pointer to a comparator function given it's name */
 comparator_t *lookup_comp(int comp, int mode,

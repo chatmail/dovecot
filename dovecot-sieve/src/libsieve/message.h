@@ -30,6 +30,8 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #include "sieve_interface.h"	/* for action contexts */
 #include "tree.h"		/* for stringlist_t */
+#include "lib.h"
+#include "hash.h"
 
 typedef struct Action action_list_t;
 
@@ -61,6 +63,7 @@ void free_action_list(action_list_t *actions);
    the do_action() functions should copy param */
 struct Action {
     action_t a;
+    int cancel_keep;
     union {
 	sieve_reject_context_t rej;
 	sieve_fileinto_context_t fil;
@@ -112,13 +115,14 @@ void free_notify_list(notify_list_t *n);
  * these don't actually perform the actions, they just add it to the
  * action list */
 int do_reject(action_list_t *m, const char *msg);
-int do_fileinto(action_list_t *m, const char *mbox,
+int do_fileinto(action_list_t *m, const char *mbox, int cancel_keep,
 		sieve_imapflags_t *imapflags);
-int do_redirect(action_list_t *m, const char *addr);
+int do_redirect(action_list_t *m, const char *addr, int cancel_keep);
 int do_keep(action_list_t *m, sieve_imapflags_t *imapflags);
 int do_discard(action_list_t *m);
 int do_vacation(action_list_t *m, char *addr, char *fromaddr,
-		char *subj, const char *msg, int days, int mime);
+		char *subj, const char *msg, int days, int mime,
+		const char *handle);
 int do_setflag(action_list_t *m, const char *flag);
 int do_addflag(action_list_t *m, const char *flag);
 int do_removeflag(action_list_t *m, const char *flag);
@@ -131,10 +135,9 @@ int do_denotify(notify_list_t *n, comparator_t *comp, const void *pat,
 		void *comprock, const char *priority);
 
 /* execute some bytecode */
-int sieve_eval_bc(sieve_interp_t *i, const void *bc_in, unsigned int bc_len,
-		  void *m, sieve_imapflags_t * imapflags,
-		  action_list_t *actions,
-		  notify_list_t *notify_list,
-		  const char **errmsg);
+int sieve_eval_bc(sieve_execute_t *exe, int is_incl, sieve_interp_t *i,
+		  struct hash_table *body_cache, void *sc, void *m,
+		  sieve_imapflags_t * imapflags, action_list_t *actions,
+		  notify_list_t *notify_list, const char **errmsg);
 
 #endif

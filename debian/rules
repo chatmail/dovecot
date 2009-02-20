@@ -24,7 +24,7 @@ config.status: patch-stamp configure
 	  cp -f /usr/share/misc/config.sub config.sub
 	-test -r /usr/share/misc/config.guess && \
 	  cp -f /usr/share/misc/config.guess config.guess
-	aclocal-1.9; automake-1.9 --add-missing; libtoolize -f -c;  aclocal-1.9; autoconf
+	aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf
 	# Add here commands to configure the package.
 	./configure --with-ldap \
 	            --with-ssl=openssl \
@@ -44,24 +44,45 @@ config.status: patch-stamp configure
 	            --localstatedir=/var \
 	            --mandir=\$${prefix}/share/man \
 	            --infodir=\$${prefix}/share/info \
-	            --with-moduledir=\$${prefix}/lib/dovecot/modules
+	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
+				--disable-static
+	# dovecot-sieve plugin
+	-test -r /usr/share/misc/config.sub && \
+	  mv dovecot-sieve/config.sub dovecot-sieve/config.sub.orig && \
+	  cp -f /usr/share/misc/config.sub dovecot-sieve/config.sub
+	-test -r /usr/share/misc/config.guess && \
+	  mv dovecot-sieve/config.guess dovecot-sieve/config.guess.orig && \
+	  cp -f /usr/share/misc/config.guess dovecot-sieve/config.guess
+	(cd dovecot-sieve/ && aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf)
+	# dovecot-managesieve module
+	-test -r /usr/share/misc/config.sub && \
+	  mv dovecot-managesieve/config.sub dovecot-managesieve/config.sub.orig && \
+	  cp -f /usr/share/misc/config.sub dovecot-managesieve/config.sub
+	-test -r /usr/share/misc/config.guess && \
+	  mv dovecot-managesieve/config.guess dovecot-managesieve/config.guess.orig && \
+	  cp -f /usr/share/misc/config.guess dovecot-managesieve/config.guess
+	cp dovecot-managesieve/README dovecot-managesieve/managesieve.README
+	(cd dovecot-managesieve/ && aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf)
 
 build: build-stamp
-
-
-build-stamp: config.status
+build-stamp:  config.status
 	dh_testdir
-
 	# Add here commands to compile the package.
 	$(MAKE)
 	# dovecot-sieve plugin
-	cd dovecot-sieve && sh autogen.sh
-	cd dovecot-sieve && ./configure --with-dovecot=.. \
+	(cd dovecot-sieve/ && ./configure --with-dovecot=../ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib \
-		--with-moduledir=\$${prefix}/lib/dovecot/modules
+		--with-moduledir=\$${prefix}/lib/dovecot/modules)
 	$(MAKE) -C dovecot-sieve
-	cd src/drac && $(MAKE)
+	# dovecot-managesieve module
+	(cd dovecot-managesieve/ && ./configure --with-dovecot=../ \
+		--with-dovecot-sieve=../dovecot-sieve/ \
+		--prefix=/usr \
+		--libexecdir=\$${prefix}/lib)
+	$(MAKE) -C dovecot-managesieve
+	# DRAC
+	cd src/plugins/drac && $(MAKE)
 	touch build-stamp
 
 clean: clean1 unpatch
@@ -72,10 +93,16 @@ clean1:
 	# Add here commands to clean up after the build process.
 	[ ! -f Makefile ] || $(MAKE) distclean
 	[ ! -f dovecot-sieve/Makefile ] || $(MAKE) -C dovecot-sieve distclean
+	[ ! -f dovecot-managesieve/Makefile ] || $(MAKE) -C dovecot-managesieve distclean
 	rm -f conftest conftest.o config.log config.cache config.status ylwrap
 	[ -f config.sub.orig ] && mv config.sub.orig config.sub || true
+	[ -f dovecot-sieve/config.sub.orig ] && mv dovecot-sieve/config.sub.orig dovecot-sieve/config.sub || true
+	[ -f dovecot-managesieve/config.sub.orig ] && mv dovecot-managesieve/config.sub.orig dovecot-managesieve/config.sub || true
+	[ -f dovecot-managesieve/managesieve.README ] && rm dovecot-managesieve/managesieve.README || true
 	[ -f config.guess.orig ] && mv config.sub.orig config.guess || true
-	rm -f src/drac/drac.so
+	[ -f dovecot-sieve/config.guess.orig ] && mv dovecot-sieve/config.sub.orig dovecot-sieve/config.guess || true
+	[ -f dovecot-managesieve/config.guess.orig ] && mv dovecot-managesieve/config.sub.orig dovecot-managesieve/config.guess || true
+	rm -f src/plugins/drac/drac.so
 	dh_clean
 
 install: build
@@ -83,24 +110,24 @@ install: build
 	dh_testroot
 	dh_clean -k
 	dh_installdirs
-
 	# Add here commands to install the package into debian/dovecot.
 	$(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
 	$(MAKE) -C dovecot-sieve install DESTDIR=$(CURDIR)/debian/dovecot-common
-	cp $(CURDIR)/src/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
+	$(MAKE) -C dovecot-managesieve install DESTDIR=$(CURDIR)/debian/dovecot-common
+	cp $(CURDIR)/src/plugins/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-ldap-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-ldap.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-sql-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-sql.conf
-	install -o root -g root -m 0644 $(CURDIR)/debian/conffile.md5sum/dovecot.conf.md5sum $(CURDIR)/debian/dovecot-common/usr/share/dovecot/
-	install -o root -g root -m 0644 $(CURDIR)/debian/conffile.md5sum/dovecot-ldap.conf.md5sum $(CURDIR)/debian/dovecot-common/usr/share/dovecot/
-	install -o root -g root -m 0644 $(CURDIR)/debian/conffile.md5sum/dovecot-sql.conf.md5sum $(CURDIR)/debian/dovecot-common/usr/share/dovecot/
 	install -D -m 0755 -o root -g root $(CURDIR)/debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-common/usr/bin/maildirmake.dovecot
 	install -D -m 0755 -o root -g root $(CURDIR)/src/plugins/convert/convert-tool $(CURDIR)/debian/dovecot-common/usr/bin/convert-tool
 	install -o root -g root -m 0644 $(CURDIR)/debian/dovecot-common.overrides $(CURDIR)/debian/dovecot-common/usr/share/lintian/overrides/dovecot-common
 	mv $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/imap/ $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot/modules/
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/pop3/ $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot/modules/
 	mv $(CURDIR)/debian/dovecot-common/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/dovecot-config $(CURDIR)/debian/dovecot-dev/usr/lib/dovecot
 	rmdir $(CURDIR)/debian/dovecot-common/usr/include
 	rm $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-ldap-example.conf
 	rm $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-sql-example.conf
@@ -121,7 +148,7 @@ binary-arch: build install
 	mv $(CURDIR)/debian/dovecot-common/etc/pam.d/dovecot-common $(CURDIR)/debian/dovecot-common/etc/pam.d/dovecot
 	dh_installinit -pdovecot-common --init-script=dovecot -u"defaults 24"
 	dh_installman -a
-	dh_installman -p dovecot-common debian/maildirmake.dovecot.1 debian/dovecot.1
+	dh_installman -p dovecot-common debian/maildirmake.dovecot.1 debian/dovecot.1 debian/dovecot.8
 	dh_installchangelogs -a ChangeLog
 	dh_link -a
 	dh_strip -a
