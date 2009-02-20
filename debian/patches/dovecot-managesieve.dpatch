@@ -12,9 +12,9 @@
 
 exit 0
 @DPATCH@
-diff -urN dovecot-1.1.7/dovecot-example.conf dovecot-1.1.7-managesieve/dovecot-example.conf
---- dovecot-1.1.7/dovecot-example.conf	2008-11-23 14:53:53.000000000 -0700
-+++ dovecot-1.1.7-managesieve/dovecot-example.conf	2008-12-04 20:05:46.000000000 -0700
+diff -urN dovecot-1.1.11/dovecot-example.conf dovecot-1.1.11.debian/dovecot-example.conf
+--- dovecot-1.1.11/dovecot-example.conf	2009-01-26 02:12:41.000000000 +0100
++++ dovecot-1.1.11.debian/dovecot-example.conf	2009-02-20 20:03:47.000000000 +0100
 @@ -18,7 +18,7 @@
  # Base directory where to store runtime data.
  #base_dir = /var/run/dovecot/
@@ -46,7 +46,7 @@ diff -urN dovecot-1.1.7/dovecot-example.conf dovecot-1.1.7-managesieve/dovecot-e
  #listen = *
  
  # Disable LOGIN command and all other plaintext authentications unless
-@@ -651,6 +655,48 @@
+@@ -650,6 +654,48 @@
  }
  
  ##
@@ -95,9 +95,1169 @@ diff -urN dovecot-1.1.7/dovecot-example.conf dovecot-1.1.7-managesieve/dovecot-e
  ## LDA specific settings
  ##
  
-diff -urN dovecot-1.1.7/README.managesieve dovecot-1.1.7-managesieve/README.managesieve
---- dovecot-1.1.7/README.managesieve	1969-12-31 17:00:00.000000000 -0700
-+++ dovecot-1.1.7-managesieve/README.managesieve	2008-12-04 20:05:46.000000000 -0700
+diff -urN dovecot-1.1.11/dovecot-example.conf.orig dovecot-1.1.11.debian/dovecot-example.conf.orig
+--- dovecot-1.1.11/dovecot-example.conf.orig	1970-01-01 01:00:00.000000000 +0100
++++ dovecot-1.1.11.debian/dovecot-example.conf.orig	2009-02-20 20:03:23.000000000 +0100
+@@ -0,0 +1,1156 @@
++## Dovecot configuration file
++
++# If you're in a hurry, see http://wiki.dovecot.org/QuickConfiguration
++
++# "dovecot -n" command gives a clean output of the changed settings. Use it
++# instead of copy&pasting this file when posting to the Dovecot mailing list.
++
++# '#' character and everything after it is treated as comments. Extra spaces
++# and tabs are ignored. If you want to use either of these explicitly, put the
++# value inside quotes, eg.: key = "# char and trailing whitespace  "
++
++# Default values are shown for each setting, it's not required to uncomment
++# any of the lines. Exception to this are paths, they're just examples with
++# the real defaults being based on configure options. The paths listed here
++# are for configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var
++# --with-ssldir=/etc/ssl
++
++# Base directory where to store runtime data.
++#base_dir = /var/run/dovecot/
++
++# Protocols we want to be serving: imap imaps pop3 pop3s
++# If you only want to use dovecot-auth, you can set this to "none".
++#protocols = imap imaps
++
++# A space separated list of IP or host addresses where to listen in for
++# connections. "*" listens in all IPv4 interfaces. "[::]" listens in all IPv6
++# interfaces. Use "*, [::]" for listening both IPv4 and IPv6.
++#
++# If you want to specify ports for each service, you will need to configure
++# these settings inside the protocol imap/pop3 { ... } section, so you can
++# specify different ports for IMAP/POP3. For example:
++#   protocol imap {
++#     listen = *:10143
++#     ssl_listen = *:10943
++#     ..
++#   }
++#   protocol pop3 {
++#     listen = *:10100
++#     ..
++#   }
++#listen = *
++
++# Disable LOGIN command and all other plaintext authentications unless
++# SSL/TLS is used (LOGINDISABLED capability). Note that if the remote IP
++# matches the local IP (ie. you're connecting from the same computer), the
++# connection is considered secure and plaintext authentication is allowed.
++#disable_plaintext_auth = yes
++
++# Should all IMAP and POP3 processes be killed when Dovecot master process
++# shuts down. Setting this to "no" means that Dovecot can be upgraded without
++# forcing existing client connections to close (although that could also be
++# a problem if the upgrade is eg. because of a security fix). This however
++# means that after master process has died, the client processes can't write
++# to log files anymore.
++#shutdown_clients = yes
++
++##
++## Logging
++##
++
++# Log file to use for error messages, instead of sending them to syslog.
++# /dev/stderr can be used to log into stderr.
++#log_path = 
++
++# Log file to use for informational and debug messages.
++# Default is the same as log_path.
++#info_log_path = 
++
++# Prefix for each line written to log file. % codes are in strftime(3)
++# format.
++#log_timestamp = "%b %d %H:%M:%S "
++
++# Syslog facility to use if you're logging to syslog. Usually if you don't
++# want to use "mail", you'll use local0..local7. Also other standard
++# facilities are supported.
++#syslog_facility = mail
++
++##
++## SSL settings
++##
++
++# IP or host address where to listen in for SSL connections. Remember to also
++# add imaps and/or pop3s to protocols setting. Defaults to same as "listen"
++# setting if not specified.
++#ssl_listen =
++
++# Disable SSL/TLS support. <doc/wiki/SSL>
++#ssl_disable = no
++
++# PEM encoded X.509 SSL/TLS certificate and private key. They're opened before
++# dropping root privileges, so keep the key file unreadable by anyone but
++# root. Included doc/mkcert.sh can be used to easily generate self-signed
++# certificate, just make sure to update the domains in dovecot-openssl.cnf
++#ssl_cert_file = /etc/ssl/certs/dovecot.pem
++#ssl_key_file = /etc/ssl/private/dovecot.pem
++
++# If key file is password protected, give the password here. Alternatively
++# give it when starting dovecot with -p parameter. Since this file is often
++# world-readable, you may want to place this setting instead to a different
++# root owned 0600 file by using !include_try <path>.
++#ssl_key_password =
++
++# File containing trusted SSL certificate authorities. Set this only if you
++# intend to use ssl_verify_client_cert=yes. The CAfile should contain the
++# CA-certificate(s) followed by the matching CRL(s).
++#ssl_ca_file = 
++
++# Request client to send a certificate. If you also want to require it, set
++# ssl_require_client_cert=yes in auth section.
++#ssl_verify_client_cert = no
++
++# Which field from certificate to use for username. commonName and
++# x500UniqueIdentifier are the usual choices. You'll also need to set
++# ssl_username_from_cert=yes.
++#ssl_cert_username_field = commonName
++
++# How often to regenerate the SSL parameters file. Generation is quite CPU
++# intensive operation. The value is in hours, 0 disables regeneration
++# entirely.
++#ssl_parameters_regenerate = 168
++
++# SSL ciphers to use
++#ssl_cipher_list = ALL:!LOW:!SSLv2
++
++# Show protocol level SSL errors.
++#verbose_ssl = no
++
++##
++## Login processes
++##
++
++# <doc/wiki/LoginProcess.txt>
++
++# Directory where authentication process places authentication UNIX sockets
++# which login needs to be able to connect to. The sockets are created when
++# running as root, so you don't have to worry about permissions. Note that
++# everything in this directory is deleted when Dovecot is started.
++#login_dir = /var/run/dovecot/login
++
++# chroot login process to the login_dir. Only reason not to do this is if you
++# wish to run the whole Dovecot without roots. <doc/wiki/Rootless.txt>
++#login_chroot = yes
++
++# User to use for the login process. Create a completely new user for this,
++# and don't use it anywhere else. The user must also belong to a group where
++# only it has access, it's used to control access for authentication process.
++# Note that this user is NOT used to access mails. <doc/wiki/UserIds.txt>
++#login_user = dovecot
++
++# Set max. process size in megabytes. If you don't use
++# login_process_per_connection you might need to grow this.
++#login_process_size = 64
++
++# Should each login be processed in it's own process (yes), or should one
++# login process be allowed to process multiple connections (no)? Yes is more
++# secure, espcially with SSL/TLS enabled. No is faster since there's no need
++# to create processes all the time.
++#login_process_per_connection = yes
++
++# Number of login processes to keep for listening new connections.
++#login_processes_count = 3
++
++# Maximum number of login processes to create. The listening process count
++# usually stays at login_processes_count, but when multiple users start logging
++# in at the same time more extra processes are created. To prevent fork-bombing
++# we check only once in a second if new processes should be created - if all
++# of them are used at the time, we double their amount until the limit set by
++# this setting is reached.
++#login_max_processes_count = 128
++
++# Maximum number of connections allowed per each login process. This setting
++# is used only if login_process_per_connection=no. Once the limit is reached,
++# the process notifies master so that it can create a new login process.
++#login_max_connections = 256
++
++# Greeting message for clients.
++#login_greeting = Dovecot ready.
++
++# Space-separated list of elements we want to log. The elements which have
++# a non-empty variable value are joined together to form a comma-separated
++# string.
++#login_log_format_elements = user=<%u> method=%m rip=%r lip=%l %c
++
++# Login log format. %$ contains login_log_format_elements string, %s contains
++# the data we want to log.
++#login_log_format = %$: %s
++
++##
++## Mailbox locations and namespaces
++##
++
++# Location for users' mailboxes. This is the same as the old default_mail_env
++# setting. The default is empty, which means that Dovecot tries to find the
++# mailboxes automatically. This won't work if the user doesn't have any mail
++# yet, so you should explicitly tell Dovecot the full location.
++#
++# If you're using mbox, giving a path to the INBOX file (eg. /var/mail/%u)
++# isn't enough. You'll also need to tell Dovecot where the other mailboxes are
++# kept. This is called the "root mail directory", and it must be the first
++# path given in the mail_location setting.
++#
++# There are a few special variables you can use, eg.:
++#
++#   %u - username
++#   %n - user part in user@domain, same as %u if there's no domain
++#   %d - domain part in user@domain, empty if there's no domain
++#   %h - home directory
++#
++# See doc/wiki/Variables.txt for full list. Some examples:
++#
++#   mail_location = maildir:~/Maildir
++#   mail_location = mbox:~/mail:INBOX=/var/mail/%u
++#   mail_location = mbox:/var/mail/%d/%1n/%n:INDEX=/var/indexes/%d/%1n/%n
++#
++# <doc/wiki/MailLocation.txt>
++#
++#mail_location = 
++
++# If you need to set multiple mailbox locations or want to change default
++# namespace settings, you can do it by defining namespace sections.
++#
++# You can have private, shared and public namespaces. The only difference
++# between them is how Dovecot announces them to client via NAMESPACE
++# extension. Shared namespaces are meant for user-owned mailboxes which are
++# shared to other users, while public namespaces are for more globally
++# accessible mailboxes.
++#
++# REMEMBER: If you add any namespaces, the default namespace must be added
++# explicitly, ie. mail_location does nothing unless you have a namespace
++# without a location setting. Default namespace is simply done by having a
++# namespace with empty prefix.
++#namespace private {
++   # Hierarchy separator to use. You should use the same separator for all
++   # namespaces or some clients get confused. '/' is usually a good one.
++   # The default however depends on the underlying mail storage format.
++   #separator = 
++
++   # Prefix required to access this namespace. This needs to be different for
++   # all namespaces. For example "Public/".
++   #prefix = 
++
++   # Physical location of the mailbox. This is in same format as
++   # mail_location, which is also the default for it.
++   #location =
++
++   # There can be only one INBOX, and this setting defines which namespace
++   # has it.
++   #inbox = no
++
++   # If namespace is hidden, it's not advertised to clients via NAMESPACE
++   # extension. You'll most likely also want to set list=no. This is mostly
++   # useful when converting from another server with different namespaces which
++   # you want to deprecate but still keep working. For example you can create
++   # hidden namespaces with prefixes "~/mail/", "~%u/mail/" and "mail/".
++   #hidden = yes
++
++   # Show the mailboxes under this namespace with LIST command. This makes the
++   # namespace visible for clients that don't support NAMESPACE extension.
++   #list = yes
++
++   # Namespace handles its own subscriptions. If set to "no", the parent
++   # namespace handles them (empty prefix should always have this as "yes")
++   #subscriptions = yes
++#}
++
++# System user and group used to access mails. If you use multiple, userdb
++# can override these by returning uid or gid fields. You can use either numbers
++# or names. <doc/wiki/UserIds>
++#mail_uid =
++#mail_gid =
++
++# Group to enable temporarily for privileged operations. Currently this is
++# used only with INBOX when either its initial creation or dotlocking fails.
++# Typically this is set to "mail" to give access to /var/mail.
++#mail_privileged_group =
++
++# Grant access to these supplementary groups for mail processes. Typically
++# these are used to set up access to shared mailboxes. Note that it may be
++# dangerous to set these if users can create symlinks (e.g. if "mail" group is
++# set here, ln -s /var/mail ~/mail/var could allow a user to delete others'
++# mailboxes, or ln -s /secret/shared/box ~/mail/mybox would allow reading it).
++#mail_access_groups =
++
++# Allow full filesystem access to clients. There's no access checks other than
++# what the operating system does for the active UID/GID. It works with both
++# maildir and mboxes, allowing you to prefix mailboxes names with eg. /path/
++# or ~user/.
++#mail_full_filesystem_access = no
++
++##
++## Mail processes
++##
++
++# Enable mail process debugging. This can help you figure out why Dovecot
++# isn't finding your mails.
++#mail_debug = no
++
++# Log prefix for mail processes. See doc/wiki/Variables.txt for list of
++# possible variables you can use.
++#mail_log_prefix = "%Us(%u): "
++
++# Max. number of lines a mail process is allowed to log per second before it's
++# throttled. 0 means unlimited. Typically there's no need to change this
++# unless you're using mail_log plugin, which may log a lot. This setting is
++# ignored while mail_debug=yes to avoid pointless throttling.
++#mail_log_max_lines_per_sec = 10
++
++# Don't use mmap() at all. This is required if you store indexes to shared
++# filesystems (NFS or clustered filesystem).
++#mmap_disable = no
++
++# Rely on O_EXCL to work when creating dotlock files. NFS supports O_EXCL
++# since version 3, so this should be safe to use nowadays by default.
++#dotlock_use_excl = yes
++
++# Don't use fsync() or fdatasync() calls. This makes the performance better
++# at the cost of potential data loss if the server (or the file server)
++# goes down.
++#fsync_disable = no
++
++# Mail storage exists in NFS. Set this to yes to make Dovecot flush NFS caches
++# whenever needed. If you're using only a single mail server this isn't needed.
++#mail_nfs_storage = no
++# Mail index files also exist in NFS. Setting this to yes requires
++# mmap_disable=yes and fsync_disable=no.
++#mail_nfs_index = no
++
++# Locking method for index files. Alternatives are fcntl, flock and dotlock.
++# Dotlocking uses some tricks which may create more disk I/O than other locking
++# methods. NFS users: flock doesn't work, remember to change mmap_disable.
++#lock_method = fcntl
++
++# Drop all privileges before exec()ing the mail process. This is mostly
++# meant for debugging, otherwise you don't get core dumps. It could be a small
++# security risk if you use single UID for multiple users, as the users could
++# ptrace() each others processes then.
++#mail_drop_priv_before_exec = no
++
++# Show more verbose process titles (in ps). Currently shows user name and
++# IP address. Useful for seeing who are actually using the IMAP processes
++# (eg. shared mailboxes or if same uid is used for multiple accounts).
++#verbose_proctitle = no
++
++# Valid UID range for users, defaults to 500 and above. This is mostly
++# to make sure that users can't log in as daemons or other system users.
++# Note that denying root logins is hardcoded to dovecot binary and can't
++# be done even if first_valid_uid is set to 0.
++#first_valid_uid = 500
++#last_valid_uid = 0
++
++# Valid GID range for users, defaults to non-root/wheel. Users having
++# non-valid GID as primary group ID aren't allowed to log in. If user
++# belongs to supplementary groups with non-valid GIDs, those groups are
++# not set.
++#first_valid_gid = 1
++#last_valid_gid = 0
++
++# Maximum number of running mail processes. When this limit is reached,
++# new users aren't allowed to log in.
++#max_mail_processes = 512
++
++# Set max. process size in megabytes. Most of the memory goes to mmap()ing
++# files, so it shouldn't harm much even if this limit is set pretty high.
++#mail_process_size = 256
++
++# Maximum allowed length for mail keyword name. It's only forced when trying
++# to create new keywords.
++#mail_max_keyword_length = 50
++
++# ':' separated list of directories under which chrooting is allowed for mail
++# processes (ie. /var/mail will allow chrooting to /var/mail/foo/bar too).
++# This setting doesn't affect login_chroot, mail_chroot or auth chroot
++# settings.
++# WARNING: Never add directories here which local users can modify, that
++# may lead to root exploit. Usually this should be done only if you don't
++# allow shell access for users. <doc/wiki/Chrooting.txt>
++#valid_chroot_dirs = 
++
++# Default chroot directory for mail processes. This can be overridden for
++# specific users in user database by giving /./ in user's home directory
++# (eg. /home/./user chroots into /home). Note that usually there is no real
++# need to do chrooting, Dovecot doesn't allow users to access files outside
++# their mail directory anyway. If your home directories are prefixed with
++# the chroot directory, append "/." to mail_chroot. <doc/wiki/Chrooting.txt>
++#mail_chroot = 
++
++##
++## Mailbox handling optimizations
++##
++
++# The minimum number of mails in a mailbox before updates are done to cache
++# file. This allows optimizing Dovecot's behavior to do less disk writes at
++# the cost of more disk reads.
++#mail_cache_min_mail_count = 0
++
++# When IDLE command is running, mailbox is checked once in a while to see if
++# there are any new mails or other changes. This setting defines the minimum
++# time in seconds to wait between those checks. Dovecot can also use dnotify,
++# inotify and kqueue to find out immediately when changes occur.
++#mailbox_idle_check_interval = 30
++
++# Save mails with CR+LF instead of plain LF. This makes sending those mails
++# take less CPU, especially with sendfile() syscall with Linux and FreeBSD.
++# But it also creates a bit more disk I/O which may just make it slower.
++# Also note that if other software reads the mboxes/maildirs, they may handle
++# the extra CRs wrong and cause problems.
++#mail_save_crlf = no
++
++##
++## Maildir-specific settings
++##
++
++# By default LIST command returns all entries in maildir beginning with a dot.
++# Enabling this option makes Dovecot return only entries which are directories.
++# This is done by stat()ing each entry, so it causes more disk I/O.
++# (For systems setting struct dirent->d_type, this check is free and it's
++# done always regardless of this setting)
++#maildir_stat_dirs = no
++
++# When copying a message, do it with hard links whenever possible. This makes
++# the performance much better, and it's unlikely to have any side effects.
++#maildir_copy_with_hardlinks = yes
++
++# When copying a message, try to preserve the base filename. Only if the
++# destination mailbox already contains the same name (ie. the mail is being
++# copied there twice), a new name is given. The destination filename check is
++# done only by looking at dovecot-uidlist file, so if something outside
++# Dovecot does similar filename preserving copies, you may run into problems.
++# NOTE: This setting requires maildir_copy_with_hardlinks = yes to work.
++#maildir_copy_preserve_filename = no
++
++##
++## mbox-specific settings
++##
++
++# Which locking methods to use for locking mbox. There are four available:
++#  dotlock: Create <mailbox>.lock file. This is the oldest and most NFS-safe
++#           solution. If you want to use /var/mail/ like directory, the users
++#           will need write access to that directory.
++#  dotlock_try: Same as dotlock, but if it fails because of permissions or
++#               because there isn't enough disk space, just skip it.
++#  fcntl  : Use this if possible. Works with NFS too if lockd is used.
++#  flock  : May not exist in all systems. Doesn't work with NFS.
++#  lockf  : May not exist in all systems. Doesn't work with NFS.
++#
++# You can use multiple locking methods; if you do the order they're declared
++# in is important to avoid deadlocks if other MTAs/MUAs are using multiple
++# locking methods as well. Some operating systems don't allow using some of
++# them simultaneously.
++#mbox_read_locks = fcntl
++#mbox_write_locks = dotlock fcntl
++
++# Maximum time in seconds to wait for lock (all of them) before aborting.
++#mbox_lock_timeout = 300
++
++# If dotlock exists but the mailbox isn't modified in any way, override the
++# lock file after this many seconds.
++#mbox_dotlock_change_timeout = 120
++
++# When mbox changes unexpectedly we have to fully read it to find out what
++# changed. If the mbox is large this can take a long time. Since the change
++# is usually just a newly appended mail, it'd be faster to simply read the
++# new mails. If this setting is enabled, Dovecot does this but still safely
++# fallbacks to re-reading the whole mbox file whenever something in mbox isn't
++# how it's expected to be. The only real downside to this setting is that if
++# some other MUA changes message flags, Dovecot doesn't notice it immediately.
++# Note that a full sync is done with SELECT, EXAMINE, EXPUNGE and CHECK 
++# commands.
++#mbox_dirty_syncs = yes
++
++# Like mbox_dirty_syncs, but don't do full syncs even with SELECT, EXAMINE,
++# EXPUNGE or CHECK commands. If this is set, mbox_dirty_syncs is ignored.
++#mbox_very_dirty_syncs = no
++
++# Delay writing mbox headers until doing a full write sync (EXPUNGE and CHECK
++# commands and when closing the mailbox). This is especially useful for POP3
++# where clients often delete all mails. The downside is that our changes
++# aren't immediately visible to other MUAs.
++#mbox_lazy_writes = yes
++
++# If mbox size is smaller than this (in kilobytes), don't write index files.
++# If an index file already exists it's still read, just not updated.
++#mbox_min_index_size = 0
++
++##
++## dbox-specific settings
++##
++
++# Maximum dbox file size in kilobytes until it's rotated.
++#dbox_rotate_size = 2048
++
++# Minimum dbox file size in kilobytes before it's rotated
++# (overrides dbox_rotate_days)
++#dbox_rotate_min_size = 16
++
++# Maximum dbox file age in days until it's rotated. Day always begins from
++# midnight, so 1 = today, 2 = yesterday, etc. 0 = check disabled.
++#dbox_rotate_days = 0
++
++##
++## IMAP specific settings
++##
++
++protocol imap {
++  # Login executable location.
++  #login_executable = /usr/libexec/dovecot/imap-login
++
++  # IMAP executable location. Changing this allows you to execute other
++  # binaries before the imap process is executed.
++  #
++  # This would write rawlogs into ~/dovecot.rawlog/ directory:
++  #   mail_executable = /usr/libexec/dovecot/rawlog /usr/libexec/dovecot/imap
++  #
++  # This would attach gdb into the imap process and write backtraces into
++  # /tmp/gdbhelper.* files:
++  #   mail_executable = /usr/libexec/dovecot/gdbhelper /usr/libexec/dovecot/imap
++  #
++  #mail_executable = /usr/libexec/dovecot/imap
++
++  # Maximum IMAP command line length in bytes. Some clients generate very long
++  # command lines with huge mailboxes, so you may need to raise this if you get
++  # "Too long argument" or "IMAP command line too large" errors often.
++  #imap_max_line_length = 65536
++
++  # Maximum number of IMAP connections allowed for a user from each IP address.
++  # NOTE: The username is compared case-sensitively.
++  #mail_max_userip_connections = 10
++
++  # Support for dynamically loadable plugins. mail_plugins is a space separated
++  # list of plugins to load.
++  #mail_plugins = 
++  #mail_plugin_dir = /usr/lib/dovecot/imap
++
++  # Send IMAP capabilities in greeting message. This makes it unnecessary for
++  # clients to request it with CAPABILITY command, so it saves one round-trip.
++  # Many clients however don't understand it and ask the CAPABILITY anyway.
++  #login_greeting_capability = no
++
++  # IMAP logout format string:
++  #  %i - total number of bytes read from client
++  #  %o - total number of bytes sent to client
++  #imap_logout_format = bytes=%i/%o
++
++  # Override the IMAP CAPABILITY response.
++  #imap_capability = 
++
++  # Workarounds for various client bugs:
++  #   delay-newmail:
++  #     Send EXISTS/RECENT new mail notifications only when replying to NOOP
++  #     and CHECK commands. Some clients ignore them otherwise, for example OSX
++  #     Mail (<v2.1). Outlook Express breaks more badly though, without this it
++  #     may show user "Message no longer in server" errors. Note that OE6 still
++  #     breaks even with this workaround if synchronization is set to
++  #     "Headers Only".
++  #   netscape-eoh:
++  #     Netscape 4.x breaks if message headers don't end with the empty "end of
++  #     headers" line. Normally all messages have this, but setting this
++  #     workaround makes sure that Netscape never breaks by adding the line if
++  #     it doesn't exist. This is done only for FETCH BODY[HEADER.FIELDS..]
++  #     commands. Note that RFC says this shouldn't be done.
++  #   tb-extra-mailbox-sep:
++  #     With mbox storage a mailbox can contain either mails or submailboxes,
++  #     but not both. Thunderbird separates these two by forcing server to
++  #     accept '/' suffix in mailbox names in subscriptions list.
++  # The list is space-separated.
++  #imap_client_workarounds = 
++}
++  
++##
++## POP3 specific settings
++##
++
++protocol pop3 {
++  # Login executable location.
++  #login_executable = /usr/libexec/dovecot/pop3-login
++
++  # POP3 executable location. See IMAP's mail_executable above for examples
++  # how this could be changed.
++  #mail_executable = /usr/libexec/dovecot/pop3
++
++  # Don't try to set mails non-recent or seen with POP3 sessions. This is
++  # mostly intended to reduce disk I/O. With maildir it doesn't move files
++  # from new/ to cur/, with mbox it doesn't write Status-header.
++  #pop3_no_flag_updates = no
++
++  # Support LAST command which exists in old POP3 specs, but has been removed
++  # from new ones. Some clients still wish to use this though. Enabling this
++  # makes RSET command clear all \Seen flags from messages.
++  #pop3_enable_last = no
++
++  # If mail has X-UIDL header, use it as the mail's UIDL.
++  #pop3_reuse_xuidl = no
++
++  # Keep the mailbox locked for the entire POP3 session.
++  #pop3_lock_session = no
++
++  # POP3 UIDL (unique mail identifier) format to use. You can use following
++  # variables, along with the variable modifiers described in
++  # doc/wiki/Variables.txt (e.g. %Uf for the filename in uppercase)
++  #
++  #  %v - Mailbox's IMAP UIDVALIDITY
++  #  %u - Mail's IMAP UID
++  #  %m - MD5 sum of the mailbox headers in hex (mbox only)
++  #  %f - filename (maildir only)
++  #
++  # If you want UIDL compatibility with other POP3 servers, use:
++  #  UW's ipop3d         : %08Xv%08Xu
++  #  Courier             : %f or %v-%u (both might be used simultaneosly)
++  #  Cyrus (<= 2.1.3)    : %u
++  #  Cyrus (>= 2.1.4)    : %v.%u
++  #  Dovecot v0.99.x     : %v.%u
++  #  tpop3d              : %Mf
++  #
++  # Note that Outlook 2003 seems to have problems with %v.%u format which was
++  # Dovecot's default, so if you're building a new server it would be a good
++  # idea to change this. %08Xu%08Xv should be pretty fail-safe.
++  #
++  #pop3_uidl_format = %08Xu%08Xv
++
++  # POP3 logout format string:
++  #  %i - total number of bytes read from client
++  #  %o - total number of bytes sent to client
++  #  %t - number of TOP commands
++  #  %p - number of bytes sent to client as a result of TOP command
++  #  %r - number of RETR commands
++  #  %b - number of bytes sent to client as a result of RETR command
++  #  %d - number of deleted messages
++  #  %m - number of messages (before deletion)
++  #  %s - mailbox size in bytes (before deletion)
++  #pop3_logout_format = top=%t/%p, retr=%r/%b, del=%d/%m, size=%s
++
++  # Maximum number of POP3 connections allowed for a user from each IP address.
++  # NOTE: The username is compared case-sensitively.
++  #mail_max_userip_connections = 3
++
++  # Support for dynamically loadable plugins. mail_plugins is a space separated
++  # list of plugins to load.
++  #mail_plugins = 
++  #mail_plugin_dir = /usr/lib/dovecot/pop3
++
++  # Workarounds for various client bugs:
++  #   outlook-no-nuls:
++  #     Outlook and Outlook Express hang if mails contain NUL characters.
++  #     This setting replaces them with 0x80 character.
++  #   oe-ns-eoh:
++  #     Outlook Express and Netscape Mail breaks if end of headers-line is
++  #     missing. This option simply sends it if it's missing.
++  # The list is space-separated.
++  #pop3_client_workarounds = 
++}
++
++##
++## LDA specific settings
++##
++
++protocol lda {
++  # Address to use when sending rejection mails.
++  postmaster_address = postmaster@example.com
++
++  # Hostname to use in various parts of sent mails, eg. in Message-Id.
++  # Default is the system's real hostname.
++  #hostname = 
++
++  # Support for dynamically loadable plugins. mail_plugins is a space separated
++  # list of plugins to load.
++  #mail_plugins = 
++  #mail_plugin_dir = /usr/lib/dovecot/lda
++
++  # If user is over quota, return with temporary failure instead of
++  # bouncing the mail.
++  #quota_full_tempfail = no
++
++  # Format to use for logging mail deliveries. You can use variables:
++  #  %$ - Delivery status message (e.g. "saved to INBOX")
++  #  %m - Message-ID
++  #  %s - Subject
++  #  %f - From address
++  #deliver_log_format = msgid=%m: %$
++
++  # Binary to use for sending mails.
++  #sendmail_path = /usr/lib/sendmail
++
++  # Subject: header to use for rejection mails. You can use the same variables
++  # as for rejection_reason below.
++  #rejection_subject = Automatically rejected mail
++
++  # Human readable error message for rejection mails. You can use variables:
++  #  %n = CRLF, %r = reason, %s = original subject, %t = recipient
++  #rejection_reason = Your message to <%t> was automatically rejected:%n%r
++
++  # UNIX socket path to master authentication server to find users.
++  #auth_socket_path = /var/run/dovecot/auth-master
++}
++
++##
++## Authentication processes
++##
++
++# Executable location
++#auth_executable = /usr/libexec/dovecot/dovecot-auth
++
++# Set max. process size in megabytes.
++#auth_process_size = 256
++
++# Authentication cache size in kilobytes. 0 means it's disabled.
++# Note that bsdauth, PAM and vpopmail require cache_key to be set for caching
++# to be used.
++#auth_cache_size = 0
++# Time to live in seconds for cached data. After this many seconds the cached
++# record is no longer used, *except* if the main database lookup returns
++# internal failure. We also try to handle password changes automatically: If
++# user's previous authentication was successful, but this one wasn't, the
++# cache isn't used. For now this works only with plaintext authentication.
++#auth_cache_ttl = 3600
++# TTL for negative hits (user not found). 0 disables caching them completely.
++#auth_cache_negative_ttl = 3600
++
++# Space separated list of realms for SASL authentication mechanisms that need
++# them. You can leave it empty if you don't want to support multiple realms.
++# Many clients simply use the first one listed here, so keep the default realm
++# first.
++#auth_realms =
++
++# Default realm/domain to use if none was specified. This is used for both
++# SASL realms and appending @domain to username in plaintext logins.
++#auth_default_realm = 
++
++# List of allowed characters in username. If the user-given username contains
++# a character not listed in here, the login automatically fails. This is just
++# an extra check to make sure user can't exploit any potential quote escaping
++# vulnerabilities with SQL/LDAP databases. If you want to allow all characters,
++# set this value to empty.
++#auth_username_chars = abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890.-_@
++
++# Username character translations before it's looked up from databases. The
++# value contains series of from -> to characters. For example "#@/@" means
++# that '#' and '/' characters are translated to '@'.
++#auth_username_translation =
++
++# Username formatting before it's looked up from databases. You can use
++# the standard variables here, eg. %Lu would lowercase the username, %n would
++# drop away the domain if it was given, or "%n-AT-%d" would change the '@' into
++# "-AT-". This translation is done after auth_username_translation changes.
++#auth_username_format =
++
++# If you want to allow master users to log in by specifying the master
++# username within the normal username string (ie. not using SASL mechanism's
++# support for it), you can specify the separator character here. The format
++# is then <username><separator><master username>. UW-IMAP uses "*" as the
++# separator, so that could be a good choice.
++#auth_master_user_separator =
++
++# Username to use for users logging in with ANONYMOUS SASL mechanism
++#auth_anonymous_username = anonymous
++
++# More verbose logging. Useful for figuring out why authentication isn't
++# working.
++#auth_verbose = no
++
++# Even more verbose logging for debugging purposes. Shows for example SQL
++# queries.
++#auth_debug = no
++
++# In case of password mismatches, log the passwords and used scheme so the
++# problem can be debugged. Enabling this also enables auth_debug.
++#auth_debug_passwords = no
++
++# Maximum number of dovecot-auth worker processes. They're used to execute
++# blocking passdb and userdb queries (eg. MySQL and PAM). They're
++# automatically created and destroyed as needed.
++#auth_worker_max_count = 30
++
++# Number of auth requests to handle before destroying the process. This may
++# be useful if PAM plugins leak memory.
++#auth_worker_max_request_count = 0
++
++# Host name to use in GSSAPI principal names. The default is to use the
++# name returned by gethostname().
++#auth_gssapi_hostname =
++
++# Kerberos keytab to use for the GSSAPI mechanism. Will use the system 
++# default (usually /etc/krb5.keytab) if not specified.
++#auth_krb5_keytab = 
++
++# Do NTLM authentication using Samba's winbind daemon and ntlm_auth helper.
++# <doc/wiki/Authentication/Mechanisms/Winbind.txt>
++#auth_ntlm_use_winbind = no
++
++# Path for Samba's ntlm_auth helper binary.
++#auth_winbind_helper_path = /usr/bin/ntlm_auth
++
++# Number of seconds to delay before replying to failed authentications.
++#auth_failure_delay = 2
++
++auth default {
++  # Space separated list of wanted authentication mechanisms:
++  #   plain login digest-md5 cram-md5 ntlm rpa apop anonymous gssapi otp skey
++  #   gss-spnego
++  # NOTE: See also disable_plaintext_auth setting.
++  mechanisms = plain
++
++  #
++  # Password database is used to verify user's password (and nothing more).
++  # You can have multiple passdbs and userdbs. This is useful if you want to
++  # allow both system users (/etc/passwd) and virtual users to login without
++  # duplicating the system users into virtual database.
++  #
++  # <doc/wiki/PasswordDatabase.txt>
++  #
++  # By adding master=yes setting inside a passdb you make the passdb a list
++  # of "master users", who can log in as anyone else. Unless you're using PAM,
++  # you probably still want the destination user to be looked up from passdb
++  # that it really exists. This can be done by adding pass=yes setting to the
++  # master passdb. <doc/wiki/Authentication.MasterUsers.txt>
++
++  # Users can be temporarily disabled by adding a passdb with deny=yes.
++  # If the user is found from that database, authentication will fail.
++  # The deny passdb should always be specified before others, so it gets
++  # checked first. Here's an example:
++
++  #passdb passwd-file {
++    # File contains a list of usernames, one per line
++    #args = /etc/dovecot.deny
++    #deny = yes
++  #}
++
++  # PAM authentication. Preferred nowadays by most systems. 
++  # Note that PAM can only be used to verify if user's password is correct,
++  # so it can't be used as userdb. If you don't want to use a separate user
++  # database (passwd usually), you can use static userdb.
++  # REMEMBER: You'll need /etc/pam.d/dovecot file created for PAM
++  # authentication to actually work. <doc/wiki/PasswordDatabase.PAM.txt>
++  passdb pam {
++    # [session=yes] [setcred=yes] [failure_show_msg=yes]
++    # [cache_key=<key>] [<service name>]
++    #
++    # session=yes makes Dovecot open and immediately close PAM session. Some
++    # PAM plugins need this to work, such as pam_mkhomedir.
++    #
++    # setcred=yes makes Dovecot establish PAM credentials if some PAM plugins
++    # need that. They aren't ever deleted though, so this isn't enabled by
++    # default.
++    #
++    # cache_key can be used to enable authentication caching for PAM
++    # (auth_cache_size also needs to be set). It isn't enabled by default
++    # because PAM modules can do all kinds of checks besides checking password,
++    # such as checking IP address. Dovecot can't know about these checks
++    # without some help. cache_key is simply a list of variables (see
++    # doc/wiki/Variables.txt) which must match for the cached data to be used.
++    # Here are some examples:
++    #   %u - Username must match. Probably sufficient for most uses.
++    #   %u%r - Username and remote IP address must match.
++    #   %u%s - Username and service (ie. IMAP, POP3) must match.
++    # 
++    # The service name can contain variables, for example %Ls expands to
++    # pop3 or imap.
++    #
++    # Some examples:
++    #   args = session=yes %Ls
++    #   args = cache_key=%u dovecot
++    #args = dovecot
++  }
++
++  # System users (NSS, /etc/passwd, or similiar)
++  # In many systems nowadays this uses Name Service Switch, which is
++  # configured in /etc/nsswitch.conf. <doc/wiki/AuthDatabase.Passwd.txt>
++  #passdb passwd {
++    # [blocking=yes] - See userdb passwd for explanation
++    #args = 
++  #}
++
++  # Shadow passwords for system users (NSS, /etc/shadow or similiar).
++  # Deprecated by PAM nowadays.
++  # <doc/wiki/PasswordDatabase.Shadow.txt>
++  #passdb shadow {
++    # [blocking=yes] - See userdb passwd for explanation
++    #args = 
++  #}
++
++  # PAM-like authentication for OpenBSD.
++  # <doc/wiki/PasswordDatabase.BSDAuth.txt>
++  #passdb bsdauth {
++    # [cache_key=<key>] - See cache_key in PAM for explanation.
++    #args =
++  #}
++
++  # passwd-like file with specified location
++  # <doc/wiki/AuthDatabase.PasswdFile.txt>
++  #passdb passwd-file {
++    # [scheme=<default password scheme>] [username_format=<format>]
++    # <Path for passwd-file>
++    #args = 
++  #}
++
++  # checkpassword executable authentication
++  # NOTE: You will probably want to use "userdb prefetch" with this.
++  # <doc/wiki/PasswordDatabase.CheckPassword.txt>
++  #passdb checkpassword {
++    # Path for checkpassword binary
++    #args = 
++  #}
++
++  # SQL database <doc/wiki/AuthDatabase.SQL.txt>
++  #passdb sql {
++    # Path for SQL configuration file, see doc/dovecot-sql-example.conf
++    #args = 
++  #}
++
++  # LDAP database <doc/wiki/AuthDatabase.LDAP.txt>
++  #passdb ldap {
++    # Path for LDAP configuration file, see doc/dovecot-ldap-example.conf
++    #args = 
++  #}
++
++  # vpopmail authentication <doc/wiki/AuthDatabase.VPopMail.txt>
++  #passdb vpopmail {
++    # [cache_key=<key>] - See cache_key in PAM for explanation.
++    # [quota_template=<template>] - %q expands to Maildir++ quota
++    #   (eg. quota_template=quota_rule=*:backend=%q)
++    #args =
++  #}
++
++  #
++  # User database specifies where mails are located and what user/group IDs
++  # own them. For single-UID configuration use "static".
++  #
++  # <doc/wiki/UserDatabase.txt>
++  #
++
++  # "prefetch" user database means that the passdb already provided the
++  # needed information and there's no need to do a separate userdb lookup.
++  # This can be made to work with SQL and LDAP databases, see their example
++  # configuration files for more information how to do it.
++  # <doc/wiki/UserDatabase.Prefetch.txt>
++  #userdb prefetch {
++  #}
++
++  # System users (NSS, /etc/passwd, or similiar). In many systems nowadays this
++  # uses Name Service Switch, which is configured in /etc/nsswitch.conf.
++  # <doc/wiki/AuthDatabase.Passwd.txt>
++  userdb passwd {
++    # [blocking=yes] - By default the lookups are done in the main dovecot-auth
++    # process. This setting causes the lookups to be done in auth worker
++    # proceses. Useful with remote NSS lookups that may block.
++    # NOTE: Be sure to use this setting with nss_ldap or users might get
++    # logged in as each others!
++    #args = 
++  }
++
++  # passwd-like file with specified location
++  # <doc/wiki/AuthDatabase.PasswdFile.txt>
++  #userdb passwd-file {
++    # [username_format=<format>] <Path for passwd-file>
++    #args =
++  #}
++
++  # static settings generated from template <doc/wiki/UserDatabase.Static.txt>
++  #userdb static {
++    # Template for the fields. Can return anything a userdb could normally
++    # return. For example:
++    #
++    #  args = uid=500 gid=500 home=/var/mail/%u
++    #
++    # If you use deliver, it needs to look up users only from the userdb. This
++    # of course doesn't work with static because there is no list of users.
++    # Normally static userdb handles this by doing a passdb lookup. This works
++    # with most passdbs, with PAM being the most notable exception. If you do
++    # the user verification another way, you can add allow_all_users=yes to
++    # the args in which case the passdb lookup is skipped.
++    #
++    #args =
++  #}
++
++  # SQL database <doc/wiki/AuthDatabase.SQL.txt>
++  #userdb sql {
++    # Path for SQL configuration file, see doc/dovecot-sql-example.conf
++    #args = 
++  #}
++
++  # LDAP database <doc/wiki/AuthDatabase.LDAP.txt>
++  #userdb ldap {
++    # Path for LDAP configuration file, see doc/dovecot-ldap-example.conf
++    #args = 
++  #}
++
++  # vpopmail <doc/wiki/AuthDatabase.VPopMail.txt>
++  #userdb vpopmail {
++  #}
++
++  # User to use for the process. This user needs access to only user and
++  # password databases, nothing else. Only shadow and pam authentication
++  # requires roots, so use something else if possible. Note that passwd
++  # authentication with BSDs internally accesses shadow files, which also
++  # requires roots. Note that this user is NOT used to access mails.
++  # That user is specified by userdb above.
++  user = root
++
++  # Directory where to chroot the process. Most authentication backends don't
++  # work if this is set, and there's no point chrooting if auth_user is root.
++  # Note that valid_chroot_dirs isn't needed to use this setting.
++  #chroot = 
++
++  # Number of authentication processes to create
++  #count = 1
++
++  # Require a valid SSL client certificate or the authentication fails.
++  #ssl_require_client_cert = no
++
++  # Take the username from client's SSL certificate, using 
++  # X509_NAME_get_text_by_NID() which returns the subject's DN's
++  # CommonName. 
++  #ssl_username_from_cert = no
++
++  # It's possible to export the authentication interface to other programs:
++  #socket listen {
++    #master {
++      # Master socket provides access to userdb information. It's typically
++      # used to give Dovecot's local delivery agent access to userdb so it
++      # can find mailbox locations.
++      #path = /var/run/dovecot/auth-master
++      #mode = 0600
++      # Default user/group is the one who started dovecot-auth (root)
++      #user = 
++      #group = 
++    #}
++    #client {
++      # The client socket is generally safe to export to everyone. Typical use
++      # is to export it to your SMTP server so it can do SMTP AUTH lookups
++      # using it.
++      #path = /var/run/dovecot/auth-client
++      #mode = 0660
++    #}
++  #}
++}
++
++# If you wish to use another authentication server than dovecot-auth, you can
++# use connect sockets. They are assumed to be already running, Dovecot's master
++# process only tries to connect to them. They don't need any other settings
++# than the path for the master socket, as the configuration is done elsewhere.
++# Note that the client sockets must exist in the login_dir.
++#auth external {
++#  socket connect {
++#    master {
++#      path = /var/run/dovecot/auth-master
++#    }
++#  }
++#}
++
++##
++## Dictionary server settings
++##
++
++# Dictionary can be used by some plugins to store key=value lists.
++# Currently this is only used by dict quota backend. The dictionary can be
++# used either directly or though a dictionary server. The following dict block
++# maps dictionary names to URIs when the server is used. These can then be
++# referenced using URIs in format "proxy::<name>".
++
++dict {
++  #quota = mysql:/etc/dovecot-dict-quota.conf 
++}
++
++# Path to Berkeley DB's configuration file. See doc/dovecot-db-example.conf
++#dict_db_config = 
++
++##
++## Plugin settings
++##
++
++plugin {
++  # Here you can give some extra environment variables to mail processes.
++  # This is mostly meant for passing parameters to plugins. %variable
++  # expansion is done for all values.
++
++  # Quota plugin. Multiple backends are supported:
++  #   dirsize: Find and sum all the files found from mail directory.
++  #            Extremely SLOW with Maildir. It'll eat your CPU and disk I/O.
++  #   dict: Keep quota stored in dictionary (eg. SQL)
++  #   maildir: Maildir++ quota
++  #   fs: Read-only support for filesystem quota
++  #
++  # Quota limits are set using "quota_rule" parameters, either in here or in
++  # userdb. It's also possible to give mailbox-specific limits, for example:
++  #   quota_rule = *:storage=1048576
++  #   quota_rule2 = Trash:storage=102400
++  # User has now 1GB quota, but when saving to Trash mailbox the user gets
++  # additional 100MB.
++  #
++  # Multiple quota roots are also possible, for example:
++  #   quota = dict:user::proxy::quota
++  #   quota2 = dict:domain:%d:proxy::quota_domain
++  #   quota_rule = *:storage=102400
++  #   quota2_rule = *:storage=1048576
++  # Gives each user their own 100MB quota and one shared 1GB quota within
++  # the domain.
++  #
++  # You can execute a given command when user exceeds a specified quota limit.
++  # Each quota root has separate limits. Only the command for the first
++  # exceeded limit is excecuted, so put the highest limit first.
++  # Note that % needs to be escaped as %%, otherwise "% " expands to empty.
++  #   quota_warning = storage=95%% /usr/local/bin/quota-warning.sh 95
++  #   quota_warning2 = storage=80%% /usr/local/bin/quota-warning.sh 80
++  #quota = maildir
++
++  # ACL plugin. vfile backend reads ACLs from "dovecot-acl" file from maildir
++  # directory. You can also optionally give a global ACL directory path where
++  # ACLs are applied to all users' mailboxes. The global ACL directory contains
++  # one file for each mailbox, eg. INBOX or sub.mailbox. cache_secs parameter
++  # specifies how many seconds to wait between stat()ing dovecot-acl file
++  # to see if it changed.
++  #acl = vfile:/etc/dovecot-acls:cache_secs=300
++
++  # Convert plugin. If set, specifies the source storage path which is
++  # converted to destination storage (mail_location) when the user logs in.
++  # The existing mail directory is renamed to <dir>-converted.
++  #convert_mail = mbox:%h/mail
++  # Skip mailboxes which we can't open successfully instead of aborting.
++  #convert_skip_broken_mailboxes = no
++  # Skip directories beginning with '.'
++  #convert_skip_dotdirs = no
++  # If source storage has mailbox names with destination storage's hierarchy
++  # separators, replace them with this character.
++  #convert_alt_hierarchy_char = _
++
++  # Trash plugin. When saving a message would make user go over quota, this
++  # plugin automatically deletes the oldest mails from configured mailboxes
++  # until the message can be saved within quota limits. The configuration file
++  # is a text file where each line is in format: <priority> <mailbox name>
++  # Mails are first deleted in lowest -> highest priority number order
++  #trash = /etc/dovecot-trash.conf
++
++  # Expire plugin. Mails are expunged from mailboxes after being there the
++  # configurable time. The first expiration date for each mailbox is stored in
++  # a dictionary so it can be quickly determined which mailboxes contain
++  # expired mails. The actual expunging is done in a nightly cronjob, which
++  # you must set up:
++  #   dovecot --exec-mail ext /usr/libexec/dovecot/expire-tool
++  #expire = Trash 7 Spam 30
++  #expire_dict = db:/var/lib/dovecot/expire.db
++
++  # Lazy expunge plugin. Currently works only with maildirs. When a user
++  # expunges mails, the mails are moved to a mailbox in another namespace
++  # (1st). When a mailbox is deleted, the mailbox is moved to another namespace
++  # (2nd) as well. Also if the deleted mailbox had any expunged messages,
++  # they're moved to a 3rd namespace. The mails won't be counted in quota,
++  # and they're not deleted automatically (use a cronjob or something).
++  #lazy_expunge = .EXPUNGED/ .DELETED/ .DELETED/.EXPUNGED/
++
++  # Events to log. Default is all.
++  #mail_log_events = delete undelete expunge copy mailbox_delete mailbox_rename
++  # Group events within a transaction to one line.
++  #mail_log_group_events = 
++  # Available fields: uid, box, msgid, size, vsize
++  # size and vsize are available only for expunge and copy events.
++  #mail_log_fields = uid box msgid size
++}
+diff -urN dovecot-1.1.11/README.managesieve dovecot-1.1.11.debian/README.managesieve
+--- dovecot-1.1.11/README.managesieve	1970-01-01 01:00:00.000000000 +0100
++++ dovecot-1.1.11.debian/README.managesieve	2009-02-20 20:03:47.000000000 +0100
 @@ -0,0 +1,29 @@
 +
 +MANAGESIEVE service support patch for Dovecot 1.1
@@ -128,10 +1288,10 @@ diff -urN dovecot-1.1.7/README.managesieve dovecot-1.1.7-managesieve/README.mana
 +Note that this patch adds configuration examples to the dovecot-example.conf 
 +configuration file example.
 +
-diff -urN dovecot-1.1.7/src/master/child-process.c dovecot-1.1.7-managesieve/src/master/child-process.c
---- dovecot-1.1.7/src/master/child-process.c	2008-10-26 09:03:45.000000000 -0600
-+++ dovecot-1.1.7-managesieve/src/master/child-process.c	2008-12-04 20:05:46.000000000 -0700
-@@ -19,7 +19,8 @@
+diff -urN dovecot-1.1.11/src/master/child-process.c dovecot-1.1.11.debian/src/master/child-process.c
+--- dovecot-1.1.11/src/master/child-process.c	2009-01-14 21:04:23.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/child-process.c	2009-02-20 20:03:47.000000000 +0100
+@@ -20,7 +20,8 @@
  	"imap",
  	"pop3",
  	"ssl-build-param",
@@ -141,7 +1301,7 @@ diff -urN dovecot-1.1.7/src/master/child-process.c dovecot-1.1.7-managesieve/src
  };
  
  struct hash_table *processes;
-@@ -108,6 +109,7 @@
+@@ -109,6 +110,7 @@
  			return "Out of memory - see login_process_size setting";
  		case PROCESS_TYPE_IMAP:
  		case PROCESS_TYPE_POP3:
@@ -149,9 +1309,241 @@ diff -urN dovecot-1.1.7/src/master/child-process.c dovecot-1.1.7-managesieve/src
  			return "Out of memory - see mail_process_size setting";
  		case PROCESS_TYPE_UNKNOWN:
  		case PROCESS_TYPE_SSL_PARAM:
-diff -urN dovecot-1.1.7/src/master/child-process.h dovecot-1.1.7-managesieve/src/master/child-process.h
---- dovecot-1.1.7/src/master/child-process.h	2008-10-26 09:03:45.000000000 -0600
-+++ dovecot-1.1.7-managesieve/src/master/child-process.h	2008-12-04 20:05:46.000000000 -0700
+diff -urN dovecot-1.1.11/src/master/child-process.c.orig dovecot-1.1.11.debian/src/master/child-process.c.orig
+--- dovecot-1.1.11/src/master/child-process.c.orig	1970-01-01 01:00:00.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/child-process.c.orig	2009-01-14 21:04:23.000000000 +0100
+@@ -0,0 +1,228 @@
++/* Copyright (c) 2002-2009 Dovecot authors, see the included COPYING file */
++
++#include "common.h"
++#include "lib-signals.h"
++#include "hash.h"
++#include "str.h"
++#include "env-util.h"
++#include "syslog-util.h"
++#include "child-process.h"
++
++#include <unistd.h>
++#include <syslog.h>
++#include <sys/wait.h>
++
++const char *process_names[PROCESS_TYPE_MAX] = {
++	"unknown",
++	"auth",
++	"auth-worker",
++	"login",
++	"imap",
++	"pop3",
++	"ssl-build-param",
++	"dict"
++};
++
++struct hash_table *processes;
++static child_process_destroy_callback_t *destroy_callbacks[PROCESS_TYPE_MAX];
++
++struct child_process *child_process_lookup(pid_t pid)
++{
++	return hash_lookup(processes, POINTER_CAST(pid));
++}
++
++void child_process_add(pid_t pid, struct child_process *process)
++{
++	hash_insert(processes, POINTER_CAST(pid), process);
++}
++
++void child_process_remove(pid_t pid)
++{
++	hash_remove(processes, POINTER_CAST(pid));
++}
++
++void child_process_init_env(void)
++{
++	int facility;
++
++	/* remove all environment, we don't need them */
++	env_clean();
++
++	/* we'll log through master process */
++	env_put("LOG_TO_MASTER=1");
++	if (env_tz != NULL)
++		env_put(t_strconcat("TZ=", env_tz, NULL));
++
++	if (settings_root == NULL ||
++	    !syslog_facility_find(settings_root->defaults->syslog_facility,
++				  &facility))
++		facility = LOG_MAIL;
++	env_put(t_strdup_printf("SYSLOG_FACILITY=%d", facility));
++
++	if (settings_root != NULL && !settings_root->defaults->version_ignore)
++		env_put("DOVECOT_VERSION="PACKAGE_VERSION);
++#ifdef DEBUG
++	if (gdb) env_put("GDB=1");
++#endif
++}
++
++void client_process_exec(const char *cmd, const char *title)
++{
++	const char **argv;
++
++	/* very simple argument splitting. */
++	if (*title == '\0')
++		argv = t_strsplit(cmd, " ");
++	else
++		argv = t_strsplit(t_strconcat(cmd, " ", title, NULL), " ");
++
++	client_process_exec_argv(argv[0], argv);
++}
++
++void client_process_exec_argv(const char *executable, const char **argv)
++{
++	const char *p;
++
++	/* hide the path, it's ugly */
++	p = strrchr(argv[0], '/');
++	if (p != NULL) argv[0] = p+1;
++
++	execv(executable, (char **)argv);
++}
++
++static const char *get_exit_status_message(enum fatal_exit_status status,
++					   enum process_type process_type)
++{
++	switch (status) {
++	case FATAL_LOGOPEN:
++		return "Can't open log file";
++	case FATAL_LOGWRITE:
++		return "Can't write to log file";
++	case FATAL_LOGERROR:
++		return "Internal logging error";
++	case FATAL_OUTOFMEM:
++		switch (process_type) {
++		case PROCESS_TYPE_AUTH:
++		case PROCESS_TYPE_AUTH_WORKER:
++			return "Out of memory - see auth_process_size setting";
++		case PROCESS_TYPE_LOGIN:
++			return "Out of memory - see login_process_size setting";
++		case PROCESS_TYPE_IMAP:
++		case PROCESS_TYPE_POP3:
++			return "Out of memory - see mail_process_size setting";
++		case PROCESS_TYPE_UNKNOWN:
++		case PROCESS_TYPE_SSL_PARAM:
++		case PROCESS_TYPE_DICT:
++		case PROCESS_TYPE_MAX:
++			break;
++		}
++		return "Out of memory";
++	case FATAL_EXEC:
++		return "exec() failed";
++
++	case FATAL_DEFAULT:
++		return "Fatal failure";
++	}
++
++	return NULL;
++}
++
++static void sigchld_handler(int signo ATTR_UNUSED,
++			    void *context ATTR_UNUSED)
++{
++	struct child_process *process;
++	const char *process_type_name, *msg;
++	enum process_type process_type;
++	string_t *str;
++	pid_t pid;
++	int status;
++	bool abnormal_exit;
++
++	str = t_str_new(128);
++	while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
++		/* get the type and remove from hash */
++		str_truncate(str, 0);
++		process = child_process_lookup(pid);
++		if (process == NULL)
++			process_type = PROCESS_TYPE_UNKNOWN;
++		else {
++			process_type = process->type;
++			child_process_remove(pid);
++		}
++		abnormal_exit = TRUE;
++
++		/* write errors to syslog */
++		process_type_name = process_names[process_type];
++		if (WIFEXITED(status)) {
++			status = WEXITSTATUS(status);
++			if (status == 0) {
++				abnormal_exit = FALSE;
++				if (process_type == PROCESS_TYPE_UNKNOWN) {
++					i_error("unknown child %s exited "
++						"successfully", dec2str(pid));
++				}
++			} else if (status == 1 &&
++				   process_type == PROCESS_TYPE_SSL_PARAM) {
++				/* kludgy. hide this failure. */
++			} else if (status == FATAL_DEFAULT &&
++				   process->seen_fatal) {
++				/* the error was already logged. */
++			} else {
++				msg = get_exit_status_message(status,
++							      process_type);
++				msg = msg == NULL ? "" :
++					t_strconcat(" (", msg, ")", NULL);
++				str_printfa(str,
++					    "child %s (%s) returned error %d%s",
++					    dec2str(pid), process_type_name,
++					    status, msg);
++			}
++		} else if (WIFSIGNALED(status)) {
++			str_printfa(str, "child %s (%s) killed with signal %d",
++				    dec2str(pid), process_type_name,
++				    WTERMSIG(status));
++		}
++
++		if (str_len(str) > 0) {
++			if (process != NULL && process->ip.family != 0) {
++				if (!process->ip_changed)
++					str_append(str, " (ip=");
++				else
++					str_append(str, " (latest ip=");
++				str_printfa(str, "%s)",
++					    net_ip2addr(&process->ip));
++			}
++			i_error("%s", str_c(str));
++		}
++
++		if (destroy_callbacks[process_type] != NULL) {
++			destroy_callbacks[process_type](process, pid,
++							abnormal_exit);
++		}
++	}
++
++	if (pid == -1 && errno != EINTR && errno != ECHILD)
++		i_warning("waitpid() failed: %m");
++}
++
++void child_process_set_destroy_callback(enum process_type type,
++					child_process_destroy_callback_t *cb)
++{
++	i_assert(type < PROCESS_TYPE_MAX);
++
++	destroy_callbacks[type] = cb;
++}
++
++void child_processes_init(void)
++{
++	processes = hash_create(default_pool, default_pool, 128, NULL, NULL);
++	lib_signals_set_handler(SIGCHLD, TRUE, sigchld_handler, NULL);
++}
++
++void child_processes_deinit(void)
++{
++	/* make sure we log if child processes died unexpectedly */
++	sigchld_handler(SIGCHLD, NULL);
++	lib_signals_unset_handler(SIGCHLD, sigchld_handler, NULL);
++	hash_destroy(&processes);
++}
+diff -urN dovecot-1.1.11/src/master/child-process.h dovecot-1.1.11.debian/src/master/child-process.h
+--- dovecot-1.1.11/src/master/child-process.h	2009-01-14 21:01:36.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/child-process.h	2009-02-20 20:03:47.000000000 +0100
 @@ -10,6 +10,7 @@
  	PROCESS_TYPE_POP3,
  	PROCESS_TYPE_SSL_PARAM,
@@ -160,9 +1552,9 @@ diff -urN dovecot-1.1.7/src/master/child-process.h dovecot-1.1.7-managesieve/src
  
  	PROCESS_TYPE_MAX
  };
-diff -urN dovecot-1.1.7/src/master/listener.c dovecot-1.1.7-managesieve/src/master/listener.c
---- dovecot-1.1.7/src/master/listener.c	2008-10-26 09:03:45.000000000 -0600
-+++ dovecot-1.1.7-managesieve/src/master/listener.c	2008-12-04 20:05:46.000000000 -0700
+diff -urN dovecot-1.1.11/src/master/listener.c dovecot-1.1.11.debian/src/master/listener.c
+--- dovecot-1.1.11/src/master/listener.c	2009-01-07 19:32:00.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/listener.c	2009-02-20 20:03:47.000000000 +0100
 @@ -126,6 +126,10 @@
  			check_conflicts_set(server->pop3, ip, port,
  					    "pop3", proto);
@@ -235,10 +1627,10 @@ diff -urN dovecot-1.1.7/src/master/listener.c dovecot-1.1.7-managesieve/src/mast
 +		}
  	}
  }
-diff -urN dovecot-1.1.7/src/master/login-process.c dovecot-1.1.7-managesieve/src/master/login-process.c
---- dovecot-1.1.7/src/master/login-process.c	2008-10-26 09:03:45.000000000 -0600
-+++ dovecot-1.1.7-managesieve/src/master/login-process.c	2008-12-04 20:05:46.000000000 -0700
-@@ -71,8 +71,20 @@
+diff -urN dovecot-1.1.11/src/master/login-process.c dovecot-1.1.11.debian/src/master/login-process.c
+--- dovecot-1.1.11/src/master/login-process.c	2009-01-20 21:01:57.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/login-process.c	2009-02-20 20:03:47.000000000 +0100
+@@ -73,8 +73,20 @@
  	group = i_new(struct login_group, 1);
  	group->refcount = 1;
  	group->set = set;
@@ -261,7 +1653,7 @@ diff -urN dovecot-1.1.7/src/master/login-process.c dovecot-1.1.7-managesieve/src
  
  	group->next = login_groups;
  	login_groups = group;
-@@ -224,6 +236,8 @@
+@@ -226,6 +238,8 @@
  			login_group_create(server->imap);
  		if (server->pop3 != NULL)
  			login_group_create(server->pop3);
@@ -270,7 +1662,7 @@ diff -urN dovecot-1.1.7/src/master/login-process.c dovecot-1.1.7-managesieve/src
  	}
  }
  
-@@ -285,6 +299,8 @@
+@@ -287,6 +301,8 @@
  			protocol = MAIL_PROTOCOL_IMAP;
  		else if (strcmp(proto, "pop3") == 0)
  			protocol = MAIL_PROTOCOL_POP3;
@@ -279,21 +1671,960 @@ diff -urN dovecot-1.1.7/src/master/login-process.c dovecot-1.1.7-managesieve/src
  		else {
  			i_error("login: Unknown protocol '%s'", proto);
  			return FALSE;
-@@ -590,7 +606,10 @@
+@@ -595,6 +611,9 @@
  				    *set->imap_capability != '\0' ?
  				    set->imap_capability :
  				    set->imap_generated_capability, NULL));
--	}
 +	} else if (group->mail_process_type == PROCESS_TYPE_MANAGESIEVE) {
 +		env_put(t_strconcat("MANAGESIEVE_IMPLEMENTATION_STRING=",
 +			set->managesieve_implementation_string, NULL));
-+	}
-	env_put(t_strconcat("LOGIN_DIR=", set->login_dir, NULL));
+ 	}
+ 	env_put(t_strconcat("LOGIN_DIR=", set->login_dir, NULL));
  }
- 
-diff -urN dovecot-1.1.7/src/master/mail-process.c dovecot-1.1.7-managesieve/src/master/mail-process.c
---- dovecot-1.1.7/src/master/mail-process.c	2008-11-15 10:36:54.000000000 -0700
-+++ dovecot-1.1.7-managesieve/src/master/mail-process.c	2008-12-04 20:05:46.000000000 -0700
+diff -urN dovecot-1.1.11/src/master/login-process.c.orig dovecot-1.1.11.debian/src/master/login-process.c.orig
+--- dovecot-1.1.11/src/master/login-process.c.orig	1970-01-01 01:00:00.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/login-process.c.orig	2009-01-20 21:01:57.000000000 +0100
+@@ -0,0 +1,937 @@
++/* Copyright (c) 2002-2009 Dovecot authors, see the included COPYING file */
++
++#include "common.h"
++#include "array.h"
++#include "ioloop.h"
++#include "hash.h"
++#include "network.h"
++#include "ostream.h"
++#include "fdpass.h"
++#include "fd-close-on-exec.h"
++#include "env-util.h"
++#include "restrict-access.h"
++#include "restrict-process-size.h"
++#include "dup2-array.h"
++#include "login-process.h"
++#include "auth-process.h"
++#include "mail-process.h"
++#include "master-login-interface.h"
++#include "log.h"
++#include "ssl-init.h"
++
++#include <unistd.h>
++#include <syslog.h>
++#include <sys/stat.h>
++
++#define LOGIN_LIMIT_WARNING_MIN_INTERVAL (60*5)
++
++struct login_process {
++	struct child_process process;
++
++	struct login_group *group;
++	struct login_process *prev_prelogin, *next_prelogin;
++	int refcount;
++
++	pid_t pid;
++	int fd;
++	struct io *io;
++	struct ostream *output;
++	enum master_login_state state;
++
++	unsigned int initialized:1;
++	unsigned int destroyed:1;
++	unsigned int inetd_child:1;
++};
++
++struct login_auth_request {
++	struct login_process *process;
++	unsigned int tag;
++
++	unsigned int login_tag;
++	int fd;
++
++	struct ip_addr local_ip, remote_ip;
++};
++
++static unsigned int auth_id_counter, login_pid_counter;
++static struct timeout *to;
++static struct io *io_listen;
++static bool logins_stalled = FALSE;
++
++static struct login_group *login_groups;
++
++static void login_processes_stall(void);
++static void login_process_destroy(struct login_process *p);
++static void login_process_unref(struct login_process *p);
++static bool login_process_init_group(struct login_process *p);
++static void login_processes_start_missing(void *context);
++
++static void login_group_create(struct settings *set)
++{
++	struct login_group *group;
++
++	group = i_new(struct login_group, 1);
++	group->refcount = 1;
++	group->set = set;
++	group->mail_process_type = set->protocol == MAIL_PROTOCOL_IMAP ?
++		PROCESS_TYPE_IMAP : PROCESS_TYPE_POP3;
++
++	group->next = login_groups;
++	login_groups = group;
++}
++
++static void login_group_unref(struct login_group *group)
++{
++	i_assert(group->refcount > 0);
++
++	if (--group->refcount > 0)
++		return;
++
++	i_free(group);
++}
++
++void auth_master_callback(const char *user, const char *const *args,
++			  struct login_auth_request *request)
++{
++	struct master_login_reply master_reply;
++	ssize_t ret;
++
++	memset(&master_reply, 0, sizeof(master_reply));
++	if (user == NULL)
++		master_reply.status = MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++	else T_BEGIN {
++		struct login_group *group = request->process->group;
++
++		master_reply.status =
++			create_mail_process(group->mail_process_type,
++					    group->set,
++					    request->fd, &request->local_ip,
++					    &request->remote_ip, user, args,
++					    FALSE);
++	} T_END;
++
++	/* reply to login */
++	master_reply.tag = request->login_tag;
++
++	ret = o_stream_send(request->process->output, &master_reply,
++			    sizeof(master_reply));
++	if (ret != sizeof(master_reply)) {
++		if (ret >= 0) {
++			i_warning("Login process %s transmit buffer full, "
++				  "killing..", dec2str(request->process->pid));
++		}
++		login_process_destroy(request->process);
++	}
++
++	if (close(request->fd) < 0)
++		i_error("close(mail client) failed: %m");
++	login_process_unref(request->process);
++	i_free(request);
++}
++
++static void process_remove_from_prelogin_lists(struct login_process *p)
++{
++	if (p->state != LOGIN_STATE_FULL_PRELOGINS)
++		return;
++
++	if (p->prev_prelogin == NULL)
++		p->group->oldest_prelogin_process = p->next_prelogin;
++	else
++		p->prev_prelogin->next_prelogin = p->next_prelogin;
++
++	if (p->next_prelogin == NULL)
++		p->group->newest_prelogin_process = p->prev_prelogin;
++	else
++		p->next_prelogin->prev_prelogin = p->prev_prelogin;
++
++	p->prev_prelogin = p->next_prelogin = NULL;
++}
++
++static void process_mark_nonlistening(struct login_process *p,
++				      enum master_login_state new_state)
++{
++	if (p->group == NULL)
++		return;
++
++	if (p->state == LOGIN_STATE_LISTENING)
++		p->group->listening_processes--;
++
++	if (new_state == LOGIN_STATE_FULL_PRELOGINS) {
++		/* add to prelogin list */
++		i_assert(p->state != new_state);
++
++		p->prev_prelogin = p->group->newest_prelogin_process;
++		if (p->group->newest_prelogin_process == NULL)
++			p->group->oldest_prelogin_process = p;
++		else
++			p->group->newest_prelogin_process->next_prelogin = p;
++		p->group->newest_prelogin_process = p;
++	} else {
++		process_remove_from_prelogin_lists(p);
++	}
++}
++
++static void process_mark_listening(struct login_process *p)
++{
++	if (p->group == NULL)
++		return;
++
++	if (p->state != LOGIN_STATE_LISTENING)
++		p->group->listening_processes++;
++
++	process_remove_from_prelogin_lists(p);
++}
++
++static void login_process_set_initialized(struct login_process *p)
++{
++	p->initialized = TRUE;
++
++	if (logins_stalled) {
++		/* processes were created successfully */
++		i_info("Created login processes successfully, unstalling");
++
++		logins_stalled = FALSE;
++		timeout_remove(&to);
++		to = timeout_add(1000, login_processes_start_missing, NULL);
++	}
++}
++
++static void
++login_process_set_state(struct login_process *p, enum master_login_state state)
++{
++	if (state == p->state || state > LOGIN_STATE_COUNT ||
++	    (state < p->state && p->group->set->login_process_per_connection)) {
++		i_error("login: tried to change state %d -> %d "
++			"(if you can't login at all, see src/lib/fdpass.c)",
++			p->state, state);
++		login_process_destroy(p);
++		return;
++	}
++
++	if (state == LOGIN_STATE_LISTENING) {
++		process_mark_listening(p);
++	} else {
++		process_mark_nonlistening(p, state);
++	}
++
++	p->state = state;
++}
++
++static void login_process_groups_create(void)
++{
++	struct server_settings *server;
++
++	for (server = settings_root; server != NULL; server = server->next) {
++		if (server->imap != NULL)
++			login_group_create(server->imap);
++		if (server->pop3 != NULL)
++			login_group_create(server->pop3);
++	}
++}
++
++static struct login_group *
++login_group_process_find(const char *name, enum mail_protocol protocol)
++{
++	struct login_group *group;
++
++	if (login_groups == NULL)
++                login_process_groups_create();
++
++	for (group = login_groups; group != NULL; group = group->next) {
++		if (strcmp(group->set->server->name, name) == 0 &&
++		    group->set->protocol == protocol)
++			return group;
++	}
++
++	return NULL;
++}
++
++static bool login_process_read_group(struct login_process *p)
++{
++	struct login_group *group;
++	const char *name, *proto;
++	unsigned char buf[256];
++	enum mail_protocol protocol;
++	unsigned int len;
++	ssize_t ret;
++
++	/* read length */
++	ret = read(p->fd, buf, 1);
++	if (ret != 1)
++		len = 0;
++	else {
++		len = buf[0];
++		if (len >= sizeof(buf)) {
++			i_error("login: Server name length too large");
++			return FALSE;
++		}
++
++		ret = read(p->fd, buf, len);
++	}
++
++	if (ret < 0)
++		i_error("login: read() failed: %m");
++	else if (len == 0 || (size_t)ret != len)
++		i_error("login: Server name wasn't sent");
++	else {
++		name = t_strndup(buf, len);
++		proto = strchr(name, '/');
++		if (proto == NULL) {
++			proto = name;
++			name = "default";
++		} else {
++			name = t_strdup_until(name, proto++);
++		}
++
++		if (strcmp(proto, "imap") == 0)
++			protocol = MAIL_PROTOCOL_IMAP;
++		else if (strcmp(proto, "pop3") == 0)
++			protocol = MAIL_PROTOCOL_POP3;
++		else {
++			i_error("login: Unknown protocol '%s'", proto);
++			return FALSE;
++		}
++
++		group = login_group_process_find(name, protocol);
++		if (group == NULL) {
++			i_error("login: Unknown server name '%s'", name);
++			return FALSE;
++		}
++
++		p->group = group;
++		return login_process_init_group(p);
++	}
++	return FALSE;
++}
++
++static int
++login_read_request(struct login_process *p, struct master_login_request *req,
++		   int *client_fd_r)
++{
++	struct stat st;
++	ssize_t ret;
++
++	*client_fd_r = -1;
++
++	ret = fd_read(p->fd, req, sizeof(*req), client_fd_r);
++	if (ret >= (ssize_t)sizeof(req->version) &&
++	    req->version != MASTER_LOGIN_PROTOCOL_VERSION) {
++		i_error("login: Protocol version mismatch "
++			"(mixed old and new binaries?)");
++		return -1;
++	}
++
++	if (ret != sizeof(*req)) {
++		if (ret == 0) {
++			/* disconnected, ie. the login process died */
++		} else if (ret > 0) {
++			/* request wasn't fully read */
++			i_error("login: fd_read() returned partial %d",
++				(int)ret);
++		} else {
++			if (errno == EAGAIN)
++				return 0;
++
++			i_error("login: fd_read() failed: %m");
++		}
++		return -1;
++	}
++
++	if (req->ino == (ino_t)-1) {
++		if (*client_fd_r != -1) {
++			i_error("login: Notification request sent "
++				"a file descriptor");
++			return -1;
++		}
++		return 1;
++	}
++
++	if (*client_fd_r == -1) {
++		i_error("login: Login request missing a file descriptor");
++		return -1;
++	}
++
++	if (fstat(*client_fd_r, &st) < 0) {
++		i_error("login: fstat(mail client) failed: %m");
++		return -1;
++	}
++
++	if (st.st_ino != req->ino) {
++		i_error("login: Login request inode mismatch: %s != %s",
++			dec2str(st.st_ino), dec2str(req->ino));
++		return -1;
++	}
++	return 1;
++}
++
++static void login_process_input(struct login_process *p)
++{
++	struct auth_process *auth_process;
++	struct login_auth_request *authreq;
++	struct master_login_request req;
++	int client_fd;
++	ssize_t ret;
++
++	if (p->group == NULL) {
++		/* we want to read the group */
++		if (!login_process_read_group(p))
++			login_process_destroy(p);
++		return;
++	}
++
++	ret = login_read_request(p, &req, &client_fd);
++	if (ret == 0)
++		return;
++	if (ret < 0) {
++		if (client_fd != -1) {
++			if (close(client_fd) < 0)
++				i_error("login: close(mail client) failed: %m");
++		}
++		login_process_destroy(p);
++		return;
++	}
++
++	if (req.ino == (ino_t)-1) {
++		/* state notification */
++		enum master_login_state state = req.tag;
++
++		if (!p->initialized) {
++			/* initialization notify */
++			login_process_set_initialized(p);
++		} else {
++			/* change "listening for new connections" status */
++			login_process_set_state(p, state);
++		}
++		return;
++	}
++
++	if (!p->initialized) {
++		i_error("login: trying to log in before initialization");
++		login_process_destroy(p);
++		return;
++	}
++
++	fd_close_on_exec(client_fd, TRUE);
++
++	/* ask the cookie from the auth process */
++	authreq = i_new(struct login_auth_request, 1);
++	p->refcount++;
++	authreq->process = p;
++	authreq->tag = ++auth_id_counter;
++	authreq->login_tag = req.tag;
++	authreq->fd = client_fd;
++	authreq->local_ip = req.local_ip;
++	authreq->remote_ip = req.remote_ip;
++
++	auth_process = auth_process_find(req.auth_pid);
++	if (auth_process == NULL) {
++		i_error("login: Authentication process %u doesn't exist",
++			req.auth_pid);
++		auth_master_callback(NULL, NULL, authreq);
++	} else {
++		auth_process_request(auth_process, p->pid,
++				     req.auth_id, authreq);
++	}
++}
++
++static struct login_process *
++login_process_new(struct login_group *group, pid_t pid, int fd,
++		  bool inetd_child)
++{
++	struct login_process *p;
++
++	i_assert(pid != 0);
++
++	p = i_new(struct login_process, 1);
++	p->process.type = PROCESS_TYPE_LOGIN;
++	p->group = group;
++	p->refcount = 2; /* once for fd close, another for process exit */
++	p->pid = pid;
++	p->fd = fd;
++	p->inetd_child = inetd_child;
++	p->io = io_add(fd, IO_READ, login_process_input, p);
++	p->output = o_stream_create_fd(fd, sizeof(struct master_login_reply)*10,
++				       FALSE);
++	if (!inetd_child) {
++		if (!group->set->login_process_per_connection)
++			p->process.allow_change_ip = TRUE;
++		child_process_add(pid, &p->process);
++	}
++
++	p->state = LOGIN_STATE_LISTENING;
++
++	if (p->group != NULL) {
++		p->group->refcount++;
++		p->group->processes++;
++		p->group->listening_processes++;
++	}
++	return p;
++}
++
++static void login_process_exited(struct login_process *p)
++{
++	if (p->group != NULL)
++		p->group->processes--;
++
++	login_process_unref(p);
++}
++
++static void login_process_destroy(struct login_process *p)
++{
++	if (p->destroyed)
++		return;
++	p->destroyed = TRUE;
++
++	if (!p->initialized)
++		login_processes_stall();
++
++	o_stream_close(p->output);
++	io_remove(&p->io);
++	if (close(p->fd) < 0)
++		i_error("close(login) failed: %m");
++
++	process_mark_nonlistening(p, LOGIN_STATE_FULL_LOGINS);
++
++	if (p->inetd_child)
++		login_process_exited(p);
++	login_process_unref(p);
++}
++
++static void login_process_unref(struct login_process *p)
++{
++	i_assert(p->refcount > 0);
++	if (--p->refcount > 0)
++		return;
++
++	if (p->group != NULL)
++		login_group_unref(p->group);
++
++	o_stream_unref(&p->output);
++	i_free(p);
++}
++
++static void login_process_init_env(struct login_group *group, pid_t pid)
++{
++	struct settings *set = group->set;
++	const struct auth_settings *auth;
++	bool require_cert;
++
++	child_process_init_env();
++
++	/* setup access environment - needs to be done after
++	   clean_child_process() since it clears environment. Don't set user
++	   parameter since we don't want to call initgroups() for login
++	   processes. */
++	restrict_access_set_env(NULL, set->login_uid,
++				set->server->login_gid, (gid_t)-1,
++				set->login_chroot ? set->login_dir : NULL,
++				0, 0, NULL);
++
++	env_put("DOVECOT_MASTER=1");
++
++	if (!set->ssl_disable) {
++		const char *ssl_key_password;
++
++		ssl_key_password = *set->ssl_key_password != '\0' ?
++			set->ssl_key_password : ssl_manual_key_password;
++
++		if (*set->ssl_ca_file != '\0') {
++			env_put(t_strconcat("SSL_CA_FILE=",
++					    set->ssl_ca_file, NULL));
++		}
++		env_put(t_strconcat("SSL_CERT_FILE=",
++				    set->ssl_cert_file, NULL));
++		env_put(t_strconcat("SSL_KEY_FILE=",
++				    set->ssl_key_file, NULL));
++		env_put(t_strconcat("SSL_KEY_PASSWORD=",
++				    ssl_key_password, NULL));
++		env_put("SSL_PARAM_FILE="SSL_PARAMETERS_FILENAME);
++		if (*set->ssl_cipher_list != '\0') {
++			env_put(t_strconcat("SSL_CIPHER_LIST=",
++					    set->ssl_cipher_list, NULL));
++		}
++		env_put(t_strconcat("SSL_CERT_USERNAME_FIELD=",
++				    set->ssl_cert_username_field, NULL));
++		if (set->ssl_verify_client_cert)
++			env_put("SSL_VERIFY_CLIENT_CERT=1");
++	}
++
++	if (set->disable_plaintext_auth)
++		env_put("DISABLE_PLAINTEXT_AUTH=1");
++	if (set->verbose_proctitle)
++		env_put("VERBOSE_PROCTITLE=1");
++	if (set->verbose_ssl)
++		env_put("VERBOSE_SSL=1");
++	if (set->server->auths->verbose)
++		env_put("VERBOSE_AUTH=1");
++	if (set->server->auths->debug)
++		env_put("AUTH_DEBUG=1");
++	require_cert = TRUE;
++	for (auth = set->server->auths; auth != NULL; auth = auth->next) {
++		if (!auth->ssl_require_client_cert)
++			require_cert = FALSE;
++	}
++	if (require_cert)
++		env_put("SSL_REQUIRE_CLIENT_CERT=1");
++
++	if (set->login_process_per_connection) {
++		env_put("PROCESS_PER_CONNECTION=1");
++		env_put("MAX_CONNECTIONS=1");
++	} else {
++		env_put(t_strdup_printf("MAX_CONNECTIONS=%u",
++					set->login_max_connections));
++	}
++
++	env_put(t_strconcat("PROCESS_UID=", dec2str(pid), NULL));
++	env_put(t_strconcat("GREETING=", set->login_greeting, NULL));
++	env_put(t_strconcat("LOG_FORMAT_ELEMENTS=",
++			    set->login_log_format_elements, NULL));
++	env_put(t_strconcat("LOG_FORMAT=", set->login_log_format, NULL));
++	if (set->login_greeting_capability)
++		env_put("GREETING_CAPABILITY=1");
++
++	if (group->mail_process_type == PROCESS_TYPE_IMAP) {
++		env_put(t_strconcat("CAPABILITY_STRING=",
++				    *set->imap_capability != '\0' ?
++				    set->imap_capability :
++				    set->imap_generated_capability, NULL));
++	}
++	env_put(t_strconcat("LOGIN_DIR=", set->login_dir, NULL));
++}
++
++static pid_t create_login_process(struct login_group *group)
++{
++	struct log_io *log;
++	const struct listener *listens;
++	unsigned int max_log_lines_per_sec;
++	const char *prefix;
++	pid_t pid;
++	ARRAY_TYPE(dup2) dups;
++	unsigned int i, listen_count = 0, ssl_listen_count = 0;
++	int fd[2], log_fd, cur_fd, tmp_fd;
++
++	if (group->set->login_uid == 0)
++		i_fatal("Login process must not run as root");
++
++	/* create communication to process with a socket pair */
++	if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) < 0) {
++		i_error("socketpair() failed: %m");
++		return -1;
++	}
++
++	max_log_lines_per_sec =
++		group->set->login_process_per_connection ? 10 : 0;
++	log_fd = log_create_pipe(&log, /*max_log_lines_per_sec*/0);
++	if (log_fd < 0)
++		pid = -1;
++	else {
++		pid = fork();
++		if (pid < 0)
++			i_error("fork() failed: %m");
++	}
++
++	if (pid < 0) {
++		(void)close(fd[0]);
++		(void)close(fd[1]);
++		(void)close(log_fd);
++		return -1;
++	}
++
++	if (pid != 0) {
++		/* master */
++		prefix = t_strdup_printf("%s-login: ",
++				process_names[group->mail_process_type]);
++		log_set_prefix(log, prefix);
++		log_set_pid(log, pid);
++
++		net_set_nonblock(fd[0], TRUE);
++		fd_close_on_exec(fd[0], TRUE);
++		(void)login_process_new(group, pid, fd[0], FALSE);
++		(void)close(fd[1]);
++		(void)close(log_fd);
++		return pid;
++	}
++
++	prefix = t_strdup_printf("master-%s-login: ",
++				 process_names[group->mail_process_type]);
++	log_set_prefix(log, prefix);
++
++	t_array_init(&dups, 16);
++	dup2_append(&dups, null_fd, STDIN_FILENO);
++	/* redirect writes to stdout also to error log. For example OpenSSL
++	   can be made to log its debug messages to stdout. */
++	dup2_append(&dups, log_fd, STDOUT_FILENO);
++	dup2_append(&dups, log_fd, STDERR_FILENO);
++	dup2_append(&dups, fd[1], LOGIN_MASTER_SOCKET_FD);
++
++	/* redirect listener fds */
++	cur_fd = LOGIN_MASTER_SOCKET_FD + 1;
++	if (array_is_created(&group->set->listens)) {
++		listens = array_get(&group->set->listens, &listen_count);
++		for (i = 0; i < listen_count; i++, cur_fd++)
++			dup2_append(&dups, listens[i].fd, cur_fd);
++	}
++
++	if (array_is_created(&group->set->ssl_listens)) {
++		listens = array_get(&group->set->ssl_listens,
++				    &ssl_listen_count);
++		for (i = 0; i < ssl_listen_count; i++, cur_fd++)
++			dup2_append(&dups, listens[i].fd, cur_fd);
++	}
++
++	if (dup2_array(&dups) < 0)
++		i_fatal("Failed to dup2() fds");
++
++	/* don't close any of these */
++	for (tmp_fd = 0; tmp_fd < cur_fd; tmp_fd++)
++		fd_close_on_exec(tmp_fd, FALSE);
++
++	(void)close(fd[0]);
++	(void)close(fd[1]);
++
++	login_process_init_env(group, getpid());
++
++	env_put(t_strdup_printf("LISTEN_FDS=%u", listen_count));
++	env_put(t_strdup_printf("SSL_LISTEN_FDS=%u", ssl_listen_count));
++
++	restrict_process_size(group->set->login_process_size, (unsigned int)-1);
++
++	/* make sure we don't leak syslog fd, but do it last so that
++	   any errors above will be logged */
++	closelog();
++
++	client_process_exec(group->set->login_executable, "");
++	i_fatal_status(FATAL_EXEC, "execv(%s) failed: %m",
++		       group->set->login_executable);
++	return -1;
++}
++
++static void
++login_process_destroyed(struct child_process *process,
++			pid_t pid ATTR_UNUSED, bool abnormal_exit)
++{
++	struct login_process *p = (struct login_process *)process;
++
++	i_assert(!p->inetd_child);
++
++	if (abnormal_exit) {
++		/* don't start raising the process count if they're dying all
++		   the time */
++		if (p->group != NULL)
++			p->group->wanted_processes_count = 0;
++	}
++
++	login_process_exited(p);
++}
++
++void login_processes_destroy_all(void)
++{
++	struct hash_iterate_context *iter;
++	void *key, *value;
++
++	iter = hash_iterate_init(processes);
++	while (hash_iterate(iter, &key, &value)) {
++		struct login_process *p = value;
++
++		if (p->process.type == PROCESS_TYPE_LOGIN)
++			login_process_destroy(p);
++	}
++	hash_iterate_deinit(&iter);
++
++	while (login_groups != NULL) {
++		struct login_group *group = login_groups;
++
++		login_groups = group->next;
++		login_group_unref(group);
++	}
++}
++
++static void login_processes_notify_group(struct login_group *group)
++{
++	struct hash_iterate_context *iter;
++	struct master_login_reply reply;
++	void *key, *value;
++
++	memset(&reply, 0, sizeof(reply));
++
++	iter = hash_iterate_init(processes);
++	while (hash_iterate(iter, &key, &value)) {
++		struct login_process *p = value;
++
++		if (p->process.type == PROCESS_TYPE_LOGIN && p->group == group)
++			(void)o_stream_send(p->output, &reply, sizeof(reply));
++	}
++	hash_iterate_deinit(&iter);
++}
++
++static int login_group_start_missings(struct login_group *group)
++{
++	if (group->set->login_process_per_connection &&
++	    group->processes >= group->set->login_max_processes_count &&
++	    group->listening_processes == 0) {
++		/* destroy the oldest listening process. non-listening
++		   processes are logged in users who we don't want to kick out
++		   because someone's started flooding */
++		if (group->oldest_prelogin_process != NULL &&
++		    group->oldest_prelogin_process->initialized)
++			login_process_destroy(group->oldest_prelogin_process);
++		else if (ioloop_time - group->last_limit_warning >
++			 LOGIN_LIMIT_WARNING_MIN_INTERVAL) {
++			group->last_limit_warning = ioloop_time;
++			i_warning("All login processes are in use. You may "
++				  "need to increase login_max_processes_count");
++		}
++	}
++
++	/* we want to respond fast when multiple clients are connecting
++	   at once, but we also want to prevent fork-bombing. use the
++	   same method as apache: check once a second if we need new
++	   processes. if yes and we've used all the existing processes,
++	   double their amount (unless we've hit the high limit).
++	   Then for each second that didn't use all existing processes,
++	   drop the max. process count by one. */
++	if (group->wanted_processes_count < group->set->login_processes_count) {
++		group->wanted_processes_count =
++			group->set->login_processes_count;
++	} else if (group->listening_processes == 0)
++		group->wanted_processes_count *= 2;
++	else if (group->wanted_processes_count >
++		 group->set->login_processes_count)
++		group->wanted_processes_count--;
++
++	while (group->listening_processes < group->wanted_processes_count &&
++	       group->processes < group->set->login_max_processes_count) {
++		if (create_login_process(group) < 0)
++			return -1;
++	}
++
++	if (group->listening_processes == 0 &&
++	    !group->set->login_process_per_connection) {
++		/* we've reached our limit. notify the processes to start
++		   listening again which makes them kill some of their
++		   oldest clients when accepting the next connection */
++		login_processes_notify_group(group);
++	}
++	return 0;
++}
++
++static void login_processes_stall(void)
++{
++	if (logins_stalled || IS_INETD())
++		return;
++
++	i_error("Temporary failure in creating login processes, "
++		"slowing down for now");
++	logins_stalled = TRUE;
++
++	timeout_remove(&to);
++	to = timeout_add(60*1000, login_processes_start_missing, NULL);
++}
++
++static void
++login_processes_start_missing(void *context ATTR_UNUSED)
++{
++	struct login_group *group;
++
++	if (!have_initialized_auth_processes) {
++		/* don't create login processes before at least one auth
++		   process has finished initializing */
++		return;
++	}
++
++	if (login_groups == NULL)
++		login_process_groups_create();
++
++	for (group = login_groups; group != NULL; group = group->next) {
++		if (login_group_start_missings(group) < 0) {
++			login_processes_stall();
++			return;
++		}
++	}
++}
++
++static int login_process_send_env(struct login_process *p)
++{
++	extern char **environ;
++	char **env;
++	ssize_t len;
++	int ret = 0;
++
++	/* this will clear our environment. luckily we don't need it. */
++	login_process_init_env(p->group, p->pid);
++
++	for (env = environ; *env != NULL; env++) {
++		len = strlen(*env);
++
++		if (o_stream_send(p->output, *env, len) != len ||
++		    o_stream_send(p->output, "\n", 1) != 1) {
++			ret = -1;
++			break;
++		}
++	}
++
++	if (ret == 0 && o_stream_send(p->output, "\n", 1) != 1)
++		ret = -1;
++
++	env_clean();
++	return ret;
++}
++
++static bool login_process_init_group(struct login_process *p)
++{
++	p->group->refcount++;
++	p->group->processes++;
++	p->group->listening_processes++;
++
++	if (login_process_send_env(p) < 0) {
++		i_error("login: Couldn't send environment");
++		return FALSE;
++	}
++
++	return TRUE;
++}
++
++static void inetd_login_accept(void *context ATTR_UNUSED)
++{
++        struct login_process *p;
++	int fd;
++
++	fd = net_accept(inetd_login_fd, NULL, NULL);
++	if (fd < 0) {
++		if (fd < -1)
++			i_error("accept(inetd_login_fd) failed: %m");
++	} else {
++		net_set_nonblock(fd, TRUE);
++		fd_close_on_exec(fd, TRUE);
++
++		p = login_process_new(NULL, ++login_pid_counter, fd, TRUE);
++		p->initialized = TRUE;
++	}
++}
++
++void login_processes_init(void)
++{
++	auth_id_counter = 0;
++        login_pid_counter = 0;
++	login_groups = NULL;
++
++	child_process_set_destroy_callback(PROCESS_TYPE_LOGIN,
++					   login_process_destroyed);
++
++	if (!IS_INETD()) {
++		to = timeout_add(1000, login_processes_start_missing, NULL);
++		io_listen = NULL;
++	} else {
++		to = NULL;
++		io_listen = io_add(inetd_login_fd, IO_READ,
++				   inetd_login_accept, NULL);
++	}
++}
++
++void login_processes_deinit(void)
++{
++	if (to != NULL)
++		timeout_remove(&to);
++	if (io_listen != NULL)
++		io_remove(&io_listen);
++}
+diff -urN dovecot-1.1.11/src/master/mail-process.c dovecot-1.1.11.debian/src/master/mail-process.c
+--- dovecot-1.1.11/src/master/mail-process.c	2009-02-03 18:07:29.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/mail-process.c	2009-02-20 20:03:47.000000000 +0100
 @@ -337,6 +337,27 @@
  	/* We care about POP3 UIDL format in all process types */
  	env_put(t_strconcat("POP3_UIDL_FORMAT=", set->pop3_uidl_format, NULL));
@@ -341,7 +2672,7 @@ diff -urN dovecot-1.1.7/src/master/mail-process.c dovecot-1.1.7-managesieve/src/
  
  	if (mail_process_count == set->max_mail_processes) {
  		i_error("Maximum number of mail processes exceeded "
-@@ -920,6 +944,8 @@
+@@ -922,6 +946,8 @@
  					   mail_process_destroyed);
  	child_process_set_destroy_callback(PROCESS_TYPE_POP3,
  					   mail_process_destroyed);
@@ -350,9 +2681,953 @@ diff -urN dovecot-1.1.7/src/master/mail-process.c dovecot-1.1.7-managesieve/src/
  }
  
  void mail_processes_deinit(void)
-diff -urN dovecot-1.1.7/src/master/main.c dovecot-1.1.7-managesieve/src/master/main.c
---- dovecot-1.1.7/src/master/main.c	2008-10-29 11:28:26.000000000 -0600
-+++ dovecot-1.1.7-managesieve/src/master/main.c	2008-12-04 20:05:46.000000000 -0700
+diff -urN dovecot-1.1.11/src/master/mail-process.c.orig dovecot-1.1.11.debian/src/master/mail-process.c.orig
+--- dovecot-1.1.11/src/master/mail-process.c.orig	1970-01-01 01:00:00.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/mail-process.c.orig	2009-02-03 18:07:29.000000000 +0100
+@@ -0,0 +1,940 @@
++/* Copyright (c) 2002-2009 Dovecot authors, see the included COPYING file */
++
++#include "common.h"
++#include "array.h"
++#include "hash.h"
++#include "fd-close-on-exec.h"
++#include "env-util.h"
++#include "str.h"
++#include "network.h"
++#include "mountpoint.h"
++#include "restrict-access.h"
++#include "restrict-process-size.h"
++#include "home-expand.h"
++#include "var-expand.h"
++#include "mail-process.h"
++#include "master-login-interface.h"
++#include "login-process.h"
++#include "log.h"
++
++#include <stdlib.h>
++#include <unistd.h>
++#include <grp.h>
++#include <syslog.h>
++#include <sys/stat.h>
++
++#ifdef HAVE_SYS_RESOURCE_H
++#  include <sys/resource.h>
++#endif
++
++/* Timeout chdir() completely after this many seconds */
++#define CHDIR_TIMEOUT 30
++/* Give a warning about chdir() taking a while if it took longer than this
++   many seconds to finish. */
++#define CHDIR_WARN_SECS 10
++
++struct mail_process_group {
++	/* process.type + user + remote_ip identifies this process group */
++	struct child_process process;
++	char *user;
++	struct ip_addr remote_ip;
++
++	/* processes array acts also as refcount */
++	ARRAY_DEFINE(processes, pid_t);
++};
++
++/* type+user -> struct mail_process_group */
++static struct hash_table *mail_process_groups;
++static unsigned int mail_process_count = 0;
++
++static unsigned int mail_process_group_hash(const void *p)
++{
++	const struct mail_process_group *group = p;
++
++	return str_hash(group->user) ^ group->process.type ^
++		net_ip_hash(&group->remote_ip);
++}
++
++static int mail_process_group_cmp(const void *p1, const void *p2)
++{
++	const struct mail_process_group *group1 = p1, *group2 = p2;
++	int ret;
++
++	ret = strcmp(group1->user, group2->user);
++	if (ret == 0)
++		ret = group1->process.type - group2->process.type;
++	if (ret == 0 && !net_ip_compare(&group1->remote_ip, &group2->remote_ip))
++		ret = -1;
++	return ret;
++}
++
++static struct mail_process_group *
++mail_process_group_lookup(enum process_type type, const char *user,
++			  const struct ip_addr *ip)
++{
++	struct mail_process_group lookup_group;
++
++	lookup_group.process.type = type;
++	lookup_group.user = t_strdup_noconst(user);
++	lookup_group.remote_ip = *ip;
++
++	return hash_lookup(mail_process_groups, &lookup_group);
++}
++
++static struct mail_process_group *
++mail_process_group_create(enum process_type type, const char *user,
++			  const struct ip_addr *ip)
++{
++	struct mail_process_group *group;
++
++	group = i_new(struct mail_process_group, 1);
++	group->process.type = type;
++	group->user = i_strdup(user);
++	group->remote_ip = *ip;
++
++	i_array_init(&group->processes, 10);
++	hash_insert(mail_process_groups, group, group);
++	return group;
++}
++
++static void
++mail_process_group_add(struct mail_process_group *group, pid_t pid)
++{
++	mail_process_count++;
++	array_append(&group->processes, &pid, 1);
++	child_process_add(pid, &group->process);
++}
++
++static void mail_process_group_free(struct mail_process_group *group)
++{
++	array_free(&group->processes);
++	i_free(group->user);
++	i_free(group);
++}
++
++static bool validate_uid_gid(struct settings *set, uid_t uid, gid_t gid,
++			     const char *user)
++{
++	if (uid == 0) {
++		i_error("user %s: Logins with UID 0 not permitted", user);
++		return FALSE;
++	}
++
++	if (set->login_uid == uid && master_uid != uid) {
++		i_error("user %s: Logins with login_user's UID %s "
++			"not permitted (see http://wiki.dovecot.org/UserIds).",
++			user, dec2str(uid));
++		return FALSE;
++	}
++
++	if (uid < (uid_t)set->first_valid_uid ||
++	    (set->last_valid_uid != 0 && uid > (uid_t)set->last_valid_uid)) {
++		i_error("user %s: Logins with UID %s not permitted "
++			"(see first_valid_uid in config file).",
++			user, dec2str(uid));
++		return FALSE;
++	}
++
++	if (gid < (gid_t)set->first_valid_gid ||
++	    (set->last_valid_gid != 0 && gid > (gid_t)set->last_valid_gid)) {
++		i_error("user %s: Logins for users with primary group ID %s "
++			"not permitted (see first_valid_gid in config file).",
++			user, dec2str(gid));
++		return FALSE;
++	}
++
++	return TRUE;
++}
++
++static bool validate_chroot(struct settings *set, const char *dir)
++{
++	const char *const *chroot_dirs;
++
++	if (*dir == '\0')
++		return FALSE;
++
++	if (*set->valid_chroot_dirs == '\0')
++		return FALSE;
++
++	chroot_dirs = t_strsplit(set->valid_chroot_dirs, ":");
++	while (*chroot_dirs != NULL) {
++		if (**chroot_dirs != '\0' &&
++		    strncmp(dir, *chroot_dirs, strlen(*chroot_dirs)) == 0)
++			return TRUE;
++		chroot_dirs++;
++	}
++
++	return FALSE;
++}
++
++static const struct var_expand_table *
++get_var_expand_table(const char *protocol,
++		     const char *user, const char *home,
++		     const char *local_ip, const char *remote_ip,
++		     pid_t pid, uid_t uid)
++{
++#define VAR_EXPAND_HOME_IDX 4
++	static struct var_expand_table static_tab[] = {
++		{ 'u', NULL },
++		{ 'n', NULL },
++		{ 'd', NULL },
++		{ 's', NULL },
++		{ 'h', NULL },
++		{ 'l', NULL },
++		{ 'r', NULL },
++		{ 'p', NULL },
++		{ 'i', NULL },
++		{ '\0', NULL }
++	};
++	struct var_expand_table *tab;
++
++	tab = t_malloc(sizeof(static_tab));
++	memcpy(tab, static_tab, sizeof(static_tab));
++
++	tab[0].value = user;
++	tab[1].value = user == NULL ? NULL : t_strcut(user, '@');
++	tab[2].value = user == NULL ? NULL : strchr(user, '@');
++	if (tab[2].value != NULL) tab[2].value++;
++	tab[3].value = t_str_ucase(protocol);
++	tab[VAR_EXPAND_HOME_IDX].value = home;
++	tab[5].value = local_ip;
++	tab[6].value = remote_ip;
++	tab[7].value = dec2str(pid);
++	tab[8].value = dec2str(uid);
++
++	return tab;
++}
++
++static bool
++has_missing_used_home(const char *str, const struct var_expand_table *table)
++{
++	i_assert(table[VAR_EXPAND_HOME_IDX].key == 'h');
++
++	return table[VAR_EXPAND_HOME_IDX].value == NULL &&
++		var_has_key(str, 'h');
++}
++
++static const char *
++expand_mail_env(const char *env, const struct var_expand_table *table)
++{
++	string_t *str;
++	const char *p;
++
++	str = t_str_new(256);
++
++	/* it's either type:data or just data */
++	p = strchr(env, ':');
++	if (p != NULL) {
++		while (env != p) {
++			str_append_c(str, *env);
++			env++;
++		}
++
++		str_append_c(str, *env++);
++	}
++
++	if (has_missing_used_home(env, table)) {
++		i_fatal("userdb didn't return a home directory, "
++			"but mail location used it (%%h): %s", env);
++	}
++
++	/* expand %vars */
++	var_expand(str, env, table);
++	return str_c(str);
++}
++
++static void
++env_put_namespace(struct namespace_settings *ns, const char *default_location,
++		  const struct var_expand_table *table)
++{
++	const char *location;
++	unsigned int i;
++	string_t *str;
++
++	if (default_location == NULL)
++		default_location = "";
++
++	for (i = 1; ns != NULL; i++, ns = ns->next) {
++		location = *ns->location != '\0' ? ns->location :
++			default_location;
++		location = expand_mail_env(location, table);
++		env_put(t_strdup_printf("NAMESPACE_%u=%s", i, location));
++
++		if (ns->separator != NULL) {
++			env_put(t_strdup_printf("NAMESPACE_%u_SEP=%s",
++						i, ns->separator));
++		}
++		if (ns->type != NULL) {
++			env_put(t_strdup_printf("NAMESPACE_%u_TYPE=%s",
++						i, ns->type));
++		}
++		if (ns->prefix != NULL) {
++			/* expand variables, eg. ~%u/ can be useful */
++			str = t_str_new(256);
++			str_printfa(str, "NAMESPACE_%u_PREFIX=", i);
++			var_expand(str, ns->prefix, table);
++			env_put(str_c(str));
++		}
++		if (ns->inbox)
++			env_put(t_strdup_printf("NAMESPACE_%u_INBOX=1", i));
++		if (ns->hidden)
++			env_put(t_strdup_printf("NAMESPACE_%u_HIDDEN=1", i));
++		if (ns->list)
++			env_put(t_strdup_printf("NAMESPACE_%u_LIST=1", i));
++		if (ns->subscriptions)
++			env_put(t_strdup_printf("NAMESPACE_%u_SUBSCRIPTIONS=1",
++						i));
++	}
++}
++
++static void
++mail_process_set_environment(struct settings *set, const char *mail,
++			     const struct var_expand_table *var_expand_table,
++			     bool exec_mail)
++{
++	const char *const *envs;
++	string_t *str;
++	unsigned int i, count;
++
++	env_put(t_strconcat("MAIL_CACHE_FIELDS=",
++			    set->mail_cache_fields, NULL));
++	env_put(t_strconcat("MAIL_NEVER_CACHE_FIELDS=",
++			    set->mail_never_cache_fields, NULL));
++	env_put(t_strdup_printf("MAIL_CACHE_MIN_MAIL_COUNT=%u",
++				set->mail_cache_min_mail_count));
++	env_put(t_strdup_printf("MAILBOX_IDLE_CHECK_INTERVAL=%u",
++				set->mailbox_idle_check_interval));
++	env_put(t_strdup_printf("MAIL_MAX_KEYWORD_LENGTH=%u",
++				set->mail_max_keyword_length));
++
++	if (set->protocol == MAIL_PROTOCOL_IMAP) {
++		env_put(t_strdup_printf("IMAP_MAX_LINE_LENGTH=%u",
++					set->imap_max_line_length));
++		if (*set->imap_capability != '\0') {
++			env_put(t_strconcat("IMAP_CAPABILITY=",
++					    set->imap_capability, NULL));
++		}
++		env_put(t_strconcat("IMAP_CLIENT_WORKAROUNDS=",
++				    set->imap_client_workarounds, NULL));
++		env_put(t_strconcat("IMAP_LOGOUT_FORMAT=",
++				    set->imap_logout_format, NULL));
++	}
++	if (set->protocol == MAIL_PROTOCOL_POP3) {
++		env_put(t_strconcat("POP3_CLIENT_WORKAROUNDS=",
++				    set->pop3_client_workarounds, NULL));
++		env_put(t_strconcat("POP3_LOGOUT_FORMAT=",
++				    set->pop3_logout_format, NULL));
++		if (set->pop3_no_flag_updates)
++			env_put("POP3_NO_FLAG_UPDATES=1");
++		if (set->pop3_reuse_xuidl)
++			env_put("POP3_REUSE_XUIDL=1");
++		if (set->pop3_enable_last)
++			env_put("POP3_ENABLE_LAST=1");
++		if (set->pop3_lock_session)
++			env_put("POP3_LOCK_SESSION=1");
++	}
++
++	/* We care about POP3 UIDL format in all process types */
++	env_put(t_strconcat("POP3_UIDL_FORMAT=", set->pop3_uidl_format, NULL));
++
++	if (set->mail_save_crlf)
++		env_put("MAIL_SAVE_CRLF=1");
++	if (set->mmap_disable)
++		env_put("MMAP_DISABLE=1");
++	if (set->dotlock_use_excl)
++		env_put("DOTLOCK_USE_EXCL=1");
++	if (set->fsync_disable)
++		env_put("FSYNC_DISABLE=1");
++	if (set->mail_nfs_storage)
++		env_put("MAIL_NFS_STORAGE=1");
++	if (set->mail_nfs_index)
++		env_put("MAIL_NFS_INDEX=1");
++	if (set->mailbox_list_index_disable)
++		env_put("MAILBOX_LIST_INDEX_DISABLE=1");
++	if (set->maildir_stat_dirs)
++		env_put("MAILDIR_STAT_DIRS=1");
++	if (set->maildir_copy_with_hardlinks)
++		env_put("MAILDIR_COPY_WITH_HARDLINKS=1");
++	if (set->maildir_copy_preserve_filename)
++		env_put("MAILDIR_COPY_PRESERVE_FILENAME=1");
++	if (set->mail_debug)
++		env_put("DEBUG=1");
++	if (set->mail_full_filesystem_access)
++		env_put("FULL_FILESYSTEM_ACCESS=1");
++	if (set->mbox_dirty_syncs)
++		env_put("MBOX_DIRTY_SYNCS=1");
++	if (set->mbox_very_dirty_syncs)
++		env_put("MBOX_VERY_DIRTY_SYNCS=1");
++	if (set->mbox_lazy_writes)
++		env_put("MBOX_LAZY_WRITES=1");
++	/* when we're not certain that the log fd points to the master
++	   process's log pipe (dump-capability, --exec-mail), don't let
++	   the imap process listen for stderr since it might break
++	   (e.g. epoll_ctl() gives EPERM). */
++	if (set->shutdown_clients && !exec_mail)
++		env_put("STDERR_CLOSE_SHUTDOWN=1");
++	(void)umask(set->umask);
++
++	env_put(t_strconcat("LOCK_METHOD=", set->lock_method, NULL));
++	env_put(t_strconcat("MBOX_READ_LOCKS=", set->mbox_read_locks, NULL));
++	env_put(t_strconcat("MBOX_WRITE_LOCKS=", set->mbox_write_locks, NULL));
++	env_put(t_strdup_printf("MBOX_LOCK_TIMEOUT=%u",
++				set->mbox_lock_timeout));
++	env_put(t_strdup_printf("MBOX_DOTLOCK_CHANGE_TIMEOUT=%u",
++				set->mbox_dotlock_change_timeout));
++	env_put(t_strdup_printf("MBOX_MIN_INDEX_SIZE=%u",
++				set->mbox_min_index_size));
++
++	env_put(t_strdup_printf("DBOX_ROTATE_SIZE=%u",
++				set->dbox_rotate_size));
++	env_put(t_strdup_printf("DBOX_ROTATE_MIN_SIZE=%u",
++				set->dbox_rotate_min_size));
++	env_put(t_strdup_printf("DBOX_ROTATE_DAYS=%u",
++				set->dbox_rotate_days));
++
++	if (*set->mail_plugins != '\0') {
++		env_put(t_strconcat("MAIL_PLUGIN_DIR=",
++				    set->mail_plugin_dir, NULL));
++		env_put(t_strconcat("MAIL_PLUGINS=", set->mail_plugins, NULL));
++	}
++
++	/* user given environment - may be malicious. virtual_user comes from
++	   auth process, but don't trust that too much either. Some auth
++	   mechanism might allow leaving extra data there. */
++	if ((mail == NULL || *mail == '\0') && *set->mail_location != '\0')
++		mail = expand_mail_env(set->mail_location, var_expand_table);
++	env_put(t_strconcat("MAIL=", mail, NULL));
++
++	if (set->server->namespaces != NULL) {
++		env_put_namespace(set->server->namespaces,
++				  mail, var_expand_table);
++	}
++
++	str = t_str_new(256);
++	envs = array_get(&set->plugin_envs, &count);
++	i_assert((count % 2) == 0);
++	for (i = 0; i < count; i += 2) {
++		str_truncate(str, 0);
++		var_expand(str, envs[i+1], var_expand_table);
++
++		if (has_missing_used_home(envs[i+1], var_expand_table)) {
++			i_error("userdb didn't return a home directory, "
++				"but it's used in plugin setting %s: %s",
++				envs[i], envs[i+1]);
++		}
++
++		env_put(t_strconcat(t_str_ucase(envs[i]), "=",
++				    str_c(str), NULL));
++	}
++}
++
++void mail_process_exec(const char *protocol, const char **args)
++{
++	struct server_settings *server = settings_root;
++	const struct var_expand_table *var_expand_table;
++	struct settings *set;
++	const char *executable;
++
++	if (strcmp(protocol, "ext") == 0) {
++		/* external binary. section contains path for it. */
++		if (*args == NULL)
++			i_fatal("External binary parameter not given");
++		set = server->defaults;
++		executable = *args;
++	} else {
++		const char *section = *args;
++
++		if (section != NULL) {
++			for (; server != NULL; server = server->next) {
++				if (strcmp(server->name, section) == 0)
++					break;
++			}
++			if (server == NULL)
++				i_fatal("Section not found: '%s'", section);
++		}
++
++		if (strcmp(protocol, "imap") == 0)
++			set = server->imap;
++		else if (strcmp(protocol, "pop3") == 0)
++			set = server->pop3;
++		else
++			i_fatal("Unknown protocol: '%s'", protocol);
++		executable = set->mail_executable;
++		args = NULL;
++	}
++
++	var_expand_table =
++		get_var_expand_table(protocol, getenv("USER"), getenv("HOME"),
++				     getenv("TCPLOCALIP"),
++				     getenv("TCPREMOTEIP"),
++				     getpid(), geteuid());
++
++	/* set up logging */
++	env_put(t_strconcat("LOG_TIMESTAMP=", set->log_timestamp, NULL));
++	if (*set->log_path == '\0')
++		env_put("USE_SYSLOG=1");
++	else
++		env_put(t_strconcat("LOGFILE=", set->log_path, NULL));
++	if (*set->info_log_path != '\0')
++		env_put(t_strconcat("INFOLOGFILE=", set->info_log_path, NULL));
++	if (*set->mail_log_prefix != '\0') {
++		string_t *str = t_str_new(256);
++
++		str_append(str, "LOG_PREFIX=");
++		var_expand(str, set->mail_log_prefix, var_expand_table);
++		env_put(str_c(str));
++	}
++
++	mail_process_set_environment(set, getenv("MAIL"), var_expand_table,
++				     TRUE);
++	if (args == NULL)
++		client_process_exec(executable, "");
++	else
++		client_process_exec_argv(executable, args);
++
++	i_fatal_status(FATAL_EXEC, "execv(%s) failed: %m", executable);
++}
++
++static void nfs_warn_if_found(const char *mail, const char *full_home_dir)
++{
++	struct mountpoint point;
++	const char *path;
++
++	if (mail == NULL || *mail == '\0')
++		path = full_home_dir;
++	else {
++		path = strstr(mail, ":INDEX=");
++		if (path != NULL) {
++			/* indexes set separately */
++			path += 7;
++			if (strncmp(path, "MEMORY", 6) == 0)
++				return;
++		} else {
++			path = strchr(mail, ':');
++			if (path == NULL) {
++				/* autodetection for path */
++				path = mail;
++			} else {
++				/* format:path */
++				path++;
++			}
++		}
++		path = home_expand_tilde(t_strcut(path, ':'), full_home_dir);
++	}
++
++	if (mountpoint_get(path, pool_datastack_create(), &point) <= 0)
++		return;
++
++	if (point.type == NULL || strcasecmp(point.type, "NFS") != 0)
++		return;
++
++	i_fatal("Mailbox indexes in %s are in NFS mount. You must set "
++		"mail_nfs_index=yes (and mail_nfs_storage=yes) to avoid index corruptions. "
++		"If you're sure this check was wrong, set nfs_check=no.", path);
++}
++
++enum master_login_status
++create_mail_process(enum process_type process_type, struct settings *set,
++		    int socket_fd, const struct ip_addr *local_ip,
++		    const struct ip_addr *remote_ip,
++		    const char *user, const char *const *args,
++		    bool dump_capability)
++{
++	const struct var_expand_table *var_expand_table;
++	const char *p, *addr, *mail, *chroot_dir, *home_dir, *full_home_dir;
++	const char *system_user, *master_user;
++	struct mail_process_group *process_group;
++	char title[1024];
++	struct log_io *log;
++	string_t *str;
++	pid_t pid;
++	uid_t uid;
++	gid_t gid;
++	ARRAY_DEFINE(extra_args, const char *);
++	unsigned int i, len, count, left, process_count, throttle;
++	int ret, log_fd, nice_value, chdir_errno;
++	bool home_given, nfs_check;
++
++	i_assert(process_type == PROCESS_TYPE_IMAP ||
++		 process_type == PROCESS_TYPE_POP3);
++
++	if (mail_process_count == set->max_mail_processes) {
++		i_error("Maximum number of mail processes exceeded "
++			"(see max_mail_processes setting)");
++		return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++	}
++
++	t_array_init(&extra_args, 16);
++	mail = home_dir = chroot_dir = system_user = ""; master_user = NULL;
++	uid = (uid_t)-1; gid = (gid_t)-1; nice_value = 0;
++	home_given = FALSE;
++	for (; *args != NULL; args++) {
++		if (strncmp(*args, "home=", 5) == 0) {
++			home_dir = *args + 5;
++			home_given = TRUE;
++		} else if (strncmp(*args, "mail=", 5) == 0)
++			mail = *args + 5;
++		else if (strncmp(*args, "chroot=", 7) == 0)
++			chroot_dir = *args + 7;
++		else if (strncmp(*args, "nice=", 5) == 0)
++			nice_value = atoi(*args + 5);
++		else if (strncmp(*args, "system_user=", 12) == 0)
++			system_user = *args + 12;
++		else if (strncmp(*args, "uid=", 4) == 0) {
++			if (uid != (uid_t)-1) {
++				i_error("uid specified multiple times for %s",
++					user);
++				return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++			}
++			uid = (uid_t)strtoul(*args + 4, NULL, 10);
++		} else if (strncmp(*args, "gid=", 4) == 0) {
++			gid = (gid_t)strtoul(*args + 4, NULL, 10);
++		} else if (strncmp(*args, "master_user=", 12) == 0) {
++			const char *arg = *args;
++
++			master_user = arg + 12;
++			array_append(&extra_args, &arg, 1);
++		} else {
++			const char *arg = *args;
++			array_append(&extra_args, &arg, 1);
++		}
++	}
++
++	/* check process limit for this user, but not if this is a master
++	   user login. */
++	process_group = dump_capability ? NULL :
++		mail_process_group_lookup(process_type, user, remote_ip);
++	process_count = process_group == NULL ? 0 :
++		array_count(&process_group->processes);
++	if (process_count >= set->mail_max_userip_connections &&
++	    set->mail_max_userip_connections != 0 &&
++	    master_user == NULL)
++		return MASTER_LOGIN_STATUS_MAX_CONNECTIONS;
++
++	/* if uid/gid wasn't returned, use the defaults */
++	if (uid == (uid_t)-1) {
++		uid = set->mail_uid_t;
++		if (uid == (uid_t)-1) {
++			i_error("User %s is missing UID (see mail_uid setting)",
++				user);
++			return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++		}
++	}
++	if (gid == (gid_t)-1) {
++		gid = set->mail_gid_t;
++		if (gid == (gid_t)-1) {
++			i_error("User %s is missing GID (see mail_gid setting)",
++				user);
++			return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++		}
++	}
++
++	if (*chroot_dir == '\0' && *set->valid_chroot_dirs != '\0' &&
++	    (p = strstr(home_dir, "/./")) != NULL) {
++		/* wu-ftpd like <chroot>/./<home> - check only if there's even
++		   a possibility of using them (non-empty valid_chroot_dirs)*/
++		chroot_dir = t_strdup_until(home_dir, p);
++		home_dir = p + 2;
++	} else if (*chroot_dir != '\0' && *home_dir != '/') {
++		/* home directories should never be relative, but force this
++		   with chroots. */
++		home_dir = t_strconcat("/", home_dir, NULL);
++	}
++
++	if (!dump_capability) {
++		if (!validate_uid_gid(set, uid, gid, user))
++			return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++	}
++
++	if (*chroot_dir != '\0') {
++		if (!validate_chroot(set, chroot_dir)) {
++			i_error("Invalid chroot directory '%s' (user %s) "
++				"(see valid_chroot_dirs setting)",
++				chroot_dir, user);
++			return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++		}
++	} else if (*set->mail_chroot != '\0') {
++		/* mail_chroot setting's value doesn't need to be in
++		   valid_chroot_dirs. */
++		chroot_dir = set->mail_chroot;
++	}
++	if (*chroot_dir != '\0' && set->mail_drop_priv_before_exec) {
++		i_error("Can't chroot to directory '%s' (user %s) "
++			"with mail_drop_priv_before_exec=yes",
++			chroot_dir, user);
++		return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++	}
++	len = strlen(chroot_dir);
++	if (len > 2 && strcmp(chroot_dir + len - 2, "/.") == 0 &&
++	    strncmp(home_dir, chroot_dir, len - 2) == 0) {
++		/* strip chroot dir from home dir */
++		home_dir += len - 2;
++	}
++
++	if (!dump_capability) {
++		throttle = set->mail_debug ? 0 :
++			set->mail_log_max_lines_per_sec;
++		log_fd = log_create_pipe(&log, throttle);
++		if (log_fd == -1)
++			return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++	} else {
++		log = NULL;
++		log_fd = dup(STDERR_FILENO);
++		if (log_fd == -1) {
++			i_error("dup() failed: %m");
++			return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++		}
++		fd_close_on_exec(log_fd, TRUE);
++	}
++
++	/* See if we need to do the initial NFS check. We want to do this only
++	   once, so the check code needs to be before fork(). */
++	if (set->nfs_check && !set->mail_nfs_index && !dump_capability) {
++		set->nfs_check = FALSE;
++		nfs_check = TRUE;
++	} else {
++		nfs_check = FALSE;
++	}
++
++	pid = fork();
++	if (pid < 0) {
++		i_error("fork() failed: %m");
++		(void)close(log_fd);
++		return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++	}
++
++	var_expand_table =
++		get_var_expand_table(process_names[process_type],
++				     user, home_given ? home_dir : NULL,
++				     net_ip2addr(local_ip),
++				     net_ip2addr(remote_ip),
++				     pid != 0 ? pid : getpid(), uid);
++	str = t_str_new(128);
++
++	if (pid != 0) {
++		/* master */
++		var_expand(str, set->mail_log_prefix, var_expand_table);
++
++		if (!dump_capability) {
++			log_set_prefix(log, str_c(str));
++			log_set_pid(log, pid);
++			if (process_group == NULL) {
++				process_group =
++					mail_process_group_create(process_type,
++								  user,
++								  remote_ip);
++			}
++			mail_process_group_add(process_group, pid);
++		}
++		(void)close(log_fd);
++		return MASTER_LOGIN_STATUS_OK;
++	}
++
++#ifdef HAVE_SETPRIORITY
++	if (nice_value != 0) {
++		if (setpriority(PRIO_PROCESS, 0, nice_value) < 0)
++			i_error("setpriority(%d) failed: %m", nice_value);
++	}
++#endif
++
++	if (!dump_capability) {
++		str_append(str, "master-");
++		var_expand(str, set->mail_log_prefix, var_expand_table);
++		log_set_prefix(log, str_c(str));
++	}
++
++	child_process_init_env();
++
++	/* move the client socket into stdin and stdout fds, log to stderr */
++	if (dup2(dump_capability ? null_fd : socket_fd, 0) < 0)
++		i_fatal("dup2(stdin) failed: %m");
++	if (dup2(socket_fd, 1) < 0)
++		i_fatal("dup2(stdout) failed: %m");
++	if (dup2(log_fd, 2) < 0)
++		i_fatal("dup2(stderr) failed: %m");
++
++	for (i = 0; i < 3; i++)
++		fd_close_on_exec(i, FALSE);
++
++	/* setup environment - set the most important environment first
++	   (paranoia about filling up environment without noticing) */
++	restrict_access_set_env(system_user, uid, gid, set->mail_priv_gid_t,
++				dump_capability ? "" : chroot_dir,
++				set->first_valid_gid, set->last_valid_gid,
++				set->mail_access_groups);
++
++	restrict_process_size(set->mail_process_size, (unsigned int)-1);
++
++	if (dump_capability)
++		env_put("DUMP_CAPABILITY=1");
++
++	if ((*home_dir == '\0' && *chroot_dir == '\0') || dump_capability) {
++		full_home_dir = "";
++		ret = -1;
++	} else {
++		full_home_dir = *chroot_dir == '\0' ? home_dir :
++			t_strconcat(chroot_dir, home_dir, NULL);
++		/* NOTE: if home directory is NFS-mounted, we might not
++		   have access to it as root. Change the effective UID and GID
++		   temporarily to make it work. */
++		if (uid != master_uid) {
++			if (setegid(gid) < 0)
++				i_fatal("setegid(%s) failed: %m", dec2str(gid));
++			if (seteuid(uid) < 0)
++				i_fatal("seteuid(%s) failed: %m", dec2str(uid));
++		}
++
++		alarm(CHDIR_TIMEOUT);
++		ret = chdir(full_home_dir);
++		chdir_errno = errno;
++		if ((left = alarm(0)) < CHDIR_TIMEOUT - CHDIR_WARN_SECS) {
++			i_warning("chdir(%s) blocked for %u secs",
++				  full_home_dir, CHDIR_TIMEOUT - left);
++		}
++
++		/* Change UID back. No need to change GID back, it doesn't
++		   really matter. */
++		if (uid != master_uid && seteuid(master_uid) < 0)
++			i_fatal("seteuid(%s) failed: %m", dec2str(master_uid));
++
++		/* If user's home directory doesn't exist and we're not
++		   trying to chroot anywhere, fallback to /tmp as the mails
++		   could be stored elsewhere. The ENOTDIR check is mostly for
++		   /dev/null home directory. */
++		if (ret < 0 && (*chroot_dir != '\0' ||
++				!(ENOTFOUND(chdir_errno) ||
++				  chdir_errno == EINTR))) {
++			errno = chdir_errno;
++			i_fatal("chdir(%s) failed with uid %s: %m",
++				full_home_dir, dec2str(uid));
++		}
++	}
++	if (ret < 0) {
++		/* We still have to change to some directory where we have
++		   rx-access. /tmp should exist everywhere. */
++		if (chdir("/tmp") < 0)
++			i_fatal("chdir(/tmp) failed: %m");
++	}
++
++	mail_process_set_environment(set, mail, var_expand_table,
++				     dump_capability);
++
++	/* extra args. uppercase key value. */
++	args = array_get(&extra_args, &count);
++	for (i = 0; i < count; i++) {
++		if (*args[i] == '=') {
++			/* Should be caught by dovecot-auth already */
++			i_fatal("Userdb returned data with empty key (%s)",
++				args[i]);
++		}
++		p = strchr(args[i], '=');
++		if (p == NULL) {
++			/* boolean */
++			env_put(t_strconcat(t_str_ucase(args[i]), "=1", NULL));
++
++		} else {
++			/* key=value */
++			env_put(t_strconcat(t_str_ucase(
++				t_strdup_until(args[i], p)), p, NULL));
++		}
++	}
++
++	if (nfs_check) {
++		/* ideally we should check all of the namespaces,
++		   but for now don't bother. */
++		const char *mail_location = getenv("NAMESPACE_1");
++
++		if (mail_location == NULL)
++			mail_location = getenv("MAIL");
++		nfs_warn_if_found(mail_location, full_home_dir);
++	}
++
++	env_put("LOGGED_IN=1");
++	env_put(t_strconcat("HOME=", home_dir, NULL));
++	env_put(t_strconcat("USER=", user, NULL));
++
++	addr = net_ip2addr(remote_ip);
++	env_put(t_strconcat("IP=", addr, NULL));
++	env_put(t_strconcat("LOCAL_IP=", net_ip2addr(local_ip), NULL));
++
++	if (!set->verbose_proctitle)
++		title[0] = '\0';
++	else {
++		if (addr == NULL)
++			addr = "??";
++
++		i_snprintf(title, sizeof(title), "[%s %s]", user, addr);
++	}
++
++	/* make sure we don't leak syslog fd, but do it last so that
++	   any errors above will be logged */
++	closelog();
++
++	if (set->mail_drop_priv_before_exec) {
++		restrict_access_by_env(TRUE);
++		/* privileged GID is now only in saved-GID. if we want to
++		   preserve it accross exec, it needs to be temporarily
++		   in effective gid */
++		restrict_access_use_priv_gid();
++	}
++
++	client_process_exec(set->mail_executable, title);
++	i_fatal_status(FATAL_EXEC, "execv(%s) failed: %m",
++		       set->mail_executable);
++
++	/* not reached */
++	return MASTER_LOGIN_STATUS_INTERNAL_ERROR;
++}
++
++static void
++mail_process_destroyed(struct child_process *process,
++		       pid_t pid, bool abnormal_exit ATTR_UNUSED)
++{
++	struct mail_process_group *group = (struct mail_process_group *)process;
++	const pid_t *pids;
++	unsigned int i, count;
++
++	pids = array_get(&group->processes, &count);
++	if (count == 1) {
++		/* last process in this group */
++		i_assert(pids[0] == pid);
++		hash_remove(mail_process_groups, group);
++		mail_process_group_free(group);
++	} else {
++		for (i = 0; i < count; i++) {
++			if (pids[i] == pid)
++				break;
++		}
++		i_assert(i != count);
++		array_delete(&group->processes, i, 1);
++	}
++
++	mail_process_count--;
++}
++
++void mail_processes_init(void)
++{
++	mail_process_groups = hash_create(default_pool, default_pool, 0,
++					  mail_process_group_hash,
++					  mail_process_group_cmp);
++
++	child_process_set_destroy_callback(PROCESS_TYPE_IMAP,
++					   mail_process_destroyed);
++	child_process_set_destroy_callback(PROCESS_TYPE_POP3,
++					   mail_process_destroyed);
++}
++
++void mail_processes_deinit(void)
++{
++	struct hash_iterate_context *iter;
++	void *key, *value;
++
++	iter = hash_iterate_init(mail_process_groups);
++	while (hash_iterate(iter, &key, &value)) {
++		struct mail_process_group *group = value;
++		mail_process_group_free(group);
++	}
++	hash_iterate_deinit(&iter);
++
++	hash_destroy(&mail_process_groups);
++}
+diff -urN dovecot-1.1.11/src/master/main.c dovecot-1.1.11.debian/src/master/main.c
+--- dovecot-1.1.11/src/master/main.c	2009-02-02 18:06:50.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/main.c	2009-02-20 20:03:47.000000000 +0100
 @@ -202,6 +202,8 @@
  			return TRUE;
  		if (server->pop3 != NULL && have_stderr_set(server->pop3))
@@ -362,9 +3637,9 @@ diff -urN dovecot-1.1.7/src/master/main.c dovecot-1.1.7-managesieve/src/master/m
  
  		server = server->next;
  	}
-diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/src/master/master-settings.c
---- dovecot-1.1.7/src/master/master-settings.c	2008-11-15 10:13:18.000000000 -0700
-+++ dovecot-1.1.7-managesieve/src/master/master-settings.c	2008-12-04 20:05:46.000000000 -0700
+diff -urN dovecot-1.1.11/src/master/master-settings.c dovecot-1.1.11.debian/src/master/master-settings.c
+--- dovecot-1.1.11/src/master/master-settings.c	2009-02-02 18:27:13.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/master-settings.c	2009-02-20 20:05:18.000000000 +0100
 @@ -293,6 +293,14 @@
  	/* dict */
  	MEMBER(dict_db_config) NULL,
@@ -403,7 +3678,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  	}
  
  	return TRUE;
-@@ -1144,7 +1157,7 @@
+@@ -1178,7 +1191,7 @@
  
  	if (strcmp(key, "login") == 0) {
  		i_warning("Ignoring deprecated 'login' section handling. "
@@ -412,7 +3687,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  			  "Some settings may have been read incorrectly.");
  		return NULL;
  	}
-@@ -1170,6 +1183,15 @@
+@@ -1204,6 +1217,15 @@
  							key, value);
  		}
  
@@ -428,7 +3703,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  		if (error == NULL)
  			return NULL;
  
-@@ -1228,6 +1250,13 @@
+@@ -1262,6 +1284,13 @@
  			array_append(&ctx->server->pop3->plugin_envs,
  				     &value, 1);
  		}
@@ -442,7 +3717,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  		return NULL;
  	}
  
-@@ -1237,7 +1266,8 @@
+@@ -1271,7 +1300,8 @@
  static struct server_settings *
  create_new_server(const char *name,
  		  struct settings *imap_defaults,
@@ -452,7 +3727,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  {
  	struct server_settings *server;
  
-@@ -1245,14 +1275,17 @@
+@@ -1279,14 +1309,17 @@
  	server->name = p_strdup(settings_pool, name);
  	server->imap = p_new(settings_pool, struct settings, 1);
  	server->pop3 = p_new(settings_pool, struct settings, 1);
@@ -470,7 +3745,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  
  	server->imap->server = server;
  	server->imap->protocol = MAIL_PROTOCOL_IMAP;
-@@ -1266,6 +1299,12 @@
+@@ -1300,6 +1333,12 @@
  	server->pop3->mail_executable = PKG_LIBEXECDIR"/pop3";
  	server->pop3->mail_plugin_dir = MODULEDIR"/pop3";
  
@@ -483,7 +3758,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  	return server;
  }
  
-@@ -1308,8 +1347,8 @@
+@@ -1342,8 +1381,8 @@
  
  		ctx->type = SETTINGS_TYPE_SERVER;
  		ctx->server = create_new_server(name, ctx->server->imap,
@@ -494,7 +3769,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  		while (server->next != NULL)
  			server = server->next;
  		server->next = ctx->server;
-@@ -1330,6 +1369,8 @@
+@@ -1364,6 +1403,8 @@
  			ctx->protocol = MAIL_PROTOCOL_POP3;
  		else if (strcmp(name, "lda") == 0)
  			ctx->protocol = MAIL_PROTOCOL_LDA;
@@ -503,7 +3778,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  		else {
  			*errormsg = "Unknown protocol name";
  			return FALSE;
-@@ -1441,6 +1482,8 @@
+@@ -1475,6 +1516,8 @@
  			fd_count += server->imap->login_max_processes_count;
  		if (server->pop3 != NULL)
  			fd_count += server->pop3->login_max_processes_count;
@@ -512,7 +3787,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  		fd_count += server->defaults->max_mail_processes;
  	}
  
-@@ -1470,7 +1513,7 @@
+@@ -1504,7 +1547,7 @@
  	ctx.protocol = MAIL_PROTOCOL_ANY;
  	ctx.server = ctx.root =
  		create_new_server("default",
@@ -521,7 +3796,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  	ctx.auth = &ctx.server->auth_defaults;
  
  	if (!settings_read(path, NULL, parse_setting, parse_section, &ctx))
-@@ -1487,7 +1530,9 @@
+@@ -1521,7 +1564,9 @@
  
  	if (!nochecks && !nofixes) {
  		ctx.root->defaults = settings_is_active(ctx.root->imap) ?
@@ -532,17 +3807,17 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  
  		path = t_strconcat(ctx.root->defaults->base_dir,
  				   "/master.pid", NULL);
-@@ -1497,7 +1542,8 @@
+@@ -1531,7 +1576,8 @@
  	prev = NULL;
  	for (server = ctx.root; server != NULL; server = server->next) {
  		if ((*server->imap->protocols == '\0' ||
 -		     *server->pop3->protocols == '\0') && !nochecks) {
 +		     *server->pop3->protocols == '\0' ||
-+		     *server->managesieve->protocols == '\0') && !nochecks) {
- 			i_error("No protocols given in configuration file");
++             *server->managesieve->protocols == '\0') && !nochecks) {
+ 			i_error("protocols: No protocols given "
+ 				"in configuration file");
  			return FALSE;
- 		}
-@@ -1527,6 +1573,15 @@
+@@ -1562,6 +1608,15 @@
  				server->defaults = server->pop3;
  		}
  
@@ -558,7 +3833,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  		if (server->defaults == NULL) {
  			if (prev == NULL)
  				ctx.root = server->next;
-@@ -1744,8 +1799,8 @@
+@@ -1779,8 +1834,8 @@
  
  void master_settings_dump(struct server_settings *set, bool nondefaults)
  {
@@ -569,7 +3844,7 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  	unsigned int count;
  
  	sets[0] = &default_settings;
-@@ -1764,6 +1819,11 @@
+@@ -1799,6 +1854,11 @@
  		sets[count] = set->pop3;
  		set_names[count] = "pop3";
  		count++;
@@ -581,9 +3856,1833 @@ diff -urN dovecot-1.1.7/src/master/master-settings.c dovecot-1.1.7-managesieve/s
  	}
  	settings_dump(setting_defs, sets, set_names, count, nondefaults, 0);
  	namespace_settings_dump(set->namespaces, nondefaults);
-diff -urN dovecot-1.1.7/src/master/master-settings-defs.c dovecot-1.1.7-managesieve/src/master/master-settings-defs.c
---- dovecot-1.1.7/src/master/master-settings-defs.c	2008-10-26 09:03:45.000000000 -0600
-+++ dovecot-1.1.7-managesieve/src/master/master-settings-defs.c	2008-12-04 20:05:46.000000000 -0700
+diff -urN dovecot-1.1.11/src/master/master-settings.c.orig dovecot-1.1.11.debian/src/master/master-settings.c.orig
+--- dovecot-1.1.11/src/master/master-settings.c.orig	1970-01-01 01:00:00.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/master-settings.c.orig	2009-02-02 18:27:13.000000000 +0100
+@@ -0,0 +1,1820 @@
++/* Copyright (c) 2002-2009 Dovecot authors, see the included COPYING file */
++
++#include "common.h"
++#include "array.h"
++#include "str.h"
++#include "istream.h"
++#include "fd-close-on-exec.h"
++#include "safe-mkdir.h"
++#include "mkdir-parents.h"
++#include "unlink-directory.h"
++#include "syslog-util.h"
++#include "mail-process.h"
++#include "master-login-interface.h"
++#include "settings.h"
++
++#include <stdio.h>
++#include <stddef.h>
++#include <stdlib.h>
++#include <dirent.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <signal.h>
++#include <sys/stat.h>
++#include <sys/wait.h>
++#include <pwd.h>
++#include <grp.h>
++#ifdef HAVE_SYS_RESOURCE_H
++#  include <sys/resource.h>
++#endif
++
++enum settings_type {
++	SETTINGS_TYPE_ROOT,
++	SETTINGS_TYPE_SERVER,
++	SETTINGS_TYPE_AUTH,
++	SETTINGS_TYPE_AUTH_SOCKET,
++	SETTINGS_TYPE_AUTH_PASSDB,
++	SETTINGS_TYPE_AUTH_USERDB,
++        SETTINGS_TYPE_NAMESPACE,
++	SETTINGS_TYPE_SOCKET,
++	SETTINGS_TYPE_DICT,
++	SETTINGS_TYPE_PLUGIN
++};
++
++struct settings_parse_ctx {
++	enum settings_type type, parent_type;
++	enum mail_protocol protocol;
++
++	struct server_settings *root, *server;
++	struct auth_settings *auth;
++	struct socket_settings *socket;
++	struct auth_socket_settings *auth_socket;
++	struct auth_passdb_settings *auth_passdb;
++	struct auth_userdb_settings *auth_userdb;
++        struct namespace_settings *namespace;
++
++	int level;
++};
++
++#include "master-settings-defs.c"
++
++#undef DEF_STR
++#undef DEF_INT
++#undef DEF_BOOL
++#define DEF_STR(name) DEF_STRUCT_STR(name, auth_settings)
++#define DEF_INT(name) DEF_STRUCT_INT(name, auth_settings)
++#define DEF_BOOL(name) DEF_STRUCT_BOOL(name, auth_settings)
++
++static struct setting_def auth_setting_defs[] = {
++	DEF_STR(mechanisms),
++	DEF_STR(realms),
++	DEF_STR(default_realm),
++	DEF_INT(cache_size),
++	DEF_INT(cache_ttl),
++	DEF_INT(cache_negative_ttl),
++	DEF_STR(executable),
++	DEF_STR(user),
++	DEF_STR(chroot),
++	DEF_STR(username_chars),
++	DEF_STR(username_translation),
++	DEF_STR(username_format),
++	DEF_STR(master_user_separator),
++	DEF_STR(anonymous_username),
++	DEF_STR(krb5_keytab),
++	DEF_STR(gssapi_hostname),
++	DEF_STR(winbind_helper_path),
++	DEF_INT(failure_delay),
++
++	DEF_BOOL(verbose),
++	DEF_BOOL(debug),
++	DEF_BOOL(debug_passwords),
++	DEF_BOOL(ssl_require_client_cert),
++	DEF_BOOL(ssl_username_from_cert),
++	DEF_BOOL(ntlm_use_winbind),
++
++	DEF_INT(count),
++	DEF_INT(worker_max_count),
++	DEF_INT(worker_max_request_count),
++	DEF_INT(process_size),
++
++	{ 0, NULL, 0 }
++};
++
++#undef DEF_STR
++#undef DEF_INT
++#undef DEF_BOOL
++#define DEF_STR(name) DEF_STRUCT_STR(name, socket_settings)
++#define DEF_INT(name) DEF_STRUCT_INT(name, socket_settings)
++#define DEF_BOOL(name) DEF_STRUCT_BOOL(name, socket_settings)
++
++static struct setting_def socket_setting_defs[] = {
++	DEF_STR(path),
++	DEF_INT(mode),
++	DEF_STR(user),
++	DEF_STR(group),
++
++	{ 0, NULL, 0 }
++};
++
++static struct setting_def auth_socket_setting_defs[] = {
++	DEF_STRUCT_STR(type, auth_socket_settings),
++
++	{ 0, NULL, 0 }
++};
++
++#undef DEF_STR
++#undef DEF_INT
++#undef DEF_BOOL
++#define DEF_STR(name) DEF_STRUCT_STR(name, auth_passdb_settings)
++#define DEF_INT(name) DEF_STRUCT_INT(name, auth_passdb_settings)
++#define DEF_BOOL(name) DEF_STRUCT_BOOL(name, auth_passdb_settings)
++
++static struct setting_def auth_passdb_setting_defs[] = {
++	DEF_STR(driver),
++	DEF_STR(args),
++	DEF_BOOL(deny),
++	DEF_BOOL(pass),
++	DEF_BOOL(master),
++
++	{ 0, NULL, 0 }
++};
++
++static struct setting_def auth_userdb_setting_defs[] = {
++	DEF_STRUCT_STR(driver, auth_userdb_settings),
++	DEF_STRUCT_STR(args, auth_userdb_settings),
++
++	{ 0, NULL, 0 }
++};
++
++#undef DEF_STR
++#undef DEF_INT
++#undef DEF_BOOL
++#define DEF_STR(name) DEF_STRUCT_STR(name, namespace_settings)
++#define DEF_INT(name) DEF_STRUCT_INT(name, namespace_settings)
++#define DEF_BOOL(name) DEF_STRUCT_BOOL(name, namespace_settings)
++
++static struct setting_def namespace_setting_defs[] = {
++	DEF_STR(type),
++	DEF_STR(separator),
++	DEF_STR(prefix),
++	DEF_STR(location),
++	DEF_BOOL(inbox),
++	DEF_BOOL(hidden),
++	DEF_BOOL(list),
++	DEF_BOOL(subscriptions),
++
++	{ 0, NULL, 0 }
++};
++
++struct settings default_settings = {
++	MEMBER(server) NULL,
++	MEMBER(protocol) 0,
++
++	/* common */
++	MEMBER(base_dir) PKG_RUNDIR,
++	MEMBER(log_path) "",
++	MEMBER(info_log_path) "",
++	MEMBER(log_timestamp) DEFAULT_FAILURE_STAMP_FORMAT,
++	MEMBER(syslog_facility) "mail",
++
++	/* general */
++	MEMBER(protocols) "imap imaps",
++	MEMBER(listen) "*",
++	MEMBER(ssl_listen) "",
++
++	MEMBER(ssl_disable) FALSE,
++	MEMBER(ssl_ca_file) "",
++	MEMBER(ssl_cert_file) SSLDIR"/certs/dovecot.pem",
++	MEMBER(ssl_key_file) SSLDIR"/private/dovecot.pem",
++	MEMBER(ssl_key_password) "",
++	MEMBER(ssl_parameters_regenerate) 168,
++	MEMBER(ssl_cipher_list) "",
++	MEMBER(ssl_cert_username_field) "commonName",
++	MEMBER(ssl_verify_client_cert) FALSE,
++	MEMBER(disable_plaintext_auth) TRUE,
++	MEMBER(verbose_ssl) FALSE,
++	MEMBER(shutdown_clients) TRUE,
++	MEMBER(nfs_check) TRUE,
++	MEMBER(version_ignore) FALSE,
++
++	/* login */
++	MEMBER(login_dir) "login",
++	MEMBER(login_executable) NULL,
++	MEMBER(login_user) "dovecot",
++	MEMBER(login_greeting) "Dovecot ready.",
++	MEMBER(login_log_format_elements) "user=<%u> method=%m rip=%r lip=%l %c",
++	MEMBER(login_log_format) "%$: %s",
++
++	MEMBER(login_process_per_connection) TRUE,
++	MEMBER(login_chroot) TRUE,
++	MEMBER(login_greeting_capability) FALSE,
++
++	MEMBER(login_process_size) 64,
++	MEMBER(login_processes_count) 3,
++	MEMBER(login_max_processes_count) 128,
++	MEMBER(login_max_connections) 256,
++
++	/* mail */
++	MEMBER(valid_chroot_dirs) "",
++	MEMBER(mail_chroot) "",
++	MEMBER(max_mail_processes) 512,
++	MEMBER(mail_max_userip_connections) 10,
++	MEMBER(verbose_proctitle) FALSE,
++
++	MEMBER(first_valid_uid) 500,
++	MEMBER(last_valid_uid) 0,
++	MEMBER(first_valid_gid) 1,
++	MEMBER(last_valid_gid) 0,
++	MEMBER(mail_extra_groups) "",
++	MEMBER(mail_access_groups) "",
++	MEMBER(mail_privileged_group) "",
++	MEMBER(mail_uid) "",
++	MEMBER(mail_gid) "",
++
++	MEMBER(mail_location) "",
++	MEMBER(mail_cache_fields) "",
++	MEMBER(mail_never_cache_fields) "imap.envelope",
++	MEMBER(mail_cache_min_mail_count) 0,
++	MEMBER(mailbox_idle_check_interval) 30,
++	MEMBER(mail_debug) FALSE,
++	MEMBER(mail_full_filesystem_access) FALSE,
++	MEMBER(mail_max_keyword_length) 50,
++	MEMBER(mail_save_crlf) FALSE,
++#ifdef MMAP_CONFLICTS_WRITE
++	MEMBER(mmap_disable) TRUE,
++#else
++	MEMBER(mmap_disable) FALSE,
++#endif
++	MEMBER(dotlock_use_excl) TRUE,
++	MEMBER(fsync_disable) FALSE,
++	MEMBER(mail_nfs_storage) FALSE,
++	MEMBER(mail_nfs_index) FALSE,
++	MEMBER(mailbox_list_index_disable) TRUE,
++	MEMBER(lock_method) "fcntl",
++	MEMBER(maildir_stat_dirs) FALSE,
++	MEMBER(maildir_copy_with_hardlinks) TRUE,
++	MEMBER(maildir_copy_preserve_filename) FALSE,
++	MEMBER(mbox_read_locks) "fcntl",
++	MEMBER(mbox_write_locks) "dotlock fcntl",
++	MEMBER(mbox_lock_timeout) 300,
++	MEMBER(mbox_dotlock_change_timeout) 120,
++	MEMBER(mbox_min_index_size) 0,
++	MEMBER(mbox_dirty_syncs) TRUE,
++	MEMBER(mbox_very_dirty_syncs) FALSE,
++	MEMBER(mbox_lazy_writes) TRUE,
++	MEMBER(dbox_rotate_size) 2048,
++	MEMBER(dbox_rotate_min_size) 16,
++	MEMBER(dbox_rotate_days) 1,
++	MEMBER(umask) 0077,
++	MEMBER(mail_drop_priv_before_exec) FALSE,
++
++	MEMBER(mail_executable) PKG_LIBEXECDIR"/imap",
++	MEMBER(mail_process_size) 256,
++	MEMBER(mail_plugins) "",
++	MEMBER(mail_plugin_dir) MODULEDIR"/imap",
++	MEMBER(mail_log_prefix) "%Us(%u): ",
++	MEMBER(mail_log_max_lines_per_sec) 10,
++
++	/* imap */
++	MEMBER(imap_max_line_length) 65536,
++	MEMBER(imap_capability) "",
++	MEMBER(imap_client_workarounds) "",
++	MEMBER(imap_logout_format) "bytes=%i/%o",
++
++	/* pop3 */
++	MEMBER(pop3_no_flag_updates) FALSE,
++	MEMBER(pop3_enable_last) FALSE,
++	MEMBER(pop3_reuse_xuidl) FALSE,
++	MEMBER(pop3_lock_session) FALSE,
++	MEMBER(pop3_uidl_format) "%08Xu%08Xv",
++	MEMBER(pop3_client_workarounds) "",
++	MEMBER(pop3_logout_format) "top=%t/%p, retr=%r/%b, del=%d/%m, size=%s",
++
++	/* dict */
++	MEMBER(dict_db_config) NULL,
++
++	/* .. */
++};
++
++struct auth_settings default_auth_settings = {
++	MEMBER(parent) NULL,
++	MEMBER(next) NULL,
++
++	MEMBER(name) NULL,
++	MEMBER(mechanisms) "plain",
++	MEMBER(realms) "",
++	MEMBER(default_realm) "",
++	MEMBER(cache_size) 0,
++	MEMBER(cache_ttl) 3600,
++	MEMBER(cache_negative_ttl) 3600,
++	MEMBER(executable) PKG_LIBEXECDIR"/dovecot-auth",
++	MEMBER(user) "root",
++	MEMBER(chroot) "",
++	MEMBER(username_chars) "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890.-_@",
++	MEMBER(username_translation) "",
++	MEMBER(username_format) "",
++	MEMBER(master_user_separator) "",
++	MEMBER(anonymous_username) "anonymous",
++	MEMBER(krb5_keytab) "",
++	MEMBER(gssapi_hostname) "",
++	MEMBER(winbind_helper_path) "/usr/bin/ntlm_auth",
++	MEMBER(failure_delay) 2,
++
++	MEMBER(verbose) FALSE,
++	MEMBER(debug) FALSE,
++	MEMBER(debug_passwords) FALSE,
++	MEMBER(ssl_require_client_cert) FALSE,
++	MEMBER(ssl_username_from_cert) FALSE,
++	MEMBER(ntlm_use_winbind) FALSE,
++
++	MEMBER(count) 1,
++	MEMBER(worker_max_count) 30,
++	MEMBER(worker_max_request_count) 0,
++	MEMBER(process_size) 256,
++
++	/* .. */
++	MEMBER(uid) 0,
++	MEMBER(gid) 0,
++	MEMBER(passdbs) NULL,
++	MEMBER(userdbs) NULL,
++	MEMBER(sockets) NULL
++};
++
++struct socket_settings default_socket_settings = {
++#define DEFAULT_MASTER_SOCKET_PATH "auth-master"
++#define DEFAULT_CLIENT_SOCKET_PATH "auth-client"
++	MEMBER(path) "",
++	MEMBER(mode) 0600,
++	MEMBER(user) "",
++	MEMBER(group) ""
++};
++
++struct namespace_settings default_namespace_settings = {
++	MEMBER(parent) NULL,
++	MEMBER(next) NULL,
++	MEMBER(type) NULL,
++
++	MEMBER(separator) "",
++	MEMBER(prefix) "",
++	MEMBER(location) "",
++
++	MEMBER(inbox) FALSE,
++	MEMBER(hidden) FALSE,
++	MEMBER(list) TRUE,
++	MEMBER(subscriptions) TRUE
++};
++
++static pool_t settings_pool, settings2_pool;
++struct server_settings *settings_root = NULL;
++
++static void fix_base_path(struct settings *set, const char **str)
++{
++	if (*str != NULL && **str != '\0' && **str != '/') {
++		*str = p_strconcat(settings_pool,
++				   set->base_dir, "/", *str, NULL);
++	}
++}
++
++static bool parse_uid(const char *str, uid_t *uid_r)
++{
++	struct passwd *pw;
++	char *p;
++
++	if (*str >= '0' && *str <= '9') {
++		*uid_r = (uid_t)strtoul(str, &p, 10);
++		if (*p == '\0')
++			return TRUE;
++	}
++
++	pw = getpwnam(str);
++	if (pw == NULL)
++		return FALSE;
++
++	*uid_r = pw->pw_uid;
++	return TRUE;
++}
++
++static bool parse_gid(const char *str, gid_t *gid_r)
++{
++	struct group *gr;
++	char *p;
++
++	if (*str >= '0' && *str <= '9') {
++		*gid_r = (gid_t)strtoul(str, &p, 10);
++		if (*p == '\0')
++			return TRUE;
++	}
++
++	gr = getgrnam(str);
++	if (gr == NULL)
++		return FALSE;
++
++	*gid_r = gr->gr_gid;
++	return TRUE;
++}
++
++static bool get_login_uid(struct settings *set)
++{
++	struct passwd *pw;
++
++	if ((pw = getpwnam(set->login_user)) == NULL) {
++		i_error("Login user doesn't exist: %s", set->login_user);
++		return FALSE;
++	}
++
++	if (set->server->login_gid == 0)
++		set->server->login_gid = pw->pw_gid;
++	else if (set->server->login_gid != pw->pw_gid) {
++		i_error("All login process users must belong to same group "
++			"(%s vs %s)", dec2str(set->server->login_gid),
++			dec2str(pw->pw_gid));
++		return FALSE;
++	}
++
++	set->login_uid = pw->pw_uid;
++	return TRUE;
++}
++
++static bool auth_settings_verify(struct auth_settings *auth)
++{
++	struct passwd *pw;
++	struct auth_socket_settings *s;
++
++	if ((pw = getpwnam(auth->user)) == NULL) {
++		i_error("Auth user doesn't exist: %s", auth->user);
++		return FALSE;
++	}
++
++	if (auth->parent->defaults->login_uid == pw->pw_uid &&
++	    master_uid != pw->pw_uid) {
++		i_error("login_user %s (uid %s) must not be same as auth_user",
++			auth->user, dec2str(pw->pw_uid));
++		return FALSE;
++	}
++	auth->uid = pw->pw_uid;
++	auth->gid = pw->pw_gid;
++
++	if (access(t_strcut(auth->executable, ' '), X_OK) < 0) {
++		i_error("auth_executable: Can't use %s: %m",
++			t_strcut(auth->executable, ' '));
++		return FALSE;
++	}
++
++	fix_base_path(auth->parent->defaults, &auth->chroot);
++	if (*auth->chroot != '\0' && access(auth->chroot, X_OK) < 0) {
++		i_error("Can't access auth chroot directory %s: %m",
++			auth->chroot);
++		return FALSE;
++	}
++
++	if (auth->ssl_require_client_cert || auth->ssl_username_from_cert) {
++		/* if we require valid cert, make sure we also ask for it */
++		if (auth->parent->pop3 != NULL)
++			auth->parent->pop3->ssl_verify_client_cert = TRUE;
++		if (auth->parent->imap != NULL)
++			auth->parent->imap->ssl_verify_client_cert = TRUE;
++	}
++
++	for (s = auth->sockets; s != NULL; s = s->next) {
++		if (auth->count > 1 && strcmp(s->type, "listen") == 0) {
++			i_error("Currently auth process count must be 1 if "
++				"you're using auth socket listeners.");
++			return FALSE;
++		}
++		fix_base_path(auth->parent->defaults, &s->master.path);
++		fix_base_path(auth->parent->defaults, &s->client.path);
++	}
++	return TRUE;
++}
++
++static bool namespace_settings_verify(struct namespace_settings *ns)
++{
++	const char *name;
++
++	name = ns->prefix != NULL ? ns->prefix : "";
++
++	if (ns->separator != NULL &&
++	    ns->separator[0] != '\0' && ns->separator[1] != '\0') {
++		i_error("Namespace '%s': "
++			"Hierarchy separator must be only one character long",
++			name);
++		return FALSE;
++	}
++
++	return TRUE;
++}
++
++static const char *get_directory(const char *path)
++{
++	char *str, *p;
++
++	str = t_strdup_noconst(path);
++	p = strrchr(str, '/');
++	if (p == NULL)
++		return ".";
++	else {
++		*p = '\0';
++		return str;
++	}
++}
++
++static bool settings_is_active(struct settings *set)
++{
++	if (*set->protocols == '\0') {
++		/* we're probably using this with --exec-mail */
++		return TRUE;
++	}
++
++	if (set->protocol == MAIL_PROTOCOL_IMAP) {
++		if (strstr(set->protocols, "imap") == NULL)
++			return FALSE;
++	} else {
++		if (strstr(set->protocols, "pop3") == NULL)
++			return FALSE;
++	}
++
++	return TRUE;
++}
++
++static bool settings_have_connect_sockets(struct settings *set)
++{
++	struct auth_settings *auth;
++	struct server_settings *server;
++
++	for (server = set->server; server != NULL; server = server->next) {
++		for (auth = server->auths; auth != NULL; auth = auth->next) {
++			if (auth->sockets != NULL &&
++			    strcmp(auth->sockets->type, "connect") == 0)
++				return TRUE;
++		}
++	}
++
++	return FALSE;
++}
++
++static bool settings_have_nonplaintext_auths(struct settings *set)
++{
++	struct auth_settings *auth;
++	struct server_settings *server;
++	const char *const *tmp;
++
++	for (server = set->server; server != NULL; server = server->next) {
++		for (auth = server->auths; auth != NULL; auth = auth->next) {
++			tmp = t_strsplit_spaces(auth->mechanisms, " ");
++			for (; *tmp != NULL; tmp++) {
++				if (strcasecmp(*tmp, "PLAIN") != 0 &&
++				    strcasecmp(*tmp, "LOGIN") != 0)
++					return TRUE;
++			}
++		}
++	}
++
++	return FALSE;
++}
++
++static void unlink_auth_sockets(const char *path, const char *prefix)
++{
++	DIR *dirp;
++	struct dirent *dp;
++	struct stat st;
++	string_t *str;
++	unsigned int prefix_len;
++
++	dirp = opendir(path);
++	if (dirp == NULL) {
++		i_error("opendir(%s) failed: %m", path);
++		return;
++	}
++
++	prefix_len = strlen(prefix);
++	str = t_str_new(256);
++	while ((dp = readdir(dirp)) != NULL) {
++		if (dp->d_name[0] == '.')
++			continue;
++
++		if (strncmp(dp->d_name, prefix, prefix_len) != 0)
++			continue;
++
++		str_truncate(str, 0);
++		str_printfa(str, "%s/%s", path, dp->d_name);
++		if (lstat(str_c(str), &st) < 0) {
++			if (errno != ENOENT)
++				i_error("lstat(%s) failed: %m", str_c(str));
++			continue;
++		}
++		if (!S_ISSOCK(st.st_mode))
++			continue;
++
++		/* try to avoid unlinking sockets if someone's already
++		   listening in them. do this only at startup, because
++		   when SIGHUPing a child process might catch the new
++		   connection before it notices that it's supposed
++		   to die. null_fd == -1 check is a bit kludgy, but works.. */
++		if (null_fd == -1) {
++			int fd = net_connect_unix(str_c(str));
++			if (fd != -1 || errno != ECONNREFUSED) {
++				i_fatal("Dovecot is already running? "
++					"Socket already exists: %s",
++					str_c(str));
++			}
++		}
++
++		if (unlink(str_c(str)) < 0 && errno != ENOENT)
++			i_error("unlink(%s) failed: %m", str_c(str));
++	}
++	(void)closedir(dirp);
++}
++
++#ifdef HAVE_MODULES
++static bool get_imap_capability(struct settings *set)
++{
++	/* FIXME: pretty ugly code just for getting the capability
++	   automatically */
++	static const char *generated_capability = NULL;
++	static const char *args[] = {
++		"uid=65534",
++		"gid=65534",
++		"home=/tmp",
++		NULL
++	};
++	enum master_login_status login_status;
++	struct ip_addr ip;
++	char buf[4096];
++	int fd[2], status;
++	ssize_t ret;
++	unsigned int pos;
++	uid_t uid;
++
++	if (generated_capability != NULL) {
++		/* Reloading configuration. Don't try to execute the imap
++		   process again. Too risky and the wait() call below will
++		   break it anyway. Just use the previous capability list we
++		   already had generated. */
++		set->imap_generated_capability =
++			p_strdup(settings_pool, generated_capability);
++		return TRUE;
++	}
++
++	uid = geteuid();
++	if (uid != 0) {
++		/* use the current user */
++		args[0] = t_strdup_printf("uid=%s", dec2str(uid));
++		args[1] = t_strdup_printf("gid=%s", dec2str(getegid()));
++	}
++
++	memset(&ip, 0, sizeof(ip));
++	if (pipe(fd) < 0) {
++		i_error("pipe() failed: %m");
++		return FALSE;
++	}
++	fd_close_on_exec(fd[0], TRUE);
++	fd_close_on_exec(fd[1], TRUE);
++	login_status = create_mail_process(PROCESS_TYPE_IMAP, set, fd[1],
++					   &ip, &ip, "dump-capability",
++					   args, TRUE);
++	if (login_status != MASTER_LOGIN_STATUS_OK) {
++		(void)close(fd[0]);
++		(void)close(fd[1]);
++		return FALSE;
++	}
++	(void)close(fd[1]);
++
++	alarm(5);
++	if (wait(&status) == -1)
++		i_fatal("imap dump-capability process got stuck");
++	alarm(0);
++
++	if (status != 0) {
++		(void)close(fd[0]);
++		if (WIFSIGNALED(status)) {
++			i_error("imap dump-capability process "
++				"killed with signal %d", WTERMSIG(status));
++		} else {
++			i_error("imap dump-capability process returned %d",
++				WIFEXITED(status) ? WEXITSTATUS(status) :
++				status);
++		}
++		return FALSE;
++	}
++
++	pos = 0;
++	while ((ret = read(fd[0], buf + pos, sizeof(buf) - pos)) > 0)
++		pos += ret;
++
++	if (ret < 0) {
++		i_error("read(imap dump-capability process) failed: %m");
++		(void)close(fd[0]);
++		return FALSE;
++	}
++	(void)close(fd[0]);
++
++	if (pos == 0 || buf[pos-1] != '\n') {
++		i_error("imap dump-capability: Couldn't read capability "
++			"(got %u bytes)", pos);
++		return FALSE;
++	}
++	buf[pos-1] = '\0';
++
++	generated_capability = i_strdup(buf);
++	set->imap_generated_capability =
++		p_strdup(settings_pool, generated_capability);
++	return TRUE;
++}
++#endif
++
++static bool settings_verify(struct settings *set)
++{
++	const char *dir;
++	int facility;
++
++	if (!get_login_uid(set))
++		return FALSE;
++
++	set->mail_uid_t = (uid_t)-1;
++	set->mail_gid_t = (gid_t)-1;
++	set->mail_priv_gid_t = (gid_t)-1;
++
++	if (*set->mail_uid != '\0') {
++		if (!parse_uid(set->mail_uid, &set->mail_uid_t)) {
++			i_error("Non-existing mail_uid: %s", set->mail_uid);
++			return FALSE;
++		}
++	}
++	if (*set->mail_gid != '\0') {
++		if (!parse_gid(set->mail_gid, &set->mail_gid_t)) {
++			i_error("Non-existing mail_gid: %s", set->mail_uid);
++			return FALSE;
++		}
++	}
++	if (*set->mail_privileged_group != '\0') {
++		if (!parse_gid(set->mail_privileged_group,
++			       &set->mail_priv_gid_t)) {
++			i_error("Non-existing mail_privileged_group: %s",
++				set->mail_privileged_group);
++			return FALSE;
++		}
++	}
++	if (*set->mail_extra_groups != '\0') {
++		if (*set->mail_access_groups != '\0') {
++			i_error("Can't set both mail_extra_groups "
++				"and mail_access_groups");
++			return FALSE;
++		}
++		if (!set->server->warned_mail_extra_groups) {
++			set->server->warned_mail_extra_groups = TRUE;
++			i_warning("mail_extra_groups setting was often used "
++				  "insecurely so it is now deprecated, "
++				  "use mail_access_groups or "
++				  "mail_privileged_group instead");
++		}
++		set->mail_access_groups = set->mail_extra_groups;
++	}
++
++	if (set->protocol != MAIL_PROTOCOL_ANY &&
++	    access(t_strcut(set->mail_executable, ' '), X_OK) < 0) {
++		i_error("mail_executable: Can't use %s: %m",
++			t_strcut(set->mail_executable, ' '));
++		return FALSE;
++	}
++
++	if (*set->log_path != '\0' && access(set->log_path, W_OK) < 0) {
++		dir = get_directory(set->log_path);
++		if (access(dir, W_OK) < 0) {
++			i_error("log_path: Can't write to directory %s: %m",
++				dir);
++			return FALSE;
++		}
++	}
++
++	if (*set->info_log_path != '\0' &&
++	    access(set->info_log_path, W_OK) < 0) {
++		dir = get_directory(set->info_log_path);
++		if (access(dir, W_OK) < 0) {
++			i_error("info_log_path: Can't write to directory %s: %m",
++				dir);
++			return FALSE;
++		}
++	}
++
++	if (!syslog_facility_find(set->syslog_facility, &facility)) {
++		i_error("syslog_facility: Unknown value: %s",
++			set->syslog_facility);
++		return FALSE;
++	}
++
++#ifdef HAVE_SSL
++	if (!set->ssl_disable) {
++		if (*set->ssl_ca_file != '\0' &&
++		    access(set->ssl_ca_file, R_OK) < 0) {
++			i_fatal("ssl_ca_file: Can't use %s: %m",
++				set->ssl_ca_file);
++		}
++
++		if (access(set->ssl_cert_file, R_OK) < 0) {
++			i_error("ssl_cert_file: Can't use %s: %m",
++				set->ssl_cert_file);
++			return FALSE;
++		}
++
++		if (access(set->ssl_key_file, R_OK) < 0) {
++			i_error("ssl_key_file: Can't use %s: %m",
++				set->ssl_key_file);
++			return FALSE;
++		}
++	}
++#else
++	if (!set->ssl_disable) {
++		i_error("SSL support not compiled in but ssl_disable=no");
++		return FALSE;
++	}
++#endif
++	if (set->ssl_disable && set->disable_plaintext_auth &&
++	    strcmp(set->protocols, "none") != 0 &&
++	    strncmp(set->listen, "127.", 4) != 0 &&
++	    !settings_have_nonplaintext_auths(set)) {
++		i_warning("There is no way to login to this server: "
++			  "disable_plaintext_auth=yes, ssl-disable=yes, "
++			  "no non-plaintext auth mechanisms.");
++	}
++
++	if (set->max_mail_processes < 1) {
++		i_error("max_mail_processes must be at least 1");
++		return FALSE;
++	}
++	if (strcmp(set->login_dir, set->base_dir) == 0) {
++		i_error("login_dir can't be the same as base_dir");
++		return FALSE;
++	}
++
++	if (set->last_valid_uid != 0 &&
++	    set->first_valid_uid > set->last_valid_uid) {
++		i_error("first_valid_uid can't be larger than last_valid_uid");
++		return FALSE;
++	}
++	if (set->last_valid_gid != 0 &&
++	    set->first_valid_gid > set->last_valid_gid) {
++		i_error("first_valid_gid can't be larger than last_valid_gid");
++		return FALSE;
++	}
++	if (set->mail_drop_priv_before_exec && *set->mail_chroot != '\0') {
++		i_error("mail_drop_priv_before_exec=yes and mail_chroot "
++			"don't work together");
++		return FALSE;
++	}
++
++	if (set->protocol != MAIL_PROTOCOL_ANY &&
++	    access(t_strcut(set->login_executable, ' '), X_OK) < 0) {
++		i_error("login_executable: Can't use %s: %m",
++			t_strcut(set->login_executable, ' '));
++		return FALSE;
++	}
++
++	if (set->login_processes_count < 1) {
++		i_error("login_processes_count must be at least 1");
++		return FALSE;
++	}
++	if (set->login_max_connections < 1) {
++		i_error("login_max_connections must be at least 1");
++		return FALSE;
++	}
++
++	if (set->mail_nfs_index && !set->mmap_disable) {
++		i_error("mail_nfs_index=yes requires mmap_disable=yes");
++		return FALSE;
++	}
++	if (set->mail_nfs_index && set->fsync_disable) {
++		i_error("mail_nfs_index=yes requires fsync_disable=no");
++		return FALSE;
++	}
++
++#ifdef HAVE_MODULES
++	if (*set->mail_plugins != '\0' &&
++	    access(set->mail_plugin_dir, R_OK | X_OK) < 0) {
++		i_error("mail_plugin_dir: Can't access directory: %s: %m",
++			set->mail_plugin_dir);
++		return FALSE;
++	}
++#else
++	if (*set->mail_plugins != '\0') {
++		i_error("mail_plugins: Plugin support wasn't built into Dovecot, "
++			"can't load plugins: %s", set->mail_plugins);
++		return FALSE;
++	}
++#endif
++	return TRUE;
++}
++
++static bool settings_do_fixes(struct settings *set)
++{
++	struct stat st;
++
++	/* since base dir is under /var/run by default, it may have been
++	   deleted. */
++	if (mkdir_parents(set->base_dir, 0777) < 0 && errno != EEXIST) {
++		i_error("mkdir(%s) failed: %m", set->base_dir);
++		return FALSE;
++	}
++	/* allow base_dir to be a symlink, so don't use lstat() */
++	if (stat(set->base_dir, &st) < 0) {
++		i_error("stat(%s) failed: %m", set->base_dir);
++		return FALSE;
++	}
++	if ((st.st_mode & 0310) != 0310 || (st.st_mode & 0777) == 0777) {
++		/* FIXME: backwards compatibility: fix permissions so that
++		   login processes can find ssl-parameters file. Group rx is
++		   enough, but change it to world-rx so that we don't have to
++		   start changing groups and causing possibly other problems.
++
++		   The second check is to fix 1.0beta1's accidental 0777
++		   mode change.. */
++		i_warning("Fixing permissions of %s to be world-readable",
++			  set->base_dir);
++		if (chmod(set->base_dir, 0755) < 0)
++			i_error("chmod(%s) failed: %m", set->base_dir);
++	}
++
++	/* remove auth worker sockets left by unclean exits */
++	unlink_auth_sockets(set->base_dir, "auth-worker.");
++
++	/* Make sure our permanent state directory exists */
++	if (mkdir_parents(PKG_STATEDIR, 0750) < 0 && errno != EEXIST) {
++		i_error("mkdir(%s) failed: %m", PKG_STATEDIR);
++		return FALSE;
++	}
++
++	if (!settings_have_connect_sockets(set)) {
++		/* we are not using external authentication, so make sure the
++		   login directory exists with correct permissions and it's
++		   empty. with external auth we wouldn't want to delete
++		   existing sockets or break the permissions required by the
++		   auth server. */
++		if (safe_mkdir(set->login_dir, 0750,
++			       master_uid, set->server->login_gid) == 0) {
++			i_warning("Corrected permissions for login directory "
++				  "%s", set->login_dir);
++		}
++
++		unlink_auth_sockets(set->login_dir, "");
++	}
++
++#ifdef HAVE_MODULES
++	if (*set->mail_plugins != '\0' && set->protocol == MAIL_PROTOCOL_IMAP &&
++	    *set->imap_capability == '\0') {
++		if (!get_imap_capability(set))
++			return FALSE;
++	}
++#endif
++	return TRUE;
++}
++
++static bool settings_fix(struct settings *set, bool nochecks, bool nofixes)
++{
++	/* fix relative paths */
++	fix_base_path(set, &set->login_dir);
++
++	if (nochecks)
++		return TRUE;
++	if (!settings_verify(set))
++		return FALSE;
++	return nofixes ? TRUE : settings_do_fixes(set);
++}
++
++static void pid_file_check_running(const char *path)
++{
++	char buf[32];
++	int fd;
++	ssize_t ret;
++
++	fd = open(path, O_RDONLY);
++	if (fd == -1) {
++		if (errno == ENOENT)
++			return;
++		i_fatal("open(%s) failed: %m", path);
++	}
++
++	ret = read(fd, buf, sizeof(buf));
++	if (ret <= 0) {
++		if (ret == 0)
++			i_error("Empty PID file in %s, overriding", path);
++		else
++			i_fatal("read(%s) failed: %m", path);
++	} else {
++		pid_t pid;
++
++		if (buf[ret-1] == '\n')
++			ret--;
++		buf[ret] = '\0';
++		pid = atoi(buf);
++		if (pid == getpid() || (kill(pid, 0) < 0 && errno == ESRCH)) {
++			/* doesn't exist */
++		} else {
++			i_fatal("Dovecot is already running with PID %s "
++				"(read from %s)", buf, path);
++		}
++	}
++	(void)close(fd);
++}
++
++static struct auth_settings *
++auth_settings_new(struct server_settings *server, const char *name)
++{
++	struct auth_settings *auth;
++
++	auth = p_new(settings_pool, struct auth_settings, 1);
++
++	/* copy defaults */
++	*auth = server->auth_defaults;
++	auth->parent = server;
++	auth->name = p_strdup(settings_pool, name);
++
++	auth->next = server->auths;
++	server->auths = auth;
++
++	return auth;
++}
++
++static struct auth_settings *
++parse_new_auth(struct server_settings *server, const char *name,
++	       const char **errormsg)
++{
++	struct auth_settings *auth;
++
++	if (strchr(name, '/') != NULL) {
++		*errormsg = "Authentication process name must not contain '/'";
++		return NULL;
++	}
++
++	for (auth = server->auths; auth != NULL; auth = auth->next) {
++		if (strcmp(auth->name, name) == 0) {
++			*errormsg = "Authentication process already exists "
++				"with the same name";
++			return NULL;
++		}
++	}
++
++	return auth_settings_new(server, name);
++}
++
++static struct auth_passdb_settings *
++auth_passdb_settings_new(struct auth_settings *auth, const char *type)
++{
++	struct auth_passdb_settings *as, **as_p;
++
++	as = p_new(settings_pool, struct auth_passdb_settings, 1);
++
++	as->parent = auth;
++	as->driver = str_lcase(p_strdup(settings_pool, type));
++
++	as_p = &auth->passdbs;
++	while (*as_p != NULL)
++		as_p = &(*as_p)->next;
++	*as_p = as;
++
++	return as;
++}
++
++static struct auth_userdb_settings *
++auth_userdb_settings_new(struct auth_settings *auth, const char *type)
++{
++	struct auth_userdb_settings *as, **as_p;
++
++	as = p_new(settings_pool, struct auth_userdb_settings, 1);
++
++	as->parent = auth;
++	as->driver = str_lcase(p_strdup(settings_pool, type));
++
++	as_p = &auth->userdbs;
++	while (*as_p != NULL)
++		as_p = &(*as_p)->next;
++	*as_p = as;
++
++	return as;
++}
++
++static struct auth_socket_settings *
++auth_socket_settings_new(struct auth_settings *auth, const char *type)
++{
++	struct auth_socket_settings *as, **as_p;
++
++	as = p_new(settings_pool, struct auth_socket_settings, 1);
++
++	as->parent = auth;
++	as->type = str_lcase(p_strdup(settings_pool, type));
++	as->master = default_socket_settings;
++	as->client = default_socket_settings;
++
++	as->master.path = DEFAULT_MASTER_SOCKET_PATH;
++	as->client.path = DEFAULT_CLIENT_SOCKET_PATH;
++
++	as_p = &auth->sockets;
++	while (*as_p != NULL)
++		as_p = &(*as_p)->next;
++	*as_p = as;
++
++	return as;
++}
++
++static struct auth_socket_settings *
++parse_new_auth_socket(struct auth_settings *auth, const char *name,
++		      const char **errormsg)
++{
++	if (strcmp(name, "connect") != 0 && strcmp(name, "listen") != 0) {
++		*errormsg = "Unknown auth socket type";
++		return NULL;
++	}
++
++	if (auth->sockets != NULL && strcmp(name, "connect") == 0) {
++		*errormsg = "With connect auth socket no other sockets "
++			"can be used in same auth section";
++		return NULL;
++	}
++
++	return auth_socket_settings_new(auth, name);
++}
++
++static struct namespace_settings *
++namespace_settings_new(struct server_settings *server, const char *type)
++{
++	struct namespace_settings *ns, **ns_p;
++
++	ns = p_new(settings_pool, struct namespace_settings, 1);
++	*ns = default_namespace_settings;
++
++	ns->parent = server;
++	ns->type = str_lcase(p_strdup(settings_pool, type));
++
++	ns_p = &server->namespaces;
++	while (*ns_p != NULL)
++		ns_p = &(*ns_p)->next;
++	*ns_p = ns;
++
++	return ns;
++}
++
++static struct namespace_settings *
++parse_new_namespace(struct server_settings *server, const char *name,
++		    const char **errormsg)
++{
++	if (strcasecmp(name, "private") != 0 &&
++	    strcasecmp(name, "shared") != 0 &&
++	    strcasecmp(name, "public") != 0) {
++		*errormsg = "Unknown namespace type";
++		return NULL;
++	}
++
++	return namespace_settings_new(server, name);
++}
++
++static const char *parse_setting(const char *key, const char *value,
++				 struct settings_parse_ctx *ctx)
++{
++	const char *error;
++
++	/* backwards compatibility */
++	if (strcmp(key, "auth") == 0) {
++		ctx->auth = parse_new_auth(ctx->server, value, &error);
++		return ctx->auth == NULL ? error : NULL;
++	}
++
++	if (strcmp(key, "login") == 0) {
++		i_warning("Ignoring deprecated 'login' section handling. "
++			  "Use protocol imap/pop3 { .. } instead. "
++			  "Some settings may have been read incorrectly.");
++		return NULL;
++	}
++
++	switch (ctx->type) {
++	case SETTINGS_TYPE_ROOT:
++	case SETTINGS_TYPE_SERVER:
++		error = NULL;
++		if (ctx->protocol == MAIL_PROTOCOL_ANY ||
++		    ctx->protocol == MAIL_PROTOCOL_IMAP) {
++			error = parse_setting_from_defs(settings_pool,
++							setting_defs,
++							ctx->server->imap,
++							key, value);
++		}
++
++		if (error == NULL &&
++		    (ctx->protocol == MAIL_PROTOCOL_ANY ||
++		     ctx->protocol == MAIL_PROTOCOL_POP3)) {
++			error = parse_setting_from_defs(settings_pool,
++							setting_defs,
++							ctx->server->pop3,
++							key, value);
++		}
++
++		if (error == NULL)
++			return NULL;
++
++		if (strncmp(key, "auth_", 5) == 0) {
++			return parse_setting_from_defs(settings_pool,
++						       auth_setting_defs,
++						       ctx->auth,
++						       key + 5, value);
++		}
++		return error;
++	case SETTINGS_TYPE_AUTH:
++		if (strncmp(key, "auth_", 5) == 0)
++			key += 5;
++		return parse_setting_from_defs(settings_pool, auth_setting_defs,
++					       ctx->auth, key, value);
++	case SETTINGS_TYPE_AUTH_SOCKET:
++		return parse_setting_from_defs(settings_pool,
++					       auth_socket_setting_defs,
++					       ctx->auth_socket, key, value);
++	case SETTINGS_TYPE_AUTH_PASSDB:
++		return parse_setting_from_defs(settings_pool,
++					       auth_passdb_setting_defs,
++					       ctx->auth_passdb, key, value);
++	case SETTINGS_TYPE_AUTH_USERDB:
++		return parse_setting_from_defs(settings_pool,
++					       auth_userdb_setting_defs,
++					       ctx->auth_userdb, key, value);
++	case SETTINGS_TYPE_NAMESPACE:
++		return parse_setting_from_defs(settings_pool,
++					       namespace_setting_defs,
++					       ctx->namespace, key, value);
++	case SETTINGS_TYPE_SOCKET:
++		return parse_setting_from_defs(settings_pool,
++					       socket_setting_defs,
++					       ctx->socket, key, value);
++	case SETTINGS_TYPE_DICT:
++		key = p_strdup(settings_pool, key);
++		value = p_strdup(settings_pool, value);
++
++		array_append(&ctx->server->dicts, &key, 1);
++		array_append(&ctx->server->dicts, &value, 1);
++		return NULL;
++	case SETTINGS_TYPE_PLUGIN:
++		key = p_strdup(settings_pool, key);
++		value = p_strdup(settings_pool, value);
++
++		if (ctx->protocol == MAIL_PROTOCOL_ANY ||
++		    ctx->protocol == MAIL_PROTOCOL_IMAP) {
++			array_append(&ctx->server->imap->plugin_envs, &key, 1);
++			array_append(&ctx->server->imap->plugin_envs,
++				     &value, 1);
++		}
++		if (ctx->protocol == MAIL_PROTOCOL_ANY ||
++		    ctx->protocol == MAIL_PROTOCOL_POP3) {
++			array_append(&ctx->server->pop3->plugin_envs, &key, 1);
++			array_append(&ctx->server->pop3->plugin_envs,
++				     &value, 1);
++		}
++		return NULL;
++	}
++
++	i_unreached();
++}
++
++static struct server_settings *
++create_new_server(const char *name,
++		  struct settings *imap_defaults,
++		  struct settings *pop3_defaults)
++{
++	struct server_settings *server;
++
++	server = p_new(settings_pool, struct server_settings, 1);
++	server->name = p_strdup(settings_pool, name);
++	server->imap = p_new(settings_pool, struct settings, 1);
++	server->pop3 = p_new(settings_pool, struct settings, 1);
++	server->auth_defaults = default_auth_settings;
++
++	*server->imap = *imap_defaults;
++	*server->pop3 = *pop3_defaults;
++
++	p_array_init(&server->dicts, settings_pool, 4);
++	p_array_init(&server->imap->plugin_envs, settings_pool, 8);
++	p_array_init(&server->pop3->plugin_envs, settings_pool, 8);
++
++	server->imap->server = server;
++	server->imap->protocol = MAIL_PROTOCOL_IMAP;
++	server->imap->login_executable = PKG_LIBEXECDIR"/imap-login";
++	server->imap->mail_executable = PKG_LIBEXECDIR"/imap";
++	server->imap->mail_plugin_dir = MODULEDIR"/imap";
++
++	server->pop3->server = server;
++	server->pop3->protocol = MAIL_PROTOCOL_POP3;
++	server->pop3->login_executable = PKG_LIBEXECDIR"/pop3-login";
++	server->pop3->mail_executable = PKG_LIBEXECDIR"/pop3";
++	server->pop3->mail_plugin_dir = MODULEDIR"/pop3";
++
++	return server;
++}
++
++static bool parse_section(const char *type, const char *name,
++			  struct settings_parse_ctx *ctx, const char **errormsg)
++{
++	struct server_settings *server;
++
++	if (type == NULL) {
++		/* section closing */
++		if (ctx->level-- > 0) {
++			ctx->type = ctx->parent_type;
++			ctx->protocol = MAIL_PROTOCOL_ANY;
++
++			switch (ctx->type) {
++			case SETTINGS_TYPE_AUTH_SOCKET:
++				ctx->parent_type = SETTINGS_TYPE_AUTH;
++				break;
++			default:
++				ctx->parent_type = SETTINGS_TYPE_ROOT;
++				break;
++			}
++		} else {
++			ctx->type = SETTINGS_TYPE_ROOT;
++			ctx->server = ctx->root;
++			ctx->auth = &ctx->root->auth_defaults;
++			ctx->namespace = NULL;
++		}
++		return TRUE;
++	}
++
++	ctx->level++;
++	ctx->parent_type = ctx->type;
++
++	if (strcmp(type, "server") == 0) {
++		if (ctx->type != SETTINGS_TYPE_ROOT) {
++			*errormsg = "Server section not allowed here";
++			return FALSE;
++		}
++
++		ctx->type = SETTINGS_TYPE_SERVER;
++		ctx->server = create_new_server(name, ctx->server->imap,
++						ctx->server->pop3);
++                server = ctx->root;
++		while (server->next != NULL)
++			server = server->next;
++		server->next = ctx->server;
++		return TRUE;
++	}
++
++	if (strcmp(type, "protocol") == 0) {
++		if ((ctx->type != SETTINGS_TYPE_ROOT &&
++		     ctx->type != SETTINGS_TYPE_SERVER) ||
++		    ctx->level != 1) {
++			*errormsg = "Protocol section not allowed here";
++			return FALSE;
++		}
++
++		if (strcmp(name, "imap") == 0)
++			ctx->protocol = MAIL_PROTOCOL_IMAP;
++		else if (strcmp(name, "pop3") == 0)
++			ctx->protocol = MAIL_PROTOCOL_POP3;
++		else if (strcmp(name, "lda") == 0)
++			ctx->protocol = MAIL_PROTOCOL_LDA;
++		else {
++			*errormsg = "Unknown protocol name";
++			return FALSE;
++		}
++		return TRUE;
++	}
++
++	if (strcmp(type, "auth") == 0) {
++		if (ctx->type != SETTINGS_TYPE_ROOT &&
++		    ctx->type != SETTINGS_TYPE_SERVER) {
++			*errormsg = "Auth section not allowed here";
++			return FALSE;
++		}
++
++		ctx->type = SETTINGS_TYPE_AUTH;
++		ctx->auth = parse_new_auth(ctx->server, name, errormsg);
++		return ctx->auth != NULL;
++	}
++
++	if (ctx->type == SETTINGS_TYPE_AUTH &&
++	    strcmp(type, "socket") == 0) {
++		ctx->type = SETTINGS_TYPE_AUTH_SOCKET;
++		ctx->auth_socket = parse_new_auth_socket(ctx->auth,
++							 name, errormsg);
++		return ctx->auth_socket != NULL;
++	}
++
++	if (ctx->type == SETTINGS_TYPE_AUTH && strcmp(type, "passdb") == 0) {
++		ctx->type = SETTINGS_TYPE_AUTH_PASSDB;
++		ctx->auth_passdb = auth_passdb_settings_new(ctx->auth, name);
++		return TRUE;
++	}
++
++	if (ctx->type == SETTINGS_TYPE_AUTH && strcmp(type, "userdb") == 0) {
++		ctx->type = SETTINGS_TYPE_AUTH_USERDB;
++		ctx->auth_userdb = auth_userdb_settings_new(ctx->auth, name);
++		return TRUE;
++	}
++
++	if (ctx->type == SETTINGS_TYPE_AUTH_SOCKET) {
++		ctx->type = SETTINGS_TYPE_SOCKET;
++
++		if (strcmp(type, "master") == 0) {
++			ctx->socket = &ctx->auth_socket->master;
++			ctx->socket->used = TRUE;
++			return TRUE;
++		}
++
++		if (strcmp(type, "client") == 0) {
++			ctx->socket = &ctx->auth_socket->client;
++			ctx->socket->used = TRUE;
++			return TRUE;
++		}
++	}
++
++	if (strcmp(type, "namespace") == 0) {
++		if (ctx->type != SETTINGS_TYPE_ROOT &&
++		    ctx->type != SETTINGS_TYPE_SERVER) {
++			*errormsg = "Namespace section not allowed here";
++			return FALSE;
++		}
++
++		ctx->type = SETTINGS_TYPE_NAMESPACE;
++		ctx->namespace = parse_new_namespace(ctx->server, name,
++						     errormsg);
++		return ctx->namespace != NULL;
++	}
++
++	if (strcmp(type, "dict") == 0) {
++		if (ctx->type != SETTINGS_TYPE_ROOT &&
++		    ctx->type != SETTINGS_TYPE_SERVER) {
++			*errormsg = "Plugin section not allowed here";
++			return FALSE;
++		}
++
++		ctx->type = SETTINGS_TYPE_DICT;
++		return TRUE;
++	}
++
++	if (strcmp(type, "plugin") == 0) {
++		if (ctx->type != SETTINGS_TYPE_ROOT &&
++		    ctx->type != SETTINGS_TYPE_SERVER) {
++			*errormsg = "Plugin section not allowed here";
++			return FALSE;
++		}
++
++		ctx->type = SETTINGS_TYPE_PLUGIN;
++		return TRUE;
++	}
++
++	*errormsg = "Unknown section type";
++	return FALSE;
++}
++
++static void
++settings_warn_needed_fds(struct server_settings *server ATTR_UNUSED)
++{
++#ifdef HAVE_SETRLIMIT
++	struct rlimit rlim;
++	unsigned int fd_count = 0;
++
++	if (getrlimit(RLIMIT_NOFILE, &rlim) < 0)
++		return;
++
++	/* count only log pipes needed for login and mail processes. we need
++	   more, but they're the ones that can use up most of the fds */
++	for (; server != NULL; server = server->next) {
++		if (server->imap != NULL)
++			fd_count += server->imap->login_max_processes_count;
++		if (server->pop3 != NULL)
++			fd_count += server->pop3->login_max_processes_count;
++		fd_count += server->defaults->max_mail_processes;
++	}
++
++	if (rlim.rlim_cur < fd_count) {
++		i_warning("fd limit %d is lower than what Dovecot can use under "
++			  "full load (more than %u). Either grow the limit or "
++			  "change login_max_processes_count and "
++			  "max_mail_processes settings",
++			  (int)rlim.rlim_cur, fd_count);
++	}
++#endif
++}
++
++bool master_settings_read(const char *path, bool nochecks, bool nofixes)
++{
++	struct settings_parse_ctx ctx;
++	struct server_settings *server, *prev;
++	struct auth_settings *auth;
++	struct namespace_settings *ns;
++	pool_t temp;
++
++	memset(&ctx, 0, sizeof(ctx));
++
++	p_clear(settings_pool);
++
++	ctx.type = SETTINGS_TYPE_ROOT;
++	ctx.protocol = MAIL_PROTOCOL_ANY;
++	ctx.server = ctx.root =
++		create_new_server("default",
++				  &default_settings, &default_settings);
++	ctx.auth = &ctx.server->auth_defaults;
++
++	if (!settings_read(path, NULL, parse_setting, parse_section, &ctx))
++		return FALSE;
++
++	if (ctx.level != 0) {
++		i_error("Missing '}'");
++		return FALSE;
++	}
++
++	/* If server sections were defined, skip the root */
++	if (ctx.root->next != NULL)
++		ctx.root = ctx.root->next;
++
++	if (!nochecks && !nofixes) {
++		ctx.root->defaults = settings_is_active(ctx.root->imap) ?
++			ctx.root->imap : ctx.root->pop3;
++
++		path = t_strconcat(ctx.root->defaults->base_dir,
++				   "/master.pid", NULL);
++		pid_file_check_running(path);
++	}
++
++	prev = NULL;
++	for (server = ctx.root; server != NULL; server = server->next) {
++		if ((*server->imap->protocols == '\0' ||
++		     *server->pop3->protocols == '\0') && !nochecks) {
++			i_error("protocols: No protocols given "
++				"in configuration file");
++			return FALSE;
++		}
++		/* --exec-mail is used if nochecks=TRUE. Allow it regardless
++		   of what's in protocols setting. */
++		if (!settings_is_active(server->imap) && !nochecks) {
++			if (strcmp(server->imap->protocols, "none") == 0) {
++				server->imap->protocol = MAIL_PROTOCOL_ANY;
++				if (!settings_fix(server->imap, nochecks,
++						  nofixes))
++					return FALSE;
++				server->defaults = server->imap;
++			}
++			server->imap = NULL;
++		} else {
++			if (!settings_fix(server->imap, nochecks, nofixes))
++				return FALSE;
++			server->defaults = server->imap;
++		}
++
++		if (!settings_is_active(server->pop3) && !nochecks)
++			server->pop3 = NULL;
++		else {
++			if (!settings_fix(server->pop3, nochecks, nofixes))
++				return FALSE;
++			if (server->defaults == NULL)
++				server->defaults = server->pop3;
++		}
++
++		if (server->defaults == NULL) {
++			if (prev == NULL)
++				ctx.root = server->next;
++			else
++				prev->next = server->next;
++		} else {
++			auth = server->auths;
++			if (auth == NULL) {
++				i_error("Missing auth section for server %s",
++					server->name);
++				return FALSE;
++			}
++
++			if (!nochecks) {
++				for (; auth != NULL; auth = auth->next) {
++					if (!auth_settings_verify(auth))
++						return FALSE;
++				}
++				ns = server->namespaces;
++				for (; ns != NULL; ns = ns->next) {
++					if (!namespace_settings_verify(ns))
++						return FALSE;
++				}
++			}
++			prev = server;
++		}
++	}
++
++	if (ctx.root == NULL) {
++		/* We aren't actually checking them separately, but if it
++		   contains only invalid protocols we'll get here.. */
++		i_error("Invalid protocols given in configuration file");
++		return FALSE;
++	}
++
++	if (!nochecks)
++		settings_warn_needed_fds(ctx.root);
++
++	/* settings ok, swap them */
++	temp = settings_pool;
++	settings_pool = settings2_pool;
++	settings2_pool = temp;
++
++	settings_root = ctx.root;
++	return TRUE;
++}
++
++static void settings_dump(const struct setting_def *def, const void **sets,
++			  const char **set_names, unsigned int count,
++			  bool nondefaults, unsigned int indent)
++{
++	const char **str;
++	unsigned int i;
++
++	str = t_new(const char *, count);
++	for (; def->name != NULL; def++) {
++		bool same = TRUE;
++
++		switch (def->type) {
++		case SET_STR: {
++			const char *const *strp;
++
++			for (i = 0; i < count; i++) {
++				strp = CONST_PTR_OFFSET(sets[i], def->offset);
++				str[i] = *strp != NULL ? *strp : "";
++			}
++			break;
++		}
++		case SET_INT: {
++			const unsigned int *n;
++
++			for (i = 0; i < count; i++) {
++				n = CONST_PTR_OFFSET(sets[i], def->offset);
++				str[i] = dec2str(*n);
++			}
++			break;
++		}
++		case SET_BOOL: {
++			const bool *b;
++
++			for (i = 0; i < count; i++) {
++				b = CONST_PTR_OFFSET(sets[i], def->offset);
++				str[i] = *b ? "yes" : "no";
++			}
++			break;
++		}
++		}
++
++		for (i = 2; i < count; i++) {
++			if (strcmp(str[i], str[i-1]) != 0)
++				same = FALSE;
++		}
++		if (same) {
++			if (!nondefaults || strcmp(str[0], str[1]) != 0) {
++				for (i = 0; i < indent; i++)
++					putc(' ', stdout);
++				printf("%s: %s\n", def->name, str[1]);
++			}
++		} else {
++			for (i = 0; i < indent; i++)
++				putc(' ', stdout);
++			for (i = 1; i < count; i++) {
++				printf("%s(%s): %s\n", def->name,
++				       set_names[i], str[i]);
++			}
++		}
++	}
++}
++
++static void
++namespace_settings_dump(struct namespace_settings *ns, bool nondefaults)
++{
++	const void *sets[2];
++
++	sets[0] = t_malloc0(sizeof(struct namespace_settings));
++	for (; ns != NULL; ns = ns->next) {
++		printf("namespace:\n");
++		sets[1] = ns;
++		settings_dump(namespace_setting_defs, sets, NULL, 2,
++			      nondefaults, 2);
++	}
++}
++
++static void auth_settings_dump(struct auth_settings *auth, bool nondefaults)
++{
++	const struct auth_passdb_settings *passdb;
++	const struct auth_userdb_settings *userdb;
++	const struct auth_socket_settings *socket_set;
++	const void *sets[2], *sets2[2];
++	const void *empty_defaults;
++
++	empty_defaults = t_malloc0(sizeof(struct auth_passdb_settings) +
++				   sizeof(struct auth_userdb_settings) +
++				   sizeof(struct auth_socket_settings));
++
++	sets[0] = &default_auth_settings;
++	sets2[0] = empty_defaults;
++
++	for (; auth != NULL; auth = auth->next) {
++		printf("auth %s:\n", auth->name);
++		sets[1] = auth;
++		settings_dump(auth_setting_defs, sets, NULL, 2, nondefaults, 2);
++
++		passdb = auth->passdbs;
++		for (; passdb != NULL; passdb = passdb->next) {
++			printf("  passdb:\n");
++			sets2[1] = passdb;
++			settings_dump(auth_passdb_setting_defs, sets2, NULL, 2,
++				      nondefaults, 4);
++		}
++
++		userdb = auth->userdbs;
++		for (; userdb != NULL; userdb = userdb->next) {
++			printf("  userdb:\n");
++			sets2[1] = userdb;
++			settings_dump(auth_userdb_setting_defs, sets2, NULL, 2,
++				      nondefaults, 4);
++		}
++
++		socket_set = auth->sockets;
++		for (; socket_set != NULL; socket_set = socket_set->next) {
++			printf("  socket:\n");
++			sets2[1] = socket_set;
++			settings_dump(auth_socket_setting_defs, sets2, NULL, 2,
++				      nondefaults, 4);
++
++			if (socket_set->client.used) {
++				printf("    client:\n");
++				sets2[1] = &socket_set->client;
++				settings_dump(socket_setting_defs, sets2, NULL,
++					      2, nondefaults, 6);
++			}
++
++			if (socket_set->master.used) {
++				printf("    master:\n");
++				sets2[1] = &socket_set->master;
++				settings_dump(socket_setting_defs, sets2, NULL,
++					      2, nondefaults, 6);
++			}
++		}
++	}
++}
++
++static void plugin_settings_dump(const struct settings *set)
++{
++	const char *const *envs;
++	unsigned int i, count;
++
++	envs = array_get(&set->plugin_envs, &count);
++	i_assert((count % 2) == 0);
++
++	if (count == 0)
++		return;
++
++	printf("plugin:\n");
++	for (i = 0; i < count; i += 2)
++		printf("  %s: %s\n", envs[i], envs[i+1]);
++}
++
++static void dict_settings_dump(const struct server_settings *set)
++{
++	const char *const *dicts;
++	unsigned int i, count;
++
++	dicts = array_get(&set->dicts, &count);
++	i_assert((count % 2) == 0);
++
++	if (count == 0)
++		return;
++
++	printf("dict:\n");
++	for (i = 0; i < count; i += 2)
++		printf("  %s: %s\n", dicts[i], dicts[i+1]);
++}
++
++void master_settings_dump(struct server_settings *set, bool nondefaults)
++{
++	const void *sets[4];
++	const char *set_names[4];
++	unsigned int count;
++
++	sets[0] = &default_settings;
++	sets[1] = set->defaults;
++
++	set_names[0] = NULL;
++	set_names[1] = "default";
++
++	count = 2;
++	if (set->imap != NULL) {
++		sets[count] = set->imap;
++		set_names[count] = "imap";
++		count++;
++	}
++	if (set->pop3 != NULL) {
++		sets[count] = set->pop3;
++		set_names[count] = "pop3";
++		count++;
++	}
++	settings_dump(setting_defs, sets, set_names, count, nondefaults, 0);
++	namespace_settings_dump(set->namespaces, nondefaults);
++	auth_settings_dump(set->auths, nondefaults);
++	plugin_settings_dump(set->defaults);
++	dict_settings_dump(set);
++}
++
++void master_settings_init(void)
++{
++	settings_pool = pool_alloconly_create("settings", 4096);
++	settings2_pool = pool_alloconly_create("settings2", 4096);
++}
++
++void master_settings_deinit(void)
++{
++	pool_unref(&settings_pool);
++	pool_unref(&settings2_pool);
++}
+diff -urN dovecot-1.1.11/src/master/master-settings-defs.c dovecot-1.1.11.debian/src/master/master-settings-defs.c
+--- dovecot-1.1.11/src/master/master-settings-defs.c	2009-01-06 15:33:51.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/master-settings-defs.c	2009-02-20 20:03:47.000000000 +0100
 @@ -127,5 +127,13 @@
  	/* dict */
  	DEF_STR(dict_db_config),
@@ -598,9 +5697,9 @@ diff -urN dovecot-1.1.7/src/master/master-settings-defs.c dovecot-1.1.7-managesi
 +
  	{ 0, NULL, 0 }
  };
-diff -urN dovecot-1.1.7/src/master/master-settings.h dovecot-1.1.7-managesieve/src/master/master-settings.h
---- dovecot-1.1.7/src/master/master-settings.h	2008-10-26 09:03:45.000000000 -0600
-+++ dovecot-1.1.7-managesieve/src/master/master-settings.h	2008-12-04 20:05:46.000000000 -0700
+diff -urN dovecot-1.1.11/src/master/master-settings.h dovecot-1.1.11.debian/src/master/master-settings.h
+--- dovecot-1.1.11/src/master/master-settings.h	2009-01-05 21:49:58.000000000 +0100
++++ dovecot-1.1.11.debian/src/master/master-settings.h	2009-02-20 20:03:47.000000000 +0100
 @@ -4,10 +4,11 @@
  #include "network.h"
  
