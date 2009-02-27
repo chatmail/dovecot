@@ -6,8 +6,9 @@ dovecot (1:1.1.11-2) unstable; urgency=low
     signal for reloading the configuration. (Closes: #512197)
   * debian/rules: added the switch "--install" to the libtoolize calls;
     (Closes: #493803)
+  * debian/control: dovecot-common suggests ntp and ntpdate. (Closes: #511060)
 
- -- Fabio Tranchitella <kobold@debian.org>  Fri, 27 Feb 2009 16:40:09 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 27 Feb 2009 16:44:47 +0100
 
 dovecot (1:1.1.11-1) unstable; urgency=low
 

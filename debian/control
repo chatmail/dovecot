@@ -12,7 +12,7 @@ Vcs-Browser: http://svn.debian.org/wsvn/collab-maint/deb-maint/dovecot/trunk/?op
 Package: dovecot-common
 Architecture: any
 Depends: ${shlibs:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020)
-Suggests: ntp
+Suggests: ntp | ntpdate
 Replaces: dovecot
 Description: secure mail server that supports mbox and maildir mailboxes
  Dovecot is a mail server whose major goals are security and extreme
