@@ -1,3 +1,12 @@
+dovecot (1:1.1.11-2) unstable; urgency=low
+
+  * debian/dovecot-common.init: fixed a bug in the init script, adding a
+    missing slash in the PIDFILE path. (Closes: #516845)
+  * debian/dovecot-common.init: fixed a bug in the init script, sending the HUP
+    signal for reloading the configuration. (Closes: #512197)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 27 Feb 2009 15:11:08 +0100
+
 dovecot (1:1.1.11-1) unstable; urgency=low
 
   * New upstream release, upload to unstable. (Closes: #507122)

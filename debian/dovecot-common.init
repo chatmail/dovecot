@@ -68,7 +68,7 @@ done
 # determine the location of the PID file
 # overide by setting base_dir in conf file or PIDBASE in /etc/defaults/$NAME
 PIDBASE=${PIDBASE:-`sed -r "s/^[ \t]*base_dir[ \t]*=[ \t]*([^ \t]*)/\1/;t;d" ${CONF}`}
-PIDFILE=${PIDBASE:-/var/run/dovecot/}master.pid
+PIDFILE=${PIDBASE:-/var/run/dovecot}/master.pid
 
 #
 # Function that starts the daemon/service
@@ -121,7 +121,7 @@ do_reload() {
     # restarting (for example, when it is sent a SIGHUP),
     # then implement that here.
     #
-    start-stop-daemon --stop --signal USR1 --quiet --pidfile $PIDFILE --name $NAME
+    start-stop-daemon --stop --signal HUP --quiet --pidfile $PIDFILE --name $NAME
     return 0
 }
 
