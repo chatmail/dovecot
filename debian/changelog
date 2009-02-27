@@ -4,8 +4,10 @@ dovecot (1:1.1.11-2) unstable; urgency=low
     missing slash in the PIDFILE path. (Closes: #516845)
   * debian/dovecot-common.init: fixed a bug in the init script, sending the HUP
     signal for reloading the configuration. (Closes: #512197)
+  * debian/rules: added the switch "--install" to the libtoolize calls;
+    (Closes: #493803)
 
- -- Fabio Tranchitella <kobold@debian.org>  Fri, 27 Feb 2009 15:11:08 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 27 Feb 2009 16:40:09 +0100
 
 dovecot (1:1.1.11-1) unstable; urgency=low
 
