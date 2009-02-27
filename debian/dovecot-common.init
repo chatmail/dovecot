@@ -50,20 +50,23 @@ if [ ! -r ${CONF} ]; then
   exit 1;
 fi
 
-# The init script should do nothing if dovecot or another imap/pop3 server
-# is being run from inetd, and dovecot is configured to run as an imap or
-# pop3 service
-for p in `sed -r "s/^ *(([^:]+|\[[^]]+]|\*):)?(pop3s?|imaps?)[ \t].*/\3/;t;d" \
-  /etc/inetd.conf`
-do
-  for q in `sed -r "s/^[ \t]*protocols[ \t]*=[ \t]*(([^\"]*)|\"(.*)\")/\2\3/;t;d" \
-    ${CONF}`
+# dont check for inetd.conf if its not installed
+if [ -f /etc/inetd.conf ]; then
+  # The init script should do nothing if dovecot or another imap/pop3 server
+  # is being run from inetd, and dovecot is configured to run as an imap or
+  # pop3 service
+  for p in `sed -r "s/^ *(([^:]+|\[[^]]+]|\*):)?(pop3s?|imaps?)[ \t].*/\3/;t;d" \
+    /etc/inetd.conf`
   do
-    if [ $p = $q ]; then
-      exit 0
-    fi
+    for q in `sed -r "s/^[ \t]*protocols[ \t]*=[ \t]*(([^\"]*)|\"(.*)\")/\2\3/;t;d" \
+      ${CONF}`
+    do
+      if [ $p = $q ]; then
+        exit 0
+      fi
+    done
   done
-done
+fi
 
 # determine the location of the PID file
 # overide by setting base_dir in conf file or PIDBASE in /etc/defaults/$NAME

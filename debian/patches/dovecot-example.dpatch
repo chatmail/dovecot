@@ -7,10 +7,16 @@
 
 exit 0
 @DPATCH@
-diff -urN dovecot-1.1.1/dovecot-example.conf dovecot-1.1.1-example/dovecot-example.conf
---- dovecot-1.1.1/dovecot-example.conf	2008-06-12 00:45:10.000000000 -0600
-+++ dovecot-1.1.1-example/dovecot-example.conf	2008-06-23 21:43:49.000000000 -0600
-@@ -21,6 +21,7 @@
+diff -urN dovecot-1.1.11/dovecot-example.conf dovecot-1.1.11.debian/dovecot-example.conf
+--- dovecot-1.1.11/dovecot-example.conf	2009-01-26 02:12:41.000000000 +0100
++++ dovecot-1.1.11.debian/dovecot-example.conf	2009-02-27 15:08:53.000000000 +0100
+@@ -16,11 +16,12 @@
+ # --with-ssldir=/etc/ssl
+ 
+ # Base directory where to store runtime data.
+-#base_dir = /var/run/dovecot/
++#base_dir = /var/run/dovecot
+ 
  # Protocols we want to be serving: imap imaps pop3 pop3s
  # If you only want to use dovecot-auth, you can set this to "none".
  #protocols = imap imaps
@@ -18,7 +24,7 @@ diff -urN dovecot-1.1.1/dovecot-example.conf dovecot-1.1.1-example/dovecot-examp
  
  # A space separated list of IP or host addresses where to listen in for
  # connections. "*" listens in all IPv4 interfaces. "[::]" listens in all IPv6
-@@ -70,6 +71,7 @@
+@@ -69,6 +70,7 @@
  # Prefix for each line written to log file. % codes are in strftime(3)
  # format.
  #log_timestamp = "%b %d %H:%M:%S "
@@ -36,7 +42,7 @@ diff -urN dovecot-1.1.1/dovecot-example.conf dovecot-1.1.1-example/dovecot-examp
  #ssl_cert_file = /etc/ssl/certs/dovecot.pem
  #ssl_key_file = /etc/ssl/private/dovecot.pem
  
-@@ -204,7 +205,7 @@
+@@ -206,7 +207,7 @@
  #   %d - domain part in user@domain, empty if there's no domain
  #   %h - home directory
  #
@@ -149,7 +155,7 @@ diff -urN dovecot-1.1.1/dovecot-example.conf dovecot-1.1.1-example/dovecot-examp
  
    # If user is over quota, return with temporary failure instead of
    # bouncing the mail.
-@@ -686,14 +689,14 @@
+@@ -690,14 +693,14 @@
  
    # UNIX socket path to master authentication server to find users.
    #auth_socket_path = /var/run/dovecot/auth-master
@@ -166,7 +172,7 @@ diff -urN dovecot-1.1.1/dovecot-example.conf dovecot-1.1.1-example/dovecot-examp
  
  # Set max. process size in megabytes.
  #auth_process_size = 256
-@@ -842,8 +845,8 @@
+@@ -846,8 +849,8 @@
      # because PAM modules can do all kinds of checks besides checking password,
      # such as checking IP address. Dovecot can't know about these checks
      # without some help. cache_key is simply a list of variables (see
@@ -177,7 +183,7 @@ diff -urN dovecot-1.1.1/dovecot-example.conf dovecot-1.1.1-example/dovecot-examp
      #   %u - Username must match. Probably sufficient for most uses.
      #   %u%r - Username and remote IP address must match.
      #   %u%s - Username and service (ie. IMAP, POP3) must match.
-@@ -898,14 +901,14 @@
+@@ -902,14 +905,14 @@
  
    # SQL database <doc/wiki/AuthDatabase.SQL.txt>
    #passdb sql {
@@ -196,7 +202,7 @@ diff -urN dovecot-1.1.1/dovecot-example.conf dovecot-1.1.1-example/dovecot-examp
    #}
  
    # vpopmail authentication <doc/wiki/AuthDatabase.VPopMail.txt>
-@@ -961,14 +964,14 @@
+@@ -973,14 +976,14 @@
  
    # SQL database <doc/wiki/AuthDatabase.SQL.txt>
    #userdb sql {
@@ -215,7 +221,7 @@ diff -urN dovecot-1.1.1/dovecot-example.conf dovecot-1.1.1-example/dovecot-examp
    #}
  
    # vpopmail <doc/wiki/AuthDatabase.VPopMail.txt>
-@@ -1131,7 +1134,7 @@
+@@ -1134,7 +1137,7 @@
    # a dictionary so it can be quickly determined which mailboxes contain
    # expired mails. The actual expunging is done in a nightly cronjob, which
    # you must set up:

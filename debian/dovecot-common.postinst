@@ -67,6 +67,12 @@ root@$MAILNAME
       chmod 0600 $SSL_KEY || true
     fi
   fi
+
+  # migration hooks
+  if [ -f /etc/dovecot/dovecot.conf ] && grep -q default_mail_env /etc/dovecot.conf; then
+    sed -i -e 's/^default_mail_env/mail_location/g' /etc/dovecot/dovecot.conf
+  fi
+
 fi
 
 #DEBHELPER#

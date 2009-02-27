@@ -4,11 +4,14 @@ dovecot (1:1.1.11-2) unstable; urgency=low
     missing slash in the PIDFILE path. (Closes: #516845)
   * debian/dovecot-common.init: fixed a bug in the init script, sending the HUP
     signal for reloading the configuration. (Closes: #512197)
+  * debian/dovecot-common.init: check if /etc/inetd.conf exists. (Closes: #509259)
   * debian/rules: added the switch "--install" to the libtoolize calls;
     (Closes: #493803)
   * debian/control: dovecot-common suggests ntp and ntpdate. (Closes: #511060)
+  * debian/dovecot-common.postinst: migration hook for default_mail_env =>
+    mail_location. (Closes: #517073)
 
- -- Fabio Tranchitella <kobold@debian.org>  Fri, 27 Feb 2009 16:44:47 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 27 Feb 2009 16:51:38 +0100
 
 dovecot (1:1.1.11-1) unstable; urgency=low
 

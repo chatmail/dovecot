@@ -1,4 +1,6 @@
+dovecot-managesieve-dist
 dovecot-managesieve
+dovecot-sieve
 dovecot-example
 dovecot-sql
 dovecot-drac
