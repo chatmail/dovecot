@@ -1,3 +1,10 @@
+dovecot (1:1.1.11-3) unstable; urgency=low
+
+  * debian/dovecot-common.init: applied patch from Håkon Stordahl to call
+    ntp-wait if available. (Closes: #517808)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Wed, 04 Mar 2009 17:38:59 +0100
+
 dovecot (1:1.1.11-2) unstable; urgency=low
 
   * debian/dovecot-common.init: fixed a bug in the init script, adding a
