@@ -15,13 +15,13 @@ if [ "$1" = "configure" ]; then
   done
 
   if [ -n "`id -u imapd 2> /dev/null`" ]; then
-    /usr/sbin/deluser imapd || true
-    /usr/sbin/delgroup imapd || true
+    deluser imapd || true
+    delgroup imapd || true
   fi
 
   if [ -z "`id -u dovecot 2> /dev/null`" ]; then
-    /usr/sbin/adduser --system --group --home /usr/lib/dovecot --gecos "Dovecot mail server" \
-                      --disabled-password --quiet dovecot || true
+    adduser --system --group --home /usr/lib/dovecot --gecos "Dovecot mail server" \
+            --disabled-password --quiet dovecot || true
   fi
 
   # Fix permissions
