@@ -1,3 +1,10 @@
+dovecot (1:1.1.11-4) unstable; urgency=low
+
+  * debian/dovecot-common.init: fixed a typo from the last upload.
+    (Closes: #518504)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 06 Mar 2009 18:39:09 +0100
+
 dovecot (1:1.1.11-3) unstable; urgency=low
 
   * debian/dovecot-common.init: applied patch from Håkon Stordahl to call
