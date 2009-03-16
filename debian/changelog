@@ -3,10 +3,10 @@ dovecot (1:1.1.12-1) unstable; urgency=low
   * New upstream release, it fixes some wrong defaults in the configuration
     file. (Closes: #518631)
   * debian/rules: add support for libdb. (Closes: #518630)
-  * debian/dovecot-common.postinst: do not create if either the certificate or
-    the key files already exist. (Closes: #518738)
+  * debian/dovecot-common.postinst: create the dovecot certificate only at
+    install time. (Closes: #518738, #518598)
 
- -- Fabio Tranchitella <kobold@debian.org>  Mon, 16 Mar 2009 14:24:07 +0100
+ -- Fabio Tranchitella <kobold@debian.org>  Mon, 16 Mar 2009 14:26:32 +0100
 
 dovecot (1:1.1.11-4) unstable; urgency=low
 
