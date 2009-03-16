@@ -28,6 +28,7 @@ config.status: patch-stamp configure
 	# Add here commands to configure the package.
 	./configure --with-ldap \
 	            --with-ssl=openssl \
+	            --with-db \
 	            --with-pgsql \
 	            --with-mysql \
 	            --with-sqlite \
