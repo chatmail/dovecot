@@ -1,3 +1,11 @@
+dovecot (1:1.1.13-1) unstable; urgency=low
+
+  * New upstream release.
+  * This version fixes problems accessing mailboxes in some setups.
+    (Closes: #520310)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 19 Mar 2009 17:31:56 +0100
+
 dovecot (1:1.1.12-1) unstable; urgency=low
 
   * New upstream release, it fixes some wrong defaults in the configuration
