@@ -7,9 +7,9 @@
 
 exit 0
 @DPATCH@
-diff -urN dovecot-1.1.11/dovecot-example.conf dovecot-1.1.11.debian/dovecot-example.conf
---- dovecot-1.1.11/dovecot-example.conf	2009-01-26 02:12:41.000000000 +0100
-+++ dovecot-1.1.11.debian/dovecot-example.conf	2009-02-27 15:08:53.000000000 +0100
+diff -urN dovecot-1.1.13/dovecot-example.conf dovecot-1.1.13.debian/dovecot-example.conf
+--- dovecot-1.1.13/dovecot-example.conf	2009-03-13 22:23:14.000000000 +0100
++++ dovecot-1.1.13.debian/dovecot-example.conf	2009-03-29 21:34:12.000000000 +0200
 @@ -16,11 +16,12 @@
  # --with-ssldir=/etc/ssl
  
@@ -172,6 +172,15 @@ diff -urN dovecot-1.1.11/dovecot-example.conf dovecot-1.1.11.debian/dovecot-exam
  
  # Set max. process size in megabytes.
  #auth_process_size = 256
+@@ -820,7 +823,7 @@
+ 
+   #passdb passwd-file {
+     # File contains a list of usernames, one per line
+-    #args = /etc/dovecot.deny
++    #args = /etc/dovecot/dovecot.deny
+     #deny = yes
+   #}
+ 
 @@ -846,8 +849,8 @@
      # because PAM modules can do all kinds of checks besides checking password,
      # such as checking IP address. Dovecot can't know about these checks
@@ -221,12 +230,38 @@ diff -urN dovecot-1.1.11/dovecot-example.conf dovecot-1.1.11.debian/dovecot-exam
    #}
  
    # vpopmail <doc/wiki/AuthDatabase.VPopMail.txt>
-@@ -1134,7 +1137,7 @@
+@@ -1057,7 +1060,7 @@
+ # referenced using URIs in format "proxy::<name>".
+ 
+ dict {
+-  #quota = mysql:/etc/dovecot-dict-quota.conf 
++  #quota = mysql:/etc/dovecot/dovecot-dict-quota.conf 
+   #expire = db:/var/lib/dovecot/expire.db
+ }
+ 
+@@ -1109,7 +1112,7 @@
+   # one file for each mailbox, eg. INBOX or sub.mailbox. cache_secs parameter
+   # specifies how many seconds to wait between stat()ing dovecot-acl file
+   # to see if it changed.
+-  #acl = vfile:/etc/dovecot-acls:cache_secs=300
++  #acl = vfile:/etc/dovecot/dovecot-acls:cache_secs=300
+ 
+   # Convert plugin. If set, specifies the source storage path which is
+   # converted to destination storage (mail_location) when the user logs in.
+@@ -1128,14 +1131,14 @@
+   # until the message can be saved within quota limits. The configuration file
+   # is a text file where each line is in format: <priority> <mailbox name>
+   # Mails are first deleted in lowest -> highest priority number order
+-  #trash = /etc/dovecot-trash.conf
++  #trash = /etc/dovecot/dovecot-trash.conf
+ 
+   # Expire plugin. Mails are expunged from mailboxes after being there the
+   # configurable time. The first expiration date for each mailbox is stored in
    # a dictionary so it can be quickly determined which mailboxes contain
    # expired mails. The actual expunging is done in a nightly cronjob, which
    # you must set up:
 -  #   dovecot --exec-mail ext /usr/libexec/dovecot/expire-tool
 +  #   dovecot --exec-mail ext /usr/lib/dovecot/expire-tool
    #expire = Trash 7 Spam 30
-   #expire_dict = db:/var/lib/dovecot/expire.db
+   #expire_dict = proxy::expire
  

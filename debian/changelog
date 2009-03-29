@@ -1,3 +1,12 @@
+dovecot (1:1.1.13-2) unstable; urgency=high
+
+  * New upload, urgency set to high: the package in testing is broken.
+  * debian/dovecot-common.init: fixed a typo.
+  * debian/patches/dovecot-example.dpatch: fixed a few paths.
+    (Closes: #521544)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 29 Mar 2009 21:16:02 +0200
+
 dovecot (1:1.1.13-1) unstable; urgency=low
 
   * New upstream release.
