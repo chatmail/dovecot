@@ -10,8 +10,11 @@ dovecot (1:1.1.15-1) unstable; urgency=low
   * debian/dovecot-common.README.Debian: simplyfied, we only point the user to
     wiki.dovecot.org; added a note about how to regenerate the SSL certificate.
     (Closes: #528934)
+  * debian/dovecot-common.postrm: do not break if /etc/ssl/certs does not
+    exist. (Closes: #524865)
+  * debian/patches/dovecot-managesieve-dist: updated to 0.10.6.
 
- -- Fabio Tranchitella <kobold@debian.org>  Sun, 31 May 2009 19:26:13 +0200
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 31 May 2009 20:13:26 +0200
 
 dovecot (1:1.1.13-2) unstable; urgency=high
 

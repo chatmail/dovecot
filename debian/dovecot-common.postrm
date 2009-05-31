@@ -23,18 +23,21 @@ if [ "$1" = "purge" ] ; then
 		fi
 	done
 
-        userdel dovecot || true;
-	cd /etc/ssl/certs
-	PATH=$PATH:/usr/bin/ssl
-	if [ -f dovecot.pem ]; then
-		echo "SSL certificate /etc/ssl/certs/dovecot.pem is NOT removed."
-		echo "Please remove manually if required."
-	fi
-	if [ -f ../private/dovecot.pem ]; then
-		echo "SSL certificate /etc/ssl/private/dovecot.pem is NOT removed."
-		echo "Please remove manually if required."
-	fi
-	if [ -d /var/run/dovecot ]; then rm -rf /var/run/dovecot; fi
+    userdel dovecot || true;
+
+    if [ -d /etc/ssl/certs ]; then
+	    cd /etc/ssl/certs
+        PATH=$PATH:/usr/bin/ssl
+        if [ -f dovecot.pem ]; then
+            echo "SSL certificate /etc/ssl/certs/dovecot.pem is NOT removed."
+            echo "Please remove manually if required."
+        fi
+        if [ -f ../private/dovecot.pem ]; then
+            echo "SSL certificate /etc/ssl/private/dovecot.pem is NOT removed."
+            echo "Please remove manually if required."
+        fi
+        if [ -d /var/run/dovecot ]; then rm -rf /var/run/dovecot; fi
+    fi
 fi
 
 #DEBHELPER#
