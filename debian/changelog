@@ -1,12 +1,14 @@
 dovecot (1:1.1.15-1) unstable; urgency=low
 
-  * New upstream release. (Closes: #529923)
+  * New upstream release; sorry, no time to include extra upstream patches
+    which are not released, feel free to submit them as dpatch files and I will
+    add them to the package. (Closes: #529923)
   * debian/control: updated Standards-Version, no changes needed.
   * debian/dovecot-common.init: patched to support ENABLED=0 in
     /etc/default/dovecot, useful if dovecot is used as local-only IMAP server
     through PREAUTH interface. (Closes: #524302)
 
- -- Fabio Tranchitella <kobold@debian.org>  Sun, 31 May 2009 18:53:15 +0200
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 31 May 2009 19:21:28 +0200
 
 dovecot (1:1.1.13-2) unstable; urgency=high
 
