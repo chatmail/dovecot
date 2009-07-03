@@ -7,9 +7,8 @@
 
 exit 0
 @DPATCH@
-diff -urN dovecot-1.1.1/doc/dovecot-sql-example.conf dovecot-1.1.1-sql/doc/dovecot-sql-example.conf
---- dovecot-1.1.1/doc/dovecot-sql-example.conf	2008-06-12 00:45:10.000000000 -0600
-+++ dovecot-1.1.1-sql/doc/dovecot-sql-example.conf	2008-06-22 21:23:52.000000000 -0600
+--- dovecot-1.2.0/doc/dovecot-sql-example.conf	2008-09-20 16:22:54.000000000 +0000
++++ dovecot-1.2.0-debian/doc/dovecot-sql-example.conf	2009-07-03 06:39:50.000000000 +0000
 @@ -47,7 +47,7 @@
  #                           the default my.cnf location
  #     option_group        - Read options from the given group (default: client)
@@ -18,4 +17,4 @@ diff -urN dovecot-1.1.1/doc/dovecot-sql-example.conf dovecot-1.1.1-sql/doc/dovec
 +#   You can connect to UNIX sockets by using host: host=/var/run/mysqld/mysqld.sock
  #   Note that currently you can't use spaces in parameters.
  #
- # sqlite:
+ #   MySQL supports multiple host parameters for load balancing / HA.

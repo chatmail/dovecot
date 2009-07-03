@@ -7,9 +7,8 @@
 
 exit 0
 @DPATCH@
-diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-example.conf
---- dovecot-1.1.15/dovecot-example.conf	2009-05-13 18:41:46.000000000 +0200
-+++ dovecot-1.1.15.debian/dovecot-example.conf	2009-05-31 19:09:34.000000000 +0200
+--- dovecot-1.2.0/dovecot-example.conf	2009-06-18 07:37:43.000000000 +0000
++++ dovecot-1.2.0-debian/dovecot-example.conf	2009-07-03 05:31:29.000000000 +0000
 @@ -17,11 +17,12 @@
  # --sysconfdir=/etc --localstatedir=/var --with-ssldir=/etc/ssl
  
@@ -36,9 +35,9 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  # setting if not specified.
  #ssl_listen =
  
--# Disable SSL/TLS support. <doc/wiki/SSL.txt>
-+# Disable SSL/TLS support. </usr/share/doc/dovecot-common/wiki/SSL.txt>
- #ssl_disable = no
+-# SSL/TLS support: yes, no, required. <doc/wiki/SSL.txt>
++# SSL/TLS support: yes, no, required. </usr/share/doc/dovecot-common/wiki/SSL.txt>
+ #ssl = yes
  
  # PEM encoded X.509 SSL/TLS certificate and private key. They're opened before
  # dropping root privileges, so keep the key file unreadable by anyone but
@@ -73,7 +72,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  #login_user = dovecot
  
  # Set max. process size in megabytes. If you don't use
-@@ -207,13 +208,14 @@
+@@ -213,13 +214,14 @@
  #   %d - domain part in user@domain, empty if there's no domain
  #   %h - home directory
  #
@@ -90,7 +89,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  #
  #mail_location = 
  
-@@ -266,7 +268,7 @@
+@@ -295,7 +297,7 @@
  
  # System user and group used to access mails. If you use multiple, userdb
  # can override these by returning uid or gid fields. You can use either numbers
@@ -99,7 +98,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  #mail_uid =
  #mail_gid =
  
-@@ -274,6 +276,7 @@
+@@ -303,6 +305,7 @@
  # used only with INBOX when either its initial creation or dotlocking fails.
  # Typically this is set to "mail" to give access to /var/mail.
  #mail_privileged_group =
@@ -107,7 +106,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  
  # Grant access to these supplementary groups for mail processes. Typically
  # these are used to set up access to shared mailboxes. Note that it may be
-@@ -296,8 +299,8 @@
+@@ -325,8 +328,8 @@
  # isn't finding your mails.
  #mail_debug = no
  
@@ -118,7 +117,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  #mail_log_prefix = "%Us(%u): "
  
  # Max. number of lines a mail process is allowed to log per second before it's
-@@ -374,7 +377,7 @@
+@@ -403,7 +406,7 @@
  # settings. If this setting is empty, "/./" in home dirs are ignored.
  # WARNING: Never add directories here which local users can modify, that
  # may lead to root exploit. Usually this should be done only if you don't
@@ -127,7 +126,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  #valid_chroot_dirs = 
  
  # Default chroot directory for mail processes. This can be overridden for
-@@ -382,7 +385,7 @@
+@@ -411,7 +414,7 @@
  # (eg. /home/./user chroots into /home). Note that usually there is no real
  # need to do chrooting, Dovecot doesn't allow users to access files outside
  # their mail directory anyway. If your home directories are prefixed with
@@ -136,7 +135,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  #mail_chroot = 
  
  ##
-@@ -504,19 +507,19 @@
+@@ -537,20 +540,20 @@
  
  protocol imap {
    # Login executable location.
@@ -146,9 +145,11 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
    # IMAP executable location. Changing this allows you to execute other
    # binaries before the imap process is executed.
    #
-   # This would write rawlogs into ~/dovecot.rawlog/ directory:
+   # This would write rawlogs into user's ~/dovecot.rawlog/, if it exists:
 -  #   mail_executable = /usr/libexec/dovecot/rawlog /usr/libexec/dovecot/imap
+-  # <doc/wiki/Debugging/Rawlog.txt>
 +  #   mail_executable = /usr/lib/dovecot/rawlog /usr/lib/dovecot/imap
++  # </usr/doc/dovecot-common/wiki/Debugging.Rawlog.txt>
    #
    # This would attach gdb into the imap process and write backtraces into
    # /tmp/gdbhelper.* files:
@@ -160,16 +161,16 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  
    # Maximum IMAP command line length in bytes. Some clients generate very long
    # command lines with huge mailboxes, so you may need to raise this if you get
-@@ -530,7 +533,7 @@
+@@ -564,7 +567,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
 -  #mail_plugin_dir = /usr/lib/dovecot/imap
 +  #mail_plugin_dir = /usr/lib/dovecot/modules/imap
  
-   # Send IMAP capabilities in greeting message. This makes it unnecessary for
-   # clients to request it with CAPABILITY command, so it saves one round-trip.
-@@ -573,11 +576,11 @@
+   # IMAP logout format string:
+   #  %i - total number of bytes read from client
+@@ -614,11 +617,11 @@
  
  protocol pop3 {
    # Login executable location.
@@ -183,7 +184,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  
    # Don't try to set mails non-recent or seen with POP3 sessions. This is
    # mostly intended to reduce disk I/O. With maildir it doesn't move files
-@@ -597,7 +600,8 @@
+@@ -638,7 +641,8 @@
  
    # POP3 UIDL (unique mail identifier) format to use. You can use following
    # variables, along with the variable modifiers described in
@@ -193,7 +194,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
    #
    #  %v - Mailbox's IMAP UIDVALIDITY
    #  %u - Mail's IMAP UID
-@@ -616,7 +620,7 @@
+@@ -657,7 +661,7 @@
    # Dovecot's default, so if you're building a new server it would be a good
    # idea to change this. %08Xu%08Xv should be pretty fail-safe.
    #
@@ -202,7 +203,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  
    # POP3 logout format string:
    #  %i - total number of bytes read from client
-@@ -637,7 +641,7 @@
+@@ -678,7 +682,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -211,7 +212,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  
    # Workarounds for various client bugs:
    #   outlook-no-nuls:
-@@ -654,9 +658,9 @@
+@@ -695,9 +699,9 @@
  ## LDA specific settings
  ##
  
@@ -223,7 +224,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  
    # Hostname to use in various parts of sent mails, eg. in Message-Id.
    # Default is the system's real hostname.
-@@ -665,7 +669,7 @@
+@@ -706,7 +710,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -232,7 +233,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  
    # If user is over quota, return with temporary failure instead of
    # bouncing the mail.
-@@ -691,14 +695,14 @@
+@@ -732,14 +736,14 @@
  
    # UNIX socket path to master authentication server to find users.
    #auth_socket_path = /var/run/dovecot/auth-master
@@ -249,16 +250,17 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  
  # Set max. process size in megabytes.
  #auth_process_size = 256
-@@ -784,7 +788,7 @@
+@@ -821,7 +825,8 @@
  #auth_krb5_keytab = 
  
- # Do NTLM authentication using Samba's winbind daemon and ntlm_auth helper.
--# <doc/wiki/Authentication/Mechanisms/Winbind.txt>
-+# </usr/share/doc/dovecot-common/wiki/Authentication/Mechanisms/Winbind.txt>
- #auth_ntlm_use_winbind = no
+ # Do NTLM and GSS-SPNEGO authentication using Samba's winbind daemon and
+-# ntlm_auth helper. <doc/wiki/Authentication/Mechanisms/Winbind.txt>
++# ntlm_auth helper.
++# </usr/share/doc/dovecot-common/wiki/Authentication.Mechanisms.Winbind.txt>
+ #auth_use_winbind = no
  
  # Path for Samba's ntlm_auth helper binary.
-@@ -806,13 +810,13 @@
+@@ -843,13 +848,13 @@
    # allow both system users (/etc/passwd) and virtual users to login without
    # duplicating the system users into virtual database.
    #
@@ -274,7 +276,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
  
    # Users can be temporarily disabled by adding a passdb with deny=yes.
    # If the user is found from that database, authentication will fail.
-@@ -821,7 +825,7 @@
+@@ -858,7 +863,7 @@
  
    #passdb passwd-file {
      # File contains a list of usernames, one per line
@@ -283,27 +285,26 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
      #deny = yes
    #}
  
-@@ -830,7 +834,7 @@
+@@ -867,7 +872,7 @@
    # so it can't be used as userdb. If you don't want to use a separate user
    # database (passwd usually), you can use static userdb.
    # REMEMBER: You'll need /etc/pam.d/dovecot file created for PAM
 -  # authentication to actually work. <doc/wiki/PasswordDatabase.PAM.txt>
 +  # authentication to actually work. </usr/share/doc/dovecot-common/wiki/PasswordDatabase.PAM.txt>
    passdb pam {
-     # [session=yes] [setcred=yes] [failure_show_msg=yes]
+     # [session=yes] [setcred=yes] [failure_show_msg=yes] [max_requests=<n>]
      # [cache_key=<key>] [<service name>]
-@@ -847,8 +851,8 @@
+@@ -888,7 +893,8 @@
      # because PAM modules can do all kinds of checks besides checking password,
      # such as checking IP address. Dovecot can't know about these checks
      # without some help. cache_key is simply a list of variables (see
--    # <doc/wiki/Variables.txt>) which must match for the cached data to be used.
--    # Here are some examples:
-+    # </usr/share/doc/dovecot-common/wiki/Variables.txt>) which must match for
-+    # the cached data to be used.  Here are some examples:
+-    # doc/wiki/Variables.txt) which must match for the cached data to be used.
++    # /usr/share/doc/dovecot-common/wiki/Variables.txt) which must match
++    # for the cached data to be used.
+     # Here are some examples:
      #   %u - Username must match. Probably sufficient for most uses.
      #   %u%r - Username and remote IP address must match.
-     #   %u%s - Username and service (ie. IMAP, POP3) must match.
-@@ -864,7 +868,7 @@
+@@ -905,7 +911,7 @@
  
    # System users (NSS, /etc/passwd, or similiar)
    # In many systems nowadays this uses Name Service Switch, which is
@@ -312,7 +313,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
    #passdb passwd {
      # [blocking=yes] - See userdb passwd for explanation
      #args = 
-@@ -872,21 +876,21 @@
+@@ -913,21 +919,21 @@
  
    # Shadow passwords for system users (NSS, /etc/shadow or similiar).
    # Deprecated by PAM nowadays.
@@ -337,12 +338,12 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
    #passdb passwd-file {
      # [scheme=<default password scheme>] [username_format=<format>]
      # <Path for passwd-file>
-@@ -895,25 +899,25 @@
+@@ -936,25 +942,25 @@
  
    # checkpassword executable authentication
    # NOTE: You will probably want to use "userdb prefetch" with this.
--  # <doc/wiki/PasswordDatabase.CheckPassword.txt>
-+  # </usr/share/doc/dovecot-common/wiki/PasswordDatabase.CheckPassword.txt>
+-  # <doc/wiki/AuthDatabase.CheckPassword.txt>
++  # </usr/share/doc/dovecot-common/wiki/AuthDatabase.CheckPassword.txt>
    #passdb checkpassword {
      # Path for checkpassword binary
      #args = 
@@ -371,7 +372,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
    #passdb vpopmail {
      # [cache_key=<key>] - See cache_key in PAM for explanation.
      # [quota_template=<template>] - %q expands to Maildir++ quota
-@@ -925,20 +929,20 @@
+@@ -966,20 +972,20 @@
    # User database specifies where mails are located and what user/group IDs
    # own them. For single-UID configuration use "static".
    #
@@ -395,7 +396,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
    userdb passwd {
      # [blocking=yes] - By default the lookups are done in the main dovecot-auth
      # process. This setting causes the lookups to be done in auth worker
-@@ -949,13 +953,13 @@
+@@ -990,20 +996,20 @@
    }
  
    # passwd-like file with specified location
@@ -406,12 +407,20 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
      #args =
    #}
  
+   # checkpassword executable user database lookup
+-  # <doc/wiki/AuthDatabase.CheckPassword.txt>
++  # </usr/share/doc/dovecot-common/wiki/AuthDatabase.CheckPassword.txt>
+   #userdb checkpassword {
+     # Path for checkpassword binary
+     #args = 
+   #}
+ 
 -  # static settings generated from template <doc/wiki/UserDatabase.Static.txt>
 +  # static settings generated from template </usr/share/doc/dovecot-common/wiki/UserDatabase.Static.txt>
    #userdb static {
      # Template for the fields. Can return anything a userdb could normally
      # return. For example:
-@@ -972,19 +976,19 @@
+@@ -1020,19 +1026,19 @@
      #args =
    #}
  
@@ -438,7 +447,7 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
    #userdb vpopmail {
    #}
  
-@@ -1058,7 +1062,7 @@
+@@ -1106,7 +1112,7 @@
  # referenced using URIs in format "proxy::<name>".
  
  dict {
@@ -447,16 +456,16 @@ diff -urN dovecot-1.1.15/dovecot-example.conf dovecot-1.1.15.debian/dovecot-exam
    #expire = db:/var/lib/dovecot/expire.db
  }
  
-@@ -1110,7 +1114,7 @@
+@@ -1158,7 +1164,7 @@
    # one file for each mailbox, eg. INBOX or sub.mailbox. cache_secs parameter
    # specifies how many seconds to wait between stat()ing dovecot-acl file
    # to see if it changed.
 -  #acl = vfile:/etc/dovecot-acls:cache_secs=300
 +  #acl = vfile:/etc/dovecot/dovecot-acls:cache_secs=300
  
-   # Convert plugin. If set, specifies the source storage path which is
-   # converted to destination storage (mail_location) when the user logs in.
-@@ -1129,14 +1133,14 @@
+   # To let users LIST mailboxes shared by other users, Dovecot needs a
+   # shared mailbox dictionary. For example:
+@@ -1181,14 +1187,14 @@
    # until the message can be saved within quota limits. The configuration file
    # is a text file where each line is in format: <priority> <mailbox name>
    # Mails are first deleted in lowest -> highest priority number order
