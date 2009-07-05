@@ -1,7 +1,7 @@
 dovecot-example
 #dovecot-managesieve-dist
 #dovecot-managesieve
-#dovecot-sieve
+dovecot-sieve
 dovecot-sql
 dovecot-drac
 dovecot-quota

@@ -12,23 +12,23 @@ formats.  It is fully compatible with UW-IMAP and Courier IMAP servers as
 well as mail clients accessing the mailboxes directly.
 .PP
 .B dovecot
-can be setup to authenticate against LDAP, Postgres or MYSQL databases, but by 
+can be setup to authenticate against LDAP, Postgres or MySQL databases, but by 
 default authentication is with 
-.BR PAM(7)
+.BR PAM(7) .
 .
 .PP
 .B dovecot
 is normally started during the system boot, and runs as a background process
 but it can also be run through
-.BR inetd(8)
+.BR inetd(8) .
 .
 In the latter case, the
 .B /usr/lib/dovecot/imap-login
 or
 .B /usr/lib/dovecot/pop3-login
 binaries are run directly not
-.B /usr/sbin/dovecot
-.
+.B /usr/sbin/dovecot .
+
 .PP
 .B dovecot
 will log all of its activities according to syslog.
@@ -55,13 +55,10 @@ Default configuration file.
 .I /etc/dovecot/dovecot-ldap.conf
 Additional configuration for LDAP based authentication.
 .TP 12
-.I /etc/dovecot/dovecot-pgsql.conf
-Additional configuration for Postgres based authentication.
+.I /etc/dovecot/dovecot-sql.conf
+Additional configuration for database based authentication.
 .TP 12
-.I /etc/dovecot/dovecot-mysql.conf
-Additional configuration for MySQL based authentication.
-.TP 12
-.I /usr/lib/dovecot.
+.I /usr/lib/dovecot
 Location of 
 .B dovecot 
 modules.
