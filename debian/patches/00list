@@ -8,4 +8,4 @@ dovecot-quota
 postgres-configure
 quota-mountpoint
 exec-check-for-none
-#dovecot-ssl
+dovecot-ssl
