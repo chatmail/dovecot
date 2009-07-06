@@ -53,15 +53,13 @@ config.status: patch-stamp configure
 	-test -r /usr/share/misc/config.guess && \
 	  cp -f /usr/share/misc/config.guess dovecot-libsieve/config.guess
 	(cd dovecot-libsieve/ && aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf)
-#	# dovecot-managesieve module
-#	-test -r /usr/share/misc/config.sub && \
-#	  mv dovecot-managesieve/config.sub dovecot-managesieve/config.sub.orig && \
-#	  cp -f /usr/share/misc/config.sub dovecot-managesieve/config.sub
-#	-test -r /usr/share/misc/config.guess && \
-#	  mv dovecot-managesieve/config.guess dovecot-managesieve/config.guess.orig && \
-#	  cp -f /usr/share/misc/config.guess dovecot-managesieve/config.guess
-#	cp dovecot-managesieve/README dovecot-managesieve/managesieve.README
-#	(cd dovecot-managesieve/ && aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf)
+	# Dovecot managesieve module
+	-test -r /usr/share/misc/config.sub && \
+	  cp -f /usr/share/misc/config.sub dovecot-managesieve/config.sub
+	-test -r /usr/share/misc/config.guess && \
+	  cp -f /usr/share/misc/config.guess dovecot-managesieve/config.guess
+	cp dovecot-managesieve/README dovecot-managesieve/managesieve.README
+	(cd dovecot-managesieve/ && aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf)
 
 build: build-stamp
 build-stamp:  config.status
@@ -74,12 +72,12 @@ build-stamp:  config.status
 		--libexecdir=\$${prefix}/lib \
 		--with-moduledir=\$${prefix}/lib/dovecot/modules)
 	$(MAKE) -C dovecot-libsieve
-#	# Dovecot managesieve module
-#	(cd dovecot-managesieve/ && ./configure --with-dovecot=../ \
-#		--with-dovecot-sieve=../dovecot-libsieve/ \
-#		--prefix=/usr \
-#		--libexecdir=\$${prefix}/lib)
-#	$(MAKE) -C dovecot-managesieve
+	# Dovecot managesieve module
+	(cd dovecot-managesieve/ && ./configure --with-dovecot=../ \
+		--with-dovecot-sieve=../dovecot-libsieve/ \
+		--prefix=/usr \
+		--libexecdir=\$${prefix}/lib)
+	$(MAKE) -C dovecot-managesieve
 	# DRAC
 	cd src/plugins/drac && $(MAKE)
 	touch build-stamp
@@ -92,15 +90,13 @@ clean1:
 	# Add here commands to clean up after the build process.
 	[ ! -f Makefile ] || $(MAKE) distclean
 	[ ! -f dovecot-libsieve/Makefile ] || $(MAKE) -C dovecot-libsieve distclean
-#	[ ! -f dovecot-managesieve/Makefile ] || $(MAKE) -C dovecot-managesieve distclean
+	[ ! -f dovecot-managesieve/Makefile ] || $(MAKE) -C dovecot-managesieve distclean
 	rm -f conftest conftest.o config.log config.cache config.status ylwrap
 	[ -f config.sub.orig ] && mv config.sub.orig config.sub || true
 	[ -f dovecot-libsieve/config.sub ] && rm dovecot-libsieve/config.sub || true
-#	[ -f dovecot-managesieve/config.sub.orig ] && mv dovecot-managesieve/config.sub.orig dovecot-managesieve/config.sub || true
-#	[ -f dovecot-managesieve/managesieve.README ] && rm dovecot-managesieve/managesieve.README || true
+	[ -f dovecot-managesieve/managesieve.README ] && rm dovecot-managesieve/managesieve.README || true
 	[ -f config.guess.orig ] && mv config.sub.orig config.guess || true
 	[ -f dovecot-libsieve/config.guess ] && rm dovecot-libsieve/config.guess || true
-#	[ -f dovecot-managesieve/config.guess.orig ] && mv dovecot-managesieve/config.sub.orig dovecot-managesieve/config.guess || true
 	rm -f src/plugins/drac/drac.so
 	dh_clean
 
@@ -112,7 +108,7 @@ install: build
 	# Add here commands to install the package into debian/dovecot.
 	$(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
 	$(MAKE) -C dovecot-libsieve install DESTDIR=$(CURDIR)/debian/dovecot-common
-#	$(MAKE) -C dovecot-managesieve install DESTDIR=$(CURDIR)/debian/dovecot-common
+	$(MAKE) -C dovecot-managesieve install DESTDIR=$(CURDIR)/debian/dovecot-common
 	cp $(CURDIR)/src/plugins/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-ldap-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-ldap.conf
