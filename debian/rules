@@ -59,7 +59,7 @@ config.status: patch-stamp configure
 	-test -r /usr/share/misc/config.guess && \
 	  cp -f /usr/share/misc/config.guess dovecot-managesieve/config.guess
 	cp dovecot-managesieve/README dovecot-managesieve/managesieve.README
-	(cd dovecot-managesieve/ && aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf)
+	(cd dovecot-managesieve/ && autoheader && aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf)
 
 build: build-stamp
 build-stamp:  config.status
