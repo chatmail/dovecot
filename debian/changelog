@@ -1,4 +1,4 @@
-dovecot (1:1.2.1-1~UNRELEASED) unstable; urgency=low
+dovecot (1:1.2.1-1) unstable; urgency=low
 
   [ Joel Johnson ]
   * New upstream release
