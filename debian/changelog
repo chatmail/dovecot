@@ -2,7 +2,7 @@ dovecot (1:1.2.1-2) UNRELEASED; urgency=low
 
   * Update to use default automake (Closes: #536880) now that current upstream
     successfully builds with 1.10 (was previously a problem in bug 473754.
-  *
+  * Updated Standards-Verson to 3.8.2 (no action required)
 
  -- Joel Johnson <mrjoel@lixil.net>  Tue, 14 Jul 2009 20:37:21 -0600
 

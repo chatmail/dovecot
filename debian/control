@@ -5,7 +5,7 @@ Maintainer: Dovecot Maintainers <jaldhar-dovecot@debian.org>
 Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>, Fabio Tranchitella <kobold@debian.org>, Joel Johnson <mrjoel@lixil.net>
 Build-Depends: debhelper (>= 5.0.0), automake, autoconf, libtool, pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient15-dev, libsqlite3-dev, libsasl2-dev, zlib1g-dev, libkrb5-dev, dpatch, byacc, flex, drac-dev (>= 1.12-5), libbz2-dev, libdb-dev
 Build-Conflicts: linux-kernel-headers (<= 2.5.999-test7-bk-17), automake1.4
-Standards-Version: 3.8.1
+Standards-Version: 3.8.2
 Vcs-Svn: svn://svn.debian.org/svn/collab-maint/deb-maint/dovecot/trunk
 Vcs-Browser: http://svn.debian.org/wsvn/collab-maint/deb-maint/dovecot/trunk/?op=log
 
