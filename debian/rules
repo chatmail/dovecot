@@ -46,7 +46,8 @@ config.status: patch-stamp configure
 	            --mandir=\$${prefix}/share/man \
 	            --infodir=\$${prefix}/share/info \
 	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
-				--disable-static
+	            --disable-rpath \
+	            --disable-static
 	# Dovecot sieve plugin
 	-test -r /usr/share/misc/config.sub && \
 	  cp -f /usr/share/misc/config.sub dovecot-libsieve/config.sub
@@ -115,7 +116,6 @@ install: build
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-sql-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-sql.conf
 	install -D -m 0755 -o root -g root $(CURDIR)/debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-common/usr/bin/maildirmake.dovecot
 	install -D -m 0755 -o root -g root $(CURDIR)/src/plugins/convert/convert-tool $(CURDIR)/debian/dovecot-common/usr/bin/convert-tool
-	install -o root -g root -m 0644 $(CURDIR)/debian/dovecot-common.overrides $(CURDIR)/debian/dovecot-common/usr/share/lintian/overrides/dovecot-common
 	mv $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/imap/ $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot/modules/
