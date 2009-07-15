@@ -24,7 +24,7 @@ config.status: patch-stamp configure
 	  cp -f /usr/share/misc/config.sub config.sub
 	-test -r /usr/share/misc/config.guess && \
 	  cp -f /usr/share/misc/config.guess config.guess
-	aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf
+	aclocal && automake --add-missing --copy && libtoolize -f -c && aclocal && autoconf
 	# Add here commands to configure the package.
 	./configure --with-ldap \
 	            --with-ssl=openssl \
@@ -52,14 +52,14 @@ config.status: patch-stamp configure
 	  cp -f /usr/share/misc/config.sub dovecot-libsieve/config.sub
 	-test -r /usr/share/misc/config.guess && \
 	  cp -f /usr/share/misc/config.guess dovecot-libsieve/config.guess
-	(cd dovecot-libsieve/ && aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf)
+	(cd dovecot-libsieve/ && aclocal && automake --add-missing --copy && libtoolize -f -c && aclocal && autoconf)
 	# Dovecot managesieve module
 	-test -r /usr/share/misc/config.sub && \
 	  cp -f /usr/share/misc/config.sub dovecot-managesieve/config.sub
 	-test -r /usr/share/misc/config.guess && \
 	  cp -f /usr/share/misc/config.guess dovecot-managesieve/config.guess
 	cp dovecot-managesieve/README dovecot-managesieve/managesieve.README
-	(cd dovecot-managesieve/ && autoheader && aclocal-1.9 && automake-1.9 --add-missing --copy && libtoolize -f -c && aclocal-1.9 && autoconf)
+	(cd dovecot-managesieve/ && autoheader && aclocal && automake --add-missing --copy && libtoolize -f -c && aclocal && autoconf)
 
 build: build-stamp
 build-stamp:  config.status

@@ -1,3 +1,11 @@
+dovecot (1:1.2.1-2) UNRELEASED; urgency=low
+
+  * Update to use default automake (Closes: #536880) now that current upstream
+    successfully builds with 1.10 (was previously a problem in bug 473754.
+  *
+
+ -- Joel Johnson <mrjoel@lixil.net>  Tue, 14 Jul 2009 20:37:21 -0600
+
 dovecot (1:1.2.1-1) unstable; urgency=low
 
   [ Joel Johnson ]
