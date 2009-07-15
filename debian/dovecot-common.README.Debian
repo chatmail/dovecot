@@ -30,6 +30,12 @@ be changed are:
     * Renamed ssl_disable=yes to ssl=no.
     * Renamed auth_ntlm_use_winbind to auth_use_winbind, which also determines
       if GSS-SPNEGO is handled by GSSAPI or winbind. 
+    * The sieve= and sieve_storage= settings need to be placed in the  plugin
+      {}  section now and sieve_storage= needs to be renamed to sieve_dir=.
+      This removes the duplication of these values with respect to the Sieve
+      Plugin for deliver. So, if using the Sieve plugin, these settings should
+      already be there and all that needs to be done is remove the sieve= and
+      sieve_storage= settings from the  protocol managesieve {}  section. 
 
 How to regenerate your self-signed SSL certificate
 --------------------------------------------------
