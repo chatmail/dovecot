@@ -1,2 +1,0 @@
-dovecot-common: non-standard-dir-perm var/run/dovecot/ 0700 != 0755
-dovecot-common: non-standard-dir-perm var/run/dovecot/login/ 0750 != 0755

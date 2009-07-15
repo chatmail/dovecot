@@ -126,8 +126,6 @@ install: build
 	rmdir $(CURDIR)/debian/dovecot-common/usr/include
 	rm $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-ldap-example.conf
 	rm $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-sql-example.conf
-	chmod 0700 $(CURDIR)/debian/dovecot-common/var/run/dovecot
-	chmod 0750 $(CURDIR)/debian/dovecot-common/var/run/dovecot/login
 
 # Build architecture-independent files here.
 binary-indep: build install
@@ -148,7 +146,7 @@ binary-arch: build install
 	dh_link -a
 	dh_strip -a
 	dh_compress -a
-	dh_fixperms -a -Xetc/dovecot/dovecot.conf -Xetc/dovecot/dovecot-ldap.conf -Xetc/dovecot/dovecot-sql.conf -Xvar/run/dovecot -Xvar/run/dovecot/login
+	dh_fixperms -a -Xetc/dovecot/dovecot.conf -Xetc/dovecot/dovecot-ldap.conf -Xetc/dovecot/dovecot-sql.conf
 	dh_installdeb -a
 	dh_shlibdeps -a
 	dh_gencontrol -a

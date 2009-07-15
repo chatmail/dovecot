@@ -4,5 +4,3 @@ etc/ssl/private
 usr/sbin
 usr/share/dovecot
 usr/share/lintian/overrides
-var/run/dovecot
-var/run/dovecot/login

@@ -24,11 +24,6 @@ if [ "$1" = "configure" ]; then
             --disabled-password --quiet dovecot || true
   fi
 
-  # Fix permissions
-  chmod 755 /var/run/dovecot
-  chmod 750 /var/run/dovecot/login
-  chgrp dovecot /var/run/dovecot/login
-
   ## SSL Certs
   # Certs and key file
   SSL_CERT="/etc/ssl/certs/dovecot.pem"
