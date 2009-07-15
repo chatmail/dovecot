@@ -3,6 +3,12 @@ dovecot (1:1.2.1-2) UNRELEASED; urgency=low
   * Update to use default automake (Closes: #536880) now that current upstream
     successfully builds with 1.10 (was previously a problem in bug 473754.
   * Updated Standards-Verson to 3.8.2 (no action required)
+  * Remove ./var/run directories to fix lintian warnings.
+  * Updated dovecot-libsieve patch to version 0.1.8, removed autogen.sh,
+    tests, and doc/rfc
+  * Updated dovecot-managesieve patch to version 0.11.7
+  * Updated dovecot-managesieve-dist patch to Mercurial revision 12b9733ee8b0
+      (0.11.7+), removed lib-cmusieve, doc/rfs, autogen.sh
 
  -- Joel Johnson <mrjoel@lixil.net>  Tue, 14 Jul 2009 20:37:21 -0600
 
@@ -15,7 +21,7 @@ dovecot (1:1.2.1-1) unstable; urgency=low
         removed RFCs and tests for a DFSG patch)
     - update ManageSieve patch and software to hg revision 2c9b4b4ab6a8
         (0.11.6+) for 1.2.1 support
-        + removed removing lib-cmusieve since building against newer sieve
+        + removed lib-cmusieve since building against newer sieve
         + removed doc/rfc for DFSG compliance
         + removed autogen.sh since we run autotools during the build
     - updated other misc patches

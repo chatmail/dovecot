@@ -53,7 +53,7 @@ config.status: patch-stamp configure
 	  cp -f /usr/share/misc/config.sub dovecot-libsieve/config.sub
 	-test -r /usr/share/misc/config.guess && \
 	  cp -f /usr/share/misc/config.guess dovecot-libsieve/config.guess
-	(cd dovecot-libsieve/ && aclocal && automake --add-missing --copy && libtoolize -f -c && aclocal && autoconf)
+	(cd dovecot-libsieve/ && autoheader && aclocal && automake --add-missing --copy && libtoolize -f -c && aclocal && autoconf)
 	# Dovecot managesieve module
 	-test -r /usr/share/misc/config.sub && \
 	  cp -f /usr/share/misc/config.sub dovecot-managesieve/config.sub

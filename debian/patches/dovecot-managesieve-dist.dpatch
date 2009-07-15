@@ -11,8 +11,8 @@
 exit 0
 @DPATCH@
 diff -urN dovecot-1.2.1/dovecot-managesieve/AUTHORS dovecot-1.2.1-debian/dovecot-managesieve/AUTHORS
---- dovecot-1.2.1/dovecot-managesieve/AUTHORS	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/AUTHORS	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/AUTHORS	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/AUTHORS	2009-07-15 00:07:29.000000000 -0600
 @@ -0,0 +1,15 @@
 +Stephan Bosch <stephan@rename-it.nl>
 +
@@ -30,16 +30,42 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/AUTHORS dovecot-1.2.1-debian/dovecot
 +dovecot-sieve-1.1 package. The AUTHORS file there references the CMU
 +authors.
 diff -urN dovecot-1.2.1/dovecot-managesieve/ChangeLog dovecot-1.2.1-debian/dovecot-managesieve/ChangeLog
---- dovecot-1.2.1/dovecot-managesieve/ChangeLog	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/ChangeLog	2009-07-12 18:38:17.000000000 +0000
-@@ -0,0 +1,993 @@
+--- dovecot-1.2.1/dovecot-managesieve/ChangeLog	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/ChangeLog	2009-07-15 00:09:59.000000000 -0600
+@@ -0,0 +1,1019 @@
++2009-07-13  Stephan Bosch  <stephan@rename-it.nl>
++
++	* README:
++	Fixed small problems in the README file.
++	[12b9733ee8b0] [tip]
++
++	* README:
++	Updated README.
++	[754280926847]
++
++	* .hgtags:
++	Added tag 0.11.7 for changeset eb5ae4346ab8
++	[089ba4356b73]
++
++	* NEWS, configure.in:
++	Released v0.11.7 for Dovecot v1.2.1.
++	[eb5ae4346ab8] [0.11.7]
++
 +2009-07-12  Stephan Bosch  <stephan@rename-it.nl>
++
++	* NEWS:
++	Updated NEWS file for next release.
++	[3f5e1aa77014]
++
++	* src/managesieve/main.c:
++	Incorporated various changes in IMAP's main.c into ManageSieve.
++	[289543707aa7]
 +
 +	* src/managesieve/cmd-putscript.c:
 +	Fixed panic occuring when many errors are produced by the Sieve
 +	compiler (never use t_str_new for strings that are written at deeper
 +	datastack levels).
-+	[2c9b4b4ab6a8] [tip]
++	[2c9b4b4ab6a8]
 +
 +	* src/lib-managesieve/managesieve-quote.c, src/lib-sievestorage/sieve-
 +	storage-list.c, src/lib-sievestorage/sieve-storage-save.c, src/lib-
@@ -1027,10 +1053,10 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/ChangeLog dovecot-1.2.1-debian/dovec
 +	[e81ad896fdf8]
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/configure.in dovecot-1.2.1-debian/dovecot-managesieve/configure.in
---- dovecot-1.2.1/dovecot-managesieve/configure.in	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/configure.in	2009-07-12 18:39:41.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/configure.in	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/configure.in	2009-07-15 00:13:00.000000000 -0600
 @@ -0,0 +1,110 @@
-+AC_INIT([Dovecot ManageSieve], [0.11.6], [dovecot@dovecot.org], [dovecot-1.2-managesieve])
++AC_INIT([Dovecot ManageSieve], [0.11.7], [dovecot@dovecot.org], [dovecot-1.2-managesieve])
 +AC_CONFIG_SRCDIR([src])
 +
 +AC_CONFIG_HEADERS([dummy-config.h dmanagesieve-config.h])
@@ -1141,16 +1167,16 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/configure.in dovecot-1.2.1-debian/do
 +
 +AC_OUTPUT
 diff -urN dovecot-1.2.1/dovecot-managesieve/COPYING dovecot-1.2.1-debian/dovecot-managesieve/COPYING
---- dovecot-1.2.1/dovecot-managesieve/COPYING	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/COPYING	2009-07-12 18:40:14.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/COPYING	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/COPYING	2009-07-15 00:11:45.000000000 -0600
 @@ -0,0 +1,4 @@
 +See AUTHORS file for list of copyright holders.
 +
 +Everything is licenced under LGPLv2.1 (see /usr/share/common-licenses/LGPL-2.1)
 +unless otherwise mentioned at the beginning of the file.
 diff -urN dovecot-1.2.1/dovecot-managesieve/dmanagesieve-config.h.in dovecot-1.2.1-debian/dovecot-managesieve/dmanagesieve-config.h.in
---- dovecot-1.2.1/dovecot-managesieve/dmanagesieve-config.h.in	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/dmanagesieve-config.h.in	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/dmanagesieve-config.h.in	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/dmanagesieve-config.h.in	2009-07-15 00:07:29.000000000 -0600
 @@ -0,0 +1,6 @@
 +
 +/* Define to the full name of this ManageSieve implementation. */
@@ -1159,8 +1185,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/dmanagesieve-config.h.in dovecot-1.2
 +/* Define to the version of this ManageSieve implementation. */
 +#undef MANAGESIEVE_VERSION
 diff -urN dovecot-1.2.1/dovecot-managesieve/doc/design.txt dovecot-1.2.1-debian/dovecot-managesieve/doc/design.txt
---- dovecot-1.2.1/dovecot-managesieve/doc/design.txt	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/doc/design.txt	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/doc/design.txt	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/doc/design.txt	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,28 @@
 +Design
 +------
@@ -1191,8 +1217,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/doc/design.txt dovecot-1.2.1-debian/
 +support for UTF-8 strings. 
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/INSTALL dovecot-1.2.1-debian/dovecot-managesieve/INSTALL
---- dovecot-1.2.1/dovecot-managesieve/INSTALL	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/INSTALL	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/INSTALL	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/INSTALL	2009-07-15 00:07:29.000000000 -0600
 @@ -0,0 +1,62 @@
 +Compile
 +-------
@@ -1257,8 +1283,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/INSTALL dovecot-1.2.1-debian/dovecot
 +Refer to README file.
 + 
 diff -urN dovecot-1.2.1/dovecot-managesieve/Makefile.am dovecot-1.2.1-debian/dovecot-managesieve/Makefile.am
---- dovecot-1.2.1/dovecot-managesieve/Makefile.am	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/Makefile.am	2009-07-12 18:39:16.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/Makefile.am	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/Makefile.am	2009-07-15 00:11:36.000000000 -0600
 @@ -0,0 +1,10 @@
 +SUBDIRS = src
 +
@@ -1271,10 +1297,22 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/Makefile.am dovecot-1.2.1-debian/dov
 +	hg log --style=changelog > ChangeLog
 +endif
 diff -urN dovecot-1.2.1/dovecot-managesieve/NEWS dovecot-1.2.1-debian/dovecot-managesieve/NEWS
---- dovecot-1.2.1/dovecot-managesieve/NEWS	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/NEWS	2009-07-12 18:37:59.000000000 +0000
-@@ -0,0 +1,240 @@
+--- dovecot-1.2.1/dovecot-managesieve/NEWS	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/NEWS	2009-07-15 00:07:29.000000000 -0600
+@@ -0,0 +1,252 @@
 +Dovecot 1.2:
++
++v0.11.7:
++	* Adjusted to changes in the Dovecot login API. This release now depends on
++	  Dovecot v1.2.1 or newer.
++	* Incorporated various small changes in IMAP into ManageSieve. This includes
++	  properly enabling the generation of core dumps.
++	- The previous release implicitly resolved the FreeBSD script truncation
++	  error. This release adds a small correction to the code that detects the
++	  truncation.
++	- Fixed panic occurring when many errors are produced by the Sieve compiler
++	  (bug found by Pascal Volk).
++	- Fixed memory leak in the PUTSCRIPT command.
 +
 +v0.11.6:
 +	* Adjusted to changes in Dovecot regarding client idle timeout vs 
@@ -1515,9 +1553,9 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/NEWS dovecot-1.2.1-debian/dovecot-ma
 +  of script checking and capability listing. THIS NEEDS TO BE CHANGED! 
 +- Fixed some minor bugs in the putscript command
 diff -urN dovecot-1.2.1/dovecot-managesieve/README dovecot-1.2.1-debian/dovecot-managesieve/README
---- dovecot-1.2.1/dovecot-managesieve/README	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/README	2009-07-12 18:37:59.000000000 +0000
-@@ -0,0 +1,163 @@
+--- dovecot-1.2.1/dovecot-managesieve/README	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/README	2009-07-15 00:07:29.000000000 -0600
+@@ -0,0 +1,169 @@
 +MANAGESIEVE implementation for Dovecot (1.2)
 +
 +Compile
@@ -1561,6 +1599,12 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/README dovecot-1.2.1-debian/dovecot-
 +    directly borrowed from IMAP. But, since long command lines are very unlikely 
 +    with ManageSieve, changing this will not be very useful. 
 +
++managesieve_logout_format = bytes=%i/%o
++    Specifies the string pattern used to compose the logout message of an
++    authenticated session. The following substitutions are available:
++        %i - total number of bytes read from client
++        %o - total number of bytes sent to client
++
 +managesieve_implementation_string = dovecot
 +    To fool ManageSieve clients that are focused on CMU's timesieved you can 
 +    specify the IMPLEMENTATION capability that the Dovecot reports to clients 
@@ -1575,7 +1619,7 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/README dovecot-1.2.1-debian/dovecot-
 +    stored. Scripts are stored as separate files with extension '.sieve'. All 
 +    other files are ignored when scripts are listed by a ManageSieve client. If
 +    this setting remains unspecified, the mail_location setting is used as 
-+    explained above.
++    explained above. The now deprecated sieve_storage setting is still accepted.
 +
 +sieve = ~/.dovecot.sieve
 +    Specifies the location of the symbolic link pointing to the active script in
@@ -1623,7 +1667,7 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/README dovecot-1.2.1-debian/dovecot-
 +
 +plugin {
 +  sieve=~/.dovecot.sieve
-+  sieve_storage=~/sieve
++  sieve_dir=~/sieve
 +}
 +
 +Proxying
@@ -1682,8 +1726,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/README dovecot-1.2.1-debian/dovecot-
 +in a moderator queue for a while. See http://dovecot.org/mailinglists.html
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/Makefile.am dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/Makefile.am
---- dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/Makefile.am	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/Makefile.am	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/Makefile.am	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/Makefile.am	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,15 @@
 +noinst_LIBRARIES = libmanagesieve.a
 +
@@ -1701,8 +1745,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/Makefile.am dove
 +	managesieve-quote.h \
 +	managesieve-parser.h 
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-parser.c dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-parser.c
---- dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-parser.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-parser.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-parser.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-parser.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,675 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -2380,8 +2424,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-pars
 +	return NULL;
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-parser.h dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-parser.h
---- dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-parser.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-parser.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-parser.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-parser.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,192 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -2576,8 +2620,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-pars
 +
 +#endif
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-quote.c dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-quote.c
---- dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-quote.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-quote.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-quote.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-quote.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,179 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -2759,8 +2803,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-quot
 +	return ret;
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-quote.h dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-quote.h
---- dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-quote.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-quote.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-quote.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-managesieve/managesieve-quote.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,20 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -2783,8 +2827,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-managesieve/managesieve-quot
 +
 +#endif
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/Makefile.am dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/Makefile.am
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/Makefile.am	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/Makefile.am	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/Makefile.am	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/Makefile.am	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,22 @@
 +noinst_LIBRARIES = libsievestorage.a
 +
@@ -2809,8 +2853,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/Makefile.am dov
 +	sieve-storage-private.h \
 +	sieve-storage.h
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage.c dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage.c
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,520 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -3333,8 +3377,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage.c
 +
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-error.h dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-error.h
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-error.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-error.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-error.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-error.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,32 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -3369,8 +3413,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-e
 +
 +#endif /* __SIEVE_STORAGE_ERROR_H */
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage.h dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage.h
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,31 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -3404,8 +3448,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage.h
 +
 +#endif
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.c dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.c
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,113 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -3521,8 +3565,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-l
 +	
 +    
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.h dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.h
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-list.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,32 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -3557,8 +3601,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-l
 +	
 +    
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-private.h dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-private.h
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-private.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-private.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-private.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-private.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,58 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -3619,8 +3663,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-p
 +#endif
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.c dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.c
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,347 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -3970,8 +4014,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-s
 +	sieve_storage_save_destroy(ctx);
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.h dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.h
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-save.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,27 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -4001,8 +4045,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-s
 +#endif
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.c dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.c
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,617 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -4622,8 +4666,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-s
 +
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.h dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.h
---- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/lib-sievestorage/sieve-storage-script.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,34 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -4660,13 +4704,13 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/lib-sievestorage/sieve-storage-s
 +#endif
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/Makefile.am dovecot-1.2.1-debian/dovecot-managesieve/src/Makefile.am
---- dovecot-1.2.1/dovecot-managesieve/src/Makefile.am	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/Makefile.am	2009-07-12 18:39:51.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/Makefile.am	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/Makefile.am	2009-07-15 00:12:03.000000000 -0600
 @@ -0,0 +1 @@
 +SUBDIRS = lib-managesieve lib-sievestorage managesieve managesieve-login
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/client.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/client.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/client.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/client.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/client.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/client.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,578 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -5247,8 +5291,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/client.c dovecot-1.2
 +}
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/client.h dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/client.h
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/client.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/client.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/client.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/client.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,105 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -5356,8 +5400,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/client.h dovecot-1.2
 +
 +#endif
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-capability.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-capability.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-capability.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-capability.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-capability.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-capability.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,49 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -5409,8 +5453,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-capability.c dov
 +}
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-deletescript.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-deletescript.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-deletescript.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-deletescript.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-deletescript.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-deletescript.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,45 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -5458,8 +5502,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-deletescript.c d
 +	return TRUE;
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-getscript.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-getscript.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-getscript.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-getscript.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-getscript.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-getscript.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,129 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -5591,8 +5635,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-getscript.c dove
 +	return cmd_getscript_continue(cmd);
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-havespace.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-havespace.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-havespace.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-havespace.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-havespace.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-havespace.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,41 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -5636,8 +5680,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-havespace.c dove
 +	return TRUE;
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-listscripts.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-listscripts.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-listscripts.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-listscripts.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-listscripts.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-listscripts.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,49 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -5689,8 +5733,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-listscripts.c do
 +	return TRUE;
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-logout.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-logout.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-logout.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-logout.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-logout.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-logout.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,15 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -5708,8 +5752,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-logout.c dovecot
 +	return TRUE;
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-noop.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-noop.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-noop.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-noop.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-noop.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-noop.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,45 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -5757,8 +5801,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-noop.c dovecot-1
 +}
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-putscript.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-putscript.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-putscript.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-putscript.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-putscript.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-putscript.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,428 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -6189,8 +6233,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-putscript.c dove
 +	return cmd_putscript_start(cmd, NULL);
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-renamescript.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-renamescript.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-renamescript.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-renamescript.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-renamescript.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-renamescript.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,45 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -6238,8 +6282,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-renamescript.c d
 +}
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-setactive.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-setactive.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-setactive.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-setactive.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-setactive.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/cmd-setactive.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,57 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -6299,8 +6343,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/cmd-setactive.c dove
 +	return TRUE;
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/commands.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/commands.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/commands.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/commands.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/commands.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/commands.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,115 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -6418,8 +6462,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/commands.c dovecot-1
 +	array_free(&commands);
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/commands.h dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/commands.h
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/commands.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/commands.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/commands.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/commands.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,49 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -6471,8 +6515,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/commands.h dovecot-1
 +
 +#endif /* __COMMANDS_H */
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/common.h dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/common.h
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/common.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/common.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/common.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/common.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,46 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -6521,9 +6565,9 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/common.h dovecot-1.2
 +
 +#endif
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/main.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/main.c	2009-07-12 18:37:59.000000000 +0000
-@@ -0,0 +1,349 @@
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/main.c	2009-07-15 00:07:30.000000000 -0600
+@@ -0,0 +1,350 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
 +
@@ -6592,6 +6636,9 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c dovecot-1.2.1
 +
 +static void log_error_callback(void *context ATTR_UNUSED)
 +{
++	/* the log fd is closed, don't die when trying to log later */
++	i_set_failure_ignore_errors(TRUE);
++	
 +	io_loop_stop(ioloop);
 +}
 +
@@ -6673,10 +6720,6 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c dovecot-1.2.1
 +	/* Log file or syslog opening probably requires roots */
 +	open_logfile();
 +
-+	/* Most likely needed. Have to open /dev/urandom before possible
-+	   chrooting. */
-+	random_init();
-+	
 +	/* Load the plugins before chrooting. Their init() is called later. */
 +	/* FIXME: MAIL_PLUGINS is a rather odd config value for a MANAGESIEVE
 +	 * server 
@@ -6691,6 +6734,7 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c dovecot-1.2.1
 +	}	
 +
 +	restrict_access_by_env(!IS_STANDALONE());
++    restrict_access_allow_coredumps(TRUE);
 +}
 +
 +static void internal_error()
@@ -6709,7 +6753,7 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c dovecot-1.2.1
 +{
 +	struct sieve_storage *storage;
 +	struct client *client;
-+	const char *user, *str, *sieve_storage, *mail;
++	const char *username, *home, *str, *sieve_storage, *mail;
 +	const char *extensions;
 +
 +	lib_signals_init();
@@ -6718,25 +6762,23 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c dovecot-1.2.1
 +	lib_signals_ignore(SIGPIPE, TRUE);
 +	lib_signals_ignore(SIGALRM, FALSE);
 +
-+	user = getenv("USER");
-+	if (user == NULL) {
++	username = getenv("USER");
++	if (username == NULL) {
 +		if (IS_STANDALONE())
-+			user = getlogin();
-+		if (user == NULL) {
++			username = getlogin();
++		if (username == NULL) {
 +			internal_error();
 +			i_fatal("USER environment missing");
 +		}
 +	}
 +
++    home = getenv("HOME");
 +	if (getenv("DEBUG") != NULL) {
-+		const char *home;
++		i_info("Effective uid=%s, gid=%s, home=%s",
++			dec2str(geteuid()), dec2str(getegid()),
++ 			home != NULL ? home : "(none)");
++    }
 +
-+        home = getenv("HOME");
-+        i_info("Effective uid=%s, gid=%s, home=%s",
-+               dec2str(geteuid()), dec2str(getegid()),
-+               home != NULL ? home : "(none)");
-+	}
-+	
 +	if (getenv("STDERR_CLOSE_SHUTDOWN") != NULL) {
 +		/* If master dies, the log fd gets closed and we'll quit */
 +		log_io = io_add(STDERR_FILENO, IO_ERROR,
@@ -6799,9 +6841,9 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c dovecot-1.2.1
 +
 +	if ( (sieve_storage == NULL || *sieve_storage == '\0') &&
 +		!(mail == NULL || *mail == '\0') ) {
-+		storage = sieve_storage_create_from_mail(mail, user);
++		storage = sieve_storage_create_from_mail(mail, username);
 +	} else 
-+		storage = sieve_storage_create(sieve_storage, user);
++		storage = sieve_storage_create(sieve_storage, username);
 +
 +	if (storage == NULL) {
 +		internal_error();
@@ -6837,7 +6879,6 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c dovecot-1.2.1
 +	commands_deinit();
 +	dict_drivers_unregister_builtin();
 +	sieve_deinit();
-+	random_deinit();
 +
 +	lib_signals_deinit();
 +	closelog();
@@ -6864,8 +6905,12 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c dovecot-1.2.1
 +	process_title_init(argv, envp);
 +	ioloop = io_loop_create();
 +
++    /* fake that we're running, so we know if client was destroyed
++       while initializing */
++	io_loop_set_running(ioloop);
 +	main_init();
-+	io_loop_run(ioloop);
++	if (io_loop_is_running(ioloop))
++		io_loop_run(ioloop);
 +	main_deinit();
 +
 +	io_loop_destroy(&ioloop);
@@ -6874,8 +6919,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/main.c dovecot-1.2.1
 +	return 0;
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/Makefile.am dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/Makefile.am
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve/Makefile.am	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/Makefile.am	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve/Makefile.am	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve/Makefile.am	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,64 @@
 +pkglibexecdir = $(libexecdir)/dovecot
 +
@@ -6942,8 +6987,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve/Makefile.am dovecot-
 +	commands.h \
 +	common.h 
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client-authenticate.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client-authenticate.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client-authenticate.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client-authenticate.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client-authenticate.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client-authenticate.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,415 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -7361,8 +7406,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client-authent
 +}
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client-authenticate.h dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client-authenticate.h
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client-authenticate.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client-authenticate.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client-authenticate.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client-authenticate.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,14 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -7379,8 +7424,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client-authent
 +
 +#endif
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,731 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -8114,8 +8159,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client.c dovec
 +}
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client.h dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client.h
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/client.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,92 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -8210,8 +8255,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/client.h dovec
 +  _client_send_response(client, "BYE", resp_code, msg)
 +#endif
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/cmd-noop.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/cmd-noop.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/cmd-noop.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/cmd-noop.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/cmd-noop.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/cmd-noop.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,48 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -8262,8 +8307,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/cmd-noop.c dov
 +}
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/commands.h dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/commands.h
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/commands.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/commands.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/commands.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/commands.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,11 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -8277,8 +8322,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/commands.h dov
 +
 +#endif /* __COMMANDS_H */
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/Makefile.am dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/Makefile.am
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/Makefile.am	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/Makefile.am	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/Makefile.am	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/Makefile.am	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,46 @@
 +pkglibexecdir = $(libexecdir)/dovecot
 +
@@ -8327,8 +8372,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/Makefile.am do
 +	managesieve-capability.h \
 +	managesieve-proxy.h
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-capability.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-capability.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-capability.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-capability.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-capability.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-capability.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,89 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -8420,8 +8465,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-ca
 +}
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-capability.h dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-capability.h
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-capability.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-capability.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-capability.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-capability.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,13 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -8437,8 +8482,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-ca
 +
 +#endif /* __MANAGESIEVE_CAPABILITY_H */
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-proxy.c dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-proxy.c
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-proxy.c	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-proxy.c	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-proxy.c	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-proxy.c	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,475 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -8916,8 +8961,8 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-pr
 +	return 0;
 +}
 diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-proxy.h dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-proxy.h
---- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-proxy.h	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-proxy.h	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-proxy.h	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/src/managesieve-login/managesieve-proxy.h	2009-07-15 00:07:30.000000000 -0600
 @@ -0,0 +1,13 @@
 +/* Copyright (c) 2002-2009 Dovecot Sieve authors, see the included COPYING file
 + */
@@ -8933,14 +8978,14 @@ diff -urN dovecot-1.2.1/dovecot-managesieve/src/managesieve-login/managesieve-pr
 +
 +#endif
 diff -urN dovecot-1.2.1/dovecot-managesieve/stamp.h.in dovecot-1.2.1-debian/dovecot-managesieve/stamp.h.in
---- dovecot-1.2.1/dovecot-managesieve/stamp.h.in	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/stamp.h.in	2009-07-12 18:41:05.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/stamp.h.in	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/stamp.h.in	2009-07-15 00:11:18.000000000 -0600
 @@ -0,0 +1,2 @@
 +
 +
 diff -urN dovecot-1.2.1/dovecot-managesieve/TODO dovecot-1.2.1-debian/dovecot-managesieve/TODO
---- dovecot-1.2.1/dovecot-managesieve/TODO	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.1-debian/dovecot-managesieve/TODO	2009-07-12 18:37:59.000000000 +0000
+--- dovecot-1.2.1/dovecot-managesieve/TODO	1969-12-31 17:00:00.000000000 -0700
++++ dovecot-1.2.1-debian/dovecot-managesieve/TODO	2009-07-15 00:07:29.000000000 -0600
 @@ -0,0 +1,25 @@
 +Next (in order of descending priority/precedence):
 +

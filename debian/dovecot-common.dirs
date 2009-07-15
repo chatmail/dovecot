@@ -3,4 +3,3 @@ etc/ssl/certs
 etc/ssl/private
 usr/sbin
 usr/share/dovecot
-usr/share/lintian/overrides
