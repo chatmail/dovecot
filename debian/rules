@@ -92,19 +92,25 @@ clean1:
 	dh_testdir
 	dh_testroot
 	rm -f build-stamp 
-	# Add here commands to clean up after the build process.
+	# Cleanup dovecot itself
 	[ ! -f Makefile ] || $(MAKE) distclean
-	[ ! -f dovecot-libsieve/Makefile ] || $(MAKE) -C dovecot-libsieve distclean
-	[ ! -f dovecot-managesieve/Makefile ] || $(MAKE) -C dovecot-managesieve distclean
 	rm -f conftest conftest.o config.log config.cache config.status ylwrap
-	[ -f config.sub.orig ] && mv config.sub.orig config.sub || true
-	[ -f dovecot-libsieve/config.sub ] && rm dovecot-libsieve/config.sub || true
-	[ -f dovecot-libsieve/sieve.README ] && rm dovecot-libsieve/sieve.README || true
-	[ -f dovecot-libsieve/sieve.ChangeLog ] && rm dovecot-libsieve/sieve.ChangeLog || true
-	[ -f dovecot-managesieve/managesieve.README ] && rm dovecot-managesieve/managesieve.README || true
-	[ -f dovecot-managesieve/managesieve.ChangeLog ] && rm dovecot-managesieve/managesieve.ChangeLog || true
-	[ -f config.guess.orig ] && mv config.sub.orig config.guess || true
+	[ -f config.sub.orig ]   && mv config.sub.orig   config.sub || true
+	[ -f config.guess.orig ] && mv config.guess.orig config.guess || true
+	# Cleanup dovecot sieve plugin
+	[ ! -f dovecot-libsieve/Makefile ] || $(MAKE) -C dovecot-libsieve distclean
+	[ -f dovecot-libsieve/config.sub ]   && rm dovecot-libsieve/config.sub || true
 	[ -f dovecot-libsieve/config.guess ] && rm dovecot-libsieve/config.guess || true
+	[ -f dovecot-libsieve/sieve.README ]    && rm dovecot-libsieve/sieve.README || true
+	[ -f dovecot-libsieve/sieve.ChangeLog ] && rm dovecot-libsieve/sieve.ChangeLog || true
+	# TODO: clean up autotools cruft from dovecot-libsieve
+	# Cleanup dovecot ManageSieve
+	[ ! -f dovecot-managesieve/Makefile ] || $(MAKE) -C dovecot-managesieve distclean
+	[ -f dovecot-managesieve/config.sub ]   && rm dovecot-managesieve/config.sub || true
+	[ -f dovecot-managesieve/config.guess ] && rm dovecot-managesieve/config.guess || true
+	[ -f dovecot-managesieve/managesieve.README ]    && rm dovecot-managesieve/managesieve.README || true
+	[ -f dovecot-managesieve/managesieve.ChangeLog ] && rm dovecot-managesieve/managesieve.ChangeLog || true
+	# TODO: clean up autotools cruft from dovecot-libsieve
 	rm -f src/plugins/drac/drac.so
 	dh_clean
 
