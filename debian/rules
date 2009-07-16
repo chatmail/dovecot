@@ -32,9 +32,7 @@ config.status: patch-stamp configure
 	            --with-pgsql \
 	            --with-mysql \
 	            --with-sqlite \
-	            --with-cyrus-sasl2 \
 	            --with-gssapi \
-	            --with-deliver \
 	            --with-ioloop=best \
 	            --enable-header-install \
 	            --host=$(DEB_HOST_GNU_TYPE) \
