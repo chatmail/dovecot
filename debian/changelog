@@ -1,4 +1,4 @@
-dovecot (1:1.2.1-2) UNRELEASED; urgency=low
+dovecot (1:1.2.1-2) unstable; urgency=low
 
   * Update to use default automake (Closes: #536880) now that current upstream
     successfully builds with 1.10 (was previously a problem in bug 473754.
