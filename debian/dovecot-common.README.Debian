@@ -17,6 +17,7 @@ be changed are:
   ----------
     * listen = [::] listens only for IPv6 connections now, if you want both
       IPv4 and IPv6 use listen = *, [::]
+
     * Quota plugin has completely new configuration. See
       http://wiki.dovecot.org/Quota/1.1
   
@@ -24,12 +25,19 @@ be changed are:
   ----------
     * The SIEVE plugin was changed from using a cmusieve-derived plugin to a
       native dovecot plugin. The configuration properties are identical,
-      however the plugin name has changed. To enable the SIEVE plugin in 1.2,
-      replace 'cmusieve' with 'sieve' in the mail_plugins value of the lda
-      protocol in the config file.
+      however the plugin name has changed. To support the SIEVE plugin in 1.2:
+        a) replace 'cmusieve' with 'sieve' in the mail_plugins value
+           of the lda protocol in the config file.
+        b) edit all sieve scripts to change the following requires (see
+           http://wiki.dovecot.org/LDA/Sieve/Dovecot#Migration_from_CMUSieve)
+           i.  replace imapflags with imap4flags
+           ii. convert notify usage to the new enotify
+
     * Renamed ssl_disable=yes to ssl=no.
+
     * Renamed auth_ntlm_use_winbind to auth_use_winbind, which also determines
       if GSS-SPNEGO is handled by GSSAPI or winbind. 
+
     * The sieve= and sieve_storage= settings need to be placed in the  plugin
       {}  section now and sieve_storage= needs to be renamed to sieve_dir=.
       This removes the duplication of these values with respect to the Sieve
