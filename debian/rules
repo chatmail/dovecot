@@ -74,7 +74,8 @@ build-stamp:  config.status
 	(cd dovecot-libsieve/ && ./configure --with-dovecot=../ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib \
-		--with-moduledir=\$${prefix}/lib/dovecot/modules)
+		--with-moduledir=\$${prefix}/lib/dovecot/modules) \
+		--disable-static
 	$(MAKE) -C dovecot-libsieve
 	# Dovecot managesieve module
 	(cd dovecot-managesieve/ && ./configure --with-dovecot=../ \
@@ -152,7 +153,7 @@ binary-arch: build install
 	dh_link -a
 	dh_strip -a
 	dh_compress -a
-	dh_fixperms -a -Xetc/dovecot/dovecot.conf -Xetc/dovecot/dovecot-ldap.conf -Xetc/dovecot/dovecot-sql.conf
+	dh_fixperms -a
 	dh_installdeb -a
 	dh_shlibdeps -a
 	dh_gencontrol -a
