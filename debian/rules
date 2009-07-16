@@ -74,8 +74,7 @@ build-stamp:  config.status
 	(cd dovecot-libsieve/ && ./configure --with-dovecot=../ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib \
-		--with-moduledir=\$${prefix}/lib/dovecot/modules) \
-		--disable-static
+		--enable-static=no )
 	$(MAKE) -C dovecot-libsieve
 	# Dovecot managesieve module
 	(cd dovecot-managesieve/ && ./configure --with-dovecot=../ \
