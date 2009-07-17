@@ -1,9 +1,13 @@
 dovecot (1:1.2.1-3) UNRELEASED; urgency=low
 
+  [Joel Johnson]
+  * Set default for mbox_write_locks to "fnctl dotlock" according to
+     Debian Policy (Closes: #537326)
+  [Jaldhar H. Vyas]
   * Remove unneeded build-dependencies on byacc and flex now that we no longer
     use cmusieve.
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 16 Jul 2009 17:05:45 -0400
+ -- Joel Johnson <mrjoel@lixil.net>  Fri, 17 Jul 2009 09:05:06 -0600
 
 dovecot (1:1.2.1-2) unstable; urgency=low
 

@@ -9,3 +9,4 @@ postgres-configure
 quota-mountpoint
 exec-check-for-none
 dovecot-ssl
+dovecot-mboxlocking

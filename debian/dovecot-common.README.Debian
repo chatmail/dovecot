@@ -4,6 +4,12 @@ Dovecot debian package
 Please refer to http://wiki.dovecot.org for the full documentation of this
 package and its configuration.
 
+Note that the default value for mbox_write_locks differs between Debian and
+upstream Dovecot. Running 'dovecot -n' to get a list of non-default settings
+will reflect this difference, even if not set in the config file.
+	Debian:  mbox_write_locks = "fnctl dotlock"
+	Dovecot: mbox_write_locks = "dotlock fnctl"
+
 Upgrading from 1.0 (lenny) to 1.2 (squeeze)
 --------------------------------------------
 Several configuration file values have changed between releases. If the
