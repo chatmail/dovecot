@@ -1,4 +1,4 @@
-dovecot (1:1.2.2-1) UNRELEASED; urgency=low
+dovecot (1:1.2.2-1) unstable; urgency=low
 
   [Joel Johnson]
   * New upstream version, updated ManageSieve patch
