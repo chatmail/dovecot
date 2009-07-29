@@ -1,9 +1,16 @@
 dovecot (1:1.2.2-1) UNRELEASED; urgency=low
 
   [Joel Johnson]
+  * New upstream version, updated ManageSieve patch
+     - fixes index corruption condition (Closes: #537388)
   * Set default for mbox_write_locks to "fnctl dotlock" according to
-     Debian Policy (Closes: #537326)
-  * Set build dependency to reflect MySQL 5.1 transition (requested in 538455)
+    Debian Policy (Closes: #537326)
+  * Set MySQL build dependency to use version-agnostic -dev package
+  * Drop postgres-configure patch, functionality included upstream
+  * Updated dovecot-libsieve to version 0.1.9
+     - fixes subaddress matching (Closes: #537386)
+     - check additional address-list headers (Closes: #537379)
+
   [Jaldhar H. Vyas]
   * Remove unneeded build-dependencies on byacc and flex now that we no longer
     use cmusieve.

@@ -53,14 +53,16 @@ config.status: patch-stamp configure
 	  cp -f /usr/share/misc/config.guess dovecot-libsieve/config.guess
 	cp dovecot-libsieve/ChangeLog dovecot-libsieve/sieve.ChangeLog
 	cp dovecot-libsieve/README dovecot-libsieve/sieve.README
+	cp dovecot-libsieve/NEWS dovecot-libsieve/sieve.NEWS
 	(cd dovecot-libsieve/ && autoheader && aclocal && automake --add-missing --copy && libtoolize -f -c && aclocal && autoconf)
 	# Dovecot managesieve module
 	-test -r /usr/share/misc/config.sub && \
 	  cp -f /usr/share/misc/config.sub dovecot-managesieve/config.sub
 	-test -r /usr/share/misc/config.guess && \
 	  cp -f /usr/share/misc/config.guess dovecot-managesieve/config.guess
-	cp dovecot-managesieve/README dovecot-managesieve/managesieve.README
 	cp dovecot-managesieve/ChangeLog dovecot-managesieve/managesieve.ChangeLog
+	cp dovecot-managesieve/README dovecot-managesieve/managesieve.README
+	cp dovecot-managesieve/NEWS dovecot-managesieve/managesieve.NEWS
 	(cd dovecot-managesieve/ && autoheader && aclocal && automake --add-missing --copy && libtoolize -f -c && aclocal && autoconf)
 
 build: build-stamp
@@ -99,6 +101,7 @@ clean1:
 	[ -f dovecot-libsieve/config.sub ]   && rm dovecot-libsieve/config.sub || true
 	[ -f dovecot-libsieve/config.guess ] && rm dovecot-libsieve/config.guess || true
 	[ -f dovecot-libsieve/sieve.README ]    && rm dovecot-libsieve/sieve.README || true
+	[ -f dovecot-libsieve/sieve.NEWS ]    && rm dovecot-libsieve/sieve.NEWS || true
 	[ -f dovecot-libsieve/sieve.ChangeLog ] && rm dovecot-libsieve/sieve.ChangeLog || true
 	# TODO: clean up autotools cruft from dovecot-libsieve
 	# Cleanup dovecot ManageSieve
@@ -106,6 +109,7 @@ clean1:
 	[ -f dovecot-managesieve/config.sub ]   && rm dovecot-managesieve/config.sub || true
 	[ -f dovecot-managesieve/config.guess ] && rm dovecot-managesieve/config.guess || true
 	[ -f dovecot-managesieve/managesieve.README ]    && rm dovecot-managesieve/managesieve.README || true
+	[ -f dovecot-managesieve/managesieve.NEWS ]    && rm dovecot-managesieve/managesieve.NEWS || true
 	[ -f dovecot-managesieve/managesieve.ChangeLog ] && rm dovecot-managesieve/managesieve.ChangeLog || true
 	# TODO: clean up autotools cruft from dovecot-libsieve
 	rm -f src/plugins/drac/drac.so

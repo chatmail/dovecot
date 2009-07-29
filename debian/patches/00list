@@ -5,7 +5,6 @@ dovecot-managesieve
 dovecot-sql
 dovecot-drac
 dovecot-quota
-postgres-configure
 quota-mountpoint
 exec-check-for-none
 dovecot-ssl
