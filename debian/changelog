@@ -1,11 +1,12 @@
-dovecot (1:1.2.2-2) UNRELEASED; urgency=low
+dovecot (1:1.2.2-2) unstable; urgency=high
 
+  * Er that should be fcntl not fnctl.  (Closes: #539474, #539486)
   * For the sake of completeness, fixed some errors in the example config file.
     (They are in the !include statements which are commented out by default 
     so it is unlikely that most users will actually be affected.)
     (Closes: #539391)
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 31 Jul 2009 17:36:26 -0400
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 01 Aug 2009 11:38:03 -0400
 
 dovecot (1:1.2.2-1) unstable; urgency=low
 

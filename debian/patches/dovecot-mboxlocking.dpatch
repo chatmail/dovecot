@@ -17,8 +17,8 @@ diff -urN dovecot-1.2.1/dovecot-example.conf dovecot-1.2.1-debian/dovecot-exampl
 +#
 +# The Debian value for mbox_write_locks differs from upstream Dovecot. It is
 +# changed to be compliant with Debian Policy (section 11.6) for NFS safety.
-+#       Dovecot: mbox_write_locks = dotlock fnctl
-+#       Debian:  mbox_write_locks = fnctl dotlock
++#       Dovecot: mbox_write_locks = dotlock fcntl
++#       Debian:  mbox_write_locks = fcntl dotlock
 +#
  #mbox_read_locks = fcntl
 -#mbox_write_locks = dotlock fcntl
@@ -34,7 +34,7 @@ diff -urN dovecot-1.2.1/src/master/master-settings.c dovecot-1.2.1-debian/src/ma
  	MEMBER(maildir_very_dirty_syncs) FALSE,
  	MEMBER(mbox_read_locks) "fcntl",
 -	MEMBER(mbox_write_locks) "dotlock fcntl",
-+	MEMBER(mbox_write_locks) "fnctl dotlock",
++	MEMBER(mbox_write_locks) "fcntl dotlock",
  	MEMBER(mbox_lock_timeout) 300,
  	MEMBER(mbox_dotlock_change_timeout) 120,
  	MEMBER(mbox_min_index_size) 0,
@@ -50,7 +50,7 @@ diff -urN dovecot-1.2.1/src/master/master-settings.c dovecot-1.2.1-debian/src/ma
 +		it to report based on strict Dovecot defaults
 +	*/
 +	struct settings dovecot_default_settings = default_settings;
-+	dovecot_default_settings.mbox_write_locks = "dotlock fnctl";
++	dovecot_default_settings.mbox_write_locks = "dotlock fcntl";
 +	sets[0] = &dovecot_default_settings;
  	sets[1] = set->defaults;
  
