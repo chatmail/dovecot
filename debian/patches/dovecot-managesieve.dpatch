@@ -1,20 +1,21 @@
 #! /bin/sh -e
 ## DP: Adds support for ManageSieve
 ## DP: Author: Stephan Bosch <stephan@rename-it.nl>
-## DP: Version: 0.11.7
+## DP: Version: 0.11.9
 
 # Copyright (c) 2006-2009 by Stephan Bosch <stephan@rename-it.nl>
 # This patch is licenced under LGPLv2.1
 
-# Patch obtained from http://hg.rename-it.nl/dovecot-1.2-managesieve-patch/archive/4ae2885866d1.tar.gz
+# Patch obtained from http://www.rename-it.nl/dovecot/1.2/dovecot-1.2.4-managesieve-0.11.9.diff.gz
 
 . $(dirname $0)/DPATCH
 
 exit 0
 @DPATCH@
-diff -urN dovecot-1.2.2/dovecot-example.conf dovecot-1.2.2-debian/dovecot-example.conf
---- dovecot-1.2.2/dovecot-example.conf	2009-07-27 00:57:30.000000000 +0000
-+++ dovecot-1.2.2-debian/dovecot-example.conf	2009-07-29 02:47:37.000000000 +0000
+Binary files dovecot-1.2.4.orig/dovecot-1.2.4-managesieve-0.11.9.diff.gz and dovecot-1.2.4/dovecot-1.2.4-managesieve-0.11.9.diff.gz differ
+diff -urN dovecot-1.2.4.orig/dovecot-example.conf dovecot-1.2.4/dovecot-example.conf
+--- dovecot-1.2.4.orig/dovecot-example.conf	2009-08-08 01:46:04.000000000 +0200
++++ dovecot-1.2.4/dovecot-example.conf	2009-08-29 17:20:49.000000000 +0200
 @@ -19,7 +19,7 @@
  # Base directory where to store runtime data.
  #base_dir = /var/run/dovecot/
@@ -106,9 +107,9 @@ diff -urN dovecot-1.2.2/dovecot-example.conf dovecot-1.2.2-debian/dovecot-exampl
  }
  
  # Config files can also be included:
-diff -urN dovecot-1.2.2/README.managesieve dovecot-1.2.2-debian/README.managesieve
---- dovecot-1.2.2/README.managesieve	1970-01-01 00:00:00.000000000 +0000
-+++ dovecot-1.2.2-debian/README.managesieve	2009-07-29 02:47:37.000000000 +0000
+diff -urN dovecot-1.2.4.orig/README.managesieve dovecot-1.2.4/README.managesieve
+--- dovecot-1.2.4.orig/README.managesieve	1970-01-01 01:00:00.000000000 +0100
++++ dovecot-1.2.4/README.managesieve	2009-08-29 17:20:49.000000000 +0200
 @@ -0,0 +1,29 @@
 +
 +MANAGESIEVE service support patch for Dovecot 1.2
@@ -139,9 +140,9 @@ diff -urN dovecot-1.2.2/README.managesieve dovecot-1.2.2-debian/README.managesie
 +Note that this patch adds configuration examples to the dovecot-example.conf 
 +configuration file example.
 +
-diff -urN dovecot-1.2.2/src/master/child-process.c dovecot-1.2.2-debian/src/master/child-process.c
---- dovecot-1.2.2/src/master/child-process.c	2009-04-02 18:00:40.000000000 +0000
-+++ dovecot-1.2.2-debian/src/master/child-process.c	2009-07-29 02:47:37.000000000 +0000
+diff -urN dovecot-1.2.4.orig/src/master/child-process.c dovecot-1.2.4/src/master/child-process.c
+--- dovecot-1.2.4.orig/src/master/child-process.c	2009-04-28 22:01:59.000000000 +0200
++++ dovecot-1.2.4/src/master/child-process.c	2009-08-29 17:20:49.000000000 +0200
 @@ -20,7 +20,8 @@
  	"imap",
  	"pop3",
@@ -168,9 +169,9 @@ diff -urN dovecot-1.2.2/src/master/child-process.c dovecot-1.2.2-debian/src/mast
  #ifndef HAVE_PR_SET_DUMPABLE
  		if (!settings_root->defaults->mail_drop_priv_before_exec) {
  			str_append(str, " (core not dumped - set mail_drop_priv_before_exec=yes)");
-diff -urN dovecot-1.2.2/src/master/child-process.h dovecot-1.2.2-debian/src/master/child-process.h
---- dovecot-1.2.2/src/master/child-process.h	2009-02-10 00:44:00.000000000 +0000
-+++ dovecot-1.2.2-debian/src/master/child-process.h	2009-07-29 02:47:37.000000000 +0000
+diff -urN dovecot-1.2.4.orig/src/master/child-process.h dovecot-1.2.4/src/master/child-process.h
+--- dovecot-1.2.4.orig/src/master/child-process.h	2009-02-23 19:26:01.000000000 +0100
++++ dovecot-1.2.4/src/master/child-process.h	2009-08-29 17:20:49.000000000 +0200
 @@ -10,6 +10,7 @@
  	PROCESS_TYPE_POP3,
  	PROCESS_TYPE_SSL_PARAM,
@@ -179,9 +180,9 @@ diff -urN dovecot-1.2.2/src/master/child-process.h dovecot-1.2.2-debian/src/mast
  
  	PROCESS_TYPE_MAX
  };
-diff -urN dovecot-1.2.2/src/master/listener.c dovecot-1.2.2-debian/src/master/listener.c
---- dovecot-1.2.2/src/master/listener.c	2009-06-01 00:36:49.000000000 +0000
-+++ dovecot-1.2.2-debian/src/master/listener.c	2009-07-29 02:47:37.000000000 +0000
+diff -urN dovecot-1.2.4.orig/src/master/listener.c dovecot-1.2.4/src/master/listener.c
+--- dovecot-1.2.4.orig/src/master/listener.c	2009-06-05 00:28:14.000000000 +0200
++++ dovecot-1.2.4/src/master/listener.c	2009-08-29 17:20:49.000000000 +0200
 @@ -130,6 +130,10 @@
  			check_conflicts_set(server->pop3, ip, port,
  					    "pop3", proto);
@@ -254,9 +255,9 @@ diff -urN dovecot-1.2.2/src/master/listener.c dovecot-1.2.2-debian/src/master/li
 +		}
  	}
  }
-diff -urN dovecot-1.2.2/src/master/login-process.c dovecot-1.2.2-debian/src/master/login-process.c
---- dovecot-1.2.2/src/master/login-process.c	2009-04-16 00:23:02.000000000 +0000
-+++ dovecot-1.2.2-debian/src/master/login-process.c	2009-07-29 02:47:37.000000000 +0000
+diff -urN dovecot-1.2.4.orig/src/master/login-process.c dovecot-1.2.4/src/master/login-process.c
+--- dovecot-1.2.4.orig/src/master/login-process.c	2009-04-28 22:01:59.000000000 +0200
++++ dovecot-1.2.4/src/master/login-process.c	2009-08-29 17:20:49.000000000 +0200
 @@ -72,8 +72,20 @@
  	group = i_new(struct login_group, 1);
  	group->refcount = 1;
@@ -312,9 +313,9 @@ diff -urN dovecot-1.2.2/src/master/login-process.c dovecot-1.2.2-debian/src/mast
  	if (*set->login_trusted_networks != '\0') {
  		env_put(t_strconcat("TRUSTED_NETWORKS=",
  				    set->login_trusted_networks, NULL));
-diff -urN dovecot-1.2.2/src/master/mail-process.c dovecot-1.2.2-debian/src/master/mail-process.c
---- dovecot-1.2.2/src/master/mail-process.c	2009-07-26 18:20:55.000000000 +0000
-+++ dovecot-1.2.2-debian/src/master/mail-process.c	2009-07-29 02:47:37.000000000 +0000
+diff -urN dovecot-1.2.4.orig/src/master/mail-process.c dovecot-1.2.4/src/master/mail-process.c
+--- dovecot-1.2.4.orig/src/master/mail-process.c	2009-08-08 01:46:04.000000000 +0200
++++ dovecot-1.2.4/src/master/mail-process.c	2009-08-29 17:20:49.000000000 +0200
 @@ -368,6 +368,15 @@
  	/* We care about POP3 UIDL format in all process types */
  	env_put(t_strconcat("POP3_UIDL_FORMAT=", set->pop3_uidl_format, NULL));
@@ -359,9 +360,9 @@ diff -urN dovecot-1.2.2/src/master/mail-process.c dovecot-1.2.2-debian/src/maste
  }
  
  void mail_processes_deinit(void)
-diff -urN dovecot-1.2.2/src/master/main.c dovecot-1.2.2-debian/src/master/main.c
---- dovecot-1.2.2/src/master/main.c	2009-05-20 17:44:08.000000000 +0000
-+++ dovecot-1.2.2-debian/src/master/main.c	2009-07-29 02:47:37.000000000 +0000
+diff -urN dovecot-1.2.4.orig/src/master/main.c dovecot-1.2.4/src/master/main.c
+--- dovecot-1.2.4.orig/src/master/main.c	2009-05-20 23:48:16.000000000 +0200
++++ dovecot-1.2.4/src/master/main.c	2009-08-29 17:20:49.000000000 +0200
 @@ -207,6 +207,8 @@
  			return TRUE;
  		if (server->pop3 != NULL && have_stderr_set(server->pop3))
@@ -371,9 +372,9 @@ diff -urN dovecot-1.2.2/src/master/main.c dovecot-1.2.2-debian/src/master/main.c
  
  		server = server->next;
  	}
-diff -urN dovecot-1.2.2/src/master/master-settings.c dovecot-1.2.2-debian/src/master/master-settings.c
---- dovecot-1.2.2/src/master/master-settings.c	2009-07-27 01:55:40.000000000 +0000
-+++ dovecot-1.2.2-debian/src/master/master-settings.c	2009-07-29 02:47:37.000000000 +0000
+diff -urN dovecot-1.2.4.orig/src/master/master-settings.c dovecot-1.2.4/src/master/master-settings.c
+--- dovecot-1.2.4.orig/src/master/master-settings.c	2009-08-08 01:46:04.000000000 +0200
++++ dovecot-1.2.4/src/master/master-settings.c	2009-08-29 17:20:49.000000000 +0200
 @@ -296,6 +296,11 @@
  	MEMBER(dict_db_config) NULL,
  	MEMBER(dict_process_count) 1,
@@ -654,9 +655,9 @@ diff -urN dovecot-1.2.2/src/master/master-settings.c dovecot-1.2.2-debian/src/ma
  	}
  	settings_dump(setting_defs, sets, set_names, count, nondefaults, 0);
  	namespace_settings_dump(set->namespaces, nondefaults);
-diff -urN dovecot-1.2.2/src/master/master-settings-defs.c dovecot-1.2.2-debian/src/master/master-settings-defs.c
---- dovecot-1.2.2/src/master/master-settings-defs.c	2009-04-16 23:04:28.000000000 +0000
-+++ dovecot-1.2.2-debian/src/master/master-settings-defs.c	2009-07-29 02:47:37.000000000 +0000
+diff -urN dovecot-1.2.4.orig/src/master/master-settings-defs.c dovecot-1.2.4/src/master/master-settings-defs.c
+--- dovecot-1.2.4.orig/src/master/master-settings-defs.c	2009-04-28 22:01:59.000000000 +0200
++++ dovecot-1.2.4/src/master/master-settings-defs.c	2009-08-29 17:20:49.000000000 +0200
 @@ -130,5 +130,10 @@
  	DEF_STR(dict_db_config),
  	DEF_INT(dict_process_count),
@@ -668,9 +669,9 @@ diff -urN dovecot-1.2.2/src/master/master-settings-defs.c dovecot-1.2.2-debian/s
 +
  	{ 0, NULL, 0 }
  };
-diff -urN dovecot-1.2.2/src/master/master-settings.h dovecot-1.2.2-debian/src/master/master-settings.h
---- dovecot-1.2.2/src/master/master-settings.h	2009-07-27 01:53:22.000000000 +0000
-+++ dovecot-1.2.2-debian/src/master/master-settings.h	2009-07-29 02:47:37.000000000 +0000
+diff -urN dovecot-1.2.4.orig/src/master/master-settings.h dovecot-1.2.4/src/master/master-settings.h
+--- dovecot-1.2.4.orig/src/master/master-settings.h	2009-08-08 01:46:04.000000000 +0200
++++ dovecot-1.2.4/src/master/master-settings.h	2009-08-29 17:20:49.000000000 +0200
 @@ -4,10 +4,11 @@
  #include "network.h"
  

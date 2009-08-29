@@ -3,8 +3,12 @@ dovecot (1:1.2.4-1) unstable; urgency=low
   * New upstream release. (Closes: #537186, #540058)
   * Bumped Standards-Version to 3.8.3, no changes needed.
   * debian/control: only suggests ntp. (Closes: #542152)
+  * debian/patches/dovecot-managesieve-dist.dpatch: updated to the 0.11.9
+    release. (Closes: #539527)
+  * debian/rules: dovecot should be started with sequence number 20.
+    (Closes: #543473)
 
- -- Fabio Tranchitella <kobold@debian.org>  Sat, 29 Aug 2009 17:15:42 +0200
+ -- Fabio Tranchitella <kobold@debian.org>  Sat, 29 Aug 2009 17:27:59 +0200
 
 dovecot (1:1.2.2-2) unstable; urgency=high
 

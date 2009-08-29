@@ -153,7 +153,7 @@ binary-arch: build install
 	dh_installexamples -a
 	dh_installpam -a
 	mv $(CURDIR)/debian/dovecot-common/etc/pam.d/dovecot-common $(CURDIR)/debian/dovecot-common/etc/pam.d/dovecot
-	dh_installinit -pdovecot-common --init-script=dovecot -u"defaults 24"
+	dh_installinit -pdovecot-common --init-script=dovecot -u"defaults 20"
 	dh_installman -a
 	dh_installman -p dovecot-common debian/maildirmake.dovecot.1 debian/dovecot.1 debian/dovecot.8 debian/dovecotpw.1
 	dh_installchangelogs -a ChangeLog
