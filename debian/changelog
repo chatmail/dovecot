@@ -1,3 +1,9 @@
+dovecot (1:1.2.5-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Mon, 14 Sep 2009 14:34:06 +0200
+
 dovecot (1:1.2.4-2) unstable; urgency=low
 
   * debian/patches/dovecot-libsieve.dpatch: updated to 0.1.12.
