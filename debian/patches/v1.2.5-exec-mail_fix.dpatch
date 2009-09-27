@@ -1,0 +1,30 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+##
+## DP: Author: Timo Sirainen
+## DP: Fix #546695
+
+# Patch obtained from http://hg.dovecot.org/dovecot-1.2/rev/0f04c7da33f1
+
+@DPATCH@
+diff -urNad dovecot-1.2.5~/src/master/main.c dovecot-1.2.5/src/master/main.c
+--- dovecot-1.2.5~/src/master/main.c	2009-09-11 18:25:25.000000000 +0200
++++ dovecot-1.2.5/src/master/main.c	2009-09-24 02:09:03.000000000 +0200
+@@ -614,8 +614,6 @@
+ 			sizeof(ssl_manual_key_password));
+ 	} T_END;
+ 
+-	open_std_fds();
+-
+ 	/* save TZ environment. AIX depends on it to get the timezone
+ 	   correctly. */
+ 	env_tz = getenv("TZ");
+@@ -636,6 +634,9 @@
+ 		mail_process_exec(exec_protocol, exec_args);
+ 	}
+ 
++	/* closes stdin/stdout, must be after --exec-mail handling */
++	open_std_fds();
++
+ 	/* log all errors to both stderr and log file until we've finished
+ 	   startup. */
+ 	set_tee_logfile(settings_root->defaults);
