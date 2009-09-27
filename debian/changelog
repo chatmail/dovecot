@@ -1,8 +1,10 @@
 dovecot (1:1.2.5-2) unstable; urgency=low
 
   * debian/dpatches/v1.2.5-exec-mail_fix.dpatch: added. (Closes: #546694, 546695)
+  * debian/dovecot-common.dirs: removed /etc, /etc/ssl/{private,certs}, they
+    are handled by openssl; this should fix the piuparts test.
 
- -- Fabio Tranchitella <kobold@debian.org>  Sun, 27 Sep 2009 20:41:36 +0200
+ -- Fabio Tranchitella <kobold@debian.org>  Sun, 27 Sep 2009 20:51:31 +0200
 
 dovecot (1:1.2.5-1) unstable; urgency=low
 
