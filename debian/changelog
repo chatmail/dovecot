@@ -1,3 +1,9 @@
+dovecot (1:1.2.6-1) unstable; urgency=low
+
+  * New upstream relese.
+
+ -- Fabio Tranchitella <kobold@debian.org>  Mon, 12 Oct 2009 06:52:01 +0000
+
 dovecot (1:1.2.5-2) unstable; urgency=low
 
   * debian/dpatches/v1.2.5-exec-mail_fix.dpatch: added.
