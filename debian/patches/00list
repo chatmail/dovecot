@@ -9,4 +9,3 @@ quota-mountpoint
 exec-check-for-none
 dovecot-ssl
 dovecot-mboxlocking
-v1.2.5-exec-mail_fix
