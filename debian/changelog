@@ -1,3 +1,11 @@
+dovecot (1:1.2.7-1) unstable; urgency=low
+
+  * New upstream release.
+  * debian/dovecot-common.init: use $CONF when starting the daemon.
+    (Closes: #549944)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Sat, 14 Nov 2009 10:13:26 +0100
+
 dovecot (1:1.2.6-1) unstable; urgency=low
 
   * New upstream relese.
