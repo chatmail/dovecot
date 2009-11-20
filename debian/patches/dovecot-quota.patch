@@ -1,0 +1,15 @@
+Author: Mark Hymers <mhy@debian.org>
+Description: allow imap_quota to be loaded without quota plugin
+Origin: vendor, http://bugs.debian.org/cgi-bin/bugreport.cgi?msg=10;bug=484677
+Bug-Debian: http://bugs.debian.org/484677
+
+--- dovecot-1.2.7.orig/src/plugins/imap-quota/Makefile.am
++++ dovecot-1.2.7/src/plugins/imap-quota/Makefile.am
+@@ -9,6 +9,7 @@
+ imap_moduledir = $(moduledir)/imap
+ 
+ lib11_imap_quota_plugin_la_LDFLAGS = -module -avoid-version
++lib11_imap_quota_plugin_la_LIBADD = ../quota/lib10_quota_plugin.la
+ 
+ imap_module_LTLIBRARIES = \
+ 	lib11_imap_quota_plugin.la

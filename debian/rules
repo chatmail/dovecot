@@ -10,23 +10,10 @@
 DEB_HOST_GNU_TYPE   ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 
-
-ifneq (,$(findstring debug,$(DEB_BUILD_OPTIONS)))
-	CFLAGS += -g
-endif
-ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
-	INSTALL_PROGRAM += -s
-endif
-
-config.status: patch-stamp configure
+config-stamp: configure
 	dh_testdir
-	-test -r /usr/share/misc/config.sub && \
-	  cp -f /usr/share/misc/config.sub config.sub
-	-test -r /usr/share/misc/config.guess && \
-	  cp -f /usr/share/misc/config.guess config.guess
-	aclocal && automake --add-missing --copy && libtoolize -f -c && aclocal && autoconf
-	# Add here commands to configure the package.
-	./configure --with-ldap \
+	# Dovecot
+	sh configure --with-ldap \
 	            --with-ssl=openssl \
 	            --with-db \
 	            --with-pgsql \
@@ -46,72 +33,51 @@ config.status: patch-stamp configure
 	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
 	            --disable-rpath \
 	            --disable-static
+	$(MAKE) dovecot-config
 	# Dovecot sieve plugin
-	-test -r /usr/share/misc/config.sub && \
-	  cp -f /usr/share/misc/config.sub dovecot-libsieve/config.sub
-	-test -r /usr/share/misc/config.guess && \
-	  cp -f /usr/share/misc/config.guess dovecot-libsieve/config.guess
-	cp dovecot-libsieve/ChangeLog dovecot-libsieve/sieve.ChangeLog
-	cp dovecot-libsieve/README dovecot-libsieve/sieve.README
-	cp dovecot-libsieve/NEWS dovecot-libsieve/sieve.NEWS
-	(cd dovecot-libsieve/ && autoheader && aclocal && automake --add-missing --copy && libtoolize -f -c && aclocal && autoconf)
-	# Dovecot managesieve module
-	-test -r /usr/share/misc/config.sub && \
-	  cp -f /usr/share/misc/config.sub dovecot-managesieve/config.sub
-	-test -r /usr/share/misc/config.guess && \
-	  cp -f /usr/share/misc/config.guess dovecot-managesieve/config.guess
-	cp dovecot-managesieve/ChangeLog dovecot-managesieve/managesieve.ChangeLog
-	cp dovecot-managesieve/README dovecot-managesieve/managesieve.README
-	cp dovecot-managesieve/NEWS dovecot-managesieve/managesieve.NEWS
-	(cd dovecot-managesieve/ && autoheader && aclocal && automake --add-missing --copy && libtoolize -f -c && aclocal && autoconf)
-
-build: build-stamp
-build-stamp:  config.status
-	dh_testdir
-	# Add here commands to compile the package.
-	$(MAKE)
-	# Dovecot sieve plugin
-	(cd dovecot-libsieve/ && ./configure --with-dovecot=../ \
+	(cd libsieve/ && sh configure --with-dovecot=../ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib \
 		--enable-static=no )
-	$(MAKE) -C dovecot-libsieve
+	cp libsieve/ChangeLog libsieve/sieve.ChangeLog
+	cp libsieve/README libsieve/sieve.README
+	cp libsieve/NEWS libsieve/sieve.NEWS
 	# Dovecot managesieve module
-	(cd dovecot-managesieve/ && ./configure --with-dovecot=../ \
-		--with-dovecot-sieve=../dovecot-libsieve/ \
+	(cd managesieve/ && sh configure --with-dovecot=../ \
+		--with-dovecot-sieve=../libsieve/ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib)
-	$(MAKE) -C dovecot-managesieve
+	cp managesieve/ChangeLog managesieve/managesieve.ChangeLog
+	cp managesieve/README managesieve/managesieve.README
+	cp managesieve/NEWS managesieve/managesieve.NEWS
+	touch config-stamp
+
+build: build-stamp
+build-stamp:  config-stamp
+	dh_testdir
+	# Dovecot
+	$(MAKE)
+	# Dovecot sieve plugin
+	$(MAKE) -C libsieve
+	# Dovecot managesieve module
+	$(MAKE) -C managesieve
 	# DRAC
 	cd src/plugins/drac && $(MAKE)
 	touch build-stamp
 
-clean: clean1 unpatch
-clean1:
+clean:
 	dh_testdir
 	dh_testroot
-	rm -f build-stamp 
+	rm -f build-stamp config-stamp
 	# Cleanup dovecot itself
 	[ ! -f Makefile ] || $(MAKE) distclean
-	rm -f conftest conftest.o config.log config.cache config.status ylwrap
-	[ -f config.sub.orig ]   && mv config.sub.orig   config.sub || true
-	[ -f config.guess.orig ] && mv config.guess.orig config.guess || true
 	# Cleanup dovecot sieve plugin
-	[ ! -f dovecot-libsieve/Makefile ] || $(MAKE) -C dovecot-libsieve distclean
-	[ -f dovecot-libsieve/config.sub ]   && rm dovecot-libsieve/config.sub || true
-	[ -f dovecot-libsieve/config.guess ] && rm dovecot-libsieve/config.guess || true
-	[ -f dovecot-libsieve/sieve.README ]    && rm dovecot-libsieve/sieve.README || true
-	[ -f dovecot-libsieve/sieve.NEWS ]    && rm dovecot-libsieve/sieve.NEWS || true
-	[ -f dovecot-libsieve/sieve.ChangeLog ] && rm dovecot-libsieve/sieve.ChangeLog || true
-	# TODO: clean up autotools cruft from dovecot-libsieve
+	[ ! -f libsieve/Makefile ] || $(MAKE) -C libsieve distclean
+	rm -f libsieve/sieve.README libsieve/sieve.NEWS libsieve/sieve.ChangeLog
 	# Cleanup dovecot ManageSieve
-	[ ! -f dovecot-managesieve/Makefile ] || $(MAKE) -C dovecot-managesieve distclean
-	[ -f dovecot-managesieve/config.sub ]   && rm dovecot-managesieve/config.sub || true
-	[ -f dovecot-managesieve/config.guess ] && rm dovecot-managesieve/config.guess || true
-	[ -f dovecot-managesieve/managesieve.README ]    && rm dovecot-managesieve/managesieve.README || true
-	[ -f dovecot-managesieve/managesieve.NEWS ]    && rm dovecot-managesieve/managesieve.NEWS || true
-	[ -f dovecot-managesieve/managesieve.ChangeLog ] && rm dovecot-managesieve/managesieve.ChangeLog || true
-	# TODO: clean up autotools cruft from dovecot-libsieve
+	[ ! -f managesieve/Makefile ] || $(MAKE) -C managesieve distclean
+	rm -f managesieve/managesieve.README managesieve/managesieve.NEWS managesieve/managesieve.ChangeLog
+	# Cleanup DRAC
 	rm -f src/plugins/drac/drac.so
 	dh_clean
 
@@ -120,10 +86,9 @@ install: build
 	dh_testroot
 	dh_clean -k
 	dh_installdirs
-	# Add here commands to install the package into debian/dovecot.
-	$(MAKE) install prefix=$(CURDIR)/debian/dovecot-common/usr sysconfdir=$(CURDIR)/debian/dovecot-common/etc/dovecot
-	$(MAKE) -C dovecot-libsieve install DESTDIR=$(CURDIR)/debian/dovecot-common
-	$(MAKE) -C dovecot-managesieve install DESTDIR=$(CURDIR)/debian/dovecot-common
+	$(MAKE) install DESTDIR=$(CURDIR)/debian/dovecot-common
+	$(MAKE) -C libsieve install DESTDIR=$(CURDIR)/debian/dovecot-common
+	$(MAKE) -C managesieve install DESTDIR=$(CURDIR)/debian/dovecot-common
 	cp $(CURDIR)/src/plugins/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-ldap-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-ldap.conf
@@ -169,5 +134,3 @@ binary-arch: build install
 
 binary: binary-indep binary-arch
 .PHONY: build clean binary-indep binary-arch binary install 
-
-include /usr/share/dpatch/dpatch.make

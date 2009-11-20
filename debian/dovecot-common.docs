@@ -1,9 +1,9 @@
 NEWS
 README
 TODO
-dovecot-libsieve/sieve.README
-dovecot-libsieve/sieve.NEWS
-dovecot-libsieve/sieve.ChangeLog
-dovecot-managesieve/managesieve.README
-dovecot-managesieve/managesieve.NEWS
-dovecot-managesieve/managesieve.ChangeLog
+libsieve/sieve.README
+libsieve/sieve.NEWS
+libsieve/sieve.ChangeLog
+managesieve/managesieve.README
+managesieve/managesieve.NEWS
+managesieve/managesieve.ChangeLog

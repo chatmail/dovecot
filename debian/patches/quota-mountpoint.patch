@@ -1,0 +1,27 @@
+Author: Jaldhar H. Vyas <jaldhar@debian.org>
+Description: fixes missing get_mountpoint() error by statically linking in the mountpoint code.
+
+--- dovecot-1.2.7.orig/src/plugins/quota/Makefile.am
++++ dovecot-1.2.7/src/plugins/quota/Makefile.am
+@@ -13,6 +13,11 @@
+ module_LTLIBRARIES = \
+ 	lib10_quota_plugin.la
+ 
++# get some functions included which only plugins use. liblib should probably
++# be a shared library so this wouldn't be needed.
++unused_sources = \
++	../../lib/mountpoint.c
++
+ quota_dist_sources = \
+ 	quota.c \
+ 	quota-count.c \
+@@ -21,7 +26,8 @@
+ 	quota-dirsize.c \
+ 	quota-maildir.c \
+         quota-plugin.c \
+-	quota-storage.c
++	quota-storage.c \
++	$(unused_sources)
+ 
+ lib10_quota_plugin_la_SOURCES = \
+ 	$(quota_dist_sources) \

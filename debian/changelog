@@ -1,3 +1,10 @@
+dovecot (1:1.2.8-1) UNRELEASED; urgency=low
+
+  * New upstream release.
+  * Switched to the new source format "3.0 (quilt)"
+
+ -- Marco Nenciarini <mnencia@debian.org>  Fri, 20 Nov 2009 17:53:32 +0100
+
 dovecot (1:1.2.7-1) unstable; urgency=low
 
   * New upstream release.
