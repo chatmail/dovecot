@@ -1,9 +1,22 @@
 dovecot (1:1.2.8-1) UNRELEASED; urgency=low
 
   * New upstream release.
-  * Switched to the new source format "3.0 (quilt)"
+  * Added myself to uploaders.
+  * Switched to the new source format "3.0 (quilt)":
+    - removed dpatch from build-depends
+    - removed debian/README.source because now we use only standard
+      dpkg features
+    - regenerated all patches
+  * Prepared to switch to multi-origin source:
+    - recreated dovecot-libsieve.patch and dovecot-managesieve-dist.patch
+      starting from the upstream tarball
+    - removed all autotools related build-depends and build-conflict
+    - renamed dovecot-libsieve and dovecot-managesieve directories
+      to libsieve and managesieve.
+  * debian/rules: Moved the configuration of libsieve and managesieve from
+    the build phase to the configuration phase
 
- -- Marco Nenciarini <mnencia@debian.org>  Fri, 20 Nov 2009 17:53:32 +0100
+ -- Marco Nenciarini <mnencia@debian.org>  Sun, 22 Nov 2009 11:28:48 +0100
 
 dovecot (1:1.2.7-1) unstable; urgency=low
 
