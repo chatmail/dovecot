@@ -1,4 +1,4 @@
-dovecot (1:1.2.8-1) UNRELEASED; urgency=high
+dovecot (1:1.2.8-1) unstable; urgency=high
 
   [ Marco Nenciarini ]
   * New upstream release. (Closes: #557601)
@@ -22,7 +22,7 @@ dovecot (1:1.2.8-1) UNRELEASED; urgency=high
     (Closes: #554710)
   * Fixed some stray libexec'isms in the default configuration.
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 23 Nov 2009 16:24:07 -0500
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 23 Nov 2009 17:04:14 -0500
 
 dovecot (1:1.2.7-1) unstable; urgency=low
 
