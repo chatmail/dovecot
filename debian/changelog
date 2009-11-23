@@ -1,6 +1,6 @@
-dovecot (1:1.2.8-1) UNRELEASED; urgency=low
+dovecot (1:1.2.8-1) UNRELEASED; urgency=high
 
-  * New upstream release.
+  * New upstream release. (Closes: #557601)
   * Added myself to uploaders.
   * Switched to the new source format "3.0 (quilt)":
     - removed dpatch from build-depends
@@ -16,7 +16,7 @@ dovecot (1:1.2.8-1) UNRELEASED; urgency=low
   * debian/rules: Moved the configuration of libsieve and managesieve from
     the build phase to the configuration phase
 
- -- Marco Nenciarini <mnencia@debian.org>  Sun, 22 Nov 2009 11:28:48 +0100
+ -- Marco Nenciarini <mnencia@debian.org>  Mon, 23 Nov 2009 11:50:36 +0100
 
 dovecot (1:1.2.7-1) unstable; urgency=low
 
