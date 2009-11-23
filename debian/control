@@ -61,3 +61,16 @@ Description: secure POP3 server that supports mbox and maildir mailboxes
  also be pretty fast, extensible, and portable.
  .
  This package contains the dovecot POP3 server.
+
+Package: dovecot-dbg
+Section: debug
+Priority: extra
+Architecture: any
+Depends: dovecot-common (= ${binary:Version})
+Description: debug symbols for Dovecot
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It should
+ also be pretty fast, extensible, and portable.
+ .
+ This package contains debug symbols for Dovecot.

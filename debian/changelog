@@ -1,5 +1,6 @@
 dovecot (1:1.2.8-1) UNRELEASED; urgency=high
 
+  [ Marco Nenciarini ]
   * New upstream release. (Closes: #557601)
   * Added myself to uploaders.
   * Switched to the new source format "3.0 (quilt)":
@@ -16,7 +17,11 @@ dovecot (1:1.2.8-1) UNRELEASED; urgency=high
   * debian/rules: Moved the configuration of libsieve and managesieve from
     the build phase to the configuration phase
 
- -- Marco Nenciarini <mnencia@debian.org>  Mon, 23 Nov 2009 11:50:36 +0100
+  [ Jaldhar H. Vyas ]
+  * Added dovecot-dbg package  with debugging symbols.  Thanks Stephan Bosch.
+    (Closes: #554710)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 23 Nov 2009 10:41:29 -0500
 
 dovecot (1:1.2.7-1) unstable; urgency=low
 
