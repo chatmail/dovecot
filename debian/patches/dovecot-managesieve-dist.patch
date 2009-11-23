@@ -2694,10 +2694,10 @@ Index: dovecot-1.2.7/managesieve/README
 +listen = *:2000
 +    Interface and port on which the daemon listens for incoming connections.
 +
-+login_executable = /usr/libexec/dovecot/managesieve-login
++login_executable = /usr/lib/dovecot/managesieve-login
 +    Login executable location. 
 +
-+mail_executable = /usr/libexec/dovecot/managesieve
++mail_executable = /usr/lib/dovecot/managesieve
 +    The managesieve executable location. For examples how this could be applied,
 +    refer to the explanation of the mail_executable setting for IMAP. 
 +    
