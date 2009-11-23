@@ -1,10 +1,11 @@
 Author: Stephan Bosch <stephan@rename-it.nl>
 Description: Adds support for ManageSieve
-Origin: http://www.rename-it.nl/dovecot/1.2/dovecot-1.2.7-managesieve-0.11.9.diff.gz
-Last-Update: 2009-11-14
+Origin: http://www.rename-it.nl/dovecot/1.2/dovecot-1.2.8-managesieve-0.11.9.diff.gz
+Last-Update: 2009-11-23
 
+diff -r ee1782019a60 README.managesieve
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/README.managesieve	Sat Nov 14 14:01:28 2009 +0100
++++ b/README.managesieve	Mon Nov 23 12:21:06 2009 +0100
 @@ -0,0 +1,29 @@
 +
 +MANAGESIEVE service support patch for Dovecot 1.2
@@ -35,9 +36,9 @@ Last-Update: 2009-11-14
 +Note that this patch adds configuration examples to the dovecot-example.conf 
 +configuration file example.
 +
-diff -r 4e001a34078e dovecot-example.conf
---- a/dovecot-example.conf	Mon Nov 09 21:38:16 2009 -0500
-+++ b/dovecot-example.conf	Sat Nov 14 14:01:28 2009 +0100
+diff -r ee1782019a60 dovecot-example.conf
+--- a/dovecot-example.conf	Thu Nov 19 19:32:13 2009 -0500
++++ b/dovecot-example.conf	Mon Nov 23 12:21:06 2009 +0100
 @@ -19,7 +19,7 @@
  # Base directory where to store runtime data.
  #base_dir = /var/run/dovecot/
@@ -69,7 +70,7 @@ diff -r 4e001a34078e dovecot-example.conf
  #listen = *
  
  # Disable LOGIN command and all other plaintext authentications unless
-@@ -696,6 +700,42 @@
+@@ -696,6 +700,38 @@
  }
  
  ##
@@ -94,25 +95,21 @@ diff -r 4e001a34078e dovecot-example.conf
 +  #  %o - total number of bytes sent to client
 +  #managesieve_logout_format = bytes=%i/%o
 +
-+  # If, for some inobvious reason, the sieve_storage remains unset, the 
-+  # ManageSieve daemon uses the specification of the mail_location to find out 
-+  # where to store the sieve files (see explaination in README.managesieve). 
-+  # The example below, when uncommented, overrides any global mail_location 
-+  # specification and stores all the scripts in '~/mail/sieve' if sieve_storage 
-+  # is unset. However, you should always use the sieve_storage setting.
-+  # mail_location = mbox:~/mail
-+
 +  # To fool ManageSieve clients that are focused on timesieved you can
 +  # specify the IMPLEMENTATION capability that the dovecot reports to clients 
 +  # (default: "dovecot").
 +  #managesieve_implementation_string = Cyrus timsieved v2.2.13
++
++  # The ManageSieve service also uses the sieve and sieve_dir settings
++  # of the Sieve plugin. These are configured in the plugin {} section of
++  # this config file. 
 +}
 +
 +##
  ## LDA specific settings
  ##
  
-@@ -1211,6 +1251,16 @@
+@@ -1211,6 +1247,16 @@
    # Available fields: uid, box, msgid, from, subject, size, vsize, flags
    # size and vsize are available only for expunge and copy events.
    #mail_log_fields = uid box msgid size
@@ -129,9 +126,9 @@ diff -r 4e001a34078e dovecot-example.conf
  }
  
  # Config files can also be included. deliver doesn't support them currently.
-diff -r 4e001a34078e src/master/child-process.c
---- a/src/master/child-process.c	Mon Nov 09 21:38:16 2009 -0500
-+++ b/src/master/child-process.c	Sat Nov 14 14:01:28 2009 +0100
+diff -r ee1782019a60 src/master/child-process.c
+--- a/src/master/child-process.c	Thu Nov 19 19:32:13 2009 -0500
++++ b/src/master/child-process.c	Mon Nov 23 12:21:06 2009 +0100
 @@ -20,7 +20,8 @@
  	"imap",
  	"pop3",
@@ -158,9 +155,9 @@ diff -r 4e001a34078e src/master/child-process.c
  #ifndef HAVE_PR_SET_DUMPABLE
  		if (!settings_root->defaults->mail_drop_priv_before_exec) {
  			str_append(str, " (core not dumped - set mail_drop_priv_before_exec=yes)");
-diff -r 4e001a34078e src/master/child-process.h
---- a/src/master/child-process.h	Mon Nov 09 21:38:16 2009 -0500
-+++ b/src/master/child-process.h	Sat Nov 14 14:01:28 2009 +0100
+diff -r ee1782019a60 src/master/child-process.h
+--- a/src/master/child-process.h	Thu Nov 19 19:32:13 2009 -0500
++++ b/src/master/child-process.h	Mon Nov 23 12:21:06 2009 +0100
 @@ -10,6 +10,7 @@
  	PROCESS_TYPE_POP3,
  	PROCESS_TYPE_SSL_PARAM,
@@ -169,9 +166,9 @@ diff -r 4e001a34078e src/master/child-process.h
  
  	PROCESS_TYPE_MAX
  };
-diff -r 4e001a34078e src/master/listener.c
---- a/src/master/listener.c	Mon Nov 09 21:38:16 2009 -0500
-+++ b/src/master/listener.c	Sat Nov 14 14:01:28 2009 +0100
+diff -r ee1782019a60 src/master/listener.c
+--- a/src/master/listener.c	Thu Nov 19 19:32:13 2009 -0500
++++ b/src/master/listener.c	Mon Nov 23 12:21:06 2009 +0100
 @@ -130,6 +130,10 @@
  			check_conflicts_set(server->pop3, ip, port,
  					    "pop3", proto);
@@ -244,9 +241,9 @@ diff -r 4e001a34078e src/master/listener.c
 +		}
  	}
  }
-diff -r 4e001a34078e src/master/login-process.c
---- a/src/master/login-process.c	Mon Nov 09 21:38:16 2009 -0500
-+++ b/src/master/login-process.c	Sat Nov 14 14:01:28 2009 +0100
+diff -r ee1782019a60 src/master/login-process.c
+--- a/src/master/login-process.c	Thu Nov 19 19:32:13 2009 -0500
++++ b/src/master/login-process.c	Mon Nov 23 12:21:06 2009 +0100
 @@ -72,8 +72,20 @@
  	group = i_new(struct login_group, 1);
  	group->refcount = 1;
@@ -302,9 +299,9 @@ diff -r 4e001a34078e src/master/login-process.c
  	if (*set->login_trusted_networks != '\0') {
  		env_put(t_strconcat("TRUSTED_NETWORKS=",
  				    set->login_trusted_networks, NULL));
-diff -r 4e001a34078e src/master/mail-process.c
---- a/src/master/mail-process.c	Mon Nov 09 21:38:16 2009 -0500
-+++ b/src/master/mail-process.c	Sat Nov 14 14:01:28 2009 +0100
+diff -r ee1782019a60 src/master/mail-process.c
+--- a/src/master/mail-process.c	Thu Nov 19 19:32:13 2009 -0500
++++ b/src/master/mail-process.c	Mon Nov 23 12:21:06 2009 +0100
 @@ -372,6 +372,15 @@
  	/* We care about POP3 UIDL format in all process types */
  	env_put(t_strconcat("POP3_UIDL_FORMAT=", set->pop3_uidl_format, NULL));
@@ -349,9 +346,9 @@ diff -r 4e001a34078e src/master/mail-process.c
  }
  
  void mail_processes_deinit(void)
-diff -r 4e001a34078e src/master/main.c
---- a/src/master/main.c	Mon Nov 09 21:38:16 2009 -0500
-+++ b/src/master/main.c	Sat Nov 14 14:01:28 2009 +0100
+diff -r ee1782019a60 src/master/main.c
+--- a/src/master/main.c	Thu Nov 19 19:32:13 2009 -0500
++++ b/src/master/main.c	Mon Nov 23 12:21:06 2009 +0100
 @@ -247,6 +247,8 @@
  			return TRUE;
  		if (server->pop3 != NULL && have_stderr_set(server->pop3))
@@ -361,9 +358,9 @@ diff -r 4e001a34078e src/master/main.c
  
  		server = server->next;
  	}
-diff -r 4e001a34078e src/master/master-settings-defs.c
---- a/src/master/master-settings-defs.c	Mon Nov 09 21:38:16 2009 -0500
-+++ b/src/master/master-settings-defs.c	Sat Nov 14 14:01:28 2009 +0100
+diff -r ee1782019a60 src/master/master-settings-defs.c
+--- a/src/master/master-settings-defs.c	Thu Nov 19 19:32:13 2009 -0500
++++ b/src/master/master-settings-defs.c	Mon Nov 23 12:21:06 2009 +0100
 @@ -131,5 +131,10 @@
  	DEF_STR(dict_db_config),
  	DEF_INT(dict_process_count),
@@ -375,9 +372,9 @@ diff -r 4e001a34078e src/master/master-settings-defs.c
 +
  	{ 0, NULL, 0 }
  };
-diff -r 4e001a34078e src/master/master-settings.c
---- a/src/master/master-settings.c	Mon Nov 09 21:38:16 2009 -0500
-+++ b/src/master/master-settings.c	Sat Nov 14 14:01:28 2009 +0100
+diff -r ee1782019a60 src/master/master-settings.c
+--- a/src/master/master-settings.c	Thu Nov 19 19:32:13 2009 -0500
++++ b/src/master/master-settings.c	Mon Nov 23 12:21:06 2009 +0100
 @@ -297,6 +297,11 @@
  	MEMBER(dict_db_config) NULL,
  	MEMBER(dict_process_count) 1,
@@ -478,7 +475,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  	return FALSE;
  }
  
-@@ -1017,6 +1058,10 @@
+@@ -1025,6 +1066,10 @@
  			return FALSE;
  	}
  #endif
@@ -489,7 +486,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  	return TRUE;
  }
  
-@@ -1252,6 +1297,15 @@
+@@ -1260,6 +1305,15 @@
  			array_append(&ctx->server->lda_settings, &value, 1);
  		}
  
@@ -505,7 +502,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  		if (error == NULL)
  			return NULL;
  
-@@ -1310,6 +1364,13 @@
+@@ -1318,6 +1372,13 @@
  			array_append(&ctx->server->pop3->plugin_envs,
  				     &value, 1);
  		}
@@ -519,7 +516,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  		return NULL;
  	}
  
-@@ -1319,7 +1380,8 @@
+@@ -1327,7 +1388,8 @@
  static struct server_settings *
  create_new_server(const char *name,
  		  struct settings *imap_defaults,
@@ -529,7 +526,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  {
  	struct server_settings *server;
  
-@@ -1327,15 +1389,18 @@
+@@ -1335,15 +1397,18 @@
  	server->name = p_strdup(settings_pool, name);
  	server->imap = p_new(settings_pool, struct settings, 1);
  	server->pop3 = p_new(settings_pool, struct settings, 1);
@@ -548,7 +545,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  
  	server->imap->server = server;
  	server->imap->protocol = MAIL_PROTOCOL_IMAP;
-@@ -1349,6 +1414,12 @@
+@@ -1357,6 +1422,12 @@
  	server->pop3->mail_executable = PKG_LIBEXECDIR"/pop3";
  	server->pop3->mail_plugin_dir = MODULEDIR"/pop3";
  
@@ -561,7 +558,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  	return server;
  }
  
-@@ -1391,8 +1462,8 @@
+@@ -1399,8 +1470,8 @@
  
  		ctx->type = SETTINGS_TYPE_SERVER;
  		ctx->server = create_new_server(name, ctx->server->imap,
@@ -572,7 +569,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  		while (server->next != NULL)
  			server = server->next;
  		server->next = ctx->server;
-@@ -1413,6 +1484,8 @@
+@@ -1421,6 +1492,8 @@
  			ctx->protocol = MAIL_PROTOCOL_POP3;
  		else if (strcmp(name, "lda") == 0)
  			ctx->protocol = MAIL_PROTOCOL_LDA;
@@ -581,7 +578,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  		else {
  			*errormsg = "Unknown protocol name";
  			return FALSE;
-@@ -1524,6 +1597,8 @@
+@@ -1532,6 +1605,8 @@
  			fd_count += server->imap->login_max_processes_count;
  		if (server->pop3 != NULL)
  			fd_count += server->pop3->login_max_processes_count;
@@ -590,7 +587,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  		fd_count += server->defaults->max_mail_processes;
  	}
  
-@@ -1554,7 +1629,7 @@
+@@ -1562,7 +1637,7 @@
  	ctx.protocol = MAIL_PROTOCOL_ANY;
  	ctx.server = ctx.root =
  		create_new_server("default",
@@ -599,7 +596,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  	ctx.auth = &ctx.server->auth_defaults;
  
  	if (!settings_read(path, NULL, parse_setting, parse_section, &ctx))
-@@ -1571,7 +1646,8 @@
+@@ -1579,7 +1654,8 @@
  
  	if (!nochecks && !nofixes) {
  		def = settings_is_active(ctx.root->imap) ?
@@ -609,7 +606,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  
  		path = t_strconcat(def->base_dir, "/master.pid", NULL);
  		pid_file_check_running(path);
-@@ -1580,7 +1656,8 @@
+@@ -1588,7 +1664,8 @@
  	prev = NULL;
  	for (server = ctx.root; server != NULL; server = server->next) {
  		if ((*server->imap->protocols == '\0' ||
@@ -619,7 +616,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  			i_error("protocols: No protocols given "
  				"in configuration file");
  			return FALSE;
-@@ -1611,6 +1688,15 @@
+@@ -1619,6 +1696,15 @@
  				server->defaults = server->pop3;
  		}
  
@@ -635,7 +632,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  		if (server->defaults == NULL) {
  			if (prev == NULL)
  				ctx.root = server->next;
-@@ -1844,8 +1930,8 @@
+@@ -1852,8 +1938,8 @@
  
  void master_settings_dump(struct server_settings *set, bool nondefaults)
  {
@@ -646,7 +643,7 @@ diff -r 4e001a34078e src/master/master-settings.c
  	unsigned int count;
  
  	sets[0] = &default_settings;
-@@ -1864,6 +1950,11 @@
+@@ -1872,6 +1958,11 @@
  		sets[count] = set->pop3;
  		set_names[count] = "pop3";
  		count++;
@@ -658,9 +655,9 @@ diff -r 4e001a34078e src/master/master-settings.c
  	}
  	settings_dump(setting_defs, sets, set_names, count, nondefaults, 0);
  	namespace_settings_dump(set->namespaces, nondefaults);
-diff -r 4e001a34078e src/master/master-settings.h
---- a/src/master/master-settings.h	Mon Nov 09 21:38:16 2009 -0500
-+++ b/src/master/master-settings.h	Sat Nov 14 14:01:28 2009 +0100
+diff -r ee1782019a60 src/master/master-settings.h
+--- a/src/master/master-settings.h	Thu Nov 19 19:32:13 2009 -0500
++++ b/src/master/master-settings.h	Mon Nov 23 12:21:06 2009 +0100
 @@ -4,10 +4,11 @@
  #include "network.h"
  
