@@ -79,11 +79,11 @@ diff -r ee1782019a60 dovecot-example.conf
 +
 +protocol managesieve {
 +  # Login executable location.
-+  #login_executable = /usr/lib/dovecot/managesieve-login
++  #login_executable = /usr/libexec/dovecot/managesieve-login
 +
 +  # ManageSieve executable location. See IMAP's mail_executable above for 
 +  # examples how this could be changed.
-+  #mail_executable = /usr/lib/dovecot/managesieve
++  #mail_executable = /usr/libexec/dovecot/managesieve
 +
 +  # Maximum ManageSieve command line length in bytes. This setting is 
 +  # directly borrowed from IMAP. But, since long command lines are very

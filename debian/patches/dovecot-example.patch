@@ -2,10 +2,10 @@ Author: Jaldhar H. Vyas <jaldhar@debian.org>
 Description: Small changes to dovecot-example.conf
 Last-Update: 2009-07-31
 
-Index: dovecot-1.2.7/dovecot-example.conf
+Index: dovecot-1.2.8/dovecot-example.conf
 ===================================================================
---- dovecot-1.2.7.orig/dovecot-example.conf	2009-11-18 08:55:04.542991456 +0100
-+++ dovecot-1.2.7/dovecot-example.conf	2009-11-18 08:56:33.807442258 +0100
+--- dovecot-1.2.8.orig/dovecot-example.conf	2009-11-24 14:48:44.230540758 +0100
++++ dovecot-1.2.8/dovecot-example.conf	2009-11-24 14:51:14.542528472 +0100
 @@ -17,11 +17,12 @@
  # --sysconfdir=/etc --localstatedir=/var --with-ssldir=/etc/ssl
  
@@ -209,7 +209,21 @@ Index: dovecot-1.2.7/dovecot-example.conf
  
    # Workarounds for various client bugs:
    #   outlook-no-nuls:
-@@ -739,9 +743,9 @@
+@@ -705,11 +709,11 @@
+ 
+ protocol managesieve {
+   # Login executable location.
+-  #login_executable = /usr/libexec/dovecot/managesieve-login
++  #login_executable = /usr/lib/dovecot/managesieve-login
+ 
+   # ManageSieve executable location. See IMAP's mail_executable above for 
+   # examples how this could be changed.
+-  #mail_executable = /usr/libexec/dovecot/managesieve
++  #mail_executable = /usr/lib/dovecot/managesieve
+ 
+   # Maximum ManageSieve command line length in bytes. This setting is 
+   # directly borrowed from IMAP. But, since long command lines are very
+@@ -735,9 +739,9 @@
  ## LDA specific settings
  ##
  
@@ -221,7 +235,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
  
    # Hostname to use in various parts of sent mails, eg. in Message-Id.
    # Default is the system's real hostname.
-@@ -750,7 +754,7 @@
+@@ -746,7 +750,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
    #mail_plugins = 
@@ -230,7 +244,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
  
    # If user is over quota, return with temporary failure instead of
    # bouncing the mail.
-@@ -776,14 +780,14 @@
+@@ -772,14 +776,14 @@
  
    # UNIX socket path to master authentication server to find users.
    #auth_socket_path = /var/run/dovecot/auth-master
@@ -247,7 +261,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
  
  # Set max. process size in megabytes.
  #auth_process_size = 256
-@@ -865,7 +869,8 @@
+@@ -861,7 +865,8 @@
  #auth_krb5_keytab = 
  
  # Do NTLM and GSS-SPNEGO authentication using Samba's winbind daemon and
@@ -257,7 +271,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
  #auth_use_winbind = no
  
  # Path for Samba's ntlm_auth helper binary.
-@@ -887,13 +892,13 @@
+@@ -883,13 +888,13 @@
    # allow both system users (/etc/passwd) and virtual users to login without
    # duplicating the system users into virtual database.
    #
@@ -273,7 +287,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
  
    # Users can be temporarily disabled by adding a passdb with deny=yes.
    # If the user is found from that database, authentication will fail.
-@@ -902,7 +907,7 @@
+@@ -898,7 +903,7 @@
  
    #passdb passwd-file {
      # File contains a list of usernames, one per line
@@ -282,7 +296,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
      #deny = yes
    #}
  
-@@ -911,7 +916,7 @@
+@@ -907,7 +912,7 @@
    # so it can't be used as userdb. If you don't want to use a separate user
    # database (passwd usually), you can use static userdb.
    # REMEMBER: You'll need /etc/pam.d/dovecot file created for PAM
@@ -291,7 +305,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
    passdb pam {
      # [session=yes] [setcred=yes] [failure_show_msg=yes] [max_requests=<n>]
      # [cache_key=<key>] [<service name>]
-@@ -932,7 +937,8 @@
+@@ -928,7 +933,8 @@
      # because PAM modules can do all kinds of checks besides checking password,
      # such as checking IP address. Dovecot can't know about these checks
      # without some help. cache_key is simply a list of variables (see
@@ -301,7 +315,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
      # Here are some examples:
      #   %u - Username must match. Probably sufficient for most uses.
      #   %u%r - Username and remote IP address must match.
-@@ -949,7 +955,7 @@
+@@ -945,7 +951,7 @@
  
    # System users (NSS, /etc/passwd, or similiar)
    # In many systems nowadays this uses Name Service Switch, which is
@@ -310,7 +324,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
    #passdb passwd {
      # [blocking=yes] - See userdb passwd for explanation
      #args = 
-@@ -957,21 +963,21 @@
+@@ -953,21 +959,21 @@
  
    # Shadow passwords for system users (NSS, /etc/shadow or similiar).
    # Deprecated by PAM nowadays.
@@ -335,7 +349,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
    #passdb passwd-file {
      # [scheme=<default password scheme>] [username_format=<format>]
      # <Path for passwd-file>
-@@ -980,25 +986,25 @@
+@@ -976,25 +982,25 @@
  
    # checkpassword executable authentication
    # NOTE: You will probably want to use "userdb prefetch" with this.
@@ -369,7 +383,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
    #passdb vpopmail {
      # [cache_key=<key>] - See cache_key in PAM for explanation.
      # [quota_template=<template>] - %q expands to Maildir++ quota
-@@ -1010,20 +1016,20 @@
+@@ -1006,20 +1012,20 @@
    # User database specifies where mails are located and what user/group IDs
    # own them. For single-UID configuration use "static".
    #
@@ -393,7 +407,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
    userdb passwd {
      # [blocking=yes] - By default the lookups are done in the main dovecot-auth
      # process. This setting causes the lookups to be done in auth worker
-@@ -1034,20 +1040,20 @@
+@@ -1030,20 +1036,20 @@
    }
  
    # passwd-like file with specified location
@@ -417,7 +431,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
    #userdb static {
      # Template for the fields. Can return anything a userdb could normally
      # return. For example:
-@@ -1064,19 +1070,19 @@
+@@ -1060,19 +1066,19 @@
      #args =
    #}
  
@@ -444,7 +458,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
    #userdb vpopmail {
    #}
  
-@@ -1150,7 +1156,7 @@
+@@ -1146,7 +1152,7 @@
  # referenced using URIs in format "proxy::<name>".
  
  dict {
@@ -453,7 +467,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
    #expire = db:/var/lib/dovecot/expire.db
  }
  
-@@ -1202,7 +1208,7 @@
+@@ -1198,7 +1204,7 @@
    # one file for each mailbox, eg. INBOX or sub.mailbox. cache_secs parameter
    # specifies how many seconds to wait between stat()ing dovecot-acl file
    # to see if it changed.
@@ -462,7 +476,7 @@ Index: dovecot-1.2.7/dovecot-example.conf
  
    # To let users LIST mailboxes shared by other users, Dovecot needs a
    # shared mailbox dictionary. For example:
-@@ -1225,14 +1231,14 @@
+@@ -1221,14 +1227,14 @@
    # until the message can be saved within quota limits. The configuration file
    # is a text file where each line is in format: <priority> <mailbox name>
    # Mails are first deleted in lowest -> highest priority number order

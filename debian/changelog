@@ -1,3 +1,12 @@
+dovecot (1:1.2.8-2) UNRELEASED; urgency=low
+
+  * Moved libexec to lib corrections in dovecot-managesieve.patch and
+    dovecot-managesieve-dist.patch to dovecot-example.patch
+  * debian/patches/dovecot-mboxlocking.patch: Regenerated to avoid FTBFS
+    when quilt isn't installed.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 24 Nov 2009 18:23:43 +0100
+
 dovecot (1:1.2.8-1) unstable; urgency=high
 
   [ Marco Nenciarini ]
