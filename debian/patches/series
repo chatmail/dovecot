@@ -4,8 +4,6 @@ dovecot-managesieve.patch
 dovecot-example.patch
 dovecot-sql.patch
 dovecot-drac.patch
-dovecot-quota.patch
-quota-mountpoint.patch
 exec-check-for-none.patch
 dovecot-ssl.patch
 dovecot-mboxlocking.patch
