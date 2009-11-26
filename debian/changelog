@@ -7,13 +7,18 @@ dovecot (1:1.2.8-2) UNRELEASED; urgency=low
   * debian/patches/quota-mountpoint.patch: Removed. Not needed anymore.
   * debian/patches/dovecot-quota.patch: Removed. Quotas aren't properly
     enabled unless mail_plugins = quota imap_quota.
+  * debian/dovecot-common.init: fixed LSB headers. (Closes: #558040)
+  * debian/changelog: added CVE references to previous changelog entry.
 
- -- Marco Nenciarini <mnencia@debian.org>  Tue, 24 Nov 2009 22:48:05 +0100
+ -- Marco Nenciarini <mnencia@debian.org>  Thu, 26 Nov 2009 12:33:21 +0100
 
 dovecot (1:1.2.8-1) unstable; urgency=high
 
   [ Marco Nenciarini ]
   * New upstream release. (Closes: #557601)
+  * [SECURITY] Fixes local information disclosure and denial of service.
+    (see: http://www.dovecot.org/list/dovecot-news/2009-November/000143.html
+    and CVE-2009-3897)
   * Added myself to uploaders.
   * Switched to the new source format "3.0 (quilt)":
     - removed dpatch from build-depends
