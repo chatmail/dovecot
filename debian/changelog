@@ -9,8 +9,13 @@ dovecot (1:1.2.8-2) UNRELEASED; urgency=low
     enabled unless mail_plugins = quota imap_quota.
   * debian/dovecot-common.init: fixed LSB headers. (Closes: #558040)
   * debian/changelog: added CVE references to previous changelog entry.
+  * debian/rules: checked up the build system. It's not fragile anymore.
+    (Closes: 493803)
+  * debian/dovecot-common.postinst: Now invoking dpkg-reconfigure
+    on dovecot-common is enough to generate new certificates
+    if the previous ones were removed. (Closes: #545582)
 
- -- Marco Nenciarini <mnencia@debian.org>  Thu, 26 Nov 2009 12:33:21 +0100
+ -- Marco Nenciarini <mnencia@debian.org>  Thu, 26 Nov 2009 13:38:53 +0100
 
 dovecot (1:1.2.8-1) unstable; urgency=high
 

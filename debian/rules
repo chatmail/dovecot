@@ -62,7 +62,7 @@ build-stamp:  config-stamp
 	# Dovecot managesieve module
 	$(MAKE) -C managesieve
 	# DRAC
-	cd src/plugins/drac && $(MAKE)
+	$(MAKE) -C src/plugins/drac
 	touch build-stamp
 
 clean:
