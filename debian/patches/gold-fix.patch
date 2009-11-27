@@ -1,0 +1,26 @@
+Index: dovecot-1.2.8/configure
+===================================================================
+--- dovecot-1.2.8.orig/configure	2009-11-27 13:38:40.500216708 +0100
++++ dovecot-1.2.8/configure	2009-11-27 13:56:00.531213800 +0100
+@@ -21518,7 +21518,7 @@
+ 
+ fi
+ 
+-			LDAP_LIBS=-lldap
++			LDAP_LIBS="-lldap -llber"
+ 
+ 			if test $want_ldap != plugin; then
+ 				AUTH_LIBS="$AUTH_LIBS $LDAP_LIBS"
+Index: dovecot-1.2.8/configure.in
+===================================================================
+--- dovecot-1.2.8.orig/configure.in	2009-11-27 13:38:40.508216120 +0100
++++ dovecot-1.2.8/configure.in	2009-11-27 13:55:23.623513021 +0100
+@@ -1897,7 +1897,7 @@
+ 			AC_CHECK_LIB(ldap, ldap_start_tls_s, [
+ 				AC_DEFINE(LDAP_HAVE_START_TLS_S,, Define if you have ldap_start_tls_s)
+ 			])
+-			LDAP_LIBS=-lldap
++			LDAP_LIBS="-lldap -llber"
+ 			AC_SUBST(LDAP_LIBS)
+ 			if test $want_ldap != plugin; then
+ 				AUTH_LIBS="$AUTH_LIBS $LDAP_LIBS"
