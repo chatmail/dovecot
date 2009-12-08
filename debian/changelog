@@ -1,4 +1,4 @@
-dovecot (1:1.2.8-2) UNRELEASED; urgency=low
+dovecot (1:1.2.8-2) unstable; urgency=low
 
   * Moved libexec to lib corrections in dovecot-managesieve.patch and
     dovecot-managesieve-dist.patch to dovecot-example.patch
@@ -17,8 +17,11 @@ dovecot (1:1.2.8-2) UNRELEASED; urgency=low
   * debian/dovecot-common.postinst: Now invoking dpkg-reconfigure
     on dovecot-common is enough to generate new certificates
     if the previous ones were removed. (Closes: #545582)
+  * debian/rules: No longer install convert-tool in /usr/bin.
+    It isn't an user utility and it should stay in /usr/lib/dovecot
+    like all other similar tool.
 
- -- Marco Nenciarini <mnencia@debian.org>  Fri, 27 Nov 2009 13:59:51 +0100
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 08 Dec 2009 12:24:04 +0100
 
 dovecot (1:1.2.8-1) unstable; urgency=high
 
