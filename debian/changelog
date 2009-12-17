@@ -1,3 +1,10 @@
+dovecot (1:1.2.9-1) unstable; urgency=low
+
+  * New upstream release.
+  * debian/patches/gold-fix.patch: Removed. Fixed upstream.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Thu, 17 Dec 2009 10:52:53 +0100
+
 dovecot (1:1.2.8-2) unstable; urgency=low
 
   * Moved libexec to lib corrections in dovecot-managesieve.patch and
