@@ -1,5 +1,5 @@
-dovecot-libsieve.patch
-dovecot-managesieve-dist.patch
+sieve-0.1.14.patch
+managesieve-0.11.10.patch
 dovecot-managesieve.patch
 dovecot-example.patch
 dovecot-sql.patch

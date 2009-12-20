@@ -5,6 +5,12 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+SIEVE_VERSION=0.1.14
+MANAGESIEVE_VERSION=0.11.10
+
+SIEVE_DIR=sieve-$(SIEVE_VERSION)
+MANAGESIEVE_DIR=managesieve-$(MANAGESIEVE_VERSION)
+
 # These are used for cross-compiling and for saving the configure script
 # from having to guess our platform (since we know it already)
 DEB_HOST_GNU_TYPE   ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
@@ -35,21 +41,15 @@ config-stamp: configure
 	            --disable-static
 	$(MAKE) dovecot-config
 	# Dovecot sieve plugin
-	(cd libsieve/ && sh configure --with-dovecot=../ \
+	(cd $(SIEVE_DIR)/ && sh configure --with-dovecot=../ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib \
 		--enable-static=no )
-	cp libsieve/ChangeLog libsieve/sieve.ChangeLog
-	cp libsieve/README libsieve/sieve.README
-	cp libsieve/NEWS libsieve/sieve.NEWS
 	# Dovecot managesieve module
-	(cd managesieve/ && sh configure --with-dovecot=../ \
-		--with-dovecot-sieve=../libsieve/ \
+	(cd $(MANAGESIEVE_DIR)/ && sh configure --with-dovecot=../ \
+		--with-dovecot-sieve=../$(SIEVE_DIR)/ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib)
-	cp managesieve/ChangeLog managesieve/managesieve.ChangeLog
-	cp managesieve/README managesieve/managesieve.README
-	cp managesieve/NEWS managesieve/managesieve.NEWS
 	touch config-stamp
 
 build: build-stamp
@@ -58,9 +58,9 @@ build-stamp:  config-stamp
 	# Dovecot
 	$(MAKE)
 	# Dovecot sieve plugin
-	$(MAKE) -C libsieve
+	$(MAKE) -C $(SIEVE_DIR)
 	# Dovecot managesieve module
-	$(MAKE) -C managesieve
+	$(MAKE) -C $(MANAGESIEVE_DIR)
 	# DRAC
 	$(MAKE) -C src/plugins/drac
 	touch build-stamp
@@ -72,11 +72,9 @@ clean:
 	# Cleanup dovecot itself
 	[ ! -f Makefile ] || $(MAKE) distclean
 	# Cleanup dovecot sieve plugin
-	[ ! -f libsieve/Makefile ] || $(MAKE) -C libsieve distclean
-	rm -f libsieve/sieve.README libsieve/sieve.NEWS libsieve/sieve.ChangeLog
+	[ ! -f $(SIEVE_DIR)/Makefile ] || $(MAKE) -C $(SIEVE_DIR) distclean
 	# Cleanup dovecot ManageSieve
-	[ ! -f managesieve/Makefile ] || $(MAKE) -C managesieve distclean
-	rm -f managesieve/managesieve.README managesieve/managesieve.NEWS managesieve/managesieve.ChangeLog
+	[ ! -f $(MANAGESIEVE_DIR)/Makefile ] || $(MAKE) -C $(MANAGESIEVE_DIR) distclean
 	# Cleanup DRAC
 	rm -f src/plugins/drac/drac.so
 	dh_clean
@@ -87,14 +85,20 @@ install: build
 	dh_clean -k
 	dh_installdirs
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/dovecot-common
-	$(MAKE) -C libsieve install DESTDIR=$(CURDIR)/debian/dovecot-common
-	$(MAKE) -C managesieve install DESTDIR=$(CURDIR)/debian/dovecot-common
+	$(MAKE) -C $(SIEVE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-common
+	$(MAKE) -C $(MANAGESIEVE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-common
 	cp $(CURDIR)/src/plugins/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-ldap-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-ldap.conf
 	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-sql-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-sql.conf
 	install -D -m 0755 -o root -g root $(CURDIR)/debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-common/usr/bin/maildirmake.dovecot
 	mv $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common
+	cp $(SIEVE_DIR)/ChangeLog $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/sieve.ChangeLog
+	cp $(SIEVE_DIR)/README $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/sieve.README
+	cp $(SIEVE_DIR)/NEWS $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/sieve.NEWS
+	cp $(MANAGESIEVE_DIR)/ChangeLog $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/managesieve.ChangeLog
+	cp $(MANAGESIEVE_DIR)/README $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/managesieve.README
+	cp $(MANAGESIEVE_DIR)/NEWS $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/managesieve.NEWS
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/imap/ $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot/modules/
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot

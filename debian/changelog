@@ -1,3 +1,13 @@
+dovecot (1:1.2.9-2) UNRELEASED; urgency=low
+
+  * Upgraded sieve plugin to version 0.1.14
+  * Upgraded managesieve plugin to version 0.11.10
+  * debian/patches/dovecot-example.patch: Refreshed.
+  * debian/rules: Now supports arbitrary name of plugin directories.
+    It allow to have some (limited) version in component's name.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Sun, 20 Dec 2009 19:40:39 +0100
+
 dovecot (1:1.2.9-1) unstable; urgency=low
 
   * New upstream release.

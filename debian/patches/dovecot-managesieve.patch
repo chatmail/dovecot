@@ -1,20 +1,21 @@
 Author: Stephan Bosch <stephan@rename-it.nl>
 Description: Adds support for ManageSieve
-Origin: http://www.rename-it.nl/dovecot/1.2/dovecot-1.2.8-managesieve-0.11.9.diff.gz
-Last-Update: 2009-11-23
+Origin: http://www.rename-it.nl/dovecot/1.2/dovecot-1.2.9-managesieve-0.11.10.diff.gz
+Last-Update: 2009-12-20
 
-diff -r ee1782019a60 README.managesieve
---- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/README.managesieve	Mon Nov 23 12:21:06 2009 +0100
+Index: b/README.managesieve
+===================================================================
+--- /dev/null
++++ b/README.managesieve
 @@ -0,0 +1,29 @@
 +
 +MANAGESIEVE service support patch for Dovecot 1.2
 +
-+NOTICE: As per dovecot-1.1, this patch only contains the changes to the 
-+Dovecot tree that are necessary to use the now external 
-+dovecot-1.x-managesieve package. So, applying this patch is no longer 
-+the only thing you need to do to give Dovecot managesieve support. 
-+Eventually the need for this patch will disappear completely. 
++NOTICE: As per dovecot-1.1, this patch only contains the changes to the
++Dovecot tree that are necessary to use the now external
++dovecot-1.x-managesieve package. So, applying this patch is no longer
++the only thing you need to do to give Dovecot managesieve support.
++Eventually the need for this patch will disappear completely.
 +
 +Compile
 +-------
@@ -24,7 +25,7 @@ diff -r ee1782019a60 README.managesieve
 +
 +./configure
 +make
-+sudo make install 
++sudo make install
 +
 +Don't forget to execute ./autogen.sh if you downloaded dovecot from the
 +Mercurial repository.
@@ -32,13 +33,14 @@ diff -r ee1782019a60 README.managesieve
 +Installation and Configuration
 +------------------------------
 +
-+Read the README of the dovecot-managesieve package for the next steps. 
-+Note that this patch adds configuration examples to the dovecot-example.conf 
++Read the README of the dovecot-managesieve package for the next steps.
++Note that this patch adds configuration examples to the dovecot-example.conf
 +configuration file example.
 +
-diff -r ee1782019a60 dovecot-example.conf
---- a/dovecot-example.conf	Thu Nov 19 19:32:13 2009 -0500
-+++ b/dovecot-example.conf	Mon Nov 23 12:21:06 2009 +0100
+Index: b/dovecot-example.conf
+===================================================================
+--- a/dovecot-example.conf
++++ b/dovecot-example.conf
 @@ -19,7 +19,7 @@
  # Base directory where to store runtime data.
  #base_dir = /var/run/dovecot/
@@ -54,7 +56,7 @@ diff -r ee1782019a60 dovecot-example.conf
  # If you want to specify ports for each service, you will need to configure
 -# these settings inside the protocol imap/pop3 { ... } section, so you can
 -# specify different ports for IMAP/POP3. For example:
-+# these settings inside the protocol imap/pop3/managesieve { ... } section, 
++# these settings inside the protocol imap/pop3/managesieve { ... } section,
 +# so you can specify different ports for IMAP/POP3/MANAGESIEVE. For example:
  #   protocol imap {
  #     listen = *:10143
@@ -70,7 +72,7 @@ diff -r ee1782019a60 dovecot-example.conf
  #listen = *
  
  # Disable LOGIN command and all other plaintext authentications unless
-@@ -696,6 +700,38 @@
+@@ -696,6 +700,42 @@
  }
  
  ##
@@ -81,13 +83,13 @@ diff -r ee1782019a60 dovecot-example.conf
 +  # Login executable location.
 +  #login_executable = /usr/libexec/dovecot/managesieve-login
 +
-+  # ManageSieve executable location. See IMAP's mail_executable above for 
++  # ManageSieve executable location. See IMAP's mail_executable above for
 +  # examples how this could be changed.
 +  #mail_executable = /usr/libexec/dovecot/managesieve
 +
-+  # Maximum ManageSieve command line length in bytes. This setting is 
++  # Maximum ManageSieve command line length in bytes. This setting is
 +  # directly borrowed from IMAP. But, since long command lines are very
-+  # unlikely with ManageSieve, changing this will not be very useful.  
++  # unlikely with ManageSieve, changing this will not be very useful.
 +  #managesieve_max_line_length = 65536
 +
 +  # ManageSieve logout format string:
@@ -95,40 +97,45 @@ diff -r ee1782019a60 dovecot-example.conf
 +  #  %o - total number of bytes sent to client
 +  #managesieve_logout_format = bytes=%i/%o
 +
++  # If, for some inobvious reason, the sieve_storage remains unset, the
++  # ManageSieve daemon uses the specification of the mail_location to find out
++  # where to store the sieve files (see explaination in README.managesieve).
++  # The example below, when uncommented, overrides any global mail_location
++  # specification and stores all the scripts in '~/mail/sieve' if sieve_storage
++  # is unset. However, you should always use the sieve_storage setting.
++  # mail_location = mbox:~/mail
++
 +  # To fool ManageSieve clients that are focused on timesieved you can
-+  # specify the IMPLEMENTATION capability that the dovecot reports to clients 
++  # specify the IMPLEMENTATION capability that the dovecot reports to clients
 +  # (default: "dovecot").
 +  #managesieve_implementation_string = Cyrus timsieved v2.2.13
-+
-+  # The ManageSieve service also uses the sieve and sieve_dir settings
-+  # of the Sieve plugin. These are configured in the plugin {} section of
-+  # this config file. 
 +}
 +
 +##
  ## LDA specific settings
  ##
  
-@@ -1211,6 +1247,16 @@
+@@ -1211,6 +1251,16 @@
    # Available fields: uid, box, msgid, from, subject, size, vsize, flags
    # size and vsize are available only for expunge and copy events.
    #mail_log_fields = uid box msgid size
 +
 +  # Sieve plugin (http://wiki.dovecot.org/LDA/Sieve) and ManageSieve service
-+  # 
-+  # Location of the active script. When ManageSieve is used this is actually 
-+  # a symlink pointing to the active script in the sieve storage directory. 
++  #
++  # Location of the active script. When ManageSieve is used this is actually
++  # a symlink pointing to the active script in the sieve storage directory.
 +  #sieve=~/.dovecot.sieve
 +  #
-+  # The path to the directory where the personal Sieve scripts are stored. For 
++  # The path to the directory where the personal Sieve scripts are stored. For
 +  # ManageSieve this is where the uploaded scripts are stored.
 +  #sieve_dir=~/sieve
  }
  
  # Config files can also be included. deliver doesn't support them currently.
-diff -r ee1782019a60 src/master/child-process.c
---- a/src/master/child-process.c	Thu Nov 19 19:32:13 2009 -0500
-+++ b/src/master/child-process.c	Mon Nov 23 12:21:06 2009 +0100
+Index: b/src/master/child-process.c
+===================================================================
+--- a/src/master/child-process.c
++++ b/src/master/child-process.c
 @@ -20,7 +20,8 @@
  	"imap",
  	"pop3",
@@ -155,9 +162,10 @@ diff -r ee1782019a60 src/master/child-process.c
  #ifndef HAVE_PR_SET_DUMPABLE
  		if (!settings_root->defaults->mail_drop_priv_before_exec) {
  			str_append(str, " (core not dumped - set mail_drop_priv_before_exec=yes)");
-diff -r ee1782019a60 src/master/child-process.h
---- a/src/master/child-process.h	Thu Nov 19 19:32:13 2009 -0500
-+++ b/src/master/child-process.h	Mon Nov 23 12:21:06 2009 +0100
+Index: b/src/master/child-process.h
+===================================================================
+--- a/src/master/child-process.h
++++ b/src/master/child-process.h
 @@ -10,6 +10,7 @@
  	PROCESS_TYPE_POP3,
  	PROCESS_TYPE_SSL_PARAM,
@@ -166,9 +174,10 @@ diff -r ee1782019a60 src/master/child-process.h
  
  	PROCESS_TYPE_MAX
  };
-diff -r ee1782019a60 src/master/listener.c
---- a/src/master/listener.c	Thu Nov 19 19:32:13 2009 -0500
-+++ b/src/master/listener.c	Mon Nov 23 12:21:06 2009 +0100
+Index: b/src/master/listener.c
+===================================================================
+--- a/src/master/listener.c
++++ b/src/master/listener.c
 @@ -130,6 +130,10 @@
  			check_conflicts_set(server->pop3, ip, port,
  					    "pop3", proto);
@@ -241,9 +250,10 @@ diff -r ee1782019a60 src/master/listener.c
 +		}
  	}
  }
-diff -r ee1782019a60 src/master/login-process.c
---- a/src/master/login-process.c	Thu Nov 19 19:32:13 2009 -0500
-+++ b/src/master/login-process.c	Mon Nov 23 12:21:06 2009 +0100
+Index: b/src/master/login-process.c
+===================================================================
+--- a/src/master/login-process.c
++++ b/src/master/login-process.c
 @@ -72,8 +72,20 @@
  	group = i_new(struct login_group, 1);
  	group->refcount = 1;
@@ -299,9 +309,10 @@ diff -r ee1782019a60 src/master/login-process.c
  	if (*set->login_trusted_networks != '\0') {
  		env_put(t_strconcat("TRUSTED_NETWORKS=",
  				    set->login_trusted_networks, NULL));
-diff -r ee1782019a60 src/master/mail-process.c
---- a/src/master/mail-process.c	Thu Nov 19 19:32:13 2009 -0500
-+++ b/src/master/mail-process.c	Mon Nov 23 12:21:06 2009 +0100
+Index: b/src/master/mail-process.c
+===================================================================
+--- a/src/master/mail-process.c
++++ b/src/master/mail-process.c
 @@ -372,6 +372,15 @@
  	/* We care about POP3 UIDL format in all process types */
  	env_put(t_strconcat("POP3_UIDL_FORMAT=", set->pop3_uidl_format, NULL));
@@ -332,7 +343,7 @@ diff -r ee1782019a60 src/master/mail-process.c
  
  	i_assert(process_type == PROCESS_TYPE_IMAP ||
 -		 process_type == PROCESS_TYPE_POP3);
-+		process_type == PROCESS_TYPE_POP3 || 
++		process_type == PROCESS_TYPE_POP3 ||
 +		process_type == PROCESS_TYPE_MANAGESIEVE );
  
  	if (mail_process_count == set->max_mail_processes) {
@@ -346,9 +357,10 @@ diff -r ee1782019a60 src/master/mail-process.c
  }
  
  void mail_processes_deinit(void)
-diff -r ee1782019a60 src/master/main.c
---- a/src/master/main.c	Thu Nov 19 19:32:13 2009 -0500
-+++ b/src/master/main.c	Mon Nov 23 12:21:06 2009 +0100
+Index: b/src/master/main.c
+===================================================================
+--- a/src/master/main.c
++++ b/src/master/main.c
 @@ -247,6 +247,8 @@
  			return TRUE;
  		if (server->pop3 != NULL && have_stderr_set(server->pop3))
@@ -358,9 +370,10 @@ diff -r ee1782019a60 src/master/main.c
  
  		server = server->next;
  	}
-diff -r ee1782019a60 src/master/master-settings-defs.c
---- a/src/master/master-settings-defs.c	Thu Nov 19 19:32:13 2009 -0500
-+++ b/src/master/master-settings-defs.c	Mon Nov 23 12:21:06 2009 +0100
+Index: b/src/master/master-settings-defs.c
+===================================================================
+--- a/src/master/master-settings-defs.c
++++ b/src/master/master-settings-defs.c
 @@ -131,5 +131,10 @@
  	DEF_STR(dict_db_config),
  	DEF_INT(dict_process_count),
@@ -372,9 +385,10 @@ diff -r ee1782019a60 src/master/master-settings-defs.c
 +
  	{ 0, NULL, 0 }
  };
-diff -r ee1782019a60 src/master/master-settings.c
---- a/src/master/master-settings.c	Thu Nov 19 19:32:13 2009 -0500
-+++ b/src/master/master-settings.c	Mon Nov 23 12:21:06 2009 +0100
+Index: b/src/master/master-settings.c
+===================================================================
+--- a/src/master/master-settings.c
++++ b/src/master/master-settings.c
 @@ -297,6 +297,11 @@
  	MEMBER(dict_db_config) NULL,
  	MEMBER(dict_process_count) 1,
@@ -554,7 +568,7 @@ diff -r ee1782019a60 src/master/master-settings.c
 +	server->managesieve->login_executable = PKG_LIBEXECDIR"/managesieve-login";
 +	server->managesieve->mail_executable = PKG_LIBEXECDIR"/managesieve";
 +	server->managesieve->mail_plugin_dir = MODULEDIR"/managesieve";
-+  
++
  	return server;
  }
  
@@ -643,21 +657,22 @@ diff -r ee1782019a60 src/master/master-settings.c
  	unsigned int count;
  
  	sets[0] = &default_settings;
-@@ -1872,6 +1958,11 @@
- 		sets[count] = set->pop3;
+@@ -1873,6 +1959,11 @@
  		set_names[count] = "pop3";
  		count++;
-+	}	
+ 	}
 +	if (set->managesieve != NULL) {
 +		sets[count] = set->managesieve;
 +		set_names[count] = "managesieve";
 +		count++;
- 	}
++	}
  	settings_dump(setting_defs, sets, set_names, count, nondefaults, 0);
  	namespace_settings_dump(set->namespaces, nondefaults);
-diff -r ee1782019a60 src/master/master-settings.h
---- a/src/master/master-settings.h	Thu Nov 19 19:32:13 2009 -0500
-+++ b/src/master/master-settings.h	Mon Nov 23 12:21:06 2009 +0100
+ 	lda_settings_dump(set);
+Index: b/src/master/master-settings.h
+===================================================================
+--- a/src/master/master-settings.h
++++ b/src/master/master-settings.h
 @@ -4,10 +4,11 @@
  #include "network.h"
  
