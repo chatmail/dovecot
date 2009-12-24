@@ -5,11 +5,8 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-SIEVE_VERSION=0.1.14
-MANAGESIEVE_VERSION=0.11.10
-
-SIEVE_DIR=sieve-$(SIEVE_VERSION)
-MANAGESIEVE_DIR=managesieve-$(MANAGESIEVE_VERSION)
+SIEVE_DIR=sieve
+MANAGESIEVE_DIR=managesieve
 
 # These are used for cross-compiling and for saving the configure script
 # from having to guess our platform (since we know it already)
