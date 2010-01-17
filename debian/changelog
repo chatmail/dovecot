@@ -1,11 +1,14 @@
-dovecot (1:1.2.9-2) UNRELEASED; urgency=low
+dovecot (1:1.2.9-2) unstable; urgency=low
 
   * Upgraded sieve plugin to version 0.1.14
   * Upgraded managesieve plugin to version 0.11.10
   * Upgraded dovecot-managesieve.patch to version 0.11.10
   * debian/patches/dovecot-example.patch: Refreshed.
+  * Added expire-tool wrapper script (Closes: #565538)
+  * Added ${misc:Depends} to the dependencies of each binary package,
+    to make lintian happy (debhelper-but-no-misc-depends)
 
- -- Marco Nenciarini <mnencia@debian.org>  Thu, 24 Dec 2009 11:41:11 +0100
+ -- Marco Nenciarini <mnencia@debian.org>  Sun, 17 Jan 2010 09:39:42 +0100
 
 dovecot (1:1.2.9-1) unstable; urgency=low
 

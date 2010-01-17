@@ -12,7 +12,7 @@ Vcs-Browser: http://svn.debian.org/wsvn/collab-maint/deb-maint/dovecot/trunk/?op
 
 Package: dovecot-common
 Architecture: any
-Depends: ${shlibs:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020)
+Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020)
 Suggests: ntp
 Replaces: dovecot
 Description: secure mail server that supports mbox and maildir mailboxes
@@ -26,7 +26,7 @@ Description: secure mail server that supports mbox and maildir mailboxes
 
 Package: dovecot-dev
 Architecture: any
-Depends: ${shlibs:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
 Description: header files for the dovecot mail server
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
@@ -38,7 +38,7 @@ Description: header files for the dovecot mail server
 
 Package: dovecot-imapd
 Architecture: any
-Depends: ${shlibs:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
 Provides: imap-server
 Replaces: imap-server, dovecot-common
 Description: secure IMAP server that supports mbox and maildir mailboxes
@@ -51,7 +51,7 @@ Description: secure IMAP server that supports mbox and maildir mailboxes
 
 Package: dovecot-pop3d
 Architecture: any
-Depends: ${shlibs:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
 Provides: pop3-server
 Replaces: pop3-server, dovecot-common
 Description: secure POP3 server that supports mbox and maildir mailboxes
@@ -66,7 +66,7 @@ Package: dovecot-dbg
 Section: debug
 Priority: extra
 Architecture: any
-Depends: dovecot-common (= ${binary:Version})
+Depends: ${misc:Depends}, dovecot-common (= ${binary:Version})
 Description: debug symbols for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
