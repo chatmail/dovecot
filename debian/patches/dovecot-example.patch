@@ -2,8 +2,6 @@ Author: Jaldhar H. Vyas <jaldhar@debian.org>
 Description: Small changes to dovecot-example.conf
 Last-Update: 2009-12-20
 
-Index: b/dovecot-example.conf
-===================================================================
 --- a/dovecot-example.conf
 +++ b/dovecot-example.conf
 @@ -17,11 +17,12 @@
@@ -209,7 +207,9 @@ Index: b/dovecot-example.conf
  
    # Workarounds for various client bugs:
    #   outlook-no-nuls:
-@@ -705,11 +709,11 @@
+@@ -703,19 +707,19 @@
+ ## ManageSieve specific settings
+ ##
  
  protocol managesieve {
    # Login executable location.
@@ -223,18 +223,21 @@ Index: b/dovecot-example.conf
  
    # Maximum ManageSieve command line length in bytes. This setting is
    # directly borrowed from IMAP. But, since long command lines are very
-@@ -739,9 +743,9 @@
+   # unlikely with ManageSieve, changing this will not be very useful.
+   #managesieve_max_line_length = 65536
+ 
+   # ManageSieve logout format string:
+   #  %i - total number of bytes read from client
+   #  %o - total number of bytes sent to client
+@@ -739,7 +743,7 @@
  ## LDA specific settings
  ##
  
 -protocol lda {
 +#protocol lda {
-   # Address to use when sending rejection mails.
--  postmaster_address = postmaster@example.com
-+  #postmaster_address = postmaster@example.com
+   # Address to use when sending rejection mails (e.g. postmaster@example.com).
+   #postmaster_address =
  
-   # Hostname to use in various parts of sent mails, eg. in Message-Id.
-   # Default is the system's real hostname.
 @@ -750,7 +754,7 @@
    # Support for dynamically loadable plugins. mail_plugins is a space separated
    # list of plugins to load.
@@ -489,7 +492,7 @@ Index: b/dovecot-example.conf
    # expired mails. The actual expunging is done in a nightly cronjob, which
    # you must set up:
 -  #   dovecot --exec-mail ext /usr/libexec/dovecot/expire-tool
-+  #   dovecot --exec-mail ext /usr/lib/dovecot/expire-tool
++  #   dovecot --exec-mail ext /usr/lib/dovecot/expire-tool.sh
    #expire = Trash 7 Spam 30
    #expire_dict = proxy::expire
  

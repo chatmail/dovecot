@@ -1,10 +1,8 @@
 Author: Joel Johnson <mrjoel@lixil.net>
 Description: Change default Debian value in accordance with Debian Policy
 
-Index: dovecot-1.2.8/dovecot-example.conf
-===================================================================
---- dovecot-1.2.8.orig/dovecot-example.conf	2009-11-24 14:54:19.098525043 +0100
-+++ dovecot-1.2.8/dovecot-example.conf	2009-11-24 14:54:57.578538078 +0100
+--- a/dovecot-example.conf
++++ b/dovecot-example.conf
 @@ -488,8 +488,14 @@
  # in is important to avoid deadlocks if other MTAs/MUAs are using multiple
  # locking methods as well. Some operating systems don't allow using some of
@@ -21,10 +19,8 @@ Index: dovecot-1.2.8/dovecot-example.conf
  
  # Maximum time in seconds to wait for lock (all of them) before aborting.
  #mbox_lock_timeout = 300
-Index: dovecot-1.2.8/src/master/master-settings.c
-===================================================================
---- dovecot-1.2.8.orig/src/master/master-settings.c	2009-11-24 14:54:43.207545777 +0100
-+++ dovecot-1.2.8/src/master/master-settings.c	2009-11-24 14:54:57.598541833 +0100
+--- a/src/master/master-settings.c
++++ b/src/master/master-settings.c
 @@ -255,7 +255,7 @@
  	MEMBER(maildir_copy_preserve_filename) FALSE,
  	MEMBER(maildir_very_dirty_syncs) FALSE,
@@ -34,7 +30,7 @@ Index: dovecot-1.2.8/src/master/master-settings.c
  	MEMBER(mbox_lock_timeout) 300,
  	MEMBER(mbox_dotlock_change_timeout) 120,
  	MEMBER(mbox_min_index_size) 0,
-@@ -1944,7 +1944,15 @@
+@@ -1969,7 +1969,15 @@
  	const char *set_names[5];
  	unsigned int count;
  

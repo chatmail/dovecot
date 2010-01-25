@@ -1,3 +1,12 @@
+dovecot (1:1.2.10-1) unstable; urgency=low
+
+  * New upstream release (Closes: #566796)
+  * Upgraded sieve plugin to version 0.1.15
+  * Upgraded managesieve plugin to version 0.11.11
+  * Upgraded dovecot-managesieve.patch to version 0.11.11
+
+ -- Marco Nenciarini <mnencia@debian.org>  Mon, 25 Jan 2010 17:21:09 +0100
+
 dovecot (1:1.2.9-2) unstable; urgency=low
 
   * Upgraded sieve plugin to version 0.1.14
