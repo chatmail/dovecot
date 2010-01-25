@@ -207,9 +207,7 @@ Last-Update: 2009-12-20
  
    # Workarounds for various client bugs:
    #   outlook-no-nuls:
-@@ -703,19 +707,19 @@
- ## ManageSieve specific settings
- ##
+@@ -705,11 +709,11 @@
  
  protocol managesieve {
    # Login executable location.
@@ -223,12 +221,6 @@ Last-Update: 2009-12-20
  
    # Maximum ManageSieve command line length in bytes. This setting is
    # directly borrowed from IMAP. But, since long command lines are very
-   # unlikely with ManageSieve, changing this will not be very useful.
-   #managesieve_max_line_length = 65536
- 
-   # ManageSieve logout format string:
-   #  %i - total number of bytes read from client
-   #  %o - total number of bytes sent to client
 @@ -739,7 +743,7 @@
  ## LDA specific settings
  ##
