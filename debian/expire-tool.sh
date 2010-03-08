@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # To make expire-tool working some failing plugins have to be removed
 # from MAIL_PLUGINS environment variable.
