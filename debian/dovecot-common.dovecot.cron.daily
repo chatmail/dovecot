@@ -1,0 +1,13 @@
+#!/bin/sh
+
+[ -x /usr/sbin/dovecot ] || exit 0
+[ -x /usr/lib/dovecot/expire-tool.sh ] || exit 0
+[ -e /etc/default/dovecot ] || exit 0
+
+EXPIRE_CRON=""
+
+. /etc/default/dovecot
+
+[ "x$EXPIRE_CRON" = "xdaily" ] || exit 0
+
+/usr/sbin/dovecot --exec-mail ext /usr/lib/dovecot/expire-tool.sh 
