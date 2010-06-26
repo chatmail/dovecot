@@ -7,4 +7,3 @@ dovecot-drac.patch
 exec-check-for-none.patch
 dovecot-ssl.patch
 dovecot-mboxlocking.patch
-sieve-fix-imapflags.patch
