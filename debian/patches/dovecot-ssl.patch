@@ -4,9 +4,9 @@ Bug-Debian: http://bugs.debian.org/446555
 Origin: vendor, http://bugs.debian.org/cgi-bin/bugreport.cgi?msg=25;filename=dovecot-ssl.patch;att=1;bug=446555
 
 Description: SSL certificate fingerprint
---- dovecot-1.2.7.orig/src/auth/auth-request.c
-+++ dovecot-1.2.7/src/auth/auth-request.c
-@@ -164,6 +164,8 @@
+--- a/src/auth/auth-request.c
++++ b/src/auth/auth-request.c
+@@ -166,6 +166,8 @@
  		request->master_user = p_strdup(request->pool, value);
  	else if (strcmp(key, "original_username") == 0)
  		request->original_username = p_strdup(request->pool, value);
@@ -15,8 +15,8 @@ Description: SSL certificate fingerprint
  	else if (strcmp(key, "cert_username") == 0) {
  		if (request->auth->ssl_username_from_cert) {
  			/* get username from SSL certificate. it overrides
---- dovecot-1.2.7.orig/src/auth/auth-request.h
-+++ dovecot-1.2.7/src/auth/auth-request.h
+--- a/src/auth/auth-request.h
++++ b/src/auth/auth-request.h
 @@ -44,6 +44,7 @@
  	const char *realm;
  	char *mech_password; /* set if verify_plain() is called */
@@ -25,8 +25,8 @@ Description: SSL certificate fingerprint
          /* extra_fields are returned in authentication reply. Fields prefixed
             with "userdb_" are skipped. If prefetch userdb is used, it uses
             the "userdb_" prefixed fields. */
---- dovecot-1.2.7.orig/src/auth/db-checkpassword.c
-+++ dovecot-1.2.7/src/auth/db-checkpassword.c
+--- a/src/auth/db-checkpassword.c
++++ b/src/auth/db-checkpassword.c
 @@ -120,6 +120,10 @@
  		env_put(t_strconcat("MASTER_USER=",
  				    request->master_user, NULL));
@@ -38,8 +38,8 @@ Description: SSL certificate fingerprint
  	if (request->extra_fields != NULL) {
  		const char *fields =
  			auth_stream_reply_export(request->extra_fields);
---- dovecot-1.2.7.orig/src/lib-auth/auth-client.h
-+++ dovecot-1.2.7/src/lib-auth/auth-client.h
+--- a/src/lib-auth/auth-client.h
++++ b/src/lib-auth/auth-client.h
 @@ -26,6 +26,7 @@
  	const char *mech;
  	const char *service;
@@ -48,8 +48,8 @@ Description: SSL certificate fingerprint
  	enum auth_request_flags flags;
  
  	struct ip_addr local_ip, remote_ip;
---- dovecot-1.2.7.orig/src/lib-auth/auth-server-request.c
-+++ dovecot-1.2.7/src/lib-auth/auth-server-request.c
+--- a/src/lib-auth/auth-server-request.c
++++ b/src/lib-auth/auth-server-request.c
 @@ -15,7 +15,7 @@
  
  	unsigned int id;
@@ -90,8 +90,8 @@ Description: SSL certificate fingerprint
  	i_free(request);
  }
  
---- dovecot-1.2.7.orig/src/login-common/sasl-server.c
-+++ dovecot-1.2.7/src/login-common/sasl-server.c
+--- a/src/login-common/sasl-server.c
++++ b/src/login-common/sasl-server.c
 @@ -163,6 +163,8 @@
  	info.service = service;
  	info.cert_username = client->proxy == NULL ? NULL :
@@ -101,8 +101,8 @@ Description: SSL certificate fingerprint
  	info.flags = client_get_auth_flags(client);
  	info.local_ip = client->local_ip;
  	info.remote_ip = client->ip;
---- dovecot-1.2.7.orig/src/login-common/ssl-proxy.c
-+++ dovecot-1.2.7/src/login-common/ssl-proxy.c
+--- a/src/login-common/ssl-proxy.c
++++ b/src/login-common/ssl-proxy.c
 @@ -57,6 +57,12 @@
  
  void ssl_proxy_free(struct ssl_proxy *proxy ATTR_UNUSED) {}
@@ -116,8 +116,8 @@ Description: SSL certificate fingerprint
  unsigned int ssl_proxy_get_count(void)
  {
  	return 0;
---- dovecot-1.2.7.orig/src/login-common/ssl-proxy-gnutls.c
-+++ dovecot-1.2.7/src/login-common/ssl-proxy-gnutls.c
+--- a/src/login-common/ssl-proxy-gnutls.c
++++ b/src/login-common/ssl-proxy-gnutls.c
 @@ -61,6 +61,11 @@
  	return gnutls_alert_get_name(gnutls_alert_get(proxy->session));
  }
@@ -130,8 +130,8 @@ Description: SSL certificate fingerprint
  static int handle_ssl_error(struct ssl_proxy *proxy, int error)
  {
  	if (!gnutls_error_is_fatal(error)) {
---- dovecot-1.2.7.orig/src/login-common/ssl-proxy.h
-+++ dovecot-1.2.7/src/login-common/ssl-proxy.h
+--- a/src/login-common/ssl-proxy.h
++++ b/src/login-common/ssl-proxy.h
 @@ -25,6 +25,7 @@
  const char *ssl_proxy_get_last_error(const struct ssl_proxy *proxy) ATTR_PURE;
  const char *ssl_proxy_get_security_string(struct ssl_proxy *proxy);
@@ -140,8 +140,8 @@ Description: SSL certificate fingerprint
  
  /* Return number of active SSL proxies */
  unsigned int ssl_proxy_get_count(void) ATTR_PURE;
---- dovecot-1.2.7.orig/src/login-common/ssl-proxy-openssl.c
-+++ dovecot-1.2.7/src/login-common/ssl-proxy-openssl.c
+--- a/src/login-common/ssl-proxy-openssl.c
++++ b/src/login-common/ssl-proxy-openssl.c
 @@ -26,6 +26,8 @@
  /* Check every 30 minutes if parameters file has been updated */
  #define SSL_PARAMFILE_CHECK_INTERVAL (60*30)
