@@ -1,3 +1,10 @@
+dovecot (1:1.2.12-2) UNRELEASED; urgency=low
+
+  * dovecot-common: Upped expiration date of self-generated certificates to
+    10 years from 1 year.  (Closes: #587036)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 27 Jun 2010 23:17:55 -0400
+
 dovecot (1:1.2.12-1) unstable; urgency=low
 
   * New upstream release
