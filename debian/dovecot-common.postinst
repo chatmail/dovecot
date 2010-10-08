@@ -34,6 +34,7 @@ if [ "$1" = "configure" ]; then
     echo "You already have ssl certs for dovecot."
   else
     echo "Creating generic self-signed certificate: $SSL_CERT"
+    echo "This certificate will expire in 365 days."
     echo "(replace with hand-crafted or authorized one if needed)."
     cd /etc/ssl/certs
     PATH=$PATH:/usr/bin/ssl
