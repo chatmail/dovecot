@@ -1,9 +1,19 @@
-dovecot (1:1.2.14-1) UNRELEASED; urgency=low
+dovecot (1:1.2.15-1) unstable; urgency=high
 
-  * New upstream release (Closes: #597529)
+  [ Marco Nenciarini ]
+  * New upstream release (Closes: #587036,#597529)
   * Updated policy version to 3.9.1.0 (no changes needed)
 
- -- Marco Nenciarini <mnencia@debian.org>  Fri, 01 Oct 2010 16:56:13 +0200
+  [ Jaldhar H. Vyas ]
+  * [SECURITY] Fixes two bugs with acls which could have allowed a user to
+    gain improper access or admin rights to shared mailboxes.
+    (Closes: #599521)
+  * Warn that the generated SSL certificate will expire in 365 days.  Thanks
+    Phillip Weis.  (Closes: #576455)
+  * Wherever the path to sendmail is given as /usr/lib/sendmail, change to
+    /usr/sbin/sendmail.  (Closes: #570814,#595671)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 08 Oct 2010 17:34:19 -0400
 
 dovecot (1:1.2.13-1) unstable; urgency=low
 

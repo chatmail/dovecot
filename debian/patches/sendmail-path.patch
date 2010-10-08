@@ -1,0 +1,68 @@
+Author: Jaldhar H. Vyas <jaldhar@debian.org>
+Description: Changes instances of /usr/lib/sendmail to /usr/sbin/sendmail
+Last-Updated: 2010-10-08
+
+Index: tmp/doc/wiki/LDA.txt
+===================================================================
+--- tmp.orig/doc/wiki/LDA.txt	2010-05-23 21:42:16.000000000 -0400
++++ tmp/doc/wiki/LDA.txt	2010-10-08 17:29:12.000000000 -0400
+@@ -35,7 +35,6 @@
+  * 'hostname' is used in generated Message-IDs and in Reporting-UA: header in
+    bounce mails
+  * 'sendmail_path' is used to send mails. Note that the default is
+-   '/usr/lib/sendmail', which doesn't necessarily work the same as
+    '/usr/sbin/sendmail'.
+  * 'auth_socket_path' specifies the UNIX socket to dovecot-auth where deliver
+    can lookup userdb information when '-d' parameter is used. See below how to
+Index: tmp/dovecot-example.conf
+===================================================================
+--- tmp.orig/dovecot-example.conf	2010-10-08 17:29:12.000000000 -0400
++++ tmp/dovecot-example.conf	2010-10-08 17:29:12.000000000 -0400
+@@ -774,7 +774,7 @@
+   #deliver_log_format = msgid=%m: %$
+ 
+   # Binary to use for sending mails.
+-  #sendmail_path = /usr/lib/sendmail
++  #sendmail_path = /usr/sbin/sendmail
+ 
+   # Subject: header to use for rejection mails. You can use the same variables
+   # as for rejection_reason below.
+Index: tmp/src/deliver/deliver.c
+===================================================================
+--- tmp.orig/src/deliver/deliver.c	2010-05-24 11:01:14.000000000 -0400
++++ tmp/src/deliver/deliver.c	2010-10-08 17:29:12.000000000 -0400
+@@ -46,7 +46,7 @@
+ #include <syslog.h>
+ 
+ #define DEFAULT_CONFIG_FILE SYSCONFDIR"/dovecot.conf"
+-#define DEFAULT_SENDMAIL_PATH "/usr/lib/sendmail"
++#define DEFAULT_SENDMAIL_PATH "/usr/sbin/sendmail"
+ #define DEFAULT_ENVELOPE_SENDER "MAILER-DAEMON"
+ 
+ /* After buffer grows larger than this, create a temporary file to /tmp
+Index: tmp/sieve/src/sieve-tools/sieve-test.c
+===================================================================
+--- tmp.orig/sieve/src/sieve-tools/sieve-test.c	2010-10-08 17:30:11.000000000 -0400
++++ tmp/sieve/src/sieve-tools/sieve-test.c	2010-10-08 17:30:23.000000000 -0400
+@@ -28,7 +28,7 @@
+  * Configuration
+  */
+ 
+-#define DEFAULT_SENDMAIL_PATH "/usr/lib/sendmail"
++#define DEFAULT_SENDMAIL_PATH "/usr/sbin/sendmail"
+ #define DEFAULT_ENVELOPE_SENDER "MAILER-DAEMON"
+ 
+ /*
+Index: tmp/sieve/src/testsuite/testsuite.c
+===================================================================
+--- tmp.orig/sieve/src/testsuite/testsuite.c	2010-10-08 17:30:36.000000000 -0400
++++ tmp/sieve/src/testsuite/testsuite.c	2010-10-08 17:30:53.000000000 -0400
+@@ -40,7 +40,7 @@
+  * Configuration
+  */
+ 
+-#define DEFAULT_SENDMAIL_PATH "/usr/lib/sendmail"
++#define DEFAULT_SENDMAIL_PATH "/usr/sbin/sendmail"
+ #define DEFAULT_ENVELOPE_SENDER "MAILER-DAEMON"
+ 
+ /*
