@@ -21,8 +21,10 @@ dovecot (1:2.0.6-1) UNRELEASED; urgency=low
   * Remove daily cron script and the related configuration from the
     default file.
   * Update debian/dovecot-common.NEWS.Debian with upgrading instructions
+  * Call dh_makeshlibs with --no-script option to avoid
+    {postinst,postrm}-has-useless-call-to-ldconfig lintian errors.
 
- -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 19:16:35 +0200
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 19:17:17 +0200
 
 dovecot (1:1.2.15-1) unstable; urgency=high
 
