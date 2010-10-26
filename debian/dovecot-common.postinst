@@ -2,14 +2,41 @@
 set -e
 
 if [ "$1" = "configure" ]; then
+  CONFFILES="dovecot.conf \
+    dovecot-db.conf.ext \
+    dovecot-dict-sql.conf.ext \
+    dovecot-ldap.conf.ext \
+    dovecot-sql.conf.ext \
+    conf.d/10-auth.conf \
+    conf.d/10-director.conf \
+    conf.d/10-logging.conf \
+    conf.d/10-mail.conf \
+    conf.d/10-master.conf \
+    conf.d/10-ssl.conf \
+    conf.d/15-lda.conf \
+    conf.d/20-imap.conf \
+    conf.d/20-lmtp.conf \
+    conf.d/20-managesieve.conf \
+    conf.d/20-pop3.conf \
+    conf.d/90-acl.conf \
+    conf.d/90-plugin.conf \
+    conf.d/90-quota.conf \
+    conf.d/90-sieve.conf \
+    conf.d/auth-deny.conf.ext \
+    conf.d/auth-master.conf.ext \
+    conf.d/auth-passwdfile.conf.ext \
+    conf.d/auth-static.conf.ext \
+    conf.d/auth-system.conf.ext \
+    conf.d/auth-vpopmail.conf.ext"
 
-  for conffile in dovecot.conf dovecot-ldap.conf dovecot-sql.conf ; do
+  for conffile in $CONFFILES ; do
     # Tell ucf that the file in /usr/share/dovecot is the latest
     # maintainer version, and let it handle how to manage the real
     # configuration file in /etc/dovecot.
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-common /etc/dovecot/$conffile
-    if [ "$conffile" != "dovecot.conf" ] && [ -f "/etc/dovecot/$conffile" ]; then
+    if [ "$conffile" != "dovecot.conf" ] && [ -f "/etc/dovecot/$conffile" ] &&
+		[ `echo $conffile | cut -b -7` != "conf.d/" ]; then
       chmod 0600 /etc/dovecot/$conffile
     fi
   done
@@ -19,9 +46,17 @@ if [ "$1" = "configure" ]; then
     delgroup imapd || true
   fi
 
+  ## Users
+  #
+
   if [ -z "`id -u dovecot 2> /dev/null`" ]; then
     adduser --system --group --home /usr/lib/dovecot --gecos "Dovecot mail server" \
             --disabled-password --quiet dovecot || true
+  fi
+
+  if [ -z "`id -u dovenull 2> /dev/null`" ]; then
+    adduser --system --home /nonexistent --no-create-home --gecos "Dovecot login user" \
+            --disabled-password --quiet dovenull || true
   fi
 
   ## SSL Certs
