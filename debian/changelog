@@ -18,8 +18,10 @@ dovecot (1:2.0.6-1) UNRELEASED; urgency=low
     pw' command.
   * Remove expire-tool.sh wrapper as there is no expire-tool in dovecot
     2.0. Same feature is provided through 'doveadm expunge' command.
+  * Remove daily cron script and the related configuration from the
+    default file.
 
- -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 19:13:42 +0200
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 19:15:05 +0200
 
 dovecot (1:1.2.15-1) unstable; urgency=high
 

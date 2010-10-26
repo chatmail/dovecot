@@ -5,9 +5,3 @@
 
 # Set to '1' to allow Dovecot daemons to produce core dumps
 #ALLOW_COREDUMPS=1
-
-# Set to 'daily' to enable the cron job to delete expired messages.
-# BEWARE: it requires additional configuration. 
-# Please refer to http://wiki.dovecot.org/Plugins/Expire 
-# or /usr/share/doc/dovecot-common/wiki/Plugins.Expire.txt.gz
-#EXPIRE_CRON="daily"
