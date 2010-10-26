@@ -7,8 +7,10 @@ dovecot (1:2.0.6-1) UNRELEASED; urgency=low
     instead of 365 days, as it's the lifetime of of self-generated
     certificates since 1:1.2.13-1
   * Updated copyright and package descriptions. Thanks Stephan Bosch.
+  * Switch to gbp-pq patch management. Drop all patches but drac
+    support. Update pigeonhole to release 0.2.1
 
- -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 17:40:35 +0200
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 18:17:40 +0200
 
 dovecot (1:1.2.15-1) unstable; urgency=high
 

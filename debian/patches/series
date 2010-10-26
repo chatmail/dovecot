@@ -1,10 +1,2 @@
-sieve.patch
-managesieve.patch
-dovecot-managesieve.patch
-dovecot-example.patch
-dovecot-sql.patch
-dovecot-drac.patch
-exec-check-for-none.patch
-dovecot-ssl.patch
-dovecot-mboxlocking.patch
-sendmail-path.patch
+0001-pigeonhole.patch
+0002-dovecot-drac.patch
