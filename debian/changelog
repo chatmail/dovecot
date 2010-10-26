@@ -1,5 +1,6 @@
-dovecot (1:1.2.15-2) UNRELEASED; urgency=low
+dovecot (1:2.0.6-1) UNRELEASED; urgency=low
 
+  * New upstream major release (Closes: #597476)
   * Switch vcs fields to git
   * Add debian/gbp.conf to make easy the usage of git-buildpackage
   * Warn that the generated SSL certificate will expire in 10 years
