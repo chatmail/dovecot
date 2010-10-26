@@ -1,0 +1,66 @@
+Mail logger plugin
+==================
+
+This plugin exists in Dovecot v1.0rc18 and later. It logs several actions done
+in the mail session:
+
+ * Setting and removing \Deleted flag
+ * Expunging
+ * Copying mails to another mailbox
+ * Mailbox deletions
+ * Mailbox renames (v1.1+)
+ * Any flag changes  (v1.2+)
+ * Appends (v1.2+)
+
+Messages' UID and Message-ID header is logged for each action. Here's an
+example:
+
+---%<-------------------------------------------------------------------------
+imap(user): copy -> Trash: uid=908, msgid=<123.foo@bar>
+imap(user): deleted: uid=908, msgid=<123.foo@bar>
+imap(user): expunged: uid=908, msgid=<123.foo@bar>
+---%<-------------------------------------------------------------------------
+
+You can enable the plugin by setting:
+
+---%<-------------------------------------------------------------------------
+# Disable log throttling, see below.
+mail_log_max_lines_per_sec = 0
+
+protocol imap {
+  mail_plugins = mail_log
+}
+---%<-------------------------------------------------------------------------
+
+By default Dovecot limits how much each process can log to avoid a broken
+process flooding the log file and using up all the disk space. This is done by
+allowing the process to log only n messages per second. If it tries to log more
+often, then the logging is throttled and eventually the child process will
+block while trying to write to log file descriptor. mail_log plugin however
+logs a lot, so it's incompatible with the log throttling feature. This is why
+you should set 'mail_log_max_lines_per_sec = 0' to disable it.
+
+Configuration
+-------------
+
+Since v1.1+ you can configure what and how mail_log plugin logs:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  # Events to log. Also available in v1.2+: flag_change append
+  mail_log_events = delete undelete expunge copy mailbox_delete mailbox_rename
+
+  # Group events within a transaction to one line.
+  mail_log_group_events =
+
+  # Available in v1.1+: uid, box, msgid, size, vsize
+  # Available in v1.2+: from, subject, flags
+  mail_log_fields = uid box msgid size
+}
+---%<-------------------------------------------------------------------------
+
+Log grouping allows grouping multiple changes to one line. Only uid, size and
+vsize fields are logged in a grouped event. The sizes are the summed up sizes
+of the mails.
+
+(This file was created from the wiki on 2010-05-24 04:42)

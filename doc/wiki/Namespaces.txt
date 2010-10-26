@@ -1,0 +1,182 @@
+Namespaces
+==========
+
+Dovecot supports fully configurable namespaces. Their original and primary
+purpose is to provide Namespace IMAP extension (RFC 2342
+[http://www.faqs.org/rfcs/rfc2342.html]) support, which allows giving IMAP
+clients hints about where to locate mailboxes and whether they're private,
+shared or public. Unfortunately most IMAP clients don't support this extension.
+
+Dovecot namespaces can be used for several other purposes too:
+
+ * Changing the hierarchy separator
+ * Providing backwards compatibility when switching from another IMAP server
+ * Provides support for <public> [SharedMailboxes.Public.txt] and <shared>
+   [SharedMailboxes.Shared.txt] mailboxes
+ * Allows having mails in multiple different locations with possibly different
+   formats
+
+Configuration
+-------------
+
+By default no namespaces are explicitly defined in 'dovecot.conf'. In this
+situation Dovecot creates a private namespace automatically. This automatic
+namespace creation isn't done when namespaces are defined, so if you intend to
+simply add a new namespace, be sure to also add the default private namespace.
+
+There are 3 types of namespaces:
+
+ * private: Typically contains only user's own private mailboxes.
+ * shared: Contains other users' <shared mailboxes>
+   [SharedMailboxes.Shared.txt] (v1.2+).
+ * public: Contains <public mailboxes> [SharedMailboxes.Public.txt].
+
+Hierarchy separators
+--------------------
+
+Hierarchy separator specifies the character that is used to separate a parent
+mailbox from its child mailbox. For example if you have a mailbox "foo" with a
+child mailbox "bar", the full path to the child mailbox would be "foo/bar" if
+the separator was '/'. With a separator '.' it would be "foo.bar".
+
+By default the separator is the same as the mailbox list layout separator. This
+setting affects only how the separator is visible to clients, it doesn't change
+the mailbox list layout separator. For example with Maildir++ layout the
+default separator is '.' and if the separator was changed, the mailbox name in
+filesystem would still be called ".foo.bar". Currently it's not possible to
+change the layout separator without modifying the source code. See also
+<listescape> [Plugins.Listescape.txt] plugin.
+
+A commonly used separator is '/'. It probably causes the least amount of
+trouble with different IMAP clients.
+
+You should use the same hierarchy separator for all namespaces. All list=yes
+namespaces must use the same separator, but if you find it necessary (e.g. for
+backwards compatibility namespaces) you may use different separators for
+list=no namespaces.
+
+Namespace settings
+------------------
+
+ * prefix: The namespace prefix how it's visible in the NAMESPACE reply (if
+   hidden=no) and mailbox list (if list=yes).
+ * location: <Mailbox location> [MailLocation.txt]. The default is to use
+   'mail_location' setting.
+ * inbox: "yes", if this namespace contains the user's INBOX. There is only one
+   INBOX, so only one namespace can have inbox=yes.
+ * hidden: "yes", if this namespace shouldn't be listed in NAMESPACE reply.
+ * list (v1.1+): "yes" (default), if this namespace and its mailboxes should be
+   listed by LIST command when the namespace prefix isn't explicitly specified
+   as a parameter. "children" (v1.2+) means the namespace prefix list listed
+   only if it has child mailboxes.
+ * subscriptions (v1.1+): "yes" (default) if this namespace should handle its
+   own subscriptions. If "no", then the first parent namespace with
+   subscriptions=yes will handle it. For example if it's "no" for a namespace
+   with prefix=foo/bar/, Dovecot first sees if there's a prefix=foo/ namespace
+   with subscriptions=yes and then a namespace with an empty prefix. If neither
+   is found, an error is given.
+
+Shared Mailboxes
+----------------
+
+See <SharedMailboxes.txt>.
+
+Examples
+--------
+
+Mixed mbox and Maildir
+----------------------
+
+If you have your INBOX as mbox in '/var/mail/username' and the rest of the
+mailboxes in Maildir format under '~/Maildir', you can do this by creating two
+namespaces:
+
+---%<-------------------------------------------------------------------------
+namespace private {
+  separator = /
+  prefix = "#mbox/"
+  location = mbox:~/mail:INBOX=/var/mail/%u
+  inbox = yes
+  hidden = yes
+  list = no   # for v1.1+
+}
+namespace private {
+  separator = /
+  prefix =
+  location = maildir:~/Maildir
+}
+---%<-------------------------------------------------------------------------
+
+Without the 'list = no' setting (or 'hidden=yes' in v1.0) in the first
+namespace, clients see the "#mbox" namespace as a non-selectable mailbox named
+"#mbox" and having child mailboxes (ie. like a directory). The child mailboxes
+are all the mbox files in '~/mail' directory.
+
+Backwards Compatibility: UW-IMAP
+--------------------------------
+
+When switching from UW-IMAP and you don't want to give users full access to
+filesystem, you can create hidden namespaces which allow users to access their
+mails using their existing namespace settings in clients.
+
+---%<-------------------------------------------------------------------------
+# default namespace
+namespace private {
+  separator = /
+  prefix =
+  inbox = yes
+}
+# for backwards compatibility:
+namespace private {
+  separator = /
+  prefix = mail/
+  hidden = yes
+  list = no   # for v1.1+
+}
+namespace private {
+  separator = /
+  prefix = ~/mail/
+  hidden = yes
+  list = no   # for v1.1+
+}
+namespace private {
+  separator = /
+  prefix = ~%u/mail/
+  hidden = yes
+  list = no   # for v1.1+
+}
+---%<-------------------------------------------------------------------------
+
+Backwards Compatibility: Courier IMAP
+-------------------------------------
+
+You can continue using the same INBOX. namespace as Courier:
+
+---%<-------------------------------------------------------------------------
+namespace private {
+  separator = .
+  prefix = INBOX.
+  inbox = yes
+}
+---%<-------------------------------------------------------------------------
+
+Alternatively you can create the INBOX. as a compatibility name, so old clients
+can continue using it while new clients will use the empty prefix namespace:
+
+---%<-------------------------------------------------------------------------
+namespace private {
+  separator = .
+  prefix =
+  inbox = yes
+}
+
+namespace private {
+  separator = .
+  prefix = INBOX.
+  inbox = no
+  hidden = yes
+  list = no   # for v1.1+
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2010-05-24 04:42)

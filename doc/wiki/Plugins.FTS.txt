@@ -1,0 +1,46 @@
+Full text search indexing
+=========================
+
+Dovecot v1.1 supports the following FTS indexers:
+
+ * <Squat> [Plugins.FTS.Squat.txt] is Dovecot's own search index.
+ * <Lucene> [Plugins.FTS.Lucene.txt] uses Lucene's C++ library.
+ * <Solr> [Plugins.FTS.Solr.txt] communicates with Lucene's Solr server
+   [http://lucene.apache.org/solr/]. Use this instead of fts-lucene if
+   possible.
+
+The main difference between Squat indexes and the others is that Squat provides
+support for substring searches. This is required for IMAP protocol compliancy,
+so TEXT and BODY searches are looked up only from Squat indexes. Dovecot's
+non-standard X-TEXT-FAST and X-BODY-FAST SEARCH parameters can be used to look
+up from non-Squat indexes.
+
+Currently the indexes are updated only while searching, so neither <deliver>
+[LDA.txt] nor IMAP APPEND command updates the indexes immediately. This means
+that if user has received a lot of mail since the last indexing, it may take a
+while to index all the mails before replying to the search command. Dovecot
+sends periodic "* OK Indexed n% of the mailbox" updates which can be caught by
+webmail implementations to implement a progress bar. You could also build a
+cronjob to index users' mailboxes once in a while (by selecting each mailbox
+and issuing a 'SEARCH TEXT xyzzyx' command).
+
+Using both Squat and non-Squat
+------------------------------
+
+It's possible to use both Squat and non-Squat indexes at the same time, so that
+TEXT/BODY are looked up from Squat indexes and X-TEXT-FAST/X-BODY-FAST are
+looked up from the non-Squat index. This of course means that indexes will have
+to be built and updated for both, so it might not be that good idea.
+
+---%<-------------------------------------------------------------------------
+protocol imap {
+..
+  mail_plugins = fts fts_squat fts_solr
+}
+...
+plugin {
+  fts = squat solr
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2010-05-24 04:42)

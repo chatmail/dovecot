@@ -1,0 +1,34 @@
+UW-IMAP style mbox snarfing from /var/mail/ to ~/mbox
+=====================================================
+
+This configuration will move messages from '/var/mail/%u' to '~/mbox':
+
+---%<-------------------------------------------------------------------------
+mail_location = mbox:~/mail:INBOX=/var/mail/%u
+
+plugin {
+  # add only the mbox file path here, no mbox: prefix.
+  mbox_snarf = ~/mbox
+}
+
+protocol imap {
+  mail_plugins = mbox_snarf
+}
+protocol pop3 {
+  mail_plugins = mbox_snarf
+}
+---%<-------------------------------------------------------------------------
+
+If '~/mbox' doesn't exist, nothing special is done.
+
+If '~/mbox' exists, it's treated as INBOX and mails are moved from
+'/var/mail/%u' whenever the mailbox is synchronized.
+
+Before v1.1.8 if all the messages couldn't be moved because quota exceeded,
+then none of the messages were moved. v1.1.8+ just moves those messages it
+managed to move before running out of quota.
+
+It's not possible to do snarfing between different mailbox formats. That would
+require a redesign of the plugin.
+
+(This file was created from the wiki on 2010-05-24 04:42)

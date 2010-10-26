@@ -1,0 +1,59 @@
+Plugins
+=======
+
+Distributed with Dovecot:
+
+ * <acl> [ACL.txt]: Access Control Lists for mailboxes
+ * <autocreate> [Plugins.Autocreate.txt]: Automatically create/subscribe
+   mailboxes when user logs in
+ * <convert> [Plugins.Convert.txt]: Convert user's mailboxes from one format to
+   another on login
+ * <expire> [Plugins.Expire.txt]: Delete mails from specified mailboxes after a
+   designated number of days
+ * <fts> [Plugins.FTS.txt]: Full text search indexing
+ * <lazy_expunge> [Plugins.Lazyexpunge.txt]: Make EXPUNGE and DELETE commands
+   just rename the mails elsewhere
+ * <listescape> [Plugins.Listescape.txt]: Allow using characters in mailbox
+   names that would otherwise be illegal
+ * <mail_log> [Plugins.MailLog.txt]: Log several mail actions
+ * <mbox_snarf> [Plugins.MboxSnarf.txt]: UW-IMAP style mbox snarfing from
+   '/var/mail/%u' to '~/mbox'
+ * <quota> [Quota.txt]: Quota tracking and enforcing
+    * imap_quota: IMAP commands for requesting current quota
+ * <trash> [Plugins.Trash.txt]: Delete mails from Trash when user would go over
+   quota
+ * <virtual> [Plugins.Virtual.txt]: Virtual mailboxes
+ * <zlib> [Plugins.Zlib.txt]: Access compressed mails
+
+External:
+
+ * antispam [http://johannes.sipsolutions.net/Projects/dovecot-antispam]:
+   Integrates spam learning into Dovecot
+ * drac [http://dovecot.org/patches/1.1/drac.c]: Pop-before-SMTP plugin using
+   DRAC
+ * whoson [ftp://ftp.ufanet.ru/pub/boco/dovecot/whoson-plugin/]:
+   Pop-before-SMTP plugin using WHOSON protocol [http://whoson.sourceforge.net]
+
+ * alert [http://dovecot.org/patches/1.0/imap-alert-plugin.c]: Send IMAP ALERT
+   message from '/etc/dovecot.alert'.
+ * <sieve & cmusieve> [LDA.Sieve.txt]: Use the SIEVE [http://sieve.info/]
+   language for filtering
+ * Fetchmail wakeup [http://github.com/marschap/fetchmail_wakeup]: Wakes
+   fetchmail when Dovecot looks for new mail. This is a heavily extended and
+   updated version that works with Dovecot 1.1.x and 1.2.x
+ * Fetchmail wake [http://guichaz.free.fr/misc/]: Wakes fetchmail when Dovecot
+   looks for new mail. This is the original version that only works with
+   dovecot 1.0.x
+
+Experimental Plugins:
+
+ * <xexec> [Plugins.xexec.txt]: Execute any server side application and
+   communicate with it through plugins over IMAP
+ * <deleted-to-trash> [Plugins.deleted-to-trash.txt]: Automatically move
+   deleted item to trash folder, if client side doesn't do it, such as outlook
+   and evolution.
+
+To enable / disable plugins per user you can make your userdb return
+'mail_plugins' extra field. See <UserDatabase.ExtraFields.txt> for examples.
+
+(This file was created from the wiki on 2010-05-24 04:42)

@@ -1,0 +1,153 @@
+Dovecot LDA with Postfix
+========================
+
+This page contains only information specific to using LDA with Postfix, see
+<LDA.txt> for more information about using the LDA itself.
+
+System users
+------------
+
+If you wish you use 'deliver' for all system users on a single domain mail host
+you can do it by editing 'mailbox_command' parameter in
+
+'/etc/postfix/main.cf' (postconf(5) [http://www.postfix.org/postconf.5.html]):
+
+---%<-------------------------------------------------------------------------
+mailbox_command = /usr/local/libexec/dovecot/deliver
+#  or
+mailbox_command = /usr/libexec/dovecot/deliver
+#  or
+mailbox_command = /usr/lib/dovecot/deliver
+#  or wherever it was installed in your system.
+---%<-------------------------------------------------------------------------
+
+Then run 'postfix reload' and that is it (be sure that /var/mail or wherever
+you deliver mail is writable by the deliver process which does not run as
+root).
+
+Note: Postfix's mailbox_size_limit setting applies to all files that are
+written via local(8), which interfaces Dovecot deliver.  So if you have
+mailbox_size_limit = 51200000 (Postfix default setting), deliver won't be able
+to write to existing mbox files that will exceed 51200000 bytes after writing
+the new message into the file.  You will _not_ see a Postfix error in your logs
+if this occurs, even though the parameter causing the error condition is a
+Postfix parameter.  You will see a Dovecot entry similar to this:
+
+---%<-------------------------------------------------------------------------
+Jan 1 00:00:00 hostname dovecot: deliver(user): write() failed with mbox file
+/home/user/mail/foo: File too large
+---%<-------------------------------------------------------------------------
+
+If you use Dovecot sieve to sort messages into IMAP folders that are mbox
+files, and an mbox file reaches the above limit, you will also see related
+error messages such as these below directly following the error message above. 
+In this example the INBOX file is /var/mail/user and is relatively empty due to
+previous sieve sorting.  Sieve falls back and delivers the message to the INBOX
+folder when it finds the sort destination folder exceeds the Postfix
+mailbox_size_limit:
+
+---%<-------------------------------------------------------------------------
+Jan 1 00:00:00 hostname dovecot: deliver(user): write() failed with mbox file
+/home/user/mail/foo: File too large
+Jan 1 00:00:00 hostname dovecot: deliver(user): sieve:
+msgid=<xxxx@xxxx.xxxx.xxx>: failed to store into mailbox 'foo': Internal error
+occurred. Refer to server log for more information. [2010-01-01 00:00:00]
+Jan 1 00:00:00 hostname dovecot: deliver(user): sieve:
+msgid=<xxxx@xxxx.xxxx.xxx>: stored mail into mailbox 'INBOX'
+Jan 1 00:00:00 hostname dovecot: deliver(user): sieve: execution of script
+/home/user/.dovecot.sieve failed, but implicit keep was successful
+---%<-------------------------------------------------------------------------
+
+Some detailed config files and examples at
+http://heinous.org/wiki/Virtual_Domains%2C_Postfix%2C_Dovecot_LDA%2C_and_LDAP
+[http://heinous.org/wiki/Virtual_Domains,_Postfix,_Dovecot_LDA,_and_LDAP]
+
+Virtual users
+-------------
+
+Dovecot LDA is very easy to use on large scale installations with Postfix
+virtual domains support, just add a 'dovecot' service in
+'/etc/postfix/master.cf' (master(5) [http://www.postfix.org/master.5.html]):
+
+---%<-------------------------------------------------------------------------
+dovecot   unix  -       n       n       -       -       pipe
+  flags=DRhu user=vmail:vmail argv=/usr/local/libexec/dovecot/deliver -f
+${sender} -d ${recipient}
+---%<-------------------------------------------------------------------------
+
+An example using address extensions (ie user+extension@domain.com (don't forget
+to define the proper recipient_delimiter in Postfix's main.cf)) to deliver to
+the folder 'extension' in your maildir (If you wish to preserve the case of
+${extension}, remove the 'hu'flags [http://www.postfix.org/pipe.8.html], and be
+sure to utilize <Modifiers> [Variables.txt] in your dovecot.conf for mail
+locations and other configuration parameters that are expecting lower case):
+
+---%<-------------------------------------------------------------------------
+dovecot unix    -       n       n       -       -      pipe
+  flags=DRhu user=vmail:vmail argv=/usr/local/libexec/dovecot/deliver -f
+${sender} -d ${user}@${nexthop} -n -m ${extension}
+
+# or with v1.1.2+ if you have a INBOX/ namespace prefix:
+dovecot unix    -       n       n       -       -      pipe
+  flags=DRhu user=vmail:vmail argv=/usr/local/libexec/dovecot/deliver -f
+${sender} -d ${user}@${nexthop} -n -m INBOX/${extension}
+---%<-------------------------------------------------------------------------
+
+This example ignores address extensions (ie user+extension@domain.com delivers
+just like user@domain.com):
+
+---%<-------------------------------------------------------------------------
+dovecot   unix  -       n       n       -       -       pipe
+  flags=DRhu user=vmail:vmail argv=/usr/lib/dovecot/deliver -f ${sender} -d
+${user}@${nexthop}
+---%<-------------------------------------------------------------------------
+
+Replace 'vmail' above with your virtual mail user account.
+
+Then set 'virtual_transport' to 'dovecot' in '/etc/postfix/main.cf':
+
+---%<-------------------------------------------------------------------------
+dovecot_destination_recipient_limit = 1
+virtual_mailbox_domains = your.domain.here
+virtual_transport = dovecot
+---%<-------------------------------------------------------------------------
+
+And remember to run
+
+---%<-------------------------------------------------------------------------
+postfix reload
+---%<-------------------------------------------------------------------------
+
+Virtual users with multiple uids/gids
+-------------------------------------
+
+If you need multiple uids/gids you'll need to set deliver setuid root or invoke
+it through sudo. See the <LDA.txt> main page how to do this securely.
+
+Postfix mail_debug caveat
+-------------------------
+
+This is a problem with Dovecot versions older than v1.0.1:
+
+Be sure that the 'mail_debug' setting is commented out in 'dovecot.conf',
+because otherwise the postfix sendmail replacement will be started in the
+debugger using debugger_command [http://www.postfix.org/DEBUG_README.html] and
+delayed for five seconds. It is not enough to set 'mail_debug' to 'no', because
+postfix's sendmail command checks for the existence of the MAIL_DEBUG
+environment variable, which is created by the dovecot lda as soon as a
+'mail_debug' setting is present.
+
+Postfix with a NFS mail store
+-----------------------------
+
+If you are experiencing problems with deliver processes hanging when delivering
+to a NFS mail store, it's likely that the deliver process is hanging while
+waiting for free locks.  The occurrence of this can be greatly reduced, if not
+eradicated, by forcing Postfix to only deliver to the same recipient one at a
+time.
+
+---%<-------------------------------------------------------------------------
+dovecot_destination_concurrency_limit = 1
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2010-05-24 04:42)

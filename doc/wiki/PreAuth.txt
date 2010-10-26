@@ -1,0 +1,28 @@
+Pre-Authentificated Sessions
+============================
+
+For debugging purpose or to perform IMAP actions on-behalf of an user, one can
+use pre-authentificated sessions.
+
+Simply, one calls 'dovecot --exec-mail imap' and can speak IMAP via STDIN.
+
+However, the call does not always populate all environment variables and one
+needto setup the uid and gid /before/ the call, hence, the name "'PREAUTH'".
+Secondary, the call does not drop privilegues in-the-middle, therefore
+someaccess permissions, such as to log to a file, may fail. In this case, one
+canuse an alternate configuration file.
+
+So a more advanced call might look like this:
+
+---%<-------------------------------------------------------------------------
+sudo -H -u user /usr/local/dovecot/sbin/dovecot \
+ -c /usr/local/dovecot/etc/dovecot-cmdline.conf --exec-mail imap
+* PREAUTH [CAPABILITY IMAP4rev1 ...] Logged in as user
+---%<-------------------------------------------------------------------------
+
+Note the 'PREAUTH' in the reply. Now one can speak IMAP.
+
+The part 'sudo -H -u user' sets up the uid/gid for system users, one might need
+'sudo -u vmail USER=user HOME=path' for virtual users.
+
+(This file was created from the wiki on 2010-05-24 04:42)

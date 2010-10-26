@@ -1,0 +1,63 @@
+Rawlog
+======
+
+Dovecot supports logging post-login IMAP/POP3 traffic (also TLS/SSL encrypted)
+using 'rawlog' binary. It works by checking if 'dovecot.rawlog/' directory
+exists in the logged in user's home directory, and writing the traffic to
+'yyyymmdd-HHMMSS-pid.in' and '.out' files. Each connection gets their own
+in/out files.
+
+With imap you may see extra '* TIMESTAMP' lines in the log files. These aren't
+really part of the IMAP traffic, just something that rawlog writes itself after
+the connection has been idle for a while. They're meant to help debugging.
+
+Home directory
+--------------
+
+Note that for rawlog to work, your <userdb> [UserDatabase.txt] must have
+returned a home directory for the user. If you can't get rawlog to work, you
+should verify that the home directory really is where you expected it to be by
+setting 'mail_debug=yes' and checking the logs. You should see a line such as:
+
+---%<-------------------------------------------------------------------------
+Effective uid=1000, gid=1000, home=/home/user
+---%<-------------------------------------------------------------------------
+
+In above configuration rawlog would expect to find '/home/user/dovecot.rawlog/'
+directory writable by uid 1000. NOTE: Dovecot versions older than v1.0.rc23
+don't log the home directory even if it exists.
+
+If you don't have the home directory and you can't or don't want to modify
+userdb configuration, you can add the home to plugin section:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  # ..
+  home = /home/%u
+  # or temporarily even e.g. home = /tmp/temp-home
+}
+---%<-------------------------------------------------------------------------
+
+Configuration
+-------------
+
+To enable rawlog, you must modify 'mail_executable' setting(s) to execute
+rawlog instead of imap or pop3. For example:
+
+---%<-------------------------------------------------------------------------
+protocol imap {
+  mail_executable = /usr/local/libexec/dovecot/rawlog
+/usr/local/libexec/dovecot/imap
+  # ..
+}
+protocol pop3 {
+  mail_executable = /usr/local/libexec/dovecot/rawlog
+/usr/local/libexec/dovecot/pop3
+  # ..
+}
+---%<-------------------------------------------------------------------------
+
+Dovecot v1.1+ rawlog supports '-b' parameter. This makes it log IP packet
+boundaries by writing it as<<<packet>>>.
+
+(This file was created from the wiki on 2010-05-24 04:42)

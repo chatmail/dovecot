@@ -1,0 +1,61 @@
+Listescape plugin
+=================
+
+ * Comes with v1.2.alpha3+
+ * Also available for v1.0.6+
+   [http://dovecot.org/patches/1.0/listescape-plugin.c] and v1.1
+   [http://dovecot.org/patches/1.1/listescape-plugin.c].
+    * These versions support only escaping '.' with virtual '/' separators,
+      although you can play with the #defines
+
+Listescape plugin allows users to use characters in mailboxes names that would
+otherwise be illegal, for example:
+
+ * Maildir++ layout disallows using '.' character since it's used internally as
+   the hierarchy separator.
+ * '~' character at the beginning of the mailbox name is disallowed, because of
+   the possibility that it gets expanded to user's home directory.
+ * '/' character is disallowed with all layouts (if it's not the hierarchy
+   separator).
+
+Listescape plugin allows you to use all of these characters, as long as the
+virtual separator is changed to something else. The characters are escaped to
+the mailbox name as \NN hex codes.
+
+Examples
+--------
+
+Allow '.' characters with Maildir++ layout when virtual hierarchy separator is
+changed to '/':
+
+---%<-------------------------------------------------------------------------
+protocol imap {
+  mail_plugins = listescape
+}
+
+namespace private {
+  separator = /
+  inbox = yes
+}
+
+plugin {
+  # The default escape character is '\', but you can change it (v1.2 only)
+  #escape_char = "\\"
+}
+---%<-------------------------------------------------------------------------
+
+Allow both '.' and '/' characters when virtual hierarchy separator is changed
+to '^':
+
+---%<-------------------------------------------------------------------------
+protocol imap {
+  mail_plugins = listescape
+}
+
+namespace private {
+  separator = ^
+  inbox = yes
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2010-05-24 04:42)

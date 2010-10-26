@@ -1,0 +1,14 @@
+Shared mailboxes
+================
+
+Dovecot can support mailbox sharing in several different ways:
+
+ * <Public mailboxes> [SharedMailboxes.Public.txt]
+ * <Shared mailboxes> [SharedMailboxes.Shared.txt] between users (using IMAP
+   ACL commands) (v1.2+)
+ * <Symlinking mailboxes> [SharedMailboxes.Symlinks.txt]
+
+See <SharedMailboxes.Permissions.txt> for common filesystem related permission
+problems that are common with all the sharing methods.
+
+(This file was created from the wiki on 2010-05-24 04:42)
