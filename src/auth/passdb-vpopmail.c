@@ -2,7 +2,7 @@
 
 /* Thanks to Courier-IMAP for showing how the vpopmail API should be used */
 
-#include "common.h"
+#include "auth-common.h"
 #include "passdb.h"
 
 #ifdef PASSDB_VPOPMAIL
@@ -159,27 +159,31 @@ vpopmail_verify_plain(struct auth_request *request, const char *password,
 }
 
 static struct passdb_module *
-vpopmail_preinit(struct auth_passdb *auth_passdb, const char *args)
+vpopmail_preinit(pool_t pool, const char *args)
 {
+	static bool vauth_load_initialized = FALSE;
 	struct vpopmail_passdb_module *module;
 	const char *const *tmp;
 
-	module = p_new(auth_passdb->auth->pool,
-		       struct vpopmail_passdb_module, 1);
+	module = p_new(pool, struct vpopmail_passdb_module, 1);
 	module->module.default_pass_scheme = VPOPMAIL_DEFAULT_PASS_SCHEME;
 
 	tmp = t_strsplit_spaces(args, " ");
 	for (; *tmp != NULL; tmp++) {
 		if (strncmp(*tmp, "cache_key=", 10) == 0) {
 			module->module.cache_key =
-				auth_cache_parse_key(auth_passdb->auth->pool,
-						     *tmp + 10);
+				auth_cache_parse_key(pool, *tmp + 10);
 		} else if (strncmp(*tmp, "webmail=", 8) == 0) {
 			if (net_addr2ip(*tmp + 8, &module->webmail_ip) < 0)
 				i_fatal("vpopmail: Invalid webmail IP address");
 		} else {
 			i_fatal("passdb vpopmail: Unknown setting: %s", *tmp);
 		}
+	}
+	if (!vauth_load_initialized) {
+		vauth_load_initialized = TRUE;
+		if (vauth_open(0) != 0)
+			i_fatal("vpopmail: vauth_open() failed");
 	}
 	return &module->module;
 }
@@ -202,6 +206,6 @@ struct passdb_module_interface passdb_vpopmail = {
 };
 #else
 struct passdb_module_interface passdb_vpopmail = {
-	MEMBER(name) "vpopmail"
+	.name = "vpopmail"
 };
 #endif

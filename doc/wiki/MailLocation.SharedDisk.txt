@@ -27,12 +27,8 @@ Some clustered filesystems may not support fcntl, so you can change it to use
 flock instead. Fcntl locks may also cause problems with some NFS
 configurations, in which case you can try if switching to dotlocks helps. Note
 that dotlocks are the slowest locking method. You can change the locking method
-from 'lock_method' setting.
-
-Regardless of the 'lock_method' setting, Dovecot always uses dotlocks for some
-locks. Because of this, setting 'dotlock_use_excl=yes' will also improve the
-performance (default in v1.1+). Before doing that with NFS, make sure that your
-NFS client and server support O_EXCL (NFSv3+ should be fine).
+from 'lock_method' setting. Regardless of the 'lock_method' setting, Dovecot
+always uses dotlocks for some locks.
 
 Clock synchronization
 ---------------------
@@ -46,21 +42,24 @@ Caching
 
 Your cluster will probably perform better if users are usually redirected to
 the same server. This is because the mailbox may already be cached in the
-memory and it may also reduce the traffic between the clusterfs nodes. At the
-very least make sure that the concurrent connections coming for the user from
-the same IP address go to the same server.
+memory and it may also reduce the traffic between the clusterfs nodes. You can
+use <director> [Director.txt] service to do this easily automatically. Or at
+the very least make sure that your load balancer redirects connections from the
+same IP address to the same server.
 
 FUSE / GlusterFS
 ----------------
 
 FUSE caches dentries and file attributes internally. If you're using multiple
 GlusterFS clients to access the same mailboxes, you're going to have problems.
-With v1.1 these can be avoided by using NFS cache flushes, which just happen to
-work with FUSE as well:
+Worst of these problems can be avoided by using NFS cache flushes, which just
+happen to work with FUSE as well:
 
 ---%<-------------------------------------------------------------------------
 mail_nfs_index = yes
 mail_nfs_storage = yes
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+These probably don't work perfectly.
+
+(This file was created from the wiki on 2010-07-02 21:30)

@@ -16,27 +16,25 @@ Contents
 
      3. Outlook Express 6
 
-     4. Netscape 4.x
+     4. Netscape Mail
 
-     5. Netscape Mail
+     5. Evolution
 
-     6. Evolution
+     6. Mulberry
 
-     7. Mulberry
+     7. Thunderbird
 
-     8. Thunderbird
+     8. Mutt
 
-     9. Mutt
+     9. Pine
 
-     10. Pine
+     10. SquirrelMail
 
-     11. SquirrelMail
+     11. Horde IMP
 
-     12. Horde IMP
+     12. RoundCube Webmail
 
-     13. RoundCube Webmail
-
-     14. @Mail Webmail
+     13. @Mail Webmail
 
 Apple Mail.app
 --------------
@@ -52,7 +50,6 @@ subscribing/unsubscribing to folders in the public namespace.
 Outlook
 -------
 
- * You should enable 'outlook-idle' workaround with IMAP.
  * You should enable 'outlook-no-nuls' workaround with POP3.
  * Outlook 2003 has problems with older Dovecot's default POP3 UIDL format,
    which causes it to download the same mails over and over again if "leave
@@ -78,14 +75,8 @@ Outlook Express 6
    longer available on this server" error when opening a mail. This isn't
    Dovecot specific problem, and I'm not aware of any possible workarounds at
    the moment for this in server side.
- * You should enable 'outlook-idle' and 'delay-newmail' workarounds for IMAP.
+ * You should enable 'delay-newmail' workarounds for IMAP.
  * You should enable 'outlook-no-nuls' and 'oe-ns-eoh' workarounds for POP3.
-
-Netscape 4.x
-------------
-
- * You should enable 'netscape-eoh' workaround with IMAP, if you still care
-   about supporting this..
 
 Netscape Mail
 -------------
@@ -159,11 +150,6 @@ $servers['imap'] = array(
 );
 ---%<-------------------------------------------------------------------------
 
-If you're using echo in a post login script to send an alert to a user (for
-example, if they are over quota), you *must* end your lines with a CRLF (\r\n)
-instead of just a LF (\n) with some versions of Horde, IMP, and c-client.
-Otherwise, user logins will fail if an alert is sent as they log in.
-
 RoundCube Webmail
 -----------------
 
@@ -176,4 +162,4 @@ Uses the namespace returned via Dovecot, full support via IMAP/POP3 using @Mail
 [http://atmail.com/]. Can also read mailbox quota via the getquotaroot IMAP
 command.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

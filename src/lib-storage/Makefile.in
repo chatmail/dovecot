@@ -16,6 +16,7 @@
 @SET_MAKE@
 
 
+
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
@@ -36,11 +37,11 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 subdir = src/lib-storage
-DIST_COMMON = $(am__noinst_HEADERS_DIST) \
-	$(am__pkginc_lib_HEADERS_DIST) $(srcdir)/Makefile.am \
-	$(srcdir)/Makefile.in
+DIST_COMMON = $(noinst_HEADERS) $(pkginc_lib_HEADERS) \
+	$(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -49,49 +50,11 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LIBRARIES = $(noinst_LIBRARIES)
 ARFLAGS = cru
-libstorage_a_AR = $(AR) $(ARFLAGS)
-libstorage_a_LIBADD =
-am_libstorage_a_OBJECTS = mail.$(OBJEXT) mail-copy.$(OBJEXT) \
-	mail-error.$(OBJEXT) mail-namespace.$(OBJEXT) \
-	mail-search.$(OBJEXT) mail-search-build.$(OBJEXT) \
-	mail-storage.$(OBJEXT) mail-thread.$(OBJEXT) \
-	mail-user.$(OBJEXT) mailbox-list.$(OBJEXT) \
-	mailbox-search-result.$(OBJEXT) mailbox-tree.$(OBJEXT) \
-	mailbox-uidvalidity.$(OBJEXT)
-libstorage_a_OBJECTS = $(am_libstorage_a_OBJECTS)
-DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
-depcomp = $(SHELL) $(top_srcdir)/depcomp
-am__depfiles_maybe = depfiles
-am__mv = mv -f
-COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
-	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
-LTCOMPILE = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
-	--mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
-	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
-CCLD = $(CC)
-LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
-	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
-	$(LDFLAGS) -o $@
-SOURCES = $(libstorage_a_SOURCES)
-DIST_SOURCES = $(libstorage_a_SOURCES)
-RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
-	html-recursive info-recursive install-data-recursive \
-	install-dvi-recursive install-exec-recursive \
-	install-html-recursive install-info-recursive \
-	install-pdf-recursive install-ps-recursive install-recursive \
-	installcheck-recursive installdirs-recursive pdf-recursive \
-	ps-recursive uninstall-recursive
-am__noinst_HEADERS_DIST = mail-copy.h mail-error.h mail-namespace.h \
-	mail-search.h mail-search-build.h mail-thread.h mail-storage.h \
-	mail-storage-private.h mail-user.h mailbox-list.h \
-	mailbox-list-private.h mailbox-search-result-private.h \
-	mailbox-tree.h mailbox-uidvalidity.h
-am__pkginc_lib_HEADERS_DIST = mail-copy.h mail-error.h \
-	mail-namespace.h mail-search.h mail-search-build.h \
-	mail-thread.h mail-storage.h mail-storage-private.h \
-	mail-user.h mailbox-list.h mailbox-list-private.h \
-	mailbox-search-result-private.h mailbox-tree.h \
-	mailbox-uidvalidity.h
+libstorage_test_a_AR = $(AR) $(ARFLAGS)
+libstorage_test_a_LIBADD =
+am_libstorage_test_a_OBJECTS = test-mail-storage.$(OBJEXT) \
+	test-mailbox.$(OBJEXT) test-mail.$(OBJEXT)
+libstorage_test_a_OBJECTS = $(am_libstorage_test_a_OBJECTS)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -113,7 +76,55 @@ am__nobase_list = $(am__nobase_strip_setup); \
 am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
-am__installdirs = "$(DESTDIR)$(pkginc_libdir)"
+am__installdirs = "$(DESTDIR)$(pkglibdir)" \
+	"$(DESTDIR)$(pkginc_libdir)"
+LTLIBRARIES = $(noinst_LTLIBRARIES) $(pkglib_LTLIBRARIES)
+am__DEPENDENCIES_1 =
+am_libdovecot_storage_la_OBJECTS =
+libdovecot_storage_la_OBJECTS = $(am_libdovecot_storage_la_OBJECTS)
+libdovecot_storage_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(libdovecot_storage_la_LDFLAGS) $(LDFLAGS) -o $@
+libstorage_la_LIBADD =
+am_libstorage_la_OBJECTS = mail.lo mail-copy.lo mail-error.lo \
+	mail-namespace.lo mail-search.lo mail-search-build.lo \
+	mail-search-parser.lo mail-search-parser-imap.lo \
+	mail-search-parser-cmdline.lo mail-search-register.lo \
+	mail-search-register-human.lo mail-search-register-imap.lo \
+	mail-storage.lo mail-storage-hooks.lo mail-storage-settings.lo \
+	mail-thread.lo mail-user.lo mailbox-list.lo \
+	mailbox-search-result.lo mailbox-tree.lo \
+	mailbox-uidvalidity.lo
+libstorage_la_OBJECTS = $(am_libstorage_la_OBJECTS)
+libstorage_service_la_LIBADD =
+am_libstorage_service_la_OBJECTS = mail-storage-service.lo
+libstorage_service_la_OBJECTS = $(am_libstorage_service_la_OBJECTS)
+DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
+depcomp = $(SHELL) $(top_srcdir)/depcomp
+am__depfiles_maybe = depfiles
+am__mv = mv -f
+COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
+	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+LTCOMPILE = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+	--mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+CCLD = $(CC)
+LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
+SOURCES = $(libstorage_test_a_SOURCES) \
+	$(libdovecot_storage_la_SOURCES) $(libstorage_la_SOURCES) \
+	$(libstorage_service_la_SOURCES)
+DIST_SOURCES = $(libstorage_test_a_SOURCES) \
+	$(libdovecot_storage_la_SOURCES) $(libstorage_la_SOURCES) \
+	$(libstorage_service_la_SOURCES)
+RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
+	html-recursive info-recursive install-data-recursive \
+	install-dvi-recursive install-exec-recursive \
+	install-html-recursive install-info-recursive \
+	install-pdf-recursive install-ps-recursive install-recursive \
+	installcheck-recursive installdirs-recursive pdf-recursive \
+	ps-recursive uninstall-recursive
 HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
@@ -150,6 +161,7 @@ am__relativize = \
   done; \
   reldir="$$dir2"
 ACLOCAL = @ACLOCAL@
+ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTH_CFLAGS = @AUTH_CFLAGS@
@@ -195,10 +207,18 @@ LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
+LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
+LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
+LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
+LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
@@ -209,6 +229,7 @@ MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
 MYSQL_CFLAGS = @MYSQL_CFLAGS@
+MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -230,7 +251,9 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
+RUN_TEST = @RUN_TEST@
 SED = @SED@
+SETTING_FILES = @SETTING_FILES@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 SQLITE_CFLAGS = @SQLITE_CFLAGS@
@@ -239,8 +262,8 @@ SQL_CFLAGS = @SQL_CFLAGS@
 SQL_LIBS = @SQL_LIBS@
 SSL_CFLAGS = @SSL_CFLAGS@
 SSL_LIBS = @SSL_LIBS@
-STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
+VALGRIND = @VALGRIND@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -303,23 +326,36 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = list index register
-noinst_LIBRARIES = libstorage.a
+noinst_LTLIBRARIES = libstorage.la libstorage_service.la
+noinst_LIBRARIES = libstorage_test.a
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-auth \
+	-I$(top_srcdir)/src/lib-dict \
+	-I$(top_srcdir)/src/lib-master \
+	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-index \
-	-DPKG_RUNDIR=\""$(rundir)"\"
+	-DPKG_RUNDIR=\""$(rundir)"\" \
+	-DMODULEDIR=\""$(moduledir)"\"
 
-libstorage_a_SOURCES = \
+libstorage_la_SOURCES = \
 	mail.c \
 	mail-copy.c \
 	mail-error.c \
 	mail-namespace.c \
 	mail-search.c \
 	mail-search-build.c \
+	mail-search-parser.c \
+	mail-search-parser-imap.c \
+	mail-search-parser-cmdline.c \
+	mail-search-register.c \
+	mail-search-register-human.c \
+	mail-search-register-imap.c \
 	mail-storage.c \
+	mail-storage-hooks.c \
+	mail-storage-settings.c \
 	mail-thread.c \
 	mail-user.c \
 	mailbox-list.c \
@@ -327,15 +363,24 @@ libstorage_a_SOURCES = \
 	mailbox-tree.c \
 	mailbox-uidvalidity.c
 
+libstorage_service_la_SOURCES = \
+	mail-storage-service.c
+
 headers = \
 	mail-copy.h \
 	mail-error.h \
 	mail-namespace.h \
 	mail-search.h \
 	mail-search-build.h \
+	mail-search-register.h \
 	mail-thread.h \
 	mail-storage.h \
+	mail-search-parser.h \
+	mail-search-parser-private.h \
 	mail-storage-private.h \
+	mail-storage-hooks.h \
+	mail-storage-service.h \
+	mail-storage-settings.h \
 	mail-user.h \
 	mailbox-list.h \
 	mailbox-list-private.h \
@@ -343,9 +388,31 @@ headers = \
 	mailbox-tree.h \
 	mailbox-uidvalidity.h
 
-@INSTALL_HEADERS_TRUE@pkginc_libdir = $(pkgincludedir)/src/lib-storage
-@INSTALL_HEADERS_TRUE@pkginc_lib_HEADERS = $(headers)
-@INSTALL_HEADERS_FALSE@noinst_HEADERS = $(headers)
+shlibs = \
+	libstorage.la \
+	libstorage_service.la \
+	list/libstorage_list.la \
+	index/libstorage_index.la \
+	register/libstorage_register.la \
+	../lib-index/libindex.la \
+	../lib-dovecot/libdovecot.la
+
+pkglib_LTLIBRARIES = libdovecot-storage.la
+libdovecot_storage_la_SOURCES = 
+libdovecot_storage_la_LIBADD = $(shlibs) $(MODULE_LIBS)
+libdovecot_storage_la_DEPENDENCIES = $(shlibs)
+libdovecot_storage_la_LDFLAGS = -export-dynamic
+libstorage_test_a_SOURCES = \
+	test-mail-storage.c \
+	test-mailbox.c \
+	test-mail.c
+
+test_headers = \
+	test-mail-storage.h
+
+pkginc_libdir = $(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)
+noinst_HEADERS = $(test_headers)
 all: all-recursive
 
 .SUFFIXES:
@@ -383,10 +450,56 @@ $(am__aclocal_m4_deps):
 
 clean-noinstLIBRARIES:
 	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
-libstorage.a: $(libstorage_a_OBJECTS) $(libstorage_a_DEPENDENCIES) 
-	-rm -f libstorage.a
-	$(libstorage_a_AR) libstorage.a $(libstorage_a_OBJECTS) $(libstorage_a_LIBADD)
-	$(RANLIB) libstorage.a
+libstorage_test.a: $(libstorage_test_a_OBJECTS) $(libstorage_test_a_DEPENDENCIES) 
+	-rm -f libstorage_test.a
+	$(libstorage_test_a_AR) libstorage_test.a $(libstorage_test_a_OBJECTS) $(libstorage_test_a_LIBADD)
+	$(RANLIB) libstorage_test.a
+
+clean-noinstLTLIBRARIES:
+	-test -z "$(noinst_LTLIBRARIES)" || rm -f $(noinst_LTLIBRARIES)
+	@list='$(noinst_LTLIBRARIES)'; for p in $$list; do \
+	  dir="`echo $$p | sed -e 's|/[^/]*$$||'`"; \
+	  test "$$dir" != "$$p" || dir=.; \
+	  echo "rm -f \"$${dir}/so_locations\""; \
+	  rm -f "$${dir}/so_locations"; \
+	done
+install-pkglibLTLIBRARIES: $(pkglib_LTLIBRARIES)
+	@$(NORMAL_INSTALL)
+	test -z "$(pkglibdir)" || $(MKDIR_P) "$(DESTDIR)$(pkglibdir)"
+	@list='$(pkglib_LTLIBRARIES)'; test -n "$(pkglibdir)" || list=; \
+	list2=; for p in $$list; do \
+	  if test -f $$p; then \
+	    list2="$$list2 $$p"; \
+	  else :; fi; \
+	done; \
+	test -z "$$list2" || { \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 '$(DESTDIR)$(pkglibdir)'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 "$(DESTDIR)$(pkglibdir)"; \
+	}
+
+uninstall-pkglibLTLIBRARIES:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkglib_LTLIBRARIES)'; test -n "$(pkglibdir)" || list=; \
+	for p in $$list; do \
+	  $(am__strip_dir) \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f '$(DESTDIR)$(pkglibdir)/$$f'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f "$(DESTDIR)$(pkglibdir)/$$f"; \
+	done
+
+clean-pkglibLTLIBRARIES:
+	-test -z "$(pkglib_LTLIBRARIES)" || rm -f $(pkglib_LTLIBRARIES)
+	@list='$(pkglib_LTLIBRARIES)'; for p in $$list; do \
+	  dir="`echo $$p | sed -e 's|/[^/]*$$||'`"; \
+	  test "$$dir" != "$$p" || dir=.; \
+	  echo "rm -f \"$${dir}/so_locations\""; \
+	  rm -f "$${dir}/so_locations"; \
+	done
+libdovecot-storage.la: $(libdovecot_storage_la_OBJECTS) $(libdovecot_storage_la_DEPENDENCIES) 
+	$(libdovecot_storage_la_LINK) -rpath $(pkglibdir) $(libdovecot_storage_la_OBJECTS) $(libdovecot_storage_la_LIBADD) $(LIBS)
+libstorage.la: $(libstorage_la_OBJECTS) $(libstorage_la_DEPENDENCIES) 
+	$(LINK)  $(libstorage_la_OBJECTS) $(libstorage_la_LIBADD) $(LIBS)
+libstorage_service.la: $(libstorage_service_la_OBJECTS) $(libstorage_service_la_DEPENDENCIES) 
+	$(LINK)  $(libstorage_service_la_OBJECTS) $(libstorage_service_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -394,19 +507,31 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-copy.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-error.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-namespace.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-build.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-storage.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-thread.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-user.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-search-result.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-tree.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-uidvalidity.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-copy.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-error.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-namespace.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-build.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-parser-cmdline.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-parser-imap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-parser.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-register-human.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-register-imap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-register.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-storage-hooks.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-storage-service.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-storage-settings.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-storage.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-thread.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-user.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-search-result.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-tree.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-uidvalidity.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-storage.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mailbox.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -650,10 +775,10 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-recursive
-all-am: Makefile $(LIBRARIES) $(HEADERS)
+all-am: Makefile $(LIBRARIES) $(LTLIBRARIES) $(HEADERS)
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(pkginc_libdir)"; do \
+	for dir in "$(DESTDIR)$(pkglibdir)" "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-recursive
@@ -684,7 +809,7 @@ maintainer-clean-generic:
 clean: clean-recursive
 
 clean-am: clean-generic clean-libtool clean-noinstLIBRARIES \
-	mostlyclean-am
+	clean-noinstLTLIBRARIES clean-pkglibLTLIBRARIES mostlyclean-am
 
 distclean: distclean-recursive
 	-rm -rf ./$(DEPDIR)
@@ -710,7 +835,7 @@ install-dvi: install-dvi-recursive
 
 install-dvi-am:
 
-install-exec-am:
+install-exec-am: install-pkglibLTLIBRARIES
 
 install-html: install-html-recursive
 
@@ -750,26 +875,28 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-pkginc_libHEADERS
+uninstall-am: uninstall-pkginc_libHEADERS uninstall-pkglibLTLIBRARIES
 
 .MAKE: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) ctags-recursive \
 	install-am install-strip tags-recursive
 
 .PHONY: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) CTAGS GTAGS \
 	all all-am check check-am clean clean-generic clean-libtool \
-	clean-noinstLIBRARIES ctags ctags-recursive distclean \
+	clean-noinstLIBRARIES clean-noinstLTLIBRARIES \
+	clean-pkglibLTLIBRARIES ctags ctags-recursive distclean \
 	distclean-compile distclean-generic distclean-libtool \
 	distclean-tags distdir dvi dvi-am html html-am info info-am \
 	install install-am install-data install-data-am install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
 	install-html-am install-info install-info-am install-man \
 	install-pdf install-pdf-am install-pkginc_libHEADERS \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs installdirs-am maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-recursive uninstall uninstall-am \
-	uninstall-pkginc_libHEADERS
+	install-pkglibLTLIBRARIES install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	installdirs-am maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-recursive \
+	uninstall uninstall-am uninstall-pkginc_libHEADERS \
+	uninstall-pkglibLTLIBRARIES
 
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

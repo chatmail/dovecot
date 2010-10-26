@@ -39,7 +39,8 @@ subdir = src/plugins/mbox-snarf
 DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -97,6 +98,7 @@ ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
+ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTH_CFLAGS = @AUTH_CFLAGS@
@@ -142,10 +144,18 @@ LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
+LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
+LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
+LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
+LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
@@ -156,6 +166,7 @@ MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
 MYSQL_CFLAGS = @MYSQL_CFLAGS@
+MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -177,7 +188,9 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
+RUN_TEST = @RUN_TEST@
 SED = @SED@
+SETTING_FILES = @SETTING_FILES@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 SQLITE_CFLAGS = @SQLITE_CFLAGS@
@@ -186,8 +199,8 @@ SQL_CFLAGS = @SQL_CFLAGS@
 SQL_LIBS = @SQL_LIBS@
 SSL_CFLAGS = @SSL_CFLAGS@
 SSL_LIBS = @SSL_LIBS@
-STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
+VALGRIND = @VALGRIND@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -511,7 +524,7 @@ install-dvi: install-dvi-am
 
 install-dvi-am:
 
-install-exec-am: install-exec-local
+install-exec-am:
 
 install-html: install-html-am
 
@@ -560,22 +573,15 @@ uninstall-am: uninstall-moduleLTLIBRARIES
 	distclean-compile distclean-generic distclean-libtool \
 	distclean-tags distdir dvi dvi-am html html-am info info-am \
 	install install-am install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-exec-local \
-	install-html install-html-am install-info install-info-am \
-	install-man install-moduleLTLIBRARIES install-pdf \
-	install-pdf-am install-ps install-ps-am install-strip \
-	installcheck installcheck-am installdirs maintainer-clean \
+	install-dvi-am install-exec install-exec-am install-html \
+	install-html-am install-info install-info-am install-man \
+	install-moduleLTLIBRARIES install-pdf install-pdf-am \
+	install-ps install-ps-am install-strip installcheck \
+	installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
 	tags uninstall uninstall-am uninstall-moduleLTLIBRARIES
 
-
-install-exec-local:
-	for d in imap pop3; do \
-	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
-	  rm -f $(DESTDIR)$(moduledir)/$$d/lib20_mbox_snarf_plugin$(MODULE_SUFFIX); \
-	  $(LN_S) ../lib20_mbox_snarf_plugin$(MODULE_SUFFIX) $(DESTDIR)$(moduledir)/$$d; \
-	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

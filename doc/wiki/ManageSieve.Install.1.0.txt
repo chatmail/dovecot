@@ -52,4 +52,4 @@ autoreconf -i
 
 Afterwards, you can continue the usual <build process> [CompilingSource.txt].
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

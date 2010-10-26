@@ -12,13 +12,13 @@ mailboxes. This means that:
    directory to prevent users from creating new mailboxes under it.
 
 Dovecot never modifies permissions for existing mail files or directories. When
-users share mailboxes between each others (in v1.2+), the system must have been
-set up in a way that filesystem permissions don't get in the way. The easiest
-way to do that is to use only a single UID. Another possibility would be to use
-one or more groups for all the mail files that may be shared to other users
-belonging to the same group. For example if you host multiple domains, you
-might create a group for each domain and allow mailbox sharing (only) between
-users in the same domain.
+users share mailboxes between each others, the system must have been set up in
+a way that filesystem permissions don't get in the way. The easiest way to do
+that is to use only a single UID. Another possibility would be to use one or
+more groups for all the mail files that may be shared to other users belonging
+to the same group. For example if you host multiple domains, you might create a
+group for each domain and allow mailbox sharing (only) between users in the
+same domain.
 
 System user UNIX groups
 -----------------------
@@ -31,9 +31,8 @@ If you use <passwd> [AuthDatabase.Passwd.txt] userdb, the IMAP process has
 access to all the UNIX groups defined for that user. You may use these groups
 when granting filesystem permissions. If you wish to use UNIX groups defined in
 '/etc/group' but don't use passwd userdb, you can still do this by returning
-'system_groups_user' <userdb extra field> [UserDatabase.ExtraFields.txt]
-('system_user' in v1.1 and older), which contains the UNIX user name whose
-groups are read from the group file.
+'system_groups_user' <userdb extra field> [UserDatabase.ExtraFields.txt], which
+contains the UNIX user name whose groups are read from the group file.
 
 You can also set up extra UNIX groups by listing them in 'mail_access_groups'
 setting. To have per-user UNIX groups, return 'mail_access_groups' as userdb
@@ -45,19 +44,11 @@ system users is to make all mail dirs/files 0770/0660 mode and owned by group
 grained groups of course leaks less mail data in case there's a security hole
 in Dovecot.
 
-Permissions for new files and mailboxes (v1.1 and older)
---------------------------------------------------------
+Permissions for new mailboxes
+-----------------------------
 
-Dovecot v1.1 and older simply use 0700 and 0600 modes when creating new files
-and directories.'dovecot-shared' file described below can be used to change
-permissions for files inside mailboxes, which should be enough for most needs.
-If you need more, upgrading to v1.2 is the best solution.
-
-Permissions for new mailboxes (v1.2+)
--------------------------------------
-
-When creating a new mailbox, Dovecot v1.2+ copies the permissions from the
-mailbox root directory. For example with mboxes if you have directories:
+When creating a new mailbox, Dovecot copies the permissions from the mailbox
+root directory. For example with mboxes if you have directories:
 
 ---%<-------------------------------------------------------------------------
 drwx--xr-x 8 user group 4096 2009-02-21 18:31 /home/user/mail/
@@ -83,10 +74,10 @@ chmod g+s /home/user/mail
 This will cause the group to be automatically copied by the OS for all created
 files/directories under it, even if the user doesn't belong to the group.
 
-Permissions for new files in mailboxes (v1.2+)
-----------------------------------------------
+Permissions for new files in mailboxes
+--------------------------------------
 
-When creating new files inside a mailbox, Dovecot v1.2+ copies the read/write
+When creating new files inside a mailbox, Dovecot copies the read/write
 permissions from the mailbox's directory. For example if you have:
 
 ---%<-------------------------------------------------------------------------
@@ -114,32 +105,11 @@ only by looking at the mailbox root directories' permissions, not individual
 mail files. This may become a problem if the mail files' permissions aren't as
 Dovecot expects.
 
-Maildir: dovecot-shared file
-----------------------------
-
-If 'dovecot-shared' file exists in a Maildir mailbox, Dovecot v1.0+ uses its
-permissions for newly created files in the mailbox. This also overrides the
-parent directory's permissions with v1.2, mainly for backwards compatibility.
-
-If 'dovecot-shared' file exists in Maildir root directory, permissions for
-newly created mailboxes are taken from it as well and the file is copied to the
-created mailbox.
-
-In both cases the file's group is also preserved. If this isn't necessary, you
-can set the setgid bit for the file:
-
----%<-------------------------------------------------------------------------
-chmod g+s /home/user/Maildir/dovecot-shared
----%<-------------------------------------------------------------------------
-
-Note that when 'dovecot-shared' file exists, \Seen flag state is kept only in
-index files. See <SharedMailboxes.Public.txt> for more information.
-
 Mail Delivery Agent permissions
 -------------------------------
 
-When using Dovecot <deliver> [LDA.txt], it uses all the same configuration
-files as IMAP/POP3, so you don't need to worry about it.
+When using Dovecot <LDA.txt>, it uses all the same configuration files as
+IMAP/POP3, so you don't need to worry about it.
 
 When using an external MDA to deliver to a shared mailbox, you need to make
 sure that the resulting files have proper permissions. For example with
@@ -155,4 +125,4 @@ initial permissions on parent directory's permissions. After the initial
 creation, the permissions are permanently preserved. So if you want to use
 different permissions, just chown/chmod the file.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

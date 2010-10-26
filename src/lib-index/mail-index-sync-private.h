@@ -1,6 +1,7 @@
 #ifndef MAIL_INDEX_SYNC_PRIVATE_H
 #define MAIL_INDEX_SYNC_PRIVATE_H
 
+#include "mail-index-private.h"
 #include "mail-transaction-log.h"
 
 struct uid_range {
@@ -82,6 +83,9 @@ int mail_index_sync_ext_hdr_update(struct mail_index_sync_map_ctx *ctx,
 int
 mail_index_sync_ext_rec_update(struct mail_index_sync_map_ctx *ctx,
 			       const struct mail_transaction_ext_rec_update *u);
+int
+mail_index_sync_ext_atomic_inc(struct mail_index_sync_map_ctx *ctx,
+			       const struct mail_transaction_ext_atomic_inc *u);
 
 int mail_index_sync_keywords(struct mail_index_sync_map_ctx *ctx,
 			     const struct mail_transaction_header *hdr,

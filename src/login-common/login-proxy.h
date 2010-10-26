@@ -1,6 +1,7 @@
 #ifndef LOGIN_PROXY_H
 #define LOGIN_PROXY_H
 
+struct client;
 struct login_proxy;
 
 enum login_proxy_ssl_flags {
@@ -12,30 +13,25 @@ enum login_proxy_ssl_flags {
 	PROXY_SSL_FLAG_ANY_CERT	= 0x04
 };
 
+struct login_proxy_settings {
+	const char *host;
+	const char *dns_client_socket_path;
+	unsigned int port;
+	unsigned int connect_timeout_msecs;
+	/* send a notification about proxy connection to proxy-notify pipe
+	   every n seconds */
+	unsigned int notify_refresh_secs;
+	enum login_proxy_ssl_flags ssl_flags;
+};
+
 /* Called when new input comes from proxy. */
-typedef void proxy_callback_t(void *context);
+typedef void proxy_callback_t(struct client *client);
 
 /* Create a proxy to given host. Returns NULL if failed. Given callback is
    called when new input is available from proxy. */
-struct login_proxy *
-login_proxy_new(struct client *client, const char *host, unsigned int port,
-		enum login_proxy_ssl_flags ssl_flags,
-		unsigned int connect_timeout_msecs,
-		proxy_callback_t *callback, void *context);
-#ifdef CONTEXT_TYPE_SAFETY
-#  define login_proxy_new(client, host, port, ssl_flags, \
-			  connect_timeout_msecs, callback, context) \
-	({(void)(1 ? 0 : callback(context)); \
-	  login_proxy_new(client, host, port, ssl_flags, \
-	  	connect_timeout_msecs, \
-		(proxy_callback_t *)callback, context); })
-#else
-#  define login_proxy_new(client, host, port, ssl_flags, \
-			  connect_timeout_msecs, callback, context) \
-	  login_proxy_new(client, host, port, ssl_flags, \
-	  	connect_timeout_msecs, \
-		(proxy_callback_t *)callback, context)
-#endif
+int login_proxy_new(struct client *client,
+		    const struct login_proxy_settings *set,
+		    proxy_callback_t *callback);
 /* Free the proxy. This should be called if authentication fails. */
 void login_proxy_free(struct login_proxy **proxy);
 
@@ -46,8 +42,7 @@ bool login_proxy_is_ourself(const struct client *client, const char *host,
 
 /* Detach proxy from client. This is done after the authentication is
    successful and all that is left is the dummy proxying. */
-void login_proxy_detach(struct login_proxy *proxy, struct istream *client_input,
-			struct ostream *client_output);
+void login_proxy_detach(struct login_proxy *proxy);
 
 /* STARTTLS command was issued. */
 int login_proxy_starttls(struct login_proxy *proxy);
@@ -60,10 +55,9 @@ unsigned int login_proxy_get_port(const struct login_proxy *proxy) ATTR_PURE;
 enum login_proxy_ssl_flags
 login_proxy_get_ssl_flags(const struct login_proxy *proxy) ATTR_PURE;
 
-/* Return number of active detached login proxies */
-unsigned int login_proxy_get_count(void) ATTR_PURE;
+void login_proxy_kill_idle(void);
 
-void login_proxy_init(void);
+void login_proxy_init(const char *proxy_notify_pipe_path);
 void login_proxy_deinit(void);
 
 #endif

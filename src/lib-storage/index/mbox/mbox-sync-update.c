@@ -96,7 +96,7 @@ static void status_flags_replace(struct mbox_sync_mail_context *ctx, size_t pos,
 
 		/* see if this is unknown flag for us */
 		for (i = 0; flags_list[i].chr != 0; i++) {
-			if (flags_list[i].chr == data[pos])
+			if (flags_list[i].chr == (char)data[pos])
 				break;
 		}
 
@@ -112,7 +112,7 @@ static void status_flags_replace(struct mbox_sync_mail_context *ctx, size_t pos,
 
 	/* @UNSAFE */
 	data = buffer_get_space_unsafe(ctx->header, pos, need);
-	for (i = 0, need = 0; flags_list[i].chr != 0; i++) {
+	for (i = 0; flags_list[i].chr != 0; i++) {
 		if ((ctx->mail.flags & flags_list[i].flag) != 0)
 			*data++ = flags_list[i].chr;
 	}
@@ -124,12 +124,14 @@ static void
 keywords_append(struct mbox_sync_context *sync_ctx, string_t *dest,
 		const ARRAY_TYPE(keyword_indexes) *keyword_indexes_arr)
 {
+	struct index_mailbox_context *ibox =
+		INDEX_STORAGE_CONTEXT(&sync_ctx->mbox->box);
 	const char *const *keyword_names;
 	const unsigned int *keyword_indexes;
 	unsigned int i, idx_count, keywords_count;
 	size_t last_break;
 
-	keyword_names = array_get(sync_ctx->mbox->ibox.keyword_names,
+	keyword_names = array_get(ibox->keyword_names,
 				  &keywords_count);
 	keyword_indexes = array_get(keyword_indexes_arr, &idx_count);
 
@@ -152,6 +154,8 @@ static void
 keywords_append_all(struct mbox_sync_mail_context *ctx, string_t *dest,
 		    size_t startpos)
 {
+	struct index_mailbox_context *ibox =
+		INDEX_STORAGE_CONTEXT(&ctx->sync_ctx->mbox->box);
 	const char *const *names;
 	const unsigned char *p;
 	unsigned int i, count;
@@ -168,7 +172,7 @@ keywords_append_all(struct mbox_sync_mail_context *ctx, string_t *dest,
 		}
 	}
 
-	names = array_get(ctx->sync_ctx->mbox->ibox.keyword_names, &count);
+	names = array_get(ibox->keyword_names, &count);
 	for (i = 0; i < count; i++) {
 		/* wrap the line whenever it gets too long */
 		if (str_len(dest) - last_break < KEYWORD_WRAP_LINE_LENGTH)
@@ -183,11 +187,9 @@ keywords_append_all(struct mbox_sync_mail_context *ctx, string_t *dest,
 
 static void mbox_sync_add_missing_headers(struct mbox_sync_mail_context *ctx)
 {
-	size_t old_hdr_size, new_hdr_size, startpos;
+	size_t new_hdr_size, startpos;
 
-	old_hdr_size = ctx->body_offset - ctx->hdr_offset;
 	new_hdr_size = str_len(ctx->header);
-
 	if (new_hdr_size > 0 &&
 	    str_data(ctx->header)[new_hdr_size-1] != '\n') {
 		/* broken header - doesn't end with \n. fix it. */
@@ -382,7 +384,7 @@ static void mbox_sync_update_header_real(struct mbox_sync_mail_context *ctx)
 {
 	i_assert(ctx->mail.uid != 0 || ctx->mail.pseudo);
 
-	if (!ctx->sync_ctx->mbox->ibox.keep_recent)
+	if (!ctx->sync_ctx->keep_recent)
 		ctx->mail.flags &= ~MAIL_RECENT;
 
 	mbox_sync_update_status(ctx);
@@ -412,7 +414,7 @@ mbox_sync_update_header_from_real(struct mbox_sync_mail_context *ctx,
 	    (ctx->mail.flags & MAIL_RECENT) != 0) {
 		ctx->mail.flags = (ctx->mail.flags & ~STATUS_FLAGS_MASK) |
 			(mail->flags & STATUS_FLAGS_MASK);
-		if (!ctx->sync_ctx->mbox->ibox.keep_recent)
+		if (!ctx->sync_ctx->keep_recent)
                         ctx->mail.flags &= ~MAIL_RECENT;
 		mbox_sync_update_status(ctx);
 	}

@@ -13,14 +13,11 @@ Configuration
 -------------
 
 ---%<-------------------------------------------------------------------------
-protocol imap {
-..
-  mail_plugins = fts fts_lucene
-}
-...
+mail_plugins = $mail_plugins fts fts_lucene
+
 plugin {
   fts = lucene
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

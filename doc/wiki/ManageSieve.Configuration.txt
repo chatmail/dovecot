@@ -211,4 +211,4 @@ not seen much testing. The <proxy configuration wiki page>
 [PasswordDatabase.ExtraFields.Proxy.txt] for POP3 and IMAP should apply to
 <ManageSieve.txt> as well.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

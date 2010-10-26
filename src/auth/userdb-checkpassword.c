@@ -1,6 +1,7 @@
 /* Copyright (c) 2004-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
+#include "execv-const.h"
 #include "userdb.h"
 
 #ifdef USERDB_CHECKPASSWORD
@@ -120,16 +121,14 @@ checkpassword_lookup_child(struct auth_request *request,
 		   handle this. */
 		env_put("AUTHORIZED=1");
 		checkpassword_setup_env(request);
-		/* very simple argument splitting. */
-		cmd = t_strconcat(module->checkpassword_path, " ",
-				  module->checkpassword_reply_path, NULL);
+		cmd = checkpassword_get_cmd(request, module->checkpassword_path,
+					    module->checkpassword_reply_path);
 		auth_request_log_debug(request, "userdb-checkpassword",
 				       "execute: %s", cmd);
 
+		/* very simple argument splitting. */
 		args = t_strsplit(cmd, " ");
-		execv(args[0], (char **)args);
-		auth_request_log_error(request, "userdb-checkpassword",
-				       "execv(%s) failed: %m", args[0]);
+		execv_const(args[0], args);
 	}
 	exit(2);
 }
@@ -218,13 +217,12 @@ checkpassword_lookup(struct auth_request *request, userdb_callback_t *callback)
 }
 
 static struct userdb_module *
-checkpassword_preinit(struct auth_userdb *auth_userdb, const char *args)
+checkpassword_preinit(pool_t pool, const char *args)
 {
 	struct checkpassword_userdb_module *module;
 
-	module = p_new(auth_userdb->auth->pool,
-		       struct checkpassword_userdb_module, 1);
-	module->checkpassword_path = p_strdup(auth_userdb->auth->pool, args);
+	module = p_new(pool, struct checkpassword_userdb_module, 1);
+	module->checkpassword_path = p_strdup(pool, args);
 	module->checkpassword_reply_path =
 		PKG_LIBEXECDIR"/checkpassword-reply";
 
@@ -261,9 +259,13 @@ struct userdb_module_interface userdb_checkpassword = {
 	checkpassword_deinit,
 
 	checkpassword_lookup,
+
+	NULL,
+	NULL,
+	NULL
 };
 #else
 struct userdb_module_interface userdb_checkpassword = {
-	MEMBER(name) "checkpassword"
+	.name = "checkpassword"
 };
 #endif

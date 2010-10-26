@@ -3,7 +3,8 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-storage \
-	-I$(top_srcdir)/src/lib-storage/index
+	-I$(top_srcdir)/src/lib-storage/index \
+	-I$(top_srcdir)/src/lib-storage/index/dbox-common
 
 lib20_zlib_plugin_la_LDFLAGS = -module -avoid-version
 
@@ -23,15 +24,11 @@ lib20_zlib_plugin_la_LIBADD = \
 lib20_zlib_plugin_la_SOURCES = \
 	istream-bzlib.c \
 	istream-zlib.c \
+	ostream-zlib.c \
+	ostream-bzlib.c \
 	zlib-plugin.c
 
 noinst_HEADERS = \
 	istream-zlib.h \
+	ostream-zlib.h \
 	zlib-plugin.h
-
-install-exec-local:
-	for d in imap pop3; do \
-	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
-	  rm -f $(DESTDIR)$(moduledir)/$$d/lib20_zlib_plugin$(MODULE_SUFFIX); \
-	  $(LN_S) ../lib20_zlib_plugin$(MODULE_SUFFIX) $(DESTDIR)$(moduledir)/$$d; \
-	done

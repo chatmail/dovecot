@@ -16,7 +16,6 @@
 @SET_MAKE@
 
 
-
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
@@ -40,30 +39,17 @@ host_triplet = @host@
 @BUILD_PGSQL_TRUE@@SQL_PLUGINS_TRUE@am__append_2 = pgsql
 @BUILD_SQLITE_TRUE@@SQL_PLUGINS_TRUE@am__append_3 = sqlite
 subdir = src/lib-sql
-DIST_COMMON = $(am__noinst_HEADERS_DIST) \
-	$(am__pkginc_lib_HEADERS_DIST) $(srcdir)/Makefile.am \
+DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-LIBRARIES = $(noinst_LIBRARIES)
-ARFLAGS = cru
-libsql_a_AR = $(AR) $(ARFLAGS)
-libsql_a_LIBADD =
-am__libsql_a_SOURCES_DIST = sql-api.c sql-pool.c driver-mysql.c \
-	driver-pgsql.c driver-sqlite.c sql-drivers-register.c
-am__objects_1 = sql-api.$(OBJEXT) sql-pool.$(OBJEXT)
-@SQL_PLUGINS_FALSE@am__objects_2 = driver-mysql.$(OBJEXT) \
-@SQL_PLUGINS_FALSE@	driver-pgsql.$(OBJEXT) \
-@SQL_PLUGINS_FALSE@	driver-sqlite.$(OBJEXT)
-am_libsql_a_OBJECTS = $(am__objects_1) $(am__objects_2) \
-	sql-drivers-register.$(OBJEXT)
-libsql_a_OBJECTS = $(am_libsql_a_OBJECTS)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -87,7 +73,7 @@ am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
 am__installdirs = "$(DESTDIR)$(sql_moduledir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
-LTLIBRARIES = $(sql_module_LTLIBRARIES)
+LTLIBRARIES = $(noinst_LTLIBRARIES) $(sql_module_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 @SQL_PLUGINS_TRUE@libdriver_mysql_la_DEPENDENCIES =  \
 @SQL_PLUGINS_TRUE@	$(am__DEPENDENCIES_1)
@@ -122,6 +108,17 @@ libdriver_sqlite_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(libdriver_sqlite_la_LDFLAGS) $(LDFLAGS) -o $@
 @BUILD_SQLITE_TRUE@@SQL_PLUGINS_TRUE@am_libdriver_sqlite_la_rpath =  \
 @BUILD_SQLITE_TRUE@@SQL_PLUGINS_TRUE@	-rpath $(sql_moduledir)
+libsql_la_LIBADD =
+am__libsql_la_SOURCES_DIST = sql-api.c sql-db-cache.c driver-mysql.c \
+	driver-pgsql.c driver-sqlite.c driver-sqlpool.c
+am__objects_1 = sql-api.lo sql-db-cache.lo
+@SQL_PLUGINS_FALSE@am__objects_2 = driver-mysql.lo driver-pgsql.lo \
+@SQL_PLUGINS_FALSE@	driver-sqlite.lo
+am_libsql_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
+	driver-sqlpool.lo
+nodist_libsql_la_OBJECTS = sql-drivers-register.lo
+libsql_la_OBJECTS = $(am_libsql_la_OBJECTS) \
+	$(nodist_libsql_la_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -135,19 +132,19 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libsql_a_SOURCES) $(libdriver_mysql_la_SOURCES) \
-	$(libdriver_pgsql_la_SOURCES) $(libdriver_sqlite_la_SOURCES)
-DIST_SOURCES = $(am__libsql_a_SOURCES_DIST) \
-	$(am__libdriver_mysql_la_SOURCES_DIST) \
+SOURCES = $(libdriver_mysql_la_SOURCES) $(libdriver_pgsql_la_SOURCES) \
+	$(libdriver_sqlite_la_SOURCES) $(libsql_la_SOURCES) \
+	$(nodist_libsql_la_SOURCES)
+DIST_SOURCES = $(am__libdriver_mysql_la_SOURCES_DIST) \
 	$(am__libdriver_pgsql_la_SOURCES_DIST) \
-	$(am__libdriver_sqlite_la_SOURCES_DIST)
-am__noinst_HEADERS_DIST = sql-api.h sql-api-private.h sql-pool.h
-am__pkginc_lib_HEADERS_DIST = sql-api.h sql-api-private.h sql-pool.h
-HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
+	$(am__libdriver_sqlite_la_SOURCES_DIST) \
+	$(am__libsql_la_SOURCES_DIST)
+HEADERS = $(pkginc_lib_HEADERS)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
+ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTH_CFLAGS = @AUTH_CFLAGS@
@@ -193,10 +190,18 @@ LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
+LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
+LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
+LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
+LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
@@ -207,6 +212,7 @@ MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
 MYSQL_CFLAGS = @MYSQL_CFLAGS@
+MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -228,7 +234,9 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
+RUN_TEST = @RUN_TEST@
 SED = @SED@
+SETTING_FILES = @SETTING_FILES@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 SQLITE_CFLAGS = @SQLITE_CFLAGS@
@@ -237,8 +245,8 @@ SQL_CFLAGS = @SQL_CFLAGS@
 SQL_LIBS = @SQL_LIBS@
 SSL_CFLAGS = @SSL_CFLAGS@
 SSL_LIBS = @SSL_LIBS@
-STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
+VALGRIND = @VALGRIND@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -300,7 +308,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-noinst_LIBRARIES = libsql.a
+noinst_LTLIBRARIES = libsql.la
 SQL_DRIVER_PLUGINS = $(am__append_1) $(am__append_2) $(am__append_3)
 @BUILD_MYSQL_TRUE@@SQL_PLUGINS_TRUE@MYSQL_LIB = libdriver_mysql.la
 @BUILD_PGSQL_TRUE@@SQL_PLUGINS_TRUE@PGSQL_LIB = libdriver_pgsql.la
@@ -310,26 +318,26 @@ SQL_DRIVER_PLUGINS = $(am__append_1) $(am__append_2) $(am__append_3)
 @SQL_PLUGINS_TRUE@	$(PGSQL_LIB) \
 @SQL_PLUGINS_TRUE@	$(SQLITE_LIB)
 
-@SQL_PLUGINS_TRUE@sql_moduledir = $(moduledir)/sql
+@SQL_PLUGINS_TRUE@sql_moduledir = $(moduledir)
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
-	-DMODULEDIR=\""$(moduledir)"\" \
 	$(SQL_CFLAGS)
 
 dist_sources = \
 	sql-api.c \
-	sql-pool.c
+	sql-db-cache.c
 
 @SQL_PLUGINS_FALSE@driver_sources = \
 @SQL_PLUGINS_FALSE@	driver-mysql.c \
 @SQL_PLUGINS_FALSE@	driver-pgsql.c \
 @SQL_PLUGINS_FALSE@	driver-sqlite.c
 
-libsql_a_SOURCES = \
+libsql_la_SOURCES = \
 	$(dist_sources) \
 	$(driver_sources) \
-	sql-drivers-register.c
+	driver-sqlpool.c
 
+nodist_libsql_la_SOURCES = sql-drivers-register.c
 @SQL_PLUGINS_TRUE@libdriver_mysql_la_LDFLAGS = -module -avoid-version
 @SQL_PLUGINS_TRUE@libdriver_mysql_la_LIBADD = $(MYSQL_LIBS)
 @SQL_PLUGINS_TRUE@libdriver_mysql_la_CPPFLAGS = -I$(top_srcdir)/src/lib $(MYSQL_CFLAGS)
@@ -345,11 +353,10 @@ libsql_a_SOURCES = \
 headers = \
 	sql-api.h \
 	sql-api-private.h \
-	sql-pool.h
+	sql-db-cache.h
 
-@INSTALL_HEADERS_TRUE@pkginc_libdir = $(pkgincludedir)/src/lib-sql
-@INSTALL_HEADERS_TRUE@pkginc_lib_HEADERS = $(headers)
-@INSTALL_HEADERS_FALSE@noinst_HEADERS = $(headers)
+pkginc_libdir = $(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)
 all: all-am
 
 .SUFFIXES:
@@ -385,12 +392,14 @@ $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
 
-clean-noinstLIBRARIES:
-	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
-libsql.a: $(libsql_a_OBJECTS) $(libsql_a_DEPENDENCIES) 
-	-rm -f libsql.a
-	$(libsql_a_AR) libsql.a $(libsql_a_OBJECTS) $(libsql_a_LIBADD)
-	$(RANLIB) libsql.a
+clean-noinstLTLIBRARIES:
+	-test -z "$(noinst_LTLIBRARIES)" || rm -f $(noinst_LTLIBRARIES)
+	@list='$(noinst_LTLIBRARIES)'; for p in $$list; do \
+	  dir="`echo $$p | sed -e 's|/[^/]*$$||'`"; \
+	  test "$$dir" != "$$p" || dir=.; \
+	  echo "rm -f \"$${dir}/so_locations\""; \
+	  rm -f "$${dir}/so_locations"; \
+	done
 install-sql_moduleLTLIBRARIES: $(sql_module_LTLIBRARIES)
 	@$(NORMAL_INSTALL)
 	test -z "$(sql_moduledir)" || $(MKDIR_P) "$(DESTDIR)$(sql_moduledir)"
@@ -428,6 +437,8 @@ libdriver_pgsql.la: $(libdriver_pgsql_la_OBJECTS) $(libdriver_pgsql_la_DEPENDENC
 	$(libdriver_pgsql_la_LINK) $(am_libdriver_pgsql_la_rpath) $(libdriver_pgsql_la_OBJECTS) $(libdriver_pgsql_la_LIBADD) $(LIBS)
 libdriver_sqlite.la: $(libdriver_sqlite_la_OBJECTS) $(libdriver_sqlite_la_DEPENDENCIES) 
 	$(libdriver_sqlite_la_LINK) $(am_libdriver_sqlite_la_rpath) $(libdriver_sqlite_la_OBJECTS) $(libdriver_sqlite_la_LIBADD) $(LIBS)
+libsql.la: $(libsql_la_OBJECTS) $(libsql_la_DEPENDENCIES) 
+	$(LINK)  $(libsql_la_OBJECTS) $(libsql_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -435,15 +446,16 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/driver-mysql.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/driver-pgsql.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/driver-sqlite.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/driver-mysql.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/driver-pgsql.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/driver-sqlite.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/driver-sqlpool.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdriver_mysql_la-driver-mysql.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdriver_pgsql_la-driver-pgsql.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdriver_sqlite_la-driver-sqlite.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sql-api.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sql-drivers-register.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sql-pool.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sql-api.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sql-db-cache.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sql-drivers-register.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -597,7 +609,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LIBRARIES) $(LTLIBRARIES) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(sql_moduledir)" "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -626,7 +638,7 @@ maintainer-clean-generic:
 @SQL_PLUGINS_FALSE@install-exec-local:
 clean: clean-am
 
-clean-am: clean-generic clean-libtool clean-noinstLIBRARIES \
+clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	clean-sql_moduleLTLIBRARIES mostlyclean-am
 
 distclean: distclean-am
@@ -700,7 +712,7 @@ uninstall-am: uninstall-pkginc_libHEADERS \
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-noinstLIBRARIES \
+	clean-libtool clean-noinstLTLIBRARIES \
 	clean-sql_moduleLTLIBRARIES ctags distclean distclean-compile \
 	distclean-generic distclean-libtool distclean-tags distdir dvi \
 	dvi-am html html-am info info-am install install-am \
@@ -739,7 +751,7 @@ sql-drivers-register.c: Makefile
 @SQL_PLUGINS_TRUE@	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
 @SQL_PLUGINS_TRUE@	  for driver in $(SQL_DRIVER_PLUGINS); do \
 @SQL_PLUGINS_TRUE@	    rm -f $(DESTDIR)$(moduledir)/$$d/libdriver_$$driver.so; \
-@SQL_PLUGINS_TRUE@	    $(LN_S) ../sql/libdriver_$$driver.so $(DESTDIR)$(moduledir)/$$d; \
+@SQL_PLUGINS_TRUE@	    $(LN_S) ../libdriver_$$driver.so $(DESTDIR)$(moduledir)/$$d; \
 @SQL_PLUGINS_TRUE@	  done; \
 @SQL_PLUGINS_TRUE@	done
 

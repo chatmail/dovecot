@@ -97,11 +97,13 @@ Dynamic passwd-file locations
 
 ---%<-------------------------------------------------------------------------
 mail_location = maildir:/home/%d/%n/Maildir
-userdb passwd-file {
-  args = /home/%d/etc/passwd
+passdb {
+  driver = passwd-file
+  args = username_format=%n /home/%d/etc/shadow
 }
-passdb passwd-file {
-  args = /home/%d/etc/shadow
+userdb {
+  driver = passwd-file
+  args = username_format=%n /home/%d/etc/passwd
 }
 ---%<-------------------------------------------------------------------------
 
@@ -111,7 +113,7 @@ is kept in their home directory at '/home/<domain>/<username>/Maildir'.
 The usernames in the passwd and shadow files are expected to contain only the
 user part, no domain. This is because the path itself already contained %d to
 specify the domain. If you want the files to contain full user@domain names,
-you can use %0.d instead of %d.
+you can use 'username_format=%u'.
 
 static userdb
 =============
@@ -122,9 +124,11 @@ is to use the <static userdb> [UserDatabase.Static.txt]:
 
 ---%<-------------------------------------------------------------------------
 mail_location = maildir:~/Maildir
-passdb pam {
+passdb {
+  driver = pam
 }
-userdb static {
+userdb {
+  driver = static
   args = uid=vmail gid=vmail home=/var/mail/virtual/%d/%n
 }
 ---%<-------------------------------------------------------------------------
@@ -142,4 +146,4 @@ Existing virtual user management software
    <Migration.Linuxconf.txt>
  * Also see the <HowTo.txt> page
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

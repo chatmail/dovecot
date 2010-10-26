@@ -39,10 +39,6 @@ const char *t_strconcat(const char *str1, ...)
 /* Like t_strdup(), but stop at cutchar. */
 const char *t_strcut(const char *str, char cutchar);
 
-/* Return TRUE if all characters in string are numbers.
-   Stop when `end_char' is found from string. */
-bool is_numeric(const char *str, char end_char) ATTR_PURE;
-
 /* Like strlcpy(), but return -1 if buffer was overflown, 0 if not. */
 int i_strocpy(char *dest, const char *src, size_t dstsize);
 
@@ -80,9 +76,13 @@ const char *t_strarray_join(const char *const *arr, const char *separator)
 	ATTR_MALLOC;
 /* Removes a value from NULL-terminated string array. Returns TRUE if found. */
 bool str_array_remove(const char **arr, const char *value);
-/* Returns TRUE if value exists in NULL-terminated string array.
-   Strings are compared case-insensitively. */
+/* Returns TRUE if value exists in NULL-terminated string array. */
+bool str_array_find(const char *const *arr, const char *value);
+/* Like str_array_find(), but use strcasecmp(). */
 bool str_array_icase_find(const char *const *arr, const char *value);
+/* Duplicate array of strings. The memory can be freed by freeing the
+   return value. */
+const char **p_strarray_dup(pool_t pool, const char *const *arr);
 
 /* INTERNAL */
 char *t_noalloc_strdup_vprintf(const char *format, va_list args,

@@ -1,4 +1,4 @@
-noinst_LIBRARIES = liblib.a
+noinst_LTLIBRARIES = liblib.la
 
 BUILT_SOURCES = unicodemap.c
 
@@ -8,9 +8,11 @@ $(srcdir)/unicodemap.c: unicodemap.pl
 	test -f UnicodeData.txt || wget http://www.unicode.org/Public/UNIDATA/UnicodeData.txt
 	perl $(srcdir)/unicodemap.pl < UnicodeData.txt > $@
 
-liblib_a_SOURCES = \
+liblib_la_SOURCES = \
+	abspath.c \
 	array.c \
 	aqueue.c \
+	askpass.c \
 	backtrace-string.c \
 	base64.c \
 	bsearch-insert-pos.c \
@@ -22,6 +24,7 @@ liblib_a_SOURCES = \
 	data-stack.c \
 	eacces-error.c \
 	env-util.c \
+	execv-const.c \
 	failures.c \
 	fd-close-on-exec.c \
 	fd-set-nonblock.c \
@@ -33,6 +36,8 @@ liblib_a_SOURCES = \
 	file-lock.c \
 	file-set-size.c \
 	hash.c \
+	hash-format.c \
+	hash-method.c \
 	hash2.c \
 	hex-binary.c \
 	hex-dec.c \
@@ -42,6 +47,7 @@ liblib_a_SOURCES = \
 	imem.c \
 	iostream.c \
 	istream.c \
+	istream-base64-encoder.c \
 	istream-concat.c \
 	istream-crlf.c \
 	istream-data.c \
@@ -69,7 +75,6 @@ liblib_a_SOURCES = \
 	mempool-alloconly.c \
 	mempool-datastack.c \
 	mempool-system.c \
-	mempool-system-clean.c \
 	mempool-unsafe-datastack.c \
 	mkdir-parents.c \
 	mmap-anon.c \
@@ -80,6 +85,7 @@ liblib_a_SOURCES = \
 	nfs-workarounds.c \
 	ostream.c \
 	ostream-file.c \
+	ostream-buffer.c \
 	primes.c \
 	printf-format-fix.c \
 	process-title.c \
@@ -100,6 +106,7 @@ liblib_a_SOURCES = \
 	str-sanitize.c \
 	strescape.c \
 	strfuncs.c \
+	strnum.c \
 	time-util.c \
 	unix-socket-create.c \
 	unlink-directory.c \
@@ -108,12 +115,15 @@ liblib_a_SOURCES = \
 	utc-offset.c \
 	utc-mktime.c \
 	var-expand.c \
+	wildcard-match.c \
 	write-full.c
 
 headers = \
+	abspath.h \
 	aqueue.h \
 	array.h \
 	array-decl.h \
+	askpass.h \
 	backtrace-string.h \
 	base64.h \
 	bsearch-insert-pos.h \
@@ -125,6 +135,7 @@ headers = \
 	data-stack.h \
 	eacces-error.h \
 	env-util.h \
+	execv-const.h \
 	failures.h \
 	fd-close-on-exec.h \
 	fd-set-nonblock.h \
@@ -135,7 +146,10 @@ headers = \
 	file-dotlock.h \
 	file-lock.h \
 	file-set-size.h \
+	fsync-mode.h \
 	hash.h \
+	hash-format.h \
+	hash-method.h \
 	hash2.h \
 	hex-binary.h \
 	hex-dec.h \
@@ -145,6 +159,7 @@ headers = \
 	imem.h \
 	iostream-internal.h \
 	istream.h \
+	istream-base64-encoder.h \
 	istream-concat.h \
 	istream-crlf.h \
 	istream-internal.h \
@@ -190,6 +205,7 @@ headers = \
 	str-sanitize.h \
 	strescape.h \
 	strfuncs.h \
+	strnum.h \
 	time-util.h \
 	unix-socket-create.h \
 	unlink-directory.h \
@@ -198,11 +214,60 @@ headers = \
 	utc-offset.h \
 	utc-mktime.h \
 	var-expand.h \
+	wildcard-match.h \
 	write-full.h
 
-if INSTALL_HEADERS
-  pkginc_libdir=$(pkgincludedir)/src/lib
-  pkginc_lib_HEADERS = $(headers)
-else
-  noinst_HEADERS = $(headers)
-endif
+test_programs = test-lib
+noinst_PROGRAMS = $(test_programs)
+
+test_lib_CPPFLAGS = \
+	-I$(top_srcdir)/src/lib-test
+
+test_libs = \
+	../lib-test/libtest.la \
+	liblib.la
+
+test_lib_SOURCES = \
+	test-lib.c \
+	test-array.c \
+	test-aqueue.c \
+	test-base64.c \
+	test-bsearch-insert-pos.c \
+	test-buffer.c \
+	test-crc32.c \
+	test-hash-format.c \
+	test-hex-binary.c \
+	test-istream-concat.c \
+	test-istream-crlf.c \
+	test-istream-seekable.c \
+	test-istream-tee.c \
+	test-llist.c \
+	test-mempool-alloconly.c \
+	test-network.c \
+	test-ostream-file.c \
+	test-primes.c \
+	test-priorityq.c \
+	test-seq-range-array.c \
+	test-strescape.c \
+	test-strfuncs.c \
+	test-str-find.c \
+	test-str-sanitize.c \
+	test-time-util.c \
+	test-utc-mktime.c \
+	test-var-expand.c
+
+test_headers = \
+	test-lib.h
+
+test_lib_LDADD = $(test_libs)
+test_lib_DEPENDENCIES = $(test_libs)
+
+check: check-am check-test
+check-test: all-am
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
+
+pkginc_libdir=$(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)
+noinst_HEADERS = $(test_headers)

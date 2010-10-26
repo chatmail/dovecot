@@ -37,7 +37,8 @@ host_triplet = @host@
 subdir = doc/wiki
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -71,6 +72,7 @@ am__installdirs = "$(DESTDIR)$(wikidir)"
 DATA = $(wiki_DATA)
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
+ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTH_CFLAGS = @AUTH_CFLAGS@
@@ -116,10 +118,18 @@ LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
+LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
+LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
+LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
+LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
@@ -130,6 +140,7 @@ MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
 MYSQL_CFLAGS = @MYSQL_CFLAGS@
+MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -151,7 +162,9 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
+RUN_TEST = @RUN_TEST@
 SED = @SED@
+SETTING_FILES = @SETTING_FILES@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 SQLITE_CFLAGS = @SQLITE_CFLAGS@
@@ -160,8 +173,8 @@ SQL_CFLAGS = @SQL_CFLAGS@
 SQL_LIBS = @SQL_LIBS@
 SSL_CFLAGS = @SSL_CFLAGS@
 SSL_LIBS = @SSL_LIBS@
-STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
+VALGRIND = @VALGRIND@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -255,7 +268,6 @@ wikifiles = ACL.txt \
 	Chrooting.txt \
 	Clients.NegativeUIDs.txt \
 	Clients.txt \
-	CommandLine.txt \
 	CompilingSource.txt \
 	Debugging.Authentication.txt \
 	Debugging.ProcessTracing.txt \
@@ -264,6 +276,7 @@ wikifiles = ACL.txt \
 	Design.Arrays.txt \
 	Design.AuthProcess.txt \
 	Design.Buffers.txt \
+	Design.Dsync.txt \
 	Design.Indexes.Cache.txt \
 	Design.Indexes.MailIndexApi.txt \
 	Design.Indexes.MainIndex.txt \
@@ -289,6 +302,7 @@ wikifiles = ACL.txt \
 	Design.Storage.Plugins.txt \
 	Design.Strings.txt \
 	Design.txt \
+	Director.txt \
 	DomainLost.txt \
 	FindMailLocation.txt \
 	FinishBasicConfiguration.txt \
@@ -300,25 +314,24 @@ wikifiles = ACL.txt \
 	HowTo.SimpleVirtualInstall.txt \
 	HowTo.txt \
 	IndexFiles.txt \
-	InetdInstall.txt \
 	Iptables.txt \
 	LDA.Exim.txt \
 	LDA.Indexing.txt \
 	LDA.Postfix.txt \
 	LDA.Qmail.txt \
 	LDA.Sendmail.txt \
-	LDA.Sieve.CMU.txt \
 	LDA.Sieve.Dovecot.txt \
 	LDA.Sieve.txt \
 	LDA.txt \
+	LMTP.txt \
 	Logging.txt \
 	LoginProcess.txt \
 	MDA.txt \
 	MTA.txt \
 	MailLocation.LocalDisk.txt \
 	MailLocation.Maildir.txt \
-	MailLocation.Mbox.txt \
 	MailLocation.SharedDisk.txt \
+	MailLocation.mbox.txt \
 	MailLocation.txt \
 	MailboxFormat.Cydir.txt \
 	MailboxFormat.MH.txt \
@@ -363,7 +376,6 @@ wikifiles = ACL.txt \
 	PasswordDatabase.txt \
 	PerformanceTuning.txt \
 	Plugins.Autocreate.txt \
-	Plugins.Convert.txt \
 	Plugins.Expire.txt \
 	Plugins.FTS.Lucene.txt \
 	Plugins.FTS.Solr.txt \
@@ -380,7 +392,7 @@ wikifiles = ACL.txt \
 	PostLoginScripting.txt \
 	PreAuth.txt \
 	QuickConfiguration.txt \
-	Quota.1.1.txt \
+	Quota.Configuration.txt \
 	Quota.Dict.txt \
 	Quota.Dirsize.txt \
 	Quota.FS.txt \
@@ -405,6 +417,7 @@ wikifiles = ACL.txt \
 	Upgrading.1.0.txt \
 	Upgrading.1.1.txt \
 	Upgrading.1.2.txt \
+	Upgrading.2.0.txt \
 	Upgrading.txt \
 	UserDatabase.ExtraFields.txt \
 	UserDatabase.NSS.txt \
@@ -412,7 +425,6 @@ wikifiles = ACL.txt \
 	UserDatabase.Static.txt \
 	UserDatabase.txt \
 	UserIds.txt \
-	VarMailDotLock.txt \
 	Variables.txt \
 	VirtualUsers.Home.txt \
 	VirtualUsers.txt \

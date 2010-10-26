@@ -2,12 +2,32 @@ Post-login scripting
 ====================
 
 If you want to do something special after authentication, but before beginning
-the IMAP or POP3 session, you can do this by changing the 'mail_executable'
-setting to run a script. Below are some examples for what this can be used for.
+the IMAP or POP3 session, you can do this by telling imap/pop3 executable to
+use post-login service:
 
-*WARNING: The process still runs as root at this point!* The privileges are
-dropped only after the imap process starts. You can change this by setting
-'mail_drop_priv_before_exec=yes'.
+---%<-------------------------------------------------------------------------
+service imap {
+  executable = imap imap-postlogin
+}
+
+# The service name below doesn't actually matter.
+service imap-postlogin {
+  executable = script-login /usr/local/bin/postlogin.sh
+
+  # the script process runs as the user specified here
+  user = root
+  unix_listener imap-postlogin {
+  }
+}
+---%<-------------------------------------------------------------------------
+
+You can run multiple post-login scripts by just giving multiple scripts as
+parameters to 'script-login', for example:
+
+---%<-------------------------------------------------------------------------
+  executable = script-login rawlog /usr/local/bin/postlogin.sh
+/usr/local/bin/postlogin2.sh
+---%<-------------------------------------------------------------------------
 
 Running environment
 -------------------
@@ -17,29 +37,24 @@ network socket, so you can send data to client by simply writing to stdout.
 Standard error fd is redirected to Dovecot's error log, you can write errors
 there as well.
 
-All of Dovecot's settings are passed via environment variables from master
-process to mail processes. Usually the settings have same names as in
-'dovecot.conf', except uppercased. So for example 'mmap_disable' setting shows
-up in 'MMAP_DISABLE' environment variable. You can override any settings you
-want by modifying the environment before executing the imap/pop3 binary.
+The script can use environment variables:
 
-Note that boolean settings are enabled simply by having the environment
-variable exist. So 'MMAP_DISABLE=1' and 'MMAP_DISABLE=0' (and =anything) means
-the same as 'mmap_disable=yes'.
+ * USER: Username
+ * IP: Remote IP address
+ * LOCAL_IP: Local IP address
+ * Fields returned by userdb lookup with their keys uppercased (e.g. if userdb
+   returned home, it's stored in HOME).
 
-The only list for mapping settings to environment variables exists in the
-source code ('src/master/mail-process.c'. Another somewhat easy way would be
-for you to get a list of all environment variables and find the settings you
-want to override from it:
+It's possible to add/modify userdb fields by adding them to environment and
+adding the field to USERDB_KEYS. For example to change user's mail location:
 
 ---%<-------------------------------------------------------------------------
-#!/bin/sh
-set > /tmp/dovecot-environment
-exec /usr/local/libexec/dovecot/imap "$@"
+export MAIL=maildir:/tmp/test
+export USERDB_KEYS="$USERDB_KEYS mail"
+exec "$@"
 ---%<-------------------------------------------------------------------------
 
-The USER and IP environment variables come from the login process and are
-guaranteed to be sanitized.
+You can change any Dovecot settings using the above method.
 
 Last-login tracking
 -------------------
@@ -53,9 +68,7 @@ touch ~/.last_login
 # b) SQL based tracking. Beware of potential SQL injection holes if you allow
 # users to have ' characters in usernames.
 #echo "update last_login = now WHERE user = '$USER'" | mysql mails
-# Finally execute the imap/pop3 binary. If you use both, you'll need two
-scripts.
-exec /usr/local/libexec/dovecot/imap "$@"
+exec "$@"
 ---%<-------------------------------------------------------------------------
 
 /Note: if creating a timestamp inside the Maildir itself, it's better to avoid
@@ -72,24 +85,18 @@ Alerts
 ------
 
 If you want to give the user's client some warning notification, you can do it
-just by writing it to stdout. Although note that not all clients show the
-alerts, even though IMAP RFC requires it. Be careful to test before sending an
-IMAP ALERT that your current user is not 'dump-capability'. If not you will
-break your IMAP connection. Some clients will not correctly handle alerts that
-you send in this fashion unless they end in CRLF, so make sure to end your
-lines with \r\n instead of just \n.
+just by writing it to stdout. But note:
+
+ * Not all clients show the alerts, even though IMAP RFC requires it.
+ * IMAP protocol requires CRLF (\r\n) line feeds. Some clients will break if
+   you only send LF.
 
 ---%<-------------------------------------------------------------------------
 #!/bin/sh
 if [ -f ~/.out-of-office ]; then
-  if [ "$USER" != "dump-capability" ]
-  then
-    echo -en "* OK [ALERT] You're still marked as being out of office.\r\n"
-  fi
+  printf "* OK [ALERT] You're still marked as being out of office.\r\n"
 fi
-# Finally execute the imap/pop3 binary. If you use both, you'll need two
-scripts.
-exec /usr/local/libexec/dovecot/imap "$@"
+exec "$@"
 ---%<-------------------------------------------------------------------------
 
 Use UNIX groups for ACL authorization
@@ -99,30 +106,31 @@ Use UNIX groups for ACL authorization
 #!/bin/sh
 ACL_GROUPS=`groups $USER | tr ' '  ','`
 export ACL_GROUPS
-exec /usr/lib/dovecot/imap "$@"
+exec "$@"
 ---%<-------------------------------------------------------------------------
 
 Denying connection from some IP/User
 ------------------------------------
 
 You can use the IP and USER shell variables that are setup by dovecot in a bash
-script in order to deny connection (after a successfull login), like this:
+script in order to deny connection (after a successful login), like this:
 
 ---%<-------------------------------------------------------------------------
 if [ "$USER" = "myuser" ] ; then
-  echo "* OK [ALERT] The user '$USER' can not login"
-  echo "* NO"
-  exit 1
+  printf "* NO [ALERT] The user '$USER' can not login\r\n"
+  exit 0
 fi
 
 if [ ! "$IP" = "192.168.1.1" ] ; then
-  echo "* OK [ALERT] Access not allowed from the Internet"
-  echo "* NO"
-  exit 1
+  printf "* NO [ALERT] Access not allowed from the Internet\r\n"
+  exit 0
 fi
+exec "$@"
 ---%<-------------------------------------------------------------------------
 
-Or use the Connect ACL Script for limiting some user from connecting from the
-Internet. More info here:http://www.linux.org.py/wiki/howto/dovecot_connect_acl
+You can also use
 
-(This file was created from the wiki on 2010-05-24 04:42)
+ * http://www.linux.org.py/wiki/howto/dovecot_connect_acl
+ * TCP wrappers can be used with 'login_access_sockets = tcpwrap'
+
+(This file was created from the wiki on 2010-07-02 21:30)

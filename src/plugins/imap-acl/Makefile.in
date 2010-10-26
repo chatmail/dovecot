@@ -39,7 +39,8 @@ subdir = src/plugins/imap-acl
 DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -69,7 +70,8 @@ am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
 am__installdirs = "$(DESTDIR)$(imap_moduledir)"
 LTLIBRARIES = $(imap_module_LTLIBRARIES)
-lib02_imap_acl_plugin_la_LIBADD =
+@DOVECOT_PLUGIN_DEPS_TRUE@lib02_imap_acl_plugin_la_DEPENDENCIES =  \
+@DOVECOT_PLUGIN_DEPS_TRUE@	../acl/lib01_acl_plugin.la
 am_lib02_imap_acl_plugin_la_OBJECTS = imap-acl-plugin.lo
 lib02_imap_acl_plugin_la_OBJECTS =  \
 	$(am_lib02_imap_acl_plugin_la_OBJECTS)
@@ -96,6 +98,7 @@ ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
+ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTH_CFLAGS = @AUTH_CFLAGS@
@@ -141,10 +144,18 @@ LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
+LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
+LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
+LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
+LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
@@ -155,6 +166,7 @@ MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
 MYSQL_CFLAGS = @MYSQL_CFLAGS@
+MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -176,7 +188,9 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
+RUN_TEST = @RUN_TEST@
 SED = @SED@
+SETTING_FILES = @SETTING_FILES@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 SQLITE_CFLAGS = @SQLITE_CFLAGS@
@@ -185,8 +199,8 @@ SQL_CFLAGS = @SQL_CFLAGS@
 SQL_LIBS = @SQL_LIBS@
 SSL_CFLAGS = @SSL_CFLAGS@
 SSL_LIBS = @SSL_LIBS@
-STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
+VALGRIND = @VALGRIND@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -252,14 +266,18 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-imap \
+	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-storage \
 	-I$(top_srcdir)/src/imap \
 	-I$(top_srcdir)/src/plugins/acl
 
-imap_moduledir = $(moduledir)/imap
+imap_moduledir = $(moduledir)
 lib02_imap_acl_plugin_la_LDFLAGS = -module -avoid-version
 imap_module_LTLIBRARIES = \
 	lib02_imap_acl_plugin.la
+
+@DOVECOT_PLUGIN_DEPS_TRUE@lib02_imap_acl_plugin_la_LIBADD = \
+@DOVECOT_PLUGIN_DEPS_TRUE@	../acl/lib01_acl_plugin.la
 
 lib02_imap_acl_plugin_la_SOURCES = \
 	imap-acl-plugin.c

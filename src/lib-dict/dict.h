@@ -48,15 +48,18 @@ int dict_lookup(struct dict *dict, pool_t pool,
 struct dict_iterate_context *
 dict_iterate_init(struct dict *dict, const char *path, 
 		  enum dict_iterate_flags flags);
-/* Returns -1 = error, 0 = finished, 1 = key/value set */
-int dict_iterate(struct dict_iterate_context *ctx,
-		 const char **key_r, const char **value_r);
-void dict_iterate_deinit(struct dict_iterate_context **ctx);
+struct dict_iterate_context *
+dict_iterate_init_multiple(struct dict *dict, const char *const *paths,
+			   enum dict_iterate_flags flags);
+bool dict_iterate(struct dict_iterate_context *ctx,
+		  const char **key_r, const char **value_r);
+/* Returns 0 = ok, -1 = iteration failed */
+int dict_iterate_deinit(struct dict_iterate_context **ctx);
 
 /* Start a new dictionary transaction. */
 struct dict_transaction_context *dict_transaction_begin(struct dict *dict);
 /* Commit the transaction. Returns 1 if ok, 0 if dict_atomic_inc() was used
-   on a non-existing key, -1 if failed. */
+   on a nonexistent key, -1 if failed. */
 int dict_transaction_commit(struct dict_transaction_context **ctx);
 /* Commit the transaction, but don't wait to see if it finishes successfully.
    If callback isn't NULL, it's called eventually. If it's not called by the
@@ -80,5 +83,10 @@ void dict_unset(struct dict_transaction_context *ctx,
    otherwise commit() will return 0. */
 void dict_atomic_inc(struct dict_transaction_context *ctx,
 		     const char *key, long long diff);
+
+/* Escape/unescape '/' characters in a string, so that it can be safely added
+   into path components in dict keys. */
+const char *dict_escape_string(const char *str);
+const char *dict_unescape_string(const char *str);
 
 #endif

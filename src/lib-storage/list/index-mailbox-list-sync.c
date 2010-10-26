@@ -42,16 +42,14 @@ static struct index_list_map index_list_map[] = {
 	{ NULL, 0, 0 }
 };
 
-static void (*index_list_next_hook_mailbox_created)(struct mailbox *box);
-
 static MODULE_CONTEXT_DEFINE_INIT(index_list_storage_module,
 				  &mail_storage_module_register);
 
-static int index_list_box_close(struct mailbox *box)
+static void index_list_box_close(struct mailbox *box)
 {
 	struct index_list_mailbox *ibox = INDEX_LIST_STORAGE_CONTEXT(box);
 
-	return ibox->module_ctx.super.close(box);
+	ibox->module_ctx.super.close(box);
 }
 
 static int index_list_update_mail_index(struct index_mailbox_list *ilist,
@@ -86,14 +84,12 @@ index_list_mailbox_open_unchanged_view(struct mailbox *box,
 				       struct mail_index_view **view_r,
 				       uint32_t *seq_r)
 {
-	struct mailbox_list *list;
 	struct index_mailbox_list *ilist;
 	struct mail_index_view *view;
 	uint32_t uid, seq;
 	int ret;
 
-	list = mail_storage_get_list(box->storage);
-	ilist = INDEX_LIST_CONTEXT(list);
+	ilist = INDEX_LIST_CONTEXT(box->list);
 
 	if (ilist == NULL) {
 		/* indexing disabled */
@@ -132,7 +128,6 @@ index_list_mailbox_open_unchanged_view(struct mailbox *box,
 static int
 index_list_get_cached_status(struct mailbox *box, struct mailbox_status *status)
 {
-	struct mailbox_list *list;
 	struct index_mailbox_list *ilist;
 	struct mail_index_view *view;
 	const void *data;
@@ -147,8 +142,7 @@ index_list_get_cached_status(struct mailbox *box, struct mailbox_status *status)
 	if (ret <= 0)
 		return ret;
 
-	list = mail_storage_get_list(box->storage);
-	ilist = INDEX_LIST_CONTEXT(list);
+	ilist = INDEX_LIST_CONTEXT(box->list);
 	for (i = 0; index_list_map[i].name != NULL; i++) {
 		ext_id_p = PTR_OFFSET(ilist, index_list_map[i].eid_offset);
 		mail_index_lookup_ext(view, seq, *ext_id_p, &data, &expunged);
@@ -223,6 +217,7 @@ index_list_update(struct index_mailbox_list *ilist, struct mailbox *box,
 {
 	struct index_list_mailbox *ibox = INDEX_LIST_STORAGE_CONTEXT(box);
 	struct mail_index_transaction *trans;
+	struct mail_index_transaction_commit_result result;
 	const void *data;
 	const uint32_t *counter_p;
 	uint32_t *ext_id_p;
@@ -258,8 +253,12 @@ index_list_update(struct index_mailbox_list *ilist, struct mailbox *box,
 		return -1;
 	}
 
-	return mail_index_transaction_commit(&trans, &ibox->log_seq,
-					     &ibox->log_offset);
+	if (mail_index_transaction_commit_full(&trans, &result) < 0)
+		return -1;
+
+	ibox->log_seq = result.log_file_seq;
+	ibox->log_offset = result.log_file_offset;
+	return 0;
 }
 
 static struct mailbox_sync_context *
@@ -307,41 +306,29 @@ static bool index_list_sync_next(struct mailbox_sync_context *ctx,
 }
 
 static int index_list_sync_deinit(struct mailbox_sync_context *ctx,
-				  enum mailbox_status_items status_items,
-				  struct mailbox_status *status_r)
+				  struct mailbox_sync_status *status_r)
 {
 	struct mailbox *box = ctx->box;
 	struct index_list_mailbox *ibox = INDEX_LIST_STORAGE_CONTEXT(box);
-	struct mailbox_list *list;
 	struct index_mailbox_list *ilist;
 	struct mail_index_view *view;
-	struct mailbox_status tmp_status, *status;
+	struct mailbox_status status;
 	uint32_t uid, seq;
 
 	if (!box->opened) {
 		/* nothing synced. just return the status. */
 		i_free(ctx);
-
-		if (status_items != 0)
-			index_list_get_status(box, status_items, status_r);
 		return 0;
 	}
 
-	list = mail_storage_get_list(box->storage);
-	ilist = INDEX_LIST_CONTEXT(list);
+	ilist = INDEX_LIST_CONTEXT(box->list);
 
 	if (ilist == NULL) {
 		/* indexing disabled */
-		return ibox->module_ctx.super.
-			sync_deinit(ctx, status_items, status_r);
+		return ibox->module_ctx.super.sync_deinit(ctx, status_r);
 	}
 
-	/* if status_items == 0, the status_r may be NULL. we really want to
-	   know the status anyway, so save it elsewhere then */
-	status = status_items == 0 ? &tmp_status : status_r;
-	status_items |= CACHED_STATUS_ITEMS;
-
-	if (ibox->module_ctx.super.sync_deinit(ctx, status_items, status) < 0)
+	if (ibox->module_ctx.super.sync_deinit(ctx, status_r) < 0)
 		return -1;
 	ctx = NULL;
 
@@ -352,20 +339,19 @@ static int index_list_sync_deinit(struct mailbox_sync_context *ctx,
 	}
 
 	view = mail_index_view_open(ilist->mail_index);
-	if (mail_index_lookup_seq(view, uid, &seq))
-		(void)index_list_update(ilist, box, view, seq, status);
+	if (mail_index_lookup_seq(view, uid, &seq)) {
+		mailbox_get_status(box, CACHED_STATUS_ITEMS, &status);
+		(void)index_list_update(ilist, box, view, seq, &status);
+	}
 	mail_index_view_close(&view);
 	return 0;
 }
 
-static void index_list_mail_mailbox_opened(struct mailbox *box)
+static void index_list_mail_mailbox_allocated(struct mailbox *box)
 {
 	struct index_mailbox_list *ilist =
-		INDEX_LIST_CONTEXT(box->storage->list);
+		INDEX_LIST_CONTEXT(box->list);
 	struct index_list_mailbox *ibox;
-
-	if (index_list_next_hook_mailbox_created != NULL)
-		index_list_next_hook_mailbox_created(box);
 
 	if (ilist == NULL)
 		return;
@@ -395,8 +381,11 @@ void index_mailbox_list_sync_init_list(struct mailbox_list *list)
 	}
 }
 
+static struct mail_storage_hooks index_mailbox_list_sync_hooks = {
+	.mailbox_allocated = index_list_mail_mailbox_allocated
+};
+
 void index_mailbox_list_sync_init(void)
 {
-	index_list_next_hook_mailbox_created = hook_mailbox_opened;
-	hook_mailbox_opened = index_list_mail_mailbox_opened;
+	mail_storage_hooks_add_internal(&index_mailbox_list_sync_hooks);
 }

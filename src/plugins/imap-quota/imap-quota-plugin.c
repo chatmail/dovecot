@@ -1,11 +1,11 @@
 /* Copyright (c) 2005-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "imap-common.h"
 #include "str.h"
 #include "ostream.h"
 #include "imap-quote.h"
 #include "mail-namespace.h"
-#include "commands.h"
+#include "imap-commands.h"
 #include "quota.h"
 #include "quota-plugin.h"
 #include "imap-quota-plugin.h"
@@ -14,7 +14,10 @@
 
 #define QUOTA_USER_SEPARATOR ':'
 
-const char *imap_quota_plugin_version = PACKAGE_VERSION;
+const char *imap_quota_plugin_version = DOVECOT_VERSION;
+
+static struct module *imap_quota_module;
+static void (*next_hook_client_created)(struct client **client);
 
 static const char *
 imap_quota_root_get_name(struct mail_user *user, struct mail_user *owner,
@@ -66,43 +69,34 @@ quota_reply_write(string_t *str, struct mail_user *user,
 static bool cmd_getquotaroot(struct client_command_context *cmd)
 {
 	struct client *client = cmd->client;
-	struct mail_storage *storage;
+	struct quota_user *quser = QUOTA_USER_CONTEXT(client->user);
 	struct mail_namespace *ns;
 	struct mailbox *box;
 	struct quota_root_iter *iter;
         struct quota_root *root;
-	const char *orig_mailbox, *mailbox, *name;
+	const char *mailbox, *storage_name, *name;
 	string_t *quotaroot_reply, *quota_reply;
 
 	/* <mailbox> */
 	if (!client_read_string_args(cmd, 1, &mailbox))
 		return FALSE;
 
-	orig_mailbox = mailbox;
-	storage = client_find_storage(cmd, &mailbox);
-	if (storage == NULL)
+	ns = client_find_namespace(cmd, mailbox, &storage_name, NULL);
+	if (ns == NULL)
 		return TRUE;
 
-	box = mailbox_open(&storage, mailbox, NULL, (MAILBOX_OPEN_READONLY |
-						     MAILBOX_OPEN_FAST |
-						     MAILBOX_OPEN_KEEP_RECENT));
-	if (box == NULL) {
-		client_send_storage_error(cmd, storage);
-		return TRUE;
-	}
-
-	ns = mail_storage_get_namespace(storage);
-	if (quota_set == NULL) {
-		mailbox_close(&box);
+	if (quser == NULL) {
 		client_send_tagline(cmd, "OK No quota.");
 		return TRUE;
 	}
 	if (ns->owner != NULL && ns->owner != client->user &&
 	    !client->user->admin) {
-		mailbox_close(&box);
 		client_send_tagline(cmd, "NO Not showing other users' quota.");
 		return TRUE;
 	}
+
+	box = mailbox_alloc(ns->list, storage_name, MAILBOX_FLAG_READONLY |
+			    MAILBOX_FLAG_KEEP_RECENT);
 
 	/* build QUOTAROOT reply and QUOTA reply for all quota roots */
 	quotaroot_reply = t_str_new(128);
@@ -119,13 +113,17 @@ static bool cmd_getquotaroot(struct client_command_context *cmd)
 		quota_reply_write(quota_reply, client->user, ns->owner, root);
 	}
 	quota_root_iter_deinit(&iter);
-	mailbox_close(&box);
+	mailbox_free(&box);
 
 	/* send replies */
-	client_send_line(client, str_c(quotaroot_reply));
-	o_stream_send(client->output, str_data(quota_reply),
-		      str_len(quota_reply));
-	client_send_tagline(cmd, "OK Getquotaroot completed.");
+	if (str_len(quota_reply) == 0)
+		client_send_tagline(cmd, "OK No quota.");
+	else {
+		client_send_line(client, str_c(quotaroot_reply));
+		o_stream_send(client->output, str_data(quota_reply),
+			      str_len(quota_reply));
+		client_send_tagline(cmd, "OK Getquotaroot completed.");
+	}
 	return TRUE;
 }
 
@@ -139,11 +137,6 @@ static bool cmd_getquota(struct client_command_context *cmd)
 	/* <quota root> */
 	if (!client_read_string_args(cmd, 1, &root_name))
 		return FALSE;
-
-	if (quota_set == NULL) {
-		client_send_tagline(cmd, "OK No quota.");
-		return TRUE;
-	}
 
 	root = quota_root_lookup(cmd->client->user, root_name);
 	if (root == NULL && cmd->client->user->admin) {
@@ -174,22 +167,17 @@ static bool cmd_getquota(struct client_command_context *cmd)
 static bool cmd_setquota(struct client_command_context *cmd)
 {
 	struct quota_root *root;
-        const struct imap_arg *args, *arg;
-	const char *root_name, *name, *error;
+        const struct imap_arg *args, *list_args;
+	const char *root_name, *name, *value_str, *error;
 	uint64_t value;
 
 	/* <quota root> <resource limits> */
 	if (!client_read_args(cmd, 2, 0, &args))
 		return FALSE;
 
-	root_name = imap_arg_string(&args[0]);
-	if (args[1].type != IMAP_ARG_LIST || root_name == NULL) {
+	if (!imap_arg_get_astring(&args[0], &root_name) ||
+	    !imap_arg_get_list(&args[1], &list_args)) {
 		client_send_command_error(cmd, "Invalid arguments.");
-		return TRUE;
-	}
-
-	if (quota_set == NULL) {
-		client_send_tagline(cmd, "OK No quota.");
 		return TRUE;
 	}
 
@@ -199,16 +187,14 @@ static bool cmd_setquota(struct client_command_context *cmd)
 		return TRUE;
 	}
 
-        arg = IMAP_ARG_LIST_ARGS(&args[1]);
-	for (; arg->type != IMAP_ARG_EOL; arg += 2) {
-		name = imap_arg_string(arg);
-		if (name == NULL || arg[1].type != IMAP_ARG_ATOM ||
-		    !is_numeric(IMAP_ARG_STR(&arg[1]), '\0')) {
+	for (; !IMAP_ARG_IS_EOL(list_args); list_args += 2) {
+		if (!imap_arg_get_atom(&list_args[0], &name) ||
+		    !imap_arg_get_atom(&list_args[1], &value_str) ||
+		    str_to_uint64(value_str, &value) < 0) {
 			client_send_command_error(cmd, "Invalid arguments.");
 			return TRUE;
 		}
 
-                value = strtoull(IMAP_ARG_STR_NONULL(&arg[1]), NULL, 10);
 		if (quota_set_resource(root, name, value, &error) < 0) {
 			client_send_command_error(cmd, error);
 			return TRUE;
@@ -219,12 +205,24 @@ static bool cmd_setquota(struct client_command_context *cmd)
 	return TRUE;
 }
 
-void imap_quota_plugin_init(void)
+static void imap_quota_client_created(struct client **client)
+{
+	if (mail_user_is_plugin_loaded((*client)->user, imap_quota_module))
+		str_append((*client)->capability_string, " QUOTA");
+
+	if (next_hook_client_created != NULL)
+		next_hook_client_created(client);
+}
+
+void imap_quota_plugin_init(struct module *module)
 {
 	command_register("GETQUOTAROOT", cmd_getquotaroot, 0);
 	command_register("GETQUOTA", cmd_getquota, 0);
 	command_register("SETQUOTA", cmd_setquota, 0);
-	str_append(capability_string, " QUOTA");
+
+	imap_quota_module = module;
+	next_hook_client_created =
+		imap_client_created_hook_set(imap_quota_client_created);
 }
 
 void imap_quota_plugin_deinit(void)
@@ -232,4 +230,9 @@ void imap_quota_plugin_deinit(void)
 	command_unregister("GETQUOTAROOT");
 	command_unregister("GETQUOTA");
 	command_unregister("SETQUOTA");
+
+	imap_client_created_hook_set(next_hook_client_created);
 }
+
+const char *imap_quota_plugin_dependencies[] = { "quota", NULL };
+const char imap_quota_plugin_binary_dependency[] = "imap";

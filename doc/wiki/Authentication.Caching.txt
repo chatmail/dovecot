@@ -29,10 +29,10 @@ The settings related to the authentication cache are:
    is no longer used (except for internal failures) if it was created more than
    this many seconds ago. Entries are removed from the cache only when the
    cache is full and a new entry is to be added.
- * 'auth_cache_negative_ttl': (v1.1+ only) If a passdb or userdb lookup didn't
-   return any data (i.e. the user doesn't exist), it's also stored in the cache
-   as a negative entry. This setting allows you to give negative entries a
-   different TTL. 0 disables negative caching completely.
+ * 'auth_cache_negative_ttl': If a passdb or userdb lookup didn't return any
+   data (i.e. the user doesn't exist), it's also stored in the cache as a
+   negative entry. This setting allows you to give negative entries a different
+   TTL. 0 disables negative caching completely.
 
 It should be pretty safe to set very high TTLs, because the only field that
 usually can change is the user's password, and Dovecot attempts to catch those
@@ -59,7 +59,8 @@ cache key:
 For example if the PAM lookup depends on username and service, you can use:
 
 ---%<-------------------------------------------------------------------------
-passdb pam {
+passdb {
+  driver = pam
   args = cache_key=%s%u *
 }
 ---%<-------------------------------------------------------------------------
@@ -98,4 +99,4 @@ Early change scenario:
     previous authentication was unsuccessful, so Dovecot doesn't bother doing
     another backend passdb lookup (until cache TTL expires). The login fails.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

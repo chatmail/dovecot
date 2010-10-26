@@ -90,11 +90,8 @@ struct mail_index_strmap_hash_key {
 #define MAIL_INDEX_STRMAP_TIMEOUT_SECS 10
 
 const struct dotlock_settings default_dotlock_settings = {
-	MEMBER(temp_prefix) NULL,
-	MEMBER(lock_suffix) NULL,
-
-	MEMBER(timeout) MAIL_INDEX_STRMAP_TIMEOUT_SECS,
-	MEMBER(stale_timeout) 30
+	.timeout = MAIL_INDEX_STRMAP_TIMEOUT_SECS,
+	.stale_timeout = 30
 };
 
 struct mail_index_strmap *
@@ -102,14 +99,18 @@ mail_index_strmap_init(struct mail_index *index, const char *suffix)
 {
 	struct mail_index_strmap *strmap;
 
+	i_assert(index->open_count > 0);
+
 	strmap = i_new(struct mail_index_strmap, 1);
 	strmap->index = index;
 	strmap->path = i_strconcat(index->filepath, suffix, NULL);
 	strmap->fd = -1;
 
 	strmap->dotlock_settings = default_dotlock_settings;
-	strmap->dotlock_settings.use_excl_lock = index->use_excl_dotlocks;
-	strmap->dotlock_settings.nfs_flush = index->nfs_flush;
+	strmap->dotlock_settings.use_excl_lock =
+		(index->flags & MAIL_INDEX_OPEN_FLAG_DOTLOCK_USE_EXCL) != 0;
+	strmap->dotlock_settings.nfs_flush =
+		(index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0;
 	return strmap;
 }
 
@@ -125,7 +126,9 @@ mail_index_strmap_set_syscall_error(struct mail_index_strmap *strmap,
 
 	if (ENOSPACE(errno)) {
 		strmap->index->nodiskspace = TRUE;
-		return;
+		if ((strmap->index->flags &
+		     MAIL_INDEX_OPEN_FLAG_NEVER_IN_MEMORY) == 0)
+			return;
 	}
 
 	mail_index_set_error(strmap->index,
@@ -1038,6 +1041,7 @@ static int mail_index_strmap_recreate(struct mail_index_strmap_view *view)
 
 static int mail_index_strmap_lock(struct mail_index_strmap *strmap)
 {
+	unsigned int timeout_secs;
 	int ret;
 
 	i_assert(strmap->fd != -1);
@@ -1045,9 +1049,10 @@ static int mail_index_strmap_lock(struct mail_index_strmap *strmap)
 	if (strmap->index->lock_method != FILE_LOCK_METHOD_DOTLOCK) {
 		i_assert(strmap->file_lock == NULL);
 
+		timeout_secs = I_MIN(MAIL_INDEX_STRMAP_TIMEOUT_SECS,
+				     strmap->index->max_lock_timeout_secs);
 		ret = file_wait_lock(strmap->fd, strmap->path, F_WRLCK,
-				     strmap->index->lock_method,
-				     MAIL_INDEX_STRMAP_TIMEOUT_SECS,
+				     strmap->index->lock_method, timeout_secs,
 				     &strmap->file_lock);
 		if (ret <= 0) {
 			mail_index_strmap_set_syscall_error(strmap,
@@ -1074,11 +1079,9 @@ static void mail_index_strmap_unlock(struct mail_index_strmap *strmap)
 		file_dotlock_delete(&strmap->dotlock);
 }
 
-static int strmap_rec_cmp(const void *key, const void *value)
+static int
+strmap_rec_cmp(const uint32_t *uid, const struct mail_index_strmap_rec *rec)
 {
-	const uint32_t *uid = key;
-	const struct mail_index_strmap_rec *rec = value;
-
 	return *uid < rec->uid ? -1 :
 		(*uid > rec->uid ? 1 : 0);
 }
@@ -1114,10 +1117,11 @@ mail_index_strmap_write_append(struct mail_index_strmap_view *view)
 	   already have internally given it another index). So the only
 	   sensible choice is to write nothing and hope that the message goes
 	   away soon. */
-	old_recs = array_get(&view->recs, &old_count);
 	next_uid = view->last_read_uid + 1;
-	(void)bsearch_insert_pos(&next_uid, old_recs, old_count,
-				 sizeof(*old_recs), strmap_rec_cmp, &i);
+	(void)array_bsearch_insert_pos(&view->recs, &next_uid,
+				       strmap_rec_cmp, &i);
+
+	old_recs = array_get(&view->recs, &old_count);
 	if (i < old_count) {
 		while (i > 0 && old_recs[i-1].uid == old_recs[i].uid)
 			i--;

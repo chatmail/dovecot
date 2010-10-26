@@ -69,6 +69,7 @@ void mail_cache_register_fields(struct mail_cache *cache,
 				struct mail_cache_field *fields,
 				unsigned int fields_count)
 {
+	struct mail_cache_field *orig_field;
 	void *orig_key, *orig_value;
 	char *name;
 	unsigned int new_idx;
@@ -83,6 +84,11 @@ void mail_cache_register_fields(struct mail_cache *cache,
 
 			fields[i].idx =
 				POINTER_CAST_TO(orig_value, unsigned int);
+
+			orig_field = &cache->fields[fields[i].idx].field;
+			if (orig_field->decision == MAIL_CACHE_DECISION_NO)
+				orig_field->decision = fields[i].decision;
+
 			(void)field_type_verify(cache, fields[i].idx,
 						fields[i].type,
 						fields[i].field_size);
@@ -145,6 +151,14 @@ mail_cache_register_lookup(struct mail_cache *cache, const char *name)
 		return POINTER_CAST_TO(orig_value, unsigned int);
 	else
 		return (unsigned int)-1;
+}
+
+const struct mail_cache_field *
+mail_cache_register_get_field(struct mail_cache *cache, unsigned int field_idx)
+{
+	i_assert(field_idx < cache->fields_count);
+
+	return &cache->fields[field_idx].field;
 }
 
 const struct mail_cache_field *

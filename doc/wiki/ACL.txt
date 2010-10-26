@@ -17,12 +17,9 @@ plugin even enabled.
 ACLs can be enabled in dovecot.conf with:
 
 ---%<-------------------------------------------------------------------------
+mail_plugins = acl
 protocol imap {
-  mail_plugins = acl imap_acl
-}
-protocol lda {
-  # If you use deliver with Sieve you may want to enforce ACLs:
-  mail_plugins = acl
+  mail_plugins = $mail_plugins imap_acl
 }
 
 plugin {
@@ -34,15 +31,14 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-ACL groups are supported since v1.1+ by returning a comma-separated
-'acl_groups' <extra field> [UserDatabase.ExtraFields.txt] from userdb, which
-contains all the groups the user belongs to. User's UNIX groups have no effect
-on ACLs (you can "enable" them by using a special <post-login script>
-[PostLoginScripting.txt]).
+ACL groups support works by returning a comma-separated 'acl_groups' <extra
+field> [UserDatabase.ExtraFields.txt] from userdb, which contains all the
+groups the user belongs to. User's UNIX groups have no effect on ACLs (you can
+"enable" them by using a special <post-login script> [PostLoginScripting.txt]).
 
 The default ACL for mailboxes is to give the mailbox owner all permissions and
 other users none. Mailboxes in public namespaces don't have owners, so by
-default no-one can access them.
+default no one can access them.
 
 ACL vfile backend
 -----------------
@@ -53,8 +49,8 @@ Per-mailbox ACLs are stored in 'dovecot-acl' named file, which exists in:
 
  * maildir: The Maildir's mail directory (eg. '~/Maildir',
    '~/Maildir/.folder/')
- * mbox: Control directory (since v1.1+). You should explicitly specify
-   ':CONTROL=<path>' in mail location.
+ * mbox: Control directory. You should explicitly specify ':CONTROL=<path>' in
+   mail location.
  * dbox: dbox's mail directory (eg. '~/dbox/INBOX/dbox-Mails/')
 
 ACL Inheritance
@@ -102,20 +98,15 @@ can instead create a .DEFAULT file for "foo":
  * foo: '/etc/dovecot/acls/foo/.DEFAULT'
  * foo/bar: '/etc/dovecot/acls/foo/bar'
 
-WARNING: With v1.x namespace prefixes are ignored, so if you have multiple
-namespaces their mailbox names could conflict. With v2.0+ you must use the
-namespace prefixes. For example with namespace 'prefix=INBOX/' containing
-mailbox "foo" use '/etc/dovecot/acls/INBOX/foo'. (This was supposed to have
-been fixed in v1.1 already, but somehow it wasn't.)
+The filenames must start with namespace prefix (if it has one). For example
+with namespace 'prefix=INBOX/' containing mailbox "foo" use
+'/etc/dovecot/acls/INBOX/foo'.
 
 If a mailbox has both global and per-mailbox ACL file, both of them are read
-and the ACLs are merged. If there are any conflicts:
-
- * v1.0 and v1.1: The per-mailbox ACL file overrides global ACL file.
- * v1.2+: The global ACL file overrides per-mailbox ACL file. This change was
-   done because in v1.2+ users can modify their own per-mailbox ACL files via
-   IMAP ACL extension. Global ACLs can only be modified by administrator, so
-   users shouldn't be able to override them.
+and the ACLs are merged. If there are any conflicts, the global ACL file
+overrides per-mailbox ACL file. This is because users can modify their own
+per-mailbox ACL files via IMAP ACL extension. Global ACLs can only be modified
+by administrator, so users shouldn't be able to override them.
 
 ACL files
 ---------
@@ -191,14 +182,9 @@ Named ACLs are mostly intended for future extensions.
 Example ACL file:
 
 ---%<-------------------------------------------------------------------------
-owner lrwstiekxa
+owner lrwstipekxa
 user=timo rl
 ---%<-------------------------------------------------------------------------
-
-Note that the file is rather picky about formatting; using a tab (or multiple
-spaces) instead of a space character between fields may not work.  If you are
-having problems, make sure to check for tabs, extra spaces and other unwanted
-characters.
 
 List cache
 ----------
@@ -207,4 +193,4 @@ List cache
 you manually add/edit 'dovecot-acl' files, you may need to delete the
 'dovecot-acl-list' to get the mailboxes visible.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

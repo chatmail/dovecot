@@ -7,12 +7,13 @@
  * This software is released under the MIT license.
  */
 
-#include "common.h"
+#include "auth-common.h"
 #include "lib-signals.h"
 #include "mech.h"
 #include "str.h"
 #include "buffer.h"
 #include "base64.h"
+#include "execv-const.h"
 #include "istream.h"
 #include "ostream.h"
 
@@ -95,7 +96,9 @@ static void sigchld_handler(const siginfo_t *si ATTR_UNUSED,
 	winbind_wait_pid(&winbind_spnego_context);
 }
 
-static void winbind_helper_connect(struct winbind_helper *winbind)
+static void
+winbind_helper_connect(const struct auth_settings *set,
+		       struct winbind_helper *winbind)
 {
 	int infd[2], outfd[2];
 	pid_t pid;
@@ -122,7 +125,7 @@ static void winbind_helper_connect(struct winbind_helper *winbind)
 
 	if (pid == 0) {
 		/* child */
-		const char *helper_path, *args[3];
+		const char *args[3];
 
 		(void)close(infd[0]);
 		(void)close(outfd[1]);
@@ -131,15 +134,10 @@ static void winbind_helper_connect(struct winbind_helper *winbind)
 		    dup2(infd[1], STDOUT_FILENO) < 0)
 			i_fatal("dup2() failed: %m");
 
-		helper_path = getenv("WINBIND_HELPER_PATH");
-		if (helper_path == NULL)
-			helper_path = DEFAULT_WINBIND_HELPER_PATH;
-
-		args[0] = helper_path;
+		args[0] = set->winbind_helper_path;
 		args[1] = winbind->param;
 		args[2] = NULL;
-		execv(args[0], (void *)args);
-		i_fatal("execv(%s) failed: %m", args[0]);
+		execv_const(args[0], args);
 	}
 
 	/* parent */
@@ -199,7 +197,7 @@ do_auth_continue(struct auth_request *auth_request,
 	token = t_strsplit_spaces(answer, " ");
 	if (token[0] == NULL ||
 	    (token[1] == NULL && strcmp(token[0], "BH") != 0) ||
-	    (token[2] == NULL && gss_spnego)) {
+	    (gss_spnego && (token[1] == NULL || token[2] == NULL))) {
 		auth_request_log_error(auth_request, "winbind",
 				       "Invalid input from helper: %s", answer);
 		return HR_RESTART;
@@ -228,9 +226,8 @@ do_auth_continue(struct auth_request *auth_request,
 		buffer_t *buf;
 
 		buf = t_base64_decode_str(token[1]);
-		auth_request->callback(auth_request,
-				       AUTH_CLIENT_RESULT_CONTINUE,
-				       buf->data, buf->used);
+		auth_request_handler_reply_continue(auth_request, buf->data,
+						    buf->used);
 		request->continued = TRUE;
 		return HR_OK;
 	} else if (strcmp(token[0], "NA") == 0) {
@@ -243,6 +240,7 @@ do_auth_continue(struct auth_request *auth_request,
 		const char *user, *p, *error;
 
 		user = gss_spnego ? token[2] : token[1];
+		i_assert(user != NULL);
 
 		p = strchr(user, '\\');
 		if (p != NULL) {
@@ -281,6 +279,17 @@ do_auth_continue(struct auth_request *auth_request,
 }
 
 static void
+mech_winbind_auth_initial(struct auth_request *auth_request,
+			  const unsigned char *data, size_t data_size)
+{
+	struct winbind_auth_request *request =
+		(struct winbind_auth_request *)auth_request;
+
+	winbind_helper_connect(auth_request->set, request->winbind);
+	mech_generic_auth_initial(auth_request, data, data_size);
+}
+
+static void
 mech_winbind_auth_continue(struct auth_request *auth_request,
 			   const unsigned char *data, size_t data_size)
 {
@@ -306,7 +315,6 @@ static struct auth_request *do_auth_new(struct winbind_helper *winbind)
 	request->auth_request.pool = pool;
 
 	request->winbind = winbind;
-	winbind_helper_connect(request->winbind);
 	return &request->auth_request;
 }
 
@@ -323,8 +331,8 @@ static struct auth_request *mech_winbind_spnego_auth_new(void)
 const struct mech_module mech_winbind_ntlm = {
 	"NTLM",
 
-	MEMBER(flags) MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE,
-	MEMBER(passdb_need) MECH_PASSDB_NEED_NOTHING,
+	.flags = MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE,
+	.passdb_need = MECH_PASSDB_NEED_NOTHING,
 
 	mech_winbind_ntlm_auth_new,
 	mech_generic_auth_initial,
@@ -335,11 +343,11 @@ const struct mech_module mech_winbind_ntlm = {
 const struct mech_module mech_winbind_spnego = {
 	"GSS-SPNEGO",
 
-	MEMBER(flags) 0,
-	MEMBER(passdb_need) MECH_PASSDB_NEED_NOTHING,
+	.flags = 0,
+	.passdb_need = MECH_PASSDB_NEED_NOTHING,
 
 	mech_winbind_spnego_auth_new,
-	mech_generic_auth_initial,
+	mech_winbind_auth_initial,
 	mech_winbind_auth_continue,
 	mech_generic_auth_free
 };

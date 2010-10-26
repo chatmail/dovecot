@@ -56,6 +56,36 @@ smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated,
 reject_unauth_destination
 ---%<-------------------------------------------------------------------------
 
+Using SASL with Postfix submission port
+---------------------------------------
+
+When Dovecot is used as the authentication backend for Postfix it is good
+practice to use a dedicated submission port for the MUAs (TCP 587). Not only
+can you specify individual parameters in *master.cf* overriding the global ones
+but you will not run into internet mail rejection while the Dovecot Auth
+Mechanism is unavailable. In this example Postfix is configured to accept TLS
+encrypted sessions only along with several sanity checks:
+
+ * Verification of alias ownership via Login Maps
+ * Domainname and recipient plausibility
+
+'master.cf'
+
+---%<-------------------------------------------------------------------------
+submission inet n - - - - smtpd
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_sasl_type=dovecot
+  -o smtpd_sasl_path=private/auth
+  -o smtpd_sasl_security_options=noanonymous
+  -o smtpd_sasl_local_domain=$myhostname
+  -o smtpd_client_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_sender_login_maps=hash:/etc/postfix/virtual
+  -o smtpd_sender_restrictions=reject_sender_login_mismatch
+  -o
+smtpd_recipient_restrictions=reject_unknown_recipient_domain,reject_non_fqdn_recipient,permit_sasl_authenticated,reject
+---%<-------------------------------------------------------------------------
+
 See also:
 ---------
 
@@ -72,4 +102,4 @@ the default, and most clients can work with it, but Outlook Express needs the
 
  * http://archives.neohapsis.com/archives/postfix/2000-11/0881.html
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "str.h"
+#include "abspath.h"
 #include "restrict-access.h"
 #include "eacces-error.h"
 
@@ -84,38 +85,46 @@ static const char *
 eacces_error_get_full(const char *func, const char *path, bool creating)
 {
 	const char *prev_path = path, *dir, *p;
+	const char *pw_name = NULL, *gr_name = NULL;
 	const struct passwd *pw;
 	const struct group *group;
 	string_t *errmsg;
 	struct stat st, dir_st;
-	char cwd[PATH_MAX];
 	int orig_errno, ret = -1;
 
 	orig_errno = errno;
 	errmsg = t_str_new(256);
 	str_printfa(errmsg, "%s(%s)", func, path);
+	dir = "/";
 	if (*path != '/') {
-		dir = getcwd(cwd, sizeof(cwd));
-		if (dir != NULL)
+		if (t_get_current_dir(&dir) == 0)
 			str_printfa(errmsg, " in directory %s", dir);
+		if (strchr(path, '/') == NULL) {
+			/* we have no path. do the file access checks anyway. */
+			ret = 0;
+		}
 	}
 	str_printfa(errmsg, " failed: Permission denied (euid=%s",
 		    dec2str(geteuid()));
 
 	pw = getpwuid(geteuid());
-	if (pw != NULL)
-		str_printfa(errmsg, "(%s)", pw->pw_name);
-	else
+	if (pw != NULL) {
+		pw_name = t_strdup(pw->pw_name);
+		str_printfa(errmsg, "(%s)", pw_name);
+	} else {
 		str_append(errmsg, "(<unknown>)");
+	}
 
 	str_printfa(errmsg, " egid=%s", dec2str(getegid()));
 	group = getgrgid(getegid());
-	if (group != NULL)
-		str_printfa(errmsg, "(%s)", group->gr_name);
-	else
+	if (group != NULL) {
+		gr_name = t_strdup(group->gr_name);
+		str_printfa(errmsg, "(%s)", gr_name);
+	} else {
 		str_append(errmsg, "(<unknown>)");
+	}
 
-	dir = "/";
+	memset(&dir_st, 0, sizeof(dir_st));
 	while ((p = strrchr(prev_path, '/')) != NULL) {
 		dir = t_strdup_until(prev_path, p);
 		ret = stat(dir, &st);
@@ -157,6 +166,25 @@ eacces_error_get_full(const char *func, const char *path, bool creating)
 		} else
 			str_printfa(errmsg, " UNIX perms appear ok, "
 				    "some security policy wrong?");
+	}
+	if (dir_st.st_uid != geteuid()) {
+		if (pw_name != NULL &&
+		    (pw = getpwuid(dir_st.st_uid)) != NULL &&
+		    strcmp(pw->pw_name, pw_name) == 0) {
+			str_printfa(errmsg, ", conflicting dir uid=%s(%s)",
+				    dec2str(dir_st.st_uid), pw_name);
+		} else {
+			str_append(errmsg, ", euid is not dir owner");
+		}
+	} else {
+		str_append(errmsg, ", euid is dir owner");
+	}
+	if (gr_name != NULL && dir_st.st_gid != getegid()) {
+		group = getgrgid(dir_st.st_gid);
+		if (group != NULL && strcmp(group->gr_name, gr_name) == 0) {
+			str_printfa(errmsg, ", conflicting dir gid=%s(%s)",
+				    dec2str(dir_st.st_gid), gr_name);
+		}
 	}
 	str_append_c(errmsg, ')');
 	errno = orig_errno;

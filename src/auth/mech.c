@@ -1,6 +1,6 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 #include "ioloop.h"
 #include "mech.h"
 #include "str.h"
@@ -50,8 +50,7 @@ void mech_generic_auth_initial(struct auth_request *request,
 			       const unsigned char *data, size_t data_size)
 {
 	if (data == NULL) {
-		request->callback(request, AUTH_CLIENT_RESULT_CONTINUE,
-				  NULL, 0);
+		auth_request_handler_reply_continue(request, NULL, 0);
 	} else {
 		/* initial reply given, even if it was 0 bytes */
 		request->mech->auth_continue(request, data, data_size);
@@ -83,7 +82,79 @@ extern const struct mech_module mech_gssapi_spnego;
 extern const struct mech_module mech_winbind_ntlm;
 extern const struct mech_module mech_winbind_spnego;
 
-void mech_init(void)
+static void mech_register_add(struct mechanisms_register *reg,
+			      const struct mech_module *mech)
+{
+	struct mech_module_list *list;
+
+	list = p_new(reg->pool, struct mech_module_list, 1);
+	list->module = *mech;
+
+	str_printfa(reg->handshake, "MECH\t%s", mech->mech_name);
+	if ((mech->flags & MECH_SEC_PRIVATE) != 0)
+		str_append(reg->handshake, "\tprivate");
+	if ((mech->flags & MECH_SEC_ANONYMOUS) != 0)
+		str_append(reg->handshake, "\tanonymous");
+	if ((mech->flags & MECH_SEC_PLAINTEXT) != 0)
+		str_append(reg->handshake, "\tplaintext");
+	if ((mech->flags & MECH_SEC_DICTIONARY) != 0)
+		str_append(reg->handshake, "\tdictionary");
+	if ((mech->flags & MECH_SEC_ACTIVE) != 0)
+		str_append(reg->handshake, "\tactive");
+	if ((mech->flags & MECH_SEC_FORWARD_SECRECY) != 0)
+		str_append(reg->handshake, "\tforward-secrecy");
+	if ((mech->flags & MECH_SEC_MUTUAL_AUTH) != 0)
+		str_append(reg->handshake, "\tmutual-auth");
+	str_append_c(reg->handshake, '\n');
+
+	list->next = reg->modules;
+	reg->modules = list;
+}
+
+struct mechanisms_register *
+mech_register_init(const struct auth_settings *set)
+{
+	struct mechanisms_register *reg;
+	const struct mech_module *mech;
+	const char *const *mechanisms;
+	pool_t pool;
+
+	pool = pool_alloconly_create("mechanisms register", 1024);
+	reg = p_new(pool, struct mechanisms_register, 1);
+	reg->pool = pool;
+	reg->set = set;
+	reg->handshake = str_new(pool, 512);
+
+	mechanisms = t_strsplit_spaces(set->mechanisms, " ");
+	for (; *mechanisms != NULL; mechanisms++) {
+		if (strcasecmp(*mechanisms, "ANONYMOUS") == 0) {
+			if (*set->anonymous_username == '\0') {
+				i_fatal("ANONYMOUS listed in mechanisms, "
+					"but anonymous_username not set");
+			}
+		}
+		mech = mech_module_find(*mechanisms);
+		if (mech == NULL) {
+			i_fatal("Unknown authentication mechanism '%s'",
+				*mechanisms);
+		}
+		mech_register_add(reg, mech);
+	}
+
+	if (reg->modules == NULL)
+		i_fatal("No authentication mechanisms configured");
+	return reg;
+}
+
+void mech_register_deinit(struct mechanisms_register **_reg)
+{
+	struct mechanisms_register *reg = *_reg;
+
+	*_reg = NULL;
+	pool_unref(&reg->pool);
+}
+
+void mech_init(const struct auth_settings *set)
 {
 	mech_register_module(&mech_plain);
 	mech_register_module(&mech_login);
@@ -91,7 +162,7 @@ void mech_init(void)
 	mech_register_module(&mech_cram_md5);
 	mech_register_module(&mech_digest_md5);
 	mech_register_module(&mech_external);
-	if (getenv("USE_WINBIND") != NULL) {
+	if (set->use_winbind) {
 		mech_register_module(&mech_winbind_ntlm);
 		mech_register_module(&mech_winbind_spnego);
 	} else {
@@ -109,7 +180,7 @@ void mech_init(void)
 #endif
 }
 
-void mech_deinit(void)
+void mech_deinit(const struct auth_settings *set)
 {
 	mech_unregister_module(&mech_plain);
 	mech_unregister_module(&mech_login);
@@ -117,7 +188,7 @@ void mech_deinit(void)
 	mech_unregister_module(&mech_cram_md5);
 	mech_unregister_module(&mech_digest_md5);
 	mech_unregister_module(&mech_external);
-	if (getenv("NTLM_USE_WINBIND") != NULL) {
+	if (set->use_winbind) {
 		mech_unregister_module(&mech_winbind_ntlm);
 		mech_unregister_module(&mech_winbind_spnego);
 	} else {

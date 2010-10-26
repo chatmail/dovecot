@@ -1,6 +1,6 @@
 /* Copyright (c) 2003-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 
 #if defined(PASSDB_SQL) || defined(USERDB_SQL)
 
@@ -21,18 +21,20 @@ static struct setting_def setting_defs[] = {
 	DEF_STR(password_query),
 	DEF_STR(user_query),
  	DEF_STR(update_query),
+ 	DEF_STR(iterate_query),
 	DEF_STR(default_pass_scheme),
 
 	{ 0, NULL, 0 }
 };
 
 static struct sql_settings default_sql_settings = {
-	MEMBER(driver) NULL,
-	MEMBER(connect) NULL,
-	MEMBER(password_query) "SELECT username, domain, password FROM users WHERE username = '%n' AND domain = '%d'",
-	MEMBER(user_query) "SELECT home, uid, gid FROM users WHERE username = '%n' AND domain = '%d'",
-	MEMBER(update_query) "UPDATE users SET password = '%w' WHERE username = '%n' AND domain = '%d'",
-	MEMBER(default_pass_scheme) "MD5"
+	.driver = NULL,
+	.connect = NULL,
+	.password_query = "SELECT username, domain, password FROM users WHERE username = '%n' AND domain = '%d'",
+	.user_query = "SELECT home, uid, gid FROM users WHERE username = '%n' AND domain = '%d'",
+	.update_query = "UPDATE users SET password = '%w' WHERE username = '%n' AND domain = '%d'",
+	.iterate_query = "SELECT username, domain FROM users",
+	.default_pass_scheme = "MD5"
 };
 
 static struct sql_connection *connections = NULL;
@@ -82,6 +84,15 @@ struct sql_connection *db_sql_init(const char *config_path)
 			   null_settings_section_callback, conn))
 		exit(FATAL_DEFAULT);
 
+	if (conn->set.password_query == default_sql_settings.password_query)
+		conn->default_password_query = TRUE;
+	if (conn->set.user_query == default_sql_settings.user_query)
+		conn->default_user_query = TRUE;
+	if (conn->set.update_query == default_sql_settings.update_query)
+		conn->default_update_query = TRUE;
+	if (conn->set.iterate_query == default_sql_settings.iterate_query)
+		conn->default_iterate_query = TRUE;
+
 	if (conn->set.driver == NULL) {
 		i_fatal("sql: driver not set in configuration file %s",
 			config_path);
@@ -100,6 +111,10 @@ struct sql_connection *db_sql_init(const char *config_path)
 void db_sql_unref(struct sql_connection **_conn)
 {
         struct sql_connection *conn = *_conn;
+
+	/* abort all pending auth requests before setting conn to NULL,
+	   so that callbacks can still access it */
+	sql_disconnect(conn->db);
 
 	*_conn = NULL;
 	if (--conn->refcount > 0)

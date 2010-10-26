@@ -1,134 +1,203 @@
-v1.2.15 2010-10-01  Timo Sirainen <tss@iki.fi>
+v2.0.6 2010-10-21  Timo Sirainen <tss@iki.fi>
+
+	* Pre-login CAPABILITY includes IDLE again. Mainly to make Blackberry
+	  servers happy.
+	* auth: auth_cache_negative_ttl default was 0 in earlier v2.0.x, but it
+	  was supposed to be 1 hour as in v1.x. Changed it back to 1h.
+	  If you want it disabled, make sure doveconf shows it as 0.
+
+	+ dbox: Added support for saving mail attachments to external files,
+	  with also support for single instance storage. This feature hasn't
+	  had much testing yet, so be careful with it.
+	+ doveadm: Added import command for importing mails from other storages.
+	+ Reduced NFS I/O operations for index file accesses
+	+ dbox, Maildir: When copying messages, copy also already cached fields
+	  from dovecot.index.cache
+	+ mdbox: Added mdbox_preallocate_space setting (Linux+ext3/XFS only)
+	- Maildir: LDA/LMTP assert-crashed sometimes when saving a mail.
+	- Fixed leaking fds when writing to dovecot.mailbox.log.
+	- Fixed rare dovecot.index.cache corruption
+	- IMAP: SEARCH YOUNGER/OLDER wasn't working correctly
+
+v2.0.5 2010-10-01  Timo Sirainen <tss@iki.fi>
 
 	* acl: Fixed the logic of merging multiple ACL entries. Now it works as
 	  documented, while previously it could have done slightly different
 	  things depending on the order of the entries.
+	* virtual: Allow opening virtual mailboxes that refer to non-existing
+	  mailboxes. It seems that the benefits of this outweigh the lack of
+	  error message when typoing a mailbox name.
 
-	* acl: Don't give admin rights to all owner mailboxes. This was
-	  originally done to make sure that mailbox owner couldn't accidentally
-	  remove their own admin rights. But this is already prevented by
-	  SETACL command, so it's not necessary. Also sysadmin may have
-	  intentionally removed some admin rights from some mailboxes
-	  (especially when using symlinked shared mailboxes).
+	+ Added some disk I/O optimizations to Maildir and index code. They're
+	  especially helpful with short-lived connections like POP3.
+	+ pop3: Added pop3_fast_size_lookups setting.
+	- doveconf sometimes failed with complaining about missing ssl_key
+	  setting, causing e.g. dovecot-lda to fail.
+	- lda: If there's an error in configuration, doveconf didn't exit with
+	  EX_TEMPFAIL as it should have.
+	- sdbox: Fixed memory leak when copying messages with hard links. 
+	- zlib + sdbox combination didn't work
+	- zlib: Fixed several crashes, which mainly showed up with mbox.
+	- quota: Don't crash if user has quota disabled, but plugin loaded.
+	- doveadm fetch uid was actually returning sequence, not uid.
+	- v2.0.4's subscription listing ignored (and logged a warning about)
+	  subscriptions=no namespaces' entries in some configurations.
+	  (So listing shared mailboxes' subscriptions could have been broken.)
+	- acl: Fixed crashing when sometimes listing shared mailboxes via
+	  dict proxy.
 
-	- Maildir: Fixed potential "Duplicate file entry" in dovecot-uidlist
-	  file errors.
-	- Maildir: Avoid unnecessary uidlist recreation during mail delivery.
-	- imap: When SELECT fails, it didn't close the previous mailbox.
-	- Dovecot master process could have died if it got SIGCHLD signals
-	  very rapidly while it was trying to log. This could have happened
-	  for example if a lot of imap/pop3 sessions disconnected at the exact
-	  same time.
+v2.0.4 2010-09-26  Timo Sirainen <tss@iki.fi>
 
-v1.2.14 2010-08-24  Timo Sirainen <tss@iki.fi>
+	* multi-dbox: If :INDEX=path is specified, keep
+	  storage/dovecot.map.index* files also in the index path rather than
+	  in the main storage directory.
 
-	+ virtual mailboxes: Added support for IDLE notifications.
-	- master: Don't crash on config reload when using dict processes.
+	  WARNING: if you specified :INDEX= with earlier mdbox installation,
+	  you must now manually move the storage indexes to the expected
+	  directory! Otherwise Dovecot won't see them and will rebuild the
+	  indexes, possibly unexpunging some mails.
+
+	- Maildir: Copying messages with hard links sometimes caused the
+	  source maildir's entire tmp/ directory to be renamed to destination
+	  maildir as if it were a message.
+	- Maildir: v2.0.3 broke expunging copied messages sometimes
+	- Maildir: INBOX whose tmp/ directory was lost couldn't be opened
+	- single-dbox: Messages weren't copied with hard links
+	- vpopmail support is hopefully working again.
+	- dsync: POP3 UIDLs weren't copied with Maildir
+	- dict file: Fixed fd leak (showed up easily with LMTP + quota)
+
+v2.0.3 2010-09-17  Timo Sirainen <tss@iki.fi>
+
+	* dovecot-lda: Removed use of non-standard Envelope-To: header as a
+	  default for -a. Set lda_original_recipient_header=Envelope-To to
+	  returns the old behavior.
+
+	+ Added support for reverse quota warnings (i.e. when quota goes back
+	  under the limit). This is enabled by adding '-' to beginning of
+	  quota_warning value. Based on patch by Jeroen Koekkoek.
+	+ dovecot-lda: Added lda_original_recipient_header setting, which is
+	  used for getting original recipient if -a isn't used.
+	+ dovecot-lda: Added -r parameter to specify final recipient address.
+	  (It may differ from original address for e.g. aliases.)
+	+ Maildir: uidlist file can now override message's GUID, making it
+	  possible for multiple messages in a mailbox to have the same GUID.
+	  This also fixes dsync's message conflict resolution.
+	- dovecot-lda: If destination user isn't found, exit with EX_NOUSER,
+	  not EX_TEMPFAIL.
+	- dsync: Fixed handling \Noselect mailboxes
+	- Fixed an infinite loop introduced by v2.0.2's message parser changes.
+	- Fixed a crash introduced by v2.0.2's istream-crlf changes.
+
+v2.0.2 2010-09-08  Timo Sirainen <tss@iki.fi>
+
+	* vpopmail support is disabled for now, since it's broken. You can use
+	  it via checkpassword support or its sql/ldap database directly.
+
+	- maildir: Fixed "duplicate uidlist entry" errors that happened at
+	  least with LMTP when mail was delivered to multiple recipients
+	- Deleting ACLs didn't cause entries to be removed from acl_shared_dict
+	- mail_max_lock_timeout setting wasn't working with all locks
+	- auth_cache_size setting's old-style value wasn't autoconverted
+	  and it usually also caused a crash
+
+v2.0.1 2010-08-24  Timo Sirainen <tss@iki.fi>
+
+	* When dsync is started as root, remote dsync command is now also
+	  executed as root instead of with dropped privileges.
+
 	- IMAP: QRESYNC parameters for SELECT weren't handled correctly.
+	- UTF-8 string validity checking wasn't done correctly (e.g.
+	  mailbox names in Sieve fileinto)
+	- dsync: Fixed a random assert-crash with remote dsyncing
 
-v1.2.13 2010-07-23  Timo Sirainen <tss@iki.fi>
+v2.0.0 2010-08-16  Timo Sirainen <tss@iki.fi>
 
-	- acl: Don't use INBOX's ACLs as default ACLs if their paths are the
-	  same. This was mainly a problem with Maildir where INBOX's ACLs
-	  were copied to all newly created mailboxes.
-	- Fixed iconv() crash when it was processing several kilobytes of
-	  broken continuous input. This mainly could have caused a problem
-	  with IMAP SEARCH. Possibly also with some Sieve checks.
-	- If MIME encoded-words contained line feeds, Dovecot logged
-	  cache corruption errors.
-	- mbox: Renaming mailbox under newly created dir didn't move index
-	  directory.
-	- mbox: When generating envelope to From_-line, don't append a second
-	  @owndomain if username already has one. 
+	* Dovecot uses two system users for internal purposes now by default:
+	  dovenull and dovecot. You need to create the dovenull user or change
+	  default_login_user setting.
+	* Global ACLs are now looked up using namespace prefixes. For example
+	  if you previously had INBOX. namespace prefix and a global ACL for
+	  "INBOX.Sent", it's now looked up from "INBOX.Sent" file instead of
+	  "Sent" as before.
+	* Maildir: File permissions are no longer based on dovecot-shared file,
+	  but the mailbox directory.
 
-v1.2.12 2010-06-18  Timo Sirainen <tss@iki.fi>
+	+ Redesigned master process. It's now more modular and there is less
+	  code running as root.
+	+ Configuration supports now per-local/remote ip/network settings.
+	+ dsync utility does a two-way mailbox synchronization.
+	+ LMTP server and proxying.
+	+ Added mdbox (multi-dbox) mail storage backend.
+	+ doveadm utility can be used to do all kinds of administration
+	  functions. Old dovecotpw and *view utilities now exist in its
+	  subcommands.
+	+ imap and pop3 processes can now handle multiple connections.
+	+ IMAP: COMPRESS=DEFLATE is supported by imap_zlib plugin
+	+ director service helps NFS installations to redirect users always
+	  to same server to avoid corruption
 
-	- deliver: Don't crash when a message with Auto-submitted: header gets
-	  rejected.
-	- lib-storage: Fixed header searches to work correctly when there are
-	  multiple headers with same name.
-	- dict client: Disconnect from dict server after 1 second of idling.
-	- dict: If process crashed, it wasn't automatically restarted
-	- dict file: If dict file's group permissions equal world permissions,
-	  don't try to change its gid.
-	- maildir: Fixed a memory leak when copying with hardlinks.
-	- maildir: Expunging last messages may have assert-crashed if their
-	  filenames had just changed.
+v2.0.rc6 2010-08-13  Timo Sirainen <tss@iki.fi>
 
-v1.2.11 2010-03-08  Timo Sirainen <tss@iki.fi>
+	- dict quota didn't always decrease quota when messages were expunged
+	- Shared INBOX wasn't always listed with FS layout
 
-	- mbox: Message header reading was unnecessarily slow. Fetching a
-	  huge header could have resulted in Dovecot eating a lot of CPU.
-	  Also searching messages was much slower than necessary.
-	- mbox, dbox, cydir: Mail root directory was created with 0770
-	  permissions, instead of 0700.
-	- maildir: Reading uidlist could have ended up in an infinite loop.
-	- IMAP IDLE: v1.2.7+ caused extra load by checking changes every
-	  0.5 seconds after a change had occurred in mailbox
+v2.0.rc5 2010-08-09  Timo Sirainen <tss@iki.fi>
 
-v1.2.10 2010-01-25  Timo Sirainen <tss@iki.fi>
+	- Using more than 2 plugins could have caused broken behavior
+	  (more fixes for this)
+	- Listescape plugin fixes
+	- mbox: Fixed a couple of assert-crashes
+	- mdbox: Fixed potential assert-crash when saving multiple messages
+	  in one transaction.
 
-	+ %variables now support %{host}, %{pid} and %{env:ENVIRONMENT_NAME}
-	  everywhere.
-	+ LIST-STATUS capability is now advertised
-	- maildir: Fixed several assert-crashes.
-	- imap: LIST "" inbox shouldn't crash when using namespace with
-	  "INBOX." prefix.
-	- lazy_expunge now ignores non-private namespaces.
+v2.0.rc4 2010-08-04  Timo Sirainen <tss@iki.fi>
 
-v1.2.9 2009-12-16  Timo Sirainen <tss@iki.fi>
+	+ director: Added director_doveadm_port for accepting doveadm
+	  TCP connections. 
+	+ doveadm: Added client/server architecture support for running mail
+	  commands. Enable this by setting doveadm_worker_count to non-zero.
+	+ mail-log: Added support for mailbox_create event.
+	+ imap_capability = +XFOO BAR can be used to add capabilities instead
+	  of replacing the whole capability string.
+	+ virtual storage: Added support for IDLE notifications. 
+	- doveadm mailbox status: Fixed listing non-ASCII mailbox names. 
+	- doveadm fetch: Fixed output when fetching message header or body
+	- doveadm director map/add/remove: Fixed handling IP address as
+	  parameter. 
+	- dsync: A few more fixes
 
-	* maildir: When saving, filenames now always contain ,S=<size>.
-	  Previously this was done only when quota plugin was loaded. It's
-	  required for zlib plugin and may be useful for other things too.
+v2.0.rc3 2010-07-20  Timo Sirainen <tss@iki.fi>
 
-	+ lazy-expunge: Support a single-namespace configuration. If a mailbox
-	  is deleted, its messages are merged with its old expunged messages
-	  (if there were any).
-	+ expire: Settings now support spaces in mailbox names by using
-	  quoted strings.
-	- maildir: v1.2.7 and v1.2.8 caused assert-crashes in
-	  maildir_uidlist_records_drop_expunges()
-	- maildir_copy_preserve_filename=yes could have caused crashes.
-	- Maildir++ quota: % limits weren't updated when limits were read
-	  from maildirsize.
-	- virtual: v1.2.8 didn't fully fix the "lots of mailboxes" bug
-	- virtual: Fixed updating virtual mailbox based on flag changes.
-	- fts-squat: Fixed searching multi-byte characters.
+	* Single-dbox is now called "sdbox" instead of "dbox".
+	  "dbox" will stay as an alias for it for now.
 
-v1.2.8 2009-11-19  Timo Sirainen <tss@iki.fi>
+	+ Added mail_temp_dir setting, used by deliver and lmtp for creating
+	  temporary mail files. Default is /tmp.
+	+ doveadm: Added "director map" command to list user -> host mappings.
+	- imap: Fixed checking if list=children namespace has children.
+	- director: If all login processes died, director stopped reading
+	  proxy-notify input and caused future login processes to hang
+	- mail_log plugin configuration was broken
+	- Using more than 2 plugins could have caused broken behavior
+	- mdbox: Race condition fixes related to copying and purging
+	- dsync: Lots of fixes
 
-	* Dovecot v1.2.x had been creating base_dir (and its parents if
-	  necessary) with 0777 permissions. The base_dir's permissions get
-	  changed to 0755 automatically at startup, but you may need to
-	  chmod the parent directories manually.
+v2.0.rc2 2010-07-09  Timo Sirainen <tss@iki.fi>
 
-	- acl: If user has rights from more than one group, merge them instead
-	  of choosing one group's rights and ignoring others.
-	- virtual: When using a lot of mailboxes, the virtual mailbox's header
-	  could have grown over 32 kB and caused "out of memory" crashes. Also
-	  over 64 kB headers couldn't even be updated with existing transaction
-	  log records. Added a new record type that gets used with >=64 kB
-	  headers. Older Dovecot versions don't understand this header and
-	  will log errors if they see it.
-	- FETCH BODYSTRUCTURE didn't return RFC 2231 "key*" fields correctly
+	- Fixed a crash with empty mail_plugins
+	- Fixed sharing INBOX to other users
+	- mdbox: Rebuilding storage was broken in rc1
+	- dsync was broken for remote syncs in rc1
+	- director+LMTP proxy wasn't working correctly
+	- v1.x config parser failed with some settings if pigeonhole wasn't
+	  installed.
+	- virtual: If non-matching messages weren't expunged within same
+	  session, they never got expunged.
 
-v1.2.7 2009-11-09  Timo Sirainen <tss@iki.fi>
+v2.0.rc1 2010-07-02  Timo Sirainen <tss@iki.fi>
 
-	* IMAP: IDLE now sends "Still here" notifications to same user's
-	  connections at the same time. This hopefully reduces power usage
-	  of some mobile clients that use multiple IDLEing connections.
-	* IMAP: If imap_capability is set, show it in the login banner.
-
-	+ IMAP: Implemented SORT=DISPLAY extension.
-	- Login process creation could have sometimes failed with epoll_ctl()
-	  errors or without epoll probably some other strange things could
-	  have happened.
-	- Maildir: Fixed some performance issues
-	- Maildir: Fixed crash when using a lot of keywords.
-	- Several fixes to QRESYNC extension and modseq handling
-	- mbox: Make sure failed saves get rolled back with NFS.
-	- dbox: Several fixes.
+	* See v2.0.0 notes
 
 v1.2.6 2009-10-05  Timo Sirainen <tss@iki.fi>
 

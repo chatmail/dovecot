@@ -4,7 +4,7 @@
 #include "istream.h"
 #include "iostream-internal.h"
 
-#define I_STREAM_MIN_SIZE 4096
+#define I_STREAM_MIN_SIZE IO_BLOCK_SIZE
 
 struct istream_private {
 /* inheritance: */
@@ -16,6 +16,7 @@ struct istream_private {
 		     uoff_t v_offset, bool mark);
 	void (*sync)(struct istream_private *stream);
 	const struct stat *(*stat)(struct istream_private *stream, bool exact);
+	int (*get_size)(struct istream_private *stream, bool exact, uoff_t *size_r);
 
 /* data: */
 	struct istream istream;
@@ -32,6 +33,15 @@ struct istream_private {
 
 	struct istream *parent; /* for filter streams */
 	uoff_t parent_start_offset;
+
+	/* parent stream's expected offset is kept here. i_stream_read()
+	   always seeks parent stream to here before calling read(). */
+	uoff_t parent_expected_offset;
+
+	/* increased every time the stream is changed (e.g. seek, read).
+	   this way streams can check if their parent streams have been
+	   accessed behind them. */
+	unsigned int access_counter;
 
 	string_t *line_str; /* for i_stream_next_line() if w_buffer == NULL */
 	unsigned int return_nolf_line:1;

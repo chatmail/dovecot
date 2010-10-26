@@ -28,7 +28,7 @@ There are 3 types of namespaces:
 
  * private: Typically contains only user's own private mailboxes.
  * shared: Contains other users' <shared mailboxes>
-   [SharedMailboxes.Shared.txt] (v1.2+).
+   [SharedMailboxes.Shared.txt].
  * public: Contains <public mailboxes> [SharedMailboxes.Public.txt].
 
 Hierarchy separators
@@ -65,12 +65,12 @@ Namespace settings
  * inbox: "yes", if this namespace contains the user's INBOX. There is only one
    INBOX, so only one namespace can have inbox=yes.
  * hidden: "yes", if this namespace shouldn't be listed in NAMESPACE reply.
- * list (v1.1+): "yes" (default), if this namespace and its mailboxes should be
-   listed by LIST command when the namespace prefix isn't explicitly specified
-   as a parameter. "children" (v1.2+) means the namespace prefix list listed
-   only if it has child mailboxes.
- * subscriptions (v1.1+): "yes" (default) if this namespace should handle its
-   own subscriptions. If "no", then the first parent namespace with
+ * list: "yes" (default), if this namespace and its mailboxes should be listed
+   by LIST command when the namespace prefix isn't explicitly specified as a
+   parameter. "children" means the namespace prefix list listed only if it has
+   child mailboxes.
+ * subscriptions: "yes" (default) if this namespace should handle its own
+   subscriptions. If "no", then the first parent namespace with
    subscriptions=yes will handle it. For example if it's "no" for a namespace
    with prefix=foo/bar/, Dovecot first sees if there's a prefix=foo/ namespace
    with subscriptions=yes and then a namespace with an empty prefix. If neither
@@ -92,25 +92,25 @@ mailboxes in Maildir format under '~/Maildir', you can do this by creating two
 namespaces:
 
 ---%<-------------------------------------------------------------------------
-namespace private {
+namespace {
   separator = /
   prefix = "#mbox/"
   location = mbox:~/mail:INBOX=/var/mail/%u
   inbox = yes
   hidden = yes
-  list = no   # for v1.1+
+  list = no
 }
-namespace private {
+namespace {
   separator = /
   prefix =
   location = maildir:~/Maildir
 }
 ---%<-------------------------------------------------------------------------
 
-Without the 'list = no' setting (or 'hidden=yes' in v1.0) in the first
-namespace, clients see the "#mbox" namespace as a non-selectable mailbox named
-"#mbox" and having child mailboxes (ie. like a directory). The child mailboxes
-are all the mbox files in '~/mail' directory.
+Without the 'list = no' setting in the first namespace, clients see the "#mbox"
+namespace as a non-selectable mailbox named "#mbox" and having child mailboxes
+(ie. like a directory). The child mailboxes are all the mbox files in '~/mail'
+directory.
 
 Backwards Compatibility: UW-IMAP
 --------------------------------
@@ -121,29 +121,29 @@ mails using their existing namespace settings in clients.
 
 ---%<-------------------------------------------------------------------------
 # default namespace
-namespace private {
+namespace {
   separator = /
   prefix =
   inbox = yes
 }
 # for backwards compatibility:
-namespace private {
+namespace {
   separator = /
   prefix = mail/
   hidden = yes
-  list = no   # for v1.1+
+  list = no
 }
-namespace private {
+namespace {
   separator = /
   prefix = ~/mail/
   hidden = yes
-  list = no   # for v1.1+
+  list = no
 }
-namespace private {
+namespace {
   separator = /
   prefix = ~%u/mail/
   hidden = yes
-  list = no   # for v1.1+
+  list = no
 }
 ---%<-------------------------------------------------------------------------
 
@@ -153,7 +153,7 @@ Backwards Compatibility: Courier IMAP
 You can continue using the same INBOX. namespace as Courier:
 
 ---%<-------------------------------------------------------------------------
-namespace private {
+namespace {
   separator = .
   prefix = INBOX.
   inbox = yes
@@ -164,19 +164,19 @@ Alternatively you can create the INBOX. as a compatibility name, so old clients
 can continue using it while new clients will use the empty prefix namespace:
 
 ---%<-------------------------------------------------------------------------
-namespace private {
+namespace {
   separator = .
   prefix =
   inbox = yes
 }
 
-namespace private {
+namespace {
   separator = .
   prefix = INBOX.
   inbox = no
   hidden = yes
-  list = no   # for v1.1+
+  list = no
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

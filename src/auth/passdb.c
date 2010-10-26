@@ -1,6 +1,6 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 #include "array.h"
 #include "password-scheme.h"
 #include "auth-worker-server.h"
@@ -9,16 +9,21 @@
 #include <stdlib.h>
 
 static ARRAY_DEFINE(passdb_interfaces, struct passdb_module_interface *);
+static ARRAY_DEFINE(passdb_modules, struct passdb_module *);
+
+static const struct passdb_module_interface passdb_iface_deinit = {
+	.name = "deinit"
+};
 
 static struct passdb_module_interface *passdb_interface_find(const char *name)
 {
 	struct passdb_module_interface *const *ifaces;
-	unsigned int i, count;
 
-	ifaces = array_get(&passdb_interfaces, &count);
-	for (i = 0; i < count; i++) {
-		if (strcmp(ifaces[i]->name, name) == 0)
-			return ifaces[i];
+	array_foreach(&passdb_interfaces, ifaces) {
+		struct passdb_module_interface *iface = *ifaces;
+
+		if (strcmp(iface->name, name) == 0)
+			return iface;
 	}
 	return NULL;
 }
@@ -41,12 +46,12 @@ void passdb_register_module(struct passdb_module_interface *iface)
 void passdb_unregister_module(struct passdb_module_interface *iface)
 {
 	struct passdb_module_interface *const *ifaces;
-	unsigned int i, count;
+	unsigned int idx;
 
-	ifaces = array_get(&passdb_interfaces, &count);
-	for (i = 0; i < count; i++) {
-		if (ifaces[i] == iface) {
-			array_delete(&passdb_interfaces, i, 1);
+	array_foreach(&passdb_interfaces, ifaces) {
+		if (*ifaces == iface) {
+			idx = array_foreach_idx(&passdb_interfaces, ifaces);
+			array_delete(&passdb_interfaces, idx, 1);
 			return;
 		}
 	}
@@ -94,7 +99,7 @@ bool passdb_get_credentials(struct auth_request *auth_request,
 			const char *error = t_strdup_printf(
 				"Requested %s scheme, but we have only %s",
 				wanted_scheme, input_scheme);
-			if (auth_request->auth->verbose_debug_passwords) {
+			if (auth_request->set->debug_passwords) {
 				error = t_strdup_printf("%s (input: %s)",
 							error, input);
 			}
@@ -112,8 +117,8 @@ bool passdb_get_credentials(struct auth_request *auth_request,
 			username = t_strconcat(username, "@",
 					       auth_request->realm, NULL);
 		}
-		if (auth_request->auth->verbose_debug_passwords) {
-			auth_request_log_info(auth_request, "password",
+		if (auth_request->set->debug_passwords) {
+			auth_request_log_debug(auth_request, "password",
 				"Generating %s from user '%s', password '%s'",
 				wanted_scheme, username, plaintext);
 		}
@@ -133,7 +138,7 @@ void passdb_handle_credentials(enum passdb_result result,
 			       lookup_credentials_callback_t *callback,
                                struct auth_request *auth_request)
 {
-	const unsigned char *credentials;
+	const unsigned char *credentials = NULL;
 	size_t size = 0;
 
 	if (result != PASSDB_RESULT_OK) {
@@ -154,18 +159,30 @@ void passdb_handle_credentials(enum passdb_result result,
 	callback(result, credentials, size, auth_request);
 }
 
-struct auth_passdb *passdb_preinit(struct auth *auth, const char *driver,
-				   const char *args, unsigned int id)
+static struct passdb_module *
+passdb_find(const char *driver, const char *args, unsigned int *idx_r)
 {
+	struct passdb_module *const *passdbs;
+	unsigned int i, count;
+
+	passdbs = array_get(&passdb_modules, &count);
+	for (i = 0; i < count; i++) {
+		if (strcmp(passdbs[i]->iface.name, driver) == 0 &&
+		    strcmp(passdbs[i]->args, args) == 0) {
+			*idx_r = i;
+			return passdbs[i];
+		}
+	}
+	return NULL;
+}
+
+struct passdb_module *
+passdb_preinit(pool_t pool, const char *driver, const char *args)
+{
+	static unsigned int auth_passdb_id = 0;
 	struct passdb_module_interface *iface;
-        struct auth_passdb *auth_passdb;
-
-	if (args == NULL) args = "";
-
-	auth_passdb = p_new(auth->pool, struct auth_passdb, 1);
-	auth_passdb->auth = auth;
-        auth_passdb->args = p_strdup(auth->pool, args);
-        auth_passdb->id = id;
+	struct passdb_module *passdb;
+	unsigned int idx;
 
 	iface = passdb_interface_find(driver);
 	if (iface == NULL)
@@ -174,42 +191,69 @@ struct auth_passdb *passdb_preinit(struct auth *auth, const char *driver,
 		i_fatal("Support not compiled in for passdb driver '%s'",
 			driver);
 	}
+	if (iface->preinit == NULL && iface->init == NULL && *args != '\0')
+		i_fatal("passdb %s: No args are supported: %s", driver, args);
 
-	if (iface->preinit == NULL && iface->init == NULL &&
-	    *auth_passdb->args != '\0') {
-		i_fatal("passdb %s: No args are supported: %s",
-			driver, auth_passdb->args);
-	}
+	passdb = passdb_find(driver, args, &idx);
+	if (passdb != NULL)
+		return passdb;
 
-	if (iface->preinit == NULL) {
-		auth_passdb->passdb =
-			p_new(auth->pool, struct passdb_module, 1);
-	} else {
-		auth_passdb->passdb =
-			iface->preinit(auth_passdb, auth_passdb->args);
-	}
-	auth_passdb->passdb->iface = *iface;
-	return auth_passdb;
+	if (iface->preinit == NULL)
+		passdb = p_new(pool, struct passdb_module, 1);
+	else
+		passdb = iface->preinit(pool, args);
+	passdb->id = ++auth_passdb_id;
+	passdb->iface = *iface;
+	passdb->args = p_strdup(pool, args);
+	array_append(&passdb_modules, &passdb, 1);
+	return passdb;
 }
 
-void passdb_init(struct auth_passdb *passdb)
+void passdb_init(struct passdb_module *passdb)
 {
-	if (passdb->passdb->iface.init != NULL)
-		passdb->passdb->iface.init(passdb->passdb, passdb->args);
+	if (passdb->iface.init != NULL && passdb->init_refcount == 0)
+		passdb->iface.init(passdb);
+	passdb->init_refcount++;
 
-	i_assert(passdb->passdb->default_pass_scheme != NULL ||
-		 passdb->passdb->cache_key == NULL);
-
-	if (passdb->passdb->blocking && !worker) {
-		/* blocking passdb - we need an auth server */
-		auth_worker_server_init();
-	}
+	i_assert(passdb->default_pass_scheme != NULL ||
+		 passdb->cache_key == NULL);
 }
 
-void passdb_deinit(struct auth_passdb *passdb)
+void passdb_deinit(struct passdb_module *passdb)
 {
-	if (passdb->passdb->iface.deinit != NULL)
-		passdb->passdb->iface.deinit(passdb->passdb);
+	unsigned int idx;
+
+	i_assert(passdb->init_refcount > 0);
+
+	if (--passdb->init_refcount > 0)
+		return;
+
+	if (passdb_find(passdb->iface.name, passdb->args, &idx) == NULL)
+		i_unreached();
+	array_delete(&passdb_modules, idx, 1);
+
+	if (passdb->iface.deinit != NULL)
+		passdb->iface.deinit(passdb);
+
+	/* make sure passdb isn't accessed again */
+	passdb->iface = passdb_iface_deinit;
+}
+
+void passdbs_generate_md5(unsigned char md5[MD5_RESULTLEN])
+{
+	struct md5_context ctx;
+	struct passdb_module *const *passdbs;
+	unsigned int i, count;
+
+	md5_init(&ctx);
+	passdbs = array_get(&passdb_modules, &count);
+	for (i = 0; i < count; i++) {
+		md5_update(&ctx, &passdbs[i]->id, sizeof(passdbs[i]->id));
+		md5_update(&ctx, passdbs[i]->iface.name,
+			   strlen(passdbs[i]->iface.name));
+		md5_update(&ctx, passdbs[i]->args, strlen(passdbs[i]->args));
+	}
+	md5_final(&ctx, md5);
 }
 
 extern struct passdb_module_interface passdb_passwd;
@@ -222,10 +266,12 @@ extern struct passdb_module_interface passdb_vpopmail;
 extern struct passdb_module_interface passdb_ldap;
 extern struct passdb_module_interface passdb_sql;
 extern struct passdb_module_interface passdb_sia;
+extern struct passdb_module_interface passdb_static;
 
 void passdbs_init(void)
 {
 	i_array_init(&passdb_interfaces, 16);
+	i_array_init(&passdb_modules, 16);
 	passdb_register_module(&passdb_passwd);
 	passdb_register_module(&passdb_bsdauth);
 	passdb_register_module(&passdb_passwd_file);
@@ -236,9 +282,11 @@ void passdbs_init(void)
 	passdb_register_module(&passdb_ldap);
 	passdb_register_module(&passdb_sql);
 	passdb_register_module(&passdb_sia);
+	passdb_register_module(&passdb_static);
 }
 
 void passdbs_deinit(void)
 {
+	array_free(&passdb_modules);
 	array_free(&passdb_interfaces);
 }

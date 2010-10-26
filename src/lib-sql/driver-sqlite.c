@@ -33,9 +33,9 @@ struct sqlite_transaction_context {
 	unsigned int failed:1;
 };
 
-extern struct sql_db driver_sqlite_db;
-extern struct sql_result driver_sqlite_result;
-extern struct sql_result driver_sqlite_error_result;
+extern const struct sql_db driver_sqlite_db;
+extern const struct sql_result driver_sqlite_result;
+extern const struct sql_result driver_sqlite_error_result;
 
 static int driver_sqlite_connect(struct sql_db *_db)
 {
@@ -54,8 +54,17 @@ static int driver_sqlite_connect(struct sql_db *_db)
 		i_error("sqlite: open(%s) failed: %s", db->dbfile,
 			sqlite3_errmsg(db->sqlite));
 		sqlite3_close(db->sqlite);
+		db->sqlite = NULL;
 		return -1;
 	}
+}
+
+static void driver_sqlite_disconnect(struct sql_db *_db)
+{
+ 	struct sqlite_db *db = (struct sqlite_db *)_db;
+
+	sqlite3_close(db->sqlite);
+	db->sqlite = NULL;
 }
 
 static struct sql_db *driver_sqlite_init_v(const char *connect_string)
@@ -79,15 +88,12 @@ static void driver_sqlite_deinit_v(struct sql_db *_db)
 {
 	struct sqlite_db *db = (struct sqlite_db *)_db;
 
+	_db->no_reconnect = TRUE;
+	sql_db_set_state(&db->api, SQL_DB_STATE_DISCONNECTED);
+
 	sqlite3_close(db->sqlite);
 	array_free(&_db->module_contexts);
 	pool_unref(&db->pool);
-}
-
-static enum sql_db_flags
-driver_sqlite_get_flags(struct sql_db *db ATTR_UNUSED)
-{
-	return SQL_DB_FLAG_BLOCKING;
 }
 
 static const char *
@@ -143,7 +149,7 @@ static void driver_sqlite_query(struct sql_db *db, const char *query,
 	result->callback = TRUE;
 	callback(result, context);
 	result->callback = FALSE;
-	sql_result_free(result);
+	sql_result_unref(result);
 }
 
 static struct sql_result *
@@ -172,6 +178,7 @@ driver_sqlite_query_s(struct sql_db *_db, const char *query)
 		}
 	}
 	result->api.db = _db;
+	result->api.refcount = 1;
 
 	return &result->api;
 }
@@ -385,14 +392,15 @@ driver_sqlite_update(struct sql_transaction_context *_ctx, const char *query,
 		*affected_rows = sqlite3_changes(db->sqlite);
 }
 
-struct sql_db driver_sqlite_db = {
-	"sqlite",
+const struct sql_db driver_sqlite_db = {
+	.name = "sqlite",
+	.flags = SQL_DB_FLAG_BLOCKING,
 
-	MEMBER(v) {
+	.v = {
 		driver_sqlite_init_v,
 		driver_sqlite_deinit_v,
-		driver_sqlite_get_flags,
 		driver_sqlite_connect,
+		driver_sqlite_disconnect,
 		driver_sqlite_escape_string,
 		driver_sqlite_exec,
 		driver_sqlite_query,
@@ -406,8 +414,8 @@ struct sql_db driver_sqlite_db = {
 	}
 };
 
-struct sql_result driver_sqlite_result = {
-	MEMBER(v) {
+const struct sql_result driver_sqlite_result = {
+	.v = {
 		driver_sqlite_result_free,
 		driver_sqlite_result_next_row,
 		driver_sqlite_result_get_fields_count,
@@ -427,8 +435,8 @@ driver_sqlite_result_error_next_row(struct sql_result *result ATTR_UNUSED)
 	return -1;
 }
 
-struct sql_result driver_sqlite_error_result = {
-	MEMBER(v) {
+const struct sql_result driver_sqlite_error_result = {
+	.v = {
 		driver_sqlite_result_free,
 		driver_sqlite_result_error_next_row,
 		NULL, NULL, NULL, NULL, NULL, NULL, NULL,

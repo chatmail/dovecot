@@ -1,301 +1,197 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "pop3-common.h"
 #include "ioloop.h"
-#include "file-lock.h"
-#include "network.h"
-#include "lib-signals.h"
-#include "restrict-access.h"
-#include "fd-close-on-exec.h"
-#include "base64.h"
 #include "buffer.h"
 #include "istream.h"
+#include "ostream.h"
+#include "abspath.h"
+#include "base64.h"
+#include "str.h"
 #include "process-title.h"
-#include "module-dir.h"
+#include "restrict-access.h"
+#include "master-service.h"
+#include "master-login.h"
+#include "master-interface.h"
 #include "var-expand.h"
-#include "dict.h"
-#include "mail-storage.h"
-#include "mail-namespace.h"
+#include "mail-user.h"
+#include "mail-storage-service.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <syslog.h>
 
 #define IS_STANDALONE() \
-        (getenv("LOGGED_IN") == NULL)
+        (getenv(MASTER_UID_ENV) == NULL)
 
-struct client_workaround_list {
-	const char *name;
-	enum client_workarounds num;
-};
-
-static struct client_workaround_list client_workaround_list[] = {
-	{ "outlook-no-nuls", WORKAROUND_OUTLOOK_NO_NULS },
-	{ "oe-ns-eoh", WORKAROUND_OE_NS_EOH },
-	{ NULL, 0 }
-};
-
-struct ioloop *ioloop;
+static bool verbose_proctitle = FALSE;
+static struct mail_storage_service_ctx *storage_service;
+static struct master_login *master_login = NULL;
 
 void (*hook_client_created)(struct client **client) = NULL;
 
-static struct module *modules = NULL;
-static char log_prefix[128]; /* syslog() needs this to be permanent */
-static struct io *log_io = NULL;
-
-enum client_workarounds client_workarounds = 0;
-bool enable_last_command = FALSE;
-bool no_flag_updates = FALSE;
-bool reuse_xuidl = FALSE;
-bool save_uidl = FALSE;
-bool lock_session = FALSE;
-const char *uidl_format, *logout_format;
-enum uidl_keys uidl_keymask;
-
-static void sig_die(const siginfo_t *si, void *context ATTR_UNUSED)
+void pop3_refresh_proctitle(void)
 {
-	/* warn about being killed because of some signal, except SIGINT (^C)
-	   which is too common at least while testing :) */
-	if (si->si_signo != SIGINT) {
-		i_warning("Killed with signal %d (by pid=%s uid=%s code=%s)",
-			  si->si_signo, dec2str(si->si_pid),
-			  dec2str(si->si_uid),
-			  lib_signal_code_to_str(si->si_signo, si->si_code));
-	}
-	io_loop_stop(ioloop);
-}
-
-static void log_error_callback(void *context ATTR_UNUSED)
-{
-	/* the log fd is closed, don't die when trying to log later */
-	i_set_failure_ignore_errors(TRUE);
-
-	io_loop_stop(ioloop);
-}
-
-static void parse_workarounds(void)
-{
-        struct client_workaround_list *list;
-	const char *env, *const *str;
-
-	env = getenv("POP3_CLIENT_WORKAROUNDS");
-	if (env == NULL)
-		return;
-
-	for (str = t_strsplit_spaces(env, " ,"); *str != NULL; str++) {
-		list = client_workaround_list;
-		for (; list->name != NULL; list++) {
-			if (strcasecmp(*str, list->name) == 0) {
-				client_workarounds |= list->num;
-				break;
-			}
-		}
-		if (list->name == NULL)
-			i_fatal("Unknown client workaround: %s", *str);
-	}
-}
-
-static enum uidl_keys parse_uidl_keymask(const char *format)
-{
-	enum uidl_keys mask = 0;
-
-	for (; *format != '\0'; format++) {
-		if (format[0] == '%' && format[1] != '\0') {
-			switch (var_get_key(++format)) {
-			case 'v':
-				mask |= UIDL_UIDVALIDITY;
-				break;
-			case 'u':
-				mask |= UIDL_UID;
-				break;
-			case 'm':
-				mask |= UIDL_MD5;
-				break;
-			case 'f':
-				mask |= UIDL_FILE_NAME;
-				break;
-			}
-		}
-	}
-	return mask;
-}
-
-static void open_logfile(void)
-{
-	const char *user;
-
-	if (getenv("LOG_TO_MASTER") != NULL) {
-		i_set_failure_internal();
-		return;
-	}
-
-	if (getenv("LOG_PREFIX") != NULL)
-		i_strocpy(log_prefix, getenv("LOG_PREFIX"), sizeof(log_prefix));
-	else {
-		user = getenv("USER");
-		if (user == NULL) user = "??";
-		if (strlen(user) >= sizeof(log_prefix)-6) {
-			/* quite a long user name, cut it */
-			user = t_strndup(user, sizeof(log_prefix)-6-2);
-			user = t_strconcat(user, "..", NULL);
-		}
-		i_snprintf(log_prefix, sizeof(log_prefix), "pop3(%s): ", user);
-	}
-
-	if (getenv("USE_SYSLOG") != NULL) {
-		const char *env = getenv("SYSLOG_FACILITY");
-		i_set_failure_syslog(log_prefix, LOG_NDELAY,
-				     env == NULL ? LOG_MAIL : atoi(env));
-	} else {
-		/* log to file or stderr */
-		i_set_failure_file(getenv("LOGFILE"), log_prefix);
-	}
-
-	if (getenv("INFOLOGFILE") != NULL)
-		i_set_info_file(getenv("INFOLOGFILE"));
-
-	i_set_failure_timestamp_format(getenv("LOGSTAMP"));
-}
-
-static void drop_privileges(void)
-{
-	const char *version;
-
-	version = getenv("DOVECOT_VERSION");
-	if (version != NULL && strcmp(version, PACKAGE_VERSION) != 0) {
-		i_fatal("Dovecot version mismatch: "
-			"Master is v%s, pop3 is v"PACKAGE_VERSION" "
-			"(if you don't care, set version_ignore=yes)", version);
-	}
-
-	/* Log file or syslog opening probably requires roots */
-	open_logfile();
-
-	/* Load the plugins before chrooting. Their init() is called later. */
-	if (getenv("MAIL_PLUGINS") != NULL) {
-		const char *plugin_dir = getenv("MAIL_PLUGIN_DIR");
-
-		if (plugin_dir == NULL)
-			plugin_dir = MODULEDIR"/pop3";
-		modules = module_dir_load(plugin_dir, getenv("MAIL_PLUGINS"),
-					  TRUE, version);
-	}
-
-	restrict_access_by_env(!IS_STANDALONE());
-	restrict_access_allow_coredumps(TRUE);
-}
-
-static bool main_init(void)
-{
-	struct mail_user *user;
 	struct client *client;
-	const char *str;
-	bool ret = TRUE;
+	string_t *title = t_str_new(128);
 
-	lib_signals_init();
-        lib_signals_set_handler(SIGINT, TRUE, sig_die, NULL);
-        lib_signals_set_handler(SIGTERM, TRUE, sig_die, NULL);
-        lib_signals_ignore(SIGPIPE, TRUE);
-        lib_signals_ignore(SIGALRM, FALSE);
+	if (!verbose_proctitle)
+		return;
 
-	if (getenv("USER") == NULL) {
-		if (getenv("DOVECOT_MASTER") == NULL)
-			i_fatal("USER environment missing");
-		else {
-			i_fatal("login_executable setting must be pop3-login, "
-				"not pop3");
+	str_append_c(title, '[');
+	switch (pop3_client_count) {
+	case 0:
+		str_append(title, "idling");
+		break;
+	case 1:
+		client = pop3_clients;
+		str_append(title, client->user->username);
+		if (client->user->remote_ip != NULL) {
+			str_append_c(title, ' ');
+			str_append(title, net_ip2addr(client->user->remote_ip));
 		}
+		break;
+	default:
+		str_printfa(title, "%u connections", pop3_client_count);
+		break;
+	}
+	str_append_c(title, ']');
+	process_title_set(str_c(title));
+}
+
+static void pop3_die(void)
+{
+	/* do nothing. pop3 connections typically die pretty quick anyway. */
+}
+
+static void client_add_input(struct client *client, const buffer_t *buf)
+{
+	struct ostream *output;
+
+	if (buf != NULL && buf->used > 0) {
+		if (!i_stream_add_data(client->input, buf->data, buf->used))
+			i_panic("Couldn't add client input to stream");
 	}
 
-	if (getenv("DEBUG") != NULL) {
-		const char *home;
-
-		home = getenv("HOME");
-		i_info("Effective uid=%s, gid=%s, home=%s",
-		       dec2str(geteuid()), dec2str(getegid()),
-		       home != NULL ? home : "(none)");
-	}
-
-	if (getenv("STDERR_CLOSE_SHUTDOWN") != NULL) {
-		/* If master dies, the log fd gets closed and we'll quit */
-		log_io = io_add(STDERR_FILENO, IO_ERROR,
-				log_error_callback, NULL);
-	}
-
-	dict_drivers_register_builtin();
-	mail_users_init(getenv("AUTH_SOCKET_PATH"), getenv("DEBUG") != NULL);
-        mail_storage_init();
-	mail_storage_register_all();
-	mailbox_list_register_all();
-	clients_init();
-
-	module_dir_init(modules);
-
-	parse_workarounds();
-	enable_last_command = getenv("POP3_ENABLE_LAST") != NULL;
-	no_flag_updates = getenv("POP3_NO_FLAG_UPDATES") != NULL;
-	reuse_xuidl = getenv("POP3_REUSE_XUIDL") != NULL;
-	save_uidl = getenv("POP3_SAVE_UIDL") != NULL;
-	lock_session = getenv("POP3_LOCK_SESSION") != NULL;
-
-	uidl_format = getenv("POP3_UIDL_FORMAT");
-	if (uidl_format == NULL || *uidl_format == '\0')
-		uidl_format = "%08Xu%08Xv";
-	logout_format = getenv("POP3_LOGOUT_FORMAT");
-	if (logout_format == NULL)
-		logout_format = "top=%t/%p, retr=%r/%b, del=%d/%m, size=%s";
-	uidl_keymask = parse_uidl_keymask(uidl_format);
-	if (uidl_keymask == 0)
-		i_fatal("pop3_uidl_format setting doesn't contain any "
-			"%% variables.");
-
-	user = mail_user_init(getenv("USER"));
-	mail_user_set_home(user, getenv("HOME"));
-	if (mail_namespaces_init(user) < 0)
-		i_fatal("Namespace initialization failed");
-
-	client = client_create(0, 1, user);
-	if (client == NULL)
-		return FALSE;
-
+	output = client->output;
+	o_stream_ref(output);
+	o_stream_cork(output);
 	if (!IS_STANDALONE())
 		client_send_line(client, "+OK Logged in.");
+	(void)client_handle_input(client);
+	o_stream_uncork(output);
+	o_stream_unref(&output);
+}
 
-	str = getenv("CLIENT_INPUT");
-	if (str != NULL) T_BEGIN {
-		buffer_t *buf = t_base64_decode_str(str);
-		if (buf->used > 0) {
-			if (!i_stream_add_data(client->input, buf->data,
-					       buf->used))
-				i_panic("Couldn't add client input to stream");
-			ret = client_handle_input(client);
-		}
+static int
+client_create_from_input(const struct mail_storage_service_input *input,
+			 int fd_in, int fd_out, const buffer_t *input_buf,
+			 const char **error_r)
+{
+	struct mail_storage_service_user *user;
+	struct mail_user *mail_user;
+	struct client *client;
+	const struct pop3_settings *set;
+
+	if (mail_storage_service_lookup_next(storage_service, input,
+					     &user, &mail_user, error_r) <= 0)
+		return -1;
+	restrict_access_allow_coredumps(TRUE);
+
+	set = mail_storage_service_user_get_set(user)[1];
+	if (set->verbose_proctitle)
+		verbose_proctitle = TRUE;
+
+	client = client_create(fd_in, fd_out, mail_user, user, set);
+	if (client != NULL) T_BEGIN {
+		client_add_input(client, input_buf);
 	} T_END;
-	return ret;
+	return 0;
 }
 
-static void main_deinit(void)
+static void main_stdio_run(const char *username)
 {
-	if (log_io != NULL)
-		io_remove(&log_io);
-	clients_deinit();
+	struct mail_storage_service_input input;
+	buffer_t *input_buf;
+	const char *value, *error, *input_base64;
 
-	module_dir_unload(&modules);
-	mail_storage_deinit();
-	mail_users_deinit();
-	dict_drivers_unregister_builtin();
+	memset(&input, 0, sizeof(input));
+	input.module = input.service = "pop3";
+	input.username = username != NULL ? username : getenv("USER");
+	if (input.username == NULL && IS_STANDALONE())
+		input.username = getlogin();
+	if (input.username == NULL)
+		i_fatal("USER environment missing");
+	if ((value = getenv("IP")) != NULL)
+		net_addr2ip(value, &input.remote_ip);
+	if ((value = getenv("LOCAL_IP")) != NULL)
+		net_addr2ip(value, &input.local_ip);
 
-	lib_signals_deinit();
-	closelog();
+	input_base64 = getenv("CLIENT_INPUT");
+	input_buf = input_base64 == NULL ? NULL :
+		t_base64_decode_str(input_base64);
+
+	if (client_create_from_input(&input, STDIN_FILENO, STDOUT_FILENO,
+				     input_buf, &error) < 0)
+		i_fatal("%s", error);
 }
 
-int main(int argc ATTR_UNUSED, char *argv[], char *envp[])
+static void
+login_client_connected(const struct master_login_client *client,
+		       const char *username, const char *const *extra_fields)
 {
-#ifdef DEBUG
-	if (getenv("LOGGED_IN") != NULL && getenv("GDB") == NULL)
-		fd_debug_verify_leaks(3, 1024);
-#endif
+	struct mail_storage_service_input input;
+	const char *error;
+	buffer_t input_buf;
+
+	memset(&input, 0, sizeof(input));
+	input.module = input.service = "pop3";
+	input.local_ip = client->auth_req.local_ip;
+	input.remote_ip = client->auth_req.remote_ip;
+	input.username = username;
+	input.userdb_fields = extra_fields;
+
+	buffer_create_const_data(&input_buf, client->data,
+				 client->auth_req.data_size);
+	if (client_create_from_input(&input, client->fd, client->fd,
+				     &input_buf, &error) < 0) {
+		i_error("%s", error);
+		(void)close(client->fd);
+		master_service_client_connection_destroyed(master_service);
+	}
+}
+
+static void login_client_failed(const struct master_login_client *client,
+				const char *errormsg)
+{
+	const char *msg;
+
+	msg = t_strdup_printf("-ERR [IN-USE] %s\r\n", errormsg);
+	if (write(client->fd, msg, strlen(msg)) < 0) {
+		/* ignored */
+	}
+}
+
+static void client_connected(struct master_service_connection *conn)
+{
+	/* when running standalone, we shouldn't even get here */
+	i_assert(master_login != NULL);
+
+	master_service_client_connection_accept(conn);
+	master_login_add(master_login, conn->fd);
+}
+
+int main(int argc, char *argv[])
+{
+	static const struct setting_parser_info *set_roots[] = {
+		&pop3_setting_parser_info,
+		NULL
+	};
+	enum master_service_flags service_flags = 0;
+	enum mail_storage_service_flags storage_service_flags = 0;
+	const char *postlogin_socket_path, *username = NULL;
+	int c;
+
 	if (IS_STANDALONE() && getuid() == 0 &&
 	    net_getpeername(1, NULL, NULL) == 0) {
 		printf("-ERR pop3 binary must not be started from "
@@ -303,20 +199,60 @@ int main(int argc ATTR_UNUSED, char *argv[], char *envp[])
 		return 1;
 	}
 
-	/* NOTE: we start rooted, so keep the code minimal until
-	   restrict_access_by_env() is called */
-	lib_init();
-	drop_privileges();
+	if (IS_STANDALONE()) {
+		service_flags |= MASTER_SERVICE_FLAG_STANDALONE |
+			MASTER_SERVICE_FLAG_STD_CLIENT;
+	} else {
+		service_flags |= MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
+		storage_service_flags |=
+			MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT;
+	}
 
-        process_title_init(argv, envp);
-	ioloop = io_loop_create();
+	master_service = master_service_init("pop3", service_flags,
+					     &argc, &argv, "u:");
+	while ((c = master_getopt(master_service)) > 0) {
+		switch (c) {
+		case 'u':
+			storage_service_flags |=
+				MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP;
+			username = optarg;
+			break;
+		default:
+			return FATAL_DEFAULT;
+		}
+	}
+	postlogin_socket_path = argv[1] == NULL ? NULL : t_abspath(argv[1]);
 
-	if (main_init())
-		io_loop_run(ioloop);
-	main_deinit();
+	master_service_init_finish(master_service);
+	master_service_set_die_callback(master_service, pop3_die);
 
-	io_loop_destroy(&ioloop);
-	lib_deinit();
+	storage_service =
+		mail_storage_service_init(master_service,
+					  set_roots, storage_service_flags);
 
+	/* fake that we're running, so we know if client was destroyed
+	   while handling its initial input */
+	io_loop_set_running(current_ioloop);
+
+	if (IS_STANDALONE()) {
+		T_BEGIN {
+			main_stdio_run(username);
+		} T_END;
+	} else {
+		master_login = master_login_init(master_service, "auth-master",
+						 postlogin_socket_path,
+						 login_client_connected,
+						 login_client_failed);
+		io_loop_set_running(current_ioloop);
+	}
+
+	if (io_loop_is_running(current_ioloop))
+		master_service_run(master_service, client_connected);
+	clients_destroy_all();
+
+	if (master_login != NULL)
+		master_login_deinit(&master_login);
+	mail_storage_service_deinit(&storage_service);
+	master_service_deinit(&master_service);
 	return 0;
 }

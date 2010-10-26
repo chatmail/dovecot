@@ -16,6 +16,8 @@
 @SET_MAKE@
 
 
+
+
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
@@ -35,12 +37,13 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-dict
-DIST_COMMON = $(am__noinst_HEADERS_DIST) \
-	$(am__pkginc_lib_HEADERS_DIST) $(srcdir)/Makefile.am \
+DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -49,19 +52,22 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LIBRARIES = $(noinst_LIBRARIES)
 ARFLAGS = cru
-libdict_a_AR = $(AR) $(ARFLAGS)
-libdict_a_LIBADD =
-am__objects_1 = dict.$(OBJEXT) dict-client.$(OBJEXT) \
-	dict-file.$(OBJEXT)
-am_libdict_a_OBJECTS = $(am__objects_1)
-libdict_a_OBJECTS = $(am_libdict_a_OBJECTS)
 libdict_backend_a_AR = $(AR) $(ARFLAGS)
 libdict_backend_a_LIBADD =
-am__objects_2 = dict-db.$(OBJEXT) dict-sql.$(OBJEXT) \
+am_libdict_backend_a_OBJECTS = dict-db.$(OBJEXT) dict-sql.$(OBJEXT) \
 	dict-sql-settings.$(OBJEXT)
-am_libdict_backend_a_OBJECTS = $(am__objects_2) \
-	dict-drivers-register.$(OBJEXT)
-libdict_backend_a_OBJECTS = $(am_libdict_backend_a_OBJECTS)
+nodist_libdict_backend_a_OBJECTS = dict-drivers-register.$(OBJEXT)
+libdict_backend_a_OBJECTS = $(am_libdict_backend_a_OBJECTS) \
+	$(nodist_libdict_backend_a_OBJECTS)
+LTLIBRARIES = $(noinst_LTLIBRARIES)
+libdict_la_LIBADD =
+am__objects_1 = dict.lo dict-client.lo dict-file.lo
+am_libdict_la_OBJECTS = $(am__objects_1)
+libdict_la_OBJECTS = $(am_libdict_la_OBJECTS)
+am__EXEEXT_1 = test-dict$(EXEEXT)
+PROGRAMS = $(noinst_PROGRAMS)
+am_test_dict_OBJECTS = test-dict.$(OBJEXT)
+test_dict_OBJECTS = $(am_test_dict_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -75,12 +81,11 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libdict_a_SOURCES) $(libdict_backend_a_SOURCES)
-DIST_SOURCES = $(libdict_a_SOURCES) $(libdict_backend_a_SOURCES)
-am__noinst_HEADERS_DIST = dict.h dict-client.h dict-private.h \
-	dict-sql.h dict-sql-settings.h
-am__pkginc_lib_HEADERS_DIST = dict.h dict-client.h dict-private.h \
-	dict-sql.h dict-sql-settings.h
+SOURCES = $(libdict_backend_a_SOURCES) \
+	$(nodist_libdict_backend_a_SOURCES) $(libdict_la_SOURCES) \
+	$(test_dict_SOURCES)
+DIST_SOURCES = $(libdict_backend_a_SOURCES) $(libdict_la_SOURCES) \
+	$(test_dict_SOURCES)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -103,10 +108,12 @@ am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
 am__installdirs = "$(DESTDIR)$(pkginc_libdir)"
-HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
+HEADERS = $(pkginc_lib_HEADERS)
 ETAGS = etags
 CTAGS = ctags
+DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
+ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTH_CFLAGS = @AUTH_CFLAGS@
@@ -152,10 +159,18 @@ LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
+LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
+LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
+LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
+LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
@@ -166,6 +181,7 @@ MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
 MYSQL_CFLAGS = @MYSQL_CFLAGS@
+MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -187,7 +203,9 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
+RUN_TEST = @RUN_TEST@
 SED = @SED@
+SETTING_FILES = @SETTING_FILES@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 SQLITE_CFLAGS = @SQLITE_CFLAGS@
@@ -196,8 +214,8 @@ SQL_CFLAGS = @SQL_CFLAGS@
 SQL_LIBS = @SQL_LIBS@
 SSL_CFLAGS = @SSL_CFLAGS@
 SSL_LIBS = @SSL_LIBS@
-STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
+VALGRIND = @VALGRIND@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -259,9 +277,11 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-noinst_LIBRARIES = libdict.a libdict_backend.a
+noinst_LTLIBRARIES = libdict.la
+noinst_LIBRARIES = libdict_backend.a
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-sql \
 	-I$(top_srcdir)/src/lib-settings \
 	$(SQL_CFLAGS)
@@ -271,16 +291,15 @@ base_sources = \
 	dict-client.c \
 	dict-file.c
 
-backend_sources = \
+libdict_la_SOURCES = \
+	$(base_sources)
+
+libdict_backend_a_SOURCES = \
 	dict-db.c \
 	dict-sql.c \
 	dict-sql-settings.c
 
-libdict_a_SOURCES = \
-	$(base_sources)
-
-libdict_backend_a_SOURCES = \
-	$(backend_sources) \
+nodist_libdict_backend_a_SOURCES = \
 	dict-drivers-register.c
 
 headers = \
@@ -290,10 +309,18 @@ headers = \
 	dict-sql.h \
 	dict-sql-settings.h
 
-@INSTALL_HEADERS_TRUE@pkginc_libdir = $(pkgincludedir)/src/lib-dict
-@INSTALL_HEADERS_TRUE@pkginc_lib_HEADERS = $(headers)
-@INSTALL_HEADERS_FALSE@noinst_HEADERS = $(headers)
-DISTFILES = $(DIST_COMMON) $(base_sources) $(backend_sources) $(HEADERS) $(TEXINFOS) $(EXTRA_DIST)
+pkginc_libdir = $(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)
+test_programs = \
+	test-dict
+
+test_libs = \
+	../lib-test/libtest.la \
+	../lib/liblib.la
+
+test_dict_SOURCES = test-dict.c
+test_dict_LDADD = dict.lo $(test_libs)
+test_dict_DEPENDENCIES = dict.lo $(test_libs)
 all: all-am
 
 .SUFFIXES:
@@ -331,14 +358,33 @@ $(am__aclocal_m4_deps):
 
 clean-noinstLIBRARIES:
 	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
-libdict.a: $(libdict_a_OBJECTS) $(libdict_a_DEPENDENCIES) 
-	-rm -f libdict.a
-	$(libdict_a_AR) libdict.a $(libdict_a_OBJECTS) $(libdict_a_LIBADD)
-	$(RANLIB) libdict.a
 libdict_backend.a: $(libdict_backend_a_OBJECTS) $(libdict_backend_a_DEPENDENCIES) 
 	-rm -f libdict_backend.a
 	$(libdict_backend_a_AR) libdict_backend.a $(libdict_backend_a_OBJECTS) $(libdict_backend_a_LIBADD)
 	$(RANLIB) libdict_backend.a
+
+clean-noinstLTLIBRARIES:
+	-test -z "$(noinst_LTLIBRARIES)" || rm -f $(noinst_LTLIBRARIES)
+	@list='$(noinst_LTLIBRARIES)'; for p in $$list; do \
+	  dir="`echo $$p | sed -e 's|/[^/]*$$||'`"; \
+	  test "$$dir" != "$$p" || dir=.; \
+	  echo "rm -f \"$${dir}/so_locations\""; \
+	  rm -f "$${dir}/so_locations"; \
+	done
+libdict.la: $(libdict_la_OBJECTS) $(libdict_la_DEPENDENCIES) 
+	$(LINK)  $(libdict_la_OBJECTS) $(libdict_la_LIBADD) $(LIBS)
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+test-dict$(EXEEXT): $(test_dict_OBJECTS) $(test_dict_DEPENDENCIES) 
+	@rm -f test-dict$(EXEEXT)
+	$(LINK) $(test_dict_OBJECTS) $(test_dict_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -346,13 +392,14 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-client.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-client.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-db.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-drivers-register.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-file.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-file.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-sql-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-sql.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dict.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -485,7 +532,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LIBRARIES) $(HEADERS)
+all-am: Makefile $(LIBRARIES) $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -514,7 +561,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-noinstLIBRARIES \
-	mostlyclean-am
+	clean-noinstLTLIBRARIES clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -585,21 +632,22 @@ uninstall-am: uninstall-pkginc_libHEADERS
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-noinstLIBRARIES ctags distclean \
-	distclean-compile distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-am install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-pkginc_libHEADERS \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags uninstall uninstall-am uninstall-pkginc_libHEADERS
+	clean-libtool clean-noinstLIBRARIES clean-noinstLTLIBRARIES \
+	clean-noinstPROGRAMS ctags distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-pkginc_libHEADERS install-ps \
+	install-ps-am install-strip installcheck installcheck-am \
+	installdirs maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool pdf pdf-am ps ps-am tags uninstall \
+	uninstall-am uninstall-pkginc_libHEADERS
 
 
-dict-drivers-register.c: Makefile
+dict-drivers-register.c: Makefile $(top_builddir)/config.h
 	rm -f $@
 	echo '/* this file automatically generated by Makefile */' >$@
 	echo '#include "lib.h"' >>$@
@@ -611,6 +659,7 @@ dict-drivers-register.c: Makefile
 	  fi; \
 	done
 	echo 'void dict_drivers_register_all(void) {' >>$@
+	echo 'dict_drivers_register_builtin();' >>$@
 	echo 'dict_sql_register();' >>$@
 	for i in $(dict_drivers) null; do \
 	  if [ "$${i}" != "null" ]; then \
@@ -619,6 +668,7 @@ dict-drivers-register.c: Makefile
 	done
 	echo '}' >>$@
 	echo 'void dict_drivers_unregister_all(void) {' >>$@
+	echo 'dict_drivers_unregister_builtin();' >>$@
 	echo 'dict_sql_unregister();' >>$@
 	for i in $(dict_drivers) null; do \
 	  if [ "$${i}" != "null" ]; then \
@@ -629,6 +679,12 @@ dict-drivers-register.c: Makefile
 
 distclean-generic:
 	rm -f Makefile dict-drivers-register.c
+
+check: check-am check-test
+check-test: all-am
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

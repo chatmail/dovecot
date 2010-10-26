@@ -1,6 +1,6 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "imap-common.h"
 #include "ostream.h"
 #include "str.h"
 #include "seq-range-array.h"
@@ -10,7 +10,7 @@
 #include "imap-seqset.h"
 #include "imap-util.h"
 #include "mail-search-build.h"
-#include "commands.h"
+#include "imap-commands.h"
 #include "imap-search-args.h"
 #include "imap-search.h"
 
@@ -47,13 +47,13 @@ search_parse_return_options(struct imap_search_context *ctx,
 	const char *name, *str;
 	unsigned int idx;
 
-	while (args->type != IMAP_ARG_EOL) {
-		if (args->type != IMAP_ARG_ATOM) {
+	while (!IMAP_ARG_IS_EOL(args)) {
+		if (!imap_arg_get_atom(args, &name)) {
 			client_send_command_error(cmd,
 				"SEARCH return options contain non-atoms.");
 			return FALSE;
 		}
-		name = t_str_ucase(IMAP_ARG_STR_NONULL(args));
+		name = t_str_ucase(name);
 		args++;
 		if (strcmp(name, "MIN") == 0)
 			ctx->return_options |= SEARCH_RETURN_MIN;
@@ -74,12 +74,11 @@ search_parse_return_options(struct imap_search_context *ctx,
 				return FALSE;
 			}
 			ctx->return_options |= SEARCH_RETURN_PARTIAL;
-			if (args->type != IMAP_ARG_ATOM) {
+			if (!imap_arg_get_atom(args, &str)) {
 				client_send_command_error(cmd,
 					"PARTIAL range missing.");
 				return FALSE;
 			}
-			str = IMAP_ARG_STR_NONULL(args);
 			if (imap_partial_range_parse(ctx, str) < 0) {
 				client_send_command_error(cmd,
 					"PARTIAL range broken.");
@@ -163,15 +162,13 @@ static void imap_search_result_save(struct imap_search_context *ctx)
 static void imap_search_send_result_standard(struct imap_search_context *ctx)
 {
 	const struct seq_range *range;
-	unsigned int i, count;
 	string_t *str;
 	uint32_t seq;
 
 	str = t_str_new(1024);
-	range = array_get(&ctx->result, &count);
 	str_append(str, ctx->sorting ? "* SORT" : "* SEARCH");
-	for (i = 0; i < count; i++) {
-		for (seq = range[i].seq1; seq <= range[i].seq2; seq++)
+	array_foreach(&ctx->result, range) {
+		for (seq = range->seq1; seq <= range->seq2; seq++)
 			str_printfa(str, " %u", seq);
 		if (str_len(str) >= 1024-32) {
 			o_stream_send(ctx->cmd->client->output,
@@ -347,7 +344,7 @@ static bool cmd_search_more(struct client_command_context *cmd)
 		(opts & ~(SEARCH_RETURN_NORESULTS |
 			  SEARCH_RETURN_MIN | SEARCH_RETURN_MAX)) == 0;
 	while (mailbox_search_next_nonblock(ctx->search_ctx, ctx->mail,
-					    &tryagain) > 0) {
+					    &tryagain)) {
 		id = cmd->uid ? ctx->mail->uid : ctx->mail->seq;
 		ctx->result_count++;
 
@@ -447,19 +444,17 @@ static void cmd_search_more_callback(struct client_command_context *cmd)
 int cmd_search_parse_return_if_found(struct imap_search_context *ctx,
 				     const struct imap_arg **_args)
 {
-	const struct imap_arg *args = *_args;
+	const struct imap_arg *list_args, *args = *_args;
 	struct client_command_context *cmd = ctx->cmd;
 
-	if (!(args->type == IMAP_ARG_ATOM && args[1].type == IMAP_ARG_LIST &&
-	      strcasecmp(IMAP_ARG_STR_NONULL(args), "RETURN") == 0)) {
+	if (!imap_arg_atom_equals(&args[0], "RETURN") ||
+	    !imap_arg_get_list(&args[1], &list_args)) {
 		ctx->return_options = SEARCH_RETURN_ALL;
 		return 1;
 	}
 
-	args++;
-	if (!search_parse_return_options(ctx, IMAP_ARG_LIST_ARGS(args)))
+	if (!search_parse_return_options(ctx, list_args))
 		return -1;
-	args++;
 
 	if ((ctx->return_options & SEARCH_RETURN_SAVE) != 0) {
 		/* wait if there is another SEARCH SAVE command running. */
@@ -474,7 +469,7 @@ int cmd_search_parse_return_if_found(struct imap_search_context *ctx,
 			i_array_init(&cmd->client->search_saved_uidset, 128);
 	}
 
-	*_args = args;
+	*_args = args + 2;
 	return 1;
 }
 

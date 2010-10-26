@@ -45,6 +45,15 @@
 /* Disable asserts */
 #undef DISABLE_ASSERTS
 
+/* Dovecot name */
+#undef DOVECOT_NAME
+
+/* Dovecot string */
+#undef DOVECOT_STRING
+
+/* Dovecot version */
+#undef DOVECOT_VERSION
+
 /* How to define flexible array members in structs */
 #undef FLEXIBLE_ARRAY_MEMBER
 
@@ -74,6 +83,9 @@
 
 /* Define to 1 if you have the <execinfo.h> header file. */
 #undef HAVE_EXECINFO_H
+
+/* Define to 1 if you have the `fallocate' function. */
+#undef HAVE_FALLOCATE
 
 /* Define to 1 if you have the `fcntl' function. */
 #undef HAVE_FCNTL
@@ -164,11 +176,14 @@
 /* Define to 1 if you have the <libgen.h> header file. */
 #undef HAVE_LIBGEN_H
 
-/* Define to 1 if you have the `ldap' library (-lldap). */
-#undef HAVE_LIBLDAP
+/* Define if you have libwrap */
+#undef HAVE_LIBWRAP
 
 /* Define to 1 if you have the <linux/dqblk_xfs.h> header file. */
 #undef HAVE_LINUX_DQBLK_XFS_H
+
+/* Define to 1 if you have the <linux/falloc.h> header file. */
+#undef HAVE_LINUX_FALLOC_H
 
 /* Define if you have Linux-compatible mremap() */
 #undef HAVE_LINUX_MREMAP
@@ -310,6 +325,9 @@
 
 /* Build with OpenSSL compression */
 #undef HAVE_SSL_COMPRESSION
+
+/* Build with TLS hostname support */
+#undef HAVE_SSL_GET_SERVERNAME
 
 /* Define if you have statfs.f_mntfromname */
 #undef HAVE_STATFS_MNTFROMNAME
@@ -579,6 +597,9 @@
 /* printf() format for uoff_t */
 #undef PRIuUOFF_T
 
+/* Define if process title can be changed by modifying argv */
+#undef PROCTITLE_HACK
+
 /* The size of `int', as computed by sizeof. */
 #undef SIZEOF_INT
 
@@ -609,6 +630,9 @@
 /* Define if your time_t is signed */
 #undef TIME_T_SIGNED
 
+/* Define if unsetenv() returns int */
+#undef UNSETENV_RET_INT
+
 /* Define if off_t is int */
 #undef UOFF_T_INT
 
@@ -638,9 +662,6 @@
 
 /* Build with SQL support */
 #undef USERDB_SQL
-
-/* Build with static userdb support */
-#undef USERDB_STATIC
 
 /* Build with vpopmail support */
 #undef USERDB_VPOPMAIL

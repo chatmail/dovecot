@@ -10,6 +10,11 @@ lib21_fts_squat_plugin_la_LDFLAGS = -module -avoid-version
 module_LTLIBRARIES = \
 	lib21_fts_squat_plugin.la
 
+if DOVECOT_PLUGIN_DEPS
+lib21_fts_squat_plugin_la_LIBADD = \
+	../fts/lib20_fts_plugin.la
+endif
+
 lib21_fts_squat_plugin_la_SOURCES = \
 	fts-squat-plugin.c \
 	fts-backend-squat.c \
@@ -31,18 +36,9 @@ common_objects = \
 	squat-trie.lo \
 	squat-uidlist.lo
 
-libs = $(STORAGE_LIBS)
+libs = \
+	$(LIBDOVECOT_STORAGE) \
+	$(common_objects)
 
-squat_test_LDADD = \
-	$(common_objects) \
-	$(libs) \
-	$(LIBICONV)
-
-squat_test_DEPENDENCIES = $(libs) $(common_objects)
-
-install-exec-local:
-	for d in imap pop3 lda; do \
-	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
-	  rm -f $(DESTDIR)$(moduledir)/$$d/lib21_fts_squat_plugin$(MODULE_SUFFIX); \
-	  $(LN_S) ../lib21_fts_squat_plugin$(MODULE_SUFFIX) $(DESTDIR)$(moduledir)/$$d; \
-	done
+squat_test_LDADD = $(libs) $(LIBDOVECOT)
+squat_test_DEPENDENCIES = $(libs) $(LIBDOVECOT_DEPS)

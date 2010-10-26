@@ -4,6 +4,7 @@
    rewritten. */
 
 #include "lib.h"
+#include "array.h"
 #include "imap-match.h"
 
 #include <ctype.h>
@@ -69,7 +70,7 @@ static const char *pattern_compress(const char *pattern)
 			*dest++ = *pattern++;
 		}
 	}
-	*dest++ = '\0';
+	*dest = '\0';
 	return ret;
 }
 
@@ -173,6 +174,57 @@ void imap_match_deinit(struct imap_match_glob **glob)
 	p_free((*glob)->pool, (*glob)->patterns);
 	p_free((*glob)->pool, *glob);
 	*glob = NULL;
+}
+
+static struct imap_match_glob *
+imap_match_dup_real(pool_t pool, const struct imap_match_glob *glob)
+{
+	ARRAY_TYPE(const_string) patterns;
+	const struct imap_match_pattern *p;
+	bool inboxcase = FALSE;
+
+	t_array_init(&patterns, 8);
+	for (p = glob->patterns; p->pattern != NULL; p++) {
+		if (p->inboxcase)
+			inboxcase = TRUE;
+		array_append(&patterns, &p->pattern, 1);
+	}
+	(void)array_append_space(&patterns);
+	return imap_match_init_multiple_real(pool, array_idx(&patterns, 0),
+					     inboxcase, glob->sep);
+}
+
+struct imap_match_glob *
+imap_match_dup(pool_t pool, const struct imap_match_glob *glob)
+{
+	struct imap_match_glob *new_glob;
+
+	if (pool->datastack_pool) {
+		return imap_match_dup_real(pool, glob);
+	} else {
+		T_BEGIN {
+			new_glob = imap_match_dup_real(pool, glob);
+		} T_END;
+		return new_glob;
+	}
+}
+
+bool imap_match_globs_equal(const struct imap_match_glob *glob1,
+			    const struct imap_match_glob *glob2)
+{
+	const struct imap_match_pattern *p1 = glob1->patterns;
+	const struct imap_match_pattern *p2 = glob2->patterns;
+
+	if (glob1->sep != glob2->sep)
+		return FALSE;
+
+	for (; p1->pattern != NULL && p2->pattern != NULL; p1++, p2++) {
+		if (strcmp(p1->pattern, p2->pattern) != 0)
+			return FALSE;
+		if (p1->inboxcase != p2->inboxcase)
+			return FALSE;
+	}
+	return p1->pattern == p2->pattern;
 }
 
 #define CMP_CUR_CHR(ctx, data, pattern) \

@@ -74,33 +74,14 @@ static int mail_index_lock(struct mail_index *index, int lock_type,
 		return 1;
 	}
 
-	if (lock_type == F_RDLCK || !index->log_locked) {
-		i_assert(index->file_lock == NULL);
+	if (index->file_lock == NULL) {
+		i_assert(index->lock_type == F_UNLCK);
 		ret = mail_index_lock_fd(index, index->filepath, index->fd,
 					 lock_type, timeout_secs,
 					 &index->file_lock);
 	} else {
-		/* this is kind of kludgy. we wish to avoid deadlocks while
-		   trying to lock transaction log, but it can happen if our
-		   process is holding transaction log lock and waiting for
-		   index write lock, while the other process is holding index
-		   read lock and waiting for transaction log lock.
-
-		   we don't have a problem with grabbing read index lock
-		   because the only way for it to block is if it's
-		   write-locked, which isn't allowed unless transaction log
-		   is also locked.
-
-		   so, the workaround for this problem is that we simply try
-		   locking once. if it doesn't work, just rewrite the file.
-		   hopefully there won't be any other deadlocking issues. :) */
-		if (index->file_lock == NULL) {
-			ret = mail_index_lock_fd(index, index->filepath,
-						 index->fd, lock_type, 0,
-						 &index->file_lock);
-		} else {
-			ret = file_lock_try_update(index->file_lock, lock_type);
-		}
+		i_assert(index->lock_type == F_RDLCK && lock_type == F_WRLCK);
+		ret = file_lock_try_update(index->file_lock, lock_type);
 	}
 	if (ret <= 0)
 		return ret;
@@ -123,7 +104,7 @@ static int mail_index_lock(struct mail_index *index, int lock_type,
 void mail_index_flush_read_cache(struct mail_index *index, const char *path,
 				 int fd, bool locked)
 {
-	if (!index->nfs_flush)
+	if ((index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) == 0)
 		return;
 
 	/* Assume flock() is emulated with fcntl(), because that's how most
@@ -139,10 +120,12 @@ void mail_index_flush_read_cache(struct mail_index *index, const char *path,
 
 int mail_index_lock_shared(struct mail_index *index, unsigned int *lock_id_r)
 {
+	unsigned int timeout_secs;
 	int ret;
 
-	ret = mail_index_lock(index, F_RDLCK, MAIL_INDEX_SHARED_LOCK_TIMEOUT,
-			      lock_id_r);
+	timeout_secs = I_MIN(MAIL_INDEX_SHARED_LOCK_TIMEOUT,
+			     index->max_lock_timeout_secs);
+	ret = mail_index_lock(index, F_RDLCK, timeout_secs, lock_id_r);
 	if (ret > 0) {
 		mail_index_flush_read_cache(index, index->filepath,
 					    index->fd, TRUE);
@@ -152,8 +135,8 @@ int mail_index_lock_shared(struct mail_index *index, unsigned int *lock_id_r)
 		return -1;
 
 	mail_index_set_error(index,
-		"Timeout while waiting for shared lock for index file %s",
-		index->filepath);
+		"Timeout (%us) while waiting for shared lock for index file %s",
+		timeout_secs, index->filepath);
 	index->index_lock_timeout = TRUE;
 	return -1;
 }

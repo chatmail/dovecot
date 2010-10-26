@@ -13,7 +13,9 @@ enum auth_request_state {
 	AUTH_REQUEST_STATE_PASSDB,
 	AUTH_REQUEST_STATE_MECH_CONTINUE,
 	AUTH_REQUEST_STATE_FINISHED,
-	AUTH_REQUEST_STATE_USERDB
+	AUTH_REQUEST_STATE_USERDB,
+
+	AUTH_REQUEST_STATE_MAX
 };
 
 typedef const char *
@@ -55,9 +57,13 @@ struct auth_request {
 	struct auth_stream_reply *userdb_reply;
 
 	const struct mech_module *mech;
-	struct auth *auth;
+	const struct auth_settings *set;
         struct auth_passdb *passdb;
         struct auth_userdb *userdb;
+
+	/* passdb lookups have a handler, userdb lookups don't */
+	struct auth_request_handler *handler;
+        struct auth_master_connection *master;
 
 	unsigned int connect_uid;
 	unsigned int client_pid;
@@ -68,6 +74,11 @@ struct auth_request {
 	struct ip_addr local_ip, remote_ip;
 	unsigned int local_port, remote_port;
 
+	struct timeout *to_abort, *to_penalty;
+	unsigned int last_penalty;
+	unsigned int initial_response_len;
+	const unsigned char *initial_response;
+
 	union {
 		verify_plain_callback_t *verify_plain;
 		lookup_credentials_callback_t *lookup_credentials;
@@ -76,9 +87,7 @@ struct auth_request {
 	} private_callback;
         const char *credentials_scheme;
 
-	mech_callback_t *callback;
 	void *context;
-        struct auth_master_connection *master;
 
 	unsigned int successful:1;
 	unsigned int passdb_failure:1;
@@ -100,14 +109,22 @@ struct auth_request {
 	unsigned int userdb_lookup:1;
 	unsigned int userdb_lookup_failed:1;
 	unsigned int secured:1;
+	unsigned int removed_from_handler:1;
 
 	/* ... mechanism specific data ... */
 };
 
+extern unsigned int auth_request_state_count[AUTH_REQUEST_STATE_MAX];
+
 struct auth_request *
-auth_request_new(struct auth *auth, const struct mech_module *mech,
-		 mech_callback_t *callback, void *context);
-struct auth_request *auth_request_new_dummy(struct auth *auth);
+auth_request_new(const struct mech_module *mech);
+struct auth_request *auth_request_new_dummy(void);
+void auth_request_init(struct auth_request *request);
+struct auth *auth_request_get_auth(struct auth_request *request);
+
+void auth_request_set_state(struct auth_request *request,
+			    enum auth_request_state state);
+
 void auth_request_ref(struct auth_request *request);
 void auth_request_unref(struct auth_request **request);
 
@@ -121,8 +138,7 @@ void auth_request_export(struct auth_request *request,
 bool auth_request_import(struct auth_request *request,
 			 const char *key, const char *value);
 
-void auth_request_initial(struct auth_request *request,
-			  const unsigned char *data, size_t data_size);
+void auth_request_initial(struct auth_request *request);
 void auth_request_continue(struct auth_request *request,
 			   const unsigned char *data, size_t data_size);
 
@@ -156,6 +172,8 @@ void auth_request_set_userdb_field_values(struct auth_request *request,
 					  const char *const *values);
 void auth_request_proxy_finish(struct auth_request *request, bool success);
 
+void auth_request_log_password_mismatch(struct auth_request *request,
+					const char *subsystem);
 int auth_request_password_verify(struct auth_request *request,
 				 const char *plain_password,
 				 const char *crypted_password,
@@ -188,5 +206,7 @@ void auth_request_set_credentials(struct auth_request *request,
 				  set_credentials_callback_t *callback);
 void auth_request_userdb_callback(enum userdb_result result,
 				  struct auth_request *request);
+
+void auth_request_refresh_last_access(struct auth_request *request);
 
 #endif

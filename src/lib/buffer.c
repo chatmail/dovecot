@@ -57,52 +57,55 @@ buffer_check_limits(struct real_buffer *buf, size_t pos, size_t data_size)
 		if (unlikely(!buf->dynamic)) {
 			i_panic("Buffer full (%"PRIuSIZE_T" > %"PRIuSIZE_T", "
 				"pool %s)", pos + data_size, buf->alloc,
+				buf->pool == NULL ? "<none>" :
 				pool_get_name(buf->pool));
 		}
 
 		buffer_alloc(buf, pool_get_exp_grown_size(buf->pool, buf->alloc,
 							  new_size));
 	}
+#if 0
+	else if (new_size > buf->used && buf->alloced &&
+		 !buf->pool->alloconly_pool && !buf->pool->datastack_pool) {
+		void *new_buf;
+
+		/* buffer's size increased: move the buffer's memory elsewhere.
+		   this should help catch bugs where old pointers are tried to
+		   be used to access the buffer's memory */
+		new_buf = p_malloc(buf->pool, buf->alloc);
+		memcpy(new_buf, buf->w_buffer, buf->alloc);
+		p_free(buf->pool, buf->w_buffer);
+
+		buf->w_buffer = new_buf;
+		buf->r_buffer = new_buf;
+	}
+#endif
 
 	if (new_size > buf->used)
 		buf->used = new_size;
 	i_assert(buf->used <= buf->alloc);
 }
 
-buffer_t *buffer_create_static_hard(pool_t pool, size_t size)
+void buffer_create_data(buffer_t *buffer, void *data, size_t size)
 {
 	struct real_buffer *buf;
 
-	buf = p_new(pool, struct real_buffer, 1);
-	buf->pool = pool;
-	buffer_alloc(buf, size);
-	return (buffer_t *)buf;
-}
+	i_assert(sizeof(*buffer) >= sizeof(struct real_buffer));
 
-buffer_t *buffer_create_data(pool_t pool, void *data, size_t size)
-{
-	struct real_buffer *buf;
-
-	buf = p_new(pool, struct real_buffer, 1);
-	buf->pool = pool;
+	buf = (struct real_buffer *)buffer;
+	memset(buf, 0, sizeof(*buf));
 	buf->alloc = size;
 	buf->r_buffer = buf->w_buffer = data;
-	return (buffer_t *)buf;
 }
 
-buffer_t *buffer_create_const_data(pool_t pool, const void *data, size_t size)
+void buffer_create_const_data(buffer_t *buffer, const void *data, size_t size)
 {
 	struct real_buffer *buf;
 
-	buf = p_new(pool, struct real_buffer, 1);
-	buf->pool = pool;
-	buffer_update_const_data((buffer_t *)buf, data, size);
-	return (buffer_t *)buf;
-}
+	i_assert(sizeof(*buffer) >= sizeof(struct real_buffer));
 
-void buffer_update_const_data(buffer_t *_buf, const void *data, size_t size)
-{
-	struct real_buffer *buf = (struct real_buffer *)_buf;
+	buf = (struct real_buffer *)buffer;
+	memset(buf, 0, sizeof(*buf));
 
 	buf->used = buf->alloc = size;
 	buf->r_buffer = data;
@@ -127,7 +130,8 @@ void buffer_free(buffer_t **_buf)
 	*_buf = NULL;
 	if (buf->alloced)
 		p_free(buf->pool, buf->w_buffer);
-	p_free(buf->pool, buf);
+	if (buf->pool != NULL)
+		p_free(buf->pool, buf);
 }
 
 void *buffer_free_without_data(buffer_t **_buf)

@@ -121,10 +121,12 @@ You can apply a modifiers for each variable (e.g. %Ls = pop3):
  * %H - take a 32bit hash of the variable and return it as hex. You can also
    limit the hash value. For example %256Hu gives values 0..ff. You might want
    padding also, so %2.256Hu gives 00..ff. This can be useful for example in
-   dividing users automatically to multiple partitions. Note that if you're
-   hashing usernames being in user@domain form, you probably want to reverse
-   the string to get better hash value variety, e.g. %3RHu.
- * %M - return the string's MD5 sum
+   dividing users automatically to multiple partitions.
+    * %H hash function is a bit bad if all the strings end with the same text,
+      so if you're hashing usernames being in user@domain form, you probably
+      want to reverse the username to get better hash value variety, e.g.
+      %3RHu.
+ * %M - return the string's MD5 sum as hex.
  * %D - return "sub.domain.org" as "sub,dc=domain,dc=org" (for LDAP queries)
  * %T - Trim trailing whitespace (v1.1.rc6+)
 
@@ -142,4 +144,7 @@ with '0' character if the string is shorter. For example %04i may return
 "0001", "1000" and "12345". %1.04i for the same string would return "001",
 "000" and "2345".
 
-(This file was created from the wiki on 2010-05-24 04:42)
+The modifiers are applied from left-to-right order, except the substring is
+always taken from the final string.
+
+(This file was created from the wiki on 2010-07-02 21:30)

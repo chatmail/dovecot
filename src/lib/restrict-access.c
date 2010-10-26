@@ -20,37 +20,15 @@
 static gid_t process_primary_gid = (gid_t)-1;
 static gid_t process_privileged_gid = (gid_t)-1;
 static bool process_using_priv_gid = FALSE;
+static char *chroot_dir = NULL;
 
-void restrict_access_set_env(const char *user, uid_t uid,
-			     gid_t gid, gid_t privileged_gid,
-			     const char *chroot_dir,
-			     gid_t first_valid_gid, gid_t last_valid_gid,
-			     const char *extra_groups)
+void restrict_access_init(struct restrict_access_settings *set)
 {
-	if (user != NULL && *user != '\0')
-		env_put(t_strconcat("RESTRICT_USER=", user, NULL));
-	if (chroot_dir != NULL && *chroot_dir != '\0')
-		env_put(t_strconcat("RESTRICT_CHROOT=", chroot_dir, NULL));
+	memset(set, 0, sizeof(*set));
 
-	env_put(t_strdup_printf("RESTRICT_SETUID=%s", dec2str(uid)));
-	env_put(t_strdup_printf("RESTRICT_SETGID=%s", dec2str(gid)));
-	if (privileged_gid != (gid_t)-1) {
-		env_put(t_strdup_printf("RESTRICT_SETGID_PRIV=%s",
-					dec2str(privileged_gid)));
-	}
-	if (extra_groups != NULL && *extra_groups != '\0') {
-		env_put(t_strconcat("RESTRICT_SETEXTRAGROUPS=",
-				    extra_groups, NULL));
-	}
-
-	if (first_valid_gid != 0) {
-		env_put(t_strdup_printf("RESTRICT_GID_FIRST=%s",
-					dec2str(first_valid_gid)));
-	}
-	if (last_valid_gid != 0) {
-		env_put(t_strdup_printf("RESTRICT_GID_LAST=%s",
-					dec2str(last_valid_gid)));
-	}
+	set->uid = (uid_t)-1;
+	set->gid = (gid_t)-1;
+	set->privileged_gid = (gid_t)-1;
 }
 
 static const char *get_uid_str(uid_t uid)
@@ -151,22 +129,17 @@ gid_t *restrict_get_groups_list(unsigned int *gid_count_r)
 	return gid_list;
 }
 
-static void drop_restricted_groups(gid_t *gid_list, unsigned int *gid_count,
+static void drop_restricted_groups(const struct restrict_access_settings *set,
+				   gid_t *gid_list, unsigned int *gid_count,
 				   bool *have_root_group)
 {
 	/* @UNSAFE */
-	gid_t first_valid, last_valid;
-	const char *env;
 	unsigned int i, used;
 
-	env = getenv("RESTRICT_GID_FIRST");
-	first_valid = env == NULL ? 0 : (gid_t)strtoul(env, NULL, 10);
-	env = getenv("RESTRICT_GID_LAST");
-	last_valid = env == NULL ? (gid_t)-1 : (gid_t)strtoul(env, NULL, 10);
-
 	for (i = 0, used = 0; i < *gid_count; i++) {
-		if (gid_list[i] >= first_valid &&
-		    (last_valid == (gid_t)-1 || gid_list[i] <= last_valid)) {
+		if (gid_list[i] >= set->first_valid_gid &&
+		    (set->last_valid_gid == 0 ||
+		     gid_list[i] <= set->last_valid_gid)) {
 			if (gid_list[i] == 0)
 				*have_root_group = TRUE;
 			gid_list[used++] = gid_list[i];
@@ -178,9 +151,10 @@ static void drop_restricted_groups(gid_t *gid_list, unsigned int *gid_count,
 static gid_t get_group_id(const char *name)
 {
 	struct group *group;
+	gid_t gid;
 
-	if (is_numeric(name, '\0'))
-		return (gid_t)strtoul(name, NULL, 10);
+	if (str_to_gid(name, &gid) == 0)
+		return gid;
 
 	group = getgrnam(name);
 	if (group == NULL)
@@ -188,7 +162,7 @@ static gid_t get_group_id(const char *name)
 	return group->gr_gid;
 }
 
-static void fix_groups_list(const char *extra_groups,
+static void fix_groups_list(const struct restrict_access_settings *set,
 			    bool preserve_existing, bool *have_root_group)
 {
 	gid_t gid, *gid_list, *gid_list2;
@@ -201,12 +175,12 @@ static void fix_groups_list(const char *extra_groups,
 	   so add it to supplementary groups. */
 	add_primary_gid = process_privileged_gid != (gid_t)-1;
 
-	tmp = extra_groups == NULL ? &empty :
-		t_strsplit_spaces(extra_groups, ", ");
+	tmp = set->extra_groups == NULL ? &empty :
+		t_strsplit_spaces(set->extra_groups, ", ");
 
 	if (preserve_existing) {
 		gid_list = restrict_get_groups_list(&gid_count);
-		drop_restricted_groups(gid_list, &gid_count,
+		drop_restricted_groups(set, gid_list, &gid_count,
 				       have_root_group);
 		/* see if the list already contains the primary GID */
 		for (i = 0; i < gid_count; i++) {
@@ -245,29 +219,25 @@ static void fix_groups_list(const char *extra_groups,
 	if (setgroups(gid_count, gid_list) < 0) {
 		if (errno == EINVAL) {
 			i_fatal("setgroups(%s) failed: Too many extra groups",
-				extra_groups == NULL ? "" : extra_groups);
+				set->extra_groups == NULL ? "" :
+				set->extra_groups);
 		} else {
 			i_fatal("setgroups() failed: %m");
 		}
 	}
 }
 
-void restrict_access_by_env(bool disallow_root)
+void restrict_access(const struct restrict_access_settings *set,
+		     const char *home, bool disallow_root)
 {
-	const char *env;
-	uid_t uid;
 	bool is_root, have_root_group, preserve_groups = FALSE;
 	bool allow_root_gid;
 
 	is_root = geteuid() == 0;
 
 	/* set the primary/privileged group */
-	env = getenv("RESTRICT_SETGID");
-	process_primary_gid = env == NULL || *env == '\0' ? (gid_t)-1 :
-		(gid_t)strtoul(env, NULL, 10);
-	env = getenv("RESTRICT_SETGID_PRIV");
-	process_privileged_gid = env == NULL || *env == '\0' ? (gid_t)-1 :
-		(gid_t)strtoul(env, NULL, 10);
+	process_primary_gid = set->gid;
+	process_privileged_gid = set->privileged_gid;
 
 	have_root_group = process_primary_gid == 0;
 	if (process_primary_gid != (gid_t)-1 ||
@@ -282,33 +252,33 @@ void restrict_access_by_env(bool disallow_root)
 	}
 
 	/* set system user's groups */
-	env = getenv("RESTRICT_USER");
-	if (env != NULL && *env != '\0' && is_root) {
-		if (initgroups(env, process_primary_gid) < 0) {
+	if (set->system_groups_user != NULL && is_root) {
+		if (initgroups(set->system_groups_user,
+			       process_primary_gid) < 0) {
 			i_fatal("initgroups(%s, %s) failed: %m",
-				env, get_gid_str(process_primary_gid));
+				set->system_groups_user,
+				get_gid_str(process_primary_gid));
 		}
 		preserve_groups = TRUE;
 	}
 
 	/* add extra groups. if we set system user's groups, drop the
 	   restricted groups at the same time. */
-	env = getenv("RESTRICT_SETEXTRAGROUPS");
 	if (is_root) T_BEGIN {
-		fix_groups_list(env, preserve_groups, &have_root_group);
+		fix_groups_list(set, preserve_groups,
+				&have_root_group);
 	} T_END;
 
 	/* chrooting */
-	env = getenv("RESTRICT_CHROOT");
-	if (env != NULL && *env != '\0') {
+	if (set->chroot_dir != NULL) {
 		/* kludge: localtime() must be called before chroot(),
 		   or the timezone isn't known */
-		const char *home = getenv("HOME");
 		time_t t = 0;
 		(void)localtime(&t);
 
-		if (chroot(env) != 0)
-			i_fatal("chroot(%s) failed: %m", env);
+		if (chroot(set->chroot_dir) != 0)
+			i_fatal("chroot(%s) failed: %m", set->chroot_dir);
+		chroot_dir = i_strdup(set->chroot_dir);
 
 		if (home != NULL) {
 			if (chdir(home) < 0) {
@@ -323,36 +293,36 @@ void restrict_access_by_env(bool disallow_root)
 	}
 
 	/* uid last */
-	env = getenv("RESTRICT_SETUID");
-	uid = env == NULL || *env == '\0' ? 0 : (uid_t)strtoul(env, NULL, 10);
-	if (uid != 0) {
-		if (setuid(uid) != 0) {
+	if (set->uid != (uid_t)-1) {
+		if (setuid(set->uid) != 0) {
 			i_fatal("setuid(%s) failed with euid=%s: %m "
 				"(This binary should probably be called with "
 				"process user set to %s instead of %s)",
-				get_uid_str(uid), get_uid_str(geteuid()),
-				get_uid_str(uid), get_uid_str(geteuid()));
+				get_uid_str(set->uid), get_uid_str(geteuid()),
+				get_uid_str(set->uid), get_uid_str(geteuid()));
 		}
 	}
 
 	/* verify that we actually dropped the privileges */
-	if (uid != 0 || disallow_root) {
+	if ((set->uid != (uid_t)-1 && set->uid != 0) || disallow_root) {
 		if (setuid(0) == 0) {
-			if (uid == 0)
-				i_fatal("Running as root isn't permitted");
+			if (disallow_root &&
+			    (set->uid == 0 || set->uid == (uid_t)-1))
+				i_fatal("This process must not be run as root");
+
 			i_fatal("We couldn't drop root privileges");
 		}
 	}
 
-	env = getenv("RESTRICT_GID_FIRST");
-	if (env != NULL && atoi(env) != 0)
+	if (set->first_valid_gid != 0)
 		allow_root_gid = FALSE;
 	else if (process_primary_gid == 0 || process_privileged_gid == 0)
 		allow_root_gid = TRUE;
 	else
 		allow_root_gid = FALSE;
 
-	if (!allow_root_gid && uid != 0) {
+	if (!allow_root_gid && set->uid != 0 &&
+	    (set->uid != (uid_t)-1 || !is_root)) {
 		if (getgid() == 0 || getegid() == 0 || setgid(0) == 0) {
 			if (process_primary_gid == 0)
 				i_fatal("GID 0 isn't permitted");
@@ -362,21 +332,107 @@ void restrict_access_by_env(bool disallow_root)
 				get_gid_str(getgid()), get_gid_str(getegid()));
 		}
 	}
+}
+
+void restrict_access_set_env(const struct restrict_access_settings *set)
+{
+	if (set->system_groups_user != NULL &&
+	    *set->system_groups_user != '\0') {
+		env_put(t_strconcat("RESTRICT_USER=",
+				    set->system_groups_user, NULL));
+	}
+	if (set->chroot_dir != NULL && *set->chroot_dir != '\0')
+		env_put(t_strconcat("RESTRICT_CHROOT=", set->chroot_dir, NULL));
+
+	if (set->uid != (uid_t)-1) {
+		env_put(t_strdup_printf("RESTRICT_SETUID=%s",
+					dec2str(set->uid)));
+	}
+	if (set->gid != (gid_t)-1) {
+		env_put(t_strdup_printf("RESTRICT_SETGID=%s",
+					dec2str(set->gid)));
+	}
+	if (set->privileged_gid != (gid_t)-1) {
+		env_put(t_strdup_printf("RESTRICT_SETGID_PRIV=%s",
+					dec2str(set->privileged_gid)));
+	}
+	if (set->extra_groups != NULL && *set->extra_groups != '\0') {
+		env_put(t_strconcat("RESTRICT_SETEXTRAGROUPS=",
+				    set->extra_groups, NULL));
+	}
+
+	if (set->first_valid_gid != 0) {
+		env_put(t_strdup_printf("RESTRICT_GID_FIRST=%s",
+					dec2str(set->first_valid_gid)));
+	}
+	if (set->last_valid_gid != 0) {
+		env_put(t_strdup_printf("RESTRICT_GID_LAST=%s",
+					dec2str(set->last_valid_gid)));
+	}
+}
+
+static const char *null_if_empty(const char *str)
+{
+	return str == NULL || *str == '\0' ? NULL : str;
+}
+
+void restrict_access_get_env(struct restrict_access_settings *set_r)
+{
+	const char *value;
+
+	restrict_access_init(set_r);
+	if ((value = getenv("RESTRICT_SETUID")) != NULL) {
+		if (str_to_uid(value, &set_r->uid) < 0)
+			i_fatal("Invalid uid: %s", value);
+	}
+	if ((value = getenv("RESTRICT_SETGID")) != NULL) {
+		if (str_to_gid(value, &set_r->gid) < 0)
+			i_fatal("Invalid gid: %s", value);
+	}
+	if ((value = getenv("RESTRICT_SETGID_PRIV")) != NULL) {
+		if (str_to_gid(value, &set_r->privileged_gid) < 0)
+			i_fatal("Invalid privileged_gid: %s", value);
+	}
+	if ((value = getenv("RESTRICT_GID_FIRST")) != NULL) {
+		if (str_to_gid(value, &set_r->first_valid_gid) < 0)
+			i_fatal("Invalid first_valid_gid: %s", value);
+	}
+	if ((value = getenv("RESTRICT_GID_LAST")) != NULL) {
+		if (str_to_gid(value, &set_r->last_valid_gid) < 0)
+			i_fatal("Invalid last_value_gid: %s", value);
+	}
+
+	set_r->extra_groups = null_if_empty(getenv("RESTRICT_SETEXTRAGROUPS"));
+	set_r->system_groups_user = null_if_empty(getenv("RESTRICT_USER"));
+	set_r->chroot_dir = null_if_empty(getenv("RESTRICT_CHROOT"));
+}
+
+void restrict_access_by_env(const char *home, bool disallow_root)
+{
+	struct restrict_access_settings set;
+
+	restrict_access_get_env(&set);
+	restrict_access(&set, home, disallow_root);
 
 	/* clear the environment, so we don't fail if we get back here */
-	env_put("RESTRICT_USER=");
-	env_put("RESTRICT_CHROOT=");
-	env_put("RESTRICT_SETUID=");
+	env_remove("RESTRICT_SETUID");
 	if (process_privileged_gid == (gid_t)-1) {
 		/* if we're dropping privileges before executing and
 		   a privileged group is set, the groups must be fixed
 		   after exec */
-		env_put("RESTRICT_SETGID=");
-		env_put("RESTRICT_SETGID_PRIV=");
+		env_remove("RESTRICT_SETGID");
+		env_remove("RESTRICT_SETGID_PRIV");
 	}
-	env_put("RESTRICT_SETEXTRAGROUPS=");
-	env_put("RESTRICT_GID_FIRST=");
-	env_put("RESTRICT_GID_LAST=");
+	env_remove("RESTRICT_GID_FIRST");
+	env_remove("RESTRICT_GID_LAST");
+	env_remove("RESTRICT_SETEXTRAGROUPS");
+	env_remove("RESTRICT_USER");
+	env_remove("RESTRICT_CHROOT");
+}
+
+const char *restrict_access_get_current_chroot(void)
+{
+	return chroot_dir;
 }
 
 void restrict_access_allow_coredumps(bool allow ATTR_UNUSED)

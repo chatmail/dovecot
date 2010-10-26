@@ -75,7 +75,7 @@ search_result_update_search(struct mail_search_result *result,
 	search_ctx->update_result = result;
 
 	mail = mail_alloc(t, 0, NULL);
-	while (mailbox_search_next(search_ctx, mail) > 0) {
+	while (mailbox_search_next(search_ctx, mail)) {
 		i_assert(next_uid != 0);
 
 		if (next_uid != mail->uid) {
@@ -139,7 +139,6 @@ int index_search_result_update_flags(struct mail_search_result *result,
 int index_search_result_update_appends(struct mail_search_result *result,
 				       unsigned int old_messages_count)
 {
-	struct index_mailbox *ibox = (struct index_mailbox *)result->box;
 	struct mailbox_transaction_context *t;
 	struct mail_search_context *search_ctx;
 	struct mail *mail;
@@ -147,7 +146,7 @@ int index_search_result_update_appends(struct mail_search_result *result,
 	uint32_t message_count;
 	int ret;
 
-	message_count = mail_index_view_get_messages_count(ibox->view);
+	message_count = mail_index_view_get_messages_count(result->box->view);
 	if (old_messages_count == message_count) {
 		/* no new messages */
 		return 0;
@@ -168,7 +167,7 @@ int index_search_result_update_appends(struct mail_search_result *result,
 	search_ctx = mailbox_search_init(t, result->search_args, NULL);
 
 	mail = mail_alloc(t, 0, NULL);
-	while (mailbox_search_next(search_ctx, mail) > 0)
+	while (mailbox_search_next(search_ctx, mail))
 		mailbox_search_result_add(result, mail->uid);
 	mail_free(&mail);
 
@@ -184,18 +183,15 @@ int index_search_result_update_appends(struct mail_search_result *result,
 void index_search_results_update_expunges(struct mailbox *box,
 					  const ARRAY_TYPE(seq_range) *expunges)
 {
-	struct index_mailbox *ibox = (struct index_mailbox *)box;
 	const struct seq_range *seqs;
-	unsigned int i, count;
 	uint32_t seq, uid;
 
 	if (array_count(&box->search_results) == 0)
 		return;
 
-	seqs = array_get(expunges, &count);
-	for (i = 0; i < count; i++) {
-		for (seq = seqs[i].seq1; seq <= seqs[i].seq2; seq++) {
-			mail_index_lookup_uid(ibox->view, seq, &uid);
+	array_foreach(expunges, seqs) {
+		for (seq = seqs->seq1; seq <= seqs->seq2; seq++) {
+			mail_index_lookup_uid(box->view, seq, &uid);
 			mailbox_search_results_remove(box, uid);
 		}
 	}

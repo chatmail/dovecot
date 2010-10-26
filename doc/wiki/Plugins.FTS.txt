@@ -1,7 +1,7 @@
 Full text search indexing
 =========================
 
-Dovecot v1.1 supports the following FTS indexers:
+The following FTS indexers are supported:
 
  * <Squat> [Plugins.FTS.Squat.txt] is Dovecot's own search index.
  * <Lucene> [Plugins.FTS.Lucene.txt] uses Lucene's C++ library.
@@ -15,11 +15,11 @@ so TEXT and BODY searches are looked up only from Squat indexes. Dovecot's
 non-standard X-TEXT-FAST and X-BODY-FAST SEARCH parameters can be used to look
 up from non-Squat indexes.
 
-Currently the indexes are updated only while searching, so neither <deliver>
-[LDA.txt] nor IMAP APPEND command updates the indexes immediately. This means
-that if user has received a lot of mail since the last indexing, it may take a
-while to index all the mails before replying to the search command. Dovecot
-sends periodic "* OK Indexed n% of the mailbox" updates which can be caught by
+Currently the indexes are updated only while searching, so neither <LDA.txt>
+nor IMAP APPEND command updates the indexes immediately. This means that if
+user has received a lot of mail since the last indexing, it may take a while to
+index all the mails before replying to the search command. Dovecot sends
+periodic "* OK Indexed n% of the mailbox" updates which can be caught by
 webmail implementations to implement a progress bar. You could also build a
 cronjob to index users' mailboxes once in a while (by selecting each mailbox
 and issuing a 'SEARCH TEXT xyzzyx' command).
@@ -43,4 +43,4 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

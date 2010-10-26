@@ -39,6 +39,13 @@
 
 #include "fdpass.h"
 
+#ifndef HAVE_CONFIG_H
+struct const_iovec {
+	const void *iov_base;
+	size_t iov_len;
+};
+#endif
+
 /* RFC 2292 defines CMSG_*() macros, but some operating systems don't have them
    so we'll define our own if they don't exist.
 
@@ -97,7 +104,7 @@
 ssize_t fd_send(int handle, int send_fd, const void *data, size_t size)
 {
         struct msghdr msg;
-        struct iovec iov;
+        struct const_iovec iov;
         struct cmsghdr *cmsg;
 	char buf[CMSG_SPACE(sizeof(int))];
 
@@ -106,10 +113,10 @@ ssize_t fd_send(int handle, int send_fd, const void *data, size_t size)
 
 	memset(&msg, 0, sizeof(struct msghdr));
 
-        iov.iov_base = (void *) data;
+        iov.iov_base = data;
         iov.iov_len = size;
 
-        msg.msg_iov = &iov;
+        msg.msg_iov = (void *)&iov;
 	msg.msg_iovlen = 1;
 
 	if (send_fd != -1) {
@@ -122,7 +129,7 @@ ssize_t fd_send(int handle, int send_fd, const void *data, size_t size)
 		cmsg->cmsg_level = SOL_SOCKET;
 		cmsg->cmsg_type = SCM_RIGHTS;
 		cmsg->cmsg_len = CMSG_LEN(sizeof(int));
-		*((int *) CMSG_DATA(cmsg)) = send_fd;
+		memcpy(CMSG_DATA(cmsg), &send_fd, sizeof(send_fd));
 
 		/* set the real length we want to use. Do it after all is
 		   set just in case CMSG macros required the extra padding
@@ -187,7 +194,7 @@ ssize_t fd_read(int handle, void *data, size_t size, int *fd)
 	if (!CHECK_MSG(msg) || !CHECK_CMSG(cmsg))
 		*fd = -1;
 	else
-		*fd = *((int *) CMSG_DATA(cmsg));
+		memcpy(fd, CMSG_DATA(cmsg), sizeof(*fd));
 	return ret;
 }
 

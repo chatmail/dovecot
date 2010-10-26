@@ -15,47 +15,52 @@ auth_module_LTLIBRARIES = \
 
 pkglibexecdir = $(libexecdir)/dovecot
 
-pkglibexec_PROGRAMS = dovecot-auth checkpassword-reply
+pkglibexec_PROGRAMS = auth checkpassword-reply
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-auth \
 	-I$(top_srcdir)/src/lib-sql \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-ntlm \
 	-I$(top_srcdir)/src/lib-otp \
+	-I$(top_srcdir)/src/lib-master \
 	-DAUTH_MODULE_DIR=\""$(auth_moduledir)"\" \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
 	$(AUTH_CFLAGS)
 
-dovecot_auth_LDFLAGS = -export-dynamic
+auth_LDFLAGS = -export-dynamic
 
 libpassword_a_SOURCES = \
 	mycrypt.c \
 	password-scheme.c \
+	password-scheme-crypt.c \
 	password-scheme-md5crypt.c \
 	password-scheme-otp.c \
 	password-scheme-rpa.c
 
-dovecot_auth_LDADD = \
+auth_libs = \
 	libpassword.a \
-	../lib-settings/libsettings.a \
 	../lib-ntlm/libntlm.a \
 	../lib-otp/libotp.a \
-	../lib-sql/libsql.a \
-	../lib/liblib.a \
-	$(AUTH_LIBS) \
-	$(MODULE_LIBS)
+	$(LIBDOVECOT_SQL)
+
+auth_LDADD = $(auth_libs) $(LIBDOVECOT) $(AUTH_LIBS) $(MODULE_LIBS)
+auth_DEPENDENCIES = $(auth_libs) $(LIBDOVECOT_DEPS)
 
 ldap_sources = db-ldap.c passdb-ldap.c userdb-ldap.c
 
-dovecot_auth_SOURCES = \
+auth_SOURCES = \
 	auth.c \
 	auth-cache.c \
 	auth-client-connection.c \
 	auth-master-connection.c \
-	auth-master-listener.c \
+	mech-otp-skey-common.c \
+	mech-plain-common.c \
+	auth-penalty.c \
 	auth-request.c \
 	auth-request-handler.c \
+	auth-settings.c \
 	auth-stream.c \
 	auth-worker-client.c \
 	auth-worker-server.c \
@@ -77,8 +82,6 @@ dovecot_auth_SOURCES = \
 	mech-rpa.c \
 	mech-apop.c \
 	mech-winbind.c \
-	otp-skey-common.c \
-	plain-common.c \
 	passdb.c \
 	passdb-blocking.c \
 	passdb-bsdauth.c \
@@ -91,6 +94,7 @@ dovecot_auth_SOURCES = \
 	passdb-sia.c \
 	passdb-vpopmail.c \
 	passdb-sql.c \
+	passdb-static.c \
 	userdb.c \
 	userdb-blocking.c \
 	userdb-checkpassword.c \
@@ -107,24 +111,23 @@ headers = \
 	auth.h \
 	auth-cache.h \
 	auth-client-connection.h \
-	auth-client-interface.h \
-	auth-master-interface.h \
+	auth-common.h \
 	auth-master-connection.h \
-	auth-master-listener.h \
+	mech-otp-skey-common.h \
+	mech-plain-common.h \
+	auth-penalty.h \
 	auth-request.h \
 	auth-request-handler.h \
+	auth-settings.h \
 	auth-stream.h \
 	auth-worker-client.h \
 	auth-worker-server.h \
 	db-ldap.h \
 	db-sql.h \
 	db-passwd-file.h \
-	common.h \
 	db-checkpassword.h \
 	mech.h \
 	mycrypt.h \
-	otp-skey-common.h \
-	plain-common.h \
 	passdb.h \
 	passdb-blocking.h \
 	passdb-cache.h \
@@ -148,15 +151,11 @@ libauthdb_ldap_la_CPPFLAGS = $(AM_CPPFLAGS) -DPLUGIN_BUILD
 libauthdb_ldap_la_SOURCES = $(ldap_sources)
 endif
 
-if INSTALL_HEADERS
-  pkginc_libdir=$(pkgincludedir)/src/auth
-  pkginc_lib_HEADERS = $(headers)
-else
-  noinst_HEADERS = $(headers)
-endif
+pkginc_libdir=$(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)
 
-checkpassword_reply_LDADD = \
-	../lib/liblib.a
+checkpassword_reply_LDADD = $(LIBDOVECOT)
+checkpassword_reply_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 
 checkpassword_reply_sources = \
 	checkpassword-reply.c

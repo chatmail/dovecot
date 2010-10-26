@@ -5,11 +5,20 @@
 #include "mail-storage-private.h"
 #include "mail-copy.h"
 
-int mail_storage_copy(struct mail_save_context *ctx, struct mail *mail)
+static int
+mail_storage_try_copy(struct mail_save_context **_ctx, struct mail *mail)
 {
+	struct mail_save_context *ctx = *_ctx;
+	struct mail_private *pmail = (struct mail_private *)mail;
 	struct istream *input;
 	const char *from_envelope, *guid;
 	time_t received_date;
+
+	ctx->copying = TRUE;
+
+	/* we need to open the file in any case. caching metadata is unlikely
+	   to help anything. */
+	pmail->v.set_uid_cache_updates(mail, TRUE);
 
 	if (mail_get_stream(mail, NULL, NULL, &input) < 0)
 		return -1;
@@ -33,7 +42,7 @@ int mail_storage_copy(struct mail_save_context *ctx, struct mail *mail)
 			mailbox_save_set_guid(ctx, guid);
 	}
 
-	if (mailbox_save_begin(&ctx, input) < 0)
+	if (mailbox_save_begin(_ctx, input) < 0)
 		return -1;
 
 	do {
@@ -44,9 +53,24 @@ int mail_storage_copy(struct mail_save_context *ctx, struct mail *mail)
 	if (input->stream_errno != 0) {
 		mail_storage_set_critical(ctx->transaction->box->storage,
 					  "copy: i_stream_read() failed: %m");
-		mailbox_save_cancel(&ctx);
 		return -1;
 	}
+	return 0;
+}
 
+int mail_storage_copy(struct mail_save_context *ctx, struct mail *mail)
+{
+	if (ctx->keywords != NULL) {
+		/* keywords gets unreferenced twice: first in
+		   mailbox_save_cancel()/_finish() and second time in
+		   mailbox_copy(). */
+		mailbox_keywords_ref(ctx->transaction->box, ctx->keywords);
+	}
+
+	if (mail_storage_try_copy(&ctx, mail) < 0) {
+		if (ctx != NULL)
+			mailbox_save_cancel(&ctx);
+		return -1;
+	}
 	return mailbox_save_finish(&ctx);
 }

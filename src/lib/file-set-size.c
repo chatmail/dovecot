@@ -7,19 +7,23 @@
 #ifdef HAVE_POSIX_FALLOCATE
 #  define _XOPEN_SOURCE 600 /* Required by glibc, breaks Solaris 9 */
 #endif
+#define _GNU_SOURCE /* for fallocate() */
 #include "lib.h"
 #include "file-set-size.h"
 
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#ifdef HAVE_LINUX_FALLOC_H
+#  include <linux/falloc.h>
+#endif
 
 int file_set_size(int fd, off_t size)
 {
 #ifdef HAVE_POSIX_FALLOCATE
 	static bool posix_fallocate_supported = TRUE;
 #endif
-	char block[4096];
+	char block[IO_BLOCK_SIZE];
 	off_t offset;
 	ssize_t ret;
 	struct stat st;
@@ -75,4 +79,16 @@ int file_set_size(int fd, off_t size)
 		offset += ret;
 	}
 	return 0;
+}
+
+int file_preallocate(int fd ATTR_UNUSED, off_t size ATTR_UNUSED)
+{
+#if defined(HAVE_FALLOCATE) && defined(FALLOC_FL_KEEP_SIZE)
+	/* Linux */
+	if (fallocate(fd, FALLOC_FL_KEEP_SIZE, 0, size) < 0)
+		return errno == ENOSYS ? 0 : -1;
+	return 1;
+#else
+	return 0;
+#endif
 }

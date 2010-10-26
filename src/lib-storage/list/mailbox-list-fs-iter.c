@@ -2,7 +2,6 @@
 
 #include "lib.h"
 #include "array.h"
-#include "unlink-directory.h"
 #include "imap-match.h"
 #include "mailbox-tree.h"
 #include "mailbox-list-subscriptions.h"
@@ -178,7 +177,7 @@ static const char *list_get_rootdir(struct fs_list_iterate_context *ctx,
 {
 	const char *const *patterns, *name, *p, *last;
 
-	if ((ctx->ctx.list->flags & MAILBOX_LIST_FLAG_FULL_FS_ACCESS) == 0)
+	if (!ctx->ctx.list->mail_set->mail_full_filesystem_access)
 		return NULL;
 
 	/* see if there are any absolute paths in patterns */
@@ -213,7 +212,7 @@ fs_list_iter_init(struct mailbox_list *_list, const char *const *patterns,
 		  enum mailbox_list_iter_flags flags)
 {
 	struct fs_list_iterate_context *ctx;
-	const char *path, *vpath, *rootdir, *test_pattern;
+	const char *path, *vpath, *rootdir, *test_pattern, *real_pattern;
 	char *pattern;
 	DIR *dirp;
 	unsigned int prefix_len;
@@ -224,8 +223,7 @@ fs_list_iter_init(struct mailbox_list *_list, const char *const *patterns,
 	ctx->ctx.flags = flags;
 	ctx->info_pool = pool_alloconly_create("fs list", 1024);
 	ctx->next = fs_list_next;
-	ctx->sep = (flags & MAILBOX_LIST_ITER_VIRTUAL_NAMES) != 0 ?
-		_list->ns->sep : _list->ns->real_sep;
+	ctx->sep = _list->ns->sep;
 	ctx->info.ns = _list->ns;
 
 	prefix_len = strlen(_list->ns->prefix);
@@ -233,15 +231,16 @@ fs_list_iter_init(struct mailbox_list *_list, const char *const *patterns,
 	for (; *patterns != NULL; patterns++) {
 		/* check that we're not trying to do any "../../" lists */
 		test_pattern = *patterns;
-		if ((flags & MAILBOX_LIST_ITER_VIRTUAL_NAMES) != 0) {
-			/* skip namespace prefix if possible. this allows using
-			   e.g. ~/mail/ prefix and have it pass the pattern
-			   validation. */
-			if (strncmp(test_pattern, _list->ns->prefix,
-				    prefix_len) == 0)
-				test_pattern += prefix_len;
-		}
-		if (mailbox_list_is_valid_pattern(_list, test_pattern)) {
+		/* skip namespace prefix if possible. this allows using
+		   e.g. ~/mail/ prefix and have it pass the pattern
+		   validation. */
+		if (strncmp(test_pattern, _list->ns->prefix, prefix_len) == 0)
+			test_pattern += prefix_len;
+		/* check pattern also when it's converted to use real
+		   separators. */
+		real_pattern = mail_namespace_fix_sep(_list->ns, test_pattern);
+		if (mailbox_list_is_valid_pattern(_list, test_pattern) &&
+		    mailbox_list_is_valid_pattern(_list, real_pattern)) {
 			if (strcasecmp(*patterns, "INBOX") == 0) {
 				ctx->inbox_match = TRUE;
 				continue;
@@ -279,8 +278,7 @@ fs_list_iter_init(struct mailbox_list *_list, const char *const *patterns,
 		return &ctx->ctx;
 	}
 
-	vpath = (flags & MAILBOX_LIST_ITER_VIRTUAL_NAMES) != 0 ?
-		_list->ns->prefix : "";
+	vpath = _list->ns->prefix;
 	rootdir = list_get_rootdir(ctx, &vpath);
 	if (rootdir == NULL) {
 		path = mailbox_list_get_path(_list, NULL,
@@ -394,10 +392,13 @@ fs_list_get_subscription_flags(struct fs_list_iterate_context *ctx,
 
 static void inbox_flags_set(struct fs_list_iterate_context *ctx)
 {
+	struct mail_namespace *ns = ctx->ctx.list->ns;
+
 	/* INBOX is always selectable */
 	ctx->info.flags &= ~(MAILBOX_NOSELECT | MAILBOX_NONEXISTENT);
 
-	if (*ctx->ctx.list->ns->prefix != '\0') {
+	if (*ns->prefix != '\0' &&
+	    (ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
 		/* we're listing INBOX for a namespace with a prefix.
 		   if there are children for the INBOX, they're returned under
 		   the mailbox prefix, not under the INBOX itself. */
@@ -406,20 +407,28 @@ static void inbox_flags_set(struct fs_list_iterate_context *ctx)
 	}
 }
 
+static const char *
+fs_list_get_inbox_vname(struct fs_list_iterate_context *ctx)
+{
+	struct mail_namespace *ns = ctx->ctx.list->ns;
+
+	if ((ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0)
+		return "INBOX";
+	else
+		return p_strconcat(ctx->info_pool, ns->prefix, "INBOX", NULL);
+}
+
 static struct mailbox_info *fs_list_inbox(struct fs_list_iterate_context *ctx)
 {
-	const char *inbox_path, *dir, *fname;
-
 	ctx->info.flags = 0;
-	ctx->info.name = "INBOX";
+	ctx->info.name = fs_list_get_inbox_vname(ctx);
 
-	inbox_path = mailbox_list_get_path(ctx->ctx.list, "INBOX",
-					   MAILBOX_LIST_PATH_TYPE_DIR);
-	path_split(inbox_path, &dir, &fname);
-	if (ctx->ctx.list->v.iter_is_mailbox(&ctx->ctx, dir, fname, "INBOX",
-					     MAILBOX_LIST_FILE_TYPE_UNKNOWN,
-					     &ctx->info.flags) < 0)
+	if (mailbox_list_mailbox(ctx->ctx.list, "INBOX", &ctx->info.flags) < 0)
 		ctx->ctx.failed = TRUE;
+
+	if ((ctx->ctx.flags & MAILBOX_LIST_ITER_NO_AUTO_INBOX) != 0 &&
+	    (ctx->info.flags & MAILBOX_NONEXISTENT) != 0)
+		return NULL;
 
 	ctx->info.flags |= fs_list_get_subscription_flags(ctx, "INBOX");
 	inbox_flags_set(ctx);
@@ -449,9 +458,11 @@ list_file_inbox(struct fs_list_iterate_context *ctx, const char *fname)
 	}
 	inbox_flags_set(ctx);
 
-	if ((ctx->info.flags & MAILBOX_NOINFERIORS) != 0 &&
-	    list_file_is_inbox(ctx, fname)) {
-		/* delay listing in case there's a INBOX/ directory */
+	if (list_file_is_inbox(ctx, fname) &&
+	    (ctx->ctx.list->flags & MAILBOX_LIST_FLAG_MAILBOX_FILES) != 0) {
+		/* delay listing in case there's a INBOX/ directory.
+		   do this only when INBOX is a file! otherwise we won't list
+		   INBOX children. */
 		ctx->inbox_found = TRUE;
 		ctx->inbox_flags = ctx->info.flags;
 		return FALSE;
@@ -510,6 +521,12 @@ list_file_subdir(struct fs_list_iterate_context *ctx,
 		delayed_send = TRUE;
 	}
 
+	if ((ctx->ctx.flags & MAILBOX_LIST_ITER_SHOW_EXISTING_PARENT) == 0) {
+		/* LIST "" foo/% - we don't want to see foo/ returned */
+		delayed_send = FALSE;
+		match2 = IMAP_MATCH_CHILDREN;
+	}
+
 	if (scan_subdir) {
 		real_path = t_strconcat(ctx->dir->real_path, "/", fname, NULL);
 		ret = list_opendir(ctx, real_path, vpath, &dirp);
@@ -542,8 +559,9 @@ list_file(struct fs_list_iterate_context *ctx,
 {
 	struct mail_namespace *ns = ctx->ctx.list->ns;
 	const char *fname = entry->fname;
-	const char *list_path;
+	const char *list_path, *root_dir;
 	enum imap_match_result match;
+	struct stat st;
 	int ret;
 
 	/* skip . and .. */
@@ -564,11 +582,19 @@ list_file(struct fs_list_iterate_context *ctx,
 		return 0;
 	}
 
+	if (strcmp(fname, ctx->ctx.list->set.subscription_fname) == 0) {
+		/* skip subscriptions file */
+		root_dir = mailbox_list_get_path(ctx->ctx.list, NULL,
+						 MAILBOX_LIST_PATH_TYPE_DIR);
+		if (strcmp(root_dir, ctx->dir->real_path) == 0)
+			return 0;
+	}
+
+
 	/* get the info.flags using callback */
-	ctx->info.flags = 0;
 	ret = ctx->ctx.list->v.
-		iter_is_mailbox(&ctx->ctx, ctx->dir->real_path, fname,
-				list_path, entry->type, &ctx->info.flags);
+		get_mailbox_flags(ctx->ctx.list, ctx->dir->real_path, fname,
+				  entry->type, &st, &ctx->info.flags);
 	if (ret <= 0)
 		return ret;
 
@@ -587,7 +613,7 @@ list_file(struct fs_list_iterate_context *ctx,
 	ctx->info.flags |= fs_list_get_subscription_flags(ctx, list_path);
 
 	/* make sure we give only one correct INBOX */
-	if ((ns->flags & NAMESPACE_FLAG_INBOX) != 0) {
+	if ((ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
 		if (strcasecmp(list_path, "INBOX") == 0) {
 			if (!list_file_inbox(ctx, fname))
 				return 0;
@@ -597,6 +623,13 @@ list_file(struct fs_list_iterate_context *ctx,
 			/* This is the INBOX. Don't return it under the mailbox
 			   prefix unless it has children. */
 			return 0;
+		}
+	} else if ((ns->flags & NAMESPACE_FLAG_INBOX_ANY) != 0) {
+		/* shared namespace */
+		if (strcasecmp(fname, "INBOX") == 0 &&
+		    list_file_is_inbox(ctx, fname)) {
+			if (!list_file_inbox(ctx, fname))
+				return 0;
 		}
 	}
 
@@ -615,7 +648,10 @@ fs_list_subs(struct fs_list_iterate_context *ctx)
 {
 	struct mailbox_node *node;
 	enum mailbox_info_flags flags;
-	const char *path, *dir, *fname;
+	struct mail_namespace *ns;
+	const char *path, *dir, *fname, *storage_name;
+	unsigned int len;
+	struct stat st;
 
 	node = mailbox_tree_iterate_next(ctx->tree_iter, &ctx->info.name);
 	if (node == NULL)
@@ -630,15 +666,34 @@ fs_list_subs(struct fs_list_iterate_context *ctx)
 		return &ctx->info;
 	}
 
-	path = mailbox_list_get_path(ctx->ctx.list, ctx->info.name,
-				     MAILBOX_LIST_PATH_TYPE_DIR);
-	path_split(path, &dir, &fname);
-	ctx->info.flags = 0;
-	if (ctx->ctx.list->v.iter_is_mailbox(&ctx->ctx, dir, fname,
-					     ctx->info.name,
-					     MAILBOX_LIST_FILE_TYPE_UNKNOWN,
-					     &ctx->info.flags) < 0)
-		ctx->ctx.failed = TRUE;
+	/* see if this is for another subscriptions=no namespace */
+	storage_name = ctx->info.name;
+	ns = mail_namespace_find_unsubscribable(ctx->info.ns->user->namespaces,
+						&storage_name);
+	if (ns == NULL) {
+		ns = ctx->info.ns;
+		storage_name = mail_namespace_get_storage_name(ns, storage_name);
+	}
+
+	/* if name ends with hierarchy separator, drop the separator */
+	len = strlen(storage_name);
+	if (len > 0 && storage_name[len-1] == ns->real_sep)
+		storage_name = t_strndup(storage_name, len-1);
+
+	if (!mailbox_list_is_valid_pattern(ns->list, storage_name)) {
+		/* broken entry in subscriptions file */
+		ctx->info.flags = MAILBOX_NONEXISTENT;
+	} else {
+		struct mailbox_list *list = ns->list;
+
+		path = mailbox_list_get_path(list, storage_name,
+					     MAILBOX_LIST_PATH_TYPE_DIR);
+		path_split(path, &dir, &fname);
+		if (list->v.get_mailbox_flags(list, dir, fname,
+					      MAILBOX_LIST_FILE_TYPE_UNKNOWN,
+					      &st, &ctx->info.flags) < 0)
+			ctx->ctx.failed = TRUE;
+	}
 
 	ctx->info.flags |= flags;
 	return &ctx->info;
@@ -753,9 +808,10 @@ fs_list_next(struct fs_list_iterate_context *ctx)
 	}
 
 	if (!ctx->inbox_found &&
-	    (ctx->ctx.list->ns->flags & NAMESPACE_FLAG_INBOX) != 0 &&
+	    (ctx->ctx.list->ns->flags & NAMESPACE_FLAG_INBOX_ANY) != 0 &&
 	    ((ctx->glob != NULL &&
-	      imap_match(ctx->glob, "INBOX") == IMAP_MATCH_YES) ||
+	      imap_match(ctx->glob,
+			 fs_list_get_inbox_vname(ctx)) == IMAP_MATCH_YES) ||
 	     ctx->inbox_match)) {
 		/* INBOX wasn't seen while listing other mailboxes. It might
 		   be located elsewhere. */

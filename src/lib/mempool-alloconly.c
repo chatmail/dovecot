@@ -25,7 +25,6 @@ struct alloconly_pool {
 	size_t base_size;
 	bool disable_warning;
 #endif
-	bool clean_frees;
 };
 
 struct pool_block {
@@ -80,10 +79,10 @@ static const struct pool_vfuncs static_alloconly_pool_vfuncs = {
 };
 
 static const struct pool static_alloconly_pool = {
-	MEMBER(v) &static_alloconly_pool_vfuncs,
+	.v = &static_alloconly_pool_vfuncs,
 
-	MEMBER(alloconly_pool) TRUE,
-	MEMBER(datastack_pool) FALSE
+	.alloconly_pool = TRUE,
+	.datastack_pool = FALSE
 };
 
 #ifdef DEBUG
@@ -160,17 +159,6 @@ pool_t pool_alloconly_create(const char *name ATTR_UNUSED, size_t size)
 	return &new_apool->pool;
 }
 
-pool_t pool_alloconly_create_clean(const char *name, size_t size)
-{
-	struct alloconly_pool *apool;
-	pool_t pool;
-
-	pool = pool_alloconly_create(name, size);
-	apool = (struct alloconly_pool *)pool;
-	apool->clean_frees = TRUE;
-	return pool;
-}
-
 static void pool_alloconly_destroy(struct alloconly_pool *apool)
 {
 	void *block;
@@ -182,13 +170,7 @@ static void pool_alloconly_destroy(struct alloconly_pool *apool)
 	block = apool->block;
 #ifdef DEBUG
 	safe_memset(block, CLEAR_CHR, SIZEOF_POOLBLOCK + apool->block->size);
-#else
-	if (apool->clean_frees) {
-		safe_memset(block, CLEAR_CHR,
-			    SIZEOF_POOLBLOCK + apool->block->size);
-	}
 #endif
-
 #ifndef USE_GC
 	free(block);
 #endif
@@ -380,11 +362,6 @@ static void pool_alloconly_clear(pool_t pool)
 
 #ifdef DEBUG
 		safe_memset(block, CLEAR_CHR, SIZEOF_POOLBLOCK + block->size);
-#else
-		if (apool->clean_frees) {
-			safe_memset(block, CLEAR_CHR,
-				    SIZEOF_POOLBLOCK + block->size);
-		}
 #endif
 #ifndef USE_GC
 		free(block);
@@ -398,8 +375,8 @@ static void pool_alloconly_clear(pool_t pool)
 	base_size = DEFAULT_BASE_SIZE;
 #endif
 	avail_size = apool->block->size - base_size;
-	safe_memset(PTR_OFFSET(POOL_BLOCK_DATA(apool->block), base_size), 0,
-		    avail_size - apool->block->left);
+	memset(PTR_OFFSET(POOL_BLOCK_DATA(apool->block), base_size), 0,
+	       avail_size - apool->block->left);
 	apool->block->left = avail_size;
 	apool->block->last_alloc_size = 0;
 }
@@ -409,4 +386,30 @@ static size_t pool_alloconly_get_max_easy_alloc_size(pool_t pool)
 	struct alloconly_pool *apool = (struct alloconly_pool *)pool;
 
 	return apool->block->left;
+}
+
+size_t pool_alloconly_get_total_used_size(pool_t pool)
+{
+	struct alloconly_pool *apool = (struct alloconly_pool *)pool;
+	struct pool_block *block;
+	size_t size = 0;
+
+	i_assert(pool->v == &static_alloconly_pool_vfuncs);
+
+	for (block = apool->block; block != NULL; block = block->prev)
+		size += block->size - block->left;
+	return size;
+}
+
+size_t pool_alloconly_get_total_alloc_size(pool_t pool)
+{
+	struct alloconly_pool *apool = (struct alloconly_pool *)pool;
+	struct pool_block *block;
+	size_t size = 0;
+
+	i_assert(pool->v == &static_alloconly_pool_vfuncs);
+
+	for (block = apool->block; block != NULL; block = block->prev)
+		size += block->size + SIZEOF_POOLBLOCK;
+	return size;
 }

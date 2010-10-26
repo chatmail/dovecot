@@ -1,6 +1,6 @@
 /* Copyright (c) 2003-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 
 #include "array.h"
 #include "str.h"
@@ -122,8 +122,6 @@ void userdb_static_template_export(struct userdb_static_template *tmpl,
 	}
 }
 
-#ifdef USERDB_STATIC
-
 struct static_context {
 	userdb_callback_t *callback, *old_callback;
 	void *old_context;
@@ -158,7 +156,7 @@ static_credentials_callback(enum passdb_result result,
 
 	auth_request->private_callback.userdb = ctx->old_callback;
 	auth_request->context = ctx->old_context;
-	auth_request->state = AUTH_REQUEST_STATE_USERDB;
+	auth_request_set_state(auth_request, AUTH_REQUEST_STATE_USERDB);
 
 	switch (result) {
 	case PASSDB_RESULT_OK:
@@ -201,25 +199,31 @@ static void static_lookup(struct auth_request *auth_request,
 		ctx->callback = callback;
 
 		i_assert(auth_request->state == AUTH_REQUEST_STATE_USERDB);
-		auth_request->state = AUTH_REQUEST_STATE_MECH_CONTINUE;
+		auth_request_set_state(auth_request,
+				       AUTH_REQUEST_STATE_MECH_CONTINUE);
 
 		auth_request->context = ctx;
-		auth_request_lookup_credentials(auth_request, "",
-						static_credentials_callback);
+		if (auth_request->passdb != NULL) {
+			auth_request_lookup_credentials(auth_request, "",
+				static_credentials_callback);
+		} else {
+			static_credentials_callback(
+				PASSDB_RESULT_SCHEME_NOT_AVAILABLE,
+				NULL, 0, auth_request);
+		}
 	} else {
 		static_lookup_real(auth_request, callback);
 	}
 }
 
 static struct userdb_module *
-static_preinit(struct auth_userdb *auth_userdb, const char *args)
+static_preinit(pool_t pool, const char *args)
 {
 	struct static_userdb_module *module;
 	const char *value;
 
-	module = p_new(auth_userdb->auth->pool, struct static_userdb_module, 1);
-	module->tmpl = userdb_static_template_build(auth_userdb->auth->pool,
-						    "static", args);
+	module = p_new(pool, struct static_userdb_module, 1);
+	module->tmpl = userdb_static_template_build(pool, "static", args);
 
 	if (userdb_static_template_remove(module->tmpl, "allow_all_users",
 					  &value)) {
@@ -236,10 +240,9 @@ struct userdb_module_interface userdb_static = {
 	NULL,
 	NULL,
 
-	static_lookup
+	static_lookup,
+
+	NULL,
+	NULL,
+	NULL
 };
-#else
-struct userdb_module_interface userdb_static = {
-	MEMBER(name) "static"
-};
-#endif

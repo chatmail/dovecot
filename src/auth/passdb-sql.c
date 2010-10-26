@@ -1,6 +1,6 @@
 /* Copyright (c) 2004-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 #include "passdb.h"
 
 #ifdef PASSDB_SQL
@@ -56,19 +56,28 @@ static void sql_query_callback(struct sql_result *result,
 			       struct passdb_sql_request *sql_request)
 {
 	struct auth_request *auth_request = sql_request->auth_request;
+	struct passdb_module *_module = auth_request->passdb->passdb;
+	struct sql_passdb_module *module = (struct sql_passdb_module *)_module;
 	enum passdb_result passdb_result;
-	const char *user, *password, *scheme;
+	const char *password, *scheme;
 	int ret;
 
 	passdb_result = PASSDB_RESULT_INTERNAL_FAILURE;
-	user = auth_request->user;
 	password = NULL;
 
 	ret = sql_result_next_row(result);
 	if (ret < 0) {
-		auth_request_log_error(auth_request, "sql",
-				       "Password query failed: %s",
-				       sql_result_get_error(result));
+		if (!module->conn->default_password_query) {
+			auth_request_log_error(auth_request, "sql",
+					       "Password query failed: %s",
+					       sql_result_get_error(result));
+		} else {
+			auth_request_log_error(auth_request, "sql",
+				"Password query failed: %s "
+				"(using built-in default password_query: %s)",
+				sql_result_get_error(result),
+				module->conn->set.password_query);
+		}
 	} else if (ret == 0) {
 		auth_request_log_info(auth_request, "sql", "unknown user");
 		passdb_result = PASSDB_RESULT_USER_UNKNOWN;
@@ -185,10 +194,20 @@ static void sql_lookup_credentials(struct auth_request *request,
 static void sql_set_credentials_callback(const char *error,
 					 struct passdb_sql_request *sql_request)
 {
+	struct passdb_module *_module =
+		sql_request->auth_request->passdb->passdb;
+	struct sql_passdb_module *module = (struct sql_passdb_module *)_module;
+
 	if (error != NULL) {
-		auth_request_log_error(sql_request->auth_request, "sql",
-				       "Set credentials query failed: %s",
-				       error);
+		if (!module->conn->default_update_query) {
+			auth_request_log_error(sql_request->auth_request, "sql",
+				"Set credentials query failed: %s", error);
+		} else {
+			auth_request_log_error(sql_request->auth_request, "sql",
+				"Set credentials query failed: %s"
+				"(using built-in default update_query: %s)",
+				error, module->conn->set.update_query);
+		}
 	}
 
 	sql_request->callback.
@@ -225,23 +244,21 @@ static int sql_set_credentials(struct auth_request *request,
 }
 
 static struct passdb_module *
-passdb_sql_preinit(struct auth_passdb *auth_passdb, const char *args)
+passdb_sql_preinit(pool_t pool, const char *args)
 {
 	struct sql_passdb_module *module;
 	struct sql_connection *conn;
 
-	module = p_new(auth_passdb->auth->pool, struct sql_passdb_module, 1);
+	module = p_new(pool, struct sql_passdb_module, 1);
 	module->conn = conn = db_sql_init(args);
 
 	module->module.cache_key =
-		auth_cache_parse_key(auth_passdb->auth->pool,
-				     conn->set.password_query);
+		auth_cache_parse_key(pool, conn->set.password_query);
 	module->module.default_pass_scheme = conn->set.default_pass_scheme;
 	return &module->module;
 }
 
-static void passdb_sql_init(struct passdb_module *_module,
-			    const char *args ATTR_UNUSED)
+static void passdb_sql_init(struct passdb_module *_module)
 {
 	struct sql_passdb_module *module =
 		(struct sql_passdb_module *)_module;
@@ -275,6 +292,6 @@ struct passdb_module_interface passdb_sql = {
 };
 #else
 struct passdb_module_interface passdb_sql = {
-	MEMBER(name) "sql"
+	.name = "sql"
 };
 #endif

@@ -1,10 +1,10 @@
 %d expands to empty string
 ==========================
 
-The problem is that your username lost the domain. Dovecot doesn't keep track
-of the domain separately from username, so if something changes username from
-"user@domain" to just plain "user", the domain is lost and %d returns nothing.
-If you have 'auth_debug=yes', this shows up in logs like:
+The problem is that your username string lost the domain part. Dovecot doesn't
+keep track of the domain separately from username, so if something changes
+username from "user@domain" to just plain "user", the domain is lost and %d
+returns nothing. If you have 'auth_debug=yes', this shows up in logs like:
 
 ---%<-------------------------------------------------------------------------
 Info: auth(user@domain.org): username changed user@domain.org -> user
@@ -42,13 +42,12 @@ password_query = SELECT concat(username, '@', domain) AS user, password FROM
 users WHERE username = '%n' AND domain = '%d'
 ---%<-------------------------------------------------------------------------
 
-With v1.1+ you can return username and domain fields separately and Dovecot
-will merge them into a single user field:
+Or you can return username and domain fields separately and Dovecot will merge
+them into a single user field:
 
 ---%<-------------------------------------------------------------------------
-# v1.1+ only:
 password_query = SELECT username, domain, password FROM users WHERE username =
 '%n' AND domain = '%d'
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

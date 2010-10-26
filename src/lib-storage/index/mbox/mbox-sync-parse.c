@@ -113,6 +113,8 @@ static void
 parse_imap_keywords_list(struct mbox_sync_mail_context *ctx,
                          struct message_header_line *hdr, size_t pos)
 {
+	struct mailbox *box = &ctx->sync_ctx->mbox->box;
+	struct index_mailbox_context *ibox = INDEX_STORAGE_CONTEXT(box);
 	const char *keyword, *error;
 	size_t keyword_start;
 	unsigned int idx, count;
@@ -134,15 +136,15 @@ parse_imap_keywords_list(struct mbox_sync_mail_context *ctx,
 		/* add it to index's keyword list if it's not there already */
 		keyword = t_strndup(hdr->full_value + keyword_start,
 				    pos - keyword_start);
-		if (mailbox_keyword_is_valid(&ctx->sync_ctx->mbox->ibox.box,
+		if (mailbox_keyword_is_valid(&ctx->sync_ctx->mbox->box,
 					     keyword, &error)) {
-			mail_index_keyword_lookup_or_create(
-				ctx->sync_ctx->mbox->ibox.index, keyword, &idx);
+			mail_index_keyword_lookup_or_create(box->index,
+							    keyword, &idx);
 		}
 		count++;
 	}
 
-	if (count != array_count(ctx->sync_ctx->mbox->ibox.keyword_names)) {
+	if (count != array_count(ibox->keyword_names)) {
 		/* need to update this list */
 		ctx->imapbase_rewrite = TRUE;
 		ctx->need_rewrite = TRUE;
@@ -246,6 +248,7 @@ static bool parse_x_imap(struct mbox_sync_mail_context *ctx,
 static bool parse_x_keywords_real(struct mbox_sync_mail_context *ctx,
 				  struct message_header_line *hdr)
 {
+	struct mailbox *box = &ctx->sync_ctx->mbox->box;
 	ARRAY_TYPE(keyword_indexes) keyword_list;
 	const unsigned int *list;
 	string_t *keyword;
@@ -276,8 +279,8 @@ static bool parse_x_keywords_real(struct mbox_sync_mail_context *ctx,
 		str_truncate(keyword, 0);
 		str_append_n(keyword, hdr->full_value + keyword_start,
 			     pos - keyword_start);
-		if (!mail_index_keyword_lookup(ctx->sync_ctx->mbox->ibox.index,
-					       str_c(keyword), &idx)) {
+		if (!mail_index_keyword_lookup(box->index, str_c(keyword),
+					       &idx)) {
 			/* keyword wasn't found. that means the sent mail
 			   originally contained X-Keywords header. Delete it. */
 			return FALSE;
@@ -592,8 +595,7 @@ bool mbox_sync_parse_match_mail(struct mbox_mailbox *mbox,
 	/* match by MD5 sum */
 	mbox->mbox_save_md5 = TRUE;
 
-	mail_index_lookup_ext(view, seq, mbox->ibox.md5hdr_ext_idx,
-			      &data, NULL);
+	mail_index_lookup_ext(view, seq, mbox->md5hdr_ext_idx, &data, NULL);
 	return data == NULL ? 0 :
 		memcmp(data, ctx.hdr_md5_sum, 16) == 0;
 }

@@ -34,7 +34,8 @@ Next check that Dovecot is listening for connections:
 Trying 127.0.0.1...
 Connected to localhost.
 Escape character is '^]'.
-* OK Dovecot ready.
+* OK [CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE STARTTLS
+AUTH=PLAIN] Dovecot ready.
 ---%<-------------------------------------------------------------------------
 
 If you got "connection refused", check that 'imap' is included in 'protocols'
@@ -47,15 +48,15 @@ Next check that it also works from remote host:
 Trying 1.2.3.4...
 Connected to your.host.org.
 Escape character is '^]'.
-* OK Dovecot ready.
+* OK [CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE STARTTLS
+AUTH=PLAIN] Dovecot ready.
 ---%<-------------------------------------------------------------------------
 
 If that didn't work, check all possible firewalls in between, and check that
 'listen' setting is '*' in 'dovecot.conf'.
 
-Note: If you've only got only 'protocols=imaps' enabled, instead of 'telnet
-your.host.org 143' use 'openssl s_client -connect your.host.org:993'. This
-additionally checks Dovecot is accessing certificates correctly.
+If you have only imaps enabled, see "remote login" section below for how to
+test using openssl s_client.
 
 Check that it's allowing logins
 -------------------------------
@@ -102,17 +103,13 @@ a NO Plaintext authentication disabled.
 If this is the case, you didn't set 'disable_plaintext_auth = no'. You could
 alternatively use OpenSSL to test that the server works with SSL:
 
- * Test using imaps port, requires configuring with 'protocols = imaps':
-   (assuming you've already set Dovecot up with 'protocol = imaps'):
-
+ * Test using imaps port (assuming you haven't disabled imaps port):
    ---%<----------------------------------------------------------------------
    # openssl s_client -connect your.host.org:993
    * OK Dovecot ready.
    ---%<----------------------------------------------------------------------
 
- * Test using imap port and STARTTLS command, doesn't require 'protocols =
-   imaps':
-
+ * Test using imap port and STARTTLS command (works also with imap port):
    ---%<----------------------------------------------------------------------
    # openssl s_client -connect your.host.org:143 -starttls imap
    * OK Dovecot ready.
@@ -180,4 +177,4 @@ If you can see only INBOX,
 
 Most IMAP clients have been tested with Dovecot and they work.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

@@ -1,17 +1,15 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
-#include "commands.h"
-#include "mail-namespace.h"
+#include "imap-common.h"
+#include "imap-commands.h"
 
 bool cmd_delete(struct client_command_context *cmd)
 {
 	struct client *client = cmd->client;
+	enum mailbox_name_status status;
 	struct mail_namespace *ns;
-	struct mail_storage *storage;
-	struct mailbox_list *list;
-	struct mailbox *mailbox;
-	const char *name;
+	struct mailbox *box;
+	const char *name, *storage_name;
 
 	/* <mailbox> */
 	if (!client_read_string_args(cmd, 1, &name))
@@ -23,35 +21,32 @@ bool cmd_delete(struct client_command_context *cmd)
 		return TRUE;
 	}
 
-	ns = client_find_namespace(cmd, &name);
+	ns = client_find_namespace(cmd, name, &storage_name, &status);
 	if (ns == NULL)
 		return TRUE;
-	storage = ns->storage;
+	switch (status) {
+	case MAILBOX_NAME_EXISTS_MAILBOX:
+	case MAILBOX_NAME_EXISTS_DIR:
+		break;
+	case MAILBOX_NAME_VALID:
+	case MAILBOX_NAME_INVALID:
+	case MAILBOX_NAME_NOINFERIORS:
+		client_fail_mailbox_name_status(cmd, name, NULL, status);
+		return TRUE;
+	}
 
-	mailbox = client->mailbox;
-	if (mailbox != NULL && mailbox_get_storage(mailbox) == storage &&
-	    strcmp(mailbox_get_name(mailbox), name) == 0) {
+	box = mailbox_alloc(ns->list, storage_name, 0);
+	if (client->mailbox != NULL &&
+	    mailbox_backends_equal(box, client->mailbox)) {
 		/* deleting selected mailbox. close it first */
 		client_search_updates_free(client);
-		storage = mailbox_get_storage(mailbox);
-		client->mailbox = NULL;
-
-		if (mailbox_close(&mailbox) < 0)
-			client_send_untagged_storage_error(client, storage);
+		mailbox_free(&client->mailbox);
 	}
 
-	if ((client_workarounds & WORKAROUND_TB_EXTRA_MAILBOX_SEP) != 0 &&
-	    *name != '\0' &&
-	    name[strlen(name)-1] == mail_storage_get_hierarchy_sep(storage)) {
-		/* drop the extra trailing hierarchy separator */
-		name = t_strndup(name, strlen(name)-1);
-	}
-
-	list = mail_storage_get_list(storage);
-	if (mailbox_list_delete_mailbox(list, name) < 0)
-		client_send_list_error(cmd, list);
-	else {
+	if (mailbox_delete(box) < 0)
+		client_send_storage_error(cmd, mailbox_get_storage(box));
+	else
 		client_send_tagline(cmd, "OK Delete completed.");
-	}
+	mailbox_free(&box);
 	return TRUE;
 }

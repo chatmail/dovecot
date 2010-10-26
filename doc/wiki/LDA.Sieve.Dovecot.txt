@@ -398,4 +398,4 @@ differences:
    ".sieve" :'include :personal "myscript";' won't work unless you rename
    "myscript" to "myscript.sieve"
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

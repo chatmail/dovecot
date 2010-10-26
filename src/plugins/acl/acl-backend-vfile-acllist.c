@@ -42,14 +42,12 @@ static const char *acl_list_get_root_dir(struct acl_backend_vfile *backend)
 {
 	struct mail_storage *storage;
 	const char *rootdir, *maildir;
-	bool is_file;
 
 	rootdir = mailbox_list_get_path(backend->backend.list, NULL,
 					MAILBOX_LIST_PATH_TYPE_DIR);
 
 	storage = mailbox_list_get_namespace(backend->backend.list)->storage;
-	(void)mail_storage_get_mailbox_path(storage, "", &is_file);
-	if (is_file) {
+	if (mail_storage_is_mailbox_file(storage)) {
 		maildir = mailbox_list_get_path(backend->backend.list, NULL,
 						MAILBOX_LIST_PATH_TYPE_MAILBOX);
 		if (strcmp(maildir, rootdir) == 0) {
@@ -158,16 +156,19 @@ void acl_backend_vfile_acllist_refresh(struct acl_backend_vfile *backend)
 
 static int
 acllist_append(struct acl_backend_vfile *backend, struct ostream *output,
-	       struct mail_storage *storage, const char *name)
+	       const char *vname)
 {
 	struct acl_object *aclobj;
 	struct acl_object_list_iter *iter;
 	struct acl_rights rights;
 	struct acl_backend_vfile_acllist acllist;
+	const char *name;
 	int ret;
 
+	name = mail_namespace_get_storage_name(backend->backend.list->ns,
+					       vname);
 	acl_cache_flush(backend->backend.cache, name);
-	aclobj = acl_object_init_from_name(&backend->backend, storage, name);
+	aclobj = acl_object_init_from_name(&backend->backend, name);
 
 	iter = acl_object_list_init(aclobj);
 	while ((ret = acl_object_list_next(iter, &rights)) > 0) {
@@ -250,11 +251,11 @@ acl_backend_vfile_acllist_try_rebuild(struct acl_backend_vfile *backend)
 	acllist_clear(backend, 0);
 
 	backend->rebuilding_acllist = TRUE;
-	iter = mailbox_list_iter_init(list, "*", MAILBOX_LIST_ITER_RAW_LIST |
+	iter = mailbox_list_iter_init(list, "*",
+				      MAILBOX_LIST_ITER_RAW_LIST |
 				      MAILBOX_LIST_ITER_RETURN_NO_FLAGS);
 	while ((info = mailbox_list_iter_next(iter)) != NULL) {
-		if (acllist_append(backend, output, ns->storage,
-				   info->name) < 0) {
+		if (acllist_append(backend, output, info->name) < 0) {
 			ret = -1;
 			break;
 		}
@@ -323,12 +324,10 @@ acl_backend_vfile_acllist_find(struct acl_backend_vfile *backend,
 			       const char *name)
 {
 	const struct acl_backend_vfile_acllist *acllist;
-	unsigned int i, count;
 
-	acllist = array_get(&backend->acllist, &count);
-	for (i = 0; i < count; i++) {
-		if (strcmp(acllist[i].name, name) == 0)
-			return &acllist[i];
+	array_foreach(&backend->acllist, acllist) {
+		if (strcmp(acllist->name, name) == 0)
+			return acllist;
 	}
 	return NULL;
 }

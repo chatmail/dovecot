@@ -115,4 +115,4 @@ struct plugin_mailbox *mbox = PLUGIN_CONTEXT(box);
 
 (Yes, this API seems a bit too difficult to use and could use a redesign.)
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "ioloop.h"
 #include "istream.h"
+#include "hex-binary.h"
 #include "index-mail.h"
 #include "mbox-storage.h"
 #include "mbox-file.h"
@@ -15,11 +16,11 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-static void mbox_prepare_resync(struct index_mail *mail)
+static void mbox_prepare_resync(struct mail *mail)
 {
 	struct mbox_transaction_context *t =
-		(struct mbox_transaction_context *)mail->trans;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->ibox;
+		(struct mbox_transaction_context *)mail->transaction;
+	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->box;
 
 	if (mbox->mbox_lock_type == F_RDLCK) {
 		if (mbox->mbox_lock_id == t->mbox_lock_id)
@@ -33,16 +34,17 @@ static int mbox_mail_seek(struct index_mail *mail)
 {
 	struct mbox_transaction_context *t =
 		(struct mbox_transaction_context *)mail->trans;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->ibox;
+	struct mail *_mail = &mail->mail.mail;
+	struct mbox_mailbox *mbox = (struct mbox_mailbox *)_mail->box;
 	enum mbox_sync_flags sync_flags = 0;
 	int ret, try;
 	bool deleted;
 
-	if (mail->mail.mail.expunged || mbox->syncing)
+	if (_mail->expunged || mbox->syncing)
 		return -1;
 
-	if (mail->mail.mail.lookup_abort != MAIL_LOOKUP_ABORT_NEVER)
-		return mail_set_aborted(&mail->mail.mail);
+	if (_mail->lookup_abort != MAIL_LOOKUP_ABORT_NEVER)
+		return mail_set_aborted(_mail);
 
 	if (mbox->mbox_stream != NULL &&
 	    istream_raw_mbox_is_corrupted(mbox->mbox_stream)) {
@@ -53,7 +55,7 @@ static int mbox_mail_seek(struct index_mail *mail)
 	for (try = 0; try < 2; try++) {
 		if ((sync_flags & MBOX_SYNC_FORCE_SYNC) != 0) {
 			/* dirty offsets are broken. make sure we can sync. */
-			mbox_prepare_resync(mail);
+			mbox_prepare_resync(_mail);
 		}
 		if (mbox->mbox_lock_type == F_UNLCK) {
 			sync_flags |= MBOX_SYNC_LOCK_READING;
@@ -64,8 +66,8 @@ static int mbox_mail_seek(struct index_mail *mail)
 
 			/* refresh index file after mbox has been locked to
 			   make sure we get only up-to-date mbox offsets. */
-			if (mail_index_refresh(mbox->ibox.index) < 0) {
-				mail_storage_set_index_error(&mbox->ibox);
+			if (mail_index_refresh(mbox->box.index) < 0) {
+				mail_storage_set_index_error(&mbox->box);
 				return -1;
 			}
 
@@ -82,15 +84,15 @@ static int mbox_mail_seek(struct index_mail *mail)
 		if (mbox_file_open_stream(mbox) < 0)
 			return -1;
 
-		ret = mbox_file_seek(mbox, mail->trans->trans_view,
-				     mail->mail.mail.seq, &deleted);
+		ret = mbox_file_seek(mbox, _mail->transaction->view,
+				     _mail->seq, &deleted);
 		if (ret > 0) {
 			/* success */
 			break;
 		}
 		if (ret < 0) {
 			if (deleted)
-				mail_set_expunged(&mail->mail.mail);
+				mail_set_expunged(_mail);
 			return -1;
 		}
 
@@ -100,7 +102,7 @@ static int mbox_mail_seek(struct index_mail *mail)
 	if (ret == 0) {
 		mail_storage_set_critical(&mbox->storage->storage,
 			"Losing sync for mail uid=%u in mbox file %s",
-			mail->mail.mail.uid, mbox->path);
+			_mail->uid, mbox->box.path);
 	}
 	return 0;
 }
@@ -109,7 +111,7 @@ static int mbox_mail_get_received_date(struct mail *_mail, time_t *date_r)
 {
 	struct index_mail *mail = (struct index_mail *)_mail;
 	struct index_mail_data *data = &mail->data;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->ibox;
+	struct mbox_mailbox *mbox = (struct mbox_mailbox *)_mail->box;
 
 	if (index_mail_get_received_date(_mail, date_r) == 0)
 		return 0;
@@ -144,13 +146,37 @@ static int mbox_mail_get_save_date(struct mail *_mail, time_t *date_r)
 	return 0;
 }
 
+static bool
+mbox_mail_get_md5_header(struct index_mail *mail, const char **value_r)
+{
+	static uint8_t empty_md5[16] =
+		{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->mail.mail.box;
+	const void *ext_data;
+
+	if (mail->data.guid != NULL)
+		return mail->data.guid;
+
+	mail_index_lookup_ext(mail->mail.mail.transaction->view,
+			      mail->mail.mail.seq, mbox->md5hdr_ext_idx,
+			      &ext_data, NULL);
+	if (ext_data != NULL && memcmp(ext_data, empty_md5, 16) != 0) {
+		mail->data.guid = p_strdup(mail->data_pool,
+					   binary_to_hex(ext_data, 16));
+		*value_r = mail->data.guid;
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
 static int
 mbox_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 		      const char **value_r)
 {
-#define EMPTY_MD5_SUM "00000000000000000000000000000000"
 	struct index_mail *mail = (struct index_mail *)_mail;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->ibox;
+	struct mbox_mailbox *mbox = (struct mbox_mailbox *)_mail->box;
+	uoff_t offset;
 
 	switch (field) {
 	case MAIL_FETCH_FROM_ENVELOPE:
@@ -159,20 +185,35 @@ mbox_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 
 		*value_r = istream_raw_mbox_get_sender(mbox->mbox_stream);
 		return 0;
+	case MAIL_FETCH_GUID:
 	case MAIL_FETCH_HEADER_MD5:
-		if (index_mail_get_special(_mail, field, value_r) < 0)
-			return -1;
-		if (**value_r != '\0' && strcmp(*value_r, EMPTY_MD5_SUM) != 0)
+		if (mbox_mail_get_md5_header(mail, value_r))
 			return 0;
 
-		/* i guess in theory the EMPTY_MD5_SUM is valid and can happen,
+		/* i guess in theory the empty_md5 is valid and can happen,
 		   but it's almost guaranteed that it means the MD5 sum is
 		   missing. recalculate it. */
+		offset = mbox->mbox_lock_type == F_UNLCK ? 0 :
+			istream_raw_mbox_get_start_offset(mbox->mbox_stream);
 		mbox->mbox_save_md5 = TRUE;
-                mbox_prepare_resync(mail);
-		if (mbox_sync(mbox, MBOX_SYNC_FORCE_SYNC) < 0)
+		if (mbox_sync(mbox, MBOX_SYNC_FORCE_SYNC |
+			      MBOX_SYNC_READONLY) < 0)
 			return -1;
-		break;
+		if (mbox->mbox_lock_type != F_UNLCK) {
+			if (istream_raw_mbox_seek(mbox->mbox_stream,
+						  offset) < 0) {
+				i_error("mbox %s sync lost during MD5 syncing",
+					_mail->box->name);
+				return -1;
+			}
+		}
+
+		if (!mbox_mail_get_md5_header(mail, value_r)) {
+			i_error("mbox %s resyncing didn't save header MD5 values",
+				_mail->box->name);
+			return -1;
+		}
+		return 0;
 	default:
 		break;
 	}
@@ -183,14 +224,14 @@ mbox_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 static bool
 mbox_mail_get_next_offset(struct index_mail *mail, uoff_t *next_offset_r)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->ibox;
+	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->mail.mail.box;
 	struct mail_index_view *view;
 	const struct mail_index_header *hdr;
 	uint32_t seq;
 	int trailer_size;
 	int ret = 1;
 
-	hdr = mail_index_get_header(mail->trans->trans_view);
+	hdr = mail_index_get_header(mail->mail.mail.transaction->view);
 	if (mail->mail.mail.seq > hdr->messages_count) {
 		/* we're appending a new message */
 		return 0;
@@ -204,15 +245,15 @@ mbox_mail_get_next_offset(struct index_mail *mail, uoff_t *next_offset_r)
 	if (mbox_sync_header_refresh(mbox) < 0)
 		return -1;
 
-	view = mail_index_view_open(mail->ibox->index);
+	view = mail_index_view_open(mail->mail.mail.box->index);
 	hdr = mail_index_get_header(view);
 	if (!mail_index_lookup_seq(view, mail->mail.mail.uid, &seq))
 		i_panic("Message unexpectedly expunged from index");
 
 	if (seq == hdr->messages_count) {
 		/* last message, use the synced mbox size */
-		trailer_size = (mbox->storage->storage.flags &
-				MAIL_STORAGE_FLAG_SAVE_CRLF) != 0 ? 2 : 1;
+		trailer_size =
+			mbox->storage->storage.set->mail_save_crlf ? 2 : 1;
 		*next_offset_r = mbox->mbox_hdr.sync_size - trailer_size;
 	} else {
 		if (mbox_file_lookup_offset(mbox, view, seq + 1,
@@ -227,7 +268,7 @@ static int mbox_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 {
 	struct index_mail *mail = (struct index_mail *)_mail;
 	struct index_mail_data *data = &mail->data;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->ibox;
+	struct mbox_mailbox *mbox = (struct mbox_mailbox *)_mail->box;
 	struct istream *input;
 	struct message_size hdr_size;
 	uoff_t old_offset, body_offset, body_size, next_offset;
@@ -268,7 +309,7 @@ static int mbox_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 
 static int mbox_mail_init_stream(struct index_mail *mail)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->ibox;
+	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->mail.mail.box;
 	struct istream *raw_stream;
 	uoff_t hdr_offset, next_offset;
 	int ret;
@@ -284,7 +325,7 @@ static int mbox_mail_init_stream(struct index_mail *mail)
 		if (ret < 0) {
 			i_warning("mbox %s: Can't find next message offset "
 				  "for uid=%u",
-				  mbox->path, mail->mail.mail.uid);
+				  mbox->box.path, mail->mail.mail.uid);
 		}
 	}
 	if (ret <= 0)
@@ -345,6 +386,7 @@ struct mail_vfuncs mbox_mail_vfuncs = {
 	index_mail_free,
 	mbox_mail_set_seq,
 	mbox_mail_set_uid,
+	index_mail_set_uid_cache_updates,
 
 	index_mail_get_flags,
 	index_mail_get_keywords,
@@ -361,10 +403,12 @@ struct mail_vfuncs mbox_mail_vfuncs = {
 	index_mail_get_header_stream,
 	mbox_mail_get_stream,
 	mbox_mail_get_special,
+	index_mail_get_real_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
+	index_mail_update_modseq,
 	NULL,
 	index_mail_expunge,
 	index_mail_set_cache_corrupted,
-	index_mail_get_index_mail
+	index_mail_opened
 };

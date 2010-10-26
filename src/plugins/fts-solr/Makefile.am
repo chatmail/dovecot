@@ -11,7 +11,12 @@ lib21_fts_solr_plugin_la_LDFLAGS = -module -avoid-version
 module_LTLIBRARIES = \
 	lib21_fts_solr_plugin.la
 
+if DOVECOT_PLUGIN_DEPS
+fts_plugin_dep = ../fts/lib20_fts_plugin.la
+endif
+
 lib21_fts_solr_plugin_la_LIBADD = \
+	$(fts_plugin_dep) \
 	$(CURL_LIBS) -lexpat
 
 lib21_fts_solr_plugin_la_SOURCES = \
@@ -22,10 +27,3 @@ lib21_fts_solr_plugin_la_SOURCES = \
 noinst_HEADERS = \
 	fts-solr-plugin.h \
 	solr-connection.h
-
-install-exec-local:
-	for d in imap pop3 lda; do \
-	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
-	  rm -f $(DESTDIR)$(moduledir)/$$d/lib21_fts_solr_plugin$(MODULE_SUFFIX); \
-	  $(LN_S) ../lib21_fts_solr_plugin$(MODULE_SUFFIX) $(DESTDIR)$(moduledir)/$$d; \
-	done

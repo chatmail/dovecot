@@ -1,6 +1,6 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 #include "passdb.h"
 
 #ifdef PASSDB_PASSWD_FILE
@@ -14,8 +14,8 @@
 struct passwd_file_passdb_module {
 	struct passdb_module module;
 
-	struct auth *auth;
 	struct db_passwd_file *pwf;
+	const char *username_format;
 };
 
 static void passwd_file_save_results(struct auth_request *request,
@@ -70,7 +70,8 @@ passwd_file_verify_plain(struct auth_request *request, const char *password,
 	const char *scheme, *crypted_pass;
         int ret;
 
-	pu = db_passwd_file_lookup(module->pwf, request);
+	pu = db_passwd_file_lookup(module->pwf, request,
+				   module->username_format);
 	if (pu == NULL) {
 		callback(PASSDB_RESULT_USER_UNKNOWN, request);
 		return;
@@ -95,7 +96,8 @@ passwd_file_lookup_credentials(struct auth_request *request,
 	struct passwd_user *pu;
 	const char *crypted_pass, *scheme;
 
-	pu = db_passwd_file_lookup(module->pwf, request);
+	pu = db_passwd_file_lookup(module->pwf, request,
+				   module->username_format);
 	if (pu == NULL) {
 		callback(PASSDB_RESULT_USER_UNKNOWN, NULL, 0, request);
 		return;
@@ -108,7 +110,7 @@ passwd_file_lookup_credentials(struct auth_request *request,
 }
 
 static struct passdb_module *
-passwd_file_preinit(struct auth_passdb *auth_passdb, const char *args)
+passwd_file_preinit(pool_t pool, const char *args)
 {
 	struct passwd_file_passdb_module *module;
 	const char *scheme = PASSWD_FILE_DEFAULT_SCHEME;
@@ -136,9 +138,9 @@ passwd_file_preinit(struct auth_passdb *auth_passdb, const char *args)
 			args++;
 
 		if (strcmp(key, "scheme") == 0)
-			scheme = p_strdup(auth_passdb->auth->pool, value);
+			scheme = p_strdup(pool, value);
 		else if (strcmp(key, "username_format") == 0)
-			format = p_strdup(auth_passdb->auth->pool, value);
+			format = p_strdup(pool, value);
 		else
 			i_fatal("passdb passwd-file: Unknown setting: %s", key);
 	}
@@ -146,26 +148,23 @@ passwd_file_preinit(struct auth_passdb *auth_passdb, const char *args)
 	if (*args == '\0')
 		i_fatal("passdb passwd-file: Missing args");
 
-	module = p_new(auth_passdb->auth->pool,
-		       struct passwd_file_passdb_module, 1);
-	module->auth = auth_passdb->auth;
-	module->pwf = db_passwd_file_init(args, format, FALSE,
-					  module->auth->verbose_debug);
+	module = p_new(pool, struct passwd_file_passdb_module, 1);
+	module->pwf = db_passwd_file_init(args, FALSE,
+					  global_auth_settings->debug);
+	module->username_format = format;
 
 	if (!module->pwf->vars)
 		module->module.cache_key = format;
 	else {
-		module->module.cache_key =
-			auth_cache_parse_key(auth_passdb->auth->pool,
-				t_strconcat(format, module->pwf->path, NULL));
+		module->module.cache_key = auth_cache_parse_key(pool,
+			t_strconcat(format, module->pwf->path, NULL));
 	}
 
 	module->module.default_pass_scheme = scheme;
 	return &module->module;
 }
 
-static void passwd_file_init(struct passdb_module *_module,
-			     const char *args ATTR_UNUSED)
+static void passwd_file_init(struct passdb_module *_module)
 {
 	struct passwd_file_passdb_module *module =
 		(struct passwd_file_passdb_module *)_module;
@@ -194,6 +193,6 @@ struct passdb_module_interface passdb_passwd_file = {
 };
 #else
 struct passdb_module_interface passdb_passwd_file = {
-	MEMBER(name) "passwd-file"
+	.name = "passwd-file"
 };
 #endif

@@ -59,21 +59,16 @@ Sieve language itself.
 Installation and configuration
 ------------------------------
 
-Sieve is implemented as a plugin to deliver [http://wiki.dovecot.org/LDA].
-Currently, two concurrent implementations of the Sieve plugin are available.
-See their pages for specific instructions:
+Sieve is implemented as a plugin to <LDA.txt> or <LMTP.txt>.
 
- * <CMU Sieve> [LDA.Sieve.CMU.txt] uses the Sieve interpreter from the Cyrus
-   project. For Dovecot v1.0 .. v1.2.
- * <Dovecot Sieve> [LDA.Sieve.Dovecot.txt] is a fully rewritten implementation.
-   For Dovecot v1.2 and newer.
+ * <Pigeonhole Sieve> [LDA.Sieve.Dovecot.txt] is Dovecot's own Sieve
+   implementation.
 
 Features
 --------
 
-Both Sieve implementations support various extensions to the Sieve language.
-You can find more information about the extensions from the Sieve Mail
-Filtering Language Charter
+Sieve language has various extensions. You can find more information about the
+extensions from the Sieve Mail Filtering Language Charter
 [http://www.ietf.org/html.charters/sieve-charter.html] or the Sieve.info wiki
 page [http://www.sieve.info/].
 
@@ -82,129 +77,126 @@ Note that Sieve doesn't support running external programs.
 The supported Sieve features are:
 
  *
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| *Extension*                                                     | *CMU   | *Dovecot     | *Purpose*      |
-|                                                                 | Sieve* | Sieve*       |                |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| fileinto [http://ietfreport.isoc.org/idref/rfc5228/]            | yes    | yes          | Allows storing |
-|                                                                 |        |              | messages in    |
-|                                                                 |        |              | folders other  |
-|                                                                 |        |              | than INBOX     |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| envelope [http://ietfreport.isoc.org/idref/rfc5228/]            | yes    | yes          | Allows         |
-|                                                                 |        |              | evaluating     |
-|                                                                 |        |              | envelope parts,|
-|                                                                 |        |              | i.e. sender and|
-|                                                                 |        |              | recipient      |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| encoded-character [http://ietfreport.isoc.org/idref/rfc5228/]   | no     | yes          | Allows encoding|
-|                                                                 |        |              | special        |
-|                                                                 |        |              | characters     |
-|                                                                 |        |              | numerically    |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| copy [http://ietfreport.isoc.org/idref/rfc3894/]                | v1.1+  | yes          | Allows storing |
-|                                                                 |        |              | and forwarding |
-|                                                                 |        |              | messages       |
-|                                                                 |        |              | without        |
-|                                                                 |        |              | canceling the  |
-|                                                                 |        |              | implicit keep  |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| body [http://ietfreport.isoc.org/idref/rfc5173/]                | v1.1+  | yes          | Allows         |
-|                                                                 |        |              | evaluating the |
-|                                                                 |        |              | body of a      |
-|                                                                 |        |              | message        |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| variables [http://ietfreport.isoc.org/idref/rfc5229/]           | no     | yes          | Adds variables |
-|                                                                 |        |              | support to the |
-|                                                                 |        |              | language       |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| vacation [http://ietfreport.isoc.org/idref/rfc5230/]            | yes    | yes          | Provides       |
-|                                                                 |        |              | auto-responder |
-|                                                                 |        |              | functionality, |
-|                                                                 |        |              | e.g. for when  |
-|                                                                 |        |              | the user is on |
-|                                                                 |        |              | vacation       |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| relational [http://ietfreport.isoc.org/idref/rfc5231/]          | yes    | yes          | Provides       |
-|                                                                 |        |              | relational     |
-|                                                                 |        |              | match support  |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| imap4flags [http://ietfreport.isoc.org/idref/rfc5232/]          | no     | yes          | Allows adding  |
-|                                                                 |        |              | IMAP flags to  |
-|                                                                 |        |              | stored messages|
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| subaddress [http://ietfreport.isoc.org/idref/rfc5233/]          | yes    | yes          | Allows testing |
-|                                                                 |        |              | against        |
-|                                                                 |        |              | delimited      |
-|                                                                 |        |              | elements of the|
-|                                                                 |        |              | local part of  |
-|                                                                 |        |              | addresses      |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| reject [http://ietfreport.isoc.org/idref/rfc5429/]              | yes    | yes          | Allows         |
-|                                                                 |        |              | rejecting      |
-|                                                                 |        |              | messages with a|
-|                                                                 |        |              | rejection      |
-|                                                                 |        |              | bounce message |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| enotify [http://ietfreport.isoc.org/idref/rfc5435/]             | no     | yes          | Provides the   |
-|                                                                 |        |              | ability to send|
-|                                                                 |        |              | notifications  |
-|                                                                 |        |              | by various     |
-|                                                                 |        |              | means          |
-|                                                                 |        |              | (currently only|
-|                                                                 |        |              | mailto)        |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| mailbox [http://ietfreport.isoc.org/idref/rfc5490/]             | no     | yes          | Provides a     |
-|                                                                 |        |              | mailbox        |
-|                                                                 |        |              | existence check|
-|                                                                 |        |              | and allows     |
-|                                                                 |        |              | creating       |
-|                                                                 |        |              | mailboxes upon |
-|                                                                 |        |              | fileinto       |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| environment [http://ietfreport.isoc.org/idref/rfc5183/]         | no     | basic        | Allows testing |
-|                                                                 |        |              | against various|
-|                                                                 |        |              | labeled values |
-|                                                                 |        |              | from the       |
-|                                                                 |        |              | execution      |
-|                                                                 |        |              | environment    |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| date [http://ietfreport.isoc.org/idref/rfc5260/]                | no     | yes          | Adds the       |
-|                                                                 |        |              | ability to test|
-|                                                                 |        |              | date and time  |
-|                                                                 |        |              | values in      |
-|                                                                 |        |              | various ways   |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| regex [http://ietfreport.isoc.org/idref/draft-ietf-sieve-regex/]| yes    | yes          | Provides       |
-|                                                                 |        |              | regular        |
-|                                                                 |        |              | expression     |
-|                                                                 |        |              | match support  |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| spamtest and virustest                                          | no     | experimental | Implements a   |
-| [http://ietfreport.isoc.org/idref/rfc5235/]                     |        |              | uniform way to |
-|                                                                 |        |              | test against   |
-|                                                                 |        |              | headers added  |
-|                                                                 |        |              | by spam and    |
-|                                                                 |        |              | virus scanners |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| include                                                         | v1.1+  | yes          | Allows         |
-| [http://ietfreport.isoc.org/idref/draft-daboo-sieve-include/]   |        |              | including other|
-|                                                                 |        |              | Sieve scripts  |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| imapflags(old draft                                             | yes    | yes  (default| Old version of |
-| [http://tools.ietf.org/html/draft-melnikov-sieve-imapflags-03]) |        | disabled)    | imap4flags     |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-| notify (old draft                                               | yes    | yes (default | Old version of |
-| [http://tools.ietf.org/html/draft-martin-sieve-notify-01])      |        | disabled)    | enotify        |
-+-----------------------------------------------------------------+--------+--------------+----------------+
-
-Note that the CMU Sieve plugin implements an older specification of the
-*enotify* extension which was called *notify*. Something similar is true for
-the *imap4flags* extension, which was known as *imapflags* for CMU Sieve.  For
-backwards compatibility, Dovecot Sieve plugin also supports the old *imapflags*
-extension. The most valuable extension that the new Sieve implementation adds
-to the list is the *variables* extension. As the name implies, this adds
-support for variables to the language.
++-----------------------------------------------------------------+--------------+----------------+
+| *Extension*                                                     | *Pigeonhole* | *Purpose*      |
++-----------------------------------------------------------------+--------------+----------------+
+| fileinto [http://ietfreport.isoc.org/idref/rfc5228/]            | yes          | Allows storing |
+|                                                                 |              | messages in    |
+|                                                                 |              | folders other  |
+|                                                                 |              | than INBOX     |
++-----------------------------------------------------------------+--------------+----------------+
+| envelope [http://ietfreport.isoc.org/idref/rfc5228/]            | yes          | Allows         |
+|                                                                 |              | evaluating     |
+|                                                                 |              | envelope parts,|
+|                                                                 |              | i.e. sender and|
+|                                                                 |              | recipient      |
++-----------------------------------------------------------------+--------------+----------------+
+| encoded-character [http://ietfreport.isoc.org/idref/rfc5228/]   | yes          | Allows encoding|
+|                                                                 |              | special        |
+|                                                                 |              | characters     |
+|                                                                 |              | numerically    |
++-----------------------------------------------------------------+--------------+----------------+
+| copy [http://ietfreport.isoc.org/idref/rfc3894/]                | yes          | Allows storing |
+|                                                                 |              | and forwarding |
+|                                                                 |              | messages       |
+|                                                                 |              | without        |
+|                                                                 |              | canceling the  |
+|                                                                 |              | implicit keep  |
++-----------------------------------------------------------------+--------------+----------------+
+| body [http://ietfreport.isoc.org/idref/rfc5173/]                | yes          | Allows         |
+|                                                                 |              | evaluating the |
+|                                                                 |              | body of a      |
+|                                                                 |              | message        |
++-----------------------------------------------------------------+--------------+----------------+
+| variables [http://ietfreport.isoc.org/idref/rfc5229/]           | yes          | Adds variables |
+|                                                                 |              | support to the |
+|                                                                 |              | language       |
++-----------------------------------------------------------------+--------------+----------------+
+| vacation [http://ietfreport.isoc.org/idref/rfc5230/]            | yes          | Provides       |
+|                                                                 |              | auto-responder |
+|                                                                 |              | functionality, |
+|                                                                 |              | e.g. for when  |
+|                                                                 |              | the user is on |
+|                                                                 |              | vacation       |
++-----------------------------------------------------------------+--------------+----------------+
+| relational [http://ietfreport.isoc.org/idref/rfc5231/]          | yes          | Provides       |
+|                                                                 |              | relational     |
+|                                                                 |              | match support  |
++-----------------------------------------------------------------+--------------+----------------+
+| imap4flags [http://ietfreport.isoc.org/idref/rfc5232/]          | yes          | Allows adding  |
+|                                                                 |              | IMAP flags to  |
+|                                                                 |              | stored messages|
++-----------------------------------------------------------------+--------------+----------------+
+| subaddress [http://ietfreport.isoc.org/idref/rfc5233/]          | yes          | Allows testing |
+|                                                                 |              | against        |
+|                                                                 |              | delimited      |
+|                                                                 |              | elements of the|
+|                                                                 |              | local part of  |
+|                                                                 |              | addresses      |
++-----------------------------------------------------------------+--------------+----------------+
+| reject [http://ietfreport.isoc.org/idref/rfc5429/]              | yes          | Allows         |
+|                                                                 |              | rejecting      |
+|                                                                 |              | messages with a|
+|                                                                 |              | rejection      |
+|                                                                 |              | bounce message |
++-----------------------------------------------------------------+--------------+----------------+
+| enotify [http://ietfreport.isoc.org/idref/rfc5435/]             | yes          | Provides the   |
+|                                                                 |              | ability to send|
+|                                                                 |              | notifications  |
+|                                                                 |              | by various     |
+|                                                                 |              | means          |
+|                                                                 |              | (currently only|
+|                                                                 |              | mailto)        |
++-----------------------------------------------------------------+--------------+----------------+
+| mailbox [http://ietfreport.isoc.org/idref/rfc5490/]             | yes          | Provides a     |
+|                                                                 |              | mailbox        |
+|                                                                 |              | existence check|
+|                                                                 |              | and allows     |
+|                                                                 |              | creating       |
+|                                                                 |              | mailboxes upon |
+|                                                                 |              | fileinto       |
++-----------------------------------------------------------------+--------------+----------------+
+| environment [http://ietfreport.isoc.org/idref/rfc5183/]         | basic        | Allows testing |
+|                                                                 |              | against various|
+|                                                                 |              | labeled values |
+|                                                                 |              | from the       |
+|                                                                 |              | execution      |
+|                                                                 |              | environment    |
++-----------------------------------------------------------------+--------------+----------------+
+| date [http://ietfreport.isoc.org/idref/rfc5260/]                | yes          | Adds the       |
+|                                                                 |              | ability to test|
+|                                                                 |              | date and time  |
+|                                                                 |              | values in      |
+|                                                                 |              | various ways   |
++-----------------------------------------------------------------+--------------+----------------+
+| regex [http://ietfreport.isoc.org/idref/draft-ietf-sieve-regex/]| yes          | Provides       |
+|                                                                 |              | regular        |
+|                                                                 |              | expression     |
+|                                                                 |              | match support  |
++-----------------------------------------------------------------+--------------+----------------+
+| spamtest and virustest                                          | experimental | Implements a   |
+| [http://ietfreport.isoc.org/idref/rfc5235/]                     |              | uniform way to |
+|                                                                 |              | test against   |
+|                                                                 |              | headers added  |
+|                                                                 |              | by spam and    |
+|                                                                 |              | virus scanners |
++-----------------------------------------------------------------+--------------+----------------+
+| include                                                         | yes          | Allows         |
+| [http://ietfreport.isoc.org/idref/draft-daboo-sieve-include/]   |              | including other|
+|                                                                 |              | Sieve scripts  |
++-----------------------------------------------------------------+--------------+----------------+
+| imapflags(old draft                                             | yes  (default| Old version of |
+| [http://tools.ietf.org/html/draft-melnikov-sieve-imapflags-03]) | disabled)    | imap4flags (for|
+|                                                                 |              | backwards      |
+|                                                                 |              | compatibility  |
+|                                                                 |              | with CMU Sieve)|
++-----------------------------------------------------------------+--------------+----------------+
+| notify (old draft                                               | yes (default | Old version of |
+| [http://tools.ietf.org/html/draft-martin-sieve-notify-01])      | disabled)    | enotify (for   |
+|                                                                 |              | backwards      |
+|                                                                 |              | compatibility  |
+|                                                                 |              | with CMU Sieve)|
++-----------------------------------------------------------------+--------------+----------------+
 
 ManageSieve server
 ------------------
@@ -227,9 +219,9 @@ http://libsieve-php.sourceforge.net/
 Mailbox names with fileinto
 ---------------------------
 
-With Dovecot v1.1+ you need to give mailbox names to fileinto commands the same
-way as IMAP clients see them. For example if you want to deliver mail to
-"Customers" mailbox which exists under "Work" mailbox:
+You need to give mailbox names to fileinto commands the same way as IMAP
+clients see them. For example if you want to deliver mail to "Customers"
+mailbox which exists under "Work" mailbox:
 
  * Namespace with 'prefix=""', 'separator=.' (Maildir default):
    *Work.Customers*
@@ -238,26 +230,16 @@ way as IMAP clients see them. For example if you want to deliver mail to
  * Namespace with 'prefix=""', 'separator=/' (mbox, dbox default):
    *Work/Customers*
 
-Dovecot v1.0's deliver doesn't support namespaces, so if you have a namespace
-prefix you must not add it to fileinto and you must use the default separator.
-This also means that delivering mails to multiple namespaces isn't possible
-with v1.0.
-
 Vacation auto-reply
 -------------------
 
 Vacation uses envelope sender and envelope recipient. They're taken from:
 
- * v1.0:
-    * Envelope sender: Return-Path: header in the message.
-    * Envelope recipient: -d parameter to deliver. If -d isn't given
-      (delivering to system users), the $USER environment is used.
- * v1.1+:
-    * Envelope sender: -f parameter to deliver if given, otherwise Return-Path:
-      header in the message.
-    * Envelope recipient: -a parameter to deliver if given, otherwise -d
-      parameter to deliver. If neither is given (delivering to system users),
-      the $USER environment is used.
+ * Envelope sender: -f parameter to dovecot-lda if given, otherwise
+   Return-Path: header in the message.
+ * Envelope recipient: -a parameter to dovecot-lda if given, otherwise -d
+   parameter to dovecot-lda. If neither is given (delivering to system users),
+   the $USER environment is used.
 
 The vacation replies are sent to the envelope sender.
 
@@ -331,14 +313,14 @@ full address, so pass it with the -a flag.
 
 ---%<-------------------------------------------------------------------------
 dovecot unix    -       n       n       -       -      pipe
-  flags=DRhu user=mail:mail argv=/usr/local/libexec/dovecot/deliver
+  flags=DRhu user=mail:mail argv=/usr/local/libexec/dovecot/dovecot-lda
   -f ${sender} -d ${user}@${nexthop} -a ${recipient}
 ---%<-------------------------------------------------------------------------
 
 or
 
 ---%<-------------------------------------------------------------------------
-mailbox_command = /usr/lib/dovecot/deliver -a "$RECIPIENT"
+mailbox_command = /usr/lib/dovecot/dovecot-lda -a "$RECIPIENT"
 ---%<-------------------------------------------------------------------------
 
 Mail filtering by various headers
@@ -446,7 +428,7 @@ John Doe";
 Include scripts
 ---------------
 
-With v1.1 it's possible to include other Sieve scripts in your script:
+It's possible to include other Sieve scripts in your script:
 
 ---%<-------------------------------------------------------------------------
 require ["include"];
@@ -468,10 +450,6 @@ sieve_global_path).
   sieve_global_dir = /etc/dovecot/sieve/
 }
 ---%<-------------------------------------------------------------------------
-
-With v1.1 'sieve_dir' should match the 'sieve_storage' setting in the <protocol
-managesieve> [ManageSieve.txt] section. <ManageSieve.txt> v1.2+ uses
-'sieve_dir' directly.
 
 Both 'sieve_dir' and 'sieve_global_dir' may also be overridden by <userdb extra
 fields> [UserDatabase.ExtraFields.txt].
@@ -496,4 +474,4 @@ Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
 Here's the original post announcing it:
 http://dovecot.org/list/dovecot/2007-March/020895.html
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

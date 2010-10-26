@@ -1,14 +1,14 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "imap-common.h"
 #include "ioloop.h"
 #include "istream.h"
 #include "ostream.h"
 #include "str.h"
-#include "commands.h"
 #include "imap-parser.h"
 #include "imap-date.h"
-#include "mail-storage.h"
+#include "imap-util.h"
+#include "imap-commands.h"
 
 #include <sys/time.h>
 
@@ -103,29 +103,25 @@ static int validate_args(const struct imap_arg *args,
 			 bool *nonsync_r)
 {
 	/* [<flags>] */
-	if (args->type != IMAP_ARG_LIST)
+	if (!imap_arg_get_list(args, flags_r))
 		*flags_r = NULL;
-	else {
-		*flags_r = IMAP_ARG_LIST_ARGS(args);
+	else
 		args++;
-	}
 
 	/* [<internal date>] */
 	if (args->type != IMAP_ARG_STRING)
 		*internal_date_r = NULL;
 	else {
-		*internal_date_r = IMAP_ARG_STR(args);
+		*internal_date_r = imap_arg_as_astring(args);
 		args++;
 	}
 
-	if (args->type != IMAP_ARG_LITERAL_SIZE &&
-	    args->type != IMAP_ARG_LITERAL_SIZE_NONSYNC) {
+	if (!imap_arg_get_literal_size(args, msg_size_r)) {
 		*nonsync_r = FALSE;
 		return FALSE;
 	}
 
 	*nonsync_r = args->type == IMAP_ARG_LITERAL_SIZE_NONSYNC;
-	*msg_size_r = IMAP_ARG_LITERAL_SIZE(args);
 	return TRUE;
 }
 
@@ -148,7 +144,7 @@ static void cmd_append_finish(struct cmd_append_context *ctx)
 	if (ctx->t != NULL)
 		mailbox_transaction_rollback(&ctx->t);
 	if (ctx->box != ctx->cmd->client->mailbox && ctx->box != NULL)
-		mailbox_close(&ctx->box);
+		mailbox_free(&ctx->box);
 }
 
 static bool cmd_append_continue_cancel(struct client_command_context *cmd)
@@ -216,6 +212,7 @@ static bool cmd_append_continue_parsing(struct client_command_context *cmd)
 	const char *internal_date_str;
 	time_t internal_date;
 	int ret, timezone_offset;
+	unsigned int save_count;
 	bool nonsync;
 
 	if (cmd->cancel) {
@@ -240,12 +237,12 @@ static bool cmd_append_continue_parsing(struct client_command_context *cmd)
 		return FALSE;
 	}
 
-	if (args->type == IMAP_ARG_EOL) {
+	if (IMAP_ARG_IS_EOL(args)) {
 		/* last message */
 		enum mailbox_sync_flags sync_flags;
 		enum imap_sync_flags imap_flags;
-		uint32_t uid_validity, uid1, uid2;
-		const char *msg;
+		struct mail_transaction_commit_changes changes;
+		string_t *msg;
 
 		/* eat away the trailing CRLF */
 		client->input_skip_line = TRUE;
@@ -261,27 +258,26 @@ static bool cmd_append_continue_parsing(struct client_command_context *cmd)
 			return TRUE;
 		}
 
-		ret = mailbox_transaction_commit_get_uids(&ctx->t,
-							  &uid_validity,
-							  &uid1, &uid2);
+		ret = mailbox_transaction_commit_get_changes(&ctx->t, &changes);
 		if (ret < 0) {
 			client_send_storage_error(cmd, ctx->storage);
 			cmd_append_finish(ctx);
 			return TRUE;
 		}
-		i_assert(ctx->count == uid2 - uid1 + 1);
 
-		if (uid1 == 0)
-			msg = "OK Append completed.";
-		else if (uid1 == uid2) {
-			msg = t_strdup_printf("OK [APPENDUID %u %u] "
-					      "Append completed.",
-					      uid_validity, uid1);
+		msg = t_str_new(256);
+		save_count = seq_range_count(&changes.saved_uids);
+		if (save_count == 0) {
+			/* not supported by backend (virtual) */
+			str_append(msg, "OK Append completed.");
 		} else {
-			msg = t_strdup_printf("OK [APPENDUID %u %u:%u] "
-					      "Append completed.",
-					      uid_validity, uid1, uid2);
+			i_assert(ctx->count == save_count);
+			str_printfa(msg, "OK [APPENDUID %u ",
+				    changes.uid_validity);
+			imap_write_seq_range(msg, &changes.saved_uids);
+			str_append(msg, "] Append completed.");
 		}
+		pool_unref(&changes.pool);
 
 		if (ctx->box == cmd->client->mailbox) {
 			sync_flags = 0;
@@ -292,7 +288,7 @@ static bool cmd_append_continue_parsing(struct client_command_context *cmd)
 		}
 
 		cmd_append_finish(ctx);
-		return cmd_sync(cmd, sync_flags, imap_flags, msg);
+		return cmd_sync(cmd, sync_flags, imap_flags, str_c(msg));
 	}
 
 	if (!validate_args(args, &flags_list, &internal_date_str,
@@ -355,7 +351,7 @@ static bool cmd_append_continue_parsing(struct client_command_context *cmd)
 	ret = mailbox_save_begin(&ctx->save_ctx, ctx->input);
 
 	if (keywords != NULL)
-		mailbox_keywords_free(ctx->box, &keywords);
+		mailbox_keywords_unref(ctx->box, &keywords);
 
 	if (ret < 0) {
 		/* save initialization failed */
@@ -452,25 +448,37 @@ static bool cmd_append_continue_message(struct client_command_context *cmd)
 static struct mailbox *
 get_mailbox(struct client_command_context *cmd, const char *name)
 {
-	struct mail_storage *storage;
+	struct mail_namespace *ns;
 	struct mailbox *box;
+	enum mailbox_name_status status;
+	const char *storage_name;
 
-	if (!client_verify_mailbox_name(cmd, name,
-				CLIENT_VERIFY_MAILBOX_SHOULD_EXIST_TRYCREATE))
+	ns = client_find_namespace(cmd, name, &storage_name, &status);
+	if (ns == NULL)
 		return NULL;
 
-	storage = client_find_storage(cmd, &name);
-	if (storage == NULL)
+	switch (status) {
+	case MAILBOX_NAME_EXISTS_MAILBOX:
+		break;
+	case MAILBOX_NAME_EXISTS_DIR:
+		status = MAILBOX_NAME_VALID;
+		/* fall through */
+	case MAILBOX_NAME_VALID:
+	case MAILBOX_NAME_INVALID:
+	case MAILBOX_NAME_NOINFERIORS:
+		client_fail_mailbox_name_status(cmd, name, "TRYCREATE", status);
 		return NULL;
+	}
 
 	if (cmd->client->mailbox != NULL &&
-	    mailbox_equals(cmd->client->mailbox, storage, name))
+	    mailbox_equals(cmd->client->mailbox, ns, storage_name))
 		return cmd->client->mailbox;
 
-	box = mailbox_open(&storage, name, NULL, MAILBOX_OPEN_SAVEONLY |
-			   MAILBOX_OPEN_FAST | MAILBOX_OPEN_KEEP_RECENT);
-	if (box == NULL) {
-		client_send_storage_error(cmd, storage);
+	box = mailbox_alloc(ns->list, storage_name, MAILBOX_FLAG_SAVEONLY |
+			    MAILBOX_FLAG_KEEP_RECENT);
+	if (mailbox_open(box) < 0) {
+		client_send_storage_error(cmd, mailbox_get_storage(box));
+		mailbox_free(&box);
 		return NULL;
 	}
 	if (cmd->client->enabled_features != 0)
@@ -521,7 +529,7 @@ bool cmd_append(struct client_command_context *cmd)
 	o_stream_unset_flush_callback(client->output);
 
 	ctx->save_parser = imap_parser_create(client->input, client->output,
-					      imap_max_line_length);
+					      client->set->imap_max_line_length);
 
 	cmd->func = cmd_append_continue_parsing;
 	cmd->context = ctx;

@@ -25,28 +25,30 @@ dovecot.conf:
 sql.
 mail_location = maildir:~/Maildir
 
-auth default {
-  mechanisms = plain
+auth_mechanisms = plain
 
-  # try to authenticate using SQL database first
-  passdb sql {
-    args = /etc/dovecot-sql.conf
-  }
-  # fallback to PAM
-  passdb pam {
-  }
+# try to authenticate using SQL database first
+passdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql.conf.ext
+}
+# fallback to PAM
+passdb {
+  driver = pam
+}
 
-  # look up users from SQL first (even if authentication was done using PAM!)
-  userdb sql {
-    args = /etc/dovecot-sql.conf
-  }
-  # if not found, fallback to /etc/passwd
-  userdb passwd {
-  }
+# look up users from SQL first (even if authentication was done using PAM!)
+userdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql.conf.ext
+}
+# if not found, fallback to /etc/passwd
+userdb {
+  driver = passwd
 }
 ---%<-------------------------------------------------------------------------
 
-dovecot-sql.conf:
+dovecot-sql.conf.ext:
 
 ---%<-------------------------------------------------------------------------
 password_query = SELECT userid as user, password FROM users WHERE userid = '%u'
@@ -55,4 +57,4 @@ user_query = SELECT uid, gid, 'maildir:/var/vmail/%u' as mail FROM users WHERE
 userid = '%u'
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

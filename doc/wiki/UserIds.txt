@@ -4,33 +4,40 @@ System users used by Dovecot
 Dovecot typically requires 3 or more system users:
 
  * /root/: Dovecot is started as root.
- * /dovecot/: Dovecot uses an unprivileged /dovecot/ user for internal purposes
-   (for login processes).
- * auth user: Password and user database lookups are done as auth user. The
-   default is root.
- * mail user(s): Mails are accessed using yet another user. The mail user *IS
-   NOT /dovecot/ * user.
+ * /dovenull/: Dovecot uses an unprivileged /dovenull/ user for untrusted login
+   processes.
+ * /dovecot/: Dovecot uses an unprivileged /dovecot/ user for internal
+   processes.
+ * auth user: Password and user database lookups are done as auth user.
+ * mail user(s): Mails are accessed using yet another user. The mail user
+   should not be /dovecot/ user.
 
 Using multiple users allows privilege separation, which makes it harder for
 attackers to compromise the whole system if a security hole is found from one
 component. However, if you really want to run everything under a single user,
 <it's possible> [Rootless.txt].
 
-Dovecot user
-============
+Dovenull user
+=============
 
-/dovecot/ user is used internally for processing users' logins. It shouldn't
+/dovenull/ user is used internally for processing users' logins. It shouldn't
 have access to any files, authentication databases or anything else either. It
-should belong to its own private *dovecot* group where no one else belongs to,
+should belong to its own private *dovenull* group where no one else belongs to,
 and which doesn't have access to any files either (other than what Dovecot
 internally creates).
 
-* /dovecot/ user isn't used for any kind of mail processing - don't store
-users' mails as dovecot, and don't put /dovecot/ user to mail or any other
-groups*.
+You can change the default /dovenull/ user to something else from
+'default_login_user' setting.
 
-You can change the default /dovecot/ user to something else from 'login_user'
-setting.
+Dovecot user
+============
+
+/dovecot/ user is used internally for unprivileged Dovecot processes. It should
+belong to its own private /dovecot/ group. Mail files are not accessed as
+/dovecot/ user, so you shouldn't give it access to mails.
+
+You can change the default /dovecot/ user to something else from
+'default_internal_user' setting.
 
 Mail users
 ==========
@@ -42,7 +49,7 @@ configurations can be placed to two categories:
     system user in '/etc/passwd'. For system user setups you generally don't
     have to worry about UIDs or GIDs.
  2. <Virtual users> [VirtualUsers.txt] where all Dovecot users run under a
-    single system user, for example 'vmail' (just NOT /dovecot/).
+    single system user, for example 'vmail'.
 
 However it's possible to use a setup that is anything between these two. For
 example use a separate system user for each domain.
@@ -102,29 +109,33 @@ It's also possible to give all the users access to extra groups with
 Authentication process user
 ===========================
 
+Depending on passdb and userdb configuration, the lookups are done either by
+auth process or auth worker process. They have different default users:
+
 ---%<-------------------------------------------------------------------------
-auth default {
-  ..
+service auth {
+  user = $default_internal_user
+}
+service auth-worker {
   user = root
 }
 ---%<-------------------------------------------------------------------------
 
-The auth user setting specifies the system user under which 'dovecot-auth'
-processes are run. The user must have access to your <password databases>
-[PasswordDatabase.txt] and <user databases> [UserDatabase.txt]. It's not used
-for anything else. The default is to use root, because it's guaranteed to have
-access to all the password databases. The user must not be the same as
-login_user (dovecot).
+The user must have access to your <password databases> [PasswordDatabase.txt]
+and <user databases> [UserDatabase.txt]. It's not used for anything else. The
+default is to use root, because it's guaranteed to have access to all the
+password databases. If you don't need this, you should change it to
+$default_internal_user.
 
-If you're using a virtual user setup, there's really no reason for you to use
-root. You could instead create a new auth user, such as /doveauth/. If you're
-using SQL or LDAP the user doesn't need access to any of Dovecot's
-configuration files, because they're read while Dovecot is still running as
-root.
+<PAM> [PasswordDatabase.PAM.txt] and <shadow> [PasswordDatabase.Shadow.txt]
+passdbs are usually configured to read '/etc/shadow' file. Even this doesn't
+need root access if the file is readable by shadow group:
 
-<PAM> [PasswordDatabase.PAM.txt] and <shadow> [PasswordDatabase.txt] passdbs
-are usually configured to read '/etc/shadow' file. Even this doesn't need root
-access if you give the auth user access to /shadow/ group, and make sure that
-the '/etc/shadow' file is readable by the /shadow/ group.
+---%<-------------------------------------------------------------------------
+service auth-worker {
+  user = $default_internal_user
+  group = shadow
+}
+---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

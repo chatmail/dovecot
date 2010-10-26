@@ -30,4 +30,4 @@ socat tcp4-listen:109,setuid=nobody,fork,reuseaddr
 tcp4-connect:localhost:110,bind=localhost &
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

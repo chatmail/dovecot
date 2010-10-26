@@ -6,6 +6,7 @@
 #include "str.h"
 #include "istream.h"
 #include "time-util.h"
+#include "rfc822-parser.h"
 #include "message-parser.h"
 #include "message-decoder.h"
 #include "mail-namespace.h"
@@ -40,6 +41,7 @@ struct fts_storage_build_context {
 
 	uint32_t uid;
 	string_t *headers;
+	char *content_type, *content_disposition;
 };
 
 struct fts_transaction_context {
@@ -59,19 +61,17 @@ static MODULE_CONTEXT_DEFINE_INIT(fts_storage_module,
 				  &mail_storage_module_register);
 static MODULE_CONTEXT_DEFINE_INIT(fts_mail_module, &mail_module_register);
 
-static int fts_mailbox_close(struct mailbox *box)
+static void fts_mailbox_free(struct mailbox *box)
 {
 	struct fts_mailbox *fbox = FTS_CONTEXT(box);
-	int ret;
 
 	if (fbox->backend_substr != NULL)
 		fts_backend_deinit(&fbox->backend_substr);
 	if (fbox->backend_fast != NULL)
 		fts_backend_deinit(&fbox->backend_fast);
 
-	ret = fbox->module_ctx.super.close(box);
+	fbox->module_ctx.super.free(box);
 	i_free(fbox);
-	return ret;
 }
 
 static int fts_build_mail_flush_headers(struct fts_storage_build_context *ctx)
@@ -79,20 +79,52 @@ static int fts_build_mail_flush_headers(struct fts_storage_build_context *ctx)
 	if (str_len(ctx->headers) == 0)
 		return 0;
 
-	if (fts_backend_build_more(ctx->build, ctx->uid, str_data(ctx->headers),
-				   str_len(ctx->headers), TRUE) < 0)
+	fts_backend_build_hdr(ctx->build, ctx->uid);
+	if (fts_backend_build_more(ctx->build, str_data(ctx->headers),
+				   str_len(ctx->headers)) < 0)
 		return -1;
 
 	str_truncate(ctx->headers, 0);
 	return 0;
 }
 
-static bool fts_build_want_index_part(const struct message_block *block)
+static void fts_build_parse_content_type(struct fts_storage_build_context *ctx,
+					 const struct message_header_line *hdr)
 {
-	/* we'll index only text/xxx and message/rfc822 parts for now */
-	return (block->part->flags &
-		(MESSAGE_PART_FLAG_TEXT |
-		 MESSAGE_PART_FLAG_MESSAGE_RFC822)) != 0;
+	struct rfc822_parser_context parser;
+	string_t *content_type;
+
+	rfc822_parser_init(&parser, hdr->full_value, hdr->full_value_len, NULL);
+	(void)rfc822_skip_lwsp(&parser);
+
+	T_BEGIN {
+		content_type = t_str_new(64);
+		if (rfc822_parse_content_type(&parser, content_type) >= 0) {
+			i_free(ctx->content_type);
+			ctx->content_type = i_strdup(str_c(content_type));
+		}
+	} T_END;
+}
+
+static void
+fts_build_parse_content_disposition(struct fts_storage_build_context *ctx,
+				    const struct message_header_line *hdr)
+{
+	/* just pass it as-is to backend. */
+	i_free(ctx->content_disposition);
+	ctx->content_disposition =
+		i_strndup(hdr->full_value, hdr->full_value_len);
+}
+
+static void fts_parse_mail_header(struct fts_storage_build_context *ctx,
+				  const struct message_block *raw_block)
+{
+	const struct message_header_line *hdr = raw_block->hdr;
+
+	if (strcasecmp(hdr->name, "Content-Type") == 0)
+		fts_build_parse_content_type(ctx, hdr);
+	else if (strcasecmp(hdr->name, "Content-Disposition") == 0)
+		fts_build_parse_content_disposition(ctx, hdr);
 }
 
 static void fts_build_mail_header(struct fts_storage_build_context *ctx,
@@ -111,11 +143,13 @@ static void fts_build_mail_header(struct fts_storage_build_context *ctx,
 
 static int fts_build_mail(struct fts_storage_build_context *ctx, uint32_t uid)
 {
+	enum message_decoder_flags decoder_flags = MESSAGE_DECODER_FLAG_DTCASE;
 	struct istream *input;
 	struct message_parser_ctx *parser;
 	struct message_decoder_context *decoder;
 	struct message_block raw_block, block;
 	struct message_part *prev_part, *parts;
+	bool skip_body = FALSE, body_part = FALSE;
 	int ret;
 
 	ctx->uid = uid;
@@ -127,7 +161,11 @@ static int fts_build_mail(struct fts_storage_build_context *ctx, uint32_t uid)
 	parser = message_parser_init(pool_datastack_create(), input,
 				     MESSAGE_HEADER_PARSER_FLAG_CLEAN_ONELINE,
 				     0);
-	decoder = message_decoder_init(MESSAGE_DECODER_FLAG_DTCASE);
+
+
+	if ((ctx->build->backend->flags & FTS_BACKEND_FLAG_BINARY_MIME_PARTS) != 0)
+		decoder_flags |= MESSAGE_DECODER_FLAG_RETURN_BINARY;
+	decoder = message_decoder_init(decoder_flags);
 	for (;;) {
 		ret = message_parser_parse_next_block(parser, &raw_block);
 		i_assert(ret != 0);
@@ -136,30 +174,62 @@ static int fts_build_mail(struct fts_storage_build_context *ctx, uint32_t uid)
 				ret = 0;
 			break;
 		}
-		if (raw_block.hdr == NULL && raw_block.size != 0 &&
-		    !fts_build_want_index_part(&raw_block)) {
-			/* skipping this body */
-			continue;
+
+		if (raw_block.part != prev_part) {
+			/* body part changed. we're now parsing the end of
+			   boundary, possibly followed by message epilogue */
+			if (!skip_body && prev_part != NULL) {
+				i_assert(body_part);
+				fts_backend_build_body_end(ctx->build);
+			}
+			prev_part = raw_block.part;
+			i_free_and_null(ctx->content_type);
+			i_free_and_null(ctx->content_disposition);
+
+			if (raw_block.size != 0) {
+				/* multipart. skip until beginning of next
+				   part's headers */
+				skip_body = TRUE;
+			}
+		}
+
+		if (raw_block.hdr != NULL) {
+			/* always handle headers */
+		} else if (raw_block.size == 0) {
+			/* end of headers */
+			const char *content_type = ctx->content_type == NULL ?
+				"text/plain" : ctx->content_type;
+
+			skip_body = !fts_backend_build_body_begin(ctx->build,
+					ctx->uid, content_type,
+					ctx->content_disposition);
+			body_part = TRUE;
+		} else {
+			if (skip_body)
+				continue;
 		}
 
 		if (!message_decoder_decode_next_block(decoder, &raw_block,
 						       &block))
 			continue;
 
-		if (block.hdr != NULL)
+		if (block.hdr != NULL) {
+			fts_parse_mail_header(ctx, &raw_block);
 			fts_build_mail_header(ctx, &block);
-		else if (block.size == 0) {
+		} else if (block.size == 0) {
 			/* end of headers */
 			str_append_c(ctx->headers, '\n');
 		} else {
-			if (fts_backend_build_more(ctx->build, ctx->uid,
-						   block.data, block.size,
-						   FALSE) < 0) {
+			i_assert(body_part);
+			if (fts_backend_build_more(ctx->build,
+						   block.data, block.size) < 0) {
 				ret = -1;
 				break;
 			}
 		}
 	}
+	if (!skip_body && body_part)
+		fts_backend_build_body_end(ctx->build);
 	if (message_parser_deinit(&parser, &parts) < 0)
 		mail_set_cache_corrupted(ctx->mail, MAIL_FETCH_MESSAGE_PARTS);
 	message_decoder_deinit(&decoder);
@@ -271,9 +341,9 @@ fts_build_init_box(struct fts_search_context *fctx, struct mailbox *box,
 				  seq1, seq2, last_uid);
 }
 
-static int mailbox_name_cmp(const void *p1, const void *p2)
+static int mailbox_name_cmp(const struct fts_orig_mailboxes *box1,
+			    const struct fts_orig_mailboxes *box2)
 {
-	const struct fts_orig_mailboxes *box1 = p1, *box2 = p2;
 	int ret;
 
 	T_BEGIN {
@@ -289,10 +359,10 @@ static int mailbox_name_cmp(const void *p1, const void *p2)
 	return ret;
 }
 
-static int fts_backend_uid_map_mailbox_cmp(const void *p1, const void *p2)
+static int
+fts_backend_uid_map_mailbox_cmp(const struct fts_backend_uid_map *map1,
+				const struct fts_backend_uid_map *map2)
 {
-	const struct fts_backend_uid_map *map1 = p1, *map2 = p2;
-
 	return strcmp(map1->mailbox, map2->mailbox);
 }
 
@@ -356,15 +426,15 @@ static int fts_build_init_virtual_next(struct fts_search_context *fctx)
 static const char *
 fts_box_get_root(struct mailbox *box, struct mail_namespace **ns_r)
 {
-	struct mail_namespace *ns = box->storage->ns;
+	struct mail_namespace *ns = mailbox_get_namespace(box);
 	const char *name = box->name;
 
 	while (ns->alias_for != NULL)
 		ns = ns->alias_for;
 	*ns_r = ns;
 
-	if (*name == '\0' && ns != box->storage->ns &&
-	    (ns->flags & NAMESPACE_FLAG_INBOX) != 0) {
+	if (*name == '\0' && ns != mailbox_get_namespace(box) &&
+	    (ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
 		/* ugly workaround to allow selecting INBOX from a Maildir/
 		   when it's not in the inbox=yes namespace. */
 		return "INBOX";
@@ -375,12 +445,11 @@ fts_box_get_root(struct mailbox *box, struct mail_namespace **ns_r)
 static int fts_build_init_virtual(struct fts_search_context *fctx)
 {
 	struct fts_search_virtual_context *vctx = &fctx->virtual_ctx;
-	struct fts_backend_uid_map *last_uids;
 	ARRAY_TYPE(mailboxes) mailboxes;
 	struct mailbox *const *boxes;
-	struct fts_orig_mailboxes *orig_boxes;
+	const struct fts_orig_mailboxes *orig_boxes;
 	struct fts_orig_mailboxes orig_box;
-	unsigned int i, box_count, last_uid_count;
+	unsigned int i, box_count;
 	int ret;
 
 	t_array_init(&mailboxes, 64);
@@ -396,8 +465,7 @@ static int fts_build_init_virtual(struct fts_search_context *fctx)
 		array_append(&vctx->orig_mailboxes, &orig_box, 1);
 	}
 
-	orig_boxes = array_get_modifiable(&vctx->orig_mailboxes, &box_count);
-
+	orig_boxes = array_get(&vctx->orig_mailboxes, &box_count);
 	if (box_count <= 0) {
 		if (box_count == 0) {
 			/* empty virtual mailbox */
@@ -419,11 +487,9 @@ static int fts_build_init_virtual(struct fts_search_context *fctx)
 		pool_unref(&vctx->pool);
 		return -1;
 	}
-	last_uids = array_get_modifiable(&vctx->last_uids, &last_uid_count);
 
-	qsort(orig_boxes, box_count, sizeof(*orig_boxes), mailbox_name_cmp);
-	qsort(last_uids, last_uid_count, sizeof(*last_uids),
-	      fts_backend_uid_map_mailbox_cmp);
+	array_sort(&vctx->orig_mailboxes, mailbox_name_cmp);
+	array_sort(&vctx->last_uids, fts_backend_uid_map_mailbox_cmp);
 
 	ret = fts_build_init_virtual_next(fctx);
 	return ret < 0 ? -1 : 0;
@@ -482,13 +548,15 @@ static int fts_build_deinit(struct fts_storage_build_context **_ctx)
 	if (ioloop_time - ctx->search_start_time.tv_sec >=
 	    FTS_BUILD_NOTIFY_INTERVAL_SECS) {
 		/* we notified at least once */
-		box->storage->callbacks->
+		box->storage->callbacks.
 			notify_ok(box, "Mailbox indexing finished",
 				  box->storage->callback_context);
 	}
 
 	str_free(&ctx->headers);
 	mail_search_args_unref(&ctx->search_args);
+	i_free(ctx->content_type);
+	i_free(ctx->content_disposition);
 	i_free(ctx);
 	return ret;
 }
@@ -496,29 +564,46 @@ static int fts_build_deinit(struct fts_storage_build_context **_ctx)
 static void fts_build_notify(struct fts_storage_build_context *ctx)
 {
 	struct mailbox *box = ctx->mail->transaction->box;
-	const struct seq_range *range;
-	float percentage;
-	unsigned int msecs, secs;
 
 	if (ctx->last_notify.tv_sec == 0) {
 		/* set the search time in here, in case a plugin
 		   already spent some time indexing the mailbox */
 		ctx->search_start_time = ioloop_timeval;
-	} else if (box->storage->callbacks->notify_ok != NULL) {
-		range = array_idx(&ctx->search_args->args->value.seqset, 0);
-		percentage = (ctx->mail->seq - range->seq1) * 100.0 /
-			(range->seq2 - range->seq1);
-		msecs = timeval_diff_msecs(&ioloop_timeval,
-					   &ctx->search_start_time);
-		secs = (msecs / (percentage / 100.0) - msecs) / 1000;
+	} else if (box->storage->callbacks.notify_ok != NULL) {
+		double completed_frac;
+		unsigned int eta_secs;
+		const struct seq_range *range;
+		uint32_t seq_diff;
+
+		range =	array_idx(&ctx->search_args->args->value.seqset, 0);
+
+		seq_diff = range->seq2 - range->seq1;
+
+		if (seq_diff != 0) {
+			completed_frac = (double)(ctx->mail->seq - range->seq1) / seq_diff;
+
+			if (completed_frac >= 0.000001) {
+				unsigned int elapsed_msecs, est_total_msecs;
+
+				elapsed_msecs = timeval_diff_msecs(&ioloop_timeval,
+							   &ctx->search_start_time);
+				est_total_msecs = elapsed_msecs / completed_frac;
+				eta_secs = (est_total_msecs - elapsed_msecs) / 1000;
+			} else {
+				eta_secs = 0;
+			}
+		} else {
+			completed_frac = 0.0;
+			eta_secs = 0;
+		}
 
 		T_BEGIN {
 			const char *text;
 
 			text = t_strdup_printf("Indexed %d%% of the mailbox, "
-					       "ETA %d:%02d", (int)percentage,
-					       secs/60, secs%60);
-			box->storage->callbacks->
+					       "ETA %d:%02d", (int)(completed_frac * 100.0),
+					       eta_secs/60, eta_secs%60);
+			box->storage->callbacks.
 				notify_ok(box, text,
 				box->storage->callback_context);
 		} T_END;
@@ -535,7 +620,7 @@ static int fts_build_more(struct fts_storage_build_context *ctx)
 	    FTS_BUILD_NOTIFY_INTERVAL_SECS)
 		fts_build_notify(ctx);
 
-	while (mailbox_search_next(ctx->search_ctx, ctx->mail) > 0) {
+	while (mailbox_search_next(ctx->search_ctx, ctx->mail)) {
 		T_BEGIN {
 			ret = fts_build_mail(ctx, ctx->mail->uid);
 		} T_END;
@@ -621,8 +706,9 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 	return ctx;
 }
 
-static int fts_mailbox_search_next_nonblock(struct mail_search_context *ctx,
-					    struct mail *mail, bool *tryagain_r)
+static bool
+fts_mailbox_search_next_nonblock(struct mail_search_context *ctx,
+				 struct mail *mail, bool *tryagain_r)
 {
 	struct fts_mailbox *fbox = FTS_CONTEXT(ctx->transaction->box);
 	struct fts_search_context *fctx = FTS_CONTEXT(ctx);
@@ -633,7 +719,7 @@ static int fts_mailbox_search_next_nonblock(struct mail_search_context *ctx,
 		   to finish building the indexes */
 		if (!fts_try_build_init(ctx, fctx)) {
 			*tryagain_r = TRUE;
-			return 0;
+			return FALSE;
 		}
 	}
 
@@ -642,7 +728,7 @@ static int fts_mailbox_search_next_nonblock(struct mail_search_context *ctx,
 		ret = fts_build_more(fctx->build_ctx);
 		if (ret == 0) {
 			*tryagain_r = TRUE;
-			return 0;
+			return FALSE;
 		}
 
 		/* finished / error */
@@ -854,11 +940,8 @@ static void fts_mail_expunge(struct mail *_mail)
 	fmail->module_ctx.super.expunge(_mail);
 }
 
-static int fts_score_cmp(const void *key, const void *data)
+static int fts_score_cmp(const uint32_t *uid, const struct fts_score_map *score)
 {
-	const uint32_t *uid = key;
-	const struct fts_score_map *score = data;
-
 	return *uid < score->uid ? -1 :
 		(*uid > score->uid ? 1 : 0);
 }
@@ -870,15 +953,13 @@ static int fts_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 	struct fts_mail *fmail = FTS_MAIL_CONTEXT(mail);
 	struct fts_transaction_context *ft = FTS_CONTEXT(_mail->transaction);
 	const struct fts_score_map *scores;
-	unsigned int count;
 
 	if (field != MAIL_FETCH_SEARCH_SCORE || ft->score_map == NULL ||
 	    !array_is_created(ft->score_map))
 		scores = NULL;
 	else {
-		scores = array_get(ft->score_map, &count);
-		scores = bsearch(&_mail->uid, scores, count, sizeof(*scores),
-				 fts_score_cmp);
+		scores = array_bsearch(ft->score_map, &_mail->uid,
+				       fts_score_cmp);
 	}
 	if (scores != NULL) {
 		i_assert(scores->uid == _mail->uid);
@@ -891,29 +972,24 @@ static int fts_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 	return fmail->module_ctx.super.get_special(_mail, field, value_r);
 }
 
-static struct mail *
-fts_mail_alloc(struct mailbox_transaction_context *t,
-	       enum mail_fetch_field wanted_fields,
-	       struct mailbox_header_lookup_ctx *wanted_headers)
+void fts_mail_allocated(struct mail *_mail)
 {
-	struct fts_mailbox *fbox = FTS_CONTEXT(t->box);
+	struct mail_private *mail = (struct mail_private *)_mail;
+	struct mail_vfuncs *v = mail->vlast;
+	struct fts_mailbox *fbox = FTS_CONTEXT(_mail->box);
 	struct fts_mail *fmail;
-	struct mail *_mail;
-	struct mail_private *mail;
 
-	_mail = fbox->module_ctx.super.
-		mail_alloc(t, wanted_fields, wanted_headers);
-	if (fbox->backend_substr != NULL || fbox->backend_fast != NULL) {
-		mail = (struct mail_private *)_mail;
+	if (fbox == NULL ||
+	    (fbox->backend_substr == NULL && fbox->backend_fast == NULL))
+		return;
 
-		fmail = p_new(mail->pool, struct fts_mail, 1);
-		fmail->module_ctx.super = mail->v;
+	fmail = p_new(mail->pool, struct fts_mail, 1);
+	fmail->module_ctx.super = *v;
+	mail->vlast = &fmail->module_ctx.super;
 
-		mail->v.expunge = fts_mail_expunge;
-		mail->v.get_special = fts_mail_get_special;
-		MODULE_CONTEXT_SET(mail, fts_mail_module, fmail);
-	}
-	return _mail;
+	v->expunge = fts_mail_expunge;
+	v->get_special = fts_mail_get_special;
+	MODULE_CONTEXT_SET(mail, fts_mail_module, fmail);
 }
 
 static void fts_box_backends_init(struct mailbox *box)
@@ -942,9 +1018,9 @@ static void fts_box_backends_init(struct mailbox *box)
 			fbox->backend_fast = backend;
 		}
 	}
-	if ((box->storage->flags & MAIL_STORAGE_FLAG_DEBUG) != 0 &&
+	if (box->storage->set->mail_debug &&
 	    fbox->backend_substr == NULL && fbox->backend_fast == NULL)
-		i_info("fts: No backends enabled by the fts setting");
+		i_debug("fts: No backends enabled by the fts setting");
 }
 
 static struct mailbox_transaction_context *
@@ -1009,10 +1085,9 @@ static void fts_transaction_rollback(struct mailbox_transaction_context *t)
 	fts_transaction_finish(box, ft, FALSE);
 }
 
-static int fts_transaction_commit(struct mailbox_transaction_context *t,
-				  uint32_t *uid_validity_r,
-				  uint32_t *first_saved_uid_r,
-				  uint32_t *last_saved_uid_r)
+static int
+fts_transaction_commit(struct mailbox_transaction_context *t,
+		       struct mail_transaction_commit_changes *changes_r)
 {
 	struct mailbox *box = t->box;
 	struct fts_mailbox *fbox = FTS_CONTEXT(box);
@@ -1026,45 +1101,41 @@ static int fts_transaction_commit(struct mailbox_transaction_context *t,
 	if (ft->free_mail)
 		mail_free(&ft->mail);
 
-	ret = fbox->module_ctx.super.transaction_commit(t,
-							uid_validity_r,
-							first_saved_uid_r,
-							last_saved_uid_r);
+	ret = fbox->module_ctx.super.transaction_commit(t, changes_r);
 	fts_transaction_finish(box, ft, ret == 0);
 	return ret;
 }
 
 static void fts_mailbox_init(struct mailbox *box, const char *env)
 {
+	struct mailbox_vfuncs *v = box->vlast;
 	struct fts_mailbox *fbox;
 
 	fbox = i_new(struct fts_mailbox, 1);
 	fbox->virtual = strcmp(box->storage->name, "virtual") == 0;
 	fbox->env = env;
-	fbox->module_ctx.super = box->v;
-	box->v.close = fts_mailbox_close;
-	box->v.search_init = fts_mailbox_search_init;
-	box->v.search_next_nonblock = fts_mailbox_search_next_nonblock;
-	box->v.search_next_update_seq = fbox->virtual ?
+	fbox->module_ctx.super = *v;
+	box->vlast = &fbox->module_ctx.super;
+
+	v->free = fts_mailbox_free;
+	v->search_init = fts_mailbox_search_init;
+	v->search_next_nonblock = fts_mailbox_search_next_nonblock;
+	v->search_next_update_seq = fbox->virtual ?
 		fts_mailbox_search_next_update_seq_virtual :
 		fts_mailbox_search_next_update_seq;
-	box->v.search_deinit = fts_mailbox_search_deinit;
-	box->v.mail_alloc = fts_mail_alloc;
-	box->v.transaction_begin = fts_transaction_begin;
-	box->v.transaction_rollback = fts_transaction_rollback;
-	box->v.transaction_commit = fts_transaction_commit;
+	v->search_deinit = fts_mailbox_search_deinit;
+	v->transaction_begin = fts_transaction_begin;
+	v->transaction_rollback = fts_transaction_rollback;
+	v->transaction_commit = fts_transaction_commit;
 
 	MODULE_CONTEXT_SET(box, fts_storage_module, fbox);
 }
 
-void fts_mailbox_opened(struct mailbox *box)
+void fts_mailbox_allocated(struct mailbox *box)
 {
 	const char *env;
 
-	env = getenv("FTS");
-	i_assert(env != NULL);
-	fts_mailbox_init(box, env);
-
-	if (fts_next_hook_mailbox_opened != NULL)
-		fts_next_hook_mailbox_opened(box);
+	env = mail_user_plugin_getenv(box->storage->user, "fts");
+	if (env != NULL)
+		fts_mailbox_init(box, env);
 }

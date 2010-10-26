@@ -59,19 +59,16 @@ void
 mail_index_sync_deinit_expunge_handlers(struct mail_index_sync_map_ctx *ctx)
 {
 	const struct mail_index_expunge_handler *eh;
-	unsigned int i, count;
 
 	if (!array_is_created(&ctx->expunge_handlers))
 		return;
 
-	eh = array_get(&ctx->expunge_handlers, &count);
-	for (i = 0; i < count; i++) {
-		if (eh[i].sync_context != NULL) {
-			eh[i].handler(ctx, 0, NULL, eh[i].sync_context,
-				      eh[i].context);
+	array_foreach(&ctx->expunge_handlers, eh) {
+		if (eh->sync_context != NULL) {
+			eh->handler(ctx, 0, NULL, eh->sync_context,
+				    eh->context);
 		}
 	}
-
 	array_free(&ctx->expunge_handlers);
 }
 
@@ -293,7 +290,6 @@ sync_ext_resize(const struct mail_transaction_ext_intro *u,
 		ext->hdr_size = u->hdr_size;
 		modified = TRUE;
 	}
-	map->hdr_base = map->hdr_copy_buf->data;
 
 	if (ext->record_align < u->record_align ||
 	    (ext->record_align > u->record_align && !no_shrink)) {
@@ -322,6 +318,8 @@ sync_ext_resize(const struct mail_transaction_ext_intro *u,
 		ext_hdr->record_offset = ext->record_offset;
 		ext_hdr->record_size = ext->record_size;
 		ext_hdr->record_align = ext->record_align;
+	} else {
+		i_assert(map->hdr_base == map->hdr_copy_buf->data);
 	}
 
 	if (new_size != old_size) {
@@ -341,7 +339,7 @@ sync_ext_resize(const struct mail_transaction_ext_intro *u,
 		sync_ext_reorder(map, ext_map_idx, old_record_size);
 	} else if (modified) {
 		/* header size changed. recreate index file. */
-		map = mail_index_sync_get_atomic_map(ctx);
+		(void)mail_index_sync_get_atomic_map(ctx);
 	}
 }
 
@@ -375,7 +373,7 @@ mail_index_sync_ext_init_new(struct mail_index_sync_map_ctx *ctx,
 			     const struct mail_index_ext_header *ext_hdr,
 			     uint32_t *ext_map_idx_r)
 {
-	struct mail_index_map *map = ctx->view->map;
+	struct mail_index_map *map;
 	const struct mail_index_ext *ext;
 	buffer_t *hdr_buf;
 	uint32_t ext_map_idx;
@@ -497,10 +495,13 @@ int mail_index_sync_ext_intro(struct mail_index_sync_map_ctx *ctx,
 		if (!mail_index_map_lookup_ext(map, name, &ext_map_idx))
 			ext_map_idx = (uint32_t)-1;
 	}
-	ext = ext_map_idx == (uint32_t)-1 ? NULL :
-		array_idx(&map->extensions, ext_map_idx);
-	if (ext != NULL)
+	if (ext_map_idx == (uint32_t)-1)
+		ext = NULL;
+	else {
+		ext = array_idx(&map->extensions, ext_map_idx);
 		name = ext->name;
+	}
+	i_assert(name != NULL);
 
 	if (!ctx->internal_update &&
 	    strcmp(name, MAIL_INDEX_EXT_KEYWORDS) == 0) {
@@ -528,7 +529,7 @@ int mail_index_sync_ext_intro(struct mail_index_sync_map_ctx *ctx,
 		return -1;
 	}
 
-	if (ext_map_idx != (uint32_t)-1) {
+	if (ext != NULL) {
 		/* exists already */
 		if (u->reset_id == ext->reset_id) {
 			/* check if we need to resize anything */
@@ -576,7 +577,7 @@ static void mail_index_sync_ext_clear(struct mail_index_view *view,
 int mail_index_sync_ext_reset(struct mail_index_sync_map_ctx *ctx,
 			      const struct mail_transaction_ext_reset *u)
 {
-	struct mail_index_map *map = ctx->view->map;
+	struct mail_index_map *map;
 	struct mail_index_ext_header *ext_hdr;
         struct mail_index_ext *ext;
 
@@ -687,5 +688,104 @@ mail_index_sync_ext_rec_update(struct mail_index_sync_map_ctx *ctx,
 
 	/* @UNSAFE */
 	memcpy(old_data, u + 1, ext->record_size);
+	return 1;
+}
+
+int
+mail_index_sync_ext_atomic_inc(struct mail_index_sync_map_ctx *ctx,
+			       const struct mail_transaction_ext_atomic_inc *u)
+{
+	struct mail_index_view *view = ctx->view;
+	struct mail_index_record *rec;
+	const struct mail_index_ext *ext;
+	void *data;
+	uint32_t seq;
+	uint64_t min_value, max_value, orig_num;
+
+	i_assert(ctx->cur_ext_map_idx != (uint32_t)-1);
+	i_assert(!ctx->cur_ext_ignore);
+
+	if (u->uid == 0 || u->uid >= view->map->hdr.next_uid) {
+		mail_index_sync_set_corrupted(ctx,
+			"Extension record inc for invalid uid=%u", u->uid);
+		return -1;
+	}
+
+	if (!mail_index_lookup_seq(view, u->uid, &seq))
+		return 1;
+
+	ext = array_idx(&view->map->extensions, ctx->cur_ext_map_idx);
+	i_assert(ext->record_offset + ext->record_size <=
+		 view->map->hdr.record_size);
+
+	rec = MAIL_INDEX_MAP_IDX(view->map, seq-1);
+	data = PTR_OFFSET(rec, ext->record_offset);
+
+	min_value = u->diff >= 0 ? 0 : (uint64_t)(-(int64_t)u->diff);
+
+	max_value = ext->record_size == 8 ? (uint64_t)-1 :
+		((uint64_t)1 << (ext->record_size*8)) - 1;
+	if (u->diff <= 0) {
+		/* skip */
+	} else if (max_value >= (uint32_t)u->diff) {
+		max_value -= u->diff;
+	} else {
+		mail_index_sync_set_corrupted(ctx,
+			"Extension record inc diff=%d larger than max value=%u "
+			"(uid=%u)", u->diff, (unsigned int)max_value, u->uid);
+		return -1;
+	}
+
+	switch (ext->record_size) {
+	case 1: {
+		uint8_t *num = data;
+
+		orig_num = *num;
+		if (orig_num >= min_value && orig_num <= max_value)
+			*num += u->diff;
+		break;
+	}
+	case 2: {
+		uint16_t *num = data;
+		orig_num = *num;
+		if (orig_num >= min_value && orig_num <= max_value)
+			*num += u->diff;
+		break;
+	}
+	case 4: {
+		uint32_t *num = data;
+		orig_num = *num;
+		if (orig_num >= min_value && orig_num <= max_value)
+			*num += u->diff;
+		break;
+	}
+	case 8: {
+		uint64_t *num = data;
+		orig_num = *num;
+		if (orig_num >= min_value && orig_num <= max_value)
+			*num += u->diff;
+		break;
+	}
+	default:
+		mail_index_sync_set_corrupted(ctx,
+			"Extension record inc with invalid size=%u",
+			ext->record_size);
+		return -1;
+	}
+	if (orig_num < min_value) {
+		mail_index_sync_set_corrupted(ctx,
+			"Extension record inc drops number below zero "
+			"(uid=%u, diff=%d, orig=%llu)",
+			u->uid, u->diff, (unsigned long long)orig_num);
+		return -1;
+	} else if (orig_num > max_value) {
+		mail_index_sync_set_corrupted(ctx,
+			"Extension record inc overflows number "
+			"(uid=%u, diff=%d, orig=%llu)",
+			u->uid, u->diff, (unsigned long long)orig_num);
+		return -1;
+	}
+
+	mail_index_sync_write_seq_update(ctx, seq, seq);
 	return 1;
 }

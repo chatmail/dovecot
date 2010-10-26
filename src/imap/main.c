@@ -1,309 +1,310 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "imap-common.h"
 #include "ioloop.h"
-#include "network.h"
+#include "istream.h"
 #include "ostream.h"
+#include "abspath.h"
 #include "str.h"
 #include "base64.h"
-#include "istream.h"
-#include "lib-signals.h"
+#include "process-title.h"
 #include "restrict-access.h"
 #include "fd-close-on-exec.h"
-#include "process-title.h"
-#include "module-dir.h"
-#include "dict.h"
-#include "mail-storage.h"
-#include "commands.h"
+#include "master-interface.h"
+#include "master-service.h"
+#include "master-login.h"
+#include "mail-user.h"
+#include "mail-storage-service.h"
+#include "imap-resp-code.h"
+#include "imap-commands.h"
 #include "imap-fetch.h"
-#include "mail-namespace.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <syslog.h>
 
 #define IS_STANDALONE() \
-        (getenv("IMAPLOGINTAG") == NULL)
+        (getenv(MASTER_UID_ENV) == NULL)
 
-struct client_workaround_list {
-	const char *name;
-	enum client_workarounds num;
-};
+#define IMAP_DIE_IDLE_SECS 10
 
-static struct client_workaround_list client_workaround_list[] = {
-	{ "delay-newmail", WORKAROUND_DELAY_NEWMAIL },
-	{ "outlook-idle", 0 }, /* only for backwards compatibility */
-	{ "netscape-eoh", WORKAROUND_NETSCAPE_EOH },
-	{ "tb-extra-mailbox-sep", WORKAROUND_TB_EXTRA_MAILBOX_SEP },
-	{ NULL, 0 }
-};
+static bool verbose_proctitle = FALSE;
+static struct mail_storage_service_ctx *storage_service;
+static struct master_login *master_login = NULL;
 
-struct ioloop *ioloop;
-unsigned int imap_max_line_length;
-enum client_workarounds client_workarounds = 0;
-const char *logout_format;
-const char *imap_id_send, *imap_id_log;
+imap_client_created_func_t *hook_client_created = NULL;
 
-static struct io *log_io = NULL;
-static struct module *modules = NULL;
-static char log_prefix[128]; /* syslog() needs this to be permanent */
-
-void (*hook_client_created)(struct client **client) = NULL;
-
-string_t *capability_string;
-
-static void sig_die(const siginfo_t *si, void *context ATTR_UNUSED)
+imap_client_created_func_t *
+imap_client_created_hook_set(imap_client_created_func_t *new_hook)
 {
-	/* warn about being killed because of some signal, except SIGINT (^C)
-	   which is too common at least while testing :) */
-	if (si->si_signo != SIGINT) {
-		i_warning("Killed with signal %d (by pid=%s uid=%s code=%s)",
-			  si->si_signo, dec2str(si->si_pid),
-			  dec2str(si->si_uid),
-			  lib_signal_code_to_str(si->si_signo, si->si_code));
-	}
-	io_loop_stop(ioloop);
+	imap_client_created_func_t *old_hook = hook_client_created;
+
+	hook_client_created = new_hook;
+	return old_hook;
 }
 
-static void log_error_callback(void *context ATTR_UNUSED)
+void imap_refresh_proctitle(void)
 {
-	/* the log fd is closed, don't die when trying to log later */
-	i_set_failure_ignore_errors(TRUE);
-
-	io_loop_stop(ioloop);
-}
-
-static void parse_workarounds(void)
-{
-        struct client_workaround_list *list;
-	const char *env, *const *str;
-
-	env = getenv("IMAP_CLIENT_WORKAROUNDS");
-	if (env == NULL)
-		return;
-
-	for (str = t_strsplit_spaces(env, " ,"); *str != NULL; str++) {
-		list = client_workaround_list;
-		for (; list->name != NULL; list++) {
-			if (strcasecmp(*str, list->name) == 0) {
-				client_workarounds |= list->num;
-				break;
-			}
-		}
-		if (list->name == NULL)
-			i_fatal("Unknown client workaround: %s", *str);
-	}
-}
-
-static void open_logfile(void)
-{
-	const char *user;
-
-	if (getenv("LOG_TO_MASTER") != NULL) {
-		i_set_failure_internal();
-		return;
-	}
-
-	if (getenv("LOG_PREFIX") != NULL)
-		i_strocpy(log_prefix, getenv("LOG_PREFIX"), sizeof(log_prefix));
-	else {
-		user = getenv("USER");
-		if (user == NULL) {
-			if (IS_STANDALONE())
-				user = getlogin();
-			if (user == NULL)
-				user = "??";
-		}
-		if (strlen(user) >= sizeof(log_prefix)-6) {
-			/* quite a long user name, cut it */
-			user = t_strndup(user, sizeof(log_prefix)-6-2);
-			user = t_strconcat(user, "..", NULL);
-		}
-		i_snprintf(log_prefix, sizeof(log_prefix), "imap(%s): ", user);
-	}
-	if (getenv("USE_SYSLOG") != NULL) {
-		const char *env = getenv("SYSLOG_FACILITY");
-		i_set_failure_syslog(log_prefix, LOG_NDELAY,
-				     env == NULL ? LOG_MAIL : atoi(env));
-	} else {
-		/* log to file or stderr */
-		i_set_failure_file(getenv("LOGFILE"), log_prefix);
-	}
-
-	if (getenv("INFOLOGFILE") != NULL)
-		i_set_info_file(getenv("INFOLOGFILE"));
-
-	i_set_failure_timestamp_format(getenv("LOGSTAMP"));
-}
-
-static void drop_privileges(void)
-{
-	const char *version;
-
-	version = getenv("DOVECOT_VERSION");
-	if (version != NULL && strcmp(version, PACKAGE_VERSION) != 0) {
-		i_fatal("Dovecot version mismatch: "
-			"Master is v%s, imap is v"PACKAGE_VERSION" "
-			"(if you don't care, set version_ignore=yes)", version);
-	}
-
-	/* Log file or syslog opening probably requires roots */
-	open_logfile();
-
-	/* Load the plugins before chrooting. Their init() is called later. */
-	if (getenv("MAIL_PLUGINS") != NULL) {
-		const char *plugin_dir = getenv("MAIL_PLUGIN_DIR");
-
-		if (plugin_dir == NULL)
-			plugin_dir = MODULEDIR"/imap";
-		modules = module_dir_load(plugin_dir, getenv("MAIL_PLUGINS"),
-					  TRUE, version);
-	}
-
-	restrict_access_by_env(!IS_STANDALONE());
-	restrict_access_allow_coredumps(TRUE);
-}
-
-static void main_init(void)
-{
+#define IMAP_PROCTITLE_PREFERRED_LEN 80
 	struct client *client;
-	struct ostream *output;
-	struct mail_user *user;
-	const char *username, *home, *str, *tag;
+	struct client_command_context *cmd;
+	string_t *title = t_str_new(128);
 
-	lib_signals_init();
-        lib_signals_set_handler(SIGINT, TRUE, sig_die, NULL);
-        lib_signals_set_handler(SIGTERM, TRUE, sig_die, NULL);
-        lib_signals_ignore(SIGPIPE, TRUE);
-        lib_signals_ignore(SIGALRM, FALSE);
+	if (!verbose_proctitle)
+		return;
 
-	username = getenv("USER");
-	if (username == NULL && IS_STANDALONE())
-		username = getlogin();
-	if (username == NULL) {
-		if (getenv("DOVECOT_MASTER") == NULL)
-			i_fatal("USER environment missing");
+	str_append_c(title, '[');
+	switch (imap_client_count) {
+	case 0:
+		str_append(title, "idling");
+		break;
+	case 1:
+		client = imap_clients;
+		str_append(title, client->user->username);
+		if (client->user->remote_ip != NULL) {
+			str_append_c(title, ' ');
+			str_append(title, net_ip2addr(client->user->remote_ip));
+		}
+		for (cmd = client->command_queue; cmd != NULL; cmd = cmd->next) {
+			if (cmd->name == NULL)
+				continue;
+
+			if (str_len(title) > IMAP_PROCTITLE_PREFERRED_LEN)
+				break;
+			str_append_c(title, ' ');
+			str_append(title, cmd->name);
+		}
+		break;
+	default:
+		str_printfa(title, "%u connections", imap_client_count);
+		break;
+	}
+	str_append_c(title, ']');
+	process_title_set(str_c(title));
+}
+
+static void client_kill_idle(struct client *client)
+{
+	if (client->output_lock != NULL)
+		return;
+
+	client_send_line(client, "* BYE Server shutting down.");
+	client_destroy(client, "Server shutting down.");
+}
+
+static void imap_die(void)
+{
+	struct client *client, *next;
+	time_t last_io, now = time(NULL);
+	time_t stop_timestamp = now - IMAP_DIE_IDLE_SECS;
+	unsigned int stop_msecs;
+
+	for (client = imap_clients; client != NULL; client = next) {
+		next = client->next;
+
+		last_io = I_MAX(client->last_input, client->last_output);
+		if (last_io <= stop_timestamp)
+			client_kill_idle(client);
 		else {
-			i_fatal("login_executable setting must be imap-login, "
-				"not imap");
+			timeout_remove(&client->to_idle);
+			stop_msecs = (last_io - stop_timestamp) * 1000;
+			client->to_idle = timeout_add(stop_msecs,
+						      client_kill_idle, client);
 		}
 	}
+}
 
-	home = getenv("HOME");
-	if (getenv("DEBUG") != NULL) {
-		i_info("Effective uid=%s, gid=%s, home=%s",
-		       dec2str(geteuid()), dec2str(getegid()),
-		       home != NULL ? home : "(none)");
+struct client_input {
+	const char *tag;
+
+	const unsigned char *input;
+	unsigned int input_size;
+	bool send_untagged_capability;
+};
+
+static void
+client_parse_input(const unsigned char *data, unsigned int len,
+		   struct client_input *input_r)
+{
+	unsigned int taglen;
+
+	i_assert(len > 0);
+
+	memset(input_r, 0, sizeof(*input_r));
+
+	if (data[0] == '1')
+		input_r->send_untagged_capability = TRUE;
+	data++; len--;
+
+	input_r->tag = t_strndup(data, len);
+	taglen = strlen(input_r->tag) + 1;
+
+	if (len > taglen) {
+		input_r->input = data + taglen;
+		input_r->input_size = len - taglen;
 	}
+}
 
-	if (getenv("STDERR_CLOSE_SHUTDOWN") != NULL) {
-		/* If master dies, the log fd gets closed and we'll quit */
-		log_io = io_add(STDERR_FILENO, IO_ERROR,
-				log_error_callback, NULL);
+static void client_add_input(struct client *client, const buffer_t *buf)
+{
+	struct ostream *output;
+	struct client_input input;
+
+	if (buf != NULL && buf->used > 0) {
+		client_parse_input(buf->data, buf->used, &input);
+		if (input.input_size > 0 &&
+		    !i_stream_add_data(client->input, input.input,
+				       input.input_size))
+			i_panic("Couldn't add client input to stream");
+	} else {
+		/* IMAPLOGINTAG environment is compatible with mailfront */
+		memset(&input, 0, sizeof(input));
+		input.tag = getenv("IMAPLOGINTAG");
 	}
-
-	capability_string = str_new(default_pool, sizeof(CAPABILITY_STRING)+32);
-	str_append(capability_string, CAPABILITY_STRING);
-
-	dict_drivers_register_builtin();
-	mail_users_init(getenv("AUTH_SOCKET_PATH"), getenv("DEBUG") != NULL);
-        mail_storage_init();
-	mail_storage_register_all();
-	mailbox_list_register_all();
-	clients_init();
-	commands_init();
-	imap_fetch_handlers_init();
-
-	module_dir_init(modules);
-
-	if (getenv("DUMP_CAPABILITY") != NULL) {
-		printf("%s\n", str_c(capability_string));
-		exit(0);
-	}
-
-	str = getenv("IMAP_CAPABILITY");
-	if (str != NULL && *str != '\0') {
-		/* Overrides all capabilities */
-		str_truncate(capability_string, 0);
-		str_append(capability_string, str);
-	}
-
-	str = getenv("IMAP_MAX_LINE_LENGTH");
-	imap_max_line_length = str != NULL ?
-		(unsigned int)strtoul(str, NULL, 10) :
-		DEFAULT_IMAP_MAX_LINE_LENGTH;
-
-	logout_format = getenv("IMAP_LOGOUT_FORMAT");
-	if (logout_format == NULL)
-		logout_format = "bytes=%i/%o";
-
-	imap_id_send = getenv("IMAP_ID_SEND");
-	imap_id_log = getenv("IMAP_ID_LOG");
-
-        parse_workarounds();
-
-	user = mail_user_init(username);
-	mail_user_set_home(user, home);
-	if (mail_namespaces_init(user) < 0)
-		i_fatal("Namespace initialization failed");
-	client = client_create(0, 1, user);
 
 	output = client->output;
 	o_stream_ref(output);
 	o_stream_cork(output);
-
-	/* IMAPLOGINTAG environment is compatible with mailfront */
-	tag = getenv("IMAPLOGINTAG");
-	if (tag == NULL) {
+	if (input.tag == NULL) {
 		client_send_line(client, t_strconcat(
 			"* PREAUTH [CAPABILITY ",
-			str_c(capability_string), "] "
-			"Logged in as ", user->username, NULL));
+			str_c(client->capability_string), "] "
+			"Logged in as ", client->user->username, NULL));
+	} else if (input.send_untagged_capability) {
+		/* client doesn't seem to understand tagged capabilities. send
+		   untagged instead and hope that it works. */
+		client_send_line(client, t_strconcat("* CAPABILITY ",
+			str_c(client->capability_string), NULL));
+		client_send_line(client,
+				 t_strconcat(input.tag, " OK Logged in", NULL));
 	} else {
 		client_send_line(client, t_strconcat(
-			tag, " OK [CAPABILITY ",
-			str_c(capability_string), "] Logged in", NULL));
+			input.tag, " OK [CAPABILITY ",
+			str_c(client->capability_string), "] Logged in", NULL));
 	}
-	str = getenv("CLIENT_INPUT");
-	if (str != NULL) T_BEGIN {
-		buffer_t *buf = t_base64_decode_str(str);
-		if (buf->used > 0) {
-			if (!i_stream_add_data(client->input, buf->data,
-					       buf->used))
-				i_panic("Couldn't add client input to stream");
-			(void)client_handle_input(client);
-		}
-	} T_END;
-        o_stream_uncork(output);
+	(void)client_handle_input(client);
+	o_stream_uncork(output);
 	o_stream_unref(&output);
 }
 
-static void main_deinit(void)
+static int
+client_create_from_input(const struct mail_storage_service_input *input,
+			 const struct master_login_client *login_client,
+			 int fd_in, int fd_out, const buffer_t *input_buf,
+			 const char **error_r)
 {
-	if (log_io != NULL)
-		io_remove(&log_io);
-	clients_deinit();
+	struct mail_storage_service_user *user;
+	struct mail_user *mail_user;
+	struct client *client;
+	const struct imap_settings *set;
+	enum mail_auth_request_flags flags;
 
-	module_dir_unload(&modules);
-	imap_fetch_handlers_deinit();
-	commands_deinit();
-	mail_storage_deinit();
-	mail_users_deinit();
-	dict_drivers_unregister_builtin();
+	if (mail_storage_service_lookup_next(storage_service, input,
+					     &user, &mail_user, error_r) <= 0)
+		return -1;
+	restrict_access_allow_coredumps(TRUE);
 
-	str_free(&capability_string);
+	set = mail_storage_service_user_get_set(user)[1];
+	if (set->verbose_proctitle)
+		verbose_proctitle = TRUE;
 
-	lib_signals_deinit();
-	closelog();
+	client = client_create(fd_in, fd_out, mail_user, user, set);
+	T_BEGIN {
+		client_add_input(client, input_buf);
+	} T_END;
+
+	flags = login_client == NULL ? 0 : login_client->auth_req.flags;
+	if ((flags & MAIL_AUTH_REQUEST_FLAG_TLS_COMPRESSION) != 0)
+		client->tls_compression = TRUE;
+	return 0;
 }
 
-int main(int argc ATTR_UNUSED, char *argv[], char *envp[])
+static void main_stdio_run(const char *username)
 {
-#ifdef DEBUG
-	if (!IS_STANDALONE() && getenv("GDB") == NULL)
-		fd_debug_verify_leaks(3, 1024);
-#endif
+	struct mail_storage_service_input input;
+	const char *value, *error, *input_base64;
+	buffer_t *input_buf;
+
+	memset(&input, 0, sizeof(input));
+	input.module = input.service = "imap";
+	input.username = username != NULL ? username : getenv("USER");
+	if (input.username == NULL && IS_STANDALONE())
+		input.username = getlogin();
+	if (input.username == NULL)
+		i_fatal("USER environment missing");
+	if ((value = getenv("IP")) != NULL)
+		net_addr2ip(value, &input.remote_ip);
+	if ((value = getenv("LOCAL_IP")) != NULL)
+		net_addr2ip(value, &input.local_ip);
+
+	input_base64 = getenv("CLIENT_INPUT");
+	input_buf = input_base64 == NULL ? NULL :
+		t_base64_decode_str(input_base64);
+
+	if (client_create_from_input(&input, NULL, STDIN_FILENO, STDOUT_FILENO,
+				     input_buf, &error) < 0)
+		i_fatal("%s", error);
+}
+
+static void
+login_client_connected(const struct master_login_client *client,
+		       const char *username, const char *const *extra_fields)
+{
+	struct mail_storage_service_input input;
+	const char *error;
+	buffer_t input_buf;
+
+	memset(&input, 0, sizeof(input));
+	input.module = input.service = "imap";
+	input.local_ip = client->auth_req.local_ip;
+	input.remote_ip = client->auth_req.remote_ip;
+	input.username = username;
+	input.userdb_fields = extra_fields;
+
+	buffer_create_const_data(&input_buf, client->data,
+				 client->auth_req.data_size);
+	if (client_create_from_input(&input, client, client->fd, client->fd,
+				     &input_buf, &error) < 0) {
+		i_error("%s", error);
+		(void)close(client->fd);
+		master_service_client_connection_destroyed(master_service);
+	}
+}
+
+static void login_client_failed(const struct master_login_client *client,
+				const char *errormsg)
+{
+	struct client_input input;
+	const char *msg;
+
+	client_parse_input(client->data, client->auth_req.data_size, &input);
+	msg = t_strdup_printf("%s NO ["IMAP_RESP_CODE_UNAVAILABLE"] %s\r\n",
+			      input.tag, errormsg);
+	if (write(client->fd, msg, strlen(msg)) < 0) {
+		/* ignored */
+	}
+}
+
+static void client_connected(struct master_service_connection *conn)
+{
+	/* when running standalone, we shouldn't even get here */
+	i_assert(master_login != NULL);
+
+	master_service_client_connection_accept(conn);
+	master_login_add(master_login, conn->fd);
+}
+
+int main(int argc, char *argv[])
+{
+	static const struct setting_parser_info *set_roots[] = {
+		&imap_setting_parser_info,
+		NULL
+	};
+	enum master_service_flags service_flags = 0;
+	enum mail_storage_service_flags storage_service_flags = 0;
+	const char *postlogin_socket_path, *username = NULL;
+	int c;
+
 	if (IS_STANDALONE() && getuid() == 0 &&
 	    net_getpeername(1, NULL, NULL) == 0) {
 		printf("* BAD [ALERT] imap binary must not be started from "
@@ -311,24 +312,68 @@ int main(int argc ATTR_UNUSED, char *argv[], char *envp[])
 		return 1;
 	}
 
-	/* NOTE: we start rooted, so keep the code minimal until
-	   restrict_access_by_env() is called */
-	lib_init();
-	drop_privileges();
+	if (IS_STANDALONE()) {
+		service_flags |= MASTER_SERVICE_FLAG_STANDALONE |
+			MASTER_SERVICE_FLAG_STD_CLIENT;
+	} else {
+		service_flags |= MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
+		storage_service_flags |=
+			MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT;
+	}
 
-        process_title_init(argv, envp);
-	ioloop = io_loop_create();
+	master_service = master_service_init("imap", service_flags,
+					     &argc, &argv, "u:");
+	while ((c = master_getopt(master_service)) > 0) {
+		switch (c) {
+		case 'u':
+			storage_service_flags |=
+				MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP;
+			username = optarg;
+			break;
+		default:
+			return FATAL_DEFAULT;
+		}
+	}
+	postlogin_socket_path = argv[1] == NULL ? NULL : t_abspath(argv[1]);
+
+	master_service_init_finish(master_service);
+	master_service_set_die_callback(master_service, imap_die);
+
+	/* plugins may want to add commands, so this needs to be called early */
+	commands_init();
+	imap_fetch_handlers_init();
+
+	storage_service =
+		mail_storage_service_init(master_service,
+					  set_roots, storage_service_flags);
 
 	/* fake that we're running, so we know if client was destroyed
-	   while initializing */
-	io_loop_set_running(ioloop);
-	main_init();
-	if (io_loop_is_running(ioloop))
-		io_loop_run(ioloop);
-	main_deinit();
+	   while handling its initial input */
+	io_loop_set_running(current_ioloop);
 
-	io_loop_destroy(&ioloop);
-	lib_deinit();
+	if (IS_STANDALONE()) {
+		T_BEGIN {
+			main_stdio_run(username);
+		} T_END;
+	} else {
+		master_login = master_login_init(master_service, "auth-master",
+						 postlogin_socket_path,
+						 login_client_connected,
+						 login_client_failed);
+		io_loop_set_running(current_ioloop);
+	}
 
+	if (io_loop_is_running(current_ioloop))
+		master_service_run(master_service, client_connected);
+	clients_destroy_all();
+
+	if (master_login != NULL)
+		master_login_deinit(&master_login);
+	mail_storage_service_deinit(&storage_service);
+
+	imap_fetch_handlers_deinit();
+	commands_deinit();
+
+	master_service_deinit(&master_service);
 	return 0;
 }

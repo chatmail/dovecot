@@ -4,6 +4,7 @@
 #include "ioloop.h"
 #include "array.h"
 #include "buffer.h"
+#include "module-context.h"
 #include "file-cache.h"
 #include "file-set-size.h"
 #include "read-full.h"
@@ -16,12 +17,18 @@
 
 #define MAIL_CACHE_WRITE_BUFFER 32768
 
+#define CACHE_TRANS_CONTEXT(obj) \
+	MODULE_CONTEXT(obj, cache_mail_index_transaction_module)
+
 struct mail_cache_reservation {
 	uint32_t offset;
 	uint32_t size;
 };
 
 struct mail_cache_transaction_ctx {
+	union mail_index_transaction_module_context module_ctx;
+	struct mail_index_transaction_vfuncs super;
+
 	struct mail_cache *cache;
 	struct mail_cache_view *view;
 	struct mail_index_transaction *trans;
@@ -42,8 +49,43 @@ struct mail_cache_transaction_ctx {
 	unsigned int changes:1;
 };
 
+static MODULE_CONTEXT_DEFINE_INIT(cache_mail_index_transaction_module,
+				  &mail_index_module_register);
+
+static void
+mail_cache_transaction_free_reservations(struct mail_cache_transaction_ctx *ctx);
 static int mail_cache_link_unlocked(struct mail_cache *cache,
 				    uint32_t old_offset, uint32_t new_offset);
+
+static void mail_index_transaction_cache_reset(struct mail_index_transaction *t)
+{
+	struct mail_cache_transaction_ctx *ctx = CACHE_TRANS_CONTEXT(t);
+	struct mail_index_transaction_vfuncs super = ctx->super;
+
+	mail_cache_transaction_reset(ctx);
+	super.reset(t);
+}
+
+static int
+mail_index_transaction_cache_commit(struct mail_index_transaction *t,
+				    struct mail_index_transaction_commit_result *result_r)
+{
+	struct mail_cache_transaction_ctx *ctx = CACHE_TRANS_CONTEXT(t);
+	struct mail_index_transaction_vfuncs super = ctx->super;
+
+	mail_cache_transaction_commit(&ctx);
+	return super.commit(t, result_r);
+}
+
+static void
+mail_index_transaction_cache_rollback(struct mail_index_transaction *t)
+{
+	struct mail_cache_transaction_ctx *ctx = CACHE_TRANS_CONTEXT(t);
+	struct mail_index_transaction_vfuncs super = ctx->super;
+
+	mail_cache_transaction_rollback(&ctx);
+	super.rollback(t);
+}
 
 struct mail_cache_transaction_ctx *
 mail_cache_get_transaction(struct mail_cache_view *view,
@@ -51,8 +93,11 @@ mail_cache_get_transaction(struct mail_cache_view *view,
 {
 	struct mail_cache_transaction_ctx *ctx;
 
-	if (t->cache_trans_ctx != NULL)
-		return t->cache_trans_ctx;
+	ctx = !cache_mail_index_transaction_module.id.module_id_set ? NULL :
+		CACHE_TRANS_CONTEXT(t);
+
+	if (ctx != NULL)
+		return ctx;
 
 	ctx = i_new(struct mail_cache_transaction_ctx, 1);
 	ctx->cache = view->cache;
@@ -64,11 +109,16 @@ mail_cache_get_transaction(struct mail_cache_view *view,
 	view->transaction = ctx;
 	view->trans_view = mail_index_transaction_open_updated_view(t);
 
-	t->cache_trans_ctx = ctx;
+	ctx->super = t->v;
+	t->v.reset = mail_index_transaction_cache_reset;
+	t->v.commit = mail_index_transaction_cache_commit;
+	t->v.rollback = mail_index_transaction_cache_rollback;
+
+	MODULE_CONTEXT_SET(t, cache_mail_index_transaction_module, ctx);
 	return ctx;
 }
 
-static void mail_cache_transaction_reset(struct mail_cache_transaction_ctx *ctx)
+void mail_cache_transaction_reset(struct mail_cache_transaction_ctx *ctx)
 {
 	ctx->cache_file_seq = MAIL_CACHE_IS_UNUSABLE(ctx->cache) ? 0 :
 		ctx->cache->hdr->file_seq;
@@ -97,7 +147,8 @@ mail_cache_transaction_free(struct mail_cache_transaction_ctx **_ctx)
 
 	*_ctx = NULL;
 
-	ctx->trans->cache_trans_ctx = NULL;
+	MODULE_CONTEXT_UNSET(ctx->trans, cache_mail_index_transaction_module);
+
 	ctx->view->transaction = NULL;
 	ctx->view->trans_seq1 = ctx->view->trans_seq2 = 0;
 
@@ -116,8 +167,6 @@ mail_cache_transaction_compress(struct mail_cache_transaction_ctx *ctx)
 	struct mail_cache *cache = ctx->cache;
 	struct mail_index_view *view;
 	struct mail_index_transaction *trans;
-	uint32_t log_file_seq;
-	uoff_t log_file_offset;
 	int ret;
 
 	ctx->tried_compression = TRUE;
@@ -132,8 +181,7 @@ mail_cache_transaction_compress(struct mail_cache_transaction_ctx *ctx)
 		mail_index_transaction_rollback(&trans);
 		ret = -1;
 	} else {
-		ret = mail_index_transaction_commit(&trans, &log_file_seq,
-						    &log_file_offset);
+		ret = mail_index_transaction_commit(&trans);
 	}
 	mail_index_view_close(&view);
 	mail_cache_transaction_reset(ctx);
@@ -214,8 +262,9 @@ static int mail_cache_transaction_lock(struct mail_cache_transaction_ctx *ctx)
 			return 0;
 		}
 	}
+	i_assert(!MAIL_CACHE_IS_UNUSABLE(cache));
 
-	if (!MAIL_CACHE_IS_UNUSABLE(cache) && ctx->cache_file_seq == 0) {
+	if (ctx->cache_file_seq == 0) {
 		i_assert(ctx->cache_data == NULL ||
 			 ctx->cache_data->used == 0);
 		ctx->cache_file_seq = cache->hdr->file_seq;
@@ -447,6 +496,31 @@ mail_cache_free_space(struct mail_cache *cache, uint32_t offset, uint32_t size)
 	}
 }
 
+static void
+mail_cache_transaction_free_reservations(struct mail_cache_transaction_ctx *ctx)
+{
+	const struct mail_cache_reservation *reservations;
+	unsigned int count;
+
+	if (ctx->reserved_space == 0 && array_count(&ctx->reservations) == 0)
+		return;
+
+	if (mail_cache_transaction_lock(ctx) <= 0)
+		return;
+
+	reservations = array_get(&ctx->reservations, &count);
+
+	/* free flushed data as well. do it from end to beginning so we have
+	   a better chance of updating used_file_size instead of adding holes */
+	while (count > 0) {
+		count--;
+		mail_cache_free_space(ctx->cache,
+				      reservations[count].offset,
+				      reservations[count].size);
+	}
+	(void)mail_cache_unlock(ctx->cache);
+}
+
 static int
 mail_cache_transaction_free_space(struct mail_cache_transaction_ctx *ctx)
 {
@@ -544,6 +618,9 @@ mail_cache_transaction_update_index(struct mail_cache_transaction_ctx *ctx,
 {
 	struct mail_cache *cache = ctx->cache;
 	uint32_t i, old_offset, orig_write_offset;
+
+	mail_index_ext_using_reset_id(ctx->trans, ctx->cache->ext_id,
+				      ctx->cache_file_seq);
 
 	/* write the cache_offsets to index file. records' prev_offset
 	   is updated to point to old cache record when index is being
@@ -742,29 +819,8 @@ int mail_cache_transaction_commit(struct mail_cache_transaction_ctx **_ctx)
 void mail_cache_transaction_rollback(struct mail_cache_transaction_ctx **_ctx)
 {
 	struct mail_cache_transaction_ctx *ctx = *_ctx;
-	struct mail_cache *cache = ctx->cache;
-	const struct mail_cache_reservation *reservations;
-	unsigned int count;
 
-	if ((ctx->reserved_space > 0 || array_count(&ctx->reservations) > 0) &&
-	    !MAIL_CACHE_IS_UNUSABLE(cache)) {
-		if (mail_cache_transaction_lock(ctx) > 0) {
-			reservations = array_get(&ctx->reservations, &count);
-
-			/* free flushed data as well. do it from end to
-			   beginning so we have a better chance of
-			   updating used_file_size instead of adding
-			   holes */
-			while (count > 0) {
-				count--;
-				mail_cache_free_space(ctx->cache,
-					reservations[count].offset,
-					reservations[count].size);
-			}
-			(void)mail_cache_unlock(cache);
-		}
-	}
-
+	mail_cache_transaction_free_reservations(ctx);
 	mail_cache_transaction_free(_ctx);
 }
 
@@ -783,7 +839,7 @@ mail_cache_header_fields_write(struct mail_cache_transaction_ctx *ctx,
 	if (mail_cache_write(cache, buffer->data, size, offset) < 0)
 		return -1;
 
-	if (cache->index->nfs_flush) {
+	if (cache->index->fsync_mode == FSYNC_MODE_ALWAYS) {
 		if (fdatasync(cache->fd) < 0) {
 			mail_cache_set_syscall_error(cache, "fdatasync()");
 			return -1;
@@ -832,7 +888,7 @@ static int mail_cache_header_add_field(struct mail_cache_transaction_ctx *ctx,
 	struct mail_cache *cache = ctx->cache;
 	int ret;
 
-	if ((ret = mail_cache_transaction_lock(ctx)) <= 0) {
+	if (mail_cache_transaction_lock(ctx) <= 0) {
 		if (MAIL_CACHE_IS_UNUSABLE(cache))
 			return -1;
 
@@ -843,7 +899,7 @@ static int mail_cache_header_add_field(struct mail_cache_transaction_ctx *ctx,
 			return 0;
 
 		/* need to add it */
-		if ((ret = mail_cache_transaction_lock(ctx)) <= 0)
+		if (mail_cache_transaction_lock(ctx) <= 0)
 			return -1;
 	}
 

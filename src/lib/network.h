@@ -29,6 +29,7 @@ struct ip_addr {
 		struct in_addr ip4;
 	} u;
 };
+ARRAY_DEFINE_TYPE(ip_addr, struct ip_addr);
 
 /* maxmimum string length of IP address */
 #ifdef HAVE_IPV6
@@ -40,15 +41,26 @@ struct ip_addr {
 #define IPADDR_IS_V4(ip) ((ip)->family == AF_INET)
 #define IPADDR_IS_V6(ip) ((ip)->family == AF_INET6)
 
-/* returns 1 if IPADDRs are the same */
+/* Returns TRUE if IPs are the same */
 bool net_ip_compare(const struct ip_addr *ip1, const struct ip_addr *ip2);
+/* Returns 0 if IPs are the same, -1 or 1 otherwise. */
+int net_ip_cmp(const struct ip_addr *ip1, const struct ip_addr *ip2);
 unsigned int net_ip_hash(const struct ip_addr *ip);
 
-/* Connect to socket with ip address */
+/* Connect to socket with ip address. The socket and connect() is
+   non-blocking. */
 int net_connect_ip(const struct ip_addr *ip, unsigned int port,
 		   const struct ip_addr *my_ip);
+/* Like net_connect_ip(), but do a blocking connect(). */
+int net_connect_ip_blocking(const struct ip_addr *ip, unsigned int port,
+			    const struct ip_addr *my_ip);
+/* Returns 0 if we can bind() as given IP, -1 if not. */
+int net_try_bind(const struct ip_addr *ip);
 /* Connect to named UNIX socket */
 int net_connect_unix(const char *path);
+/* Try to connect to UNIX socket for give number of seconds when connect()
+   returns EAGAIN or ECONNREFUSED. */
+int net_connect_unix_with_retries(const char *path, unsigned int msecs);
 /* Disconnect socket */
 void net_disconnect(int fd);
 
@@ -72,7 +84,7 @@ int net_listen_unix(const char *path, int backlog);
    again. */
 int net_listen_unix_unlink_stale(const char *path, int backlog);
 /* Accept a connection on a socket. Returns -1 if the connection got closed,
-   -2 for other failures */
+   -2 for other failures. For UNIX sockets addr->family=port=0. */
 int net_accept(int fd, struct ip_addr *addr, unsigned int *port);
 
 /* Read data from socket, return number of bytes read,
@@ -91,10 +103,12 @@ const char *net_gethosterror(int error) ATTR_CONST;
    some error with name server) */
 int net_hosterror_notfound(int error) ATTR_CONST;
 
-/* Get socket local address/port */
+/* Get socket local address/port. For UNIX sockets addr->family=port=0. */
 int net_getsockname(int fd, struct ip_addr *addr, unsigned int *port);
-/* Get socket remote address/port */
+/* Get socket remote address/port. For UNIX sockets addr->family=port=0. */
 int net_getpeername(int fd, struct ip_addr *addr, unsigned int *port);
+/* Get UNIX socket name. */
+int net_getunixname(int fd, const char **name_r);
 
 /* Returns ip_addr as string, or NULL if ip is invalid. */
 const char *net_ip2addr(const struct ip_addr *ip);

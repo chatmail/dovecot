@@ -1,7 +1,8 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "imap-common.h"
 #include "mail-storage.h"
+#include "mail-search-parser.h"
 #include "mail-search-build.h"
 #include "imap-search-args.h"
 #include "imap-parser.h"
@@ -39,16 +40,21 @@ int imap_search_args_build(struct client_command_context *cmd,
 			   const struct imap_arg *args, const char *charset,
 			   struct mail_search_args **search_args_r)
 {
+	struct mail_search_parser *parser;
 	struct mail_search_args *sargs;
 	const char *error;
+	int ret;
 
-	if (args->type == IMAP_ARG_EOL) {
+	if (IMAP_ARG_IS_EOL(args)) {
 		client_send_command_error(cmd, "Missing search parameters");
 		return -1;
 	}
 
-	if (mail_search_build_from_imap_args(args, charset,
-					     &sargs, &error) < 0) {
+	parser = mail_search_parser_init_imap(args);
+	ret = mail_search_build(mail_search_register_get_imap(),
+				parser, charset, &sargs, &error);
+	mail_search_parser_deinit(&parser);
+	if (ret < 0) {
 		client_send_command_error(cmd, error);
 		return -1;
 	}
@@ -113,8 +119,7 @@ static int imap_search_get_msgset_arg(struct client_command_context *cmd,
 }
 
 static int
-imap_search_get_uidset_arg(struct client_command_context *cmd,
-			   const char *uidset, struct mail_search_args **args_r,
+imap_search_get_uidset_arg(const char *uidset, struct mail_search_args **args_r,
 			   const char **error_r)
 {
 	struct mail_search_args *args;
@@ -122,7 +127,7 @@ imap_search_get_uidset_arg(struct client_command_context *cmd,
 	args = mail_search_build_init();
 	args->args = p_new(args->pool, struct mail_search_arg, 1);
 	args->args->type = SEARCH_UIDSET;
-	p_array_init(&args->args->value.seqset, cmd->pool, 16);
+	p_array_init(&args->args->value.seqset, args->pool, 16);
 	if (imap_seq_set_parse(uidset, &args->args->value.seqset) < 0) {
 		*error_r = "Invalid uidset";
 		return -1;
@@ -189,8 +194,7 @@ int imap_search_get_anyset(struct client_command_context *cmd,
 		ret = imap_search_get_msgset_arg(cmd, set, search_args_r,
 						 &error);
 	} else {
-		ret = imap_search_get_uidset_arg(cmd, set, search_args_r,
-						 &error);
+		ret = imap_search_get_uidset_arg(set, search_args_r, &error);
 	}
 	if (ret < 0) {
 		client_send_command_error(cmd, error);

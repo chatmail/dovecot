@@ -60,11 +60,8 @@ static const struct acl_letter_map acl_letter_map[] = {
 };
 
 static struct dotlock_settings dotlock_set = {
-	MEMBER(temp_prefix) NULL,
-	MEMBER(lock_suffix) NULL,
-
-	MEMBER(timeout) 30,
-	MEMBER(stale_timeout) 120
+	.timeout = 30,
+	.stale_timeout = 120
 };
 
 static struct acl_backend *acl_backend_vfile_alloc(void)
@@ -92,16 +89,21 @@ acl_backend_vfile_init(struct acl_backend *_backend, const char *data)
 	if (*tmp != NULL)
 		tmp++;
 	for (; *tmp != NULL; tmp++) {
-		if (strncmp(*tmp, "cache_secs=", 11) == 0)
-			backend->cache_secs = atoi(*tmp + 11);
-		else {
+		if (strncmp(*tmp, "cache_secs=", 11) == 0) {
+			if (str_to_uint(*tmp + 11, &backend->cache_secs) < 0) {
+				i_error("acl vfile: Invalid cache_secs value: %s",
+					*tmp + 11);
+				return -1;
+			}
+		} else {
 			i_error("acl vfile: Unknown parameter: %s", *tmp);
 			return -1;
 		}
 	}
 	if (_backend->debug) {
-		i_info("acl vfile: Global ACL directory: %s",
-		       backend->global_dir);
+		i_debug("acl vfile: Global ACL directory: %s",
+			backend->global_dir == NULL ? "(none)" :
+			backend->global_dir);
 	}
 
 	_backend->cache =
@@ -123,20 +125,26 @@ static void acl_backend_vfile_deinit(struct acl_backend *_backend)
 }
 
 static const char *
-acl_backend_vfile_get_local_dir(struct mail_storage *storage, const char *name)
+acl_backend_vfile_get_local_dir(struct acl_backend *backend, const char *name)
 {
+	struct mail_namespace *ns;
 	const char *dir, *inbox;
-	bool is_file;
 
-	dir = mail_storage_get_mailbox_path(storage, name, &is_file);
-	if (is_file) {
-		dir = mailbox_list_get_path(storage->list, name,
+	if (*name == '\0')
+		name = NULL;
+
+	ns = mailbox_list_get_namespace(backend->list);
+	if (mail_storage_is_mailbox_file(ns->storage)) {
+		dir = mailbox_list_get_path(ns->list, name,
 					    MAILBOX_LIST_PATH_TYPE_CONTROL);
+	} else {
+		dir = mailbox_list_get_path(ns->list, name,
+					    MAILBOX_LIST_PATH_TYPE_MAILBOX);
 	}
-	if (*name == '\0') {
+	if (name == NULL && dir != NULL) {
 		/* verify that the directory isn't same as INBOX's directory.
 		   this is mainly for Maildir. */
-		inbox = mailbox_list_get_path(storage->list, "INBOX",
+		inbox = mailbox_list_get_path(ns->list, "INBOX",
 					      MAILBOX_LIST_PATH_TYPE_MAILBOX);
 		if (strcmp(inbox, dir) == 0) {
 			/* can't have default ACLs with this setup */
@@ -148,7 +156,7 @@ acl_backend_vfile_get_local_dir(struct mail_storage *storage, const char *name)
 
 static struct acl_object *
 acl_backend_vfile_object_init(struct acl_backend *_backend,
-			      struct mail_storage *storage, const char *name)
+			      const char *name)
 {
 	struct acl_backend_vfile *backend =
 		(struct acl_backend_vfile *)_backend;
@@ -158,28 +166,31 @@ acl_backend_vfile_object_init(struct acl_backend *_backend,
 	aclobj = i_new(struct acl_object_vfile, 1);
 	aclobj->aclobj.backend = _backend;
 	aclobj->aclobj.name = i_strdup(name);
-	aclobj->global_path = backend->global_dir == NULL ? NULL :
-		i_strconcat(backend->global_dir, "/", name, NULL);
 
-	if (storage == NULL) {
-		/* the default ACL for mailbox list */
-		dir = NULL;
-	} else {
-		dir = acl_backend_vfile_get_local_dir(storage, name);
-	}
+	if (backend->global_dir != NULL) T_BEGIN {
+		struct mail_namespace *ns =
+			mailbox_list_get_namespace(_backend->list);
+		string_t *vname;
+
+		vname = t_str_new(128);
+		mail_namespace_get_vname(ns, vname, name);
+		aclobj->global_path = i_strconcat(backend->global_dir, "/",
+						  str_c(vname), NULL);
+	} T_END;
+
+	dir = acl_backend_vfile_get_local_dir(_backend, name);
 	aclobj->local_path = dir == NULL ? NULL :
 		i_strconcat(dir, "/"ACL_FILENAME, NULL);
 	return &aclobj->aclobj;
 }
 
 static const char *
-get_parent_mailbox(struct mail_storage *storage, const char *name)
+get_parent_mailbox(struct acl_backend *backend, const char *name)
 {
+	struct mail_namespace *ns = mailbox_list_get_namespace(backend->list);
 	const char *p;
-	char sep;
 
-	sep = mailbox_list_get_hierarchy_sep(storage->list);
-	p = strrchr(name, sep);
+	p = strrchr(name, ns->real_sep);
 	return p == NULL ? NULL : t_strdup_until(name, p);
 }
 
@@ -213,8 +224,7 @@ acl_backend_vfile_exists(struct acl_backend_vfile *backend, const char *path,
 }
 
 static bool
-acl_backend_vfile_has_acl(struct acl_backend *_backend,
-			  struct mail_storage *storage, const char *name)
+acl_backend_vfile_has_acl(struct acl_backend *_backend, const char *name)
 {
 	struct acl_backend_vfile *backend =
 		(struct acl_backend_vfile *)_backend;
@@ -231,13 +241,13 @@ acl_backend_vfile_has_acl(struct acl_backend *_backend,
 	/* See if the mailbox exists. If we wanted recursive lookups we could
 	   skip this, but at least for now we assume that if an existing
 	   mailbox has no ACL it's equivalent to default ACLs. */
-	path = mailbox_list_get_path(storage->list, name,
+	path = mailbox_list_get_path(_backend->list, name,
 				     MAILBOX_LIST_PATH_TYPE_MAILBOX);
 	ret = path == NULL ? 0 :
 		acl_backend_vfile_exists(backend, path,
 					 &new_validity.mailbox_validity);
-	if (ret == 0) {
-		dir = acl_backend_vfile_get_local_dir(storage, name);
+	if (ret == 0 &&
+	    (dir = acl_backend_vfile_get_local_dir(_backend, name)) != NULL) {
 		local_path = t_strconcat(dir, "/", name, NULL);
 		ret = acl_backend_vfile_exists(backend, local_path,
 					       &new_validity.local_validity);
@@ -253,7 +263,6 @@ acl_backend_vfile_has_acl(struct acl_backend *_backend,
 
 static struct acl_object *
 acl_backend_vfile_object_init_parent(struct acl_backend *backend,
-				     struct mail_storage *storage,
 				     const char *child_name)
 {
 	const char *parent;
@@ -262,8 +271,8 @@ acl_backend_vfile_object_init_parent(struct acl_backend *backend,
 	   a) has global ACL file
 	   b) has local ACL file
 	   c) exists */
-	while ((parent = get_parent_mailbox(storage, child_name)) != NULL) {
-		if (acl_backend_vfile_has_acl(backend, storage, parent))
+	while ((parent = get_parent_mailbox(backend, child_name)) != NULL) {
+		if (acl_backend_vfile_has_acl(backend, parent))
 			break;
 		child_name = parent;
 	}
@@ -271,7 +280,7 @@ acl_backend_vfile_object_init_parent(struct acl_backend *backend,
 		/* use the root */
 		parent = "";
 	}
-	return acl_backend_vfile_object_init(backend, storage, parent);
+	return acl_backend_vfile_object_init(backend, parent);
 }
 
 static void acl_backend_vfile_object_deinit(struct acl_object *_aclobj)
@@ -293,14 +302,14 @@ static const char *const *
 acl_rights_alloc(pool_t pool, ARRAY_TYPE(const_string) *rights_arr,
 		 bool dup_strings)
 {
-	const char **ret, **rights;
+	const char **ret, *const *rights;
 	unsigned int i, dest, count;
 
 	/* sort the rights first so we can easily drop duplicates */
-	rights = array_get_modifiable(rights_arr, &count);
-	qsort(rights, count, sizeof(*rights), i_strcmp_p);
+	array_sort(rights_arr, i_strcmp_p);
 
 	/* @UNSAFE */
+	rights = array_get(rights_arr, &count);
 	ret = p_new(pool, const char *, count + 1);
 	if (count > 0) {
 		ret[0] = rights[0];
@@ -352,7 +361,7 @@ acl_parse_rights(pool_t pool, const char *acl, const char **error_r)
 			return NULL;
 		}
 
-		names = t_strsplit_spaces(acl + 1, ", ");
+		names = t_strsplit_spaces(acl + 1, ", \t");
 		for (; *names != NULL; names++) {
 			const char *name = p_strdup(pool, *names);
 			array_append(&rights, &name, 1);
@@ -459,14 +468,19 @@ acl_object_vfile_parse_line(struct acl_object_vfile *aclobj, bool global,
 	return 0;
 }
 
-static void acl_backend_remove_all_access(struct acl_object *aclobj)
+static void acl_backend_remove_all_access(struct acl_object_vfile *aclobj)
 {
-	struct acl_rights_update rights;
+	static const char *null = NULL;
+	struct acl_rights rights;
 
 	memset(&rights, 0, sizeof(rights));
-	rights.rights.id_type = ACL_ID_ANYONE;
-	rights.modify_mode = ACL_MODIFY_MODE_REPLACE;
-	acl_cache_update(aclobj->backend->cache, aclobj->name, &rights);
+	rights.id_type = ACL_ID_ANYONE;
+	rights.rights = &null;
+	array_append(&aclobj->rights, &rights, 1);
+
+	rights.id_type = ACL_ID_OWNER;
+	rights.rights = &null;
+	array_append(&aclobj->rights, &rights, 1);
 }
 
 static int
@@ -487,13 +501,14 @@ acl_backend_vfile_read(struct acl_object_vfile *aclobj,
 	if (fd == -1) {
 		if (errno == ENOENT || errno == ENOTDIR) {
 			if (aclobj->aclobj.backend->debug)
-				i_info("acl vfile: file %s not found", path);
+				i_debug("acl vfile: file %s not found", path);
 			validity->last_mtime = VALIDITY_MTIME_NOTFOUND;
 		} else if (errno == EACCES) {
 			if (aclobj->aclobj.backend->debug)
-				i_info("acl vfile: no access to file %s", path);
+				i_debug("acl vfile: no access to file %s",
+					path);
 
-			acl_backend_remove_all_access(&aclobj->aclobj);
+			acl_backend_remove_all_access(aclobj);
 			validity->last_mtime = VALIDITY_MTIME_NOACCESS;
 		} else {
 			i_error("open(%s) failed: %m", path);
@@ -523,7 +538,7 @@ acl_backend_vfile_read(struct acl_object_vfile *aclobj,
 	}
 
 	if (aclobj->aclobj.backend->debug)
-		i_info("acl vfile: reading file %s", path);
+		i_debug("acl vfile: reading file %s", path);
 
 	input = i_stream_create_fd(fd, 4096, FALSE);
 	i_stream_set_return_partial_line(input, TRUE);
@@ -674,9 +689,9 @@ int acl_backend_vfile_object_get_mtime(struct acl_object *aclobj,
 	return 0;
 }
 
-static int acl_rights_cmp(const void *p1, const void *p2)
+static int acl_rights_cmp(const struct acl_rights *r1,
+			  const struct acl_rights *r2)
 {
-	const struct acl_rights *r1 = p1, *r2 = p2;
 	int ret;
 
 	if (r1->global != r2->global) {
@@ -720,10 +735,10 @@ static void acl_backend_vfile_rights_sort(struct acl_object_vfile *aclobj)
 	if (!array_is_created(&aclobj->rights))
 		return;
 
-	rights = array_get_modifiable(&aclobj->rights, &count);
-	qsort(rights, count, sizeof(*rights), acl_rights_cmp);
+	array_sort(&aclobj->rights, acl_rights_cmp);
 
 	/* merge identical identifiers */
+	rights = array_get_modifiable(&aclobj->rights, &count);
 	for (dest = 0, i = 1; i < count; i++) {
 		if (acl_rights_cmp(&rights[i], &rights[dest]) == 0) {
 			/* add i's rights to dest and delete i */
@@ -758,7 +773,6 @@ static void apply_owner_default_rights(struct acl_object *_aclobj)
 
 static void acl_backend_vfile_cache_rebuild(struct acl_object_vfile *aclobj)
 {
-	struct mail_namespace *ns;
 	struct acl_object *_aclobj = &aclobj->aclobj;
 	struct acl_rights_update ru;
 	enum acl_modify_mode add_mode;
@@ -770,8 +784,6 @@ static void acl_backend_vfile_cache_rebuild(struct acl_object_vfile *aclobj)
 
 	if (!array_is_created(&aclobj->rights))
 		return;
-
-	ns = mailbox_list_get_namespace(_aclobj->backend->list);
 
 	/* Rights are sorted by their 1) locals first, globals next,
 	   2) acl_id_type. We'll apply only the rights matching ourself.
@@ -896,6 +908,12 @@ static int acl_backend_vfile_update_begin(struct acl_object_vfile *aclobj,
 	gid_t gid;
 	int fd;
 
+	if (aclobj->local_path == NULL) {
+		i_error("Can't update acl object '%s': No local acl file path",
+			aclobj->aclobj.name);
+		return -1;
+	}
+
 	/* first lock the ACL file */
 	mailbox_list_get_permissions(_aclobj->backend->list, _aclobj->name,
 				     &mode, &gid, &gid_origin);
@@ -922,7 +940,7 @@ static bool modify_right_list(pool_t pool,
 			      enum acl_modify_mode modify_mode)
 {
 	const char *const *old_rights = *rightsp;
-	const char *const *new_rights;
+	const char *const *new_rights = NULL;
 	const char *null = NULL;
 	ARRAY_TYPE(const_string) rights;
 	unsigned int i, j;
@@ -968,10 +986,11 @@ static bool modify_right_list(pool_t pool,
 		*rightsp = NULL;
 		return TRUE;
 	}
+	i_assert(new_rights != NULL);
 	*rightsp = new_rights;
 
 	if (old_rights == NULL)
-		return new_rights != NULL;
+		return new_rights[0] != NULL;
 
 	/* see if anything changed */
 	for (i = 0; old_rights[i] != NULL && new_rights[i] != NULL; i++) {
@@ -1138,10 +1157,9 @@ acl_backend_vfile_object_update(struct acl_object *_aclobj,
 	struct acl_object_vfile *aclobj = (struct acl_object_vfile *)_aclobj;
 	struct acl_backend_vfile *backend =
 		(struct acl_backend_vfile *)_aclobj->backend;
-	const struct acl_rights *rights;
 	struct dotlock *dotlock;
 	const char *path;
-	unsigned int i, count;
+	unsigned int i;
 	int fd;
 	bool changed;
 
@@ -1152,9 +1170,8 @@ acl_backend_vfile_object_update(struct acl_object *_aclobj,
 	if (fd == -1)
 		return -1;
 
-	rights = array_get(&aclobj->rights, &count);
-	if (!bsearch_insert_pos(&update->rights, rights, count, sizeof(*rights),
-				acl_rights_cmp, &i))
+	if (!array_bsearch_insert_pos(&aclobj->rights, &update->rights,
+				      acl_rights_cmp, &i))
 		changed = vfile_object_add_right(aclobj, i, update);
 	else
 		changed = vfile_object_modify_right(aclobj, i, update);
@@ -1175,9 +1192,11 @@ acl_backend_vfile_object_update(struct acl_object *_aclobj,
 		acl_cache_flush(_aclobj->backend->cache, _aclobj->name);
 		return -1;
 	}
-	/* make sure dovecot-acl-list gets updated if we added any
+	/* make sure dovecot-acl-list gets updated if we changed any
 	   lookup rights. */
-	if (acl_rights_has_nonowner_lookup_changes(&update->rights))
+	if (acl_rights_has_nonowner_lookup_changes(&update->rights) ||
+	    update->modify_mode == ACL_MODIFY_MODE_REPLACE ||
+	    update->modify_mode == ACL_MODIFY_MODE_CLEAR)
 		(void)acl_backend_vfile_acllist_rebuild(backend);
 	return 0;
 }

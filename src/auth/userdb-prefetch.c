@@ -1,6 +1,6 @@
 /* Copyright (c) 2004-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 #include "userdb.h"
 
 #ifdef USERDB_PREFETCH
@@ -16,7 +16,7 @@ static void prefetch_lookup(struct auth_request *auth_request,
 	/* auth_request_set_field() should have already placed the userdb_*
 	   values to userdb_reply. */
 	if (auth_request->userdb_reply == NULL) {
-		if (auth_request->auth->userdbs->next == NULL) {
+		if (auth_request_get_auth(auth_request)->userdbs->next == NULL) {
 			/* no other userdbs */
 			if (auth_request->userdb_lookup) {
 				auth_request_log_error(auth_request, "prefetch",
@@ -26,9 +26,9 @@ static void prefetch_lookup(struct auth_request *auth_request,
 					"passdb didn't return userdb entries");
 			}
 		} else if (!auth_request->userdb_lookup ||
-			   auth_request->auth->verbose_debug) {
+			   auth_request->set->debug) {
 			/* more userdbs, they may know the user */
-			auth_request_log_info(auth_request, "prefetch",
+			auth_request_log_debug(auth_request, "prefetch",
 				"passdb didn't return userdb entries, "
 				"trying the next userdb");
 		}
@@ -47,10 +47,14 @@ struct userdb_module_interface userdb_prefetch = {
 	NULL,
 	NULL,
 
-	prefetch_lookup
+	prefetch_lookup,
+
+	NULL,
+	NULL,
+	NULL
 };
 #else
 struct userdb_module_interface userdb_prefetch = {
-	MEMBER(name) "prefetch"
+	.name = "prefetch"
 };
 #endif

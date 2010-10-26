@@ -53,6 +53,33 @@
 #  define ARRAY_TYPE_CHECK(array, data) 0
 #endif
 
+/* usage: struct foo *foo; array_foreach(foo_arr, foo) { .. } */
+#if (defined(__STDC__) && __STDC_VERSION__ >= 199901L)
+#  define array_foreach(array, elem) \
+	for (const void *elem ## __foreach_end = \
+		(const char *)(elem = *(array)->v) + (array)->arr.buffer->used; \
+	     elem != elem ## __foreach_end; (elem)++)
+#  define array_foreach_modifiable(array, elem) \
+	for (const void *elem ## _end = \
+		(const char *)(elem = ARRAY_TYPE_CAST_MODIFIABLE(array) \
+			buffer_get_modifiable_data((array)->arr.buffer, NULL)) + \
+			(array)->arr.buffer->used; \
+	 elem != elem ## _end; elem++)
+#else
+#  define array_foreach(array, elem) \
+	for (elem = *(array)->v; \
+	     elem != CONST_PTR_OFFSET(*(array)->v, (array)->arr.buffer->used); \
+	     (elem)++)
+#  define array_foreach_modifiable(array, elem) \
+	for (elem = ARRAY_TYPE_CAST_MODIFIABLE(array) \
+			buffer_get_modifiable_data((array)->arr.buffer, NULL); \
+	     elem != CONST_PTR_OFFSET(*(array)->v, (array)->arr.buffer->used); \
+	     (elem)++)
+#endif
+
+#define array_foreach_idx(array, elem) \
+	((elem) - (array)->v[0])
+
 static inline void
 array_create_from_buffer_i(struct array *array, buffer_t *buffer,
 			   size_t element_size)
@@ -233,5 +260,31 @@ bool array_cmp_i(const struct array *array1,
 void array_reverse_i(struct array *array);
 #define array_reverse(array) \
 	array_reverse_i(&(array)->arr)
+
+void array_sort_i(struct array *array, int (*cmp)(const void *, const void *));
+#ifdef CONTEXT_TYPE_SAFETY
+#define array_sort(array, cmp) \
+	({(void)(1 ? 0 : cmp(ARRAY_TYPE_CAST_CONST(array)NULL, \
+			     ARRAY_TYPE_CAST_CONST(array)NULL)); \
+	array_sort_i(&(array)->arr, \
+		(int (*)(const void *, const void *))cmp); })
+#else
+#define array_sort(array, cmp) \
+	array_sort_i(&(array)->arr, (int (*)(const void *, const void *))cmp)
+#endif
+
+void *array_bsearch_i(struct array *array, const void *key,
+		      int (*cmp)(const void *, const void *));
+#ifdef CONTEXT_TYPE_SAFETY
+#define array_bsearch(array, key, cmp) \
+	ARRAY_TYPE_CAST_MODIFIABLE(array) \
+	({(void)(1 ? 0 : cmp(key, ARRAY_TYPE_CAST_CONST(array)NULL)); \
+	array_bsearch_i(&(array)->arr, (const void *)key, \
+		(int (*)(const void *, const void *))cmp); })
+#else
+#define array_bsearch(array, key, cmp) \
+	array_bsearch_i(&(array)->arr, (const void *)key, \
+		(int (*)(const void *, const void *))cmp)
+#endif
 
 #endif

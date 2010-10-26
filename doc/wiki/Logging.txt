@@ -7,9 +7,11 @@ Contents
 
      2. Changing Log File Paths
 
-     3. Rotating Logs
+     3. Syslog Example
 
-     4. Logging verbosity
+     4. Rotating Logs
+
+     5. Logging verbosity
 
 Dovecot Logging
 ===============
@@ -22,9 +24,10 @@ to syslog using *mail* facility. You can change the facility from
 'syslog_facility' setting. You can also configure Dovecot to write to log files
 directly, see below.
 
-When using syslog, Dovecot uses 4 different logging levels:
+When using syslog, Dovecot uses 5 different logging levels:
 
- * *info*: Informational and debug messages.
+ * *debug*: Debug-level message.
+ * *info*: Informational messages.
  * *warning*: Warnings that don't cause an actual error, but are useful to know
    about.
  * *err*: Non-fatal errors.
@@ -35,20 +38,13 @@ configuration. Often everything is logged to '/var/log/mail.log' or
 '/var/log/maillog', and *err* and *crit* are logged to '/var/log/mail.err'.
 This is not necessarily true for your configuration though.
 
-You can find the correct log files using these methods:
+You can find the log file locations by running:
 
- * Info log: After starting Dovecot, 'grep "starting up" /var/log/*'. It should
-   show a line such as:'Dovecot v1.0.0 starting up'
- * Error logs: Use 'dovecot --log-error' command, which makes Dovecot log a few
-   messages and exit. Then 'grep "This is Dovecot's" /var/log/*' to find them.
-   You should see:
-    * With Dovecot v1.0.0 you'll find only the *crit* log: 'This is Dovecot's
-      error log'
-    * With Dovecot v1.0.1+ you'll find all of them:
-       * *warning*: 'This is Dovecot's warning log'
-       * *err*: 'This is Dovecot's error log'
-       * *crit*: 'This is Dovecot's fatal log'
- * You can also check your '/etc/syslog.conf' to see how it's configured.
+---%<-------------------------------------------------------------------------
+doveadm log find
+---%<-------------------------------------------------------------------------
+
+You can also check your '/etc/syslog.conf' to see how it's configured.
 
 Internal Errors
 ---------------
@@ -76,14 +72,32 @@ logs, you can make Dovecot log elsewhere as well:
 
 ---%<-------------------------------------------------------------------------
 log_path = /var/log/dovecot.log
-# If you want everything in one file, just don't specify info_log_path
+# If you want everything in one file, just don't specify info_log_path and
+debug_log_path
 info_log_path = /var/log/dovecot-info.log
+# Leave empty in order to send debug-level messages to info_log_path
+debug_log_path = /var/log/dovecot-debug.log
 ---%<-------------------------------------------------------------------------
 
 The warning and error messages will go to file specified by 'log_path', while
-everything else goes to 'info_log_path'. If you do this, make sure you're
-really looking at the 'log_path' file for error messages, since the "Starting
-up" message is written to 'info_log_path' file.
+informative messages goes to 'info_log_path' and debug messages goes to
+'debug_log_path'. If you do this, make sure you're really looking at the
+'log_path' file for error messages, since the "Starting up" message is written
+to 'info_log_path' file.
+
+Syslog Example
+--------------
+
+Dovecot logging asynchronously via 'syslog_facility = local0' with basic rules:
+
+---%<-------------------------------------------------------------------------
+local0.* -/var/log/dovecot.log
+local0.info -/var/log/dovecot.info
+local0.warn -/var/log/dovecot.warn
+local0.err -/var/log/dovecot.err
+:msg,contains,"stored mail into mailbox"\
+                                  -/var/log/dovecot.lmtp
+---%<-------------------------------------------------------------------------
 
 Rotating Logs
 -------------
@@ -94,22 +108,16 @@ doesn't grow beyond a manageable size. Save the below scriptlet as
 '/etc/logrotate.d/dovecot':
 
 ---%<-------------------------------------------------------------------------
-# dovecot SIGUSR1: Re-opens the log files.
 /var/log/dovecot*.log {
   missingok
   notifempty
   delaycompress
   sharedscripts
   postrotate
-    /bin/kill -USR1 `cat /var/run/dovecot/master.pid 2>/dev/null` 2> /dev/null
-|| true
+    doveadm log reopen
   endscript
 }
 ---%<-------------------------------------------------------------------------
-
-*NOTE*: change the path to the logfile(s) and the 'master.pid' file as
-appropriate for your system configuration. The default location of 'master.pid'
-is '/usr/local/var/run/dovecot/master.pid'.
 
 Logging verbosity
 -----------------
@@ -126,6 +134,6 @@ all disabled, but they may be useful for debugging.
    showing where Dovecot is looking for mails.
  * 'verbose_ssl=yes' enables logging SSL errors and warnings. Even without this
    setting if connection is closed because of an SSL error, the error is logged
-   as the disconnection reason (v1.1+).
+   as the disconnection reason.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

@@ -17,7 +17,7 @@ by both IMAP and POP3 to authenticate to dovecot-auth, so you see it in the
 debug logs.
 
 The PLAIN mechanism's authentication format is: <authorization ID> NUL
-<authentication ID> NUL <password>. Authentication ID is the username who you
+<authentication ID> NUL <password>. Authorization ID is the username who you
 want to log in as, and authentication ID is the username whose password you're
 giving. If you're not planning on doing a <master user login>
 [Authentication.MasterUsers.txt], you can either set both of these fields to
@@ -78,4 +78,4 @@ mmencode -u
 
 to check that you have encoded correctly.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

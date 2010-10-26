@@ -1,4 +1,4 @@
-noinst_LIBRARIES = libstorage_shared.a
+noinst_LTLIBRARIES = libstorage_shared.la
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
@@ -6,19 +6,14 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-storage \
-	-I$(top_srcdir)/src/lib-storage/index \
-	-DPKG_RUNDIR=\""$(rundir)"\"
+	-I$(top_srcdir)/src/lib-storage/index
 
-libstorage_shared_a_SOURCES = \
+libstorage_shared_la_SOURCES = \
 	shared-list.c \
 	shared-storage.c
 
 headers = \
 	shared-storage.h
 
-if INSTALL_HEADERS
-  pkginc_libdir=$(pkgincludedir)/src/lib-storage/index/shared
-  pkginc_lib_HEADERS = $(headers)
-else
-  noinst_HEADERS = $(headers)
-endif
+pkginc_libdir=$(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)

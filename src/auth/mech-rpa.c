@@ -6,7 +6,7 @@
  * This software is released under the MIT license.
  */
 
-#include "common.h"
+#include "auth-common.h"
 #include "mech.h"
 #include "passdb.h"
 #include "str.h"
@@ -329,21 +329,21 @@ rpa_add_realm(string_t *realms, const char *realm, const char *service)
 static const unsigned char *
 mech_rpa_build_token2(struct rpa_auth_request *request, size_t *size)
 {
-	struct auth *auth = request->auth_request.auth;
+	const struct auth_settings *set = request->auth_request.set;
 	unsigned int realms_len, length;
 	string_t *realms;
 	buffer_t *buf;
 	unsigned char timestamp[RPA_TIMESTAMP_LEN / 2];
-	char *const *tmp;
+	const char *const *tmp;
 
 	realms = t_str_new(64);
-	for (tmp = auth->auth_realms; *tmp != NULL; tmp++) {
+	for (tmp = set->realms_arr; *tmp != NULL; tmp++) {
 		rpa_add_realm(realms, *tmp, request->auth_request.service);
 	}
 
 	if (str_len(realms) == 0) {
-		rpa_add_realm(realms, auth->default_realm != NULL ?
-			      auth->default_realm : my_hostname,
+		rpa_add_realm(realms, *set->default_realm != '\0' ?
+			      set->default_realm : my_hostname,
 			      request->auth_request.service);
 	}
 
@@ -450,9 +450,9 @@ rpa_credentials_callback(enum passdb_result result,
 			auth_request_fail(auth_request);
 		else {
 			token4 = mech_rpa_build_token4(request, &token4_size);
-			auth_request->callback(auth_request,
-					       AUTH_CLIENT_RESULT_CONTINUE,
-					       token4, token4_size);
+			auth_request_handler_reply_continue(auth_request,
+							    token4,
+							    token4_size);
 			request->phase = 2;
 		}
 		break;
@@ -489,8 +489,7 @@ mech_rpa_auth_phase1(struct auth_request *auth_request,
 	request->service_ucs2be = ucs2be_str(request->pool, service,
 					     &request->service_len);
 
-	auth_request->callback(auth_request, AUTH_CLIENT_RESULT_CONTINUE,
-			       token2, token2_size);
+	auth_request_handler_reply_continue(auth_request, token2, token2_size);
 	request->phase = 1;
 }
 
@@ -581,9 +580,9 @@ static struct auth_request *mech_rpa_auth_new(void)
 const struct mech_module mech_rpa = {
 	"RPA",
 
-	MEMBER(flags) MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE |
+	.flags = MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE |
 		MECH_SEC_MUTUAL_AUTH,
-	MEMBER(passdb_need) MECH_PASSDB_NEED_LOOKUP_CREDENTIALS,
+	.passdb_need = MECH_PASSDB_NEED_LOOKUP_CREDENTIALS,
 
 	mech_rpa_auth_new,
 	mech_generic_auth_initial,

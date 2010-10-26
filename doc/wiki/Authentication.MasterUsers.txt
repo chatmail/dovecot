@@ -56,17 +56,18 @@ Example configuration
 ---------------------
 
 ---%<-------------------------------------------------------------------------
-auth_master_user_separator=*
-auth default {
-  passdb passwd-file {
-    args = /etc/dovecot/passwd.masterusers
-    master = yes
-    pass = yes
-  }
-  passdb shadow {
-  }
-  userdb passwd {
-  }
+auth_master_user_separator = *
+passdb {
+  driver = passwd-file
+  args = /etc/dovecot/passwd.masterusers
+  master = yes
+  pass = yes
+}
+passdb {
+  driver = shadow
+}
+userdb {
+  driver = passwd
 }
 ---%<-------------------------------------------------------------------------
 
@@ -91,24 +92,26 @@ The master passdb doesn't have to be passwd-file, it could be an SQL query as
 well:
 
 ---%<-------------------------------------------------------------------------
-auth_master_user_separator=*
-auth default {
-  passdb sql {
-    args = /etc/dovecot/dovecot-sql-master.conf
-    master = yes
-    pass = yes
-  }
-  passdb sql {
-    args = /etc/dovecot/dovecot-sql.conf
-  }
-  userdb sql {
-    args = /etc/dovecot/dovecot-sql.conf
-  }
+auth_master_user_separator = *
+passdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql-master.conf.ext
+  master = yes
+  pass = yes
+}
+passdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql.conf.ext
+}
+userdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql.conf.ext
+}
 }
 ---%<-------------------------------------------------------------------------
 
-'dovecot-sql-master.conf' would contain all the normal connection settings and
-a 'password_query':
+'dovecot-sql-master.conf.ext' would contain all the normal connection settings
+and a 'password_query':
 
 ---%<-------------------------------------------------------------------------
 password_query = SELECT password FROM users WHERE userid = '%u' and master_user
@@ -149,14 +152,12 @@ password, even those that don't really exist.
 Then in your dovecot.conf, have something like:
 
 ---%<-------------------------------------------------------------------------
-auth default {
-..
-  passdb pam {
-  }
-  passdb sql {
-    args = /etc/dovecot-sql-master.conf
-  }
-..
+passdb {
+  driver = pam
+}
+passdb {
+  driver = sql
+  args = /etc/dovecot-sql-master.conf.ext
 }
 ---%<-------------------------------------------------------------------------
 
@@ -169,4 +170,4 @@ user2:{plain}master-password
 ..etc..
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

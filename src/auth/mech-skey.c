@@ -6,14 +6,14 @@
  * This software is released under the MIT license.
  */
 
-#include "common.h"
+#include "auth-common.h"
 #include "safe-memset.h"
 #include "hash.h"
 #include "mech.h"
 #include "passdb.h"
 #include "hex-binary.h"
 #include "otp.h"
-#include "otp-skey-common.h"
+#include "mech-otp-skey-common.h"
 
 static void 
 skey_send_challenge(struct auth_request *auth_request,
@@ -56,9 +56,8 @@ skey_send_challenge(struct auth_request *auth_request,
 	answer = p_strdup_printf(request->pool, "%u %s",
 				 request->state.seq, request->state.seed);
 
-	auth_request->callback(auth_request,
-			       AUTH_CLIENT_RESULT_CONTINUE,
-			       answer, strlen(answer));
+	auth_request_handler_reply_continue(auth_request, answer,
+					    strlen(answer));
 }
 
 static void
@@ -189,8 +188,8 @@ static struct auth_request *mech_skey_auth_new(void)
 const struct mech_module mech_skey = {
 	"SKEY",
 
-	MEMBER(flags) MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE,
-	MEMBER(passdb_need) MECH_PASSDB_NEED_SET_CREDENTIALS,
+	.flags = MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE,
+	.passdb_need = MECH_PASSDB_NEED_SET_CREDENTIALS,
 
 	mech_skey_auth_new,
 	mech_generic_auth_initial,

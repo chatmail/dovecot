@@ -16,35 +16,31 @@ Dovecot can use:
 Enabling quota plugins
 ----------------------
 
-There are currently two quota related plugins:
+There are two quota related plugins:
 
  * quota: Implements the actual quota handling and includes also all the quota
    backends.
  * imap_quota: For reporting quota information via IMAP.
 
-Usually you'd enable these by adding them to the 'mail_plugins' settings in the
-config file:
+Enable them in dovecot.conf:
 
 ---%<-------------------------------------------------------------------------
+mail_plugins = $mail_plugins quota
 protocol imap {
-  mail_plugins = quota imap_quota
-}
-protocol pop3 {
-  mail_plugins = quota
-}
-# In case you're using deliver:
-protocol lda {
-  mail_plugins = quota
+  mail_plugins = $mail_plugins imap_quota
 }
 ---%<-------------------------------------------------------------------------
 
 Configuration
 -------------
 
-The configuration is done differently for v1.0 and v1.1:
+See <Quota.Configuration.txt> for backend-independent quota configuration.
 
- * <v1.0 quota configuration> [Quota.1.0.txt]
- * <v1.1 quota configuration> [Quota.1.1.txt]
+Quota recalculation
+-------------------
+
+If your quotas are out of sync, you can use 'doveadm quota recalc' command to
+recalculate them.
 
 Quota and Trash mailbox
 -----------------------
@@ -68,16 +64,13 @@ user may get an unintuitive message about not being able to delete messages
 because user is over quota. The possible solutions for this are:
 
  * Disable move-to-trash feature from client
- * Dovecot v1.0 + <Maildir++> [Quota.Maildir.txt] quota: You can completely
-   ignore Trash mailbox from quota calculation by appending ':ignore=Trash' to
-   the quota line. Note that this would allow users to store messages
-   infinitely to the mailbox.
- * Dovecot v1.1 or <v1.0 quota rewrite> [Quota.1.1.txt]: You can ignore Trash
-   like with v1.0, but you can also give a separate quota rule giving Trash
-   mailbox somewhat more quota (but not unlimited).
+ * You can create a separate quota rule ignoring Trash mailbox's quota. Note
+   that this would allow users to store messages infinitely to the mailbox.
+ * You can create a separate quota rule giving Trash mailbox somewhat higher
+   quota limit (but not unlimited).
 
 To make sure users don't start keeping messages permanently in Trash you can
-use a nightly <cronjob or expire plugin (v1.1)> [Plugins.Expire.txt] to expunge
-old messages from Trash mailbox.
+use a nightly <cronjob> [Plugins.Expire.txt] to expunge old messages from Trash
+mailbox.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

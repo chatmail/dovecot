@@ -7,10 +7,6 @@ exists in the logged in user's home directory, and writing the traffic to
 'yyyymmdd-HHMMSS-pid.in' and '.out' files. Each connection gets their own
 in/out files.
 
-With imap you may see extra '* TIMESTAMP' lines in the log files. These aren't
-really part of the IMAP traffic, just something that rawlog writes itself after
-the connection has been idle for a while. They're meant to help debugging.
-
 Home directory
 --------------
 
@@ -24,8 +20,7 @@ Effective uid=1000, gid=1000, home=/home/user
 ---%<-------------------------------------------------------------------------
 
 In above configuration rawlog would expect to find '/home/user/dovecot.rawlog/'
-directory writable by uid 1000. NOTE: Dovecot versions older than v1.0.rc23
-don't log the home directory even if it exists.
+directory writable by uid 1000.
 
 If you don't have the home directory and you can't or don't want to modify
 userdb configuration, you can add the home to plugin section:
@@ -41,23 +36,30 @@ plugin {
 Configuration
 -------------
 
-To enable rawlog, you must modify 'mail_executable' setting(s) to execute
-rawlog instead of imap or pop3. For example:
+To enable rawlog, you must use rawlog as a <post-login script>
+[PostLoginScripting.txt]:
 
 ---%<-------------------------------------------------------------------------
-protocol imap {
-  mail_executable = /usr/local/libexec/dovecot/rawlog
-/usr/local/libexec/dovecot/imap
-  # ..
+service imap {
+  executable = imap postlogin
 }
-protocol pop3 {
-  mail_executable = /usr/local/libexec/dovecot/rawlog
-/usr/local/libexec/dovecot/pop3
-  # ..
+service pop3 {
+  executable = pop3 postlogin
+}
+
+service postlogin {
+  executable = script-login rawlog
+  unix_listener postlogin {
+  }
 }
 ---%<-------------------------------------------------------------------------
 
-Dovecot v1.1+ rawlog supports '-b' parameter. This makes it log IP packet
-boundaries by writing it as<<<packet>>>.
+You can also give parameters to rawlog:
 
-(This file was created from the wiki on 2010-05-24 04:42)
+ * -i: Log only to *.in files
+ * -o: Log only to *.out files
+ * -b: Write IP packet boundaries (or whatever read() sees anyway) to the log
+   files. The packet is written between<<< and >>>.
+ * -t: Log a microsecond resolution timestamp at the beginning of each line.
+
+(This file was created from the wiki on 2010-07-02 21:30)

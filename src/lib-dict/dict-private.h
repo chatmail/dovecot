@@ -14,11 +14,11 @@ struct dict_vfuncs {
 		      const char *key, const char **value_r);
 
 	struct dict_iterate_context *
-		(*iterate_init)(struct dict *dict, const char *path,
+		(*iterate_init)(struct dict *dict, const char *const *paths,
 				enum dict_iterate_flags flags);
-	int (*iterate)(struct dict_iterate_context *ctx,
-		       const char **key_r, const char **value_r);
-	void (*iterate_deinit)(struct dict_iterate_context *ctx);
+	bool (*iterate)(struct dict_iterate_context *ctx,
+			const char **key_r, const char **value_r);
+	int (*iterate_deinit)(struct dict_iterate_context *ctx);
 
 	struct dict_transaction_context *(*transaction_init)(struct dict *dict);
 	int (*transaction_commit)(struct dict_transaction_context *ctx,

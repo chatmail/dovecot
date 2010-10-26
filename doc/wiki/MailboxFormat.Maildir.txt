@@ -27,32 +27,41 @@ difference (see below).
 The file begins with a header:
 
 ---%<-------------------------------------------------------------------------
-1 1173189136 20221
+3 V1275660208 N25022 G3085f01b7f11094c501100008c4a11c1
 ---%<-------------------------------------------------------------------------
 
-Where 1 means the file format version number, 1173189136 is the IMAP
-UIDVALIDITY and 20221 is the UID that will be given to the next added message.
-The version number is always 1 currently. Dovecot used to have version number 2
-also for a while, so if the number is ever increased it needs to become version
-3.
+ * 3 is the file format version number used by Dovecot v1.1+
+ * 1275660208 is the IMAP UIDVALIDITY
+ * 25022 is the UID that will be given to the next added message
+ * 3085f01b7f11094c501100008c4a11c1 is the 128 bit mailbox global UID in hex
+ * There may be other fields, and the order of these fields isn't important
+
+Version 1 file format is compatible with Courier. Version 2 was used by a few
+non-release versions.
 
 After the header comes the list of UID <-> filename mappings:
 
 ---%<-------------------------------------------------------------------------
-123 1035478339.27041_118.foo.org
-20220 1035478339.27041_118.foo.org:2,S
+25006 :1276528487.M364837P9451.kurkku,S=1355,W=1394:2,
+25017 W2481 :1276533073.M242911P3632.kurkku:2,F
 ---%<-------------------------------------------------------------------------
 
-Because with maildir the filename changes every time the message's flags
-change, the filename listed in the file doesn't necessarily exist. With Courier
-IMAP the filenames contained only the maildir file's basename (ie. everything
-before ":2," string). Dovecot instead writes the file's last known full
-filename. Usually this allows opening the file without reading the directory's
-contents to find the file's current file name.
+ * 25006, 25017 are message UIDs
+ * 2481 is the second message's virtual size. First message contains it in the
+   filename itself, so it's not duplicated.
+ * There may be more fields before ':' character
+ * Rest of the line after ':' is the last known filename. This filename doesn't
+   necessarily exist currently, because filename changes every time message's
+   flags change. Dovecot doesn't waste disk I/O by rewriting uidlist file every
+   time flags change, but whenever it is rewritten the latest filenames are
+   used. This allows Dovecot to try to guess what the message's current
+   filename is and if successful, avoid having to scan the directory's
+   contents.
 
 The dovecot-uidlist file doesn't need to be locked for reading. When writing
-dovecot-uidlist.lock file needs to be created. The dovecot-uidlist file must
-never be directly modified, it can only be replaced with rename() call.
+dovecot-uidlist.lock file needs to be created. New lines can be appended to the
+end of file, but existing data must never be directly modified, it can only be
+replaced with rename() call.
 
 dovecot-uidlist is updated lazily to optimize for disk I/O. If a message is
 expunged, it may not be removed from dovecot-uidlist until sometimes later.
@@ -301,4 +310,4 @@ References
  * Maildir++ [http://www.inter7.com/courierimap/README.maildirquota.html]
  * Wikipedia [http://en.wikipedia.org/wiki/Maildir]
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

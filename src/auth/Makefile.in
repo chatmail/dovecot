@@ -36,14 +36,13 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-pkglibexec_PROGRAMS = dovecot-auth$(EXEEXT) \
-	checkpassword-reply$(EXEEXT)
+pkglibexec_PROGRAMS = auth$(EXEEXT) checkpassword-reply$(EXEEXT)
 subdir = src/auth
-DIST_COMMON = $(am__noinst_HEADERS_DIST) \
-	$(am__pkginc_lib_HEADERS_DIST) $(srcdir)/Makefile.am \
+DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -55,6 +54,7 @@ ARFLAGS = cru
 libpassword_a_AR = $(AR) $(ARFLAGS)
 libpassword_a_LIBADD =
 am_libpassword_a_OBJECTS = mycrypt.$(OBJEXT) password-scheme.$(OBJEXT) \
+	password-scheme-crypt.$(OBJEXT) \
 	password-scheme-md5crypt.$(OBJEXT) \
 	password-scheme-otp.$(OBJEXT) password-scheme-rpa.$(OBJEXT)
 libpassword_a_OBJECTS = $(am_libpassword_a_OBJECTS)
@@ -109,45 +109,42 @@ libmech_gssapi_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 @GSSAPI_PLUGIN_TRUE@am_libmech_gssapi_la_rpath = -rpath \
 @GSSAPI_PLUGIN_TRUE@	$(auth_moduledir)
 PROGRAMS = $(pkglibexec_PROGRAMS)
-checkpassword_reply_SOURCES = checkpassword-reply.c
-checkpassword_reply_OBJECTS = checkpassword-reply.$(OBJEXT)
-checkpassword_reply_DEPENDENCIES = ../lib/liblib.a
 am__objects_2 = db-ldap.$(OBJEXT) passdb-ldap.$(OBJEXT) \
 	userdb-ldap.$(OBJEXT)
-am_dovecot_auth_OBJECTS = auth.$(OBJEXT) auth-cache.$(OBJEXT) \
+am_auth_OBJECTS = auth.$(OBJEXT) auth-cache.$(OBJEXT) \
 	auth-client-connection.$(OBJEXT) \
 	auth-master-connection.$(OBJEXT) \
-	auth-master-listener.$(OBJEXT) auth-request.$(OBJEXT) \
-	auth-request-handler.$(OBJEXT) auth-stream.$(OBJEXT) \
-	auth-worker-client.$(OBJEXT) auth-worker-server.$(OBJEXT) \
-	db-checkpassword.$(OBJEXT) db-sql.$(OBJEXT) \
-	db-passwd-file.$(OBJEXT) main.$(OBJEXT) mech.$(OBJEXT) \
-	mech-anonymous.$(OBJEXT) mech-plain.$(OBJEXT) \
+	mech-otp-skey-common.$(OBJEXT) mech-plain-common.$(OBJEXT) \
+	auth-penalty.$(OBJEXT) auth-request.$(OBJEXT) \
+	auth-request-handler.$(OBJEXT) auth-settings.$(OBJEXT) \
+	auth-stream.$(OBJEXT) auth-worker-client.$(OBJEXT) \
+	auth-worker-server.$(OBJEXT) db-checkpassword.$(OBJEXT) \
+	db-sql.$(OBJEXT) db-passwd-file.$(OBJEXT) main.$(OBJEXT) \
+	mech.$(OBJEXT) mech-anonymous.$(OBJEXT) mech-plain.$(OBJEXT) \
 	mech-login.$(OBJEXT) mech-cram-md5.$(OBJEXT) \
 	mech-digest-md5.$(OBJEXT) mech-external.$(OBJEXT) \
 	mech-gssapi.$(OBJEXT) mech-ntlm.$(OBJEXT) mech-otp.$(OBJEXT) \
 	mech-skey.$(OBJEXT) mech-rpa.$(OBJEXT) mech-apop.$(OBJEXT) \
-	mech-winbind.$(OBJEXT) otp-skey-common.$(OBJEXT) \
-	plain-common.$(OBJEXT) passdb.$(OBJEXT) \
+	mech-winbind.$(OBJEXT) passdb.$(OBJEXT) \
 	passdb-blocking.$(OBJEXT) passdb-bsdauth.$(OBJEXT) \
 	passdb-cache.$(OBJEXT) passdb-checkpassword.$(OBJEXT) \
 	passdb-passwd.$(OBJEXT) passdb-passwd-file.$(OBJEXT) \
 	passdb-pam.$(OBJEXT) passdb-shadow.$(OBJEXT) \
 	passdb-sia.$(OBJEXT) passdb-vpopmail.$(OBJEXT) \
-	passdb-sql.$(OBJEXT) userdb.$(OBJEXT) \
+	passdb-sql.$(OBJEXT) passdb-static.$(OBJEXT) userdb.$(OBJEXT) \
 	userdb-blocking.$(OBJEXT) userdb-checkpassword.$(OBJEXT) \
 	userdb-nss.$(OBJEXT) userdb-passwd.$(OBJEXT) \
 	userdb-passwd-file.$(OBJEXT) userdb-prefetch.$(OBJEXT) \
 	userdb-static.$(OBJEXT) userdb-vpopmail.$(OBJEXT) \
 	userdb-sql.$(OBJEXT) $(am__objects_2)
-dovecot_auth_OBJECTS = $(am_dovecot_auth_OBJECTS)
-dovecot_auth_DEPENDENCIES = libpassword.a \
-	../lib-settings/libsettings.a ../lib-ntlm/libntlm.a \
-	../lib-otp/libotp.a ../lib-sql/libsql.a ../lib/liblib.a \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
-dovecot_auth_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
-	$(dovecot_auth_LDFLAGS) $(LDFLAGS) -o $@
+auth_OBJECTS = $(am_auth_OBJECTS)
+am__DEPENDENCIES_2 = libpassword.a ../lib-ntlm/libntlm.a \
+	../lib-otp/libotp.a $(am__DEPENDENCIES_1)
+auth_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(auth_LDFLAGS) \
+	$(LDFLAGS) -o $@
+checkpassword_reply_SOURCES = checkpassword-reply.c
+checkpassword_reply_OBJECTS = checkpassword-reply.$(OBJEXT)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -162,37 +159,19 @@ LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
 SOURCES = $(libpassword_a_SOURCES) $(libauthdb_ldap_la_SOURCES) \
-	$(libmech_gssapi_la_SOURCES) checkpassword-reply.c \
-	$(dovecot_auth_SOURCES)
+	$(libmech_gssapi_la_SOURCES) $(auth_SOURCES) \
+	checkpassword-reply.c
 DIST_SOURCES = $(libpassword_a_SOURCES) \
 	$(am__libauthdb_ldap_la_SOURCES_DIST) \
-	$(am__libmech_gssapi_la_SOURCES_DIST) checkpassword-reply.c \
-	$(dovecot_auth_SOURCES)
-am__noinst_HEADERS_DIST = auth.h auth-cache.h auth-client-connection.h \
-	auth-client-interface.h auth-master-interface.h \
-	auth-master-connection.h auth-master-listener.h auth-request.h \
-	auth-request-handler.h auth-stream.h auth-worker-client.h \
-	auth-worker-server.h db-ldap.h db-sql.h db-passwd-file.h \
-	common.h db-checkpassword.h mech.h mycrypt.h otp-skey-common.h \
-	plain-common.h passdb.h passdb-blocking.h passdb-cache.h \
-	password-scheme.h userdb.h userdb-blocking.h userdb-static.h \
-	userdb-vpopmail.h
-am__pkginc_lib_HEADERS_DIST = auth.h auth-cache.h \
-	auth-client-connection.h auth-client-interface.h \
-	auth-master-interface.h auth-master-connection.h \
-	auth-master-listener.h auth-request.h auth-request-handler.h \
-	auth-stream.h auth-worker-client.h auth-worker-server.h \
-	db-ldap.h db-sql.h db-passwd-file.h common.h \
-	db-checkpassword.h mech.h mycrypt.h otp-skey-common.h \
-	plain-common.h passdb.h passdb-blocking.h passdb-cache.h \
-	password-scheme.h userdb.h userdb-blocking.h userdb-static.h \
-	userdb-vpopmail.h
-HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
+	$(am__libmech_gssapi_la_SOURCES_DIST) $(auth_SOURCES) \
+	checkpassword-reply.c
+HEADERS = $(pkginc_lib_HEADERS)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 pkglibexecdir = $(libexecdir)/dovecot
 ACLOCAL = @ACLOCAL@
+ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTH_CFLAGS = @AUTH_CFLAGS@
@@ -238,10 +217,18 @@ LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
+LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
+LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
+LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
+LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
@@ -252,6 +239,7 @@ MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
 MYSQL_CFLAGS = @MYSQL_CFLAGS@
+MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -273,7 +261,9 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
+RUN_TEST = @RUN_TEST@
 SED = @SED@
+SETTING_FILES = @SETTING_FILES@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 SQLITE_CFLAGS = @SQLITE_CFLAGS@
@@ -282,8 +272,8 @@ SQL_CFLAGS = @SQL_CFLAGS@
 SQL_LIBS = @SQL_LIBS@
 SSL_CFLAGS = @SSL_CFLAGS@
 SSL_LIBS = @SSL_LIBS@
-STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
+VALGRIND = @VALGRIND@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -355,41 +345,45 @@ auth_module_LTLIBRARIES = \
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-auth \
 	-I$(top_srcdir)/src/lib-sql \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-ntlm \
 	-I$(top_srcdir)/src/lib-otp \
+	-I$(top_srcdir)/src/lib-master \
 	-DAUTH_MODULE_DIR=\""$(auth_moduledir)"\" \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
 	$(AUTH_CFLAGS)
 
-dovecot_auth_LDFLAGS = -export-dynamic
+auth_LDFLAGS = -export-dynamic
 libpassword_a_SOURCES = \
 	mycrypt.c \
 	password-scheme.c \
+	password-scheme-crypt.c \
 	password-scheme-md5crypt.c \
 	password-scheme-otp.c \
 	password-scheme-rpa.c
 
-dovecot_auth_LDADD = \
+auth_libs = \
 	libpassword.a \
-	../lib-settings/libsettings.a \
 	../lib-ntlm/libntlm.a \
 	../lib-otp/libotp.a \
-	../lib-sql/libsql.a \
-	../lib/liblib.a \
-	$(AUTH_LIBS) \
-	$(MODULE_LIBS)
+	$(LIBDOVECOT_SQL)
 
+auth_LDADD = $(auth_libs) $(LIBDOVECOT) $(AUTH_LIBS) $(MODULE_LIBS)
+auth_DEPENDENCIES = $(auth_libs) $(LIBDOVECOT_DEPS)
 ldap_sources = db-ldap.c passdb-ldap.c userdb-ldap.c
-dovecot_auth_SOURCES = \
+auth_SOURCES = \
 	auth.c \
 	auth-cache.c \
 	auth-client-connection.c \
 	auth-master-connection.c \
-	auth-master-listener.c \
+	mech-otp-skey-common.c \
+	mech-plain-common.c \
+	auth-penalty.c \
 	auth-request.c \
 	auth-request-handler.c \
+	auth-settings.c \
 	auth-stream.c \
 	auth-worker-client.c \
 	auth-worker-server.c \
@@ -411,8 +405,6 @@ dovecot_auth_SOURCES = \
 	mech-rpa.c \
 	mech-apop.c \
 	mech-winbind.c \
-	otp-skey-common.c \
-	plain-common.c \
 	passdb.c \
 	passdb-blocking.c \
 	passdb-bsdauth.c \
@@ -425,6 +417,7 @@ dovecot_auth_SOURCES = \
 	passdb-sia.c \
 	passdb-vpopmail.c \
 	passdb-sql.c \
+	passdb-static.c \
 	userdb.c \
 	userdb-blocking.c \
 	userdb-checkpassword.c \
@@ -441,24 +434,23 @@ headers = \
 	auth.h \
 	auth-cache.h \
 	auth-client-connection.h \
-	auth-client-interface.h \
-	auth-master-interface.h \
+	auth-common.h \
 	auth-master-connection.h \
-	auth-master-listener.h \
+	mech-otp-skey-common.h \
+	mech-plain-common.h \
+	auth-penalty.h \
 	auth-request.h \
 	auth-request-handler.h \
+	auth-settings.h \
 	auth-stream.h \
 	auth-worker-client.h \
 	auth-worker-server.h \
 	db-ldap.h \
 	db-sql.h \
 	db-passwd-file.h \
-	common.h \
 	db-checkpassword.h \
 	mech.h \
 	mycrypt.h \
-	otp-skey-common.h \
-	plain-common.h \
 	passdb.h \
 	passdb-blocking.h \
 	passdb-cache.h \
@@ -476,12 +468,10 @@ headers = \
 @LDAP_PLUGIN_TRUE@libauthdb_ldap_la_LIBADD = $(LDAP_LIBS)
 @LDAP_PLUGIN_TRUE@libauthdb_ldap_la_CPPFLAGS = $(AM_CPPFLAGS) -DPLUGIN_BUILD
 @LDAP_PLUGIN_TRUE@libauthdb_ldap_la_SOURCES = $(ldap_sources)
-@INSTALL_HEADERS_TRUE@pkginc_libdir = $(pkgincludedir)/src/auth
-@INSTALL_HEADERS_TRUE@pkginc_lib_HEADERS = $(headers)
-@INSTALL_HEADERS_FALSE@noinst_HEADERS = $(headers)
-checkpassword_reply_LDADD = \
-	../lib/liblib.a
-
+pkginc_libdir = $(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)
+checkpassword_reply_LDADD = $(LIBDOVECOT)
+checkpassword_reply_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 checkpassword_reply_sources = \
 	checkpassword-reply.c
 
@@ -604,12 +594,12 @@ clean-pkglibexecPROGRAMS:
 	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
 	echo " rm -f" $$list; \
 	rm -f $$list
+auth$(EXEEXT): $(auth_OBJECTS) $(auth_DEPENDENCIES) 
+	@rm -f auth$(EXEEXT)
+	$(auth_LINK) $(auth_OBJECTS) $(auth_LDADD) $(LIBS)
 checkpassword-reply$(EXEEXT): $(checkpassword_reply_OBJECTS) $(checkpassword_reply_DEPENDENCIES) 
 	@rm -f checkpassword-reply$(EXEEXT)
 	$(LINK) $(checkpassword_reply_OBJECTS) $(checkpassword_reply_LDADD) $(LIBS)
-dovecot-auth$(EXEEXT): $(dovecot_auth_OBJECTS) $(dovecot_auth_DEPENDENCIES) 
-	@rm -f dovecot-auth$(EXEEXT)
-	$(dovecot_auth_LINK) $(dovecot_auth_OBJECTS) $(dovecot_auth_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -620,9 +610,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-client-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-master-connection.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-master-listener.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-penalty.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-handler.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-stream.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-worker-client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-worker-server.Po@am__quote@
@@ -645,14 +636,15 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-gssapi.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-login.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-ntlm.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-otp-skey-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-otp.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-rpa.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-skey.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-winbind.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mycrypt.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/otp-skey-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-blocking.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-bsdauth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-cache.Po@am__quote@
@@ -664,13 +656,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-shadow.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-sia.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-sql.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-static.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-vpopmail.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-crypt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-md5crypt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-otp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-rpa.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/plain-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-blocking.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-checkpassword.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-ldap.Po@am__quote@

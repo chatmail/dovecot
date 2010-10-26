@@ -1,6 +1,6 @@
 /* Copyright (c) 2003-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 #include "passdb.h"
 
 #if defined(PASSDB_LDAP) && (defined(BUILTIN_LDAP) || defined(PLUGIN_BUILD))
@@ -28,50 +28,15 @@ struct passdb_ldap_request {
 		struct ldap_request_search search;
 		struct ldap_request_bind bind;
 	} request;
+	const char *dn;
 
 	union {
 		verify_plain_callback_t *verify_plain;
                 lookup_credentials_callback_t *lookup_credentials;
 	} callback;
+
+	unsigned int entries;
 };
-
-static LDAPMessage *
-handle_request_get_entry(struct ldap_connection *conn,
-			 struct auth_request *auth_request,
-			 struct passdb_ldap_request *request, LDAPMessage *res)
-{
-	enum passdb_result passdb_result;
-	LDAPMessage *entry;
-
-	passdb_result = PASSDB_RESULT_INTERNAL_FAILURE;
-
-	if (res != NULL) {
-		/* LDAP search was successful */
-		entry = ldap_first_entry(conn->ld, res);
-		if (entry == NULL) {
-			passdb_result = PASSDB_RESULT_USER_UNKNOWN;
-			auth_request_log_info(auth_request, "ldap",
-					      "unknown user");
-		} else {
-			if (ldap_next_entry(conn->ld, entry) == NULL) {
-				/* success */
-				return entry;
-			}
-
-			auth_request_log_error(auth_request, "ldap",
-				"Multiple replies found for user");
-		}
-	}
-
-	if (auth_request->credentials_scheme != NULL) {
-		request->callback.lookup_credentials(passdb_result, NULL, 0,
-						     auth_request);
-	} else {
-		request->callback.verify_plain(passdb_result, auth_request);
-	}
-	auth_request_unref(&auth_request);
-	return NULL;
-}
 
 static void
 ldap_query_save_result(struct ldap_connection *conn,
@@ -89,29 +54,24 @@ ldap_query_save_result(struct ldap_connection *conn,
 }
 
 static void
-ldap_lookup_pass_callback(struct ldap_connection *conn,
-			  struct ldap_request *request, LDAPMessage *res)
+ldap_lookup_finish(struct auth_request *auth_request,
+		   struct passdb_ldap_request *ldap_request,
+		   LDAPMessage *res)
 {
-	struct passdb_ldap_request *ldap_request =
-		(struct passdb_ldap_request *)request;
-        struct auth_request *auth_request = request->auth_request;
 	enum passdb_result passdb_result;
-	LDAPMessage *entry;
-	const char *password, *scheme;
+	const char *password = NULL, *scheme;
 	int ret;
 
-	entry = handle_request_get_entry(conn, auth_request, ldap_request, res);
-	if (entry == NULL)
-		return;
-
-	/* got first LDAP entry */
-	passdb_result = PASSDB_RESULT_INTERNAL_FAILURE;
-	password = NULL;
-
-	ldap_query_save_result(conn, entry, auth_request);
-	if (ldap_next_entry(conn->ld, entry) != NULL) {
+	if (res == NULL) {
+		passdb_result = PASSDB_RESULT_INTERNAL_FAILURE;
+	} else if (ldap_request->entries == 0) {
+		passdb_result = PASSDB_RESULT_USER_UNKNOWN;
+		auth_request_log_info(auth_request, "ldap",
+				      "unknown user");
+	} else if (ldap_request->entries > 1) {
 		auth_request_log_error(auth_request, "ldap",
 			"pass_filter matched multiple objects, aborting");
+		passdb_result = PASSDB_RESULT_INTERNAL_FAILURE;
 	} else if (auth_request->passdb_password == NULL &&
 		   !auth_request->no_password) {
 		auth_request_log_info(auth_request, "ldap",
@@ -144,7 +104,26 @@ ldap_lookup_pass_callback(struct ldap_connection *conn,
 		ldap_request->callback.verify_plain(passdb_result,
 						    auth_request);
 	}
-	auth_request_unref(&auth_request);
+}
+
+static void
+ldap_lookup_pass_callback(struct ldap_connection *conn,
+			  struct ldap_request *request, LDAPMessage *res)
+{
+	struct passdb_ldap_request *ldap_request =
+		(struct passdb_ldap_request *)request;
+        struct auth_request *auth_request = request->auth_request;
+
+	if (res == NULL || ldap_msgtype(res) == LDAP_RES_SEARCH_RESULT) {
+		ldap_lookup_finish(auth_request, ldap_request, res);
+		auth_request_unref(&auth_request);
+		return;
+	}
+
+	if (ldap_request->entries++ == 0) {
+		/* first entry */
+		ldap_query_save_result(conn, res, auth_request);
+	}
 }
 
 static void
@@ -166,7 +145,7 @@ ldap_auth_bind_callback(struct ldap_connection *conn,
 			passdb_result = PASSDB_RESULT_OK;
 		else if (ret == LDAP_INVALID_CREDENTIALS) {
 			str = "invalid credentials";
-			if (auth_request->auth->verbose_debug_passwords) {
+			if (auth_request->set->debug_passwords) {
 				str = t_strconcat(str, " (given password: ",
 						  auth_request->mech_password,
 						  ")", NULL);
@@ -208,36 +187,71 @@ static void ldap_auth_bind(struct ldap_connection *conn,
 	db_ldap_request(conn, &brequest->request);
 }
 
+static void
+ldap_bind_lookup_dn_fail(struct auth_request *auth_request,
+			 struct passdb_ldap_request *request,
+			 LDAPMessage *res)
+{
+	enum passdb_result passdb_result;
+
+	if (res == NULL)
+		passdb_result = PASSDB_RESULT_INTERNAL_FAILURE;
+	else if (request->entries == 0) {
+		passdb_result = PASSDB_RESULT_USER_UNKNOWN;
+		auth_request_log_info(auth_request, "ldap",
+				      "unknown user");
+	} else {
+		i_assert(request->entries > 1);
+		auth_request_log_error(auth_request, "ldap",
+			"pass_filter matched multiple objects, aborting");
+		passdb_result = PASSDB_RESULT_INTERNAL_FAILURE;
+	}
+
+	if (auth_request->credentials_scheme != NULL) {
+		request->callback.lookup_credentials(passdb_result, NULL, 0,
+						     auth_request);
+	} else {
+		request->callback.verify_plain(passdb_result, auth_request);
+	}
+	auth_request_unref(&auth_request);
+}
+
 static void ldap_bind_lookup_dn_callback(struct ldap_connection *conn,
 					 struct ldap_request *ldap_request,
 					 LDAPMessage *res)
 {
 	struct passdb_ldap_request *passdb_ldap_request =
 		(struct passdb_ldap_request *)ldap_request;
-	struct ldap_request_bind *brequest;
 	struct auth_request *auth_request = ldap_request->auth_request;
-	LDAPMessage *entry;
+	struct ldap_request_bind *brequest;
 	char *dn;
 
-	entry = handle_request_get_entry(conn, auth_request,
-					 passdb_ldap_request, res);
-	if (entry == NULL)
-		return;
+	if (res != NULL && ldap_msgtype(res) == LDAP_RES_SEARCH_ENTRY) {
+		if (passdb_ldap_request->entries++ > 0) {
+			/* too many replies */
+			return;
+		}
 
-	ldap_query_save_result(conn, entry, auth_request);
+		/* first entry */
+		ldap_query_save_result(conn, res, auth_request);
 
-	/* convert search request to bind request */
-	brequest = &passdb_ldap_request->request.bind;
-	memset(brequest, 0, sizeof(*brequest));
-	brequest->request.type = LDAP_REQUEST_TYPE_BIND;
-	brequest->request.auth_request = auth_request;
+		/* save dn */
+		dn = ldap_get_dn(conn->ld, res);
+		passdb_ldap_request->dn = p_strdup(auth_request->pool, dn);
+		ldap_memfree(dn);
+	} else if (res == NULL || passdb_ldap_request->entries != 1) {
+		/* failure */
+		ldap_bind_lookup_dn_fail(auth_request, passdb_ldap_request, res);
+	} else {
+		/* convert search request to bind request */
+		brequest = &passdb_ldap_request->request.bind;
+		memset(brequest, 0, sizeof(*brequest));
+		brequest->request.type = LDAP_REQUEST_TYPE_BIND;
+		brequest->request.auth_request = auth_request;
+		brequest->dn = passdb_ldap_request->dn;
 
-	/* switch the handler to the authenticated bind handler */
-	dn = ldap_get_dn(conn->ld, entry);
-	brequest->dn = p_strdup(auth_request->pool, dn);
-	ldap_memfree(dn);
-
-	ldap_auth_bind(conn, brequest);
+		ldap_auth_bind(conn, brequest);
+	}
 }
 
 static void ldap_lookup_pass(struct auth_request *auth_request,
@@ -378,30 +392,29 @@ static void ldap_lookup_credentials(struct auth_request *request,
 }
 
 static struct passdb_module *
-passdb_ldap_preinit(struct auth_passdb *auth_passdb, const char *args)
+passdb_ldap_preinit(pool_t pool, const char *args)
 {
 	struct ldap_passdb_module *module;
 	struct ldap_connection *conn;
 
-	module = p_new(auth_passdb->auth->pool, struct ldap_passdb_module, 1);
+	module = p_new(pool, struct ldap_passdb_module, 1);
 	module->conn = conn = db_ldap_init(args);
 	conn->pass_attr_map =
-		hash_table_create(default_pool, conn->pool, 0, str_hash,
-				  (hash_cmp_callback_t *)strcmp);
+		hash_table_create(default_pool, conn->pool, 0, strcase_hash,
+				  (hash_cmp_callback_t *)strcasecmp);
 
 	db_ldap_set_attrs(conn, conn->set.pass_attrs, &conn->pass_attr_names,
 			  conn->pass_attr_map,
 			  conn->set.auth_bind ? "password" : NULL);
 	module->module.cache_key =
-		auth_cache_parse_key(auth_passdb->auth->pool,
+		auth_cache_parse_key(pool,
 				     t_strconcat(conn->set.base,
 						 conn->set.pass_filter, NULL));
 	module->module.default_pass_scheme = conn->set.default_pass_scheme;
 	return &module->module;
 }
 
-static void passdb_ldap_init(struct passdb_module *_module,
-			     const char *args ATTR_UNUSED)
+static void passdb_ldap_init(struct passdb_module *_module)
 {
 	struct ldap_passdb_module *module =
 		(struct ldap_passdb_module *)_module;
@@ -440,6 +453,6 @@ struct passdb_module_interface passdb_ldap_plugin =
 };
 #else
 struct passdb_module_interface passdb_ldap = {
-	MEMBER(name) "ldap"
+	.name = "ldap"
 };
 #endif

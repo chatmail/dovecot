@@ -8,7 +8,7 @@
 
 #include <stdlib.h>
 
-#define CACHE_PREFETCH 1024
+#define CACHE_PREFETCH IO_BLOCK_SIZE
 
 int mail_cache_get_record(struct mail_cache *cache, uint32_t offset,
 			  const struct mail_cache_record **rec_r)
@@ -448,10 +448,9 @@ static void header_lines_save(struct header_lookup_context *ctx,
 	}
 }
 
-static int header_lookup_line_cmp(const void *p1, const void *p2)
+static int header_lookup_line_cmp(const struct header_lookup_line *l1,
+				  const struct header_lookup_line *l2)
 {
-	const struct header_lookup_line *l1 = p1, *l2 = p2;
-
 	return (int)l1->line_num - (int)l2->line_num;
 }
 
@@ -524,8 +523,8 @@ mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
 
 	/* we need to return headers in the order they existed originally.
 	   we can do this by sorting the messages by their line numbers. */
+	array_sort(&ctx.lines, header_lookup_line_cmp);
 	lines = array_get_modifiable(&ctx.lines, &count);
-	qsort(lines, count, sizeof(*lines), header_lookup_line_cmp);
 
 	/* then start filling dest buffer from the headers */
 	for (i = 0; i < count; i++) {

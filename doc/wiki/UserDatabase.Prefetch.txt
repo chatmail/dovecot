@@ -12,10 +12,10 @@ prefixes. For example if a userdb typically returns 'uid', 'gid' and 'home'
 fields, the passdb would have to return 'userdb_uid', 'userdb_gid' and
 'userdb_home' fields.
 
-If you're using <deliver> [LDA.txt], you still need a valid userdb which can be
-used to locate the users. You can do this by adding a normal SQL/LDAP userdb
-*after the userdb prefetch*. The order of definitions is significant. See below
-for examples.
+If you're using <LDA.txt>, you still need a valid userdb which can be used to
+locate the users. You can do this by adding a normal SQL/LDAP userdb *after the
+userdb prefetch*. The order of definitions is significant. See below for
+examples.
 
 LDAP's 'auth_bind_userdn=yes' setting is incompatible with prefetch, because no
 passdb lookup is done then. If you want zero LDAP lookups, you might want to
@@ -27,22 +27,24 @@ SQL example
 'dovecot.conf':
 
 ---%<-------------------------------------------------------------------------
-passdb sql {
-  args = /etc/dovecot-sql.conf
+passdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql.conf.ext
 }
-userdb prefetch {
+userdb {
+  driver = prefetch
 }
-# The userdb below is used only by deliver.
-userdb sql {
-  args = /etc/dovecot-sql.conf
+# The userdb below is used only by lda.
+userdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql.conf.ext
 }
 ---%<-------------------------------------------------------------------------
 
-'dovecot-sql.conf':
+'dovecot-sql.conf.ext':
 
 ---%<-------------------------------------------------------------------------
-# NOTE: '\' line splitting works only with v1.1+
-password_query = SELECT password, \
+password_query = SELECT userid AS user, password, \
   home AS userdb_home, uid AS userdb_uid, gid AS userdb_gid \
   FROM users \
   WHERE userid = '%u'
@@ -57,26 +59,28 @@ LDAP example
 'dovecot.conf':
 
 ---%<-------------------------------------------------------------------------
-passdb ldap {
-  args = /etc/dovecot-ldap.conf
+passdb {
+  driver = ldap
+  args = /etc/dovecot/dovecot-ldap.conf.ext
 }
-userdb prefetch {
+userdb {
+  driver = prefetch
 }
 # The userdb below is used only by deliver.
-userdb ldap {
-  args = /etc/dovecot-ldap.conf
+userdb {
+  driver = ldap
+  args = /etc/dovecot/dovecot-ldap.conf.ext
 }
 ---%<-------------------------------------------------------------------------
 
-'dovecot-ldap.conf':
+'dovecot-ldap.conf.ext':
 
 ---%<-------------------------------------------------------------------------
-# NOTE: '\' line splitting works only with v1.1+
-pass_attrs = uid=user,userPassword=password, \
-  homeDirectory=userdb_home,uidNumber=userdb_uid,gidNumber=userdb_gid
+pass_attrs = uid=user, userPassword=password, \
+  homeDirectory=userdb_home, uidNumber=userdb_uid, gidNumber=userdb_gid
 
 # For deliver:
-user_attrs = homeDirectory=home,uidNumber=uid,gidNumber=gid
+user_attrs = homeDirectory=home, uidNumber=uid, gidNumber=gid
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

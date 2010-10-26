@@ -1,5 +1,5 @@
 if BUILD_ZLIB_PLUGIN
-ZLIB = zlib
+ZLIB = zlib imap-zlib
 endif
 
 if BUILD_LUCENE
@@ -14,14 +14,14 @@ SUBDIRS = \
 	acl \
 	imap-acl \
 	autocreate \
-	convert \
 	expire \
 	fts \
 	fts-squat \
 	lazy-expunge \
 	listescape \
-	mail-log \
 	mbox-snarf \
+	notify \
+	mail-log \
 	quota \
 	imap-quota \
 	trash \

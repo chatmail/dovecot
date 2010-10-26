@@ -21,11 +21,7 @@ Contents
 
      2. Authentication Backend Options
 
- 7. Dynamic Authentication Modules
-
- 8. Dynamic IMAP and POP3 Modules
-
- 9. Dynamic SQL drivers
+ 7. Dynamic IMAP and POP3 Modules
 
 Compiling Dovecot From Sources
 ==============================
@@ -51,9 +47,14 @@ environment variables. For example:
 CPPFLAGS="-I/opt/openssl/include" LDFLAGS="-L/opt/openssl/lib -ldl" ./configure
 ---%<-------------------------------------------------------------------------
 
-You'll need to create a *dovecot* user (or change 'login_user' setting) that's
-used by imap-login and pop3-login processes as kind of a "untrusted
-Dovecot-specific nobody user". It should also have its own *dovecot* group. See
+You'll need to create two users for Dovecot's internal use:
+
+ * *dovenull*: Used by untrusted imap-login and pop3-login processes
+   (default_login_user setting).
+ * *dovecot*: Used by slightly more trusted Dovecot processes
+   (default_internal_user setting).
+
+Both of them should also have their own *dovenull* and *dovecot* groups. See
 <UserIds.txt> for more information.
 
 Compiling Dovecot From Mercurial
@@ -62,13 +63,19 @@ Compiling Dovecot From Mercurial
 If you got Dovecot from Mercurial, for instance with
 
 ---%<-------------------------------------------------------------------------
-hg clone http://hg.dovecot.org/dovecot-1.2/
+hg clone http://hg.dovecot.org/dovecot-2.0/
 ---%<-------------------------------------------------------------------------
 
 you will first need to run './autogen.sh' to generate the 'configure' script
-and some other files. This requires that you have the 'autoconf', 'automake',
-'libtool', 'pkg-config' and 'gettext' packages installed. You also need to use
-GNU make.
+and some other files. This requires that you have the following
+software/packages installed:
+
+ * 'autoconf'
+ * 'automake'
+ * 'libtool'
+ * 'pkg-config'
+ * 'gettext'
+ * GNU make.
 
 It is advisable to add '--enable-maintainer-mode' to the 'configure' script.
 Thus:
@@ -83,8 +90,7 @@ sudo make install
 For later updates, you can use:
 
 ---%<-------------------------------------------------------------------------
-hg pull
-hg update
+hg pull -u
 make
 sudo make install
 ---%<-------------------------------------------------------------------------
@@ -236,25 +242,24 @@ automake or libtool. They are explained elsewhere.
 Here is a list of options that Dovecot adds. You should not usually have to
 change these, but they are described here just for completeness:
 
---enable-ipv6:
-  Enable IPv6 support. This is enabled by default if the system is detected to
-  support it.
-
 --enable-devel-checks:
   Enables some extra sanity checks. This is mainly useful for developers. It
   does quite a lot of unnecessary work but should catch some programming
-  mistakes more quickly. (v1.1 and older called this --enable-debug)
+  mistakes more quickly.
 
 --enable-asserts:
   Enable assertion checks, enabled by default. Disabling them may slightly save
   some CPU, but if there are bugs they can cause more problems since they are
   not detected as early.
 
+--without-shared-libs:
+  Link Dovecot binaries with static libraries instead of dynamic libraries.
+
 --disable-largefile:
   Specifies if we use 32bit or 64bit file offsets in 32bit CPUs. 64bit is the
   default if the system supports it  (Linux and Solaris do). Dropping this to
   32bit may save some memory, but it prevents accessing any file larger than 2
-  GB. (v1.0 called this --with-file-offset-size=32)
+  GB.
 
 --with-mem-align=BYTES:
   Specifies memory alignment used for memory allocations. It is needed with
@@ -312,13 +317,6 @@ Authentication Backend Options
 
 The basic backends are built if the system is detected to support them:
 
---with-passwd:
-  Build with <passwd> [AuthDatabase.Passwd.txt] support (typically NSS /
-  '/etc/passwd')
-
---with-passwd-file:
-  Build with <passwd-like file> [AuthDatabase.Passwd.txt] support
-
 --with-shadow:
   Build with <shadow> [PasswordDatabase.Shadow.txt] password support
 
@@ -331,18 +329,9 @@ The basic backends are built if the system is detected to support them:
 --with-sia:
   Build with Tru64 SIA support
 
---with-checkpassword:
-  Build with <checkpassword> [AuthDatabase.CheckPassword.txt] support
-
 --with-bsdauth:
   Build with <BSD authentication> [PasswordDatabase.BSDAuth.txt] support (if
   supported by your OS)
-
---with-static-userdb:
-  Build with <static userdb> [UserDatabase.Static.txt] support
-
---with-prefetch-userdb:
-  Build with <prefetch userdb> [UserDatabase.Prefetch.txt] support
 
 Some backends require extra libraries and are not necessarily wanted, so they
 are built only if specifically enabled:
@@ -361,23 +350,7 @@ are built only if specifically enabled:
 --with-vpopmail:
   Build with vpopmail support (requires vpopmail sources or a devel package)
 
-Dynamic Authentication Modules
-==============================
-
-Dovecot can also dynamically load authentication modules from the
-'$prefix/lib/dovecot/auth/' directory. Binary packages builders should use them
-for authentication modules which require external libraries (e. g. LDAP and
-vpopmail). There is no standard way to build them as modules currently, but
-something like this should work:
-
----%<-------------------------------------------------------------------------
-gcc -shared -fPIC -DHAVE_CONFIG_H -DUSERDB_LDAP -DPASSDB_LDAP \
--I../.. -I../lib -I../lib-settings \
-db-ldap.c userdb-ldap.c passdb-ldap.c -o ldap.so -lldap
-gcc -shared -fPIC -DHAVE_CONFIG_H -DUSERDB_VPOPMAIL -DPASSDB_VPOPMAIL \
--I../.. -I../lib userdb-vpopmail.c passdb-vpopmail.c -o vpopmail.so \
--lvpopmail
----%<-------------------------------------------------------------------------
+It's also possible to build these as plugins by giving e.g. --with-sql=plugin.
 
 Dynamic IMAP and POP3 Modules
 =============================
@@ -391,24 +364,4 @@ The plugin filename is prefixed with a number which specifies the order in
 which the plugins are loaded. This is important if one plugin depends on
 another.
 
-Dynamic SQL drivers
-===================
-
-The SQL drivers can be used by dovecot-auth, but also by lib-dict. lib-dict
-then can be used by some plugins, for example enabling dict quota backend to
-keep the quota information in SQL database.
-
-You could place the SQL drivers into main plugin directory and create symlinks
-for them into auth/, imap/, pop3/ and lda/.
-
----%<-------------------------------------------------------------------------
-cd src/lib-sql
-gcc -shared -fPIC -DHAVE_CONFIG_H -DBUILD_PGSQL \
--I../.. -I../lib -I../lib-settings -I/usr/include/postgresql \
-driver-pgsql.c -o driver_pgsql.so -L/usr/lib/postgresql -lpq
-gcc -shared -fPIC -DHAVE_CONFIG_H -DBUILD_MYSQL \
--I../.. -I../lib -I../lib-settings -I/usr/include/mysql \
-driver-mysql.c -o driver_mysql.so -lmysqlclient
----%<-------------------------------------------------------------------------
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

@@ -5,7 +5,7 @@
 #include "istream.h"
 #include "str.h"
 #include "sql-api-private.h"
-#include "sql-pool.h"
+#include "sql-db-cache.h"
 #include "dict-private.h"
 #include "dict-sql-settings.h"
 #include "dict-sql.h"
@@ -35,13 +35,17 @@ struct sql_dict {
 
 struct sql_dict_iterate_context {
 	struct dict_iterate_context ctx;
+	pool_t pool;
+
 	enum dict_iterate_flags flags;
-	char *path;
+	const char **paths;
 
 	struct sql_result *result;
 	string_t *key;
 	const struct dict_sql_map *map;
 	unsigned int key_prefix_len, pattern_prefix_len, next_map_idx;
+	unsigned int path_idx;
+	bool failed;
 };
 
 struct sql_dict_inc_row {
@@ -61,10 +65,9 @@ struct sql_dict_transaction_context {
 	struct sql_dict_inc_row *inc_row;
 
 	unsigned int failed:1;
-	unsigned int changed:1;
 };
 
-static struct sql_pool *dict_sql_pool;
+static struct sql_db_cache *dict_sql_db_cache;
 
 static void sql_dict_prev_inc_flush(struct sql_dict_transaction_context *ctx);
 
@@ -90,8 +93,8 @@ sql_dict_init(struct dict *driver, const char *uri,
 	/* currently pgsql and sqlite don't support "ON DUPLICATE KEY" */
 	dict->has_on_duplicate_key = strcmp(driver->name, "mysql") == 0;
 
-	dict->db = sql_pool_new(dict_sql_pool, driver->name,
-				dict->set->connect);
+	dict->db = sql_db_cache_new(dict_sql_db_cache, driver->name,
+				    dict->set->connect);
 	return &dict->dict;
 }
 
@@ -297,7 +300,7 @@ static int sql_dict_lookup(struct dict *_dict, pool_t pool,
 			p_strdup(pool, sql_result_get_field_value(result, 0));
 	}
 
-	sql_result_free(result);
+	sql_result_unref(result);
 	return ret;
 }
 
@@ -312,16 +315,24 @@ sql_dict_iterate_find_next_map(struct sql_dict_iterate_context *ctx,
 	t_array_init(values, dict->set->max_field_count);
 	maps = array_get(&dict->set->maps, &count);
 	for (i = ctx->next_map_idx; i < count; i++) {
-		if (dict_sql_map_match(&maps[i], ctx->path,
+		if (dict_sql_map_match(&maps[i], ctx->paths[ctx->path_idx],
 				       values, &pat_len, &path_len, TRUE) &&
 		    ((ctx->flags & DICT_ITERATE_FLAG_RECURSE) != 0 ||
 		     array_count(values)+1 >= array_count(&maps[i].sql_fields))) {
 			ctx->key_prefix_len = path_len;
 			ctx->pattern_prefix_len = pat_len;
 			ctx->next_map_idx = i + 1;
+
+			str_truncate(ctx->key, 0);
+			str_append(ctx->key, ctx->paths[ctx->path_idx]);
 			return &maps[i];
 		}
 	}
+
+	/* try the next path, if there is any */
+	ctx->path_idx++;
+	if (ctx->paths[ctx->path_idx] != NULL)
+		return sql_dict_iterate_find_next_map(ctx, values);
 	return NULL;
 }
 
@@ -357,7 +368,8 @@ static bool sql_dict_iterate_next_query(struct sql_dict_iterate_context *ctx)
 
 		recurse_type = (ctx->flags & DICT_ITERATE_FLAG_RECURSE) == 0 ?
 			SQL_DICT_RECURSE_ONE : SQL_DICT_RECURSE_FULL;
-		sql_dict_where_build(dict, map, &values, ctx->path[0],
+		sql_dict_where_build(dict, map, &values,
+				     ctx->paths[ctx->path_idx][0],
 				     recurse_type, query);
 
 		if ((ctx->flags & DICT_ITERATE_FLAG_SORT_BY_KEY) != 0) {
@@ -377,47 +389,58 @@ static bool sql_dict_iterate_next_query(struct sql_dict_iterate_context *ctx)
 }
 
 static struct dict_iterate_context *
-sql_dict_iterate_init(struct dict *_dict, const char *path, 
+sql_dict_iterate_init(struct dict *_dict, const char *const *paths,
 		      enum dict_iterate_flags flags)
 {
 	struct sql_dict_iterate_context *ctx;
+	unsigned int i, path_count;
+	pool_t pool;
 
-	ctx = i_new(struct sql_dict_iterate_context, 1);
+	pool = pool_alloconly_create("sql dict iterate", 512);
+	ctx = p_new(pool, struct sql_dict_iterate_context, 1);
 	ctx->ctx.dict = _dict;
-	ctx->path = i_strdup(path);
+	ctx->pool = pool;
 	ctx->flags = flags;
-	ctx->key = str_new(default_pool, 256);
-	str_append(ctx->key, ctx->path);
 
+	for (path_count = 0; paths[path_count] != NULL; path_count++) ;
+	ctx->paths = p_new(pool, const char *, path_count + 1);
+	for (i = 0; i < path_count; i++)
+		ctx->paths[i] = p_strdup(pool, paths[i]);
+
+	ctx->key = str_new(pool, 256);
 	if (!sql_dict_iterate_next_query(ctx)) {
-		i_error("sql dict iterate: Invalid/unmapped path: %s", path);
+		i_error("sql dict iterate: Invalid/unmapped path: %s",
+			paths[0]);
 		ctx->result = NULL;
 		return &ctx->ctx;
 	}
 	return &ctx->ctx;
 }
 
-static int sql_dict_iterate(struct dict_iterate_context *_ctx,
-			    const char **key_r, const char **value_r)
+static bool sql_dict_iterate(struct dict_iterate_context *_ctx,
+			     const char **key_r, const char **value_r)
 {
 	struct sql_dict_iterate_context *ctx =
 		(struct sql_dict_iterate_context *)_ctx;
-	const char *p;
+	const char *p, *value;
 	unsigned int i, count;
 	int ret;
 
-	if (ctx->result == NULL)
-		return -1;
+	if (ctx->result == NULL) {
+		ctx->failed = TRUE;
+		return FALSE;
+	}
 
 	while ((ret = sql_result_next_row(ctx->result)) == 0) {
 		/* see if there are more results in the next map */
 		if (!sql_dict_iterate_next_query(ctx))
-			return 0;
+			return FALSE;
 	}
 	if (ret < 0) {
+		ctx->failed = TRUE;
 		i_error("dict sql iterate failed: %s",
 			sql_result_get_error(ctx->result));
-		return ret;
+		return FALSE;
 	}
 
 	/* convert fetched row to dict key */
@@ -433,27 +456,28 @@ static int sql_dict_iterate(struct dict_iterate_context *_ctx,
 			str_append_c(ctx->key, *p);
 		else {
 			i_assert(i < count);
-			str_append(ctx->key,
-				   sql_result_get_field_value(ctx->result, i));
+			value = sql_result_get_field_value(ctx->result, i);
+			if (value != NULL)
+				str_append(ctx->key, value);
 			i++;
 		}
 	}
 
 	*key_r = str_c(ctx->key);
 	*value_r = sql_result_get_field_value(ctx->result, 0);
-	return 1;
+	return TRUE;
 }
 
-static void sql_dict_iterate_deinit(struct dict_iterate_context *_ctx)
+static int sql_dict_iterate_deinit(struct dict_iterate_context *_ctx)
 {
 	struct sql_dict_iterate_context *ctx =
 		(struct sql_dict_iterate_context *)_ctx;
+	int ret = ctx->failed ? -1 : 0;
 
 	if (ctx->result != NULL)
-		sql_result_free(ctx->result);
-	str_free(&ctx->key);
-	i_free(ctx->path);
-	i_free(ctx);
+		sql_result_unref(ctx->result);
+	pool_unref(&ctx->pool);
+	return ret;
 }
 
 static struct dict_transaction_context *
@@ -849,7 +873,7 @@ static void sql_dict_atomic_inc(struct dict_transaction_context *_ctx,
 }
 
 static struct dict sql_dict = {
-	MEMBER(name) "sql",
+	.name = "sql",
 
 	{
 		sql_dict_init,
@@ -875,7 +899,7 @@ void dict_sql_register(void)
         const struct sql_db *const *drivers;
 	unsigned int i, count;
 
-	dict_sql_pool = sql_pool_init(DICT_SQL_MAX_UNUSED_CONNECTIONS);
+	dict_sql_db_cache = sql_db_cache_init(DICT_SQL_MAX_UNUSED_CONNECTIONS);
 
 	/* @UNSAFE */
 	drivers = array_get(&sql_drivers, &count);
@@ -896,5 +920,5 @@ void dict_sql_unregister(void)
 	for (i = 0; dict_sql_drivers[i].name != NULL; i++)
 		dict_driver_unregister(&dict_sql_drivers[i]);
 	i_free(dict_sql_drivers);
-	sql_pool_deinit(&dict_sql_pool);
+	sql_db_cache_deinit(&dict_sql_db_cache);
 }

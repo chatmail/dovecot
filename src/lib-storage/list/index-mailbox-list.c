@@ -7,6 +7,7 @@
 #include "imap-match.h"
 #include "mail-index.h"
 #include "mail-storage.h"
+#include "mail-storage-hooks.h"
 #include "mailbox-tree.h"
 #include "mailbox-list-subscriptions.h"
 #include "mailbox-list-index.h"
@@ -21,7 +22,6 @@
 
 struct index_mailbox_list_module index_mailbox_list_module =
 	MODULE_CONTEXT_INIT(&mailbox_list_module_register);
-static void (*index_next_hook_mailbox_list_created)(struct mailbox_list *list);
 
 static enum mailbox_info_flags
 index_mailbox_list_index_flags_translate(enum mailbox_list_index_flags flags)
@@ -456,26 +456,20 @@ static int index_mailbox_list_open_indexes(struct mailbox_list *list,
 {
 	struct index_mailbox_list *ilist = INDEX_LIST_CONTEXT(list);
 	const char *path;
-	enum mail_index_open_flags index_flags;
-	enum mail_storage_flags storage_flags;
+	enum mail_index_open_flags index_flags = 0;
 	int ret;
 
-	/* FIXME: a bit ugly way to get the flags, but this will do for now.. */
-	index_flags = MAIL_INDEX_OPEN_FLAG_CREATE;
-	storage_flags = *list->set.mail_storage_flags;
-#ifndef MMAP_CONFLICTS_WRITE
-	if ((storage_flags & MAIL_STORAGE_FLAG_MMAP_DISABLE) != 0)
-#endif
-		index_flags |= MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE;
+	index_flags = mail_storage_settings_to_index_flags(list->mail_set);
 
-	if (mail_index_open(ilist->mail_index, index_flags,
-			    *list->set.lock_method) < 0) {
+	mail_index_set_lock_method(ilist->mail_index,
+				   list->mail_set->parsed_lock_method, -1U);
+	if (mail_index_open_or_create(ilist->mail_index, index_flags) < 0) {
 		if (mail_index_move_to_memory(ilist->mail_index) < 0) {
 			/* try opening once more. it should be created
 			   directly into memory now. */
-			ret = mail_index_open(ilist->mail_index, index_flags,
-					      *list->set.lock_method);
-			if (ret <= 0) {
+			ret = mail_index_open_or_create(ilist->mail_index,
+							index_flags);
+			if (ret < 0) {
 				/* everything failed. there's a bug in the
 				   code, but just work around it by disabling
 				   the index completely */
@@ -507,7 +501,7 @@ static void index_mailbox_list_created(struct mailbox_list *list)
 
 	/* FIXME: always disabled for now */
 	dir = mailbox_list_get_path(list, NULL, MAILBOX_LIST_PATH_TYPE_INDEX);
-	if (*dir == '\0' || getenv("MAILBOX_LIST_INDEX_DISABLE") != NULL ||
+	if (*dir == '\0' || list->mail_set->mailbox_list_index_disable ||
 	    strcmp(list->name, "maildir++") != 0 || 1) {
 		/* reserve the module context anyway, so syncing code knows
 		   that the index is disabled */
@@ -538,12 +532,14 @@ static void index_mailbox_list_created(struct mailbox_list *list)
 	}
 }
 
+static struct mail_storage_hooks index_mailbox_list_hooks = {
+	.mailbox_list_created = index_mailbox_list_created
+};
+
 void index_mailbox_list_init(void); /* called in mailbox-list-register.c */
 
 void index_mailbox_list_init(void)
 {
-	index_next_hook_mailbox_list_created = hook_mailbox_list_created;
-	hook_mailbox_list_created = index_mailbox_list_created;
-
+	mail_storage_hooks_add_internal(&index_mailbox_list_hooks);
 	index_mailbox_list_sync_init();
 }

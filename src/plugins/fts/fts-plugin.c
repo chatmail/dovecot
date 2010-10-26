@@ -1,26 +1,24 @@
 /* Copyright (c) 2006-2010 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "mail-storage-private.h"
+#include "mail-storage-hooks.h"
 #include "fts-plugin.h"
 
 #include <stdlib.h>
 
-const char *fts_plugin_version = PACKAGE_VERSION;
+const char *fts_plugin_version = DOVECOT_VERSION;
 
-void (*fts_next_hook_mailbox_opened)(struct mailbox *box);
+static struct mail_storage_hooks fts_mail_storage_hooks = {
+	.mailbox_allocated = fts_mailbox_allocated,
+	.mail_allocated = fts_mail_allocated
+};
 
-void fts_plugin_init(void)
+void fts_plugin_init(struct module *module)
 {
-	if (getenv("FTS") != NULL) {
-		fts_next_hook_mailbox_opened = hook_mailbox_opened;
-		hook_mailbox_opened = fts_mailbox_opened;
-	} else if (getenv("DEBUG") != NULL)
-		i_info("fts: No fts setting - plugin disabled");
+	mail_storage_hooks_add(module, &fts_mail_storage_hooks);
 }
 
 void fts_plugin_deinit(void)
 {
-	if (hook_mailbox_opened == fts_mailbox_opened)
-		hook_mailbox_opened = fts_next_hook_mailbox_opened;
+	mail_storage_hooks_remove(&fts_mail_storage_hooks);
 }

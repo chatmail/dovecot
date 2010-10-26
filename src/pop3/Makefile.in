@@ -36,11 +36,11 @@ build_triplet = @build@
 host_triplet = @host@
 pkglibexec_PROGRAMS = pop3$(EXEEXT)
 subdir = src/pop3
-DIST_COMMON = $(am__noinst_HEADERS_DIST) \
-	$(am__pkginc_lib_HEADERS_DIST) $(srcdir)/Makefile.am \
+DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -50,11 +50,11 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(pkglibexecdir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
 PROGRAMS = $(pkglibexec_PROGRAMS)
-am_pop3_OBJECTS = client.$(OBJEXT) commands.$(OBJEXT) main.$(OBJEXT)
+am_pop3_OBJECTS = main.$(OBJEXT) pop3-client.$(OBJEXT) \
+	pop3-commands.$(OBJEXT) pop3-settings.$(OBJEXT)
 pop3_OBJECTS = $(am_pop3_OBJECTS)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) ../lib-dict/libdict.a \
-	$(unused_objects)
+am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(unused_objects)
 pop3_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(pop3_LDFLAGS) \
 	$(LDFLAGS) -o $@
@@ -73,9 +73,6 @@ LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	$(LDFLAGS) -o $@
 SOURCES = $(pop3_SOURCES)
 DIST_SOURCES = $(pop3_SOURCES)
-am__noinst_HEADERS_DIST = capability.h client.h commands.h common.h
-am__pkginc_lib_HEADERS_DIST = capability.h client.h commands.h \
-	common.h
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -97,12 +94,13 @@ am__nobase_list = $(am__nobase_strip_setup); \
 am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
-HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
+HEADERS = $(pkginc_lib_HEADERS)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 pkglibexecdir = $(libexecdir)/dovecot
 ACLOCAL = @ACLOCAL@
+ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTH_CFLAGS = @AUTH_CFLAGS@
@@ -148,10 +146,18 @@ LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
+LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
+LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
+LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
+LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
@@ -162,6 +168,7 @@ MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
 MYSQL_CFLAGS = @MYSQL_CFLAGS@
+MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -183,7 +190,9 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
+RUN_TEST = @RUN_TEST@
 SED = @SED@
+SETTING_FILES = @SETTING_FILES@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 SQLITE_CFLAGS = @SQLITE_CFLAGS@
@@ -192,8 +201,8 @@ SQL_CFLAGS = @SQL_CFLAGS@
 SQL_LIBS = @SQL_LIBS@
 SSL_CFLAGS = @SSL_CFLAGS@
 SSL_LIBS = @SSL_LIBS@
-STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
+VALGRIND = @VALGRIND@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -257,44 +266,39 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-settings \
+	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-mail \
-	-I$(top_srcdir)/src/lib-storage \
-	-DMODULEDIR=\""$(moduledir)"\"
+	-I$(top_srcdir)/src/lib-storage
 
 pop3_LDFLAGS = -export-dynamic
-
-# get some functions included which only plugins use. liblib should probably
-# be a shared library so this wouldn't be needed..
-unused_objects = \
-	../lib/mountpoint.o \
-	../lib-imap/imap-util.o
+@BUILD_SHARED_LIBS_FALSE@unused_objects = \
+@BUILD_SHARED_LIBS_FALSE@	../lib/mountpoint.o \
+@BUILD_SHARED_LIBS_FALSE@	../lib-imap/imap-util.o \
+@BUILD_SHARED_LIBS_FALSE@	../lib-storage/mail-search-parser-imap.o
 
 libs = \
-	$(STORAGE_LIBS) \
-	../lib-dict/libdict.a \
+	$(LIBDOVECOT_STORAGE) \
 	$(unused_objects)
 
-pop3_LDADD = \
-	$(libs) \
-	$(LIBICONV) \
-	$(MODULE_LIBS)
-
-pop3_DEPENDENCIES = $(libs)
+pop3_LDADD = $(libs) $(LIBDOVECOT) $(MODULE_LIBS)
+pop3_DEPENDENCIES = $(libs) $(LIBDOVECOT_DEPS)
 pop3_SOURCES = \
-	client.c \
-	commands.c \
-	main.c
+	main.c \
+	pop3-client.c \
+	pop3-commands.c \
+	pop3-settings.c
 
 headers = \
-	capability.h \
-	client.h \
-	commands.h \
-	common.h
+	pop3-capability.h \
+	pop3-client.h \
+	pop3-commands.h \
+	pop3-common.h \
+	pop3-settings.h
 
-@INSTALL_HEADERS_TRUE@pkginc_libdir = $(pkgincludedir)/src/pop3
-@INSTALL_HEADERS_TRUE@pkginc_lib_HEADERS = $(headers)
-@INSTALL_HEADERS_FALSE@noinst_HEADERS = $(headers)
+pkginc_libdir = $(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)
 all: all-am
 
 .SUFFIXES:
@@ -382,9 +386,10 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/commands.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pop3-client.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pop3-commands.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pop3-settings.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

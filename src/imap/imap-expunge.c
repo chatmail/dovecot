@@ -1,6 +1,6 @@
 /* Copyright (c) 2003-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "imap-common.h"
 #include "mail-storage.h"
 #include "mail-search-build.h"
 #include "imap-expunge.h"
@@ -31,7 +31,7 @@ int imap_expunge(struct mailbox *box, struct mail_search_arg *next_search_arg)
 	mail_search_args_unref(&search_args);
 
 	mail = mail_alloc(t, 0, NULL);
-	while (mailbox_search_next(ctx, mail) > 0) {
+	while (mailbox_search_next(ctx, mail)) {
 		mail_expunge(mail);
 		expunges = TRUE;
 	}

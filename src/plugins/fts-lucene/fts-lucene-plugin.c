@@ -4,11 +4,11 @@
 #include "mail-storage-private.h"
 #include "fts-lucene-plugin.h"
 
-const char *fts_lucene_plugin_version = PACKAGE_VERSION;
+const char *fts_lucene_plugin_version = DOVECOT_VERSION;
 
 unsigned int fts_lucene_storage_module_id;
 
-void fts_lucene_plugin_init(void)
+void fts_lucene_plugin_init(struct module *module ATTR_UNUSED)
 {
 	fts_backend_register(&fts_backend_lucene);
 }

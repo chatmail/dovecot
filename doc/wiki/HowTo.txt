@@ -7,6 +7,8 @@ HOWTOs / Examples / Tutorials
  * <A simple virtual passwd file installation> [HowTo.SimpleVirtualInstall.txt]
 
  * <Virtual passwd file and Exim> [HowTo.VirtualhostingWithExim.txt]
+ * <Virtual passwd file and Postfix> [HowTo.Virtual User Flat File
+   Configuration with Postfix.txt]
 
 <Virtual users> [VirtualUsers.txt] with <LDAP> [AuthDatabase.LDAP.txt]:
 
@@ -79,7 +81,6 @@ Others:
  * <VMailMgr with Dovecot> [HowTo.VMailMgr.txt]
  * <NTLM authentication against Active Directory>
    [HowTo.ActiveDirectoryNtlm.txt]
- * <Building a mail server with Exim, Dovecot and Squirrelmail>
-   [HowTo.DebianEximDovecotSquirrelmailSieve.txt]
+ * <Postfix and Dovecot LMTP> [HowTo.PostfixDovecotLMTP.txt]
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

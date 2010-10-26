@@ -12,14 +12,14 @@
  * This software is released under the MIT license.
  */
 
-#include "common.h"
-#include "mech.h"
-#include "passdb.h"
+#include "auth-common.h"
+#include "env-util.h"
 #include "str.h"
 #include "str-sanitize.h"
-#include "buffer.h"
 #include "hex-binary.h"
 #include "safe-memset.h"
+#include "mech.h"
+#include "passdb.h"
 
 #include <stdlib.h>
 
@@ -99,12 +99,13 @@ static void mech_gssapi_log_error(struct auth_request *request,
 	} while (message_context != 0);
 }
 
-static void mech_gssapi_initialize(void)
+static void mech_gssapi_initialize(const struct auth_settings *set)
 {
-	const char *path;
+	const char *path = set->krb5_keytab;
 
-	path = getenv("KRB5_KTNAME");
-	if (path != NULL) {
+	if (*path != '\0') {
+		/* environment may be used by Kerberos 5 library directly */
+		env_put(t_strconcat("KRB5_KTNAME=", path, NULL));
 #ifdef HAVE_GSSKRB5_REGISTER_ACCEPTOR_IDENTITY
 		gsskrb5_register_acceptor_identity(path);
 #elif defined (HAVE_KRB5_GSS_REGISTER_ACCEPTOR_IDENTITY)
@@ -117,11 +118,6 @@ static struct auth_request *mech_gssapi_auth_new(void)
 {
 	struct gssapi_auth_request *request;
 	pool_t pool;
-
-	if (!gssapi_initialized) {
-		gssapi_initialized = TRUE;
-		mech_gssapi_initialize();
-	}
 
 	pool = pool_alloconly_create("gssapi_auth_request", 1024);
 	request = p_new(pool, struct gssapi_auth_request, 1);
@@ -142,7 +138,12 @@ obtain_service_credentials(struct auth_request *request, gss_cred_id_t *ret_r)
 	gss_name_t gss_principal;
 	const char *service_name;
 
-	if (strcmp(request->auth->gssapi_hostname, "$ALL") == 0) {
+	if (!gssapi_initialized) {
+		gssapi_initialized = TRUE;
+		mech_gssapi_initialize(request->set);
+	}
+
+	if (strcmp(request->set->gssapi_hostname, "$ALL") == 0) {
 		auth_request_log_debug(request, "gssapi",
 				       "Using all keytab entries");
 		*ret_r = GSS_C_NO_CREDENTIAL;
@@ -160,7 +161,7 @@ obtain_service_credentials(struct auth_request *request, gss_cred_id_t *ret_r)
 	principal_name = t_str_new(128);
 	str_append(principal_name, service_name);
 	str_append_c(principal_name, '@');
-	str_append(principal_name, request->auth->gssapi_hostname);
+	str_append(principal_name, request->set->gssapi_hostname);
 
 	auth_request_log_debug(request, "gssapi",
 		"Obtaining credentials for %s", str_c(principal_name));
@@ -327,9 +328,9 @@ mech_gssapi_sec_context(struct gssapi_auth_request *request,
 	}
 
 	if (ret == 0) {
-		auth_request->callback(auth_request,
-				       AUTH_CLIENT_RESULT_CONTINUE,
-				       output_token.value, output_token.length);
+		auth_request_handler_reply_continue(auth_request,
+						    output_token.value,
+						    output_token.length);
 	}
 	(void)gss_release_buffer(&minor_status, &output_token);
 	return ret;
@@ -369,9 +370,8 @@ mech_gssapi_wrap(struct gssapi_auth_request *request, gss_buffer_desc inbuf)
 	auth_request_log_debug(&request->auth_request, "gssapi",
 			       "Negotiated security layer");
 
-	request->auth_request.callback(&request->auth_request,
-				       AUTH_CLIENT_RESULT_CONTINUE,
-				       outbuf.value, outbuf.length);
+	auth_request_handler_reply_continue(&request->auth_request,
+					    outbuf.value, outbuf.length);
 
 	(void)gss_release_buffer(&minor_status, &outbuf);
 	request->sasl_gssapi_state = GSS_STATE_UNWRAP;
@@ -551,7 +551,7 @@ mech_gssapi_auth_continue(struct auth_request *request,
 	struct gssapi_auth_request *gssapi_request = 
 		(struct gssapi_auth_request *)request;
 	gss_buffer_desc inbuf;
-	int ret;
+	int ret = -1;
 
 	inbuf.value = (void *)data;
 	inbuf.length = data_size;
@@ -567,7 +567,6 @@ mech_gssapi_auth_continue(struct auth_request *request,
 		ret = mech_gssapi_unwrap(gssapi_request, inbuf);
 		break;
 	default:
-		ret = -1;
 		i_unreached();
 	}
 	if (ret < 0)
@@ -597,8 +596,7 @@ mech_gssapi_auth_initial(struct auth_request *request,
 
 	if (data_size == 0) {
 		/* The client should go first */
-		request->callback(request, AUTH_CLIENT_RESULT_CONTINUE,
-				  NULL, 0);
+		auth_request_handler_reply_continue(request, NULL, 0);
 	} else {
 		mech_gssapi_auth_continue(request, data, data_size);
 	}
@@ -632,8 +630,8 @@ mech_gssapi_auth_free(struct auth_request *request)
 const struct mech_module mech_gssapi = {
 	"GSSAPI",
 
-	MEMBER(flags) 0,
-	MEMBER(passdb_need) MECH_PASSDB_NEED_NOTHING,
+	.flags = 0,
+	.passdb_need = MECH_PASSDB_NEED_NOTHING,
 
 	mech_gssapi_auth_new,
 	mech_gssapi_auth_initial,
@@ -647,8 +645,8 @@ const struct mech_module mech_gssapi = {
 const struct mech_module mech_gssapi_spnego = {
 	"GSS-SPNEGO",
 
-	MEMBER(flags) 0,
-	MEMBER(passdb_need) MECH_PASSDB_NEED_NOTHING,
+	.flags = 0,
+	.passdb_need = MECH_PASSDB_NEED_NOTHING,
 
 	mech_gssapi_auth_new,
         mech_gssapi_auth_initial,
@@ -664,18 +662,22 @@ void mech_gssapi_init(void)
 {
 	mech_register_module(&mech_gssapi);
 #ifdef HAVE_GSSAPI_SPNEGO
-	if (getenv("NTLM_USE_WINBIND") == NULL)
+	/* load if we already didn't load it using winbind */
+	if (mech_module_find(mech_gssapi_spnego.mech_name) == NULL)
 		mech_register_module(&mech_gssapi_spnego);
 #endif
 }
 
 void mech_gssapi_deinit(void)
 {
-	mech_unregister_module(&mech_gssapi);
 #ifdef HAVE_GSSAPI_SPNEGO
-	if (getenv("NTLM_USE_WINBIND") == NULL)
+	const struct mech_module *mech;
+
+	mech = mech_module_find(mech_gssapi_spnego.mech_name);
+	if (mech != NULL && mech->auth_new == mech_gssapi_auth_new)
 		mech_unregister_module(&mech_gssapi_spnego);
 #endif
+	mech_unregister_module(&mech_gssapi);
 }
 #endif
 

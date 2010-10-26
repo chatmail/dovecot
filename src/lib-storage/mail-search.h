@@ -18,13 +18,10 @@ enum mail_search_arg_type {
 	SEARCH_FLAGS,
 	SEARCH_KEYWORDS,
 
-	/* dates */
+	/* dates (date_type required) */
 	SEARCH_BEFORE,
 	SEARCH_ON, /* time must point to beginning of the day */
 	SEARCH_SINCE,
-	SEARCH_SENTBEFORE,
-	SEARCH_SENTON, /* time must point to beginning of the day */
-	SEARCH_SENTSINCE,
 
 	/* sizes */
 	SEARCH_SMALLER,
@@ -45,11 +42,19 @@ enum mail_search_arg_type {
 	SEARCH_MODSEQ,
 	SEARCH_INTHREAD,
 	SEARCH_GUID,
-	SEARCH_MAILBOX
+	SEARCH_MAILBOX,
+	SEARCH_MAILBOX_GUID,
+	SEARCH_MAILBOX_GLOB
+};
+
+enum mail_search_date_type {
+	MAIL_SEARCH_DATE_TYPE_SENT = 1,
+	MAIL_SEARCH_DATE_TYPE_RECEIVED,
+	MAIL_SEARCH_DATE_TYPE_SAVED
 };
 
 enum mail_search_arg_flag {
-	/* For (SENT)BEFORE/SINCE/ON searches: Don't drop timezone from
+	/* For BEFORE/SINCE/ON searches: Don't drop timezone from
 	   comparisons */
 	MAIL_SEARCH_ARG_FLAG_USE_TZ	= 0x01,
 };
@@ -77,17 +82,20 @@ struct mail_search_arg {
 		uoff_t size;
 		enum mail_flags flags;
 		enum mail_search_arg_flag search_flags;
+		enum mail_search_date_type date_type;
 		enum mail_thread_type thread_type;
 		struct mail_keywords *keywords;
 		struct mail_search_modseq *modseq;
 		struct mail_search_args *search_args;
 		struct mail_search_result *search_result;
+		struct imap_match_glob *mailbox_glob;
 	} value;
 
         void *context;
 	const char *hdr_field_name; /* for SEARCH_HEADER* */
 	unsigned int not:1;
 	unsigned int match_always:1; /* result = 1 always */
+	unsigned int nonmatch_always:1; /* result = 0 always */
 
 	int result; /* -1 = unknown, 0 = unmatched, 1 = matched */
 };
@@ -162,7 +170,13 @@ const char *const *
 mail_search_args_analyze(struct mail_search_arg *args,
 			 bool *have_headers, bool *have_body);
 
-/* Simplify/optimize search arguments */
+/* Returns FALSE if search query contains MAILBOX[_GLOB] args such that the
+   query can never match any messages in the given mailbox. */
+bool mail_search_args_match_mailbox(struct mail_search_args *args,
+				    const char *vname, char sep);
+
+/* Simplify/optimize search arguments. Afterwards all OR/SUB args are
+   guaranteed to have not=FALSE. */
 void mail_search_args_simplify(struct mail_search_args *args);
 
 #endif

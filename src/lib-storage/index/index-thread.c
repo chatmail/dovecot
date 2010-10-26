@@ -208,7 +208,6 @@ static void mail_thread_strmap_remap(const uint32_t *idx_map,
 	   pointers though. */
 	new_first_invalid = new_count + 1 +
 		THREAD_INVALID_MSGID_STR_IDX_SKIP_COUNT;
-	i = cache->first_invalid_msgid_str_idx;
 	for (i = 0; i < invalid_count; i++) {
 		node = array_idx_modifiable(&new_nodes, new_first_invalid + i);
 		*node = old_nodes[cache->first_invalid_msgid_str_idx + i];
@@ -233,7 +232,7 @@ static int thread_get_mail_header(struct mail *mail, const char *name,
 			return -1;
 
 		/* Message is expunged. Instead of failing the entire THREAD
-		   command, just treat the header as non-existing. */
+		   command, just treat the header as nonexistent. */
 		*value_r = NULL;
 	}
 	return 0;
@@ -307,10 +306,9 @@ static int mail_thread_index_map_build(struct mail_thread_context *ctx)
 
 	if (tbox->strmap_view == NULL) {
 		/* first time we're threading this mailbox */
-		struct index_mailbox *ibox = (struct index_mailbox *)ctx->box;
-
 		tbox->strmap_view =
-			mail_index_strmap_view_open(tbox->strmap, ibox->view,
+			mail_index_strmap_view_open(tbox->strmap,
+						    ctx->box->view,
 						    mail_thread_hash_key_cmp,
 						    mail_thread_hash_rec_cmp,
 						    mail_thread_strmap_remap,
@@ -340,7 +338,7 @@ static int mail_thread_index_map_build(struct mail_thread_context *ctx)
 	mail = mail_alloc(ctx->t, 0, headers_ctx);
 	mailbox_header_lookup_unref(&headers_ctx);
 
-	while (mailbox_search_next(search_ctx, mail) > 0) {
+	while (mailbox_search_next(search_ctx, mail)) {
 		if (mail_thread_map_add_mail(ctx, mail) < 0) {
 			ret = -1;
 			break;
@@ -433,9 +431,9 @@ static void mail_thread_cache_update_adds(struct mail_thread_mailbox *tbox,
 	if (uid_count == 0)
 		return;
 
+	(void)array_bsearch_insert_pos(tbox->msgid_map, &uids[0].seq1,
+				       msgid_map_cmp, &j);
 	msgid_map = array_get(tbox->msgid_map, &map_count);
-	(void)bsearch_insert_pos(&uids[0].seq1, msgid_map, map_count,
-				 sizeof(*msgid_map), msgid_map_cmp, &j);
 	i_assert(j < map_count);
 	while (j > 0 && msgid_map[j-1].uid == msgid_map[j].uid)
 		j--;
@@ -533,7 +531,7 @@ static void mail_thread_cache_sync_add(struct mail_thread_mailbox *tbox,
 	   count - kind of kludgy) */
 	i_assert(msgid_map[count].uid == 0);
 	i = 0;
-	while (i < count && mailbox_search_next(search_ctx, mail) > 0) {
+	while (i < count && mailbox_search_next(search_ctx, mail)) {
 		while (msgid_map[i].uid < mail->uid)
 			i++;
 		i_assert(i < count);
@@ -615,36 +613,46 @@ mail_thread_iterate_init(struct mail_thread_context *ctx,
 					     thread_type, write_seqs);
 }
 
-static int mail_thread_mailbox_close(struct mailbox *box)
+static void mail_thread_mailbox_close(struct mailbox *box)
 {
 	struct mail_thread_mailbox *tbox = MAIL_THREAD_CONTEXT(box);
-	int ret;
 
 	i_assert(tbox->ctx == NULL);
 
 	if (tbox->strmap_view != NULL)
 		mail_index_strmap_view_close(&tbox->strmap_view);
-	mail_index_strmap_deinit(&tbox->strmap);
 	if (tbox->cache->search_result != NULL)
 		mailbox_search_result_free(&tbox->cache->search_result);
-	array_free(&tbox->cache->thread_nodes);
-	i_free(tbox->cache);
-
-	ret = tbox->module_ctx.super.close(box);
-	i_free(tbox);
-	return ret;
+	tbox->module_ctx.super.close(box);
 }
 
-void index_thread_mailbox_index_opened(struct index_mailbox *ibox)
+static void mail_thread_mailbox_free(struct mailbox *box)
 {
-	struct mailbox *box = &ibox->box;
-	struct mail_thread_mailbox *tbox;
+	struct mail_thread_mailbox *tbox = MAIL_THREAD_CONTEXT(box);
+
+	mail_index_strmap_deinit(&tbox->strmap);
+	tbox->module_ctx.super.free(box);
+
+	array_free(&tbox->cache->thread_nodes);
+	i_free(tbox->cache);
+	i_free(tbox);
+}
+
+void index_thread_mailbox_opened(struct mailbox *box)
+{
+	struct mail_thread_mailbox *tbox = MAIL_THREAD_CONTEXT(box);
+
+	if (tbox != NULL) {
+		/* mailbox was already opened+closed once. */
+		return;
+	}
 
 	tbox = i_new(struct mail_thread_mailbox, 1);
 	tbox->module_ctx.super = box->v;
 	box->v.close = mail_thread_mailbox_close;
+	box->v.free = mail_thread_mailbox_free;
 
-	tbox->strmap = mail_index_strmap_init(ibox->index,
+	tbox->strmap = mail_index_strmap_init(box->index,
 					      MAIL_THREAD_INDEX_SUFFIX);
 	tbox->next_msgid_idx = 1;
 

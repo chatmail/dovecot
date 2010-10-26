@@ -1,8 +1,6 @@
 Autocreate plugin
 =================
 
-Comes with v1.2.alpha3+.
-
 This plugin allows administrator to specify mailboxes that must always exist
 for all users. They can optionally also be subscribed. The mailboxes are
 created and subscribed always after user logs in. Namespaces are fully
@@ -12,7 +10,7 @@ Example:
 
 ---%<-------------------------------------------------------------------------
 protocol imap {
-  mail_plugins = autocreate
+  mail_plugins = $mail_plugins autocreate
 }
 plugin {
   autocreate = Trash
@@ -24,31 +22,4 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-v1.0 or v1.1
-------------
-
-The plugin is also available from
-http://www.dovecot.org/patches/1.1/autocreate-plugin.c. To compile the plugin
-by hand, do the following:
-
----%<-------------------------------------------------------------------------
-# replace * with the correct version:
-export DOVECOT=~/src/dovecot-1.*
-
-gcc -fPIC -shared -g -Wall -I$DOVECOT -I$DOVECOT/src/lib \
--I$DOVECOT/src/lib-storage -I$DOVECOT/src/lib-mail \
- -I$DOVECOT/src/lib-imap -DHAVE_CONFIG_H \
-autocreate-plugin.c -o autocreate_plugin.so
-
-# $PREFIX is the installation directory, e.g. /usr/local or /usr:
-cp autocreate_plugin.so $PREFIX/lib/dovecot/modules/imap/autocreate_plugin.so
-
-# Make sure you include the plugin directory in the dovecot.conf file
-# Example:
-# mail_plugins = autocreate
-# mail_plugin_dir = $PREFIX/lib/dovecot/modules/imap
----%<-------------------------------------------------------------------------
-
-The plugin does not need a lib_xy prefix.
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

@@ -27,8 +27,7 @@ struct subsfile_list_context {
 static void subsread_set_syscall_error(struct mailbox_list *list,
 				       const char *function, const char *path)
 {
-	if (errno == EACCES &&
-	    (list->flags & MAILBOX_LIST_FLAG_DEBUG) == 0) {
+	if (errno == EACCES && !list->mail_set->mail_debug) {
 		mailbox_list_set_error(list, MAIL_ERROR_PERM,
 				       "No permission to read subscriptions");
 	} else {
@@ -41,8 +40,7 @@ static void subsread_set_syscall_error(struct mailbox_list *list,
 static void subswrite_set_syscall_error(struct mailbox_list *list,
 					const char *function, const char *path)
 {
-	if (errno == EACCES &&
-	    (list->flags & MAILBOX_LIST_FLAG_DEBUG) == 0) {
+	if (errno == EACCES && !list->mail_set->mail_debug) {
 		mailbox_list_set_error(list, MAIL_ERROR_PERM,
 				       "No permission to modify subscriptions");
 	} else {
@@ -89,6 +87,7 @@ static const char *next_line(struct mailbox_list *list, const char *path,
 int subsfile_set_subscribed(struct mailbox_list *list, const char *path,
 			    const char *temp_prefix, const char *name, bool set)
 {
+	const struct mail_storage_settings *mail_set = list->mail_set;
 	struct dotlock_settings dotlock_set;
 	struct dotlock *dotlock;
 	const char *line, *origin;
@@ -97,16 +96,14 @@ int subsfile_set_subscribed(struct mailbox_list *list, const char *path,
 	int fd_in, fd_out;
 	mode_t mode;
 	gid_t gid;
-	bool found, failed = FALSE;
+	bool found, changed = FALSE, failed = FALSE;
 
 	if (strcasecmp(name, "INBOX") == 0)
 		name = "INBOX";
 
 	memset(&dotlock_set, 0, sizeof(dotlock_set));
-	dotlock_set.use_excl_lock =
-		(list->flags & MAILBOX_LIST_FLAG_DOTLOCK_USE_EXCL) != 0;
-	dotlock_set.nfs_flush =
-		(list->flags & MAILBOX_LIST_FLAG_NFS_FLUSH) != 0;
+	dotlock_set.use_excl_lock = mail_set->dotlock_use_excl;
+	dotlock_set.nfs_flush = mail_set->mail_nfs_storage;
 	dotlock_set.temp_prefix = temp_prefix;
 	dotlock_set.timeout = SUBSCRIPTION_FILE_LOCK_TIMEOUT;
 	dotlock_set.stale_timeout = SUBSCRIPTION_FILE_CHANGE_TIMEOUT;
@@ -143,42 +140,47 @@ int subsfile_set_subscribed(struct mailbox_list *list, const char *path,
 		i_stream_create_fd(fd_in, list->mailbox_name_max_length+1,
 				   TRUE);
 	output = o_stream_create_fd_file(fd_out, 0, FALSE);
+	o_stream_cork(output);
 	found = FALSE;
 	while ((line = next_line(list, path, input,
 				 &failed, FALSE)) != NULL) {
 		if (strcmp(line, name) == 0) {
 			found = TRUE;
-			if (!set)
+			if (!set) {
+				changed = TRUE;
 				continue;
+			}
 		}
 
-		if (o_stream_send_str(output, line) < 0 ||
-		    o_stream_send(output, "\n", 1) < 0) {
-			subswrite_set_syscall_error(list, "write()", path);
-			failed = TRUE;
-			break;
-		}
+		(void)o_stream_send_str(output, line);
+		(void)o_stream_send(output, "\n", 1);
 	}
 
 	if (!failed && set && !found) {
 		/* append subscription */
 		line = t_strconcat(name, "\n", NULL);
-		if (o_stream_send_str(output, line) < 0) {
-			subswrite_set_syscall_error(list, "write()", path);
-			failed = TRUE;
-		}
+		(void)o_stream_send_str(output, line);
+		changed = TRUE;
 	}
 
-	if (!failed && fsync(fd_out) < 0) {
-		subswrite_set_syscall_error(list, "fsync()", path);
-		failed = TRUE;
+	if (changed && !failed) {
+		if (o_stream_flush(output) < 0) {
+			subswrite_set_syscall_error(list, "write()", path);
+			failed = TRUE;
+		} else if (mail_set->parsed_fsync_mode != FSYNC_MODE_NEVER) {
+			if (fsync(fd_out) < 0) {
+				subswrite_set_syscall_error(list, "fsync()",
+							    path);
+				failed = TRUE;
+			}
+		}
 	}
 
 	if (input != NULL)
 		i_stream_destroy(&input);
 	o_stream_destroy(&output);
 
-	if (failed || (set && found) || (!set && !found)) {
+	if (failed || !changed) {
 		if (file_dotlock_delete(&dotlock) < 0) {
 			subswrite_set_syscall_error(list,
 				"file_dotlock_delete()", path);
@@ -193,7 +195,7 @@ int subsfile_set_subscribed(struct mailbox_list *list, const char *path,
 			failed = TRUE;
 		}
 	}
-	return failed ? -1 : 0;
+	return failed ? -1 : (changed ? 1 : 0);
 }
 
 struct subsfile_list_context *
@@ -243,7 +245,7 @@ const char *subsfile_list_next(struct subsfile_list_context *ctx)
         for (i = 0;; i++) {
                 line = next_line(ctx->list, ctx->path, ctx->input, &ctx->failed,
 				 i < SUBSCRIPTION_FILE_ESTALE_RETRY_COUNT);
-                if (ctx->input->stream_errno != ESTALE ||
+		if (ctx->input->stream_errno != ESTALE ||
                     i == SUBSCRIPTION_FILE_ESTALE_RETRY_COUNT)
                         break;
 

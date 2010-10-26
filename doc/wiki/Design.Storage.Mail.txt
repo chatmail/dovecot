@@ -3,7 +3,7 @@ Mail
 
 Mail is first allocated with 'mail_alloc()'. Mails always belong to a
 <transaction> [Design.Storage.Mailbox.Transaction.txt]. Even if mail is treated
-read-only, Dovecot might write data to cache file, so whenever possible mail
+read-only, Dovecot might write data to cache file, so whenever possible, mail
 transactions should be committed. When mail is allocated, you can specify a
 list of fields and headers that you're (most likely) going to need. This allows
 Dovecot to optimize the later 'mail_get_*()' lookups so that it doesn't need to
@@ -12,7 +12,7 @@ you shouldn't list fields unless you're fairly certain you need them.
 
 If you need to jump around in the mailbox based on already known sequences or
 UIDs, you can do this with 'mail_set_seq()' and 'mail_set_uid()'. This way you
-don't have to go through all the trouble of setting you a mailbox search.
+don't have to go through all the trouble of setting up a mailbox search.
 
 Getting data
 ------------
@@ -97,4 +97,4 @@ immutable, so it's not possible to change message's received date, headers or
 body. If you wish to modify any of them, you need to create a new message and
 expunge the old one.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

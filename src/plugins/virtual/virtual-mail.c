@@ -41,7 +41,7 @@ virtual_mail_alloc(struct mailbox_transaction_context *t,
 
 	vmail->imail.data_pool =
 		pool_alloconly_create("virtual index_mail", 512);
-	vmail->imail.ibox = &mbox->ibox;
+	vmail->imail.ibox = INDEX_STORAGE_CONTEXT(t->box);
 	vmail->imail.trans = (struct index_transaction_context *)t;
 
 	vmail->wanted_fields = wanted_fields;
@@ -49,6 +49,7 @@ virtual_mail_alloc(struct mailbox_transaction_context *t,
 		vmail->wanted_headers = wanted_headers;
 		mailbox_header_lookup_ref(wanted_headers);
 	}
+
 	i_array_init(&vmail->backend_mails, array_count(&mbox->backend_boxes));
 	return &vmail->imail.mail.mail;
 }
@@ -66,6 +67,7 @@ static void virtual_mail_free(struct mail *mail)
 
 	if (vmail->wanted_headers != NULL)
 		mailbox_header_lookup_unref(&vmail->wanted_headers);
+
 	pool_unref(&vmail->imail.data_pool);
 	pool_unref(&vmail->imail.mail.pool);
 }
@@ -114,7 +116,7 @@ static void virtual_mail_set_seq(struct mail *mail, uint32_t seq)
 	const void *data;
 	bool expunged;
 
-	mail_index_lookup_ext(mbox->ibox.view, seq, mbox->virtual_ext_id,
+	mail_index_lookup_ext(mail->box->view, seq, mbox->virtual_ext_id,
 			      &data, &expunged);
 	vrec = data;
 
@@ -128,7 +130,7 @@ static void virtual_mail_set_seq(struct mail *mail, uint32_t seq)
 
 	vmail->imail.data.seq = seq;
 	mail->seq = seq;
-	mail_index_lookup_uid(mbox->ibox.view, seq, &mail->uid);
+	mail_index_lookup_uid(mail->box->view, seq, &mail->uid);
 
 	if (!vmail->lost) {
 		mail->expunged = vmail->backend_mail->expunged;
@@ -143,14 +145,21 @@ static void virtual_mail_set_seq(struct mail *mail, uint32_t seq)
 
 static bool virtual_mail_set_uid(struct mail *mail, uint32_t uid)
 {
-	struct virtual_mailbox *mbox = (struct virtual_mailbox *)mail->box;
 	uint32_t seq;
 
-	if (!mail_index_lookup_seq(mbox->ibox.view, uid, &seq))
+	if (!mail_index_lookup_seq(mail->box->view, uid, &seq))
 		return FALSE;
 
 	virtual_mail_set_seq(mail, seq);
 	return TRUE;
+}
+
+static void virtual_mail_set_uid_cache_updates(struct mail *mail, bool set)
+{
+	struct virtual_mail *vmail = (struct virtual_mail *)mail;
+	struct mail_private *p = (struct mail_private *)vmail->backend_mail;
+
+	p->v.set_uid_cache_updates(vmail->backend_mail, set);
 }
 
 static int virtual_mail_handle_lost(struct virtual_mail *vmail)
@@ -163,7 +172,7 @@ static int virtual_mail_handle_lost(struct virtual_mail *vmail)
 }
 
 static int
-virtual_mail_get_parts(struct mail *mail, const struct message_part **parts_r)
+virtual_mail_get_parts(struct mail *mail, struct message_part **parts_r)
 {
 	struct virtual_mail *vmail = (struct virtual_mail *)mail;
 
@@ -330,17 +339,18 @@ virtual_mail_get_special(struct mail *mail, enum mail_fetch_field field,
 
 	if (virtual_mail_handle_lost(vmail) < 0)
 		return -1;
-	if (field == MAIL_FETCH_MAILBOX_NAME) {
-		*value_r = p_strconcat(vmail->imail.data_pool,
-				       box->storage->ns->prefix,
-				       box->name, NULL);
-		return 0;
-	}
 	if (mail_get_special(vmail->backend_mail, field, value_r) < 0) {
 		virtual_box_copy_error(mail->box, box);
 		return -1;
 	}
 	return 0;
+}
+
+static struct mail *virtual_mail_get_real_mail(struct mail *mail)
+{
+	struct virtual_mail *vmail = (struct virtual_mail *)mail;
+
+	return mail_get_real_mail(vmail->backend_mail);
 }
 
 static void virtual_mail_update_pop3_uidl(struct mail *mail, const char *uidl)
@@ -369,18 +379,12 @@ virtual_mail_set_cache_corrupted(struct mail *mail, enum mail_fetch_field field)
 	mail_set_cache_corrupted(vmail->backend_mail, field);
 }
 
-static struct index_mail *virtual_mail_get_index_mail(struct mail *mail)
-{
-	struct virtual_mail *vmail = (struct virtual_mail *)mail;
-
-	return (struct index_mail *)vmail->backend_mail;
-}
-
 struct mail_vfuncs virtual_mail_vfuncs = {
 	NULL,
 	virtual_mail_free,
 	virtual_mail_set_seq,
 	virtual_mail_set_uid,
+	virtual_mail_set_uid_cache_updates,
 
 	index_mail_get_flags,
 	index_mail_get_keywords,
@@ -397,10 +401,12 @@ struct mail_vfuncs virtual_mail_vfuncs = {
 	virtual_mail_get_header_stream,
 	virtual_mail_get_stream,
 	virtual_mail_get_special,
+	virtual_mail_get_real_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
+	index_mail_update_modseq,
 	virtual_mail_update_pop3_uidl,
 	virtual_mail_expunge,
 	virtual_mail_set_cache_corrupted,
-	virtual_mail_get_index_mail
+	NULL
 };

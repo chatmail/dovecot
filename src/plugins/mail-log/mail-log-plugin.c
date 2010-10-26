@@ -2,11 +2,13 @@
 
 #include "lib.h"
 #include "array.h"
+#include "llist.h"
 #include "str.h"
 #include "str-sanitize.h"
 #include "imap-util.h"
 #include "mail-storage-private.h"
 #include "mailbox-list-private.h"
+#include "notify-plugin.h"
 #include "mail-log-plugin.h"
 
 #include <stdlib.h>
@@ -14,12 +16,8 @@
 #define MAILBOX_NAME_LOG_LEN 64
 #define HEADER_LOG_LEN 80
 
-#define MAIL_LOG_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_log_storage_module)
-#define MAIL_LOG_MAIL_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_log_mail_module)
-#define MAIL_LOG_LIST_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_log_mailbox_list_module)
+#define MAIL_LOG_USER_CONTEXT(obj) \
+	MODULE_CONTEXT(obj, mail_log_user_module)
 
 enum mail_log_field {
 	MAIL_LOG_FIELD_UID	= 0x01,
@@ -39,15 +37,16 @@ enum mail_log_event {
 	MAIL_LOG_EVENT_DELETE		= 0x01,
 	MAIL_LOG_EVENT_UNDELETE		= 0x02,
 	MAIL_LOG_EVENT_EXPUNGE		= 0x04,
-	MAIL_LOG_EVENT_COPY		= 0x08,
-	MAIL_LOG_EVENT_MAILBOX_DELETE	= 0x10,
-	MAIL_LOG_EVENT_MAILBOX_RENAME	= 0x20,
-	MAIL_LOG_EVENT_FLAG_CHANGE	= 0x40,
-	MAIL_LOG_EVENT_APPEND		= 0x80
+	MAIL_LOG_EVENT_SAVE		= 0x08,
+	MAIL_LOG_EVENT_COPY		= 0x10,
+	MAIL_LOG_EVENT_MAILBOX_CREATE	= 0x20,
+	MAIL_LOG_EVENT_MAILBOX_DELETE	= 0x40,
+	MAIL_LOG_EVENT_MAILBOX_RENAME	= 0x80,
+	MAIL_LOG_EVENT_FLAG_CHANGE	= 0x100
 };
 #define MAIL_LOG_DEFAULT_EVENTS \
 	(MAIL_LOG_EVENT_DELETE | MAIL_LOG_EVENT_UNDELETE | \
-	 MAIL_LOG_EVENT_EXPUNGE | MAIL_LOG_EVENT_COPY | \
+	 MAIL_LOG_EVENT_EXPUNGE | MAIL_LOG_EVENT_SAVE | MAIL_LOG_EVENT_COPY | \
 	 MAIL_LOG_EVENT_MAILBOX_DELETE | MAIL_LOG_EVENT_MAILBOX_RENAME)
 
 static const char *field_names[] = {
@@ -66,53 +65,37 @@ static const char *event_names[] = {
 	"delete",
 	"undelete",
 	"expunge",
+	"save",
 	"copy",
+	"mailbox_create",
 	"mailbox_delete",
 	"mailbox_rename",
 	"flag_change",
-	"append",
 	NULL
 };
 
-struct mail_log_settings {
+struct mail_log_user {
+	union mail_user_module_context module_ctx;
+
 	enum mail_log_field fields;
 	enum mail_log_event events;
-
-	unsigned int group_events:1;
 };
 
-struct mail_log_group_changes {
+struct mail_log_message {
+	struct mail_log_message *prev, *next;
+
 	enum mail_log_event event;
-	const char *data;
-
-	ARRAY_TYPE(seq_range) uids;
-	uoff_t psize_total, vsize_total;
+	bool ignore;
+	const char *pretext, *text;
 };
 
-struct mail_log_transaction_context {
-	union mailbox_transaction_module_context module_ctx;
+struct mail_log_mail_txn_context {
 	pool_t pool;
-	struct mail *tmp_mail;
-
-	ARRAY_DEFINE(group_changes, struct mail_log_group_changes);
-
-	unsigned int changes;
+	struct mail_log_message *messages, *messages_tail;
 };
 
-const char *mail_log_plugin_version = PACKAGE_VERSION;
-
-static struct mail_log_settings mail_log_set;
-
-static void (*mail_log_next_hook_mail_storage_created)
-	(struct mail_storage *storage);
-static void (*mail_log_next_hook_mailbox_list_created)
-	(struct mailbox_list *list);
-
-static MODULE_CONTEXT_DEFINE_INIT(mail_log_storage_module,
-				  &mail_storage_module_register);
-static MODULE_CONTEXT_DEFINE_INIT(mail_log_mail_module, &mail_module_register);
-static MODULE_CONTEXT_DEFINE_INIT(mail_log_mailbox_list_module,
-				  &mailbox_list_module_register);
+static MODULE_CONTEXT_DEFINE_INIT(mail_log_user_module,
+				  &mail_user_module_register);
 
 static enum mail_log_field mail_log_field_find(const char *name)
 {
@@ -129,501 +112,15 @@ static enum mail_log_event mail_log_event_find(const char *name)
 {
 	unsigned int i;
 
+	if (strcmp(name, "append") == 0) {
+		/* v1.x backwards compatibility */
+		name = "save";
+	}
 	for (i = 0; event_names[i] != NULL; i++) {
 		if (strcmp(name, event_names[i]) == 0)
 			return 1 << i;
 	}
 	return 0;
-}
-
-static const char *mail_log_event_get_name(enum mail_log_event event)
-{
-	unsigned int i;
-
-	for (i = 0; event_names[i] != NULL; i++) {
-		if ((unsigned)event == (unsigned)(1 << i))
-			return event_names[i];
-	}
-	i_unreached();
-	return NULL;
-}
-
-static struct mail_log_group_changes *
-mail_log_action_get_group(struct mail_log_transaction_context *lt,
-			  enum mail_log_event event, const char *data)
-{
-	struct mail_log_group_changes *group;
-	unsigned int i, count;
-
-	if (!array_is_created(&lt->group_changes))
-		p_array_init(&lt->group_changes, lt->pool, 8);
-
-	group = array_get_modifiable(&lt->group_changes, &count);
-	for (i = 0; i < count; i++) {
-		if (group[i].event == event &&
-		    null_strcmp(data, group[i].data) == 0)
-			return &group[i];
-	}
-
-	group = array_append_space(&lt->group_changes);
-	group->event = event;
-	group->data = p_strdup(lt->pool, data);
-	return group;
-}
-
-static void
-mail_log_action_add_group(struct mail_log_transaction_context *lt,
-			  struct mail *mail, enum mail_log_event event,
-			  const char *data)
-{
-	struct mail_log_group_changes *group;
-	uoff_t size;
-
-	group = mail_log_action_get_group(lt, event, data);
-
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_UID) != 0) {
-		if (!array_is_created(&group->uids))
-			p_array_init(&group->uids, lt->pool, 32);
-		seq_range_array_add(&group->uids, 0, mail->uid);
-	}
-
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_PSIZE) != 0 &&
-	    (event & (MAIL_LOG_EVENT_EXPUNGE | MAIL_LOG_EVENT_COPY)) != 0) {
-		if (mail_get_physical_size(mail, &size) == 0)
-			group->psize_total += size;
-	}
-
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_VSIZE) != 0 &&
-	    (event & (MAIL_LOG_EVENT_EXPUNGE | MAIL_LOG_EVENT_COPY)) != 0) {
-		if (mail_get_virtual_size(mail, &size) == 0)
-			group->vsize_total += size;
-	}
-}
-
-static void mail_log_append_mailbox_name(string_t *str, struct mailbox *box)
-{
-	const char *mailbox_str;
-
-	/* most operations are for INBOX, and POP3 has only INBOX,
-	   so don't add it. */
-	mailbox_str = mailbox_get_name(box);
-	if (strcmp(mailbox_str, "INBOX") != 0) {
-		str_printfa(str, "box=%s, ",
-			    str_sanitize(mailbox_str, MAILBOX_NAME_LOG_LEN));
-	}
-}
-
-static void
-mail_log_group(struct mailbox *box, const struct mail_log_group_changes *group)
-{
-	const struct seq_range *range;
-	unsigned int i, count;
-	string_t *str;
-	
-	str = t_str_new(128);
-	str_printfa(str, "%s: ", mail_log_event_get_name(group->event));
-
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_UID) != 0 &&
-	    array_is_created(&group->uids)) {
-		str_append(str, "uids=");
-
-		range = array_get(&group->uids, &count);
-		for (i = 0; i < count; i++) {
-			if (i != 0)
-				str_append_c(str, ',');
-
-			str_printfa(str, "%u", range[i].seq1);
-			if (range[i].seq1 != range[i].seq2)
-				str_printfa(str, "-%u", range[i].seq2);
-		}
-		str_append(str, ", ");
-	}
-
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_BOX) != 0)
-		mail_log_append_mailbox_name(str, box);
-
-	if (group->event == MAIL_LOG_EVENT_COPY)
-		str_printfa(str, "dest=%s, ", group->data);
-
-	if (group->psize_total != 0)
-		str_printfa(str, "size=%"PRIuUOFF_T", ", group->psize_total);
-	if (group->vsize_total != 0)
-		str_printfa(str, "size=%"PRIuUOFF_T", ", group->vsize_total);
-	str_truncate(str, str_len(str)-2);
-
-	i_info("%s", str_c(str));
-}
-
-static void
-mail_log_group_changes(struct mailbox *box,
-		       struct mail_log_transaction_context *lt)
-{
-	const struct mail_log_group_changes *group;
-	unsigned int i, count;
-
-	group = array_get(&lt->group_changes, &count);
-	for (i = 0; i < count; i++) {
-		T_BEGIN {
-			mail_log_group(box, &group[i]);
-		} T_END;
-	}
-}
-
-static void mail_log_add_hdr(struct mail *mail, string_t *str,
-			     const char *name, const char *header)
-{
-	const char *value;
-
-	if (mail_get_first_header(mail, header, &value) <= 0)
-		value = "";
-	str_printfa(str, "%s=%s, ", name, str_sanitize(value, HEADER_LOG_LEN));
-}
-
-static void mail_log_action(struct mailbox_transaction_context *dest_trans,
-			    struct mail *mail, enum mail_log_event event,
-			    const char *data)
-{
-	struct mail_log_transaction_context *lt = MAIL_LOG_CONTEXT(dest_trans);
-	uoff_t size;
-	string_t *str;
-
-	if ((mail_log_set.events & event) == 0)
-		return;
-
-	lt->changes++;
-
-	if (mail_log_set.group_events) {
-		mail_log_action_add_group(lt, mail, event, data);
-		return;
-	}
-
-	str = t_str_new(128);
-	str_printfa(str, "%s: ", mail_log_event_get_name(event));
-
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_UID) != 0 && mail->uid != 0)
-		str_printfa(str, "uid=%u, ", mail->uid);
-
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_BOX) != 0)
-		mail_log_append_mailbox_name(str, mail->box);
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_FLAGS) != 0) {
-		str_printfa(str, "flags=(");
-		imap_write_flags(str, mail_get_flags(mail),
-				 mail_get_keywords(mail));
-		str_append(str, "), ");
-	}
-	if (event == MAIL_LOG_EVENT_COPY)
-		str_printfa(str, "dest=%s, ", data);
-
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_MSGID) != 0)
-		mail_log_add_hdr(mail, str, "msgid", "Message-ID");
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_FROM) != 0)
-		mail_log_add_hdr(mail, str, "from", "From");
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_SUBJECT) != 0)
-		mail_log_add_hdr(mail, str, "subject", "Subject");
-
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_PSIZE) != 0 &&
-	    (event & (MAIL_LOG_EVENT_EXPUNGE | MAIL_LOG_EVENT_COPY)) != 0) {
-		if (mail_get_physical_size(mail, &size) == 0)
-			str_printfa(str, "size=%"PRIuUOFF_T", ", size);
-	}
-	if ((mail_log_set.fields & MAIL_LOG_FIELD_VSIZE) != 0 &&
-	    (event & (MAIL_LOG_EVENT_EXPUNGE | MAIL_LOG_EVENT_COPY)) != 0) {
-		if (mail_get_virtual_size(mail, &size) == 0)
-			str_printfa(str, "vsize=%"PRIuUOFF_T", ", size);
-	}
-	str_truncate(str, str_len(str)-2);
-
-	i_info("%s", str_c(str));
-}
-
-static void mail_log_mail_expunge(struct mail *_mail)
-{
-	struct mail_private *mail = (struct mail_private *)_mail;
-	union mail_module_context *lmail = MAIL_LOG_MAIL_CONTEXT(mail);
-
-	T_BEGIN {
-		mail_log_action(_mail->transaction, _mail,
-				MAIL_LOG_EVENT_EXPUNGE, NULL);
-	} T_END;
-	lmail->super.expunge(_mail);
-}
-
-static void
-mail_log_mail_update_flags(struct mail *_mail, enum modify_type modify_type,
-			   enum mail_flags flags)
-{
-	struct mail_private *mail = (struct mail_private *)_mail;
-	union mail_module_context *lmail = MAIL_LOG_MAIL_CONTEXT(mail);
-	enum mail_flags old_flags, new_flags;
-
-	old_flags = mail_get_flags(_mail);
-	lmail->super.update_flags(_mail, modify_type, flags);
-
-	new_flags = old_flags;
-	switch (modify_type) {
-	case MODIFY_ADD:
-		new_flags |= flags;
-		break;
-	case MODIFY_REMOVE:
-		new_flags &= ~flags;
-		break;
-	case MODIFY_REPLACE:
-		new_flags = flags;
-		break;
-	}
-
-	if (((old_flags ^ new_flags) & MAIL_DELETED) != 0) T_BEGIN {
-		mail_log_action(_mail->transaction, _mail,
-				(new_flags & MAIL_DELETED) != 0 ?
-				MAIL_LOG_EVENT_DELETE :
-				MAIL_LOG_EVENT_UNDELETE, NULL);
-	} T_END;
-
-	if ((old_flags & ~MAIL_DELETED) != (new_flags & ~MAIL_DELETED)) {
-		mail_log_action(_mail->transaction, _mail,
-				MAIL_LOG_EVENT_FLAG_CHANGE, NULL);
-	}
-}
-
-static void
-mail_log_mail_update_keywords(struct mail *_mail, enum modify_type modify_type,
-			      struct mail_keywords *keywords)
-{
-	struct mail_private *mail = (struct mail_private *)_mail;
-	union mail_module_context *lmail = MAIL_LOG_MAIL_CONTEXT(mail);
-	const char *const *old_keywords, *const *new_keywords;
-	unsigned int i;
-
-	old_keywords = mail_get_keywords(_mail);
-	lmail->super.update_keywords(_mail, modify_type, keywords);
-	new_keywords = mail_get_keywords(_mail);
-
-	for (i = 0; old_keywords[i] != NULL && new_keywords[i] != NULL; i++) {
-		if (strcmp(old_keywords[i], new_keywords[i]) != 0)
-			break;
-	}
-
-	if (old_keywords[i] != NULL || new_keywords[i] != NULL) {
-		mail_log_action(_mail->transaction, _mail,
-				MAIL_LOG_EVENT_FLAG_CHANGE, NULL);
-	}
-}
-
-static struct mail *
-mail_log_mail_alloc(struct mailbox_transaction_context *t,
-		    enum mail_fetch_field wanted_fields,
-		    struct mailbox_header_lookup_ctx *wanted_headers)
-{
-	union mailbox_module_context *lbox = MAIL_LOG_CONTEXT(t->box);
-	union mail_module_context *lmail;
-	struct mail *_mail;
-	struct mail_private *mail;
-
-	_mail = lbox->super.mail_alloc(t, wanted_fields, wanted_headers);
-	mail = (struct mail_private *)_mail;
-
-	lmail = p_new(mail->pool, union mail_module_context, 1);
-	lmail->super = mail->v;
-
-	mail->v.update_flags = mail_log_mail_update_flags;
-	mail->v.update_keywords = mail_log_mail_update_keywords;
-	mail->v.expunge = mail_log_mail_expunge;
-	MODULE_CONTEXT_SET_SELF(mail, mail_log_mail_module, lmail);
-	return _mail;
-}
-
-static int
-mail_log_copy(struct mail_save_context *ctx, struct mail *mail)
-{
-	union mailbox_module_context *lbox =
-		MAIL_LOG_CONTEXT(ctx->transaction->box);
-	const char *name;
-
-	if (lbox->super.copy(ctx, mail) < 0)
-		return -1;
-
-	T_BEGIN {
-		name = str_sanitize(mailbox_get_name(ctx->transaction->box),
-				    MAILBOX_NAME_LOG_LEN);
-		mail_log_action(ctx->transaction, mail,
-				MAIL_LOG_EVENT_COPY, name);
-	} T_END;
-	return 0;
-}
-
-static int
-mail_log_save_begin(struct mail_save_context *ctx, struct istream *input)
-{
-	struct mail_log_transaction_context *lt =
-		MAIL_LOG_CONTEXT(ctx->transaction);
-	union mailbox_module_context *lbox =
-		MAIL_LOG_CONTEXT(ctx->transaction->box);
-
-	if (ctx->dest_mail == NULL) {
-		if (lt->tmp_mail == NULL)
-			lt->tmp_mail = mail_alloc(ctx->transaction, 0, NULL);
-		ctx->dest_mail = lt->tmp_mail;
-	}
-
-	return lbox->super.save_begin(ctx, input);
-}
-
-static int mail_log_save_finish(struct mail_save_context *ctx)
-{
-	union mailbox_module_context *lbox =
-		MAIL_LOG_CONTEXT(ctx->transaction->box);
-
-	if (lbox->super.save_finish(ctx) < 0)
-		return -1;
-
-	T_BEGIN {
-		mail_log_action(ctx->transaction, ctx->dest_mail,
-				MAIL_LOG_EVENT_APPEND, NULL);
-	} T_END;
-	return 0;
-}
-
-static struct mailbox_transaction_context *
-mail_log_transaction_begin(struct mailbox *box,
-			   enum mailbox_transaction_flags flags)
-{
-	union mailbox_module_context *lbox = MAIL_LOG_CONTEXT(box);
-	struct mailbox_transaction_context *t;
-	struct mail_log_transaction_context *lt;
-	pool_t pool;
-
-	t = lbox->super.transaction_begin(box, flags);
-
-	pool = pool_alloconly_create("mail log transaction", 1024);
-	lt = p_new(pool, struct mail_log_transaction_context, 1);
-	lt->pool = pool;
-	MODULE_CONTEXT_SET(t, mail_log_storage_module, lt);
-	return t;
-}
-
-static int
-mail_log_transaction_commit(struct mailbox_transaction_context *t,
-			    uint32_t *uid_validity_r,
-			    uint32_t *first_saved_uid_r,
-			    uint32_t *last_saved_uid_r)
-{
-	struct mail_log_transaction_context *lt = MAIL_LOG_CONTEXT(t);
-	union mailbox_module_context *lbox = MAIL_LOG_CONTEXT(t->box);
-
-	if (lt->changes > 0 && mail_log_set.group_events)
-		mail_log_group_changes(t->box, lt);
-	if (lt->tmp_mail != NULL)
-		mail_free(&lt->tmp_mail);
-	pool_unref(&lt->pool);
-
-	return lbox->super.transaction_commit(t, uid_validity_r,
-					      first_saved_uid_r,
-					      last_saved_uid_r);
-}
-
-static void
-mail_log_transaction_rollback(struct mailbox_transaction_context *t)
-{
-	struct mail_log_transaction_context *lt = MAIL_LOG_CONTEXT(t);
-	union mailbox_module_context *lbox = MAIL_LOG_CONTEXT(t->box);
-
-	if (lt->changes > 0 && !mail_log_set.group_events) {
-		i_info("Transaction rolled back: "
-		       "Ignore last %u changes", lt->changes);
-	}
-	if (lt->tmp_mail != NULL)
-		mail_free(&lt->tmp_mail);
-	pool_unref(&lt->pool);
-
-	lbox->super.transaction_rollback(t);
-}
-
-static struct mailbox *
-mail_log_mailbox_open(struct mail_storage *storage, const char *name,
-		      struct istream *input, enum mailbox_open_flags flags)
-{
-	union mail_storage_module_context *lstorage = MAIL_LOG_CONTEXT(storage);
-	struct mailbox *box;
-	union mailbox_module_context *lbox;
-
-	box = lstorage->super.mailbox_open(storage, name, input, flags);
-	if (box == NULL)
-		return NULL;
-
-	lbox = p_new(box->pool, union mailbox_module_context, 1);
-	lbox->super = box->v;
-
-	box->v.mail_alloc = mail_log_mail_alloc;
-	box->v.copy = mail_log_copy;
-	box->v.save_begin = mail_log_save_begin;
-	box->v.save_finish = mail_log_save_finish;
-	box->v.transaction_begin = mail_log_transaction_begin;
-	box->v.transaction_commit = mail_log_transaction_commit;
-	box->v.transaction_rollback = mail_log_transaction_rollback;
-	MODULE_CONTEXT_SET_SELF(box, mail_log_storage_module, lbox);
-	return box;
-}
-
-static int
-mail_log_mailbox_list_delete(struct mailbox_list *list, const char *name)
-{
-	union mailbox_list_module_context *llist = MAIL_LOG_LIST_CONTEXT(list);
-
-	if (llist->super.delete_mailbox(list, name) < 0)
-		return -1;
-
-	if ((mail_log_set.events & MAIL_LOG_EVENT_MAILBOX_DELETE) == 0)
-		return 0;
-
-	i_info("Mailbox deleted: %s", str_sanitize(name, MAILBOX_NAME_LOG_LEN));
-	return 0;
-}
-
-static int
-mail_log_mailbox_list_rename(struct mailbox_list *list, const char *oldname,
-			     const char *newname)
-{
-	union mailbox_list_module_context *llist = MAIL_LOG_LIST_CONTEXT(list);
-
-	if (llist->super.rename_mailbox(list, oldname, newname) < 0)
-		return -1;
-
-	if ((mail_log_set.events & MAIL_LOG_EVENT_MAILBOX_RENAME) == 0)
-		return 0;
-
-	i_info("Mailbox renamed: %s -> %s",
-	       str_sanitize(oldname, MAILBOX_NAME_LOG_LEN),
-	       str_sanitize(newname, MAILBOX_NAME_LOG_LEN));
-	return 0;
-}
-
-static void mail_log_mail_storage_created(struct mail_storage *storage)
-{
-	union mail_storage_module_context *lstorage;
-
-	lstorage = p_new(storage->pool, union mail_storage_module_context, 1);
-	lstorage->super = storage->v;
-	storage->v.mailbox_open = mail_log_mailbox_open;
-
-	MODULE_CONTEXT_SET_SELF(storage, mail_log_storage_module, lstorage);
-
-	if (mail_log_next_hook_mail_storage_created != NULL)
-		mail_log_next_hook_mail_storage_created(storage);
-}
-
-static void mail_log_mailbox_list_created(struct mailbox_list *list)
-{
-	union mailbox_list_module_context *llist;
-
-	llist = p_new(list->pool, union mailbox_list_module_context, 1);
-	llist->super = list->v;
-	list->v.delete_mailbox = mail_log_mailbox_list_delete;
-	list->v.rename_mailbox = mail_log_mailbox_list_rename;
-
-	MODULE_CONTEXT_SET_SELF(list, mail_log_mailbox_list_module, llist);
-
-	if (mail_log_next_hook_mailbox_list_created != NULL)
-		mail_log_next_hook_mailbox_list_created(list);
 }
 
 static enum mail_log_field mail_log_parse_fields(const char *str)
@@ -654,36 +151,351 @@ static enum mail_log_event mail_log_parse_events(const char *str)
 	return events;
 }
 
-static void mail_log_read_settings(struct mail_log_settings *set)
+static void mail_log_mail_user_created(struct mail_user *user)
 {
+	struct mail_log_user *muser;
 	const char *str;
 
-	memset(set, 0, sizeof(*set));
+	muser = p_new(user->pool, struct mail_log_user, 1);
+	MODULE_CONTEXT_SET(user, mail_log_user_module, muser);
 
-	str = getenv("MAIL_LOG_FIELDS");
-	set->fields = str == NULL ? MAIL_LOG_DEFAULT_FIELDS :
+	str = mail_user_plugin_getenv(user, "mail_log_fields");
+	muser->fields = str == NULL ? MAIL_LOG_DEFAULT_FIELDS :
 		mail_log_parse_fields(str);
 
-	str = getenv("MAIL_LOG_EVENTS");
-	set->events = str == NULL ? MAIL_LOG_DEFAULT_EVENTS :
+	str = mail_user_plugin_getenv(user, "mail_log_events");
+	muser->events = str == NULL ? MAIL_LOG_DEFAULT_EVENTS :
 		mail_log_parse_events(str);
-
-	set->group_events = getenv("MAIL_LOG_GROUP_EVENTS") != NULL;
 }
 
-void mail_log_plugin_init(void)
+static void mail_log_append_mailbox_name(string_t *str, struct mail *mail)
 {
-	mail_log_read_settings(&mail_log_set);
+	const char *mailbox_str;
 
-	mail_log_next_hook_mail_storage_created = hook_mail_storage_created;
-	hook_mail_storage_created = mail_log_mail_storage_created;
+	mailbox_str = mailbox_get_name(mail->box);
+	str_printfa(str, "box=%s",
+		    str_sanitize(mailbox_str, MAILBOX_NAME_LOG_LEN));
+}
 
-	mail_log_next_hook_mailbox_list_created = hook_mailbox_list_created;
-	hook_mailbox_list_created = mail_log_mailbox_list_created;
+static void
+mail_log_append_mail_header(string_t *str, struct mail *mail,
+			    const char *name, const char *header)
+{
+	const char *value;
+
+	if (mail_get_first_header(mail, header, &value) <= 0)
+		value = "";
+	str_printfa(str, "%s=%s", name, str_sanitize(value, HEADER_LOG_LEN));
+}
+
+static void
+mail_log_append_uid(struct mail_log_mail_txn_context *ctx,
+		    struct mail_log_message *msg, string_t *str, uint32_t uid)
+{
+	if (uid != 0)
+		str_printfa(str, "uid=%u", uid);
+	else {
+		/* we don't know the uid yet, assign it later */
+		str_printfa(str, "uid=");
+		msg->pretext = p_strdup(ctx->pool, str_c(str));
+		str_truncate(str, 0);
+	}
+}
+
+static void
+mail_log_append_mail_message_real(struct mail_log_mail_txn_context *ctx,
+				  struct mail *mail, enum mail_log_event event,
+				  const char *desc)
+{
+	struct mail_log_user *muser =
+		MAIL_LOG_USER_CONTEXT(mail->box->storage->user);
+	struct mail_log_message *msg;
+	string_t *text;
+	uoff_t size;
+	
+	msg = p_new(ctx->pool, struct mail_log_message, 1);
+
+	text = t_str_new(128);
+	str_append(text, desc);
+	str_append(text, ": ");
+	if ((muser->fields & MAIL_LOG_FIELD_BOX) != 0) {
+		mail_log_append_mailbox_name(text, mail);
+		str_append(text, ", ");
+	}
+	if ((muser->fields & MAIL_LOG_FIELD_UID) != 0) {
+		if (event != MAIL_LOG_EVENT_SAVE &&
+		    event != MAIL_LOG_EVENT_COPY)
+			mail_log_append_uid(ctx, msg, text, mail->uid);
+		else {
+			/* with mbox mail->uid contains the uid, but handle
+			   this consistently with all mailbox formats */
+			mail_log_append_uid(ctx, msg, text, 0);
+		}
+		str_append(text, ", ");
+	}
+	if ((muser->fields & MAIL_LOG_FIELD_MSGID) != 0) {
+		mail_log_append_mail_header(text, mail, "msgid", "Message-ID");
+		str_append(text, ", ");
+	}
+	if ((muser->fields & MAIL_LOG_FIELD_PSIZE) != 0) {
+		if (mail_get_physical_size(mail, &size) == 0)
+			str_printfa(text, "size=%"PRIuUOFF_T, size);
+		else
+			str_printfa(text, "size=error");
+		str_append(text, ", ");
+	}
+	if ((muser->fields & MAIL_LOG_FIELD_VSIZE) != 0) {
+		if (mail_get_virtual_size(mail, &size) == 0)
+			str_printfa(text, "vsize=%"PRIuUOFF_T, size);
+		else
+			str_printfa(text, "vsize=error");
+		str_append(text, ", ");
+	}
+	if ((muser->fields & MAIL_LOG_FIELD_FROM) != 0) {
+		mail_log_append_mail_header(text, mail, "from", "From");
+		str_append(text, ", ");
+	}
+	if ((muser->fields & MAIL_LOG_FIELD_SUBJECT) != 0) {
+		mail_log_append_mail_header(text, mail, "subject", "Subject");
+		str_append(text, ", ");
+	}
+	if ((muser->fields & MAIL_LOG_FIELD_FLAGS) != 0) {
+		str_printfa(text, "flags=(");
+		imap_write_flags(text, mail_get_flags(mail),
+				 mail_get_keywords(mail));
+		str_append(text, "), ");
+	}
+	str_truncate(text, str_len(text)-2);
+
+	msg->event = event;
+	msg->text = p_strdup(ctx->pool, str_c(text));
+	DLLIST2_APPEND(&ctx->messages, &ctx->messages_tail, msg);
+}
+
+static void mail_log_add_dummy_msg(struct mail_log_mail_txn_context *ctx,
+				   enum mail_log_event event)
+{
+	struct mail_log_message *msg;
+
+	msg = p_new(ctx->pool, struct mail_log_message, 1);
+	msg->event = event;
+	msg->ignore = TRUE;
+	DLLIST2_APPEND(&ctx->messages, &ctx->messages_tail, msg);
+}
+
+static void
+mail_log_append_mail_message(struct mail_log_mail_txn_context *ctx,
+			     struct mail *mail, enum mail_log_event event,
+			     const char *desc)
+{
+	struct mail_log_user *muser =
+		MAIL_LOG_USER_CONTEXT(mail->box->storage->user);
+
+	if ((muser->events & event) == 0) {
+		if (event == MAIL_LOG_EVENT_SAVE ||
+		    event == MAIL_LOG_EVENT_COPY)
+			mail_log_add_dummy_msg(ctx, event);
+		return;
+	}
+
+	T_BEGIN {
+		mail_log_append_mail_message_real(ctx, mail, event, desc);
+	} T_END;
+}
+
+static void *
+mail_log_mail_transaction_begin(struct mailbox_transaction_context *t ATTR_UNUSED)
+{
+	pool_t pool;
+	struct mail_log_mail_txn_context *ctx;
+
+	pool = pool_alloconly_create("mail-log", 2048);
+	ctx = p_new(pool, struct mail_log_mail_txn_context, 1);
+	ctx->pool = pool;
+	return ctx;
+}
+
+static void mail_log_mail_save(void *txn, struct mail *mail)
+{
+	struct mail_log_mail_txn_context *ctx =
+		(struct mail_log_mail_txn_context *)txn;
+
+	mail_log_append_mail_message(ctx, mail, MAIL_LOG_EVENT_SAVE, "save");
+}
+
+static void mail_log_mail_copy(void *txn, struct mail *src, struct mail *dst)
+{
+	struct mail_log_mail_txn_context *ctx =
+		(struct mail_log_mail_txn_context *)txn;
+	const char *desc;
+
+	if (strcmp(src->box->storage->name, "raw") == 0) {
+		/* special case: lda/lmtp is saving a mail */
+		desc = "save";
+	} else {
+		desc = t_strdup_printf("copy from %s",
+				       str_sanitize(mailbox_get_name(src->box),
+						    MAILBOX_NAME_LOG_LEN));
+	}
+	mail_log_append_mail_message(ctx, dst, MAIL_LOG_EVENT_COPY, desc);
+}
+
+static void mail_log_mail_expunge(void *txn, struct mail *mail)
+{
+	struct mail_log_mail_txn_context *ctx =
+		(struct mail_log_mail_txn_context *)txn;
+	
+	mail_log_append_mail_message(ctx, mail, MAIL_LOG_EVENT_EXPUNGE,
+				     "expunge");
+}
+
+static void mail_log_mail_update_flags(void *txn, struct mail *mail,
+				       enum mail_flags old_flags)
+{
+	struct mail_log_mail_txn_context *ctx =
+		(struct mail_log_mail_txn_context *)txn;
+	enum mail_flags new_flags = mail_get_flags(mail);
+
+	if (((old_flags ^ new_flags) & MAIL_DELETED) == 0) {
+		mail_log_append_mail_message(ctx, mail,
+					     MAIL_LOG_EVENT_FLAG_CHANGE,
+					     "flag_change");
+	} else if ((old_flags & MAIL_DELETED) == 0) {
+		mail_log_append_mail_message(ctx, mail, MAIL_LOG_EVENT_DELETE,
+					     "delete");
+	} else {
+		mail_log_append_mail_message(ctx, mail, MAIL_LOG_EVENT_UNDELETE,
+					     "undelete");
+	}
+}
+
+static void
+mail_log_mail_update_keywords(void *txn, struct mail *mail, 
+			      const char *const *old_keywords ATTR_UNUSED)
+{
+	struct mail_log_mail_txn_context *ctx =
+		(struct mail_log_mail_txn_context *)txn;
+
+	mail_log_append_mail_message(ctx, mail, MAIL_LOG_EVENT_FLAG_CHANGE,
+				     "flag_change");
+}
+
+static void mail_log_save(const struct mail_log_message *msg, uint32_t uid)
+{
+	if (msg->ignore) {
+		/* not logging this save/copy */
+	} else if (msg->pretext == NULL)
+		i_info("%s", msg->text);
+	else if (uid != 0)
+		i_info("%s%u%s", msg->pretext, uid, msg->text);
+	else
+		i_info("%serror%s", msg->pretext, msg->text);
+}
+
+static void
+mail_log_mail_transaction_commit(void *txn,
+				 struct mail_transaction_commit_changes *changes)
+{
+	struct mail_log_mail_txn_context *ctx =
+		(struct mail_log_mail_txn_context *)txn;
+	struct mail_log_message *msg;
+	struct seq_range_iter iter;
+	unsigned int n = 0;
+	uint32_t uid;
+
+	seq_range_array_iter_init(&iter, &changes->saved_uids);
+	for (msg = ctx->messages; msg != NULL; msg = msg->next) {
+		if (msg->event == MAIL_LOG_EVENT_SAVE ||
+		    msg->event == MAIL_LOG_EVENT_COPY) {
+			if (!seq_range_array_iter_nth(&iter, n++, &uid))
+				uid = 0;
+			mail_log_save(msg, uid);
+		} else {
+			i_assert(msg->pretext == NULL);
+			i_info("%s", msg->text);
+		}
+	}
+	i_assert(!seq_range_array_iter_nth(&iter, n, &uid));
+
+	pool_unref(&ctx->pool);
+}
+
+static void mail_log_mail_transaction_rollback(void *txn)
+{
+	struct mail_log_mail_txn_context *ctx =
+		(struct mail_log_mail_txn_context *)txn;
+
+	pool_unref(&ctx->pool);
+}
+
+static void
+mail_log_mailbox_create(struct mailbox *box)
+{
+	struct mail_log_user *muser = MAIL_LOG_USER_CONTEXT(box->storage->user);
+
+	if ((muser->events & MAIL_LOG_EVENT_MAILBOX_CREATE) == 0)
+		return;
+
+	i_info("Mailbox created: %s",
+	       str_sanitize(box->name, MAILBOX_NAME_LOG_LEN));
+}
+
+static void
+mail_log_mailbox_delete_commit(void *txn ATTR_UNUSED, struct mailbox *box)
+{
+	struct mail_log_user *muser = MAIL_LOG_USER_CONTEXT(box->storage->user);
+
+	if ((muser->events & MAIL_LOG_EVENT_MAILBOX_DELETE) == 0)
+		return;
+
+	i_info("Mailbox deleted: %s",
+	       str_sanitize(box->name, MAILBOX_NAME_LOG_LEN));
+}
+
+static void
+mail_log_mailbox_rename(struct mailbox *src,
+			struct mailbox *dest, bool rename_children ATTR_UNUSED)
+{
+	struct mail_log_user *muser = MAIL_LOG_USER_CONTEXT(src->storage->user);
+
+	if ((muser->events & MAIL_LOG_EVENT_MAILBOX_RENAME) == 0)
+		return;
+
+	i_info("Mailbox renamed: %s -> %s",
+	       str_sanitize(src->name, MAILBOX_NAME_LOG_LEN),
+	       str_sanitize(dest->name, MAILBOX_NAME_LOG_LEN));
+}
+
+static const struct notify_vfuncs mail_log_vfuncs = {
+	.mail_transaction_begin = mail_log_mail_transaction_begin,
+	.mail_save = mail_log_mail_save,
+	.mail_copy = mail_log_mail_copy,
+	.mail_expunge = mail_log_mail_expunge,
+	.mail_update_flags = mail_log_mail_update_flags,
+	.mail_update_keywords = mail_log_mail_update_keywords,
+	.mail_transaction_commit = mail_log_mail_transaction_commit,
+	.mail_transaction_rollback = mail_log_mail_transaction_rollback,
+	.mailbox_create = mail_log_mailbox_create,
+	.mailbox_delete_commit = mail_log_mailbox_delete_commit,
+	.mailbox_rename = mail_log_mailbox_rename
+};
+
+static struct notify_context *mail_log_ctx;
+
+static struct mail_storage_hooks mail_log_mail_storage_hooks = {
+	.mail_user_created = mail_log_mail_user_created
+};
+
+void mail_log_plugin_init(struct module *module)
+{
+	mail_log_ctx = notify_register(&mail_log_vfuncs);
+	mail_storage_hooks_add(module, &mail_log_mail_storage_hooks);
 }
 
 void mail_log_plugin_deinit(void)
 {
-	hook_mail_storage_created = mail_log_next_hook_mail_storage_created;
-	hook_mailbox_list_created = mail_log_next_hook_mailbox_list_created;
+	mail_storage_hooks_remove(&mail_log_mail_storage_hooks);
+	notify_unregister(mail_log_ctx);
 }
+
+const char *mail_log_plugin_dependencies[] = { "notify", NULL };

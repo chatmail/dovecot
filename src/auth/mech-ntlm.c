@@ -6,7 +6,7 @@
  * This software is released under the MIT license.
  */
 
-#include "common.h"
+#include "auth-common.h"
 #include "mech.h"
 #include "passdb.h"
 #include "str.h"
@@ -201,9 +201,8 @@ mech_ntlm_auth_continue(struct auth_request *auth_request,
 		request->unicode_negotiated = flags & NTLMSSP_NEGOTIATE_UNICODE;
 		request->challenge = message->challenge;
 
-		auth_request->callback(auth_request,
-				       AUTH_CLIENT_RESULT_CONTINUE,
-				       message, message_size);
+		auth_request_handler_reply_continue(auth_request, message,
+						    message_size);
 	} else {
 		const struct ntlmssp_response *response =
 			(const struct ntlmssp_response *)data;
@@ -250,8 +249,8 @@ static struct auth_request *mech_ntlm_auth_new(void)
 const struct mech_module mech_ntlm = {
 	"NTLM",
 
-	MEMBER(flags) MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE,
-	MEMBER(passdb_need) MECH_PASSDB_NEED_LOOKUP_CREDENTIALS,
+	.flags = MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE,
+	.passdb_need = MECH_PASSDB_NEED_LOOKUP_CREDENTIALS,
 
 	mech_ntlm_auth_new,
 	mech_generic_auth_initial,

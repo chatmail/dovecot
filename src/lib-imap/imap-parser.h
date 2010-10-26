@@ -1,21 +1,7 @@
 #ifndef IMAP_PARSER_H
 #define IMAP_PARSER_H
 
-#include "array.h"
-
-/* We use this macro to read atoms from input. It should probably contain
-   everything some day, but for now we can't handle some input otherwise:
-
-   ']' is required for parsing section (FETCH BODY[])
-   '%', '*' and ']' are valid list-chars for LIST patterns
-   '\' is used in flags */
-#define IS_ATOM_SPECIAL_INPUT(c) \
-	((c) == '(' || (c) == ')' || (c) == '{' || \
-	 (c) == '"' || (c) <= 32 || (c) == 0x7f)
-
-#define IS_ATOM_SPECIAL(c) \
-	(IS_ATOM_SPECIAL_INPUT(c) || \
-	 (c) == ']' || (c) == '%' || (c) == '*' || (c) == '\\')
+#include "imap-arg.h"
 
 enum imap_parser_flags {
 	/* Set this flag if you wish to read only size of literal argument
@@ -33,60 +19,7 @@ enum imap_parser_flags {
 	IMAP_PARSE_FLAG_MULTILINE_STR	= 0x10
 };
 
-enum imap_arg_type {
-	IMAP_ARG_NIL = 0,
-	IMAP_ARG_ATOM,
-	IMAP_ARG_STRING,
-	IMAP_ARG_LIST,
-
-	/* literals are returned as IMAP_ARG_STRING by default */
-	IMAP_ARG_LITERAL,
-	IMAP_ARG_LITERAL_SIZE,
-	IMAP_ARG_LITERAL_SIZE_NONSYNC,
-
-	IMAP_ARG_EOL /* end of argument list */
-};
-
 struct imap_parser;
-
-ARRAY_DEFINE_TYPE(imap_arg_list, struct imap_arg);
-struct imap_arg {
-	enum imap_arg_type type;
-        struct imap_arg *parent; /* always of type IMAP_ARG_LIST */
-
-	union {
-		const char *str;
-		uoff_t literal_size;
-		ARRAY_TYPE(imap_arg_list) list;
-	} _data;
-};
-
-#define IMAP_ARG_TYPE_IS_STRING(type) \
-	((type) == IMAP_ARG_ATOM || (type) == IMAP_ARG_STRING || \
-	 (type) == IMAP_ARG_LITERAL)
-
-#define IMAP_ARG_STR(arg) \
-	((arg)->type == IMAP_ARG_NIL ? NULL : \
-	 IMAP_ARG_TYPE_IS_STRING((arg)->type) ? \
-	 (arg)->_data.str : imap_arg_str_error(arg))
-
-#define IMAP_ARG_STR_NONULL(arg) \
-	((arg)->type == IMAP_ARG_ATOM || (arg)->type == IMAP_ARG_STRING || \
-	 (arg)->type == IMAP_ARG_LITERAL ? \
-	 (arg)->_data.str : imap_arg_str_error(arg))
-
-#define IMAP_ARG_LITERAL_SIZE(arg) \
-	(((arg)->type == IMAP_ARG_LITERAL_SIZE || \
-	 (arg)->type == IMAP_ARG_LITERAL_SIZE_NONSYNC) ? \
-	 (arg)->_data.literal_size : imap_arg_literal_size_error(arg))
-
-#define IMAP_ARG_LIST(arg) \
-	((arg)->type == IMAP_ARG_LIST ? \
-	 &(arg)->_data.list : imap_arg_list_error(arg))
-#define IMAP_ARG_LIST_ARGS(arg) \
-	array_idx(IMAP_ARG_LIST(arg), 0)
-#define IMAP_ARG_LIST_COUNT(arg) \
-	(array_count(IMAP_ARG_LIST(arg)) - 1)
 
 /* Create new IMAP argument parser. output is used for sending command
    continuation requests for literals.
@@ -106,6 +39,10 @@ void imap_parser_destroy(struct imap_parser **parser);
 
 /* Reset the parser to initial state. */
 void imap_parser_reset(struct imap_parser *parser);
+
+/* Change parser's input and output streams */
+void imap_parser_set_streams(struct imap_parser *parser, struct istream *input,
+			     struct ostream *output);
 
 /* Return the last error in parser. fatal is set to TRUE if there's no way to
    continue parsing, currently only if too large non-sync literal size was
@@ -139,15 +76,5 @@ int imap_parser_finish_line(struct imap_parser *parser, unsigned int count,
 /* Read one word - used for reading tag and command name.
    Returns NULL if more data is needed. */
 const char *imap_parser_read_word(struct imap_parser *parser);
-
-/* Returns the imap argument as string. NIL returns "" and list returns NULL. */
-const char *imap_arg_string(const struct imap_arg *arg);
-
-/* Error functions */
-char *imap_arg_str_error(const struct imap_arg *arg) ATTR_NORETURN;
-uoff_t imap_arg_literal_size_error(const struct imap_arg *arg)
-	ATTR_NORETURN;
-ARRAY_TYPE(imap_arg_list) *imap_arg_list_error(const struct imap_arg *arg)
-	ATTR_NORETURN;
 
 #endif

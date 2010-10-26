@@ -2,8 +2,7 @@ Solr Full Text Search Indexing
 ==============================
 
 Solr [http://lucene.apache.org/solr/] is a Lucene indexing server. Dovecot
-communicates to it using HTTP/XML queries. Supported since Dovecot v1.1.2 and
-later.
+communicates to it using HTTP/XML queries.
 
 Compiling
 ---------
@@ -22,16 +21,7 @@ configure it.
 On Dovecot's side add:
 
 ---%<-------------------------------------------------------------------------
-protocol imap {
-..
-  mail_plugins = fts fts_solr
-}
-# POP3 doesn't do any FTS lookups or indexing, but indexed messages may be
-deleted
-protocol pop3 {
-..
-  mail_plugins = fts fts_solr
-}
+mail_plugins = $mail_plugins fts fts_solr
 
 plugin {
   fts = solr
@@ -101,4 +91,4 @@ External sites with tutorials on using Solr under Dovecot
    - Guide for installing all the dependencies for Solr to work under
    CentOS/Fedora. Step by step tutorial.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

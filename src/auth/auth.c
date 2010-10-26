@@ -1,128 +1,110 @@
 /* Copyright (c) 2005-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
-#include "network.h"
-#include "buffer.h"
-#include "str.h"
-#include "hostpid.h"
+#include "auth-common.h"
+#include "array.h"
+#include "settings-parser.h"
+#include "master-service-settings.h"
 #include "mech.h"
 #include "userdb.h"
 #include "passdb.h"
-#include "passdb-cache.h"
 #include "auth.h"
-#include "auth-request-handler.h"
 
-#include <stdlib.h>
-#include <unistd.h>
+struct auth_userdb_settings userdb_dummy_set = {
+	.driver = "static",
+	.args = ""
+};
 
-struct auth *auth_preinit(void)
+static ARRAY_DEFINE(auths, struct auth *);
+
+static void
+auth_passdb_preinit(struct auth *auth, const struct auth_passdb_settings *set,
+		    struct auth_passdb **passdbs)
 {
-	struct auth *auth;
-	struct auth_passdb *auth_passdb, **passdb_p, **masterdb_p;
-	const char *driver, *args;
-	pool_t pool;
-	unsigned int i;
+	struct auth_passdb *auth_passdb, **dest;
 
-	pool = pool_alloconly_create("auth", 2048);
+	auth_passdb = p_new(auth->pool, struct auth_passdb, 1);
+	auth_passdb->set = set;
+
+	for (dest = passdbs; *dest != NULL; dest = &(*dest)->next) ;
+	*dest = auth_passdb;
+
+	auth_passdb->passdb =
+		passdb_preinit(auth->pool, set->driver, set->args);
+}
+
+static void
+auth_userdb_preinit(struct auth *auth, const struct auth_userdb_settings *set)
+{
+        struct auth_userdb *auth_userdb, **dest;
+
+	auth_userdb = p_new(auth->pool, struct auth_userdb, 1);
+	auth_userdb->set = set;
+
+	for (dest = &auth->userdbs; *dest != NULL; dest = &(*dest)->next) ;
+	*dest = auth_userdb;
+
+	auth_userdb->userdb =
+		userdb_preinit(auth->pool, set->driver, set->args);
+}
+
+static struct auth *
+auth_preinit(const struct auth_settings *set, const char *service, pool_t pool,
+	     const struct mechanisms_register *reg)
+{
+	struct auth_passdb_settings *const *passdbs;
+	struct auth_userdb_settings *const *userdbs;
+	struct auth *auth;
+	unsigned int i, count, db_count, passdb_count, last_passdb = 0;
+
 	auth = p_new(pool, struct auth, 1);
 	auth->pool = pool;
+	auth->service = p_strdup(pool, service);
+	auth->set = set;
+	auth->reg = reg;
 
-	auth->verbose_debug_passwords =
-		getenv("VERBOSE_DEBUG_PASSWORDS") != NULL;
-	auth->verbose_debug = getenv("VERBOSE_DEBUG") != NULL ||
-		auth->verbose_debug_passwords;
-	auth->verbose = getenv("VERBOSE") != NULL || auth->verbose_debug;
-
-	passdb_p = &auth->passdbs;
-	masterdb_p = &auth->masterdbs;
-	auth_passdb = NULL;
-	for (i = 1; ; i++) {
-		driver = getenv(t_strdup_printf("PASSDB_%u_DRIVER", i));
-		if (driver == NULL)
-			break;
-
-                args = getenv(t_strdup_printf("PASSDB_%u_ARGS", i));
-		auth_passdb = passdb_preinit(auth, driver, args, i);
-
-                auth_passdb->deny =
-                        getenv(t_strdup_printf("PASSDB_%u_DENY", i)) != NULL;
-		auth_passdb->pass =
-                        getenv(t_strdup_printf("PASSDB_%u_PASS", i)) != NULL;
-
-		if (getenv(t_strdup_printf("PASSDB_%u_MASTER", i)) == NULL) {
-			*passdb_p = auth_passdb;
-			passdb_p = &auth_passdb->next;
-                } else {
-			if (auth_passdb->deny)
-				i_fatal("Master passdb can't have deny=yes");
-
-			*masterdb_p = auth_passdb;
-			masterdb_p = &auth_passdb->next;
-		}
+	if (array_is_created(&set->passdbs))
+		passdbs = array_get(&set->passdbs, &db_count);
+	else {
+		passdbs = NULL;
+		db_count = 0;
 	}
-	if (auth_passdb != NULL && auth_passdb->pass) {
-		if (masterdb_p != &auth_passdb->next)
-			i_fatal("Last passdb can't have pass=yes");
-		else if (auth->passdbs == NULL) {
+
+	/* initialize passdbs first and count them */
+	for (passdb_count = 0, i = 0; i < db_count; i++) {
+		if (passdbs[i]->master)
+			continue;
+
+		auth_passdb_preinit(auth, passdbs[i], &auth->passdbs);
+		passdb_count++;
+		last_passdb = i;
+	}
+	if (passdb_count != 0 && passdbs[last_passdb]->pass)
+		i_fatal("Last passdb can't have pass=yes");
+
+	for (i = 0; i < db_count; i++) {
+		if (!passdbs[i]->master)
+			continue;
+
+		if (passdbs[i]->deny)
+			i_fatal("Master passdb can't have deny=yes");
+		if (passdbs[i]->pass && passdb_count == 0) {
 			i_fatal("Master passdb can't have pass=yes "
 				"if there are no passdbs");
 		}
+		auth_passdb_preinit(auth, passdbs[i], &auth->masterdbs);
 	}
 
-	for (i = 1; ; i++) {
-		driver = getenv(t_strdup_printf("USERDB_%u_DRIVER", i));
-		if (driver == NULL)
-			break;
-
-                args = getenv(t_strdup_printf("USERDB_%u_ARGS", i));
-		userdb_preinit(auth, driver, args);
+	if (array_is_created(&set->userdbs)) {
+		userdbs = array_get(&set->userdbs, &count);
+		for (i = 0; i < count; i++)
+			auth_userdb_preinit(auth, userdbs[i]);
 	}
 
 	if (auth->userdbs == NULL) {
 		/* use a dummy userdb static. */
-		userdb_preinit(auth, "static", "");
+		auth_userdb_preinit(auth, &userdb_dummy_set);
 	}
 	return auth;
-}
-
-const string_t *auth_mechanisms_get_list(struct auth *auth)
-{
-	struct mech_module_list *list;
-	string_t *str;
-
-	str = t_str_new(128);
-	for (list = auth->mech_modules; list != NULL; list = list->next)
-		str_append(str, list->module.mech_name);
-
-	return str;
-}
-
-static void auth_mech_register(struct auth *auth, const struct mech_module *mech)
-{
-	struct mech_module_list *list;
-
-	list = p_new(auth->pool, struct mech_module_list, 1);
-	list->module = *mech;
-
-	str_printfa(auth->mech_handshake, "MECH\t%s", mech->mech_name);
-	if ((mech->flags & MECH_SEC_PRIVATE) != 0)
-		str_append(auth->mech_handshake, "\tprivate");
-	if ((mech->flags & MECH_SEC_ANONYMOUS) != 0)
-		str_append(auth->mech_handshake, "\tanonymous");
-	if ((mech->flags & MECH_SEC_PLAINTEXT) != 0)
-		str_append(auth->mech_handshake, "\tplaintext");
-	if ((mech->flags & MECH_SEC_DICTIONARY) != 0)
-		str_append(auth->mech_handshake, "\tdictionary");
-	if ((mech->flags & MECH_SEC_ACTIVE) != 0)
-		str_append(auth->mech_handshake, "\tactive");
-	if ((mech->flags & MECH_SEC_FORWARD_SECRECY) != 0)
-		str_append(auth->mech_handshake, "\tforward-secrecy");
-	if ((mech->flags & MECH_SEC_MUTUAL_AUTH) != 0)
-		str_append(auth->mech_handshake, "\tmutual-auth");
-	str_append_c(auth->mech_handshake, '\n');
-
-	list->next = auth->mech_modules;
-	auth->mech_modules = list;
 }
 
 static bool auth_passdb_list_have_verify_plain(struct auth *auth)
@@ -187,7 +169,7 @@ static void auth_mech_list_verify_passdb(struct auth *auth)
 {
 	struct mech_module_list *list;
 
-	for (list = auth->mech_modules; list != NULL; list = list->next) {
+	for (list = auth->reg->modules; list != NULL; list = list->next) {
 		if (!auth_mech_verify_passdb(auth, list))
 			break;
 	}
@@ -203,119 +185,111 @@ static void auth_mech_list_verify_passdb(struct auth *auth)
 	}
 }
 
-void auth_init(struct auth *auth)
+static void auth_init(struct auth *auth)
 {
 	struct auth_passdb *passdb;
 	struct auth_userdb *userdb;
-	const struct mech_module *mech;
-	const char *const *mechanisms;
-	const char *env;
 
 	for (passdb = auth->masterdbs; passdb != NULL; passdb = passdb->next)
-		passdb_init(passdb);
+		passdb_init(passdb->passdb);
 	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next)
-		passdb_init(passdb);
+		passdb_init(passdb->passdb);
 	for (userdb = auth->userdbs; userdb != NULL; userdb = userdb->next)
-		userdb_init(userdb);
-	/* caching is handled only by the main auth process */
-	if (!worker)
-		passdb_cache_init();
+		userdb_init(userdb->userdb);
 
-	auth->mech_handshake = str_new(auth->pool, 512);
-
-	auth->anonymous_username = getenv("ANONYMOUS_USERNAME");
-	if (auth->anonymous_username != NULL &&
-	    *auth->anonymous_username == '\0')
-                auth->anonymous_username = NULL;
-
-	/* register wanted mechanisms */
-	env = getenv("MECHANISMS");
-	if (env == NULL)
-		i_fatal("MECHANISMS environment is unset");
-
-	mechanisms = t_strsplit_spaces(env, " ");
-	while (*mechanisms != NULL) {
-		if (strcasecmp(*mechanisms, "ANONYMOUS") == 0) {
-			if (auth->anonymous_username == NULL) {
-				i_fatal("ANONYMOUS listed in mechanisms, "
-					"but anonymous_username not given");
-			}
-		}
-		mech = mech_module_find(*mechanisms);
-		if (mech == NULL) {
-			i_fatal("Unknown authentication mechanism '%s'",
-				*mechanisms);
-		}
-		auth_mech_register(auth, mech);
-
-		mechanisms++;
-	}
-
-	if (auth->mech_modules == NULL)
-		i_fatal("No authentication mechanisms configured");
 	auth_mech_list_verify_passdb(auth);
-
-	env = getenv("REALMS");
-	if (env == NULL)
-		env = "";
-	auth->auth_realms = p_strsplit_spaces(auth->pool, env, " ");
-
-	env = getenv("DEFAULT_REALM");
-	if (env != NULL && *env != '\0')
-		auth->default_realm = env;
-
-	env = getenv("USERNAME_CHARS");
-	if (env == NULL || *env == '\0') {
-		/* all chars are allowed */
-		memset(auth->username_chars, 1, sizeof(auth->username_chars));
-	} else {
-		for (; *env != '\0'; env++)
-			auth->username_chars[(int)(uint8_t)*env] = 1;
-	}
-
-	env = getenv("USERNAME_TRANSLATION");
-	if (env != NULL) {
-		for (; *env != '\0' && env[1] != '\0'; env += 2)
-			auth->username_translation[(int)(uint8_t)*env] = env[1];
-	}
-
-	env = getenv("USERNAME_FORMAT");
-	if (env != NULL && *env != '\0')
-		auth->username_format = env;
-
-	env = getenv("GSSAPI_HOSTNAME");
-	if (env != NULL && *env != '\0')
-		auth->gssapi_hostname = env;
-	else
-		auth->gssapi_hostname = my_hostname;
-
-	env = getenv("MASTER_USER_SEPARATOR");
-	if (env != NULL)
-		auth->master_user_separator = env[0];
-
-	auth->ssl_require_client_cert =
-		getenv("SSL_REQUIRE_CLIENT_CERT") != NULL;
-	auth->ssl_username_from_cert =
-		getenv("SSL_USERNAME_FROM_CERT") != NULL;
 }
 
-void auth_deinit(struct auth **_auth)
+static void auth_deinit(struct auth *auth)
 {
-        struct auth *auth = *_auth;
 	struct auth_passdb *passdb;
 	struct auth_userdb *userdb;
 
-	*_auth = NULL;
-
 	for (passdb = auth->masterdbs; passdb != NULL; passdb = passdb->next)
-		passdb_deinit(passdb);
+		passdb_deinit(passdb->passdb);
 	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next)
-		passdb_deinit(passdb);
+		passdb_deinit(passdb->passdb);
 	for (userdb = auth->userdbs; userdb != NULL; userdb = userdb->next)
-		userdb_deinit(userdb);
+		userdb_deinit(userdb->userdb);
+}
 
-	auth_request_handler_deinit();
-	passdb_cache_deinit();
+struct auth *auth_find_service(const char *name)
+{
+	struct auth *const *a;
+	unsigned int i, count;
 
-	pool_unref(&auth->pool);
+	a = array_get(&auths, &count);
+	if (name != NULL) {
+		for (i = 1; i < count; i++) {
+			if (strcmp(a[i]->service, name) == 0)
+				return a[i];
+		}
+		/* not found. maybe we can instead find a !service */
+		for (i = 1; i < count; i++) {
+			if (a[i]->service[0] == '!' &&
+			    strcmp(a[i]->service + 1, name) != 0)
+				return a[i];
+		}
+	}
+	return a[0];
+}
+
+void auths_preinit(const struct auth_settings *set, pool_t pool,
+		   const struct mechanisms_register *reg,
+		   const char *const *services)
+{
+	struct master_service_settings_output set_output;
+	const struct auth_settings *service_set;
+	struct auth *auth;
+	unsigned int i;
+	const char *not_service = NULL;
+
+	i_array_init(&auths, 8);
+
+	auth = auth_preinit(set, NULL, pool, reg);
+	array_append(&auths, &auth, 1);
+
+	for (i = 0; services[i] != NULL; i++) {
+		if (services[i][0] == '!') {
+			if (not_service != NULL) {
+				i_fatal("Can't have multiple protocol "
+					"!services (seen %s and %s)",
+					not_service, services[i]);
+			}
+			not_service = services[i];
+		}
+		service_set = auth_settings_read(services[i], pool,
+						 &set_output);
+		auth = auth_preinit(service_set, services[i], pool, reg);
+		array_append(&auths, &auth, 1);
+	}
+}
+
+void auths_init(void)
+{
+	struct auth *const *auth;
+
+	array_foreach(&auths, auth)
+		auth_init(*auth);
+}
+
+void auths_deinit(void)
+{
+	struct auth *const *auth;
+
+	array_foreach(&auths, auth)
+		auth_deinit(*auth);
+}
+
+void auths_free(void)
+{
+	struct auth **auth;
+	unsigned int i, count;
+
+	/* deinit in reverse order, because modules have been allocated by
+	   the first auth pool that used them */
+	auth = array_get_modifiable(&auths, &count);
+	for (i = count; i > 0; i--)
+		pool_unref(&auth[i-1]->pool);
+	array_free(&auths);
 }

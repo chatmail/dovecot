@@ -23,7 +23,7 @@ struct trash_mailbox {
 	const char *name;
 	int priority; /* lower number = higher priority */
 
-	struct mail_storage *storage;
+	struct mail_namespace *ns;
 
 	/* temporarily set while cleaning: */
 	struct mailbox *box;
@@ -41,26 +41,25 @@ struct trash_user {
 	ARRAY_DEFINE(trash_boxes, struct trash_mailbox);
 };
 
-const char *trash_plugin_version = PACKAGE_VERSION;
+const char *trash_plugin_version = DOVECOT_VERSION;
 
 static MODULE_CONTEXT_DEFINE_INIT(trash_user_module,
 				  &mail_user_module_register);
-static void (*trash_next_hook_mail_namespaces_created)
-	(struct mail_namespace *namespaces);
 static int (*trash_next_quota_test_alloc)(struct quota_transaction_context *,
 					  uoff_t, bool *);
 
 static int trash_clean_mailbox_open(struct trash_mailbox *trash)
 {
-	struct mail_storage *storage = trash->storage;
 	struct mail_search_args *search_args;
 
-	trash->box = mailbox_open(&storage, trash->name, NULL,
-				  MAILBOX_OPEN_KEEP_RECENT);
-	if (trash->box == NULL)
+	trash->box = mailbox_alloc(trash->ns->list, trash->name,
+				   MAILBOX_FLAG_KEEP_RECENT);
+	if (mailbox_open(trash->box) < 0) {
+		mailbox_free(&trash->box);
 		return 0;
+	}
 
-	if (mailbox_sync(trash->box, MAILBOX_SYNC_FLAG_FULL_READ, 0, NULL) < 0)
+	if (mailbox_sync(trash->box, MAILBOX_SYNC_FLAG_FULL_READ) < 0)
 		return -1;
 
 	trash->trans = mailbox_transaction_begin(trash->box, 0);
@@ -86,7 +85,7 @@ static int trash_clean_mailbox_get_next(struct trash_mailbox *trash,
 			ret = trash_clean_mailbox_open(trash);
 		else
 			ret = mailbox_search_next(trash->search_ctx,
-						  trash->mail);
+						  trash->mail) ? 1 : 0;
 		if (ret <= 0) {
 			*received_time_r = 0;
 			return ret;
@@ -169,15 +168,15 @@ err:
                         mailbox_transaction_rollback(&trash->trans);
 		}
 
-		mailbox_close(&trash->box);
+		mailbox_free(&trash->box);
 	}
 
 	if (size_expunged < size_needed) {
-		if (getenv("DEBUG") != NULL) {
-			i_info("trash plugin: Failed to remove enough messages "
-			       "(needed %llu bytes, expunged only %llu bytes)",
-			       (unsigned long long)size_needed,
-			       (unsigned long long)size_expunged);
+		if (ctx->quota->user->mail_debug) {
+			i_debug("trash plugin: Failed to remove enough messages "
+				"(needed %llu bytes, expunged only %llu bytes)",
+				(unsigned long long)size_needed,
+				(unsigned long long)size_expunged);
 		}
 		return FALSE;
 	}
@@ -198,9 +197,9 @@ trash_quota_test_alloc(struct quota_transaction_context *ctx,
 	for (i = 0; ; i++) {
 		ret = trash_next_quota_test_alloc(ctx, size, too_large_r);
 		if (ret != 0 || *too_large_r) {
-			if (getenv("DEBUG") != NULL && *too_large_r) {
-				i_info("trash plugin: Mail is larger than "
-				       "quota, won't even try to handle");
+			if (ctx->quota->user->mail_debug && *too_large_r) {
+				i_debug("trash plugin: Mail is larger than "
+					"quota, won't even try to handle");
 			}
 			return ret;
 		}
@@ -233,17 +232,16 @@ static bool trash_find_storage(struct mail_user *user,
 		if (mail_namespace_update_name(ns, &name)) {
 			if (name != trash->name)
 				trash->name = p_strdup(user->pool, name);
-			trash->storage = ns->storage;
+			trash->ns = ns;
 			return TRUE;
 		}
 	}
 	return FALSE;
 }
 
-static int trash_mailbox_priority_cmp(const void *p1, const void *p2)
+static int trash_mailbox_priority_cmp(const struct trash_mailbox *t1,
+				      const struct trash_mailbox *t2)
 {
-	const struct trash_mailbox *t1 = p1, *t2 = p2;
-
 	return t1->priority - t2->priority;
 }
 
@@ -253,7 +251,6 @@ static int read_configuration(struct mail_user *user, const char *path)
 	struct istream *input;
 	const char *line, *name;
 	struct trash_mailbox *trash;
-	unsigned int count;
 	int fd, ret = 0;
 
 	fd = open(path, O_RDONLY);
@@ -274,7 +271,12 @@ static int read_configuration(struct mail_user *user, const char *path)
 
 		trash = array_append_space(&tuser->trash_boxes);
 		trash->name = p_strdup(user->pool, name+1);
-		trash->priority = atoi(t_strdup_until(line, name));
+		if (str_to_int(t_strdup_until(line, name),
+			       &trash->priority) < 0) {
+			i_error("trash: Invalid priority for mailbox '%s'",
+				trash->name);
+			ret = -1;
+		}
 
 		if (!trash_find_storage(user, trash)) {
 			i_error("trash: Namespace not found for mailbox '%s'",
@@ -282,55 +284,56 @@ static int read_configuration(struct mail_user *user, const char *path)
 			ret = -1;
 		}
 
-		if (getenv("DEBUG") != NULL) {
-			i_info("trash plugin: Added '%s' with priority %d",
-			       trash->name, trash->priority);
+		if (user->mail_debug) {
+			i_debug("trash plugin: Added '%s' with priority %d",
+				trash->name, trash->priority);
 		}
 	}
 	i_stream_destroy(&input);
 	(void)close(fd);
 
-	trash = array_get_modifiable(&tuser->trash_boxes, &count);
-	qsort(trash, count, sizeof(*trash), trash_mailbox_priority_cmp);
+	array_sort(&tuser->trash_boxes, trash_mailbox_priority_cmp);
 	return ret;
 }
 
 static void
-trash_hook_mail_namespaces_created(struct mail_namespace *namespaces)
+trash_mail_namespaces_created(struct mail_namespace *namespaces)
 {
 	struct mail_user *user = namespaces->user;
+	struct quota_user *quser = QUOTA_USER_CONTEXT(user);
 	struct trash_user *tuser;
 	const char *env;
 
-	env = getenv("TRASH");
+	env = mail_user_plugin_getenv(user, "trash");
 	if (env == NULL) {
-		if (getenv("DEBUG") != NULL)
-			i_info("trash: No trash setting - plugin disabled");
-	} else if (quota_set == NULL) {
+		if (user->mail_debug)
+			i_debug("trash: No trash setting - plugin disabled");
+	} else if (quser == NULL) {
 		i_error("trash plugin: quota plugin not initialized");
 	} else {
 		tuser = p_new(user->pool, struct trash_user, 1);
-		tuser->module_ctx.super = user->v;
 		MODULE_CONTEXT_SET(user, trash_user_module, tuser);
 
 		if (read_configuration(user, env) == 0) {
-			trash_next_quota_test_alloc = quota_set->test_alloc;
-			quota_set->test_alloc = trash_quota_test_alloc;
+			trash_next_quota_test_alloc =
+				quser->quota->set->test_alloc;
+			quser->quota->set->test_alloc = trash_quota_test_alloc;
 		}
 	}
-
-	if (trash_next_hook_mail_namespaces_created != NULL)
-		trash_next_hook_mail_namespaces_created(namespaces);
 }
 
-void trash_plugin_init(void)
+static struct mail_storage_hooks trash_mail_storage_hooks = {
+	.mail_namespaces_created = trash_mail_namespaces_created
+};
+
+void trash_plugin_init(struct module *module)
 {
-	trash_next_hook_mail_namespaces_created = hook_mail_namespaces_created;
-	hook_mail_namespaces_created = trash_hook_mail_namespaces_created;
+	mail_storage_hooks_add(module, &trash_mail_storage_hooks);
 }
 
 void trash_plugin_deinit(void)
 {
-	hook_mail_namespaces_created = trash_hook_mail_namespaces_created;
-	quota_set->test_alloc = trash_next_quota_test_alloc;
+	mail_storage_hooks_remove(&trash_mail_storage_hooks);
 }
+
+const char *trash_plugin_dependencies[] = { "quota", NULL };

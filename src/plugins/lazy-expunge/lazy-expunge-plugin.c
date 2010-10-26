@@ -6,9 +6,10 @@
 #include "str.h"
 #include "seq-range-array.h"
 #include "mkdir-parents.h"
-#include "maildir-storage.h"
-#include "mail-namespace.h"
+#include "mail-storage-private.h"
 #include "mail-search-build.h"
+#include "mailbox-list-private.h"
+#include "mail-namespace.h"
 #include "lazy-expunge-plugin.h"
 
 #include <stdio.h>
@@ -23,6 +24,8 @@
 	MODULE_CONTEXT(obj, lazy_expunge_mailbox_list_module)
 #define LAZY_EXPUNGE_USER_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, lazy_expunge_mail_user_module)
+#define LAZY_EXPUNGE_MAIL_CONTEXT(obj) \
+	MODULE_CONTEXT(obj, lazy_expunge_mail_module)
 
 enum lazy_namespace {
 	LAZY_NAMESPACE_EXPUNGE,
@@ -36,39 +39,26 @@ struct lazy_expunge_mail_user {
 	union mail_user_module_context module_ctx;
 
 	struct mail_namespace *lazy_ns[LAZY_NAMESPACE_COUNT];
+	const char *env;
 };
 
 struct lazy_expunge_mailbox_list {
 	union mailbox_list_module_context module_ctx;
 
-	struct mail_storage *storage;
-	bool deleting;
-};
-
-struct lazy_expunge_mail_storage {
-	union mail_storage_module_context module_ctx;
-
-	bool internal_namespace;
+	unsigned int allow_rename:1;
+	unsigned int internal_namespace:1;
 };
 
 struct lazy_expunge_transaction {
 	union mailbox_transaction_module_context module_ctx;
 
-	ARRAY_TYPE(seq_range) expunge_seqs;
-	struct mailbox *expunge_box;
+	struct mailbox *dest_box;
+	struct mailbox_transaction_context *dest_trans;
 
 	bool failed;
 };
 
-const char *lazy_expunge_plugin_version = PACKAGE_VERSION;
-
-static void (*lazy_expunge_next_hook_mail_namespaces_created)
-	(struct mail_namespace *namespaces);
-static void (*lazy_expunge_next_hook_mail_storage_created)
-	(struct mail_storage *storage);
-static void (*lazy_expunge_next_hook_mailbox_list_created)
-	(struct mailbox_list *list);
-static void (*lazy_expunge_next_hook_mail_user_created)(struct mail_user *user);
+const char *lazy_expunge_plugin_version = DOVECOT_VERSION;
 
 static MODULE_CONTEXT_DEFINE_INIT(lazy_expunge_mail_storage_module,
 				  &mail_storage_module_register);
@@ -80,52 +70,85 @@ static MODULE_CONTEXT_DEFINE_INIT(lazy_expunge_mail_user_module,
 				  &mail_user_module_register);
 
 static struct mailbox *
-mailbox_open_or_create(struct mail_storage *storage, const char *name)
+mailbox_open_or_create(struct mailbox_list *list, const char *name,
+		       const char **error_r)
 {
 	struct mailbox *box;
 	enum mail_error error;
 
-	box = mailbox_open(&storage, name, NULL, MAILBOX_OPEN_FAST |
-			   MAILBOX_OPEN_KEEP_RECENT |
-			   MAILBOX_OPEN_NO_INDEX_FILES);
-	if (box != NULL)
+	box = mailbox_alloc(list, name, MAILBOX_FLAG_KEEP_RECENT |
+			    MAILBOX_FLAG_NO_INDEX_FILES);
+	if (mailbox_open(box) == 0) {
+		*error_r = NULL;
 		return box;
+	}
 
-	(void)mail_storage_get_last_error(storage, &error);
-	if (error != MAIL_ERROR_NOTFOUND)
+	*error_r = mail_storage_get_last_error(mailbox_get_storage(box),
+					       &error);
+	if (error != MAIL_ERROR_NOTFOUND) {
+		mailbox_free(&box);
 		return NULL;
+	}
 
-	/* try creating it. */
-	if (mail_storage_mailbox_create(storage, name, FALSE) < 0)
+	/* try creating and re-opening it. */
+	if (mailbox_create(box, NULL, FALSE) < 0 ||
+	    mailbox_open(box) < 0) {
+		*error_r = mail_storage_get_last_error(mailbox_get_storage(box),
+						       NULL);
+		mailbox_free(&box);
 		return NULL;
-
-	/* and try opening again */
-	box = mailbox_open(&storage, name, NULL, MAILBOX_OPEN_FAST |
-			   MAILBOX_OPEN_KEEP_RECENT);
+	}
 	return box;
+}
+
+static struct mail_namespace *
+get_lazy_ns(struct mail_user *user, enum lazy_namespace type)
+{
+	struct lazy_expunge_mail_user *luser = LAZY_EXPUNGE_USER_CONTEXT(user);
+
+	return luser->lazy_ns[type];
 }
 
 static void lazy_expunge_mail_expunge(struct mail *_mail)
 {
-	struct lazy_expunge_mail_user *luser =
-		LAZY_EXPUNGE_USER_CONTEXT(_mail->box->storage->ns->user);
+	struct mail_namespace *ns = _mail->box->list->ns;
+	struct mail_private *mail = (struct mail_private *)_mail;
+	union mail_module_context *mmail = LAZY_EXPUNGE_MAIL_CONTEXT(mail);
 	struct lazy_expunge_transaction *lt =
 		LAZY_EXPUNGE_CONTEXT(_mail->transaction);
-	struct mail_storage *deststorage;
+	struct mail_namespace *dest_ns;
+	struct mail_save_context *save_ctx;
+	const char *error;
 
-	if (lt->expunge_box == NULL) {
-		deststorage = luser->lazy_ns[LAZY_NAMESPACE_EXPUNGE]->storage;
-		lt->expunge_box = mailbox_open_or_create(deststorage,
-							 _mail->box->name);
-		if (lt->expunge_box == NULL) {
+	dest_ns = get_lazy_ns(ns->user, LAZY_NAMESPACE_EXPUNGE);
+	if (lt->dest_box == NULL) {
+		lt->dest_box = mailbox_open_or_create(dest_ns->list,
+						      _mail->box->name, &error);
+		if (lt->dest_box == NULL) {
 			mail_storage_set_critical(_mail->box->storage,
-				"lazy_expunge: Couldn't open expunge mailbox");
+				"lazy_expunge: Couldn't open expunge mailbox: "
+				"%s", error);
 			lt->failed = TRUE;
 			return;
 		}
+		if (mailbox_sync(lt->dest_box, 0) < 0) {
+			mail_storage_set_critical(_mail->box->storage,
+				"lazy_expunge: Couldn't sync expunge mailbox");
+			mailbox_free(&lt->dest_box);
+			lt->failed = TRUE;
+			return;
+		}
+
+		lt->dest_trans = mailbox_transaction_begin(lt->dest_box,
+					  MAILBOX_TRANSACTION_FLAG_EXTERNAL);
 	}
 
-	seq_range_array_add(&lt->expunge_seqs, 32, _mail->uid);
+	save_ctx = mailbox_save_alloc(lt->dest_trans);
+	mailbox_save_copy_flags(save_ctx, _mail);
+	save_ctx->flags &= ~MAIL_DELETED;
+	if (mailbox_copy(&save_ctx, _mail) < 0 && !_mail->expunged)
+		lt->failed = TRUE;
+	mmail->super.expunge(_mail);
 }
 
 static struct mailbox_transaction_context *
@@ -143,125 +166,34 @@ lazy_expunge_transaction_begin(struct mailbox *box,
 	return t;
 }
 
-struct lazy_expunge_move_context {
-	string_t *path;
-	unsigned int dir_len;
-};
-
-static int lazy_expunge_move(struct maildir_mailbox *mbox,
-			     const char *path, void *context)
-{
-	struct lazy_expunge_move_context *ctx = context;
-	const char *p, *p2;
-
-	str_truncate(ctx->path, ctx->dir_len);
-	p = strrchr(path, '/');
-	if (p == NULL)
-		p = path;
-	else
-		p++;
-
-	/* drop \Deleted flag */
-	p2 = strstr(p, MAILDIR_FLAGS_FULL_SEP);
-	if (p2 != NULL)
-		p2 = strchr(p2, 'T');
-	if (p2 == NULL)
-		str_append(ctx->path, p);
-	else {
-		str_append_n(ctx->path, p, p2 - p);
-		str_append(ctx->path, p2 + 1);
-	}
-
-	if (rename(path, str_c(ctx->path)) == 0)
-		return 1;
-	if (errno == ENOENT)
-		return 0;
-	mail_storage_set_critical(mbox->ibox.box.storage,
-				  "rename(%s, %s) failed: %m",
-				  path, str_c(ctx->path));
-	return -1;
-}
-
-static int lazy_expunge_move_expunges(struct mailbox *srcbox,
-				      struct lazy_expunge_transaction *lt)
-{
-	struct maildir_mailbox *msrcbox = (struct maildir_mailbox *)srcbox;
-	struct mailbox_transaction_context *trans;
-	struct index_transaction_context *itrans;
-	struct lazy_expunge_move_context ctx;
-	const struct seq_range *range;
-	unsigned int i, count;
-	const char *dir;
-	uint32_t seq, uid, seq1, seq2;
-	bool is_file;
-	int ret = 0;
-
-	dir = mail_storage_get_mailbox_path(lt->expunge_box->storage,
-					    lt->expunge_box->name, &is_file);
-	dir = t_strconcat(dir, "/cur/", NULL);
-
-	ctx.path = str_new(default_pool, 256);
-	str_append(ctx.path, dir);
-	ctx.dir_len = str_len(ctx.path);
-
-	trans = mailbox_transaction_begin(srcbox,
-					  MAILBOX_TRANSACTION_FLAG_EXTERNAL);
-	itrans = (struct index_transaction_context *)trans;
-
-	range = array_get(&lt->expunge_seqs, &count);
-	for (i = 0; i < count && ret == 0; i++) {
-		mailbox_get_seq_range(srcbox, range[i].seq1, range[i].seq2,
-				      &seq1, &seq2);
-		for (uid = range[i].seq1; uid <= range[i].seq2; uid++) {
-			if (maildir_file_do(msrcbox, uid, lazy_expunge_move,
-					    &ctx) < 0) {
-				ret = -1;
-				break;
-			}
-		}
-		for (seq = seq1; seq <= seq2; seq++)
-			mail_index_expunge(itrans->trans, seq);
-	}
-
-	if (mailbox_transaction_commit(&trans) < 0)
-		ret = -1;
-
-	str_free(&ctx.path);
-	return ret;
-}
-
 static void lazy_expunge_transaction_free(struct lazy_expunge_transaction *lt)
 {
-	if (lt->expunge_box != NULL)
-		mailbox_close(&lt->expunge_box);
-	if (array_is_created(&lt->expunge_seqs))
-		array_free(&lt->expunge_seqs);
+	if (lt->dest_trans != NULL)
+		mailbox_transaction_rollback(&lt->dest_trans);
+	if (lt->dest_box != NULL)
+		mailbox_free(&lt->dest_box);
 	i_free(lt);
 }
 
 static int
 lazy_expunge_transaction_commit(struct mailbox_transaction_context *ctx,
-				uint32_t *uid_validity_r,
-				uint32_t *first_saved_uid_r,
-				uint32_t *last_saved_uid_r)
+				struct mail_transaction_commit_changes *changes_r)
 {
 	union mailbox_module_context *mbox = LAZY_EXPUNGE_CONTEXT(ctx->box);
 	struct lazy_expunge_transaction *lt = LAZY_EXPUNGE_CONTEXT(ctx);
-	struct mailbox *srcbox = ctx->box;
 	int ret;
+
+	if (lt->dest_trans != NULL && !lt->failed) {
+		if (mailbox_transaction_commit(&lt->dest_trans) < 0)
+			lt->failed = TRUE;
+	}
 
 	if (lt->failed) {
 		mbox->super.transaction_rollback(ctx);
 		ret = -1;
 	} else {
-		ret = mbox->super.transaction_commit(ctx, uid_validity_r,
-						     first_saved_uid_r,
-						     last_saved_uid_r);
+		ret = mbox->super.transaction_commit(ctx, changes_r);
 	}
-
-	if (ret == 0 && array_is_created(&lt->expunge_seqs))
-		ret = lazy_expunge_move_expunges(srcbox, lt);
-
 	lazy_expunge_transaction_free(lt);
 	return ret;
 }
@@ -276,229 +208,99 @@ lazy_expunge_transaction_rollback(struct mailbox_transaction_context *ctx)
 	lazy_expunge_transaction_free(lt);
 }
 
-static struct mail *
-lazy_expunge_mail_alloc(struct mailbox_transaction_context *t,
-			enum mail_fetch_field wanted_fields,
-			struct mailbox_header_lookup_ctx *wanted_headers)
+static void lazy_expunge_mail_allocated(struct mail *_mail)
 {
-	union mailbox_module_context *mbox = LAZY_EXPUNGE_CONTEXT(t->box);
+	struct lazy_expunge_transaction *lt =
+		LAZY_EXPUNGE_CONTEXT(_mail->transaction);
+	struct mail_private *mail = (struct mail_private *)_mail;
+	struct mail_vfuncs *v = mail->vlast;
 	union mail_module_context *mmail;
-	struct mail *_mail;
-	struct mail_private *mail;
 
-	_mail = mbox->super.mail_alloc(t, wanted_fields, wanted_headers);
-	mail = (struct mail_private *)_mail;
+	if (lt == NULL)
+		return;
 
 	mmail = p_new(mail->pool, union mail_module_context, 1);
-	mmail->super = mail->v;
+	mmail->super = *v;
+	mail->vlast = &mmail->super;
 
-	mail->v.expunge = lazy_expunge_mail_expunge;
+	v->expunge = lazy_expunge_mail_expunge;
 	MODULE_CONTEXT_SET_SELF(mail, lazy_expunge_mail_module, mmail);
-	return _mail;
-}
-
-static struct mailbox *
-lazy_expunge_mailbox_open(struct mail_storage *storage, const char *name,
-			  struct istream *input, enum mailbox_open_flags flags)
-{
-	struct lazy_expunge_mail_storage *lstorage =
-		LAZY_EXPUNGE_CONTEXT(storage);
-	struct mailbox *box;
-	union mailbox_module_context *mbox;
-
-	box = lstorage->module_ctx.super.
-		mailbox_open(storage, name, input, flags);
-	if (box == NULL || lstorage->internal_namespace)
-		return box;
-
-	mbox = p_new(box->pool, union mailbox_module_context, 1);
-	mbox->super = box->v;
-
-	box->v.transaction_begin = lazy_expunge_transaction_begin;
-	box->v.transaction_commit = lazy_expunge_transaction_commit;
-	box->v.transaction_rollback = lazy_expunge_transaction_rollback;
-	box->v.mail_alloc = lazy_expunge_mail_alloc;
-	MODULE_CONTEXT_SET_SELF(box, lazy_expunge_mail_storage_module, mbox);
-	return box;
-}
-
-static int dir_move_or_merge(struct mailbox_list *list,
-			     const char *srcdir, const char *destdir)
-{
-	DIR *dir;
-	struct dirent *dp;
-	string_t *src_path, *dest_path;
-	unsigned int src_dirlen, dest_dirlen;
-	int ret = 0;
-
-	if (rename(srcdir, destdir) == 0 || errno == ENOENT)
-		return 0;
-
-	if (!EDESTDIREXISTS(errno)) {
-		mailbox_list_set_critical(list,
-			"rename(%s, %s) failed: %m", srcdir, destdir);
-	}
-
-	/* rename all the files separately */
-	dir = opendir(srcdir);
-	if (dir == NULL) {
-		mailbox_list_set_critical(list,
-			"opendir(%s) failed: %m", srcdir);
-		return -1;
-	}
-
-	src_path = t_str_new(512);
-	dest_path = t_str_new(512);
-
-	str_append(src_path, srcdir);
-	str_append(dest_path, destdir);
-	str_append_c(src_path, '/');
-	str_append_c(dest_path, '/');
-	src_dirlen = str_len(src_path);
-	dest_dirlen = str_len(dest_path);
-
-	while ((dp = readdir(dir)) != NULL) {
-		if (dp->d_name[0] == '.' &&
-		    (dp->d_name[1] == '\0' ||
-		     (dp->d_name[1] == '.' && dp->d_name[2] == '\0')))
-			continue;
-
-		str_truncate(src_path, src_dirlen);
-		str_append(src_path, dp->d_name);
-		str_truncate(dest_path, dest_dirlen);
-		str_append(dest_path, dp->d_name);
-
-		if (rename(str_c(src_path), str_c(dest_path)) < 0 &&
-		    errno != ENOENT) {
-			mailbox_list_set_critical(list,
-				"rename(%s, %s) failed: %m",
-				str_c(src_path), str_c(dest_path));
-			ret = -1;
-		}
-	}
-	if (closedir(dir) < 0) {
-		mailbox_list_set_critical(list,
-			"closedir(%s) failed: %m", srcdir);
-		ret = -1;
-	}
-	if (ret == 0) {
-		if (rmdir(srcdir) < 0) {
-			mailbox_list_set_critical(list,
-				"rmdir(%s) failed: %m", srcdir);
-			ret = -1;
-		}
-	}
-	return ret;
 }
 
 static int
-mailbox_move(struct mailbox_list *src_list, const char *src_name,
-	     struct mailbox_list *dest_list, const char **_dest_name)
+mailbox_move(struct mailbox *src_box, struct mailbox_list *dest_list,
+	     const char *wanted_destname, struct mailbox **dest_box_r)
 {
-	const char *dest_name = *_dest_name;
-	const char *srcdir, *src2dir, *src3dir, *destdir, *p, *destparent;
-	const char *origin;
-	struct stat st;
+	struct lazy_expunge_mailbox_list *src_llist =
+		LAZY_EXPUNGE_LIST_CONTEXT(src_box->list);
+	const char *dest_name = wanted_destname;
+	struct mailbox *dest_box;
+	const char *dir, *origin;
+	enum mail_error error;
 	mode_t mode;
 	gid_t gid;
+	int ret;
 
-	srcdir = mailbox_list_get_path(src_list, src_name,
-				       MAILBOX_LIST_PATH_TYPE_MAILBOX);
-	destdir = mailbox_list_get_path(dest_list, dest_name,
-					MAILBOX_LIST_PATH_TYPE_MAILBOX);
-	while (rename(srcdir, destdir) < 0) {
-		if (errno == ENOENT) {
-			/* if this is because the destination parent directory
-			   didn't exist, create it. */
-			p = strrchr(destdir, '/');
-			if (p == NULL)
-				return 0;
-			destparent = t_strdup_until(destdir, p);
-			if (stat(destparent, &st) == 0)
-				return 0;
+	/* make sure the destination root directory exists */
+	mailbox_list_get_dir_permissions(dest_list, NULL, &mode, &gid, &origin);
+	dir = mailbox_list_get_path(dest_list, NULL, MAILBOX_LIST_PATH_TYPE_DIR);
+	if (mkdir_parents_chgrp(dir, mode, gid, origin) < 0 &&
+	    errno != EEXIST) {
+		mail_storage_set_critical(src_box->storage,
+			"mkdir_parents(%s) failed: %m", dir);
+		return -1;
+	}
 
-			mailbox_list_get_dir_permissions(dest_list, NULL,
-							 &mode, &gid, &origin);
-			if (mkdir_parents_chgrp(destparent, mode,
-						gid, origin) < 0) {
-				if (errno == EEXIST) {
-					/* race condition */
-					continue;
-				}
-				mailbox_list_set_critical(src_list,
-					"mkdir(%s) failed: %m", destparent);
-				return -1;
-			}
-			/* created, try again. */
-			continue;
-		}
+	for (;;) {
+		dest_box = mailbox_alloc(dest_list, dest_name,
+					 MAILBOX_FLAG_OPEN_DELETED);
 
-		if (!EDESTDIREXISTS(errno)) {
-			mailbox_list_set_critical(src_list,
-				"rename(%s, %s) failed: %m", srcdir, destdir);
+		src_llist->allow_rename = TRUE;
+		ret = mailbox_rename(src_box, dest_box, FALSE);
+		src_llist->allow_rename = FALSE;
+
+		if (ret == 0)
+			break;
+		mailbox_free(&dest_box);
+
+		mail_storage_get_last_error(src_box->storage, &error);
+		switch (error) {
+		case MAIL_ERROR_EXISTS:
+			break;
+		case MAIL_ERROR_NOTFOUND:
+			return 0;
+		default:
 			return -1;
 		}
 
-		/* mailbox is being deleted multiple times per second.
-		   update the filename. */
-		dest_name = t_strdup_printf("%s-%04u", *_dest_name,
+		/* destination already exists. generate a different name. */
+		dest_name = t_strdup_printf("%s-%04u", wanted_destname,
 					    (uint32_t)random());
-		destdir = mailbox_list_get_path(dest_list, dest_name,
-						MAILBOX_LIST_PATH_TYPE_MAILBOX);
 	}
 
-	src2dir = mailbox_list_get_path(src_list, src_name,
-					MAILBOX_LIST_PATH_TYPE_CONTROL);
-	if (strcmp(src2dir, srcdir) != 0) {
-		destdir = mailbox_list_get_path(dest_list, dest_name,
-						MAILBOX_LIST_PATH_TYPE_CONTROL);
-		(void)dir_move_or_merge(src_list, src2dir, destdir);
-	}
-	src3dir = mailbox_list_get_path(src_list, src_name,
-					MAILBOX_LIST_PATH_TYPE_INDEX);
-	if (strcmp(src3dir, srcdir) != 0 && strcmp(src3dir, src2dir) != 0) {
-		destdir = mailbox_list_get_path(dest_list, dest_name,
-						MAILBOX_LIST_PATH_TYPE_INDEX);
-		(void)dir_move_or_merge(src_list, src3dir, destdir);
-	}
-
-	*_dest_name = dest_name;
+	*dest_box_r = dest_box;
 	return 1;
 }
 
 static int
-mailbox_move_all_mails(struct mailbox_list *list,
-		       const char *src_name, const char *dest_name)
+mailbox_move_all_mails(struct mailbox *src_box, const char *dest_name)
 {
-	struct mail_storage *storage = list->ns->storage;
-	struct mailbox *src_box, *dest_box;
+	struct mailbox *dest_box;
 	struct mail_search_args *search_args;
         struct mailbox_transaction_context *src_trans, *dest_trans;
 	struct mail_search_context *search_ctx;
 	struct mail_save_context *save_ctx;
 	struct mail *mail;
-	struct mail_keywords *keywords;
-	const char *const *keywords_list;
 	const char *errstr;
 	enum mail_error error;
 	int ret;
 
-	dest_box = mailbox_open(&storage, dest_name, NULL, 0);
-	if (dest_box == NULL) {
-		errstr = mail_storage_get_last_error(storage, &error);
+	dest_box = mailbox_alloc(src_box->list, dest_name, 0);
+	if (mailbox_open(dest_box) < 0) {
+		errstr = mail_storage_get_last_error(dest_box->storage, &error);
 		i_error("lazy_expunge: Couldn't open DELETE dest mailbox "
 			"%s: %s", dest_name, errstr);
-		return -1;
-	}
-
-	src_box = mailbox_open(&storage, src_name, NULL,
-			       MAILBOX_OPEN_KEEP_LOCKED);
-	if (src_box == NULL) {
-		errstr = mail_storage_get_last_error(storage, &error);
-		if (error == MAIL_ERROR_NOTFOUND)
-			return 0;
-		i_error("lazy_expunge: Couldn't open DELETE source mailbox "
-			"%s: %s", src_name, errstr);
+		mailbox_free(&dest_box);
 		return -1;
 	}
 
@@ -513,19 +315,14 @@ mailbox_move_all_mails(struct mailbox_list *list,
 
 	mail = mail_alloc(src_trans, 0, NULL);
 	while ((ret = mailbox_search_next(search_ctx, mail)) > 0) {
-		keywords_list = mail_get_keywords(mail);
-		keywords = str_array_length(keywords_list) == 0 ? NULL :
-			mailbox_keywords_create_valid(dest_box, keywords_list);
-
 		save_ctx = mailbox_save_alloc(dest_trans);
-		mailbox_save_set_flags(save_ctx,
-				       mail_get_flags(mail) & ~MAIL_DELETED,
-				       keywords);
-		ret = mailbox_copy(&save_ctx, mail);
-		mailbox_keywords_free(dest_box, &keywords);
-
-		if (ret < 0 && !mail->expunged)
-			break;
+		mailbox_save_copy_flags(save_ctx, mail);
+		if (mailbox_copy(&save_ctx, mail) < 0) {
+			if (!mail->expunged) {
+				ret = -1;
+				break;
+			}
+		}
 	}
 	mail_free(&mail);
 
@@ -538,60 +335,54 @@ mailbox_move_all_mails(struct mailbox_list *list,
 	else
 		mailbox_transaction_rollback(&dest_trans);
 
-	mailbox_close(&src_box);
-	mailbox_close(&dest_box);
-
 	if (ret == 0)
-		ret = mailbox_list_delete_mailbox(list, src_name);
+		ret = mailbox_delete(src_box);
+
+	mailbox_free(&dest_box);
 	return ret;
 }
 
-static int
-lazy_expunge_mailbox_list_delete(struct mailbox_list *list, const char *name)
+static int mailbox_mark_index_undeleted(struct mailbox *box)
 {
-	struct lazy_expunge_mail_user *luser =
-		LAZY_EXPUNGE_USER_CONTEXT(list->ns->user);
+	struct mail_index_transaction *trans;
+
+	trans = mail_index_transaction_begin(box->view,
+				MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
+	mail_index_set_undeleted(trans);
+	if (mail_index_transaction_commit(&trans) < 0) {
+		mail_storage_set_index_error(box);
+		return -1;
+	}
+	return 0;
+}
+
+static int lazy_expunge_mailbox_delete(struct mailbox *box)
+{
+	union mailbox_module_context *lbox =
+		LAZY_EXPUNGE_CONTEXT(box);
 	struct lazy_expunge_mailbox_list *llist =
-		LAZY_EXPUNGE_LIST_CONTEXT(list);
-	struct lazy_expunge_mail_storage *lstorage;
-	struct mailbox_list *dest_list, *expunge_list;
-	enum mailbox_name_status status;
-	const char *destname;
+		LAZY_EXPUNGE_LIST_CONTEXT(box->list);
+	struct mailbox_list *list = box->list;
+	struct mail_namespace *expunge_ns, *dest_ns;
+	struct mailbox *expunge_box;
+	const char *destname, *str;
+	enum mail_error error;
 	struct tm *tm;
 	char timestamp[256];
 	int ret;
 
-	if (llist->storage == NULL || llist->deleting) {
-		/* not a maildir storage */
-		return llist->module_ctx.super.delete_mailbox(list, name);
+	if (llist->internal_namespace || !box->opened) {
+		/* a) deleting mailbox from lazy_expunge namespaces
+		   b) deleting a \noselect mailbox */
+		return lbox->super.delete(box);
 	}
 
-	lstorage = LAZY_EXPUNGE_CONTEXT(llist->storage);
-	if (lstorage->internal_namespace)
-		return llist->module_ctx.super.delete_mailbox(list, name);
-
-	/* first do the normal sanity checks */
-	if (strcmp(name, "INBOX") == 0) {
-		mailbox_list_set_error(list, MAIL_ERROR_NOTPOSSIBLE,
-				       "INBOX can't be deleted.");
-		return -1;
-	}
-
-	if (mailbox_list_get_mailbox_name_status(list, name, &status) < 0)
-		return -1;
-	if (status == MAILBOX_NAME_INVALID) {
-		mailbox_list_set_error(list, MAIL_ERROR_PARAMS,
-				       "Invalid mailbox name");
-		return -1;
-	}
-
-	expunge_list = luser->lazy_ns[LAZY_NAMESPACE_EXPUNGE]->storage->list;
-	dest_list = luser->lazy_ns[LAZY_NAMESPACE_DELETE]->storage->list;
-
-	if (expunge_list == dest_list) {
+	expunge_ns = get_lazy_ns(list->ns->user, LAZY_NAMESPACE_EXPUNGE);
+	dest_ns = get_lazy_ns(list->ns->user, LAZY_NAMESPACE_DELETE);
+	if (expunge_ns == dest_ns) {
 		/* if there are no expunged messages in this mailbox,
 		   we can simply rename the mailbox to the destination name */
-		destname = name;
+		destname = box->name;
 	} else {
 		/* destination mailbox name needs to contain a timestamp */
 		tm = localtime(&ioloop_time);
@@ -600,97 +391,146 @@ lazy_expunge_mailbox_list_delete(struct mailbox_list *list, const char *name)
 			i_strocpy(timestamp, dec2str(ioloop_time),
 				  sizeof(timestamp));
 		}
-		destname = t_strconcat(name, "-", timestamp, NULL);
+		destname = t_strconcat(box->name, "-", timestamp, NULL);
 	}
 
-	/* first move the actual mailbox */
-	if ((ret = mailbox_move(list, name, dest_list, &destname)) < 0)
+	/* avoid potential race conditions by marking it deleted */
+	if (mailbox_mark_index_deleted(box, TRUE) < 0)
+		return -1;
+
+	/* rename it into the lazy_expunge namespace */
+	ret = mailbox_move(box, dest_ns->list, destname, &expunge_box);
+	if (ret < 0)
 		return -1;
 	if (ret == 0) {
-		mailbox_list_set_error(list, MAIL_ERROR_NOTFOUND,
-			T_MAIL_ERR_MAILBOX_NOT_FOUND(name));
+		mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
+			T_MAIL_ERR_MAILBOX_NOT_FOUND(box->name));
 		return -1;
 	}
 
-	if (expunge_list == dest_list && strcmp(destname, name) != 0) {
-		llist->deleting = TRUE;
-		(void)mailbox_move_all_mails(dest_list, destname, name);
-		llist->deleting = FALSE;
+	/* other sessions now see the mailbox completely deleted.
+	   since it's not really deleted in the lazy-expunge namespace,
+	   we might want to change it again. so mark the index undeleted. */
+	if (mailbox_open(expunge_box) < 0) {
+		str = mail_storage_get_last_error(expunge_box->storage, &error);
+		i_error("lazy_expunge: Couldn't open DELETEd mailbox "
+			"%s: %s", expunge_box->name, str);
+		mailbox_free(&expunge_box);
+		return -1;
 	}
+	if (mailbox_mark_index_undeleted(expunge_box) < 0) {
+		mailbox_free(&expunge_box);
+		return -1;
+	}
+
+	if (expunge_ns == dest_ns && strcmp(expunge_box->name, box->name) != 0)
+		ret = mailbox_move_all_mails(expunge_box, box->name);
+	else
+		ret = 0;
+	mailbox_free(&expunge_box);
 
 	/* next move the expunged messages mailbox, if it exists */
-	dest_list = luser->lazy_ns[LAZY_NAMESPACE_DELETE_EXPUNGE]->storage->list;
-	if (expunge_list != dest_list)
-		(void)mailbox_move(expunge_list, name, dest_list, &destname);
-	return 0;
+	dest_ns = get_lazy_ns(list->ns->user, LAZY_NAMESPACE_DELETE_EXPUNGE);
+	if (expunge_ns != dest_ns) {
+		struct mailbox *ret_box;
+
+		expunge_box = mailbox_alloc(expunge_ns->list, box->name, 0);
+		ret = mailbox_move(expunge_box, dest_ns->list,
+				   destname, &ret_box);
+		if (ret > 0)
+			mailbox_free(&ret_box);
+		mailbox_free(&expunge_box);
+	}
+	return ret < 0 ? -1 : 0;
 }
 
-static void lazy_expunge_mail_storage_init(struct mail_storage *storage)
+static int
+lazy_expunge_mailbox_rename(struct mailbox *src, struct mailbox *dest,
+			    bool rename_children)
+{
+	union mailbox_module_context *lbox = LAZY_EXPUNGE_CONTEXT(src);
+	struct lazy_expunge_mailbox_list *src_llist =
+		LAZY_EXPUNGE_LIST_CONTEXT(src->list);
+	struct lazy_expunge_mailbox_list *dest_llist =
+		LAZY_EXPUNGE_LIST_CONTEXT(dest->list);
+
+	if (!src_llist->allow_rename &&
+	    (src_llist->internal_namespace ||
+	     dest_llist->internal_namespace)) {
+		mail_storage_set_error(src->storage, MAIL_ERROR_NOTPOSSIBLE,
+			"Can't rename mailboxes to/from expunge namespace.");
+		return -1;
+	}
+	return lbox->super.rename(src, dest, rename_children);
+}
+
+static void lazy_expunge_mailbox_allocated(struct mailbox *box)
 {
 	struct lazy_expunge_mailbox_list *llist =
-		LAZY_EXPUNGE_LIST_CONTEXT(storage->list);
-	struct lazy_expunge_mail_storage *lstorage;
-	const char *const *p;
-	unsigned int i;
+		LAZY_EXPUNGE_LIST_CONTEXT(box->list);
+	union mailbox_module_context *mbox;
+	struct mailbox_vfuncs *v = box->vlast;
 
-	if (storage->ns->type != NAMESPACE_PRIVATE) {
-		/* this works only for private namespaces. */
+	if (llist == NULL)
 		return;
+
+	mbox = p_new(box->pool, union mailbox_module_context, 1);
+	mbox->super = *v;
+	box->vlast = &mbox->super;
+	MODULE_CONTEXT_SET_SELF(box, lazy_expunge_mail_storage_module, mbox);
+
+	if (!llist->internal_namespace) {
+		v->transaction_begin = lazy_expunge_transaction_begin;
+		v->transaction_commit = lazy_expunge_transaction_commit;
+		v->transaction_rollback = lazy_expunge_transaction_rollback;
+		v->delete = lazy_expunge_mailbox_delete;
+		v->rename = lazy_expunge_mailbox_rename;
+	} else {
+		v->rename = lazy_expunge_mailbox_rename;
 	}
-
-	/* if this is one of our internal storages, mark it as such before
-	   quota plugin sees it */
-	p = t_strsplit_spaces(getenv("LAZY_EXPUNGE"), " ");
-	for (i = 0; i < LAZY_NAMESPACE_COUNT && *p != NULL; i++, p++) {
-		if (strcmp(storage->ns->prefix, *p) == 0) {
-			storage->ns->flags |= NAMESPACE_FLAG_NOQUOTA;
-			break;
-		}
-	}
-
-	llist->storage = storage;
-
-	lstorage = p_new(storage->pool, struct lazy_expunge_mail_storage, 1);
-	lstorage->module_ctx.super = storage->v;
-	storage->v.mailbox_open = lazy_expunge_mailbox_open;
-
-	MODULE_CONTEXT_SET(storage, lazy_expunge_mail_storage_module, lstorage);
-}
-
-static void lazy_expunge_mail_storage_created(struct mail_storage *storage)
-{
-	/* only maildir supported for now */
-	if (strcmp(storage->name, "maildir") == 0)
-		lazy_expunge_mail_storage_init(storage);
-
-	if (lazy_expunge_next_hook_mail_storage_created != NULL)
-		lazy_expunge_next_hook_mail_storage_created(storage);
 }
 
 static void lazy_expunge_mailbox_list_created(struct mailbox_list *list)
 {
+	struct lazy_expunge_mail_user *luser =
+		LAZY_EXPUNGE_USER_CONTEXT(list->ns->user);
 	struct lazy_expunge_mailbox_list *llist;
+	const char *const *p;
+	unsigned int i;
 
-	if (lazy_expunge_next_hook_mailbox_list_created != NULL)
-		lazy_expunge_next_hook_mailbox_list_created(list);
+	if (luser == NULL)
+		return;
 
-	llist = p_new(list->pool, struct lazy_expunge_mailbox_list, 1);
-	llist->module_ctx.super = list->v;
-	list->v.delete_mailbox = lazy_expunge_mailbox_list_delete;
+	/* if this is one of our internal namespaces, mark it as such before
+	   quota plugin sees it */
+	p = t_strsplit_spaces(luser->env, " ");
+	for (i = 0; i < LAZY_NAMESPACE_COUNT && *p != NULL; i++, p++) {
+		if (strcmp(list->ns->prefix, *p) == 0) {
+			list->ns->flags |= NAMESPACE_FLAG_NOQUOTA;
+			break;
+		}
+	}
 
-	MODULE_CONTEXT_SET(list, lazy_expunge_mailbox_list_module, llist);
+	if (luser != NULL && list->ns->type == NAMESPACE_PRIVATE) {
+		llist = p_new(list->pool, struct lazy_expunge_mailbox_list, 1);
+		MODULE_CONTEXT_SET(list, lazy_expunge_mailbox_list_module,
+				   llist);
+	}
 }
 
 static void
-lazy_expunge_hook_mail_namespaces_created(struct mail_namespace *namespaces)
+lazy_expunge_mail_namespaces_created(struct mail_namespace *namespaces)
 {
 	struct lazy_expunge_mail_user *luser =
 		LAZY_EXPUNGE_USER_CONTEXT(namespaces->user);
-	struct lazy_expunge_mail_storage *lstorage;
+	struct lazy_expunge_mailbox_list *llist;
 	const char *const *p;
 	int i;
 
-	p = t_strsplit_spaces(getenv("LAZY_EXPUNGE"), " ");
+	if (luser == NULL)
+		return;
+
+	p = t_strsplit_spaces(luser->env, " ");
 	for (i = 0; i < LAZY_NAMESPACE_COUNT && *p != NULL; i++, p++) {
 		const char *name = *p;
 
@@ -698,71 +538,69 @@ lazy_expunge_hook_mail_namespaces_created(struct mail_namespace *namespaces)
 			mail_namespace_find_prefix(namespaces, name);
 		if (luser->lazy_ns[i] == NULL)
 			i_fatal("lazy_expunge: Unknown namespace: '%s'", name);
-		if (strcmp(luser->lazy_ns[i]->storage->name, "maildir") != 0) {
-			i_fatal("lazy_expunge: Namespace must be in maildir "
-				"format: %s", name);
-		}
+		mail_namespace_ref(luser->lazy_ns[i]);
 
 		/* we don't want to override these namespaces' expunge/delete
 		   operations. */
-		lstorage = LAZY_EXPUNGE_CONTEXT(luser->lazy_ns[i]->storage);
-		lstorage->internal_namespace = TRUE;
+		llist = LAZY_EXPUNGE_LIST_CONTEXT(luser->lazy_ns[i]->list);
+		llist->internal_namespace = TRUE;
 	}
 	if (i == 0)
 		i_fatal("lazy_expunge: No namespaces defined");
-	for (; i < LAZY_NAMESPACE_COUNT; i++)
+	for (; i < LAZY_NAMESPACE_COUNT; i++) {
 		luser->lazy_ns[i] = luser->lazy_ns[i-1];
+		mail_namespace_ref(luser->lazy_ns[i]);
+	}
+}
 
-	if (lazy_expunge_next_hook_mail_namespaces_created != NULL)
-		lazy_expunge_next_hook_mail_namespaces_created(namespaces);
+static void lazy_expunge_user_deinit(struct mail_user *user)
+{
+	struct lazy_expunge_mail_user *luser = LAZY_EXPUNGE_USER_CONTEXT(user);
+	unsigned int i;
+
+	for (i = 0; i < LAZY_NAMESPACE_COUNT; i++) {
+		if (luser->lazy_ns[i] != NULL)
+			mail_namespace_unref(&luser->lazy_ns[i]);
+	}
+
+	luser->module_ctx.super.deinit(user);
 }
 
 static void lazy_expunge_mail_user_created(struct mail_user *user)
 {
+	struct mail_user_vfuncs *v = user->vlast;
 	struct lazy_expunge_mail_user *luser;
+	const char *env;
 
-	luser = p_new(user->pool, struct lazy_expunge_mail_user, 1);
-	luser->module_ctx.super = user->v;
+	env = mail_user_plugin_getenv(user, "lazy_expunge");
+	if (env != NULL) {
+		luser = p_new(user->pool, struct lazy_expunge_mail_user, 1);
+		luser->module_ctx.super = *v;
+		user->vlast = &luser->module_ctx.super;
+		v->deinit = lazy_expunge_user_deinit;
+		luser->env = env;
 
-	MODULE_CONTEXT_SET(user, lazy_expunge_mail_user_module, luser);
-
-	if (lazy_expunge_next_hook_mail_user_created != NULL)
-		lazy_expunge_next_hook_mail_user_created(user);
+		MODULE_CONTEXT_SET(user, lazy_expunge_mail_user_module, luser);
+	} else if (user->mail_debug) {
+		i_debug("lazy_expunge: No lazy_expunge setting - "
+			"plugin disabled");
+	}
 }
 
-void lazy_expunge_plugin_init(void)
+static struct mail_storage_hooks lazy_expunge_mail_storage_hooks = {
+	.mail_user_created = lazy_expunge_mail_user_created,
+	.mail_namespaces_created = lazy_expunge_mail_namespaces_created,
+	.mailbox_list_created = lazy_expunge_mailbox_list_created,
+	.mailbox_allocated = lazy_expunge_mailbox_allocated,
+	.mail_allocated = lazy_expunge_mail_allocated
+};
+
+void lazy_expunge_plugin_init(struct module *module)
 {
-	if (getenv("LAZY_EXPUNGE") == NULL) {
-		if (getenv("DEBUG") != NULL) {
-			i_info("lazy_expunge: No lazy_expunge setting - "
-			       "plugin disabled");
-		}
-		return;
-	}
-
-	lazy_expunge_next_hook_mail_namespaces_created =
-		hook_mail_namespaces_created;
-	hook_mail_namespaces_created =
-		lazy_expunge_hook_mail_namespaces_created;
-
-	lazy_expunge_next_hook_mail_storage_created = hook_mail_storage_created;
-	hook_mail_storage_created = lazy_expunge_mail_storage_created;
-
-	lazy_expunge_next_hook_mailbox_list_created = hook_mailbox_list_created;
-	hook_mailbox_list_created = lazy_expunge_mailbox_list_created;
-
-	lazy_expunge_next_hook_mail_user_created = hook_mail_user_created;
-	hook_mail_user_created = lazy_expunge_mail_user_created;
+	mail_storage_hooks_add(module, &lazy_expunge_mail_storage_hooks);
 }
 
 void lazy_expunge_plugin_deinit(void)
 {
-	if (getenv("LAZY_EXPUNGE") != NULL)
-		return;
-
-	hook_mail_namespaces_created =
-		lazy_expunge_hook_mail_namespaces_created;
-	hook_mail_storage_created = lazy_expunge_next_hook_mail_storage_created;
-	hook_mailbox_list_created = lazy_expunge_next_hook_mailbox_list_created;
-	hook_mail_user_created = lazy_expunge_next_hook_mail_user_created;
+	mail_storage_hooks_remove(&lazy_expunge_mail_storage_hooks);
 }

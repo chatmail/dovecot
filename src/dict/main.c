@@ -1,54 +1,33 @@
 /* Copyright (c) 2005-2010 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "lib-signals.h"
-#include "ioloop.h"
-#include "fd-close-on-exec.h"
 #include "restrict-access.h"
 #include "randgen.h"
+#include "env-util.h"
+#include "module-dir.h"
+#include "master-service.h"
+#include "master-service-settings.h"
 #include "sql-api.h"
 #include "dict.h"
 #include "dict-client.h"
-#include "dict-server.h"
-#include "module-dir.h"
+#include "dict-connection.h"
+#include "dict-settings.h"
 
-#include <stdlib.h>
-#include <unistd.h>
-#include <syslog.h>
-
-#define DICT_MASTER_LISTENER_FD 3
-
-static struct ioloop *ioloop;
-static struct io *log_io;
 static struct module *modules;
-static struct dict_server *dict_server;
 
-static void sig_die(const siginfo_t *si, void *context ATTR_UNUSED)
+static void dict_die(void)
 {
-	/* warn about being killed because of some signal, except SIGINT (^C)
-	   which is too common at least while testing :) */
-	if (si->si_signo != SIGINT) {
-		i_warning("Killed with signal %d (by pid=%s uid=%s code=%s)",
-			  si->si_signo, dec2str(si->si_pid),
-			  dec2str(si->si_uid),
-			  lib_signal_code_to_str(si->si_signo, si->si_code));
-	}
-	io_loop_stop(ioloop);
+	/* hope that other processes relying on us will die first. */
 }
 
-static void log_error_callback(void *context ATTR_UNUSED)
+static void client_connected(struct master_service_connection *conn)
 {
-	/* the log fd is closed, don't die when trying to log later */
-	i_set_failure_ignore_errors(TRUE);
-
-	io_loop_stop(ioloop);
+	master_service_client_connection_accept(conn);
+	dict_connection_create(conn->fd);
 }
 
-static void drop_privileges(void)
+static void main_preinit(void)
 {
-	/* Log file or syslog opening probably requires roots */
-	i_set_failure_internal();
-
 	/* Maybe needed. Have to open /dev/urandom before possible
 	   chrooting. */
 	random_init();
@@ -57,82 +36,72 @@ static void drop_privileges(void)
 	sql_drivers_init();
 	sql_drivers_register_all();
 
-	restrict_access_by_env(FALSE);
+	restrict_access_by_env(NULL, FALSE);
+	restrict_access_allow_coredumps(TRUE);
 }
 
 static void main_init(void)
 {
-	const char *version, *path;
-	int fd;
+	struct module_dir_load_settings mod_set;
+	void **sets;
 
-	version = getenv("DOVECOT_VERSION");
-	if (version != NULL && strcmp(version, PACKAGE_VERSION) != 0) {
-		i_fatal("Dovecot version mismatch: "
-			"Master is v%s, dict is v"PACKAGE_VERSION" "
-			"(if you don't care, set version_ignore=yes)", version);
+	sets = master_service_settings_get_others(master_service);
+	dict_settings = sets[0];
+
+	if (*dict_settings->dict_db_config != '\0') {
+		/* for berkeley db library */
+		env_put(t_strconcat("DB_CONFIG=", dict_settings->dict_db_config,
+				    NULL));
 	}
 
-	lib_signals_init();
-        lib_signals_set_handler(SIGINT, TRUE, sig_die, NULL);
-        lib_signals_set_handler(SIGTERM, TRUE, sig_die, NULL);
-        lib_signals_ignore(SIGPIPE, TRUE);
-        lib_signals_ignore(SIGALRM, FALSE);
+	memset(&mod_set, 0, sizeof(mod_set));
+	mod_set.version = master_service_get_version_string(master_service);
+	mod_set.require_init_funcs = TRUE;
 
-	/* If master dies, the log fd gets closed and we'll quit */
-	log_io = io_add(STDERR_FILENO, IO_ERROR, log_error_callback, NULL);
-
-	modules = module_dir_load(DICT_MODULE_DIR, NULL, TRUE, version);
+	modules = module_dir_load(DICT_MODULE_DIR, NULL, &mod_set);
 	module_dir_init(modules);
 
 	/* Register only after loading modules. They may contain SQL drivers,
 	   which we'll need to register. */
 	dict_drivers_register_all();
-
-	path = getenv("DICT_LISTEN_FROM_FD");
-	fd = path == NULL ? -1 : DICT_MASTER_LISTENER_FD;
-	if (path == NULL) {
-		path = t_strconcat(getenv("BASE_DIR"),
-				   DEFAULT_DICT_SERVER_SOCKET_FNAME, NULL);
-	}
-
-	dict_server = dict_server_init(path, fd);
 }
 
 static void main_deinit(void)
 {
-	io_remove(&log_io);
-	dict_server_deinit(dict_server);
+	dict_connections_destroy_all();
+	dict_drivers_unregister_all();
 
 	module_dir_unload(&modules);
 
-	dict_drivers_unregister_all();
-
 	sql_drivers_deinit();
 	random_deinit();
-	lib_signals_deinit();
-	closelog();
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
-#ifdef DEBUG
-	if (getenv("GDB") == NULL)
-		fd_debug_verify_leaks(DICT_MASTER_LISTENER_FD+1, 1024);
-#endif
+	const struct setting_parser_info *set_roots[] = {
+		&dict_setting_parser_info,
+		NULL
+	};
+	const char *error;
 
-	/* NOTE: we start rooted, so keep the code minimal until
-	   restrict_access_by_env() is called */
-	lib_init();
-	drop_privileges();
+	master_service = master_service_init("dict", 0, &argc, &argv, NULL);
+	if (master_getopt(master_service) > 0)
+		return FATAL_DEFAULT;
 
-	ioloop = io_loop_create();
+	if (master_service_settings_read_simple(master_service, set_roots,
+						&error) < 0)
+		i_fatal("Error reading configuration: %s", error);
+
+	master_service_init_log(master_service, "dict: ");
+	main_preinit();
+	master_service_init_finish(master_service);
+	master_service_set_die_callback(master_service, dict_die);
 
 	main_init();
-        io_loop_run(ioloop);
+	master_service_run(master_service, client_connected);
+
 	main_deinit();
-
-	io_loop_destroy(&ioloop);
-	lib_deinit();
-
-	return 0;
+	master_service_deinit(&master_service);
+        return 0;
 }

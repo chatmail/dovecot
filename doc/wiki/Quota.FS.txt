@@ -1,6 +1,8 @@
 Filesystem quota
 ================
 
+Filesystem quota supports both local filesystems and rquota (NFS).
+
 Index files
 -----------
 
@@ -10,10 +12,9 @@ so Dovecot runs more slowly if it can't keep them updated. You can specify the
 index file location by appending ':INDEX=/somewhere' to <mail_location>
 [MailLocation.txt].
 
-Since v1.0.rc27 Dovecot can handle "out of disk space" errors in index file
-handling and transparently move to in-memory indexes. It'll use the in-memory
-indexes until the mailbox is re-opened. Earlier versions will break more or
-less badly.
+Dovecot can handle "out of disk space" errors in index file handling and
+transparently move to in-memory indexes. It'll use the in-memory indexes until
+the mailbox is re-opened.
 
 mbox
 ----
@@ -55,26 +56,16 @@ Note that if you change the location of the control files, Dovecot will look in
 the new CONTROL directory ('/var/no-quotas/control/%u') for the subscriptions
 file.
 
-Quota reporting
----------------
-
-Dovecot supports filesystem quota reporting using a quota plugin. New features
-in Dovecot v1.1 include:
-
- * RPC quota (for NFS) support.
- * Inode quota is reported as message count quota for <Maildir>
-   [MailboxFormat.Maildir.txt] and <Cydir> [MailboxFormat.Cydir.txt] formats.
- * Group quota is supported. It's used if user quota doesn't exist, or if quota
-   parameters contains "group".
-
 Parameters
 ----------
 
-All of these require v1.1+:
+By default only user quota is shown, or if it doesn't exist, group quota is
+used as fallback.
 
  * user: Report only user quotas, don't fallback to showing group quotas.
  * group: Report only group quotas
- * inode_per_mail: Report inode quota as "number of message" quota.
+ * inode_per_mail: Report inode quota as "number of message" quota. This can be
+   useful with Maildir or single-dbox.
  * noenforcing: Don't try to enforce quotas by calculating if saving would get
    user over quota. Only handle write failures.
  * mount=<path>: Report quota from given path. Default is to use the path for
@@ -87,8 +78,9 @@ Examples
 --------
 
 ---%<-------------------------------------------------------------------------
+mail_plugins = $mail_plugins quota
 protocol imap {
-  mail_plugins = quota imap_quota
+  mail_plugins = mail_plugins imap_quota
 }
 
 plugin {
@@ -97,7 +89,7 @@ plugin {
 ---%<-------------------------------------------------------------------------
 
 If you want to see both user and group quotas as separate quota roots, you can
-use this with v1.1:
+use this:
 
 ---%<-------------------------------------------------------------------------
 plugin {
@@ -106,8 +98,7 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-If you have your mails in two filesystems, you can create two quota roots with
-v1.1:
+If you have your mails in two filesystems, you can create two quota roots:
 
 ---%<-------------------------------------------------------------------------
 plugin {
@@ -118,4 +109,4 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

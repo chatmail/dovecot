@@ -11,6 +11,7 @@
 #include "nfs-workarounds.h"
 #include "read-full.h"
 #include "write-full.h"
+#include "mail-index-alloc-cache.h"
 #include "mail-index-private.h"
 #include "mail-index-view-private.h"
 #include "mail-index-sync-private.h"
@@ -43,6 +44,8 @@ struct mail_index *mail_index_alloc(const char *dir, const char *prefix)
 
 	index->mode = 0600;
 	index->gid = (gid_t)-1;
+	index->lock_method = FILE_LOCK_METHOD_FCNTL;
+	index->max_lock_timeout_secs = -1U;
 
 	index->keywords_ext_id =
 		mail_index_ext_register(index, MAIL_INDEX_EXT_KEYWORDS,
@@ -62,7 +65,8 @@ void mail_index_free(struct mail_index **_index)
 	struct mail_index *index = *_index;
 
 	*_index = NULL;
-	mail_index_close(index);
+
+	i_assert(index->open_count == 0);
 
 	mail_transaction_log_free(&index->log);
 	hash_table_destroy(&index->keywords_hash);
@@ -80,10 +84,12 @@ void mail_index_free(struct mail_index **_index)
 	i_free(index);
 }
 
-void mail_index_set_fsync_types(struct mail_index *index,
-				enum mail_index_sync_type fsync_mask)
+void mail_index_set_fsync_mode(struct mail_index *index,
+			       enum fsync_mode mode,
+			       enum mail_index_sync_type mask)
 {
-	index->fsync_mask = fsync_mask;
+	index->fsync_mode = mode;
+	index->fsync_mask = mask;
 }
 
 void mail_index_set_permissions(struct mail_index *index,
@@ -94,6 +100,14 @@ void mail_index_set_permissions(struct mail_index *index,
 
 	i_free(index->gid_origin);
 	index->gid_origin = i_strdup(gid_origin);
+}
+
+void mail_index_set_lock_method(struct mail_index *index,
+				enum file_lock_method lock_method,
+				unsigned int max_timeout_secs)
+{
+	index->lock_method = lock_method;
+	index->max_lock_timeout_secs = max_timeout_secs;
 }
 
 uint32_t mail_index_ext_register(struct mail_index *index, const char *name,
@@ -258,6 +272,96 @@ const ARRAY_TYPE(keywords) *mail_index_get_keywords(struct mail_index *index)
 	return &index->keywords;
 }
 
+struct mail_keywords *
+mail_index_keywords_create(struct mail_index *index,
+			   const char *const keywords[])
+{
+	struct mail_keywords *k;
+	unsigned int src, dest, i, count;
+
+	count = str_array_length(keywords);
+	if (count == 0) {
+		k = i_new(struct mail_keywords, 1);
+		k->index = index;
+		k->refcount = 1;
+		return k;
+	}
+
+	/* @UNSAFE */
+	k = i_malloc(sizeof(struct mail_keywords) +
+		     (sizeof(k->idx) * (count-1)));
+	k->index = index;
+	k->refcount = 1;
+
+	/* look up the keywords from index. they're never removed from there
+	   so we can permanently store indexes to them. */
+	for (src = dest = 0; src < count; src++) {
+		mail_index_keyword_lookup_or_create(index, keywords[src],
+						    &k->idx[dest]);
+		/* ignore if this is a duplicate */
+		for (i = 0; i < src; i++) {
+			if (k->idx[i] == k->idx[dest])
+				break;
+		}
+		if (i == src)
+			dest++;
+	}
+	k->count = dest;
+	return k;
+}
+
+struct mail_keywords *
+mail_index_keywords_create_from_indexes(struct mail_index *index,
+					const ARRAY_TYPE(keyword_indexes)
+						*keyword_indexes)
+{
+	struct mail_keywords *k;
+	const unsigned int *indexes;
+	unsigned int src, dest, i, count;
+
+	indexes = array_get(keyword_indexes, &count);
+	if (count == 0) {
+		k = i_new(struct mail_keywords, 1);
+		k->index = index;
+		k->refcount = 1;
+		return k;
+	}
+
+	/* @UNSAFE */
+	k = i_malloc(sizeof(struct mail_keywords) +
+		     (sizeof(k->idx) * (count-1)));
+	k->index = index;
+	k->refcount = 1;
+
+	/* copy but skip duplicates */
+	for (src = dest = 0; src < count; src++) {
+		for (i = 0; i < src; i++) {
+			if (k->idx[i] == indexes[src])
+				break;
+		}
+		if (i == src)
+			k->idx[dest++] = indexes[src];
+	}
+	k->count = dest;
+	return k;
+}
+
+void mail_index_keywords_ref(struct mail_keywords *keywords)
+{
+	keywords->refcount++;
+}
+
+void mail_index_keywords_unref(struct mail_keywords **_keywords)
+{
+	struct mail_keywords *keywords = *_keywords;
+
+	i_assert(keywords->refcount > 0);
+
+	*_keywords = NULL;
+	if (--keywords->refcount == 0)
+		i_free(keywords);
+}
+
 int mail_index_try_open_only(struct mail_index *index)
 {
 	i_assert(index->fd == -1);
@@ -321,8 +425,10 @@ int mail_index_create_tmp_file(struct mail_index *index, const char **path_r)
 	old_mask = umask(0);
 	fd = open(path, O_RDWR|O_CREAT|O_TRUNC, index->mode);
 	umask(old_mask);
-	if (fd == -1)
-		return mail_index_file_set_syscall_error(index, path, "open()");
+	if (fd == -1) {
+		mail_index_file_set_syscall_error(index, path, "creat()");
+		return -1;
+	}
 
 	mail_index_fchown(index, fd, path);
 	return fd;
@@ -388,21 +494,14 @@ static int mail_index_open_files(struct mail_index *index,
 	return 1;
 }
 
-int mail_index_open(struct mail_index *index, enum mail_index_open_flags flags,
-		    enum file_lock_method lock_method)
+int mail_index_open(struct mail_index *index, enum mail_index_open_flags flags)
 {
 	int ret;
 
-	if (index->opened) {
-		if (index->map != NULL &&
-		    (index->map->hdr.flags &
-		     MAIL_INDEX_HDR_FLAG_CORRUPTED) != 0) {
-			/* corrupted, reopen files */
-                        mail_index_close(index);
-		} else {
-			i_assert(index->map != NULL);
-			return 1;
-		}
+	if (index->open_count > 0) {
+		i_assert(index->map != NULL);
+		index->open_count++;
+		return 1;
 	}
 
 	index->filepath = MAIL_INDEX_IS_IN_MEMORY(index) ?
@@ -417,30 +516,39 @@ int mail_index_open(struct mail_index *index, enum mail_index_open_flags flags,
 	index->readonly = FALSE;
 	index->nodiskspace = FALSE;
 	index->index_lock_timeout = FALSE;
-	index->log_locked = FALSE;
-	index->mmap_disable = (flags & MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE) != 0;
-	index->use_excl_dotlocks =
-		(flags & MAIL_INDEX_OPEN_FLAG_DOTLOCK_USE_EXCL) != 0;
-	index->fsync_disable =
-		(flags & MAIL_INDEX_OPEN_FLAG_FSYNC_DISABLE) != 0;
-	index->nfs_flush = (flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0;
+	index->log_sync_locked = FALSE;
+	index->flags = flags;
 	index->readonly = (flags & MAIL_INDEX_OPEN_FLAG_READONLY) != 0;
-	index->lock_method = lock_method;
 
-	if (index->nfs_flush && index->fsync_disable)
-		i_fatal("nfs flush requires fsync_disable=no");
-	if (index->nfs_flush && !index->mmap_disable)
+	if ((flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0 &&
+	    index->fsync_mode != FSYNC_MODE_ALWAYS)
+		i_fatal("nfs flush requires mail_fsync=always");
+	if ((flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0 &&
+	    (flags & MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE) == 0)
 		i_fatal("nfs flush requires mmap_disable=yes");
 
 	if ((ret = mail_index_open_files(index, flags)) <= 0) {
 		/* doesn't exist and create flag not used */
+		index->open_count++;
 		mail_index_close(index);
 		return ret;
 	}
+	index->open_count++;
 
 	i_assert(index->map != NULL);
-	index->opened = TRUE;
+	mail_index_alloc_cache_index_opened(index);
 	return 1;
+}
+
+int mail_index_open_or_create(struct mail_index *index,
+			      enum mail_index_open_flags flags)
+{
+	int ret;
+
+	flags |= MAIL_INDEX_OPEN_FLAG_CREATE;
+	ret = mail_index_open(index, flags);
+	i_assert(ret != 0);
+	return ret < 0 ? -1 : 0;
 }
 
 void mail_index_close_file(struct mail_index *index)
@@ -462,6 +570,10 @@ void mail_index_close_file(struct mail_index *index)
 
 void mail_index_close(struct mail_index *index)
 {
+	i_assert(index->open_count > 0);
+	if (--index->open_count > 0)
+		return;
+
 	if (index->map != NULL)
 		mail_index_unmap(&index->map);
 
@@ -473,7 +585,6 @@ void mail_index_close(struct mail_index *index)
 	i_free_and_null(index->filepath);
 
 	index->indexid = 0;
-	index->opened = FALSE;
 }
 
 int mail_index_unlink(struct mail_index *index)
@@ -481,7 +592,7 @@ int mail_index_unlink(struct mail_index *index)
 	const char *path;
 	int last_errno = 0;
 
-	if (MAIL_INDEX_IS_IN_MEMORY(index))
+	if (MAIL_INDEX_IS_IN_MEMORY(index) || index->readonly)
 		return 0;
 
 	/* main index */
@@ -515,7 +626,8 @@ int mail_index_reopen_if_changed(struct mail_index *index)
 {
 	struct stat st1, st2;
 
-	i_assert(index->shared_lock_count == 0 || !index->nfs_flush);
+	i_assert(index->shared_lock_count == 0 ||
+		 (index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) == 0);
 	i_assert(index->excl_lock_count == 0);
 
 	if (MAIL_INDEX_IS_IN_MEMORY(index))
@@ -524,7 +636,7 @@ int mail_index_reopen_if_changed(struct mail_index *index)
 	if (index->fd == -1)
 		return mail_index_try_open_only(index);
 
-	if (index->nfs_flush)
+	if ((index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0)
 		nfs_flush_file_handle_cache(index->filepath);
 	if (nfs_safe_stat(index->filepath, &st2) < 0) {
 		if (errno == ENOENT)
@@ -593,6 +705,9 @@ int mail_index_move_to_memory(struct mail_index *index)
 	if (MAIL_INDEX_IS_IN_MEMORY(index))
 		return index->map == NULL ? -1 : 0;
 
+	if ((index->flags & MAIL_INDEX_OPEN_FLAG_NEVER_IN_MEMORY) != 0)
+		return -1;
+
 	/* set the index as being into memory */
 	i_free_and_null(index->dir);
 
@@ -634,8 +749,33 @@ void mail_index_mark_corrupted(struct mail_index *index)
 	index->indexid = 0;
 
 	index->map->hdr.flags |= MAIL_INDEX_HDR_FLAG_CORRUPTED;
-	if (unlink(index->filepath) < 0 && errno != ENOENT && errno != ESTALE)
-		mail_index_set_syscall_error(index, "unlink()");
+	if (!index->readonly) {
+		if (unlink(index->filepath) < 0 &&
+		    errno != ENOENT && errno != ESTALE)
+			mail_index_set_syscall_error(index, "unlink()");
+	}
+}
+
+bool mail_index_is_deleted(struct mail_index *index)
+{
+	return index->index_delete_requested || index->index_deleted;
+}
+
+int mail_index_get_modification_time(struct mail_index *index, time_t *mtime_r)
+{
+	struct stat st;
+
+	if (mail_transaction_log_get_mtime(index->log, mtime_r) < 0)
+		return -1;
+
+	if (*mtime_r == 0) {
+		if (stat(index->filepath, &st) < 0) {
+			mail_index_set_syscall_error(index, "stat()");
+			return -1;
+		}
+		*mtime_r = st.st_mtime;
+	}
+	return 0;
 }
 
 void mail_index_fchown(struct mail_index *index, int fd, const char *path)
@@ -673,35 +813,38 @@ void mail_index_fchown(struct mail_index *index, int fd, const char *path)
 int mail_index_set_syscall_error(struct mail_index *index,
 				 const char *function)
 {
-	i_assert(function != NULL);
-
-	if (ENOSPACE(errno)) {
-		index->nodiskspace = TRUE;
-		return -1;
-	}
-
-	return mail_index_set_error(index, "%s failed with index file %s: %m",
-				    function, index->filepath);
+	return mail_index_file_set_syscall_error(index, index->filepath,
+						 function);
 }
 
 int mail_index_file_set_syscall_error(struct mail_index *index,
 				      const char *filepath,
 				      const char *function)
 {
+	const char *errstr;
+
 	i_assert(filepath != NULL);
 	i_assert(function != NULL);
 
 	if (ENOSPACE(errno)) {
 		index->nodiskspace = TRUE;
-		return -1;
+		if ((index->flags & MAIL_INDEX_OPEN_FLAG_NEVER_IN_MEMORY) == 0)
+			return -1;
 	}
 
 	if (errno == EACCES) {
-		return mail_index_set_error(index, "%s",
-			eacces_error_get(t_strcut(function, '('), filepath));
+		function = t_strcut(function, '(');
+		if (strcmp(function, "creat") == 0 ||
+		    strncmp(function, "file_dotlock_", 13) == 0)
+			errstr = eacces_error_get_creating(function, filepath);
+		else
+			errstr = eacces_error_get(function, filepath);
+		return mail_index_set_error(index, "%s", errstr);
 	} else {
-		return mail_index_set_error(index, "%s failed with file %s: %m",
-					    function, filepath);
+		const char *suffix = errno != EFBIG ? "" :
+			" (process was started with ulimit -f limit)";
+		return mail_index_set_error(index, "%s failed with file %s: "
+					    "%m%s", function, filepath, suffix);
 	}
 }
 
@@ -719,102 +862,4 @@ void mail_index_reset_error(struct mail_index *index)
 
 	index->nodiskspace = FALSE;
         index->index_lock_timeout = FALSE;
-}
-
-#if WORDS_BIGENDIAN
-/* FIXME: Unfortunately these functions were originally written to use
-   endian-specific code and we can't avoid that without breaking backwards
-   compatibility. When we do break it, just select one of these. */
-uint32_t mail_index_uint32_to_offset(uint32_t offset)
-{
-	i_assert(offset < 0x40000000);
-	i_assert((offset & 3) == 0);
-
-	offset >>= 2;
-	return  0x00000080 | ((offset & 0x0000007f)) |
-		0x00008000 | ((offset & 0x00003f80) >> 7 << 8) |
-		0x00800000 | ((offset & 0x001fc000) >> 14 << 16) |
-		0x80000000 | ((offset & 0x0fe00000) >> 21 << 24);
-}
-
-uint32_t mail_index_offset_to_uint32(uint32_t offset)
-{
-	if ((offset & 0x80808080) != 0x80808080)
-		return 0;
-
-	return  (((offset & 0x0000007f)) |
-		 ((offset & 0x00007f00) >> 8 << 7) |
-		 ((offset & 0x007f0000) >> 16 << 14) |
-		 ((offset & 0x7f000000) >> 24 << 21)) << 2;
-}
-#else
-uint32_t mail_index_uint32_to_offset(uint32_t offset)
-{
-	i_assert(offset < 0x40000000);
-	i_assert((offset & 3) == 0);
-
-	offset >>= 2;
-	return  0x80000000 | ((offset & 0x0000007f) << 24) |
-		0x00800000 | ((offset & 0x00003f80) >> 7 << 16) |
-		0x00008000 | ((offset & 0x001fc000) >> 14 << 8) |
-		0x00000080 | ((offset & 0x0fe00000) >> 21);
-}
-
-uint32_t mail_index_offset_to_uint32(uint32_t offset)
-{
-	if ((offset & 0x80808080) != 0x80808080)
-		return 0;
-
-	return  (((offset & 0x0000007f) << 21) |
-		 ((offset & 0x00007f00) >> 8 << 14) |
-		 ((offset & 0x007f0000) >> 16 << 7) |
-		 ((offset & 0x7f000000) >> 24)) << 2;
-}
-#endif
-
-void mail_index_pack_num(uint8_t **p, uint32_t num)
-{
-	/* number continues as long as the highest bit is set */
-	while (num >= 0x80) {
-		**p = (num & 0x7f) | 0x80;
-		*p += 1;
-		num >>= 7;
-	}
-
-	**p = num;
-	*p += 1;
-}
-
-int mail_index_unpack_num(const uint8_t **p, const uint8_t *end,
-			  uint32_t *num_r)
-{
-	const uint8_t *c = *p;
-	uint32_t value = 0;
-	unsigned int bits = 0;
-
-	for (;;) {
-		if (unlikely(c == end)) {
-			/* we should never see EOF */
-			*num_r = 0;
-			return -1;
-		}
-
-		value |= (*c & 0x7f) << bits;
-		if (*c < 0x80)
-			break;
-
-		bits += 7;
-		c++;
-	}
-
-	if (unlikely(bits >= 32)) {
-		/* broken input */
-		*p = end;
-		*num_r = 0;
-		return -1;
-	}
-
-	*p = c + 1;
-	*num_r = value;
-	return 0;
 }

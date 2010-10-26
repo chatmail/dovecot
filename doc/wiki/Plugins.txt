@@ -6,8 +6,6 @@ Distributed with Dovecot:
  * <acl> [ACL.txt]: Access Control Lists for mailboxes
  * <autocreate> [Plugins.Autocreate.txt]: Automatically create/subscribe
    mailboxes when user logs in
- * <convert> [Plugins.Convert.txt]: Convert user's mailboxes from one format to
-   another on login
  * <expire> [Plugins.Expire.txt]: Delete mails from specified mailboxes after a
    designated number of days
  * <fts> [Plugins.FTS.txt]: Full text search indexing
@@ -24,6 +22,8 @@ Distributed with Dovecot:
    quota
  * <virtual> [Plugins.Virtual.txt]: Virtual mailboxes
  * <zlib> [Plugins.Zlib.txt]: Access compressed mails
+ * imap_zlib: Enable IMAP COMPRESS [http://tools.ietf.org/html/rfc4978]
+   extension
 
 External:
 
@@ -56,4 +56,4 @@ Experimental Plugins:
 To enable / disable plugins per user you can make your userdb return
 'mail_plugins' extra field. See <UserDatabase.ExtraFields.txt> for examples.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

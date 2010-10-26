@@ -34,6 +34,13 @@ o_stream_create_fd(int fd, size_t max_buffer_size, bool autoclose_fd);
    If offset==(uoff_t)-1, the current offset isn't known. */
 struct ostream *
 o_stream_create_fd_file(int fd, uoff_t offset, bool autoclose_fd);
+/* Create an output stream to a buffer. */
+struct ostream *o_stream_create_buffer(buffer_t *buf);
+
+/* Set name (e.g. path) for output stream. */
+void o_stream_set_name(struct ostream *stream, const char *name);
+/* Get output stream's name. Returns "" if stream has no name. */
+const char *o_stream_get_name(struct ostream *stream);
 
 /* o_stream_close() + o_stream_unref() */
 void o_stream_destroy(struct ostream **stream);
@@ -70,6 +77,8 @@ int o_stream_flush(struct ostream *stream);
 void o_stream_set_flush_pending(struct ostream *stream, bool set);
 /* Returns number of bytes currently in buffer. */
 size_t o_stream_get_buffer_used_size(const struct ostream *stream) ATTR_PURE;
+/* Returns number of bytes we can still write without failing. */
+size_t o_stream_get_buffer_avail_size(const struct ostream *stream) ATTR_PURE;
 
 /* Seek to specified position from beginning of file. This works only for
    files. Returns 1 if successful, -1 if error. */
@@ -92,5 +101,9 @@ ssize_t o_stream_send_str(struct ostream *stream, const char *str);
    calling this function. */
 off_t o_stream_send_istream(struct ostream *outstream,
 			    struct istream *instream);
+
+/* Write data to specified offset. Returns 0 if successful, -1 if error. */
+int o_stream_pwrite(struct ostream *stream, const void *data, size_t size,
+		    uoff_t offset);
 
 #endif

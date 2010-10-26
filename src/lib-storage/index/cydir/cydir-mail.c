@@ -13,7 +13,7 @@ static const char *cydir_mail_get_path(struct mail *mail)
 {
 	const char *dir;
 
-	dir = mailbox_list_get_path(mail->box->storage->list, mail->box->name,
+	dir = mailbox_list_get_path(mail->box->list, mail->box->name,
 				    MAILBOX_LIST_PATH_TYPE_MAILBOX);
 	return t_strdup_printf("%s/%u.", dir, mail->uid);
 }
@@ -113,7 +113,12 @@ cydir_mail_get_stream(struct mail *_mail, struct message_size *hdr_size,
 			return -1;
 		}
 		mail->data.stream = i_stream_create_fd(fd, 0, TRUE);
+		i_stream_set_name(mail->data.stream, path);
 		index_mail_set_read_buffer_size(_mail, mail->data.stream);
+		if (mail->mail.v.istream_opened != NULL) {
+			if (mail->mail.v.istream_opened(_mail, stream_r) < 0)
+				return -1;
+		}
 	}
 
 	return index_mail_init_stream(mail, hdr_size, body_size, stream_r);
@@ -124,6 +129,7 @@ struct mail_vfuncs cydir_mail_vfuncs = {
 	index_mail_free,
 	index_mail_set_seq,
 	index_mail_set_uid,
+	index_mail_set_uid_cache_updates,
 
 	index_mail_get_flags,
 	index_mail_get_keywords,
@@ -140,10 +146,12 @@ struct mail_vfuncs cydir_mail_vfuncs = {
 	index_mail_get_header_stream,
 	cydir_mail_get_stream,
 	index_mail_get_special,
+	index_mail_get_real_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
+	index_mail_update_modseq,
 	NULL,
 	index_mail_expunge,
 	index_mail_set_cache_corrupted,
-	index_mail_get_index_mail
+	index_mail_opened
 };

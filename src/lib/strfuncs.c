@@ -36,10 +36,7 @@ char *p_strdup(pool_t pool, const char *str)
 	if (str == NULL)
                 return NULL;
 
-	for (len = 0; (str)[len] != '\0'; )
-		len++;
-	len++;
-
+	len = strlen(str) + 1;
 	mem = p_malloc(pool, len);
 	memcpy(mem, str, len);
 	return mem;
@@ -282,20 +279,6 @@ const char *t_strcut(const char *str, char cutchar)
         return str;
 }
 
-bool is_numeric(const char *str, char end_char)
-{
-	if (*str == '\0' || *str == end_char)
-		return FALSE;
-
-	while (*str != '\0' && *str != end_char) {
-		if (!i_isdigit(*str))
-			return FALSE;
-		str++;
-	}
-
-	return TRUE;
-}
-
 int i_strocpy(char *dest, const char *src, size_t dstsize)
 {
 	if (dstsize == 0)
@@ -306,7 +289,7 @@ int i_strocpy(char *dest, const char *src, size_t dstsize)
 		dstsize--;
 	}
 
-	*dest++ = '\0';
+	*dest = '\0';
 	return *src == '\0' ? 0 : -1;
 }
 
@@ -541,6 +524,15 @@ bool str_array_remove(const char **arr, const char *value)
 	return FALSE;
 }
 
+bool str_array_find(const char *const *arr, const char *value)
+{
+	for (; *arr != NULL; arr++) {
+		if (strcmp(*arr, value) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
 bool str_array_icase_find(const char *const *arr, const char *value)
 {
 	for (; *arr != NULL; arr++) {
@@ -548,6 +540,28 @@ bool str_array_icase_find(const char *const *arr, const char *value)
 			return TRUE;
 	}
 	return FALSE;
+}
+
+const char **p_strarray_dup(pool_t pool, const char *const *arr)
+{
+	unsigned int i;
+	const char **ret;
+	char *p;
+	size_t len, size = sizeof(const char *);
+
+	for (i = 0; arr[i] != NULL; i++)
+		size += sizeof(const char *) + strlen(arr[i]) + 1;
+
+	ret = p_malloc(pool, size);
+	p = PTR_OFFSET(ret, sizeof(const char *) * (i + 1));
+	for (i = 0; arr[i] != NULL; i++) {
+		len = strlen(arr[i]) + 1;
+		memcpy(p, arr[i], len);
+		ret[i] = p;
+		p += len;
+	}
+	i_assert(PTR_OFFSET(ret, size) == (void *)p);
+	return ret;
 }
 
 const char *dec2str(uintmax_t number)

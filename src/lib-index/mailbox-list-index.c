@@ -42,11 +42,8 @@ struct mailbox_list_iter_ctx {
 };
 
 static const struct dotlock_settings default_dotlock_set = {
-	MEMBER(temp_prefix) NULL,
-	MEMBER(lock_suffix) NULL,
-
-	MEMBER(timeout) 60,
-	MEMBER(stale_timeout) 30
+	.timeout = 60,
+	.stale_timeout = 30
 };
 
 int mailbox_list_index_set_syscall_error(struct mailbox_list_index *index,
@@ -88,7 +85,8 @@ void mailbox_list_index_file_close(struct mailbox_list_index *index)
 int mailbox_list_index_set_corrupted(struct mailbox_list_index *index,
 				     const char *str)
 {
-	(void)unlink(index->filepath);
+	if (!index->mail_index->readonly)
+		(void)unlink(index->filepath);
 	mailbox_list_index_file_close(index);
 
 	i_error("Corrupted mailbox list index file %s: %s",
@@ -223,7 +221,7 @@ static int mailbox_list_index_is_recreated(struct mailbox_list_index *index)
 	if (index->fd == -1)
 		return 1;
 
-	if (index->mail_index->nfs_flush)
+	if ((index->mail_index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0)
 		nfs_flush_file_handle_cache(index->filepath);
 
 	if (nfs_safe_stat(index->filepath, &st1) < 0) {
@@ -276,7 +274,8 @@ int mailbox_list_index_file_create(struct mailbox_list_index *index,
 		return -1;
 	}
 
-	if (index->mail_index->nfs_flush && fdatasync(fd) < 0) {
+	if (index->mail_index->fsync_mode == FSYNC_MODE_ALWAYS &&
+	    fdatasync(fd) < 0) {
 		mailbox_list_index_set_syscall_error(index, "fdatasync()");
 		(void)file_dotlock_delete(&dotlock);
 		return -1;
@@ -352,10 +351,13 @@ mailbox_list_index_alloc(const char *path, char separator,
 	index->separator = separator;
 	index->mail_index = mail_index;
 	index->fd = -1;
-	index->mmap_disable = mail_index->mmap_disable;
+	index->mmap_disable =
+		(mail_index->flags & MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE) != 0;
 	index->dotlock_set = default_dotlock_set;
-	index->dotlock_set.use_excl_lock = mail_index->use_excl_dotlocks;
-	index->dotlock_set.nfs_flush = mail_index->nfs_flush;
+	index->dotlock_set.use_excl_lock =
+		(mail_index->flags & MAIL_INDEX_OPEN_FLAG_DOTLOCK_USE_EXCL) != 0;
+	index->dotlock_set.nfs_flush =
+		(mail_index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0;
 	return index;
 }
 

@@ -27,11 +27,10 @@ Dovecot uses as much memory as it needs, which is usually quite little.
 
 Note that these settings do not directly affect the memory usage:
 
- * 'login/mail/auth_process_size': These are simply safe guards against
-   potential memory leaks. If the process's virtual size reaches the limit, the
-   process is killed by the kernel.
- * 'login_max_processes_count', 'max_mail_processes' and
-   'auth_worker_max_count': These are mostly to avoid DoS attacks using up all
-   your memory.
+ * 'service { vsz_limit } ': These are simply safe guards against potential
+   memory leaks. If the process's virtual size reaches the limit, the process
+   is killed by the kernel.
+ * 'service { process_limit, client_limit } ': These are mostly to avoid DoS
+   attacks using up all your memory.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

@@ -1,19 +1,17 @@
 Zlib plugin
 ===========
 
-Zlib plugin can be used to read compressed mbox and maildir files. Zlib plugin
-supports compression using zlib/gzip and bzlib/bzip2 (v1.1.2+).
+Zlib plugin can be used to read compressed mbox, maildir or dbox files. Zlib
+plugin supports compression using zlib/gzip and bzlib/bzip2.
 
-You can enable zlib plugin by just loading it, there is no other configuration:
+Configuration:
 
 ---%<-------------------------------------------------------------------------
-protocol imap {
-  ..
-  mail_plugins = zlib
-}
-protocol pop3 {
-  ..
-  mail_plugins = zlib
+mail_plugins = $mail_plugins zlib
+
+plugin {
+  zlib_save_level = 6 # 1..9
+  zlib_save = gz # or bz2
 }
 ---%<-------------------------------------------------------------------------
 
@@ -22,7 +20,13 @@ mbox
 
 Compressed mbox files can be accessed only as read-only. The compression is
 detected based on the file name, so your compressed mboxes should end with .gz
-or .bz2 extension.
+or .bz2 extension. There is no support for compression during saving.
+
+dbox
+----
+
+Mails can be stored as compressed. Existing uncompressed mails can't currently
+be compressed (or vice versa).
 
 Maildir
 -------
@@ -32,9 +36,9 @@ files from Maildir. If you've enabled both gzip and bzip2 support you can have
 files compressed with either one of them in the Maildir. The compression is
 detected by reading the first few bytes from the file and figuring out if it's
 a valid gzip or bzip2 header. The file name doesn't matter. This means that an
-IMAP client can also try to exploit security holes in zlib/bzlib by writing
-specially crafted mails using IMAP's APPEND command. v1.2.5+ fixes this by not
-allowing clients to save mails that are detected as compressed.
+IMAP client could also try to exploit security holes in zlib/bzlib by writing
+specially crafted mails using IMAP's APPEND command. This is prevented by
+Dovecot not allowing clients to save mails that are detected as compressed.
 
 All mails must have ',S=<size>' in their filename where <size> contains the
 original uncompressed mail size, otherwise there will be problems with quota
@@ -50,7 +54,7 @@ Compression
 
 You'll probably want to use some cronjob to compress old mails. However note
 that to avoid seeing duplicate mails in rare race conditions you'll have to use
-the included maildirlock utility (v1.1.2+). The idea is to:
+the included maildirlock utility. The idea is to:
 
  1. Find the mails you want to compress in a single maildir.
      * Skip files that don't have ',S=<size>' in the filename.
@@ -80,24 +84,4 @@ the included maildirlock utility (v1.1.2+). The idea is to:
  6. Unlock the maildir by sending a TERM signal to the maildirlock process
     (killing the PID it wrote to stdout).
 
-Compression while saving (v2.0+)
---------------------------------
-
-Since v2.0+ Dovecot supports compression while saving mails (via <LDA.txt> or
-IMAP APPEND command). There are two settings related to this:
-
----%<-------------------------------------------------------------------------
-plugin {
-  zlib_save_level = 6 # 1..9
-  zlib_save = gz # or bz2
-}
----%<-------------------------------------------------------------------------
-
-Don't forget to also enable zlib plugin (either at root level, or in lda and
-lmtp protocol sections):
-
----%<-------------------------------------------------------------------------
-mail_plugins = zlib
----%<-------------------------------------------------------------------------
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

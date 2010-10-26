@@ -15,19 +15,17 @@ exceeded" error.
 The configuration file is a text file where each line is in format: '<priority>
 <mailbox name>'. Mails are deleted in lowest -> highest priority number order.
 
-*Example dovecot.conf:*
+dovecot.conf:
 
 ---%<-------------------------------------------------------------------------
-protocol imap {
-  mail_plugins = quota trash
-}
+mail_plugins = $mail_plugins quota trash
 
 plugin {
-  trash = /etc/dovecot-trash.conf
+  trash = /etc/dovecot/dovecot-trash.conf.ext
 }
 ---%<-------------------------------------------------------------------------
 
-*Example dovecot-trash.conf file*
+dovecot-trash.conf.ext:
 
 ---%<-------------------------------------------------------------------------
 # Spam mailbox is emptied before Trash
@@ -40,4 +38,4 @@ plugin {
 3 Sent Messages
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

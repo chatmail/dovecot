@@ -3,6 +3,7 @@
 
 #include "file-lock.h"
 #include "mail-index.h"
+#include "mail-index-util.h"
 #include "mail-index-view-private.h"
 #include "mail-index-transaction-private.h"
 
@@ -50,8 +51,6 @@ typedef int mail_index_sync_handler_t(struct mail_index_sync_map_ctx *ctx,
 				      uint32_t seq, void *old_data,
 				      const void *new_data, void **context);
 typedef void mail_index_sync_lost_handler_t(struct mail_index *index);
-
-ARRAY_DEFINE_TYPE(seq_array, uint32_t);
 
 #define MAIL_INDEX_HEADER_SIZE_ALIGN(size) \
 	(((size) + 7) & ~7)
@@ -171,6 +170,9 @@ struct mail_index {
 	struct mail_cache *cache;
 	struct mail_transaction_log *log;
 
+	unsigned int open_count;
+	enum mail_index_open_flags flags;
+	enum fsync_mode fsync_mode;
 	enum mail_index_sync_type fsync_mask;
 	mode_t mode;
 	gid_t gid;
@@ -201,9 +203,13 @@ struct mail_index {
 	uint32_t fsck_log_head_file_seq;
 	uoff_t fsck_log_head_file_offset;
 
+	/* syncing will update this if non-NULL */
+	struct mail_index_transaction_commit_result *sync_commit_result;
+
 	int lock_type, shared_lock_count, excl_lock_count;
 	unsigned int lock_id_counter;
 	enum file_lock_method lock_method;
+	unsigned int max_lock_timeout_secs;
 
 	struct file_lock *file_lock;
 	struct dotlock *dotlock;
@@ -222,12 +228,9 @@ struct mail_index {
 	unsigned int nodiskspace:1;
 	unsigned int index_lock_timeout:1;
 
-	unsigned int opened:1;
-	unsigned int log_locked:1;
-	unsigned int mmap_disable:1;
-	unsigned int fsync_disable:1;
-	unsigned int use_excl_dotlocks:1;
-	unsigned int nfs_flush:1;
+	unsigned int index_delete_requested:1; /* next sync sets it deleted */
+	unsigned int index_deleted:1; /* no changes allowed anymore */
+	unsigned int log_sync_locked:1;
 	unsigned int readonly:1;
 	unsigned int mapping:1;
 	unsigned int syncing:1;
@@ -313,9 +316,20 @@ bool mail_index_map_get_ext_idx(struct mail_index_map *map,
 const struct mail_index_ext *
 mail_index_view_get_ext(struct mail_index_view *view, uint32_t ext_id);
 
+void mail_index_map_lookup_seq_range(struct mail_index_map *map,
+				     uint32_t first_uid, uint32_t last_uid,
+				     uint32_t *first_seq_r,
+				     uint32_t *last_seq_r);
+
 int mail_index_map_check_header(struct mail_index_map *map);
+bool mail_index_check_header_compat(struct mail_index *index,
+				    const struct mail_index_header *hdr,
+				    uoff_t file_size);
+int mail_index_map_parse_extensions(struct mail_index_map *map);
 int mail_index_map_parse_keywords(struct mail_index_map *map);
 
+void mail_index_map_init_extbufs(struct mail_index_map *map,
+				 unsigned int initial_count);
 int mail_index_map_ext_get_next(struct mail_index_map *map,
 				unsigned int *offset,
 				const struct mail_index_ext_header **ext_hdr_r,
@@ -339,13 +353,5 @@ int mail_index_set_syscall_error(struct mail_index *index,
 int mail_index_file_set_syscall_error(struct mail_index *index,
 				      const char *filepath,
 				      const char *function);
-
-uint32_t mail_index_uint32_to_offset(uint32_t offset);
-uint32_t mail_index_offset_to_uint32(uint32_t offset);
-
-#define MAIL_INDEX_PACK_MAX_SIZE ((sizeof(uint32_t) * 8 + 7) / 7)
-void mail_index_pack_num(uint8_t **p, uint32_t num);
-int mail_index_unpack_num(const uint8_t **p, const uint8_t *end,
-			  uint32_t *num_r);
 
 #endif
