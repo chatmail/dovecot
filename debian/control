@@ -7,8 +7,8 @@ Build-Depends: debhelper (>= 5.0.0), pkg-config, libssl-dev, libpam0g-dev, libld
 Build-Conflicts: linux-kernel-headers (<= 2.5.999-test7-bk-17)
 Standards-Version: 3.9.1.0
 Homepage: http://dovecot.org/
-Vcs-Svn: svn://svn.debian.org/svn/collab-maint/deb-maint/dovecot/trunk
-Vcs-Browser: http://svn.debian.org/wsvn/collab-maint/deb-maint/dovecot/trunk/?op=log
+Vcs-Git: git://git.debian.org/git/collab-maint/dovecot.git
+Vcs-Browser: http://git.debian.org/?p=collab-maint/dovecot.git
 
 Package: dovecot-common
 Architecture: any
