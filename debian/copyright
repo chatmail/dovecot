@@ -1,11 +1,14 @@
 This package was debianized by Jaldhar H. Vyas <jaldhar@debian.org> on
 Tue,  3 Dec 2002 01:10:07 -0500.
 
-It was downloaded from http://www.dovecot.org/
+It was downloaded from the following locations:
+
+  - http://dovecot.org/download.html (dovecot)
+  - http://pigeonhole.dovecot.org/download.html (sieve/managesieve support)
 
 Upstream Author: Timo Sirainen <tss@iki.fi>
 
-Managesieve Author: Stephan Bosch <stephan@rename-it.nl>
+Pigeonhole Author: Stephan Bosch <stephan@rename-it.nl>
 
 Copyright:
     Copyright (c) 2001-2009 Timo Sirainen
