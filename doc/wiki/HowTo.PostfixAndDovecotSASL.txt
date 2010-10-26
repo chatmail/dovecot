@@ -1,0 +1,75 @@
+Postfix and Dovecot SASL
+------------------------
+
+Since version 2.3, Postfix supports SMTP AUTH through <Dovecot SASL> [Sasl.txt]
+as introduced in the Dovecot 1.0 series. If using Postfix obtained from a
+binary (such as a .rpm or .deb file), you can check if Postfix was compiled
+with support for Dovecot SASL by running the command:
+
+---%<-------------------------------------------------------------------------
+postconf -a
+---%<-------------------------------------------------------------------------
+
+Once you have verified that your installation of Postfix supports Dovecot SASL,
+it's very simple to configure:
+
+Example dovecot.conf excerpt
+----------------------------
+
+---%<-------------------------------------------------------------------------
+auth default {
+      mechanisms = plain login
+      passdb pam {
+      }
+      userdb passwd {
+      }
+      socket listen {
+        client {
+          # Assuming the default Postfix $queue_directory setting
+          path = /var/spool/postfix/private/auth
+          mode = 0660
+          # Assuming the default Postfix user and group
+          user = postfix
+          group = postfix
+        }
+        # deliver and some other programs need also auth-master:
+        #master {
+        #  path = /var/run/dovecot/auth-master
+        #  mode = 0600
+        #}
+      }
+    }
+---%<-------------------------------------------------------------------------
+
+Example Postfix main.cf excerpt
+-------------------------------
+
+---%<-------------------------------------------------------------------------
+smtpd_sasl_type = dovecot
+# Can be an absolute path, or relative to $queue_directory
+# Debian/Ubuntu users: Postfix is setup by default to run chrooted, so it is
+best to leave it as-is below
+smtpd_sasl_path = private/auth
+# and the common settings to enable SASL:
+smtpd_sasl_auth_enable = yes
+smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated,
+reject_unauth_destination
+---%<-------------------------------------------------------------------------
+
+See also:
+---------
+
+ * http://www.postfix.org/SASL_README.html#server_dovecot
+
+Remark
+------
+
+If Outlook Express (and/or Windows Mail) doesn't seem to login, even though you
+checked "My server requires authentication" in its configuration, then verify
+that the "mechanisms" line contains "login" in addition to "plain". "plain" is
+the default, and most clients can work with it, but Outlook Express needs the
+"login" mechanism. Also see:
+
+ * http://archives.neohapsis.com/archives/postfix/2000-11/0881.html
+
+(This file was created from the wiki on 2010-05-24 04:42)

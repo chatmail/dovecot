@@ -1,0 +1,172 @@
+Master users/passwords
+======================
+
+It's possible to configure master users who are able to log in as other users.
+It's also possible to directly log in as any user using a master password,
+although this isn't recommended.
+
+Master users
+------------
+
+There are two ways for master users to log in as other users:
+
+ 1. Give the login username in the <SASL mechanism's>
+    [Authentication.Mechanisms.txt] authorization ID field. Currently only the
+    PLAIN SASL mechanism supports this.
+ 2. Specify both the master username and the login username in the same
+    username field. The usernames are separated by a string configured by the
+    'auth_master_user_separator' setting. UW-IMAP uses "*" as the separator, so
+    that could be a good choice. Using "*" as the separator, the master user
+    would log in as "login_user*master_user".
+
+Master users are configured by adding a new <passdb> [PasswordDatabase.txt]
+with 'master=yes' setting. The users in the master passdb cannot log in as
+themselves, only as other people. That means they don't need to exist in the
+<userdb> [UserDatabase.txt], because the userdb lookup is done only for the
+user they're logging in as.
+
+You should also add the 'pass=yes' setting to the master passdb if possible. It
+means that Dovecot verifies that the login user really exists before allowing
+the master user to log in. Without the setting if a non-existing login username
+is given, depending on the configuration, it could either return an internal
+login error (the userdb lookup failed) or create a whole new user (with eg.
+<static userdb> [UserDatabase.Static.txt]). 'pass=yes' doesn't work with PAM or
+LDAP with 'auth_bind=yes', because both of them require knowing the user's
+password.
+
+'pass=yes' is especially useful with a <Checkpassword>
+[PasswordDatabase.CheckPassword.txt] passdb because the script gets both the
+login and the master username as environment variables. Other passdbs see only
+the login username in '%u'. In the future there will probably be another
+setting to make the user verification to be done from userdb.
+
+If you want master users to be able to log in as themselves, you'll need to
+either add the user to the normal passdb or add the passdb to 'dovecot.conf'
+twice, with and without 'master=yes'. Note that if the passdbs point to
+different locations, the user can have a different password when logging in as
+other users than when logging in as himself. This is a good idea since it can
+avoid accidentally logging in as someone else.
+
+Usually it's better to have only a few special master users that are used
+*only* to log in as other people. One example could be a special "spam" master
+user that trains the users' spam filters by reading the messages from the
+user's spam mailbox.
+
+Example configuration
+---------------------
+
+---%<-------------------------------------------------------------------------
+auth_master_user_separator=*
+auth default {
+  passdb passwd-file {
+    args = /etc/dovecot/passwd.masterusers
+    master = yes
+    pass = yes
+  }
+  passdb shadow {
+  }
+  userdb passwd {
+  }
+}
+---%<-------------------------------------------------------------------------
+
+Where the 'passwd.masterusers' file would contain the master usernames and
+passwords:
+
+---%<-------------------------------------------------------------------------
+admin:{SHA1}nU4eI71bcnBGqeO0t9tXvY1u5oQ=
+admin2:{SHA1}i+UhJqb95FCnFio2UdWJu1HpV50=
+---%<-------------------------------------------------------------------------
+
+One way to create this master file is to use the htaccess program as follows:
+
+---%<-------------------------------------------------------------------------
+htpasswd -b -c -s passwd.masterusers user password
+---%<-------------------------------------------------------------------------
+
+SQL Example
+-----------
+
+The master passdb doesn't have to be passwd-file, it could be an SQL query as
+well:
+
+---%<-------------------------------------------------------------------------
+auth_master_user_separator=*
+auth default {
+  passdb sql {
+    args = /etc/dovecot/dovecot-sql-master.conf
+    master = yes
+    pass = yes
+  }
+  passdb sql {
+    args = /etc/dovecot/dovecot-sql.conf
+  }
+  userdb sql {
+    args = /etc/dovecot/dovecot-sql.conf
+  }
+}
+---%<-------------------------------------------------------------------------
+
+'dovecot-sql-master.conf' would contain all the normal connection settings and
+a 'password_query':
+
+---%<-------------------------------------------------------------------------
+password_query = SELECT password FROM users WHERE userid = '%u' and master_user
+= true
+---%<-------------------------------------------------------------------------
+
+Testing
+-------
+
+---%<-------------------------------------------------------------------------
+# telnet localhost 143
+* OK Dovecot ready.
+1 login loginuser*masteruser masterpass
+1 OK Logged in.
+---%<-------------------------------------------------------------------------
+
+If you had any problems, set 'auth_debug=yes' and look at the logs.
+
+Master passwords
+----------------
+
+The easiest way to implement this is with SQL:
+
+---%<-------------------------------------------------------------------------
+password_query = SELECT user, 'master-password' AS password FROM users WHERE
+userid = '%u'
+---%<-------------------------------------------------------------------------
+
+If you don't have the users in SQL database, you can still fake it:
+
+---%<-------------------------------------------------------------------------
+password_query = SELECT '%u' AS user, 'master-password' AS password
+---%<-------------------------------------------------------------------------
+
+However note that the above will allow logins for any username using the master
+password, even those that don't really exist.
+
+Then in your dovecot.conf, have something like:
+
+---%<-------------------------------------------------------------------------
+auth default {
+..
+  passdb pam {
+  }
+  passdb sql {
+    args = /etc/dovecot-sql-master.conf
+  }
+..
+}
+---%<-------------------------------------------------------------------------
+
+One way to do this without SQL is to create a <passwd-file>
+[AuthDatabase.PasswdFile.txt] containing every user:
+
+---%<-------------------------------------------------------------------------
+user1:{plain}master-password
+user2:{plain}master-password
+..etc..
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2010-05-24 04:42)

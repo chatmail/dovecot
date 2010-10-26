@@ -1,0 +1,30 @@
+---%<-------------------------------------------------------------------------
+Error: open(/var/mail/user.lock) failed: Permission denied
+Error: file_lock_dotlock() failed with mbox file /var/mail/user: Permission
+denied
+---%<-------------------------------------------------------------------------
+
+or with 1.0-stable/test releases:
+
+---%<-------------------------------------------------------------------------
+open(/var/spool/mail/.temp.host.1234.abcdefg) failed: Permission denied
+file_lock_dotlock() failed with mbox file /var/spool/mail/user: Permission
+denied
+---%<-------------------------------------------------------------------------
+
+Since v0.99.10.9 it's possible to fix this by adding to config file:
+
+---%<-------------------------------------------------------------------------
+mail_extra_groups = mail
+---%<-------------------------------------------------------------------------
+
+or whatever group owns your /var/mail directory. Keeping sticky bit ('chmod
++t') for /var/mail might still be a good idea for extra security.
+
+SELinux
+=======
+
+If the above didn't help, it could have been caused by SELinux permissions. Try
+if disabling it helps.
+
+(This file was created from the wiki on 2010-05-24 04:42)

@@ -1,0 +1,499 @@
+Dovecot Sieve plugin
+====================
+
+Contents
+
+
+ 1. Dovecot Sieve plugin
+
+     1. Introduction
+
+     2. Installation and configuration
+
+     3. Features
+
+     4. ManageSieve server
+
+     5. Validate your script
+
+     6. Mailbox names with fileinto
+
+     7. Vacation auto-reply
+
+     8. Example scripts
+
+         1. SpamAssassin tagged mail filtering
+
+         2. Plus Addressed mail filtering
+
+         3. Mail filtering by various headers
+
+         4. Flagging or Highlighting your mail
+
+         5. Vacation auto-reply
+
+         6. Include scripts
+
+     9. French Howto
+
+     10. Migration from Procmail
+
+Introduction
+------------
+
+The Dovecot Sieve plugin provides mail filtering facilities at time of final
+message delivery using the Sieve (RFC 5228
+[http://www.ietf.org/rfc/rfc5228.txt]) language. By writing Sieve scripts,
+users can customize how messages are delivered, e.g. whether they are forwarded
+or stored in special folders. The Sieve language is meant to be simple,
+extensible and system independent. And, unlike most other mail filtering script
+languages, it does not allow users to execute arbitrary programs. This is
+particularly useful to prevent virtual users from having full access to the
+mail store. The intention of the language is to make it impossible for users to
+do anything more complex (and dangerous) than write simple mail filters.
+
+The bottom of this page provides a few specific Sieve script examples. See
+Sieve wiki [http://sieve.info/] for more comprehensive information about the
+Sieve language itself.
+
+Installation and configuration
+------------------------------
+
+Sieve is implemented as a plugin to deliver [http://wiki.dovecot.org/LDA].
+Currently, two concurrent implementations of the Sieve plugin are available.
+See their pages for specific instructions:
+
+ * <CMU Sieve> [LDA.Sieve.CMU.txt] uses the Sieve interpreter from the Cyrus
+   project. For Dovecot v1.0 .. v1.2.
+ * <Dovecot Sieve> [LDA.Sieve.Dovecot.txt] is a fully rewritten implementation.
+   For Dovecot v1.2 and newer.
+
+Features
+--------
+
+Both Sieve implementations support various extensions to the Sieve language.
+You can find more information about the extensions from the Sieve Mail
+Filtering Language Charter
+[http://www.ietf.org/html.charters/sieve-charter.html] or the Sieve.info wiki
+page [http://www.sieve.info/].
+
+Note that Sieve doesn't support running external programs.
+
+The supported Sieve features are:
+
+ *
++-----------------------------------------------------------------+--------+--------------+----------------+
+| *Extension*                                                     | *CMU   | *Dovecot     | *Purpose*      |
+|                                                                 | Sieve* | Sieve*       |                |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| fileinto [http://ietfreport.isoc.org/idref/rfc5228/]            | yes    | yes          | Allows storing |
+|                                                                 |        |              | messages in    |
+|                                                                 |        |              | folders other  |
+|                                                                 |        |              | than INBOX     |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| envelope [http://ietfreport.isoc.org/idref/rfc5228/]            | yes    | yes          | Allows         |
+|                                                                 |        |              | evaluating     |
+|                                                                 |        |              | envelope parts,|
+|                                                                 |        |              | i.e. sender and|
+|                                                                 |        |              | recipient      |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| encoded-character [http://ietfreport.isoc.org/idref/rfc5228/]   | no     | yes          | Allows encoding|
+|                                                                 |        |              | special        |
+|                                                                 |        |              | characters     |
+|                                                                 |        |              | numerically    |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| copy [http://ietfreport.isoc.org/idref/rfc3894/]                | v1.1+  | yes          | Allows storing |
+|                                                                 |        |              | and forwarding |
+|                                                                 |        |              | messages       |
+|                                                                 |        |              | without        |
+|                                                                 |        |              | canceling the  |
+|                                                                 |        |              | implicit keep  |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| body [http://ietfreport.isoc.org/idref/rfc5173/]                | v1.1+  | yes          | Allows         |
+|                                                                 |        |              | evaluating the |
+|                                                                 |        |              | body of a      |
+|                                                                 |        |              | message        |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| variables [http://ietfreport.isoc.org/idref/rfc5229/]           | no     | yes          | Adds variables |
+|                                                                 |        |              | support to the |
+|                                                                 |        |              | language       |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| vacation [http://ietfreport.isoc.org/idref/rfc5230/]            | yes    | yes          | Provides       |
+|                                                                 |        |              | auto-responder |
+|                                                                 |        |              | functionality, |
+|                                                                 |        |              | e.g. for when  |
+|                                                                 |        |              | the user is on |
+|                                                                 |        |              | vacation       |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| relational [http://ietfreport.isoc.org/idref/rfc5231/]          | yes    | yes          | Provides       |
+|                                                                 |        |              | relational     |
+|                                                                 |        |              | match support  |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| imap4flags [http://ietfreport.isoc.org/idref/rfc5232/]          | no     | yes          | Allows adding  |
+|                                                                 |        |              | IMAP flags to  |
+|                                                                 |        |              | stored messages|
++-----------------------------------------------------------------+--------+--------------+----------------+
+| subaddress [http://ietfreport.isoc.org/idref/rfc5233/]          | yes    | yes          | Allows testing |
+|                                                                 |        |              | against        |
+|                                                                 |        |              | delimited      |
+|                                                                 |        |              | elements of the|
+|                                                                 |        |              | local part of  |
+|                                                                 |        |              | addresses      |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| reject [http://ietfreport.isoc.org/idref/rfc5429/]              | yes    | yes          | Allows         |
+|                                                                 |        |              | rejecting      |
+|                                                                 |        |              | messages with a|
+|                                                                 |        |              | rejection      |
+|                                                                 |        |              | bounce message |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| enotify [http://ietfreport.isoc.org/idref/rfc5435/]             | no     | yes          | Provides the   |
+|                                                                 |        |              | ability to send|
+|                                                                 |        |              | notifications  |
+|                                                                 |        |              | by various     |
+|                                                                 |        |              | means          |
+|                                                                 |        |              | (currently only|
+|                                                                 |        |              | mailto)        |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| mailbox [http://ietfreport.isoc.org/idref/rfc5490/]             | no     | yes          | Provides a     |
+|                                                                 |        |              | mailbox        |
+|                                                                 |        |              | existence check|
+|                                                                 |        |              | and allows     |
+|                                                                 |        |              | creating       |
+|                                                                 |        |              | mailboxes upon |
+|                                                                 |        |              | fileinto       |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| environment [http://ietfreport.isoc.org/idref/rfc5183/]         | no     | basic        | Allows testing |
+|                                                                 |        |              | against various|
+|                                                                 |        |              | labeled values |
+|                                                                 |        |              | from the       |
+|                                                                 |        |              | execution      |
+|                                                                 |        |              | environment    |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| date [http://ietfreport.isoc.org/idref/rfc5260/]                | no     | yes          | Adds the       |
+|                                                                 |        |              | ability to test|
+|                                                                 |        |              | date and time  |
+|                                                                 |        |              | values in      |
+|                                                                 |        |              | various ways   |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| regex [http://ietfreport.isoc.org/idref/draft-ietf-sieve-regex/]| yes    | yes          | Provides       |
+|                                                                 |        |              | regular        |
+|                                                                 |        |              | expression     |
+|                                                                 |        |              | match support  |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| spamtest and virustest                                          | no     | experimental | Implements a   |
+| [http://ietfreport.isoc.org/idref/rfc5235/]                     |        |              | uniform way to |
+|                                                                 |        |              | test against   |
+|                                                                 |        |              | headers added  |
+|                                                                 |        |              | by spam and    |
+|                                                                 |        |              | virus scanners |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| include                                                         | v1.1+  | yes          | Allows         |
+| [http://ietfreport.isoc.org/idref/draft-daboo-sieve-include/]   |        |              | including other|
+|                                                                 |        |              | Sieve scripts  |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| imapflags(old draft                                             | yes    | yes  (default| Old version of |
+| [http://tools.ietf.org/html/draft-melnikov-sieve-imapflags-03]) |        | disabled)    | imap4flags     |
++-----------------------------------------------------------------+--------+--------------+----------------+
+| notify (old draft                                               | yes    | yes (default | Old version of |
+| [http://tools.ietf.org/html/draft-martin-sieve-notify-01])      |        | disabled)    | enotify        |
++-----------------------------------------------------------------+--------+--------------+----------------+
+
+Note that the CMU Sieve plugin implements an older specification of the
+*enotify* extension which was called *notify*. Something similar is true for
+the *imap4flags* extension, which was known as *imapflags* for CMU Sieve.  For
+backwards compatibility, Dovecot Sieve plugin also supports the old *imapflags*
+extension. The most valuable extension that the new Sieve implementation adds
+to the list is the *variables* extension. As the name implies, this adds
+support for variables to the language.
+
+ManageSieve server
+------------------
+
+To give users the ability to upload their own Sieve scripts to your server,
+i.e. without the need for shell or FTP access, you can use the
+<ManageSieve.txt> protocol. Two alternatives are available for Dovecot:
+
+ * <Dovecot's native ManageSieve implementation> [ManageSieve.txt]
+ * Python implementation [http://woozle.org/~neale/src/pysieved/]. Ensure if
+   using TLS that the tlslite library used this patch
+   [http://sourceforge.net/mailarchive/message.php?msg_name=1173243373.1225.TMDA@tmda.severn.wwwdotorg.org]
+
+Validate your script
+--------------------
+
+Use the following page to validate your sieve rules:
+http://libsieve-php.sourceforge.net/
+
+Mailbox names with fileinto
+---------------------------
+
+With Dovecot v1.1+ you need to give mailbox names to fileinto commands the same
+way as IMAP clients see them. For example if you want to deliver mail to
+"Customers" mailbox which exists under "Work" mailbox:
+
+ * Namespace with 'prefix=""', 'separator=.' (Maildir default):
+   *Work.Customers*
+ * Namespace with 'prefix=INBOX.', 'separator=.' (Courier migration):
+   *INBOX.Work.Customers*
+ * Namespace with 'prefix=""', 'separator=/' (mbox, dbox default):
+   *Work/Customers*
+
+Dovecot v1.0's deliver doesn't support namespaces, so if you have a namespace
+prefix you must not add it to fileinto and you must use the default separator.
+This also means that delivering mails to multiple namespaces isn't possible
+with v1.0.
+
+Vacation auto-reply
+-------------------
+
+Vacation uses envelope sender and envelope recipient. They're taken from:
+
+ * v1.0:
+    * Envelope sender: Return-Path: header in the message.
+    * Envelope recipient: -d parameter to deliver. If -d isn't given
+      (delivering to system users), the $USER environment is used.
+ * v1.1+:
+    * Envelope sender: -f parameter to deliver if given, otherwise Return-Path:
+      header in the message.
+    * Envelope recipient: -a parameter to deliver if given, otherwise -d
+      parameter to deliver. If neither is given (delivering to system users),
+      the $USER environment is used.
+
+The vacation replies are sent to the envelope sender.
+
+List of autoreplied senders is stored in '.dovecot.lda-dupes' file in user's
+home directory. When you're testing the vacation feature, it's easy to forget
+that the reply is sent only once in the number of configured days. If you've
+problems getting the vacation reply, try deleting this file. If that didn't
+help, make sure the problem isn't related to sending mails in general by trying
+the "reject" Sieve command.
+
+The automatic replies aren't sent if any of the following is true:
+
+ * Auto-Submitted: header exists with any value except "no"
+ * Precedence: header exists with value "junk", "bulk" or "list"
+ * The envelope sender
+    * begins with "MAILER-DAEMON" (case-insensitive)
+    * begins with "LISTSERV" (case-insensitive)
+    * begins with "majordomo" (case-insensitive)
+    * begins with "owner-" (case-sensitive)
+    * contains the string "-request" anywhere within it (case-sensitive)
+ * The envelope sender and envelope recipient are the same
+ * The envelope recipient is not found in the message To:, Cc: or Bcc: fields.
+
+A bare username without a domain gets canonicalised by the libsieve code to
+"<username>@unspecified-domain", which means it is highly unlikely to pass the
+last two tests in the list above.
+
+Example scripts
+---------------
+
+Below are some simple Sieve code examples, more can be found from
+http://libsieve.sourceforge.net/script1.php and
+http://wiki.fastmail.fm/index.php?title=SieveExamples.
+
+SpamAssassin tagged mail filtering
+----------------------------------
+
+Redirect SpamAssassin tagged mails into mbox folder "spam":
+
+---%<-------------------------------------------------------------------------
+require "fileinto";
+if header :contains "X-Spam-Flag" "YES" {
+  fileinto "spam";
+}
+---%<-------------------------------------------------------------------------
+
+Discard SpamAssassin tagged mails:
+
+---%<-------------------------------------------------------------------------
+if header :contains "X-Spam-Flag" "YES" {
+  discard;
+}
+---%<-------------------------------------------------------------------------
+
+Plus Addressed mail filtering
+-----------------------------
+
+This is useful when you don't want just any +tag to create a directory, but you
+want to use tagged addresses such as with amavisd-new.  This example would
+place email addressed to user+spam@example.com into user's Spam folder.
+
+---%<-------------------------------------------------------------------------
+require ["fileinto", "envelope", "subaddress"];
+if envelope :detail "to" "spam"{
+  fileinto "Spam";
+}
+---%<-------------------------------------------------------------------------
+
+To work with Postfix, this requires that the envelope "to" still contains the
+full address, so pass it with the -a flag.
+
+---%<-------------------------------------------------------------------------
+dovecot unix    -       n       n       -       -      pipe
+  flags=DRhu user=mail:mail argv=/usr/local/libexec/dovecot/deliver
+  -f ${sender} -d ${user}@${nexthop} -a ${recipient}
+---%<-------------------------------------------------------------------------
+
+or
+
+---%<-------------------------------------------------------------------------
+mailbox_command = /usr/lib/dovecot/deliver -a "$RECIPIENT"
+---%<-------------------------------------------------------------------------
+
+Mail filtering by various headers
+---------------------------------
+
+Use if/elsif/else to store messages into various folders/subfolders:
+
+ * ---%<----------------------------------------------------------------------
+   require "fileinto";
+   if address :is "to" "dovecot@dovecot.org" {
+     fileinto "Dovecot-list";
+   } elsif address :is "Return-path" "owner-cipe-l@inka.de" {
+     fileinto "lists.cipe";
+   } elsif anyof (header :contains "X-listname" "lugog@cip.rz.fh-offenburg.de",
+                  header :contains "List-Id" "Linux User Group Offenburg") {
+     fileinto "ml.lugog";
+   } else {
+     # The rest goes into INBOX
+     # default is "implicit keep", we do it explicitly here
+     keep;
+   }
+   ---%<----------------------------------------------------------------------
+
+   "anyof" means logical OR, "allof" is AND.
+
+Forward mails with "order" or "buy" in their subject to another address:
+
+ * ---%<----------------------------------------------------------------------
+   if header :contains "subject" ["order", "buy"] {
+     redirect "orders@company.dom";
+   }
+   ---%<----------------------------------------------------------------------
+
+Message-ID and recipient of forwarded message are stored in a
+'.dovecot.lda-dupes' at users home directory to prevent mail loops.
+
+Flagging or Highlighting your mail
+----------------------------------
+
+Some mail readers use these flags:
+
+---%<-------------------------------------------------------------------------
+# CMUsieve
+require "imapflags";
+# dovecot 1.2
+# require "imap4flags";
+require "regex";
+if anyof (exists "X-Cron-Env",
+          header :regex    ["subject"] [".* security run output",
+                                        ".* monthly run output",
+                                        ".* daily run output",
+                                        ".* weekly run output"]) {
+  addflag "$label1"; # ie 'Important'/red label within Thunderbird
+
+# Other flags:
+# addflag "$label1";  # Important: #ff0000 => red
+# addflag "$label2";  # Work:      #ff9900 => orange
+# addflag "$label3";  # personal:  #009900 => green
+# addflag "$label4";  # todo:      #3333ff => blue
+# addflag "$label5";  # later:     #993399 => violet
+#
+}
+---%<-------------------------------------------------------------------------
+
+Local copy of your emails:
+
+---%<-------------------------------------------------------------------------
+if address ["Return-Path"] ["my_address@my_domain.com"]
+{
+   setflag "\\seen";
+}
+---%<-------------------------------------------------------------------------
+
+/Useful, when you want sieve to manage your incoming *and* outgoing email (you
+must ask your mail reader to Bcc your mail to your dovecot in this case)./
+
+More flags fun can be found here:
+
+Vacation auto-reply
+-------------------
+
+---%<-------------------------------------------------------------------------
+require ["fileinto", "vacation"];
+# Move spam to spam folder
+if header :contains "X-Spam-Flag" "YES" {
+  fileinto "spam";
+  # Stop here so that we do not reply on spams
+  stop;
+}
+vacation
+  # Reply at most once a day to a same sender
+  :days 1
+  :subject "Out of office reply"
+  # List of additional recipient addresses which are included in the auto
+replying.
+  # If a mail's recipient is not the envelope recipient and it's not on this
+list,
+  # no vacation reply is sent for it.
+  :addresses ["j.doe@company.dom", "john.doe@company.dom"]
+"I'm out of office, please contact Joan Doe instead.
+Best regards
+John Doe";
+---%<-------------------------------------------------------------------------
+
+Include scripts
+---------------
+
+With v1.1 it's possible to include other Sieve scripts in your script:
+
+---%<-------------------------------------------------------------------------
+require ["include"];
+include :global "global-spam.sieve";
+include :personal "my-own-spam.sieve";
+---%<-------------------------------------------------------------------------
+
+The lookup directories can be specified with:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  # Directory for :personal include scripts. The default is to use home
+directory.
+  sieve_dir = %h/sieve
+
+  # Directory for :global include scripts (not to be confused with
+sieve_global_path).
+  # If unset, the include fails.
+  sieve_global_dir = /etc/dovecot/sieve/
+}
+---%<-------------------------------------------------------------------------
+
+With v1.1 'sieve_dir' should match the 'sieve_storage' setting in the <protocol
+managesieve> [ManageSieve.txt] section. <ManageSieve.txt> v1.2+ uses
+'sieve_dir' directly.
+
+Both 'sieve_dir' and 'sieve_global_dir' may also be overridden by <userdb extra
+fields> [UserDatabase.ExtraFields.txt].
+
+It's not currently possible to use subdirectories for the scripts. Having a '/'
+character in the script name always fails the include. This is just an extra
+check to avoid potential problems with including scripts within mail
+directories.
+
+French Howto
+------------
+
+http://casys.crevetor.org/index.php/Filtres_côté_serveur
+
+Migration from Procmail
+-----------------------
+
+There exists a script which attempts to translate simple Procmail rules into
+Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
+(dovecot.org mirror [http://dovecot.org/tools/procmail2sieve.pl])
+
+Here's the original post announcing it:
+http://dovecot.org/list/dovecot/2007-March/020895.html
+
+(This file was created from the wiki on 2010-05-24 04:42)

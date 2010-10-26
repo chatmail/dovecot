@@ -1,0 +1,31 @@
+Dirsize quota
+=============
+
+The /dirsize/ quota backend supports *storage* quota limits, but not *messages*
+quota limits. The current quota is calculated by finding all files in
+configured mail directories and summing up their sizes. This works pretty fast
+with mboxes, but *dirsize is a really bad idea with maildirs*. It will end up
+eating all your CPU and disk I/O.
+
+v1.0 example
+------------
+
+---%<-------------------------------------------------------------------------
+plugin {
+  # 10MB quota limit
+  quota = dirsize:storage=10240
+}
+---%<-------------------------------------------------------------------------
+
+v1.1 example
+------------
+
+---%<-------------------------------------------------------------------------
+plugin {
+  # 10MB quota limit
+  quota = dirsize:user
+  quota_rule = *:storage=10M
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2010-05-24 04:42)

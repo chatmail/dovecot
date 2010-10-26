@@ -1,0 +1,103 @@
+Rootless Installation
+=====================
+
+It's possible to make Dovecot run under a single system user without requiring
+root privileges at any point. This shouldn't be thought of as a security
+feature, but instead simply as a way for non-admins to run Dovecot in their
+favorite mail server. It's also useful if you just wish to test Dovecot without
+messing up your system.
+
+If you think of this as a good way to achieve security, ask yourself which is
+worse:
+
+a)
+
+ * A very small possibility to get root privileges through Dovecot.
+ * A small possibility without logging in to get into system as a
+   non-privileged *dovecot* user, chrooted into an empty directory.
+ * A small possibility to get user's privileges after logging in, but no
+   possibility to read others' mails since they're saved with different UIDs
+   (plus you might also be chrooted to your own mailbox).
+
+b)
+
+ * Absolutely zero possibility to get root privileges through Dovecot.
+ * A small possibility to get into system as a mail user, possibly even without
+   logging in, and being able to read everyone's mail (and finally gaining
+   roots by exploiting some just discovered local vulnerability, unless you
+   bothered to set up a special chrooted environment).
+
+Installation
+------------
+
+Install somewhere under home directory:
+
+---%<-------------------------------------------------------------------------
+./configure --prefix=$HOME/dovecot
+make
+make install
+---%<-------------------------------------------------------------------------
+
+Dovecot is then started by running '~/dovecot/sbin/dovecot'. The configuration
+file exists in '~/dovecot/etc/dovecot.conf'.
+
+Configuration
+-------------
+
+The important settings to change for rootless installation are:
+
+ * 'login_chroot=no'
+ * 'login_user' and auth 'user' should be the username you're running Dovecot
+   as.
+ * 'log_path' and 'info_log_path'
+ * Instead of <passdb PAM> [PasswordDatabase.PAM.txt] use for example
+   <passwd-file> [AuthDatabase.PasswdFile.txt].
+ * 'listen' and 'ssl_listen' ports need to be changed
+
+Example configuration for user called *testuser*:
+
+---%<-------------------------------------------------------------------------
+protocols = imap imaps pop3 pop3s
+ssl_disable = yes
+disable_plaintext_auth = no
+pop3_uidl_format = %08Xu%08Xv
+
+login_chroot = no
+login_user = testuser
+
+# paths
+log_path = /home/testuser/dovecot/error.log
+info_log_path = /home/testuser/dovecot/info.log
+mail_location = maildir:~/Maildir
+
+# ports
+protocol imap {
+  listen = *:14300
+  ssl_listen = *:14301
+}
+protocol pop3 {
+ listen = *:11000
+  ssl_listen = *:11001
+}
+
+# authentication
+auth default {
+  mechanisms = plain
+  user = testuser
+  passdb passwd-file {
+    args = /home/testuser/dovecot/passwd
+  }
+  userdb passwd {
+  }
+}
+---%<-------------------------------------------------------------------------
+
+'/home/testuser/dovecot/passwd' contains the password:
+
+---%<-------------------------------------------------------------------------
+testuser:{PLAIN}testpass
+---%<-------------------------------------------------------------------------
+
+You should now be able to log in as *testuser* using password *testpass*.
+
+(This file was created from the wiki on 2010-05-24 04:42)

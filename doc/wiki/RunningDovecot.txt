@@ -1,0 +1,124 @@
+Running Dovecot
+===============
+
+Starting
+--------
+
+Dovecot can simply be started by running 'dovecot' as root. If there are any
+problems, they're usually written to terminal, but they may also be written to
+<error log> [Logging.txt] as well.
+
+If you wish to, you can also <start Dovecot from inetd or xinetd>
+[InetdInstall.txt], but don't try that before you know the Dovecot installation
+is actually working.
+
+ * A sample universal <init.d script> [DovecotInit.txt].
+ * A sample Mac OS X 10.4 <launchd plist file> [LaunchdInstall.txt]
+
+Stopping
+--------
+
+Killing the Dovecot master process with a normal TERM signal does a clean
+shutdown:
+
+---%<-------------------------------------------------------------------------
+# master.pid is written to directory pointed by base_dir setting.
+# /var/run/dovecot/ is a common location for it.
+base_dir=`dovecot -a | grep ^base_dir: | sed 's/^[^:]*: //'`
+kill `cat $base_dir/master.pid`
+---%<-------------------------------------------------------------------------
+
+'shutdown_clients' setting controls whether existing IMAP and POP3 sessions are
+killed.
+
+Processes
+---------
+
+When Dovecot is running, it uses several processes:
+
+---%<-------------------------------------------------------------------------
+# ps auxw|grep "dovecot\|imap\|pop3"
+root     25992  0.0  0.1   3512  1248 ?        Ss   Jan02   2:49 dovecot
+nobody   25993  0.0  0.1   6260  1920 ?        S    Jan02   0:10 dovecot-auth
+nobody   27570  0.0  0.1   6264  1928 ?        S    22:45   0:00 dovecot-auth
+-w
+dovecot  25994  0.0  0.1   3276  1440 ?        S    Jan02   0:19 pop3-login
+dovecot  16809  0.0  0.1   3284  1444 ?        S    04:23   0:03 imap-login
+user     27572  0.0  0.0   2156   740 ?        S    22:45   0:00 imap
+user     27734  0.0  0.0   2096   948 ?        S    22:51   0:00 pop3
+---%<-------------------------------------------------------------------------
+
+ * 'dovecot' process is the Dovecot master process which keeps everything
+   running.
+ * 'dovecot-auth' process handles all authentication.
+ * 'dovecot-auth -w' process is an "authentication worker" process. It's used
+   only with some "blocking" authentication databases, such as MySQL.
+ * 'imap-login' and 'pop3-login' processes handle new IMAP and POP3 connections
+   until user has logged in.
+ * 'imap' and 'pop3' processes handle the IMAP and POP3 connections after user
+   has logged in.
+
+Reloading Configuration
+-----------------------
+
+Send HUP signal to 'dovecot' process. An acknowledgement is written to log
+file:
+
+---%<-------------------------------------------------------------------------
+dovecot: Jan 08 00:36:45 Warning: SIGHUP received - reloading configuration
+---%<-------------------------------------------------------------------------
+
+Note that log file locations aren't changed unless you fully stop and restart
+Dovecot.
+
+Running Multiple Invocations of Dovecot
+---------------------------------------
+
+You may wish to invoke a second session (or even multiple sessions) of Dovecot
+for testing different functionality, configurations, etc.  In order to to run
+multiple instances of Dovecot, you must:
+
+ 1. Create a differently named copy of the dovecot.conf configuration file with
+    these changes:
+     1. Change 'base_dir' to the new run directory
+     2. Make sure that 'login_dir' is either commented out (default is relative
+        to 'base_dir'), or change it under the new directory as well
+     3. Change the 'listen' and 'ssl_listen' port numbers to new, unused values
+
+     4. If you're using authentication sockets (for SMTP AUTH or deliver),
+        you'll need to change them as well.'auth_socket_path' specifies the
+        socket path for deliver.
+         * Alternatively if all the instances have identical authentication
+           configuration, you can have only a single Dovecot instance serve the
+           auth sockets and have the other instances use them.
+ 2. Invoke 'dovecot' (and 'deliver') with the '-c' flag and the modified
+    configuration file, e.g.:'dovecot -c /usr/local/etc/dovecot2.conf'
+
+Rotating Log Files
+------------------
+
+If you specified log file paths manually in 'dovecot.conf' instead of using
+syslog, you can send USR1 signal to Dovecot to make it close and reopen the log
+files.
+
+Troubleshooting
+---------------
+
+If you can't see the Dovecot processes running after starting 'dovecot',
+something is most likely wrong in your 'dovecot.conf'. Look at the error from
+Dovecot's log file. See <Logging.txt> for how to find the log.
+
+If you really can't find any error messages from any logs, try starting Dovecot
+with 'dovecot -F'. If you see it crash like:
+
+---%<-------------------------------------------------------------------------
+sh: segmentation fault (core dumped)  dovecot -F
+---%<-------------------------------------------------------------------------
+
+Then it's a bug in Dovecot. Please report it with your configuration file.
+
+If it simply quits without giving any error, then it wrote the error to a log
+file and you just didn't find it. Try specifying the log file manually and make
+sure you're really looking at the correct file.
+
+(This file was created from the wiki on 2010-05-24 04:42)

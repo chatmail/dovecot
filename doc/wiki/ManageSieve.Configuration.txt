@@ -1,0 +1,214 @@
+ManageSieve Configuration
+=========================
+
+*NOTE*: If you have used the sieve plugin before and you have '.dovecot.sieve'
+files in user directories, you are advised to *make a backup first*. Although
+the <ManageSieve.txt> daemon takes care to move these files to the sieve
+storage before it is substituted with a symbolic link, this is not a very well
+tested operation, meaning that there is a possibility that existing sieve
+scripts get lost.
+
+The <ManageSieve.txt> configuration consists of <ManageSieve.txt> protocol
+settings and Sieve script storage-related settings. The storage-related
+settings are equal to or shared with settings of the <Sieve plugin>
+[LDA.Sieve.txt] for <Deliver> [LDA.txt]. First, the <ManageSieve.txt> protocol
+settings are outlined and then the storage-related settings are described. Note
+that the location and name of some settings has changed between
+<ManageSieve.txt> versions and therefore it is important to pay attention to
+what version of <ManageSieve.txt> you are configuring.
+
+Protocol Configuration
+----------------------
+
+Along with all other binaries that dovecot uses, the managesieve and
+managesieve-login binaries are installed during 'make install'. The only thing
+you need to do to activate the <ManageSieve.txt> protocol support in Dovecot is
+to add 'managesieve' to the 'protocols=' configuration line in your
+dovecot.conf. The managesieve daemon will listen on port 2000 by default. As
+the implementation of the managesieve daemon is largely based on the original
+IMAP implementation, it is very similar in terms of configuration. In addition
+to most <mail daemon config settings> [MainConfig.txt], the managesieve daemon
+accepts a few more. The following settings can be configured in the 'protocol
+managesieve' section:
+
+listen = *:2000:
+  IP or host address where to listen in for connections.
+
+login_executable = /usr/libexec/dovecot/managesieve-login:
+  Login executable location.
+
+mail_executable = /usr/libexec/dovecot/managesieve:
+  managesieve executable location. See mail_executable for IMAP for examples
+  how this could be changed.
+
+managesieve_max_line_length = 65536:
+  Maximum managesieve command line length in bytes. This setting is directly
+  borrowed from IMAP. But, since long command lines are very unlikely with
+  <ManageSieve.txt>, changing this will not be very useful.
+
+managesieve_logout_format = bytes=%i/%o:
+  Specifies the string pattern used to compose the logout message of an
+  authenticated session. The following substitutions are available:
+
+---%<-------------------------------------------------------------------------
+%i - total number of bytes read from client
+%o - total number of bytes sent to client
+---%<-------------------------------------------------------------------------
+
+managesieve_implementation_string = dovecot:
+  To fool <ManageSieve.txt> clients that are focused on CMU's timesieved you
+  can specify the IMPLEMENTATION capability that the dovecot reports to clients
+  (e.g. ''Cyrus timsieved v2.2.13'').
+
+Storage Configuration
+---------------------
+
+The Sieve storage configuration consists of specifying where the user's scripts
+are stored and where the active script is located. The <ManageSieve.txt> daemon
+will upload scripts in the specified directory and substitute the active script
+file with a symbolic link pointing to the active script in the script
+directory. This part of the configuration differs between v1.0/v1.1 and v1.2,
+where the main difference is that v1.0/v1.1 had all settings located in the
+'protocol managesieve' section and that v1.2 has the storage-related settings
+located in the 'plugin' section to remove the duplication with respect to the
+<Sieve plugin> [LDA.Sieve.txt]
+
+v1.0/v1.1
+---------
+
+The following additional settings are available in the 'protocol managesieve'
+section of the config file:
+
+sieve_storage = ~/sieve:
+  This specifies the path to the directory where the uploaded scripts are
+  stored. In terms of '%' variable substitution it is identical to dovecot's
+  'mail_location' setting used by the mail protocol daemons. Scripts are stored
+  as separate files with extension '.sieve', all other files are ignored when
+  scripts are listed by a <ManageSieve.txt> client. If this setting remains
+  unspecified, the 'mail_location' setting is used as explained below. Make
+  sure that this setting is identical to the 'sieve_dir' setting of the <Sieve
+  plugin> [LDA.Sieve.txt] to allow Sieve scripts to properly 'include' other
+  scripts in that directory.
+
+sieve = ~/.dovecot.sieve:
+  Specifies the location of the symbolic link pointing to the active script in
+  the sieve storage directory. This must match the 'sieve' setting used by the
+  <Sieve plugin> [LDA.Sieve.txt]. Variable substitution with % is recognized.
+  If a regular file exists at this location, it is moved to the 'sieve_storage'
+  location before the symbolic link is installed. It is renamed to
+  'dovecot.orig.sieve' and therefore listed as 'dovecot.orig' by a
+  <ManageSieve.txt> client.
+
+mail_location =:
+  If, for some reason, the sieve_storage remains unset, the managesieve daemon
+  uses the specification of the mail_location to find out where to store the
+  sieve files. In a mail directory, scripts are always stored in a 'sieve'
+  sub-directory. Actually, the 'sieve' directory is located in the 'CONTROL='
+  directory of 'mail_location' if specified, otherwise the 'sieve' directory is
+  placed in the root of the mail location. Note that for some mail storage
+  types (e.g. mbox) this script directory is listed as a mail folder, so be
+  sure to put the sieve scripts somewhere else if you can. Note that this is
+  provided only for backwards compatibility to old v1.0 versions and you should
+  always use the sieve_storage setting in stead.
+
+A storage location specified by 'sieve_storage' is always generated
+automatically if it does not exist (as far as the system permits the user to do
+so; no root privileges are used). This is similar to the behaviour of the mail
+daemons. Note that when 'mail_location' is used to specify the script storage
+location, only the 'sieve' subdirectory is generated automatically.
+
+v1.2
+----
+
+The <ManageSieve.txt> daemon recognizes the following settings in the 'plugin'
+section of the config file:
+
+sieve_dir = ~/sieve:
+  This specifies the path to the directory where the uploaded scripts are
+  stored. Scripts are stored as separate files with extension '.sieve'. All
+  other files are ignored when scripts are listed by a <ManageSieve.txt>
+  client. If this setting remains unspecified, the mail_location setting is
+  used as explained above for v1.0/v1.1. The <Sieve plugin> [LDA.Sieve.txt]
+  will use this setting as the directory from which personal scripts can be
+  included in other scripts using Sieve's include extension. The now deprecated
+  sieve_storage setting is still accepted as an alias, but keep in mind that
+  the <Sieve plugin> [LDA.Sieve.txt] will not recognize that.
+
+sieve = ~/.dovecot.sieve:
+  Specifies the location of the symbolic link pointing to the active script in
+  the sieve storage directory. If a regular file exists at this location, it is
+  moved to the 'sieve_storage' location before the symbolic link is installed.
+  It is renamed to 'dovecot.orig.sieve' and therefore listed as 'dovecot.orig'
+  by a <ManageSieve.txt> client. Just like any setting in the 'plugin' section,
+  '%' variable substitution is performed.
+
+Examples
+--------
+
+The following provides example configurations for <ManageSieve.txt> in
+dovecot.conf for the various versions. Only sections relevant to
+<ManageSieve.txt> and the Sieve plugin are shown. Refer to dovecot-example.conf
+in your patched dovecot tree for a full example with comments, but don't forget
+to add 'managesieve' to the 'protocols' setting if you use it.
+
+v1.0/v1.1
+---------
+
+---%<-------------------------------------------------------------------------
+...
+# Start imap, imaps, pop3 and managesieve services
+protocols = imap imaps pop3 managesieve
+
+protocol managesieve {
+  # Specify an alternative address:port the daemon must listen on
+  # (default: *:2000)
+  #listen = localhost:2000
+
+  managesieve_logout_format = bytes ( in=%i : out=%o )
+
+  # Duplicated from plugin section
+  sieve=~/.dovecot.sieve
+  sieve_storage=~/sieve
+}
+
+plugin {
+  # Settings for the Sieve plugin
+  sieve=~/.dovecot.sieve
+  sieve_dir=~/sieve
+}
+---%<-------------------------------------------------------------------------
+
+v1.2
+----
+
+---%<-------------------------------------------------------------------------
+...
+# Start imap, imaps, pop3 and managesieve services
+protocols = imap imaps pop3 managesieve
+
+protocol managesieve {
+  # Specify an alternative address:port the daemon must listen on
+  # (default: *:2000)
+  #listen = localhost:2000
+
+  managesieve_logout_format = bytes ( in=%i : out=%o )
+}
+
+plugin {
+  # Used by both the Sieve plugin and the ManageSieve protocol
+  sieve=~/.dovecot.sieve
+  sieve_dir=~/sieve
+}
+---%<-------------------------------------------------------------------------
+
+Proxy
+-----
+
+Like Dovecot's imapd, the <ManageSieve.txt> login daemon supports proxying to
+multiple backend servers. Although the underlying code is copied from the imapd
+sources for the most part, it has some <ManageSieve.txt>-specifics that have
+not seen much testing. The <proxy configuration wiki page>
+[PasswordDatabase.ExtraFields.Proxy.txt] for POP3 and IMAP should apply to
+<ManageSieve.txt> as well.
+
+(This file was created from the wiki on 2010-05-24 04:42)

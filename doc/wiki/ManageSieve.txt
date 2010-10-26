@@ -1,0 +1,40 @@
+Dovecot ManageSieve Server
+==========================
+
+ManageSieve service is used to manage a user's <Sieve> [LDA.Sieve.txt] script
+collection. It has the following advantages over doing it directly via
+filesystem:
+
+ * No need to let users log in via FTP/SFTP/etc, which could be difficult
+   especially with virtual users.
+ * ManageSieve is a standard protocol
+   [http://tools.ietf.org/rfcmarkup?rfc-repository=http://www.rfc-editor.org/authors&doc=rfc5804&topmenu=true&document=draft-ietf-sieve-managesieve-09&docreplaces=draft-ietf-sieve-managesieve-09&title=RFC-EDITOR+AUTH48+REVIEW+COPY&extrastyle=body+{background-color:#fee;}]
+   (almost finalized, and unlike to have any major changes), so users can
+   manage their scripts using (hopefully) user-friendlyManageSieve clients.
+   Many webmails already include aManageSieve client.
+ * Scripts are compiled before they are installed, which guarantees that the
+   uploaded script is valid. This prevents a user from inadvertently installing
+   a broken Sieve script.
+
+Dovecot's ManageSieve support is distributed in a separate package. Currently
+it also requires patching Dovecot sources, but this won't be necessary anymore
+in Dovecot v2.0. Dovecot'sManageSieve implementation is part of the Pigeonhole
+project [http://pigeonhole.dovecot.org/]. There exists also an alternative
+pysieved [http://gitorious.org/pysieved/pages/Home] ManageSieve server that
+works with Dovecot.
+
+ * <Download and Installation> [ManageSieve.Install.txt]
+ * <Configuration> [ManageSieve.Configuration.txt]
+ * <Troubleshooting> [ManageSieve.Troubleshooting.txt]
+ * <Client Issues> [ManageSieve.Clients.txt]
+
+Contact Info
+------------
+
+ * Author: Stephan Bosch, stephan@rename-it.nl
+ * IRC: Freenode [http://freenode.net/], #dovecot, S[r]us
+ * Please use the Dovecot mailing list
+   [http://www.dovecot.org/mailinglists.html] for questions about the
+   ManageSieve service. You don't have to subscribe to it.
+
+(This file was created from the wiki on 2010-05-24 04:42)

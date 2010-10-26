@@ -1,0 +1,58 @@
+Multiple Authentication Databases
+=================================
+
+Dovecot supports defining multiple authentication databases, so that if the
+password doesn't match in the first database, it checks the next one. This can
+be useful if you want to easily support having both local system users in
+'/etc/passwd' and virtual users.
+
+Currently the fallback works only with the PLAIN authentication mechanism.
+
+Often you also want a different mail location for system and virtual users. The
+best way to do this would be to always have mails stored below the home
+directory ('mail_location = ~/Maildir'), but if this isn't possible you can do
+this by pointing <mail_location> [MailLocation.txt] to system users' mail
+location and have the virtual userdb override it by returning 'mail' <extra
+field> [UserDatabase.ExtraFields.txt].
+
+Example
+-------
+
+dovecot.conf:
+
+---%<-------------------------------------------------------------------------
+# the default mail location for system users, this will be overridden in userdb
+sql.
+mail_location = maildir:~/Maildir
+
+auth default {
+  mechanisms = plain
+
+  # try to authenticate using SQL database first
+  passdb sql {
+    args = /etc/dovecot-sql.conf
+  }
+  # fallback to PAM
+  passdb pam {
+  }
+
+  # look up users from SQL first (even if authentication was done using PAM!)
+  userdb sql {
+    args = /etc/dovecot-sql.conf
+  }
+  # if not found, fallback to /etc/passwd
+  userdb passwd {
+  }
+}
+---%<-------------------------------------------------------------------------
+
+dovecot-sql.conf:
+
+---%<-------------------------------------------------------------------------
+password_query = SELECT userid as user, password FROM users WHERE userid = '%u'
+# returning mail overrides mail_location setting for SQL users.
+user_query = SELECT uid, gid, 'maildir:/var/vmail/%u' as mail FROM users WHERE
+userid = '%u'
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2010-05-24 04:42)

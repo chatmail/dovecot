@@ -1,0 +1,99 @@
+dbox
+====
+
+dbox is Dovecot's own high-performance mailbox format. The original version was
+introduced in v1.0 alpha4, but since then it has been completely redesigned in
+v1.1 series and changed even further for upcoming v2.0.
+
+dbox can be used in two ways:
+
+ 1. dbox: One message per file (*single-dbox*), similar to <Maildir>
+    [MailboxFormat.Maildir.txt].
+ 2. mdbox: Multiple messages per file (*multi-dbox*), but unlike <mbox>
+    [MailboxFormat.mbox.txt] multiple files per mailbox. (v2.0+)
+
+One of the main reasons for dbox's high performance is that it uses Dovecot's
+index files as the only storage for message flags and keywords. This means that
+indexes don't have to be "synchronized". Dovecot trusts that they're always
+up-to-date (unless it sees that something is clearly broken).
+
+Unlike Maildir the message file names don't change. This makes it possible to
+support storing files in multiple directories or mount points. dbox supports
+looking up files from "altpath" if they're not found from the primary path.
+This means that it's possible to move older mails that are rarely accessed to
+cheaper (slower) storage.
+
+dbox storage is extensible, so in future there will be other extensions. Some
+things that are planned:
+
+ * Single instance attachment storage. If multiple mailboxes/users have the
+   same attachment, it's stored only once in disk.
+ * Compression?
+
+Multi-dbox
+----------
+
+Multi-dbox is currently available in 2.0 beta releases
+[http://www.dovecot.org/releases/2.0/beta/] and the latest 2.0 development code
+[http://hg.dovecot.org/dovecot-2.0/]. You can use it with:
+
+---%<-------------------------------------------------------------------------
+mail_location = mdbox:~/dbox
+---%<-------------------------------------------------------------------------
+
+The directory layout (under '~/dbox/') is:
+
+ * '~/dbox/storage/' contains the actual mail data for all mailboxes
+ * '~/dbox/mailboxes/' contains directories for mailboxes and their index files
+
+The storage directory has files:
+
+ * 'dovecot.map.index*' files contain the "map index"
+ * 'm.*' files contain the mail data
+
+Each m.* file contains one or more messages. 'mdbox_rotate_size' setting can be
+used to configure how large the files can grow.
+
+The map index contains a record for each message:
+
+ * map_uid: Unique growing 32 bit number for the message.
+ * refcount: 16 bit reference counter for this message. Each time the message
+   is copied the refcount is increased.
+ * file_id: File number containing the message. For example if file_id=5, the
+   message is in file 'm.5'.
+ * offset: Offset to message within the file.
+ * size: Space used by the message in the file, including all metadata.
+
+Mailbox indexes refer to messages only using map_uids. This allows messages to
+be moved to different files by updating only the map index. Copying is done
+simply by appending a new record to mailbox index containing the existing
+map_uid and increasing its refcount. If refcount grows over 32768, currently
+Dovecot gives an error message. It's unlikely anyone really wants to copy the
+same message that many times.
+
+Expunging a message only decreases the message's refcount. The space is later
+freed in "cleanup" step. This may be done automatically within the session or
+later in a nightly cronjob when there's less disk I/O. The cleanup first finds
+all files that have refcount=0 mails. Then it goes through each file and copies
+the refcount>0 mails to other dbox files (to the same files as where newly
+saved messages would also go), updates the map index and finally deletes the
+original file. So there is never any overwriting or file truncation.
+
+The "cleanup" function can be invoked explicitly using 'doveadm purge'.
+
+There are several safety features built into dbox to avoid losing messages or
+their state if map index or mailbox index gets corrupted:
+
+ * Each message has a 128 bit globally unique identifier (GUID). The GUID is
+   saved to message metadata in m.* files and also to mailbox indexes. This
+   allows Dovecot to find messages even if map index gets corrupted.
+ * Whenever index file is rewritten, the old index is renamed to
+   'dovecot.index.backup'. If the main index becomes corrupted, this backup
+   index is used to restore flags and figure out what messages belong to the
+   mailbox.
+ * Initial mailbox where message was saved to is stored in the message metadata
+   in m.* files. So if all indexes get lost, the messages are put to their
+   initial mailboxes. This is better than placing everything into a single
+   mailbox.
+
+(This file was created from the wiki on 2010-05-24 04:42)

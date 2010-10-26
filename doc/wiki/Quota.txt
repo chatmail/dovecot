@@ -1,0 +1,83 @@
+Quota
+=====
+
+Quota backend specifies the method how Dovecot keeps track of the current quota
+usage. They don't (usually) specify users' quota limits, that's done by
+returning extra fields from userdb. There are different quota backends that
+Dovecot can use:
+
+ * <fs> [Quota.FS.txt]: Filesystem quota.
+ * <dirsize> [Quota.Dirsize.txt]: The simplest and slowest quota backend, but
+   it works quite well with mboxes.
+ * <dict> [Quota.Dict.txt]: Store quota usage in a dictionary (e.g. SQL).
+ * <maildir> [Quota.Maildir.txt]: Store quota usage in Maildir++ maildirsize
+   files. This is the most commonly used quota for virtual users.
+
+Enabling quota plugins
+----------------------
+
+There are currently two quota related plugins:
+
+ * quota: Implements the actual quota handling and includes also all the quota
+   backends.
+ * imap_quota: For reporting quota information via IMAP.
+
+Usually you'd enable these by adding them to the 'mail_plugins' settings in the
+config file:
+
+---%<-------------------------------------------------------------------------
+protocol imap {
+  mail_plugins = quota imap_quota
+}
+protocol pop3 {
+  mail_plugins = quota
+}
+# In case you're using deliver:
+protocol lda {
+  mail_plugins = quota
+}
+---%<-------------------------------------------------------------------------
+
+Configuration
+-------------
+
+The configuration is done differently for v1.0 and v1.1:
+
+ * <v1.0 quota configuration> [Quota.1.0.txt]
+ * <v1.1 quota configuration> [Quota.1.1.txt]
+
+Quota and Trash mailbox
+-----------------------
+
+Standard way to expunge messages with IMAP works by:
+
+ 1. Marking message with \Deleted flag
+ 2. Actually expunging the message using EXPUNGE command
+
+Both of these commands can be successfully used while user's quota is full.
+However many clients use a "move-to-Trash" feature, which works by:
+
+ 1. COPY the message to Trash mailbox
+ 2. Mark the message with \Deleted
+ 3. Expunge the message from the original mailbox.
+ 4. (Maybe later expunge the message from Trash when "clean trash" feature is
+    used)
+
+If user is over quota (or just under it), the first COPY command will fail and
+user may get an unintuitive message about not being able to delete messages
+because user is over quota. The possible solutions for this are:
+
+ * Disable move-to-trash feature from client
+ * Dovecot v1.0 + <Maildir++> [Quota.Maildir.txt] quota: You can completely
+   ignore Trash mailbox from quota calculation by appending ':ignore=Trash' to
+   the quota line. Note that this would allow users to store messages
+   infinitely to the mailbox.
+ * Dovecot v1.1 or <v1.0 quota rewrite> [Quota.1.1.txt]: You can ignore Trash
+   like with v1.0, but you can also give a separate quota rule giving Trash
+   mailbox somewhat more quota (but not unlimited).
+
+To make sure users don't start keeping messages permanently in Trash you can
+use a nightly <cronjob or expire plugin (v1.1)> [Plugins.Expire.txt] to expunge
+old messages from Trash mailbox.
+
+(This file was created from the wiki on 2010-05-24 04:42)
