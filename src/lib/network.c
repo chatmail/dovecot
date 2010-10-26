@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "close-keep-errno.h"
 #include "fd-set-nonblock.h"
+#include "time-util.h"
 #include "network.h"
 
 #include <stdlib.h>
@@ -29,17 +30,20 @@ union sockaddr_union {
 
 bool net_ip_compare(const struct ip_addr *ip1, const struct ip_addr *ip2)
 {
+	return net_ip_cmp(ip1, ip2) == 0;
+}
+
+int net_ip_cmp(const struct ip_addr *ip1, const struct ip_addr *ip2)
+{
 	if (ip1->family != ip2->family)
-		return 0;
+		return ip1->family - ip2->family;
 
 #ifdef HAVE_IPV6
-	if (ip1->family == AF_INET6) {
-		return memcmp(&ip1->u.ip6, &ip2->u.ip6,
-			      sizeof(ip1->u.ip6)) == 0;
-	}
+	if (ip1->family == AF_INET6)
+		return memcmp(&ip1->u.ip6, &ip2->u.ip6, sizeof(ip1->u.ip6));
 #endif
 
-	return memcmp(&ip1->u.ip4, &ip2->u.ip4, sizeof(ip1->u.ip4)) == 0;
+	return memcmp(&ip1->u.ip4, &ip2->u.ip4, sizeof(ip1->u.ip4));
 }
 
 unsigned int net_ip_hash(const struct ip_addr *ip)
@@ -95,6 +99,10 @@ sin_set_ip(union sockaddr_union *so, const struct ip_addr *ip)
 static inline void
 sin_get_ip(const union sockaddr_union *so, struct ip_addr *ip)
 {
+	/* IP structs may be sent across processes. Clear the whole struct
+	   first to make sure it won't leak any data across processes. */
+	memset(ip, 0, sizeof(*ip));
+
 	ip->family = so->sin.sin_family;
 
 #ifdef HAVE_IPV6
@@ -131,16 +139,17 @@ static inline unsigned int sin_get_port(union sockaddr_union *so)
 }
 
 #ifdef __FreeBSD__
-static int net_connect_ip_freebsd(const struct ip_addr *ip, unsigned int port,
-				  const struct ip_addr *my_ip);
+static int
+net_connect_ip_full_freebsd(const struct ip_addr *ip, unsigned int port,
+			    const struct ip_addr *my_ip, bool blocking);
 
-int net_connect_ip(const struct ip_addr *ip, unsigned int port,
-		   const struct ip_addr *my_ip)
+static int net_connect_ip_full(const struct ip_addr *ip, unsigned int port,
+			       const struct ip_addr *my_ip, bool blocking)
 {
 	int fd, try;
 
 	for (try = 0;;) {
-		fd = net_connect_ip_freebsd(ip, port, my_ip);
+		fd = net_connect_ip_full_freebsd(ip, port, my_ip, blocking);
 		if (fd != -1 || ++try == 5 ||
 		    (errno != EADDRINUSE && errno != EACCES))
 			break;
@@ -155,12 +164,11 @@ int net_connect_ip(const struct ip_addr *ip, unsigned int port,
 	return fd;
 }
 /* then some kludging: */
-#define net_connect_ip net_connect_ip_freebsd
-static
+#define net_connect_ip_full net_connect_ip_full_freebsd
 #endif
 
-int net_connect_ip(const struct ip_addr *ip, unsigned int port,
-		   const struct ip_addr *my_ip)
+static int net_connect_ip_full(const struct ip_addr *ip, unsigned int port,
+			       const struct ip_addr *my_ip, bool blocking)
 {
 	union sockaddr_union so;
 	int fd, ret, opt = 1;
@@ -183,13 +191,13 @@ int net_connect_ip(const struct ip_addr *ip, unsigned int port,
 	/* set socket options */
 	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt));
-	net_set_nonblock(fd, TRUE);
+	if (!blocking)
+		net_set_nonblock(fd, TRUE);
 
 	/* set our own address */
 	if (my_ip != NULL) {
 		sin_set_ip(&so, my_ip);
 		if (bind(fd, &so.sa, SIZEOF_SOCKADDR(so)) == -1) {
-			/* failed, set it back to INADDR_ANY */
 			i_error("bind(%s) failed: %m", net_ip2addr(my_ip));
 			close_keep_errno(fd);
 			return -1;
@@ -212,6 +220,44 @@ int net_connect_ip(const struct ip_addr *ip, unsigned int port,
 	}
 
 	return fd;
+}
+#ifdef __FreeBSD__
+#  undef net_connect_ip_full
+#endif
+
+int net_connect_ip(const struct ip_addr *ip, unsigned int port,
+		   const struct ip_addr *my_ip)
+{
+	return net_connect_ip_full(ip, port, my_ip, FALSE);
+}
+
+int net_connect_ip_blocking(const struct ip_addr *ip, unsigned int port,
+			    const struct ip_addr *my_ip)
+{
+	return net_connect_ip_full(ip, port, my_ip, TRUE);
+}
+
+int net_try_bind(const struct ip_addr *ip)
+{
+	union sockaddr_union so;
+	int fd;
+
+	/* create the socket */
+	memset(&so, 0, sizeof(so));
+        so.sin.sin_family = ip->family;
+	fd = socket(ip->family, SOCK_STREAM, 0);
+	if (fd == -1) {
+		i_error("socket() failed: %m");
+		return -1;
+	}
+
+	sin_set_ip(&so, ip);
+	if (bind(fd, &so.sa, SIZEOF_SOCKADDR(so)) == -1) {
+		close_keep_errno(fd);
+		return -1;
+	}
+	(void)close(fd);
+	return 0;
 }
 
 int net_connect_unix(const char *path)
@@ -249,9 +295,32 @@ int net_connect_unix(const char *path)
 	return fd;
 }
 
+int net_connect_unix_with_retries(const char *path, unsigned int msecs)
+{
+	struct timeval start, now;
+	int fd;
+
+	if (gettimeofday(&start, NULL) < 0)
+		i_panic("gettimeofday() failed: %m");
+
+	do {
+		fd = net_connect_unix(path);
+		if (fd != -1 || (errno != EAGAIN && errno != ECONNREFUSED))
+			break;
+
+		/* busy. wait for a while. */
+		usleep(((rand() % 10) + 1) * 10000);
+		if (gettimeofday(&now, NULL) < 0)
+			i_panic("gettimeofday() failed: %m");
+	} while (timeval_diff_msecs(&now, &start) < (int)msecs);
+	return fd;
+}
+
 void net_disconnect(int fd)
 {
-	if (close(fd) < 0)
+	/* FreeBSD's close() fails with ECONNRESET if socket still has unsent
+	   data in transmit buffer. We don't care. */
+	if (close(fd) < 0 && errno != ECONNRESET)
 		i_error("net_disconnect() failed: %m");
 }
 
@@ -439,10 +508,14 @@ int net_accept(int fd, struct ip_addr *addr, unsigned int *port)
 		else
 			return -2;
 	}
-
-	if (addr != NULL) sin_get_ip(&so, addr);
-	if (port != NULL) *port = sin_get_port(&so);
-
+	if (so.sin.sin_family == AF_UNIX) {
+		if (addr != NULL)
+			memset(addr, 0, sizeof(*addr));
+		if (port != NULL) *port = 0;
+	} else {
+		if (addr != NULL) sin_get_ip(&so, addr);
+		if (port != NULL) *port = sin_get_port(&so);
+	}
 	return ret;
 }
 
@@ -565,10 +638,14 @@ int net_getsockname(int fd, struct ip_addr *addr, unsigned int *port)
 	addrlen = sizeof(so);
 	if (getsockname(fd, &so.sa, &addrlen) == -1)
 		return -1;
-
-        if (addr != NULL) sin_get_ip(&so, addr);
-	if (port != NULL) *port = sin_get_port(&so);
-
+	if (so.sin.sin_family == AF_UNIX) {
+		if (addr != NULL)
+			memset(addr, 0, sizeof(*addr));
+		if (port != NULL) *port = 0;
+	} else {
+		if (addr != NULL) sin_get_ip(&so, addr);
+		if (port != NULL) *port = sin_get_port(&so);
+	}
 	return 0;
 }
 
@@ -582,10 +659,29 @@ int net_getpeername(int fd, struct ip_addr *addr, unsigned int *port)
 	addrlen = sizeof(so);
 	if (getpeername(fd, &so.sa, &addrlen) == -1)
 		return -1;
+	if (so.sin.sin_family == AF_UNIX) {
+		if (addr != NULL)
+			memset(addr, 0, sizeof(*addr));
+		if (port != NULL) *port = 0;
+	} else {
+		if (addr != NULL) sin_get_ip(&so, addr);
+		if (port != NULL) *port = sin_get_port(&so);
+	}
+	return 0;
+}
 
-        if (addr != NULL) sin_get_ip(&so, addr);
-	if (port != NULL) *port = sin_get_port(&so);
+int net_getunixname(int fd, const char **name_r)
+{
+	struct sockaddr_un sa;
+	socklen_t addrlen = sizeof(sa);
 
+	if (getsockname(fd, (void *)&sa, &addrlen) < 0)
+		return -1;
+	if (sa.sun_family != AF_UNIX) {
+		errno = ENOTSOCK;
+		return -1;
+	}
+	*name_r = t_strdup(sa.sun_path);
 	return 0;
 }
 
@@ -616,11 +712,22 @@ const char *net_ip2addr(const struct ip_addr *ip)
 
 int net_addr2ip(const char *addr, struct ip_addr *ip)
 {
+	int ret;
+
 	if (strchr(addr, ':') != NULL) {
 		/* IPv6 */
 		ip->family = AF_INET6;
 #ifdef HAVE_IPV6
-		if (inet_pton(AF_INET6, addr, &ip->u.ip6) == 0)
+		T_BEGIN {
+			if (addr[0] == '[') {
+				/* allow [ipv6 addr] */
+				unsigned int len = strlen(addr);
+				if (addr[len-1] == ']')
+					addr = t_strndup(addr+1, len-2);
+			}
+			ret = inet_pton(AF_INET6, addr, &ip->u.ip6);
+		} T_END;
+		if (ret == 0)
 			return -1;
 #else
 		ip->u.ip4.s_addr = 0;
@@ -723,9 +830,18 @@ bool is_ipv4_address(const char *addr)
 
 bool is_ipv6_address(const char *addr)
 {
+	bool have_prefix = FALSE;
+
+	if (*addr == '[') {
+		have_prefix = TRUE;
+		addr++;
+	}
 	while (*addr != '\0') {
-		if (*addr != ':' && !i_isxdigit(*addr))
+		if (*addr != ':' && !i_isxdigit(*addr)) {
+			if (have_prefix && *addr == ']' && addr[1] == '\0')
+				break;
 			return FALSE;
+		}
                 addr++;
 	}
 
@@ -736,7 +852,7 @@ int net_parse_range(const char *network, struct ip_addr *ip_r,
 		    unsigned int *bits_r)
 {
 	const char *p;
-	int bits, max_bits;
+	unsigned int bits, max_bits;
 
 	p = strchr(network, '/');
 	if (p != NULL)
@@ -751,8 +867,7 @@ int net_parse_range(const char *network, struct ip_addr *ip_r,
 		bits = max_bits;
 	} else {
 		/* get the network mask */
-		bits = atoi(p);
-		if (bits < 0 || bits > max_bits)
+		if (str_to_uint(p, &bits) < 0 || bits > max_bits)
 			return -1;
 	}
 	*bits_r = bits;

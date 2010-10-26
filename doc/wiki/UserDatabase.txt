@@ -2,8 +2,8 @@ User Databases
 ==============
 
 After a user has been successfully authenticated, Dovecot looks up the user's
-userdb information. The userdb lookup is also done by <deliver> [LDA.txt] to
-find out how to deliver mails for the user.
+userdb information. The userdb lookup is also done by <LDA.txt> to find out how
+to deliver mails for the user.
 
 The user database lookup returns these fields:
 
@@ -26,7 +26,7 @@ Currently supported user databases are:
    similiar)
  * <Passwd-file> [AuthDatabase.PasswdFile.txt]: '/etc/passwd'-like file in
    specified location
- * <NSS> [UserDatabase.NSS.txt]: Name Service Switch (v1.1+)
+ * <NSS> [UserDatabase.NSS.txt]: Name Service Switch
  * <LDAP> [AuthDatabase.LDAP.txt]: Lightweight Directory Access Protocol
  * <SQL> [AuthDatabase.SQL.txt]: SQL database (PostgreSQL, MySQL, SQLite)
  * <Static> [UserDatabase.Static.txt]: Userdb information generated from a
@@ -36,4 +36,4 @@ Currently supported user databases are:
  * <Prefetch> [UserDatabase.Prefetch.txt]: This assumes that the passdb already
    returned also all the required user database information
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

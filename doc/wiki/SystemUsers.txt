@@ -107,6 +107,6 @@ Dovecot, including several other software, allow using "/./" in home directory
 path to specify the chroot path. For example '/home/./user' would chroot to
 '/home'. If you want to enable this for Dovecot, add the chroot path to
 'valid_chroot_dirs' setting ('/home' in the previous example). If this isn't
-done, v1.1+ ignores the "/./" (and v1.0 just gives an error).
+done, Dovecot just ignores the "/./".
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

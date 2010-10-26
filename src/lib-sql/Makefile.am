@@ -1,4 +1,4 @@
-noinst_LIBRARIES = libsql.a
+noinst_LTLIBRARIES = libsql.la
 
 SQL_DRIVER_PLUGINS =
 
@@ -21,19 +21,18 @@ sql_module_LTLIBRARIES = \
 	$(PGSQL_LIB) \
 	$(SQLITE_LIB)
 
-sql_moduledir = $(moduledir)/sql
+sql_moduledir = $(moduledir)
 endif
 
 sql_drivers = @sql_drivers@
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
-	-DMODULEDIR=\""$(moduledir)"\" \
 	$(SQL_CFLAGS)
 
 dist_sources = \
 	sql-api.c \
-	sql-pool.c
+	sql-db-cache.c
 
 if ! SQL_PLUGINS
 driver_sources = \
@@ -42,10 +41,11 @@ driver_sources = \
 	driver-sqlite.c
 endif
 
-libsql_a_SOURCES = \
+libsql_la_SOURCES = \
 	$(dist_sources) \
 	$(driver_sources) \
-	sql-drivers-register.c
+	driver-sqlpool.c
+nodist_libsql_la_SOURCES = sql-drivers-register.c
 
 if SQL_PLUGINS
 libdriver_mysql_la_LDFLAGS = -module -avoid-version
@@ -67,14 +67,10 @@ endif
 headers = \
 	sql-api.h \
 	sql-api-private.h \
-	sql-pool.h
+	sql-db-cache.h
 
-if INSTALL_HEADERS
-  pkginc_libdir=$(pkgincludedir)/src/lib-sql
-  pkginc_lib_HEADERS = $(headers)
-else
-  noinst_HEADERS = $(headers)
-endif
+pkginc_libdir=$(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)
 
 sql-drivers-register.c: Makefile
 	rm -f $@
@@ -104,7 +100,7 @@ install-exec-local:
 	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
 	  for driver in $(SQL_DRIVER_PLUGINS); do \
 	    rm -f $(DESTDIR)$(moduledir)/$$d/libdriver_$$driver.so; \
-	    $(LN_S) ../sql/libdriver_$$driver.so $(DESTDIR)$(moduledir)/$$d; \
+	    $(LN_S) ../libdriver_$$driver.so $(DESTDIR)$(moduledir)/$$d; \
 	  done; \
 	done
 endif

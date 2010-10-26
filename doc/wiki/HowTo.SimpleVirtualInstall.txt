@@ -187,4 +187,4 @@ jane:{PLAIN}pass::::::userdb_quota=maildir:storage=204800
 Joe has now 100MB quota and Jane has 200MB quota. See <Quota.txt> for more
 information about quota settings.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

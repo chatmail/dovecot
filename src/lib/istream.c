@@ -5,6 +5,22 @@
 #include "str.h"
 #include "istream-internal.h"
 
+void i_stream_set_name(struct istream *stream, const char *name)
+{
+	i_free(stream->real_stream->iostream.name);
+	stream->real_stream->iostream.name = i_strdup(name);
+}
+
+const char *i_stream_get_name(struct istream *stream)
+{
+	while (stream->real_stream->iostream.name == NULL) {
+		stream = stream->real_stream->parent;
+		if (stream == NULL)
+			return "";
+	}
+	return stream->real_stream->iostream.name;
+}
+
 void i_stream_destroy(struct istream **stream)
 {
 	i_stream_close(*stream);
@@ -64,9 +80,25 @@ void i_stream_set_max_buffer_size(struct istream *stream, size_t max_size)
 	io_stream_set_max_buffer_size(&stream->real_stream->iostream, max_size);
 }
 
+size_t i_stream_get_max_buffer_size(struct istream *stream)
+{
+	return stream->real_stream->max_buffer_size;
+}
+
 void i_stream_set_return_partial_line(struct istream *stream, bool set)
 {
 	stream->real_stream->return_nolf_line = set;
+}
+
+static void i_stream_update(struct istream_private *stream)
+{
+	if (stream->parent == NULL)
+		stream->access_counter++;
+	else {
+		stream->access_counter =
+			stream->parent->real_stream->access_counter;
+		stream->parent_expected_offset = stream->parent->v_offset;
+	}
 }
 
 ssize_t i_stream_read(struct istream *stream)
@@ -80,6 +112,9 @@ ssize_t i_stream_read(struct istream *stream)
 
 	stream->eof = FALSE;
 	stream->stream_errno = 0;
+
+	if (_stream->parent != NULL)
+		i_stream_seek(_stream->parent, _stream->parent_expected_offset);
 
 	old_size = _stream->pos - _stream->skip;
 	ret = _stream->read(_stream);
@@ -104,6 +139,8 @@ ssize_t i_stream_read(struct istream *stream)
 		i_assert((size_t)ret+old_size == _stream->pos - _stream->skip);
 		break;
 	}
+
+	i_stream_update(_stream);
 	return ret;
 }
 
@@ -164,21 +201,17 @@ void i_stream_skip(struct istream *stream, uoff_t count)
 	_stream->seek(_stream, stream->v_offset + count, FALSE);
 }
 
-static bool i_stream_can_optimize_seek(struct istream *stream)
+static bool i_stream_can_optimize_seek(struct istream_private *stream)
 {
-	uoff_t expected_offset;
-
-	if (stream->real_stream->parent == NULL)
+	if (stream->parent == NULL)
 		return TRUE;
 
-	/* use the fast route only if the parent stream is at the
-	   expected offset */
-	expected_offset = stream->real_stream->parent_start_offset +
-		stream->v_offset - stream->real_stream->skip;
-	if (stream->real_stream->parent->v_offset != expected_offset)
+	/* use the fast route only if the parent stream hasn't been changed */
+	if (stream->access_counter !=
+	    stream->parent->real_stream->access_counter)
 		return FALSE;
 
-	return i_stream_can_optimize_seek(stream->real_stream->parent);
+	return i_stream_can_optimize_seek(stream->parent->real_stream);
 }
 
 void i_stream_seek(struct istream *stream, uoff_t v_offset)
@@ -186,16 +219,16 @@ void i_stream_seek(struct istream *stream, uoff_t v_offset)
 	struct istream_private *_stream = stream->real_stream;
 
 	if (v_offset >= stream->v_offset &&
-	    i_stream_can_optimize_seek(stream)) {
+	    i_stream_can_optimize_seek(_stream))
 		i_stream_skip(stream, v_offset - stream->v_offset);
-		return;
+	else {
+		if (unlikely(stream->closed))
+			return;
+
+		stream->eof = FALSE;
+		_stream->seek(_stream, v_offset, FALSE);
 	}
-
-	if (unlikely(stream->closed))
-		return;
-
-	stream->eof = FALSE;
-	_stream->seek(_stream, v_offset, FALSE);
+	i_stream_update(_stream);
 }
 
 void i_stream_seek_mark(struct istream *stream, uoff_t v_offset)
@@ -207,6 +240,7 @@ void i_stream_seek_mark(struct istream *stream, uoff_t v_offset)
 
 	stream->eof = FALSE;
 	_stream->seek(_stream, v_offset, TRUE);
+	i_stream_update(_stream);
 }
 
 void i_stream_sync(struct istream *stream)
@@ -216,8 +250,10 @@ void i_stream_sync(struct istream *stream)
 	if (unlikely(stream->closed))
 		return;
 
-	if (_stream->sync != NULL)
+	if (_stream->sync != NULL) {
 		_stream->sync(_stream);
+		i_stream_update(_stream);
+	}
 }
 
 const struct stat *i_stream_stat(struct istream *stream, bool exact)
@@ -230,11 +266,35 @@ const struct stat *i_stream_stat(struct istream *stream, bool exact)
 	return _stream->stat(_stream, exact);
 }
 
+int i_stream_get_size(struct istream *stream, bool exact, uoff_t *size_r)
+{
+	struct istream_private *_stream = stream->real_stream;
+
+	if (unlikely(stream->closed))
+		return -1;
+
+	return _stream->get_size(_stream, exact, size_r);
+}
+
 bool i_stream_have_bytes_left(const struct istream *stream)
 {
 	const struct istream_private *_stream = stream->real_stream;
 
 	return !stream->eof || _stream->skip != _stream->pos;
+}
+
+bool i_stream_is_eof(struct istream *stream)
+{
+	const struct istream_private *_stream = stream->real_stream;
+
+	if (_stream->skip == _stream->pos)
+		(void)i_stream_read(stream);
+	return !i_stream_have_bytes_left(stream);
+}
+
+uoff_t i_stream_get_absolute_offset(struct istream *stream)
+{
+	return stream->real_stream->abs_start_offset + stream->v_offset;
 }
 
 static char *i_stream_next_line_finish(struct istream_private *stream, size_t i)
@@ -281,8 +341,7 @@ static char *i_stream_last_line(struct istream_private *_stream)
 char *i_stream_next_line(struct istream *stream)
 {
 	struct istream_private *_stream = stream->real_stream;
-	char *ret_buf;
-        size_t i;
+	const unsigned char *pos;
 
 	if (_stream->skip >= _stream->pos) {
 		stream->stream_errno = 0;
@@ -290,22 +349,19 @@ char *i_stream_next_line(struct istream *stream)
 	}
 
 	if (unlikely(_stream->w_buffer == NULL)) {
-		i_error("i_stream_next_line() called for unmodifiable stream");
+		i_error("i_stream_next_line(%s) called for unmodifiable stream",
+			i_stream_get_name(stream));
 		return NULL;
 	}
 
-	/* @UNSAFE */
-	ret_buf = NULL;
-	for (i = _stream->skip; i < _stream->pos; i++) {
-		if (_stream->buffer[i] == 10) {
-			/* got it */
-			ret_buf = i_stream_next_line_finish(_stream, i);
-                        break;
-		}
-	}
-	if (ret_buf == NULL)
+	pos = memchr(_stream->buffer + _stream->skip, '\n',
+		     _stream->pos - _stream->skip);
+	if (pos != NULL) {
+		return i_stream_next_line_finish(_stream,
+						 pos - _stream->buffer);
+	} else {
 		return i_stream_last_line(_stream);
-        return ret_buf;
+	}
 }
 
 char *i_stream_read_next_line(struct istream *stream)
@@ -413,8 +469,13 @@ void i_stream_grow_buffer(struct istream_private *stream, size_t bytes)
 	    stream->buffer_size > stream->max_buffer_size)
 		stream->buffer_size = stream->max_buffer_size;
 
-	stream->buffer = stream->w_buffer =
-		i_realloc(stream->w_buffer, old_size, stream->buffer_size);
+	if (stream->buffer_size <= old_size)
+		stream->buffer_size = old_size;
+	else {
+		stream->w_buffer = i_realloc(stream->w_buffer, old_size,
+					     stream->buffer_size);
+		stream->buffer = stream->w_buffer;
+	}
 }
 
 bool i_stream_get_buffer_space(struct istream_private *stream,
@@ -460,12 +521,64 @@ i_stream_default_set_max_buffer_size(struct iostream_private *stream,
 	struct istream_private *_stream = (struct istream_private *)stream;
 
 	_stream->max_buffer_size = max_size;
+	if (_stream->parent != NULL)
+		i_stream_set_max_buffer_size(_stream->parent, max_size);
 }
 
+static void i_stream_default_destroy(struct iostream_private *stream)
+{
+	struct istream_private *_stream = (struct istream_private *)stream;
+
+	i_free(_stream->w_buffer);
+	if (_stream->parent != NULL)
+		i_stream_unref(&_stream->parent);
+}
+
+static void
+i_stream_default_seek(struct istream_private *stream,
+		      uoff_t v_offset, bool mark ATTR_UNUSED)
+{
+	size_t available;
+
+	if (stream->istream.v_offset > v_offset)
+		i_panic("stream doesn't support seeking backwards");
+
+	while (stream->istream.v_offset < v_offset) {
+		(void)i_stream_read(&stream->istream);
+
+		available = stream->pos - stream->skip;
+		if (available == 0) {
+			stream->istream.stream_errno = ESPIPE;
+			return;
+		}
+		if (available <= v_offset - stream->istream.v_offset)
+			i_stream_skip(&stream->istream, available);
+		else {
+			i_stream_skip(&stream->istream,
+				      v_offset - stream->istream.v_offset);
+		}
+	}
+}
 static const struct stat *
 i_stream_default_stat(struct istream_private *stream, bool exact ATTR_UNUSED)
 {
 	return &stream->statbuf;
+}
+
+static int
+i_stream_default_get_size(struct istream_private *stream,
+			  bool exact, uoff_t *size_r)
+{
+	const struct stat *st;
+
+	st = stream->stat(stream, exact);
+	if (st == NULL)
+		return -1;
+	if (st->st_size == -1)
+		return 0;
+
+	*size_r = st->st_size;
+	return 1;
 }
 
 struct istream *
@@ -473,15 +586,26 @@ i_stream_create(struct istream_private *_stream, struct istream *parent, int fd)
 {
 	_stream->fd = fd;
 	if (parent != NULL) {
+		_stream->access_counter = parent->real_stream->access_counter;
 		_stream->parent = parent;
 		_stream->parent_start_offset = parent->v_offset;
+		_stream->parent_expected_offset = parent->v_offset;
 		_stream->abs_start_offset = parent->v_offset +
 			parent->real_stream->abs_start_offset;
+		i_stream_ref(parent);
 	}
 	_stream->istream.real_stream = _stream;
 
+	if (_stream->iostream.destroy == NULL)
+		_stream->iostream.destroy = i_stream_default_destroy;
+	if (_stream->seek == NULL) {
+		i_assert(!_stream->istream.seekable);
+		_stream->seek = i_stream_default_seek;
+	}
 	if (_stream->stat == NULL)
 		_stream->stat = i_stream_default_stat;
+	if (_stream->get_size == NULL)
+		_stream->get_size = i_stream_default_get_size;
 	if (_stream->iostream.set_max_buffer_size == NULL) {
 		_stream->iostream.set_max_buffer_size =
 			i_stream_default_set_max_buffer_size;
@@ -498,118 +622,3 @@ i_stream_create(struct istream_private *_stream, struct istream *parent, int fd)
 	io_stream_init(&_stream->iostream);
 	return &_stream->istream;
 }
-
-#ifdef STREAM_TEST
-/* gcc istream.c -o teststream liblib.a -Wall -DHAVE_CONFIG_H -DSTREAM_TEST -g */
-
-#include <fcntl.h>
-#include <unistd.h>
-#include "ostream.h"
-
-#define BUF_VALUE(offset) \
-        (((offset) % 256) ^ ((offset) / 256))
-
-static void check_buffer(const unsigned char *data, size_t size, size_t offset)
-{
-	size_t i;
-
-	for (i = 0; i < size; i++)
-		i_assert(data[i] == BUF_VALUE(i+offset));
-}
-
-int main(void)
-{
-	struct istream *input, *l_input;
-	struct ostream *output1, *output2;
-	int i, fd1, fd2;
-	unsigned char buf[1024];
-	const unsigned char *data;
-	size_t size;
-
-	lib_init();
-
-	fd1 = open("teststream.1", O_RDWR | O_CREAT | O_TRUNC, 0600);
-	if (fd1 < 0)
-		i_fatal("open() failed: %m");
-	fd2 = open("teststream.2", O_RDWR | O_CREAT | O_TRUNC, 0600);
-	if (fd2 < 0)
-		i_fatal("open() failed: %m");
-
-	/* write initial data */
-	for (i = 0; i < sizeof(buf); i++)
-		buf[i] = BUF_VALUE(i);
-	write(fd1, buf, sizeof(buf));
-
-	/* test reading */
-	input = i_stream_create_fd(fd1, 512, FALSE);
-	i_assert(i_stream_get_size(input) == sizeof(buf));
-
-	i_assert(i_stream_read_data(input, &data, &size, 0) > 0);
-	i_assert(size == 512);
-	check_buffer(data, size, 0);
-
-	i_stream_seek(input, 256);
-	i_assert(i_stream_read_data(input, &data, &size, 0) > 0);
-	i_assert(size == 512);
-	check_buffer(data, size, 256);
-
-	i_stream_seek(input, 0);
-	i_assert(i_stream_read_data(input, &data, &size, 512) == -2);
-	i_assert(size == 512);
-	check_buffer(data, size, 0);
-
-	i_stream_skip(input, 900);
-	i_assert(i_stream_read_data(input, &data, &size, 0) > 0);
-	i_assert(size == sizeof(buf) - 900);
-	check_buffer(data, size, 900);
-
-	/* test moving data */
-	output1 = o_stream_create_fd(fd1, 512, FALSE);
-	output2 = o_stream_create_fd(fd2, 512, FALSE);
-
-	i_stream_seek(input, 1); size = sizeof(buf)-1;
-	i_assert(o_stream_send_istream(output2, input) == size);
-	o_stream_flush(output2);
-
-	lseek(fd2, 0, SEEK_SET);
-	i_assert(read(fd2, buf, sizeof(buf)) == size);
-	check_buffer(buf, size, 1);
-
-	i_stream_seek(input, 0);
-	o_stream_seek(output1, sizeof(buf));
-	i_assert(o_stream_send_istream(output1, input) == sizeof(buf));
-
-	/* test moving with limits */
-	l_input = i_stream_create_limit(input, sizeof(buf)/2, 512);
-	i_stream_seek(l_input, 0);
-	o_stream_seek(output1, 10);
-	i_assert(o_stream_send_istream(output1, l_input) == 512);
-
-	i_stream_set_max_buffer_size(input, sizeof(buf));
-
-	i_stream_seek(input, 0);
-	i_assert(i_stream_read_data(input, &data, &size, sizeof(buf)-1) > 0);
-	i_assert(size == sizeof(buf));
-	check_buffer(data, 10, 0);
-	check_buffer(data + 10, 512, sizeof(buf)/2);
-	check_buffer(data + 10 + 512,
-		     size - (10 + 512), 10 + 512);
-
-	/* reading within limits */
-	i_stream_seek(l_input, 0);
-	i_assert(i_stream_read_data(l_input, &data, &size, 511) > 0);
-	i_assert(size == 512);
-	i_assert(i_stream_read_data(l_input, &data, &size, 512) == -2);
-	i_assert(size == 512);
-	i_stream_skip(l_input, 511);
-	i_assert(i_stream_read_data(l_input, &data, &size, 0) > 0);
-	i_assert(size == 1);
-	i_stream_skip(l_input, 1);
-	i_assert(i_stream_read_data(l_input, &data, &size, 0) == -1);
-	i_assert(size == 0);
-
-	unlink("teststream.1");
-	unlink("teststream.2");
-	return 0;
-}
-#endif

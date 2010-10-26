@@ -3,7 +3,6 @@
 
 #include "seq-range-array.h"
 #include "index-storage.h"
-#include "mailbox-list-private.h"
 
 #define VIRTUAL_STORAGE_NAME "virtual"
 #define VIRTUAL_SUBSCRIPTION_FILE_NAME ".virtual-subscriptions"
@@ -49,7 +48,6 @@ struct virtual_mail_index_record {
 
 struct virtual_storage {
 	struct mail_storage storage;
-	union mailbox_list_module_context list_module_ctx;
 
 	/* List of mailboxes while a virtual mailbox is being opened.
 	   Used to track loops. */
@@ -71,6 +69,9 @@ struct virtual_backend_box {
 	uint32_t sync_uid_validity;
 	uint32_t sync_next_uid;
 	uint64_t sync_highest_modseq;
+	/* this value is either 0 or same as sync_highest_modseq. it's kept 0
+	   when there are pending removes that have yet to be expunged */
+	uint64_t ondisk_highest_modseq;
 
 	struct mail_search_args *search_args;
 	struct mail_search_result *search_result;
@@ -99,10 +100,9 @@ struct virtual_backend_box {
 ARRAY_DEFINE_TYPE(virtual_backend_box, struct virtual_backend_box *);
 
 struct virtual_mailbox {
-	struct index_mailbox ibox;
+	struct mailbox box;
 	struct virtual_storage *storage;
 
-	const char *path;
 	uint32_t virtual_ext_id;
 
 	uint32_t prev_uid_validity;
@@ -146,8 +146,8 @@ virtual_search_init(struct mailbox_transaction_context *t,
 		    struct mail_search_args *args,
 		    const enum mail_sort_type *sort_program);
 int virtual_search_deinit(struct mail_search_context *ctx);
-int virtual_search_next_nonblock(struct mail_search_context *ctx,
-				 struct mail *mail, bool *tryagain_r);
+bool virtual_search_next_nonblock(struct mail_search_context *ctx,
+				  struct mail *mail, bool *tryagain_r);
 bool virtual_search_next_update_seq(struct mail_search_context *ctx);
 
 struct mail *
@@ -167,12 +167,8 @@ int virtual_save_begin(struct mail_save_context *ctx, struct istream *input);
 int virtual_save_continue(struct mail_save_context *ctx);
 int virtual_save_finish(struct mail_save_context *ctx);
 void virtual_save_cancel(struct mail_save_context *ctx);
-void virtual_save_free(struct virtual_save_context *ctx);
+void virtual_save_free(struct mail_save_context *ctx);
 
-void virtual_copy_error(struct mail_storage *dest, struct mail_storage *src);
 void virtual_box_copy_error(struct mailbox *dest, struct mailbox *src);
-
-void virtual_transaction_class_init(void);
-void virtual_transaction_class_deinit(void);
 
 #endif

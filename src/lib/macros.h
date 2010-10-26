@@ -67,8 +67,8 @@
  */
 #define STRUCT_MEMBER_P(struct_p, struct_offset) \
 	((void *) ((char *) (struct_p) + (long) (struct_offset)))
-#define STRUCT_MEMBER(member_type, struct_p, struct_offset) \
-	(*(member_type *) G_STRUCT_MEMBER_P((struct_p), (struct_offset)))
+#define CONST_STRUCT_MEMBER_P(struct_p, struct_offset) \
+	((const void *) ((const char *) (struct_p) + (long) (struct_offset)))
 
 /* Provide simple macro statement wrappers (adapted from Perl):
    STMT_START { statements; } STMT_END;
@@ -129,13 +129,13 @@
 #  define ATTR_WARN_UNUSED_RESULT
 #  define ATTR_SENTINEL
 #endif
-
-/* C99-style struct member definitions */
-#if (defined(__STDC__) && __STDC_VERSION__ >= 199901L && \
-	!defined(_HPUX_SOURCE)) || __GNUC__ > 2
-#  define MEMBER(name) .name =
+#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3)
+/* GCC 4.3 and later */
+#  define ATTR_HOT __attribute__((hot))
+#  define ATTR_COLD __attribute__((cold))
 #else
-#  define MEMBER(name)
+#  define ATTR_HOT
+#  define ATTR_COLD
 #endif
 
 /* Macros to provide type safety for callback functions' context parameters */
@@ -146,8 +146,13 @@
 #  define CONTEXT_CALLBACK(name, callback_type, callback, context, ...) \
 	({(void)(1 ? 0 : callback(context)); \
 	name(__VA_ARGS__, (callback_type *)callback, context); })
+#  define CONTEXT_CALLBACK2(name, callback_type, callback, arg1_type, context, ...) \
+	({(void)(1 ? 0 : callback((arg1_type)0, context)); \
+	name(__VA_ARGS__, (callback_type *)callback, context); })
 #else
 #  define CONTEXT_CALLBACK(name, callback_type, callback, context, ...) \
+	name(__VA_ARGS__, (callback_type *)callback, context)
+#  define CONTEXT_CALLBACK2(name, callback_type, callback, arg1_type, context, ...) \
 	name(__VA_ARGS__, (callback_type *)callback, context)
 #endif
 
@@ -161,16 +166,6 @@
 #else
 #  define COMPILE_ERROR_IF_TRUE(condition) 0
 #  define COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE(_a, _b) 0
-#endif
-
-/* Wrap the gcc __PRETTY_FUNCTION__ and __FUNCTION__ variables with
-   macros, so we can refer to them as strings unconditionally. */
-#ifdef __GNUC__
-#  define GNUC_FUNCTION __FUNCTION__
-#  define GNUC_PRETTY_FUNCTION __PRETTY_FUNCTION__
-#else
-#  define GNUC_FUNCTION ""
-#  define GNUC_PRETTY_FUNCTION ""
 #endif
 
 #if __GNUC__ > 2
@@ -191,7 +186,7 @@
        i_panic("file %s: line %d (%s): assertion failed: (%s)",		\
 		__FILE__,						\
 		__LINE__,						\
-		__PRETTY_FUNCTION__,					\
+		__FUNCTION__,					\
 		#expr);			}STMT_END
 
 #else /* !__GNUC__ */

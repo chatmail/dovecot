@@ -1,10 +1,11 @@
 #ifndef MAILDIR_STORAGE_H
 #define MAILDIR_STORAGE_H
 
+#include "maildir-settings.h"
+
 #define MAILDIR_STORAGE_NAME "maildir"
 #define MAILDIR_SUBSCRIPTION_FILE_NAME "subscriptions"
 #define MAILDIR_INDEX_PREFIX "dovecot.index"
-#define MAILDIR_UNLINK_DIRNAME "DOVECOT-TRASHED"
 #define MAILDIR_UIDVALIDITY_FNAME "dovecot-uidvalidity"
 
 /* "base,S=123:2," means:
@@ -40,16 +41,12 @@
    maildir. */
 #define MAILDIR_LOCK_TOUCH_SECS 10
 
-#define MAILDIR_SAVE_FLAG_HARDLINK 0x10000000
-#define MAILDIR_SAVE_FLAG_DELETED  0x20000000
-
 /* If an operation fails with ENOENT, we'll check if the mailbox is deleted
    or if some directory is just missing. If it's missing, we'll create the
    directories and try again this many times before failing. */
 #define MAILDIR_DELETE_RETRY_COUNT 3
 
 #include "index-storage.h"
-#include "mailbox-list-private.h"
 
 struct timeval;
 struct maildir_save_context;
@@ -68,23 +65,17 @@ struct maildir_list_index_record {
 struct maildir_storage {
 	struct mail_storage storage;
 
-	union mailbox_list_module_context list_module_ctx;
+	const struct maildir_settings *set;
 	const char *temp_prefix;
 
 	uint32_t maildir_list_ext_id;
-
-	unsigned int copy_with_hardlinks:1;
-	unsigned int copy_preserve_filename:1;
-	unsigned int save_size_in_filename:1;
-	unsigned int stat_dirs:1;
 };
 
 struct maildir_mailbox {
-	struct index_mailbox ibox;
+	struct mailbox box;
 	struct maildir_storage *storage;
 	struct mail_index_view *flags_view;
 
-	const char *path;
 	struct timeout *keep_lock_to;
 
 	/* maildir sync: */
@@ -94,15 +85,8 @@ struct maildir_mailbox {
 	struct maildir_index_header maildir_hdr;
 	uint32_t maildir_ext_id;
 
+	unsigned int synced:1;
 	unsigned int syncing_commit:1;
-	unsigned int very_dirty_syncs:1;
-};
-
-struct maildir_transaction_context {
-	struct index_transaction_context ictx;
-	union mail_index_transaction_module_context module_ctx;
-
-	struct maildir_save_context *save_ctx;
 };
 
 extern struct mail_vfuncs maildir_mail_vfuncs;
@@ -124,11 +108,9 @@ int maildir_file_do(struct maildir_mailbox *mbox, uint32_t uid,
 	maildir_file_do(mbox, seq, (maildir_file_do_func *)callback, context)
 #endif
 
-bool maildir_set_deleted(struct maildir_mailbox *mbox);
-uint32_t maildir_get_uidvalidity_next(struct mail_storage *storage);
-
-void maildir_transaction_class_init(void);
-void maildir_transaction_class_deinit(void);
+bool maildir_set_deleted(struct mailbox *box);
+uint32_t maildir_get_uidvalidity_next(struct mailbox_list *list);
+int maildir_lose_unexpected_dir(struct mail_storage *storage, const char *path);
 
 struct mail_save_context *
 maildir_save_alloc(struct mailbox_transaction_context *_t);
@@ -137,18 +119,21 @@ int maildir_save_continue(struct mail_save_context *ctx);
 int maildir_save_finish(struct mail_save_context *ctx);
 void maildir_save_cancel(struct mail_save_context *ctx);
 
-struct maildir_save_context *
-maildir_save_transaction_init(struct maildir_transaction_context *t);
-uint32_t maildir_save_add(struct maildir_transaction_context *t,
-			  const char *base_fname, enum mail_flags flags,
-			  struct mail_keywords *keywords,
-			  struct mail *dest_mail);
+struct maildir_filename *
+maildir_save_add(struct mail_save_context *_ctx, const char *tmp_fname,
+		 struct mail *src_mail);
+void maildir_save_set_dest_basename(struct mail_save_context *ctx,
+				    struct maildir_filename *mf,
+				    const char *basename);
+void maildir_save_set_sizes(struct maildir_filename *mf,
+			    uoff_t size, uoff_t vsize);
 const char *maildir_save_file_get_path(struct mailbox_transaction_context *t,
 				       uint32_t seq);
 
-int maildir_transaction_save_commit_pre(struct maildir_save_context *ctx);
-void maildir_transaction_save_commit_post(struct maildir_save_context *ctx);
-void maildir_transaction_save_rollback(struct maildir_save_context *ctx);
+int maildir_transaction_save_commit_pre(struct mail_save_context *ctx);
+void maildir_transaction_save_commit_post(struct mail_save_context *ctx,
+					  struct mail_index_transaction_commit_result *result);
+void maildir_transaction_save_rollback(struct mail_save_context *ctx);
 
 int maildir_copy(struct mail_save_context *ctx, struct mail *mail);
 int maildir_transaction_copy_commit(struct maildir_copy_context *ctx);

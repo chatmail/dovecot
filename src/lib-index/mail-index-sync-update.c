@@ -70,7 +70,7 @@ static void mail_index_sync_replace_map(struct mail_index_sync_map_ctx *ctx,
 	mail_index_modseq_sync_map_replaced(ctx->modseq_ctx);
 }
 
-static void
+static struct mail_index_map *
 mail_index_sync_move_to_private_memory(struct mail_index_sync_map_ctx *ctx)
 {
 	struct mail_index_map *map = ctx->view->map;
@@ -86,6 +86,7 @@ mail_index_sync_move_to_private_memory(struct mail_index_sync_map_ctx *ctx)
 	if (!MAIL_INDEX_MAP_IS_IN_MEMORY(ctx->view->map))
 		mail_index_map_move_to_memory(ctx->view->map);
 	mail_index_modseq_sync_map_replaced(ctx->modseq_ctx);
+	return map;
 }
 
 struct mail_index_map *
@@ -208,7 +209,6 @@ sync_expunge_call_handlers(struct mail_index_sync_map_ctx *ctx,
 {
 	const struct mail_index_expunge_handler *eh;
 	struct mail_index_record *rec;
-	unsigned int i, count;
 	uint32_t seq;
 
 	/* call expunge handlers only when syncing index file */
@@ -221,8 +221,7 @@ sync_expunge_call_handlers(struct mail_index_sync_map_ctx *ctx,
 	if (!array_is_created(&ctx->expunge_handlers))
 		return;
 
-	eh = array_get(&ctx->expunge_handlers, &count);
-	for (i = 0; i < count; i++, eh++) {
+	array_foreach(&ctx->expunge_handlers, eh) {
 		for (seq = seq1; seq <= seq2; seq++) {
 			rec = MAIL_INDEX_MAP_IDX(ctx->view->map, seq-1);
 			/* FIXME: does expunge handler's return value matter?
@@ -239,7 +238,7 @@ sync_expunge_call_handlers(struct mail_index_sync_map_ctx *ctx,
 static void
 sync_expunge(struct mail_index_sync_map_ctx *ctx, uint32_t uid1, uint32_t uid2)
 {
-	struct mail_index_map *map = ctx->view->map;
+	struct mail_index_map *map;
 	struct mail_index_record *rec;
 	uint32_t seq_count, seq, seq1, seq2;
 
@@ -281,36 +280,68 @@ static void *sync_append_record(struct mail_index_map *map)
 	return ret;
 }
 
-static void sync_uid_update(struct mail_index_sync_map_ctx *ctx,
-			    uint32_t old_uid, uint32_t new_uid)
+static bool sync_update_ignored_change(struct mail_index_sync_map_ctx *ctx)
 {
-	struct mail_index_map *map;
-	struct mail_index_record *rec;
-	uint32_t old_seq;
-	void *dest;
+	struct mail_index_transaction_commit_result *result =
+		ctx->view->index->sync_commit_result;
+	uint32_t prev_log_seq;
+	uoff_t prev_log_offset, trans_start_offset, trans_end_offset;
 
-	if (new_uid < ctx->view->map->hdr.next_uid) {
-		/* uid update is no longer possible */
-		return;
+	if (result == NULL)
+		return FALSE;
+
+	/* we'll return TRUE if this modseq change was written within the
+	   transaction that was just committed */
+	mail_transaction_log_view_get_prev_pos(ctx->view->log_view,
+					       &prev_log_seq, &prev_log_offset);
+	if (prev_log_seq != result->log_file_seq)
+		return FALSE;
+
+	trans_end_offset = result->log_file_offset;
+	trans_start_offset = trans_end_offset - result->commit_size;
+	if (prev_log_offset < trans_start_offset ||
+	    prev_log_offset >= trans_end_offset)
+		return FALSE;
+
+	return TRUE;
+}
+
+static int
+sync_modseq_update(struct mail_index_sync_map_ctx *ctx,
+		   const struct mail_transaction_modseq_update *u,
+		   unsigned int size)
+{
+	struct mail_index_view *view = ctx->view;
+	const struct mail_transaction_modseq_update *end;
+	uint32_t seq;
+	uint64_t min_modseq, highest_modseq = 0;
+	int ret;
+
+	end = CONST_PTR_OFFSET(u, size);
+	for (; u < end; u++) {
+		if (u->uid == 0)
+			seq = 0;
+		else if (!mail_index_lookup_seq(view, u->uid, &seq))
+			continue;
+
+		min_modseq = ((uint64_t)u->modseq_high32 >> 32) |
+			u->modseq_low32;
+		if (highest_modseq < min_modseq)
+			highest_modseq = min_modseq;
+
+		ret = seq == 0 ? 1 :
+			mail_index_modseq_set(view, seq, min_modseq);
+		if (ret < 0) {
+			mail_index_sync_set_corrupted(ctx,
+				"modseqs updated before they were enabled");
+			return -1;
+		}
+		if (ret == 0 && sync_update_ignored_change(ctx))
+			view->index->sync_commit_result->ignored_modseq_changes++;
 	}
 
-	if (!mail_index_lookup_seq(ctx->view, old_uid, &old_seq))
-		return;
-
-	map = mail_index_sync_get_atomic_map(ctx);
-	map->hdr.next_uid = new_uid+1;
-	map->rec_map->last_appended_uid = new_uid;
-
-	/* add the new record */
-	dest = sync_append_record(map);
-	rec = MAIL_INDEX_MAP_IDX(map, old_seq-1);
-	rec->uid = new_uid;
-	memcpy(dest, rec, map->hdr.record_size);
-
-	/* @UNSAFE: remove the old record */
-	memmove(rec, PTR_OFFSET(rec, map->hdr.record_size),
-		(map->rec_map->records_count + 1 - old_seq) *
-		map->hdr.record_size);
+	mail_index_modseq_update_highest(ctx->modseq_ctx, highest_modseq);
+	return 1;
 }
 
 void mail_index_sync_write_seq_update(struct mail_index_sync_map_ctx *ctx,
@@ -344,8 +375,7 @@ static int sync_append(const struct mail_index_record *rec,
 	/* move to memory. the mapping is written when unlocking so we don't
 	   waste time re-mmap()ing multiple times or waste space growing index
 	   file too large */
-	mail_index_sync_move_to_private_memory(ctx);
-	map = view->map;
+	map = mail_index_sync_move_to_private_memory(ctx);
 
 	if (rec->uid <= map->rec_map->last_appended_uid) {
 		i_assert(map->hdr.messages_count < map->rec_map->records_count);
@@ -612,7 +642,7 @@ int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
 		break;
 	}
 	case MAIL_TRANSACTION_EXT_HDR_UPDATE: {
-		const struct mail_transaction_ext_hdr_update *rec = data;
+		const struct mail_transaction_ext_hdr_update *rec;
 		unsigned int i;
 
 		for (i = 0; i < hdr->size; ) {
@@ -638,7 +668,7 @@ int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
 		break;
 	}
 	case MAIL_TRANSACTION_EXT_HDR_UPDATE32: {
-		const struct mail_transaction_ext_hdr_update32 *rec = data;
+		const struct mail_transaction_ext_hdr_update32 *rec;
 		unsigned int i;
 
 		for (i = 0; i < hdr->size; ) {
@@ -702,6 +732,30 @@ int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
 		}
 		break;
 	}
+	case MAIL_TRANSACTION_EXT_ATOMIC_INC: {
+		const struct mail_transaction_ext_atomic_inc *rec, *end;
+
+		if (ctx->cur_ext_map_idx == (uint32_t)-1) {
+			mail_index_sync_set_corrupted(ctx,
+				"Extension record updated "
+				"without intro prefix");
+			ret = -1;
+			break;
+		}
+
+		if (ctx->cur_ext_ignore) {
+			ret = 1;
+			break;
+		}
+
+		end = CONST_PTR_OFFSET(data, hdr->size);
+		for (rec = data; rec < end; rec++) {
+			ret = mail_index_sync_ext_atomic_inc(ctx, rec);
+			if (ret <= 0)
+				break;
+		}
+		break;
+	}
 	case MAIL_TRANSACTION_KEYWORD_UPDATE: {
 		const struct mail_transaction_keyword_update *rec = data;
 
@@ -714,19 +768,23 @@ int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
 		ret = mail_index_sync_keywords_reset(ctx, hdr, rec);
 		break;
 	}
-	case MAIL_TRANSACTION_UID_UPDATE: {
-		const struct mail_transaction_uid_update *rec = data, *end;
-
-		end = CONST_PTR_OFFSET(data, hdr->size);
-		for (rec = data; rec < end; rec++)
-			sync_uid_update(ctx, rec->old_uid, rec->new_uid);
-		break;
-	}
 	case MAIL_TRANSACTION_MODSEQ_UPDATE: {
-		/* just ignore modseq updates. they're not so hugely
-		   important. */
+		const struct mail_transaction_modseq_update *rec = data;
+
+		ret = sync_modseq_update(ctx, rec, hdr->size);
 		break;
 	}
+	case MAIL_TRANSACTION_INDEX_DELETED:
+		if ((hdr->type & MAIL_TRANSACTION_EXTERNAL) == 0) {
+			/* next sync finishes the deletion */
+			ctx->view->index->index_delete_requested = TRUE;
+		} else {
+			/* transaction log reading handles this */
+		}
+		break;
+	case MAIL_TRANSACTION_INDEX_UNDELETED:
+		ctx->view->index->index_delete_requested = FALSE;
+		break;
 	default:
 		mail_index_sync_set_corrupted(ctx,
 			"Unknown transaction record type 0x%x",
@@ -831,7 +889,7 @@ int mail_index_sync_map(struct mail_index_map **_map,
 
 	start_offset = type == MAIL_INDEX_SYNC_HANDLER_FILE ?
 		map->hdr.log_file_tail_offset : map->hdr.log_file_head_offset;
-	if (!force && !index->mmap_disable) {
+	if (!force && (index->flags & MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE) == 0) {
 		/* see if we'd prefer to reopen the index file instead of
 		   syncing the current map from the transaction log.
 		   don't check this if mmap is disabled, because reopening
@@ -862,12 +920,15 @@ int mail_index_sync_map(struct mail_index_map **_map,
 					    map->hdr.log_file_seq, start_offset,
 					    (uint32_t)-1, (uoff_t)-1, &reset);
 	if (ret <= 0) {
+		mail_index_view_close(&view);
 		if (force && ret == 0) {
 			/* the seq/offset is probably broken */
+			mail_index_set_error(index, "Index %s: Lost log for "
+				"seq=%u offset=%"PRIuUOFF_T, index->filepath,
+				map->hdr.log_file_seq, start_offset);
 			(void)mail_index_fsck(index);
 		}
 		/* can't use it. sync by re-reading index. */
-		mail_index_view_close(&view);
 		return 0;
 	}
 

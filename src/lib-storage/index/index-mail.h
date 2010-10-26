@@ -77,7 +77,7 @@ struct index_mail_data {
 	uint32_t parse_line_num;
 
 	struct message_part *parts;
-	const char *envelope, *body, *bodystructure, *uid_string;
+	const char *envelope, *body, *bodystructure, *uid_string, *guid;
 	struct message_part_envelope_data *envelope_data;
 
 	uint32_t seq;
@@ -108,16 +108,18 @@ struct index_mail_data {
 	unsigned int messageparts_saved_to_cache:1;
 	unsigned int header_parsed:1;
 	unsigned int no_caching:1;
+	unsigned int forced_no_caching:1;
 	unsigned int destroying_stream:1;
 	unsigned int initialized_wrapper_stream:1;
+	unsigned int destroy_callback_set:1;
 };
 
 struct index_mail {
         struct mail_private mail;
 	struct index_mail_data data;
+	struct index_mailbox_context *ibox;
 
 	pool_t data_pool;
-	struct index_mailbox *ibox;
 	struct index_transaction_context *trans;
 	uint32_t uid_validity;
 
@@ -152,6 +154,7 @@ void index_mail_init(struct index_mail *mail,
 
 void index_mail_set_seq(struct mail *mail, uint32_t seq);
 bool index_mail_set_uid(struct mail *mail, uint32_t uid);
+void index_mail_set_uid_cache_updates(struct mail *mail, bool set);
 void index_mail_close(struct mail *mail);
 void index_mail_free(struct mail *mail);
 
@@ -179,8 +182,7 @@ uint64_t index_mail_get_modseq(struct mail *_mail);
 const char *const *index_mail_get_keywords(struct mail *_mail);
 const ARRAY_TYPE(keyword_indexes) *
 index_mail_get_keyword_indexes(struct mail *_mail);
-int index_mail_get_parts(struct mail *_mail,
-			 const struct message_part **parts_r);
+int index_mail_get_parts(struct mail *_mail, struct message_part **parts_r);
 int index_mail_get_received_date(struct mail *_mail, time_t *date_r);
 int index_mail_get_save_date(struct mail *_mail, time_t *date_r);
 int index_mail_get_date(struct mail *_mail, time_t *date_r, int *timezone_r);
@@ -192,14 +194,17 @@ int index_mail_init_stream(struct index_mail *mail,
 			   struct istream **stream_r);
 int index_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 			   const char **value_r);
+struct mail *index_mail_get_real_mail(struct mail *mail);
 
 void index_mail_update_flags(struct mail *mail, enum modify_type modify_type,
 			     enum mail_flags flags);
 void index_mail_update_keywords(struct mail *mail, enum modify_type modify_type,
 				struct mail_keywords *keywords);
+void index_mail_update_modseq(struct mail *mail, uint64_t min_modseq);
 void index_mail_expunge(struct mail *mail);
 void index_mail_set_cache_corrupted(struct mail *mail,
 				    enum mail_fetch_field field);
+int index_mail_opened(struct mail *mail, struct istream **stream);
 struct index_mail *index_mail_get_index_mail(struct mail *mail);
 
 bool index_mail_get_cached_uoff_t(struct index_mail *mail,
@@ -220,5 +225,7 @@ void index_mail_cache_parse_deinit(struct mail *mail, time_t received_date,
 
 int index_mail_cache_lookup_field(struct index_mail *mail, buffer_t *buf,
 				  unsigned int field_idx);
+
+enum index_mail_access_part index_mail_get_access_part(struct index_mail *mail);
 
 #endif

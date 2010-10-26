@@ -23,12 +23,17 @@ struct file_dict {
 	int fd;
 };
 
+struct file_dict_iterate_path {
+	const char *path;
+	unsigned int len;
+};
+
 struct file_dict_iterate_context {
 	struct dict_iterate_context ctx;
+	pool_t pool;
 
 	struct hash_iterate_context *iter;
-	char *path;
-	unsigned int path_len;
+	struct file_dict_iterate_path *paths;
 
 	enum dict_iterate_flags flags;
 	unsigned int failed:1;
@@ -59,11 +64,8 @@ struct file_dict_transaction_context {
 };
 
 static struct dotlock_settings file_dict_dotlock_settings = {
-	MEMBER(temp_prefix) NULL,
-	MEMBER(lock_suffix) NULL,
-
-	MEMBER(timeout) 30,
-	MEMBER(stale_timeout) 5
+	.timeout = 30,
+	.stale_timeout = 5
 };
 
 static struct dict *file_dict_init(struct dict *driver, const char *uri,
@@ -170,16 +172,25 @@ static int file_dict_lookup(struct dict *_dict, pool_t pool,
 }
 
 static struct dict_iterate_context *
-file_dict_iterate_init(struct dict *_dict, const char *path,
+file_dict_iterate_init(struct dict *_dict, const char *const *paths,
 		       enum dict_iterate_flags flags)
 {
         struct file_dict_iterate_context *ctx;
 	struct file_dict *dict = (struct file_dict *)_dict;
+	unsigned int i, path_count;
+	pool_t pool;
 
-	ctx = i_new(struct file_dict_iterate_context, 1);
+	pool = pool_alloconly_create("file dict iterate", 256);
+	ctx = p_new(pool, struct file_dict_iterate_context, 1);
 	ctx->ctx.dict = _dict;
-	ctx->path = i_strdup(path);
-	ctx->path_len = strlen(path);
+	ctx->pool = pool;
+
+	for (path_count = 0; paths[path_count] != NULL; path_count++) ;
+	ctx->paths = p_new(pool, struct file_dict_iterate_path, path_count + 1);
+	for (i = 0; i < path_count; i++) {
+		ctx->paths[i].path = p_strdup(pool, paths[i]);
+		ctx->paths[i].len = strlen(paths[i]);
+	}
 	ctx->flags = flags;
 	ctx->iter = hash_table_iterate_init(dict->hash);
 
@@ -188,36 +199,52 @@ file_dict_iterate_init(struct dict *_dict, const char *path,
 	return &ctx->ctx;
 }
 
-static int file_dict_iterate(struct dict_iterate_context *_ctx,
-			     const char **key_r, const char **value_r)
+static const struct file_dict_iterate_path *
+file_dict_iterate_find_path(struct file_dict_iterate_context *ctx,
+			    const char *key)
+{
+	unsigned int i;
+
+	for (i = 0; ctx->paths[i].path != NULL; i++) {
+		if (strncmp(ctx->paths[i].path, key, ctx->paths[i].len) == 0)
+			return &ctx->paths[i];
+	}
+	return NULL;
+}
+
+static bool file_dict_iterate(struct dict_iterate_context *_ctx,
+			      const char **key_r, const char **value_r)
 {
 	struct file_dict_iterate_context *ctx =
 		(struct file_dict_iterate_context *)_ctx;
+	const struct file_dict_iterate_path *path;
 	void *key, *value;
 
 	while (hash_table_iterate(ctx->iter, &key, &value)) {
-		if (strncmp(ctx->path, key, ctx->path_len) != 0)
+		path = file_dict_iterate_find_path(ctx, key);
+		if (path == NULL)
 			continue;
 
 		if ((ctx->flags & DICT_ITERATE_FLAG_RECURSE) == 0 &&
-		    strchr((char *)key + ctx->path_len, '/') != NULL)
+		    strchr((char *)key + path->len, '/') != NULL)
 			continue;
 
 		*key_r = key;
 		*value_r = value;
-		return 1;
+		return TRUE;
 	}
-	return ctx->failed ? -1 : 0;
+	return FALSE;
 }
 
-static void file_dict_iterate_deinit(struct dict_iterate_context *_ctx)
+static int file_dict_iterate_deinit(struct dict_iterate_context *_ctx)
 {
 	struct file_dict_iterate_context *ctx =
 		(struct file_dict_iterate_context *)_ctx;
+	int ret = ctx->failed ? -1 : 0;
 
 	hash_table_iterate_deinit(&ctx->iter);
-	i_free(ctx->path);
-	i_free(ctx);
+	pool_unref(&ctx->pool);
+	return ret;
 }
 
 static struct dict_transaction_context *
@@ -240,13 +267,12 @@ static void file_dict_apply_changes(struct file_dict_transaction_context *ctx)
 	const char *tmp;
 	char *key, *value, *old_value;
 	void *orig_key, *orig_value;
-	const struct file_dict_change *changes;
-	unsigned int i, count, new_len;
+	const struct file_dict_change *change;
+	unsigned int new_len;
 	long long diff;
 
-	changes = array_get(&ctx->changes, &count);
-	for (i = 0; i < count; i++) {
-		if (hash_table_lookup_full(dict->hash, changes[i].key,
+	array_foreach(&ctx->changes, change) {
+		if (hash_table_lookup_full(dict->hash, change->key,
 					   &orig_key, &orig_value)) {
 			key = orig_key;
 			old_value = orig_value;
@@ -256,14 +282,14 @@ static void file_dict_apply_changes(struct file_dict_transaction_context *ctx)
 		}
 		value = NULL;
 
-		switch (changes[i].type) {
+		switch (change->type) {
 		case FILE_DICT_CHANGE_TYPE_INC:
 			if (old_value == NULL) {
 				ctx->atomic_inc_not_found = TRUE;
 				break;
 			}
 			diff = strtoll(old_value, NULL, 10) +
-				changes[i].value.diff;
+				change->value.diff;
 			tmp = t_strdup_printf("%lld", diff);
 			new_len = strlen(tmp);
 			if (old_value == NULL || new_len > strlen(old_value))
@@ -275,10 +301,10 @@ static void file_dict_apply_changes(struct file_dict_transaction_context *ctx)
 			/* fall through */
 		case FILE_DICT_CHANGE_TYPE_SET:
 			if (key == NULL)
-				key = p_strdup(dict->hash_pool, changes[i].key);
+				key = p_strdup(dict->hash_pool, change->key);
 			if (value == NULL) {
 				value = p_strdup(dict->hash_pool,
-						 changes[i].value.str);
+						 change->value.str);
 			}
 			hash_table_update(dict->hash, key, value);
 			break;
@@ -290,37 +316,68 @@ static void file_dict_apply_changes(struct file_dict_transaction_context *ctx)
 	}
 }
 
-static int fd_copy_permissions(int src_fd, const char *src_path,
-			       int dest_fd, const char *dest_path)
+static int
+fd_copy_stat_permissions(const struct stat *src_st,
+			 int dest_fd, const char *dest_path)
 {
-	struct stat src_st, dest_st;
+	struct stat dest_st;
 
-	if (fstat(src_fd, &src_st) < 0) {
-		i_error("fstat(%s) failed: %m", src_path);
-		return -1;
-	}
 	if (fstat(dest_fd, &dest_st) < 0) {
 		i_error("fstat(%s) failed: %m", dest_path);
 		return -1;
 	}
 
-	if (src_st.st_gid != dest_st.st_gid &&
-	    (src_st.st_mode & 0070) >> 3 != (src_st.st_mode & 0007)) {
-		if (fchown(dest_fd, (uid_t)-1, src_st.st_gid) < 0) {
+	if (src_st->st_gid != dest_st.st_gid &&
+	    ((src_st->st_mode & 0070) >> 3 != (src_st->st_mode & 0007))) {
+		/* group has different permissions from world.
+		   preserve the group. */
+		if (fchown(dest_fd, (uid_t)-1, src_st->st_gid) < 0) {
 			i_error("fchown(%s, -1, %s) failed: %m",
-				dest_path, dec2str(src_st.st_gid));
+				dest_path, dec2str(src_st->st_gid));
 			return -1;
 		}
 	}
 
-	if ((src_st.st_mode & 07777) != (dest_st.st_mode & 07777)) {
-		if (fchmod(dest_fd, src_st.st_mode & 07777) < 0) {
+	if ((src_st->st_mode & 07777) != (dest_st.st_mode & 07777)) {
+		if (fchmod(dest_fd, src_st->st_mode & 07777) < 0) {
 			i_error("fchmod(%s, %o) failed: %m",
-				dest_path, (int)(src_st.st_mode & 0777));
+				dest_path, (int)(src_st->st_mode & 0777));
 			return -1;
 		}
 	}
 	return 0;
+}
+
+static int fd_copy_permissions(int src_fd, const char *src_path,
+			       int dest_fd, const char *dest_path)
+{
+	struct stat src_st;
+
+	if (fstat(src_fd, &src_st) < 0) {
+		i_error("fstat(%s) failed: %m", src_path);
+		return -1;
+	}
+	return fd_copy_stat_permissions(&src_st, dest_fd, dest_path);
+}
+
+static int
+fd_copy_parent_dir_permissions(const char *src_path, int dest_fd,
+			       const char *dest_path)
+{
+	struct stat src_st;
+	const char *src_dir, *p;
+
+	p = strrchr(src_path, '/');
+	if (p == NULL)
+		src_dir = ".";
+	else
+		src_dir = t_strdup_until(src_path, p);
+	if (stat(src_dir, &src_st) < 0) {
+		i_error("stat(%s) failed: %m", src_dir);
+		return -1;
+	}
+	src_st.st_mode &= 0666;
+	return fd_copy_stat_permissions(&src_st, dest_fd, dest_path);
 }
 
 static int file_dict_write_changes(struct file_dict_transaction_context *ctx)
@@ -348,6 +405,10 @@ static int file_dict_write_changes(struct file_dict_transaction_context *ctx)
 		/* preserve the permissions */
 		(void)fd_copy_permissions(dict->fd, dict->path, fd,
 					  file_dotlock_get_lock_path(dotlock));
+	} else {
+		/* get initial permissions from parent directory */
+		(void)fd_copy_parent_dir_permissions(dict->path, fd,
+					file_dotlock_get_lock_path(dotlock));
 	}
 	file_dict_apply_changes(ctx);
 
@@ -446,7 +507,7 @@ file_dict_atomic_inc(struct dict_transaction_context *_ctx,
 }
 
 struct dict dict_driver_file = {
-	MEMBER(name) "file",
+	.name = "file",
 	{
 		file_dict_init,
 		file_dict_deinit,

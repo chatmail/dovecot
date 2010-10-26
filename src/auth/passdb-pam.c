@@ -7,7 +7,7 @@
    modified versions are marked as such.  There's absolutely no warranty.
 */
 
-#include "common.h"
+#include "auth-common.h"
 #include "passdb.h"
 
 #ifdef PASSDB_PAM
@@ -174,7 +174,7 @@ static int try_pam_auth(struct auth_request *request, pam_handle_t *pamh,
 			auth_request_log_error(request, "pam", "%s", str);
 		} else if (status == PAM_AUTH_ERR) {
 			str = t_strconcat(str, " (password mismatch?)", NULL);
-			if (request->auth->verbose_debug_passwords) {
+			if (request->set->debug_passwords) {
 				str = t_strconcat(str, " (given password: ",
 						  request->mech_password,
 						  ")", NULL);
@@ -327,13 +327,13 @@ pam_verify_plain(struct auth_request *request, const char *password,
 }
 
 static struct passdb_module *
-pam_preinit(struct auth_passdb *auth_passdb, const char *args)
+pam_preinit(pool_t pool, const char *args)
 {
 	struct pam_passdb_module *module;
 	const char *const *t_args;
 	int i;
 
-	module = p_new(auth_passdb->auth->pool, struct pam_passdb_module, 1);
+	module = p_new(pool, struct pam_passdb_module, 1);
 	module->service_name = "dovecot";
 	/* we're caching the password by using directly the plaintext password
 	   given by the auth mechanism */
@@ -351,8 +351,7 @@ pam_preinit(struct auth_passdb *auth_passdb, const char *args)
 			module->pam_setcred = TRUE;
 		else if (strncmp(t_args[i], "cache_key=", 10) == 0) {
 			module->module.cache_key =
-				auth_cache_parse_key(auth_passdb->auth->pool,
-						     t_args[i] + 10);
+				auth_cache_parse_key(pool, t_args[i] + 10);
 		} else if (strcmp(t_args[i], "blocking=yes") == 0) {
 			/* ignore, for backwards compatibility */
 		} else if (strcmp(t_args[i], "failure_show_msg=yes") == 0) {
@@ -361,12 +360,15 @@ pam_preinit(struct auth_passdb *auth_passdb, const char *args)
 			/* for backwards compatibility */
 			module->service_name = "%Ls";
 		} else if (strncmp(t_args[i], "max_requests=", 13) == 0) {
-			module->requests_left = atoi(t_args[i] + 13);
+			if (str_to_uint(t_args[i] + 13,
+					&module->requests_left) < 0) {
+				i_error("pam: Invalid requests_left value: %s",
+					t_args[i] + 13);
+			}
 		} else if (t_args[i+1] == NULL) {
-			module->service_name =
-				p_strdup(auth_passdb->auth->pool, t_args[i]);
+			module->service_name = p_strdup(pool, t_args[i]);
 		} else {
-			i_fatal("passdb pam: Unknown setting: %s", t_args[i]);
+			i_fatal("pam: Unknown setting: %s", t_args[i]);
 		}
 	}
 	return &module->module;
@@ -385,6 +387,6 @@ struct passdb_module_interface passdb_pam = {
 };
 #else
 struct passdb_module_interface passdb_pam = {
-	MEMBER(name) "pam"
+	.name = "pam"
 };
 #endif

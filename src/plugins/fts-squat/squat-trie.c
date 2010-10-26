@@ -389,7 +389,6 @@ node_add_child(struct squat_trie *trie, struct squat_node *node,
 		/* first child */
 		node->children.data = i_malloc(new_size);
 		trie->node_alloc_size += new_size;
-		children = NODE_CHILDREN_NODES(node);
 	} else {
 		old_size = NODE_CHILDREN_ALLOC_SIZE(old_child_count);
 		if (old_size != new_size) {
@@ -1081,14 +1080,12 @@ squat_trie_iterate_init(struct squat_trie *trie)
 static int
 squat_trie_iterate_deinit(struct squat_trie_iterate_context *ctx)
 {
-	struct squat_trie_iterate_node *nodes;
-	unsigned int i, count;
+	struct squat_trie_iterate_node *node;
 	int ret = ctx->failed ? -1 : 0;
 
 	if (array_is_created(&ctx->cur.shifts)) {
-		nodes = array_get_modifiable(&ctx->parents, &count);
-		for (i = 0; i < count; i++)
-			array_free(&nodes[i].shifts);
+		array_foreach_modifiable(&ctx->parents, node)
+			array_free(&node->shifts);
 		array_free(&ctx->cur.shifts);
 	}
 	array_free(&ctx->parents);

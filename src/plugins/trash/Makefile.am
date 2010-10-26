@@ -10,16 +10,13 @@ lib11_trash_plugin_la_LDFLAGS = -module -avoid-version
 module_LTLIBRARIES = \
 	lib11_trash_plugin.la
 
+if DOVECOT_PLUGIN_DEPS
+lib11_trash_plugin_la_LIBADD = \
+	../quota/lib10_quota_plugin.la
+endif
+
 lib11_trash_plugin_la_SOURCES = \
 	trash-plugin.c
 
 noinst_HEADERS = \
 	trash-plugin.h
-
-install-exec-local:
-	for d in imap lda; do \
-	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
-	  rm -f $(DESTDIR)$(moduledir)/$$d/lib11_trash_plugin$(MODULE_SUFFIX); \
-	  $(LN_S) ../lib11_trash_plugin$(MODULE_SUFFIX) $(DESTDIR)$(moduledir)/$$d; \
-	done
-

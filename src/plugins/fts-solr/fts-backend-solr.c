@@ -30,6 +30,7 @@ struct solr_fts_backend_build_context {
 	uint32_t prev_uid, uid_validity;
 	string_t *cmd;
 	bool headers;
+	bool field_open;
 };
 
 struct solr_virtual_uid_map_context {
@@ -57,7 +58,7 @@ static void fts_box_name_get_root(struct mail_namespace **ns, const char **name)
 		*ns = (*ns)->alias_for;
 
 	if (**name == '\0' && *ns != orig_ns &&
-	    ((*ns)->flags & NAMESPACE_FLAG_INBOX) != 0) {
+	    ((*ns)->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
 		/* ugly workaround to allow selecting INBOX from a Maildir/
 		   when it's not in the inbox=yes namespace. */
 		*name = "INBOX";
@@ -67,7 +68,7 @@ static void fts_box_name_get_root(struct mail_namespace **ns, const char **name)
 static const char *
 fts_box_get_root(struct mailbox *box, struct mail_namespace **ns_r)
 {
-	struct mail_namespace *ns = box->storage->ns;
+	struct mail_namespace *ns = mailbox_get_namespace(box);
 	const char *name = box->name;
 
 	fts_box_name_get_root(&ns, &name);
@@ -191,7 +192,9 @@ static void solr_quote_http(string_t *dest, const char *str)
 static struct fts_backend *
 fts_backend_solr_init(struct mailbox *box)
 {
-	const struct fts_solr_settings *set = &fts_solr_settings;
+	struct fts_solr_user *fuser =
+		FTS_SOLR_USER_CONTEXT(box->storage->user);
+	const struct fts_solr_settings *set = &fuser->set;
 	struct solr_fts_backend *backend;
 	struct mail_namespace *ns;
 	const char *str, *box_name;
@@ -204,13 +207,13 @@ fts_backend_solr_init(struct mailbox *box)
 		solr_conn = solr_connection_init(set->url, set->debug);
 
 	backend = i_new(struct solr_fts_backend, 1);
-	str = fts_solr_settings.default_ns_prefix;
-	if (str != NULL) {
+	if (set->default_ns_prefix != NULL) {
 		backend->default_ns =
-			mail_namespace_find_prefix(ns->user->namespaces, str);
+			mail_namespace_find_prefix(ns->user->namespaces,
+						   set->default_ns_prefix);
 		if (backend->default_ns == NULL) {
 			i_fatal("fts_solr: default_ns setting points to "
-				"nonexisting namespace");
+				"nonexistent namespace");
 		}
 	} else {
 		backend->default_ns =
@@ -368,7 +371,7 @@ solr_get_namespaces(struct fts_backend *_backend,
 		    struct mailbox *box, const char *ns_prefix)
 {
 	struct solr_fts_backend *backend = (struct solr_fts_backend *)_backend;
-	struct mail_namespace *namespaces = box->storage->ns->user->namespaces;
+	struct mail_namespace *namespaces = box->storage->user->namespaces;
 
 	if (ns_prefix == NULL)
 		return backend->default_ns;
@@ -514,7 +517,7 @@ fts_backend_solr_get_all_last_uids(struct fts_backend *backend, pool_t pool,
 	str = t_str_new(256);
 	str_printfa(str, "fl=uid,box,uidv,ns&rows=%u&q=last_uid:TRUE+user:",
 		    SOLR_MAX_ROWS);
-	solr_quote_http(str, backend->box->storage->ns->user->username);
+	solr_quote_http(str, backend->box->storage->user->username);
 	fts_backend_solr_filter_mailboxes(backend, str, backend->box);
 
 	return solr_connection_select(solr_conn, str_c(str),
@@ -590,48 +593,91 @@ static void xml_encode_id(string_t *str, struct fts_backend *_backend,
 	xml_encode(str, backend->id_box_name);
 }
 
-static int
-fts_backend_solr_build_more(struct fts_backend_build_context *_ctx,
-			    uint32_t uid, const unsigned char *data,
-			    size_t size, bool headers)
+static void
+fts_backend_solr_uid_changed(struct solr_fts_backend_build_context *ctx,
+			     uint32_t uid)
+{
+	if (ctx->post == NULL) {
+		ctx->post = solr_connection_post_begin(solr_conn);
+		str_append(ctx->cmd, "<add>");
+	} else {
+		if (ctx->field_open) {
+			str_append(ctx->cmd, "</field>");
+			ctx->field_open = FALSE;
+		}
+		str_append(ctx->cmd, "</doc>");
+	}
+	ctx->prev_uid = uid;
+	ctx->headers = FALSE;
+
+	fts_backend_solr_add_doc_prefix(ctx, uid);
+	str_printfa(ctx->cmd, "<field name=\"id\">");
+	xml_encode_id(ctx->cmd, ctx->ctx.backend, uid, ctx->uid_validity);
+	str_append(ctx->cmd, "</field>");
+}
+
+static void
+fts_backend_solr_build_hdr(struct fts_backend_build_context *_ctx,
+			   uint32_t uid)
 {
 	struct solr_fts_backend_build_context *ctx =
 		(struct solr_fts_backend_build_context *)_ctx;
-	string_t *cmd = ctx->cmd;
 
-	/* body comes first, then headers */
-	if (ctx->prev_uid != uid) {
-		/* uid changed */
-		if (ctx->post == NULL) {
-			ctx->post = solr_connection_post_begin(solr_conn);
-			str_append(cmd, "<add>");
-		} else {
-			str_append(cmd, "</field></doc>");
+	if (uid != ctx->prev_uid)
+		fts_backend_solr_uid_changed(ctx, uid);
+	else {
+		i_assert(!ctx->headers);
+
+		if (ctx->field_open) {
+			str_append(ctx->cmd, "</field>");
+			ctx->field_open = FALSE;
 		}
-		ctx->prev_uid = uid;
-
-		fts_backend_solr_add_doc_prefix(ctx, uid);
-		str_printfa(cmd, "<field name=\"id\">");
-		xml_encode_id(cmd, _ctx->backend, uid, ctx->uid_validity);
-		str_append(cmd, "</field>");
-
-		ctx->headers = headers;
-		if (headers) {
-			str_append(cmd, "<field name=\"hdr\">");
-		} else {
-			str_append(cmd, "<field name=\"body\">");
-		}
-	} else if (headers && !ctx->headers) {
-		str_append(cmd, "</field><field name=\"hdr\">");
-	} else {
-		i_assert(!(!headers && ctx->headers));
 	}
 
-	xml_encode_data(cmd, data, size);
-	if (str_len(cmd) > SOLR_CMDBUF_SIZE-128) {
-		solr_connection_post_more(ctx->post, str_data(cmd),
-					  str_len(cmd));
-		str_truncate(cmd, 0);
+	i_assert(!ctx->field_open);
+	ctx->field_open = TRUE;
+	ctx->headers = TRUE;
+	str_append(ctx->cmd, "<field name=\"hdr\">");
+}
+
+static bool
+fts_backend_solr_build_body_begin(struct fts_backend_build_context *_ctx,
+				  uint32_t uid, const char *content_type,
+				  const char *content_disposition ATTR_UNUSED)
+{
+	struct solr_fts_backend_build_context *ctx =
+		(struct solr_fts_backend_build_context *)_ctx;
+
+	if (!fts_backend_default_can_index(content_type))
+		return FALSE;
+
+	if (uid != ctx->prev_uid)
+		fts_backend_solr_uid_changed(ctx, uid);
+	else {
+		/* body comes first, then headers */
+		i_assert(!ctx->headers);
+	}
+
+	if (!ctx->field_open) {
+		ctx->field_open = TRUE;
+		ctx->headers = FALSE;
+		str_append(ctx->cmd, "<field name=\"body\">");
+	}
+	return TRUE;
+}
+
+static int
+fts_backend_solr_build_more(struct fts_backend_build_context *_ctx,
+			    const unsigned char *data, size_t size)
+{
+	struct solr_fts_backend_build_context *ctx =
+		(struct solr_fts_backend_build_context *)_ctx;
+
+	xml_encode_data(ctx->cmd, data, size);
+	if (str_len(ctx->cmd) > SOLR_CMDBUF_SIZE-128) {
+		solr_connection_post_more(ctx->post, str_data(ctx->cmd),
+					  str_len(ctx->cmd));
+		str_truncate(ctx->cmd, 0);
 	}
 	return 0;
 }
@@ -644,7 +690,11 @@ fts_backed_solr_build_commit(struct solr_fts_backend_build_context *ctx)
 	if (ctx->post == NULL)
 		return 0;
 
-	str_append(ctx->cmd, "</field></doc>");
+	if (ctx->field_open) {
+		str_append(ctx->cmd, "</field>");
+		ctx->field_open = FALSE;
+	}
+	str_append(ctx->cmd, "</doc>");
 
 	/* Update the mailbox's last_uid field, replacing the existing
 	   document. Note that since there is no locking, it's possible that
@@ -728,7 +778,7 @@ static bool solr_virtual_uid_map(const char *ns_prefix, const char *mailbox,
 	bool convert_inbox;
 
 	ns = solr_get_namespaces(ctx->backend, ctx->box, ns_prefix);
-	convert_inbox = (ns->flags & NAMESPACE_FLAG_INBOX) != 0 &&
+	convert_inbox = (ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0 &&
 		strcmp(mailbox, "INBOX") == 0;
 	for (; ns != NULL; ns = ns->alias_chain_next) {
 		vname = convert_inbox ? ns->prefix :
@@ -799,7 +849,7 @@ static int fts_backend_solr_lookup(struct fts_backend_lookup_context *ctx,
 	/* use a separate filter query for selecting the mailbox. it shouldn't
 	   affect the score and there could be some caching benefits too. */
 	str_append(str, "&fq=%2Buser:");
-	solr_quote_http(str, box->storage->ns->user->username);
+	solr_quote_http(str, box->storage->user->username);
 	if (virtual)
 		fts_backend_solr_filter_mailboxes(ctx->backend, str, box);
 	else {
@@ -826,8 +876,8 @@ static int fts_backend_solr_lookup(struct fts_backend_lookup_context *ctx,
 }
 
 struct fts_backend fts_backend_solr = {
-	MEMBER(name) "solr",
-	MEMBER(flags) FTS_BACKEND_FLAG_VIRTUAL_LOOKUPS,
+	.name = "solr",
+	.flags = FTS_BACKEND_FLAG_VIRTUAL_LOOKUPS,
 
 	{
 		fts_backend_solr_init,
@@ -835,6 +885,9 @@ struct fts_backend fts_backend_solr = {
 		fts_backend_solr_get_last_uid,
 		fts_backend_solr_get_all_last_uids,
 		fts_backend_solr_build_init,
+		fts_backend_solr_build_hdr,
+		fts_backend_solr_build_body_begin,
+		NULL,
 		fts_backend_solr_build_more,
 		fts_backend_solr_build_deinit,
 		fts_backend_solr_expunge,

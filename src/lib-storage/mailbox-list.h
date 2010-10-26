@@ -1,28 +1,35 @@
 #ifndef MAILBOX_LIST_H
 #define MAILBOX_LIST_H
 
+#include "mail-types.h"
 #include "mail-error.h"
 
+#ifdef PATH_MAX
+#  define MAILBOX_LIST_NAME_MAX_LENGTH PATH_MAX
+#else
+#  define MAILBOX_LIST_NAME_MAX_LENGTH 4096
+#endif
+
+enum namespace_type;
 struct mail_namespace;
+struct mail_storage;
 struct mailbox_list;
 struct mailbox_list_iterate_context;
 
 enum mailbox_list_properties {
 	/* maildir_name must always be empty */
-	MAILBOX_LIST_PROP_NO_MAILDIR_NAME       = 0x01
+	MAILBOX_LIST_PROP_NO_MAILDIR_NAME	= 0x01,
+	/* alt directories not supported */
+	MAILBOX_LIST_PROP_NO_ALT_DIR		= 0x02,
+	/* no support for \noselect directories, only mailboxes */
+	MAILBOX_LIST_PROP_NO_NOSELECT		= 0x04,
+	/* mail root directory isn't required */
+	MAILBOX_LIST_PROP_NO_ROOT		= 0x08
 };
 
 enum mailbox_list_flags {
-	/* Print debugging information while initializing the driver */
-	MAILBOX_LIST_FLAG_DEBUG			= 0x01,
-	/* Allow full filesystem access with absolute or relative paths. */
-	MAILBOX_LIST_FLAG_FULL_FS_ACCESS	= 0x04,
-	/* Rely on O_EXCL when creating dotlocks */
-	MAILBOX_LIST_FLAG_DOTLOCK_USE_EXCL	= 0x08,
 	/* Mailboxes are files, not directories. */
-	MAILBOX_LIST_FLAG_MAILBOX_FILES		= 0x10,
-	/* Flush NFS attribute cache when needed */
-	MAILBOX_LIST_FLAG_NFS_FLUSH		= 0x20
+	MAILBOX_LIST_FLAG_MAILBOX_FILES		= 0x01
 };
 
 enum mailbox_info_flags {
@@ -37,11 +44,15 @@ enum mailbox_info_flags {
 	MAILBOX_CHILD_SUBSCRIBED	= 0x100,
 
 	/* Internally used by lib-storage */
+	MAILBOX_SELECT			= 0x20000000,
 	MAILBOX_MATCHED			= 0x40000000
 };
 
 enum mailbox_name_status {
-	MAILBOX_NAME_EXISTS,
+	/* name points to a selectable mailbox */
+	MAILBOX_NAME_EXISTS_MAILBOX,
+	/* name points to non-selectable mailbox */
+	MAILBOX_NAME_EXISTS_DIR,
 	MAILBOX_NAME_VALID,
 	MAILBOX_NAME_INVALID,
 	MAILBOX_NAME_NOINFERIORS
@@ -50,15 +61,28 @@ enum mailbox_name_status {
 enum mailbox_list_iter_flags {
 	/* Ignore index file and ACLs (used by ACL plugin internally) */
 	MAILBOX_LIST_ITER_RAW_LIST		= 0x000001,
-	/* Use virtual mailbox names (virtual separators and namespace
-	   prefixes) for patterns and for returned mailbox names. */
-	MAILBOX_LIST_ITER_VIRTUAL_NAMES		= 0x000002,
+	/* When listing "foo/%" and "foo" is an existing mailbox
+	   (maybe \noselect), have LIST also return "foo/" in the replies.
+	   This is needed by IMAP, but messes up internal code. */
+	MAILBOX_LIST_ITER_SHOW_EXISTING_PARENT	= 0x000002,
+	/* Don't list INBOX unless it actually exists */
+	MAILBOX_LIST_ITER_NO_AUTO_INBOX		= 0x000004,
+
+	/* For mailbox_list_iter_init_namespaces(): Skip namespaces that
+	   have alias_for set. */
+	MAILBOX_LIST_ITER_SKIP_ALIASES		= 0x000008,
+	/* For mailbox_list_iter_init_namespaces(): '*' in a pattern doesn't
+	   match beyond namespace boundary (e.g. "foo*" or "*o" doesn't match
+	   "foo." namespace's mailboxes, but "*.*" does). also '%' can't match
+	   namespace prefixes, if there exists a parent namespace whose children
+	   it matches. */
+	MAILBOX_LIST_ITER_STAR_WITHIN_NS	= 0x000010,
 
 	/* List only subscribed mailboxes */
-	MAILBOX_LIST_ITER_SELECT_SUBSCRIBED	= 0x000010,
+	MAILBOX_LIST_ITER_SELECT_SUBSCRIBED	= 0x000100,
 	/* Return MAILBOX_CHILD_* if mailbox's children match selection
 	   criteria, even if the mailbox itself wouldn't match. */
-	MAILBOX_LIST_ITER_SELECT_RECURSIVEMATCH	= 0x000020,
+	MAILBOX_LIST_ITER_SELECT_RECURSIVEMATCH	= 0x000200,
 
 	/* Don't return any flags unless it can be done without cost */
 	MAILBOX_LIST_ITER_RETURN_NO_FLAGS	= 0x001000,
@@ -71,8 +95,10 @@ enum mailbox_list_iter_flags {
 enum mailbox_list_path_type {
 	/* Return directory's path (eg. ~/dbox/INBOX) */
 	MAILBOX_LIST_PATH_TYPE_DIR,
+	MAILBOX_LIST_PATH_TYPE_ALT_DIR,
 	/* Return mailbox path (eg. ~/dbox/INBOX/dbox-Mails) */
 	MAILBOX_LIST_PATH_TYPE_MAILBOX,
+	MAILBOX_LIST_PATH_TYPE_ALT_MAILBOX,
 	/* Return control directory */
 	MAILBOX_LIST_PATH_TYPE_CONTROL,
 	/* Return index file directory */
@@ -88,9 +114,11 @@ enum mailbox_list_file_type {
 };
 
 struct mailbox_list_settings {
+	const char *layout; /* FIXME: shouldn't be here */
 	const char *root_dir;
 	const char *index_dir;
 	const char *control_dir;
+	const char *alt_dir; /* FIXME: dbox-specific.. */
 
 	const char *inbox_path;
 	const char *subscription_fname;
@@ -110,11 +138,6 @@ struct mailbox_list_settings {
 	/* if set, store mailboxes under root_dir/mailbox_dir_name/.
 	   this setting contains either "" or "dir/". */
 	const char *mailbox_dir_name;
-
-	/* If mailbox index is used, use these settings for it
-	   (pointers, so they're set to NULL after init is finished): */
-	const enum mail_storage_flags *mail_storage_flags;
-	const enum file_lock_method *lock_method;
 };
 
 struct mailbox_info {
@@ -129,21 +152,27 @@ void mailbox_list_register_all(void);
 void mailbox_list_register(const struct mailbox_list *list);
 void mailbox_list_unregister(const struct mailbox_list *list);
 
+const struct mailbox_list *
+mailbox_list_find_class(const char *driver);
+
 /* Returns 0 if ok, -1 if driver was unknown. */
-int mailbox_list_alloc(const char *driver, struct mailbox_list **list_r,
-		       const char **error_r);
-void mailbox_list_init(struct mailbox_list *list, struct mail_namespace *ns,
-		       const struct mailbox_list_settings *set,
-		       enum mailbox_list_flags flags);
-void mailbox_list_deinit(struct mailbox_list *list);
+int mailbox_list_create(const char *driver, struct mail_namespace *ns,
+			const struct mailbox_list_settings *set,
+			enum mailbox_list_flags flags, const char **error_r);
+void mailbox_list_destroy(struct mailbox_list **list);
 
 const char *
 mailbox_list_get_driver_name(const struct mailbox_list *list) ATTR_PURE;
-char mailbox_list_get_hierarchy_sep(const struct mailbox_list *list) ATTR_PURE;
 enum mailbox_list_flags
 mailbox_list_get_flags(const struct mailbox_list *list) ATTR_PURE;
 struct mail_namespace *
 mailbox_list_get_namespace(const struct mailbox_list *list) ATTR_PURE;
+struct mail_user *
+mailbox_list_get_user(const struct mailbox_list *list) ATTR_PURE;
+int mailbox_list_get_storage(struct mailbox_list **list, const char **name,
+			     struct mail_storage **storage_r);
+void mailbox_list_get_closest_storage(struct mailbox_list *list,
+				      struct mail_storage **storage);
 
 /* Returns the mode and GID that should be used when creating new files to
    the specified mailbox, or to mailbox list root if name is NULL. (gid_t)-1 is
@@ -182,6 +211,13 @@ const char *mailbox_list_get_path(struct mailbox_list *list, const char *name,
 int mailbox_list_get_mailbox_name_status(struct mailbox_list *list,
 					 const char *name,
 					 enum mailbox_name_status *status);
+/* Returns mailbox's change log, or NULL if it doesn't have one. */
+struct mailbox_log *mailbox_list_get_changelog(struct mailbox_list *list);
+/* Specify timestamp to use when writing mailbox changes to changelog.
+   The same timestamp is used until stamp is set to (time_t)-1, after which
+   current time is used */
+void mailbox_list_set_changelog_timestamp(struct mailbox_list *list,
+					  time_t stamp);
 
 /* Returns a prefix that temporary files should use without conflicting
    with the namespace. */
@@ -210,6 +246,7 @@ mailbox_list_iter_init_multiple(struct mailbox_list *list,
 struct mailbox_list_iterate_context *
 mailbox_list_iter_init_namespaces(struct mail_namespace *namespaces,
 				  const char *const *patterns,
+				  enum namespace_type type_mask,
 				  enum mailbox_list_iter_flags flags);
 /* Get next mailbox. Returns the mailbox name */
 const struct mailbox_info *
@@ -228,17 +265,11 @@ int mailbox_list_mailbox(struct mailbox_list *list, const char *name,
 int mailbox_list_set_subscribed(struct mailbox_list *list,
 				const char *name, bool set);
 
-/* Delete the given mailbox. If it has children, they aren't deleted. */
-int mailbox_list_delete_mailbox(struct mailbox_list *list, const char *name);
-/* If the name has inferior hierarchical names, then the inferior
-   hierarchical names MUST also be renamed (ie. foo -> bar renames
-   also foo/bar -> bar/bar). newname may contain multiple new
-   hierarchies.
-
-   If oldname is case-insensitively "INBOX", the mails are moved
-   into new mailbox but the INBOX mailbox must not be deleted. */
-int mailbox_list_rename_mailbox(struct mailbox_list *list,
-				const char *oldname, const char *newname);
+/* Create a non-selectable mailbox. Fail with MAIL_ERROR_NOTPOSSIBLE if only
+   a selectable mailbox can be created. */
+int mailbox_list_create_dir(struct mailbox_list *list, const char *name);
+/* Delete a non-selectable mailbox. Fail if the mailbox is selectable. */
+int mailbox_list_delete_dir(struct mailbox_list *list, const char *name);
 
 /* Returns the error message of last occurred error. */
 const char *mailbox_list_get_last_error(struct mailbox_list *list,

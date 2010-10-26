@@ -1,5 +1,5 @@
-Mailbox sharing between users (v1.2+)
-=====================================
+Mailbox sharing between users
+=============================
 
 To enable mailbox sharing, you'll need to create a shared namespace. See
 <ACL.txt> for more information about ACL-specific settings.
@@ -9,14 +9,16 @@ To enable mailbox sharing, you'll need to create a shared namespace. See
 mail_location = maildir:~/Maildir
 
 # You need to create also a private namespace:
-namespace private {
+namespace {
+  type = private
   separator = /
   prefix =
   #location defaults to mail_location.
   inbox = yes
 }
 
-namespace shared {
+namespace {
+  type = shared
   separator = /
   prefix = shared/%%u/
   location = maildir:%%h/Maildir:INDEX=~/Maildir/shared/%%u
@@ -24,11 +26,9 @@ namespace shared {
   list = children
 }
 
+mail_plugins = acl
 protocol imap {
-  mail_plugins = acl imap_acl
-}
-protocol lda {
-  mail_plugins = acl
+  mail_plugins = $mail_plugins imap_acl
 }
 plugin {
   acl = vfile
@@ -46,10 +46,9 @@ don't, you might want to drop the domain part and instead use
 visible always, you can set 'list=yes'.
 
 The 'location' setting specifies how to access other users' mailboxes. If you
-use %%h, the user's home directory is asked from dovecot-auth process via
-auth-master socket. See <LDA.txt> for how to configure the socket. If the
-users' mailboxes can be found using a template, it's faster not to use the %%h.
-For example:
+use %%h, the user's home directory is asked from auth process via auth-userdb
+socket. See <LDA.txt> for how to configure the socket. If the users' mailboxes
+can be found using a template, it's faster not to use the %%h. For example:
 
 ---%<-------------------------------------------------------------------------
   location = maildir:/var/mail/%%d/%%n/Maildir:INDEX=~/Maildir/shared/%%u
@@ -114,8 +113,8 @@ make sure it doesn't get lost. If it does, each user having shared mailboxes
 must use the IMAP SETACL command (see below) to get the dictionary updated for
 themselves.
 
-You could use any dictionary backend, such as SQL or Berkeley DB, but a simple
-flat file should work pretty well too:
+You could use any dictionary backend, including SQL, but a simple flat file
+should work pretty well too:
 
 ---%<-------------------------------------------------------------------------
 plugin {
@@ -144,7 +143,7 @@ plugin {
 }
 
 dict {
-  acl = pgsql:/etc/dovecot-dict-sql.conf
+  acl = pgsql:/etc/dovecot/dovecot-dict-sql.conf.ext
 }
 ---%<-------------------------------------------------------------------------
 
@@ -161,9 +160,10 @@ COMMENT ON TABLE user_shares IS 'User from_user shares folders to user
 to_user.';
 ---%<-------------------------------------------------------------------------
 
-'/etc/dovecot-dict-sql.conf':
+'/etc/dovecot/dovecot-dict-sql.conf.ext':
 
 ---%<-------------------------------------------------------------------------
+connect = host=localhost dbname=mails user=sqluser password=sqlpass
 map {
   pattern = shared/shared-boxes/user/$to/$from
   table = user_shares
@@ -260,4 +260,4 @@ initially have "lookup" right, but later we don't:
 4 OK Myrights completed.
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

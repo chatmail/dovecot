@@ -9,8 +9,8 @@ You can also use <prefetch userdb> [UserDatabase.Prefetch.txt] to avoid the
 userdb LDAP lookup.
 
 Userdb lookups are always done using the default DN ('dn' setting) bind. It's
-not possible to do the lookup using the user's DN (remember that e.g. <deliver>
-[LDA.txt] needs to do userdb lookups without knowing the user's password).
+not possible to do the lookup using the user's DN (remember that e.g. <LDA.txt>
+needs to do userdb lookups without knowing the user's password).
 
 The userdb lookups are configured in very much the same way as <LDAP password
 lookups> [AuthDatabase.LDAP.PasswordLookups.txt]. Instead of 'pass_attrs' and
@@ -18,11 +18,8 @@ lookups> [AuthDatabase.LDAP.PasswordLookups.txt]. Instead of 'pass_attrs' and
 'pass_filter' and 'user_filter' are equivalent.
 
 If you're using a single UID and GID for all the users, you can specify them
-globally instead of returning them from LDAP:
-
- * v1.0: 'user_global_uid' and 'user_global_gid' settings in
-   'dovecot-ldap.conf'
- * v1.1+: 'mail_uid' and 'mail_gid' settings in 'dovecot.conf'
+globally with 'mail_uid' and 'mail_gid' settings instead of returning them from
+LDAP.
 
 Example:
 
@@ -31,8 +28,8 @@ user_attrs = homeDirectory=home, uidNumber=uid, gidNumber=gid
 user_filter = (&(objectClass=posixAccount)(uid=%u))
 ---%<-------------------------------------------------------------------------
 
-Attribute templates (v1.1+)
----------------------------
+Attribute templates
+-------------------
 
 You can mix static text with the value returned from LDAP by using %$ in the
 value. Some examples:
@@ -51,8 +48,8 @@ from "sAMAccountName" LDAP attribute:
 user_attrs = sAMAccountName=mail=maildir:/var/spool/vmail/%$
 ---%<-------------------------------------------------------------------------
 
-You can add static fields that aren't looked up from LDAP (v1.1.rc5+). For
-example create a "mail" field with value "/var/vmail/%d/%n":
+You can add static fields that aren't looked up from LDAP. For example create a
+"mail" field with value "/var/vmail/%d/%n":
 
 ---%<-------------------------------------------------------------------------
 user_attrs = \
@@ -60,4 +57,4 @@ user_attrs = \
   =mail=/var/vmail/%d/%n
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

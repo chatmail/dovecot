@@ -1,6 +1,8 @@
 #ifndef PASSDB_H
 #define PASSDB_H
 
+#include "md5.h"
+
 #define IS_VALID_PASSWD(pass) \
 	((pass)[0] != '\0' && (pass)[0] != '*' && (pass)[0] != '!')
 
@@ -30,9 +32,8 @@ typedef void set_credentials_callback_t(bool success,
 struct passdb_module_interface {
 	const char *name;
 
-	struct passdb_module *
-		(*preinit)(struct auth_passdb *auth_passdb, const char *args);
-	void (*init)(struct passdb_module *module, const char *args);
+	struct passdb_module *(*preinit)(pool_t pool, const char *args);
+	void (*init)(struct passdb_module *module);
 	void (*deinit)(struct passdb_module *module);
 
 	/* Check if plaintext password matches */
@@ -51,6 +52,7 @@ struct passdb_module_interface {
 };
 
 struct passdb_module {
+	const char *args;
 	/* The caching key for this module, or NULL if caching isn't wanted. */
 	const char *cache_key;
 	/* Default password scheme for this module.
@@ -59,6 +61,11 @@ struct passdb_module {
 	/* If blocking is set to TRUE, use child processes to access
 	   this passdb. */
 	bool blocking;
+        /* id is used by blocking passdb to identify the passdb */
+	unsigned int id;
+
+	/* number of time init() has been called */
+	int init_refcount;
 
 	struct passdb_module_interface iface;
 };
@@ -80,13 +87,15 @@ void passdb_handle_credentials(enum passdb_result result,
 			       lookup_credentials_callback_t *callback,
                                struct auth_request *auth_request);
 
-struct auth_passdb *passdb_preinit(struct auth *auth, const char *driver,
-				   const char *args, unsigned int id);
-void passdb_init(struct auth_passdb *passdb);
-void passdb_deinit(struct auth_passdb *passdb);
+struct passdb_module *
+passdb_preinit(pool_t pool, const char *driver, const char *args);
+void passdb_init(struct passdb_module *passdb);
+void passdb_deinit(struct passdb_module *passdb);
 
 void passdb_register_module(struct passdb_module_interface *iface);
 void passdb_unregister_module(struct passdb_module_interface *iface);
+
+void passdbs_generate_md5(unsigned char md5[MD5_RESULTLEN]);
 
 void passdbs_init(void);
 void passdbs_deinit(void);

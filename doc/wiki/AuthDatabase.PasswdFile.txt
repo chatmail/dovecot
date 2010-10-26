@@ -40,20 +40,15 @@ You can use all the <variables> [Variables.txt] in the passwd-file filenames,
 for example:
 
 ---%<-------------------------------------------------------------------------
-passdb passwd-file {
+passdb {
+  driver = passwd-file
   # Each domain has a separate passwd-file:
   args = /etc/auth/%d/passwd
 }
 ---%<-------------------------------------------------------------------------
 
-*v1.0 only*: If the filename contains %d, the usernames in the passwd file are
-expected to contain only the user, not the domain. If you want to use full
-"user@domain" usernames in the file, use %0.d instead. For v1.1, see below.
-
 Parameters
 ----------
-
-These are available *only with v1.1* and later:
 
  * *scheme=<s>*: Allows you to specify the default password scheme. The default
    is CRYPT. This is available only for passdb.
@@ -64,10 +59,12 @@ These are available *only with v1.1* and later:
 For example:
 
 ---%<-------------------------------------------------------------------------
-passdb passwd-file {
+passdb {
+  driver = passwd-file
   args = scheme=plain-md5 username_format=%n /etc/imap.passwd
 }
-userdb passwd-file {
+userdb {
+  driver = passwd-file
   args = username_format=%n /etc/imap.passwd
 }
 ---%<-------------------------------------------------------------------------
@@ -96,4 +93,4 @@ allow_nets=192.168.0.0/24
 user2:{plain}pass2:1001:1001::/home/user2
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

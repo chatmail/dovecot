@@ -1,6 +1,6 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 #include "passdb.h"
 
 #ifdef PASSDB_BSDAUTH
@@ -37,7 +37,7 @@ bsdauth_verify_plain(struct auth_request *request, const char *password,
 	safe_memset(pw->pw_passwd, 0, strlen(pw->pw_passwd));
 
 	if (result == 0) {
-		auth_request_log_info(request, "bsdauth", "password mismatch");
+		auth_request_log_password_mismatch(request, "bsdauth");
 		callback(PASSDB_RESULT_PASSWORD_MISMATCH, request);
 		return;
 	}
@@ -49,18 +49,19 @@ bsdauth_verify_plain(struct auth_request *request, const char *password,
 }
 
 static struct passdb_module *
-bsdauth_preinit(struct auth_passdb *auth_passdb, const char *args)
+bsdauth_preinit(pool_t pool, const char *args)
 {
 	struct passdb_module *module;
 
-	module = p_new(auth_passdb->auth->pool, struct passdb_module, 1);
+	module = p_new(pool, struct passdb_module, 1);
 	module->default_pass_scheme = "PLAIN"; /* same reason as PAM */
+	module->blocking = TRUE;
 
-	if (strncmp(args, "cache_key=", 10) == 0) {
-		module->cache_key =
-			auth_cache_parse_key(auth_passdb->auth->pool,
-					     args + 10);
-	} else if (*args != '\0')
+	if (strcmp(args, "blocking=no") == 0)
+		module->blocking = FALSE;
+	else if (strncmp(args, "cache_key=", 10) == 0)
+		module->cache_key = auth_cache_parse_key(pool, args + 10);
+	else if (*args != '\0')
 		i_fatal("passdb bsdauth: Unknown setting: %s", args);
 	return module;
 }
@@ -83,6 +84,6 @@ struct passdb_module_interface passdb_bsdauth = {
 };
 #else
 struct passdb_module_interface passdb_bsdauth = {
-	MEMBER(name) "bsdauth"
+	.name = "bsdauth"
 };
 #endif

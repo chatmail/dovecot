@@ -46,24 +46,4 @@ Once the 'maildirsize' reaches 5120 bytes, the quota is recalculated and the
 file is recreated. This makes sure that if quota happens to be broken (e.g.
 externally deleted files) it won't stay that way forever.
 
-Trash mailbox (v1.0)
---------------------
-
-This feature works only with v1.0rc16 .. v1.0.x. <v1.1 quota> [Quota.1.1.txt]
-has replaced this setting with quota rules.
-
-A "delete" operation in many clients means that the mail is copied to Trash
-mailbox and then expunged from the original mailbox. This means that the delete
-operation will fail if user is already over quota. If you wish to make this
-work, you can use 'ignore' setting, which doesn't count the quota at all for
-the given mailbox:
-
----%<-------------------------------------------------------------------------
-plugin {
-  quota = maildir:storage=10240:ignore=Trash
-}
----%<-------------------------------------------------------------------------
-
-Note that there can be only one ignore setting.
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

@@ -19,7 +19,7 @@
 
 /* try to keep the buffer size within 4k..128k. ReiserFS may actually return
    128k as optimal size. */
-#define DEFAULT_OPTIMAL_BLOCK_SIZE 4096
+#define DEFAULT_OPTIMAL_BLOCK_SIZE IO_BLOCK_SIZE
 #define MAX_OPTIMAL_BLOCK_SIZE (128*1024)
 
 #define IS_STREAM_EMPTY(fstream) \
@@ -37,12 +37,11 @@ struct file_ostream {
 	uoff_t real_offset;
 
 	unsigned char *buffer; /* ring-buffer */
-	size_t buffer_size, max_buffer_size, optimal_block_size;
+	size_t buffer_size, optimal_block_size;
 	size_t head, tail; /* first unsent/unused byte */
 
 	unsigned int full:1; /* if head == tail, is buffer empty or full? */
 	unsigned int file:1;
-	unsigned int corked:1;
 	unsigned int flush_pending:1;
 	unsigned int socket_cork_set:1;
 	unsigned int no_socket_cork:1;
@@ -58,8 +57,10 @@ static void stream_closed(struct file_ostream *fstream)
 		io_remove(&fstream->io);
 
 	if (fstream->autoclose_fd && fstream->fd != -1) {
-		if (close(fstream->fd) < 0)
-			i_error("file_ostream.close() failed: %m");
+		if (close(fstream->fd) < 0) {
+			i_error("file_ostream.close(%s) failed: %m",
+				o_stream_get_name(&fstream->ostream.ostream));
+		}
 	}
 	fstream->fd = -1;
 
@@ -83,13 +84,18 @@ static void o_stream_file_destroy(struct iostream_private *stream)
 	i_free(fstream->buffer);
 }
 
-static void
-o_stream_file_set_max_buffer_size(struct iostream_private *stream,
-				  size_t max_size)
+static size_t file_buffer_get_used_size(struct file_ostream *fstream)
 {
-	struct file_ostream *fstream = (struct file_ostream *)stream;
-
-	fstream->max_buffer_size = max_size;
+	if (fstream->head == fstream->tail)
+		return fstream->full ? fstream->buffer_size : 0;
+	else if (fstream->head < fstream->tail) {
+		/* ...HXXXT... */
+		return fstream->tail - fstream->head;
+	} else {
+		/* XXXT...HXXX */
+		return fstream->tail +
+			(fstream->buffer_size - fstream->head);
+	}
 }
 
 static void update_buffer(struct file_ostream *fstream, size_t size)
@@ -127,7 +133,7 @@ static void update_buffer(struct file_ostream *fstream, size_t size)
 
 static void o_stream_socket_cork(struct file_ostream *fstream)
 {
-	if (fstream->corked && !fstream->socket_cork_set) {
+	if (fstream->ostream.corked && !fstream->socket_cork_set) {
 		if (!fstream->no_socket_cork) {
 			if (net_set_cork(fstream->fd, TRUE) < 0)
 				fstream->no_socket_cork = TRUE;
@@ -319,7 +325,7 @@ static void o_stream_file_cork(struct ostream_private *stream, bool set)
 	struct file_ostream *fstream = (struct file_ostream *)stream;
 	int ret;
 
-	if (fstream->corked != set && !stream->ostream.closed) {
+	if (stream->corked != set && !stream->ostream.closed) {
 		if (set && fstream->io != NULL)
 			io_remove(&fstream->io);
 		else if (!set) {
@@ -339,7 +345,7 @@ static void o_stream_file_cork(struct ostream_private *stream, bool set)
 				fstream->no_socket_cork = TRUE;
 			fstream->socket_cork_set = FALSE;
 		}
-		fstream->corked = set;
+		stream->corked = set;
 	}
 }
 
@@ -356,7 +362,7 @@ o_stream_file_flush_pending(struct ostream_private *stream, bool set)
 	struct file_ostream *fstream = (struct file_ostream *) stream;
 
 	fstream->flush_pending = set;
-	if (set && !fstream->corked && fstream->io == NULL) {
+	if (set && !stream->corked && fstream->io == NULL) {
 		fstream->io = io_add(fstream->fd, IO_WRITE,
 				     stream_send_io, fstream);
 	}
@@ -406,13 +412,13 @@ static void o_stream_grow_buffer(struct file_ostream *fstream, size_t bytes)
 	size_t size, new_size, end_size;
 
 	size = nearest_power(fstream->buffer_size + bytes);
-	if (size > fstream->max_buffer_size) {
+	if (size > fstream->ostream.max_buffer_size) {
 		/* limit the size */
-		size = fstream->max_buffer_size;
-	} else if (fstream->corked) {
+		size = fstream->ostream.max_buffer_size;
+	} else if (fstream->ostream.corked) {
 		/* try to use optimal buffer size with corking */
 		new_size = I_MIN(fstream->optimal_block_size,
-				 fstream->max_buffer_size);
+				 fstream->ostream.max_buffer_size);
 		if (new_size > size)
 			size = new_size;
 	}
@@ -504,7 +510,7 @@ static size_t o_stream_add(struct file_ostream *fstream,
 	}
 
 	if (sent != 0 && fstream->io == NULL &&
-	    !fstream->corked && !fstream->file) {
+	    !fstream->ostream.corked && !fstream->file) {
 		fstream->io = io_add(fstream->fd, IO_WRITE, stream_send_io,
 				     fstream);
 	}
@@ -531,9 +537,9 @@ static ssize_t o_stream_file_sendv(struct ostream_private *stream,
 	}
 
 	optimal_size = I_MIN(fstream->optimal_block_size,
-			     fstream->max_buffer_size);
+			     fstream->ostream.max_buffer_size);
 	if (IS_STREAM_EMPTY(fstream) &&
-	    (!fstream->corked || size >= optimal_size)) {
+	    (!stream->corked || size >= optimal_size)) {
 		/* send immediately */
 		ret = o_stream_writev(fstream, iov, iov_count);
 		if (ret < 0)
@@ -576,6 +582,92 @@ static ssize_t o_stream_file_sendv(struct ostream_private *stream,
 	i_assert((size_t)ret <= total_size);
 	i_assert((size_t)ret == total_size || !fstream->file);
 	return ret;
+}
+
+static size_t
+o_stream_file_update_buffer(struct file_ostream *fstream,
+			    const void *data, size_t size, size_t pos)
+{
+	size_t avail, copy_size;
+
+	if (fstream->head < fstream->tail) {
+		/* ...HXXXT... */
+		i_assert(pos < fstream->tail);
+		avail = fstream->tail - pos;
+	} else {
+		/* XXXT...HXXX */
+		avail = fstream->buffer_size - pos;
+	}
+	copy_size = I_MIN(size, avail);
+	memcpy(fstream->buffer + pos, data, copy_size);
+	data = CONST_PTR_OFFSET(data, copy_size);
+	size -= copy_size;
+
+	if (size > 0 && fstream->head >= fstream->tail) {
+		/* wraps to beginning of the buffer */
+		copy_size = I_MIN(size, fstream->tail);
+		memcpy(fstream->buffer, data, copy_size);
+		size -= copy_size;
+	}
+	return size;
+}
+
+static int
+o_stream_file_write_at(struct ostream_private *stream,
+		       const void *data, size_t size, uoff_t offset)
+{
+	struct file_ostream *fstream = (struct file_ostream *)stream;
+	size_t used, pos, skip, left;
+
+	/* update buffer if the write overlaps it */
+	used = file_buffer_get_used_size(fstream);
+	if (used > 0 &&
+	    fstream->buffer_offset < offset + size &&
+	    fstream->buffer_offset + used > offset) {
+		if (fstream->buffer_offset <= offset) {
+			/* updating from the beginning */
+			skip = 0;
+		} else {
+			skip = fstream->buffer_offset - offset;
+		}
+		pos = (fstream->head + offset + skip - fstream->buffer_offset) %
+			fstream->buffer_size;
+		left = o_stream_file_update_buffer(fstream,
+				CONST_PTR_OFFSET(data, skip), size - skip, pos);
+		if (left > 0) {
+			/* didn't write all of it */
+			if (skip > 0) {
+				/* we also have to write a prefix. don't
+				   bother with two syscalls, just write all
+				   of it in one pwrite(). */
+			} else {
+				/* write only the suffix */
+				unsigned int update_count = size - left;
+
+				data = CONST_PTR_OFFSET(data, update_count);
+				size -= update_count;
+				offset += update_count;
+			}
+		} else if (skip == 0) {
+			/* everything done */
+			return 0;
+		} else {
+			/* still have to write prefix */
+			size = skip;
+		}
+	}
+
+	/* we couldn't write everything to the buffer. flush the buffer
+	   and pwrite() the rest. */
+	if (o_stream_file_flush(stream) < 0)
+		return -1;
+
+	if (pwrite_full(fstream->fd, data, size, offset) < 0) {
+		stream->ostream.stream_errno = errno;
+		stream_closed(fstream);
+		return -1;
+	}
+	return 0;
 }
 
 static off_t io_stream_sendfile(struct ostream_private *outstream,
@@ -637,65 +729,6 @@ static off_t io_stream_sendfile(struct ostream_private *outstream,
 		(void)i_stream_read(instream);
 	}
 	return ret < 0 ? -1 : (off_t)(instream->v_offset - start_offset);
-}
-
-static off_t io_stream_copy(struct ostream_private *outstream,
-			    struct istream *instream)
-{
-	struct file_ostream *foutstream = (struct file_ostream *)outstream;
-	uoff_t start_offset;
-	struct const_iovec iov[3];
-	int iov_len;
-	const unsigned char *data;
-	size_t size, skip_size;
-	ssize_t ret;
-	int pos;
-
-	iov_len = o_stream_fill_iovec(foutstream, iov);
-
-        skip_size = 0;
-	for (pos = 0; pos < iov_len; pos++)
-		skip_size += iov[pos].iov_len;
-
-	start_offset = instream->v_offset;
-	for (;;) {
-		(void)i_stream_read_data(instream, &data, &size,
-					 foutstream->optimal_block_size-1);
-		if (size == 0) {
-			/* all sent */
-			break;
-		}
-
-		pos = iov_len++;
-		iov[pos].iov_base = (void *) data;
-		iov[pos].iov_len = size;
-
-		ret = o_stream_writev(foutstream, iov, iov_len);
-		if (ret < 0)
-			return -1;
-
-		if (skip_size > 0) {
-			if ((size_t)ret < skip_size) {
-				update_buffer(foutstream, ret);
-				skip_size -= ret;
-				ret = 0;
-			} else {
-				update_buffer(foutstream, skip_size);
-				ret -= skip_size;
-				skip_size = 0;
-			}
-		}
-		outstream->ostream.offset += ret;
-		i_stream_skip(instream, ret);
-
-		if ((size_t)ret != iov[pos].iov_len)
-			break;
-
-		i_assert(skip_size == 0);
-		iov_len = 0;
-	}
-
-	return (off_t) (instream->v_offset - start_offset);
 }
 
 static off_t io_stream_copy_backwards(struct ostream_private *outstream,
@@ -775,17 +808,14 @@ static off_t io_stream_copy_backwards(struct ostream_private *outstream,
 	return (off_t) (in_size - in_start_offset);
 }
 
-static off_t o_stream_file_send_istream(struct ostream_private *outstream,
-					struct istream *instream)
+static off_t io_stream_copy_stream(struct ostream_private *outstream,
+				   struct istream *instream, bool same_stream)
 {
 	struct file_ostream *foutstream = (struct file_ostream *)outstream;
 	const struct stat *st;
-	off_t ret;
-	int in_fd;
+	off_t in_abs_offset, ret;
 
-	in_fd = !instream->readable_fd ? -1 : i_stream_get_fd(instream);
-
-	if (in_fd == foutstream->fd) {
+	if (same_stream) {
 		/* copying data within same fd. we'll have to be careful with
 		   seeks and overlapping writes. */
 		st = i_stream_stat(instream, TRUE);
@@ -795,22 +825,37 @@ static off_t o_stream_file_send_istream(struct ostream_private *outstream,
 		}
 		i_assert(instream->v_offset <= (uoff_t)st->st_size);
 
-		ret = (off_t)outstream->ostream.offset -
-			(off_t)(instream->real_stream->abs_start_offset +
-				instream->v_offset);
+		in_abs_offset = instream->real_stream->abs_start_offset +
+			instream->v_offset;
+		ret = (off_t)outstream->ostream.offset - in_abs_offset;
 		if (ret == 0) {
 			/* copying data over itself. we don't really
 			   need to do that, just fake it. */
 			return st->st_size - instream->v_offset;
 		}
-		if (ret > 0) {
+		if (ret > 0 && st->st_size > ret) {
 			/* overlapping */
+			i_assert(instream->seekable);
 			return io_stream_copy_backwards(outstream, instream,
 							st->st_size);
 		}
 	}
 
-	if (!foutstream->no_sendfile && in_fd != -1 && instream->seekable) {
+	return io_stream_copy(&outstream->ostream, instream,
+			      foutstream->optimal_block_size);
+}
+
+static off_t o_stream_file_send_istream(struct ostream_private *outstream,
+					struct istream *instream)
+{
+	struct file_ostream *foutstream = (struct file_ostream *)outstream;
+	bool same_stream;
+	int in_fd;
+	off_t ret;
+
+	in_fd = !instream->readable_fd ? -1 : i_stream_get_fd(instream);
+	if (!foutstream->no_sendfile && in_fd != -1 &&
+	    in_fd != foutstream->fd && instream->seekable) {
 		ret = io_stream_sendfile(outstream, instream, in_fd);
 		if (ret >= 0 || outstream->ostream.stream_errno != EINVAL)
 			return ret;
@@ -821,7 +866,8 @@ static off_t o_stream_file_send_istream(struct ostream_private *outstream,
 		foutstream->no_sendfile = TRUE;
 	}
 
-	return io_stream_copy(outstream, instream);
+	same_stream = i_stream_get_fd(instream) == foutstream->fd;
+	return io_stream_copy_stream(outstream, instream, same_stream);
 }
 
 static struct file_ostream *
@@ -836,8 +882,6 @@ o_stream_create_fd_common(int fd, bool autoclose_fd)
 
 	fstream->ostream.iostream.close = o_stream_file_close;
 	fstream->ostream.iostream.destroy = o_stream_file_destroy;
-	fstream->ostream.iostream.set_max_buffer_size =
-		o_stream_file_set_max_buffer_size;
 
 	fstream->ostream.cork = o_stream_file_cork;
 	fstream->ostream.flush = o_stream_file_flush;
@@ -845,6 +889,7 @@ o_stream_create_fd_common(int fd, bool autoclose_fd)
 	fstream->ostream.get_used_size = o_stream_file_get_used_size;
 	fstream->ostream.seek = o_stream_file_seek;
 	fstream->ostream.sendv = o_stream_file_sendv;
+	fstream->ostream.write_at = o_stream_file_write_at;
 	fstream->ostream.send_istream = o_stream_file_send_istream;
 
 	return fstream;
@@ -878,7 +923,7 @@ o_stream_create_fd(int fd, size_t max_buffer_size, bool autoclose_fd)
 	off_t offset;
 
 	fstream = o_stream_create_fd_common(fd, autoclose_fd);
-	fstream->max_buffer_size = max_buffer_size;
+	fstream->ostream.max_buffer_size = max_buffer_size;
 	ostream = o_stream_create(&fstream->ostream);
 
 	offset = lseek(fd, 0, SEEK_CUR);
@@ -895,7 +940,7 @@ o_stream_create_fd(int fd, size_t max_buffer_size, bool autoclose_fd)
 	}
 
 	if (max_buffer_size == 0)
-		fstream->max_buffer_size = fstream->optimal_block_size;
+		fstream->ostream.max_buffer_size = fstream->optimal_block_size;
 
 	return ostream;
 }
@@ -911,7 +956,7 @@ o_stream_create_fd_file(int fd, uoff_t offset, bool autoclose_fd)
 
 	fstream = o_stream_create_fd_common(fd, autoclose_fd);
 	fstream_init_file(fstream);
-	fstream->max_buffer_size = fstream->optimal_block_size;
+	fstream->ostream.max_buffer_size = fstream->optimal_block_size;
 	fstream->real_offset = offset;
 	fstream->buffer_offset = offset;
 

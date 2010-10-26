@@ -63,18 +63,21 @@ different filenames in the LDAP passdb and userdb args. The second file could
 be a symlink to the first one. For example:
 
 ---%<-------------------------------------------------------------------------
-passdb ldap {
-  args = /etc/dovecot/dovecot-ldap.conf
+passdb {
+  driver = ldap
+  args = /etc/dovecot/dovecot-ldap.conf.ext
 }
-userdb ldap {
-  args = /etc/dovecot/dovecot-ldap-userdb.conf
+userdb {
+  driver = ldap
+  args = /etc/dovecot/dovecot-ldap-userdb.conf.ext
 }
 ---%<-------------------------------------------------------------------------
 
 And create the symlink:
 
 ---%<-------------------------------------------------------------------------
-ln -s /etc/dovecot/dovecot-ldap.conf /etc/dovecot/dovecot-ldap-userdb.conf
+ln -s /etc/dovecot/dovecot-ldap.conf.ext
+/etc/dovecot/dovecot-ldap-userdb.conf.ext
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

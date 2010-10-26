@@ -1,20 +1,15 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "imap-common.h"
 #include "ioloop.h"
 #include "istream.h"
 #include "ostream.h"
 #include "crc32.h"
-#include "commands.h"
-#include "mail-user.h"
+#include "mail-storage-settings.h"
+#include "imap-commands.h"
 #include "imap-sync.h"
 
 #include <stdlib.h>
-
-#define DEFAULT_IDLE_CHECK_INTERVAL 30
-/* Send some noice to client every few minutes to avoid NATs and stateful
-   firewalls from closing the connection */
-#define DEFAULT_IMAP_IDLE_NOTIFY_INTERVAL (2*60)
 
 struct cmd_idle_context {
 	struct client *client;
@@ -60,7 +55,7 @@ idle_finish(struct cmd_idle_context *ctx, bool done_ok, bool free_cmd)
 		client_command_free(&ctx->cmd);
 }
 
-static void idle_client_input(struct cmd_idle_context *ctx)
+static void idle_client_input_more(struct cmd_idle_context *ctx)
 {
 	struct client *client = ctx->client;
 	char *line;
@@ -71,7 +66,7 @@ static void idle_client_input(struct cmd_idle_context *ctx)
 	switch (i_stream_read(client->input)) {
 	case -1:
 		/* disconnected */
-		client_destroy(client, "Disconnected in IDLE");
+		client_disconnect(client, "Disconnected in IDLE");
 		return;
 	case -2:
 		client->input_skip_line = TRUE;
@@ -95,10 +90,17 @@ static void idle_client_input(struct cmd_idle_context *ctx)
 			break;
 		}
 	}
+	if (!client->disconnected && !client->handling_input)
+		client_continue_pending_input(client);
+}
+
+static void idle_client_input(struct cmd_idle_context *ctx)
+{
+	struct client *client = ctx->client;
+
+	idle_client_input_more(ctx);
 	if (client->disconnected)
 		client_destroy(client, NULL);
-	else
-		client_continue_pending_input(client);
 }
 
 static void keepalive_timeout(struct cmd_idle_context *ctx)
@@ -108,9 +110,15 @@ static void keepalive_timeout(struct cmd_idle_context *ctx)
 		return;
 	}
 
-	/* Sending this keeps NATs/stateful firewalls alive. Sending this
-	   also catches dead connections. */
-	client_send_line(ctx->client, "* OK Still here");
+	if (o_stream_get_buffer_used_size(ctx->client->output) == 0) {
+		/* Sending this keeps NATs/stateful firewalls alive.
+		   Sending this also catches dead connections. Don't send
+		   anything if there is already data waiting in output
+		   buffer. */
+		o_stream_cork(ctx->client->output);
+		client_send_line(ctx->client, "* OK Still here");
+		o_stream_uncork(ctx->client->output);
+	}
 	/* Make sure idling connections don't get disconnected. There are
 	   several clients that really want to IDLE forever and there's not
 	   much harm in letting them do so. */
@@ -130,23 +138,22 @@ static void idle_sync_now(struct mailbox *box, struct cmd_idle_context *ctx)
 
 static void idle_callback(struct mailbox *box, struct cmd_idle_context *ctx)
 {
+	struct client *client = ctx->client;
+
 	if (ctx->sync_ctx != NULL)
 		ctx->sync_pending = TRUE;
 	else {
 		ctx->manual_cork = TRUE;
 		idle_sync_now(box, ctx);
+		if (client->disconnected)
+			client_destroy(client, NULL);
 	}
 }
 
 static void idle_add_keepalive_timeout(struct cmd_idle_context *ctx)
 {
-	const char *value;
-	unsigned int interval;
+	unsigned int interval = ctx->client->set->imap_idle_notify_interval;
 
-	value = getenv("IMAP_IDLE_NOTIFY_INTERVAL");
-	interval = value != NULL ?
-		(unsigned int)strtoul(value, NULL, 10) :
-		DEFAULT_IMAP_IDLE_NOTIFY_INTERVAL;
 	if (interval == 0)
 		return;
 
@@ -221,7 +228,7 @@ static bool cmd_idle_continue(struct client_command_context *cmd)
 		/* input is pending */
 		client->io = io_add(i_stream_get_fd(client->input),
 				    IO_READ, idle_client_input, ctx);
-		idle_client_input(ctx);
+		idle_client_input_more(ctx);
 	}
 	return FALSE;
 }
@@ -230,21 +237,18 @@ bool cmd_idle(struct client_command_context *cmd)
 {
 	struct client *client = cmd->client;
 	struct cmd_idle_context *ctx;
-	const char *str;
-	unsigned int interval;
 
 	ctx = p_new(cmd->pool, struct cmd_idle_context, 1);
 	ctx->cmd = cmd;
 	ctx->client = client;
 	idle_add_keepalive_timeout(ctx);
 
-	str = getenv("MAILBOX_IDLE_CHECK_INTERVAL");
-	interval = str == NULL ? 0 : (unsigned int)strtoul(str, NULL, 10);
-	if (interval == 0)
-		interval = DEFAULT_IDLE_CHECK_INTERVAL;
-
 	if (client->mailbox != NULL) {
-		mailbox_notify_changes(client->mailbox, interval,
+		const struct mail_storage_settings *set;
+
+		set = mailbox_get_settings(client->mailbox);
+		mailbox_notify_changes(client->mailbox,
+				       set->mailbox_idle_check_interval,
 				       idle_callback, ctx);
 	}
 	client_send_line(client, "+ idling");
@@ -260,5 +264,6 @@ bool cmd_idle(struct client_command_context *cmd)
 	   added mailbox-notifier, we wouldn't see them otherwise. */
 	if (client->mailbox != NULL)
 		idle_sync_now(client->mailbox, ctx);
+	idle_client_input_more(ctx);
 	return FALSE;
 }

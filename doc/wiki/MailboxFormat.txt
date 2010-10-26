@@ -15,14 +15,14 @@ Mailbox formats supported by Dovecot:
    messages.
  * <Cydir> [MailboxFormat.Cydir.txt]: Dovecot's own simple and high performance
    Cyrus-like mailbox format. It should be mostly used for testing and
-   benchmarking only. v1.1+ only.
+   benchmarking only.
 
 Mailbox formats *not* supported by Dovecot:
 
  * <mbx> [MailboxFormat.mbx.txt]: UW-IMAP's old high performance mailbox
    format. One file contains all the mailboxes, so expunges may still be slow.
  * <mix> [MailboxFormat.mix.txt]: UW-IMAP's new (2006) high performance mailbox
-   format. Similar to dbox.
+   format. Similar to multi-dbox.
  * <mailstore> [MailboxFormat.mailstore.txt]: A format created by Exim.
  * <MH> [MailboxFormat.MH.txt]: One file contains one message. Sort order of
    the folder determines the message ID and name.  Actively used by projects
@@ -36,7 +36,7 @@ Mailbox formats *not* supported by Dovecot:
 
 Adding support for new formats for Dovecot isn't very difficult, although it
 can be time consuming. Dovecot exposes a nice and simple API which needs to be
-implemented.
+implemented. Use Cydir format as an example.
 
 Software Support
 ----------------
@@ -75,4 +75,4 @@ References
    http://www.linuxmail.info/mbox-maildir-mail-storage-formats/
    [http://www.linux-mail.info/mbox-maildir-mail-storage-formats/]
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

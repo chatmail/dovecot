@@ -31,7 +31,7 @@ static struct quota_root *dict_quota_alloc(void)
 static int dict_quota_init(struct quota_root *_root, const char *args)
 {
 	struct dict_quota_root *root = (struct dict_quota_root *)_root;
-	const char *username, *p, *base_dir;
+	const char *username, *p;
 
 	p = args == NULL ? NULL : strchr(args, ':');
 	if (p == NULL) {
@@ -50,6 +50,11 @@ static int dict_quota_init(struct quota_root *_root, const char *args)
 			args += 12;
 			continue;
 		}
+		if (strncmp(args, "ignoreunlimited:", 16) == 0) {
+			_root->disable_unlimited_tracking = TRUE;
+			args += 16;
+			continue;
+		}
 		if (strncmp(args, "ns=", 3) == 0) {
 			p = strchr(args, ':');
 			if (p == NULL)
@@ -66,16 +71,14 @@ static int dict_quota_init(struct quota_root *_root, const char *args)
 		username = _root->quota->user->username;
 
 	if (_root->quota->set->debug) {
-		i_info("dict quota: user=%s, uri=%s, noenforcing=%d",
-		       username, args, _root->no_enforcing);
+		i_debug("dict quota: user=%s, uri=%s, noenforcing=%d",
+			username, args, _root->no_enforcing);
 	}
 
 	/* FIXME: we should use 64bit integer as datatype instead but before
 	   it can actually be used don't bother */
-	base_dir = getenv("BASE_DIR");
-	if (base_dir == NULL)
-		base_dir = PKG_RUNDIR;
-	root->dict = dict_init(args, DICT_DATA_TYPE_STRING, username, base_dir);
+	root->dict = dict_init(args, DICT_DATA_TYPE_STRING, username,
+			       _root->quota->user->set->base_dir);
 	return root->dict != NULL ? 0 : -1;
 }
 
@@ -112,6 +115,10 @@ dict_quota_count(struct dict_quota_root *root,
 
 	T_BEGIN {
 		dt = dict_transaction_begin(root->dict);
+		/* these unsets are mainly necessary for pgsql, because its
+		   trigger otherwise increases quota without deleting it */
+		dict_unset(dt, DICT_QUOTA_CURRENT_BYTES_PATH);
+		dict_unset(dt, DICT_QUOTA_CURRENT_COUNT_PATH);
 		dict_set(dt, DICT_QUOTA_CURRENT_BYTES_PATH, dec2str(bytes));
 		dict_set(dt, DICT_QUOTA_CURRENT_COUNT_PATH, dec2str(count));
 	} T_END;

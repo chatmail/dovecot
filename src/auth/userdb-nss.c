@@ -2,7 +2,7 @@
 
 /* Currently supports only GLIBC-compatible NSS modules */
 
-#include "common.h"
+#include "auth-common.h"
 #include "userdb.h"
 
 #ifdef USERDB_NSS
@@ -101,19 +101,19 @@ userdb_nss_load_module(struct nss_userdb_module *module, pool_t pool)
 }
 
 static struct userdb_module *
-userdb_nss_preinit(struct auth_userdb *auth_userdb, const char *args)
+userdb_nss_preinit(pool_t pool, const char *args)
 {
 	struct nss_userdb_module *module;
 	const char *const *tmp;
-	pool_t pool = auth_userdb->auth->pool;
 
 	module = p_new(pool, struct nss_userdb_module, 1);
 	module->bufsize = sysconf(_SC_GETPW_R_SIZE_MAX);
 	module->buf = p_malloc(pool, module->bufsize);
+	module->module.blocking = TRUE;
 
 	for (tmp = t_strsplit(args, " "); *tmp != NULL; tmp++) {
-		if (strcmp(*tmp, "blocking=yes") == 0)
-			module->module.blocking = TRUE;
+		if (strcmp(*tmp, "blocking=no") == 0)
+			module->module.blocking = FALSE;
 		else if (strncmp(*tmp, "service=", 8) == 0)
 			module->nss_module.name = p_strdup(pool, *tmp + 8);
 		else
@@ -147,10 +147,14 @@ struct userdb_module_interface userdb_nss = {
 	NULL,
 	userdb_nss_deinit,
 
-	userdb_nss_lookup
+	userdb_nss_lookup,
+
+	NULL,
+	NULL,
+	NULL
 };
 #else
 struct userdb_module_interface userdb_nss = {
-	MEMBER(name) "nss"
+	.name = "nss"
 };
 #endif

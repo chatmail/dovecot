@@ -8,7 +8,7 @@
 /* Maximum number of requests in queue. After this new requests are dropped. */
 #define DB_LDAP_MAX_QUEUE_SIZE 1024
 /* Maximum number of pending requests before delaying new requests. */
-#define DB_LDAP_MAX_PENDING_REQUESTS 128
+#define DB_LDAP_MAX_PENDING_REQUESTS 8
 /* If LDAP connection is down, fail requests after waiting for this long. */
 #define DB_LDAP_REQUEST_DISCONNECT_TIMEOUT_SECS 4
 /* If request is still in queue after this many seconds and other requests
@@ -61,6 +61,8 @@ struct ldap_settings {
 	const char *user_filter;
 	const char *pass_attrs;
 	const char *pass_filter;
+	const char *iterate_attrs;
+	const char *iterate_filter;
 
 	const char *default_pass_scheme;
 
@@ -85,6 +87,12 @@ struct ldap_request {
 
 	db_search_callback_t *callback;
 	struct auth_request *auth_request;
+
+	/* If expect_one_reply=TRUE, this contains the first LDAP entry.
+	   If another one comes, we'll return an error. */
+	LDAPMessage *first_entry;
+
+	unsigned int expect_one_reply:1;
 };
 
 struct ldap_request_search {
@@ -139,8 +147,8 @@ struct ldap_connection {
 	/* Timestamp when we last received a reply */
 	time_t last_reply_stamp;
 
-	char **pass_attr_names, **user_attr_names;
-	struct hash_table *pass_attr_map, *user_attr_map;
+	char **pass_attr_names, **user_attr_names, **iterate_attr_names;
+	struct hash_table *pass_attr_map, *user_attr_map, *iterate_attr_map;
 };
 
 /* Send/queue request */
@@ -155,6 +163,8 @@ struct ldap_connection *db_ldap_init(const char *config_path);
 void db_ldap_unref(struct ldap_connection **conn);
 
 int db_ldap_connect(struct ldap_connection *conn);
+
+void db_ldap_enable_input(struct ldap_connection *conn, bool enable);
 
 struct var_expand_table *
 db_ldap_value_get_var_expand_table(struct auth_request *auth_request);

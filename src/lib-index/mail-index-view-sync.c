@@ -159,7 +159,8 @@ view_sync_get_expunges(struct mail_index_view_sync_ctx *ctx,
 
 	/* get a list of expunge transactions. there may be some that we have
 	   already synced, but it doesn't matter because they'll get dropped
-	   out when converting to sequences */
+	   out when converting to sequences. the uid ranges' validity has
+	   already been verified, so we can use them directly. */
 	mail_transaction_log_view_mark(view->log_view);
 	while ((ret = mail_transaction_log_view_next(view->log_view,
 						     &hdr, &data)) > 0) {
@@ -178,7 +179,7 @@ view_sync_get_expunges(struct mail_index_view_sync_ctx *ctx,
 	mail_transaction_log_view_rewind(view->log_view);
 
 	*expunge_count_r = view_sync_expunges2seqs(ctx);
-	return 0;
+	return ret;
 }
 
 static bool have_existing_expunges(struct mail_index_view *view,
@@ -188,7 +189,7 @@ static bool have_existing_expunges(struct mail_index_view *view,
 	uint32_t seq1, seq2;
 
 	range_end = CONST_PTR_OFFSET(range, size);
-	for (; range < range_end; range++) {
+	for (; range != range_end; range++) {
 		if (mail_index_lookup_seq_range(view, range->seq1, range->seq2,
 						&seq1, &seq2))
 			return TRUE;
@@ -510,7 +511,7 @@ mail_index_view_sync_begin(struct mail_index_view *view,
 			   enum mail_index_view_sync_flags flags)
 {
 	struct mail_index_view_sync_ctx *ctx;
-	struct mail_index_map *map;
+	struct mail_index_map *tmp_map;
 	unsigned int expunge_count = 0;
 	bool reset, sync_expunges, have_expunges;
 	int ret;
@@ -612,11 +613,9 @@ mail_index_view_sync_begin(struct mail_index_view *view,
 		ctx->sync_map_update = TRUE;
 
 		if (view->map->refcount > 1) {
-			map = mail_index_map_clone(view->map);
+			tmp_map = mail_index_map_clone(view->map);
 			mail_index_unmap(&view->map);
-			view->map = map;
-		} else {
-			map = view->map;
+			view->map = tmp_map;
 		}
 
 		if (sync_expunges) {
@@ -636,17 +635,15 @@ mail_index_view_sync_begin(struct mail_index_view *view,
 static bool
 view_sync_is_hidden(struct mail_index_view *view, uint32_t seq, uoff_t offset)
 {
-	const struct mail_index_view_log_sync_area *syncs;
-	unsigned int i, count;
+	const struct mail_index_view_log_sync_area *sync;
 
 	if (!array_is_created(&view->syncs_hidden))
 		return FALSE;
 
-	syncs = array_get(&view->syncs_hidden, &count);
-	for (i = 0; i < count; i++) {
-		if (syncs[i].log_file_offset <= offset &&
-		    offset - syncs[i].log_file_offset < syncs[i].length &&
-		    syncs[i].log_file_seq == seq)
+	array_foreach(&view->syncs_hidden, sync) {
+		if (sync->log_file_offset <= offset &&
+		    offset - sync->log_file_offset < sync->length &&
+		    sync->log_file_seq == seq)
 			return TRUE;
 	}
 

@@ -2,7 +2,7 @@
 
 /* Thanks to Courier-IMAP for showing how the vpopmail API should be used */
 
-#include "common.h"
+#include "auth-common.h"
 #include "userdb.h"
 
 #if defined(PASSDB_VPOPMAIL) || defined(USERDB_VPOPMAIL)
@@ -137,11 +137,10 @@ static void vpopmail_lookup(struct auth_request *auth_request,
 }
 
 static struct userdb_module *
-vpopmail_preinit(struct auth_userdb *auth_userdb, const char *args)
+vpopmail_preinit(pool_t pool, const char *args)
 {
 	struct vpopmail_userdb_module *module;
 	const char *const *tmp, *p;
-	pool_t pool = auth_userdb->auth->pool;
 
 	module = p_new(pool, struct vpopmail_userdb_module, 1);
 
@@ -170,10 +169,14 @@ struct userdb_module_interface userdb_vpopmail = {
 	NULL,
 	NULL,
 
-	vpopmail_lookup
+	vpopmail_lookup,
+
+	NULL,
+	NULL,
+	NULL
 };
 #else
 struct userdb_module_interface userdb_vpopmail = {
-	MEMBER(name) "vpopmail"
+	.name = "vpopmail"
 };
 #endif

@@ -1,6 +1,7 @@
 /* Copyright (c) 2004-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
+#include "execv-const.h"
 #include "passdb.h"
 
 #ifdef PASSDB_CHECKPASSWORD 
@@ -135,16 +136,14 @@ checkpassword_verify_plain_child(struct auth_request *request,
 				       "dup2() failed: %m");
 	} else {
 		checkpassword_setup_env(request);
-		/* very simple argument splitting. */
-		cmd = t_strconcat(module->checkpassword_path, " ",
-				  module->checkpassword_reply_path, NULL);
+		cmd = checkpassword_get_cmd(request, module->checkpassword_path,
+					    module->checkpassword_reply_path);
 		auth_request_log_debug(request, "checkpassword",
 				       "execute: %s", cmd);
 
+		/* very simple argument splitting. */
 		args = t_strsplit(cmd, " ");
-		execv(args[0], (char **)args);
-		auth_request_log_error(request, "checkpassword",
-				       "execv(%s) failed: %m", args[0]);
+		execv_const(args[0], args);
 	}
 	exit(2);
 }
@@ -235,13 +234,12 @@ checkpassword_verify_plain(struct auth_request *request, const char *password,
 }
 
 static struct passdb_module *
-checkpassword_preinit(struct auth_passdb *auth_passdb, const char *args)
+checkpassword_preinit(pool_t pool, const char *args)
 {
 	struct checkpassword_passdb_module *module;
 
-	module = p_new(auth_passdb->auth->pool,
-		       struct checkpassword_passdb_module, 1);
-	module->checkpassword_path = p_strdup(auth_passdb->auth->pool, args);
+	module = p_new(pool, struct checkpassword_passdb_module, 1);
+	module->checkpassword_path = p_strdup(pool, args);
 	module->checkpassword_reply_path =
 		PKG_LIBEXECDIR"/checkpassword-reply";
 
@@ -283,6 +281,6 @@ struct passdb_module_interface passdb_checkpassword = {
 };
 #else
 struct passdb_module_interface passdb_checkpassword = {
-	MEMBER(name) "checkpassword"
+	.name = "checkpassword"
 };
 #endif

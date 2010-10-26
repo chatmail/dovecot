@@ -1,16 +1,23 @@
 Expire plugin
 =============
 
-(v1.1+ only)
+This plugin can be used to optimize expunging old mails from users' mailboxes.
+Even without this plugin it's possible to use doveadm to expunge messages:
 
-The expire plugin was created to keep track of mails in specific mailboxes, and
-expunge them when they've been there for a specified amount of time.  It keeps
-an internal database (typically SQL) of all such mailboxes, so it doesn't have
-to go through all the mailboxes for all the users.
+---%<-------------------------------------------------------------------------
+doveadm expunge -A mailbox Trash savedbefore 30d
+---%<-------------------------------------------------------------------------
 
-The expire days are counted from when the message was *saved or copied to the
-mailbox* (*NOT the time message was originally received*) while expire plugin
-was loaded. If there are existing messages in the mailbox, they'll get expunged
+This however now goes through all users Trash mailboxes and opens them. If you
+have a lot of users, this could take a while. To optimize this behavior better,
+you can enable expire plugin to keep track of wanted mailboxes' "oldest mail's
+saved timestamp". Then the above doveadm command goes through only users whose
+Trash mailbox actually has something to expunge.
+
+Expire plugin tracks/optimizes only "savedbefore" search query, i.e. the date
+when message was *saved or copied to the mailbox* (*NOT the time message was
+originally received*) while expire plugin was loaded. If mailbox had existing
+messages before the plugin was loaded for the first time, they'll get expunged
 eventually when the first message saved/copied after expire plugin was enabled
 gets expunged.
 
@@ -22,7 +29,8 @@ The save/copy date may not be exact if it's not cached in
  * dbox: Save/copy time is taken from the dbox file if it exists (it normally
    should), fallbacking to file's ctime if not.
 
-Mailbox patterns can contain IMAP LIST command-compatible wildcards:
+You need to configure a list of mailboxes that are tracked. Mailbox patterns
+can contain IMAP LIST command-compatible wildcards:
 
  * "*" works in a standard way: It matches any number of characters.
  * "%" works by matching any number of characters, but it stops at the
@@ -30,78 +38,18 @@ Mailbox patterns can contain IMAP LIST command-compatible wildcards:
    doesn't work correctly if you've configured separator to something else
    (e.g. "." is the default for Maildir).
 
-The expire plugin itself doesn't do anything except keep track of messages in
-the mailboxes. To actually perform the expunging you need to run 'expire-tool'
-in for example a nightly cronjob (can be run as often as you want though):
-
----%<-------------------------------------------------------------------------
-dovecot --exec-mail ext /usr/libexec/dovecot/expire-tool
----%<-------------------------------------------------------------------------
-
-You can also run it manually with '--test' parameter to see what would happen
-without actually changing anything. This can also be useful for debugging why
-it doesn't appear to be working.
-
-Dovecot v1.2
-------------
-
-Since v1.2 expire-tool loads plugins defined in protocol imap section of
-'dovecot.conf'. However some plugins (at least /imap_quota/ and /mail_log/)
-fail to load. To make expire-tool work again the failing plugins have to be
-removed from MAIL_PLUGINS environment variable. To achieve this create
-'/usr/libexec/dovecot/expire-tool.sh':
-
----%<-------------------------------------------------------------------------
-#!/bin/bash
-MAIL_PLUGINS=${MAIL_PLUGINS//imap_quota/}
-MAIL_PLUGINS=${MAIL_PLUGINS//mail_log/}
-
-exec ${0%.sh} "$@"
----%<-------------------------------------------------------------------------
-
-Execute:
-
----%<-------------------------------------------------------------------------
-chmod 755 /usr/libexec/dovecot/expire-tool.sh
----%<-------------------------------------------------------------------------
-
-Now you can use this for your cronjob:
-
----%<-------------------------------------------------------------------------
-dovecot --exec-mail ext /usr/libexec/dovecot/expire-tool.sh
----%<-------------------------------------------------------------------------
-
-Mail location setting problem (v1.1-v1.2)
------------------------------------------
-
-Because of the way expire-tool is executed, you can't use user-specific
-%variables in 'mail_location'. These are expanded by "dovecot" binary before it
-even calls expire-tool. So for example if you have:
-
----%<-------------------------------------------------------------------------
-mail_location = maildir:/var/mail/%u
----%<-------------------------------------------------------------------------
-
-expire-tool will see it as:
-
----%<-------------------------------------------------------------------------
-mail_location = maildir:/var/mail/root
----%<-------------------------------------------------------------------------
-
-This is fixed in Dovecot v2.0, but with older versions the path has to come
-from userdb lookup. You can either return "mail" <userdb extra field>
-[UserDatabase.ExtraFields.txt] or return "home" and use '~/' to point to the
-user's mailbox path in 'mail_location'.
-
-Authentication socket
----------------------
-
-expire-tool requires an auth-master socket to find users' mailboxes. See
-<LDA.txt> for how to configure one. If you're not using the default path for
-the socket, you can change it by adding 'auth_socket_path' to plugin section.
-
 Example configuration
 ---------------------
+
+---%<-------------------------------------------------------------------------
+mail_plugins = $mail_plugins expire
+
+plugin {
+  expire = Trash
+  expire2 = Trash/*
+  expire3 = Spam
+}
+---%<-------------------------------------------------------------------------
 
 MySQL Backend
 -------------
@@ -109,77 +57,27 @@ MySQL Backend
 dovecot.conf:
 
 ---%<-------------------------------------------------------------------------
-protocol imap {
-  mail_plugins = expire
-}
-protocol pop3 {
-  mail_plugins = expire
-}
-protocol lda {
-  # probably not necessary - just enables tracking messages on mailboxes
-  # where messages are never saved via IMAP and never expunged
-  mail_plugins = expire
-}
 dict {
-  # NOTE: dict process currently runs as root, so this file will be owned as
-root.
-  expire = mysql:/etc/dovecot-dict-expire.conf
-}
-plugin {
-  # Trash and its children 7d, Spam 30d
-  expire = Trash 7 Trash/* 7 Spam 30
-  expire_dict = proxy::expire
-
-  # If you have a non-default path to auth-master, set also:
-  #auth_socket_path = /var/run/dovecot/auth-master
+  expire = mysql:/etc/dovecot/dovecot-dict-expire.conf.ext
 }
 ---%<-------------------------------------------------------------------------
 
 Create the table like this:
 
 ---%<-------------------------------------------------------------------------
-# for v1.1 only:
 CREATE TABLE expires (
-  mailbox varchar(255) not null,
-  expire_stamp integer not null,
-  primary key (mailbox)
-);
-
-# for v1.2+:
-CREATE TABLE expires (
-  username varchar(100) not null,
+  username varchar(75) not null,
   mailbox varchar(255) not null,
   expire_stamp integer not null,
   primary key (username, mailbox)
 );
 ---%<-------------------------------------------------------------------------
 
-NOTE:  If your SQL table uses UTF-8 encoding, the above command for v1.2+ will
-not work.  Use the following instead, per the Dovecot mailing list
-[http://www.mail-archive.com/dovecot@dovecot.org/msg19258.html]:
-
----%<-------------------------------------------------------------------------
-# for v1.2+, with UTF-8 encoding:
-CREATE TABLE expires (
-  username varchar(100) not null,
-  mailbox varchar(255) not null,
-  expire_stamp integer not null,
-  key (username, mailbox(200))
-);
----%<-------------------------------------------------------------------------
-
-dovecot-dict-expire.conf:
+dovecot-dict-expire.conf.ext:
 
 ---%<-------------------------------------------------------------------------
 connect = host=localhost dbname=mails user=sqluser password=sqlpass
 
-# v1.1 only:
-table = expires
-select_field = expire_stamp
-where_field = mailbox
-username_field = not_used
-
-# v1.2+ only:
 map {
   pattern = shared/expire/$user/$mailbox
   table = expires
@@ -198,23 +96,6 @@ PostgreSQL Backend
 Like MySQL configuration above, but you'll also need to create a trigger:
 
 ---%<-------------------------------------------------------------------------
--- v1.1+:
-CREATE OR REPLACE FUNCTION merge_expires() RETURNS TRIGGER AS $$
-BEGIN
-  UPDATE expires SET expire_stamp = NEW.expire_stamp
-    WHERE mailbox = NEW.mailbox;
-  IF FOUND THEN
-    RETURN NULL;
-  ELSE
-    RETURN NEW;
-  END IF;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER mergeexpires BEFORE INSERT ON expires
-   FOR EACH ROW EXECUTE PROCEDURE merge_expires();
-
--- v1.2+:
 CREATE OR REPLACE FUNCTION merge_expires() RETURNS TRIGGER AS $$
 BEGIN
   UPDATE expires SET expire_stamp = NEW.expire_stamp
@@ -237,7 +118,6 @@ SQLite Backend
 Like MySQL configuration above, but you'll also need to create a trigger:
 
 ---%<-------------------------------------------------------------------------
--- v1.2+:
 CREATE TRIGGER mergeexpires BEFORE INSERT ON expires FOR EACH ROW
 BEGIN
         UPDATE expires SET expire_stamp=NEW.expire_stamp
@@ -248,63 +128,12 @@ mailbox = NEW.mailbox) IS NOT NULL;
 END;
 ---%<-------------------------------------------------------------------------
 
-BDB Backend
------------
-
-The Berkeley DB code in Dovecot doesn't work very well, so this configuration
-isn't recommended. Use SQLite instead.
-
----%<-------------------------------------------------------------------------
-protocol imap {
-  mail_plugins = expire
-}
-protocol pop3 {
-  mail_plugins = expire
-}
-protocol lda {
-  # probably not necessary - just enables tracking messages on mailboxes
-  # where messages are never saved via IMAP and never expunged
-  mail_plugins = expire
-}
-dict {
-  # NOTE: dict process currently runs as root, so this file will be owned as
-root.
-  expire = db:/var/lib/dovecot/expire.db
-}
-plugin {
-  # Trash and its children 7d, Spam 30d
-  expire = Trash 7 Trash/* 7 Spam 30
-  expire_dict = proxy::expire
-
-  # If you have a non-default path to auth-master, set also:
-  #auth_socket_path = /var/run/dovecot/auth-master
-}
----%<-------------------------------------------------------------------------
-
-Alternative dbox directory expiration
--------------------------------------
-
-Expire plugin can also be used to move old mail files to dbox alternative
-directory. The idea behind this is that old mails are accessed rarely, so the
-alternative directory may be located on a cheaper storage with lower I/O
-capabilities.'expire_altmove' setting can be used to configure this:
-
----%<-------------------------------------------------------------------------
-mail_location = dbox:~/dbox:ALT=/altstorage/%d/%n/dbox
-# mail_plugin and dict settings as in above example
-plugin {
-  expire = Trash 7 Trash/* 7 Spam 30
-  # Move all mails to slow storage after 31 days (so Trash/Spam is never moved)
-  expire_altmove = * 31
-  expire_dict = proxy::expire
-}
----%<-------------------------------------------------------------------------
-
 Example #1 timeline
 -------------------
 
-Let's say Trash is configured to expire in 7 days and today is 2009-07-10.
-Initially the database and the Trash mailbox is empty.
+FIXME: expire-tool no longer exists, update these examples. Let's say Trash is
+configured to expire in 7 days and today is 2009-07-10. Initially the database
+and the Trash mailbox is empty.
 
 User moves the first message to Trash. The expires table is updated:
 
@@ -322,8 +151,7 @@ and try to find messages to expunge. Until then it skips the mailbox.
 
 A day later user moves another message to Trash. The expire_stamp isn't
 updated, because the second message's save date is newer than the first one's.
-Checking Trash's contents via IMAP you can see something like (X-SAVEDATE
-requires v1.2.2+):
+Checking Trash's contents via IMAP you can see something like:
 
 ---%<-------------------------------------------------------------------------
 1 fetch 1:* (internaldate x-savedate)
@@ -435,20 +263,4 @@ exactly need to be expunged.
 After running expire-tool without --test you'll see that the Trash mailbox is
 empty and the database row is deleted.
 
-v1.0 cronjob equivalent
------------------------
-
-For Dovecot v1.0, this can be accomplished by running a daily shell script:
-
----%<-------------------------------------------------------------------------
-# delete 30 day old mails
-find /var/virtualmail/ -regex '.*/\.\(Trash\|Junk\)\(/.*\)?\/\(cur\|new\)/.*'
--type f  -ctime +30  -delete
-# or -exec rm '{}' \; instead of -delete
----%<-------------------------------------------------------------------------
-
-Using ctime means that messages are deleted 30 days after they've been moved to
-Trash. If mtime was used instead, it would mean the message is deleted 30 days
-after its original creation, which could be immediately.
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

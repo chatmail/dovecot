@@ -17,57 +17,39 @@
 
 struct acl_lookup_dict {
 	struct mail_user *user;
+	struct dict *dict;
 };
 
 struct acl_lookup_dict_iter {
 	pool_t pool;
 	struct acl_lookup_dict *dict;
 
+	pool_t iter_value_pool;
 	ARRAY_TYPE(const_string) iter_ids;
-	struct dict_iterate_context *dict_iter;
-	unsigned int iter_idx;
-
-	const char *prefix;
-	unsigned int prefix_len;
+	ARRAY_TYPE(const_string) iter_values;
+	unsigned int iter_idx, iter_value_idx;
 
 	unsigned int failed:1;
 };
 
-static struct dict *acl_dict;
-
-void acl_lookup_dicts_init(void)
-{
-	const char *uri, *base_dir;
-
-	uri = getenv("ACL_SHARED_DICT");
-	if (uri == NULL) {
-		if (getenv("DEBUG") != NULL) {
-			i_info("acl: No acl_shared_dict setting - "
-			       "shared mailbox listing is disabled");
-		}
-		return;
-	}
-
-	base_dir = getenv("BASE_DIR");
-	if (base_dir == NULL)
-		base_dir = PKG_RUNDIR;
-	acl_dict = dict_init(uri, DICT_DATA_TYPE_STRING, "", base_dir);
-	if (acl_dict == NULL)
-		i_fatal("acl: dict_init(%s) failed", uri);
-}
-
-void acl_lookup_dicts_deinit(void)
-{
-	if (acl_dict != NULL)
-		dict_deinit(&acl_dict);
-}
-
 struct acl_lookup_dict *acl_lookup_dict_init(struct mail_user *user)
 {
 	struct acl_lookup_dict *dict;
+	const char *uri;
 
 	dict = i_new(struct acl_lookup_dict, 1);
 	dict->user = user;
+
+	uri = mail_user_plugin_getenv(user, "acl_shared_dict");
+	if (uri != NULL) {
+		dict->dict = dict_init(uri, DICT_DATA_TYPE_STRING, "",
+				       user->set->base_dir);
+		if (dict->dict == NULL)
+			i_error("acl: dict_init(%s) failed", uri);
+	} else if (user->mail_debug) {
+		i_debug("acl: No acl_shared_dict setting - "
+			"shared mailbox listing is disabled");
+	}
 	return dict;
 }
 
@@ -76,6 +58,8 @@ void acl_lookup_dict_deinit(struct acl_lookup_dict **_dict)
 	struct acl_lookup_dict *dict = *_dict;
 
 	*_dict = NULL;
+	if (dict->dict != NULL)
+		dict_deinit(&dict->dict);
 	i_free(dict);
 }
 
@@ -119,10 +103,10 @@ static int acl_lookup_dict_rebuild_add_backend(struct mail_namespace *ns,
 		return 0;
 
 	id = t_str_new(128);
-	backend = acl_storage_get_backend(ns->storage);
+	backend = acl_mailbox_list_get_backend(ns->list);
 	ctx = acl_backend_nonowner_lookups_iter_init(backend);
 	while ((ret = acl_backend_nonowner_lookups_iter_next(ctx, &name)) > 0) {
-		aclobj = acl_object_init_from_name(backend, ns->storage, name);
+		aclobj = acl_object_init_from_name(backend, name);
 
 		iter = acl_object_list_init(aclobj);
 		while ((ret = acl_object_list_next(iter, &rights)) > 0) {
@@ -152,7 +136,7 @@ acl_lookup_dict_rebuild_update(struct acl_lookup_dict *dict,
 	const char *username = dict->user->username;
 	struct dict_iterate_context *iter;
 	struct dict_transaction_context *dt;
-	const char *prefix, *key, *value, **old_ids, *const *new_ids, *p;
+	const char *prefix, *key, *value, *const *old_ids, *const *new_ids, *p;
 	ARRAY_TYPE(const_string) old_ids_arr;
 	unsigned int newi, oldi, old_count, new_count;
 	string_t *path;
@@ -167,31 +151,30 @@ acl_lookup_dict_rebuild_update(struct acl_lookup_dict *dict,
 	t_array_init(&old_ids_arr, 128);
 	prefix = DICT_PATH_SHARED DICT_SHARED_BOXES_PATH;
 	prefix_len = strlen(prefix);
-	iter = dict_iterate_init(acl_dict, prefix, DICT_ITERATE_FLAG_RECURSE);
-	while ((ret = dict_iterate(iter, &key, &value)) > 0) {
-		/* prefix/$dest/$source */
+	iter = dict_iterate_init(dict->dict, prefix, DICT_ITERATE_FLAG_RECURSE);
+	while (dict_iterate(iter, &key, &value)) {
+		/* prefix/$type/$dest/$source */
 		key += prefix_len;
-		p = strchr(key, '/');
+		p = strrchr(key, '/');
 		if (p != NULL && strcmp(p + 1, username) == 0) {
 			key = t_strdup_until(key, p);
 			array_append(&old_ids_arr, &key, 1);
 		}
 	}
-	dict_iterate_deinit(&iter);
-	if (ret < 0) {
+	if (dict_iterate_deinit(&iter) < 0) {
 		i_error("acl: dict iteration failed, can't update dict");
 		return -1;
 	}
 
 	/* sort the existing identifiers */
-	old_ids = array_get_modifiable(&old_ids_arr, &old_count);
-	qsort(old_ids, old_count, sizeof(*old_ids), i_strcmp_p);
+	array_sort(&old_ids_arr, i_strcmp_p);
 
 	/* sync the identifiers */
 	path = t_str_new(256);
 	str_append(path, prefix);
 
-	dt = dict_transaction_begin(acl_dict);
+	dt = dict_transaction_begin(dict->dict);
+	old_ids = array_get(&old_ids_arr, &old_count);
 	new_ids = array_get(new_ids_arr, &new_count);
 	for (newi = oldi = 0; newi < new_count || oldi < old_count; ) {
 		ret = newi == new_count ? 1 :
@@ -230,7 +213,7 @@ int acl_lookup_dict_rebuild(struct acl_lookup_dict *dict)
 	unsigned int i, dest, count;
 	int ret = 0;
 
-	if (acl_dict == NULL)
+	if (dict->dict == NULL)
 		return 0;
 
 	/* get all ACL identifiers with a positive lookup right */
@@ -241,9 +224,9 @@ int acl_lookup_dict_rebuild(struct acl_lookup_dict *dict)
 	}
 
 	/* sort identifiers and remove duplicates */
-	ids = array_get_modifiable(&ids_arr, &count);
-	qsort(ids, count, sizeof(*ids), i_strcmp_p);
+	array_sort(&ids_arr, i_strcmp_p);
 
+	ids = array_get_modifiable(&ids_arr, &count);
 	for (i = 1, dest = 0; i < count; i++) {
 		if (strcmp(ids[dest], ids[i]) != 0) {
 			if (++dest != i)
@@ -260,18 +243,35 @@ int acl_lookup_dict_rebuild(struct acl_lookup_dict *dict)
 	return ret;
 }
 
-static void acl_lookup_dict_iterate_start(struct acl_lookup_dict_iter *iter)
+static void acl_lookup_dict_iterate_read(struct acl_lookup_dict_iter *iter)
 {
-	const char *const *idp;
+	struct dict_iterate_context *dict_iter;
+	const char *const *idp, *prefix, *key, *value;
+	unsigned int prefix_len;
 
 	idp = array_idx(&iter->iter_ids, iter->iter_idx);
 	iter->iter_idx++;
-	iter->prefix = p_strconcat(iter->pool, DICT_PATH_SHARED
-				   DICT_SHARED_BOXES_PATH, *idp, "/", NULL);
-	iter->prefix_len = strlen(iter->prefix);
+	iter->iter_value_idx = 0;
 
-	iter->dict_iter = dict_iterate_init(acl_dict, iter->prefix,
-					    DICT_ITERATE_FLAG_RECURSE);
+	prefix = t_strconcat(DICT_PATH_SHARED DICT_SHARED_BOXES_PATH,
+			     *idp, "/", NULL);
+	prefix_len = strlen(prefix);
+
+	/* read all of it to memory. at least currently dict-proxy can support
+	   only one iteration at a time, but the acl code can end up rebuilding
+	   the dict, which opens another iteration. */
+	p_clear(iter->iter_value_pool);
+	array_clear(&iter->iter_values);
+	dict_iter = dict_iterate_init(iter->dict->dict, prefix,
+				      DICT_ITERATE_FLAG_RECURSE);
+	while (dict_iterate(dict_iter, &key, &value)) {
+		i_assert(prefix_len < strlen(key));
+
+		key = p_strdup(iter->iter_value_pool, key + prefix_len);
+		array_append(&iter->iter_values, &key, 1);
+	}
+	if (dict_iterate_deinit(&dict_iter) < 0)
+		iter->failed = TRUE;
 }
 
 struct acl_lookup_dict_iter *
@@ -283,7 +283,7 @@ acl_lookup_dict_iterate_visible_init(struct acl_lookup_dict *dict)
 	unsigned int i;
 	pool_t pool;
 
-	pool = pool_alloconly_create("acl lookup dict iter", 512);
+	pool = pool_alloconly_create("acl lookup dict iter", 1024);
 	iter = p_new(pool, struct acl_lookup_dict_iter, 1);
 	iter->pool = pool;
 	iter->dict = dict;
@@ -293,6 +293,10 @@ acl_lookup_dict_iterate_visible_init(struct acl_lookup_dict *dict)
 	array_append(&iter->iter_ids, &id, 1);
 	id = p_strconcat(pool, "user/", dict->user->username, NULL);
 	array_append(&iter->iter_ids, &id, 1);
+
+	i_array_init(&iter->iter_values, 64);
+	iter->iter_value_pool =
+		pool_alloconly_create("acl lookup dict iter values", 1024);
 
 	/* get all groups we belong to */
 	if (auser->groups != NULL) {
@@ -305,32 +309,24 @@ acl_lookup_dict_iterate_visible_init(struct acl_lookup_dict *dict)
 
 	/* iterate through all identifiers that match us, start with the
 	   first one */
-	if (acl_dict != NULL)
-		acl_lookup_dict_iterate_start(iter);
+	if (dict->dict != NULL)
+		acl_lookup_dict_iterate_read(iter);
 	return iter;
 }
 
 const char *
 acl_lookup_dict_iterate_visible_next(struct acl_lookup_dict_iter *iter)
 {
-	const char *key, *value;
-	int ret;
+	const char *const *keys;
+	unsigned int count;
 
-	if (iter->dict_iter == NULL)
-		return 0;
-
-	ret = dict_iterate(iter->dict_iter, &key, &value);
-	if (ret > 0) {
-		i_assert(iter->prefix_len < strlen(key));
-		return key + iter->prefix_len;
-	}
-	if (ret < 0)
-		iter->failed = TRUE;
-	dict_iterate_deinit(&iter->dict_iter);
+	keys = array_get(&iter->iter_values, &count);
+	if (iter->iter_value_idx < count)
+		return keys[iter->iter_value_idx++];
 
 	if (iter->iter_idx < array_count(&iter->iter_ids)) {
 		/* get to the next iterator */
-		acl_lookup_dict_iterate_start(iter);
+		acl_lookup_dict_iterate_read(iter);
 		return acl_lookup_dict_iterate_visible_next(iter);
 	}
 	return NULL;
@@ -342,8 +338,8 @@ int acl_lookup_dict_iterate_visible_deinit(struct acl_lookup_dict_iter **_iter)
 	int ret = iter->failed ? -1 : 0;
 
 	*_iter = NULL;
-	if (iter->dict_iter != NULL)
-		dict_iterate_deinit(&iter->dict_iter);
+	array_free(&iter->iter_values);
+	pool_unref(&iter->iter_value_pool);
 	pool_unref(&iter->pool);
 	return ret;
 }

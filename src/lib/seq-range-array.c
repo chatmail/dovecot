@@ -33,7 +33,7 @@ static bool seq_range_lookup(const ARRAY_TYPE(seq_range) *array,
 	return FALSE;
 }
 
-void seq_range_array_add(ARRAY_TYPE(seq_range) *array,
+bool seq_range_array_add(ARRAY_TYPE(seq_range) *array,
 			 unsigned int init_count, uint32_t seq)
 {
 	struct seq_range *data, value;
@@ -47,33 +47,33 @@ void seq_range_array_add(ARRAY_TYPE(seq_range) *array,
 	data = array_get_modifiable(array, &count);
 	if (count == 0) {
 		array_append(array, &value, 1);
-		return;
+		return FALSE;
 	}
 
 	/* quick checks */
 	if (data[count-1].seq2 == seq-1) {
 		/* grow last range */
 		data[count-1].seq2 = seq;
-		return;
+		return FALSE;
 	}
 	if (data[count-1].seq2 < seq) {
 		array_append(array, &value, 1);
-		return;
+		return FALSE;
 	}
 	if (data[0].seq1 == seq+1) {
 		/* grow down first range */
 		data[0].seq1 = seq;
-		return;
+		return FALSE;
 	}
 	if (data[0].seq1 > seq) {
 		array_insert(array, 0, &value, 1);
-		return;
+		return FALSE;
 	}
 
 	/* somewhere in the middle, array is sorted so find it with
 	   binary search */
 	if (seq_range_lookup(array, seq, &idx))
-		return;
+		return TRUE;
 
 	/* idx == count couldn't happen because we already handle it above */
 	i_assert(idx < count && data[idx].seq1 >= seq);
@@ -97,6 +97,7 @@ void seq_range_array_add(ARRAY_TYPE(seq_range) *array,
 	} else {
 		array_insert(array, idx, &value, 1);
 	}
+	return FALSE;
 }
 
 void seq_range_array_add_range(ARRAY_TYPE(seq_range) *array,
@@ -142,16 +143,14 @@ void seq_range_array_merge(ARRAY_TYPE(seq_range) *dest,
 			   const ARRAY_TYPE(seq_range) *src)
 {
 	const struct seq_range *range;
-	unsigned int i, count;
 
 	if (array_count(dest) == 0) {
 		array_append_array(dest, src);
 		return;
 	}
 
-	range = array_get(src, &count);
-	for (i = 0; i < count; i++)
-		seq_range_array_add_range(dest, range[i].seq1, range[i].seq2);
+	array_foreach(src, range)
+		seq_range_array_add_range(dest, range->seq1, range->seq2);
 }
 
 bool seq_range_array_remove(ARRAY_TYPE(seq_range) *array, uint32_t seq)
@@ -190,7 +189,7 @@ bool seq_range_array_remove(ARRAY_TYPE(seq_range) *array, uint32_t seq)
 
 	/* somewhere in the middle, array is sorted so find it with
 	   binary search */
-	idx = 0; left_idx = 0; right_idx = count;
+	left_idx = 0; right_idx = count;
 	while (left_idx < right_idx) {
 		idx = (left_idx + right_idx) / 2;
 
@@ -270,12 +269,10 @@ unsigned int seq_range_array_remove_seq_range(ARRAY_TYPE(seq_range) *dest,
 {
 	unsigned int ret = 0;
 	const struct seq_range *src_range;
-	unsigned int i, count;
 
-	src_range = array_get(src, &count);
-	for (i = 0; i < count; i++) {
-		ret += seq_range_array_remove_range(dest, src_range[i].seq1,
-						    src_range[i].seq2);
+	array_foreach(src, src_range) {
+		ret += seq_range_array_remove_range(dest, src_range->seq1,
+						    src_range->seq2);
 	}
 	return ret;
 }
@@ -334,11 +331,10 @@ bool seq_range_array_have_common(const ARRAY_TYPE(seq_range) *array1,
 unsigned int seq_range_count(const ARRAY_TYPE(seq_range) *array)
 {
 	const struct seq_range *range;
-	unsigned int i, count, seq_count;
+	unsigned int seq_count = 0;
 
-	range = array_get(array, &count);
-	for (i = seq_count = 0; i < count; i++)
-		seq_count += range[i].seq2 - range[i].seq1 + 1;
+	array_foreach(array, range)
+		seq_count += range->seq2 - range->seq1 + 1;
 	return seq_count;
 }
 

@@ -44,13 +44,18 @@ struct mail_cache *mail_cache_open_or_create(struct mail_index *index);
 struct mail_cache *mail_cache_create(struct mail_index *index);
 void mail_cache_free(struct mail_cache **cache);
 
-/* Register fields. fields[].idx is updated to contain field index. */
+/* Register fields. fields[].idx is updated to contain field index.
+   If field already exists and its caching decision is NO, the decision is
+   updated to the input field's decision. */
 void mail_cache_register_fields(struct mail_cache *cache,
 				struct mail_cache_field *fields,
 				unsigned int fields_count);
 /* Returns registered field index, or (unsigned int)-1 if not found. */
 unsigned int
 mail_cache_register_lookup(struct mail_cache *cache, const char *name);
+/* Returns specified field */
+const struct mail_cache_field *
+mail_cache_register_get_field(struct mail_cache *cache, unsigned int field_idx);
 /* Returns a list of all registered fields */
 const struct mail_cache_field *
 mail_cache_register_get_list(struct mail_cache *cache, pool_t pool,
@@ -71,6 +76,7 @@ struct mail_cache_transaction_ctx *
 mail_cache_get_transaction(struct mail_cache_view *view,
 			   struct mail_index_transaction *t);
 
+void mail_cache_transaction_reset(struct mail_cache_transaction_ctx *ctx);
 int mail_cache_transaction_commit(struct mail_cache_transaction_ctx **ctx);
 void mail_cache_transaction_rollback(struct mail_cache_transaction_ctx **ctx);
 
@@ -109,5 +115,7 @@ int mail_cache_lookup_headers(struct mail_cache_view *view, string_t *dest,
 /* "Error in index cache file %s: ...". */
 void mail_cache_set_corrupted(struct mail_cache *cache, const char *fmt, ...)
 	ATTR_FORMAT(2, 3);
+/* Delete the cache file. */
+void mail_cache_reset(struct mail_cache *cache);
 
 #endif

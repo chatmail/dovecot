@@ -35,23 +35,25 @@ For example to create a public Maildir mailboxes, use:
 mail_location = maildir:~/Maildir
 
 # When creating any namespaces, you must also have a private namespace:
-namespace private {
+namespace {
+  type = private
   separator = /
   prefix =
   #location defaults to mail_location.
   inbox = yes
 }
 
-namespace public {
+namespace {
+  type = public
   separator = /
   prefix = Public/
   location = maildir:/var/mail/public
-  subscriptions = no  # v1.1+
+  subscriptions = no
 }
 ---%<-------------------------------------------------------------------------
 
 In the above example, you would then create Maildir mailboxes under the
-/var/mail/public/ directory. For example:
+'/var/mail/public/' directory. For example:
 
 ---%<-------------------------------------------------------------------------
 # ls -la /var/mail/public/
@@ -62,8 +64,8 @@ drwxrws--- 1 root mail 0 2007-03-19 03:12 .bugtraq
 ---%<-------------------------------------------------------------------------
 
 Note that there are no 'cur/', 'new/' or 'tmp/' directories directly under the
-'/var/mail/public/', because the Public/ namespace isn't a mailbox itself.
-(v1.2.3+ allows that, if you create them manually.)
+'/var/mail/public/', because the Public/ namespace isn't a mailbox itself. (If
+you create them manually, it does become a selectable mailbox.)
 
 The 'dovecot-shared' file isn't directly used for either lkml or bugtraq
 mailboxes, but if you create a new public mailbox via Dovecot it's
@@ -81,11 +83,12 @@ user's index files. By making each user have their own private index files, you
 can make the \Seen flag private for the users. For example:
 
 ---%<-------------------------------------------------------------------------
-namespace public {
+namespace {
+  type = public
   separator = /
   prefix = Public/
   location = maildir:/var/mail/public:INDEX=~/Maildir/public
-  subscriptions = no  # v1.1+
+  subscriptions = no
 }
 ---%<-------------------------------------------------------------------------
 
@@ -93,17 +96,12 @@ Now when accessing e.g. "Public/lkml" mailbox, Dovecot keeps its index files in
 '~/Maildir/public/lkml/' directory. If it ever gets deleted, the \Seen flags
 are lost.
 
-The 'dovecot-shared' file has also another purpose: Its permissions are copied
-to files created under the mailbox. This was necessary with v1.1, but with v1.2
-there are other ways to handle it. See <SharedMailboxes.Permissions.txt> for
-more information.
-
 If you want to change what flags are shared when 'dovecot-shared' file exists,
 currently you'll have to modify the source
 code:'src/lib-storage/index/maildir/maildir-storage.c' maildir_open() has
 'mbox->ibox.box.private_flags_mask = MAIL_SEEN;' Change the 'MAIL_SEEN' to any
-flag combination you want (or zero). See 'src/lib-mail/mail-types.h' for list
-of valid flags.
+flag combination you want. See 'src/lib-mail/mail-types.h' for list of valid
+flags.
 
 Maildir: Keyword sharing
 ------------------------
@@ -121,17 +119,10 @@ Subscriptions
 -------------
 
 Typically you want each user to have control over their own subscriptions for
-mailboxes in public namespaces. This is why with v1.1+ you should set
-'subscriptions=no' to the namespace. Dovecot will then use the parent
-namespace's subscriptions file. Note that this practically means you must have
-a namespace with empty prefix, otherwise there is no "parent namespace".
-
-With Dovecot v1.0 you can't set 'subscriptions=no', which makes things more
-problematic. You could create per-user subscriptions by changing CONTROL
-directory, but this breaks setting keywords. You could also make the
-subscriptions file shared and not let any user modify it. This can be done by
-removing write permissions from the directory containing the subscriptions
-file.
+mailboxes in public namespaces. This is why you should set 'subscriptions=no'
+to the namespace. Dovecot will then use the parent namespace's subscriptions
+file. Note that this practically means you must have a namespace with empty
+prefix, otherwise there is no "parent namespace".
 
 Read-only mailboxes
 -------------------
@@ -143,10 +134,11 @@ If you have a read-only directory structure containing mbox files, you'll need
 to store index files elsewhere:
 
 ---%<-------------------------------------------------------------------------
-namespace public {
+namespace {
+  type = public
   prefix = Public/
   location = mbox:/var/mail/public/:INDEX=/var/indexes/public
-  subscriptions = no  # v1.1+
+  subscriptions = no
 }
 ---%<-------------------------------------------------------------------------
 
@@ -174,18 +166,20 @@ possible to use shared control files but per-user index files, assuming you've
 set up permissions properly.
 
 ---%<-------------------------------------------------------------------------
-namespace public {
+namespace {
+  type = public
   separator = /
   prefix = Public/
   location =
 maildir:/var/mail/public:CONTROL=~/Maildir/public:INDEX=~/Maildir/public
-  subscriptions = no  # v1.1+
+  subscriptions = no
 }
-namespace public {
+namespace {
+  type = public
   separator = /
   prefix = Team/
   location = maildir:/var/mail/team:CONTROL=~/Maildir/team:INDEX=~/Maildir/team
-  subscriptions = no  # v1.1+
+  subscriptions = no
 }
 ---%<-------------------------------------------------------------------------
 
@@ -195,16 +189,17 @@ Example: Public mailboxes with ACLs
 See <ACL.txt> for more information about ACLs.
 
 ---%<-------------------------------------------------------------------------
-namespace public {
-   separator = .
-   prefix = public.
-   location = maildir:/var/mail/public
-   subscriptions = no
-   list = children
+namespace {
+  type = public
+  separator = .
+  prefix = public.
+  location = maildir:/var/mail/public
+  subscriptions = no
+  list = children
 }
 
 plugin {
-   acl = vfile
+  acl = vfile
 }
 ---%<-------------------------------------------------------------------------
 
@@ -217,4 +212,4 @@ After this you have to place 'dovecot-acl' files in every mailbox/folder below
 'acl_shared_dict' setting is not relevant for public mailboxes (only for
 shared).
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

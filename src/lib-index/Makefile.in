@@ -16,6 +16,7 @@
 @SET_MAKE@
 
 
+
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
@@ -35,42 +36,68 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-index
-DIST_COMMON = $(am__noinst_HEADERS_DIST) \
-	$(am__pkginc_lib_HEADERS_DIST) $(srcdir)/Makefile.am \
+DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-LIBRARIES = $(noinst_LIBRARIES)
-ARFLAGS = cru
-libindex_a_AR = $(AR) $(ARFLAGS)
-libindex_a_LIBADD =
-am_libindex_a_OBJECTS = mail-cache.$(OBJEXT) \
-	mail-cache-compress.$(OBJEXT) mail-cache-decisions.$(OBJEXT) \
-	mail-cache-fields.$(OBJEXT) mail-cache-lookup.$(OBJEXT) \
-	mail-cache-transaction.$(OBJEXT) \
-	mail-cache-sync-update.$(OBJEXT) mail-index.$(OBJEXT) \
-	mail-index-dummy-view.$(OBJEXT) mail-index-fsck.$(OBJEXT) \
-	mail-index-lock.$(OBJEXT) mail-index-map.$(OBJEXT) \
-	mail-index-modseq.$(OBJEXT) mail-index-transaction.$(OBJEXT) \
-	mail-index-transaction-view.$(OBJEXT) \
-	mail-index-strmap.$(OBJEXT) mail-index-sync.$(OBJEXT) \
-	mail-index-sync-ext.$(OBJEXT) \
-	mail-index-sync-keywords.$(OBJEXT) \
-	mail-index-sync-update.$(OBJEXT) mail-index-view.$(OBJEXT) \
-	mail-index-view-sync.$(OBJEXT) mail-index-write.$(OBJEXT) \
-	mail-transaction-log.$(OBJEXT) \
-	mail-transaction-log-append.$(OBJEXT) \
-	mail-transaction-log-file.$(OBJEXT) \
-	mail-transaction-log-view.$(OBJEXT) \
-	mailbox-list-index.$(OBJEXT) mailbox-list-index-sync.$(OBJEXT)
-libindex_a_OBJECTS = $(am_libindex_a_OBJECTS)
+LTLIBRARIES = $(noinst_LTLIBRARIES)
+libindex_la_LIBADD =
+am_libindex_la_OBJECTS = mail-cache.lo mail-cache-compress.lo \
+	mail-cache-decisions.lo mail-cache-fields.lo \
+	mail-cache-lookup.lo mail-cache-transaction.lo \
+	mail-cache-sync-update.lo mail-index.lo \
+	mail-index-alloc-cache.lo mail-index-dummy-view.lo \
+	mail-index-fsck.lo mail-index-lock.lo mail-index-map.lo \
+	mail-index-map-hdr.lo mail-index-map-read.lo \
+	mail-index-modseq.lo mail-index-transaction.lo \
+	mail-index-transaction-export.lo \
+	mail-index-transaction-finish.lo \
+	mail-index-transaction-sort-appends.lo \
+	mail-index-transaction-update.lo \
+	mail-index-transaction-view.lo mail-index-strmap.lo \
+	mail-index-sync.lo mail-index-sync-ext.lo \
+	mail-index-sync-keywords.lo mail-index-sync-update.lo \
+	mail-index-util.lo mail-index-view.lo mail-index-view-sync.lo \
+	mail-index-write.lo mail-transaction-log.lo \
+	mail-transaction-log-append.lo mail-transaction-log-file.lo \
+	mail-transaction-log-view.lo mailbox-list-index.lo \
+	mailbox-list-index-sync.lo mailbox-log.lo
+libindex_la_OBJECTS = $(am_libindex_la_OBJECTS)
+am__EXEEXT_1 = test-mail-index-sync-ext$(EXEEXT) \
+	test-mail-index-transaction-finish$(EXEEXT) \
+	test-mail-index-transaction-update$(EXEEXT) \
+	test-mail-transaction-log-append$(EXEEXT) \
+	test-mail-transaction-log-view$(EXEEXT)
+PROGRAMS = $(noinst_PROGRAMS)
+am_test_mail_index_sync_ext_OBJECTS =  \
+	test-mail-index-sync-ext.$(OBJEXT)
+test_mail_index_sync_ext_OBJECTS =  \
+	$(am_test_mail_index_sync_ext_OBJECTS)
+am_test_mail_index_transaction_finish_OBJECTS =  \
+	test-mail-index-transaction-finish.$(OBJEXT)
+test_mail_index_transaction_finish_OBJECTS =  \
+	$(am_test_mail_index_transaction_finish_OBJECTS)
+am_test_mail_index_transaction_update_OBJECTS =  \
+	test-mail-index-transaction-update.$(OBJEXT)
+test_mail_index_transaction_update_OBJECTS =  \
+	$(am_test_mail_index_transaction_update_OBJECTS)
+am_test_mail_transaction_log_append_OBJECTS =  \
+	test-mail-transaction-log-append.$(OBJEXT)
+test_mail_transaction_log_append_OBJECTS =  \
+	$(am_test_mail_transaction_log_append_OBJECTS)
+am_test_mail_transaction_log_view_OBJECTS =  \
+	test-mail-transaction-log-view.$(OBJEXT)
+test_mail_transaction_log_view_OBJECTS =  \
+	$(am_test_mail_transaction_log_view_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -84,20 +111,17 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libindex_a_SOURCES)
-DIST_SOURCES = $(libindex_a_SOURCES)
-am__noinst_HEADERS_DIST = mail-cache.h mail-cache-private.h \
-	mail-index.h mail-index-modseq.h mail-index-private.h \
-	mail-index-strmap.h mail-index-sync-private.h \
-	mail-index-transaction-private.h mail-index-view-private.h \
-	mail-transaction-log.h mail-transaction-log-private.h \
-	mailbox-list-index.h mailbox-list-index-private.h
-am__pkginc_lib_HEADERS_DIST = mail-cache.h mail-cache-private.h \
-	mail-index.h mail-index-modseq.h mail-index-private.h \
-	mail-index-strmap.h mail-index-sync-private.h \
-	mail-index-transaction-private.h mail-index-view-private.h \
-	mail-transaction-log.h mail-transaction-log-private.h \
-	mailbox-list-index.h mailbox-list-index-private.h
+SOURCES = $(libindex_la_SOURCES) $(test_mail_index_sync_ext_SOURCES) \
+	$(test_mail_index_transaction_finish_SOURCES) \
+	$(test_mail_index_transaction_update_SOURCES) \
+	$(test_mail_transaction_log_append_SOURCES) \
+	$(test_mail_transaction_log_view_SOURCES)
+DIST_SOURCES = $(libindex_la_SOURCES) \
+	$(test_mail_index_sync_ext_SOURCES) \
+	$(test_mail_index_transaction_finish_SOURCES) \
+	$(test_mail_index_transaction_update_SOURCES) \
+	$(test_mail_transaction_log_append_SOURCES) \
+	$(test_mail_transaction_log_view_SOURCES)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -120,11 +144,12 @@ am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
 am__installdirs = "$(DESTDIR)$(pkginc_libdir)"
-HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
+HEADERS = $(pkginc_lib_HEADERS)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
+ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTH_CFLAGS = @AUTH_CFLAGS@
@@ -170,10 +195,18 @@ LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
+LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
+LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
+LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
+LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
@@ -184,6 +217,7 @@ MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
 MYSQL_CFLAGS = @MYSQL_CFLAGS@
+MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -205,7 +239,9 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
+RUN_TEST = @RUN_TEST@
 SED = @SED@
+SETTING_FILES = @SETTING_FILES@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 SQLITE_CFLAGS = @SQLITE_CFLAGS@
@@ -214,8 +250,8 @@ SQL_CFLAGS = @SQL_CFLAGS@
 SQL_LIBS = @SQL_LIBS@
 SSL_CFLAGS = @SSL_CFLAGS@
 SSL_LIBS = @SSL_LIBS@
-STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
+VALGRIND = @VALGRIND@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -277,12 +313,13 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-noinst_LIBRARIES = libindex.a
+noinst_LTLIBRARIES = libindex.la
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-mail
 
-libindex_a_SOURCES = \
+libindex_la_SOURCES = \
 	mail-cache.c \
 	mail-cache-compress.c \
 	mail-cache-decisions.c \
@@ -291,18 +328,26 @@ libindex_a_SOURCES = \
 	mail-cache-transaction.c \
 	mail-cache-sync-update.c \
         mail-index.c \
+        mail-index-alloc-cache.c \
         mail-index-dummy-view.c \
         mail-index-fsck.c \
         mail-index-lock.c \
         mail-index-map.c \
+        mail-index-map-hdr.c \
+        mail-index-map-read.c \
         mail-index-modseq.c \
         mail-index-transaction.c \
+        mail-index-transaction-export.c \
+        mail-index-transaction-finish.c \
+        mail-index-transaction-sort-appends.c \
+        mail-index-transaction-update.c \
         mail-index-transaction-view.c \
         mail-index-strmap.c \
         mail-index-sync.c \
         mail-index-sync-ext.c \
         mail-index-sync-keywords.c \
         mail-index-sync-update.c \
+        mail-index-util.c \
         mail-index-view.c \
         mail-index-view-sync.c \
         mail-index-write.c \
@@ -311,26 +356,57 @@ libindex_a_SOURCES = \
         mail-transaction-log-file.c \
         mail-transaction-log-view.c \
         mailbox-list-index.c \
-        mailbox-list-index-sync.c
+        mailbox-list-index-sync.c \
+        mailbox-log.c
 
 headers = \
 	mail-cache.h \
 	mail-cache-private.h \
 	mail-index.h \
+        mail-index-alloc-cache.h \
         mail-index-modseq.h \
 	mail-index-private.h \
         mail-index-strmap.h \
 	mail-index-sync-private.h \
 	mail-index-transaction-private.h \
+	mail-index-util.h \
 	mail-index-view-private.h \
         mail-transaction-log.h \
 	mail-transaction-log-private.h \
+	mail-transaction-log-view-private.h \
         mailbox-list-index.h \
-        mailbox-list-index-private.h
+        mailbox-list-index-private.h \
+        mailbox-log.h
 
-@INSTALL_HEADERS_TRUE@pkginc_libdir = $(pkgincludedir)/src/lib-index
-@INSTALL_HEADERS_TRUE@pkginc_lib_HEADERS = $(headers)
-@INSTALL_HEADERS_FALSE@noinst_HEADERS = $(headers)
+test_programs = \
+	test-mail-index-sync-ext \
+	test-mail-index-transaction-finish \
+	test-mail-index-transaction-update \
+	test-mail-transaction-log-append \
+	test-mail-transaction-log-view
+
+test_libs = \
+	mail-index-util.lo \
+	../lib-test/libtest.la \
+	../lib/liblib.la
+
+test_mail_index_sync_ext_SOURCES = test-mail-index-sync-ext.c
+test_mail_index_sync_ext_LDADD = mail-index-sync-ext.lo $(test_libs)
+test_mail_index_sync_ext_DEPENDENCIES = mail-index-sync-ext.lo $(test_libs)
+test_mail_index_transaction_finish_SOURCES = test-mail-index-transaction-finish.c
+test_mail_index_transaction_finish_LDADD = mail-index-transaction-finish.lo $(test_libs)
+test_mail_index_transaction_finish_DEPENDENCIES = mail-index-transaction-finish.lo $(test_libs)
+test_mail_index_transaction_update_SOURCES = test-mail-index-transaction-update.c
+test_mail_index_transaction_update_LDADD = mail-index-transaction-update.lo $(test_libs)
+test_mail_index_transaction_update_DEPENDENCIES = mail-index-transaction-update.lo $(test_libs)
+test_mail_transaction_log_append_SOURCES = test-mail-transaction-log-append.c
+test_mail_transaction_log_append_LDADD = mail-transaction-log-append.lo $(test_libs)
+test_mail_transaction_log_append_DEPENDENCIES = mail-transaction-log-append.lo $(test_libs)
+test_mail_transaction_log_view_SOURCES = test-mail-transaction-log-view.c
+test_mail_transaction_log_view_LDADD = mail-transaction-log-view.lo $(test_libs)
+test_mail_transaction_log_view_DEPENDENCIES = mail-transaction-log-view.lo $(test_libs)
+pkginc_libdir = $(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)
 all: all-am
 
 .SUFFIXES:
@@ -366,12 +442,40 @@ $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
 
-clean-noinstLIBRARIES:
-	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
-libindex.a: $(libindex_a_OBJECTS) $(libindex_a_DEPENDENCIES) 
-	-rm -f libindex.a
-	$(libindex_a_AR) libindex.a $(libindex_a_OBJECTS) $(libindex_a_LIBADD)
-	$(RANLIB) libindex.a
+clean-noinstLTLIBRARIES:
+	-test -z "$(noinst_LTLIBRARIES)" || rm -f $(noinst_LTLIBRARIES)
+	@list='$(noinst_LTLIBRARIES)'; for p in $$list; do \
+	  dir="`echo $$p | sed -e 's|/[^/]*$$||'`"; \
+	  test "$$dir" != "$$p" || dir=.; \
+	  echo "rm -f \"$${dir}/so_locations\""; \
+	  rm -f "$${dir}/so_locations"; \
+	done
+libindex.la: $(libindex_la_OBJECTS) $(libindex_la_DEPENDENCIES) 
+	$(LINK)  $(libindex_la_OBJECTS) $(libindex_la_LIBADD) $(LIBS)
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+test-mail-index-sync-ext$(EXEEXT): $(test_mail_index_sync_ext_OBJECTS) $(test_mail_index_sync_ext_DEPENDENCIES) 
+	@rm -f test-mail-index-sync-ext$(EXEEXT)
+	$(LINK) $(test_mail_index_sync_ext_OBJECTS) $(test_mail_index_sync_ext_LDADD) $(LIBS)
+test-mail-index-transaction-finish$(EXEEXT): $(test_mail_index_transaction_finish_OBJECTS) $(test_mail_index_transaction_finish_DEPENDENCIES) 
+	@rm -f test-mail-index-transaction-finish$(EXEEXT)
+	$(LINK) $(test_mail_index_transaction_finish_OBJECTS) $(test_mail_index_transaction_finish_LDADD) $(LIBS)
+test-mail-index-transaction-update$(EXEEXT): $(test_mail_index_transaction_update_OBJECTS) $(test_mail_index_transaction_update_DEPENDENCIES) 
+	@rm -f test-mail-index-transaction-update$(EXEEXT)
+	$(LINK) $(test_mail_index_transaction_update_OBJECTS) $(test_mail_index_transaction_update_LDADD) $(LIBS)
+test-mail-transaction-log-append$(EXEEXT): $(test_mail_transaction_log_append_OBJECTS) $(test_mail_transaction_log_append_DEPENDENCIES) 
+	@rm -f test-mail-transaction-log-append$(EXEEXT)
+	$(LINK) $(test_mail_transaction_log_append_OBJECTS) $(test_mail_transaction_log_append_LDADD) $(LIBS)
+test-mail-transaction-log-view$(EXEEXT): $(test_mail_transaction_log_view_OBJECTS) $(test_mail_transaction_log_view_DEPENDENCIES) 
+	@rm -f test-mail-transaction-log-view$(EXEEXT)
+	$(LINK) $(test_mail_transaction_log_view_OBJECTS) $(test_mail_transaction_log_view_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -379,35 +483,49 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-compress.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-decisions.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-fields.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-lookup.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-sync-update.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-transaction.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-dummy-view.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-fsck.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-lock.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-map.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-modseq.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-strmap.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-sync-ext.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-sync-keywords.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-sync-update.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-sync.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-transaction-view.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-transaction.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-view-sync.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-view.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-write.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-append.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-file.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-view.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-index-sync.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-index.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-compress.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-decisions.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-fields.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-lookup.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-sync-update.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-transaction.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-alloc-cache.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-dummy-view.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-fsck.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-lock.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-map-hdr.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-map-read.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-map.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-modseq.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-strmap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-sync-ext.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-sync-keywords.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-sync-update.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-sync.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-transaction-export.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-transaction-finish.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-transaction-sort-appends.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-transaction-update.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-transaction-view.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-transaction.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-util.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-view-sync.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-view.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index-write.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-append.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-view.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-index-sync.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-index.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-log.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-sync-ext.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-transaction-finish.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-transaction-update.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-transaction-log-append.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-transaction-log-view.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -540,7 +658,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LIBRARIES) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -572,8 +690,8 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-am
 
-clean-am: clean-generic clean-libtool clean-noinstLIBRARIES \
-	mostlyclean-am
+clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
+	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -644,19 +762,26 @@ uninstall-am: uninstall-pkginc_libHEADERS
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-noinstLIBRARIES ctags distclean \
-	distclean-compile distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-am install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-pkginc_libHEADERS \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags uninstall uninstall-am uninstall-pkginc_libHEADERS
+	clean-libtool clean-noinstLTLIBRARIES clean-noinstPROGRAMS \
+	ctags distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am install-data \
+	install-data-am install-dvi install-dvi-am install-exec \
+	install-exec-am install-html install-html-am install-info \
+	install-info-am install-man install-pdf install-pdf-am \
+	install-pkginc_libHEADERS install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags uninstall uninstall-am \
+	uninstall-pkginc_libHEADERS
 
+
+check: check-am check-test
+check-test: all-am
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

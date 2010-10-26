@@ -36,14 +36,15 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 subdir = .
-DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
-	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
-	$(srcdir)/dovecot-config.in.in $(srcdir)/stamp.h.in \
-	$(top_srcdir)/configure AUTHORS COPYING ChangeLog INSTALL NEWS \
-	TODO config.guess config.rpath config.sub depcomp install-sh \
-	ltmain.sh missing
+DIST_COMMON = README $(am__configure_deps) $(dist_pkginclude_HEADERS) \
+	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
+	$(srcdir)/config.h.in $(srcdir)/dovecot-config.in.in \
+	$(srcdir)/stamp.h.in $(top_srcdir)/configure AUTHORS COPYING \
+	ChangeLog INSTALL NEWS TODO config.guess config.rpath \
+	config.sub depcomp install-sh ltmain.sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.in
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/configure.in
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
@@ -82,10 +83,10 @@ am__nobase_list = $(am__nobase_strip_setup); \
 am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
-am__installdirs = "$(DESTDIR)$(confdir)" "$(DESTDIR)$(pkglibdir)" \
-	"$(DESTDIR)$(pkgincludedir)"
-DATA = $(conf_DATA) $(noinst_DATA) $(pkglib_DATA)
-HEADERS = $(nodist_pkginclude_HEADERS)
+am__installdirs = "$(DESTDIR)$(aclocaldir)" "$(DESTDIR)$(pkglibdir)" \
+	"$(DESTDIR)$(pkgincludedir)" "$(DESTDIR)$(pkgincludedir)"
+DATA = $(aclocal_DATA) $(pkglib_DATA)
+HEADERS = $(dist_pkginclude_HEADERS) $(nodist_pkginclude_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 AM_RECURSIVE_TARGETS = $(RECURSIVE_TARGETS:-recursive=) \
@@ -93,7 +94,7 @@ AM_RECURSIVE_TARGETS = $(RECURSIVE_TARGETS:-recursive=) \
 	distdir dist dist-all distcheck
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = src doc
+DIST_SUBDIRS = $(SUBDIRS)
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -131,6 +132,7 @@ GZIP_ENV = --best
 distuninstallcheck_listfiles = find . -type f -print
 distcleancheck_listfiles = find . -type f -print
 ACLOCAL = @ACLOCAL@
+ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
 AR = @AR@
 AUTH_CFLAGS = @AUTH_CFLAGS@
@@ -176,10 +178,18 @@ LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
+LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
+LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
+LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
+LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
@@ -190,6 +200,7 @@ MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
 MYSQL_CFLAGS = @MYSQL_CFLAGS@
+MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -211,7 +222,9 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
+RUN_TEST = @RUN_TEST@
 SED = @SED@
+SETTING_FILES = @SETTING_FILES@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 SQLITE_CFLAGS = @SQLITE_CFLAGS@
@@ -220,8 +233,8 @@ SQL_CFLAGS = @SQL_CFLAGS@
 SQL_LIBS = @SQL_LIBS@
 SSL_CFLAGS = @SSL_CFLAGS@
 SSL_LIBS = @SSL_LIBS@
-STORAGE_LIBS = @STORAGE_LIBS@
 STRIP = @STRIP@
+VALGRIND = @VALGRIND@
 VERSION = @VERSION@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -283,26 +296,32 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-@BUILD_DOCS_TRUE@DOCS = doc
+aclocaldir = $(datadir)/aclocal
 SUBDIRS = \
+	. \
 	src \
-	$(DOCS)
+	doc
 
-confdir = $(sysconfdir)
-conf_DATA = dovecot-example.conf
+dist_pkginclude_HEADERS = \
+	dovecot-version.h
+
 EXTRA_DIST = \
 	COPYING.LGPL \
 	COPYING.MIT \
 	ChangeLog \
+	is-tagged.py \
+	run-test.sh \
+	update-version.sh \
 	$(conf_DATA)
 
 datafiles = \
 	dovecot-config
 
-@INSTALL_HEADERS_TRUE@nodist_pkginclude_HEADERS = config.h
-@INSTALL_HEADERS_TRUE@pkglib_DATA = $(datafiles)
-@INSTALL_HEADERS_FALSE@noinst_DATA = $(datafiles)
+nodist_pkginclude_HEADERS = config.h
+pkglib_DATA = $(datafiles)
+aclocal_DATA = dovecot.m4
 CLEANFILES = $(datafiles)
+DISTCLEANFILES = $(top_builddir)/dovecot-version.h
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
@@ -371,26 +390,26 @@ clean-libtool:
 
 distclean-libtool:
 	-rm -f libtool config.lt
-install-confDATA: $(conf_DATA)
+install-aclocalDATA: $(aclocal_DATA)
 	@$(NORMAL_INSTALL)
-	test -z "$(confdir)" || $(MKDIR_P) "$(DESTDIR)$(confdir)"
-	@list='$(conf_DATA)'; test -n "$(confdir)" || list=; \
+	test -z "$(aclocaldir)" || $(MKDIR_P) "$(DESTDIR)$(aclocaldir)"
+	@list='$(aclocal_DATA)'; test -n "$(aclocaldir)" || list=; \
 	for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
 	  echo "$$d$$p"; \
 	done | $(am__base_list) | \
 	while read files; do \
-	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(confdir)'"; \
-	  $(INSTALL_DATA) $$files "$(DESTDIR)$(confdir)" || exit $$?; \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(aclocaldir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(aclocaldir)" || exit $$?; \
 	done
 
-uninstall-confDATA:
+uninstall-aclocalDATA:
 	@$(NORMAL_UNINSTALL)
-	@list='$(conf_DATA)'; test -n "$(confdir)" || list=; \
+	@list='$(aclocal_DATA)'; test -n "$(aclocaldir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	test -n "$$files" || exit 0; \
-	echo " ( cd '$(DESTDIR)$(confdir)' && rm -f" $$files ")"; \
-	cd "$(DESTDIR)$(confdir)" && rm -f $$files
+	echo " ( cd '$(DESTDIR)$(aclocaldir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(aclocaldir)" && rm -f $$files
 install-pkglibDATA: $(pkglib_DATA)
 	@$(NORMAL_INSTALL)
 	test -z "$(pkglibdir)" || $(MKDIR_P) "$(DESTDIR)$(pkglibdir)"
@@ -411,6 +430,26 @@ uninstall-pkglibDATA:
 	test -n "$$files" || exit 0; \
 	echo " ( cd '$(DESTDIR)$(pkglibdir)' && rm -f" $$files ")"; \
 	cd "$(DESTDIR)$(pkglibdir)" && rm -f $$files
+install-dist_pkgincludeHEADERS: $(dist_pkginclude_HEADERS)
+	@$(NORMAL_INSTALL)
+	test -z "$(pkgincludedir)" || $(MKDIR_P) "$(DESTDIR)$(pkgincludedir)"
+	@list='$(dist_pkginclude_HEADERS)'; test -n "$(pkgincludedir)" || list=; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(pkgincludedir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(pkgincludedir)" || exit $$?; \
+	done
+
+uninstall-dist_pkgincludeHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(dist_pkginclude_HEADERS)'; test -n "$(pkgincludedir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	test -n "$$files" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(pkgincludedir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(pkgincludedir)" && rm -f $$files
 install-nodist_pkgincludeHEADERS: $(nodist_pkginclude_HEADERS)
 	@$(NORMAL_INSTALL)
 	test -z "$(pkgincludedir)" || $(MKDIR_P) "$(DESTDIR)$(pkgincludedir)"
@@ -694,6 +733,7 @@ distcheck: dist
 	test -d $(distdir)/_build || exit 0; \
 	dc_install_base=`$(am__cd) $(distdir)/_inst && pwd | sed -e 's,^[^:\\/]:[\\/],/,'` \
 	  && dc_destdir="$${TMPDIR-/tmp}/am-dc-$$$$/" \
+	  && $(MAKE) $(AM_MAKEFLAGS) distcheck-hook \
 	  && am__cwd=`pwd` \
 	  && $(am__cd) $(distdir)/_build \
 	  && ../configure --srcdir=.. --prefix="$$dc_install_base" \
@@ -747,7 +787,7 @@ check: check-recursive
 all-am: Makefile $(DATA) $(HEADERS) config.h
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(confdir)" "$(DESTDIR)$(pkglibdir)" "$(DESTDIR)$(pkgincludedir)"; do \
+	for dir in "$(DESTDIR)$(aclocaldir)" "$(DESTDIR)$(pkglibdir)" "$(DESTDIR)$(pkgincludedir)" "$(DESTDIR)$(pkgincludedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-recursive
@@ -772,6 +812,7 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-test -z "$(DISTCLEANFILES)" || rm -f $(DISTCLEANFILES)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -798,14 +839,16 @@ info: info-recursive
 
 info-am:
 
-install-data-am: install-confDATA install-nodist_pkgincludeHEADERS
+install-data-am: install-aclocalDATA install-dist_pkgincludeHEADERS \
+	install-nodist_pkgincludeHEADERS
 
 install-dvi: install-dvi-recursive
 
 install-dvi-am:
 
 install-exec-am: install-pkglibDATA
-
+	@$(NORMAL_INSTALL)
+	$(MAKE) $(AM_MAKEFLAGS) install-exec-hook
 install-html: install-html-recursive
 
 install-html-am:
@@ -844,11 +887,12 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-confDATA uninstall-nodist_pkgincludeHEADERS \
-	uninstall-pkglibDATA
+uninstall-am: uninstall-aclocalDATA uninstall-dist_pkgincludeHEADERS \
+	uninstall-nodist_pkgincludeHEADERS uninstall-pkglibDATA
 
 .MAKE: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) all \
-	ctags-recursive install-am install-strip tags-recursive
+	ctags-recursive install-am install-exec-am install-strip \
+	tags-recursive
 
 .PHONY: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) CTAGS GTAGS \
 	all all-am am--refresh check check-am clean clean-generic \
@@ -857,26 +901,65 @@ uninstall-am: uninstall-confDATA uninstall-nodist_pkgincludeHEADERS \
 	distcheck distclean distclean-generic distclean-hdr \
 	distclean-libtool distclean-tags distcleancheck distdir \
 	distuninstallcheck dvi dvi-am html html-am info info-am \
-	install install-am install-confDATA install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-nodist_pkgincludeHEADERS \
-	install-pdf install-pdf-am install-pkglibDATA install-ps \
-	install-ps-am install-strip installcheck installcheck-am \
-	installdirs installdirs-am maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-recursive \
-	uninstall uninstall-am uninstall-confDATA \
+	install install-aclocalDATA install-am install-data \
+	install-data-am install-dist_pkgincludeHEADERS install-dvi \
+	install-dvi-am install-exec install-exec-am install-exec-hook \
+	install-html install-html-am install-info install-info-am \
+	install-man install-nodist_pkgincludeHEADERS install-pdf \
+	install-pdf-am install-pkglibDATA install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	installdirs-am maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-generic mostlyclean-libtool pdf pdf-am \
+	ps ps-am tags tags-recursive uninstall uninstall-aclocalDATA \
+	uninstall-am uninstall-dist_pkgincludeHEADERS \
 	uninstall-nodist_pkgincludeHEADERS uninstall-pkglibDATA
 
 
 @MAINTAINER_MODE_TRUE@ChangeLog: .hg/dirstate
-@MAINTAINER_MODE_TRUE@	hg log --style=changelog > ChangeLog
+@MAINTAINER_MODE_TRUE@	hg log -r tip:fef8259e7277 --style=changelog > ChangeLog
+
+dovecot-version.h: noop
+	$(SHELL) $(top_srcdir)/update-version.sh $(top_srcdir) $(top_builddir)
+
+noop:
 
 dovecot-config: dovecot-config.in Makefile
+	old=`pwd` && cd $(top_builddir) && abs_builddir=`pwd` && cd $$old && \
+	cd $(top_srcdir) && abs_srcdir=`pwd` && cd $$old && \
 	cat dovecot-config.in | sed \
-	-e "s|^moduledir=|moduledir=$(moduledir)|" \
-	-e "s|^dovecot_incdir=|dovecot_incdir=$(pkgincludedir)|" > dovecot-config
+	-e "s|\$$(top_builddir)|$$abs_builddir|g" \
+	-e "s|\$$(incdir)|$$abs_srcdir|g" \
+	-e "s|\$$(LIBICONV)|$(LIBICONV)|g" \
+	-e "s|^\(dovecot_pkgincludedir\)=|\1=$(pkgincludedir)|" \
+	-e "s|^\(dovecot_pkglibdir\)=|\1=$(pkglibdir)|" \
+	-e "s|^\(dovecot_pkglibexecdir\)=|\1=$(libexecdir)/dovecot|" \
+	-e "s|^\(dovecot_docdir\)=|\1=$(docdir)|" \
+	-e "s|^\(dovecot_moduledir\)=|\1=$(moduledir)|" \
+	> dovecot-config
+
+install-exec-hook:
+	rm $(DESTDIR)$(pkglibdir)/dovecot-config && \
+	grep -v '^LIBDOVECOT_.*_INCLUDE' dovecot-config | \
+	grep -v '^LIBDOVECOT.*_DEPS' | sed \
+	-e "s|^\(LIBDOVECOT\)=.*$$|\1='-L$(pkglibdir) -ldovecot'|" \
+	-e "s|^\(LIBDOVECOT_LOGIN\)=.*$$|\1=-ldovecot-login|" \
+	-e "s|^\(LIBDOVECOT_SQL\)=.*$$|\1=-ldovecot-sql|" \
+	-e "s|^\(LIBDOVECOT_LDA\)=.*$$|\1=-ldovecot-lda|" \
+	-e "s|^\(LIBDOVECOT_STORAGE\)=.*$$|\1=-ldovecot-storage|" \
+	-e "s|^\(LIBDOVECOT_INCLUDE\)=.*$$|\1=-I$(pkgincludedir)|" \
+	> $(DESTDIR)$(pkglibdir)/dovecot-config
+
+distcheck-hook:
+	if which scan-build > /dev/null; then \
+	  cd $(distdir)/_build; \
+	  scan-build -o scan-reports ../configure --with-ldap=auto --with-pgsql=auto --with-mysql=auto --with-sqlite=auto --with-solr=auto --with-gssapi=auto --with-libwrap=auto; \
+	  rm -rf scan-reports; \
+	  scan-build -o scan-reports make 2>&1 || exit 1; \
+	  if ! rmdir scan-reports 2>/dev/null; then \
+	    exit 1; \
+	  fi; \
+	  cd ../..; rm -rf $(distdir)/_build/*; \
+	fi
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

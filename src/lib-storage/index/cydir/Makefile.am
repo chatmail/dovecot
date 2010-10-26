@@ -1,4 +1,4 @@
-noinst_LIBRARIES = libstorage_cydir.a
+noinst_LTLIBRARIES = libstorage_cydir.la
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
@@ -8,20 +8,15 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-storage \
 	-I$(top_srcdir)/src/lib-storage/index
 
-libstorage_cydir_a_SOURCES = \
+libstorage_cydir_la_SOURCES = \
 	cydir-mail.c \
 	cydir-save.c \
 	cydir-sync.c \
-	cydir-storage.c \
-	cydir-transaction.c
+	cydir-storage.c
 
 headers = \
 	cydir-storage.h \
 	cydir-sync.h
 
-if INSTALL_HEADERS
-  pkginc_libdir=$(pkgincludedir)/src/lib-storage/index/cydir
-  pkginc_lib_HEADERS = $(headers)
-else
-  noinst_HEADERS = $(headers)
-endif
+pkginc_libdir=$(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)

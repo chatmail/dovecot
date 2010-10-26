@@ -1,14 +1,16 @@
 #ifndef MAILDIR_UIDLIST_H
 #define MAILDIR_UIDLIST_H
 
+#include "mail-storage.h"
+
 #define MAILDIR_UIDLIST_NAME "dovecot-uidlist"
 /* how many seconds to wait before overriding uidlist.lock */
 #define MAILDIR_UIDLIST_LOCK_STALE_TIMEOUT (60*2)
 
-struct index_mailbox;
 struct maildir_mailbox;
 struct maildir_uidlist;
 struct maildir_uidlist_sync_ctx;
+struct maildir_uidlist_rec;
 
 enum maildir_uidlist_sync_flags {
 	MAILDIR_UIDLIST_SYNC_PARTIAL	= 0x01,
@@ -30,6 +32,7 @@ enum maildir_uidlist_rec_flag {
 enum maildir_uidlist_hdr_ext_key {
 	MAILDIR_UIDLIST_HDR_EXT_UID_VALIDITY		= 'V',
 	MAILDIR_UIDLIST_HDR_EXT_NEXT_UID		= 'N',
+	MAILDIR_UIDLIST_HDR_EXT_GUID			= 'G',
 	/* POP3 UIDL format unless overridden by records */
 	MAILDIR_UIDLIST_HDR_EXT_POP3_UIDL_FORMAT	= 'P'
 };
@@ -42,7 +45,9 @@ enum maildir_uidlist_rec_ext_key {
 	   isn't written to uidlist. */
 	MAILDIR_UIDLIST_REC_EXT_VSIZE		= 'W',
 	/* POP3 UIDL overriding the default format */
-	MAILDIR_UIDLIST_REC_EXT_POP3_UIDL	= 'P'
+	MAILDIR_UIDLIST_REC_EXT_POP3_UIDL	= 'P',
+	/* Message GUID (default is the base filename) */
+	MAILDIR_UIDLIST_REC_EXT_GUID		= 'G'
 };
 
 int maildir_uidlist_lock(struct maildir_uidlist *uidlist);
@@ -50,10 +55,9 @@ int maildir_uidlist_try_lock(struct maildir_uidlist *uidlist);
 int maildir_uidlist_lock_touch(struct maildir_uidlist *uidlist);
 void maildir_uidlist_unlock(struct maildir_uidlist *uidlist);
 bool maildir_uidlist_is_locked(struct maildir_uidlist *uidlist);
+bool maildir_uidlist_is_read(struct maildir_uidlist *uidlist);
 
 struct maildir_uidlist *maildir_uidlist_init(struct maildir_mailbox *mbox);
-struct maildir_uidlist *
-maildir_uidlist_init_readonly(struct index_mailbox *ibox);
 void maildir_uidlist_deinit(struct maildir_uidlist **uidlist);
 
 /* Returns -1 if error, 0 if file is broken or lost, 1 if ok. If nfs_flush=TRUE
@@ -79,6 +83,10 @@ maildir_uidlist_lookup_ext(struct maildir_uidlist *uidlist, uint32_t uid,
 
 uint32_t maildir_uidlist_get_uid_validity(struct maildir_uidlist *uidlist);
 uint32_t maildir_uidlist_get_next_uid(struct maildir_uidlist *uidlist);
+int maildir_uidlist_get_mailbox_guid(struct maildir_uidlist *uidlist,
+				     uint8_t mailbox_guid[MAIL_GUID_128_SIZE]);
+void maildir_uidlist_set_mailbox_guid(struct maildir_uidlist *uidlist,
+				      const uint8_t mailbox_guid[MAIL_GUID_128_SIZE]);
 
 void maildir_uidlist_set_uid_validity(struct maildir_uidlist *uidlist,
 				      uint32_t uid_validity);
@@ -103,11 +111,20 @@ int maildir_uidlist_sync_init(struct maildir_uidlist *uidlist,
 int maildir_uidlist_sync_next(struct maildir_uidlist_sync_ctx *ctx,
 			      const char *filename,
 			      enum maildir_uidlist_rec_flag flags);
+int maildir_uidlist_sync_next_uid(struct maildir_uidlist_sync_ctx *ctx,
+				  const char *filename, uint32_t uid,
+				  enum maildir_uidlist_rec_flag flags,
+				  struct maildir_uidlist_rec **rec_r);
 void maildir_uidlist_sync_remove(struct maildir_uidlist_sync_ctx *ctx,
 				 const char *filename);
+void maildir_uidlist_sync_set_ext(struct maildir_uidlist_sync_ctx *ctx,
+				  struct maildir_uidlist_rec *rec,
+				  enum maildir_uidlist_rec_ext_key key,
+				  const char *value);
 const char *
 maildir_uidlist_sync_get_full_filename(struct maildir_uidlist_sync_ctx *ctx,
 				       const char *filename);
+void maildir_uidlist_sync_recreate(struct maildir_uidlist_sync_ctx *ctx);
 void maildir_uidlist_sync_finish(struct maildir_uidlist_sync_ctx *ctx);
 int maildir_uidlist_sync_deinit(struct maildir_uidlist_sync_ctx **ctx,
 				bool success);

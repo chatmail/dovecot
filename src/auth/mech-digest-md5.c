@@ -2,7 +2,7 @@
 
 /* Digest-MD5 SASL authentication, see RFC-2831 */
 
-#include "common.h"
+#include "auth-common.h"
 #include "base64.h"
 #include "buffer.h"
 #include "hex-binary.h"
@@ -56,11 +56,12 @@ struct digest_auth_request {
 
 static string_t *get_digest_challenge(struct digest_auth_request *request)
 {
-	struct auth *auth = request->auth_request.auth;
-	buffer_t *buf;
+	const struct auth_settings *set = request->auth_request.set;
+	buffer_t buf;
 	string_t *str;
-	char *const *tmp;
+	const char *const *tmp;
 	unsigned char nonce[16];
+	unsigned char nonce_base64[MAX_BASE64_ENCODED_SIZE(sizeof(nonce))+1];
 	int i;
 	bool first_qop;
 
@@ -77,20 +78,18 @@ static string_t *get_digest_challenge(struct digest_auth_request *request)
 	/* get 128bit of random data as nonce */
 	random_fill(nonce, sizeof(nonce));
 
-	buf = buffer_create_static_hard(pool_datastack_create(),
-				MAX_BASE64_ENCODED_SIZE(sizeof(nonce))+1);
-
-	base64_encode(nonce, sizeof(nonce), buf);
-	buffer_append_c(buf, '\0');
-	request->nonce = p_strdup(request->pool, buffer_get_data(buf, NULL));
+	buffer_create_data(&buf, nonce_base64, sizeof(nonce_base64));
+	base64_encode(nonce, sizeof(nonce), &buf);
+	buffer_append_c(&buf, '\0');
+	request->nonce = p_strdup(request->pool, buf.data);
 
 	str = t_str_new(256);
-	if (*auth->auth_realms == NULL) {
+	if (*set->realms_arr == NULL) {
 		/* If no realms are given, at least Cyrus SASL client defaults
 		   to destination host name */
 		str_append(str, "realm=\"\",");
 	} else {
-		for (tmp = auth->auth_realms; *tmp != NULL; tmp++)
+		for (tmp = set->realms_arr; *tmp != NULL; tmp++)
 			str_printfa(str, "realm=\"%s\",", *tmp);
 	}
 
@@ -385,8 +384,8 @@ static bool auth_handle_response(struct digest_auth_request *request,
 			return FALSE;
 		}
 
-		request->maxbuf = strtoul(value, NULL, 10);
-		if (request->maxbuf == 0) {
+		if (str_to_ulong(value, &request->maxbuf) < 0 ||
+		    request->maxbuf == 0) {
 			*error = "Invalid maxbuf value";
 			return FALSE;
 		}
@@ -507,10 +506,9 @@ static void credentials_callback(enum passdb_result result,
 		}
 
 		request->authenticated = TRUE;
-		auth_request->callback(auth_request,
-				       AUTH_CLIENT_RESULT_CONTINUE,
-				       request->rspauth,
-				       strlen(request->rspauth));
+		auth_request_handler_reply_continue(auth_request,
+						    request->rspauth,
+						    strlen(request->rspauth));
 		break;
 	case PASSDB_RESULT_INTERNAL_FAILURE:
 		auth_request_internal_failure(auth_request);
@@ -571,8 +569,8 @@ mech_digest_md5_auth_initial(struct auth_request *auth_request,
 	/* FIXME: there's no support for subsequent authentication */
 
 	challenge = get_digest_challenge(request);
-	auth_request->callback(auth_request, AUTH_CLIENT_RESULT_CONTINUE,
-			       str_data(challenge), str_len(challenge));
+	auth_request_handler_reply_continue(auth_request, str_data(challenge),
+					    str_len(challenge));
 }
 
 static struct auth_request *mech_digest_md5_auth_new(void)
@@ -592,9 +590,9 @@ static struct auth_request *mech_digest_md5_auth_new(void)
 const struct mech_module mech_digest_md5 = {
 	"DIGEST-MD5",
 
-	MEMBER(flags) MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE |
+	.flags = MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE |
 		MECH_SEC_MUTUAL_AUTH,
-	MEMBER(passdb_need) MECH_PASSDB_NEED_LOOKUP_CREDENTIALS,
+	.passdb_need = MECH_PASSDB_NEED_LOOKUP_CREDENTIALS,
 
 	mech_digest_md5_auth_new,
 	mech_digest_md5_auth_initial,

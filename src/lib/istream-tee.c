@@ -16,6 +16,8 @@ struct tee_child_istream {
 
 	struct tee_istream *tee;
 	struct tee_child_istream *next;
+
+	unsigned int last_read_waiting:1;
 };
 
 static void tee_streams_update_buffer(struct tee_istream *tee)
@@ -37,6 +39,11 @@ static void tee_streams_update_buffer(struct tee_istream *tee)
 			tee->input->v_offset;
 		i_assert(tstream->istream.skip + old_used <= size);
 		tstream->istream.pos = tstream->istream.skip + old_used;
+
+		tstream->istream.parent_expected_offset =
+			tee->input->v_offset;
+		tstream->istream.access_counter =
+			tee->input->real_stream->access_counter;
 	}
 }
 
@@ -82,6 +89,7 @@ static void i_stream_tee_destroy(struct iostream_private *stream)
 	}
 
 	if (tee->children == NULL) {
+		/* last child. the tee is now destroyed */
 		i_assert(tee->input->v_offset <= tee->max_read_offset);
 		i_stream_skip(tee->input,
 			      tee->max_read_offset - tee->input->v_offset);
@@ -112,6 +120,7 @@ static ssize_t i_stream_tee_read(struct istream_private *stream)
 	uoff_t last_high_offset;
 	ssize_t ret;
 
+	tstream->last_read_waiting = FALSE;
 	if (stream->buffer == NULL) {
 		/* initial read */
 		tee_streams_update_buffer(tstream->tee);
@@ -129,10 +138,11 @@ static ssize_t i_stream_tee_read(struct istream_private *stream)
 		tee_streams_skip(tstream->tee);
 		ret = i_stream_read(input);
 		if (ret <= 0) {
-			data = i_stream_get_data(input, &size);
+			(void)i_stream_get_data(input, &size);
 			if (ret == -2 && stream->skip != 0) {
 				/* someone else is holding the data,
 				   wait for it */
+				tstream->last_read_waiting = TRUE;
 				return 0;
 			}
 			stream->istream.stream_errno = input->stream_errno;
@@ -153,13 +163,6 @@ static ssize_t i_stream_tee_read(struct istream_private *stream)
 	i_assert(ret > 0);
 	stream->pos = size;
 	return ret;
-}
-
-static void ATTR_NORETURN
-i_stream_tee_seek(struct istream_private *stream ATTR_UNUSED,
-		  uoff_t v_offset ATTR_UNUSED, bool mark ATTR_UNUSED)
-{
-	i_panic("tee-istream: seeking unsupported currently");
 }
 
 static const struct stat *
@@ -198,25 +201,34 @@ struct tee_istream *tee_i_stream_create(struct istream *input)
 struct istream *tee_i_stream_create_child(struct tee_istream *tee)
 {
 	struct tee_child_istream *tstream;
+	struct istream *ret, *input = tee->input;
 
 	tstream = i_new(struct tee_child_istream, 1);
 	tstream->tee = tee;
 
-	tstream->istream.max_buffer_size =
-		tee->input->real_stream->max_buffer_size;
+	tstream->istream.max_buffer_size = input->real_stream->max_buffer_size;
 	tstream->istream.iostream.close = i_stream_tee_close;
 	tstream->istream.iostream.destroy = i_stream_tee_destroy;
 	tstream->istream.iostream.set_max_buffer_size =
 		i_stream_tee_set_max_buffer_size;
 
 	tstream->istream.read = i_stream_tee_read;
-	tstream->istream.seek = i_stream_tee_seek;
 	tstream->istream.stat = i_stream_tee_stat;
 	tstream->istream.sync = i_stream_tee_sync;
 
 	tstream->next = tee->children;
 	tee->children = tstream;
 
-	return i_stream_create(&tstream->istream, NULL,
-			       i_stream_get_fd(tee->input));
+	ret = i_stream_create(&tstream->istream, input, i_stream_get_fd(input));
+	/* we keep the reference in tee stream, no need for extra references */
+	i_stream_unref(&input);
+	return ret;
+}
+
+bool tee_i_stream_child_is_waiting(struct istream *input)
+{
+	struct tee_child_istream *tstream =
+		(struct tee_child_istream *)input->real_stream;
+
+	return tstream->last_read_waiting;
 }

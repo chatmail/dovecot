@@ -19,8 +19,8 @@
 struct acl_mailbox {
 	union mailbox_module_context module_ctx;
 	struct acl_object *aclobj;
-
-	unsigned int save_hack:1;
+	bool skip_acl_checks;
+	bool acl_enabled;
 };
 
 struct acl_transaction_context {
@@ -29,20 +29,6 @@ struct acl_transaction_context {
 
 static MODULE_CONTEXT_DEFINE_INIT(acl_mail_module, &mail_module_register);
 static struct acl_transaction_context acl_transaction_failure;
-
-struct acl_backend *acl_storage_get_backend(struct mail_storage *storage)
-{
-	struct acl_mail_storage *astorage = ACL_CONTEXT(storage);
-
-	return astorage->rights.backend;
-}
-
-struct acl_object *acl_storage_get_default_aclobj(struct mail_storage *storage)
-{
-	struct acl_mail_storage *astorage = ACL_CONTEXT(storage);
-
-	return astorage->rights.backend->default_aclobj;
-}
 
 struct acl_object *acl_mailbox_get_aclobj(struct mailbox *box)
 {
@@ -54,11 +40,14 @@ struct acl_object *acl_mailbox_get_aclobj(struct mailbox *box)
 int acl_mailbox_right_lookup(struct mailbox *box, unsigned int right_idx)
 {
 	struct acl_mailbox *abox = ACL_CONTEXT(box);
-	struct acl_mail_storage *astorage = ACL_CONTEXT(box->storage);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(box->list);
 	int ret;
 
+	if (abox->skip_acl_checks)
+		return 1;
+
 	ret = acl_object_have_right(abox->aclobj,
-			astorage->rights.acl_storage_right_idx[right_idx]);
+			alist->rights.acl_storage_right_idx[right_idx]);
 	if (ret > 0)
 		return 1;
 	if (ret < 0) {
@@ -79,7 +68,7 @@ static bool acl_is_readonly(struct mailbox *box)
 	if (abox->module_ctx.super.is_readonly(box))
 		return TRUE;
 
-	save_right = (box->open_flags & MAILBOX_OPEN_POST_SESSION) != 0 ?
+	save_right = (box->flags & MAILBOX_FLAG_POST_SESSION) != 0 ?
 		ACL_STORAGE_RIGHT_POST : ACL_STORAGE_RIGHT_INSERT;
 	if (acl_mailbox_right_lookup(box, save_right) > 0)
 		return FALSE;
@@ -109,12 +98,134 @@ static bool acl_allow_new_keywords(struct mailbox *box)
 	return acl_mailbox_right_lookup(box, ACL_STORAGE_RIGHT_WRITE) > 0;
 }
 
-static int acl_mailbox_close(struct mailbox *box)
+static void acl_mailbox_free(struct mailbox *box)
 {
 	struct acl_mailbox *abox = ACL_CONTEXT(box);
 
 	acl_object_deinit(&abox->aclobj);
-	return abox->module_ctx.super.close(box);
+	abox->module_ctx.super.free(box);
+}
+
+static void acl_mailbox_copy_acls_from_parent(struct mailbox *box)
+{
+	struct acl_mailbox *abox = ACL_CONTEXT(box);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(box->list);
+	struct acl_object *parent_aclobj;
+	struct acl_object_list_iter *iter;
+	struct acl_rights_update update;
+
+	memset(&update, 0, sizeof(update));
+	update.modify_mode = ACL_MODIFY_MODE_REPLACE;
+	update.neg_modify_mode = ACL_MODIFY_MODE_REPLACE;
+
+	parent_aclobj = acl_object_init_from_parent(alist->rights.backend,
+						    box->name);
+	iter = acl_object_list_init(parent_aclobj);
+	while (acl_object_list_next(iter, &update.rights) > 0) {
+		/* don't copy global ACL rights. */
+		if (!update.rights.global)
+			(void)acl_object_update(abox->aclobj, &update);
+	}
+	acl_object_list_deinit(&iter);
+	acl_object_deinit(&parent_aclobj);
+}
+
+static int
+acl_mailbox_create(struct mailbox *box, const struct mailbox_update *update,
+		   bool directory)
+{
+	struct acl_mailbox *abox = ACL_CONTEXT(box);
+
+	/* we already checked permissions in list.mailbox_create_dir(). */
+	if (abox->module_ctx.super.create(box, update, directory) < 0)
+		return -1;
+
+	acl_mailbox_copy_acls_from_parent(box);
+	return 0;
+}
+
+static int
+acl_mailbox_update(struct mailbox *box, const struct mailbox_update *update)
+{
+	struct acl_mailbox *abox = ACL_CONTEXT(box);
+	int ret;
+
+	ret = acl_mailbox_right_lookup(box, ACL_STORAGE_RIGHT_ADMIN);
+	if (ret <= 0)
+		return -1;
+	return abox->module_ctx.super.update(box, update);
+}
+
+static void acl_mailbox_fail_not_found(struct mailbox *box)
+{
+	int ret;
+
+	ret = acl_mailbox_right_lookup(box, ACL_STORAGE_RIGHT_LOOKUP);
+	if (ret > 0) {
+		mail_storage_set_error(box->storage, MAIL_ERROR_PERM,
+				       MAIL_ERRSTR_NO_PERMISSION);
+	} else if (ret == 0) {
+		mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
+				T_MAIL_ERR_MAILBOX_NOT_FOUND(box->name));
+	}
+}
+
+static int
+acl_mailbox_delete(struct mailbox *box)
+{
+	struct acl_mailbox *abox = ACL_CONTEXT(box);
+	int ret;
+
+	ret = acl_mailbox_right_lookup(box, ACL_STORAGE_RIGHT_DELETE);
+	if (ret <= 0) {
+		if (ret == 0)
+			acl_mailbox_fail_not_found(box);
+		return -1;
+	}
+
+	/* deletion might internally open the mailbox. let it succeed even if
+	   we don't have READ permission. */
+	abox->skip_acl_checks = TRUE;
+	ret = abox->module_ctx.super.delete(box);
+	abox->skip_acl_checks = FALSE;
+	return ret;
+}
+
+static int
+acl_mailbox_rename(struct mailbox *src, struct mailbox *dest,
+		   bool rename_children)
+{
+	struct acl_mailbox *abox = ACL_CONTEXT(src);
+	int ret;
+
+	/* renaming requires rights to delete the old mailbox */
+	ret = acl_mailbox_right_lookup(src, ACL_STORAGE_RIGHT_DELETE);
+	if (ret <= 0) {
+		if (ret == 0)
+			acl_mailbox_fail_not_found(src);
+		return -1;
+	}
+
+	/* and create the new one under the parent mailbox */
+	T_BEGIN {
+		ret = acl_mailbox_list_have_right(dest->list, dest->name, TRUE,
+						ACL_STORAGE_RIGHT_CREATE, NULL);
+	} T_END;
+
+	if (ret <= 0) {
+		if (ret == 0) {
+			/* Note that if the mailbox didn't have LOOKUP
+			   permission, this now reveals to user the mailbox's
+			   existence. Can't help it. */
+			mail_storage_set_error(src->storage, MAIL_ERROR_PERM,
+					       MAIL_ERRSTR_NO_PERMISSION);
+		} else {
+			mail_storage_set_internal_error(src->storage);
+		}
+		return -1;
+	}
+
+	return abox->module_ctx.super.rename(src, dest, rename_children);
 }
 
 static int
@@ -225,28 +336,24 @@ static void acl_mail_expunge(struct mail *_mail)
 	amail->super.expunge(_mail);
 }
 
-static struct mail *
-acl_mail_alloc(struct mailbox_transaction_context *t,
-	       enum mail_fetch_field wanted_fields,
-	       struct mailbox_header_lookup_ctx *wanted_headers)
+void acl_mail_allocated(struct mail *_mail)
 {
-	struct acl_mailbox *abox = ACL_CONTEXT(t->box);
+	struct acl_mailbox *abox = ACL_CONTEXT(_mail->box);
+	struct mail_private *mail = (struct mail_private *)_mail;
+	struct mail_vfuncs *v = mail->vlast;
 	union mail_module_context *amail;
-	struct mail *_mail;
-	struct mail_private *mail;
 
-	_mail = abox->module_ctx.super.
-		mail_alloc(t, wanted_fields, wanted_headers);
-	mail = (struct mail_private *)_mail;
+	if (abox == NULL || !abox->acl_enabled)
+		return;
 
 	amail = p_new(mail->pool, union mail_module_context, 1);
-	amail->super = mail->v;
+	amail->super = *v;
+	mail->vlast = &amail->super;
 
-	mail->v.update_flags = acl_mail_update_flags;
-	mail->v.update_keywords = acl_mail_update_keywords;
-	mail->v.expunge = acl_mail_expunge;
+	v->update_flags = acl_mail_update_flags;
+	v->update_keywords = acl_mail_update_keywords;
+	v->expunge = acl_mail_expunge;
 	MODULE_CONTEXT_SET_SELF(mail, acl_mail_module, amail);
-	return _mail;
 }
 
 static int acl_save_get_flags(struct mailbox *box, enum mail_flags *flags,
@@ -276,7 +383,7 @@ acl_save_begin(struct mail_save_context *ctx, struct istream *input)
 	struct acl_mailbox *abox = ACL_CONTEXT(box);
 	enum acl_storage_rights save_right;
 
-	save_right = (box->open_flags & MAILBOX_OPEN_POST_SESSION) != 0 ?
+	save_right = (box->flags & MAILBOX_FLAG_POST_SESSION) != 0 ?
 		ACL_STORAGE_RIGHT_POST : ACL_STORAGE_RIGHT_INSERT;
 	if (acl_mailbox_right_lookup(box, save_right) <= 0)
 		return -1;
@@ -293,7 +400,7 @@ acl_copy(struct mail_save_context *ctx, struct mail *mail)
 	struct acl_mailbox *abox = ACL_CONTEXT(t->box);
 	enum acl_storage_rights save_right;
 
-	save_right = (t->box->open_flags & MAILBOX_OPEN_POST_SESSION) != 0 ?
+	save_right = (t->box->flags & MAILBOX_FLAG_POST_SESSION) != 0 ?
 		ACL_STORAGE_RIGHT_POST : ACL_STORAGE_RIGHT_INSERT;
 	if (acl_mailbox_right_lookup(t->box, save_right) <= 0)
 		return -1;
@@ -305,8 +412,7 @@ acl_copy(struct mail_save_context *ctx, struct mail *mail)
 
 static int
 acl_transaction_commit(struct mailbox_transaction_context *ctx,
-		       uint32_t *uid_validity_r,
-		       uint32_t *first_saved_uid_r, uint32_t *last_saved_uid_r)
+		       struct mail_transaction_commit_changes *changes_r)
 {
 	struct acl_mailbox *abox = ACL_CONTEXT(ctx->box);
 	void *at = ACL_CONTEXT(ctx);
@@ -316,9 +422,7 @@ acl_transaction_commit(struct mailbox_transaction_context *ctx,
 		return -1;
 	}
 
-	return abox->module_ctx.super.
-		transaction_commit(ctx, uid_validity_r,
-				   first_saved_uid_r, last_saved_uid_r);
+	return abox->module_ctx.super.transaction_commit(ctx, changes_r);
 }
 
 static int
@@ -350,27 +454,81 @@ acl_keywords_create(struct mailbox *box, const char *const keywords[],
 						      keywords_r, skip_invalid);
 }
 
-struct mailbox *acl_mailbox_open_box(struct mailbox *box)
+static int acl_mailbox_open_check_acl(struct mailbox *box)
 {
-	struct acl_mail_storage *astorage = ACL_CONTEXT(box->storage);
+	struct acl_mailbox *abox = ACL_CONTEXT(box);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(box->list);
+	const unsigned int *idx_arr = alist->rights.acl_storage_right_idx;
+	enum acl_storage_rights open_right;
+	int ret;
+
+	/* mailbox can be opened either for reading or appending new messages */
+	if ((box->flags & MAILBOX_FLAG_IGNORE_ACLS) != 0 ||
+	    (box->list->ns->flags & NAMESPACE_FLAG_NOACL) != 0 ||
+	    abox->skip_acl_checks)
+		return 0;
+
+	if ((box->flags & MAILBOX_FLAG_SAVEONLY) != 0) {
+		open_right = (box->flags & MAILBOX_FLAG_POST_SESSION) != 0 ?
+			ACL_STORAGE_RIGHT_POST : ACL_STORAGE_RIGHT_INSERT;
+	} else {
+		open_right = ACL_STORAGE_RIGHT_READ;
+	}
+
+	ret = acl_object_have_right(abox->aclobj, idx_arr[open_right]);
+	if (ret <= 0) {
+		if (ret == 0) {
+			/* no access. */
+			acl_mailbox_fail_not_found(box);
+		}
+		return -1;
+	}
+	return 0;
+}
+
+static int acl_mailbox_open(struct mailbox *box)
+{
+	struct acl_mailbox *abox = ACL_CONTEXT(box);
+
+	if (acl_mailbox_open_check_acl(box) < 0)
+		return -1;
+
+	return abox->module_ctx.super.open(box);
+}
+
+void acl_mailbox_allocated(struct mailbox *box)
+{
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(box->list);
+	struct mailbox_vfuncs *v = box->vlast;
 	struct acl_mailbox *abox;
 
+	if (alist == NULL) {
+		/* ACLs disabled */
+		return;
+	}
+
 	abox = p_new(box->pool, struct acl_mailbox, 1);
-	abox->module_ctx.super = box->v;
-	abox->aclobj = acl_object_init_from_name(astorage->rights.backend,
-						 box->storage,
+	abox->module_ctx.super = *v;
+	box->vlast = &abox->module_ctx.super;
+	/* aclobj can be used for setting ACLs, even when mailbox is opened
+	   with IGNORE_ACLS flag */
+	abox->aclobj = acl_object_init_from_name(alist->rights.backend,
 						 mailbox_get_name(box));
 
-	if ((box->open_flags & MAILBOX_OPEN_IGNORE_ACLS) == 0) {
-		box->v.is_readonly = acl_is_readonly;
-		box->v.allow_new_keywords = acl_allow_new_keywords;
-		box->v.close = acl_mailbox_close;
-		box->v.mail_alloc = acl_mail_alloc;
-		box->v.save_begin = acl_save_begin;
-		box->v.keywords_create = acl_keywords_create;
-		box->v.copy = acl_copy;
-		box->v.transaction_commit = acl_transaction_commit;
+	v->free = acl_mailbox_free;
+	if ((box->flags & MAILBOX_FLAG_IGNORE_ACLS) == 0) {
+		abox->acl_enabled = TRUE;
+		v->is_readonly = acl_is_readonly;
+		v->allow_new_keywords = acl_allow_new_keywords;
+		v->open = acl_mailbox_open;
+		v->create = acl_mailbox_create;
+		v->update = acl_mailbox_update;
+		v->delete = acl_mailbox_delete;
+		v->rename = acl_mailbox_rename;
+		v->save_begin = acl_save_begin;
+		v->keywords_create = acl_keywords_create;
+		v->copy = acl_copy;
+		v->transaction_commit = acl_transaction_commit;
 	}
 	MODULE_CONTEXT_SET(box, acl_storage_module, abox);
-	return box;
 }

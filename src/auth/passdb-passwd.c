@@ -1,6 +1,6 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 #include "passdb.h"
 
 #ifdef PASSDB_PASSWD
@@ -57,12 +57,13 @@ passwd_verify_plain(struct auth_request *request, const char *password,
 	callback(PASSDB_RESULT_OK, request);
 }
 
-static void passwd_init(struct passdb_module *module, const char *args)
+static void passwd_init(struct passdb_module *module)
 {
-	if (strcmp(args, "blocking=yes") == 0)
-		module->blocking = TRUE;
-	else if (*args != '\0')
-		i_fatal("passdb passwd: Unknown setting: %s", args);
+	module->blocking = TRUE;
+	if (strcmp(module->args, "blocking=no") == 0)
+		module->blocking = FALSE;
+	else if (*module->args != '\0')
+		i_fatal("passdb passwd: Unknown setting: %s", module->args);
 
 	module->cache_key = PASSWD_CACHE_KEY;
 	module->default_pass_scheme = PASSWD_PASS_SCHEME;
@@ -87,6 +88,6 @@ struct passdb_module_interface passdb_passwd = {
 
 #else
 struct passdb_module_interface passdb_passwd = {
-	MEMBER(name) "passwd"
+	.name = "passwd"
 };
 #endif

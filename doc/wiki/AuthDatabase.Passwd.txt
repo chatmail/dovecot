@@ -11,29 +11,26 @@ nowadays so it doesn't usually work as a password database. BSDs are an
 exception to this, they still set the password field even with shadow
 passwords.
 
-The lookup is by default done in the primary dovecot-auth process, so if NSS is
-configured to do the lookups from an external server, it slows down all the
-other authentications while waiting for the reply. To avoid that, you can use
-'blocking=yes' argument to do the lookups in auth worker processes:
+The lookup is by default done in the auth worker processes. If you have only a
+small local passwd file, you can avoid having extra auth worker processes by
+disabling it:
 
 ---%<-------------------------------------------------------------------------
-# NOTE: v1.0.rc23 and later only
-userdb passwd {
-  args = blocking=yes
+userdb {
+  driver = passwd
+  args = blocking=no
 }
 ---%<-------------------------------------------------------------------------
-
-The "blocking" name can be a bit confusing. It doesn't mean that the lookup
-blocks the whole dovecot-auth, exactly the opposite.
 
 Field overriding and extra fields
 ---------------------------------
 
-v1.1+ only: It's possible to override fields from passwd and add <extra fields>
+It's possible to override fields from passwd and add <extra fields>
 [UserDatabase.ExtraFields.txt] with templates. For example:
 
 ---%<-------------------------------------------------------------------------
-userdb passwd {
+userdb {
+  driver = passwd
   args = home=/var/mail/%u mail=maildir:/var/mail/%u/Maildir
 }
 ---%<-------------------------------------------------------------------------
@@ -41,26 +38,4 @@ userdb passwd {
 This uses the UID and GID fields from passwd, but home directory is overridden.
 Also the default <mail_location> [MailLocation.txt] setting is overridden.
 
-nss_ldap
---------
-
-nss_ldap can in some cases return wrong user's information and cause users to
-log in as each others. With 1.0.rc23 and later you can fix this by using the
-'blocking=yes' setting as described above.
-
-There's a nss_ldap bug about this in RedHat's Bugzilla
-[https://bugzilla.redhat.com/bugzilla/show_bug.cgi?id=154314].
-
-A typical PAM + nss_ldap configuration looks like:
-
----%<-------------------------------------------------------------------------
-# NOTE: v1.0.rc23 and later only
-  userdb passwd {
-    args = blocking=yes
-  }
-  passdb pam {
-    args = dovecot
-  }
----%<-------------------------------------------------------------------------
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

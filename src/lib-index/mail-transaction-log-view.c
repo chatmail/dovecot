@@ -3,34 +3,7 @@
 #include "lib.h"
 #include "array.h"
 #include "mail-index-private.h"
-#include "mail-transaction-log-private.h"
-
-struct mail_transaction_log_view {
-	struct mail_transaction_log *log;
-        struct mail_transaction_log_view *next;
-
-	uint32_t min_file_seq, max_file_seq;
-	uoff_t min_file_offset, max_file_offset;
-
-	struct mail_transaction_header tmp_hdr;
-
-	/* a list of log files we've referenced. we have to keep this list
-	   explicitly because more files may be added into the linked list
-	   at any time. */
-	ARRAY_DEFINE(file_refs, struct mail_transaction_log_file *);
-        struct mail_transaction_log_file *cur, *head, *tail;
-	uoff_t cur_offset;
-
-	uint64_t prev_modseq;
-	uint32_t prev_file_seq;
-	uoff_t prev_file_offset;
-
-	struct mail_transaction_log_file *mark_file;
-	uoff_t mark_offset, mark_next_offset;
-	uint64_t mark_modseq;
-
-	unsigned int broken:1;
-};
+#include "mail-transaction-log-view-private.h"
 
 struct mail_transaction_log_view *
 mail_transaction_log_view_open(struct mail_transaction_log *log)
@@ -98,13 +71,12 @@ int mail_transaction_log_view_set(struct mail_transaction_log_view *view,
 				  uint32_t max_file_seq, uoff_t max_file_offset,
 				  bool *reset_r)
 {
-	struct mail_transaction_log_file *file, *const *files;
+	struct mail_transaction_log_file *file, *const *files, *tail;
 	uoff_t start_offset, end_offset;
 	unsigned int i;
 	uint32_t seq;
 	int ret;
 
-	i_assert(view->log != NULL);
 	i_assert(min_file_seq <= max_file_seq);
 
 	*reset_r = FALSE;
@@ -115,15 +87,16 @@ int mail_transaction_log_view_set(struct mail_transaction_log_view *view,
 		return -1;
 	}
 
+	tail = view->log->files;
 	if (min_file_seq == 0) {
 		/* index file doesn't exist yet. this transaction log should
 		   start from the beginning */
-		if (view->log->files->hdr.prev_file_seq != 0) {
+		if (tail->hdr.prev_file_seq != 0) {
 			/* but it doesn't */
 			return 0;
 		}
 
-		min_file_seq = view->log->files->hdr.file_seq;
+		min_file_seq = tail->hdr.file_seq;
 		min_file_offset = 0;
 
 		if (max_file_seq == 0) {
@@ -132,10 +105,10 @@ int mail_transaction_log_view_set(struct mail_transaction_log_view *view,
 		}
 	} 
 
-	if (min_file_seq == view->log->files->hdr.prev_file_seq &&
-	    min_file_offset == view->log->files->hdr.prev_file_offset) {
+	if (min_file_seq == tail->hdr.prev_file_seq &&
+	    min_file_offset == tail->hdr.prev_file_offset) {
 		/* we can skip this */
-		min_file_seq = view->log->files->hdr.file_seq;
+		min_file_seq = tail->hdr.file_seq;
 		min_file_offset = 0;
 
 		if (min_file_seq > max_file_seq) {
@@ -154,14 +127,12 @@ int mail_transaction_log_view_set(struct mail_transaction_log_view *view,
 		return -1;
 	}
 
-	if (min_file_offset > 0 &&
-	    min_file_offset < view->log->files->hdr.hdr_size) {
+	if (min_file_offset > 0 && min_file_offset < tail->hdr.hdr_size) {
 		/* log file offset is probably corrupted in the index file. */
 		mail_transaction_log_view_set_corrupted(view,
 			"file_seq=%u, min_file_offset (%"PRIuUOFF_T
 			") < hdr_size (%u)",
-			min_file_seq, min_file_offset,
-			view->log->files->hdr.hdr_size);
+			min_file_seq, min_file_offset, tail->hdr.hdr_size);
 		return -1;
 	}
 
@@ -218,6 +189,7 @@ int mail_transaction_log_view_set(struct mail_transaction_log_view *view,
 		view->head = file;
 		file = file->next;
 	}
+	i_assert(view->tail != NULL);
 
 	if (min_file_offset == 0) {
 		/* beginning of the file */
@@ -278,6 +250,16 @@ int mail_transaction_log_view_set(struct mail_transaction_log_view *view,
 			}
 			i_assert(i == 1);
 		}
+	}
+
+	if (min_file_seq == view->head->hdr.file_seq &&
+	    min_file_offset > view->head->sync_offset) {
+		/* log file offset is probably corrupted in the index file. */
+		mail_transaction_log_view_set_corrupted(view,
+			"file_seq=%u, min_file_offset (%"PRIuUOFF_T
+			") > sync_offset (%"PRIuUOFF_T")", min_file_seq,
+			min_file_offset, view->head->sync_offset);
+		return -1;
 	}
 
 	i_assert(max_file_seq == (uint32_t)-1 ||
@@ -423,15 +405,49 @@ mail_transaction_log_view_is_corrupted(struct mail_transaction_log_view *view)
 }
 
 static bool
+log_view_is_uid_range_valid(struct mail_transaction_log_file *file,
+			    enum mail_transaction_type rec_type,
+			    const ARRAY_TYPE(seq_range) *uids)
+{
+	const struct seq_range *rec, *prev = NULL;
+	unsigned int i, count = array_count(uids);
+
+	if ((uids->arr.buffer->used % uids->arr.element_size) != 0) {
+		mail_transaction_log_file_set_corrupted(file,
+			"Invalid record size (type=0x%x)", rec_type);
+		return FALSE;
+	} else if (count == 0) {
+		mail_transaction_log_file_set_corrupted(file,
+			"No UID ranges (type=0x%x)", rec_type);
+		return FALSE;
+	}
+
+	for (i = 0; i < count; i++, prev = rec) {
+		rec = array_idx(uids, i);
+		if (rec->seq1 > rec->seq2 || rec->seq1 == 0) {
+			mail_transaction_log_file_set_corrupted(file,
+				"Invalid UID range (%u .. %u, type=0x%x)",
+				rec->seq1, rec->seq2, rec_type);
+			return FALSE;
+		}
+		if (prev != NULL && rec->seq1 <= prev->seq2) {
+			mail_transaction_log_file_set_corrupted(file,
+				"Non-sorted UID ranges (type=0x%x)", rec_type);
+			return FALSE;
+		}
+	}
+	return TRUE;
+}
+
+static bool
 log_view_is_record_valid(struct mail_transaction_log_file *file,
 			 const struct mail_transaction_header *hdr,
 			 const void *data)
 {
 	enum mail_transaction_type rec_type;
 	ARRAY_TYPE(seq_range) uids = ARRAY_INIT;
-	buffer_t *uid_buf = NULL;
+	buffer_t uid_buf;
 	uint32_t rec_size;
-	bool ret = TRUE;
 
 	rec_type = hdr->type & MAIL_TRANSACTION_TYPE_MASK;
 	rec_size = mail_index_offset_to_uint32(hdr->size) - sizeof(*hdr);
@@ -471,26 +487,24 @@ log_view_is_record_valid(struct mail_transaction_log_file *file,
 		if ((rec_size % sizeof(struct mail_index_record)) != 0) {
 			mail_transaction_log_file_set_corrupted(file,
 				"Invalid append record size");
-			ret = FALSE;
+			return FALSE;
 		}
 		break;
 	case MAIL_TRANSACTION_EXPUNGE:
-		uid_buf = buffer_create_const_data(pool_datastack_create(),
-						   data, rec_size);
-		array_create_from_buffer(&uids, uid_buf,
+		buffer_create_const_data(&uid_buf, data, rec_size);
+		array_create_from_buffer(&uids, &uid_buf,
 			sizeof(struct mail_transaction_expunge));
 		break;
 	case MAIL_TRANSACTION_EXPUNGE_GUID:
 		if ((rec_size % sizeof(struct mail_transaction_expunge_guid)) != 0) {
 			mail_transaction_log_file_set_corrupted(file,
 				"Invalid expunge guid record size");
-			ret = FALSE;
+			return FALSE;
 		}
 		break;
 	case MAIL_TRANSACTION_FLAG_UPDATE:
-		uid_buf = buffer_create_const_data(pool_datastack_create(),
-						   data, rec_size);
-		array_create_from_buffer(&uids, uid_buf,
+		buffer_create_const_data(&uid_buf, data, rec_size);
+		array_create_from_buffer(&uids, &uid_buf,
 			sizeof(struct mail_transaction_flag_update));
 		break;
 	case MAIL_TRANSACTION_KEYWORD_UPDATE: {
@@ -504,20 +518,19 @@ log_view_is_record_valid(struct mail_transaction_log_file *file,
 		if (seqset_offset > rec_size) {
 			mail_transaction_log_file_set_corrupted(file,
 				"Invalid keyword update record size");
-			ret = FALSE;
-			break;
+			return FALSE;
 		}
 
-		uid_buf = buffer_create_const_data(pool_datastack_create(),
-					CONST_PTR_OFFSET(data, seqset_offset),
-					rec_size - seqset_offset);
-		array_create_from_buffer(&uids, uid_buf, sizeof(uint32_t)*2);
+		buffer_create_const_data(&uid_buf,
+					 CONST_PTR_OFFSET(data, seqset_offset),
+					 rec_size - seqset_offset);
+		array_create_from_buffer(&uids, &uid_buf,
+					 sizeof(uint32_t)*2);
 		break;
 	}
 	case MAIL_TRANSACTION_KEYWORD_RESET:
-		uid_buf = buffer_create_const_data(pool_datastack_create(),
-						   data, rec_size);
-		array_create_from_buffer(&uids, uid_buf,
+		buffer_create_const_data(&uid_buf, data, rec_size);
+		array_create_from_buffer(&uids, &uid_buf,
 			sizeof(struct mail_transaction_keyword_reset));
 		break;
 	default:
@@ -525,40 +538,10 @@ log_view_is_record_valid(struct mail_transaction_log_file *file,
 	}
 
 	if (array_is_created(&uids)) {
-		const struct seq_range *rec, *prev = NULL;
-		unsigned int i, count = array_count(&uids);
-
-		if ((uid_buf->used % uids.arr.element_size) != 0) {
-			mail_transaction_log_file_set_corrupted(file,
-				"Invalid record size (type=0x%x)", rec_type);
-			ret = FALSE;
-			count = 0;
-		} else if (count == 0) {
-			mail_transaction_log_file_set_corrupted(file,
-				"No UID ranges (type=0x%x)", rec_type);
-			ret = FALSE;
-		}
-
-		for (i = 0; i < count; i++, prev = rec) {
-			rec = array_idx(&uids, i);
-			if (rec->seq1 > rec->seq2 || rec->seq1 == 0) {
-				mail_transaction_log_file_set_corrupted(file,
-					"Invalid UID range "
-					"(%u .. %u, type=0x%x)",
-					rec->seq1, rec->seq2, rec_type);
-				ret = FALSE;
-				break;
-			}
-			if (prev != NULL && rec->seq1 <= prev->seq2) {
-				mail_transaction_log_file_set_corrupted(file,
-					"Non-sorted UID ranges (type=0x%x)",
-					rec_type);
-				ret = FALSE;
-				break;
-			}
-		}
+		if (!log_view_is_uid_range_valid(file, rec_type, &uids))
+			return FALSE;
 	}
-	return ret;
+	return TRUE;
 }
 
 static int
@@ -632,9 +615,7 @@ log_view_get_next(struct mail_transaction_log_view *view,
 		ret = log_view_is_record_valid(file, hdr, data) ? 1 : -1;
 	} T_END;
 	if (ret > 0) {
-		if (mail_transaction_header_has_modseq(hdr, data,
-						       view->prev_modseq))
-			view->prev_modseq++;
+		mail_transaction_update_modseq(hdr, data, &view->prev_modseq);
 		*hdr_r = hdr;
 		*data_r = data;
 		view->cur_offset += full_size;

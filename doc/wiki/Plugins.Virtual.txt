@@ -1,21 +1,11 @@
 Virtual mailboxes
 =================
 
-(This plugin is available with dovecot version 1.2.x only)
-
-Loading the plugin
-------------------
-
 First, you'll have to load the plugin:
 
 ---%<-------------------------------------------------------------------------
- protocol imap {
-   mail_plugins = virtual
- }
+mail_plugins = $mail_plugins virtual
 ---%<-------------------------------------------------------------------------
-
-If you use the <deliver LDA> [LDA.txt], you need to enable it inside a
-'protocol lda' section as well.
 
 Namespace configuration
 -----------------------
@@ -24,7 +14,7 @@ Then, you'll have to create a <namespace> [Namespaces.txt] for the virtual
 mailboxes, for example:
 
 ---%<-------------------------------------------------------------------------
-namespace private {
+namespace {
   prefix = virtual/
   separator = /
   location = virtual:~/Maildir/virtual
@@ -39,17 +29,6 @@ default it uses the "fs" layout, so you can create directories such as:
 
 If you prefer to use Maildir++ layout instead, you can simply append
 ':LAYOUT=maildir++' to the location.
-
-*The location specified in the namespace must exist* (but v2.0 creates it
-automatically)
-
-IMAP will fail with 'Fatal: Namespace initialization failed' if the 'location'
-in the new namespace doesn't exist.  This is very easy to overlook if you use
-per-user locations for the virtual namespace and create your own right away. 
-All of your other users will be unable to access their mail until the root mail
-directory for the namespace is created.  There is no builtin facility for
-creating them on login, but you can use a <PostLoginScripting.txt> hook to do
-it.  An <example> [Plugins.Virtual.txt] is below.
 
 Virtual mailbox configuration
 -----------------------------
@@ -171,7 +150,7 @@ Namespace configuration:
 
 ---%<-------------------------------------------------------------------------
 # The default namespace that is visible to IMAP clients
-namespace private {
+namespace default {
   prefix =
   separator = /
   list = yes
@@ -179,7 +158,7 @@ namespace private {
 
 # Virtual namespace for the virtual INBOX. Use a global directory for
 dovecot-virtual files.
-namespace private {
+namespace virtual {
   prefix = virtual/
   separator = /
   location = virtual:/etc/dovecot/virtual:INDEX=~/Maildir/virtual
@@ -188,7 +167,7 @@ namespace private {
 }
 
 # Copy of the default namespace. We'll use this in dovecot-virtual file.
-namespace private {
+namespace real {
   prefix = RealMails/
   separator = /
   list = no
@@ -197,21 +176,18 @@ namespace private {
 ---%<-------------------------------------------------------------------------
 
 Note that none of the namespaces have inbox=yes. This is because for IMAP users
-you want the first namespace to have inbox=yes, but for POP3 users you want the
-virtual namespace to have inbox=yes. This requires setting the inbox=yes in
+you want the default namespace to have inbox=yes, but for POP3 users you want
+the virtual namespace to have inbox=yes. This requires setting the inbox=yes in
 <userdb extra fields> [UserDatabase.ExtraFields.txt]. For example with MySQL
 you can can do this like:
 
 ---%<-------------------------------------------------------------------------
 user_query = SELECT ..., \
-  CASE '%s' WHEN 'pop3' THEN NULL ELSE 'yes' END AS namespace_1_inbox, \
-  CASE '%s' WHEN 'pop3' THEN 'yes' ELSE NULL END AS namespace_2_inbox \
+  CASE '%s' WHEN 'pop3' THEN NULL ELSE 'yes' END AS 'namespace/default/inbox',
+\
+  CASE '%s' WHEN 'pop3' THEN 'yes' ELSE NULL END AS 'namespace/virtual/inbox' \
   WHERE ...
 ---%<-------------------------------------------------------------------------
-
-Note the 1 and 2 in the middle of namespace_n_inbox. Those specify the
-namespace's position, so 1 is the empty prefix namespace and 2 is the virtual
-namespace.
 
 Finally specify what the virtual INBOX looks like for POP3 users:
 
@@ -229,52 +205,11 @@ You'll have to use the RealMails/ prefix if you want to use "*" wildcard,
 otherwise it would match INBOX, which in turn would again lead to the virtual
 INBOX and that would create a loop.
 
-Also to avoid accidental POP3 UIDL changes, you shouldn't base UIDLs on IMAP
-UIDs. Instead use for example filenames with Maildir:
+Also to avoid accidental POP3 UIDL changes, you shouldn't base the UIDLs on
+IMAP UIDs. Instead use for GUIDs (with maildir the same as base filename):
 
 ---%<-------------------------------------------------------------------------
-pop3_uidl_format = %f
+pop3_uidl_format = %g
 ---%<-------------------------------------------------------------------------
 
-Example PostLoginScript
------------------------
-
-Here are a couple of useful things you might do in a post login script:
-
- * Automatically create a 'virtual' directory for each user (without it they
-   will not be able to access their mail once the namespace is created!).
- * Automatically switch the 'INBOX' to the virtual namespace if the user
-   creates a virtual folder named INBOX.
-
----CodeArea-------------------------------------------------------------------
-#!/bin/sh
-# AUTOMATICALLY CREATE virtual DIRECTORY
-#
-# assumes NAMESPACE_1 is your normal mail, NAMESPACE_2
-# is virtual.  ${NAMESPACE_2} contains the directory
-# we need to create but in an inconvenient format, so
-# here we assume it's $HOME/Maildir/virtual
-
-export VIRTUAL=$HOME/Maildir/virtual
-
-if [ ! -d "$VIRTUAL" ]; then
-        # su to get right ownership
-        su $USER -c 'mkdir -m 700 -p "$VIRTUAL"'
-fi
-
-# AUTOMATICALLY VIRTUALIZE INBOX
-#
-# If the user creates a virtual/INBOX/dovecot-virtual,
-# switch the inbox to the virtual namespace.
-
-if [ -s "${VIRTUAL}/INBOX/dovecot-virtual" ]; then
-        unset NAMESPACE_1_INBOX
-        export NAMESPACE_2_INBOX=1
-fi
-
-#set > /tmp/dovecot-environment
-
-exec /usr/local/libexec/dovecot/imap "$@"
----CodeArea-------------------------------------------------------------------
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

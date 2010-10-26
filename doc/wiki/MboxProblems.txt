@@ -131,30 +131,4 @@ your SMTP server. The headers that you should filter out are:
  * X-UID
  * X-UIDL (if you're using 'pop3_reuse_xuidl=yes')
 
-v0.99.x problems
-----------------
-
-Dovecot v0.99.x had several bugs with handling mbox files. It's highly
-recommended that you upgrade to v1.0 or later. The problems described below
-don't exist in v1.0 anymore.
-
----%<-------------------------------------------------------------------------
-Error indexing mbox file /var/mail/username: LF not found where expected
----%<-------------------------------------------------------------------------
-
-Typically this problem means that there are two adjacent From_-lines in the
-mbox file, such as:
-
----%<-------------------------------------------------------------------------
-From MAILER-DAEMON  Wed Jan 28 19:30:51 2004
-From MAILER-DAEMON  Wed Jan 29 12:37:23 2004
----%<-------------------------------------------------------------------------
-
-Dovecot v0.99.x can't parse this, so you'll have to delete one of these lines.
-
-Another problem with v0.99.x is that it sometimes leaves extra empty lines,
-possibly containing NUL bytes, lying around at the beginning of the file. If
-the mailbox can't be opened, you'll need to delete these so that the mbox file
-begins with the From_-line.
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

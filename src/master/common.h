@@ -1,26 +1,21 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-struct ip_addr;
-
 #include "lib.h"
+#include "master-interface.h"
 #include "master-settings.h"
 
-#define AUTH_SUCCESS_PATH PKG_STATEDIR"/auth-success"
-
-extern struct ioloop *ioloop;
-extern int null_fd, inetd_login_fd;
 extern uid_t master_uid;
-extern char program_path[];
-extern char ssl_manual_key_password[];
-extern const char *env_tz;
-extern bool auth_success_written;
+extern gid_t master_gid;
 extern bool core_dumps_disabled;
-#ifdef DEBUG
-extern bool gdb;
-#endif
+extern char ssl_manual_key_password[];
+extern int null_fd;
+extern struct service_list *services;
 
-#define IS_INETD() \
-	(inetd_login_fd != -1)
+void process_exec(const char *cmd, const char *extra_args[]) ATTR_NORETURN;
+
+int get_uidgid(const char *user, uid_t *uid_r, gid_t *gid_r,
+	       const char **error_r);
+int get_gid(const char *group, gid_t *gid_r, const char **error_r);
 
 #endif

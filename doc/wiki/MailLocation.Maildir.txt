@@ -21,8 +21,8 @@ By default Dovecot uses Maildir++ directory layout. This means that all
 mailboxes are stored in a single directory and prefixed with a dot. For
 example:
 
- * Maildir/.folder
- * Maildir/.folder.subfolder
+ * Maildir/.folder/
+ * Maildir/.folder.subfolder/
 
 If you want maildirs to use hierarchical directories, such as:
 
@@ -32,7 +32,6 @@ If you want maildirs to use hierarchical directories, such as:
 you'll need to enable fs layout:
 
 ---%<-------------------------------------------------------------------------
-# v1.1+ only:
 mail_location = maildir:~/Maildir:LAYOUT=fs
 ---%<-------------------------------------------------------------------------
 
@@ -78,16 +77,15 @@ mail_location = maildir:~/Maildir:INDEX=/var/indexes/%u
 Optimizations
 -------------
 
- * 'maildir_very_dirty_syncs=yes' (v1.2+): Assume that only Dovecot accesses
-   'cur/' directory. If another process (or even Dovecot which doesn't update
-   index files) does changes to 'cur/' while the mailbox is simultaneously
-   being modified by Dovecot, Dovecot may not notice those external changes.
-   It's still safe to deliver new mails to 'new/' using non-Dovecot software.
- * 'maildir_copy_with_hardlinks=yes' (default in v1.1+): When copying a
-   message, do it with hard links whenever possible. This makes the performance
-   much better, and it's unlikely to have any side effects. This will be
-   default in some future version. The only downside is that copying to a
-   shared mailbox may cause permission problems.
+ * 'maildir_very_dirty_syncs=yes': Assume that only Dovecot accesses 'cur/'
+   directory. If another process (or even Dovecot which doesn't update index
+   files) does changes to 'cur/' while the mailbox is simultaneously being
+   modified by Dovecot, Dovecot may not notice those external changes. It's
+   still safe to deliver new mails to 'new/' using non-Dovecot software.
+ * 'maildir_copy_with_hardlinks=yes' (default): When copying a message, do it
+   with hard links whenever possible. This makes the performance much better,
+   and it's unlikely to have any side effects. Only reason to disable this is
+   if you're using a filesystem where hard links are slow (e.g. HFS+).
  * 'maildir_stat_dirs=no' (default): Assume that all the files beginning with a
    dot in the maildir are maildirs. You shouldn't have any non-directory files
    beginning with a dot in the maildirs, but if you do you may need to set this
@@ -95,14 +93,10 @@ Optimizations
    degrades the performance. Some filesystems provide the
    directory/non-directory status for free without having to stat(). In those
    filesystems this setting is ignored.
- * 'maildir_copy_preserve_filename = yes' (not default): When copying a
-   message, try to preserve the base filename. This may allow you to optimize
-   your backups, but other than that it gives no benefits. NOTE: This setting
-   requires 'maildir_copy_with_hardlinks = yes' to work.
 
 Filesystem optimizations
 ------------------------
 
 See "Maildir and filesystems" section in <MailboxFormat.Maildir.txt>.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

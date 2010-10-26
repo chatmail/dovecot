@@ -57,21 +57,16 @@ Dovecot supports the following non-plaintext mechanisms:
    client support is rare.
  * ANONYMOUS: Support for logging in anonymously. This may be useful if you're
    intending to provide publically accessible IMAP archive.
- * OTP and SKEY: One time password mechanisms. Supported only by Dovecot v1.1
-   and later.
- * EXTERNAL: EXTERNAL SASL mechanism. Supported only by Dovecot v1.2 and later.
+ * OTP and SKEY: One time password mechanisms.
+ * EXTERNAL: EXTERNAL SASL mechanism.
 
 Configuration
 -------------
 
-By default only PLAIN mechanism is enabled. You can change this by modifying
-'dovecot.conf':
+By default only PLAIN mechanism is enabled. To use more, set:
 
 ---%<-------------------------------------------------------------------------
-auth default {
-  mechanisms = plain login cram-md5
-  # ..
-}
+auth_mechanisms = plain login cram-md5
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

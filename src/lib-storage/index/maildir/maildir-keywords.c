@@ -55,7 +55,7 @@ struct maildir_keywords *maildir_keywords_init(struct maildir_mailbox *mbox)
 {
 	struct maildir_keywords *mk;
 
-	mk = maildir_keywords_init_readonly(&mbox->ibox.box);
+	mk = maildir_keywords_init_readonly(&mbox->box);
 	mk->mbox = mbox;
 	return mk;
 }
@@ -66,7 +66,8 @@ maildir_keywords_init_readonly(struct mailbox *box)
 	struct maildir_keywords *mk;
 	const char *dir;
 
-	dir = mail_storage_get_mailbox_control_dir(box->storage, box->name);
+	dir = mailbox_list_get_path(box->list, box->name,
+				    MAILBOX_LIST_PATH_TYPE_CONTROL);
 
 	mk = i_new(struct maildir_keywords, 1);
 	mk->storage = box->storage;
@@ -77,14 +78,15 @@ maildir_keywords_init_readonly(struct mailbox *box)
 				     strcase_hash, (hash_cmp_callback_t *)strcasecmp);
 
 	mk->dotlock_settings.use_excl_lock =
-		(box->storage->flags & MAIL_STORAGE_FLAG_DOTLOCK_USE_EXCL) != 0;
+		box->storage->set->dotlock_use_excl;
 	mk->dotlock_settings.nfs_flush =
-		(box->storage->flags &
-		 MAIL_STORAGE_FLAG_NFS_FLUSH_STORAGE) != 0;
-	mk->dotlock_settings.timeout = KEYWORDS_LOCK_STALE_TIMEOUT + 2;
+		box->storage->set->mail_nfs_storage;
+	mk->dotlock_settings.timeout =
+		mail_storage_get_lock_timeout(box->storage,
+					      KEYWORDS_LOCK_STALE_TIMEOUT + 2);
 	mk->dotlock_settings.stale_timeout = KEYWORDS_LOCK_STALE_TIMEOUT;
 	mk->dotlock_settings.temp_prefix =
-		mailbox_list_get_temp_prefix(box->storage->list);
+		mailbox_list_get_temp_prefix(box->list);
 	return mk;
 }
 
@@ -113,13 +115,14 @@ static int maildir_keywords_sync(struct maildir_keywords *mk)
 	struct stat st;
 	char *line, *p, *new_name;
 	const char **strp;
-	int fd, idx;
+	unsigned int idx;
+	int fd;
 
         /* Remember that we rely on uidlist file locking in here. That's why
            we rely on stat()'s timestamp and don't bother handling ESTALE
            errors. */
 
-	if ((mk->storage->flags & MAIL_STORAGE_FLAG_NFS_FLUSH_STORAGE) != 0) {
+	if (mk->storage->set->mail_nfs_storage) {
 		/* file is updated only by replacing it, no need to flush
 		   attribute cache */
 		nfs_flush_file_handle_cache(mk->path);
@@ -166,8 +169,8 @@ static int maildir_keywords_sync(struct maildir_keywords *mk)
 		}
 		*p++ = '\0';
 
-		idx = atoi(line);
-		if (idx < 0 || idx >= MAILDIR_MAX_KEYWORDS || *p == '\0') {
+		if (str_to_uint(line, &idx) < 0 ||
+		    idx >= MAILDIR_MAX_KEYWORDS || *p == '\0') {
 			/* shouldn't happen */
 			continue;
 		}
@@ -286,7 +289,7 @@ static int maildir_keywords_write_fd(struct maildir_keywords *mk,
 				     const char *path, int fd)
 {
 	struct maildir_mailbox *mbox = mk->mbox;
-	struct mailbox *box = &mbox->ibox.box;
+	struct mailbox *box = &mbox->box;
 	const char *const *keywords;
 	unsigned int i, count;
 	string_t *str;
@@ -367,7 +370,7 @@ static int maildir_keywords_commit(struct maildir_keywords *mk)
 		/* we could just create the temp file directly, but doing it
 		   this ways avoids potential problems with overwriting
 		   contents in malicious symlinks */
-		old_mask = umask(0777 & ~mk->mbox->ibox.box.file_create_mode);
+		old_mask = umask(0777 & ~mk->mbox->box.file_create_mode);
 		fd = file_dotlock_open(&mk->dotlock_settings, mk->path,
 				       DOTLOCK_CREATE_FLAG_NONBLOCK, &dotlock);
 		umask(old_mask);
@@ -381,7 +384,7 @@ static int maildir_keywords_commit(struct maildir_keywords *mk)
 		}
 		/* the control dir doesn't exist. create it unless the whole
 		   mailbox was just deleted. */
-		if (!maildir_set_deleted(mk->mbox))
+		if (!maildir_set_deleted(&mk->mbox->box))
 			return -1;
 	}
 

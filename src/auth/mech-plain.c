@@ -1,10 +1,10 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 #include "safe-memset.h"
 #include "mech.h"
 #include "passdb.h"
-#include "plain-common.h"
+#include "mech-plain-common.h"
 
 static void
 mech_plain_auth_continue(struct auth_request *request,
@@ -15,8 +15,7 @@ mech_plain_auth_continue(struct auth_request *request,
 	size_t i, len;
 	int count;
 
-	/* authorization ID \0 authentication ID \0 pass.
-	   we'll ignore authorization ID for now. */
+	/* authorization ID \0 authentication ID \0 pass. */
 	authid = (const char *) data;
 	authenid = NULL; pass = NULL;
 
@@ -78,8 +77,8 @@ static struct auth_request *mech_plain_auth_new(void)
 const struct mech_module mech_plain = {
 	"PLAIN",
 
-	MEMBER(flags) MECH_SEC_PLAINTEXT,
-	MEMBER(passdb_need) MECH_PASSDB_NEED_VERIFY_PLAIN,
+	.flags = MECH_SEC_PLAINTEXT,
+	.passdb_need = MECH_PASSDB_NEED_VERIFY_PLAIN,
 
 	mech_plain_auth_new,
 	mech_generic_auth_initial,

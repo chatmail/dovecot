@@ -6,7 +6,9 @@
 
 enum sql_db_flags {
 	/* Set if queries are not executed asynchronously */
-	SQL_DB_FLAG_BLOCKING		= 0x01
+	SQL_DB_FLAG_BLOCKING		= 0x01,
+	/* Set if database wants to use connection pooling */
+	SQL_DB_FLAG_POOLED		= 0x02
 };
 
 enum sql_field_type {
@@ -63,6 +65,8 @@ enum sql_db_flags sql_get_flags(struct sql_db *db);
    though. Returns -1 if we're not connected, 0 if we started connecting or
    1 if we are fully connected now. */
 int sql_connect(struct sql_db *db);
+/* Explicitly disconnect from database and abort pending auth requests. */
+void sql_disconnect(struct sql_db *db);
 
 /* Escape the given string if needed and return it. */
 const char *sql_escape_string(struct sql_db *db, const char *string);
@@ -94,8 +98,10 @@ void sql_result_setup_fetch(struct sql_result *result,
    occurred. This needs to be the first call for result. */
 int sql_result_next_row(struct sql_result *result);
 
-/* Needs to be called only with sql_query_s(). */
-void sql_result_free(struct sql_result *result);
+void sql_result_ref(struct sql_result *result);
+/* Needs to be called only with sql_query_s() or when result has been
+   explicitly referenced. */
+void sql_result_unref(struct sql_result *result);
 
 /* Return number of fields in result. */
 unsigned int sql_result_get_fields_count(struct sql_result *result);

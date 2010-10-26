@@ -15,46 +15,27 @@ passdb parameters:
  * cache_key: If set, you can use 'auth_cache' with VPopMail. See <PAM>
    [PasswordDatabase.PAM.txt] for more information about it.
  * webmail=IP: If IP address is specified, connections from it are assumed to
-   come from webmail and VPopMail's webmail usage restrictions apply. (v1.2+)
+   come from webmail and VPopMail's webmail usage restrictions apply.
 
 userdb parameters:
 
  * cache_key: Like in passdb.
  * quota_template=TEMPLATE: Template to specify quota rule, %q in value expands
-   to Maildir++ quota. (v1.1+)
+   to Maildir++ quota.
 
 Example
 -------
 
 ---%<-------------------------------------------------------------------------
-auth default {
-  passdb vpopmail {
-    args = webmail=127.0.0.1
-  }
-  userdb vpopmail {
-    args = quota_template=quota_rule=*:backend=%q
-  }
+passdb {
+  driver = vpopmail
+  args = webmail=127.0.0.1
+}
+userdb {
+  driver = vpopmail
+  args = quota_template=quota_rule=*:backend=%q
 }
 ---%<-------------------------------------------------------------------------
-
-Using VPopMail's quota instead of Dovecot's
-===========================================
-
-(FIXME: Doesn't quota_template described above solve this problem too?)
-
-You can use VPopMail's quota limits (instead of Dovecot's limits) by
-configuring Maildir quota like:
-
----%<-------------------------------------------------------------------------
-plugin {
-  quota = maildir
-  quota_rule = ?:storage=0
-}
----%<-------------------------------------------------------------------------
-
-"?" means that it uses an existing "maildirsize" file if it exists, otherwise
-quota is unlimited. VPopMail will recreate this file if it doesn't exist when
-delivering new mail with its quota setting.
 
 VPopMail + MySQL
 ================
@@ -63,20 +44,18 @@ Alternatively, you can use the SQL backend with the following configuration:
 
 ---%<-------------------------------------------------------------------------
 driver = mysql
-#
 connect = host=/var/run/mysqld/mysqld.sock user=vpopmail
 password=YOURPASSWORDHERE dbname=vpopmail
-#
+
 default_pass_scheme = PLAIN
-#
-password_query = SELECT CONCAT(pw_name, '@', pw_domain) AS user,
-pw_clear_passwd AS password FROM vpopmail WHERE pw_name = '%n' AND pw_domain =
-'%d'
-#
-user_query = SELECT pw_dir as home, 64020 AS uid, 64020 AS gid FROM vpopmail
-WHERE pw_name = '%n' AND pw_domain = '%d'
+password_query = SELECT CONCAT(pw_name, '@', pw_domain) AS user, \
+  pw_clear_passwd AS password \
+  FROM vpopmail \
+  WHERE pw_name = '%n' AND pw_domain = '%d'
+user_query = SELECT pw_dir as home, \
+  89 AS uid, 89 AS gid \
+  FROM vpopmail \
+  WHERE pw_name = '%n' AND pw_domain = '%d'
 ---%<-------------------------------------------------------------------------
 
-Most vpopmail installations use 89 as the uid/gid, not 64020.
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

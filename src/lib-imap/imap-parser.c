@@ -97,6 +97,13 @@ void imap_parser_reset(struct imap_parser *parser)
 	parser->literal_size_return = FALSE;
 }
 
+void imap_parser_set_streams(struct imap_parser *parser, struct istream *input,
+			     struct ostream *output)
+{
+	parser->input = input;
+	parser->output = output;
+}
+
 const char *imap_parser_get_error(struct imap_parser *parser, bool *fatal)
 {
         *fatal = parser->fatal_error;
@@ -257,11 +264,13 @@ static int imap_parser_read_atom(struct imap_parser *parser,
 			imap_parser_save_arg(parser, data, i);
 			break;
 		} else if (data[i] == ')') {
-			if (parser->list_arg != NULL ||
-			    (parser->flags &
-			     IMAP_PARSE_FLAG_ATOM_ALLCHARS) == 0) {
+			if (parser->list_arg != NULL) {
 				imap_parser_save_arg(parser, data, i);
 				break;
+			} else if ((parser->flags &
+				    IMAP_PARSE_FLAG_ATOM_ALLCHARS) == 0) {
+				parser->error = "Unexpected ')'";
+				return FALSE;
 			}
 			/* assume it's part of the atom */
 		} else if (!is_valid_atom_char(parser, data[i]))
@@ -645,8 +654,7 @@ bool imap_parser_get_literal_size(struct imap_parser *parser, uoff_t *size_r)
 	if (last_arg == NULL)
 		return FALSE;
 
-	*size_r = IMAP_ARG_LITERAL_SIZE(last_arg);
-	return TRUE;
+	return imap_arg_get_literal_size(last_arg, size_r);
 }
 
 void imap_parser_read_last_literal(struct imap_parser *parser)
@@ -709,44 +717,4 @@ const char *imap_parser_read_word(struct imap_parser *parser)
 	} else {
 		return NULL;
 	}
-}
-
-const char *imap_arg_string(const struct imap_arg *arg)
-{
-	switch (arg->type) {
-	case IMAP_ARG_NIL:
-		return "";
-
-	case IMAP_ARG_ATOM:
-	case IMAP_ARG_STRING:
-	case IMAP_ARG_LITERAL:
-		return arg->_data.str;
-
-	default:
-		return NULL;
-	}
-}
-
-char *imap_arg_str_error(const struct imap_arg *arg)
-{
-	i_panic("Tried to access imap_arg type %d as string", arg->type);
-#ifndef ATTRS_DEFINED
-	return NULL;
-#endif
-}
-
-uoff_t imap_arg_literal_size_error(const struct imap_arg *arg)
-{
-	i_panic("Tried to access imap_arg type %d as literal size", arg->type);
-#ifndef ATTRS_DEFINED
-	return 0;
-#endif
-}
-
-ARRAY_TYPE(imap_arg_list) *imap_arg_list_error(const struct imap_arg *arg)
-{
-	i_panic("Tried to access imap_arg type %d as list", arg->type);
-#ifndef ATTRS_DEFINED
-	return NULL;
-#endif
 }

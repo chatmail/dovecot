@@ -1,8 +1,7 @@
 #ifndef MAIL_TRANSACTION_LOG_H
 #define MAIL_TRANSACTION_LOG_H
 
-struct mail_index;
-struct mail_index_transaction;
+#include "mail-index.h"
 
 #define MAIL_TRANSACTION_LOG_SUFFIX ".log"
 
@@ -38,21 +37,23 @@ enum mail_transaction_type {
 	MAIL_TRANSACTION_EXT_REC_UPDATE		= 0x00000200,
 	MAIL_TRANSACTION_KEYWORD_UPDATE		= 0x00000400,
 	MAIL_TRANSACTION_KEYWORD_RESET		= 0x00000800,
+	MAIL_TRANSACTION_EXT_ATOMIC_INC		= 0x00001000,
 	MAIL_TRANSACTION_EXPUNGE_GUID		= 0x00002000,
-	MAIL_TRANSACTION_UID_UPDATE		= 0x00004000,
 	MAIL_TRANSACTION_MODSEQ_UPDATE		= 0x00008000,
 	MAIL_TRANSACTION_EXT_HDR_UPDATE32	= 0x00010000,
+	MAIL_TRANSACTION_INDEX_DELETED		= 0x00020000,
+	MAIL_TRANSACTION_INDEX_UNDELETED	= 0x00040000,
 
 	MAIL_TRANSACTION_TYPE_MASK		= 0x000fffff,
 
 #define MAIL_TRANSACTION_EXT_MASK \
 	(MAIL_TRANSACTION_EXT_INTRO | MAIL_TRANSACTION_EXT_RESET | \
 	MAIL_TRANSACTION_EXT_HDR_UPDATE | MAIL_TRANSACTION_EXT_HDR_UPDATE32 | \
-	MAIL_TRANSACTION_EXT_REC_UPDATE)
+	MAIL_TRANSACTION_EXT_REC_UPDATE | MAIL_TRANSACTION_EXT_ATOMIC_INC)
 
 	/* since we'll expunge mails based on data read from transaction log,
 	   try to avoid the possibility of corrupted transaction log expunging
-	   messages. this value is ORed to the actual MAIL_TRANSACTION_EXPUNGE
+	   messages. this value is ORed to the actual MAIL_TRANSACTION_EXPUNGE*
 	   flag. if it's not present, assume corrupted log. */
 	MAIL_TRANSACTION_EXPUNGE_PROT		= 0x0000cd90,
 
@@ -63,10 +64,6 @@ enum mail_transaction_type {
 struct mail_transaction_header {
 	uint32_t size;
 	uint32_t type; /* enum mail_transaction_type */
-};
-
-struct mail_transaction_uid_update {
-	uint32_t old_uid, new_uid;
 };
 
 struct mail_transaction_modseq_update {
@@ -80,10 +77,9 @@ struct mail_transaction_modseq_update {
 struct mail_transaction_expunge {
 	uint32_t uid1, uid2;
 };
-
 struct mail_transaction_expunge_guid {
 	uint32_t uid;
-	uint8_t guid_128[16];
+	uint8_t guid_128[MAIL_GUID_128_SIZE];
 };
 
 struct mail_transaction_flag_update {
@@ -155,6 +151,21 @@ struct mail_transaction_ext_hdr_update32 {
 struct mail_transaction_ext_rec_update {
 	uint32_t uid;
 	/* unsigned char data[]; */
+};
+struct mail_transaction_ext_atomic_inc {
+	uint32_t uid;
+	int32_t diff;
+};
+
+struct mail_transaction_log_append_ctx {
+	struct mail_transaction_log *log;
+	buffer_t *output;
+
+	uint64_t new_highest_modseq;
+	unsigned int external:1;
+	unsigned int append_sync_offset:1;
+	unsigned int sync_includes_this:1;
+	unsigned int want_fsync:1;
 };
 
 #define LOG_IS_BEFORE(seq1, offset1, seq2, offset2) \
@@ -239,13 +250,12 @@ mail_transaction_log_view_is_corrupted(struct mail_transaction_log_view *view);
 
 void mail_transaction_log_views_close(struct mail_transaction_log *log);
 
-/* Write data to transaction log. This is atomic operation. Sequences in
-   updates[] and expunges[] are relative to given view, they're modified
-   to real ones. If nothing is written, log_file_seq_r and log_file_offset_r
-   will be set to 0. */
-int mail_transaction_log_append(struct mail_index_transaction *t,
-				uint32_t *log_file_seq_r,
-				uoff_t *log_file_offset_r);
+int mail_transaction_log_append_begin(struct mail_index *index, bool external,
+				      struct mail_transaction_log_append_ctx **ctx_r);
+void mail_transaction_log_append_add(struct mail_transaction_log_append_ctx *ctx,
+				     enum mail_transaction_type type,
+				     const void *data, size_t size);
+int mail_transaction_log_append_commit(struct mail_transaction_log_append_ctx **ctx);
 
 /* Lock transaction log for index synchronization. Log cannot be read or
    written to while it's locked. Returns end offset. */
@@ -255,6 +265,9 @@ void mail_transaction_log_sync_unlock(struct mail_transaction_log *log);
 /* Returns the current head. Works only when log is locked. */
 void mail_transaction_log_get_head(struct mail_transaction_log *log,
 				   uint32_t *file_seq_r, uoff_t *file_offset_r);
+/* Returns the current tail from which all files are open to head. */
+void mail_transaction_log_get_tail(struct mail_transaction_log *log,
+				   uint32_t *file_seq_r);
 /* Returns TRUE if given seq/offset is current head log's rotate point. */
 bool mail_transaction_log_is_head_prev(struct mail_transaction_log *log,
 				       uint32_t file_seq, uoff_t file_offset);
@@ -262,5 +275,9 @@ bool mail_transaction_log_is_head_prev(struct mail_transaction_log *log,
 /* Move currently opened log head file to memory (called by
    mail_index_move_to_memory()) */
 void mail_transaction_log_move_to_memory(struct mail_transaction_log *log);
+/* Returns mtime of the transaction log head file.
+   If it doesn't exist, mtime_r is set to 0. */
+int mail_transaction_log_get_mtime(struct mail_transaction_log *log,
+				   time_t *mtime_r);
 
 #endif

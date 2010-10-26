@@ -1,0 +1,58 @@
+LMTP Server
+===========
+
+Most of the LMTP server configuration is identical to <LDA.txt>. The main
+difference is that dovecot-lda starts as a binary from command line, while LMTP
+is another process started by Dovecot's master process.
+
+Listeners
+---------
+
+You can configure LMTP to be listening on TCP or UNIX sockets:
+
+---%<-------------------------------------------------------------------------
+# add lmtp to protocols, otherwise its listeners are ignored
+protocols = imap pop3 lmtp
+
+service lmtp {
+  inet_listener lmtp {
+    address = 192.168.0.24 127.0.0.1 ::1
+    port = 24
+  }
+
+  unix_listener lmtp {
+    #mode = 0666
+  }
+}
+---%<-------------------------------------------------------------------------
+
+The UNIX listener on $base_dir/lmtp is enabled by default when protocols
+setting contains lmtp.
+
+Security
+--------
+
+Unfortunately LMTP process currently needs to run as root, and only temporarily
+drop privileges to users. Otherwise it couldn't handle mail deliveries to more
+than a single user with different UID. If you're using only a single global
+UID/GID, you can improve security by running lmtp processes as that user:
+
+---%<-------------------------------------------------------------------------
+service lmtp {
+  user = vmail
+}
+---%<-------------------------------------------------------------------------
+
+LMTP Proxying
+-------------
+
+It's possible to use Dovecot LMTP server as a proxy to remote LMTP or SMTP
+servers. The configuration is similar to <IMAP/POP3 proxying>
+[PasswordDatabase.ExtraFields.Proxy.txt], but you'll need to tell Dovecot LMTP
+to issue passdb lookups:
+
+---%<-------------------------------------------------------------------------
+lmtp_proxy = yes
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2010-07-02 21:30)

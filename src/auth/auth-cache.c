@@ -1,6 +1,6 @@
 /* Copyright (c) 2004-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "auth-common.h"
 #include "lib-signals.h"
 #include "hash.h"
 #include "str.h"
@@ -242,7 +242,7 @@ void auth_cache_insert(struct auth_cache *cache, struct auth_request *request,
 		sizeof(node->data) + data_size;
 
 	/* make sure we have enough space */
-	while (cache->size_left < alloc_size)
+	while (cache->size_left < alloc_size && cache->tail != NULL)
 		auth_cache_node_destroy(cache, cache->tail);
 
 	node = hash_table_lookup(cache->hash, str_c(str));

@@ -5,6 +5,7 @@ Dovecot Design
  * <Design of index files> [Design.Indexes.txt]
     * <API for accessing the index files> [Design.Indexes.MailIndexApi.txt]
  * <Design of authentication process> [Design.AuthProcess.txt]
+    * <Authentication protocol> [Design.AuthProtocol.txt]
  * <Design of IMAP/POP3 processes> [Design.MailProcess.txt]
 
 Code APIs
@@ -44,4 +45,4 @@ lib-storage:
  * <Plugins> [Design.Storage.Plugins.txt] - how to hook into lib-storage
    functions.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

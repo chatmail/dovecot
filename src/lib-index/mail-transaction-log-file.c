@@ -12,8 +12,17 @@
 #include "mail-index-modseq.h"
 #include "mail-transaction-log-private.h"
 
-#define LOG_PREFETCH 1024
+#define LOG_PREFETCH IO_BLOCK_SIZE
 #define MEMORY_LOG_NAME "(in-memory transaction log file)"
+#define LOG_NEW_DOTLOCK_SUFFIX ".newlock"
+
+static int
+log_file_set_syscall_error(struct mail_transaction_log_file *file,
+			   const char *function)
+{
+	return mail_index_file_set_syscall_error(file->log->index,
+						 file->filepath, function);
+}
 
 static void
 mail_transaction_log_mark_corrupted(struct mail_transaction_log_file *file)
@@ -21,7 +30,8 @@ mail_transaction_log_mark_corrupted(struct mail_transaction_log_file *file)
 	unsigned int offset =
 		offsetof(struct mail_transaction_log_header, indexid);
 
-	if (MAIL_TRANSACTION_LOG_FILE_IN_MEMORY(file))
+	if (MAIL_TRANSACTION_LOG_FILE_IN_MEMORY(file) ||
+	    file->log->index->readonly)
 		return;
 
 	/* indexid=0 marks the log file as corrupted */
@@ -90,19 +100,13 @@ void mail_transaction_log_file_free(struct mail_transaction_log_file **_file)
 		buffer_free(&file->buffer);
 
 	if (file->mmap_base != NULL) {
-		if (munmap(file->mmap_base, file->mmap_size) < 0) {
-			mail_index_file_set_syscall_error(file->log->index,
-							  file->filepath,
-							  "munmap()");
-		}
+		if (munmap(file->mmap_base, file->mmap_size) < 0)
+			log_file_set_syscall_error(file, "munmap()");
 	}
 
 	if (file->fd != -1) {
-		if (close(file->fd) < 0) {
-			mail_index_file_set_syscall_error(file->log->index,
-							  file->filepath,
-							  "close()");
-		}
+		if (close(file->fd) < 0)
+			log_file_set_syscall_error(file, "close()");
 	}
 
 	i_free(file->filepath);
@@ -189,6 +193,7 @@ mail_transaction_log_init_hdr(struct mail_transaction_log *log,
 			      struct mail_transaction_log_header *hdr)
 {
 	struct mail_index *index = log->index;
+	struct mail_transaction_log_file *file;
 
 	memset(hdr, 0, sizeof(*hdr));
 	hdr->major_version = MAIL_TRANSACTION_LOG_MAJOR_VERSION;
@@ -196,7 +201,7 @@ mail_transaction_log_init_hdr(struct mail_transaction_log *log,
 	hdr->hdr_size = sizeof(struct mail_transaction_log_header);
 	hdr->indexid = log->index->indexid;
 	hdr->create_stamp = ioloop_time;
-#ifndef WORDS_BIGENDIAN
+#if !WORDS_BIGENDIAN
 	hdr->compat_flags |= MAIL_INDEX_COMPAT_LITTLE_ENDIAN;
 #endif
 
@@ -223,6 +228,14 @@ mail_transaction_log_init_hdr(struct mail_transaction_log *log,
 	}
 
 	if (log->head != NULL) {
+		/* make sure the sequence always increases to avoid crashes
+		   later. this catches the buggy case where two processes
+		   happen to replace the same log file. */
+		for (file = log->head->next; file != NULL; file = file->next) {
+			if (hdr->file_seq <= file->hdr.file_seq)
+				hdr->file_seq = file->hdr.file_seq + 1;
+		}
+
 		if (hdr->file_seq <= log->head->hdr.file_seq) {
 			/* make sure the sequence grows */
 			hdr->file_seq = log->head->hdr.file_seq+1;
@@ -256,31 +269,31 @@ mail_transaction_log_file_alloc_in_memory(struct mail_transaction_log *log)
 static int
 mail_transaction_log_file_dotlock(struct mail_transaction_log_file *file)
 {
+	struct dotlock_settings dotlock_set;
 	int ret;
 
 	if (file->log->dotlock_count > 0)
 		ret = 1;
 	else {
-		ret = file_dotlock_create(&file->log->dotlock_settings,
-					  file->filepath, 0,
+		mail_transaction_log_get_dotlock_set(file->log, &dotlock_set);
+		ret = file_dotlock_create(&dotlock_set, file->filepath, 0,
 					  &file->log->dotlock);
 	}
 	if (ret > 0) {
 		file->log->dotlock_count++;
 		file->locked = TRUE;
+		file->lock_created = time(NULL);
 		return 0;
 	}
 	if (ret < 0) {
-		mail_index_file_set_syscall_error(file->log->index,
-						  file->filepath,
-						  "file_dotlock_create()");
+		log_file_set_syscall_error(file, "file_dotlock_create()");
 		return -1;
 	}
 
 	mail_index_set_error(file->log->index,
-			     "Timeout while waiting for "
+			     "Timeout (%us) while waiting for "
 			     "dotlock for transaction log file %s",
-			     file->filepath);
+			     dotlock_set.timeout, file->filepath);
 	file->log->index->index_lock_timeout = TRUE;
 	return -1;
 }
@@ -295,8 +308,7 @@ mail_transaction_log_file_undotlock(struct mail_transaction_log_file *file)
 
 	ret = file_dotlock_delete(&file->log->dotlock);
 	if (ret < 0) {
-		mail_index_file_set_syscall_error(file->log->index,
-			file->filepath, "file_dotlock_delete()");
+		log_file_set_syscall_error(file, "file_dotlock_delete()");
 		return -1;
 	}
 
@@ -311,6 +323,7 @@ mail_transaction_log_file_undotlock(struct mail_transaction_log_file *file)
 
 int mail_transaction_log_file_lock(struct mail_transaction_log_file *file)
 {
+	unsigned int lock_timeout_secs;
 	int ret;
 
 	if (file->locked)
@@ -325,36 +338,47 @@ int mail_transaction_log_file_lock(struct mail_transaction_log_file *file)
 		return mail_transaction_log_file_dotlock(file);
 
 	i_assert(file->file_lock == NULL);
+	lock_timeout_secs = I_MIN(MAIL_TRANSCATION_LOG_LOCK_TIMEOUT,
+				  file->log->index->max_lock_timeout_secs);
 	ret = mail_index_lock_fd(file->log->index, file->filepath, file->fd,
-				 F_WRLCK, MAIL_TRANSCATION_LOG_LOCK_TIMEOUT,
+				 F_WRLCK, lock_timeout_secs,
 				 &file->file_lock);
 	if (ret > 0) {
 		file->locked = TRUE;
+		file->lock_created = time(NULL);
 		return 0;
 	}
 	if (ret < 0) {
-		mail_index_file_set_syscall_error(file->log->index,
-						  file->filepath,
-						  "mail_index_wait_lock_fd()");
+		log_file_set_syscall_error(file, "mail_index_wait_lock_fd()");
 		return -1;
 	}
 
 	mail_index_set_error(file->log->index,
-		"Timeout while waiting for lock for transaction log file %s",
-		file->filepath);
+		"Timeout (%us) while waiting for lock for "
+		"transaction log file %s",
+		lock_timeout_secs, file->filepath);
 	file->log->index->index_lock_timeout = TRUE;
 	return -1;
 }
 
 void mail_transaction_log_file_unlock(struct mail_transaction_log_file *file)
 {
+	unsigned int lock_time;
+
 	if (!file->locked)
 		return;
 
 	file->locked = FALSE;
+	file->locked_sync_offset_updated = FALSE;
 
 	if (MAIL_TRANSACTION_LOG_FILE_IN_MEMORY(file))
 		return;
+
+	lock_time = time(NULL) - file->lock_created;
+	if (lock_time >= MAIL_TRANSCATION_LOG_LOCK_TIMEOUT) {
+		i_warning("Transaction log file %s was locked for %u seconds",
+			  file->filepath, lock_time);
+	}
 
 	if (file->log->index->lock_method == FILE_LOCK_METHOD_DOTLOCK) {
 		mail_transaction_log_file_undotlock(file);
@@ -367,22 +391,42 @@ void mail_transaction_log_file_unlock(struct mail_transaction_log_file *file)
 static ssize_t
 mail_transaction_log_file_read_header(struct mail_transaction_log_file *file)
 {
-	ssize_t pos;
-	int ret;
+	void *dest;
+	size_t pos, dest_size;
+	ssize_t ret;
+
+	i_assert(file->buffer == NULL && file->mmap_base == NULL);
 
 	memset(&file->hdr, 0, sizeof(file->hdr));
+	if (file->last_size < mmap_get_page_size() && file->last_size > 0) {
+		/* just read the entire transaction log to memory */
+		file->buffer = buffer_create_dynamic(default_pool, 4096);
+		file->buffer_offset = 0;
+		dest_size = file->last_size;
+		dest = buffer_append_space_unsafe(file->buffer, dest_size);
+	} else {
+		/* read only the header */
+		dest = &file->hdr;
+		dest_size = sizeof(file->hdr);
+	}
 
-        /* try to read the whole header, but it's not necessarily an error to
-	   read less since the older versions of the log format could be
-	   smaller. */
+	/* it's not necessarily an error to read less than wanted header size,
+	   since older versions of the log format used smaller headers. */
         pos = 0;
 	do {
-		ret = pread(file->fd, PTR_OFFSET(&file->hdr, pos),
-			    sizeof(file->hdr) - pos, pos);
+		ret = pread(file->fd, PTR_OFFSET(dest, pos),
+			    dest_size - pos, pos);
 		if (ret > 0)
 			pos += ret;
-	} while (ret > 0 && pos < (ssize_t)sizeof(file->hdr));
-	return ret < 0 ? -1 : pos;
+	} while (ret > 0 && pos < dest_size);
+
+	if (file->buffer != NULL) {
+		buffer_set_used_size(file->buffer, pos);
+		memcpy(&file->hdr, file->buffer->data,
+		       I_MIN(pos, sizeof(file->hdr)));
+	}
+
+	return ret < 0 ? -1 : (ssize_t)pos;
 }
 
 static int
@@ -399,11 +443,8 @@ mail_transaction_log_file_read_hdr(struct mail_transaction_log_file *file,
 
 	ret = mail_transaction_log_file_read_header(file);
 	if (ret < 0) {
-                if (errno != ESTALE || !ignore_estale) {
-                        mail_index_file_set_syscall_error(file->log->index,
-                                                          file->filepath,
-                                                          "pread()");
-                }
+                if (errno != ESTALE || !ignore_estale)
+			log_file_set_syscall_error(file, "pread()");
 		return -1;
 	}
 	if (file->hdr.major_version != MAIL_TRANSACTION_LOG_MAJOR_VERSION) {
@@ -420,7 +461,7 @@ mail_transaction_log_file_read_hdr(struct mail_transaction_log_file *file,
 		/* we have compatibility flags */
 		enum mail_index_header_compat_flags compat_flags = 0;
 
-#ifndef WORDS_BIGENDIAN
+#if !WORDS_BIGENDIAN
 		compat_flags |= MAIL_INDEX_COMPAT_LITTLE_ENDIAN;
 #endif
 		if (file->hdr.compat_flags != compat_flags) {
@@ -506,10 +547,8 @@ mail_transaction_log_file_stat(struct mail_transaction_log_file *file,
 	struct stat st;
 
 	if (fstat(file->fd, &st) < 0) {
-                if (errno != ESTALE || !ignore_estale) {
-			mail_index_file_set_syscall_error(file->log->index,
-				file->filepath, "fstat()");
-                }
+                if (errno != ESTALE || !ignore_estale)
+			log_file_set_syscall_error(file, "fstat()");
 		return -1;
 	}
 
@@ -544,7 +583,7 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
 	int fd, ret;
 	bool rename_existing;
 
-	if (index->nfs_flush) {
+	if (file->log->nfs_flush) {
 		/* although we check also mtime and file size below, it's done
 		   only to fix broken log files. we don't bother flushing
 		   attribute cache just for that. */
@@ -560,11 +599,8 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
 	if (reset)
 		rename_existing = FALSE;
 	else if (nfs_safe_stat(file->filepath, &st) < 0) {
-		if (errno != ENOENT) {
-			mail_index_file_set_syscall_error(index, file->filepath,
-							  "stat()");
-			return -1;
-		}
+		if (errno != ENOENT)
+			return log_file_set_syscall_error(file, "stat()");
 		rename_existing = FALSE;
 	} else if (st.st_ino == file->st_ino &&
 		   CMP_DEV_T(st.st_dev, file->st_dev) &&
@@ -579,12 +615,12 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
 		fd = nfs_safe_open(file->filepath, O_RDWR);
 		if (fd == -1) {
 			if (errno != ENOENT) {
-				mail_index_file_set_syscall_error(index,
-					file->filepath, "open()");
+				log_file_set_syscall_error(file, "open()");
 				return -1;
 			}
 		} else {
 			file->fd = fd;
+			file->last_size = 0;
 			if (mail_transaction_log_file_read_hdr(file,
 							       FALSE) > 0 &&
 			    mail_transaction_log_file_stat(file, FALSE) == 0) {
@@ -594,10 +630,8 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
 				return 0;
 			}
 			file->fd = -1;
-			if (close(fd) < 0) {
-				mail_index_file_set_syscall_error(index,
-					file->filepath, "close()");
-			}
+			if (close(fd) < 0)
+				log_file_set_syscall_error(file, "close()");
 		}
 		rename_existing = FALSE;
 	}
@@ -606,25 +640,21 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
 		return -1;
 
 	if (reset) {
+		/* don't reset modseqs. if we're reseting due to rebuilding
+		   indexes we'll probably want to keep uidvalidity and in such
+		   cases we really don't want to shrink modseqs. */
 		file->hdr.prev_file_seq = 0;
 		file->hdr.prev_file_offset = 0;
-		file->hdr.initial_modseq = 0;
 	}
 
-	if (write_full(new_fd, &file->hdr, sizeof(file->hdr)) < 0) {
-		mail_index_file_set_syscall_error(index, file->filepath,
-						  "write_full()");
-		return -1;
-	}
+	if (write_full(new_fd, &file->hdr, sizeof(file->hdr)) < 0)
+		return log_file_set_syscall_error(file, "write_full()");
 
-	if (index->nfs_flush) {
+	if (file->log->index->fsync_mode == FSYNC_MODE_ALWAYS) {
 		/* the header isn't important, so don't bother calling
-		   fdatasync() unless NFS is used */
-		if (fdatasync(new_fd) < 0) {
-			mail_index_file_set_syscall_error(index, file->filepath,
-							  "fdatasync()");
-			return -1;
-		}
+		   fdatasync() unless it's required */
+		if (fdatasync(new_fd) < 0)
+			return log_file_set_syscall_error(file, "fdatasync()");
 	}
 
 	file->fd = new_fd;
@@ -677,24 +707,31 @@ int mail_transaction_log_file_create(struct mail_transaction_log_file *file,
 				     bool reset)
 {
 	struct mail_index *index = file->log->index;
+	struct dotlock_settings new_dotlock_set;
 	struct dotlock *dotlock;
 	mode_t old_mask;
 	int fd;
 
 	i_assert(!MAIL_INDEX_IS_IN_MEMORY(index));
 
+	if (file->log->index->readonly) {
+		mail_index_set_error(index,
+			"Can't create log file %s: Index is read-only",
+			file->filepath);
+		return -1;
+	}
+
+	mail_transaction_log_get_dotlock_set(file->log, &new_dotlock_set);
+	new_dotlock_set.lock_suffix = LOG_NEW_DOTLOCK_SUFFIX;
+
 	/* With dotlocking we might already have path.lock created, so this
 	   filename has to be different. */
 	old_mask = umask(index->mode ^ 0666);
-	fd = file_dotlock_open(&file->log->new_dotlock_settings,
-			       file->filepath, 0, &dotlock);
+	fd = file_dotlock_open(&new_dotlock_set, file->filepath, 0, &dotlock);
 	umask(old_mask);
 
-	if (fd == -1) {
-		mail_index_file_set_syscall_error(index, file->filepath,
-						  "file_dotlock_open()");
-		return -1;
-	}
+	if (fd == -1)
+		return log_file_set_syscall_error(file, "file_dotlock_open()");
 	mail_index_fchown(index, fd, file_dotlock_get_lock_path(dotlock));
 
         /* either fd gets used or the dotlock gets deleted and returned fd
@@ -720,9 +757,7 @@ int mail_transaction_log_file_open(struct mail_transaction_log_file *file,
 			if (errno == ENOENT)
 				return 0;
 
-			mail_index_file_set_syscall_error(file->log->index,
-				file->filepath, "open()");
-			return -1;
+			return log_file_set_syscall_error(file, "open()");
                 }
 
 		ignore_estale = i < MAIL_INDEX_ESTALE_RETRY_COUNT;
@@ -742,7 +777,10 @@ int mail_transaction_log_file_open(struct mail_transaction_log_file *file,
 
 		if (ret == 0) {
 			/* corrupted */
-			if (unlink(file->filepath) < 0 && errno != ENOENT) {
+			if (file->log->index->readonly) {
+				/* don't delete */
+			} else if (unlink(file->filepath) < 0 &&
+				   errno != ENOENT) {
 				mail_index_set_error(file->log->index,
 						     "unlink(%s) failed: %m",
 						     file->filepath);
@@ -812,12 +850,15 @@ log_file_track_mailbox_sync_offset_hdr(struct mail_transaction_log_file *file,
 	return 0;
 }
 
-bool
-mail_transaction_header_has_modseq(const struct mail_transaction_header *hdr,
-				   const void *data,
-				   uint64_t cur_modseq)
+void mail_transaction_update_modseq(const struct mail_transaction_header *hdr,
+				    const void *data, uint64_t *cur_modseq)
 {
-	if (cur_modseq != 0) {
+	uint32_t trans_size;
+
+	trans_size = mail_index_offset_to_uint32(hdr->size);
+	i_assert(trans_size != 0);
+
+	if (*cur_modseq != 0) {
 		/* tracking modseqs */
 	} else if ((hdr->type & MAIL_TRANSACTION_TYPE_MASK) ==
 		   MAIL_TRANSACTION_EXT_INTRO) {
@@ -831,11 +872,12 @@ mail_transaction_header_has_modseq(const struct mail_transaction_header *hdr,
 		    memcmp(intro + 1, MAIL_INDEX_MODSEQ_EXT_NAME,
 			   modseq_ext_len) == 0) {
 			/* modseq tracking started */
-			return TRUE;
+			*cur_modseq += 1;
+			return;
 		}
 	} else {
 		/* not tracking modseqs */
-		return FALSE;
+		return;
 	}
 
 	switch (hdr->type & MAIL_TRANSACTION_TYPE_MASK) {
@@ -849,11 +891,21 @@ mail_transaction_header_has_modseq(const struct mail_transaction_header *hdr,
 	case MAIL_TRANSACTION_FLAG_UPDATE:
 	case MAIL_TRANSACTION_KEYWORD_UPDATE:
 	case MAIL_TRANSACTION_KEYWORD_RESET:
-	case MAIL_TRANSACTION_UID_UPDATE:
 		/* these changes increase modseq */
-		return TRUE;
+		*cur_modseq += 1;
+		break;
+	case MAIL_TRANSACTION_MODSEQ_UPDATE: {
+		const struct mail_transaction_modseq_update *rec, *end;
+
+		end = CONST_PTR_OFFSET(data, trans_size - sizeof(*hdr));
+		for (rec = data; rec < end; rec++) {
+			uint64_t modseq = ((uint64_t)rec->modseq_high32 >> 32) |
+				rec->modseq_low32;
+			if (*cur_modseq < modseq)
+				*cur_modseq = modseq;
+		}
 	}
-	return FALSE;
+	}
 }
 
 static struct modseq_cache *
@@ -998,9 +1050,7 @@ int mail_transaction_log_file_get_highest_modseq_at(
 	while (cur_offset < offset) {
 		if (log_get_synced_record(file, &cur_offset, &hdr) < 0)
 			return- 1;
-		if (mail_transaction_header_has_modseq(hdr, hdr + 1,
-						       cur_modseq))
-			cur_modseq++;
+		mail_transaction_update_modseq(hdr, hdr + 1, &cur_modseq);
 	}
 
 	/* @UNSAFE: cache the value */
@@ -1063,13 +1113,11 @@ int mail_transaction_log_file_get_modseq_next_offset(
 	while (cur_offset < file->sync_offset) {
 		if (log_get_synced_record(file, &cur_offset, &hdr) < 0)
 			return -1;
-		if (mail_transaction_header_has_modseq(hdr, hdr + 1,
-						       cur_modseq)) {
-			if (++cur_modseq == modseq)
-				break;
-		}
+		mail_transaction_update_modseq(hdr, hdr + 1, &cur_modseq);
+		if (cur_modseq >= modseq)
+			break;
 	}
-	if (modseq != cur_modseq) {
+	if (cur_offset == file->sync_offset) {
 		/* if we got to sync_offset, cur_modseq should be
 		   sync_highest_modseq */
 		mail_index_set_error(file->log->index,
@@ -1097,21 +1145,34 @@ log_file_track_sync(struct mail_transaction_log_file *file,
 	const void *data = hdr + 1;
 	int ret;
 
-	if (mail_transaction_header_has_modseq(hdr, hdr + 1,
-					       file->sync_highest_modseq))
-		file->sync_highest_modseq++;
+	mail_transaction_update_modseq(hdr, hdr + 1,
+				       &file->sync_highest_modseq);
 	if ((hdr->type & MAIL_TRANSACTION_EXTERNAL) == 0)
 		return 0;
 
 	/* external transactions: */
-	if ((hdr->type & MAIL_TRANSACTION_TYPE_MASK) ==
-	    MAIL_TRANSACTION_HEADER_UPDATE) {
+	switch (hdr->type & MAIL_TRANSACTION_TYPE_MASK) {
+	case MAIL_TRANSACTION_HEADER_UPDATE:
 		/* see if this updates mailbox_sync_offset */
 		ret = log_file_track_mailbox_sync_offset_hdr(file, data,
 							     trans_size -
 							     sizeof(*hdr));
 		if (ret != 0)
 			return ret < 0 ? -1 : 0;
+		break;
+	case MAIL_TRANSACTION_INDEX_DELETED:
+		if (file->sync_offset < file->index_undeleted_offset)
+			break;
+		file->log->index->index_deleted = TRUE;
+		file->index_deleted_offset = file->sync_offset + trans_size;
+		break;
+	case MAIL_TRANSACTION_INDEX_UNDELETED:
+		if (file->sync_offset < file->index_deleted_offset)
+			break;
+		file->log->index->index_deleted = FALSE;
+		file->log->index->index_delete_requested = FALSE;
+		file->index_undeleted_offset = file->sync_offset + trans_size;
+		break;
 	}
 
 	if (file->max_tail_offset == file->sync_offset) {
@@ -1176,12 +1237,8 @@ mail_transaction_log_file_sync(struct mail_transaction_log_file *file)
 		   Without this check we might see partial transactions,
 		   sometimes causing "Extension record updated without intro
 		   prefix" errors. */
-		if (fstat(file->fd, &st) < 0) {
-			mail_index_file_set_syscall_error(file->log->index,
-							  file->filepath,
-							  "fstat()");
-			return -1;
-		}
+		if (fstat(file->fd, &st) < 0)
+			return log_file_set_syscall_error(file, "fstat()");
 		if ((uoff_t)st.st_size != file->last_size) {
 			file->last_size = st.st_size;
 			return 0;
@@ -1253,9 +1310,7 @@ mail_transaction_log_file_insert_read(struct mail_transaction_log_file *file,
 		/* log file was deleted in NFS server, fail silently */
 		return 0;
 	} else {
-		mail_index_file_set_syscall_error(file->log->index,
-						  file->filepath, "pread()");
-		return -1;
+		return log_file_set_syscall_error(file, "pread()");
 	}
 }
 
@@ -1286,10 +1341,7 @@ mail_transaction_log_file_read_more(struct mail_transaction_log_file *file)
 			/* log file was deleted in NFS server, fail silently */
 			return 0;
 		}
-
-		mail_index_file_set_syscall_error(file->log->index,
-						  file->filepath, "pread()");
-		return -1;
+		return log_file_set_syscall_error(file, "pread()");
 	}
 	return 1;
 }
@@ -1328,7 +1380,7 @@ mail_transaction_log_file_read(struct mail_transaction_log_file *file,
 	   that we really should have read more, flush the cache and try again.
 	   if file is locked, the attribute cache was already flushed when
 	   refreshing the log. */
-	if (file->log->index->nfs_flush && nfs_flush) {
+	if (file->log->nfs_flush && nfs_flush) {
 		if (!file->locked)
 			nfs_flush_attr_cache_unlocked(file->filepath);
 		else {
@@ -1353,7 +1405,7 @@ mail_transaction_log_file_read(struct mail_transaction_log_file *file,
 	if ((ret = mail_transaction_log_file_read_more(file)) <= 0)
 		return ret;
 
-	if (file->log->index->nfs_flush && !nfs_flush &&
+	if (file->log->nfs_flush && !nfs_flush &&
 	    mail_transaction_log_file_need_nfs_flush(file)) {
 		/* we didn't read enough data. flush and try again. */
 		return mail_transaction_log_file_read(file, start_offset, TRUE);
@@ -1406,22 +1458,18 @@ mail_transaction_log_file_mmap(struct mail_transaction_log_file *file)
 	if (file->mmap_base == MAP_FAILED) {
 		file->mmap_base = NULL;
 		file->mmap_size = 0;
-		mail_index_file_set_syscall_error(file->log->index,
-						  file->filepath, "mmap()");
-		return -1;
+		return log_file_set_syscall_error(file, "mmap()");
 	}
 
 	if (file->mmap_size > mmap_get_page_size()) {
 		if (madvise(file->mmap_base, file->mmap_size,
-			    MADV_SEQUENTIAL) < 0) {
-			mail_index_file_set_syscall_error(file->log->index,
-				file->filepath, "madvise()");
-		}
+			    MADV_SEQUENTIAL) < 0)
+			log_file_set_syscall_error(file, "madvise()");
 	}
 
-	file->buffer = buffer_create_const_data(default_pool,
-						file->mmap_base,
-						file->mmap_size);
+	buffer_create_const_data(&file->mmap_buffer,
+				 file->mmap_base, file->mmap_size);
+	file->buffer = &file->mmap_buffer;
 	file->buffer_offset = 0;
 	return 0;
 }
@@ -1432,10 +1480,8 @@ mail_transaction_log_file_munmap(struct mail_transaction_log_file *file)
 	if (file->mmap_base == NULL)
 		return;
 
-	if (munmap(file->mmap_base, file->mmap_size) < 0) {
-		mail_index_file_set_syscall_error(file->log->index,
-						  file->filepath, "munmap()");
-	}
+	if (munmap(file->mmap_base, file->mmap_size) < 0)
+		log_file_set_syscall_error(file, "munmap()");
 	file->mmap_base = NULL;
 	file->mmap_size = 0;
 	buffer_free(&file->buffer);
@@ -1453,11 +1499,8 @@ mail_transaction_log_file_map_mmap(struct mail_transaction_log_file *file,
 	i_assert(file->buffer_offset == 0 || file->mmap_base == NULL);
 	i_assert(file->mmap_size == 0 || file->mmap_base != NULL);
 
-	if (fstat(file->fd, &st) < 0) {
-		mail_index_file_set_syscall_error(file->log->index,
-						  file->filepath, "fstat()");
-		return -1;
-	}
+	if (fstat(file->fd, &st) < 0)
+		return log_file_set_syscall_error(file, "fstat()");
 	file->last_size = st.st_size;
 
 	if ((uoff_t)st.st_size < file->sync_offset) {
@@ -1510,7 +1553,7 @@ int mail_transaction_log_file_map(struct mail_transaction_log_file *file,
 	i_assert(start_offset >= file->hdr.hdr_size);
 	i_assert(start_offset <= end_offset);
 
-	if (index->log_locked && file == file->log->head &&
+	if (file->locked_sync_offset_updated && file == file->log->head &&
 	    end_offset == (uoff_t)-1) {
 		/* we're not interested of going further than sync_offset */
 		if (log_file_map_check_offsets(file, start_offset,
@@ -1519,6 +1562,9 @@ int mail_transaction_log_file_map(struct mail_transaction_log_file *file,
 		i_assert(start_offset <= file->sync_offset);
 		end_offset = file->sync_offset;
 	}
+
+	if (file->locked)
+		file->locked_sync_offset_updated = TRUE;
 
 	if (file->buffer != NULL && file->buffer_offset <= start_offset) {
 		/* see if we already have it */
@@ -1549,7 +1595,7 @@ int mail_transaction_log_file_map(struct mail_transaction_log_file *file,
 		start_offset = file->sync_offset;
 	}
 
-	if (!index->mmap_disable)
+	if ((file->log->index->flags & MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE) == 0)
 		ret = mail_transaction_log_file_map_mmap(file, start_offset);
 	else {
 		mail_transaction_log_file_munmap(file);
@@ -1578,11 +1624,8 @@ void mail_transaction_log_file_move_to_memory(struct mail_transaction_log_file
 		file->buffer = buf;
 
 		/* and lose the mmap */
-		if (munmap(file->mmap_base, file->mmap_size) < 0) {
-			mail_index_file_set_syscall_error(file->log->index,
-							  file->filepath,
-							  "munmap()");
-		}
+		if (munmap(file->mmap_base, file->mmap_size) < 0)
+			log_file_set_syscall_error(file, "munmap()");
 		file->mmap_base = NULL;
 	} else if (file->buffer_offset != 0) {
 		/* we don't have the full log in the memory. read it. */
@@ -1590,13 +1633,10 @@ void mail_transaction_log_file_move_to_memory(struct mail_transaction_log_file
 	}
 	file->last_size = 0;
 
-	if (close(file->fd) < 0) {
-		mail_index_file_set_syscall_error(file->log->index,
-						  file->filepath, "close()");
-	}
+	if (close(file->fd) < 0)
+		log_file_set_syscall_error(file, "close()");
 	file->fd = -1;
 
 	i_free(file->filepath);
-	file->filepath = i_strconcat(file->log->index->filepath,
-				     MAIL_TRANSACTION_LOG_SUFFIX, NULL);
+	file->filepath = i_strdup(file->log->filepath);
 }

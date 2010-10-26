@@ -1,4 +1,4 @@
-Dovecot Authentication Protocol v1.0
+Dovecot Authentication Protocol v1.1
 
 
 General
@@ -42,13 +42,14 @@ The connection starts by both client and server sending handshakes:
  S: "VERSION" TAB <major> TAB <minor>
  S: "SPID" TAB <pid>
  S: "CUID" TAB <pid>
+ S: "COOKIE" TAB <cookie>
  S: "MECH" TAB <name> [TAB <parameters>] (multiple times)
  S: "DONE"
 
 Both client and server should check that they support the same major version
 number. If they don't, the other side isn't expected to be talking the same
 protocol and should be disconnected. Minor version can be ignored. This
-document is version number 1.0.
+document is version number 1.1.
 
 CPID, SPID and specify client and server PIDs. They should be unique
 identifiers for the specific process. UNIX process IDs are good choices.
@@ -62,6 +63,9 @@ SPID can be used by authentication client to tell master what server
 process handled the authentication.
 
 CUID is currently useful only for APOP authentication.
+
+COOKIE returns connection-specific 128 bit cookie in hex. It must be
+given to REQUEST command. (Protocol v1.1+ / Dovecot v2.0+)
 
 DONE finishes the handshake from server. CPID finishes the handshake from
 client.
@@ -85,7 +89,7 @@ Mechanisms may have parameters giving some details about them:
 Authentication Request
 ----------------------
 
- C: "AUTH" TAB <id> TAB <mechanism> TAB service=<service> [TAB <parameters>]
+ C: "AUTH" TAB <id> TAB <mechanism> TAB service=<service> [TAB <parameters>]
 
  S1: "FAIL" TAB <id> [TAB <parameters>]
  S2: "CONT" TAB <id> TAB <base64 data>
@@ -156,11 +160,11 @@ SPID can be used to let master identify the server process.
 Master Requests
 ---------------
 
- M: "REQUEST" TAB <id> TAB <client-pid> TAB <client-id>
+ M: "REQUEST" TAB <id> TAB <client-pid> TAB <client-id> TAB <cookie>
  M: "USER" TAB <id> TAB <userid> TAB service=<service> [TAB <parameters>]
 
  S: "NOTFOUND" TAB <id>
- S: "FAIL" TAB <id> TAB <error message>
+ S: "FAIL" TAB <id> [TAB <parameters>]
  S: "USER" TAB <id> TAB <userid> [TAB <parameters>]
 
 Master commands can request information about existing authentication
@@ -172,13 +176,14 @@ request.
 ID is a connection-specific unique request identifier. It must be a 32bit
 number, so typically you'd just increment it by one.
 
-NOTFOUND reply means that the request or user wasn't found. Master
-shouldn't even try to send REQUEST commands for nonexisting requests, so if
-it happens it means either a timeout caused by very high load, or client
-lying to master about the request.
+NOTFOUND reply means that the user wasn't found.
 
 FAIL reply means an internal error occurred. Usually either a configuration
 mistake or temporary error caused by lost resource (eg. database down).
+Also unknown request IDs are reported as FAILs. Currently the only
+specified parameter is "reason", which is used when user is wanted to be
+put into "temporarily disabled" state and the reason string will be shown
+to user on login or to LMTP RCPT TO reply.
 
 USER reply is sent if request succeeded. It can return parameters:
 

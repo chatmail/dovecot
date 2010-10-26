@@ -5,12 +5,14 @@
 #include "ioloop.h"
 #include "str.h"
 #include "mkdir-parents.h"
+#include "mailbox-list-private.h"
 #include "maildir-storage.h"
 #include "maildir-uidlist.h"
 #include "maildir-keywords.h"
 #include "maildir-filename.h"
 #include "maildir-sync.h"
 
+#include <stdio.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -43,7 +45,7 @@ maildir_filename_guess(struct maildir_mailbox *mbox, uint32_t uid,
 	} else {
 		*have_flags_r = TRUE;
 		kw_ctx = maildir_keywords_sync_init_readonly(mbox->keywords,
-							     mbox->ibox.index);
+							     mbox->box.index);
 		fname = maildir_filename_set_flags(kw_ctx, fname,
 						   flags, &keywords);
 		maildir_keywords_sync_deinit(&kw_ctx);
@@ -74,13 +76,13 @@ static int maildir_file_do_try(struct maildir_mailbox *mbox, uint32_t uid,
 
 	if ((flags & MAILDIR_UIDLIST_REC_FLAG_NEW_DIR) != 0) {
 		/* probably in new/ dir */
-		path = t_strconcat(mbox->path, "/new/", fname, NULL);
+		path = t_strconcat(mbox->box.path, "/new/", fname, NULL);
 		ret = callback(mbox, path, context);
 		if (ret != 0)
 			return ret;
 	}
 
-	path = t_strconcat(mbox->path, "/cur/", fname, NULL);
+	path = t_strconcat(mbox->box.path, "/cur/", fname, NULL);
 	ret = callback(mbox, path, context);
 	return ret;
 }
@@ -90,8 +92,8 @@ static int do_racecheck(struct maildir_mailbox *mbox, const char *path,
 {
 	struct stat st;
 
-	if (lstat(path, &st) == 0 && (st.st_mode & S_IFLNK) != 0) {
-		/* most likely a symlink pointing to a non-existing file */
+	if (lstat(path, &st) == 0 && (st.st_mode & S_IFMT) == S_IFLNK) {
+		/* most likely a symlink pointing to a nonexistent file */
 		mail_storage_set_critical(&mbox->storage->storage,
 			"Maildir: Symlink destination doesn't exist: %s", path);
 		return -2;
@@ -131,11 +133,9 @@ int maildir_file_do(struct maildir_mailbox *mbox, uint32_t uid,
 }
 
 static int maildir_create_path(struct mailbox *box, const char *path,
-			       bool is_mail_dir)
+			       enum mailbox_list_path_type type, bool retry)
 {
-	const char *p, *parent, *origin;
-	mode_t parent_mode;
-	gid_t parent_gid;
+	const char *p, *parent;
 
 	if (mkdir_chgrp(path, box->dir_create_mode, box->file_create_gid,
 			box->file_create_gid_origin) == 0)
@@ -146,20 +146,17 @@ static int maildir_create_path(struct mailbox *box, const char *path,
 		return 0;
 	case ENOENT:
 		p = strrchr(path, '/');
-		if (is_mail_dir || p == NULL) {
+		if (type == MAILBOX_LIST_PATH_TYPE_MAILBOX ||
+		    p == NULL || !retry) {
 			/* mailbox was being deleted just now */
 			mailbox_set_deleted(box);
 			return -1;
 		}
 		/* create index/control root directory */
 		parent = t_strdup_until(path, p);
-		mailbox_list_get_dir_permissions(box->storage->list, NULL,
-						 &parent_mode, &parent_gid,
-						 &origin);
-		if (mkdir_parents_chgrp(parent, parent_mode, parent_gid,
-					origin) == 0 || errno == EEXIST) {
+		if (mailbox_list_mkdir(box->list, parent, type) == 0) {
 			/* should work now, try again */
-			return maildir_create_path(box, path, TRUE);
+			return maildir_create_path(box, path, type, FALSE);
 		}
 		/* fall through */
 		path = parent;
@@ -170,60 +167,112 @@ static int maildir_create_path(struct mailbox *box, const char *path,
 	}
 }
 
-static int maildir_create_subdirs(struct maildir_mailbox *mbox)
+static int maildir_create_subdirs(struct mailbox *box)
 {
 	static const char *subdirs[] = { "cur", "new", "tmp" };
 	const char *dirs[N_ELEMENTS(subdirs) + 2];
-	struct mailbox *box = &mbox->ibox.box;
+	enum mailbox_list_path_type types[N_ELEMENTS(subdirs) + 2];
 	struct stat st;
 	const char *path;
 	unsigned int i;
-	bool is_mail_dir;
 
 	/* @UNSAFE: get a list of directories we want to create */
-	for (i = 0; i < N_ELEMENTS(subdirs); i++)
-		dirs[i] = t_strconcat(mbox->path, "/", subdirs[i], NULL);
-	dirs[i++] = mail_storage_get_mailbox_control_dir(box->storage,
-							 box->name);
-	dirs[i++] = mail_storage_get_mailbox_index_dir(box->storage,
-						       box->name);
+	for (i = 0; i < N_ELEMENTS(subdirs); i++) {
+		types[i] = MAILBOX_LIST_PATH_TYPE_MAILBOX;
+		dirs[i] = t_strconcat(box->path, "/", subdirs[i], NULL);
+	}
+	types[i] = MAILBOX_LIST_PATH_TYPE_CONTROL;
+	dirs[i++] = mailbox_list_get_path(box->list, box->name,
+					  MAILBOX_LIST_PATH_TYPE_CONTROL);
+	types[i] = MAILBOX_LIST_PATH_TYPE_INDEX;
+	dirs[i++] = mailbox_list_get_path(box->list, box->name,
+					  MAILBOX_LIST_PATH_TYPE_INDEX);
 	i_assert(i == N_ELEMENTS(dirs));
 
 	for (i = 0; i < N_ELEMENTS(dirs); i++) {
 		path = dirs[i];
-		if (*path == '\0' || stat(path, &st) == 0)
+		if (path == NULL || stat(path, &st) == 0)
 			continue;
 		if (errno != ENOENT) {
 			mail_storage_set_critical(box->storage,
 						  "stat(%s) failed: %m", path);
 			break;
 		}
-		is_mail_dir = i < N_ELEMENTS(subdirs);
-		if (maildir_create_path(box, path, is_mail_dir) < 0)
+		if (maildir_create_path(box, path, types[i], TRUE) < 0)
 			break;
 	}
 	return i == N_ELEMENTS(dirs) ? 0 : -1;
 }
 
-bool maildir_set_deleted(struct maildir_mailbox *mbox)
+bool maildir_set_deleted(struct mailbox *box)
 {
-	struct mailbox *box = &mbox->ibox.box;
 	struct stat st;
 	int ret;
 
-	if (stat(mbox->path, &st) < 0) {
+	if (stat(box->path, &st) < 0) {
 		if (errno == ENOENT)
 			mailbox_set_deleted(box);
 		else {
 			mail_storage_set_critical(box->storage,
-				"stat(%s) failed: %m", mbox->path);
+				"stat(%s) failed: %m", box->path);
 		}
 		return FALSE;
 	}
 	/* maildir itself exists. create all of its subdirectories in case
 	   they got lost. */
 	T_BEGIN {
-		ret = maildir_create_subdirs(mbox);
+		ret = maildir_create_subdirs(box);
 	} T_END;
 	return ret < 0 ? FALSE : TRUE;
+}
+
+int maildir_lose_unexpected_dir(struct mail_storage *storage, const char *path)
+{
+	const char *dest, *fname, *p;
+
+	/* There's a directory in maildir, get rid of it.
+
+	   In some installations this was caused by a messed up configuration
+	   where e.g. mails was initially delivered to new/new/ directory.
+	   Also Dovecot v2.0.0 - v2.0.4 sometimes may have renamed tmp/
+	   directory under new/ or cur/. */
+	if (rmdir(path) == 0) {
+		mail_storage_set_critical(storage,
+			"Maildir: rmdir()ed unwanted empty directory: %s",
+			path);
+		return 1;
+	} else if (errno == ENOENT) {
+		/* someone else rmdired or renamed it */
+		return 0;
+	} else if (errno != ENOTEMPTY) {
+		mail_storage_set_critical(storage,
+			"Maildir: Found unwanted directory %s, "
+			"but rmdir() failed: %m", path);
+		return -1;
+	}
+
+	/* It's not safe to delete this directory since it has some files in it,
+	   but it's also not helpful to log this message over and over again.
+	   Get rid of this error by renaming the directory elsewhere */
+	p = strrchr(path, '/');
+	i_assert(p != NULL);
+	fname = p + 1;
+	while (p != path && p[-1] != '/') p--;
+	i_assert(p != NULL);
+
+	dest = t_strconcat(t_strdup_until(path, p), "extra-", fname, NULL);
+	if (rename(path, dest) == 0) {
+		mail_storage_set_critical(storage,
+			"Maildir: renamed unwanted directory %s to %s",
+			path, dest);
+		return 1;
+	} else if (errno == ENOENT) {
+		/* someone else renamed it (could have been flag change) */
+		return 0;
+	} else {
+		mail_storage_set_critical(storage,
+			"Maildir: Found unwanted directory, "
+			"but rename(%s, %s) failed: %m", path, dest);
+		return -1;
+	}
 }

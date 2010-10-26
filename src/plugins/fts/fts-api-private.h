@@ -13,8 +13,13 @@ struct fts_backend_vfuncs {
 
 	int (*build_init)(struct fts_backend *backend, uint32_t *last_uid_r,
 			  struct fts_backend_build_context **ctx_r);
-	int (*build_more)(struct fts_backend_build_context *ctx, uint32_t uid,
-			  const unsigned char *data, size_t size, bool headers);
+	void (*build_hdr)(struct fts_backend_build_context *ctx, uint32_t uid);
+	bool (*build_body_begin)(struct fts_backend_build_context *ctx,
+				 uint32_t uid, const char *content_type,
+				 const char *content_disposition);
+	void (*build_body_end)(struct fts_backend_build_context *ctx);
+	int (*build_more)(struct fts_backend_build_context *ctx,
+			  const unsigned char *data, size_t size);
 	int (*build_deinit)(struct fts_backend_build_context *ctx);
 
 	void (*expunge)(struct fts_backend *backend, struct mail *mail);
@@ -45,7 +50,9 @@ enum fts_backend_flags {
 	   optimized. */
 	FTS_BACKEND_FLAG_SUBSTRING_LOOKUPS	= 0x01,
 	/* Backend supports virtual mailbox lookups. */
-	FTS_BACKEND_FLAG_VIRTUAL_LOOKUPS	= 0x02
+	FTS_BACKEND_FLAG_VIRTUAL_LOOKUPS	= 0x02,
+	/* Backend supports indexing binary MIME parts */
+	FTS_BACKEND_FLAG_BINARY_MIME_PARTS	= 0x04
 };
 
 struct fts_backend {
@@ -79,6 +86,8 @@ struct fts_backend_lookup_context {
 
 void fts_backend_register(const struct fts_backend *backend);
 void fts_backend_unregister(const char *name);
+
+bool fts_backend_default_can_index(const char *content_type);
 
 void fts_filter_uids(ARRAY_TYPE(seq_range) *definite_dest,
 		     const ARRAY_TYPE(seq_range) *definite_filter,

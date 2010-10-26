@@ -33,7 +33,6 @@ wikifiles = ACL.txt \
 	Chrooting.txt \
 	Clients.NegativeUIDs.txt \
 	Clients.txt \
-	CommandLine.txt \
 	CompilingSource.txt \
 	Debugging.Authentication.txt \
 	Debugging.ProcessTracing.txt \
@@ -42,6 +41,7 @@ wikifiles = ACL.txt \
 	Design.Arrays.txt \
 	Design.AuthProcess.txt \
 	Design.Buffers.txt \
+	Design.Dsync.txt \
 	Design.Indexes.Cache.txt \
 	Design.Indexes.MailIndexApi.txt \
 	Design.Indexes.MainIndex.txt \
@@ -67,6 +67,7 @@ wikifiles = ACL.txt \
 	Design.Storage.Plugins.txt \
 	Design.Strings.txt \
 	Design.txt \
+	Director.txt \
 	DomainLost.txt \
 	FindMailLocation.txt \
 	FinishBasicConfiguration.txt \
@@ -78,25 +79,24 @@ wikifiles = ACL.txt \
 	HowTo.SimpleVirtualInstall.txt \
 	HowTo.txt \
 	IndexFiles.txt \
-	InetdInstall.txt \
 	Iptables.txt \
 	LDA.Exim.txt \
 	LDA.Indexing.txt \
 	LDA.Postfix.txt \
 	LDA.Qmail.txt \
 	LDA.Sendmail.txt \
-	LDA.Sieve.CMU.txt \
 	LDA.Sieve.Dovecot.txt \
 	LDA.Sieve.txt \
 	LDA.txt \
+	LMTP.txt \
 	Logging.txt \
 	LoginProcess.txt \
 	MDA.txt \
 	MTA.txt \
 	MailLocation.LocalDisk.txt \
 	MailLocation.Maildir.txt \
-	MailLocation.Mbox.txt \
 	MailLocation.SharedDisk.txt \
+	MailLocation.mbox.txt \
 	MailLocation.txt \
 	MailboxFormat.Cydir.txt \
 	MailboxFormat.MH.txt \
@@ -141,7 +141,6 @@ wikifiles = ACL.txt \
 	PasswordDatabase.txt \
 	PerformanceTuning.txt \
 	Plugins.Autocreate.txt \
-	Plugins.Convert.txt \
 	Plugins.Expire.txt \
 	Plugins.FTS.Lucene.txt \
 	Plugins.FTS.Solr.txt \
@@ -158,7 +157,7 @@ wikifiles = ACL.txt \
 	PostLoginScripting.txt \
 	PreAuth.txt \
 	QuickConfiguration.txt \
-	Quota.1.1.txt \
+	Quota.Configuration.txt \
 	Quota.Dict.txt \
 	Quota.Dirsize.txt \
 	Quota.FS.txt \
@@ -183,6 +182,7 @@ wikifiles = ACL.txt \
 	Upgrading.1.0.txt \
 	Upgrading.1.1.txt \
 	Upgrading.1.2.txt \
+	Upgrading.2.0.txt \
 	Upgrading.txt \
 	UserDatabase.ExtraFields.txt \
 	UserDatabase.NSS.txt \
@@ -190,7 +190,6 @@ wikifiles = ACL.txt \
 	UserDatabase.Static.txt \
 	UserDatabase.txt \
 	UserIds.txt \
-	VarMailDotLock.txt \
 	Variables.txt \
 	VirtualUsers.Home.txt \
 	VirtualUsers.txt \

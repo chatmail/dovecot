@@ -40,6 +40,24 @@ void imap_write_flags(string_t *dest, enum mail_flags flags,
 		str_truncate(dest, str_len(dest)-1);
 }
 
+enum mail_flags imap_parse_system_flag(const char *str)
+{
+	if (strcasecmp(str, "\\Answered") == 0)
+		return MAIL_ANSWERED;
+	else if (strcasecmp(str, "\\Flagged") == 0)
+		return MAIL_FLAGGED;
+	else if (strcasecmp(str, "\\Deleted") == 0)
+		return MAIL_DELETED;
+	else if (strcasecmp(str, "\\Seen") == 0)
+		return MAIL_SEEN;
+	else if (strcasecmp(str, "\\Draft") == 0)
+		return MAIL_DRAFT;
+	else if (strcasecmp(str, "\\Recent") == 0)
+		return MAIL_RECENT;
+	else
+		return 0;
+}
+
 void imap_write_seq_range(string_t *dest, const ARRAY_TYPE(seq_range) *array)
 {
 	const struct seq_range *range;
@@ -57,10 +75,9 @@ void imap_write_seq_range(string_t *dest, const ARRAY_TYPE(seq_range) *array)
 
 void imap_write_args(string_t *dest, const struct imap_arg *args)
 {
-	const ARRAY_TYPE(imap_arg_list) *list;
 	bool first = TRUE;
 
-	for (; args->type != IMAP_ARG_EOL; args++) {
+	for (; !IMAP_ARG_IS_EOL(args); args++) {
 		if (first)
 			first = FALSE;
 		else
@@ -71,15 +88,15 @@ void imap_write_args(string_t *dest, const struct imap_arg *args)
 			str_append(dest, "NIL");
 			break;
 		case IMAP_ARG_ATOM:
-			str_append(dest, IMAP_ARG_STR(args));
+			str_append(dest, imap_arg_as_astring(args));
 			break;
 		case IMAP_ARG_STRING:
 			str_append_c(dest, '"');
-			str_append(dest, str_escape(IMAP_ARG_STR(args)));
+			str_append(dest, str_escape(imap_arg_as_astring(args)));
 			str_append_c(dest, '"');
 			break;
 		case IMAP_ARG_LITERAL: {
-			const char *strarg = IMAP_ARG_STR(args);
+			const char *strarg = imap_arg_as_astring(args);
 			str_printfa(dest, "{%"PRIuSIZE_T"}\r\n",
 				    strlen(strarg));
 			str_append(dest, strarg);
@@ -87,14 +104,13 @@ void imap_write_args(string_t *dest, const struct imap_arg *args)
 		}
 		case IMAP_ARG_LIST:
 			str_append_c(dest, '(');
-			list = IMAP_ARG_LIST(args);
-			imap_write_args(dest, array_idx(list, 0));
+			imap_write_args(dest, imap_arg_as_list(args));
 			str_append_c(dest, ')');
 			break;
 		case IMAP_ARG_LITERAL_SIZE:
 		case IMAP_ARG_LITERAL_SIZE_NONSYNC:
 			str_printfa(dest, "{%"PRIuUOFF_T"}\r\n",
-				    IMAP_ARG_LITERAL_SIZE(args));
+				    imap_arg_as_literal_size(args));
 			str_append(dest, "<too large>");
 			break;
 		case IMAP_ARG_EOL:

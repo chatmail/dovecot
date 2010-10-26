@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "array.h"
+#include "str.h"
 #include "dict-sql.h"
 #include "dict-private.h"
 
@@ -10,12 +11,12 @@ static ARRAY_DEFINE(dict_drivers, struct dict *);
 static struct dict *dict_driver_lookup(const char *name)
 {
 	struct dict *const *dicts;
-	unsigned int i, count;
 
-	dicts = array_get(&dict_drivers, &count);
-	for (i = 0; i < count; i++) {
-		if (strcmp(dicts[i]->name, name) == 0)
-			return dicts[i];
+	array_foreach(&dict_drivers, dicts) {
+		struct dict *dict = *dicts;
+
+		if (strcmp(dict->name, name) == 0)
+			return dict;
 	}
 	return NULL;
 }
@@ -35,17 +36,16 @@ void dict_driver_register(struct dict *driver)
 void dict_driver_unregister(struct dict *driver)
 {
 	struct dict *const *dicts;
-	unsigned int i, count;
+	unsigned int idx = -1U;
 
-	dicts = array_get(&dict_drivers, &count);
-	for (i = 0; i < count; i++) {
-		if (dicts[i] == driver) {
-			array_delete(&dict_drivers, i, 1);
+	array_foreach(&dict_drivers, dicts) {
+		if (*dicts == driver) {
+			idx = array_foreach_idx(&dict_drivers, dicts);
 			break;
 		}
 	}
-
-	i_assert(i < count);
+	i_assert(idx != -1U);
+	array_delete(&dict_drivers, idx, 1);
 
 	if (array_count(&dict_drivers) == 0)
 		array_free(&dict_drivers);
@@ -118,22 +118,37 @@ struct dict_iterate_context *
 dict_iterate_init(struct dict *dict, const char *path, 
 		  enum dict_iterate_flags flags)
 {
-	i_assert(dict_key_prefix_is_valid(path));
-	return dict->v.iterate_init(dict, path, flags);
+	const char *paths[2];
+
+	paths[0] = path;
+	paths[1] = NULL;
+	return dict_iterate_init_multiple(dict, paths, flags);
 }
 
-int dict_iterate(struct dict_iterate_context *ctx,
-		 const char **key_r, const char **value_r)
+struct dict_iterate_context *
+dict_iterate_init_multiple(struct dict *dict, const char *const *paths,
+			   enum dict_iterate_flags flags)
+{
+	unsigned int i;
+
+	i_assert(paths[0] != NULL);
+	for (i = 0; paths[i] != NULL; i++)
+		i_assert(dict_key_prefix_is_valid(paths[i]));
+	return dict->v.iterate_init(dict, paths, flags);
+}
+
+bool dict_iterate(struct dict_iterate_context *ctx,
+		  const char **key_r, const char **value_r)
 {
 	return ctx->dict->v.iterate(ctx, key_r, value_r);
 }
 
-void dict_iterate_deinit(struct dict_iterate_context **_ctx)
+int dict_iterate_deinit(struct dict_iterate_context **_ctx)
 {
 	struct dict_iterate_context *ctx = *_ctx;
 
 	*_ctx = NULL;
-	ctx->dict->v.iterate_deinit(ctx);
+	return ctx->dict->v.iterate_deinit(ctx);
 }
 
 struct dict_transaction_context *dict_transaction_begin(struct dict *dict)
@@ -194,4 +209,73 @@ void dict_atomic_inc(struct dict_transaction_context *ctx,
 		ctx->dict->v.atomic_inc(ctx, key, diff);
 		ctx->changed = TRUE;
 	}
+}
+
+const char *dict_escape_string(const char *str)
+{
+	const char *p;
+	string_t *ret;
+
+	/* see if we need to escape it */
+	for (p = str; *p != '\0'; p++) {
+		if (*p == '/' || *p == '\\')
+			break;
+	}
+
+	if (*p == '\0')
+		return str;
+
+	/* escape */
+	ret = t_str_new((size_t) (p - str) + 128);
+	str_append_n(ret, str, (size_t) (p - str));
+
+	for (; *p != '\0'; p++) {
+		switch (*p) {
+		case '/':
+			str_append_c(ret, '\\');
+			str_append_c(ret, '|');
+			break;
+		case '\\':
+			str_append_c(ret, '\\');
+			str_append_c(ret, '\\');
+			break;
+		default:
+			str_append_c(ret, *p);
+			break;
+		}
+	}
+	return str_c(ret);
+}
+
+const char *dict_unescape_string(const char *str)
+{
+	const char *p;
+	string_t *ret;
+
+	/* see if we need to unescape it */
+	for (p = str; *p != '\0'; p++) {
+		if (*p == '\\')
+			break;
+	}
+
+	if (*p == '\0')
+		return str;
+
+	/* unescape */
+	ret = t_str_new((size_t) (p - str) + strlen(p) + 1);
+	str_append_n(ret, str, (size_t) (p - str));
+
+	for (; *p != '\0'; p++) {
+		if (*p != '\\')
+			str_append_c(ret, *p);
+		else {
+			if (*++p == '|')
+				str_append_c(ret, '/');
+			else if (*p == '\0')
+				break;
+			else
+				str_append_c(ret, *p);
+		}
+	}
+	return str_c(ret);
 }

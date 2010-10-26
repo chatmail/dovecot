@@ -1,8 +1,10 @@
 #ifndef MAIL_TRANSACTION_LOG_VIEW_H
 #define MAIL_TRANSACTION_LOG_VIEW_H
 
-#include "file-dotlock.h"
+#include "buffer.h"
 #include "mail-transaction-log.h"
+
+struct dotlock_settings;
 
 /* Synchronization can take a while sometimes, especially when copying lots of
    mails. */
@@ -44,6 +46,7 @@ struct mail_transaction_log_file {
 	uoff_t last_size;
 
 	struct mail_transaction_log_header hdr;
+	buffer_t mmap_buffer;
 	buffer_t *buffer;
 	uoff_t buffer_offset;
 	void *mmap_base;
@@ -63,17 +66,24 @@ struct mail_transaction_log_file {
 	   sync_offset is less than this. */
 	uoff_t saved_tail_sync_offset;
 
+	/* if we've seen _INDEX_[UN9DELETED transaction in this file,
+	   this is the offset. otherwise (uoff_t)-1 */
+	uoff_t index_deleted_offset, index_undeleted_offset;
+
 	struct modseq_cache modseq_cache[LOG_FILE_MODSEQ_CACHE_SIZE];
 
 	struct file_lock *file_lock;
+	time_t lock_created;
 
 	unsigned int locked:1;
+	unsigned int locked_sync_offset_updated:1;
 	unsigned int corrupted:1;
 };
 
 struct mail_transaction_log {
 	struct mail_index *index;
         struct mail_transaction_log_view *views;
+	char *filepath, *filepath2;
 
 	/* files is a linked list of all the opened log files. the list is
 	   sorted by the log file sequence, so that transaction views can use
@@ -84,14 +94,19 @@ struct mail_transaction_log {
 	struct mail_transaction_log_file *open_file;
 
 	unsigned int dotlock_count;
-        struct dotlock_settings dotlock_settings, new_dotlock_settings;
 	struct dotlock *dotlock;
+
+	unsigned int nfs_flush:1;
+	unsigned int log_2_unlink_checked:1;
 };
 
 void
 mail_transaction_log_file_set_corrupted(struct mail_transaction_log_file *file,
 					const char *fmt, ...)
 	ATTR_FORMAT(2, 3);
+
+void mail_transaction_log_get_dotlock_set(struct mail_transaction_log *log,
+					  struct dotlock_settings *set_r);
 
 struct mail_transaction_log_file *
 mail_transaction_log_file_alloc_in_memory(struct mail_transaction_log *log);
@@ -124,10 +139,8 @@ int mail_transaction_log_rotate(struct mail_transaction_log *log, bool reset);
 int mail_transaction_log_lock_head(struct mail_transaction_log *log);
 void mail_transaction_log_file_unlock(struct mail_transaction_log_file *file);
 
-bool
-mail_transaction_header_has_modseq(const struct mail_transaction_header *hdr,
-				   const void *data,
-				   uint64_t cur_modseq);
+void mail_transaction_update_modseq(const struct mail_transaction_header *hdr,
+				    const void *data, uint64_t *cur_modseq);
 int mail_transaction_log_file_get_highest_modseq_at(
 		struct mail_transaction_log_file *file,
 		uoff_t offset, uint64_t *highest_modseq_r);

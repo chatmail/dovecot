@@ -32,11 +32,10 @@ Example dovecot.conf configurations
 If you only want to use Kerberos ticket-based authentication:
 
 ---%<-------------------------------------------------------------------------
-auth default {
-  mechanisms = gssapi
-  userdb static {
-    args = uid=vmail gid=vmail home=/var/vmail/%u
-  }
+auth_mechanisms = gssapi
+userdb {
+  driver = static
+  args = uid=vmail gid=vmail home=/var/vmail/%u
 }
 ---%<-------------------------------------------------------------------------
 
@@ -47,12 +46,12 @@ If you also want to support plaintext authentication in addition to
 ticket-based authentication, you will need something like:
 
 ---%<-------------------------------------------------------------------------
-auth default {
-  mechanisms = plain gssapi
-  passdb pam {
-  }
-  userdb passwd {
-  }
+auth_mechanisms = plain gssapi
+passdb {
+  driver = pam
+}
+userdb {
+  driver = passwd
 }
 ---%<-------------------------------------------------------------------------
 
@@ -72,13 +71,11 @@ auth sufficient pam_krb5.so
 account sufficient pam_krb5.so
 ---%<-------------------------------------------------------------------------
 
-Then enable PAM passdb in dovecot.conf:
+Then enable PAM passdb:
 
 ---%<-------------------------------------------------------------------------
-auth default {
-  ..
-  passdb pam {
-  }
+passdb {
+  driver = pam
 }
 ---%<-------------------------------------------------------------------------
 
@@ -157,4 +154,4 @@ The test:
     * run command klist (list all kerberos keys) should show imap/HOSTNAME
  * /etc/hosts has to be set properly so that kerberos can find server.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

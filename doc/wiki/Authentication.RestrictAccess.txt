@@ -12,11 +12,12 @@ access checks.
 PAM
 ---
 
-Set PAM service name to '*', ie.:
+Set PAM service name to '%s', ie.:
 
 ---%<-------------------------------------------------------------------------
-passdb pam {
-  args = *
+passdb {
+  driver = pam
+  args = %s
 }
 ---%<-------------------------------------------------------------------------
 
@@ -33,21 +34,21 @@ file=/etc/imapusers onerr=fail
 SQL
 ---
 
-You can use the '%Ls' variable which expands to 'imap' or 'pop3' in
+You can use the '%s' variable which expands to 'imap' or 'pop3' in
 'password_query', eg:
 
 ---%<-------------------------------------------------------------------------
 password_query = SELECT password FROM users WHERE userid = '%u' and
-(imap_allowed = true or '%Ls' = 'pop3')
+(imap_allowed = true or '%s' = 'pop3')
 ---%<-------------------------------------------------------------------------
 
 LDAP
 ----
 
-Just like with SQL, you can use '%Ls' in pass_filter, eg.:
+Just like with SQL, you can use '%s' in pass_filter, eg.:
 
 ---%<-------------------------------------------------------------------------
-pass_filter = (&(objectClass=posixAccount)(uid=%u)(service=%Ls))
+pass_filter = (&(objectClass=posixAccount)(uid=%u)(service=%s))
 ---%<-------------------------------------------------------------------------
 
 That would require setting both service=pop3 and service=imap attributes to the
@@ -59,8 +60,9 @@ passwd-file
 You can create a deny passwd-file based on the service:
 
 ---%<-------------------------------------------------------------------------
-passdb passwd-file {
-  args = /etc/dovecot/deny.%Ls
+passdb {
+  driver = passwd-file
+  args = /etc/dovecot/deny.%s
   deny = yes
 }
 ---%<-------------------------------------------------------------------------
@@ -80,4 +82,4 @@ network. This is especially useful for master users. This can be done by
 returning <allow_nets> [PasswordDatabase.ExtraFields.AllowNets.txt] extra field
 in passdb.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

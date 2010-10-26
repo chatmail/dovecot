@@ -117,10 +117,21 @@ static int unlink_directory_r(const char *dir)
 					break;
 
 				if (rmdir(d->d_name) < 0) {
-					if (errno != ENOENT)
+					if (errno != ENOENT) {
+						if (errno == EEXIST) {
+							/* standardize errno */
+							errno = ENOTEMPTY;
+						}
 						break;
+					}
 					errno = 0;
 				}
+			} else if (old_errno == EBUSY &&
+				   strncmp(d->d_name, ".nfs", 4) == 0) {
+				/* can't delete NFS files that are still
+				   in use. let the caller decide if this error
+				   is worth logging about */
+				break;
 			} else {
                                 /* so it wasn't a directory */
 				errno = old_errno;
@@ -169,8 +180,13 @@ int unlink_directory(const char *dir, bool unlink_dir)
 	}
 
 	if (unlink_dir) {
-		if (rmdir(dir) < 0 && errno != ENOENT)
+		if (rmdir(dir) < 0 && errno != ENOENT) {
+			if (errno == EEXIST) {
+				/* standardize errno */
+				errno = ENOTEMPTY;
+			}
 			return -1;
+		}
 	}
 
 	return 0;

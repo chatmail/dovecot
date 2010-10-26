@@ -105,7 +105,8 @@ static int copy_to_temp_file(struct seekable_istream *sstream)
 
 		if (i_stream_read(sstream->fd_input) <= 0) {
 			i_error("istream-seekable: Couldn't read back "
-				"in-memory input");
+				"in-memory input %s",
+				i_stream_get_name(&stream->istream));
 			i_stream_destroy(&sstream->fd_input);
 			return -1;
 		}
@@ -360,6 +361,7 @@ i_stream_create_seekable(struct istream *input[],
 	sstream->context = context;
 	sstream->buffer = buffer_create_dynamic(default_pool, BUF_INITIAL_SIZE);
         sstream->istream.max_buffer_size = max_buffer_size;
+	sstream->fd = -1;
 
 	sstream->input = i_new(struct istream *, count + 1);
 	memcpy(sstream->input, input, sizeof(*input) * count);

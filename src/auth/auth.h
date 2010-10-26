@@ -1,60 +1,44 @@
 #ifndef AUTH_H
 #define AUTH_H
 
+#include "auth-settings.h"
+
 #define PASSWORD_HIDDEN_STR "<hidden>"
 
 struct auth_passdb {
-	struct auth *auth;
 	struct auth_passdb *next;
 
-        /* id is used by blocking passdb to identify the passdb */
-	unsigned int id;
-	const char *args;
+	const struct auth_passdb_settings *set;
 	struct passdb_module *passdb;
-
-        /* if user is found from this passdb, deny authentication immediately */
-	unsigned int deny:1;
-	/* after a successful lookup, continue to next passdb */
-	unsigned int pass:1;
 };
 
 struct auth_userdb {
-	struct auth *auth;
 	struct auth_userdb *next;
 
-	unsigned int num;
-	const char *args;
+	const struct auth_userdb_settings *set;
 	struct userdb_module *userdb;
 };
 
 struct auth {
 	pool_t pool;
+	const char *service;
+	const struct auth_settings *set;
 
-	struct mech_module_list *mech_modules;
-	buffer_t *mech_handshake;
-
+	const struct mechanisms_register *reg;
 	struct auth_passdb *masterdbs;
 	struct auth_passdb *passdbs;
 	struct auth_userdb *userdbs;
-
-	char *const *auth_realms;
-	const char *default_realm;
-	const char *anonymous_username;
-	const char *username_format;
-	const char *gssapi_hostname;
-	char username_chars[256];
-	char username_translation[256];
-	char master_user_separator;
-	bool ssl_require_client_cert;
-	bool ssl_username_from_cert;
-
-	bool verbose, verbose_debug, verbose_debug_passwords;
 };
 
-const string_t *auth_mechanisms_get_list(struct auth *auth);
+extern struct auth_penalty *auth_penalty;
 
-struct auth *auth_preinit(void);
-void auth_init(struct auth *auth);
-void auth_deinit(struct auth **auth);
+struct auth *auth_find_service(const char *name);
+
+void auths_preinit(const struct auth_settings *set, pool_t pool,
+		   const struct mechanisms_register *reg,
+		   const char *const *services);
+void auths_init(void);
+void auths_deinit(void);
+void auths_free(void);
 
 #endif

@@ -6,6 +6,7 @@
 #include "network.h"
 #include "istream.h"
 #include "ostream.h"
+#include "eacces-error.h"
 #include "dict-private.h"
 #include "dict-client.h"
 
@@ -14,10 +15,11 @@
 #include <fcntl.h>
 
 /* Disconnect from dict server after this many milliseconds of idling after
-   sending a command. This timeout is short, because dict server does blocking
-   dict accesses, so it can handle only one client at a time. increasing the
-   timeout increases number of idling dict processes. */
-#define DICT_CLIENT_TIMEOUT_MSECS 1000
+   sending a command. Because dict server does blocking dict accesses, it can
+   handle only one client at a time. This is why the default timeout is zero,
+   so that there won't be many dict processes just doing nothing. Zero means
+   that the socket is disconnected immediately after returning to ioloop. */
+#define DICT_CLIENT_TIMEOUT_MSECS 0
 
 /* Abort dict lookup after this many seconds. */
 #define DICT_CLIENT_READ_TIMEOUT_SECS 30
@@ -34,7 +36,7 @@ struct client_dict {
 	const char *path;
 	enum dict_data_type value_type;
 
-	time_t last_connect_try;
+	time_t last_failed_connect;
 	struct istream *input;
 	struct ostream *output;
 	struct io *io;
@@ -347,7 +349,10 @@ static int client_dict_read_one_line(struct client_dict *dict, char **line_r)
 				line);
 			return 0;
 		}
-		id = strtoul(line+2, NULL, 10);
+		if (str_to_uint(line+2, &id) < 0) {
+			i_error("dict-client: Invalid ID");
+			return 0;
+		}
 		client_dict_finish_transaction(dict, id, ret);
 		return 0;
 	}
@@ -369,9 +374,11 @@ static void client_dict_timeout(struct client_dict *dict)
 
 static void client_dict_add_timeout(struct client_dict *dict)
 {
-	if (dict->to_idle != NULL)
+	if (dict->to_idle != NULL) {
+#if DICT_CLIENT_TIMEOUT_MSECS > 0
 		timeout_reset(dict->to_idle);
-	else if (client_dict_is_finished(dict)) {
+#endif
+	} else if (client_dict_is_finished(dict)) {
 		dict->to_idle = timeout_add(DICT_CLIENT_TIMEOUT_MSECS,
 					    client_dict_timeout, dict);
 	}
@@ -394,15 +401,21 @@ static int client_dict_connect(struct client_dict *dict)
 
 	i_assert(dict->fd == -1);
 
-	if (dict->last_connect_try == ioloop_time) {
+	if (dict->last_failed_connect == ioloop_time) {
 		/* Try again later */
 		return -1;
 	}
-	dict->last_connect_try = ioloop_time;
 
 	dict->fd = net_connect_unix(dict->path);
 	if (dict->fd == -1) {
-		i_error("net_connect_unix(%s) failed: %m", dict->path);
+		dict->last_failed_connect = ioloop_time;
+		if (errno == EACCES) {
+			i_error("%s", eacces_error_get("net_connect_unix",
+						       dict->path));
+		} else {
+			i_error("net_connect_unix(%s) failed: %m",
+				dict->path);
+		}
 		return -1;
 	}
 
@@ -420,6 +433,7 @@ static int client_dict_connect(struct client_dict *dict)
 				DICT_CLIENT_PROTOCOL_MINOR_VERSION,
 				dict->value_type, dict->username, dict->uri);
 	if (client_dict_send_query(dict, query) < 0) {
+		dict->last_failed_connect = ioloop_time;
 		client_dict_disconnect(dict);
 		return -1;
 	}
@@ -499,6 +513,9 @@ static int client_dict_wait(struct dict *_dict)
 	char *line;
 	int ret = 0;
 
+	if (!dict->handshaked)
+		return -1;
+
 	while (dict->async_commits > 0) {
 		if (client_dict_read_one_line(dict, &line) < 0) {
 			ret = -1;
@@ -540,7 +557,7 @@ static int client_dict_lookup(struct dict *_dict, pool_t pool,
 }
 
 static struct dict_iterate_context *
-client_dict_iterate_init(struct dict *_dict, const char *path, 
+client_dict_iterate_init(struct dict *_dict, const char *const *paths,
 			 enum dict_iterate_flags flags)
 {
 	struct client_dict *dict = (struct client_dict *)_dict;
@@ -555,18 +572,23 @@ client_dict_iterate_init(struct dict *_dict, const char *path,
 	ctx->pool = pool_alloconly_create("client dict iteration", 512);
 
 	T_BEGIN {
-		const char *query;
+		string_t *query = t_str_new(256);
+		unsigned int i;
 
-		query = t_strdup_printf("%c%d\t%s\n", DICT_PROTOCOL_CMD_ITERATE,
-					flags, dict_client_escape(path));
-		if (client_dict_send_query(dict, query) < 0)
+		str_printfa(query, "%c%d", DICT_PROTOCOL_CMD_ITERATE, flags);
+		for (i = 0; paths[i] != NULL; i++) {
+			str_append_c(query, '\t');
+			str_append(query, dict_client_escape(paths[i]));
+		}
+		str_append_c(query, '\n');
+		if (client_dict_send_query(dict, str_c(query)) < 0)
 			ctx->failed = TRUE;
 	} T_END;
 	return &ctx->ctx;
 }
 
-static int client_dict_iterate(struct dict_iterate_context *_ctx,
-			       const char **key_r, const char **value_r)
+static bool client_dict_iterate(struct dict_iterate_context *_ctx,
+				const char **key_r, const char **value_r)
 {
 	struct client_dict_iterate_context *ctx =
 		(struct client_dict_iterate_context *)_ctx;
@@ -574,48 +596,60 @@ static int client_dict_iterate(struct dict_iterate_context *_ctx,
 	char *line, *value;
 
 	if (ctx->failed)
-		return -1;
+		return FALSE;
 
 	/* read next reply */
 	line = client_dict_read_line(dict);
-	if (line == NULL)
-		return -1;
+	if (line == NULL) {
+		ctx->failed = TRUE;
+		return FALSE;
+	}
 
 	if (*line == '\0') {
 		/* end of iteration */
-		return 0;
+		return FALSE;
 	}
 
 	/* line contains key \t value */
 	p_clear(ctx->pool);
 
-	if (*line != DICT_PROTOCOL_REPLY_OK)
-		value = NULL;
-	else
+	switch (*line) {
+	case DICT_PROTOCOL_REPLY_OK:
 		value = strchr(++line, '\t');
+		break;
+	case DICT_PROTOCOL_REPLY_FAIL:
+		ctx->failed = TRUE;
+		return FALSE;
+	default:
+		value = NULL;
+		break;
+	}
 	if (value == NULL) {
 		/* broken protocol */
 		i_error("dict client (%s) sent broken reply", dict->path);
-		return -1;
+		ctx->failed = TRUE;
+		return FALSE;
 	}
 	*value++ = '\0';
 
 	*key_r = p_strdup(ctx->pool, dict_client_unescape(line));
 	*value_r = p_strdup(ctx->pool, dict_client_unescape(value));
-	return 1;
+	return TRUE;
 }
 
-static void client_dict_iterate_deinit(struct dict_iterate_context *_ctx)
+static int client_dict_iterate_deinit(struct dict_iterate_context *_ctx)
 {
 	struct client_dict *dict = (struct client_dict *)_ctx->dict;
 	struct client_dict_iterate_context *ctx =
 		(struct client_dict_iterate_context *)_ctx;
+	int ret = ctx->failed ? -1 : 0;
 
 	pool_unref(&ctx->pool);
 	i_free(ctx);
 	dict->in_iteration = FALSE;
 
 	client_dict_add_timeout(dict);
+	return ret;
 }
 
 static struct dict_transaction_context *
@@ -769,7 +803,7 @@ static void client_dict_atomic_inc(struct dict_transaction_context *_ctx,
 }
 
 struct dict dict_driver_client = {
-	MEMBER(name) "proxy",
+	.name = "proxy",
 
 	{
 		client_dict_init,

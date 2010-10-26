@@ -18,13 +18,13 @@ localuser:
 'check_local_user' is required. It makes Exim execute the transport with the
 user's UID and GID and it also sets HOME environment.
 
-Next create a new transport for Dovecot deliver:
+Next create a new transport for dovecot-lda:
 
 ---%<-------------------------------------------------------------------------
 dovecot_delivery:
   driver = pipe
-  command = /usr/local/libexec/dovecot/deliver
-# use /usr/lib/dovecot/deliver  if using Debian's package
+  command = /usr/local/libexec/dovecot/dovecot-lda
+# use /usr/lib/dovecot/dovecot-lda  if using Debian's package
   message_prefix =
   message_suffix =
   log_output
@@ -36,11 +36,11 @@ dovecot_delivery:
   temp_errors = 64 : 69 : 70: 71 : 72 : 73 : 74 : 75 : 78
 ---%<-------------------------------------------------------------------------
 
-Deliver is now running using the local user's UID and GID. The mail is
-delivered to the location specified by <mail_location> [MailLocation.txt]
-setting. Note that the above configuration doesn't do any <userdb>
-[UserDatabase.txt] lookups, so you can't have any per-user configuration. If
-you want that, see the virtual user setup below.
+LDA is now running using the local user's UID and GID. The mail is delivered to
+the location specified by <mail_location> [MailLocation.txt] setting. Note that
+the above configuration doesn't do any <userdb> [UserDatabase.txt] lookups, so
+you can't have any per-user configuration. If you want that, see the virtual
+user setup below.
 
 Virtual users
 -------------
@@ -55,10 +55,11 @@ Configure the transport to run as the user you want, for example vmail:
 ---%<-------------------------------------------------------------------------
 dovecot_virtual_delivery:
   driver = pipe
-  command = /usr/local/libexec/dovecot/deliver -d $local_part@$domain  -f
+  command = /usr/local/libexec/dovecot/dovecot-lda -d $local_part@$domain  -f
 $sender_address
-  # v1.1+: command = /usr/local/libexec/dovecot/deliver -d $local_part@$domain 
--f $sender_address -a $original_local_part@$original_domain
+  # v1.1+: command = /usr/local/libexec/dovecot/dovecot-lda -d
+$local_part@$domain  -f $sender_address -a
+$original_local_part@$original_domain
   message_prefix =
   message_suffix =
   delivery_date_add
@@ -77,16 +78,16 @@ List of temp_errors can be found in '/usr/include/sysexits.h'.
 Multiple UIDs
 -------------
 
-If you need multiple uids/gids you'll need to set deliver setuid root. See the
-<LDA.txt> main page how to do this securely.
+If you need multiple uids/gids you'll need to set dovecot-lda setuid root. See
+<LDA#multipleuids> [LDA.txt] for how to do this securely.
 
 You could alternatively set 'user = root', but this requires that you built
 Exim without root being in FIXED_NEVER_USERS list.
 
-Multiple UIDs, without running deliver as root
-----------------------------------------------
+Multiple UIDs, without running dovecot-lda as root
+--------------------------------------------------
 
-In this mode, deliver won't be querying Dovecot's master socket, instead
+In this mode, dovecot-lda won't be querying Dovecot's master socket, instead
 trusting Exim to setup its execution environment.This means you must set up
 Exim to get the UID, GID, Home directory from LDAP/SQL/whatever. Here, we're
 setting themin the router and the transport automatically inherits them.
@@ -112,7 +113,7 @@ ldap_local_user:
   group = LDAP_VIRT_GID
   #local_part_suffix = +* : -*
   #local_part_suffix_optional
-  transport = dovecot_deliver
+  transport = dovecot_lda
 ---%<-------------------------------------------------------------------------
 
 Transport configuration
@@ -123,19 +124,19 @@ for this scenario yet. It has been testedwith Exim 4.69-9 and Dovecot 1:1.2.5-2
 (backported) on Debian Lenny. YMMV with Dovecot 1.1.*.
 
 ---%<-------------------------------------------------------------------------
-dovecot_deliver:
-  debug_print = "T: dovecot_deliver for $local_part@$domain"
+dovecot_lda:
+  debug_print = "T: dovecot_lda for $local_part@$domain"
   driver = pipe
   # Uncomment the following line and comment the one after it if you want
-deliver to try
+dovecot-lda to try
   # to deliver subaddresses into INBOX.{subaddress}. If you do this, uncomment
 the
   # local_part_suffix* lines in the router as well. Make sure you also change
 the separator
   # to suit your local setup.
-  #command = /usr/lib/dovecot/deliver -e -k -s -m
+  #command = /usr/lib/dovecot/dovecot-lda -e -k -m
 "INBOX|${substr_1:$local_part_suffix}" \
-  command = /usr/lib/dovecot/deliver -e -k -s \
+  command = /usr/lib/dovecot/dovecot-lda -e -k \
       -f "$sender_address" -a "$original_local_part@$original_domain"
   use_shell
   environment = USER=$local_part@$domain
@@ -153,4 +154,4 @@ the separator
   temp_errors = 64 : 69 : 70 : 71 : 72 : 73 : 74 : 75 : 78
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

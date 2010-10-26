@@ -4,31 +4,27 @@ pkglibexec_PROGRAMS = imap
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-dict \
+	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-index \
-	-I$(top_srcdir)/src/lib-storage \
-	-DMODULEDIR=\""$(moduledir)"\"
+	-I$(top_srcdir)/src/lib-storage
 
 imap_LDFLAGS = -export-dynamic
 
-# get some functions included which only plugins use. liblib should probably
-# be a shared library so this wouldn't be needed..
+if !BUILD_SHARED_LIBS
 unused_objects = \
 	../lib/mountpoint.o
+endif
 
 libs = \
-	$(STORAGE_LIBS) \
-	../lib-dict/libdict.a \
+	$(LIBDOVECOT_STORAGE) \
 	$(unused_objects)
 
-imap_LDADD = \
-	$(libs) \
-	$(LIBICONV) \
-	$(MODULE_LIBS)
-
-imap_DEPENDENCIES = $(libs)
+imap_LDADD = $(libs) $(LIBDOVECOT) $(MODULE_LIBS)
+imap_DEPENDENCIES = $(libs) $(LIBDOVECOT_DEPS)
 
 cmds = \
 	cmd-append.c \
@@ -65,14 +61,15 @@ cmds = \
 
 imap_SOURCES = \
 	$(cmds) \
-	client.c \
-	commands.c \
-	commands-util.c \
+	imap-client.c \
+	imap-commands.c \
+	imap-commands-util.c \
 	imap-expunge.c \
 	imap-fetch.c \
 	imap-fetch-body.c \
 	imap-search.c \
 	imap-search-args.c \
+	imap-settings.c \
 	imap-status.c \
 	imap-sync.c \
 	mail-storage-callbacks.c \
@@ -80,20 +77,17 @@ imap_SOURCES = \
 
 
 headers = \
-	client.h \
-	commands.h \
-	commands-util.h \
-	common.h \
+	imap-client.h \
+	imap-commands.h \
+	imap-commands-util.h \
+	imap-common.h \
 	imap-expunge.h \
 	imap-fetch.h \
 	imap-search.h \
 	imap-search-args.h \
+	imap-settings.h \
 	imap-status.h \
 	imap-sync.h
 
-if INSTALL_HEADERS
-  pkginc_libdir=$(pkgincludedir)/src/imap
-  pkginc_lib_HEADERS = $(headers)
-else
-  noinst_HEADERS = $(headers)
-endif
+pkginc_libdir=$(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)

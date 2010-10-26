@@ -1,11 +1,11 @@
 Dovecot LDA with Sendmail
 =========================
 
-The following describes how to configure Sendmail to use 'deliver' where 'root'
-permission is not granted and Dovecot runs under a single user ID.  It may need
-some adjustment for more typical setups.  Other assumptions are that Sendmail
-is configured for virtual hosting and that local-system mail delivery is not
-handled by 'deliver'.
+The following describes how to configure Sendmail to use 'dovecot-lda' where
+'root' permission is not granted and Dovecot runs under a single user ID.  It
+may need some adjustment for more typical setups.  Other assumptions are that
+Sendmail is configured for virtual hosting and that local-system mail delivery
+is not handled by 'dovecot-lda'.
 
 Allowing that 'sendmail.mc' has 'MAILER(procmail)dnl' included, edit
 'sendmail.cf' adding these lines after the 'Mprocmail' definition:
@@ -14,10 +14,10 @@ Allowing that 'sendmail.mc' has 'MAILER(procmail)dnl' included, edit
 ######################*****##############
 ###   DOVECOT Mailer specification                              ###
 ##################*****##################
-Mdovecot,   P=/usr/local/libexec/dovecot/deliver, F=DFMPhnu9,
+Mdovecot,   P=/usr/local/libexec/dovecot/dovecot-lda, F=DFMPhnu9,
                  S=EnvFromSMTP/HdrFromSMTP, R=EnvToSMTP/HdrFromSMTP,
                  T=DNS/RFC822/X-Unix,
-                 A=/usr/local/libexec/dovecot/deliver -d $u
+                 A=/usr/local/libexec/dovecot/dovecot-lda -d $u
 ---%<-------------------------------------------------------------------------
 
 If you're using 'sendmail.mc' then put the lines above into a new file
@@ -31,8 +31,8 @@ following three lines:
 
 ---%<-------------------------------------------------------------------------
 FEATURE(`local_procmail',
-`/usr/local/libexec/dovecot/deliver',`/usr/local/libexec/dovecot/deliver -d
-$u')
+`/usr/local/libexec/dovecot/dovecot-lda',`/usr/local/libexec/dovecot/dovecot-lda
+-d $u')
 MODIFY_MAILER_FLAGS(`LOCAL', `-f')
 MAILER(procmail)
 ---%<-------------------------------------------------------------------------
@@ -49,13 +49,6 @@ After editing 'hostname.mc' with the above, be sure to remake your
 
 ===================================
 
-For non-'root' setups apply SUID and SGID permissions to 'deliver':
-
----%<-------------------------------------------------------------------------
-chown dovecot:dovecot /usr/local/libexec/dovecot/deliver
-chmod ug+s /usr/local/libexec/dovecot/deliver
----%<-------------------------------------------------------------------------
-
 If 'sendmail' runs under a different non-'root' UID via
 
  * 'define(`confRUN_AS_USER', `sendmail')dnl'
@@ -66,18 +59,13 @@ in 'sendmail.mc', then the /env_put(t_strconcat("RESTRICT_/ lines in
 Now add a
 
 ---%<-------------------------------------------------------------------------
-virtualdomain.example.com dovecot:dovecot
+virtualdomain.example.com vmail:vmail
 ---%<-------------------------------------------------------------------------
 
 line for each virtual domain to 'mailertable.cf' and run 'makemap hash
 mailertable.db < mailertable.cf'.  The 'dovecot' (or some other random text)
 after the colon character is required, else 'sendmail' will fail to pass
-command arguments to 'deliver' correctly.  Make sure all the virtual domains
-are in the 'virtuserdomains' file.
+command arguments to 'dovecot-lda' correctly.  Make sure all the virtual
+domains are in the 'virtuserdomains' file.
 
-Be aware that 'sendmail' logs /stat=unknown mailer error 89/ if 'deliver'
-returns any unusual error.  This message is misleading and looks as though
-'sendmail' were failing to find the 'deliver' executable.  It actually means
-that the error is unknown. As of v1.0.rc27 this should never happen.
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

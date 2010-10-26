@@ -6,14 +6,14 @@
  * This software is released under the MIT license.
  */
 
-#include "common.h"
+#include "auth-common.h"
 #include "safe-memset.h"
 #include "hash.h"
 #include "mech.h"
 #include "passdb.h"
 #include "hex-binary.h"
 #include "otp.h"
-#include "otp-skey-common.h"
+#include "mech-otp-skey-common.h"
 
 static void 
 otp_send_challenge(struct auth_request *auth_request,
@@ -50,9 +50,8 @@ otp_send_challenge(struct auth_request *auth_request,
 				 digest_name(request->state.algo),
 				 request->state.seq, request->state.seed);
 
-	auth_request->callback(auth_request,
-			       AUTH_CLIENT_RESULT_CONTINUE,
-			       answer, strlen(answer));
+	auth_request_handler_reply_continue(auth_request, answer,
+					    strlen(answer));
 }
 
 static void
@@ -99,12 +98,11 @@ mech_otp_auth_phase1(struct auth_request *auth_request,
 {
 	struct otp_auth_request *request =
 		(struct otp_auth_request *)auth_request;
-	const char *authzid, *authenid, *error;
+	const char *authenid, *error;
 	size_t i, count;
 
 	/* authorization ID \0 authentication ID
 	   FIXME: we'll ignore authorization ID for now. */
-	authzid = (const char *) data;
 	authenid = NULL;
 
 	count = 0;
@@ -252,8 +250,8 @@ static struct auth_request *mech_otp_auth_new(void)
 const struct mech_module mech_otp = {
 	"OTP",
 
-	MEMBER(flags) MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE,
-	MEMBER(passdb_need) MECH_PASSDB_NEED_SET_CREDENTIALS,
+	.flags = MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE,
+	.passdb_need = MECH_PASSDB_NEED_SET_CREDENTIALS,
 
 	mech_otp_auth_new,
 	mech_generic_auth_initial,

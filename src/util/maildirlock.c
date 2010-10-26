@@ -5,7 +5,7 @@
 #include "ioloop.h"
 #include "write-full.h"
 #include "file-dotlock.h"
-#include "maildir-uidlist.h"
+#include "index/maildir/maildir-uidlist.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,13 +13,8 @@
 #include <signal.h>
 
 static struct dotlock_settings dotlock_settings = {
-	MEMBER(temp_prefix) NULL,
-	MEMBER(lock_suffix) NULL,
-	MEMBER(timeout) 0,
-	MEMBER(stale_timeout) MAILDIR_UIDLIST_LOCK_STALE_TIMEOUT,
-	MEMBER(use_excl_lock) FALSE,
-	MEMBER(nfs_flush) FALSE,
-	MEMBER(use_io_notify) TRUE
+	.stale_timeout = MAILDIR_UIDLIST_LOCK_STALE_TIMEOUT,
+	.use_io_notify = TRUE
 };
 
 static struct ioloop *ioloop;
@@ -44,7 +39,7 @@ int main(int argc, const char *argv[])
 {
 	struct dotlock *dotlock;
 	unsigned int timeout;
-	pid_t pid, parent_pid;
+	pid_t pid;
 	int fd[2], ret;
 	char c;
 
@@ -53,7 +48,6 @@ int main(int argc, const char *argv[])
 			" - SIGTERM will release the lock.\n");
 		return 1;
 	}
-	parent_pid = getpid();
 	if (pipe(fd) != 0) {
 		fprintf(stderr, "pipe() failed: %s", strerror(errno));
 		return 1;

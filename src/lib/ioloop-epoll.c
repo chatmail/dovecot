@@ -110,8 +110,14 @@ void io_loop_handle_add(struct io_file *io)
 	op = first ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
 
 	if (epoll_ctl(ctx->epfd, op, io->fd, &event) < 0) {
-		i_fatal("io_loop_handle_add: epoll_ctl(%d, %d): %m",
-			op, io->fd);
+		if (errno == EPERM && op == EPOLL_CTL_ADD) {
+			i_fatal("epoll_ctl(add, %d) failed: %m "
+				"(fd doesn't support epoll%s)", io->fd,
+				io->fd != STDIN_FILENO ? "" :
+				" - instead of '<file', try 'cat file|'");
+		}
+		i_panic("epoll_ctl(%s, %d) failed: %m",
+			op == EPOLL_CTL_ADD ? "add" : "mod", io->fd);
 	}
 
 	if (first) {
@@ -143,8 +149,8 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 		op = last ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
 
 		if (epoll_ctl(ctx->epfd, op, io->fd, &event) < 0) {
-			i_error("io_loop_handle_remove: epoll_ctl(%d, %d): %m",
-				op, io->fd);
+			i_error("epoll_ctl(%s, %d) failed: %m",
+				op == EPOLL_CTL_DEL ? "del" : "mod", io->fd);
 		}
 	}
 	if (last) {
@@ -169,7 +175,7 @@ void io_loop_handler_run(struct ioloop *ioloop)
 	bool call;
 
         /* get the time left for next timeout task */
-	msecs = io_loop_get_wait_time(ioloop, &tv, NULL);
+	msecs = io_loop_get_wait_time(ioloop, &tv);
 
 	events = array_get_modifiable(&ctx->events, &events_count);
 	ret = epoll_wait(ctx->epfd, events, events_count, msecs);

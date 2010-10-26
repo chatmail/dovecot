@@ -4,15 +4,11 @@ Dovecot SSL configuration
 The most important SSL settings are:
 
 ---%<-------------------------------------------------------------------------
-# Make sure you have imaps and pop3s if you want to support them.
-# It's also possible to only use STARTTLS/STLS commands in imap/pop3 port.
-protocols = imap pop3 imaps pop3s
-
-ssl_disable = no # v1.2.beta1+ uses ssl = yes
+ssl = yes
 # Preferred permissions: root:root 0444
-ssl_cert_file = /etc/ssl/certs/dovecot.pem
+ssl_cert = </etc/ssl/certs/dovecot.pem
 # Preferred permissions: root:root 0400
-ssl_key_file = /etc/ssl/private/dovecot.pem
+ssl_key = </etc/ssl/private/dovecot.pem
 ---%<-------------------------------------------------------------------------
 
 The certificate file can be world-readable, since it doesn't contain anything
@@ -26,20 +22,20 @@ It's possible to keep the certificate and the key both in the same file:
 
 ---%<-------------------------------------------------------------------------
 # Preferred permissions: root:root 0400
-ssl_cert_file = /etc/ssl/dovecot.pem
-ssl_key_file = /etc/ssl/dovecot.pem
+ssl_cert = </etc/ssl/dovecot.pem
+ssl_key = </etc/ssl/dovecot.pem
 ---%<-------------------------------------------------------------------------
 
 It's also possible to use different certificates for IMAP and POP3:
 
 ---%<-------------------------------------------------------------------------
 protocol imap {
-  ssl_cert_file = /etc/ssl/certs/imap.pem
-  ssl_key_file = /etc/ssl/private/imap.pem
+  ssl_cert = </etc/ssl/certs/imap.pem
+  ssl_key = </etc/ssl/private/imap.pem
 }
 protocol pop3 {
-  ssl_cert_file = /etc/ssl/certs/pop3.pem
-  ssl_key_file = /etc/ssl/private/pop3.pem
+  ssl_cert = </etc/ssl/certs/pop3.pem
+  ssl_key = </etc/ssl/private/pop3.pem
 }
 ---%<-------------------------------------------------------------------------
 
@@ -47,14 +43,14 @@ There are a couple of different ways to specify when SSL/TLS is required:
 
  * 'disable_plaintext_auth=yes' allows <plaintext authentication>
    [Authentication.Mechanisms.txt] only when SSL/TLS is used first.
- * 'ssl = required' (v1.2+) requires SSL/TLS also for <non-plaintext
-   authentication> [Authentication.Mechanisms.txt].
+ * 'ssl = required' requires SSL/TLS also for <non-plaintext authentication>
+   [Authentication.Mechanisms.txt].
  * If you have only plaintext mechanisms enabled ('auth { mechanisms = plain
    login }'), you can use either (or both) of the above settings. They behave
    exactly the same way then.
 
-Multiple SSL certificates (v2.0+)
----------------------------------
+Multiple SSL certificates
+-------------------------
 
 ---%<-------------------------------------------------------------------------
 local imap.example.org {
@@ -67,8 +63,6 @@ local imap.example2.org {
 }
 # ..etc..
 ---%<-------------------------------------------------------------------------
-
-With v1.x you need to use multiple instances with multiple configurations.
 
 Password protected key files
 ----------------------------
@@ -94,7 +88,7 @@ with the password:
 Chained SSL certificates
 ------------------------
 
-Put all the certificates in the 'ssl_cert_file' file. For example when using a
+Put all the certificates in the 'ssl_cert' file. For example when using a
 certificate signed by TDC the correct order is:
 
  1. Dovecot's public certificate
@@ -117,15 +111,15 @@ small, so with slower computers you might want to disable it:
 ssl_parameters_regenerate = 0
 ---%<-------------------------------------------------------------------------
 
-By default Dovecot v1.1+ allows all except the "LOW" and SSLv2 ciphers. See
-http://www.openssl.org/docs/apps/ciphers.html for a list of the ciphers.
-Disallowing more won't really gain any security for those using better ciphers,
-but it does prevent people from accidentally using insecure ciphers. You can
-change the cipher list with:
+By default Dovecot's allowed ciphers list contains:
 
 ---%<-------------------------------------------------------------------------
-ssl_cipher_list = ALL:!LOW:!SSLv2
+ssl_cipher_list = ALL:!LOW:!SSLv2:!EXP:!aNULL
 ---%<-------------------------------------------------------------------------
+
+Disallowing more won't really gain any security for those using better ciphers,
+but it does prevent people from accidentally using insecure ciphers. See
+http://www.openssl.org/docs/apps/ciphers.html for a list of the ciphers.
 
 SSL verbosity
 -------------
@@ -144,14 +138,11 @@ If you want to require clients to present a valid SSL certificate, you'll need
 these settings:
 
 ---%<-------------------------------------------------------------------------
-ssl_ca_file = /etc/ssl/ca.pem
+ssl_ca = </etc/ssl/ca.pem
 ssl_verify_client_cert = yes
 
-auth default {
-  ssl_require_client_cert = yes
-  #ssl_username_from_cert = yes
-  ..
-}
+ssl_require_client_cert = yes
+#ssl_username_from_cert = yes
 ---%<-------------------------------------------------------------------------
 
 The CA file should contain the certificate(s) followed by the matching CRL(s).
@@ -173,7 +164,7 @@ openssl crl -in class3-revoke.crl -inform DER -outform PEM > class3-revoke.pem
 ---%<-------------------------------------------------------------------------
 
 With the above settings if a client connects which doesn't present a
-certificate signed by one of the CAs in the 'ssl_ca_file', Dovecot won't let
+certificate signed by one of the CAs in the 'ssl_ca' file, Dovecot won't let
 the user log in.
 
 You may also force the username to be taken from the certificate by setting
@@ -182,9 +173,9 @@ You may also force the username to be taken from the certificate by setting
  * The text is looked up from subject DN's specified field using OpenSSL's
    'X509_NAME_get_text_by_NID()' function.
  * By default the 'CommonName' field is used.
- * With v1.1.alpha5 and later you can change the field with
-   'ssl_cert_username_field = name' setting (parsed using OpenSSL's
-   'OBJ_txt2nid()' function). 'x500UniqueIdentifier' is a common choice.
+ * You can change the field with 'ssl_cert_username_field = name' setting
+   (parsed using OpenSSL's 'OBJ_txt2nid()' function). 'x500UniqueIdentifier' is
+   a common choice.
 
 You may also want to disable the password checking completely. Doing this
 currently circumvents Dovecot's security model so it's not recommended to use
@@ -192,4 +183,4 @@ it, but it is possible by making the <passdb> [PasswordDatabase.txt] allow
 logins using any password (typically requiring <"nopassword" extra field>
 [PasswordDatabase.ExtraFields.txt] to be returned).
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

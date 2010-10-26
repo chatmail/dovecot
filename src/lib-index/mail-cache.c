@@ -15,26 +15,28 @@
 void mail_cache_set_syscall_error(struct mail_cache *cache,
 				  const char *function)
 {
-	i_assert(function != NULL);
+	mail_index_file_set_syscall_error(cache->index, cache->filepath,
+					  function);
+}
 
-	if (ENOSPACE(errno)) {
-		cache->index->nodiskspace = TRUE;
-		return;
-	}
+static void mail_cache_unlink(struct mail_cache *cache)
+{
+	if (!cache->index->readonly)
+		(void)unlink(cache->filepath);
+}
 
-	mail_index_set_error(cache->index,
-			     "%s failed with index cache file %s: %m",
-			     function, cache->filepath);
+void mail_cache_reset(struct mail_cache *cache)
+{
+	mail_cache_unlink(cache);
+	/* mark the cache as unusable */
+	cache->hdr = NULL;
 }
 
 void mail_cache_set_corrupted(struct mail_cache *cache, const char *fmt, ...)
 {
 	va_list va;
 
-	(void)unlink(cache->filepath);
-
-	/* mark the cache as unusable */
-	cache->hdr = NULL;
+	mail_cache_reset(cache);
 
 	va_start(va, fmt);
 	T_BEGIN {
@@ -110,7 +112,7 @@ static bool mail_cache_need_reopen(struct mail_cache *cache)
 		return TRUE;
 
 	/* see if the file has changed */
-	if (cache->index->nfs_flush) {
+	if ((cache->index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0) {
 		i_assert(!cache->locked);
 		nfs_flush_file_handle_cache(cache->filepath);
 	}
@@ -125,7 +127,7 @@ static bool mail_cache_need_reopen(struct mail_cache *cache)
 		return TRUE;
 	}
 
-	if (cache->index->nfs_flush) {
+	if ((cache->index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0) {
 		/* if the old file has been deleted, the new file may have
 		   the same inode as the old one. we'll catch this here by
 		   checking if fstat() fails with ESTALE */
@@ -223,18 +225,18 @@ static bool mail_cache_verify_header(struct mail_cache *cache)
 
 	if (hdr->version != MAIL_CACHE_VERSION) {
 		/* version changed - upgrade silently */
-		(void)unlink(cache->filepath);
+		mail_cache_unlink(cache);
 		return FALSE;
 	}
 	if (hdr->compat_sizeof_uoff_t != sizeof(uoff_t)) {
 		/* architecture change - handle silently(?) */
-		(void)unlink(cache->filepath);
+		mail_cache_unlink(cache);
 		return FALSE;
 	}
 
 	if (hdr->indexid != cache->index->indexid) {
 		/* index id changed - handle silently */
-		(void)unlink(cache->filepath);
+		mail_cache_unlink(cache);
 		return FALSE;
 	}
 	if (hdr->file_seq == 0) {
@@ -412,15 +414,17 @@ static struct mail_cache *mail_cache_alloc(struct mail_index *index)
 		hash_table_create(default_pool, cache->field_pool, 0,
 				  strcase_hash, (hash_cmp_callback_t *)strcasecmp);
 
-	cache->dotlock_settings.use_excl_lock = index->use_excl_dotlocks;
-	cache->dotlock_settings.nfs_flush = index->nfs_flush;
-	cache->dotlock_settings.timeout = MAIL_CACHE_LOCK_TIMEOUT;
+	cache->dotlock_settings.use_excl_lock =
+		(index->flags & MAIL_INDEX_OPEN_FLAG_DOTLOCK_USE_EXCL) != 0;
+	cache->dotlock_settings.nfs_flush =
+		(index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0;
+	cache->dotlock_settings.timeout =
+		I_MIN(MAIL_CACHE_LOCK_TIMEOUT, index->max_lock_timeout_secs);
 	cache->dotlock_settings.stale_timeout = MAIL_CACHE_LOCK_CHANGE_TIMEOUT;
 
-	if (!MAIL_INDEX_IS_IN_MEMORY(index)) {
-		if (index->mmap_disable)
-			cache->file_cache = file_cache_new(-1);
-	}
+	if (!MAIL_INDEX_IS_IN_MEMORY(index) &&
+	    (index->flags & MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE) != 0)
+		cache->file_cache = file_cache_new(-1);
 
 	cache->ext_id =
 		mail_index_ext_register(index, "cache", 0,
@@ -489,6 +493,7 @@ void mail_cache_free(struct mail_cache **_cache)
 
 static int mail_cache_lock_file(struct mail_cache *cache, bool nonblock)
 {
+	unsigned int timeout_secs;
 	int ret;
 
 	if (cache->last_lock_failed) {
@@ -499,9 +504,12 @@ static int mail_cache_lock_file(struct mail_cache *cache, bool nonblock)
 
 	if (cache->index->lock_method != FILE_LOCK_METHOD_DOTLOCK) {
 		i_assert(cache->file_lock == NULL);
+		timeout_secs = I_MIN(MAIL_CACHE_LOCK_TIMEOUT,
+				     cache->index->max_lock_timeout_secs);
+
 		ret = mail_index_lock_fd(cache->index, cache->filepath,
 					 cache->fd, F_WRLCK,
-					 nonblock ? 0 : MAIL_CACHE_LOCK_TIMEOUT,
+					 nonblock ? 0 : timeout_secs,
 					 &cache->file_lock);
 	} else {
 		enum dotlock_create_flags flags =
@@ -552,7 +560,8 @@ mail_cache_lock_full(struct mail_cache *cache, bool require_same_reset_id,
 		(void)mail_cache_open_and_verify(cache);
 
 	if (MAIL_CACHE_IS_UNUSABLE(cache) ||
-	    MAIL_INDEX_IS_IN_MEMORY(cache->index))
+	    MAIL_INDEX_IS_IN_MEMORY(cache->index) ||
+	    cache->index->readonly)
 		return 0;
 
 	iview = mail_index_view_open(cache->index);
@@ -652,7 +661,7 @@ int mail_cache_unlock(struct mail_cache *cache)
 		mail_cache_update_need_compress(cache);
 	}
 
-	if (cache->index->nfs_flush) {
+	if (cache->index->fsync_mode == FSYNC_MODE_ALWAYS) {
 		if (fdatasync(cache->fd) < 0)
 			mail_cache_set_syscall_error(cache, "fdatasync()");
 	}

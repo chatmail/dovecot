@@ -21,23 +21,25 @@ Contents
 
      6. Client Workarounds
 
-     7. POP3 Server
+     7. SSL and Plaintext Authentication
 
-     8. SSL and Plaintext Authentication
+     8. NFS
 
-     9. NFS
-
-     10. Running
+     9. Running
 
 Configuration file
 ------------------
 
-If you compiled Dovecot from sources, Dovecot has installed a
-'/usr/local/etc/dovecot-example.conf' file, which you'll have to rename to
-'/usr/local/etc/dovecot.conf'. Prebuilt packages usually install
-'/etc/dovecot.conf' directly. You'll find the path by running 'dovecot -n|head
--1'. It's a good idea to read through the whole file and see what settings you
-might want to change.
+If you compiled and installed Dovecot from sources, Dovecot has installed only
+a '/usr/local/etc/dovecot/README' file, which contains the path to the
+installed example configuration files, usually
+'/usr/local/share/doc/dovecot/example-config'. Copy the 'dovecot.conf' file and
+'conf.d' directory from the example-config directory into
+'/usr/local/etc/dovecot/'. Prebuilt packages usually install the configuration
+files directly into '/etc/dovecot/'.
+ You'll find the path by running 'doveconf -n | head -n 1'.
+ It's a good idea to read through all the files and see what settings you might
+want to change.
 
 Authentication
 --------------
@@ -79,8 +81,8 @@ option.
 Maildir
 -------
 
-For better performance you may want to set 'maildir_copy_with_hardlinks = yes'
-option (default in v1.1+).
+For better performance you may want to set 'maildir_very_dirty_syncs = yes'
+option.
 
 Client Workarounds
 ------------------
@@ -88,58 +90,27 @@ Client Workarounds
 Check 'imap_client_workarounds' and 'pop3_client_workarounds' and see if you
 want to enable more of them than the defaults.
 
-POP3 Server
------------
-
-If you're going to use Dovecot's POP3 server, you'll need to add 'pop3' (and
-'pop3s' for SSL) to 'protocols' line in configuration file.
-
-You'll also have to set 'pop3_uidl_format' setting. If you're migrating from
-another POP3 server, see <migration page> [Migration.txt]. Otherwise set it to
-Dovecot v1.1+'s default:
-
----%<-------------------------------------------------------------------------
-pop3_uidl_format = %08Xu%08Xv
----%<-------------------------------------------------------------------------
-
 SSL and Plaintext Authentication
 --------------------------------
 
-If you intend to use SSL, set 'ssl_cert_file' and 'ssl_key_file' settings.
-Otherwise set 'ssl_disable = yes' ('ssl = no' with v1.2.beta1+). Easiest way to
-get SSL certificates built is to use Dovecot's 'doc/mkcert.sh' script. See
-<SSL.txt>.
+If you intend to use SSL, set 'ssl_cert' and 'ssl_key' settings. Otherwise set
+'ssl = no'. Easiest way to get SSL certificates built is to use Dovecot's
+'doc/mkcert.sh' script. See <SSL.txt>.
 
 By default Dovecot doesn't allow users to send passwords unencrypted to the
 server. Usually if SSL is enabled, it's a good idea not to allow this. However,
 if you don't offer SSL for some reason, you'll probably want to set
 'disable_plaintext_auth = no'.
 
-To enable imaps and pop3s, make sure they're listed in 'protocols' setting.
-
 NFS
 ---
 
 If you're using NFS or some other remote filesystem that's shared between
-multiple computers, you really should be using Dovecot v1.1 or later. See
-<NFS.txt> for more information about what settings you'll need to change and
-what other issues you'll have to be aware of.
-
-If you have only a single Dovecot server, or if the users almost always log
-into same physical server, you may want to consider storing the indexes into
-local disks instead. This is done by appending ':INDEX=path' to
-'mail_location'. For example:
-
----%<-------------------------------------------------------------------------
-mail_location = maildir:~/Maildir:INDEX=/var/indexes/%u
----%<-------------------------------------------------------------------------
-
-Remember that if you're storing indexes locally you can keep 'mmap_disable =
-no' and 'mail_nfs_index=no' (which gives better performance).
+multiple computers, you should read <NFS.txt>.
 
 Running
 -------
 
 See <RunningDovecot.txt> and <Logging.txt>.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

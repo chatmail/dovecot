@@ -14,6 +14,7 @@
 #include "istream-crlf.h"
 #include "istream-concat.h"
 #include "message-parser.h"
+#include "mail-user.h"
 #include "index-mail.h"
 #include "mbox-storage.h"
 #include "mbox-file.h"
@@ -42,7 +43,7 @@ struct mbox_save_context {
 
 	string_t *headers;
 	size_t space_end_idx;
-	uint32_t seq, next_uid, uid_validity, first_saved_uid;
+	uint32_t seq, next_uid, uid_validity;
 
 	struct istream *input;
 	struct ostream *output;
@@ -121,10 +122,13 @@ static int write_from_line(struct mbox_save_context *ctx, time_t received_date,
 				&ctx->mbox->storage->storage;
 
 			from_envelope =
-				strchr(storage->ns->user->username, '@') != NULL ?
-				storage->ns->user->username :
-				t_strconcat(storage->ns->user->username,
+				strchr(storage->user->username, '@') != NULL ?
+				storage->user->username :
+				t_strconcat(storage->user->username,
 					    "@", my_hostdomain(), NULL);
+		} else if (*from_envelope == '\0') {
+			/* can't write empty envelope */
+			from_envelope = "MAILER-DAEMON";
 		}
 
 		/* save in local timezone, no matter what it was given with */
@@ -173,24 +177,22 @@ static int mbox_write_content_length(struct mbox_save_context *ctx)
 	return 0;
 }
 
-static void mbox_save_init_sync(struct mbox_transaction_context *t)
+static void mbox_save_init_sync(struct mailbox_transaction_context *t)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)t->ictx.ibox;
-	struct mbox_save_context *ctx = t->save_ctx;
+	struct mbox_mailbox *mbox = (struct mbox_mailbox *)t->box;
+	struct mbox_save_context *ctx = (struct mbox_save_context *)t->save_ctx;
 	const struct mail_index_header *hdr;
 	struct mail_index_view *view;
 
 	/* open a new view to get the header. this is required if we just
 	   synced the mailbox so we can get updated next_uid. */
-	(void)mail_index_refresh(mbox->ibox.index);
-	view = mail_index_view_open(mbox->ibox.index);
+	(void)mail_index_refresh(mbox->box.index);
+	view = mail_index_view_open(mbox->box.index);
 	hdr = mail_index_get_header(view);
 
 	ctx->next_uid = hdr->next_uid;
-	ctx->first_saved_uid = ctx->next_uid;
 	ctx->uid_validity = hdr->uid_validity;
 	ctx->synced = TRUE;
-	t->mails_saved = TRUE;
 
 	mail_index_view_close(&view);
 }
@@ -205,7 +207,6 @@ static void status_flags_append(string_t *str, enum mail_flags flags,
 		if ((flags & flags_list[i].flag) != 0)
 			str_append_c(str, flags_list[i].chr);
 	}
-	flags ^= MBOX_NONRECENT_KLUDGE;
 }
 
 static void mbox_save_append_flag_headers(string_t *str, enum mail_flags flags)
@@ -232,7 +233,7 @@ mbox_save_append_keyword_headers(struct mbox_save_context *ctx,
 	const char *const *keyword_names;
 	unsigned int i, count, keyword_names_count;
 
-	keyword_names_list = mail_index_get_keywords(ctx->mbox->ibox.index);
+	keyword_names_list = mail_index_get_keywords(ctx->mbox->box.index);
 	keyword_names = array_get(keyword_names_list, &keyword_names_count);
 
 	str_append(ctx->headers, "X-Keywords:");
@@ -254,18 +255,20 @@ static int
 mbox_save_init_file(struct mbox_save_context *ctx,
 		    struct mbox_transaction_context *t, bool want_mail)
 {
+	struct mailbox_transaction_context *_t = &t->ictx.mailbox_ctx;
 	struct mbox_mailbox *mbox = ctx->mbox;
 	struct mail_storage *storage = &mbox->storage->storage;
 	bool empty = FALSE;
 	int ret;
 
-	if (ctx->mbox->ibox.backend_readonly) {
+	if (ctx->mbox->box.backend_readonly) {
 		mail_storage_set_error(storage, MAIL_ERROR_PERM,
 				       "Read-only mbox");
 		return -1;
 	}
 
-	if ((t->ictx.flags & MAILBOX_TRANSACTION_FLAG_ASSIGN_UIDS) != 0)
+	if ((_t->flags & MAILBOX_TRANSACTION_FLAG_ASSIGN_UIDS) != 0 ||
+	    ctx->ctx.uid != 0)
 		want_mail = TRUE;
 
 	if (ctx->append_offset == (uoff_t)-1) {
@@ -297,7 +300,7 @@ mbox_save_init_file(struct mbox_save_context *ctx,
 			/* we're not required to assign UIDs for the appended
 			   mails immediately. do it only if it doesn't require
 			   syncing. */
-			mbox_save_init_sync(t);
+			mbox_save_init_sync(_t);
 		}
 	}
 
@@ -305,7 +308,7 @@ mbox_save_init_file(struct mbox_save_context *ctx,
 		/* we'll need to assign UID for the mail immediately. */
 		if (mbox_sync(mbox, 0) < 0)
 			return -1;
-		mbox_save_init_sync(t);
+		mbox_save_init_sync(_t);
 	}
 
 	/* the syncing above could have changed the append offset */
@@ -371,7 +374,8 @@ mbox_save_get_input_stream(struct mbox_save_context *ctx, struct istream *input)
 	/* filter out unwanted headers and keep track of headers' MD5 sum */
 	filter = i_stream_create_header_filter(input, HEADER_FILTER_EXCLUDE |
 					       HEADER_FILTER_NO_CR |
-					       HEADER_FILTER_ADD_MISSING_EOH,
+					       HEADER_FILTER_ADD_MISSING_EOH |
+					       HEADER_FILTER_END_BODY_WITH_LF,
 					       mbox_save_drop_headers,
 					       mbox_save_drop_headers_count,
 					       save_header_callback, ctx);
@@ -398,8 +402,7 @@ mbox_save_get_input_stream(struct mbox_save_context *ctx, struct istream *input)
 	}
 
 	/* convert linefeeds to wanted format */
-	ret = (ctx->mbox->storage->storage.flags &
-	       MAIL_STORAGE_FLAG_SAVE_CRLF) != 0 ?
+	ret = ctx->mbox->storage->storage.set->mail_save_crlf ?
 		i_stream_create_crlf(filter) : i_stream_create_lf(filter);
 	i_stream_unref(&filter);
 
@@ -414,26 +417,24 @@ mbox_save_get_input_stream(struct mbox_save_context *ctx, struct istream *input)
 }
 
 struct mail_save_context *
-mbox_save_alloc(struct mailbox_transaction_context *_t)
+mbox_save_alloc(struct mailbox_transaction_context *t)
 {
-	struct mbox_transaction_context *t =
-		(struct mbox_transaction_context *)_t;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)t->ictx.ibox;
+	struct mbox_mailbox *mbox = (struct mbox_mailbox *)t->box;
 	struct mbox_save_context *ctx;
 
-	i_assert((t->ictx.flags & MAILBOX_TRANSACTION_FLAG_EXTERNAL) != 0);
+	i_assert((t->flags & MAILBOX_TRANSACTION_FLAG_EXTERNAL) != 0);
 
-	if (t->save_ctx != NULL)
-		return &t->save_ctx->ctx;
-
-	ctx = t->save_ctx = i_new(struct mbox_save_context, 1);
-	ctx->ctx.transaction = &t->ictx.mailbox_ctx;
-	ctx->mbox = mbox;
-	ctx->trans = t->ictx.trans;
-	ctx->append_offset = (uoff_t)-1;
-	ctx->headers = str_new(default_pool, 512);
-	ctx->mail_offset = (uoff_t)-1;
-	return &ctx->ctx;
+	if (t->save_ctx == NULL) {
+		ctx = i_new(struct mbox_save_context, 1);
+		ctx->ctx.transaction = t;
+		ctx->mbox = mbox;
+		ctx->trans = t->itrans;
+		ctx->append_offset = (uoff_t)-1;
+		ctx->headers = str_new(default_pool, 512);
+		ctx->mail_offset = (uoff_t)-1;
+		t->save_ctx = &ctx->ctx;
+	}
+	return t->save_ctx;
 }
 
 int mbox_save_begin(struct mail_save_context *_ctx, struct istream *input)
@@ -456,11 +457,17 @@ int mbox_save_begin(struct mail_save_context *_ctx, struct istream *input)
 		return -1;
 	}
 
-	save_flags = (_ctx->flags & ~MAIL_RECENT) | MAIL_RECENT;
+	save_flags = _ctx->flags;
+	if (_ctx->uid == 0)
+		save_flags |= MAIL_RECENT;
 	str_truncate(ctx->headers, 0);
 	if (ctx->synced) {
 		if (ctx->mbox->mbox_save_md5)
 			ctx->mbox_md5_ctx = mbox_md5_init();
+		if (ctx->next_uid < _ctx->uid) {
+			/* we can use the wanted UID */
+			ctx->next_uid = _ctx->uid;
+		}
 		if (ctx->output->offset == 0) {
 			/* writing the first mail. Insert X-IMAPbase as well. */
 			str_printfa(ctx->headers, "X-IMAPbase: %u %010u\n",
@@ -475,6 +482,10 @@ int mbox_save_begin(struct mail_save_context *_ctx, struct istream *input)
 			mail_index_update_keywords(ctx->trans, ctx->seq,
 						   MODIFY_REPLACE,
 						   _ctx->keywords);
+		}
+		if (_ctx->min_modseq != 0) {
+			mail_index_update_modseq(ctx->trans, ctx->seq,
+						 _ctx->min_modseq);
 		}
 
 		offset = ctx->output->offset == 0 ? 0 :
@@ -492,6 +503,7 @@ int mbox_save_begin(struct mail_save_context *_ctx, struct istream *input)
 			_ctx->dest_mail = ctx->mail;
 		}
 		mail_set_seq(_ctx->dest_mail, ctx->seq);
+		_ctx->dest_mail->saving = TRUE;
 	}
 	mbox_save_append_flag_headers(ctx->headers, save_flags);
 	mbox_save_append_keyword_headers(ctx, _ctx->keywords);
@@ -542,18 +554,7 @@ static int mbox_save_body(struct mbox_save_context *ctx)
 			return -1;
 	}
 
-	if (ctx->last_char != '\n') {
-		/* if mail doesn't end with LF, we'll do that.
-		   otherwise some mbox parsers don't like the result.
-		   this makes it impossible to save a mail that doesn't
-		   end with LF though. */
-		const char *linefeed =
-			(ctx->mbox->storage->storage.flags &
-			 MAIL_STORAGE_FLAG_SAVE_CRLF) != 0 ?
-			"\r\n" : "\n";
-		if (o_stream_send_str(ctx->output, linefeed) < 0)
-			return write_error(ctx);
-	}
+	i_assert(ctx->last_char == '\n');
 	return 0;
 }
 
@@ -617,10 +618,7 @@ int mbox_save_continue(struct mail_save_context *_ctx)
 	if (ret == 0)
 		return 0;
 
-	if (ctx->last_char != '\n') {
-		if (o_stream_send(ctx->output, "\n", 1) < 0)
-			return write_error(ctx);
-	}
+	i_assert(ctx->last_char == '\n');
 
 	if (ctx->mbox_md5_ctx) {
 		unsigned char hdr_md5_sum[16];
@@ -641,7 +639,7 @@ int mbox_save_continue(struct mail_save_context *_ctx)
 		}
 		mbox_md5_finish(ctx->mbox_md5_ctx, hdr_md5_sum);
 		mail_index_update_ext(ctx->trans, ctx->seq,
-				      ctx->mbox->ibox.md5hdr_ext_idx,
+				      ctx->mbox->md5hdr_ext_idx,
 				      hdr_md5_sum, NULL);
 	}
 
@@ -712,7 +710,6 @@ static void mbox_transaction_save_deinit(struct mbox_save_context *ctx)
 	if (ctx->mail != NULL)
 		mail_free(&ctx->mail);
 	str_free(&ctx->headers);
-	i_free(ctx);
 }
 
 static void mbox_save_truncate(struct mbox_save_context *ctx)
@@ -731,10 +728,10 @@ static void mbox_save_truncate(struct mbox_save_context *ctx)
 		mbox_set_syscall_error(ctx->mbox, "ftruncate()");
 }
 
-int mbox_transaction_save_commit(struct mbox_save_context *ctx)
+int mbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 {
-	struct mbox_transaction_context *t =
-		(struct mbox_transaction_context *)ctx->ctx.transaction;
+	struct mbox_save_context *ctx = (struct mbox_save_context *)_ctx;
+	struct mailbox_transaction_context *_t = _ctx->transaction;
 	struct mbox_mailbox *mbox = ctx->mbox;
 	struct stat st;
 	int ret = 0;
@@ -747,9 +744,9 @@ int mbox_transaction_save_commit(struct mbox_save_context *ctx)
 	}
 
 	if (ctx->synced) {
-		*t->ictx.saved_uid_validity = ctx->uid_validity;
-		*t->ictx.first_saved_uid = ctx->first_saved_uid;
-		*t->ictx.last_saved_uid = ctx->next_uid - 1;
+		_t->changes->uid_validity = ctx->uid_validity;
+		mail_index_append_finish_uids(ctx->trans, 0,
+					      &_t->changes->saved_uids);
 
 		mail_index_update_header(ctx->trans,
 			offsetof(struct mail_index_header, next_uid),
@@ -771,7 +768,7 @@ int mbox_transaction_save_commit(struct mbox_save_context *ctx)
 
 		buf.modtime = st.st_mtime;
 		buf.actime = ctx->orig_atime;
-		if (utime(mbox->path, &buf) < 0)
+		if (utime(mbox->box.path, &buf) < 0)
 			mbox_set_syscall_error(mbox, "utime()");
 	}
 
@@ -780,7 +777,7 @@ int mbox_transaction_save_commit(struct mbox_save_context *ctx)
 		o_stream_flush(ctx->output);
 	}
 	if (mbox->mbox_fd != -1 && !mbox->mbox_writeonly &&
-	    !mbox->ibox.fsync_disable) {
+	    mbox->storage->storage.set->parsed_fsync_mode != FSYNC_MODE_NEVER) {
 		if (fdatasync(mbox->mbox_fd) < 0) {
 			mbox_set_syscall_error(mbox, "fdatasync()");
 			mbox_save_truncate(ctx);
@@ -789,14 +786,35 @@ int mbox_transaction_save_commit(struct mbox_save_context *ctx)
 	}
 
 	mbox_transaction_save_deinit(ctx);
+	if (ret < 0)
+		i_free(ctx);
 	return ret;
 }
 
-void mbox_transaction_save_rollback(struct mbox_save_context *ctx)
+void mbox_transaction_save_commit_post(struct mail_save_context *_ctx,
+				       struct mail_index_transaction_commit_result *result ATTR_UNUSED)
 {
+	struct mbox_save_context *ctx = (struct mbox_save_context *)_ctx;
+
+	i_assert(ctx->mbox->mbox_lock_type == F_WRLCK);
+
+	if (ctx->synced) {
+		/* after saving mails with UIDs we need to update
+		   the last-uid */
+		(void)mbox_sync(ctx->mbox, MBOX_SYNC_HEADER |
+				MBOX_SYNC_REWRITE);
+	}
+	i_free(ctx);
+}
+
+void mbox_transaction_save_rollback(struct mail_save_context *_ctx)
+{
+	struct mbox_save_context *ctx = (struct mbox_save_context *)_ctx;
+
 	if (!ctx->finished)
 		mbox_save_cancel(&ctx->ctx);
 
 	mbox_save_truncate(ctx);
 	mbox_transaction_save_deinit(ctx);
+	i_free(ctx);
 }

@@ -1,6 +1,8 @@
 #ifndef MODULE_CONTEXT_H
 #define MODULE_CONTEXT_H
 
+#include "array.h"
+
 /*
    This is a bit complex to use, but it prevents using wrong module IDs
    in module_contexts arrays.
@@ -45,7 +47,7 @@
 
 #define MODULE_CONTEXT(obj, id_ctx) \
 	(*((void **)array_idx_modifiable(&(obj)->module_contexts, \
-					(id_ctx).id.module_id) + \
+		module_get_context_id(&(id_ctx).id)) + \
 	 OBJ_REGISTER_COMPATIBLE(obj, id_ctx)))
 
 #ifdef HAVE_TYPEOF

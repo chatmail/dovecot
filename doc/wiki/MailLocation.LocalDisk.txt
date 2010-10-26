@@ -25,33 +25,22 @@ lie that the message was saved to the disk, if in fact a power failure a second
 later would lose the message. With IMAP clients this is perhaps a less serious
 problem, because the lost message was most likely either a mail in Draft
 mailbox or a message in "Sent Messages" mailbox. In any case a message that the
-user had already seen. However if <Dovecot LDA> [LDA.txt] loses a message, the
-user never even knew that the message existed, unless the sender decides to
-resend it.
+user had already seen. However if <LDA.txt> loses a message, the user never
+even knew that the message existed, unless the sender decides to resend it.
 
 Since power failures and kernel panics are quite rare, many people are tempted
 to disable fsyncing because it may increase the performance quite a lot.
-Dovecot allows this since v1.0.rc27 by setting 'fsync_disable=yes'. However you
-should consider leaving it at "no" for LDA. You can do this with:
+Dovecot allows this by setting 'fsync_disable=yes'. However you should consider
+leaving it at "no" for LDA. You can do this with:
 
 ---%<-------------------------------------------------------------------------
 # Enable for IMAP/POP3
 fsync_disable = yes
 
 protocol lda {
-  # NOTE: Overriding fsync_disable to "no" in lda section works only with
-v1.1.8+
+  # Disable for LDA/LMTP
   fsync_disable = no
 }
 ---%<-------------------------------------------------------------------------
 
-Dovecot Settings
-----------------
-
- * 'dotlock_use_excl=yes' is safe to use with local filesystems, and it's
-   faster (default in v1.1+).
- * v1.0: 'mmap_disable=yes' appears to give better performance due to various
-   reasons, but it also increases the memory usage. (With v1.1
-   'mmap_disable=no' should be always faster)
-
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

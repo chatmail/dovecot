@@ -30,10 +30,11 @@ void io_stream_unref(struct iostream_private *stream)
 		return;
 
 	stream->close(stream);
+	stream->destroy(stream);
 	if (stream->destroy_callback != NULL)
 		stream->destroy_callback(stream->destroy_context);
-	stream->destroy(stream);
 
+        i_free(stream->name);
         i_free(stream);
 }
 

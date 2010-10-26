@@ -1,8 +1,8 @@
 mbx
 ===
 
-A high performance mbox-replacement created by Marc Crispin of University of
-Washington for UW-IMAP. Each message in the file is preceded by a record
+A high performance mbox-replacement created by Mark Crispin while at University
+of Washington for UW-IMAP. Each message in the file is preceded by a record
 carrying all the metadata that IMAP-protocol needs. This allows changing the
 metadata easily by modifying the fixed-size header, rather than moving data
 around in a file like with mbox.
@@ -21,4 +21,4 @@ Downsides contain:
    of size on disk.) This is probably UW-IMAP -specific implementation problem
    rather than actual mailbox format issue.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

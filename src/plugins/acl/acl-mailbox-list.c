@@ -12,16 +12,7 @@
 #include "acl-shared-storage.h"
 #include "acl-plugin.h"
 
-#define ACL_LIST_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, acl_mailbox_list_module)
-
 #define MAILBOX_FLAG_MATCHED 0x40000000
-
-struct acl_mailbox_list {
-	union mailbox_list_module_context module_ctx;
-
-	struct acl_storage_rights_context rights;
-};
 
 struct acl_mailbox_list_iterate_context {
 	struct mailbox_list_iterate_context ctx;
@@ -35,8 +26,22 @@ struct acl_mailbox_list_iterate_context {
 	unsigned int simple_star_glob:1;
 };
 
-static MODULE_CONTEXT_DEFINE_INIT(acl_mailbox_list_module,
-				  &mailbox_list_module_register);
+static const char *acl_storage_right_names[ACL_STORAGE_RIGHT_COUNT] = {
+	MAIL_ACL_LOOKUP,
+	MAIL_ACL_READ,
+	MAIL_ACL_WRITE,
+	MAIL_ACL_WRITE_SEEN,
+	MAIL_ACL_WRITE_DELETED,
+	MAIL_ACL_INSERT,
+	MAIL_ACL_POST,
+	MAIL_ACL_EXPUNGE,
+	MAIL_ACL_CREATE,
+	MAIL_ACL_DELETE,
+	MAIL_ACL_ADMIN
+};
+
+struct acl_mailbox_list_module acl_mailbox_list_module =
+	MODULE_CONTEXT_INIT(&mailbox_list_module_register);
 
 struct acl_backend *acl_mailbox_list_get_backend(struct mailbox_list *list)
 {
@@ -45,16 +50,30 @@ struct acl_backend *acl_mailbox_list_get_backend(struct mailbox_list *list)
 	return alist->rights.backend;
 }
 
-static int
-acl_mailbox_list_have_right(struct mailbox_list *list, const char *name,
-			    unsigned int acl_storage_right_idx, bool *can_see_r)
+int acl_mailbox_list_have_right(struct mailbox_list *list, const char *name,
+				bool parent, unsigned int acl_storage_right_idx,
+				bool *can_see_r)
 {
 	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(list);
-	int ret;
+	struct acl_backend *backend = alist->rights.backend;
+	const unsigned int *idx_arr = alist->rights.acl_storage_right_idx;
+	struct acl_object *aclobj;
+	int ret, ret2;
 
-	ret = acl_storage_rights_ctx_have_right(&alist->rights, name, FALSE,
-						acl_storage_right_idx,
-						can_see_r);
+	aclobj = !parent ?
+		acl_object_init_from_name(backend, name) :
+		acl_object_init_from_parent(backend, name);
+	ret = acl_object_have_right(aclobj, idx_arr[acl_storage_right_idx]);
+
+	if (can_see_r != NULL) {
+		ret2 = acl_object_have_right(aclobj,
+					     idx_arr[ACL_STORAGE_RIGHT_LOOKUP]);
+		if (ret2 < 0)
+			ret = -1;
+		*can_see_r = ret2 > 0;
+	}
+	acl_object_deinit(&aclobj);
+
 	if (ret < 0)
 		mailbox_list_set_internal_error(list);
 	return ret;
@@ -92,14 +111,12 @@ acl_mailbox_try_list_fast(struct acl_mailbox_list_iterate_context *ctx)
 		return;
 
 	/* no LOOKUP right by default, we can optimize this */
-	if ((ctx->ctx.flags & MAILBOX_LIST_ITER_VIRTUAL_NAMES) != 0)
-		vname = t_str_new(256);
-
+	vname = t_str_new(256);
 	memset(&update_ctx, 0, sizeof(update_ctx));
 	update_ctx.iter_ctx = &ctx->ctx;
 	update_ctx.glob =
 		imap_match_init(pool_datastack_create(), "*",
-				(ns->flags & NAMESPACE_FLAG_INBOX) != 0,
+				(ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0,
 				ctx->sep);
 	update_ctx.match_parents = TRUE;
 	update_ctx.tree_ctx = mailbox_tree_init(ctx->sep);
@@ -153,9 +170,8 @@ acl_mailbox_list_iter_init(struct mailbox_list *list,
 	ctx->ctx.list = list;
 	ctx->ctx.flags = flags;
 
-	inboxcase = (list->ns->flags & NAMESPACE_FLAG_INBOX) != 0;
-	ctx->sep = (ctx->ctx.flags & MAILBOX_LIST_ITER_VIRTUAL_NAMES) != 0 ?
-		list->ns->sep : list->ns->real_sep;
+	inboxcase = (list->ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0;
+	ctx->sep = list->ns->sep;
 	ctx->glob = imap_match_init_multiple(default_pool, patterns,
 					     inboxcase, ctx->sep);
 	/* see if all patterns have only a single '*' and it's at the end.
@@ -186,15 +202,18 @@ acl_mailbox_list_iter_next_info(struct acl_mailbox_list_iterate_context *ctx)
 	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(ctx->ctx.list);
 	const struct mailbox_info *info;
 
-	do {
-		info = alist->module_ctx.super.iter_next(ctx->super_ctx);
-		if (info == NULL)
-			return NULL;
+	while ((info = alist->module_ctx.super.iter_next(ctx->super_ctx)) != NULL) {
 		/* if we've a list of mailboxes with LOOKUP rights, skip the
 		   mailboxes not in the list (since we know they can't be
 		   visible to us). */
-	} while (ctx->lookup_boxes != NULL &&
-		 mailbox_tree_lookup(ctx->lookup_boxes, info->name) == NULL);
+		if (ctx->lookup_boxes == NULL ||
+		    mailbox_tree_lookup(ctx->lookup_boxes, info->name) != NULL)
+			break;
+		if (ctx->ctx.list->ns->user->mail_debug) {
+			i_debug("acl: Mailbox not in dovecot-acl-list: %s",
+				info->name);
+		}
+	}
 
 	return info;
 }
@@ -204,15 +223,16 @@ acl_mailbox_list_iter_get_name(struct mailbox_list_iterate_context *ctx,
 			       const char *name)
 {
 	struct mail_namespace *ns = ctx->list->ns;
+	unsigned int len;
 
-	if ((ctx->flags & MAILBOX_LIST_ITER_VIRTUAL_NAMES) == 0)
-		return name;
-
-	/* Mailbox names contain namespace prefix,
-	   except when listing INBOX. */
-	if (strncmp(name, ns->prefix, ns->prefix_len) == 0)
-		name += ns->prefix_len;
-	return mail_namespace_fix_sep(ns, name);
+	name = mail_namespace_get_storage_name(ns, name);
+	len = strlen(name);
+	if (len > 0 && name[len-1] == ns->real_sep) {
+		/* name ends with separator. this can happen if doing e.g.
+		   LIST "" foo/% and it lists "foo/". */
+		name = t_strndup(name, len-1);
+	}
+	return name;
 }
 
 static bool
@@ -234,7 +254,6 @@ iter_mailbox_has_visible_children(struct acl_mailbox_list_iterate_context *ctx,
 {
 	struct mailbox_list_iterate_context *iter;
 	const struct mailbox_info *info;
-	enum mailbox_list_iter_flags flags;
 	string_t *pattern;
 	const char *prefix;
 	unsigned int i, prefix_len;
@@ -266,14 +285,14 @@ iter_mailbox_has_visible_children(struct acl_mailbox_list_iterate_context *ctx,
 			str_append_c(pattern, '%');
 		}
 	}
-	str_append_c(pattern, ctx->sep);
+	if (i > 0 && ctx->info.name[i-1] != ctx->sep)
+		str_append_c(pattern, ctx->sep);
 	str_append_c(pattern, '*');
 	prefix = str_c(pattern);
 	prefix_len = str_len(pattern) - 1;
 
-	flags = (ctx->ctx.flags & MAILBOX_LIST_ITER_VIRTUAL_NAMES) |
-		MAILBOX_LIST_ITER_RETURN_NO_FLAGS;
-	iter = mailbox_list_iter_init(ctx->ctx.list, str_c(pattern), flags);
+	iter = mailbox_list_iter_init(ctx->ctx.list, str_c(pattern),
+				      MAILBOX_LIST_ITER_RETURN_NO_FLAGS);
 	while ((info = mailbox_list_iter_next(iter)) != NULL) {
 		if (only_nonpatterns &&
 		    imap_match(ctx->glob, info->name) == IMAP_MATCH_YES) {
@@ -303,12 +322,16 @@ acl_mailbox_list_info_is_visible(struct acl_mailbox_list_iterate_context *ctx)
 	}
 
 	acl_name = acl_mailbox_list_iter_get_name(&ctx->ctx, info->name);
-	ret = acl_mailbox_list_have_right(ctx->ctx.list, acl_name,
+	ret = acl_mailbox_list_have_right(ctx->ctx.list, acl_name, FALSE,
 					  ACL_STORAGE_RIGHT_LOOKUP,
 					  NULL);
 	if (ret != 0) {
-		if ((info->flags & MAILBOX_CHILDREN) != 0 &&
-		    !iter_mailbox_has_visible_children(ctx, FALSE)) {
+		if ((ctx->ctx.flags & MAILBOX_LIST_ITER_RETURN_NO_FLAGS) != 0) {
+			/* don't waste time checking if there are visible
+			   children, but also don't return incorrect flags */
+			info->flags &= ~MAILBOX_CHILDREN;
+		} else if ((info->flags & MAILBOX_CHILDREN) != 0 &&
+			   !iter_mailbox_has_visible_children(ctx, FALSE)) {
 			info->flags &= ~MAILBOX_CHILDREN;
 			info->flags |= MAILBOX_NOCHILDREN;
 		}
@@ -358,6 +381,10 @@ acl_mailbox_list_iter_next(struct mailbox_list_iterate_context *_ctx)
 			return NULL;
 		}
 		/* skip to next one */
+		if (ctx->ctx.list->ns->user->mail_debug) {
+			i_debug("acl: No lookup right to mailbox: %s",
+				info->name);
+		}
 	}
 	return info == NULL ? NULL : &ctx->info;
 }
@@ -380,16 +407,14 @@ acl_mailbox_list_iter_deinit(struct mailbox_list_iterate_context *_ctx)
 	return ret;
 }
 
-static int acl_mailbox_have_any_rights(struct mailbox_list *list,
+static int acl_mailbox_have_any_rights(struct acl_mailbox_list *alist,
 				       const char *name)
 {
-	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(list);
 	struct acl_object *aclobj;
 	const char *const *rights;
 	int ret;
 
-	aclobj = acl_object_init_from_name(alist->rights.backend,
-					   list->ns->storage, name);
+	aclobj = acl_object_init_from_name(alist->rights.backend, name);
 	ret = acl_object_get_my_rights(aclobj, pool_datastack_create(),
 				       &rights);
 	acl_object_deinit(&aclobj);
@@ -406,8 +431,10 @@ static int acl_get_mailbox_name_status(struct mailbox_list *list,
 	int ret;
 
 	T_BEGIN {
-		ret = acl_mailbox_have_any_rights(list, name);
+		ret = acl_mailbox_have_any_rights(alist, name);
 	} T_END;
+	if (ret < 0)
+		return -1;
 
 	if (alist->module_ctx.super.get_mailbox_name_status(list, name,
 							    status) < 0)
@@ -417,7 +444,8 @@ static int acl_get_mailbox_name_status(struct mailbox_list *list,
 
 	/* we shouldn't reveal this mailbox's existance */
 	switch (*status) {
-	case MAILBOX_NAME_EXISTS:
+	case MAILBOX_NAME_EXISTS_MAILBOX:
+	case MAILBOX_NAME_EXISTS_DIR:
 		*status = MAILBOX_NAME_VALID;
 		break;
 	case MAILBOX_NAME_VALID:
@@ -426,7 +454,7 @@ static int acl_get_mailbox_name_status(struct mailbox_list *list,
 	case MAILBOX_NAME_NOINFERIORS:
 		/* have to check if we are allowed to see the parent */
 		T_BEGIN {
-			ret = acl_storage_rights_ctx_have_right(&alist->rights, name,
+			ret = acl_mailbox_list_have_right(list, name,
 					TRUE, ACL_STORAGE_RIGHT_LOOKUP, NULL);
 		} T_END;
 
@@ -444,98 +472,99 @@ static int acl_get_mailbox_name_status(struct mailbox_list *list,
 }
 
 static int
-acl_mailbox_list_delete(struct mailbox_list *list, const char *name)
+acl_mailbox_list_create_dir(struct mailbox_list *list, const char *name,
+			    enum mailbox_dir_create_type type)
 {
 	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(list);
-	bool can_see;
 	int ret;
 
-	ret = acl_mailbox_list_have_right(list, name, ACL_STORAGE_RIGHT_DELETE,
-					  &can_see);
+	/* we're looking up CREATE permission from our parent's rights */
+	ret = acl_mailbox_list_have_right(list, name, TRUE,
+					  ACL_STORAGE_RIGHT_CREATE, NULL);
 	if (ret <= 0) {
 		if (ret < 0)
 			return -1;
-		if (can_see) {
-			mailbox_list_set_error(list, MAIL_ERROR_PERM,
-					       MAIL_ERRSTR_NO_PERMISSION);
-		} else {
-			mailbox_list_set_error(list, MAIL_ERROR_NOTFOUND,
-				T_MAIL_ERR_MAILBOX_NOT_FOUND(name));
-		}
+		/* Note that if user didn't have LOOKUP permission to parent
+		   mailbox, this may reveal the mailbox's existence to user.
+		   Can't help it. */
+		mailbox_list_set_error(list, MAIL_ERROR_PERM,
+				       MAIL_ERRSTR_NO_PERMISSION);
 		return -1;
 	}
-
-	return alist->module_ctx.super.delete_mailbox(list, name);
+	return alist->module_ctx.super.create_mailbox_dir(list, name, type);
 }
 
-static int
-acl_mailbox_list_rename(struct mailbox_list *list,
-			const char *oldname, const char *newname)
+static void acl_mailbox_list_deinit(struct mailbox_list *list)
 {
 	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(list);
-	bool can_see;
-	int ret;
 
-	/* renaming requires rights to delete the old mailbox */
-	ret = acl_mailbox_list_have_right(list, oldname,
-					  ACL_STORAGE_RIGHT_DELETE, &can_see);
-	if (ret <= 0) {
-		if (ret < 0)
-			return -1;
-		if (can_see) {
-			mailbox_list_set_error(list, MAIL_ERROR_PERM,
-					       MAIL_ERRSTR_NO_PERMISSION);
-		} else {
-			mailbox_list_set_error(list, MAIL_ERROR_NOTFOUND,
-				T_MAIL_ERR_MAILBOX_NOT_FOUND(oldname));
-		}
-		return -1;
-	}
-
-	/* and create the new one under the parent mailbox */
-	T_BEGIN {
-		ret = acl_storage_rights_ctx_have_right(&alist->rights, newname,
-				TRUE, ACL_STORAGE_RIGHT_CREATE, NULL);
-	} T_END;
-
-	if (ret <= 0) {
-		if (ret == 0) {
-			/* Note that if the mailbox didn't have LOOKUP
-			   permission, this not reveals to user the mailbox's
-			   existence. Can't help it. */
-			mailbox_list_set_error(list, MAIL_ERROR_PERM,
-					       MAIL_ERRSTR_NO_PERMISSION);
-		} else {
-			mailbox_list_set_internal_error(list);
-		}
-		return -1;
-	}
-
-	return alist->module_ctx.super.rename_mailbox(list, oldname, newname);
+	acl_backend_deinit(&alist->rights.backend);
+	alist->module_ctx.super.deinit(list);
 }
 
 static void acl_mailbox_list_init_shared(struct mailbox_list *list)
 {
 	struct acl_mailbox_list *alist;
+	struct mailbox_list_vfuncs *v = list->vlast;
 
 	alist = p_new(list->pool, struct acl_mailbox_list, 1);
-	alist->module_ctx.super = list->v;
-	list->v.iter_init = acl_mailbox_list_iter_init_shared;
+	alist->module_ctx.super = *v;
+	list->vlast = &alist->module_ctx.super;
+	v->deinit = acl_mailbox_list_deinit;
+	v->iter_init = acl_mailbox_list_iter_init_shared;
 
 	MODULE_CONTEXT_SET(list, acl_mailbox_list_module, alist);
 }
 
+static void acl_storage_rights_ctx_init(struct acl_storage_rights_context *ctx,
+					struct acl_backend *backend)
+{
+	unsigned int i;
+
+	ctx->backend = backend;
+	for (i = 0; i < ACL_STORAGE_RIGHT_COUNT; i++) {
+		ctx->acl_storage_right_idx[i] =
+			acl_backend_lookup_right(backend,
+						 acl_storage_right_names[i]);
+	}
+}
+
 static void acl_mailbox_list_init_default(struct mailbox_list *list)
 {
-	struct acl_user *auser = ACL_USER_CONTEXT(list->ns->user);
+	struct mailbox_list_vfuncs *v = list->vlast;
 	struct acl_mailbox_list *alist;
+
+	if (list->mail_set->mail_full_filesystem_access) {
+		/* not necessarily, but safer to do this for now. */
+		i_fatal("mail_full_filesystem_access=yes is "
+			"incompatible with ACLs");
+	}
+
+	alist = p_new(list->pool, struct acl_mailbox_list, 1);
+	alist->module_ctx.super = *v;
+	list->vlast = &alist->module_ctx.super;
+	v->deinit = acl_mailbox_list_deinit;
+	v->iter_init = acl_mailbox_list_iter_init;
+	v->iter_next = acl_mailbox_list_iter_next;
+	v->iter_deinit = acl_mailbox_list_iter_deinit;
+	v->get_mailbox_name_status = acl_get_mailbox_name_status;
+	v->create_mailbox_dir = acl_mailbox_list_create_dir;
+
+	MODULE_CONTEXT_SET(list, acl_mailbox_list_module, alist);
+}
+
+void acl_mail_namespace_storage_added(struct mail_namespace *ns)
+{
+	struct acl_user *auser = ACL_USER_CONTEXT(ns->user);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(ns->list);
 	struct acl_backend *backend;
-	struct mail_namespace *ns;
-	enum mailbox_list_flags flags;
 	const char *current_username, *owner_username;
 	bool owner = TRUE;
 
-	owner_username = list->ns->user->username;
+	if (alist == NULL)
+		return;
+
+	owner_username = ns->user->username;
 	current_username = auser->master_user;
 	if (current_username == NULL)
 		current_username = owner_username;
@@ -545,45 +574,28 @@ static void acl_mailbox_list_init_default(struct mailbox_list *list)
 	/* We don't care about the username for non-private mailboxes.
 	   It's used only when checking if we're the mailbox owner. We never
 	   are for shared/public mailboxes. */
-	ns = mailbox_list_get_namespace(list);
 	if (ns->type != NAMESPACE_PRIVATE)
 		owner = FALSE;
 
-	backend = acl_backend_init(auser->acl_env, list, current_username,
+	/* we need to know the storage when initializing backend */
+	backend = acl_backend_init(auser->acl_env, ns->list, current_username,
 				   auser->groups, owner);
 	if (backend == NULL)
 		i_fatal("ACL backend initialization failed");
-
-	flags = mailbox_list_get_flags(list);
-	if ((flags & MAILBOX_LIST_FLAG_FULL_FS_ACCESS) != 0) {
-		/* not necessarily, but safer to do this for now. */
-		i_fatal("mail_full_filesystem_access=yes is "
-			"incompatible with ACLs");
-	}
-
-	alist = p_new(list->pool, struct acl_mailbox_list, 1);
-	alist->module_ctx.super = list->v;
-	list->v.iter_init = acl_mailbox_list_iter_init;
-	list->v.iter_next = acl_mailbox_list_iter_next;
-	list->v.iter_deinit = acl_mailbox_list_iter_deinit;
-	list->v.get_mailbox_name_status = acl_get_mailbox_name_status;
-	list->v.delete_mailbox = acl_mailbox_list_delete;
-	list->v.rename_mailbox = acl_mailbox_list_rename;
-
 	acl_storage_rights_ctx_init(&alist->rights, backend);
-	MODULE_CONTEXT_SET(list, acl_mailbox_list_module, alist);
 }
 
 void acl_mailbox_list_created(struct mailbox_list *list)
 {
-	if ((list->ns->flags & NAMESPACE_FLAG_NOACL) != 0) {
-		/* no ACL checks for internal namespaces (deliver, shared) */
+	struct acl_user *auser = ACL_USER_CONTEXT(list->ns->user);
+
+	if (auser == NULL) {
+		/* ACLs disabled for this user */
+	} else if ((list->ns->flags & NAMESPACE_FLAG_NOACL) != 0) {
+		/* no ACL checks for internal namespaces (lda, shared) */
 		if (list->ns->type == NAMESPACE_SHARED)
 			acl_mailbox_list_init_shared(list);
 	} else {
 		acl_mailbox_list_init_default(list);
 	}
-
-	if (acl_next_hook_mailbox_list_created != NULL)
-		acl_next_hook_mailbox_list_created(list);
 }

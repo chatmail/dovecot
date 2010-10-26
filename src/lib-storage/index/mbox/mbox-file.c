@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <utime.h>
 
-#define MBOX_READ_BLOCK_SIZE (1024*4)
+#define MBOX_READ_BLOCK_SIZE IO_BLOCK_SIZE
 
 int mbox_file_open(struct mbox_mailbox *mbox)
 {
@@ -21,14 +21,15 @@ int mbox_file_open(struct mbox_mailbox *mbox)
 
 	if (mbox->mbox_file_stream != NULL) {
 		/* read-only mbox stream */
-		i_assert(mbox->ibox.backend_readonly);
+		i_assert(mbox->box.backend_readonly);
 		return 0;
 	}
 
-	fd = open(mbox->path, mbox->ibox.backend_readonly ? O_RDONLY : O_RDWR);
-	if (fd == -1 && errno == EACCES && !mbox->ibox.backend_readonly) {
-                mbox->ibox.backend_readonly = TRUE;
-		fd = open(mbox->path, O_RDONLY);
+	fd = open(mbox->box.path,
+		  mbox->box.backend_readonly ? O_RDONLY : O_RDWR);
+	if (fd == -1 && errno == EACCES && !mbox->box.backend_readonly) {
+                mbox->box.backend_readonly = TRUE;
+		fd = open(mbox->box.path, O_RDONLY);
 	}
 
 	if (fd == -1) {
@@ -67,7 +68,7 @@ int mbox_file_open_stream(struct mbox_mailbox *mbox)
 
 	if (mbox->mbox_file_stream != NULL) {
 		/* read-only mbox stream */
-		i_assert(mbox->mbox_fd == -1 && mbox->ibox.backend_readonly);
+		i_assert(mbox->mbox_fd == -1 && mbox->box.backend_readonly);
 	} else {
 		if (mbox->mbox_fd == -1) {
 			if (mbox_file_open(mbox) < 0)
@@ -85,10 +86,10 @@ int mbox_file_open_stream(struct mbox_mailbox *mbox)
 			i_stream_set_init_buffer_size(mbox->mbox_file_stream,
 						      MBOX_READ_BLOCK_SIZE);
 		}
+		i_stream_set_name(mbox->mbox_file_stream, mbox->box.path);
 	}
 
-	mbox->mbox_stream = i_stream_create_raw_mbox(mbox->mbox_file_stream,
-						     mbox->path);
+	mbox->mbox_stream = i_stream_create_raw_mbox(mbox->mbox_file_stream);
 	if (mbox->mbox_lock_type != F_UNLCK)
 		istream_raw_mbox_set_locked(mbox->mbox_stream);
 	return 0;
@@ -96,11 +97,13 @@ int mbox_file_open_stream(struct mbox_mailbox *mbox)
 
 static void mbox_file_fix_atime(struct mbox_mailbox *mbox)
 {
+	struct index_mailbox_context *ibox = INDEX_STORAGE_CONTEXT(&mbox->box);
 	struct utimbuf buf;
 	struct stat st;
 
-	if (mbox->ibox.recent_flags_count > 0 && mbox->ibox.keep_recent &&
-	    mbox->mbox_fd != -1 && !mbox->ibox.backend_readonly) {
+	if (ibox->recent_flags_count > 0 &&
+	    (mbox->box.flags & MAILBOX_FLAG_KEEP_RECENT) != 0 &&
+	    mbox->mbox_fd != -1 && !mbox->box.backend_readonly) {
 		/* we've seen recent messages which we want to keep recent.
 		   keep file's atime lower than mtime so \Marked status
 		   gets shown while listing */
@@ -111,7 +114,7 @@ static void mbox_file_fix_atime(struct mbox_mailbox *mbox)
 		if (st.st_atime >= st.st_mtime) {
 			buf.modtime = st.st_mtime;
 			buf.actime = buf.modtime - 1;
-			if (utime(mbox->path, &buf) < 0) {
+			if (utime(mbox->box.path, &buf) < 0) {
 				mbox_set_syscall_error(mbox, "utimes()");
 				return;
 			}
@@ -129,7 +132,7 @@ void mbox_file_close_stream(struct mbox_mailbox *mbox)
 	if (mbox->mbox_file_stream != NULL) {
 		if (mbox->mbox_fd == -1) {
 			/* read-only mbox stream */
-			i_assert(mbox->ibox.backend_readonly);
+			i_assert(mbox->box.backend_readonly);
 			i_stream_seek(mbox->mbox_file_stream, 0);
 		} else {
 			i_stream_destroy(&mbox->mbox_file_stream);
@@ -151,7 +154,7 @@ int mbox_file_lookup_offset(struct mbox_mailbox *mbox,
 	if (data == NULL) {
 		mail_storage_set_critical(&mbox->storage->storage,
 			"Cached message offset lost for seq %u in mbox file %s",
-			seq, mbox->path);
+			seq, mbox->box.path);
                 mbox->mbox_hdr.dirty_flag = TRUE;
                 mbox->mbox_broken_offsets = TRUE;
 		return 0;
@@ -188,7 +191,7 @@ int mbox_file_seek(struct mbox_mailbox *mbox, struct mail_index_view *view,
 
 		mail_storage_set_critical(&mbox->storage->storage,
 			"Cached message offset %s is invalid for mbox file %s",
-			dec2str(offset), mbox->path);
+			dec2str(offset), mbox->box.path);
 		mbox->mbox_hdr.dirty_flag = TRUE;
 		mbox->mbox_broken_offsets = TRUE;
 		return 0;

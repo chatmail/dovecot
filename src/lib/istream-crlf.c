@@ -11,24 +11,6 @@ struct crlf_istream {
 	unsigned int last_cr:1;
 };
 
-static void i_stream_crlf_destroy(struct iostream_private *stream)
-{
-	struct crlf_istream *cstream = (struct crlf_istream *)stream;
-
-	i_free(cstream->istream.w_buffer);
-	i_stream_unref(&cstream->istream.parent);
-}
-
-static void
-i_stream_crlf_set_max_buffer_size(struct iostream_private *stream,
-				   size_t max_size)
-{
-	struct crlf_istream *cstream = (struct crlf_istream *)stream;
-
-	cstream->istream.max_buffer_size = max_size;
-	i_stream_set_max_buffer_size(cstream->istream.parent, max_size);
-}
-
 static int i_stream_crlf_read_common(struct crlf_istream *cstream)
 {
 	struct istream_private *stream = &cstream->istream;
@@ -56,38 +38,76 @@ static int i_stream_crlf_read_common(struct crlf_istream *cstream)
 static ssize_t i_stream_crlf_read_crlf(struct istream_private *stream)
 {
 	struct crlf_istream *cstream = (struct crlf_istream *)stream;
-	const unsigned char *data;
-	size_t i, dest, size;
+	const unsigned char *data, *ptr, *src, *src_end;
+	unsigned char *dest, *dest_end;
+	size_t size, copy_len;
 	ssize_t ret;
 
 	ret = i_stream_crlf_read_common(cstream);
 	if (ret <= 0)
 		return ret;
 
+	/* at least one byte was read */
 	data = i_stream_get_data(stream->parent, &size);
 
-	/* @UNSAFE: add missing CRs */
-	dest = stream->pos;
-	for (i = 0; i < size && dest < stream->buffer_size; i++) {
-		if (data[i] == '\n') {
-			if (i == 0) {
-				if (!cstream->last_cr)
-					stream->w_buffer[dest++] = '\r';
-			} else {
-				if (data[i-1] != '\r')
-					stream->w_buffer[dest++] = '\r';
-			}
-			if (dest == stream->buffer_size)
-				break;
-		}
-		stream->w_buffer[dest++] = data[i];
-	}
-	cstream->last_cr = stream->w_buffer[dest-1] == '\r';
-	i_stream_skip(stream->parent, i);
+	dest = stream->w_buffer + stream->pos;
+	dest_end = stream->w_buffer + stream->buffer_size;
+	src = data;
+	src_end = data + size;
 
-	ret = dest - stream->pos;
+	/* @UNSAFE: add missing CRs */
+	if (*src == '\n') {
+		if (!cstream->last_cr && dest < dest_end)
+			*dest++ = '\r';
+
+		if (dest < dest_end) {
+			*dest++ = '\n';
+			src++;
+		}
+	}
+
+	while (dest < dest_end) {
+		ptr = memchr(src, '\n', src_end - src);
+		if (ptr == NULL)
+			ptr = src_end;
+
+		/* copy data up to LF */
+		copy_len = ptr - src;
+		if (dest + copy_len > dest_end)
+			copy_len = dest_end - dest;
+
+		if (copy_len > 0) {
+			memcpy(dest, src, copy_len);
+
+			dest += copy_len;
+			src += copy_len;
+		}
+
+		i_assert(dest <= dest_end && src <= src_end);
+		if (dest == dest_end || src == src_end)
+			break;
+
+		/* add the CR if necessary and copy the LF.
+		   (src >= data+1, because data[0]=='\n' was
+		   handled before this loop) */
+		if (src[-1] != '\r')
+			*dest++ = '\r';
+
+		if (dest == dest_end)
+			break;
+
+		*dest++ = '\n';
+		src++;
+		i_assert(src == ptr + 1);
+	}
+
+	i_assert(dest != stream->w_buffer);
+ 	cstream->last_cr = dest[-1] == '\r';
+	i_stream_skip(stream->parent, src - data);
+
+	ret = (dest - stream->w_buffer) - stream->pos;
 	i_assert(ret > 0);
-	stream->pos = dest;
+	stream->pos = dest - stream->w_buffer;
 	return ret;
 }
 
@@ -152,32 +172,6 @@ static ssize_t i_stream_crlf_read_lf(struct istream_private *stream)
 	return ret;
 }
 
-static void
-i_stream_crlf_seek(struct istream_private *stream,
-		   uoff_t v_offset, bool mark ATTR_UNUSED)
-{
-	size_t available;
-
-	if (stream->istream.v_offset > v_offset)
-		i_panic("crlf-istream: seeking unsupported currently");
-
-	while (stream->istream.v_offset < v_offset) {
-		(void)i_stream_crlf_read_crlf(stream);
-
-		available = stream->pos - stream->skip;
-		if (available == 0) {
-			stream->istream.stream_errno = ESPIPE;
-			return;
-		}
-		if (available <= v_offset - stream->istream.v_offset)
-			i_stream_skip(&stream->istream, available);
-		else {
-			i_stream_skip(&stream->istream,
-				      v_offset - stream->istream.v_offset);
-		}
-	}
-}
-
 static const struct stat *
 i_stream_crlf_stat(struct istream_private *stream, bool exact)
 {
@@ -189,18 +183,11 @@ i_stream_create_crlf_full(struct istream *input, bool crlf)
 {
 	struct crlf_istream *cstream;
 
-	i_stream_ref(input);
-
 	cstream = i_new(struct crlf_istream, 1);
 	cstream->istream.max_buffer_size = input->real_stream->max_buffer_size;
 
-	cstream->istream.iostream.destroy = i_stream_crlf_destroy;
-	cstream->istream.iostream.set_max_buffer_size =
-		i_stream_crlf_set_max_buffer_size;
-
 	cstream->istream.read = crlf ? i_stream_crlf_read_crlf :
 		i_stream_crlf_read_lf;
-	cstream->istream.seek = i_stream_crlf_seek;
 	cstream->istream.stat = i_stream_crlf_stat;
 
 	cstream->istream.istream.readable_fd = FALSE;

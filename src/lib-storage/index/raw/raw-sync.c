@@ -16,16 +16,15 @@ static int raw_sync(struct raw_mailbox *mbox)
 
 	i_assert(!mbox->synced);
 
-	sync_flags = MAIL_INDEX_SYNC_FLAG_FLUSH_DIRTY |
+	sync_flags = index_storage_get_sync_flags(&mbox->box) |
+		MAIL_INDEX_SYNC_FLAG_FLUSH_DIRTY |
 		MAIL_INDEX_SYNC_FLAG_REQUIRE_CHANGES;
-	if (!mbox->ibox.keep_recent)
-		sync_flags |= MAIL_INDEX_SYNC_FLAG_DROP_RECENT;
 
-	ret = mail_index_sync_begin(mbox->ibox.index, &index_sync_ctx,
+	ret = mail_index_sync_begin(mbox->box.index, &index_sync_ctx,
 				    &sync_view, &trans, sync_flags);
 	if (ret <= 0) {
 		if (ret < 0)
-			mail_storage_set_index_error(&mbox->ibox);
+			mail_storage_set_index_error(&mbox->box);
 		return ret;
 	}
 
@@ -36,10 +35,10 @@ static int raw_sync(struct raw_mailbox *mbox)
 
 	/* add our one and only message */
 	mail_index_append(trans, 1, &seq);
-	index_mailbox_set_recent_uid(&mbox->ibox, 1);
+	index_mailbox_set_recent_uid(&mbox->box, 1);
 
 	if (mail_index_sync_commit(&index_sync_ctx) < 0) {
-		mail_storage_set_index_error(&mbox->ibox);
+		mail_storage_set_index_error(&mbox->box);
 		return -1;
 	}
 	mbox->synced = TRUE;
@@ -52,10 +51,12 @@ raw_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 	struct raw_mailbox *mbox = (struct raw_mailbox *)box;
 	int ret = 0;
 
-	if (!box->opened)
-		index_storage_mailbox_open(&mbox->ibox);
+	if (!box->opened) {
+		if (mailbox_open(box) < 0)
+			ret = -1;
+	}
 
-	if (!mbox->synced)
+	if (!mbox->synced && ret == 0)
 		ret = raw_sync(mbox);
 
 	return index_mailbox_sync_init(box, flags, ret < 0);

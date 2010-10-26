@@ -1,6 +1,6 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "imap-common.h"
 #include "array.h"
 #include "buffer.h"
 #include "istream.h"
@@ -10,7 +10,7 @@
 #include "message-size.h"
 #include "imap-date.h"
 #include "mail-search-build.h"
-#include "commands.h"
+#include "imap-commands.h"
 #include "imap-quote.h"
 #include "imap-fetch.h"
 #include "imap-util.h"
@@ -25,48 +25,36 @@
 
 static ARRAY_DEFINE(fetch_handlers, struct imap_fetch_handler);
 
-static int imap_fetch_handler_cmp(const void *p1, const void *p2)
+static int imap_fetch_handler_cmp(const struct imap_fetch_handler *h1,
+				  const struct imap_fetch_handler *h2)
 {
-        const struct imap_fetch_handler *h1 = p1, *h2 = p2;
-
 	return strcmp(h1->name, h2->name);
 }
 
 void imap_fetch_handlers_register(const struct imap_fetch_handler *handlers,
 				  size_t count)
 {
-	struct imap_fetch_handler *all_handlers;
-	unsigned int all_count;
-
 	array_append(&fetch_handlers, handlers, count);
-
-	all_handlers = array_get_modifiable(&fetch_handlers, &all_count);
-	qsort(all_handlers, all_count, sizeof(*all_handlers),
-	      imap_fetch_handler_cmp);
+	array_sort(&fetch_handlers, imap_fetch_handler_cmp);
 }
 
-static int imap_fetch_handler_bsearch(const void *name_p, const void *handler_p)
+static int
+imap_fetch_handler_bsearch(const char *name, const struct imap_fetch_handler *h)
 {
-	const char *name = name_p;
-        const struct imap_fetch_handler *h = handler_p;
-
 	return strcmp(name, h->name);
 }
 
 bool imap_fetch_init_handler(struct imap_fetch_context *ctx, const char *name,
 			     const struct imap_arg **args)
 {
-	const struct imap_fetch_handler *handler, *handlers;
+	const struct imap_fetch_handler *handler;
 	const char *lookup_name, *p;
-	unsigned int count;
 
 	for (p = name; i_isalnum(*p) || *p == '-'; p++) ;
 	lookup_name = t_strdup_until(name, p);
 
-	handlers = array_get_modifiable(&fetch_handlers, &count);
-	handler = bsearch(lookup_name, handlers, count,
-			  sizeof(struct imap_fetch_handler),
-			  imap_fetch_handler_bsearch);
+	handler = array_bsearch(&fetch_handlers, lookup_name,
+				imap_fetch_handler_bsearch);
 	if (handler == NULL) {
 		client_send_command_error(ctx->cmd,
 			t_strconcat("Unknown parameter ", name, NULL));
@@ -129,17 +117,14 @@ void imap_fetch_add_handler(struct imap_fetch_context *ctx,
 	   client requested them. This is especially useful to get UID
 	   returned first, which some clients rely on..
 	*/
-	const struct imap_fetch_context_handler *handlers;
+	const struct imap_fetch_context_handler *ctx_handler;
 	struct imap_fetch_context_handler h;
-	unsigned int i, size;
 
 	if (context == NULL) {
 		/* don't allow duplicate handlers */
-		handlers = array_get(&ctx->handlers, &size);
-
-		for (i = 0; i < size; i++) {
-			if (handlers[i].handler == handler &&
-			    handlers[i].context == NULL)
+		array_foreach(&ctx->handlers, ctx_handler) {
+			if (ctx_handler->handler == handler &&
+			    ctx_handler->context == NULL)
 				return;
 		}
 	}
@@ -217,7 +202,7 @@ static int get_expunges_fallback(struct imap_fetch_context *ctx,
 	search_ctx = mailbox_search_init(trans, search_args, NULL);
 	mail_search_args_unref(&search_args);
 
-	while (mailbox_search_next(search_ctx, mail) > 0) {
+	while (mailbox_search_next(search_ctx, mail)) {
 		if (mail->uid == next_uid) {
 			if (next_uid < uid_filter[i].seq2)
 				next_uid++;
@@ -276,6 +261,16 @@ static int get_expunges_fallback(struct imap_fetch_context *ctx,
 	return ret;
 }
 
+static void
+mailbox_expunge_to_range(const ARRAY_TYPE(mailbox_expunge_rec) *input,
+			 ARRAY_TYPE(seq_range) *output)
+{
+	const struct mailbox_expunge_rec *expunge;
+
+	array_foreach(input, expunge)
+		seq_range_array_add(output, 0, expunge->uid);
+}
+
 static int
 imap_fetch_send_vanished(struct imap_fetch_context *ctx)
 {
@@ -283,29 +278,33 @@ imap_fetch_send_vanished(struct imap_fetch_context *ctx)
 	const struct mail_search_arg *modseqarg = uidarg->next;
 	const ARRAY_TYPE(seq_range) *uid_filter = &uidarg->value.seqset;
 	uint64_t modseq = modseqarg->value.modseq->modseq - 1;
-	ARRAY_TYPE(seq_range) expunged_uids;
+	ARRAY_TYPE(mailbox_expunge_rec) expunged_uids;
+	ARRAY_TYPE(seq_range) expunged_uids_range;
 	string_t *str;
 	int ret = 0;
 
 	i_array_init(&expunged_uids, array_count(uid_filter));
-	if (!mailbox_get_expunged_uids(ctx->box, modseq, uid_filter,
-				       &expunged_uids)) {
+	i_array_init(&expunged_uids_range, array_count(uid_filter));
+	if (mailbox_get_expunges(ctx->box, modseq, uid_filter, &expunged_uids))
+		mailbox_expunge_to_range(&expunged_uids, &expunged_uids_range);
+	else {
 		/* return all expunged UIDs */
 		if (get_expunges_fallback(ctx, uid_filter,
-					  &expunged_uids) < 0) {
-			array_clear(&expunged_uids);
+					  &expunged_uids_range) < 0) {
+			array_clear(&expunged_uids_range);
 			ret = -1;
 		}
 	}
-	if (array_count(&expunged_uids) > 0) {
+	if (array_count(&expunged_uids_range) > 0) {
 		str = str_new(default_pool, 128);
 		str_append(str, "* VANISHED (EARLIER) ");
-		imap_write_seq_range(str, &expunged_uids);
+		imap_write_seq_range(str, &expunged_uids_range);
 		str_append(str, "\r\n");
 		o_stream_send(ctx->client->output, str_data(str), str_len(str));
 		str_free(&str);
 	}
 	array_free(&expunged_uids);
+	array_free(&expunged_uids_range);
 	return ret;
 }
 
@@ -447,8 +446,7 @@ static int imap_fetch_more_int(struct imap_fetch_context *ctx)
 			if (ctx->cmd->cancel)
 				return 1;
 
-			if (mailbox_search_next(ctx->search_ctx,
-						ctx->mail) <= 0)
+			if (!mailbox_search_next(ctx->search_ctx, ctx->mail))
 				break;
 			ctx->cur_mail = ctx->mail;
 
@@ -537,13 +535,11 @@ int imap_fetch_more(struct imap_fetch_context *ctx)
 
 int imap_fetch_deinit(struct imap_fetch_context *ctx)
 {
-	const struct imap_fetch_context_handler *handlers;
-	unsigned int i, count;
+	const struct imap_fetch_context_handler *handler;
 
-	handlers = array_get(&ctx->handlers, &count);
-	for (i = 0; i < count; i++) {
-		if (handlers[i].want_deinit)
-			handlers[i].handler(ctx, NULL, handlers[i].context);
+	array_foreach(&ctx->handlers, handler) {
+		if (handler->want_deinit)
+			handler->handler(ctx, NULL, handler->context);
 	}
 
 	if (!ctx->line_finished) {
@@ -786,6 +782,7 @@ static int fetch_guid(struct imap_fetch_context *ctx, struct mail *mail,
 
 	str_append(ctx->cur_str, "X-GUID ");
 	imap_quote_append_string(ctx->cur_str, value, FALSE);
+	str_append_c(ctx->cur_str, ' ');
 	return 1;
 }
 
@@ -806,6 +803,7 @@ static int fetch_x_mailbox(struct imap_fetch_context *ctx, struct mail *mail,
 		i_panic("mailbox name not returned");
 	str_append(ctx->cur_str, "X-MAILBOX ");
 	imap_quote_append_string(ctx->cur_str, str, FALSE);
+	str_append_c(ctx->cur_str, ' ');
 	return 1;
 }
 
@@ -816,6 +814,24 @@ fetch_x_mailbox_init(struct imap_fetch_context *ctx ATTR_UNUSED,
 {
 	imap_fetch_add_handler(ctx, TRUE, FALSE, name, NULL,
 			       fetch_x_mailbox, NULL);
+	return TRUE;
+}
+
+static int fetch_x_real_uid(struct imap_fetch_context *ctx, struct mail *mail,
+			    void *context ATTR_UNUSED)
+{
+	str_printfa(ctx->cur_str, "X-REAL-UID %u ",
+		    mail_get_real_mail(mail)->uid);
+	return 1;
+}
+
+static bool
+fetch_x_real_uid_init(struct imap_fetch_context *ctx ATTR_UNUSED,
+		      const char *name,
+		      const struct imap_arg **args ATTR_UNUSED)
+{
+	imap_fetch_add_handler(ctx, TRUE, FALSE, name, NULL,
+			       fetch_x_real_uid, NULL);
 	return TRUE;
 }
 
@@ -855,6 +871,7 @@ imap_fetch_default_handlers[] = {
 	{ "UID", fetch_uid_init },
 	{ "X-GUID", fetch_guid_init },
 	{ "X-MAILBOX", fetch_x_mailbox_init },
+	{ "X-REAL-UID", fetch_x_real_uid_init },
 	{ "X-SAVEDATE", fetch_x_savedate_init }
 };
 

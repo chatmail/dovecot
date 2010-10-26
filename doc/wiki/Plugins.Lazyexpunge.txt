@@ -1,9 +1,6 @@
 Lazy expunge
 ============
 
-v2.0+ supports lazy expunging for all mailbox formats. Older versions support
-only Maildir.
-
 The idea behind this plugin is that expunged mails and deleted mailboxes stay
 around for a while, so that user can undelete them without assistance from
 sysadmin. The expunged mails won't be counted in user's quota. The plugin
@@ -12,8 +9,9 @@ way (see below).
 
 The plugin is configured by defining namespaces where the mails are moved. You
 can decide if you want the namespaces to be visible to clients, or if you want
-to show them only via some special webmail interface. You can use either one or
-three namespaces:
+to show them only via some special webmail interface.
+
+You can use either one or three namespaces:
 
 3 namespaces
 ------------
@@ -36,40 +34,37 @@ Example configuration:
 
 ---%<-------------------------------------------------------------------------
 # the default namespace
-namespace private {
+namespace {
   prefix =
   separator = /
   inbox = yes
 }
 
 # namespaces for lazy_expunge plugin:
-namespace private {
+namespace {
   prefix = .EXPUNGED/
   separator = /
   location = maildir:~/Maildir/expunged
 }
-namespace private {
+namespace {
   prefix = .DELETED/
   separator = /
   location = maildir:~/Maildir/deleted
 }
-namespace private {
+namespace {
   prefix = .DELETED/.EXPUNGED/
   separator = /
   location = maildir:~/Maildir/deleted/expunged
 }
 
-protocol imap {
-  mail_plugins = lazy_expunge
-}
-
+mail_plugins = $mail_plugins lazy_expunge
 plugin {
   lazy_expunge = .EXPUNGED/ .DELETED/ .DELETED/.EXPUNGED/
 }
 ---%<-------------------------------------------------------------------------
 
-1 namespace (v1.2.9+)
----------------------
+1 namespace
+-----------
 
 You create only a single namespace. When a message is expunged from mailbox
 /<name>/, it's moved to a mailbox /<name>/ in the expunge namespace. When an
@@ -80,23 +75,20 @@ Example configuration:
 
 ---%<-------------------------------------------------------------------------
 # the default namespace
-namespace private {
+namespace {
   prefix =
   separator = /
   inbox = yes
 }
 
 # namespace for lazy_expunge plugin:
-namespace private {
+namespace {
   prefix = .EXPUNGED/
   separator = /
   location = maildir:~/Maildir/expunged
 }
 
-protocol imap {
-  mail_plugins = lazy_expunge
-}
-
+mail_plugins = $mail_plugins lazy_expunge
 plugin {
   lazy_expunge = .EXPUNGED/
 }
@@ -105,11 +97,20 @@ plugin {
 Multi-dbox
 ----------
 
-With multi-dbox use:
+With multi-dbox use different MAILBOXDIRs (so copying between namespaces works
+quickly within the same storage):
 
 ---%<-------------------------------------------------------------------------
+# the default namespace
 namespace {
-  ..
+  prefix =
+  inbox = yes
+  location = mdbox:~/mdbox
+}
+
+# lazy_expunge namespace(s):
+namespace {
+  prefix = .EXPUNGED/
   location = mdbox:~/mdbox:MAILBOXDIR=expunged
 }
 ---%<-------------------------------------------------------------------------
@@ -141,8 +142,7 @@ Expire plugin
 
 <Expire plugin> [Plugins.Expire.txt] was created to keep track of mails in
 specific mailboxes, and expunge them when they've been there for a specified
-amount of time. It keeps an internal database (Berkeley DB or MySQL) of all
-such mailboxes, so it doesn't have to go through all the mailboxes for all the
-users. (v1.1+ only)
+amount of time. It keeps an internal database (e.g. SQL) of all such mailboxes,
+so it doesn't have to go through all the mailboxes for all the users.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

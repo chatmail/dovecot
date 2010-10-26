@@ -1,3 +1,5 @@
+doveadm_moduledir = $(moduledir)/doveadm
+
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-dict \
@@ -6,8 +8,9 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-storage \
 	-I$(top_srcdir)/src/lib-storage/index \
 	-I$(top_srcdir)/src/lib-storage/index/maildir \
-	-DPKG_RUNDIR=\""$(rundir)"\"
+	-I$(top_srcdir)/src/doveadm
 
+lib10_doveadm_quota_plugin_la_LDFLAGS = -module -avoid-version
 lib10_quota_plugin_la_LDFLAGS = -module -avoid-version
 
 module_LTLIBRARIES = \
@@ -23,9 +26,14 @@ quota_dist_sources = \
         quota-plugin.c \
 	quota-storage.c
 
-lib10_quota_plugin_la_SOURCES = \
-	$(quota_dist_sources) \
-	$(RQUOTA_XDR)
+lib10_quota_plugin_la_SOURCES = $(quota_dist_sources)
+nodist_lib10_quota_plugin_la_SOURCES = $(RQUOTA_XDR)
+
+doveadm_module_LTLIBRARIES = \
+	lib10_doveadm_quota_plugin.la
+
+lib10_doveadm_quota_plugin_la_SOURCES = \
+	doveadm-quota.c
 
 if HAVE_RQUOTA
 RQUOTA_XDR = rquota_xdr.c
@@ -56,16 +64,7 @@ noinst_HEADERS = \
 	quota-plugin.h \
 	quota-private.h
 
-install-exec-local:
-	for d in imap pop3 lda; do \
-	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
-	  rm -f $(DESTDIR)$(moduledir)/$$d/lib10_quota_plugin$(MODULE_SUFFIX); \
-	  $(LN_S) ../lib10_quota_plugin$(MODULE_SUFFIX) $(DESTDIR)$(moduledir)/$$d; \
-	done
-
 EXTRA_DIST = rquota.x
-
-DISTFILES = $(DIST_COMMON) $(quota_dist_sources) $(TEXINFOS) $(EXTRA_DIST)
 
 clean-generic:
 	if [ "$(top_srcdir)" != "$(top_builddir)" ]; then \

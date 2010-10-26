@@ -10,7 +10,7 @@ struct raw_mbox_istream {
 	struct istream_private istream;
 
 	time_t received_time, next_received_time;
-	char *path, *sender, *next_sender;
+	char *sender, *next_sender;
 
 	uoff_t from_offset, hdr_offset, body_offset, mail_size;
 	uoff_t input_peak_offset;
@@ -30,21 +30,10 @@ static void i_stream_raw_mbox_destroy(struct iostream_private *stream)
 
 	i_free(rstream->sender);
 	i_free(rstream->next_sender);
-	i_free(rstream->path);
 
 	i_stream_seek(rstream->istream.parent,
 		      rstream->istream.istream.v_offset);
 	i_stream_unref(&rstream->istream.parent);
-}
-
-static void
-i_stream_raw_mbox_set_max_buffer_size(struct iostream_private *stream,
-				      size_t max_size)
-{
-	struct raw_mbox_istream *rstream = (struct raw_mbox_istream *)stream;
-
-	rstream->istream.max_buffer_size = max_size;
-	i_stream_set_max_buffer_size(rstream->istream.parent, max_size);
 }
 
 static int mbox_read_from_line(struct raw_mbox_istream *rstream)
@@ -195,7 +184,6 @@ static ssize_t i_stream_raw_mbox_read(struct istream_private *stream)
 	stream->skip = 0;
 	stream->buffer = NULL;
 
-	ret = 0;
 	do {
 		buf = i_stream_get_data(stream->parent, &pos);
 		if (pos > 1 && stream->istream.v_offset + pos >
@@ -267,7 +255,8 @@ static ssize_t i_stream_raw_mbox_read(struct istream_private *stream)
 		if (mbox_read_from_line(rstream) < 0) {
 			if (stream->istream.v_offset != 0) {
 				i_error("Next message unexpectedly corrupted in mbox file "
-					"%s at %"PRIuUOFF_T, rstream->path,
+					"%s at %"PRIuUOFF_T,
+					i_stream_get_name(&stream->istream),
 					stream->istream.v_offset);
 			}
 			stream->pos = 0;
@@ -295,7 +284,7 @@ static ssize_t i_stream_raw_mbox_read(struct istream_private *stream)
 			rstream->body_offset = stream->istream.v_offset + i + 1;
 			eoh_char = -1;
 		}
-		if (buf[i] == *fromp) {
+		if ((char)buf[i] == *fromp) {
 			if (*++fromp == '\0') {
 				/* potential From-line, see if we have the
 				   rest of the line buffered. */
@@ -345,7 +334,7 @@ static ssize_t i_stream_raw_mbox_read(struct istream_private *stream)
 			}
 		} else {
 			fromp = mbox_from;
-			if (buf[i] == *fromp)
+			if ((char)buf[i] == *fromp)
 				fromp++;
 		}
 	}
@@ -368,7 +357,8 @@ static ssize_t i_stream_raw_mbox_read(struct istream_private *stream)
 		/* istream_raw_mbox_set_next_offset() used invalid
 		   cached next_offset? */
 		i_error("Next message unexpectedly lost from mbox file "
-			"%s at %"PRIuUOFF_T" (%s)", rstream->path,
+			"%s at %"PRIuUOFF_T" (%s)",
+			i_stream_get_name(&stream->istream),
 			rstream->hdr_offset + rstream->mail_size,
 			rstream->mail_size_forced ? "cached" : "noncached");
 		rstream->eof = TRUE;
@@ -420,36 +410,33 @@ static const struct stat *
 i_stream_raw_mbox_stat(struct istream_private *stream, bool exact)
 {
 	const struct stat *st;
+	struct raw_mbox_istream *rstream = (struct raw_mbox_istream *)stream;
 
 	st = i_stream_stat(stream->parent, exact);
 	if (st == NULL)
 		return NULL;
 
 	stream->statbuf = *st;
-	stream->statbuf.st_size = -1;
+	stream->statbuf.st_size =
+		!exact && rstream->seeked && rstream->mail_size != (uoff_t)-1 ?
+		(off_t)rstream->mail_size : -1;
 	return &stream->statbuf;
 }
 
-struct istream *
-i_stream_create_raw_mbox(struct istream *input, const char *path)
+struct istream *i_stream_create_raw_mbox(struct istream *input)
 {
 	struct raw_mbox_istream *rstream;
 
-	i_assert(path != NULL);
 	i_assert(input->v_offset == 0);
 
 	rstream = i_new(struct raw_mbox_istream, 1);
 
-	rstream->path = i_strdup(path);
 	rstream->body_offset = (uoff_t)-1;
 	rstream->mail_size = (uoff_t)-1;
 	rstream->received_time = (time_t)-1;
 	rstream->next_received_time = (time_t)-1;
 
 	rstream->istream.iostream.destroy = i_stream_raw_mbox_destroy;
-	rstream->istream.iostream.set_max_buffer_size =
-		i_stream_raw_mbox_set_max_buffer_size;
-
 	rstream->istream.max_buffer_size = input->real_stream->max_buffer_size;
 	rstream->istream.read = i_stream_raw_mbox_read;
 	rstream->istream.seek = i_stream_raw_mbox_seek;
@@ -460,7 +447,6 @@ i_stream_create_raw_mbox(struct istream *input, const char *path)
 	rstream->istream.istream.blocking = input->blocking;
 	rstream->istream.istream.seekable = input->seekable;
 
-	i_stream_ref(input);
 	return i_stream_create(&rstream->istream, input, -1);
 }
 
@@ -528,7 +514,8 @@ uoff_t istream_raw_mbox_get_header_offset(struct istream *stream)
 
 	if (rstream->corrupted) {
 		i_error("Unexpectedly lost From-line from mbox file %s at "
-			"%"PRIuUOFF_T, rstream->path, rstream->from_offset);
+			"%"PRIuUOFF_T, i_stream_get_name(stream),
+			rstream->from_offset);
 		return (uoff_t)-1;
 	}
 
@@ -556,7 +543,8 @@ uoff_t istream_raw_mbox_get_body_offset(struct istream *stream)
 		if (i_stream_raw_mbox_read(&rstream->istream) < 0) {
 			if (rstream->corrupted) {
 				i_error("Unexpectedly lost From-line from mbox file "
-					"%s at %"PRIuUOFF_T, rstream->path,
+					"%s at %"PRIuUOFF_T,
+					i_stream_get_name(stream),
 					rstream->from_offset);
 			} else {
 				i_assert(rstream->body_offset != (uoff_t)-1);
@@ -580,8 +568,8 @@ uoff_t istream_raw_mbox_get_body_size(struct istream *stream,
 
 	i_assert(rstream->seeked);
 	i_assert(rstream->hdr_offset != (uoff_t)-1);
-	i_assert(rstream->body_offset != (uoff_t)-1);
 
+	(void)istream_raw_mbox_get_body_offset(stream);
 	body_size = rstream->mail_size == (uoff_t)-1 ? (uoff_t)-1 :
 		rstream->mail_size - (rstream->body_offset -
 				      rstream->hdr_offset);

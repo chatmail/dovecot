@@ -5,6 +5,7 @@
 #include "lib.h"
 #include "array.h"
 #include "str.h"
+#include "hostpid.h"
 #include "mountpoint.h"
 #include "quota-private.h"
 #include "quota-fs.h"
@@ -46,6 +47,10 @@
 #ifndef _LINUX_QUOTA_VERSION
 #  define _LINUX_QUOTA_VERSION 1
 #endif
+
+#define mount_type_is_nfs(mount) \
+	(strcmp((mount)->type, "nfs") == 0 || \
+	 strcmp((mount)->type, "nfs4") == 0)
 
 struct fs_quota_mountpoint {
 	int refcount;
@@ -164,7 +169,7 @@ static struct fs_quota_mountpoint *fs_quota_mountpoint_get(const char *dir)
 	mount->fd = -1;
 #endif
 
-	if (strcmp(mount->type, "nfs") == 0) {
+	if (mount_type_is_nfs(mount)) {
 		if (strchr(mount->device_path, ':') == NULL) {
 			i_error("quota-fs: %s is not a valid NFS device path",
 				mount->device_path);
@@ -202,15 +207,16 @@ fs_quota_root_find_mountpoint(struct quota *quota,
 	return empty;
 }
 
-static void fs_quota_mount_init(struct fs_quota_root *root,
-				struct fs_quota_mountpoint *mount)
+static void
+fs_quota_mount_init(struct fs_quota_root *root,
+		    struct fs_quota_mountpoint *mount, const char *dir)
 {
 	struct quota_root *const *roots;
 	unsigned int i, count;
 
 #ifdef FS_QUOTA_SOLARIS
 #ifdef HAVE_RQUOTA
-	if (strcmp(mount->type, "nfs") == 0) {
+	if (mount_type_is_nfs(mount)) {
 		/* using rquota for this mount */
 	} else
 #endif
@@ -222,6 +228,13 @@ static void fs_quota_mount_init(struct fs_quota_root *root,
 	}
 #endif
 	root->mount = mount;
+
+	if (root->root.quota->set->debug) {
+		i_debug("fs quota add mailbox dir = %s", dir);
+		i_debug("fs quota block device = %s", mount->device_path);
+		i_debug("fs quota mount point = %s", mount->mount_path);
+		i_debug("fs quota mount type = %s", mount->type);
+	}
 
 	/* if there are more unused quota roots, copy this mount to them */
 	roots = array_get(&root->root.quota->roots, &count);
@@ -249,32 +262,27 @@ static void fs_quota_add_missing_mounts(struct quota *quota)
 			continue;
 
 		mount = fs_quota_mountpoint_get(root->storage_mount_path);
-		if (mount != NULL)
-			fs_quota_mount_init(root, mount);
+		if (mount != NULL) {
+			fs_quota_mount_init(root, mount,
+					    root->storage_mount_path);
+		}
 	}
 }
 
-static void fs_quota_storage_added(struct quota *quota,
-				   struct mail_storage *storage)
+static void fs_quota_namespace_added(struct quota *quota,
+				     struct mail_namespace *ns)
 {
 	struct fs_quota_mountpoint *mount;
 	struct fs_quota_root *root;
 	const char *dir;
-	bool is_file;
 
-	dir = mail_storage_get_mailbox_path(storage, "", &is_file);
+	dir = mailbox_list_get_path(ns->list, NULL,
+				    MAILBOX_LIST_PATH_TYPE_MAILBOX);
 	mount = fs_quota_mountpoint_get(dir);
 	if (mount != NULL) {
-		if (quota->set->debug) {
-			i_info("fs quota add storage dir = %s", dir);
-			i_info("fs quota block device = %s", mount->device_path);
-			i_info("fs quota mount point = %s", mount->mount_path);
-			i_info("fs quota mount type = %s", mount->type);
-		}
-
 		root = fs_quota_root_find_mountpoint(quota, mount);
 		if (root != NULL && root->mount == NULL)
-			fs_quota_mount_init(root, mount);
+			fs_quota_mount_init(root, mount, dir);
 		else
 			fs_quota_mountpoint_free(mount);
 	}
@@ -302,6 +310,31 @@ fs_quota_root_get_resources(struct quota_root *_root)
 }
 
 #ifdef HAVE_RQUOTA
+static void
+rquota_get_result(const rquota *rq, bool bytes,
+		  uint64_t *value_r, uint64_t *limit_r)
+{
+	/* use soft limits if they exist, fallback to hard limits */
+	if (bytes) {
+		/* convert the results from blocks to bytes */
+		*value_r = (uint64_t)rq->rq_curblocks *
+			(uint64_t)rq->rq_bsize;
+		if (rq->rq_bsoftlimit != 0) {
+			*limit_r = (uint64_t)rq->rq_bsoftlimit *
+				(uint64_t)rq->rq_bsize;
+		} else {
+			*limit_r = (uint64_t)rq->rq_bhardlimit *
+				(uint64_t)rq->rq_bsize;
+		}
+	} else {
+		*value_r = rq->rq_curfiles;
+		if (rq->rq_fsoftlimit != 0)
+			*limit_r = rq->rq_fsoftlimit;
+		else
+			*limit_r = rq->rq_fhardlimit;
+	}
+}
+
 static int do_rquota_user(struct fs_quota_root *root, bool bytes,
 			  uint64_t *value_r, uint64_t *limit_r)
 {
@@ -320,10 +353,18 @@ static int do_rquota_user(struct fs_quota_root *root, bool bytes,
 	host = t_strdup_until(mount->device_path, path);
 	path++;
 
+	/* For NFSv4, we send the filesystem path without initial /. Server
+	   prepends proper NFS pseudoroot automatically and uses this for
+	   detection of NFSv4 mounts. */
+	if (strcmp(root->mount->type, "nfs4") == 0) {
+		while (*path == '/')
+			path++;
+	}
+
 	if (root->root.quota->set->debug) {
-		i_info("quota-fs: host=%s, path=%s, uid=%s, %s",
-		       host, path, dec2str(root->uid),
-		       bytes ? "bytes" : "files");
+		i_debug("quota-fs: host=%s, path=%s, uid=%s, %s",
+			host, path, dec2str(root->uid),
+			bytes ? "bytes" : "files");
 	}
 
 	/* clnt_create() polls for a while to establish a connection */
@@ -363,32 +404,20 @@ static int do_rquota_user(struct fs_quota_root *root, bool bytes,
 
 	switch (result.status) {
 	case Q_OK: {
-		/* convert the results from blocks to bytes */
-		const rquota *rq = &result.getquota_rslt_u.gqr_rquota;
-
-		if (rq->rq_active) {
-			if (bytes) {
-				*value_r = (uint64_t)rq->rq_curblocks *
-					(uint64_t)rq->rq_bsize;
-				*limit_r = (uint64_t)rq->rq_bsoftlimit *
-					(uint64_t)rq->rq_bsize;
-			} else {
-				*value_r = rq->rq_curfiles;
-				*limit_r = rq->rq_fsoftlimit;
-			}
-		}
+		rquota_get_result(&result.getquota_rslt_u.gqr_rquota, bytes,
+				  value_r, limit_r);
 		if (root->root.quota->set->debug) {
-			i_info("quota-fs: uid=%s, value=%llu, "
-			       "limit=%llu, active=%d", dec2str(root->uid),
-			       (unsigned long long)*value_r,
-			       (unsigned long long)*limit_r, rq->rq_active);
+			i_debug("quota-fs: uid=%s, value=%llu, limit=%llu",
+				dec2str(root->uid),
+				(unsigned long long)*value_r,
+				(unsigned long long)*limit_r);
 		}
 		return 1;
 	}
 	case Q_NOQUOTA:
 		if (root->root.quota->set->debug) {
-			i_info("quota-fs: uid=%s, limit=unlimited",
-			       dec2str(root->uid));
+			i_debug("quota-fs: uid=%s, limit=unlimited",
+				dec2str(root->uid));
 		}
 		return 1;
 	case Q_EPERM:
@@ -401,8 +430,9 @@ static int do_rquota_user(struct fs_quota_root *root, bool bytes,
 	}
 }
 
-static int do_rquota_group(struct fs_quota_root *root, bool bytes,
-			   uint64_t *value_r, uint64_t *limit_r)
+static int
+do_rquota_group(struct fs_quota_root *root ATTR_UNUSED, bool bytes ATTR_UNUSED,
+		uint64_t *value_r ATTR_UNUSED, uint64_t *limit_r ATTR_UNUSED)
 {
 #if defined(EXT_RQUOTAVERS) && defined(GRPQUOTA)
 	struct getquota_rslt result;
@@ -421,9 +451,9 @@ static int do_rquota_group(struct fs_quota_root *root, bool bytes,
 	path++;
 
 	if (root->root.quota->set->debug) {
-		i_info("quota-fs: host=%s, path=%s, gid=%s, %s",
-		       host, path, dec2str(root->gid),
-		       bytes ? "bytes" : "files");
+		i_debug("quota-fs: host=%s, path=%s, gid=%s, %s",
+			host, path, dec2str(root->gid),
+			bytes ? "bytes" : "files");
 	}
 
 	/* clnt_create() polls for a while to establish a connection */
@@ -464,32 +494,20 @@ static int do_rquota_group(struct fs_quota_root *root, bool bytes,
 
 	switch (result.status) {
 	case Q_OK: {
-		/* convert the results from blocks to bytes */
-		const rquota *rq = &result.getquota_rslt_u.gqr_rquota;
-
-		if (rq->rq_active) {
-			if (bytes) {
-				*value_r = (uint64_t)rq->rq_curblocks *
-					(uint64_t)rq->rq_bsize;
-				*limit_r = (uint64_t)rq->rq_bsoftlimit *
-					(uint64_t)rq->rq_bsize;
-			} else {
-				*value_r = rq->rq_curfiles;
-				*limit_r = rq->rq_fsoftlimit;
-			}
-		}
+		rquota_get_result(&result.getquota_rslt_u.gqr_rquota, bytes,
+				  value_r, limit_r);
 		if (root->root.quota->set->debug) {
-			i_info("quota-fs: gid=%s, value=%llu, "
-			       "limit=%llu, active=%d", dec2str(root->gid),
-			       (unsigned long long)*value_r,
-			       (unsigned long long)*limit_r, rq->rq_active);
+			i_debug("quota-fs: gid=%s, value=%llu, limit=%llu",
+				dec2str(root->gid),
+				(unsigned long long)*value_r,
+				(unsigned long long)*limit_r);
 		}
 		return 1;
 	}
 	case Q_NOQUOTA:
 		if (root->root.quota->set->debug) {
-			i_info("quota-fs: gid=%s, limit=unlimited",
-			       dec2str(root->gid));
+			i_debug("quota-fs: gid=%s, limit=unlimited",
+				dec2str(root->gid));
 		}
 		return 1;
 	case Q_EPERM:
@@ -716,13 +734,13 @@ static bool fs_quota_match_box(struct quota_root *_root, struct mailbox *box)
 	struct fs_quota_root *root = (struct fs_quota_root *)_root;
 	struct stat mst, rst;
 	const char *mailbox_path;
-	bool is_file, match;
+	bool match;
 
 	if (root->storage_mount_path == NULL)
 		return TRUE;
 
-	mailbox_path = mail_storage_get_mailbox_path(box->storage, box->name,
-						     &is_file);
+	mailbox_path = mailbox_list_get_path(box->list, box->name,
+					     MAILBOX_LIST_PATH_TYPE_MAILBOX);
 	if (stat(mailbox_path, &mst) < 0) {
 		if (errno != ENOENT)
 			i_error("stat(%s) failed: %m", mailbox_path);
@@ -730,15 +748,15 @@ static bool fs_quota_match_box(struct quota_root *_root, struct mailbox *box)
 	}
 	if (stat(root->storage_mount_path, &rst) < 0) {
 		if (_root->quota->set->debug) {
-			i_error("stat(%s) failed: %m",
+			i_debug("stat(%s) failed: %m",
 				root->storage_mount_path);
 		}
 		return FALSE;
 	}
 	match = CMP_DEV_T(mst.st_dev, rst.st_dev);
 	if (_root->quota->set->debug) {
-	 	i_info("box=%s mount=%s match=%s", mailbox_path,
-		       root->storage_mount_path, match ? "yes" : "no");
+	 	i_debug("box=%s mount=%s match=%s", mailbox_path,
+			root->storage_mount_path, match ? "yes" : "no");
 	}
  	return match;
 }
@@ -761,7 +779,7 @@ fs_quota_get_resource(struct quota_root *_root, const char *name,
 	bytes = strcasecmp(name, QUOTA_NAME_STORAGE_BYTES) == 0;
 
 #ifdef HAVE_RQUOTA
-	if (strcmp(root->mount->type, "nfs") == 0) {
+	if (mount_type_is_nfs(root->mount)) {
 		T_BEGIN {
 			ret = !root->user_disabled ?
 				do_rquota_user(root, bytes, value_r, &limit) :
@@ -806,7 +824,7 @@ struct quota_backend quota_backend_fs = {
 		NULL,
 		NULL,
 
-		fs_quota_storage_added,
+		fs_quota_namespace_added,
 
 		fs_quota_root_get_resources,
 		fs_quota_get_resource,

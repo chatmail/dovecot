@@ -1,6 +1,6 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "imap-common.h"
 #include "str.h"
 #include "ostream.h"
 #include "mail-storage.h"
@@ -8,7 +8,7 @@
 #include "imap-quote.h"
 #include "imap-util.h"
 #include "imap-sync.h"
-#include "commands.h"
+#include "imap-commands.h"
 
 struct client_sync_context {
 	/* if multiple commands are in progress, we may need to wait for them
@@ -47,18 +47,16 @@ static void uids_to_seqs(struct mailbox *box, ARRAY_TYPE(seq_range) *uids)
 	T_BEGIN {
 		ARRAY_TYPE(seq_range) seqs;
 		const struct seq_range *range;
-		unsigned int i, count;
 		uint32_t seq1, seq2;
 
-		range = array_get(uids, &count);
-		t_array_init(&seqs, count);
-		for (i = 0; i < count; i++) {
-			mailbox_get_seq_range(box, range[i].seq1, range[i].seq2,
+		t_array_init(&seqs, array_count(uids));
+		array_foreach(uids, range) {
+			mailbox_get_seq_range(box, range->seq1, range->seq2,
 					      &seq1, &seq2);
 			/* since we have to notify about expunged messages,
 			   we expect that all the referenced UIDs exist */
 			i_assert(seq1 != 0);
-			i_assert(seq2 - seq1 == range[i].seq2 - range[i].seq1);
+			i_assert(seq2 - seq1 == range->seq2 - range->seq1);
 
 			seq_range_array_add_range(&seqs, seq1, seq2);
 		}
@@ -109,8 +107,7 @@ imap_sync_send_search_update(struct imap_sync_context *ctx,
 
 static void imap_sync_send_search_updates(struct imap_sync_context *ctx)
 {
-	const struct imap_search_update *updates;
-	unsigned int i, count;
+	const struct imap_search_update *update;
 
 	if (!array_is_created(&ctx->client->search_updates))
 		return;
@@ -120,9 +117,8 @@ static void imap_sync_send_search_updates(struct imap_sync_context *ctx)
 		i_array_init(&ctx->search_adds, 128);
 	}
 
-	updates = array_get(&ctx->client->search_updates, &count);
-	for (i = 0; i < count; i++) T_BEGIN {
-		imap_sync_send_search_update(ctx, &updates[i]);
+	array_foreach(&ctx->client->search_updates, update) T_BEGIN {
+		imap_sync_send_search_update(ctx, update);
 	} T_END;
 }
 
@@ -166,18 +162,19 @@ imap_sync_init(struct client *client, struct mailbox *box,
 static void
 imap_sync_send_highestmodseq(struct imap_sync_context *ctx,
 			     const struct mailbox_status *status,
+			     const struct mailbox_sync_status *sync_status,
 			     struct client_command_context *sync_cmd)
 {
 	struct client *client = ctx->client;
 	uint64_t send_modseq = 0;
 
-	if (status->sync_delayed_expunges &&
+	if (sync_status->sync_delayed_expunges &&
 	    client->highest_fetch_modseq > client->sync_last_full_modseq) {
 		/* if client updates highest-modseq using returned MODSEQs
 		   it loses expunges. try to avoid this by sending it a lower
 		   pre-expunge HIGHESTMODSEQ reply. */
 		send_modseq = client->sync_last_full_modseq;
-	} else if (!status->sync_delayed_expunges &&
+	} else if (!sync_status->sync_delayed_expunges &&
 		   status->highest_modseq > client->sync_last_full_modseq &&
 		   status->highest_modseq > client->highest_fetch_modseq) {
 		/* we've probably sent some VANISHED or EXISTS replies which
@@ -203,7 +200,7 @@ imap_sync_send_highestmodseq(struct imap_sync_context *ctx,
 			(unsigned long long)send_modseq));
 	}
 
-	if (!status->sync_delayed_expunges) {
+	if (!sync_status->sync_delayed_expunges) {
 		/* no delayed expunges, remember this for future */
 		client->sync_last_full_modseq = status->highest_modseq;
 	}
@@ -215,21 +212,23 @@ int imap_sync_deinit(struct imap_sync_context *ctx,
 {
 	struct client *client = ctx->client;
 	struct mailbox_status status;
+	struct mailbox_sync_status sync_status;
 	int ret;
 
 	mail_free(&ctx->mail);
 	if (array_is_created(&ctx->expunges))
 		array_free(&ctx->expunges);
 
-	if (mailbox_sync_deinit(&ctx->sync_ctx, STATUS_UIDVALIDITY |
-				STATUS_MESSAGES | STATUS_RECENT |
-				STATUS_HIGHESTMODSEQ, &status) < 0 ||
+	if (mailbox_sync_deinit(&ctx->sync_ctx, &sync_status) < 0 ||
 	    ctx->failed) {
 		mailbox_transaction_rollback(&ctx->t);
 		array_free(&ctx->tmp_keywords);
 		i_free(ctx);
 		return -1;
 	}
+	mailbox_get_status(ctx->box, STATUS_UIDVALIDITY |
+			   STATUS_MESSAGES | STATUS_RECENT |
+			   STATUS_HIGHESTMODSEQ, &status);
 
 	ret = mailbox_transaction_commit(&ctx->t);
 
@@ -257,8 +256,10 @@ int imap_sync_deinit(struct imap_sync_context *ctx,
 	   now it contains added/removed messages. */
 	imap_sync_send_search_updates(ctx);
 
-	if ((client->enabled_features & MAILBOX_FEATURE_QRESYNC) != 0)
-		imap_sync_send_highestmodseq(ctx, &status, sync_cmd);
+	if ((client->enabled_features & MAILBOX_FEATURE_QRESYNC) != 0) {
+		imap_sync_send_highestmodseq(ctx, &status, &sync_status,
+					     sync_cmd);
+	}
 
 	if (array_is_created(&ctx->search_removes)) {
 		array_free(&ctx->search_removes);
@@ -563,8 +564,7 @@ static void get_common_sync_flags(struct client *client,
 	if (fast_count != count)
 		*flags_r &= ~MAILBOX_SYNC_FLAG_FAST;
 
-	i_assert((*flags_r & (MAILBOX_SYNC_AUTO_STOP |
-			      MAILBOX_SYNC_FLAG_FIX_INCONSISTENT)) == 0);
+	i_assert((*flags_r & MAILBOX_SYNC_FLAG_FIX_INCONSISTENT) == 0);
 }
 
 static bool cmd_sync_client(struct client_command_context *sync_cmd)
@@ -579,7 +579,7 @@ static bool cmd_sync_client(struct client_command_context *sync_cmd)
 	get_common_sync_flags(client, &flags, &imap_flags);
 	client->sync_counter++;
 
-	no_newmail = (client_workarounds & WORKAROUND_DELAY_NEWMAIL) != 0 &&
+	no_newmail = (client->set->parsed_workarounds & WORKAROUND_DELAY_NEWMAIL) != 0 &&
 		(imap_flags & IMAP_SYNC_FLAG_SAFE) == 0;
 	if (no_newmail) {
 		/* expunges might break the client just as badly as new mail

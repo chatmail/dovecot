@@ -32,9 +32,9 @@ static const enum message_header_parser_flags hdr_parser_flags =
 static const enum message_parser_flags msg_parser_flags =
 	MESSAGE_PARSER_FLAG_SKIP_BODY_BLOCK;
 
-static int header_line_cmp(const void *p1, const void *p2)
+static int header_line_cmp(const struct index_mail_line *l1,
+			   const struct index_mail_line *l2)
 {
-	const struct index_mail_line *l1 = p1, *l2 = p2;
 	int diff;
 
 	diff = (int)l1->field_idx - (int)l2->field_idx;
@@ -44,7 +44,7 @@ static int header_line_cmp(const void *p1, const void *p2)
 
 static void index_mail_parse_header_finish(struct index_mail *mail)
 {
-	struct index_mail_line *lines;
+	const struct index_mail_line *lines;
 	const unsigned char *header, *data;
 	const uint8_t *match;
 	buffer_t *buf;
@@ -52,12 +52,11 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 	unsigned int i, j, count, match_idx, match_count;
 	bool noncontiguous;
 
-	lines = array_get_modifiable(&mail->header_lines, &count);
-
 	/* sort it first so fields are grouped together and ordered by
 	   line number */
-	qsort(lines, count, sizeof(*lines), header_line_cmp);
+	array_sort(&mail->header_lines, header_line_cmp);
 
+	lines = array_get(&mail->header_lines, &count);
 	match = array_get(&mail->header_match, &match_count);
 	header = buffer_get_data(mail->header_data, NULL);
 	buf = buffer_create_dynamic(pool_datastack_create(), 256);
@@ -147,7 +146,7 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 }
 
 static unsigned int
-get_header_field_idx(struct index_mailbox *ibox, const char *field,
+get_header_field_idx(struct mailbox *box, const char *field,
 		     enum mail_cache_decision_type decision)
 {
 	struct mail_cache_field header_field = {
@@ -158,7 +157,7 @@ get_header_field_idx(struct index_mailbox *ibox, const char *field,
 	header_field.decision = decision;
 	T_BEGIN {
 		header_field.name = t_strconcat("hdr.", field, NULL);
-		mail_cache_register_fields(ibox->cache, &header_field, 1);
+		mail_cache_register_fields(box->cache, &header_field, 1);
 	} T_END;
 	return header_field.idx;
 }
@@ -181,7 +180,7 @@ static void index_mail_parse_header_register_all_wanted(struct index_mail *mail)
 	unsigned int i, count;
 
 	all_cache_fields =
-		mail_cache_register_get_list(mail->ibox->cache,
+		mail_cache_register_get_list(mail->mail.mail.box->cache,
 					     pool_datastack_create(), &count);
 	for (i = 0; i < count; i++) {
 		if (strncasecmp(all_cache_fields[i].name, "hdr.", 4) != 0)
@@ -249,7 +248,7 @@ void index_mail_parse_header_init(struct index_mail *mail,
 	   Date: header. if we have Date field's index set at this point we
 	   know that we want it. otherwise add it and remember that we don't
 	   want it cached. */
-	field_idx = get_header_field_idx(mail->ibox, "Date",
+	field_idx = get_header_field_idx(mail->mail.mail.box, "Date",
 					 MAIL_CACHE_DECISION_NO);
 	match = array_get(&mail->header_match, &match_count);
 	if (field_idx < match_count &&
@@ -285,6 +284,7 @@ void index_mail_parse_header(struct message_part *part,
 			     struct message_header_line *hdr,
 			     struct index_mail *mail)
 {
+	struct mail *_mail = &mail->mail.mail;
 	struct index_mail_data *data = &mail->data;
 	unsigned int field_idx, count;
 	uint8_t *match;
@@ -320,7 +320,7 @@ void index_mail_parse_header(struct message_part *part,
 			const char *cache_field_name =
 				t_strconcat("hdr.", hdr->name, NULL);
 			data->parse_line.field_idx =
-				mail_cache_register_lookup(mail->ibox->cache,
+				mail_cache_register_lookup(_mail->box->cache,
 							   cache_field_name);
 		} T_END;
 	}
@@ -340,7 +340,7 @@ void index_mail_parse_header(struct message_part *part,
 		str_append_n(mail->header_data, hdr->middle, hdr->middle_len);
 
 		/* remember that we saw this header so we don't add it to
-		   cache as nonexisting. */
+		   cache as nonexistent. */
 		match[field_idx] |= HEADER_MATCH_FLAG_FOUND;
 	}
 	str_append_n(mail->header_data, hdr->value, hdr->value_len);
@@ -482,7 +482,7 @@ int index_mail_headers_get_envelope(struct index_mail *mail)
 		mail->data.stream->v_offset;
 
 	mail->data.save_envelope = TRUE;
-	header_ctx = mailbox_header_lookup_init(&mail->ibox->box,
+	header_ctx = mailbox_header_lookup_init(mail->mail.mail.box,
 						imap_envelope_headers);
 	if (mail_get_header_stream(&mail->mail.mail, header_ctx, &stream) < 0) {
 		mailbox_header_lookup_unref(&header_ctx);
@@ -607,7 +607,7 @@ index_mail_get_raw_headers(struct index_mail *mail, const char *field,
 
 	i_assert(field != NULL);
 
-	field_idx = get_header_field_idx(mail->ibox, field,
+	field_idx = get_header_field_idx(mail->mail.mail.box, field,
 					 MAIL_CACHE_DECISION_TEMP);
 
 	dest = str_new(mail->data_pool, 128);
@@ -621,7 +621,7 @@ index_mail_get_raw_headers(struct index_mail *mail, const char *field,
 			/* parse */
 			headers[0] = field; headers[1] = NULL;
 			headers_ctx = mailbox_header_lookup_init(
-						&mail->ibox->box, headers);
+						mail->mail.mail.box, headers);
 			ret = index_mail_parse_headers(mail, headers_ctx);
 			mailbox_header_lookup_unref(&headers_ctx);
 			if (ret < 0)
@@ -641,7 +641,7 @@ index_mail_get_raw_headers(struct index_mail *mail, const char *field,
 	data = buffer_get_modifiable_data(dest, &len);
 
 	if (len == 0) {
-		/* cached as non-existing. */
+		/* cached as nonexistent. */
 		*value_r = p_new(mail->data_pool, const char *, 1);
 		return 0;
 	}
@@ -753,7 +753,7 @@ int index_mail_get_headers(struct mail *_mail, const char *field,
 		} T_END;
 
 		if (ret < 0) {
-			mail_cache_set_corrupted(mail->ibox->cache,
+			mail_cache_set_corrupted(_mail->box->cache,
 				"Broken header %s for mail UID %u",
 				field, _mail->uid);
 		}
@@ -781,7 +781,7 @@ int index_mail_get_first_header(struct mail *_mail, const char *field,
 		} T_END;
 
 		if (ret < 0) {
-			mail_cache_set_corrupted(mail->ibox->cache,
+			mail_cache_set_corrupted(_mail->box->cache,
 				"Broken header %s for mail UID %u",
 				field, _mail->uid);
 		}
@@ -853,7 +853,6 @@ int index_mail_get_header_stream(struct mail *_mail,
 static struct mailbox_header_lookup_ctx *
 index_header_lookup_init_real(struct mailbox *box, const char *const headers[])
 {
-	struct index_mailbox *ibox = (struct index_mailbox *)box;
 	struct mail_cache_field *fields, header_field = {
 		NULL, 0, MAIL_CACHE_FIELD_HEADER, 0,
 		MAIL_CACHE_DECISION_TEMP
@@ -881,11 +880,12 @@ index_header_lookup_init_real(struct mailbox *box, const char *const headers[])
 		header_field.name = t_strconcat("hdr.", headers[i], NULL);
 		fields[i] = header_field;
 	}
-	mail_cache_register_fields(ibox->cache, fields, count);
+	mail_cache_register_fields(box->cache, fields, count);
 
 	pool = pool_alloconly_create("index_header_lookup_ctx", 1024);
 	ctx = p_new(pool, struct index_header_lookup_ctx, 1);
 	ctx->ctx.box = box;
+	ctx->ctx.refcount = 1;
 	ctx->pool = pool;
 	ctx->count = count;
 
@@ -912,15 +912,7 @@ index_header_lookup_init(struct mailbox *box, const char *const headers[])
 	return ctx;
 }
 
-void index_header_lookup_ref(struct mailbox_header_lookup_ctx *_ctx)
-{
-	struct index_header_lookup_ctx *ctx =
-		(struct index_header_lookup_ctx *)_ctx;
-
-	pool_ref(ctx->pool);
-}
-
-void index_header_lookup_unref(struct mailbox_header_lookup_ctx *_ctx)
+void index_header_lookup_deinit(struct mailbox_header_lookup_ctx *_ctx)
 {
 	struct index_header_lookup_ctx *ctx =
 		(struct index_header_lookup_ctx *)_ctx;

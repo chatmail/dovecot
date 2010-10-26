@@ -2,6 +2,7 @@
 #define MAIL_INDEX_H
 
 #include "file-lock.h"
+#include "fsync-mode.h"
 #include "mail-types.h"
 #include "seq-range-array.h"
 
@@ -17,12 +18,15 @@ enum mail_index_open_flags {
 	MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE	= 0x04,
 	/* Rely on O_EXCL when creating dotlocks */
 	MAIL_INDEX_OPEN_FLAG_DOTLOCK_USE_EXCL	= 0x10,
-	/* Don't fsync() or fdatasync() */
-	MAIL_INDEX_OPEN_FLAG_FSYNC_DISABLE	= 0x20,
 	/* Flush NFS attr/data/write cache when necessary */
 	MAIL_INDEX_OPEN_FLAG_NFS_FLUSH		= 0x40,
 	/* Open the index read-only */
-	MAIL_INDEX_OPEN_FLAG_READONLY		= 0x80
+	MAIL_INDEX_OPEN_FLAG_READONLY		= 0x80,
+	/* Create backups of dovecot.index files once in a while */
+	MAIL_INDEX_OPEN_FLAG_KEEP_BACKUPS	= 0x100,
+	/* If we run out of disk space, fail modifications instead of moving
+	   indexes to memory. */
+	MAIL_INDEX_OPEN_FLAG_NEVER_IN_MEMORY	= 0x200
 };
 
 enum mail_index_header_compat_flags {
@@ -97,6 +101,7 @@ struct mail_index_record {
 struct mail_keywords {
 	struct mail_index *index;
 	unsigned int count;
+	int refcount;
 
         /* variable sized list of keyword indexes */
 	unsigned int idx[1];
@@ -112,7 +117,9 @@ enum mail_index_transaction_flags {
 	/* Don't add flag updates unless they actually change something.
 	   This is reliable only when syncing, otherwise someone else might
 	   have already committed a transaction that had changed the flags. */
-	MAIL_INDEX_TRANSACTION_FLAG_AVOID_FLAG_UPDATES	= 0x04
+	MAIL_INDEX_TRANSACTION_FLAG_AVOID_FLAG_UPDATES	= 0x04,
+	/* fsync() this transaction (unless fsyncs are disabled) */
+	MAIL_INDEX_TRANSACTION_FLAG_FSYNC		= 0x08
 };
 
 enum mail_index_sync_type {
@@ -133,7 +140,11 @@ enum mail_index_sync_flags {
 	MAIL_INDEX_SYNC_FLAG_AVOID_FLAG_UPDATES	= 0x04,
 	/* If there are no new transactions and nothing else to do,
 	   return 0 in mail_index_sync_begin() */
-	MAIL_INDEX_SYNC_FLAG_REQUIRE_CHANGES	= 0x08
+	MAIL_INDEX_SYNC_FLAG_REQUIRE_CHANGES	= 0x08,
+	/* Create the transaction with FSYNC flag */
+	MAIL_INDEX_SYNC_FLAG_FSYNC		= 0x10,
+	/* If we see "delete index" request transaction, finish it */
+	MAIL_INDEX_SYNC_FLAG_DELETING_INDEX	= 0x20
 };
 
 enum mail_index_view_sync_flags {
@@ -155,6 +166,9 @@ struct mail_index_sync_rec {
 
 	/* MAIL_INDEX_SYNC_TYPE_KEYWORD_ADD, .._REMOVE: */
 	unsigned int keyword_idx;
+
+	/* MAIL_INDEX_SYNC_TYPE_EXPUNGE: */
+	uint8_t guid_128[MAIL_GUID_128_SIZE];
 };
 
 enum mail_index_view_sync_type {
@@ -170,6 +184,17 @@ struct mail_index_view_sync_rec {
 	unsigned int hidden:1;
 };
 
+struct mail_index_transaction_commit_result {
+	/* seq/offset points to end of transaction */
+	uint32_t log_file_seq;
+	uoff_t log_file_offset;
+	/* number of bytes in the written transaction.
+	   all of it was written to the same file. */
+	uoff_t commit_size;
+
+	unsigned int ignored_modseq_changes;
+};
+
 struct mail_index;
 struct mail_index_map;
 struct mail_index_view;
@@ -180,15 +205,23 @@ struct mail_index_view_sync_ctx;
 struct mail_index *mail_index_alloc(const char *dir, const char *prefix);
 void mail_index_free(struct mail_index **index);
 
-/* Specify the transaction types that are fsynced after writing.
-   Default is to fsync nothing. */
-void mail_index_set_fsync_types(struct mail_index *index,
-				enum mail_index_sync_type fsync_mask);
+/* Specify how often to do fsyncs. If mode is FSYNC_MODE_OPTIMIZED, the mask
+   can be used to specify which transaction types to fsync. */
+void mail_index_set_fsync_mode(struct mail_index *index, enum fsync_mode mode,
+			       enum mail_index_sync_type mask);
 void mail_index_set_permissions(struct mail_index *index,
 				mode_t mode, gid_t gid, const char *gid_origin);
+/* Set locking method and maximum time to wait for a lock (-1U = default). */
+void mail_index_set_lock_method(struct mail_index *index,
+				enum file_lock_method lock_method,
+				unsigned int max_timeout_secs);
 
-int mail_index_open(struct mail_index *index, enum mail_index_open_flags flags,
-		    enum file_lock_method lock_method);
+/* Open index. Returns 1 if ok, 0 if index doesn't exist and CREATE flags
+   wasn't given, -1 if error. */
+int mail_index_open(struct mail_index *index, enum mail_index_open_flags flags);
+/* Open or create index. Returns 0 if ok, -1 if error. */
+int mail_index_open_or_create(struct mail_index *index,
+			      enum mail_index_open_flags flags);
 void mail_index_close(struct mail_index *index);
 /* unlink() all the index files. */
 int mail_index_unlink(struct mail_index *index);
@@ -217,6 +250,9 @@ struct mail_index *mail_index_view_get_index(struct mail_index_view *view);
 uint32_t mail_index_view_get_messages_count(struct mail_index_view *view);
 /* Returns TRUE if we lost track of changes for some reason. */
 bool mail_index_view_is_inconsistent(struct mail_index_view *view);
+/* Returns number of transactions open for the view. */
+unsigned int
+mail_index_view_get_transaction_count(struct mail_index_view *view);
 
 /* Transaction has to be opened to be able to modify index. You can have
    multiple transactions open simultaneously. Committed transactions won't
@@ -225,9 +261,9 @@ bool mail_index_view_is_inconsistent(struct mail_index_view *view);
 struct mail_index_transaction *
 mail_index_transaction_begin(struct mail_index_view *view,
 			     enum mail_index_transaction_flags flags);
-int mail_index_transaction_commit(struct mail_index_transaction **t,
-				  uint32_t *log_file_seq_r,
-				  uoff_t *log_file_offset_r);
+int mail_index_transaction_commit(struct mail_index_transaction **t);
+int mail_index_transaction_commit_full(struct mail_index_transaction **t,
+				       struct mail_index_transaction_commit_result *result_r);
 void mail_index_transaction_rollback(struct mail_index_transaction **t);
 /* Discard all changes in the transaction. */
 void mail_index_transaction_reset(struct mail_index_transaction *t);
@@ -294,14 +330,23 @@ int mail_index_sync_begin_to(struct mail_index *index,
 /* Returns TRUE if it currently looks like syncing would return changes. */
 bool mail_index_sync_have_any(struct mail_index *index,
 			      enum mail_index_sync_flags flags);
+/* Returns the log file seq+offsets for the area which this sync is handling. */
+void mail_index_sync_get_offsets(struct mail_index_sync_ctx *ctx,
+				 uint32_t *seq1_r, uoff_t *offset1_r,
+				 uint32_t *seq2_r, uoff_t *offset2_r);
 /* Returns -1 if error, 0 if sync is finished, 1 if record was filled. */
 bool mail_index_sync_next(struct mail_index_sync_ctx *ctx,
 			  struct mail_index_sync_rec *sync_rec);
 /* Returns TRUE if there's more to sync. */
 bool mail_index_sync_have_more(struct mail_index_sync_ctx *ctx);
+/* Returns TRUE if sync has any expunges to handle. */
+bool mail_index_sync_has_expunges(struct mail_index_sync_ctx *ctx);
 /* Reset syncing to initial state after mail_index_sync_begin(), so you can
    go through all the sync records again with mail_index_sync_next(). */
 void mail_index_sync_reset(struct mail_index_sync_ctx *ctx);
+/* Update result when refreshing index at the end of sync. */
+void mail_index_sync_set_commit_result(struct mail_index_sync_ctx *ctx,
+				       struct mail_index_transaction_commit_result *result);
 /* Commit synchronization by writing all changes to mail index file. */
 int mail_index_sync_commit(struct mail_index_sync_ctx **ctx);
 /* Rollback synchronization - none of the changes listed by sync_next() are
@@ -372,13 +417,19 @@ void mail_index_lookup_first(struct mail_index_view *view,
 /* Append a new record to index. */
 void mail_index_append(struct mail_index_transaction *t, uint32_t uid,
 		       uint32_t *seq_r);
-/* Assigns UIDs for appended mails all at once. UID must have been given as 0
-   for mail_index_append(). Returns the next unused UID. */
-void mail_index_append_assign_uids(struct mail_index_transaction *t,
-				   uint32_t first_uid, uint32_t *next_uid_r);
+/* Assign UIDs for mails with uid=0 or uid<first_uid. Assumes that mailbox is
+   locked in a way that UIDs can be safely assigned. Returns UIDs for all
+   asigned messages, in their sequence order (so UIDs are not necessary
+   ascending). */
+void mail_index_append_finish_uids(struct mail_index_transaction *t,
+				   uint32_t first_uid,
+				   ARRAY_TYPE(seq_range) *uids_r);
 /* Expunge record from index. Note that this doesn't affect sequence numbers
    until transaction is committed and mailbox is synced. */
 void mail_index_expunge(struct mail_index_transaction *t, uint32_t seq);
+/* Like mail_index_expunge(), but also write message GUID to transaction log. */
+void mail_index_expunge_guid(struct mail_index_transaction *t, uint32_t seq,
+			     const uint8_t guid_128[MAIL_GUID_128_SIZE]);
 /* Update flags in index. */
 void mail_index_update_flags(struct mail_index_transaction *t, uint32_t seq,
 			     enum modify_type modify_type,
@@ -387,9 +438,25 @@ void mail_index_update_flags_range(struct mail_index_transaction *t,
 				   uint32_t seq1, uint32_t seq2,
 				   enum modify_type modify_type,
 				   enum mail_flags flags);
+/* Update message's modseq to be at least min_modseq. */
+void mail_index_update_modseq(struct mail_index_transaction *t, uint32_t seq,
+			      uint64_t min_modseq);
+/* Update highest modseq to be at least min_modseq. */
+void mail_index_update_highest_modseq(struct mail_index_transaction *t,
+				      uint64_t min_modseq);
 /* Reset the index before committing this transaction. This is usually done
    only when UIDVALIDITY changes. */
 void mail_index_reset(struct mail_index_transaction *t);
+/* Mark index deleted. No further changes will be possible after the
+   transaction has been committed. */
+void mail_index_set_deleted(struct mail_index_transaction *t);
+/* Mark a deleted index as undeleted. Afterwards index can be changed again. */
+void mail_index_set_undeleted(struct mail_index_transaction *t);
+/* Returns TRUE if index has been set deleted. This gets set only after
+   index has been opened/refreshed and the transaction has been seen. */
+bool mail_index_is_deleted(struct mail_index *index);
+/* Returns the last time mailbox was modified. */
+int mail_index_get_modification_time(struct mail_index *index, time_t *mtime_r);
 
 /* Lookup a keyword, returns TRUE if found, FALSE if not. */
 bool mail_index_keyword_lookup(struct mail_index *index,
@@ -410,8 +477,8 @@ struct mail_keywords *
 mail_index_keywords_create_from_indexes(struct mail_index *index,
 					const ARRAY_TYPE(keyword_indexes)
 						*keyword_indexes);
-/* Free the keywords. */
-void mail_index_keywords_free(struct mail_keywords **keywords);
+void mail_index_keywords_ref(struct mail_keywords *keywords);
+void mail_index_keywords_unref(struct mail_keywords **keywords);
 
 /* Update keywords for given message. */
 void mail_index_update_keywords(struct mail_index_transaction *t, uint32_t seq,
@@ -506,5 +573,9 @@ void mail_index_update_header_ext(struct mail_index_transaction *t,
    now overwriting. */
 void mail_index_update_ext(struct mail_index_transaction *t, uint32_t seq,
 			   uint32_t ext_id, const void *data, void *old_data);
+/* Increase/decrease number in extension atomically. Returns the sum of the
+   diffs for this seq. */
+int mail_index_atomic_inc_ext(struct mail_index_transaction *t,
+			      uint32_t seq, uint32_t ext_id, int diff);
 
 #endif

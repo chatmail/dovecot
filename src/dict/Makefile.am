@@ -4,6 +4,8 @@ pkglibexec_PROGRAMS = dict
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-master \
+	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-sql \
 	-DDICT_MODULE_DIR=\""$(moduledir)/dict"\" \
@@ -13,22 +15,23 @@ dict_LDFLAGS = -export-dynamic
 
 libs = \
 	../lib-dict/libdict_backend.a \
-	../lib-dict/libdict.a \
-	../lib-sql/libsql.a \
-	../lib-settings/libsettings.a \
-	../lib/liblib.a
+	$(LIBDOVECOT_SQL)
 
 dict_LDADD = \
 	$(libs) \
+	$(LIBDOVECOT) \
 	$(MODULE_LIBS) \
 	$(DICT_LIBS) \
 	$(SQL_LIBS)
-
-dict_DEPENDENCIES = $(libs)
+dict_DEPENDENCIES = $(libs) $(LIBDOVECOT_DEPS)
 
 dict_SOURCES = \
-	dict-server.c \
+	dict-connection.c \
+	dict-commands.c \
+	dict-settings.c \
 	main.c
 
 noinst_HEADERS = \
-	dict-server.h
+	dict-connection.h \
+	dict-commands.h \
+	dict-settings.h

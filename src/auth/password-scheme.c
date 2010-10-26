@@ -25,12 +25,12 @@ static const struct password_scheme *
 password_scheme_lookup_name(const char *name)
 {
 	const struct password_scheme *const *schemes;
-	unsigned int i, count;
 
-	schemes = array_get(&password_schemes, &count);
-	for (i = 0; i < count; i++) {
-		if (strcasecmp(schemes[i]->name, name) == 0)
-			return schemes[i];
+	array_foreach(&password_schemes, schemes) {
+		const struct password_scheme *scheme = *schemes;
+
+		if (strcasecmp(scheme->name, name) == 0)
+			return scheme;
 	}
 	return NULL;
 }
@@ -155,8 +155,8 @@ int password_decode(const char *password, const char *scheme,
 		*size_r = len;
 		break;
 	case PW_ENCODING_HEX:
-		buf = buffer_create_static_hard(pool_datastack_create(),
-						len / 2 + 1);
+		buf = buffer_create_dynamic(pool_datastack_create(),
+					    len / 2 + 1);
 		if (hex_to_binary(password, buf) == 0) {
 			*raw_password_r = buf->data;
 			*size_r = buf->used;
@@ -166,8 +166,8 @@ int password_decode(const char *password, const char *scheme,
 		   all. some input lengths produce matching hex and base64
 		   encoded lengths. */
 	case PW_ENCODING_BASE64:
-		buf = buffer_create_static_hard(pool_datastack_create(),
-						MAX_BASE64_DECODED_SIZE(len));
+		buf = buffer_create_dynamic(pool_datastack_create(),
+					    MAX_BASE64_DECODED_SIZE(len));
 		if (base64_decode(password, len, NULL, buf) < 0)
 			return -1;
 
@@ -227,10 +227,22 @@ bool password_generate_encoded(const char *plaintext, const char *user,
 	return TRUE;
 }
 
+const char *password_generate_salt(size_t len)
+{
+	unsigned int i;
+	char *salt;
+
+	salt = t_malloc(len + 1);
+	random_fill(salt, len);
+	for (i = 0; i < len; i++)
+		salt[i] = salt_chars[salt[i] % (sizeof(salt_chars)-1)];
+	salt[len] = '\0';
+	return salt;
+}
+
 bool password_scheme_is_alias(const char *scheme1, const char *scheme2)
 {
 	const struct password_scheme *const *schemes, *s1 = NULL, *s2 = NULL;
-	unsigned int i, count;
 
 	scheme1 = t_strcut(scheme1, '.');
 	scheme2 = t_strcut(scheme2, '.');
@@ -238,12 +250,13 @@ bool password_scheme_is_alias(const char *scheme1, const char *scheme2)
 	if (strcasecmp(scheme1, scheme2) == 0)
 		return TRUE;
 
-	schemes = array_get(&password_schemes, &count);
-	for (i = 0; i < count; i++) {
-		if (strcasecmp(schemes[i]->name, scheme1) == 0)
-			s1 = schemes[i];
-		else if (strcasecmp(schemes[i]->name, scheme2) == 0)
-			s2 = schemes[i];
+	array_foreach(&password_schemes, schemes) {
+		const struct password_scheme *scheme = *schemes;
+
+		if (strcasecmp(scheme->name, scheme1) == 0)
+			s1 = scheme;
+		else if (strcasecmp(scheme->name, scheme2) == 0)
+			s2 = scheme;
 	}
 
 	/* if they've the same generate function, they're equivalent */
@@ -273,9 +286,8 @@ password_scheme_detect(const char *plain_password, const char *crypted_password,
 	return NULL;
 }
 
-static bool
-crypt_verify(const char *plaintext, const char *user ATTR_UNUSED,
-	     const unsigned char *raw_password, size_t size)
+bool crypt_verify(const char *plaintext, const char *user ATTR_UNUSED,
+		  const unsigned char *raw_password, size_t size)
 {
 	const char *password, *crypted;
 
@@ -299,14 +311,10 @@ static void
 crypt_generate(const char *plaintext, const char *user ATTR_UNUSED,
 	       const unsigned char **raw_password_r, size_t *size_r)
 {
-	char salt[3];
-	const char *password;
+#define	CRYPT_SALT_LEN 2
+	const char *password, *salt;
 
-	random_fill(salt, sizeof(salt)-1);
-	salt[0] = salt_chars[salt[0] % (sizeof(salt_chars)-1)];
-	salt[1] = salt_chars[salt[1] % (sizeof(salt_chars)-1)];
-	salt[2] = '\0';
-
+	salt = password_generate_salt(CRYPT_SALT_LEN);
 	password = t_strdup(mycrypt(plaintext, salt));
 	*raw_password_r = (const unsigned char *)password;
 	*size_r = strlen(password);
@@ -392,6 +400,19 @@ sha256_generate(const char *plaintext, const char *user ATTR_UNUSED,
 }
 
 static void
+sha512_generate(const char *plaintext, const char *user ATTR_UNUSED,
+		const unsigned char **raw_password_r, size_t *size_r)
+{
+	unsigned char *digest;
+
+	digest = t_malloc(SHA512_RESULTLEN);
+	sha512_get_digest(plaintext, strlen(plaintext), digest);
+
+	*raw_password_r = digest;
+	*size_r = SHA512_RESULTLEN;
+}
+
+static void
 ssha_generate(const char *plaintext, const char *user ATTR_UNUSED,
 	      const unsigned char **raw_password_r, size_t *size_r)
 {
@@ -470,6 +491,47 @@ static bool ssha256_verify(const char *plaintext, const char *user,
 		    size - SHA256_RESULTLEN);
 	sha256_result(&ctx, sha256_digest);
 	return memcmp(sha256_digest, raw_password, SHA256_RESULTLEN) == 0;
+}
+
+static void
+ssha512_generate(const char *plaintext, const char *user ATTR_UNUSED,
+		 const unsigned char **raw_password_r, size_t *size_r)
+{
+#define SSHA512_SALT_LEN 4
+	unsigned char *digest, *salt;
+	struct sha512_ctx ctx;
+
+	digest = t_malloc(SHA512_RESULTLEN + SSHA512_SALT_LEN);
+	salt = digest + SHA512_RESULTLEN;
+	random_fill(salt, SSHA512_SALT_LEN);
+
+	sha512_init(&ctx);
+	sha512_loop(&ctx, plaintext, strlen(plaintext));
+	sha512_loop(&ctx, salt, SSHA512_SALT_LEN);
+	sha512_result(&ctx, digest);
+
+	*raw_password_r = digest;
+	*size_r = SHA512_RESULTLEN + SSHA512_SALT_LEN;
+}
+
+static bool ssha512_verify(const char *plaintext, const char *user,
+			   const unsigned char *raw_password, size_t size)
+{
+	unsigned char sha512_digest[SHA512_RESULTLEN];
+	struct sha512_ctx ctx;
+
+	/* format: <SHA512 hash><salt> */
+	if (size <= SHA512_RESULTLEN) {
+		i_error("ssha512_verify(%s): SSHA512 password too short", user);
+		return FALSE;
+	}
+
+	sha512_init(&ctx);
+	sha512_loop(&ctx, plaintext, strlen(plaintext));
+	sha512_loop(&ctx, raw_password + SHA512_RESULTLEN,
+		    size - SHA512_RESULTLEN);
+	sha512_result(&ctx, sha512_digest);
+	return memcmp(sha512_digest, raw_password, SHA512_RESULTLEN) == 0;
 }
 
 static void
@@ -672,9 +734,12 @@ static const struct password_scheme builtin_schemes[] = {
  	{ "SHA1", PW_ENCODING_BASE64, SHA1_RESULTLEN, NULL, sha1_generate },
  	{ "SHA256", PW_ENCODING_BASE64, SHA256_RESULTLEN,
 	  NULL, sha256_generate },
+ 	{ "SHA512", PW_ENCODING_BASE64, SHA512_RESULTLEN,
+	  NULL, sha512_generate },
 	{ "SMD5", PW_ENCODING_BASE64, 0, smd5_verify, smd5_generate },
 	{ "SSHA", PW_ENCODING_BASE64, 0, ssha_verify, ssha_generate },
 	{ "SSHA256", PW_ENCODING_BASE64, 0, ssha256_verify, ssha256_generate },
+	{ "SSHA512", PW_ENCODING_BASE64, 0, ssha512_verify, ssha512_generate },
 	{ "PLAIN", PW_ENCODING_NONE, 0, NULL, plain_generate },
 	{ "CLEARTEXT", PW_ENCODING_NONE, 0, NULL, plain_generate },
 	{ "CRAM-MD5", PW_ENCODING_HEX, CRAM_MD5_CONTEXTLEN,
@@ -708,12 +773,12 @@ void password_scheme_register(const struct password_scheme *scheme)
 void password_scheme_unregister(const struct password_scheme *scheme)
 {
 	const struct password_scheme *const *schemes;
-	unsigned int i, count;
+	unsigned int idx;
 
-	schemes = array_get(&password_schemes, &count);
-	for (i = 0; i < count; i++) {
-		if (strcasecmp(schemes[i]->name, scheme->name) == 0) {
-			array_delete(&password_schemes, i, 1);
+	array_foreach(&password_schemes, schemes) {
+		if (strcasecmp((*schemes)->name, scheme->name) == 0) {
+			idx = array_foreach_idx(&password_schemes, schemes);
+			array_delete(&password_schemes, idx, 1);
 			return;
 		}
 	}
@@ -727,6 +792,7 @@ void password_schemes_init(void)
 	i_array_init(&password_schemes, N_ELEMENTS(builtin_schemes) + 4);
 	for (i = 0; i < N_ELEMENTS(builtin_schemes); i++)
 		password_scheme_register(&builtin_schemes[i]);
+	password_scheme_register_crypt();
 }
 
 void password_schemes_deinit(void)

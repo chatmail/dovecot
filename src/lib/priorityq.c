@@ -136,6 +136,7 @@ static void priorityq_remove_idx(struct priorityq *pq, unsigned int idx)
 void priorityq_remove(struct priorityq *pq, struct priorityq_item *item)
 {
 	priorityq_remove_idx(pq, item->idx);
+	item->idx = -1U;
 }
 
 struct priorityq_item *priorityq_peek(struct priorityq *pq)
@@ -154,7 +155,17 @@ struct priorityq_item *priorityq_pop(struct priorityq *pq)
 	struct priorityq_item *item;
 
 	item = priorityq_peek(pq);
-	if (item != NULL)
+	if (item != NULL) {
 		priorityq_remove_idx(pq, 0);
+		item->idx = -1U;
+	}
 	return item;
+}
+
+struct priorityq_item *const *priorityq_items(struct priorityq *pq)
+{
+	if (array_count(&pq->items) == 0)
+		return NULL;
+
+	return array_idx(&pq->items, 0);
 }

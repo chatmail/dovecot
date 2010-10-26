@@ -2,22 +2,17 @@
 #define RAW_STORAGE_H
 
 #include "index-storage.h"
-#include "mailbox-list-private.h"
 
 #define RAW_STORAGE_NAME "raw"
 #define RAW_SUBSCRIPTION_FILE_NAME "subscriptions"
 
 struct raw_storage {
 	struct mail_storage storage;
-	union mailbox_list_module_context list_module_ctx;
 };
 
 struct raw_mailbox {
-	struct index_mailbox ibox;
+	struct mailbox box;
 	struct raw_storage *storage;
-
-	const char *path;
-	struct istream *input;
 
 	time_t mtime, ctime;
 	uoff_t size;
@@ -28,8 +23,5 @@ struct raw_mailbox {
 };
 
 extern struct mail_vfuncs raw_mail_vfuncs;
-
-void raw_transaction_class_init(void);
-void raw_transaction_class_deinit(void);
 
 #endif

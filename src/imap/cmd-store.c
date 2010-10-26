@@ -1,9 +1,9 @@
 /* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
 
-#include "common.h"
+#include "imap-common.h"
 #include "seq-range-array.h"
 #include "str.h"
-#include "commands.h"
+#include "imap-commands.h"
 #include "imap-search-args.h"
 #include "imap-util.h"
 
@@ -46,20 +46,22 @@ static bool
 store_parse_modifiers(struct imap_store_context *ctx,
 		      const struct imap_arg *args)
 {
-	const char *name;
+	const char *name, *value;
 
-	for (; args->type != IMAP_ARG_EOL; args++) {
-		if (args->type != IMAP_ARG_ATOM ||
-		    args[1].type != IMAP_ARG_ATOM) {
+	for (; !IMAP_ARG_IS_EOL(args); args += 2) {
+		if (!imap_arg_get_atom(&args[0], &name) ||
+		    !imap_arg_get_atom(&args[1], &value)) {
 			client_send_command_error(ctx->cmd,
-				"STORE modifiers contain non-atoms.");
+				"Invalid STORE modifiers.");
 			return FALSE;
 		}
-		name = IMAP_ARG_STR(args);
+
 		if (strcasecmp(name, "UNCHANGEDSINCE") == 0) {
-			args++;
-			ctx->max_modseq =
-				strtoull(imap_arg_string(args), NULL, 10);
+			if (str_to_uint64(value, &ctx->max_modseq) < 0) {
+				client_send_command_error(ctx->cmd,
+							  "Invalid modseq");
+				return FALSE;
+			}
 			client_enable(ctx->cmd->client,
 				      MAILBOX_FEATURE_CONDSTORE);
 		} else {
@@ -75,24 +77,26 @@ static bool
 store_parse_args(struct imap_store_context *ctx, const struct imap_arg *args)
 {
 	struct client_command_context *cmd = ctx->cmd;
+	const struct imap_arg *list_args;
 	const char *type;
 	const char *const *keywords_list = NULL;
 
 	ctx->max_modseq = (uint64_t)-1;
-	if (args->type == IMAP_ARG_LIST) {
-		if (!store_parse_modifiers(ctx, IMAP_ARG_LIST_ARGS(args)))
+	if (imap_arg_get_list(args, &list_args)) {
+		if (!store_parse_modifiers(ctx, list_args))
 			return FALSE;
 		args++;
 	}
 
-	type = imap_arg_string(args++);
-	if (type == NULL || !get_modify_type(ctx, type)) {
+	if (!imap_arg_get_astring(args, &type) ||
+	    !get_modify_type(ctx, type)) {
 		client_send_command_error(cmd, "Invalid arguments.");
 		return FALSE;
 	}
+	args++;
 
-	if (args->type == IMAP_ARG_LIST) {
-		if (!client_parse_mail_flags(cmd, IMAP_ARG_LIST_ARGS(args),
+	if (imap_arg_get_list(args, &list_args)) {
+		if (!client_parse_mail_flags(cmd, list_args,
 					     &ctx->flags, &keywords_list))
 			return FALSE;
 	} else {
@@ -125,7 +129,7 @@ bool cmd_store(struct client_command_context *cmd)
 	ARRAY_TYPE(seq_range) modified_set, uids;
 	enum mailbox_transaction_flags flags = 0;
 	enum imap_sync_flags imap_sync_flags = 0;
-	const char *reply, *tagged_reply;
+	const char *set, *reply, *tagged_reply;
 	string_t *str;
 	int ret;
 
@@ -135,12 +139,11 @@ bool cmd_store(struct client_command_context *cmd)
 	if (!client_verify_open_mailbox(cmd))
 		return TRUE;
 
-	if (args->type != IMAP_ARG_ATOM) {
+	if (!imap_arg_get_atom(args, &set)) {
 		client_send_command_error(cmd, "Invalid arguments.");
 		return TRUE;
 	}
-	ret = imap_search_get_seqset(cmd, IMAP_ARG_STR_NONULL(args),
-				     cmd->uid, &search_args);
+	ret = imap_search_get_seqset(cmd, set, cmd->uid, &search_args);
 	if (ret <= 0)
 		return ret < 0;
 
@@ -178,7 +181,7 @@ bool cmd_store(struct client_command_context *cmd)
 	}
 
 	mail = mail_alloc(t, MAIL_FETCH_FLAGS, NULL);
-	while (mailbox_search_next(search_ctx, mail) > 0) {
+	while (mailbox_search_next(search_ctx, mail)) {
 		if (ctx.max_modseq < (uint64_t)-1) {
 			/* check early so there's less work for transaction
 			   commit if something has to be cancelled */
@@ -198,7 +201,7 @@ bool cmd_store(struct client_command_context *cmd)
 	mail_free(&mail);
 
 	if (ctx.keywords != NULL)
-		mailbox_keywords_free(client->mailbox, &ctx.keywords);
+		mailbox_keywords_unref(client->mailbox, &ctx.keywords);
 
 	ret = mailbox_search_deinit(&search_ctx);
 	if (ret < 0)

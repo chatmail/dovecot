@@ -26,7 +26,7 @@ change that. See <Authentication.PasswordSchemes.txt>.
 
 If the client isn't even attempting to log in, you most likely have
 'disable_plaintext_auth=yes' (default) and the client isn't configured to use
-SSL/TLS (or you've also 'ssl_disable=yes').
+SSL/TLS (or you've also set 'ssl=no').
 
 If you're using <PAM> [PasswordDatabase.PAM.txt]:
 
@@ -49,4 +49,4 @@ It's not finding my emails
 'auth_debug=yes' may be helpful in debugging. See <MailLocation.txt> for how to
 configure where the mails are looked up from.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

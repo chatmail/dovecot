@@ -17,19 +17,14 @@ and violate the POP3 specification.
 
 Dovecot returns correct message sizes by reading the entire message and
 counting the linefeeds correctly. After this is done, the "virtual size" is
-stored into 'dovecot.index.cache' file and future calculations can be avoided
-by simply looking up the cached value. Since all of the message sizes are
-required for each POP3 login, losing the cache files may trigger huge disk I/O
-bursts.
+stored into dovecot-uidlist file and future calculations can be avoided by
+simply looking up the cached value.
 
 You can also avoid the initial message size calculation by storing the size
 directly into the filename. You can do this by appending ,W=<size> at the end
 of the base filename. For example '1199932653.M583975P6568.host,W=2211:2,' is a
-file whose virtual size is 2211 bytes (and real size somewhat smaller).
-
-Dovecot v1.1 supports storing virtual sizes also into dovecot-uidlist file. By
-doing this it doesn't need to create or update 'dovecot.index.cache' file at
-all for POP3-only users (it internally figures out who POP3-only users are).
+file whose virtual size is 2211 bytes (and real size somewhat smaller). Note
+that this must not be done for existing files, only to newly delivered mails.
 
 mbox Performance
 ----------------
@@ -92,14 +87,17 @@ UIDVALIDITY and UID values. The default in Dovecot v1.1+ is:
 pop3_uidl_format = %08Xu%08Xv
 ---%<-------------------------------------------------------------------------
 
+Another good default for dbox is to use the message's global UID:
+
+---%<-------------------------------------------------------------------------
+pop3_uidl_format = %g
+---%<-------------------------------------------------------------------------
+
 Some formats, such as the previous default '%v.%u', seem to have problems with
 Outlook 2003.
 
-MD5 UIDL format
----------------
-
-Note: This works only with mbox format and there are some issues with it with
-Dovecot versions earlier than v1.0.1.
+MD5 UIDL format (mbox-only)
+---------------------------
 
 ---%<-------------------------------------------------------------------------
 pop3_uidl_format = %m
@@ -144,4 +142,4 @@ If you use <Dovecot's deliver> [LDA.txt] or IMAP APPEND and 'pop3_uidl_format =
 %m', it always appends the X-Delivery-ID: header to saved mailbox. Any existing
 X-Delivery-ID: headers in the saved mails are dropped.
 
-(This file was created from the wiki on 2010-05-24 04:42)
+(This file was created from the wiki on 2010-07-02 21:30)

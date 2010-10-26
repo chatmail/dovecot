@@ -4,8 +4,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-index \
-	-I$(top_srcdir)/src/lib-storage \
-	-DPKG_RUNDIR=\""$(rundir)"\"
+	-I$(top_srcdir)/src/lib-storage
 
 lib01_acl_plugin_la_LDFLAGS = -module -avoid-version
 
@@ -34,10 +33,3 @@ noinst_HEADERS = \
 	acl-plugin.h \
 	acl-shared-storage.h \
 	acl-storage.h
-
-install-exec-local:
-	for d in imap lda; do \
-	  $(mkdir_p) $(DESTDIR)$(moduledir)/$$d; \
-	  rm -f $(DESTDIR)$(moduledir)/$$d/lib01_acl_plugin$(MODULE_SUFFIX); \
-	  $(LN_S) ../lib01_acl_plugin$(MODULE_SUFFIX) $(DESTDIR)$(moduledir)/$$d; \
-	done

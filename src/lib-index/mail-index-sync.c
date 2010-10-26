@@ -15,6 +15,7 @@ struct mail_index_sync_ctx {
 	struct mail_index *index;
 	struct mail_index_view *view;
 	struct mail_index_transaction *sync_trans, *ext_trans;
+	struct mail_index_transaction_commit_result *sync_commit_result;
 	enum mail_index_sync_flags flags;
 
 	const struct mail_transaction_header *hdr;
@@ -46,10 +47,11 @@ static void mail_index_sync_add_expunge_guid(struct mail_index_sync_ctx *ctx)
 	const struct mail_transaction_expunge_guid *e = ctx->data;
 	size_t i, size = ctx->hdr->size / sizeof(*e);
 
-	for (i = 0; i < size; i++)
-		mail_index_expunge(ctx->sync_trans, e[i].uid);
+	for (i = 0; i < size; i++) {
+		mail_index_expunge_guid(ctx->sync_trans, e[i].uid,
+					e[i].guid_128);
+	}
 }
-
 
 static void mail_index_sync_add_flag_update(struct mail_index_sync_ctx *ctx)
 {
@@ -99,7 +101,7 @@ static void mail_index_sync_add_keyword_update(struct mail_index_sync_ctx *ctx)
 		}
 	}
 
-	mail_index_keywords_free(&keywords);
+	mail_index_keywords_unref(&keywords);
 }
 
 static void mail_index_sync_add_keyword_reset(struct mail_index_sync_ctx *ctx)
@@ -116,7 +118,7 @@ static void mail_index_sync_add_keyword_reset(struct mail_index_sync_ctx *ctx)
 						   MODIFY_REPLACE, keywords);
 		}
 	}
-	mail_index_keywords_free(&keywords);
+	mail_index_keywords_unref(&keywords);
 }
 
 static void mail_index_sync_add_append(struct mail_index_sync_ctx *ctx)
@@ -249,13 +251,14 @@ mail_index_sync_read_and_sort(struct mail_index_sync_ctx *ctx)
 	for (i = 0; i < keyword_count; i++) {
 		if (array_is_created(&keyword_updates[i].add_seq)) {
 			synclist = array_append_space(&ctx->sync_list);
-			synclist->array = (void *)&keyword_updates[i].add_seq;
+			synclist->array =
+				(const void *)&keyword_updates[i].add_seq;
 			synclist->keyword_idx = i;
 		}
 		if (array_is_created(&keyword_updates[i].remove_seq)) {
 			synclist = array_append_space(&ctx->sync_list);
 			synclist->array =
-				(void *)&keyword_updates[i].remove_seq;
+				(const void *)&keyword_updates[i].remove_seq;
 			synclist->keyword_idx = i;
 			synclist->keyword_remove = TRUE;
 		}
@@ -387,6 +390,13 @@ mail_index_sync_begin_init(struct mail_index *index,
 		return 0;
 	}
 
+	if (index->index_deleted) {
+		/* index is already deleted. we can't sync. */
+		if (locked)
+			mail_transaction_log_sync_unlock(index->log);
+		return -1;
+	}
+
 	if (!locked) {
 		/* it looks like we have something to sync. lock the file and
 		   check again. */
@@ -446,6 +456,9 @@ int mail_index_sync_begin_to(struct mail_index *index,
 					MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
 	mail_index_view_close(&sync_view);
 
+	/* set before any rollbacks are called */
+	index->syncing = TRUE;
+
 	/* we wish to see all the changes from last mailbox sync position to
 	   the end of the transaction log */
 	if (mail_index_sync_set_log_view(ctx->view, hdr->log_file_seq,
@@ -473,15 +486,21 @@ int mail_index_sync_begin_to(struct mail_index *index,
 	trans_flags = MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL;
 	if ((ctx->flags & MAIL_INDEX_SYNC_FLAG_AVOID_FLAG_UPDATES) != 0)
 		trans_flags |= MAIL_INDEX_TRANSACTION_FLAG_AVOID_FLAG_UPDATES;
+	if ((ctx->flags & MAIL_INDEX_SYNC_FLAG_FSYNC) != 0)
+		trans_flags |= MAIL_INDEX_TRANSACTION_FLAG_FSYNC;
 	ctx->ext_trans = mail_index_transaction_begin(ctx->view, trans_flags);
 	ctx->ext_trans->sync_transaction = TRUE;
-
-	index->syncing = TRUE;
 
 	*ctx_r = ctx;
 	*view_r = ctx->view;
 	*trans_r = ctx->ext_trans;
 	return 1;
+}
+
+bool mail_index_sync_has_expunges(struct mail_index_sync_ctx *ctx)
+{
+	return array_is_created(&ctx->sync_trans->expunges) &&
+		array_count(&ctx->sync_trans->expunges) > 0;
 }
 
 static bool mail_index_sync_view_have_any(struct mail_index_view *view,
@@ -518,6 +537,7 @@ static bool mail_index_sync_view_have_any(struct mail_index_view *view,
 
 		switch (hdr->type & MAIL_TRANSACTION_TYPE_MASK) {
 		case MAIL_TRANSACTION_EXT_REC_UPDATE:
+		case MAIL_TRANSACTION_EXT_ATOMIC_INC:
 			/* extension record updates aren't exactly needed
 			   to be synced, but cache syncing relies on tail
 			   offsets being updated. */
@@ -526,6 +546,8 @@ static bool mail_index_sync_view_have_any(struct mail_index_view *view,
 		case MAIL_TRANSACTION_FLAG_UPDATE:
 		case MAIL_TRANSACTION_KEYWORD_UPDATE:
 		case MAIL_TRANSACTION_KEYWORD_RESET:
+		case MAIL_TRANSACTION_INDEX_DELETED:
+		case MAIL_TRANSACTION_INDEX_UNDELETED:
 			return TRUE;
 		default:
 			break;
@@ -540,21 +562,31 @@ bool mail_index_sync_have_any(struct mail_index *index,
 	struct mail_index_view *view;
 	bool ret;
 
-	(void)mail_index_refresh(index);
-
 	view = mail_index_view_open(index);
 	ret = mail_index_sync_view_have_any(view, flags);
 	mail_index_view_close(&view);
 	return ret;
 }
 
+void mail_index_sync_get_offsets(struct mail_index_sync_ctx *ctx,
+				 uint32_t *seq1_r, uoff_t *offset1_r,
+				 uint32_t *seq2_r, uoff_t *offset2_r)
+{
+	*seq1_r = ctx->view->map->hdr.log_file_seq;
+	*offset1_r = ctx->view->map->hdr.log_file_tail_offset != 0 ?
+		ctx->view->map->hdr.log_file_tail_offset :
+		ctx->view->index->log->head->hdr.hdr_size;
+	mail_transaction_log_get_head(ctx->view->index->log, seq2_r, offset2_r);
+}
+
 static void
 mail_index_sync_get_expunge(struct mail_index_sync_rec *rec,
-			    const struct mail_transaction_expunge *exp)
+			    const struct mail_transaction_expunge_guid *exp)
 {
 	rec->type = MAIL_INDEX_SYNC_TYPE_EXPUNGE;
-	rec->uid1 = exp->uid1;
-	rec->uid2 = exp->uid2;
+	rec->uid1 = exp->uid;
+	rec->uid2 = exp->uid;
+	memcpy(rec->guid_128, exp->guid_128, sizeof(rec->guid_128));
 }
 
 static void
@@ -605,6 +637,8 @@ bool mail_index_sync_next(struct mail_index_sync_ctx *ctx,
 	/* FIXME: replace with a priority queue so we don't have to go
 	   through the whole list constantly. and remember to make sure that
 	   keyword resets are sent before adds! */
+	/* FIXME: pretty ugly to do this for expunges, which isn't even a
+	   seq_range. */
 	sync_list = array_get_modifiable(&ctx->sync_list, &count);
 	for (i = 0; i < count; i++) {
 		if (!array_is_created(sync_list[i].array) ||
@@ -641,7 +675,7 @@ bool mail_index_sync_next(struct mail_index_sync_ctx *ctx,
 
 	if (sync_list[i].array == (void *)&sync_trans->expunges) {
 		mail_index_sync_get_expunge(sync_rec,
-			(const struct mail_transaction_expunge *)uid_range);
+			(const struct mail_transaction_expunge_guid *)uid_range);
 	} else if (sync_list[i].array == (void *)&sync_trans->updates) {
 		mail_index_sync_get_update(sync_rec,
 			(const struct mail_transaction_flag_update *)uid_range);
@@ -658,30 +692,31 @@ bool mail_index_sync_next(struct mail_index_sync_ctx *ctx,
 bool mail_index_sync_have_more(struct mail_index_sync_ctx *ctx)
 {
 	const struct mail_index_sync_list *sync_list;
-	unsigned int i, count;
 
 	if (ctx->sync_appends)
 		return TRUE;
 
-	sync_list = array_get(&ctx->sync_list, &count);
-	for (i = 0; i < count; i++) {
-		if (array_is_created(sync_list[i].array) &&
-		    sync_list[i].idx != array_count(sync_list[i].array))
+	array_foreach(&ctx->sync_list, sync_list) {
+		if (array_is_created(sync_list->array) &&
+		    sync_list->idx != array_count(sync_list->array))
 			return TRUE;
 	}
 	return FALSE;
 }
 
+void mail_index_sync_set_commit_result(struct mail_index_sync_ctx *ctx,
+				       struct mail_index_transaction_commit_result *result)
+{
+	ctx->sync_commit_result = result;
+}
+
 void mail_index_sync_reset(struct mail_index_sync_ctx *ctx)
 {
 	struct mail_index_sync_list *sync_list;
-	unsigned int i, count;
 
 	ctx->next_uid = 0;
-
-	sync_list = array_get_modifiable(&ctx->sync_list, &count);
-	for (i = 0; i < count; i++)
-		sync_list[i].idx = 0;
+	array_foreach_modifiable(&ctx->sync_list, sync_list)
+		sync_list->idx = 0;
 }
 
 static void mail_index_sync_end(struct mail_index_sync_ctx **_ctx)
@@ -708,8 +743,15 @@ mail_index_sync_update_mailbox_offset(struct mail_index_sync_ctx *ctx)
 	uint32_t seq;
 	uoff_t offset;
 
-	mail_transaction_log_view_get_prev_pos(ctx->view->log_view,
-					       &seq, &offset);
+	if (!mail_transaction_log_view_is_last(ctx->view->log_view)) {
+		/* didn't sync everything */
+		mail_transaction_log_view_get_prev_pos(ctx->view->log_view,
+						       &seq, &offset);
+	} else {
+		/* synced everything, but we might also have committed new
+		   transactions. include them also here. */
+		mail_transaction_log_get_head(ctx->index->log, &seq, &offset);
+	}
 	mail_transaction_log_set_mailbox_sync_pos(ctx->index->log, seq, offset);
 
 	/* If tail offset has changed, make sure it gets written to
@@ -737,10 +779,17 @@ int mail_index_sync_commit(struct mail_index_sync_ctx **_ctx)
 {
         struct mail_index_sync_ctx *ctx = *_ctx;
 	struct mail_index *index = ctx->index;
-	uint32_t seq, next_uid;
-	uoff_t offset;
-	bool want_rotate;
+	uint32_t next_uid;
+	bool want_rotate, index_undeleted, delete_index;
 	int ret = 0;
+
+	index_undeleted = ctx->ext_trans->index_undeleted;
+	delete_index = index->index_delete_requested && !index_undeleted &&
+		(ctx->flags & MAIL_INDEX_SYNC_FLAG_DELETING_INDEX) != 0;
+	if (delete_index) {
+		/* finish this sync by marking the index deleted */
+		mail_index_set_deleted(ctx->ext_trans);
+	}
 
 	mail_index_sync_update_mailbox_offset(ctx);
 	if (mail_cache_need_compress(index->cache)) {
@@ -760,16 +809,25 @@ int mail_index_sync_commit(struct mail_index_sync_ctx **_ctx)
 		}
 	}
 
-	if (mail_index_transaction_commit(&ctx->ext_trans, &seq, &offset) < 0) {
+	if (mail_index_transaction_commit(&ctx->ext_trans) < 0) {
 		mail_index_sync_end(&ctx);
 		return -1;
+	}
+
+	if (delete_index)
+		index->index_deleted = TRUE;
+	else if (index_undeleted) {
+		index->index_deleted = FALSE;
+		index->index_delete_requested = FALSE;
 	}
 
 	/* refresh the mapping with newly committed external transactions
 	   and the synced expunges. sync using file handler here so that the
 	   expunge handlers get called. */
+	index->sync_commit_result = ctx->sync_commit_result;
 	if (mail_index_map(ctx->index, MAIL_INDEX_SYNC_HANDLER_FILE) <= 0)
 		ret = -1;
+	index->sync_commit_result = NULL;
 
 	want_rotate = mail_transaction_log_want_rotate(index->log);
 	if (ret == 0 &&

@@ -25,7 +25,12 @@ void env_put(const char *env)
 void env_remove(const char *name)
 {
 #ifdef HAVE_UNSETENV
+#ifdef UNSETENV_RET_INT
+	if (unsetenv(name) < 0)
+		i_fatal("unsetenv(%s) failed: %m", name);
+#else
 	unsetenv(name);
+#endif
 #else
 	extern char **environ;
 	unsigned int len;
@@ -71,6 +76,8 @@ struct env_backup *env_backup_save(void)
 	extern char **environ;
 	unsigned int i, count;
 	pool_t pool;
+
+	i_assert(environ != NULL);
 
 	for (count = 0; environ[count] != NULL; count++) ;
 

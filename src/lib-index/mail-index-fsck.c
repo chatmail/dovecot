@@ -68,12 +68,10 @@ mail_index_fsck_header(struct mail_index *index, struct mail_index_map *map,
 static bool
 array_has_name(const ARRAY_TYPE(const_string) *names, const char *name)
 {
-	const char *const *str;
-	unsigned int i, count;
+	const char *const *namep;
 
-	str = array_get(names, &count);
-	for (i = 0; i < count; i++) {
-		if (strcmp(str[i], name) == 0)
+	array_foreach(names, namep) {
+		if (strcmp(*namep, name) == 0)
 			return TRUE;
 	}
 	return FALSE;
@@ -426,7 +424,7 @@ mail_index_fsck_map(struct mail_index *index, struct mail_index_map *map)
 
 int mail_index_fsck(struct mail_index *index)
 {
-	bool orig_locked = index->log_locked;
+	bool orig_locked = index->log_sync_locked;
 	struct mail_index_map *map;
 	uint32_t file_seq;
 	uoff_t file_offset;
@@ -435,9 +433,9 @@ int mail_index_fsck(struct mail_index *index)
 
 	if (index->log->head == NULL) {
 		/* we're trying to open the index files, but there wasn't
-		   any .log file. this should be rare, so just fsck it without
-		   locking. */
-		orig_locked = TRUE;
+		   any .log file. */
+		if (mail_transaction_log_create(index->log, FALSE) < 0)
+			return -1;
 	}
 
 	if (!orig_locked) {
@@ -467,7 +465,7 @@ void mail_index_fsck_locked(struct mail_index *index)
 {
 	int ret;
 
-	i_assert(index->log_locked);
+	i_assert(index->log_sync_locked);
 	ret = mail_index_fsck(index);
 	i_assert(ret == 0);
 }
