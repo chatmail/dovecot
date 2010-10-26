@@ -9,8 +9,9 @@ dovecot (1:2.0.6-1) UNRELEASED; urgency=low
   * Updated copyright and package descriptions. Thanks Stephan Bosch.
   * Switch to gbp-pq patch management. Drop all patches but drac
     support. Update pigeonhole to release 0.2.1
+  * Update debian/rules to work with dovecot 2.0. Thanks Stephan Bosch.
 
- -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 18:17:40 +0200
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 18:20:33 +0200
 
 dovecot (1:1.2.15-1) unstable; urgency=high
 

@@ -5,8 +5,7 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-SIEVE_DIR=sieve
-MANAGESIEVE_DIR=managesieve
+PIGEONHOLE_DIR=pigeonhole
 
 # These are used for cross-compiling and for saving the configure script
 # from having to guess our platform (since we know it already)
@@ -18,17 +17,15 @@ config-stamp: configure
 	# Dovecot
 	sh configure --with-ldap \
 	            --with-ssl=openssl \
-	            --with-db \
 	            --with-pgsql \
 	            --with-mysql \
 	            --with-sqlite \
 	            --with-gssapi \
 	            --with-ioloop=best \
-	            --enable-header-install \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \
 	            --prefix=/usr \
-	            --sysconfdir=/etc/dovecot \
+	            --sysconfdir=/etc \
 	            --libexecdir=\$${prefix}/lib \
 	            --localstatedir=/var \
 	            --mandir=\$${prefix}/share/man \
@@ -37,16 +34,13 @@ config-stamp: configure
 	            --disable-rpath \
 	            --disable-static
 	$(MAKE) dovecot-config
-	# Dovecot sieve plugin
-	(cd $(SIEVE_DIR)/ && sh configure --with-dovecot=../ \
+	# Pigeonhole
+	(cd $(PIGEONHOLE_DIR)/ && sh configure --with-dovecot=../ \
 		--prefix=/usr \
 		--libexecdir=\$${prefix}/lib \
-		--enable-static=no )
-	# Dovecot managesieve module
-	(cd $(MANAGESIEVE_DIR)/ && sh configure --with-dovecot=../ \
-		--with-dovecot-sieve=../$(SIEVE_DIR)/ \
-		--prefix=/usr \
-		--libexecdir=\$${prefix}/lib)
+		--mandir=\$${prefix}/share/man \
+		--infodir=\$${prefix}/share/info \
+		--disable-static )
 	touch config-stamp
 
 build: build-stamp
@@ -54,10 +48,8 @@ build-stamp:  config-stamp
 	dh_testdir
 	# Dovecot
 	$(MAKE)
-	# Dovecot sieve plugin
-	$(MAKE) -C $(SIEVE_DIR)
-	# Dovecot managesieve module
-	$(MAKE) -C $(MANAGESIEVE_DIR)
+	# Pigeonhole
+	$(MAKE) -C $(PIGEONHOLE_DIR)
 	# DRAC
 	$(MAKE) -C src/plugins/drac
 	touch build-stamp
@@ -68,10 +60,8 @@ clean:
 	rm -f build-stamp config-stamp
 	# Cleanup dovecot itself
 	[ ! -f Makefile ] || $(MAKE) distclean
-	# Cleanup dovecot sieve plugin
-	[ ! -f $(SIEVE_DIR)/Makefile ] || $(MAKE) -C $(SIEVE_DIR) distclean
-	# Cleanup dovecot ManageSieve
-	[ ! -f $(MANAGESIEVE_DIR)/Makefile ] || $(MAKE) -C $(MANAGESIEVE_DIR) distclean
+	# Cleanup pigeonhole
+	[ ! -f $(PIGEONHOLE_DIR)/Makefile ] || $(MAKE) -C $(PIGEONHOLE_DIR) distclean
 	# Cleanup DRAC
 	rm -f src/plugins/drac/drac.so
 	dh_clean
@@ -82,30 +72,32 @@ install: build
 	dh_clean -k
 	dh_installdirs
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/dovecot-common
-	$(MAKE) -C $(SIEVE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-common
-	$(MAKE) -C $(MANAGESIEVE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-common
+	$(MAKE) -C $(PIGEONHOLE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-common
 	cp $(CURDIR)/src/plugins/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
-	mv $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot.conf
-	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-ldap-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-ldap.conf
-	install -o root -g root -m 0644 $(CURDIR)/doc/dovecot-sql-example.conf $(CURDIR)/debian/dovecot-common/usr/share/dovecot/dovecot-sql.conf
+	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/*.conf \
+		$(CURDIR)/debian/dovecot-common/usr/share/dovecot/
+	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/*.conf.ext \
+		$(CURDIR)/debian/dovecot-common/usr/share/dovecot/
+	install -o root -g root -m 0744 -d $(CURDIR)/debian/dovecot-common/etc/dovecot/conf.d/
+	install -o root -g root -m 0744 -d $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/
+	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/conf.d/*.conf \
+		$(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/
+	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/conf.d/*.conf.ext \
+		$(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/
+	install -o root -g root -m 0644 $(CURDIR)/$(PIGEONHOLE_DIR)/doc/example-config/conf.d/*.conf \
+		$(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/
 	install -D -m 0755 -o root -g root $(CURDIR)/debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-common/usr/bin/maildirmake.dovecot
 	install -m 0755 -o root -g root $(CURDIR)/debian/expire-tool.sh $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/expire-tool.sh
 	mv $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common
-	cp $(SIEVE_DIR)/ChangeLog $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/sieve.ChangeLog
-	cp $(SIEVE_DIR)/README $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/sieve.README
-	cp $(SIEVE_DIR)/NEWS $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/sieve.NEWS
-	cp $(MANAGESIEVE_DIR)/ChangeLog $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/managesieve.ChangeLog
-	cp $(MANAGESIEVE_DIR)/README $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/managesieve.README
-	cp $(MANAGESIEVE_DIR)/NEWS $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/managesieve.NEWS
+	cp $(PIGEONHOLE_DIR)/ChangeLog $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/pigeonhole.ChangeLog
+	cp $(PIGEONHOLE_DIR)/README $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/pigeonhole.README
+	cp $(PIGEONHOLE_DIR)/NEWS $(CURDIR)/debian/dovecot-common/usr/share/doc/dovecot-common/pigeonhole.NEWS
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/imap/ $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot/modules/
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/lib??_imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot/modules/
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/pop3/ $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot/modules/
 	mv $(CURDIR)/debian/dovecot-common/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/dovecot-config $(CURDIR)/debian/dovecot-dev/usr/lib/dovecot
 	rmdir $(CURDIR)/debian/dovecot-common/usr/include
-	rm $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-ldap-example.conf
-	rm $(CURDIR)/debian/dovecot-common/etc/dovecot/dovecot-sql-example.conf
 
 # Build architecture-independent files here.
 binary-indep: build install
