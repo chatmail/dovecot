@@ -13,8 +13,11 @@ dovecot (1:2.0.6-1) UNRELEASED; urgency=low
   * Update debian/dovecot-common.{postinst,postrm} to handle the new
     config file layout and the new dovenull user. Thanks Stephan Bosch.
   * Remove debian/dovecot.1 manpage because is provided by upstream.
+  * Remove debian/dovecotpw.1 manpage as there is no dovecotpw
+    executable in dovecot 2.0. Same feature is provided through 'doveadm
+    pw' command.
 
- -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 19:09:11 +0200
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 19:10:24 +0200
 
 dovecot (1:1.2.15-1) unstable; urgency=high
 

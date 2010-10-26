@@ -114,7 +114,7 @@ binary-arch: build install
 	dh_installinit -pdovecot-common --init-script=dovecot -u"defaults 20"
 	dh_installcron -p dovecot-common --name=dovecot
 	dh_installman -a
-	dh_installman -p dovecot-common debian/maildirmake.dovecot.1 debian/dovecot.8 debian/dovecotpw.1
+	dh_installman -p dovecot-common debian/dovecot.8 debian/maildirmake.dovecot.1
 	dh_installchangelogs -a ChangeLog
 	dh_link -a
 	dh_strip -a --dbg-package=dovecot-dbg
