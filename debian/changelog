@@ -2,8 +2,11 @@ dovecot (1:1.2.15-2) UNRELEASED; urgency=low
 
   * Switch vcs fields to git
   * Add debian/gbp.conf to make easy the usage of git-buildpackage
+  * Warn that the generated SSL certificate will expire in 10 years
+    instead of 365 days, as it's the lifetime of of self-generated
+    certificates since 1:1.2.13-1
 
- -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 23:35:49 +0200
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 23:42:08 +0200
 
 dovecot (1:1.2.15-1) unstable; urgency=high
 
