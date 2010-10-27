@@ -1,18 +1,18 @@
 From: Stephan Bosch <stephan@rename-it.nl>
-Date: Wed, 27 Oct 2010 09:07:25 +0200
+Date: Wed, 27 Oct 2010 12:17:29 +0200
 Subject: [PATCH] dovecot-managesieve
 
 Description: Adds support for ManageSieve
-Origin: http://www.rename-it.nl/dovecot/1.2/dovecot-1.2.13-managesieve-0.11.11.diff.gz
-Last-Update: 2010-07-26
+Origin: http://www.rename-it.nl/dovecot/1.2/dovecot-1.2.15-managesieve-0.11.12.diff.gz
+Last-Update: 2010-10-27
 
-ManageSieve patch v0.11.11 for dovecot-1.2.13
+ManageSieve patch v0.11.12 for dovecot-1.2.15
 
 Copyright (c) 2006-2010 by Stephan Bosch <stephan@rename-it.nl>
 
 This patch is licenced under LGPLv2.1 (see COPYING.LGPL in the dovecot sources)
 ---
- README.managesieve                |   29 ++++++++++
+ README.managesieve                |   28 +++++++++
  dovecot-example.conf              |   56 +++++++++++++++++-
  src/master/child-process.c        |    5 +-
  src/master/child-process.h        |    1 +
@@ -23,15 +23,15 @@ This patch is licenced under LGPLv2.1 (see COPYING.LGPL in the dovecot sources)
  src/master/master-settings-defs.c |    5 ++
  src/master/master-settings.c      |  113 +++++++++++++++++++++++++++++++++----
  src/master/master-settings.h      |   16 ++++-
- 11 files changed, 275 insertions(+), 23 deletions(-)
+ 11 files changed, 274 insertions(+), 23 deletions(-)
  create mode 100644 README.managesieve
 
 diff --git a/README.managesieve b/README.managesieve
 new file mode 100644
-index 0000000..b17264d
+index 0000000..d30289c
 --- /dev/null
 +++ b/README.managesieve
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,28 @@
 +
 +MANAGESIEVE service support patch for Dovecot 1.2
 +
@@ -60,7 +60,6 @@ index 0000000..b17264d
 +Read the README of the dovecot-managesieve package for the next steps.
 +Note that this patch adds configuration examples to the dovecot-example.conf
 +configuration file example.
-+
 diff --git a/dovecot-example.conf b/dovecot-example.conf
 index efd24e5..cad585c 100644
 --- a/dovecot-example.conf
@@ -334,7 +333,7 @@ index ae82f36..b5a0fb1 100644
  		env_put(t_strconcat("TRUSTED_NETWORKS=",
  				    set->login_trusted_networks, NULL));
 diff --git a/src/master/mail-process.c b/src/master/mail-process.c
-index 5cde8f0..fb66809 100644
+index 5cde8f0..6307e61 100644
 --- a/src/master/mail-process.c
 +++ b/src/master/mail-process.c
 @@ -373,6 +373,15 @@ mail_process_set_environment(struct settings *set, const char *mail,
@@ -347,7 +346,7 @@ index 5cde8f0..fb66809 100644
 +		env_put(t_strconcat("MANAGESIEVE_LOGOUT_FORMAT=",
 +				    set->managesieve_logout_format, NULL));
 +		env_put(t_strconcat("MANAGESIEVE_IMPLEMENTATION_STRING=",
-+        		    set->managesieve_implementation_string, NULL));
++			    set->managesieve_implementation_string, NULL));
 +	}
 +
  	if (set->mail_save_crlf)
@@ -395,17 +394,17 @@ index 4fd8ed6..c1937d8 100644
  		server = server->next;
  	}
 diff --git a/src/master/master-settings-defs.c b/src/master/master-settings-defs.c
-index 823fc21..e40b4a0 100644
+index 823fc21..ae81a1b 100644
 --- a/src/master/master-settings-defs.c
 +++ b/src/master/master-settings-defs.c
 @@ -131,5 +131,10 @@ static struct setting_def setting_defs[] = {
  	DEF_STR(dict_db_config),
  	DEF_INT(dict_process_count),
  
-+  	/* managesieve */
-+  	DEF_INT(managesieve_max_line_length),
++	/* managesieve */
++	DEF_INT(managesieve_max_line_length),
 +	DEF_STR(managesieve_logout_format),
-+  	DEF_STR(managesieve_implementation_string),
++	DEF_STR(managesieve_implementation_string),
 +
  	{ 0, NULL, 0 }
  };
