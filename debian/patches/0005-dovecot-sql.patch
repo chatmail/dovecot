@@ -1,0 +1,23 @@
+From: Jaldhar H. Vyas <jaldhar@debian.org>
+Date: Wed, 27 Oct 2010 09:07:25 +0200
+Subject: [PATCH] dovecot-sql
+
+Description: Small cosmetic changes for dovecot-sql.conf
+---
+ doc/dovecot-sql-example.conf |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/doc/dovecot-sql-example.conf b/doc/dovecot-sql-example.conf
+index 915548d..bb380a5 100644
+--- a/doc/dovecot-sql-example.conf
++++ b/doc/dovecot-sql-example.conf
+@@ -47,7 +47,7 @@
+ #                           the default my.cnf location
+ #     option_group        - Read options from the given group (default: client)
+ # 
+-#   You can connect to UNIX sockets by using host: host=/var/run/mysql.sock
++#   You can connect to UNIX sockets by using host: host=/var/run/mysqld/mysqld.sock
+ #   Note that currently you can't use spaces in parameters.
+ #
+ #   MySQL supports multiple host parameters for load balancing / HA.
+-- 

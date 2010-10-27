@@ -1,0 +1,747 @@
+From: Stephan Bosch <stephan@rename-it.nl>
+Date: Wed, 27 Oct 2010 09:07:25 +0200
+Subject: [PATCH] dovecot-managesieve
+
+Description: Adds support for ManageSieve
+Origin: http://www.rename-it.nl/dovecot/1.2/dovecot-1.2.13-managesieve-0.11.11.diff.gz
+Last-Update: 2010-07-26
+
+ManageSieve patch v0.11.11 for dovecot-1.2.13
+
+Copyright (c) 2006-2010 by Stephan Bosch <stephan@rename-it.nl>
+
+This patch is licenced under LGPLv2.1 (see COPYING.LGPL in the dovecot sources)
+---
+ README.managesieve                |   29 ++++++++++
+ dovecot-example.conf              |   56 +++++++++++++++++-
+ src/master/child-process.c        |    5 +-
+ src/master/child-process.h        |    1 +
+ src/master/listener.c             |   29 +++++++++-
+ src/master/login-process.c        |   26 ++++++++-
+ src/master/mail-process.c         |   16 +++++-
+ src/master/main.c                 |    2 +
+ src/master/master-settings-defs.c |    5 ++
+ src/master/master-settings.c      |  113 +++++++++++++++++++++++++++++++++----
+ src/master/master-settings.h      |   16 ++++-
+ 11 files changed, 275 insertions(+), 23 deletions(-)
+ create mode 100644 README.managesieve
+
+diff --git a/README.managesieve b/README.managesieve
+new file mode 100644
+index 0000000..b17264d
+--- /dev/null
++++ b/README.managesieve
+@@ -0,0 +1,29 @@
++
++MANAGESIEVE service support patch for Dovecot 1.2
++
++NOTICE: As per dovecot-1.1, this patch only contains the changes to the
++Dovecot tree that are necessary to use the now external
++dovecot-1.x-managesieve package. So, applying this patch is no longer
++the only thing you need to do to give Dovecot managesieve support.
++Eventually the need for this patch will disappear completely.
++
++Compile
++-------
++
++After applying this patch you can just use the usual build process
++(http://wiki.dovecot.org/CompilingSource):
++
++./configure
++make
++sudo make install
++
++Don't forget to execute ./autogen.sh if you downloaded dovecot from the
++Mercurial repository.
++
++Installation and Configuration
++------------------------------
++
++Read the README of the dovecot-managesieve package for the next steps.
++Note that this patch adds configuration examples to the dovecot-example.conf
++configuration file example.
++
+diff --git a/dovecot-example.conf b/dovecot-example.conf
+index efd24e5..cad585c 100644
+--- a/dovecot-example.conf
++++ b/dovecot-example.conf
+@@ -19,7 +19,7 @@
+ # Base directory where to store runtime data.
+ #base_dir = /var/run/dovecot/
+ 
+-# Protocols we want to be serving: imap imaps pop3 pop3s
++# Protocols we want to be serving: imap imaps pop3 pop3s managesieve
+ # If you only want to use dovecot-auth, you can set this to "none".
+ #protocols = imap imaps
+ 
+@@ -28,8 +28,8 @@
+ # interfaces. Use "*, [::]" for listening both IPv4 and IPv6.
+ #
+ # If you want to specify ports for each service, you will need to configure
+-# these settings inside the protocol imap/pop3 { ... } section, so you can
+-# specify different ports for IMAP/POP3. For example:
++# these settings inside the protocol imap/pop3/managesieve { ... } section,
++# so you can specify different ports for IMAP/POP3/MANAGESIEVE. For example:
+ #   protocol imap {
+ #     listen = *:10143
+ #     ssl_listen = *:10943
+@@ -39,6 +39,10 @@
+ #     listen = *:10100
+ #     ..
+ #   }
++#   protocol managesieve {
++#     listen = *:12000
++#     ..
++#   }
+ #listen = *
+ 
+ # Disable LOGIN command and all other plaintext authentications unless
+@@ -696,6 +700,42 @@ protocol pop3 {
+ }
+ 
+ ##
++## ManageSieve specific settings
++##
++
++protocol managesieve {
++  # Login executable location.
++  #login_executable = /usr/libexec/dovecot/managesieve-login
++
++  # ManageSieve executable location. See IMAP's mail_executable above for
++  # examples how this could be changed.
++  #mail_executable = /usr/libexec/dovecot/managesieve
++
++  # Maximum ManageSieve command line length in bytes. This setting is
++  # directly borrowed from IMAP. But, since long command lines are very
++  # unlikely with ManageSieve, changing this will not be very useful.
++  #managesieve_max_line_length = 65536
++
++  # ManageSieve logout format string:
++  #  %i - total number of bytes read from client
++  #  %o - total number of bytes sent to client
++  #managesieve_logout_format = bytes=%i/%o
++
++  # If, for some inobvious reason, the sieve_storage remains unset, the
++  # ManageSieve daemon uses the specification of the mail_location to find out
++  # where to store the sieve files (see explaination in README.managesieve).
++  # The example below, when uncommented, overrides any global mail_location
++  # specification and stores all the scripts in '~/mail/sieve' if sieve_storage
++  # is unset. However, you should always use the sieve_storage setting.
++  # mail_location = mbox:~/mail
++
++  # To fool ManageSieve clients that are focused on timesieved you can
++  # specify the IMPLEMENTATION capability that the dovecot reports to clients
++  # (default: "dovecot").
++  #managesieve_implementation_string = Cyrus timsieved v2.2.13
++}
++
++##
+ ## LDA specific settings
+ ##
+ 
+@@ -1211,6 +1251,16 @@ plugin {
+   # Available fields: uid, box, msgid, from, subject, size, vsize, flags
+   # size and vsize are available only for expunge and copy events.
+   #mail_log_fields = uid box msgid size
++
++  # Sieve plugin (http://wiki.dovecot.org/LDA/Sieve) and ManageSieve service
++  #
++  # Location of the active script. When ManageSieve is used this is actually
++  # a symlink pointing to the active script in the sieve storage directory.
++  #sieve=~/.dovecot.sieve
++  #
++  # The path to the directory where the personal Sieve scripts are stored. For
++  # ManageSieve this is where the uploaded scripts are stored.
++  #sieve_dir=~/sieve
+ }
+ 
+ # Config files can also be included. deliver doesn't support them currently.
+diff --git a/src/master/child-process.c b/src/master/child-process.c
+index 1c8f93a..ae7a819 100644
+--- a/src/master/child-process.c
++++ b/src/master/child-process.c
+@@ -20,7 +20,8 @@ const char *process_names[PROCESS_TYPE_MAX] = {
+ 	"imap",
+ 	"pop3",
+ 	"ssl-build-param",
+-	"dict"
++	"dict",
++	"managesieve"
+ };
+ 
+ struct hash_table *processes;
+@@ -111,6 +112,7 @@ static const char *get_exit_status_message(enum fatal_exit_status status,
+ 			return "Out of memory - see login_process_size setting";
+ 		case PROCESS_TYPE_IMAP:
+ 		case PROCESS_TYPE_POP3:
++		case PROCESS_TYPE_MANAGESIEVE:
+ 			return "Out of memory - see mail_process_size setting";
+ 		case PROCESS_TYPE_UNKNOWN:
+ 		case PROCESS_TYPE_SSL_PARAM:
+@@ -159,6 +161,7 @@ log_coredump(string_t *str, enum process_type process_type, int status)
+ #endif
+ 	case PROCESS_TYPE_IMAP:
+ 	case PROCESS_TYPE_POP3:
++	case PROCESS_TYPE_MANAGESIEVE:
+ #ifndef HAVE_PR_SET_DUMPABLE
+ 		if (!settings_root->defaults->mail_drop_priv_before_exec) {
+ 			str_append(str, " (core not dumped - set mail_drop_priv_before_exec=yes)");
+diff --git a/src/master/child-process.h b/src/master/child-process.h
+index 3324ffb..903ed1d 100644
+--- a/src/master/child-process.h
++++ b/src/master/child-process.h
+@@ -10,6 +10,7 @@ enum process_type {
+ 	PROCESS_TYPE_POP3,
+ 	PROCESS_TYPE_SSL_PARAM,
+ 	PROCESS_TYPE_DICT,
++	PROCESS_TYPE_MANAGESIEVE,
+ 
+ 	PROCESS_TYPE_MAX
+ };
+diff --git a/src/master/listener.c b/src/master/listener.c
+index 37d17af..749f808 100644
+--- a/src/master/listener.c
++++ b/src/master/listener.c
+@@ -130,6 +130,10 @@ static void check_conflicts(const struct ip_addr *ip, unsigned int port,
+ 			check_conflicts_set(server->pop3, ip, port,
+ 					    "pop3", proto);
+ 		}
++		 if (server->managesieve != NULL) {
++            check_conflicts_set(server->managesieve, ip, port,
++                        "managesieve", proto);
++        }
+ 	}
+ }
+ 
+@@ -230,13 +234,29 @@ static void listen_parse_and_close_unneeded(struct settings *set)
+ 			if (set->protocol == MAIL_PROTOCOL_POP3 &&
+ 			    strcmp(set->ssl, "no") != 0)
+ 				ssl_listen = TRUE;
++		} else if (strcasecmp(*proto, "managesieve") == 0) {
++			if (set->protocol == MAIL_PROTOCOL_MANAGESIEVE)
++				nonssl_listen = TRUE;
+ 		}
+ 	}
+ 
+ 	if (!nonssl_listen)
+ 		listener_close_fds(&set->listens);
+ 	else {
+-		default_port = set->protocol == MAIL_PROTOCOL_IMAP ? 143 : 110;
++		switch (set->protocol) {
++		case MAIL_PROTOCOL_IMAP:
++			default_port = 143;
++			break;
++		case MAIL_PROTOCOL_POP3:
++			default_port = 110;
++			break;
++		case MAIL_PROTOCOL_MANAGESIEVE:
++			default_port = 2000;
++			break;
++		default:
++			i_unreached();
++		}
++
+ 		listener_init("listen", set->listen, default_port,
+ 			      &set->listens);
+ 	}
+@@ -336,9 +356,11 @@ void listeners_open_fds(struct server_settings *old_set, bool retry)
+ 		if (old_set != NULL) {
+ 			listen_copy_old(old_set->imap, server->imap);
+ 			listen_copy_old(old_set->pop3, server->pop3);
++			listen_copy_old(old_set->managesieve, server->managesieve);
+ 		}
+ 		listen_parse_and_close_unneeded(server->imap);
+ 		listen_parse_and_close_unneeded(server->pop3);
++		listen_parse_and_close_unneeded(server->managesieve);
+ 
+ 		if (old_set != NULL)
+ 			old_set = old_set->next;
+@@ -349,6 +371,8 @@ void listeners_open_fds(struct server_settings *old_set, bool retry)
+ 			listener_listen_missing(server->imap, "imap", retry);
+ 		if (server->pop3 != NULL)
+ 			listener_listen_missing(server->pop3, "pop3", retry);
++		if (server->managesieve != NULL)
++			listener_listen_missing(server->managesieve, "managesieve", retry);
+ 	}
+ }
+ 
+@@ -365,5 +389,8 @@ void listeners_close_fds(void)
+ 			listener_close_fds(&server->pop3->listens);
+ 			listener_close_fds(&server->pop3->ssl_listens);
+ 		}
++		if (server->managesieve != NULL) {
++			listener_close_fds(&server->managesieve->listens);
++		}
+ 	}
+ }
+diff --git a/src/master/login-process.c b/src/master/login-process.c
+index ae82f36..b5a0fb1 100644
+--- a/src/master/login-process.c
++++ b/src/master/login-process.c
+@@ -72,8 +72,20 @@ static void login_group_create(struct settings *set)
+ 	group = i_new(struct login_group, 1);
+ 	group->refcount = 1;
+ 	group->set = set;
+-	group->mail_process_type = set->protocol == MAIL_PROTOCOL_IMAP ?
+-		PROCESS_TYPE_IMAP : PROCESS_TYPE_POP3;
++
++	switch ( set->protocol ) {
++	case MAIL_PROTOCOL_IMAP:
++		group->mail_process_type = PROCESS_TYPE_IMAP;
++		break;
++	case MAIL_PROTOCOL_POP3:
++		group->mail_process_type = PROCESS_TYPE_POP3;
++		break;
++	case MAIL_PROTOCOL_MANAGESIEVE:
++		group->mail_process_type = PROCESS_TYPE_MANAGESIEVE;
++		break;
++	default:
++		i_unreached();
++	}
+ 
+ 	group->next = login_groups;
+ 	login_groups = group;
+@@ -224,6 +236,8 @@ static void login_process_groups_create(void)
+ 			login_group_create(server->imap);
+ 		if (server->pop3 != NULL)
+ 			login_group_create(server->pop3);
++		if (server->managesieve != NULL)
++			login_group_create(server->managesieve);
+ 	}
+ }
+ 
+@@ -285,6 +299,8 @@ static bool login_process_read_group(struct login_process *p)
+ 			protocol = MAIL_PROTOCOL_IMAP;
+ 		else if (strcmp(proto, "pop3") == 0)
+ 			protocol = MAIL_PROTOCOL_POP3;
++		else if (strcmp(proto, "managesieve") == 0)
++			protocol = MAIL_PROTOCOL_MANAGESIEVE;
+ 		else {
+ 			i_error("login: Unknown protocol '%s'", proto);
+ 			return FALSE;
+@@ -621,7 +637,13 @@ static void login_process_init_env(struct login_group *group, pid_t pid)
+ 				    set->imap_generated_capability, NULL));
+ 		if (*set->imap_capability != '\0')
+ 			env_put("CAPABILITY_STRING_OVERRIDDEN=1");
++	} else if (group->mail_process_type == PROCESS_TYPE_MANAGESIEVE) {
++		env_put(t_strconcat("CAPABILITY_STRING=",
++			set->managesieve_generated_capability, NULL));
++		env_put(t_strconcat("MANAGESIEVE_IMPLEMENTATION_STRING=",
++			set->managesieve_implementation_string, NULL));
+ 	}
++
+ 	if (*set->login_trusted_networks != '\0') {
+ 		env_put(t_strconcat("TRUSTED_NETWORKS=",
+ 				    set->login_trusted_networks, NULL));
+diff --git a/src/master/mail-process.c b/src/master/mail-process.c
+index 5cde8f0..fb66809 100644
+--- a/src/master/mail-process.c
++++ b/src/master/mail-process.c
+@@ -373,6 +373,15 @@ mail_process_set_environment(struct settings *set, const char *mail,
+ 	/* We care about POP3 UIDL format in all process types */
+ 	env_put(t_strconcat("POP3_UIDL_FORMAT=", set->pop3_uidl_format, NULL));
+ 
++	if (set->protocol == MAIL_PROTOCOL_MANAGESIEVE) {
++		env_put(t_strdup_printf("MANAGESIEVE_MAX_LINE_LENGTH=%u",
++				    set->managesieve_max_line_length));
++		env_put(t_strconcat("MANAGESIEVE_LOGOUT_FORMAT=",
++				    set->managesieve_logout_format, NULL));
++		env_put(t_strconcat("MANAGESIEVE_IMPLEMENTATION_STRING=",
++        		    set->managesieve_implementation_string, NULL));
++	}
++
+ 	if (set->mail_save_crlf)
+ 		env_put("MAIL_SAVE_CRLF=1");
+ 	if (set->mmap_disable)
+@@ -500,6 +509,8 @@ void mail_process_exec(const char *protocol, const char **args)
+ 			set = server->imap;
+ 		else if (strcmp(protocol, "pop3") == 0)
+ 			set = server->pop3;
++		else if (strcmp(protocol, "managesieve") == 0)
++			set = server->managesieve;
+ 		else
+ 			i_fatal("Unknown protocol: '%s'", protocol);
+ 		executable = set->mail_executable;
+@@ -597,7 +608,8 @@ create_mail_process(enum process_type process_type, struct settings *set,
+ 	bool home_given, nfs_check;
+ 
+ 	i_assert(process_type == PROCESS_TYPE_IMAP ||
+-		 process_type == PROCESS_TYPE_POP3);
++		process_type == PROCESS_TYPE_POP3 ||
++		process_type == PROCESS_TYPE_MANAGESIEVE );
+ 
+ 	if (mail_process_count == set->max_mail_processes) {
+ 		i_error("Maximum number of mail processes exceeded "
+@@ -986,6 +998,8 @@ void mail_processes_init(void)
+ 					   mail_process_destroyed);
+ 	child_process_set_destroy_callback(PROCESS_TYPE_POP3,
+ 					   mail_process_destroyed);
++	child_process_set_destroy_callback(PROCESS_TYPE_MANAGESIEVE,
++					   mail_process_destroyed);
+ }
+ 
+ void mail_processes_deinit(void)
+diff --git a/src/master/main.c b/src/master/main.c
+index 4fd8ed6..c1937d8 100644
+--- a/src/master/main.c
++++ b/src/master/main.c
+@@ -247,6 +247,8 @@ static bool have_stderr(struct server_settings *server)
+ 			return TRUE;
+ 		if (server->pop3 != NULL && have_stderr_set(server->pop3))
+ 			return TRUE;
++		if (server->managesieve != NULL && have_stderr_set(server->managesieve))
++			return TRUE;
+ 
+ 		server = server->next;
+ 	}
+diff --git a/src/master/master-settings-defs.c b/src/master/master-settings-defs.c
+index 823fc21..e40b4a0 100644
+--- a/src/master/master-settings-defs.c
++++ b/src/master/master-settings-defs.c
+@@ -131,5 +131,10 @@ static struct setting_def setting_defs[] = {
+ 	DEF_STR(dict_db_config),
+ 	DEF_INT(dict_process_count),
+ 
++  	/* managesieve */
++  	DEF_INT(managesieve_max_line_length),
++	DEF_STR(managesieve_logout_format),
++  	DEF_STR(managesieve_implementation_string),
++
+ 	{ 0, NULL, 0 }
+ };
+diff --git a/src/master/master-settings.c b/src/master/master-settings.c
+index 74883dc..2ab2199 100644
+--- a/src/master/master-settings.c
++++ b/src/master/master-settings.c
+@@ -297,6 +297,11 @@ struct settings default_settings = {
+ 	MEMBER(dict_db_config) NULL,
+ 	MEMBER(dict_process_count) 1,
+ 
++	/* managesieve */
++	MEMBER(managesieve_max_line_length) 65536,
++	MEMBER(managesieve_logout_format) "bytes=%i/%o",
++	MEMBER(managesieve_implementation_string) PACKAGE,
++
+ 	/* .. */
+ };
+ 
+@@ -477,6 +482,8 @@ static bool auth_settings_verify(struct auth_settings *auth)
+ 			auth->parent->pop3->ssl_verify_client_cert = TRUE;
+ 		if (auth->parent->imap != NULL)
+ 			auth->parent->imap->ssl_verify_client_cert = TRUE;
++		if (auth->parent->managesieve != NULL)
++			auth->parent->managesieve->ssl_verify_client_cert = TRUE;
+ 	}
+ 
+ 	for (s = auth->sockets; s != NULL; s = s->next) {
+@@ -556,12 +563,21 @@ static bool settings_is_active(struct settings *set)
+ 		return TRUE;
+ 	}
+ 
+-	if (set->protocol == MAIL_PROTOCOL_IMAP) {
++	switch ( set->protocol ) {
++	case MAIL_PROTOCOL_IMAP:
+ 		if (strstr(set->protocols, "imap") == NULL)
+ 			return FALSE;
+-	} else {
++		break;
++	case MAIL_PROTOCOL_POP3:
+ 		if (strstr(set->protocols, "pop3") == NULL)
+ 			return FALSE;
++		break;
++	case MAIL_PROTOCOL_MANAGESIEVE:
++		if (strstr(set->protocols, "managesieve") == NULL)
++			return FALSE;
++		break;
++	default:
++		i_unreached();
+ 	}
+ 
+ 	return TRUE;
+@@ -656,7 +672,6 @@ static void unlink_auth_sockets(const char *path, const char *prefix)
+ 	(void)closedir(dirp);
+ }
+ 
+-#ifdef HAVE_MODULES
+ static const char *
+ get_process_capability(enum process_type ptype, struct settings *set)
+ {
+@@ -757,6 +772,7 @@ get_process_capability(enum process_type ptype, struct settings *set)
+ 	return i_strdup(buf);
+ }
+ 
++#ifdef HAVE_MODULES
+ static bool get_imap_capability(struct settings *set)
+ {
+ 	static const char *generated_capability = NULL;
+@@ -781,6 +797,26 @@ static bool get_imap_capability(struct settings *set)
+ }
+ #endif
+ 
++static bool get_managesieve_capability(struct settings *set)
++{
++	static const char *generated_capability = NULL;
++
++	if (generated_capability != NULL) {
++		/* See get_imap_capability above.. */
++		set->managesieve_generated_capability =
++			p_strdup(settings_pool, generated_capability);
++		return TRUE;
++	}
++
++	generated_capability = get_process_capability(PROCESS_TYPE_MANAGESIEVE, set);
++	if (generated_capability == NULL)
++		return FALSE;
++
++	set->managesieve_generated_capability =
++		p_strdup(settings_pool, generated_capability);
++	return TRUE;
++}
++
+ static bool settings_verify(struct settings *set)
+ {
+ 	const char *dir;
+@@ -966,6 +1002,11 @@ static bool login_want_core_dumps(struct settings *set)
+ 		strstr(set->server->imap->login_executable, " -D");
+ 	if (p != NULL && p[3] == '\0')
+ 		return TRUE;
++	p = set->server->managesieve == NULL ? NULL :
++		strstr(set->server->managesieve->login_executable, " -D");
++	if (p != NULL && p[3] == '\0')
++		return TRUE;
++
+ 	return FALSE;
+ }
+ 
+@@ -1025,6 +1066,10 @@ static bool settings_do_fixes(struct settings *set)
+ 			return FALSE;
+ 	}
+ #endif
++	if ( set->protocol == MAIL_PROTOCOL_MANAGESIEVE ) {
++		if (!get_managesieve_capability(set))
++			return FALSE;
++	}
+ 	return TRUE;
+ }
+ 
+@@ -1260,6 +1305,15 @@ static const char *parse_setting(const char *key, const char *value,
+ 			array_append(&ctx->server->lda_settings, &value, 1);
+ 		}
+ 
++		if (error == NULL &&
++		    (ctx->protocol == MAIL_PROTOCOL_ANY ||
++		     ctx->protocol == MAIL_PROTOCOL_MANAGESIEVE)) {
++			error = parse_setting_from_defs(settings_pool,
++							setting_defs,
++							ctx->server->managesieve,
++							key, value);
++		}
++
+ 		if (error == NULL)
+ 			return NULL;
+ 
+@@ -1318,6 +1372,13 @@ static const char *parse_setting(const char *key, const char *value,
+ 			array_append(&ctx->server->pop3->plugin_envs,
+ 				     &value, 1);
+ 		}
++		if (ctx->protocol == MAIL_PROTOCOL_ANY ||
++		    ctx->protocol == MAIL_PROTOCOL_MANAGESIEVE) {
++			array_append(&ctx->server->managesieve->plugin_envs, &key, 1);
++			array_append(&ctx->server->managesieve->plugin_envs,
++				     &value, 1);
++		}
++
+ 		return NULL;
+ 	}
+ 
+@@ -1327,7 +1388,8 @@ static const char *parse_setting(const char *key, const char *value,
+ static struct server_settings *
+ create_new_server(const char *name,
+ 		  struct settings *imap_defaults,
+-		  struct settings *pop3_defaults)
++		  struct settings *pop3_defaults,
++		  struct settings *managesieve_defaults)
+ {
+ 	struct server_settings *server;
+ 
+@@ -1335,15 +1397,18 @@ create_new_server(const char *name,
+ 	server->name = p_strdup(settings_pool, name);
+ 	server->imap = p_new(settings_pool, struct settings, 1);
+ 	server->pop3 = p_new(settings_pool, struct settings, 1);
++	server->managesieve = p_new(settings_pool, struct settings, 1);
+ 	server->auth_defaults = default_auth_settings;
+ 
+ 	*server->imap = *imap_defaults;
+ 	*server->pop3 = *pop3_defaults;
++	*server->managesieve = *managesieve_defaults;
+ 
+ 	p_array_init(&server->dicts, settings_pool, 4);
+ 	p_array_init(&server->lda_settings, settings_pool, 12);
+ 	p_array_init(&server->imap->plugin_envs, settings_pool, 8);
+ 	p_array_init(&server->pop3->plugin_envs, settings_pool, 8);
++	p_array_init(&server->managesieve->plugin_envs, settings_pool, 8);
+ 
+ 	server->imap->server = server;
+ 	server->imap->protocol = MAIL_PROTOCOL_IMAP;
+@@ -1357,6 +1422,12 @@ create_new_server(const char *name,
+ 	server->pop3->mail_executable = PKG_LIBEXECDIR"/pop3";
+ 	server->pop3->mail_plugin_dir = MODULEDIR"/pop3";
+ 
++	server->managesieve->server = server;
++	server->managesieve->protocol = MAIL_PROTOCOL_MANAGESIEVE;
++	server->managesieve->login_executable = PKG_LIBEXECDIR"/managesieve-login";
++	server->managesieve->mail_executable = PKG_LIBEXECDIR"/managesieve";
++	server->managesieve->mail_plugin_dir = MODULEDIR"/managesieve";
++
+ 	return server;
+ }
+ 
+@@ -1399,8 +1470,8 @@ static bool parse_section(const char *type, const char *name,
+ 
+ 		ctx->type = SETTINGS_TYPE_SERVER;
+ 		ctx->server = create_new_server(name, ctx->server->imap,
+-						ctx->server->pop3);
+-                server = ctx->root;
++						ctx->server->pop3, ctx->server->managesieve);
++		server = ctx->root;
+ 		while (server->next != NULL)
+ 			server = server->next;
+ 		server->next = ctx->server;
+@@ -1421,6 +1492,8 @@ static bool parse_section(const char *type, const char *name,
+ 			ctx->protocol = MAIL_PROTOCOL_POP3;
+ 		else if (strcmp(name, "lda") == 0)
+ 			ctx->protocol = MAIL_PROTOCOL_LDA;
++		else if (strcmp(name, "managesieve") == 0)
++			ctx->protocol = MAIL_PROTOCOL_MANAGESIEVE;
+ 		else {
+ 			*errormsg = "Unknown protocol name";
+ 			return FALSE;
+@@ -1532,6 +1605,8 @@ settings_warn_needed_fds(struct server_settings *server ATTR_UNUSED)
+ 			fd_count += server->imap->login_max_processes_count;
+ 		if (server->pop3 != NULL)
+ 			fd_count += server->pop3->login_max_processes_count;
++		if (server->managesieve != NULL)
++			fd_count += server->managesieve->login_max_processes_count;
+ 		fd_count += server->defaults->max_mail_processes;
+ 	}
+ 
+@@ -1584,7 +1659,7 @@ bool master_settings_read(const char *path, bool nochecks, bool nofixes,
+ 	ctx.protocol = MAIL_PROTOCOL_ANY;
+ 	ctx.server = ctx.root =
+ 		create_new_server("default",
+-				  &default_settings, &default_settings);
++				  &default_settings, &default_settings, &default_settings);
+ 	ctx.auth = &ctx.server->auth_defaults;
+ 
+ 	ret = settings_read(path, NULL, parse_setting, parse_section, &ctx);
+@@ -1604,7 +1679,8 @@ bool master_settings_read(const char *path, bool nochecks, bool nofixes,
+ 
+ 	if (!nochecks && !nofixes) {
+ 		def = settings_is_active(ctx.root->imap) ?
+-			ctx.root->imap : ctx.root->pop3;
++			ctx.root->imap : ( settings_is_active(ctx.root->pop3) ?
++				ctx.root->pop3 : ctx.root->managesieve );
+ 
+ 		path = t_strconcat(def->base_dir, "/master.pid", NULL);
+ 		pid_file_check_running(path);
+@@ -1613,7 +1689,8 @@ bool master_settings_read(const char *path, bool nochecks, bool nofixes,
+ 	prev = NULL;
+ 	for (server = ctx.root; server != NULL; server = server->next) {
+ 		if ((*server->imap->protocols == '\0' ||
+-		     *server->pop3->protocols == '\0') && !nochecks) {
++		     *server->pop3->protocols == '\0' ||
++		     *server->managesieve->protocols == '\0') && !nochecks) {
+ 			i_error("protocols: No protocols given "
+ 				"in configuration file");
+ 			return FALSE;
+@@ -1644,6 +1721,15 @@ bool master_settings_read(const char *path, bool nochecks, bool nofixes,
+ 				server->defaults = server->pop3;
+ 		}
+ 
++		if (!settings_is_active(server->managesieve) && !nochecks)
++			server->managesieve = NULL;
++		else {
++			if (!settings_fix(server->managesieve, nochecks, nofixes))
++				return FALSE;
++			if (server->defaults == NULL)
++				server->defaults = server->managesieve;
++		}
++
+ 		if (server->defaults == NULL) {
+ 			if (prev == NULL)
+ 				ctx.root = server->next;
+@@ -1877,8 +1963,8 @@ static void lda_settings_dump(const struct server_settings *set)
+ 
+ void master_settings_dump(struct server_settings *set, bool nondefaults)
+ {
+-	const void *sets[4];
+-	const char *set_names[4];
++	const void *sets[5];
++	const char *set_names[5];
+ 	unsigned int count;
+ 
+ 	sets[0] = &default_settings;
+@@ -1898,6 +1984,11 @@ void master_settings_dump(struct server_settings *set, bool nondefaults)
+ 		set_names[count] = "pop3";
+ 		count++;
+ 	}
++	if (set->managesieve != NULL) {
++		sets[count] = set->managesieve;
++		set_names[count] = "managesieve";
++		count++;
++	}
+ 	settings_dump(setting_defs, sets, set_names, count, nondefaults, 0);
+ 	namespace_settings_dump(set->namespaces, nondefaults);
+ 	lda_settings_dump(set);
+diff --git a/src/master/master-settings.h b/src/master/master-settings.h
+index d5fd10c..12cd124 100644
+--- a/src/master/master-settings.h
++++ b/src/master/master-settings.h
+@@ -4,10 +4,11 @@
+ #include "network.h"
+ 
+ enum mail_protocol {
+-        MAIL_PROTOCOL_ANY,
+-        MAIL_PROTOCOL_IMAP,
++	MAIL_PROTOCOL_ANY,
++	MAIL_PROTOCOL_IMAP,
+ 	MAIL_PROTOCOL_POP3,
+-	MAIL_PROTOCOL_LDA
++	MAIL_PROTOCOL_LDA,
++	MAIL_PROTOCOL_MANAGESIEVE
+ };
+ 
+ struct listener {
+@@ -143,6 +144,11 @@ struct settings {
+ 	const char *dict_db_config;
+ 	unsigned int dict_process_count;
+ 
++	/* managesieve */
++	unsigned int managesieve_max_line_length;
++	const char *managesieve_logout_format;
++	const char *managesieve_implementation_string;
++
+ 	/* .. */
+ 	ARRAY_TYPE(listener) listens;
+ 	ARRAY_TYPE(listener) ssl_listens;
+@@ -151,6 +157,7 @@ struct settings {
+ 	gid_t mail_gid_t, mail_priv_gid_t;
+ 
+ 	const char *imap_generated_capability;
++	const char *managesieve_generated_capability;
+ 
+ 	ARRAY_DEFINE(plugin_envs, const char *);
+ };
+@@ -256,9 +263,10 @@ struct server_settings {
+ 	struct settings *defaults;
+ 	struct settings *imap;
+ 	struct settings *pop3;
++	struct settings *managesieve;
+ 	struct auth_settings *auths;
+ 	struct auth_settings auth_defaults;
+-        struct namespace_settings *namespaces;
++	struct namespace_settings *namespaces;
+ 
+ 	ARRAY_DEFINE(lda_settings, const char *);
+ 	ARRAY_DEFINE(dicts, const char *);
+-- 

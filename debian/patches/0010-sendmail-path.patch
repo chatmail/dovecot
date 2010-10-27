@@ -1,0 +1,79 @@
+From: Jaldhar H. Vyas <jaldhar@debian.org>
+Date: Wed, 27 Oct 2010 09:07:26 +0200
+Subject: [PATCH] sendmail-path
+
+Description: Changes instances of /usr/lib/sendmail to /usr/sbin/sendmail
+Last-Updated: 2010-10-08
+---
+ doc/wiki/LDA.txt                   |    1 -
+ dovecot-example.conf               |    2 +-
+ sieve/src/sieve-tools/sieve-test.c |    2 +-
+ sieve/src/testsuite/testsuite.c    |    2 +-
+ src/deliver/deliver.c              |    2 +-
+ 5 files changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/doc/wiki/LDA.txt b/doc/wiki/LDA.txt
+index 01503e7..3ada1dc 100644
+--- a/doc/wiki/LDA.txt
++++ b/doc/wiki/LDA.txt
+@@ -35,7 +35,6 @@ important settings are:
+  * 'hostname' is used in generated Message-IDs and in Reporting-UA: header in
+    bounce mails
+  * 'sendmail_path' is used to send mails. Note that the default is
+-   '/usr/lib/sendmail', which doesn't necessarily work the same as
+    '/usr/sbin/sendmail'.
+  * 'auth_socket_path' specifies the UNIX socket to dovecot-auth where deliver
+    can lookup userdb information when '-d' parameter is used. See below how to
+diff --git a/dovecot-example.conf b/dovecot-example.conf
+index 54651ed..dd289df 100644
+--- a/dovecot-example.conf
++++ b/dovecot-example.conf
+@@ -774,7 +774,7 @@ protocol managesieve {
+   #deliver_log_format = msgid=%m: %$
+ 
+   # Binary to use for sending mails.
+-  #sendmail_path = /usr/lib/sendmail
++  #sendmail_path = /usr/sbin/sendmail
+ 
+   # Subject: header to use for rejection mails. You can use the same variables
+   # as for rejection_reason below.
+diff --git a/sieve/src/sieve-tools/sieve-test.c b/sieve/src/sieve-tools/sieve-test.c
+index 2058330..79ca5c7 100644
+--- a/sieve/src/sieve-tools/sieve-test.c
++++ b/sieve/src/sieve-tools/sieve-test.c
+@@ -28,7 +28,7 @@
+  * Configuration
+  */
+ 
+-#define DEFAULT_SENDMAIL_PATH "/usr/lib/sendmail"
++#define DEFAULT_SENDMAIL_PATH "/usr/sbin/sendmail"
+ #define DEFAULT_ENVELOPE_SENDER "MAILER-DAEMON"
+ 
+ /*
+diff --git a/sieve/src/testsuite/testsuite.c b/sieve/src/testsuite/testsuite.c
+index 8e8827a..e2ec402 100644
+--- a/sieve/src/testsuite/testsuite.c
++++ b/sieve/src/testsuite/testsuite.c
+@@ -40,7 +40,7 @@ const struct sieve_script_env *testsuite_scriptenv;
+  * Configuration
+  */
+ 
+-#define DEFAULT_SENDMAIL_PATH "/usr/lib/sendmail"
++#define DEFAULT_SENDMAIL_PATH "/usr/sbin/sendmail"
+ #define DEFAULT_ENVELOPE_SENDER "MAILER-DAEMON"
+ 
+ /*
+diff --git a/src/deliver/deliver.c b/src/deliver/deliver.c
+index b8230c0..af16042 100644
+--- a/src/deliver/deliver.c
++++ b/src/deliver/deliver.c
+@@ -46,7 +46,7 @@
+ #include <syslog.h>
+ 
+ #define DEFAULT_CONFIG_FILE SYSCONFDIR"/dovecot.conf"
+-#define DEFAULT_SENDMAIL_PATH "/usr/lib/sendmail"
++#define DEFAULT_SENDMAIL_PATH "/usr/sbin/sendmail"
+ #define DEFAULT_ENVELOPE_SENDER "MAILER-DAEMON"
+ 
+ /* After buffer grows larger than this, create a temporary file to /tmp
+-- 

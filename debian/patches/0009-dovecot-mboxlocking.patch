@@ -1,0 +1,61 @@
+From: Joel Johnson <mrjoel@lixil.net>
+Date: Wed, 27 Oct 2010 09:07:26 +0200
+Subject: [PATCH] dovecot-mboxlocking
+
+Description: Change default Debian value in accordance with Debian Policy
+---
+ dovecot-example.conf         |    8 +++++++-
+ src/master/master-settings.c |   12 ++++++++++--
+ 2 files changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/dovecot-example.conf b/dovecot-example.conf
+index 0ae066b..54651ed 100644
+--- a/dovecot-example.conf
++++ b/dovecot-example.conf
+@@ -488,8 +488,14 @@ mail_privileged_group = mail
+ # in is important to avoid deadlocks if other MTAs/MUAs are using multiple
+ # locking methods as well. Some operating systems don't allow using some of
+ # them simultaneously.
++#
++# The Debian value for mbox_write_locks differs from upstream Dovecot. It is
++# changed to be compliant with Debian Policy (section 11.6) for NFS safety.
++#       Dovecot: mbox_write_locks = dotlock fcntl
++#       Debian:  mbox_write_locks = fcntl dotlock
++#
+ #mbox_read_locks = fcntl
+-#mbox_write_locks = dotlock fcntl
++#mbox_write_locks = fcntl dotlock
+ 
+ # Maximum time in seconds to wait for lock (all of them) before aborting.
+ #mbox_lock_timeout = 300
+diff --git a/src/master/master-settings.c b/src/master/master-settings.c
+index 3d818bf..ba2ab19 100644
+--- a/src/master/master-settings.c
++++ b/src/master/master-settings.c
+@@ -255,7 +255,7 @@ struct settings default_settings = {
+ 	MEMBER(maildir_copy_preserve_filename) FALSE,
+ 	MEMBER(maildir_very_dirty_syncs) FALSE,
+ 	MEMBER(mbox_read_locks) "fcntl",
+-	MEMBER(mbox_write_locks) "dotlock fcntl",
++	MEMBER(mbox_write_locks) "fcntl dotlock",
+ 	MEMBER(mbox_lock_timeout) 300,
+ 	MEMBER(mbox_dotlock_change_timeout) 120,
+ 	MEMBER(mbox_min_index_size) 0,
+@@ -1969,7 +1969,15 @@ void master_settings_dump(struct server_settings *set, bool nondefaults)
+ 	const char *set_names[5];
+ 	unsigned int count;
+ 
+-	sets[0] = &default_settings;
++	/* Debian change - the Debian default for mbox_write_lock differs from
++		upstream Dovecot, however we still want 'dovecot -n' to report
++		based on Dovecot defaults to make it clear that the setting is
++		different, so we make a copy of the default_settings and force
++		it to report based on strict Dovecot defaults
++	*/
++	struct settings dovecot_default_settings = default_settings;
++	dovecot_default_settings.mbox_write_locks = "dotlock fcntl";
++	sets[0] = &dovecot_default_settings;
+ 	sets[1] = set->defaults;
+ 
+ 	set_names[0] = NULL;
+-- 
