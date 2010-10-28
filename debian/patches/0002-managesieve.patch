@@ -93,7 +93,8 @@ Last-Update: 2010-10-27
  managesieve/src/managesieve/main.c                 |  371 +
  managesieve/src/managesieve/managesieve-quota.c    |   70 +
  managesieve/src/managesieve/managesieve-quota.h    |   12 +
- 87 files changed, 50761 insertions(+), 0 deletions(-)
+ managesieve/stamp.h.in                             |    1 +
+ 88 files changed, 50762 insertions(+), 0 deletions(-)
  create mode 100644 managesieve/AUTHORS
  create mode 100644 managesieve/COPYING
  create mode 100644 managesieve/COPYING.LGPL
@@ -51468,5 +51469,9 @@ index 0000000..a21e919
 +#endif /* __MANAGESIEVE_QUOTA_H */
 diff --git a/managesieve/stamp.h.in b/managesieve/stamp.h.in
 new file mode 100644
-index 0000000..e69de29
+index 0000000..8b13789
+--- /dev/null
++++ b/managesieve/stamp.h.in
+@@ -0,0 +1 @@
++
 -- 
