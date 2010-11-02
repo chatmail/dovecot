@@ -38,8 +38,11 @@ if [ "$1" = "configure" ]; then
     echo "(replace with hand-crafted or authorized one if needed)."
     cd /etc/ssl/certs
     PATH=$PATH:/usr/bin/ssl
-    FQDN=`hostname -f`
-    MAILNAME=`cat /etc/mailname 2> /dev/null || hostname -f`
+    if ! FQDN="$(hostname -f)"; then
+        FQDN="$(hostname)"
+        echo WARNING: Could not get FQDN, using \"$FQDN\".
+    fi
+    MAILNAME="$(cat /etc/mailname 2> /dev/null || echo "$FQDN")"
     (openssl req -new -x509 -days 3652.5 -nodes -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
 .
 .
