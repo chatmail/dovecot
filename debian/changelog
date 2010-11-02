@@ -1,3 +1,15 @@
+dovecot (1:1.2.15-3) unstable; urgency=low
+
+  * [096c373] Fix file overwrite error when upgrading from lenny
+    (Closes: #601980)
+  * [37b3220] Add --no-create-home to adduser invocation in dovecot-
+    common.postinst script (Closes: #601767)
+  * [b00b527] Fall back to `hostname` if `hostname -f` invocation fails
+    (Closes: #562780)
+  * [9102fec] Make self-generated certificates key length 2048 bits.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 02 Nov 2010 11:12:53 +0100
+
 dovecot (1:1.2.15-2) unstable; urgency=low
 
   * [a0744a5] Switch vcs fields to git
