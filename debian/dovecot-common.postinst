@@ -43,7 +43,8 @@ if [ "$1" = "configure" ]; then
         echo WARNING: Could not get FQDN, using \"$FQDN\".
     fi
     MAILNAME="$(cat /etc/mailname 2> /dev/null || echo "$FQDN")"
-    (openssl req -new -x509 -days 3652.5 -nodes -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
+    (openssl req -newkey rsa:2048  -x509 -days 3652.5 -nodes \
+	-rand /dev/urandom -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
 .
 .
 .
