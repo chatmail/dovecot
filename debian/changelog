@@ -1,30 +1,35 @@
 dovecot (1:2.0.6-1) UNRELEASED; urgency=low
 
-  * New upstream major release (Closes: #597476)
-  * Switch vcs fields to git
-  * Add debian/gbp.conf to make easy the usage of git-buildpackage
-  * Warn that the generated SSL certificate will expire in 10 years
-    instead of 365 days, as it's the lifetime of of self-generated
-    certificates since 1:1.2.13-1
-  * Updated copyright and package descriptions. Thanks Stephan Bosch.
-  * Switch to gbp-pq patch management. Drop all patches but drac
-    support. Update pigeonhole to release 0.2.1
-  * Update debian/rules to work with dovecot 2.0. Thanks Stephan Bosch.
-  * Update debian/dovecot-common.{postinst,postrm} to handle the new
-    config file layout and the new dovenull user. Thanks Stephan Bosch.
-  * Remove debian/dovecot.1 manpage because is provided by upstream.
-  * Remove debian/dovecotpw.1 manpage as there is no dovecotpw
-    executable in dovecot 2.0. Same feature is provided through 'doveadm
-    pw' command.
-  * Remove expire-tool.sh wrapper as there is no expire-tool in dovecot
-    2.0. Same feature is provided through 'doveadm expunge' command.
-  * Remove daily cron script and the related configuration from the
-    default file.
-  * Update debian/dovecot-common.NEWS.Debian with upgrading instructions
-  * Call dh_makeshlibs with --no-script option to avoid
-    {postinst,postrm}-has-useless-call-to-ldconfig lintian errors.
+  * UNRELEASED
 
  -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 19:17:17 +0200
+
+dovecot (1:1.2.15-3) unstable; urgency=low
+
+  * [096c373] Fix file overwrite error when upgrading from lenny
+    (Closes: #601980)
+  * [37b3220] Add --no-create-home to adduser invocation in dovecot-
+    common.postinst script (Closes: #601767)
+  * [b00b527] Fall back to `hostname` if `hostname -f` invocation fails
+    (Closes: #562780)
+  * [9102fec] Make self-generated certificates key length 2048 bits.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 02 Nov 2010 11:12:53 +0100
+
+dovecot (1:1.2.15-2) unstable; urgency=low
+
+  * [a0744a5] Switch vcs fields to git
+  * [d8a1bd4] Add debian/gbp.conf to make easy the usage of git-
+    buildpackage
+  * [c0dc21f] Warn that the generated SSL certificate will expire in 10
+    years instead of 365 days, as it's the lifetime of of self-generated
+    certificates since 1:1.2.13-1
+  * [6472d63] Switch to gbp-pq patch management.
+  * [bf2fc17] Upgraded sieve plugin to version 0.1.18
+  * [6b9809d] Upgraded managesieve plugin to version 0.11.12
+  * [d67cd17] Upgraded dovecot-managesieve.patch to version 0.11.12
+
+ -- Marco Nenciarini <mnencia@debian.org>  Thu, 28 Oct 2010 22:50:19 +0200
 
 dovecot (1:1.2.15-1) unstable; urgency=high
 

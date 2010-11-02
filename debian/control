@@ -28,6 +28,8 @@ Description: secure mail server that supports mbox, maildir, dbox and mdbox mail
 Package: dovecot-dev
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Replaces: dovecot-common (<< 1.1.11-1)
+Breaks: dovecot-common (<< 1.1.11-1)
 Description: header files for the dovecot mail server
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that

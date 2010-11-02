@@ -51,7 +51,7 @@ if [ "$1" = "configure" ]; then
 
   if [ -z "`id -u dovecot 2> /dev/null`" ]; then
     adduser --system --group --home /usr/lib/dovecot --gecos "Dovecot mail server" \
-            --disabled-password --quiet dovecot || true
+            --no-create-home --disabled-password --quiet dovecot || true
   fi
 
   if [ -z "`id -u dovenull 2> /dev/null`" ]; then
@@ -73,9 +73,13 @@ if [ "$1" = "configure" ]; then
     echo "(replace with hand-crafted or authorized one if needed)."
     cd /etc/ssl/certs
     PATH=$PATH:/usr/bin/ssl
-    FQDN=`hostname -f`
-    MAILNAME=`cat /etc/mailname 2> /dev/null || hostname -f`
-    (openssl req -new -x509 -days 3652.5 -nodes -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
+    if ! FQDN="$(hostname -f)"; then
+        FQDN="$(hostname)"
+        echo WARNING: Could not get FQDN, using \"$FQDN\".
+    fi
+    MAILNAME="$(cat /etc/mailname 2> /dev/null || echo "$FQDN")"
+    (openssl req -newkey rsa:2048  -x509 -days 3652.5 -nodes \
+	-rand /dev/urandom -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
 .
 .
 .
