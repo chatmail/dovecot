@@ -1,8 +1,34 @@
-dovecot (1:2.0.6-1) UNRELEASED; urgency=low
+dovecot (1:2.0.6-1~1.gbp6897f6) UNRELEASED; urgency=low
 
-  * UNRELEASED
+  ** SNAPSHOT build @6897f6b6048dc15ea59cb945a77e9c14cf5b2585 **
 
- -- Marco Nenciarini <mnencia@debian.org>  Tue, 26 Oct 2010 19:17:17 +0200
+  * [7c15295] Create {debian,upstream}-2.0 branches for dovecot 2.0.x
+    packaging
+  * [a4764a4] New upstream major release (Closes: #597476)
+  * [461f667] Updated copyright and package descriptions. Thanks Stephan
+    Bosch.
+  * [7fbd92a] Drop all patches but drac support. Update pigeonhole to
+    release 0.2.1
+  * [05a5a1e] Update debian/rules to work with dovecot 2.0. Thanks
+    Stephan Bosch.
+  * [a36193e] Update debian/dovecot-common.{postinst,postrm} to handle
+    the new config file layout. Thanks Stephan Bosch.
+  * [3589afd] Remove debian/dovecot.1 manpage because is provided by
+    upstream.
+  * [f1703e1] Remove debian/dovecotpw.1 manpage as there is no dovecotpw
+    executable in dovecot 2.0. Same feature is provided through 'doveadm
+    pw' command.
+  * [e30283d] Remove expire-tool.sh wrapper as there is no expire-tool
+    in dovecot 2.0. Same feature is provided through 'doveadm expunge'
+    command.
+  * [3385061] Remove daily cron script and the related configuration
+    from the default file.
+  * [bec19a0] Update debian/dovecot-common.NEWS.Debian with upgrading
+    instructions
+  * [1e56f1c] Call dh_makeshlibs with --no-script option to avoid
+    {postinst,postrm}-has-useless-call-to-ldconfig lintian errors.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 02 Nov 2010 16:54:11 +0100
 
 dovecot (1:1.2.15-3) unstable; urgency=low
 
