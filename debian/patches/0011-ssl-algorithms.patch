@@ -1,0 +1,24 @@
+From: Marco Nenciarini <mnencia@debian.org>
+Date: Thu, 4 Nov 2010 16:52:39 +0100
+Subject: [PATCH] ssl-algorithms
+
+Description: Force loading of all OpenSSL algorithms
+ to avoid unknown message digest algorithm" error
+ with certain openssl versions
+---
+ src/login-common/ssl-proxy-openssl.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/login-common/ssl-proxy-openssl.c b/src/login-common/ssl-proxy-openssl.c
+index b00a4b8..81921fd 100644
+--- a/src/login-common/ssl-proxy-openssl.c
++++ b/src/login-common/ssl-proxy-openssl.c
+@@ -978,6 +978,7 @@ void ssl_proxy_init(void)
+ 
+ 	SSL_library_init();
+ 	SSL_load_error_strings();
++	OpenSSL_add_all_algorithms();
+ 
+ 	extdata_index = SSL_get_ex_new_index(0, dovecot, NULL, NULL, NULL);
+ 	ssl_proxy_init_server(certfile, keyfile);
+-- 
