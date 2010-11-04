@@ -51469,9 +51469,9 @@ index 0000000..a21e919
 +#endif /* __MANAGESIEVE_QUOTA_H */
 diff --git a/managesieve/stamp.h.in b/managesieve/stamp.h.in
 new file mode 100644
-index 0000000..8b13789
+index 0000000..9d6f459
 --- /dev/null
 +++ b/managesieve/stamp.h.in
 @@ -0,0 +1 @@
-+
++/**/
 -- 
