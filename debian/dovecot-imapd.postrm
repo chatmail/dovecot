@@ -4,8 +4,8 @@ set -e
 
 if [ "$1" = "remove" ]; then
 	# Remove the imaps and imap option from the protocols line
-	perl -pi.bak -e 'if (/^\s*protocols =/i) { s/imaps//; s/imap//; s/$/ none/ unless (/pop3/ or /none/); s/[ \t]+/ /g; };'\
-   /etc/dovecot/dovecot.conf
+	sed -i -e '/^[[:space:]]*protocols *=/ {s/imaps\?[[:space:]]*//g; s/=[[:space:]]*$/= none/}' \
+		/etc/dovecot/protocols.conf
 fi
 
 # Restart dovecot because we've updated the configuration file.
