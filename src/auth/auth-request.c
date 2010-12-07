@@ -290,10 +290,8 @@ static void auth_request_save_cache(struct auth_request *request,
 	extra_fields = request->extra_fields == NULL ? NULL :
 		auth_stream_reply_export(request->extra_fields);
 
-	if (passdb_cache == NULL)
-		return;
-
-	if (passdb->cache_key == NULL)
+	if (passdb_cache == NULL || passdb->cache_key == NULL ||
+	    request->master_user != NULL)
 		return;
 
 	if (result < 0) {
@@ -442,7 +440,11 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
                 request->passdb = request->passdb->next;
 		request->passdb_password = NULL;
 
-                if (*result == PASSDB_RESULT_INTERNAL_FAILURE) {
+		if (*result == PASSDB_RESULT_USER_UNKNOWN) {
+			/* remember that we did at least one successful
+			   passdb lookup */
+			request->passdb_user_unknown = TRUE;
+		} else if (*result == PASSDB_RESULT_INTERNAL_FAILURE) {
 			/* remember that we have had an internal failure. at
 			   the end return internal failure if we couldn't
 			   successfully login. */
@@ -598,6 +600,12 @@ auth_request_lookup_credentials_finish(enum passdb_result result,
 				"Credentials: %s",
 				binary_to_hex(credentials, size));
 		}
+		if (result == PASSDB_RESULT_SCHEME_NOT_AVAILABLE &&
+		    request->passdb_user_unknown) {
+			/* one of the passdbs accepted the scheme,
+			   but the user was unknown there */
+			result = PASSDB_RESULT_USER_UNKNOWN;
+		}
 		request->private_callback.
 			lookup_credentials(result, credentials, size, request);
 	}
@@ -712,7 +720,8 @@ static void auth_request_userdb_save_cache(struct auth_request *request,
 	struct userdb_module *userdb = request->userdb->userdb;
 	const char *str;
 
-	if (passdb_cache == NULL || userdb->cache_key == NULL)
+	if (passdb_cache == NULL || userdb->cache_key == NULL ||
+	    request->master_user != NULL)
 		return;
 
 	str = result == USERDB_RESULT_USER_UNKNOWN ? "" :
@@ -730,6 +739,9 @@ static bool auth_request_lookup_user_cache(struct auth_request *request,
 	const char *value;
 	struct auth_cache_node *node;
 	bool expired, neg_expired;
+
+	if (request->master_user != NULL)
+		return FALSE;
 
 	value = auth_cache_lookup(passdb_cache, request, key, &node,
 				  &expired, &neg_expired);

@@ -558,8 +558,15 @@ int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
 			break;
 		}
 		end = CONST_PTR_OFFSET(data, hdr->size);
-		for (; rec != end; rec++)
+		for (; rec != end; rec++) {
+			if (rec->uid == 0) {
+				mail_index_sync_set_corrupted(ctx,
+					"Expunge-guid for invalid uid=%u",
+					rec->uid);
+				break;
+			}
 			sync_expunge(ctx, rec->uid, rec->uid);
+		}
 		break;
 	}
 	case MAIL_TRANSACTION_FLAG_UPDATE: {
@@ -784,6 +791,8 @@ int mail_index_sync_record(struct mail_index_sync_map_ctx *ctx,
 		break;
 	case MAIL_TRANSACTION_INDEX_UNDELETED:
 		ctx->view->index->index_delete_requested = FALSE;
+		break;
+	case MAIL_TRANSACTION_BOUNDARY:
 		break;
 	default:
 		mail_index_sync_set_corrupted(ctx,

@@ -9,6 +9,7 @@
 #include "master-service-settings.h"
 #include "settings-parser.h"
 #include "doveadm-print-private.h"
+#include "doveadm-dump.h"
 #include "doveadm-mail.h"
 #include "doveadm-settings.h"
 #include "doveadm.h"
@@ -227,6 +228,7 @@ static void doveadm_read_settings(void)
 	};
 	struct master_service_settings_input input;
 	struct master_service_settings_output output;
+	const struct doveadm_settings *set;
 	const char *error;
 
 	memset(&input, 0, sizeof(input));
@@ -237,9 +239,8 @@ static void doveadm_read_settings(void)
 					 &output, &error) < 0)
 		i_fatal("Error reading configuration: %s", error);
 
-	doveadm_settings = master_service_settings_get_others(master_service)[0];
-	doveadm_settings = settings_dup(&doveadm_setting_parser_info,
-					doveadm_settings,
+	set = master_service_settings_get_others(master_service)[0];
+	doveadm_settings = settings_dup(&doveadm_setting_parser_info, set,
 					pool_datastack_create());
 }
 
@@ -315,6 +316,7 @@ int main(int argc, char *argv[])
 		quick_init = FALSE;
 		doveadm_register_director_commands();
 		doveadm_register_log_commands();
+		doveadm_dump_init();
 		doveadm_mail_init();
 		doveadm_load_modules();
 
@@ -353,6 +355,7 @@ int main(int argc, char *argv[])
 
 	if (!quick_init) {
 		doveadm_mail_deinit();
+		doveadm_dump_deinit();
 		doveadm_unload_modules();
 		doveadm_print_deinit();
 	}

@@ -1101,6 +1101,14 @@ local_worker_convert_mailbox_name(struct local_dsync_worker *worker,
 			/* probably some reserved name (e.g. dbox-Mails) */
 			name = t_strconcat("_", name, NULL);
 		}
+		if (!mailbox_list_is_valid_create_name(ns->list, name)) {
+			/* name is too long? just give up and generate a
+			   unique name */
+			uint8_t guid[MAIL_GUID_128_SIZE];
+
+			mail_generate_guid_128(guid);
+			name = mail_guid_128_to_string(guid);
+		}
 		i_assert(mailbox_list_is_valid_create_name(ns->list, name));
 	}
 	return name;
@@ -1630,7 +1638,7 @@ local_worker_save_msg_continue(struct local_dsync_worker *worker)
 {
 	struct mailbox *dest_box = worker->ext_mail->box;
 	dsync_worker_save_callback_t *callback;
-	int ret;
+	ssize_t ret;
 
 	while ((ret = i_stream_read(worker->save_input)) > 0) {
 		if (mailbox_save_continue(worker->save_ctx) < 0)
@@ -1654,17 +1662,18 @@ local_worker_save_msg_continue(struct local_dsync_worker *worker)
 		errno = worker->save_input->stream_errno;
 		i_error("read(msg input) failed: %m");
 		mailbox_save_cancel(&worker->save_ctx);
-		ret = -1;
+		dsync_worker_set_failure(&worker->worker);
 	} else {
 		i_assert(worker->save_input->eof);
-		ret = mailbox_save_finish(&worker->save_ctx);
-	}
-	if (ret < 0) {
-		struct mail_storage *storage = mailbox_get_storage(dest_box);
-		i_error("Can't save message to mailbox %s: %s",
-			mailbox_get_vname(dest_box),
-			mail_storage_get_last_error(storage, NULL));
-		dsync_worker_set_failure(&worker->worker);
+		if (mailbox_save_finish(&worker->save_ctx) < 0) {
+			struct mail_storage *storage =
+				mailbox_get_storage(dest_box);
+
+			i_error("Can't save message to mailbox %s: %s",
+				mailbox_get_vname(dest_box),
+				mail_storage_get_last_error(storage, NULL));
+			dsync_worker_set_failure(&worker->worker);
+		}
 	}
 	callback = worker->save_callback;
 	worker->save_callback = NULL;
@@ -1705,6 +1714,7 @@ local_worker_msg_save(struct dsync_worker *_worker,
 		i_error("Can't save message to mailbox %s: %s",
 			mailbox_get_vname(dest_box),
 			mail_storage_get_last_error(storage, NULL));
+		mailbox_save_cancel(&save_ctx);
 		dsync_worker_set_failure(_worker);
 		callback(context);
 		return;

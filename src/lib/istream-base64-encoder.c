@@ -46,6 +46,10 @@ i_stream_base64_try_encode_line(struct base64_encoder_istream *bstream)
 	size_t size, buffer_avail;
 	buffer_t buf;
 
+	data = i_stream_get_data(stream->parent, &size);
+	if (size == 0)
+		return FALSE;
+
 	if (bstream->cur_line_len == bstream->chars_per_line) {
 		/* @UNSAFE: end of line, add newline */
 		if (!i_stream_get_buffer_space(stream,
@@ -57,9 +61,6 @@ i_stream_base64_try_encode_line(struct base64_encoder_istream *bstream)
 		stream->w_buffer[stream->pos++] = '\n';
 		bstream->cur_line_len = 0;
 	}
-	data = i_stream_get_data(stream->parent, &size);
-	if (size == 0)
-		return FALSE;
 
 	i_stream_get_buffer_space(stream, (size+2)/3*4, NULL);
 	buffer_avail = stream->buffer_size - stream->pos;
@@ -96,12 +97,15 @@ static ssize_t i_stream_base64_encoder_read(struct istream_private *stream)
 {
 	struct base64_encoder_istream *bstream =
 		(struct base64_encoder_istream *)stream;
-	size_t pre_count, post_count;
+	size_t pre_count, post_count, size;
 	int ret;
 
-	ret = i_stream_read_parent(stream);
-	if (ret <= 0)
-		return ret;
+	do {
+		ret = i_stream_read_parent(stream);
+		if (ret <= 0)
+			return ret;
+		(void)i_stream_get_data(stream->parent, &size);
+	} while (size < 4 && !stream->parent->eof);
 
 	/* encode as many lines as fits into destination buffer */
 	pre_count = stream->pos - stream->skip;
@@ -120,7 +124,31 @@ static ssize_t i_stream_base64_encoder_read(struct istream_private *stream)
 static const struct stat *
 i_stream_base64_encoder_stat(struct istream_private *stream, bool exact)
 {
+	if (exact) {
+		/* too much trouble to implement until it's actually needed */
+		i_panic("istream-base64-encoder: "
+			"stat() doesn't support getting exact size");
+	}
 	return i_stream_stat(stream->parent, exact);
+}
+
+static void
+i_stream_base64_encoder_seek(struct istream_private *stream,
+			     uoff_t v_offset, bool mark)
+{
+	struct base64_encoder_istream *bstream =
+		(struct base64_encoder_istream *)stream;
+
+	if (v_offset < stream->istream.v_offset) {
+		/* seeking backwards - go back to beginning and seek
+		   forward from there. */
+		stream->parent_expected_offset = stream->parent_start_offset;
+		stream->skip = stream->pos = 0;
+		stream->istream.v_offset = 0;
+		bstream->cur_line_len = 0;
+		i_stream_seek(stream->parent, 0);
+	}
+	i_stream_default_seek(stream, v_offset, mark);
 }
 
 struct istream *
@@ -139,10 +167,11 @@ i_stream_create_base64_encoder(struct istream *input,
 	bstream->istream.parent = input;
 	bstream->istream.read = i_stream_base64_encoder_read;
 	bstream->istream.stat = i_stream_base64_encoder_stat;
+	bstream->istream.seek = i_stream_base64_encoder_seek;
 
 	bstream->istream.istream.readable_fd = FALSE;
 	bstream->istream.istream.blocking = input->blocking;
-	bstream->istream.istream.seekable = FALSE;
+	bstream->istream.istream.seekable = input->seekable;
 	return i_stream_create(&bstream->istream, input,
 			       i_stream_get_fd(input));
 }

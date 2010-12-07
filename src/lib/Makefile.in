@@ -91,6 +91,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-buffer.$(OBJEXT) test_lib-test-crc32.$(OBJEXT) \
 	test_lib-test-hash-format.$(OBJEXT) \
 	test_lib-test-hex-binary.$(OBJEXT) \
+	test_lib-test-istream-base64-encoder.$(OBJEXT) \
 	test_lib-test-istream-concat.$(OBJEXT) \
 	test_lib-test-istream-crlf.$(OBJEXT) \
 	test_lib-test-istream-seekable.$(OBJEXT) \
@@ -312,6 +313,7 @@ srcdir = @srcdir@
 ssldir = @ssldir@
 statedir = @statedir@
 sysconfdir = @sysconfdir@
+systemdsystemunitdir = @systemdsystemunitdir@
 target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
@@ -546,6 +548,7 @@ test_lib_SOURCES = \
 	test-crc32.c \
 	test-hash-format.c \
 	test-hex-binary.c \
+	test-istream-base64-encoder.c \
 	test-istream-concat.c \
 	test-istream-crlf.c \
 	test-istream-seekable.c \
@@ -744,6 +747,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-crc32.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hash-format.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hex-binary.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-base64-encoder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-concat.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-crlf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-seekable.Po@am__quote@
@@ -920,6 +924,20 @@ test_lib-test-hex-binary.obj: test-hex-binary.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-hex-binary.c' object='test_lib-test-hex-binary.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-hex-binary.obj `if test -f 'test-hex-binary.c'; then $(CYGPATH_W) 'test-hex-binary.c'; else $(CYGPATH_W) '$(srcdir)/test-hex-binary.c'; fi`
+
+test_lib-test-istream-base64-encoder.o: test-istream-base64-encoder.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-base64-encoder.o -MD -MP -MF $(DEPDIR)/test_lib-test-istream-base64-encoder.Tpo -c -o test_lib-test-istream-base64-encoder.o `test -f 'test-istream-base64-encoder.c' || echo '$(srcdir)/'`test-istream-base64-encoder.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-istream-base64-encoder.Tpo $(DEPDIR)/test_lib-test-istream-base64-encoder.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-istream-base64-encoder.c' object='test_lib-test-istream-base64-encoder.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-base64-encoder.o `test -f 'test-istream-base64-encoder.c' || echo '$(srcdir)/'`test-istream-base64-encoder.c
+
+test_lib-test-istream-base64-encoder.obj: test-istream-base64-encoder.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-base64-encoder.obj -MD -MP -MF $(DEPDIR)/test_lib-test-istream-base64-encoder.Tpo -c -o test_lib-test-istream-base64-encoder.obj `if test -f 'test-istream-base64-encoder.c'; then $(CYGPATH_W) 'test-istream-base64-encoder.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-base64-encoder.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-istream-base64-encoder.Tpo $(DEPDIR)/test_lib-test-istream-base64-encoder.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-istream-base64-encoder.c' object='test_lib-test-istream-base64-encoder.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-base64-encoder.obj `if test -f 'test-istream-base64-encoder.c'; then $(CYGPATH_W) 'test-istream-base64-encoder.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-base64-encoder.c'; fi`
 
 test_lib-test-istream-concat.o: test-istream-concat.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-concat.o -MD -MP -MF $(DEPDIR)/test_lib-test-istream-concat.Tpo -c -o test_lib-test-istream-concat.o `test -f 'test-istream-concat.c' || echo '$(srcdir)/'`test-istream-concat.c

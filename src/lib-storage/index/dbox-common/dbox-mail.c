@@ -32,9 +32,11 @@ void dbox_mail_close(struct mail *_mail)
 {
 	struct dbox_mail *mail = (struct dbox_mail *)_mail;
 
+	index_mail_close(_mail);
+	/* close the dbox file only after index is closed, since it may still
+	   try to read from it. */
 	if (mail->open_file != NULL)
 		dbox_file_unref(&mail->open_file);
-	index_mail_close(_mail);
 }
 
 int dbox_mail_metadata_read(struct dbox_mail *mail, struct dbox_file **file_r)
@@ -77,22 +79,14 @@ int dbox_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 	struct dbox_mail *mail = (struct dbox_mail *)_mail;
 	struct index_mail_data *data = &mail->imail.data;
 	struct dbox_file *file;
-	const char *value;
 
 	if (index_mail_get_physical_size(_mail, size_r) == 0)
 		return 0;
 
-	/* see if we have it in metadata */
 	if (dbox_mail_metadata_read(mail, &file) < 0)
 		return -1;
 
-	value = dbox_file_metadata_get(file, DBOX_METADATA_PHYSICAL_SIZE);
-	if (value != NULL)
-		data->physical_size = strtoul(value, NULL, 16);
-	else {
-		/* no. that means we can use the size in the header */
-		data->physical_size = file->cur_physical_size;
-	}
+	data->physical_size = dbox_file_get_plaintext_size(file);
 	*size_r = data->physical_size;
 	return 0;
 }
@@ -187,7 +181,12 @@ dbox_get_cached_metadata(struct dbox_mail *mail, enum dbox_metadata_key key,
 		value = "";
 	index_mail_cache_add_idx(imail, ibox->cache_fields[cache_field].idx,
 				 value, strlen(value)+1);
-	*value_r = value;
+
+	/* don't return pointer to dbox metadata directly, since it may
+	   change unexpectedly */
+	str_truncate(str, 0);
+	str_append(str, value);
+	*value_r = str_c(str);
 	return 0;
 }
 

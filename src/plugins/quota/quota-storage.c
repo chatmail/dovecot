@@ -405,6 +405,9 @@ void quota_mailbox_allocated(struct mailbox *box)
 	if (QUOTA_LIST_CONTEXT(box->list) == NULL)
 		return;
 
+	if ((box->storage->class_flags & MAIL_STORAGE_CLASS_FLAG_NOQUOTA) != 0)
+		return;
+
 	qbox = p_new(box->pool, struct quota_mailbox, 1);
 	qbox->module_ctx.super = *v;
 	box->vlast = &qbox->module_ctx.super;

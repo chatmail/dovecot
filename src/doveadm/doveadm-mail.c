@@ -204,10 +204,8 @@ doveadm_mail_next_user(struct doveadm_mail_cmd_context *ctx,
 
 	if (doveadm_settings->doveadm_worker_count > 0 && !doveadm_server) {
 		/* execute this command via doveadm server */
-		T_BEGIN {
-			ret = doveadm_mail_server_user(ctx, service_user);
-			mail_storage_service_user_free(&service_user);
-		} T_END;
+		ret = doveadm_mail_server_user(ctx, service_user, error_r);
+		mail_storage_service_user_free(&service_user);
 		return ret < 0 ? -1 : 1;
 	}
 
@@ -322,7 +320,6 @@ doveadm_mail_all_users(struct doveadm_mail_cmd_context *ctx, char *argv[],
 	if (ret < 0)
 		i_error("Failed to iterate through some users");
 	mail_storage_service_deinit(&ctx->storage_service);
-	doveadm_mail_server_flush();
 }
 
 static void
@@ -374,15 +371,19 @@ doveadm_mail_cmd(const struct doveadm_mail_cmd *cmd, int argc, char *argv[])
 		service_flags |= MAIL_STORAGE_SERVICE_FLAG_DEBUG;
 
 	ctx = doveadm_mail_cmd_init(cmd);
-	ctx->args = (const void *)argv;
 
-	getopt_args = t_strconcat("Au:", ctx->getopt_args, NULL);
+	getopt_args = t_strconcat("As:u:", ctx->getopt_args, NULL);
 	username = getenv("USER");
 	wildcard_user = NULL;
 	while ((c = getopt(argc, argv, getopt_args)) > 0) {
 		switch (c) {
 		case 'A':
 			ctx->iterate_all_users = TRUE;
+			break;
+		case 'S':
+			doveadm_settings->doveadm_socket_path = optarg;
+			if (doveadm_settings->doveadm_worker_count == 0)
+				doveadm_settings->doveadm_worker_count = 1;
 			break;
 		case 'u':
 			service_flags |=
@@ -403,6 +404,7 @@ doveadm_mail_cmd(const struct doveadm_mail_cmd *cmd, int argc, char *argv[])
 		i_fatal("doveadm %s: Unknown parameter: %s",
 			cmd->name, argv[0]);
 	}
+	ctx->args = (const void *)argv;
 
 	ctx->iterate_single_user =
 		!ctx->iterate_all_users && wildcard_user == NULL;
@@ -418,6 +420,7 @@ doveadm_mail_cmd(const struct doveadm_mail_cmd *cmd, int argc, char *argv[])
 		service_flags |= MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP;
 		doveadm_mail_all_users(ctx, argv, wildcard_user, service_flags);
 	}
+	doveadm_mail_server_flush();
 	ctx->v.deinit(ctx);
 	doveadm_print_flush();
 
@@ -501,7 +504,8 @@ void doveadm_mail_usage(string_t *out)
 	const struct doveadm_mail_cmd *cmd;
 
 	array_foreach(&doveadm_mail_cmds, cmd) {
-		str_printfa(out, "%s\t[-u <user>|-A]", cmd->name);
+		str_printfa(out, "%s\t[-u <user>|-A] [-S <socket_path>]",
+			    cmd->name);
 		if (cmd->usage_args != NULL)
 			str_printfa(out, " %s", cmd->usage_args);
 		str_append_c(out, '\n');
@@ -510,8 +514,8 @@ void doveadm_mail_usage(string_t *out)
 
 void doveadm_mail_help(const struct doveadm_mail_cmd *cmd)
 {
-	fprintf(stderr, "doveadm %s [-u <user>|-A] %s\n", cmd->name,
-		cmd->usage_args == NULL ? "" : cmd->usage_args);
+	fprintf(stderr, "doveadm %s [-u <user>|-A] [-S <socket_path>] %s\n",
+		cmd->name, cmd->usage_args == NULL ? "" : cmd->usage_args);
 	exit(1);
 }
 

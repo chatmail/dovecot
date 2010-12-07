@@ -386,6 +386,9 @@
 /* Define if you have struct iovec */
 #undef HAVE_STRUCT_IOVEC
 
+/* Define if you want to use systemd socket activation */
+#undef HAVE_SYSTEMD
+
 /* Define to 1 if you have the <sys/event.h> header file. */
 #undef HAVE_SYS_EVENT_H
 

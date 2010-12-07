@@ -53,10 +53,14 @@ static ssize_t i_stream_attachment_read(struct istream_private *stream)
 		stream->istream.eof = TRUE;
 	} else if (!stream->istream.eof) {
 		/* still more to read */
+	} else if (stream->istream.stream_errno == ENOENT) {
+		/* lost the file */
 	} else {
 		i_error("Attachment file %s smaller than expected "
-			"(%"PRIuUOFF_T")", i_stream_get_name(stream->parent),
-			astream->size);
+			"(%"PRIuUOFF_T" < %"PRIuUOFF_T")",
+			i_stream_get_name(stream->parent),
+			stream->istream.v_offset, astream->size);
+		stream->istream.stream_errno = EIO;
 	}
 
 	ret = pos > stream->pos ? (ssize_t)(pos - stream->pos) :
@@ -81,24 +85,21 @@ i_stream_attachment_seek(struct istream_private *stream,
 }
 
 static const struct stat *
-i_stream_attachment_stat(struct istream_private *stream, bool exact)
+i_stream_attachment_stat(struct istream_private *stream, bool exact ATTR_UNUSED)
 {
 	struct attachment_istream *astream =
 		(struct attachment_istream *)stream;
 	const struct stat *st;
 
-	st = i_stream_stat(stream->parent, exact);
+	/* parent stream may be base64-decoder. don't waste time decoding the
+	   entire stream, since we already know what the size is supposed
+	   to be. */
+	st = i_stream_stat(stream->parent, FALSE);
 	if (st == NULL)
 		return NULL;
 
 	stream->statbuf = *st;
 	stream->statbuf.st_size = astream->size;
-	if (st->st_size != 0 && (uoff_t)st->st_size != astream->size) {
-		i_error("Attachment file %s size mismatch: "
-			"%"PRIuUOFF_T" != %"PRIuUOFF_T,
-			i_stream_get_name(stream->parent),
-			st->st_size, astream->size);
-	}
 	return &stream->statbuf;
 }
 

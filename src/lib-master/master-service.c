@@ -393,32 +393,20 @@ void master_service_init_finish(struct master_service *service)
 
 void master_service_env_clean(bool preserve_home)
 {
-	const char *user, *tz, *home;
+	static const char *preserve_envs[] = {
+		"HOME", /* keep as the first element */
+		"USER",
+		"TZ",
 #ifdef DEBUG
-	bool gdb = getenv("GDB") != NULL;
+		"GDB",
 #endif
-
-	user = getenv("USER");
-	if (user != NULL)
-		user = t_strconcat("USER=", user, NULL);
-	tz = getenv("TZ");
-	if (tz != NULL)
-		tz = t_strconcat("TZ=", tz, NULL);
-	home = preserve_home ? getenv("HOME") : NULL;
-	if (home != NULL)
-		home = t_strconcat("HOME=", home, NULL);
-
-	/* Note that if the original environment was set with env_put(), the
-	   environment strings will be invalid after env_clean(). That's why
-	   we t_strconcat() them above. */
-	env_clean();
-
-	if (user != NULL) env_put(user);
-	if (tz != NULL) env_put(tz);
-	if (home != NULL) env_put(home);
-#ifdef DEBUG
-	if (gdb) env_put("GDB=1");
+#ifdef HAVE_SYSTEMD
+		"LISTEN_PID",
+		"LISTEN_FDS",
 #endif
+		NULL
+	};
+	env_clean_except(preserve_envs + (preserve_home ? 0 : 1));
 }
 
 void master_service_set_client_limit(struct master_service *service,
@@ -842,6 +830,15 @@ void master_status_update(struct master_service *service)
 {
 	ssize_t ret;
 	bool important_update;
+
+	if ((service->flags & MASTER_SERVICE_FLAG_UPDATE_PROCTITLE) != 0 &&
+	    service->set != NULL && service->set->verbose_proctitle) T_BEGIN {
+		unsigned int used_count = service->total_available_count -
+			service->master_status.available_count;
+
+		process_title_set(t_strdup_printf("[%u connections]",
+						  used_count));
+	} T_END;
 
 	important_update = master_status_update_is_important(service);
 	if (service->master_status.pid == 0 ||

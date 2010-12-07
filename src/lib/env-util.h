@@ -8,6 +8,8 @@ void env_put(const char *env);
 void env_remove(const char *name);
 /* Clear all environment variables. */
 void env_clean(void);
+/* Clear all environment variables except what's listed in preserve_envs[] */
+void env_clean_except(const char *const preserve_envs[]);
 
 /* Save a copy of the current environment. */
 struct env_backup *env_backup_save(void);
@@ -15,6 +17,10 @@ struct env_backup *env_backup_save(void);
 void env_backup_restore(struct env_backup *env);
 /* Free the memory used by environment backup. */
 void env_backup_free(struct env_backup **env);
+
+/* Returns the value of "&environ". This is more portable than using it
+   directly. */
+char ***env_get_environ_p(void);
 
 /* Free all memory used by env_put() function. Environment must not be
    accessed afterwards. */
