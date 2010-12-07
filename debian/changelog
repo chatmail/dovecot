@@ -1,6 +1,6 @@
-dovecot (1:2.0.6-1~1.gbp6897f6) UNRELEASED; urgency=low
+dovecot (1:2.0.8-1~2.gbp45a01a) UNRELEASED; urgency=low
 
-  ** SNAPSHOT build @6897f6b6048dc15ea59cb945a77e9c14cf5b2585 **
+  ** SNAPSHOT build @45a01a13c6ce8a11a30c68898e76b9a5db42fbf1 **
 
   * [7c15295] Create {debian,upstream}-2.0 branches for dovecot 2.0.x
     packaging
@@ -28,7 +28,7 @@ dovecot (1:2.0.6-1~1.gbp6897f6) UNRELEASED; urgency=low
   * [1e56f1c] Call dh_makeshlibs with --no-script option to avoid
     {postinst,postrm}-has-useless-call-to-ldconfig lintian errors.
 
- -- Marco Nenciarini <mnencia@debian.org>  Tue, 02 Nov 2010 16:54:11 +0100
+ -- Marco Nenciarini <mnencia@debian.org>  Tue, 07 Dec 2010 16:49:51 +0100
 
 dovecot (1:1.2.15-3) unstable; urgency=low
 
