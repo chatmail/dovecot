@@ -24,7 +24,7 @@
 #include <unistd.h>
 
 #define IS_STANDALONE() \
-        (getenv(MASTER_UID_ENV) == NULL)
+        (getenv(MASTER_IS_PARENT_ENV) == NULL)
 
 #define IMAP_DIE_IDLE_SECS 10
 
@@ -250,6 +250,7 @@ static void
 login_client_connected(const struct master_login_client *client,
 		       const char *username, const char *const *extra_fields)
 {
+#define MSG_BYE_INTERNAL_ERROR "* BYE "MAIL_ERRSTR_CRITICAL_MSG"\r\n"
 	struct mail_storage_service_input input;
 	const char *error;
 	buffer_t input_buf;
@@ -265,6 +266,11 @@ login_client_connected(const struct master_login_client *client,
 				 client->auth_req.data_size);
 	if (client_create_from_input(&input, client, client->fd, client->fd,
 				     &input_buf, &error) < 0) {
+		if (write(client->fd, MSG_BYE_INTERNAL_ERROR,
+			  strlen(MSG_BYE_INTERNAL_ERROR)) < 0) {
+			if (errno != EAGAIN && errno != EPIPE)
+				i_error("write(client) failed: %m");
+		}
 		i_error("%s", error);
 		(void)close(client->fd);
 		master_service_client_connection_destroyed(master_service);
@@ -334,7 +340,8 @@ int main(int argc, char *argv[])
 			return FATAL_DEFAULT;
 		}
 	}
-	postlogin_socket_path = argv[1] == NULL ? NULL : t_abspath(argv[1]);
+	postlogin_socket_path = argv[optind] == NULL ? NULL :
+		t_abspath(argv[optind]);
 
 	master_service_init_finish(master_service);
 	master_service_set_die_callback(master_service, imap_die);
@@ -356,7 +363,8 @@ int main(int argc, char *argv[])
 			main_stdio_run(username);
 		} T_END;
 	} else {
-		master_login = master_login_init(master_service, "auth-master",
+		master_login = master_login_init(master_service,
+						 t_abspath("auth-master"),
 						 postlogin_socket_path,
 						 login_client_connected,
 						 login_client_failed);

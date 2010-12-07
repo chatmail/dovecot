@@ -22,7 +22,7 @@
 #include <unistd.h>
 
 #define IS_STANDALONE() \
-        (getenv(MASTER_UID_ENV) == NULL)
+        (getenv(MASTER_IS_PARENT_ENV) == NULL)
 
 static bool verbose_proctitle = FALSE;
 static struct mail_storage_service_ctx *storage_service;
@@ -221,7 +221,8 @@ int main(int argc, char *argv[])
 			return FATAL_DEFAULT;
 		}
 	}
-	postlogin_socket_path = argv[1] == NULL ? NULL : t_abspath(argv[1]);
+	postlogin_socket_path = argv[optind] == NULL ? NULL :
+		t_abspath(argv[optind]);
 
 	master_service_init_finish(master_service);
 	master_service_set_die_callback(master_service, pop3_die);
@@ -239,7 +240,8 @@ int main(int argc, char *argv[])
 			main_stdio_run(username);
 		} T_END;
 	} else {
-		master_login = master_login_init(master_service, "auth-master",
+		master_login = master_login_init(master_service,
+						 t_abspath("auth-master"),
 						 postlogin_socket_path,
 						 login_client_connected,
 						 login_client_failed);

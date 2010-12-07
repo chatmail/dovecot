@@ -193,6 +193,7 @@ struct master_service_settings {
 	uoff_t config_cache_size;
 	bool version_ignore;
 	bool shutdown_clients;
+	bool verbose_proctitle;
 };
 /* ../../src/lib-lda/lda-settings.h */
 extern const struct setting_parser_info lda_setting_parser_info;
@@ -493,7 +494,7 @@ const struct setting_parser_info mail_namespace_setting_parser_info = {
 static const struct setting_define mail_user_setting_defines[] = {
 	DEF(SET_STR, base_dir),
 	DEF(SET_STR, auth_socket_path),
-	DEF(SET_STR, mail_temp_dir),
+	DEF(SET_STR_VARS, mail_temp_dir),
 
 	DEF(SET_STR, mail_uid),
 	DEF(SET_STR, mail_gid),
@@ -673,6 +674,7 @@ static const struct setting_define master_service_setting_defines[] = {
 	DEF(SET_SIZE, config_cache_size),
 	DEF(SET_BOOL, version_ignore),
 	DEF(SET_BOOL, shutdown_clients),
+	DEF(SET_BOOL, verbose_proctitle),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -684,7 +686,8 @@ static const struct master_service_settings master_service_default_settings = {
 	.syslog_facility = "mail",
 	.config_cache_size = 1024*1024,
 	.version_ignore = FALSE,
-	.shutdown_clients = TRUE
+	.shutdown_clients = TRUE,
+	.verbose_proctitle = FALSE
 };
 const struct setting_parser_info master_service_setting_parser_info = {
 	.module_name = "master",
@@ -767,7 +770,6 @@ enum pop3_client_workarounds {
 };
 /* </settings checks> */
 struct pop3_settings {
-	bool mail_debug;
 	bool verbose_proctitle;
 
 	/* pop3: */
@@ -800,8 +802,6 @@ struct master_settings {
 	uoff_t default_vsz_limit;
 
 	bool version_ignore;
-	bool mail_debug;
-	bool auth_debug;
 
 	unsigned int first_valid_uid, last_valid_uid;
 	unsigned int first_valid_gid, last_valid_gid;
@@ -845,6 +845,7 @@ struct login_settings {
 extern const struct setting_parser_info lmtp_setting_parser_info;
 struct lmtp_settings {
 	bool lmtp_proxy;
+	bool lmtp_save_to_detail_mailbox;
 };
 /* ../../src/imap/imap-settings.h */
 extern const struct setting_parser_info imap_setting_parser_info;
@@ -855,7 +856,6 @@ enum imap_client_workarounds {
 };
 /* </settings checks> */
 struct imap_settings {
-	bool mail_debug;
 	bool verbose_proctitle;
 
 	/* imap: */
@@ -973,7 +973,7 @@ struct service_settings tcpwrap_service_settings = {
 	.client_limit = 1,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = ARRAY_INIT,
 	.fifo_listeners = ARRAY_INIT,
@@ -1014,7 +1014,7 @@ struct service_settings ssl_params_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &ssl_params_unix_listeners_buf,
 			      sizeof(ssl_params_unix_listeners[0]) } },
@@ -1121,7 +1121,7 @@ struct service_settings pop3_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &pop3_unix_listeners_buf,
 			      sizeof(pop3_unix_listeners[0]) } },
@@ -1135,7 +1135,6 @@ struct service_settings pop3_service_settings = {
 #define DEFLIST(field, name, defines) \
 	{ SET_DEFLIST, name, offsetof(struct pop3_settings, field), defines }
 static const struct setting_define pop3_setting_defines[] = {
-	DEF(SET_BOOL, mail_debug),
 	DEF(SET_BOOL, verbose_proctitle),
 
 	DEF(SET_BOOL, pop3_no_flag_updates),
@@ -1150,7 +1149,6 @@ static const struct setting_define pop3_setting_defines[] = {
 	SETTING_DEFINE_LIST_END
 };
 static const struct pop3_settings pop3_default_settings = {
-	.mail_debug = FALSE,
 	.verbose_proctitle = FALSE,
 
 	.pop3_no_flag_updates = FALSE,
@@ -1212,7 +1210,7 @@ struct service_settings pop3_login_service_settings = {
 	.client_limit = 0,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = 64,
+	.vsz_limit = 64*1024*1024,
 
 	.unix_listeners = ARRAY_INIT,
 	.fifo_listeners = ARRAY_INIT,
@@ -1375,10 +1373,26 @@ master_default_settings_get_service(const char *name)
 }
 #endif
 
+static unsigned int
+service_get_client_limit(struct master_settings *set, const char *name)
+{
+	struct service_settings *const *servicep;
+
+	array_foreach(&set->services, servicep) {
+		if (strcmp((*servicep)->name, name) == 0) {
+			if ((*servicep)->client_limit != 0)
+				return (*servicep)->client_limit;
+			else
+				return set->default_client_limit;
+		}
+	}
+	return set->default_client_limit;
+}
+
 static bool
 master_settings_verify(void *_set, pool_t pool, const char **error_r)
 {
-	static int warned_auth = FALSE;
+	static int warned_auth = FALSE, warned_anvil = FALSE;
 #ifdef CONFIG_BINARY
 	const struct service_settings *default_service;
 #endif
@@ -1386,8 +1400,8 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 	struct service_settings *const *services;
 	const char *const *strings;
 	ARRAY_TYPE(const_string) all_listeners;
-	unsigned int i, j, count, len, process_limit;
-	unsigned int auth_client_limit, max_auth_client_processes;
+	unsigned int i, j, count, len, client_limit, process_limit;
+	unsigned int max_auth_client_processes, max_anvil_client_processes;
 
 	len = strlen(set->base_dir);
 	if (len > 0 && set->base_dir[len-1] == '/') {
@@ -1454,7 +1468,8 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 		}
 	}
 	t_array_init(&all_listeners, 64);
-	auth_client_limit = max_auth_client_processes = 0;
+	max_auth_client_processes = 0;
+	max_anvil_client_processes = 2; /* blocking, nonblocking pipes */
 	for (i = 0; i < count; i++) {
 		struct service_settings *service = services[i];
 
@@ -1489,6 +1504,11 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 				service->name);
 			return FALSE;
 		}
+		if (service->vsz_limit < 1024 && service->vsz_limit != 0) {
+			*error_r = t_strdup_printf("service(%s): "
+				"vsz_limit is too low", service->name);
+			return FALSE;
+		}
 
 #ifdef CONFIG_BINARY
 		default_service =
@@ -1501,17 +1521,16 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 		}
 #endif
 
-		if (strcmp(service->name, "auth") == 0) {
-			auth_client_limit = service->client_limit != 0 ?
-				service->client_limit :
-				set->default_client_limit;
-		} else if (*service->protocol != '\0' &&
-			   str_array_find((const char **)set->protocols_split,
-					  service->protocol)) {
+		if (*service->protocol != '\0' &&
+		    str_array_find((const char **)set->protocols_split,
+				   service->protocol)) {
 			/* each imap/pop3/lmtp process can use up a connection,
 			   although if service_count=1 it's only temporary */
 			max_auth_client_processes += process_limit;
 		}
+		if (strcmp(service->type, "login") == 0 ||
+		    strcmp(service->name, "auth") == 0)
+			max_anvil_client_processes += process_limit;
 
 		fix_file_listener_paths(&service->unix_listeners,
 					pool, set, &all_listeners);
@@ -1520,11 +1539,20 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 		add_inet_listeners(&service->inet_listeners, &all_listeners);
 	}
 
-	if (auth_client_limit < max_auth_client_processes && !warned_auth) {
+	client_limit = service_get_client_limit(set, "auth");
+	if (client_limit < max_auth_client_processes && !warned_auth) {
 		warned_auth = TRUE;
 		i_warning("service auth { client_limit=%u } is lower than "
 			  "required under max. load (%u)",
-			  auth_client_limit, max_auth_client_processes);
+			  client_limit, max_auth_client_processes);
+	}
+
+	client_limit = service_get_client_limit(set, "anvil");
+	if (client_limit < max_anvil_client_processes && !warned_anvil) {
+		warned_anvil = TRUE;
+		i_warning("service anvil { client_limit=%u } is lower than "
+			  "required under max. load (%u)",
+			  client_limit, max_anvil_client_processes);
 	}
 
 	/* check for duplicate listeners */
@@ -1646,7 +1674,7 @@ static const struct service_settings service_default_settings = {
 	.drop_priv_before_exec = FALSE,
 
 	.process_min_avail = 0,
-	.process_limit = -1U,
+	.process_limit = 0,
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
@@ -1686,8 +1714,6 @@ static const struct setting_define master_setting_defines[] = {
 	DEF(SET_SIZE, default_vsz_limit),
 
 	DEF(SET_BOOL, version_ignore),
-	DEF(SET_BOOL, mail_debug),
-	DEF(SET_BOOL, auth_debug),
 
 	DEF(SET_UINT, first_valid_uid),
 	DEF(SET_UINT, last_valid_uid),
@@ -1712,8 +1738,6 @@ struct master_settings master_default_settings = {
 	.default_vsz_limit = 256*1024*1024,
 
 	.version_ignore = FALSE,
-	.mail_debug = FALSE,
-	.auth_debug = FALSE,
 
 	.first_valid_uid = 500,
 	.last_valid_uid = 0,
@@ -1885,7 +1909,7 @@ struct service_settings log_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = ARRAY_INIT,
 	.fifo_listeners = ARRAY_INIT,
@@ -1895,17 +1919,17 @@ struct service_settings log_service_settings = {
 };
 /* ../../src/lmtp/lmtp-settings.c */
 /* <settings checks> */
-static struct file_listener_settings lmtp_login_unix_listeners_array[] = {
+static struct file_listener_settings lmtp_unix_listeners_array[] = {
 	{ "lmtp", 0666, "", "" }
 };
-static struct file_listener_settings *lmtp_login_unix_listeners[] = {
-	&lmtp_login_unix_listeners_array[0]
+static struct file_listener_settings *lmtp_unix_listeners[] = {
+	&lmtp_unix_listeners_array[0]
 };
-static buffer_t lmtp_login_unix_listeners_buf = {
-	lmtp_login_unix_listeners, sizeof(lmtp_login_unix_listeners), { 0, }
+static buffer_t lmtp_unix_listeners_buf = {
+	lmtp_unix_listeners, sizeof(lmtp_unix_listeners), { 0, }
 };
 /* </settings checks> */
-struct service_settings lmtp_login_service_settings = {
+struct service_settings lmtp_service_settings = {
 	.name = "lmtp",
 	.protocol = "lmtp",
 	.type = "",
@@ -1925,8 +1949,8 @@ struct service_settings lmtp_login_service_settings = {
 	.idle_kill = 0,
 	.vsz_limit = 0,
 
-	.unix_listeners = { { &lmtp_login_unix_listeners_buf,
-			      sizeof(lmtp_login_unix_listeners[0]) } },
+	.unix_listeners = { { &lmtp_unix_listeners_buf,
+			      sizeof(lmtp_unix_listeners[0]) } },
 	.fifo_listeners = ARRAY_INIT,
 	.inet_listeners = ARRAY_INIT
 };
@@ -1935,11 +1959,13 @@ struct service_settings lmtp_login_service_settings = {
 	{ type, #name, offsetof(struct lmtp_settings, name), NULL }
 static const struct setting_define lmtp_setting_defines[] = {
 	DEF(SET_BOOL, lmtp_proxy),
+	DEF(SET_BOOL, lmtp_save_to_detail_mailbox),
 
 	SETTING_DEFINE_LIST_END
 };
 static const struct lmtp_settings lmtp_default_settings = {
-	.lmtp_proxy = FALSE
+	.lmtp_proxy = FALSE,
+	.lmtp_save_to_detail_mailbox = FALSE
 };
 static const struct setting_parser_info *lmtp_setting_dependencies[] = {
 	&lda_setting_parser_info,
@@ -2037,7 +2063,7 @@ struct service_settings imap_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &imap_unix_listeners_buf,
 			      sizeof(imap_unix_listeners[0]) } },
@@ -2051,7 +2077,6 @@ struct service_settings imap_service_settings = {
 #define DEFLIST(field, name, defines) \
 	{ SET_DEFLIST, name, offsetof(struct imap_settings, field), defines }
 static const struct setting_define imap_setting_defines[] = {
-	DEF(SET_BOOL, mail_debug),
 	DEF(SET_BOOL, verbose_proctitle),
 
 	DEF(SET_SIZE, imap_max_line_length),
@@ -2065,7 +2090,6 @@ static const struct setting_define imap_setting_defines[] = {
 	SETTING_DEFINE_LIST_END
 };
 static const struct imap_settings imap_default_settings = {
-	.mail_debug = FALSE,
 	.verbose_proctitle = FALSE,
 
 	/* RFC-2683 recommends at least 8000 bytes. Some clients however don't
@@ -2128,7 +2152,7 @@ struct service_settings imap_login_service_settings = {
 	.client_limit = 0,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = 64,
+	.vsz_limit = 64*1024*1024,
 
 	.unix_listeners = ARRAY_INIT,
 	.fifo_listeners = ARRAY_INIT,
@@ -2209,7 +2233,7 @@ struct service_settings doveadm_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &doveadm_unix_listeners_buf,
 			      sizeof(doveadm_unix_listeners[0]) } },
@@ -2287,7 +2311,7 @@ struct service_settings dns_client_service_settings = {
 	.client_limit = 1,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &dns_client_unix_listeners_buf,
 			      sizeof(dns_client_unix_listeners[0]) } },
@@ -2337,7 +2361,7 @@ struct service_settings director_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = -1U,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &director_unix_listeners_buf,
 			      sizeof(director_unix_listeners[0]) } },
@@ -2410,7 +2434,7 @@ struct service_settings dict_service_settings = {
 	.client_limit = 1,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &dict_unix_listeners_buf,
 			      sizeof(dict_unix_listeners[0]) } },
@@ -2472,7 +2496,7 @@ struct service_settings config_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &config_unix_listeners_buf,
 			      sizeof(config_unix_listeners[0]) } },
@@ -2596,7 +2620,7 @@ struct service_settings auth_service_settings = {
 	.client_limit = 4096,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &auth_unix_listeners_buf,
 			      sizeof(auth_unix_listeners[0]) } },
@@ -2623,7 +2647,7 @@ struct service_settings auth_worker_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &auth_worker_unix_listeners_buf,
 			      sizeof(auth_worker_unix_listeners[0]) } },
@@ -2809,7 +2833,7 @@ struct service_settings anvil_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = -1U,
-	.vsz_limit = -1U,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &anvil_unix_listeners_buf,
 			      sizeof(anvil_unix_listeners[0]) } },
@@ -2826,7 +2850,7 @@ static struct service_settings *config_all_services[] = {
 	&pop3_service_settings,
 	&pop3_login_service_settings,
 	&log_service_settings,
-	&lmtp_login_service_settings,
+	&lmtp_service_settings,
 	&imap_service_settings,
 	&imap_login_service_settings,
 	&doveadm_service_settings,

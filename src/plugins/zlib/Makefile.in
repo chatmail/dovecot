@@ -68,8 +68,17 @@ am__nobase_list = $(am__nobase_strip_setup); \
 am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
-am__installdirs = "$(DESTDIR)$(moduledir)"
-LTLIBRARIES = $(module_LTLIBRARIES)
+am__installdirs = "$(DESTDIR)$(doveadm_moduledir)" \
+	"$(DESTDIR)$(moduledir)"
+LTLIBRARIES = $(doveadm_module_LTLIBRARIES) $(module_LTLIBRARIES)
+lib10_doveadm_zlib_plugin_la_LIBADD =
+am_lib10_doveadm_zlib_plugin_la_OBJECTS = doveadm-zlib.lo
+lib10_doveadm_zlib_plugin_la_OBJECTS =  \
+	$(am_lib10_doveadm_zlib_plugin_la_OBJECTS)
+lib10_doveadm_zlib_plugin_la_LINK = $(LIBTOOL) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(lib10_doveadm_zlib_plugin_la_LDFLAGS) \
+	$(LDFLAGS) -o $@
 am__DEPENDENCIES_1 =
 lib20_zlib_plugin_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
@@ -92,8 +101,10 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(lib20_zlib_plugin_la_SOURCES)
-DIST_SOURCES = $(lib20_zlib_plugin_la_SOURCES)
+SOURCES = $(lib10_doveadm_zlib_plugin_la_SOURCES) \
+	$(lib20_zlib_plugin_la_SOURCES)
+DIST_SOURCES = $(lib10_doveadm_zlib_plugin_la_SOURCES) \
+	$(lib20_zlib_plugin_la_SOURCES)
 HEADERS = $(noinst_HEADERS)
 ETAGS = etags
 CTAGS = ctags
@@ -259,18 +270,22 @@ srcdir = @srcdir@
 ssldir = @ssldir@
 statedir = @statedir@
 sysconfdir = @sysconfdir@
+systemdsystemunitdir = @systemdsystemunitdir@
 target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+doveadm_moduledir = $(moduledir)/doveadm
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-storage \
 	-I$(top_srcdir)/src/lib-storage/index \
-	-I$(top_srcdir)/src/lib-storage/index/dbox-common
+	-I$(top_srcdir)/src/lib-storage/index/dbox-common \
+	-I$(top_srcdir)/src/doveadm
 
+lib10_doveadm_zlib_plugin_la_LDFLAGS = -module -avoid-version
 lib20_zlib_plugin_la_LDFLAGS = -module -avoid-version
 module_LTLIBRARIES = \
 	lib20_zlib_plugin.la
@@ -291,6 +306,12 @@ noinst_HEADERS = \
 	istream-zlib.h \
 	ostream-zlib.h \
 	zlib-plugin.h
+
+doveadm_module_LTLIBRARIES = \
+	lib10_doveadm_zlib_plugin.la
+
+lib10_doveadm_zlib_plugin_la_SOURCES = \
+	doveadm-zlib.c
 
 all: all-am
 
@@ -326,6 +347,37 @@ $(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
+install-doveadm_moduleLTLIBRARIES: $(doveadm_module_LTLIBRARIES)
+	@$(NORMAL_INSTALL)
+	test -z "$(doveadm_moduledir)" || $(MKDIR_P) "$(DESTDIR)$(doveadm_moduledir)"
+	@list='$(doveadm_module_LTLIBRARIES)'; test -n "$(doveadm_moduledir)" || list=; \
+	list2=; for p in $$list; do \
+	  if test -f $$p; then \
+	    list2="$$list2 $$p"; \
+	  else :; fi; \
+	done; \
+	test -z "$$list2" || { \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 '$(DESTDIR)$(doveadm_moduledir)'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 "$(DESTDIR)$(doveadm_moduledir)"; \
+	}
+
+uninstall-doveadm_moduleLTLIBRARIES:
+	@$(NORMAL_UNINSTALL)
+	@list='$(doveadm_module_LTLIBRARIES)'; test -n "$(doveadm_moduledir)" || list=; \
+	for p in $$list; do \
+	  $(am__strip_dir) \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f '$(DESTDIR)$(doveadm_moduledir)/$$f'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f "$(DESTDIR)$(doveadm_moduledir)/$$f"; \
+	done
+
+clean-doveadm_moduleLTLIBRARIES:
+	-test -z "$(doveadm_module_LTLIBRARIES)" || rm -f $(doveadm_module_LTLIBRARIES)
+	@list='$(doveadm_module_LTLIBRARIES)'; for p in $$list; do \
+	  dir="`echo $$p | sed -e 's|/[^/]*$$||'`"; \
+	  test "$$dir" != "$$p" || dir=.; \
+	  echo "rm -f \"$${dir}/so_locations\""; \
+	  rm -f "$${dir}/so_locations"; \
+	done
 install-moduleLTLIBRARIES: $(module_LTLIBRARIES)
 	@$(NORMAL_INSTALL)
 	test -z "$(moduledir)" || $(MKDIR_P) "$(DESTDIR)$(moduledir)"
@@ -357,6 +409,8 @@ clean-moduleLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
+lib10_doveadm_zlib_plugin.la: $(lib10_doveadm_zlib_plugin_la_OBJECTS) $(lib10_doveadm_zlib_plugin_la_DEPENDENCIES) 
+	$(lib10_doveadm_zlib_plugin_la_LINK) -rpath $(doveadm_moduledir) $(lib10_doveadm_zlib_plugin_la_OBJECTS) $(lib10_doveadm_zlib_plugin_la_LIBADD) $(LIBS)
 lib20_zlib_plugin.la: $(lib20_zlib_plugin_la_OBJECTS) $(lib20_zlib_plugin_la_DEPENDENCIES) 
 	$(lib20_zlib_plugin_la_LINK) -rpath $(moduledir) $(lib20_zlib_plugin_la_OBJECTS) $(lib20_zlib_plugin_la_LIBADD) $(LIBS)
 
@@ -366,6 +420,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-zlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-bzlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-zlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-bzlib.Plo@am__quote@
@@ -485,7 +540,7 @@ check-am: all-am
 check: check-am
 all-am: Makefile $(LTLIBRARIES) $(HEADERS)
 installdirs:
-	for dir in "$(DESTDIR)$(moduledir)"; do \
+	for dir in "$(DESTDIR)$(doveadm_moduledir)" "$(DESTDIR)$(moduledir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -515,8 +570,8 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-am
 
-clean-am: clean-generic clean-libtool clean-moduleLTLIBRARIES \
-	mostlyclean-am
+clean-am: clean-doveadm_moduleLTLIBRARIES clean-generic clean-libtool \
+	clean-moduleLTLIBRARIES mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -536,7 +591,8 @@ info: info-am
 
 info-am:
 
-install-data-am: install-moduleLTLIBRARIES
+install-data-am: install-doveadm_moduleLTLIBRARIES \
+	install-moduleLTLIBRARIES
 
 install-dvi: install-dvi-am
 
@@ -582,23 +638,27 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-moduleLTLIBRARIES
+uninstall-am: uninstall-doveadm_moduleLTLIBRARIES \
+	uninstall-moduleLTLIBRARIES
 
 .MAKE: install-am install-strip
 
-.PHONY: CTAGS GTAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-moduleLTLIBRARIES ctags distclean \
-	distclean-compile distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-am install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-moduleLTLIBRARIES install-pdf install-pdf-am \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs maintainer-clean \
+.PHONY: CTAGS GTAGS all all-am check check-am clean \
+	clean-doveadm_moduleLTLIBRARIES clean-generic clean-libtool \
+	clean-moduleLTLIBRARIES ctags distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-data install-data-am install-doveadm_moduleLTLIBRARIES \
+	install-dvi install-dvi-am install-exec install-exec-am \
+	install-html install-html-am install-info install-info-am \
+	install-man install-moduleLTLIBRARIES install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags uninstall uninstall-am uninstall-moduleLTLIBRARIES
+	tags uninstall uninstall-am \
+	uninstall-doveadm_moduleLTLIBRARIES \
+	uninstall-moduleLTLIBRARIES
 
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

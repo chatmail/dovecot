@@ -10,6 +10,7 @@
 #include "hash.h"
 #include "str.h"
 #include "master-interface.h"
+#include "master-service.h"
 #include "master-auth.h"
 #include "master-login-auth.h"
 
@@ -30,6 +31,8 @@ struct master_login_auth_request {
 
 	master_login_auth_request_callback_t *callback;
 	void *context;
+
+	unsigned int aborted:1;
 };
 
 struct master_login_auth {
@@ -55,7 +58,7 @@ struct master_login_auth {
 };
 
 static void master_login_auth_set_timeout(struct master_login_auth *auth);
-static void master_login_auth_send_all_requests(struct master_login_auth *auth);
+static void master_login_auth_check_spids(struct master_login_auth *auth);
 
 struct master_login_auth *master_login_auth_init(const char *auth_socket_path)
 {
@@ -69,7 +72,18 @@ struct master_login_auth *master_login_auth_init(const char *auth_socket_path)
 	auth->refcount = 1;
 	auth->fd = -1;
 	auth->requests = hash_table_create(default_pool, pool, 0, NULL, NULL);
+	auth->id_counter = (rand() % 32767) * 131072U;
 	return auth;
+}
+
+static void
+request_internal_failure(struct master_login_auth_request *request,
+			 const char *reason)
+{
+	i_error("%s (client-pid=%u client-id=%u)",
+		reason, request->client_pid, request->auth_id);
+	request->callback(NULL, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
+			  request->context);
 }
 
 void master_login_auth_disconnect(struct master_login_auth *auth)
@@ -81,8 +95,8 @@ void master_login_auth_disconnect(struct master_login_auth *auth)
 		DLLIST2_REMOVE(&auth->request_head,
 			       &auth->request_tail, request);
 
-		request->callback(NULL, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
-				  request->context);
+		request_internal_failure(request,
+			"Disconnected from auth server, aborting");
 		i_free(request);
 	}
 	hash_table_clear(auth->requests, FALSE);
@@ -137,6 +151,7 @@ static unsigned int auth_get_next_timeout_secs(struct master_login_auth *auth)
 static void master_login_auth_timeout(struct master_login_auth *auth)
 {
 	struct master_login_auth_request *request;
+	const char *reason;
 
 	while (auth->request_head != NULL &&
 	       auth_get_next_timeout_secs(auth) == 0) {
@@ -145,10 +160,10 @@ static void master_login_auth_timeout(struct master_login_auth *auth)
 			       &auth->request_tail, request);
 		hash_table_remove(auth->requests, POINTER_CAST(request->id));
 
-		i_error("Auth server request timed out after %u secs",
+		reason = t_strdup_printf(
+			"Auth server request timed out after %u secs",
 			(unsigned int)(ioloop_time - request->create_stamp));
-		request->callback(NULL, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
-				  request->context);
+		request_internal_failure(request, reason);
 		i_free(request);
 	}
 	timeout_remove(&auth->to);
@@ -194,6 +209,12 @@ master_login_auth_lookup_request(struct master_login_auth *auth,
 		return NULL;
 	}
 	master_login_auth_request_remove(auth, request);
+	if (request->aborted) {
+		request->callback(NULL, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
+				  request->context);
+		i_free(request);
+		return NULL;
+	}
 	return request;
 }
 
@@ -235,9 +256,10 @@ master_login_auth_input_notfound(struct master_login_auth *auth,
 
 	request = master_login_auth_lookup_request(auth, id);
 	if (request != NULL) {
-		i_error("Authenticated user not found from userdb");
-		request->callback(NULL, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
-				  request->context);
+		const char *reason = t_strdup_printf(
+			"Authenticated user not found from userdb, "
+			"auth lookup id=%u", id);
+		request_internal_failure(request, reason);
 		i_free(request);
 	}
 	return TRUE;
@@ -263,11 +285,15 @@ master_login_auth_input_fail(struct master_login_auth *auth,
 
 	request = master_login_auth_lookup_request(auth, id);
 	if (request != NULL) {
-		if (error != NULL)
-			i_error("Internal auth failure");
-		request->callback(NULL, error != NULL ? error :
-				  MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
-				  request->context);
+		if (error == NULL) {
+			request_internal_failure(request,
+						 "Internal auth failure");
+		} else {
+			i_error("Internal tuah failure: %s "
+				"(client-pid=%u client-id=%u)",
+				error, request->client_pid, request->auth_id);
+			request->callback(NULL, error, request->context);
+		}
 		i_free(request);
 	}
 	return TRUE;
@@ -282,7 +308,10 @@ static void master_login_auth_input(struct master_login_auth *auth)
 	case 0:
 		return;
 	case -1:
-		/* disconnected */
+		/* disconnected. stop accepting new connections, because in
+		   default configuration we no longer have permissions to
+		   connect back to auth-master */
+		master_service_stop_new_connections(master_service);
 		master_login_auth_disconnect(auth);
 		return;
 	case -2:
@@ -321,7 +350,7 @@ static void master_login_auth_input(struct master_login_auth *auth)
 			return;
 		}
 		auth->spid_received = TRUE;
-		master_login_auth_send_all_requests(auth);
+		master_login_auth_check_spids(auth);
 	}
 
 	auth->refcount++;
@@ -363,19 +392,38 @@ master_login_auth_connect(struct master_login_auth *auth)
 	return 0;
 }
 
+static bool
+auth_request_check_spid(struct master_login_auth *auth,
+			struct master_login_auth_request *req)
+{
+	if (auth->auth_server_pid != req->auth_pid && auth->spid_received) {
+		/* auth server was restarted. don't even attempt a login. */
+		i_warning("Auth server restarted (pid %u -> %u), aborting auth",
+			  (unsigned int)req->auth_pid,
+			  (unsigned int)auth->auth_server_pid);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static void master_login_auth_check_spids(struct master_login_auth *auth)
+{
+	struct master_login_auth_request *req, *next;
+
+	for (req = auth->request_head; req != NULL; req = next) {
+		next = req->next;
+		if (!auth_request_check_spid(auth, req))
+			req->aborted = TRUE;
+	}
+}
+
 static void
 master_login_auth_send_request(struct master_login_auth *auth,
 			       struct master_login_auth_request *req)
 {
 	string_t *str;
 
-	i_assert(auth->spid_received);
-
-	if (auth->auth_server_pid != req->auth_pid) {
-		/* auth server was restarted. don't even attempt a login. */
-		i_warning("Auth server restarted (pid %u -> %u), aborting auth",
-			  (unsigned int)req->auth_pid,
-			  (unsigned int)auth->auth_server_pid);
+	if (!auth_request_check_spid(auth, req)) {
 		master_login_auth_request_remove(auth, req);
 		req->callback(NULL, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
 			      req->context);
@@ -391,16 +439,6 @@ master_login_auth_send_request(struct master_login_auth *auth,
 	o_stream_send(auth->output, str_data(str), str_len(str));
 }
 
-static void master_login_auth_send_all_requests(struct master_login_auth *auth)
-{
-	struct master_login_auth_request *req, *next;
-
-	for (req = auth->request_head; req != NULL; req = next) {
-		next = req->next;
-		master_login_auth_send_request(auth, req);
-	}
-}
-
 void master_login_auth_request(struct master_login_auth *auth,
 			       const struct master_auth_request *req,
 			       master_login_auth_request_callback_t *callback,
@@ -411,6 +449,9 @@ void master_login_auth_request(struct master_login_auth *auth,
 
 	if (auth->fd == -1) {
 		if (master_login_auth_connect(auth) < 0) {
+			/* we couldn't connect to auth now,
+			   so we probably can't in future either. */
+			master_service_stop_new_connections(master_service);
 			callback(NULL, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
 				 context);
 			return;
@@ -440,8 +481,7 @@ void master_login_auth_request(struct master_login_auth *auth,
 	if (auth->to == NULL)
 		master_login_auth_set_timeout(auth);
 
-	if (auth->spid_received)
-		master_login_auth_send_request(auth, login_req);
+	master_login_auth_send_request(auth, login_req);
 }
 
 unsigned int master_login_auth_request_count(struct master_login_auth *auth)

@@ -15,6 +15,7 @@ struct master_service_settings {
 	uoff_t config_cache_size;
 	bool version_ignore;
 	bool shutdown_clients;
+	bool verbose_proctitle;
 };
 
 struct master_service_settings_input {
@@ -65,6 +66,8 @@ pool_t master_service_settings_detach(struct master_service *service);
 const struct master_service_settings *
 master_service_settings_get(struct master_service *service);
 void **master_service_settings_get_others(struct master_service *service);
+struct setting_parser_context *
+master_service_get_settings_parser(struct master_service *service);
 
 int master_service_set(struct master_service *service, const char *line);
 
@@ -72,4 +75,5 @@ int master_service_set(struct master_service *service, const char *line);
    and parameter are unaliased before comparing. */
 bool master_service_set_has_config_override(struct master_service *service,
 					    const char *key);
+
 #endif

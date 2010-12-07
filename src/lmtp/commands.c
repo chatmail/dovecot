@@ -256,9 +256,16 @@ static bool client_proxy_rcpt(struct client *client, const char *address,
 		client_send_line(client, "554 5.4.6 <%s> "
 				 "Proxying loops to itself", address);
 		pool_unref(&pool);
-		return FALSE;
+		return TRUE;
 	}
 
+	if (array_count(&client->state.rcpt_to) != 0) {
+		client_send_line(client, "451 4.3.0 <%s> "
+			"Can't handle mixed proxy/non-proxy destinations",
+			address);
+		pool_unref(&pool);
+		return TRUE;
+	}
 	if (client->proxy == NULL) {
 		client->proxy = lmtp_proxy_init(client->set->hostname,
 						dns_client_socket_path,
@@ -375,6 +382,13 @@ int cmd_rcpt(struct client *client, const char *args)
 			return 0;
 	}
 
+	if (client->proxy != NULL) {
+		client_send_line(client, "451 4.3.0 <%s> "
+			"Can't handle mixed proxy/non-proxy destinations",
+			address);
+		return 0;
+	}
+
 	memset(&input, 0, sizeof(input));
 	input.module = input.service = "lmtp";
 	input.username = username;
@@ -469,7 +483,9 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 	if (dctx.dest_addr == NULL)
 		dctx.dest_addr = rcpt->address;
 	dctx.final_dest_addr = rcpt->address;
-	dctx.dest_mailbox_name = *rcpt->detail == '\0' ? "INBOX" : rcpt->detail;
+	dctx.dest_mailbox_name = *rcpt->detail != '\0' &&
+		client->lmtp_set->lmtp_save_to_detail_mailbox ?
+		rcpt->detail : "INBOX";
 	dctx.save_dest_mail = array_count(&client->state.rcpt_to) > 1 &&
 		client->state.first_saved_mail == NULL;
 
@@ -743,10 +759,12 @@ static int client_input_add_file(struct client *client,
 
 	/* move everything to a temporary file. */
 	path = t_str_new(256);
-	mail_user_set_get_temp_prefix(path, client->user_set);
+	mail_user_set_get_temp_prefix(path, client->raw_mail_user->set);
 	fd = safe_mkstemp_hostpid(path, 0600, (uid_t)-1, (gid_t)-1);
-	if (fd == -1)
+	if (fd == -1) {
+		i_error("Temp file creation to %s failed: %m", str_c(path));
 		return -1;
+	}
 
 	/* we just want the fd, unlink it */
 	if (unlink(str_c(path)) < 0) {

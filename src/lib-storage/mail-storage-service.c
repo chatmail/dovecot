@@ -167,7 +167,9 @@ user_reply_handle(struct mail_storage_service_ctx *ctx,
 		  const struct auth_user_reply *reply,
 		  const char **error_r)
 {
-	const char *const *str, *line;
+	const char *home = reply->home;
+	const char *chroot = reply->chroot;
+	const char *const *str, *line, *p;
 	unsigned int i, count;
 	int ret = 0;
 
@@ -181,18 +183,26 @@ user_reply_handle(struct mail_storage_service_ctx *ctx,
 	if (reply->gid != (uid_t)-1)
 		set_keyval(ctx, user, "mail_gid", dec2str(reply->gid));
 
-	if (reply->home != NULL)
+	if (home != NULL && chroot == NULL &&
+	    *user->user_set->valid_chroot_dirs != '\0' &&
+	    (p = strstr(home, "/./")) != NULL) {
+		/* wu-ftpd like <chroot>/./<home> - check only if there's even
+		   a possibility of using them (non-empty valid_chroot_dirs) */
+		chroot = t_strdup_until(home, p);
+		home = p + 2;
+	}
+
+	if (home != NULL)
 		set_keyval(ctx, user, "mail_home", reply->home);
 
-	if (reply->chroot != NULL) {
-		if (!validate_chroot(user->user_set, reply->chroot)) {
+	if (chroot != NULL) {
+		if (!validate_chroot(user->user_set, chroot)) {
 			*error_r = t_strdup_printf(
 				"userdb returned invalid chroot directory: %s "
-				"(see valid_chroot_dirs setting)",
-				reply->chroot);
+				"(see valid_chroot_dirs setting)", chroot);
 			return -1;
 		}
-		set_keyval(ctx, user, "mail_chroot", reply->chroot);
+		set_keyval(ctx, user, "mail_chroot", chroot);
 	}
 
 	str = array_get(&reply->extra_fields, &count);
@@ -520,11 +530,16 @@ mail_storage_service_init_log(struct mail_storage_service_ctx *ctx,
 	ctx->log_initialized = TRUE;
 	T_BEGIN {
 		string_t *str;
+		struct ioloop_log *log;
 
 		str = t_str_new(256);
 		var_expand(str, user->user_set->mail_log_prefix,
 			   get_var_expand_table(ctx->service, &user->input));
 		master_service_init_log(ctx->service, str_c(str));
+
+		log = io_loop_log_new(current_ioloop);
+		io_loop_log_set_prefix(log, str_c(str));
+		io_loop_log_unref(&log);
 	} T_END;
 }
 
@@ -601,8 +616,10 @@ mail_storage_service_init(struct master_service *service,
 	if ((flags & MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT) == 0) {
 		/* note: we may not have read any settings yet, so this logging
 		   may still be going to wrong location */
-		master_service_init_log(service,
-					t_strconcat(service->name, ": ", NULL));
+		const char *log_prefix = t_strconcat(service->name, ": ", NULL);
+
+		master_service_init_log(service, log_prefix);
+		io_loop_set_default_log_prefix(current_ioloop, log_prefix);
 	}
 	dict_drivers_register_builtin();
 	return ctx;

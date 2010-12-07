@@ -54,7 +54,9 @@ enum mail_storage_class_flags {
 	/* root_dir points to a unique directory */
 	MAIL_STORAGE_CLASS_FLAG_UNIQUE_ROOT	= 0x02,
 	/* mailbox_open_stream() is supported */
-	MAIL_STORAGE_CLASS_FLAG_OPEN_STREAMS	= 0x04
+	MAIL_STORAGE_CLASS_FLAG_OPEN_STREAMS	= 0x04,
+	/* never use quota for this storage (e.g. virtual mailboxes) */
+	MAIL_STORAGE_CLASS_FLAG_NOQUOTA		= 0x08
 };
 
 struct mail_storage {
@@ -282,6 +284,10 @@ struct mailbox {
 	unsigned int inbox_user:1;
 	/* TRUE if this is an INBOX for this namespace (user or shared) */
 	unsigned int inbox_any:1;
+	/* When copying to this mailbox, require that mailbox_copy() uses
+	   mailbox_save_*() to actually save a new physical copy rather than
+	   simply incrementing a reference count (e.g. via hard link) */
+	unsigned int disable_reflink_copy_to:1;
 };
 
 struct mail_vfuncs {
