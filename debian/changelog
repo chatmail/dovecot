@@ -1,3 +1,13 @@
+dovecot (1:1.2.15-4) unstable; urgency=low
+
+  * [a6055fb] Force loading of all OpenSSL algorithms to avoid "unknown
+    message digest algorithm" error with certain openssl versions
+    (Closes: #573889)
+  * [49abe86] Fix upgrade from lenny by adding epoch to Replaces and
+    Breaks lines (Closes: #601980)
+
+ -- Marco Nenciarini <mnencia@debian.org>  Mon, 24 Jan 2011 00:22:27 +0100
+
 dovecot (1:1.2.15-3) unstable; urgency=low
 
   * [096c373] Fix file overwrite error when upgrading from lenny
