@@ -8,4 +8,3 @@
 0008-dovecot-ssl.patch
 0009-dovecot-mboxlocking.patch
 0010-sendmail-path.patch
-0011-ssl-algorithms.patch
