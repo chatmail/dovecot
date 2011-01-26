@@ -115,4 +115,60 @@ you can work around the problem of not having the per-user directory:
    directory containing other mailboxes than INBOX. If the directory is
    writable, all the users will have their mailboxes shared.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+Directory layout
+----------------
+
+By default Dovecot uses filesystem layout under mbox. This means that mail is
+stored in mbox files under hierarchical directories, for example:
+
+ * '~/mail/inbox' - mbox file containing mail for INBOX
+ * '~/mail/foo' - mbox file containing mail for mailbox "foo"
+ * '~/mail/bar/baz' - mbox file containing mail for mailbox "bar/baz"
+
+One upshot of this is that it is not normally possible to have mailboxes which
+are subfolders of mailboxes containing messages.
+
+As an alternative, it is possible to configure Dovecot to store all mailboxes
+in a single directory with hierarchical levels separated by a dot. This can be
+configured by adding ':LAYOUT=maildir++' to the mail location. There are,
+however, some further considerations when doing this; see
+<MboxChildFolders.txt> for some examples.
+
+Control files
+-------------
+
+Under mbox format, Dovecot maintains the subscribed mailboxes list in a file
+'.subscriptions' which by default is stored in the mail location root. So in
+the example configuration this would be at '~/mail/.subscriptions'.
+
+If you want to put this somewhere else, you can change the directory in which
+the '.subscriptions' file is kept by using the 'CONTROL' parameter. So for
+example, if we configured the mail location using:
+
+---%<-------------------------------------------------------------------------
+mail_location = mbox:~/mail:CONTROL=~/mail-control
+---%<-------------------------------------------------------------------------
+
+then the subscribed mailboxes list would be maintained at
+'~/mail-control/.subscriptions'.
+
+One practical application of the 'CONTROL' parameter is described at
+<MboxChildFolders.txt>.
+
+Message file name
+-----------------
+
+By default, Dovecot stores messages for INBOX in an mbox file called "inbox",
+and messages for all other mailboxes in an mbox file whose relative path is
+equivalent to the name of the mailbox. Under this scheme, it is not possible to
+have mailboxes which contain both messages and child mailboxes.
+
+However, the behaviour (for mailboxes other than INBOX) can be changed using
+the 'DIRNAME' parameter. If the 'DIRNAME' parameter is specified with a
+particular value, then Dovecot will store messages in a file with a name of
+that value, in a directory with a name equivalent to the mailbox name.
+
+There are, however, some further considerations when doing this; see
+<MboxChildFolders.txt> for an example.
+
+(This file was created from the wiki on 2011-01-13 04:52)

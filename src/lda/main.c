@@ -154,13 +154,6 @@ create_raw_stream(struct mail_deliver_context *ctx,
 	i_free(sender);
 
 	if (input->v_offset == 0) {
-		if (deliver_mail == NULL) {
-			/* no Sieve or any other plugin. this input stream
-			   simply passes to mailbox_save(), so it doesn't need
-			   to be seekable and we can avoid creating temp files
-			   for large mails. */
-			return input;
-		}
 		input2 = input;
 		i_stream_ref(input2);
 	} else {
@@ -262,7 +255,8 @@ int main(int argc, char *argv[])
 		&argc, &argv, "a:d:ef:km:p:r:");
 
 	memset(&ctx, 0, sizeof(ctx));
-	ctx.pool = pool_alloconly_create("mail deliver context", 256);
+	ctx.session = mail_deliver_session_init();
+	ctx.pool = ctx.session->pool;
 	ctx.dest_mailbox_name = "INBOX";
 	path = NULL;
 
@@ -474,7 +468,7 @@ int main(int argc, char *argv[])
 
 	mail_user_unref(&ctx.dest_user);
 	mail_user_unref(&raw_mail_user);
-	pool_unref(&ctx.pool);
+	mail_deliver_session_deinit(&ctx.session);
 
 	mail_storage_service_user_free(&service_user);
 	mail_storage_service_deinit(&storage_service);

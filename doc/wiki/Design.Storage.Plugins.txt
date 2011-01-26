@@ -77,10 +77,13 @@ context. If you only want to override some methods, you can use:
 
 ---%<-------------------------------------------------------------------------
 union mailbox_module_context *mbox;
+struct mailbox_vfuncs *v = box->vlast;
 
 mbox = p_new(box->pool, union mailbox_module_context, 1);
-mbox->super = box->v;
-box->v.transaction_begin = plugin_transaction_begin;
+mbox->super = *v;
+box->vlast = &mbox->super;
+
+v->transaction_begin = plugin_transaction_begin;
 MODULE_CONTEXT_SET_SELF(box, plugin_storage_module, mbox);
 ---%<-------------------------------------------------------------------------
 
@@ -95,10 +98,13 @@ struct plugin_mailbox {
 /* .. */
 
 struct plugin_mailbox *mbox;
+struct mailbox_vfuncs *v = box->vlast;
 
 mbox = p_new(box->pool, struct plugin_mailbox, 1);
-mbox->module_ctx.super = box->v;
-box->v.transaction_begin = plugin_transaction_begin;
+mbox->module_ctx.super = *v;
+box->vlast = &mbox->super;
+
+v->transaction_begin = plugin_transaction_begin;
 MODULE_CONTEXT_SET(box, plugin_storage_module, mbox);
 ---%<-------------------------------------------------------------------------
 
@@ -115,4 +121,4 @@ struct plugin_mailbox *mbox = PLUGIN_CONTEXT(box);
 
 (Yes, this API seems a bit too difficult to use and could use a redesign.)
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

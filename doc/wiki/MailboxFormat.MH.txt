@@ -49,4 +49,4 @@ Links
  * Mutt Manual [http://www.mutt.org/doc/manual/manual-4.html#ss4.6]: Describing
    how it handles MH folders
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

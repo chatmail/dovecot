@@ -11,20 +11,20 @@ wikifiles = ACL.txt \
 	AuthDatabase.CheckPassword.txt \
 	AuthDatabase.LDAP.AuthBinds.txt \
 	AuthDatabase.LDAP.PasswordLookups.txt \
-	AuthDatabase.LDAP.Userdb.txt \
 	AuthDatabase.LDAP.txt \
-	AuthDatabase.Passwd.txt \
+	AuthDatabase.LDAP.Userdb.txt \
 	AuthDatabase.PasswdFile.txt \
+	AuthDatabase.Passwd.txt \
 	AuthDatabase.SQL.txt \
-	AuthDatabase.VPopMail.txt \
 	AuthDatabase.txt \
+	AuthDatabase.VPopMail.txt \
 	Authentication.Caching.txt \
 	Authentication.Kerberos.txt \
 	Authentication.MasterUsers.txt \
 	Authentication.Mechanisms.DigestMD5.txt \
 	Authentication.Mechanisms.NTLM.txt \
-	Authentication.Mechanisms.Winbind.txt \
 	Authentication.Mechanisms.txt \
+	Authentication.Mechanisms.Winbind.txt \
 	Authentication.MultipleDatabases.txt \
 	Authentication.PasswordSchemes.txt \
 	Authentication.RestrictAccess.txt \
@@ -54,19 +54,20 @@ wikifiles = ACL.txt \
 	Design.Plugins.txt \
 	Design.Processes.txt \
 	Design.Storage.ErrorHandling.txt \
-	Design.Storage.Mail.txt \
-	Design.Storage.MailNamespace.txt \
-	Design.Storage.MailStorage.txt \
-	Design.Storage.MailUser.txt \
+	Design.Storage.MailboxList.txt \
 	Design.Storage.Mailbox.Save.txt \
 	Design.Storage.Mailbox.Search.txt \
 	Design.Storage.Mailbox.Sync.txt \
 	Design.Storage.Mailbox.Transaction.txt \
 	Design.Storage.Mailbox.txt \
-	Design.Storage.MailboxList.txt \
+	Design.Storage.MailNamespace.txt \
+	Design.Storage.MailStorage.txt \
+	Design.Storage.Mail.txt \
+	Design.Storage.MailUser.txt \
 	Design.Storage.Plugins.txt \
 	Design.Strings.txt \
 	Design.txt \
+	Dict.txt \
 	Director.txt \
 	DomainLost.txt \
 	FindMailLocation.txt \
@@ -79,68 +80,79 @@ wikifiles = ACL.txt \
 	HowTo.SimpleVirtualInstall.txt \
 	HowTo.txt \
 	IndexFiles.txt \
-	Iptables.txt \
 	LDA.Exim.txt \
 	LDA.Indexing.txt \
 	LDA.Postfix.txt \
 	LDA.Qmail.txt \
 	LDA.Sendmail.txt \
-	LDA.Sieve.Dovecot.txt \
 	LDA.Sieve.txt \
 	LDA.txt \
 	LMTP.txt \
 	Logging.txt \
 	LoginProcess.txt \
-	MDA.txt \
-	MTA.txt \
-	MailLocation.LocalDisk.txt \
-	MailLocation.Maildir.txt \
-	MailLocation.SharedDisk.txt \
-	MailLocation.mbox.txt \
-	MailLocation.txt \
 	MailboxFormat.Cydir.txt \
-	MailboxFormat.MH.txt \
-	MailboxFormat.Maildir.txt \
 	MailboxFormat.dbox.txt \
+	MailboxFormat.Maildir.txt \
 	MailboxFormat.mailstore.txt \
 	MailboxFormat.mbox.txt \
 	MailboxFormat.mbx.txt \
+	MailboxFormat.MH.txt \
 	MailboxFormat.txt \
-	ManageSieve.Clients.txt \
-	ManageSieve.Configuration.txt \
-	ManageSieve.Install.1.0.txt \
-	ManageSieve.Install.txt \
-	ManageSieve.Troubleshooting.txt \
-	ManageSieve.txt \
+	maildrop.txt \
+	MailLocation.dbox.txt \
+	MailLocation.LocalDisk.txt \
+	MailLocation.Maildir.txt \
+	MailLocation.mbox.txt \
+	MailLocation.SharedDisk.txt \
+	MailLocation.txt \
+	MboxChildFolders.txt \
 	MboxLocking.txt \
 	MboxProblems.txt \
+	MDA.txt \
 	Migration.BincIMAP.txt \
 	Migration.Courier.txt \
 	Migration.Cyrus.txt \
 	Migration.Linuxconf.txt \
 	Migration.MailFormat.txt \
+	Migration.Online.txt \
 	Migration.Teapop.txt \
+	Migration.txt \
 	Migration.UW.txt \
 	Migration.Vm-pop3d.txt \
-	Migration.txt \
 	MissingMailboxes.txt \
-	NFS.txt \
+	MTA.txt \
+	mutt.txt \
 	Namespaces.txt \
+	NFS.txt \
 	OSCompatibility.txt \
-	POP3Server.txt \
 	PasswordDatabase.BSDAuth.txt \
 	PasswordDatabase.ExtraFields.AllowNets.txt \
 	PasswordDatabase.ExtraFields.Host.txt \
 	PasswordDatabase.ExtraFields.NoDelay.txt \
 	PasswordDatabase.ExtraFields.NoLogin.txt \
 	PasswordDatabase.ExtraFields.Proxy.txt \
-	PasswordDatabase.ExtraFields.User.txt \
 	PasswordDatabase.ExtraFields.txt \
+	PasswordDatabase.ExtraFields.User.txt \
 	PasswordDatabase.PAM.txt \
 	PasswordDatabase.Shadow.txt \
+	PasswordDatabase.Static.txt \
 	PasswordDatabase.txt \
 	PerformanceTuning.txt \
+	Pigeonhole.Installation.txt \
+	Pigeonhole.ManageSieve.Clients.txt \
+	Pigeonhole.ManageSieve.Configuration.txt \
+	Pigeonhole.ManageSieve.Install.txt \
+	Pigeonhole.ManageSieve.Troubleshooting.txt \
+	Pigeonhole.ManageSieve.txt \
+	Pigeonhole.Sieve.Configuration.txt \
+	Pigeonhole.Sieve.Examples.txt \
+	Pigeonhole.Sieve.Plugins.Extdata.txt \
+	Pigeonhole.Sieve.Plugins.txt \
+	Pigeonhole.Sieve.txt \
+	Pigeonhole.Sieve.Usage.txt \
+	Pigeonhole.txt \
 	Plugins.Autocreate.txt \
+	Plugins.Compress.txt \
 	Plugins.Expire.txt \
 	Plugins.FTS.Lucene.txt \
 	Plugins.FTS.Solr.txt \
@@ -149,11 +161,12 @@ wikifiles = ACL.txt \
 	Plugins.Lazyexpunge.txt \
 	Plugins.Listescape.txt \
 	Plugins.MailLog.txt \
-	Plugins.MboxSnarf.txt \
+	Plugins.Snarf.txt \
 	Plugins.Trash.txt \
+	Plugins.txt \
 	Plugins.Virtual.txt \
 	Plugins.Zlib.txt \
-	Plugins.txt \
+	POP3Server.txt \
 	PostLoginScripting.txt \
 	PreAuth.txt \
 	QuickConfiguration.txt \
@@ -164,10 +177,6 @@ wikifiles = ACL.txt \
 	Quota.Maildir.txt \
 	Quota.txt \
 	RunningDovecot.txt \
-	SSL.CertificateClientImporting.txt \
-	SSL.CertificateCreation.txt \
-	SSL.DovecotConfiguration.txt \
-	SSL.txt \
 	Sasl.txt \
 	SecurityTuning.txt \
 	SharedMailboxes.Permissions.txt \
@@ -175,6 +184,10 @@ wikifiles = ACL.txt \
 	SharedMailboxes.Shared.txt \
 	SharedMailboxes.Symlinks.txt \
 	SharedMailboxes.txt \
+	SSL.CertificateClientImporting.txt \
+	SSL.CertificateCreation.txt \
+	SSL.DovecotConfiguration.txt \
+	SSL.txt \
 	SystemUsers.txt \
 	TestInstallation.txt \
 	TestPop3Installation.txt \
@@ -190,10 +203,8 @@ wikifiles = ACL.txt \
 	UserDatabase.Static.txt \
 	UserDatabase.txt \
 	UserIds.txt \
+	uw2dovecot.sh.txt \
 	Variables.txt \
 	VirtualUsers.Home.txt \
 	VirtualUsers.txt \
-	WhyDoesItNotWork.txt \
-	maildrop.txt \
-	mutt.txt \
-	uw2dovecot.sh.txt
+	WhyDoesItNotWork.txt

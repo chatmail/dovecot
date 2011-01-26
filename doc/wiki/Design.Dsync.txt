@@ -38,7 +38,7 @@ renamed or deleted. So:
    deleted from the other side. If there's not, the mailbox is created and
    synced.
  * Subscriptions and unsubscriptions are synced in a similar way. But because
-   it's possible to be subscribed to non-existing mailboxes, mailbox log can't
+   it's possible to be subscribed to nonexistent mailboxes, mailbox log can't
    contain mailbox GUIDs for them. Instead the first 128 bits of SHA1 of
    mailbox name are used. Collisions for mailbox names are highly unlikely, but
    even if one happens, the worst that can happen is that user gets
@@ -108,4 +108,4 @@ FIXME: This optimization currently works only in full sync mode. If this were
 to work in fast sync mode, the full mailbox list would have to be looked up
 from local side. And this would slow it down..
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

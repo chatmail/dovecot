@@ -13,32 +13,20 @@ postconf -a
 Once you have verified that your installation of Postfix supports Dovecot SASL,
 it's very simple to configure:
 
-Example dovecot.conf excerpt
-----------------------------
+Example conf.d/10-master.conf excerpt
+-------------------------------------
 
 ---%<-------------------------------------------------------------------------
-auth default {
-      mechanisms = plain login
-      passdb pam {
-      }
-      userdb passwd {
-      }
-      socket listen {
-        client {
-          # Assuming the default Postfix $queue_directory setting
-          path = /var/spool/postfix/private/auth
-          mode = 0660
-          # Assuming the default Postfix user and group
-          user = postfix
-          group = postfix
-        }
-        # deliver and some other programs need also auth-master:
-        #master {
-        #  path = /var/run/dovecot/auth-master
-        #  mode = 0600
-        #}
-      }
-    }
+service auth {
+...
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0660
+    # Assuming the default Postfix user and group
+    user = postfix
+    group = postfix
+  }
+  ...
+}
 ---%<-------------------------------------------------------------------------
 
 Example Postfix main.cf excerpt
@@ -46,10 +34,12 @@ Example Postfix main.cf excerpt
 
 ---%<-------------------------------------------------------------------------
 smtpd_sasl_type = dovecot
+
 # Can be an absolute path, or relative to $queue_directory
 # Debian/Ubuntu users: Postfix is setup by default to run chrooted, so it is
 best to leave it as-is below
 smtpd_sasl_path = private/auth
+
 # and the common settings to enable SASL:
 smtpd_sasl_auth_enable = yes
 smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated,
@@ -64,7 +54,7 @@ practice to use a dedicated submission port for the MUAs (TCP 587). Not only
 can you specify individual parameters in *master.cf* overriding the global ones
 but you will not run into internet mail rejection while the Dovecot Auth
 Mechanism is unavailable. In this example Postfix is configured to accept TLS
-encrypted sessions only along with several sanity checks:
+encrypted sessions only, along with several other sanity checks:
 
  * Verification of alias ownership via Login Maps
  * Domainname and recipient plausibility
@@ -95,11 +85,11 @@ Remark
 ------
 
 If Outlook Express (and/or Windows Mail) doesn't seem to login, even though you
-checked "My server requires authentication" in its configuration, then verify
+checked "My server requires authentication" in it's configuration, then verify
 that the "mechanisms" line contains "login" in addition to "plain". "plain" is
 the default, and most clients can work with it, but Outlook Express needs the
 "login" mechanism. Also see:
 
  * http://archives.neohapsis.com/archives/postfix/2000-11/0881.html
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

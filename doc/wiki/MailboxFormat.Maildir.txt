@@ -78,9 +78,8 @@ IMAP keywords
 -------------
 
 All the non-standard message flags are called keywords in IMAP. Some clients
-use these automatically for marking spam (eg. $Junk, $ <NonJunk.txt>, $Spam, $
-<NonSpam.txt> keywords). Thunderbird uses labels which map to keywords $Label1,
-$Label2, etc.
+use these automatically for marking spam (eg. $Junk, $NonJunk, $Spam, $NonSpam
+keywords). Thunderbird uses labels which map to keywords $Label1, $Label2, etc.
 
 Dovecot stores keywords in the maildir filename's flags field using letters
 a..z. This means that only 26 keywords are possible to store in the maildir. If
@@ -310,4 +309,4 @@ References
  * Maildir++ [http://www.inter7.com/courierimap/README.maildirquota.html]
  * Wikipedia [http://en.wikipedia.org/wiki/Maildir]
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

@@ -1,8 +1,10 @@
 Zlib plugin
 ===========
 
-Zlib plugin can be used to read compressed mbox, maildir or dbox files. Zlib
-plugin supports compression using zlib/gzip and bzlib/bzip2.
+Zlib plugin can be used to read compressed mbox, maildir or dbox files. It can
+be also used to write(via IMAP, <LDA.txt> and/or <LMTP.txt>) compressed
+messages to <dbox> [MailboxFormat.dbox.txt] or Maildir mailboxes.   Zlib plugin
+supports compression using zlib/gzip and bzlib/bzip2.
 
 Configuration:
 
@@ -84,4 +86,4 @@ the included maildirlock utility. The idea is to:
  6. Unlock the maildir by sending a TERM signal to the maildirlock process
     (killing the PID it wrote to stdout).
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

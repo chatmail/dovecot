@@ -93,4 +93,4 @@ allow_nets=192.168.0.0/24
 user2:{plain}pass2:1001:1001::/home/user2
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

@@ -16,9 +16,11 @@ Contents
 
      3. User database lookups
 
-     4. Prefetching
+     4. User iteration
 
-     5. Example
+     5. Prefetching
+
+     6. Example
 
 Password database lookups
 -------------------------
@@ -90,6 +92,17 @@ mail_uid = vmail
 mail_gid = vmail
 ---%<-------------------------------------------------------------------------
 
+User iteration
+--------------
+
+Some commands, such as 'doveadm -A' need to get a list of users. With SQL
+userdb this is done with 'iterate_query' setting. You can either return
+
+ * "user" field containing either user or user@domain style usernames, or
+ * "user" and "domain" fields
+
+Any other fields are ignored.
+
 Prefetching
 -----------
 
@@ -132,10 +145,14 @@ connect = host=/var/run/mysqld/mysqld.sock dbname=mails user=admin
 password=pass
 # Alternatively you can connect to localhost as well:
 #connect = host=localhost dbname=mails user=admin password=pass
+
 password_query = SELECT userid AS username, domain, password \
   FROM users WHERE userid = '%n' AND domain = '%d'
 user_query = SELECT home, uid, gid FROM users WHERE userid = '%n' AND domain =
 '%d'
+
+# For using doveadm -A:
+iterate_query = SELECT userid AS username, domain FROM users
 ---%<-------------------------------------------------------------------------
 
 PostgreSQL
@@ -149,11 +166,14 @@ pg_hba.conf
 driver = pgsql
 # Use "host= ... pass=foo#bar" if your password has '#' character
 connect = host=localhost dbname=mails user=admin password=pass
-# PostgreSQL:
+
 password_query = SELECT userid AS username, domain, password \
   FROM users WHERE userid = '%n' AND domain = '%d'
 user_query = SELECT home, uid, gid FROM users WHERE userid = '%n' AND domain =
 '%d'
+
+# For using doveadm -A:
+iterate_query = SELECT userid AS username, domain FROM users
 ---%<-------------------------------------------------------------------------
 
 SQLite
@@ -164,10 +184,14 @@ Add to your 'dovecot-sql.conf' file:
 ---%<-------------------------------------------------------------------------
 driver = sqlite
 connect = /path/to/sqlite.db
+
 password_query = SELECT userid AS username, domain, password \
   FROM users WHERE userid = '%n' AND domain = '%d'
 user_query = SELECT home, uid, gid FROM users WHERE userid = '%n' AND domain =
 '%d'
+
+# For using doveadm -A:
+iterate_query = SELECT userid AS username, domain FROM users
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

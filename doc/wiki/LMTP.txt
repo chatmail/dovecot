@@ -1,9 +1,28 @@
 LMTP Server
 ===========
 
-Most of the LMTP server configuration is identical to <LDA.txt>. The main
-difference is that dovecot-lda starts as a binary from command line, while LMTP
-is another process started by Dovecot's master process.
+LMTP uses the same settings as <LDA.txt>, as specified in 'conf.d/15-lda.conf'
+in example configuration. There is also a bit of extra configuration in
+'conf.d/20-lmtp.conf'. The main difference is that the LDA is a short-running
+process, started as a binary from command line, while LMTP is a long-runing
+process started by Dovecot's master process.
+
+Envelope Addresses
+------------------
+
+Compared to dovecot-lda parameters, the addresses are taken from:
+
+ * -f / Envelope sender address: This is the MAIL FROM: value from LMTP
+   session.
+ * -r / Final envelope recipient address: This is the RCPT TO: value from LMTP
+   session.
+ * -a / Original envelope recipient address: This defaults to same as RCPT TO:
+   value, but may be overridden by reading it from a header specified by
+   'lda_original_recipient_header' setting.
+ * -d / Destination username: This is the same as RCPT TO: value, but with the
+   "+extension" part removed when 'recipient_delimiter' setting is set. If
+   usernames differ from recipient email addresses, the userdb must handle the
+   translation.
 
 Listeners
 ---------
@@ -55,4 +74,4 @@ to issue passdb lookups:
 lmtp_proxy = yes
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

@@ -110,15 +110,19 @@ minutes they time out and fail the operation.
 Directory Structure
 -------------------
 
-When listing mailboxes, Dovecot simply assumes that all files it sees are
-mboxes and all directories mean that they contain sub-mailboxes. There are two
-special cases however which aren't listed:
+By default, when listing mailboxes, Dovecot simply assumes that all files it
+sees are mboxes and all directories mean that they contain sub-mailboxes. There
+are two special cases however which aren't listed:
 
  * '.subscriptions' file contains IMAP's mailbox subscriptions.
  * '.imap/' directory contains Dovecot's index files.
 
 Because it's not possible to have a file which is also a directory, it's not
-possible to create a mailbox and child mailboxes under it.
+normally possible to create a mailbox and child mailboxes under it.
+
+However if you really want to be able to have mailboxes containing both
+messages and child mailboxes under mbox, then Dovecot can be configured to do
+this, subject to certain provisos; see <MboxChildFolders.txt>.
 
 Dovecot's Metadata
 ------------------
@@ -264,4 +268,4 @@ References
  * CommuniGatePro mbox
    [http://www.communigate.com/CommuniGatePro/Mailboxes.html#mbox]
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

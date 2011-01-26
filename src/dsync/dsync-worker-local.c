@@ -1000,6 +1000,8 @@ local_worker_msg_iter_next(struct dsync_worker_msg_iter *_iter,
 	msg_r->flags = mail_get_flags(iter->mail);
 	msg_r->keywords = mail_get_keywords(iter->mail);
 	msg_r->modseq = mail_get_modseq(iter->mail);
+	if (mail_get_save_date(iter->mail, &msg_r->save_date) < 0)
+		msg_r->save_date = (time_t)-1;
 	return 1;
 }
 
@@ -1714,7 +1716,6 @@ local_worker_msg_save(struct dsync_worker *_worker,
 		i_error("Can't save message to mailbox %s: %s",
 			mailbox_get_vname(dest_box),
 			mail_storage_get_last_error(storage, NULL));
-		mailbox_save_cancel(&save_ctx);
 		dsync_worker_set_failure(_worker);
 		callback(context);
 		return;

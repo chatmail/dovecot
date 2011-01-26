@@ -38,66 +38,80 @@ make
 make install
 ---%<-------------------------------------------------------------------------
 
-Dovecot is then started by running '~/dovecot/sbin/dovecot'. The configuration
-file exists in '~/dovecot/etc/dovecot.conf'.
+Dovecot is then started by running '~/dovecot/sbin/dovecot'. The example
+configuration file exists in '~/dovecot/share/doc/dovecot/example-config/' and
+needs to be copied to '~/dovecot/etc/dovecot/'.
 
 Configuration
 -------------
 
 The important settings to change for rootless installation are:
 
- * 'login_chroot=no'
- * 'login_user' and auth 'user' should be the username you're running Dovecot
-   as.
- * 'log_path' and 'info_log_path'
+ * Remove default usernames. By setting them empty, Dovecot uses the same user
+   as what master is running as:
+
+   ---%<----------------------------------------------------------------------
+   default_internal_user =
+   default_login_user =
+   ---%<----------------------------------------------------------------------
+
+ * Remove default chrooting from all services:
+
+   ---%<----------------------------------------------------------------------
+   service anvil {
+     chroot =
+   }
+   service imap-login {
+     chroot =
+   }
+   service pop3-login {
+     chroot =
+   }
+   ---%<----------------------------------------------------------------------
+
+ * Change listener ports:
+
+   ---%<----------------------------------------------------------------------
+   service imap-login {
+     inet_listener imap {
+       port = 10143
+     }
+     inet_listener imaps {
+       port = 10993
+     }
+   }
+   service pop3-login {
+     inet_listener pop3 {
+       port = 10110
+     }
+     inet_listener pop3s {
+       port = 10995
+     }
+   }
+   ---%<----------------------------------------------------------------------
+
+ * Change logging destination:
+
+   ---%<----------------------------------------------------------------------
+   log_path = /home/user/dovecot.log
+   ---%<----------------------------------------------------------------------
+
  * Instead of <passdb PAM> [PasswordDatabase.PAM.txt] use for example
-   <passwd-file> [AuthDatabase.PasswdFile.txt].
- * 'listen' and 'ssl_listen' ports need to be changed
+   <passwd-file> [AuthDatabase.PasswdFile.txt]:
 
-Example configuration for user called *testuser*:
+   ---%<----------------------------------------------------------------------
+   passdb passwd-file {
+     args = /home/user/dovecot/etc/passwd
+   }
+   userdb passwd {
+   }
+   ---%<----------------------------------------------------------------------
 
----%<-------------------------------------------------------------------------
-protocols = imap imaps pop3 pop3s
-ssl_disable = yes
-disable_plaintext_auth = no
-pop3_uidl_format = %08Xu%08Xv
+   Where the 'passwd' file contains the username and password for your login
+   user:
 
-login_chroot = no
-login_user = testuser
+   ---%<----------------------------------------------------------------------
+   user:{PLAIN}pass
+   ---%<----------------------------------------------------------------------
 
-# paths
-log_path = /home/testuser/dovecot/error.log
-info_log_path = /home/testuser/dovecot/info.log
-mail_location = maildir:~/Maildir
-
-# ports
-protocol imap {
-  listen = *:14300
-  ssl_listen = *:14301
-}
-protocol pop3 {
- listen = *:11000
-  ssl_listen = *:11001
-}
-
-# authentication
-auth default {
-  mechanisms = plain
-  user = testuser
-  passdb passwd-file {
-    args = /home/testuser/dovecot/passwd
-  }
-  userdb passwd {
-  }
-}
----%<-------------------------------------------------------------------------
-
-'/home/testuser/dovecot/passwd' contains the password:
-
----%<-------------------------------------------------------------------------
-testuser:{PLAIN}testpass
----%<-------------------------------------------------------------------------
-
-You should now be able to log in as *testuser* using password *testpass*.
-
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

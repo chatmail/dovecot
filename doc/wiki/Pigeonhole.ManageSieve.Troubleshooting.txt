@@ -1,25 +1,23 @@
 ManageSieve Troubleshooting
 ===========================
 
-Like Dovecot itself, *the <ManageSieve.txt> service always logs a detailed
-error message* if something goes wrong at the server (refer to <Dovecot
-Logging> [Logging.txt] for more details): the logs are the first place to look
-if you suspect something is wrong. To get additional debug messages in your log
-file, you should set 'mail_debug=yes' in <dovecot.conf> [MainConfig.txt]
-(inside 'protocol managesieve {...} 'if you want to enable this for managesieve
-only).
+Like Dovecot itself, *the ManageSieve service always logs a detailed error
+message* if something goes wrong at the server (refer to <Dovecot Logging>
+[Logging.txt] for more details): the logs are the first place to look if you
+suspect something is wrong. To get additional debug messages in your log file,
+you should set 'mail_debug=yes' in dovecot.conf (inside 'protocol managesieve
+{...}'if you want to enable this for managesieve only).
 
 If the client commits protocol violations or sends invalid scripts, an error
 response is provided to the client which is not necessarily logged on the
-server. A good <ManageSieve.txt> client presents such error messages to the
-user.
+server. A goodManageSieve client presents such error messages to the user.
 
 Manual Login and Script Upload
 ------------------------------
 
 If you fail to login or upload scripts to the server, it is not necessarily
-caused by Dovecot or your configuration. It is often best to test your
-<ManageSieve.txt> server manually first. This also provides you with the direct
+caused by Dovecot or your configuration. It is often best to test
+yourManageSieve server manually first. This also provides you with the direct
 error messages from the server without intermission of your client. If you do
 not use TLS, you can connect using a simple 'telnet' or 'netcat' connection to
 the configured port. Otherwise you must use a TLS-capable text protocol client
@@ -40,12 +38,12 @@ but, since you are using telnet/netcat, you cannot use this (refer to Manual
 TLS Login below). The 'SASL' capability lists the available SASL authentication
 mechanisms. If this list is empty and 'STARTTLS' is available, it probably
 means that the server forces you to initiate TLS first (as dictated by
-''disable_plaintext_auth=yes'' in <dovecot.conf> [MainConfig.txt]).
+''disable_plaintext_auth=yes'' in dovecot.conf).
 
 Now you need to log in. Although potentially multiple SASL mechanisms are
 available, only 'PLAIN' is described here. Authentication is performed using
-the <ManageSieve.txt> 'AUTHENTICATE' command. This command typically looks as
-follows when the 'PLAIN' mechanism is used:
+theManageSieve 'AUTHENTICATE' command. This command typically looks as follows
+when the 'PLAIN' mechanism is used:
 
 ---%<-------------------------------------------------------------------------
 AUTHENTICATE "PLAIN" "<base64-encoded credentials>"
@@ -126,8 +124,8 @@ Manual TLS Login
 
 When TLS needs to be used during manual testing, 'gnutls-cli' provides the
 means to do so. This command-line utility is part of the GNUTLS distribution
-and on most systems this should be easy to install. It is used to connect to
-<ManageSieve.txt> as follows:
+and on most systems this should be easy to install. It is used to connect
+toManageSieve as follows:
 
 ---%<-------------------------------------------------------------------------
 gnutls-cli --starttls -p <port> <host>
@@ -174,15 +172,12 @@ inetd, wrapping it into a script that writes the protocol messages somewhere
 (*FIXME*: This needs some checking and explanation). Alternatively, if
 possible, the client can be altered to write its protocol messages somewhere.
 
-Refer to the <ManageSieve Clients page> [ManageSieve.Clients.txt] for
-information on known client problems.
+Refer to the <ManageSieve Clients page> [Pigeonhole.ManageSieve.Clients.txt]
+for information on known client problems.
 
 Known Server Issues and Protocol Deviations
 -------------------------------------------
 
- * The current implementation of the daemon does not have quota enforcement as
-   recommended in the specification. So keep in mind that malicious users could
-   fill your file system with loads of spurious script files.
  * The ANONYMOUS authentication mechanism is currently not supported and
    explicitly denied.
 
@@ -191,4 +186,4 @@ to the Dovecot mailing list [http://dovecot.org/mailinglists.html]. In any
 case, you must make sure that the issue is properly explained and that the
 author can contact you for more information.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

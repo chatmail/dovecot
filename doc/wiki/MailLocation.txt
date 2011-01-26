@@ -3,6 +3,7 @@ Mail location
 
  * For mbox-specific settings, see <MailLocation.mbox.txt>
  * For Maildir-specific settings, see <MailLocation.Maildir.txt>
+ * For dbox-specific settings, see <MailLocation.dbox.txt>
 
 There are three different places where the mail location is looked up from:
 
@@ -20,12 +21,60 @@ usually a good idea to explicitly specify where the mails are, even if the
 autodetection happens to work. Autodetection commonly fails for new users who
 don't have the mail directory created yet.
 
+Format
+------
+
+The format of the mailbox location specification is as follows:
+
+ * / <mailbox-format> [MailboxFormat.txt]/ : /path/ [ : /key/ = /value/ … ]
+
+where:
+
+ * /mailbox-format/ is a tag identifying one of the formats described at
+   <Mailbox Formats> [MailboxFormat.txt].
+ * /path/ is the path to a directory where the mail is stored. This must be an
+   absolute path, not a relative path. Even if relative paths appear to work,
+   this usage is deprecated and will likely stop working at some point.
+ * /key/ = /value/ can appear zero or more times to set various optional
+   parameters. Possible values for /key/ are:
+    * 'INDEX' : specifies the location of <index files> [MailLocation.txt].
+    * 'INBOX' : specifies the location of the <INBOX> [MailLocation.txt].
+    * 'LAYOUT' : specifies the directory layout under the <mbox>
+      [MailLocation.mbox.txt] or <Maildir> [MailLocation.Maildir.txt] formats.
+    * 'CONTROL' : specifies the location of control files under the <mbox>
+      [MailLocation.mbox.txt] or <Maildir> [MailLocation.Maildir.txt] formats.
+    * 'SUBSCRIPTIONS' : specifies the file used for storing subscriptions.  The
+      default is "subscriptions".  If you're trying to avoid name collisions
+      with a mailbox named "subscriptions", then also consider setting
+      'MAILBOXDIR'.
+    * 'MAILBOXDIR' : specifies directory name under which all mailbox
+      directories are stored. With <dbox formats> [MailboxFormat.dbox.txt] the
+      default is "mailboxes/" while with other mailbox formats the default is
+      empty. Typically this should be changed only for <lazy_expunge namespace>
+      [Plugins.Lazyexpunge.txt] with mdbox.
+    * 'DIRNAME' : specifies the directory name used for mailbox directories, or
+      in the case of mbox specifies the mailbox message file name. With <dbox
+      formats> [MailboxFormat.dbox.txt] the default is "dbox-Mails/" while with
+      other mailbox formats the default is empty. Can be used under either
+      <mbox> [MailLocation.mbox.txt], <Maildir> [MailLocation.Maildir.txt] or
+      <dbox> [MailLocation.dbox.txt] formats.
+    * 'ALT' : specifies the <Alternate storage> [MailLocation.dbox.txt] path
+      for dbox formats.
+ * The colons and equals signs are literal and there are no spaces in an actual
+   mailbox location specification.
+
+Variables
+---------
+
 You can use several variables in the 'mail_location' setting. See
 <Variables.txt> for a full list, but the most commonly used ones are:
 
  * '%u': Full username.
  * '%n': User part in user@domain, same as %u if there's no domain.
  * '%d': Domain part in user@domain, empty if there's no domain.
+
+Typical settings
+----------------
 
 Typically with Maildir it would be set to:
 
@@ -42,7 +91,15 @@ mail_location = mbox:~/mail:INBOX=/var/mail/%u
 or if you'd like to use the <dbox> [MailboxFormat.dbox.txt] format:
 
 ---%<-------------------------------------------------------------------------
-mail_location = dbox:~/dbox
+# single-dbox
+mail_location = sdbox:~/dbox
+---%<-------------------------------------------------------------------------
+
+or:
+
+---%<-------------------------------------------------------------------------
+# multi-dbox
+mail_location = mdbox:~/mdbox
 ---%<-------------------------------------------------------------------------
 
 Use only absolute paths. Even if relative paths would appear to work, they
@@ -101,9 +158,9 @@ need to use <namespaces> [Namespaces.txt] for that.
 Homeless users
 --------------
 
-Having a home directory for users is highly recommended. Dovecot's <Sieve
-plugin> [LDA.Sieve.txt] already requires a home directory to work, and it
-probably won't be the last feature to require a home. See
+Having a home directory for users is highly recommended. The <Pigeonhole.txt>
+<Sieve plugin> [Pigeonhole.Sieve.txt] already requires a home directory to
+work, and it probably won't be the last feature to require a home. See
 <VirtualUsers#homedirs> [VirtualUsers.txt] for more reasons why it's a good
 idea, and how to give Dovecot a home directory even if you don't have a "real
 home directory".
@@ -206,4 +263,4 @@ export USERDB_KEYS="$USERDB_KEYS namespace/user/location"
 exec env "NAMESPACE/USER/LOCATION=$location" "$@"
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

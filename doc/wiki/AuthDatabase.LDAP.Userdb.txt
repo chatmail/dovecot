@@ -26,6 +26,10 @@ Example:
 ---%<-------------------------------------------------------------------------
 user_attrs = homeDirectory=home, uidNumber=uid, gidNumber=gid
 user_filter = (&(objectClass=posixAccount)(uid=%u))
+
+# For using doveadm -A:
+iterate_attrs = uid=user
+iterate_filter = (objectClass=posixAccount)
 ---%<-------------------------------------------------------------------------
 
 Attribute templates
@@ -41,20 +45,20 @@ Create a "quota_rule" field with value "*:bytes=<n>" where <n> comes from
 user_attrs = quotaBytes=quota_rule=*:bytes=%$
 ---%<-------------------------------------------------------------------------
 
-Create a "mail" field with value "maildir:/var/mail/<dir>" where <dir> comes
-from "sAMAccountName" LDAP attribute:
+Create a "mail" field with value "maildir:/var/mail/<dir>/Maildir" where <dir>
+comes from "sAMAccountName" LDAP attribute:
 
 ---%<-------------------------------------------------------------------------
-user_attrs = sAMAccountName=mail=maildir:/var/spool/vmail/%$
+user_attrs = sAMAccountName=mail=maildir:/var/spool/vmail/%$/Maildir
 ---%<-------------------------------------------------------------------------
 
 You can add static fields that aren't looked up from LDAP. For example create a
-"mail" field with value "/var/vmail/%d/%n":
+"mail" field with value "maildir:/var/vmail/%d/%n/Maildir":
 
 ---%<-------------------------------------------------------------------------
 user_attrs = \
   quotaBytes=quota_rule=*:bytes=%$, \
-  =mail=/var/vmail/%d/%n
+  =mail=maildir:/var/vmail/%d/%n/Maildir
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

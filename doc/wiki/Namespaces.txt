@@ -179,4 +179,35 @@ namespace {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+Per-user Namespace Location From SQL
+------------------------------------
+
+You need to give the namespace a name, for example "docs" below:
+
+---%<-------------------------------------------------------------------------
+namespace docs {
+  type = public
+  separator = /
+  prefix = Public/
+}
+---%<-------------------------------------------------------------------------
+
+Then you have an SQL table like:
+
+---%<-------------------------------------------------------------------------
+CREATE TABLE Namespaces (
+..
+  Location varchar(255) NOT NULL,
+..
+)
+---%<-------------------------------------------------------------------------
+
+Now if you want to set the namespace location from the Namespaces table, use
+something like:
+
+---%<-------------------------------------------------------------------------
+user_query = SELECT Location as 'namespace/docs/location' FROM Namespaces WHERE
+..
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2011-01-13 04:52)

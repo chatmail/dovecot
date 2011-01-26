@@ -8,7 +8,7 @@ To enable mailbox sharing, you'll need to create a shared namespace. See
 # User's private mail location.
 mail_location = maildir:~/Maildir
 
-# You need to create also a private namespace:
+# When creating any namespaces, you must also have a private namespace:
 namespace {
   type = private
   separator = /
@@ -65,6 +65,7 @@ users' variables. For example if your name is "myself" and "someone1" and
  * %%u expands to "someone1" or "someone2"
  * %h might expand to "/home/myself"
  * %%h might expand to "/home/someone1" or "/home/someone2"
+ * ~/ equals %h/
 
 Note that in e.g. mail_location setting you might need both. For example in:
 
@@ -147,17 +148,26 @@ dict {
 }
 ---%<-------------------------------------------------------------------------
 
-Database table:
+See <Dict.txt> for more information, especially about permission issues.
+
+Database tables:
 
 ---%<-------------------------------------------------------------------------
 CREATE TABLE user_shares (
   from_user varchar(100) not null,
   to_user varchar(100) not null,
-  dummy char(1),        -- always '1' currently
+  dummy char(1) DEFAULT '1',    -- always '1' currently
   primary key (from_user, to_user)
 );
 COMMENT ON TABLE user_shares IS 'User from_user shares folders to user
 to_user.';
+
+CREATE TABLE anyone_shares (
+  from_user varchar(100) not null,
+  dummy char(1) DEFAULT '1',    -- always '1' currently
+  primary key (from_user)
+);
+COMMENT ON TABLE anyone_shares IS 'User from_user shares folders to anyone.';
 ---%<-------------------------------------------------------------------------
 
 '/etc/dovecot/dovecot-dict-sql.conf.ext':
@@ -172,6 +182,16 @@ map {
   fields {
     from_user = $from
     to_user = $to
+  }
+}
+
+map {
+  pattern = shared/shared-boxes/anyone/$from
+  table = anyone_shares
+  value_field = dummy
+
+  fields {
+    from_user = $from
   }
 }
 ---%<-------------------------------------------------------------------------
@@ -219,8 +239,9 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-Note that you can also do this only for some users by returning the
-'acl_anyone' as <userdb extra field> [UserDatabase.ExtraFields.txt].
+Note that you can also do this only for some users by using the second table
+"anyone_shares". Every user listed in this table shares his folders with
+everyone. See also <userdb extra field> [UserDatabase.ExtraFields.txt].
 
 IMAP ACL examples
 -----------------
@@ -260,4 +281,4 @@ initially have "lookup" right, but later we don't:
 4 OK Myrights completed.
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

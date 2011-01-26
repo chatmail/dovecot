@@ -99,4 +99,42 @@ Filesystem optimizations
 
 See "Maildir and filesystems" section in <MailboxFormat.Maildir.txt>.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+Mailbox directory name
+----------------------
+
+When using 'LAYOUT=fs', there is a potential for naming collisions between
+Maildir's 'new/', 'cur/' and 'tmp/' subdirectories, and mail folders of the
+same names. For example, consider a mail folder "foo/bar". Under 'LAYOUT=fs',
+data for this mail folder will be stored at under Maildir's usual three
+directories '~/Maildir/foo/bar/{new,cur,tmp}/'.
+
+If the user then tries to create a mail folder "foo/bar/new", this would then
+imply that data should be stored in Maildir's three directories
+'~/Maildir/foo/bar/new/{new,cur,tmp}/'. But this would overlap Maildir's 'new/'
+subdirectory of mail folder "foo/bar".
+
+This may not be a problem in many installations, but if a risk of collisions
+with Maildir's three subdirectory names is perceived, then the 'DIRNAME'
+parameter can be used. For example, if we specify mail location as:
+
+---%<-------------------------------------------------------------------------
+mail_location = maildir:~/Maildir:LAYOUT=fs:DIRNAME=mAildir
+---%<-------------------------------------------------------------------------
+
+then this will push Maildir's 'new/', 'cur/' and 'tmp/' subdirectories down
+into a subdirectory 'mAildir/', so a mail folder "foo/bar" would be stored at
+'~/Maildir/foo/bar/mAildir/{new,cur,tmp}/'. A mail folder "foo/bar/new" would
+be stored at '~/Maildir/foo/bar/new/mAildir/{new,cur,tmp}/', which would then
+have no overlap with the mail folder "foo/bar".
+
+'DIRNAME' affects INBOX slightly differently. Without 'DIRNAME', INBOX will be
+stored at '~/Maildir/{new,cur,tmp}/', but when 'DIRNAME' is specified, we get
+an extra path component 'INBOX/' immediately prior to the 'DIRNAME' value, so
+in the example above INBOX would be stored at
+'~/Maildir/INBOX/mAildir/{new,cur,tmp}/'.
+
+The value for 'DIRNAME' should be chosen carefully so as to minimise the
+chances of clashing with mail folder names. In the example here, unusual
+upper/lower casing has been used.
+
+(This file was created from the wiki on 2011-01-13 04:52)

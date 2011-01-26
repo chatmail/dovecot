@@ -7,7 +7,7 @@ Contents
 
          1. Maildir: Keyword sharing
 
-     2. Other mailbox formats
+     2. Other mailbox formats: Per-user flags
 
      3. Subscriptions
 
@@ -109,8 +109,8 @@ Maildir: Keyword sharing
 Make sure you don't try to use per-user CONTROL directory. Otherwise
 'dovecot-keywords' file doesn't get shared and keyword mapping breaks.
 
-Other mailbox formats
----------------------
+Other mailbox formats: Per-user flags
+-------------------------------------
 
 Currently you can't have any per-user flags with other mailbox formats than
 Maildir.
@@ -212,4 +212,4 @@ After this you have to place 'dovecot-acl' files in every mailbox/folder below
 'acl_shared_dict' setting is not relevant for public mailboxes (only for
 shared).
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

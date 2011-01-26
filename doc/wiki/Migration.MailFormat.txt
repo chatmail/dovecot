@@ -10,13 +10,13 @@ dsync
 
 With dsync you can convert between any two mailbox formats that Dovecot
 supports. As much of the mailbox state is preserved as possible. Typically it's
-everything. See <Tools.dsync.txt> for full documentation, here are only a
+everything. See <Tools.Dsync.txt> for full documentation, here are only a
 couple of examples:
 
  * mbox -> maildir migration. Set 'mail_location=maildir:~/Maildir' and run
-   'doveadm convert -u username mbox:~/mail:INBOX=/var/mail/username'
+   'doveadm mirror -u username mbox:~/mail:INBOX=/var/mail/username'
  * maildir -> mdbox migration. Set 'mail_location=mdbox:~/mdbox' and run
-   'doveadm convert -u username maildir:~/Maildir'
+   'doveadm mirror -u username maildir:~/Maildir'
 
 If you can successfully use dsync, you can skip the rest of this page.
 
@@ -242,4 +242,4 @@ works then:
       copy tmp/foo '#driver.unix'/tmp/foo.unix' = convert /tmp/foo file to mbox
       - Manwe, 2010-03-09
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

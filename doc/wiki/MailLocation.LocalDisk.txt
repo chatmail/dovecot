@@ -30,17 +30,21 @@ even knew that the message existed, unless the sender decides to resend it.
 
 Since power failures and kernel panics are quite rare, many people are tempted
 to disable fsyncing because it may increase the performance quite a lot.
-Dovecot allows this by setting 'fsync_disable=yes'. However you should consider
-leaving it at "no" for LDA. You can do this with:
+Dovecot allows this by setting 'mail_fsync=never'. However you should consider
+leaving it at "no" for LDA and LMTP. You can do this with:
 
 ---%<-------------------------------------------------------------------------
-# Enable for IMAP/POP3
-fsync_disable = yes
+# Default to no fsyncing
+mail_fsync = never
 
 protocol lda {
-  # Disable for LDA/LMTP
-  fsync_disable = no
+  # Enable fsyncing for LDA
+  mail_fsync = optimized
+}
+protocol lmtp {
+  # Enable fsyncing for LMTP
+  mail_fsync = optimized
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)
