@@ -62,4 +62,4 @@ You can also make userdb return a chroot. There are two ways to do that:
     to chroot into '/home', or 'home=/home/user/./' to chroot into
     '/home/user'.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

@@ -21,7 +21,7 @@ Main features of Dovecot LDA
  * <Mailbox indexing during mail delivery> [LDA.Indexing.txt], providing faster
    mailbox access later
  * <Quota enforcing by a plugin> [Quota.txt]
- * <Sieve language support by a plugin> [LDA.Sieve.txt]
+ * <Sieve language support by a plugin> [Pigeonhole.Sieve.txt]
     * Mail filtering
     * Mail forwarding
     * Vacation auto-reply
@@ -53,13 +53,20 @@ Parameters accepted by dovecot-lda:
  * '-d <username>': Destination username. If given, the user information is
    looked up from dovecot-auth. Typically used with virtual users, but not
    necessarily with system users.
- * '-a <address>': Destination address (e.g. user+ext@domain). Default is the
-   same as username.
- * '-f <address>': Envelope sender address.
+ * '-a <address>': Original envelope recipient address (e.g. user+ext@domain),
+   typically same as SMTP's RCPT TO: value. If not specified, it's taken from
+   header specified by 'lda_original_recipient_header' setting (v2.0.3+). If
+   the header doesn't exist either, defaults to same as username.
+ * '-r <address>': Final envelope recipient address. Defaults to -a address,
+   but may differ if e.g. aliases are used or when dropping the +ext part.
+   (v2.0.3+)
+ * '-f <address>': Envelope sender address. If not specified and message data
+   begins with a valid mbox-style "From " line, the address is taken from it.
  * '-c <path>': Alternative configuration file path.
  * '-m <mailbox>': Destination mailbox (default is INBOX). If the mailbox
-   doesn't exist, it's created (unless -n is used). If message couldn't be
-   saved to the mailbox for any reason, it's delivered to INBOX instead.
+   doesn't exist, it will not be created (unless the lda_mailbox_autocreate
+   setting is set to yes). If message couldn't be saved to the mailbox for any
+   reason, it's delivered to INBOX instead.
     * If Sieve plugin is used, this mailbox is used as the "keep" action's
       mailbox. It's also used if there is no Sieve script or if the script
       fails for some reason.
@@ -156,7 +163,7 @@ HOME=/path/to/user/homedir dovecot-lda -f $FROM_ENVELOPE
 
 This way you don't need to have a master listener socket. Note that you should
 verify the user's existence prior to running dovecot-lda, otherwise you'll end
-up having mail delivered to non-existing users as well.
+up having mail delivered to nonexistent users as well.
 
 You must have set the proper UID (and GID) before running dovecot-lda. It's not
 possible to run dovecot-lda as root without '-d' parameter.
@@ -277,6 +284,7 @@ Plugins
 
  * Most of the <Dovecot plugins> [Plugins.txt] work with dovecot-lda.
  * Virtual quota can be enforced using <Quota plugin> [Quota.txt].
- * Sieve language support can be added with <Sieve plugin> [LDA.Sieve.txt].
+ * Sieve language support can be added with the <Pigeonhole Sieve plugin>
+   [Pigeonhole.Sieve.txt].
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

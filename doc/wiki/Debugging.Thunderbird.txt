@@ -53,4 +53,4 @@ want to log all modules instead of just IMAP (SMTP, e.g.) then replace "IMAP"
 above with "all". The above will create a date/time stamped logfile for each
 run, so  you won't lose the previous logs.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

@@ -6,10 +6,11 @@ This plugin can be used to log several actions done in a mail session:
  * Setting and removing \Deleted flag
  * Expunging
  * Copying mails to another mailbox
+ * Mailbox creations
  * Mailbox deletions
  * Mailbox renames
  * Any flag changes
- * Appends
+ * Saves
 
 Messages' UID and Message-ID header is logged for each action. Here's an
 example:
@@ -33,19 +34,12 @@ You can configure what and how mail_log plugin logs:
 
 ---%<-------------------------------------------------------------------------
 plugin {
-  # Events to log. Also available: flag_change append
+  # Events to log. Also available: flag_change save mailbox_create
   mail_log_events = delete undelete expunge copy mailbox_delete mailbox_rename
-
-  # Group events within a transaction to one line.
-  mail_log_group_events =
 
   # Also available: flags vsize from subject
   mail_log_fields = uid box msgid size
 }
 ---%<-------------------------------------------------------------------------
 
-Log grouping allows grouping multiple changes to one line. Only uid, size and
-vsize fields are logged in a grouped event. The sizes are the summed up sizes
-of the mails.
-
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

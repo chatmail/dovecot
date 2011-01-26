@@ -52,16 +52,52 @@ There are a couple of different ways to specify when SSL/TLS is required:
 Multiple SSL certificates
 -------------------------
 
+TLS SNI (Server Name Indication) support required
+-------------------------------------------------
+
+/It is important to note that having multiple SSL certificates per IP will not
+be compatible with all clients, especially mobile ones. It is a TLS SNI
+limitation./
+
 ---%<-------------------------------------------------------------------------
-local imap.example.org {
+local_name imap.example.org {
   ssl_cert = </etc/ssl/certs/imap.example.org.crt
   ssl_key = </etc/ssl/private/imap.example.org.key
 }
-local imap.example2.org {
+local_name imap.example2.org {
   ssl_cert = </etc/ssl/certs/imap.example2.org.crt
   ssl_key = </etc/ssl/private/imap.example2.org.key
 }
 # ..etc..
+---%<-------------------------------------------------------------------------
+
+Different certificates per IP and protocol
+------------------------------------------
+
+---%<-------------------------------------------------------------------------
+local 192.0.2.10 {
+  protocol imap {
+    ssl_cert = </etc/ssl/dovecot/imap-01.example.com.cert.pem
+    ssl_key  = </etc/ssl/dovecot/imap-01.example.com.key.pem
+  }
+
+  protocol pop3 {
+    ssl_cert = </etc/ssl/dovecot/pop-01.example.com.cert.pem
+    ssl_key  = </etc/ssl/dovecot/pop-01.example.com.key.pem
+  }
+}
+
+local 192.0.2.20 {
+  protocol imap {
+    ssl_cert = </etc/ssl/dovecot/imap-02.example.com.cert.pem
+    ssl_key  = </etc/ssl/dovecot/imap-02.example.com.key.pem
+  }
+
+  protocol pop3 {
+    ssl_cert = </etc/ssl/dovecot/pop-02.example.com.cert.pem
+    ssl_key  = </etc/ssl/dovecot/pop-02.example.com.key.pem
+  }
+}
 ---%<-------------------------------------------------------------------------
 
 Password protected key files
@@ -183,4 +219,4 @@ it, but it is possible by making the <passdb> [PasswordDatabase.txt] allow
 logins using any password (typically requiring <"nopassword" extra field>
 [PasswordDatabase.ExtraFields.txt] to be returned).
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

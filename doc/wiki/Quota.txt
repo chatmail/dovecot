@@ -22,11 +22,21 @@ There are two quota related plugins:
    backends.
  * imap_quota: For reporting quota information via IMAP.
 
-Enable them in dovecot.conf:
+Enable them in configuration files, e.g.:
+
+conf.d/10-mail.conf:
 
 ---%<-------------------------------------------------------------------------
+# Space separated list of plugins to load for all services. Plugins specific to
+# IMAP, LDA, etc. are added to this list in their own .conf files.
 mail_plugins = $mail_plugins quota
+---%<-------------------------------------------------------------------------
+
+conf.d/20-imap.conf:
+
+---%<-------------------------------------------------------------------------
 protocol imap {
+  # Space separated list of plugins to load (default is global mail_plugins).
   mail_plugins = $mail_plugins imap_quota
 }
 ---%<-------------------------------------------------------------------------
@@ -73,4 +83,4 @@ To make sure users don't start keeping messages permanently in Trash you can
 use a nightly <cronjob> [Plugins.Expire.txt] to expunge old messages from Trash
 mailbox.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

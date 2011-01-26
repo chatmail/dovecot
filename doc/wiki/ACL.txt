@@ -61,8 +61,10 @@ If you're creating a root-level mailbox, it uses the namespace's default ACLs.
 There is no actual inheritance, however: If you modify parent's ACLs, the
 child's ACLs stay the same. There is currently no support for ACL inheritance.
 
-The default ACLs are read from "dovecot-acl" file in the namespace's mail root
-directory (e.g.'/var/public/Maildir').
+Namespace's default ACLs are read from "dovecot-acl" file in the namespace's
+mail root directory (e.g.'/var/public/Maildir'). Note that currently these
+default ACLs are used only when creating new mailboxes, they aren't used for
+mailboxes without ACLs.
 
 Global ACLs
 -----------
@@ -160,7 +162,7 @@ The currently supported ACLs and their corresponding named ACLs are:
 | i | insert        | Messages can be written or copied to the mailbox        |
 +---+---------------+---------------------------------------------------------+
 | p | post          | Messages can be posted to the mailbox by <LDA.txt>, e.g.|
-|   |               | from Sieve scripts                                      |
+|   |               | from <Sieve> [Pigeonhole.Sieve.txt] scripts             |
 +---+---------------+---------------------------------------------------------+
 | e | expunge       | Messages can be expunged                                |
 +---+---------------+---------------------------------------------------------+
@@ -171,7 +173,8 @@ The currently supported ACLs and their corresponding named ACLs are:
 +---+---------------+---------------------------------------------------------+
 | x | delete        | Mailbox can be deleted                                  |
 +---+---------------+---------------------------------------------------------+
-| a | admin         | Administration rights to the mailbox                    |
+| a | admin         | Administration rights to the mailbox (currently: ability|
+|   |               | to change ACLs for mailbox)                             |
 +---+---------------+---------------------------------------------------------+
 
 The ACLs are compatible with RFC 4314 (IMAP ACL extension, updated version).
@@ -193,4 +196,4 @@ List cache
 you manually add/edit 'dovecot-acl' files, you may need to delete the
 'dovecot-acl-list' to get the mailboxes visible.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

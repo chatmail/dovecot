@@ -59,4 +59,4 @@ gives a nice error message:
 Error: Can't load plugin imap_quota_plugin: Plugin quota must be loaded also
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

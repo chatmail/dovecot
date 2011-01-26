@@ -7,15 +7,12 @@ HOWTOs / Examples / Tutorials
  * <A simple virtual passwd file installation> [HowTo.SimpleVirtualInstall.txt]
 
  * <Virtual passwd file and Exim> [HowTo.VirtualhostingWithExim.txt]
- * <Virtual passwd file and Postfix> [HowTo.Virtual User Flat File
-   Configuration with Postfix.txt]
+ * <Virtual passwd file and Postfix> [HowTo.VirtualUserFlatFilesPostfix.txt]
 
 <Virtual users> [VirtualUsers.txt] with <LDAP> [AuthDatabase.LDAP.txt]:
 
  * <OpenLDAP> [HowTo.DovecotOpenLdap.txt] ( <Cheat sheet>
    [HowTo.DoveLdapCheatSheet.txt])
- * Postfix, OpenLDAP and Jamm [http://wanderingbarque.com/mailserver.html] (for
-   Dovecot v0.99.x, settings incompatible with v1.0)
  * Postfix and Active Directory or OpenLDAP [http://www.linuxmail.info]
  * Samba LDAP PDC / Mail / DNS / DHCP server
    [http://wiki.nutum.es/linux/samba/samba_ldap_mds/inicio], using Debian,
@@ -48,9 +45,7 @@ HOWTOs / Examples / Tutorials
     * Postfix and Dovecot with MySQL and TLS/SSL, Postgrey and DSPAM
       [http://johnny.chadda.se/2007/04/15/mail-server-howto-postfix-and-dovecot-with-mysql-and-tlsssl-postgrey-and-dspam/]
     * ISP-style Email Server with Debian-Etch and Postfix (MySQL, Dovecot,
-      Postfix etc.) [http://workaround.org/articles/ispmail-etch/]
-    * ISP-style Email Server with Debian Etch and Exim (MySQL, Dovecot, Exim
-      etc.) in German [http://developer.gauner.org/ispmail-exim/]
+      Postfix etc.) [http://workaround.org/ispmail]
  * PostgreSQL
     * <PostgreSQL and Postfix> [HowTo.DovecotPostgresql.txt]
     * Mailserver virtual configuration (Postfix, Dovecot, SMTP Auth, PostgreSQL
@@ -75,12 +70,10 @@ Others:
  * <Refiltering mail> [HowTo.RefilterMail.txt]
  * <Outlook calendar sharing using Bynari Connector (commercial software) with
    dovecot> [HowTo.BynariConnector.txt]
- * <Compiling Dovecot 1.0 for CentOS 4> [HowTo.Compiling Dovecot 1.0 for Centos
-   4.txt]
  * <Using fail2ban with Dovecot> [HowTo.Fail2Ban.txt]
  * <VMailMgr with Dovecot> [HowTo.VMailMgr.txt]
  * <NTLM authentication against Active Directory>
    [HowTo.ActiveDirectoryNtlm.txt]
  * <Postfix and Dovecot LMTP> [HowTo.PostfixDovecotLMTP.txt]
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

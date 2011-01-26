@@ -56,11 +56,16 @@ auth_bind_userdn = cn=%u,ou=people,o=org
 Connection optimization
 -----------------------
 
-When using auth binds, the userdb lookups should use a separate connection to
-the LDAP server. That way it can send LDAP requests asynchronously to the
-server, which improves the performance. This can be done by specifying
-different filenames in the LDAP passdb and userdb args. The second file could
-be a symlink to the first one. For example:
+When using
+
+ * auth binds and
+ * userdb ldap lookups,
+
+the userdb lookups should use a separate connection to the LDAP server. That
+way it can send LDAP requests asynchronously to the server, which improves the
+performance. This can be done by specifying different filenames in the LDAP
+passdb and userdb args. The second file could be a symlink to the first one.
+For example:
 
 ---%<-------------------------------------------------------------------------
 passdb {
@@ -80,4 +85,4 @@ ln -s /etc/dovecot/dovecot-ldap.conf.ext
 /etc/dovecot/dovecot-ldap-userdb.conf.ext
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

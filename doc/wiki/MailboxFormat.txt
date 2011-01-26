@@ -2,37 +2,98 @@ Mailbox Formats
 ===============
 
 Mailbox formats supported by Dovecot:
++-----------------------------+---------------+-------------------+-------------+
+| *Name*                      | *Tag*         | *Description*     |
++-----------------------------+---------------+-------------------+-------------+
+| <mbox>                      | 'mbox'        | Traditional UNIX  |
+| [MailboxFormat.mbox.txt]    |               | mailbox format.   |
+|                             |               | Users' INBOX      |
+|                             |               | mboxes are        |
+|                             |               | commonly stored in|
+|                             |               | '/var/spool/mail' |
+|                             |               | or '/var/mail'    |
+|                             |               | directory. Single |
+|                             |               | file contains     |
+|                             |               | multiple messages.|
++-----------------------------+---------------+-------------------+-------------+
+| <Maildir>                   | 'maildir'     | One file contains |
+| [MailboxFormat.Maildir.txt] |               | one message. A    |
+|                             |               | reliable choice   |
+|                             |               | since files are   |
+|                             |               | never modified and|
+|                             |               | all operations are|
+|                             |               | atomic. The       |
+|                             |               | top-level         |
+|                             |               | 'Maildir'         |
+|                             |               | directory contains|
+|                             |               | the 'Maildir/cur',|
+|                             |               | 'Maildir/new' and |
+|                             |               | 'Maildir/tmp'     |
+|                             |               | subdirectories.   |
++-----------------------------+---------------+-------------------+-------------+
+| <dbox>                      | 'sdbox'       | *single-dbox*, one| Dovecot's   |
+| [MailboxFormat.dbox.txt]    |               | message per file  | own high    |
+|                             |               |                   | performance |
+|                             |               |                   | mailbox     |
+|                             |               |                   | format.     |
+|                             |               |                   | Messages are|
+|                             |               |                   | stored in   |
+|                             |               |                   | one or more |
+|                             |               |                   | files, each |
+|                             |               |                   | containing  |
+|                             |               |                   | one or more |
+|                             |               |                   | messages.   |
++-----------------------------+---------------+-------------------+-------------+
+| 'mdbox'                     | *multi-dbox*, |
+|                             | multiple      |
+|                             | messages per  |
+|                             | file          |
++-----------------------------+---------------+-------------------+-------------+
+| 'dbox'                      | deprecated    |
+|                             | alias for     |
+|                             | 'sdbox'       |
++-----------------------------+---------------+-------------------+-------------+
+| <Cydir>                     | 'cydir'       | Dovecot's own     |
+| [MailboxFormat.Cydir.txt]   |               | simple and high   |
+|                             |               | performance       |
+|                             |               | Cyrus-like mailbox|
+|                             |               | format. It should |
+|                             |               | be mostly used for|
+|                             |               | testing and       |
+|                             |               | benchmarking only.|
++-----------------------------+---------------+-------------------+-------------+
 
- * <mbox> [MailboxFormat.mbox.txt]: Traditional UNIX mailbox format. Users'
-   INBOX mboxes are commonly stored in '/var/spool/mail' or '/var/mail'
-   directory. Single file contains multiple messages.
- * <Maildir> [MailboxFormat.Maildir.txt]: One file contains one message. A
-   reliable choice since files are never modified and all operations are
-   atomic. The top-level 'Maildir' directory contains the 'Maildir/cur',
-   'Maildir/new' and 'Maildir/tmp' subdirectories.
- * <dbox> [MailboxFormat.dbox.txt]: Dovecot's own high performance mailbox
-   format. Mails are stored in one or more files, each containing one or more
-   messages.
- * <Cydir> [MailboxFormat.Cydir.txt]: Dovecot's own simple and high performance
-   Cyrus-like mailbox format. It should be mostly used for testing and
-   benchmarking only.
+The *Tag* column indicates the tag which is used at the beginning of a <mailbox
+location specification> [MailLocation.txt].
 
 Mailbox formats *not* supported by Dovecot:
-
- * <mbx> [MailboxFormat.mbx.txt]: UW-IMAP's old high performance mailbox
-   format. One file contains all the mailboxes, so expunges may still be slow.
- * <mix> [MailboxFormat.mix.txt]: UW-IMAP's new (2006) high performance mailbox
-   format. Similar to multi-dbox.
- * <mailstore> [MailboxFormat.mailstore.txt]: A format created by Exim.
- * <MH> [MailboxFormat.MH.txt]: One file contains one message. Sort order of
-   the folder determines the message ID and name.  Actively used by projects
-   such as MH-E, NMH, exmh.  Experimentally supported by UW-IMAP
-   [http://www.washington.edu/imap/].
- * <MMDF> [MailboxFormat.MMDF.txt]: Similar to mbox, but instead of From-line
-   separators it uses four '^A' characters
- * <Cyrus> [MailboxFormat.Cyrus.txt]: One file contains one message, plus there
-   are a couple of index/cache files. Commonly referred to as being
-   maildir-like, although they have only a single thing in common.
++-------------------------------+---------------------------------------------+
+| *Name*                        | *Description*                               |
++-------------------------------+---------------------------------------------+
+| <mbx> [MailboxFormat.mbx.txt] | UW-IMAP's old high performance mailbox      |
+|                               | format. One file contains all the mailboxes,|
+|                               | so expunges may still be slow.              |
++-------------------------------+---------------------------------------------+
+| <mix> [MailboxFormat.mix.txt] | UW-IMAP's new (2006) high performance       |
+|                               | mailbox format. Similar to multi-dbox.      |
++-------------------------------+---------------------------------------------+
+| <mailstore>                   | A format created by Exim.                   |
+| [MailboxFormat.mailstore.txt] |                                             |
++-------------------------------+---------------------------------------------+
+| <MH> [MailboxFormat.MH.txt]   | One file contains one message. Sort order of|
+|                               | the folder determines the message ID and    |
+|                               | name.  Actively used by projects such as    |
+|                               | MH-E, NMH, exmh.  Experimentally supported  |
+|                               | by UW-IMAP [http://www.washington.edu/imap/].|
++-------------------------------+---------------------------------------------+
+| <MMDF> [MailboxFormat.MMDF.txt]| Similar to mbox, but instead of From-line   |
+|                               | separators it uses four '^A' characters     |
++-------------------------------+---------------------------------------------+
+| <Cyrus>                       | One file contains one message, plus there   |
+| [MailboxFormat.Cyrus.txt]     | are a couple of index/cache files. Commonly |
+|                               | referred to as being maildir-like, although |
+|                               | they have only a single thing in common.    |
++-------------------------------+---------------------------------------------+
 
 Adding support for new formats for Dovecot isn't very difficult, although it
 can be time consuming. Dovecot exposes a nice and simple API which needs to be
@@ -75,4 +136,4 @@ References
    http://www.linuxmail.info/mbox-maildir-mail-storage-formats/
    [http://www.linux-mail.info/mbox-maildir-mail-storage-formats/]
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

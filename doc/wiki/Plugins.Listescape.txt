@@ -1,17 +1,17 @@
 Listescape plugin
 =================
 
-Listescape plugin allows users to use characters in mailboxes names that would
-otherwise be illegal, for example:
+The Listescape plugin allows users to use characters in mailboxes names that
+would otherwise be illegal, for example:
 
- * Maildir++ layout disallows using '.' character since it's used internally as
-   the hierarchy separator.
- * '~' character at the beginning of the mailbox name is disallowed, because of
-   the possibility that it gets expanded to user's home directory.
- * '/' character is disallowed with all layouts (if it's not the hierarchy
+ * Maildir++ layout disallows using the '.' character, since it's used
+   internally as the hierarchy separator.
+ * The '~' character at the beginning of the mailbox name is disallowed,
+   because of the possibility that it gets expanded to user's home directory.
+ * The '/' character is disallowed with all layouts (if it's not the hierarchy
    separator).
 
-Listescape plugin allows you to use all of these characters, as long as the
+The Listescape plugin allows you to use all of these characters, as long as the
 virtual separator is changed to something else. The characters are escaped to
 the mailbox name as \NN hex codes.
 
@@ -49,4 +49,4 @@ namespace private {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

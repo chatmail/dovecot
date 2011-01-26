@@ -69,4 +69,4 @@ By default only PLAIN mechanism is enabled. To use more, set:
 auth_mechanisms = plain login cram-md5
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

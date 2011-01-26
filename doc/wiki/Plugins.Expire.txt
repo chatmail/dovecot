@@ -1,25 +1,48 @@
 Expire plugin
 =============
 
-This plugin can be used to optimize expunging old mails from users' mailboxes.
-Even without this plugin it's possible to use doveadm to expunge messages:
+Typically this plugin is used to optimize expunging old mails from users'
+mailboxes. For example:
 
 ---%<-------------------------------------------------------------------------
 doveadm expunge -A mailbox Trash savedbefore 30d
 ---%<-------------------------------------------------------------------------
 
-This however now goes through all users Trash mailboxes and opens them. If you
-have a lot of users, this could take a while. To optimize this behavior better,
-you can enable expire plugin to keep track of wanted mailboxes' "oldest mail's
-saved timestamp". Then the above doveadm command goes through only users whose
-Trash mailbox actually has something to expunge.
+Note that:
+
+ * This command runs fine even without expire plugin loaded. Then it just goes
+   through all users rather than those users who have something to actually
+   expunge.
+ * The plugin actually works for all doveadm mail commands, not just expunge.
+   So for testing you could use e.g.'doveadm search -A ...' to see which
+   messages it matches.
+ * The optimization is done only when -A parameter is used to go through all
+   users. If you use -u parameter to separately go through users, the plugin
+   does nothing.
+ * The optimization is done only when "savedbefore" is used in the search
+   query. It's possible to have further restrictions also, but the user
+   filtering is based only on the "savedbefore" timestamp.
+ * The optimization is done only when the given mailbox or mailboxes match the
+   list of expire mailboxes specified in 'plugin { expire* } ' settings.
+
+So the expire plugin's job is to reduce disk I/O when figuring out which users
+have work to do. Unless you have thousands of users, you probably shouldn't
+bother with this plugin.
+
+Details
+-------
+
+When expire plugin is enabled, it keeps track of the "oldest mail's saved
+timestamp" for the specified mailboxes. When doveadm command uses "savedbefore"
+search key, the timestamps in the database can be used to figure out which
+users have matching mails.
 
 Expire plugin tracks/optimizes only "savedbefore" search query, i.e. the date
 when message was *saved or copied to the mailbox* (*NOT the time message was
-originally received*) while expire plugin was loaded. If mailbox had existing
-messages before the plugin was loaded for the first time, they'll get expunged
-eventually when the first message saved/copied after expire plugin was enabled
-gets expunged.
+originally received*) while expire plugin was loaded. If mailbox contained
+existing messages before the plugin was loaded for the first time, they'll get
+expunged eventually when the first message saved/copied after expire plugin was
+enabled gets expunged.
 
 The save/copy date may not be exact if it's not cached in
 'dovecot.index.cache':
@@ -41,6 +64,8 @@ can contain IMAP LIST command-compatible wildcards:
 Example configuration
 ---------------------
 
+Make sure you enable the plugin globally, not just for specific protocols.
+
 ---%<-------------------------------------------------------------------------
 mail_plugins = $mail_plugins expire
 
@@ -51,12 +76,20 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
+ * See <Dict.txt> for more information about how to use dict service,
+   especially about permission issues.
+ * You need to get 'doveadm -A' working using your userdb. See iterate settings
+   for <SQL> [AuthDatabase.SQL.txt] and <LDAP> [AuthDatabase.LDAP.txt].
+
 MySQL Backend
 -------------
 
 dovecot.conf:
 
 ---%<-------------------------------------------------------------------------
+plugin {
+  expire_dict = proxy::expire
+}
 dict {
   expire = mysql:/etc/dovecot/dovecot-dict-expire.conf.ext
 }
@@ -263,4 +296,4 @@ exactly need to be expunged.
 After running expire-tool without --test you'll see that the Trash mailbox is
 empty and the database row is deleted.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

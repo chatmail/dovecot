@@ -58,7 +58,7 @@ functions returning int can fail, others don't.
    "".
  * 'mail_get_stream()' returns an input stream that can be used to access the
    mail. If this function is called multiple times, each call seeks the stream
-   to beginning.
+   to beginning. Don't unreference the stream, it's destroyed automatically.
     * Typically the input contains the raw data in disk, lines may end with LF
       or CRLF depending on how they're on disk.
     * mbox drops Dovecot's internal headers from the stream (X-UID:, Status:,
@@ -97,4 +97,4 @@ immutable, so it's not possible to change message's received date, headers or
 body. If you wish to modify any of them, you need to create a new message and
 expunge the old one.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

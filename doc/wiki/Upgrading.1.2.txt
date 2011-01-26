@@ -28,7 +28,8 @@ Settings:
  * Renamed 'auth_ntlm_use_winbind' to 'auth_use_winbind', which also determines
    if GSS-SPNEGO is handled by GSSAPI or winbind.
  * Removed 'login_greeting_capability'. The capabilities are now always sent
-   (Lemonade requires this and it's not that much extra traffic).
+   (LEMONADE [http://www.lemonadeformobiles.com/] requires this and it's not
+   that much extra traffic).
  * Removed 'auth_worker_max_request_count'. It was useful only with PAM, so it
    can now be specified in 'passdb pam { args = max_requests=n } '. The default
    is 100.
@@ -40,17 +41,17 @@ ACL:
 
 Sieve:
 
- * You should consider <migrating from CMU Sieve to Dovecot Sieve>
-   [LDA.Sieve.Dovecot.txt] (see the link for instructions)
+ * You should consider <migrating from CMU Sieve to Pigeonhole>
+   [Pigeonhole.Sieve.Configuration.txt] (see the link for instructions).
 
-<ManageSieve.txt>:
+<ManageSieve> [Pigeonhole.ManageSieve.txt]:
 
  * The 'sieve=' and 'sieve_storage=' settings need to be placed in the ' plugin
    {}' section now and 'sieve_storage=' needs to be renamed to 'sieve_dir='.
    This removes the duplication of these values with respect to the <Sieve
-   Plugin> [LDA.Sieve.txt] for <Deliver> [LDA.txt]. So, since you are using the
-   Sieve plugin, these settings should already be there and all that needs to
-   be done is remove the 'sieve=' and 'sieve_storage=' settings from the '
-   protocol managesieve {}' section.
+   Plugin> [Pigeonhole.Sieve.txt] for <Deliver> [LDA.txt]. So, since you are
+   using the Sieve plugin, these settings should already be there and all that
+   needs to be done is remove the 'sieve=' and 'sieve_storage=' settings from
+   the ' protocol managesieve {} ' section.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

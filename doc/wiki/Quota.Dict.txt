@@ -12,19 +12,28 @@ are:
 The quota root format is:
 
 ---%<-------------------------------------------------------------------------
-quota = dict:<quota root name>:<username>:<dictionary URI>
+quota = dict:<quota root name>:<username>[:<option>[...]]:<dictionary URI>
 ---%<-------------------------------------------------------------------------
 
 If /username/ is left empty, the logged in username is used (this is typically
 what you want). Another useful username is '%d' for supporting domain-wide
 quotas.
 
+The supported options are:
+
+ * noenforcing: Don't enforce quota limits, only track them.
+ * ignoreunlimited: If user has unlimited quota, don't track it.
+ * ns=<prefix>: This quota root is tracked only for the given namespace.
+
+Examples
+--------
+
 ---%<-------------------------------------------------------------------------
 plugin {
   # SQL backend:
-  quota = dict:user::proxy::quota
+  quota = dict:User quota::proxy::quota
   # file backend:
-  quota = dict:user::file:%h/Maildir/dovecot-quota
+  quota = dict:User quota::file:%h/Maildir/dovecot-quota
 
   quota_rule = *:storage=10M:messages=1000
 }
@@ -141,4 +150,6 @@ dict {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+See <Dict.txt> for more information, especially about permission issues.
+
+(This file was created from the wiki on 2011-01-13 04:52)

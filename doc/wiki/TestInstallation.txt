@@ -173,8 +173,15 @@ If you can see only INBOX,
 
  * Clear out any "IMAP namespace prefix" or similar settings from clients.
  * Check if client is configured to show only "subscribed mailboxes". If so,
-   you'll have to subscribe to the mailboxes you wish to see.
+   you'll have to subscribe to the mailboxes you wish to see. You can see a
+   list of subscribed mailboxes with:
+
+   ---%<----------------------------------------------------------------------
+   d lsub "" *
+   * LSUB () "/" "INBOX"
+   d OK Lsub completed.
+   ---%<----------------------------------------------------------------------
 
 Most IMAP clients have been tested with Dovecot and they work.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

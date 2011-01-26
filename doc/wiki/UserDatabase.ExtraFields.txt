@@ -10,12 +10,10 @@ A user database lookup typically returns <uid, gid, home and mail>
  * *system_groups_user*: Specifies the username whose groups are read from
    '/etc/group' (or wherever NSS is configured to taken them from). The logged
    in user has access to those groups. This may be useful for shared mailboxes.
-    * This field is called *system_user* in v1.1 and older.
  * *userdb_import*: This allows returning multiple extra fields in one
    TAB-separated field. It's useful for userdbs which are a bit less flexible
-   for returning a variable number of fields (e.g. SQL). (v1.2+)
- * *uidgid_file*: Get uid and gid for user based on the given filename. (v1.1+)
-
+   for returning a variable number of fields (e.g. SQL).
+ * *uidgid_file*: Get uid and gid for user based on the given filename.
  * It's possible to override settings from 'dovecot.conf'.
 
 These fields can be returned the exact same way as uid, gid, home and mail
@@ -34,27 +32,24 @@ gets overridden anyway.
 To understand how imap and pop3 processes see their settings, it may be helpful
 to know how Dovecot internally passes them:
 
- 1. All actual settings are first placed into environment variables. The
-    environment name may be different than the setting name.
- 2. Everything inside plugin section is placed into environment variables.
-    <%variables> [Variables.txt] in values are expanded first.
- 3. Everything from userdb lookup is placed into environment variables.
- 4. At this point if <post-login scripting is used> [PostLoginScripting.txt],
-    it may modify the environment if wanted.
- 5. imap/pop3 reads the settings from environment variables. It doesn't matter
-    how they got there, they're read the exact same way.
+ 1. First all actual settings are first read into memory.
+ 2. Next if <post-login scripting is used> [PostLoginScripting.txt], it may
+    modify the settings if wanted.
+ 3. Last all the extra fields returned by userdb lookup are used to override
+    the settings. Any unknown setting is placed into plugin {} section (e.g.
+    foo=bar will be parsed as if it were plugin { foo=bar }).
 
-At each step if the environment variable already exists, it's replaced with the
-new value (ie. the setting is overridden).
+If you want to override settings inside sections, you can separate the section
+name and key with '/'. For example:
 
-Note that
+---%<-------------------------------------------------------------------------
+namespace default {
+  inbox = yes
+}
+---%<-------------------------------------------------------------------------
 
- * If you want to override a setting from userdb you must use its environment
-   name, not the setting name. See <PostLoginScripting.txt> for how to find out
-   what the environment is named.
- * Boolean settings are checked simply by the environment variables' existence
-   and their values are ignored. For example having a userdb lookup return
-   'mmap_disable=no' would still enable it.
+The inbox setting can be overridden by returning 'namespace/default/inbox=no'
+extra field.
 
 Examples
 --------
@@ -65,8 +60,6 @@ SQL
 dovecot-sql.conf:
 
 ---%<-------------------------------------------------------------------------
-# NOTE: \ line splitting works only with v1.1+. The quota_rule is also for
-v1.1+.
 user_query = SELECT home, uid, gid, \
   '*:storage=100M' as quota_rule, mail_plugins \
   FROM users WHERE userid = '%u'
@@ -91,14 +84,10 @@ otherwise they're treated as <passdb extra fields>
 [PasswordDatabase.ExtraFields.txt].
 
 ---%<-------------------------------------------------------------------------
-# v1.0 quota format:
-user:{plain}pass:1000:1000::/home/user::userdb_mail=mbox:~/mail
-userdb_quota=maildir:storage=102400
-# v1.1 quota format:
 user:{plain}pass:1000:1000::/home/user::userdb_mail=mbox:~/mail
 userdb_quota_rule=*:storage=100M
 user2:{plain}pass2:1001:1001::/home/user2::userdb_mail=maildir:~/Maildir
 userdb_quota_rule=*:storage=200M
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

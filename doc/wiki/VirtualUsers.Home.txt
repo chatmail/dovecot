@@ -19,7 +19,8 @@ And in particular:
 
 Some uses for home directory are:
 
- * By default Sieve scripts are in user's home directory.
+ * By default <Sieve> [Pigeonhole.Sieve.txt] scripts are in user's home
+   directory.
  * Duplicate mail check database is in user's home directory. Suppression of
    duplicate rejects/vacations won't work if home directory isn't specified.
  * Debugging: If an imap or pop3 process crashes, the core file is written to
@@ -40,7 +41,7 @@ with this are:
       child)
  * And vice versa: If user creates "dovecot.sieve" mailbox, Dovecot will
    probably start logging all kinds of errors because the mailbox directory
-   isn't a valid Sieve script.
+   isn't a valid <Sieve> [Pigeonhole.Sieve.txt] script.
  * If you ever intend to migrate to another mailbox format, it's much more
    easier to do if you can have both old and new mail directories under the
    user's home directory.
@@ -61,6 +62,14 @@ these (in the preferred order):
      * mbox: There's really no good and safe way to do it.
  4. The home directory is the same as the mail directory.
 
+If for example home='/var/vmail/domain/user/'
+mail='/var/vmail/domain/user/mail/' set:
+
+---%<-------------------------------------------------------------------------
+mail_home = /var/vmail/%d/%n
+mail_location = maildir:/var/vmail/%d/%n/mail
+---%<-------------------------------------------------------------------------
+
 Examples
 --------
 
@@ -76,4 +85,4 @@ user_attrs = .., mailDirectory=home=/var/vmail/%$
 
 Then just use 'mail_location = maildir:~/Maildir'.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

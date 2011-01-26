@@ -1,0 +1,27 @@
+Dovecot ManageSieve Server
+==========================
+
+ManageSieve service is used to manage a user's <Sieve> [LDA.Sieve.txt] script
+collection. It has the following advantages over doing it directly via
+filesystem:
+
+ * No need to let users log in via FTP/SFTP/etc, which could be difficult
+   especially with virtual users.
+ * ManageSieve is a standard protocol [http://tools.ietf.org/html/rfc5804], so
+   users can manage their scripts using (hopefully) user-friendlyManageSieve
+   clients. Many webmails already include aManageSieve client.
+ * Scripts are compiled before they are installed, which guarantees that the
+   uploaded script is valid. This prevents a user from inadvertently installing
+   a broken Sieve script.
+
+Dovecot's ManageSieve support is distributed in a separate package from the
+Pigeonhole project [http://pigeonhole.dovecot.org/]. There exists also an
+alternative pysieved [http://gitorious.org/pysieved/pages/Home] ManageSieve
+server that works with Dovecot.
+
+ * <Download and Installation> [Pigeonhole.txt]
+ * <Configuration> [Pigeonhole.ManageSieve.Configuration.txt]
+ * <Troubleshooting> [Pigeonhole.ManageSieve.Troubleshooting.txt]
+ * <Client Issues> [Pigeonhole.ManageSieve.Clients.txt]
+
+(This file was created from the wiki on 2011-01-13 04:52)

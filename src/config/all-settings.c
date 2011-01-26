@@ -827,8 +827,8 @@ struct login_settings {
 	const char *ssl_cipher_list;
 	const char *ssl_cert_username_field;
 	bool ssl_verify_client_cert;
-	bool ssl_require_client_cert;
-	bool ssl_username_from_cert;
+	bool auth_ssl_require_client_cert;
+	bool auth_ssl_username_from_cert;
 	bool verbose_ssl;
 
 	bool disable_plaintext_auth;
@@ -1797,7 +1797,8 @@ static bool login_settings_check(void *_set, pool_t pool, const char **error_r)
 	set->log_format_elements_split =
 		p_strsplit(pool, set->login_log_format_elements, " ");
 
-	if (set->ssl_require_client_cert || set->ssl_username_from_cert) {
+	if (set->auth_ssl_require_client_cert ||
+	    set->auth_ssl_username_from_cert) {
 		/* if we require valid cert, make sure we also ask for it */
 		set->ssl_verify_client_cert = TRUE;
 	}
@@ -1838,8 +1839,8 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, ssl_cipher_list),
 	DEF(SET_STR, ssl_cert_username_field),
 	DEF(SET_BOOL, ssl_verify_client_cert),
-	DEF(SET_BOOL, ssl_require_client_cert),
-	DEF(SET_BOOL, ssl_username_from_cert),
+	DEF(SET_BOOL, auth_ssl_require_client_cert),
+	DEF(SET_BOOL, auth_ssl_username_from_cert),
 	DEF(SET_BOOL, verbose_ssl),
 
 	DEF(SET_BOOL, disable_plaintext_auth),
@@ -1867,8 +1868,8 @@ static const struct login_settings login_default_settings = {
 	.ssl_cipher_list = "ALL:!LOW:!SSLv2:!EXP:!aNULL",
 	.ssl_cert_username_field = "commonName",
 	.ssl_verify_client_cert = FALSE,
-	.ssl_require_client_cert = FALSE,
-	.ssl_username_from_cert = FALSE,
+	.auth_ssl_require_client_cert = FALSE,
+	.auth_ssl_username_from_cert = FALSE,
 	.verbose_ssl = FALSE,
 
 	.disable_plaintext_auth = TRUE,
@@ -2883,8 +2884,8 @@ const struct setting_parser_info *all_default_roots[] = {
 	&doveadm_setting_parser_info, 
 	&mail_user_setting_parser_info, 
 	&imap_login_setting_parser_info, 
-	&imap_setting_parser_info, 
 	&mail_storage_setting_parser_info, 
+	&imap_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

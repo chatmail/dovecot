@@ -135,5 +135,12 @@ all disabled, but they may be useful for debugging.
  * 'verbose_ssl=yes' enables logging SSL errors and warnings. Even without this
    setting if connection is closed because of an SSL error, the error is logged
    as the disconnection reason.
+ * 'auth_verbose_passwords=no|plain|sha1' If authentication fails, this setting
+   logs the used password. If you don't really need to know what the password
+   itself was, but are more interested in knowing if the user is simply trying
+   to use the wrong password every single time or if it's a brute force attack,
+   you can set this to "sha1" and only the SHA1 of the password is logged.
+   That's enough to know if the password is same or different between login
+   attempts.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

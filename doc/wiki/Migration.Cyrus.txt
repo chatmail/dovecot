@@ -61,4 +61,4 @@ with other mail servers (e.g. Dovecot).
 For Fedora Core 3 (and probably other versions) the command is just 'db_dump -p
 /etc/sasldb2'.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

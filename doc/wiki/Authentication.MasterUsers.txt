@@ -27,7 +27,7 @@ user they're logging in as.
 
 You should also add the 'pass=yes' setting to the master passdb if possible. It
 means that Dovecot verifies that the login user really exists before allowing
-the master user to log in. Without the setting if a non-existing login username
+the master user to log in. Without the setting if a nonexistent login username
 is given, depending on the configuration, it could either return an internal
 login error (the userdb lookup failed) or create a whole new user (with eg.
 <static userdb> [UserDatabase.Static.txt]). 'pass=yes' doesn't work with PAM or
@@ -170,4 +170,126 @@ user2:{plain}master-password
 ..etc..
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+Advanced SQL Examples
+---------------------
+
+In these example we will create 3 kinds of master users. The first will be
+users who can read all email for all domains. The next example will be users
+who can read all email for their domain only. The third example will be users
+who can read email of domains listed in a separate ownership table. We will use
+MySQL and create 2 tables with the following structure.
+
+---%<-------------------------------------------------------------------------
+CREATE TABLE `users` (
+  `uid` int(4) NOT NULL AUTO_INCREMENT,
+  `user_name` varchar(80) NOT NULL,
+  `domain_name` varchar(80) NOT NULL,
+  `password` varchar(60) DEFAULT NULL,
+  `last_login` datetime DEFAULT NULL,
+  `masteradmin` tinyint(1) NOT NULL DEFAULT '0',
+  `owns_domain` tinyint(1) NOT NULL DEFAULT '0',
+  UNIQUE KEY `emaillookup` (`domain_name`,`user_name`),
+  UNIQUE KEY `uid` (`uid`)
+) ENGINE=MyISAM AUTO_INCREMENT=995 DEFAULT CHARSET=latin
+
+CREATE TABLE `ownership` (
+  `login_id` varchar(128) NOT NULL,
+  `owned_object` varchar(128) NOT NULL,
+  UNIQUE KEY `login_id_full` (`login_id`,`owned_object`),
+  KEY `login_id` (`login_id`),
+  KEY `owned_object` (`owned_object`),
+  KEY `login_id_index` (`login_id`),
+  KEY `owned_object_index` (`owned_object`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1
+---%<-------------------------------------------------------------------------
+
+The dovecot.conf file for all 3 master user configurations will be as follows:
+
+---%<-------------------------------------------------------------------------
+passdb {
+  driver = sql
+  args = /etc/dovecot/ownership-sql.conf
+  master = yes
+  pass = yes
+}
+
+passdb {
+  driver = sql
+  args = /etc/dovecot/domain-owner-sql.conf
+  master = yes
+  pass = yes
+}
+
+passdb {
+  driver = sql
+  args = /etc/dovecot/masteradmin-sql.conf
+  master = yes
+  pass = yes
+}
+passdb {
+  args = /etc/dovecot/sql.conf
+  driver = sql
+}
+---%<-------------------------------------------------------------------------
+
+Before we get into the master user tricks, we start with normal email
+authentication. The query for that is as follows:
+
+---%<-------------------------------------------------------------------------
+password_query = SELECT user_name, domain_name, password FROM users WHERE
+user_name = '%n' AND domain_name = '%d'
+---%<-------------------------------------------------------------------------
+
+In this first example master admin suppose you want to allow a few people to be
+master users over all domains. These users will have the "masteradmin" field
+set to 1. The query would be:
+
+---%<-------------------------------------------------------------------------
+password_query = SELECT user_name, domain_name, password FROM users WHERE
+user_name = '%n' AND domain_name = '%d' AND masteradmin='1'
+---%<-------------------------------------------------------------------------
+
+In the second example suppose you are hosting multiple domains and you want to
+allow a few users to become master users of their domain only.
+
+Your query would be as follows:
+
+---%<-------------------------------------------------------------------------
+password_query = SELECT user_name, domain_name, password FROM users WHERE
+user_name = '%n' \
+AND domain_name = '%d' AND owns_domain='1' AND '%d'='%{login_domain}'
+---%<-------------------------------------------------------------------------
+
+This will allow you to log in using the following to read Joe's email if
+master@dovecot.org is flagged as the domain_owner.
+
+---%<-------------------------------------------------------------------------
+joe@dovecot.org*master@dovecot.org
+---%<-------------------------------------------------------------------------
+
+In this third example we have a table of owners. There are a list of pairs
+between owner email addresses and domains that are owned. That way if a person
+controls a lot of domains then they can view all the users in all the domains
+they control. The query would be as follows:
+
+---%<-------------------------------------------------------------------------
+password_query = SELECT user_name, domain_name, password FROM users, ownership
+WHERE \
+user_name = '%n' AND domain_name = '%d' AND login_id='%u' AND
+owned_object='%{login_domain}'
+---%<-------------------------------------------------------------------------
+
+If you really want to get tricky and efficient you can combine all 3 queries
+into one giant query that does everything.
+
+---%<-------------------------------------------------------------------------
+password_query = SELECT user_name, domain_name, password FROM users, ownership
+WHERE \
+user_name = '%n' AND domain_name = '%d' AND ( \
+(masteradmin='1') OR \
+(owns_domain='1' AND '%d'='%{login_domain}') OR \
+(login_id='%u' and owned_object='%{login_domain}')) \
+group by uid
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2011-01-13 04:52)

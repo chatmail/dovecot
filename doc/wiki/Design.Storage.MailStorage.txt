@@ -38,4 +38,4 @@ Methods that mail storage backends need to implement are:
  * 'mailbox_alloc()': Allocate memory for <mailbox>
    [Design.Storage.Mailbox.txt].
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

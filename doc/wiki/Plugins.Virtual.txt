@@ -85,6 +85,10 @@ virtual mailbox, it wouldn't show up there. This also means it's problematic to
 support IMAP UIDPLUS extension for virtual mailboxes, and currently Dovecot
 doesn't even try (no [APPENDUID] or [COPYUID] is sent to client).
 
+The !-prefixed virtual mailbox is also selected from; you don't need to list it
+again without an ! or you'll get two copies of your messages in the virtual
+mailbox.
+
 Examples
 --------
 
@@ -212,4 +216,4 @@ IMAP UIDs. Instead use for GUIDs (with maildir the same as base filename):
 pop3_uidl_format = %g
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)

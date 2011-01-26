@@ -81,6 +81,19 @@ You might want to build a cronjob to go through the Lucene indexes once in a
 while to delete indexed messages (or entire mailboxes) that no longer exist on
 the filesystem. It shouldn't normally find any such messages though.
 
+Sharding
+--------
+
+If you have more users than fit into a single Solr box, you can split users off
+to different servers. A couple of different ways you could do it are:
+
+ * Have some HTTP proxy redirecting the connections based on the URL
+ * Configure Dovecot's userdb lookup to return a different host for 'fts_solr'
+   setting using <extra fields> [UserDatabase.ExtraFields.txt].
+    * LDAP: 'user_attrs = ..., solrHost=fts_solr=url=http://%$:8983/solr/'
+    * MySQL: 'user_query = SELECT concat('url=http://', solr_host,
+      ':8983/solr/') AS fts_solr, ...'
+
 External Tutorials
 ------------------
 
@@ -91,4 +104,4 @@ External sites with tutorials on using Solr under Dovecot
    - Guide for installing all the dependencies for Solr to work under
    CentOS/Fedora. Step by step tutorial.
 
-(This file was created from the wiki on 2010-07-02 21:30)
+(This file was created from the wiki on 2011-01-13 04:52)
