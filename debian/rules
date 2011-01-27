@@ -15,12 +15,13 @@ DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 config-stamp: configure
 	dh_testdir
 	# Dovecot
-	sh configure --with-ldap \
+	sh configure --with-ldap=plugin \
 	            --with-ssl=openssl \
+	            --with-sql=plugin \
 	            --with-pgsql \
 	            --with-mysql \
 	            --with-sqlite \
-	            --with-gssapi \
+	            --with-gssapi=plugin \
 	            --with-ioloop=best \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \
