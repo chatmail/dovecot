@@ -3,9 +3,9 @@
 set -e
 
 if [ "$1" = "configure" -a -z "$2" ]; then
-	# Add the pop3 option to the protocols line on first install
-	sed -i -e '/^[[:space:]]*protocols *=/ {s/[[:space:]]*none//; /pop3/!s/[[:space:]]*$/ pop3/}' \
-		/etc/dovecot/protocols.conf
+	# Add the pop3 and pop3s options to the protocols line.
+	perl -pi.bak -e 'if (/^\s*protocols =/i) { s/none//; s/$/ pop3 pop3s/ unless /pop3/;  s/[ \t]+/ /g; };'\
+	/etc/dovecot/dovecot.conf
 fi
 
 if [ -x "/etc/init.d/dovecot" ]; then

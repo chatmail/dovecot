@@ -3,9 +3,9 @@
 set -e
 
 if [ "$1" = "configure" -a -z "$2" ]; then
-	# Add the imap option to the protocols line on first install
-	sed -i -e '/^[[:space:]]*protocols *=/ {s/[[:space:]]*none//; /imap/!s/[[:space:]]*$/ imap/}' \
-		/etc/dovecot/protocols.conf
+	# Add the imap and imaps options to the protocols line on first install
+	perl -pi.bak -e 'if (/^\s*protocols =/i) { s/none//; s/$/ imap imaps/ unless /imap/; s/[ \t]+/ /g; };'\
+   /etc/dovecot/dovecot.conf
 fi
 
 if [ -x "/etc/init.d/dovecot" ]; then

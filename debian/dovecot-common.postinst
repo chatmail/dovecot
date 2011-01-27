@@ -3,7 +3,6 @@ set -e
 
 if [ "$1" = "configure" ]; then
   CONFFILES="dovecot.conf \
-    protocols.conf \
     dovecot-db.conf.ext \
     dovecot-dict-sql.conf.ext \
     dovecot-ldap.conf.ext \
@@ -30,30 +29,17 @@ if [ "$1" = "configure" ]; then
     conf.d/auth-system.conf.ext \
     conf.d/auth-vpopmail.conf.ext"
 
-  # if upgrade from a version without protocols.conf file
-  # read the current enabled protocols before upgrading the configuration
-  if [ -n "$2" ] && dpkg --compare-versions "$2" "<=" "1:2.0.8-1"; then
-    protocols="`doveconf protocols 2> /dev/null || true`"
-  fi
-
   for conffile in $CONFFILES ; do
     # Tell ucf that the file in /usr/share/dovecot is the latest
     # maintainer version, and let it handle how to manage the real
     # configuration file in /etc/dovecot.
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-common /etc/dovecot/$conffile
-    if [ "$conffile" != "dovecot.conf" ] && [ "$conffile" != "protocols.conf" ] && [ -f "/etc/dovecot/$conffile" ] &&
+    if [ "$conffile" != "dovecot.conf" ] && [ -f "/etc/dovecot/$conffile" ] &&
 		[ `echo $conffile | cut -b -7` != "conf.d/" ]; then
       chmod 0600 /etc/dovecot/$conffile
     fi
   done
-
-  # if upgrade from a version without protocols.conf file
-  # initialize it with the previously enabled protocols
-  if [ -n "$2" ] && dpkg --compare-versions "$2" "<=" "1:2.0.8-1"; then
-    sed -i -e "s/^[[:space:]]*protocols *=.*$/$protocols/" \
-      /etc/dovecot/protocols.conf
-  fi
 
   if [ -n "`id -u imapd 2> /dev/null`" ]; then
     deluser imapd || true
