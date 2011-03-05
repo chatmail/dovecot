@@ -1,9 +1,0 @@
-dovecot (0.99.13-1) unstable; urgency=low
-
-  * As of this version, dovecot-pop3d doesn't make changes to 
-    /etc/dovecot/dovecot.conf.  If this is your first time installing the
-    package, read /usr/share/doc/dovecot-pop3d/README.Debian to learn how
-    to enable the server.
-
-  -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 31 Dec 2004 15:53:16 -0500
-
