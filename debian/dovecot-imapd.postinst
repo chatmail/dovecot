@@ -2,10 +2,16 @@
 
 set -e
 
-if [ "$1" = "configure" -a -z "$2" ]; then
-	# Add the imap and imaps options to the protocols line on first install
-	perl -pi.bak -e 'if (/^\s*protocols =/i) { s/none//; s/$/ imap imaps/ unless /imap/; s/[ \t]+/ /g; };'\
-   /etc/dovecot/dovecot.conf
+if [ "$1" = "configure" ]; then
+  CONFFILES="conf.d/20-imap.conf"
+
+  for conffile in $CONFFILES ; do
+    # Tell ucf that the file in /usr/share/dovecot is the latest
+    # maintainer version, and let it handle how to manage the real
+    # configuration file in /etc/dovecot.
+    ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
+    ucfr dovecot-pop3d /etc/dovecot/$conffile
+  done
 fi
 
 if [ -x "/etc/init.d/dovecot" ]; then
