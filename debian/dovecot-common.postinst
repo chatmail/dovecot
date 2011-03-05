@@ -63,7 +63,7 @@ if [ "$1" = "configure" ]; then
   # Certs and key file
   SSL_CERT="/etc/ssl/certs/dovecot.pem"
   SSL_KEY="/etc/ssl/private/dovecot.pem"
-  
+
   # Generate new certs if needed
   if [ -e $SSL_CERT ] || [ -e $SSL_KEY ]; then
     echo "You already have ssl certs for dovecot."
@@ -93,7 +93,7 @@ root@$MAILNAME
     if [ -e $SSL_CERT ] && [ -e $SSL_KEY ]; then
       ucfr dovecot-common $SSL_CERT
       ucfr dovecot-common $SSL_KEY
-    
+
       chown root $SSL_CERT || true
       chgrp dovecot $SSL_CERT || true
       chmod 0644 $SSL_CERT || true
@@ -101,11 +101,6 @@ root@$MAILNAME
       chgrp dovecot $SSL_KEY || true
       chmod 0600 $SSL_KEY || true
     fi
-  fi
-
-  # migration hooks
-  if [ -f /etc/dovecot/dovecot.conf ] && grep -q default_mail_env /etc/dovecot/dovecot.conf; then
-    sed -i -e 's/^default_mail_env/mail_location/' /etc/dovecot/dovecot.conf
   fi
 
 fi
