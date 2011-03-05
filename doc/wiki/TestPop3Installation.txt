@@ -39,9 +39,9 @@ setting in 'dovecot.conf'. Also check that 'listen' setting is '*'.
 Next check that it also works from remote host:
 
 ---%<-------------------------------------------------------------------------
-# telnet your.host.org 110
+# telnet imap.example.com 110
 Trying 1.2.3.4...
-Connected to your.host.org.
+Connected to imap.example.com.
 Escape character is '^]'.
 +OK Dovecot ready.
 ---%<-------------------------------------------------------------------------
@@ -73,7 +73,7 @@ You'll need to try this from another computer, since all local IPs are treated
 as secure:
 
 ---%<-------------------------------------------------------------------------
-# telnet your.host.org 110
+# telnet imap.example.com 110
 user username
 pass password
 ---%<-------------------------------------------------------------------------
@@ -93,7 +93,7 @@ alternatively use OpenSSL to test that the server works with SSL (assuming
 you've already set it up):
 
 ---%<-------------------------------------------------------------------------
-# openssl s_client -connect your.host.org:995
+# openssl s_client -connect imap.example.com:995
 +OK Dovecot ready.
 ---%<-------------------------------------------------------------------------
 
@@ -134,4 +134,4 @@ If you can't log in,
 
 Many POP3 clients have been tested with Dovecot and they work.
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

@@ -28,4 +28,4 @@ Add the '-d' parameter to specify the destination username:
 |/var/qmail/bin/preline -f /usr/local/libexec/dovecot/dovecot-lda -d $EXT@$USER
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

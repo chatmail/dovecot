@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -387,4 +387,12 @@ acl_backend_vfile_nonowner_iter_deinit(struct acl_mailbox_list_context *ctx)
 
 	backend->iterating_acllist = FALSE;
 	i_free(ctx);
+}
+
+int acl_backend_vfile_nonowner_lookups_rebuild(struct acl_backend *_backend)
+{
+	struct acl_backend_vfile *backend =
+		(struct acl_backend_vfile *)_backend;
+
+	return acl_backend_vfile_acllist_rebuild(backend);
 }

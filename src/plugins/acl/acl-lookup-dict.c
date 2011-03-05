@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -61,6 +61,11 @@ void acl_lookup_dict_deinit(struct acl_lookup_dict **_dict)
 	if (dict->dict != NULL)
 		dict_deinit(&dict->dict);
 	i_free(dict);
+}
+
+bool acl_lookup_dict_is_enabled(struct acl_lookup_dict *dict)
+{
+	return dict->dict != NULL;
 }
 
 static void
@@ -311,6 +316,8 @@ acl_lookup_dict_iterate_visible_init(struct acl_lookup_dict *dict)
 	   first one */
 	if (dict->dict != NULL)
 		acl_lookup_dict_iterate_read(iter);
+	else
+		array_clear(&iter->iter_ids);
 	return iter;
 }
 

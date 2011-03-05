@@ -75,4 +75,4 @@ Manual conversion
  * Courier's message keywords implementation isn't Dovecot compatible. There
    doesn't exist a simple way to convert the keywords manually.
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

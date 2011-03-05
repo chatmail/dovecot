@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hash.h"
@@ -12,7 +12,7 @@
 
 extern struct acl_backend_vfuncs acl_backend_vfile;
 
-static const char *const owner_mailbox_rights[] = {
+const char *const all_mailbox_rights[] = {
 	MAIL_ACL_LOOKUP,
 	MAIL_ACL_READ,
 	MAIL_ACL_WRITE,
@@ -27,6 +27,7 @@ static const char *const owner_mailbox_rights[] = {
 	NULL
 };
 
+static const char *const *owner_mailbox_rights = all_mailbox_rights;
 static const char *const non_owner_mailbox_rights[] = { NULL };
 
 struct acl_backend *

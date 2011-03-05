@@ -4,7 +4,7 @@ Pigeonhole Installation
 Getting the sources
 -------------------
 
-You can download the sources from the Pigeonhole download page
+You can download the latest released sources from the Pigeonhole download page
 [http://pigeonhole.dovecot.org/download.html].
 
 Alternatively, you can get the sources, including the most recent unreleased
@@ -48,4 +48,8 @@ make
 sudo make install
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2011-01-13 04:52)
+*IMPORTANT*: You need to recompile Pigeonhole when you upgrade Dovecot to a new
+version, because otherwise the Sieve interpreter plugin will fail to load with
+a version error.
+
+(This file was created from the wiki on 2011-03-04 04:52)

@@ -68,4 +68,4 @@ after the colon character is required, else 'sendmail' will fail to pass
 command arguments to 'dovecot-lda' correctly.  Make sure all the virtual
 domains are in the 'virtuserdomains' file.
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

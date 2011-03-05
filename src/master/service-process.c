@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "array.h"
@@ -116,7 +116,13 @@ service_dup_fds(struct service *service)
 		break;
 	}
 	dup2_append(&dups, service->status_fd[1], MASTER_STATUS_FD);
-	dup2_append(&dups, master_dead_pipe_fd[1], MASTER_DEAD_FD);
+	if (service->type != SERVICE_TYPE_ANVIL) {
+		dup2_append(&dups, service->list->master_dead_pipe_fd[1],
+			    MASTER_DEAD_FD);
+	} else {
+		dup2_append(&dups, global_master_dead_pipe_fd[1],
+			    MASTER_DEAD_FD);
+	}
 
 	if (service->type == SERVICE_TYPE_LOG) {
 		/* keep stderr as-is. this is especially important when
@@ -180,12 +186,8 @@ static void
 service_process_setup_environment(struct service *service, unsigned int uid)
 {
 	const struct master_service_settings *set = service->list->service_set;
-	const char *const *p;
 
-	/* remove all environment, and put back what we need */
-	env_clean();
-	for (p = service->list->child_process_env; *p != NULL; p++)
-		env_put(*p);
+	master_service_env_clean();
 
 	switch (service->type) {
 	case SERVICE_TYPE_CONFIG:

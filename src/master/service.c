@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "ioloop.h"
@@ -426,18 +426,15 @@ static bool service_want(struct service_settings *set)
 	return FALSE;
 }
 
-int services_create(const struct master_settings *set,
-		    const char *const *child_process_env,
-		    struct service_list **services_r, const char **error_r)
+static int
+services_create_real(const struct master_settings *set, pool_t pool,
+		     struct service_list **services_r, const char **error_r)
 {
 	struct service_list *service_list;
 	struct service *service;
 	struct service_settings *const *service_settings;
-	pool_t pool;
 	const char *error;
 	unsigned int i, count;
-
-	pool = pool_alloconly_create("services pool", 4096);
 
 	service_list = p_new(pool, struct service_list, 1);
 	service_list->refcount = 1;
@@ -445,9 +442,10 @@ int services_create(const struct master_settings *set,
 	service_list->service_set = master_service_settings_get(master_service);
 	service_list->set_pool = master_service_settings_detach(master_service);
 	service_list->set = set;
-	service_list->child_process_env = child_process_env;
 	service_list->master_log_fd[0] = -1;
 	service_list->master_log_fd[1] = -1;
+	service_list->master_dead_pipe_fd[0] = -1;
+	service_list->master_dead_pipe_fd[1] = -1;
 
 	service_settings = array_get(&set->services, &count);
 	p_array_init(&service_list->services, pool, count);
@@ -503,6 +501,19 @@ int services_create(const struct master_settings *set,
 	}
 
 	*services_r = service_list;
+	return 0;
+}
+
+int services_create(const struct master_settings *set,
+		    struct service_list **services_r, const char **error_r)
+{
+	pool_t pool;
+
+	pool = pool_alloconly_create("services pool", 4096);
+	if (services_create_real(set, pool, services_r, error_r) < 0) {
+		pool_unref(&pool);
+		return -1;
+	}
 	return 0;
 }
 

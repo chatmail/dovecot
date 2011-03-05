@@ -263,4 +263,4 @@ export USERDB_KEYS="$USERDB_KEYS namespace/user/location"
 exec env "NAMESPACE/USER/LOCATION=$location" "$@"
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

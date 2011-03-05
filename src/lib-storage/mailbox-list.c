@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -262,6 +262,12 @@ int mailbox_list_settings_parse(struct mail_user *user, const char *data,
 	str = split_next_arg(&tmp);
 	if (fix_path(user, str, &set_r->root_dir, &error) < 0) {
 		*error_r = t_strconcat(error, "mail root dir in: ", data, NULL);
+		return -1;
+	}
+	if (strncmp(set_r->root_dir, "INBOX=", 6) == 0) {
+		/* probably mbox user trying to avoid root_dir */
+		*error_r = t_strconcat("Mail root directory not given: ",
+				       data, NULL);
 		return -1;
 	}
 

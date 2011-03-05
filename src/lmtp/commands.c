@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -71,7 +71,8 @@ int cmd_lhlo(struct client *client, const char *args)
 	client_send_line(client, "250-ENHANCEDSTATUSCODES");
 	client_send_line(client, "250 PIPELINING");
 
-	client->state.lhlo = p_strdup(client->state_pool, str_c(domain));
+	i_free(client->lhlo);
+	client->lhlo = i_strdup(str_c(domain));
 	return 0;
 }
 
@@ -323,7 +324,7 @@ static const char *lmtp_unescape_address(const char *name)
 static void rcpt_address_parse(struct client *client, const char *address,
 			       const char **username_r, const char **detail_r)
 {
-	const char *p, *p2;
+	const char *p, *domain;
 
 	*username_r = address;
 	*detail_r = "";
@@ -331,16 +332,16 @@ static void rcpt_address_parse(struct client *client, const char *address,
 	if (*client->set->recipient_delimiter == '\0')
 		return;
 
+	domain = strchr(address, '@');
 	p = strstr(address, client->set->recipient_delimiter);
-	if (p != NULL) {
+	if (p != NULL && (domain == NULL || p < domain)) {
 		/* user+detail@domain */
 		*username_r = t_strdup_until(*username_r, p);
-		p2 = strchr(p, '@');
-		if (p2 == NULL)
+		if (domain == NULL)
 			*detail_r = p+1;
 		else {
-			*detail_r = t_strdup_until(p+1, p2);
-			*username_r = t_strconcat(*username_r, p2, NULL);
+			*detail_r = t_strdup_until(p+1, domain);
+			*username_r = t_strconcat(*username_r, domain, NULL);
 		}
 	}
 }
@@ -699,30 +700,28 @@ static void client_proxy_finish(bool timeout, void *context)
 static const char *client_get_added_headers(struct client *client)
 {
 	string_t *str = t_str_new(200);
-	const char *host, *address = NULL, *username = NULL;
+	const char *host, *rcpt_to = NULL;
 
 	if (array_count(&client->state.rcpt_to) == 1) {
 		const struct mail_recipient *rcpt =
 			array_idx(&client->state.rcpt_to, 0);
-		const char *detail;
 
-		address = rcpt->address;
-		rcpt_address_parse(client, address, &username, &detail);
+		rcpt_to = rcpt->address;
 	}
 
 	str_printfa(str, "Return-Path: <%s>\r\n", client->state.mail_from);
-	if (username != NULL)
-		str_printfa(str, "Delivered-To: <%s>\r\n", username);
+	if (rcpt_to != NULL)
+		str_printfa(str, "Delivered-To: <%s>\r\n", rcpt_to);
 
-	str_printfa(str, "Received: from %s", client->state.lhlo);
+	str_printfa(str, "Received: from %s", client->lhlo);
 	if ((host = net_ip2addr(&client->remote_ip)) != NULL)
 		str_printfa(str, " ([%s])", host);
 	str_printfa(str, "\r\n\tby %s ("PACKAGE_NAME") with LMTP id %s",
 		    client->my_domain, client->state.session_id);
 
 	str_append(str, "\r\n\t");
-	if (address != NULL)
-		str_printfa(str, "for <%s>", address);
+	if (rcpt_to != NULL)
+		str_printfa(str, "for <%s>", rcpt_to);
 	str_printfa(str, "; %s\r\n", message_date_create(ioloop_time));
 	return str_c(str);
 }

@@ -48,6 +48,11 @@ mail_location = mdbox:/var/vmail/%d/%n:ALT=/altstorage/vmail/%d/%n
 will make Dovecot look for message data first under '/var/vmail/%d/%n', and if
 it is not found there it will look under '/altstorage/vmail/%d/%n' instead.
 
+Keep the unmounted '/altstorage' directory permissions such that Dovecot mail
+processes can't create directories under it (e.g. root:root 0755). This way if
+the alt storage isn't mounted for some reason, Dovecot won't think that all the
+messages in alt storage were deleted and lose their flags.
+
 Mailbox directory name
 ----------------------
 
@@ -78,4 +83,4 @@ The value for 'DIRNAME' should be chosen carefully so as to minimise the
 chances of clashing with mail folder names. In the example here, unusual
 upper/lower casing has been used.
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

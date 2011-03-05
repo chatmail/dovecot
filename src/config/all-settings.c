@@ -200,12 +200,14 @@ extern const struct setting_parser_info lda_setting_parser_info;
 struct lda_settings {
 	const char *postmaster_address;
 	const char *hostname;
+	const char *submission_host;
 	const char *sendmail_path;
 	const char *rejection_subject;
 	const char *rejection_reason;
 	const char *deliver_log_format;
 	const char *recipient_delimiter;
 	const char *lda_original_recipient_header;
+
 	bool quota_full_tempfail;
 	bool lda_mailbox_autocreate;
 	bool lda_mailbox_autosubscribe;
@@ -710,6 +712,7 @@ const struct setting_parser_info master_service_setting_parser_info = {
 static const struct setting_define lda_setting_defines[] = {
 	DEF(SET_STR, postmaster_address),
 	DEF(SET_STR, hostname),
+	DEF(SET_STR, submission_host),
 	DEF(SET_STR, sendmail_path),
 	DEF(SET_STR, rejection_subject),
 	DEF(SET_STR, rejection_reason),
@@ -725,6 +728,7 @@ static const struct setting_define lda_setting_defines[] = {
 static const struct lda_settings lda_default_settings = {
 	.postmaster_address = "",
 	.hostname = "",
+	.submission_host = "",
 	.sendmail_path = "/usr/sbin/sendmail",
 	.rejection_subject = "Rejected: %s",
 	.rejection_reason =
@@ -791,6 +795,7 @@ extern const struct setting_parser_info master_setting_parser_info;
 struct master_settings {
 	const char *base_dir;
 	const char *libexec_dir;
+	const char *import_environment;
 	const char *protocols;
 	const char *listen;
 	const char *ssl;
@@ -1242,6 +1247,18 @@ const struct setting_parser_info *pop3_login_setting_roots[] = {
 extern const struct setting_parser_info service_setting_parser_info;
 extern const struct setting_parser_info service_setting_parser_info;
 /* <settings checks> */
+#ifdef HAVE_SYSTEMD
+#  define ENV_SYSTEMD " LISTEN_PID LISTEN_FDS"
+#else
+#  define ENV_SYSTEMD ""
+#endif
+#ifdef DEBUG
+#  define ENV_GDB " GDB"
+#else
+#  define ENV_GDB ""
+#endif
+/* </settings checks> */
+/* <settings checks> */
 static void
 expand_user(const char **user, enum service_user_default *default_r,
 	    const struct master_settings *set)
@@ -1450,12 +1467,8 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 		service_set_login_dump_core(service);
 	}
 	set->protocols_split = p_strsplit_spaces(pool, set->protocols, " ");
-	if (set->protocols_split[0] == NULL) {
-		*error_r = "No protocols defined, "
-			"if you don't want any use protocols=none";
-		return FALSE;
-	}
-	if (strcmp(set->protocols_split[0], "none") == 0 &&
+	if (set->protocols_split[0] != NULL &&
+	    strcmp(set->protocols_split[0], "none") == 0 &&
 	    set->protocols_split[1] == NULL)
 		set->protocols_split[0] = NULL;
 
@@ -1703,6 +1716,7 @@ const struct setting_parser_info service_setting_parser_info = {
 static const struct setting_define master_setting_defines[] = {
 	DEF(SET_STR, base_dir),
 	DEF(SET_STR, libexec_dir),
+	DEF(SET_STR, import_environment),
 	DEF(SET_STR, protocols),
 	DEF(SET_STR, listen),
 	DEF(SET_ENUM, ssl),
@@ -1727,6 +1741,7 @@ static const struct setting_define master_setting_defines[] = {
 struct master_settings master_default_settings = {
 	.base_dir = PKG_RUNDIR,
 	.libexec_dir = PKG_LIBEXECDIR,
+	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,
 	.protocols = "imap pop3 lmtp",
 	.listen = "*, ::",
 	.ssl = "yes:no:required",

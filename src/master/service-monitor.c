@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "array.h"
@@ -195,8 +195,11 @@ static void service_monitor_throttle(struct service *service)
 	service_throttle(service, SERVICE_STARTUP_FAILURE_THROTTLE_SECS);
 }
 
-static void service_drop_connections(struct service *service)
+static void service_drop_connections(struct service_listener *l)
 {
+	struct service *service = l->service;
+	int fd;
+
 	if (service->last_drop_warning +
 	    SERVICE_DROP_WARN_INTERVAL_SECS < ioloop_time) {
 		service->last_drop_warning = ioloop_time;
@@ -206,25 +209,35 @@ static void service_drop_connections(struct service *service)
 			  service->process_limit > 1 ?
 			  "process_limit" : "client_limit");
 	}
-	service->listen_pending = TRUE;
-	service_monitor_listen_stop(service);
 
 	if (service->type == SERVICE_TYPE_LOGIN) {
 		/* reached process limit, notify processes that they
 		   need to start killing existing connections if they
 		   reach connection limit */
 		service_login_notify(service, TRUE);
+
+		service->listen_pending = TRUE;
+		service_monitor_listen_stop(service);
+	} else {
+		/* just accept and close the connection, so it's clear that
+		   this is happening because of the limit, rather than because
+		   the service processes aren't answering fast enough */
+		fd = net_accept(l->fd, NULL, NULL);
+		if (fd > 0)
+			net_disconnect(fd);
 	}
 }
 
-static void service_accept(struct service *service)
+static void service_accept(struct service_listener *l)
 {
+	struct service *service = l->service;
+
 	i_assert(service->process_avail == 0);
 
 	if (service->process_count == service->process_limit) {
 		/* we've reached our limits, new clients will have to
 		   wait until there are more processes available */
-		service_drop_connections(service);
+		service_drop_connections(l);
 		return;
 	}
 
@@ -274,7 +287,7 @@ void service_monitor_listen_start(struct service *service)
 		struct service_listener *l = *listeners;
 
 		if (l->io == NULL && l->fd != -1)
-			l->io = io_add(l->fd, IO_READ, service_accept, service);
+			l->io = io_add(l->fd, IO_READ, service_accept, l);
 	}
 }
 
@@ -330,6 +343,11 @@ void services_monitor_start(struct service_list *service_list)
 
 	services_log_init(service_list);
 	service_anvil_monitor_start(service_list);
+
+	if (pipe(service_list->master_dead_pipe_fd) < 0)
+		i_error("pipe() failed: %m");
+	fd_close_on_exec(service_list->master_dead_pipe_fd[0], TRUE);
+	fd_close_on_exec(service_list->master_dead_pipe_fd[1], TRUE);
 
 	array_foreach(&service_list->services, services) {
 		struct service *service = *services;
@@ -408,6 +426,15 @@ void service_monitor_stop(struct service *service)
 void services_monitor_stop(struct service_list *service_list)
 {
 	struct service *const *services;
+
+	if (service_list->master_dead_pipe_fd[0] != -1) {
+		if (close(service_list->master_dead_pipe_fd[0]) < 0)
+			i_error("close(master dead pipe) failed: %m");
+		if (close(service_list->master_dead_pipe_fd[1]) < 0)
+			i_error("close(master dead pipe) failed: %m");
+		service_list->master_dead_pipe_fd[0] = -1;
+		service_list->master_dead_pipe_fd[1] = -1;
+	}
 
 	array_foreach(&service_list->services, services)
 		service_monitor_stop(*services);
