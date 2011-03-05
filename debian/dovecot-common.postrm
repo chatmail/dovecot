@@ -17,8 +17,6 @@ if [ "$1" = "purge" ] ; then
 		/etc/dovecot/conf.d/10-master.conf \
 		/etc/dovecot/conf.d/10-ssl.conf \
 		/etc/dovecot/conf.d/15-lda.conf \
-		/etc/dovecot/conf.d/20-lmtp.conf \
-		/etc/dovecot/conf.d/20-managesieve.conf \
 		/etc/dovecot/conf.d/90-acl.conf \
 		/etc/dovecot/conf.d/90-plugin.conf \
 		/etc/dovecot/conf.d/90-quota.conf \

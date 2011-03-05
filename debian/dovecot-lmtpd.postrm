@@ -1,0 +1,34 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "purge" ] ; then
+	CONFFILES="/etc/dovecot/conf.d/20-lmtp.conf"
+
+	for conffile in $CONFFILES; do
+		# we mimic dpkg as closely as possible, so we remove configuration
+		# files with dpkg backup extensions too:
+		### Some of the following is from Tore Anderson:
+		for ext in '~' '%' .bak .dpkg-tmp .dpkg-new .dpkg-old .dpkg-dist;  do
+			rm -f $conffile$ext
+		done
+		# remove the configuration file itself
+		rm -f $conffile
+		# and finally clear it out from the ucf database
+		if which ucf >/dev/null; then
+			ucf --purge $conffile
+		fi
+		if which ucfr >/dev/null; then
+			ucfr --purge dovecot-common $conffile
+		fi
+	done
+fi
+
+if [ -x "/etc/init.d/dovecot" ]; then
+	if [ -x /usr/sbin/invoke-rc.d ] ; then
+		invoke-rc.d dovecot start
+	else
+		/etc/init.d/dovecot start
+	fi
+fi
+
+#DEBHELPER#

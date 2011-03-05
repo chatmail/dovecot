@@ -101,6 +101,15 @@ install: build
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-pop3* $(CURDIR)/debian/dovecot-pop3d/usr/share/dovecot/conf.d/
 
+	# lmtpd
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/lmtp* $(CURDIR)/debian/dovecot-lmtpd/usr/lib/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-lmtp* $(CURDIR)/debian/dovecot-lmtpd/usr/share/dovecot/conf.d/
+
+	# managesieved
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/managesieve* $(CURDIR)/debian/dovecot-managesieved/usr/lib/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/settings/libmanagesieve* $(CURDIR)/debian/dovecot-managesieved/usr/lib/dovecot/modules/settings/
+	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-managesieve* $(CURDIR)/debian/dovecot-managesieved/usr/share/dovecot/conf.d/
+
 	# dev
 	mv $(CURDIR)/debian/dovecot-common/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/dovecot-config $(CURDIR)/debian/dovecot-dev/usr/lib/dovecot
