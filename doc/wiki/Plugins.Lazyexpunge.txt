@@ -122,7 +122,8 @@ cronjob
 -------
 
 Run something like this for each user every night (not actually tested if it
-works):
+works, and vulnerable to TOCTTOU if the user can place symlinks in any of the
+directories find is traversing):
 
 ---%<-------------------------------------------------------------------------
 # delete a day old mails
@@ -145,4 +146,4 @@ specific mailboxes, and expunge them when they've been there for a specified
 amount of time. It keeps an internal database (e.g. SQL) of all such mailboxes,
 so it doesn't have to go through all the mailboxes for all the users.
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

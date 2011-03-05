@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -73,8 +73,16 @@ extern const struct sql_result driver_pgsql_result;
 
 static void result_finish(struct pgsql_result *result);
 
+static const char *pgsql_prefix(struct pgsql_db *db)
+{
+	return db->host == NULL ? "pgsql" :
+		t_strdup_printf("pgsql(%s)", db->host);
+}
+
 static void driver_pgsql_set_state(struct pgsql_db *db, enum sql_db_state state)
 {
+	i_assert(state == SQL_DB_STATE_BUSY || db->cur_result == NULL);
+
 	/* switch back to original ioloop in case the caller wants to
 	   add/remove timeouts */
 	if (db->ioloop != NULL)
@@ -148,8 +156,8 @@ static void connect_callback(struct pgsql_db *db)
 	case PGRES_POLLING_OK:
 		break;
 	case PGRES_POLLING_FAILED:
-		i_error("pgsql: Connect failed to %s: %s",
-			PQdb(db->pg), last_error(db));
+		i_error("%s: Connect failed to database %s: %s",
+			pgsql_prefix(db), PQdb(db->pg), last_error(db));
 		driver_pgsql_close(db);
 		return;
 	}
@@ -160,7 +168,8 @@ static void connect_callback(struct pgsql_db *db)
 	}
 
 	if (io_dir == 0) {
-		i_info("pgsql: Connected to %s", PQdb(db->pg));
+		i_info("%s: Connected to database %s",
+		       pgsql_prefix(db), PQdb(db->pg));
 		if (db->to_connect != NULL)
 			timeout_remove(&db->to_connect);
 		driver_pgsql_set_state(db, SQL_DB_STATE_IDLE);
@@ -174,11 +183,10 @@ static void connect_callback(struct pgsql_db *db)
 
 static void driver_pgsql_connect_timeout(struct pgsql_db *db)
 {
-	const char *dbname = PQdb(db->pg);
 	unsigned int secs = ioloop_time - db->api.last_connect_try;
 
-	i_error("pgsql: Connect failed to %s: Timeout after %u seconds",
-		dbname != NULL ? dbname : db->host, secs);
+	i_error("%s: Connect failed: Timeout after %u seconds",
+		pgsql_prefix(db), secs);
 	driver_pgsql_close(db);
 }
 
@@ -189,19 +197,21 @@ static int driver_pgsql_connect(struct sql_db *_db)
 	i_assert(db->api.state == SQL_DB_STATE_DISCONNECTED);
 
 	db->pg = PQconnectStart(db->connect_string);
-	if (db->pg == NULL)
-		i_fatal("pgsql: PQconnectStart() failed (out of memory)");
+	if (db->pg == NULL) {
+		i_fatal("%s: PQconnectStart() failed (out of memory)",
+			pgsql_prefix(db));
+	}
 
 	if (PQstatus(db->pg) == CONNECTION_BAD) {
-		i_error("pgsql: Connect failed to %s: %s",
-			PQdb(db->pg), last_error(db));
+		i_error("%s: Connect failed to database %s: %s",
+			pgsql_prefix(db), PQdb(db->pg), last_error(db));
 		driver_pgsql_close(db);
 		return -1;
 	}
 
 	/* nonblocking connecting begins. */
 	if (PQsetnonblocking(db->pg, 1) < 0)
-		i_error("pgsql: PQsetnonblocking() failed");
+		i_error("%s: PQsetnonblocking() failed", pgsql_prefix(db));
 	i_assert(db->to_connect == NULL);
 	db->to_connect = timeout_add(SQL_CONNECT_TIMEOUT_SECS * 1000,
 				     driver_pgsql_connect_timeout, db);
@@ -422,7 +432,11 @@ static void flush_callback(struct pgsql_result *result)
 
 static void query_timeout(struct pgsql_result *result)
 {
-	i_error("pgsql: Query timed out, aborting");
+        struct pgsql_db *db = (struct pgsql_db *)result->api.db;
+
+	driver_pgsql_stop_io(db);
+
+	i_error("%s: Query timed out, aborting", pgsql_prefix(db));
 	result->timeout = TRUE;
 	result_finish(result);
 }
@@ -436,6 +450,7 @@ static void do_query(struct pgsql_result *result, const char *query)
 	i_assert(db->cur_result == NULL);
 	i_assert(db->io == NULL);
 
+	driver_pgsql_set_state(db, SQL_DB_STATE_BUSY);
 	db->cur_result = result;
 	result->to = timeout_add(SQL_QUERY_TIMEOUT_SECS * 1000,
 				 query_timeout, result);
@@ -447,7 +462,6 @@ static void do_query(struct pgsql_result *result, const char *query)
 		return;
 	}
 
-	driver_pgsql_set_state(db, SQL_DB_STATE_BUSY);
 	if (ret > 0) {
 		/* write blocks */
 		db->io = io_add(PQsocket(db->pg), IO_WRITE,
@@ -488,7 +502,7 @@ static void exec_callback(struct sql_result *_result,
 {
 	struct pgsql_db *db = (struct pgsql_db *)_result->db;
 
-	i_error("pgsql: sql_exec() failed: %s", last_error(db));
+	i_error("%s: sql_exec() failed: %s", pgsql_prefix(db), last_error(db));
 }
 
 static void driver_pgsql_exec(struct sql_db *db, const char *query)

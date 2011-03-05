@@ -219,4 +219,103 @@ it, but it is possible by making the <passdb> [PasswordDatabase.txt] allow
 logins using any password (typically requiring <"nopassword" extra field>
 [PasswordDatabase.ExtraFields.txt] to be returned).
 
-(This file was created from the wiki on 2011-01-13 04:52)
+Testing
+-------
+
+Try out your new setup:
+
+---%<-------------------------------------------------------------------------
+openssl s_client -connect mail.sample.com:pop3s
+---%<-------------------------------------------------------------------------
+
+You should see something like this:
+
+---%<-------------------------------------------------------------------------
+CONNECTED(00000003)
+depth=2 /O=Root CA/OU=http://www.cacert.org/CN=CA Cert Signing
+Authority/emailAddress=support@cacert.org
+verify error:num=19:self signed certificate in certificate chain
+verify return:0
+---
+Certificate chain
+ 0 s:/CN=mail.example.com
+   i:/O=CAcert Inc./OU=http://www.CAcert.org/CN=CAcert Class 3 Root
+ 1 s:/O=CAcert Inc./OU=http://www.CAcert.org/CN=CAcert Class 3 Root
+   i:/O=Root CA/OU=http://www.cacert.org/CN=CA Cert Signing
+Authority/emailAddress=support@cacert.org
+ 2 s:/O=Root CA/OU=http://www.cacert.org/CN=CA Cert Signing
+Authority/emailAddress=support@cacert.org
+   i:/O=Root CA/OU=http://www.cacert.org/CN=CA Cert Signing
+Authority/emailAddress=support@cacert.org
+---
+Server certificate
+-----BEGIN CERTIFICATE-----
+MIIE1DCCArygAwIBAgIDAMBPMA0GCSqGSIb3DQEBBAUAMFQxFDASBgNVBAoTC0NB
+Y2VydCBJbmMuMR4wHAYDVQQLExVodHRwOi8vd3d3LkNBY2VydC5vcmcxHDAaBgNV
+BAMTE0NBY2VydCBDbGFzcyAzIFJvb3QwHhcNMTAxMjIwMTM1NDQ1WhcNMTIxMjE5
+MTM1NDQ1WjAmMSQwIgYDjksadnjkasndjksandjksandjksandj5YXJlYS5vcmcw
+ggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC3jOX3FC8wVqnb2r65Sfvk
+cYUpJhlbhCfqPdN41c3WS0y1Jwwum1q4oMAJvdRnD5TMff1+fqTFy3lS1sYxIXiD
+kBRo478eNqzXHMpBOqbvKjYp/UZgWUNA9ebI1nQtwd7rnjmm/GrtyItjahCsgzDS
+qPAie+mXYzuT49ZoG+Glg7/R/jDcLMcJY0d5eJ7kufB1RLhvRitZD4FEbJVehqhY
+aevf5bLk1BNFhzRBfLXmv6u/kfvWf2HjGAf0aFhaQyiAldDgnZrvaZOFjkToJk27
+p9MguvwGmbciao0DmMjcJhQ0smclFwy8Kj98Tz+nTkfAlU8jJdb1J/tIatJdpSRh
+AgMBAAGjgdwwgdkwDAYDVR0TAQH/BAIwADA0BgNVHSUELTArBggrBgEFBQcDAgYI
+KwYBBQUHAwEGCWCGSAGG+EIEAQYKKwYBBAGCNwoDAzALBgNVHQ8EBAMCBaAwMwYI
+KwYBBQUHAQEEJzAlMCMGCCsGAQUFBzABhadodHRwOi8vb2NzcC5jYWNlcnQub3Jn
+LzBRBgNVknsadkjasnjdksandjksandjsnNlY3VyaXR5YXJlYS5vcmegKQYIKwYB
+BQUHCAWgHQwbbWFpbC5qb2ludC5zZWN1cml0eWFyZWEub3JnMA0GCSqGSIb3DQEB
+BQUAA4ICAQAX8ceObvUZNKYTlNQ/cv0BiA1XweRsVNca1ILACNLdVPR9mvf+aXCh
+ODkHaZAmGngj1DfD4fJsTbaydGWSPeVH91Qi9F+Pi6szhsxylI83NKbuXihcenuG
+twnte8aIb5FelVHttLQPSKRR62E8YmDWk3KYivuFAuZqDaGnWc5yeneTBpsGter/
+4awqsgymBK2YEg1HIWMPaRBvwzCVN/yUyWhFH9Nj11f/xgZE87VXrjLHWT/73i2Z
+S4uIZ2KHQUYuxMGldgpXm+QxFM8DGA6z1T1oPCVfW85cezlfr8QVvX6SXZrAUNL0
+3D5YPzQuevW+5CrqnGA+F5ff4mBMl8R8Sg0+0LoLqt5PbpGyTt9vS1INZCdfvtIA
+/d7Ae7Xp9W8FVRqd7tvNMIy3ZA0/wNMDUczkhC/YtvHfMELpjtMJAGF15OtO7Vik
+V+FZnBP1Yd7760dtEmd6bF8vjcXCvDdxwGtcAehAUpIgAWvkHHOt8+H56tkFENAP
+/ZpJ+Wr+K3lxkkG+BN1bucxMuAdVyTpFyZfKDHRXIO/5e0hpPOaTO+obD3kifzdh
+yy7KmdKvDclHTiPuonJBzEXeM3JQBjcDHbMSyA6+38yBcso27h9VqCQJB2cZmSlW
+ArS/9wt2X21KgeuGHlTZ/8z9gXAjQKXhDYECWWd6LkWl98ZDBihslQ==
+-----END CERTIFICATE-----
+subject=/CN=mail.example.com
+issuer=/O=CAcert Inc./OU=http://www.CAcert.org/CN=CAcert Class 3 Root
+---
+No client certificate CA names sent
+---
+SSL handshake has read 5497 bytes and written 293 bytes
+---
+New, TLSv1/SSLv3, Cipher is DHE-RSA-AES256-SHA
+Server public key is 2048 bit
+Secure Renegotiation IS supported
+Compression: zlib compression
+Expansion: zlib compression
+SSL-Session:
+    Protocol  : TLSv1
+    Cipher    : DHE-RSA-AES256-SHA
+    Session-ID:
+114A22BE4625B33F6893124ACF640AE0628B48B5039E90B3B9A20ADF7FA691F3
+    Session-ID-ctx:
+    Master-Key:
+B8A55EC91A060575CFB29503FBF7160C2DC8BCBFE02D20A7F704882F72D8D00272D8D002CE5CCC4B94A492F43ED8F
+    Key-Arg   : None
+    TLS session ticket:
+    0000 - 86 c7 46 63 a5 b6 48 74-16 d8 e0 a7 e2 64 e8 89   ..Fc..Ht.....d..
+    0010 - 97 90 59 4b 57 f3 e2 b3-e2 d2 88 90 a8 aa b4 44   ..YKW..........D
+    0020 - ea 24 08 5e b4 14 7f e1-2a 1a 1c 40 ca 85 e7 41   .$.^....*..@...A
+    0030 - 9d 0d a8 4c f7 e3 db 1e-ef da 53 9c fe 43 cc 62   ...L......S..C.b
+    0040 - 79 b6 ad ea 9d cf ca b2-37 41 b7 0f ea 7d 59 e8   y.......7A...}Y.
+    0050 - 10 01 a0 eb dc c2 63 66-56 54 6a e8 3a 4b 93 49   ......cfVTj.:K.I
+    0060 - 77 da e4 4b 21 e8 30 7e-bf 10 91 3a 2c f9 59 80   w..K!.0~...:,.Y.
+    0070 - 01 1f 36 0b 92 85 67 55-c8 86 1d 44 b1 6f 0d ae   ..6...gU...D.o..
+    0080 - 15 36 b6 49 3a ef 94 9a-ef 6d 27 f0 80 20 43 09   .6.I:....m'.. C.
+    0090 - be 70 c5 30 15 3b 93 c6-c1 4c e9 7f 5c 34 98 dd   .p.0.;...L..\4..
+
+    Compression: 1 (zlib compression)
+    Start Time: 1292857721
+    Timeout   : 300 (sec)
+    Verify return code: 19 (self signed certificate in certificate chain)
+---
++OK Dovecot ready.
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2011-03-04 04:52)

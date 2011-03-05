@@ -176,6 +176,11 @@ will make Dovecot look for message data first under '/var/vmail/%d/%n'
 ("primary storage"), and if it is not found there it will look under
 '/altstorage/vmail/%d/%n' ("alternate storage") instead.
 
+Keep the unmounted '/altstorage' directory permissions such that Dovecot mail
+processes can't create directories under it (e.g. root:root 0755). This way if
+the alt storage isn't mounted for some reason, Dovecot won't think that all the
+messages in alt storage were deleted and lose their flags.
+
 When messages are moved from primary storage to alternate storage, only the
 actual message data (stored in files 'u.*' under *single-dbox* and 'm.*' under
 *multi-dbox*) is moved to alternate storage; everything else remains in the
@@ -205,4 +210,4 @@ appear *either* in the primary storage area *or* the alternate storage area but
 not both — if the corresponding file appears in both areas then there is an
 inconsistency.
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

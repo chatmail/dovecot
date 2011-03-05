@@ -75,5 +75,7 @@ Others:
  * <NTLM authentication against Active Directory>
    [HowTo.ActiveDirectoryNtlm.txt]
  * <Postfix and Dovecot LMTP> [HowTo.PostfixDovecotLMTP.txt]
+ * Apple Discussion Forum: Mail Services in Mac OS X Server v10.6 Snow Leopard
+   [http://discussions.apple.com/forum.jspa?forumID=1350]
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

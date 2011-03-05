@@ -114,11 +114,12 @@ struct service_list {
 	struct service *config;
 	struct service *log;
 	struct service *anvil;
-	const char *const *child_process_env;
 
 	/* nonblocking log fds usd by master */
 	int master_log_fd[2];
 	struct service_process_notify *log_byes;
+
+	int master_dead_pipe_fd[2];
 
 	ARRAY_DEFINE(services, struct service *);
 
@@ -131,7 +132,6 @@ extern struct hash_table *service_pids;
 
 /* Create all services from settings */
 int services_create(const struct master_settings *set,
-		    const char *const *child_process_env,
 		    struct service_list **services_r, const char **error_r);
 
 /* Destroy services */

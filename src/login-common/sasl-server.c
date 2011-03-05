@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -67,6 +67,10 @@ client_get_auth_flags(struct client *client)
 		auth_flags |= AUTH_REQUEST_FLAG_VALID_CLIENT_CERT;
 	if (client->secured)
 		auth_flags |= AUTH_REQUEST_FLAG_SECURED;
+	if (client->trusted) {
+		/* e.g. webmail */
+		auth_flags |= AUTH_REQUEST_FLAG_NO_PENALTY;
+	}
 	return auth_flags;
 }
 

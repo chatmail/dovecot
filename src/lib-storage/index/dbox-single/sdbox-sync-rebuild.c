@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -175,6 +175,13 @@ int sdbox_sync_index_rebuild(struct sdbox_mailbox *mbox, bool force)
 			/* already rebuilt by someone else */
 			return 0;
 		}
+	}
+
+	if (dbox_sync_rebuild_verify_alt_storage(mbox->box.list) < 0) {
+		mail_storage_set_critical(mbox->box.storage,
+			"sdbox %s: Alt storage not mounted, "
+			"aborting index rebuild", mbox->box.path);
+		return -1;
 	}
 
 	mail_cache_reset(mbox->box.cache);

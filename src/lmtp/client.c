@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -230,7 +230,7 @@ struct client *client_create(int fd_in, int fd_out,
 	client_raw_user_create(client);
 	client_generate_session_id(client);
 	client->my_domain = client->set->hostname;
-	client->state.lhlo = "missing";
+	client->lhlo = i_strdup("missing");
 
 	DLLIST_PREPEND(&clients, client);
 	clients_count++;
@@ -264,6 +264,7 @@ void client_destroy(struct client *client, const char *prefix,
 	if (client->fd_in != client->fd_out)
 		net_disconnect(client->fd_out);
 	client_state_reset(client);
+	i_free(client->lhlo);
 	pool_unref(&client->state_pool);
 	pool_unref(&client->pool);
 

@@ -21,6 +21,7 @@ struct acl_backend_vfuncs {
 					  const char **name_r);
 	void (*nonowner_lookups_iter_deinit)
 		(struct acl_mailbox_list_context *ctx);
+	int (*nonowner_lookups_rebuild)(struct acl_backend *backend);
 
 	struct acl_object *(*object_init)(struct acl_backend *backend,
 					  const char *name);
@@ -74,6 +75,8 @@ struct acl_object_list_iter {
 	unsigned int failed:1;
 };
 
+extern const char *const all_mailbox_rights[];
+
 const char *const *
 acl_backend_mask_get_names(struct acl_backend *backend,
 			   const struct acl_mask *mask, pool_t pool);
@@ -81,5 +84,7 @@ int acl_backend_get_default_rights(struct acl_backend *backend,
 				   const struct acl_mask **mask_r);
 void acl_rights_write_id(string_t *dest, const struct acl_rights *right);
 bool acl_rights_has_nonowner_lookup_changes(const struct acl_rights *rights);
+
+int acl_identifier_parse(const char *line, struct acl_rights *rights);
 
 #endif

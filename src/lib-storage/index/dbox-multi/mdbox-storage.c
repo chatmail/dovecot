@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -316,7 +316,7 @@ static int
 mdbox_mailbox_update(struct mailbox *box, const struct mailbox_update *update)
 {
 	if (!box->opened) {
-		if (index_storage_mailbox_open(box, FALSE) < 0)
+		if (mailbox_open(box) < 0)
 			return -1;
 	}
 	if (update->cache_fields != NULL)

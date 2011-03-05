@@ -63,7 +63,6 @@ There are multiple different tools for managing your own CA. The simplest way
 is to use a CA managing tool as gnoMint [http://gnomint.sourceforge.net/] or
 TinyCA [http://tinyca.sm-zone.net/]. However, if you need to tailor the
 properties of the CA, you always can use OpenSSL, very much customizable, but
-however a bit cumbersome. See http://sial.org/howto/openssl/ca/ for example for
-a tutorial.
+however a bit cumbersome.
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

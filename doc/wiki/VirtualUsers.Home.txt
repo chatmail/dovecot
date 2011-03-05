@@ -63,11 +63,11 @@ these (in the preferred order):
  4. The home directory is the same as the mail directory.
 
 If for example home='/var/vmail/domain/user/'
-mail='/var/vmail/domain/user/mail/' set:
+mail='/var/vmail/domain/user/mail/', set:
 
 ---%<-------------------------------------------------------------------------
 mail_home = /var/vmail/%d/%n
-mail_location = maildir:/var/vmail/%d/%n/mail
+mail_location = maildir:~/mail
 ---%<-------------------------------------------------------------------------
 
 Examples
@@ -85,4 +85,4 @@ user_attrs = .., mailDirectory=home=/var/vmail/%$
 
 Then just use 'mail_location = maildir:~/Maildir'.
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

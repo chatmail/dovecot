@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -672,6 +672,7 @@ int mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 		   bool directory)
 {
 	enum mailbox_dir_create_type type;
+	int ret;
 
 	if (!mailbox_list_is_valid_create_name(box->list, box->name)) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
@@ -687,7 +688,10 @@ int mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 	}
 	mailbox_refresh_permissions(box);
 
-	return box->v.create(box, update, directory);
+	box->creating = TRUE;
+	ret = box->v.create(box, update, directory);
+	box->creating = FALSE;
+	return ret;
 }
 
 int mailbox_update(struct mailbox *box, const struct mailbox_update *update)
@@ -844,8 +848,9 @@ int mailbox_rename(struct mailbox *src, struct mailbox *dest,
 			"Can't rename mailboxes across specified storages.");
 		return -1;
 	}
-	if (src->list->ns->type != NAMESPACE_PRIVATE ||
-	    dest->list->ns->type != NAMESPACE_PRIVATE) {
+	if (src->list != dest->list &&
+	    (src->list->ns->type != NAMESPACE_PRIVATE ||
+	     dest->list->ns->type != NAMESPACE_PRIVATE)) {
 		mail_storage_set_error(src->storage, MAIL_ERROR_NOTPOSSIBLE,
 			"Renaming not supported across non-private namespaces.");
 		return -1;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -116,7 +116,8 @@ static void master_auth_connection_input(struct master_auth_connection *conn)
 				return;
 			i_error("read(%s) failed: %m", conn->auth->path);
 		} else {
-			i_error("read(%s) failed: Remote closed connection",
+			i_error("read(%s) failed: Remote closed connection "
+				"(process_limit reached?)",
 				conn->auth->path);
 		}
 		master_auth_connection_deinit(&conn);

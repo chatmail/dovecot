@@ -323,7 +323,6 @@ wikifiles = ACL.txt \
 	LDA.Postfix.txt \
 	LDA.Qmail.txt \
 	LDA.Sendmail.txt \
-	LDA.Sieve.txt \
 	LDA.txt \
 	LMTP.txt \
 	Logging.txt \

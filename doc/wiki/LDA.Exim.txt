@@ -119,9 +119,8 @@ ldap_local_user:
 Transport configuration
 -----------------------
 
-This transport will not work with Dovecot 1.0.*, as its LDA didn't have support
-for this scenario yet. It has been testedwith Exim 4.69-9 and Dovecot 1:1.2.5-2
-(backported) on Debian Lenny. YMMV with Dovecot 1.1.*.
+This transport has been tested with Exim 4.69-9 and Dovecot 1:1.2.5-2
+(backported) on Debian Lenny.You also have to set
 
 ---%<-------------------------------------------------------------------------
 dovecot_lda:
@@ -140,6 +139,7 @@ the separator
       -f "$sender_address" -a "$original_local_part@$original_domain"
   use_shell
   environment = USER=$local_part@$domain
+  home_directory = /var/mail/home/$domain/$local_part
   umask = 002
   message_prefix =
   message_suffix =
@@ -154,4 +154,7 @@ the separator
   temp_errors = 64 : 69 : 70 : 71 : 72 : 73 : 74 : 75 : 78
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2011-01-13 04:52)
+You need to have <home directory> [VirtualUsers.Home.txt] set to have duplicate
+database enabled, among other reasons.
+
+(This file was created from the wiki on 2011-03-04 04:52)

@@ -134,4 +134,4 @@ different. This should work with new versions:
 rip=(\d+\.\d+\.\d+\.\d+),.*$/$2/i;
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

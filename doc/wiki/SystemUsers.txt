@@ -3,7 +3,7 @@ System Users
 
 System users are typically defined in '/etc/passwd' file, but this isn't
 necessary. Using NSS [http://en.wikipedia.org/wiki/Name_Service_Switch] you can
-configure the lookups to be done from for example LDAP. See <passwd>
+configure the lookups to be done from elsewhere (e.g. LDAP). See <passwd>
 [AuthDatabase.Passwd.txt] userdb configuration for how to set this up.
 Especially if you're using nss_ldap you must set 'blocking=yes'.
 
@@ -109,4 +109,4 @@ path to specify the chroot path. For example '/home/./user' would chroot to
 'valid_chroot_dirs' setting ('/home' in the previous example). If this isn't
 done, Dovecot just ignores the "/./".
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)

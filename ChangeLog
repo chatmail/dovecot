@@ -1,8 +1,881 @@
+2011-03-04  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 755c63ff089f
+	[81d799f52912] [tip]
+
+	* .hgtags:
+	Added tag 2.0.10 for changeset 755c63ff089f
+	[58039a22d17f]
+
+	* NEWS, TODO, configure.in:
+	Released v2.0.10.
+	[755c63ff089f] [2.0.10]
+
+	* src/anvil/anvil-connection.c, src/anvil/anvil-settings.c, src/anvil
+	/connect-limit.c, src/anvil/main.c, src/anvil/penalty.c, src/anvil
+	/test-penalty.c, src/auth/auth-cache.c, src/auth/auth-client-
+	connection.c, src/auth/auth-master-connection.c, src/auth/auth-
+	penalty.c, src/auth/auth-request-handler.c, src/auth/auth-request.c,
+	src/auth/auth-settings.c, src/auth/auth-stream.c, src/auth/auth-
+	worker-client.c, src/auth/auth-worker-server.c, src/auth/auth.c,
+	src/auth/db-checkpassword.c, src/auth/db-ldap.c, src/auth/db-passwd-
+	file.c, src/auth/db-sql.c, src/auth/main.c, src/auth/mech-
+	anonymous.c, src/auth/mech-cram-md5.c, src/auth/mech-digest-md5.c,
+	src/auth/mech-external.c, src/auth/mech-plain.c, src/auth/mech.c,
+	src/auth/passdb-blocking.c, src/auth/passdb-bsdauth.c, src/auth
+	/passdb-cache.c, src/auth/passdb-checkpassword.c, src/auth/passdb-
+	ldap.c, src/auth/passdb-passwd-file.c, src/auth/passdb-passwd.c,
+	src/auth/passdb-shadow.c, src/auth/passdb-sql.c, src/auth/passdb-
+	static.c, src/auth/passdb-vpopmail.c, src/auth/passdb.c, src/auth
+	/password-scheme-crypt.c, src/auth/password-scheme.c, src/auth
+	/userdb-blocking.c, src/auth/userdb-checkpassword.c, src/auth
+	/userdb-ldap.c, src/auth/userdb-nss.c, src/auth/userdb-passwd-
+	file.c, src/auth/userdb-passwd.c, src/auth/userdb-prefetch.c,
+	src/auth/userdb-sql.c, src/auth/userdb-static.c, src/auth/userdb-
+	vpopmail.c, src/auth/userdb.c, src/config/config-connection.c,
+	src/config/config-filter.c, src/config/config-parser.c, src/config
+	/config-request.c, src/config/config-settings.c,
+	src/config/doveconf.c, src/config/main.c, src/config/old-set-
+	parser.c, src/config/sysinfo-get.c, src/dict/dict-commands.c,
+	src/dict/dict-connection.c, src/dict/dict-settings.c,
+	src/dict/main.c, src/director/auth-connection.c, src/director
+	/director-connection.c, src/director/director-host.c, src/director
+	/director-request.c, src/director/director-settings.c, src/director
+	/director-test.c, src/director/director.c, src/director/doveadm-
+	connection.c, src/director/login-connection.c, src/director/mail-
+	host.c, src/director/main.c, src/director/notify-connection.c,
+	src/director/user-directory.c, src/dns/dns-client-settings.c,
+	src/dns/dns-client.c, src/doveadm/client-connection.c, src/doveadm
+	/doveadm-auth.c, src/doveadm/doveadm-director.c, src/doveadm
+	/doveadm-dump-index.c, src/doveadm/doveadm-dump-log.c, src/doveadm
+	/doveadm-dump-mailboxlog.c, src/doveadm/doveadm-dump-thread.c,
+	src/doveadm/doveadm-dump.c, src/doveadm/doveadm-kick.c, src/doveadm
+	/doveadm-log.c, src/doveadm/doveadm-mail-altmove.c, src/doveadm
+	/doveadm-mail-expunge.c, src/doveadm/doveadm-mail-fetch.c,
+	src/doveadm/doveadm-mail-import.c, src/doveadm/doveadm-mail-iter.c,
+	src/doveadm/doveadm-mail-list-iter.c, src/doveadm/doveadm-mail-
+	mailbox-status.c, src/doveadm/doveadm-mail-mailbox.c, src/doveadm
+	/doveadm-mail-search.c, src/doveadm/doveadm-mail-server.c,
+	src/doveadm/doveadm-mail.c, src/doveadm/doveadm-master.c,
+	src/doveadm/doveadm-mutf7.c, src/doveadm/doveadm-penalty.c,
+	src/doveadm/doveadm-print-flow.c, src/doveadm/doveadm-print-pager.c,
+	src/doveadm/doveadm-print-server.c, src/doveadm/doveadm-print-tab.c,
+	src/doveadm/doveadm-print-table.c, src/doveadm/doveadm-print.c,
+	src/doveadm/doveadm-settings.c, src/doveadm/doveadm-sis.c,
+	src/doveadm/doveadm-util.c, src/doveadm/doveadm-who.c,
+	src/doveadm/doveadm.c, src/doveadm/main.c, src/doveadm/server-
+	connection.c, src/dsync/dsync-brain-msgs-new.c, src/dsync/dsync-
+	brain-msgs.c, src/dsync/dsync-brain.c, src/dsync/dsync-data.c,
+	src/dsync/dsync-proxy-client.c, src/dsync/dsync-proxy-server-cmd.c,
+	src/dsync/dsync-proxy-server.c, src/dsync/dsync-proxy.c, src/dsync
+	/dsync-worker-local.c, src/dsync/dsync-worker.c, src/dsync/dsync.c,
+	src/dsync/test-dsync-brain-msgs.c, src/dsync/test-dsync-brain.c,
+	src/dsync/test-dsync-common.c, src/dsync/test-dsync-proxy-server-
+	cmd.c, src/dsync/test-dsync-proxy.c, src/dsync/test-dsync-worker.c,
+	src/imap-login/client-authenticate.c, src/imap-login/client.c, src
+	/imap-login/imap-login-settings.c, src/imap-login/imap-proxy.c,
+	src/imap/cmd-append.c, src/imap/cmd-cancelupdate.c, src/imap/cmd-
+	capability.c, src/imap/cmd-check.c, src/imap/cmd-close.c, src/imap
+	/cmd-copy.c, src/imap/cmd-create.c, src/imap/cmd-delete.c, src/imap
+	/cmd-enable.c, src/imap/cmd-examine.c, src/imap/cmd-expunge.c,
+	src/imap/cmd-fetch.c, src/imap/cmd-id.c, src/imap/cmd-idle.c,
+	src/imap/cmd-list.c, src/imap/cmd-logout.c, src/imap/cmd-lsub.c,
+	src/imap/cmd-namespace.c, src/imap/cmd-noop.c, src/imap/cmd-
+	rename.c, src/imap/cmd-search.c, src/imap/cmd-select.c, src/imap
+	/cmd-sort.c, src/imap/cmd-status.c, src/imap/cmd-store.c, src/imap
+	/cmd-subscribe.c, src/imap/cmd-thread.c, src/imap/cmd-uid.c,
+	src/imap/cmd-unselect.c, src/imap/cmd-unsubscribe.c,
+	src/imap/cmd-x-cancel.c, src/imap/imap-client.c, src/imap/imap-
+	commands-util.c, src/imap/imap-commands.c, src/imap/imap-expunge.c,
+	src/imap/imap-fetch-body.c, src/imap/imap-fetch.c, src/imap/imap-
+	search-args.c, src/imap/imap-search.c, src/imap/imap-settings.c,
+	src/imap/imap-status.c, src/imap/imap-sync.c, src/imap/mail-storage-
+	callbacks.c, src/imap/main.c, src/lda/main.c, src/lib-auth/auth-
+	client-request.c, src/lib-auth/auth-client.c, src/lib-auth/auth-
+	master.c, src/lib-auth/auth-server-connection.c, src/lib-charset
+	/charset-iconv.c, src/lib-charset/charset-utf8.c, src/lib-dict/dict-
+	client.c, src/lib-dict/dict-db.c, src/lib-dict/dict-file.c, src/lib-
+	dict/dict-sql-settings.c, src/lib-dict/dict-sql.c, src/lib-
+	dict/dict.c, src/lib-dict/test-dict.c, src/lib-dns/dns-lookup.c, src
+	/lib-fs/fs-api.c, src/lib-fs/fs-posix.c, src/lib-fs/fs-sis-common.c,
+	src/lib-fs/fs-sis-queue.c, src/lib-fs/fs-sis.c, src/lib-fs/ostream-
+	cmp.c, src/lib-imap/imap-arg.c, src/lib-imap/imap-base-subject.c,
+	src/lib-imap/imap-bodystructure.c, src/lib-imap/imap-date.c, src
+	/lib-imap/imap-envelope.c, src/lib-imap/imap-id.c, src/lib-imap
+	/imap-match.c, src/lib-imap/imap-parser.c, src/lib-imap/imap-
+	quote.c, src/lib-imap/imap-seqset.c, src/lib-imap/imap-utf7.c, src
+	/lib-imap/imap-util.c, src/lib-imap/test-imap-match.c, src/lib-imap
+	/test-imap-parser.c, src/lib-imap/test-imap-utf7.c, src/lib-imap
+	/test-imap-util.c, src/lib-index/mail-cache-compress.c, src/lib-
+	index/mail-cache-decisions.c, src/lib-index/mail-cache-fields.c, src
+	/lib-index/mail-cache-lookup.c, src/lib-index/mail-cache-sync-
+	update.c, src/lib-index/mail-cache-transaction.c, src/lib-index
+	/mail-cache.c, src/lib-index/mail-index-alloc-cache.c, src/lib-index
+	/mail-index-dummy-view.c, src/lib-index/mail-index-fsck.c, src/lib-
+	index/mail-index-lock.c, src/lib-index/mail-index-map-hdr.c, src
+	/lib-index/mail-index-map-read.c, src/lib-index/mail-index-map.c,
+	src/lib-index/mail-index-modseq.c, src/lib-index/mail-index-
+	strmap.c, src/lib-index/mail-index-sync-ext.c, src/lib-index/mail-
+	index-sync-keywords.c, src/lib-index/mail-index-sync-update.c, src
+	/lib-index/mail-index-sync.c, src/lib-index/mail-index-transaction-
+	export.c, src/lib-index/mail-index-transaction-finish.c, src/lib-
+	index/mail-index-transaction-sort-appends.c, src/lib-index/mail-
+	index-transaction-update.c, src/lib-index/mail-index-transaction-
+	view.c, src/lib-index/mail-index-transaction.c, src/lib-index/mail-
+	index-util.c, src/lib-index/mail-index-view-sync.c, src/lib-index
+	/mail-index-view.c, src/lib-index/mail-index-write.c, src/lib-index
+	/mail-index.c, src/lib-index/mail-transaction-log-append.c, src/lib-
+	index/mail-transaction-log-file.c, src/lib-index/mail-transaction-
+	log-view.c, src/lib-index/mail-transaction-log.c, src/lib-index
+	/mailbox-list-index-sync.c, src/lib-index/mailbox-list-index.c, src
+	/lib-index/mailbox-log.c, src/lib-index/test-mail-index-sync-ext.c,
+	src/lib-index/test-mail-index-transaction-finish.c, src/lib-index
+	/test-mail-index-transaction-update.c, src/lib-index/test-mail-
+	transaction-log-append.c, src/lib-index/test-mail-transaction-log-
+	view.c, src/lib-lda/duplicate.c, src/lib-lda/lda-settings.c, src
+	/lib-lda/lmtp-client.c, src/lib-lda/mail-deliver.c, src/lib-lda
+	/mail-send.c, src/lib-lda/smtp-client.c, src/lib-mail/istream-dot.c,
+	src/lib-mail/istream-header-filter.c, src/lib-mail/mbox-from.c, src
+	/lib-mail/message-address.c, src/lib-mail/message-date.c, src/lib-
+	mail/message-decoder.c, src/lib-mail/message-header-decode.c, src
+	/lib-mail/message-header-encode.c, src/lib-mail/message-header-
+	parser.c, src/lib-mail/message-id.c, src/lib-mail/message-parser.c,
+	src/lib-mail/message-part-serialize.c, src/lib-mail/message-
+	search.c, src/lib-mail/message-send.c, src/lib-mail/message-size.c,
+	src/lib-mail/quoted-printable.c, src/lib-mail/rfc2231-parser.c, src
+	/lib-mail/rfc822-parser.c, src/lib-mail/test-istream-dot.c, src/lib-
+	mail/test-istream-header-filter.c, src/lib-mail/test-mbox-from.c,
+	src/lib-mail/test-message-address.c, src/lib-mail/test-message-
+	date.c, src/lib-mail/test-message-decoder.c, src/lib-mail/test-
+	message-header-decode.c, src/lib-mail/test-message-header-encode.c,
+	src/lib-mail/test-message-header-parser.c, src/lib-mail/test-
+	message-id.c, src/lib-mail/test-message-parser.c, src/lib-mail/test-
+	quoted-printable.c, src/lib-mail/test-rfc2231-parser.c, src/lib-
+	master/anvil-client.c, src/lib-master/master-auth.c, src/lib-master
+	/master-login-auth.c, src/lib-master/master-login.c, src/lib-master
+	/master-service-settings-cache.c, src/lib-master/master-service-
+	settings.c, src/lib-master/master-service.c, src/lib-master/syslog-
+	util.c, src/lib-settings/settings-parser.c, src/lib-
+	settings/settings.c, src/lib-sql/driver-mysql.c, src/lib-sql/driver-
+	pgsql.c, src/lib-sql/driver-sqlpool.c, src/lib-sql/sql-api.c, src
+	/lib-sql/sql-db-cache.c, src/lib-storage/index/cydir/cydir-mail.c,
+	src/lib-storage/index/cydir/cydir-save.c, src/lib-
+	storage/index/cydir/cydir-storage.c, src/lib-storage/index/cydir
+	/cydir-sync.c, src/lib-storage/index/dbox-common/dbox-attachment.c,
+	src/lib-storage/index/dbox-common/dbox-file-fix.c, src/lib-
+	storage/index/dbox-common/dbox-file.c, src/lib-storage/index/dbox-
+	common/dbox-mail.c, src/lib-storage/index/dbox-common/dbox-save.c,
+	src/lib-storage/index/dbox-common/dbox-storage.c, src/lib-
+	storage/index/dbox-common/dbox-sync-rebuild.c, src/lib-storage/index
+	/dbox-multi/mdbox-file.c, src/lib-storage/index/dbox-multi/mdbox-
+	mail.c, src/lib-storage/index/dbox-multi/mdbox-map.c, src/lib-
+	storage/index/dbox-multi/mdbox-purge.c, src/lib-storage/index/dbox-
+	multi/mdbox-save.c, src/lib-storage/index/dbox-multi/mdbox-
+	settings.c, src/lib-storage/index/dbox-multi/mdbox-storage-
+	rebuild.c, src/lib-storage/index/dbox-multi/mdbox-storage.c, src
+	/lib-storage/index/dbox-multi/mdbox-sync.c, src/lib-storage/index
+	/dbox-single/sdbox-copy.c, src/lib-storage/index/dbox-single/sdbox-
+	file.c, src/lib-storage/index/dbox-single/sdbox-mail.c, src/lib-
+	storage/index/dbox-single/sdbox-save.c, src/lib-storage/index/dbox-
+	single/sdbox-storage.c, src/lib-storage/index/dbox-single/sdbox-
+	sync-rebuild.c, src/lib-storage/index/dbox-single/sdbox-sync.c, src
+	/lib-storage/index/index-attachment.c, src/lib-storage/index/index-
+	fetch.c, src/lib-storage/index/index-mail-headers.c, src/lib-
+	storage/index/index-mail.c, src/lib-storage/index/index-mailbox-
+	check.c, src/lib-storage/index/index-search-result.c, src/lib-
+	storage/index/index-search.c, src/lib-storage/index/index-sort-
+	string.c, src/lib-storage/index/index-sort.c, src/lib-storage/index
+	/index-status.c, src/lib-storage/index/index-storage.c, src/lib-
+	storage/index/index-sync-changes.c, src/lib-storage/index/index-
+	sync-search.c, src/lib-storage/index/index-sync.c, src/lib-
+	storage/index/index-thread-finish.c, src/lib-storage/index/index-
+	thread-links.c, src/lib-storage/index/index-thread.c, src/lib-
+	storage/index/index-transaction.c, src/lib-storage/index/istream-
+	attachment.c, src/lib-storage/index/istream-mail-stats.c, src/lib-
+	storage/index/maildir/maildir-copy.c, src/lib-storage/index/maildir
+	/maildir-filename.c, src/lib-storage/index/maildir/maildir-
+	keywords.c, src/lib-storage/index/maildir/maildir-mail.c, src/lib-
+	storage/index/maildir/maildir-save.c, src/lib-storage/index/maildir
+	/maildir-settings.c, src/lib-storage/index/maildir/maildir-
+	storage.c, src/lib-storage/index/maildir/maildir-sync-index.c, src
+	/lib-storage/index/maildir/maildir-sync.c, src/lib-
+	storage/index/maildir/maildir-uidlist.c, src/lib-
+	storage/index/maildir/maildir-util.c, src/lib-storage/index/mbox
+	/istream-raw-mbox.c, src/lib-storage/index/mbox/mbox-file.c, src
+	/lib-storage/index/mbox/mbox-lock.c, src/lib-storage/index/mbox
+	/mbox-mail.c, src/lib-storage/index/mbox/mbox-md5.c, src/lib-
+	storage/index/mbox/mbox-save.c, src/lib-storage/index/mbox/mbox-
+	settings.c, src/lib-storage/index/mbox/mbox-storage.c, src/lib-
+	storage/index/mbox/mbox-sync-parse.c, src/lib-storage/index/mbox
+	/mbox-sync-rewrite.c, src/lib-storage/index/mbox/mbox-sync-update.c,
+	src/lib-storage/index/mbox/mbox-sync.c, src/lib-storage/index/raw
+	/raw-mail.c, src/lib-storage/index/raw/raw-storage.c, src/lib-
+	storage/index/raw/raw-sync.c, src/lib-storage/index/shared/shared-
+	list.c, src/lib-storage/index/shared/shared-storage.c, src/lib-
+	storage/index/test-index-fetch.c, src/lib-storage/list/index-
+	mailbox-list-sync.c, src/lib-storage/list/index-mailbox-list.c, src
+	/lib-storage/list/mailbox-list-delete.c, src/lib-storage/list
+	/mailbox-list-fs-flags.c, src/lib-storage/list/mailbox-list-fs-
+	iter.c, src/lib-storage/list/mailbox-list-fs.c, src/lib-storage/list
+	/mailbox-list-maildir-iter.c, src/lib-storage/list/mailbox-list-
+	maildir.c, src/lib-storage/list/mailbox-list-none.c, src/lib-
+	storage/list/mailbox-list-subscriptions.c, src/lib-storage/list
+	/subscription-file.c, src/lib-storage/mail-copy.c, src/lib-storage
+	/mail-error.c, src/lib-storage/mail-namespace.c, src/lib-storage
+	/mail-search-build.c, src/lib-storage/mail-search-parser-cmdline.c,
+	src/lib-storage/mail-search-parser-imap.c, src/lib-storage/mail-
+	search-parser.c, src/lib-storage/mail-search-register-human.c, src
+	/lib-storage/mail-search-register-imap.c, src/lib-storage/mail-
+	search-register.c, src/lib-storage/mail-search.c, src/lib-storage
+	/mail-storage-hooks.c, src/lib-storage/mail-storage-service.c, src
+	/lib-storage/mail-storage-settings.c, src/lib-storage/mail-
+	storage.c, src/lib-storage/mail-thread.c, src/lib-storage/mail-
+	user.c, src/lib-storage/mail.c, src/lib-storage/mailbox-list.c, src
+	/lib-storage/mailbox-search-result.c, src/lib-storage/mailbox-
+	tree.c, src/lib-storage/mailbox-uidvalidity.c, src/lib-storage/test-
+	mail-storage.c, src/lib-storage/test-mail.c, src/lib-storage/test-
+	mailbox.c, src/lib-test/test-common.c, src/lib/abspath.c,
+	src/lib/aqueue.c, src/lib/array.c, src/lib/askpass.c, src/lib
+	/backtrace-string.c, src/lib/base64.c, src/lib/bsearch-insert-pos.c,
+	src/lib/buffer.c, src/lib/child-wait.c, src/lib/close-keep-errno.c,
+	src/lib/compat.c, src/lib/crc32.c, src/lib/data-stack.c, src/lib
+	/eacces-error.c, src/lib/env-util.c, src/lib/execv-const.c,
+	src/lib/failures.c, src/lib/fd-close-on-exec.c, src/lib/fd-set-
+	nonblock.c, src/lib/fdatasync-path.c, src/lib/fdpass.c, src/lib
+	/file-cache.c, src/lib/file-copy.c, src/lib/file-dotlock.c, src/lib
+	/file-lock.c, src/lib/file-set-size.c, src/lib/hash-format.c,
+	src/lib/hash-method.c, src/lib/hash.c, src/lib/hash2.c, src/lib/hex-
+	binary.c, src/lib/hex-dec.c, src/lib/home-expand.c,
+	src/lib/hostpid.c, src/lib/imem.c, src/lib/ioloop-notify-dn.c,
+	src/lib/ioloop-notify-fd.c, src/lib/ioloop-notify-inotify.c, src/lib
+	/ioloop-notify-none.c, src/lib/ioloop-poll.c, src/lib/ioloop-
+	select.c, src/lib/ioloop.c, src/lib/iostream.c, src/lib/istream-
+	base64-encoder.c, src/lib/istream-concat.c, src/lib/istream-crlf.c,
+	src/lib/istream-data.c, src/lib/istream-file.c, src/lib/istream-
+	limit.c, src/lib/istream-mmap.c, src/lib/istream-seekable.c, src/lib
+	/istream-tee.c, src/lib/istream.c, src/lib/lib-signals.c,
+	src/lib/lib.c, src/lib/mempool-alloconly.c, src/lib/mempool-
+	datastack.c, src/lib/mempool-system.c, src/lib/mempool-unsafe-
+	datastack.c, src/lib/mempool.c, src/lib/mkdir-parents.c, src/lib
+	/mmap-anon.c, src/lib/mmap-util.c, src/lib/module-dir.c,
+	src/lib/mountpoint.c, src/lib/network.c, src/lib/nfs-workarounds.c,
+	src/lib/ostream-buffer.c, src/lib/ostream-file.c, src/lib/ostream.c,
+	src/lib/printf-format-fix.c, src/lib/priorityq.c, src/lib/process-
+	title.c, src/lib/randgen.c, src/lib/read-full.c, src/lib/restrict-
+	access.c, src/lib/restrict-process-size.c, src/lib/safe-memset.c,
+	src/lib/safe-mkdir.c, src/lib/safe-mkstemp.c, src/lib/sendfile-
+	util.c, src/lib/seq-range-array.c, src/lib/str-find.c, src/lib/str-
+	sanitize.c, src/lib/str.c, src/lib/strescape.c, src/lib/strfuncs.c,
+	src/lib/strnum.c, src/lib/test-aqueue.c, src/lib/test-array.c,
+	src/lib/test-base64.c, src/lib/test-bsearch-insert-pos.c, src/lib
+	/test-buffer.c, src/lib/test-crc32.c, src/lib/test-hash-format.c,
+	src/lib/test-hex-binary.c, src/lib/test-istream-base64-encoder.c,
+	src/lib/test-istream-concat.c, src/lib/test-istream-crlf.c, src/lib
+	/test-istream-seekable.c, src/lib/test-istream-tee.c, src/lib/test-
+	lib.c, src/lib/test-llist.c, src/lib/test-mempool-alloconly.c,
+	src/lib/test-network.c, src/lib/test-ostream-file.c, src/lib/test-
+	primes.c, src/lib/test-priorityq.c, src/lib/test-seq-range-array.c,
+	src/lib/test-str-find.c, src/lib/test-str-sanitize.c, src/lib/test-
+	strescape.c, src/lib/test-strfuncs.c, src/lib/test-time-util.c,
+	src/lib/test-utc-mktime.c, src/lib/test-var-expand.c, src/lib/time-
+	util.c, src/lib/unichar.c, src/lib/unix-socket-create.c, src/lib
+	/unlink-directory.c, src/lib/unlink-old-files.c, src/lib/utc-
+	mktime.c, src/lib/utc-offset.c, src/lib/var-expand.c, src/lib/write-
+	full.c, src/lmtp/client.c, src/lmtp/commands.c, src/lmtp/lmtp-
+	proxy.c, src/lmtp/lmtp-settings.c, src/lmtp/main.c, src/log/log-
+	connection.c, src/log/log-settings.c, src/log/main.c, src/login-
+	common/access-lookup.c, src/login-common/client-common-auth.c, src
+	/login-common/client-common.c, src/login-common/login-proxy-state.c,
+	src/login-common/login-proxy.c, src/login-common/login-settings.c,
+	src/login-common/main.c, src/login-common/sasl-server.c, src/login-
+	common/ssl-proxy-gnutls.c, src/login-common/ssl-proxy-openssl.c, src
+	/login-common/ssl-proxy.c, src/master/dup2-array.c,
+	src/master/main.c, src/master/master-settings.c, src/master/service-
+	anvil.c, src/master/service-listen.c, src/master/service-log.c,
+	src/master/service-monitor.c, src/master/service-process-notify.c,
+	src/master/service-process.c, src/master/service.c, src/plugins/acl
+	/acl-api.c, src/plugins/acl/acl-backend-vfile-acllist.c,
+	src/plugins/acl/acl-backend-vfile.c, src/plugins/acl/acl-backend.c,
+	src/plugins/acl/acl-cache.c, src/plugins/acl/acl-lookup-dict.c,
+	src/plugins/acl/acl-mailbox-list.c, src/plugins/acl/acl-mailbox.c,
+	src/plugins/acl/acl-plugin.c, src/plugins/acl/acl-shared-storage.c,
+	src/plugins/acl/acl-storage.c, src/plugins/autocreate/autocreate-
+	plugin.c, src/plugins/expire/doveadm-expire.c, src/plugins/expire
+	/expire-plugin.c, src/plugins/expire/expire-set.c, src/plugins/fts-
+	lucene/fts-backend-lucene.c, src/plugins/fts-lucene/fts-lucene-
+	plugin.c, src/plugins/fts-solr/fts-backend-solr.c, src/plugins/fts-
+	solr/fts-solr-plugin.c, src/plugins/fts-solr/solr-connection.c,
+	src/plugins/fts-squat/fts-backend-squat.c, src/plugins/fts-squat
+	/fts-squat-plugin.c, src/plugins/fts-squat/squat-test.c, src/plugins
+	/fts-squat/squat-trie.c, src/plugins/fts-squat/squat-uidlist.c,
+	src/plugins/fts/fts-api.c, src/plugins/fts/fts-plugin.c,
+	src/plugins/fts/fts-search.c, src/plugins/fts/fts-storage.c,
+	src/plugins/imap-acl/imap-acl-plugin.c, src/plugins/imap-quota/imap-
+	quota-plugin.c, src/plugins/imap-zlib/imap-zlib-plugin.c,
+	src/plugins/lazy-expunge/lazy-expunge-plugin.c,
+	src/plugins/listescape/listescape-plugin.c, src/plugins/mail-log
+	/mail-log-plugin.c, src/plugins/quota/doveadm-quota.c,
+	src/plugins/quota/quota-count.c, src/plugins/quota/quota-dict.c,
+	src/plugins/quota/quota-dirsize.c, src/plugins/quota/quota-fs.c,
+	src/plugins/quota/quota-maildir.c, src/plugins/quota/quota-plugin.c,
+	src/plugins/quota/quota-storage.c, src/plugins/quota/quota.c,
+	src/plugins/snarf/snarf-plugin.c, src/plugins/trash/trash-plugin.c,
+	src/plugins/virtual/virtual-config.c, src/plugins/virtual/virtual-
+	mail.c, src/plugins/virtual/virtual-plugin.c, src/plugins/virtual
+	/virtual-save.c, src/plugins/virtual/virtual-search.c,
+	src/plugins/virtual/virtual-storage.c, src/plugins/virtual/virtual-
+	sync.c, src/plugins/virtual/virtual-transaction.c, src/plugins/zlib
+	/doveadm-zlib.c, src/plugins/zlib/istream-bzlib.c, src/plugins/zlib
+	/istream-zlib.c, src/plugins/zlib/ostream-bzlib.c, src/plugins/zlib
+	/ostream-zlib.c, src/plugins/zlib/zlib-plugin.c, src/pop3-login
+	/client-authenticate.c, src/pop3-login/client.c, src/pop3-login/pop3
+	-login-settings.c, src/pop3-login/pop3-proxy.c, src/pop3/main.c,
+	src/pop3/pop3-client.c, src/pop3/pop3-commands.c,
+	src/pop3/pop3-settings.c, src/ssl-params/main.c, src/ssl-params/ssl-
+	params-openssl.c, src/ssl-params/ssl-params-settings.c, src/ssl-
+	params/ssl-params.c, src/util/gdbhelper.c, src/util/listview.c,
+	src/util/maildirlock.c, src/util/rawlog.c, src/util/script-login.c,
+	src/util/script.c, src/util/tcpwrap-settings.c, src/util/tcpwrap.c:
+	Updated copyright notices to include year 2011.
+	[44d0474a451e]
+
+	* src/lib-master/anvil-client.c:
+	lib-master: Added reconnection timeout to anvil client. Previously
+	if anvil kept disconnecting, the client was rapidly flooding the
+	logs with errors.
+	[54e354cbf061]
+
+	* src/master/master-settings.c:
+	master: Allow protocols value to be empty (= same as "none")
+	[a6382acebe7e]
+
+	* src/master/common.h, src/master/main.c, src/master/service-
+	monitor.c, src/master/service-process.c, src/master/service.c,
+	src/master/service.h:
+	master: Use per-services_list "master is dead" fd, so services know
+	when config is reload.
+	[539da23bff31]
+
+	* src/master/service.c:
+	master: Memory leak fix if services couldn't be initialized. (On
+	config reload.)
+	[65e943eafe8b]
+
+	* src/lib-sql/driver-sqlpool.c:
+	lib-sql: When adding more connections to sql pool, connect to them
+	immediately.
+	[e758f10f40c1]
+
+	* src/lib-sql/driver-pgsql.c:
+	pgsql: Don't assert-crash if query fails when trying to send it.
+	[f95b1e26f1f2]
+
+	* src/lib-sql/driver-pgsql.c:
+	pgsql: If host isn't given, don't show pgsql((null)) as log prefix
+	(or crash).
+	[27ee65dc87c2]
+
+	* doc/example-config/dovecot.conf:
+	example-config: Added import_environment.
+	[dfd5a2efd7df]
+
+	* src/login-common/sasl-server.c:
+	login: Skip auth penalty checks from IPs in login_trusted_networks.
+	[73cad87e2045]
+
+	* src/auth/auth-penalty.c, src/auth/auth-request.c, src/auth/auth-
+	request.h, src/lib-auth/auth-client-request.c, src/lib-auth/auth-
+	client.h:
+	auth: Allow clients to specify that they want to skip auth penalty
+	check. This is "safe", because the clients specify the IP for the
+	penalty check anyway.
+	[bf6749d4db08]
+
+	* src/plugins/virtual/virtual-config.c:
+	virtual: Allow search rule continuation lines to begin with tab as
+	well as space.
+	[d32a23fa160d]
+
+	* src/lib-imap/imap-parser.c:
+	lib-imap: imap_parser_finish_line() didn't return failure on invalid
+	input.
+	[3f21260a72ce]
+
+	* src/lib-storage/index/dbox-single/sdbox-storage.c, src/lib-
+	storage/index/dbox-single/sdbox-storage.h, src/lib-storage/mail-
+	storage-private.h, src/lib-storage/mail-storage.c:
+	sdbox: Fixed creating mailbox with given GUID.
+	[1ffeb083c993]
+
+	* src/plugins/acl/doveadm-acl.c:
+	doveadm acl debug: If any errors are noticed, fix them.
+	[325e163a6f84]
+
+	* src/plugins/acl/acl-api-private.h, src/plugins/acl/acl-api.c,
+	src/plugins/acl/acl-api.h, src/plugins/acl/acl-backend-vfile-
+	acllist.c, src/plugins/acl/acl-backend-vfile.c, src/plugins/acl/acl-
+	backend-vfile.h:
+	acl: Added acl_backend_nonowner_lookups_rebuild()
+	[313e9af474a4]
+
+	* src/plugins/acl/doveadm-acl.c:
+	doveadm: Added acl delete command.
+	[20b173d061d9]
+
+	* src/plugins/acl/doveadm-acl.c:
+	doveadm acl debug: Show also if mailbox has private flags.
+	[6c4f67202ebf]
+
+	* src/plugins/acl/Makefile.am, src/plugins/acl/acl-api-private.h,
+	src/plugins/acl/acl-api.c, src/plugins/acl/acl-backend-vfile.c,
+	src/plugins/acl/acl-backend.c, src/plugins/acl/acl-lookup-dict.c,
+	src/plugins/acl/acl-lookup-dict.h, src/plugins/acl/doveadm-acl.c:
+	acl: Added doveadm plugin supporting acl get/set/rights/debug
+	commands.
+	[a2120ee55303]
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: MAIL_STORAGE_SERVICE_FLAG_DEBUG didn't do anything.
+	[35577e832d5a]
+
+	* src/plugins/acl/acl-lookup-dict.c:
+	acl: Fixed crash when acl_lookup_dict was disabled and user belonged
+	to groups.
+	[c0203b7923d3]
+
+2011-03-02  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/dbox-multi/mdbox-purge.c:
+	mdbox purge: Fixes to handling corrupted mdbox files.
+	[989f3990b254]
+
+	* src/lib-storage/index/dbox-common/dbox-file.c:
+	mdbox: Storage rebuilding may have skipped over messages if the file
+	was already at EOF. Probably didn't happen except when purging
+	noticed corruption and triggered index rebuild.
+	[fe144ecec678]
+
+	* src/lib-sql/driver-mysql.c, src/lib-sql/driver-pgsql.c:
+	mysql/pgsql: Log prefixes now contain also the hostname. This is
+	useful when there are multiple hosts in use.
+	[965b9019ef2e]
+
+2011-02-28  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-charset/charset-iconv.c:
+	lib-charset: Skip over only invalid characters, not entire buffers
+	around them.
+	[b6f8d4bee20d]
+
+	* src/doveadm/doveadm-mail-import.c:
+	doveadm import: Fixed potential memory corruption.
+	[2ab52f478b72]
+
+	* src/doveadm/doveadm-mail.c:
+	doveadm: Unload plugins only after calling command's deinit()
+	function. This fixes a crash on deinit when using a plugin that
+	hooks into user.deinit().
+	[60daca1d28c7]
+
+	* src/doveadm/doveadm-mail.c:
+	doveadm: Memory leak fix.
+	[f7cb34c45864]
+
+	* src/auth/auth-request.c, src/auth/auth-request.h, src/auth/db-
+	ldap.c, src/auth/db-ldap.h, src/auth/passdb-ldap.c, src/auth/userdb-
+	ldap.c:
+	auth: Log a warning if ldap attribute has unexpectedly multiple
+	values.
+	[946d1cd3300b]
+
+	* src/lib-storage/index/index-thread.c:
+	lib-storage: Failures when building thread index were hidden.
+	[067f038ded8b]
+
+2011-02-25  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-index/mail-index-transaction-export.c:
+	lib-index: If keyword is added and remove within transaction, don't
+	write a broken keyword update. This could have caused "No UID ranges
+	(type=0x400)" errors.
+	[2762bb5a7481]
+
+	* HEAD branch somehow came back. Removing it again.
+	[679a1fa26479] <HEAD>
+
+2011-02-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-index/mail-index-transaction-export.c:
+	lib-index: If keyword is added and remove within transaction, don't
+	write a broken keyword update. This could have caused "No UID ranges
+	(type=0x400)" errors.
+	[b492ad185b53] <HEAD>
+
+2011-02-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/config/old-set-parser.c:
+	config: Fixed converting old auth/mail_process_size settings.
+	[2480413a80fb]
+
+	* src/config/config-request.c:
+	config: Previous commit allows removing "0" from strlist/0/key=value
+	output.
+	[e7fa2906f875]
+
+	* src/lib-settings/settings-parser.c:
+	lib-settings: Fixed setting "strlist/key=value" when strlist hadn't
+	been initialized yet. This happened when using -O parameter.
+	[bc77e80947c0]
+
+	* doc/example-config/conf.d/15-lda.conf, src/lib-lda/lda-settings.c,
+	src/lib-lda/lda-settings.h, src/lib-lda/smtp-client.c:
+	lib-lda: Added submission_host setting to send mails via SMTP
+	instead of sendmail.
+	[be78b9fd88e7]
+
+	* src/imap/imap-client.c, src/imap/imap-client.h:
+	imap: Fixed infinite loop / memory eating with SEARCHRES +
+	pipelining $. If SEARCH RETURN (SAVE) command was running long
+	enough so that Dovecot started executing the next command, and if
+	that command used $ in messageset, Dovecot went into infinite
+	function recursion.
+	[3053befe6a64]
+
+2011-02-22  Mike Kazantsev (sacrilege)  <mk.fraggod@gmail.com>
+
+	* dovecot.service.in:
+	systemd service: added [Install] section, so it can be used
+	independently from dovecot.socket
+	[324f9ca60539]
+
+2011-02-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/expire/doveadm-expire.c:
+	doveadm expire: Added more error and debug messages.
+	[9862e8388a1c]
+
+	* src/doveadm/doveadm-mail-import.c:
+	doveadm import: Settings weren't correctly used for the import
+	storage. For example plugins weren't loaded, causing problems with
+	zlib compressed messages.
+	[dc4e0320c087]
+
+	* src/lib-index/mail-transaction-log-view.c:
+	lib-index: Verify that expunge-guid records have valid UID.
+	[9a4c198597d8]
+
+2011-02-18  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/zlib/doveadm-zlib.c:
+	Compiler warning fix.
+	[cce208f9b393]
+
+	* src/lib/unichar.c, src/lib/unichar.h:
+	Added uni_utf8_data_is_valid().
+	[35c6df7f6144]
+
+2011-02-17  Pascal Volk  <user@localhost.localdomain.org>
+
+	* doc/man/doveadm-quota.1.in:
+	man: Storage quota values are reported in kilobytes.
+	[206cc9b37215]
+
+2011-02-17  Timo Sirainen  <tss@iki.fi>
+
+	* src/dsync/dsync-brain-msgs-new.c:
+	dsync: Flush workers' output earlier when saving messages.
+	[b48c31797b93]
+
+	* src/dsync/dsync-proxy-client.c:
+	dsync: Error handling fix to "proxy client timed out".
+	[b1992c77e9d2]
+
+	* src/dsync/dsync-proxy-client.c:
+	dsync: Fixed somewhat random failures with saving messages to remote
+	dsync.
+	[7ce47a476656]
+
+	* src/lib-storage/index/dbox-common/dbox-sync-rebuild.c, src/lib-
+	storage/index/dbox-common/dbox-sync-rebuild.h, src/lib-storage/index
+	/dbox-multi/mdbox-storage-rebuild.c, src/lib-storage/index/dbox-
+	single/sdbox-sync-rebuild.c:
+	dbox index rebuild: If alt dir isn't mounted (can't be mkdir()ed),
+	abort rebuild.
+	[159605040ec0]
+
+	* src/lib-storage/index/dbox-common/dbox-attachment.c:
+	dbox: Check that attachment extref parts won't point outside
+	message.
+	[c9af551124fb]
+
+	* src/lib/istream-limit.c:
+	istream-limit: Allow seeking past limit without assert-crashing. The
+	next read() will simply return EOF.
+	[7705bd04924c]
+
+	* doc/example-config/conf.d/20-pop3.conf:
+	example-config: mail_max_userip_connections default is 10, even for
+	pop3. 3 would probably be better, but there's no way to set per-
+	protocol defaults currently.
+	[db7abf4a29e5]
+
+	* src/lib-sql/driver-pgsql.c:
+	pgsql: Added assert.
+	[b3cb10df15e6]
+
+	* src/lib-sql/driver-pgsql.c:
+	pgsql: Don't assert-crash on "query timed out" error.
+	[7d265040cd02]
+
+	* src/lib-storage/mail-storage.c:
+	lib-storage: Fixed renaming mailboxes in a non-private namespace.
+	[3c61817f30bb]
+
+	* src/lmtp/client.c, src/lmtp/client.h, src/lmtp/commands.c:
+	lmtp: Don't forget LHLO host when sending multiple messages in
+	session.
+	[aba5a6a24b99]
+
+2011-02-11  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-request.c:
+	auth: If username contains invalid chars, log sanitized username
+	even without auth_debug.
+	[049a922c193c]
+
+	* src/doveadm/doveadm-mail.c:
+	doveadm: Previous mailbox create -s fix broke -A/-u parameters.
+	Fixed now properly the root cause: -S parameter was handled as -s by
+	getopt.
+	[775a3a64ea74]
+
+2011-02-10  Dennis Schridde  <devurandom@gmx.net>
+
+	* src/lib/module-dir.c:
+	Put modulename in quotes when complaining about its non-existence
+	[723a26a7d328]
+
+2011-02-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/master/main.c:
+	master: Change stderr to /dev/null just before forking.
+	[08e4280e5bfd]
+
+	* src/lib-mail/istream-header-filter.c:
+	istream-header-filter: Fixes handling HEADER_FILTER_END_BODY_WITH_LF
+	correctly.
+	[079a81fb5117]
+
+	* src/lib-storage/list/mailbox-list-maildir.c:
+	Maildir++: Fixed crash when listing subscriptions for a
+	subscriptions=no namespace from LAYOUT=fs namespace.
+	[4374ae187075]
+
+	* src/doveadm/doveadm.c, src/lib-lda/smtp-client.c, src/lib-master
+	/master-interface.h, src/lib-master/master-service-settings.c, src
+	/lib-master/master-service-settings.h, src/lib-master/master-
+	service.c, src/lib-master/master-service.h, src/lib-storage/mail-
+	storage-service.c, src/master/main.c, src/master/master-settings.c,
+	src/master/master-settings.h, src/master/service-process.c,
+	src/master/service.c, src/master/service.h:
+	Added import_environment setting. This also cleans up different
+	places in code where TZ and other environments are preserved. If
+	it's not in the import_environment setting, it's not preserved.
+	[cec7fa92ff48]
+
+	* src/doveadm/doveadm-mail.c:
+	doveadm: Fixed giving parameters to mail commands.
+	[98f13cc1e649]
+
+2011-02-08  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-master/master-auth.c:
+	lib-master: If post-login socket disconnects unexpectedly, suggest
+	process_limit being the reason.
+	[443cc3044d91]
+
+	* src/master/service-monitor.c:
+	master: If process limit is reached, just accept and close the
+	client connection. This makes it a bit clearer what the problem is,
+	so that client can log a better error message.
+	[b399f91ae660]
+
+2011-02-07  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: Give restrict_access() uid/gid source (userdb or
+	mail_u/gid setting).
+	[888999441619]
+
+	* src/lib/restrict-access.c, src/lib/restrict-access.h:
+	restrict_access(): Show uid/gid source in setuid()/setgid() failure
+	messages if given.
+	[cb2c008ae3e8]
+
+2011-02-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/lmtp/commands.c:
+	lmtp: Fixed handling recipient_delimiter when it was found from
+	domain name.
+	[c34d871a7bb6]
+
+2011-02-02  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap/cmd-copy.c:
+	imap: Fixed a hang when trying to COPY to a nonexistent mailbox.
+	[826981b2c5c4]
+
+2011-01-31  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-sql/driver-mysql.c:
+	lib-sql: Implemented sql_result_get_field_value_binary() for MySQL.
+	[5a6e44ca5825]
+
+2011-01-30  Timo Sirainen  <tss@iki.fi>
+
+	* dovecot-config.in.in, dovecot.m4:
+	dovecot-config, dovecot.m4: Export SQL_LIBS as DOVECOT_SQL_LIBS
+	[816a6e69d4b5]
+
+	* src/lib-sql/Makefile.am:
+	lib-sql: Install libdovecot-sql.so as well.
+	[f57d19f262a5]
+
+	* src/lib-storage/list/mailbox-list-none.c:
+	lib-storage: layout=noop now shows INBOX as existing if namespace
+	has inbox=yes. It also shows INBOX as always being subscribed.
+	[ff73c325ff01]
+
+	* src/util/script.c:
+	script: Root permissions weren't being dropped before executing the
+	script.
+	[7ec1982fb275]
+
+2011-01-26  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/ioloop.c:
+	ioloop: Use -1 for infinite poll/epoll timeout rather than INT_MAX.
+	Should improve performance a tiny bit and also works around a CPU
+	eater bug in Linux 2.6.37.
+	[16ce45dbcb53]
+
+2011-01-25  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: Give a better error message if mail_location has INBOX
+	but no mail root dir.
+	[fc02e620204d]
+
+	* src/lib/file-dotlock.c:
+	dotlocks: When locking using hard links, make sure the dotlock's
+	timestamp is new enough.
+	[3582271a897e]
+
+2011-01-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/dbox-common/dbox-storage.c, src/lib-
+	storage/index/dbox-multi/mdbox-storage.c, src/lib-storage/index
+	/dbox-single/sdbox-storage.c:
+	dbox: mailbox_create/update() might not have updated index header
+	correctly.
+	[42ca32299617]
+
+2011-01-21  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap/cmd-idle.c:
+	IDLE: Don't assert-crash if IDLE+DONE is sent in same TCP packet.
+	[4741f1b4f9b3]
+
+	* src/plugins/zlib/Makefile.am, src/plugins/zlib/doveadm-zlib.c:
+	Added doveadm zlibconnect command for testing IMAP COMPRESS.
+	[108754651836]
+
+	* src/plugins/zlib/ostream-zlib.c:
+	zlib: Make sure output stream flushes the stream automatically when
+	not corked. Fixes hangs with IMAP COMPRESS extension.
+	[b71834419ea3]
+
+2011-01-20  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/file-dotlock.c:
+	dotlocks: Refresh current time after having waited for a lock.
+	[5a3c87124066]
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: Fixed handling chroot/home for services that don't
+	really chroot (lmtp).
+	[0fc2d00f83df]
+
+2011-01-19  Pascal Volk  <user@localhost.localdomain.org>
+
+	* src/lmtp/commands.c:
+	lmtp: Write "+ext" part to Delivered-To: header. (reverted changeset
+	19231e3585db)
+	[a3a7cc0172fd]
+
+2011-01-19  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-request.c:
+	auth: Logging improvement for nopassword=y.
+	[4b16a5b1da62]
+
+2011-01-17  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-index/mail-index.c:
+	lib-index: Avoid corrupting dovecot.index file when recreating it
+	even in case of broken file locking.
+	[7ecc5e10da57]
+
+2011-01-16  Christian Wiese  <chris@opensde.org>
+
+	* src/auth/mech-winbind.c:
+	auth: Fixed mech_winbind_ntlm by using mech_winbind_auth_initial()
+	In changeset 9002 a new function named mech_winbind_auth_initial()
+	was introduced, but only the mech_winbind_spnego module part was
+	changed to finally use this function. The mech_winbind_ntlm module
+	part was not properly adapted which leads to a non functioning NTLM
+	authentication mechanism while using winbind, because it will never
+	call the `ntlm_auth` helper.
+
+	The simple fix is to replace mech_generic_auth_initial() with
+	mech_winbind_auth_initial() as auth_initial "hook" when setting up
+	the mech_winbind_ntlm module, like it is done in the
+	mech_winbind_spnego module.
+
+	References:
+
+	- Changeset 9002:
+	http://hg.dovecot.org/dovecot-2.0/diff/9d0037a997f4/src/auth/mech-
+	winbind.c
+	--- src/auth/mech-winbind.c | 2 +- 1 files changed, 1
+	insertions(+), 1 deletions(-)
+	[d8179b523116]
+
+2011-01-16  Timo Sirainen  <tss@iki.fi>
+
+	* doc/man/dsync.1.in:
+	man: Updated dsync.1's -o parameter description.
+	[31ffb4e631ab]
+
+	* doc/man/dovecot-lda.1.in:
+	man: Added -o parameter to dovecot-lda.1
+	[9d111f5b22e2]
+
+	* src/lib/mkdir-parents.c:
+	mkdir_*chown/chgrp(): If chown() fails, rmdir() the directory.
+	[c75a13e5b678]
+
+	* src/dsync/dsync-data.c:
+	dsync: Fixed crash when mailbox had zero cache_fields but its array
+	was initialized.
+	[113b54dcb950]
+
 2011-01-13  Timo Sirainen  <tss@iki.fi>
 
 	* .hgsigs:
 	Added signature for changeset 440fcf8cb338
-	[af92646d36d6] [tip]
+	[af92646d36d6]
 
 	* .hgtags:
 	Added tag 2.0.9 for changeset 440fcf8cb338

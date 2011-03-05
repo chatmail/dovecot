@@ -44,9 +44,9 @@ setting in 'dovecot.conf'. Also check that 'listen' setting is '*'.
 Next check that it also works from remote host:
 
 ---%<-------------------------------------------------------------------------
-# telnet your.host.org 143
+# telnet imap.example.com 143
 Trying 1.2.3.4...
-Connected to your.host.org.
+Connected to imap.example.com.
 Escape character is '^]'.
 * OK [CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE STARTTLS
 AUTH=PLAIN] Dovecot ready.
@@ -83,7 +83,7 @@ You'll need to try this from another computer, since all local IPs are treated
 as secure:
 
 ---%<-------------------------------------------------------------------------
-# telnet your.host.org 143
+# telnet imap.example.com 143
 a login username password
 ---%<-------------------------------------------------------------------------
 
@@ -105,13 +105,13 @@ alternatively use OpenSSL to test that the server works with SSL:
 
  * Test using imaps port (assuming you haven't disabled imaps port):
    ---%<----------------------------------------------------------------------
-   # openssl s_client -connect your.host.org:993
+   # openssl s_client -connect imap.example.com:993
    * OK Dovecot ready.
    ---%<----------------------------------------------------------------------
 
  * Test using imap port and STARTTLS command (works also with imap port):
    ---%<----------------------------------------------------------------------
-   # openssl s_client -connect your.host.org:143 -starttls imap
+   # openssl s_client -connect imap.example.com:143 -starttls imap
    * OK Dovecot ready.
    ---%<----------------------------------------------------------------------
 
@@ -184,4 +184,4 @@ If you can see only INBOX,
 
 Most IMAP clients have been tested with Dovecot and they work.
 
-(This file was created from the wiki on 2011-01-13 04:52)
+(This file was created from the wiki on 2011-03-04 04:52)
