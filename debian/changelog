@@ -1,8 +1,9 @@
-dovecot (1:2.0.9-1~3.gbp785ad1) UNRELEASED; urgency=low
+dovecot (1:2.0.10-1~4.gbp9a954f) UNRELEASED; urgency=low
 
-  ** SNAPSHOT build @785ad1fc3bf8faf22870758d7f162601e5f5b50d **
+  ** SNAPSHOT build @9a954f1fc0d7114ee5fa96f59403e8d9d2df76f4 **
 
-  * [a4764a4] New upstream major release (Closes: #597476)
+  * [a4764a4] New upstream major release (Closes: #573889, #580929,
+    #597476, #603951, #606089, #606646, #606649, #608075, #612369, #610919)
   * [461f667] Updated copyright and package descriptions. Thanks Stephan
     Bosch.
   * [7fbd92a] Drop all patches but drac support. Update pigeonhole to
@@ -25,8 +26,20 @@ dovecot (1:2.0.9-1~3.gbp785ad1) UNRELEASED; urgency=low
     instructions
   * [1e56f1c] Call dh_makeshlibs with --no-script option to avoid
     {postinst,postrm}-has-useless-call-to-ldconfig lintian errors.
+  * [325f055] Disable numbers in patches (requires git-buildpackage >=0.5.13)
+  * [74d6ebe] Added debian/source/local-options with "unapply-patches".
+  * [0edef17] Set default protocols value as empty and enable each protocol
+    in its own configuration file (LP: #661453)
+  * [e88860c] Removed code about upgrading from pre-etch packages.
+  * [95c5d47] Removed obsolete Build-Conflict (Closes: #614053)
+  * [41dddf4] Move configurations for imapd and pop3d to the appropriate
+    packages. (Closes: #606648)
+  * [b8b66dc] Removed obsolete README.Debian and NEWS.Debian in dovecot-pop3d
+    and dovecot-imapd packages
+  * [0bda8ac] Added packages dovecot-lmtpd and dovecot-managesieved.
+  * [9a954f1] Build databases, ldap and gssapi support as plugins
 
- -- Marco Nenciarini <mnencia@debian.org>  Thu, 27 Jan 2011 09:47:17 +0100
+ -- Marco Nenciarini <mnencia@debian.org>  Sat, 05 Mar 2011 22:55:54 +0100
 
 dovecot (1:1.2.15-3) unstable; urgency=low
 
