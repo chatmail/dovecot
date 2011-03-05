@@ -39,7 +39,7 @@ Description: header files for the dovecot mail server
 
 Package: dovecot-imapd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
 Provides: imap-server
 Replaces: imap-server, dovecot-common
 Description: secure IMAP server that supports mbox, maildir, dbox and mdbox mailboxes
@@ -52,7 +52,7 @@ Description: secure IMAP server that supports mbox, maildir, dbox and mdbox mail
 
 Package: dovecot-pop3d
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
 Provides: pop3-server
 Replaces: pop3-server, dovecot-common
 Description: secure POP3 server that supports mbox, maildir, dbox and mdbox mailboxes
@@ -65,7 +65,7 @@ Description: secure POP3 server that supports mbox, maildir, dbox and mdbox mail
 
 Package: dovecot-lmtpd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
 Replaces: dovecot-common
 Description: secure LMTP server for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
@@ -77,7 +77,7 @@ Description: secure LMTP server for Dovecot
 
 Package: dovecot-managesieved
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
 Replaces: dovecot-common
 Description: secure ManageSieve server for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
