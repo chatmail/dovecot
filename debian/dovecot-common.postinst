@@ -25,6 +25,24 @@ if [ "$1" = "configure" ]; then
     conf.d/auth-system.conf.ext \
     conf.d/auth-vpopmail.conf.ext"
 
+  OLD_CONFFILES="dovecot-ldap.conf \
+    dovecot-sql.conf \
+    protocols.conf \
+    conf.d/20-imap.conf \
+    conf.d/20-lmtp.conf \
+    conf.d/20-managesieve.conf \
+    conf.d/20-pop3.conf"
+
+  if dpkg --compare-versions "$2" le-nl "1:2.0.10-1"; then
+    for conffile in $OLD_CONFFILES ; do
+      ucf --purge /etc/dovecot/$conffile
+      ucfr --purge dovecot-common /etc/dovecot/$conffile
+    done
+    if [ -f "/etc/dovecot/protocols.conf" ]; then
+      rm -f "/etc/dovecot/protocols.conf"
+    fi
+  fi
+
   for conffile in $CONFFILES ; do
     # Tell ucf that the file in /usr/share/dovecot is the latest
     # maintainer version, and let it handle how to manage the real

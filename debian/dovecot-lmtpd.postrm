@@ -18,7 +18,7 @@ if [ "$1" = "purge" ] ; then
 			ucf --purge $conffile
 		fi
 		if which ucfr >/dev/null; then
-			ucfr --purge dovecot-common $conffile
+			ucfr --purge dovecot-lmtpd $conffile
 		fi
 	done
 fi
