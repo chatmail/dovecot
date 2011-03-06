@@ -95,21 +95,51 @@ install: build
 
 	# imapd
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/lib??_imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot/modules/
-	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-imap* $(CURDIR)/debian/dovecot-imapd/usr/share/dovecot/conf.d/
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/lib??_imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot/modules
+	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-imap* $(CURDIR)/debian/dovecot-imapd/usr/share/dovecot/conf.d
 
 	# pop3d
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-pop3* $(CURDIR)/debian/dovecot-pop3d/usr/share/dovecot/conf.d/
+	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-pop3* $(CURDIR)/debian/dovecot-pop3d/usr/share/dovecot/conf.d
 
 	# lmtpd
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/lmtp* $(CURDIR)/debian/dovecot-lmtpd/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-lmtp* $(CURDIR)/debian/dovecot-lmtpd/usr/share/dovecot/conf.d/
+	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-lmtp* $(CURDIR)/debian/dovecot-lmtpd/usr/share/dovecot/conf.d
 
 	# managesieved
 	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/managesieve* $(CURDIR)/debian/dovecot-managesieved/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/settings/libmanagesieve* $(CURDIR)/debian/dovecot-managesieved/usr/lib/dovecot/modules/settings/
-	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-managesieve* $(CURDIR)/debian/dovecot-managesieved/usr/share/dovecot/conf.d/
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/settings/libmanagesieve* $(CURDIR)/debian/dovecot-managesieved/usr/lib/dovecot/modules/settings
+	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/??-managesieve* $(CURDIR)/debian/dovecot-managesieved/usr/share/dovecot/conf.d
+
+	# pgsql
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/auth/libdriver_pgsql* $(CURDIR)/debian/dovecot-pgsql/usr/lib/dovecot/modules/auth
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/dict/libdriver_pgsql* $(CURDIR)/debian/dovecot-pgsql/usr/lib/dovecot/modules/dict
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/libdriver_pgsql* $(CURDIR)/debian/dovecot-pgsql/usr/lib/dovecot/modules
+
+	# mysql
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/auth/libdriver_mysql* $(CURDIR)/debian/dovecot-mysql/usr/lib/dovecot/modules/auth
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/dict/libdriver_mysql* $(CURDIR)/debian/dovecot-mysql/usr/lib/dovecot/modules/dict
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/libdriver_mysql* $(CURDIR)/debian/dovecot-mysql/usr/lib/dovecot/modules
+
+	# sqlite
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/auth/libdriver_sqlite* $(CURDIR)/debian/dovecot-sqlite/usr/lib/dovecot/modules/auth
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/dict/libdriver_sqlite* $(CURDIR)/debian/dovecot-sqlite/usr/lib/dovecot/modules/dict
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/libdriver_sqlite* $(CURDIR)/debian/dovecot-sqlite/usr/lib/dovecot/modules
+
+	# gssapi
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/auth/libmech_gssapi* $(CURDIR)/debian/dovecot-gssapi/usr/lib/dovecot/modules/auth
+
+	# ldap
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/auth/libauthdb_ldap* $(CURDIR)/debian/dovecot-ldap/usr/lib/dovecot/modules/auth
+	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/*-ldap.conf.ext $(CURDIR)/debian/dovecot-ldap/usr/share/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/*-ldap.conf.ext $(CURDIR)/debian/dovecot-ldap/usr/share/dovecot/conf.d
+
+	# sieve
+	mv $(CURDIR)/debian/dovecot-common/usr/bin/sieve* $(CURDIR)/debian/dovecot-sieve/usr/bin
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules/lib??_sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules
+	mv $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/libdovecot-sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot
+	mv $(CURDIR)/debian/dovecot-common/usr/share/dovecot/conf.d/*-sieve.conf $(CURDIR)/debian/dovecot-sieve/usr/share/dovecot/conf.d
+	mv $(CURDIR)/debian/dovecot-common/usr/share/man/man1/sieve* $(CURDIR)/debian/dovecot-sieve/usr/share/man/man1
 
 	# dev
 	mv $(CURDIR)/debian/dovecot-common/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include

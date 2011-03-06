@@ -20,7 +20,7 @@ Description: secure mail server that supports mbox, maildir, dbox and mdbox mail
  all data is valid, making it nearly impossible to crash. It should also be
  pretty fast, extensible, and portable.
  .
- This package contains the files used by the vatious dovecot servers,
+ This package contains the files used by the various dovecot servers,
  the Dovecot LDA (dovecot-lda) and Pigeonhole Sieve support.
 
 Package: dovecot-dev
@@ -77,7 +77,7 @@ Description: secure LMTP server for Dovecot
 
 Package: dovecot-managesieved
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), dovecot-sieve (= ${binary:Version}), ucf (>= 2.0020)
 Replaces: dovecot-common
 Description: secure ManageSieve server for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
@@ -86,6 +86,72 @@ Description: secure ManageSieve server for Dovecot
  pretty fast, extensible, and portable.
  .
  This package contains the dovecot ManageSieve server.
+
+Package: dovecot-pgsql
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Description: PostgreSQL support for Dovecot
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify that
+ all data is valid, making it nearly impossible to crash. It should also be
+ pretty fast, extensible, and portable.
+ .
+ This package provides PostgreSQL support for Dovecot.
+
+Package: dovecot-mysql
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Description: MySQL support for Dovecot
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify that
+ all data is valid, making it nearly impossible to crash. It should also be
+ pretty fast, extensible, and portable.
+ .
+ This package provides MySQL support for Dovecot.
+
+Package: dovecot-sqlite
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Description: SQLite support for Dovecot
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify that
+ all data is valid, making it nearly impossible to crash. It should also be
+ pretty fast, extensible, and portable.
+ .
+ This package provides SQLite support for Dovecot.
+
+Package: dovecot-ldap
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
+Description: LDAP support for Dovecot
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify that
+ all data is valid, making it nearly impossible to crash. It should also be
+ pretty fast, extensible, and portable.
+ .
+ This package provides LDAP support for Dovecot.
+
+Package: dovecot-gssapi
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Description: GSSAPI authentication support for Dovecot
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify that
+ all data is valid, making it nearly impossible to crash. It should also be
+ pretty fast, extensible, and portable.
+ .
+ This package provides GSSAPI authentication support for Dovecot.
+
+Package: dovecot-sieve
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
+Description: sieve filters support for Dovecot
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify that
+ all data is valid, making it nearly impossible to crash. It should also be
+ pretty fast, extensible, and portable.
+ .
+ This package provides sieve filters support for Dovecot.
 
 Package: dovecot-dbg
 Section: debug

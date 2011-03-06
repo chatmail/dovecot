@@ -8,7 +8,6 @@ if [ "$1" = "purge" ] ; then
 	CONFFILES="/etc/dovecot/dovecot.conf \
 		/etc/dovecot/dovecot-db.conf.ext \
 		/etc/dovecot/dovecot-dict-sql.conf.ext \
-		/etc/dovecot/dovecot-ldap.conf.ext \
 		/etc/dovecot/dovecot-sql.conf.ext \
 		/etc/dovecot/conf.d/10-auth.conf \
 		/etc/dovecot/conf.d/10-director.conf \
@@ -20,7 +19,6 @@ if [ "$1" = "purge" ] ; then
 		/etc/dovecot/conf.d/90-acl.conf \
 		/etc/dovecot/conf.d/90-plugin.conf \
 		/etc/dovecot/conf.d/90-quota.conf \
-		/etc/dovecot/conf.d/90-sieve.conf \
 		/etc/dovecot/conf.d/auth-deny.conf.ext \
 		/etc/dovecot/conf.d/auth-master.conf.ext \
 		/etc/dovecot/conf.d/auth-passwdfile.conf.ext \

@@ -2,7 +2,7 @@
 set -e
 
 if [ "$1" = "purge" ] ; then
-	CONFFILES="/etc/dovecot/conf.d/20-pop3.conf"
+	CONFFILES="/etc/dovecot/conf.d/90-sieve.conf"
 
 	for conffile in $CONFFILES; do
 		# we mimic dpkg as closely as possible, so we remove configuration
@@ -18,7 +18,7 @@ if [ "$1" = "purge" ] ; then
 			ucf --purge $conffile
 		fi
 		if which ucfr >/dev/null; then
-			ucfr --purge dovecot-pop3d $conffile
+			ucfr --purge dovecot-sieve $conffile
 		fi
 	done
 fi

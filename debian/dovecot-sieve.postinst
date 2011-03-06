@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "configure" ]; then
+  CONFFILES="conf.d/90-sieve.conf"
+
+  for conffile in $CONFFILES ; do
+    # Tell ucf that the file in /usr/share/dovecot is the latest
+    # maintainer version, and let it handle how to manage the real
+    # configuration file in /etc/dovecot.
+    ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
+    ucfr dovecot-sieve /etc/dovecot/$conffile
+  done
+fi
+
+if [ -x "/etc/init.d/dovecot" ]; then
+	if [ -x /usr/sbin/invoke-rc.d ]; then
+		invoke-rc.d dovecot restart
+	else
+		/etc/init.d/dovecot restart
+	fi
+fi
+
+#DEBHELPER#
