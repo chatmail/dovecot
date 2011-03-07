@@ -1,8 +1,48 @@
+2011-03-07  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 3355b4bbd4ac
+	[47279462da5a] [tip]
+
+	* .hgtags:
+	Added tag 2.0.11 for changeset 3355b4bbd4ac
+	[4f76b03db4cd]
+
+	* NEWS, configure.in:
+	Released v2.0.11.
+	[3355b4bbd4ac] [2.0.11]
+
+	* src/lib-storage/mail-storage-settings.c:
+	lib-storage: dotlock_use_excl default was accidentally set to "no".
+	[61ed55d1c870]
+
+	* src/dsync/dsync-proxy-client.c:
+	dsync: Fixed a timeout/crash when saving messages to remote dsync.
+	[5767657f0170]
+
+2011-03-06  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/dbox-multi/mdbox-map.c:
+	mdbox: Avoid leaking fds when saving many messages larger than
+	mdbox_rotate_size.
+	[d1f30e375f40]
+
+2011-03-05  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/db-ldap.c:
+	auth: Fixed ldap assert-crash.
+	[b44ec48d9425]
+
 2011-03-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/acl/doveadm-acl.c:
+	doveadm acl set: Require non-standard rights to be prefixed with ':'
+	char.
+	[d757b13d84ff]
 
 	* .hgsigs:
 	Added signature for changeset 755c63ff089f
-	[81d799f52912] [tip]
+	[81d799f52912]
 
 	* .hgtags:
 	Added tag 2.0.10 for changeset 755c63ff089f
