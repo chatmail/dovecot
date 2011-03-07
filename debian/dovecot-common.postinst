@@ -34,7 +34,7 @@ if [ "$1" = "configure" ]; then
     conf.d/90-sieve.conf \
     conf.d/auth-ldap.conf.ext"
 
-  if dpkg --compare-versions "$2" le-nl "1:2.0.10-1"; then
+  if dpkg --compare-versions "$2" le-nl "1:2.0.11-1"; then
     for conffile in $OLD_CONFFILES ; do
       ucf --purge /etc/dovecot/$conffile
       ucfr --purge dovecot-common /etc/dovecot/$conffile

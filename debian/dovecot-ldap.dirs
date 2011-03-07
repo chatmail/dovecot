@@ -1,2 +1,3 @@
 usr/lib/dovecot/modules/auth
 usr/share/dovecot/conf.d
+usr/share/dovecot/protocols.d

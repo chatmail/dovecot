@@ -1,2 +1,2 @@
 usr/sbin
-usr/share/dovecot
+usr/share/dovecot/protocols.d

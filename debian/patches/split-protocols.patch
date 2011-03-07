@@ -5,88 +5,43 @@ Subject: split-protocols
 Description: Set default protocols value as empty and enable each
  protocol in its own configuration file
 ---
- doc/example-config/conf.d/20-imap.conf             |    3 +++
- doc/example-config/conf.d/20-lmtp.conf             |    3 +++
- doc/example-config/conf.d/20-pop3.conf             |    3 +++
- doc/example-config/dovecot.conf                    |    3 ---
- .../doc/example-config/conf.d/20-managesieve.conf  |    4 ++--
+ doc/example-config/dovecot.conf                    |    4 ++--
+ .../doc/example-config/conf.d/20-managesieve.conf  |    3 ---
  src/config/all-settings.c                          |    2 +-
  src/master/master-settings.c                       |    2 +-
- 7 files changed, 13 insertions(+), 7 deletions(-)
+ 4 files changed, 4 insertions(+), 7 deletions(-)
 
-diff --git a/doc/example-config/conf.d/20-imap.conf b/doc/example-config/conf.d/20-imap.conf
-index 5f8725e..435cf0a 100644
---- a/doc/example-config/conf.d/20-imap.conf
-+++ b/doc/example-config/conf.d/20-imap.conf
-@@ -2,6 +2,9 @@
- ## IMAP specific settings
- ##
- 
-+# Enable imap protocol
-+protocols = $protocols imap
-+
- protocol imap {
-   # Maximum IMAP command line length. Some clients generate very long command
-   # lines with huge mailboxes, so you may need to raise this if you get
-diff --git a/doc/example-config/conf.d/20-lmtp.conf b/doc/example-config/conf.d/20-lmtp.conf
-index 7c54481..1f2dd8b 100644
---- a/doc/example-config/conf.d/20-lmtp.conf
-+++ b/doc/example-config/conf.d/20-lmtp.conf
-@@ -2,6 +2,9 @@
- ## LMTP specific settings
- ##
- 
-+# Enable lmtp protocol
-+protocols = $protocols lmtp
-+
- # Support proxying to other LMTP/SMTP servers by performing passdb lookups.
- #lmtp_proxy = no
- 
-diff --git a/doc/example-config/conf.d/20-pop3.conf b/doc/example-config/conf.d/20-pop3.conf
-index b56f030..0822e35 100644
---- a/doc/example-config/conf.d/20-pop3.conf
-+++ b/doc/example-config/conf.d/20-pop3.conf
-@@ -2,6 +2,9 @@
- ## POP3 specific settings
- ##
- 
-+# Enable pop3 protocol
-+protocols = $protocols pop3
-+
- protocol pop3 {
-   # Don't try to set mails non-recent or seen with POP3 sessions. This is
-   # mostly intended to reduce disk I/O. With maildir it doesn't move files
 diff --git a/doc/example-config/dovecot.conf b/doc/example-config/dovecot.conf
-index 61f689b..6d67038 100644
+index 61f689b..a550ea2 100644
 --- a/doc/example-config/dovecot.conf
 +++ b/doc/example-config/dovecot.conf
-@@ -16,9 +16,6 @@
+@@ -16,8 +16,8 @@
  # options. The paths listed here are for configure --prefix=/usr
  # --sysconfdir=/etc --localstatedir=/var
  
 -# Protocols we want to be serving.
 -#protocols = imap pop3 lmtp
--
++# Enable installed protocols
++!include_try /usr/share/dovecot/protocols.d/*.protocol
+ 
  # A comma separated list of IPs or hosts where to listen in for connections. 
  # "*" listens in all IPv4 interfaces, "::" listens in all IPv6 interfaces.
- # If you want to specify non-default ports or anything more complex,
 diff --git a/pigeonhole/doc/example-config/conf.d/20-managesieve.conf b/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
-index 42dfc39..fe2a484 100644
+index 42dfc39..d8fde1f 100644
 --- a/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
 +++ b/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
-@@ -2,8 +2,8 @@
+@@ -2,9 +2,6 @@
  ## ManageSieve specific settings
  ##
  
 -# Uncomment to enable managesieve protocol:
 -#protocols = $protocols sieve
-+# Enable managesieve protocol
-+protocols = $protocols sieve
- 
+-
  # Service definitions
  
+ service managesieve-login {
 diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index f02a89b..8d04987 100644
+index 8a5072e..58875a1 100644
 --- a/src/config/all-settings.c
 +++ b/src/config/all-settings.c
 @@ -1742,7 +1742,7 @@ struct master_settings master_default_settings = {
