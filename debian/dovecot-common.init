@@ -60,10 +60,11 @@ if [ -f /etc/inetd.conf ]; then
   for p in `sed -r "s/^ *(([^:]+|\[[^]]+]|\*):)?(pop3s?|imaps?)[ \t].*/\3/;t;d" \
     /etc/inetd.conf`
   do
-    for q in `sed -r "s/^[ \t]*protocols[ \t]*=[ \t]*(([^\"]*)|\"(.*)\")/\2\3/;t;d" \
-      ${CONF}`
+    for q in `doveconf -n | \
+      sed -r "s/^[ \t]*protocols[ \t]*=[ \t]*(([^\"]*)|\"(.*)\")/\2\3/;t;d"`
     do
       if [ $p = $q ]; then
+        log_daemon_msg "protocol ${p} configured both in inetd and in dovecot" "$NAME" && log_end_msg 1
         exit 0
       fi
     done
@@ -72,7 +73,7 @@ fi
 
 # determine the location of the PID file
 # overide by setting base_dir in conf file or PIDBASE in /etc/defaults/$NAME
-PIDBASE=${PIDBASE:-`sed -r "s/^[ \t]*base_dir[ \t]*=[ \t]*([^ \t]*)/\1/;t;d" ${CONF}`}
+PIDBASE=${PIDBASE:-`doveconf -n | sed -r "s/^[ \t]*base_dir[ \t]*=[ \t]*([^ \t]*)/\1/;t;d"`}
 PIDFILE=${PIDBASE:-/var/run/dovecot}/master.pid
 
 #
