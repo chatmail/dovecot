@@ -857,7 +857,8 @@ extern const struct setting_parser_info imap_setting_parser_info;
 /* <settings checks> */
 enum imap_client_workarounds {
 	WORKAROUND_DELAY_NEWMAIL		= 0x01,
-	WORKAROUND_TB_EXTRA_MAILBOX_SEP		= 0x08
+	WORKAROUND_TB_EXTRA_MAILBOX_SEP		= 0x08,
+	WORKAROUND_TB_LSUB_FLAGS		= 0x10
 };
 /* </settings checks> */
 struct imap_settings {
@@ -2020,6 +2021,7 @@ struct imap_client_workaround_list {
 static const struct imap_client_workaround_list imap_client_workaround_list[] = {
 	{ "delay-newmail", WORKAROUND_DELAY_NEWMAIL },
 	{ "tb-extra-mailbox-sep", WORKAROUND_TB_EXTRA_MAILBOX_SEP },
+	{ "tb-lsub-flags", WORKAROUND_TB_LSUB_FLAGS },
 	{ NULL, 0 }
 };
 

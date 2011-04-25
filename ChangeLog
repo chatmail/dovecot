@@ -1,8 +1,467 @@
+2011-04-12  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 606faab2b896
+	[fef40f957c11] [tip]
+
+	* .hgtags:
+	Added tag 2.0.12 for changeset 606faab2b896
+	[a957418b55af]
+
+	* NEWS, configure.in:
+	Released v2.0.12.
+	[606faab2b896] [2.0.12]
+
+	* src/lib-storage/index/test-index-fetch.c:
+	test-index-fetch unit test fixed.
+	[8101b70e4a27]
+
+	* src/lib-storage/index/dbox-single/sdbox-sync-rebuild.c:
+	sdbox: When rebuilding index, don't unnecessarily change mailbox's
+	GUID.
+	[bdd5a26ee180]
+
+	* src/lib-storage/index/dbox-single/sdbox-mail.c, src/lib-
+	storage/index/dbox-single/sdbox-storage.c, src/lib-storage/index
+	/dbox-single/sdbox-storage.h:
+	sdbox: If message file is unexpectedly lost, rebuild index.
+	[d4945c93c33b]
+
+	* src/lib-storage/index/dbox-common/dbox-file.c, src/lib-storage/index
+	/dbox-single/sdbox-sync.c, src/lib-storage/index/dbox-single/sdbox-
+	sync.h:
+	sdbox: Commit expunges to index first before unlinking the files.
+	[edf79127fccd]
+
+	* src/lib-storage/index/dbox-multi/mdbox-mail.c:
+	mdbox: Fixed mail_get_save_date() returning wrong return value. This
+	broke expire plugin.
+	[2269cea521b6]
+
+	* src/auth/auth-request.c:
+	auth: Export/import auth_request->successful for auth workers.
+	[bbcef91eac7e]
+
+	* src/auth/db-ldap.c, src/auth/db-ldap.h:
+	auth: Removed max. request queue limit from LDAP. Old requests get
+	dropped after 60 seconds, but other than that there is probably not
+	much point in having a hard coded limit.
+	[56616bad7310]
+
+2011-04-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: Fixed crash in mail_storage_service_all_init() (doveadm
+	.. -A)
+	[475e6633b1d7]
+
+2011-04-08  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap-login/client.c:
+	imap-login: Reduced the max. number of allowed bad commands. This
+	makes it even more sure that we won't reply with anything dangerous
+	when attempting to access us with HTTP client.
+	[a0c1c6f7cf6e]
+
+	* src/imap-login/client.c:
+	imap-login: Don't allow IMAP command tags that have invalid
+	characters. This simply attempts to prevent HTTP requests from
+	replying with any potentially danerous data that some web browsers
+	might execute, e.g.:
+
+	curl --request POST -F 'x="<script>alert(1)</script>"'
+	http://localhost:143/
+
+	The above command probably doesn't work, because max. bad commands
+	is reached earlier. But if it isn't, this change makes sure it
+	doesn't return back anything, because '"' and '(' aren't allowed
+	characters. Even if '"' weren't required, there hopefully isn't much
+	to be done without being able to call any functions.
+	[9b94597c3f02]
+
+	* src/lib-index/mail-cache.c, src/lib-index/mail-index-map-read.c, src
+	/lib-index/mail-index-strmap.c, src/lib-index/mail-index.c, src/lib-
+	index/mail-transaction-log-file.c, src/lib-index/mailbox-list-
+	index.c, src/lib/compat.h:
+	Linux NFS: fstat() may return ENOENT instead of ESTALE in some
+	kernel versions.
+	[d14b0fd0a423]
+
+	* src/director/director-connection.c, src/director/director.c:
+	director: Improved debug/error logging.
+	[e9139f74c451]
+
+	* src/director/director-connection.c, src/director/director.c:
+	director: Reset hosts' last_failed timestamps when they're suspected
+	to be working again. This should fix some problems during director
+	removals and additions.
+	[2b7af3a16521]
+
+	* src/doveadm/doveadm-mail-import.c:
+	doveadm import: Initialize the import user properly.
+	[e2b747f88e54]
+
+	* src/lib-storage/mail-storage-service.c, src/lib-storage/mail-
+	storage-service.h:
+	lib-storage: Allow each user lookup to override global
+	mail_storage_service_flags.
+	[1f545a4a1ffb]
+
+	* src/lib-storage/mail-namespace.c, src/lib-storage/mail-namespace.h:
+	lib-storage: Added mail_namespaces_init_location() for creating a
+	single namespace for user.
+	[dafc2dcc1a64]
+
+	* src/config/config-parser.c:
+	config: Log a warning if global ssl=no, but some section has
+	ssl=yes/required. Actually supporting per-protocol (or even worse,
+	per-ip) SSL would be too much trouble.
+	[18e87d50a10a]
+
+	* src/lib/eacces-error.c:
+	eperm_error_get_chgrp(): Changed wiki link.
+	[ab12bc9fcc21]
+
+	* src/lib/eacces-error.c:
+	eperm_error_get_chgrp(): Improved error message and added a link to
+	wiki.
+	[1319931cfda0]
+
+	* doc/documentation.txt:
+	Updated main documentation.txt index.
+	[0b8f3ddbe29f]
+
+	* INSTALL, README, doc/documentation.txt, doc/example-config/dovecot-
+	ldap.conf.ext, doc/example-config/dovecot-sql.conf.ext, doc/example-
+	config/dovecot.conf, src/lda/main.c, src/lib-storage/index/mbox
+	/mbox-storage.c, src/lib-storage/mail-storage-service.c:
+	Changed wiki.dovecot.org links to wiki2.dovecot.org
+	[b6a705c42001]
+
+2011-04-05  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/dbox-single/sdbox-sync-rebuild.c, src/lib-
+	storage/index/dbox-single/sdbox-sync.c:
+	sdbox: Added more error message logging.
+	[654b5a2fc926]
+
+	* src/lib-index/mail-index-map.c:
+	lib-index: Fix to previous check.
+	[699d181a5578]
+
+	* src/lib-index/mail-index-map.c:
+	lib-index: Added extra checks against broken extension record
+	introductions.
+	[64f354128f4e]
+
+	* src/plugins/quota/quota.c:
+	quota: Fixed the quota limit check changes in previous commit.
+	Casting (uint64_t)-1 to (int64_t) isn't a good idea.
+	[6cc356a5d0a5]
+
+2011-04-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/quota/quota-private.h, src/plugins/quota/quota.c:
+	quota: Code cleanup.
+	[230458801916]
+
+	* src/plugins/quota/quota.c:
+	quota: Fixed checking message count limit when saving multiple mails
+	in transaction.
+	[618f610c7c67]
+
+	* src/plugins/quota/quota.c:
+	quota: Set quota limit correctly (for code path that doesn't exist).
+	quota_alloc() followed by quota_test/try_alloc() set the "quota
+	left" limit wrong. But this is only a theoretical problem, because
+	nothing actually calls quota_alloc() currently.
+	[8fa544520413]
+
+	* src/lib-storage/index/index-attachment.c:
+	dbox: External attachment's size was set wrong if base64 MIME part
+	ended unexpectedly.
+	[10ea7f598e11]
+
+	* src/auth/db-ldap.c:
+	auth: If initial binding to LDAP server hangs, detect it and abort.
+	[cef23de90ff1]
+
+2011-04-03  Timo Sirainen  <tss@iki.fi>
+
+	* doc/example-config/conf.d/auth-vpopmail.conf.ext:
+	example-config: Fixed vpopmail config.
+	[0ce50c22f84c]
+
+2011-03-31  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-request.c:
+	auth: Mention auth_username_chars in log when disallowing username
+	because of it.
+	[3eaf0d3a38d4]
+
+2011-03-26  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-settings/settings-parser.c:
+	lib-settings: Fixed crash when trying treat strlist as having a
+	subsection. For example "plugin/foo/bar=yes" crashed, while it
+	should have been just ignored.
+	[746b4e9e7015]
+
+	* src/lib-index/mail-transaction-log-private.h:
+	lib-index: Delete dovecot.index.log.2 files after 2 days, not after
+	30 mins.
+	[0d437e2e6949]
+
+	* src/dsync/dsync-worker-local.c:
+	dsync: Fixed handling expunges of last message when it didn't have a
+	known GUID.
+	[e0f13d7510ef]
+
+	* src/imap/imap-fetch.c:
+	imap: Use mailbox_get_expunged_uids() for QRESYNC code.
+	[e5547c86528f]
+
+	* src/lib-storage/index/index-fetch.c, src/lib-storage/index/index-
+	storage.h, src/lib-storage/index/test-index-fetch.c, src/lib-storage
+	/mail-storage-private.h, src/lib-storage/mail-storage.c, src/lib-
+	storage/mail-storage.h, src/lib-storage/test-mailbox.c:
+	lib-storage: Fixed mailbox_get_expunges() to return GUIDs with all
+	mailbox formats. Also added mailbox_get_expunged_uids() for use
+	cases that don't really need GUIDs.
+	[99e3209fc78d]
+
+2011-03-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/lmtp/Makefile.am:
+	lmtp: Fixed loading Sieve plugin when configuring --without-shared-
+	libs
+	[8c409049402c]
+
+	* src/plugins/autocreate/Makefile.am, src/plugins/autocreate
+	/autocreate-plugin.c:
+	autocreate: Disable plugin when running from dsync.
+	[4242a7bf8918]
+
+	* src/lib-storage/mail-storage.c:
+	lib-storage: Removed extra "don't allow INBOX to be deleted" check.
+	It's already checked in places where it could cause actual harm
+	(accidentally deleting other mailboxes) and where it's not allowed
+	(IMAP). This allows dsync backup to delete unwanted INBOX if the
+	mail location settings allow it.
+	[84354efc93bd]
+
+	* src/dsync/dsync-worker-local.c:
+	dsync backup: Handle better deletion of mailboxes from destination.
+	[65f4791d0eb4]
+
+2011-03-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-namespace.c:
+	lib-storage: When mail_location is looked up from environment, set
+	its unexpanded string properly. This fixes a crash when creating
+	index directories and mail location was autodetected.
+	[a5f9264674fb]
+
+	* src/doveadm/Makefile.am, src/doveadm/doveadm-mail-expunge.c,
+	src/doveadm/doveadm-mail-iter.c, src/doveadm/doveadm-mail-iter.h,
+	src/doveadm/doveadm-mail-move.c, src/doveadm/doveadm-mail.c,
+	src/doveadm/doveadm-mail.h:
+	doveadm: Added "move" command for moving mails between mailboxes.
+	[d7a02077d91f]
+
+2011-03-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/config/config-request.c, src/config/doveconf.c:
+	doveconf: Fixed showing plugin {} section.
+	[a94abbccea0f]
+
+	* src/lib-storage/mail-storage-service.c, src/lib-storage/mail-
+	storage-service.h:
+	lib-storage: Added MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES flag.
+	[b5768d835e79]
+
+2011-03-21  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: Don't try to create /dovecot.mailbox.index when indexes
+	are disabled.
+	[4f1b77b81cf3]
+
+	* doc/example-config/dovecot.conf:
+	example-config: Uncommented !include_try local.conf At least one
+	Linux distro wants this.
+	[0dcbd2357451]
+
+	* src/lib-lda/lmtp-client.c:
+	lmtp/smtp client: Crashfix if remote returned failure to RCPT TO.
+	[31b3f1819c89]
+
+2011-03-17  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts/fts-storage.c:
+	fts: Don't notify storage about finishing indexing if notify_ok
+	callback is NULL.
+	[3d48418b0501]
+
+	* src/auth/passdb-bsdauth.c, src/auth/passdb-passwd.c, src/auth
+	/userdb-passwd.c, src/auth/userdb.c, src/lda/main.c, src/lib-
+	storage/index/mbox/mbox-lock.c, src/lib-storage/mail-storage-
+	service.c, src/lib/eacces-error.c, src/lib/home-expand.c, src/lib
+	/ioloop-notify-inotify.c, src/lib/lib.c, src/lib/mkdir-parents.c,
+	src/lib/restrict-access.c, src/master/main.c, src/master/service-
+	process.c:
+	Replaced all getpw/gr*() to use i_getpw/gr*() with improved error
+	handling.
+	[02829f7f79c7]
+
+	* src/lib/Makefile.am, src/lib/ipwd.c, src/lib/ipwd.h:
+	Added i_getpw*() and i_getgr*() wrappers for getpw*()/getgr*().
+	These functions make error handling easier.
+	[7f5735ab7c35]
+
+2011-03-16  Timo Sirainen  <tss@iki.fi>
+
+	* src/master/main.c:
+	master: Don't close stderr if logging goes there.
+	[26d5351649ac]
+
+	* src/plugins/virtual/virtual-config.c, src/plugins/virtual/virtual-
+	storage.c, src/plugins/virtual/virtual-storage.h:
+	virtual: Support +mailbox entries that clear \Recent flag from
+	messages.
+	[be0f0de75e34]
+
+	* src/lib-storage/index/dbox-multi/mdbox-storage.c, src/lib-
+	storage/index/dbox-single/sdbox-storage.c:
+	dbox: Fixed crash on creation of a new mailbox. Broken by recent
+	changes.
+	[310f2784de31]
+
+	* src/lib/eacces-error.c:
+	eacces_error_get*(): Handle errors to / directory better.
+	[46d46fa3929f]
+
+	* src/lib-auth/auth-master.c:
+	lib-auth: If connection to auth-master gets lost, reconnect.
+	[7d9db422549a]
+
+	* src/lib-storage/index/dbox-multi/mdbox-storage.c, src/lib-storage
+	/mail-storage.c:
+	lib-storage: Moved mailbox_update() assert check from mdbox to
+	common, plus fixed it.
+	[18d801449444]
+
+	* src/dsync/dsync-brain.c, src/dsync/dsync-data.h, src/dsync/dsync-
+	proxy.c, src/dsync/dsync-worker-local.c, src/dsync/test-dsync-
+	brain.c, src/dsync/test-dsync-proxy-server-cmd.c:
+	dsync: Preserve \Recent flags state (instead of setting everything
+	\Recent).
+	[ad393de782ce]
+
+	* src/lib-storage/index/dbox-multi/mdbox-storage.c, src/lib-
+	storage/index/dbox-single/sdbox-storage.c, src/lib-storage/index
+	/index-storage.c, src/lib-storage/mail-storage.h:
+	lib-storage: Added min_first_recent_uid to struct mailbox_update.
+	Implemented for dbox. Maildir/mbox needs some more code to make this
+	work correctly.
+	[08e4c5d0dc9b]
+
+	* src/lib-storage/index/index-status.c, src/lib-storage/mail-
+	storage.h:
+	lib-storage: Added first_recent_uid to struct mailbox_status.
+	[4baca6914518]
+
+2011-03-15  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap-login/client.c:
+	imap-login: Changed CAPABILITY's tagged OK reply to say post-login
+	capabilities have more.
+	[31d8d43fa6b5]
+
+2011-03-14  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/dbox-common/dbox-attachment.c:
+	dbox: Fixed wrong error check while reading external attachments.
+	[890a46b3ab63]
+
+2011-03-12  Timo Sirainen  <tss@iki.fi>
+
+	* src/dsync/dsync-brain.c:
+	dsync: When showing mailbox names, show also their GUIDs.
+	[0a1a0d33c1b2]
+
+	* src/lib-storage/index/dbox-common/dbox-attachment.c:
+	dbox: Give more verbose error message about broken attachment ext-
+	refs.
+	[d3d6ed6d268b]
+
+	* src/lib-storage/index/dbox-single/sdbox-save.c, src/lib-
+	storage/index/maildir/maildir-save.c:
+	maildir, sdbox: If committed transaction has only aborted msg saves,
+	don't assert-crash.
+	[b896d72d7fa7]
+
+	* src/dsync/dsync-proxy-client.c:
+	dsync: If remote dsync times out, log a more verbose reason.
+	[4b537650b4de]
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: When uid/gid is invalid, tell if it's from setting or
+	userdb lookup.
+	[e83eec6d0126]
+
+	* doc/example-config/conf.d/20-imap.conf, src/imap/cmd-list.c,
+	src/imap/imap-settings.c, src/imap/imap-settings.h:
+	imap: Added tb-lsub-flags to imap_client_workarounds. Patch by Bruno
+	Tréguier.
+	[0405f4c507c9]
+
+2011-03-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/dsync/dsync-proxy-server.c:
+	dsync: Reset idle timeouts at the end of i/o callbacks, not
+	beginning. This could make a difference if the callback runs for a
+	long time.
+	[2ac35ed2f943]
+
+2011-03-09  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-imap/imap-id.c:
+	IMAP: Fixed ID command to log the parameters properly. Patch by Mike
+	Abbott / Apple.
+	[3b2c301ab31f]
+
+	* src/dsync/dsync-proxy-client.c, src/dsync/dsync-proxy-server.c,
+	src/dsync/dsync-proxy.h:
+	dsync: Use a smaller idle timeout value for client than for server.
+	[60c5cf26c3dd]
+
 2011-03-07  Timo Sirainen  <tss@iki.fi>
+
+	* src/dsync/dsync-proxy-client.c:
+	dsync: Avoid hanging when saving messages.
+	[33cd03255c94]
+
+	* src/plugins/expire/expire-plugin.c:
+	expire: Fixed mail_debug logging when same transaction expunged all
+	messages and saved new.
+	[2cb0fb910441]
+
+	* src/plugins/expire/expire-plugin.c:
+	expire: Added more debugging with mail_debug=yes
+	[63ed0d3f4f52]
+
+	* src/plugins/expire/expire-plugin.c:
+	expire: When saving first message to expire mailbox, use the oldest
+	message's save-time. This makes it easier to enable and test expire
+	plugin. This also changes how expire dict is used: previously when
+	all messages were expunged in a mailbox its entry was deleted in
+	dict, but now its value is set to 0.
+	[eac54c2dc98b]
 
 	* .hgsigs:
 	Added signature for changeset 3355b4bbd4ac
-	[47279462da5a] [tip]
+	[47279462da5a]
 
 	* .hgtags:
 	Added tag 2.0.11 for changeset 3355b4bbd4ac

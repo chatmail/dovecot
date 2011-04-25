@@ -60,7 +60,7 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	file-dotlock.lo file-lock.lo file-set-size.lo hash.lo \
 	hash-format.lo hash-method.lo hash2.lo hex-binary.lo \
 	hex-dec.lo hmac-md5.lo home-expand.lo hostpid.lo imem.lo \
-	iostream.lo istream.lo istream-base64-encoder.lo \
+	ipwd.lo iostream.lo istream.lo istream-base64-encoder.lo \
 	istream-concat.lo istream-crlf.lo istream-data.lo \
 	istream-file.lo istream-limit.lo istream-mmap.lo \
 	istream-seekable.lo istream-tee.lo ioloop.lo ioloop-iolist.lo \
@@ -178,6 +178,7 @@ CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DICT_LIBS = @DICT_LIBS@
+DLLTOOL = @DLLTOOL@
 DSYMUTIL = @DSYMUTIL@
 DUMPBIN = @DUMPBIN@
 ECHO_C = @ECHO_C@
@@ -217,6 +218,7 @@ LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
+MANIFEST_TOOL = @MANIFEST_TOOL@
 MKDIR_P = @MKDIR_P@
 MODULE_LIBS = @MODULE_LIBS@
 MODULE_SUFFIX = @MODULE_SUFFIX@
@@ -263,6 +265,7 @@ abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
 abs_top_srcdir = @abs_top_srcdir@
+ac_ct_AR = @ac_ct_AR@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_CXX = @ac_ct_CXX@
 ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
@@ -297,7 +300,6 @@ libdir = @libdir@
 libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
-lt_ECHO = @lt_ECHO@
 mail_storages = @mail_storages@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
@@ -360,6 +362,7 @@ liblib_la_SOURCES = \
 	home-expand.c \
 	hostpid.c \
 	imem.c \
+	ipwd.c \
 	iostream.c \
 	istream.c \
 	istream-base64-encoder.c \
@@ -472,6 +475,7 @@ headers = \
 	home-expand.h \
 	hostpid.h \
 	imem.h \
+	ipwd.h \
 	iostream-internal.h \
 	istream.h \
 	istream-base64-encoder.h \
@@ -691,6 +695,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ioloop-select.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ioloop.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ipwd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-base64-encoder.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-concat.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-crlf.Plo@am__quote@

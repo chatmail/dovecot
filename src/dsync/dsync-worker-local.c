@@ -49,6 +49,7 @@ struct local_dsync_mailbox {
 	struct mail_namespace *ns;
 	mailbox_guid_t guid;
 	const char *storage_name;
+	bool deleted;
 };
 
 struct local_dsync_mailbox_change {
@@ -566,7 +567,8 @@ local_worker_mailbox_iter_next(struct dsync_worker_mailbox_iter *_iter,
 	}
 
 	mailbox_get_status(box, STATUS_UIDNEXT | STATUS_UIDVALIDITY |
-			   STATUS_HIGHESTMODSEQ | STATUS_CACHE_FIELDS, &status);
+			   STATUS_HIGHESTMODSEQ | STATUS_CACHE_FIELDS |
+			   STATUS_FIRST_RECENT_UID, &status);
 
 	change = hash_table_lookup(worker->mailbox_changes_hash, mailbox_guid);
 	if (change != NULL) {
@@ -579,6 +581,7 @@ local_worker_mailbox_iter_next(struct dsync_worker_mailbox_iter *_iter,
 	dsync_box_r->uid_validity = status.uidvalidity;
 	dsync_box_r->uid_next = status.uidnext;
 	dsync_box_r->message_count = status.messages;
+	dsync_box_r->first_recent_uid = status.first_recent_uid;
 	dsync_box_r->highest_modseq = status.highest_modseq;
 
 	p_clear(iter->ret_pool);
@@ -795,6 +798,10 @@ static int local_mailbox_open(struct local_dsync_worker *worker,
 			dsync_guid_to_str(guid));
 		return -1;
 	}
+	if (lbox->deleted) {
+		*box_r = NULL;
+		return 0;
+	}
 
 	box = mailbox_alloc(lbox->ns->list, lbox->storage_name, flags);
 	if (mailbox_sync(box, 0) < 0 ||
@@ -815,7 +822,7 @@ static int local_mailbox_open(struct local_dsync_worker *worker,
 		return -1;
 	}
 	*box_r = box;
-	return 0;
+	return 1;
 }
 
 static int iter_local_mailbox_open(struct local_dsync_worker_msg_iter *iter)
@@ -826,14 +833,22 @@ static int iter_local_mailbox_open(struct local_dsync_worker_msg_iter *iter)
 	struct mailbox *box;
 	struct mailbox_transaction_context *trans;
 	struct mail_search_args *search_args;
+	int ret;
 
-	if (iter->mailbox_idx == iter->mailbox_count) {
-		/* no more mailboxes */
-		return -1;
+	for (;;) {
+		if (iter->mailbox_idx == iter->mailbox_count) {
+			/* no more mailboxes */
+			return -1;
+		}
+
+		guid = &iter->mailboxes[iter->mailbox_idx];
+		ret = local_mailbox_open(worker, guid, &box);
+		if (ret != 0)
+			break;
+		/* mailbox was deleted. try next one. */
+		iter->mailbox_idx++;
 	}
-
-	guid = &iter->mailboxes[iter->mailbox_idx];
-	if (local_mailbox_open(worker, guid, &box) < 0) {
+	if (ret < 0) {
 		i_error("msg iteration failed: Couldn't open mailbox %s",
 			dsync_guid_to_str(guid));
 		iter->iter.failed = TRUE;
@@ -910,6 +925,7 @@ iter_local_mailbox_next_expunge(struct local_dsync_worker_msg_iter *iter,
 {
 	struct mailbox *box = iter->mail->box;
 	struct mailbox_status status;
+	const uint8_t *guid_128;
 	const struct mailbox_expunge_rec *expunges;
 	unsigned int count;
 
@@ -920,9 +936,11 @@ iter_local_mailbox_next_expunge(struct local_dsync_worker_msg_iter *iter,
 
 		memset(msg_r, 0, sizeof(*msg_r));
 		str_truncate(iter->tmp_guid_str, 0);
-		binary_to_hex_append(iter->tmp_guid_str,
-				     expunges[iter->expunge_idx].guid_128,
-				     MAIL_GUID_128_SIZE);
+		guid_128 = expunges[iter->expunge_idx].guid_128;
+		if (!mail_guid_128_is_empty(guid_128)) {
+			binary_to_hex_append(iter->tmp_guid_str, guid_128,
+					     MAIL_GUID_128_SIZE);
+		}
 		msg_r->guid = str_c(iter->tmp_guid_str);
 		msg_r->uid = expunges[iter->expunge_idx].uid;
 		msg_r->flags = DSYNC_MAIL_FLAG_EXPUNGED;
@@ -1030,6 +1048,7 @@ local_worker_copy_mailbox_update(const struct dsync_mailbox *dsync_box,
 	       sizeof(update_r->mailbox_guid));
 	update_r->uid_validity = dsync_box->uid_validity;
 	update_r->min_next_uid = dsync_box->uid_next;
+	update_r->min_first_recent_uid = dsync_box->first_recent_uid;
 	update_r->min_highest_modseq = dsync_box->highest_modseq;
 }
 
@@ -1279,6 +1298,8 @@ local_worker_delete_mailbox(struct dsync_worker *_worker,
 		i_error("Can't delete mailbox %s: %s", lbox->storage_name,
 			mail_storage_get_last_error(storage, NULL));
 		dsync_worker_set_failure(_worker);
+	} else {
+		lbox->deleted = TRUE;
 	}
 	mailbox_free(&box);
 	mailbox_list_set_changelog_timestamp(lbox->ns->list, (time_t)-1);
@@ -1489,7 +1510,7 @@ local_worker_select_mailbox(struct dsync_worker *_worker,
 		local_worker_mailbox_close(worker);
 	worker->selected_box_guid = *mailbox;
 
-	if (local_mailbox_open(worker, mailbox, &worker->selected_box) < 0) {
+	if (local_mailbox_open(worker, mailbox, &worker->selected_box) <= 0) {
 		dsync_worker_set_failure(_worker);
 		return;
 	}
@@ -1598,7 +1619,7 @@ local_worker_msg_copy(struct dsync_worker *_worker,
 	struct mail_save_context *save_ctx;
 	int ret;
 
-	if (local_mailbox_open(worker, src_mailbox, &src_box) < 0) {
+	if (local_mailbox_open(worker, src_mailbox, &src_box) <= 0) {
 		callback(FALSE, context);
 		return;
 	}
@@ -1790,7 +1811,7 @@ local_worker_msg_get_next(struct local_dsync_worker *worker,
 
 	if (!dsync_guid_equals(&worker->get_mailbox, &get->mailbox)) {
 		local_worker_msg_box_close(worker);
-		if (local_mailbox_open(worker, &get->mailbox, &box) < 0) {
+		if (local_mailbox_open(worker, &get->mailbox, &box) <= 0) {
 			get->callback(DSYNC_MSG_GET_RESULT_FAILED,
 				      NULL, get->context);
 			return;

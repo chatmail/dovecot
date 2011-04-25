@@ -696,6 +696,10 @@ int mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 
 int mailbox_update(struct mailbox *box, const struct mailbox_update *update)
 {
+	i_assert(update->min_next_uid == 0 ||
+		 update->min_first_recent_uid == 0 ||
+		 update->min_first_recent_uid <= update->min_next_uid);
+
 	return box->v.update(box, update);
 }
 
@@ -763,11 +767,6 @@ int mailbox_delete(struct mailbox *box)
 	if (*box->name == '\0') {
 		mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
 				       "Storage root can't be deleted");
-		return -1;
-	}
-	if (box->inbox_any) {
-		mail_storage_set_error(box->storage, MAIL_ERROR_NOTPOSSIBLE,
-				       "INBOX can't be deleted.");
 		return -1;
 	}
 
@@ -1080,7 +1079,15 @@ bool mailbox_get_expunges(struct mailbox *box, uint64_t prev_modseq,
 			  ARRAY_TYPE(mailbox_expunge_rec) *expunges)
 {
 	return box->v.get_expunges(box, prev_modseq,
-				   uids_filter, expunges);
+				   uids_filter, NULL, expunges);
+}
+
+bool mailbox_get_expunged_uids(struct mailbox *box, uint64_t prev_modseq,
+			       const ARRAY_TYPE(seq_range) *uids_filter,
+			       ARRAY_TYPE(seq_range) *expunged_uids)
+{
+	return box->v.get_expunges(box, prev_modseq,
+				   uids_filter, expunged_uids, NULL);
 }
 
 bool mailbox_get_virtual_uid(struct mailbox *box, const char *backend_mailbox,

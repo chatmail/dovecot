@@ -7,6 +7,7 @@
 #include "module-dir.h"
 #include "restrict-access.h"
 #include "eacces-error.h"
+#include "ipwd.h"
 #include "str.h"
 #include "var-expand.h"
 #include "dict.h"
@@ -22,8 +23,6 @@
 
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <pwd.h>
-#include <grp.h>
 
 #ifdef HAVE_SYS_TIME_H
 #  include <sys/time.h>
@@ -57,6 +56,7 @@ struct mail_storage_service_ctx {
 struct mail_storage_service_user {
 	pool_t pool;
 	struct mail_storage_service_input input;
+	enum mail_storage_service_flags flags;
 
 	const char *system_groups_user, *uid_source, *gid_source;
 	const struct mail_user_settings *user_set;
@@ -271,34 +271,44 @@ service_auth_userdb_lookup(struct mail_storage_service_ctx *ctx,
 	return ret;
 }
 
-static bool parse_uid(const char *str, uid_t *uid_r)
+static bool parse_uid(const char *str, uid_t *uid_r, const char **error_r)
 {
-	struct passwd *pw;
+	struct passwd pw;
 
 	if (str_to_uid(str, uid_r) == 0)
 		return TRUE;
 
-	pw = getpwnam(str);
-	if (pw == NULL)
+	switch (i_getpwnam(str, &pw)) {
+	case -1:
+		*error_r = t_strdup_printf("getpwnam(%s) failed: %m", str);
 		return FALSE;
-
-	*uid_r = pw->pw_uid;
-	return TRUE;
+	case 0:
+		*error_r = t_strconcat("Unknown UNIX UID user: ", str, NULL);
+		return FALSE;
+	default:
+		*uid_r = pw.pw_uid;
+		return TRUE;
+	}
 }
 
-static bool parse_gid(const char *str, gid_t *gid_r)
+static bool parse_gid(const char *str, gid_t *gid_r, const char **error_r)
 {
-	struct group *gr;
+	struct group gr;
 
 	if (str_to_gid(str, gid_r) == 0)
 		return TRUE;
 
-	gr = getgrnam(str);
-	if (gr == NULL)
+	switch (i_getgrnam(str, &gr)) {
+	case -1:
+		*error_r = t_strdup_printf("getgrnam(%s) failed: %m", str);
 		return FALSE;
-
-	*gid_r = gr->gr_gid;
-	return TRUE;
+	case 0:
+		*error_r = t_strconcat("Unknown UNIX GID group: ", str, NULL);
+		return FALSE;
+	default:
+		*gid_r = gr.gr_gid;
+		return TRUE;
+	}
 }
 
 static int
@@ -310,24 +320,24 @@ service_drop_privileges(struct mail_storage_service_user *user,
 {
 	struct restrict_access_settings rset;
 	uid_t current_euid, setuid_uid = 0;
-	const char *cur_chroot;
+	const char *cur_chroot, *error;
 
 	current_euid = geteuid();
 	restrict_access_init(&rset);
 	restrict_access_get_env(&rset);
 	if (*set->mail_uid != '\0') {
-		if (!parse_uid(set->mail_uid, &rset.uid)) {
-			*error_r = t_strdup_printf("Unknown mail_uid user: %s",
-						   set->mail_uid);
+		if (!parse_uid(set->mail_uid, &rset.uid, &error)) {
+			*error_r = t_strdup_printf("%s (from %s)", error,
+						   user->uid_source);
 			return -1;
 		}
 		if (rset.uid < (uid_t)set->first_valid_uid ||
 		    (set->last_valid_uid != 0 &&
 		     rset.uid > (uid_t)set->last_valid_uid)) {
 			*error_r = t_strdup_printf(
-				"Mail access for users with UID %s "
-				"not permitted (see first_valid_uid in config file).",
-				dec2str(rset.uid));
+				"Mail access for users with UID %s not permitted "
+				"(see first_valid_uid in config file, uid from %s).",
+				dec2str(rset.uid), user->uid_source);
 			return -1;
 		}
 		rset.uid_source = user->uid_source;
@@ -337,18 +347,18 @@ service_drop_privileges(struct mail_storage_service_user *user,
 		return -1;
 	}
 	if (*set->mail_gid != '\0') {
-		if (!parse_gid(set->mail_gid, &rset.gid)) {
-			*error_r = t_strdup_printf("Unknown mail_gid group: %s",
-						   set->mail_gid);
+		if (!parse_gid(set->mail_gid, &rset.gid, &error)) {
+			*error_r = t_strdup_printf("%s (from %s)", error,
+						   user->gid_source);
 			return -1;
 		}
 		if (rset.gid < (gid_t)set->first_valid_gid ||
 		    (set->last_valid_gid != 0 &&
 		     rset.gid > (gid_t)set->last_valid_gid)) {
 			*error_r = t_strdup_printf(
-				"Mail access for users with GID %s "
-				"not permitted (see first_valid_gid in config file).",
-				dec2str(rset.gid));
+				"Mail access for users with GID %s not permitted "
+				"(see first_valid_gid in config file, gid from %s).",
+				dec2str(rset.gid), user->gid_source);
 			return -1;
 		}
 		rset.gid_source = user->gid_source;
@@ -358,10 +368,10 @@ service_drop_privileges(struct mail_storage_service_user *user,
 		return -1;
 	}
 	if (*set->mail_privileged_group != '\0') {
-		if (!parse_gid(set->mail_privileged_group, &rset.privileged_gid)) {
+		if (!parse_gid(set->mail_privileged_group, &rset.privileged_gid,
+			       &error)) {
 			*error_r = t_strdup_printf(
-				"Unknown mail_privileged_group: %s",
-				set->mail_gid);
+				"%s (in mail_privileged_group setting)", error);
 			return -1;
 		}
 	}
@@ -448,13 +458,13 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 			dec2str(geteuid()), dec2str(getegid()), home);
 	}
 
-	if ((ctx->flags & MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP) != 0 &&
-	    (ctx->flags & MAIL_STORAGE_SERVICE_FLAG_ENABLE_CORE_DUMPS) == 0) {
+	if ((user->flags & MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP) != 0 &&
+	    (user->flags & MAIL_STORAGE_SERVICE_FLAG_ENABLE_CORE_DUMPS) == 0) {
 		/* we don't want to write core files to any users' home
 		   directories since they could contain information about other
 		   users' mails as well. so do no chdiring to home. */
 	} else if (*home != '\0' &&
-		   (ctx->flags & MAIL_STORAGE_SERVICE_FLAG_NO_CHDIR) == 0) {
+		   (user->flags & MAIL_STORAGE_SERVICE_FLAG_NO_CHDIR) == 0) {
 		/* If possible chdir to home directory, so that core file
 		   could be written in case we crash. */
 		if (chdir(home) < 0) {
@@ -472,9 +482,11 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 		mail_user_unref(&mail_user);
 		return -1;
 	}
-	if (mail_namespaces_init(mail_user, error_r) < 0) {
-		mail_user_unref(&mail_user);
-		return -1;
+	if ((user->flags & MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES) == 0) {
+		if (mail_namespaces_init(mail_user, error_r) < 0) {
+			mail_user_unref(&mail_user);
+			return -1;
+		}
 	}
 	*mail_user_r = mail_user;
 	return 0;
@@ -563,11 +575,11 @@ static void mail_storage_service_time_moved(time_t old_time, time_t new_time)
 		i_fatal("Time just moved backwards by %ld seconds. "
 			"This might cause a lot of problems, "
 			"so I'll just kill myself now. "
-			"http://wiki.dovecot.org/TimeMovedBackwards", diff);
+			"http://wiki2.dovecot.org/TimeMovedBackwards", diff);
 	} else {
 		i_error("Time just moved backwards by %ld seconds. "
 			"I'll sleep now until we're back in present. "
-			"http://wiki.dovecot.org/TimeMovedBackwards", diff);
+			"http://wiki2.dovecot.org/TimeMovedBackwards", diff);
 		/* Sleep extra second to make sure usecs also grows. */
 		diff++;
 
@@ -637,6 +649,21 @@ mail_storage_service_get_auth_conn(struct mail_storage_service_ctx *ctx)
 	return ctx->conn;
 }
 
+static enum mail_storage_service_flags
+mail_storage_service_input_get_flags(struct mail_storage_service_ctx *ctx,
+				     const struct mail_storage_service_input *input)
+{
+	enum mail_storage_service_flags flags;
+
+	flags = (ctx->flags & ~input->flags_override_remove) |
+		input->flags_override_add;
+	if (input->no_userdb_lookup) {
+		/* FIXME: for API backwards compatibility only */
+		flags &= ~MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP;
+	}
+	return flags;
+}
+
 int mail_storage_service_read_settings(struct mail_storage_service_ctx *ctx,
 				       const struct mail_storage_service_input *input,
 				       pool_t pool,
@@ -648,7 +675,11 @@ int mail_storage_service_read_settings(struct mail_storage_service_ctx *ctx,
 	const struct setting_parser_info *const *roots;
 	struct master_service_settings_output set_output;
 	const struct dynamic_settings_parser *dyn_parsers;
+	enum mail_storage_service_flags flags;
 	unsigned int i;
+
+	flags = input == NULL ? ctx->flags :
+		mail_storage_service_input_get_flags(ctx, input);
 
 	memset(&set_input, 0, sizeof(set_input));
 	set_input.roots = ctx->set_roots;
@@ -657,9 +688,9 @@ int mail_storage_service_read_settings(struct mail_storage_service_ctx *ctx,
 	   environment, and if we're not doing a userdb lookup we want to
 	   use $HOME */
 	set_input.preserve_home =
-		(ctx->flags & MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP) == 0;
+		(flags & MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP) == 0;
 	set_input.use_sysexits =
-		(ctx->flags & MAIL_STORAGE_SERVICE_FLAG_USE_SYSEXITS) != 0;
+		(flags & MAIL_STORAGE_SERVICE_FLAG_USE_SYSEXITS) != 0;
 
 	if (input != NULL) {
 		set_input.module = input->module;
@@ -762,8 +793,7 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 				struct mail_storage_service_user **user_r,
 				const char **error_r)
 {
-	const bool userdb_lookup = !input->no_userdb_lookup &&
-		(ctx->flags & MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP) != 0;
+	enum mail_storage_service_flags flags;
 	struct mail_storage_service_user *user;
 	const char *username = input->username;
 	const struct setting_parser_info *user_info;
@@ -784,7 +814,9 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 		*error_r = MAIL_ERRSTR_CRITICAL_MSG;
 		return -1;
 	}
-	if ((ctx->flags & MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT) == 0 &&
+
+	flags = mail_storage_service_input_get_flags(ctx, input);
+	if ((flags & MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT) == 0 &&
 	    !ctx->log_initialized) {
 		/* initialize logging again, in case we only read the
 		   settings for the first above */
@@ -800,7 +832,7 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 	mail_storage_service_load_modules(ctx, user_info, user_set);
 
 	temp_pool = pool_alloconly_create("userdb lookup", 2048);
-	if (userdb_lookup) {
+	if ((flags & MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP) != 0) {
 		ret = service_auth_userdb_lookup(ctx, input, temp_pool,
 						 &username, &userdb_fields,
 						 error_r);
@@ -820,6 +852,7 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 	user->input.userdb_fields = NULL;
 	user->input.username = p_strdup(user_pool, username);
 	user->user_info = user_info;
+	user->flags = flags;
 
 	user->set_parser = settings_parser_dup(set_parser, user_pool);
 	if (!settings_parser_check(user->set_parser, user_pool, &error))
@@ -829,10 +862,10 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 	user->gid_source = "mail_gid setting";
 	user->uid_source = "mail_uid setting";
 
-	if ((ctx->flags & MAIL_STORAGE_SERVICE_FLAG_DEBUG) != 0)
+	if ((flags & MAIL_STORAGE_SERVICE_FLAG_DEBUG) != 0)
 		(void)settings_parse_line(user->set_parser, "mail_debug=yes");
 
-	if (!userdb_lookup) {
+	if ((flags & MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP) == 0) {
 		const char *home = getenv("HOME");
 		if (home != NULL)
 			set_keyval(ctx, user, "mail_home", home);
@@ -867,9 +900,9 @@ int mail_storage_service_next(struct mail_storage_service_ctx *ctx,
 	const char *home, *chroot, *error;
 	unsigned int len;
 	bool disallow_root =
-		(ctx->flags & MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT) != 0;
+		(user->flags & MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT) != 0;
 	bool temp_priv_drop =
-		(ctx->flags & MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP) != 0;
+		(user->flags & MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP) != 0;
 
 	/* variable strings are expanded in mail_user_init(),
 	   but we need the home and chroot sooner so do them separately here. */
@@ -910,10 +943,10 @@ int mail_storage_service_next(struct mail_storage_service_ctx *ctx,
 		set_keyval(ctx, user, "mail_home", home);
 	}
 
-	if ((ctx->flags & MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT) == 0)
+	if ((user->flags & MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT) == 0)
 		mail_storage_service_init_log(ctx, user);
 
-	if ((ctx->flags & MAIL_STORAGE_SERVICE_FLAG_NO_RESTRICT_ACCESS) == 0) {
+	if ((user->flags & MAIL_STORAGE_SERVICE_FLAG_NO_RESTRICT_ACCESS) == 0) {
 		if (service_drop_privileges(user, user_set, home, chroot,
 					    disallow_root, temp_priv_drop,
 					    FALSE, &error) < 0) {
@@ -922,7 +955,7 @@ int mail_storage_service_next(struct mail_storage_service_ctx *ctx,
 			return -1;
 		}
 		if (!temp_priv_drop ||
-		    (ctx->flags & MAIL_STORAGE_SERVICE_FLAG_ENABLE_CORE_DUMPS) != 0)
+		    (user->flags & MAIL_STORAGE_SERVICE_FLAG_ENABLE_CORE_DUMPS) != 0)
 			restrict_access_allow_coredumps(TRUE);
 	}
 
