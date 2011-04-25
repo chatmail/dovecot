@@ -66,7 +66,8 @@ enum mailbox_status_items {
 	STATUS_KEYWORDS		= 0x40,
 	STATUS_HIGHESTMODSEQ	= 0x80,
 	STATUS_CACHE_FIELDS	= 0x100,
-	STATUS_VIRTUAL_SIZE	= 0x200
+	STATUS_VIRTUAL_SIZE	= 0x200,
+	STATUS_FIRST_RECENT_UID	= 0x400
 };
 
 enum mailbox_search_result_flags {
@@ -184,6 +185,7 @@ struct mailbox_status {
 	uint32_t uidnext;
 
 	uint32_t first_unseen_seq;
+	uint32_t first_recent_uid;
 	uint64_t highest_modseq;
 	/* sum of virtual size of all messages in mailbox */
 	uint64_t virtual_size;
@@ -201,6 +203,7 @@ struct mailbox_update {
 	uint8_t mailbox_guid[MAIL_GUID_128_SIZE];
 	uint32_t uid_validity;
 	uint32_t min_next_uid;
+	uint32_t min_first_recent_uid;
 	uint64_t min_highest_modseq;
 	/* Add these fields to be temporarily cached, if they aren't already. */
 	const char *const *cache_fields;
@@ -461,6 +464,11 @@ void mailbox_get_uid_range(struct mailbox *box,
 bool mailbox_get_expunges(struct mailbox *box, uint64_t prev_modseq,
 			  const ARRAY_TYPE(seq_range) *uids_filter,
 			  ARRAY_TYPE(mailbox_expunge_rec) *expunges);
+/* Same as mailbox_get_expunges(), but return only list of UIDs. Not caring
+   about GUIDs is slightly faster. */
+bool mailbox_get_expunged_uids(struct mailbox *box, uint64_t prev_modseq,
+			       const ARRAY_TYPE(seq_range) *uids_filter,
+			       ARRAY_TYPE(seq_range) *expunged_uids);
 /* If box is a virtual mailbox, look up UID for the given backend message.
    Returns TRUE if found, FALSE if not. */
 bool mailbox_get_virtual_uid(struct mailbox *box, const char *backend_mailbox,
