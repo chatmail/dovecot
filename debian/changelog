@@ -1,12 +1,15 @@
-dovecot (1:2.0.11-2~1.gbp8370be) UNRELEASED; urgency=low
+dovecot (1:2.0.12-1) unstable; urgency=low
 
-  ** SNAPSHOT build @8370be4ec34106b370b165939afc7c54851c5611 **
+  [ Jaldhar H. Vyas ]
+  * [66cbb94] New upstream major release.  Imported Upstream version 2.0.12
 
+  [ Marco Nenciarini ]
   * [5c6b334] Updated watch file
   * [0ba683e] Updated init script to new configuration scheme. (Closes: #593527)
   * [8370be4] Fix upgrading from rename-it.nl packages
+  * [ae804e3] Update changelog
 
- -- Marco Nenciarini <mnencia@debian.org>  Sun, 27 Mar 2011 22:53:42 +0200
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 25 Apr 2011 16:07:06 -0400
 
 dovecot (1:2.0.11-1) experimental; urgency=low
 
