@@ -2,6 +2,7 @@ dovecot (1:2.0.12-1) unstable; urgency=low
 
   [ Jaldhar H. Vyas ]
   * [66cbb94] New upstream major release.  Imported Upstream version 2.0.12
+  * [a48c7fd] Updated standards version
 
   [ Marco Nenciarini ]
   * [5c6b334] Updated watch file
@@ -9,7 +10,7 @@ dovecot (1:2.0.12-1) unstable; urgency=low
   * [8370be4] Fix upgrading from rename-it.nl packages
   * [ae804e3] Update changelog
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 25 Apr 2011 16:07:06 -0400
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 25 Apr 2011 17:03:26 -0400
 
 dovecot (1:2.0.11-1) experimental; urgency=low
 
