@@ -21,7 +21,10 @@ The sieve plugin recognizes the following configuration options in the 'plugin'
 section of the config file (default values are shown if applicable):
 
 sieve = ~/.dovecot.sieve :
-  The path to the user's main active script.
+  The path to the user's main active Sieve script. When <ManageSieve>
+  [Pigeonhole.ManageSieve.txt] is used, this is a symbolic link pointing to the
+  active script in the 'sieve_dir' directory. Avoid placing the active Sieve
+  script inside the 'sieve_dir' directory.
 
 sieve_global_path :
   A path to a global sieve script file, which gets executed ONLY if user's
@@ -39,10 +42,12 @@ sieve_global_dir = :
   include extension expects a file called 'name.sieve' to exist in the
   'sieve_global_dir' directory for the following example:
 
----%<-------------------------------------------------------------------------
-require "include";
-include :global "name";
----%<-------------------------------------------------------------------------
+:
+  ---%<-----------------------------------------------------------------------
+  require "include";
+  include :global "name";
+  ---%<-----------------------------------------------------------------------
+
 sieve_dir = ~/:
   Directory for :personal include scripts for the include extension
   [http://tools.ietf.org/html/draft-ietf-sieve-include-05]. The Sieve
@@ -50,21 +55,27 @@ sieve_dir = ~/:
   include extension expects a file called 'name.sieve' to exist in the
   'sieve_dir' directory for:
 
----%<-------------------------------------------------------------------------
-require "include";
-include :personal "name";
----%<-------------------------------------------------------------------------
+:
+  ---%<-----------------------------------------------------------------------
+  require "include";
+  include :personal "name";
+  ---%<-----------------------------------------------------------------------
+
+:
+  When using <ManageSieve> [Pigeonhole.ManageSieve.txt], this is also the
+  directory where scripts are uploaded.
 
 sieve_extensions = :
   Which Sieve language extensions are available to users. By default, all
-  supported extensions are available, except for deprecated extensions or those
-  that are still under development. Some system administrators may want to
-  disable certain Sieve extensions or enable those that are not available by
-  default. All supported extensions are listed <here> [Pigeonhole.Sieve.txt].
-  Normally, all enabled extensions must be listed for this setting, but
-  starting with Sieve version 0.1.7, this setting can use '+' and '-' to
-  specify differences relative to the default. For example 'sieve_extensions =
-  +imapflags' will enable the deprecated imapflags extension
+  supported extensions are available, except for deprecated extensions,
+  extensions that require explicit configuration or those that are still under
+  development. Some system administrators may want to disable certain Sieve
+  extensions or enable those that are not available by default. All supported
+  extensions are listed <here> [Pigeonhole.Sieve.txt]. Normally, all enabled
+  extensions must be listed for this setting, but starting with Sieve version
+  0.1.7, this setting can use '+' and '-' to specify differences relative to
+  the default. For example 'sieve_extensions = +imapflags' will enable the
+  deprecated imapflags extension
   [http://tools.ietf.org/html/draft-melnikov-sieve-imapflags-03] in addition to
   all extensions enabled by default.
 
@@ -104,6 +115,16 @@ plugin {
    sieve_global_dir = /var/lib/dovecot/sieve/global/
 }
 ---%<-------------------------------------------------------------------------
+
+Extension-specific Configuration
+--------------------------------
+
+The following Sieve language extensions have specific configuration
+options/needs:
+
+ * <vacation and vacation-seconds> [Pigeonhole.Sieve.Extensions.Vacation.txt]
+ * <spamtest and virustest> [Pigeonhole.Sieve.Extensions.SpamtestVirustest.txt]
+   (configuration required)
 
 Per-user Sieve script location
 ------------------------------
@@ -264,4 +285,4 @@ From Dovecot Sieve v0.1.x (Dovecot v1.2)
    compatibility, it is recommended to update the setting to the new name,
    since the <LMTP.txt> service also uses the 'recipient_delimiter' setting.
 
-(This file was created from the wiki on 2011-03-04 04:52)
+(This file was created from the wiki on 2011-05-11 04:42)

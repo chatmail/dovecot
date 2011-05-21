@@ -60,11 +60,11 @@ there are no other passdbs or userdbs):
 
 ---%<-------------------------------------------------------------------------
 passdb {
-  args = scheme=CRYPT username_format=%u /etc/dovecot/passwd
+  args = scheme=CRYPT username_format=%u /etc/dovecot/users
   driver = passwd-file
 }
 userdb {
-  args = username_format=%u /etc/dovecot/passwd
+  args = username_format=%u /etc/dovecot/users
   driver = passwd-file
 }
 ---%<-------------------------------------------------------------------------
@@ -133,4 +133,4 @@ mail_privileged_group = mail
 Note: Specifying the privileged user must be done as shown. Simply adding
 'dovecot' user to the 'mail' group does /*not*/ grant write permission.
 
-(This file was created from the wiki on 2011-03-04 04:52)
+(This file was created from the wiki on 2011-05-11 04:42)

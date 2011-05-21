@@ -74,4 +74,12 @@ to issue passdb lookups:
 lmtp_proxy = yes
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2011-03-04 04:52)
+Plugins
+-------
+
+ * Most of the <Dovecot plugins> [Plugins.txt] work with LMTP.
+ * Virtual quota can be enforced using <Quota plugin> [Quota.txt].
+ * Sieve language support can be added with the <Pigeonhole Sieve plugin>
+   [Pigeonhole.Sieve.txt].
+
+(This file was created from the wiki on 2011-05-11 04:42)

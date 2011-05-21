@@ -31,6 +31,10 @@ with '--convert --recursive' parameters. Make sure the conversion worked by
 checking that 'dovecot-uidlist' files were created to all maildirs (including
 to subfolders).
 
+The '--recursive' option goes through only one level down in directory
+hierarchies. This means that if you have some kind of a directory hashing
+scheme (or even domain/username/), it won't convert all of the files.
+
 You can also convert each user as they log in for the first time, using
 <PostLoginScripting.txt> with a script something like:
 
@@ -75,4 +79,4 @@ Manual conversion
  * Courier's message keywords implementation isn't Dovecot compatible. There
    doesn't exist a simple way to convert the keywords manually.
 
-(This file was created from the wiki on 2011-03-04 04:52)
+(This file was created from the wiki on 2011-05-11 04:42)

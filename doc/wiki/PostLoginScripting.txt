@@ -34,10 +34,11 @@ parameters to 'script-login', for example:
 ---%<-------------------------------------------------------------------------
 
 Remember that the post-login script runs with the privileges of the "user"
-setting given to the service. If you need the script to access user's mail
-files, change it to whatever user owns the mails (e.g. vmail). If you're using
-multiple UNIX UIDs (e.g. system users), you could start the process as root and
-then do "su $USER" to drop to user's privileges.
+setting given to the service (root by default). If you need the script to
+access user's mail files, change it to whatever user owns the mails (e.g.
+vmail). If you're using multiple UNIX UIDs (e.g. system users), use
+'script-login -d' to drop to the UID/GID specified by the userdb lookup
+(ignoring user/group/chroot service settings).
 
 Running environment
 -------------------
@@ -145,4 +146,4 @@ You can also use
  * http://www.linux.org.py/wiki/howto/dovecot_connect_acl
  * TCP wrappers can be used with 'login_access_sockets = tcpwrap'
 
-(This file was created from the wiki on 2011-03-04 04:52)
+(This file was created from the wiki on 2011-05-11 04:42)

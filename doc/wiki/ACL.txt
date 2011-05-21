@@ -128,9 +128,9 @@ Where *identifier* is one of:
  * authenticated
  * anyone (or anonymous, which is alias for anyone)
 
-The ACLS are processed in the order given above, so for example if you have
-given read-access to a group, you can still remove that from specific users
-inside the group.
+The ACLS are processed in the precedence given above, so for example if you
+have given read-access to a group, you can still remove that from specific
+users inside the group.
 
 Group-override identifier allows you to override users' ACLs. Probably the most
 useful reason to do this is to temporarily disable access for some users. For
@@ -196,4 +196,4 @@ List cache
 you manually add/edit 'dovecot-acl' files, you may need to delete the
 'dovecot-acl-list' to get the mailboxes visible.
 
-(This file was created from the wiki on 2011-03-04 04:52)
+(This file was created from the wiki on 2011-05-11 04:42)

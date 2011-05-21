@@ -70,6 +70,7 @@ wikifiles = ACL.txt \
 	Dict.txt \
 	Director.txt \
 	DomainLost.txt \
+	Errors.ChgrpNoPerm.txt \
 	FindMailLocation.txt \
 	FinishBasicConfiguration.txt \
 	HowTo.EximAndDovecotSASL.txt \
@@ -145,6 +146,9 @@ wikifiles = ACL.txt \
 	Pigeonhole.ManageSieve.txt \
 	Pigeonhole.Sieve.Configuration.txt \
 	Pigeonhole.Sieve.Examples.txt \
+	Pigeonhole.Sieve.Extensions.SpamtestVirustest.txt \
+	Pigeonhole.Sieve.Extensions.txt \
+	Pigeonhole.Sieve.Extensions.Vacation.txt \
 	Pigeonhole.Sieve.Plugins.Extdata.txt \
 	Pigeonhole.Sieve.Plugins.txt \
 	Pigeonhole.Sieve.txt \

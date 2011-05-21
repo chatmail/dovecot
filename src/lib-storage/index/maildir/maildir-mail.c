@@ -471,7 +471,7 @@ maildir_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 {
 	struct index_mail *mail = (struct index_mail *)_mail;
 	struct maildir_mailbox *mbox = (struct maildir_mailbox *)_mail->box;
-	const char *path, *fname = NULL, *end, *guid, *uidl;
+	const char *path, *fname = NULL, *end, *guid, *uidl, *order;
 
 	switch (field) {
 	case MAIL_FETCH_GUID:
@@ -485,8 +485,17 @@ maildir_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 		guid = maildir_uidlist_lookup_ext(mbox->uidlist, _mail->uid,
 						  MAILDIR_UIDLIST_REC_EXT_GUID);
 		if (guid != NULL) {
-			*value_r = p_strdup(mail->data_pool, guid);
-			return 0;
+			if (*guid != '\0') {
+				*value_r = p_strdup(mail->data_pool, guid);
+				return 0;
+			}
+
+			mail_storage_set_critical(_mail->box->storage,
+				"Maildir %s: Corrupted dovecot-uidlist: "
+				"UID %u had empty GUID, clearing it",
+				_mail->box->path, _mail->uid);
+			maildir_uidlist_set_ext(mbox->uidlist, _mail->uid,
+				MAILDIR_UIDLIST_REC_EXT_GUID, NULL);
 		}
 
 		/* default to base filename: */
@@ -525,6 +534,15 @@ maildir_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 					MAIL_FETCH_UIDL_FILE_NAME, value_r);
 		} else {
 			*value_r = p_strdup(mail->data_pool, uidl);
+		}
+		return 0;
+	case MAIL_FETCH_POP3_ORDER:
+		order = maildir_uidlist_lookup_ext(mbox->uidlist, _mail->uid,
+					MAILDIR_UIDLIST_REC_EXT_POP3_ORDER);
+		if (order == NULL) {
+			*value_r = "";
+		} else {
+			*value_r = p_strdup(mail->data_pool, order);
 		}
 		return 0;
 	default:
@@ -638,6 +656,7 @@ struct mail_vfuncs maildir_mail_vfuncs = {
 	index_mail_update_modseq,
 	maildir_update_pop3_uidl,
 	index_mail_expunge,
+	index_mail_parse,
 	maildir_mail_set_cache_corrupted,
 	index_mail_opened
 };

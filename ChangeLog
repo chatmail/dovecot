@@ -1,8 +1,343 @@
+2011-05-11  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset aa8dfa085a99
+	[72c2784fcbc9] [tip]
+
+	* .hgtags:
+	Added tag 2.0.13 for changeset aa8dfa085a99
+	[5a9adcae1a0e]
+
+	* NEWS, configure.in:
+	Released v2.0.13.
+	[aa8dfa085a99] [2.0.13]
+
+	* .hgignore, doc/man/Makefile.am, doc/man/doveadm-index.1.in,
+	doc/man/doveadm.1.in:
+	man: Added doveadm index.
+	[822bd4936d46]
+
+	* doc/man/doveadm-director.1.in:
+	man: Added doveadm director dump.
+	[a410f68c5fba]
+
+	* src/lib/lib-signals.c:
+	Increased highest signal number limit. HP-UX can use at least 44.
+	[a32debbe3496]
+
+	* src/lib/compat.h:
+	Compile fix for HP-UX
+	[39389620ace4]
+
+	* doc/example-config/conf.d/10-auth.conf:
+	example-config: Updated auth_krb5_keytab comment.
+	[b41ff254e1d6]
+
+	* src/config/old-set-parser.c:
+	config: Updated obsolete protocol warning messages.
+	[7f88557102c3]
+
+	* src/director/user-directory.c:
+	director: Avoid potential problems by making sure users list is
+	always sorted by timestamp.
+	[dab7043e8263]
+
+	* doc/man/doveconf.1.in:
+	man: Updated doveconf.
+	[a6db801253c6]
+
+	* src/plugins/fts/fts-storage.c:
+	fts: Added assert to make sure all header data is valid UTF-8.
+	[5e5daccf1de3]
+
+	* src/lib-mail/message-decoder.c, src/lib-mail/message-header-
+	decode.c:
+	message [header] decoder: Output only valid UTF-8 data.
+	[c392158f374d]
+
+	* src/lib-mail/message-header-parser.c:
+	message header parser: Fixed handling NUL characters in header
+	names. line->name_len was too large and line->middle pointer may
+	have pointed past allocated memory. These may have caused
+	crashes/corruption (fts, mbox at least).
+	[cef76cf2cec9]
+
+	* src/lda/main.c:
+	lda: Log destination address and its source with mail_debug=yes
+	[8f605efb15ce]
+
+	* doc/example-config/conf.d/10-auth.conf:
+	example-config: Updated auth_gssapi_hostname comment.
+	[370bf3d2d54f]
+
+2011-05-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/zlib/istream-bzlib.c, src/plugins/zlib/istream-zlib.c:
+	zlib: Don't unnecessarily reset istream caches.
+	[66ec075a49d3]
+
+	* src/plugins/zlib/istream-bzlib.c, src/plugins/zlib/istream-zlib.c:
+	istream-[b]zlib: stat(exact=FALSE) should always return the same
+	value if file hasn't changed.
+	[15a0687ec9d0]
+
+	* src/doveadm/doveadm-mail.c:
+	doveadm mailbox status: Don't assert-crash at exit if syncing a
+	mailbox fails.
+	[b74dfa49692b]
+
+	* src/plugins/acl/acl-mailbox-list.c:
+	acl: Don't waste time doing ACL checks for IMAP LSUB command.
+	[a7f1980d250c]
+
+	* src/login-common/login-settings.c, src/login-common/login-
+	settings.h:
+	Removed ssl_parameters_file setting. It wasn't used by anything.
+	[40a5f8f07bd2]
+
+2011-05-09  Timo Sirainen  <tss@iki.fi>
+
+	* src/util/script-login.c:
+	script-login: When -d isn't given, drop privileges as specified by
+	the service settings.
+	[25a452227a09]
+
+	* src/util/script-login.c:
+	script-login: Reverted last change.
+	[56a1b3082b4b]
+
+	* src/util/script-login.c:
+	script-login: Changed default behavior to be to drop privileges.
+	Also since the default is to run as root, allow that. There is now
+	"-n" parameter to avoid dropping privileges.
+	[1bbb45a97cc1]
+
+	* src/plugins/lazy-expunge/lazy-expunge-plugin.h:
+	Minor typofix.
+	[4e99454e2c7c]
+
+	* src/lib-settings/settings-parser.c:
+	lib-settings: Crashfix for broken settings under strlist.
+	[74248914cf40]
+
+	* src/auth/db-ldap.c:
+	auth: Added assert.
+	[3ada82147977]
+
+	* src/master/master-settings.c:
+	master: Warn if service's vsz_limit < 1 MB It's unlikely anyone
+	wants it to be smaller, and small values give random errors/crashes.
+	[c3f4201f9818]
+
+	* src/imap/cmd-delete.c, src/imap/cmd-rename.c:
+	imap: RENAME and DELETE wasn't replying with NONEXISTENT resp code.
+	[6790433a1e77]
+
+	* src/lib-storage/list/mailbox-list-none.c:
+	lib-storage: Fixed LIST/LSUB with LAYOUT=none. It shouldn't have
+	listed INBOX if it didn't match the given patterns.
+	[78286b1a0a16]
+
+	* src/lmtp/commands.c:
+	lmtp: With lmtp_save_to_detail_mailbox=yes, save mail to <inbox ns
+	prefix>detail. The previous behavior required using prefix=""
+	namespace to work.
+	[622d42376fe0]
+
+2011-05-05  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/Makefile.am, src/doveadm/doveadm-mail-index.c,
+	src/doveadm/doveadm-mail.c, src/doveadm/doveadm-mail.h:
+	doveadm: Added "index" command to add unindexed messages into
+	index/cache/fts. The caching adds only the fields that were
+	previously added to the mailbox's caching decisions, so it won't do
+	anything useful for mailboxes that user's client hasn't accessed
+	yet.
+	[840e27a52e51]
+
+	* src/lib-storage/index/cydir/cydir-mail.c, src/lib-storage/index
+	/dbox-multi/mdbox-mail.c, src/lib-storage/index/dbox-single/sdbox-
+	mail.c, src/lib-storage/index/index-mail.c, src/lib-storage/index
+	/index-mail.h, src/lib-storage/index/maildir/maildir-mail.c, src
+	/lib-storage/index/mbox/mbox-mail.c, src/lib-storage/index/raw/raw-
+	mail.c, src/lib-storage/mail-storage-private.h, src/lib-storage
+	/mail-storage.h, src/lib-storage/mail.c, src/lib-storage/test-
+	mail.c, src/plugins/virtual/virtual-mail.c:
+	lib-storage: Added mail_parse().
+	[e9918fd289f3]
+
+	* src/lib-storage/index/index-transaction.c, src/lib-storage/mail-
+	storage-private.h, src/lib-storage/mail-storage.h, src/lib-
+	storage/mail.c:
+	lib-storage: Added mail_is_cached()
+	[55ff92050bd7]
+
+	* src/lib-index/mail-cache-lookup.c, src/lib-index/mail-cache.h:
+	lib-index: Added mail_cache_field_exists_any()
+	[45f6d523b1a1]
+
+2011-05-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-auth.c:
+	doveadm user: Added -f parameter to show only the specified extra
+	field's value.
+	[23b6234ce0ae]
+
+	* src/doveadm/doveadm-auth.c:
+	doveadm cleanup: Don't try to keep auth/user comand handlers in same
+	function.
+	[d0f54521bb3b]
+
+	* src/pop3/pop3-client.c, src/pop3/pop3-client.h,
+	src/pop3/pop3-commands.c:
+	pop3: Added support for showing messages in "pop3 order".
+	[c9b7e829c6a9]
+
+	* src/lib-storage/index/index-sort.c, src/lib-storage/mail-storage.h:
+	lib-storage: Added MAIL_SORT_POP3_ORDER
+	[fac2d4fe86b1]
+
+	* src/lib-storage/index/index-mail.c, src/lib-storage/index/maildir
+	/maildir-mail.c, src/lib-storage/index/maildir/maildir-uidlist.h,
+	src/lib-storage/mail-storage.h:
+	lib-storage: Added MAIL_FETCH_POP3_ORDER special field and
+	implemented for Maildir. The idea is that this specifies the order
+	of messages when accessing via POP3. This is useful when migrating
+	both POP3 and IMAP users from servers where their message ordering
+	differes and they still want to be preserved.
+	[bf0a80c91536]
+
+	* src/pop3/pop3-client.h, src/pop3/pop3-commands.c:
+	pop3: Small code cleanup.
+	[869795a295b5]
+
+2011-05-03  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/doveadm-connection.c, src/doveadm/doveadm-director.c:
+	doveadm: Added "director dump" command. It outputs doveadm director
+	commands to add/remove the current host configuration, so if all
+	directors are stopped, their state can be easily restored by running
+	the commands.
+	[c838d40bd38e]
+
+	* src/lib-index/mail-transaction-log-file.c:
+	lib-index: Try to avoid duplicate "duplicate transaction log
+	sequence" errors.
+	[036260ae0261]
+
+	* src/lib-storage/list/mailbox-list-subscriptions.c:
+	lib-storage: Remove invalid subscription file entries instead of
+	only ignoring them.
+	[490a81fe688f]
+
+2011-04-30  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/dbox-single/sdbox-storage.c:
+	sdbox: In-memory mailbox GUID differed from on-index GUID after
+	mailbox_create().
+	[663528c5c799]
+
+2011-04-29  Timo Sirainen  <tss@iki.fi>
+
+	* src/master/service-listen.c:
+	master: Increased max. listen() backlog 128 -> 511 (by copying
+	Apache)
+	[bf8c2edfbc3e]
+
+	* doc/example-config/conf.d/10-logging.conf:
+	example-config: Removed plugin/mail_log_group_events since it no
+	longer exists.
+	[46aed30670bb]
+
+2011-04-28  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/dbox-common/dbox-file.c:
+	dbox: If file can't be opened read-write, fallback to read-only.
+	[de7c0d84c560]
+
+	* src/lib-index/mail-transaction-log-file.c:
+	lib-index: If .log file can't be opened read-write, fallback to
+	read-only indexes.
+	[5429f41aa6c1]
+
+	* src/lib-settings/settings-parser.c:
+	Compiler warning fix.
+	[dfd7df8cd214]
+
+	* src/lib-storage/index/dbox-multi/mdbox-purge.c:
+	mdbox purge: Fixed warning about corrupted extrefs.
+	[bb0bd8cb6f68]
+
+	* src/lib-storage/index/mbox/mbox-mail.c:
+	mbox: Looking up GUID/MD5(header) more than once was broken.
+	[36025cbfec3b]
+
+	* src/doveadm/doveadm-mail-altmove.c, src/lib-storage/index/index-
+	sync-changes.c:
+	Compiler warning fixes about enums.
+	[c2f81056d38f]
+
+2011-04-27  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/ipwd.c:
+	i_getgr*(): OpenBSD workaround.
+	[127b4e08d3c0]
+
+2011-04-20  Timo Sirainen  <tss@iki.fi>
+
+	* src/config/config-parser.c, src/config/doveconf.c:
+	config: Avoid growing data stack / memory pools.
+	[b8fa3171f6d7]
+
+	* src/config/config-parser.c:
+	doveconf: Fixed a broken "subsection has ssl=yes" warning.
+	[7d60cd847c70]
+
+	* src/lib-lda/mail-deliver.c:
+	lib-lda: If deliver_log_format setting is empty, don't log anything.
+	Patch by Joseph Tam.
+	[0e406e7cb609]
+
+	* src/lib-storage/index/maildir/maildir-uidlist.c:
+	maildir: Added asserts to make sure invalid extension records aren't
+	written to uidlist.
+	[fa2e92526716]
+
+	* src/lib-storage/index/maildir/maildir-uidlist.c, src/lib-
+	storage/index/maildir/maildir-uidlist.h:
+	maildir: Remove invalid extension records from dovecot-uidlist. For
+	now we'll assume that if the key is outside A..Z it's invalid. Since
+	only 4 keys are used currently, there is still a lot of letters
+	available for future use.
+	[4fe53879ceb1]
+
+	* src/lib-storage/index/maildir/maildir-mail.c:
+	maildir: If uidlist has an empty GUID entry, log an error and remove
+	it. This fixes an assert-crash in dsync.
+	[d3d635ee3016]
+
+2011-04-13  Timo Sirainen  <tss@iki.fi>
+
+	* src/config/doveconf.c:
+	doveconf: Added -S parameter to dump a simplified machine readable
+	config. This should make it slightly easier for external
+	programs/scripts to call doveconf and parse its output.
+	[811a6d173bb2]
+
+	* src/config/config-parser.c:
+	config: Abort local/remote block DNS lookups after 30s and warn
+	after 5s.
+	[cf9c2252a3ea]
+
+	* src/lib/ipwd.c:
+	Compiling fix for Solaris.
+	[b60d73301c08]
+
 2011-04-12  Timo Sirainen  <tss@iki.fi>
 
 	* .hgsigs:
 	Added signature for changeset 606faab2b896
-	[fef40f957c11] [tip]
+	[fef40f957c11]
 
 	* .hgtags:
 	Added tag 2.0.12 for changeset 606faab2b896

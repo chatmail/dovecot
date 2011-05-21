@@ -60,7 +60,8 @@ depending on used version of maildrop is available at the following locations:
 | 2.3.0, 2.4.0,| http://www.max.rs/ozone/maildrop-2.3.0-dovecotauth.patch.txt |
 | 2.4.1, 2.4.2,|                                                              |
 | 2.4.3, 2.5.0,|                                                              |
-| 2.5.1, 2.5.2 |                                                              |
+| 2.5.1, 2.5.2,|                                                              |
+| 2.5.3        |                                                              |
 +--------------+--------------------------------------------------------------+
 
 When this patch is applied, maildrop will be extended with another command line
@@ -69,4 +70,4 @@ socket that will be used when performing user lookups. There's a readme file
 (README.dovecotauth) together with patch with a little bit more information
 regarding the use of this extension.
 
-(This file was created from the wiki on 2011-03-04 04:53)
+(This file was created from the wiki on 2011-05-11 04:42)
