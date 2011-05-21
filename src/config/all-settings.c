@@ -828,7 +828,6 @@ struct login_settings {
 	const char *ssl_cert;
 	const char *ssl_key;
 	const char *ssl_key_password;
-	const char *ssl_parameters_file;
 	const char *ssl_cipher_list;
 	const char *ssl_cert_username_field;
 	bool ssl_verify_client_cert;
@@ -1518,7 +1517,7 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 				service->name);
 			return FALSE;
 		}
-		if (service->vsz_limit < 1024 && service->vsz_limit != 0) {
+		if (service->vsz_limit < 1024*1024 && service->vsz_limit != 0) {
 			*error_r = t_strdup_printf("service(%s): "
 				"vsz_limit is too low", service->name);
 			return FALSE;
@@ -1851,7 +1850,6 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, ssl_cert),
 	DEF(SET_STR, ssl_key),
 	DEF(SET_STR, ssl_key_password),
-	DEF(SET_STR, ssl_parameters_file),
 	DEF(SET_STR, ssl_cipher_list),
 	DEF(SET_STR, ssl_cert_username_field),
 	DEF(SET_BOOL, ssl_verify_client_cert),
@@ -1880,7 +1878,6 @@ static const struct login_settings login_default_settings = {
 	.ssl_cert = "",
 	.ssl_key = "",
 	.ssl_key_password = "",
-	.ssl_parameters_file = "ssl-parameters.dat",
 	.ssl_cipher_list = "ALL:!LOW:!SSLv2:!EXP:!aNULL",
 	.ssl_cert_username_field = "commonName",
 	.ssl_verify_client_cert = FALSE,

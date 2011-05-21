@@ -129,7 +129,8 @@ all disabled, but they may be useful for debugging.
  * 'auth_debug=yes' enables all authentication debug logging (also enables
    'auth_verbose'). Passwords are logged as '<hidden>'.
  * 'auth_debug_passwords=yes' does everything that 'auth_debug=yes' does, but
-   it also removes password hiding.
+   it also removes password hiding (but only if you are not using PAM, since
+   PAM errors aren't written to Dovecot's own logs).
  * 'mail_debug=yes' enables all kinds of mail related debug logging, such as
    showing where Dovecot is looking for mails.
  * 'verbose_ssl=yes' enables logging SSL errors and warnings. Even without this
@@ -143,4 +144,4 @@ all disabled, but they may be useful for debugging.
    That's enough to know if the password is same or different between login
    attempts.
 
-(This file was created from the wiki on 2011-03-04 04:52)
+(This file was created from the wiki on 2011-05-11 04:42)

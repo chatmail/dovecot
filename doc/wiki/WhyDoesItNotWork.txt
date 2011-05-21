@@ -4,6 +4,10 @@ Why doesn't Dovecot work?
  * *Dovecot always logs an error message* if anything goes wrong, so make sure
    you're looking at the correct log files. Debug messages may be written to a
    different log file than error messages. See <Logging.txt>.
+ * Make sure you're modifying the correct config file! Ubuntu creates two of
+   them. Other distributions may also have older config files lying around. For
+   example add "garbage=blah" to the config file and verify that Dovecot now
+   fails to start up.
  * Try logging in manually by sending IMAP commands. If you're trying with an
    IMAP client you can't be sure if the problem is with the client's
    configuration or Dovecot's configuration. Many IMAP clients handle all
@@ -49,4 +53,4 @@ It's not finding my emails
 'auth_debug=yes' may be helpful in debugging. See <MailLocation.txt> for how to
 configure where the mails are looked up from.
 
-(This file was created from the wiki on 2011-03-04 04:52)
+(This file was created from the wiki on 2011-05-11 04:42)

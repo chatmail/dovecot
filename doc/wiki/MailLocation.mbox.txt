@@ -70,6 +70,25 @@ NOTE: With <LDA.txt> the 'mail_privileged_group' setting unfortunately doesn't
 work, so you'll have to use the sticky bit, disable dotlocking completely or
 use LMTP server instead.
 
+/var/mail/* permissions
+-----------------------
+
+In some systems the '/var/mail/$USER' files have 0660 mode permissions. This
+causes Dovecot to try to preserve the file's group, and if it doesn't have
+permissions to do so, it'll fail with an error:
+
+---%<-------------------------------------------------------------------------
+imap(user): Error: chown(/home/user/mail/.imap/INBOX, -1, 12(mail)) failed:
+Operation not permitted (egid=1000(user), group based on /var/mail/user)
+---%<-------------------------------------------------------------------------
+
+There is rarely any real need for the files to have 0660 mode, so the best
+solution for this problem is to just change the mode to 0600:
+
+---%<-------------------------------------------------------------------------
+chmod 0600 /var/mail/*
+---%<-------------------------------------------------------------------------
+
 Optimizations
 -------------
 
@@ -171,4 +190,4 @@ that value, in a directory with a name equivalent to the mailbox name.
 There are, however, some further considerations when doing this; see
 <MboxChildFolders.txt> for an example.
 
-(This file was created from the wiki on 2011-03-04 04:52)
+(This file was created from the wiki on 2011-05-11 04:42)

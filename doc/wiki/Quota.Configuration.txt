@@ -1,6 +1,33 @@
 Quota Configuration
 ===================
 
+Contents
+
+
+ 1. Quota Configuration
+
+     1. Quota rules
+
+         1. Limit configuration
+
+     2. Per-user quota
+
+         1. LDAP
+
+         2. MySQL
+
+         3. PostgreSQL, SQLite
+
+         4. passwd-file
+
+         5. passwd
+
+     3. Quota for public namespaces
+
+     4. Custom Quota Exceeded Message
+
+     5. Quota warnings
+
 The configuration is split into multiple settings:
 
 First you have the quota root backend configuration. Quota root is a concept
@@ -128,26 +155,61 @@ plugin {
 
 Next override the default 1GB quota for users:
 
----%<-------------------------------------------------------------------------
-# LDAP:
-user_attrs = homeDirectory=home,quotaBytes=quota_rule=*:bytes=%$
+LDAP
+----
 
-# MySQL:
-user_query = select uid, gid, home, \
-  concat('*:bytes=', quota_bytes) as quota_rule \
-  from users where userid = '%u'
+Quota limit is in quotaBytes field:
+
+---%<-------------------------------------------------------------------------
+user_attrs = homeDirectory=home, quotaBytes=quota_rule=*:bytes=%$
+---%<-------------------------------------------------------------------------
+
+MySQL
+-----
+
+---%<-------------------------------------------------------------------------
+user_query = SELECT uid, gid, home, \
+  concat('*:bytes=', quota_bytes) AS quota_rule \
+  FROM users WHERE userid = '%u'
 
 # MySQL with userdb prefetch: Remember to prefix quota_rule with userdb_
 # (just like all other userdb extra fields):
-password_query = select userid as user, password, \
-  uid as userdb_uid, gid as userdb_gid, \
-  concat('*:bytes=', quota_bytes) as userdb_quota_rule \
-  from users where userid = '%u'
+password_query = SELECT userid AS user, password, \
+  uid AS userdb_uid, gid AS userdb_gid, \
+  concat('*:bytes=', quota_bytes) AS userdb_quota_rule \
+  FROM users WHERE userid = '%u'
+---%<-------------------------------------------------------------------------
 
-# Example passwd-file entries:
+PostgreSQL, SQLite
+------------------
+
+---%<-------------------------------------------------------------------------
+user_query = SELECT uid, gid, home, \
+  '*:bytes=' || quota_bytes AS quota_rule \
+  FROM users WHERE userid = '%u'
+---%<-------------------------------------------------------------------------
+
+passwd-file
+-----------
+
+Example passwd-file entries:
+
+---%<-------------------------------------------------------------------------
 user:{plain}pass:1000:1000::/home/user::userdb_quota_rule=*:bytes=100M
 user2:{plain}pass2:1001:1001::/home/user2::userdb_quota_rule=*:bytes=200M
+user3:{plain}pass3:1002:1002::/home/user3::userdb_mail=maildir:~/Maildir
+userdb_quota_rule=*:bytes=300M
 ---%<-------------------------------------------------------------------------
+
+passwd
+------
+
+The <passwd> [AuthDatabase.Passwd.txt] userdb doesn't support extra fields.
+That's why you can't directly set users' quota limits to passwd file. One
+possibility would be to write a script that reads quota limits from another
+file, merges them with passwd file and produces another passwd-file, which you
+could then use with Dovecot's <userdb passwd-file>
+[AuthDatabase.PasswdFile.txt].
 
 Quota for public namespaces
 ---------------------------
@@ -249,27 +311,4 @@ just insert ":noenforcing" to proper location in it. For example with dict
 quota, you can use something like:'-o "plugin/quota=dict:User
 quota::noenforcing:proxy::quota"'
 
-Per-user quota limit configuration examples
--------------------------------------------
-
-SQL
----
-
----%<-------------------------------------------------------------------------
-# MySQL, quota in bytes:
-user_query = SELECT home, uid, gid, concat('*:bytes=', quota_bytes) AS
-quota_rule FROM users WHERE userid = '%u'
-# PostgreSQL, SQLite, quota in bytes:
-user_query = SELECT home, uid, gid, '*:bytes=' || quota_bytes AS quota_rule
-FROM users WHERE userid = '%u'
----%<-------------------------------------------------------------------------
-
-LDAP
-----
-
----%<-------------------------------------------------------------------------
-user_attrs = homeDirectory=home, uidNumber=uid, gidNumber=gid,
-quotaBytes=quota_rule=*:bytes=%$
----%<-------------------------------------------------------------------------
-
-(This file was created from the wiki on 2011-03-04 04:52)
+(This file was created from the wiki on 2011-05-11 04:42)
