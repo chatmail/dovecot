@@ -1,3 +1,11 @@
+dovecot (1:1.2.15-5) stable-security; urgency=high
+
+  * [feae144] Fixed potential crashes and other problems when parsing
+    header names that contained NUL characters. (CVE-2011-1929)
+    (Closes: #627443)
+
+ -- Marco Nenciarini <mnencia@debian.org>  Sat, 21 May 2011 21:04:30 +0200
+
 dovecot (1:1.2.15-4) unstable; urgency=low
 
   * [49abe86] Fix upgrade from lenny by adding epoch to Replaces and
