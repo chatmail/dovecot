@@ -1,3 +1,9 @@
+dovecot (1:1.2.15-6) stable-security; urgency=high
+
+  * Rebuilt in a clean squeeze environment, no changes.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Sun, 22 May 2011 11:43:04 +0200
+
 dovecot (1:1.2.15-5) stable-security; urgency=high
 
   * [feae144] Fixed potential crashes and other problems when parsing
