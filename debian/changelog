@@ -1,3 +1,10 @@
+dovecot (1:1.2.15-7) stable-security; urgency=high
+
+  * [2ffd812] Lifted Build-Conflicts with ancient linux-kernel-headers
+    (Closes: #622384)
+
+ -- Marco Nenciarini <mnencia@debian.org>  Wed, 25 May 2011 10:08:30 +0200
+
 dovecot (1:1.2.15-6) stable-security; urgency=high
 
   * Rebuilt in a clean squeeze environment, no changes.
