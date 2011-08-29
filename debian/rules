@@ -12,6 +12,9 @@ PIGEONHOLE_DIR=pigeonhole
 DEB_HOST_GNU_TYPE   ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 
+dbgpkg = $(filter %-dbg, $(shell dh_listpackages -s))
+otherpkg = $(filter-out %-dbg, $(shell dh_listpackages -s))
+
 config-stamp: configure
 	dh_testdir
 	# Dovecot
@@ -175,7 +178,8 @@ binary-arch: build install
 	dh_shlibdeps -a
 	dh_gencontrol -a
 	dh_md5sums -a
-	dh_builddeb -a
+	dh_builddeb $(foreach pkg,$(dbgpkg),-p$(pkg)) -- -Zxz
+	dh_builddeb $(foreach pkg,$(otherpkg),-p$(pkg))
 
 binary: binary-indep binary-arch
 .PHONY: build clean binary-indep binary-arch binary install 
