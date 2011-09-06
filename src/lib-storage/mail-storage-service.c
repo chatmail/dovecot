@@ -107,14 +107,23 @@ static int set_line(struct mail_storage_service_ctx *ctx,
 {
 	struct setting_parser_context *set_parser = user->set_parser;
 	bool mail_debug;
-	const char *key;
+	const char *key, *orig_key, *append_value = NULL;
+	unsigned int len;
 	int ret;
 
 	mail_debug = mail_user_set_get_mail_debug(user->user_info,
 						  user->user_set);
 	if (strchr(line, '=') == NULL)
 		line = t_strconcat(line, "=yes", NULL);
-	key = t_strcut(line, '=');
+	orig_key = key = t_strcut(line, '=');
+
+	len = strlen(key);
+	if (len > 0 && key[len-1] == '+') {
+		/* key+=value */
+		append_value = line + len + 1;
+		key = t_strndup(key, len-1);
+		line++;
+	}
 
 	if (!settings_parse_is_valid_key(set_parser, key)) {
 		/* assume it's a plugin setting */
@@ -129,6 +138,22 @@ static int set_line(struct mail_storage_service_ctx *ctx,
 				key);
 		}
 		return 1;
+	}
+
+	if (append_value != NULL) {
+		const void *value;
+		enum setting_type type;
+
+		value = settings_parse_get_value(set_parser, key, &type);
+		if (type == SET_STR) {
+			const char *const *strp = value;
+
+			line = t_strdup_printf("%s=%s%s",
+					       key, *strp, append_value);
+		} else {
+			i_error("Ignoring %s userdb setting. "
+				"'+' can only be used for strings.", orig_key);
+		}
 	}
 
 	ret = settings_parse_line(set_parser, line);
@@ -196,7 +221,7 @@ user_reply_handle(struct mail_storage_service_ctx *ctx,
 	}
 
 	if (home != NULL)
-		set_keyval(ctx, user, "mail_home", reply->home);
+		set_keyval(ctx, user, "mail_home", home);
 
 	if (chroot != NULL) {
 		if (!validate_chroot(user->user_set, chroot)) {
@@ -382,13 +407,12 @@ service_drop_privileges(struct mail_storage_service_user *user,
 
 	rset.first_valid_gid = set->first_valid_gid;
 	rset.last_valid_gid = set->last_valid_gid;
-	/* we can't chroot if we want to switch between users. there's not
-	   much point either (from security point of view) */
-	rset.chroot_dir = *chroot == '\0' || keep_setuid_root ? NULL : chroot;
+	rset.chroot_dir = *chroot == '\0' ? NULL : chroot;
 	rset.system_groups_user = user->system_groups_user;
 
 	cur_chroot = restrict_access_get_current_chroot();
 	if (cur_chroot != NULL) {
+		/* we're already chrooted. make sure the chroots are equal. */
 		if (rset.chroot_dir == NULL) {
 			*error_r = "Process is already chrooted, "
 				"can't un-chroot for this user";
@@ -903,6 +927,7 @@ int mail_storage_service_next(struct mail_storage_service_ctx *ctx,
 		(user->flags & MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT) != 0;
 	bool temp_priv_drop =
 		(user->flags & MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP) != 0;
+	bool use_chroot;
 
 	/* variable strings are expanded in mail_user_init(),
 	   but we need the home and chroot sooner so do them separately here. */
@@ -918,12 +943,19 @@ int mail_storage_service_next(struct mail_storage_service_ctx *ctx,
 		return -2;
 	}
 
+	/* we can't chroot if we want to switch between users. there's
+	   not much point either (from security point of view). but if we're
+	   already chrooted, we'll just have to continue and hope that the
+	   current chroot is the same as the wanted chroot */
+	use_chroot = !temp_priv_drop ||
+		restrict_access_get_current_chroot() != NULL;
+
 	len = strlen(chroot);
 	if (len > 2 && strcmp(chroot + len - 2, "/.") == 0 &&
 	    strncmp(home, chroot, len - 2) == 0) {
 		/* mail_chroot = /chroot/. means that the home dir already
 		   contains the chroot dir. remove it from home. */
-		if (!temp_priv_drop) {
+		if (use_chroot) {
 			home += len - 2;
 			if (*home == '\0')
 				home = "/";
@@ -932,9 +964,9 @@ int mail_storage_service_next(struct mail_storage_service_ctx *ctx,
 			set_keyval(ctx, user, "mail_home", home);
 			set_keyval(ctx, user, "mail_chroot", chroot);
 		}
-	} else if (len > 0 && temp_priv_drop) {
-		/* we're dropping privileges only temporarily, so we can't
-		   chroot. fix home directory so we can access it. */
+	} else if (len > 0 && !use_chroot) {
+		/* we're not going to chroot. fix home directory so we can
+		   access it. */
 		if (*home == '\0' || strcmp(home, "/") == 0)
 			home = chroot;
 		else

@@ -36,8 +36,8 @@ important settings are:
  * 'hostname' is used in generated Message-IDs and in Reporting-UA: header in
    bounce mails
  * 'sendmail_path' is used to send mails. Note that the default is
-   '/usr/lib/sendmail', which doesn't necessarily work the same as
-   '/usr/sbin/sendmail'.
+   '/usr/sbin/sendmail', which doesn't necessarily work the same as
+   '/usr/lib/sendmail'.
  * 'auth_socket_path' specifies the UNIX socket to auth-userdb where LDA can
    lookup userdb information when '-d' parameter is used. See below how to
    configure Dovecot to configure the socket.
@@ -287,4 +287,4 @@ Plugins
  * Sieve language support can be added with the <Pigeonhole Sieve plugin>
    [Pigeonhole.Sieve.txt].
 
-(This file was created from the wiki on 2011-05-11 04:42)
+(This file was created from the wiki on 2011-08-29 04:42)

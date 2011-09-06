@@ -39,9 +39,8 @@ External:
    [http://sieve.info/] language for filtering upon message delivery
  * Fetchmail wakeup [http://github.com/marschap/fetchmail_wakeup]: Wakes
    fetchmail when Dovecot looks for new mail. This is a heavily extended and
-   updated version that is tested to work with Dovecot 1.1.x and 1.2.x. As
-   there are no incompatible changes in Dovecot 2.0 plugin code, it is expected
-   to work on Dovecot 2.x too.
+   updated version that is tested to work with Dovecot 1.1.x and 1.2.x. The
+   freshly released version 2.0.1 works with Dovecot 2.0.x.
  * Fetchmail wake [http://guichaz.free.fr/misc/]: Wakes fetchmail when Dovecot
    looks for new mail. This is the original version that only works with
    dovecot 1.0.x
@@ -57,4 +56,4 @@ Experimental Plugins:
 To enable / disable plugins per user you can make your userdb return
 'mail_plugins' extra field. See <UserDatabase.ExtraFields.txt> for examples.
 
-(This file was created from the wiki on 2011-05-11 04:42)
+(This file was created from the wiki on 2011-08-29 04:42)

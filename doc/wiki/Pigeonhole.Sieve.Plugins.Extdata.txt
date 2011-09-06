@@ -94,4 +94,4 @@ keep;
 where "priv/vacation_subject" & "priv/cacation_message" would be looked up in
 the Dovecot dict.
 
-(This file was created from the wiki on 2011-05-11 04:42)
+(This file was created from the wiki on 2011-08-29 04:42)

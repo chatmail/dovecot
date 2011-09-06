@@ -1,8 +1,514 @@
+2011-08-29  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset aa68f38c04f0
+	[e01c9f89b0b0] [tip]
+
+	* .hgtags:
+	Added tag 2.0.14 for changeset aa68f38c04f0
+	[d30a79f4b5a4]
+
+	* NEWS, TODO, configure.in:
+	Released v2.0.14.
+	[aa68f38c04f0] [2.0.14]
+
+	* src/doveadm/doveadm-mail-server.c:
+	doveadm: Proxying fix
+	[3b7ef442595d]
+
+	* src/doveadm/server-connection.c:
+	doveadm: Fixed authentication with remote doveadm server.
+	[c7dccec3eaa4]
+
+	* src/doveadm/doveadm-director.c:
+	doveadm: Added "director ring status" command.
+	[00f9dd706a90]
+
+	* src/director/doveadm-connection.c:
+	director: Updated DIRECTOR-LIST doveadm command.
+	[63680f6e21a2]
+
+	* src/doveadm/doveadm-mail-list-iter.c:
+	doveadm: Skip mailbox optimizations under OR search terms. This
+	fixes problem with e.g. "mailbox foo or seen".
+	[24516f31a75d]
+
+	* src/lib-index/mail-index-write.c:
+	lib-index: Error logging fix to previous commit.
+	[32eb50cc35d4]
+
+2011-08-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-index/mail-index-write.c:
+	lib-index: When creating dovecot.index.backup files, fdatasync()
+	them first. Otherwise if the dovecot.index file had been written to
+	recently, it could lose both the new and the old backup data.
+	[f08bf97278ac]
+
+	* src/lib-storage/index/dbox-single/sdbox-mail.c:
+	sdbox: Avoid assert-crashing if mail being saved suddenly became
+	corrupted.
+	[de0ea56932e5]
+
+	* src/lib-master/ipc-server.c:
+	lib-master: Make sure ipc server fd isn't tried to be accessed after
+	it's closed.
+	[eaeb7bcfb51e]
+
+	* src/util/rawlog.c:
+	rawlog: Use the lib-master API calls.
+	[d4effbfae49c]
+
+	* src/lib-storage/index/mbox/mbox-mail.c:
+	mbox: Avoid crashing when getting GUID or header-md5 in some
+	conditions. mbox file can be opened and locked (especially with
+	pop3_lock_session=yes) without actually creating a stream for it.
+	[030394c74f54]
+
+	* src/plugins/zlib/istream-zlib.c:
+	zlib: Fixed reading concatenated .gz files.
+	[35e4a547231c]
+
+	* src/login-common/client-common-auth.c:
+	login proxy: Fixed assert-crash on io_add() when client disconnects
+	at a bad time.
+	[39655869f2ee]
+
+	* src/lib-lda/lmtp-client.c:
+	lib-lda: Don't crash if remote disconnects during sending mail via
+	LMTP.
+	[2f988e370a41]
+
+2011-08-18  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/dbox-multi/mdbox-purge.c:
+	mdbox: Remove refcount=0 records from map index on the first purge
+	(not second).
+	[1449a2e2c1f5]
+
+2011-08-16  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: Log alt path when mail_debug=yes
+	[46bf11666cdd]
+
+	* src/lib-index/mail-index-sync-update.c:
+	lib-index: Optimized handling MAIL_TRANSACTION_EXPUNGE_GUID records
+	in large index.
+	[17d7aceda8ba]
+
+2011-08-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-index/mail-index.c:
+	mail_index_get_keywords() / status.keywords weren't actually
+	guaranteed to be NULL terminated This could have caused crashes or
+	garbage keywords be presented to clients in some situations.
+	[ba03935cc599]
+
+2011-08-02  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/ipwd.c:
+	i_getgr*(): OpenBSD workaround is now only used for <5.0. Patch by
+	Brad.
+	[d7f76c266657]
+
+2011-07-29  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/list/mailbox-list-fs.c:
+	lib-storage: renaming mailboxes under different parent was broken in
+	fs layout If alt storage was used with sdbox or if index or control
+	dirs were used, renaming "foo" to "bar/foo" would result "foo" not
+	being renamed for those directories.
+	[f42aac06a3df]
+
+	* src/lib-storage/index/index-storage.c, src/lib-storage/mail-
+	namespace.c:
+	lib-storage: Removed unnecessary NULL checks.
+	[94c6e1cd58f1]
+
+2011-07-28  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/index-search.c:
+	lib-storage: Fixed crashing on "NOT <nonexistent sequence>" search.
+	[0e64f0217feb]
+
+	* src/imap/imap-fetch-body.c:
+	imap: FETCH BODY[HEADER.FIELDS (..)] may have tried to fetch garbage
+	field names. Such situations were quite likely to cause a crash
+	though.
+	[a77d53d40ea3]
+
+2011-07-27  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/imap-quota/imap-quota-plugin.c:
+	imap-quota: Don't crash if invalid mailbox name is given to
+	GETQUOTAROOT.
+	[b383271890fe]
+
+2011-07-12  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-lda/mail-deliver.c, src/lib-lda/mail-deliver.h:
+	lib-lda: Do INBOX GUID deduplication based on mailbox GUID, not
+	username. This should be a bit more reliable.
+	[e6300c6a5814]
+
+	* src/lib-mail/mail-types.h:
+	lib-mail: Make a mail_guid_128_t typedef.
+	[aaffc1bf6c65]
+
+2011-06-30  Timo Sirainen  <tss@iki.fi>
+
+	* src/lmtp/client.c:
+	lmtp: Error message update
+	[537d4b6d9a7a]
+
+	* src/lib-lda/lmtp-client.c:
+	lmtp client: Do corking when sending message data.
+	[36e7ded2ef0b]
+
+	* src/lmtp/client.c, src/lmtp/client.h, src/lmtp/commands.c:
+	lmtp: Log the current state in disconnect message.
+	[1b1fc681a277]
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: Fixed /chroot/./home style chrooting from userdb home.
+	[1d78d2a4e8d1]
+
+	* src/lib/failures.c:
+	liblib: Don't try to send a log prefix to log process if there is
+	none.
+	[ed0688858e59]
+
+2011-06-28  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-mail-server.c:
+	doveadm: Fixed displaying output when using -A or -u wildcards.
+	[02d97fb66047]
+
+	* src/plugins/acl/doveadm-acl.c:
+	doveadm acl: Updated usage string.
+	[aa9b50f6a92b]
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: Changed userdb +key=value to key+=value
+	[4285147ed694]
+
+	* src/lib-lda/smtp-client.c:
+	lib-lda: waitpid() for executed sendmail binary wasn't called
+	correctly. It may have failed with -ECHILD, if the sendmail binary
+	itself forked other processes.
+	[748b0fd169d1]
+
+	* src/imap/cmd-select.c:
+	imap: Don't crash if mailbox UIDVALIDITY is zero when SELECTing a
+	mailbox.
+	[0535d79ea686]
+
+	* src/lib-storage/index/dbox-multi/mdbox-mail.c:
+	mdbox: Minor code cleanup.
+	[01d43e0b2420]
+
+	* src/lib-storage/index/dbox-multi/mdbox-sync.c:
+	mdbox: Log an error if uidvalidity=0 unexpectedly.
+	[028b953e7040]
+
+2011-06-26  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-mail-index.c:
+	doveadm: Minor code cleanup
+	[0adf8c1731e6]
+
+2011-06-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: Fixed +key=value support to actually work.
+	[3d07ab746a67]
+
+	* src/lib-storage/index/index-sync.c:
+	lib-storage: MAILBOX_SYNC_FLAG_PRECACHE did nothing when
+	mail_debug=yes
+	[fcc4ff5b83c4]
+
+2011-06-16  Timo Sirainen  <tss@iki.fi>
+
+	* src/ssl-params/main.c:
+	ssl-params: Make sure we don't leak a timeout.
+	[327486d79620]
+
+2011-06-14  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-mail-index.c, src/lib-storage/index/index-
+	sync.c, src/lib-storage/mail-storage-private.h, src/lib-storage
+	/mail-storage.h, src/plugins/fts/fts-storage.c:
+	Moved the main functionality from "doveadm index" to
+	MAILBOX_SYNC_FLAG_PRECACHE This also allows plugins to hook into the
+	sync and implement their own precaching easily. fts indexing is now
+	done this way rather than kludging.
+	[8c76426a9e53]
+
+2011-06-13  Timo Sirainen  <tss@iki.fi>
+
+	* src/lmtp/commands.c:
+	lmtp: Fixed parsing quoted strings with spaces as local-part for
+	MAIL FROM and RCPT TO.
+	[09b8701362a4]
+
+2011-06-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/index-sync.c:
+	lib-storage: When "Recent flags state corrupted" happens, avoid
+	assert-crashing afterwards.
+	[3e1ee816271d]
+
+2011-06-08  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: Allow appending to existing settings via userdb extra
+	fields. "foo=bar" replaces the setting, while "+foo=bar" appends to
+	the setting.
+	[778067e9ccc2]
+
+	* src/auth/passdb-vpopmail.c:
+	vpopmail: Fixed opening SMTP relays. Also don't even try to open
+	IPv6 relays, since vpopmail becomes an open relay then. Based on
+	patch by Matt Brookings.
+	[8e5d8c4b103d]
+
+2011-06-07  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: Fixed mail_chroot to work when process was already
+	chrooted there.
+	[ed05316ed441]
+
+	* src/auth/db-ldap.c:
+	ldap: Fixed random assert-crashing with with sasl_bind=yes.
+	[c0734f08b3f3]
+
+2011-06-06  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-cache.c, src/auth/mech-winbind.c, src/doveadm/doveadm-
+	mail.c, src/lib-master/master-service.c, src/lib/child-wait.c,
+	src/log/main.c, src/master/main.c, src/ssl-params/main.c,
+	src/util/maildirlock.c:
+	Use SA_RESTART flag for signals wherever possible. Only SIGTERM (and
+	SIGINT for standalone programs) shouldn't use it.
+	[6fdee880c5dc]
+
+	* src/lib/lib-signals.c, src/lib/lib-signals.h:
+	lib_signals_set_handler(): Changed API to take flags instead of
+	boolean. This is still compatible with the old API, because using
+	FALSE/TRUE as the flags still maps to the same behavior.
+	[86e4023d08e4]
+
+	* src/lib/lib-signals.c:
+	lib-signals: Removed unnecessary code.
+	[0c6a9b907656]
+
+2011-06-03  Timo Sirainen  <tss@iki.fi>
+
+	* src/util/script-login.c:
+	script-login: When not using "-d" parameter, don't do unnecessary
+	config lookup.
+	[a2d57b43ccb2]
+
+	* src/plugins/acl/doveadm-acl.c:
+	doveadm acl debug: Show also path to mailbox if it doens't exist.
+	[5b03ca65f4ed]
+
+	* src/config/settings-get.pl, src/master/master-settings.c:
+	master: Fail at startup if default_login_user or
+	default_internal_user doesn't exist.
+	[99da5f4f375d]
+
+	* src/lib/eacces-error.c:
+	eacces_get_error(): Give even better error message for directory
+	permission errors.
+	[d339aeb782ed]
+
+	* src/lib/eacces-error.c:
+	eaccess_get_error(): Show also directory mode.
+	[17d8e1f12901]
+
+	* src/lib/eacces-error.c:
+	eaccess_get_error(): Fixes to reporting dir permissions. Also fixed
+	an infinite loop if stat("/") fails.
+	[12e3e8570d77]
+
+	* src/imap/imap-commands-util.c:
+	IMAP: Treat also "inbox/" case-insensitively as invalid mailbox
+	name.
+	[1c9b54de43f2]
+
+	* src/imap/imap-commands-util.c:
+	IMAP: Treat "namespace prefix/" as invalid mailbox name.
+	[e371cb27c5b6]
+
+	* .hgignore:
+	.hgignore updated
+	[4bc98c94883f]
+
+	* src/director/director-connection.c:
+	Compiler warning fix.
+	[66e3cc789efb]
+
+	* src/doveadm/doveadm-print.c:
+	doveadm -A: Crashfix for doveadm server when using commands that
+	print nothing.
+	[0e1254dcf86b]
+
+2011-05-31  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts-lucene/Makefile.am, src/plugins/fts-lucene/fts-
+	backend-lucene.c, src/plugins/fts-lucene/lucene-wrapper.cc:
+	fts-lucene: Fixes to work with CLucene v2.3.3.4 and new FTS API.
+	It's still not recommended to actually use this.
+	[9ae30e5d6935]
+
+	* src/lib/unichar.c, src/lib/unichar.h:
+	liblib: Added uni_utf8_to_ucs4_n().
+	[7a7c22755b7a]
+
+2011-05-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/director.c, src/doveadm/doveadm-proxy.c, src/login-
+	common/login-proxy.c:
+	doveadm proxy: s/kill/kick/ and related internal code changes.
+	Mainly for consistency, because "doveadm kick" already existed.
+	[936f6c2ddfdd]
+
+2011-05-23  Timo Sirainen  <tss@iki.fi>
+
+	* configure.in:
+	configure: Added missing ipc
+	[9127a988acb8]
+
+	* src/director/director.c:
+	director: Changed the "user killed" delay from 12 secs to 2 secs. It
+	was 12 secs only for testing.
+	[2bfdd566c149]
+
+	* src/ipc/client.c, src/ipc/ipc-group.c, src/ipc/ipc-group.h:
+	ipc: Fixes when sending commands to an empty group.
+	[6bb200302acd]
+
+	* src/director/director-connection.c, src/director/director-request.c,
+	src/director/director-test.sh, src/director/director.c,
+	src/director/director.h, src/director/doveadm-connection.c,
+	src/director/user-directory.c, src/director/user-directory.h,
+	src/doveadm/doveadm-director.c, src/login-common/login-proxy.c:
+	director: Added support for moving user to another server with
+	"doveadm director move".
+	[79f9dce5d5fd]
+
+2011-05-20  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-mail/message-header-parser.c:
+	message header parser: Allow NULs in header name also when header is
+	missing ':'. This doesn't fix any crashes/corruption unlike the
+	earlier fix, but it makes the code more correct. Although it might
+	help with mbox rewriting seeing some size mismatches (or might not).
+	[f8c378e8b461]
+
+	* src/login-common/login-proxy.c:
+	login proxy: Show in disconnect reason who did the disconnection and
+	possible error.
+	[d1c2cc4c513d]
+
+	* src/doveadm/Makefile.am, src/doveadm/doveadm-proxy.c,
+	src/doveadm/doveadm.c, src/doveadm/doveadm.h:
+	doveadm: Added "proxy list" and "proxy kill" commands.
+	[f2874eef6b0b]
+
+	* src/login-common/login-proxy.c:
+	login proxy: Connect to IPC server and implement KILL and LIST
+	commands.
+	[e4f7fb3b5a9c]
+
+	* src/Makefile.am, src/ipc/Makefile.am, src/ipc/client.c,
+	src/ipc/client.h, src/ipc/ipc-connection.c, src/ipc/ipc-
+	connection.h, src/ipc/ipc-group.c, src/ipc/ipc-group.h, src/ipc/ipc-
+	settings.c, src/ipc/main.c, src/lib-master/Makefile.am, src/lib-
+	master/ipc-client.c, src/lib-master/ipc-client.h, src/lib-master
+	/ipc-server.c, src/lib-master/ipc-server.h:
+	Added support for a simplified IPC infrastructure. The idea is that
+	you have one "ipc" proxy process, where all server processes connect
+	to. IPC clients can then connect to the proxy and ask it to forward
+	commands to either a specific server or all servers. The proxy does
+	this, and forwards back any replies from the server.
+	[bf5c8ee58e5e]
+
+	* src/doveadm/client-connection.c, src/doveadm/doveadm-settings.c,
+	src/doveadm/doveadm-settings.h:
+	doveadm: Added doveadm_allowed_commands setting, which is used by
+	doveadm server.
+	[c67ba5bf1ba9]
+
+	* src/doveadm/client-connection.c, src/doveadm/doveadm-mail-server.c:
+	doveadm server: Fixed running multiple commands without crashing.
+	[c46b1ce45cd1]
+
+	* src/doveadm/client-connection.c, src/doveadm/doveadm-mail-server.c,
+	src/doveadm/doveadm-mail.c, src/doveadm/doveadm-mail.h:
+	doveadm: Added support for using local/remote {} settings.
+	[b6568a36ecf9]
+
+	* src/doveadm/client-connection.c, src/doveadm/doveadm-settings.c,
+	src/doveadm/doveadm-settings.h, src/doveadm/server-connection.c:
+	doveadm: Added simple PLAIN authentication for remote connections.
+	Currently clients are required to use "doveadm" as the username and
+	the password must match doveadm_password setting. When using doveadm
+	as a client, it automatically uses these settings when connecting to
+	remote servers.
+	[6604f80abb02]
+
+	* src/doveadm/Makefile.am, src/doveadm/doveadm-mail-server.c,
+	src/doveadm/doveadm-mail.c, src/doveadm/doveadm-mail.h, src/doveadm
+	/doveadm-settings.c, src/doveadm/doveadm-settings.h,
+	src/doveadm/main.c:
+	doveadm: Added doveadm_proxy_port setting to make it work with
+	proxying.
+	[9c9f81ad0111]
+
+	* src/doveadm/doveadm-mail.c:
+	doveadm: Set service=doveadm for userdb lookup.
+	[d20588657ddc]
+
+2011-05-16  Timo Sirainen  <tss@iki.fi>
+
+	* src/pop3/main.c:
+	pop3: If mail storage couldn't be initialized, send -ERR to client
+	before disconnecting.
+	[ac006833cd66]
+
+	* src/pop3/pop3-client.c:
+	pop3: Add [IN-USE] to all login -ERR replies.
+	[f786d95dc5c0]
+
+	* src/imap/cmd-append.c:
+	imap: If client disconnects in APPEND, log more about what it did
+	before that.
+	[53fed82f8013]
+
+	* src/director/user-directory.c:
+	Compiler warning fix on 32bit systems. Patch by Mike Abbott / Apple
+	[d9d5759196ee]
+
+2011-05-11  Pascal Volk  <user@localhost.localdomain.org>
+
+	* doc/man/doveadm-index.1.in:
+	man: Corrected cmd name in doveadm-index.1.
+	[e76a3313a46c]
+
 2011-05-11  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-mail-index.c:
+	doveadm: Code correctness fix.
+	[b72d72ae9bd6]
 
 	* .hgsigs:
 	Added signature for changeset aa8dfa085a99
-	[72c2784fcbc9] [tip]
+	[72c2784fcbc9]
 
 	* .hgtags:
 	Added tag 2.0.13 for changeset aa8dfa085a99
