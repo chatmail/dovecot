@@ -15,6 +15,11 @@ DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 dbgpkg = $(filter %-dbg, $(shell dh_listpackages -s))
 otherpkg = $(filter-out %-dbg, $(shell dh_listpackages -s))
 
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    MAKEFLAGS += -j$(NUMJOBS)
+endif
+
 config-stamp: configure
 	dh_testdir
 	# Dovecot
