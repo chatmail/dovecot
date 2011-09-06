@@ -13,9 +13,17 @@ SSL and TLS terms are often used in confusing ways:
    pop3 (110) or smtp port (25/587). Nothing would prevent using SSLv3 protocol
    after STARTTLS command.
 
-Using two separate ports for plaintext and SSL connections was thought to be
-wasteful, so STARTTLS intended to deprecate the SSL ports (imaps, pop3s, smtps,
-etc). This never really happened, probably because of two reasons:
+Originally SSL support was added to protocols by giving them a separate "SSL
+port" (imaps, pop3s, etc.), where the SSL handshake starts immediately when
+client connects, and only after the session is encrypted the regular protocol
+handling begins. Using two separate ports for plaintext and SSL connections was
+thought to be wasteful, so STARTTLS command was added and intended to deprecate
+the SSL ports. Clients using STARTTLS work by connecting to the regular
+unencrypted port and immediately issue a STARTTLS command, after which the
+session is encrypted. After SSL handshake there is no difference between SSL
+port initiated connections and STARTTLS initiated connections.
+
+SSL port deprecation never really happened, probably because of a few reasons:
 
  * Some admins don't even know about STARTTLS.
  * Some admins want to require SSL/TLS, but don't realize that this is also
@@ -44,4 +52,4 @@ this documentation only talks about SSL when in fact it means both SSL/TLS.
  * Dovecot uses OpenSSL, so whatever information you find about it applies also
    to Dovecot.
 
-(This file was created from the wiki on 2011-05-11 04:42)
+(This file was created from the wiki on 2011-08-29 04:42)

@@ -1,5 +1,6 @@
 #include "lib.h"
 #include "array.h"
+#include "ipwd.h"
 #include "var-expand.h"
 #include "file-lock.h"
 #include "fsync-mode.h"
@@ -887,6 +888,9 @@ struct doveadm_settings {
 	const char *mail_plugin_dir;
 	const char *doveadm_socket_path;
 	unsigned int doveadm_worker_count;
+	unsigned int doveadm_proxy_port;
+	const char *doveadm_password;
+	const char *doveadm_allowed_commands;
 
 	ARRAY_DEFINE(plugin_envs, const char *);
 };
@@ -1417,6 +1421,7 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 	struct service_settings *const *services;
 	const char *const *strings;
 	ARRAY_TYPE(const_string) all_listeners;
+	struct passwd pw;
 	unsigned int i, j, count, len, client_limit, process_limit;
 	unsigned int max_auth_client_processes, max_anvil_client_processes;
 
@@ -1434,6 +1439,17 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 	if (set->last_valid_gid != 0 &&
 	    set->first_valid_gid > set->last_valid_gid) {
 		*error_r = "first_valid_gid can't be larger than last_valid_gid";
+		return FALSE;
+	}
+
+	if (i_getpwnam(set->default_login_user, &pw) == 0) {
+		*error_r = t_strdup_printf("default_login_user doesn't exist: %s",
+					   set->default_login_user);
+		return FALSE;
+	}
+	if (i_getpwnam(set->default_internal_user, &pw) == 0) {
+		*error_r = t_strdup_printf("default_internal_user doesn't exist: %s",
+					   set->default_internal_user);
 		return FALSE;
 	}
 
@@ -1997,6 +2013,45 @@ const struct setting_parser_info lmtp_setting_parser_info = {
 
 	.dependencies = lmtp_setting_dependencies
 };
+/* ../../src/ipc/ipc-settings.c */
+/* <settings checks> */
+static struct file_listener_settings ipc_unix_listeners_array[] = {
+	{ "ipc", 0600, "", "" },
+	{ "login/ipc-proxy", 0600, "$default_login_user", "" }
+};
+static struct file_listener_settings *ipc_unix_listeners[] = {
+	&ipc_unix_listeners_array[0],
+	&ipc_unix_listeners_array[1]
+};
+static buffer_t ipc_unix_listeners_buf = {
+	ipc_unix_listeners, sizeof(ipc_unix_listeners), { 0, }
+};
+/* </settings checks> */
+struct service_settings ipc_service_settings = {
+	.name = "ipc",
+	.protocol = "",
+	.type = "",
+	.executable = "ipc",
+	.user = "$default_internal_user",
+	.group = "",
+	.privileged_group = "",
+	.extra_groups = "",
+	.chroot = "empty",
+
+	.drop_priv_before_exec = FALSE,
+
+	.process_min_avail = 0,
+	.process_limit = 1,
+	.client_limit = 0,
+	.service_count = 0,
+	.idle_kill = 0,
+	.vsz_limit = (uoff_t)-1,
+
+	.unix_listeners = { { &ipc_unix_listeners_buf,
+			      sizeof(ipc_unix_listeners[0]) } },
+	.fifo_listeners = ARRAY_INIT,
+	.inet_listeners = ARRAY_INIT
+};
 /* ../../src/imap/imap-settings.c */
 /* <settings checks> */
 static struct file_listener_settings imap_unix_listeners_array[] = {
@@ -2264,6 +2319,9 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, mail_plugin_dir),
 	DEF(SET_STR, doveadm_socket_path),
 	DEF(SET_UINT, doveadm_worker_count),
+	DEF(SET_UINT, doveadm_proxy_port),
+	DEF(SET_STR, doveadm_password),
+	DEF(SET_STR, doveadm_allowed_commands),
 
 	{ SET_STRLIST, "plugin", offsetof(struct doveadm_settings, plugin_envs), NULL },
 
@@ -2275,6 +2333,9 @@ const struct doveadm_settings doveadm_default_settings = {
 	.mail_plugin_dir = MODULEDIR,
 	.doveadm_socket_path = "doveadm-server",
 	.doveadm_worker_count = 0,
+	.doveadm_proxy_port = 0,
+	.doveadm_password = "",
+	.doveadm_allowed_commands = "",
 
 	.plugin_envs = ARRAY_INIT
 };
@@ -2866,6 +2927,7 @@ static struct service_settings *config_all_services[] = {
 	&pop3_login_service_settings,
 	&log_service_settings,
 	&lmtp_service_settings,
+	&ipc_service_settings,
 	&imap_service_settings,
 	&imap_login_service_settings,
 	&doveadm_service_settings,
@@ -2898,8 +2960,8 @@ const struct setting_parser_info *all_default_roots[] = {
 	&doveadm_setting_parser_info, 
 	&mail_user_setting_parser_info, 
 	&imap_login_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
 	&imap_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

@@ -391,6 +391,7 @@ wikifiles = ACL.txt \
 	Pigeonhole.Sieve.Extensions.Vacation.txt \
 	Pigeonhole.Sieve.Plugins.Extdata.txt \
 	Pigeonhole.Sieve.Plugins.txt \
+	Pigeonhole.Sieve.Troubleshooting.txt \
 	Pigeonhole.Sieve.txt \
 	Pigeonhole.Sieve.Usage.txt \
 	Pigeonhole.txt \
