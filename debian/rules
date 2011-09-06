@@ -82,6 +82,7 @@ install: build
 	dh_installdirs
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/dovecot-common
 	$(MAKE) -C $(PIGEONHOLE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-common
+	rm `find $(CURDIR)/debian -name '*.la'`
 	cp $(CURDIR)/src/plugins/drac/drac.so $(CURDIR)/debian/dovecot-common/usr/lib/dovecot/modules
 	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/*.conf \
 		$(CURDIR)/debian/dovecot-common/usr/share/dovecot/

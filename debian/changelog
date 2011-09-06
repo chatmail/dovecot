@@ -1,3 +1,10 @@
+dovecot (1:2.0.13-1.1) unstable; urgency=low
+
+  * Non-maintainer upload.
+  * Don't ship .la files (Closes: #621297).
+
+ -- Luk Claes <luk@debian.org>  Sat, 18 Jun 2011 12:31:28 +0200
+
 dovecot (1:2.0.13-1) unstable; urgency=high
 
   [ Marco Nenciarini ]
