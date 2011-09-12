@@ -12,6 +12,8 @@ if [ "$1" = "configure" ]; then
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-pop3d /etc/dovecot/$conffile
   done
+
+  echo 'protocols = $protocols pop3' > /usr/share/dovecot/protocols.d/pop3d.protocol
 fi
 
 if [ -x "/etc/init.d/dovecot" ]; then

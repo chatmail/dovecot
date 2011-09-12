@@ -12,6 +12,8 @@ if [ "$1" = "configure" ]; then
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-managesieved /etc/dovecot/$conffile
   done
+
+  echo 'protocols = $protocols sieve' > /usr/share/dovecot/protocols.d/managesieved.protocol
 fi
 
 if [ -x "/etc/init.d/dovecot" ]; then

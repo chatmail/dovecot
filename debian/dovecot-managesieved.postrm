@@ -21,6 +21,11 @@ if [ "$1" = "purge" ] ; then
 			ucfr --purge dovecot-managesieved $conffile
 		fi
 	done
+
+fi
+
+if [ "$1" = "purge" ] || [ "$1" = "remove" ]; then
+	rm -f /usr/share/dovecot/protocols.d/managesieved.protocol
 fi
 
 if [ -x "/etc/init.d/dovecot" ]; then

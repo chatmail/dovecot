@@ -21,6 +21,11 @@ if [ "$1" = "purge" ] ; then
 			ucfr --purge dovecot-lmtpd $conffile
 		fi
 	done
+
+fi
+
+if [ "$1" = "purge" ] || [ "$1" = "remove" ]; then
+	rm -f /usr/share/dovecot/protocols.d/lmtpd.protocol
 fi
 
 if [ -x "/etc/init.d/dovecot" ]; then

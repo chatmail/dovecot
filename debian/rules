@@ -106,23 +106,19 @@ install: build
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/??-imap* $(CURDIR)/debian/dovecot-imapd/usr/share/dovecot/conf.d
-	install -D -m 0644 -o root -g root $(CURDIR)/debian/dovecot-imapd.protocol $(CURDIR)/debian/dovecot-imapd/usr/share/dovecot/protocols.d
 
 	# pop3d
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/??-pop3* $(CURDIR)/debian/dovecot-pop3d/usr/share/dovecot/conf.d
-	install -D -m 0644 -o root -g root $(CURDIR)/debian/dovecot-pop3d.protocol $(CURDIR)/debian/dovecot-pop3d/usr/share/dovecot/protocols.d
 
 	# lmtpd
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/lmtp* $(CURDIR)/debian/dovecot-lmtpd/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/??-lmtp* $(CURDIR)/debian/dovecot-lmtpd/usr/share/dovecot/conf.d
-	install -D -m 0644 -o root -g root $(CURDIR)/debian/dovecot-lmtpd.protocol $(CURDIR)/debian/dovecot-lmtpd/usr/share/dovecot/protocols.d
 
 	# managesieved
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/managesieve* $(CURDIR)/debian/dovecot-managesieved/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/settings/libmanagesieve* $(CURDIR)/debian/dovecot-managesieved/usr/lib/dovecot/modules/settings
 	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/??-managesieve* $(CURDIR)/debian/dovecot-managesieved/usr/share/dovecot/conf.d
-	install -D -m 0644 -o root -g root $(CURDIR)/debian/dovecot-managesieved.protocol $(CURDIR)/debian/dovecot-managesieved/usr/share/dovecot/protocols.d
 
 	# pgsql
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/auth/libdriver_pgsql* $(CURDIR)/debian/dovecot-pgsql/usr/lib/dovecot/modules/auth

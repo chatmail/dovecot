@@ -12,6 +12,8 @@ if [ "$1" = "configure" ]; then
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-imapd /etc/dovecot/$conffile
   done
+
+  echo 'protocols = $protocols imap' > /usr/share/dovecot/protocols.d/imapd.protocol
 fi
 
 if [ -x "/etc/init.d/dovecot" ]; then

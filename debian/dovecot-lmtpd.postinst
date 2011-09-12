@@ -12,6 +12,8 @@ if [ "$1" = "configure" ]; then
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-lmtpd /etc/dovecot/$conffile
   done
+
+  echo 'protocols = $protocols lmtp' > /usr/share/dovecot/protocols.d/lmtpd.protocol
 fi
 
 if [ -x "/etc/init.d/dovecot" ]; then
