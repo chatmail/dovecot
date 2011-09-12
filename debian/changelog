@@ -1,3 +1,12 @@
+dovecot (1:2.0.14-2~1.gbpc36ca9) UNRELEASED; urgency=low
+
+  ** SNAPSHOT build @c36ca967edc483b701644b9ff013dbc33ecf53ce **
+
+  * [a6896d6] Rename dovecot-common to dovecot-core. (Closes: 624835)
+  * [c36ca96] Manage protocols during package configuration and deconfiguration phases.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Mon, 12 Sep 2011 19:33:44 +0200
+
 dovecot (1:2.0.14-1) unstable; urgency=low
 
   * [50a947e] New upstream version 2.0.14: (Closes: #640143)
