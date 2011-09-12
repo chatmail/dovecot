@@ -42,7 +42,7 @@ if [ "$1" = "purge" ] ; then
 			ucf --purge $conffile
 		fi
 		if which ucfr >/dev/null; then
-			ucfr --purge dovecot-common $conffile
+			ucfr --purge dovecot-core $conffile
 		fi
 	done
 
@@ -52,8 +52,7 @@ if [ "$1" = "purge" ] ; then
     if [ -d /var/run/dovecot ]; then rm -rf /var/run/dovecot; fi
 
     if [ -d /etc/ssl/certs ]; then
-	    cd /etc/ssl/certs
-        PATH=$PATH:/usr/bin/ssl
+	cd /etc/ssl/certs
         if [ -f dovecot.pem ]; then
             echo "SSL certificate /etc/ssl/certs/dovecot.pem is NOT removed."
             echo "Please remove manually if required."

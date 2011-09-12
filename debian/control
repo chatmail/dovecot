@@ -11,21 +11,30 @@ Vcs-Browser: http://git.debian.org/?p=collab-maint/dovecot.git
 
 Package: dovecot-common
 Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core
+Recommends: dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite
+Description: Transitional package for dovecot
+ This is a transitional package for dovecot, and can be safely removed
+ after the installation is complete.
+
+Package: dovecot-core
+Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020)
 Suggests: ntp
-Replaces: dovecot
+Provides: dovecot-common
+Replaces: dovecot-common (<< 2.0.14-1~)
+Breaks: dovecot-common (<< 2.0.14-1~)
 Description: secure mail server that supports mbox, maildir, dbox and mdbox mailboxes
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
  all data is valid, making it nearly impossible to crash. It should also be
  pretty fast, extensible, and portable.
  .
- This package contains the files used by the various dovecot servers,
- the Dovecot LDA (dovecot-lda) and Pigeonhole Sieve support.
+ This package contains the dovecot main server and its command line utility.
 
 Package: dovecot-dev
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
 Replaces: dovecot-common (<< 1.1.11-1)
 Breaks: dovecot-common (<< 1.1.11-1)
 Description: header files for the dovecot mail server
@@ -39,9 +48,9 @@ Description: header files for the dovecot mail server
 
 Package: dovecot-imapd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
 Provides: imap-server
-Replaces: imap-server, dovecot-common
+Replaces: imap-server, dovecot-common (<< 2.0.14-1~)
 Description: secure IMAP server that supports mbox, maildir, dbox and mdbox mailboxes
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -52,9 +61,9 @@ Description: secure IMAP server that supports mbox, maildir, dbox and mdbox mail
 
 Package: dovecot-pop3d
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
 Provides: pop3-server
-Replaces: pop3-server, dovecot-common
+Replaces: pop3-server, dovecot-common (<< 2.0.14-1~)
 Description: secure POP3 server that supports mbox, maildir, dbox and mdbox mailboxes
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -65,7 +74,7 @@ Description: secure POP3 server that supports mbox, maildir, dbox and mdbox mail
 
 Package: dovecot-lmtpd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
 Replaces: dovecot-common
 Description: secure LMTP server for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
@@ -77,8 +86,8 @@ Description: secure LMTP server for Dovecot
 
 Package: dovecot-managesieved
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), dovecot-sieve (= ${binary:Version}), ucf (>= 2.0020)
-Replaces: dovecot-common
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), dovecot-sieve (= ${binary:Version}), ucf (>= 2.0020)
+Replaces: dovecot-common (<< 2.0.14-1~)
 Description: secure ManageSieve server for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -89,7 +98,7 @@ Description: secure ManageSieve server for Dovecot
 
 Package: dovecot-pgsql
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
 Description: PostgreSQL support for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -100,7 +109,7 @@ Description: PostgreSQL support for Dovecot
 
 Package: dovecot-mysql
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
 Description: MySQL support for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -111,7 +120,7 @@ Description: MySQL support for Dovecot
 
 Package: dovecot-sqlite
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
 Description: SQLite support for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -122,7 +131,7 @@ Description: SQLite support for Dovecot
 
 Package: dovecot-ldap
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
 Description: LDAP support for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -133,7 +142,7 @@ Description: LDAP support for Dovecot
 
 Package: dovecot-gssapi
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
 Description: GSSAPI authentication support for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -144,7 +153,7 @@ Description: GSSAPI authentication support for Dovecot
 
 Package: dovecot-sieve
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-common (= ${binary:Version}), ucf (>= 2.0020)
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
 Description: sieve filters support for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -157,7 +166,7 @@ Package: dovecot-dbg
 Section: debug
 Priority: extra
 Architecture: any
-Depends: ${misc:Depends}, dovecot-common (= ${binary:Version})
+Depends: ${misc:Depends}, dovecot-core (= ${binary:Version})
 Description: debug symbols for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that

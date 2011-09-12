@@ -44,12 +44,17 @@ if [ "$1" = "configure" ]; then
     fi
   done
 
+  # if we are upgrading from dovecot-common take the ownership of configuration files
+  for conffile in $(ucfq dovecot-common --with-colons | cut -f 1 -d :); do
+	ucfr --force dovecot-core $conffile
+  done
+
   for conffile in $CONFFILES ; do
     # Tell ucf that the file in /usr/share/dovecot is the latest
     # maintainer version, and let it handle how to manage the real
     # configuration file in /etc/dovecot.
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
-    ucfr dovecot-common /etc/dovecot/$conffile
+    ucfr dovecot-core /etc/dovecot/$conffile
     if [ "$conffile" != "dovecot.conf" ] && [ -f "/etc/dovecot/$conffile" ] &&
 		[ `echo $conffile | cut -b -7` != "conf.d/" ]; then
       chmod 0600 /etc/dovecot/$conffile
@@ -80,7 +85,7 @@ if [ "$1" = "configure" ]; then
   SSL_KEY="/etc/ssl/private/dovecot.pem"
 
   # Generate new certs if needed
-  if [ -e $SSL_CERT ] || [ -e $SSL_KEY ]; then
+  if [ -e $SSL_CERT ] && [ -e $SSL_KEY ]; then
     echo "You already have ssl certs for dovecot."
   else
     echo "Creating generic self-signed certificate: $SSL_CERT"
@@ -104,19 +109,15 @@ $FQDN
 root@$MAILNAME
 +
     ) || echo "Warning : Bad SSL config, can't generate certificate."
-
-    if [ -e $SSL_CERT ] && [ -e $SSL_KEY ]; then
-      ucfr dovecot-common $SSL_CERT
-      ucfr dovecot-common $SSL_KEY
-
-      chown root $SSL_CERT || true
-      chgrp dovecot $SSL_CERT || true
-      chmod 0644 $SSL_CERT || true
-      chown root $SSL_KEY || true
-      chgrp dovecot $SSL_KEY || true
-      chmod 0600 $SSL_KEY || true
-    fi
   fi
+
+  ucfr dovecot-core $SSL_CERT
+  ucfr dovecot-core $SSL_KEY
+
+  chown root:dovecot $SSL_CERT || true
+  chmod 0644 $SSL_CERT || true
+  chown root:dovecot $SSL_KEY || true
+  chmod 0600 $SSL_KEY || true
 
 fi
 
