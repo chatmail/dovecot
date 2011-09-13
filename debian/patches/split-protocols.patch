@@ -12,7 +12,7 @@ Description: Set default protocols value as empty and enable each
  4 files changed, 4 insertions(+), 7 deletions(-)
 
 diff --git a/doc/example-config/dovecot.conf b/doc/example-config/dovecot.conf
-index 61f689b..a550ea2 100644
+index a557947..22ee7a0 100644
 --- a/doc/example-config/dovecot.conf
 +++ b/doc/example-config/dovecot.conf
 @@ -16,8 +16,8 @@
@@ -41,10 +41,10 @@ index 42dfc39..d8fde1f 100644
  
  service managesieve-login {
 diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index 8a5072e..58875a1 100644
+index 873d58a..563ca12 100644
 --- a/src/config/all-settings.c
 +++ b/src/config/all-settings.c
-@@ -1742,7 +1742,7 @@ struct master_settings master_default_settings = {
+@@ -1758,7 +1758,7 @@ struct master_settings master_default_settings = {
  	.base_dir = PKG_RUNDIR,
  	.libexec_dir = PKG_LIBEXECDIR,
  	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,
@@ -54,10 +54,10 @@ index 8a5072e..58875a1 100644
  	.ssl = "yes:no:required",
  	.default_internal_user = "dovecot",
 diff --git a/src/master/master-settings.c b/src/master/master-settings.c
-index 245b903..bd69df1 100644
+index 4f49527..4b7884e 100644
 --- a/src/master/master-settings.c
 +++ b/src/master/master-settings.c
-@@ -210,7 +210,7 @@ static const struct master_settings master_default_settings = {
+@@ -211,7 +211,7 @@ static const struct master_settings master_default_settings = {
  	.base_dir = PKG_RUNDIR,
  	.libexec_dir = PKG_LIBEXECDIR,
  	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,
