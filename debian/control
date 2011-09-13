@@ -22,8 +22,8 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020)
 Suggests: ntp
 Provides: dovecot-common
-Replaces: dovecot-common (<< 2.0.14-1~)
-Breaks: dovecot-common (<< 2.0.14-1~)
+Replaces: dovecot-common (<< 2.0.14-2~)
+Breaks: dovecot-common (<< 2.0.14-2~)
 Description: secure mail server that supports mbox, maildir, dbox and mdbox mailboxes
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -35,8 +35,8 @@ Description: secure mail server that supports mbox, maildir, dbox and mdbox mail
 Package: dovecot-dev
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
-Replaces: dovecot-common (<< 1.1.11-1)
-Breaks: dovecot-common (<< 1.1.11-1)
+Replaces: dovecot-common (<< 2.0.14-2~)
+Breaks: dovecot-common (<< 2.0.14-2~)
 Description: header files for the dovecot mail server
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -50,7 +50,6 @@ Package: dovecot-imapd
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
 Provides: imap-server
-Replaces: imap-server, dovecot-common (<< 2.0.14-1~)
 Description: secure IMAP server that supports mbox, maildir, dbox and mdbox mailboxes
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -63,7 +62,6 @@ Package: dovecot-pop3d
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
 Provides: pop3-server
-Replaces: pop3-server, dovecot-common (<< 2.0.14-1~)
 Description: secure POP3 server that supports mbox, maildir, dbox and mdbox mailboxes
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -75,7 +73,8 @@ Description: secure POP3 server that supports mbox, maildir, dbox and mdbox mail
 Package: dovecot-lmtpd
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
-Replaces: dovecot-common
+Replaces: dovecot-common (<< 2.0.14-2~)
+Breaks: dovecot-common (<< 2.0.14-2~)
 Description: secure LMTP server for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
@@ -87,7 +86,8 @@ Description: secure LMTP server for Dovecot
 Package: dovecot-managesieved
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), dovecot-sieve (= ${binary:Version}), ucf (>= 2.0020)
-Replaces: dovecot-common (<< 2.0.14-1~)
+Replaces: dovecot-common (<< 2.0.14-2~)
+Breaks: dovecot-common (<< 2.0.14-2~)
 Description: secure ManageSieve server for Dovecot
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
