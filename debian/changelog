@@ -1,11 +1,19 @@
-dovecot (1:2.0.14-2~1.gbpc36ca9) UNRELEASED; urgency=low
+dovecot (1:2.0.14-2~2.gbp5cd77a) UNRELEASED; urgency=low
 
-  ** SNAPSHOT build @c36ca967edc483b701644b9ff013dbc33ecf53ce **
+  ** SNAPSHOT build @5cd77a39e187588b7763a7d85e4706a1876b41a4 **
 
   * [a6896d6] Rename dovecot-common to dovecot-core. (Closes: 624835)
-  * [c36ca96] Manage protocols during package configuration and deconfiguration phases.
+  * [c36ca96] Manage protocols during package configuration and
+    deconfiguration phases.
+  * [599b55b] Update pigeonhole to release 0.2.3
+  * [c654db0] Add a bug-script which will append doveconf -n output to bug
+    reports.
+  * [5270323] Add notes about upgrading from 1.2 to README.Debian
+    (Closes: #635351)
+  * [5cd77a3] Add build-arch and build-indep target to debian/rules as
+    required by lintian.
 
- -- Marco Nenciarini <mnencia@debian.org>  Mon, 12 Sep 2011 19:33:44 +0200
+ -- Marco Nenciarini <mnencia@debian.org>  Wed, 14 Sep 2011 13:59:38 +0200
 
 dovecot (1:2.0.14-1) unstable; urgency=low
 
