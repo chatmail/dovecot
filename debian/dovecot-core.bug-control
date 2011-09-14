@@ -1,0 +1,1 @@
+package-status: dovecot-common dovecot-core dovecot-dbg dovecot-dev dovecot-gssapi dovecot-imapd dovecot-ldap dovecot-lmtpd dovecot-managesieved dovecot-mysql dovecot-pgsql dovecot-pop3d dovecot-sieve dovecot-sqlite

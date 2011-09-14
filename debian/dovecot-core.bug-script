@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -e
+
+pecho() {
+    echo "$@"
+    echo "$@"|sed 's/./-/g'
+}
+
+
+if [ -x /usr/bin/doveconf ]
+then
+	echo
+	cat <<-EOF
+	You can append "doveconf -n" output to the bug report. It will help the
+	maintainers to better understand your configuration.
+	It normally doesn't contain any sensible information.
+	EOF
+	echo
+	yesno "Do you want to append \"doveconf -n\" output to your bug report? " yep
+	if [ "$REPLY" == yep ]
+	then
+		echo >&3
+		pecho "dovecot configuration" >&3
+		/usr/bin/doveconf -n >&3
+	fi
+fi
