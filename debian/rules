@@ -52,7 +52,6 @@ config-stamp: configure
 		--disable-static )
 	touch config-stamp
 
-build: build-stamp
 build-stamp:  config-stamp
 	dh_testdir
 	# Dovecot
@@ -184,5 +183,8 @@ binary-arch: build install
 	dh_builddeb $(foreach pkg,$(dbgpkg),-p$(pkg)) -- -Zxz
 	dh_builddeb $(foreach pkg,$(otherpkg),-p$(pkg))
 
+build: build-arch build-indep
+build-arch: build-stamp
+build-indep: build-stamp
 binary: binary-indep binary-arch
-.PHONY: build clean binary-indep binary-arch binary install
+.PHONY: build build-arch build-indep clean binary-indep binary-arch binary install
