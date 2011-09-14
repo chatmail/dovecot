@@ -14,7 +14,8 @@ then
 	cat <<-EOF
 	You can append "doveconf -n" output to the bug report. It will help the
 	maintainers to better understand your configuration.
-	It normally doesn't contain any sensitive information.
+	It normally doesn't contain any sensitive information, but you should 
+        review it before sending.
 	EOF
 	echo
 	yesno "Do you want to append \"doveconf -n\" output to your bug report? " yep
