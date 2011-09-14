@@ -2,7 +2,7 @@ dovecot (1:2.0.14-2~2.gbp5cd77a) UNRELEASED; urgency=low
 
   ** SNAPSHOT build @5cd77a39e187588b7763a7d85e4706a1876b41a4 **
 
-  * [a6896d6] Rename dovecot-common to dovecot-core. (Closes: 624835)
+  * [a6896d6] Rename dovecot-common to dovecot-core. (Closes: #624835)
   * [c36ca96] Manage protocols during package configuration and
     deconfiguration phases.
   * [599b55b] Update pigeonhole to release 0.2.3
