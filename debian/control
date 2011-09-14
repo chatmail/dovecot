@@ -12,7 +12,7 @@ Vcs-Browser: http://git.debian.org/?p=collab-maint/dovecot.git
 Package: dovecot-common
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core
-Recommends: dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite
+Recommends: dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite, dovecot-ldap
 Description: Transitional package for dovecot
  This is a transitional package for dovecot, and can be safely removed
  after the installation is complete.
