@@ -21,7 +21,7 @@ Description: Transitional package for dovecot
 Package: dovecot-core
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020)
-Suggests: ntp
+Suggests: ntp, dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite, dovecot-ldap, dovecot-imapd, dovecot-pop3d, dovecot-lmtpd, dovecot-managesieved
 Provides: dovecot-common
 Replaces: dovecot-common (<< 1:2.0.14-2~)
 Breaks: dovecot-common (<< 1:2.0.14-2~)
