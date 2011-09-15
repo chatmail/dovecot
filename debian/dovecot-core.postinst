@@ -57,23 +57,6 @@ if [ "$1" = "configure" ]; then
     fi
   done
 
-  for conffile in $CONFFILES ; do
-    # Tell ucf that the file in /usr/share/dovecot is the latest
-    # maintainer version, and let it handle how to manage the real
-    # configuration file in /etc/dovecot.
-    ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
-    ucfr dovecot-core /etc/dovecot/$conffile
-    if [ "$conffile" != "dovecot.conf" ] && [ -f "/etc/dovecot/$conffile" ] &&
-		[ `echo $conffile | cut -b -7` != "conf.d/" ]; then
-      chmod 0600 /etc/dovecot/$conffile
-    fi
-  done
-
-  if [ -n "`id -u imapd 2> /dev/null`" ]; then
-    deluser imapd || true
-    delgroup imapd || true
-  fi
-
   ## Users
   #
 
@@ -85,6 +68,24 @@ if [ "$1" = "configure" ]; then
   if [ -z "`id -u dovenull 2> /dev/null`" ]; then
     adduser --system --home /nonexistent --no-create-home --gecos "Dovecot login user" \
             --disabled-password --quiet dovenull || true
+  fi
+
+  for conffile in $CONFFILES ; do
+    # Tell ucf that the file in /usr/share/dovecot is the latest
+    # maintainer version, and let it handle how to manage the real
+    # configuration file in /etc/dovecot.
+    ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
+    ucfr dovecot-core /etc/dovecot/$conffile
+    if [ "$conffile" != "dovecot.conf" ] && [ -f "/etc/dovecot/$conffile" ] &&
+		[ `echo $conffile | cut -b -7` != "conf.d/" ]; then
+      chmod 0640 /etc/dovecot/$conffile
+      chgrp dovecot /etc/dovecot/$conffile
+    fi
+  done
+
+  if [ -n "`id -u imapd 2> /dev/null`" ]; then
+    deluser imapd || true
+    delgroup imapd || true
   fi
 
   ## SSL Certs
