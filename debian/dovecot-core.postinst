@@ -46,7 +46,15 @@ if [ "$1" = "configure" ]; then
 
   # if we are upgrading from dovecot-common take the ownership of configuration files
   for conffile in $(ucfq dovecot-common --with-colons | cut -f 1 -d :); do
-	ucfr --force dovecot-core $conffile
+    ucfr --force dovecot-core $conffile
+    if [ "$conffile" = "/etc/dovecot/dovecot.conf" ]; then
+      # avoid ucf question if the only difference is at the "protocols" line
+      confmd5=$(sed 's/^protocols.*/protocols = none/' "$conffile" | md5sum | awk '{print $1}')
+      ucfmd5=$(cat /var/lib/ucf/hashfile | grep "$conffile" | awk '{print $1}')
+      if [ "$confmd5" = "$ucfmd5" ]; then
+        sed -i 's/^protocols.*/protocols = none/' "$conffile"
+      fi
+    fi
   done
 
   for conffile in $CONFFILES ; do
