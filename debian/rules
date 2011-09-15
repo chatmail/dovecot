@@ -12,8 +12,8 @@ PIGEONHOLE_DIR=pigeonhole
 DEB_HOST_GNU_TYPE   ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 
-dbgpkg = $(filter %-dbg, $(shell dh_listpackages -s))
-otherpkg = $(filter-out %-dbg, $(shell dh_listpackages -s))
+dbgpkg = $(filter %-dbg, $(shell dh_listpackages -a))
+otherpkg = $(filter-out %-dbg, $(shell dh_listpackages -a))
 
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
     NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
@@ -160,7 +160,22 @@ install: build
 
 # Build architecture-independent files here.
 binary-indep: build install
-	# nothing to do here
+	dh_testdir -i
+	dh_testroot -i
+	dh_installchangelogs -i
+	dh_installdocs -i
+	dh_installexamples -i
+	dh_installman -i
+	dh_link -i
+	dh_strip -i
+	dh_compress -i
+	dh_fixperms -i
+	dh_makeshlibs -i
+	dh_installdeb -i
+	dh_shlibdeps -i
+	dh_gencontrol -i
+	dh_md5sums -i
+	dh_builddeb -i
 
 # Build architecture-dependent files here.
 binary-arch: build install

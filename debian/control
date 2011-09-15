@@ -10,7 +10,7 @@ Vcs-Git: git://git.debian.org/git/collab-maint/dovecot.git
 Vcs-Browser: http://git.debian.org/?p=collab-maint/dovecot.git
 
 Package: dovecot-common
-Architecture: any
+Architecture: all
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core
 Recommends: dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite, dovecot-ldap
 Suggests: dovecot-managesieved
