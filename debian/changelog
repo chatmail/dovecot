@@ -1,19 +1,30 @@
-dovecot (1:2.0.14-2~2.gbp5cd77a) UNRELEASED; urgency=low
+dovecot (1:2.0.14-2) unstable; urgency=low
 
-  ** SNAPSHOT build @5cd77a39e187588b7763a7d85e4706a1876b41a4 **
-
+  [ Marco Nenciarini ]
   * [a6896d6] Rename dovecot-common to dovecot-core. (Closes: #624835)
   * [c36ca96] Manage protocols during package configuration and
     deconfiguration phases.
-  * [599b55b] Update pigeonhole to release 0.2.3
+  * [599b55b] Update pigeonhole to release 0.2.3.
   * [c654db0] Add a bug-script which will append doveconf -n output to bug
     reports.
-  * [5270323] Add notes about upgrading from 1.2 to README.Debian
+  * [5270323] Add notes about upgrading from 1.2 to README.Debian.
     (Closes: #635351)
   * [5cd77a3] Add build-arch and build-indep target to debian/rules as
     required by lintian.
+  * [be05d2a] Avoid ucf question when upgrading from squeeze and the only
+    difference in dovecot.conf is at the "protocols" line.
+  * [3c73782] Remove ucf backups during purge.
+  * [3ccf508] Make /etc/dovecot/*.ext readable by dovecot group members.
+    (Closes: #639005)
+  * [665bcc5] Use -c ${CONF} when calling doveconf to determine PIDBASE.
+    Thanks to Jonathan Hall (Closes: #627794)
+  * [325042c] Purge obsolete unmodified config files from /etc.
+    (Closes: #629397)
+  * [a9b9afb] Modified init script to report failures. (Closes: #629654)
+  * [d4622fd] Make dovecot-core suggesting all other packages containing
+    additional features.
 
- -- Marco Nenciarini <mnencia@debian.org>  Wed, 14 Sep 2011 13:59:38 +0200
+ -- Marco Nenciarini <mnencia@debian.org>  Thu, 15 Sep 2011 19:43:55 +0200
 
 dovecot (1:2.0.14-1) unstable; urgency=low
 
