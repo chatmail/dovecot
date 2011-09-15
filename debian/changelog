@@ -1,3 +1,15 @@
+dovecot (1:2.0.14-3) unstable; urgency=low
+
+  * [f37a9ec] Enable solr full text search plugin. (LP: #620959)
+  * [cdd8b84] Build dovecot-common as architecture-all package.
+  * [af90444] Fix mail_plugin_dir default value in conf.d/10-mail.conf
+    (Closes: #624294)
+  * [61347cb] Bump debhelper build-depends to (>= 7.2.3~) because we use
+    dh_bugfiles.
+  * [4b757b6] Fix wrong configuration files path in sieve manpages.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Fri, 16 Sep 2011 02:26:21 +0200
+
 dovecot (1:2.0.14-2) unstable; urgency=low
 
   [ Marco Nenciarini ]
