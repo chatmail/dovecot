@@ -1,3 +1,2 @@
 usr/lib/dovecot
 usr/share/dovecot/conf.d
-usr/share/dovecot/protocols.d
