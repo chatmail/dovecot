@@ -3,7 +3,7 @@ Section: mail
 Priority: optional
 Maintainer: Dovecot Maintainers <jaldhar-dovecot@debian.org>
 Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>, Fabio Tranchitella <kobold@debian.org>, Joel Johnson <mrjoel@lixil.net>, Marco Nenciarini <mnencia@debian.org>
-Build-Depends: debhelper (>= 5.0.0), pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient-dev, libsqlite3-dev, libsasl2-dev, zlib1g-dev, libkrb5-dev, drac-dev (>= 1.12-5), libbz2-dev, libdb-dev
+Build-Depends: debhelper (>= 5.0.0), pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient-dev, libsqlite3-dev, libsasl2-dev, zlib1g-dev, libkrb5-dev, drac-dev (>= 1.12-5), libbz2-dev, libdb-dev, libcurl4-gnutls-dev, libexpat-dev
 Standards-Version: 3.9.2
 Homepage: http://dovecot.org/
 Vcs-Git: git://git.debian.org/git/collab-maint/dovecot.git
@@ -162,6 +162,17 @@ Description: sieve filters support for Dovecot
  pretty fast, extensible, and portable.
  .
  This package provides sieve filters support for Dovecot.
+
+Package: dovecot-solr
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
+Description: Solr full text search support for Dovecot
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify that
+ all data is valid, making it nearly impossible to crash. It should also be
+ pretty fast, extensible, and portable.
+ .
+ This package provides Solr full text search support for Dovecot.
 
 Package: dovecot-dbg
 Section: debug
