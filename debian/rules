@@ -47,6 +47,7 @@ config-stamp: configure
 	# Pigeonhole
 	(cd $(PIGEONHOLE_DIR)/ && sh configure --with-dovecot=../ \
 		--prefix=/usr \
+		--sysconfdir=/etc \
 		--libexecdir=\$${prefix}/lib \
 		--mandir=\$${prefix}/share/man \
 		--infodir=\$${prefix}/share/info \
