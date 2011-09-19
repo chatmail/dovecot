@@ -1,8 +1,209 @@
+2011-09-16  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 11ef52450096
+	[22858efc84bb] [tip]
+
+	* .hgtags:
+	Added tag 2.0.15 for changeset 11ef52450096
+	[48395777f852]
+
+	* NEWS, configure.in:
+	Released v2.0.15.
+	[11ef52450096] [2.0.15]
+
+	* src/auth/main.c:
+	auth: Use "auth-worker:" log prefix for auth worker processes.
+	[8379707478d7]
+
+	* src/lib-storage/mail-storage.c:
+	lib-storage: Improved debug logging messages.
+	[19086b0d53f4]
+
+	* src/lib-storage/index/shared/shared-storage.c:
+	lib-storage: If shared namespace prefix doesn't end with hierarchy
+	separator, fail.
+	[ea657df52a85]
+
+	* src/lib-storage/mail-storage.c:
+	lib-storage: If mailbox_rename() isn't possible and mail_debug=yes,
+	log the reason why.
+	[e57bd3e2ec27]
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: Changed debug message to sound less like an error
+	message.
+	[99e1a9aa03f7]
+
+	* src/lib-sql/driver-sqlpool.c:
+	lib-sql: Fixed load balancing between multiple SQL hosts to actually
+	work.
+	[327698228158]
+
+	* src/doveadm/doveadm-mail-iter.c, src/lib-index/mail-index-
+	transaction-update.c, src/lib-storage/index/index-sync.c:
+	s/commiting/committing/ Caught by Marco Nenciarini.
+	[79d54b6ccfe1]
+
+	* src/config/config-parser.c:
+	config: Don't crash strlist section contains a subsection.
+	[1a57526721d7]
+
+	* doc/man/dsync.1.in:
+	man: Escape fix.
+	[2795be14f37f]
+
+2011-09-15  Pascal Volk  <user@localhost.localdomain.org>
+
+	* doc/man/doveadm-altmove.1.in:
+	man: Added -r option to doveadm-altmove.1.
+	[85853915c8c0]
+
+2011-09-15  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-sql/sql-api-private.h:
+	lib-sql: Dropped connect timeout to 5 seconds. Postfix is using 10
+	second auth timeout and this needs to be less than that.
+	[20a901f1de31]
+
+	* src/lib-sql/driver-sqlpool.c:
+	lib-sql: Don't try to connect to connections that are going to be
+	reconnected later. This avoids unnecessarily trying to connect to
+	failing connections.
+	[3955a5b2a917]
+
+	* src/lib-sql/driver-sqlpool.c:
+	lib-sql: Connect to all configured hosts immediately. This makes
+	load balancing between them actually work always.
+	[55552b4e8c65]
+
+	* src/lib-sql/driver-sqlpool.c:
+	lib-sql: When escaping a string, use the first ready connection (if
+	any). This avoids unnecessarily trying to reconnect to a failing
+	connection.
+	[1b829680dce4]
+
+	* src/lib-sql/driver-mysql.c:
+	lib-sql: If MySQL connect takes more than 1 sec, don't try to
+	reconnect for that many secs.
+	[11273f581686]
+
+	* src/lib-sql/driver-mysql.c:
+	lib-sql: If MySQL connect fails, update ioloop times so later
+	timeouts get added properly.
+	[c056bd23fdcc]
+
+	* src/lib/ioloop.c, src/lib/ioloop.h:
+	liblib: Added io_loop_time_refresh()
+	[3334c12a2b1a]
+
+	* src/auth/auth-request-handler.c:
+	auth: Don't assert-crash if login client disconnects during multi-
+	reply mechanism.
+	[0dffdc3bfad1]
+
+	* src/lib-storage/index/mbox/mbox-storage.c:
+	mbox: mailbox_get_guid() works now without trying to sync the opened
+	mailbox. This fixes assert-crash when LDA was trying to get mailbox
+	GUID during save.
+	[0264ac68c770]
+
+	* src/doveadm/doveadm-mail-altmove.c:
+	doveadm altmove: Added -r parameter to move mails back to primary
+	storage.
+	[1910c76a6cc9]
+
+2011-09-13  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-storage-service.c:
+	Removed unnecessary code.
+	[d635bcf35df7]
+
+	* src/dsync/dsync.c:
+	dsync: Ignore SIGHUP
+	[41dd8f4d44d5]
+
+	* src/lib-index/mail-index-view.c:
+	lib-index: mail_index_view_clone() didn't properly clear all fields
+	in the destination view. The only caller already had it cleared
+	though. Patch by Mike Abbott / Apple.
+	[df8bd044a47d]
+
+2011-09-12  Timo Sirainen  <tss@iki.fi>
+
+	* src/dsync/dsync-worker-local.c:
+	dsync: If mailbox can't be opened, log an error but continue anyway.
+	[3c8b44bb1974]
+
+	* src/lib-storage/index/mbox/mbox-mail.c:
+	mbox: Fixed fetching last message from compressed mboxes.
+	[a930318a74a1]
+
+	* src/plugins/quota/quota-dirsize.c:
+	quota-dirsize: Get the quota from "mail root dir", not "mailboxes
+	dir". Normally they are different only with dbox (~/dbox vs.
+	~/dbox/mailboxes). This mainly fixes using dirsize with mdbox, where
+	the mail data is in ~/dbox/storage/ directory. Patch by Роман
+	Захров.
+	[9ea79795088d]
+
+	* src/auth/passdb-ldap.c:
+	ldap: Fixed auth binds for nonexistent users with some LDAP servers.
+	[d00c95f33643]
+
+2011-09-08  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: Error handling fix for key+=value when key isn't of
+	string type.
+	[0f63b7c5dd7c]
+
+	* src/lmtp/lmtp-proxy.c:
+	lmtp: Improved "DATA output timeout" error message.
+	[8de8752b2e94]
+
+	* src/lib-lda/mail-deliver.c:
+	lib-lda: Log message improvement to differentiate mailbox open vs.
+	save error.
+	[323ab62983b6]
+
+	* src/lib-storage/mail-copy.c:
+	lib-storage: Fixed mail_storage_copy() error handling.
+	[858298eb101f]
+
+	* src/lib-storage/index/dbox-common/dbox-storage.c, src/lib-
+	storage/index/dbox-single/sdbox-storage.c, src/lib-storage/index
+	/index-storage.c:
+	lib-storage: Minor error handling cleanups.
+	[1903d5fd7e76]
+
+2011-09-01  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-index/mail-index-sync-update.c, src/lib-index/mail-index-
+	view-sync.c:
+	lib-index: Make sure mail_index_sync_record() doesn't waste data
+	stack.
+	[1a6528646e11]
+
+2011-08-30  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/index-sync.c, src/lib-storage/index/index-
+	transaction.c, src/lib-storage/mail-storage.h:
+	lib-storage: Added MAILBOX_TRANSACTION_FLAG_NO_CACHE_DEC and use it
+	when precaching. The result is that "doveadm index" no longer
+	changes caching decisions.
+	[5320315600a4]
+
+	* src/lib-index/mail-cache-decisions.c, src/lib-index/mail-cache-
+	private.h, src/lib-index/mail-cache.c, src/lib-index/mail-cache.h:
+	lib-index: Added mail_cache_view_update_cache_decisions()
+	[efedf0644da8]
+
 2011-08-29  Timo Sirainen  <tss@iki.fi>
 
 	* .hgsigs:
 	Added signature for changeset aa68f38c04f0
-	[e01c9f89b0b0] [tip]
+	[e01c9f89b0b0]
 
 	* .hgtags:
 	Added tag 2.0.14 for changeset aa68f38c04f0
