@@ -1,6 +1,4 @@
-dovecot (1:2.0.15-1~1.gbp11107a) UNRELEASED; urgency=low
-
-  ** SNAPSHOT build @11107a113edda18103cba96ed0daea9eb7fcf709 **
+dovecot (1:2.0.15-1) unstable; urgency=low
 
   * [a22575a] New upstream version 2.0.15: (Closes: #642045)
       + doveadm altmove: Added -r parameter to move mails back to primary
@@ -12,8 +10,10 @@ dovecot (1:2.0.15-1~1.gbp11107a) UNRELEASED; urgency=low
         GUID assigned to it.
       - zlib+mbox: Fetching last message from compressed mailboxes crashed.
       - lib-sql: Fixed load balancing and error
+  * [8ce5abc] Update pigeonhole to release 0.2.4
+  * [87658d2] Add dovecot-solr to dovecot-core's Suggests line.
 
- -- Marco Nenciarini <mnencia@debian.org>  Mon, 19 Sep 2011 13:04:58 +0200
+ -- Marco Nenciarini <mnencia@debian.org>  Mon, 19 Sep 2011 19:26:48 +0200
 
 dovecot (1:2.0.14-3) unstable; urgency=low
 
