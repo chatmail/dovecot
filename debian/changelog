@@ -1,3 +1,20 @@
+dovecot (1:2.0.15-1~1.gbp11107a) UNRELEASED; urgency=low
+
+  ** SNAPSHOT build @11107a113edda18103cba96ed0daea9eb7fcf709 **
+
+  * [a22575a] New upstream version 2.0.15: (Closes: #642045)
+      + doveadm altmove: Added -r parameter to move mails back to primary
+        storage.
+      - v2.0.14: Index reading could have eaten a lot of memory in some
+        situations
+      - doveadm index no longer affects future caching decisions
+      - mbox: Fixed crash during mail delivery when mailbox didn't yet have
+        GUID assigned to it.
+      - zlib+mbox: Fetching last message from compressed mailboxes crashed.
+      - lib-sql: Fixed load balancing and error
+
+ -- Marco Nenciarini <mnencia@debian.org>  Mon, 19 Sep 2011 13:04:58 +0200
+
 dovecot (1:2.0.14-3) unstable; urgency=low
 
   * [f37a9ec] Enable solr full text search plugin. (LP: #620959)
