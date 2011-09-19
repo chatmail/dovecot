@@ -392,7 +392,7 @@ static int cache_add(struct mailbox *box, const struct mailbox_status *status,
 	}
 
 	/* find the first message we need to index */
-	trans = mailbox_transaction_begin(box, 0);
+	trans = mailbox_transaction_begin(box, MAILBOX_TRANSACTION_FLAG_NO_CACHE_DEC);
 	mail = mail_alloc(trans, 0, NULL);
 	for (seq = status->messages; seq > 0; seq--) {
 		mail_set_seq(mail, seq);
@@ -434,7 +434,7 @@ static int cache_add(struct mailbox *box, const struct mailbox_status *status,
 	}
 	mail_free(&mail);
 	if (mailbox_transaction_commit(&trans) < 0) {
-		i_error("Commiting mailbox %s failed: %s",
+		i_error("Committing mailbox %s failed: %s",
 			mailbox_get_vname(box),
 			mail_storage_get_last_error(mailbox_get_storage(box), NULL));
 		return -1;

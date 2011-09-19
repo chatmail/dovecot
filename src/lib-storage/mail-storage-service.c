@@ -122,7 +122,6 @@ static int set_line(struct mail_storage_service_ctx *ctx,
 		/* key+=value */
 		append_value = line + len + 1;
 		key = t_strndup(key, len-1);
-		line++;
 	}
 
 	if (!settings_parse_is_valid_key(set_parser, key)) {
@@ -870,7 +869,6 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 	}
 
 	user = p_new(user_pool, struct mail_storage_service_user, 1);
-	memset(user_r, 0, sizeof(user_r));
 	user->pool = user_pool;
 	user->input = *input;
 	user->input.userdb_fields = NULL;
