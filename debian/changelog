@@ -4,8 +4,10 @@ dovecot (1:2.0.18-1) unstable; urgency=low
   * Patch to dovecot-core/postinst so that permissions of symlinked
     certificates aren't modified. (Closes: #646508)
     Thanks Michael Kuhn.
+  * Patch to enable hardened build flags.  (Closes: #653530)
+    Thanks Moritz Muehlenhoff
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 07 Mar 2012 10:46:05 -0500
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 07 Mar 2012 10:51:36 -0500
 
 dovecot (1:2.0.15-1) unstable; urgency=low
 

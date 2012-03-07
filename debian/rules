@@ -25,6 +25,7 @@ config-stamp: configure
 	# Dovecot
 	sh configure --with-ldap=plugin \
 	            --with-ssl=openssl \
+	            $(shell dpkg-buildflags --export=configure) \
 	            --with-sql=plugin \
 	            --with-pgsql \
 	            --with-mysql \
@@ -48,6 +49,7 @@ config-stamp: configure
 	(cd $(PIGEONHOLE_DIR)/ && sh configure --with-dovecot=../ \
 		--prefix=/usr \
 		--sysconfdir=/etc \
+		$(shell dpkg-buildflags --export=configure) \
 		--libexecdir=\$${prefix}/lib \
 		--mandir=\$${prefix}/share/man \
 		--infodir=\$${prefix}/share/info \
