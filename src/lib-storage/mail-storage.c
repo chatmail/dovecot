@@ -130,7 +130,16 @@ mail_storage_get_class(struct mail_namespace *ns, const char *driver,
 	struct mail_storage *storage_class = NULL;
 	const char *home;
 
-	if (driver != NULL) {
+	if (driver == NULL) {
+		/* no mail_location, autodetect */
+	} else if (strcmp(driver, "auto") == 0) {
+		/* explicit autodetection with "auto" driver. */
+		if (list_set->root_dir != NULL &&
+		    *list_set->root_dir == '\0') {
+			/* handle the same as with driver=NULL */
+			list_set->root_dir = NULL;
+		}
+	} else {
 		storage_class = mail_storage_find_class(driver);
 		if (storage_class == NULL) {
 			*error_r = t_strdup_printf(
@@ -166,12 +175,16 @@ mail_storage_get_class(struct mail_namespace *ns, const char *driver,
 	if (storage_class != NULL)
 		return storage_class;
 
-	if (ns->set->location == NULL || *ns->set->location == '\0') {
-		(void)mail_user_get_home(ns->user, &home);
-		if (home == NULL || *home == '\0') home = "(not set)";
+	(void)mail_user_get_home(ns->user, &home);
+	if (home == NULL || *home == '\0') home = "(not set)";
 
+	if (ns->set->location == NULL || *ns->set->location == '\0') {
 		*error_r = t_strdup_printf(
 			"Mail storage autodetection failed with home=%s", home);
+	} else if (strncmp(ns->set->location, "auto:", 5) == 0) {
+		*error_r = t_strdup_printf(
+			"Autodetection failed for %s (home=%s)",
+			ns->set->location, home);
 	} else {
 		*error_r = t_strdup_printf(
 			"Ambiguous mail location setting, "

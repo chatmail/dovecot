@@ -153,6 +153,8 @@ void lmtp_client_deinit(struct lmtp_client **_client)
 
 const char *lmtp_client_state_to_string(struct lmtp_client *client)
 {
+	uoff_t size;
+
 	switch (client->input_state) {
 	case LMTP_INPUT_STATE_GREET:
 		return "greeting";
@@ -163,9 +165,18 @@ const char *lmtp_client_state_to_string(struct lmtp_client *client)
 	case LMTP_INPUT_STATE_RCPT_TO:
 		return "RCPT TO";
 	case LMTP_INPUT_STATE_DATA_CONTINUE:
-		return "DATA";
+		return "DATA init";
 	case LMTP_INPUT_STATE_DATA:
-		return "end-of-DATA";
+		if (client->output_finished)
+			return "DATA reply";
+		else if (i_stream_get_size(client->data_input, FALSE, &size) > 0) {
+			return t_strdup_printf(
+				"DATA (%"PRIuUOFF_T"/%"PRIuUOFF_T")",
+				client->data_input->v_offset, size);
+		} else {
+			return t_strdup_printf("DATA (%"PRIuUOFF_T"/?)",
+					       client->data_input->v_offset);
+		}
 	}
 	return "??";
 }
@@ -301,6 +312,7 @@ static void lmtp_client_send_data(struct lmtp_client *client)
 				break;
 			if (ret == 0) {
 				/* continue later */
+				o_stream_set_flush_pending(client->output, TRUE);
 				return;
 			}
 		}
@@ -330,7 +342,6 @@ static void lmtp_client_send_data(struct lmtp_client *client)
 
 static void lmtp_client_send_handshake(struct lmtp_client *client)
 {
-	o_stream_cork(client->output);
 	switch (client->protocol) {
 	case LMTP_CLIENT_PROTOCOL_LMTP:
 		o_stream_send_str(client->output,
@@ -343,9 +354,6 @@ static void lmtp_client_send_handshake(struct lmtp_client *client)
 					client->set.my_hostname));
 		break;
 	}
-	o_stream_send_str(client->output,
-		t_strdup_printf("MAIL FROM:%s\r\n", client->set.mail_from));
-	o_stream_uncork(client->output);
 }
 
 static int lmtp_input_get_reply_code(const char *line, int *reply_code_r)
@@ -394,6 +402,11 @@ static int lmtp_client_input_line(struct lmtp_client *client, const char *line)
 		if (reply_code != 250) {
 			lmtp_client_fail(client, line);
 			return -1;
+		}
+		if (client->input_state == LMTP_INPUT_STATE_LHLO) {
+			o_stream_send_str(client->output,
+				t_strdup_printf("MAIL FROM:%s\r\n",
+						client->set.mail_from));
 		}
 		client->input_state++;
 		lmtp_client_send_rcpts(client);

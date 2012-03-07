@@ -434,6 +434,7 @@ int index_storage_mailbox_delete_dir(struct mailbox *box, bool mailbox_deleted)
 int index_storage_mailbox_delete(struct mailbox *box)
 {
 	uint8_t mailbox_guid[MAIL_GUID_128_SIZE];
+	enum mail_error error;
 
 	if (!box->opened) {
 		/* \noselect mailbox, try deleting only the directory */
@@ -460,7 +461,14 @@ int index_storage_mailbox_delete(struct mailbox *box)
 
 	mailbox_list_add_change(box->list, MAILBOX_LOG_RECORD_DELETE_MAILBOX,
 				mailbox_guid);
-	return index_storage_mailbox_delete_dir(box, TRUE);
+	if (index_storage_mailbox_delete_dir(box, TRUE) < 0) {
+		(void)mail_storage_get_last_error(box->storage, &error);
+		if (error != MAIL_ERROR_EXISTS)
+			return -1;
+		/* we deleted the mailbox, but couldn't delete the directory
+		   because it has children. that's not an error. */
+	}
+	return 0;
 }
 
 int index_storage_mailbox_rename(struct mailbox *src, struct mailbox *dest,

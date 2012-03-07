@@ -154,18 +154,21 @@ namespace {
   prefix = mail/
   hidden = yes
   list = no
+  alias_for =
 }
 namespace {
   separator = /
   prefix = ~/mail/
   hidden = yes
   list = no
+  alias_for =
 }
 namespace {
   separator = /
   prefix = ~%u/mail/
   hidden = yes
   list = no
+  alias_for =
 }
 ---%<-------------------------------------------------------------------------
 
@@ -187,7 +190,7 @@ can continue using it while new clients will use the empty prefix namespace:
 
 ---%<-------------------------------------------------------------------------
 namespace {
-  separator = .
+  separator = /
   prefix =
   inbox = yes
 }
@@ -198,8 +201,14 @@ namespace {
   inbox = no
   hidden = yes
   list = no
+  alias_for =
 }
 ---%<-------------------------------------------------------------------------
+
+The "separator=/" allows the INBOX to have child mailboxes. Otherwise with
+"separator=." it wouldn't be possible to know if "INBOX.foo" means INBOX's
+"foo" child or the root "foo" mailbox in "INBOX." compatibility namespace. With
+"separator=/" the difference is clear with "INBOX/foo" vs. "INBOX.foo".
 
 Per-user Namespace Location From SQL
 ------------------------------------
@@ -232,4 +241,4 @@ user_query = SELECT Location as 'namespace/docs/location' FROM Namespaces WHERE
 ..
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2011-08-29 04:42)
+(This file was created from the wiki on 2012-02-12 04:42)

@@ -12,9 +12,17 @@ static void
 dbox_sync_file_move_if_needed(struct dbox_file *file,
 			      enum sdbox_sync_entry_type type)
 {
+	struct stat st;
 	bool move_to_alt = type == SDBOX_SYNC_ENTRY_TYPE_MOVE_TO_ALT;
 	bool deleted;
 
+	if (move_to_alt == dbox_file_is_in_alt(file) &&
+	    !move_to_alt) {
+		/* unopened dbox files default to primary dir.
+		   stat the file to update its location. */
+		(void)dbox_file_stat(file, &st);
+
+	}
 	if (move_to_alt != dbox_file_is_in_alt(file)) {
 		/* move the file. if it fails, nothing broke so
 		   don't worry about it. */
@@ -194,6 +202,7 @@ int sdbox_sync_begin(struct sdbox_mailbox *mbox, enum sdbox_sync_flags flags,
 		if (ret <= 0) {
 			if (ret < 0)
 				mail_storage_set_index_error(&mbox->box);
+			array_free(&ctx->expunged_uids);
 			i_free(ctx);
 			*ctx_r = NULL;
 			return ret;
@@ -225,6 +234,7 @@ int sdbox_sync_begin(struct sdbox_mailbox *mbox, enum sdbox_sync_flags flags,
 		}
 		mail_index_sync_rollback(&ctx->index_sync_ctx);
 		if (ret < 0) {
+			array_free(&ctx->expunged_uids);
 			i_free(ctx);
 			return -1;
 		}

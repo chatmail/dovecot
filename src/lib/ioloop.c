@@ -487,6 +487,7 @@ void io_loop_destroy(struct ioloop **_ioloop)
         i_assert(ioloop == current_ioloop);
 	current_ioloop = current_ioloop->prev;
 
+	i_free(ioloop->default_log_prefix);
 	i_free(ioloop);
 }
 

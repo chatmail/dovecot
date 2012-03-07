@@ -26,7 +26,7 @@ Contents
 
 Below are some simple Sieve code examples, more can be found from
 http://libsieve.sourceforge.net/script1.php and
-http://wiki.fastmail.fm/index.php?title=SieveExamples.
+http://fastmail.wikia.com/wiki/SieveExamples.
 
 Mail filtering by various headers
 ---------------------------------
@@ -316,4 +316,4 @@ Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
 Here's the original post announcing it:
 http://dovecot.org/list/dovecot/2007-March/020895.html
 
-(This file was created from the wiki on 2011-08-29 04:42)
+(This file was created from the wiki on 2012-02-12 04:42)
