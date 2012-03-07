@@ -119,6 +119,8 @@ static void client_connected(struct master_service_connection *conn)
 		if (mail_storage_service_lookup(service_ctx, &input, &user, &error) <= 0)
 			i_fatal("%s", error);
 		mail_storage_service_restrict_setenv(service_ctx, user);
+		/* we can't exec anything in a chroot */
+		env_remove("RESTRICT_CHROOT");
 		restrict_access_by_env(getenv("HOME"), TRUE);
 	}
 
@@ -126,9 +128,13 @@ static void client_connected(struct master_service_connection *conn)
 		i_fatal("dup2() failed: %m");
 	if (dup2(fd, STDOUT_FILENO) < 0)
 		i_fatal("dup2() failed: %m");
+	if (close(fd) < 0)
+		i_fatal("close() failed: %m");
 	if (conn->fd != SCRIPT_COMM_FD) {
 		if (dup2(conn->fd, SCRIPT_COMM_FD) < 0)
 			i_fatal("dup2() failed: %m");
+		if (close(conn->fd) < 0)
+			i_fatal("close() failed: %m");
 	}
 
 	/* close all listener sockets */

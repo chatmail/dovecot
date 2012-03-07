@@ -72,5 +72,5 @@ static struct doveadm_mail_cmd_context *cmd_index_alloc(void)
 }
 
 struct doveadm_mail_cmd cmd_index = {
-	cmd_index_alloc, "index", "<mailbox>"
+	cmd_index_alloc, "index", "<mailbox mask>"
 };

@@ -427,7 +427,7 @@ bool auth_request_handler_auth_begin(struct auth_request_handler *handler,
 			arg++;
 		}
 
-		if (auth_request_import(request, name, arg))
+		if (auth_request_import_auth(request, name, arg))
 			;
 		else if (strcmp(name, "resp") == 0) {
 			initial_resp = arg;
@@ -587,7 +587,9 @@ static void userdb_callback(enum userdb_result result,
 	case USERDB_RESULT_OK:
 		auth_stream_reply_add(reply, "USER", NULL);
 		auth_stream_reply_add(reply, NULL, dec2str(request->id));
-		if (request->master_user != NULL) {
+		if (request->master_user != NULL &&
+		    auth_stream_reply_find(request->userdb_reply,
+					   "master_user") == NULL) {
 			auth_stream_reply_add(request->userdb_reply,
 					      "master_user",
 					      request->master_user);

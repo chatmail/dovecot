@@ -504,19 +504,29 @@ void login_proxy_detach(struct login_proxy *proxy)
 static int login_proxy_ssl_handshaked(void *context)
 {
 	struct login_proxy *proxy = context;
+	struct ip_addr ip;
 
-	if ((proxy->ssl_flags & PROXY_SSL_FLAG_ANY_CERT) != 0 ||
-	    ssl_proxy_has_valid_client_cert(proxy->ssl_server_proxy))
+	if ((proxy->ssl_flags & PROXY_SSL_FLAG_ANY_CERT) != 0)
 		return 0;
 
-	if (!ssl_proxy_has_broken_client_cert(proxy->ssl_server_proxy)) {
-		client_log_err(proxy->client, t_strdup_printf(
-			"proxy: SSL certificate not received from %s:%u",
-			proxy->host, proxy->port));
-	} else {
+	if (ssl_proxy_has_broken_client_cert(proxy->ssl_server_proxy)) {
 		client_log_err(proxy->client, t_strdup_printf(
 			"proxy: Received invalid SSL certificate from %s:%u",
 			proxy->host, proxy->port));
+	} else if (!ssl_proxy_has_valid_client_cert(proxy->ssl_server_proxy)) {
+		client_log_err(proxy->client, t_strdup_printf(
+			"proxy: SSL certificate not received from %s:%u",
+			proxy->host, proxy->port));
+	} else if (net_addr2ip(proxy->host, &ip) == 0 ||
+		   /* NOTE: allow IP address for backwards compatibility,
+		      v2.1 no longer accepts it */
+		   ssl_proxy_cert_match_name(proxy->ssl_server_proxy,
+					     proxy->host) < 0) {
+		client_log_err(proxy->client, t_strdup_printf(
+			"proxy: hostname doesn't match SSL certificate at %s:%u",
+			proxy->host, proxy->port));
+	} else {
+		return 0;
 	}
 	proxy->disconnecting = TRUE;
 	return -1;
