@@ -148,10 +148,12 @@ root@$MAILNAME
   ucfr dovecot-core $SSL_CERT
   ucfr dovecot-core $SSL_KEY
 
-  chown root:dovecot $SSL_CERT || true
-  chmod 0644 $SSL_CERT || true
-  chown root:dovecot $SSL_KEY || true
-  chmod 0600 $SSL_KEY || true
+  if [ ! -h $SSL_CERT ] && [ ! -h $SSL_KEY ]; then
+    chown root:dovecot $SSL_CERT || true
+    chmod 0644 $SSL_CERT || true
+    chown root:dovecot $SSL_KEY || true
+    chmod 0600 $SSL_KEY || true
+  fi
 
 fi
 
