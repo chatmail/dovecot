@@ -6,8 +6,9 @@ dovecot (1:2.0.18-1) unstable; urgency=low
     Thanks Michael Kuhn.
   * Patch to enable hardened build flags.  (Closes: #653530)
     Thanks Moritz Muehlenhoff
+  * Updated pigeonhole to 0.2.6
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 07 Mar 2012 10:51:36 -0500
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 07 Mar 2012 12:40:24 -0500
 
 dovecot (1:2.0.15-1) unstable; urgency=low
 
