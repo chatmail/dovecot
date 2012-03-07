@@ -1,5 +1,6 @@
 From: Marco Nenciarini <mnencia@debian.org>
 Date: Sat, 5 Mar 2011 11:19:07 +0100
+Updated: Wed, 7 Mar 2012 10:43:09 -0500
 Subject: split-protocols
 
 Description: Set default protocols value as empty and enable each
@@ -11,10 +12,10 @@ Description: Set default protocols value as empty and enable each
  src/master/master-settings.c                       |    2 +-
  4 files changed, 4 insertions(+), 7 deletions(-)
 
-diff --git a/doc/example-config/dovecot.conf b/doc/example-config/dovecot.conf
-index a557947..22ee7a0 100644
---- a/doc/example-config/dovecot.conf
-+++ b/doc/example-config/dovecot.conf
+Index: dovecot/doc/example-config/dovecot.conf
+===================================================================
+--- dovecot.orig/doc/example-config/dovecot.conf	2012-03-07 08:19:52.000000000 -0500
++++ dovecot/doc/example-config/dovecot.conf	2012-03-07 10:37:13.000000000 -0500
 @@ -16,8 +16,8 @@
  # options. The paths listed here are for configure --prefix=/usr
  # --sysconfdir=/etc --localstatedir=/var
@@ -26,10 +27,10 @@ index a557947..22ee7a0 100644
  
  # A comma separated list of IPs or hosts where to listen in for connections. 
  # "*" listens in all IPv4 interfaces, "::" listens in all IPv6 interfaces.
-diff --git a/pigeonhole/doc/example-config/conf.d/20-managesieve.conf b/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
-index 42dfc39..d8fde1f 100644
---- a/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
-+++ b/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
+Index: dovecot/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
+===================================================================
+--- dovecot.orig/pigeonhole/doc/example-config/conf.d/20-managesieve.conf	2012-03-07 10:37:11.000000000 -0500
++++ dovecot/pigeonhole/doc/example-config/conf.d/20-managesieve.conf	2012-03-07 10:37:13.000000000 -0500
 @@ -2,9 +2,6 @@
  ## ManageSieve specific settings
  ##
@@ -40,30 +41,29 @@ index 42dfc39..d8fde1f 100644
  # Service definitions
  
  service managesieve-login {
-diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index 873d58a..563ca12 100644
---- a/src/config/all-settings.c
-+++ b/src/config/all-settings.c
-@@ -1758,7 +1758,7 @@ struct master_settings master_default_settings = {
- 	.base_dir = PKG_RUNDIR,
+Index: dovecot/src/config/all-settings.c
+===================================================================
+--- dovecot.orig/src/config/all-settings.c	2012-03-07 08:19:52.000000000 -0500
++++ dovecot/src/config/all-settings.c	2012-03-07 10:37:14.000000000 -0500
+@@ -1764,7 +1764,7 @@
  	.libexec_dir = PKG_LIBEXECDIR,
+ 	.instance_name = PACKAGE,
  	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,
 -	.protocols = "imap pop3 lmtp",
 +	.protocols = "",
  	.listen = "*, ::",
  	.ssl = "yes:no:required",
  	.default_internal_user = "dovecot",
-diff --git a/src/master/master-settings.c b/src/master/master-settings.c
-index 4f49527..4b7884e 100644
---- a/src/master/master-settings.c
-+++ b/src/master/master-settings.c
-@@ -211,7 +211,7 @@ static const struct master_settings master_default_settings = {
- 	.base_dir = PKG_RUNDIR,
+Index: dovecot/src/master/master-settings.c
+===================================================================
+--- dovecot.orig/src/master/master-settings.c	2012-03-07 08:19:52.000000000 -0500
++++ dovecot/src/master/master-settings.c	2012-03-07 10:37:14.000000000 -0500
+@@ -213,7 +213,7 @@
  	.libexec_dir = PKG_LIBEXECDIR,
+ 	.instance_name = PACKAGE,
  	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,
 -	.protocols = "imap pop3 lmtp",
 +	.protocols = "",
  	.listen = "*, ::",
  	.ssl = "yes:no:required",
  	.default_internal_user = "dovecot",
--- 
