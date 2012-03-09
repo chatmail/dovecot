@@ -23,15 +23,15 @@ endif
 config-stamp: configure
 	dh_testdir
 	# Dovecot
-	sh configure --with-ldap=plugin \
+	$(shell dpkg-buildflags --export=configure) sh configure \
+	            --with-ldap=plugin \
 	            --with-ssl=openssl \
-	            $(shell dpkg-buildflags --export=configure) \
 	            --with-sql=plugin \
 	            --with-pgsql \
 	            --with-mysql \
 	            --with-sqlite \
 	            --with-gssapi=plugin \
-		    --with-solr \
+		        --with-solr \
 	            --with-ioloop=best \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \
@@ -46,10 +46,12 @@ config-stamp: configure
 	            --disable-static
 	$(MAKE) dovecot-config
 	# Pigeonhole
-	(cd $(PIGEONHOLE_DIR)/ && sh configure --with-dovecot=../ \
+	(cd $(PIGEONHOLE_DIR)/ && \
+	    touch stamp.h.in && \
+	    $(shell dpkg-buildflags --export=configure) sh configure \
+	    --with-dovecot=../ \
 		--prefix=/usr \
 		--sysconfdir=/etc \
-		$(shell dpkg-buildflags --export=configure) \
 		--libexecdir=\$${prefix}/lib \
 		--mandir=\$${prefix}/share/man \
 		--infodir=\$${prefix}/share/info \
