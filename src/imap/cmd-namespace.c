@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -9,6 +9,7 @@
 static void list_namespaces(struct mail_namespace *ns,
 			    enum namespace_type type, string_t *str)
 {
+	char ns_sep;
 	bool found = FALSE;
 
 	while (ns != NULL) {
@@ -18,10 +19,13 @@ static void list_namespaces(struct mail_namespace *ns,
 				str_append_c(str, '(');
 				found = TRUE;
 			}
+			ns_sep = mail_namespace_get_sep(ns);
 			str_append_c(str, '(');
 			imap_quote_append_string(str, ns->prefix, FALSE);
 			str_append(str, " \"");
-			str_append(str, ns->sep_str);
+			if (ns_sep == '\\')
+				str_append_c(str, '\\');
+			str_append_c(str, ns_sep);
 			str_append(str, "\")");
 		}
 

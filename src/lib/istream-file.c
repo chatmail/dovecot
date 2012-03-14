@@ -1,10 +1,10 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
 #include "lib.h"
 #include "ioloop.h"
-#include "istream-internal.h"
+#include "istream-private.h"
 #include "network.h"
 
 #include <time.h>

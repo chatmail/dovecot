@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -44,9 +44,9 @@ cmd_user_input(const char *auth_socket_path, const struct authtest_input *input,
 				      pool, &username, &fields);
 	if (ret < 0) {
 		if (fields[0] == NULL)
-			i_fatal("userdb lookup failed for %s", input->username);
+			i_error("userdb lookup failed for %s", input->username);
 		else {
-			i_fatal("userdb lookup failed for %s: %s",
+			i_error("userdb lookup failed for %s: %s",
 				input->username, fields[0]);
 		}
 	} else if (ret == 0) {
@@ -139,7 +139,7 @@ static void auth_connected(struct auth_client *client,
 				      auth_callback, input);
 }
 
-static int
+static void
 cmd_auth_input(const char *auth_socket_path, struct authtest_input *input)
 {
 	struct auth_client *client;
@@ -157,7 +157,6 @@ cmd_auth_input(const char *auth_socket_path, struct authtest_input *input)
 
 	auth_client_set_connect_notify(client, NULL, NULL);
 	auth_client_deinit(&client);
-	return 0;
 }
 
 static void auth_user_info_parse(struct auth_user_info *info, const char *arg)
@@ -180,11 +179,12 @@ static void auth_user_info_parse(struct auth_user_info *info, const char *arg)
 }
 
 static void
-cmd_user_list(const char *auth_socket_path, char *const *users)
+cmd_user_list(const char *auth_socket_path, const struct authtest_input *input,
+	      char *const *users)
 {
 	struct auth_master_user_list_ctx *ctx;
 	struct auth_master_connection *conn;
-	const char *username;
+	const char *username, *user_mask = NULL;
 	unsigned int i;
 
 	if (auth_socket_path == NULL) {
@@ -192,8 +192,11 @@ cmd_user_list(const char *auth_socket_path, char *const *users)
 					       "/auth-userdb", NULL);
 	}
 
+	if (users[0] != NULL && users[1] == NULL)
+		user_mask = users[0];
+
 	conn = auth_master_init(auth_socket_path, 0);
-	ctx = auth_master_user_list_init(conn);
+	ctx = auth_master_user_list_init(conn, user_mask, &input->info);
 	while ((username = auth_master_user_list_next(ctx)) != NULL) {
 		for (i = 0; users[i] != NULL; i++) {
 			if (wildcard_match_icase(username, users[i]))
@@ -202,10 +205,8 @@ cmd_user_list(const char *auth_socket_path, char *const *users)
 		if (users[i] != NULL)
 			printf("%s\n", username);
 	}
-	if (auth_master_user_list_deinit(&ctx) < 0) {
-		i_error("user listing failed");
-		exit(1);
-	}
+	if (auth_master_user_list_deinit(&ctx) < 0)
+		i_fatal("user listing failed");
 	auth_master_deinit(&conn);
 }
 
@@ -239,10 +240,9 @@ static void cmd_auth(int argc, char *argv[])
 		t_askpass("Password: ");
 	if (argv[optind] != NULL)
 			i_fatal("Unexpected parameter: %s", argv[optind]);
-	if (cmd_auth_input(auth_socket_path, &input) < 0)
-		exit(FATAL_DEFAULT);
+	cmd_auth_input(auth_socket_path, &input);
 	if (!input.success)
-		exit(1);
+		doveadm_exit_code = EX_NOPERM;
 }
 
 static void cmd_user(int argc, char *argv[])
@@ -286,10 +286,9 @@ static void cmd_user(int argc, char *argv[])
 	}
 
 	if (have_wildcards)
-		cmd_user_list(auth_socket_path, argv + optind);
+		cmd_user_list(auth_socket_path, &input, argv + optind);
 	else {
 		bool first = TRUE;
-		bool notfound = FALSE;
 
 		while ((input.username = argv[optind++]) != NULL) {
 			if (first)
@@ -299,14 +298,13 @@ static void cmd_user(int argc, char *argv[])
 			switch (cmd_user_input(auth_socket_path, &input,
 					       show_field)) {
 			case -1:
-				exit(1);
+				doveadm_exit_code = EX_TEMPFAIL;
+				break;
 			case 0:
-				notfound = TRUE;
+				doveadm_exit_code = EX_NOUSER;
 				break;
 			}
 		}
-		if (notfound)
-			exit(2);
 	}
 }
 

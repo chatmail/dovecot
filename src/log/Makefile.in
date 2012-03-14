@@ -49,7 +49,8 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(pkglibexecdir)"
 PROGRAMS = $(pkglibexec_PROGRAMS)
-am_log_OBJECTS = log-connection.$(OBJEXT) log-settings.$(OBJEXT) \
+am_log_OBJECTS = doveadm-connection.$(OBJEXT) log-connection.$(OBJEXT) \
+	log-error-buffer.$(OBJEXT) log-settings.$(OBJEXT) \
 	main.$(OBJEXT)
 log_OBJECTS = $(am_log_OBJECTS)
 am__DEPENDENCIES_1 =
@@ -88,6 +89,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -148,6 +150,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOPLUGIN_LDFLAGS = @NOPLUGIN_LDFLAGS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -222,6 +225,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -251,12 +255,16 @@ AM_CPPFLAGS = \
 log_LDADD = $(LIBDOVECOT)
 log_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 log_SOURCES = \
+	doveadm-connection.c \
 	log-connection.c \
+	log-error-buffer.c \
 	log-settings.c \
 	main.c
 
 noinst_HEADERS = \
-	log-connection.h
+	doveadm-connection.h \
+	log-connection.h \
+	log-error-buffer.h
 
 all: all-am
 
@@ -345,7 +353,9 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/log-connection.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/log-error-buffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/log-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 

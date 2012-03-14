@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -8,6 +8,7 @@
 #include "hash.h"
 #include "master-interface.h"
 #include "master-service.h"
+#include "log-error-buffer.h"
 #include "log-connection.h"
 
 #include <stdio.h>
@@ -25,6 +26,7 @@ struct log_client {
 struct log_connection {
 	struct log_connection *prev, *next;
 
+	struct log_error_buffer *errorbuf;
 	int fd;
 	int listen_fd;
 	struct io *io;
@@ -76,7 +78,61 @@ static void log_parse_option(struct log_connection *log,
 	}
 }
 
-static void log_parse_master_line(const char *line)
+static void
+client_log_ctx(struct log_connection *log,
+	       const struct failure_context *ctx, time_t log_time,
+	       const char *prefix, const char *text)
+{
+	struct log_error err;
+
+	switch (ctx->type) {
+	case LOG_TYPE_DEBUG:
+	case LOG_TYPE_INFO:
+	case LOG_TYPE_COUNT:
+	case LOG_TYPE_OPTION:
+		break;
+	case LOG_TYPE_WARNING:
+	case LOG_TYPE_ERROR:
+	case LOG_TYPE_FATAL:
+	case LOG_TYPE_PANIC:
+		memset(&err, 0, sizeof(err));
+		err.type = ctx->type;
+		err.timestamp = log_time;
+		err.prefix = prefix;
+		err.text = text;
+		log_error_buffer_add(log->errorbuf, &err);
+		break;
+	}
+	i_set_failure_prefix(prefix);
+	i_log_type(ctx, "%s", text);
+	i_set_failure_prefix("log: ");
+}
+
+static void
+client_log_fatal(struct log_connection *log, struct log_client *client,
+		 const char *line, time_t log_time, const struct tm *tm)
+{
+	struct failure_context failure_ctx;
+	const char *prefix = log->default_prefix;
+
+	memset(&failure_ctx, 0, sizeof(failure_ctx));
+	failure_ctx.type = LOG_TYPE_FATAL;
+	failure_ctx.timestamp = tm;
+
+	if (client != NULL) {
+		if (client->prefix != NULL)
+			prefix = client->prefix;
+		else if (client->ip.family != 0) {
+			line = t_strdup_printf("%s [last ip=%s]",
+					       line, net_ip2addr(&client->ip));
+		}
+	}
+	client_log_ctx(log, &failure_ctx, log_time, prefix,
+		       t_strconcat("master: ", line, NULL));
+}
+
+static void
+log_parse_master_line(const char *line, time_t log_time, const struct tm *tm)
 {
 	struct log_connection *const *logs, *log;
 	struct log_client *client;
@@ -110,20 +166,21 @@ static void log_parse_master_line(const char *line)
 			return;
 		}
 		log_client_free(log, client, pid);
+	} else if (strncmp(line, "FATAL ", 6) == 0) {
+		client_log_fatal(log, client, line + 6, log_time, tm);
 	} else if (strncmp(line, "DEFAULT-FATAL ", 14) == 0) {
 		/* If the client has logged a fatal/panic, don't log this
 		   message. */
 		if (client == NULL || !client->fatal_logged)
-			i_error("%s", line + 14);
-		else
-			log_client_free(log, client, pid);
+			client_log_fatal(log, client, line + 14, log_time, tm);
 	} else {
 		i_error("Received unknown command from master: %s", line);
 	}
 }
 
 static void
-log_it(struct log_connection *log, const char *line, const struct tm *tm)
+log_it(struct log_connection *log, const char *line,
+       time_t log_time, const struct tm *tm)
 {
 	struct failure_line failure;
 	struct failure_context failure_ctx;
@@ -131,7 +188,9 @@ log_it(struct log_connection *log, const char *line, const struct tm *tm)
 	const char *prefix;
 
 	if (log->master) {
-		log_parse_master_line(line);
+		T_BEGIN {
+			log_parse_master_line(line, log_time, tm);
+		} T_END;
 		return;
 	}
 
@@ -158,9 +217,7 @@ log_it(struct log_connection *log, const char *line, const struct tm *tm)
 
 	prefix = client != NULL && client->prefix != NULL ?
 		client->prefix : log->default_prefix;
-	i_set_failure_prefix(prefix);
-	i_log_type(&failure_ctx, "%s", failure.text);
-	i_set_failure_prefix("log: ");
+	client_log_ctx(log, &failure_ctx, log_time, prefix, failure.text);
 }
 
 static int log_connection_handshake(struct log_connection *log)
@@ -229,7 +286,7 @@ static void log_connection_input(struct log_connection *log)
 		tm = *localtime(&now);
 
 		while ((line = i_stream_next_line(log->input)) != NULL)
-			log_it(log, line, &tm);
+			log_it(log, line, now, &tm);
 	}
 
 	if (log->input->eof)
@@ -242,11 +299,13 @@ static void log_connection_input(struct log_connection *log)
 	}
 }
 
-struct log_connection *log_connection_create(int fd, int listen_fd)
+struct log_connection *
+log_connection_create(struct log_error_buffer *errorbuf, int fd, int listen_fd)
 {
 	struct log_connection *log;
 
 	log = i_new(struct log_connection, 1);
+	log->errorbuf = errorbuf;
 	log->fd = fd;
 	log->listen_fd = listen_fd;
 	log->io = io_add(fd, IO_READ, log_connection_input, log);
@@ -282,8 +341,6 @@ void log_connection_destroy(struct log_connection *log)
 		i_error("close(log connection fd) failed: %m");
 	i_free(log->default_prefix);
 	i_free(log);
-
-        master_service_client_connection_destroyed(master_service);
 }
 
 void log_connections_init(void)

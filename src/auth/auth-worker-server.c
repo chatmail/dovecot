@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -41,14 +41,17 @@ struct auth_worker_connection {
 	struct auth_worker_request *request;
 	unsigned int id_counter;
 
+	unsigned int received_error:1;
+	unsigned int restart:1;
 	unsigned int shutdown:1;
 };
 
 static ARRAY_DEFINE(connections, struct auth_worker_connection *) = ARRAY_INIT;
-static unsigned int idle_count;
+static unsigned int idle_count = 0, auth_workers_with_errors = 0;
 static ARRAY_DEFINE(worker_request_array, struct auth_worker_request *);
 static struct aqueue *worker_request_queue;
 static time_t auth_worker_last_warn;
+static unsigned int auth_workers_throttle_count;
 
 static const char *worker_socket_path;
 
@@ -83,7 +86,8 @@ static void auth_worker_request_send(struct auth_worker_connection *conn,
 	    AUTH_WORKER_DELAY_WARN_MIN_INTERVAL_SECS) {
 		auth_worker_last_warn = ioloop_time;
 		i_warning("auth workers: Auth request was queued for %d "
-			  "seconds, %d left in queue",
+			  "seconds, %d left in queue "
+			  "(see auth_worker_max_count)",
 			  (int)(ioloop_time - request->created),
 			  aqueue_count(worker_request_queue));
 	}
@@ -149,18 +153,19 @@ static struct auth_worker_connection *auth_worker_create(void)
 	struct auth_worker_connection *conn;
 	int fd;
 
-	if (array_count(&connections) >= global_auth_settings->worker_max_count)
+	if (array_count(&connections) >= auth_workers_throttle_count)
 		return NULL;
 
 	fd = net_connect_unix_with_retries(worker_socket_path, 5000);
 	if (fd == -1) {
 		if (errno == EACCES) {
-			i_fatal("%s", eacces_error_get("net_connect_unix",
+			i_error("%s", eacces_error_get("net_connect_unix",
 						       worker_socket_path));
 		} else {
-			i_fatal("net_connect_unix(%s) failed: %m",
+			i_error("net_connect_unix(%s) failed: %m",
 				worker_socket_path);
 		}
+		return NULL;
 	}
 
 	conn = i_new(struct auth_worker_connection, 1);
@@ -186,6 +191,12 @@ static void auth_worker_destroy(struct auth_worker_connection **_conn,
 	unsigned int idx;
 
 	*_conn = NULL;
+
+	if (conn->received_error) {
+		i_assert(auth_workers_with_errors > 0);
+		i_assert(auth_workers_with_errors <= array_count(&connections));
+		auth_workers_with_errors--;
+	}
 
 	array_foreach(&connections, conns) {
 		if (*conns == conn) {
@@ -217,7 +228,8 @@ static void auth_worker_destroy(struct auth_worker_connection **_conn,
 
 	if (idle_count == 0 && restart) {
 		conn = auth_worker_create();
-		auth_worker_request_send_next(conn);
+		if (conn != NULL)
+			auth_worker_request_send_next(conn);
 	}
 }
 
@@ -257,6 +269,51 @@ static void auth_worker_request_handle(struct auth_worker_connection *conn,
 		io_remove(&conn->io);
 }
 
+static bool auth_worker_error(struct auth_worker_connection *conn)
+{
+	if (conn->received_error)
+		return TRUE;
+	conn->received_error = TRUE;
+	auth_workers_with_errors++;
+	i_assert(auth_workers_with_errors <= array_count(&connections));
+
+	if (auth_workers_with_errors == 1) {
+		/* this is the only failing auth worker connection.
+		   don't create new ones until this one sends SUCCESS. */
+		auth_workers_throttle_count = array_count(&connections);
+		return TRUE;
+	}
+
+	/* too many auth workers, reduce them */
+	i_assert(array_count(&connections) > 1);
+	if (auth_workers_throttle_count >= array_count(&connections))
+		auth_workers_throttle_count = array_count(&connections)-1;
+	else if (auth_workers_throttle_count > 1)
+		auth_workers_throttle_count--;
+	auth_worker_destroy(&conn, "Internal auth worker failure", FALSE);
+	return FALSE;
+}
+
+static void auth_worker_success(struct auth_worker_connection *conn)
+{
+	unsigned int max_count = global_auth_settings->worker_max_count;
+
+	if (!conn->received_error)
+		return;
+
+	i_assert(auth_workers_with_errors > 0);
+	i_assert(auth_workers_with_errors <= array_count(&connections));
+	auth_workers_with_errors--;
+
+	if (auth_workers_with_errors == 0) {
+		/* all workers are succeeding now, set the limit back to
+		   original. */
+		auth_workers_throttle_count = max_count;
+	} else if (auth_workers_throttle_count < max_count)
+		auth_workers_throttle_count++;
+	conn->received_error = FALSE;
+}
+
 static void worker_input(struct auth_worker_connection *conn)
 {
 	const char *line, *id_str;
@@ -279,8 +336,21 @@ static void worker_input(struct auth_worker_connection *conn)
 	}
 
 	while ((line = i_stream_next_line(conn->input)) != NULL) {
+		if (strcmp(line, "RESTART") == 0) {
+			conn->restart = TRUE;
+			continue;
+		}
 		if (strcmp(line, "SHUTDOWN") == 0) {
 			conn->shutdown = TRUE;
+			continue;
+		}
+		if (strcmp(line, "ERROR") == 0) {
+			if (!auth_worker_error(conn))
+				return;
+			continue;
+		}
+		if (strcmp(line, "SUCCESS") == 0) {
+			auth_worker_success(conn);
 			continue;
 		}
 		id_str = line;
@@ -307,8 +377,10 @@ static void worker_input(struct auth_worker_connection *conn)
 
 	if (conn->request != NULL) {
 		/* there's still a pending request */
-	} else if (conn->shutdown)
+	} else if (conn->restart)
 		auth_worker_destroy(&conn, "Max requests limit", TRUE);
+	else if (conn->shutdown)
+		auth_worker_destroy(&conn, "Idle kill", FALSE);
 	else
 		auth_worker_request_send_next(conn);
 }
@@ -355,6 +427,8 @@ void auth_worker_server_resume_input(struct auth_worker_connection *conn)
 void auth_worker_server_init(void)
 {
 	worker_socket_path = "auth-worker";
+	auth_workers_throttle_count = global_auth_settings->worker_max_count;
+	i_assert(auth_workers_throttle_count > 0);
 
 	i_array_init(&worker_request_array, 128);
 	worker_request_queue = aqueue_init(&worker_request_array.arr);

@@ -126,6 +126,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -186,6 +187,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOPLUGIN_LDFLAGS = @NOPLUGIN_LDFLAGS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -260,6 +262,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -284,7 +287,6 @@ top_srcdir = @top_srcdir@
 @BUILD_DOCS_TRUE@DOCDIRS = wiki example-config
 SUBDIRS = man $(DOCDIRS)
 docfiles = \
-	auth-protocol.txt \
 	documentation.txt \
 	securecoding.txt \
 	thread-refs.txt

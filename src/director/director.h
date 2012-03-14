@@ -24,6 +24,7 @@ struct director {
 	/* all director connections */
 	struct director_connection *connections;
 	struct timeout *to_reconnect;
+	struct timeout *to_sync;
 
 	/* current mail hosts */
 	struct mail_host_list *mail_hosts;
@@ -45,6 +46,7 @@ struct director {
 
 	struct ipc_client *ipc_proxy;
 	unsigned int sync_seq;
+	time_t ring_last_sync_time;
 
 	/* director ring handshaking is complete.
 	   director can start serving clients. */
@@ -65,13 +67,16 @@ director_init(const struct director_settings *set,
 	      const struct ip_addr *listen_ip, unsigned int listen_port,
 	      director_state_change_callback_t *callback);
 void director_deinit(struct director **dir);
+void director_find_self(struct director *dir);
 
 /* Start connecting to other directors */
 void director_connect(struct director *dir);
 
 void director_set_ring_handshaked(struct director *dir);
 void director_set_ring_synced(struct director *dir);
+void director_set_ring_unsynced(struct director *dir);
 void director_set_state_changed(struct director *dir);
+bool director_resend_sync(struct director *dir);
 
 void director_update_host(struct director *dir, struct director_host *src,
 			  struct director_host *orig_src,

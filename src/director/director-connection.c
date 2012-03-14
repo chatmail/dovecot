@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -570,7 +570,7 @@ static void director_handshake_cmd_done(struct director_connection *conn)
 		/* we're connected to both directors. see if the ring is
 		   finished by sending a SYNC. if we get it back, it's done. */
 		dir->sync_seq++;
-		dir->ring_synced = FALSE;
+		director_set_ring_unsynced(dir);
 		director_connection_send(dir->right,
 			t_strdup_printf("SYNC\t%s\t%u\t%u\n",
 					net_ip2addr(&dir->self_ip),
@@ -675,6 +675,41 @@ director_connection_handle_handshake(struct director_connection *conn,
 	return FALSE;
 }
 
+static void
+director_connection_sync_host(struct director_connection *conn,
+			      struct director_host *host,
+			      uint32_t seq, const char *line)
+{
+	struct director *dir = conn->dir;
+
+	if (host->self) {
+		if (dir->sync_seq != seq) {
+			/* stale SYNC event */
+			return;
+		}
+
+		if (!dir->ring_handshaked) {
+			/* the ring is handshaked */
+			director_set_ring_handshaked(dir);
+		} else if (dir->ring_synced) {
+			/* duplicate SYNC (which was sent just in case the
+			   previous one got lost) */
+		} else {
+			if (dir->debug) {
+				i_debug("Ring is synced (%s sent seq=%u)",
+					conn->name, seq);
+			}
+			director_set_ring_synced(dir);
+		}
+	} else {
+		/* forward it to the connection on right */
+		if (dir->right != NULL) {
+			director_connection_send(dir->right,
+				t_strconcat(line, "\n", NULL));
+		}
+	}
+}
+
 static bool director_connection_sync(struct director_connection *conn,
 				     const char *const *args, const char *line)
 {
@@ -693,37 +728,11 @@ static bool director_connection_sync(struct director_connection *conn,
 	/* find the originating director. if we don't see it, it was already
 	   removed and we can ignore this sync. */
 	host = director_host_lookup(dir, &ip, port);
-	if (host == NULL)
-		return TRUE;
+	if (host != NULL)
+		director_connection_sync_host(conn, host, seq, line);
 
-	if (host->self) {
-		if (dir->sync_seq != seq) {
-			/* stale SYNC event */
-			return TRUE;
-		}
-
-		if (!dir->ring_handshaked) {
-			/* the ring is handshaked */
-			director_set_ring_handshaked(dir);
-		} else if (dir->ring_synced) {
-			i_error("Received SYNC from %s (seq=%u) "
-				"while already synced", conn->name, seq);
-			return TRUE;
-		} else {
-			if (dir->debug) {
-				i_debug("Ring is synced (%s sent seq=%u)",
-					conn->name, seq);
-			}
-			director_set_ring_synced(dir);
-		}
-		return TRUE;
-	}
-
-	/* forward it to the connection on right */
-	if (dir->right != NULL) {
-		director_connection_send(dir->right,
-					 t_strconcat(line, "\n", NULL));
-	}
+	if (host == NULL || !host->self)
+		director_resend_sync(dir);
 	return TRUE;
 }
 
@@ -1130,7 +1139,7 @@ void director_connection_deinit(struct director_connection **_conn)
 	if (dir->left == NULL || dir->right == NULL) {
 		/* we aren't synced until we're again connected to a ring */
 		dir->sync_seq++;
-		dir->ring_synced = FALSE;
+		director_set_ring_unsynced(dir);
 	}
 }
 

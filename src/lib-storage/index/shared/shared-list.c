@@ -1,17 +1,10 @@
-/* Copyright (c) 2008-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "imap-match.h"
 #include "mailbox-list-private.h"
 #include "index-storage.h"
 #include "shared-storage.h"
-
-struct shared_mailbox_list_iterate_context {
-	struct mailbox_list_iterate_context ctx;
-	struct mail_namespace *cur_ns;
-	struct imap_match_glob *glob;
-	struct mailbox_info info;
-};
 
 extern struct mailbox_list shared_mailbox_list;
 
@@ -20,7 +13,7 @@ static struct mailbox_list *shared_list_alloc(void)
 	struct mailbox_list *list;
 	pool_t pool;
 
-	pool = pool_alloconly_create("shared list", 1024);
+	pool = pool_alloconly_create("shared list", 2048);
 	list = p_new(pool, struct mailbox_list, 1);
 	*list = shared_mailbox_list;
 	list->pool = pool;
@@ -43,12 +36,14 @@ static void shared_list_copy_error(struct mailbox_list *shared_list,
 }
 
 static int
-shared_get_storage(struct mailbox_list **list, const char **name,
+shared_get_storage(struct mailbox_list **list, const char *vname,
 		   struct mail_storage **storage_r)
 {
 	struct mail_namespace *ns = (*list)->ns;
+	const char *name;
 
-	if (shared_storage_get_namespace(&ns, name) < 0)
+	name = mailbox_list_get_storage_name(*list, vname);
+	if (shared_storage_get_namespace(&ns, &name) < 0)
 		return -1;
 	*list = ns->list;
 	*storage_r = ns->storage;
@@ -85,6 +80,11 @@ shared_is_valid_create_name(struct mailbox_list *list, const char *name)
 	return mailbox_list_is_valid_create_name(ns->list, name);
 }
 
+static char shared_list_get_hierarchy_sep(struct mailbox_list *list ATTR_UNUSED)
+{
+	return '/';
+}
+
 static const char *
 shared_list_get_path(struct mailbox_list *list, const char *name,
 		     enum mailbox_list_path_type type)
@@ -108,21 +108,6 @@ shared_list_get_path(struct mailbox_list *list, const char *name,
 		return NULL;
 	}
 	return mailbox_list_get_path(ns->list, name, type);
-}
-
-static int
-shared_list_get_mailbox_name_status(struct mailbox_list *list, const char *name,
-				    enum mailbox_name_status *status_r)
-{
-	struct mail_namespace *ns = list->ns;
-	int ret;
-
-	if (shared_storage_get_namespace(&ns, &name) < 0)
-		return -1;
-	ret = mailbox_list_get_mailbox_name_status(ns->list, name, status_r);
-	if (ret < 0)
-		shared_list_copy_error(list, ns);
-	return ret;
 }
 
 static const char *
@@ -155,64 +140,77 @@ shared_list_join_refpattern(struct mailbox_list *list,
 	return pattern;
 }
 
+static void
+shared_list_create_missing_namespaces(struct mailbox_list *list,
+				      const char *const *patterns)
+{
+	char sep = mail_namespace_get_sep(list->ns);
+	const char *list_pat, *name;
+	unsigned int i;
+
+	for (i = 0; patterns[i] != NULL; i++) {
+		const char *last = NULL, *p;
+
+		/* we'll require that the pattern begins with the list's
+		   namespace prefix. we could also handle other patterns
+		   (e.g. %/user/%), but it's more of a theoretical problem. */
+		if (strncmp(list->ns->prefix, patterns[i],
+			    list->ns->prefix_len) != 0)
+			continue;
+		list_pat = patterns[i] + list->ns->prefix_len;
+
+		for (p = list_pat; *p != '\0'; p++) {
+			if (*p == '%' || *p == '*')
+				break;
+			if (*p == sep)
+				last = p;
+		}
+		if (last != NULL) {
+			name = t_strdup_until(list_pat, last);
+			(void)mailbox_list_is_valid_existing_name(list, name);
+		}
+	}
+}
+
 static struct mailbox_list_iterate_context *
 shared_list_iter_init(struct mailbox_list *list, const char *const *patterns,
 		      enum mailbox_list_iter_flags flags)
 {
-	struct shared_mailbox_list_iterate_context *ctx;
+	struct mailbox_list_iterate_context *ctx;
+	pool_t pool;
+	char sep = mail_namespace_get_sep(list->ns);
 
-	ctx = i_new(struct shared_mailbox_list_iterate_context, 1);
-	ctx->ctx.list = list;
-	ctx->ctx.flags = flags;
-	ctx->cur_ns = list->ns->user->namespaces;
-	ctx->info.ns = list->ns;
-	ctx->info.flags = MAILBOX_NONEXISTENT;
-	ctx->glob = imap_match_init_multiple(default_pool, patterns,
-					     FALSE, list->ns->sep);
-	return &ctx->ctx;
+	pool = pool_alloconly_create("mailbox list shared iter", 1024);
+	ctx = p_new(pool, struct mailbox_list_iterate_context, 1);
+	ctx->pool = pool;
+	ctx->list = list;
+	ctx->flags = flags;
+	ctx->glob = imap_match_init_multiple(pool, patterns, FALSE, sep);
+	array_create(&ctx->module_contexts, pool, sizeof(void *), 5);
+
+	if ((flags & MAILBOX_LIST_ITER_SELECT_SUBSCRIBED) == 0 &&
+	    (list->ns->flags & NAMESPACE_FLAG_AUTOCREATED) == 0) T_BEGIN {
+		shared_list_create_missing_namespaces(list, patterns);
+	} T_END;
+	return ctx;
 }
 
 static const struct mailbox_info *
-shared_list_iter_next(struct mailbox_list_iterate_context *_ctx)
+shared_list_iter_next(struct mailbox_list_iterate_context *ctx ATTR_UNUSED)
 {
-	struct shared_mailbox_list_iterate_context *ctx =
-		(struct shared_mailbox_list_iterate_context *)_ctx;
-	struct mail_namespace *ns = ctx->cur_ns;
-
-	for (; ns != NULL; ns = ns->next) {
-		if (ns->type != NAMESPACE_SHARED ||
-		    (ns->flags & NAMESPACE_FLAG_AUTOCREATED) == 0)
-			continue;
-		if ((ns->flags & (NAMESPACE_FLAG_LIST_PREFIX |
-				  NAMESPACE_FLAG_LIST_CHILDREN)) == 0)
-			continue;
-
-		if (ns->prefix_len < ctx->info.ns->prefix_len ||
-		    strncmp(ns->prefix, ctx->info.ns->prefix,
-			    ctx->info.ns->prefix_len) != 0)
-			continue;
-
-		/* visible and listable namespace under ourself, see if the
-		   prefix matches without the trailing separator */
-		i_assert(ns->prefix_len > 0);
-		ctx->info.name = t_strndup(ns->prefix, ns->prefix_len - 1);
-		if (imap_match(ctx->glob, ctx->info.name) == IMAP_MATCH_YES) {
-			ctx->cur_ns = ns->next;
-			return &ctx->info;
-		}
-	}
-
-	ctx->cur_ns = NULL;
 	return NULL;
 }
 
-static int shared_list_iter_deinit(struct mailbox_list_iterate_context *_ctx)
+static int shared_list_iter_deinit(struct mailbox_list_iterate_context *ctx)
 {
-	struct shared_mailbox_list_iterate_context *ctx =
-		(struct shared_mailbox_list_iterate_context *)_ctx;
+	pool_unref(&ctx->pool);
+	return 0;
+}
 
-	imap_match_deinit(&ctx->glob);
-	i_free(ctx);
+static int
+shared_list_subscriptions_refresh(struct mailbox_list *src_list ATTR_UNUSED,
+				  struct mailbox_list *dest_list ATTR_UNUSED)
+{
 	return 0;
 }
 
@@ -273,6 +271,20 @@ shared_list_delete_dir(struct mailbox_list *list, const char *name)
 	return ret;
 }
 
+static int
+shared_list_delete_symlink(struct mailbox_list *list, const char *name)
+{
+	struct mail_namespace *ns = list->ns;
+	int ret;
+
+	if (shared_storage_get_namespace(&ns, &name) < 0)
+		return -1;
+	ret = mailbox_list_delete_symlink(ns->list, name);
+	if (ret < 0)
+		shared_list_copy_error(list, ns);
+	return ret;
+}
+
 static int shared_list_rename_get_ns(struct mailbox_list *oldlist,
 				     const char **oldname,
 				     struct mailbox_list *newlist,
@@ -314,7 +326,6 @@ shared_list_rename_mailbox(struct mailbox_list *oldlist, const char *oldname,
 
 struct mailbox_list shared_mailbox_list = {
 	.name = "shared",
-	.hierarchy_sep = '/',
 	.props = 0,
 	.mailbox_name_max_length = MAILBOX_LIST_NAME_MAX_LENGTH,
 
@@ -325,8 +336,10 @@ struct mailbox_list shared_mailbox_list = {
 		shared_is_valid_pattern,
 		shared_is_valid_existing_name,
 		shared_is_valid_create_name,
+		shared_list_get_hierarchy_sep,
+		mailbox_list_default_get_vname,
+		mailbox_list_default_get_storage_name,
 		shared_list_get_path,
-		shared_list_get_mailbox_name_status,
 		shared_list_get_temp_prefix,
 		shared_list_join_refpattern,
 		shared_list_iter_init,
@@ -334,10 +347,12 @@ struct mailbox_list shared_mailbox_list = {
 		shared_list_iter_deinit,
 		NULL,
 		NULL,
+		shared_list_subscriptions_refresh,
 		shared_list_set_subscribed,
 		shared_list_create_mailbox_dir,
 		shared_list_delete_mailbox,
 		shared_list_delete_dir,
+		shared_list_delete_symlink,
 		shared_list_rename_mailbox
 	}
 };

@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "ioloop.h"
@@ -156,6 +156,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 			line += 5;
 		client_proxy_log_failure(client, line);
 	}
+	client->proxy_auth_failed = TRUE;
 	client_proxy_failed(client, FALSE);
 	return -1;
 }

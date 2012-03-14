@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -18,8 +18,10 @@
 #include "auth-master-connection.h"
 #include "passdb.h"
 #include "passdb-blocking.h"
-#include "userdb-blocking.h"
 #include "passdb-cache.h"
+#include "passdb-template.h"
+#include "userdb-blocking.h"
+#include "userdb-template.h"
 #include "password-scheme.h"
 
 #include <stdlib.h>
@@ -109,8 +111,15 @@ void auth_request_success(struct auth_request *request,
 		return;
 	}
 
-	auth_request_set_state(request, AUTH_REQUEST_STATE_FINISHED);
 	request->successful = TRUE;
+	if (data_size > 0 && !request->final_resp_ok) {
+		/* we'll need one more SASL round, since client doesn't support
+		   the final SASL response */
+		auth_request_handler_reply_continue(request, data, data_size);
+		return;
+	}
+
+	auth_request_set_state(request, AUTH_REQUEST_STATE_FINISHED);
 	auth_request_refresh_last_access(request);
 	auth_request_handler_reply(request, AUTH_CLIENT_RESULT_SUCCESS,
 				   data, data_size);
@@ -233,6 +242,8 @@ bool auth_request_import_auth(struct auth_request *request,
 	/* auth client may set these */
 	if (strcmp(key, "secured") == 0)
 		request->secured = TRUE;
+	else if (strcmp(key, "final-resp-ok") == 0)
+		request->final_resp_ok = TRUE;
 	else if (strcmp(key, "no-penalty") == 0)
 		request->no_penalty = TRUE;
 	else if (strcmp(key, "valid-client-cert") == 0)
@@ -293,6 +304,11 @@ void auth_request_continue(struct auth_request *request,
 			   const unsigned char *data, size_t data_size)
 {
 	i_assert(request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
+
+	if (request->successful) {
+		auth_request_success(request, NULL, 0);
+		return;
+	}
 
 	auth_request_refresh_last_access(request);
 	request->mech->auth_continue(request, data, data_size);
@@ -536,23 +552,26 @@ auth_request_verify_plain_callback_finish(enum passdb_result result,
 void auth_request_verify_plain_callback(enum passdb_result result,
 					struct auth_request *request)
 {
+	struct passdb_module *passdb = request->passdb->passdb;
+
 	i_assert(request->state == AUTH_REQUEST_STATE_PASSDB);
 
 	auth_request_set_state(request, AUTH_REQUEST_STATE_MECH_CONTINUE);
 
-	if (result != PASSDB_RESULT_INTERNAL_FAILURE)
+	if (result != PASSDB_RESULT_INTERNAL_FAILURE) {
+		passdb_template_export(passdb->override_fields_tmpl, request);
 		auth_request_save_cache(request, result);
-	else {
+	} else {
 		/* lookup failed. if we're looking here only because the
 		   request was expired in cache, fallback to using cached
 		   expired record. */
-		const char *cache_key = request->passdb->passdb->cache_key;
+		const char *cache_key = passdb->cache_key;
 
 		if (passdb_cache_verify_plain(request, cache_key,
 					      request->mech_password,
 					      &result, TRUE)) {
 			auth_request_log_info(request, "passdb",
-				"Fallbacking to expired data from cache");
+				"Falling back to expired data from cache");
 		}
 	}
 
@@ -628,7 +647,8 @@ void auth_request_verify_plain(struct auth_request *request,
 			PASSDB_RESULT_INTERNAL_FAILURE, request);
 	} else if (passdb->blocking) {
 		passdb_blocking_verify_plain(request);
-	} else if (passdb->iface.verify_plain != NULL) {
+	} else {
+		passdb_template_export(passdb->default_fields_tmpl, request);
 		passdb->iface.verify_plain(request, password,
 					   auth_request_verify_plain_callback);
 	}
@@ -668,25 +688,27 @@ void auth_request_lookup_credentials_callback(enum passdb_result result,
 					      size_t size,
 					      struct auth_request *request)
 {
+	struct passdb_module *passdb = request->passdb->passdb;
 	const char *cache_cred, *cache_scheme;
 
 	i_assert(request->state == AUTH_REQUEST_STATE_PASSDB);
 
 	auth_request_set_state(request, AUTH_REQUEST_STATE_MECH_CONTINUE);
 
-	if (result != PASSDB_RESULT_INTERNAL_FAILURE)
+	if (result != PASSDB_RESULT_INTERNAL_FAILURE) {
+		passdb_template_export(passdb->override_fields_tmpl, request);
 		auth_request_save_cache(request, result);
-	else {
+	} else {
 		/* lookup failed. if we're looking here only because the
 		   request was expired in cache, fallback to using cached
 		   expired record. */
-		const char *cache_key = request->passdb->passdb->cache_key;
+		const char *cache_key = passdb->cache_key;
 
 		if (passdb_cache_lookup_credentials(request, cache_key,
 						    &cache_cred, &cache_scheme,
 						    &result, TRUE)) {
 			auth_request_log_info(request, "passdb",
-				"Fallbacking to expired data from cache");
+				"Falling back to expired data from cache");
 			passdb_handle_credentials(
 				result, cache_cred, cache_scheme,
 				auth_request_lookup_credentials_finish,
@@ -736,6 +758,7 @@ void auth_request_lookup_credentials(struct auth_request *request,
 	} else if (passdb->blocking) {
 		passdb_blocking_lookup_credentials(request);
 	} else {
+		passdb_template_export(passdb->default_fields_tmpl, request);
 		passdb->iface.lookup_credentials(request,
 			auth_request_lookup_credentials_callback);
 	}
@@ -833,7 +856,9 @@ void auth_request_userdb_callback(enum userdb_result result,
 		return;
 	}
 
-	if (request->userdb_internal_failure && result != USERDB_RESULT_OK) {
+	if (result == USERDB_RESULT_OK)
+		userdb_template_export(userdb->override_fields_tmpl, request);
+	else if (request->userdb_internal_failure) {
 		/* one of the userdb lookups failed. the user might have been
 		   in there, so this is an internal failure */
 		result = USERDB_RESULT_INTERNAL_FAILURE;
@@ -866,7 +891,7 @@ void auth_request_userdb_callback(enum userdb_result result,
 						   &result, TRUE)) {
 			request->userdb_reply = reply;
 			auth_request_log_info(request, "userdb",
-				"Fallbacking to expired data from cache");
+				"Falling back to expired data from cache");
 		}
 	}
 
@@ -1126,6 +1151,7 @@ static void auth_request_set_reply_field(struct auth_request *request,
 
 	if (request->extra_fields == NULL)
 		request->extra_fields = auth_stream_reply_init(request->pool);
+	auth_stream_reply_remove(request->extra_fields, name);
 	auth_stream_reply_add(request->extra_fields, name, value);
 }
 
@@ -1272,8 +1298,12 @@ void auth_request_set_fields(struct auth_request *request,
 
 void auth_request_init_userdb_reply(struct auth_request *request)
 {
+	struct userdb_module *module = request->userdb->userdb;
+
 	request->userdb_reply = auth_stream_reply_init(request->pool);
 	auth_stream_reply_add(request->userdb_reply, NULL, request->user);
+
+	userdb_template_export(module->default_fields_tmpl, request);
 }
 
 static void auth_request_set_uidgid_file(struct auth_request *request,
@@ -1329,9 +1359,15 @@ void auth_request_set_userdb_field(struct auth_request *request,
 		return;
 	} else if (strcmp(name, "system_user") == 0) {
 		/* FIXME: the system_user is for backwards compatibility */
+		static bool warned = FALSE;
+		if (!warned) {
+			i_warning("userdb: Replace system_user with system_groups_user");
+			warned = TRUE;
+		}
 		name = "system_groups_user";
 	}
 
+	auth_stream_reply_remove(request->userdb_reply, name);
 	auth_stream_reply_add(request->userdb_reply, name, value);
 }
 
@@ -1532,17 +1568,22 @@ int auth_request_password_verify(struct auth_request *request,
 	   password schemes (eg. digest-md5). Otherwise the username is used
 	   only for logging purposes. */
 	ret = password_verify(plain_password, request->original_username,
-			      scheme, raw_password, raw_password_size);
-	i_assert(ret >= 0);
-	if (ret == 0) {
+			      scheme, raw_password, raw_password_size, &error);
+	if (ret < 0) {
+		const char *password_str = request->set->debug_passwords ?
+			t_strdup_printf(" '%s'", crypted_password) : "";
+		auth_request_log_error(request, subsystem,
+				       "Invalid password%s in passdb: %s",
+				       password_str, error);
+	} else if (ret == 0) {
 		auth_request_log_password_mismatch(request, subsystem);
-		if (request->set->debug_passwords) T_BEGIN {
-			log_password_failure(request, plain_password,
-					     crypted_password, scheme,
-					     request->original_username,
-					     subsystem);
-		} T_END;
 	}
+	if (ret <= 0 && request->set->debug_passwords) T_BEGIN {
+		log_password_failure(request, plain_password,
+				     crypted_password, scheme,
+				     request->original_username,
+				     subsystem);
+	} T_END;
 	return ret;
 }
 

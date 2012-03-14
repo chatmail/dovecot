@@ -1,6 +1,9 @@
 noinst_LIBRARIES = libpassword.a
 auth_moduledir = $(moduledir)/auth
 
+# automake seems to force making this unconditional..
+NOPLUGIN_LDFLAGS =
+
 if GSSAPI_PLUGIN
 GSSAPI_LIB = libmech_gssapi.la
 endif
@@ -11,7 +14,8 @@ endif
 
 auth_module_LTLIBRARIES = \
 	$(GSSAPI_LIB) \
-	$(LDAP_LIB)
+	$(LDAP_LIB) \
+	libauthdb_imap.la
 
 pkglibexecdir = $(libexecdir)/dovecot
 
@@ -27,6 +31,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-master \
 	-DAUTH_MODULE_DIR=\""$(auth_moduledir)"\" \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
+	-DPKG_RUNDIR=\""$(rundir)"\" \
 	$(AUTH_CFLAGS)
 
 auth_LDFLAGS = -export-dynamic
@@ -55,6 +60,7 @@ auth_SOURCES = \
 	auth-cache.c \
 	auth-client-connection.c \
 	auth-master-connection.c \
+	auth-postfix-connection.c \
 	mech-otp-skey-common.c \
 	mech-plain-common.c \
 	auth-penalty.c \
@@ -78,6 +84,7 @@ auth_SOURCES = \
 	mech-gssapi.c \
 	mech-ntlm.c \
 	mech-otp.c \
+	mech-scram-sha1.c \
 	mech-skey.c \
 	mech-rpa.c \
 	mech-apop.c \
@@ -95,6 +102,7 @@ auth_SOURCES = \
 	passdb-vpopmail.c \
 	passdb-sql.c \
 	passdb-static.c \
+	passdb-template.c \
 	userdb.c \
 	userdb-blocking.c \
 	userdb-checkpassword.c \
@@ -105,6 +113,7 @@ auth_SOURCES = \
 	userdb-static.c \
 	userdb-vpopmail.c \
 	userdb-sql.c \
+	userdb-template.c \
 	$(ldap_sources)
 
 headers = \
@@ -113,6 +122,7 @@ headers = \
 	auth-client-connection.h \
 	auth-common.h \
 	auth-master-connection.h \
+	auth-postfix-connection.h \
 	mech-otp-skey-common.h \
 	mech-plain-common.h \
 	auth-penalty.h \
@@ -131,10 +141,11 @@ headers = \
 	passdb.h \
 	passdb-blocking.h \
 	passdb-cache.h \
+	passdb-template.h \
 	password-scheme.h \
 	userdb.h \
 	userdb-blocking.h \
-	userdb-static.h \
+	userdb-template.h \
 	userdb-vpopmail.h
 
 if GSSAPI_PLUGIN
@@ -150,6 +161,17 @@ libauthdb_ldap_la_LIBADD = $(LDAP_LIBS)
 libauthdb_ldap_la_CPPFLAGS = $(AM_CPPFLAGS) -DPLUGIN_BUILD
 libauthdb_ldap_la_SOURCES = $(ldap_sources)
 endif
+
+libauthdb_imap_la_LDFLAGS = -module -avoid-version
+libauthdb_imap_la_LIBADD = \
+	../lib-imap-client/libimap_client.la \
+	../lib-ssl-iostream/libssl_iostream.la \
+	$(LIBDOVECOT)
+libauthdb_imap_la_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	-I$(top_srcdir)/src/lib-imap \
+	-I$(top_srcdir)/src/lib-imap-client
+libauthdb_imap_la_SOURCES = passdb-imap.c
 
 pkginc_libdir=$(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)

@@ -50,9 +50,10 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libmaster_la_LIBADD =
 am_libmaster_la_OBJECTS = anvil-client.lo ipc-client.lo ipc-server.lo \
-	master-auth.lo master-login.lo master-login-auth.lo \
-	master-service.lo master-service-settings.lo \
-	master-service-settings-cache.lo syslog-util.lo
+	master-auth.lo master-instance.lo master-login.lo \
+	master-login-auth.lo master-service.lo \
+	master-service-settings.lo master-service-settings-cache.lo \
+	mountpoint-list.lo syslog-util.lo
 libmaster_la_OBJECTS = $(am_libmaster_la_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -110,6 +111,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -170,6 +172,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOPLUGIN_LDFLAGS = @NOPLUGIN_LDFLAGS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -244,6 +247,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -271,6 +275,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-settings \
 	-DPKG_RUNDIR=\""$(rundir)"\" \
+	-DPKG_STATEDIR=\""$(statedir)"\" \
 	-DSYSCONFDIR=\""$(pkgsysconfdir)"\" \
 	-DBINDIR=\""$(bindir)"\"
 
@@ -279,11 +284,13 @@ libmaster_la_SOURCES = \
 	ipc-client.c \
 	ipc-server.c \
 	master-auth.c \
+	master-instance.c \
 	master-login.c \
 	master-login-auth.c \
 	master-service.c \
 	master-service-settings.c \
 	master-service-settings-cache.c \
+	mountpoint-list.c \
 	syslog-util.c
 
 headers = \
@@ -291,6 +298,7 @@ headers = \
 	ipc-client.h \
 	ipc-server.h \
 	master-auth.h \
+	master-instance.h \
 	master-interface.h \
 	master-login.h \
 	master-login-auth.h \
@@ -299,6 +307,7 @@ headers = \
 	master-service-settings.h \
 	master-service-settings-cache.h \
 	service-settings.h \
+	mountpoint-list.h \
 	syslog-util.h
 
 pkginc_libdir = $(pkgincludedir)
@@ -359,11 +368,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ipc-client.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ipc-server.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/master-auth.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/master-instance.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/master-login-auth.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/master-login.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/master-service-settings-cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/master-service-settings.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/master-service.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mountpoint-list.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/syslog-util.Plo@am__quote@
 
 .c.o:

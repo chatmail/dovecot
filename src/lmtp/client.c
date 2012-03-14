@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -8,11 +8,14 @@
 #include "istream.h"
 #include "ostream.h"
 #include "hostpid.h"
+#include "var-expand.h"
+#include "settings-parser.h"
 #include "master-service.h"
 #include "master-service-settings.h"
 #include "mail-namespace.h"
 #include "mail-storage.h"
 #include "mail-storage-service.h"
+#include "raw-storage.h"
 #include "main.h"
 #include "lda-settings.h"
 #include "lmtp-settings.h"
@@ -123,39 +126,26 @@ static void client_input(struct client *client)
 
 static void client_raw_user_create(struct client *client)
 {
-	struct mail_namespace *raw_ns;
-	struct mail_namespace_settings raw_ns_set;
-	const char *error;
 	void **sets;
 
 	sets = master_service_settings_get_others(master_service);
-
-	client->raw_mail_user = mail_user_alloc("raw user",
-						client->user_set_info, sets[0]);
-	mail_user_set_home(client->raw_mail_user, "/");
-	if (mail_user_init(client->raw_mail_user, &error) < 0)
-		i_fatal("Raw user initialization failed: %s", error);
-
-	memset(&raw_ns_set, 0, sizeof(raw_ns_set));
-	raw_ns_set.location = ":LAYOUT=none";
-
-	raw_ns = mail_namespaces_init_empty(client->raw_mail_user);
-	raw_ns->flags |= NAMESPACE_FLAG_NOQUOTA | NAMESPACE_FLAG_NOACL;
-	raw_ns->set = &raw_ns_set;
-	if (mail_storage_create(raw_ns, "raw", 0, &error) < 0)
-		i_fatal("Couldn't create internal raw storage: %s", error);
+	client->raw_mail_user =
+		raw_storage_create_from_set(client->user_set_info, sets[0]);
 }
 
 static void client_read_settings(struct client *client)
 {
 	struct mail_storage_service_input input;
 	const struct setting_parser_context *set_parser;
+	struct lmtp_settings *lmtp_set;
+	struct lda_settings *lda_set;
 	const char *error;
 
 	memset(&input, 0, sizeof(input));
 	input.module = input.service = "lmtp";
 	input.local_ip = client->local_ip;
 	input.remote_ip = client->remote_ip;
+	input.username = "";
 
 	if (mail_storage_service_read_settings(storage_service, &input,
 					       client->pool,
@@ -163,16 +153,19 @@ static void client_read_settings(struct client *client)
 					       &set_parser, &error) < 0)
 		i_fatal("%s", error);
 
-	lmtp_settings_dup(set_parser, client->pool,
-			  &client->lmtp_set, &client->set);
+	lmtp_settings_dup(set_parser, client->pool, &lmtp_set, &lda_set);
+	settings_var_expand(&lmtp_setting_parser_info, lmtp_set, client->pool,
+		mail_storage_service_get_var_expand_table(storage_service, &input));
+	client->lmtp_set = lmtp_set;
+	client->set = lda_set;
 }
 
 static void client_generate_session_id(struct client *client)
 {
-	uint8_t guid[MAIL_GUID_128_SIZE];
+	guid_128_t guid;
 	string_t *id = t_str_new(30);
 
-	mail_generate_guid_128(guid);
+	guid_128_generate(guid);
 	base64_encode(guid, sizeof(guid), id);
 	i_assert(str_c(id)[str_len(id)-2] == '=');
 	str_truncate(id, str_len(id)-2); /* drop trailing "==" */
@@ -236,8 +229,8 @@ struct client *client_create(int fd_in, int fd_out,
 	DLLIST_PREPEND(&clients, client);
 	clients_count++;
 
-	client_send_line(client, "220 %s Dovecot LMTP ready",
-			 client->my_domain);
+	client_send_line(client, "220 %s %s", client->my_domain,
+			 client->lmtp_set->login_greeting);
 	i_info("Connect from %s", client_remote_id(client));
 	return client;
 }
@@ -306,12 +299,15 @@ void client_state_reset(struct client *client)
 			mail_storage_service_user_free(&rcpt->service_user);
 	}
 
-	if (client->state.raw_mail != NULL)
+	if (client->state.raw_mail != NULL) {
+		struct mailbox_transaction_context *raw_trans =
+			client->state.raw_mail->transaction;
+		struct mailbox *raw_box = client->state.raw_mail->box;
+
 		mail_free(&client->state.raw_mail);
-	if (client->state.raw_trans != NULL)
-		mailbox_transaction_rollback(&client->state.raw_trans);
-	if (client->state.raw_box != NULL)
-		mailbox_free(&client->state.raw_box);
+		mailbox_transaction_rollback(&raw_trans);
+		mailbox_free(&raw_box);
+	}
 
 	if (client->state.mail_data != NULL)
 		buffer_free(&client->state.mail_data);

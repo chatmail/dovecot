@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -394,7 +394,8 @@ mail_index_sync_begin_init(struct mail_index *index,
 		return 0;
 	}
 
-	if (index->index_deleted) {
+	if (index->index_deleted &&
+	    (flags & MAIL_INDEX_SYNC_FLAG_DELETING_INDEX) == 0) {
 		/* index is already deleted. we can't sync. */
 		if (locked)
 			mail_transaction_log_sync_unlock(index->log);
@@ -422,12 +423,13 @@ mail_index_sync_begin_init(struct mail_index *index,
 	return 1;
 }
 
-int mail_index_sync_begin_to(struct mail_index *index,
-			     struct mail_index_sync_ctx **ctx_r,
-			     struct mail_index_view **view_r,
-			     struct mail_index_transaction **trans_r,
-			     uint32_t log_file_seq, uoff_t log_file_offset,
-			     enum mail_index_sync_flags flags)
+static int
+mail_index_sync_begin_to2(struct mail_index *index,
+			  struct mail_index_sync_ctx **ctx_r,
+			  struct mail_index_view **view_r,
+			  struct mail_index_transaction **trans_r,
+			  uint32_t log_file_seq, uoff_t log_file_offset,
+			  enum mail_index_sync_flags flags, bool *retry_r)
 {
 	const struct mail_index_header *hdr;
 	struct mail_index_sync_ctx *ctx;
@@ -436,6 +438,14 @@ int mail_index_sync_begin_to(struct mail_index *index,
 	int ret;
 
 	i_assert(!index->syncing);
+
+	*retry_r = FALSE;
+
+	if (index->map != NULL &&
+	    (index->map->hdr.flags & MAIL_INDEX_HDR_FLAG_CORRUPTED) != 0) {
+		/* index is corrupted and need to be reopened */
+		return -1;
+	}
 
 	if (log_file_seq != (uint32_t)-1)
 		flags |= MAIL_INDEX_SYNC_FLAG_REQUIRE_CHANGES;
@@ -476,9 +486,8 @@ int mail_index_sync_begin_to(struct mail_index *index,
 		   to skip over it. fix the problem with fsck and try again. */
 		mail_index_fsck_locked(index);
 		mail_index_sync_rollback(&ctx);
-		return mail_index_sync_begin_to(index, ctx_r, view_r, trans_r,
-						log_file_seq, log_file_offset,
-						flags);
+		*retry_r = TRUE;
+		return 0;
 	}
 
 	/* we need to have all the transactions sorted to optimize
@@ -499,11 +508,34 @@ int mail_index_sync_begin_to(struct mail_index *index,
 		trans_flags |= MAIL_INDEX_TRANSACTION_FLAG_FSYNC;
 	ctx->ext_trans = mail_index_transaction_begin(ctx->view, trans_flags);
 	ctx->ext_trans->sync_transaction = TRUE;
+	ctx->ext_trans->commit_deleted_index =
+		(flags & MAIL_INDEX_SYNC_FLAG_DELETING_INDEX) != 0;
 
 	*ctx_r = ctx;
 	*view_r = ctx->view;
 	*trans_r = ctx->ext_trans;
 	return 1;
+}
+
+int mail_index_sync_begin_to(struct mail_index *index,
+			     struct mail_index_sync_ctx **ctx_r,
+			     struct mail_index_view **view_r,
+			     struct mail_index_transaction **trans_r,
+			     uint32_t log_file_seq, uoff_t log_file_offset,
+			     enum mail_index_sync_flags flags)
+{
+	bool retry;
+	int ret;
+
+	ret = mail_index_sync_begin_to2(index, ctx_r, view_r, trans_r,
+					log_file_seq, log_file_offset,
+					flags, &retry);
+	if (retry) {
+		ret = mail_index_sync_begin_to2(index, ctx_r, view_r, trans_r,
+						log_file_seq, log_file_offset,
+						flags, &retry);
+	}
+	return ret;
 }
 
 bool mail_index_sync_has_expunges(struct mail_index_sync_ctx *ctx)

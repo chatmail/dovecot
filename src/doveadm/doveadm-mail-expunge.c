@@ -1,34 +1,34 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "mail-index.h"
 #include "mail-storage.h"
 #include "mail-search.h"
-#include "doveadm-mail-list-iter.h"
+#include "doveadm-mailbox-list-iter.h"
 #include "doveadm-mail-iter.h"
 #include "doveadm-mail.h"
 
 static int
-cmd_expunge_box(const struct mailbox_info *info,
+cmd_expunge_box(struct doveadm_mail_cmd_context *ctx,
+		const struct mailbox_info *info,
 		struct mail_search_args *search_args)
 {
 	struct doveadm_mail_iter *iter;
 	struct mailbox_transaction_context *trans;
 	struct mail *mail;
 
-	if (doveadm_mail_iter_init(info, search_args, &trans, &iter) < 0)
+	if (doveadm_mail_iter_init(ctx, info, search_args, 0, NULL,
+				   &trans, &iter) < 0)
 		return -1;
 
-	mail = mail_alloc(trans, 0, NULL);
-	while (doveadm_mail_iter_next(iter, mail)) {
+	while (doveadm_mail_iter_next(iter, &mail)) {
 		if (doveadm_debug) {
 			i_debug("expunge: box=%s uid=%u",
 				info->name, mail->uid);
 		}
 		mail_expunge(mail);
 	}
-	mail_free(&mail);
 	return doveadm_mail_iter_deinit_sync(&iter);
 }
 
@@ -161,34 +161,40 @@ expunge_search_args_is_msgset_ok(struct mail_search_arg *args)
 	return FALSE;
 }
 
-static void
+static int
 cmd_expunge_run(struct doveadm_mail_cmd_context *ctx, struct mail_user *user)
 {
 	const enum mailbox_list_iter_flags iter_flags =
 		MAILBOX_LIST_ITER_RAW_LIST |
-		MAILBOX_LIST_ITER_NO_AUTO_INBOX |
+		MAILBOX_LIST_ITER_NO_AUTO_BOXES |
 		MAILBOX_LIST_ITER_RETURN_NO_FLAGS;
-	struct doveadm_mail_list_iter *iter;
+	struct doveadm_mailbox_list_iter *iter;
 	const struct mailbox_info *info;
+	int ret = 0;
 
-	iter = doveadm_mail_list_iter_init(user, ctx->search_args, iter_flags);
-	while ((info = doveadm_mail_list_iter_next(iter)) != NULL) T_BEGIN {
-		(void)cmd_expunge_box(info, ctx->search_args);
+	iter = doveadm_mailbox_list_iter_init(ctx, user, ctx->search_args,
+					      iter_flags);
+	while ((info = doveadm_mailbox_list_iter_next(iter)) != NULL) T_BEGIN {
+		if (cmd_expunge_box(ctx, info, ctx->search_args) < 0)
+			ret = -1;
 	} T_END;
-	doveadm_mail_list_iter_deinit(&iter);
+	if (doveadm_mailbox_list_iter_deinit(&iter) < 0)
+		ret = -1;
+	return ret;
 }
 
 void expunge_search_args_check(struct mail_search_args *args, const char *cmd)
 {
 	mail_search_args_simplify(args);
 	if (!expunge_search_args_is_mailbox_ok(args->args)) {
-		i_fatal("%s: To avoid accidents, search query "
+		i_fatal_status(EX_USAGE,
+			"%s: To avoid accidents, search query "
 			"must contain MAILBOX in all search branches", cmd);
 	}
 	if (!expunge_search_args_is_msgset_ok(args->args)) {
-		i_fatal("%s: To avoid accidents, each branch in "
-			"search query must contain something else "
-			"besides MAILBOX", cmd);
+		i_fatal_status(EX_USAGE,
+			"%s: To avoid accidents, each branch in search query "
+			"must contain something else besides MAILBOX", cmd);
 	}
 }
 

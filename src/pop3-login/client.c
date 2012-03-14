@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -21,18 +21,6 @@
 
 /* Disconnect client when it sends too many bad commands */
 #define CLIENT_MAX_BAD_COMMANDS 10
-
-const struct login_binary login_binary = {
-	.protocol = "pop3",
-	.process_name = "pop3-login",
-	.default_port = 110,
-	.default_ssl_port = 995
-};
-
-void login_process_preinit(void)
-{
-	login_set_roots = pop3_login_setting_roots;
-}
 
 static bool cmd_stls(struct pop3_client *client)
 {
@@ -224,18 +212,23 @@ static void pop3_login_die(void)
 	/* do nothing. pop3 connections typically die pretty quick anyway. */
 }
 
-void clients_init(void)
+static void pop3_login_preinit(void)
+{
+	login_set_roots = pop3_login_setting_roots;
+}
+
+static void pop3_login_init(void)
 {
 	/* override the default login_die() */
 	master_service_set_die_callback(master_service, pop3_login_die);
 }
 
-void clients_deinit(void)
+static void pop3_login_deinit(void)
 {
 	clients_destroy_all();
 }
 
-struct client_vfuncs client_vfuncs = {
+static struct client_vfuncs pop3_client_vfuncs = {
 	pop3_client_alloc,
 	pop3_client_create,
 	pop3_client_destroy,
@@ -249,3 +242,22 @@ struct client_vfuncs client_vfuncs = {
 	pop3_proxy_reset,
 	pop3_proxy_parse_line
 };
+
+static const struct login_binary pop3_login_binary = {
+	.protocol = "pop3",
+	.process_name = "pop3-login",
+	.default_port = 110,
+	.default_ssl_port = 995,
+
+	.client_vfuncs = &pop3_client_vfuncs,
+	.preinit = pop3_login_preinit,
+	.init = pop3_login_init,
+	.deinit = pop3_login_deinit,
+
+	.sasl_support_final_reply = FALSE
+};
+
+int main(int argc, char *argv[])
+{
+	return login_binary_run(&pop3_login_binary, argc, argv);
+}

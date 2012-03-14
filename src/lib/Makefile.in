@@ -57,13 +57,14 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	data-stack.lo eacces-error.lo env-util.lo execv-const.lo \
 	failures.lo fd-close-on-exec.lo fd-set-nonblock.lo \
 	fdatasync-path.lo fdpass.lo file-cache.lo file-copy.lo \
-	file-dotlock.lo file-lock.lo file-set-size.lo hash.lo \
+	file-dotlock.lo file-lock.lo file-set-size.lo guid.lo hash.lo \
 	hash-format.lo hash-method.lo hash2.lo hex-binary.lo \
-	hex-dec.lo hmac-md5.lo home-expand.lo hostpid.lo imem.lo \
-	ipwd.lo iostream.lo istream.lo istream-base64-encoder.lo \
-	istream-concat.lo istream-crlf.lo istream-data.lo \
-	istream-file.lo istream-limit.lo istream-mmap.lo \
-	istream-seekable.lo istream-tee.lo ioloop.lo ioloop-iolist.lo \
+	hex-dec.lo hmac-md5.lo hmac-sha1.lo home-expand.lo hostpid.lo \
+	imem.lo ipwd.lo iostream.lo iostream-rawlog.lo istream.lo \
+	istream-base64-encoder.lo istream-concat.lo istream-crlf.lo \
+	istream-data.lo istream-file.lo istream-limit.lo \
+	istream-mmap.lo istream-rawlog.lo istream-seekable.lo \
+	istream-tee.lo ioloop.lo ioloop-iolist.lo \
 	ioloop-notify-none.lo ioloop-notify-fd.lo ioloop-notify-dn.lo \
 	ioloop-notify-inotify.lo ioloop-notify-kqueue.lo \
 	ioloop-poll.lo ioloop-select.lo ioloop-epoll.lo \
@@ -72,10 +73,10 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	mempool-system.lo mempool-unsafe-datastack.lo mkdir-parents.lo \
 	mmap-anon.lo mmap-util.lo module-dir.lo mountpoint.lo \
 	network.lo nfs-workarounds.lo ostream.lo ostream-file.lo \
-	ostream-buffer.lo primes.lo printf-format-fix.lo \
-	process-title.lo priorityq.lo randgen.lo read-full.lo \
-	restrict-access.lo restrict-process-size.lo safe-memset.lo \
-	safe-mkdir.lo safe-mkstemp.lo sendfile-util.lo \
+	ostream-buffer.lo ostream-rawlog.lo primes.lo \
+	printf-format-fix.lo process-title.lo priorityq.lo randgen.lo \
+	read-full.lo restrict-access.lo restrict-process-size.lo \
+	safe-memset.lo safe-mkdir.lo safe-mkstemp.lo sendfile-util.lo \
 	seq-range-array.lo sha1.lo sha2.lo str.lo str-find.lo \
 	str-sanitize.lo strescape.lo strfuncs.lo strnum.lo \
 	time-util.lo unix-socket-create.lo unlink-directory.lo \
@@ -167,6 +168,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -227,6 +229,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOPLUGIN_LDFLAGS = @NOPLUGIN_LDFLAGS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -301,6 +304,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -352,6 +356,7 @@ liblib_la_SOURCES = \
 	file-dotlock.c \
 	file-lock.c \
 	file-set-size.c \
+	guid.c \
 	hash.c \
 	hash-format.c \
 	hash-method.c \
@@ -359,11 +364,13 @@ liblib_la_SOURCES = \
 	hex-binary.c \
 	hex-dec.c \
 	hmac-md5.c \
+	hmac-sha1.c \
 	home-expand.c \
 	hostpid.c \
 	imem.c \
 	ipwd.c \
 	iostream.c \
+	iostream-rawlog.c \
 	istream.c \
 	istream-base64-encoder.c \
 	istream-concat.c \
@@ -372,6 +379,7 @@ liblib_la_SOURCES = \
 	istream-file.c \
 	istream-limit.c \
 	istream-mmap.c \
+	istream-rawlog.c \
 	istream-seekable.c \
 	istream-tee.c \
 	ioloop.c \
@@ -404,6 +412,7 @@ liblib_la_SOURCES = \
 	ostream.c \
 	ostream-file.c \
 	ostream-buffer.c \
+	ostream-rawlog.c \
 	primes.c \
 	printf-format-fix.c \
 	process-title.c \
@@ -465,6 +474,7 @@ headers = \
 	file-lock.h \
 	file-set-size.h \
 	fsync-mode.h \
+	guid.h \
 	hash.h \
 	hash-format.h \
 	hash-method.h \
@@ -472,21 +482,25 @@ headers = \
 	hex-binary.h \
 	hex-dec.h \
 	hmac-md5.h \
+	hmac-sha1.h \
 	home-expand.h \
 	hostpid.h \
 	imem.h \
 	ipwd.h \
-	iostream-internal.h \
+	iostream-private.h \
+	iostream-rawlog.h \
+	iostream-rawlog-private.h \
 	istream.h \
 	istream-base64-encoder.h \
 	istream-concat.h \
 	istream-crlf.h \
-	istream-internal.h \
+	istream-private.h \
+	istream-rawlog.h \
 	istream-seekable.h \
 	istream-tee.h \
 	ioloop.h \
 	ioloop-iolist.h \
-	ioloop-internal.h \
+	ioloop-private.h \
 	ioloop-notify-fd.h \
 	lib.h \
 	lib-signals.h \
@@ -503,7 +517,8 @@ headers = \
 	network.h \
 	nfs-workarounds.h \
 	ostream.h \
-	ostream-internal.h \
+	ostream-private.h \
+	ostream-rawlog.h \
 	primes.h \
 	printf-format-fix.h \
 	process-title.h \
@@ -673,6 +688,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/file-dotlock.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/file-lock.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/file-set-size.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/guid.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hash-format.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hash-method.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hash.Plo@am__quote@
@@ -680,6 +696,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hex-binary.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hex-dec.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hmac-md5.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hmac-sha1.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/home-expand.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hostpid.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imem.Plo@am__quote@
@@ -694,6 +711,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ioloop-poll.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ioloop-select.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ioloop.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-rawlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ipwd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-base64-encoder.Plo@am__quote@
@@ -703,6 +721,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-file.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-limit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-mmap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-rawlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-seekable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-tee.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream.Plo@am__quote@
@@ -724,6 +743,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nfs-workarounds.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-buffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-rawlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/primes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/printf-format-fix.Plo@am__quote@
@@ -1430,8 +1450,10 @@ uninstall-am: uninstall-pkginc_libHEADERS
 	uninstall-pkginc_libHEADERS
 
 
-$(srcdir)/unicodemap.c: unicodemap.pl
+UnicodeData.txt:
 	test -f UnicodeData.txt || wget http://www.unicode.org/Public/UNIDATA/UnicodeData.txt
+
+$(srcdir)/unicodemap.c: unicodemap.pl UnicodeData.txt
 	perl $(srcdir)/unicodemap.pl < UnicodeData.txt > $@
 
 check: check-am check-test

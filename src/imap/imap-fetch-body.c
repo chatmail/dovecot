@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "buffer.h"
@@ -32,28 +32,18 @@ struct imap_fetch_body_data {
 	unsigned int peek:1;
 };
 
-struct partial_cache {
-	unsigned int select_counter;
-	unsigned int uid;
-
-	uoff_t physical_start;
-	bool cr_skipped;
-	struct message_size pos;
-};
-
-static struct partial_cache last_partial = { 0, 0, 0, 0, { 0, 0, 0 } };
-
 static void fetch_read_error(struct imap_fetch_context *ctx)
 {
 	errno = ctx->cur_input->stream_errno;
 	mail_storage_set_critical(ctx->box->storage,
 		"read(%s) failed: %m (FETCH for mailbox %s UID %u)",
 		i_stream_get_name(ctx->cur_input),
-		mailbox_get_vname(ctx->mail->box), ctx->mail->uid);
+		mailbox_get_vname(ctx->cur_mail->box), ctx->cur_mail->uid);
 }
 
 static int seek_partial(unsigned int select_counter, unsigned int uid,
-			struct partial_cache *partial, struct istream *stream,
+			struct partial_fetch_cache *partial,
+			struct istream *stream,
 			uoff_t virtual_skip, bool *cr_skipped_r)
 {
 	if (select_counter == partial->select_counter && uid == partial->uid &&
@@ -210,9 +200,9 @@ static off_t imap_fetch_send(struct imap_fetch_context *ctx,
 		   disconnect the client and hope that next try works. */
 		i_error("FETCH %s for mailbox %s UID %u got too little data: "
 			"%"PRIuUOFF_T" vs %"PRIuUOFF_T, ctx->cur_name,
-			mailbox_get_vname(ctx->mail->box), ctx->mail->uid,
-			(uoff_t)sent, virtual_size);
-		mail_set_cache_corrupted(ctx->mail, ctx->cur_size_field);
+			mailbox_get_vname(ctx->cur_mail->box),
+			ctx->cur_mail->uid, (uoff_t)sent, virtual_size);
+		mail_set_cache_corrupted(ctx->cur_mail, ctx->cur_size_field);
 		client_disconnect(ctx->client, "FETCH failed");
 		return -1;
 	}
@@ -236,10 +226,12 @@ static int fetch_stream_send(struct imap_fetch_context *ctx)
 
 	ctx->cur_offset += ret;
 	if (ctx->update_partial) {
-		last_partial.cr_skipped = ctx->skip_cr != 0;
-		last_partial.pos.physical_size =
-			ctx->cur_input->v_offset - last_partial.physical_start;
-		last_partial.pos.virtual_size += ret;
+		struct partial_fetch_cache *p = &ctx->client->last_partial;
+
+		p->cr_skipped = ctx->skip_cr != 0;
+		p->pos.physical_size =
+			ctx->cur_input->v_offset - p->physical_start;
+		p->pos.virtual_size += ret;
 	}
 
 	return ctx->cur_offset == ctx->cur_size;
@@ -273,9 +265,9 @@ static int fetch_stream_send_direct(struct imap_fetch_context *ctx)
 			i_error("FETCH %s for mailbox %s UID %u "
 				"got too little data (copying): "
 				"%"PRIuUOFF_T" vs %"PRIuUOFF_T,
-				ctx->cur_name, mailbox_get_vname(ctx->mail->box),
-				ctx->mail->uid, ctx->cur_offset, ctx->cur_size);
-			mail_set_cache_corrupted(ctx->mail,
+				ctx->cur_name, mailbox_get_vname(ctx->cur_mail->box),
+				ctx->cur_mail->uid, ctx->cur_offset, ctx->cur_size);
+			mail_set_cache_corrupted(ctx->cur_mail,
 						 ctx->cur_size_field);
 			client_disconnect(ctx->client, "FETCH failed");
 			return -1;
@@ -330,8 +322,8 @@ static int fetch_data(struct imap_fetch_context *ctx,
 		}
 	} else {
 		if (seek_partial(ctx->select_counter, ctx->cur_mail->uid,
-				 &last_partial, ctx->cur_input, body->skip,
-				 &ctx->skip_cr) < 0) {
+				 &ctx->client->last_partial, ctx->cur_input,
+				 body->skip, &ctx->skip_cr) < 0) {
 			fetch_read_error(ctx);
 			return -1;
 		}
@@ -347,36 +339,28 @@ static int fetch_body(struct imap_fetch_context *ctx, struct mail *mail,
 	struct istream *input;
 	struct message_size hdr_size, body_size;
 
-	if (body->section[0] == '\0') {
+	switch (body->section[0]) {
+	case '\0':
+		/* BODY[] - fetch everything */
 		if (mail_get_stream(mail, NULL, NULL, &input) < 0 ||
 		    mail_get_virtual_size(mail, &body_size.virtual_size) < 0 ||
 		    mail_get_physical_size(mail, &body_size.physical_size) < 0)
 			return -1;
-	} else {
-		if (mail_get_stream(mail, &hdr_size,
-				    body->section[0] == 'H' ? NULL : &body_size,
-				    &input) < 0)
-			return -1;
-	}
-
-	ctx->cur_input = input;
-	i_stream_ref(ctx->cur_input);
-	ctx->update_partial = TRUE;
-
-	switch (body->section[0]) {
-	case '\0':
-		/* BODY[] - fetch everything */
-                fetch_size = &body_size;
+		fetch_size = &body_size;
 		ctx->cur_size_field = MAIL_FETCH_VIRTUAL_SIZE;
 		break;
 	case 'H':
 		/* BODY[HEADER] - fetch only header */
+		if (mail_get_hdr_stream(mail, &hdr_size, &input) < 0)
+			return -1;
                 fetch_size = &hdr_size;
 		ctx->cur_size_field = MAIL_FETCH_MESSAGE_PARTS;
 		break;
 	case 'T':
 		/* BODY[TEXT] - skip header */
-		i_stream_skip(ctx->cur_input, hdr_size.physical_size);
+		if (mail_get_stream(mail, &hdr_size, &body_size, &input) < 0)
+			return -1;
+		i_stream_skip(input, hdr_size.physical_size);
                 fetch_size = &body_size;
 		ctx->cur_size_field = MAIL_FETCH_VIRTUAL_SIZE;
 		break;
@@ -384,15 +368,11 @@ static int fetch_body(struct imap_fetch_context *ctx, struct mail *mail,
 		i_unreached();
 	}
 
-	return fetch_data(ctx, body, fetch_size);
-}
+	ctx->cur_input = input;
+	i_stream_ref(ctx->cur_input);
+	ctx->update_partial = TRUE;
 
-static void header_filter_eoh(struct message_header_line *hdr,
-			      bool *matched ATTR_UNUSED,
-			      struct imap_fetch_context *ctx)
-{
-	if (hdr != NULL && hdr->eoh)
-		ctx->cur_have_eoh = TRUE;
+	return fetch_data(ctx, body, fetch_size);
 }
 
 static int fetch_header_partial_from(struct imap_fetch_context *ctx,
@@ -405,19 +385,16 @@ static int fetch_header_partial_from(struct imap_fetch_context *ctx,
 
 	/* MIME, HEADER.FIELDS (list), HEADER.FIELDS.NOT (list) */
 
-	ctx->cur_have_eoh = FALSE;
 	if (strncmp(header_section, "HEADER.FIELDS ", 14) == 0) {
 		input = i_stream_create_header_filter(ctx->cur_input,
-						      HEADER_FILTER_INCLUDE,
-						      body->fields,
-						      body->fields_count,
-						      header_filter_eoh, ctx);
+					HEADER_FILTER_INCLUDE,
+					body->fields, body->fields_count,
+					null_header_filter_callback, NULL);
 	} else if (strncmp(header_section, "HEADER.FIELDS.NOT ", 18) == 0) {
 		input = i_stream_create_header_filter(ctx->cur_input,
-						      HEADER_FILTER_EXCLUDE,
-						      body->fields,
-						      body->fields_count,
-						      header_filter_eoh, ctx);
+					HEADER_FILTER_EXCLUDE,
+					body->fields, body->fields_count,
+					null_header_filter_callback, NULL);
 	} else {
 		i_error("BUG: Accepted invalid section from user: '%s'",
 			header_section);
@@ -443,7 +420,7 @@ static int
 fetch_body_header_partial(struct imap_fetch_context *ctx, struct mail *mail,
 			  const struct imap_fetch_body_data *body)
 {
-	if (mail_get_stream(mail, NULL, NULL, &ctx->cur_input) < 0)
+	if (mail_get_hdr_stream(mail, NULL, &ctx->cur_input) < 0)
 		return -1;
 
 	i_stream_ref(ctx->cur_input);
@@ -930,7 +907,7 @@ static int fetch_rfc822_header(struct imap_fetch_context *ctx,
 	struct message_size hdr_size;
 	const char *str;
 
-	if (mail_get_stream(mail, &hdr_size, NULL, &ctx->cur_input) < 0)
+	if (mail_get_hdr_stream(mail, &hdr_size, &ctx->cur_input) < 0)
 		return -1;
 
 	i_stream_ref(ctx->cur_input);

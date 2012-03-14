@@ -50,9 +50,10 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libstorage_maildir_la_LIBADD =
 am_libstorage_maildir_la_OBJECTS = maildir-copy.lo maildir-filename.lo \
-	maildir-keywords.lo maildir-mail.lo maildir-save.lo \
-	maildir-settings.lo maildir-storage.lo maildir-sync.lo \
-	maildir-sync-index.lo maildir-uidlist.lo maildir-util.lo
+	maildir-filename-flags.lo maildir-keywords.lo maildir-mail.lo \
+	maildir-save.lo maildir-settings.lo maildir-storage.lo \
+	maildir-sync.lo maildir-sync-index.lo maildir-uidlist.lo \
+	maildir-util.lo
 libstorage_maildir_la_OBJECTS = $(am_libstorage_maildir_la_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -110,6 +111,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -170,6 +172,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOPLUGIN_LDFLAGS = @NOPLUGIN_LDFLAGS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -244,6 +247,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -278,6 +282,7 @@ AM_CPPFLAGS = \
 libstorage_maildir_la_SOURCES = \
 	maildir-copy.c \
 	maildir-filename.c \
+	maildir-filename-flags.c \
 	maildir-keywords.c \
 	maildir-mail.c \
 	maildir-save.c \
@@ -290,6 +295,7 @@ libstorage_maildir_la_SOURCES = \
 
 headers = \
 	maildir-filename.h \
+	maildir-filename-flags.h \
 	maildir-keywords.h \
 	maildir-storage.h \
 	maildir-settings.h \
@@ -351,6 +357,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/maildir-copy.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/maildir-filename-flags.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/maildir-filename.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/maildir-keywords.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/maildir-mail.Plo@am__quote@

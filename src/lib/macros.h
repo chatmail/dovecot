@@ -18,9 +18,6 @@
 #define N_ELEMENTS(arr) \
 	(sizeof(arr) / sizeof((arr)[0]))
 
-#define BITS_IN_UINT (CHAR_BIT * sizeof(unsigned int))
-#define BITS_IN_SIZE_T (CHAR_BIT * sizeof(size_t))
-
 #define MEM_ALIGN(size) \
 	(((size) + MEM_ALIGN_SIZE-1) & ~((unsigned int) MEM_ALIGN_SIZE-1))
 
@@ -33,13 +30,6 @@
    files that are included after this file generating tons of warnings. */
 #define I_MIN(a, b)  (((a) < (b)) ? (a) : (b))
 #define I_MAX(a, b)  (((a) > (b)) ? (a) : (b))
-
-#undef CLAMP
-#define CLAMP(x, low, high) \
-	(((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
-
-#undef NVL
-#define NVL(str, nullstr) ((str) != NULL ? (str) : (nullstr))
 
 /* make it easier to cast from/to pointers. assumes that
    sizeof(size_t) == sizeof(void *) and they're both the largest datatypes
@@ -103,6 +93,8 @@
 	__attribute__((format_arg (arg_idx)))
 #  define ATTR_SCANF(format_idx, arg_idx) \
 	__attribute__((format (scanf, format_idx, arg_idx)))
+#  define ATTR_STRFTIME(format_idx) \
+	__attribute__((format (strftime, format_idx, 0)))
 #  define ATTR_UNUSED __attribute__((unused))
 #  define ATTR_NORETURN __attribute__((noreturn))
 #  define ATTR_CONST __attribute__((const))
@@ -110,7 +102,8 @@
 #else
 #  define ATTR_FORMAT(format_idx, arg_idx)
 #  define ATTR_FORMAT_ARG(arg_idx)
-#  define ATTR_SCANF
+#  define ATTR_SCANF(format_idx, arg_idx)
+#  define ATTR_STRFTIME(format_idx)
 #  define ATTR_UNUSED
 #  define ATTR_NORETURN
 #  define ATTR_CONST

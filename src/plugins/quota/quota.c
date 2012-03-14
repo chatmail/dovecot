@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -604,6 +604,8 @@ static int quota_root_get_rule_limits(struct quota_root *root,
 	   ignore any specific quota rules */
 	enabled = bytes_limit != 0 || count_limit != 0;
 
+	(void)mail_namespace_find_unalias(root->quota->user->namespaces,
+					  &mailbox_name);
 	rule = enabled ? quota_root_rule_find(root->set, mailbox_name) : NULL;
 	if (rule != NULL) {
 		if (!rule->ignore) {
@@ -761,10 +763,9 @@ bool quota_root_is_namespace_visible(struct quota_root *root,
 {
 	struct mailbox_list *list = ns->list;
 	struct mail_storage *storage;
-	const char *name = "";
 
 	/* this check works as long as there is only one storage per list */
-	if (mailbox_list_get_storage(&list, &name, &storage) == 0 &&
+	if (mailbox_list_get_storage(&list, "", &storage) == 0 &&
 	    (storage->class_flags & MAIL_STORAGE_CLASS_FLAG_NOQUOTA) != 0)
 		return FALSE;
 
@@ -998,7 +999,7 @@ static void quota_warning_execute(struct quota_root *root, const char *cmd)
 	if (root->quota->set->debug)
 		i_debug("quota: Executing warning: %s", cmd);
 
-	args = t_strsplit(cmd, " ");
+	args = t_strsplit_spaces(cmd, " ");
 	socket_path = args[0];
 	args++;
 
@@ -1019,7 +1020,7 @@ static void quota_warning_execute(struct quota_root *root, const char *cmd)
 	}
 
 	str = t_str_new(1024);
-	str_append(str, "VERSION\tscript\t1\t0\n");
+	str_append(str, "VERSION\tscript\t3\t0\nnoreply\n");
 	for (; *args != NULL; args++) {
 		str_append(str, *args);
 		str_append_c(str, '\n');
@@ -1099,6 +1100,9 @@ int quota_transaction_commit(struct quota_transaction_context **_ctx)
 		ARRAY_DEFINE(warn_roots, struct quota_root *);
 
 		mailbox_name = mailbox_get_vname(ctx->box);
+		(void)mail_namespace_find_unalias(
+			ctx->box->storage->user->namespaces, &mailbox_name);
+
 		roots = array_get(&ctx->quota->roots, &count);
 		t_array_init(&warn_roots, count);
 		for (i = 0; i < count; i++) {

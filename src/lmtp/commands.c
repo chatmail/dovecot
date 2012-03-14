@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -11,6 +11,7 @@
 #include "ostream.h"
 #include "istream-dot.h"
 #include "safe-mkstemp.h"
+#include "restrict-access.h"
 #include "master-service.h"
 #include "rfc822-parser.h"
 #include "message-date.h"
@@ -628,30 +629,24 @@ static int client_open_raw_mail(struct client *client, struct istream *input)
 		NULL
 	};
 	struct mailbox *box;
-	struct raw_mailbox *raw_box;
+	struct mailbox_transaction_context *trans;
 	struct mailbox_header_lookup_ctx *headers_ctx;
 	enum mail_error error;
 
-	box = mailbox_alloc(client->raw_mail_user->namespaces->list,
-			    "Dovecot Delivery Mail",
-			    MAILBOX_FLAG_NO_INDEX_FILES);
-	if (mailbox_open_stream(box, input) < 0 ||
-	    mailbox_sync(box, 0) < 0) {
+	if (raw_mailbox_alloc_stream(client->raw_mail_user, input,
+				     (time_t)-1, client->state.mail_from,
+				     &box) < 0) {
 		i_error("Can't open delivery mail as raw: %s",
-			mail_storage_get_last_error(box->storage, &error));
+			mailbox_get_last_error(box, &error));
 		mailbox_free(&box);
 		client_rcpt_fail_all(client);
 		return -1;
 	}
-	raw_box = (struct raw_mailbox *)box;
-	raw_box->envelope_sender = client->state.mail_from;
 
-	client->state.raw_box = box;
-	client->state.raw_trans = mailbox_transaction_begin(box, 0);
+	trans = mailbox_transaction_begin(box, 0);
 
 	headers_ctx = mailbox_header_lookup_init(box, wanted_headers);
-	client->state.raw_mail = mail_alloc(client->state.raw_trans,
-					    0, headers_ctx);
+	client->state.raw_mail = mail_alloc(trans, 0, headers_ctx);
 	mailbox_header_lookup_unref(&headers_ctx);
 	mail_set_seq(client->state.raw_mail, 1);
 	return 0;
@@ -712,6 +707,10 @@ client_input_data_write_local(struct client *client, struct istream *input)
 		   lose e.g. config connection and need to reconnect to it. */
 		if (seteuid(0) < 0)
 			i_fatal("seteuid(0) failed: %m");
+		/* enable core dumping again. we need to chdir also to
+		   root-owned directory to get core dumps. */
+		restrict_access_allow_coredumps(TRUE);
+		(void)chdir(base_dir);
 	}
 }
 
@@ -723,18 +722,12 @@ static void client_input_data_finish(struct client *client)
 		client_input_handle(client);
 }
 
-static void client_proxy_finish(bool timeout, void *context)
+static void client_proxy_finish(void *context)
 {
 	struct client *client = context;
 
 	lmtp_proxy_deinit(&client->proxy);
-	if (timeout) {
-		client_destroy(client,
-			t_strdup_printf("421 4.4.2 %s", client->my_domain),
-			"Disconnected for inactivity");
-	} else {
-		client_input_data_finish(client);
-	}
+	client_input_data_finish(client);
 }
 
 static const char *client_get_added_headers(struct client *client)
@@ -771,10 +764,12 @@ static bool client_input_data_write(struct client *client)
 	struct istream *input;
 	bool ret = TRUE;
 
+	io_remove(&client->io);
 	i_stream_destroy(&client->dot_input);
 
 	input = client_get_input(client);
-	client_input_data_write_local(client, input);
+	if (array_count(&client->state.rcpt_to) != 0)
+		client_input_data_write_local(client, input);
 	if (client->proxy != NULL) {
 		lmtp_proxy_start(client->proxy, input, NULL,
 				 client_proxy_finish, client);
@@ -902,18 +897,8 @@ int cmd_data(struct client *client, const char *args ATTR_UNUSED)
 	client_send_line(client, "354 OK");
 
 	io_remove(&client->io);
-	if (array_count(&client->state.rcpt_to) == 0) {
-		client->state.name = "DATA (proxy)";
-		timeout_remove(&client->to_idle);
-		lmtp_proxy_start(client->proxy, client->dot_input,
-				 client->state.added_headers,
-				 client_proxy_finish, client);
-		i_stream_unref(&client->dot_input);
-	} else {
-		client->state.name = "DATA";
-		client->io = io_add(client->fd_in, IO_READ,
-				    client_input_data, client);
-		client_input_data_handle(client);
-	}
+	client->state.name = "DATA";
+	client->io = io_add(client->fd_in, IO_READ, client_input_data, client);
+	client_input_data_handle(client);
 	return -1;
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -20,13 +20,12 @@ static const char *cydir_mail_get_path(struct mail *mail)
 
 static int cydir_mail_stat(struct mail *mail, struct stat *st_r)
 {
-	struct mail_private *p = (struct mail_private *)mail;
 	const char *path;
 
 	if (mail->lookup_abort == MAIL_LOOKUP_ABORT_NOT_IN_CACHE)
 		return mail_set_aborted(mail);
 
-	p->stats_stat_lookup_count++;
+	mail->transaction->stats.stat_lookup_count++;
 	path = cydir_mail_get_path(mail);
 	if (stat(path, st_r) < 0) {
 		if (errno == ENOENT)
@@ -92,15 +91,17 @@ static int cydir_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 }
 
 static int
-cydir_mail_get_stream(struct mail *_mail, struct message_size *hdr_size,
-		      struct message_size *body_size, struct istream **stream_r)
+cydir_mail_get_stream(struct mail *_mail, bool get_body ATTR_UNUSED,
+		      struct message_size *hdr_size,
+		      struct message_size *body_size,
+		      struct istream **stream_r)
 {
 	struct index_mail *mail = (struct index_mail *)_mail;
 	const char *path;
 	int fd;
 
 	if (mail->data.stream == NULL) {
-		mail->mail.stats_open_lookup_count++;
+		_mail->transaction->stats.open_lookup_count++;
 		path = cydir_mail_get_path(_mail);
 		fd = open(path, O_RDONLY);
 		if (fd == -1) {
@@ -130,6 +131,9 @@ struct mail_vfuncs cydir_mail_vfuncs = {
 	index_mail_set_seq,
 	index_mail_set_uid,
 	index_mail_set_uid_cache_updates,
+	index_mail_prefetch,
+	index_mail_precache,
+	index_mail_add_temp_wanted_fields,
 
 	index_mail_get_flags,
 	index_mail_get_keywords,
@@ -152,7 +156,6 @@ struct mail_vfuncs cydir_mail_vfuncs = {
 	index_mail_update_modseq,
 	NULL,
 	index_mail_expunge,
-	index_mail_parse,
 	index_mail_set_cache_corrupted,
 	index_mail_opened
 };

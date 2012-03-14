@@ -76,6 +76,8 @@ am__installdirs = "$(DESTDIR)$(pkglibdir)" \
 LTLIBRARIES = $(noinst_LTLIBRARIES) $(pkglib_LTLIBRARIES) \
 	$(sql_module_LTLIBRARIES)
 am__DEPENDENCIES_1 =
+@SQL_PLUGINS_FALSE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) \
+@SQL_PLUGINS_FALSE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am_libdovecot_sql_la_OBJECTS =
 libdovecot_sql_la_OBJECTS = $(am_libdovecot_sql_la_OBJECTS)
 libdovecot_sql_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -165,6 +167,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -225,6 +228,9 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+
+# automake seems to force making this unconditional..
+NOPLUGIN_LDFLAGS = 
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -299,6 +305,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -350,6 +357,9 @@ libsql_la_SOURCES = \
 	driver-sqlpool.c
 
 nodist_libsql_la_SOURCES = sql-drivers-register.c
+deplibs = \
+	../lib-dovecot/libdovecot.la
+
 @SQL_PLUGINS_TRUE@libdriver_mysql_la_LDFLAGS = -module -avoid-version
 @SQL_PLUGINS_TRUE@libdriver_mysql_la_LIBADD = $(MYSQL_LIBS)
 @SQL_PLUGINS_TRUE@libdriver_mysql_la_CPPFLAGS = -I$(top_srcdir)/src/lib $(MYSQL_CFLAGS)
@@ -362,9 +372,15 @@ nodist_libsql_la_SOURCES = sql-drivers-register.c
 @SQL_PLUGINS_TRUE@libdriver_sqlite_la_LIBADD = $(SQLITE_LIBS)
 @SQL_PLUGINS_TRUE@libdriver_sqlite_la_CPPFLAGS = -I$(top_srcdir)/src/lib $(SQLITE_CFLAGS)
 @SQL_PLUGINS_TRUE@libdriver_sqlite_la_SOURCES = driver-sqlite.c
+@SQL_PLUGINS_FALSE@sql_libs = \
+@SQL_PLUGINS_FALSE@	$(MYSQL_LIBS) \
+@SQL_PLUGINS_FALSE@	$(PGSQL_LIBS) \
+@SQL_PLUGINS_FALSE@	$(SQLITE_LIBS)
+
+@SQL_PLUGINS_TRUE@sql_libs = 
 pkglib_LTLIBRARIES = libdovecot-sql.la
 libdovecot_sql_la_SOURCES = 
-libdovecot_sql_la_LIBADD = libsql.la $(MODULE_LIBS)
+libdovecot_sql_la_LIBADD = libsql.la $(deplibs) $(MODULE_LIBS) $(sql_libs)
 libdovecot_sql_la_DEPENDENCIES = libsql.la
 libdovecot_sql_la_LDFLAGS = -export-dynamic
 headers = \

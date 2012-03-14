@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "array.h"
@@ -264,6 +264,7 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 					 AUTH_FAILED_MSG);
 		}
 
+		client->proxy_auth_failed = TRUE;
 		client_proxy_failed(client, FALSE);
 		return -1;
 	} else if (strncasecmp(line, "* CAPABILITY ", 13) == 0) {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 /*
    Expunging works like:
@@ -15,7 +15,6 @@
 #include "lib.h"
 #include "array.h"
 #include "ioloop.h"
-#include "hex-binary.h"
 #include "str.h"
 #include "mdbox-storage.h"
 #include "mdbox-storage-rebuild.h"
@@ -27,7 +26,7 @@
 
 static int
 dbox_sync_verify_expunge_guid(struct mdbox_sync_context *ctx, uint32_t seq,
-			      const uint8_t guid_128[MAIL_GUID_128_SIZE])
+			      const guid_128_t guid_128)
 {
 	const void *data;
 	uint32_t uid;
@@ -35,21 +34,20 @@ dbox_sync_verify_expunge_guid(struct mdbox_sync_context *ctx, uint32_t seq,
 	mail_index_lookup_uid(ctx->sync_view, seq, &uid);
 	mail_index_lookup_ext(ctx->sync_view, seq,
 			      ctx->mbox->guid_ext_id, &data, NULL);
-	if (mail_guid_128_is_empty(guid_128) ||
-	    memcmp(data, guid_128, MAIL_GUID_128_SIZE) == 0)
+	if (guid_128_is_empty(guid_128) ||
+	    memcmp(data, guid_128, GUID_128_SIZE) == 0)
 		return 0;
 
 	mail_storage_set_critical(&ctx->mbox->storage->storage.storage,
 		"Mailbox %s: Expunged GUID mismatch for UID %u: %s vs %s",
 		ctx->mbox->box.vname, uid,
-		binary_to_hex(data, MAIL_GUID_128_SIZE),
-		binary_to_hex(guid_128, MAIL_GUID_128_SIZE));
+		guid_128_to_string(data), guid_128_to_string(guid_128));
 	mdbox_storage_set_corrupted(ctx->mbox->storage);
 	return -1;
 }
 
 static int mdbox_sync_expunge(struct mdbox_sync_context *ctx, uint32_t seq,
-			      const uint8_t guid_128[MAIL_GUID_128_SIZE])
+			      const guid_128_t guid_128)
 {
 	uint32_t map_uid;
 
@@ -192,6 +190,8 @@ static int mdbox_sync_try_begin(struct mdbox_sync_context *ctx,
 
 	ret = mail_index_sync_begin(mbox->box.index, &ctx->index_sync_ctx,
 				    &ctx->sync_view, &ctx->trans, sync_flags);
+	if (mail_index_reset_fscked(mbox->box.index))
+		mdbox_storage_set_corrupted(mbox->storage);
 	if (ret < 0) {
 		mail_storage_set_index_error(&mbox->box);
 		return -1;
@@ -229,7 +229,7 @@ int mdbox_sync_begin(struct mdbox_mailbox *mbox, enum mdbox_sync_flags flags,
 	   headers until syncing has locked the mailbox */
 	rebuild = mbox->storage->corrupted ||
 		(flags & MDBOX_SYNC_FLAG_FORCE_REBUILD) != 0;
-	if (rebuild) {
+	if (rebuild && (flags & MDBOX_SYNC_FLAG_NO_REBUILD) == 0) {
 		if (mdbox_storage_rebuild_in_context(mbox->storage, atomic) < 0)
 			return -1;
 		index_mailbox_reset_uidvalidity(&mbox->box);
@@ -267,7 +267,7 @@ int mdbox_sync_begin(struct mdbox_mailbox *mbox, enum mdbox_sync_flags flags,
 		if (storage_rebuilt) {
 			mail_storage_set_critical(storage,
 				"mdbox %s: Storage keeps breaking",
-				mbox->box.path);
+				mailbox_get_path(&mbox->box));
 			return -1;
 		}
 
@@ -330,6 +330,10 @@ mdbox_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 			ret = -1;
 	}
 
+	if (box->opened) {
+		if (mail_index_reset_fscked(box->index))
+			mdbox_storage_set_corrupted(mbox->storage);
+	}
 	if (ret == 0 && (index_mailbox_want_full_sync(&mbox->box, flags) ||
 			 mbox->storage->corrupted)) {
 		if ((flags & MAILBOX_SYNC_FLAG_FORCE_RESYNC) != 0)

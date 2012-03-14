@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -42,7 +42,6 @@ virtual_mail_alloc(struct mailbox_transaction_context *t,
 	vmail->imail.data_pool =
 		pool_alloconly_create("virtual index_mail", 512);
 	vmail->imail.ibox = INDEX_STORAGE_CONTEXT(t->box);
-	vmail->imail.trans = (struct index_transaction_context *)t;
 
 	vmail->wanted_fields = wanted_fields;
 	if (wanted_headers != NULL) {
@@ -98,7 +97,7 @@ virtual_mail_set_backend_mail(struct mail *mail,
 
 	backend_headers = vmail->wanted_headers == NULL ? NULL :
 		mailbox_header_lookup_init(bbox->box,
-					   vmail->wanted_headers->headers);
+					   vmail->wanted_headers->name);
 	vmail->backend_mail = mail_alloc(backend_trans, vmail->wanted_fields,
 					 backend_headers);
 	if (backend_headers != NULL)
@@ -107,7 +106,7 @@ virtual_mail_set_backend_mail(struct mail *mail,
 	return vmail->backend_mail;
 }
 
-static void virtual_mail_set_seq(struct mail *mail, uint32_t seq)
+static void virtual_mail_set_seq(struct mail *mail, uint32_t seq, bool saving)
 {
 	struct virtual_mail *vmail = (struct virtual_mail *)mail;
 	struct virtual_mailbox *mbox = (struct virtual_mailbox *)mail->box;
@@ -115,6 +114,8 @@ static void virtual_mail_set_seq(struct mail *mail, uint32_t seq)
 	const struct virtual_mail_index_record *vrec;
 	const void *data;
 	bool expunged;
+
+	i_assert(!saving);
 
 	mail_index_lookup_ext(mail->box->view, seq, mbox->virtual_ext_id,
 			      &data, &expunged);
@@ -150,7 +151,7 @@ static bool virtual_mail_set_uid(struct mail *mail, uint32_t uid)
 	if (!mail_index_lookup_seq(mail->box->view, uid, &seq))
 		return FALSE;
 
-	virtual_mail_set_seq(mail, seq);
+	virtual_mail_set_seq(mail, seq, FALSE);
 	return TRUE;
 }
 
@@ -160,6 +161,33 @@ static void virtual_mail_set_uid_cache_updates(struct mail *mail, bool set)
 	struct mail_private *p = (struct mail_private *)vmail->backend_mail;
 
 	p->v.set_uid_cache_updates(vmail->backend_mail, set);
+}
+
+static bool virtual_mail_prefetch(struct mail *mail)
+{
+	struct virtual_mail *vmail = (struct virtual_mail *)mail;
+	struct mail_private *p = (struct mail_private *)vmail->backend_mail;
+
+	return p->v.prefetch(vmail->backend_mail);
+}
+
+static void virtual_mail_precache(struct mail *mail)
+{
+	struct virtual_mail *vmail = (struct virtual_mail *)mail;
+	struct mail_private *p = (struct mail_private *)vmail->backend_mail;
+
+	p->v.precache(vmail->backend_mail);
+}
+
+static void
+virtual_mail_add_temp_wanted_fields(struct mail *mail,
+				    enum mail_fetch_field fields,
+				    struct mailbox_header_lookup_ctx *headers)
+{
+	struct virtual_mail *vmail = (struct virtual_mail *)mail;
+	struct mail_private *p = (struct mail_private *)vmail->backend_mail;
+
+	p->v.add_temp_wanted_fields(vmail->backend_mail, fields, headers);
 }
 
 static int virtual_mail_handle_lost(struct virtual_mail *vmail)
@@ -302,7 +330,7 @@ virtual_mail_get_header_stream(struct mail *mail,
 		return -1;
 
 	backend_headers = mailbox_header_lookup_init(vmail->backend_mail->box,
-						     headers->headers);
+						     headers->name);
 	ret = mail_get_header_stream(vmail->backend_mail, backend_headers,
 				     stream_r);
 	mailbox_header_lookup_unref(&backend_headers);
@@ -314,16 +342,24 @@ virtual_mail_get_header_stream(struct mail *mail,
 }
 
 static int
-virtual_mail_get_stream(struct mail *mail, struct message_size *hdr_size,
+virtual_mail_get_stream(struct mail *mail, bool get_body,
+			struct message_size *hdr_size,
 			struct message_size *body_size,
 			struct istream **stream_r)
 {
 	struct virtual_mail *vmail = (struct virtual_mail *)mail;
+	int ret;
 
 	if (virtual_mail_handle_lost(vmail) < 0)
 		return -1;
-	if (mail_get_stream(vmail->backend_mail, hdr_size, body_size,
-			    stream_r) < 0) {
+	if (get_body) {
+		ret = mail_get_stream(vmail->backend_mail, hdr_size, body_size,
+				      stream_r);
+	} else {
+		ret = mail_get_hdr_stream(vmail->backend_mail, hdr_size,
+					  stream_r);
+	}
+	if (ret < 0) {
 		virtual_box_copy_error(mail->box, vmail->backend_mail->box);
 		return -1;
 	}
@@ -369,15 +405,6 @@ static void virtual_mail_expunge(struct mail *mail)
 	mail_expunge(vmail->backend_mail);
 }
 
-static void virtual_mail_parse(struct mail *mail, bool parse_body)
-{
-	struct virtual_mail *vmail = (struct virtual_mail *)mail;
-
-	if (virtual_mail_handle_lost(vmail) < 0)
-		return;
-	mail_parse(vmail->backend_mail, parse_body);
-}
-
 static void
 virtual_mail_set_cache_corrupted(struct mail *mail, enum mail_fetch_field field)
 {
@@ -394,6 +421,9 @@ struct mail_vfuncs virtual_mail_vfuncs = {
 	virtual_mail_set_seq,
 	virtual_mail_set_uid,
 	virtual_mail_set_uid_cache_updates,
+	virtual_mail_prefetch,
+	virtual_mail_precache,
+	virtual_mail_add_temp_wanted_fields,
 
 	index_mail_get_flags,
 	index_mail_get_keywords,
@@ -416,7 +446,6 @@ struct mail_vfuncs virtual_mail_vfuncs = {
 	index_mail_update_modseq,
 	virtual_mail_update_pop3_uidl,
 	virtual_mail_expunge,
-	virtual_mail_parse,
 	virtual_mail_set_cache_corrupted,
 	NULL
 };

@@ -5,16 +5,22 @@
 #include "login-proxy.h"
 #include "sasl-server.h"
 
+#define LOGIN_MAX_MASTER_PREFIX_LEN 128
+
 /* max. size of input buffer. this means:
 
-   IMAP: Max. length of a single parameter. SASL initial response can be
-         long with GSSAPI.
+   IMAP: Max. length of command's all parameters. SASL-IR is read into
+         a separate larger buffer.
    POP3: Max. length of a command line (spec says 512 would be enough)
 */
-#define LOGIN_MAX_INBUF_SIZE 4096
+#define LOGIN_MAX_INBUF_SIZE \
+	(MASTER_AUTH_MAX_DATA_SIZE - LOGIN_MAX_MASTER_PREFIX_LEN)
 /* max. size of output buffer. if it gets full, the client is disconnected.
    SASL authentication gives the largest output. */
 #define LOGIN_MAX_OUTBUF_SIZE 4096
+
+/* Max. length of SASL authentication buffer. */
+#define LOGIN_MAX_AUTH_BUF_SIZE 8192
 
 /* Disconnect client after this many milliseconds if it hasn't managed
    to log in yet. */
@@ -101,13 +107,15 @@ struct client {
 	char *auth_mech_name;
 	struct auth_client_request *auth_request;
 	string_t *auth_response;
+	time_t auth_first_started;
+	const char *sasl_final_resp;
 
 	unsigned int master_auth_id;
 	unsigned int master_tag;
 	sasl_server_callback_t *sasl_callback;
 
 	unsigned int bad_counter;
-	unsigned int auth_attempts;
+	unsigned int auth_attempts, auth_successes;
 	pid_t mail_pid;
 
 	char *virtual_user;
@@ -125,11 +133,13 @@ struct client {
 	unsigned int auth_tried_unsupported_mech:1;
 	unsigned int auth_try_aborted:1;
 	unsigned int auth_initializing:1;
+	unsigned int auth_process_comm_fail:1;
+	unsigned int proxy_auth_failed:1;
+	unsigned int auth_waiting:1;
 	/* ... */
 };
 
 extern struct client *clients;
-extern struct client_vfuncs client_vfuncs;
 
 struct client *
 client_create(int fd, bool ssl, pool_t pool,
@@ -149,6 +159,7 @@ unsigned int clients_get_count(void) ATTR_PURE;
 void client_set_title(struct client *client);
 void client_log(struct client *client, const char *msg);
 void client_log_err(struct client *client, const char *msg);
+void client_log_warn(struct client *client, const char *msg);
 const char *client_get_extra_disconnect_reason(struct client *client);
 bool client_is_trusted(struct client *client);
 void client_auth_failed(struct client *client);
@@ -167,6 +178,7 @@ int client_auth_parse_response(struct client *client);
 int client_auth_begin(struct client *client, const char *mech_name,
 		      const char *init_resp);
 bool client_check_plaintext_auth(struct client *client, bool pass_sent);
+int client_auth_read_line(struct client *client);
 
 void client_proxy_finish_destroy_client(struct client *client);
 void client_proxy_log_failure(struct client *client, const char *line);
@@ -175,8 +187,6 @@ void client_proxy_failed(struct client *client, bool send_line);
 void clients_notify_auth_connected(void);
 void client_destroy_oldest(void);
 void clients_destroy_all(void);
-
-void clients_init(void);
-void clients_deinit(void);
+void clients_destroy_all_reason(const char *reason);
 
 #endif

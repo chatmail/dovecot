@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "ioloop.h"
@@ -98,7 +98,7 @@ static void client_input_append(struct client_command_context *cmd)
 	}
 
 	o_stream_cork(client->output);
-	finished = cmd->func(cmd);
+	finished = command_exec(cmd);
 	if (!finished && cmd->state != CLIENT_COMMAND_STATE_DONE)
 		(void)client_handle_unfinished_cmd(cmd);
 	else
@@ -145,7 +145,7 @@ static int validate_args(const struct imap_arg *args,
 
 static void cmd_append_finish(struct cmd_append_context *ctx)
 {
-	imap_parser_destroy(&ctx->save_parser);
+	imap_parser_unref(&ctx->save_parser);
 
 	i_assert(ctx->client->input_lock == ctx->cmd);
 
@@ -312,6 +312,7 @@ static bool cmd_append_continue_parsing(struct client_command_context *cmd)
 	if (!validate_args(args, &flags_list, &internal_date_str,
 			   &ctx->msg_size, &nonsync)) {
 		client_send_command_error(cmd, "Invalid arguments.");
+		client->input_skip_line = TRUE;
 		return cmd_append_cancel(ctx, nonsync);
 	}
 
@@ -369,7 +370,7 @@ static bool cmd_append_continue_parsing(struct client_command_context *cmd)
 	ret = mailbox_save_begin(&ctx->save_ctx, ctx->input);
 
 	if (keywords != NULL)
-		mailbox_keywords_unref(ctx->box, &keywords);
+		mailbox_keywords_unref(&keywords);
 
 	if (ret < 0) {
 		/* save initialization failed */
@@ -463,47 +464,6 @@ static bool cmd_append_continue_message(struct client_command_context *cmd)
 	return FALSE;
 }
 
-static struct mailbox *
-get_mailbox(struct client_command_context *cmd, const char *name)
-{
-	struct mail_namespace *ns;
-	struct mailbox *box;
-	enum mailbox_name_status status;
-	const char *storage_name;
-
-	ns = client_find_namespace(cmd, name, &storage_name, &status);
-	if (ns == NULL)
-		return NULL;
-
-	switch (status) {
-	case MAILBOX_NAME_EXISTS_MAILBOX:
-		break;
-	case MAILBOX_NAME_EXISTS_DIR:
-		status = MAILBOX_NAME_VALID;
-		/* fall through */
-	case MAILBOX_NAME_VALID:
-	case MAILBOX_NAME_INVALID:
-	case MAILBOX_NAME_NOINFERIORS:
-		client_fail_mailbox_name_status(cmd, name, "TRYCREATE", status);
-		return NULL;
-	}
-
-	if (cmd->client->mailbox != NULL &&
-	    mailbox_equals(cmd->client->mailbox, ns, storage_name))
-		return cmd->client->mailbox;
-
-	box = mailbox_alloc(ns->list, storage_name, MAILBOX_FLAG_SAVEONLY |
-			    MAILBOX_FLAG_KEEP_RECENT);
-	if (mailbox_open(box) < 0) {
-		client_send_storage_error(cmd, mailbox_get_storage(box));
-		mailbox_free(&box);
-		return NULL;
-	}
-	if (cmd->client->enabled_features != 0)
-		mailbox_enable(box, cmd->client->enabled_features);
-	return box;
-}
-
 bool cmd_append(struct client_command_context *cmd)
 {
 	struct client *client = cmd->client;
@@ -527,9 +487,8 @@ bool cmd_append(struct client_command_context *cmd)
 	ctx = p_new(cmd->pool, struct cmd_append_context, 1);
 	ctx->cmd = cmd;
 	ctx->client = client;
-	ctx->box = get_mailbox(cmd, mailbox);
 	ctx->started = ioloop_time;
-	if (ctx->box == NULL)
+	if (client_open_save_dest_box(cmd, mailbox, &ctx->box) < 0)
 		ctx->failed = TRUE;
 	else {
 		ctx->storage = mailbox_get_storage(ctx->box);

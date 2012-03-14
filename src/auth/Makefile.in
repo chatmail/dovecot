@@ -83,6 +83,13 @@ am__installdirs = "$(DESTDIR)$(auth_moduledir)" \
 	"$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(pkginc_libdir)"
 LTLIBRARIES = $(auth_module_LTLIBRARIES)
 am__DEPENDENCIES_1 =
+libauthdb_imap_la_DEPENDENCIES = ../lib-imap-client/libimap_client.la \
+	../lib-ssl-iostream/libssl_iostream.la $(am__DEPENDENCIES_1)
+am_libauthdb_imap_la_OBJECTS = libauthdb_imap_la-passdb-imap.lo
+libauthdb_imap_la_OBJECTS = $(am_libauthdb_imap_la_OBJECTS)
+libauthdb_imap_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(libauthdb_imap_la_LDFLAGS) $(LDFLAGS) -o $@
 @LDAP_PLUGIN_TRUE@libauthdb_ldap_la_DEPENDENCIES =  \
 @LDAP_PLUGIN_TRUE@	$(am__DEPENDENCIES_1)
 am__libauthdb_ldap_la_SOURCES_DIST = db-ldap.c passdb-ldap.c \
@@ -114,6 +121,7 @@ am__objects_2 = db-ldap.$(OBJEXT) passdb-ldap.$(OBJEXT) \
 am_auth_OBJECTS = auth.$(OBJEXT) auth-cache.$(OBJEXT) \
 	auth-client-connection.$(OBJEXT) \
 	auth-master-connection.$(OBJEXT) \
+	auth-postfix-connection.$(OBJEXT) \
 	mech-otp-skey-common.$(OBJEXT) mech-plain-common.$(OBJEXT) \
 	auth-penalty.$(OBJEXT) auth-request.$(OBJEXT) \
 	auth-request-handler.$(OBJEXT) auth-settings.$(OBJEXT) \
@@ -124,19 +132,21 @@ am_auth_OBJECTS = auth.$(OBJEXT) auth-cache.$(OBJEXT) \
 	mech-login.$(OBJEXT) mech-cram-md5.$(OBJEXT) \
 	mech-digest-md5.$(OBJEXT) mech-external.$(OBJEXT) \
 	mech-gssapi.$(OBJEXT) mech-ntlm.$(OBJEXT) mech-otp.$(OBJEXT) \
-	mech-skey.$(OBJEXT) mech-rpa.$(OBJEXT) mech-apop.$(OBJEXT) \
-	mech-winbind.$(OBJEXT) passdb.$(OBJEXT) \
-	passdb-blocking.$(OBJEXT) passdb-bsdauth.$(OBJEXT) \
-	passdb-cache.$(OBJEXT) passdb-checkpassword.$(OBJEXT) \
-	passdb-passwd.$(OBJEXT) passdb-passwd-file.$(OBJEXT) \
-	passdb-pam.$(OBJEXT) passdb-shadow.$(OBJEXT) \
-	passdb-sia.$(OBJEXT) passdb-vpopmail.$(OBJEXT) \
-	passdb-sql.$(OBJEXT) passdb-static.$(OBJEXT) userdb.$(OBJEXT) \
-	userdb-blocking.$(OBJEXT) userdb-checkpassword.$(OBJEXT) \
-	userdb-nss.$(OBJEXT) userdb-passwd.$(OBJEXT) \
-	userdb-passwd-file.$(OBJEXT) userdb-prefetch.$(OBJEXT) \
-	userdb-static.$(OBJEXT) userdb-vpopmail.$(OBJEXT) \
-	userdb-sql.$(OBJEXT) $(am__objects_2)
+	mech-scram-sha1.$(OBJEXT) mech-skey.$(OBJEXT) \
+	mech-rpa.$(OBJEXT) mech-apop.$(OBJEXT) mech-winbind.$(OBJEXT) \
+	passdb.$(OBJEXT) passdb-blocking.$(OBJEXT) \
+	passdb-bsdauth.$(OBJEXT) passdb-cache.$(OBJEXT) \
+	passdb-checkpassword.$(OBJEXT) passdb-passwd.$(OBJEXT) \
+	passdb-passwd-file.$(OBJEXT) passdb-pam.$(OBJEXT) \
+	passdb-shadow.$(OBJEXT) passdb-sia.$(OBJEXT) \
+	passdb-vpopmail.$(OBJEXT) passdb-sql.$(OBJEXT) \
+	passdb-static.$(OBJEXT) passdb-template.$(OBJEXT) \
+	userdb.$(OBJEXT) userdb-blocking.$(OBJEXT) \
+	userdb-checkpassword.$(OBJEXT) userdb-nss.$(OBJEXT) \
+	userdb-passwd.$(OBJEXT) userdb-passwd-file.$(OBJEXT) \
+	userdb-prefetch.$(OBJEXT) userdb-static.$(OBJEXT) \
+	userdb-vpopmail.$(OBJEXT) userdb-sql.$(OBJEXT) \
+	userdb-template.$(OBJEXT) $(am__objects_2)
 auth_OBJECTS = $(am_auth_OBJECTS)
 am__DEPENDENCIES_2 = libpassword.a ../lib-ntlm/libntlm.a \
 	../lib-otp/libotp.a $(am__DEPENDENCIES_1)
@@ -158,10 +168,10 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libpassword_a_SOURCES) $(libauthdb_ldap_la_SOURCES) \
-	$(libmech_gssapi_la_SOURCES) $(auth_SOURCES) \
-	checkpassword-reply.c
-DIST_SOURCES = $(libpassword_a_SOURCES) \
+SOURCES = $(libpassword_a_SOURCES) $(libauthdb_imap_la_SOURCES) \
+	$(libauthdb_ldap_la_SOURCES) $(libmech_gssapi_la_SOURCES) \
+	$(auth_SOURCES) checkpassword-reply.c
+DIST_SOURCES = $(libpassword_a_SOURCES) $(libauthdb_imap_la_SOURCES) \
 	$(am__libauthdb_ldap_la_SOURCES_DIST) \
 	$(am__libmech_gssapi_la_SOURCES_DIST) $(auth_SOURCES) \
 	checkpassword-reply.c
@@ -185,6 +195,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -245,6 +256,9 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+
+# automake seems to force making this unconditional..
+NOPLUGIN_LDFLAGS = 
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -319,6 +333,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -346,7 +361,8 @@ auth_moduledir = $(moduledir)/auth
 @LDAP_PLUGIN_TRUE@LDAP_LIB = libauthdb_ldap.la
 auth_module_LTLIBRARIES = \
 	$(GSSAPI_LIB) \
-	$(LDAP_LIB)
+	$(LDAP_LIB) \
+	libauthdb_imap.la
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
@@ -358,6 +374,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-master \
 	-DAUTH_MODULE_DIR=\""$(auth_moduledir)"\" \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
+	-DPKG_RUNDIR=\""$(rundir)"\" \
 	$(AUTH_CFLAGS)
 
 auth_LDFLAGS = -export-dynamic
@@ -383,6 +400,7 @@ auth_SOURCES = \
 	auth-cache.c \
 	auth-client-connection.c \
 	auth-master-connection.c \
+	auth-postfix-connection.c \
 	mech-otp-skey-common.c \
 	mech-plain-common.c \
 	auth-penalty.c \
@@ -406,6 +424,7 @@ auth_SOURCES = \
 	mech-gssapi.c \
 	mech-ntlm.c \
 	mech-otp.c \
+	mech-scram-sha1.c \
 	mech-skey.c \
 	mech-rpa.c \
 	mech-apop.c \
@@ -423,6 +442,7 @@ auth_SOURCES = \
 	passdb-vpopmail.c \
 	passdb-sql.c \
 	passdb-static.c \
+	passdb-template.c \
 	userdb.c \
 	userdb-blocking.c \
 	userdb-checkpassword.c \
@@ -433,6 +453,7 @@ auth_SOURCES = \
 	userdb-static.c \
 	userdb-vpopmail.c \
 	userdb-sql.c \
+	userdb-template.c \
 	$(ldap_sources)
 
 headers = \
@@ -441,6 +462,7 @@ headers = \
 	auth-client-connection.h \
 	auth-common.h \
 	auth-master-connection.h \
+	auth-postfix-connection.h \
 	mech-otp-skey-common.h \
 	mech-plain-common.h \
 	auth-penalty.h \
@@ -459,10 +481,11 @@ headers = \
 	passdb.h \
 	passdb-blocking.h \
 	passdb-cache.h \
+	passdb-template.h \
 	password-scheme.h \
 	userdb.h \
 	userdb-blocking.h \
-	userdb-static.h \
+	userdb-template.h \
 	userdb-vpopmail.h
 
 @GSSAPI_PLUGIN_TRUE@libmech_gssapi_la_LDFLAGS = -module -avoid-version
@@ -473,6 +496,18 @@ headers = \
 @LDAP_PLUGIN_TRUE@libauthdb_ldap_la_LIBADD = $(LDAP_LIBS)
 @LDAP_PLUGIN_TRUE@libauthdb_ldap_la_CPPFLAGS = $(AM_CPPFLAGS) -DPLUGIN_BUILD
 @LDAP_PLUGIN_TRUE@libauthdb_ldap_la_SOURCES = $(ldap_sources)
+libauthdb_imap_la_LDFLAGS = -module -avoid-version
+libauthdb_imap_la_LIBADD = \
+	../lib-imap-client/libimap_client.la \
+	../lib-ssl-iostream/libssl_iostream.la \
+	$(LIBDOVECOT)
+
+libauthdb_imap_la_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	-I$(top_srcdir)/src/lib-imap \
+	-I$(top_srcdir)/src/lib-imap-client
+
+libauthdb_imap_la_SOURCES = passdb-imap.c
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
 checkpassword_reply_LDADD = $(LIBDOVECOT)
@@ -552,6 +587,8 @@ clean-auth_moduleLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
+libauthdb_imap.la: $(libauthdb_imap_la_OBJECTS) $(libauthdb_imap_la_DEPENDENCIES) 
+	$(libauthdb_imap_la_LINK) -rpath $(auth_moduledir) $(libauthdb_imap_la_OBJECTS) $(libauthdb_imap_la_LIBADD) $(LIBS)
 libauthdb_ldap.la: $(libauthdb_ldap_la_OBJECTS) $(libauthdb_ldap_la_DEPENDENCIES) 
 	$(libauthdb_ldap_la_LINK) $(am_libauthdb_ldap_la_rpath) $(libauthdb_ldap_la_OBJECTS) $(libauthdb_ldap_la_LIBADD) $(LIBS)
 libmech_gssapi.la: $(libmech_gssapi_la_OBJECTS) $(libmech_gssapi_la_DEPENDENCIES) 
@@ -616,6 +653,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-client-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-master-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-penalty.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-postfix-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-handler.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-settings.Po@am__quote@
@@ -628,6 +666,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-ldap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-passwd-file.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-sql.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libauthdb_imap_la-passdb-imap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libauthdb_ldap_la-db-ldap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libauthdb_ldap_la-passdb-ldap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libauthdb_ldap_la-userdb-ldap.Plo@am__quote@
@@ -646,6 +685,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-rpa.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-scram-sha1.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-skey.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-winbind.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech.Po@am__quote@
@@ -662,6 +702,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-sia.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-sql.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-static.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-template.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-vpopmail.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-crypt.Po@am__quote@
@@ -678,6 +719,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-prefetch.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-sql.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-static.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-template.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-vpopmail.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb.Po@am__quote@
 
@@ -701,6 +743,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(LTCOMPILE) -c -o $@ $<
+
+libauthdb_imap_la-passdb-imap.lo: passdb-imap.c
+@am__fastdepCC_TRUE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libauthdb_imap_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libauthdb_imap_la-passdb-imap.lo -MD -MP -MF $(DEPDIR)/libauthdb_imap_la-passdb-imap.Tpo -c -o libauthdb_imap_la-passdb-imap.lo `test -f 'passdb-imap.c' || echo '$(srcdir)/'`passdb-imap.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/libauthdb_imap_la-passdb-imap.Tpo $(DEPDIR)/libauthdb_imap_la-passdb-imap.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='passdb-imap.c' object='libauthdb_imap_la-passdb-imap.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libauthdb_imap_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libauthdb_imap_la-passdb-imap.lo `test -f 'passdb-imap.c' || echo '$(srcdir)/'`passdb-imap.c
 
 libauthdb_ldap_la-db-ldap.lo: db-ldap.c
 @am__fastdepCC_TRUE@	$(LIBTOOL)  --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libauthdb_ldap_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libauthdb_ldap_la-db-ldap.lo -MD -MP -MF $(DEPDIR)/libauthdb_ldap_la-db-ldap.Tpo -c -o libauthdb_ldap_la-db-ldap.lo `test -f 'db-ldap.c' || echo '$(srcdir)/'`db-ldap.c
