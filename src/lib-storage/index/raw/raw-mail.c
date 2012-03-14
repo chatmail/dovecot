@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -12,17 +12,17 @@
 static int raw_mail_stat(struct mail *mail)
 {
 	struct raw_mailbox *mbox = (struct raw_mailbox *)mail->box;
-	struct mail_private *p = (struct mail_private *)mail;
 	const struct stat *st;
 
 	if (mail->lookup_abort == MAIL_LOOKUP_ABORT_NOT_IN_CACHE)
 		return mail_set_aborted(mail);
 
-	p->stats_fstat_lookup_count++;
+	mail->transaction->stats.fstat_lookup_count++;
 	st = i_stream_stat(mail->box->input, TRUE);
 	if (st == NULL) {
 		mail_storage_set_critical(mail->box->storage,
-			"stat(%s) failed: %m", mail->box->path);
+					  "stat(%s) failed: %m",
+					  i_stream_get_name(mail->box->input));
 		return -1;
 	}
 
@@ -77,7 +77,8 @@ static int raw_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 }
 
 static int
-raw_mail_get_stream(struct mail *_mail, struct message_size *hdr_size,
+raw_mail_get_stream(struct mail *_mail, bool get_body ATTR_UNUSED,
+		    struct message_size *hdr_size,
 		    struct message_size *body_size, struct istream **stream_r)
 {
 	struct index_mail *mail = (struct index_mail *)_mail;
@@ -103,7 +104,8 @@ raw_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 		*value_r = mbox->envelope_sender;
 		return 0;
 	case MAIL_FETCH_UIDL_FILE_NAME:
-		*value_r = mbox->have_filename ? _mail->box->path : "";
+		*value_r = mbox->have_filename ?
+			mailbox_get_path(_mail->box) : "";
 		return 0;
 	default:
 		return index_mail_get_special(_mail, field, value_r);
@@ -116,6 +118,9 @@ struct mail_vfuncs raw_mail_vfuncs = {
 	index_mail_set_seq,
 	index_mail_set_uid,
 	index_mail_set_uid_cache_updates,
+	index_mail_prefetch,
+	index_mail_precache,
+	index_mail_add_temp_wanted_fields,
 
 	index_mail_get_flags,
 	index_mail_get_keywords,
@@ -138,7 +143,6 @@ struct mail_vfuncs raw_mail_vfuncs = {
 	index_mail_update_modseq,
 	NULL,
 	index_mail_expunge,
-	index_mail_parse,
 	index_mail_set_cache_corrupted,
 	index_mail_opened
 };

@@ -49,10 +49,11 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libstorage_list_la_LIBADD =
-am_libstorage_list_la_OBJECTS = index-mailbox-list.lo \
-	index-mailbox-list-sync.lo mailbox-list-delete.lo \
+am_libstorage_list_la_OBJECTS = mailbox-list-delete.lo \
 	mailbox-list-fs.lo mailbox-list-fs-flags.lo \
-	mailbox-list-fs-iter.lo mailbox-list-maildir.lo \
+	mailbox-list-fs-iter.lo mailbox-list-index.lo \
+	mailbox-list-index-iter.lo mailbox-list-index-status.lo \
+	mailbox-list-index-sync.lo mailbox-list-maildir.lo \
 	mailbox-list-maildir-iter.lo mailbox-list-none.lo \
 	mailbox-list-subscriptions.lo subscription-file.lo
 libstorage_list_la_OBJECTS = $(am_libstorage_list_la_OBJECTS)
@@ -112,6 +113,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -172,6 +174,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOPLUGIN_LDFLAGS = @NOPLUGIN_LDFLAGS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -246,6 +249,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -277,12 +281,14 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-storage/index
 
 libstorage_list_la_SOURCES = \
-	index-mailbox-list.c \
-	index-mailbox-list-sync.c \
 	mailbox-list-delete.c \
 	mailbox-list-fs.c \
 	mailbox-list-fs-flags.c \
 	mailbox-list-fs-iter.c \
+	mailbox-list-index.c \
+	mailbox-list-index-iter.c \
+	mailbox-list-index-status.c \
+	mailbox-list-index-sync.c \
 	mailbox-list-maildir.c \
 	mailbox-list-maildir-iter.c \
 	mailbox-list-none.c \
@@ -290,9 +296,9 @@ libstorage_list_la_SOURCES = \
 	subscription-file.c
 
 headers = \
-	index-mailbox-list.h \
 	mailbox-list-delete.h \
 	mailbox-list-fs.h \
+	mailbox-list-index.h \
 	mailbox-list-maildir.h \
 	mailbox-list-subscriptions.h \
 	subscription-file.h
@@ -351,12 +357,14 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-mailbox-list-sync.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-mailbox-list.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-delete.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-fs-flags.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-fs-iter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-fs.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-index-iter.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-index-status.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-index-sync.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-index.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-maildir-iter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-maildir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-none.Plo@am__quote@

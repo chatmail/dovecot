@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "base64.h"
@@ -41,9 +41,6 @@ doveadm_mail_cmd_server(const char *cmd_name,
 			const struct mail_storage_service_input *input,
 			int argc, char *argv[])
 {
-	enum mail_storage_service_flags service_flags =
-		MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT |
-		MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP;
 	struct doveadm_mail_cmd_context *ctx;
 	const struct doveadm_mail_cmd *cmd;
 	const char *getopt_args;
@@ -56,15 +53,23 @@ doveadm_mail_cmd_server(const char *cmd_name,
 		return FALSE;
 	}
 
-	if (doveadm_debug)
-		service_flags |= MAIL_STORAGE_SERVICE_FLAG_DEBUG;
-
 	ctx = doveadm_mail_cmd_init(cmd, set);
-	getopt_args = t_strconcat("Au:", ctx->getopt_args, NULL);
+	ctx->full_args = (const void *)(argv + 1);
+
+	ctx->service_flags |=
+		MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT |
+		MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP;
+	if (doveadm_debug)
+		ctx->service_flags |= MAIL_STORAGE_SERVICE_FLAG_DEBUG;
+
+	getopt_args = t_strconcat("AS:u:", ctx->getopt_args, NULL);
 	while ((c = getopt(argc, argv, getopt_args)) > 0) {
 		switch (c) {
 		case 'A':
 			add_username_header = TRUE;
+			break;
+		case 'S':
+			/* ignore */
 			break;
 		case 'u':
 			if (strchr(optarg, '*') != NULL ||
@@ -83,7 +88,7 @@ doveadm_mail_cmd_server(const char *cmd_name,
 		}
 	}
 
-	argv += optind-1;
+	argv += optind;
 	optind = 1;
 
 	if (argv[0] != NULL && cmd->usage_args == NULL) {
@@ -100,12 +105,16 @@ doveadm_mail_cmd_server(const char *cmd_name,
 		doveadm_print_sticky("username", input->username);
 	}
 
-	doveadm_mail_single_user(ctx, argv, input, service_flags);
+	ctx->args = (const void *)argv;
+	if (ctx->v.preinit != NULL)
+		ctx->v.preinit(ctx);
+
+	doveadm_mail_single_user(ctx, input);
 	doveadm_mail_server_flush();
 	ctx->v.deinit(ctx);
 	doveadm_print_flush();
 	mail_storage_service_deinit(&ctx->storage_service);
-	ret = !ctx->failed;
+	ret = ctx->exit_code == 0;
 	pool_unref(&ctx->pool);
 
 	return ret;
@@ -152,8 +161,9 @@ static bool client_handle_command(struct client_connection *conn, char **args)
 	flags = args[0];
 	input.username = args[1];
 	cmd_name = args[2];
-	args += 3;
-	argc -= 3;
+	/* leave the command name as args[0] so getopt() works */
+	args += 2;
+	argc -= 2;
 
 	doveadm_debug = FALSE;
 	doveadm_verbose = FALSE;
@@ -263,10 +273,13 @@ static void client_connection_input(struct client_connection *conn)
 	}
 	if (!conn->authenticated) {
 		if ((ret = client_connection_authenticate(conn)) <= 0) {
-			if (ret < 0)
+			if (ret < 0) {
+				o_stream_send(conn->output, "-\n", 2);
 				client_connection_destroy(&conn);
+			}
 			return;
 		}
+		o_stream_send(conn->output, "+\n", 2);
 		conn->authenticated = TRUE;
 	}
 

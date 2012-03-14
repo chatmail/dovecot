@@ -1,112 +1,89 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
+
+/* FIXME: this plugin is only for backwards compatibility. log a warning in
+   v2.2 about this and in later versions remove completely */
 
 #include "lib.h"
-#include "master-service.h"
-#include "mail-storage.h"
-#include "mail-storage-hooks.h"
+#include "array.h"
+#include "unichar.h"
+#include "mail-user.h"
 #include "mail-namespace.h"
+#include "mail-storage-hooks.h"
 #include "autocreate-plugin.h"
 
-#include <stdlib.h>
-
-const char *autocreate_plugin_version = DOVECOT_VERSION;
-
-static void
-autocreate_mailbox(struct mail_namespace *namespaces, const char *name)
+static struct mailbox_settings *
+mailbox_settings_find(struct mail_namespace *ns, const char *vname)
 {
-	struct mail_namespace *ns;
-	struct mailbox *box;
-	const char *str;
-	enum mail_error error;
+	struct mailbox_settings *const *box_set;
 
-	ns = mail_namespace_find(namespaces, &name);
-	if (ns == NULL) {
-		if (namespaces->mail_set->mail_debug)
-			i_debug("autocreate: No namespace found for %s", name);
-		return;
+	array_foreach(&ns->set->mailboxes, box_set) {
+		if (strcmp((*box_set)->name, vname) == 0)
+			return *box_set;
 	}
-
-	box = mailbox_alloc(ns->list, name, 0);
-	if (mailbox_create(box, NULL, FALSE) < 0) {
-		str = mail_storage_get_last_error(mailbox_get_storage(box),
-						  &error);
-		if (error != MAIL_ERROR_EXISTS && ns->mail_set->mail_debug) {
-			i_debug("autocreate: Failed to create mailbox %s: %s",
-				name, str);
-		}
-	}
-	mailbox_free(&box);
-}
-
-static void autocreate_mailboxes(struct mail_namespace *namespaces)
-{
-	struct mail_user *user = namespaces->user;
-	char env_name[20];
-	const char *name;
-	unsigned int i;
-
-	i = 1;
-	name = mail_user_plugin_getenv(user, "autocreate");
-	while (name != NULL) {
-		autocreate_mailbox(namespaces, name);
-
-		i_snprintf(env_name, sizeof(env_name), "autocreate%d", ++i);
-		name = mail_user_plugin_getenv(user, env_name);
-	}
+	return NULL;
 }
 
 static void
-autosubscribe_mailbox(struct mail_namespace *namespaces, const char *name)
+add_autobox(struct mail_user *user, const char *vname, bool subscriptions)
 {
 	struct mail_namespace *ns;
-	const char *str;
-	enum mail_error error;
+	struct mailbox_settings *set;
 
-	ns = mail_namespace_find_subscribable(namespaces, &name);
-	if (ns == NULL) {
-		if (namespaces->mail_set->mail_debug)
-			i_debug("autocreate: No namespace found for %s", name);
+	if (!uni_utf8_str_is_valid(vname)) {
+		i_error("autocreate: Mailbox name isn't valid UTF-8: %s",
+			vname);
 		return;
 	}
 
-	if (mailbox_list_set_subscribed(ns->list, name, TRUE) < 0) {
-		str = mailbox_list_get_last_error(ns->list,
-						  &error);
-		if (error != MAIL_ERROR_EXISTS && ns->mail_set->mail_debug) {
-			i_debug("autocreate: Failed to subscribe mailbox "
-				"%s: %s", name, str);
-		}
+	ns = mail_namespace_find(user->namespaces, vname);
+	if (ns == NULL) {
+		i_error("autocreate: No namespace found for mailbox: %s",
+			vname);
+		return;
 	}
+
+	if (!array_is_created(&ns->set->mailboxes))
+		p_array_init(&ns->set->mailboxes, user->pool, 16);
+
+	if (strncmp(vname, ns->prefix, ns->prefix_len) == 0)
+		vname += ns->prefix_len;
+	set = mailbox_settings_find(ns, vname);
+	if (set == NULL) {
+		set = p_new(user->pool, struct mailbox_settings, 1);
+		set->name = p_strdup(user->pool, vname);
+		set->autocreate = MAILBOX_SET_AUTO_NO;
+		set->special_use = "";
+		array_append(&ns->set->mailboxes, &set, 1);
+	}
+	if (subscriptions)
+		set->autocreate = MAILBOX_SET_AUTO_SUBSCRIBE;
+	else if (strcmp(set->autocreate, MAILBOX_SET_AUTO_SUBSCRIBE) != 0)
+		set->autocreate = MAILBOX_SET_AUTO_CREATE;
 }
 
-static void autosubscribe_mailboxes(struct mail_namespace *namespaces)
+static void
+read_autobox_settings(struct mail_user *user, const char *env_name_base,
+		      bool subscriptions)
 {
-	struct mail_user *user = namespaces->user;
+	const char *value;
 	char env_name[20];
-	const char *name;
-	unsigned int i;
+	unsigned int i = 1;
 
-	i = 1;
-	name = mail_user_plugin_getenv(user, "autosubscribe");
-	while (name != NULL) {
-		autosubscribe_mailbox(namespaces, name);
+	value = mail_user_plugin_getenv(user, env_name_base);
+	while (value != NULL) {
+		add_autobox(user, value, subscriptions);
 
-		i_snprintf(env_name, sizeof(env_name), "autosubscribe%d", ++i);
-		name = mail_user_plugin_getenv(user, env_name);
+		i_snprintf(env_name, sizeof(env_name), "%s%d",
+			   env_name_base, ++i);
+		value = mail_user_plugin_getenv(user, env_name);
 	}
 }
 
 static void
 autocreate_mail_namespaces_created(struct mail_namespace *namespaces)
 {
-	if (strcmp(master_service_get_name(master_service), "dsync") == 0) {
-		/* kludge: disable autocreate plugin for dsync,
-		   since it'll only make things worse. this is fixed more
-		   nicely in v2.1 code. */
-		return;
-	}
-	autocreate_mailboxes(namespaces);
-	autosubscribe_mailboxes(namespaces);
+	read_autobox_settings(namespaces->user, "autocreate", FALSE);
+	read_autobox_settings(namespaces->user, "autosubscribe", TRUE);
 }
 
 static struct mail_storage_hooks autocreate_mail_storage_hooks = {

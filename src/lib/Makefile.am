@@ -4,8 +4,10 @@ BUILT_SOURCES = unicodemap.c
 
 EXTRA_DIST = unicodemap.c unicodemap.pl UnicodeData.txt
 
-$(srcdir)/unicodemap.c: unicodemap.pl
+UnicodeData.txt:
 	test -f UnicodeData.txt || wget http://www.unicode.org/Public/UNIDATA/UnicodeData.txt
+
+$(srcdir)/unicodemap.c: unicodemap.pl UnicodeData.txt
 	perl $(srcdir)/unicodemap.pl < UnicodeData.txt > $@
 
 liblib_la_SOURCES = \
@@ -35,6 +37,7 @@ liblib_la_SOURCES = \
 	file-dotlock.c \
 	file-lock.c \
 	file-set-size.c \
+	guid.c \
 	hash.c \
 	hash-format.c \
 	hash-method.c \
@@ -42,11 +45,13 @@ liblib_la_SOURCES = \
 	hex-binary.c \
 	hex-dec.c \
 	hmac-md5.c \
+	hmac-sha1.c \
 	home-expand.c \
 	hostpid.c \
 	imem.c \
 	ipwd.c \
 	iostream.c \
+	iostream-rawlog.c \
 	istream.c \
 	istream-base64-encoder.c \
 	istream-concat.c \
@@ -55,6 +60,7 @@ liblib_la_SOURCES = \
 	istream-file.c \
 	istream-limit.c \
 	istream-mmap.c \
+	istream-rawlog.c \
 	istream-seekable.c \
 	istream-tee.c \
 	ioloop.c \
@@ -87,6 +93,7 @@ liblib_la_SOURCES = \
 	ostream.c \
 	ostream-file.c \
 	ostream-buffer.c \
+	ostream-rawlog.c \
 	primes.c \
 	printf-format-fix.c \
 	process-title.c \
@@ -148,6 +155,7 @@ headers = \
 	file-lock.h \
 	file-set-size.h \
 	fsync-mode.h \
+	guid.h \
 	hash.h \
 	hash-format.h \
 	hash-method.h \
@@ -155,21 +163,25 @@ headers = \
 	hex-binary.h \
 	hex-dec.h \
 	hmac-md5.h \
+	hmac-sha1.h \
 	home-expand.h \
 	hostpid.h \
 	imem.h \
 	ipwd.h \
-	iostream-internal.h \
+	iostream-private.h \
+	iostream-rawlog.h \
+	iostream-rawlog-private.h \
 	istream.h \
 	istream-base64-encoder.h \
 	istream-concat.h \
 	istream-crlf.h \
-	istream-internal.h \
+	istream-private.h \
+	istream-rawlog.h \
 	istream-seekable.h \
 	istream-tee.h \
 	ioloop.h \
 	ioloop-iolist.h \
-	ioloop-internal.h \
+	ioloop-private.h \
 	ioloop-notify-fd.h \
 	lib.h \
 	lib-signals.h \
@@ -186,7 +198,8 @@ headers = \
 	network.h \
 	nfs-workarounds.h \
 	ostream.h \
-	ostream-internal.h \
+	ostream-private.h \
+	ostream-rawlog.h \
 	primes.h \
 	printf-format-fix.h \
 	process-title.h \

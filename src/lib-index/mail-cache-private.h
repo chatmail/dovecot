@@ -117,7 +117,6 @@ struct mail_cache_field_private {
 	struct mail_cache_field field;
 
 	uint32_t uid_highwater;
-	uint32_t last_used;
 
 	/* Unused fields aren't written to cache file */
 	unsigned int used:1;
@@ -221,8 +220,6 @@ struct mail_cache_lookup_iterate_ctx {
 	unsigned int failed:1;
 	unsigned int appends_checked:1;
 };
-
-int mail_cache_open_and_verify(struct mail_cache *cache);
 
 /* Explicitly lock the cache file. Returns -1 if error / timed out,
    1 if ok, 0 if cache is broken/doesn't exist */

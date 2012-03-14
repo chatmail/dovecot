@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -65,6 +65,4 @@ void notify_connection_deinit(struct notify_connection **_conn)
 	if (close(conn->fd) < 0)
 		i_error("close(notify connection) failed: %m");
 	i_free(conn);
-
-	master_service_client_connection_destroyed(master_service);
 }

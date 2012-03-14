@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "ioloop.h"
@@ -199,7 +199,8 @@ static void proxy_wait_connect(struct login_proxy *proxy)
 
 	err = net_geterror(proxy->server_fd);
 	if (err != 0) {
-		i_error("proxy: connect(%s, %u) failed: %s",
+		i_error("proxy(%s): connect(%s, %u) failed: %s",
+			proxy->client->virtual_user,
 			proxy->host, proxy->port, strerror(err));
 		proxy_fail_connect(proxy);
                 login_proxy_free(&proxy);
@@ -226,7 +227,8 @@ static void proxy_wait_connect(struct login_proxy *proxy)
 
 static void proxy_connect_timeout(struct login_proxy *proxy)
 {
-	i_error("proxy: connect(%s, %u) timed out", proxy->host, proxy->port);
+	i_error("proxy(%s): connect(%s, %u) timed out",
+		proxy->client->virtual_user, proxy->host, proxy->port);
 	proxy_fail_connect(proxy);
 	login_proxy_free(&proxy);
 }
@@ -504,7 +506,6 @@ void login_proxy_detach(struct login_proxy *proxy)
 static int login_proxy_ssl_handshaked(void *context)
 {
 	struct login_proxy *proxy = context;
-	struct ip_addr ip;
 
 	if ((proxy->ssl_flags & PROXY_SSL_FLAG_ANY_CERT) != 0)
 		return 0;
@@ -517,10 +518,7 @@ static int login_proxy_ssl_handshaked(void *context)
 		client_log_err(proxy->client, t_strdup_printf(
 			"proxy: SSL certificate not received from %s:%u",
 			proxy->host, proxy->port));
-	} else if (net_addr2ip(proxy->host, &ip) == 0 ||
-		   /* NOTE: allow IP address for backwards compatibility,
-		      v2.1 no longer accepts it */
-		   ssl_proxy_cert_match_name(proxy->ssl_server_proxy,
+	} else if (ssl_proxy_cert_match_name(proxy->ssl_server_proxy,
 					     proxy->host) < 0) {
 		client_log_err(proxy->client, t_strdup_printf(
 			"proxy: hostname doesn't match SSL certificate at %s:%u",
@@ -668,7 +666,7 @@ login_proxy_cmd_list_reply(struct ipc_cmd *cmd,
 
 		reply = t_strdup_printf("%s\t%s\t%s\t%s\t%u",
 					proxy->client->virtual_user,
-					login_binary.protocol,
+					login_binary->protocol,
 					net_ip2addr(&proxy->client->ip),
 					net_ip2addr(&proxy->ip), proxy->port);
 		ipc_cmd_send(cmd, reply);

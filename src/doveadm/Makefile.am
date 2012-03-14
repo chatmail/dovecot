@@ -1,6 +1,8 @@
 doveadm_moduledir = $(moduledir)/doveadm
 pkglibexecdir = $(libexecdir)/dovecot
 
+SUBDIRS = dsync
+
 bin_PROGRAMS = doveadm
 pkglibexec_PROGRAMS = doveadm-server
 
@@ -19,6 +21,7 @@ AM_CPPFLAGS = \
 	-DMODULEDIR=\""$(moduledir)"\" \
 	-DDOVEADM_MODULEDIR=\""$(doveadm_moduledir)"\" \
 	-DPKG_RUNDIR=\""$(rundir)"\" \
+	-DPKG_STATEDIR=\""$(statedir)"\" \
 	-DBINDIR=\""$(bindir)"\" \
 	-DMANDIR=\""$(mandir)"\"
 
@@ -35,13 +38,14 @@ cmd_pw_libs = \
 	../lib-otp/libotp.a
 
 libs = \
+	dsync/libdsync.a \
 	$(LIBDOVECOT_STORAGE) \
 	$(unused_objects)
 
 doveadm_LDADD = \
 	$(libs) \
 	$(cmd_pw_libs) \
-	$(AUTH_LIBS) \
+	$(CRYPT_LIBS) \
 	$(LIBDOVECOT) \
 	$(MODULE_LIBS)
 doveadm_DEPENDENCIES = \
@@ -68,7 +72,7 @@ common = \
 	doveadm-mail-mailbox.c \
 	doveadm-mail-mailbox-status.c \
 	doveadm-mail-move.c \
-	doveadm-mail-list-iter.c \
+	doveadm-mailbox-list-iter.c \
 	doveadm-mail-search.c \
 	doveadm-mail-server.c \
 	doveadm-print.c \
@@ -87,9 +91,11 @@ doveadm_SOURCES = \
 	doveadm-dump-log.c \
 	doveadm-dump-mailboxlog.c \
 	doveadm-dump-thread.c \
+	doveadm-instance.c \
 	doveadm-kick.c \
 	doveadm-log.c \
 	doveadm-master.c \
+	doveadm-mount.c \
 	doveadm-mutf7.c \
 	doveadm-penalty.c \
 	doveadm-print-flow.c \
@@ -99,6 +105,7 @@ doveadm_SOURCES = \
 	doveadm-proxy.c \
 	doveadm-pw.c \
 	doveadm-sis.c \
+	doveadm-stats.c \
 	doveadm-who.c
 
 doveadm_server_SOURCES = \
@@ -114,10 +121,14 @@ noinst_HEADERS = \
 	doveadm-dump.h \
 	doveadm-mail.h \
 	doveadm-mail-iter.h \
-	doveadm-mail-list-iter.h \
+	doveadm-mailbox-list-iter.h \
 	doveadm-print.h \
 	doveadm-print-private.h \
 	doveadm-server.h \
 	doveadm-settings.h \
 	doveadm-util.h \
 	doveadm-who.h
+
+install-exec-local:
+	rm -f $(DESTDIR)$(bindir)/dsync
+	$(LN_S) doveadm $(DESTDIR)$(bindir)/dsync

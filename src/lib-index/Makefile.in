@@ -69,8 +69,7 @@ am_libindex_la_OBJECTS = mail-cache.lo mail-cache-compress.lo \
 	mail-index-util.lo mail-index-view.lo mail-index-view-sync.lo \
 	mail-index-write.lo mail-transaction-log.lo \
 	mail-transaction-log-append.lo mail-transaction-log-file.lo \
-	mail-transaction-log-view.lo mailbox-list-index.lo \
-	mailbox-list-index-sync.lo mailbox-log.lo
+	mail-transaction-log-view.lo mailbox-log.lo
 libindex_la_OBJECTS = $(am_libindex_la_OBJECTS)
 am__EXEEXT_1 = test-mail-index-sync-ext$(EXEEXT) \
 	test-mail-index-transaction-finish$(EXEEXT) \
@@ -163,6 +162,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -223,6 +223,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOPLUGIN_LDFLAGS = @NOPLUGIN_LDFLAGS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -297,6 +298,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -360,8 +362,6 @@ libindex_la_SOURCES = \
         mail-transaction-log-append.c \
         mail-transaction-log-file.c \
         mail-transaction-log-view.c \
-        mailbox-list-index.c \
-        mailbox-list-index-sync.c \
         mailbox-log.c
 
 headers = \
@@ -379,8 +379,6 @@ headers = \
         mail-transaction-log.h \
 	mail-transaction-log-private.h \
 	mail-transaction-log-view-private.h \
-        mailbox-list-index.h \
-        mailbox-list-index-private.h \
         mailbox-log.h
 
 test_programs = \
@@ -523,8 +521,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-file.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-view.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-index-sync.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-index.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-log.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-sync-ext.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-transaction-finish.Po@am__quote@

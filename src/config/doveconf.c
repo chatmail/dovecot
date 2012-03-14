@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -270,8 +270,12 @@ config_dump_human_output(struct config_dump_human_context *ctx,
 					str_append_n(ctx->list_prefix, key2, p - key2);
 				else
 					str_append(ctx->list_prefix, key2);
-				if (unique_key && *value != '\0')
-					str_printfa(ctx->list_prefix, " %s", value);
+				if (unique_key && *value != '\0') {
+					if (strchr(value, ' ') == NULL)
+						str_printfa(ctx->list_prefix, " %s", value);
+					else
+						str_printfa(ctx->list_prefix, " \"%s\"", str_escape(value));
+				}
 				str_append(ctx->list_prefix, " {\n");
 				indent++;
 
@@ -592,6 +596,7 @@ int main(int argc, char *argv[])
 	int c, ret, ret2;
 	bool config_path_specified, expand_vars = FALSE, hide_key = FALSE;
 	bool parse_full_config = FALSE, simple_output = FALSE;
+	bool dump_defaults = FALSE;
 
 	if (getenv("USE_SYSEXITS") != NULL) {
 		/* we're coming from (e.g.) LDA */
@@ -601,7 +606,7 @@ int main(int argc, char *argv[])
 	memset(&filter, 0, sizeof(filter));
 	master_service = master_service_init("config",
 					     MASTER_SERVICE_FLAG_STANDALONE,
-					     &argc, &argv, "af:hm:nNpexS");
+					     &argc, &argv, "adf:hm:nNpexS");
 	orig_config_path = master_service_get_config_path(master_service);
 
 	i_set_failure_prefix("doveconf: ");
@@ -612,6 +617,9 @@ int main(int argc, char *argv[])
 		}
 		switch (c) {
 		case 'a':
+			break;
+		case 'd':
+			dump_defaults = TRUE;
 			break;
 		case 'f':
 			filter_parse_arg(&filter, optarg);
@@ -662,7 +670,8 @@ int main(int argc, char *argv[])
 	master_service_init_finish(master_service);
 	config_parse_load_modules();
 
-	if ((ret = config_parse_file(config_path, expand_vars,
+	if ((ret = config_parse_file(dump_defaults ? NULL : config_path,
+				     expand_vars,
 				     parse_full_config ? "" : module,
 				     &error)) == 0 &&
 	    access(EXAMPLE_CONFIG_DIR, X_OK) == 0) {

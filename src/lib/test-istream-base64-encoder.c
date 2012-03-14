@@ -1,8 +1,8 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
-#include "istream-internal.h"
+#include "istream-private.h"
 #include "istream-base64-encoder.h"
 
 static const char *hello = "hello world";

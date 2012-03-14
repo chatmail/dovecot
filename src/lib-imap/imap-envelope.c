@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -182,6 +182,7 @@ static void imap_write_address(string_t *str, struct message_address *addr)
 void imap_envelope_write_part_data(struct message_part_envelope_data *data,
 				   string_t *str)
 {
+#define NVL(str, nullstr) ((str) != NULL ? (str) : (nullstr))
 	static const char *empty_envelope =
 		"NIL NIL NIL NIL NIL NIL NIL NIL NIL NIL";
 
@@ -391,7 +392,7 @@ bool imap_envelope_parse(const char *envelope, enum imap_envelope_field field,
 		ret = FALSE;
 	}
 
-	imap_parser_destroy(&parser);
+	imap_parser_unref(&parser);
 	i_stream_destroy(&input);
 	return ret;
 }

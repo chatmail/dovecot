@@ -13,6 +13,8 @@ LIBDOVECOT_SUBDIRS = \
 SUBDIRS = \
 	lib-test \
 	$(LIBDOVECOT_SUBDIRS) \
+	lib-ssl-iostream \
+	lib-imap-client \
 	lib-dovecot \
 	lib-index \
 	lib-storage \
@@ -24,6 +26,7 @@ SUBDIRS = \
 	auth \
 	dict \
 	dns \
+	indexer \
 	ipc \
 	master \
 	login-common \
@@ -38,6 +41,6 @@ SUBDIRS = \
 	director \
 	util \
 	doveadm \
-	dsync \
 	ssl-params \
+	stats \
 	plugins

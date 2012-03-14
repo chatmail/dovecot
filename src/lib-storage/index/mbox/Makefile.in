@@ -50,9 +50,10 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libstorage_mbox_la_LIBADD =
 am_libstorage_mbox_la_OBJECTS = istream-raw-mbox.lo mbox-file.lo \
-	mbox-lock.lo mbox-mail.lo mbox-md5.lo mbox-save.lo \
-	mbox-settings.lo mbox-sync-parse.lo mbox-sync-rewrite.lo \
-	mbox-sync-update.lo mbox-sync.lo mbox-storage.lo
+	mbox-lock.lo mbox-mail.lo mbox-md5-apop3d.lo mbox-md5-all.lo \
+	mbox-save.lo mbox-settings.lo mbox-sync-parse.lo \
+	mbox-sync-rewrite.lo mbox-sync-update.lo mbox-sync.lo \
+	mbox-storage.lo
 libstorage_mbox_la_OBJECTS = $(am_libstorage_mbox_la_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -110,6 +111,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -170,6 +172,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOPLUGIN_LDFLAGS = @NOPLUGIN_LDFLAGS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -244,6 +247,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -281,7 +285,8 @@ libstorage_mbox_la_SOURCES = \
 	mbox-file.c \
 	mbox-lock.c \
 	mbox-mail.c \
-	mbox-md5.c \
+	mbox-md5-apop3d.c \
+	mbox-md5-all.c \
 	mbox-save.c \
 	mbox-settings.c \
 	mbox-sync-parse.c \
@@ -357,7 +362,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-file.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-lock.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-mail.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-md5.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-md5-all.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-md5-apop3d.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-save.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-settings.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-storage.Plo@am__quote@

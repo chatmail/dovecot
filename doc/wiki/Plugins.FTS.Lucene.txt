@@ -33,4 +33,4 @@ The fts-lucene settings include:
    problematic in practice, since indexing and searching languages may differ
    and may not find even exact words because they stem differently.
 
-(This file was created from the wiki on 2012-02-12 04:42)
+(This file was created from the wiki on 2012-02-23 04:42)

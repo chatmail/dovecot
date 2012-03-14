@@ -1,10 +1,11 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "hostpid.h"
 #include "llist.h"
 #include "istream.h"
 #include "ostream.h"
+#include "iostream-rawlog.h"
 #include "process-title.h"
 #include "str.h"
 #include "str-sanitize.h"
@@ -36,6 +37,12 @@ static void client_open_streams(struct client *client)
 		i_stream_create_fd(client->fd, LOGIN_MAX_INBUF_SIZE, FALSE);
 	client->output =
 		o_stream_create_fd(client->fd, LOGIN_MAX_OUTBUF_SIZE, FALSE);
+
+	if (login_rawlog_dir != NULL) {
+		if (iostream_rawlog_create(login_rawlog_dir, &client->input,
+					   &client->output) < 0)
+			login_rawlog_dir = NULL;
+	}
 }
 
 struct client *
@@ -47,8 +54,8 @@ client_create(int fd, bool ssl, pool_t pool,
 
 	i_assert(fd != -1);
 
-	client = client_vfuncs.alloc(pool);
-	client->v = client_vfuncs;
+	client = login_binary->client_vfuncs->alloc(pool);
+	client->v = *login_binary->client_vfuncs;
 	if (client->v.auth_send_challenge == NULL)
 		client->v.auth_send_challenge = client_auth_send_challenge;
 	if (client->v.auth_parse_response == NULL)
@@ -149,12 +156,13 @@ void client_destroy(struct client *client, const char *reason)
 	if (client->ssl_proxy != NULL)
 		ssl_proxy_free(&client->ssl_proxy);
 	client->v.destroy(client);
-	if (client_unref(&client) &&
-	    master_service_get_service_count(master_service) == 1) {
+	if (client_unref(&client) && initial_service_count == 1) {
 		/* as soon as this connection is done with proxying
 		   (or whatever), the process will die. there's no need for
-		   authentication anymore, so close the connection. */
-		auth_client_disconnect(auth_client);
+		   authentication anymore, so close the connection.
+		   do this only with initial service_count=1, in case there
+		   are other clients with pending authentications */
+		auth_client_disconnect(auth_client, "unnecessary connection");
 	}
 	login_client_destroyed();
 	login_refresh_proctitle();
@@ -236,14 +244,19 @@ void client_destroy_oldest(void)
 	client_destroy(client, "Disconnected: Connection queue full");
 }
 
-void clients_destroy_all(void)
+void clients_destroy_all_reason(const char *reason)
 {
 	struct client *client, *next;
 
 	for (client = clients; client != NULL; client = next) {
 		next = client->next;
-		client_destroy(client, "Disconnected: Shutting down");
+		client_destroy(client, reason);
 	}
+}
+
+void clients_destroy_all(void)
+{
+	clients_destroy_all_reason("Disconnected: Shutting down");
 }
 
 static void client_start_tls(struct client *client)
@@ -371,7 +384,7 @@ get_var_expand_table(struct client *client)
 		for (i = 0; i < 3; i++)
 			tab[i].value = str_sanitize(tab[i].value, 80);
 	}
-	tab[3].value = login_binary.protocol;
+	tab[3].value = login_binary->protocol;
 	tab[4].value = getenv("HOME");
 	tab[5].value = net_ip2addr(&client->local_ip);
 	tab[6].value = net_ip2addr(&client->ip);
@@ -408,8 +421,12 @@ static bool have_key(const struct var_expand_table *table, const char *str)
 	key = var_get_key(str);
 	for (i = 0; table[i].key != '\0'; i++) {
 		if (table[i].key == key) {
-			return table[i].value != NULL &&
-				table[i].value[0] != '\0';
+			if (table[i].value == NULL)
+				return FALSE;
+			if (table[i].value[0] != '\0')
+				return TRUE;
+			/* "" key - hide except in username */
+			return key == 'u' || key == 'n';
 		}
 	}
 	return FALSE;
@@ -472,6 +489,13 @@ void client_log_err(struct client *client, const char *msg)
 	} T_END;
 }
 
+void client_log_warn(struct client *client, const char *msg)
+{
+	T_BEGIN {
+		i_warning("%s", client_get_log_str(client, msg));
+	} T_END;
+}
+
 bool client_is_trusted(struct client *client)
 {
 	const char *const *net;
@@ -497,6 +521,9 @@ bool client_is_trusted(struct client *client)
 
 const char *client_get_extra_disconnect_reason(struct client *client)
 {
+	unsigned int auth_secs = client->auth_first_started == 0 ? 0 :
+		ioloop_time - client->auth_first_started;
+
 	if (client->set->auth_ssl_require_client_cert &&
 	    client->ssl_proxy != NULL) {
 		if (ssl_proxy_has_broken_client_cert(client->ssl_proxy))
@@ -505,8 +532,15 @@ const char *client_get_extra_disconnect_reason(struct client *client)
 			return "(client didn't send a cert)";
 	}
 
-	if (client->auth_attempts == 0)
-		return "(no auth attempts)";
+	if (!client->greeting_sent)
+		return t_strdup_printf(
+			"(disconnected before greeting, waited %u secs)",
+			(unsigned int)(ioloop_time - client->created));
+
+	if (client->auth_attempts == 0) {
+		return t_strdup_printf("(no auth attempts in %u secs)",
+			(unsigned int)(ioloop_time - client->created));
+	}
 
 	/* some auth attempts without SSL/TLS */
 	if (client->auth_tried_disabled_plaintext)
@@ -516,13 +550,31 @@ const char *client_get_extra_disconnect_reason(struct client *client)
 		return "(cert required, client didn't start TLS)";
 	if (client->auth_tried_unsupported_mech)
 		return "(tried to use unsupported auth mechanism)";
-	if (client->auth_request != NULL && client->auth_attempts == 1)
-		return "(disconnected while authenticating)";
+	if (client->auth_waiting && client->auth_attempts == 1) {
+		return t_strdup_printf("(client didn't finish SASL auth, "
+				       "waited %u secs)", auth_secs);
+	}
+	if (client->auth_request != NULL && client->auth_attempts == 1) {
+		return t_strdup_printf("(disconnected while authenticating, "
+				       "waited %u secs)", auth_secs);
+	}
+	if (client->authenticating && client->auth_attempts == 1) {
+		return t_strdup_printf("(disconnected while finishing login, "
+				       "waited %u secs)", auth_secs);
+	}
 	if (client->auth_try_aborted && client->auth_attempts == 1)
 		return "(aborted authentication)";
+	if (client->auth_process_comm_fail)
+		return "(auth process communication failure)";
 
-	return t_strdup_printf("(auth failed, %u attempts)",
-			       client->auth_attempts);
+	if (client->proxy_auth_failed)
+		return "(proxy dest auth failed)";
+	if (client->auth_successes > 0) {
+		return t_strdup_printf("(internal failure, %u succesful auths)",
+				       client->auth_successes);
+	}
+	return t_strdup_printf("(auth failed, %u attempts in %u secs)",
+			       client->auth_attempts, auth_secs);
 }
 
 void client_send_line(struct client *client, enum client_cmd_reply reply,

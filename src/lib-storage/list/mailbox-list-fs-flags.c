@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mailbox-list-fs.h"
@@ -109,17 +109,15 @@ is_inbox_file(struct mailbox_list *list, const char *path, const char *fname)
 int fs_list_get_mailbox_flags(struct mailbox_list *list,
 			      const char *dir, const char *fname,
 			      enum mailbox_list_file_type type,
-			      struct stat *st_r,
 			      enum mailbox_info_flags *flags_r)
 {
 	struct stat st;
 	const char *path;
 
-	memset(st_r, 0, sizeof(*st_r));
 	*flags_r = 0;
 
 	if (*list->set.maildir_name != '\0') {
-		/* maildir_name is set: we the code is common for all
+		/* maildir_name is set: the code is common for all
 		   storage types */
 		return list_is_maildir_mailbox(list, dir, fname, type, flags_r);
 	}
@@ -133,7 +131,7 @@ int fs_list_get_mailbox_flags(struct mailbox_list *list,
 	switch (type) {
 	case MAILBOX_LIST_FILE_TYPE_DIR:
 		if ((list->flags & MAILBOX_LIST_FLAG_MAILBOX_FILES) != 0) {
-			*flags_r |= MAILBOX_NOSELECT | MAILBOX_CHILDREN;
+			*flags_r |= MAILBOX_NOSELECT;
 			return 1;
 		}
 		break;
@@ -165,7 +163,6 @@ int fs_list_get_mailbox_flags(struct mailbox_list *list,
 			return -1;
 		}
 	}
-	*st_r = st;
 
 	if (!S_ISDIR(st.st_mode)) {
 		if (strncmp(fname, ".nfs", 4) == 0) {

@@ -16,11 +16,12 @@
 @SET_MAKE@
 
 
+
+
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
 pkglibdir = $(libdir)/@PACKAGE@
-pkglibexecdir = $(libexecdir)/@PACKAGE@
 am__cd = CDPATH="$${ZSH_VERSION+.}$(PATH_SEPARATOR)" && cd
 install_sh_DATA = $(install_sh) -c -m 644
 install_sh_PROGRAM = $(install_sh) -c
@@ -35,6 +36,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+pkglibexec_PROGRAMS = xml2text$(EXEEXT)
 subdir = src/plugins/fts
 DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
@@ -68,15 +70,33 @@ am__nobase_list = $(am__nobase_strip_setup); \
 am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
-am__installdirs = "$(DESTDIR)$(moduledir)"
-LTLIBRARIES = $(module_LTLIBRARIES)
+am__installdirs = "$(DESTDIR)$(doveadm_moduledir)" \
+	"$(DESTDIR)$(moduledir)" "$(DESTDIR)$(pkglibexecdir)" \
+	"$(DESTDIR)$(pkglibexecdir)"
+LTLIBRARIES = $(doveadm_module_LTLIBRARIES) $(module_LTLIBRARIES)
+lib20_doveadm_fts_plugin_la_LIBADD =
+am_lib20_doveadm_fts_plugin_la_OBJECTS = doveadm-fts.lo \
+	doveadm-dump-fts-expunge-log.lo
+lib20_doveadm_fts_plugin_la_OBJECTS =  \
+	$(am_lib20_doveadm_fts_plugin_la_OBJECTS)
+lib20_doveadm_fts_plugin_la_LINK = $(LIBTOOL) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(lib20_doveadm_fts_plugin_la_LDFLAGS) \
+	$(LDFLAGS) -o $@
 lib20_fts_plugin_la_LIBADD =
-am_lib20_fts_plugin_la_OBJECTS = fts-api.lo fts-plugin.lo \
-	fts-search.lo fts-storage.lo
+am_lib20_fts_plugin_la_OBJECTS = fts-api.lo fts-build-mail.lo \
+	fts-expunge-log.lo fts-indexer.lo fts-parser.lo \
+	fts-parser-html.lo fts-parser-script.lo fts-plugin.lo \
+	fts-search.lo fts-search-serialize.lo fts-storage.lo
 lib20_fts_plugin_la_OBJECTS = $(am_lib20_fts_plugin_la_OBJECTS)
 lib20_fts_plugin_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(lib20_fts_plugin_la_LDFLAGS) $(LDFLAGS) -o $@
+PROGRAMS = $(pkglibexec_PROGRAMS)
+am_xml2text_OBJECTS = xml2text.$(OBJEXT)
+xml2text_OBJECTS = $(am_xml2text_OBJECTS)
+am__DEPENDENCIES_1 =
+SCRIPTS = $(pkglibexec_SCRIPTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -90,12 +110,15 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(lib20_fts_plugin_la_SOURCES)
-DIST_SOURCES = $(lib20_fts_plugin_la_SOURCES)
+SOURCES = $(lib20_doveadm_fts_plugin_la_SOURCES) \
+	$(lib20_fts_plugin_la_SOURCES) $(xml2text_SOURCES)
+DIST_SOURCES = $(lib20_doveadm_fts_plugin_la_SOURCES) \
+	$(lib20_fts_plugin_la_SOURCES) $(xml2text_SOURCES)
 HEADERS = $(noinst_HEADERS)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
+pkglibexecdir = $(libexecdir)/dovecot
 ACLOCAL = @ACLOCAL@
 ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
 AMTAR = @AMTAR@
@@ -111,6 +134,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -171,6 +195,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOPLUGIN_LDFLAGS = 
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -245,6 +270,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -266,28 +292,57 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+doveadm_moduledir = $(moduledir)/doveadm
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
-	-I$(top_srcdir)/src/lib-charset \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-index \
-	-I$(top_srcdir)/src/lib-storage
+	-I$(top_srcdir)/src/lib-storage \
+	-I$(top_srcdir)/src/lib-storage/index \
+	-I$(top_srcdir)/src/doveadm
 
+lib20_doveadm_fts_plugin_la_LDFLAGS = -module -avoid-version
 lib20_fts_plugin_la_LDFLAGS = -module -avoid-version
 module_LTLIBRARIES = \
 	lib20_fts_plugin.la
 
 lib20_fts_plugin_la_SOURCES = \
 	fts-api.c \
+	fts-build-mail.c \
+	fts-expunge-log.c \
+	fts-indexer.c \
+	fts-parser.c \
+	fts-parser-html.c \
+	fts-parser-script.c \
 	fts-plugin.c \
 	fts-search.c \
+	fts-search-serialize.c \
 	fts-storage.c
 
 noinst_HEADERS = \
+	doveadm-fts.h \
+	html-entities.h \
 	fts-api.h \
 	fts-api-private.h \
+	fts-build-mail.h \
+	fts-expunge-log.h \
+	fts-indexer.h \
+	fts-parser.h \
 	fts-plugin.h \
+	fts-search-serialize.h \
 	fts-storage.h
+
+xml2text_SOURCES = xml2text.c
+xml2text_LDADD = fts-parser-html.lo $(LIBDOVECOT)
+xml2text_DEPENDENCIES = fts-parser-html.lo $(LIBDOVECOT_DEPS)
+pkglibexec_SCRIPTS = decode2text.sh
+EXTRA_DIST = $(pkglibexec_SCRIPTS)
+doveadm_module_LTLIBRARIES = \
+	lib20_doveadm_fts_plugin.la
+
+lib20_doveadm_fts_plugin_la_SOURCES = \
+	doveadm-fts.c \
+	doveadm-dump-fts-expunge-log.c
 
 all: all-am
 
@@ -323,6 +378,37 @@ $(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
+install-doveadm_moduleLTLIBRARIES: $(doveadm_module_LTLIBRARIES)
+	@$(NORMAL_INSTALL)
+	test -z "$(doveadm_moduledir)" || $(MKDIR_P) "$(DESTDIR)$(doveadm_moduledir)"
+	@list='$(doveadm_module_LTLIBRARIES)'; test -n "$(doveadm_moduledir)" || list=; \
+	list2=; for p in $$list; do \
+	  if test -f $$p; then \
+	    list2="$$list2 $$p"; \
+	  else :; fi; \
+	done; \
+	test -z "$$list2" || { \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 '$(DESTDIR)$(doveadm_moduledir)'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 "$(DESTDIR)$(doveadm_moduledir)"; \
+	}
+
+uninstall-doveadm_moduleLTLIBRARIES:
+	@$(NORMAL_UNINSTALL)
+	@list='$(doveadm_module_LTLIBRARIES)'; test -n "$(doveadm_moduledir)" || list=; \
+	for p in $$list; do \
+	  $(am__strip_dir) \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f '$(DESTDIR)$(doveadm_moduledir)/$$f'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f "$(DESTDIR)$(doveadm_moduledir)/$$f"; \
+	done
+
+clean-doveadm_moduleLTLIBRARIES:
+	-test -z "$(doveadm_module_LTLIBRARIES)" || rm -f $(doveadm_module_LTLIBRARIES)
+	@list='$(doveadm_module_LTLIBRARIES)'; for p in $$list; do \
+	  dir="`echo $$p | sed -e 's|/[^/]*$$||'`"; \
+	  test "$$dir" != "$$p" || dir=.; \
+	  echo "rm -f \"$${dir}/so_locations\""; \
+	  rm -f "$${dir}/so_locations"; \
+	done
 install-moduleLTLIBRARIES: $(module_LTLIBRARIES)
 	@$(NORMAL_INSTALL)
 	test -z "$(moduledir)" || $(MKDIR_P) "$(DESTDIR)$(moduledir)"
@@ -354,8 +440,90 @@ clean-moduleLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
+lib20_doveadm_fts_plugin.la: $(lib20_doveadm_fts_plugin_la_OBJECTS) $(lib20_doveadm_fts_plugin_la_DEPENDENCIES) 
+	$(lib20_doveadm_fts_plugin_la_LINK) -rpath $(doveadm_moduledir) $(lib20_doveadm_fts_plugin_la_OBJECTS) $(lib20_doveadm_fts_plugin_la_LIBADD) $(LIBS)
 lib20_fts_plugin.la: $(lib20_fts_plugin_la_OBJECTS) $(lib20_fts_plugin_la_DEPENDENCIES) 
 	$(lib20_fts_plugin_la_LINK) -rpath $(moduledir) $(lib20_fts_plugin_la_OBJECTS) $(lib20_fts_plugin_la_LIBADD) $(LIBS)
+install-pkglibexecPROGRAMS: $(pkglibexec_PROGRAMS)
+	@$(NORMAL_INSTALL)
+	test -z "$(pkglibexecdir)" || $(MKDIR_P) "$(DESTDIR)$(pkglibexecdir)"
+	@list='$(pkglibexec_PROGRAMS)'; test -n "$(pkglibexecdir)" || list=; \
+	for p in $$list; do echo "$$p $$p"; done | \
+	sed 's/$(EXEEXT)$$//' | \
+	while read p p1; do if test -f $$p || test -f $$p1; \
+	  then echo "$$p"; echo "$$p"; else :; fi; \
+	done | \
+	sed -e 'p;s,.*/,,;n;h' -e 's|.*|.|' \
+	    -e 'p;x;s,.*/,,;s/$(EXEEXT)$$//;$(transform);s/$$/$(EXEEXT)/' | \
+	sed 'N;N;N;s,\n, ,g' | \
+	$(AWK) 'BEGIN { files["."] = ""; dirs["."] = 1 } \
+	  { d=$$3; if (dirs[d] != 1) { print "d", d; dirs[d] = 1 } \
+	    if ($$2 == $$4) files[d] = files[d] " " $$1; \
+	    else { print "f", $$3 "/" $$4, $$1; } } \
+	  END { for (d in files) print "f", d, files[d] }' | \
+	while read type dir files; do \
+	    if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
+	    test -z "$$files" || { \
+	    echo " $(INSTALL_PROGRAM_ENV) $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL_PROGRAM) $$files '$(DESTDIR)$(pkglibexecdir)$$dir'"; \
+	    $(INSTALL_PROGRAM_ENV) $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL_PROGRAM) $$files "$(DESTDIR)$(pkglibexecdir)$$dir" || exit $$?; \
+	    } \
+	; done
+
+uninstall-pkglibexecPROGRAMS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkglibexec_PROGRAMS)'; test -n "$(pkglibexecdir)" || list=; \
+	files=`for p in $$list; do echo "$$p"; done | \
+	  sed -e 'h;s,^.*/,,;s/$(EXEEXT)$$//;$(transform)' \
+	      -e 's/$$/$(EXEEXT)/' `; \
+	test -n "$$list" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(pkglibexecdir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(pkglibexecdir)" && rm -f $$files
+
+clean-pkglibexecPROGRAMS:
+	@list='$(pkglibexec_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+xml2text$(EXEEXT): $(xml2text_OBJECTS) $(xml2text_DEPENDENCIES) 
+	@rm -f xml2text$(EXEEXT)
+	$(LINK) $(xml2text_OBJECTS) $(xml2text_LDADD) $(LIBS)
+install-pkglibexecSCRIPTS: $(pkglibexec_SCRIPTS)
+	@$(NORMAL_INSTALL)
+	test -z "$(pkglibexecdir)" || $(MKDIR_P) "$(DESTDIR)$(pkglibexecdir)"
+	@list='$(pkglibexec_SCRIPTS)'; test -n "$(pkglibexecdir)" || list=; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  if test -f "$$d$$p"; then echo "$$d$$p"; echo "$$p"; else :; fi; \
+	done | \
+	sed -e 'p;s,.*/,,;n' \
+	    -e 'h;s|.*|.|' \
+	    -e 'p;x;s,.*/,,;$(transform)' | sed 'N;N;N;s,\n, ,g' | \
+	$(AWK) 'BEGIN { files["."] = ""; dirs["."] = 1; } \
+	  { d=$$3; if (dirs[d] != 1) { print "d", d; dirs[d] = 1 } \
+	    if ($$2 == $$4) { files[d] = files[d] " " $$1; \
+	      if (++n[d] == $(am__install_max)) { \
+		print "f", d, files[d]; n[d] = 0; files[d] = "" } } \
+	    else { print "f", d "/" $$4, $$1 } } \
+	  END { for (d in files) print "f", d, files[d] }' | \
+	while read type dir files; do \
+	     if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
+	     test -z "$$files" || { \
+	       echo " $(INSTALL_SCRIPT) $$files '$(DESTDIR)$(pkglibexecdir)$$dir'"; \
+	       $(INSTALL_SCRIPT) $$files "$(DESTDIR)$(pkglibexecdir)$$dir" || exit $$?; \
+	     } \
+	; done
+
+uninstall-pkglibexecSCRIPTS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkglibexec_SCRIPTS)'; test -n "$(pkglibexecdir)" || exit 0; \
+	files=`for p in $$list; do echo "$$p"; done | \
+	       sed -e 's,.*/,,;$(transform)'`; \
+	test -n "$$list" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(pkglibexecdir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(pkglibexecdir)" && rm -f $$files
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -363,10 +531,20 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dump-fts-expunge-log.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-fts.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-api.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-build-mail.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-expunge-log.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-indexer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-parser-html.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-parser-script.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-plugin.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-search-serialize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-search.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-storage.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/xml2text.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -479,9 +657,9 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LTLIBRARIES) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(SCRIPTS) $(HEADERS)
 installdirs:
-	for dir in "$(DESTDIR)$(moduledir)"; do \
+	for dir in "$(DESTDIR)$(doveadm_moduledir)" "$(DESTDIR)$(moduledir)" "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(pkglibexecdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -511,7 +689,8 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-am
 
-clean-am: clean-generic clean-libtool clean-moduleLTLIBRARIES \
+clean-am: clean-doveadm_moduleLTLIBRARIES clean-generic clean-libtool \
+	clean-moduleLTLIBRARIES clean-pkglibexecPROGRAMS \
 	mostlyclean-am
 
 distclean: distclean-am
@@ -532,13 +711,14 @@ info: info-am
 
 info-am:
 
-install-data-am: install-moduleLTLIBRARIES
+install-data-am: install-doveadm_moduleLTLIBRARIES \
+	install-moduleLTLIBRARIES
 
 install-dvi: install-dvi-am
 
 install-dvi-am:
 
-install-exec-am:
+install-exec-am: install-pkglibexecPROGRAMS install-pkglibexecSCRIPTS
 
 install-html: install-html-am
 
@@ -578,23 +758,31 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-moduleLTLIBRARIES
+uninstall-am: uninstall-doveadm_moduleLTLIBRARIES \
+	uninstall-moduleLTLIBRARIES uninstall-pkglibexecPROGRAMS \
+	uninstall-pkglibexecSCRIPTS
 
 .MAKE: install-am install-strip
 
-.PHONY: CTAGS GTAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-moduleLTLIBRARIES ctags distclean \
-	distclean-compile distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-am install-data install-data-am install-dvi \
+.PHONY: CTAGS GTAGS all all-am check check-am clean \
+	clean-doveadm_moduleLTLIBRARIES clean-generic clean-libtool \
+	clean-moduleLTLIBRARIES clean-pkglibexecPROGRAMS ctags \
+	distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am install-data \
+	install-data-am install-doveadm_moduleLTLIBRARIES install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
 	install-html-am install-info install-info-am install-man \
 	install-moduleLTLIBRARIES install-pdf install-pdf-am \
+	install-pkglibexecPROGRAMS install-pkglibexecSCRIPTS \
 	install-ps install-ps-am install-strip installcheck \
 	installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags uninstall uninstall-am uninstall-moduleLTLIBRARIES
+	tags uninstall uninstall-am \
+	uninstall-doveadm_moduleLTLIBRARIES \
+	uninstall-moduleLTLIBRARIES uninstall-pkglibexecPROGRAMS \
+	uninstall-pkglibexecSCRIPTS
 
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

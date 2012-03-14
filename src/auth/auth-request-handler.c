@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -57,6 +57,12 @@ auth_request_handler_create(auth_request_callback_t *callback, void *context,
 	handler->context = context;
 	handler->master_callback = master_callback;
 	return handler;
+}
+
+unsigned int
+auth_request_handler_get_request_count(struct auth_request_handler *handler)
+{
+	return hash_table_count(handler->requests);
 }
 
 void auth_request_handler_abort_requests(struct auth_request_handler *handler)
@@ -293,6 +299,10 @@ void auth_request_handler_reply(struct auth_request *request,
 		auth_stream_reply_add(reply, NULL, dec2str(request->id));
 		if (request->user != NULL)
 			auth_stream_reply_add(reply, "user", request->user);
+		else if (request->original_username != NULL) {
+			auth_stream_reply_add(reply, "user",
+					      request->original_username);
+		}
 
 		if (request->internal_failure)
 			auth_stream_reply_add(reply, "temp", NULL);

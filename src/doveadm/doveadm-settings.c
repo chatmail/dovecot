@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -60,6 +60,7 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_UINT, doveadm_proxy_port),
 	DEF(SET_STR, doveadm_password),
 	DEF(SET_STR, doveadm_allowed_commands),
+	DEF(SET_STR, dsync_alt_char),
 
 	{ SET_STRLIST, "plugin", offsetof(struct doveadm_settings, plugin_envs), NULL },
 
@@ -75,6 +76,7 @@ const struct doveadm_settings doveadm_default_settings = {
 	.doveadm_proxy_port = 0,
 	.doveadm_password = "",
 	.doveadm_allowed_commands = "",
+	.dsync_alt_char = "_",
 
 	.plugin_envs = ARRAY_INIT
 };

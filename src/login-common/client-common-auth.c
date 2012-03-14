@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "istream.h"
@@ -17,12 +17,13 @@
 /* If we've been waiting auth server to respond for over this many milliseconds,
    send a "waiting" message. */
 #define AUTH_WAITING_TIMEOUT_MSECS (30*1000)
-
-#define CLIENT_AUTH_BUF_MAX_SIZE 8192
+#define GREETING_WARNING_TIMEOUT_MSECS (10*1000)
 
 void client_auth_failed(struct client *client)
 {
 	i_free_and_null(client->master_data_prefix);
+	if (client->auth_response != NULL)
+		str_truncate(client->auth_response, 0);
 
 	if (client->auth_initializing || client->destroyed)
 		return;
@@ -36,6 +37,10 @@ void client_auth_failed(struct client *client)
 
 static void client_auth_waiting_timeout(struct client *client)
 {
+	if (!client->greeting_sent) {
+		client_log_warn(client, "Auth process not responding, "
+				"delayed sending greeting");
+	}
 	client_send_line(client, CLIENT_CMD_REPLY_STATUS,
 			 client->master_tag == 0 ?
 			 AUTH_SERVER_WAITING_MSG : AUTH_MASTER_WAITING_MSG);
@@ -46,7 +51,9 @@ void client_set_auth_waiting(struct client *client)
 {
 	i_assert(client->to_auth_waiting == NULL);
 	client->to_auth_waiting =
-		timeout_add(AUTH_WAITING_TIMEOUT_MSECS,
+		timeout_add(!client->greeting_sent ?
+			    GREETING_WARNING_TIMEOUT_MSECS :
+			    AUTH_WAITING_TIMEOUT_MSECS,
 			    client_auth_waiting_timeout, client);
 }
 
@@ -96,7 +103,7 @@ static void client_auth_parse_args(struct client *client,
 			if (strcmp(value, "any-cert") == 0)
 				reply_r->ssl_flags |= PROXY_SSL_FLAG_ANY_CERT;
 			if (reply_r->port == 0)
-				reply_r->port = login_binary.default_ssl_port;
+				reply_r->port = login_binary->default_ssl_port;
 		} else if (strcmp(key, "starttls") == 0) {
 			reply_r->ssl_flags |= PROXY_SSL_FLAG_YES |
 				PROXY_SSL_FLAG_STARTTLS;
@@ -108,7 +115,7 @@ static void client_auth_parse_args(struct client *client,
 			i_debug("Ignoring unknown passdb extra field: %s", key);
 	}
 	if (reply_r->port == 0)
-		reply_r->port = login_binary.default_port;
+		reply_r->port = login_binary->default_port;
 
 	if (reply_r->destuser == NULL)
 		reply_r->destuser = client->virtual_user;
@@ -226,14 +233,17 @@ static void proxy_input(struct client *client)
 		client_proxy_failed(client, TRUE);
 		return;
 	case -1:
+		line = i_stream_next_line(input);
 		duration = ioloop_time - client->created;
 		client_log_err(client, t_strdup_printf(
 			"proxy: Remote %s:%u disconnected: %s "
-			"(state=%u, duration=%us)",
+			"(state=%u, duration=%us)%s",
 			login_proxy_get_host(client->login_proxy),
 			login_proxy_get_port(client->login_proxy),
 			get_disconnect_reason(input),
-			client->proxy_state, duration));
+			client->proxy_state, duration,
+			line == NULL ? "" : t_strdup_printf(
+				" - BUG: line not read: %s", line)));
 		client_proxy_failed(client, TRUE);
 		return;
 	}
@@ -325,7 +335,7 @@ client_auth_handle_reply(struct client *client,
 	return client->v.auth_handle_reply(client, reply);
 }
 
-static int client_auth_read_line(struct client *client)
+int client_auth_read_line(struct client *client)
 {
 	const unsigned char *data;
 	size_t i, size;
@@ -341,7 +351,9 @@ static int client_auth_read_line(struct client *client)
 		if (data[i] == '\n')
 			break;
 	}
-	if (str_len(client->auth_response) + i > CLIENT_AUTH_BUF_MAX_SIZE) {
+	if (client->auth_response == NULL)
+		client->auth_response = str_new(default_pool, I_MAX(i+1, 256));
+	if (str_len(client->auth_response) + i > LOGIN_MAX_AUTH_BUF_SIZE) {
 		client_destroy(client, "Authentication response too large");
 		return -1;
 	}
@@ -375,6 +387,7 @@ static void client_auth_input(struct client *client)
 	if (client->v.auth_parse_response(client) <= 0)
 		return;
 
+	client->auth_waiting = FALSE;
 	client_set_auth_waiting(client);
 	auth_client_request_continue(client->auth_request,
 				     str_c(client->auth_response));
@@ -469,9 +482,11 @@ sasl_callback(struct client *client, enum sasl_server_reply sasl_reply,
 		if (client->to_auth_waiting != NULL)
 			timeout_remove(&client->to_auth_waiting);
 
-		str_truncate(client->auth_response, 0);
+		if (client->auth_response != NULL)
+			str_truncate(client->auth_response, 0);
 
 		i_assert(client->io == NULL);
+		client->auth_waiting = TRUE;
 		client->io = io_add(client->fd, IO_READ,
 				    client_auth_input, client);
 		client_auth_input(client);
@@ -496,12 +511,9 @@ int client_auth_begin(struct client *client, const char *mech_name,
 	}
 
 
-	if (client->auth_response == NULL)
-		client->auth_response = str_new(default_pool, 256);
-
 	client_ref(client);
 	client->auth_initializing = TRUE;
-	sasl_server_auth_begin(client, login_binary.protocol, mech_name,
+	sasl_server_auth_begin(client, login_binary->protocol, mech_name,
 			       init_resp, sasl_callback);
 	client->auth_initializing = FALSE;
 	if (!client->authenticating)

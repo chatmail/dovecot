@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -409,7 +409,7 @@ static struct mail_cache *mail_cache_alloc(struct mail_index *index)
 	cache->fd = -1;
 	cache->filepath =
 		i_strconcat(index->filepath, MAIL_CACHE_FILE_SUFFIX, NULL);
-	cache->field_pool = pool_alloconly_create("Cache fields", 1024);
+	cache->field_pool = pool_alloconly_create("Cache fields", 2048);
 	cache->field_name_hash =
 		hash_table_create(default_pool, cache->field_pool, 0,
 				  strcase_hash, (hash_cmp_callback_t *)strcasecmp);
@@ -688,6 +688,11 @@ int mail_cache_write(struct mail_cache *cache, const void *data, size_t size,
 	return 0;
 }
 
+bool mail_cache_exists(struct mail_cache *cache)
+{
+	return !MAIL_CACHE_IS_UNUSABLE(cache);
+}
+
 struct mail_cache_view *
 mail_cache_view_open(struct mail_cache *cache, struct mail_index_view *iview)
 {
@@ -702,10 +707,13 @@ mail_cache_view_open(struct mail_cache *cache, struct mail_index_view *iview)
 	return view;
 }
 
-void mail_cache_view_close(struct mail_cache_view *view)
+void mail_cache_view_close(struct mail_cache_view **_view)
 {
+	struct mail_cache_view *view = *_view;
+
 	i_assert(view->trans_view == NULL);
 
+	*_view = NULL;
 	if (view->cache->field_header_write_pending &&
 	    !view->cache->compressing)
                 (void)mail_cache_header_fields_update(view->cache);

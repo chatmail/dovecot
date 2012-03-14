@@ -1,9 +1,9 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
 #include "mmap-util.h"
-#include "istream-internal.h"
+#include "istream-private.h"
 
 #include <unistd.h>
 #include <sys/stat.h>

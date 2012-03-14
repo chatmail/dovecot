@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -70,6 +70,7 @@ extern const struct mech_module mech_digest_md5;
 extern const struct mech_module mech_external;
 extern const struct mech_module mech_ntlm;
 extern const struct mech_module mech_otp;
+extern const struct mech_module mech_scram_sha1;
 extern const struct mech_module mech_skey;
 extern const struct mech_module mech_rpa;
 extern const struct mech_module mech_anonymous;
@@ -127,17 +128,22 @@ mech_register_init(const struct auth_settings *set)
 
 	mechanisms = t_strsplit_spaces(set->mechanisms, " ");
 	for (; *mechanisms != NULL; mechanisms++) {
-		if (strcasecmp(*mechanisms, "ANONYMOUS") == 0) {
+		const char *name = *mechanisms;
+
+		if (strcasecmp(name, "ANONYMOUS") == 0) {
 			if (*set->anonymous_username == '\0') {
 				i_fatal("ANONYMOUS listed in mechanisms, "
 					"but anonymous_username not set");
 			}
 		}
-		mech = mech_module_find(*mechanisms);
+		mech = mech_module_find(name);
 		if (mech == NULL) {
-			i_fatal("Unknown authentication mechanism '%s'",
-				*mechanisms);
+			/* maybe it's a plugin. try to load it. */
+			auth_module_load(t_strconcat("mech_", name, NULL));
+			mech = mech_module_find(name);
 		}
+		if (mech == NULL)
+			i_fatal("Unknown authentication mechanism '%s'", name);
 		mech_register_add(reg, mech);
 	}
 
@@ -172,6 +178,7 @@ void mech_init(const struct auth_settings *set)
 #endif
 	}
 	mech_register_module(&mech_otp);
+	mech_register_module(&mech_scram_sha1);
 	mech_register_module(&mech_skey);
 	mech_register_module(&mech_rpa);
 	mech_register_module(&mech_anonymous);

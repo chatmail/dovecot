@@ -80,7 +80,7 @@ struct mail_transaction_expunge {
 };
 struct mail_transaction_expunge_guid {
 	uint32_t uid;
-	uint8_t guid_128[MAIL_GUID_128_SIZE];
+	guid_128_t guid_128;
 };
 
 struct mail_transaction_flag_update {
@@ -253,8 +253,6 @@ mail_transaction_log_view_set_corrupted(struct mail_transaction_log_view *view,
 bool
 mail_transaction_log_view_is_corrupted(struct mail_transaction_log_view *view);
 
-void mail_transaction_log_views_close(struct mail_transaction_log *log);
-
 int mail_transaction_log_append_begin(struct mail_index *index, bool external,
 				      struct mail_transaction_log_append_ctx **ctx_r);
 void mail_transaction_log_append_add(struct mail_transaction_log_append_ctx *ctx,
@@ -284,5 +282,7 @@ void mail_transaction_log_move_to_memory(struct mail_transaction_log *log);
    If it doesn't exist, mtime_r is set to 0. */
 int mail_transaction_log_get_mtime(struct mail_transaction_log *log,
 				   time_t *mtime_r);
+/* Unlink transaction log files */
+int mail_transaction_log_unlink(struct mail_transaction_log *log);
 
 #endif

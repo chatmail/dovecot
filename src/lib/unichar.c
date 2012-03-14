@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -177,6 +177,11 @@ void uni_ucs4_to_utf8_c(unichar_t chr, buffer_t *output)
 		bitpos -= 6;
 		buffer_append_c(output, 0x80 | ((chr >> bitpos) & 0x3f));
 	} while (bitpos > 0);
+}
+
+unsigned int uni_utf8_strlen(const char *input)
+{
+	return uni_utf8_strlen_n(input, (size_t)-1);
 }
 
 unsigned int uni_utf8_strlen_n(const void *_input, size_t size)

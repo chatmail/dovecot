@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -28,7 +28,7 @@ fts_solr_plugin_init_settings(struct mail_user *user,
 		} else if (strcmp(*tmp, "debug") == 0) {
 			set->debug = TRUE;
 		} else if (strcmp(*tmp, "break-imap-search") == 0) {
-			set->substring_search = TRUE;
+			/* for backwards compatibility */
 		} else if (strcmp(*tmp, "default_ns=") == 0) {
 			set->default_ns_prefix =
 				p_strdup(user->pool, *tmp + 11);
@@ -73,12 +73,14 @@ static struct mail_storage_hooks fts_solr_mail_storage_hooks = {
 void fts_solr_plugin_init(struct module *module)
 {
 	fts_backend_register(&fts_backend_solr);
+	fts_backend_register(&fts_backend_solr_old);
 	mail_storage_hooks_add(module, &fts_solr_mail_storage_hooks);
 }
 
 void fts_solr_plugin_deinit(void)
 {
 	fts_backend_unregister(fts_backend_solr.name);
+	fts_backend_unregister(fts_backend_solr_old.name);
 	mail_storage_hooks_remove(&fts_solr_mail_storage_hooks);
 }
 
