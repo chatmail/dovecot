@@ -272,6 +272,24 @@ Best regards
 John Doe";
 ---%<-------------------------------------------------------------------------
 
+It's also possible to include the original subject via the *variables*
+extension:
+
+---%<-------------------------------------------------------------------------
+require ["variables", "vacation"];
+# Store old Subject line so it can be used in vacation message
+if header :matches "Subject" "*" {
+        set "subjwas" ": ${1}";
+}
+vacation
+  :days 1
+  :subject "Out of office reply${subjwas}"
+  :addresses ["j.doe@company.dom", "john.doe@company.dom"]
+"I'm out of office, please contact Joan Doe instead.
+Best regards
+John Doe";
+---%<-------------------------------------------------------------------------
+
 Include scripts
 ---------------
 
@@ -316,4 +334,4 @@ Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
 Here's the original post announcing it:
 http://dovecot.org/list/dovecot/2007-March/020895.html
 
-(This file was created from the wiki on 2012-02-23 04:42)
+(This file was created from the wiki on 2012-03-15 04:42)

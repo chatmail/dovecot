@@ -5,6 +5,7 @@
 #include "file-lock.h"
 #include "fsync-mode.h"
 #include "hash-format.h"
+#include "network.h"
 #include "unichar.h"
 #include "settings-parser.h"
 #include "all-settings.h"
@@ -1071,6 +1072,21 @@ struct stats_settings {
 struct ssl_params_settings {
 	unsigned int ssl_parameters_regenerate;
 };
+/* ../../src/replication/replicator/replicator-settings.h */
+extern const struct setting_parser_info replicator_setting_parser_info;
+struct replicator_settings {
+	const char *auth_socket_path;
+	const char *doveadm_socket_path;
+
+	unsigned int replication_full_sync_interval;
+	unsigned int replication_max_conns;
+};
+/* ../../src/replication/aggregator/aggregator-settings.h */
+extern const struct setting_parser_info aggregator_setting_parser_info;
+struct aggregator_settings {
+	const char *replicator_host;
+	unsigned int replicator_port;
+};
 /* ../../src/pop3/pop3-settings.h */
 extern const struct setting_parser_info pop3_setting_parser_info;
 /* <settings checks> */
@@ -1129,6 +1145,7 @@ struct login_settings {
 	const char *login_greeting;
 	const char *login_log_format_elements, *login_log_format;
 	const char *login_access_sockets;
+	const char *director_username_hash;
 
 	const char *ssl;
 	const char *ssl_ca;
@@ -1191,6 +1208,8 @@ struct imap_settings {
 extern const struct setting_parser_info *imap_login_setting_roots[];
 struct imap_login_settings {
 	const char *imap_capability;
+	const char *imap_id_send;
+	const char *imap_id_log;
 };
 /* ../../src/doveadm/doveadm-settings.h */
 extern const struct setting_parser_info doveadm_setting_parser_info;
@@ -1204,6 +1223,7 @@ struct doveadm_settings {
 	const char *doveadm_password;
 	const char *doveadm_allowed_commands;
 	const char *dsync_alt_char;
+	const char *dsync_remote_cmd;
 
 	ARRAY_DEFINE(plugin_envs, const char *);
 };
@@ -1214,6 +1234,7 @@ struct director_settings {
 
 	const char *director_servers;
 	const char *director_mail_servers;
+	const char *director_username_hash;
 	unsigned int director_user_expire;
 	unsigned int director_doveadm_port;
 };
@@ -1256,6 +1277,7 @@ struct auth_settings {
 	const char *krb5_keytab;
 	const char *gssapi_hostname;
 	const char *winbind_helper_path;
+	const char *proxy_self;
 	unsigned int failure_delay;
 	unsigned int first_valid_uid;
 	unsigned int last_valid_uid;
@@ -1278,6 +1300,7 @@ struct auth_settings {
 	char username_chars_map[256];
 	char username_translation_map[256];
 	const char *const *realms_arr;
+	const struct ip_addr *proxy_self_ips;
 };
 /* ../../src/util/tcpwrap-settings.c */
 #ifdef HAVE_LIBWRAP
@@ -1445,6 +1468,143 @@ const struct setting_parser_info ssl_params_setting_parser_info = {
 
 	.type_offset = (size_t)-1,
 	.struct_size = sizeof(struct ssl_params_settings),
+
+	.parent_offset = (size_t)-1
+};
+/* ../../src/replication/replicator/replicator-settings.c */
+/* <settings checks> */
+static struct file_listener_settings replicator_unix_listeners_array[] = {
+	{ "replicator", 0600, "$default_internal_user", "" }
+};
+static struct file_listener_settings *replicator_unix_listeners[] = {
+	&replicator_unix_listeners_array[0]
+};
+static buffer_t replicator_unix_listeners_buf = {
+	replicator_unix_listeners, sizeof(replicator_unix_listeners), { 0, }
+};
+/* </settings checks> */
+struct service_settings replicator_service_settings = {
+	.name = "replicator",
+	.protocol = "",
+	.type = "",
+	.executable = "replicator",
+	.user = "",
+	.group = "",
+	.privileged_group = "",
+	.extra_groups = "",
+	.chroot = "",
+
+	.drop_priv_before_exec = FALSE,
+
+	.process_min_avail = 0,
+	.process_limit = 1,
+	.client_limit = 0,
+	.service_count = 0,
+	.idle_kill = -1U,
+	.vsz_limit = (uoff_t)-1,
+
+	.unix_listeners = { { &replicator_unix_listeners_buf,
+			      sizeof(replicator_unix_listeners[0]) } },
+	.fifo_listeners = ARRAY_INIT,
+	.inet_listeners = ARRAY_INIT
+};
+#undef DEF
+#define DEF(type, name) \
+	{ type, #name, offsetof(struct replicator_settings, name), NULL }
+static const struct setting_define replicator_setting_defines[] = {
+	DEF(SET_STR, auth_socket_path),
+	DEF(SET_STR, doveadm_socket_path),
+
+	DEF(SET_TIME, replication_full_sync_interval),
+	DEF(SET_UINT, replication_max_conns),
+
+	SETTING_DEFINE_LIST_END
+};
+const struct replicator_settings replicator_default_settings = {
+	.auth_socket_path = "auth-userdb",
+	.doveadm_socket_path = "doveadm-server",
+
+	.replication_full_sync_interval = 60*60*12,
+	.replication_max_conns = 10
+};
+const struct setting_parser_info replicator_setting_parser_info = {
+	.module_name = "replicator",
+	.defines = replicator_setting_defines,
+	.defaults = &replicator_default_settings,
+
+	.type_offset = (size_t)-1,
+	.struct_size = sizeof(struct replicator_settings),
+
+	.parent_offset = (size_t)-1
+};
+/* ../../src/replication/aggregator/aggregator-settings.c */
+/* <settings checks> */
+static struct file_listener_settings aggregator_unix_listeners_array[] = {
+	{ "replication-notify", 0600, "", "" }
+};
+static struct file_listener_settings *aggregator_unix_listeners[] = {
+	&aggregator_unix_listeners_array[0]
+};
+static buffer_t aggregator_unix_listeners_buf = {
+	aggregator_unix_listeners, sizeof(aggregator_unix_listeners), { 0, }
+};
+
+static struct file_listener_settings aggregator_fifo_listeners_array[] = {
+	{ "replication-notify-fifo", 0600, "", "" }
+};
+static struct file_listener_settings *aggregator_fifo_listeners[] = {
+	&aggregator_fifo_listeners_array[0]
+};
+static buffer_t aggregator_fifo_listeners_buf = {
+	aggregator_fifo_listeners, sizeof(aggregator_fifo_listeners), { 0, }
+};
+/* </settings checks> */
+struct service_settings aggregator_service_settings = {
+	.name = "aggregator",
+	.protocol = "",
+	.type = "",
+	.executable = "aggregator",
+	.user = "$default_internal_user",
+	.group = "",
+	.privileged_group = "",
+	.extra_groups = "",
+	.chroot = ".",
+
+	.drop_priv_before_exec = FALSE,
+
+	.process_min_avail = 0,
+	.process_limit = 0,
+	.client_limit = 0,
+	.service_count = 0,
+	.idle_kill = 0,
+	.vsz_limit = (uoff_t)-1,
+
+	.unix_listeners = { { &aggregator_unix_listeners_buf,
+			      sizeof(aggregator_unix_listeners[0]) } },
+	.fifo_listeners = { { &aggregator_fifo_listeners_buf,
+			      sizeof(aggregator_fifo_listeners[0]) } },
+	.inet_listeners = ARRAY_INIT
+};
+#undef DEF
+#define DEF(type, name) \
+	{ type, #name, offsetof(struct aggregator_settings, name), NULL }
+static const struct setting_define aggregator_setting_defines[] = {
+	DEF(SET_STR, replicator_host),
+	DEF(SET_UINT, replicator_port),
+
+	SETTING_DEFINE_LIST_END
+};
+const struct aggregator_settings aggregator_default_settings = {
+	.replicator_host = "replicator",
+	.replicator_port = 0
+};
+const struct setting_parser_info aggregator_setting_parser_info = {
+	.module_name = "aggregator",
+	.defines = aggregator_setting_defines,
+	.defaults = &aggregator_default_settings,
+
+	.type_offset = (size_t)-1,
+	.struct_size = sizeof(struct aggregator_settings),
 
 	.parent_offset = (size_t)-1
 };
@@ -2285,6 +2445,7 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, login_log_format_elements),
 	DEF(SET_STR, login_log_format),
 	DEF(SET_STR, login_access_sockets),
+	DEF(SET_STR, director_username_hash),
 
 	DEF(SET_ENUM, ssl),
 	DEF(SET_STR, ssl_ca),
@@ -2317,6 +2478,7 @@ static const struct login_settings login_default_settings = {
 	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c",
 	.login_log_format = "%$: %s",
 	.login_access_sockets = "",
+	.director_username_hash = "%u",
 
 	.ssl = "yes:no:required",
 	.ssl_ca = "",
@@ -2757,11 +2919,15 @@ struct service_settings imap_login_service_settings = {
 	{ type, #name, offsetof(struct imap_login_settings, name), NULL }
 static const struct setting_define imap_login_setting_defines[] = {
 	DEF(SET_STR, imap_capability),
+	DEF(SET_STR, imap_id_send),
+	DEF(SET_STR, imap_id_log),
 
 	SETTING_DEFINE_LIST_END
 };
 static const struct imap_login_settings imap_login_default_settings = {
-	.imap_capability = ""
+	.imap_capability = "",
+	.imap_id_send = "",
+	.imap_id_log = ""
 };
 static const struct setting_parser_info *imap_login_setting_dependencies[] = {
 	&login_setting_parser_info,
@@ -2846,6 +3012,7 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, doveadm_password),
 	DEF(SET_STR, doveadm_allowed_commands),
 	DEF(SET_STR, dsync_alt_char),
+	DEF(SET_STR, dsync_remote_cmd),
 
 	{ SET_STRLIST, "plugin", offsetof(struct doveadm_settings, plugin_envs), NULL },
 
@@ -2861,6 +3028,7 @@ const struct doveadm_settings doveadm_default_settings = {
 	.doveadm_password = "",
 	.doveadm_allowed_commands = "",
 	.dsync_alt_char = "_",
+	.dsync_remote_cmd = "ssh -l%{login} %{host} doveadm dsync-server -u%u -l%{lock_timeout} -n%{namespace}",
 
 	.plugin_envs = ARRAY_INIT
 };
@@ -2980,6 +3148,7 @@ static const struct setting_define director_setting_defines[] = {
 
 	DEF(SET_STR, director_servers),
 	DEF(SET_STR, director_mail_servers),
+	DEF(SET_STR, director_username_hash),
 	DEF(SET_TIME, director_user_expire),
 	DEF(SET_UINT, director_doveadm_port),
 
@@ -2990,6 +3159,7 @@ const struct director_settings director_default_settings = {
 
 	.director_servers = "",
 	.director_mail_servers = "",
+	.director_username_hash = "%u",
 	.director_user_expire = 60*15,
 	.director_doveadm_port = 0
 };
@@ -3136,6 +3306,37 @@ static buffer_t auth_worker_unix_listeners_buf = {
 };
 /* </settings checks> */
 /* <settings checks> */
+static bool
+auth_settings_set_self_ips(struct auth_settings *set, pool_t pool,
+			   const char **error_r)
+{
+	const char *const *tmp;
+	ARRAY_DEFINE(ips_array, struct ip_addr);
+	struct ip_addr *ips;
+	unsigned int ips_count;
+	int ret;
+
+	if (*set->proxy_self == '\0') {
+		set->proxy_self_ips = p_new(pool, struct ip_addr, 1);
+		return TRUE;
+	}
+
+	p_array_init(&ips_array, pool, 4);
+	tmp = t_strsplit_spaces(set->proxy_self, " ");
+	for (; *tmp != NULL; tmp++) {
+		ret = net_gethostbyname(*tmp, &ips, &ips_count);
+		if (ret != 0) {
+			*error_r = t_strdup_printf("auth_proxy_self_ips: "
+				"gethostbyname(%s) failed: %s",
+				*tmp, net_gethosterror(ret));
+		}
+		array_append(&ips_array, ips, ips_count);
+	}
+	(void)array_append_space(&ips_array);
+	set->proxy_self_ips = array_idx(&ips_array, 0);
+	return TRUE;
+}
+
 static bool auth_settings_check(void *_set, pool_t pool,
 				const char **error_r)
 {
@@ -3177,6 +3378,9 @@ static bool auth_settings_check(void *_set, pool_t pool,
 	}
 	set->realms_arr =
 		(const char *const *)p_strsplit_spaces(pool, set->realms, " ");
+
+	if (!auth_settings_set_self_ips(set, pool, error_r))
+		return FALSE;
 	return TRUE;
 }
 
@@ -3346,6 +3550,7 @@ static const struct setting_define auth_setting_defines[] = {
 	DEF(SET_STR, krb5_keytab),
 	DEF(SET_STR, gssapi_hostname),
 	DEF(SET_STR, winbind_helper_path),
+	DEF(SET_STR, proxy_self),
 	DEF(SET_TIME, failure_delay),
 	DEF(SET_UINT, first_valid_uid),
 	DEF(SET_UINT, last_valid_uid),
@@ -3383,6 +3588,7 @@ static const struct auth_settings auth_default_settings = {
 	.krb5_keytab = "",
 	.gssapi_hostname = "",
 	.winbind_helper_path = "/usr/bin/ntlm_auth",
+	.proxy_self = "",
 	.failure_delay = 2,
 	.first_valid_uid = 500,
 	.last_valid_uid = 0,
@@ -3462,6 +3668,8 @@ static struct service_settings *config_all_services[] = {
 #endif
 	&stats_service_settings,
 	&ssl_params_service_settings,
+	&replicator_service_settings,
+	&aggregator_service_settings,
 	&pop3_service_settings,
 	&pop3_login_service_settings,
 	&log_service_settings,
@@ -3486,26 +3694,28 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&dict_setting_parser_info, 
 	&master_setting_parser_info, 
-	&director_setting_parser_info, 
 	&pop3_login_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
+	&mdbox_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&director_setting_parser_info, 
 	&stats_setting_parser_info, 
 	&imapc_setting_parser_info, 
-	&pop3_setting_parser_info, 
 	&maildir_setting_parser_info, 
 	&lmtp_setting_parser_info, 
 	&master_service_setting_parser_info, 
 	&login_setting_parser_info, 
-	&lda_setting_parser_info, 
 	&auth_setting_parser_info, 
 	&mbox_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
-	&mdbox_setting_parser_info, 
 	&pop3c_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&imap_login_setting_parser_info, 
 	&imap_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

@@ -155,6 +155,7 @@ void director_connect(struct director *dir)
 			   it must have failed recently */
 			director_connection_deinit(&dir->left);
 		}
+		dir->ring_min_version = DIRECTOR_VERSION_MINOR;
 		if (!dir->ring_handshaked)
 			director_set_ring_handshaked(dir);
 		else
@@ -232,14 +233,27 @@ void director_set_ring_synced(struct director *dir)
 	director_set_state_changed(dir);
 }
 
+void director_sync_send(struct director *dir, struct director_host *host,
+			uint32_t seq, unsigned int minor_version)
+{
+	string_t *str = t_str_new(128);
+
+	str_printfa(str, "SYNC\t%s\t%u\t%u",
+		    net_ip2addr(&host->ip), host->port, seq);
+	if (minor_version > 0) {
+		/* only minor_version>0 supports this parameter */
+		str_printfa(str, "\t%u", minor_version);
+	}
+	str_append_c(str, '\n');
+	director_connection_send(dir->right, str_c(str));
+}
+
 bool director_resend_sync(struct director *dir)
 {
 	if (!dir->ring_synced && dir->left != NULL && dir->right != NULL) {
 		/* send a new SYNC in case the previous one got dropped */
-		director_connection_send(dir->right,
-			t_strdup_printf("SYNC\t%s\t%u\t%u\n",
-					net_ip2addr(&dir->self_ip),
-					dir->self_port, dir->sync_seq));
+		director_sync_send(dir, dir->self_host, dir->sync_seq,
+				   DIRECTOR_VERSION_MINOR);
 		if (dir->to_sync != NULL)
 			timeout_reset(dir->to_sync);
 		return TRUE;
@@ -295,9 +309,8 @@ static void director_sync(struct director *dir)
 	if (dir->left != NULL)
 		director_connection_wait_sync(dir->left);
 	director_connection_wait_sync(dir->right);
-	director_connection_send(dir->right, t_strdup_printf(
-		"SYNC\t%s\t%u\t%u\n", net_ip2addr(&dir->self_ip),
-		dir->self_port, dir->sync_seq));
+	director_sync_send(dir, dir->self_host, dir->sync_seq,
+			   DIRECTOR_VERSION_MINOR);
 }
 
 void director_sync_freeze(struct director *dir)
@@ -387,9 +400,29 @@ void director_flush_host(struct director *dir, struct director_host *src,
 void director_update_user(struct director *dir, struct director_host *src,
 			  struct user *user)
 {
+	i_assert(src != NULL);
+
+	i_assert(!user->weak);
+	director_update_send(dir, src, t_strdup_printf("USER\t%u\t%s\n",
+		user->username_hash, net_ip2addr(&user->host->ip)));
+}
+
+void director_update_user_weak(struct director *dir, struct director_host *src,
+			       struct director_host *orig_src,
+			       struct user *user)
+{
+	i_assert(src != NULL);
+	i_assert(user->weak);
+
+	if (orig_src == NULL) {
+		orig_src = dir->self_host;
+		orig_src->last_seq++;
+	}
+
 	director_update_send(dir, src, t_strdup_printf(
-		"USER\t%u\t%s\n", user->username_hash,
-		net_ip2addr(&user->host->ip)));
+		"USER-WEAK\t%s\t%u\t%u\t%u\t%s\n",
+		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq,
+		user->username_hash, net_ip2addr(&user->host->ip)));
 }
 
 struct director_user_kill_finish_ctx {
@@ -625,10 +658,12 @@ director_init(const struct director_settings *set,
 	dir->state_change_callback = callback;
 	i_array_init(&dir->dir_hosts, 16);
 	i_array_init(&dir->pending_requests, 16);
-	dir->users = user_directory_init(set->director_user_expire);
+	dir->users = user_directory_init(set->director_user_expire,
+					 set->director_username_hash);
 	dir->mail_hosts = mail_hosts_init();
 
 	dir->ipc_proxy = ipc_client_init(DIRECTOR_IPC_PROXY_PATH);
+	dir->ring_min_version = DIRECTOR_VERSION_MINOR;
 	return dir;
 }
 

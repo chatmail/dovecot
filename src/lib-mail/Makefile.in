@@ -52,8 +52,8 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libmail_la_LIBADD =
 am_libmail_la_OBJECTS = istream-dot.lo istream-header-filter.lo \
-	mbox-from.lo message-address.lo message-date.lo \
-	message-decoder.lo message-header-decode.lo \
+	mail-user-hash.lo mbox-from.lo message-address.lo \
+	message-date.lo message-decoder.lo message-header-decode.lo \
 	message-header-encode.lo message-header-parser.lo \
 	message-id.lo message-parser.lo message-part-serialize.lo \
 	message-search.lo message-send.lo message-size.lo \
@@ -217,11 +217,13 @@ LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
+LIBDOVECOT_STORAGE_DEPS = @LIBDOVECOT_STORAGE_DEPS@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
@@ -344,6 +346,7 @@ AM_CPPFLAGS = \
 libmail_la_SOURCES = \
 	istream-dot.c \
 	istream-header-filter.c \
+	mail-user-hash.c \
 	mbox-from.c \
 	message-address.c \
 	message-date.c \
@@ -364,6 +367,7 @@ libmail_la_SOURCES = \
 headers = \
 	istream-dot.h \
 	istream-header-filter.h \
+	mail-user-hash.h \
 	mbox-from.h \
 	mail-types.h \
 	message-address.h \
@@ -544,6 +548,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-dot.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-header-filter.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-user-hash.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-from.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-address.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-date.Plo@am__quote@
