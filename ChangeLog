@@ -1,8 +1,731 @@
+2012-03-15  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 744e0d7f1b25
+	[914076de4c48] [tip]
+
+	* .hgtags:
+	Added tag 2.1.2 for changeset 744e0d7f1b25
+	[67ef6f6d45bf]
+
+	* NEWS, configure.in:
+	Released v2.1.2.
+	[744e0d7f1b25] [2.1.2]
+
+	* doc/example-config/dovecot.conf:
+	example-config: Added auth_proxy_self setting.
+	[b2643c587f5b]
+
+	* src/imap/cmd-list.c:
+	imap: Use mailbox_exists() to find out if namespace prefix is
+	selectable or not. mailbox_list_mailbox() should be treated as an
+	internal function, since ACLs don't apply to it.
+	[65a75939ac2c]
+
+	* src/lib-storage/mail-storage.c:
+	lib-storage: mailbox_exists() now returns namespace prefix as
+	selectable if it is.
+	[55586f4a86f1]
+
+	* src/lib-storage/list/mailbox-list-maildir-iter.c:
+	layout=maildir++: Don't list INBOX if it doesn't match the list
+	patterns.
+	[0b01fff98a04]
+
+	* src/auth/auth.c:
+	auth: If global passdb is missing, don't complain if protocol x and
+	!x { passdb } exists.
+	[8fb3fd391d18]
+
+2012-03-14  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/list/mailbox-list-fs-iter.c:
+	layout=fs: Rename mailbox names that aren't valid UTF-8 to avoid
+	crashes later.
+	[c077ca9bc306]
+
+	* src/lib-storage/list/mailbox-list-index-sync.c:
+	mailbox_list_index=yes: Don't add autocreated mailboxes to index
+	before they are created.
+	[3550dfc4af29]
+
+	* src/lib-storage/list/mailbox-list-index.c:
+	mailbox_list_index=yes: Don't crash at deinit (fix to previous
+	change)
+	[316110bd18e0]
+
+	* src/lib-storage/list/mailbox-list-index.c, src/lib-storage/list
+	/mailbox-list-index.h:
+	mailbox_list_index=yes: Delay opening/creating the index until it's
+	needed. This also fixes an error when trying to create the index
+	before the parent director is created.
+	[0274c4132052]
+
+	* src/auth/auth-cache.c:
+	auth: Make sure auth cache doesn't break if any cache keys have
+	TABs.
+	[90738a7c7535]
+
+	* src/auth/Makefile.am, src/auth/auth-cache.c, src/auth/auth-
+	request.c, src/auth/auth-request.h, src/auth/test-auth-cache.c:
+	auth: Fixed auth cache key generation to support %{long} variables
+	[a090cbbe3008]
+
+	* src/lib/test-var-expand.c, src/lib/var-expand.c, src/lib/var-
+	expand.h:
+	liblib: Added var_get_key_range()
+	[13d4c4f91622]
+
+	* src/anvil/penalty.c:
+	anvil: s/memcpy/memmove/ for updating checksum list. This may have
+	caused anvil to update penalties wrong.
+	[f94f289ce009]
+
+	* src/lib/test-primes.c:
+	test-primes: Fixed undefined behavior.
+	[0647b0a1b4e5]
+
+	* src/config/doveconf.c:
+	doveconf: Dump protocol/local/remote sections even if there was an
+	error earlier. This allows getting a mostly-working config file
+	rather than a truncated one.
+	[b0ef6e05a15d]
+
+2012-03-13  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mailbox-list-iter.c:
+	lib-storage: mailbox_list_iter_next() now enforces backends not to
+	return mailbox name from data stack.
+	[1883074f9a9d]
+
+	* src/lib-storage/list/mailbox-list-index-iter.c, src/lib-storage/list
+	/mailbox-list-index.h:
+	mailbox_list_index=yes iteration: Don't allocate returned mailbox
+	names from data stack. This breaks dsync.
+	[6cb102aa5d63]
+
+	* src/lib-storage/index/dbox-common/dbox-file.c, src/lib-storage/index
+	/dbox-common/dbox-file.h, src/lib-storage/index/dbox-multi/mdbox-
+	file.c, src/lib-storage/index/dbox-single/sdbox-file.c:
+	dbox: Avoid unnecessary fstat() call during file creation.
+	[a3b162331cd1]
+
+	* src/lib-storage/index/dbox-common/dbox-storage.c, src/lib-
+	storage/index/maildir/maildir-storage.c, src/lib/compat.h:
+	lib-storage: Don't log errors if trying to open a mailbox with too
+	long name. Handle ENAMETOOLONG errors the same as ENOENT.
+	[37d6dd0f053b]
+
+	* src/plugins/fts/fts-storage.c:
+	fts: Another crashfix for recent changes.
+	[352dd32abb8d]
+
+	* src/director/director-request.c:
+	director: Compiler warning fix
+	[b1c21492f8c9]
+
+2012-03-12  Timo Sirainen  <tss@iki.fi>
+
+	* src/stats/mail-session.c:
+	stats: When logging about a session crash, log also its service.
+	[74d3f14dec5a]
+
+	* src/plugins/fts/fts-storage.c:
+	fts: Crashfix when FTS isn't needed for performing search.
+	[63f3bb8462b4]
+
+	* src/plugins/fts/Makefile.am, src/plugins/fts/fts-indexer.c,
+	src/plugins/fts/fts-storage.c, src/plugins/fts/fts-storage.h:
+	fts: Added fts_index_timeout setting to abort search if indexing
+	hasn't finished by then. This timeout shows up to client as: tag NO
+	[INUSE] Timeout while waiting for indexing to finish
+	[4dd97a92691a]
+
+	* src/director/director-request.c:
+	director: Improved request timeout error more.
+	[d27b6724db32]
+
+	* src/director/director-request.c:
+	director: If request times out, log more information.
+	[1b37d6422905]
+
+	* Makefile.am:
+	Makefile: Delete dovecot-config on distclean
+	[e75446fc828c]
+
+2012-03-11  Timo Sirainen  <tss@iki.fi>
+
+	* src/replication/aggregator/Makefile.am:
+	Makefile: Fixed header filename.
+	[75f1f39c547f]
+
+	* src/auth/db-checkpassword.c:
+	checkpassword: Compiling fix for some systems
+	[2c5a7cc1023e]
+
+2012-03-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/mbox/mbox-sync.c:
+	mbox: Fixed accessing v1.x mbox index files without errors.
+	[1289b79241bb]
+
+	* src/plugins/imap-stats/imap-stats-plugin.c, src/stats/mail-
+	command.c:
+	stats: Fixes to handling per-command stats updates.
+	[96ad6da5c902]
+
+	* src/lib-storage/index/index-search.c:
+	lib-storage: Update search's cost more widely and less often.
+	[00887de4ad32]
+
+	* src/doveadm/doveadm.c:
+	doveadm config: Don't fail on invalid config (e.g. plugin not found)
+	This command is often used in init scripts and such to stop/restart
+	Dovecot.
+	[4a82ff720781]
+
+	* src/stats/mail-command.c:
+	stats: UPDATE-CMD for an existing command wasn't handled properly.
+	The command's stats themselves weren't updated. Also due to recent
+	change updating session's stats from a command no longer works
+	properly, because the session could also be updated in the middle of
+	the command.
+	[30802a608490]
+
+	* src/auth/db-checkpassword.c:
+	checkpassword: Set CREDENTIALS_LOOKUP=1 for passdb lookups
+	[495bda325391]
+
+	* src/auth/db-checkpassword.c, src/auth/passdb-checkpassword.c:
+	checkpassword: Implemented support for credentials lookup.
+	[f7c42aa64381]
+
+	* src/auth/auth-request.c, src/auth/auth-request.h, src/auth
+	/checkpassword-reply.c, src/auth/db-checkpassword.c, src/auth/db-
+	checkpassword.h, src/auth/passdb-checkpassword.c, src/auth/userdb-
+	checkpassword.c:
+	checkpassword: Escape transferred extra fields properly.
+	[e5ed29ef593e]
+
+	* src/auth/db-checkpassword.c:
+	checkpassword: Error handling fix
+	[e3c1f3f93add]
+
+	* src/auth/db-checkpassword.c:
+	checkpassword: If username+password is too large, treat it as
+	regular auth failure.
+	[262ac078a1e4]
+
+	* src/auth/checkpassword-reply.c, src/auth/db-checkpassword.c,
+	src/auth/db-checkpassword.h, src/auth/passdb-checkpassword.c,
+	src/auth/userdb-checkpassword.c:
+	auth: checkpassword code cleanup. Also fixed some error handling.
+	Removes a lot of copy&pasted code between passdb and userdb.
+	[71b64b7b2e63]
+
+2012-03-08  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/director-connection.c, src/director/director-request.c,
+	src/director/director.c, src/director/director.h,
+	src/director/main.c, src/director/notify-connection.c, src/director
+	/user-directory.c, src/director/user-directory.h:
+	director: Avoid user getting redirected to different servers near
+	its expiration. Fixes a problem when user is logging in at the same
+	time on director1 which thinks the user is expired, and on director2
+	which thinks the user expires only in 1 second.
+	[7a26c427fc78]
+
+	* src/lib-master/master-login.c:
+	lib-master: Fixed passing request data from login process.
+	[d6fda337af15]
+
+	* src/imap/main.c:
+	imap: Crashfix when running standalone.
+	[91438eb4fad8]
+
+	* Makefile.am:
+	Makefile: s/MKDIR_P/mkdir_p/ to make it actually work
+	[8c6ff808902c]
+
+2012-03-07  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/director-connection.c, src/director/director.c,
+	src/director/director.h:
+	director: Keep track of the highest supported protocol version in
+	the ring.
+	[334424e7465e]
+
+	* src/login-common/login-proxy-state.c:
+	login proxy: Handle proxy-notify errors better. If open() fails with
+	ENOENT, it should still be logged as an error. If opening or
+	anything else fails, retry opening the fifo 60 secs.
+	[94de7605f50f]
+
+	* src/director/notify-connection.c:
+	director: Log a warning if user is refreshed too late.
+	[2026af3cf87b]
+
+	* src/director/director-connection.c:
+	director: Add more info to "User hash .. is being redirected to two
+	hosts" error.
+	[d048cebc1fd4]
+
+	* src/imap-login/client.c, src/imap-login/imap-proxy.c, src/imap/imap-
+	client.c, src/imap/imap-client.h, src/imap/main.c, src/lib-master
+	/master-login.c, src/lib-master/master-login.h, src/lib-storage
+	/mail-storage-service.c, src/lib-storage/mail-storage-service.h, src
+	/login-common/client-common.c, src/login-common/client-common.h, src
+	/login-common/sasl-server.c, src/pop3-login/client.c,
+	src/pop3-login/pop3-proxy.c, src/pop3/main.c,
+	src/pop3/pop3-client.c, src/pop3/pop3-client.h:
+	Added a "session ID" string for imap/pop3 connections, available in
+	%{session} variable. The session ID passes through Dovecot IMAP/POP3
+	proxying to backend server. The same session ID is can be reused
+	after a long time (currently a bit under 9 years).
+	[5bbcf636bbeb]
+
+	* src/login-common/login-proxy.c:
+	login proxy: Log "disconnecting" message also with
+	login_log_format_elements.
+	[49b832c5de0e]
+
+	* src/login-common/client-common.c:
+	login_log_format_elements: Allow using %{long_variables} without
+	breaking.
+	[9b78e93e5b71]
+
+	* src/doveadm/doveadm-mail-server.c, src/doveadm/server-connection.c,
+	src/doveadm/server-connection.h:
+	doveadm: Handle -NOUSER replies from doveadm-server.
+	[9d47d53650be]
+
+	* src/plugins/fts/decode2text.sh:
+	decode2text: Avoid leaving temp files and hanging child processes.
+	[e540405902f1]
+
+2012-03-05  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/stats/stats-connection.c:
+	stats: Don't log write()=EPIPE failures. Retry opening the pipe
+	once.
+	[315f0d8cc2b2]
+
+	* src/plugins/stats/stats-plugin.c, src/plugins/stats/stats-plugin.h:
+	stats: More changes to send stats while doing long running searches.
+	[721e127e107f]
+
+	* src/lib-storage/index/index-search.c:
+	lib-storage: When searching with a sort program, don't prefetch any
+	mails. The prefetching probably ends up being pointless.
+	[0c3cb8976e81]
+
+	* src/pop3/pop3-client.c:
+	pop3: Added assert.
+	[8a47994cd509]
+
+	* src/plugins/stats/stats-plugin.c, src/plugins/stats/stats-plugin.h:
+	stats: Update stats once per second for long running nonblocking
+	searches.
+	[d66568d34e40]
+
+	* src/director/Makefile.am, src/director/director-request.c,
+	src/director/director-settings.c, src/director/director-settings.h,
+	src/director/director.c, src/director/doveadm-connection.c,
+	src/director/notify-connection.c, src/director/user-directory.c,
+	src/director/user-directory.h, src/lib-mail/Makefile.am, src/lib-
+	mail/mail-user-hash.c, src/lib-mail/mail-user-hash.h, src/login-
+	common/Makefile.am, src/login-common/login-proxy.c, src/login-common
+	/login-settings.c, src/login-common/login-settings.h:
+	Added director_username_hash setting to specify what part of the
+	username is hashed. The default is "%u" meaning the full username.
+	Another potentially useful value is "%d" for hashing only the domain
+	(i.e. redirect users from the same domain always to same server so
+	they can safely access each others' shared mailboxes).
+	[817ef4c9f1f3]
+
+	* src/replication/replicator/replicator-settings.c:
+	replication_max_conns setting is a number, not a time interval.
+	[005bcb8d8d02]
+
+	* src/replication/aggregator/replicator-connection.c:
+	aggregator: Fixed leaking connections to replicator.
+	[7131eb54e9cf]
+
+	* src/lmtp/Makefile.am:
+	Makefile: Fixed compiling lmtp with some SSL_LIBS options.
+	[32edf12d7624]
+
+	* src/doveadm/dsync/doveadm-dsync.c:
+	dsync: Set user.dsyncing=TRUE also for dsync-server. This avoids
+	dsync server immediately triggering another dsync when using
+	replication.
+	[5429dac9830c]
+
+	* src/doveadm/dsync/dsync-worker-local.c:
+	dsync: If mailbox was expunged empty, the messages may have
+	reappeared. This dependend on what the last UID of the previous
+	mailbox was.
+	[f549cd60fec9]
+
+2012-03-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-mount.c, src/lib-master/mountpoint-list.c, src
+	/lib-master/mountpoint-list.h, src/master/main.c:
+	Don't auto-add mountpoints under /media or /cdrom.
+	[a63651897eac]
+
+	* configure.in, dovecot-config.in.in, src/auth/Makefile.am,
+	src/doveadm/Makefile.am, src/doveadm/dsync/Makefile.am,
+	src/imap/Makefile.am, src/indexer/Makefile.am, src/lda/Makefile.am,
+	src/lib-storage/Makefile.am, src/lib-storage/index/Makefile.am, src
+	/login-common/Makefile.am, src/plugins/fts-squat/Makefile.am,
+	src/pop3/Makefile.am, src/util/Makefile.am:
+	Makefile: Link with SSL_LIBS whenever linking libssl_iostream.la
+	[e540404debb7]
+
+	* Makefile.am:
+	Makefile: Fix to previous change to get dovecot-config file built
+	again.
+	[a743cc250208]
+
+	* Makefile.am:
+	Makefile: Fixed dovecot-config installation
+	[2f3c83f28dfe]
+
+	* src/doveadm/doveadm-mailbox-list-iter.c, src/lib-storage/mailbox-
+	list.h:
+	lib-storage: Removed MAILBOX_LIST_ITER_LIST_PREFIXES flag. It was
+	already accidentally enabled by default, and there's really no good
+	reason why it shouldn't always be enabled.
+	[d4f40b5c080c]
+
+	* src/lib-storage/mailbox-list-iter.c:
+	lib-storage: mailbox_list_iter_init_namespaces() duplicated INBOX if
+	it was also ns prefix.
+	[bbe6b6c2ee99]
+
+	* src/lib-mail/rfc822-parser.c:
+	lib-mail: rfc822_parse_quoted_string() didn't remove '\' from the
+	strings.
+	[92c6e963176e]
+
+	* src/auth/userdb-passwd.c:
+	auth: userdb passwd iteration skips now also users with
+	/usr/sbin/nologin shell
+	[694ea6e13a86]
+
+	* src/lib-storage/index/index-storage.c:
+	lib-storage: If mailbox is already open in mailbox_enable(), enable
+	modseqs.
+	[31ae11fe18b2]
+
+	* src/lib-storage/index/index-storage.c:
+	lib-storage: mailbox_enable() shouldn't actually open the mailbox.
+	This combined with mailbox_get_status() never synced the mailbox, so
+	if there were any changes they weren't visible in STATUS reply.
+	[8cbc130c2b72]
+
+	* src/doveadm/dsync/doveadm-dsync.c:
+	dsync server: Ignore -f, -R and -m parameters instead of failing.
+	v2.0 dsync did this as well.
+	[9c6eeeb810c0]
+
+	* src/imap/cmd-append.c:
+	imap: Fixed error handling in APPEND parameters.
+	[5a62b55914c4]
+
+	* src/log/log-connection.c:
+	log: Avoid an "master input for invalid service_fd" error at deinit.
+	[509206065d33]
+
+	* src/log/log-connection.c, src/log/main.c:
+	log: Don't shutdown until all log writers have gone. This fixed
+	losing log messages during shutdown.
+	[174a22a052fe]
+
+	* src/replication/replicator/replicator-queue.c:
+	replicator: Another deinit crashfix
+	[f7a3714dc390]
+
+	* src/replication/replicator/replicator-queue.c:
+	replicator: Fixed crash on deinit
+	[3b258bb9a03f]
+
+	* src/replication/replicator/replicator-queue.c:
+	replicator: Queue handling was pretty broken
+	[633e587446d8]
+
+	* src/plugins/replication/replication-plugin.c:
+	replication plugin: Don't try to close fifo if it wasn't even
+	opened.
+	[9d47be37afeb]
+
+	* src/plugins/Makefile.am:
+	Makefile: Added missing replication plugin directory
+	[a422bd8ed511]
+
+	* src/auth/userdb-passwd.c:
+	auth: userdb passwd iteration now skips users with shell set to
+	/bin/false or /sbin/nologin
+	[85a8d582d37f]
+
+	* src/replication/replicator/doveadm-connection.c:
+	replicator: Crashfix
+	[fed306bef481]
+
+	* src/doveadm/client-connection.c:
+	doveadm-server: If socket is 0600 mode there's never no need to
+	authenticate. Even if the socket's owner doesn't match the process's
+	effective UID. This could be e.g. because socket owner is root,
+	while doveadm-server runs as vmail.
+	[ed641f7da63b]
+
+	* src/plugins/replication/replication-plugin.c:
+	replication plugin: Handle shared namespaces better, skip public
+	namespaces. These will be handled better later, maybe in v2.2.
+	[21d5e258d69c]
+
+	* src/plugins/replication/replication-plugin.c:
+	replication plugin: Use one shared notification fifo for all users.
+	[b44922333957]
+
+	* src/doveadm/client-connection.c, src/doveadm/doveadm-mail.c,
+	src/doveadm/doveadm-mail.h, src/replication/replicator/doveadm-
+	connection.c:
+	doveadm server now returns unknown users with -NOUSER error.
+	[9693521aa153]
+
+	* .hgignore, configure.in, src/Makefile.am, src/doveadm/dsync/doveadm-
+	dsync.c, src/lib-storage/mail-user.h,
+	src/plugins/replication/Makefile.am, src/plugins/replication
+	/replication-plugin.c, src/plugins/replication/replication-plugin.h,
+	src/replication/Makefile.am, src/replication/aggregator/Makefile.am,
+	src/replication/aggregator/aggregator-settings.c,
+	src/replication/aggregator/aggregator-settings.h,
+	src/replication/aggregator/aggregator.c, src/replication/aggregator
+	/notify-connection.c, src/replication/aggregator/notify-
+	connection.h, src/replication/aggregator/replicator-connection.c,
+	src/replication/aggregator/replicator-connection.h, src/replication
+	/replication-common.h, src/replication/replicator/Makefile.am,
+	src/replication/replicator/doveadm-connection.c,
+	src/replication/replicator/doveadm-connection.h,
+	src/replication/replicator/notify-connection.c,
+	src/replication/replicator/notify-connection.h,
+	src/replication/replicator/replicator-brain.c,
+	src/replication/replicator/replicator-brain.h,
+	src/replication/replicator/replicator-queue.c,
+	src/replication/replicator/replicator-queue.h,
+	src/replication/replicator/replicator-settings.c,
+	src/replication/replicator/replicator-settings.h,
+	src/replication/replicator/replicator.c:
+	Initial implementation of dsync-based replication.
+	[14ff849dc266]
+
+	* Makefile.am:
+	Makefile: Fixed compiling with automake 1.11.2+
+	[a452e5f616a2]
+
+2012-03-02  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-sql/driver-sqlpool.c:
+	lib-sql: If failed query is retried, log it as as warning instead of
+	as error.
+	[1002733ca266]
+
+	* src/login-common/login-proxy.c:
+	login proxy: Don't assume host is down unless last success was >30s
+	before last failure. This avoids thinking that host is down, simply
+	because one connection for it failed.
+	[53b23557ec54]
+
+	* src/doveadm/doveadm-settings.c, src/doveadm/dsync/doveadm-dsync.c,
+	src/doveadm/dsync/dsync-worker-local.c, src/doveadm/dsync/dsync-
+	worker.h:
+	dsync: Added -n parameter to dsync a specific namespace.
+	[e86198d749ec]
+
+	* src/lib/eacces-error.c:
+	eacces_error_get*(): Added ',' to message to improve readability.
+	[095abcfab7f1]
+
+	* src/lib/eacces-error.c:
+	eacces_error_get*(): Suggest ACL/MAC error if UNIX permission bits
+	look ok.
+	[d247d53f80b9]
+
+	* src/lib-storage/index/index-transaction.c, src/lib-
+	storage/index/maildir/maildir-mail.c, src/lib-storage/mail-storage-
+	private.h, src/lib-storage/mail-storage.h:
+	lib-storage: mail_transaction_commit_changes.changed=TRUE only when
+	something actually changed.
+	[3e9f91d8b2af]
+
+	* src/config/config-request.c, src/doveadm/dsync/dsync-brain.c,
+	src/doveadm/dsync/dsync-proxy-server.c, src/lib-settings/settings-
+	parser.c:
+	Increased initial memory pool sizes and marked some of them as
+	"growing".
+	[91e035840dc6]
+
+	* src/doveadm/dsync/doveadm-dsync.c:
+	dsync: Added -d parameter to sync to plugin/mail_replica
+	destination. This could be one global default or overridden by
+	userdb.
+	[dc0038843cc7]
+
+	* src/doveadm/doveadm-settings.c, src/doveadm/doveadm-settings.h,
+	src/doveadm/dsync/doveadm-dsync.c:
+	dsync: Added dsync_remote_cmd setting, which is used to execute
+	remote dsync. This is used for the old style "host" and
+	"mailuser@host" parameters, as well as for a new
+	"remote:[user@]host" parameter.
+	[69ed88beb12f]
+
+	* src/doveadm/dsync/doveadm-dsync.c:
+	dsync: Prefix remote dsync's error messages with "remote:".
+	[523a6f3e0713]
+
+	* src/doveadm/dsync/doveadm-dsync.c:
+	dsync: Added -l <timeout> parameter to lock the sync (via
+	~/.dovecot-sync.lock)
+	[d4922e80ca05]
+
+	* src/doveadm/doveadm-mail.c, src/doveadm/doveadm-mail.h:
+	doveadm: Added prerun() method for mail commands.
+	[1a33e3651c6d]
+
+	* src/login-common/client-common.c, src/login-common/client-common.h,
+	src/login-common/sasl-server.c:
+	login: If session timeouts after authentication, log a better error
+	about it.
+	[855856a9f139]
+
+2012-02-29  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/list/mailbox-list-index-iter.c:
+	mailbox_list_index=yes: Fixed mailbox listing when not using default
+	namespace settings.
+	[99cde8ce9991]
+
+	* src/plugins/fts-squat/fts-backend-squat.c:
+	fts-squat: Fixed search to actually work.
+	[ee6f3f375dd3]
+
+2012-02-28  Timo Sirainen  <tss@iki.fi>
+
+	* configure.in, src/imap/imap-client.c, src/lib-storage/mail-user.h,
+	src/plugins/fts-lucene/fts-backend-lucene.c, src/plugins/fts-solr
+	/fts-backend-solr.c, src/plugins/fts/fts-api-private.h,
+	src/plugins/fts/fts-storage.c:
+	Show SEARCH=FUZZY in IMAP capabilities only when FTS backend
+	actually supports it.
+	[bdc881838b00]
+
+	* src/lib-storage/list/mailbox-list-index-status.c, src/lib-
+	storage/list/mailbox-list-index-sync.c, src/lib-storage/list
+	/mailbox-list-index.c, src/lib-storage/list/mailbox-list-index.h:
+	mailbox list indexes: Avoid unnecessary refresh flag writes.
+	[ba2b4f8a1bb1]
+
+	* src/doveadm/dsync/doveadm-dsync.c:
+	Compiler warning fixes
+	[54aeb3853bae]
+
+	* src/lib-storage/list/mailbox-list-fs-iter.c:
+	fs layout: Mailbox listing returned duplicates when patterns
+	contained a parent and its children.
+	[07fc8baa0c9b]
+
+2012-02-27  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-worker-client.c:
+	auth worker: reset idle time after running a command, not before.
+	[3b328ffffdd4]
+
+	* src/auth/auth-worker-client.c:
+	auth worker: When idle_kill timeout is reached, change process title
+	to indicate it.
+	[5074680f321a]
+
+	* src/lib-sql/driver-mysql.c:
+	mysql: Log idle time also for CR_SERVER_LOST errors.
+	[1999ae5c9699]
+
+	* src/doveadm/dsync/doveadm-dsync.c:
+	dsync: Removed accidentally committed debug code.
+	[47dcf6a607a9]
+
+	* src/doveadm/dsync/doveadm-dsync.c:
+	dsync: Fixes to handling legacy dsync parameters.
+	[d75b807afadc]
+
+	* src/doveadm/doveadm-mail.c:
+	doveadm: Allow subcommands to specify '+' getopt parameter.
+	[0d502dc7d265]
+
+	* src/lib-ssl-iostream/Makefile.am:
+	lib-ssl-iostream: Use SSL_LIBS when linking the shared library.
+	[c07415305d9e]
+
+2012-02-25  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap-login/client.c, src/imap-login/imap-login-settings.c, src
+	/imap-login/imap-login-settings.h:
+	imap-login: imap_id_* settings were ignored pre-login.
+	[32ffa616f249]
+
+	* src/auth/auth-request.c, src/auth/auth-request.h:
+	auth: Added proxy_always extra field. When used with proxy_maybe, it
+	can be used to redirect "local" users to local backends via
+	director.
+	[4bd9cadae9ea]
+
+	* src/pop3-login/pop3-proxy.c:
+	pop3 proxy: Fixed previous change not to hang.
+	[cf713cf9b7c0]
+
+	* src/pop3-login/client.h, src/pop3-login/pop3-proxy.c:
+	pop3 proxy: Fixed handling XCLIENT reply.
+	[ef7518f0bdbc]
+
+	* src/auth/auth-request.c, src/auth/auth-settings.c, src/auth/auth-
+	settings.h, src/config/settings-get.pl:
+	auth: Added auth_proxy_self setting to specify IPs that are
+	considered as "self" for proxy_maybe.
+	[d84a9950be67]
+
+	* src/auth/auth-request.c:
+	auth: Use proxy_timeout as DNS lookup timeout, if available. Warn if
+	lookup takes >0.5s.
+	[21c0ce019290]
+
+	* src/auth/Makefile.am, src/auth/auth-master-connection.c, src/auth
+	/auth-request-handler.c, src/auth/auth-request.c, src/auth/auth-
+	request.h:
+	auth: Handle proxy_maybe=yes with host=hostname properly.
+	[863eac32786f]
+
+	* src/pop3-login/client.c, src/pop3-login/client.h,
+	src/pop3-login/pop3-proxy.c:
+	pop3-login: Implemented XCLIENT command for forwarding client
+	ip/port from proxy.
+	[35ed77dd500e]
+
+	* src/auth/auth-stream.c:
+	auth: auth_stream_reply_remove() left extra TABs to stream. Normally
+	this wouldn't really affect anything, except log some extra debug
+	messages.
+	[970809a9f9bd]
+
 2012-02-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/login-common/login-proxy.c:
+	login proxy: If connect() fails, log how many seconds it tried.
+	[c3da6b3a4a34]
 
 	* .hgsigs:
 	Added signature for changeset 04b0acc03f1e
-	[e98143525d51] [tip]
+	[e98143525d51]
 
 	* .hgtags:
 	Added tag 2.1.1 for changeset 04b0acc03f1e

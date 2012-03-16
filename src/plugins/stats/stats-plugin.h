@@ -33,6 +33,7 @@ struct stats_user {
 
 	unsigned int refresh_secs;
 	bool track_commands;
+	unsigned int refresh_check_counter;
 
 	/* current session statistics */
 	struct mail_stats session_stats;

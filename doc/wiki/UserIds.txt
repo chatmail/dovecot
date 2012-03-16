@@ -15,7 +15,7 @@ Dovecot typically requires 3 or more system users:
 Using multiple users allows privilege separation, which makes it harder for
 attackers to compromise the whole system if a security hole is found from one
 component. However, if you really want to run everything under a single user,
-<it's possible> [Rootless.txt].
+<it's possible> [HowTo.Rootless.txt].
 
 Dovenull user
 =============
@@ -144,4 +144,4 @@ service auth-worker {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2012-02-23 04:42)
+(This file was created from the wiki on 2012-03-15 04:42)

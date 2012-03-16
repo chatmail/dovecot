@@ -334,6 +334,12 @@ static bool iter_next_try_prefix(struct ns_list_iterate_context *ctx,
 	unsigned int i;
 	bool ret = FALSE;
 
+	if (strncasecmp(ns->prefix, "INBOX", ns->prefix_len-1) == 0) {
+		/* INBOX is going to be listed in any case,
+		   don't duplicate it */
+		return FALSE;
+	}
+
 	for (i = 0; ctx->patterns_ns_match[i] != NULL; i++) {
 		T_BEGIN {
 			ret = iter_next_try_prefix_pattern(ctx, ns,
@@ -697,10 +703,12 @@ mailbox_list_iter_next(struct mailbox_list_iterate_context *ctx)
 	const struct mailbox_info *info;
 
 	do {
-		if (ctx->autocreate_ctx != NULL)
-			info = autocreate_iter_next(ctx);
-		else
-			info = mailbox_list_iter_next_call(ctx);
+		T_BEGIN {
+			if (ctx->autocreate_ctx != NULL)
+				info = autocreate_iter_next(ctx);
+			else
+				info = mailbox_list_iter_next_call(ctx);
+		} T_END;
 	} while (info != NULL && !special_use_selection(ctx, info));
 	return info;
 }

@@ -5,12 +5,12 @@
 #include "istream.h"
 #include "ostream.h"
 #include "llist.h"
-#include "md5.h"
 #include "str-sanitize.h"
 #include "time-util.h"
 #include "master-service.h"
 #include "ipc-server.h"
 #include "dns-lookup.h"
+#include "mail-user-hash.h"
 #include "client-common.h"
 #include "ssl-proxy.h"
 #include "login-proxy-state.h"
@@ -23,6 +23,7 @@
 #define LOGIN_PROXY_IPC_PATH "ipc-proxy"
 #define LOGIN_PROXY_IPC_NAME "proxy"
 #define KILLED_BY_ADMIN_REASON "Killed by admin"
+#define PROXY_IMMEDIATE_FAILURE_SECS 30
 
 struct login_proxy {
 	struct login_proxy *prev, *next;
@@ -199,9 +200,10 @@ static void proxy_wait_connect(struct login_proxy *proxy)
 
 	err = net_geterror(proxy->server_fd);
 	if (err != 0) {
-		i_error("proxy(%s): connect(%s, %u) failed: %s",
+		i_error("proxy(%s): connect(%s, %u) failed: %s (after %u secs)",
 			proxy->client->virtual_user,
-			proxy->host, proxy->port, strerror(err));
+			proxy->host, proxy->port, strerror(err),
+			(unsigned int)(ioloop_time - proxy->created.tv_sec));
 		proxy_fail_connect(proxy);
                 login_proxy_free(&proxy);
 		return;
@@ -239,6 +241,7 @@ static int login_proxy_connect(struct login_proxy *proxy)
 
 	rec = login_proxy_state_get(proxy_state, &proxy->ip, proxy->port);
 	if (timeval_cmp(&rec->last_failure, &rec->last_success) > 0 &&
+	    rec->last_failure.tv_sec - rec->last_success.tv_sec > PROXY_IMMEDIATE_FAILURE_SECS &&
 	    rec->num_waiting_connections != 0) {
 		/* the server is down. fail immediately */
 		i_error("proxy(%s): Host %s:%u is down",
@@ -367,10 +370,11 @@ login_proxy_free_reason(struct login_proxy **_proxy, const char *reason)
 		DLLIST_REMOVE(&login_proxies, proxy);
 
 		ipstr = net_ip2addr(&proxy->client->ip);
-		i_info("proxy(%s): disconnecting %s%s",
-		       proxy->client->virtual_user,
-		       ipstr != NULL ? ipstr : "",
-		       reason == NULL ? "" : t_strdup_printf(" (%s)", reason));
+		client_log(proxy->client, t_strdup_printf(
+			"proxy(%s): disconnecting %s%s",
+			proxy->client->virtual_user,
+			ipstr != NULL ? ipstr : "",
+			reason == NULL ? "" : t_strdup_printf(" (%s)", reason)));
 
 		if (proxy->client_io != NULL)
 			io_remove(&proxy->client_io);
@@ -614,17 +618,10 @@ login_proxy_cmd_kick(struct ipc_cmd *cmd, const char *const *args)
 	ipc_cmd_success_reply(&cmd, t_strdup_printf("%u", count));
 }
 
-static unsigned int director_username_hash(const char *username)
+static unsigned int director_username_hash(struct client *client)
 {
-	/* NOTE: If you modify this, modify also
-	   user_directory_get_username_hash() in director/user-director.c */
-	unsigned char md5[MD5_RESULTLEN];
-	unsigned int i, hash = 0;
-
-	md5_get_digest(username, strlen(username), md5);
-	for (i = 0; i < sizeof(hash); i++)
-		hash = (hash << CHAR_BIT) | md5[i];
-	return hash;
+	return mail_user_hash(client->virtual_user,
+			      client->set->director_username_hash);
 }
 
 static void
@@ -641,7 +638,7 @@ login_proxy_cmd_kick_director_hash(struct ipc_cmd *cmd, const char *const *args)
 	for (proxy = login_proxies; proxy != NULL; proxy = next) {
 		next = proxy->next;
 
-		if (director_username_hash(proxy->client->virtual_user) == hash) {
+		if (director_username_hash(proxy->client) == hash) {
 			login_proxy_free_reason(&proxy, KILLED_BY_ADMIN_REASON);
 			count++;
 		}
@@ -649,7 +646,7 @@ login_proxy_cmd_kick_director_hash(struct ipc_cmd *cmd, const char *const *args)
 	for (proxy = login_proxies_pending; proxy != NULL; proxy = next) {
 		next = proxy->next;
 
-		if (director_username_hash(proxy->client->virtual_user) == hash) {
+		if (director_username_hash(proxy->client) == hash) {
 			client_destroy(proxy->client, "Connection kicked");
 			count++;
 		}

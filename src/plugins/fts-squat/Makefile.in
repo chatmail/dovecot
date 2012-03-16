@@ -86,7 +86,6 @@ PROGRAMS = $(noinst_PROGRAMS)
 am_squat_test_OBJECTS = squat-test.$(OBJEXT)
 squat_test_OBJECTS = $(am_squat_test_OBJECTS)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(common_objects)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -162,11 +161,13 @@ LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
+LIBDOVECOT_STORAGE_DEPS = @LIBDOVECOT_STORAGE_DEPS@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
@@ -313,12 +314,16 @@ common_objects = \
 	squat-trie.lo \
 	squat-uidlist.lo
 
-libs = \
+squat_test_LDADD = \
+	$(common_objects) \
 	$(LIBDOVECOT_STORAGE) \
-	$(common_objects)
+	$(LIBDOVECOT)
 
-squat_test_LDADD = $(libs) $(LIBDOVECOT)
-squat_test_DEPENDENCIES = $(libs) $(LIBDOVECOT_DEPS)
+squat_test_DEPENDENCIES = \
+	$(common_objects) \
+	$(LIBDOVECOT_STORAGE_DEPS) \
+	$(LIBDOVECOT_DEPS)
+
 all: all-am
 
 .SUFFIXES:

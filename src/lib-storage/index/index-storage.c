@@ -272,6 +272,9 @@ int index_storage_mailbox_open(struct mailbox *box, bool move_to_memory)
 
 	box->opened = TRUE;
 
+	if ((box->enabled_features & MAILBOX_FEATURE_CONDSTORE) != 0)
+		mail_index_modseq_enable(box->index);
+
 	index_thread_mailbox_opened(box);
 	hook_mailbox_opened(box);
 	return 0;
@@ -315,11 +318,8 @@ int index_storage_mailbox_enable(struct mailbox *box,
 {
 	if ((feature & MAILBOX_FEATURE_CONDSTORE) != 0) {
 		box->enabled_features |= MAILBOX_FEATURE_CONDSTORE;
-		if (mailbox_open(box) < 0)
-			return -1;
-		T_BEGIN {
+		if (box->opened)
 			mail_index_modseq_enable(box->index);
-		} T_END;
 	}
 	return 0;
 }

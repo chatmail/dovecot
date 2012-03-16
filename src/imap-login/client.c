@@ -111,30 +111,33 @@ client_update_info(struct imap_client *client, const struct imap_arg *args)
 			(void)net_addr2ip(value, &client->common.local_ip);
 		else if (strcasecmp(key, "x-connected-port") == 0)
 			client->common.local_port = atoi(value);
+		else if (strcasecmp(key, "x-session-id") == 0) {
+			client->common.session_id =
+				p_strdup(client->common.pool, value);
+		}
 		args += 2;
 	}
 }
 
 static int cmd_id(struct imap_client *client, const struct imap_arg *args)
 {
-	const char *env, *value;
+	const char *value;
 
 	if (!client->id_logged) {
 		client->id_logged = TRUE;
 		if (client->common.trusted)
 			client_update_info(client, args);
 
-		env = getenv("IMAP_ID_LOG");
-		value = imap_id_args_get_log_reply(args, env);
+		value = imap_id_args_get_log_reply(args, client->set->imap_id_log);
 		if (value != NULL) {
 			client_log(&client->common,
 				   t_strdup_printf("ID sent: %s", value));
 		}
 	}
 
-	env = getenv("IMAP_ID_SEND");
 	client_send_raw(&client->common,
-		t_strdup_printf("* ID %s\r\n", imap_id_reply_generate(env)));
+		t_strdup_printf("* ID %s\r\n",
+			imap_id_reply_generate(client->set->imap_id_send)));
 	client_send_line(&client->common, CLIENT_CMD_REPLY_OK, "ID completed.");
 	return 1;
 }

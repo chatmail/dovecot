@@ -71,12 +71,12 @@ am__base_list = \
 am__installdirs = "$(DESTDIR)$(pkglibdir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
 LTLIBRARIES = $(noinst_LTLIBRARIES) $(pkglib_LTLIBRARIES)
+am__DEPENDENCIES_1 =
 am_libdovecot_login_la_OBJECTS =
 libdovecot_login_la_OBJECTS = $(am_libdovecot_login_la_OBJECTS)
 libdovecot_login_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(libdovecot_login_la_LDFLAGS) $(LDFLAGS) -o $@
-am__DEPENDENCIES_1 =
 liblogin_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am_liblogin_la_OBJECTS = access-lookup.lo client-common.lo \
 	client-common-auth.lo login-proxy.lo login-proxy-state.lo \
@@ -157,11 +157,13 @@ LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
+LIBDOVECOT_STORAGE_DEPS = @LIBDOVECOT_STORAGE_DEPS@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
@@ -283,6 +285,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-dns \
 	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-ssl-iostream \
+	-I$(top_srcdir)/src/lib-mail \
 	-DPKG_STATEDIR=\""$(statedir)"\"
 
 liblogin_la_SOURCES = \
@@ -315,7 +318,7 @@ pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
 pkglib_LTLIBRARIES = libdovecot-login.la
 libdovecot_login_la_SOURCES = 
-libdovecot_login_la_LIBADD = liblogin.la ../lib-ssl-iostream/libssl_iostream.la ../lib-dovecot/libdovecot.la
+libdovecot_login_la_LIBADD = liblogin.la ../lib-ssl-iostream/libssl_iostream.la ../lib-dovecot/libdovecot.la $(SSL_LIBS)
 libdovecot_login_la_DEPENDENCIES = liblogin.la
 libdovecot_login_la_LDFLAGS = -export-dynamic
 all: all-am

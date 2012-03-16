@@ -37,6 +37,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 pkglibexec_PROGRAMS = auth$(EXEEXT) checkpassword-reply$(EXEEXT)
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/auth
 DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
@@ -84,7 +85,8 @@ am__installdirs = "$(DESTDIR)$(auth_moduledir)" \
 LTLIBRARIES = $(auth_module_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libauthdb_imap_la_DEPENDENCIES = ../lib-imap-client/libimap_client.la \
-	../lib-ssl-iostream/libssl_iostream.la $(am__DEPENDENCIES_1)
+	../lib-ssl-iostream/libssl_iostream.la $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_libauthdb_imap_la_OBJECTS = libauthdb_imap_la-passdb-imap.lo
 libauthdb_imap_la_OBJECTS = $(am_libauthdb_imap_la_OBJECTS)
 libauthdb_imap_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -115,7 +117,8 @@ libmech_gssapi_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(libmech_gssapi_la_LDFLAGS) $(LDFLAGS) -o $@
 @GSSAPI_PLUGIN_TRUE@am_libmech_gssapi_la_rpath = -rpath \
 @GSSAPI_PLUGIN_TRUE@	$(auth_moduledir)
-PROGRAMS = $(pkglibexec_PROGRAMS)
+am__EXEEXT_1 = test-auth-cache$(EXEEXT)
+PROGRAMS = $(noinst_PROGRAMS) $(pkglibexec_PROGRAMS)
 am__objects_2 = db-ldap.$(OBJEXT) passdb-ldap.$(OBJEXT) \
 	userdb-ldap.$(OBJEXT)
 am_auth_OBJECTS = auth.$(OBJEXT) auth-cache.$(OBJEXT) \
@@ -155,6 +158,8 @@ auth_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	$(LDFLAGS) -o $@
 checkpassword_reply_SOURCES = checkpassword-reply.c
 checkpassword_reply_OBJECTS = checkpassword-reply.$(OBJEXT)
+am_test_auth_cache_OBJECTS = test-auth-cache.$(OBJEXT)
+test_auth_cache_OBJECTS = $(am_test_auth_cache_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -170,11 +175,12 @@ LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	$(LDFLAGS) -o $@
 SOURCES = $(libpassword_a_SOURCES) $(libauthdb_imap_la_SOURCES) \
 	$(libauthdb_ldap_la_SOURCES) $(libmech_gssapi_la_SOURCES) \
-	$(auth_SOURCES) checkpassword-reply.c
+	$(auth_SOURCES) checkpassword-reply.c \
+	$(test_auth_cache_SOURCES)
 DIST_SOURCES = $(libpassword_a_SOURCES) $(libauthdb_imap_la_SOURCES) \
 	$(am__libauthdb_ldap_la_SOURCES_DIST) \
 	$(am__libmech_gssapi_la_SOURCES_DIST) $(auth_SOURCES) \
-	checkpassword-reply.c
+	checkpassword-reply.c $(test_auth_cache_SOURCES)
 HEADERS = $(pkginc_lib_HEADERS)
 ETAGS = etags
 CTAGS = ctags
@@ -235,11 +241,13 @@ LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
+LIBDOVECOT_STORAGE_DEPS = @LIBDOVECOT_STORAGE_DEPS@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
@@ -367,6 +375,8 @@ auth_module_LTLIBRARIES = \
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-auth \
+	-I$(top_srcdir)/src/lib-test \
+	-I$(top_srcdir)/src/lib-dns \
 	-I$(top_srcdir)/src/lib-sql \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-ntlm \
@@ -500,7 +510,7 @@ libauthdb_imap_la_LDFLAGS = -module -avoid-version
 libauthdb_imap_la_LIBADD = \
 	../lib-imap-client/libimap_client.la \
 	../lib-ssl-iostream/libssl_iostream.la \
-	$(LIBDOVECOT)
+	$(LIBDOVECOT) $(SSL_LIBS)
 
 libauthdb_imap_la_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
@@ -515,6 +525,16 @@ checkpassword_reply_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 checkpassword_reply_sources = \
 	checkpassword-reply.c
 
+test_programs = \
+	test-auth-cache
+
+test_libs = \
+	../lib-test/libtest.la \
+	../lib/liblib.la
+
+test_auth_cache_SOURCES = test-auth-cache.c
+test_auth_cache_LDADD = auth-cache.o $(test_libs)
+test_auth_cache_DEPENDENCIES = auth-cache.o $(test_libs)
 all: all-am
 
 .SUFFIXES:
@@ -593,6 +613,15 @@ libauthdb_ldap.la: $(libauthdb_ldap_la_OBJECTS) $(libauthdb_ldap_la_DEPENDENCIES
 	$(libauthdb_ldap_la_LINK) $(am_libauthdb_ldap_la_rpath) $(libauthdb_ldap_la_OBJECTS) $(libauthdb_ldap_la_LIBADD) $(LIBS)
 libmech_gssapi.la: $(libmech_gssapi_la_OBJECTS) $(libmech_gssapi_la_DEPENDENCIES) 
 	$(libmech_gssapi_la_LINK) $(am_libmech_gssapi_la_rpath) $(libmech_gssapi_la_OBJECTS) $(libmech_gssapi_la_LIBADD) $(LIBS)
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
 install-pkglibexecPROGRAMS: $(pkglibexec_PROGRAMS)
 	@$(NORMAL_INSTALL)
 	test -z "$(pkglibexecdir)" || $(MKDIR_P) "$(DESTDIR)$(pkglibexecdir)"
@@ -642,6 +671,9 @@ auth$(EXEEXT): $(auth_OBJECTS) $(auth_DEPENDENCIES)
 checkpassword-reply$(EXEEXT): $(checkpassword_reply_OBJECTS) $(checkpassword_reply_DEPENDENCIES) 
 	@rm -f checkpassword-reply$(EXEEXT)
 	$(LINK) $(checkpassword_reply_OBJECTS) $(checkpassword_reply_LDADD) $(LIBS)
+test-auth-cache$(EXEEXT): $(test_auth_cache_OBJECTS) $(test_auth_cache_DEPENDENCIES) 
+	@rm -f test-auth-cache$(EXEEXT)
+	$(LINK) $(test_auth_cache_OBJECTS) $(test_auth_cache_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -710,6 +742,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-otp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-rpa.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-auth-cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-blocking.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-checkpassword.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-ldap.Po@am__quote@
@@ -922,7 +955,8 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-auth_moduleLTLIBRARIES clean-generic clean-libtool \
-	clean-noinstLIBRARIES clean-pkglibexecPROGRAMS mostlyclean-am
+	clean-noinstLIBRARIES clean-noinstPROGRAMS \
+	clean-pkglibexecPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -996,13 +1030,14 @@ uninstall-am: uninstall-auth_moduleLTLIBRARIES \
 
 .PHONY: CTAGS GTAGS all all-am check check-am clean \
 	clean-auth_moduleLTLIBRARIES clean-generic clean-libtool \
-	clean-noinstLIBRARIES clean-pkglibexecPROGRAMS ctags distclean \
-	distclean-compile distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-am install-auth_moduleLTLIBRARIES install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-pdf install-pdf-am \
+	clean-noinstLIBRARIES clean-noinstPROGRAMS \
+	clean-pkglibexecPROGRAMS ctags distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-auth_moduleLTLIBRARIES install-data install-data-am \
+	install-dvi install-dvi-am install-exec install-exec-am \
+	install-html install-html-am install-info install-info-am \
+	install-man install-pdf install-pdf-am \
 	install-pkginc_libHEADERS install-pkglibexecPROGRAMS \
 	install-ps install-ps-am install-strip installcheck \
 	installcheck-am installdirs maintainer-clean \
@@ -1011,6 +1046,12 @@ uninstall-am: uninstall-auth_moduleLTLIBRARIES \
 	tags uninstall uninstall-am uninstall-auth_moduleLTLIBRARIES \
 	uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS
 
+
+check: check-am check-test
+check-test: all-am
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

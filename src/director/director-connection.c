@@ -19,10 +19,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define DIRECTOR_VERSION_NAME "director"
-#define DIRECTOR_VERSION_MAJOR 1
-#define DIRECTOR_VERSION_MINOR 0
-
 #define MAX_INBUF_SIZE 1024
 #define MAX_OUTBUF_SIZE (1024*1024*10)
 #define OUTBUF_FLUSH_THRESHOLD (1024*128)
@@ -183,29 +179,57 @@ static bool director_cmd_me(struct director_connection *conn,
 }
 
 static bool
-director_user_refresh(struct director *dir, unsigned int username_hash,
-		      struct mail_host *host, time_t timestamp,
-		      struct user **user_r)
+director_user_refresh(struct director_connection *conn,
+		      unsigned int username_hash, struct mail_host *host,
+		      time_t timestamp, bool weak, struct user **user_r)
 {
+	struct director *dir = conn->dir;
 	struct user *user;
-	bool ret = FALSE;
+	bool ret = FALSE, unset_weak_user = FALSE;
 
 	user = user_directory_lookup(dir->users, username_hash);
 	if (user == NULL) {
 		*user_r = user_directory_add(dir->users, username_hash,
 					     host, timestamp);
+		(*user_r)->weak = weak;
 		return TRUE;
 	}
-	if (timestamp == ioloop_time && (time_t)user->timestamp != timestamp) {
-		user_directory_refresh(dir->users, user);
-		ret = TRUE;
-	}
 
-	if (user->host != host) {
-		i_error("User hash %u is being redirected to two hosts: "
-			"%s and %s", username_hash,
-			net_ip2addr(&user->host->ip),
-			net_ip2addr(&host->ip));
+	if (user->weak) {
+		if (!weak) {
+			/* removing user's weakness */
+			unset_weak_user = TRUE;
+			user->weak = FALSE;
+			ret = TRUE;
+		} else {
+			/* weak user marked again as weak */
+		}
+	} else if (weak &&
+		   !user_directory_user_is_recently_updated(dir->users, user)) {
+		/* mark the user as weak */
+		user->weak = TRUE;
+		ret = TRUE;
+	} else if (user->host != host) {
+		/* non-weak user received a non-weak update with
+		   conflicting host. this shouldn't happen. */
+		string_t *str = t_str_new(128);
+
+		str_printfa(str, "User hash %u "
+			    "is being redirected to two hosts: %s and %s",
+			    username_hash, net_ip2addr(&user->host->ip),
+			    net_ip2addr(&host->ip));
+		str_printfa(str, " (old_ts=%ld", (long)user->timestamp);
+
+		if (!conn->handshake_received) {
+			str_printfa(str, ",handshaking,recv_ts=%ld",
+				    (long)timestamp);
+		}
+		if (user->to_move != NULL)
+			str_append(str, ",moving");
+		if (user->kill_state == USER_KILL_STATE_NONE)
+			str_printfa(str, ",kill_state=%d", user->kill_state);
+		str_append_c(str, ')');
+		i_error("%s", str_c(str));
 
 		/* we want all the directors to redirect the user to same
 		   server, but we don't want two directors fighting over which
@@ -214,12 +238,29 @@ director_user_refresh(struct director *dir, unsigned int username_hash,
 			/* change the host. we'll also need to remove the user
 			   from the old host's user_count, because we can't
 			   keep track of the user for more than one host */
-			user->host->user_count--;
-			user->host = host;
-			user->host->user_count++;
+		} else {
+			/* keep the host */
+			host = user->host;
 		}
 		ret = TRUE;
 	}
+	if (user->host != host) {
+		user->host->user_count--;
+		user->host = host;
+		user->host->user_count++;
+		ret = TRUE;
+	}
+	if (timestamp == ioloop_time && (time_t)user->timestamp != timestamp) {
+		user_directory_refresh(dir->users, user);
+		ret = TRUE;
+	}
+
+	if (unset_weak_user) {
+		/* user is no longer weak. handle pending requests for
+		   this user if there are any */
+		director_set_state_changed(conn->dir);
+	}
+
 	*user_r = user;
 	return ret;
 }
@@ -232,8 +273,9 @@ director_handshake_cmd_user(struct director_connection *conn,
 	struct ip_addr ip;
 	struct mail_host *host;
 	struct user *user;
+	bool weak;
 
-	if (str_array_length(args) != 3 ||
+	if (str_array_length(args) < 3 ||
 	    str_to_uint(args[0], &username_hash) < 0 ||
 	    net_addr2ip(args[1], &ip) < 0 ||
 	    str_to_uint(args[2], &timestamp) < 0) {
@@ -241,6 +283,7 @@ director_handshake_cmd_user(struct director_connection *conn,
 			conn->name);
 		return FALSE;
 	}
+	weak = args[3] != NULL && args[3][0] == 'w';
 
 	host = mail_host_lookup(conn->dir->mail_hosts, &ip);
 	if (host == NULL) {
@@ -249,12 +292,13 @@ director_handshake_cmd_user(struct director_connection *conn,
 		return FALSE;
 	}
 
-	director_user_refresh(conn->dir, username_hash, host, timestamp, &user);
+	director_user_refresh(conn, username_hash, host, timestamp, weak, &user);
 	return TRUE;
 }
 
 static bool
-director_cmd_user(struct director_connection *conn, const char *const *args)
+director_cmd_user(struct director_connection *conn,
+		  const char *const *args)
 {
 	unsigned int username_hash;
 	struct ip_addr ip;
@@ -274,9 +318,11 @@ director_cmd_user(struct director_connection *conn, const char *const *args)
 		return TRUE;
 	}
 
-	if (director_user_refresh(conn->dir, username_hash,
-				  host, ioloop_time, &user))
+	if (director_user_refresh(conn, username_hash,
+				  host, ioloop_time, FALSE, &user)) {
+		i_assert(!user->weak);
 		director_update_user(conn->dir, conn->host, user);
+	}
 	return TRUE;
 }
 
@@ -369,6 +415,54 @@ director_cmd_is_seen(struct director_connection *conn,
 		host->last_seq = seq;
 	}
 	return 0;
+}
+
+static bool
+director_cmd_user_weak(struct director_connection *conn,
+		       const char *const *args)
+{
+	struct director_host *dir_host;
+	struct ip_addr ip;
+	unsigned int username_hash;
+	struct mail_host *host;
+	struct user *user;
+	struct director_host *src_host = conn->host;
+	bool weak = TRUE;
+	int ret;
+
+	if ((ret = director_cmd_is_seen(conn, &args, &dir_host)) < 0)
+		return FALSE;
+
+	if (str_array_length(args) != 2 ||
+	    str_to_uint(args[0], &username_hash) < 0 ||
+	    net_addr2ip(args[1], &ip) < 0) {
+		i_error("director(%s): Invalid USER-WEAK args", conn->name);
+		return FALSE;
+	}
+
+	host = mail_host_lookup(conn->dir->mail_hosts, &ip);
+	if (host == NULL) {
+		/* we probably just removed this host. */
+		return TRUE;
+	}
+
+	if (ret > 0) {
+		/* The entire ring has seen this USER-WEAK.
+		   make it non-weak now. */
+		weak = FALSE;
+		src_host = conn->dir->self_host;
+	}
+
+	if (director_user_refresh(conn, username_hash,
+				  host, ioloop_time, weak, &user)) {
+		if (!user->weak)
+			director_update_user(conn->dir, src_host, user);
+		else {
+			director_update_user_weak(conn->dir, src_host,
+						  dir_host, user);
+		}
+	}
+	return TRUE;
 }
 
 static bool
@@ -571,10 +665,8 @@ static void director_handshake_cmd_done(struct director_connection *conn)
 		   finished by sending a SYNC. if we get it back, it's done. */
 		dir->sync_seq++;
 		director_set_ring_unsynced(dir);
-		director_connection_send(dir->right,
-			t_strdup_printf("SYNC\t%s\t%u\t%u\n",
-					net_ip2addr(&dir->self_ip),
-					dir->self_port, dir->sync_seq));
+		director_sync_send(dir, dir->self_host, dir->sync_seq,
+				   DIRECTOR_VERSION_MINOR);
 	}
 	if (conn->to_ping != NULL)
 		timeout_remove(&conn->to_ping);
@@ -657,11 +749,15 @@ director_connection_handle_handshake(struct director_connection *conn,
 	/* only incoming connections get a full USER list, but outgoing
 	   connections can also receive USER updates during handshake and
 	   it wouldn't be safe to ignore them. */
-	if (strcmp(cmd, "USER") == 0 && conn->me_received) {
-		if (conn->in)
-			return director_handshake_cmd_user(conn, args);
-		else
+	if (!conn->me_received) {
+		/* no USER updates until ME */
+	} else if (conn->in && strcmp(cmd, "USER") == 0) {
+		return director_handshake_cmd_user(conn, args);
+	} else if (!conn->in) {
+		if (strcmp(cmd, "USER") == 0)
 			return director_cmd_user(conn, args);
+		if (strcmp(cmd, "USER-WEAK") == 0)
+			return director_cmd_user_weak(conn, args);
 	}
 	/* both get DONE */
 	if (strcmp(cmd, "DONE") == 0 && !conn->handshake_received &&
@@ -678,9 +774,14 @@ director_connection_handle_handshake(struct director_connection *conn,
 static void
 director_connection_sync_host(struct director_connection *conn,
 			      struct director_host *host,
-			      uint32_t seq, const char *line)
+			      uint32_t seq, unsigned int minor_version)
 {
 	struct director *dir = conn->dir;
+
+	if (minor_version > DIRECTOR_VERSION_MINOR) {
+		/* we're not up to date */
+		minor_version = DIRECTOR_VERSION_MINOR;
+	}
 
 	if (host->self) {
 		if (dir->sync_seq != seq) {
@@ -688,6 +789,7 @@ director_connection_sync_host(struct director_connection *conn,
 			return;
 		}
 
+		dir->ring_min_version = minor_version;
 		if (!dir->ring_handshaked) {
 			/* the ring is handshaked */
 			director_set_ring_handshaked(dir);
@@ -701,35 +803,36 @@ director_connection_sync_host(struct director_connection *conn,
 			}
 			director_set_ring_synced(dir);
 		}
-	} else {
+	} else if (dir->right != NULL) {
 		/* forward it to the connection on right */
-		if (dir->right != NULL) {
-			director_connection_send(dir->right,
-				t_strconcat(line, "\n", NULL));
-		}
+		director_sync_send(dir, host, seq, minor_version);
 	}
 }
 
 static bool director_connection_sync(struct director_connection *conn,
-				     const char *const *args, const char *line)
+				     const char *const *args)
 {
 	struct director *dir = conn->dir;
 	struct director_host *host;
 	struct ip_addr ip;
-	unsigned int port, seq;
+	unsigned int port, seq, minor_version = 0;
 
-	if (str_array_length(args) != 3 ||
+	if (str_array_length(args) < 3 ||
 	    !director_args_parse_ip_port(conn, args, &ip, &port) ||
 	    str_to_uint(args[2], &seq) < 0) {
 		i_error("director(%s): Invalid SYNC args", conn->name);
 		return FALSE;
 	}
+	if (args[3] != NULL)
+		minor_version = atoi(args[3]);
 
 	/* find the originating director. if we don't see it, it was already
 	   removed and we can ignore this sync. */
 	host = director_host_lookup(dir, &ip, port);
-	if (host != NULL)
-		director_connection_sync_host(conn, host, seq, line);
+	if (host != NULL) {
+		director_connection_sync_host(conn, host, seq,
+					      minor_version);
+	}
 
 	if (host == NULL || !host->self)
 		director_resend_sync(dir);
@@ -836,6 +939,8 @@ director_connection_handle_line(struct director_connection *conn,
 
 	if (strcmp(cmd, "USER") == 0)
 		return director_cmd_user(conn, args);
+	if (strcmp(cmd, "USER-WEAK") == 0)
+		return director_cmd_user_weak(conn, args);
 	if (strcmp(cmd, "HOST") == 0)
 		return director_cmd_host(conn, args);
 	if (strcmp(cmd, "HOST-REMOVE") == 0)
@@ -851,7 +956,7 @@ director_connection_handle_line(struct director_connection *conn,
 	if (strcmp(cmd, "DIRECTOR") == 0)
 		return director_cmd_director(conn, args);
 	if (strcmp(cmd, "SYNC") == 0)
-		return director_connection_sync(conn, args, line);
+		return director_connection_sync(conn, args);
 	if (strcmp(cmd, "CONNECT") == 0)
 		return director_cmd_connect(conn, args);
 
@@ -935,20 +1040,17 @@ static int director_connection_send_users(struct director_connection *conn)
 
 	o_stream_cork(conn->output);
 	while ((user = user_directory_iter_next(conn->user_iter)) != NULL) {
-		if (!user_directory_user_has_connections(conn->dir->users,
-							 user)) {
-			/* user is already expired */
-			continue;
-		}
-
 		T_BEGIN {
-			const char *line;
+			string_t *str = t_str_new(128);
 
-			line = t_strdup_printf("USER\t%u\t%s\t%u\n",
-					       user->username_hash,
-					       net_ip2addr(&user->host->ip),
-					       user->timestamp);
-			director_connection_send(conn, line);
+			str_printfa(str, "USER\t%u\t%s\t%u",
+				    user->username_hash,
+				    net_ip2addr(&user->host->ip),
+				    user->timestamp);
+			if (user->weak)
+				str_append(str, "\tw");
+			str_append_c(str, '\n');
+			director_connection_send(conn, str_c(str));
 		} T_END;
 
 		if (o_stream_get_buffer_used_size(conn->output) >= OUTBUF_FLUSH_THRESHOLD) {
