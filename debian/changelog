@@ -1,7 +1,13 @@
+dovecot (1:2.1.2-1) experimental; urgency=low
+
+  * [70c3f6e] Imported upstream 2.1.2
+
+ -- Micah Anderson <micah@debian.org>  Thu, 15 Mar 2012 20:26:35 -0400
+
 dovecot (1:2.1.1-1) experimental; urgency=low
 
-  * [ed2a7e4] Imported upstream 2.1.1
   * [c16887c] Updated pigeonhole patch to 0.3.0, supporting 2.1
+  * [ed2a7e4] Imported upstream 2.1.1
 
  -- Micah Anderson <micah@debian.org>  Tue, 13 Mar 2012 23:08:06 -0400
 
