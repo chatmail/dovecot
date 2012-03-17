@@ -1,8 +1,39 @@
+2012-03-16  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset b9adfd52cb66
+	[063cd2a15056] [tip]
+
+	* .hgtags:
+	Added tag 2.1.3 for changeset b9adfd52cb66
+	[3df9273f15b4]
+
+	* NEWS, configure.in:
+	Released v2.1.3.
+	[b9adfd52cb66] [2.1.3]
+
+	* src/lib-storage/index/dbox-common/dbox-file.c, src/lib-storage/index
+	/dbox-common/dbox-file.h, src/lib-storage/index/dbox-multi/mdbox-
+	file.c, src/lib-storage/index/dbox-single/sdbox-file.c:
+	dbox: Reverted recent fstat() avoidance change. It didn't do that,
+	just broke mdbox.
+	[58732d172107]
+
 2012-03-15  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/user-directory.c, src/lib-index/mail-cache-fields.c,
+	src/replication/replicator/replicator-queue.c:
+	Compiler warning fixes.
+	[5b05411a81cf]
+
+	* src/replication/replicator/replicator-brain.c:
+	replicator: Fixed off-by-one-second "do we do a full sync now?"
+	check.
+	[e935ddb5a9fc]
 
 	* .hgsigs:
 	Added signature for changeset 744e0d7f1b25
-	[914076de4c48] [tip]
+	[914076de4c48]
 
 	* .hgtags:
 	Added tag 2.1.2 for changeset 744e0d7f1b25
