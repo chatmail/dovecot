@@ -1,6 +1,7 @@
 dovecot (1:2.1.2-1) experimental; urgency=low
 
   * [70c3f6e] Imported upstream 2.1.2
+  * [75cc17b] Add missing dependency on dpkg-dev 1.16.1
 
  -- Micah Anderson <micah@debian.org>  Thu, 15 Mar 2012 20:26:35 -0400
 
