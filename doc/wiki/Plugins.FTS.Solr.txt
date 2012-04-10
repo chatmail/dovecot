@@ -104,4 +104,4 @@ External sites with tutorials on using Solr under Dovecot
    - Guide for installing all the dependencies for Solr to work under
    CentOS/Fedora. Step by step tutorial.
 
-(This file was created from the wiki on 2012-03-15 04:42)
+(This file was created from the wiki on 2012-04-09 04:42)

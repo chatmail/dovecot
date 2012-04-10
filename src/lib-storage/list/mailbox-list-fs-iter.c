@@ -85,6 +85,48 @@ fs_get_existence_info_flag(struct fs_list_iterate_context *ctx,
 	return 0;
 }
 
+static void
+fs_list_rename_invalid(struct fs_list_iterate_context *ctx,
+		       const char *storage_name)
+{
+	/* the storage_name is completely invalid, rename it to
+	   something more sensible. we could do this for all names that
+	   aren't valid mUTF-7, but that might lead to accidents in
+	   future when UTF-8 storage names are used */
+	string_t *destname = t_str_new(128);
+	string_t *dest = t_str_new(128);
+	const char *root, *src;
+
+	root = mailbox_list_get_path(ctx->ctx.list, NULL,
+				     MAILBOX_LIST_PATH_TYPE_MAILBOX);
+	src = t_strconcat(root, "/", storage_name, NULL);
+
+	(void)uni_utf8_get_valid_data((const void *)storage_name,
+				      strlen(storage_name), destname);
+
+	str_append(dest, root);
+	str_append_c(dest, '/');
+	(void)imap_utf8_to_utf7(str_c(destname), dest);
+
+	if (rename(src, str_c(dest)) < 0 && errno != ENOENT)
+		i_error("rename(%s, %s) failed: %m", src, str_c(dest));
+}
+
+static const char *
+dir_get_storage_name(struct list_dir_context *dir, const char *fname)
+{
+	if (*dir->storage_name == '\0') {
+		/* regular root */
+		return fname;
+	} else if (strcmp(dir->storage_name, "/") == 0) {
+		/* full_filesystem_access=yes "/" root */
+		return t_strconcat("/", fname, NULL);
+	} else {
+		/* child */
+		return t_strconcat(dir->storage_name, "/", fname, NULL);
+	}
+}
+
 static int
 dir_entry_get(struct fs_list_iterate_context *ctx, const char *dir_path,
 	      struct list_dir_context *dir, const struct dirent *d)
@@ -117,9 +159,15 @@ dir_entry_get(struct fs_list_iterate_context *ctx, const char *dir_path,
 	}
 
 	/* check the pattern */
-	storage_name = *dir->storage_name == '\0' ? d->d_name :
-		t_strconcat(dir->storage_name, "/", d->d_name, NULL);
+	storage_name = dir_get_storage_name(dir, d->d_name);
 	vname = mailbox_list_get_vname(ctx->ctx.list, storage_name);
+	if (!uni_utf8_str_is_valid(vname)) {
+		fs_list_rename_invalid(ctx, storage_name);
+		/* just skip this in this iteration, we'll see it on the
+		   next list */
+		return 0;
+	}
+
 	match = imap_match(ctx->ctx.glob, vname);
 
 	if ((dir->info_flags & (MAILBOX_CHILDREN | MAILBOX_NOCHILDREN |
@@ -171,8 +219,9 @@ fs_list_get_storage_path(struct fs_list_iterate_context *ctx,
 
 	if (*path == '~') {
 		if (!mailbox_list_try_get_absolute_path(ctx->ctx.list, &path)) {
-			/* couldn't expand ~user/ */
-			return FALSE;
+			/* a) couldn't expand ~user/
+			   b) mailbox is under our mail root, we changed
+			   path to storage_name */
 		}
 		/* NOTE: the path may have been translated to a storage_name
 		   instead of path */
@@ -200,6 +249,10 @@ fs_list_dir_read(struct fs_list_iterate_context *ctx,
 
 	if (!fs_list_get_storage_path(ctx, dir->storage_name, &path))
 		return 0;
+	if (path == NULL) {
+		/* no mailbox root dir */
+		return 0;
+	}
 
 	fsdir = opendir(path);
 	if (fsdir == NULL) {
@@ -336,7 +389,7 @@ static void fs_list_get_roots(struct fs_list_iterate_context *ctx)
 			if (*p == '/')
 				last = p;
 		}
-		if (p == last && *pattern == '/')
+		if (p == last+1 && *pattern == '/')
 			root = "/";
 		else {
 			root = mailbox_list_get_storage_name(ctx->ctx.list,
@@ -512,33 +565,6 @@ list_file_is_any_inbox(struct fs_list_iterate_context *ctx,
 	return strcmp(path, inbox_path) == 0;
 }
 
-static void
-fs_list_rename_invalid(struct fs_list_iterate_context *ctx,
-		       const char *storage_name)
-{
-	/* the storage_name is completely invalid, rename it to
-	   something more sensible. we could do this for all names that
-	   aren't valid mUTF-7, but that might lead to accidents in
-	   future when UTF-8 storage names are used */
-	string_t *destname = t_str_new(128);
-	string_t *dest = t_str_new(128);
-	const char *root, *src;
-
-	root = mailbox_list_get_path(ctx->ctx.list, NULL,
-				     MAILBOX_LIST_PATH_TYPE_MAILBOX);
-	src = t_strconcat(root, "/", storage_name, NULL);
-
-	(void)uni_utf8_get_valid_data((const void *)storage_name,
-				      strlen(storage_name), destname);
-
-	str_append(dest, root);
-	str_append_c(dest, '/');
-	(void)imap_utf8_to_utf7(str_c(destname), dest);
-
-	if (rename(src, str_c(dest)) < 0 && errno != ENOENT)
-		i_error("rename(%s, %s) failed: %m", src, str_c(dest));
-}
-
 static int
 fs_list_entry(struct fs_list_iterate_context *ctx,
 	      const struct list_dir_entry *entry)
@@ -549,16 +575,9 @@ fs_list_entry(struct fs_list_iterate_context *ctx,
 	const char *storage_name, *vname, *child_dir_name;
 
 	dir = ctx->dir;
-	storage_name = *dir->storage_name == '\0' ? entry->fname :
-		t_strconcat(dir->storage_name, "/", entry->fname, NULL);
+	storage_name = dir_get_storage_name(dir, entry->fname);
 
 	vname = mailbox_list_get_vname(ctx->ctx.list, storage_name);
-	if (!uni_utf8_str_is_valid(vname)) {
-		fs_list_rename_invalid(ctx, storage_name);
-		/* just skip this in this iteration, we'll see it on the
-		   next list */
-		return 0;
-	}
 	ctx->info.name = p_strdup(ctx->info_pool, vname);
 	ctx->info.flags = entry->info_flags;
 

@@ -240,6 +240,8 @@ struct mailbox {
 	unsigned int transaction_count;
 	enum mailbox_feature enabled_features;
 
+	struct mail_index_view *tmp_sync_view;
+
 	/* Mailbox notification settings: */
 	unsigned int notify_min_interval;
 	mailbox_notify_callback_t *notify_callback;
@@ -442,6 +444,7 @@ struct mail_save_context {
 	uint32_t uid;
 	char *guid, *pop3_uidl, *from_envelope;
 	struct ostream *output;
+	unsigned int pop3_order;
 
 	struct mail_save_attachment *attach;
 

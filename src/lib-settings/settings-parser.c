@@ -773,7 +773,8 @@ static int settings_parse_keyvalue(struct setting_parser_context *ctx,
 	}
 
 	do {
-		if (link->info == &strlist_info) {
+		if (def == NULL) {
+			i_assert(link->info == &strlist_info);
 			settings_parse_strlist(ctx, link, key, value);
 			return 1;
 		}
@@ -804,6 +805,7 @@ const char *settings_parse_unalias(struct setting_parser_context *ctx,
 		return NULL;
 	if (def == NULL) {
 		/* strlist */
+		i_assert(link->info == &strlist_info);
 		return key;
 	}
 
@@ -823,7 +825,7 @@ settings_parse_get_value(struct setting_parser_context *ctx,
 
 	if (!settings_find_key(ctx, key, &def, &link))
 		return NULL;
-	if (link->set_struct == NULL)
+	if (link->set_struct == NULL || def == NULL)
 		return NULL;
 
 	*type_r = def->type;
@@ -839,7 +841,7 @@ bool settings_parse_is_changed(struct setting_parser_context *ctx,
 
 	if (!settings_find_key(ctx, key, &def, &link))
 		return FALSE;
-	if (link->change_struct == NULL)
+	if (link->change_struct == NULL || def == NULL)
 		return FALSE;
 
 	p = STRUCT_MEMBER_P(link->change_struct, def->offset);
@@ -1159,8 +1161,9 @@ void settings_parse_set_key_expandeded(struct setting_parser_context *ctx,
 
 	if (!settings_find_key(ctx, key, &def, &link))
 		return;
-	if (link->info == &strlist_info) {
+	if (def == NULL) {
 		/* parent is strlist, no expansion needed */
+		i_assert(link->info == &strlist_info);
 		return;
 	}
 
@@ -1379,17 +1382,31 @@ setting_copy(enum setting_type type, const void *src, void *dest, pool_t pool)
 	case SET_STRLIST: {
 		const ARRAY_TYPE(const_string) *src_arr = src;
 		ARRAY_TYPE(const_string) *dest_arr = dest;
-		const char *const *strings, *dup;
-		unsigned int i, count;
+		const char *const *strings, *const *dest_strings, *dup;
+		unsigned int i, j, count, dest_count;
 
 		if (!array_is_created(src_arr))
 			break;
 
 		strings = array_get(src_arr, &count);
+		i_assert(count % 2 == 0);
 		if (!array_is_created(dest_arr))
 			p_array_init(dest_arr, pool, count);
-		for (i = 0; i < count; i++) {
+		dest_count = array_count(dest_arr);
+		i_assert(dest_count % 2 == 0);
+		for (i = 0; i < count; i += 2) {
+			if (dest_count > 0) {
+				dest_strings = array_idx(dest_arr, 0);
+				for (j = 0; j < dest_count; j += 2) {
+					if (strcmp(strings[i], dest_strings[j]) == 0)
+						break;
+				}
+				if (j < dest_count)
+					continue;
+			}
 			dup = p_strdup(pool, strings[i]);
+			array_append(dest_arr, &dup, 1);
+			dup = p_strdup(pool, strings[i+1]);
 			array_append(dest_arr, &dup, 1);
 		}
 		break;
