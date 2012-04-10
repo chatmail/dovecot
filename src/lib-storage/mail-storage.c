@@ -914,9 +914,37 @@ static int mailbox_open_full(struct mailbox *box, struct istream *input)
 	return 0;
 }
 
+static bool mailbox_try_undelete(struct mailbox *box)
+{
+	time_t mtime;
+
+	if (mail_index_get_modification_time(box->index, &mtime) < 0)
+		return FALSE;
+	if (mtime + MAILBOX_DELETE_RETRY_SECS > time(NULL))
+		return FALSE;
+
+	if (mailbox_mark_index_deleted(box, FALSE) < 0)
+		return FALSE;
+	box->mailbox_deleted = FALSE;
+	return TRUE;
+}
+
 int mailbox_open(struct mailbox *box)
 {
-	return mailbox_open_full(box, NULL);
+	if (mailbox_open_full(box, NULL) < 0) {
+		if (!box->mailbox_deleted)
+			return -1;
+
+		/* mailbox has been marked as deleted. if this deletion
+		   started (and crashed) a long time ago, it can be confusing
+		   to user that the mailbox can't be opened. so we'll just
+		   undelete it and reopen. */
+		if(!mailbox_try_undelete(box))
+			return -1;
+		if (mailbox_open_full(box, NULL) < 0)
+			return -1;
+	}
+	return 0;
 }
 
 int mailbox_open_stream(struct mailbox *box, struct istream *input)
@@ -1043,21 +1071,6 @@ int mailbox_mark_index_deleted(struct mailbox *box, bool del)
 	return 0;
 }
 
-static bool mailbox_try_undelete(struct mailbox *box)
-{
-	time_t mtime;
-
-	if (mail_index_get_modification_time(box->index, &mtime) < 0)
-		return FALSE;
-	if (mtime + MAILBOX_DELETE_RETRY_SECS > time(NULL))
-		return FALSE;
-
-	if (mailbox_mark_index_deleted(box, FALSE) < 0)
-		return FALSE;
-	box->mailbox_deleted = FALSE;
-	return TRUE;
-}
-
 int mailbox_delete(struct mailbox *box)
 {
 	int ret;
@@ -1077,19 +1090,7 @@ int mailbox_delete(struct mailbox *box)
 	if (mailbox_open(box) < 0) {
 		if (mailbox_get_last_mail_error(box) != MAIL_ERROR_NOTFOUND)
 			return -1;
-		if (!box->mailbox_deleted) {
-			/* \noselect mailbox */
-		} else {
-			/* if deletion happened a long time ago, it means it
-			   crashed while doing it. undelete the mailbox in
-			   that case. */
-			if (!mailbox_try_undelete(box))
-				return -1;
-
-			/* retry */
-			if (mailbox_open(box) < 0)
-				return -1;
-		}
+		/* \noselect mailbox */
 	}
 
 	ret = box->v.delete(box);
@@ -1588,6 +1589,14 @@ void mailbox_save_set_pop3_uidl(struct mail_save_context *ctx, const char *uidl)
 	ctx->pop3_uidl = i_strdup(uidl);
 }
 
+void mailbox_save_set_pop3_order(struct mail_save_context *ctx,
+				 unsigned int order)
+{
+	i_assert(order > 0);
+
+	ctx->pop3_order = order;
+}
+
 void mailbox_save_set_dest_mail(struct mail_save_context *ctx,
 				struct mail *mail)
 {
@@ -1667,7 +1676,7 @@ int mailbox_copy(struct mail_save_context **_ctx, struct mail *mail)
 
 	if (mail_index_is_deleted(box->index)) {
 		mailbox_set_deleted(box);
-		mailbox_save_cancel(_ctx);
+		mailbox_save_cancel(&ctx);
 		return -1;
 	}
 

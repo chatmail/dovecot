@@ -11,6 +11,10 @@
 /* weak users supported in protocol v1.1+ */
 #define DIRECTOR_VERSION_WEAK_USERS 1
 
+/* Minimum time between even attempting to communicate with a director that
+   failed due to a protocol error. */
+#define DIRECTOR_PROTOCOL_FAILURE_RETRY_SECS 60
+
 struct director;
 struct mail_host;
 struct user;
@@ -27,9 +31,13 @@ struct director {
 	unsigned int test_port;
 
 	struct director_host *self_host;
+	/* left and right connections are set only after they have finished
+	   handshaking. until then they're in the connections list, although
+	   updates are still sent to them during handshaking if the USER list
+	   is long. */
 	struct director_connection *left, *right;
 	/* all director connections */
-	struct director_connection *connections;
+	ARRAY_DEFINE(connections, struct director_connection *);
 	struct timeout *to_reconnect;
 	struct timeout *to_sync;
 

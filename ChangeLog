@@ -1,8 +1,486 @@
+2012-04-09  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 2c21c940e19d
+	[97cba128896f] [tip]
+
+	* .hgtags:
+	Added tag 2.1.4 for changeset 2c21c940e19d
+	[1fe529f50259]
+
+	* NEWS, configure.in:
+	Released v2.1.4.
+	[2c21c940e19d] [2.1.4]
+
+	* src/director/director-connection.c:
+	director: Fixed disconnecting unwanted connection.
+	[3771ff9c04d2]
+
+	* src/lib-storage/mail-storage.c:
+	lib-storage: If mailbox deletion crashed, undelete the mailbox when
+	opening it. The deletion is assumed to be crashed if it was started
+	over 5 minutes ago.
+	[a109580dea25]
+
+2012-04-03  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-index/mail-transaction-log-file.c:
+	lib-index: Minor code cleanup.
+	[30f8ef8696f0]
+
+2012-04-09  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-user.c:
+	lib-storage: Set mail_user.service earlier.
+	[2bf504b33d64]
+
+	* src/imap/cmd-fetch.c:
+	imap: Don't allow FETCH items list to be empty.
+	[19e09ab09383]
+
+	* src/director/director-connection.c, src/director/director-host.h,
+	src/director/director.c, src/director/director.h, src/director
+	/doveadm-connection.c:
+	director: Don't communicate with directors that recently sent
+	invalid input. Track network and protocol failures separately. If a
+	director had sent invalid protocol data within last 60 seconds,
+	don't try to connect to it and don't allow it to connect to us.
+	[366b9e5fc85c]
+
+	* src/director/director-connection.c, src/director/director-
+	connection.h, src/director/director.c:
+	director: Don't try to send the new SYNC parameter to old director
+	versions. This should allow adding new directors to an old director
+	ring without anything breaking. Once all directors have upgraded
+	they start using the new features.
+	[084064444f89]
+
+2012-04-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-user.c:
+	lib-storage: Minor code cleanup.
+	[f267a2b3f424]
+
+	* src/lib-storage/list/mailbox-list-fs-iter.c:
+	layout=fs: Fixed iteration with mail_full_filesystem_access=yes
+	[86e6dc46a80e]
+
+	* src/lib-storage/list/mailbox-list-maildir-iter.c, src/lib-
+	storage/list/mailbox-list-subscriptions.c, src/lib-storage/list
+	/mailbox-list-subscriptions.h:
+	Maildir++: Return nonexistent subscribed mailbox with nonexistent
+	flag. e.g. LIST (SUBSCRIBED) "" *
+	[f03e81b702a8]
+
+	* src/lib-storage/mail-search-register-human.c:
+	lib-storage: Human search builder now uses SEARCH_MAILBOX_GLOB only
+	when wildcards are used.
+	[7a414d055b3c]
+
+	* src/doveadm/doveadm-mailbox-list-iter.c:
+	doveadm: When AND-search includes mailbox names, don't bother going
+	through them by list iteration.
+	[1b6fb6363e7f]
+
+	* src/doveadm/doveadm-mail-mailbox.c:
+	dovadm mail commands: When mailbox parameter has no wildcard, use
+	SEARCH_MAILBOX.
+	[200af5e4c44f]
+
+	* src/doveadm/doveadm-mail-mailbox-status.c:
+	doveadm status: Don't include the fields parameter as a mailbox in
+	search query.
+	[19e9a83ca8dc]
+
+	* src/plugins/pop3-migration/pop3-migration-plugin.c:
+	pop3-migration: Error message improvement.
+	[52ad5a66ee58]
+
+	* src/lib-storage/mail-namespace.c:
+	lib-storage: Require at least one namespace to be non-hidden
+	[1a33cc98666a]
+
+	* src/doveadm/doveadm-auth.c:
+	doveadm user: Added -m parameter to show some of the mail settings.
+	[601014feade4]
+
+	* src/lib-storage/Makefile.am:
+	Makefile: Link libdovecot-storage.so with LINKED_STORAGE_LDADD.
+	[8b91367bc3e1]
+
+	* src/auth/db-ldap.c, src/auth/db-ldap.h, src/auth/passdb-ldap.c:
+	ldap: Removed warning about changed user_* settings. This warning
+	can happen even with recommended settings when symlinking the
+	passdb's ldap config to userdb ldap config.
+	[324df4134049]
+
+	* src/lib-storage/mail-user.c:
+	lib-storage: When doing a userdb lookup, use the user's service
+	instead of "lib-storage".
+	[2250f11695bc]
+
+	* src/auth/db-ldap.c, src/auth/db-ldap.h:
+	ldap: Treat =key the same as =key=, just like v2.0.
+	[9930c75b989a]
+
+	* src/lib-lda/mail-deliver.c:
+	lib-lda: mail_deliver()'s dest_mail now prefetches message's GUID.
+	This fixes copying an already expunged mail with maildir.
+	[c93601fa444e]
+
+	* src/lib-storage/index/index-mail.h, src/lib-storage/index/maildir
+	/maildir-mail.c:
+	maildir: Remember the mail's GUID/filename in memory once it's
+	fetched once. This allows retrieving it later even if the message
+	gets expunged.
+	[96ce9c0c6f05]
+
+	* src/lib-storage/index/dbox-single/sdbox-copy.c:
+	sdbox: If copying with link() fails with ENOENT, fallback to trying
+	regular copying. This also fixes missing error reporting for that
+	case.
+	[cc734436c140]
+
+	* src/lib-storage/index/shared/shared-storage.c:
+	lib-storage: Previous change incorrectly reverted setting parent
+	shared namespace usable.
+	[2bcab08dc994]
+
+	* src/lib-storage/index/shared/shared-storage.c:
+	lib-storage: Fixed setting usable/unusable flags for shared
+	namespaces. If a namespace doesn't have a root that exists, mark it
+	as unusable. This avoids ACL plugin from autocreating that
+	directory.
+	[4fe357d34faf]
+
+	* src/doveadm/doveadm-mail-mailbox.c:
+	doveadm mailbox delete: -s parameter wasn't working.
+	[411344f9daf3]
+
+	* src/lib-index/mail-index-map.c:
+	lib-index: Don't assert-crash with broken extension record intros in
+	log.
+	[47526bf86c57]
+
+2012-04-03  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/director-connection.c, src/director/director-
+	connection.h, src/director/director.c, src/director/director.h:
+	director: Redesigned connection handling and error handling.
+	Director now accepts all connections from everywhere and syncs them
+	until the handshaking is finished. At that point it finally decides
+	if this is a connection that should be used as our left/right
+	connection, or if it should be disconnected. This should make
+	connecting more reliable, especially if one of the directors sends
+	broken handshake or has other trouble.
+	[b43ae3805f5f]
+
+	* src/director/director-connection.c, src/director/director-
+	connection.h, src/director/director.c:
+	director: Handle all commands during handshake. Previously the
+	sender might have sent these commands, but the receiver wouldn't
+	have handled them and instead just disconnected.
+	[544a8c4705e5]
+
+	* src/director/director-connection.c:
+	director: Improved error logging for handling invalid
+	commands/parameters.
+	[d6cd93e32b37]
+
+2012-04-02  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/director-connection.c, src/director/director-
+	connection.h, src/director/director.c, src/director/director.h:
+	director: List of director connections belongs to struct director.
+	[c760ac046203]
+
+	* src/director/director-connection.c, src/director/director-
+	connection.h, src/director/director.c:
+	director: Changes to PING handling. Use larger ping timeouts. While
+	waiting for sync keep doing rapid pings until the sync is finished,
+	not just once.
+	[168e3b5cb6e8]
+
+	* src/imap/cmd-list.c:
+	imap: Enabling SPECIAL-USE selection option should also enable the
+	same return option.
+	[7f4c35fcae80]
+
+2012-03-30  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/imapc/imapc-mail-fetch.c, src/lib-
+	storage/index/imapc/imapc-mail.c, src/lib-storage/index/imapc/imapc-
+	settings.c, src/lib-storage/index/imapc/imapc-settings.h, src/lib-
+	storage/index/imapc/imapc-storage.h:
+	imapc: Added imapc_features=rfc822.size setting to use RFC822.size
+	for physical sizes.
+	[6a8b78450202]
+
+	* src/plugins/pop3-migration/pop3-migration-plugin.c:
+	pop3-replication: Don't request virtual size from IMAP mailbox, we
+	don't need it.
+	[87cd04f35f82]
+
+	* src/plugins/pop3-migration/pop3-migration-plugin.c:
+	pop3-migration: Migrate also POP3 ordering.
+	[6df2235fd6af]
+
+	* src/doveadm/dsync/dsync-data.h, src/doveadm/dsync/dsync-worker-
+	local.c:
+	dsync: Preserve pop3 ordering. This is currently done only when
+	syncing locally, because it's not easy to add more fields for the
+	current dsync proxying protocol in backwards compatible way. dsync
+	redesign should fix this.
+	[7ae930911a74]
+
+	* src/lib-storage/index/maildir/maildir-save.c, src/lib-storage/mail-
+	storage-private.h, src/lib-storage/mail-storage.c, src/lib-storage
+	/mail-storage.h:
+	lib-storage: Added mailbox_save_set_pop3_order() and implemented for
+	Maildir.
+	[82cd7aa65faf]
+
+	* configure.in, src/plugins/Makefile.am,
+	src/plugins/pop3-migration/Makefile.am,
+	src/plugins/pop3-migration/pop3-migration-plugin.c,
+	src/plugins/pop3-migration/pop3-migration-plugin.h:
+	Added pop3-migration plugin for getting POP3 UIDLs from POP3 server.
+	The idea is to use this with dsync to migrate mails via imapc, but
+	for getting POP3 UIDLs via pop3c.
+	[78317179b4af]
+
+	* src/lib-storage/index/pop3c/pop3c-storage.c:
+	pop3c: Allow accessing via INBOX, regardless of what namespace it
+	exists in.
+	[8a94981d8040]
+
+	* src/lib-storage/list/mailbox-list-fs-iter.c:
+	layout=fs: Don't crash in iteration if there is no root dir (pop3c).
+	[b7dc140e6b4d]
+
+	* src/doveadm/dsync/dsync-brain-msgs.c:
+	dsync: Fixed handling messages without GUID.
+	[078697a32109]
+
+2012-03-29  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts-solr/fts-backend-solr.c:
+	fts-solr: Added assert + minor code cleanup
+	[7b5b40f64439]
+
+2012-03-27  Timo Sirainen  <tss@iki.fi>
+
+	* src/login-common/client-common.c, src/login-common/ssl-proxy-
+	openssl.c, src/login-common/ssl-proxy.c, src/login-common/ssl-
+	proxy.h:
+	*-login: Previous SSL fixes were still broken with service_count=1.
+	[339b1337aab0]
+
+2012-03-26  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-settings/settings-parser.c:
+	lib-settings: Make static analyzer happier.
+	[94286d055872]
+
+	* src/config/config-filter.c, src/doveadm/doveadm-stats.c,
+	src/doveadm/dsync/doveadm-dsync.c, src/doveadm/dsync/test-dsync-
+	proxy-server-cmd.c, src/imap/imap-sync.c, src/lib-dict/dict-sql.c,
+	src/lib-mail/message-parser.c, src/lib-master/master-login.c, src
+	/lib-storage/index/cydir/cydir-mail.c, src/lib-storage/index/maildir
+	/maildir-mail.c, src/lib-storage/index/maildir/maildir-sync.c, src
+	/lib-storage/list/subscription-file.c, src/lib/file-cache.c,
+	src/lib/ostream.c, src/lib/process-title.c, src/lib/strfuncs.c,
+	src/lib/test-str-find.c, src/plugins/expire/doveadm-expire.c,
+	src/plugins/fts-squat/squat-trie.c, src/plugins/fts-squat/squat-
+	uidlist.c:
+	Changes to make static analyzer happier.
+	[ba1fc76e3a2c]
+
+	* src/lib-sql/driver-pgsql.c:
+	pgsql: Fixed a potential crash if connection got closed during
+	synchronous query.
+	[e05be9afaed0]
+
+	* src/plugins/fts-solr/fts-backend-solr.c:
+	fts-solr: Indexing mail bodies was broken.
+	[bcc5e71650b9]
+
+	* src/director/director.c:
+	director: Avoid crashing if all directors are removed when
+	reconnecting. There's no way to currently remove directors though,
+	so this couldn't have actually happened.
+	[a71bc8dbe53d]
+
+	* src/lib/network.c:
+	net_listen(): If bind(ip=any) fails with non-EADDRINUSE, don't
+	crash.
+	[cd7e15b2d575]
+
+	* src/stats/mail-command.c, src/stats/mail-domain.c, src/stats/mail-
+	ip.c, src/stats/mail-session.c, src/stats/mail-user.c:
+	stats: When freeing memory, make sure we don't crash if some list
+	gets empty.
+	[3980c025805c]
+
+	* src/lib-storage/mail-storage.c:
+	lib-storage: If trying to copy a message into already deleted
+	mailbox, don't crash.
+	[8897f32939b0]
+
+	* src/lib/data-stack.c:
+	data-stack: Fixed calling t_push()/t_malloc() before
+	data_stack_init().
+	[e79496bb09f5]
+
+2012-03-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/login-common/ssl-proxy.c:
+	Compiling fix for building without SSL.
+	[8699f3d3c1e4]
+
+2012-03-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-request.h, src/lib-imap/test-imap-utf7.c, src/lib-
+	storage/index/imapc/imapc-storage.h, src/lib-test/test-common.c,
+	src/lib/strfuncs.h, src/master/main.c:
+	Compiler warning fixes.
+	[4ae85f573c93]
+
+	* src/login-common/ssl-proxy.c:
+	Fixed compiling without SSL.
+	[f369e76d0867]
+
+	* doc/example-config/conf.d/10-mail.conf:
+	mail_temp_scan_interval comment update.
+	[24b3de4952b5]
+
+	* doc/example-config/conf.d/10-mail.conf, src/lib-storage/index/dbox-
+	common/dbox-storage.c, src/lib-storage/index/dbox-common/dbox-
+	storage.h, src/lib-storage/index/dbox-multi/mdbox-map.c, src/lib-
+	storage/index/maildir/maildir-storage.c, src/lib-
+	storage/index/maildir/maildir-storage.h, src/lib-storage/mail-
+	storage-settings.c, src/lib-storage/mail-storage-settings.h:
+	Added mail_temp_scan_interval setting and changed its default from
+	8h -> 1w.
+	[370e1f945c01]
+
+	* src/lib/unlink-old-files.c, src/lib/unlink-old-files.h:
+	unlink_old_files(): Update atime before scan, not after. If
+	Maildir/dbox scanning takes long this makes sure that a lot of
+	processes won't be scanning it in parallel.
+	[091b9f49f24f]
+
+	* src/lib/network.c:
+	net_getunixcred(): Fixed Solaris to use getpeerucred() properly.
+	[98fd46f8d1ab]
+
+	* src/lib-mail/message-date.c:
+	lib-mail: message_date_parse() now also accepts '.' separator in
+	hh.mm.ss time.
+	[d4cc57c8a455]
+
+2012-03-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/dbox-single/sdbox-sync-rebuild.c, src/lib-
+	storage/index/dbox-single/sdbox-sync.c:
+	sdbox: Don't log "Rebuilding index" when another process already did
+	it and we cancel it.
+	[f30437ed63dc]
+
+	* src/lib-storage/index/dbox-multi/mdbox-sync.c, src/lib-storage/index
+	/dbox-single/sdbox-sync.c, src/lib-storage/index/maildir/maildir-
+	sync-index.c, src/lib-storage/mail-storage-private.h,
+	src/plugins/quota/quota-storage.c:
+	quota: Added a kludge to avoid recalculating quota.
+	[fb70195b5d47]
+
+	* src/lib-storage/index/index-mail.c, src/plugins/virtual/virtual-
+	mail.c:
+	lib-storage: Don't access mail->box->view, but
+	mail->transaction->view. They may not be the same. In such cases
+	e.g. mail_set_uid() may have accessed a wrong mail.
+	[39db9e4c2283]
+
+	* src/lib-dict/dict-file.c, src/lib-storage/fail-mailbox.c:
+	Increased initial memory pool sizes.
+	[3cb33e050dc4]
+
+	* src/lib-storage/index/dbox-multi/mdbox-sync.c:
+	mdbox: Fixed a long loop/crash when mdbox is broken during saving.
+	[703380324b71]
+
+	* src/lib-master/master-service.c:
+	lib-master: Minor memory leak fix on deinit.
+	[bb8d2d74a71d]
+
+	* src/login-common/client-common.c:
+	imap-login: Memory leak fix.
+	[5ae5c44b1943]
+
+	* src/login-common/client-common.c, src/login-common/login-proxy.c,
+	src/login-common/main.c, src/login-common/ssl-proxy-openssl.c, src
+	/login-common/ssl-proxy.h:
+	*-login: Another crashfix
+	[842e5124038d]
+
+	* src/login-common/client-common.c, src/login-common/ssl-proxy-
+	openssl.c, src/login-common/ssl-proxy.h:
+	*-login: Fixed crashing when proxying SSL connections to a remote
+	server.
+	[1d23440ccb89]
+
+2012-03-21  Timo Sirainen  <tss@iki.fi>
+
+	* src/config/config-filter.c:
+	config: Added a comment
+	[ff5c341f8838]
+
+	* src/lib-settings/settings-parser.c, src/lib-settings/settings-
+	parser.h:
+	lib-settings: settings_parser_apply_changes() now deduplicates
+	SET_STRLIST arrays. This fixes overriding strlist keys in config
+	file filters, e.g.:
+
+	plugin { foo = general } protocol lda { plugin { foo = lda-
+	specific setting } }
+	[bb8387e6b18f]
+
+	* src/lib-storage/index/maildir/maildir-save.c:
+	maildir: Avoid duplicate S=size and W=sizes in maildir filenames.
+	This happens with maildir_copy_with_hardlinks=no and when copying a
+	mail with zlib compression enabled.
+	[3599790da3d7]
+
+	* src/auth/auth-client-connection.c:
+	auth: Don't check client PID in non-login auth sockets. This fixes
+	PID conflict errors when using TCP auth sockets for e.g. MTAs.
+	[23ed09ca847a]
+
+	* src/imap/imap-commands.c:
+	imap: Handle XLIST command by running LIST command. If the SPECIAL-
+	USE mailboxes are enabled, this results in mostly compatible output.
+	This change allows easily enabling the GMail XLIST extension simply
+	by adding +XLIST to imap_capability setting.
+	[03499202690f]
+
+2012-03-20  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-mail-import.c:
+	doveadm import: Copy also message flags.
+	[b2a3775c7a87]
+
+2012-03-19  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/list/mailbox-list-fs-iter.c:
+	layout=fs: Renaming non-UTF8 mailbox names wasn't done in all
+	situations.
+	[c77fbfce438d]
+
 2012-03-16  Timo Sirainen  <tss@iki.fi>
 
 	* .hgsigs:
 	Added signature for changeset b9adfd52cb66
-	[063cd2a15056] [tip]
+	[063cd2a15056]
 
 	* .hgtags:
 	Added tag 2.1.3 for changeset b9adfd52cb66
@@ -900,17 +1378,6 @@
 	be there.
 	[aa2e89c9876b]
 
-	* .hgignore, doc/man/Makefile.am, doc/man/doveadm-instance.1.in,
-	doc/man/doveadm-mount.1.in, doc/man/doveadm.1.in:
-	man: Added doveadm-instance(1) and doveadm-mount(1) roff'ification
-	by Pascal Volk.
-	[b88deb09b0f4]
-
-	* src/lib-storage/list/mailbox-list-fs-iter.c:
-	fs layout: Fixed crash when autocreate mailboxes were used and LIST
-	had only invalid patterns.
-	[72e1e17d2e22]
-
 	* .hgsigs:
 	Added signature for changeset e2cd03cc9c69
 	[3e0a1e5f43f3]
@@ -922,6 +1389,17 @@
 	* NEWS, configure.in:
 	Released v2.1.0.
 	[e2cd03cc9c69] [2.1.0]
+
+	* .hgignore, doc/man/Makefile.am, doc/man/doveadm-instance.1.in,
+	doc/man/doveadm-mount.1.in, doc/man/doveadm.1.in:
+	man: Added doveadm-instance(1) and doveadm-mount(1) roff'ification
+	by Pascal Volk.
+	[b88deb09b0f4]
+
+	* src/lib-storage/list/mailbox-list-fs-iter.c:
+	fs layout: Fixed crash when autocreate mailboxes were used and LIST
+	had only invalid patterns.
+	[72e1e17d2e22]
 
 2012-02-15  Timo Sirainen  <tss@iki.fi>
 

@@ -34,6 +34,7 @@ struct mail_storage_settings {
 	unsigned int mailbox_idle_check_interval;
 	unsigned int mail_max_keyword_length;
 	unsigned int mail_max_lock_timeout;
+	unsigned int mail_temp_scan_interval;
 	bool mail_save_crlf;
 	const char *mail_fsync;
 	bool mmap_disable;
@@ -130,6 +131,11 @@ struct maildir_settings {
 	bool maildir_broken_filename_sizes;
 };
 /* ../../src/lib-storage/index/imapc/imapc-settings.h */
+/* <settings checks> */
+enum imapc_features {
+	IMAPC_FEATURE_RFC822_SIZE	= 0x01
+};
+/* </settings checks> */
 struct imapc_settings {
 	const char *imapc_host;
 	unsigned int imapc_port;
@@ -142,8 +148,11 @@ struct imapc_settings {
 	const char *imapc_ssl_ca_dir;
 	bool imapc_ssl_verify;
 
+	const char *imapc_features;
 	const char *imapc_rawlog_dir;
 	const char *ssl_crypto_device;
+
+	enum imapc_features parsed_features;
 };
 /* ../../src/lib-storage/index/dbox-multi/mdbox-settings.h */
 struct mdbox_settings {
@@ -502,6 +511,7 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_TIME, mailbox_idle_check_interval),
 	DEF(SET_UINT, mail_max_keyword_length),
 	DEF(SET_TIME, mail_max_lock_timeout),
+	DEF(SET_TIME, mail_temp_scan_interval),
 	DEF(SET_BOOL, mail_save_crlf),
 	DEF(SET_ENUM, mail_fsync),
 	DEF(SET_BOOL, mmap_disable),
@@ -530,6 +540,7 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.mailbox_idle_check_interval = 30,
 	.mail_max_keyword_length = 50,
 	.mail_max_lock_timeout = 0,
+	.mail_temp_scan_interval = 7*24*60*60,
 	.mail_save_crlf = FALSE,
 	.mail_fsync = "optimized:never:always",
 	.mmap_disable = FALSE,
@@ -849,6 +860,43 @@ static const struct setting_parser_info maildir_setting_parser_info = {
 };
 /* ../../src/lib-storage/index/imapc/imapc-settings.c */
 /* <settings checks> */
+struct imapc_feature_list {
+	const char *name;
+	enum imapc_features num;
+};
+
+static const struct imapc_feature_list imapc_feature_list[] = {
+	{ "rfc822.size", IMAPC_FEATURE_RFC822_SIZE },
+	{ NULL, 0 }
+};
+
+static int
+imapc_settings_parse_features(struct imapc_settings *set,
+			      const char **error_r)
+{
+        enum imapc_features features = 0;
+        const struct imapc_feature_list *list;
+	const char *const *str;
+
+        str = t_strsplit_spaces(set->imapc_features, " ,");
+	for (; *str != NULL; str++) {
+		list = imapc_feature_list;
+		for (; list->name != NULL; list++) {
+			if (strcasecmp(*str, list->name) == 0) {
+				features |= list->num;
+				break;
+			}
+		}
+		if (list->name == NULL) {
+			*error_r = t_strdup_printf("imapc_features: "
+				"Unknown feature: %s", *str);
+			return -1;
+		}
+	}
+	set->parsed_features = features;
+	return 0;
+}
+
 static bool imapc_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 				 const char **error_r)
 {
@@ -867,6 +915,8 @@ static bool imapc_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 		return FALSE;
 	}
 #endif
+	if (imapc_settings_parse_features(set, error_r) < 0)
+		return FALSE;
 	return TRUE;
 }
 #undef DEF
@@ -884,6 +934,7 @@ static const struct setting_define imapc_setting_defines[] = {
 	DEF(SET_STR, imapc_ssl_ca_dir),
 	DEF(SET_BOOL, imapc_ssl_verify),
 
+	DEF(SET_STR, imapc_features),
 	DEF(SET_STR, imapc_rawlog_dir),
 	DEF(SET_STR, ssl_crypto_device),
 
@@ -901,6 +952,7 @@ static const struct imapc_settings imapc_default_settings = {
 	.imapc_ssl_ca_dir = "",
 	.imapc_ssl_verify = TRUE,
 
+	.imapc_features = "",
 	.imapc_rawlog_dir = "",
 	.ssl_crypto_device = ""
 };

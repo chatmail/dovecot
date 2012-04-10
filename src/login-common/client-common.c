@@ -182,8 +182,6 @@ void client_destroy(struct client *client, const char *reason)
 
 	if (client->login_proxy != NULL)
 		login_proxy_free(&client->login_proxy);
-	if (client->ssl_proxy != NULL)
-		ssl_proxy_free(&client->ssl_proxy);
 	client->v.destroy(client);
 	if (client_unref(&client) && initial_service_count == 1) {
 		/* as soon as this connection is done with proxying
@@ -229,9 +227,10 @@ bool client_unref(struct client **_client)
 	*_client = NULL;
 
 	i_assert(client->destroyed);
-	i_assert(client->ssl_proxy == NULL);
 	i_assert(client->login_proxy == NULL);
 
+	if (client->ssl_proxy != NULL)
+		ssl_proxy_free(&client->ssl_proxy);
 	if (client->input != NULL)
 		i_stream_unref(&client->input);
 	if (client->output != NULL)
@@ -241,6 +240,7 @@ bool client_unref(struct client **_client)
 	i_free(client->proxy_master_user);
 	i_free(client->virtual_user);
 	i_free(client->auth_mech_name);
+	i_free(client->master_data_prefix);
 	pool_unref(&client->pool);
 
 	i_assert(clients_count > 0);
@@ -296,7 +296,7 @@ static void client_start_tls(struct client *client)
 	if (!client_unref(&client) || client->destroyed)
 		return;
 
-	fd_ssl = ssl_proxy_alloc(client->fd, &client->ip,
+	fd_ssl = ssl_proxy_alloc(client->fd, &client->ip, client->pool,
 				 client->set, &client->ssl_proxy);
 	if (fd_ssl == -1) {
 		client_send_line(client, CLIENT_CMD_REPLY_BYE,
