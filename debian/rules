@@ -66,7 +66,7 @@ build-stamp:  config-stamp
 	# Pigeonhole
 	$(MAKE) -C $(PIGEONHOLE_DIR)
 	# DRAC
-	$(MAKE) -C src/plugins/drac
+	$(MAKE) -C src/plugins/drac $(shell dpkg-buildflags --export=configure)
 	touch build-stamp
 
 clean:
