@@ -56,6 +56,8 @@ struct auth_request {
 	struct auth_stream_reply *extra_cache_fields;
 	/* the whole userdb result reply */
 	struct auth_stream_reply *userdb_reply;
+	/* Result of passdb lookup */
+	enum passdb_result passdb_result;
 
 	const struct mech_module *mech;
 	const struct auth_settings *set;
@@ -71,7 +73,7 @@ struct auth_request {
 	unsigned int id;
 	time_t last_access;
 
-	const char *service, *mech_name;
+	const char *service, *mech_name, *session_id;
 	struct ip_addr local_ip, remote_ip;
 	unsigned int local_port, remote_port;
 

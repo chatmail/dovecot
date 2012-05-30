@@ -1,3 +1,62 @@
+v2.1.7 2012-05-29  Timo Sirainen <tss@iki.fi>
+
+	* LDAP: Compatibility fix for v2.0: ldap: If attributes contain
+	  ldapAttr=key=template%$ and ldapAttr doesn't exist, skip the key
+	  instead of using "template" value with empty %$ part for the key.
+
+	+ pop3: Added pop3_uidl_duplicates setting for changing the behavior
+	  for duplicate UIDLs.
+	+ director: Added "doveadm director ring remove" command.
+	- director: Don't crash with quickly disconnecting incoming director
+	  connections.
+	- mdbox: If mail was originally saved to non-INBOX, and namespace
+	  prefix is non-empty, don't assert-crash when rebuilding indexes.
+	- sdbox: Don't use more fds than necessary when copying mails.
+	- auth: Fixed crash with DIGEST-MD5 when attempting to do master user
+	  login without master passdbs. 
+	- Several fixes to mail_shared_explicit_inbox=no
+	- imapc: Use imapc_list_prefix also for listing subscriptions.
+
+v2.1.6 2012-05-07  Timo Sirainen <tss@iki.fi>
+
+	* Session ID is now included by default in auth and login process
+	  log lines. It can be added to mail processes also by adding
+	  %{session} to mail_log_prefix.
+
+	+ Added ssl_require_crl setting, which specifies if CRL check must
+	  be successful when verifying client certificates.
+	+ Added mail_shared_explicit_inbox setting to specify if a shared INBOX
+	  should be accessible as "shared/$user" or "shared/$user/INBOX".
+	- v2.1.5: Using "~/" as mail_location or elsewhere failed to actually
+	  expand it to home directory.
+	- dbox: Fixed potential assert-crash when reading dbox files.
+	- trash plugin: Fixed behavior when quota is already over limit.
+	- mail_log plugin: Logging "copy" event didn't work.
+	- Proxying to backend server with SSL: Verifying server certificate
+	  name always failed, because it was compared to an IP address.
+
+v2.1.5 2012-04-23  Timo Sirainen <tss@iki.fi>
+
+	* IMAP: When neither the session nor the mailbox has modseq tracking
+	  enabled, return the mailbox as having NOMODSEQ in SELECT/EXAMINE
+	  reply. Old versions in this situation always simply returned
+	  HIGHESTMODSEQ as 1, which could have broken some clients.
+
+	+ dict file: Added optional fcntl/flock locking (default is dotlock)
+	+ fts-solr: doveadm fts rescan now resets indexes, which allows
+	  reindexing mails. (This isn't a full rescan implementation like
+	  fts-lucene has.)
+	+ doveadm expunge: Added -d parameter to delete mailbox if it's
+	  empty after expunging.
+	- IMAP: Several fixes related to mailbox listing in some configs
+	- director: A lot of fixes and performance improvements
+	- v2.1.4 didn't work without a mail home directory set
+	- mbox: Deleting a mailbox didn't delete its index files.
+	- pop3c: TOP command was sent incorrectly
+	- trash plugin didn't work properly
+	- LMTP: Don't add a duplicate Return-Path: header when proxying.
+	- listescape: Don't unescape namespace prefixes.
+
 v2.1.4 2012-04-09  Timo Sirainen <tss@iki.fi>
 
 	+ Added mail_temp_scan_interval setting and changed its default value

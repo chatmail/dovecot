@@ -109,7 +109,9 @@ static void doveadm_cmd_director_list(struct doveadm_connection *conn)
 		right = dir->right != NULL &&
 			 director_connection_get_host(dir->right) == host;
 
-		if (dir->self_host == host)
+		if (host->removed)
+			type = "removed";
+		else if (dir->self_host == host)
 			type = "self";
 		else if (left)
 			type = right ? "l+r" : "left";
@@ -129,6 +131,58 @@ static void doveadm_cmd_director_list(struct doveadm_connection *conn)
 }
 
 static bool
+doveadm_cmd_director_add(struct doveadm_connection *conn, const char *line)
+{
+	const char *const *args;
+	struct director_host *host;
+	struct ip_addr ip;
+	unsigned int port = conn->dir->self_port;
+
+	args = t_strsplit_tab(line);
+	if (args[0] == NULL ||
+	    net_addr2ip(line, &ip) < 0 ||
+	    (args[1] != NULL && str_to_uint(args[1], &port) < 0)) {
+		i_error("doveadm sent invalid DIRECTOR-ADD parameters");
+		return FALSE;
+	}
+
+	if (director_host_lookup(conn->dir, &ip, port) == NULL) {
+		host = director_host_add(conn->dir, &ip, port);
+		director_notify_ring_added(host, conn->dir->self_host);
+	}
+	o_stream_send(conn->output, "OK\n", 3);
+	return TRUE;
+}
+
+static bool
+doveadm_cmd_director_remove(struct doveadm_connection *conn, const char *line)
+{
+	const char *const *args;
+	struct director_host *host;
+	struct ip_addr ip;
+	unsigned int port = 0;
+
+	args = t_strsplit_tab(line);
+	if (args[0] == NULL ||
+	    net_addr2ip(line, &ip) < 0 ||
+	    (args[1] != NULL && str_to_uint(args[1], &port) < 0)) {
+		i_error("doveadm sent invalid DIRECTOR-REMOVE parameters");
+		return FALSE;
+	}
+
+	host = port != 0 ?
+		director_host_lookup(conn->dir, &ip, port) :
+		director_host_lookup_ip(conn->dir, &ip);
+	if (host == NULL)
+		o_stream_send_str(conn->output, "NOTFOUND\n");
+	else {
+		director_ring_remove(host, conn->dir->self_host);
+		o_stream_send(conn->output, "OK\n", 3);
+	}
+	return TRUE;
+}
+
+static bool
 doveadm_cmd_host_set(struct doveadm_connection *conn, const char *line)
 {
 	struct director *dir = conn->dir;
@@ -137,7 +191,7 @@ doveadm_cmd_host_set(struct doveadm_connection *conn, const char *line)
 	struct ip_addr ip;
 	unsigned int vhost_count = -1U;
 
-	args = t_strsplit(line, "\t");
+	args = t_strsplit_tab(line);
 	if (args[0] == NULL ||
 	    net_addr2ip(args[0], &ip) < 0 ||
 	    (args[1] != NULL && str_to_uint(args[1], &vhost_count) < 0)) {
@@ -300,7 +354,7 @@ doveadm_cmd_user_move(struct doveadm_connection *conn, const char *line)
 	struct mail_host *host;
 	struct ip_addr ip;
 
-	args = t_strsplit(line, "\t");
+	args = t_strsplit_tab(line);
 	if (args[0] == NULL || args[1] == NULL ||
 	    net_addr2ip(args[1], &ip) < 0) {
 		i_error("doveadm sent invalid USER-MOVE parameters: %s", line);
@@ -364,6 +418,10 @@ static void doveadm_connection_input(struct doveadm_connection *conn)
 			doveadm_cmd_host_list_removed(conn);
 		else if (strcmp(cmd, "DIRECTOR-LIST") == 0)
 			doveadm_cmd_director_list(conn);
+		else if (strcmp(cmd, "DIRECTOR-ADD") == 0)
+			doveadm_cmd_director_add(conn, args);
+		else if (strcmp(cmd, "DIRECTOR-REMOVE") == 0)
+			doveadm_cmd_director_remove(conn, args);
 		else if (strcmp(cmd, "HOST-SET") == 0)
 			ret = doveadm_cmd_host_set(conn, args);
 		else if (strcmp(cmd, "HOST-REMOVE") == 0)
