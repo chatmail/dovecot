@@ -43,6 +43,7 @@ config-stamp: configure
 	            --infodir=\$${prefix}/share/info \
 	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
 	            --disable-rpath \
+	            --with-systemdsystemunitdir=auto \
 	            --disable-static
 	$(MAKE) dovecot-config
 	# Pigeonhole
