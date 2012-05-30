@@ -1,3 +1,35 @@
+dovecot (1:2.1.7-1) unstable; urgency=low
+
+  * [7668742] Imported upstream 2.1.7
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 29 May 2012 23:50:41 -0400
+
+dovecot (1:2.1.4-1) experimental; urgency=low
+
+  * [6cc1e7d] Imported upstream 2.1.4
+
+ -- Micah Anderson <micah@debian.org>  Tue, 10 Apr 2012 11:33:05 -0400
+
+dovecot (1:2.1.3-1) experimental; urgency=low
+
+  * [49ecc33] Imported upstream 2.1.3
+
+ -- Micah Anderson <micah@debian.org>  Fri, 16 Mar 2012 22:04:46 -0400
+
+dovecot (1:2.1.2-1) experimental; urgency=low
+
+  * [70c3f6e] Imported upstream 2.1.2
+  * Add missing dependency on dpkg-dev 1.16.1
+
+ -- Micah Anderson <micah@debian.org>  Thu, 15 Mar 2012 20:26:35 -0400
+
+dovecot (1:2.1.1-1) experimental; urgency=low
+
+  * [e113636] Imported upstream 2.1.1
+  * Updated pigeonhole patch to 0.3.0, supporting 2.1
+
+ -- Micah Anderson <micah@debian.org>  Tue, 13 Mar 2012 23:08:06 -0400
+
 dovecot (1:2.0.18-1) unstable; urgency=low
 
   * [85ae320] Imported Upstream version 2.0.18
