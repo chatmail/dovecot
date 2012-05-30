@@ -11,10 +11,39 @@ The plugin is configured by defining namespaces where the mails are moved. You
 can decide if you want the namespaces to be visible to clients, or if you want
 to show them only via some special webmail interface.
 
-You can use either one or three namespaces:
+1 namespace
+-----------
 
-3 namespaces
-------------
+You create only a single namespace. When a message is expunged from mailbox
+/<name>/, it's moved to a mailbox /<name>/ in the expunge namespace. When an
+entire mailbox /<name>/ is deleted, it's also moved to this namespace as
+/<name>/. If it already exists, their contents are merged.
+
+Example configuration:
+
+---%<-------------------------------------------------------------------------
+# the default namespace
+namespace {
+  prefix =
+  separator = /
+  inbox = yes
+}
+
+# namespace for lazy_expunge plugin:
+namespace {
+  prefix = .EXPUNGED/
+  separator = /
+  location = maildir:~/Maildir/expunged
+}
+
+mail_plugins = $mail_plugins lazy_expunge
+plugin {
+  lazy_expunge = .EXPUNGED/
+}
+---%<-------------------------------------------------------------------------
+
+3 namespaces (obsolete, v2.0 only)
+----------------------------------
 
 The namespaces are:
 
@@ -60,37 +89,6 @@ namespace {
 mail_plugins = $mail_plugins lazy_expunge
 plugin {
   lazy_expunge = .EXPUNGED/ .DELETED/ .DELETED/.EXPUNGED/
-}
----%<-------------------------------------------------------------------------
-
-1 namespace
------------
-
-You create only a single namespace. When a message is expunged from mailbox
-/<name>/, it's moved to a mailbox /<name>/ in the expunge namespace. When an
-entire mailbox /<name>/ is deleted, it's also moved to this namespace as
-/<name>/. If it already exists, their contents are merged.
-
-Example configuration:
-
----%<-------------------------------------------------------------------------
-# the default namespace
-namespace {
-  prefix =
-  separator = /
-  inbox = yes
-}
-
-# namespace for lazy_expunge plugin:
-namespace {
-  prefix = .EXPUNGED/
-  separator = /
-  location = maildir:~/Maildir/expunged
-}
-
-mail_plugins = $mail_plugins lazy_expunge
-plugin {
-  lazy_expunge = .EXPUNGED/
 }
 ---%<-------------------------------------------------------------------------
 
@@ -147,4 +145,4 @@ specific mailboxes, and expunge them when they've been there for a specified
 amount of time. It keeps an internal database (e.g. SQL) of all such mailboxes,
 so it doesn't have to go through all the mailboxes for all the users.
 
-(This file was created from the wiki on 2012-02-12 04:42)
+(This file was created from the wiki on 2012-04-23 04:42)

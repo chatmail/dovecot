@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -208,7 +208,7 @@ mail_cache_copy(struct mail_cache *cache, struct mail_index_transaction *trans,
 			/* if the decision isn't forced and this field hasn't
 			   been accessed for a while, drop it */
 			if ((dec & MAIL_CACHE_DECISION_FORCED) == 0 &&
-			    (time_t)priv->last_used < max_drop_time &&
+			    priv->field.last_used < max_drop_time &&
 			    !priv->adding) {
 				dec = MAIL_CACHE_DECISION_NO;
 				priv->field.decision = dec;
@@ -218,7 +218,7 @@ mail_cache_copy(struct mail_cache *cache, struct mail_index_transaction *trans,
 			if ((dec & ~MAIL_CACHE_DECISION_FORCED) ==
 			    MAIL_CACHE_DECISION_NO && !priv->adding) {
 				priv->used = FALSE;
-				priv->last_used = 0;
+				priv->field.last_used = 0;
 			}
 
 			ctx.field_file_map[i] = !priv->used ?
@@ -280,7 +280,7 @@ mail_cache_copy(struct mail_cache *cache, struct mail_index_transaction *trans,
 	o_stream_seek(output, 0);
 	o_stream_send(output, &hdr, sizeof(hdr));
 
-	mail_cache_view_close(cache_view);
+	mail_cache_view_close(&cache_view);
 
 	if (o_stream_flush(output) < 0) {
 		errno = output->stream_errno;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -52,6 +52,8 @@ void mail_index_transaction_unref(struct mail_index_transaction **_t)
 
 	array_free(&t->module_contexts);
 	mail_index_view_transaction_unref(t->view);
+	if (t->latest_view != NULL)
+		mail_index_view_close(&t->latest_view);
 	mail_index_view_close(&t->view);
 	i_free(t);
 }
@@ -87,6 +89,21 @@ uint32_t mail_index_transaction_get_next_uid(struct mail_index_transaction *t)
 			next_uid = hdr->next_uid;
 	}
 	return next_uid;
+}
+
+void mail_index_transaction_lookup_latest_keywords(struct mail_index_transaction *t,
+						   uint32_t seq,
+						   ARRAY_TYPE(keyword_indexes) *keywords)
+{
+	uint32_t uid, latest_seq;
+
+	if (t->latest_view == NULL) {
+		(void)mail_index_refresh(t->view->index);
+		t->latest_view = mail_index_view_open(t->view->index);
+	}
+	mail_index_lookup_uid(t->view, seq, &uid);
+	if (mail_index_lookup_seq(t->view, uid, &latest_seq))
+		mail_index_lookup_keywords(t->view, latest_seq, keywords);
 }
 
 static int
@@ -132,10 +149,10 @@ mail_index_transaction_commit_real(struct mail_index_transaction *t,
 	if (mail_transaction_log_append_begin(log->index, external, &ctx) < 0)
 		return -1;
 	ret = mail_transaction_log_file_refresh(t, ctx);
-	if (ret > 0) {
+	if (ret > 0) T_BEGIN {
 		mail_index_transaction_finish(t);
 		mail_index_transaction_export(t, ctx);
-	}
+	} T_END;
 
 	mail_transaction_log_get_head(log, &log_seq1, &log_offset1);
 	if (mail_transaction_log_append_commit(&ctx) < 0 || ret < 0)
@@ -219,7 +236,7 @@ int mail_index_transaction_commit_full(struct mail_index_transaction **_t,
 		mail_index_transaction_rollback(_t);
 		return -1;
 	}
-	if (!index_undeleted) {
+	if (!index_undeleted && !t->commit_deleted_index) {
 		if (t->view->index->index_deleted ||
 		    (t->view->index->index_delete_requested &&
 		     !t->view->index->syncing)) {

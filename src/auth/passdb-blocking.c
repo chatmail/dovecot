@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "str.h"
@@ -30,7 +30,7 @@ auth_worker_reply_parse(struct auth_request *request, const char *reply)
 	enum passdb_result ret;
 	const char *const *args;
 
-	args = t_strsplit(reply, "\t");
+	args = t_strsplit_tab(reply);
 
 	if (strcmp(*args, "OK") == 0 && args[1] != NULL && args[2] != NULL) {
 		/* OK \t user \t password [\t extra] */

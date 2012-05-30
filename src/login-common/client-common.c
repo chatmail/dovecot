@@ -1,12 +1,15 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "hostpid.h"
 #include "llist.h"
 #include "istream.h"
 #include "ostream.h"
+#include "iostream-rawlog.h"
 #include "process-title.h"
+#include "buffer.h"
 #include "str.h"
+#include "base64.h"
 #include "str-sanitize.h"
 #include "safe-memset.h"
 #include "var-expand.h"
@@ -25,9 +28,36 @@ static unsigned int clients_count = 0;
 
 static void client_idle_disconnect_timeout(struct client *client)
 {
-	client_send_line(client, CLIENT_CMD_REPLY_BYE,
-			 "Disconnected for inactivity.");
-	client_destroy(client, "Disconnected: Inactivity");
+	const char *user_reason, *destroy_reason;
+	unsigned int secs;
+
+	if (client->master_tag != 0) {
+		secs = ioloop_time - client->auth_finished;
+		user_reason = "Timeout while finishing login.";
+		destroy_reason = t_strdup_printf(
+			"Timeout while finishing login (waited %u secs)", secs);
+		client_log_err(client, destroy_reason);
+	} else if (client->auth_request != NULL) {
+		user_reason =
+			"Disconnected for inactivity during authentication.";
+		destroy_reason =
+			"Disconnected: Inactivity during authentication";
+	} else if (client->login_proxy != NULL) {
+		secs = ioloop_time - client->created;
+		user_reason = "Timeout while finishing login.";
+		destroy_reason = t_strdup_printf(
+			"proxy: Logging in to %s:%u timed out "
+			"(state=%u, duration=%us)",
+			login_proxy_get_host(client->login_proxy),
+			login_proxy_get_port(client->login_proxy),
+			client->proxy_state, secs);
+		client_log_err(client, destroy_reason);
+	} else {
+		user_reason = "Disconnected for inactivity.";
+		destroy_reason = "Disconnected: Inactivity";
+	}
+	client_send_line(client, CLIENT_CMD_REPLY_BYE, user_reason);
+	client_destroy(client, destroy_reason);
 }
 
 static void client_open_streams(struct client *client)
@@ -36,6 +66,12 @@ static void client_open_streams(struct client *client)
 		i_stream_create_fd(client->fd, LOGIN_MAX_INBUF_SIZE, FALSE);
 	client->output =
 		o_stream_create_fd(client->fd, LOGIN_MAX_OUTBUF_SIZE, FALSE);
+
+	if (login_rawlog_dir != NULL) {
+		if (iostream_rawlog_create(login_rawlog_dir, &client->input,
+					   &client->output) < 0)
+			login_rawlog_dir = NULL;
+	}
 }
 
 struct client *
@@ -47,8 +83,8 @@ client_create(int fd, bool ssl, pool_t pool,
 
 	i_assert(fd != -1);
 
-	client = client_vfuncs.alloc(pool);
-	client->v = client_vfuncs;
+	client = login_binary->client_vfuncs->alloc(pool);
+	client->v = *login_binary->client_vfuncs;
 	if (client->v.auth_send_challenge == NULL)
 		client->v.auth_send_challenge = client_auth_send_challenge;
 	if (client->v.auth_parse_response == NULL)
@@ -146,15 +182,14 @@ void client_destroy(struct client *client, const char *reason)
 
 	if (client->login_proxy != NULL)
 		login_proxy_free(&client->login_proxy);
-	if (client->ssl_proxy != NULL)
-		ssl_proxy_free(&client->ssl_proxy);
 	client->v.destroy(client);
-	if (client_unref(&client) &&
-	    master_service_get_service_count(master_service) == 1) {
+	if (client_unref(&client) && initial_service_count == 1) {
 		/* as soon as this connection is done with proxying
 		   (or whatever), the process will die. there's no need for
-		   authentication anymore, so close the connection. */
-		auth_client_disconnect(auth_client);
+		   authentication anymore, so close the connection.
+		   do this only with initial service_count=1, in case there
+		   are other clients with pending authentications */
+		auth_client_disconnect(auth_client, "unnecessary connection");
 	}
 	login_client_destroyed();
 	login_refresh_proctitle();
@@ -192,9 +227,10 @@ bool client_unref(struct client **_client)
 	*_client = NULL;
 
 	i_assert(client->destroyed);
-	i_assert(client->ssl_proxy == NULL);
 	i_assert(client->login_proxy == NULL);
 
+	if (client->ssl_proxy != NULL)
+		ssl_proxy_free(&client->ssl_proxy);
 	if (client->input != NULL)
 		i_stream_unref(&client->input);
 	if (client->output != NULL)
@@ -204,6 +240,7 @@ bool client_unref(struct client **_client)
 	i_free(client->proxy_master_user);
 	i_free(client->virtual_user);
 	i_free(client->auth_mech_name);
+	i_free(client->master_data_prefix);
 	pool_unref(&client->pool);
 
 	i_assert(clients_count > 0);
@@ -236,14 +273,19 @@ void client_destroy_oldest(void)
 	client_destroy(client, "Disconnected: Connection queue full");
 }
 
-void clients_destroy_all(void)
+void clients_destroy_all_reason(const char *reason)
 {
 	struct client *client, *next;
 
 	for (client = clients; client != NULL; client = next) {
 		next = client->next;
-		client_destroy(client, "Disconnected: Shutting down");
+		client_destroy(client, reason);
 	}
+}
+
+void clients_destroy_all(void)
+{
+	clients_destroy_all_reason("Disconnected: Shutting down");
 }
 
 static void client_start_tls(struct client *client)
@@ -254,7 +296,7 @@ static void client_start_tls(struct client *client)
 	if (!client_unref(&client) || client->destroyed)
 		return;
 
-	fd_ssl = ssl_proxy_alloc(client->fd, &client->ip,
+	fd_ssl = ssl_proxy_alloc(client->fd, &client->ip, client->pool,
 				 client->set, &client->ssl_proxy);
 	if (fd_ssl == -1) {
 		client_send_line(client, CLIENT_CMD_REPLY_BYE,
@@ -336,31 +378,69 @@ unsigned int clients_get_count(void)
 	return clients_count;
 }
 
+const char *client_get_session_id(struct client *client)
+{
+	buffer_t *buf, *base64_buf;
+	struct timeval tv;
+	uint64_t timestamp;
+	unsigned int i;
+
+	if (client->session_id != NULL)
+		return client->session_id;
+
+	buf = buffer_create_dynamic(pool_datastack_create(), 24);
+	base64_buf = buffer_create_dynamic(pool_datastack_create(), 24*2);
+
+	if (gettimeofday(&tv, NULL) < 0)
+		i_fatal("gettimeofday(): %m");
+	timestamp = tv.tv_usec + (long long)tv.tv_sec * 1000ULL*1000ULL;
+
+	/* add lowest 48 bits of the timestamp. this gives us a bit less than
+	   9 years until it wraps */
+	for (i = 0; i < 48; i += 8)
+		buffer_append_c(buf, (timestamp >> i) & 0xff);
+
+	buffer_append_c(buf, client->remote_port & 0xff);
+	buffer_append_c(buf, (client->remote_port >> 16) & 0xff);
+#ifdef HAVE_IPV6
+	if (IPADDR_IS_V6(&client->ip))
+		buffer_append(buf, &client->ip.u.ip6, sizeof(client->ip.u.ip6));
+	else
+#endif
+		buffer_append(buf, &client->ip.u.ip4, sizeof(client->ip.u.ip4));
+	base64_encode(buf->data, buf->used, base64_buf);
+	client->session_id = p_strdup(client->pool, str_c(base64_buf));
+	return client->session_id;
+}
+
+static struct var_expand_table login_var_expand_empty_tab[] = {
+	{ 'u', NULL, "user" },
+	{ 'n', NULL, "username" },
+	{ 'd', NULL, "domain" },
+	{ 's', NULL, "service" },
+	{ 'h', NULL, "home" },
+	{ 'l', NULL, "lip" },
+	{ 'r', NULL, "rip" },
+	{ 'p', NULL, "pid" },
+	{ 'm', NULL, "mech" },
+	{ 'a', NULL, "lport" },
+	{ 'b', NULL, "rport" },
+	{ 'c', NULL, "secured" },
+	{ 'k', NULL, "ssl_security" },
+	{ 'e', NULL, "mail_pid" },
+	{ '\0', NULL, "session" },
+	{ '\0', NULL, NULL }
+};
+
 static const struct var_expand_table *
 get_var_expand_table(struct client *client)
 {
-	static struct var_expand_table static_tab[] = {
-		{ 'u', NULL, "user" },
-		{ 'n', NULL, "username" },
-		{ 'd', NULL, "domain" },
-		{ 's', NULL, "service" },
-		{ 'h', NULL, "home" },
-		{ 'l', NULL, "lip" },
-		{ 'r', NULL, "rip" },
-		{ 'p', NULL, "pid" },
-		{ 'm', NULL, "mech" },
-		{ 'a', NULL, "lport" },
-		{ 'b', NULL, "rport" },
-		{ 'c', NULL, "secured" },
-		{ 'k', NULL, "ssl_security" },
-		{ 'e', NULL, "mail_pid" },
-		{ '\0', NULL, NULL }
-	};
 	struct var_expand_table *tab;
 	unsigned int i;
 
-	tab = t_malloc(sizeof(static_tab));
-	memcpy(tab, static_tab, sizeof(static_tab));
+	tab = t_malloc(sizeof(login_var_expand_empty_tab));
+	memcpy(tab, login_var_expand_empty_tab,
+	       sizeof(login_var_expand_empty_tab));
 
 	if (client->virtual_user != NULL) {
 		tab[0].value = client->virtual_user;
@@ -371,7 +451,7 @@ get_var_expand_table(struct client *client)
 		for (i = 0; i < 3; i++)
 			tab[i].value = str_sanitize(tab[i].value, 80);
 	}
-	tab[3].value = login_binary.protocol;
+	tab[3].value = login_binary->protocol;
 	tab[4].value = getenv("HOME");
 	tab[5].value = net_ip2addr(&client->local_ip);
 	tab[6].value = net_ip2addr(&client->ip);
@@ -397,19 +477,20 @@ get_var_expand_table(struct client *client)
 	}
 	tab[13].value = client->mail_pid == 0 ? "" :
 		dec2str(client->mail_pid);
+	tab[14].value = client_get_session_id(client);
 	return tab;
 }
 
-static bool have_key(const struct var_expand_table *table, const char *str)
+static bool have_username_key(const char *str)
 {
 	char key;
-	unsigned int i;
 
-	key = var_get_key(str);
-	for (i = 0; table[i].key != '\0'; i++) {
-		if (table[i].key == key) {
-			return table[i].value != NULL &&
-				table[i].value[0] != '\0';
+	for (; *str != '\0'; str++) {
+		if (str[0] == '%' && str[1] != '\0') {
+			str++;
+			key = var_get_key(str);
+			if (key == 'u' || key == 'n')
+				return TRUE;
 		}
 	}
 	return FALSE;
@@ -425,9 +506,9 @@ client_get_log_str(struct client *client, const char *msg)
 	};
 	const struct var_expand_table *var_expand_table;
 	struct var_expand_table *tab;
-	const char *p;
 	char *const *e;
-	string_t *str;
+	string_t *str, *str2;
+	unsigned int pos;
 
 	var_expand_table = get_var_expand_table(client);
 
@@ -435,20 +516,28 @@ client_get_log_str(struct client *client, const char *msg)
 	memcpy(tab, static_tab, sizeof(static_tab));
 
 	str = t_str_new(256);
+	str2 = t_str_new(128);
 	for (e = client->set->log_format_elements_split; *e != NULL; e++) {
-		for (p = *e; *p != '\0'; p++) {
-			if (*p != '%' || p[1] == '\0')
+		pos = str_len(str);
+		var_expand(str, *e, var_expand_table);
+		if (have_username_key(*e)) {
+			/* username is added even if it's empty */
+		} else {
+			str_truncate(str2, 0);
+			var_expand(str2, *e, login_var_expand_empty_tab);
+			if (strcmp(str_c(str)+pos, str_c(str2)) == 0) {
+				/* empty %variables, don't add */
+				str_truncate(str, pos);
 				continue;
-
-			p++;
-			if (have_key(var_expand_table, p)) {
-				if (str_len(str) > 0)
-					str_append(str, ", ");
-				var_expand(str, *e, var_expand_table);
-				break;
 			}
 		}
+
+		if (str_len(str) > 0)
+			str_append(str, ", ");
 	}
+
+	if (str_len(str) > 0)
+		str_truncate(str, str_len(str)-2);
 
 	tab[0].value = t_strdup(str_c(str));
 	tab[1].value = msg;
@@ -469,6 +558,13 @@ void client_log_err(struct client *client, const char *msg)
 {
 	T_BEGIN {
 		i_error("%s", client_get_log_str(client, msg));
+	} T_END;
+}
+
+void client_log_warn(struct client *client, const char *msg)
+{
+	T_BEGIN {
+		i_warning("%s", client_get_log_str(client, msg));
 	} T_END;
 }
 
@@ -497,6 +593,9 @@ bool client_is_trusted(struct client *client)
 
 const char *client_get_extra_disconnect_reason(struct client *client)
 {
+	unsigned int auth_secs = client->auth_first_started == 0 ? 0 :
+		ioloop_time - client->auth_first_started;
+
 	if (client->set->auth_ssl_require_client_cert &&
 	    client->ssl_proxy != NULL) {
 		if (ssl_proxy_has_broken_client_cert(client->ssl_proxy))
@@ -505,24 +604,53 @@ const char *client_get_extra_disconnect_reason(struct client *client)
 			return "(client didn't send a cert)";
 	}
 
-	if (client->auth_attempts == 0)
-		return "(no auth attempts)";
+	if (!client->greeting_sent)
+		return t_strdup_printf(
+			"(disconnected before greeting, waited %u secs)",
+			(unsigned int)(ioloop_time - client->created));
+
+	if (client->auth_attempts == 0) {
+		return t_strdup_printf("(no auth attempts in %u secs)",
+			(unsigned int)(ioloop_time - client->created));
+	}
 
 	/* some auth attempts without SSL/TLS */
 	if (client->auth_tried_disabled_plaintext)
-		return "(tried to use disabled plaintext auth)";
+		return "(tried to use disallowed plaintext auth)";
 	if (client->set->auth_ssl_require_client_cert &&
 	    client->ssl_proxy == NULL)
 		return "(cert required, client didn't start TLS)";
 	if (client->auth_tried_unsupported_mech)
 		return "(tried to use unsupported auth mechanism)";
-	if (client->auth_request != NULL && client->auth_attempts == 1)
-		return "(disconnected while authenticating)";
+	if (client->auth_waiting && client->auth_attempts == 1) {
+		return t_strdup_printf("(client didn't finish SASL auth, "
+				       "waited %u secs)", auth_secs);
+	}
+	if (client->auth_request != NULL && client->auth_attempts == 1) {
+		return t_strdup_printf("(disconnected while authenticating, "
+				       "waited %u secs)", auth_secs);
+	}
+	if (client->authenticating && client->auth_attempts == 1) {
+		return t_strdup_printf("(disconnected while finishing login, "
+				       "waited %u secs)", auth_secs);
+	}
 	if (client->auth_try_aborted && client->auth_attempts == 1)
 		return "(aborted authentication)";
+	if (client->auth_process_comm_fail)
+		return "(auth process communication failure)";
 
-	return t_strdup_printf("(auth failed, %u attempts)",
-			       client->auth_attempts);
+	if (client->proxy_auth_failed)
+		return "(proxy dest auth failed)";
+	if (client->auth_successes > 0) {
+		return t_strdup_printf("(internal failure, %u succesful auths)",
+				       client->auth_successes);
+	}
+	if (client->auth_user_disabled)
+		return "(user disabled)";
+	if (client->auth_pass_expired)
+		return "(password expired)";
+	return t_strdup_printf("(auth failed, %u attempts in %u secs)",
+			       client->auth_attempts, auth_secs);
 }
 
 void client_send_line(struct client *client, enum client_cmd_reply reply,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -10,6 +10,7 @@
 #include "write-full.h"
 #include "str.h"
 #include "maildir-storage.h"
+#include "mailbox-list-private.h"
 #include "quota-private.h"
 
 #include <stdio.h>
@@ -157,8 +158,8 @@ maildir_list_next(struct maildir_list_context *ctx, time_t *mtime_r)
 		T_BEGIN {
 			const char *path, *storage_name;
 
-			storage_name = mail_namespace_get_storage_name(
-				ctx->info->ns, ctx->info->name);
+			storage_name = mailbox_list_get_storage_name(
+				ctx->info->ns->list, ctx->info->name);
 			path = mailbox_list_get_path(ctx->list, storage_name,
 					MAILBOX_LIST_PATH_TYPE_MAILBOX);
 			str_truncate(ctx->path, 0);
@@ -221,51 +222,48 @@ static int maildirsize_write(struct maildir_quota_root *root, const char *path)
 	struct mail_namespace *const *namespaces;
 	unsigned int i, count;
 	struct dotlock *dotlock;
-	const char *p, *dir, *gid_origin, *dir_gid_origin;
+	const char *p, *dir, *gid_origin;
 	string_t *str;
-	mode_t mode, dir_mode;
-	gid_t gid, dir_gid;
+	mode_t file_mode, dir_mode;
+	gid_t gid;
 	int fd;
 
 	i_assert(root->fd == -1);
 
 	/* figure out what permissions we should use for maildirsize.
 	   use the inbox namespace's permissions if possible. */
-	mode = 0600; dir_mode = 0700; dir_gid_origin = gid_origin = "default";
-	gid = dir_gid = (gid_t)-1;
+	file_mode = 0600; dir_mode = 0700; gid_origin = "default";
+	gid = (gid_t)-1;
 	namespaces = array_get(&root->root.quota->namespaces, &count);
 	i_assert(count > 0);
 	for (i = 0; i < count; i++) {
-		if ((namespaces[i]->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
-			mailbox_list_get_permissions(namespaces[i]->list,
-						     NULL, &mode, &gid,
-						     &gid_origin);
-			mailbox_list_get_dir_permissions(namespaces[i]->list,
-							 NULL,
-							 &dir_mode, &dir_gid,
-							 &dir_gid_origin);
-			break;
-		}
+		if ((namespaces[i]->flags & NAMESPACE_FLAG_INBOX_USER) == 0)
+			continue;
+
+		mailbox_list_get_root_permissions(namespaces[i]->list,
+						  &file_mode, &dir_mode,
+						  &gid, &gid_origin);
+		break;
 	}
 
 	dotlock_settings.use_excl_lock = set->dotlock_use_excl;
 	dotlock_settings.nfs_flush = set->mail_nfs_storage;
 	fd = file_dotlock_open_group(&dotlock_settings, path,
 				     DOTLOCK_CREATE_FLAG_NONBLOCK,
-				     mode, gid, gid_origin, &dotlock);
+				     file_mode, gid, gid_origin, &dotlock);
 	if (fd == -1 && errno == ENOENT) {
 		/* the control directory doesn't exist yet? create it */
 		p = strrchr(path, '/');
 		dir = t_strdup_until(path, p);
-		if (mkdir_parents_chgrp(dir, dir_mode, dir_gid,
-					dir_gid_origin) < 0 &&
+		if (mkdir_parents_chgrp(dir, dir_mode, gid, gid_origin) < 0 &&
 		    errno != EEXIST) {
 			i_error("mkdir_parents(%s) failed: %m", dir);
 			return -1;
 		}
 		fd = file_dotlock_open_group(&dotlock_settings, path,
 					     DOTLOCK_CREATE_FLAG_NONBLOCK,
-					     mode, gid, gid_origin, &dotlock);
+					     file_mode, gid, gid_origin,
+					     &dotlock);
 	}
 	if (fd == -1) {
 		if (errno == EAGAIN) {
@@ -298,13 +296,10 @@ static int maildirsize_write(struct maildir_quota_root *root, const char *path)
 		return -1;
 	}
 
-	/* keep the fd open since we might want to update it later */
-	if (file_dotlock_replace(&dotlock,
-				 DOTLOCK_REPLACE_FLAG_DONT_CLOSE_FD) < 0) {
+	if (file_dotlock_replace(&dotlock, 0) < 0) {
 		i_error("file_dotlock_replace(%s) failed: %m", path);
 		return -1;
 	}
-	root->fd = fd;
 	return 0;
 }
 
@@ -620,7 +615,6 @@ static bool maildirquota_limits_init(struct maildir_quota_root *root)
 {
 	struct mailbox_list *list;
 	struct mail_storage *storage;
-	const char *name = "";
 
 	if (root->limits_initialized)
 		return root->maildirsize_path != NULL;
@@ -633,7 +627,7 @@ static bool maildirquota_limits_init(struct maildir_quota_root *root)
 	i_assert(root->maildirsize_path != NULL);
 
 	list = root->maildirsize_ns->list;
-	if (mailbox_list_get_storage(&list, &name, &storage) == 0 &&
+	if (mailbox_list_get_storage(&list, "", &storage) == 0 &&
 	    strcmp(storage->name, MAILDIR_STORAGE_NAME) != 0) {
 		/* non-maildir namespace, skip */
 		if ((storage->class_flags &
@@ -712,6 +706,14 @@ static int maildirsize_update(struct maildir_quota_root *root,
 			i_error("write_full(%s) failed: %m",
 				root->maildirsize_path);
 		}
+	} else {
+		/* close the file to force a flush with NFS */
+		if (close(root->fd) < 0) {
+			ret = -1;
+			if (errno != ESTALE)
+				i_error("close(%s) failed: %m", root->maildirsize_path);
+		}
+		root->fd = -1;
 	}
 	return ret;
 }
@@ -875,8 +877,13 @@ maildir_quota_update(struct quota_root *_root,
 		(void)close(root->fd);
 		root->fd = -1;
 		(void)maildirsize_recalculate(root);
-	} else if (maildirsize_update(root, ctx->count_used, ctx->bytes_used) < 0)
+	} else if (maildirsize_update(root, ctx->count_used, ctx->bytes_used) < 0) {
+		if (root->fd != -1) {
+			(void)close(root->fd);
+			root->fd = -1;
+		}
 		maildirsize_rebuild_later(root);
+	}
 
 	return 0;
 }

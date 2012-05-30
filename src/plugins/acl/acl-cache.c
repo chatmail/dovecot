@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -75,6 +75,10 @@ static void acl_cache_free_object_cache(struct acl_object_cache *obj_cache)
 	if (obj_cache->my_current_rights != NULL &&
 	    obj_cache->my_current_rights != &negative_cache_entry)
 		acl_cache_mask_deinit(&obj_cache->my_current_rights);
+	if (obj_cache->my_rights != NULL)
+		acl_cache_mask_deinit(&obj_cache->my_rights);
+	if (obj_cache->my_neg_rights != NULL)
+		acl_cache_mask_deinit(&obj_cache->my_neg_rights);
 	i_free(obj_cache->name);
 	i_free(obj_cache);
 }

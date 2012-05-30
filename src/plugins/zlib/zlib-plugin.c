@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -301,6 +301,7 @@ static int zlib_mailbox_open_input(struct mailbox *box)
 {
 	const struct zlib_handler *handler;
 	struct istream *input;
+	struct stat st;
 	int fd;
 
 	handler = zlib_get_zlib_handler_ext(box->name);
@@ -310,14 +311,20 @@ static int zlib_mailbox_open_input(struct mailbox *box)
 	if (mail_storage_is_mailbox_file(box->storage)) {
 		/* looks like a compressed single file mailbox. we should be
 		   able to handle this. */
-		fd = open(box->path, O_RDONLY);
+		const char *box_path = mailbox_get_path(box);
+
+		fd = open(box_path, O_RDONLY);
 		if (fd == -1) {
-			mail_storage_set_critical(box->storage,
-				"open(%s) failed: %m", box->path);
-			return -1;
+			/* let the standard handler figure out what to do
+			   with the failure */
+			return 0;
+		}
+		if (fstat(fd, &st) == 0 && S_ISDIR(st.st_mode)) {
+			(void)close(fd);
+			return 0;
 		}
 		input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
-		i_stream_set_name(input, box->path);
+		i_stream_set_name(input, box_path);
 		box->input = handler->create_istream(input, TRUE);
 		i_stream_unref(&input);
 		box->flags |= MAILBOX_FLAG_READONLY;

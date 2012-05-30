@@ -8,6 +8,9 @@
    this many seconds, kill the process */
 #define SERVICE_FIRST_STATUS_TIMEOUT_SECS 30
 
+#define SERVICE_STARTUP_FAILURE_THROTTLE_MIN_SECS 2
+#define SERVICE_STARTUP_FAILURE_THROTTLE_MAX_SECS 60
+
 enum service_listener_type {
 	SERVICE_LISTENER_UNIX,
 	SERVICE_LISTENER_FIFO,
@@ -21,6 +24,7 @@ struct service_listener {
 	int fd; /* may be -1 */
 	struct io *io;
 
+	const char *name;
 	const char *inet_address;
 
 	union {
@@ -79,6 +83,10 @@ struct service {
 	int status_fd[2];
 	struct io *io_status;
 
+	unsigned int throttle_secs;
+	time_t exit_failure_last;
+	unsigned int exit_failures_in_sec;
+
 	/* Login process's notify fd. We change its seek position to
 	   communicate state to login processes. */
 	int login_notify_fd;
@@ -103,6 +111,8 @@ struct service {
 	unsigned int have_inet_listeners:1;
 	/* service_login_notify()'s last notification state */
 	unsigned int last_login_full_notify:1;
+	/* service has exited at least once with exit code 0 */
+	unsigned int have_successful_exits:1;
 };
 
 struct service_list {
@@ -126,6 +136,7 @@ struct service_list {
 
 	ARRAY_DEFINE(services, struct service *);
 
+	unsigned int destroying:1;
 	unsigned int destroyed:1;
 	unsigned int sigterm_sent:1;
 	unsigned int sigterm_sent_to_log:1;
@@ -138,7 +149,7 @@ int services_create(const struct master_settings *set,
 		    struct service_list **services_r, const char **error_r);
 
 /* Destroy services */
-void services_destroy(struct service_list *service_list);
+void services_destroy(struct service_list *service_list, bool wait);
 
 void service_list_ref(struct service_list *service_list);
 void service_list_unref(struct service_list *service_list);

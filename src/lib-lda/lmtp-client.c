@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -425,11 +425,9 @@ static int lmtp_client_input_line(struct lmtp_client *client, const char *line)
 			return -1;
 		}
 		client->input_state++;
-		o_stream_cork(client->output);
 		if (client->data_header != NULL)
 			o_stream_send_str(client->output, client->data_header);
 		lmtp_client_send_data(client);
-		o_stream_uncork(client->output);
 		break;
 	case LMTP_INPUT_STATE_DATA:
 		/* DATA replies */
@@ -445,8 +443,10 @@ static void lmtp_client_input(struct lmtp_client *client)
 	const char *line;
 
 	lmtp_client_ref(client);
+	o_stream_cork(client->output);
 	while ((line = i_stream_read_next_line(client->input)) != NULL) {
 		if (lmtp_client_input_line(client, line) < 0) {
+			o_stream_uncork(client->output);
 			lmtp_client_unref(&client);
 			return;
 		}
@@ -461,6 +461,7 @@ static void lmtp_client_input(struct lmtp_client *client)
 		lmtp_client_fail(client, ERRSTR_TEMP_REMOTE_FAILURE
 				 " (disconnected in input)");
 	}
+	o_stream_uncork(client->output);
 	lmtp_client_unref(&client);
 }
 
@@ -537,6 +538,9 @@ int lmtp_client_connect_tcp(struct lmtp_client *client,
 			    const char *host, unsigned int port)
 {
 	struct dns_lookup_settings dns_lookup_set;
+	struct ip_addr *ips;
+	unsigned int ips_count;
+	int ret;
 
 	client->input_state = LMTP_INPUT_STATE_GREET;
 	client->host = p_strdup(client->pool, host);
@@ -553,14 +557,26 @@ int lmtp_client_connect_tcp(struct lmtp_client *client,
 		client->set.dns_client_socket_path;
 	dns_lookup_set.timeout_msecs = LMTP_CLIENT_DNS_LOOKUP_TIMEOUT_MSECS;
 
-	if (net_addr2ip(host, &client->ip) < 0) {
+	if (net_addr2ip(host, &client->ip) == 0) {
+		/* IP address */
+	} else if (dns_lookup_set.dns_client_socket_path == NULL) {
+		/* no dns-client, use blocking lookup */
+		ret = net_gethostbyname(host, &ips, &ips_count);
+		if (ret != 0) {
+			i_error("lmtp client: DNS lookup of %s failed: %s",
+				client->host, net_gethosterror(ret));
+			return -1;
+		}
+		client->ip = ips[0];
+	} else {
 		if (dns_lookup(host, &dns_lookup_set,
 			       lmtp_client_dns_done, client) < 0)
 			return -1;
-	} else {
-		if (lmtp_client_connect(client) < 0)
-			return -1;
+		return 0;
 	}
+
+	if (lmtp_client_connect(client) < 0)
+		return -1;
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -303,7 +303,7 @@ int mdbox_file_create_fd(struct dbox_file *file, const char *path, bool parents)
 	struct mdbox_file *mfile = (struct mdbox_file *)file;
 	struct mdbox_map *map = mfile->storage->map;
 	mode_t old_mask;
-	const char *p, *dir;
+	const char *p, *dir, *error;
 	int fd;
 
 	old_mask = umask(0666 & ~map->create_mode);
@@ -312,12 +312,13 @@ int mdbox_file_create_fd(struct dbox_file *file, const char *path, bool parents)
 	if (fd == -1 && errno == ENOENT && parents &&
 	    (p = strrchr(path, '/')) != NULL) {
 		dir = t_strdup_until(path, p);
-		if (mailbox_list_mkdir(map->root_list, dir,
-				       path != file->alt_path ?
-				       MAILBOX_LIST_PATH_TYPE_DIR :
-				       MAILBOX_LIST_PATH_TYPE_ALT_DIR) < 0) {
-			mail_storage_copy_list_error(&file->storage->storage,
-						     map->root_list);
+		if (mailbox_list_mkdir_root(map->root_list, dir,
+					    path != file->alt_path ?
+					    MAILBOX_LIST_PATH_TYPE_DIR :
+					    MAILBOX_LIST_PATH_TYPE_ALT_DIR,
+					    &error) < 0) {
+			mail_storage_set_critical(&file->storage->storage,
+				"Couldn't create %s: %s", dir, error);
 			return -1;
 		}
 		/* try again */

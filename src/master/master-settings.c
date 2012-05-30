@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "array.h"
@@ -9,6 +9,7 @@
 #include "ipwd.h"
 #include "mkdir-parents.h"
 #include "safe-mkdir.h"
+#include "restrict-process-size.h"
 #include "settings-parser.h"
 #include "master-settings.h"
 
@@ -180,7 +181,7 @@ static const struct setting_define master_setting_defines[] = {
 	DEF(SET_STR, default_login_user),
 	DEF(SET_UINT, default_process_limit),
 	DEF(SET_UINT, default_client_limit),
-	DEF(SET_UINT, default_idle_kill),
+	DEF(SET_TIME, default_idle_kill),
 	DEF(SET_SIZE, default_vsz_limit),
 
 	DEF(SET_BOOL, version_ignore),
@@ -202,7 +203,7 @@ static const struct setting_define master_setting_defines[] = {
 #  define ENV_SYSTEMD ""
 #endif
 #ifdef DEBUG
-#  define ENV_GDB " GDB"
+#  define ENV_GDB " GDB DEBUG_SILENT"
 #else
 #  define ENV_GDB ""
 #endif
@@ -403,9 +404,6 @@ static bool
 master_settings_verify(void *_set, pool_t pool, const char **error_r)
 {
 	static int warned_auth = FALSE, warned_anvil = FALSE;
-#ifdef CONFIG_BINARY
-	const struct service_settings *default_service;
-#endif
 	struct master_settings *set = _set;
 	struct service_settings *const *services;
 	const char *const *strings;
@@ -413,6 +411,13 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 	struct passwd pw;
 	unsigned int i, j, count, len, client_limit, process_limit;
 	unsigned int max_auth_client_processes, max_anvil_client_processes;
+#ifdef CONFIG_BINARY
+	const struct service_settings *default_service;
+#else
+	rlim_t fd_limit;
+	const char *max_client_limit_source = "default_client_count";
+	unsigned int max_client_limit = set->default_client_limit;
+#endif
 
 	len = strlen(set->base_dir);
 	if (len > 0 && set->base_dir[len-1] == '/') {
@@ -537,6 +542,12 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 				"process_limit must be 1", service->name);
 			return FALSE;
 		}
+#else
+		if (max_client_limit < service->client_limit) {
+			max_client_limit = service->client_limit;
+			max_client_limit_source = t_strdup_printf(
+				"service %s { client_limit }", service->name);
+		}
 #endif
 
 		if (*service->protocol != '\0' &&
@@ -544,7 +555,9 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 				   service->protocol)) {
 			/* each imap/pop3/lmtp process can use up a connection,
 			   although if service_count=1 it's only temporary */
-			max_auth_client_processes += process_limit;
+			if (service->service_count != 1 ||
+			    strcmp(service->type, "login") == 0)
+				max_auth_client_processes += process_limit;
 		}
 		if (strcmp(service->type, "login") == 0 ||
 		    strcmp(service->name, "auth") == 0)
@@ -572,6 +585,15 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 			  "required under max. load (%u)",
 			  client_limit, max_anvil_client_processes);
 	}
+#ifndef CONFIG_BINARY
+	if (restrict_get_fd_limit(&fd_limit) == 0 &&
+	    fd_limit < (rlim_t)max_client_limit) {
+		i_warning("fd limit (ulimit -n) is lower than required "
+			  "under max. load (%u < %u), because of %s",
+			  (unsigned int)fd_limit, max_client_limit,
+			  max_client_limit_source);
+	}
+#endif
 
 	/* check for duplicate listeners */
 	array_sort(&all_listeners, i_strcmp_p);

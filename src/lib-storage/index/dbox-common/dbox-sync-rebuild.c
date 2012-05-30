@@ -1,7 +1,8 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
+#include "mail-cache.h"
 #include "mail-index-modseq.h"
 #include "mailbox-list-private.h"
 #include "index-storage.h"
@@ -159,6 +160,12 @@ dbox_sync_index_rebuild_init(struct mailbox *box,
 	index_mailbox_reset_uidvalidity(box);
 	mail_index_ext_lookup(box->index, "cache", &ctx->cache_ext_id);
 
+	/* open cache and read the caching decisions. we'll reset the cache in
+	   case it contains any invalid data, but we want to preserve the
+	   decisions. */
+	(void)mail_cache_open_and_verify(ctx->box->cache);
+	mail_cache_reset(box->cache);
+
 	/* if backup index file exists, try to use it */
 	index_dir = mailbox_list_get_path(box->list, box->name,
 					  MAILBOX_LIST_PATH_TYPE_INDEX);
@@ -183,6 +190,9 @@ void dbox_sync_index_rebuild_deinit(struct dbox_sync_rebuild_context **_ctx)
 	struct dbox_sync_rebuild_context *ctx = *_ctx;
 
 	*_ctx = NULL;
+
+	/* initialize cache file with the old field decisions */
+	(void)mail_cache_compress(ctx->box->cache, ctx->trans);
 	dbox_sync_rebuild_header(ctx);
 	if (ctx->backup_index != NULL) {
 		mail_index_view_close(&ctx->backup_view);
@@ -194,7 +204,7 @@ void dbox_sync_index_rebuild_deinit(struct dbox_sync_rebuild_context **_ctx)
 
 int dbox_sync_rebuild_verify_alt_storage(struct mailbox_list *list)
 {
-	const char *alt_path;
+	const char *alt_path, *error;
 	struct stat st;
 
 	alt_path = mailbox_list_get_path(list, NULL,
@@ -212,8 +222,12 @@ int dbox_sync_rebuild_verify_alt_storage(struct mailbox_list *list)
 
 	/* try to create the alt directory. if it fails, it means alt
 	   storage isn't mounted. */
-	if (mailbox_list_mkdir(list, alt_path,
-			       MAILBOX_LIST_PATH_TYPE_ALT_DIR) < 0)
+	if (mailbox_list_mkdir_root(list, alt_path,
+				    MAILBOX_LIST_PATH_TYPE_ALT_DIR,
+				    &error) < 0) {
+		i_error("Couldn't create dbox alt root dir %s: %s",
+			alt_path, error);
 		return -1;
+	}
 	return 0;
 }

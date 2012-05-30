@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 /* Inside transaction we keep messages stored in sequences in uid fields.
    Before they're written to transaction log the sequences are changed to
@@ -336,13 +336,13 @@ mail_index_expunge_last_append(struct mail_index_transaction *t, uint32_t seq)
 
 void mail_index_expunge(struct mail_index_transaction *t, uint32_t seq)
 {
-	static uint8_t null_guid[MAIL_GUID_128_SIZE] =
+	static guid_128_t null_guid =
 		{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	mail_index_expunge_guid(t, seq, null_guid);
 }
 
 void mail_index_expunge_guid(struct mail_index_transaction *t, uint32_t seq,
-			     const uint8_t guid_128[MAIL_GUID_128_SIZE])
+			     const guid_128_t guid_128)
 {
 	const struct mail_transaction_expunge_guid *expunges;
 	struct mail_transaction_expunge_guid *expunge;
@@ -977,7 +977,7 @@ keyword_update_has_changes(struct mail_index_transaction *t, uint32_t seq,
 
 	t_array_init(&existing, 32);
 	if (seq < t->first_new_seq)
-		mail_index_lookup_keywords(t->view, seq, &existing);
+		mail_index_transaction_lookup_latest_keywords(t, seq, &existing);
 	existing_idx = array_get(&existing, &existing_count);
 
 	if (modify_type == MODIFY_REPLACE && existing_count != keywords->count)

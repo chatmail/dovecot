@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "llist.h"
@@ -29,6 +29,7 @@ struct anvil_connection {
 	unsigned int version_received:1;
 	unsigned int handshaked:1;
 	unsigned int master:1;
+	unsigned int fifo:1;
 };
 
 struct anvil_connection *anvil_connections = NULL;
@@ -39,7 +40,7 @@ anvil_connection_next_line(struct anvil_connection *conn)
 	const char *line;
 
 	line = i_stream_next_line(conn->input);
-	return line == NULL ? NULL : t_strsplit(line, "\t");
+	return line == NULL ? NULL : t_strsplit_tab(line);
 }
 
 static int
@@ -149,8 +150,14 @@ static void anvil_connection_input(void *context)
 
 		if (!version_string_verify(line, "anvil",
 				ANVIL_CLIENT_PROTOCOL_MAJOR_VERSION)) {
+			if (anvil_restarted && (conn->master || conn->fifo)) {
+				/* old pending data. ignore input until we get
+				   the handshake. */
+				anvil_connection_input(context);
+				return;
+			}
 			i_error("Anvil client not compatible with this server "
-				"(mixed old and new binaries?)");
+				"(mixed old and new binaries?) %s", line);
 			anvil_connection_destroy(conn);
 			return;
 		}
@@ -180,12 +187,15 @@ anvil_connection_create(int fd, bool master, bool fifo)
 		conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
 	conn->io = io_add(fd, IO_READ, anvil_connection_input, conn);
 	conn->master = master;
+	conn->fifo = fifo;
 	DLLIST_PREPEND(&anvil_connections, conn);
 	return conn;
 }
 
 void anvil_connection_destroy(struct anvil_connection *conn)
 {
+	bool fifo = conn->fifo;
+
 	DLLIST_REMOVE(&anvil_connections, conn);
 
 	io_remove(&conn->io);
@@ -196,7 +206,8 @@ void anvil_connection_destroy(struct anvil_connection *conn)
 		i_error("close(anvil conn) failed: %m");
 	i_free(conn);
 
-	master_service_client_connection_destroyed(master_service);
+	if (!fifo)
+		master_service_client_connection_destroyed(master_service);
 }
 
 void anvil_connections_destroy_all(void)

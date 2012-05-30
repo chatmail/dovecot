@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -24,6 +24,10 @@ const char *failure_log_type_prefixes[LOG_TYPE_COUNT] = {
 	"Error: ",
 	"Fatal: ",
 	"Panic: "
+};
+
+const char *failure_log_type_names[LOG_TYPE_COUNT] = {
+	"debug", "info", "warning", "error", "fatal", "panic"
 };
 
 /* Initialize working defaults */
@@ -694,9 +698,14 @@ void i_set_failure_timestamp_format(const char *fmt)
         log_stamp_format = i_strdup(fmt);
 }
 
-void i_set_failure_ip(const struct ip_addr *ip)
+void i_set_failure_send_ip(const struct ip_addr *ip)
 {
 	i_failure_send_option("ip", net_ip2addr(ip));
+}
+
+void i_set_failure_send_prefix(const char *prefix)
+{
+	i_failure_send_option("prefix", prefix);
 }
 
 void i_set_failure_exit_callback(void (*callback)(int *status))

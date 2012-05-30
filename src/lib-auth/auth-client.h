@@ -11,10 +11,14 @@ enum auth_request_flags {
 	AUTH_REQUEST_FLAG_SECURED		= 0x01,
 	AUTH_REQUEST_FLAG_VALID_CLIENT_CERT	= 0x02,
 	/* Skip penalty checks for this request */
-	AUTH_REQUEST_FLAG_NO_PENALTY		= 0x04
+	AUTH_REQUEST_FLAG_NO_PENALTY		= 0x04,
+	/* Support final SASL response */
+	AUTH_REQUEST_FLAG_SUPPORT_FINAL_RESP	= 0x08
 };
 
 enum auth_request_status {
+	AUTH_REQUEST_STATUS_ABORT = -3,
+	AUTH_REQUEST_STATUS_INTERNAL_FAIL = -2,
 	AUTH_REQUEST_STATUS_FAIL = -1,
 	AUTH_REQUEST_STATUS_CONTINUE,
 	AUTH_REQUEST_STATUS_OK
@@ -33,6 +37,7 @@ struct auth_connect_id {
 struct auth_request_info {
 	const char *mech;
 	const char *service;
+	const char *session_id;
 	const char *cert_username;
 	enum auth_request_flags flags;
 
@@ -57,7 +62,7 @@ auth_client_init(const char *auth_socket_path, unsigned int client_pid,
 void auth_client_deinit(struct auth_client **client);
 
 void auth_client_connect(struct auth_client *client);
-void auth_client_disconnect(struct auth_client *client);
+void auth_client_disconnect(struct auth_client *client, const char *reason);
 bool auth_client_is_connected(struct auth_client *client);
 bool auth_client_is_disconnected(struct auth_client *client);
 void auth_client_set_connect_notify(struct auth_client *client,

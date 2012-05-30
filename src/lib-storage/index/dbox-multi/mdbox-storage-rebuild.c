@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -21,7 +21,7 @@
 #include <unistd.h>
 
 struct mdbox_rebuild_msg {
-	uint8_t guid_128[MAIL_GUID_128_SIZE];
+	guid_128_t guid_128;
 	uint32_t file_id;
 	uint32_t offset;
 	uint32_t size;
@@ -50,33 +50,12 @@ struct mdbox_storage_rebuild_context {
 	ARRAY_TYPE(seq_range) seen_file_ids;
 
 	uint32_t rebuild_count;
-	uint32_t highest_seen_map_uid;
 	uint32_t highest_file_id;
 
 	struct mailbox_list *default_list;
 
 	struct rebuild_msg_mailbox prev_msg;
 };
-
-static unsigned int guid_hash(const void *p)
-{
-        const uint8_t *s = p;
-	unsigned int i, g, h = 0;
-
-	for (i = 0; i < MAIL_GUID_128_SIZE; i++) {
-		h = (h << 4) + s[i];
-		if ((g = h & 0xf0000000UL)) {
-			h = h ^ (g >> 24);
-			h = h ^ g;
-		}
-	}
-	return h;
-}
-
-static int guid_cmp(const void *p1, const void *p2)
-{
-	return memcmp(p1, p2, MAIL_GUID_128_SIZE);
-}
 
 static struct mdbox_storage_rebuild_context *
 mdbox_storage_rebuild_init(struct mdbox_storage *storage,
@@ -91,7 +70,7 @@ mdbox_storage_rebuild_init(struct mdbox_storage *storage,
 	ctx->atomic = atomic;
 	ctx->pool = pool_alloconly_create("dbox map rebuild", 1024*256);
 	ctx->guid_hash = hash_table_create(default_pool, ctx->pool, 0,
-					   guid_hash, guid_cmp);
+					   guid_128_hash, guid_128_cmp);
 	i_array_init(&ctx->msgs, 512);
 	i_array_init(&ctx->seen_file_ids, 128);
 
@@ -198,7 +177,7 @@ static int rebuild_file_mails(struct mdbox_storage_rebuild_context *ctx,
 		rec->offset = offset;
 		rec->size = file->input->v_offset - offset;
 		mail_generate_guid_128_hash(guid, rec->guid_128);
-		i_assert(!mail_guid_128_is_empty(rec->guid_128));
+		i_assert(!guid_128_is_empty(rec->guid_128));
 		array_append(&ctx->msgs, &rec, 1);
 
 		old_rec = hash_table_lookup(ctx->guid_hash, rec->guid_128);
@@ -477,12 +456,12 @@ static void mdbox_header_update(struct dbox_sync_rebuild_context *rebuild_ctx,
 	}
 
 	/* make sure we have valid mailbox guid */
-	if (mail_guid_128_is_empty(hdr.mailbox_guid)) {
-		if (!mail_guid_128_is_empty(backup_hdr.mailbox_guid)) {
+	if (guid_128_is_empty(hdr.mailbox_guid)) {
+		if (!guid_128_is_empty(backup_hdr.mailbox_guid)) {
 			memcpy(hdr.mailbox_guid, backup_hdr.mailbox_guid,
 			       sizeof(hdr.mailbox_guid));
 		} else {
-			mail_generate_guid_128(hdr.mailbox_guid);
+			guid_128_generate(hdr.mailbox_guid);
 		}
 	}
 
@@ -505,21 +484,15 @@ rebuild_mailbox(struct mdbox_storage_rebuild_context *ctx,
 	struct mail_index_transaction *trans;
 	struct dbox_sync_rebuild_context *rebuild_ctx;
 	enum mail_error error;
-	const char *name;
 	int ret;
 
-	name = mail_namespace_get_storage_name(ns, vname);
-	if (!mailbox_list_is_valid_existing_name(ns->list, name)) {
-		i_warning("Invalid mailbox name: %s", name);
-		return 0;
-	}
-
-	box = mailbox_alloc(ns->list, name, MAILBOX_FLAG_READONLY |
-			    MAILBOX_FLAG_KEEP_RECENT |
+	box = mailbox_alloc(ns->list, vname, MAILBOX_FLAG_READONLY |
 			    MAILBOX_FLAG_IGNORE_ACLS);
 	i_assert(box->storage == &ctx->storage->storage.storage);
-	if (dbox_mailbox_open(box) < 0) {
-		(void)mail_storage_get_last_error(box->storage, &error);
+	if (mailbox_open(box) < 0) {
+		error = mailbox_get_last_mail_error(box);
+		i_error("Couldn't open mailbox '%s': %s",
+			vname, mailbox_get_last_error(box, NULL));
 		mailbox_free(&box);
 		if (error == MAIL_ERROR_TEMP)
 			return -1;
@@ -536,9 +509,6 @@ rebuild_mailbox(struct mdbox_storage_rebuild_context *ctx,
 		mailbox_free(&box);
 		return -1;
 	}
-
-	/* reset cache, just in case it contains invalid data */
-	mail_cache_reset(box->cache);
 
 	rebuild_ctx = dbox_sync_index_rebuild_init(&mbox->box, view, trans);
 	mdbox_header_update(rebuild_ctx, mbox);
@@ -635,6 +605,7 @@ static int rebuild_restore_msg(struct mdbox_storage_rebuild_context *ctx,
 	if (ret > 0 && !deleted && dbox_file_metadata_read(file) > 0) {
 		mailbox = dbox_file_metadata_get(file,
 						 DBOX_METADATA_ORIG_MAILBOX);
+		mailbox = mailbox_list_get_vname(ctx->default_list, mailbox);
 		mailbox = t_strdup(mailbox);
 	}
 	dbox_file_unref(&file);
@@ -653,18 +624,17 @@ static int rebuild_restore_msg(struct mdbox_storage_rebuild_context *ctx,
 	   there. */
 	created = FALSE;
 	box = ctx->prev_msg.box != NULL &&
-		strcmp(mailbox, ctx->prev_msg.box->name) == 0 ?
+		strcmp(mailbox, ctx->prev_msg.box->vname) == 0 ?
 		ctx->prev_msg.box : NULL;
 	while (box == NULL) {
 		box = mailbox_alloc(ctx->default_list, mailbox,
 				    MAILBOX_FLAG_READONLY |
-				    MAILBOX_FLAG_KEEP_RECENT |
 				    MAILBOX_FLAG_IGNORE_ACLS);
 		i_assert(box->storage == storage);
-		if (dbox_mailbox_open(box) == 0)
+		if (mailbox_open(box) == 0)
 			break;
 
-		(void)mail_storage_get_last_error(box->storage, &error);
+		error = mailbox_get_last_mail_error(box);
 		if (error == MAIL_ERROR_NOTFOUND && !created) {
 			/* mailbox doesn't exist currently? see if creating
 			   it helps. */

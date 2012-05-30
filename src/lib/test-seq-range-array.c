@@ -1,10 +1,23 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "array.h"
 #include "seq-range-array.h"
 
 #include <stdlib.h>
+
+static void test_seq_range_array_add_merge(void)
+{
+	ARRAY_TYPE(seq_range) range;
+
+	test_begin("seq_range_array_add() merging");
+	t_array_init(&range, 8);
+	seq_range_array_add(&range, 0, 4);
+	seq_range_array_add(&range, 0, 1);
+	seq_range_array_add(&range, 0, 2);
+	test_assert(array_count(&range) == 2);
+	test_end();
+}
 
 static void test_seq_range_array_random(void)
 {
@@ -53,7 +66,7 @@ static void test_seq_range_array_random(void)
 
 		seqs = array_get(&range, &count);
 		for (j = 0, seq1 = 0; j < count; j++) {
-			if (j > 0 && seqs[j-1].seq2 >= seqs[j].seq1)
+			if (j > 0 && seqs[j-1].seq2+1 >= seqs[j].seq1)
 				goto fail;
 			for (; seq1 < seqs[j].seq1; seq1++) {
 				if (shadowbuf[seq1] != 0)
@@ -156,6 +169,7 @@ static void test_seq_range_array_have_common(void)
 
 void test_seq_range_array(void)
 {
+	test_seq_range_array_add_merge();
 	test_seq_range_array_invert();
 	test_seq_range_array_have_common();
 	test_seq_range_array_random();

@@ -54,6 +54,9 @@ HOWTOs / Examples / Tutorials
     * PostgreSQL, Postfix (Dovecot LDA and Dovecot SASL), Dovecot and vmm
       (command line tool) [http://vmm.localdomain.org/] (also available in
       German [http://de.vmm.localdomain.org/])
+ * SQLite
+    * Postfix+Dovecot with SQLite3 backend [http://rob0.nodns4.us/howto/] (also
+      implements system users)
 
 Others:
 
@@ -80,5 +83,7 @@ Others:
    [http://discussions.apple.com/forum.jspa?forumID=1350]
  * <Postfix + Dspam + Dovecot via LTMP>
    [HowTo.Virtual+Postfix+Dspam+Dovecot.txt]
+ * Postfix + Dovecot2.0.13 + MySQL virtual_users as proxy to DBMail
+   [http://content.fens.org/index.php?q=admin-howto/mail/dovecot2dbmail-proxy]
 
-(This file was created from the wiki on 2012-02-12 04:42)
+(This file was created from the wiki on 2012-04-23 04:42)

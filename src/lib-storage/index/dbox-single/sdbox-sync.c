@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "dbox-attachment.h"
@@ -36,6 +36,7 @@ static void sdbox_sync_file(struct sdbox_sync_context *ctx,
 			    enum sdbox_sync_entry_type type)
 {
 	struct dbox_file *file;
+	enum modify_type modify_type;
 
 	switch (type) {
 	case SDBOX_SYNC_ENTRY_TYPE_EXPUNGE:
@@ -46,6 +47,13 @@ static void sdbox_sync_file(struct sdbox_sync_context *ctx,
 		break;
 	case SDBOX_SYNC_ENTRY_TYPE_MOVE_FROM_ALT:
 	case SDBOX_SYNC_ENTRY_TYPE_MOVE_TO_ALT:
+		/* update flags in the sync transaction, mainly to make
+		   sure that these alt changes get marked as synced
+		   and won't be retried */
+		modify_type = type == SDBOX_SYNC_ENTRY_TYPE_MOVE_TO_ALT ?
+			MODIFY_ADD : MODIFY_REMOVE;
+		mail_index_update_flags(ctx->trans, seq, modify_type,
+					(enum mail_flags)DBOX_INDEX_FLAG_ALT);
 		file = sdbox_file_init(ctx->mbox, uid);
 		dbox_sync_file_move_if_needed(file, type);
 		dbox_file_unref(&file);
@@ -101,7 +109,7 @@ static int sdbox_sync_index(struct sdbox_sync_context *ctx)
 		/* newly created index file */
 		mail_storage_set_critical(box->storage,
 			"sdbox %s: Broken index: missing UIDVALIDITY",
-			box->path);
+			mailbox_get_path(box));
 		return 0;
 	}
 
@@ -142,10 +150,12 @@ static void dbox_sync_expunge_files(struct sdbox_sync_context *ctx)
 
 	/* NOTE: Index is no longer locked. Multiple processes may be unlinking
 	   the files at the same time. */
+	ctx->mbox->box.tmp_sync_view = ctx->sync_view;
 	array_foreach(&ctx->expunged_uids, uidp)
 		dbox_sync_file_expunge(ctx, *uidp);
 	if (ctx->mbox->box.v.sync_notify != NULL)
 		ctx->mbox->box.v.sync_notify(&ctx->mbox->box, 0, 0);
+	ctx->mbox->box.tmp_sync_view = NULL;
 }
 
 static int
@@ -199,6 +209,8 @@ int sdbox_sync_begin(struct sdbox_mailbox *mbox, enum sdbox_sync_flags flags,
 					    &ctx->index_sync_ctx,
 					    &ctx->sync_view, &ctx->trans,
 					    sync_flags);
+		if (mail_index_reset_fscked(mbox->box.index))
+			sdbox_set_mailbox_corrupted(&mbox->box);
 		if (ret <= 0) {
 			if (ret < 0)
 				mail_storage_set_index_error(&mbox->box);
@@ -221,12 +233,10 @@ int sdbox_sync_begin(struct sdbox_mailbox *mbox, enum sdbox_sync_flags flags,
 			if (i >= SDBOX_REBUILD_COUNT) {
 				mail_storage_set_critical(storage,
 					"sdbox %s: Index keeps breaking",
-					ctx->mbox->box.path);
+					mailbox_get_path(&ctx->mbox->box));
 				ret = -1;
 			} else {
 				/* do a full resync and try again. */
-				i_warning("sdbox %s: Rebuilding index",
-					  ctx->mbox->box.path);
 				rebuild = FALSE;
 				ret = sdbox_sync_index_rebuild(mbox,
 							       force_rebuild);
@@ -252,11 +262,13 @@ int sdbox_sync_finish(struct sdbox_sync_context **_ctx, bool success)
 	*_ctx = NULL;
 
 	if (success) {
+		mail_index_view_ref(ctx->sync_view);
 		if (mail_index_sync_commit(&ctx->index_sync_ctx) < 0) {
 			mail_storage_set_index_error(&ctx->mbox->box);
 			ret = -1;
 		} else {
 			dbox_sync_expunge_files(ctx);
+			mail_index_view_close(&ctx->sync_view);
 		}
 	} else {
 		mail_index_sync_rollback(&ctx->index_sync_ctx);
@@ -291,7 +303,10 @@ sdbox_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 			ret = -1;
 	}
 
-	if (ret == 0 && index_mailbox_want_full_sync(&mbox->box, flags)) {
+	if (mail_index_reset_fscked(box->index))
+		sdbox_set_mailbox_corrupted(box);
+	if (ret == 0 && (index_mailbox_want_full_sync(&mbox->box, flags) ||
+			 mbox->corrupted_rebuild_count != 0)) {
 		if ((flags & MAILBOX_SYNC_FLAG_FORCE_RESYNC) != 0)
 			sdbox_sync_flags |= SDBOX_SYNC_FLAG_FORCE_REBUILD;
 		ret = sdbox_sync(mbox, sdbox_sync_flags);

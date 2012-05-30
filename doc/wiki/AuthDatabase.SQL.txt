@@ -203,4 +203,23 @@ user_query = SELECT home, uid, gid FROM users WHERE userid = '%n' AND domain =
 iterate_query = SELECT userid AS username, domain FROM users
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2012-02-12 04:42)
+Authenaticate against Horde
+---------------------------
+
+I use the following in devocot-sql.conf file to authenticate directly against
+the Horde user/password database (with static userdb) on PostgreSQL:
+
+---%<-------------------------------------------------------------------------
+driver = pgsql
+connect = host=localhost dbname=horde user=dovecot password=
+default_pass_scheme = MD5-CRYPT
+password_query = SELECT user_uid AS username, user_pass AS password \
+   FROM horde_users WHERE user_uid = '%u'
+iterate_query = SELECT user_uid AS username FROM users
+---%<-------------------------------------------------------------------------
+
+Note that you will have to change the password encryption in Horde to
+MD5-CRYPT. Also, the example above requires a 'dovecot' user in PostgreSQL with
+read (SELECT) privileges on the 'horde_users' table.
+
+(This file was created from the wiki on 2012-04-23 04:42)

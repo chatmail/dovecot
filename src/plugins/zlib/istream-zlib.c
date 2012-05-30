@@ -1,11 +1,11 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 
 #ifdef HAVE_ZLIB
 
 #include "crc32.h"
-#include "istream-internal.h"
+#include "istream-private.h"
 #include "istream-zlib.h"
 #include <zlib.h>
 

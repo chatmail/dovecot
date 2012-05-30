@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -80,7 +80,7 @@ static void anvil_reconnect(struct anvil_client *client)
 	if (ioloop_time - client->last_reconnect < ANVIL_RECONNECT_MIN_SECS) {
 		if (client->to_reconnect == NULL) {
 			client->to_reconnect =
-				timeout_add(ANVIL_RECONNECT_MIN_SECS,
+				timeout_add(ANVIL_RECONNECT_MIN_SECS*1000,
 					    anvil_reconnect, client);
 		}
 	} else {

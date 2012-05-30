@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -125,7 +125,7 @@ int mail_transaction_log_create(struct mail_transaction_log *log, bool reset)
 
 void mail_transaction_log_close(struct mail_transaction_log *log)
 {
-	mail_transaction_log_views_close(log);
+	i_assert(log->views == NULL);
 
 	if (log->open_file != NULL)
 		mail_transaction_log_file_free(&log->open_file);
@@ -536,6 +536,17 @@ int mail_transaction_log_get_mtime(struct mail_transaction_log *log,
 		return -1;
 	}
 	*mtime_r = st.st_mtime;
+	return 0;
+}
+
+int mail_transaction_log_unlink(struct mail_transaction_log *log)
+{
+	if (unlink(log->filepath) < 0 &&
+	    errno != ENOENT && errno != ESTALE) {
+		mail_index_file_set_syscall_error(log->index, log->filepath,
+						  "unlink()");
+		return -1;
+	}
 	return 0;
 }
 

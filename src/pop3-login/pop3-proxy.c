@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "ioloop.h"
@@ -37,6 +37,18 @@ static void proxy_send_login(struct pop3_client *client, struct ostream *output)
 {
 	string_t *str;
 
+	if (client->proxy_xclient) {
+		/* remote supports XCLIENT, send it */
+		(void)o_stream_send_str(output, t_strdup_printf(
+			"XCLIENT ADDR=%s PORT=%u SESSION=%s\r\n",
+			net_ip2addr(&client->common.ip),
+			client->common.remote_port,
+			client_get_session_id(&client->common)));
+		client->common.proxy_state = POP3_PROXY_XCLIENT;
+	} else {
+		client->common.proxy_state = POP3_PROXY_LOGIN1;
+	}
+
 	str = t_str_new(128);
 	if (client->common.proxy_master_user == NULL) {
 		/* send USER command */
@@ -48,7 +60,6 @@ static void proxy_send_login(struct pop3_client *client, struct ostream *output)
 		str_append(str, "AUTH PLAIN\r\n");
 	}
 	(void)o_stream_send(output, str_data(str), str_len(str));
-	client->common.proxy_state = POP3_PROXY_LOGIN1;
 }
 
 int pop3_proxy_parse_line(struct client *client, const char *line)
@@ -71,6 +82,8 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 			client_proxy_failed(client, TRUE);
 			return -1;
 		}
+		pop3_client->proxy_xclient =
+			strncmp(line+3, " [XCLIENT]", 10) == 0;
 
 		ssl_flags = login_proxy_get_ssl_flags(client->login_proxy);
 		if ((ssl_flags & PROXY_SSL_FLAG_STARTTLS) == 0) {
@@ -96,6 +109,16 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 		output = login_proxy_get_ostream(client->login_proxy);
 		proxy_send_login(pop3_client, output);
 		return 1;
+	case POP3_PROXY_XCLIENT:
+		if (strncmp(line, "+OK", 3) != 0) {
+			client_log_err(client, t_strdup_printf(
+				"proxy: Remote XCLIENT failed: %s",
+				str_sanitize(line, 160)));
+			client_proxy_failed(client, TRUE);
+			return -1;
+		}
+		client->proxy_state = POP3_PROXY_LOGIN1;
+		return 0;
 	case POP3_PROXY_LOGIN1:
 		str = t_str_new(128);
 		if (client->proxy_master_user == NULL) {
@@ -156,6 +179,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 			line += 5;
 		client_proxy_log_failure(client, line);
 	}
+	client->proxy_auth_failed = TRUE;
 	client_proxy_failed(client, FALSE);
 	return -1;
 }

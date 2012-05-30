@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -145,7 +145,7 @@ int dbox_mail_get_save_date(struct mail *_mail, time_t *date_r)
 	if (storage->v.mail_open(mail, &offset, &file) < 0)
 		return -1;
 
-	mail->imail.mail.stats_fstat_lookup_count++;
+	_mail->transaction->stats.fstat_lookup_count++;
 	if (dbox_file_stat(file, &st) < 0) {
 		if (errno == ENOENT)
 			mail_set_expunged(_mail);
@@ -167,8 +167,8 @@ dbox_get_cached_metadata(struct dbox_mail *mail, enum dbox_metadata_key key,
 	string_t *str;
 
 	str = str_new(imail->data_pool, 64);
-	if (mail_cache_lookup_field(imail->trans->cache_view, str,
-				    imail->mail.mail.seq,
+	if (mail_cache_lookup_field(imail->mail.mail.transaction->cache_view,
+				    str, imail->mail.mail.seq,
 				    ibox->cache_fields[cache_field].idx) > 0) {
 		*value_r = str_c(str);
 		return 0;
@@ -234,7 +234,8 @@ get_mail_stream(struct dbox_mail *mail, uoff_t offset,
 		return dbox_attachment_file_get_stream(file, stream_r);
 }
 
-int dbox_mail_get_stream(struct mail *_mail, struct message_size *hdr_size,
+int dbox_mail_get_stream(struct mail *_mail, bool get_body ATTR_UNUSED,
+			 struct message_size *hdr_size,
 			 struct message_size *body_size,
 			 struct istream **stream_r)
 {

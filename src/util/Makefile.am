@@ -6,7 +6,6 @@ pkglibexec_PROGRAMS = \
 	script-login \
 	$(TCPWRAP_BIN) \
 	gdbhelper \
-	listview \
 	maildirlock
 
 AM_CPPFLAGS = \
@@ -28,8 +27,13 @@ rawlog_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 rawlog_SOURCES = \
 	rawlog.c
 
-script_login_LDADD = $(LIBDOVECOT_STORAGE) $(LIBDOVECOT) $(MODULE_LIBS)
-script_login_DEPENDENCIES = $(LIBDOVECOT_STORAGE) $(LIBDOVECOT_DEPS)
+script_login_LDADD = \
+	$(LIBDOVECOT_STORAGE) \
+	$(LIBDOVECOT) \
+	$(MODULE_LIBS)
+script_login_DEPENDENCIES = \
+	$(LIBDOVECOT_STORAGE_DEPS) \
+	$(LIBDOVECOT_DEPS)
 script_login_SOURCES = \
 	script-login.c
 
@@ -51,11 +55,6 @@ gdbhelper_LDADD = $(LIBDOVECOT)
 gdbhelper_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 gdbhelper_SOURCES = \
 	gdbhelper.c
-
-listview_LDADD = $(LIBDOVECOT)
-listview_DEPENDENCIES = $(LIBDOVECOT_DEPS)
-listview_SOURCES = \
-	listview.c
 
 maildirlock_LDADD = $(LIBDOVECOT)
 maildirlock_DEPENDENCIES = $(LIBDOVECOT_DEPS)

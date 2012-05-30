@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -226,9 +226,9 @@ int imap_sync_deinit(struct imap_sync_context *ctx,
 		i_free(ctx);
 		return -1;
 	}
-	mailbox_get_status(ctx->box, STATUS_UIDVALIDITY |
-			   STATUS_MESSAGES | STATUS_RECENT |
-			   STATUS_HIGHESTMODSEQ, &status);
+	mailbox_get_open_status(ctx->box, STATUS_UIDVALIDITY |
+				STATUS_MESSAGES | STATUS_RECENT |
+				STATUS_HIGHESTMODSEQ, &status);
 
 	ret = mailbox_transaction_commit(&ctx->t);
 
@@ -669,8 +669,11 @@ static bool cmd_sync_drop_fast(struct client *client)
 	for (; cmd != NULL; cmd = prev) {
 		prev = cmd->next;
 
-		if (cmd->state == CLIENT_COMMAND_STATE_WAIT_SYNC &&
-		    (cmd->sync->flags & MAILBOX_SYNC_FLAG_FAST) != 0) {
+		if (cmd->state != CLIENT_COMMAND_STATE_WAIT_SYNC)
+			continue;
+
+		i_assert(cmd->sync != NULL);
+		if ((cmd->sync->flags & MAILBOX_SYNC_FLAG_FAST) != 0) {
 			if (cmd_finish_sync(cmd)) {
 				client_command_free(&cmd);
 				ret = TRUE;
@@ -680,7 +683,7 @@ static bool cmd_sync_drop_fast(struct client *client)
 	return ret;
 }
 
-bool cmd_sync_delayed(struct client *client)
+static bool cmd_sync_delayed_real(struct client *client)
 {
 	struct client_command_context *cmd, *first_expunge, *first_nonexpunge;
 
@@ -725,4 +728,14 @@ bool cmd_sync_delayed(struct client *client)
 		return cmd_sync_drop_fast(client);
 	i_assert(client->mailbox != NULL);
 	return cmd_sync_client(cmd);
+}
+
+bool cmd_sync_delayed(struct client *client)
+{
+	bool ret;
+
+	T_BEGIN {
+		ret = cmd_sync_delayed_real(client);
+	} T_END;
+	return ret;
 }

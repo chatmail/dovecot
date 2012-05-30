@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -86,6 +86,11 @@ void mail_index_modseq_enable(struct mail_index *index)
 		}
 	}
 	index->modseqs_enabled = TRUE;
+}
+
+bool mail_index_have_modseq_tracking(struct mail_index *index)
+{
+	return mail_index_map_get_modseq_header(index->map) != NULL;
 }
 
 const struct mail_index_modseq_header *

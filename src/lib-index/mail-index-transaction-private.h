@@ -35,6 +35,7 @@ struct mail_index_transaction {
 	enum mail_index_transaction_flags flags;
 	struct mail_index_transaction_vfuncs v;
 	struct mail_index_view *view;
+	struct mail_index_view *latest_view;
 
 	/* NOTE: If you add anything new, remember to update
 	   mail_index_transaction_reset_v() to reset it. */
@@ -86,6 +87,7 @@ struct mail_index_transaction {
 	unsigned int reset:1;
 	unsigned int index_deleted:1;
 	unsigned int index_undeleted:1;
+	unsigned int commit_deleted_index:1;
 	/* non-extension updates. flag updates don't change this because
 	   they may be added and removed, so be sure to check that the updates
 	   array is non-empty also. */
@@ -120,6 +122,9 @@ mail_index_transaction_get_flag_update_pos(struct mail_index_transaction *t,
 					   unsigned int left_idx,
 					   unsigned int right_idx,
 					   uint32_t seq);
+void mail_index_transaction_lookup_latest_keywords(struct mail_index_transaction *t,
+						   uint32_t seq,
+						   ARRAY_TYPE(keyword_indexes) *keywords);
 
 bool mail_index_cancel_flag_updates(struct mail_index_transaction *t,
 				    uint32_t seq);

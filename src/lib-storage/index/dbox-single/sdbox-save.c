@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -78,9 +78,18 @@ sdbox_save_alloc(struct mailbox_transaction_context *t)
 void sdbox_save_add_file(struct mail_save_context *_ctx, struct dbox_file *file)
 {
 	struct sdbox_save_context *ctx = (struct sdbox_save_context *)_ctx;
+	struct dbox_file *const *files;
+	unsigned int count;
 
 	if (ctx->first_saved_seq == 0)
 		ctx->first_saved_seq = ctx->ctx.seq;
+
+	files = array_get(&ctx->files, &count);
+	if (count > 0) {
+		/* a plugin may leave a previously saved file open.
+		   we'll close it here to avoid eating too many fds. */
+		dbox_file_close(files[count-1]);
+	}
 	array_append(&ctx->files, &file, 1);
 }
 
@@ -116,7 +125,7 @@ static int dbox_save_mail_write_metadata(struct dbox_save_context *ctx,
 	const struct mail_attachment_extref *extrefs;
 	struct dbox_message_header dbox_msg_hdr;
 	uoff_t message_size;
-	uint8_t guid_128[MAIL_GUID_128_SIZE];
+	guid_128_t guid_128;
 	unsigned int i, count;
 
 	i_assert(file->msg_header_size == sizeof(dbox_msg_hdr));
@@ -315,10 +324,11 @@ void sdbox_transaction_save_commit_post(struct mail_save_context *_ctx,
 		ctx->ctx.failed = TRUE;
 
 	if (storage->set->parsed_fsync_mode != FSYNC_MODE_NEVER) {
-		if (fdatasync_path(ctx->mbox->box.path) < 0) {
+		const char *box_path = mailbox_get_path(&ctx->mbox->box);
+
+		if (fdatasync_path(box_path) < 0) {
 			mail_storage_set_critical(storage,
-				"fdatasync_path(%s) failed: %m",
-				ctx->mbox->box.path);
+				"fdatasync_path(%s) failed: %m", box_path);
 		}
 	}
 	sdbox_transaction_save_rollback(_ctx);

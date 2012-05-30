@@ -1,6 +1,7 @@
-/* Copyright (c) 2004-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
+#include "restrict-process-size.h"
 #include "password-scheme.h"
 #include "passdb.h"
 #include "passdb-cache.h"
@@ -52,7 +53,7 @@ bool passdb_cache_verify_plain(struct auth_request *request, const char *key,
 		return TRUE;
 	}
 
-	list = t_strsplit(value, "\t");
+	list = t_strsplit_tab(value);
 
 	cached_pw = list[0];
 	if (*cached_pw == '\0') {
@@ -116,7 +117,7 @@ bool passdb_cache_lookup_credentials(struct auth_request *request,
 		return TRUE;
 	}
 
-	list = t_strsplit(value, "\t");
+	list = t_strsplit_tab(value);
 	auth_request_set_fields(request, list + 1, NULL);
 
 	*result_r = PASSDB_RESULT_OK;
@@ -128,9 +129,18 @@ bool passdb_cache_lookup_credentials(struct auth_request *request,
 
 void passdb_cache_init(const struct auth_settings *set)
 {
+	rlim_t limit;
+
 	if (set->cache_size == 0 || set->cache_ttl == 0)
 		return;
 
+	if (restrict_get_process_size(&limit) == 0 &&
+	    set->cache_size > limit) {
+		i_warning("auth_cache_size (%luM) is higher than "
+			  "process VSZ limit (%luM)",
+			  (unsigned long)(set->cache_size/1024/1024),
+			  (unsigned long)(limit/1024/1024));
+	}
 	passdb_cache = auth_cache_new(set->cache_size, set->cache_ttl,
 				      set->cache_negative_ttl);
 }

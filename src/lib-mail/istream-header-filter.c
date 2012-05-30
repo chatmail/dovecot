@@ -1,9 +1,9 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "message-parser.h"
-#include "istream-internal.h"
+#include "istream-private.h"
 #include "istream-header-filter.h"
 
 #include <stdlib.h>

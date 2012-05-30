@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 /* Logic is pretty much based on dnotify by Oskar Liljeblad. */
 
@@ -7,7 +7,7 @@
 
 #ifdef IOLOOP_NOTIFY_DNOTIFY
 
-#include "ioloop-internal.h"
+#include "ioloop-private.h"
 #include "ioloop-notify-fd.h"
 #include "fd-set-nonblock.h"
 #include "fd-close-on-exec.h"
@@ -87,7 +87,7 @@ static void dnotify_input(struct ioloop *ioloop)
 	for (i = 0; i < ret; i++) {
 		io = io_notify_fd_find(&ctx->fd_ctx, fd_buf[i]);
 		if (io != NULL)
-			io->io.callback(io->io.context);
+			io_loop_call_io(&io->io);
 	}
 }
 

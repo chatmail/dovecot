@@ -1,7 +1,7 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "istream-internal.h"
+#include "istream-private.h"
 #include "test-common.h"
 
 #include <stdio.h>
@@ -185,7 +185,7 @@ void test_out_reason(const char *name, bool success, const char *reason)
 	total_count++;
 }
 
-static void
+static void ATTR_FORMAT(2, 0)
 test_error_handler(const struct failure_context *ctx,
 		   const char *format, va_list args)
 {

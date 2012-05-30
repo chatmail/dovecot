@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -8,8 +8,8 @@
 #include "network.h"
 #include "sendfile-util.h"
 #include "istream.h"
-#include "istream-internal.h"
-#include "ostream-internal.h"
+#include "istream-private.h"
+#include "ostream-private.h"
 
 #include <unistd.h>
 #include <sys/stat.h>
@@ -870,6 +870,14 @@ static off_t o_stream_file_send_istream(struct ostream_private *outstream,
 	return io_stream_copy_stream(outstream, instream, same_stream);
 }
 
+static void o_stream_file_switch_ioloop(struct ostream_private *stream)
+{
+	struct file_ostream *fstream = (struct file_ostream *)stream;
+
+	if (fstream->io != NULL)
+		fstream->io = io_loop_move_io(&fstream->io);
+}
+
 static struct file_ostream *
 o_stream_create_fd_common(int fd, bool autoclose_fd)
 {
@@ -891,6 +899,7 @@ o_stream_create_fd_common(int fd, bool autoclose_fd)
 	fstream->ostream.sendv = o_stream_file_sendv;
 	fstream->ostream.write_at = o_stream_file_write_at;
 	fstream->ostream.send_istream = o_stream_file_send_istream;
+	fstream->ostream.switch_ioloop = o_stream_file_switch_ioloop;
 
 	return fstream;
 }
@@ -924,7 +933,7 @@ o_stream_create_fd(int fd, size_t max_buffer_size, bool autoclose_fd)
 
 	fstream = o_stream_create_fd_common(fd, autoclose_fd);
 	fstream->ostream.max_buffer_size = max_buffer_size;
-	ostream = o_stream_create(&fstream->ostream);
+	ostream = o_stream_create(&fstream->ostream, NULL);
 
 	offset = lseek(fd, 0, SEEK_CUR);
 	if (offset >= 0) {
@@ -960,7 +969,7 @@ o_stream_create_fd_file(int fd, uoff_t offset, bool autoclose_fd)
 	fstream->real_offset = offset;
 	fstream->buffer_offset = offset;
 
-	ostream = o_stream_create(&fstream->ostream);
+	ostream = o_stream_create(&fstream->ostream, NULL);
 	ostream->offset = offset;
 	return ostream;
 }

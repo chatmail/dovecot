@@ -14,9 +14,11 @@ Contents
 
          1. ArchLinux
 
-         2. Debian
+         2. RHEL 6 + clones (CentOS, Scientific Linux, ...)
 
-         3. OpenBSD
+         3. Debian
+
+         4. OpenBSD
 
 Getting the sources
 -------------------
@@ -82,6 +84,16 @@ running:
 pacman -S  pigeonhole
 ---%<-------------------------------------------------------------------------
 
+RHEL 6 + clones (CentOS, Scientific Linux, ...)
+-----------------------------------------------
+
+Pidgeonhole is available in the main repository, and can be installed by
+running:
+
+---%<-------------------------------------------------------------------------
+yum install dovecot-pigeonhole
+---%<-------------------------------------------------------------------------
+
 Debian
 ------
 
@@ -107,4 +119,4 @@ Pidgeonhole can be installed from packages by running:
 pkg_add dovecot-pigeonhole
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2012-02-12 04:42)
+(This file was created from the wiki on 2012-04-23 04:42)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -164,14 +164,16 @@ dict_sql_map_match(const struct dict_sql_map *map, const char *path,
 			return FALSE;
 		}
 	}
+
+	*path_len_r = path - path_start;
+	*pat_len_r = pat - map->pattern;
+
 	if (*pat == '\0')
 		return *path == '\0';
 	else if (!partial_ok)
 		return FALSE;
 	else {
 		/* partial matches must end with '/' */
-		*path_len_r = path - path_start;
-		*pat_len_r = pat - map->pattern;
 		return pat == map->pattern || pat[-1] == '/';
 	}
 }

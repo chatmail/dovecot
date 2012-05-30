@@ -41,4 +41,14 @@ few mails), you'll need to do a rescan:
 doveadm fts rescan -u user@domain
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2012-02-12 04:42)
+Settings (v2.1+)
+----------------
+
+ * 'fts_index_timeout': When SEARCH notices that index isn't up to date, it
+   tells indexer to index the mails and waits until it is finished. This
+   setting adds a maximum timeout to this wait. If the timeout is reached, the
+   SEARCH fails with:'NO [INUSE] Timeout while waiting for indexing to finish'
+ * 'fts_decoder': Decode attachments to plaintext using this service and index
+   the resulting plaintext.
+
+(This file was created from the wiki on 2012-04-23 04:42)
