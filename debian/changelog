@@ -1,8 +1,14 @@
 dovecot (1:2.1.7-1) unstable; urgency=low
 
-  * [7668742] Imported upstream 2.1.7
+  * [7668742] Imported upstream 2.1.7 (Closes: #663243)
+              + doveadm.1 documents the move command. (Closes: #641750)
+  * [4db927a] Patch to enable systemd support.  (Closes: #672266)
+              Thanks Riku Voipio.
+  * [e17ac86] Previous attempt at setting hardening flags did not include the
+              drac plugin.  Simon Ruderich provided an extra patch.
+              (Closes: #653530)
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 29 May 2012 23:50:41 -0400
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 30 May 2012 16:27:21 -0400
 
 dovecot (1:2.1.4-1) experimental; urgency=low
 
