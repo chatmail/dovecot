@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -56,14 +56,6 @@ void mail_transaction_log_view_close(struct mail_transaction_log_view **_view)
 
 	array_free(&view->file_refs);
 	i_free(view);
-}
-
-void mail_transaction_log_views_close(struct mail_transaction_log *log)
-{
-	struct mail_transaction_log_view *view;
-
-	for (view = log->views; view != NULL; view = view->next)
-		view->log = NULL;
 }
 
 int mail_transaction_log_view_set(struct mail_transaction_log_view *view,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -202,9 +202,7 @@ static void test_mail_index_transaction_finish_modseq_updates(void)
 static void test_mail_index_transaction_finish_expunges(void)
 {
 	struct mail_index_transaction *t;
-	uint8_t guid1[MAIL_GUID_128_SIZE];
-	uint8_t guid2[MAIL_GUID_128_SIZE];
-	uint8_t guid3[MAIL_GUID_128_SIZE];
+	guid_128_t guid1, guid2, guid3;
 	const struct mail_transaction_expunge_guid *expunges;
 	struct mail_transaction_expunge_guid expunge;
 	unsigned int i, count;

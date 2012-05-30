@@ -53,8 +53,7 @@ am_lmtp_OBJECTS = main.$(OBJEXT) client.$(OBJEXT) commands.$(OBJEXT) \
 	lmtp-proxy.$(OBJEXT) lmtp-settings.$(OBJEXT)
 lmtp_OBJECTS = $(am_lmtp_OBJECTS)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = $(unused_objects) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
+am__DEPENDENCIES_2 = $(unused_objects) $(am__DEPENDENCIES_1)
 lmtp_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(lmtp_LDFLAGS) \
 	$(LDFLAGS) -o $@
@@ -93,6 +92,7 @@ CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPT_LIBS = @CRYPT_LIBS@
 CURLCONFIG = @CURLCONFIG@
 CURL_CFLAGS = @CURL_CFLAGS@
 CURL_LIBS = @CURL_LIBS@
@@ -132,11 +132,13 @@ LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
+LIBDOVECOT_STORAGE_DEPS = @LIBDOVECOT_STORAGE_DEPS@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
+LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
@@ -153,6 +155,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
+NOPLUGIN_LDFLAGS = @NOPLUGIN_LDFLAGS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -227,6 +230,7 @@ libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
 mail_storages = @mail_storages@
+mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -272,11 +276,19 @@ lmtp_LDFLAGS = -export-dynamic
 
 libs = \
 	$(unused_objects) \
-	$(LIBDOVECOT_STORAGE) \
 	$(LIBDOVECOT_LDA)
 
-lmtp_LDADD = $(libs) $(LIBDOVECOT) $(MODULE_LIBS)
-lmtp_DEPENDENCIES = $(libs) $(LIBDOVECOT_DEPS)
+lmtp_LDADD = \
+	$(libs) \
+	$(LIBDOVECOT_STORAGE) \
+	$(LIBDOVECOT) \
+	$(MODULE_LIBS)
+
+lmtp_DEPENDENCIES = \
+	$(libs) \
+	$(LIBDOVECOT_STORAGE_DEPS) \
+	$(LIBDOVECOT_DEPS)
+
 lmtp_SOURCES = \
 	main.c \
 	client.c \

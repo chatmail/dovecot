@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -59,7 +59,7 @@ void env_clean(void)
 	if (clearenv() < 0)
 		i_fatal("clearenv() failed");
 #else
-	extern char **environ;
+	char ***environ_p = env_get_environ_p();
 
 	/* Try to clear the environment.
 
@@ -68,7 +68,7 @@ void env_clean(void)
 	   c) environ = emptyenv doesn't work on Haiku OS
 	   d) environ = calloc() should work everywhere
 	*/
-	environ = calloc(1, sizeof(*environ));
+	*environ_p = calloc(1, sizeof(**environ_p));
 #endif
 	if (env_pool != NULL)
 		p_clear(env_pool);

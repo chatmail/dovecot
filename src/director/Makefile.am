@@ -8,7 +8,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-master \
-	-DPKG_RUNDIR=\""$(rundir)"\"
+	-I$(top_srcdir)/src/lib-mail
 
 director_LDADD = $(LIBDOVECOT)
 director_DEPENDENCIES = $(LIBDOVECOT_DEPS)

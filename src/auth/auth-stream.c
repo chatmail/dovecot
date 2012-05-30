@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "str.h"
@@ -76,15 +76,16 @@ void auth_stream_reply_remove(struct auth_stream_reply *reply, const char *key)
 	if (!auth_stream_reply_find_area(reply, key, &idx, &len))
 		return;
 
-	if (str_len(reply->str) < idx + len) {
-		/* remove also trailing tab */
-		len++;
-	} else if (str_len(reply->str) == idx + len && idx > 0) {
-		/* removing last item, remove preceding tab */
+	if (idx == 0 && str_len(reply->str) == len) {
+		/* removing the only item */
+	} else if (str_len(reply->str) == idx + len) {
+		/* removing the last item -> remove the preceding tab */
 		len++;
 		idx--;
+	} else {
+		/* remove the trailing tab */
+		len++;
 	}
-
 	str_delete(reply->str, idx, len);
 }
 
@@ -106,6 +107,13 @@ const char *auth_stream_reply_find(struct auth_stream_reply *reply,
 		len -= keylen + 1;
 		return t_strndup(str_c(reply->str) + idx, len);
 	}
+}
+
+bool auth_stream_reply_exists(struct auth_stream_reply *reply, const char *key)
+{
+	unsigned int idx, len;
+
+	return auth_stream_reply_find_area(reply, key, &idx, &len);
 }
 
 void auth_stream_reply_reset(struct auth_stream_reply *reply)

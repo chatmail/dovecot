@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -33,6 +33,10 @@
 /* Maximum difference between current time and create file's ctime before
    logging a warning. Should be less than a second in normal operation. */
 #define MAX_TIME_DIFF 30
+/* NFS may return a cached mtime in stat(). A later non-cached stat() may
+   return a slightly different mtime. Allow the difference to be this much
+   and still consider it to be the same mtime. */
+#define FILE_DOTLOCK_MAX_STAT_MTIME_DIFF 1
 
 struct dotlock {
 	struct dotlock_settings settings;
@@ -530,8 +534,13 @@ dotlock_create(struct dotlock *dotlock, enum dotlock_create_flags flags,
 				try_create_lock_excl(&lock_info, write_pid) :
 				try_create_lock_hardlink(&lock_info, write_pid,
 							 tmp_path, now);
-			if (ret != 0)
+			if (ret != 0) {
+				/* if we succeeded, get the current time once
+				   more in case disk I/O usage was really high
+				   and it took a long time to create the lock */
+				now = time(NULL);
 				break;
+			}
 		}
 
 		if (last_notify != now && set->callback != NULL) {
@@ -699,6 +708,19 @@ static void dotlock_replaced_warning(struct dotlock *dotlock, bool deleted)
 	}
 }
 
+static bool file_dotlock_has_mtime_changed(time_t t1, time_t t2)
+{
+	time_t diff;
+
+	if (t1 == t2)
+		return FALSE;
+
+	/* with NFS t1 may have been looked up from local cache.
+	   allow it to be a little bit different. */
+	diff = t1 > t2 ? t1-t2 : t2-t1;
+	return diff > FILE_DOTLOCK_MAX_STAT_MTIME_DIFF;
+}
+
 int file_dotlock_delete(struct dotlock **dotlock_p)
 {
 	struct dotlock *dotlock;
@@ -729,7 +751,8 @@ int file_dotlock_delete(struct dotlock **dotlock_p)
 		return 0;
 	}
 
-	if (dotlock->mtime != st.st_mtime && dotlock->fd == -1) {
+	if (file_dotlock_has_mtime_changed(dotlock->mtime, st.st_mtime) &&
+	    dotlock->fd == -1) {
 		i_warning("Our dotlock file %s was modified (%s vs %s), "
 			  "assuming it wasn't overridden (kept it %d secs)",
 			  lock_path,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -15,6 +15,7 @@ struct auth_client_request {
 
 	struct auth_server_connection *conn;
 	unsigned int id;
+	time_t created;
 
 	struct auth_request_info request_info;
 
@@ -34,6 +35,8 @@ static void auth_server_send_new_request(struct auth_server_connection *conn,
 	str_append(str, "\tservice=");
 	str_tabescape_write(str, info->service);
 
+	if ((info->flags & AUTH_REQUEST_FLAG_SUPPORT_FINAL_RESP) != 0)
+		str_append(str, "\tfinal-resp-ok");
 	if ((info->flags & AUTH_REQUEST_FLAG_SECURED) != 0)
 		str_append(str, "\tsecured");
 	if ((info->flags & AUTH_REQUEST_FLAG_NO_PENALTY) != 0)
@@ -80,15 +83,16 @@ auth_client_request_new(struct auth_client *client,
 	request->request_info.mech = p_strdup(pool, request_info->mech);
 	request->request_info.service = p_strdup(pool, request_info->service);
 	request->request_info.cert_username =
-		p_strdup(pool, request_info->cert_username);
+		p_strdup_empty(pool, request_info->cert_username);
 	request->request_info.initial_resp_base64 =
-		p_strdup(pool, request_info->initial_resp_base64);
+		p_strdup_empty(pool, request_info->initial_resp_base64);
 	
 	request->callback = callback;
 	request->context = context;
 
 	request->id =
 		auth_server_connection_add_request(request->conn, request);
+	request->created = ioloop_time;
 	T_BEGIN {
 		auth_server_send_new_request(request->conn, request);
 	} T_END;
@@ -133,7 +137,7 @@ void auth_client_request_abort(struct auth_client_request **_request)
 	*_request = NULL;
 
 	auth_client_send_cancel(request->conn->client, request->id);
-	call_callback(request, AUTH_REQUEST_STATUS_FAIL, NULL, NULL);
+	call_callback(request, AUTH_REQUEST_STATUS_ABORT, NULL, NULL);
 }
 
 unsigned int auth_client_request_get_id(struct auth_client_request *request)
@@ -155,6 +159,11 @@ const char *auth_client_request_get_cookie(struct auth_client_request *request)
 bool auth_client_request_is_aborted(struct auth_client_request *request)
 {
 	return request->callback == NULL;
+}
+
+time_t auth_client_request_get_create_time(struct auth_client_request *request)
+{
+	return request->created;
 }
 
 void auth_client_request_server_input(struct auth_client_request *request,
@@ -182,6 +191,8 @@ void auth_client_request_server_input(struct auth_client_request *request,
 		args = NULL;
 		break;
 	case AUTH_REQUEST_STATUS_FAIL:
+	case AUTH_REQUEST_STATUS_INTERNAL_FAIL:
+	case AUTH_REQUEST_STATUS_ABORT:
 		break;
 	}
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -8,6 +8,11 @@
 #include "message-date.h"
 
 #include <ctype.h>
+
+/* RFC specifies ':' as the only allowed separator,
+   but be forgiving also for some broken ones */
+#define IS_TIME_SEP(c) \
+	((c) == ':' || (c) == '.')
 
 struct message_date_parser_context {
 	struct rfc822_parser_context parser;
@@ -189,7 +194,7 @@ message_date_parser_tokens(struct message_date_parser_context *ctx,
 	}
 
 	/* :mm (may be the last token) */
-	if (*ctx->parser.data != ':')
+	if (!IS_TIME_SEP(*ctx->parser.data))
 		return FALSE;
 	ctx->parser.data++;
 	(void)rfc822_skip_lwsp(&ctx->parser);
@@ -200,7 +205,8 @@ message_date_parser_tokens(struct message_date_parser_context *ctx,
 	tm.tm_min = (value[0]-'0') * 10 + (value[1]-'0');
 
 	/* [:ss] */
-	if (ctx->parser.data != ctx->parser.end && *ctx->parser.data == ':') {
+	if (ctx->parser.data != ctx->parser.end &&
+	    IS_TIME_SEP(*ctx->parser.data)) {
 		ctx->parser.data++;
 		(void)rfc822_skip_lwsp(&ctx->parser);
 

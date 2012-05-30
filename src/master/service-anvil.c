@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "ioloop.h"
@@ -125,6 +125,7 @@ void service_anvil_process_destroyed(struct service_process *process)
 
 	if (service_anvil_global->pid == process->pid)
 		service_anvil_global->pid = 0;
+	service_anvil_global->restarted = TRUE;
 }
 
 void service_anvil_send_log_fd(void)

@@ -1,12 +1,13 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "str.h"
 #include "hex-binary.h"
 #include "file-lock.h"
+#include "message-parser.h"
+#include "message-part-serialize.h"
 #include "mail-index-private.h"
-#include "mail-cache-private.h"
 #include "mail-cache-private.h"
 #include "mail-index-modseq.h"
 #include "doveadm-dump.h"
@@ -34,17 +35,22 @@ struct mbox_index_header {
 };
 struct sdbox_index_header {
 	uint32_t rebuild_count;
-	uint8_t mailbox_guid[MAIL_GUID_128_SIZE];
+	guid_128_t mailbox_guid;
 };
 struct mdbox_index_header {
 	uint32_t map_uid_validity;
-	uint8_t mailbox_guid[MAIL_GUID_128_SIZE];
+	guid_128_t mailbox_guid;
 };
 struct mdbox_mail_index_record {
 	uint32_t map_uid;
 	uint32_t save_date;
 };
 
+struct fts_index_header {
+	uint32_t last_indexed_uid;
+	uint32_t settings_checksum;
+	uint32_t unused;
+};
 struct virtual_mail_index_header {
 	uint32_t change_counter;
 	uint32_t mailbox_count;
@@ -97,8 +103,6 @@ static void dump_hdr(struct mail_index *index)
 		printf("log file tail offset ..... = %u\n", hdr->log_file_tail_offset);
 		printf("log file head offset ..... = %u\n", hdr->log_file_head_offset);
 	}
-	printf("sync size ................ = %llu\n", (unsigned long long)hdr->sync_size);
-	printf("sync stamp ............... = %u (%s)\n", hdr->sync_stamp, unixdate2str(hdr->sync_stamp));
 	printf("day stamp ................ = %u (%s)\n", hdr->day_stamp, unixdate2str(hdr->day_stamp));
 	for (i = 0; i < N_ELEMENTS(hdr->day_first_uid); i++)
 		printf("day first uid[%u] ......... = %u\n", i, hdr->day_first_uid[i]);
@@ -142,24 +146,21 @@ static void dump_extension_header(struct mail_index *index,
 		       (unsigned long long)hdr->sync_size);
 		printf(" - dirty_flag . = %d\n", hdr->dirty_flag);
 		printf(" - mailbox_guid = %s\n",
-		       binary_to_hex(hdr->mailbox_guid,
-				     sizeof(hdr->mailbox_guid)));
+		       guid_128_to_string(hdr->mailbox_guid));
 	} else if (strcmp(ext->name, "mdbox-hdr") == 0) {
 		const struct mdbox_index_header *hdr = data;
 
 		printf("header\n");
 		printf(" - map_uid_validity .. = %u\n", hdr->map_uid_validity);
 		printf(" - mailbox_guid ...... = %s\n",
-		       binary_to_hex(hdr->mailbox_guid,
-				     sizeof(hdr->mailbox_guid)));
+		       guid_128_to_string(hdr->mailbox_guid));
 	} else if (strcmp(ext->name, "dbox-hdr") == 0) {
 		const struct sdbox_index_header *hdr = data;
 
 		printf("header\n");
 		printf(" - rebuild_count . = %u\n", hdr->rebuild_count);
 		printf(" - mailbox_guid .. = %s\n",
-		       binary_to_hex(hdr->mailbox_guid,
-				     sizeof(hdr->mailbox_guid)));
+		       guid_128_to_string(hdr->mailbox_guid));
 	} else if (strcmp(ext->name, "modseq") == 0) {
 		const struct mail_index_modseq_header *hdr = data;
 
@@ -168,6 +169,14 @@ static void dump_extension_header(struct mail_index *index,
 		       (unsigned long long)hdr->highest_modseq);
 		printf(" - log_seq ...... = %u\n", hdr->log_seq);
 		printf(" - log_offset ... = %u\n", hdr->log_offset);
+	} else if (strcmp(ext->name, "fts") == 0) {
+		const struct fts_index_header *hdr = data;
+
+		printf("header\n");
+		printf(" - last_indexed_uid ..... = %u\n",
+		       hdr->last_indexed_uid);
+		printf(" - settings_checksum .... = %u\n",
+		       hdr->settings_checksum);
 	} else if (strcmp(ext->name, "virtual") == 0) {
 		const struct virtual_mail_index_header *hdr = data;
 		const struct virtual_mail_index_mailbox_record *rec;
@@ -334,8 +343,43 @@ static void dump_cache_hdr(struct mail_cache *cache)
 			printf("   - ");
 		printf("%-4s %.16s\n",
 		       cache_decision2str(field->decision),
-		       unixdate2str(cache->fields[cache_idx].last_used));
+		       unixdate2str(field->last_used));
 	}
+}
+
+static void dump_message_part(string_t *str, const struct message_part *part)
+{
+	for (; part != NULL; part = part->next) {
+		str_append_c(str, '(');
+		str_printfa(str, "pos=%"PRIuUOFF_T" ", part->physical_pos);
+		str_printfa(str, "hdr.p=%"PRIuUOFF_T" ", part->header_size.physical_size);
+		str_printfa(str, "hdr.v=%"PRIuUOFF_T" ", part->header_size.virtual_size);
+		str_printfa(str, "body.p=%"PRIuUOFF_T" ", part->body_size.physical_size);
+		str_printfa(str, "body.v=%"PRIuUOFF_T" ", part->body_size.virtual_size);
+		str_printfa(str, "flags=%x", part->flags);
+		if (part->children != NULL) {
+			str_append_c(str, ' ');
+			dump_message_part(str, part->children);
+		}
+		str_append_c(str, ')');
+	}
+}
+
+static void
+dump_cache_mime_parts(string_t *str, const void *data, unsigned int size)
+{
+	const struct message_part *part;
+	const char *error;
+
+	str_append_c(str, ' ');
+
+	part = message_part_deserialize(pool_datastack_create(), data, size, &error);
+	if (part == NULL) {
+		str_printfa(str, "error: %s", error);
+		return;
+	}
+
+	dump_message_part(str, part);
 }
 
 static void dump_cache(struct mail_cache_view *cache_view, unsigned int seq)
@@ -379,6 +423,8 @@ static void dump_cache(struct mail_cache_view *cache_view, unsigned int seq)
 		case MAIL_CACHE_FIELD_VARIABLE_SIZE:
 		case MAIL_CACHE_FIELD_BITMASK:
 			str_printfa(str, "(%s)", binary_to_hex(data, size));
+			if (strcmp(field->name, "mime.parts") == 0)
+				dump_cache_mime_parts(str, data, size);
 			break;
 		case MAIL_CACHE_FIELD_STRING:
 			if (size > 0)
@@ -571,7 +617,7 @@ static void cmd_dump_index(int argc ATTR_UNUSED, char *argv[])
 			} T_END;
 		}
 	}
-	mail_cache_view_close(cache_view);
+	mail_cache_view_close(&cache_view);
 	mail_index_view_close(&view);
 	mail_index_close(index);
 	mail_index_free(&index);

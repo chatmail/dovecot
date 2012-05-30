@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -261,7 +261,6 @@ static int smtp_client_send(struct smtp_client *smtp_client)
 	client_set.mail_from = smtp_client->return_path == NULL ? "<>" :
 		t_strconcat("<", smtp_client->return_path, ">", NULL);
 	client_set.my_hostname = smtp_client->set->hostname;
-	client_set.dns_client_socket_path = "dns-client";
 
 	ioloop = io_loop_create();
 	client = lmtp_client_init(&client_set, smtp_client_send_finished,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -255,13 +255,13 @@ static int
 mbox_save_init_file(struct mbox_save_context *ctx,
 		    struct mbox_transaction_context *t, bool want_mail)
 {
-	struct mailbox_transaction_context *_t = &t->ictx.mailbox_ctx;
+	struct mailbox_transaction_context *_t = &t->t;
 	struct mbox_mailbox *mbox = ctx->mbox;
 	struct mail_storage *storage = &mbox->storage->storage;
 	bool empty = FALSE;
 	int ret;
 
-	if (ctx->mbox->box.backend_readonly) {
+	if (mbox_is_backend_readonly(ctx->mbox)) {
 		mail_storage_set_error(storage, MAIL_ERROR_PERM,
 				       "Read-only mbox");
 		return -1;
@@ -337,7 +337,7 @@ static void save_header_callback(struct message_header_line *hdr,
 		}
 
 		if (!*matched && ctx->mbox_md5_ctx != NULL)
-			mbox_md5_continue(ctx->mbox_md5_ctx, hdr);
+			ctx->mbox->md5_v.more(ctx->mbox_md5_ctx, hdr);
 	}
 }
 
@@ -463,7 +463,7 @@ int mbox_save_begin(struct mail_save_context *_ctx, struct istream *input)
 	str_truncate(ctx->headers, 0);
 	if (ctx->synced) {
 		if (ctx->mbox->mbox_save_md5)
-			ctx->mbox_md5_ctx = mbox_md5_init();
+			ctx->mbox_md5_ctx = ctx->mbox->md5_v.init();
 		if (ctx->next_uid < _ctx->uid) {
 			/* we can use the wanted UID */
 			ctx->next_uid = _ctx->uid;
@@ -502,8 +502,7 @@ int mbox_save_begin(struct mail_save_context *_ctx, struct istream *input)
 			}
 			_ctx->dest_mail = ctx->mail;
 		}
-		mail_set_seq(_ctx->dest_mail, ctx->seq);
-		_ctx->dest_mail->saving = TRUE;
+		mail_set_seq_saving(_ctx->dest_mail, ctx->seq);
 	}
 	mbox_save_append_flag_headers(ctx->headers, save_flags);
 	mbox_save_append_keyword_headers(ctx, _ctx->keywords);
@@ -635,9 +634,9 @@ int mbox_save_continue(struct mail_save_context *_ctx)
 			hdr.value = hdr.full_value =
 				hdr.middle + hdr.middle_len;
 			hdr.value_len = strlen((const char *)hdr.value);
-			mbox_md5_continue(ctx->mbox_md5_ctx, &hdr);
+			ctx->mbox->md5_v.more(ctx->mbox_md5_ctx, &hdr);
 		}
-		mbox_md5_finish(ctx->mbox_md5_ctx, hdr_md5_sum);
+		ctx->mbox->md5_v.finish(ctx->mbox_md5_ctx, hdr_md5_sum);
 		mail_index_update_ext(ctx->trans, ctx->seq,
 				      ctx->mbox->md5hdr_ext_idx,
 				      hdr_md5_sum, NULL);
@@ -770,7 +769,8 @@ int mbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 
 		buf.modtime = st.st_mtime;
 		buf.actime = ctx->orig_atime;
-		if (utime(mbox->box.path, &buf) < 0 && errno != EPERM)
+		if (utime(mailbox_get_path(&mbox->box), &buf) < 0 &&
+		    errno != EPERM)
 			mbox_set_syscall_error(mbox, "utime()");
 	}
 

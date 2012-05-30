@@ -2,6 +2,7 @@
 #define AUTH_REQUEST_H
 
 #include "network.h"
+#include "var-expand.h"
 #include "mech.h"
 #include "userdb.h"
 #include "passdb.h"
@@ -105,18 +106,24 @@ struct auth_request {
 	unsigned int prefer_plain_credentials:1;
 	unsigned int proxy:1;
 	unsigned int proxy_maybe:1;
+	unsigned int proxy_always:1;
+	unsigned int proxy_host_is_self:1;
 	unsigned int valid_client_cert:1;
 	unsigned int no_penalty:1;
 	unsigned int cert_username:1;
 	unsigned int userdb_lookup:1;
 	unsigned int userdb_lookup_failed:1;
 	unsigned int secured:1;
+	unsigned int final_resp_ok:1;
 	unsigned int removed_from_handler:1;
 
 	/* ... mechanism specific data ... */
 };
 
+typedef void auth_request_proxy_cb_t(bool success, struct auth_request *);
+
 extern unsigned int auth_request_state_count[AUTH_REQUEST_STATE_MAX];
+extern const struct var_expand_table auth_request_var_expand_static_tab[];
 
 struct auth_request *
 auth_request_new(const struct mech_module *mech);
@@ -166,6 +173,9 @@ bool auth_request_set_login_username(struct auth_request *request,
 void auth_request_set_field(struct auth_request *request,
 			    const char *name, const char *value,
 			    const char *default_scheme);
+void auth_request_set_field_keyvalue(struct auth_request *request,
+				     const char *field,
+				     const char *default_scheme);
 void auth_request_set_fields(struct auth_request *request,
 			     const char *const *fields,
 			     const char *default_scheme);
@@ -176,7 +186,10 @@ void auth_request_set_userdb_field(struct auth_request *request,
 void auth_request_set_userdb_field_values(struct auth_request *request,
 					  const char *name,
 					  const char *const *values);
-void auth_request_proxy_finish(struct auth_request *request, bool success);
+/* returns -1 = failed, 0 = callback is called later, 1 = finished */
+int auth_request_proxy_finish(struct auth_request *request,
+			      auth_request_proxy_cb_t *callback);
+void auth_request_proxy_finish_failure(struct auth_request *request);
 
 void auth_request_log_password_mismatch(struct auth_request *request,
 					const char *subsystem);
@@ -199,7 +212,7 @@ void auth_request_log_info(struct auth_request *auth_request,
 			   const char *format, ...) ATTR_FORMAT(3, 4);
 void auth_request_log_warning(struct auth_request *auth_request,
 			      const char *subsystem,
-			      const char *format, ...);
+			      const char *format, ...) ATTR_FORMAT(3, 4);
 void auth_request_log_error(struct auth_request *auth_request,
 			    const char *subsystem,
 			    const char *format, ...) ATTR_FORMAT(3, 4);

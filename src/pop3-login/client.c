@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -22,18 +22,6 @@
 /* Disconnect client when it sends too many bad commands */
 #define CLIENT_MAX_BAD_COMMANDS 10
 
-const struct login_binary login_binary = {
-	.protocol = "pop3",
-	.process_name = "pop3-login",
-	.default_port = 110,
-	.default_ssl_port = 995
-};
-
-void login_process_preinit(void)
-{
-	login_set_roots = pop3_login_setting_roots;
-}
-
 static bool cmd_stls(struct pop3_client *client)
 {
 	client_cmd_starttls(&client->common);
@@ -44,6 +32,43 @@ static bool cmd_quit(struct pop3_client *client)
 {
 	client_send_line(&client->common, CLIENT_CMD_REPLY_OK, "Logging out");
 	client_destroy(&client->common, "Aborted login");
+	return TRUE;
+}
+
+static bool cmd_xclient(struct pop3_client *client, const char *args)
+{
+	const char *const *tmp;
+	unsigned int remote_port;
+	bool args_ok = TRUE;
+
+	if (!client->common.trusted) {
+		client_send_line(&client->common, CLIENT_CMD_REPLY_BAD,
+				 "You are not from trusted IP");
+		return TRUE;
+	}
+	for (tmp = t_strsplit(args, " "); *tmp != NULL; tmp++) {
+		if (strncasecmp(*tmp, "ADDR=", 5) == 0) {
+			if (net_addr2ip(*tmp + 5, &client->common.ip) < 0)
+				args_ok = FALSE;
+		} else if (strncasecmp(*tmp, "PORT=", 5) == 0) {
+			if (str_to_uint(*tmp + 5, &remote_port) < 0 ||
+			    remote_port == 0 || remote_port > 65535)
+				args_ok = FALSE;
+			else
+				client->common.remote_port = remote_port;
+		} else if (strncasecmp(*tmp, "SESSION=", 8) == 0) {
+			client->common.session_id =
+				p_strdup(client->common.pool, *tmp + 8);
+		}
+	}
+	if (!args_ok) {
+		client_send_line(&client->common, CLIENT_CMD_REPLY_BAD,
+				 "Invalid parameters");
+		return TRUE;
+	}
+
+	/* args ok, set them and reset the state */
+	client_send_line(&client->common, CLIENT_CMD_REPLY_OK, "Updated");
 	return TRUE;
 }
 
@@ -65,6 +90,8 @@ static bool client_command_execute(struct pop3_client *client, const char *cmd,
 		return cmd_stls(client);
 	if (strcmp(cmd, "QUIT") == 0)
 		return cmd_quit(client);
+	if (strcmp(cmd, "XCLIENT") == 0)
+		return cmd_xclient(client, args);
 
 	client_send_line(&client->common, CLIENT_CMD_REPLY_BAD,
 			 "Unknown command.");
@@ -161,18 +188,20 @@ static char *get_apop_challenge(struct pop3_client *client)
 static void pop3_client_send_greeting(struct client *client)
 {
 	struct pop3_client *pop3_client = (struct pop3_client *)client;
+	string_t *str;
 
 	client->io = io_add(client->fd, IO_READ, client_input, client);
 
-	pop3_client->apop_challenge = get_apop_challenge(pop3_client);
-	if (pop3_client->apop_challenge == NULL) {
-		client_send_line(client, CLIENT_CMD_REPLY_OK,
-				 client->set->login_greeting);
-	} else {
-		client_send_line(client, CLIENT_CMD_REPLY_OK,
-			t_strconcat(client->set->login_greeting, " ",
-				    pop3_client->apop_challenge, NULL));
+	str = t_str_new(128);
+	if (client->trusted) {
+		/* Dovecot extension to avoid extra roundtrip for CAPA */
+		str_append(str, "[XCLIENT] ");
 	}
+	str_append(str, client->set->login_greeting);
+	pop3_client->apop_challenge = get_apop_challenge(pop3_client);
+	if (pop3_client->apop_challenge != NULL)
+		str_printfa(str, " %s", pop3_client->apop_challenge);
+	client_send_line(client, CLIENT_CMD_REPLY_OK, str_c(str));
 	client->greeting_sent = TRUE;
 }
 
@@ -224,18 +253,23 @@ static void pop3_login_die(void)
 	/* do nothing. pop3 connections typically die pretty quick anyway. */
 }
 
-void clients_init(void)
+static void pop3_login_preinit(void)
+{
+	login_set_roots = pop3_login_setting_roots;
+}
+
+static void pop3_login_init(void)
 {
 	/* override the default login_die() */
 	master_service_set_die_callback(master_service, pop3_login_die);
 }
 
-void clients_deinit(void)
+static void pop3_login_deinit(void)
 {
 	clients_destroy_all();
 }
 
-struct client_vfuncs client_vfuncs = {
+static struct client_vfuncs pop3_client_vfuncs = {
 	pop3_client_alloc,
 	pop3_client_create,
 	pop3_client_destroy,
@@ -249,3 +283,22 @@ struct client_vfuncs client_vfuncs = {
 	pop3_proxy_reset,
 	pop3_proxy_parse_line
 };
+
+static const struct login_binary pop3_login_binary = {
+	.protocol = "pop3",
+	.process_name = "pop3-login",
+	.default_port = 110,
+	.default_ssl_port = 995,
+
+	.client_vfuncs = &pop3_client_vfuncs,
+	.preinit = pop3_login_preinit,
+	.init = pop3_login_init,
+	.deinit = pop3_login_deinit,
+
+	.sasl_support_final_reply = FALSE
+};
+
+int main(int argc, char *argv[])
+{
+	return login_binary_run(&pop3_login_binary, argc, argv);
+}

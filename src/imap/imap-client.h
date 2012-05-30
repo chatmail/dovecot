@@ -2,6 +2,7 @@
 #define IMAP_CLIENT_H
 
 #include "imap-commands.h"
+#include "message-size.h"
 
 #define CLIENT_COMMAND_QUEUE_MAX_SIZE 4
 /* Maximum number of CONTEXT=SEARCH UPDATEs. Clients probably won't need more
@@ -86,9 +87,19 @@ struct client_command_context {
 	unsigned int temp_executed:1; /* temporary execution state tracking */
 };
 
+struct partial_fetch_cache {
+	unsigned int select_counter;
+	unsigned int uid;
+
+	uoff_t physical_start;
+	bool cr_skipped;
+	struct message_size pos;
+};
+
 struct client {
 	struct client *prev, *next;
 
+	const char *session_id;
 	int fd_in, fd_out;
 	struct io *io;
 	struct istream *input;
@@ -121,6 +132,8 @@ struct client {
 
 	uint64_t sync_last_full_modseq;
 	uint64_t highest_fetch_modseq;
+
+	struct partial_fetch_cache last_partial;
 
 	/* SEARCHRES extension: Last saved SEARCH result */
 	ARRAY_TYPE(seq_range) search_saved_uidset;
@@ -158,7 +171,8 @@ extern unsigned int imap_client_count;
 
 /* Create new client with specified input/output handles. socket specifies
    if the handle is a socket. */
-struct client *client_create(int fd_in, int fd_out, struct mail_user *user,
+struct client *client_create(int fd_in, int fd_out, const char *session_id,
+			     struct mail_user *user,
 			     struct mail_storage_service_user *service_user,
 			     const struct imap_settings *set);
 void client_destroy(struct client *client, const char *reason);
@@ -193,7 +207,7 @@ bool client_read_string_args(struct client_command_context *cmd,
    have to wait for an existing SEARCH SAVE to finish. */
 bool client_handle_search_save_ambiguity(struct client_command_context *cmd);
 
-void client_enable(struct client *client, enum mailbox_feature features);
+int client_enable(struct client *client, enum mailbox_feature features);
 
 struct imap_search_update *
 client_search_update_lookup(struct client *client, const char *tag,

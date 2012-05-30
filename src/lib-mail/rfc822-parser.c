@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -231,7 +231,7 @@ int rfc822_parse_quoted_string(struct rfc822_parser_context *ctx, string_t *str)
 			if (ctx->data == ctx->end)
 				return -1;
 
-			str_append_n(str, start, ctx->data - start);
+			str_append_n(str, start, ctx->data - start - 1);
 			start = ctx->data;
 			break;
 		}

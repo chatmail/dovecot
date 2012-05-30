@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -17,6 +17,7 @@
 #define DIRECTOR_RECONNECT_TIMEOUT_MSECS (30*1000)
 #define DIRECTOR_USER_MOVE_TIMEOUT_MSECS (30*1000)
 #define DIRECTOR_USER_MOVE_FINISH_DELAY_MSECS (2*1000)
+#define DIRECTOR_SYNC_TIMEOUT_MSECS (15*1000)
 
 static bool director_is_self_ip_set(struct director *dir)
 {
@@ -48,7 +49,7 @@ static void director_find_self_ip(struct director *dir)
 	i_fatal("director_servers doesn't list ourself");
 }
 
-static void director_find_self(struct director *dir)
+void director_find_self(struct director *dir)
 {
 	if (dir->self_host != NULL)
 		return;
@@ -80,12 +81,26 @@ static unsigned int director_find_self_idx(struct director *dir)
 	i_unreached();
 }
 
+static bool
+director_has_outgoing_connection(struct director *dir,
+				 struct director_host *host)
+{
+	struct director_connection *const *connp;
+
+	array_foreach(&dir->connections, connp) {
+		if (director_connection_get_host(*connp) == host &&
+		    !director_connection_is_incoming(*connp))
+			return TRUE;
+	}
+	return FALSE;
+}
+
 int director_connect_host(struct director *dir, struct director_host *host)
 {
 	unsigned int port;
 	int fd;
 
-	if (director_connection_find_outgoing(dir, host) != NULL)
+	if (director_has_outgoing_connection(dir, host))
 		return 0;
 
 	if (dir->debug) {
@@ -95,13 +110,13 @@ int director_connect_host(struct director *dir, struct director_host *host)
 	port = dir->test_port != 0 ? dir->test_port : host->port;
 	fd = net_connect_ip(&host->ip, port, &dir->self_ip);
 	if (fd == -1) {
-		host->last_failed = ioloop_time;
+		host->last_network_failure = ioloop_time;
 		i_error("connect(%s) failed: %m", host->name);
 		return -1;
 	}
 	/* Reset timestamp so that director_connect() won't skip this host
 	   while we're still trying to connect to it */
-	host->last_failed = 0;
+	host->last_network_failure = 0;
 
 	director_connection_init_out(dir, fd, host);
 	return 0;
@@ -114,8 +129,10 @@ director_get_preferred_right_host(struct director *dir)
 	unsigned int count, self_idx;
 
 	hosts = array_get(&dir->dir_hosts, &count);
-	if (count == 1)
+	if (count == 1) {
+		/* self */
 		return NULL;
+	}
 
 	self_idx = director_find_self_idx(dir);
 	return hosts[(self_idx + 1) % count];
@@ -126,7 +143,6 @@ void director_connect(struct director *dir)
 	struct director_host *const *hosts;
 	unsigned int i, count, self_idx;
 
-	director_find_self(dir);
 	self_idx = director_find_self_idx(dir);
 
 	/* try to connect to first working server on our right side.
@@ -135,9 +151,15 @@ void director_connect(struct director *dir)
 	for (i = 1; i < count; i++) {
 		unsigned int idx = (self_idx + i) % count;
 
-		if (hosts[idx]->last_failed +
+		if (hosts[idx]->last_network_failure +
 		    DIRECTOR_RECONNECT_RETRY_SECS > ioloop_time) {
-			/* failed recently, don't try retrying here */
+			/* connection failed recently, don't try retrying here */
+			continue;
+		}
+		if (hosts[idx]->last_protocol_failure +
+		    DIRECTOR_PROTOCOL_FAILURE_RETRY_SECS > ioloop_time) {
+			/* the director recently sent invalid protocol data,
+			   don't try retrying yet */
 			continue;
 		}
 
@@ -155,6 +177,7 @@ void director_connect(struct director *dir)
 			   it must have failed recently */
 			director_connection_deinit(&dir->left);
 		}
+		dir->ring_min_version = DIRECTOR_VERSION_MINOR;
 		if (!dir->ring_handshaked)
 			director_set_ring_handshaked(dir);
 		else
@@ -188,7 +211,9 @@ static void director_reconnect_timeout(struct director *dir)
 	cur_host = dir->right == NULL ? NULL :
 		director_connection_get_host(dir->right);
 
-	if (cur_host != preferred_host)
+	if (preferred_host == NULL) {
+		/* all directors have been removed, try again later */
+	} else if (cur_host != preferred_host)
 		(void)director_connect_host(dir, preferred_host);
 	else {
 		/* the connection hasn't finished sync yet.
@@ -225,8 +250,75 @@ void director_set_ring_synced(struct director *dir)
 			timeout_remove(&dir->to_reconnect);
 	}
 
+	if (dir->left != NULL)
+		director_connection_set_synced(dir->left, TRUE);
+	if (dir->right != NULL)
+		director_connection_set_synced(dir->right, TRUE);
+	if (dir->to_sync != NULL)
+		timeout_remove(&dir->to_sync);
 	dir->ring_synced = TRUE;
+	dir->ring_last_sync_time = ioloop_time;
 	director_set_state_changed(dir);
+}
+
+void director_sync_send(struct director *dir, struct director_host *host,
+			uint32_t seq, unsigned int minor_version)
+{
+	string_t *str;
+
+	str = t_str_new(128);
+	str_printfa(str, "SYNC\t%s\t%u\t%u",
+		    net_ip2addr(&host->ip), host->port, seq);
+	if (minor_version > 0 &&
+	    director_connection_get_minor_version(dir->right) > 0) {
+		/* only minor_version>0 supports this parameter */
+		str_printfa(str, "\t%u", minor_version);
+	}
+	str_append_c(str, '\n');
+	director_connection_send(dir->right, str_c(str));
+
+	/* ping our connections in case either of them are hanging.
+	   if they are, we want to know it fast. */
+	if (dir->left != NULL)
+		director_connection_ping(dir->left);
+	if (dir->right != NULL)
+		director_connection_ping(dir->right);
+}
+
+bool director_resend_sync(struct director *dir)
+{
+	if (!dir->ring_synced && dir->left != NULL && dir->right != NULL) {
+		/* send a new SYNC in case the previous one got dropped */
+		director_sync_send(dir, dir->self_host, dir->sync_seq,
+				   DIRECTOR_VERSION_MINOR);
+		if (dir->to_sync != NULL)
+			timeout_reset(dir->to_sync);
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static void director_sync_timeout(struct director *dir)
+{
+	i_assert(!dir->ring_synced);
+
+	if (director_resend_sync(dir))
+		i_error("Ring SYNC appears to have got lost, resending");
+}
+
+void director_set_ring_unsynced(struct director *dir)
+{
+	if (dir->ring_synced) {
+		dir->ring_synced = FALSE;
+		dir->ring_last_sync_time = ioloop_time;
+	}
+
+	if (dir->to_sync == NULL) {
+		dir->to_sync = timeout_add(DIRECTOR_SYNC_TIMEOUT_MSECS,
+					   director_sync_timeout, dir);
+	} else {
+		timeout_reset(dir->to_sync);
+	}
 }
 
 static void director_sync(struct director *dir)
@@ -243,7 +335,7 @@ static void director_sync(struct director *dir)
 
 	/* we're synced again when we receive this SYNC back */
 	dir->sync_seq++;
-	dir->ring_synced = FALSE;
+	director_set_ring_unsynced(dir);
 
 	if (dir->debug) {
 		i_debug("Ring is desynced (seq=%u, sending SYNC to %s)",
@@ -251,28 +343,32 @@ static void director_sync(struct director *dir)
 			director_connection_get_name(dir->right));
 	}
 
+	/* send PINGs to our connections more rapidly until we've synced again.
+	   if the connection has actually died, we don't need to wait (and
+	   delay requests) for as long to detect it */
 	if (dir->left != NULL)
-		director_connection_wait_sync(dir->left);
-	director_connection_wait_sync(dir->right);
-	director_connection_send(dir->right, t_strdup_printf(
-		"SYNC\t%s\t%u\t%u\n", net_ip2addr(&dir->self_ip),
-		dir->self_port, dir->sync_seq));
+		director_connection_set_synced(dir->left, FALSE);
+	director_connection_set_synced(dir->right, FALSE);
+	director_sync_send(dir, dir->self_host, dir->sync_seq,
+			   DIRECTOR_VERSION_MINOR);
 }
 
 void director_sync_freeze(struct director *dir)
 {
+	struct director_connection *const *connp;
+
 	i_assert(!dir->sync_frozen);
 	i_assert(!dir->sync_pending);
 
-	if (dir->left != NULL)
-		director_connection_cork(dir->left);
-	if (dir->right != NULL)
-		director_connection_cork(dir->right);
+	array_foreach(&dir->connections, connp)
+		director_connection_cork(*connp);
 	dir->sync_frozen = TRUE;
 }
 
 void director_sync_thaw(struct director *dir)
 {
+	struct director_connection *const *connp;
+
 	i_assert(dir->sync_frozen);
 
 	dir->sync_frozen = FALSE;
@@ -280,10 +376,8 @@ void director_sync_thaw(struct director *dir)
 		dir->sync_pending = FALSE;
 		director_sync(dir);
 	}
-	if (dir->left != NULL)
-		director_connection_uncork(dir->left);
-	if (dir->right != NULL)
-		director_connection_uncork(dir->right);
+	array_foreach(&dir->connections, connp)
+		director_connection_uncork(*connp);
 }
 
 void director_update_host(struct director *dir, struct director_host *src,
@@ -346,9 +440,29 @@ void director_flush_host(struct director *dir, struct director_host *src,
 void director_update_user(struct director *dir, struct director_host *src,
 			  struct user *user)
 {
+	i_assert(src != NULL);
+
+	i_assert(!user->weak);
+	director_update_send(dir, src, t_strdup_printf("USER\t%u\t%s\n",
+		user->username_hash, net_ip2addr(&user->host->ip)));
+}
+
+void director_update_user_weak(struct director *dir, struct director_host *src,
+			       struct director_host *orig_src,
+			       struct user *user)
+{
+	i_assert(src != NULL);
+	i_assert(user->weak);
+
+	if (orig_src == NULL) {
+		orig_src = dir->self_host;
+		orig_src->last_seq++;
+	}
+
 	director_update_send(dir, src, t_strdup_printf(
-		"USER\t%u\t%s\n", user->username_hash,
-		net_ip2addr(&user->host->ip)));
+		"USER-WEAK\t%s\t%u\t%u\t%u\t%s\n",
+		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq,
+		user->username_hash, net_ip2addr(&user->host->ip)));
 }
 
 struct director_user_kill_finish_ctx {
@@ -393,7 +507,7 @@ struct director_kill_context {
 static void
 director_finish_user_kill(struct director *dir, struct user *user, bool self)
 {
-	if (dir->right == NULL || dir->right == dir->left) {
+	if (dir->right == NULL) {
 		/* we're alone */
 		director_user_kill_finish_delayed(dir, user);
 	} else if (self ||
@@ -562,12 +676,14 @@ void director_set_state_changed(struct director *dir)
 void director_update_send(struct director *dir, struct director_host *src,
 			  const char *cmd)
 {
+	struct director_connection *const *connp;
+
 	i_assert(src != NULL);
 
-	if (dir->left != NULL)
-		director_connection_send_except(dir->left, src, cmd);
-	if (dir->right != NULL && dir->right != dir->left)
-		director_connection_send_except(dir->right, src, cmd);
+	array_foreach(&dir->connections, connp) {
+		if (director_connection_get_host(*connp) != src)
+			director_connection_send(*connp, cmd);
+	}
 }
 
 struct director *
@@ -576,7 +692,6 @@ director_init(const struct director_settings *set,
 	      director_state_change_callback_t *callback)
 {
 	struct director *dir;
-	const char *path;
 
 	dir = i_new(struct director, 1);
 	dir->set = set;
@@ -585,11 +700,13 @@ director_init(const struct director_settings *set,
 	dir->state_change_callback = callback;
 	i_array_init(&dir->dir_hosts, 16);
 	i_array_init(&dir->pending_requests, 16);
-	dir->users = user_directory_init(set->director_user_expire);
+	i_array_init(&dir->connections, 8);
+	dir->users = user_directory_init(set->director_user_expire,
+					 set->director_username_hash);
 	dir->mail_hosts = mail_hosts_init();
 
-	path = t_strconcat(set->base_dir, "/" DIRECTOR_IPC_PROXY_PATH, NULL);
-	dir->ipc_proxy = ipc_client_init(path);
+	dir->ipc_proxy = ipc_client_init(DIRECTOR_IPC_PROXY_PATH);
+	dir->ring_min_version = DIRECTOR_VERSION_MINOR;
 	return dir;
 }
 
@@ -597,10 +714,16 @@ void director_deinit(struct director **_dir)
 {
 	struct director *dir = *_dir;
 	struct director_host *const *hostp;
+	struct director_connection *conn, *const *connp;
 
 	*_dir = NULL;
 
-	director_connections_deinit(dir);
+	while (array_count(&dir->connections) > 0) {
+		connp = array_idx(&dir->connections, 0);
+		conn = *connp;
+		director_connection_deinit(&conn);
+	}
+
 	user_directory_deinit(&dir->users);
 	mail_hosts_deinit(&dir->mail_hosts);
 	mail_hosts_deinit(&dir->orig_config_hosts);
@@ -612,9 +735,12 @@ void director_deinit(struct director **_dir)
 		timeout_remove(&dir->to_handshake_warning);
 	if (dir->to_request != NULL)
 		timeout_remove(&dir->to_request);
+	if (dir->to_sync != NULL)
+		timeout_remove(&dir->to_sync);
 	array_foreach(&dir->dir_hosts, hostp)
 		director_host_free(*hostp);
 	array_free(&dir->pending_requests);
 	array_free(&dir->dir_hosts);
+	array_free(&dir->connections);
 	i_free(dir);
 }

@@ -6,6 +6,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-settings \
 	-DPKG_RUNDIR=\""$(rundir)"\" \
+	-DPKG_STATEDIR=\""$(statedir)"\" \
 	-DSYSCONFDIR=\""$(pkgsysconfdir)"\" \
 	-DBINDIR=\""$(bindir)"\"
 
@@ -14,11 +15,13 @@ libmaster_la_SOURCES = \
 	ipc-client.c \
 	ipc-server.c \
 	master-auth.c \
+	master-instance.c \
 	master-login.c \
 	master-login-auth.c \
 	master-service.c \
 	master-service-settings.c \
 	master-service-settings-cache.c \
+	mountpoint-list.c \
 	syslog-util.c
 
 headers = \
@@ -26,6 +29,7 @@ headers = \
 	ipc-client.h \
 	ipc-server.h \
 	master-auth.h \
+	master-instance.h \
 	master-interface.h \
 	master-login.h \
 	master-login-auth.h \
@@ -34,6 +38,7 @@ headers = \
 	master-service-settings.h \
 	master-service-settings-cache.h \
 	service-settings.h \
+	mountpoint-list.h \
 	syslog-util.h
 
 pkginc_libdir=$(pkgincludedir)

@@ -1,7 +1,7 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "istream-internal.h"
+#include "istream-private.h"
 #include "istream-crlf.h"
 
 struct crlf_istream {

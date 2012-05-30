@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hex-binary.h"
@@ -204,8 +204,6 @@ static struct {
 	HDRF(log_file_seq),
 	HDRF(log_file_tail_offset),
 	HDRF(log_file_head_offset),
-	HDRF(sync_size),
-	HDRF(sync_stamp),
 	HDRF(day_stamp)
 };
 

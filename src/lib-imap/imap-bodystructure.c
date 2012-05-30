@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -360,6 +360,7 @@ static void part_write_body_multipart(const struct message_part *part,
 static void part_write_body(const struct message_part *part,
 			    string_t *str, bool extended)
 {
+#define NVL(str, nullstr) ((str) != NULL ? (str) : (nullstr))
 	struct message_part_body_data *data = part->context;
 	bool text;
 
@@ -714,7 +715,7 @@ bool imap_body_parse_from_bodystructure(const char *bodystructure,
 	if (!ret)
 		i_error("Error parsing IMAP bodystructure: %s", bodystructure);
 
-	imap_parser_destroy(&parser);
+	imap_parser_unref(&parser);
 	i_stream_destroy(&input);
 	return ret;
 }

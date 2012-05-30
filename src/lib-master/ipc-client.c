@@ -1,4 +1,4 @@
-/* Copyright (c) 2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -113,6 +113,7 @@ static void ipc_client_disconnect(struct ipc_client *client)
 	o_stream_destroy(&client->output);
 	if (close(client->fd) < 0)
 		i_error("close(%s) failed: %m", client->path);
+	client->fd = -1;
 }
 
 struct ipc_client *

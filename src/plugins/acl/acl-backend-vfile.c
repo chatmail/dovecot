@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -11,6 +11,7 @@
 #include "file-dotlock.h"
 #include "nfs-workarounds.h"
 #include "mail-storage-private.h"
+#include "mailbox-list-private.h"
 #include "mail-namespace.h"
 #include "acl-cache.h"
 #include "acl-backend-vfile.h"
@@ -127,13 +128,14 @@ static void acl_backend_vfile_deinit(struct acl_backend *_backend)
 static const char *
 acl_backend_vfile_get_local_dir(struct acl_backend *backend, const char *name)
 {
-	struct mail_namespace *ns;
+	struct mail_namespace *ns = mailbox_list_get_namespace(backend->list);
 	const char *dir, *inbox;
 
 	if (*name == '\0')
 		name = NULL;
+	else if (!mailbox_list_is_valid_existing_name(ns->list, name))
+		return NULL;
 
-	ns = mailbox_list_get_namespace(backend->list);
 	if (mail_storage_is_mailbox_file(ns->storage)) {
 		dir = mailbox_list_get_path(ns->list, name,
 					    MAILBOX_LIST_PATH_TYPE_CONTROL);
@@ -161,21 +163,16 @@ acl_backend_vfile_object_init(struct acl_backend *_backend,
 	struct acl_backend_vfile *backend =
 		(struct acl_backend_vfile *)_backend;
 	struct acl_object_vfile *aclobj;
-	const char *dir;
+	const char *dir, *vname;
 
 	aclobj = i_new(struct acl_object_vfile, 1);
 	aclobj->aclobj.backend = _backend;
 	aclobj->aclobj.name = i_strdup(name);
 
 	if (backend->global_dir != NULL) T_BEGIN {
-		struct mail_namespace *ns =
-			mailbox_list_get_namespace(_backend->list);
-		string_t *vname;
-
-		vname = t_str_new(128);
-		mail_namespace_get_vname(ns, vname, name);
+		vname = mailbox_list_get_vname(backend->backend.list, name);
 		aclobj->global_path = i_strconcat(backend->global_dir, "/",
-						  str_c(vname), NULL);
+						  vname, NULL);
 	} T_END;
 
 	dir = acl_backend_vfile_get_local_dir(_backend, name);
@@ -190,7 +187,7 @@ get_parent_mailbox(struct acl_backend *backend, const char *name)
 	struct mail_namespace *ns = mailbox_list_get_namespace(backend->list);
 	const char *p;
 
-	p = strrchr(name, ns->real_sep);
+	p = strrchr(name, mail_namespace_get_sep(ns));
 	return p == NULL ? NULL : t_strdup_until(name, p);
 }
 
@@ -867,9 +864,7 @@ static int acl_backend_vfile_update_begin(struct acl_object_vfile *aclobj,
 					  struct dotlock **dotlock_r)
 {
 	struct acl_object *_aclobj = &aclobj->aclobj;
-	const char *gid_origin;
-	mode_t mode;
-	gid_t gid;
+	struct mailbox_permissions perm;
 	int fd;
 
 	if (aclobj->local_path == NULL) {
@@ -879,10 +874,12 @@ static int acl_backend_vfile_update_begin(struct acl_object_vfile *aclobj,
 	}
 
 	/* first lock the ACL file */
-	mailbox_list_get_permissions(_aclobj->backend->list, _aclobj->name,
-				     &mode, &gid, &gid_origin);
+	mailbox_list_get_permissions(_aclobj->backend->list,
+				     _aclobj->name, &perm);
 	fd = file_dotlock_open_group(&dotlock_set, aclobj->local_path, 0,
-				     mode, gid, gid_origin, dotlock_r);
+				     perm.file_create_mode,
+				     perm.file_create_gid,
+				     perm.file_create_gid_origin, dotlock_r);
 	if (fd == -1) {
 		i_error("file_dotlock_open(%s) failed: %m", aclobj->local_path);
 		return -1;

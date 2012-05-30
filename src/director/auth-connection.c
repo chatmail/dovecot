@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -38,6 +38,7 @@ static void auth_connection_input(struct auth_connection *conn)
 		return;
 	case -1:
 		/* disconnected */
+		i_error("Auth server disconnected unexpectedly");
 		auth_connection_disconnected(&conn);
 		return;
 	case -2:

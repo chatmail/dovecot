@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2001-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "env-util.h"
@@ -14,7 +14,7 @@ size_t nearest_power(size_t num)
 {
 	size_t n = 1;
 
-	i_assert(num <= ((size_t)1 << (BITS_IN_SIZE_T-1)));
+	i_assert(num <= ((size_t)1 << (CHAR_BIT*sizeof(size_t) - 1)));
 
 	while (n < num) n <<= 1;
 	return n;

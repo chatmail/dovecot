@@ -1,21 +1,16 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
 #include "istream.h"
 #include "str.h"
 #include "str-find.h"
-#include "charset-utf8.h"
 #include "rfc822-parser.h"
 #include "message-decoder.h"
 #include "message-parser.h"
 #include "message-search.h"
 
 struct message_search_context {
-	char *key;
-	char *key_charset;
-	unsigned int key_len;
-
 	enum message_search_flags flags;
 	struct str_find_context *str_find_ctx;
 	struct message_part *prev_part;
@@ -24,45 +19,23 @@ struct message_search_context {
 	unsigned int content_type_text:1; /* text/any or message/any */
 };
 
-static int
-message_search_init_real(const char *key, const char *charset,
-			 enum message_search_flags flags,
-			 struct message_search_context **ctx_r)
+struct message_search_context *
+message_search_init(const char *key_utf8,
+		    enum message_search_flags flags)
 {
+	enum message_decoder_flags decoder_flags = 0;
 	struct message_search_context *ctx;
-	string_t *key_utf8;
-	enum charset_result result;
-	int ret;
 
-	key_utf8 = t_str_new(128);
-	if (charset_to_utf8_str(charset, CHARSET_FLAG_DECOMP_TITLECASE,
-				key, key_utf8, &result) < 0)
-		ret = 0;
-	else if (result != CHARSET_RET_OK)
-		ret = -1;
-	else {
-		ctx = *ctx_r = i_new(struct message_search_context, 1);
-		ctx->key = i_strdup(str_c(key_utf8));
-		ctx->key_len = str_len(key_utf8);
-		ctx->key_charset = i_strdup(charset);
-		ctx->flags = flags;
-		ctx->decoder = message_decoder_init(MESSAGE_DECODER_FLAG_DTCASE);
-		ctx->str_find_ctx = str_find_init(default_pool, ctx->key);
-		ret = 1;
-	}
-	return ret;
-}
+	i_assert(*key_utf8 != '\0');
 
-int message_search_init(const char *key, const char *charset,
-			enum message_search_flags flags,
-			struct message_search_context **ctx_r)
-{
-	int ret;
+	if ((flags & MESSAGE_SEARCH_FLAG_DTCASE) != 0)
+		decoder_flags |= MESSAGE_DECODER_FLAG_DTCASE;
 
-	T_BEGIN {
-		ret = message_search_init_real(key, charset, flags, ctx_r);
-	} T_END;
-	return ret;
+	ctx = i_new(struct message_search_context, 1);
+	ctx->flags = flags;
+	ctx->decoder = message_decoder_init(decoder_flags);
+	ctx->str_find_ctx = str_find_init(default_pool, key_utf8);
+	return ctx;
 }
 
 void message_search_deinit(struct message_search_context **_ctx)
@@ -72,8 +45,6 @@ void message_search_deinit(struct message_search_context **_ctx)
 	*_ctx = NULL;
 	str_find_deinit(&ctx->str_find_ctx);
 	message_decoder_deinit(&ctx->decoder);
-	i_free(ctx->key);
-	i_free(ctx->key_charset);
 	i_free(ctx);
 }
 

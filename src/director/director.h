@@ -4,6 +4,17 @@
 #include "network.h"
 #include "director-settings.h"
 
+#define DIRECTOR_VERSION_NAME "director"
+#define DIRECTOR_VERSION_MAJOR 1
+#define DIRECTOR_VERSION_MINOR 1
+
+/* weak users supported in protocol v1.1+ */
+#define DIRECTOR_VERSION_WEAK_USERS 1
+
+/* Minimum time between even attempting to communicate with a director that
+   failed due to a protocol error. */
+#define DIRECTOR_PROTOCOL_FAILURE_RETRY_SECS 60
+
 struct director;
 struct mail_host;
 struct user;
@@ -20,10 +31,15 @@ struct director {
 	unsigned int test_port;
 
 	struct director_host *self_host;
+	/* left and right connections are set only after they have finished
+	   handshaking. until then they're in the connections list, although
+	   updates are still sent to them during handshaking if the USER list
+	   is long. */
 	struct director_connection *left, *right;
 	/* all director connections */
-	struct director_connection *connections;
+	ARRAY_DEFINE(connections, struct director_connection *);
 	struct timeout *to_reconnect;
+	struct timeout *to_sync;
 
 	/* current mail hosts */
 	struct mail_host_list *mail_hosts;
@@ -45,6 +61,9 @@ struct director {
 
 	struct ipc_client *ipc_proxy;
 	unsigned int sync_seq;
+	/* the lowest minor version supported by the ring */
+	unsigned int ring_min_version;
+	time_t ring_last_sync_time;
 
 	/* director ring handshaking is complete.
 	   director can start serving clients. */
@@ -65,13 +84,18 @@ director_init(const struct director_settings *set,
 	      const struct ip_addr *listen_ip, unsigned int listen_port,
 	      director_state_change_callback_t *callback);
 void director_deinit(struct director **dir);
+void director_find_self(struct director *dir);
 
 /* Start connecting to other directors */
 void director_connect(struct director *dir);
 
 void director_set_ring_handshaked(struct director *dir);
 void director_set_ring_synced(struct director *dir);
+void director_set_ring_unsynced(struct director *dir);
 void director_set_state_changed(struct director *dir);
+void director_sync_send(struct director *dir, struct director_host *host,
+			uint32_t seq, unsigned int minor_version);
+bool director_resend_sync(struct director *dir);
 
 void director_update_host(struct director *dir, struct director_host *src,
 			  struct director_host *orig_src,
@@ -84,6 +108,9 @@ void director_flush_host(struct director *dir, struct director_host *src,
 			 struct mail_host *host);
 void director_update_user(struct director *dir, struct director_host *src,
 			  struct user *user);
+void director_update_user_weak(struct director *dir, struct director_host *src,
+			       struct director_host *orig_src,
+			       struct user *user);
 void director_move_user(struct director *dir, struct director_host *src,
 			struct director_host *orig_src,
 			unsigned int username_hash, struct mail_host *host);
@@ -92,6 +119,7 @@ void director_user_killed_everywhere(struct director *dir,
 				     struct director_host *src,
 				     struct director_host *orig_src,
 				     unsigned int username_hash);
+void director_user_weak(struct director *dir, struct user *user);
 
 void director_sync_freeze(struct director *dir);
 void director_sync_thaw(struct director *dir);

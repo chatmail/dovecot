@@ -1,8 +1,8 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
-#include "istream-internal.h"
+#include "istream-private.h"
 #include "istream-concat.h"
 
 struct concat_istream {
@@ -92,7 +92,7 @@ static ssize_t i_stream_concat_read(struct istream_private *stream)
 	bool last_stream;
 
 	if (cstream->cur_input == NULL) {
-		stream->istream.eof = TRUE;
+		stream->istream.stream_errno = EINVAL;
 		return -1;
 	}
 
@@ -188,6 +188,9 @@ find_v_offset(struct concat_istream *cstream, uoff_t *v_offset)
 			/* we'll need to figure out this stream's size */
 			st = i_stream_stat(cstream->input[i], TRUE);
 			if (st == NULL) {
+				i_error("istream-concat: "
+					"Failed to get size of stream %s",
+					i_stream_get_name(cstream->input[i]));
 				cstream->istream.istream.stream_errno =
 					cstream->input[i]->stream_errno;
 				return (unsigned int)-1;
@@ -217,7 +220,9 @@ static void i_stream_concat_seek(struct istream_private *stream,
 
 	cstream->cur_idx = find_v_offset(cstream, &v_offset);
 	if (cstream->cur_idx == (unsigned int)-1) {
+		/* failed */
 		cstream->cur_input = NULL;
+		stream->istream.stream_errno = EINVAL;
 		return;
 	}
 	cstream->cur_input = cstream->input[cstream->cur_idx];

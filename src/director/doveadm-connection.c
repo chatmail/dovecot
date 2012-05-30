@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -99,6 +99,7 @@ static void doveadm_cmd_director_list(struct doveadm_connection *conn)
 	string_t *str = t_str_new(1024);
 	const char *type;
 	bool left, right;
+	time_t last_failed;
 
 	array_foreach(&dir->dir_hosts, hostp) {
 		const struct director_host *host = *hostp;
@@ -116,9 +117,12 @@ static void doveadm_cmd_director_list(struct doveadm_connection *conn)
 			type = "right";
 		else
 			type = "";
+
+		last_failed = I_MAX(host->last_network_failure,
+				    host->last_protocol_failure);
 		str_printfa(str, "%s\t%u\t%s\t%lu\n",
 			    net_ip2addr(&host->ip), host->port, type,
-			    (unsigned long)host->last_failed);
+			    (unsigned long)last_failed);
 	}
 	str_append_c(str, '\n');
 	o_stream_send(conn->output, str_data(str), str_len(str));
@@ -223,7 +227,7 @@ doveadm_cmd_user_lookup(struct doveadm_connection *conn, const char *line)
 	string_t *str = t_str_new(256);
 
 	if (str_to_uint(line, &username_hash) < 0)
-		username_hash = user_directory_get_username_hash(line);
+		username_hash = user_directory_get_username_hash(conn->dir->users, line);
 
 	/* get user's current host */
 	user = user_directory_lookup(conn->dir->users, username_hash);
@@ -309,7 +313,7 @@ doveadm_cmd_user_move(struct doveadm_connection *conn, const char *line)
 	}
 
 	if (str_to_uint(args[0], &username_hash) < 0)
-		username_hash = user_directory_get_username_hash(line);
+		username_hash = user_directory_get_username_hash(conn->dir->users, line);
 	user = user_directory_lookup(conn->dir->users, username_hash);
 	if (user != NULL && user->kill_state != USER_KILL_STATE_NONE) {
 		o_stream_send_str(conn->output, "TRYAGAIN\n");

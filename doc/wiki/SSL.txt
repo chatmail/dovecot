@@ -57,4 +57,4 @@ this documentation only talks about SSL when in fact it means both SSL/TLS.
  * Dovecot uses OpenSSL, so whatever information you find about it applies also
    to Dovecot.
 
-(This file was created from the wiki on 2012-02-12 04:42)
+(This file was created from the wiki on 2012-04-09 04:42)

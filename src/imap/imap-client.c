@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "ioloop.h"
@@ -32,7 +32,8 @@ static void client_idle_timeout(struct client *client)
 	client_destroy(client, "Disconnected for inactivity");
 }
 
-struct client *client_create(int fd_in, int fd_out, struct mail_user *user,
+struct client *client_create(int fd_in, int fd_out, const char *session_id,
+			     struct mail_user *user,
 			     struct mail_storage_service_user *service_user,
 			     const struct imap_settings *set)
 {
@@ -44,11 +45,12 @@ struct client *client_create(int fd_in, int fd_out, struct mail_user *user,
 	net_set_nonblock(fd_in, TRUE);
 	net_set_nonblock(fd_out, TRUE);
 
-	pool = pool_alloconly_create("imap client", 1024);
+	pool = pool_alloconly_create("imap client", 2048);
 	client = p_new(pool, struct client, 1);
 	client->pool = pool;
 	client->set = set;
 	client->service_user = service_user;
+	client->session_id = p_strdup(pool, session_id);
 	client->fd_in = fd_in;
 	client->fd_out = fd_out;
 	client->input = i_stream_create_fd(fd_in,
@@ -81,6 +83,11 @@ struct client *client_create(int fd_in, int fd_out, struct mail_user *user,
 		str_append(client->capability_string, CAPABILITY_STRING);
 		str_append_c(client->capability_string, ' ');
 		str_append(client->capability_string, set->imap_capability + 1);
+	}
+	if (user->fuzzy_search) {
+		/* Enable FUZZY capability only when it actually has
+		   a chance of working */
+		str_append(client->capability_string, " SEARCH=FUZZY");
 	}
 
 	ident = mail_user_get_anvil_userip_ident(client->user);
@@ -123,7 +130,8 @@ void client_command_cancel(struct client_command_context **_cmd)
 		i_unreached();
 	}
 
-	cmd_ret = !cmd->cancel || cmd->func == NULL ? TRUE : cmd->func(cmd);
+	cmd_ret = !cmd->cancel || cmd->func == NULL ? TRUE :
+		command_exec(cmd);
 	if (!cmd_ret && cmd->state != CLIENT_COMMAND_STATE_DONE) {
 		if (cmd->client->output->closed)
 			i_panic("command didn't cancel itself: %s", cmd->name);
@@ -137,6 +145,7 @@ static const char *client_stats(struct client *client)
 	static struct var_expand_table static_tab[] = {
 		{ 'i', NULL, "input" },
 		{ 'o', NULL, "output" },
+		{ '\0', NULL, "session" },
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
@@ -147,6 +156,7 @@ static const char *client_stats(struct client *client)
 
 	tab[0].value = dec2str(i_stream_get_absolute_offset(client->input));
 	tab[1].value = dec2str(client->output->offset);
+	tab[2].value = client->session_id;
 
 	str = t_str_new(128);
 	var_expand(str, client->set->imap_logout_format, tab);
@@ -209,7 +219,7 @@ void client_destroy(struct client *client, const char *reason)
 	mail_user_unref(&client->user);
 
 	if (client->free_parser != NULL)
-		imap_parser_destroy(&client->free_parser);
+		imap_parser_unref(&client->free_parser);
 	if (client->io != NULL)
 		io_remove(&client->io);
 	if (client->to_idle_output != NULL)
@@ -547,7 +557,7 @@ void client_command_free(struct client_command_context **_cmd)
 		client->mailbox_change_lock = NULL;
 
 	if (client->free_parser != NULL)
-		imap_parser_destroy(&cmd->parser);
+		imap_parser_unref(&cmd->parser);
 	else {
 		imap_parser_reset(cmd->parser);
 		client->free_parser = cmd->parser;
@@ -669,7 +679,8 @@ static bool client_command_input(struct client_command_context *cmd)
 
         if (cmd->func != NULL) {
 		/* command is being executed - continue it */
-		if (cmd->func(cmd) || cmd->state == CLIENT_COMMAND_STATE_DONE) {
+		if (command_exec(cmd) ||
+		    cmd->state == CLIENT_COMMAND_STATE_DONE) {
 			/* command execution was finished */
 			client_command_free(&cmd);
 			client_add_missing_io(client);
@@ -837,7 +848,7 @@ static void client_output_cmd(struct client_command_context *cmd)
 	bool finished;
 
 	/* continue processing command */
-	finished = cmd->func(cmd) || cmd->state == CLIENT_COMMAND_STATE_DONE;
+	finished = command_exec(cmd) || cmd->state == CLIENT_COMMAND_STATE_DONE;
 
 	if (!finished)
 		(void)client_handle_unfinished_cmd(cmd);
@@ -923,27 +934,35 @@ bool client_handle_search_save_ambiguity(struct client_command_context *cmd)
 	return TRUE;
 }
 
-void client_enable(struct client *client, enum mailbox_feature features)
+int client_enable(struct client *client, enum mailbox_feature features)
 {
 	struct mailbox_status status;
+	int ret;
 
 	if ((client->enabled_features & features) == features)
-		return;
+		return 0;
 
 	client->enabled_features |= features;
 	if (client->mailbox == NULL)
-		return;
+		return 0;
 
-	mailbox_enable(client->mailbox, features);
-	if ((features & MAILBOX_FEATURE_CONDSTORE) != 0) {
+	ret = mailbox_enable(client->mailbox, features);
+	if ((features & MAILBOX_FEATURE_CONDSTORE) != 0 && ret == 0) {
 		/* CONDSTORE being enabled while mailbox is selected.
 		   Notify client of the latest HIGHESTMODSEQ. */
-		mailbox_get_status(client->mailbox,
-				   STATUS_HIGHESTMODSEQ, &status);
-		client_send_line(client, t_strdup_printf(
-			"* OK [HIGHESTMODSEQ %llu] Highest",
-			(unsigned long long)status.highest_modseq));
+		ret = mailbox_get_status(client->mailbox,
+					 STATUS_HIGHESTMODSEQ, &status);
+		if (ret == 0) {
+			client_send_line(client, t_strdup_printf(
+				"* OK [HIGHESTMODSEQ %llu] Highest",
+				(unsigned long long)status.highest_modseq));
+		}
 	}
+	if (ret < 0) {
+		client_send_untagged_storage_error(client,
+			mailbox_get_storage(client->mailbox));
+	}
+	return ret;
 }
 
 struct imap_search_update *

@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "hostpid.h"
@@ -24,6 +24,7 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, login_log_format_elements),
 	DEF(SET_STR, login_log_format),
 	DEF(SET_STR, login_access_sockets),
+	DEF(SET_STR, director_username_hash),
 
 	DEF(SET_ENUM, ssl),
 	DEF(SET_STR, ssl_ca),
@@ -31,9 +32,11 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, ssl_key),
 	DEF(SET_STR, ssl_key_password),
 	DEF(SET_STR, ssl_cipher_list),
+	DEF(SET_STR, ssl_protocols),
 	DEF(SET_STR, ssl_cert_username_field),
 	DEF(SET_STR, ssl_client_cert),
 	DEF(SET_STR, ssl_client_key),
+	DEF(SET_STR, ssl_crypto_device),
 	DEF(SET_BOOL, ssl_verify_client_cert),
 	DEF(SET_BOOL, auth_ssl_require_client_cert),
 	DEF(SET_BOOL, auth_ssl_username_from_cert),
@@ -55,6 +58,7 @@ static const struct login_settings login_default_settings = {
 	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c",
 	.login_log_format = "%$: %s",
 	.login_access_sockets = "",
+	.director_username_hash = "%u",
 
 	.ssl = "yes:no:required",
 	.ssl_ca = "",
@@ -62,9 +66,11 @@ static const struct login_settings login_default_settings = {
 	.ssl_key = "",
 	.ssl_key_password = "",
 	.ssl_cipher_list = "ALL:!LOW:!SSLv2:!EXP:!aNULL",
+	.ssl_protocols = "!SSLv2",
 	.ssl_cert_username_field = "commonName",
 	.ssl_client_cert = "",
 	.ssl_client_key = "",
+	.ssl_crypto_device = "",
 	.ssl_verify_client_cert = FALSE,
 	.auth_ssl_require_client_cert = FALSE,
 	.auth_ssl_username_from_cert = FALSE,
@@ -200,8 +206,8 @@ login_settings_read(pool_t pool,
 
 	memset(&input, 0, sizeof(input));
 	input.roots = login_set_roots;
-	input.module = login_binary.process_name;
-	input.service = login_binary.protocol;
+	input.module = login_binary->process_name;
+	input.service = login_binary->protocol;
 	input.local_name = local_name;
 
 	if (local_ip != NULL)

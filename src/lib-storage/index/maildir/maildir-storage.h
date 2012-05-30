@@ -31,8 +31,6 @@
    calculating file's virtual size (added missing CRs). */
 #define MAILDIR_EXTRA_VIRTUAL_SIZE 'W'
 
-/* How often to scan tmp/ directory for old files (based on dir's atime) */
-#define MAILDIR_TMP_SCAN_SECS (8*60*60)
 /* Delete files having ctime older than this from tmp/. 36h is standard. */
 #define MAILDIR_TMP_DELETE_SECS (36*60*60)
 
@@ -67,8 +65,6 @@ struct maildir_storage {
 
 	const struct maildir_settings *set;
 	const char *temp_prefix;
-
-	uint32_t maildir_list_ext_id;
 };
 
 struct maildir_mailbox {
@@ -78,15 +74,23 @@ struct maildir_mailbox {
 
 	struct timeout *keep_lock_to;
 
+	/* Filled lazily by mailbox_get_private_flags_mask() */
+	enum mail_flags _private_flags_mask;
+
 	/* maildir sync: */
 	struct maildir_uidlist *uidlist;
 	struct maildir_keywords *keywords;
 
 	struct maildir_index_header maildir_hdr;
 	uint32_t maildir_ext_id;
+	uint32_t maildir_list_index_ext_id;
 
 	unsigned int synced:1;
 	unsigned int syncing_commit:1;
+	unsigned int private_flags_mask_set:1;
+	unsigned int backend_readonly:1;
+	unsigned int backend_readonly_set:1;
+	unsigned int sync_uidlist_refreshed:1;
 };
 
 extern struct mail_vfuncs maildir_mail_vfuncs;
@@ -111,6 +115,7 @@ int maildir_file_do(struct maildir_mailbox *mbox, uint32_t uid,
 bool maildir_set_deleted(struct mailbox *box);
 uint32_t maildir_get_uidvalidity_next(struct mailbox_list *list);
 int maildir_lose_unexpected_dir(struct mail_storage *storage, const char *path);
+bool maildir_is_backend_readonly(struct maildir_mailbox *mbox);
 
 struct mail_save_context *
 maildir_save_alloc(struct mailbox_transaction_context *_t);

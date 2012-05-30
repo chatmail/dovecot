@@ -9,6 +9,7 @@ struct master_service_listener {
 	int fd;
 	bool ssl;
 	struct io *io;
+	const char *name;
 };
 
 struct master_service {
@@ -22,23 +23,28 @@ struct master_service {
 	char **argv;
 
 	const char *version_string;
-	const char *config_path;
+	char *config_path;
 	ARRAY_TYPE(const_string) config_overrides;
 	int config_fd;
 	int syslog_facility;
 
 	unsigned int socket_count, ssl_socket_count;
-        struct master_service_listener *listeners;
+	struct master_service_listener *listeners;
+	char **listener_names;
+	unsigned int listener_names_count;
 
 	struct io *io_status_write, *io_status_error;
 	unsigned int service_count_left;
 	unsigned int total_available_count;
+	unsigned int process_limit;
+	unsigned int idle_kill_secs;
 
 	struct master_status master_status;
 	unsigned int last_sent_status_avail_count;
 	time_t last_sent_status_time;
 	struct timeout *to_status;
 
+	bool (*idle_die_callback)(void);
 	void (*die_callback)(void);
 	struct timeout *to_die;
 

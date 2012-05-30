@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -298,7 +298,8 @@ static void cmd_who(int argc, char *argv[])
 		who_lookup(&ctx, who_aggregate_line);
 		who_print(&ctx);
 	} else {
-		doveadm_print_header_simple("username");
+		doveadm_print_header("username", "username",
+				     DOVEADM_PRINT_HEADER_FLAG_EXPAND);
 		doveadm_print_header("service", "proto", 0);
 		doveadm_print_header_simple("pid");
 		doveadm_print_header_simple("ip");

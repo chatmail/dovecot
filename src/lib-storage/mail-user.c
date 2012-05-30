@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -12,6 +12,7 @@
 #include "settings-parser.h"
 #include "auth-master.h"
 #include "master-service.h"
+#include "mountpoint-list.h"
 #include "mail-storage-settings.h"
 #include "mail-storage-private.h"
 #include "mail-namespace.h"
@@ -26,7 +27,8 @@ struct auth_master_connection *mail_user_auth_master_conn;
 static void mail_user_deinit_base(struct mail_user *user)
 {
 	mail_namespaces_deinit(&user->namespaces);
-	pool_unref(&user->pool);
+	if (user->mountpoints != NULL)
+		mountpoint_list_deinit(&user->mountpoints);
 }
 
 struct mail_user *mail_user_alloc(const char *username,
@@ -48,6 +50,7 @@ struct mail_user *mail_user_alloc(const char *username,
 	user->set_info = set_info;
 	user->unexpanded_set = settings_dup(set_info, set, pool);
 	user->set = settings_dup(set_info, set, pool);
+	user->service = master_service_get_name(master_service);
 
 	/* check settings so that the duplicated structure will again
 	   contain the parsed fields */
@@ -136,8 +139,16 @@ void mail_user_unref(struct mail_user **_user)
 	i_assert(user->refcount > 0);
 
 	*_user = NULL;
-	if (--user->refcount == 0)
-		user->v.deinit(user);
+	if (user->refcount > 1) {
+		user->refcount--;
+		return;
+	}
+
+	/* call deinit() with refcount=1, otherwise we may assert-crash in
+	   mail_user_ref() that is called by some deinit() handler. */
+	user->v.deinit(user);
+	i_assert(user->refcount == 1);
+	pool_unref(&user->pool);
 }
 
 struct mail_user *mail_user_find(struct mail_user *user, const char *name)
@@ -151,11 +162,12 @@ struct mail_user *mail_user_find(struct mail_user *user, const char *name)
 	return NULL;
 }
 
-void mail_user_set_vars(struct mail_user *user, uid_t uid, const char *service,
+void mail_user_set_vars(struct mail_user *user, const char *service,
 			const struct ip_addr *local_ip,
 			const struct ip_addr *remote_ip)
 {
-	user->uid = uid;
+	i_assert(service != NULL);
+
 	user->service = p_strdup(user->pool, service);
 	if (local_ip != NULL && local_ip->family != 0) {
 		user->local_ip = p_new(user->pool, struct ip_addr, 1);
@@ -180,6 +192,7 @@ mail_user_var_expand_table(struct mail_user *user)
 		{ 'r', NULL, "rip" },
 		{ 'p', NULL, "pid" },
 		{ 'i', NULL, "uid" },
+		{ '\0', NULL, "gid" },
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
@@ -202,6 +215,7 @@ mail_user_var_expand_table(struct mail_user *user)
 		p_strdup(user->pool, net_ip2addr(user->remote_ip));
 	tab[7].value = my_pid;
 	tab[8].value = p_strdup(user->pool, dec2str(user->uid));
+	tab[9].value = p_strdup(user->pool, dec2str(user->gid));
 
 	user->var_expand_table = tab;
 	return user->var_expand_table;
@@ -260,7 +274,7 @@ int mail_user_get_home(struct mail_user *user, const char **home_r)
 	int ret;
 
 	memset(&info, 0, sizeof(info));
-	info.service = "lib-storage";
+	info.service = user->service;
 	if (user->local_ip != NULL)
 		info.local_ip = *user->local_ip;
 	if (user->remote_ip != NULL)
@@ -329,7 +343,7 @@ int mail_user_try_home_expand(struct mail_user *user, const char **pathp)
 {
 	const char *home, *path = *pathp;
 
-	if (mail_user_get_home(user, &home) < 0)
+	if (mail_user_get_home(user, &home) <= 0)
 		return -1;
 
 	path = home_expand_tilde(path, home);
@@ -355,4 +369,36 @@ const char *mail_user_get_anvil_userip_ident(struct mail_user *user)
 		return NULL;
 	return t_strconcat(net_ip2addr(user->remote_ip), "/",
 			   str_tabescape(user->username), NULL);
+}
+
+bool mail_user_is_path_mounted(struct mail_user *user, const char *path,
+			       const char **error_r)
+{
+	struct mountpoint_list_rec *rec;
+	const char *mounts_path;
+
+	*error_r = NULL;
+
+	if (user->mountpoints == NULL) {
+		mounts_path = t_strdup_printf("%s/"MOUNTPOINT_LIST_FNAME,
+					      user->set->base_dir);
+		user->mountpoints = mountpoint_list_init_readonly(mounts_path);
+	} else {
+		(void)mountpoint_list_refresh(user->mountpoints);
+	}
+	rec = mountpoint_list_find(user->mountpoints, path);
+	if (rec == NULL || strcmp(rec->state, MOUNTPOINT_STATE_IGNORE) == 0) {
+		/* we don't have any knowledge of this path's mountpoint.
+		   assume it's fine. */
+		return TRUE;
+	}
+	/* record exists for this mountpoint. see if it's mounted */
+	if (mountpoint_list_update_mounted(user->mountpoints) == 0 &&
+	    !rec->mounted) {
+		*error_r = t_strdup_printf("Mountpoint %s isn't mounted. "
+			"Mount it or remove it with doveadm mount remove",
+			rec->mount_path);
+		return FALSE;
+	}
+	return TRUE;
 }

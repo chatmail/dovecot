@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -19,7 +19,7 @@ static struct file_listener_settings auth_unix_listeners_array[] = {
 	{ "login/login", 0666, "", "" },
 	{ "auth-login", 0600, "$default_internal_user", "" },
 	{ "auth-client", 0600, "", "" },
-	{ "auth-userdb", 0600, "", "" },
+	{ "auth-userdb", 0666, "", "" },
 	{ "auth-master", 0600, "", "" }
 };
 static struct file_listener_settings *auth_unix_listeners[] = {
@@ -49,7 +49,7 @@ struct service_settings auth_service_settings = {
 
 	.process_min_avail = 0,
 	.process_limit = 1,
-	.client_limit = 4096,
+	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
 	.vsz_limit = (uoff_t)-1,
@@ -107,6 +107,8 @@ struct service_settings auth_worker_service_settings = {
 static const struct setting_define auth_passdb_setting_defines[] = {
 	DEF(SET_STR, driver),
 	DEF(SET_STR, args),
+	DEF(SET_STR, default_fields),
+	DEF(SET_STR, override_fields),
 	DEF(SET_BOOL, deny),
 	DEF(SET_BOOL, pass),
 	DEF(SET_BOOL, master),
@@ -117,6 +119,8 @@ static const struct setting_define auth_passdb_setting_defines[] = {
 static const struct auth_passdb_settings auth_passdb_default_settings = {
 	.driver = "",
 	.args = "",
+	.default_fields = "",
+	.override_fields = "",
 	.deny = FALSE,
 	.pass = FALSE,
 	.master = FALSE
@@ -142,13 +146,17 @@ const struct setting_parser_info auth_passdb_setting_parser_info = {
 static const struct setting_define auth_userdb_setting_defines[] = {
 	DEF(SET_STR, driver),
 	DEF(SET_STR, args),
+	DEF(SET_STR, default_fields),
+	DEF(SET_STR, override_fields),
 
 	SETTING_DEFINE_LIST_END
 };
 
 static const struct auth_userdb_settings auth_userdb_default_settings = {
 	.driver = "",
-	.args = ""
+	.args = "",
+	.default_fields = "",
+	.override_fields = ""
 };
 
 const struct setting_parser_info auth_userdb_setting_parser_info = {
@@ -190,6 +198,7 @@ static const struct setting_define auth_setting_defines[] = {
 	DEF(SET_STR, krb5_keytab),
 	DEF(SET_STR, gssapi_hostname),
 	DEF(SET_STR, winbind_helper_path),
+	DEF(SET_STR, proxy_self),
 	DEF(SET_TIME, failure_delay),
 	DEF(SET_UINT, first_valid_uid),
 	DEF(SET_UINT, last_valid_uid),
@@ -207,6 +216,7 @@ static const struct setting_define auth_setting_defines[] = {
 	DEFLIST(passdbs, "passdb", &auth_passdb_setting_parser_info),
 	DEFLIST(userdbs, "userdb", &auth_userdb_setting_parser_info),
 
+	DEF_NOPREFIX(SET_STR, base_dir),
 	DEF_NOPREFIX(SET_BOOL, verbose_proctitle),
 
 	SETTING_DEFINE_LIST_END
@@ -221,12 +231,13 @@ static const struct auth_settings auth_default_settings = {
 	.cache_negative_ttl = 60*60,
 	.username_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890.-_@",
 	.username_translation = "",
-	.username_format = "",
+	.username_format = "%Lu",
 	.master_user_separator = "",
 	.anonymous_username = "anonymous",
 	.krb5_keytab = "",
 	.gssapi_hostname = "",
 	.winbind_helper_path = "/usr/bin/ntlm_auth",
+	.proxy_self = "",
 	.failure_delay = 2,
 	.first_valid_uid = 500,
 	.last_valid_uid = 0,
@@ -244,6 +255,7 @@ static const struct auth_settings auth_default_settings = {
 	.passdbs = ARRAY_INIT,
 	.userdbs = ARRAY_INIT,
 
+	.base_dir = PKG_RUNDIR,
 	.verbose_proctitle = FALSE
 };
 
@@ -261,6 +273,37 @@ const struct setting_parser_info auth_setting_parser_info = {
 };
 
 /* <settings checks> */
+static bool
+auth_settings_set_self_ips(struct auth_settings *set, pool_t pool,
+			   const char **error_r)
+{
+	const char *const *tmp;
+	ARRAY_DEFINE(ips_array, struct ip_addr);
+	struct ip_addr *ips;
+	unsigned int ips_count;
+	int ret;
+
+	if (*set->proxy_self == '\0') {
+		set->proxy_self_ips = p_new(pool, struct ip_addr, 1);
+		return TRUE;
+	}
+
+	p_array_init(&ips_array, pool, 4);
+	tmp = t_strsplit_spaces(set->proxy_self, " ");
+	for (; *tmp != NULL; tmp++) {
+		ret = net_gethostbyname(*tmp, &ips, &ips_count);
+		if (ret != 0) {
+			*error_r = t_strdup_printf("auth_proxy_self_ips: "
+				"gethostbyname(%s) failed: %s",
+				*tmp, net_gethosterror(ret));
+		}
+		array_append(&ips_array, ips, ips_count);
+	}
+	(void)array_append_space(&ips_array);
+	set->proxy_self_ips = array_idx(&ips_array, 0);
+	return TRUE;
+}
+
 static bool auth_settings_check(void *_set, pool_t pool,
 				const char **error_r)
 {
@@ -271,6 +314,11 @@ static bool auth_settings_check(void *_set, pool_t pool,
 		set->debug = TRUE;
 	if (set->debug)
 		set->verbose = TRUE;
+
+	if (set->worker_max_count == 0) {
+		*error_r = "auth_worker_max_count must be above zero";
+		return FALSE;
+	}
 
 	if (set->cache_size > 0 && set->cache_size < 1024) {
 		/* probably a configuration error.
@@ -297,6 +345,9 @@ static bool auth_settings_check(void *_set, pool_t pool,
 	}
 	set->realms_arr =
 		(const char *const *)p_strsplit_spaces(pool, set->realms, " ");
+
+	if (!auth_settings_set_self_ips(set, pool, error_r))
+		return FALSE;
 	return TRUE;
 }
 
@@ -339,6 +390,7 @@ auth_settings_read(const char *service, pool_t pool,
 	};
  	struct master_service_settings_input input;
 	struct setting_parser_context *set_parser;
+	struct auth_settings *set;
 	const char *error;
 
 	memset(&input, 0, sizeof(input));
@@ -349,9 +401,12 @@ auth_settings_read(const char *service, pool_t pool,
 					 output_r, &error) < 0)
 		i_fatal("Error reading configuration: %s", error);
 
+	pool_ref(pool);
 	set_parser = settings_parser_dup(master_service->set_parser, pool);
 	if (!settings_parser_check(set_parser, pool, &error))
 		i_unreached();
 
-	return settings_parser_get_list(set_parser)[1];
+	set = settings_parser_get_list(set_parser)[1];
+	settings_parser_deinit(&set_parser);
+	return set;
 }
