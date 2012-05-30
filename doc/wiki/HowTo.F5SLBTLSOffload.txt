@@ -1,0 +1,251 @@
+F5 SLB TLS Offload
+==================
+
+POP3 TLS Offload
+----------------
+
+This is a working example from our soon to be production deployment which
+supports the following functionality:
+
+ * Disables SSL on port 110 connections to allow TLS Offload to be performed
+ * Appends STLS to the POP3 CAPA response
+ * Listens for the STLS command and initiates SSL Negotiation (without
+   involvement from the backend POP3 Server)
+ * Watches for the USER command and appends a realm to the username if one is
+   not supplied
+ * Stops all parsing once the user has successfully logged in
+
+---%<-------------------------------------------------------------------------
+when CLIENT_ACCEPTED {
+  if { [TCP::local_port clientside] == "110" } {
+    # Disable SSL if we're on port 110 (as we're doing TLS Offload)
+    set secure 0
+    SSL::disable
+  } else {
+    set secure 1
+  }
+  set realm "mydomain.com"
+  set debug 1
+  set loggedin 0
+}
+
+when SERVER_CONNECTED {
+  TCP::collect
+}
+
+when CLIENTSSL_HANDSHAKE {
+  SSL::collect
+  set secure 1
+}
+
+when CLIENTSSL_DATA {
+  if { $debug } { log local0. "CLIENT DATA: [SSL::payload]" }
+
+  set lcpayload [string tolower [SSL::payload]]
+
+  if { $lcpayload starts_with "user" } {
+    if { [scan [SSL::payload] {%s%s} command user] == 2 } {
+      if { $user contains "@" } {
+        # No action, realm supplied
+      } else {
+        set pos [string first $user [SSL::payload] 0]
+        SSL::payload replace $pos [string length $user] "$user@$realm"
+      }
+      if { $debug } { log local0. [SSL::payload] }
+    }
+  }
+
+  SSL::release
+  if { $loggedin == 0 } {
+    SSL::collect
+  }
+}
+
+when CLIENT_DATA {
+  if { $debug } { log local0. "CLIENT DATA: [TCP::payload]" }
+  set lcpayload [string tolower [TCP::payload]]
+  if { $lcpayload starts_with "stls" } {
+    TCP::respond "+OK Begin TLS negotiation\r\n"
+    TCP::payload replace 0 [TCP::payload length] ""
+    TCP::release
+    SSL::enable
+    return
+  } elseif { $lcpayload starts_with "user" } {
+    if { [scan [TCP::payload] {%s%s} command user] == 2 } {
+      if { $user contains "@" } {
+        # No action, realm supplied
+      } else {
+        set pos [string first $user [TCP::payload] 0]
+        TCP::payload replace $pos [string length $user] "$user@$realm"
+      }
+      if { $debug } { log local0. [TCP::payload] }
+    }
+  }
+  TCP::release
+  if { $loggedin == 0 } {
+    TCP::collect
+  }
+}
+
+when SERVER_DATA {
+  if { $debug } { log local0. "SERVER DATA: [TCP::payload]" }
+
+  set lcpayload [string tolower [TCP::payload]]
+  if { $lcpayload starts_with "+ok logged in" } {
+    TCP::release
+    set loggedin 1
+    event disable
+    if { $debug } { log local0. "POP3 Login Successful" }
+    return
+  } elseif { $lcpayload contains "\r\ncapa\r\n" } {
+    TCP::payload replace [expr [TCP::payload length] - 3] 0 "STLS\r\n"
+
+  }
+
+  if { $secure == 1 && $loggedin == 0 } {
+    clientside { SSL::collect }
+  } elseif { $secure == 0 && $loggedin == 0 } {
+    clientside { TCP::collect }
+  }
+  TCP::release
+  if { $loggedin == 0 } {
+    TCP::collect
+  }
+}
+---%<-------------------------------------------------------------------------
+
+IMAP TLS Offload
+----------------
+
+This is a working example from our soon to be production deployment which
+supports the following functionality:
+
+ * Disables SSL on port 143 connections to allow TLS Offload to be performed
+ * Overrides the IMAP Capability response and adds STARTTLS
+ * Listens for the STARTTLS command and initiates SSL Negotiation (without
+   involvement from the backend IMAP Server)
+ * Watches for the LOGIN command and appends a realm to the username if one is
+   not supplied
+ * Stops all parsing once the user has successfully logged in
+
+---%<-------------------------------------------------------------------------
+when CLIENT_ACCEPTED {
+  set secure 1
+  if { [TCP::local_port] == "143" } {
+    SSL::disable
+    set secure 0
+  }
+  set realm "mydomain.com"
+  set debug 1
+  set loggedin 0
+  set loginseq "FAKESEQ"
+}
+
+when SERVER_CONNECTED {
+  TCP::collect
+}
+
+when CLIENTSSL_HANDSHAKE {
+  SSL::collect
+  set secure 1
+}
+
+when CLIENTSSL_DATA {
+  if { $debug } { log local0. "CLIENT DATA: [SSL::payload]" }
+
+  if { [scan [SSL::payload] {%s%s} seq cmd] == 2 } {
+    log local0. "IMAP COMMAND: seq=$seq, cmd=$cmd"
+    switch [string tolower $cmd] {
+      "login" {
+        if { [scan [SSL::payload] {%s%s%s%s} seq cmd login password] == 4 } {
+          set loginseq $seq
+          if { $login contains "@" } {
+            # No action, contains realm
+          } else {
+            set pos [string first $login [SSL::payload] 0]
+            SSL::payload replace $pos [string length $login] "$login@$realm"
+          }
+        }
+      }
+
+      default { }
+    }
+  }
+  SSL::release
+  if { not $loggedin } {
+    SSL::collect
+  }
+}
+
+when CLIENT_DATA {
+  if { $debug } { log local0. "CLIENT DATA: [TCP::payload]" }
+
+  if { [scan [TCP::payload] {%s%s} seq cmd] == 2 } {
+    log local0. "IMAP COMMAND: seq=$seq, cmd=$cmd"
+    switch [string tolower $cmd] {
+      "login" {
+        if { [scan [TCP::payload] {%s%s%s%s} seq cmd login password] == 4 } {
+          set loginseq $seq
+          if { $login contains "@" } {
+            # No action, contains realm
+          } else {
+            set pos [string first $login [TCP::payload] 0]
+            TCP::payload replace $pos [string length $login] "$login@$realm"
+          }
+        }
+      }
+      "starttls" {
+        TCP::respond "$seq OK \"Begin TLS negotiation\"\r\n"
+        TCP::payload replace 0 [TCP::payload length] ""
+        TCP::release
+        SSL::enable
+        set secure 1
+        return
+      }
+      default {
+      }
+    }
+  }
+
+  TCP::release
+  if { not $loggedin } {
+    TCP::collect
+  }
+}
+
+when SERVER_DATA {
+  if { $debug } { log local0. "IMAP SERVER: [TCP::payload]" }
+
+  if { [TCP::payload] starts_with "* CAPABILITY" } {
+    TCP::payload replace 13 0 "STARTTLS "
+  }
+  if { [TCP::payload] starts_with "* OK \[CAPABILITY" } {
+    TCP::payload replace 17 0 "STARTTLS "
+  }
+  log local0. "Login Seq=$loginseq"
+  if { [TCP::payload] contains "$loginseq OK" } {
+    if { $debug } { log local0. "Login detected, stopping capture" }
+    TCP::release
+    set loggedin 1
+    return
+  }
+
+  if { $secure == 1 && $loggedin == 0 } {
+    clientside { SSL::collect }
+  } elseif { $secure == 0 && $loggedin == 0 } {
+    clientside { TCP::collect }
+  }
+
+  TCP::release
+  if { $loggedin == 0 } {
+    TCP::collect
+  }
+}
+---%<-------------------------------------------------------------------------
+
+Wishlist / Todo
+---------------
+
+ * Add support for AUTH PLAIN / AUTH LOGIN
+
+(This file was created from the wiki on 2012-04-23 04:42)

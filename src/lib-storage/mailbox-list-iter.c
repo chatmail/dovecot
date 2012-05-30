@@ -533,7 +533,6 @@ autocreate_iter_existing(struct mailbox_list_iterate_context *ctx)
 	if ((ctx->flags & MAILBOX_LIST_ITER_SELECT_SUBSCRIBED) == 0)
 		match2 = match;
 	else {
-		info->flags |= MAILBOX_SUBSCRIBED;
 		match2 = autocreate_box_match(&actx->all_ns_box_sets,
 					      ctx->list->ns, info->name,
 					      FALSE, &idx);
@@ -763,6 +762,8 @@ mailbox_list_iter_update_real(struct mailbox_list_iter_update_context *ctx,
 			if (node != NULL) {
 				if (!ctx->update_only && add_matched)
 					node->flags |= MAILBOX_MATCHED;
+				if ((always_flags & MAILBOX_CHILDREN) != 0)
+					node->flags &= ~MAILBOX_NOCHILDREN;
 				node->flags |= always_flags;
 			}
 			/* We don't want to show the parent mailboxes unless

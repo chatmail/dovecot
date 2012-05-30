@@ -152,4 +152,4 @@ with '0' character if the string is shorter. For example %04i may return
 The modifiers are applied from left-to-right order, except the substring is
 always taken from the final string.
 
-(This file was created from the wiki on 2012-04-09 04:42)
+(This file was created from the wiki on 2012-04-23 04:42)

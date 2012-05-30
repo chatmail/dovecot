@@ -123,7 +123,8 @@ dir_get_storage_name(struct list_dir_context *dir, const char *fname)
 		return t_strconcat("/", fname, NULL);
 	} else {
 		/* child */
-		return t_strconcat(dir->storage_name, "/", fname, NULL);
+		return *fname == '\0' ? dir->storage_name :
+			t_strconcat(dir->storage_name, "/", fname, NULL);
 	}
 }
 
@@ -323,13 +324,14 @@ fs_list_read_dir(struct fs_list_iterate_context *ctx, const char *storage_name,
 	dir->info_flags = info_flags;
 	p_array_init(&dir->entries, pool, 16);
 
-	if ((dir->info_flags & MAILBOX_CHILDREN) == 0) {
-		/* start with the assumption of not having children */
-		dir->info_flags |= MAILBOX_NOCHILDREN;
-	}
-
 	if (fs_list_dir_read(ctx, dir) < 0)
 		ctx->ctx.failed = TRUE;
+
+	if ((dir->info_flags & (MAILBOX_CHILDREN | MAILBOX_NOCHILDREN |
+				MAILBOX_NOINFERIORS)) == 0) {
+		/* assume this directory has no children */
+		dir->info_flags |= MAILBOX_NOCHILDREN;
+	}
 	return dir;
 }
 
@@ -370,10 +372,12 @@ fs_list_get_valid_patterns(struct fs_list_iterate_context *ctx,
 
 static void fs_list_get_roots(struct fs_list_iterate_context *ctx)
 {
+	struct mail_namespace *ns = ctx->ctx.list->ns;
+	char ns_sep = mail_namespace_get_sep(ns);
 	bool full_fs_access =
 		ctx->ctx.list->mail_set->mail_full_filesystem_access;
 	const char *const *patterns, *pattern, *const *parentp, *const *childp;
-	const char *p, *last, *root;
+	const char *p, *last, *root, *prefix_vname;
 	unsigned int i, parentlen;
 
 	i_assert(*ctx->valid_patterns != NULL);
@@ -386,14 +390,28 @@ static void fs_list_get_roots(struct fs_list_iterate_context *ctx)
 		for (p = last = pattern; *p != '\0'; p++) {
 			if (*p == '%' || *p == '*')
 				break;
-			if (*p == '/')
+			if (*p == ns_sep)
 				last = p;
 		}
-		if (p == last+1 && *pattern == '/')
+		prefix_vname = t_strdup_until(pattern, last);
+
+		if (p == last+1 && *pattern == ns_sep)
 			root = "/";
-		else {
+		else if ((ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0 &&
+			 strcasecmp(prefix_vname, "INBOX") == 0 &&
+			 strncasecmp(ns->prefix, pattern, ns->prefix_len) == 0) {
+			/* special case: Namespace prefix is INBOX/ and
+			   we just want to see its contents (not the
+			   INBOX's children). */
+			root = "";
+		} else if (*prefix_vname == '\0') {
+			/* we need to handle "" explicitly here, because getting
+			   storage name with mail_shared_explicit_inbox=no
+			   would return root=INBOX. */
+			root = "";
+		} else {
 			root = mailbox_list_get_storage_name(ctx->ctx.list,
-						t_strdup_until(pattern, last));
+							     prefix_vname);
 		}
 
 		if (*root == '/') {

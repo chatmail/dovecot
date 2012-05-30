@@ -69,7 +69,7 @@ Running
 -------
 
 ---%<-------------------------------------------------------------------------
-dsync backup -R -u user@domain imapc:
+doveadm backup -R -u user@domain imapc:
 ---%<-------------------------------------------------------------------------
 
 The source IMAP/POP3 mailboxes shouldn't be modified while dsync is running.
@@ -89,4 +89,4 @@ Problems
  * If source IMAP and POP3 servers return messages somehow differently,
    pop3-migration plugin might not be able to match the messages
 
-(This file was created from the wiki on 2012-04-09 04:42)
+(This file was created from the wiki on 2012-04-23 04:42)

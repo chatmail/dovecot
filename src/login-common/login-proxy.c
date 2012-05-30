@@ -308,6 +308,7 @@ int login_proxy_new(struct client *client,
 	proxy->client_fd = -1;
 	proxy->server_fd = -1;
 	proxy->created = ioloop_timeval;
+	proxy->ip = set->ip;
 	proxy->host = i_strdup(set->host);
 	proxy->port = set->port;
 	proxy->connect_timeout_msecs = set->connect_timeout_msecs;
@@ -319,7 +320,8 @@ int login_proxy_new(struct client *client,
 	dns_lookup_set.dns_client_socket_path = set->dns_client_socket_path;
 	dns_lookup_set.timeout_msecs = set->connect_timeout_msecs;
 
-	if (net_addr2ip(set->host, &proxy->ip) < 0) {
+	if (set->ip.family == 0 &&
+	    net_addr2ip(set->host, &proxy->ip) < 0) {
 		if (dns_lookup(set->host, &dns_lookup_set,
 			       login_proxy_dns_done, proxy) < 0)
 			return -1;
@@ -516,8 +518,9 @@ static int login_proxy_ssl_handshaked(void *context)
 
 	if (ssl_proxy_has_broken_client_cert(proxy->ssl_server_proxy)) {
 		client_log_err(proxy->client, t_strdup_printf(
-			"proxy: Received invalid SSL certificate from %s:%u",
-			proxy->host, proxy->port));
+			"proxy: Received invalid SSL certificate from %s:%u: %s",
+			proxy->host, proxy->port,
+			ssl_proxy_get_cert_error(proxy->ssl_server_proxy)));
 	} else if (!ssl_proxy_has_valid_client_cert(proxy->ssl_server_proxy)) {
 		client_log_err(proxy->client, t_strdup_printf(
 			"proxy: SSL certificate not received from %s:%u",
@@ -684,7 +687,7 @@ login_proxy_cmd_list(struct ipc_cmd *cmd, const char *const *args ATTR_UNUSED)
 
 static void login_proxy_ipc_cmd(struct ipc_cmd *cmd, const char *line)
 {
-	const char *const *args = t_strsplit(line, "\t");
+	const char *const *args = t_strsplit_tab(line);
 	const char *name = args[0];
 
 	args++;

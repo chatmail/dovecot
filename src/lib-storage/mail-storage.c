@@ -765,6 +765,10 @@ int mailbox_exists(struct mailbox *box, bool auto_boxes,
 		return 0;
 	}
 
+	/* if this is a shared namespace with only INBOX and
+	   mail_shared_explicit_inbox=no, we'll need to mark the namespace as
+	   usable here since nothing else will. */
+	box->list->ns->flags |= NAMESPACE_FLAG_USABLE;
 	return 0;
 }
 
@@ -989,6 +993,8 @@ void mailbox_free(struct mailbox **_box)
 
 	DLLIST_REMOVE(&box->storage->mailboxes, box);
 	mail_storage_obj_unref(box->storage);
+	if (box->metadata_pool != NULL)
+		pool_unref(&box->metadata_pool);
 	pool_unref(&box->pool);
 }
 
@@ -1103,6 +1109,18 @@ int mailbox_delete(struct mailbox *box)
 
 	box->deleting = FALSE;
 	mailbox_close(box);
+	return ret;
+}
+
+int mailbox_delete_empty(struct mailbox *box)
+{
+	int ret;
+
+	/* FIXME: should be a parameter to delete(), but since it changes API
+	   don't do it for now */
+	box->deleting_must_be_empty = TRUE;
+	ret = mailbox_delete(box);
+	box->deleting_must_be_empty = FALSE;
 	return ret;
 }
 
@@ -1270,6 +1288,9 @@ int mailbox_get_metadata(struct mailbox *box, enum mailbox_metadata_items items,
 {
 	memset(metadata_r, 0, sizeof(*metadata_r));
 
+	if (box->metadata_pool != NULL)
+		p_clear(box->metadata_pool);
+
 	if (box->v.get_metadata(box, items, metadata_r) < 0)
 		return -1;
 
@@ -1328,6 +1349,8 @@ int mailbox_sync_deinit(struct mailbox_sync_context **_ctx,
 			i_error("Syncing INBOX failed: %s", errormsg);
 		}
 	}
+	if (ret == 0)
+		box->synced = TRUE;
 	return ret;
 }
 
@@ -1613,7 +1636,8 @@ int mailbox_save_begin(struct mail_save_context **ctx, struct istream *input)
 		return -1;
 	}
 
-	(*ctx)->saving = TRUE;
+	if (!(*ctx)->copying_via_save)
+		(*ctx)->saving = TRUE;
 	if (box->v.save_begin == NULL) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_NOTPOSSIBLE,
 				       "Saving messages not supported");

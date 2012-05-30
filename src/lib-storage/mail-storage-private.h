@@ -212,7 +212,7 @@ struct mailbox {
 
         struct mailbox_vfuncs v, *vlast;
 /* private: */
-	pool_t pool;
+	pool_t pool, metadata_pool;
 	/* Linked list of all mailboxes in this storage */
 	struct mailbox *prev, *next;
 
@@ -265,6 +265,8 @@ struct mailbox {
 	unsigned int creating:1;
 	/* Mailbox is being deleted */
 	unsigned int deleting:1;
+	/* Delete mailbox only if it's empty */
+	unsigned int deleting_must_be_empty:1;
 	/* Mailbox was already marked as deleted within this allocation. */
 	unsigned int marked_deleted:1;
 	/* TRUE if this is an INBOX for this user */
@@ -277,6 +279,8 @@ struct mailbox {
 	unsigned int disable_reflink_copy_to:1;
 	/* Don't allow creating any new keywords */
 	unsigned int disallow_new_keywords:1;
+	/* Mailbox has been synced at least once */
+	unsigned int synced:1;
 };
 
 struct mail_vfuncs {

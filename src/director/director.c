@@ -17,7 +17,10 @@
 #define DIRECTOR_RECONNECT_TIMEOUT_MSECS (30*1000)
 #define DIRECTOR_USER_MOVE_TIMEOUT_MSECS (30*1000)
 #define DIRECTOR_USER_MOVE_FINISH_DELAY_MSECS (2*1000)
-#define DIRECTOR_SYNC_TIMEOUT_MSECS (15*1000)
+#define DIRECTOR_SYNC_TIMEOUT_MSECS (5*1000)
+#define DIRECTOR_RING_MIN_WAIT_SECS 20
+#define DIRECTOR_QUICK_RECONNECT_TIMEOUT_MSECS 1000
+#define DIRECTOR_DELAYED_DIR_REMOVE_MSECS (1000*30)
 
 static bool director_is_self_ip_set(struct director *dir)
 {
@@ -125,8 +128,8 @@ int director_connect_host(struct director *dir, struct director_host *host)
 static struct director_host *
 director_get_preferred_right_host(struct director *dir)
 {
-	struct director_host *const *hosts;
-	unsigned int count, self_idx;
+	struct director_host *const *hosts, *host;
+	unsigned int i, count, self_idx;
 
 	hosts = array_get(&dir->dir_hosts, &count);
 	if (count == 1) {
@@ -135,7 +138,37 @@ director_get_preferred_right_host(struct director *dir)
 	}
 
 	self_idx = director_find_self_idx(dir);
-	return hosts[(self_idx + 1) % count];
+	for (i = 0; i < count; i++) {
+		host = hosts[(self_idx + i + 1) % count];
+		if (!host->removed)
+			return host;
+	}
+	/* self, with some removed hosts */
+	return NULL;
+}
+
+static bool director_wait_for_others(struct director *dir)
+{
+	struct director_host *const *hostp;
+
+	/* don't assume we're alone until we've attempted to connect
+	   to others for a while */
+	if (dir->ring_first_alone != 0 &&
+	    ioloop_time - dir->ring_first_alone > DIRECTOR_RING_MIN_WAIT_SECS)
+		return FALSE;
+
+	if (dir->ring_first_alone == 0)
+		dir->ring_first_alone = ioloop_time;
+	/* reset all failures and try again */
+	array_foreach(&dir->dir_hosts, hostp) {
+		(*hostp)->last_network_failure = 0;
+		(*hostp)->last_protocol_failure = 0;
+	}
+	if (dir->to_reconnect != NULL)
+		timeout_remove(&dir->to_reconnect);
+	dir->to_reconnect = timeout_add(DIRECTOR_QUICK_RECONNECT_TIMEOUT_MSECS,
+					director_connect, dir);
+	return TRUE;
 }
 
 void director_connect(struct director *dir)
@@ -151,6 +184,9 @@ void director_connect(struct director *dir)
 	for (i = 1; i < count; i++) {
 		unsigned int idx = (self_idx + i) % count;
 
+		if (hosts[idx]->removed)
+			continue;
+
 		if (hosts[idx]->last_network_failure +
 		    DIRECTOR_RECONNECT_RETRY_SECS > ioloop_time) {
 			/* connection failed recently, don't try retrying here */
@@ -163,26 +199,30 @@ void director_connect(struct director *dir)
 			continue;
 		}
 
-		if (director_connect_host(dir, hosts[idx]) == 0)
-			break;
-	}
-	if (i == count) {
-		/* we're the only one */
-		if (dir->debug) {
-			i_debug("director: Couldn't connect to right side, "
-				"we must be the only director left");
+		if (director_connect_host(dir, hosts[idx]) == 0) {
+			/* success */
+			return;
 		}
-		if (dir->left != NULL) {
-			/* since we couldn't connect to it,
-			   it must have failed recently */
-			director_connection_deinit(&dir->left);
-		}
-		dir->ring_min_version = DIRECTOR_VERSION_MINOR;
-		if (!dir->ring_handshaked)
-			director_set_ring_handshaked(dir);
-		else
-			director_set_ring_synced(dir);
 	}
+
+	if (count > 1 && director_wait_for_others(dir))
+		return;
+
+	/* we're the only one */
+	if (count > 1) {
+		i_warning("director: Couldn't connect to right side, "
+			  "we must be the only director left");
+	}
+	if (dir->left != NULL) {
+		/* since we couldn't connect to it,
+		   it must have failed recently */
+		director_connection_deinit(&dir->left);
+	}
+	dir->ring_min_version = DIRECTOR_VERSION_MINOR;
+	if (!dir->ring_handshaked)
+		director_set_ring_handshaked(dir);
+	else
+		director_set_ring_synced(dir);
 }
 
 void director_set_ring_handshaked(struct director *dir)
@@ -238,16 +278,14 @@ void director_set_ring_synced(struct director *dir)
 
 	host = dir->right == NULL ? NULL :
 		director_connection_get_host(dir->right);
+
+	if (dir->to_reconnect != NULL)
+		timeout_remove(&dir->to_reconnect);
 	if (host != director_get_preferred_right_host(dir)) {
 		/* try to reconnect to preferred host later */
-		if (dir->to_reconnect == NULL) {
-			dir->to_reconnect =
-				timeout_add(DIRECTOR_RECONNECT_TIMEOUT_MSECS,
-					    director_reconnect_timeout, dir);
-		}
-	} else {
-		if (dir->to_reconnect != NULL)
-			timeout_remove(&dir->to_reconnect);
+		dir->to_reconnect =
+			timeout_add(DIRECTOR_RECONNECT_TIMEOUT_MSECS,
+				    director_reconnect_timeout, dir);
 	}
 
 	if (dir->left != NULL)
@@ -323,6 +361,10 @@ void director_set_ring_unsynced(struct director *dir)
 
 static void director_sync(struct director *dir)
 {
+	/* we're synced again when we receive this SYNC back */
+	dir->sync_seq++;
+	director_set_ring_unsynced(dir);
+
 	if (dir->sync_frozen) {
 		dir->sync_pending = TRUE;
 		return;
@@ -332,10 +374,6 @@ static void director_sync(struct director *dir)
 			 (dir->left == NULL && dir->right == NULL));
 		return;
 	}
-
-	/* we're synced again when we receive this SYNC back */
-	dir->sync_seq++;
-	director_set_ring_unsynced(dir);
 
 	if (dir->debug) {
 		i_debug("Ring is desynced (seq=%u, sending SYNC to %s)",
@@ -378,6 +416,79 @@ void director_sync_thaw(struct director *dir)
 	}
 	array_foreach(&dir->connections, connp)
 		director_connection_uncork(*connp);
+}
+
+void director_notify_ring_added(struct director_host *added_host,
+				struct director_host *src)
+{
+	const char *cmd;
+
+	cmd = t_strdup_printf("DIRECTOR\t%s\t%u\n",
+			      net_ip2addr(&added_host->ip), added_host->port);
+	director_update_send(added_host->dir, src, cmd);
+}
+
+static void director_delayed_dir_remove_timeout(struct director *dir)
+{
+	struct director_host *const *hosts, *host;
+	unsigned int i, count;
+
+	timeout_remove(&dir->to_remove_dirs);
+
+	hosts = array_get(&dir->dir_hosts, &count);
+	for (i = 0; i < count; ) {
+		if (hosts[i]->removed) {
+			host = hosts[i];
+			director_host_free(&host);
+			hosts = array_get(&dir->dir_hosts, &count);
+		} else {
+			i++;
+		}
+	}
+}
+
+void director_ring_remove(struct director_host *removed_host,
+			  struct director_host *src)
+{
+	struct director *dir = removed_host->dir;
+	struct director_connection *const *conns, *conn;
+	unsigned int i, count;
+	const char *cmd;
+
+	if (removed_host->self) {
+		/* others will just disconnect us */
+		return;
+	}
+
+	/* mark the host as removed and fully remove it later. this delay is
+	   needed, because the removal may trigger director reconnections,
+	   which may send the director back and we don't want to re-add it */
+	removed_host->removed = TRUE;
+	if (dir->to_remove_dirs == NULL) {
+		dir->to_remove_dirs =
+			timeout_add(DIRECTOR_DELAYED_DIR_REMOVE_MSECS,
+				    director_delayed_dir_remove_timeout, dir);
+	}
+
+	/* disconnect any connections to the host */
+	conns = array_get(&dir->connections, &count);
+	for (i = 0; i < count; ) {
+		conn = conns[i];
+		if (director_connection_get_host(conn) != removed_host)
+			i++;
+		else {
+			director_connection_deinit(&conn);
+			conns = array_get(&dir->connections, &count);
+		}
+	}
+	if (dir->right == NULL)
+		director_connect(dir);
+
+	cmd = t_strdup_printf("DIRECTOR-REMOVE\t%s\t%u\n",
+			      net_ip2addr(&removed_host->ip),
+			      removed_host->port);
+	director_update_send_version(dir, src,
+				     DIRECTOR_VERSION_RING_REMOVE, cmd);
 }
 
 void director_update_host(struct director *dir, struct director_host *src,
@@ -676,12 +787,20 @@ void director_set_state_changed(struct director *dir)
 void director_update_send(struct director *dir, struct director_host *src,
 			  const char *cmd)
 {
+	director_update_send_version(dir, src, 0, cmd);
+}
+
+void director_update_send_version(struct director *dir,
+				  struct director_host *src,
+				  unsigned int min_version, const char *cmd)
+{
 	struct director_connection *const *connp;
 
 	i_assert(src != NULL);
 
 	array_foreach(&dir->connections, connp) {
-		if (director_connection_get_host(*connp) != src)
+		if (director_connection_get_host(*connp) != src &&
+		    director_connection_get_minor_version(*connp) >= min_version)
 			director_connection_send(*connp, cmd);
 	}
 }
@@ -713,7 +832,7 @@ director_init(const struct director_settings *set,
 void director_deinit(struct director **_dir)
 {
 	struct director *dir = *_dir;
-	struct director_host *const *hostp;
+	struct director_host *const *hostp, *host;
 	struct director_connection *conn, *const *connp;
 
 	*_dir = NULL;
@@ -737,8 +856,13 @@ void director_deinit(struct director **_dir)
 		timeout_remove(&dir->to_request);
 	if (dir->to_sync != NULL)
 		timeout_remove(&dir->to_sync);
-	array_foreach(&dir->dir_hosts, hostp)
-		director_host_free(*hostp);
+	if (dir->to_remove_dirs != NULL)
+		timeout_remove(&dir->to_remove_dirs);
+	while (array_count(&dir->dir_hosts) > 0) {
+		hostp = array_idx(&dir->dir_hosts, 0);
+		host = *hostp;
+		director_host_free(&host);
+	}
 	array_free(&dir->pending_requests);
 	array_free(&dir->dir_hosts);
 	array_free(&dir->connections);

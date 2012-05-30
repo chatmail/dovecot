@@ -45,6 +45,7 @@ struct mail_storage_settings {
 	bool mail_debug;
 	bool mail_full_filesystem_access;
 	bool maildir_stat_dirs;
+	bool mail_shared_explicit_inbox;
 	const char *lock_method;
 	const char *pop3_uidl_format;
 
@@ -133,7 +134,8 @@ struct maildir_settings {
 /* ../../src/lib-storage/index/imapc/imapc-settings.h */
 /* <settings checks> */
 enum imapc_features {
-	IMAPC_FEATURE_RFC822_SIZE	= 0x01
+	IMAPC_FEATURE_RFC822_SIZE	= 0x01,
+	IMAPC_FEATURE_GUID_FORCED	= 0x02
 };
 /* </settings checks> */
 struct imapc_settings {
@@ -150,6 +152,7 @@ struct imapc_settings {
 
 	const char *imapc_features;
 	const char *imapc_rawlog_dir;
+	const char *imapc_list_prefix;
 	const char *ssl_crypto_device;
 
 	enum imapc_features parsed_features;
@@ -522,6 +525,7 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_BOOL, mail_debug),
 	DEF(SET_BOOL, mail_full_filesystem_access),
 	DEF(SET_BOOL, maildir_stat_dirs),
+	DEF(SET_BOOL, mail_shared_explicit_inbox),
 	DEF(SET_ENUM, lock_method),
 	DEF(SET_STR, pop3_uidl_format),
 
@@ -551,6 +555,7 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.mail_debug = FALSE,
 	.mail_full_filesystem_access = FALSE,
 	.maildir_stat_dirs = FALSE,
+	.mail_shared_explicit_inbox = TRUE,
 	.lock_method = "fcntl:flock:dotlock",
 	.pop3_uidl_format = "%08Xu%08Xv"
 };
@@ -867,6 +872,7 @@ struct imapc_feature_list {
 
 static const struct imapc_feature_list imapc_feature_list[] = {
 	{ "rfc822.size", IMAPC_FEATURE_RFC822_SIZE },
+	{ "guid-forced", IMAPC_FEATURE_GUID_FORCED },
 	{ NULL, 0 }
 };
 
@@ -936,6 +942,7 @@ static const struct setting_define imapc_setting_defines[] = {
 
 	DEF(SET_STR, imapc_features),
 	DEF(SET_STR, imapc_rawlog_dir),
+	DEF(SET_STR, imapc_list_prefix),
 	DEF(SET_STR, ssl_crypto_device),
 
 	SETTING_DEFINE_LIST_END
@@ -954,6 +961,7 @@ static const struct imapc_settings imapc_default_settings = {
 
 	.imapc_features = "",
 	.imapc_rawlog_dir = "",
+	.imapc_list_prefix = "",
 	.ssl_crypto_device = ""
 };
 static const struct setting_parser_info imapc_setting_parser_info = {
@@ -1159,6 +1167,7 @@ struct pop3_settings {
 	bool pop3_fast_size_lookups;
 	const char *pop3_client_workarounds;
 	const char *pop3_logout_format;
+	const char *pop3_uidl_duplicates;
 
 	enum pop3_client_workarounds parsed_workarounds;
 };
@@ -1211,6 +1220,7 @@ struct login_settings {
 	const char *ssl_client_key;
 	const char *ssl_crypto_device;
 	bool ssl_verify_client_cert;
+	bool ssl_require_crl;
 	bool auth_ssl_require_client_cert;
 	bool auth_ssl_username_from_cert;
 	bool verbose_ssl;
@@ -1763,6 +1773,7 @@ static const struct setting_define pop3_setting_defines[] = {
 	DEF(SET_BOOL, pop3_fast_size_lookups),
 	DEF(SET_STR, pop3_client_workarounds),
 	DEF(SET_STR, pop3_logout_format),
+	DEF(SET_ENUM, pop3_uidl_duplicates),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -1776,7 +1787,8 @@ static const struct pop3_settings pop3_default_settings = {
 	.pop3_lock_session = FALSE,
 	.pop3_fast_size_lookups = FALSE,
 	.pop3_client_workarounds = "",
-	.pop3_logout_format = "top=%t/%p, retr=%r/%b, del=%d/%m, size=%s"
+	.pop3_logout_format = "top=%t/%p, retr=%r/%b, del=%d/%m, size=%s",
+	.pop3_uidl_duplicates = "allow:rename"
 };
 static const struct setting_parser_info *pop3_setting_dependencies[] = {
 	&mail_user_setting_parser_info,
@@ -1866,7 +1878,7 @@ extern const struct setting_parser_info service_setting_parser_info;
 #  define ENV_SYSTEMD ""
 #endif
 #ifdef DEBUG
-#  define ENV_GDB " GDB"
+#  define ENV_GDB " GDB DEBUG_SILENT"
 #else
 #  define ENV_GDB ""
 #endif
@@ -2511,6 +2523,7 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, ssl_client_key),
 	DEF(SET_STR, ssl_crypto_device),
 	DEF(SET_BOOL, ssl_verify_client_cert),
+	DEF(SET_BOOL, ssl_require_crl),
 	DEF(SET_BOOL, auth_ssl_require_client_cert),
 	DEF(SET_BOOL, auth_ssl_username_from_cert),
 	DEF(SET_BOOL, verbose_ssl),
@@ -2527,7 +2540,7 @@ static const struct setting_define login_setting_defines[] = {
 static const struct login_settings login_default_settings = {
 	.login_trusted_networks = "",
 	.login_greeting = PACKAGE_NAME" ready.",
-	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c",
+	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
 	.login_log_format = "%$: %s",
 	.login_access_sockets = "",
 	.director_username_hash = "%u",
@@ -2544,6 +2557,7 @@ static const struct login_settings login_default_settings = {
 	.ssl_client_key = "",
 	.ssl_crypto_device = "",
 	.ssl_verify_client_cert = FALSE,
+	.ssl_require_crl = TRUE,
 	.auth_ssl_require_client_cert = FALSE,
 	.auth_ssl_username_from_cert = FALSE,
 	.verbose_ssl = FALSE,
@@ -3332,7 +3346,7 @@ static struct file_listener_settings auth_unix_listeners_array[] = {
 	{ "login/login", 0666, "", "" },
 	{ "auth-login", 0600, "$default_internal_user", "" },
 	{ "auth-client", 0600, "", "" },
-	{ "auth-userdb", 0666, "", "" },
+	{ "auth-userdb", 0666, "$default_internal_user", "" },
 	{ "auth-master", 0600, "", "" }
 };
 static struct file_listener_settings *auth_unix_listeners[] = {

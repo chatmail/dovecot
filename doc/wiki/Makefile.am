@@ -75,6 +75,7 @@ wikifiles = ACL.txt \
 	FindMailLocation.txt \
 	FinishBasicConfiguration.txt \
 	HowTo.EximAndDovecotSASL.txt \
+	HowTo.F5SLBTLSOffload.txt \
 	HowTo.ImapcProxy.txt \
 	HowTo.PopBSMTPAndDovecot.txt \
 	HowTo.PopRelay.txt \

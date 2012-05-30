@@ -52,6 +52,20 @@ Usually it's better to have only a few special master users that are used
 user that trains the users' spam filters by reading the messages from the
 user's spam mailbox.
 
+ACLs
+----
+
+The Master user is still subject to ACLs. The options for handling this are:
+
+ 1. Adding a global <ACL.txt> for the master user. Unfortunately currently you
+    can only create per-mailbox ACLs, there is no "default ACL" that applies to
+    all mailboxes.
+ 2. Assigning 'MASTER_USER=$USER' in a <postlogin-script>
+    [PostLoginScripting.txt]. The result is that the login username's ACL is
+    used, rather than the master username's.
+ 3. Assigning 'master_user=%u' in <userdb lookup> [UserDatabase.txt], which
+    basically does the same as the post-login script.
+
 Example configuration
 ---------------------
 
@@ -292,4 +306,4 @@ user_name = '%n' AND domain_name = '%d' AND ( \
 group by uid
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2012-04-09 04:42)
+(This file was created from the wiki on 2012-04-23 04:42)

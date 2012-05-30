@@ -51,12 +51,16 @@
 #define OUTBUF_FLUSH_THRESHOLD (1024*128)
 /* Max idling time before "ME" command must have been received,
    or we'll disconnect. */
-#define DIRECTOR_CONNECTION_ME_TIMEOUT_MSECS (2*1000)
+#define DIRECTOR_CONNECTION_ME_TIMEOUT_MSECS (10*1000)
+/* Max time to wait for USERs in handshake to be sent. With a lot of users the
+   kernel may quickly eat up everything we send, while the receiver is busy
+   parsing the data. */
+#define DIRECTOR_CONNECTION_SEND_USERS_TIMEOUT_MSECS (30*1000)
 /* Max idling time before "DONE" command must have been received,
    or we'll disconnect. */
 #define DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS (30*1000)
 /* How long to wait for PONG for an idling connection */
-#define DIRECTOR_CONNECTION_PING_IDLE_TIMEOUT_MSECS (2*1000)
+#define DIRECTOR_CONNECTION_PING_IDLE_TIMEOUT_MSECS (10*1000)
 /* Maximum time to wait for PONG reply */
 #define DIRECTOR_CONNECTION_PONG_TIMEOUT_MSECS (60*1000)
 /* How long to wait to send PING when connection is idle */
@@ -66,6 +70,7 @@
 /* If outgoing director connection exists for less than this many seconds,
    mark the host as failed so we won't try to reconnect to it immediately */
 #define DIRECTOR_SUCCESS_MIN_CONNECT_SECS 40
+#define DIRECTOR_WAIT_DISCONNECT_SECS 10
 
 #if DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS <= DIRECTOR_CONNECTION_PING_TIMEOUT_MSECS
 #  error DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS is too low
@@ -92,7 +97,7 @@ struct director_connection {
 	struct io *io;
 	struct istream *input;
 	struct ostream *output;
-	struct timeout *to, *to_ping, *to_pong;
+	struct timeout *to_disconnect, *to_ping, *to_pong;
 
 	struct user_directory_iter *user_iter;
 
@@ -113,7 +118,7 @@ struct director_connection {
 };
 
 static void director_connection_disconnected(struct director_connection **conn);
-static void director_connection_protocol_error(struct director_connection **conn);
+static void director_connection_reconnect(struct director_connection **conn);
 
 static void ATTR_FORMAT(2, 3)
 director_cmd_error(struct director_connection *conn, const char *fmt, ...)
@@ -124,6 +129,8 @@ director_cmd_error(struct director_connection *conn, const char *fmt, ...)
 	i_error("director(%s): Command %s: %s (input: %s)", conn->name,
 		conn->cur_cmd, t_strdup_vprintf(fmt, args), conn->cur_line);
 	va_end(args);
+
+	conn->host->last_protocol_failure = ioloop_time;
 }
 
 static void
@@ -133,6 +140,9 @@ director_connection_init_timeout(struct director_connection *conn)
 
 	if (!conn->connected) {
 		i_error("director(%s): Connect timed out (%u secs)",
+			conn->name, secs);
+	} else if (conn->io == NULL) {
+		i_error("director(%s): Sending handshake (%u secs)",
 			conn->name, secs);
 	} else if (!conn->me_received) {
 		i_error("director(%s): Handshaking ME timed out (%u secs)",
@@ -157,16 +167,28 @@ director_connection_set_ping_timeout(struct director_connection *conn)
 	conn->to_ping = timeout_add(msecs, director_connection_ping, conn);
 }
 
+static void director_connection_wait_timeout(struct director_connection *conn)
+{
+	director_connection_deinit(&conn);
+}
+
 static void director_connection_send_connect(struct director_connection *conn,
 					     struct director_host *host)
 {
 	const char *connect_str;
+
+	if (conn->to_disconnect != NULL)
+		return;
 
 	connect_str = t_strdup_printf("CONNECT\t%s\t%u\n",
 				      net_ip2addr(&host->ip), host->port);
 	director_connection_send(conn, connect_str);
 	(void)o_stream_flush(conn->output);
 	o_stream_uncork(conn->output);
+
+	conn->to_disconnect =
+		timeout_add(DIRECTOR_WAIT_DISCONNECT_SECS*1000,
+			    director_connection_wait_timeout, conn);
 }
 
 static void director_connection_assigned(struct director_connection *conn)
@@ -217,7 +239,7 @@ static bool director_connection_assign_left(struct director_connection *conn)
 			  "us, should use %s instead",
 			  conn->name, dir->left->host->name);
 		director_connection_send_connect(conn, dir->left->host);
-		return FALSE;
+		return TRUE;
 	} else {
 		/* this new connection is the correct one, but wait until the
 		   old connection gets disconnected before using this one.
@@ -240,7 +262,8 @@ static void director_assign_left(struct director *dir)
 	array_foreach(&dir->connections, connp) {
 		conn = *connp;
 
-		if (conn->in && conn->handshake_received && conn != dir->left) {
+		if (conn->in && conn->handshake_received &&
+		    conn->to_disconnect == NULL && conn != dir->left) {
 			/* either use this or disconnect it */
 			if (!director_connection_assign_left(conn)) {
 				/* we don't want this */
@@ -257,7 +280,7 @@ static bool director_has_outgoing_connections(struct director *dir)
 	struct director_connection *const *connp;
 
 	array_foreach(&dir->connections, connp) {
-		if (!(*connp)->in)
+		if (!(*connp)->in && (*connp)->to_disconnect == NULL)
 			return TRUE;
 	}
 	return FALSE;
@@ -360,7 +383,12 @@ static bool director_cmd_me(struct director_connection *conn,
 	   elsewhere with CONNECT. however, before disconnecting it verify
 	   first that our left side is actually still functional.
 	*/
+	i_assert(conn->host == NULL);
 	conn->host = director_host_get(dir, &ip, port);
+	/* the host shouldn't be removed at this point, but if for some
+	   reason it is we don't want to crash */
+	conn->host->removed = FALSE;
+	director_host_ref(conn->host);
 	/* make sure we don't keep old sequence values across restarts */
 	conn->host->last_seq = 0;
 
@@ -446,7 +474,7 @@ director_user_refresh(struct director_connection *conn,
 		}
 		if (user->to_move != NULL)
 			str_append(str, ",moving");
-		if (user->kill_state == USER_KILL_STATE_NONE)
+		if (user->kill_state != USER_KILL_STATE_NONE)
 			str_printfa(str, ",kill_state=%d", user->kill_state);
 		str_append_c(str, ')');
 		i_error("%s", str_c(str));
@@ -553,22 +581,55 @@ static bool director_cmd_director(struct director_connection *conn,
 	struct director_host *host;
 	struct ip_addr ip;
 	unsigned int port;
+	bool forward = FALSE;
 
 	if (!director_args_parse_ip_port(conn, args, &ip, &port))
 		return FALSE;
 
 	host = director_host_lookup(conn->dir, &ip, port);
 	if (host != NULL) {
+		if (host == conn->dir->self_host) {
+			/* ignore updates to ourself */
+			return TRUE;
+		}
+		if (host->removed) {
+			/* ignore re-adds of removed directors */
+			return TRUE;
+		}
+
 		/* already have this. just reset its last_network_failure
 		   timestamp, since it might be up now. */
 		host->last_network_failure = 0;
-		return TRUE;
+		if (host->last_seq != 0) {
+			/* it also may have been restarted, reset last_seq */
+			host->last_seq = 0;
+			forward = TRUE;
+		}
+	} else {
+		/* save the director and forward it */
+		host = director_host_add(conn->dir, &ip, port);
+		forward = TRUE;
 	}
+	if (forward) {
+		director_notify_ring_added(host,
+			director_connection_get_host(conn));
+	}
+	return TRUE;
+}
 
-	/* save the director and forward it */
-	director_host_add(conn->dir, &ip, port);
-	director_update_send(conn->dir, director_connection_get_host(conn),
-		t_strdup_printf("DIRECTOR\t%s\t%u\n", net_ip2addr(&ip), port));
+static bool director_cmd_director_remove(struct director_connection *conn,
+					 const char *const *args)
+{
+	struct director_host *host;
+	struct ip_addr ip;
+	unsigned int port;
+
+	if (!director_args_parse_ip_port(conn, args, &ip, &port))
+		return FALSE;
+
+	host = director_host_lookup(conn->dir, &ip, port);
+	if (host != NULL && !host->removed)
+		director_ring_remove(host, director_connection_get_host(conn));
 	return TRUE;
 }
 
@@ -621,7 +682,7 @@ director_cmd_is_seen(struct director_connection *conn,
 	*_args = args + 3;
 
 	host = director_host_lookup(conn->dir, &ip, port);
-	if (host == NULL) {
+	if (host == NULL || host->removed) {
 		/* director is already gone, but we can't be sure if this
 		   command was sent everywhere. re-send it as if it was from
 		   ourself. */
@@ -859,8 +920,14 @@ static bool director_handshake_cmd_done(struct director_connection *conn)
 {
 	struct director *dir = conn->dir;
 
-	if (dir->debug)
-		i_debug("Handshaked to %s", conn->host->name);
+	if (dir->debug) {
+		unsigned int secs = time(NULL)-conn->created;
+
+		i_debug("director(%s): Handshake took %u secs, "
+			"bytes in=%"PRIuUOFF_T" out=%"PRIuUOFF_T,
+			conn->name, secs, conn->input->v_offset,
+			conn->output->offset);
+	}
 
 	/* the host is up now, make sure we can connect to it immediately
 	   if needed */
@@ -1074,15 +1141,13 @@ static void director_disconnect_wrong_lefts(struct director *dir)
 		conn = *connp;
 
 		if (conn->in && conn != dir->left && conn->me_received &&
+		    conn->to_disconnect == NULL &&
 		    director_host_cmp_to_self(dir->left->host, conn->host,
 					      dir->self_host) < 0) {
 			i_warning("Director connection %s tried to connect to "
 				  "us, should use %s instead",
 				  conn->name, dir->left->host->name);
 			director_connection_send_connect(conn, dir->left->host);
-			director_connection_deinit(&conn);
-			director_disconnect_wrong_lefts(dir);
-			return;
 		}
 	}
 }
@@ -1120,10 +1185,6 @@ director_connection_handle_cmd(struct director_connection *conn,
 		if (ret < 0) {
 			/* invalid commands during handshake,
 			   we probably don't want to reconnect here */
-			if (conn->dir->debug) {
-				i_debug("director(%s): Handshaking failed",
-					conn->host->name);
-			}
 			return FALSE;
 		}
 		/* allow also other commands during handshake */
@@ -1153,6 +1214,8 @@ director_connection_handle_cmd(struct director_connection *conn,
 		return director_cmd_user_killed_everywhere(conn, args);
 	if (strcmp(cmd, "DIRECTOR") == 0)
 		return director_cmd_director(conn, args);
+	if (strcmp(cmd, "DIRECTOR-REMOVE") == 0)
+		return director_cmd_director_remove(conn, args);
 	if (strcmp(cmd, "SYNC") == 0)
 		return director_connection_sync(conn, args);
 	if (strcmp(cmd, "CONNECT") == 0)
@@ -1169,10 +1232,10 @@ director_connection_handle_line(struct director_connection *conn,
 	const char *cmd, *const *args;
 	bool ret;
 
-	args = t_strsplit(line, "\t");
+	args = t_strsplit_tab(line);
 	cmd = args[0]; args++;
 	if (cmd == NULL) {
-		i_error("director(%s): Received empty line", conn->name);
+		director_cmd_error(conn, "Received empty line");
 		return FALSE;
 	}
 
@@ -1202,9 +1265,20 @@ static void director_connection_input(struct director_connection *conn)
 		return;
 	case -2:
 		/* buffer full */
-		i_error("BUG: Director %s sent us more than %d bytes",
-			conn->name, MAX_INBUF_SIZE);
-		director_connection_protocol_error(&conn);
+		director_cmd_error(conn, "Director sent us more than %d bytes",
+				   MAX_INBUF_SIZE);
+		director_connection_reconnect(&conn);
+		return;
+	}
+
+	if (conn->to_disconnect != NULL) {
+		/* just read everything the remote sends, and wait for it
+		   to disconnect. we mainly just want the remote to read the
+		   CONNECT we sent it. */
+		size_t size;
+
+		(void)i_stream_get_data(conn->input, &size);
+		i_stream_skip(conn->input, size);
 		return;
 	}
 
@@ -1215,11 +1289,7 @@ static void director_connection_input(struct director_connection *conn)
 		} T_END;
 
 		if (!ret) {
-			if (dir->debug) {
-				i_debug("director(%s): Invalid input, disconnecting",
-					conn->name);
-			}
-			director_connection_protocol_error(&conn);
+			director_connection_reconnect(&conn);
 			break;
 		}
 	}
@@ -1234,6 +1304,8 @@ static void director_connection_send_directors(struct director_connection *conn,
 	struct director_host *const *hostp;
 
 	array_foreach(&conn->dir->dir_hosts, hostp) {
+		if ((*hostp)->removed)
+			continue;
 		str_printfa(str, "DIRECTOR\t%s\t%u\n",
 			    net_ip2addr(&(*hostp)->ip), (*hostp)->port);
 	}
@@ -1282,9 +1354,6 @@ static int director_connection_send_users(struct director_connection *conn)
 	user_directory_iter_deinit(&conn->user_iter);
 	director_connection_send(conn, "DONE\n");
 
-	i_assert(conn->io == NULL);
-	conn->io = io_add(conn->fd, IO_READ, director_connection_input, conn);
-
 	ret = o_stream_flush(conn->output);
 	timeout_reset(conn->to_ping);
 	return ret;
@@ -1301,6 +1370,8 @@ static int director_connection_output(struct director_connection *conn)
 		o_stream_uncork(conn->output);
 		if (ret < 0)
 			director_connection_disconnected(&conn);
+		else
+			o_stream_set_flush_pending(conn->output, TRUE);
 		return ret;
 	}
 	return o_stream_flush(conn->output);
@@ -1365,6 +1436,11 @@ static void director_connection_connected(struct director_connection *conn)
 				    director_connection_output, conn);
 
 	io_remove(&conn->io);
+	conn->io = io_add(conn->fd, IO_READ, director_connection_input, conn);
+
+	timeout_remove(&conn->to_ping);
+	conn->to_ping = timeout_add(DIRECTOR_CONNECTION_SEND_USERS_TIMEOUT_MSECS,
+				    director_connection_init_timeout, conn);
 
 	o_stream_cork(conn->output);
 	director_connection_send_handshake(conn);
@@ -1373,7 +1449,8 @@ static void director_connection_connected(struct director_connection *conn)
 	director_connection_send(conn, str_c(str));
 
 	conn->user_iter = user_directory_iter_init(dir->users);
-	(void)director_connection_send_users(conn);
+	if (director_connection_send_users(conn) == 0)
+		o_stream_set_flush_pending(conn->output, TRUE);
 	o_stream_uncork(conn->output);
 }
 
@@ -1383,12 +1460,15 @@ director_connection_init_out(struct director *dir, int fd,
 {
 	struct director_connection *conn;
 
+	i_assert(!host->removed);
+
 	/* make sure we don't keep old sequence values across restarts */
 	host->last_seq = 0;
 
 	conn = director_connection_init_common(dir, fd);
 	conn->name = i_strdup_printf("%s/out", host->name);
 	conn->host = host;
+	director_host_ref(host);
 	conn->io = io_add(conn->fd, IO_WRITE,
 			  director_connection_connected, conn);
 	return conn;
@@ -1421,11 +1501,13 @@ void director_connection_deinit(struct director_connection **_conn)
 	}
 	if (dir->right == conn)
 		dir->right = NULL;
+	if (conn->host != NULL)
+		director_host_unref(conn->host);
 
 	if (conn->user_iter != NULL)
 		user_directory_iter_deinit(&conn->user_iter);
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	if (conn->to_disconnect != NULL)
+		timeout_remove(&conn->to_disconnect);
 	if (conn->to_pong != NULL)
 		timeout_remove(&conn->to_pong);
 	timeout_remove(&conn->to_ping);
@@ -1453,7 +1535,8 @@ void director_connection_disconnected(struct director_connection **_conn)
 	struct director_connection *conn = *_conn;
 	struct director *dir = conn->dir;
 
-	if (conn->created + DIRECTOR_SUCCESS_MIN_CONNECT_SECS > ioloop_time) {
+	if (conn->created + DIRECTOR_SUCCESS_MIN_CONNECT_SECS > ioloop_time &&
+	    conn->host != NULL) {
 		/* connection didn't exist for very long, assume it has a
 		   network problem */
 		conn->host->last_network_failure = ioloop_time;
@@ -1464,21 +1547,14 @@ void director_connection_disconnected(struct director_connection **_conn)
 		director_connect(dir);
 }
 
-void director_connection_protocol_error(struct director_connection **_conn)
+void director_connection_reconnect(struct director_connection **_conn)
 {
 	struct director_connection *conn = *_conn;
 	struct director *dir = conn->dir;
 
-	conn->host->last_protocol_failure = ioloop_time;
-
 	director_connection_deinit(_conn);
 	if (dir->right == NULL)
 		director_connect(dir);
-}
-
-static void director_connection_timeout(struct director_connection *conn)
-{
-	director_connection_disconnected(&conn);
 }
 
 void director_connection_send(struct director_connection *conn,
@@ -1499,7 +1575,6 @@ void director_connection_send(struct director_connection *conn,
 				"disconnecting", conn->name);
 		}
 		o_stream_close(conn->output);
-		conn->to = timeout_add(0, director_connection_timeout, conn);
 	}
 }
 
