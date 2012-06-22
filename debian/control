@@ -3,7 +3,7 @@ Section: mail
 Priority: optional
 Maintainer: Dovecot Maintainers <jaldhar-dovecot@debian.org>
 Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>, Fabio Tranchitella <kobold@debian.org>, Joel Johnson <mrjoel@lixil.net>, Marco Nenciarini <mnencia@debian.org>
-Build-Depends: debhelper (>= 7.2.3~), dpkg-dev (>= 1.16.1), pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient-dev, libsqlite3-dev, libsasl2-dev, zlib1g-dev, libkrb5-dev, drac-dev (>= 1.12-5), libbz2-dev, libdb-dev, libcurl4-gnutls-dev, libexpat-dev, systemd
+Build-Depends: debhelper (>= 7.2.3~), dpkg-dev (>= 1.16.1), pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient-dev, libsqlite3-dev, libsasl2-dev, zlib1g-dev, libkrb5-dev, drac-dev (>= 1.12-5), libbz2-dev, libdb-dev, libcurl4-gnutls-dev, libexpat-dev
 Standards-Version: 3.9.3
 Homepage: http://dovecot.org/
 Vcs-Git: git://git.debian.org/git/collab-maint/dovecot.git
