@@ -1,3 +1,15 @@
+dovecot (1:2.1.7-2) unstable; urgency=low
+
+  * [e23a136] Just a quick upload to make dovecot buildable on non-linux
+    platforms again. (Closes: #676817) I did it by removing the systemd
+    build-dep altogether.  sd-daemon.[ch] is included in the source so if
+    systemd is installed on a system, it should be detected and socket
+    activation should happen.  That is, assuming I've got everything right
+    (and documented) which is something I'll be looking into for the next
+    version.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 21 Jun 2012 23:54:47 -0400
+
 dovecot (1:2.1.7-1) unstable; urgency=low
 
   * [7668742] Imported upstream 2.1.7 (Closes: #663243)
