@@ -1,0 +1,2 @@
+dovecot-solr: hardening-no-fortify-functions usr/lib/dovecot/modules/lib21_fts_solr_plugin.so
+

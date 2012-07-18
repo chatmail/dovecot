@@ -197,6 +197,7 @@ binary-arch: build install
 	dh_installman -a
 	dh_installman -p dovecot-core debian/maildirmake.dovecot.1
 	dh_bugfiles -a
+	dh_lintian -a
 	dh_installchangelogs -a ChangeLog
 	dh_link -a
 	dh_strip -a --dbg-package=dovecot-dbg
