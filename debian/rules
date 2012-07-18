@@ -5,6 +5,8 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+dpkg_buildflags = DEB_BUILD_MAINT_OPTIONS="hardening=+all" dpkg-buildflags
+
 PIGEONHOLE_DIR=pigeonhole
 
 # These are used for cross-compiling and for saving the configure script
@@ -23,7 +25,7 @@ endif
 config-stamp: configure
 	dh_testdir
 	# Dovecot
-	$(shell dpkg-buildflags --export=configure) sh configure \
+	$(shell $(dpkg_buildflags) --export=configure) sh configure \
 	            --with-ldap=plugin \
 	            --with-ssl=openssl \
 	            --with-sql=plugin \
@@ -49,7 +51,7 @@ config-stamp: configure
 	# Pigeonhole
 	(cd $(PIGEONHOLE_DIR)/ && \
 	    touch stamp.h.in && \
-	    $(shell dpkg-buildflags --export=configure) sh configure \
+	    $(shell $(dpkg_buildflags) --export=configure) sh configure \
 	    --with-dovecot=../ \
 		--prefix=/usr \
 		--sysconfdir=/etc \
@@ -66,7 +68,7 @@ build-stamp:  config-stamp
 	# Pigeonhole
 	$(MAKE) -C $(PIGEONHOLE_DIR)
 	# DRAC
-	$(MAKE) -C src/plugins/drac $(shell dpkg-buildflags --export=configure)
+	$(MAKE) -C src/plugins/drac $(shell $(dpkg_buildflags) --export=configure)
 	touch build-stamp
 
 clean:
