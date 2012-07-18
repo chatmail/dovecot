@@ -1,5 +1,5 @@
 From: Jaldhar H. Vyas <jaldhar@debian.org>
-Date: Thu, 14 Oct 2010 23:17:44 +0200
+Date: Wed, 18 Jul 2012 17:35:35 +0300
 Subject: backport of 2.1.8 fixes for mailbox names
 Bug: #680035
 Description: Fixes instances where UTF-8 was misused instead of mUTF-7

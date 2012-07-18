@@ -1,0 +1,26 @@
+From: Luca Capello <luca@pca.it>
+Date: Mon, 09 Jul 2012 12:39:04 -0600
+Subject: Document dsync -k option
+Description: Adds a section on -k to the dsync.1 manpage
+Bug: #680992
+---
+ doc/man/dsync.1.in |    6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/doc/man/dsync.1.in b/doc/man/dsync.1.in
+index 2f34dcb..45fc31f 100644
+--- a/doc/man/dsync.1.in
++++ b/doc/man/dsync.1.in
+@@ -97,6 +97,12 @@ might skip syncing a mailbox, if both locations had modified it equally
+ many times (i.e. highest\-modseqs were equal), but with different changes.
+ .\"---------------------------------
+ .TP
++.BI \-k
++Preserve the existing environment variables, useful when using
++.B dsync
++with the SSH agent.
++.\"---------------------------------
++.TP
+ .BI \-m\  mailbox
+ Specifies the
+ .I mailbox
