@@ -4,3 +4,4 @@ pigeonhole.patch
 dovecot-drac.patch
 split-protocols.patch
 fix-mail_plugin_dir-default.patch
+fix-checkscript-segfault.patch
