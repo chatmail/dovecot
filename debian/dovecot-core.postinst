@@ -122,7 +122,7 @@ if [ "$1" = "configure" ]; then
   SSL_KEY="/etc/ssl/private/dovecot.pem"
 
   # Generate new certs if needed
-  if [ -e $SSL_CERT ] && [ -e $SSL_KEY ]; then
+  if [ -e $SSL_CERT ] || [ -e $SSL_KEY ]; then
     echo "You already have ssl certs for dovecot."
   else
     echo "Creating generic self-signed certificate: $SSL_CERT"
