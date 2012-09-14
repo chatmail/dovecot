@@ -14,12 +14,4 @@ if [ "$1" = "configure" ]; then
   done
 fi
 
-if [ -x "/etc/init.d/dovecot" ]; then
-	if [ -x /usr/sbin/invoke-rc.d ]; then
-		invoke-rc.d dovecot restart
-	else
-		/etc/init.d/dovecot restart
-	fi
-fi
-
 #DEBHELPER#
