@@ -3,15 +3,19 @@ dovecot (1:2.1.7-3~1.gbpfa282c) UNRELEASED; urgency=low
   ** SNAPSHOT build @fa282c76219558107debad2c9daafe11344c5a89 **
 
   [ Jaldhar H. Vyas ]
-  * [1a9ad5c] Fixes instances where UTF-8 was misused instead of mUTF-7 (Bug #680035)
-  * [8e40ea5] Patch to build with PIE and bindnow from intrigeri@debian.org (Bug #679017)
-  * [bc66629] Patch to document -k in dsync.1  by Luca Capello <luca@pca.it> (Bug #680992)
+  * [1a9ad5c] Fixes instances where UTF-8 was misused instead of mUTF-7
+    (Closes: #680035)
+  * [8e40ea5] Patch to build with PIE and bindnow
+    by intrigeri@debian.org (Closes: #679017)
+  * [bc66629] Patch to document -k in dsync.1
+    by Luca Capello <luca@pca.it> (Closes: #680992)
   * [ba67766] Add lintian overrides.
 
   [ Marco Nenciarini ]
   * [ffba408] Updated watch file
   * [9777434] Install missing default configuration files from upstream
-  * [fa282c7] Backport fix for segfault in managesieve triggered by CHECKSCRIPT command.
+  * [fa282c7] Backport fix for segfault in managesieve triggered by
+    CHECKSCRIPT command. (Closes: 688197)
 
  -- Marco Nenciarini <mnencia@debian.org>  Sat, 11 Aug 2012 01:08:23 +0200
 
