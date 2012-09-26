@@ -54,14 +54,14 @@ if [ "$1" = "purge" ] ; then
 
     if [ -d /var/run/dovecot ]; then rm -rf /var/run/dovecot; fi
 
-    if [ -d /etc/ssl/certs ]; then
-	cd /etc/ssl/certs
+    if [ -d /etc/dovecot ]; then
+	cd /etc/dovecot
         if [ -f dovecot.pem ]; then
-            echo "SSL certificate /etc/ssl/certs/dovecot.pem is NOT removed."
+            echo "SSL certificate /etc/dovecot/dovecot.pem is NOT removed."
             echo "Please remove manually if required."
         fi
-        if [ -f ../private/dovecot.pem ]; then
-            echo "SSL certificate /etc/ssl/private/dovecot.pem is NOT removed."
+        if [ -f ./private/dovecot.pem ]; then
+            echo "SSL certificate /etc/dovecot/private/dovecot.pem is NOT removed."
             echo "Please remove manually if required."
         fi
     fi

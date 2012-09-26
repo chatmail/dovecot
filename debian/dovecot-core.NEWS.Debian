@@ -1,3 +1,21 @@
+dovecot (1:2.1.7-3) unstable; urgency=low
+
+  * It was pointed out in bug #608719 that dovecots generated x.509
+    certificates should not be kept in /etc/ssl/certs.  As of this 
+    version they are now created in /etc/dovecot on new installs.
+    If you have an existing install, you can keep your certificates
+    where they are or move them yourself.
+    1.  Move /etc/ssl/certs/dovecot.pem to /etc/dovecot
+    2.  Create a directory called /etc/dovecot/private owned by root:root
+        with 0700 permissions.
+    3.  Move /etc/ssl/certs/private/dovecot.pem to /etc/dovecot/private
+    4.  In /etc/dovecot/conf.d/10-ssl.conf make sure you have these lines:
+        ssl_cert = </etc/dovecot/dovecot.pem
+        ssl_key = </etc/dovecot/private/dovecot.pem
+    5.  Restart dovecot.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 26 Sep 2012 16:32:39 -0400
+
 dovecot (1:2.0.5-1) experimental; urgency=low
 
   * A lot of settings have changed. Dovecot v2.0 can still use most of
