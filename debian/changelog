@@ -1,8 +1,19 @@
-dovecot (1:2.1.7-3~1.gbpfa282c) UNRELEASED; urgency=low
-
-  ** SNAPSHOT build @fa282c76219558107debad2c9daafe11344c5a89 **
+dovecot (1:2.1.7-3) unstable; urgency=low
 
   [ Jaldhar H. Vyas ]
+  * [3cdf0cd] Patch to add missing defines on Hurd platform  by Svante Signell
+    <svante.signell@telia.com> (Closes: #686931)
+  * [58f01c2] Generated certificates will now be created in /etc/dovecot
+    (Closes: #608719)
+  * [03d5499] Do not generate new dovecot cert if key or cert is already present
+    (Closes: #685896,#631257) Thanks to Alexander Ufimtsev  <alexu@ucd.ie> and
+    Jörg-Volker Peetz <jvpeetz@web.de> for patches.
+  * [2db5c1a] Add support for dpkg triggers.  This means dovecot will not be
+    repeatedly restarted when installing or removing lots of plugins
+    (Closes: #601744)  This should also solve the problem of dovecot starting
+    prematurely on upgrades.  (Closes: #665487)
+  * [87d982b] Use libwrap (Closes: #685850)
+  * [cfa92b5] Upgrade pigeonhole page to 0.3.1 (Closes: #688407)
   * [1a9ad5c] Fixes instances where UTF-8 was misused instead of mUTF-7
     (Closes: #680035)
   * [8e40ea5] Patch to build with PIE and bindnow
@@ -14,10 +25,10 @@ dovecot (1:2.1.7-3~1.gbpfa282c) UNRELEASED; urgency=low
   [ Marco Nenciarini ]
   * [ffba408] Updated watch file
   * [9777434] Install missing default configuration files from upstream
-  * [fa282c7] Backport fix for segfault in managesieve triggered by
+  * [9496828] Backport fix for segfault in managesieve triggered by
     CHECKSCRIPT command. (Closes: 688197)
 
- -- Marco Nenciarini <mnencia@debian.org>  Sat, 11 Aug 2012 01:08:23 +0200
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 27 Sep 2012 11:00:17 -0400
 
 dovecot (1:2.1.7-2) unstable; urgency=low
 
