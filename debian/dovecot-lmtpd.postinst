@@ -16,12 +16,4 @@ if [ "$1" = "configure" ]; then
   echo 'protocols = $protocols lmtp' > /usr/share/dovecot/protocols.d/lmtpd.protocol
 fi
 
-if [ -x "/etc/init.d/dovecot" ]; then
-	if [ -x /usr/sbin/invoke-rc.d ]; then
-		invoke-rc.d dovecot restart
-	else
-		/etc/init.d/dovecot restart
-	fi
-fi
-
 #DEBHELPER#

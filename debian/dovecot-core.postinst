@@ -12,6 +12,7 @@ if [ "$1" = "configure" ]; then
     conf.d/10-mail.conf \
     conf.d/10-master.conf \
     conf.d/10-ssl.conf \
+    conf.d/10-tcpwrapper.conf \
     conf.d/15-lda.conf \
     conf.d/15-mailboxes.conf \
     conf.d/90-acl.conf \
@@ -118,25 +119,46 @@ if [ "$1" = "configure" ]; then
 
   ## SSL Certs
   # Certs and key file
-  SSL_CERT="/etc/ssl/certs/dovecot.pem"
-  SSL_KEY="/etc/ssl/private/dovecot.pem"
+  OLD_SSL_CERT="/etc/ssl/certs/dovecot.pem"
+  OLD_SSL_KEY="/etc/ssl/private/dovecot.pem"
+  SSL_CERT="/etc/dovecot/dovecot.pem"
+  SSL_KEY="/etc/dovecot/private/dovecot.pem"
 
+  if [ ! -e /etc/dovecot/private ]; then
+    install -d -o root -g root -m0700 /etc/dovecot/private
+  fi
+
+  if [ -e $OLD_SSL_CERT ] || [ -e $OLD_SSL_KEY ]; then
+      echo "You already have ssl certs for dovecot."
+      echo "However you should move them out of /etc/ssl"
+      echo "and into /etc/dovecot and update the configuration"
+      echo "in /etc/dovecot/conf.d/10-ssl.conf accordingly."
+      echo "See /usr/share/dovecot-core/NEWS.Debian for details."
+        perl -i -nE "
+        if (/^\w*?ssl_cert/) {
+            say 'ssl_cert = <$OLD_SSL_CERT'
+        }
+        elsif (/^\w*?ssl_key/) {
+            say 'ssl_key = <$OLD_SSL_KEY'
+        } else {
+            print;
+        }" /etc/dovecot/conf.d/10-ssl.conf
   # Generate new certs if needed
-  if [ -e $SSL_CERT ] && [ -e $SSL_KEY ]; then
-    echo "You already have ssl certs for dovecot."
+  elif [ -e $SSL_CERT ] || [ -e $SSL_KEY ]; then
+      echo "You already have ssl certs for dovecot."
   else
-    echo "Creating generic self-signed certificate: $SSL_CERT"
-    echo "This certificate will expire in 10 years."
-    echo "(replace with hand-crafted or authorized one if needed)."
-    cd /etc/ssl/certs
-    PATH=$PATH:/usr/bin/ssl
-    if ! FQDN="$(hostname -f)"; then
-        FQDN="$(hostname)"
-        echo WARNING: Could not get FQDN, using \"$FQDN\".
-    fi
-    MAILNAME="$(cat /etc/mailname 2> /dev/null || echo "$FQDN")"
-    (openssl req -newkey rsa:2048  -x509 -days 3652.5 -nodes \
-	-rand /dev/urandom -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
+      echo "Creating generic self-signed certificate: $SSL_CERT"
+      echo "This certificate will expire in 10 years."
+      echo "(replace with hand-crafted or authorized one if needed)."
+      cd /etc/dovecot
+      PATH=$PATH:/usr/bin/ssl
+      if ! FQDN="$(hostname -f)"; then
+          FQDN="$(hostname)"
+          echo WARNING: Could not get FQDN, using \"$FQDN\".
+      fi
+      MAILNAME="$(cat /etc/mailname 2> /dev/null || echo "$FQDN")"
+      (openssl req -newkey rsa:2048  -x509 -days 3652.5 -nodes \
+	  -rand /dev/urandom -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
 .
 .
 .
@@ -145,19 +167,30 @@ $FQDN
 $FQDN
 root@$MAILNAME
 +
-    ) || echo "Warning : Bad SSL config, can't generate certificate."
+      ) || echo "Warning : Bad SSL config, can't generate certificate."
+
+    ucfr dovecot-core $SSL_CERT
+    ucfr dovecot-core $SSL_KEY
+
+    if [ ! -h $SSL_CERT ] && [ ! -h $SSL_KEY ]; then
+      chown root:dovecot $SSL_CERT || true
+      chmod 0644 $SSL_CERT || true
+      chown root:dovecot $SSL_KEY || true
+      chmod 0600 $SSL_KEY || true
+    fi
+
   fi
 
-  ucfr dovecot-core $SSL_CERT
-  ucfr dovecot-core $SSL_KEY
+fi
 
-  if [ ! -h $SSL_CERT ] && [ ! -h $SSL_KEY ]; then
-    chown root:dovecot $SSL_CERT || true
-    chmod 0644 $SSL_CERT || true
-    chown root:dovecot $SSL_KEY || true
-    chmod 0600 $SSL_KEY || true
-  fi
-
+if [ "$1" = "triggered" ]; then
+    if [ -x "/etc/init.d/dovecot" ]; then
+        if [ -x /usr/sbin/invoke-rc.d ]; then
+            invoke-rc.d dovecot restart
+        else
+            /etc/init.d/dovecot restart
+        fi
+    fi
 fi
 
 #DEBHELPER#
