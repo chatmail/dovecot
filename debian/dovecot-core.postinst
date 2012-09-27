@@ -12,6 +12,7 @@ if [ "$1" = "configure" ]; then
     conf.d/10-mail.conf \
     conf.d/10-master.conf \
     conf.d/10-ssl.conf \
+    conf.d/10-tcpwrapper.conf \
     conf.d/15-lda.conf \
     conf.d/15-mailboxes.conf \
     conf.d/90-acl.conf \

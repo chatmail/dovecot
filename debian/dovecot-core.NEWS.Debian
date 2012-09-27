@@ -14,7 +14,11 @@ dovecot (1:2.1.7-3) unstable; urgency=low
         ssl_key = </etc/dovecot/private/dovecot.pem
     5.  Restart dovecot.
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 26 Sep 2012 16:32:39 -0400
+  *  Instead of starting via inetd and tcpd, there is TCP wrapper support
+     now.  See http://wiki2.dovecot.org/LoginProcess and 
+     /etc/dovecot/conf.d/10-tcpwrapper.conf
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 27 Sep 2012 05:33:08 -0400
 
 dovecot (1:2.0.5-1) experimental; urgency=low
 
