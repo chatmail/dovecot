@@ -1,4 +1,4 @@
-hurd-ftbs.patch
+hurd-compat.patch
 dsync-manpage.patch
 mutf-7.patch
 pigeonhole.patch

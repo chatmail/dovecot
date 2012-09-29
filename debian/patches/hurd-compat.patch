@@ -1,0 +1,94 @@
+From: Jaldhar H. Vyas <jaldhar@debian.org>
+Date: Sat, 29 Sep 2012 19:09:33 -0400
+Subject: Backport of upstream patches for Hurd compatability
+Description: Fixes FTBS on Hurd platform
+Bug: #686931
+Origin: http://hg.dovecot.org/dovecot-2.1
+ This patch is an amalgamation of the following HG changesets
+
+ Author  Timo Sirainen <tss@iki.fi>
+ Fri Sep 28 15:07:11 2012 +0300
+ changeset 14738  75aadea5c2a2
+        
+ Author  Timo Sirainen <tss@iki.fi>
+ Fri Sep 28 15:11:30 2012 +0300
+ changeset 14739  2a44991cbf66
+
+ Author  Timo Sirainen <tss@iki.fi>
+ Fri Sep 28 15:12:28 2012 +0300
+ changeset 14740  6cac808c4bd8
+---
+ src/lib-master/master-instance.c                 |    2 +-
+ src/lib-storage/index/dbox-common/dbox-storage.c |   14 ++++++--------
+ src/lib/compat.h                                 |    4 ++++
+ 3 files changed, 11 insertions(+), 9 deletions(-)
+
+diff --git a/src/lib-master/master-instance.c b/src/lib-master/master-instance.c
+index 54cf03e..1427993 100644
+--- a/src/lib-master/master-instance.c
++++ b/src/lib-master/master-instance.c
+@@ -88,7 +88,7 @@ static int master_instance_list_refresh(struct master_instance_list *list)
+ 		i_error("open(%s) failed: %m", list->path);
+ 		return -1;
+ 	}
+-	input = i_stream_create_fd(fd, PATH_MAX, TRUE);
++	input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+ 	while ((line = i_stream_read_next_line(input)) != NULL) T_BEGIN {
+ 		if (master_instance_list_add_line(list, line) < 0)
+ 			i_error("Invalid line in %s: %s", list->path, line);
+diff --git a/src/lib-storage/index/dbox-common/dbox-storage.c b/src/lib-storage/index/dbox-common/dbox-storage.c
+index 6afd176..4061625 100644
+--- a/src/lib-storage/index/dbox-common/dbox-storage.c
++++ b/src/lib-storage/index/dbox-common/dbox-storage.c
+@@ -1,6 +1,7 @@
+ /* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
+ 
+ #include "lib.h"
++#include "abspath.h"
+ #include "ioloop.h"
+ #include "fs-api.h"
+ #include "mkdir-parents.h"
+@@ -31,25 +32,22 @@ static bool
+ dbox_alt_path_has_changed(const char *root_dir,
+ 			  const char *alt_path, const char *alt_symlink_path)
+ {
+-	char buf[PATH_MAX];
+-	ssize_t ret;
++	const char *linkpath;
+ 
+-	ret = readlink(alt_symlink_path, buf, sizeof(buf)-1);
+-	if (ret < 0) {
++	if (t_readlink(alt_symlink_path, &linkpath) < 0) {
+ 		if (errno == ENOENT)
+ 			return alt_path != NULL;
+ 		i_error("readlink(%s) failed: %m", alt_symlink_path);
+ 		return FALSE;
+ 	}
+-	buf[ret] = '\0';
+ 
+ 	if (alt_path == NULL) {
+ 		i_warning("dbox %s: Original ALT=%s, "
+-			  "but currently no ALT path set", root_dir, buf);
++			  "but currently no ALT path set", root_dir, linkpath);
+ 		return TRUE;
+-	} else if (strcmp(buf, alt_path) != 0) {
++	} else if (strcmp(linkpath, alt_path) != 0) {
+ 		i_warning("dbox %s: Original ALT=%s, "
+-			  "but currently ALT=%s", root_dir, buf, alt_path);
++			  "but currently ALT=%s", root_dir, linkpath, alt_path);
+ 		return TRUE;
+ 	}
+ 	return FALSE;
+diff --git a/src/lib/compat.h b/src/lib/compat.h
+index 4a85245..6b752e5 100644
+--- a/src/lib/compat.h
++++ b/src/lib/compat.h
+@@ -270,4 +270,8 @@ int fdatasync(int);
+ #  define IO_BLOCK_SIZE 8192
+ #endif
+ 
++#if !defined(PIPE_BUF) && defined(_POSIX_PIPE_BUF)
++#  define PIPE_BUF (8 * _POSIX_PIPE_BUF) /* for HURD */
++#endif
++
+ #endif
