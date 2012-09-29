@@ -1,8 +1,8 @@
-dovecot (1:2.1.7-3) unstable; urgency=low
+dovecot (1:2.1.7-3) unstable; urgency=high
 
   [ Jaldhar H. Vyas ]
-  * [3cdf0cd] Patch to add missing defines on Hurd platform  by Svante Signell
-    <svante.signell@telia.com> (Closes: #686931)
+  * [ba1d3f5] Fix FTBS on Hurd (Closes: #686931) via upstream patch backported
+    from mercurial.
   * [58f01c2] Generated certificates will now be created in /etc/dovecot
     (Closes: #608719)
   * [03d5499] Do not generate new dovecot cert if key or cert is already present
@@ -28,7 +28,7 @@ dovecot (1:2.1.7-3) unstable; urgency=low
   * [9496828] Backport fix for segfault in managesieve triggered by
     CHECKSCRIPT command. (Closes: 688197)
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 27 Sep 2012 11:00:17 -0400
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 29 Sep 2012 19:16:12 -0400
 
 dovecot (1:2.1.7-2) unstable; urgency=low
 
