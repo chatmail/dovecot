@@ -15,6 +15,7 @@ if [ "$1" = "purge" ] ; then
 		/etc/dovecot/conf.d/10-mail.conf \
 		/etc/dovecot/conf.d/10-master.conf \
 		/etc/dovecot/conf.d/10-ssl.conf \
+		/etc/dovecot/conf.d/10-tcpwrapper.conf \
 		/etc/dovecot/conf.d/15-lda.conf \
 		/etc/dovecot/conf.d/15-mailboxes.conf \
 		/etc/dovecot/conf.d/90-acl.conf \
