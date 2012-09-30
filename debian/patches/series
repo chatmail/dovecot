@@ -8,3 +8,4 @@ fix-mail_plugin_dir-default.patch
 ssl-cert-location.patch
 fix-checkscript-segfault.patch
 tcpwrapper.patch
+utf8-namespace.patch
