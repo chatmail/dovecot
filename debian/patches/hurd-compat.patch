@@ -2,21 +2,30 @@ From: Jaldhar H. Vyas <jaldhar@debian.org>
 Date: Sat, 29 Sep 2012 19:09:33 -0400
 Subject: Backport of upstream patches for Hurd compatability
 Description: Fixes FTBS on Hurd platform
+ This patch is an amalgamation of the following HG changesets:
+
+ HG changeset patch
+ # User Timo Sirainen <tss@iki.fi>
+ # Date 1348834031 -10800
+ # Node ID 75aadea5c2a2efbcc9c3a46380677eea05e33122
+ # Parent  88a05f387743ab213d0153ffd0652b2e76db4bf5
+ Avoid using PATH_MAX.
+
+ # HG changeset patch
+ # User Timo Sirainen <tss@iki.fi>
+ # Date 1348834348 -10800
+ # Node ID 6cac808c4bd8a3337c0dc55fd01a9954404c5515
+ # Parent  2a44991cbf6687812e3f6dd0a2c303eee43c867f
+ Compiling fix for HURD
+
+ # HG changeset patch
+ # User Timo Sirainen <tss@iki.fi>
+ # Date 1348834290 -10800
+ # Node ID 2a44991cbf6687812e3f6dd0a2c303eee43c867f
+ # Parent  75aadea5c2a2efbcc9c3a46380677eea05e33122
+ Avoid using PATH_MAX.        
 Bug: #686931
 Origin: http://hg.dovecot.org/dovecot-2.1
- This patch is an amalgamation of the following HG changesets
-
- Author  Timo Sirainen <tss@iki.fi>
- Fri Sep 28 15:07:11 2012 +0300
- changeset 14738  75aadea5c2a2
-        
- Author  Timo Sirainen <tss@iki.fi>
- Fri Sep 28 15:11:30 2012 +0300
- changeset 14739  2a44991cbf66
-
- Author  Timo Sirainen <tss@iki.fi>
- Fri Sep 28 15:12:28 2012 +0300
- changeset 14740  6cac808c4bd8
 ---
  src/lib-master/master-instance.c                 |    2 +-
  src/lib-storage/index/dbox-common/dbox-storage.c |   14 ++++++--------

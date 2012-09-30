@@ -1,7 +1,6 @@
 From: Timo Sirainen <tss@iki.fi>
 Date: Thu, 14 Oct 2010 23:17:44 +0200
 Subject: dovecot-drac
-
 Description: Adds support for drac
 Origin: http://dovecot.org/patches/1.1/drac.c
 ---

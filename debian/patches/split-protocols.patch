@@ -2,7 +2,6 @@ From: Marco Nenciarini <mnencia@debian.org>
 Date: Sat, 5 Mar 2011 11:19:07 +0100
 Updated: Wed, 7 Mar 2012 10:43:09 -0500
 Subject: split-protocols
-
 Description: Set default protocols value as empty and enable each
  protocol in its own configuration file
 ---

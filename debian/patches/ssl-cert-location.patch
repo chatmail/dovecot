@@ -1,8 +1,8 @@
 From: Jaldhar H. Vyas <jaldhar@debian.org>
 Date: Tue, 25 Sep 2012 01:12:07 -0400
 Subject: SSL cert location
-
-Description: Move dovecots generated X.509 certificate out of /etc/ssl where it doesn't belong.
+Description: Move dovecots generated X.509 certificate out of /etc/ssl where
+ it doesn't belong.
 Bug: #608719
 ---
  doc/example-config/conf.d/10-ssl.conf |    4 ++--

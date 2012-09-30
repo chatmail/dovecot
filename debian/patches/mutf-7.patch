@@ -3,7 +3,6 @@ Date: Wed, 18 Jul 2012 17:35:35 +0300
 Subject: backport of 2.1.8 fixes for mailbox names
 Bug: #680035
 Description: Fixes instances where UTF-8 was misused instead of mUTF-7
-Origin: http://hg.dovecot.org/dovecot-2.1
  This patch is an amalgamation of the following HG changesets
  # HG changeset patch
  # User Timo Sirainen <tss@iki.fi>
@@ -25,6 +24,7 @@ Origin: http://hg.dovecot.org/dovecot-2.1
  # Node ID 90270c054e1f64548e3ce5d73db85739ba9ab5f8
  # Parent  880af3c78df9adb61fe012792ce0e48bcd08752b
  imap-quota: GETQUOTAROOT command used UTF-8 instead of mUTF-7 encoding for mailbox name.
+Origin: http://hg.dovecot.org/dovecot-2.1
  
 ---
 

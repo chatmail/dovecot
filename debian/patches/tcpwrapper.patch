@@ -1,7 +1,6 @@
 From: Joerg Dorchain <joerg@dorchain.net>
 Date: Sun, 26 Aug 2012 10:10:28 +0200
 Subject: Add TCP wrapper support
-
 Description: Configuration file for TCP wrapper support.
 Bug: #685850
 ---

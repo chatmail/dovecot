@@ -1,7 +1,6 @@
 From: Marco Nenciarini <mnencia@debian.org>
 Date: Fri, 16 Sep 2011 00:55:02 +0200
 Subject: fix mail_plugin_dir default
-
 Description: Fix mail_plugin_dir default value in conf.d/10-mail.conf
 Bug: #624294
 ---
