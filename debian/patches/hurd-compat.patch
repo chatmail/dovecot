@@ -3,21 +3,21 @@ Date: Sat, 29 Sep 2012 19:09:33 -0400
 Subject: Backport of upstream patches for Hurd compatability
 Description: Fixes FTBS on Hurd platform
  This patch is an amalgamation of the following HG changesets:
-
+ .
  HG changeset patch
  # User Timo Sirainen <tss@iki.fi>
  # Date 1348834031 -10800
  # Node ID 75aadea5c2a2efbcc9c3a46380677eea05e33122
  # Parent  88a05f387743ab213d0153ffd0652b2e76db4bf5
  Avoid using PATH_MAX.
-
+ .
  # HG changeset patch
  # User Timo Sirainen <tss@iki.fi>
  # Date 1348834348 -10800
  # Node ID 6cac808c4bd8a3337c0dc55fd01a9954404c5515
  # Parent  2a44991cbf6687812e3f6dd0a2c303eee43c867f
  Compiling fix for HURD
-
+ .
  # HG changeset patch
  # User Timo Sirainen <tss@iki.fi>
  # Date 1348834290 -10800

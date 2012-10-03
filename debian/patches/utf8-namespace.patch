@@ -10,7 +10,7 @@ Description: Fixes handling of UTF-8 namespace prefixes
  # Parent  565605200989dd5a81b8358a13420a4d7b30b33c
  imap: Fixes to handling UTF-8 namespace prefixes
 Origin: http://hg.dovecot.org/dovecot-2.1
-
+---
 diff -r 565605200989 -r ade94fde249e src/imap/cmd-list.c
 --- a/src/imap/cmd-list.c	Thu Aug 23 22:33:23 2012 +0300
 +++ b/src/imap/cmd-list.c	Thu Aug 23 22:56:56 2012 +0300
