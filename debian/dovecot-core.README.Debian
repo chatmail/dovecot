@@ -31,6 +31,21 @@ Other important changes are:
     completely untrustworthy processes, while "dovecot" user is used
     for slightly more trusted processes.
 
+  * In conf.d/10-mail.conf, the default mail_location is set to
+    mbox:~/mail:INBOX=/var/mail/%u
+    This has to be set because Dovecots auto-detection of mailboxes fails
+    when a user has no mail.  I tried to provide a reasonable default
+    but advanced users will certainly want to change this.
+
+    Related to this, you might see an error in the logs about dovecot not
+    being able to chgrp certain files.  This is because the default user
+    mailboxes in Debian belong to group mail which dovecot is not part of
+    (nor should be.)  The Debian package has been patched so that the error
+    will not be fatal but for a more permanent solution, see here:
+    http://wiki2.dovecot.org/Errors/ChgrpNoPerm  for some discussion.  Or
+    you can set mail_location (and the equivalent settings in your MDA) so
+    that mailboxes are in the users home directory.
+
   * No more convert plugin, use dsync instead
 
   * No more expire-tool, use doveadm expunge instead. Also expire
