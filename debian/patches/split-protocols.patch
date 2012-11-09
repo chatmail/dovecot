@@ -39,7 +39,7 @@ Index: dovecot/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
 -
  # Service definitions
  
- service managesieve-login {
+ #service managesieve-login {
 Index: dovecot/src/config/all-settings.c
 ===================================================================
 --- dovecot.orig/src/config/all-settings.c	2012-03-07 08:19:52.000000000 -0500
