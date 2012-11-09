@@ -10,8 +10,7 @@ dovecot (1:2.1.7-3) unstable; urgency=high
     Jörg-Volker Peetz <jvpeetz@web.de> for patches.
   * [2db5c1a] Add support for dpkg triggers.  This means dovecot will not be
     repeatedly restarted when installing or removing lots of plugins
-    (Closes: #601744)  This should also solve the problem of dovecot starting
-    prematurely on upgrades.  (Closes: #665487)
+    (Closes: #601744)
   * [87d982b] Use libwrap (Closes: #685850)
   * [cfa92b5] Upgrade pigeonhole page to 0.3.1 (Closes: #688407)
   * [1a9ad5c] Fixes instances where UTF-8 was misused instead of mUTF-7
@@ -28,7 +27,7 @@ dovecot (1:2.1.7-3) unstable; urgency=high
   * [9496828] Backport fix for segfault in managesieve triggered by
     CHECKSCRIPT command. (Closes: 688197)
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 29 Sep 2012 19:16:12 -0400
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 09 Nov 2012 17:40:53 -0500
 
 dovecot (1:2.1.7-2) unstable; urgency=low
 
