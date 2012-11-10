@@ -1,22 +1,27 @@
 dovecot (1:2.1.7-3) unstable; urgency=high
 
   [ Jaldhar H. Vyas ]
+  * [03d5499] Do not generate new dovecot cert if key or cert is already
+    present (Closes: #685896,#631257) Thanks to Alexander Ufimtsev
+    <alexu@ucd.ie> and Jörg-Volker Peetz <jvpeetz@web.de> for patches.
+  * [5be6c2a] You should be able to upgrade and remove dovecot-managesieved
+    without errors (Closes: #665487)
+  * [1a9ad5c] Fixes instances where UTF-8 was misused instead of mUTF-7
+    (Closes: #680035)
+  * [c0ac3ba] Backport of fix for failure to autocreate mailboxes
+    (Closes: #623440) This also requires setting the default mail_location.
   * [ba1d3f5] Fix FTBS on Hurd (Closes: #686931) via upstream patch backported
     from mercurial.
+  * [cfa92b5] Upgrade pigeonhole page to 0.3.1 (Closes: #688407)
   * [58f01c2] Generated certificates will now be created in /etc/dovecot
     (Closes: #608719)
-  * [03d5499] Do not generate new dovecot cert if key or cert is already present
-    (Closes: #685896,#631257) Thanks to Alexander Ufimtsev  <alexu@ucd.ie> and
-    Jörg-Volker Peetz <jvpeetz@web.de> for patches.
+  * [8e40ea5] Patch to build with PIE and bindnow
+    by intrigeri@debian.org (Closes: #679017)
+  * [87d982b] Use libwrap (Closes: #685850)
+  * [ebb5421] Start after nslcd (Closes: #692632)
   * [2db5c1a] Add support for dpkg triggers.  This means dovecot will not be
     repeatedly restarted when installing or removing lots of plugins
     (Closes: #601744)
-  * [87d982b] Use libwrap (Closes: #685850)
-  * [cfa92b5] Upgrade pigeonhole page to 0.3.1 (Closes: #688407)
-  * [1a9ad5c] Fixes instances where UTF-8 was misused instead of mUTF-7
-    (Closes: #680035)
-  * [8e40ea5] Patch to build with PIE and bindnow
-    by intrigeri@debian.org (Closes: #679017)
   * [bc66629] Patch to document -k in dsync.1
     by Luca Capello <luca@pca.it> (Closes: #680992)
   * [ba67766] Add lintian overrides.
@@ -25,9 +30,9 @@ dovecot (1:2.1.7-3) unstable; urgency=high
   * [ffba408] Updated watch file
   * [9777434] Install missing default configuration files from upstream
   * [9496828] Backport fix for segfault in managesieve triggered by
-    CHECKSCRIPT command. (Closes: 688197)
+    CHECKSCRIPT command. (Closes: #688197)
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 09 Nov 2012 17:40:53 -0500
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 10 Nov 2012 03:50:30 -0500
 
 dovecot (1:2.1.7-2) unstable; urgency=low
 
