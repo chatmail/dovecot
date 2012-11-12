@@ -1,3 +1,10 @@
+dovecot (1:2.1.7-4) unstable; urgency=low
+
+  * [68ef7ad] piuparts complained /etc/dovecot/private was left unowned on
+    purge which is against policy (Closes: #692944)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 11 Nov 2012 23:45:07 -0500
+
 dovecot (1:2.1.7-3) unstable; urgency=high
 
   [ Jaldhar H. Vyas ]
