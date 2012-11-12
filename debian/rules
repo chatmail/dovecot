@@ -89,6 +89,7 @@ install: build
 	dh_testroot
 	dh_clean -k
 	dh_installdirs
+	chmod 0700 debian/dovecot-core/etc/dovecot/private
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/dovecot-core
 	$(MAKE) -C $(PIGEONHOLE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-core
 	rm `find $(CURDIR)/debian -name '*.la'`
