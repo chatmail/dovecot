@@ -1,4 +1,11 @@
-dovecot (1:2.1.7-4) unstable; urgency=low
+dovecot (1:2.1.7-5) unstable; urgency=high
+
+  * [132bc3b] Remove call to ntp-wait in init script.  Dovecot handles a 
+    skewed clock much better now.  (Closes: #693225)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 14 Nov 2012 14:45:29 -0500
+
+dovecot (1:2.1.7-4) unstable; urgency=high
 
   * [68ef7ad] piuparts complained /etc/dovecot/private was left unowned on
     purge which is against policy (Closes: #692944)
