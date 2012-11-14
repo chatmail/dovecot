@@ -134,14 +134,6 @@ do_reload() {
 case "$1" in
   start)
     log_daemon_msg "Starting $DESC" "$NAME"
-    # Dovecot will kill itself if the system clock moves backwards
-    # while Dovecot is running, and this can happen if the hardware
-    # clock is severely out of sync at boot time, and then ntpd is
-    # used to synchronize the system clock. So, if the machine also
-    # runs ntpd, we call ntp-wait to make sure that ntpd has had a
-    # chance to synchronize the system clock before Dovecot is
-    # started.
-    test -x /usr/sbin/ntp-wait && ntp-wait -n 2 || true
     do_start
     case "$?" in
         0|1) log_end_msg 0 ;;
