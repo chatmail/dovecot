@@ -133,7 +133,7 @@ if [ "$1" = "configure" ]; then
       echo "However you should move them out of /etc/ssl"
       echo "and into /etc/dovecot and update the configuration"
       echo "in /etc/dovecot/conf.d/10-ssl.conf accordingly."
-      echo "See /usr/share/dovecot-core/NEWS.Debian for details."
+      echo "See /usr/share/doc/dovecot-core/NEWS.Debian.gz for details."
         perl -i -nE "
         if (/^\w*?ssl_cert/) {
             say 'ssl_cert = <$OLD_SSL_CERT'
