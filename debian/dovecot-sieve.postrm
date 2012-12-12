@@ -23,4 +23,12 @@ if [ "$1" = "purge" ] ; then
 	done
 fi
 
+if [ -x "/etc/init.d/dovecot" ]; then
+       if [ -x /usr/sbin/invoke-rc.d ] ; then
+               invoke-rc.d dovecot start
+       else
+               /etc/init.d/dovecot start
+       fi
+fi
+
 #DEBHELPER#
