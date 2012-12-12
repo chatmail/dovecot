@@ -35,7 +35,6 @@ config-stamp: configure
 	            --with-gssapi=plugin \
 		        --with-solr \
 	            --with-ioloop=best \
-	            --with-libwrap \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \
 	            --prefix=/usr \
