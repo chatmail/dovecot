@@ -14,6 +14,8 @@ Section: oldlibs
 Priority: extra
 Architecture: all
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core
+Breaks:   mailavenger (<< 0.8.1-4)
+Replaces: mailavenger (<< 0.8.1-4)
 Recommends: dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite, dovecot-ldap
 Suggests: dovecot-managesieved
 Description: Transitional package for dovecot
