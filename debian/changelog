@@ -1,3 +1,18 @@
+dovecot (1:2.1.7-6) unstable; urgency=high
+
+  * WARNING: in order to get this package into wheezy some functionality
+    from the previous release had to be removed.  Namely:
+    - TCP Wrappers support
+    - Hurd compatability support
+    - Triggers  
+    All this will be coming back in the next version but for now, if you need
+    any of it, stick with -5.
+  * [1f869e0] NEWS.Debian was not getting added to the package (Closes: #693621)
+  * [564c5e2] Add breaks and replaces mailavenger for debian-common
+    (Closes: #694376)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 14 Dec 2012 17:01:33 -0500
+
 dovecot (1:2.1.7-5) unstable; urgency=high
 
   * [132bc3b] Remove call to ntp-wait in init script.  Dovecot handles a 
