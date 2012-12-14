@@ -89,7 +89,6 @@ install: build
 	dh_testroot
 	dh_clean -k
 	dh_installdirs
-	chmod 0700 debian/dovecot-core/etc/dovecot/private
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/dovecot-core
 	$(MAKE) -C $(PIGEONHOLE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-core
 	rm `find $(CURDIR)/debian -name '*.la'`
@@ -205,6 +204,7 @@ binary-arch: build install
 	dh_strip -a --dbg-package=dovecot-dbg
 	dh_compress -a
 	dh_fixperms -a
+	chmod 0700 debian/dovecot-core/etc/dovecot/private
 	dh_makeshlibs -a -n
 	dh_installdeb -a
 	dh_shlibdeps -a
