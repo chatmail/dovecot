@@ -135,11 +135,11 @@ if [ "$1" = "configure" ]; then
       echo "in /etc/dovecot/conf.d/10-ssl.conf accordingly."
       echo "See /usr/share/doc/dovecot-core/NEWS.Debian.gz for details."
         perl -i -nE "
-        if (/^\w*?ssl_cert/) {
-            say 'ssl_cert = <$OLD_SSL_CERT'
+        if (m|^\w*?ssl_cert\s*=\s*<$OLD_SSL_CERT|) {
+            say 'ssl_cert = <$SSL_CERT'
         }
-        elsif (/^\w*?ssl_key/) {
-            say 'ssl_key = <$OLD_SSL_KEY'
+        elsif (m|^\w*?ssl_key\s*=\s*<$OLD_SSL_KEY|) {
+            say 'ssl_key = <$SSL_KEY'
         } else {
             print;
         }" /etc/dovecot/conf.d/10-ssl.conf
