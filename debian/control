@@ -14,8 +14,6 @@ Section: oldlibs
 Priority: extra
 Architecture: all
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core
-Breaks:   mailavenger (<< 0.8.1-4)
-Replaces: mailavenger (<< 0.8.1-4)
 Recommends: dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite, dovecot-ldap
 Suggests: dovecot-managesieved
 Description: Transitional package for dovecot
@@ -27,8 +25,8 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020)
 Suggests: ntp, dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite, dovecot-ldap, dovecot-imapd, dovecot-pop3d, dovecot-lmtpd, dovecot-managesieved, dovecot-solr
 Provides: dovecot-common
-Replaces: dovecot-common (<< 1:2.0.14-2~)
-Breaks: dovecot-common (<< 1:2.0.14-2~)
+Replaces: dovecot-common (<< 1:2.0.14-2~), mailavenger (<< 0.8.1-4)
+Breaks: dovecot-common (<< 1:2.0.14-2~), mailavenger (<< 0.8.1-4)
 Description: secure mail server that supports mbox, maildir, dbox and mdbox mailboxes
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that
