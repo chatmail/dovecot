@@ -1,0 +1,38 @@
+From: Jaldhar H. Vyas <jaldhar@debian.org>
+Date: Mon, 04 Feb 2013 15:55:06 +0000
+Subject: wrong pointer to exampledir
+Description: The file /etc/dovecot/README sends the user to a directory
+/usr/share/doc/dovecot/example-config/, but the real path should be
+/usr/share/doc/dovecot-core/example-config/
+Bug: #698941
+
+ doc/example-config/Makefile.in        |    2 +-
+ doc/example-config/conf.d/Makefile.in |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/example-config/Makefile.in b/doc/example-config/Makefile.in
+index 687ec24..c463065 100644
+--- a/doc/example-config/Makefile.in
++++ b/doc/example-config/Makefile.in
+@@ -296,7 +296,7 @@ top_srcdir = @top_srcdir@
+ SUBDIRS = conf.d
+ pkgsysconfdir = $(sysconfdir)/dovecot
+ nodist_pkgsysconf_DATA = README
+-exampledir = $(docdir)/example-config
++exampledir = $(datarootdir)/doc/dovecot-core/example-config
+ example_DATA = \
+ 	dovecot.conf \
+ 	dovecot-db.conf.ext \
+diff --git a/doc/example-config/conf.d/Makefile.in b/doc/example-config/conf.d/Makefile.in
+index 8292a36..49f93f2 100644
+--- a/doc/example-config/conf.d/Makefile.in
++++ b/doc/example-config/conf.d/Makefile.in
+@@ -253,7 +253,7 @@ top_build_prefix = @top_build_prefix@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+ pkgsysconfdir = $(sysconfdir)/dovecot
+-exampledir = $(docdir)/example-config/conf.d
++exampledir = $(datarootdir)/doc/dovecot-core/example-config/conf.d
+ example_DATA = \
+ 	auth-checkpassword.conf.ext \
+ 	auth-deny.conf.ext \
