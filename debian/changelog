@@ -1,3 +1,21 @@
+dovecot (1:2.1.7-7) unstable; urgency=high
+
+  * If you are upgrading from stable or earlier versions of this package
+    from testing/unstable please carefully read
+    /usr/share/doc/dovecot-core/README.Debian.gz for important information
+    about changes.
+  * [0d74b31] Move Breaks/Replaces mailavenger from dovecot-common to
+    dovecot-core (Closes: #694376)
+  * [a8030a1] Revamped dovecot-cores README.Debian by adding any info I could
+    think of in order to ease upgrade problems. (Closes: #696820)
+  * [04798d3] Don't touch 10-ssl.conf at all.  Eventually I will DTRT with
+    regards to the default generated ssl certificates but in the mean time
+    this will do the least mischief.  (Closes: #696817)
+  * [fde17d1] Patch to make /etc/dovecot/readme point to the right place for
+    the example configuration.  (Closes: #698941)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 04 Feb 2013 16:27:17 -0500
+
 dovecot (1:2.1.7-6) unstable; urgency=high
 
   * WARNING: in order to get this package into wheezy some functionality
