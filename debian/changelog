@@ -1,3 +1,9 @@
+dovecot (1:2.1.7-7~bpo60+1) squeeze-backports; urgency=low
+
+  * Rebuild for squeeze-backports.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Fri, 22 Feb 2013 16:03:12 +0100
+
 dovecot (1:2.1.7-7) unstable; urgency=high
 
   * If you are upgrading from stable or earlier versions of this package
@@ -143,12 +149,6 @@ dovecot (1:2.0.18-1) unstable; urgency=low
   * [00b0d0c] Updated pigeonhole to 0.2.6
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 09 Mar 2012 00:55:13 -0500
-
-dovecot (1:2.0.15-1~bpo60+1) squeeze-backports; urgency=low
-
-  * Rebuild for squeeze-backports.
-
- -- Marco Nenciarini <mnencia@debian.org>  Mon, 19 Sep 2011 19:55:55 +0200
 
 dovecot (1:2.0.15-1) unstable; urgency=low
 
