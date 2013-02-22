@@ -7,6 +7,8 @@ struct master_service_settings_output;
 struct auth_passdb_settings {
 	const char *driver;
 	const char *args;
+	const char *default_fields;
+	const char *override_fields;
 	bool deny;
 	bool pass;
 	bool master;
@@ -15,6 +17,8 @@ struct auth_passdb_settings {
 struct auth_userdb_settings {
 	const char *driver;
 	const char *args;
+	const char *default_fields;
+	const char *override_fields;
 };
 
 struct auth_settings {
@@ -32,6 +36,7 @@ struct auth_settings {
 	const char *krb5_keytab;
 	const char *gssapi_hostname;
 	const char *winbind_helper_path;
+	const char *proxy_self;
 	unsigned int failure_delay;
 	unsigned int first_valid_uid;
 	unsigned int last_valid_uid;
@@ -47,12 +52,14 @@ struct auth_settings {
 	ARRAY_DEFINE(passdbs, struct auth_passdb_settings *);
 	ARRAY_DEFINE(userdbs, struct auth_userdb_settings *);
 
+	const char *base_dir;
 	bool verbose_proctitle;
 
 	/* generated: */
 	char username_chars_map[256];
 	char username_translation_map[256];
 	const char *const *realms_arr;
+	const struct ip_addr *proxy_self_ips;
 };
 
 extern const struct setting_parser_info auth_setting_parser_info;

@@ -1,9 +1,9 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
 #include "str.h"
-#include "istream-internal.h"
+#include "istream-private.h"
 
 void i_stream_set_name(struct istream *stream, const char *name)
 {
@@ -52,6 +52,14 @@ void i_stream_set_destroy_callback(struct istream *stream,
 
 	iostream->destroy_callback = callback;
 	iostream->destroy_context = context;
+}
+
+void i_stream_unset_destroy_callback(struct istream *stream)
+{
+	struct iostream_private *iostream = &stream->real_stream->iostream;
+
+	iostream->destroy_callback = NULL;
+	iostream->destroy_context = NULL;
 }
 
 int i_stream_get_fd(struct istream *stream)
@@ -107,8 +115,10 @@ ssize_t i_stream_read(struct istream *stream)
 	size_t old_size;
 	ssize_t ret;
 
-	if (unlikely(stream->closed))
+	if (unlikely(stream->closed)) {
+		errno = stream->stream_errno;
 		return -1;
+	}
 
 	stream->eof = FALSE;
 	stream->stream_errno = 0;
@@ -127,6 +137,7 @@ ssize_t i_stream_read(struct istream *stream)
 			/* error handling should be easier if we now just
 			   assume the stream is now at EOF */
 			stream->eof = TRUE;
+			errno = stream->stream_errno;
 		} else {
 			i_assert(stream->eof);
 		}
@@ -349,12 +360,6 @@ char *i_stream_next_line(struct istream *stream)
 		return NULL;
 	}
 
-	if (unlikely(_stream->w_buffer == NULL)) {
-		i_error("i_stream_next_line(%s) called for unmodifiable stream",
-			i_stream_get_name(stream));
-		return NULL;
-	}
-
 	pos = memchr(_stream->buffer + _stream->skip, '\n',
 		     _stream->pos - _stream->skip);
 	if (pos != NULL) {
@@ -458,6 +463,8 @@ void i_stream_grow_buffer(struct istream_private *stream, size_t bytes)
 {
 	size_t old_size;
 
+	i_assert(stream->max_buffer_size > 0);
+
 	old_size = stream->buffer_size;
 
 	stream->buffer_size = stream->pos + bytes;
@@ -466,8 +473,7 @@ void i_stream_grow_buffer(struct istream_private *stream, size_t bytes)
 	else
 		stream->buffer_size = nearest_power(stream->buffer_size);
 
-	if (stream->max_buffer_size > 0 &&
-	    stream->buffer_size > stream->max_buffer_size)
+	if (stream->buffer_size > stream->max_buffer_size)
 		stream->buffer_size = stream->max_buffer_size;
 
 	if (stream->buffer_size <= old_size)

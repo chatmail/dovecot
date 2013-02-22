@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "ioloop.h"
@@ -11,7 +11,9 @@
 #include "abspath.h"
 #include "ipwd.h"
 #include "execv-const.h"
+#include "mountpoint-list.h"
 #include "restrict-process-size.h"
+#include "master-instance.h"
 #include "master-service.h"
 #include "master-service-settings.h"
 #include "askpass.h"
@@ -45,6 +47,8 @@ int null_fd, global_master_dead_pipe_fd[2];
 struct service_list *services;
 
 static char *pidfile_path;
+static struct master_instance_list *instances;
+static struct timeout *to_instance;
 static failure_callback_t *orig_fatal_callback;
 static failure_callback_t *orig_error_callback;
 
@@ -79,7 +83,10 @@ void process_exec(const char *cmd, const char *extra_args[])
 	if (p != NULL) argv[0] = p+1;
 
 	/* prefix with dovecot/ */
-	argv[0] = t_strconcat(PACKAGE"/", argv[0], NULL);
+	argv[0] = t_strdup_printf("%s/%s", services->set->instance_name,
+				  argv[0]);
+	if (strncmp(argv[0], PACKAGE, strlen(PACKAGE)) != 0)
+		argv[0] = t_strconcat(PACKAGE"-", argv[0], NULL);
 	(void)execv_const(executable, argv);
 }
 
@@ -157,7 +164,7 @@ master_fatal_callback(const struct failure_context *ctx,
 	abort(); /* just to silence the noreturn attribute warnings */
 }
 
-static void ATTR_NORETURN
+static void ATTR_NORETURN ATTR_FORMAT(2, 0)
 startup_fatal_handler(const struct failure_context *ctx,
 		      const char *fmt, va_list args)
 {
@@ -170,7 +177,7 @@ startup_fatal_handler(const struct failure_context *ctx,
 	abort();
 }
 
-static void
+static void ATTR_FORMAT(2, 0)
 startup_error_handler(const struct failure_context *ctx,
 		      const char *fmt, va_list args)
 {
@@ -282,6 +289,64 @@ static void create_config_symlink(const struct master_settings *set)
 	}
 }
 
+static void mountpoints_warn_missing(struct mountpoint_list *mountpoints)
+{
+	struct mountpoint_list_iter *iter;
+	struct mountpoint_list_rec *rec;
+
+	/* warn about mountpoints that no longer exist */
+	iter = mountpoint_list_iter_init(mountpoints);
+	while ((rec = mountpoint_list_iter_next(iter)) != NULL) {
+		if (MOUNTPOINT_WRONGLY_NOT_MOUNTED(rec)) {
+			i_warning("%s is no longer mounted. "
+				  "If this is intentional, "
+				  "remove it with doveadm mount",
+				  rec->mount_path);
+		}
+	}
+	mountpoint_list_iter_deinit(&iter);
+}
+
+static void mountpoints_update(const struct master_settings *set)
+{
+	struct mountpoint_list *mountpoints;
+	const char *perm_path, *state_path;
+
+	perm_path = t_strconcat(PKG_STATEDIR"/"MOUNTPOINT_LIST_FNAME, NULL);
+	state_path = t_strconcat(set->base_dir, "/"MOUNTPOINT_LIST_FNAME, NULL);
+	mountpoints = mountpoint_list_init(perm_path, state_path);
+
+	if (mountpoint_list_add_missing(mountpoints, MOUNTPOINT_STATE_DEFAULT,
+				mountpoint_list_default_ignore_prefixes,
+				mountpoint_list_default_ignore_types) == 0)
+		mountpoints_warn_missing(mountpoints);
+	(void)mountpoint_list_save(mountpoints);
+	mountpoint_list_deinit(&mountpoints);
+}
+
+static void instance_update_now(struct master_instance_list *list)
+{
+	int ret;
+
+	ret = master_instance_list_set_name(list, services->set->base_dir,
+					    services->set->instance_name);
+	if (ret == 0) {
+		/* duplicate instance names. allow without warning.. */
+		master_instance_list_update(list, services->set->base_dir);
+	}
+	
+	if (to_instance != NULL)
+		timeout_remove(&to_instance);
+	to_instance = timeout_add((3600*12 + rand()%(60*30)) * 1000,
+				  instance_update_now, list);
+}
+
+static void instance_update(void)
+{
+	instances = master_instance_list_init(MASTER_INSTANCE_PATH);
+	instance_update_now(instances);
+}
+
 static void
 sig_settings_reload(const siginfo_t *si ATTR_UNUSED,
 		    void *context ATTR_UNUSED)
@@ -330,7 +395,7 @@ sig_settings_reload(const siginfo_t *si ATTR_UNUSED,
 			 services->config->config_file_path);
 
 	/* switch to new configuration. */
-	services_monitor_stop(services);
+	services_monitor_stop(services, FALSE);
 	if (services_listen_using(new_services, services) < 0) {
 		services_monitor_start(services);
 		return;
@@ -342,7 +407,7 @@ sig_settings_reload(const siginfo_t *si ATTR_UNUSED,
 		while (service->processes != NULL)
 			service_process_destroy(service->processes);
 	}
-	services_destroy(services);
+	services_destroy(services, FALSE);
 
 	services = new_services;
         services_monitor_start(services);
@@ -428,8 +493,30 @@ static void main_log_startup(void)
 		i_info(STARTUP_STRING);
 }
 
+static void master_set_process_limit(void)
+{
+	struct service *const *servicep;
+	unsigned int process_limit = 0;
+	rlim_t nproc;
+
+	/* we'll just count all the processes that can exist and set the
+	   process limit so that we won't reach it. it's usually higher than
+	   needed, since we'd only need to set it high enough for each
+	   separate UID not to reach the limit, but this is difficult to
+	   guess: mail processes should probably be counted together for a
+	   common vmail user (unless system users are being used), but
+	   we can't really guess what the mail processes are. */
+	array_foreach(&services->services, servicep)
+		process_limit += (*servicep)->process_limit;
+
+	if (restrict_get_process_limit(&nproc) == 0 &&
+	    process_limit > nproc)
+		restrict_process_count(process_limit);
+}
+
 static void main_init(const struct master_settings *set)
 {
+	master_set_process_limit();
 	drop_capabilities();
 
 	/* deny file access from everyone else except owner */
@@ -451,17 +538,36 @@ static void main_init(const struct master_settings *set)
 
 	create_pid_file(pidfile_path);
 	create_config_symlink(set);
+	mountpoints_update(set);
+	instance_update();
 
 	services_monitor_start(services);
 }
 
+static void global_dead_pipe_close(void)
+{
+	if (close(global_master_dead_pipe_fd[0]) < 0)
+		i_error("close(global dead pipe) failed: %m");
+	if (close(global_master_dead_pipe_fd[1]) < 0)
+		i_error("close(global dead pipe) failed: %m");
+	global_master_dead_pipe_fd[0] = -1;
+	global_master_dead_pipe_fd[1] = -1;
+}
+
 static void main_deinit(void)
 {
+	instance_update_now(instances);
+	timeout_remove(&to_instance);
+	master_instance_list_deinit(&instances);
+
+	/* kill services and wait for them to die before unlinking pid file */
+	global_dead_pipe_close();
+	services_destroy(services, TRUE);
+
 	if (unlink(pidfile_path) < 0)
 		i_error("unlink(%s) failed: %m", pidfile_path);
 	i_free(pidfile_path);
 
-	services_destroy(services);
 	service_anvil_global_deinit();
 	service_pids_deinit();
 }
@@ -796,7 +902,9 @@ int main(int argc, char *argv[])
 	if (!foreground)
 		daemonize();
 
-	main_init(set);
+	T_BEGIN {
+		main_init(set);
+	} T_END;
 	master_service_run(master_service, NULL);
 	main_deinit();
 	master_service_deinit(&master_service);

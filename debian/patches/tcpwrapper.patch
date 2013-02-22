@@ -1,0 +1,42 @@
+From: Joerg Dorchain <joerg@dorchain.net>
+Date: Sun, 26 Aug 2012 10:10:28 +0200
+Subject: Add TCP wrapper support
+Description: Configuration file for TCP wrapper support.
+Bug: #685850
+---
+ doc/example-config/conf.d/10-tcpwrapper.conf |   14 ++++++++++++++
+ doc/example-config/conf.d/Makefile.am        |    1 +
+ 2 files changed, 15 insertions(+)
+
+diff --git a/doc/example-config/conf.d/10-tcpwrapper.conf b/doc/example-config/conf.d/10-tcpwrapper.conf
+new file mode 100644
+index 0000000..b237d96
+--- /dev/null
++++ b/doc/example-config/conf.d/10-tcpwrapper.conf
+@@ -0,0 +1,14 @@
++# 10-tcpwrapper.conf
++#
++# service name for hosts.{allow|deny} are those defined as
++# inet_listener in master.conf
++#
++#login_access_sockets = tcpwrap
++#
++#service tcpwrap {
++#  unix_listener login/tcpwrap {
++#    group = $default_login_user
++#    mode = 0600
++#    user = $default_login_user
++#  }
++#}
+diff --git a/doc/example-config/conf.d/Makefile.am b/doc/example-config/conf.d/Makefile.am
+index 744d202..f9fe79b 100644
+--- a/doc/example-config/conf.d/Makefile.am
++++ b/doc/example-config/conf.d/Makefile.am
+@@ -17,6 +17,7 @@ example_DATA = \
+ 	10-mail.conf \
+ 	10-master.conf \
+ 	10-ssl.conf \
++	10-tcpwrapper.conf \
+ 	15-lda.conf \
+ 	15-mailboxes.conf \
+ 	20-imap.conf \

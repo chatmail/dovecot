@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "array.h"
@@ -30,10 +30,12 @@ enum imap_proxy_state {
 static void proxy_write_id(struct imap_client *client, string_t *str)
 {
 	str_printfa(str, "I ID ("
+		    "\"x-session-id\" \"%s\" "
 		    "\"x-originating-ip\" \"%s\" "
 		    "\"x-originating-port\" \"%u\" "
 		    "\"x-connected-ip\" \"%s\" "
 		    "\"x-connected-port\" \"%u\")\r\n",
+		    client_get_session_id(&client->common),
 		    net_ip2addr(&client->common.ip),
 		    client->common.remote_port,
 		    net_ip2addr(&client->common.local_ip),
@@ -231,7 +233,7 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 		return 1;
 	} else if (strncmp(line, "L ", 2) == 0) {
 		line += 2;
-		if (client->set->verbose_auth) {
+		if (client->set->auth_verbose) {
 			const char *log_line = line;
 
 			if (strncasecmp(log_line, "NO ", 3) == 0)
@@ -264,6 +266,7 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 					 AUTH_FAILED_MSG);
 		}
 
+		client->proxy_auth_failed = TRUE;
 		client_proxy_failed(client, FALSE);
 		return -1;
 	} else if (strncasecmp(line, "* CAPABILITY ", 13) == 0) {

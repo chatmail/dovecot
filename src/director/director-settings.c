@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -40,7 +40,7 @@ struct service_settings director_service_settings = {
 	.group = "",
 	.privileged_group = "",
 	.extra_groups = "",
-	.chroot = "",
+	.chroot = ".",
 
 	.drop_priv_before_exec = FALSE,
 
@@ -64,11 +64,11 @@ struct service_settings director_service_settings = {
 	{ type, #name, offsetof(struct director_settings, name), NULL }
 
 static const struct setting_define director_setting_defines[] = {
-	DEF(SET_STR, base_dir),
 	DEF(SET_STR, master_user_separator),
 
 	DEF(SET_STR, director_servers),
 	DEF(SET_STR, director_mail_servers),
+	DEF(SET_STR, director_username_hash),
 	DEF(SET_TIME, director_user_expire),
 	DEF(SET_UINT, director_doveadm_port),
 
@@ -76,11 +76,11 @@ static const struct setting_define director_setting_defines[] = {
 };
 
 const struct director_settings director_default_settings = {
-	.base_dir = PKG_RUNDIR,
 	.master_user_separator = "",
 
 	.director_servers = "",
 	.director_mail_servers = "",
+	.director_username_hash = "%u",
 	.director_user_expire = 60*15,
 	.director_doveadm_port = 0
 };

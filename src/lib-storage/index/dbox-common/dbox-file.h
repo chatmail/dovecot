@@ -27,6 +27,7 @@
 #endif
 
 struct dbox_file;
+struct stat;
 
 enum dbox_header_key {
 	/* Must be sizeof(struct dbox_message_header) when appending (hex) */
@@ -70,10 +71,7 @@ enum dbox_metadata_key {
 
 enum dbox_message_type {
 	/* Normal message */
-	DBOX_MESSAGE_TYPE_NORMAL	= 'N',
-	/* Parts of the message exists outside the following data.
-	   See the metadata for how to find them. */
-	DBOX_MESSAGE_TYPE_EXT_REFS	= 'E'
+	DBOX_MESSAGE_TYPE_NORMAL	= 'N'
 };
 
 struct dbox_message_header {

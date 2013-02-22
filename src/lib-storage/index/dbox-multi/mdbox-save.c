@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -58,7 +58,7 @@ mdbox_copy_file_get_file(struct mailbox_transaction_context *t,
 	rec = data;
 
 	if (mdbox_map_lookup(ctx->mbox->storage->map, rec->map_uid,
-			     &file_id, offset_r) <= 0)
+			     &file_id, offset_r) < 0)
 		i_unreached();
 
 	return mdbox_file_init(ctx->mbox->storage, file_id);
@@ -166,7 +166,7 @@ static int mdbox_save_mail_write_metadata(struct mdbox_save_context *ctx,
 	struct dbox_file *file = mail->file_append->file;
 	struct dbox_message_header dbox_msg_hdr;
 	uoff_t message_size;
-	uint8_t guid_128[MAIL_GUID_128_SIZE];
+	guid_128_t guid_128;
 
 	i_assert(file->msg_header_size == sizeof(dbox_msg_hdr));
 
@@ -218,6 +218,7 @@ static int mdbox_save_finish_write(struct mail_save_context *_ctx)
 	i_stream_unref(&ctx->ctx.input);
 
 	if (ctx->ctx.failed) {
+		mail_index_expunge(ctx->ctx.trans, ctx->ctx.seq);
 		mdbox_map_append_abort(ctx->append_ctx);
 		array_delete(&ctx->mails, array_count(&ctx->mails) - 1, 1);
 		return -1;
@@ -301,10 +302,13 @@ int mdbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 		return -1;
 	}
 
-	/* lock the mailbox after map to avoid deadlocks. */
+	/* lock the mailbox after map to avoid deadlocks. if we've noticed
+	   any corruption, deal with it later, otherwise we won't have
+	   up-to-date atomic->sync_view */
 	if (mdbox_sync_begin(ctx->mbox, MDBOX_SYNC_FLAG_NO_PURGE |
 			     MDBOX_SYNC_FLAG_FORCE |
-			     MDBOX_SYNC_FLAG_FSYNC, ctx->atomic,
+			     MDBOX_SYNC_FLAG_FSYNC |
+			     MDBOX_SYNC_FLAG_NO_REBUILD, ctx->atomic,
 			     &ctx->sync_ctx) < 0) {
 		mdbox_transaction_save_rollback(_ctx);
 		return -1;
@@ -364,10 +368,11 @@ void mdbox_transaction_save_commit_post(struct mail_save_context *_ctx,
 	(void)mdbox_map_atomic_finish(&ctx->atomic);
 
 	if (storage->set->parsed_fsync_mode != FSYNC_MODE_NEVER) {
-		if (fdatasync_path(ctx->mbox->box.path) < 0) {
+		const char *box_path = mailbox_get_path(&ctx->mbox->box);
+
+		if (fdatasync_path(box_path) < 0) {
 			mail_storage_set_critical(storage,
-				"fdatasync_path(%s) failed: %m",
-				ctx->mbox->box.path);
+				"fdatasync_path(%s) failed: %m", box_path);
 		}
 	}
 	mdbox_transaction_save_rollback(_ctx);
@@ -441,9 +446,7 @@ int mdbox_copy(struct mail_save_context *_ctx, struct mail *mail)
 	save_mail = array_append_space(&ctx->mails);
 	save_mail->seq = ctx->ctx.seq;
 
-	if (_ctx->dest_mail != NULL) {
-		mail_set_seq(_ctx->dest_mail, ctx->ctx.seq);
-		_ctx->dest_mail->saving = TRUE;
-	}
+	if (_ctx->dest_mail != NULL)
+		mail_set_seq_saving(_ctx->dest_mail, ctx->ctx.seq);
 	return 0;
 }

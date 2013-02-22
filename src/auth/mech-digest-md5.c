@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 /* Digest-MD5 SASL authentication, see RFC-2831 */
 
@@ -34,7 +34,6 @@ struct digest_auth_request {
 	struct auth_request auth_request;
 
 	pool_t pool;
-	unsigned int authenticated:1;
 
 	/* requested: */
 	char *nonce;
@@ -46,6 +45,7 @@ struct digest_auth_request {
 	char *nonce_count;
 	char *qop_value;
 	char *digest_uri; /* may be NULL */
+	char *authzid; /* may be NULL, authorization ID */
 	unsigned char response[32];
 	unsigned long maxbuf;
 	unsigned int nonce_found:1;
@@ -133,7 +133,12 @@ static bool verify_credentials(struct digest_auth_request *request,
 		     { nonce-value, ":" nc-value, ":",
 		       cnonce-value, ":", qop-value, ":", HEX(H(A2)) }))
 
-	   and since we don't support authzid yet:
+	   and if authzid is not empty:
+
+	   A1 = { H( { username-value, ":", realm-value, ":", passwd } ),
+		":", nonce-value, ":", cnonce-value, ":", authzid }
+
+	   else:
 
 	   A1 = { H( { username-value, ":", realm-value, ":", passwd } ),
 		":", nonce-value, ":", cnonce-value }
@@ -155,6 +160,10 @@ static bool verify_credentials(struct digest_auth_request *request,
 	md5_update(&ctx, request->nonce, strlen(request->nonce));
 	md5_update(&ctx, ":", 1);
 	md5_update(&ctx, request->cnonce, strlen(request->cnonce));
+	if (request->authzid != NULL) {
+		md5_update(&ctx, ":", 1);
+		md5_update(&ctx, request->authzid, strlen(request->authzid));
+	}
 	md5_final(&ctx, digest);
 	a1_hex = binary_to_hex(digest, 16);
 
@@ -324,7 +333,7 @@ static bool auth_handle_response(struct digest_auth_request *request,
 		return TRUE;
 	}
 
-	if (strcmp(key, "nonce-count") == 0) {
+	if (strcmp(key, "nc") == 0) {
 		if (request->nonce_count != NULL) {
 			*error = "nonce-count must not exist more than once";
 			return FALSE;
@@ -417,8 +426,18 @@ static bool auth_handle_response(struct digest_auth_request *request,
 	}
 
 	if (strcmp(key, "authzid") == 0) {
-		/* not supported, abort */
-		return FALSE;
+		if (request->authzid != NULL) {
+		    *error = "authzid must not exist more than once";
+		    return FALSE;
+		}
+
+		if (*value == '\0') {
+		    *error = "empty authzid";
+		    return FALSE;
+		}
+
+		request->authzid = p_strdup(request->pool, value);
+		return TRUE;
 	}
 
 	/* unknown key, ignore */
@@ -505,10 +524,8 @@ static void credentials_callback(enum passdb_result result,
 			return;
 		}
 
-		request->authenticated = TRUE;
-		auth_request_handler_reply_continue(auth_request,
-						    request->rspauth,
-						    strlen(request->rspauth));
+		auth_request_success(auth_request, request->rspauth,
+				     strlen(request->rspauth));
 		break;
 	case PASSDB_RESULT_INTERNAL_FAILURE:
 		auth_request_internal_failure(auth_request);
@@ -527,13 +544,6 @@ mech_digest_md5_auth_continue(struct auth_request *auth_request,
 		(struct digest_auth_request *)auth_request;
 	const char *username, *error;
 
-	if (request->authenticated) {
-		/* authentication is done, we were just waiting the last
-		   word from client */
-		auth_request_success(auth_request, NULL, 0);
-		return;
-	}
-
 	if (parse_digest_response(request, data, data_size, &error)) {
 		if (auth_request->realm != NULL &&
 		    strchr(request->username, '@') == NULL) {
@@ -544,7 +554,11 @@ mech_digest_md5_auth_continue(struct auth_request *auth_request,
 			username = request->username;
 		}
 
-		if (auth_request_set_username(auth_request, username, &error)) {
+		if (auth_request_set_username(auth_request, username, &error) &&
+				(request->authzid == NULL ||
+				 auth_request_set_login_username(auth_request,
+								 request->authzid,
+								 &error))) {
 			auth_request_lookup_credentials(auth_request,
 					"DIGEST-MD5", credentials_callback);
 			return;

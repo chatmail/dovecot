@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -27,7 +27,7 @@ struct penalty_context {
 
 static void penalty_parse_line(const char *line, struct penalty_line *line_r)
 {
-	const char *const *args = t_strsplit(line, "\t");
+	const char *const *args = t_strsplit_tab(line);
 	const char *ident = args[0];
 	const char *penalty_str = args[1];
 	const char *last_penalty_str = args[2];

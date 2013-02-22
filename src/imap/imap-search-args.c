@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "mail-storage.h"
@@ -52,10 +52,15 @@ int imap_search_args_build(struct client_command_context *cmd,
 
 	parser = mail_search_parser_init_imap(args);
 	ret = mail_search_build(mail_search_register_get_imap(),
-				parser, charset, &sargs, &error);
+				parser, &charset, &sargs, &error);
 	mail_search_parser_deinit(&parser);
 	if (ret < 0) {
-		client_send_command_error(cmd, error);
+		if (charset == NULL) {
+			client_send_tagline(cmd, t_strconcat(
+				"BAD [BADCHARSET] ", error, NULL));
+		} else {
+			client_send_command_error(cmd, error);
+		}
 		return -1;
 	}
 
@@ -112,6 +117,7 @@ static int imap_search_get_msgset_arg(struct client_command_context *cmd,
 	    !msgset_is_valid(&args->args->value.seqset,
 			     cmd->client->messages_count)) {
 		*error_r = "Invalid messageset";
+		mail_search_args_unref(&args);
 		return -1;
 	}
 	*args_r = args;
@@ -130,6 +136,7 @@ imap_search_get_uidset_arg(const char *uidset, struct mail_search_args **args_r,
 	p_array_init(&args->args->value.seqset, args->pool, 16);
 	if (imap_seq_set_parse(uidset, &args->args->value.seqset) < 0) {
 		*error_r = "Invalid uidset";
+		mail_search_args_unref(&args);
 		return -1;
 	}
 
@@ -172,7 +179,7 @@ static int imap_search_get_searchres(struct client_command_context *cmd,
 	} else {
 		/* $ not set yet, match nothing */
 		search_args->args->type = SEARCH_ALL;
-		search_args->args->not = TRUE;
+		search_args->args->match_not = TRUE;
 	}
 	*search_args_r = search_args;
 	return 1;

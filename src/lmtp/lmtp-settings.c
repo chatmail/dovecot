@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -41,10 +41,10 @@ struct service_settings lmtp_service_settings = {
 
 	.process_min_avail = 0,
 	.process_limit = 0,
-	.client_limit = 0,
+	.client_limit = 1,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = 0,
+	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &lmtp_unix_listeners_buf,
 			      sizeof(lmtp_unix_listeners[0]) } },
@@ -59,13 +59,15 @@ struct service_settings lmtp_service_settings = {
 static const struct setting_define lmtp_setting_defines[] = {
 	DEF(SET_BOOL, lmtp_proxy),
 	DEF(SET_BOOL, lmtp_save_to_detail_mailbox),
+	DEF(SET_STR_VARS, login_greeting),
 
 	SETTING_DEFINE_LIST_END
 };
 
 static const struct lmtp_settings lmtp_default_settings = {
 	.lmtp_proxy = FALSE,
-	.lmtp_save_to_detail_mailbox = FALSE
+	.lmtp_save_to_detail_mailbox = FALSE,
+	.login_greeting = PACKAGE_NAME" ready."
 };
 
 static const struct setting_parser_info *lmtp_setting_dependencies[] = {
@@ -88,8 +90,8 @@ const struct setting_parser_info lmtp_setting_parser_info = {
 
 void lmtp_settings_dup(const struct setting_parser_context *set_parser,
 		       pool_t pool,
-		       const struct lmtp_settings **lmtp_set_r,
-		       const struct lda_settings **lda_set_r)
+		       struct lmtp_settings **lmtp_set_r,
+		       struct lda_settings **lda_set_r)
 {
 	void **sets;
 

@@ -1,8 +1,8 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
-#include "ostream-internal.h"
+#include "ostream-private.h"
 
 struct buffer_ostream {
 	struct ostream_private ostream;
@@ -59,5 +59,5 @@ struct ostream *o_stream_create_buffer(buffer_t *buf)
 	bstream->ostream.write_at = o_stream_buffer_write_at;
 
 	bstream->buf = buf;
-	return o_stream_create(&bstream->ostream);
+	return o_stream_create(&bstream->ostream, NULL);
 }

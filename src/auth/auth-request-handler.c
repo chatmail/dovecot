@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -57,6 +57,12 @@ auth_request_handler_create(auth_request_callback_t *callback, void *context,
 	handler->context = context;
 	handler->master_callback = master_callback;
 	return handler;
+}
+
+unsigned int
+auth_request_handler_get_request_count(struct auth_request_handler *handler)
+{
+	return hash_table_count(handler->requests);
 }
 
 void auth_request_handler_abort_requests(struct auth_request_handler *handler)
@@ -156,15 +162,14 @@ static void get_client_extra_fields(struct auth_request *request,
 
 	extra_fields = auth_stream_reply_export(request->extra_fields);
 
-	if (!request->proxy) {
-		/* we only wish to remove all fields prefixed with "userdb_" */
-		if (strstr(extra_fields, "userdb_") == NULL) {
-			auth_stream_reply_import(reply, extra_fields);
-			return;
-		}
+	if (!request->proxy && strstr(extra_fields, "userdb_") == NULL) {
+		/* optimization: there are no userdb_* fields, we can just
+		   import */
+		auth_stream_reply_import(reply, extra_fields);
+		return;
 	}
 
-	fields = t_strsplit(extra_fields, "\t");
+	fields = t_strsplit_tab(extra_fields);
 	for (src = 0; fields[src] != NULL; src++) {
 		if (strncmp(fields[src], "userdb_", 7) != 0) {
 			if (!seen_pass && strncmp(fields[src], "pass=", 5) == 0)
@@ -231,6 +236,87 @@ auth_request_handle_failure(struct auth_request *request,
 	}
 }
 
+static void
+auth_request_handler_reply_success_finish(struct auth_request *request)
+{
+        struct auth_request_handler *handler = request->handler;
+	struct auth_stream_reply *reply;
+
+	reply = auth_stream_reply_init(pool_datastack_create());
+
+	if (request->last_penalty != 0 && auth_penalty != NULL) {
+		/* reset penalty */
+		auth_penalty_update(auth_penalty, request, 0);
+	}
+
+	auth_stream_reply_add(reply, "OK", NULL);
+	auth_stream_reply_add(reply, NULL, dec2str(request->id));
+	auth_stream_reply_add(reply, "user", request->user);
+	get_client_extra_fields(request, reply);
+	if (request->no_login || handler->master_callback == NULL) {
+		/* this request doesn't have to wait for master
+		   process to pick it up. delete it */
+		auth_request_handler_remove(handler, request);
+	}
+	handler->callback(reply, handler->context);
+}
+
+static void
+auth_request_handler_reply_failure_finish(struct auth_request *request)
+{
+	struct auth_stream_reply *reply;
+
+	reply = auth_stream_reply_init(pool_datastack_create());
+	auth_stream_reply_add(reply, "FAIL", NULL);
+	auth_stream_reply_add(reply, NULL, dec2str(request->id));
+	if (request->user != NULL)
+		auth_stream_reply_add(reply, "user", request->user);
+	else if (request->original_username != NULL) {
+		auth_stream_reply_add(reply, "user",
+				      request->original_username);
+	}
+
+	if (request->internal_failure)
+		auth_stream_reply_add(reply, "temp", NULL);
+	else if (request->master_user != NULL) {
+		/* authentication succeeded, but we can't log in
+		   as the wanted user */
+		auth_stream_reply_add(reply, "authz", NULL);
+	}
+	if (request->no_failure_delay)
+		auth_stream_reply_add(reply, "nodelay", NULL);
+	get_client_extra_fields(request, reply);
+
+	switch (request->passdb_result) {
+	case PASSDB_RESULT_INTERNAL_FAILURE:
+	case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
+	case PASSDB_RESULT_USER_UNKNOWN:
+	case PASSDB_RESULT_PASSWORD_MISMATCH:
+	case PASSDB_RESULT_OK:
+		break;
+	case PASSDB_RESULT_USER_DISABLED:
+		auth_stream_reply_add(reply, "user_disabled", NULL);
+		break;
+	case PASSDB_RESULT_PASS_EXPIRED:
+		auth_stream_reply_add(reply, "pass_expired", NULL);
+		break;
+	}
+
+	auth_request_handle_failure(request, reply);
+}
+
+static void
+auth_request_handler_proxy_callback(bool success, struct auth_request *request)
+{
+        struct auth_request_handler *handler = request->handler;
+
+	if (success)
+		auth_request_handler_reply_success_finish(request);
+	else
+		auth_request_handler_reply_failure_finish(request);
+        auth_request_handler_unref(&handler);
+}
+
 void auth_request_handler_reply(struct auth_request *request,
 				enum auth_client_result result,
 				const void *auth_reply, size_t reply_size)
@@ -238,6 +324,7 @@ void auth_request_handler_reply(struct auth_request *request,
         struct auth_request_handler *handler = request->handler;
 	struct auth_stream_reply *reply;
 	string_t *str;
+	int ret;
 
 	if (handler->destroyed) {
 		/* the client connection was already closed. we can't do
@@ -249,9 +336,9 @@ void auth_request_handler_reply(struct auth_request *request,
 		auth_request_set_state(request, AUTH_REQUEST_STATE_FINISHED);
 	}
 
-	reply = auth_stream_reply_init(pool_datastack_create());
 	switch (result) {
 	case AUTH_CLIENT_RESULT_CONTINUE:
+		reply = auth_stream_reply_init(pool_datastack_create());
 		auth_stream_reply_add(reply, "CONT", NULL);
 		auth_stream_reply_add(reply, NULL, dec2str(request->id));
 
@@ -263,49 +350,23 @@ void auth_request_handler_reply(struct auth_request *request,
 		handler->callback(reply, handler->context);
 		break;
 	case AUTH_CLIENT_RESULT_SUCCESS:
-		auth_request_proxy_finish(request, TRUE);
-
-		if (request->last_penalty != 0 && auth_penalty != NULL) {
-			/* reset penalty */
-			auth_penalty_update(auth_penalty, request, 0);
-		}
-
-		auth_stream_reply_add(reply, "OK", NULL);
-		auth_stream_reply_add(reply, NULL, dec2str(request->id));
-		auth_stream_reply_add(reply, "user", request->user);
 		if (reply_size > 0) {
 			str = t_str_new(MAX_BASE64_ENCODED_SIZE(reply_size));
 			base64_encode(auth_reply, reply_size, str);
-			auth_stream_reply_add(reply, "resp", str_c(str));
+			auth_stream_reply_add(request->extra_fields, "resp", str_c(str));
 		}
-		get_client_extra_fields(request, reply);
-		if (request->no_login || handler->master_callback == NULL) {
-			/* this request doesn't have to wait for master
-			   process to pick it up. delete it */
-			auth_request_handler_remove(handler, request);
-		}
-		handler->callback(reply, handler->context);
+		ret = auth_request_proxy_finish(request,
+				auth_request_handler_proxy_callback);
+		if (ret < 0)
+			auth_request_handler_reply_failure_finish(request);
+		else if (ret > 0)
+			auth_request_handler_reply_success_finish(request);
+		else
+			return;
 		break;
 	case AUTH_CLIENT_RESULT_FAILURE:
-		auth_request_proxy_finish(request, FALSE);
-
-		auth_stream_reply_add(reply, "FAIL", NULL);
-		auth_stream_reply_add(reply, NULL, dec2str(request->id));
-		if (request->user != NULL)
-			auth_stream_reply_add(reply, "user", request->user);
-
-		if (request->internal_failure)
-			auth_stream_reply_add(reply, "temp", NULL);
-		else if (request->master_user != NULL) {
-			/* authentication succeeded, but we can't log in
-			   as the wanted user */
-			auth_stream_reply_add(reply, "authz", NULL);
-		}
-		if (request->no_failure_delay)
-			auth_stream_reply_add(reply, "nodelay", NULL);
-		get_client_extra_fields(request, reply);
-
-		auth_request_handle_failure(request, reply);
+		auth_request_proxy_finish_failure(request);
+		auth_request_handler_reply_failure_finish(request);
 		break;
 	}
 	/* NOTE: request may be destroyed now */
@@ -392,7 +453,7 @@ bool auth_request_handler_auth_begin(struct auth_request_handler *handler,
 	i_assert(!handler->destroyed);
 
 	/* <id> <mechanism> [...] */
-	list = t_strsplit(args, "\t");
+	list = t_strsplit_tab(args);
 	if (list[0] == NULL || list[1] == NULL ||
 	    str_to_uint(list[0], &id) < 0) {
 		i_error("BUG: Authentication client %u "
@@ -427,7 +488,7 @@ bool auth_request_handler_auth_begin(struct auth_request_handler *handler,
 			arg++;
 		}
 
-		if (auth_request_import(request, name, arg))
+		if (auth_request_import_auth(request, name, arg))
 			;
 		else if (strcmp(name, "resp") == 0) {
 			initial_resp = arg;
@@ -587,7 +648,9 @@ static void userdb_callback(enum userdb_result result,
 	case USERDB_RESULT_OK:
 		auth_stream_reply_add(reply, "USER", NULL);
 		auth_stream_reply_add(reply, NULL, dec2str(request->id));
-		if (request->master_user != NULL) {
+		if (request->master_user != NULL &&
+		    auth_stream_reply_find(request->userdb_reply,
+					   "master_user") == NULL) {
 			auth_stream_reply_add(request->userdb_reply,
 					      "master_user",
 					      request->master_user);

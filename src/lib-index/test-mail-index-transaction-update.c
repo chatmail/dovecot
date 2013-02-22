@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -41,6 +41,12 @@ bool mail_index_map_get_ext_idx(struct mail_index_map *map ATTR_UNUSED,
 uint32_t mail_index_view_get_messages_count(struct mail_index_view *view ATTR_UNUSED)
 {
 	return hdr.messages_count;
+}
+
+void mail_index_transaction_lookup_latest_keywords(struct mail_index_transaction *t ATTR_UNUSED,
+						   uint32_t seq ATTR_UNUSED,
+						   ARRAY_TYPE(keyword_indexes) *keywords ATTR_UNUSED)
+{
 }
 
 static struct mail_index_transaction *
@@ -500,12 +506,10 @@ static void test_mail_index_modseq_update(void)
 
 static void test_mail_index_expunge(void)
 {
-	static uint8_t empty_guid[MAIL_GUID_128_SIZE] = { 0, };
+	static guid_128_t empty_guid = { 0, };
 	struct mail_index_transaction *t;
 	const struct mail_transaction_expunge_guid *expunges;
-	uint8_t guid2[MAIL_GUID_128_SIZE];
-	uint8_t guid3[MAIL_GUID_128_SIZE];
-	uint8_t guid4[MAIL_GUID_128_SIZE];
+	guid_128_t guid2, guid3, guid4;
 	unsigned int i, count;
 
 	test_begin("mail index expunge");

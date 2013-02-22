@@ -1,0 +1,17 @@
+Removing dovecot-managesieved
+-----------------------------
+
+If you remove (i.e. with dpkg -r or aptitude remove) this package you will
+get an error something like this:
+
+doveconf: Fatal: Error in configuration file /etc/dovecot/dovecot.conf: 
+service(managesieve-login): executable is empty
+
+To avoid it, make sure 
+/etc/dovecot/conf.d/etc/dovecot/conf.d/20-managesieve.conf has been deleted, 
+moved or completely commented out first.  Alternatively, purge the package 
+instead of removing it.
+
+If you do not do this, dovecot-core will be left in an unconfigured state 
+because the error will cause a trigger to fail.  To fix this simply reinstall 
+dovecot-core.

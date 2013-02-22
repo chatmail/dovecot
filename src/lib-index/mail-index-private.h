@@ -181,6 +181,9 @@ struct mail_index {
 	pool_t extension_pool;
 	ARRAY_DEFINE(extensions, struct mail_index_registered_ext);
 
+	uint32_t ext_hdr_init_id;
+	void *ext_hdr_init_data;
+
 	ARRAY_DEFINE(sync_lost_handlers, mail_index_sync_lost_handler_t *);
 
 	char *filepath;
@@ -221,6 +224,8 @@ struct mail_index {
 	uint32_t keywords_ext_id;
 	uint32_t modseq_ext_id;
 
+	unsigned int view_count;
+
 	/* Module-specific contexts. */
 	ARRAY_DEFINE(module_contexts, union mail_index_module_context *);
 
@@ -239,6 +244,7 @@ struct mail_index {
 	unsigned int modseqs_enabled:1;
 	unsigned int initial_create:1;
 	unsigned int initial_mapped:1;
+	unsigned int fscked:1;
 };
 
 extern struct mail_index_module_register mail_index_module_register;

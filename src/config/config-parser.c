@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -612,6 +612,7 @@ config_parse_line(struct config_parser_context *ctx,
 		while (IS_WHITE(*line)) line++;
 
 		if (*line == '<') {
+			while (IS_WHITE(line[1])) line++;
 			*value_r = line + 1;
 			return CONFIG_LINE_TYPE_KEYFILE;
 		}
@@ -641,14 +642,25 @@ config_parse_line(struct config_parser_context *ctx,
 		*value_r = "";
 	else {
 		/* get section name */
-		*value_r = line;
-		while (!IS_WHITE(*line) && *line != '\0')
-			line++;
-
-		if (*line != '\0') {
-			*line++ = '\0';
-			while (IS_WHITE(*line))
+		if (*line != '"') {
+			*value_r = line;
+			while (!IS_WHITE(*line) && *line != '\0')
 				line++;
+			if (*line != '\0') {
+				*line++ = '\0';
+				while (IS_WHITE(*line))
+					line++;
+			}
+		} else {
+			char *value = ++line;
+			while (*line != '"' && *line != '\0')
+				line++;
+			if (*line == '"') {
+				*line++ = '\0';
+				while (IS_WHITE(*line))
+					line++;
+				*value_r = str_unescape(value);
+			}
 		}
 		if (*line != '{') {
 			*value_r = "Expecting '='";
@@ -672,7 +684,9 @@ static int config_parse_finish(struct config_parser_context *ctx, const char **e
 	(void)array_append_space(&ctx->all_parsers);
 	config_filter_add_all(new_filter, array_idx(&ctx->all_parsers, 0));
 
-	if ((ret = config_all_parsers_check(ctx, new_filter, &error)) < 0) {
+	if (ctx->hide_errors)
+		ret = 0;
+	else if ((ret = config_all_parsers_check(ctx, new_filter, &error)) < 0) {
 		*error_r = t_strdup_printf("Error in configuration file %s: %s",
 					   ctx->path, error);
 	}
@@ -730,7 +744,7 @@ static int config_write_value(struct config_parser_context *ctx,
 	string_t *str = ctx->str;
 	const void *var_name, *var_value, *p;
 	enum setting_type var_type;
-	const char *error;
+	const char *error, *path;
 	bool dump, expand_parent;
 
 	switch (type) {
@@ -744,10 +758,13 @@ static int config_write_value(struct config_parser_context *ctx,
 		} else {
 			if (!config_require_key(ctx, key)) {
 				/* don't even try to open the file */
-			} else if (str_append_file(str, key, value, &error) < 0) {
-				/* file reading failed */
-				ctx->error = p_strdup(ctx->pool, error);
-				return -1;
+			} else {
+				path = fix_relative_path(value, ctx->cur_input);
+				if (str_append_file(str, key, path, &error) < 0) {
+					/* file reading failed */
+					ctx->error = p_strdup(ctx->pool, error);
+					return -1;
+				}
 			}
 		}
 		break;
@@ -874,15 +891,21 @@ int config_parse_file(const char *path, bool expand_values, const char *module,
 	int fd, ret = 0;
 	bool handled;
 
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		*error_r = t_strdup_printf("open(%s) failed: %m", path);
-		return 0;
+	if (path == NULL) {
+		path = "<defaults>";
+		fd = -1;
+	} else {
+		fd = open(path, O_RDONLY);
+		if (fd < 0) {
+			*error_r = t_strdup_printf("open(%s) failed: %m", path);
+			return 0;
+		}
 	}
 
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.pool = pool_alloconly_create("config file parser", 1024*256);
 	ctx.path = path;
+	ctx.hide_errors = fd == -1;
 
 	for (count = 0; all_roots[count] != NULL; count++) ;
 	ctx.root_parsers =
@@ -906,7 +929,9 @@ int config_parse_file(const char *path, bool expand_values, const char *module,
 
 	ctx.str = str_new(ctx.pool, 256);
 	full_line = str_new(default_pool, 512);
-	ctx.cur_input->input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	ctx.cur_input->input = fd != -1 ?
+		i_stream_create_fd(fd, (size_t)-1, TRUE) :
+		i_stream_create_from_data("", 0);
 	i_stream_set_return_partial_line(ctx.cur_input->input, TRUE);
 	old_settings_init(&ctx);
 	if (hook_config_parser_begin != NULL)

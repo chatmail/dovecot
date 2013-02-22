@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "bsearch-insert-pos.h"
@@ -13,9 +13,9 @@ static int cmp_uint(const void *p1, const void *p2)
 void test_bsearch_insert_pos(void)
 {
 	static const unsigned int input[] = {
-		1, 5, 9, 15, 16, -1,
-		1, 5, 9, 15, 16, 17, -1,
-		-1
+		1, 5, 9, 15, 16, -1U,
+		1, 5, 9, 15, 16, 17, -1U,
+		-1U
 	};
 	static const unsigned int max_key = 18;
 	const unsigned int *cur;

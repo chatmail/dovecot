@@ -13,70 +13,126 @@ will reflect this difference, even if not set in the config file.
 Upgrading from 1.2 (squeeze) to 2.0 (wheezy)
 --------------------------------------------
 
-A lot of settings have changed. Dovecot v2.0 can still use most of the
-v1.x configuration files, but it logs a lot of warnings at startup.
-A quick and easy way to convert your old config file to v2.0 format is:
+  * If you are upgrading from 1.2.15 in stable, be aware that a lot of settings
+     have changed. Dovecot v2.0 can still use most of the v1.x configuration
+     files, but it logs a lot of warnings at startup.  A quick and easy way to
+     convert your old config file to v2.0 format is:
 
-doveconf -n -c dovecot-1.conf > dovecot-2.conf
+     doveconf -n -c dovecot-1.conf > dovecot-2.conf
 
-This command logs a warning about each obsolete setting it converts to
-the new format. You can either go through the warnings to figure out
-what changes exactly were done, or you can simply trust doveconf and
-replace your old config with the newly generated one.
+    This command logs a warning about each obsolete setting it converts to
+    the new format. You can either go through the warnings to figure out
+    what changes exactly were done, or you can simply trust doveconf and
+    replace your old config with the newly generated one.
 
-Other important changes are:
+  *  The biggest problem reported so far is due to an unfortunate packaging
+     error in earlier versions of the 2.1.7 packages that left several files
+     in /etc/dovecot/conf.d unmarked as conf files.  This meant that dpkg
+     didn't give them its usual protection against the overwriting of user
+     changes and silently changed them to them to the package defaults even if
+     you made your own local modifications.  This was fixed in -3.  Who is
+     affected by this bug?
 
-  * Dovecot uses two system users for internal purposes now by
-    default: "dovenull" and "dovecot". "dovenull" user is used by
-    completely untrustworthy processes, while "dovecot" user is used
-    for slightly more trusted processes.
+     + if you are upgrading to this version from 1.2.15 in stable you are not
+       affected.
+     + if you are upgrading from 2.1.7 -3 or higher, you are not affected.
+     + if you are upgrading from 2.1.7 -2 or -1 from unstable, testing, or
+       backports, you might be affected.
 
-  * No more convert plugin, use dsync instead
+     If you are affected, check all the files in /etc/dovecot/conf.d
+     carefully and remerge your local changes.  Sorry for the inconvenience;
+     this should not happen again.
 
-  * No more expire-tool, use doveadm expunge instead. Also expire
-    configuration is different.
+     If you want to be absolutely sure nothing will happen to your
+     configuration you can add it to /etc/dovecot/local.conf which is
+     completely untouched by the dovecot package.
 
-  * Post-login scripts are configured differently and need to be modified
+  * In conf.d/10-mail.conf, the default mail_location is set by default to
+    mbox:~/mail:INBOX=/var/mail/%u
+    This has to be set because Dovecots auto-detection of mailboxes fails
+    when a user has no mail.  I tried to provide a reasonable default
+    but advanced users will certainly want to change this. People affected
+    by the conf file bug mentioned above should also check that it is set
+    to the right values.
 
-  * Quota warnings are configured differently and the script may need
-    to be modified (most environment settings like $USER are gone)
+    Related to this, you might see an error in the logs about dovecot not
+    being able to chgrp certain files.  This is because the default user
+    mailboxes in Debian belong to group mail which dovecot is not part of
+    (nor should be.)  The Debian package has been patched so that the error
+    will not be fatal but for a more permanent solution, see here:
+    http://wiki2.dovecot.org/Errors/ChgrpNoPerm  for some discussion.  Or
+    you can set mail_location (and the equivalent settings in your MDA) so
+    that mailboxes are in the users home directory.
 
-  * Global ACL filenames now require namespace prefix (e.g. if you use
-    "INBOX." prefix, /etc/acls/foo needs to be renamed to
-    /etc/acls/INBOX.foo
+    Users bitten by the conf file bug or who did not have mail_location set
+    at all may have found that mailbox detection worked anyway so they often
+    ask me why it is necessary for the package to set it at all.  Strictly
+    speaking, it is not but we are trying to make the package plug-and-play
+    for first time users while keeping things flexible for more advanced
+    users and this is the best compromise that can be made.
 
-  * Maildir: Permissions for newly created mail files are no longer
-    copied from dovecot-shared file, but instead from the mail
-    directory (e.g. for "foo" mailbox, they're taken from
-    ~/Maildir/.foo directory)
+  * Another file whose presence may cause problems is
+    /etc/dovecot/conf.d/15-mailboxes.conf which defines mailboxes.  By default
+    this requires a "namespace inbox" section in
+    /etc/dovecot/conf.d/10-mail.conf. Either add that namespace or comment out
+    the contents of this file.
 
-  * dbox: v2.0 format is slightly different, but backwards
-    compatible. The main problem is that v2.0 no longer supports
-    maildir-dbox hybrid resulting from "fast Maildir migration". If
-    you have any Maildir files in your dbox, you need to convert them
-    somehow (some examples). You might also consider using dsync to
-    get rid of the old unused metadata in your dbox files.
+  * It was pointed out in bug #608719 that dovecots generated x.509
+    certificates should not be kept in /etc/ssl/certs.  As of this
+    version they are now created in /etc/dovecot on new installs.
+    If you have an existing install, you can keep your certificates
+    where they are or move them yourself.
+    1.  Move /etc/ssl/certs/dovecot.pem to /etc/dovecot
+    2.  Create a directory called /etc/dovecot/private owned by root:root
+        with 0700 permissions.
+    3.  Move /etc/ssl/certs/private/dovecot.pem to /etc/dovecot/private
+    4.  In /etc/dovecot/conf.d/10-ssl.conf make sure you have these lines:
+        ssl_cert = </etc/dovecot/dovecot.pem
+        ssl_key = </etc/dovecot/private/dovecot.pem
+    5.  Restart dovecot.
 
+    Owing to another packaging bug, if you did not remove the generated
+    certificates but did modify ssl_cert and ssl_key in
+    /etc/dovecot/conf.d/10-ssl.conf to point somewhere else, your changes
+    could have been overwritten in -6.  This is fixed in this version.
 
-  * Pre-login and post-login CAPABILITY reply is now
-    different. Dovecot expects clients to recognize new automatically
-    sent capabilities. This should work with all commonly used
-    clients, but some rarely used clients might have problems. Either
-    get the client fixed, or set imap_capability manually.
+  * Other important changes from 1.2.x are:
 
-  * ManageSieve protocol was assigned an official port by IANA:
-    4190. This is used by Pigeonhole by default now. If you want to
-    listen also on the old 2000 port, see the example in
-    /usr/share/doc/dovecot-common/wiki/ManageSieve.Configuration.txt.gz
-
-  * deliver binary was renamed to dovecot-lda (but a symlink still
-    exists for now)
-
-  * deliver -n parameter was replaced by lda_mailbox_autocreate
-    setting. The default also changed to "no".
-
-  * deliver -s parameter was replaced by lda_mailbox_autosubscribe
-    setting. The default is "no", as before.
+    + Dovecot uses two system users for internal purposes now by
+      default: "dovenull" and "dovecot". "dovenull" user is used by
+      completely untrustworthy processes, while "dovecot" user is used
+      for slightly more trusted processes.
+    + No more convert plugin, use dsync instead
+    + Post-login scripts are configured differently and need to be modified
+    + Quota warnings are configured differently and the script may need
+      to be modified (most environment settings like $USER are gone)
+    + Global ACL filenames now require namespace prefix (e.g. if you use
+      "INBOX." prefix, /etc/acls/foo needs to be renamed to /etc/acls/INBOX.foo
+    + Maildir: Permissions for newly created mail files are no longer
+      copied from dovecot-shared file, but instead from the mail
+      directory (e.g. for "foo" mailbox, they're taken from
+      ~/Maildir/.foo directory)
+    + dbox: v2.0 format is slightly different, but backwards
+      compatible. The main problem is that v2.0 no longer supports
+      maildir-dbox hybrid resulting from "fast Maildir migration". If
+      you have any Maildir files in your dbox, you need to convert them
+      somehow (some examples). You might also consider using dsync to
+      get rid of the old unused metadata in your dbox files.
+    + Pre-login and post-login CAPABILITY reply is now
+      different. Dovecot expects clients to recognize new automatically
+      sent capabilities. This should work with all commonly used
+      clients, but some rarely used clients might have problems. Either
+      get the client fixed, or set imap_capability manually.
+    + ManageSieve protocol was assigned an official port by IANA:
+      4190. This is used by Pigeonhole by default now. If you want to
+      listen also on the old 2000 port, see the example in
+      /usr/share/doc/dovecot-common/wiki/ManageSieve.Configuration.txt.gz
+    + deliver binary was renamed to dovecot-lda (but a symlink still
+      exists for now)
+    + deliver -n parameter was replaced by lda_mailbox_autocreate
+      setting. The default also changed to "no".
+    + deliver -s parameter was replaced by lda_mailbox_autosubscribe
+      setting. The default is "no", as before.
 
 Upgrading from 1.0 (lenny) to 1.2 (squeeze)
 --------------------------------------------

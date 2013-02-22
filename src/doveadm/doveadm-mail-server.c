@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -83,14 +83,22 @@ static void doveadm_cmd_callback(enum server_cmd_reply reply, void *context)
 	struct server_connection *conn = context;
 	struct doveadm_server *server;
 
-	if (reply == SERVER_CMD_REPLY_INTERNAL_FAILURE) {
+	switch (reply) {
+	case SERVER_CMD_REPLY_INTERNAL_FAILURE:
 		internal_failure = TRUE;
 		master_service_stop(master_service);
 		return;
+	case SERVER_CMD_REPLY_UNKNOWN_USER:
+		i_error("No such user");
+		if (cmd_ctx->exit_code == 0)
+			cmd_ctx->exit_code = EX_NOUSER;
+		break;
+	case SERVER_CMD_REPLY_FAIL:
+		doveadm_mail_failed_error(cmd_ctx, MAIL_ERROR_TEMP);
+		break;
+	case SERVER_CMD_REPLY_OK:
+		break;
 	}
-
-	if (reply != SERVER_CMD_REPLY_OK)
-		cmd_ctx->failed = TRUE;
 
 	server = server_connection_get_server(conn);
 	if (array_count(&server->queue) > 0) {
@@ -125,9 +133,9 @@ static void doveadm_mail_server_handle(struct server_connection *conn,
 	str_tabescape_write(cmd, username);
 	str_append_c(cmd, '\t');
 	str_tabescape_write(cmd, cmd_ctx->cmd->name);
-	for (i = 0; cmd_ctx->args[i] != NULL; i++) {
+	for (i = 0; cmd_ctx->full_args[i] != NULL; i++) {
 		str_append_c(cmd, '\t');
-		str_tabescape_write(cmd, cmd_ctx->args[i]);
+		str_tabescape_write(cmd, cmd_ctx->full_args[i]);
 	}
 	str_append_c(cmd, '\n');
 	server_connection_cmd(conn, str_c(cmd), doveadm_cmd_callback, conn);
@@ -302,7 +310,7 @@ void doveadm_mail_server_flush(void)
 	if (master_service_is_killed(master_service))
 		i_error("Aborted");
 	if (DOVEADM_MAIL_SERVER_FAILED())
-		cmd_ctx->failed = TRUE;
+		doveadm_mail_failed_error(cmd_ctx, MAIL_ERROR_TEMP);
 
 	hash_table_destroy(&servers);
 	pool_unref(&server_pool);

@@ -1,0 +1,47 @@
+From: Marco Nenciarini <mnencia@debian.org>
+Date: Sat, 11 Aug 2012 00:55:54 +0200
+Subject: fix-checkscript-segfault
+Upstream: http://hg.rename-it.nl/dovecot-2.1-pigeonhole/rev/6ceeb6421231
+Description: fixed segfault bug triggered by CHECKSCRIPT command.
+ # HG changeset patch
+ # User Stephan Bosch <stephan@rename-it.nl>
+ # Date 1342130270 -7200
+ # Node ID 6ceeb642123117ed8377f3b0d7d28171f790e911
+ # Parent  602d93069d3a1c93866178308bd4d03f20a15f73
+ ManageSieve: fixed segfault bug triggered by CHECKSCRIPT command.
+---
+ pigeonhole/src/lib-sievestorage/sieve-storage-save.c |   13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/pigeonhole/src/lib-sievestorage/sieve-storage-save.c b/pigeonhole/src/lib-sievestorage/sieve-storage-save.c
+index c93237d..cbb6504 100644
+--- a/pigeonhole/src/lib-sievestorage/sieve-storage-save.c
++++ b/pigeonhole/src/lib-sievestorage/sieve-storage-save.c
+@@ -317,19 +317,20 @@ struct sieve_script *sieve_storage_save_get_tempscript
+ bool sieve_storage_save_will_activate
+ (struct sieve_save_context *ctx)
+ {
+-	const char *scriptname;
+-	int ret = 0;
++	bool result = FALSE;
++
++	if ( ctx->scriptname != NULL ) T_BEGIN {
++		const char *scriptname;
++		int ret;
+ 
+-	T_BEGIN {
+ 		ret = sieve_storage_get_active_scriptfile(ctx->storage, &scriptname);
+-	
+ 		if ( ret > 0 ) {
+-		 	/* Is the requested script active? */
+-			ret = ( strcmp(ctx->scriptname, scriptname) == 0 ? 1 : 0 );
++			/* Is the requested script active? */
++			result = ( strcmp(ctx->scriptname, scriptname) == 0 );
+ 		}
+ 	} T_END;
+ 
+-	return ret;
++	return result;
+ }
+ 
+ int sieve_storage_save_commit(struct sieve_save_context **ctx)

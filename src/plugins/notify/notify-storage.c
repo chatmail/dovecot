@@ -102,8 +102,15 @@ notify_copy(struct mail_save_context *ctx, struct mail *mail)
 		ctx->dest_mail = lt->tmp_mail;
 	}
 
-	if ((ret = lbox->super.copy(ctx, mail)) == 0)
+	if ((ret = lbox->super.copy(ctx, mail)) < 0)
+		return -1;
+
+	if (ctx->saving) {
+		/* we came from mailbox_save_using_mail() */
+		notify_contexts_mail_save(ctx->dest_mail);
+	} else {
 		notify_contexts_mail_copy(mail, ctx->dest_mail);
+	}
 	return ret;
 }
 
@@ -128,7 +135,7 @@ notify_save_finish(struct mail_save_context *ctx)
 {
 	union mailbox_module_context *lbox =
 		NOTIFY_CONTEXT(ctx->transaction->box);
-	struct mail *dest_mail = ctx->copying ? NULL : ctx->dest_mail;
+	struct mail *dest_mail = ctx->copying_via_save ? NULL : ctx->dest_mail;
 
 	if (lbox->super.save_finish(ctx) < 0)
 		return -1;
@@ -202,6 +209,18 @@ notify_mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 }
 
 static int
+notify_mailbox_update(struct mailbox *box, const struct mailbox_update *update)
+{
+	union mailbox_module_context *lbox = NOTIFY_CONTEXT(box);
+
+	if (lbox->super.update(box, update) < 0)
+		return -1;
+
+	notify_contexts_mailbox_update(box);
+	return 0;
+}
+
+static int
 notify_mailbox_delete(struct mailbox *box)
 {
 	union mailbox_module_context *lbox = NOTIFY_CONTEXT(box);
@@ -228,6 +247,18 @@ notify_mailbox_rename(struct mailbox *src, struct mailbox *dest,
 	return 0;
 }
 
+static int
+notify_mailbox_set_subscribed(struct mailbox *box, bool set)
+{
+	union mailbox_module_context *lbox = NOTIFY_CONTEXT(box);
+
+	if (lbox->super.set_subscribed(box, set) < 0)
+		return -1;
+
+	notify_contexts_mailbox_set_subscribed(box, set);
+	return 0;
+}
+
 static void notify_mailbox_allocated(struct mailbox *box)
 {
 	struct mailbox_vfuncs *v = box->vlast;
@@ -244,8 +275,10 @@ static void notify_mailbox_allocated(struct mailbox *box)
 	v->transaction_commit = notify_transaction_commit;
 	v->transaction_rollback = notify_transaction_rollback;
 	v->create = notify_mailbox_create;
+	v->update = notify_mailbox_update;
 	v->delete = notify_mailbox_delete;
 	v->rename = notify_mailbox_rename;
+	v->set_subscribed = notify_mailbox_set_subscribed;
 	MODULE_CONTEXT_SET_SELF(box, notify_storage_module, lbox);
 }
 

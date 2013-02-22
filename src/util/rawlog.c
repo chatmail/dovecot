@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 
@@ -11,6 +11,7 @@
 #include "ostream.h"
 #include "process-title.h"
 #include "restrict-access.h"
+#include "time-util.h"
 #include "master-service.h"
 
 #include <stdlib.h>
@@ -226,15 +227,9 @@ static int client_output(struct rawlog_proxy *proxy)
 
 static void proxy_open_logs(struct rawlog_proxy *proxy, const char *path)
 {
-	time_t now;
-	struct tm *tm;
-	const char *fname;
-	char timestamp[50];
+	const char *fname, *timestamp;
 
-	now = time(NULL);
-	tm = localtime(&now);
-	if (strftime(timestamp, sizeof(timestamp), "%Y%m%d-%H%M%S", tm) <= 0)
-		i_fatal("strftime() failed");
+	timestamp = t_strflocaltime("%Y%m%d-%H%M%S", time(NULL));
 
 	if ((proxy->flags & RAWLOG_FLAG_LOG_INPUT) != 0) {
 		fname = t_strdup_printf("%s/%s-%s.in", path, timestamp,
@@ -367,14 +362,16 @@ int main(int argc, char *argv[])
 	int c;
 
 	master_service = master_service_init("rawlog", 0,
-					     &argc, &argv, "+iobt");
+					     &argc, &argv, "+f:obt");
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
-		case 'i':
-			flags &= ~RAWLOG_FLAG_LOG_OUTPUT;
-			break;
-		case 'o':
-			flags &= ~RAWLOG_FLAG_LOG_INPUT;
+		case 'f':
+			if (strcmp(optarg, "in") == 0)
+				flags &= ~RAWLOG_FLAG_LOG_OUTPUT;
+			else if (strcmp(optarg, "out") == 0)
+				flags &= ~RAWLOG_FLAG_LOG_INPUT;
+			else
+				i_fatal("Invalid filter: %s", optarg);
 			break;
 		case 'b':
 			flags |= RAWLOG_FLAG_LOG_BOUNDARIES;
@@ -390,7 +387,7 @@ int main(int argc, char *argv[])
 	argv += optind;
 
 	if (argc < 1)
-		i_fatal("Usage: rawlog [-i | -o] [-b] [-t] <binary> <arguments>");
+		i_fatal("Usage: rawlog [-f in|out] [-b] [-t] <binary> <arguments>");
 
 	master_service_init_log(master_service, "rawlog: ");
 	master_service_init_finish(master_service);

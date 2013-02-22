@@ -1,0 +1,43 @@
+From: Jaldhar H. Vyas <jaldhar@debian.org>
+Date: Tue, 02 Oct 2012 22:49:18 -0400
+Subject: Backport of fix for failure to autocreate mailboxes
+Description: Allows creation of index directory even when it can't be chgrp'ed
+ which in turn permits mailboxes to be autocreated.  See also:
+ default-mail_location.patch which is also needed to fix bug #623440
+ .
+ This patch is an amalgamation of the following HG changesets:
+ .
+ HG changeset patch
+ # User Timo Sirainen <tss@iki.fi>
+ # Date 1349209450 -10800
+ # Node ID 3ce50c0bb782e0989e807f32831d6823f6be64cf
+ # Parent  e29b627219b3b5d51aecdfbbecd75bb6332bb105
+ lib-storage: When index mkdir() fails with EPERM, create the dir anyway with 0700 mode.
+ This avoids failing entirely when /var/mail/user has 0660 permissions and we
+ don't have access to the group. The error message is still logged.
+Bug: #623440
+Origin: http://hg.dovecot.org/dovecot-2.1
+---
+ src/lib-storage/mailbox-list.c |    9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/lib-storage/mailbox-list.c b/src/lib-storage/mailbox-list.c
+index c65e70b..9bab19e 100644
+--- a/src/lib-storage/mailbox-list.c
++++ b/src/lib-storage/mailbox-list.c
+@@ -1406,7 +1406,14 @@ int mailbox_list_create_missing_index_dir(struct mailbox_list *list,
+ 		if (errno != ENOENT || p == NULL || ++n == 2) {
+ 			mailbox_list_set_critical(list,
+ 				"mkdir(%s) failed: %m", index_dir);
+-			return -1;
++			if (p == NULL || errno != EPERM ||
++			    perm.dir_create_mode == 0700)
++				return -1;
++			/* we can't use the GID. allow it anyway with more
++			   restricted permissions. */
++			perm.file_create_gid = (gid_t)-1;
++			perm.dir_create_mode = 0700;
++			continue;
+ 		}
+ 		/* create the parent directory first */
+ 		parent_dir = t_strdup_until(index_dir, p);

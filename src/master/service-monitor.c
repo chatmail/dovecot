@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "array.h"
@@ -20,12 +20,15 @@
 #include <syslog.h>
 #include <signal.h>
 
-#define SERVICE_STARTUP_FAILURE_THROTTLE_SECS 60
 #define SERVICE_DROP_WARN_INTERVAL_SECS 60
+#define SERVICE_DROP_TIMEOUT_MSECS (10*1000)
+#define MAX_DIE_WAIT_SECS 5
+#define SERVICE_MAX_EXIT_FAILURES_IN_SEC 10
 
 static void service_monitor_start_extra_avail(struct service *service);
 static void service_status_more(struct service_process *process,
 				const struct master_status *status);
+static void service_monitor_listen_start_force(struct service *service);
 
 static void service_process_kill_idle(struct service_process *process)
 {
@@ -169,8 +172,10 @@ static void service_status_input(struct service *service)
 	if (ret <= 0) {
 		if (ret == 0)
 			service_error(service, "read(status) failed: EOF");
-		else
+		else if (errno != EAGAIN)
 			service_error(service, "read(status) failed: %m");
+		else
+			return;
 		service_monitor_stop(service);
 		return;
 	}
@@ -191,23 +196,60 @@ static void service_monitor_throttle(struct service *service)
 	if (service->to_throttle != NULL)
 		return;
 
-	service_error(service, "command startup failed, throttling");
-	service_throttle(service, SERVICE_STARTUP_FAILURE_THROTTLE_SECS);
+	i_assert(service->throttle_secs > 0);
+
+	service_error(service, "command startup failed, throttling for %u secs",
+		      service->throttle_secs);
+	service_throttle(service, service->throttle_secs);
+	service->throttle_secs *= 2;
+	if (service->throttle_secs > SERVICE_STARTUP_FAILURE_THROTTLE_MAX_SECS)
+		service->throttle_secs = SERVICE_STARTUP_FAILURE_THROTTLE_MAX_SECS;
+}
+
+static void service_drop_timeout(struct service *service)
+{
+	struct service_listener *const *lp;
+	int fd;
+
+	i_assert(service->process_avail == 0);
+
+	/* drop all pending connections */
+	array_foreach(&service->listeners, lp) {
+		while ((fd = net_accept((*lp)->fd, NULL, NULL)) > 0)
+			net_disconnect(fd);
+	}
+
+	service_monitor_listen_start_force(service);
+	service->listen_pending = TRUE;
+}
+
+static void service_monitor_listen_pending(struct service *service)
+{
+	i_assert(service->process_avail == 0);
+
+	service_monitor_listen_stop(service);
+	service->listen_pending = TRUE;
+
+	service->to_drop = timeout_add(SERVICE_DROP_TIMEOUT_MSECS,
+				       service_drop_timeout, service);
 }
 
 static void service_drop_connections(struct service_listener *l)
 {
 	struct service *service = l->service;
+	unsigned int limit;
 	int fd;
 
 	if (service->last_drop_warning +
 	    SERVICE_DROP_WARN_INTERVAL_SECS < ioloop_time) {
 		service->last_drop_warning = ioloop_time;
-		i_warning("service(%s): %s reached, "
+		limit = service->process_limit > 1 ?
+			service->process_limit : service->client_limit;
+		i_warning("service(%s): %s (%u) reached, "
 			  "client connections are being dropped",
 			  service->set->name,
 			  service->process_limit > 1 ?
-			  "process_limit" : "client_limit");
+			  "process_limit" : "client_limit", limit);
 	}
 
 	if (service->type == SERVICE_TYPE_LOGIN) {
@@ -216,12 +258,16 @@ static void service_drop_connections(struct service_listener *l)
 		   reach connection limit */
 		service_login_notify(service, TRUE);
 
-		service->listen_pending = TRUE;
-		service_monitor_listen_stop(service);
+		service_monitor_listen_pending(service);
+	} else if (!service->listen_pending) {
+		/* maybe this is a temporary peak, stop for a while and
+		   see if it goes away */
+		service_monitor_listen_pending(service);
 	} else {
-		/* just accept and close the connection, so it's clear that
-		   this is happening because of the limit, rather than because
-		   the service processes aren't answering fast enough */
+		/* this has been happening for a while now. just accept and
+		   close the connection, so it's clear that this is happening
+		   because of the limit, rather than because the service
+		   processes aren't answering fast enough */
 		fd = net_accept(l->fd, NULL, NULL);
 		if (fd > 0)
 			net_disconnect(fd);
@@ -252,7 +298,8 @@ static void service_monitor_start_extra_avail(struct service *service)
 {
 	unsigned int i, count;
 
-	if (service->process_avail >= service->set->process_min_avail)
+	if (service->process_avail >= service->set->process_min_avail ||
+	    service->list->destroying)
 		return;
 
 	count = service->set->process_min_avail - service->process_avail;
@@ -265,23 +312,20 @@ static void service_monitor_start_extra_avail(struct service *service)
 			break;
 		}
 	}
-	if (i > 0 && service->listening) {
+	if (i > 0) {
 		/* we created some processes, they'll do the listening now */
 		service_monitor_listen_stop(service);
 	}
 }
 
-void service_monitor_listen_start(struct service *service)
+static void service_monitor_listen_start_force(struct service *service)
 {
 	struct service_listener *const *listeners;
 
-	if (service->process_avail > 0 ||
-	    (service->process_count == service->process_limit &&
-	     service->listen_pending))
-		return;
-
 	service->listening = TRUE;
 	service->listen_pending = FALSE;
+	if (service->to_drop != NULL)
+		timeout_remove(&service->to_drop);
 
 	array_foreach(&service->listeners, listeners) {
 		struct service_listener *l = *listeners;
@@ -289,6 +333,16 @@ void service_monitor_listen_start(struct service *service)
 		if (l->io == NULL && l->fd != -1)
 			l->io = io_add(l->fd, IO_READ, service_accept, l);
 	}
+}
+
+void service_monitor_listen_start(struct service *service)
+{
+	if (service->process_avail > 0 ||
+	    (service->process_count == service->process_limit &&
+	     service->listen_pending))
+		return;
+
+	service_monitor_listen_start_force(service);
 }
 
 void service_monitor_listen_stop(struct service *service)
@@ -302,6 +356,9 @@ void service_monitor_listen_stop(struct service *service)
 			io_remove(&l->io);
 	}
 	service->listening = FALSE;
+	service->listen_pending = FALSE;
+	if (service->to_drop != NULL)
+		timeout_remove(&service->to_drop);
 }
 
 static int service_login_create_notify_fd(struct service *service)
@@ -341,7 +398,8 @@ void services_monitor_start(struct service_list *service_list)
 {
 	struct service *const *services;
 
-	services_log_init(service_list);
+	if (services_log_init(service_list) < 0)
+		return;
 	service_anvil_monitor_start(service_list);
 
 	if (pipe(service_list->master_dead_pipe_fd) < 0)
@@ -377,14 +435,17 @@ void services_monitor_start(struct service_list *service_list)
 		service_monitor_listen_start(service);
 	}
 
-	if (service_process_create(service_list->log) != NULL)
-		service_monitor_listen_stop(service_list->log);
+	if (service_list->log->status_fd[0] != -1) {
+		if (service_process_create(service_list->log) != NULL)
+			service_monitor_listen_stop(service_list->log);
+	}
 
 	/* start up a process for startup-services */
 	array_foreach(&service_list->services, services) {
 		struct service *service = *services;
 
-		if (service->type == SERVICE_TYPE_STARTUP) {
+		if (service->type == SERVICE_TYPE_STARTUP &&
+		    service->status_fd[0] != -1) {
 			if (service_process_create(service) != NULL)
 				service_monitor_listen_stop(service);
 		}
@@ -423,7 +484,28 @@ void service_monitor_stop(struct service *service)
 		timeout_remove(&service->to_throttle);
 }
 
-void services_monitor_stop(struct service_list *service_list)
+static void services_monitor_wait(struct service_list *service_list)
+{
+	struct service *const *servicep;
+	time_t max_wait_time = time(NULL) + MAX_DIE_WAIT_SECS;
+	bool finished;
+
+	for (;;) {
+		finished = TRUE;
+		services_monitor_reap_children();
+		array_foreach(&service_list->services, servicep) {
+			if ((*servicep)->status_fd[0] != -1)
+				service_status_input(*servicep);
+			if ((*servicep)->process_avail > 0)
+				finished = FALSE;
+		}
+		if (finished || time(NULL) > max_wait_time)
+			break;
+		usleep(100000);
+	}
+}
+
+void services_monitor_stop(struct service_list *service_list, bool wait)
 {
 	struct service *const *services;
 
@@ -436,6 +518,13 @@ void services_monitor_stop(struct service_list *service_list)
 		service_list->master_dead_pipe_fd[1] = -1;
 	}
 
+	if (wait) {
+		/* we've notified all children that the master is dead.
+		   now wait for the children to either die or to tell that
+		   they're no longer listening for new connections */
+		services_monitor_wait(service_list);
+	}
+
 	array_foreach(&service_list->services, services)
 		service_monitor_stop(*services);
 
@@ -445,10 +534,24 @@ void services_monitor_stop(struct service_list *service_list)
 static bool
 service_process_failure(struct service_process *process, int status)
 {
+	struct service *service = process->service;
 	bool throttle;
 
 	service_process_log_status_error(process, status);
-	throttle = process->total_count == 0;
+	throttle = process->to_status != NULL;
+	if (!throttle && !service->have_successful_exits) {
+		/* this service has seen no successful exits yet.
+		   try to avoid failure storms by throttling the service if it
+		   only keeps failing rapidly. this is no longer done after
+		   one success to avoid intentional DoSing, in case attacker
+		   finds a way to quickly crash his own session. */
+		if (service->exit_failure_last != ioloop_time) {
+			service->exit_failure_last = ioloop_time;
+			service->exit_failures_in_sec = 0;
+		}
+		if (++service->exit_failures_in_sec > SERVICE_MAX_EXIT_FAILURES_IN_SEC)
+			throttle = TRUE;
+	}
 	service_process_notify_add(service_anvil_global->kills, process);
 	return throttle;
 }
@@ -472,8 +575,14 @@ void services_monitor_reap_children(void)
 		service = process->service;
 		if (status == 0) {
 			/* success */
-			if (service->listen_pending)
+			if (service->listen_pending &&
+			    !service->list->destroying)
 				service_monitor_listen_start(service);
+			/* one success resets all failures */
+			service->have_successful_exits = TRUE;
+			service->exit_failures_in_sec = 0;
+			service->throttle_secs =
+				SERVICE_STARTUP_FAILURE_THROTTLE_MIN_SECS;
 			throttle = FALSE;
 		} else {
 			throttle = service_process_failure(process, status);

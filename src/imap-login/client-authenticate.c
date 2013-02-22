@@ -1,14 +1,16 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
 #include "buffer.h"
+#include "hostpid.h"
 #include "ioloop.h"
 #include "istream.h"
 #include "ostream.h"
 #include "safe-memset.h"
 #include "str.h"
 #include "str-sanitize.h"
+#include "time-util.h"
 #include "imap-resp-code.h"
 #include "imap-parser.h"
 #include "auth-client.h"
@@ -36,6 +38,7 @@ bool imap_client_auth_handle_reply(struct client *client,
 {
 	struct imap_client *imap_client = (struct imap_client *)client;
 	string_t *str;
+	const char *timestamp, *msg;
 
 	if (reply->host != NULL) {
 		/* IMAP referral
@@ -71,27 +74,24 @@ bool imap_client_auth_handle_reply(struct client *client,
 			client_destroy_success(client, "Login with referral");
 			return TRUE;
 		}
-	} else if (reply->nologin) {
-		/* Authentication went ok, but for some reason user isn't
-		   allowed to log in. Shouldn't probably happen. */
-		if (reply->reason != NULL) {
-			client_send_line(client,
-					 CLIENT_CMD_REPLY_AUTH_FAIL_REASON,
-					 reply->reason);
-		} else if (reply->temp) {
-			client_send_line(client,
-					 CLIENT_CMD_REPLY_AUTH_FAIL_TEMP,
-					 AUTH_TEMP_FAILED_MSG);
-		} else if (reply->authz_failure) {
-			client_send_line(client, CLIENT_CMD_REPLY_AUTHZ_FAILED,
-					 "Authorization failed");
-		} else {
-			client_send_line(client, CLIENT_CMD_REPLY_AUTH_FAILED,
-					 AUTH_FAILED_MSG);
-		}
-	} else {
+	} else if (!reply->nologin) {
 		/* normal login/failure */
 		return FALSE;
+	} else if (reply->reason != NULL) {
+		client_send_line(client, CLIENT_CMD_REPLY_AUTH_FAIL_REASON,
+				 reply->reason);
+	} else if (reply->temp) {
+		timestamp = t_strflocaltime("%Y-%m-%d %H:%M:%S", ioloop_time);
+		msg = t_strdup_printf(AUTH_TEMP_FAILED_MSG" [%s:%s]",
+				      my_hostname, timestamp);
+		client_send_line(client,
+				 CLIENT_CMD_REPLY_AUTH_FAIL_TEMP, msg);
+	} else if (reply->authz_failure) {
+		client_send_line(client, CLIENT_CMD_REPLY_AUTHZ_FAILED,
+				 "Authorization failed");
+	} else {
+		client_send_line(client, CLIENT_CMD_REPLY_AUTH_FAILED,
+				 AUTH_FAILED_MSG);
 	}
 
 	i_assert(reply->nologin);
@@ -118,22 +118,49 @@ imap_client_auth_begin(struct imap_client *imap_client, const char *mech_name,
 	return client_auth_begin(&imap_client->common, mech_name, init_resp);
 }
 
-int cmd_authenticate(struct imap_client *imap_client,
-		     const struct imap_arg *args)
+int cmd_authenticate(struct imap_client *imap_client, bool *parsed_r)
 {
-	const char *mech_name, *init_resp;
+	/* NOTE: This command's input is handled specially because the
+	   SASL-IR can be large. */
+	struct client *client = &imap_client->common;
+	const unsigned char *data;
+	size_t i, size;
+	int ret;
+
+	*parsed_r = FALSE;
 
 	/* <auth mechanism name> [<initial SASL response>] */
-	if (!imap_arg_get_atom(&args[0], &mech_name) || *mech_name == '\0')
-		return -1;
-	if (imap_arg_get_atom(&args[1], &init_resp))
-		args++;
-	else
-		init_resp = NULL;
-	if (!IMAP_ARG_IS_EOL(&args[1]))
-		return -1;
+	if (!imap_client->auth_mech_name_parsed) {
+		data = i_stream_get_data(client->input, &size);
+		for (i = 0; i < size; i++) {
+			if (data[i] == ' ' ||
+			    data[i] == '\r' || data[i] == '\n')
+				break;
+		}
+		if (i == size)
+			return 0;
+		if (i == 0) {
+			/* empty mechanism name */
+			imap_client->skip_line = TRUE;
+			return -1;
+		}
+		i_free(client->auth_mech_name);
+		client->auth_mech_name = i_strndup(data, i);
+		imap_client->auth_mech_name_parsed = TRUE;
+		if (data[i] == ' ')
+			i++;
+		i_stream_skip(client->input, i);
+	}
 
-	return imap_client_auth_begin(imap_client, mech_name, init_resp);
+	/* get SASL-IR, if any */
+	if ((ret = client_auth_read_line(client)) <= 0)
+		return ret;
+
+	*parsed_r = TRUE;
+	imap_client->auth_mech_name_parsed = FALSE;
+	return imap_client_auth_begin(imap_client,
+				      t_strdup(client->auth_mech_name),
+				      t_strdup(str_c(client->auth_response)));
 }
 
 int cmd_login(struct imap_client *imap_client, const struct imap_arg *args)

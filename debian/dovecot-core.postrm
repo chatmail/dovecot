@@ -15,13 +15,17 @@ if [ "$1" = "purge" ] ; then
 		/etc/dovecot/conf.d/10-mail.conf \
 		/etc/dovecot/conf.d/10-master.conf \
 		/etc/dovecot/conf.d/10-ssl.conf \
+		/etc/dovecot/conf.d/10-tcpwrapper.conf \
 		/etc/dovecot/conf.d/15-lda.conf \
+		/etc/dovecot/conf.d/15-mailboxes.conf \
 		/etc/dovecot/conf.d/90-acl.conf \
 		/etc/dovecot/conf.d/90-plugin.conf \
 		/etc/dovecot/conf.d/90-quota.conf \
+		/etc/dovecot/conf.d/auth-checkpassword.conf.ext \
 		/etc/dovecot/conf.d/auth-deny.conf.ext \
 		/etc/dovecot/conf.d/auth-master.conf.ext \
 		/etc/dovecot/conf.d/auth-passwdfile.conf.ext \
+		/etc/dovecot/conf.d/auth-sql.conf.ext \
 		/etc/dovecot/conf.d/auth-static.conf.ext \
 		/etc/dovecot/conf.d/auth-system.conf.ext \
 		/etc/dovecot/conf.d/auth-vpopmail.conf.ext \
@@ -51,14 +55,14 @@ if [ "$1" = "purge" ] ; then
 
     if [ -d /var/run/dovecot ]; then rm -rf /var/run/dovecot; fi
 
-    if [ -d /etc/ssl/certs ]; then
-	cd /etc/ssl/certs
+    if [ -d /etc/dovecot ]; then
+	cd /etc/dovecot
         if [ -f dovecot.pem ]; then
-            echo "SSL certificate /etc/ssl/certs/dovecot.pem is NOT removed."
+            echo "SSL certificate /etc/dovecot/dovecot.pem is NOT removed."
             echo "Please remove manually if required."
         fi
-        if [ -f ../private/dovecot.pem ]; then
-            echo "SSL certificate /etc/ssl/private/dovecot.pem is NOT removed."
+        if [ -f ./private/dovecot.pem ]; then
+            echo "SSL certificate /etc/dovecot/private/dovecot.pem is NOT removed."
             echo "Please remove manually if required."
         fi
     fi

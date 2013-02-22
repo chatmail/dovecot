@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -55,7 +55,7 @@ who_user_has_ip(const struct who_user *user, const struct ip_addr *ip)
 
 static void who_parse_line(const char *line, struct who_line *line_r)
 {
-	const char *const *args = t_strsplit(line, "\t");
+	const char *const *args = t_strsplit_tab(line);
 	const char *ident = args[0];
 	const char *pid_str = args[1];
 	const char *refcount_str = args[2];
@@ -298,7 +298,8 @@ static void cmd_who(int argc, char *argv[])
 		who_lookup(&ctx, who_aggregate_line);
 		who_print(&ctx);
 	} else {
-		doveadm_print_header_simple("username");
+		doveadm_print_header("username", "username",
+				     DOVEADM_PRINT_HEADER_FLAG_EXPAND);
 		doveadm_print_header("service", "proto", 0);
 		doveadm_print_header_simple("pid");
 		doveadm_print_header_simple("ip");

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "ioloop.h"
@@ -31,10 +31,13 @@ struct login_access_lookup {
 	struct access_lookup *access;
 };
 
+const struct login_binary *login_binary;
 struct auth_client *auth_client;
 struct master_auth *master_auth;
 bool closing_down;
 struct anvil_client *anvil;
+const char *login_rawlog_dir = NULL;
+unsigned int initial_service_count;
 
 const struct login_settings *global_login_settings;
 void **global_other_settings;
@@ -42,6 +45,7 @@ void **global_other_settings;
 static struct timeout *auth_client_to;
 static bool shutting_down = FALSE;
 static bool ssl_connections = FALSE;
+static bool auth_connected_once = FALSE;
 
 static void login_access_lookup_next(struct login_access_lookup *lookup);
 
@@ -68,7 +72,9 @@ void login_refresh_proctitle(void)
 
 static void auth_client_idle_timeout(struct auth_client *auth_client)
 {
-	auth_client_disconnect(auth_client);
+	i_assert(clients == NULL);
+
+	auth_client_disconnect(auth_client, "idle disconnect");
 	timeout_remove(&auth_client_to);
 }
 
@@ -109,7 +115,7 @@ client_connected_finish(const struct master_service_connection *conn)
 		local_port = 0;
 	}
 
-	pool = pool_alloconly_create("login client", 5*1024);
+	pool = pool_alloconly_create("login client", 8*1024);
 	set = login_settings_read(pool, &local_ip,
 				  &conn->remote_ip, NULL, &other_sets);
 
@@ -117,7 +123,7 @@ client_connected_finish(const struct master_service_connection *conn)
 		client = client_create(conn->fd, FALSE, pool, set, other_sets,
 				       &local_ip, &conn->remote_ip);
 	} else {
-		fd_ssl = ssl_proxy_alloc(conn->fd, &conn->remote_ip, set,
+		fd_ssl = ssl_proxy_alloc(conn->fd, &conn->remote_ip, pool, set,
 					 &proxy);
 		if (fd_ssl == -1) {
 			net_disconnect(conn->fd);
@@ -183,7 +189,7 @@ static void login_access_lookup_next(struct login_access_lookup *lookup)
 		return;
 	}
 	lookup->access = access_lookup(*lookup->next_socket, lookup->conn.fd,
-				       login_binary.protocol,
+				       login_binary->protocol,
 				       login_access_callback, lookup);
 	if (lookup->access == NULL)
 		login_access_lookup_free(lookup);
@@ -213,6 +219,12 @@ static void client_connected(struct master_service_connection *conn)
 	struct login_access_lookup *lookup;
 
 	master_service_client_connection_accept(conn);
+	if (conn->remote_ip.family != 0) {
+		/* log the connection's IP address in case we crash. it's of
+		   course possible that another earlier client causes the
+		   crash, but this is better than nothing. */
+		i_set_failure_send_ip(&conn->remote_ip);
+	}
 
 	/* make sure we're connected (or attempting to connect) to auth */
 	auth_client_connect(auth_client);
@@ -235,14 +247,24 @@ static void client_connected(struct master_service_connection *conn)
 static void auth_connect_notify(struct auth_client *client ATTR_UNUSED,
 				bool connected, void *context ATTR_UNUSED)
 {
-	if (connected)
+	if (connected) {
+		auth_connected_once = TRUE;
 		clients_notify_auth_connected();
-	else if (shutting_down)
+	} else if (shutting_down)
 		clients_destroy_all();
+	else if (!auth_connected_once) {
+		/* auth disconnected without having ever succeeded, so the
+		   auth process is probably misconfigured. no point in
+		   keeping the client connections hanging. */
+		clients_destroy_all_reason("Disconnected: Auth process broken");
+	}
 }
 
 static bool anvil_reconnect_callback(void)
 {
+	/* we got disconnected from anvil. we can't reconnect to it since we're
+	   chrooted, so just die after we've finished handling the current
+	   connections. */
 	master_service_stop_new_connections(master_service);
 	return FALSE;
 }
@@ -284,17 +306,25 @@ static void main_preinit(bool allow_core_dumps)
 	restrict_access_by_env(NULL, TRUE);
 	if (allow_core_dumps)
 		restrict_access_allow_coredumps(TRUE);
-}
-
-static void main_init(const char *login_socket)
-{
-	/* make sure we can't fork() */
-	restrict_process_size((unsigned int)-1, 1);
+	initial_service_count = master_service_get_service_count(master_service);
 
 	if (restrict_access_get_current_chroot() == NULL) {
 		if (chdir("login") < 0)
 			i_fatal("chdir(login) failed: %m");
 	}
+
+	if (login_rawlog_dir != NULL &&
+	    access(login_rawlog_dir, W_OK | X_OK) < 0) {
+		i_error("access(%s, wx) failed: %m - disabling rawlog",
+			login_rawlog_dir);
+		login_rawlog_dir = NULL;
+	}
+}
+
+static void main_init(const char *login_socket)
+{
+	/* make sure we can't fork() */
+	restrict_process_count(1);
 
 	master_service_set_avail_overflow_callback(master_service,
 						   client_destroy_oldest);
@@ -303,9 +333,9 @@ static void main_init(const char *login_socket)
 	auth_client = auth_client_init(login_socket, (unsigned int)getpid(),
 				       FALSE);
         auth_client_set_connect_notify(auth_client, auth_connect_notify, NULL);
-	master_auth = master_auth_init(master_service, login_binary.protocol);
+	master_auth = master_auth_init(master_service, login_binary->protocol);
 
-	clients_init();
+	login_binary->init();
 	login_proxy_init("proxy-notify");
 }
 
@@ -314,7 +344,7 @@ static void main_deinit(void)
 	ssl_proxy_deinit();
 	login_proxy_deinit();
 
-	clients_deinit();
+	login_binary->deinit();
 	auth_client_deinit(&auth_client);
 	master_auth_deinit(&master_auth);
 
@@ -325,7 +355,8 @@ static void main_deinit(void)
 	login_settings_deinit();
 }
 
-int main(int argc, char *argv[])
+int login_binary_run(const struct login_binary *binary,
+		     int argc, char *argv[])
 {
 	enum master_service_flags service_flags =
 		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN |
@@ -335,15 +366,21 @@ int main(int argc, char *argv[])
 	const char *login_socket = DEFAULT_LOGIN_SOCKET;
 	int c;
 
-	master_service = master_service_init(login_binary.process_name,
-					     service_flags, &argc, &argv, "DS");
+	login_binary = binary;
+
+	master_service = master_service_init(login_binary->process_name,
+					     service_flags, &argc, &argv,
+					     "DR:S");
 	master_service_init_log(master_service, t_strconcat(
-		login_binary.process_name, ": ", NULL));
+		login_binary->process_name, ": ", NULL));
 
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
 		case 'D':
 			allow_core_dumps = TRUE;
+			break;
+		case 'R':
+			login_rawlog_dir = optarg;
 			break;
 		case 'S':
 			ssl_connections = TRUE;
@@ -355,17 +392,15 @@ int main(int argc, char *argv[])
 	if (argv[optind] != NULL)
 		login_socket = argv[optind];
 
-	login_process_preinit();
+	login_binary->preinit();
 
 	set_pool = pool_alloconly_create("global login settings", 4096);
 	global_login_settings =
 		login_settings_read(set_pool, NULL, NULL, NULL,
 				    &global_other_settings);
 
-	/* main_preinit() needs to know the client limit, which is set by
-	   this. so call it first. */
-	master_service_init_finish(master_service);
 	main_preinit(allow_core_dumps);
+	master_service_init_finish(master_service);
 	main_init(login_socket);
 
 	master_service_run(master_service, client_connected);

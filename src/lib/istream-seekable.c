@@ -1,11 +1,11 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
 #include "close-keep-errno.h"
 #include "read-full.h"
 #include "write-full.h"
-#include "istream-internal.h"
+#include "istream-private.h"
 #include "istream-concat.h"
 #include "istream-seekable.h"
 
@@ -18,6 +18,7 @@ struct seekable_istream {
 
 	char *temp_path;
 	uoff_t write_peak;
+	uoff_t size;
 
 	int (*fd_callback)(const char **path_r, void *context);
 	void *context;
@@ -54,6 +55,7 @@ static void i_stream_seekable_destroy(struct iostream_private *stream)
 		i_stream_unref(&sstream->input[i]);
 
 	i_free(sstream->temp_path);
+	i_free(sstream->input);
 }
 
 static void
@@ -139,6 +141,7 @@ static ssize_t read_more(struct seekable_istream *sstream)
 		sstream->cur_input = sstream->input[sstream->cur_idx++];
 		if (sstream->cur_input == NULL) {
 			/* last one, EOF */
+			sstream->size = sstream->istream.istream.v_offset;
 			sstream->istream.istream.eof = TRUE;
 			return -1;
 		}
@@ -301,6 +304,12 @@ i_stream_seekable_stat(struct istream_private *stream, bool exact)
 	uoff_t old_offset;
 	ssize_t ret;
 
+	if (sstream->size != (uoff_t)-1) {
+		/* we've already reached EOF and know the size */
+		stream->statbuf.st_size = sstream->size;
+		return &stream->statbuf;
+	}
+
 	if (sstream->buffer != NULL) {
 		/* we want to know the full size of the file, so read until
 		   we're finished */
@@ -312,7 +321,9 @@ i_stream_seekable_stat(struct istream_private *stream, bool exact)
 
 		if (ret == 0) {
 			i_panic("i_stream_stat() used for non-blocking "
-				"seekable stream");
+				"seekable stream %s offset %"PRIuUOFF_T,
+				i_stream_get_name(sstream->cur_input),
+				sstream->cur_input->v_offset);
 		}
 		i_stream_skip(&stream->istream, stream->pos - stream->skip);
 		i_stream_seek(&stream->istream, old_offset);
@@ -364,6 +375,7 @@ i_stream_create_seekable(struct istream *input[],
 	sstream->buffer = buffer_create_dynamic(default_pool, BUF_INITIAL_SIZE);
         sstream->istream.max_buffer_size = max_buffer_size;
 	sstream->fd = -1;
+	sstream->size = (uoff_t)-1;
 
 	sstream->input = i_new(struct istream *, count + 1);
 	memcpy(sstream->input, input, sizeof(*input) * count);

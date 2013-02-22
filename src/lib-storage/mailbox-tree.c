@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -8,6 +8,8 @@
 struct mailbox_tree_context {
 	pool_t pool;
 	char separator;
+	bool parents_nonexistent;
+
 	struct mailbox_node *nodes;
 };
 
@@ -27,12 +29,9 @@ struct mailbox_tree_iterate_context {
 struct mailbox_tree_context *mailbox_tree_init(char separator)
 {
 	struct mailbox_tree_context *tree;
-	pool_t pool;
 
-	pool = pool_alloconly_create(MEMPOOL_GROWING"mailbox_tree", 10240);
-
-	tree = p_new(pool, struct mailbox_tree_context, 1);
-	tree->pool = pool;
+	tree = i_new(struct mailbox_tree_context, 1);
+	tree->pool = pool_alloconly_create(MEMPOOL_GROWING"mailbox_tree", 10240);
 	tree->separator = separator;
 	return tree;
 }
@@ -43,18 +42,35 @@ void mailbox_tree_deinit(struct mailbox_tree_context **_tree)
 
 	*_tree = NULL;
 	pool_unref(&tree->pool);
+	i_free(tree);
+}
+
+void mailbox_tree_set_separator(struct mailbox_tree_context *tree,
+				char separator)
+{
+	tree->separator = separator;
+}
+
+void mailbox_tree_set_parents_nonexistent(struct mailbox_tree_context *tree)
+{
+	tree->parents_nonexistent = TRUE;
+}
+
+void mailbox_tree_clear(struct mailbox_tree_context *tree)
+{
+	p_clear(tree->pool);
+	tree->nodes = NULL;
 }
 
 static struct mailbox_node *
 mailbox_tree_traverse(struct mailbox_tree_context *tree, const char *path,
-		      bool create, bool *created)
+		      bool create, bool *created_r)
 {
 	struct mailbox_node **node, *parent;
 	const char *name;
 	string_t *str;
 
-	if (created != NULL)
-		*created = FALSE;
+	*created_r = FALSE;
 
 	if (path == NULL)
 		return tree->nodes;
@@ -91,9 +107,10 @@ mailbox_tree_traverse(struct mailbox_tree_context *tree, const char *path,
 			*node = p_new(tree->pool, struct mailbox_node, 1);
 			(*node)->parent = parent;
 			(*node)->name = p_strdup(tree->pool, name);
+			if (tree->parents_nonexistent)
+				(*node)->flags = MAILBOX_NONEXISTENT;
 
-			if (created != NULL)
-				*created = TRUE;
+			*created_r = TRUE;
 		}
 
 		if (*path == '\0')
@@ -110,13 +127,19 @@ mailbox_tree_traverse(struct mailbox_tree_context *tree, const char *path,
 
 struct mailbox_node *
 mailbox_tree_get(struct mailbox_tree_context *tree, const char *path,
-		 bool *created)
+		 bool *created_r)
 {
 	struct mailbox_node *node;
+	bool created;
 
 	T_BEGIN {
-		node = mailbox_tree_traverse(tree, path, TRUE, created);
+		node = mailbox_tree_traverse(tree, path, TRUE, &created);
 	} T_END;
+	if (created && tree->parents_nonexistent)
+		node->flags = 0;
+
+	if (created_r != NULL)
+		*created_r = created;
 	return node;
 }
 
@@ -124,9 +147,10 @@ struct mailbox_node *
 mailbox_tree_lookup(struct mailbox_tree_context *tree, const char *path)
 {
 	struct mailbox_node *node;
+	bool created;
 
 	T_BEGIN {
-		node = mailbox_tree_traverse(tree, path, FALSE, NULL);
+		node = mailbox_tree_traverse(tree, path, FALSE, &created);
 	} T_END;
 	return node;
 }

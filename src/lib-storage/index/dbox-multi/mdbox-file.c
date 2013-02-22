@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -84,7 +84,8 @@ mdbox_close_open_files(struct mdbox_storage *storage, unsigned int close_count)
 	}
 }
 
-static void mdbox_file_init_paths(struct mdbox_file *file, const char *fname)
+static void
+mdbox_file_init_paths(struct mdbox_file *file, const char *fname, bool alt)
 {
 	i_free(file->file.primary_path);
 	i_free(file->file.alt_path);
@@ -95,7 +96,8 @@ static void mdbox_file_init_paths(struct mdbox_file *file, const char *fname)
 			i_strdup_printf("%s/%s", file->storage->alt_storage_dir,
 					fname);
 	}
-	file->file.cur_path = file->file.primary_path;
+	file->file.cur_path = !alt ? file->file.primary_path :
+		file->file.alt_path;
 }
 
 static int mdbox_file_create(struct mdbox_file *file)
@@ -159,7 +161,7 @@ mdbox_file_init_full(struct mdbox_storage *storage,
 	file->file_id = file_id;
 	fname = file_id == 0 ? dbox_generate_tmp_filename() :
 		t_strdup_printf(MDBOX_MAIL_FILE_FORMAT, file_id);
-	mdbox_file_init_paths(file, fname);
+	mdbox_file_init_paths(file, fname, FALSE);
 	dbox_file_init(&file->file);
 	if (alt_dir)
 		file->file.cur_path = file->file.alt_path;
@@ -185,6 +187,7 @@ mdbox_file_init_new_alt(struct mdbox_storage *storage)
 
 int mdbox_file_assign_file_id(struct mdbox_file *file, uint32_t file_id)
 {
+	struct stat st;
 	const char *old_path;
 	const char *new_dir, *new_fname, *new_path;
 
@@ -196,13 +199,21 @@ int mdbox_file_assign_file_id(struct mdbox_file *file, uint32_t file_id)
 	new_dir = !dbox_file_is_in_alt(&file->file) ?
 		file->storage->storage_dir : file->storage->alt_storage_dir;
 	new_path = t_strdup_printf("%s/%s", new_dir, new_fname);
+
+	if (stat(new_path, &st) == 0) {
+		mail_storage_set_critical(&file->file.storage->storage,
+			"mdbox: %s already exists, rebuilding index", new_path);
+		mdbox_storage_set_corrupted(file->storage);
+		return -1;
+	}
 	if (rename(old_path, new_path) < 0) {
 		mail_storage_set_critical(&file->storage->storage.storage,
 					  "rename(%s, %s) failed: %m",
 					  old_path, new_path);
 		return -1;
 	}
-	mdbox_file_init_paths(file, new_fname);
+	mdbox_file_init_paths(file, new_fname,
+			      dbox_file_is_in_alt(&file->file));
 	file->file_id = file_id;
 	array_append(&file->storage->open_files, &file, 1);
 	return 0;
@@ -292,7 +303,7 @@ int mdbox_file_create_fd(struct dbox_file *file, const char *path, bool parents)
 	struct mdbox_file *mfile = (struct mdbox_file *)file;
 	struct mdbox_map *map = mfile->storage->map;
 	mode_t old_mask;
-	const char *p, *dir;
+	const char *p, *dir, *error;
 	int fd;
 
 	old_mask = umask(0666 & ~map->create_mode);
@@ -301,12 +312,13 @@ int mdbox_file_create_fd(struct dbox_file *file, const char *path, bool parents)
 	if (fd == -1 && errno == ENOENT && parents &&
 	    (p = strrchr(path, '/')) != NULL) {
 		dir = t_strdup_until(path, p);
-		if (mailbox_list_mkdir(map->root_list, dir,
-				       path != file->alt_path ?
-				       MAILBOX_LIST_PATH_TYPE_DIR :
-				       MAILBOX_LIST_PATH_TYPE_ALT_DIR) < 0) {
-			mail_storage_copy_list_error(&file->storage->storage,
-						     map->root_list);
+		if (mailbox_list_mkdir_root(map->root_list, dir,
+					    path != file->alt_path ?
+					    MAILBOX_LIST_PATH_TYPE_DIR :
+					    MAILBOX_LIST_PATH_TYPE_ALT_DIR,
+					    &error) < 0) {
+			mail_storage_set_critical(&file->storage->storage,
+				"Couldn't create %s: %s", dir, error);
 			return -1;
 		}
 		/* try again */

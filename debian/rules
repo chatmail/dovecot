@@ -5,6 +5,8 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+dpkg_buildflags = DEB_BUILD_MAINT_OPTIONS="hardening=+all" dpkg-buildflags
+
 PIGEONHOLE_DIR=pigeonhole
 
 # These are used for cross-compiling and for saving the configure script
@@ -23,14 +25,15 @@ endif
 config-stamp: configure
 	dh_testdir
 	# Dovecot
-	sh configure --with-ldap=plugin \
+	$(shell $(dpkg_buildflags) --export=configure) sh configure \
+	            --with-ldap=plugin \
 	            --with-ssl=openssl \
 	            --with-sql=plugin \
 	            --with-pgsql \
 	            --with-mysql \
 	            --with-sqlite \
 	            --with-gssapi=plugin \
-		    --with-solr \
+		        --with-solr \
 	            --with-ioloop=best \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \
@@ -42,10 +45,14 @@ config-stamp: configure
 	            --infodir=\$${prefix}/share/info \
 	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
 	            --disable-rpath \
+	            --with-systemdsystemunitdir=auto \
 	            --disable-static
 	$(MAKE) dovecot-config
 	# Pigeonhole
-	(cd $(PIGEONHOLE_DIR)/ && sh configure --with-dovecot=../ \
+	(cd $(PIGEONHOLE_DIR)/ && \
+	    touch stamp.h.in && \
+	    $(shell $(dpkg_buildflags) --export=configure) sh configure \
+	    --with-dovecot=../ \
 		--prefix=/usr \
 		--sysconfdir=/etc \
 		--libexecdir=\$${prefix}/lib \
@@ -61,7 +68,7 @@ build-stamp:  config-stamp
 	# Pigeonhole
 	$(MAKE) -C $(PIGEONHOLE_DIR)
 	# DRAC
-	$(MAKE) -C src/plugins/drac
+	$(MAKE) -C src/plugins/drac $(shell $(dpkg_buildflags) --export=configure)
 	touch build-stamp
 
 clean:
@@ -188,13 +195,15 @@ binary-arch: build install
 	mv $(CURDIR)/debian/dovecot-core/etc/pam.d/dovecot-core $(CURDIR)/debian/dovecot-core/etc/pam.d/dovecot
 	dh_installinit -pdovecot-core --init-script=dovecot -u"defaults 20"
 	dh_installman -a
-	dh_installman -p dovecot-core debian/dovecot.8 debian/maildirmake.dovecot.1
+	dh_installman -p dovecot-core debian/maildirmake.dovecot.1
 	dh_bugfiles -a
+	dh_lintian -a
 	dh_installchangelogs -a ChangeLog
 	dh_link -a
 	dh_strip -a --dbg-package=dovecot-dbg
 	dh_compress -a
 	dh_fixperms -a
+	chmod 0700 debian/dovecot-core/etc/dovecot/private
 	dh_makeshlibs -a -n
 	dh_installdeb -a
 	dh_shlibdeps -a

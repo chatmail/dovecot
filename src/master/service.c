@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "ioloop.h"
@@ -46,6 +46,11 @@ service_create_file_listener(struct service *service,
 	l->type = type;
 	l->fd = -1;
 	l->set.fileset.set = set;
+	l->name = strrchr(set->path, '/');
+	if (l->name != NULL)
+		l->name++;
+	else
+		l->name = set->path;
 
 	if (get_uidgid(set->user, &l->set.fileset.uid, &gid, error_r) < 0)
 		set_name = "user";
@@ -123,6 +128,7 @@ service_create_one_inet_listener(struct service *service,
 	l->set.inetset.set = set;
 	l->set.inetset.ip = *ip;
 	l->inet_address = p_strdup(service->list->pool, address);
+	l->name = set->name;
 
 	if (set->port > 65535) {
 		*error_r = t_strdup_printf("Invalid port: %u", set->port);
@@ -212,6 +218,7 @@ service_create(pool_t pool, const struct service_settings *set,
 	service = p_new(pool, struct service, 1);
 	service->list = service_list;
 	service->set = set;
+	service->throttle_secs = SERVICE_STARTUP_FAILURE_THROTTLE_MIN_SECS;
 
 	service->client_limit = set->client_limit != 0 ? set->client_limit :
 		set->master_set->default_client_limit;
@@ -615,12 +622,13 @@ static void services_kill_timeout(struct service_list *service_list)
 	}
 }
 
-void services_destroy(struct service_list *service_list)
+void services_destroy(struct service_list *service_list, bool wait)
 {
 	/* make sure we log if child processes died unexpectedly */
-        services_monitor_reap_children();
+	service_list->destroying = TRUE;
+	services_monitor_reap_children();
 
-	services_monitor_stop(service_list);
+	services_monitor_stop(service_list, wait);
 
 	if (service_list->refcount > 1 &&
 	    service_list->service_set->shutdown_clients) {

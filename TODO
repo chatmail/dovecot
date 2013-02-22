@@ -1,10 +1,51 @@
- - doveadm fetch text mailbox <ns prefix> -> no replies, because
-   mailbox_list_iter_init_namespaces() doesn't return ns prefixes
+ - lmtp client/proxy: Handle multiline replies better
+ - lib-ssl-iostream: Support ssl_protocols setting
+ - recreate mailbox -> existing sessions log "indexid changed" error
+ - add message/mime limits
+ - imapc:
+     - prefetching to THREAD and SORT
+     - check all imap extensions and see if some don't work (condstore)
+ - per-namespace imapc_* settings? create a way to "copy" a settings struct,
+   so mail_storage_settings are copied to mail_namespace_settings. use the
+   change tracking to figure out what settings are namespace-specific.
+
+ - imap: list (special-use recursivematch) "" % doesn't work
+ - passdb, userdb { username_format } that doesn't permanently change
+   the username
+ - mdbox/sdbox index rebuild -> quota rebuild?
+ - solr separate attachments (patch)
+ - sql connection pooling: Count lookup latencies, avoid servers with
+   significantly higher latencies. optionally use the secondary server only
+   as fallback
+ - maildir_storage_sync_force() shouldn't do anything except find the new
+   file, don't go expunging any more stuff or we could get recursively back to
+   where we started, and stuff would break
+ - imap: append/copy could trigger indexing (optionally)
+ - fuzzy: be fuzzy about date/size
+ - fix proxy_maybe=fqdn
+ - mailbox list index:
+    - with in-memory indexes be sure to refresh it more often
+    - refreshing could refresh only the parts that are actually requested,
+      e.g. %
+    - mailbox_get_metadata(guid) could be optimized
+    - virtual could use it to avoid keeping all mailboxes open
+ - check:
+    - dsyncing between two namespace separators is probably broken..
+ - remove mail_deliver_session after all, do all the stuff transparently
+   by hooking into mailbox_copy().
+     - use this hook also to do the mail deduplication: 1) sort all destination
+       users, 2) create mail_user only once for each user, 3) remember in
+       src_mail the previously copied mail, 4) use that for mailbox_copy()ing
+       to following recipients
+ - notify_sync() could have "what changed" struct with old/new flags
+ - maildir: copy dovecot-shared file from parent mailbox, not root.
+ - if global ACL path points to a file instead of a directory, read all of
+   them from there. support wildcards in names.
+
  - master passdb preserves userdb_* extra fields. should it preserve
    non-userdb_* extra fields too?
  - imap, pop3: if client init fails, wait a second or two before disconnecting
    client.
- - doveadm expunge parameter to delete empty mailboxes (for lazy-expunge)
  - doveadm search savedbefore 7d could be optimized in large mailboxes..
  - mdbox: storage rebuilding could log about changes it does
  - mdbox: broken extrefs header keeps causing index rebuilds
@@ -18,15 +59,11 @@
    from lib-index
  - dsync: if mailbox is renamed due to it being invalid, its subscription
    isn't renamed
- - LSUB shows subscribed namespace prefix as prefix/, also SUBSCRIBE adds the /
  - sql pool: if async query is pending and sync query is sent and there
    are no more empty connections, it should flush the async query first
  - NTLMv1 and LM should be disabled if disable_plaintext_auth=yes
  - SEARCH SENT*/HEADER/etc. doesn't seem optimized when using with TEXT/BODY
  - dict sql: support ignoring some search key hierarchies (e.g. acl "anyone")
-
- - fts-solr: crashes if expunge is done while search is indexing
- - fts-solr: handle DELETE, RENAME. use mailbox GUIDs (optionally)
 
  - mdbox
     - dotlocking: cleanup should delete stale *.lock files
@@ -76,7 +113,6 @@
  - search: use mail_get_parts() only when it's already cached. if it's not,
    add it to cache afterwards.
  - move ssl proxying code to lib-master
- - proxy: verify ssl cert's cname
  - dict pooling
 
 	/* currently non-external transactions can be applied multiple times,
@@ -98,9 +134,6 @@
    assertion failed: (file_offset >= log->head->saved_tail_offset)
  - virtual: If last message matching INTHREAD rule gets expunged, the rest of
    the thread doesn't go away
- - virtual: "Searched n% of the mailbox" gives broken numbers since
-   ctx->seq jumps around. And why is it also returned when fts is enabled
-   along with "Indexed n% of the mailbox"?
  - how do shared mailboxes work with plugins?
     - lazy-expunge, fts, etc.?
     - listescape+acl can't handle shared mailboxes with escape chars
@@ -129,11 +162,7 @@
    - recent_uids assert at least with mbox
  - quota fs: Should values returned by quota be divided by the actual
    filesystem block size instead of hardcoded DEV_BSIZE? not with AIX..
- - mailbox list fs: Listing subscriptions with children return options doesn't
-   work unless iter_is_mailbox() returns the children flags
- - lucene: handle replacement chars?
  - squat:
-   - support ORs
    - wrong indexid
    - fts_build_init() assertion failed: (last_uid < last_uid_locked)
    - is locking done right? it reads header without file being locked?
@@ -147,9 +176,8 @@
    - sasl bind + auth_bind=yes should probably be doing only sasl binds..
    - support multiple connections for doing auth binds
    - domain lookups which set the base for user lookup
-   - same attribute can't be used for multiple values.
-   - multiple attributes can't be merged to a single value.
-   - multiple value could be joined with specified separator (per-field)
+   - multiple ldap values could be joined into one field with specified
+     separator (e.g. mail_access_groups=%{ldap:gidNumber:,})
    - implement something like:
        user_attrs {
 	 uid = %{ldap:uidNumber}
@@ -168,9 +196,6 @@
 
  - maildir
    - don't allow more than 26 keywords
-   - physical separator could be configurable
-   - lda+maildir: if new mails are in new/ or cur/ they're not added to
-     dovecot-uidlist but newly saved mails are, so UIDs will be in wrong order
 
  - file_cache: we're growing the mmap in page size blocks, which is horribly
    slow if mremap() doesn't exist.
@@ -221,9 +246,6 @@
 	   - only after that we can remove the transaction log offset
 	     overwriting (otherwise we can get partial transactions in views)
 
- - lib-storage
-    - x search charset asdf all -> should fail
-
  - login
     - Digest-MD5: support integrity protection, and maybe crypting. Do it
       through login process like SSL is done?
@@ -243,13 +265,6 @@
       untrusted computers. Maybe always send [ALERT] about the previous
       read-only login time with IP?
 
- - quota
-    - if dovecot-uidlist can't be written, assume the new mails have UIDs 
-      beginning from uidlist.next_uid. Whenever mails are expunged, overwrite
-      the next_uid field with the current highest next_uid. Whenever we have
-      assumed UIDs and uidlist gets updated, throw the client out with
-      "inconsist mailbox".
-
  - ssl
     - add setting: ssl_options = bitmask. by default we enable all openssl
       workarounds, this could be used to disable some of them
@@ -260,8 +275,6 @@
     - message_search_init() could accept multiple search keywords so we
       wouldn't need to call it separately for each one (so we wouldn't need
       to parse the message multiple times).
-    - could optionally support scanning inside file attachments and use
-      plugins to extract text out of them (word, excel, pdf, etc. etc.)
     - Create our own extension: When searching with TEXT/BODY, return
       the message text surrounding the keywords just like web search engines
       do. like: SEARCH X-PRINT-MATCHES TEXT "hello" -> * SEARCH 1 "He said:

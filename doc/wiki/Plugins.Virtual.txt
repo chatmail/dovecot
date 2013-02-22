@@ -92,7 +92,7 @@ mailbox.
 Examples
 --------
 
-List all messages with \Deleted flag in all mailboxes:
+ * List all messages with \Deleted flag in all mailboxes:
 
 ---%<-------------------------------------------------------------------------
 # ~/Maildir/virtual/Trash/dovecot-virtual
@@ -100,7 +100,7 @@ List all messages with \Deleted flag in all mailboxes:
   deleted
 ---%<-------------------------------------------------------------------------
 
-List all unseen INBOX and work/* messages:
+ * List all unseen INBOX and work/* messages:
 
 ---%<-------------------------------------------------------------------------
 # ~/Maildir/virtual/unseen/dovecot-virtual
@@ -109,9 +109,9 @@ work/*
   unseen
 ---%<-------------------------------------------------------------------------
 
-Create a GMail-style "conversation view" for INBOX which shows all threads that
-have messages in INBOX, but shows all messages in the thread regardless of in
-what mailbox they physically exist in:
+ * Create a GMail-style "conversation view" for INBOX which shows all threads
+   that have messages in INBOX, but shows all messages in the thread regardless
+   of in what mailbox they physically exist in:
 
 ---%<-------------------------------------------------------------------------
 # ~/Maildir/virtual/all/dovecot-virtual
@@ -125,8 +125,8 @@ virtual/all
   inthread refs x-mailbox INBOX
 ---%<-------------------------------------------------------------------------
 
-Create a mailbox containing messages from all mailboxes except Trash and its
-children:
+ * Create a mailbox containing messages from all mailboxes except Trash and its
+   children:
 
 ---%<-------------------------------------------------------------------------
 # ~/Maildir/virtual/all/dovecot-virtual
@@ -136,12 +136,21 @@ children:
   all
 ---%<-------------------------------------------------------------------------
 
-Create a virtual Sentmail folder that includes Sent*:
+ * Create a virtual Sentmail folder that includes Sent*:
 
 ---%<-------------------------------------------------------------------------
 # ~/Maildir/virtual/Sentmail/dovecot-virtual
 Sent*
   all
+---%<-------------------------------------------------------------------------
+
+ * List messages from past 48 hours (syntax is in seconds):
+
+---%<-------------------------------------------------------------------------
+# ~/Maildir/virtual/recent/dovecot-virtual
+INBOX
+work/*
+  all younger 172800
 ---%<-------------------------------------------------------------------------
 
 Virtual POP3 INBOX
@@ -154,7 +163,7 @@ Namespace configuration:
 
 ---%<-------------------------------------------------------------------------
 # The default namespace that is visible to IMAP clients
-namespace default {
+namespace inbox {
   prefix =
   separator = /
   list = yes
@@ -170,7 +179,7 @@ namespace virtual {
   hidden = yes
 }
 
-# Copy of the default namespace. We'll use this in dovecot-virtual file.
+# Copy of the inbox namespace. We'll use this in dovecot-virtual file.
 namespace real {
   prefix = RealMails/
   separator = /
@@ -180,15 +189,14 @@ namespace real {
 ---%<-------------------------------------------------------------------------
 
 Note that none of the namespaces have inbox=yes. This is because for IMAP users
-you want the default namespace to have inbox=yes, but for POP3 users you want
-the virtual namespace to have inbox=yes. This requires setting the inbox=yes in
+you want the inbox namespace to have inbox=yes, but for POP3 users you want the
+virtual namespace to have inbox=yes. This requires setting the inbox=yes in
 <userdb extra fields> [UserDatabase.ExtraFields.txt]. For example with MySQL
 you can can do this like:
 
 ---%<-------------------------------------------------------------------------
 user_query = SELECT ..., \
-  CASE '%s' WHEN 'pop3' THEN NULL ELSE 'yes' END AS 'namespace/default/inbox',
-\
+  CASE '%s' WHEN 'pop3' THEN NULL ELSE 'yes' END AS 'namespace/inbox/inbox', \
   CASE '%s' WHEN 'pop3' THEN 'yes' ELSE NULL END AS 'namespace/virtual/inbox' \
   WHERE ...
 ---%<-------------------------------------------------------------------------
@@ -198,6 +206,7 @@ Finally specify what the virtual INBOX looks like for POP3 users:
 '/etc/dovecot/virtual/INBOX/dovecot-virtual' :
 
 ---%<-------------------------------------------------------------------------
+RealMails
 RealMails/*
 -RealMails/Trash
 -RealMails/Trash/*
@@ -216,4 +225,4 @@ IMAP UIDs. Instead use for GUIDs (with maildir the same as base filename):
 pop3_uidl_format = %g
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2011-08-29 04:42)
+(This file was created from the wiki on 2012-04-23 04:42)

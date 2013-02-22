@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
@@ -11,7 +11,9 @@
 
 struct auth_userdb_settings userdb_dummy_set = {
 	.driver = "static",
-	.args = ""
+	.args = "",
+	.default_fields = "",
+	.override_fields = ""
 };
 
 static ARRAY_DEFINE(auths, struct auth *);
@@ -28,8 +30,7 @@ auth_passdb_preinit(struct auth *auth, const struct auth_passdb_settings *set,
 	for (dest = passdbs; *dest != NULL; dest = &(*dest)->next) ;
 	*dest = auth_passdb;
 
-	auth_passdb->passdb =
-		passdb_preinit(auth->pool, set->driver, set->args);
+	auth_passdb->passdb = passdb_preinit(auth->pool, set);
 }
 
 static void
@@ -43,8 +44,97 @@ auth_userdb_preinit(struct auth *auth, const struct auth_userdb_settings *set)
 	for (dest = &auth->userdbs; *dest != NULL; dest = &(*dest)->next) ;
 	*dest = auth_userdb;
 
-	auth_userdb->userdb =
-		userdb_preinit(auth->pool, set->driver, set->args);
+	auth_userdb->userdb = userdb_preinit(auth->pool, set);
+}
+
+static bool auth_passdb_list_have_verify_plain(struct auth *auth)
+{
+	struct auth_passdb *passdb;
+
+	for (passdb = auth->masterdbs; passdb != NULL; passdb = passdb->next) {
+		if (passdb->passdb->iface.verify_plain != NULL)
+			return TRUE;
+	}
+	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next) {
+		if (passdb->passdb->iface.verify_plain != NULL)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+static bool auth_passdb_list_have_lookup_credentials(struct auth *auth)
+{
+	struct auth_passdb *passdb;
+
+	for (passdb = auth->masterdbs; passdb != NULL; passdb = passdb->next) {
+		if (passdb->passdb->iface.lookup_credentials != NULL)
+			return TRUE;
+	}
+	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next) {
+		if (passdb->passdb->iface.lookup_credentials != NULL)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+static int auth_passdb_list_have_set_credentials(struct auth *auth)
+{
+	struct auth_passdb *passdb;
+
+	for (passdb = auth->masterdbs; passdb != NULL; passdb = passdb->next) {
+		if (passdb->passdb->iface.set_credentials != NULL)
+			return TRUE;
+	}
+	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next) {
+		if (passdb->passdb->iface.set_credentials != NULL)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+static bool
+auth_mech_verify_passdb(struct auth *auth, struct mech_module_list *list)
+{
+	switch (list->module.passdb_need) {
+	case MECH_PASSDB_NEED_NOTHING:
+		break;
+	case MECH_PASSDB_NEED_VERIFY_PLAIN:
+		if (!auth_passdb_list_have_verify_plain(auth))
+			return FALSE;
+		break;
+	case MECH_PASSDB_NEED_VERIFY_RESPONSE:
+	case MECH_PASSDB_NEED_LOOKUP_CREDENTIALS:
+		if (!auth_passdb_list_have_lookup_credentials(auth))
+			return FALSE;
+		break;
+	case MECH_PASSDB_NEED_SET_CREDENTIALS:
+		if (!auth_passdb_list_have_lookup_credentials(auth))
+			return FALSE;
+		if (!auth_passdb_list_have_set_credentials(auth))
+			return FALSE;
+		break;
+	}
+	return TRUE;
+}
+
+static void auth_mech_list_verify_passdb(struct auth *auth)
+{
+	struct mech_module_list *list;
+
+	for (list = auth->reg->modules; list != NULL; list = list->next) {
+		if (!auth_mech_verify_passdb(auth, list))
+			break;
+	}
+
+	if (list != NULL) {
+		if (auth->passdbs == NULL) {
+			i_fatal("No passdbs specified in configuration file. "
+				"%s mechanism needs one",
+				list->module.mech_name);
+		}
+		i_fatal("%s mechanism can't be supported with given passdbs",
+			list->module.mech_name);
+	}
 }
 
 static struct auth *
@@ -107,84 +197,6 @@ auth_preinit(const struct auth_settings *set, const char *service, pool_t pool,
 	return auth;
 }
 
-static bool auth_passdb_list_have_verify_plain(struct auth *auth)
-{
-	struct auth_passdb *passdb;
-
-	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next) {
-		if (passdb->passdb->iface.verify_plain != NULL)
-			return TRUE;
-	}
-	return FALSE;
-}
-
-static bool auth_passdb_list_have_lookup_credentials(struct auth *auth)
-{
-	struct auth_passdb *passdb;
-
-	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next) {
-		if (passdb->passdb->iface.lookup_credentials != NULL)
-			return TRUE;
-	}
-	return FALSE;
-}
-
-static int auth_passdb_list_have_set_credentials(struct auth *auth)
-{
-	struct auth_passdb *passdb;
-
-	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next) {
-		if (passdb->passdb->iface.set_credentials != NULL)
-			return TRUE;
-	}
-	return FALSE;
-}
-
-static bool
-auth_mech_verify_passdb(struct auth *auth, struct mech_module_list *list)
-{
-	switch (list->module.passdb_need) {
-	case MECH_PASSDB_NEED_NOTHING:
-		break;
-	case MECH_PASSDB_NEED_VERIFY_PLAIN:
-		if (!auth_passdb_list_have_verify_plain(auth))
-			return FALSE;
-		break;
-	case MECH_PASSDB_NEED_VERIFY_RESPONSE:
-	case MECH_PASSDB_NEED_LOOKUP_CREDENTIALS:
-		if (!auth_passdb_list_have_lookup_credentials(auth))
-			return FALSE;
-		break;
-	case MECH_PASSDB_NEED_SET_CREDENTIALS:
-		if (!auth_passdb_list_have_lookup_credentials(auth))
-			return FALSE;
-		if (!auth_passdb_list_have_set_credentials(auth))
-			return FALSE;
-		break;
-	}
-	return TRUE;
-}
-
-static void auth_mech_list_verify_passdb(struct auth *auth)
-{
-	struct mech_module_list *list;
-
-	for (list = auth->reg->modules; list != NULL; list = list->next) {
-		if (!auth_mech_verify_passdb(auth, list))
-			break;
-	}
-
-	if (list != NULL) {
-		if (auth->passdbs == NULL) {
-			i_fatal("No passdbs specified in configuration file. "
-				"%s mechanism needs one",
-				list->module.mech_name);
-		}
-		i_fatal("%s mechanism can't be supported with given passdbs",
-			list->module.mech_name);
-	}
-}
-
 static void auth_init(struct auth *auth)
 {
 	struct auth_passdb *passdb;
@@ -196,8 +208,6 @@ static void auth_init(struct auth *auth)
 		passdb_init(passdb->passdb);
 	for (userdb = auth->userdbs; userdb != NULL; userdb = userdb->next)
 		userdb_init(userdb->userdb);
-
-	auth_mech_list_verify_passdb(auth);
 }
 
 static void auth_deinit(struct auth *auth)
@@ -240,9 +250,10 @@ void auths_preinit(const struct auth_settings *set, pool_t pool,
 {
 	struct master_service_settings_output set_output;
 	const struct auth_settings *service_set;
-	struct auth *auth;
+	struct auth *auth, *const *authp;
 	unsigned int i;
 	const char *not_service = NULL;
+	bool check_default = TRUE;
 
 	i_array_init(&auths, 8);
 
@@ -262,6 +273,14 @@ void auths_preinit(const struct auth_settings *set, pool_t pool,
 						 &set_output);
 		auth = auth_preinit(service_set, services[i], pool, reg);
 		array_append(&auths, &auth, 1);
+	}
+
+	if (not_service != NULL && str_array_find(services, not_service+1))
+		check_default = FALSE;
+
+	array_foreach(&auths, authp) {
+		if ((*authp)->service != NULL || check_default)
+			auth_mech_list_verify_passdb(*authp);
 	}
 }
 

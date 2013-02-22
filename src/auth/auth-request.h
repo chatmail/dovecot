@@ -2,6 +2,7 @@
 #define AUTH_REQUEST_H
 
 #include "network.h"
+#include "var-expand.h"
 #include "mech.h"
 #include "userdb.h"
 #include "passdb.h"
@@ -55,6 +56,8 @@ struct auth_request {
 	struct auth_stream_reply *extra_cache_fields;
 	/* the whole userdb result reply */
 	struct auth_stream_reply *userdb_reply;
+	/* Result of passdb lookup */
+	enum passdb_result passdb_result;
 
 	const struct mech_module *mech;
 	const struct auth_settings *set;
@@ -70,7 +73,7 @@ struct auth_request {
 	unsigned int id;
 	time_t last_access;
 
-	const char *service, *mech_name;
+	const char *service, *mech_name, *session_id;
 	struct ip_addr local_ip, remote_ip;
 	unsigned int local_port, remote_port;
 
@@ -105,18 +108,24 @@ struct auth_request {
 	unsigned int prefer_plain_credentials:1;
 	unsigned int proxy:1;
 	unsigned int proxy_maybe:1;
+	unsigned int proxy_always:1;
+	unsigned int proxy_host_is_self:1;
 	unsigned int valid_client_cert:1;
 	unsigned int no_penalty:1;
 	unsigned int cert_username:1;
 	unsigned int userdb_lookup:1;
 	unsigned int userdb_lookup_failed:1;
 	unsigned int secured:1;
+	unsigned int final_resp_ok:1;
 	unsigned int removed_from_handler:1;
 
 	/* ... mechanism specific data ... */
 };
 
+typedef void auth_request_proxy_cb_t(bool success, struct auth_request *);
+
 extern unsigned int auth_request_state_count[AUTH_REQUEST_STATE_MAX];
+extern const struct var_expand_table auth_request_var_expand_static_tab[];
 
 struct auth_request *
 auth_request_new(const struct mech_module *mech);
@@ -139,6 +148,10 @@ void auth_request_export(struct auth_request *request,
 			 struct auth_stream_reply *reply);
 bool auth_request_import(struct auth_request *request,
 			 const char *key, const char *value);
+bool auth_request_import_info(struct auth_request *request,
+			      const char *key, const char *value);
+bool auth_request_import_auth(struct auth_request *request,
+			      const char *key, const char *value);
 
 void auth_request_initial(struct auth_request *request);
 void auth_request_continue(struct auth_request *request,
@@ -162,6 +175,9 @@ bool auth_request_set_login_username(struct auth_request *request,
 void auth_request_set_field(struct auth_request *request,
 			    const char *name, const char *value,
 			    const char *default_scheme);
+void auth_request_set_field_keyvalue(struct auth_request *request,
+				     const char *field,
+				     const char *default_scheme);
 void auth_request_set_fields(struct auth_request *request,
 			     const char *const *fields,
 			     const char *default_scheme);
@@ -172,7 +188,10 @@ void auth_request_set_userdb_field(struct auth_request *request,
 void auth_request_set_userdb_field_values(struct auth_request *request,
 					  const char *name,
 					  const char *const *values);
-void auth_request_proxy_finish(struct auth_request *request, bool success);
+/* returns -1 = failed, 0 = callback is called later, 1 = finished */
+int auth_request_proxy_finish(struct auth_request *request,
+			      auth_request_proxy_cb_t *callback);
+void auth_request_proxy_finish_failure(struct auth_request *request);
 
 void auth_request_log_password_mismatch(struct auth_request *request,
 					const char *subsystem);
@@ -195,7 +214,7 @@ void auth_request_log_info(struct auth_request *auth_request,
 			   const char *format, ...) ATTR_FORMAT(3, 4);
 void auth_request_log_warning(struct auth_request *auth_request,
 			      const char *subsystem,
-			      const char *format, ...);
+			      const char *format, ...) ATTR_FORMAT(3, 4);
 void auth_request_log_error(struct auth_request *auth_request,
 			    const char *subsystem,
 			    const char *format, ...) ATTR_FORMAT(3, 4);

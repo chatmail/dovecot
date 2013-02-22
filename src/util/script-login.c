@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "env-util.h"
@@ -79,10 +79,12 @@ static void client_connected(struct master_service_connection *conn)
 	if (fd == -1)
 		i_fatal("client fd not received");
 
+	alarm(0);
+
 	/* put everything to environment */
 	env_clean();
 	keys = t_str_new(256);
-	args = t_strsplit(data_line, "\t");
+	args = t_strsplit_tab(data_line);
 
 	if (str_array_length(args) < 3)
 		i_fatal("Missing input fields");
@@ -119,6 +121,8 @@ static void client_connected(struct master_service_connection *conn)
 		if (mail_storage_service_lookup(service_ctx, &input, &user, &error) <= 0)
 			i_fatal("%s", error);
 		mail_storage_service_restrict_setenv(service_ctx, user);
+		/* we can't exec anything in a chroot */
+		env_remove("RESTRICT_CHROOT");
 		restrict_access_by_env(getenv("HOME"), TRUE);
 	}
 
@@ -126,9 +130,13 @@ static void client_connected(struct master_service_connection *conn)
 		i_fatal("dup2() failed: %m");
 	if (dup2(fd, STDOUT_FILENO) < 0)
 		i_fatal("dup2() failed: %m");
+	if (close(fd) < 0)
+		i_fatal("close() failed: %m");
 	if (conn->fd != SCRIPT_COMM_FD) {
 		if (dup2(conn->fd, SCRIPT_COMM_FD) < 0)
 			i_fatal("dup2() failed: %m");
+		if (close(conn->fd) < 0)
+			i_fatal("close() failed: %m");
 	}
 
 	/* close all listener sockets */
@@ -169,12 +177,19 @@ static void script_execute_finish(void)
 	}
 	str_append_c(reply, '\n');
 
+	/* finish by sending the fd to the mail process */
 	ret = fd_send(SCRIPT_COMM_FD, STDOUT_FILENO,
 		      str_data(reply), str_len(reply));
-	if (ret < 0)
-		i_fatal("fd_send() failed: %m");
-	else if (ret != (ssize_t)str_len(reply))
-		i_fatal("fd_send() sent partial output");
+	if (ret == (ssize_t)str_len(reply)) {
+		/* success */
+	} else {
+		if (ret < 0)
+			i_error("fd_send() failed: %m");
+		else
+			i_error("fd_send() sent partial output");
+		/* exit with 0 even though we failed. non-0 exit just makes
+		   master log an unnecessary error. */
+	}
 }
 
 int main(int argc, char *argv[])

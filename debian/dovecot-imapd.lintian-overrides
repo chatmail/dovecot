@@ -1,0 +1,2 @@
+dovecot-imapd: hardening-no-fortify-functions usr/lib/dovecot/imap
+

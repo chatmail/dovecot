@@ -1,0 +1,19 @@
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/anvil
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/auth
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/config
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/dict
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/director
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/gdbhelper
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/libdovecot-login.so.0.0.0
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/libdovecot-sql.so.0.0.0
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/auth/libauthdb_imap.so
+dovecot-core: hardening-no-relro usr/lib/dovecot/modules/drac.so
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib05_pop3_migration_plugin.so
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib10_quota_plugin.so
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib11_trash_plugin.so
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib20_replication_plugin.so
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib21_fts_squat_plugin.so
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/replicator
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/script
+dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/script-login
+

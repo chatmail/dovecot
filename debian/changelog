@@ -1,3 +1,149 @@
+dovecot (1:2.1.7-7) unstable; urgency=high
+
+  * If you are upgrading from stable or earlier versions of this package
+    from testing/unstable please carefully read
+    /usr/share/doc/dovecot-core/README.Debian.gz for important information
+    about changes.
+  * [0d74b31] Move Breaks/Replaces mailavenger from dovecot-common to
+    dovecot-core (Closes: #694376)
+  * [a8030a1] Revamped dovecot-cores README.Debian by adding any info I could
+    think of in order to ease upgrade problems. (Closes: #696820)
+  * [04798d3] Don't touch 10-ssl.conf at all.  Eventually I will DTRT with
+    regards to the default generated ssl certificates but in the mean time
+    this will do the least mischief.  (Closes: #696817)
+  * [fde17d1] Patch to make /etc/dovecot/readme point to the right place for
+    the example configuration.  (Closes: #698941)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 04 Feb 2013 16:27:17 -0500
+
+dovecot (1:2.1.7-6) unstable; urgency=high
+
+  * WARNING: in order to get this package into wheezy some functionality
+    from the previous release had to be removed.  Namely:
+    - TCP Wrappers support
+    - Hurd compatability support
+    - Triggers  
+    All this will be coming back in the next version but for now, if you need
+    any of it, stick with -5.
+  * [1f869e0] NEWS.Debian was not getting added to the package (Closes: #693621)
+  * [564c5e2] Add breaks and replaces mailavenger for debian-common
+    (Closes: #694376)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 14 Dec 2012 17:01:33 -0500
+
+dovecot (1:2.1.7-5) unstable; urgency=high
+
+  * [132bc3b] Remove call to ntp-wait in init script.  Dovecot handles a 
+    skewed clock much better now.  (Closes: #693225)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 14 Nov 2012 14:45:29 -0500
+
+dovecot (1:2.1.7-4) unstable; urgency=high
+
+  * [68ef7ad] piuparts complained /etc/dovecot/private was left unowned on
+    purge which is against policy (Closes: #692944)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 11 Nov 2012 23:45:07 -0500
+
+dovecot (1:2.1.7-3) unstable; urgency=high
+
+  [ Jaldhar H. Vyas ]
+  * [03d5499] Do not generate new dovecot cert if key or cert is already
+    present (Closes: #685896,#631257) Thanks to Alexander Ufimtsev
+    <alexu@ucd.ie> and Jörg-Volker Peetz <jvpeetz@web.de> for patches.
+  * [5be6c2a] You should be able to upgrade and remove dovecot-managesieved
+    without errors (Closes: #665487)
+  * [1a9ad5c] Fixes instances where UTF-8 was misused instead of mUTF-7
+    (Closes: #680035)
+  * [c0ac3ba] Backport of fix for failure to autocreate mailboxes
+    (Closes: #623440) This also requires setting the default mail_location.
+  * [ba1d3f5] Fix FTBS on Hurd (Closes: #686931) via upstream patch backported
+    from mercurial.
+  * [cfa92b5] Upgrade pigeonhole page to 0.3.1 (Closes: #688407)
+  * [58f01c2] Generated certificates will now be created in /etc/dovecot
+    (Closes: #608719)
+  * [8e40ea5] Patch to build with PIE and bindnow
+    by intrigeri@debian.org (Closes: #679017)
+  * [87d982b] Use libwrap (Closes: #685850)
+  * [ebb5421] Start after nslcd (Closes: #692632)
+  * [2db5c1a] Add support for dpkg triggers.  This means dovecot will not be
+    repeatedly restarted when installing or removing lots of plugins
+    (Closes: #601744)
+  * [bc66629] Patch to document -k in dsync.1
+    by Luca Capello <luca@pca.it> (Closes: #680992)
+  * [ba67766] Add lintian overrides.
+
+  [ Marco Nenciarini ]
+  * [ffba408] Updated watch file
+  * [9777434] Install missing default configuration files from upstream
+  * [9496828] Backport fix for segfault in managesieve triggered by
+    CHECKSCRIPT command. (Closes: #688197)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 10 Nov 2012 03:50:30 -0500
+
+dovecot (1:2.1.7-2) unstable; urgency=low
+
+  * [e23a136] Just a quick upload to make dovecot buildable on non-linux
+    platforms again. (Closes: #676817) I did it by removing the systemd
+    build-dep altogether.  sd-daemon.[ch] is included in the source so if
+    systemd is installed on a system, it should be detected and socket
+    activation should happen.  That is, assuming I've got everything right
+    (and documented) which is something I'll be looking into for the next
+    version.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 21 Jun 2012 23:54:47 -0400
+
+dovecot (1:2.1.7-1) unstable; urgency=low
+
+  * [7668742] Imported upstream 2.1.7 (Closes: #663243)
+              + doveadm.1 documents the move command. (Closes: #641750)
+  * [4db927a] Patch to enable systemd support.  (Closes: #672266)
+              Thanks Riku Voipio.
+  * [e17ac86] Previous attempt at setting hardening flags did not include the
+              drac plugin.  Simon Ruderich provided an extra patch.
+              (Closes: #653530)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 30 May 2012 16:27:21 -0400
+
+dovecot (1:2.1.4-1) experimental; urgency=low
+
+  * [6cc1e7d] Imported upstream 2.1.4
+
+ -- Micah Anderson <micah@debian.org>  Tue, 10 Apr 2012 11:33:05 -0400
+
+dovecot (1:2.1.3-1) experimental; urgency=low
+
+  * [49ecc33] Imported upstream 2.1.3
+
+ -- Micah Anderson <micah@debian.org>  Fri, 16 Mar 2012 22:04:46 -0400
+
+dovecot (1:2.1.2-1) experimental; urgency=low
+
+  * [70c3f6e] Imported upstream 2.1.2
+  * Add missing dependency on dpkg-dev 1.16.1
+
+ -- Micah Anderson <micah@debian.org>  Thu, 15 Mar 2012 20:26:35 -0400
+
+dovecot (1:2.1.1-1) experimental; urgency=low
+
+  * [e113636] Imported upstream 2.1.1
+  * Updated pigeonhole patch to 0.3.0, supporting 2.1
+
+ -- Micah Anderson <micah@debian.org>  Tue, 13 Mar 2012 23:08:06 -0400
+
+dovecot (1:2.0.18-1) unstable; urgency=low
+
+  * [85ae320] Imported Upstream version 2.0.18
+  * [9cfd1da] Upped standards version to 3.9.3
+  * [afb4164] Patch to dovecot-core/postinst so that permissions of symlinked
+    certificates aren't modified. (Closes: #646508)
+    Thanks Michael Kuhn.
+  * [bf642ee] Patch to enable hardened build flags.  (Closes: #653530)
+    Thanks Moritz Muehlenhoff.
+  * [00b0d0c] Updated pigeonhole to 0.2.6
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 09 Mar 2012 00:55:13 -0500
+
 dovecot (1:2.0.15-1~bpo60+1) squeeze-backports; urgency=low
 
   * Rebuild for squeeze-backports.

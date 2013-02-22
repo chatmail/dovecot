@@ -1,0 +1,159 @@
+From: Jaldhar H. Vyas <jaldhar@debian.org>
+Date: Sun, 30 Sep 2012 11:31:43 -0400
+Subject: backport of 2.1.8 fixes for UTF-8 namespaces
+Bug: #685841
+Description: Fixes handling of UTF-8 namespace prefixes
+ # HG changeset patch
+ # User Timo Sirainen <tss@iki.fi>
+ # Date 1345751816 -10800
+ # Node ID ade94fde249e1379af55df62c47ad98e19ddb935
+ # Parent  565605200989dd5a81b8358a13420a4d7b30b33c
+ imap: Fixes to handling UTF-8 namespace prefixes
+Origin: http://hg.dovecot.org/dovecot-2.1
+---
+diff -r 565605200989 -r ade94fde249e src/imap/cmd-list.c
+--- a/src/imap/cmd-list.c	Thu Aug 23 22:33:23 2012 +0300
++++ b/src/imap/cmd-list.c	Thu Aug 23 22:56:56 2012 +0300
+@@ -230,6 +230,19 @@
+ 	return ret;
+ }
+ 
++static const char *ns_prefix_mutf7(struct mail_namespace *ns)
++{
++	string_t *str;
++
++	if (*ns->prefix == '\0')
++		return "";
++
++	str = t_str_new(64);
++	if (imap_utf8_to_utf7(ns->prefix, str) < 0)
++		i_panic("Namespace prefix not UTF-8: %s", ns->prefix);
++	return str_c(str);
++}
++
+ static const char *ns_get_listed_prefix(struct cmd_list_context *ctx)
+ {
+ 	struct imap_match_glob *glob;
+@@ -285,7 +298,7 @@
+ 	unsigned int len;
+ 	enum mailbox_info_flags flags;
+ 	const char *name;
+-	string_t *str;
++	string_t *str, *mutf7_name;
+ 	bool same_ns, ends_with_sep;
+ 	char ns_sep = mail_namespace_get_sep(ctx->ns);
+ 
+@@ -364,7 +377,11 @@
+ 	str_append(str, ") ");
+ 	list_reply_append_ns_sep_param(str, ns_sep);
+ 	str_append_c(str, ' ');
+-	imap_quote_append_string(str, name, FALSE);
++
++	mutf7_name = t_str_new(64);
++	if (imap_utf8_to_utf7(name, mutf7_name) < 0)
++		i_panic("Namespace prefix not UTF-8: %s", name);
++	imap_quote_append_string(str, str_c(mutf7_name), FALSE);
+ 	mailbox_childinfo2str(ctx, str, flags);
+ 
+ 	client_send_line(ctx->cmd->client, str_c(str));
+@@ -870,7 +887,7 @@
+ 	   Otherwise we'll emulate UW-IMAP behavior. */
+ 	ns = mail_namespace_find_visible(client->user->namespaces, ref);
+ 	if (ns != NULL) {
+-		ns_prefix = ns->prefix;
++		ns_prefix = ns_prefix_mutf7(ns);
+ 		ns_sep = mail_namespace_get_sep(ns);
+ 	} else {
+ 		ns_prefix = "";
+@@ -938,6 +955,10 @@
+ 		return TRUE;
+ 	}
+ 	str = t_str_new(64);
++	if (imap_utf7_to_utf8(ctx->ref, str) == 0)
++		ctx->ref = p_strdup(cmd->pool, str_c(str));
++	str_truncate(str, 0);
++
+ 	if (imap_arg_get_list_full(&args[1], &list_args, &arg_count)) {
+ 		ctx->used_listext = TRUE;
+ 		/* convert pattern list to string array */
+diff -r 565605200989 -r ade94fde249e src/imap/cmd-namespace.c
+--- a/src/imap/cmd-namespace.c	Thu Aug 23 22:33:23 2012 +0300
++++ b/src/imap/cmd-namespace.c	Thu Aug 23 22:56:56 2012 +0300
+@@ -2,6 +2,7 @@
+ 
+ #include "imap-common.h"
+ #include "str.h"
++#include "imap-utf7.h"
+ #include "imap-quote.h"
+ #include "imap-commands.h"
+ #include "mail-namespace.h"
+@@ -9,6 +10,7 @@
+ static void list_namespaces(struct mail_namespace *ns,
+ 			    enum namespace_type type, string_t *str)
+ {
++	string_t *mutf7_prefix = t_str_new(64);
+ 	char ns_sep;
+ 	bool found = FALSE;
+ 
+@@ -21,7 +23,14 @@
+ 			}
+ 			ns_sep = mail_namespace_get_sep(ns);
+ 			str_append_c(str, '(');
+-			imap_quote_append_string(str, ns->prefix, FALSE);
++
++			str_truncate(mutf7_prefix, 0);
++			if (imap_utf8_to_utf7(ns->prefix, mutf7_prefix) < 0) {
++				i_panic("LIST: Namespace prefix not UTF-8: %s",
++					ns->prefix);
++			}
++
++			imap_quote_append_string(str, str_c(mutf7_prefix), FALSE);
+ 			str_append(str, " \"");
+ 			if (ns_sep == '\\')
+ 				str_append_c(str, '\\');
+diff -r 565605200989 -r ade94fde249e src/imap/imap-commands-util.c
+--- a/src/imap/imap-commands-util.c	Thu Aug 23 22:33:23 2012 +0300
++++ b/src/imap/imap-commands-util.c	Thu Aug 23 22:56:56 2012 +0300
+@@ -19,10 +19,15 @@
+ {
+ 	struct mail_namespace *namespaces = cmd->client->user->namespaces;
+ 	struct mail_namespace *ns;
+-	unsigned int name_len;
+ 	string_t *utf8_name;
+ 
+-	ns = mail_namespace_find(namespaces, *mailbox);
++	utf8_name = t_str_new(64);
++	if (imap_utf7_to_utf8(*mailbox, utf8_name) < 0) {
++		client_send_tagline(cmd, "NO Mailbox name is not valid mUTF-7");
++		return NULL;
++	}
++
++	ns = mail_namespace_find(namespaces, str_c(utf8_name));
+ 	if (ns == NULL) {
+ 		client_send_tagline(cmd, t_strdup_printf(
+ 			"NO Client tried to access nonexistent namespace. "
+@@ -31,20 +36,14 @@
+ 		return NULL;
+ 	}
+ 
+-	name_len = strlen(*mailbox);
+ 	if ((cmd->client->set->parsed_workarounds &
+ 	     		WORKAROUND_TB_EXTRA_MAILBOX_SEP) != 0 &&
+-	    name_len > 0 &&
+-	    (*mailbox)[name_len-1] == mail_namespace_get_sep(ns)) {
++	    str_len(utf8_name) > 0 &&
++	    str_c(utf8_name)[str_len(utf8_name)-1] == mail_namespace_get_sep(ns)) {
+ 		/* drop the extra trailing hierarchy separator */
+-		*mailbox = t_strndup(*mailbox, name_len-1);
++		str_truncate(utf8_name, str_len(utf8_name)-1);
+ 	}
+ 
+-	utf8_name = t_str_new(64);
+-	if (imap_utf7_to_utf8(*mailbox, utf8_name) < 0) {
+-		client_send_tagline(cmd, "NO Mailbox name is not valid mUTF-7");
+-		return NULL;
+-	}
+ 	*mailbox = str_c(utf8_name);
+ 	return ns;
+ }
+

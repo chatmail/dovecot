@@ -80,7 +80,7 @@ struct mail_transaction_expunge {
 };
 struct mail_transaction_expunge_guid {
 	uint32_t uid;
-	uint8_t guid_128[MAIL_GUID_128_SIZE];
+	guid_128_t guid_128;
 };
 
 struct mail_transaction_flag_update {
@@ -210,8 +210,8 @@ struct mail_transaction_log_view *
 mail_transaction_log_view_open(struct mail_transaction_log *log);
 void mail_transaction_log_view_close(struct mail_transaction_log_view **view);
 
-/* Set view boundaries. Returns -1 if error, 0 if files are lost, 1 if ok.
-   reset_r=TRUE if the whole index should be reset before applying any
+/* Set view boundaries. Returns -1 if error, 0 if files are lost or corrupted,
+   1 if ok. reset_r=TRUE if the whole index should be reset before applying any
    changes. */
 int mail_transaction_log_view_set(struct mail_transaction_log_view *view,
 				  uint32_t min_file_seq, uoff_t min_file_offset,
@@ -253,8 +253,6 @@ mail_transaction_log_view_set_corrupted(struct mail_transaction_log_view *view,
 bool
 mail_transaction_log_view_is_corrupted(struct mail_transaction_log_view *view);
 
-void mail_transaction_log_views_close(struct mail_transaction_log *log);
-
 int mail_transaction_log_append_begin(struct mail_index *index, bool external,
 				      struct mail_transaction_log_append_ctx **ctx_r);
 void mail_transaction_log_append_add(struct mail_transaction_log_append_ctx *ctx,
@@ -284,5 +282,7 @@ void mail_transaction_log_move_to_memory(struct mail_transaction_log *log);
    If it doesn't exist, mtime_r is set to 0. */
 int mail_transaction_log_get_mtime(struct mail_transaction_log *log,
 				   time_t *mtime_r);
+/* Unlink transaction log files */
+int mail_transaction_log_unlink(struct mail_transaction_log *log);
 
 #endif

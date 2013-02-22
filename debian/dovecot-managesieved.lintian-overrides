@@ -1,0 +1,2 @@
+dovecot-managesieved: hardening-no-fortify-functions usr/lib/dovecot/managesieve-login
+dovecot-managesieved: hardening-no-fortify-functions usr/lib/dovecot/modules/settings/libmanagesieve_login_settings.so

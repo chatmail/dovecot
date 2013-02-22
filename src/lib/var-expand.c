@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -11,6 +11,7 @@
 #include "var-expand.h"
 
 #include <stdlib.h>
+#include <unistd.h>
 #include <ctype.h>
 
 #define TABLE_LAST(t) \
@@ -138,17 +139,36 @@ static const struct var_expand_modifier modifiers[] = {
 };
 
 static const char *
+var_expand_func(const struct var_expand_func_table *func_table,
+		const char *key, const char *data, void *context)
+{
+	if (strcmp(key, "env") == 0)
+		return getenv(data);
+	if (func_table == NULL)
+		return NULL;
+
+	for (; func_table->key != NULL; func_table++) {
+		if (strcmp(func_table->key, key) == 0)
+			return func_table->func(data, context);
+	}
+	return NULL;
+}
+
+static const char *
 var_expand_long(const struct var_expand_table *table,
-		const void *key_start, unsigned int key_len)
+		const struct var_expand_func_table *func_table,
+		const void *key_start, unsigned int key_len, void *context)
 {
         const struct var_expand_table *t;
 	const char *value = NULL;
 
-	for (t = table; !TABLE_LAST(t); t++) {
-		if (t->long_key != NULL &&
-		    strncmp(t->long_key, key_start, key_len) == 0 &&
-		    t->long_key[key_len] == '\0') {
-			return t->value != NULL ? t->value : "";
+	if (table != NULL) {
+		for (t = table; !TABLE_LAST(t); t++) {
+			if (t->long_key != NULL &&
+			    strncmp(t->long_key, key_start, key_len) == 0 &&
+			    t->long_key[key_len] == '\0') {
+				return t->value != NULL ? t->value : "";
+			}
 		}
 	}
 
@@ -160,20 +180,33 @@ var_expand_long(const struct var_expand_table *table,
 		case 3:
 			if (strcmp(key, "pid") == 0)
 				value = my_pid;
+			else if (strcmp(key, "uid") == 0)
+				value = dec2str(geteuid());
+			else if (strcmp(key, "gid") == 0)
+				value = dec2str(getegid());
 			break;
 		case 8:
 			if (strcmp(key, "hostname") == 0)
 				value = my_hostname;
 			break;
 		}
-		if (strncmp(key, "env:", 4) == 0)
-			value = getenv(key + 4);
+		if (value == NULL) {
+			const char *data = strchr(key, ':');
+
+			if (data != NULL)
+				key = t_strdup_until(key, data++);
+			else
+				data = "";
+			value = var_expand_func(func_table, key, data, context);
+		}
 	} T_END;
 	return value;
 }
 
-void var_expand(string_t *dest, const char *str,
-		const struct var_expand_table *table)
+void var_expand_with_funcs(string_t *dest, const char *str,
+			   const struct var_expand_table *table,
+			   const struct var_expand_func_table *func_table,
+			   void *context)
 {
         const struct var_expand_modifier *m;
         const struct var_expand_table *t;
@@ -252,10 +285,11 @@ void var_expand(string_t *dest, const char *str,
 			if (*str == '{' && (end = strchr(str, '}')) != NULL) {
 				/* %{long_key} */
 				len = end - (str + 1);
-				var = var_expand_long(table, str+1, len);
+				var = var_expand_long(table, func_table,
+						      str+1, len, context);
 				if (var != NULL)
 					str = end;
-			} else {
+			} else if (table != NULL) {
 				for (t = table; !TABLE_LAST(t); t++) {
 					if (t->key == *str) {
 						var = t->value != NULL ?
@@ -306,30 +340,58 @@ void var_expand(string_t *dest, const char *str,
 	}
 }
 
+void var_expand(string_t *dest, const char *str,
+		const struct var_expand_table *table)
+{
+	var_expand_with_funcs(dest, str, table, NULL, NULL);
+}
+
 char var_get_key(const char *str)
 {
+	unsigned int idx, size;
+
+	var_get_key_range(str, &idx, &size);
+	return str[idx];
+}
+
+void var_get_key_range(const char *str, unsigned int *idx_r,
+		       unsigned int *size_r)
+{
 	const struct var_expand_modifier *m;
+	unsigned int i = 0;
 
 	/* [<offset>.]<width>[<modifiers>]<variable> */
-	while ((*str >= '0' && *str <= '9') || *str == '-')
-		str++;
+	while ((str[i] >= '0' && str[i] <= '9') || str[i] == '-')
+		i++;
 
-	if (*str == '.') {
-		str++;
-		while (*str >= '0' && *str <= '9')
-			str++;
+	if (str[i] == '.') {
+		i++;
+		while (str[i] >= '0' && str[i] <= '9')
+			i++;
 	}
 
 	do {
 		for (m = modifiers; m->key != '\0'; m++) {
-			if (m->key == *str) {
-				str++;
+			if (m->key == str[i]) {
+				i++;
 				break;
 			}
 		}
 	} while (m->key != '\0');
 
-	return *str;
+	if (str[i] != '{') {
+		/* short key */
+		*idx_r = i;
+		*size_r = str[i] == '\0' ? 0 : 1;
+	} else {
+		/* long key */
+		*idx_r = ++i;
+		for (; str[i] != '\0'; i++) {
+			if (str[i] == '}')
+				break;
+		}
+		*size_r = i - *idx_r;
+	}
 }
 
 static bool var_has_long_key(const char **str, const char *long_key)

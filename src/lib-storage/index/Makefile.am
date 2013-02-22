@@ -1,4 +1,4 @@
-SUBDIRS = maildir mbox dbox-common dbox-multi dbox-single cydir raw shared
+SUBDIRS = maildir mbox dbox-common dbox-multi dbox-single cydir imapc pop3c raw shared
 
 noinst_LTLIBRARIES = libstorage_index.la
 
@@ -13,9 +13,8 @@ AM_CPPFLAGS = \
 
 libstorage_index_la_SOURCES = \
 	istream-attachment.c \
-	istream-mail-stats.c \
+	istream-mail.c \
 	index-attachment.c \
-	index-fetch.c \
 	index-mail.c \
 	index-mail-headers.c \
 	index-mailbox-check.c \
@@ -33,14 +32,12 @@ libstorage_index_la_SOURCES = \
 	index-thread-links.c \
 	index-transaction.c
 
-libstorage_index_la_LIBADD = @LINKED_STORAGE_LIBS@
-libstorage_index_la_DEPENDENCIES = @LINKED_STORAGE_LIBS@
-
 headers = \
 	istream-attachment.h \
-	istream-mail-stats.h \
+	istream-mail.h \
 	index-attachment.h \
 	index-mail.h \
+	index-search-private.h \
 	index-search-result.h \
 	index-sort.h \
 	index-sort-private.h \
@@ -48,25 +45,6 @@ headers = \
 	index-sync-changes.h \
 	index-sync-private.h \
 	index-thread-private.h
-
-test_programs = \
-	test-index-fetch
-
-noinst_PROGRAMS = $(test_programs)
-
-test_libs = \
-	$(top_builddir)/src/lib-test/libtest.la \
-	$(top_builddir)/src/lib/liblib.la
-
-test_index_fetch_SOURCES = test-index-fetch.c
-test_index_fetch_LDADD = index-fetch.lo $(test_libs)
-test_index_fetch_DEPENDENCIES = index-fetch.lo $(test_libs)
-
-check: check-am check-test
-check-test: all-am
-	for bin in $(test_programs); do \
-	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
-	done
 
 pkginc_libdir=$(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)

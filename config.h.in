@@ -108,8 +108,17 @@
 /* Define to 1 if you have the `getmntent' function. */
 #undef HAVE_GETMNTENT
 
+/* Define to 1 if you have the `getmntinfo' function. */
+#undef HAVE_GETMNTINFO
+
 /* Define to 1 if you have the `getpagesize' function. */
 #undef HAVE_GETPAGESIZE
+
+/* Define to 1 if you have the `getpeereid' function. */
+#undef HAVE_GETPEEREID
+
+/* Define to 1 if you have the `getpeerucred' function. */
+#undef HAVE_GETPEERUCRED
 
 /* Define to 1 if you have the `glob' function. */
 #undef HAVE_GLOB
@@ -194,6 +203,12 @@
 /* Define to 1 if you have the `lockf' function. */
 #undef HAVE_LOCKF
 
+/* Define if you want stemming support for CLucene */
+#undef HAVE_LUCENE_STEMMER
+
+/* Define if you want textcat support for CLucene */
+#undef HAVE_LUCENE_TEXTCAT
+
 /* Define to 1 if you have the `madvise' function. */
 #undef HAVE_MADVISE
 
@@ -247,6 +262,9 @@
 
 /* Build with PostgreSQL support */
 #undef HAVE_PGSQL
+
+/* Define to 1 if you have the `posix_fadvise' function. */
+#undef HAVE_POSIX_FADVISE
 
 /* Define if you have a working posix_fallocate() */
 #undef HAVE_POSIX_FALLOCATE
@@ -439,6 +457,9 @@
 
 /* Define to 1 if you have the <ucontext.h> header file. */
 #undef HAVE_UCONTEXT_H
+
+/* Define to 1 if you have the <ucred.h> header file. */
+#undef HAVE_UCRED_H
 
 /* Define to 1 if you have the <ufs/ufs/quota.h> header file. */
 #undef HAVE_UFS_UFS_QUOTA_H

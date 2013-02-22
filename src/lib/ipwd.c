@@ -1,4 +1,4 @@
-/* Copyright (c) 2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2012-2012 Dovecot authors, see the included COPYING file */
 
 #define _POSIX_PTHREAD_SEMANTICS /* for Solaris */
 #include "lib.h"
@@ -31,11 +31,12 @@ static void gr_init(void)
 	long size;
 
 	if (grbuf == NULL) {
-		/* OpenBSD up to 4.9 reports too low value in sysconf() */
-#if !defined(__OpenBSD__) || OpenBSD >= 201111
 		size = sysconf(_SC_GETGR_R_SIZE_MAX);
-		if (size < 0)
-#endif
+		/* Some BSDs return too low value for this. instead of trying
+		   to figure out exactly which, just make sure it's at least
+		   a reasonable size. if the real size is smaller, it doesn't
+		   matter much that we waste a few kilobytes of memory. */
+		if (size < DEFAULT_GRBUF_SIZE)
 			size = DEFAULT_GRBUF_SIZE;
 
 		grbuf_size = size;

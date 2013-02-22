@@ -15,22 +15,25 @@ struct mail_storage_settings {
 	const char *mail_attachment_dir;
 	const char *mail_attachment_hash;
 	uoff_t mail_attachment_min_size;
+	unsigned int mail_prefetch_count;
 	const char *mail_cache_fields;
 	const char *mail_never_cache_fields;
 	unsigned int mail_cache_min_mail_count;
 	unsigned int mailbox_idle_check_interval;
 	unsigned int mail_max_keyword_length;
 	unsigned int mail_max_lock_timeout;
+	unsigned int mail_temp_scan_interval;
 	bool mail_save_crlf;
 	const char *mail_fsync;
 	bool mmap_disable;
 	bool dotlock_use_excl;
 	bool mail_nfs_storage;
 	bool mail_nfs_index;
-	bool mailbox_list_index_disable;
+	bool mailbox_list_index;
 	bool mail_debug;
 	bool mail_full_filesystem_access;
 	bool maildir_stat_dirs;
+	bool mail_shared_explicit_inbox;
 	const char *lock_method;
 	const char *pop3_uidl_format;
 
@@ -50,8 +53,21 @@ struct mail_namespace_settings {
 	bool hidden;
 	const char *list;
 	bool subscriptions;
+	bool ignore_on_failure;
 
+	ARRAY_DEFINE(mailboxes, struct mailbox_settings *);
 	struct mail_user_settings *user_set;
+};
+
+/* <settings checks> */
+#define MAILBOX_SET_AUTO_NO "no"
+#define MAILBOX_SET_AUTO_CREATE "create"
+#define MAILBOX_SET_AUTO_SUBSCRIBE "subscribe"
+/* </settings checks> */
+struct mailbox_settings {
+	const char *name;
+	const char *autocreate;
+	const char *special_use;
 };
 
 struct mail_user_settings {
@@ -83,6 +99,7 @@ extern const struct setting_parser_info mail_user_setting_parser_info;
 extern const struct setting_parser_info mail_namespace_setting_parser_info;
 extern const struct setting_parser_info mail_storage_setting_parser_info;
 extern const struct mail_namespace_settings mail_namespace_default_settings;
+extern const struct mailbox_settings mailbox_default_settings;
 
 const void *
 mail_user_set_get_driver_settings(const struct setting_parser_info *info,

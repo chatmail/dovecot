@@ -1,15 +1,17 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
 #include "buffer.h"
 #include "hex-binary.h"
+#include "hostpid.h"
 #include "ioloop.h"
 #include "istream.h"
 #include "ostream.h"
 #include "safe-memset.h"
 #include "str.h"
 #include "str-sanitize.h"
+#include "time-util.h"
 #include "auth-client.h"
 #include "../pop3/pop3-capability.h"
 #include "ssl-proxy.h"
@@ -52,6 +54,8 @@ bool cmd_capa(struct pop3_client *client, const char *args ATTR_UNUSED)
 bool pop3_client_auth_handle_reply(struct client *client,
 				   const struct client_auth_reply *reply)
 {
+	const char *timestamp, *msg;
+
 	if (!reply->nologin)
 		return FALSE;
 
@@ -59,8 +63,10 @@ bool pop3_client_auth_handle_reply(struct client *client,
 		client_send_line(client, CLIENT_CMD_REPLY_AUTH_FAILED,
 				 reply->reason);
 	} else if (reply->temp) {
-		client_send_line(client, CLIENT_CMD_REPLY_AUTH_FAIL_TEMP,
-				 AUTH_TEMP_FAILED_MSG);
+		timestamp = t_strflocaltime("%Y-%m-%d %H:%M:%S", ioloop_time);
+		msg = t_strdup_printf(AUTH_TEMP_FAILED_MSG" [%s:%s]",
+				      my_hostname, timestamp);
+		client_send_line(client, CLIENT_CMD_REPLY_AUTH_FAIL_TEMP, msg);
 	} else {
 		client_send_line(client, CLIENT_CMD_REPLY_AUTH_FAILED,
 				 AUTH_FAILED_MSG);
@@ -158,7 +164,7 @@ bool cmd_apop(struct pop3_client *pop3_client, const char *args)
 	unsigned int server_pid, connect_uid;
 
 	if (pop3_client->apop_challenge == NULL) {
-		if (client->set->verbose_auth)
+		if (client->set->auth_verbose)
 			client_log(client, "APOP failed: APOP not enabled");
 		client_send_line(client, CLIENT_CMD_REPLY_BAD,
 				 "APOP not enabled.");
@@ -168,7 +174,7 @@ bool cmd_apop(struct pop3_client *pop3_client, const char *args)
 	/* <username> <md5 sum in hex> */
 	p = strchr(args, ' ');
 	if (p == NULL || strlen(p+1) != 32) {
-		if (client->set->verbose_auth)
+		if (client->set->auth_verbose)
 			client_log(client, "APOP failed: Invalid parameters");
 		client_send_line(client, CLIENT_CMD_REPLY_BAD,
 				 "Invalid parameters.");
@@ -183,7 +189,7 @@ bool cmd_apop(struct pop3_client *pop3_client, const char *args)
 	buffer_append_c(apop_data, '\0');
 
 	if (hex_to_binary(p+1, apop_data) < 0) {
-		if (client->set->verbose_auth) {
+		if (client->set->auth_verbose) {
 			client_log(client, "APOP failed: "
 				   "Invalid characters in MD5 response");
 		}

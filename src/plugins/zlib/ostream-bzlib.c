@@ -1,10 +1,10 @@
-/* Copyright (c) 2010-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 
 #ifdef HAVE_BZLIB
 
-#include "ostream-internal.h"
+#include "ostream-private.h"
 #include "ostream-zlib.h"
 #include <bzlib.h>
 
@@ -15,31 +15,42 @@ struct bzlib_ostream {
 	bz_stream zs;
 
 	char outbuf[CHUNK_SIZE];
-	struct ostream *output;
+	unsigned int outbuf_offset, outbuf_used;
 
 	unsigned int flushed:1;
 };
-
-static void zstream_copy_error(struct bzlib_ostream *zstream)
-{
-	struct ostream *src = zstream->output;
-	struct ostream *dest = &zstream->ostream.ostream;
-
-	dest->stream_errno = src->stream_errno;
-	dest->last_failed_errno = src->last_failed_errno;
-	dest->overflow = src->overflow;
-}
 
 static void o_stream_bzlib_close(struct iostream_private *stream)
 {
 	struct bzlib_ostream *zstream = (struct bzlib_ostream *)stream;
 
-	if (zstream->output == NULL)
-		return;
-
 	o_stream_flush(&zstream->ostream.ostream);
-	o_stream_unref(&zstream->output);
 	(void)BZ2_bzCompressEnd(&zstream->zs);
+}
+
+static int o_stream_zlib_send_outbuf(struct bzlib_ostream *zstream)
+{
+	ssize_t ret;
+	size_t size;
+
+	if (zstream->outbuf_used == 0)
+		return 1;
+
+	size = zstream->outbuf_used - zstream->outbuf_offset;
+	i_assert(size > 0);
+	ret = o_stream_send(zstream->ostream.parent,
+			    zstream->outbuf + zstream->outbuf_offset, size);
+	if (ret < 0) {
+		o_stream_copy_error_from_parent(&zstream->ostream);
+		return -1;
+	}
+	if ((size_t)ret != size) {
+		zstream->outbuf_offset += ret;
+		return 0;
+	}
+	zstream->outbuf_offset = 0;
+	zstream->outbuf_used = 0;
+	return 1;
 }
 
 static ssize_t
@@ -47,20 +58,25 @@ o_stream_bzlib_send_chunk(struct bzlib_ostream *zstream,
 			  const void *data, size_t size)
 {
 	bz_stream *zs = &zstream->zs;
-	ssize_t ret;
+	int ret;
+
+	i_assert(zstream->outbuf_used == 0);
 
 	zs->next_in = (void *)data;
 	zs->avail_in = size;
 	while (zs->avail_in > 0) {
 		if (zs->avail_out == 0) {
+			/* previous block was compressed. send it and start
+			   compression for a new block. */
 			zs->next_out = zstream->outbuf;
 			zs->avail_out = sizeof(zstream->outbuf);
 
-			ret = o_stream_send(zstream->output, zstream->outbuf,
-					    sizeof(zstream->outbuf));
-			if (ret != (ssize_t)sizeof(zstream->outbuf)) {
-				zstream_copy_error(zstream);
+			zstream->outbuf_used = sizeof(zstream->outbuf);
+			if ((ret = o_stream_zlib_send_outbuf(zstream)) < 0)
 				return -1;
+			if (ret == 0) {
+				/* parent stream's buffer full */
+				break;
 			}
 		}
 
@@ -71,8 +87,10 @@ o_stream_bzlib_send_chunk(struct bzlib_ostream *zstream,
 			i_unreached();
 		}
 	}
+	size -= zs->avail_in;
+
 	zstream->flushed = FALSE;
-	return 0;
+	return size;
 }
 
 static int o_stream_bzlib_send_flush(struct bzlib_ostream *zstream)
@@ -82,23 +100,29 @@ static int o_stream_bzlib_send_flush(struct bzlib_ostream *zstream)
 	bool done = FALSE;
 	int ret;
 
-	i_assert(zs->avail_in == 0);
+	if (zs->avail_in != 0) {
+		i_assert(zstream->ostream.ostream.last_failed_errno != 0);
+		zstream->ostream.ostream.stream_errno =
+			zstream->ostream.ostream.last_failed_errno;
+		return -1;
+	}
 
 	if (zstream->flushed)
 		return 0;
 
+	if ((ret = o_stream_zlib_send_outbuf(zstream)) <= 0)
+		return ret;
+
+	i_assert(zstream->outbuf_used == 0);
 	do {
 		len = sizeof(zstream->outbuf) - zs->avail_out;
 		if (len != 0) {
 			zs->next_out = zstream->outbuf;
 			zs->avail_out = sizeof(zstream->outbuf);
 
-			ret = o_stream_send(zstream->output,
-					    zstream->outbuf, len);
-			if (ret != (int)len) {
-				zstream_copy_error(zstream);
-				return -1;
-			}
+			zstream->outbuf_used = len;
+			if ((ret = o_stream_zlib_send_outbuf(zstream)) <= 0)
+				return ret;
 			if (done)
 				break;
 		}
@@ -119,19 +143,6 @@ static int o_stream_bzlib_send_flush(struct bzlib_ostream *zstream)
 	return 0;
 }
 
-static void o_stream_bzlib_cork(struct ostream_private *stream, bool set)
-{
-	struct bzlib_ostream *zstream = (struct bzlib_ostream *)stream;
-
-	stream->corked = set;
-	if (set)
-		o_stream_cork(zstream->output);
-	else {
-		(void)o_stream_flush(&stream->ostream);
-		o_stream_uncork(zstream->output);
-	}
-}
-
 static int o_stream_bzlib_flush(struct ostream_private *stream)
 {
 	struct bzlib_ostream *zstream = (struct bzlib_ostream *)stream;
@@ -140,9 +151,9 @@ static int o_stream_bzlib_flush(struct ostream_private *stream)
 	if (o_stream_bzlib_send_flush(zstream) < 0)
 		return -1;
 
-	ret = o_stream_flush(zstream->output);
+	ret = o_stream_flush(stream->parent);
 	if (ret < 0)
-		zstream_copy_error(zstream);
+		o_stream_copy_error_from_parent(stream);
 	return ret;
 }
 
@@ -151,17 +162,29 @@ o_stream_bzlib_sendv(struct ostream_private *stream,
 		    const struct const_iovec *iov, unsigned int iov_count)
 {
 	struct bzlib_ostream *zstream = (struct bzlib_ostream *)stream;
-	ssize_t bytes = 0;
+	ssize_t ret, bytes = 0;
 	unsigned int i;
 
-	for (i = 0; i < iov_count; i++) {
-		if (o_stream_bzlib_send_chunk(zstream, iov[i].iov_base,
-					      iov[i].iov_len) < 0)
-			return -1;
-		bytes += iov[i].iov_len;
+	if ((ret = o_stream_zlib_send_outbuf(zstream)) <= 0) {
+		/* error / we still couldn't flush existing data to
+		   parent stream. */
+		return ret;
 	}
 
+	for (i = 0; i < iov_count; i++) {
+		ret = o_stream_bzlib_send_chunk(zstream, iov[i].iov_base,
+						iov[i].iov_len);
+		if (ret < 0)
+			return -1;
+		bytes += ret;
+		if ((size_t)ret != iov[i].iov_len)
+			break;
+	}
 	stream->ostream.offset += bytes;
+
+	/* avail_in!=0 check is used to detect errors. if it's non-zero here
+	   it simply means we didn't send all the data */
+	zstream->zs.avail_in = 0;
 	return bytes;
 }
 
@@ -174,11 +197,8 @@ struct ostream *o_stream_create_bz2(struct ostream *output, int level)
 
 	zstream = i_new(struct bzlib_ostream, 1);
 	zstream->ostream.sendv = o_stream_bzlib_sendv;
-	zstream->ostream.cork = o_stream_bzlib_cork;
 	zstream->ostream.flush = o_stream_bzlib_flush;
 	zstream->ostream.iostream.close = o_stream_bzlib_close;
-	zstream->output = output;
-	o_stream_ref(output);
 
 	ret = BZ2_bzCompressInit(&zstream->zs, level, 0, 0);
 	switch (ret) {
@@ -197,6 +217,6 @@ struct ostream *o_stream_create_bz2(struct ostream *output, int level)
 
 	zstream->zs.next_out = zstream->outbuf;
 	zstream->zs.avail_out = sizeof(zstream->outbuf);
-	return o_stream_create(&zstream->ostream);
+	return o_stream_create(&zstream->ostream, output);
 }
 #endif

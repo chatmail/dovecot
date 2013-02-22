@@ -77,7 +77,8 @@ struct index_mail_data {
 	uint32_t parse_line_num;
 
 	struct message_part *parts;
-	const char *envelope, *body, *bodystructure, *uid_string, *guid;
+	const char *envelope, *body, *bodystructure, *guid, *filename;
+	const char *from_envelope;
 	struct message_part_envelope_data *envelope_data;
 
 	uint32_t seq;
@@ -87,6 +88,10 @@ struct index_mail_data {
 	/* dont_cache_fields overrides cache_fields */
 	enum mail_fetch_field cache_fetch_fields, dont_cache_fetch_fields;
 	unsigned int dont_cache_field_idx;
+	enum mail_fetch_field wanted_fields;
+	struct mailbox_header_lookup_ctx *wanted_headers;
+
+	buffer_t *search_results;
 
 	struct istream *stream, *filter_stream;
 	struct tee_istream *tee_stream;
@@ -96,12 +101,14 @@ struct index_mail_data {
 	ARRAY_TYPE(keywords) keywords;
 	ARRAY_TYPE(keyword_indexes) keyword_indexes;
 
+	unsigned int initialized:1;
 	unsigned int save_sent_date:1;
 	unsigned int sent_date_parsed:1;
 	unsigned int save_envelope:1;
 	unsigned int save_bodystructure_header:1;
 	unsigned int save_bodystructure_body:1;
 	unsigned int save_message_parts:1;
+	unsigned int stream_has_only_header:1;
 	unsigned int parsed_bodystructure:1;
 	unsigned int hdr_size_set:1;
 	unsigned int body_size_set:1;
@@ -112,6 +119,7 @@ struct index_mail_data {
 	unsigned int destroying_stream:1;
 	unsigned int initialized_wrapper_stream:1;
 	unsigned int destroy_callback_set:1;
+	unsigned int prefetch_sent:1;
 };
 
 struct index_mail {
@@ -120,11 +128,6 @@ struct index_mail {
 	struct index_mailbox_context *ibox;
 
 	pool_t data_pool;
-	struct index_transaction_context *trans;
-	uint32_t uid_validity;
-
-	enum mail_fetch_field wanted_fields;
-	struct index_header_lookup_ctx *wanted_headers;
 
 	int pop3_state;
 
@@ -141,6 +144,8 @@ struct index_mail {
 	uint8_t header_match_value;
 
 	unsigned int pop3_state_set:1;
+	/* mail created by mailbox_search_*() */
+	unsigned int search_mail:1;
 };
 
 struct mail *
@@ -152,10 +157,15 @@ void index_mail_init(struct index_mail *mail,
 		     enum mail_fetch_field wanted_fields,
 		     struct mailbox_header_lookup_ctx *_wanted_headers);
 
-void index_mail_set_seq(struct mail *mail, uint32_t seq);
+void index_mail_set_seq(struct mail *mail, uint32_t seq, bool saving);
 bool index_mail_set_uid(struct mail *mail, uint32_t uid);
 void index_mail_set_uid_cache_updates(struct mail *mail, bool set);
+bool index_mail_prefetch(struct mail *mail);
+void index_mail_add_temp_wanted_fields(struct mail *mail,
+				       enum mail_fetch_field fields,
+				       struct mailbox_header_lookup_ctx *headers);
 void index_mail_close(struct mail *mail);
+void index_mail_close_streams(struct index_mail *mail);
 void index_mail_free(struct mail *mail);
 
 bool index_mail_want_parse_headers(struct index_mail *mail);
@@ -202,7 +212,7 @@ void index_mail_update_keywords(struct mail *mail, enum modify_type modify_type,
 				struct mail_keywords *keywords);
 void index_mail_update_modseq(struct mail *mail, uint64_t min_modseq);
 void index_mail_expunge(struct mail *mail);
-void index_mail_parse(struct mail *mail, bool parse_body);
+void index_mail_precache(struct mail *mail);
 void index_mail_set_cache_corrupted(struct mail *mail,
 				    enum mail_fetch_field field);
 int index_mail_opened(struct mail *mail, struct istream **stream);
@@ -226,7 +236,6 @@ void index_mail_cache_parse_deinit(struct mail *mail, time_t received_date,
 
 int index_mail_cache_lookup_field(struct index_mail *mail, buffer_t *buf,
 				  unsigned int field_idx);
-
-enum index_mail_access_part index_mail_get_access_part(struct index_mail *mail);
+void index_mail_save_finish(struct mail_save_context *ctx);
 
 #endif

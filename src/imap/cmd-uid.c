@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "imap-commands.h"
@@ -24,5 +24,5 @@ bool cmd_uid(struct client_command_context *cmd)
 	cmd->cmd_flags = command->flags;
 	cmd->func = command->func;
 	cmd->uid = TRUE;
-	return cmd->func(cmd);
+	return command_exec(cmd);
 }

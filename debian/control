@@ -3,13 +3,15 @@ Section: mail
 Priority: optional
 Maintainer: Dovecot Maintainers <jaldhar-dovecot@debian.org>
 Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>, Fabio Tranchitella <kobold@debian.org>, Joel Johnson <mrjoel@lixil.net>, Marco Nenciarini <mnencia@debian.org>
-Build-Depends: debhelper (>= 7.2.3~), pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient-dev, libsqlite3-dev, libsasl2-dev, zlib1g-dev, libkrb5-dev, drac-dev (>= 1.12-5), libbz2-dev, libdb-dev, libcurl4-gnutls-dev, libexpat-dev
-Standards-Version: 3.9.2
+Build-Depends: debhelper (>= 7.2.3~), dpkg-dev (>= 1.16.1), pkg-config, libssl-dev, libpam0g-dev, libldap2-dev, libpq-dev, libmysqlclient-dev, libsqlite3-dev, libsasl2-dev, zlib1g-dev, libkrb5-dev, drac-dev (>= 1.12-5), libbz2-dev, libdb-dev, libcurl4-gnutls-dev, libexpat-dev
+Standards-Version: 3.9.3
 Homepage: http://dovecot.org/
 Vcs-Git: git://git.debian.org/git/collab-maint/dovecot.git
 Vcs-Browser: http://git.debian.org/?p=collab-maint/dovecot.git
 
 Package: dovecot-common
+Section: oldlibs
+Priority: extra
 Architecture: all
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core
 Recommends: dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite, dovecot-ldap
@@ -23,8 +25,8 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020)
 Suggests: ntp, dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite, dovecot-ldap, dovecot-imapd, dovecot-pop3d, dovecot-lmtpd, dovecot-managesieved, dovecot-solr
 Provides: dovecot-common
-Replaces: dovecot-common (<< 1:2.0.14-2~)
-Breaks: dovecot-common (<< 1:2.0.14-2~)
+Replaces: dovecot-common (<< 1:2.0.14-2~), mailavenger (<< 0.8.1-4)
+Breaks: dovecot-common (<< 1:2.0.14-2~), mailavenger (<< 0.8.1-4)
 Description: secure mail server that supports mbox, maildir, dbox and mdbox mailboxes
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify that

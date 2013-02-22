@@ -8,6 +8,8 @@ This page contains generic information related to migrating from another IMAP
 or POP3 server to Dovecot. You should read this page, and then look at the
 server-specific instructions:
 
+ * <Migrating from any IMAP/POP3 server to Dovecot via dsync>
+   [Migration.Dsync.txt]
  * <UW-IMAP / UW-POP3> [Migration.UW.txt]
  * <Linuxconf / VIMAP> [Migration.Linuxconf.txt]
  * <Courier IMAP and POP3> [Migration.Courier.txt]
@@ -143,4 +145,4 @@ passwords. Even if you do not, imapsync also supports logging in as an admin
 user that has the ability to copy message for sub users, and a variety of other
 authentication options.
 
-(This file was created from the wiki on 2011-08-29 04:42)
+(This file was created from the wiki on 2012-04-23 04:42)

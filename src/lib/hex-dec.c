@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hex-dec.h"
@@ -28,6 +28,8 @@ uintmax_t hex2dec(const unsigned char *data, unsigned int len)
 			value += data[i]-'0';
 		else if (data[i] >= 'A' && data[i] <= 'F')
 			value += data[i]-'A' + 10;
+		else if (data[i] >= 'a' && data[i] <= 'f')
+			value += data[i]-'a' + 10;
 		else
 			return 0;
 	}

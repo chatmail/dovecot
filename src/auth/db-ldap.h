@@ -63,6 +63,7 @@ struct ldap_settings {
 	const char *iterate_filter;
 
 	const char *default_pass_scheme;
+	bool userdb_warning_disable; /* deprecated for now at least */
 
 	/* ... */
 	int ldap_deref, ldap_scope;
@@ -118,6 +119,16 @@ enum ldap_connection_state {
 	LDAP_CONN_STATE_BOUND_DEFAULT
 };
 
+struct ldap_field {
+	/* Dovecot field name. */
+	const char *name;
+	/* Field value template with %vars. NULL = same as LDAP value. */
+	const char *value;
+	/* LDAP attribute name, or "" if this is a static field. */
+	const char *ldap_attr_name;
+};
+ARRAY_DEFINE_TYPE(ldap_field, struct ldap_field);
+
 struct ldap_connection {
 	struct ldap_connection *next;
 
@@ -146,7 +157,8 @@ struct ldap_connection {
 	time_t last_reply_stamp;
 
 	char **pass_attr_names, **user_attr_names, **iterate_attr_names;
-	struct hash_table *pass_attr_map, *user_attr_map, *iterate_attr_map;
+	ARRAY_TYPE(ldap_field) pass_attr_map, user_attr_map, iterate_attr_map;
+	bool userdb_used;
 };
 
 /* Send/queue request */
@@ -154,18 +166,15 @@ void db_ldap_request(struct ldap_connection *conn,
 		     struct ldap_request *request);
 
 void db_ldap_set_attrs(struct ldap_connection *conn, const char *attrlist,
-		       char ***attr_names_r, struct hash_table *attr_map,
+		       char ***attr_names_r, ARRAY_TYPE(ldap_field) *attr_map,
 		       const char *skip_attr);
 
-struct ldap_connection *db_ldap_init(const char *config_path);
+struct ldap_connection *db_ldap_init(const char *config_path, bool userdb);
 void db_ldap_unref(struct ldap_connection **conn);
 
 int db_ldap_connect(struct ldap_connection *conn);
 
 void db_ldap_enable_input(struct ldap_connection *conn, bool enable);
-
-struct var_expand_table *
-db_ldap_value_get_var_expand_table(struct auth_request *auth_request);
 
 const char *ldap_escape(const char *str,
 			const struct auth_request *auth_request);
@@ -174,9 +183,10 @@ const char *ldap_get_error(struct ldap_connection *conn);
 struct db_ldap_result_iterate_context *
 db_ldap_result_iterate_init(struct ldap_connection *conn, LDAPMessage *entry,
 			    struct auth_request *auth_request,
-			    struct hash_table *attr_map);
+			    const ARRAY_TYPE(ldap_field) *attr_map);
 bool db_ldap_result_iterate_next(struct db_ldap_result_iterate_context *ctx,
 				 const char **name_r,
 				 const char *const **values_r);
+void db_ldap_result_iterate_deinit(struct db_ldap_result_iterate_context **ctx);
 
 #endif

@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "llist.h"
@@ -42,7 +42,7 @@ config_connection_next_line(struct config_connection *conn)
 	if (line == NULL)
 		return NULL;
 
-	return t_strsplit(line, "\t");
+	return t_strsplit_tab(line);
 }
 
 static void

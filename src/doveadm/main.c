@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "restrict-access.h"
@@ -17,6 +17,7 @@ const struct doveadm_print_vfuncs *doveadm_print_vfuncs_all[] = {
 };
 
 struct client_connection *doveadm_client;
+int doveadm_exit_code = 0;
 
 static void doveadm_die(void)
 {

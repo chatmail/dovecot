@@ -1,7 +1,7 @@
 #ifndef MAIL_DELIVER_H
 #define MAIL_DELIVER_H
 
-#include "mail-types.h"
+#include "guid.h"
 
 enum mail_flags;
 enum mail_error;
@@ -13,7 +13,7 @@ struct mail_deliver_session {
 	pool_t pool;
 
 	/* List of INBOX GUIDs where this mail has already been saved to */
-	ARRAY_DEFINE(inbox_guids, mail_guid_128_t);
+	ARRAY_DEFINE(inbox_guids, guid_128_t);
 };
 
 struct mail_deliver_context {
@@ -51,6 +51,10 @@ struct mail_deliver_context {
 	bool tried_default_save;
 	bool saved_mail;
 	bool save_dest_mail;
+	/* Delivery failed because user is out of quota / disk space */
+	bool mailbox_full;
+	/* Send DSN instead of MDN */
+	bool dsn;
 };
 
 struct mail_deliver_save_open_context {

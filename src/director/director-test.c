@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2011 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
 
 /*
    This program accepts incoming unauthenticated IMAP connections from
@@ -275,7 +275,7 @@ static void imap_client_destroy(struct imap_client **_client)
 	}
 
 	DLLIST_REMOVE(&imap_clients, client);
-	imap_parser_destroy(&client->parser);
+	imap_parser_unref(&client->parser);
 	io_remove(&client->io);
 	i_stream_unref(&client->input);
 	o_stream_unref(&client->output);
@@ -492,7 +492,7 @@ static void admin_read_hosts(struct admin_connection *conn)
 			break;
 		/* ip vhost-count user-count */
 		T_BEGIN {
-			const char *const *args = t_strsplit(line, "\t");
+			const char *const *args = t_strsplit_tab(line);
 			struct host *host;
 
 			host = i_new(struct host, 1);
