@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2013 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "array.h"
@@ -101,7 +101,7 @@ static void service_status_less(struct service_process *process,
 		process->idle_start = ioloop_time;
 		if (service->process_avail > service->set->process_min_avail &&
 		    process->to_idle == NULL &&
-		    service->idle_kill != -1U) {
+		    service->idle_kill != UINT_MAX) {
 			/* we have more processes than we really need.
 			   add a bit of randomness so that we don't send the
 			   signal to all of them at once */
@@ -122,7 +122,7 @@ service_status_input_one(struct service *service,
 {
         struct service_process *process;
 
-	process = hash_table_lookup(service_pids, &status->pid);
+	process = hash_table_lookup(service_pids, POINTER_CAST(status->pid));
 	if (process == NULL) {
 		/* we've probably wait()ed it away already. ignore */
 		return;
@@ -237,19 +237,27 @@ static void service_monitor_listen_pending(struct service *service)
 static void service_drop_connections(struct service_listener *l)
 {
 	struct service *service = l->service;
+	const char *limit_name;
 	unsigned int limit;
 	int fd;
 
 	if (service->last_drop_warning +
 	    SERVICE_DROP_WARN_INTERVAL_SECS < ioloop_time) {
 		service->last_drop_warning = ioloop_time;
-		limit = service->process_limit > 1 ?
-			service->process_limit : service->client_limit;
+		if (service->process_limit > 1) {
+			limit_name = "process_limit";
+			limit = service->process_limit;
+		} else if (service->set->service_count == 1) {
+			i_assert(service->client_limit == 1);
+			limit_name = "client_limit/service_count";
+			limit = 1;
+		} else {
+			limit_name = "client_limit";
+			limit = service->client_limit;
+		}
 		i_warning("service(%s): %s (%u) reached, "
 			  "client connections are being dropped",
-			  service->set->name,
-			  service->process_limit > 1 ?
-			  "process_limit" : "client_limit", limit);
+			  service->set->name, limit_name, limit);
 	}
 
 	if (service->type == SERVICE_TYPE_LOGIN) {
@@ -363,7 +371,7 @@ void service_monitor_listen_stop(struct service *service)
 
 static int service_login_create_notify_fd(struct service *service)
 {
-	int fd;
+	int fd, ret;
 
 	if (service->login_notify_fd != -1)
 		return 0;
@@ -389,9 +397,10 @@ static int service_login_create_notify_fd(struct service *service)
 		}
 	} T_END;
 
+	ret = fd == -1 ? -1 : 0;
 	if (fd != service->login_notify_fd)
-		(void)close(fd);
-	return fd == -1 ? -1 : 0;
+		i_close_fd(&fd);
+	return ret;
 }
 
 void services_monitor_start(struct service_list *service_list)
@@ -565,7 +574,7 @@ void services_monitor_reap_children(void)
 	bool service_stopped, throttle;
 
 	while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-		process = hash_table_lookup(service_pids, &pid);
+		process = hash_table_lookup(service_pids, POINTER_CAST(pid));
 		if (process == NULL) {
 			i_error("waitpid() returned unknown PID %s",
 				dec2str(pid));

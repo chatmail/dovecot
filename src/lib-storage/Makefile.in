@@ -42,7 +42,7 @@ DIST_COMMON = $(noinst_HEADERS) $(pkginc_lib_HEADERS) \
 	$(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -82,6 +82,7 @@ LTLIBRARIES = $(noinst_LTLIBRARIES) $(pkglib_LTLIBRARIES)
 am__DEPENDENCIES_1 = libstorage.la libstorage_service.la \
 	list/libstorage_list.la index/libstorage_index.la \
 	register/libstorage_register.la ../lib-index/libindex.la \
+	../lib-imap-storage/libimap-storage.la \
 	../lib-dovecot/libdovecot.la
 am__DEPENDENCIES_2 =
 am_libdovecot_storage_la_OBJECTS =
@@ -99,8 +100,9 @@ am_libstorage_la_OBJECTS = fail-mail-storage.lo fail-mailbox.lo \
 	mail-storage.lo mail-storage-hooks.lo mail-storage-settings.lo \
 	mail-thread.lo mail-user.lo mailbox-get.lo \
 	mailbox-guid-cache.lo mailbox-header.lo mailbox-keywords.lo \
-	mailbox-list.lo mailbox-list-iter.lo mailbox-search-result.lo \
-	mailbox-tree.lo mailbox-uidvalidity.lo
+	mailbox-list.lo mailbox-list-notify.lo \
+	mailbox-search-result.lo mailbox-tree.lo \
+	mailbox-uidvalidity.lo
 libstorage_la_OBJECTS = $(am_libstorage_la_OBJECTS)
 libstorage_service_la_LIBADD =
 am_libstorage_service_la_OBJECTS = mail-storage-service.lo
@@ -181,13 +183,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -219,6 +222,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -266,6 +270,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -386,7 +391,7 @@ libstorage_la_SOURCES = \
 	mailbox-header.c \
 	mailbox-keywords.c \
 	mailbox-list.c \
-	mailbox-list-iter.c \
+	mailbox-list-notify.c \
 	mailbox-search-result.c \
 	mailbox-tree.c \
 	mailbox-uidvalidity.c
@@ -413,7 +418,9 @@ headers = \
 	mail-user.h \
 	mailbox-guid-cache.h \
 	mailbox-list.h \
+	mailbox-list-iter.h \
 	mailbox-list-private.h \
+	mailbox-list-notify.h \
 	mailbox-search-result-private.h \
 	mailbox-tree.h \
 	mailbox-uidvalidity.h
@@ -426,11 +433,12 @@ shlibs = \
 	index/libstorage_index.la \
 	register/libstorage_register.la \
 	../lib-index/libindex.la \
+	../lib-imap-storage/libimap-storage.la \
 	../lib-dovecot/libdovecot.la
 
 pkglib_LTLIBRARIES = libdovecot-storage.la
 libdovecot_storage_la_SOURCES = 
-libdovecot_storage_la_LIBADD = $(shlibs) $(LINKED_STORAGE_LDADD) $(MODULE_LIBS)
+libdovecot_storage_la_LIBADD = $(shlibs) $(LINKED_STORAGE_LDADD)
 libdovecot_storage_la_DEPENDENCIES = $(shlibs)
 libdovecot_storage_la_LDFLAGS = -export-dynamic
 test_programs = \
@@ -442,7 +450,7 @@ test_libs = \
 
 test_mailbox_get_SOURCES = test-mailbox-get.c
 test_mailbox_get_LDADD = mailbox-get.lo $(test_libs)
-test_mailbox_get_DEPENDENCIES = mailbox-get.lo $(test_libs)
+test_mailbox_get_DEPENDENCIES = $(noinst_LTLIBRARIES) $(test_libs)
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
 noinst_HEADERS = $(test_headers)
@@ -570,7 +578,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-guid-cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-header.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-keywords.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-iter.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-notify.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-search-result.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-tree.Plo@am__quote@

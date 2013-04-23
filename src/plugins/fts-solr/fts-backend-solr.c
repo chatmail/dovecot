@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -6,6 +6,7 @@
 #include "hash.h"
 #include "strescape.h"
 #include "unichar.h"
+#include "http-url.h"
 #include "mail-storage-private.h"
 #include "mailbox-list-private.h"
 #include "mail-search.h"
@@ -17,8 +18,13 @@
 
 #define SOLR_CMDBUF_SIZE (1024*64)
 #define SOLR_CMDBUF_FLUSH_SIZE (SOLR_CMDBUF_SIZE-128)
-#define SOLR_BUFFER_WARN_SIZE (1024*1024)
 #define SOLR_MAX_MULTI_ROWS 100000
+
+/* If header is larger than this, truncate it. */
+#define SOLR_HEADER_MAX_SIZE (1024*1024)
+/* If SOLR_HEADER_MAX_SIZE was already reached, write still to individual
+   header fields as long as they're smaller than this */
+#define SOLR_HEADER_LINE_MAX_TRUNC_SIZE 1024
 
 struct solr_fts_backend {
 	struct fts_backend backend;
@@ -38,18 +44,17 @@ struct solr_fts_backend_update_context {
 	struct solr_connection_post *post;
 	uint32_t prev_uid;
 	string_t *cmd, *cur_value, *cur_value2;
-	ARRAY_DEFINE(fields, struct solr_fts_field);
+	string_t *cmd_expunge;
+	ARRAY(struct solr_fts_field) fields;
 
 	uint32_t last_indexed_uid;
-	uint32_t size_warned_uid;
 
 	unsigned int last_indexed_uid_set:1;
 	unsigned int body_open:1;
 	unsigned int documents_added:1;
 	unsigned int expunges:1;
+	unsigned int truncate_header:1;
 };
-
-static struct solr_connection *solr_conn = NULL;
 
 static bool is_valid_xml_char(unichar_t chr)
 {
@@ -136,7 +141,7 @@ static void xml_encode(string_t *dest, const char *str)
 static void solr_quote_http(string_t *dest, const char *str)
 {
 	str_append(dest, "%22");
-	solr_connection_http_escape(solr_conn, dest, str);
+	http_url_escape_param(dest, str);
 	str_append(dest, "%22");
 }
 
@@ -150,14 +155,16 @@ static struct fts_backend *fts_backend_solr_alloc(void)
 }
 
 static int
-fts_backend_solr_init(struct fts_backend *_backend,
-		      const char **error_r ATTR_UNUSED)
+fts_backend_solr_init(struct fts_backend *_backend, const char **error_r)
 {
 	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT(_backend->ns->user);
 	const struct fts_solr_settings *set = &fuser->set;
 
-	if (solr_conn == NULL)
-		solr_conn = solr_connection_init(set->url, set->debug);
+	if (solr_conn == NULL) {
+		if (solr_connection_init(set->url, set->debug,
+					 &solr_conn, error_r) < 0)
+			return -1;
+	}
 	return 0;
 }
 
@@ -229,7 +236,7 @@ fts_backend_solr_get_last_uid(struct fts_backend *_backend,
 	if (get_last_uid_fallback(_backend, box, last_uid_r) < 0)
 		return -1;
 
-	(void)fts_index_set_last_uid(box, *last_uid_r);
+	fts_index_set_last_uid(box, *last_uid_r);
 	return 0;
 }
 
@@ -240,7 +247,6 @@ fts_backend_solr_update_init(struct fts_backend *_backend)
 
 	ctx = i_new(struct solr_fts_backend_update_context, 1);
 	ctx->ctx.backend = _backend;
-	ctx->cmd = str_new(default_pool, SOLR_CMDBUF_SIZE);
 	i_array_init(&ctx->fields, 16);
 	return &ctx->ctx;
 }
@@ -305,7 +311,7 @@ fts_backend_solr_doc_close(struct solr_fts_backend_update_context *ctx)
 	}
 	array_foreach_modifiable(&ctx->fields, field) {
 		str_printfa(ctx->cmd, "<field name=\"%s\">", field->key);
-		str_append_str(ctx->cmd, field->value);
+		xml_encode_data(ctx->cmd, str_data(field->value), str_len(field->value));
 		str_append(ctx->cmd, "</field>");
 		str_truncate(field->value, 0);
 	}
@@ -326,6 +332,15 @@ fts_backed_solr_build_commit(struct solr_fts_backend_update_context *ctx)
 	return solr_connection_post_end(ctx->post);
 }
 
+static void
+fts_backend_solr_expunge_flush(struct solr_fts_backend_update_context *ctx)
+{
+	str_append(ctx->cmd_expunge, "</delete>");
+	(void)solr_connection_post(solr_conn, str_c(ctx->cmd_expunge));
+	str_truncate(ctx->cmd_expunge, 0);
+	str_append(ctx->cmd_expunge, "<delete>");
+}
+
 static int
 fts_backend_solr_update_deinit(struct fts_backend_update_context *_ctx)
 {
@@ -341,14 +356,18 @@ fts_backend_solr_update_deinit(struct fts_backend_update_context *_ctx)
 	if (ctx->documents_added || ctx->expunges) {
 		/* commit and wait until the documents we just indexed are
 		   visible to the following search */
-		str = t_strdup_printf("<commit waitFlush=\"false\" "
-				      "waitSearcher=\"%s\"/>",
+		if (ctx->expunges)
+			fts_backend_solr_expunge_flush(ctx);
+		str = t_strdup_printf("<commit waitSearcher=\"%s\"/>",
 				      ctx->documents_added ? "true" : "false");
 		if (solr_connection_post(solr_conn, str) < 0)
 			ret = -1;
 	}
 
-	str_free(&ctx->cmd);
+	if (ctx->cmd != NULL)
+		str_free(&ctx->cmd);
+	if (ctx->cmd_expunge != NULL)
+		str_free(&ctx->cmd_expunge);
 	array_foreach_modifiable(&ctx->fields, field) {
 		str_free(&field->value);
 		i_free(field->key);
@@ -367,7 +386,7 @@ fts_backend_solr_update_set_mailbox(struct fts_backend_update_context *_ctx,
 	const char *box_guid;
 
 	if (ctx->prev_uid != 0) {
-		(void)fts_index_set_last_uid(ctx->cur_box, ctx->prev_uid);
+		fts_index_set_last_uid(ctx->cur_box, ctx->prev_uid);
 		ctx->prev_uid = 0;
 	}
 
@@ -404,18 +423,18 @@ fts_backend_solr_update_expunge(struct fts_backend_update_context *_ctx,
 		   highly unlikely to be indexed at this time. */
 		return;
 	}
-	ctx->expunges = TRUE;
+	if (!ctx->expunges) {
+		ctx->expunges = TRUE;
+		ctx->cmd_expunge = str_new(default_pool, 1024);
+		str_append(ctx->cmd_expunge, "<delete>");
+	}
 
-	T_BEGIN {
-		string_t *cmd;
+	if (str_len(ctx->cmd_expunge) >= SOLR_CMDBUF_FLUSH_SIZE)
+		fts_backend_solr_expunge_flush(ctx);
 
-		cmd = t_str_new(256);
-		str_append(cmd, "<delete><id>");
-		xml_encode_id(ctx, cmd, uid);
-		str_append(cmd, "</id></delete>");
-
-		(void)solr_connection_post(solr_conn, str_c(cmd));
-	} T_END;
+	str_append(ctx->cmd_expunge, "<id>");
+	xml_encode_id(ctx, ctx->cmd_expunge, uid);
+	str_append(ctx->cmd_expunge, "</id>");
 }
 
 static void
@@ -425,12 +444,14 @@ fts_backend_solr_uid_changed(struct solr_fts_backend_update_context *ctx,
 	if (ctx->post == NULL) {
 		i_assert(ctx->prev_uid == 0);
 
+		ctx->cmd = str_new(default_pool, SOLR_CMDBUF_SIZE);
 		ctx->post = solr_connection_post_begin(solr_conn);
 		str_append(ctx->cmd, "<add>");
 	} else {
 		fts_backend_solr_doc_close(ctx);
 	}
 	ctx->prev_uid = uid;
+	ctx->truncate_header = FALSE;
 	fts_backend_solr_doc_open(ctx, uid);
 }
 
@@ -517,8 +538,11 @@ fts_backend_solr_update_build_more(struct fts_backend_update_context *_ctx,
 		}
 		xml_encode_data(ctx->cmd, data, size);
 	} else {
-		xml_encode_data(ctx->cur_value, data, size);
-		if (ctx->cur_value2 != NULL)
+		if (!ctx->truncate_header)
+			xml_encode_data(ctx->cur_value, data, size);
+		if (ctx->cur_value2 != NULL &&
+		    (!ctx->truncate_header ||
+		     str_len(ctx->cur_value2) < SOLR_HEADER_LINE_MAX_TRUNC_SIZE))
 			xml_encode_data(ctx->cur_value2, data, size);
 	}
 
@@ -527,15 +551,15 @@ fts_backend_solr_update_build_more(struct fts_backend_update_context *_ctx,
 					  str_len(ctx->cmd));
 		str_truncate(ctx->cmd, 0);
 	}
-	if (str_len(ctx->cur_value) >= SOLR_BUFFER_WARN_SIZE &&
-	    ctx->size_warned_uid != ctx->prev_uid) {
+	if (!ctx->truncate_header &&
+	    str_len(ctx->cur_value) >= SOLR_HEADER_MAX_SIZE) {
 		/* a large header */
 		i_assert(ctx->cur_value != ctx->cmd);
 
-		ctx->size_warned_uid = ctx->prev_uid;
-		i_warning("fts-solr(%s): Mailbox %s UID=%u header size is huge",
+		i_warning("fts-solr(%s): Mailbox %s UID=%u header size is huge, truncating",
 			  ctx->cur_box->storage->user->username,
 			  mailbox_get_vname(ctx->cur_box), ctx->prev_uid);
+		ctx->truncate_header = TRUE;
 	}
 	return 0;
 }
@@ -555,13 +579,14 @@ static int fts_backend_solr_rescan(struct fts_backend *backend)
 	/* FIXME: proper rescan needed. for now we'll just reset the
 	   last-uids */
 	iter = mailbox_list_iter_init(backend->ns->list, "*",
+				      MAILBOX_LIST_ITER_SKIP_ALIASES |
 				      MAILBOX_LIST_ITER_NO_AUTO_BOXES);
 	while ((info = mailbox_list_iter_next(iter)) != NULL) {
 		if ((info->flags &
 		     (MAILBOX_NONEXISTENT | MAILBOX_NOSELECT)) != 0)
 			continue;
 
-		box = mailbox_alloc(info->ns->list, info->name, 0);
+		box = mailbox_alloc(info->ns->list, info->vname, 0);
 		if (mailbox_open(box) == 0) {
 			if (fts_index_set_last_uid(box, 0) < 0)
 				ret = -1;
@@ -785,8 +810,8 @@ solr_search_multi(struct fts_backend *_backend, string_t *str,
 {
 	struct solr_result **solr_results;
 	struct fts_result *fts_result;
-	ARRAY_DEFINE(fts_results, struct fts_result);
-	struct hash_table *mailboxes;
+	ARRAY(struct fts_result) fts_results;
+	HASH_TABLE(char *, struct mailbox *) mailboxes;
 	struct mailbox *box;
 	const char *box_guid;
 	unsigned int i, len;
@@ -799,8 +824,7 @@ solr_search_multi(struct fts_backend *_backend, string_t *str,
 	else
 		str_append(str, "%22%22");
 
-	mailboxes = hash_table_create(default_pool, default_pool, 0,
-				      str_hash, (hash_cmp_callback_t *)strcmp);
+	hash_table_create(&mailboxes, default_pool, 0, str_hash, strcmp);
 	str_append(str, "%2B(");
 	len = str_len(str);
 	for (i = 0; boxes[i] != NULL; i++) {
@@ -835,7 +859,7 @@ solr_search_multi(struct fts_backend *_backend, string_t *str,
 		fts_result->scores = solr_results[i]->scores;
 		fts_result->scores_sorted = TRUE;
 	}
-	(void)array_append_space(&fts_results);
+	array_append_zero(&fts_results);
 	result->box_results = array_idx_modifiable(&fts_results, 0);
 	hash_table_destroy(&mailboxes);
 	return 0;

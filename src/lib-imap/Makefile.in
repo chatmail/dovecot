@@ -42,7 +42,7 @@ DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -53,16 +53,24 @@ LTLIBRARIES = $(noinst_LTLIBRARIES)
 libimap_la_LIBADD =
 am_libimap_la_OBJECTS = imap-arg.lo imap-base-subject.lo \
 	imap-bodystructure.lo imap-date.lo imap-envelope.lo imap-id.lo \
-	imap-match.lo imap-parser.lo imap-quote.lo imap-seqset.lo \
-	imap-utf7.lo imap-util.lo
+	imap-match.lo imap-parser.lo imap-quote.lo imap-url.lo \
+	imap-seqset.lo imap-utf7.lo imap-util.lo
 libimap_la_OBJECTS = $(am_libimap_la_OBJECTS)
-am__EXEEXT_1 = test-imap-match$(EXEEXT) test-imap-parser$(EXEEXT) \
-	test-imap-utf7$(EXEEXT) test-imap-util$(EXEEXT)
+am__EXEEXT_1 = test-imap-bodystructure$(EXEEXT) \
+	test-imap-match$(EXEEXT) test-imap-parser$(EXEEXT) \
+	test-imap-url$(EXEEXT) test-imap-utf7$(EXEEXT) \
+	test-imap-util$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
+am_test_imap_bodystructure_OBJECTS =  \
+	test-imap-bodystructure.$(OBJEXT)
+test_imap_bodystructure_OBJECTS =  \
+	$(am_test_imap_bodystructure_OBJECTS)
 am_test_imap_match_OBJECTS = test-imap-match.$(OBJEXT)
 test_imap_match_OBJECTS = $(am_test_imap_match_OBJECTS)
 am_test_imap_parser_OBJECTS = test-imap-parser.$(OBJEXT)
 test_imap_parser_OBJECTS = $(am_test_imap_parser_OBJECTS)
+am_test_imap_url_OBJECTS = test-imap-url.$(OBJEXT)
+test_imap_url_OBJECTS = $(am_test_imap_url_OBJECTS)
 am_test_imap_utf7_OBJECTS = test-imap-utf7.$(OBJEXT)
 test_imap_utf7_OBJECTS = $(am_test_imap_utf7_OBJECTS)
 am_test_imap_util_OBJECTS = test-imap-util.$(OBJEXT)
@@ -80,12 +88,14 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libimap_la_SOURCES) $(test_imap_match_SOURCES) \
-	$(test_imap_parser_SOURCES) $(test_imap_utf7_SOURCES) \
+SOURCES = $(libimap_la_SOURCES) $(test_imap_bodystructure_SOURCES) \
+	$(test_imap_match_SOURCES) $(test_imap_parser_SOURCES) \
+	$(test_imap_url_SOURCES) $(test_imap_utf7_SOURCES) \
 	$(test_imap_util_SOURCES)
-DIST_SOURCES = $(libimap_la_SOURCES) $(test_imap_match_SOURCES) \
-	$(test_imap_parser_SOURCES) $(test_imap_utf7_SOURCES) \
-	$(test_imap_util_SOURCES)
+DIST_SOURCES = $(libimap_la_SOURCES) \
+	$(test_imap_bodystructure_SOURCES) $(test_imap_match_SOURCES) \
+	$(test_imap_parser_SOURCES) $(test_imap_url_SOURCES) \
+	$(test_imap_utf7_SOURCES) $(test_imap_util_SOURCES)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -130,13 +140,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -168,6 +179,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -215,6 +227,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -310,6 +323,7 @@ libimap_la_SOURCES = \
 	imap-match.c \
 	imap-parser.c \
 	imap-quote.c \
+	imap-url.c \
 	imap-seqset.c \
 	imap-utf7.c \
 	imap-util.c
@@ -325,6 +339,7 @@ headers = \
 	imap-parser.h \
 	imap-resp-code.h \
 	imap-quote.h \
+	imap-url.h \
 	imap-seqset.h \
 	imap-utf7.h \
 	imap-util.h
@@ -332,8 +347,10 @@ headers = \
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
 test_programs = \
+	test-imap-bodystructure \
 	test-imap-match \
 	test-imap-parser \
+	test-imap-url \
 	test-imap-utf7 \
 	test-imap-util
 
@@ -341,18 +358,25 @@ test_libs = \
 	../lib-test/libtest.la \
 	../lib/liblib.la
 
+test_deps = $(noinst_LTLIBRARIES) $(test_libs)
+test_imap_bodystructure_SOURCES = test-imap-bodystructure.c
+test_imap_bodystructure_LDADD = imap-bodystructure.lo imap-envelope.lo imap-quote.lo imap-parser.lo imap-arg.lo ../lib-mail/libmail.la $(test_libs)
+test_imap_bodystructure_DEPENDENCIES = $(test_deps) ../lib-mail/libmail.la
 test_imap_match_SOURCES = test-imap-match.c
 test_imap_match_LDADD = imap-match.lo $(test_libs)
-test_imap_match_DEPENDENCIES = imap-match.lo $(test_libs)
+test_imap_match_DEPENDENCIES = $(test_deps)
 test_imap_parser_SOURCES = test-imap-parser.c
 test_imap_parser_LDADD = imap-parser.lo imap-arg.lo $(test_libs)
-test_imap_parser_DEPENDENCIES = imap-parser.lo imap-arg.lo $(test_libs)
+test_imap_parser_DEPENDENCIES = $(test_deps)
+test_imap_url_SOURCES = test-imap-url.c
+test_imap_url_LDADD = imap-url.lo  $(test_libs)
+test_imap_url_DEPENDENCIES = $(test_deps)
 test_imap_utf7_SOURCES = test-imap-utf7.c
 test_imap_utf7_LDADD = imap-utf7.lo $(test_libs)
-test_imap_utf7_DEPENDENCIES = imap-utf7.lo $(test_libs)
+test_imap_utf7_DEPENDENCIES = $(test_deps)
 test_imap_util_SOURCES = test-imap-util.c
 test_imap_util_LDADD = imap-util.lo imap-arg.lo $(test_libs)
-test_imap_util_DEPENDENCIES = imap-util.lo imap-arg.lo $(test_libs)
+test_imap_util_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -407,12 +431,18 @@ clean-noinstPROGRAMS:
 	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
 	echo " rm -f" $$list; \
 	rm -f $$list
+test-imap-bodystructure$(EXEEXT): $(test_imap_bodystructure_OBJECTS) $(test_imap_bodystructure_DEPENDENCIES) $(EXTRA_test_imap_bodystructure_DEPENDENCIES) 
+	@rm -f test-imap-bodystructure$(EXEEXT)
+	$(LINK) $(test_imap_bodystructure_OBJECTS) $(test_imap_bodystructure_LDADD) $(LIBS)
 test-imap-match$(EXEEXT): $(test_imap_match_OBJECTS) $(test_imap_match_DEPENDENCIES) $(EXTRA_test_imap_match_DEPENDENCIES) 
 	@rm -f test-imap-match$(EXEEXT)
 	$(LINK) $(test_imap_match_OBJECTS) $(test_imap_match_LDADD) $(LIBS)
 test-imap-parser$(EXEEXT): $(test_imap_parser_OBJECTS) $(test_imap_parser_DEPENDENCIES) $(EXTRA_test_imap_parser_DEPENDENCIES) 
 	@rm -f test-imap-parser$(EXEEXT)
 	$(LINK) $(test_imap_parser_OBJECTS) $(test_imap_parser_LDADD) $(LIBS)
+test-imap-url$(EXEEXT): $(test_imap_url_OBJECTS) $(test_imap_url_DEPENDENCIES) $(EXTRA_test_imap_url_DEPENDENCIES) 
+	@rm -f test-imap-url$(EXEEXT)
+	$(LINK) $(test_imap_url_OBJECTS) $(test_imap_url_LDADD) $(LIBS)
 test-imap-utf7$(EXEEXT): $(test_imap_utf7_OBJECTS) $(test_imap_utf7_DEPENDENCIES) $(EXTRA_test_imap_utf7_DEPENDENCIES) 
 	@rm -f test-imap-utf7$(EXEEXT)
 	$(LINK) $(test_imap_utf7_OBJECTS) $(test_imap_utf7_LDADD) $(LIBS)
@@ -436,10 +466,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-quote.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-seqset.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-url.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-utf7.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-util.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-bodystructure.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-match.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-parser.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-url.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-utf7.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-util.Po@am__quote@
 

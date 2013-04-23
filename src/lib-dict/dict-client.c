@@ -1,9 +1,9 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "llist.h"
 #include "str.h"
-#include "network.h"
+#include "net.h"
 #include "istream.h"
 #include "ostream.h"
 #include "eacces-error.h"
@@ -72,6 +72,7 @@ struct client_dict_transaction_context {
 
 	unsigned int failed:1;
 	unsigned int sent_begin:1;
+	unsigned int async:1;
 };
 
 static int client_dict_connect(struct client_dict *dict);
@@ -207,7 +208,7 @@ client_dict_transaction_send_begin(struct client_dict_transaction_context *ctx)
 	return ctx->failed ? -1 : 0;
 }
 
-static int
+static int ATTR_NOWARN_UNUSED_RESULT
 client_dict_send_transaction_query(struct client_dict_transaction_context *ctx,
 				   const char *query)
 {
@@ -261,15 +262,17 @@ client_dict_finish_transaction(struct client_dict *dict,
 		i_error("dict-client: Unknown transaction id %u", id);
 		return;
 	}
-	if (ctx->callback != NULL)
-		ctx->callback(ret, ctx->context);
 
-	DLLIST_REMOVE(&dict->transactions, ctx);
-	i_free(ctx);
-
+	/* the callback may call the dict code again, so remove this
+	   transaction before calling it */
 	i_assert(dict->async_commits > 0);
 	if (--dict->async_commits == 0)
 		io_remove(&dict->io);
+	DLLIST_REMOVE(&dict->transactions, ctx);
+
+	if (ctx->callback != NULL)
+		ctx->callback(ret, ctx->context);
+	i_free(ctx);
 }
 
 static ssize_t client_dict_read_timeout(struct client_dict *dict)
@@ -444,8 +447,17 @@ static int client_dict_connect(struct client_dict *dict)
 
 static void client_dict_disconnect(struct client_dict *dict)
 {
+	struct client_dict_transaction_context *ctx, *next;
+
 	dict->connect_counter++;
 	dict->handshaked = FALSE;
+
+	/* abort all pending async commits */
+	for (ctx = dict->transactions; ctx != NULL; ctx = next) {
+		next = ctx->next;
+		if (ctx->async)
+			client_dict_finish_transaction(dict, ctx->id, -1);
+	}
 
 	if (dict->to_idle != NULL)
 		timeout_remove(&dict->to_idle);
@@ -463,10 +475,11 @@ static void client_dict_disconnect(struct client_dict *dict)
 	}
 }
 
-static struct dict *
+static int
 client_dict_init(struct dict *driver, const char *uri,
 		 enum dict_data_type value_type, const char *username,
-		 const char *base_dir)
+		 const char *base_dir, struct dict **dict_r,
+		 const char **error_r)
 {
 	struct client_dict *dict;
 	const char *dest_uri;
@@ -475,8 +488,8 @@ client_dict_init(struct dict *driver, const char *uri,
 	/* uri = [<path>] ":" <uri> */
 	dest_uri = strchr(uri, ':');
 	if (dest_uri == NULL) {
-		i_error("dict-client: Invalid URI: %s", uri);
-		return NULL;
+		*error_r = t_strdup_printf("Invalid URI: %s", uri);
+		return -1;
 	}
 
 	pool = pool_alloconly_create("client dict", 1024);
@@ -496,7 +509,8 @@ client_dict_init(struct dict *driver, const char *uri,
 				"/"DEFAULT_DICT_SERVER_SOCKET_FNAME, NULL);
 	}
 	dict->uri = p_strdup(pool, dest_uri + 1);
-	return &dict->dict;
+	*dict_r = &dict->dict;
+	return 0;
 }
 
 static void client_dict_deinit(struct dict *_dict)
@@ -669,15 +683,13 @@ client_dict_transaction_init(struct dict *_dict)
 static void dict_async_input(struct client_dict *dict)
 {
 	char *line;
-	size_t size;
 	int ret;
 
 	i_assert(!dict->in_iteration);
 
 	do {
 		ret = client_dict_read_one_line(dict, &line);
-		(void)i_stream_get_data(dict->input, &size);
-	} while (ret == 0 && size > 0);
+	} while (ret == 0 && i_stream_get_data_size(dict->input) > 0);
 
 	if (ret < 0)
 		io_remove(&dict->io);
@@ -706,6 +718,7 @@ client_dict_transaction_commit(struct dict_transaction_context *_ctx,
 		else if (async) {
 			ctx->callback = callback;
 			ctx->context = context;
+			ctx->async = TRUE;
 			if (dict->async_commits++ == 0) {
 				dict->io = io_add(dict->fd, IO_READ,
 						  dict_async_input, dict);
@@ -745,7 +758,7 @@ client_dict_transaction_rollback(struct dict_transaction_context *_ctx)
 
 		query = t_strdup_printf("%c%u\n", DICT_PROTOCOL_CMD_ROLLBACK,
 					ctx->id);
-		(void)client_dict_send_transaction_query(ctx, query);
+		client_dict_send_transaction_query(ctx, query);
 	} T_END;
 
 	DLLIST_REMOVE(&dict->transactions, ctx);
@@ -767,7 +780,7 @@ static void client_dict_set(struct dict_transaction_context *_ctx,
 					DICT_PROTOCOL_CMD_SET, ctx->id,
 					dict_client_escape(key),
 					dict_client_escape(value));
-		(void)client_dict_send_transaction_query(ctx, query);
+		client_dict_send_transaction_query(ctx, query);
 	} T_END;
 }
 
@@ -783,7 +796,24 @@ static void client_dict_unset(struct dict_transaction_context *_ctx,
 		query = t_strdup_printf("%c%u\t%s\n",
 					DICT_PROTOCOL_CMD_UNSET, ctx->id,
 					dict_client_escape(key));
-		(void)client_dict_send_transaction_query(ctx, query);
+		client_dict_send_transaction_query(ctx, query);
+	} T_END;
+}
+
+static void client_dict_append(struct dict_transaction_context *_ctx,
+			       const char *key, const char *value)
+{
+	struct client_dict_transaction_context *ctx =
+		(struct client_dict_transaction_context *)_ctx;
+
+	T_BEGIN {
+		const char *query;
+
+		query = t_strdup_printf("%c%u\t%s\t%s\n",
+					DICT_PROTOCOL_CMD_APPEND, ctx->id,
+					dict_client_escape(key),
+					dict_client_escape(value));
+		client_dict_send_transaction_query(ctx, query);
 	} T_END;
 }
 
@@ -798,7 +828,7 @@ static void client_dict_atomic_inc(struct dict_transaction_context *_ctx,
 		query = t_strdup_printf("%c%u\t%s\t%lld\n",
 					DICT_PROTOCOL_CMD_ATOMIC_INC,
 					ctx->id, dict_client_escape(key), diff);
-		(void)client_dict_send_transaction_query(ctx, query);
+		client_dict_send_transaction_query(ctx, query);
 	} T_END;
 }
 
@@ -818,6 +848,7 @@ struct dict dict_driver_client = {
 		client_dict_transaction_rollback,
 		client_dict_set,
 		client_dict_unset,
+		client_dict_append,
 		client_dict_atomic_inc
 	}
 };

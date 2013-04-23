@@ -1,11 +1,11 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "str.h"
 #include "env-util.h"
 #include "execv-const.h"
-#include "master-service.h"
+#include "master-service-private.h"
 #include "master-service-settings.h"
 #include "settings-parser.h"
 #include "doveadm-print-private.h"
@@ -28,7 +28,7 @@ const struct doveadm_print_vfuncs *doveadm_print_vfuncs_all[] = {
 
 int doveadm_exit_code = 0;
 
-static ARRAY_DEFINE(doveadm_cmds, struct doveadm_cmd);
+static ARRAY(struct doveadm_cmd) doveadm_cmds;
 
 static void failure_exit_callback(int *status)
 {
@@ -55,15 +55,15 @@ static void
 doveadm_usage_compress_lines(FILE *out, const char *str, const char *prefix)
 {
 	const char *cmd, *args, *p, *short_name, *prev_name = "";
-	char **lines;
+	const char **lines;
 	unsigned int i, count, prefix_len = strlen(prefix);
 
 	/* split lines */
-	lines = p_strsplit(pool_datastack_create(), str, "\n");
+	lines = (void *)p_strsplit(pool_datastack_create(), str, "\n");
 	for (count = 0; lines[count] != NULL; count++) ;
 
 	/* sort lines */
-	qsort(lines, count, sizeof(*lines), i_strcmp_p);
+	i_qsort(lines, count, sizeof(*lines), i_strcmp_p);
 
 	/* print lines, compress subcommands into a single line */
 	for (i = 0; i < count; i++) {
@@ -163,6 +163,8 @@ static struct doveadm_cmd doveadm_cmd_help = {
 
 static void cmd_config(int argc ATTR_UNUSED, char *argv[])
 {
+	env_put(t_strconcat(MASTER_CONFIG_FILE_ENV"=",
+		master_service_get_config_path(master_service), NULL));
 	argv[0] = BINDIR"/doveconf";
 	(void)execv(argv[0], argv);
 	i_fatal("execv(%s) failed: %m", argv[0]);
@@ -170,6 +172,21 @@ static void cmd_config(int argc ATTR_UNUSED, char *argv[])
 
 static struct doveadm_cmd doveadm_cmd_config = {
 	cmd_config, "config", "[doveconf parameters]"
+};
+
+static void cmd_exec(int argc ATTR_UNUSED, char *argv[])
+{
+	const char *path, *binary = argv[1];
+
+	path = t_strdup_printf("%s/%s", doveadm_settings->libexec_dir, binary);
+	argv++;
+	argv[0] = t_strdup_noconst(path);
+	(void)execv(argv[0], argv);
+	i_fatal("execv(%s) failed: %m", argv[0]);
+}
+
+static struct doveadm_cmd doveadm_cmd_exec = {
+	cmd_exec, "exec", "<binary> [binary parameters]"
 };
 
 static bool
@@ -259,6 +276,10 @@ static void doveadm_read_settings(void)
 					 &output, &error) < 0)
 		i_fatal("Error reading configuration: %s", error);
 
+	service_set = master_service_settings_get(master_service);
+	service_set = settings_dup(&master_service_setting_parser_info,
+				   service_set, pool_datastack_create());
+
 	set = master_service_settings_get_others(master_service)[0];
 	doveadm_settings = settings_dup(&doveadm_setting_parser_info, set,
 					pool_datastack_create());
@@ -267,10 +288,9 @@ static void doveadm_read_settings(void)
 static struct doveadm_cmd *doveadm_commands[] = {
 	&doveadm_cmd_help,
 	&doveadm_cmd_config,
+	&doveadm_cmd_exec,
 	&doveadm_cmd_stop,
 	&doveadm_cmd_reload,
-	&doveadm_cmd_auth,
-	&doveadm_cmd_user,
 	&doveadm_cmd_dump,
 	&doveadm_cmd_pw,
 	&doveadm_cmd_who,
@@ -280,7 +300,8 @@ static struct doveadm_cmd *doveadm_commands[] = {
 	&doveadm_cmd_sis_deduplicate,
 	&doveadm_cmd_sis_find,
 	&doveadm_cmd_stats_dump,
-	&doveadm_cmd_stats_top
+	&doveadm_cmd_stats_top,
+	&doveadm_cmd_zlibconnect
 };
 
 int main(int argc, char *argv[])
@@ -340,11 +361,14 @@ int main(int argc, char *argv[])
 		quick_init = TRUE;
 	} else {
 		quick_init = FALSE;
+		doveadm_register_auth_commands();
 		doveadm_register_director_commands();
 		doveadm_register_instance_commands();
 		doveadm_register_mount_commands();
 		doveadm_register_proxy_commands();
 		doveadm_register_log_commands();
+		doveadm_register_replicator_commands();
+		doveadm_register_fs_commands();
 		doveadm_dump_init();
 		doveadm_mail_init();
 		doveadm_load_modules();

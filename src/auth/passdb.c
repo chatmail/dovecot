@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2013 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
@@ -9,8 +9,8 @@
 
 #include <stdlib.h>
 
-static ARRAY_DEFINE(passdb_interfaces, struct passdb_module_interface *);
-static ARRAY_DEFINE(passdb_modules, struct passdb_module *);
+static ARRAY(struct passdb_module_interface *) passdb_interfaces;
+static ARRAY(struct passdb_module *) passdb_modules;
 
 static const struct passdb_module_interface passdb_iface_deinit = {
 	.name = "deinit"
@@ -278,6 +278,7 @@ void passdbs_generate_md5(unsigned char md5[MD5_RESULTLEN])
 
 extern struct passdb_module_interface passdb_passwd;
 extern struct passdb_module_interface passdb_bsdauth;
+extern struct passdb_module_interface passdb_dict;
 extern struct passdb_module_interface passdb_shadow;
 extern struct passdb_module_interface passdb_passwd_file;
 extern struct passdb_module_interface passdb_pam;
@@ -294,6 +295,7 @@ void passdbs_init(void)
 	i_array_init(&passdb_modules, 16);
 	passdb_register_module(&passdb_passwd);
 	passdb_register_module(&passdb_bsdauth);
+	passdb_register_module(&passdb_dict);
 	passdb_register_module(&passdb_passwd_file);
 	passdb_register_module(&passdb_pam);
 	passdb_register_module(&passdb_checkpassword);

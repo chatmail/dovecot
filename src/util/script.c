@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -54,7 +54,7 @@ exec_child(struct master_service_connection *conn, const char *const *args)
 
 	for (; *args != NULL; args++)
 		array_append(&exec_args, args, 1);
-	(void)array_append_space(&exec_args);
+	array_append_zero(&exec_args);
 
 	env_clean();
 	args = array_idx(&exec_args, 0);
@@ -133,8 +133,8 @@ static bool client_exec_script(struct master_service_connection *conn)
 	}
 	alarm(0);
 
-	/* drop the last LF */
-	buffer_set_used_size(input, scanpos-1);
+	/* drop the last two LFs */
+	buffer_set_used_size(input, scanpos-2);
 
 	args = t_strsplit(str_c(input), "\n");
 	script_verify_version(*args); args++;
@@ -148,7 +148,7 @@ static bool client_exec_script(struct master_service_connection *conn)
 			exec_child(conn, args + 1);
 			i_unreached();
 		}
-		if (*args == '\0')
+		if (**args == '\0')
 			i_fatal("empty options");
 		args++;
 	}

@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -72,7 +72,7 @@ level_scores_add_vuids(struct virtual_mailbox *vbox,
 	t_array_init(&vuids_arr, count);
 	t_array_init(&backend_uids, 64);
 	for (i = 0; i < count; i++)
-		seq_range_array_add(&backend_uids, 0, scores[i].uid);
+		seq_range_array_add(&backend_uids, scores[i].uid);
 	vbox->vfuncs.get_virtual_uid_map(&vbox->box, br->box,
 					 &backend_uids, &vuids_arr);
 
@@ -181,7 +181,7 @@ static int fts_search_lookup_level_multi(struct fts_search_context *fctx,
 				break;
 			array_append(&tmp_mailboxes, &mailboxes[j], 1);
 		}
-		(void)array_append_space(&tmp_mailboxes);
+		array_append_zero(&tmp_mailboxes);
 
 		mail_search_args_reset(args, TRUE);
 		if (fts_backend_lookup_multi(backend,
@@ -199,13 +199,15 @@ static int fts_search_lookup_level(struct fts_search_context *fctx,
 				   struct mail_search_arg *args,
 				   bool and_args)
 {
-	if (!fctx->virtual_mailbox) {
-		if (fts_search_lookup_level_single(fctx, args, and_args) < 0)
-			return -1;
-	} else T_BEGIN {
-		if (fts_search_lookup_level_multi(fctx, args, and_args) < 0)
-			return -1;
+	int ret;
+
+	T_BEGIN {
+		ret = !fctx->virtual_mailbox ?
+			fts_search_lookup_level_single(fctx, args, and_args) :
+			fts_search_lookup_level_multi(fctx, args, and_args);
 	} T_END;
+	if (ret < 0)
+		return -1;
 
 	for (; args != NULL; args = args->next) {
 		if (args->type != SEARCH_OR && args->type != SEARCH_SUB)

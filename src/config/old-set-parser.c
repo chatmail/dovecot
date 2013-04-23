@@ -1,10 +1,12 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
 #include "settings-parser.h"
 #include "config-parser-private.h"
 #include "old-set-parser.h"
+
+#define config_apply_line (void)config_apply_line
 
 struct socket_set {
 	const char *path, *mode, *user, *group;
@@ -305,7 +307,7 @@ old_settings_handle_proto(struct config_parser_context *ctx,
 			return TRUE;
 		}
 		p = strrchr(value, ':');
-		if (p != NULL) {
+		if (p != NULL && listen_has_port(value)) {
 			obsolete(ctx, "%s=..:port has been replaced by service { inet_listener { port } }", key);
 			value = t_strdup_until(value, p++);
 			if (config_filter_match(&old_section->filter, &imap_filter)) {

@@ -1,17 +1,19 @@
 #ifndef DIRECTOR_H
 #define DIRECTOR_H
 
-#include "network.h"
+#include "net.h"
 #include "director-settings.h"
 
 #define DIRECTOR_VERSION_NAME "director"
 #define DIRECTOR_VERSION_MAJOR 1
-#define DIRECTOR_VERSION_MINOR 2
+#define DIRECTOR_VERSION_MINOR 3
 
 /* weak users supported in protocol v1.1+ */
 #define DIRECTOR_VERSION_WEAK_USERS 1
 /* director removes supported in v1.2+ */
 #define DIRECTOR_VERSION_RING_REMOVE 2
+/* quit reason supported in v1.3+ */
+#define DIRECTOR_VERSION_QUIT 3
 
 /* Minimum time between even attempting to communicate with a director that
    failed due to a protocol error. */
@@ -39,9 +41,10 @@ struct director {
 	   is long. */
 	struct director_connection *left, *right;
 	/* all director connections */
-	ARRAY_DEFINE(connections, struct director_connection *);
+	ARRAY(struct director_connection *) connections;
 	struct timeout *to_reconnect;
 	struct timeout *to_sync;
+	struct timeout *to_callback;
 
 	/* current mail hosts */
 	struct mail_host_list *mail_hosts;
@@ -52,14 +55,14 @@ struct director {
 	struct user_directory *users;
 
 	/* these requests are waiting for directors to be in synced */
-	ARRAY_DEFINE(pending_requests, struct director_request *);
+	ARRAY(struct director_request *) pending_requests;
 	struct timeout *to_request;
 	struct timeout *to_handshake_warning;
 
 	director_state_change_callback_t *state_change_callback;
 
 	/* director hosts are sorted by IP (and port) */
-	ARRAY_DEFINE(dir_hosts, struct director_host *);
+	ARRAY(struct director_host *) dir_hosts;
 	struct timeout *to_remove_dirs;
 
 	struct ipc_client *ipc_proxy;
@@ -77,8 +80,9 @@ struct director {
 	unsigned int ring_synced:1;
 	unsigned int sync_frozen:1;
 	unsigned int sync_pending:1;
-	unsigned int debug:1;
 };
+
+extern bool director_debug;
 
 /* Create a new director. If listen_ip specifies an actual IP, it's used with
    listen_port for finding ourself from the director_servers setting.
@@ -109,26 +113,27 @@ void director_ring_remove(struct director_host *removed_host,
 
 void director_update_host(struct director *dir, struct director_host *src,
 			  struct director_host *orig_src,
-			  struct mail_host *host);
+			  struct mail_host *host) ATTR_NULL(3);
 void director_remove_host(struct director *dir, struct director_host *src,
 			  struct director_host *orig_src,
-			  struct mail_host *host);
+			  struct mail_host *host) ATTR_NULL(2, 3);
 void director_flush_host(struct director *dir, struct director_host *src,
 			 struct director_host *orig_src,
-			 struct mail_host *host);
+			 struct mail_host *host) ATTR_NULL(3);
 void director_update_user(struct director *dir, struct director_host *src,
 			  struct user *user);
 void director_update_user_weak(struct director *dir, struct director_host *src,
 			       struct director_host *orig_src,
-			       struct user *user);
+			       struct user *user) ATTR_NULL(3);
 void director_move_user(struct director *dir, struct director_host *src,
 			struct director_host *orig_src,
-			unsigned int username_hash, struct mail_host *host);
+			unsigned int username_hash, struct mail_host *host)
+	ATTR_NULL(3);
 void director_user_killed(struct director *dir, unsigned int username_hash);
 void director_user_killed_everywhere(struct director *dir,
 				     struct director_host *src,
 				     struct director_host *orig_src,
-				     unsigned int username_hash);
+				     unsigned int username_hash) ATTR_NULL(3);
 void director_user_weak(struct director *dir, struct user *user);
 
 void director_sync_freeze(struct director *dir);
@@ -143,5 +148,7 @@ void director_update_send_version(struct director *dir,
 				  unsigned int min_version, const char *cmd);
 
 int director_connect_host(struct director *dir, struct director_host *host);
+
+void dir_debug(const char *fmt, ...) ATTR_FORMAT(1, 2);
 
 #endif

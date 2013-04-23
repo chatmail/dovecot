@@ -114,8 +114,25 @@ mdbox:~/mdbox:MAILBOXDIR=expunged:SUBSCRIPTIONS=subscriptions-expunged
 }
 ---%<-------------------------------------------------------------------------
 
+Copy only the last instance (v2.2+)
+-----------------------------------
+
+If mail has multiple copies (via IMAP COPY), each copy is normally moved to
+lazy expunge namespace when it's expunged. With v2.2+ you can set 'plugin {
+lazy_expunge_only_last_instance = yes }' to copy only the last instance and
+immediately expunge the others. This may be useful if you want to provide a
+flat list of all expunged mails without duplicates in your webmail. With many
+clients this means that the last instance is always in the Trash mailbox.
+
 Cleaning up
 -----------
+
+doveadm
+-------
+
+---%<-------------------------------------------------------------------------
+doveadm expunge mailbox 'deleted/*' savedsince 1d
+---%<-------------------------------------------------------------------------
 
 cronjob
 -------
@@ -145,4 +162,4 @@ specific mailboxes, and expunge them when they've been there for a specified
 amount of time. It keeps an internal database (e.g. SQL) of all such mailboxes,
 so it doesn't have to go through all the mailboxes for all the users.
 
-(This file was created from the wiki on 2012-04-23 04:42)
+(This file was created from the wiki on 2013-04-15 04:42)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -22,6 +22,7 @@ const struct imapc_capability_name imapc_capability_names[] = {
 	{ "STARTTLS", IMAPC_CAPABILITY_STARTTLS },
 	{ "X-GM-EXT-1", IMAPC_CAPABILITY_X_GM_EXT_1 },
 	{ "CONDSTORE", IMAPC_CAPABILITY_CONDSTORE },
+	{ "NAMESPACE", IMAPC_CAPABILITY_NAMESPACE },
 
 	{ "IMAP4REV1", IMAPC_CAPABILITY_IMAP4REV1 },
 	{ NULL, 0 }
@@ -38,7 +39,7 @@ imapc_client_init(const struct imapc_client_settings *set)
 {
 	struct imapc_client *client;
 	struct ssl_iostream_settings ssl_set;
-	const char *source;
+	const char *error;
 	pool_t pool;
 
 	pool = pool_alloconly_create("imapc client", 1024);
@@ -57,22 +58,24 @@ imapc_client_init(const struct imapc_client_settings *set)
 	client->set.temp_path_prefix =
 		p_strdup(pool, set->temp_path_prefix);
 	client->set.rawlog_dir = p_strdup(pool, set->rawlog_dir);
+	client->set.max_idle_time = set->max_idle_time;
 
 	if (set->ssl_mode != IMAPC_CLIENT_SSL_MODE_NONE) {
 		client->set.ssl_mode = set->ssl_mode;
 		client->set.ssl_ca_dir = p_strdup(pool, set->ssl_ca_dir);
+		client->set.ssl_ca_file = p_strdup(pool, set->ssl_ca_file);
 		client->set.ssl_verify = set->ssl_verify;
 
 		memset(&ssl_set, 0, sizeof(ssl_set));
 		ssl_set.ca_dir = set->ssl_ca_dir;
+		ssl_set.ca_file = set->ssl_ca_file;
 		ssl_set.verify_remote_cert = set->ssl_verify;
 		ssl_set.crypto_device = set->ssl_crypto_device;
 
-		source = t_strdup_printf("%s:%u", set->host, set->port);
-		if (ssl_iostream_context_init_client(source, &ssl_set,
-						     &client->ssl_ctx) < 0) {
-			i_error("imapc(%s): Couldn't initialize SSL context",
-				source);
+		if (ssl_iostream_context_init_client(&ssl_set, &client->ssl_ctx,
+						     &error) < 0) {
+			i_error("imapc(%s:%u): Couldn't initialize SSL context: %s",
+				set->host, set->port, error);
 		}
 	}
 	client->untagged_callback = default_untagged_callback;
@@ -270,7 +273,7 @@ imapc_client_reconnect_cb(const struct imapc_command_reply *reply,
 		/* reopen the mailbox */
 		box->reopen_callback(box->reopen_context);
 	} else {
-		imapc_connection_abort_commands(box->conn, TRUE, FALSE);
+		imapc_connection_abort_commands(box->conn, NULL, FALSE);
 	}
 }
 
@@ -405,7 +408,7 @@ int imapc_client_create_temp_fd(struct imapc_client *client,
 	if (unlink(str_c(path)) < 0) {
 		/* shouldn't happen.. */
 		i_error("unlink(%s) failed: %m", str_c(path));
-		(void)close(fd);
+		i_close_fd(&fd);
 		return -1;
 	}
 	*path_r = str_c(path);

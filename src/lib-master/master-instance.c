@@ -1,6 +1,7 @@
-/* Copyright (c) 2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "abspath.h"
 #include "array.h"
 #include "istream.h"
 #include "ostream.h"
@@ -16,7 +17,10 @@ struct master_instance_list {
 	pool_t pool;
 	const char *path;
 
-	ARRAY_DEFINE(instances, struct master_instance);
+	ARRAY(struct master_instance) instances;
+
+	unsigned int locked:1;
+	unsigned int config_paths_changed:1;
 };
 
 struct master_instance_list_iter {
@@ -50,6 +54,22 @@ void master_instance_list_deinit(struct master_instance_list **_list)
 	pool_unref(&list->pool);
 }
 
+static void
+master_instance_update_config_path(struct master_instance_list *list,
+				   struct master_instance *inst)
+{
+	const char *path, *config_path;
+
+	/* update instance's config path if it has changed */
+	path = t_strconcat(inst->base_dir, "/"PACKAGE".conf", NULL);
+	if (t_readlink(path, &config_path) == 0) {
+		if (null_strcmp(inst->config_path, config_path) != 0) {
+			inst->config_path = p_strdup(list->pool, config_path);
+			list->config_paths_changed = TRUE;
+		}
+	}
+}
+
 static int
 master_instance_list_add_line(struct master_instance_list *list,
 			      const char *line)
@@ -58,9 +78,9 @@ master_instance_list_add_line(struct master_instance_list *list,
 	const char *const *args;
 	time_t last_used;
 
-	/* <last used> <name> <base dir> */
+	/* <last used> <name> <base dir> [<config path>] */
 	args = t_strsplit_tabescaped(line);
-	if (str_array_length(args) != 3)
+	if (str_array_length(args) < 3)
 		return -1;
 	if (str_to_time(args[0], &last_used) < 0)
 		return -1;
@@ -69,6 +89,8 @@ master_instance_list_add_line(struct master_instance_list *list,
 	inst->last_used = last_used;
 	inst->name = p_strdup(list->pool, args[1]);
 	inst->base_dir = p_strdup(list->pool, args[2]);
+	inst->config_path = p_strdup_empty(list->pool, args[3]);
+	master_instance_update_config_path(list, inst);
 	return 0;
 }
 
@@ -88,7 +110,7 @@ static int master_instance_list_refresh(struct master_instance_list *list)
 		i_error("open(%s) failed: %m", list->path);
 		return -1;
 	}
-	input = i_stream_create_fd(fd, PATH_MAX, TRUE);
+	input = i_stream_create_fd(fd, (size_t)-1, TRUE);
 	while ((line = i_stream_read_next_line(input)) != NULL) T_BEGIN {
 		if (master_instance_list_add_line(list, line) < 0)
 			i_error("Invalid line in %s: %s", list->path, line);
@@ -108,32 +130,36 @@ master_instance_list_write(struct master_instance_list *list,
 	struct ostream *output;
 	const struct master_instance *inst;
 	string_t *str = t_str_new(128);
+	int ret = 0;
 
 	output = o_stream_create_fd(fd, 0, FALSE);
 	o_stream_cork(output);
 	array_foreach(&list->instances, inst) {
 		str_truncate(str, 0);
 		str_printfa(str, "%ld\t", (long)inst->last_used);
-		str_tabescape_write(str, inst->name);
+		str_append_tabescaped(str, inst->name);
 		str_append_c(str, '\t');
-		str_tabescape_write(str, inst->base_dir);
+		str_append_tabescaped(str, inst->base_dir);
+		str_append_c(str, '\t');
+		if (inst->config_path != NULL)
+			str_append_tabescaped(str, inst->config_path);
 		str_append_c(str, '\n');
-		(void)o_stream_send(output, str_data(str), str_len(str));
+		o_stream_nsend(output, str_data(str), str_len(str));
 	}
-	o_stream_uncork(output);
-	(void)o_stream_flush(output);
-	if (output->last_failed_errno != 0) {
-		errno = output->last_failed_errno;
+	if (o_stream_nfinish(output) < 0) {
 		i_error("write(%s) failed: %m", path);
-		return -1;
+		ret = -1;
 	}
-	return 0;
+	o_stream_destroy(&output);
+	return ret;
 }
 
 static int master_instance_write_init(struct master_instance_list *list,
 				      struct dotlock **dotlock_r)
 {
 	int fd;
+
+	i_assert(!list->locked);
 
 	*dotlock_r = NULL;
 
@@ -144,9 +170,10 @@ static int master_instance_write_init(struct master_instance_list *list,
 		return -1;
 	}
 	if (master_instance_list_refresh(list) < 0) {
-		(void)file_dotlock_delete(dotlock_r);
+		file_dotlock_delete(dotlock_r);
 		return -1;
 	}
+	list->locked = TRUE;
 	return fd;
 }
 
@@ -156,18 +183,23 @@ static int master_instance_write_finish(struct master_instance_list *list,
 	const char *lock_path = file_dotlock_get_lock_path(*dotlock);
 	int ret;
 
+	i_assert(list->locked);
+
 	T_BEGIN {
 		ret = master_instance_list_write(list, fd, lock_path);
 	} T_END;
+
+	list->locked = FALSE;
 	if (ret < 0) {
-		(void)file_dotlock_delete(dotlock);
+		file_dotlock_delete(dotlock);
 		return -1;
 	}
 	if (fdatasync(fd) < 0) {
 		i_error("fdatasync(%s) failed: %m", lock_path);
-		(void)file_dotlock_delete(dotlock);
+		file_dotlock_delete(dotlock);
 		return -1;
 	}
+	list->config_paths_changed = FALSE;
 	return file_dotlock_replace(dotlock, 0);
 }
 
@@ -201,6 +233,7 @@ int master_instance_list_update(struct master_instance_list *list,
 		inst->base_dir = p_strdup(list->pool, base_dir);
 	}
 	inst->last_used = time(NULL);
+	master_instance_update_config_path(list, inst);
 
 	return master_instance_write_finish(list, fd, &dotlock);
 }
@@ -222,7 +255,8 @@ int master_instance_list_set_name(struct master_instance_list *list,
 	if (orig_inst != NULL &&
 	    strcmp(orig_inst->base_dir, base_dir) != 0) {
 		/* name already used */
-		(void)file_dotlock_delete(&dotlock);
+		file_dotlock_delete(&dotlock);
+		list->locked = FALSE;
 		return 0;
 	}
 
@@ -257,10 +291,29 @@ int master_instance_list_remove(struct master_instance_list *list,
 	}
 
 	if (i == count) {
-		(void)file_dotlock_delete(&dotlock);
+		file_dotlock_delete(&dotlock);
+		list->locked = FALSE;
 		return 0;
 	}
 	return master_instance_write_finish(list, fd, &dotlock) < 0 ? -1 : 1;
+}
+
+static int
+master_instance_list_refresh_and_update(struct master_instance_list *list)
+{
+	struct dotlock *dotlock;
+	int fd;
+
+	if (master_instance_list_refresh(list) < 0)
+		return -1;
+	if (list->config_paths_changed && !list->locked) {
+		/* write new config paths */
+		if ((fd = master_instance_write_init(list, &dotlock)) == -1)
+			return -1;
+		if (master_instance_write_finish(list, fd, &dotlock) < 0)
+			return -1;
+	}
+	return 0;
 }
 
 const struct master_instance *
@@ -272,7 +325,7 @@ master_instance_list_find_by_name(struct master_instance_list *list,
 	i_assert(*name != '\0');
 
 	if (array_count(&list->instances) == 0)
-		(void)master_instance_list_refresh(list);
+		(void)master_instance_list_refresh_and_update(list);
 
 	array_foreach(&list->instances, inst) {
 		if (strcmp(inst->name, name) == 0)
@@ -288,7 +341,7 @@ master_instance_list_iterate_init(struct master_instance_list *list)
 
 	iter = i_new(struct master_instance_list_iter, 1);
 	iter->list = list;
-	(void)master_instance_list_refresh(list);
+	(void)master_instance_list_refresh_and_update(list);
 	return iter;
 }
 

@@ -1,15 +1,15 @@
-/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2013 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "ioloop.h"
 #include "istream.h"
 #include "ostream.h"
 #include "llist.h"
+#include "str.h"
 #include "str-sanitize.h"
 #include "time-util.h"
 #include "master-service.h"
 #include "ipc-server.h"
-#include "dns-lookup.h"
 #include "mail-user-hash.h"
 #include "client-common.h"
 #include "ssl-proxy.h"
@@ -19,7 +19,6 @@
 #define MAX_PROXY_INPUT_SIZE 4096
 #define OUTBUF_THRESHOLD 1024
 #define LOGIN_PROXY_DIE_IDLE_SECS 2
-#define LOGIN_PROXY_DNS_WARN_MSECS 500
 #define LOGIN_PROXY_IPC_PATH "ipc-proxy"
 #define LOGIN_PROXY_IPC_NAME "proxy"
 #define KILLED_BY_ADMIN_REASON "Killed by admin"
@@ -49,6 +48,7 @@ struct login_proxy {
 
 	proxy_callback_t *callback;
 
+	unsigned int connected:1;
 	unsigned int destroying:1;
 	unsigned int disconnecting:1;
 };
@@ -61,7 +61,8 @@ static struct ipc_server *login_proxy_ipc_server;
 static void login_proxy_ipc_cmd(struct ipc_cmd *cmd, const char *line);
 
 static void
-login_proxy_free_reason(struct login_proxy **_proxy, const char *reason);
+login_proxy_free_reason(struct login_proxy **_proxy, const char *reason)
+	ATTR_NULL(2);
 
 static void login_proxy_free_errno(struct login_proxy **proxy,
 				   int err, const char *who)
@@ -176,6 +177,7 @@ static void proxy_plain_connected(struct login_proxy *proxy)
 				   FALSE);
 	proxy->server_output =
 		o_stream_create_fd(proxy->server_fd, (size_t)-1, FALSE);
+	o_stream_set_no_error_handling(proxy->server_output, TRUE);
 
 	proxy->server_io =
 		io_add(proxy->server_fd, IO_READ, proxy_prelogin_input, proxy);
@@ -194,26 +196,47 @@ static void proxy_fail_connect(struct login_proxy *proxy)
 	proxy->state_rec = NULL;
 }
 
+static void
+proxy_log_connect_error(struct login_proxy *proxy)
+{
+	string_t *str = t_str_new(128);
+	struct ip_addr local_ip;
+	unsigned int local_port;
+
+	str_printfa(str, "proxy(%s): ", proxy->client->virtual_user);
+	if (!proxy->connected) {
+		str_printfa(str, "connect(%s, %u) failed: %m",
+			    proxy->host, proxy->port);
+	} else {
+		str_printfa(str, "Login for %s:%u timed out",
+			    proxy->host, proxy->port);
+	}
+	str_printfa(str, " (after %u secs",
+		    (unsigned int)(ioloop_time - proxy->created.tv_sec));
+
+	if (proxy->server_fd != -1 &&
+	    net_getsockname(proxy->server_fd, &local_ip, &local_port) == 0) {
+		str_printfa(str, ", local=%s:%u",
+			    net_ip2addr(&local_ip), local_port);
+	}
+
+	str_append_c(str, ')');
+	i_error("%s", str_c(str));
+}
+
 static void proxy_wait_connect(struct login_proxy *proxy)
 {
-	int err;
-
-	err = net_geterror(proxy->server_fd);
-	if (err != 0) {
-		i_error("proxy(%s): connect(%s, %u) failed: %s (after %u secs)",
-			proxy->client->virtual_user,
-			proxy->host, proxy->port, strerror(err),
-			(unsigned int)(ioloop_time - proxy->created.tv_sec));
+	errno = net_geterror(proxy->server_fd);
+	if (errno != 0) {
+		proxy_log_connect_error(proxy);
 		proxy_fail_connect(proxy);
                 login_proxy_free(&proxy);
 		return;
 	}
+	proxy->connected = TRUE;
 	proxy->state_rec->last_success = ioloop_timeval;
 	proxy->state_rec->num_waiting_connections--;
 	proxy->state_rec = NULL;
-
-	if (proxy->to != NULL)
-		timeout_remove(&proxy->to);
 
 	if ((proxy->ssl_flags & PROXY_SSL_FLAG_YES) != 0 &&
 	    (proxy->ssl_flags & PROXY_SSL_FLAG_STARTTLS) == 0) {
@@ -229,8 +252,8 @@ static void proxy_wait_connect(struct login_proxy *proxy)
 
 static void proxy_connect_timeout(struct login_proxy *proxy)
 {
-	i_error("proxy(%s): connect(%s, %u) timed out",
-		proxy->client->virtual_user, proxy->host, proxy->port);
+	errno = ETIMEDOUT;
+	proxy_log_connect_error(proxy);
 	proxy_fail_connect(proxy);
 	login_proxy_free(&proxy);
 }
@@ -252,8 +275,7 @@ static int login_proxy_connect(struct login_proxy *proxy)
 
 	proxy->server_fd = net_connect_ip(&proxy->ip, proxy->port, NULL);
 	if (proxy->server_fd == -1) {
-		i_error("proxy(%s): connect(%s, %u) failed: %m",
-			proxy->client->virtual_user, proxy->host, proxy->port);
+		proxy_log_connect_error(proxy);
 		login_proxy_free(&proxy);
 		return -1;
 	}
@@ -269,37 +291,22 @@ static int login_proxy_connect(struct login_proxy *proxy)
 	return 0;
 }
 
-static void login_proxy_dns_done(const struct dns_lookup_result *result,
-				 struct login_proxy *proxy)
-{
-	if (result->ret != 0) {
-		i_error("proxy(%s): DNS lookup of %s failed: %s",
-			proxy->client->virtual_user, proxy->host,
-			result->error);
-		login_proxy_free(&proxy);
-	} else {
-		if (result->msecs > LOGIN_PROXY_DNS_WARN_MSECS) {
-			i_warning("proxy(%s): DNS lookup for %s took %u.%03u s",
-				  proxy->client->virtual_user, proxy->host,
-				  result->msecs/1000, result->msecs % 1000);
-		}
-
-		proxy->ip = result->ips[0];
-		(void)login_proxy_connect(proxy);
-	}
-}
-
 int login_proxy_new(struct client *client,
 		    const struct login_proxy_settings *set,
 		    proxy_callback_t *callback)
 {
 	struct login_proxy *proxy;
-	struct dns_lookup_settings dns_lookup_set;
 
 	i_assert(client->login_proxy == NULL);
 
 	if (set->host == NULL || *set->host == '\0') {
 		i_error("proxy(%s): host not given", client->virtual_user);
+		return -1;
+	}
+
+	if (client->proxy_ttl <= 1) {
+		i_error("proxy(%s): TTL reached zero - "
+			"proxies appear to be looping?", client->virtual_user);
 		return -1;
 	}
 
@@ -316,15 +323,11 @@ int login_proxy_new(struct client *client,
 	proxy->ssl_flags = set->ssl_flags;
 	client_ref(client);
 
-	memset(&dns_lookup_set, 0, sizeof(dns_lookup_set));
-	dns_lookup_set.dns_client_socket_path = set->dns_client_socket_path;
-	dns_lookup_set.timeout_msecs = set->connect_timeout_msecs;
-
 	if (set->ip.family == 0 &&
 	    net_addr2ip(set->host, &proxy->ip) < 0) {
-		if (dns_lookup(set->host, &dns_lookup_set,
-			       login_proxy_dns_done, proxy) < 0)
-			return -1;
+		i_error("proxy(%s): BUG: host %s is not an IP "
+			"(auth should have changed it)",
+			client->virtual_user, set->host);
 	} else {
 		if (login_proxy_connect(proxy) < 0)
 			return -1;
@@ -337,7 +340,7 @@ int login_proxy_new(struct client *client,
 	return 0;
 }
 
-static void
+static void ATTR_NULL(2)
 login_proxy_free_reason(struct login_proxy **_proxy, const char *reason)
 {
 	struct login_proxy *proxy = *_proxy;
@@ -466,6 +469,9 @@ void login_proxy_detach(struct login_proxy *proxy)
 	i_assert(proxy->client_fd == -1);
 	i_assert(proxy->server_output != NULL);
 
+	if (proxy->to != NULL)
+		timeout_remove(&proxy->to);
+
 	proxy->client_fd = i_stream_get_fd(client->input);
 	proxy->client_output = client->output;
 
@@ -476,7 +482,7 @@ void login_proxy_detach(struct login_proxy *proxy)
 	/* send all pending client input to proxy and get rid of the stream */
 	data = i_stream_get_data(client->input, &size);
 	if (size != 0)
-		(void)o_stream_send(proxy->server_output, data, size);
+		o_stream_nsend(proxy->server_output, data, size);
 
 	/* from now on, just do dummy proxying */
 	io_remove(&proxy->server_io);
@@ -549,6 +555,7 @@ int login_proxy_starttls(struct login_proxy *proxy)
 
 	fd = ssl_proxy_client_alloc(proxy->server_fd, &proxy->client->ip,
 				    proxy->client->pool, proxy->client->set,
+				    proxy->client->ssl_set,
 				    login_proxy_ssl_handshaked, proxy,
 				    &proxy->ssl_server_proxy);
 	if (fd < 0) {

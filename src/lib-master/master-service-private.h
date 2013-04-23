@@ -37,6 +37,7 @@ struct master_service {
 	unsigned int service_count_left;
 	unsigned int total_available_count;
 	unsigned int process_limit;
+	unsigned int process_min_avail;
 	unsigned int idle_kill_secs;
 
 	struct master_status master_status;
@@ -59,6 +60,9 @@ struct master_service {
 	const struct master_service_settings *set;
 	struct setting_parser_context *set_parser;
 
+	struct ssl_iostream_context *ssl_ctx;
+	time_t ssl_params_last_refresh;
+
 	unsigned int killed:1;
 	unsigned int stopping:1;
 	unsigned int keep_environment:1;
@@ -67,6 +71,8 @@ struct master_service {
 	unsigned int die_with_master:1;
 	unsigned int call_avail_overflow:1;
 	unsigned int config_path_is_default:1;
+	unsigned int want_ssl_settings:1;
+	unsigned int ssl_ctx_initialized:1;
 };
 
 void master_service_io_listeners_add(struct master_service *service);
@@ -74,5 +80,6 @@ void master_status_update(struct master_service *service);
 void master_service_close_config_fd(struct master_service *service);
 
 void master_service_io_listeners_remove(struct master_service *service);
+void master_service_ssl_io_listeners_remove(struct master_service *service);
 
 #endif

@@ -40,7 +40,7 @@ DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -76,8 +76,8 @@ am__uninstall_files_from_dir = { \
   }
 am__installdirs = "$(DESTDIR)$(imap_moduledir)"
 LTLIBRARIES = $(imap_module_LTLIBRARIES)
-@DOVECOT_PLUGIN_DEPS_TRUE@lib30_imap_zlib_plugin_la_DEPENDENCIES =  \
-@DOVECOT_PLUGIN_DEPS_TRUE@	../zlib/lib20_zlib_plugin.la
+lib30_imap_zlib_plugin_la_DEPENDENCIES =  \
+	../../lib-compression/libcompression.la
 am_lib30_imap_zlib_plugin_la_OBJECTS = imap-zlib-plugin.lo
 lib30_imap_zlib_plugin_la_OBJECTS =  \
 	$(am_lib30_imap_zlib_plugin_la_OBJECTS)
@@ -116,13 +116,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -154,6 +155,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -201,6 +203,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -281,20 +284,20 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-compression \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-storage \
-	-I$(top_srcdir)/src/imap \
-	-I$(top_srcdir)/src/plugins/zlib
+	-I$(top_srcdir)/src/imap
 
 imap_moduledir = $(moduledir)
 lib30_imap_zlib_plugin_la_LDFLAGS = -module -avoid-version
 imap_module_LTLIBRARIES = \
 	lib30_imap_zlib_plugin.la
 
-@DOVECOT_PLUGIN_DEPS_TRUE@lib30_imap_zlib_plugin_la_LIBADD = \
-@DOVECOT_PLUGIN_DEPS_TRUE@	../zlib/lib20_zlib_plugin.la
+lib30_imap_zlib_plugin_la_LIBADD = \
+	../../lib-compression/libcompression.la
 
 lib30_imap_zlib_plugin_la_SOURCES = \
 	imap-zlib-plugin.c

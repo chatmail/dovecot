@@ -20,8 +20,8 @@ liblib_la_SOURCES = \
 	bsearch-insert-pos.c \
 	buffer.c \
 	child-wait.c \
-	close-keep-errno.c \
 	compat.c \
+	connection.c \
 	crc32.c \
 	data-stack.c \
 	eacces-error.c \
@@ -44,24 +44,30 @@ liblib_la_SOURCES = \
 	hash2.c \
 	hex-binary.c \
 	hex-dec.c \
-	hmac-md5.c \
-	hmac-sha1.c \
+	hmac.c \
+	hmac-cram-md5.c \
 	home-expand.c \
 	hostpid.c \
 	imem.c \
 	ipwd.c \
 	iostream.c \
 	iostream-rawlog.c \
+	iostream-temp.c \
+	iso8601-date.c \
 	istream.c \
+	istream-base64-decoder.c \
 	istream-base64-encoder.c \
+	istream-chain.c \
 	istream-concat.c \
 	istream-crlf.c \
 	istream-data.c \
 	istream-file.c \
+	istream-jsonstr.c \
 	istream-limit.c \
 	istream-mmap.c \
 	istream-rawlog.c \
 	istream-seekable.c \
+	istream-sized.c \
 	istream-tee.c \
 	ioloop.c \
 	ioloop-iolist.c \
@@ -74,6 +80,7 @@ liblib_la_SOURCES = \
 	ioloop-select.c \
 	ioloop-epoll.c \
 	ioloop-kqueue.c \
+	json-parser.c \
 	lib.c \
 	lib-signals.c \
 	md4.c \
@@ -88,11 +95,13 @@ liblib_la_SOURCES = \
 	mmap-util.c \
 	module-dir.c \
 	mountpoint.c \
-	network.c \
+	net.c \
 	nfs-workarounds.c \
+	numpack.c \
 	ostream.c \
-	ostream-file.c \
 	ostream-buffer.c \
+	ostream-file.c \
+	ostream-hash.c \
 	ostream-rawlog.c \
 	primes.c \
 	printf-format-fix.c \
@@ -120,6 +129,7 @@ liblib_la_SOURCES = \
 	unlink-directory.c \
 	unlink-old-files.c \
 	unichar.c \
+	uri-util.c \
 	utc-offset.c \
 	utc-mktime.c \
 	var-expand.c \
@@ -137,8 +147,8 @@ headers = \
 	bsearch-insert-pos.h \
 	buffer.h \
 	child-wait.h \
-	close-keep-errno.h \
 	compat.h \
+	connection.h \
 	crc32.h \
 	data-stack.h \
 	eacces-error.h \
@@ -157,13 +167,14 @@ headers = \
 	fsync-mode.h \
 	guid.h \
 	hash.h \
+	hash-decl.h \
 	hash-format.h \
 	hash-method.h \
 	hash2.h \
 	hex-binary.h \
 	hex-dec.h \
-	hmac-md5.h \
-	hmac-sha1.h \
+	hmac.h \
+	hmac-cram-md5.h \
 	home-expand.h \
 	hostpid.h \
 	imem.h \
@@ -171,18 +182,24 @@ headers = \
 	iostream-private.h \
 	iostream-rawlog.h \
 	iostream-rawlog-private.h \
+	iostream-temp.h \
+	iso8601-date.h \
 	istream.h \
-	istream-base64-encoder.h \
+	istream-base64.h \
+	istream-chain.h \
 	istream-concat.h \
 	istream-crlf.h \
+	istream-jsonstr.h \
 	istream-private.h \
 	istream-rawlog.h \
 	istream-seekable.h \
+	istream-sized.h \
 	istream-tee.h \
 	ioloop.h \
 	ioloop-iolist.h \
 	ioloop-private.h \
 	ioloop-notify-fd.h \
+	json-parser.h \
 	lib.h \
 	lib-signals.h \
 	llist.h \
@@ -195,9 +212,11 @@ headers = \
 	module-context.h \
 	module-dir.h \
 	mountpoint.h \
-	network.h \
+	net.h \
 	nfs-workarounds.h \
+	numpack.h \
 	ostream.h \
+	ostream-hash.h \
 	ostream-private.h \
 	ostream-rawlog.h \
 	primes.h \
@@ -226,6 +245,7 @@ headers = \
 	unlink-directory.h \
 	unlink-old-files.h \
 	unichar.h \
+	uri-util.h \
 	utc-offset.h \
 	utc-mktime.h \
 	var-expand.h \
@@ -252,23 +272,29 @@ test_lib_SOURCES = \
 	test-crc32.c \
 	test-hash-format.c \
 	test-hex-binary.c \
+	test-iso8601-date.c \
+	test-istream-base64-decoder.c \
 	test-istream-base64-encoder.c \
 	test-istream-concat.c \
 	test-istream-crlf.c \
 	test-istream-seekable.c \
 	test-istream-tee.c \
+	test-json-parser.c \
 	test-llist.c \
 	test-mempool-alloconly.c \
 	test-network.c \
+	test-numpack.c \
 	test-ostream-file.c \
 	test-primes.c \
 	test-priorityq.c \
 	test-seq-range-array.c \
+	test-str.c \
 	test-strescape.c \
 	test-strfuncs.c \
 	test-str-find.c \
 	test-str-sanitize.c \
 	test-time-util.c \
+	test-unichar.c \
 	test-utc-mktime.c \
 	test-var-expand.c
 

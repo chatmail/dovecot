@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -37,7 +37,7 @@ static void fts_build_parse_content_type(struct fts_mail_build_context *ctx,
 	string_t *content_type;
 
 	rfc822_parser_init(&parser, hdr->full_value, hdr->full_value_len, NULL);
-	(void)rfc822_skip_lwsp(&parser);
+	rfc822_skip_lwsp(&parser);
 
 	T_BEGIN {
 		content_type = t_str_new(64);
@@ -128,7 +128,7 @@ static void fts_build_mail_header(struct fts_mail_build_context *ctx,
 		addr = message_address_parse(pool_datastack_create(),
 					     hdr->full_value,
 					     hdr->full_value_len,
-					     -1U, TRUE);
+					     UINT_MAX, TRUE);
 		str = t_str_new(hdr->full_value_len);
 		message_address_write(str, addr);
 
@@ -170,6 +170,7 @@ fts_build_body_begin(struct fts_mail_build_context *ctx, bool *binary_body_r)
 		   strncmp(content_type, "message/", 8) == 0) {
 		/* text body parts */
 		key.type = FTS_BACKEND_BUILD_KEY_BODY_PART;
+		ctx->body_parser = fts_parser_text_init();
 	} else {
 		/* possibly binary */
 		if ((ctx->update_ctx->backend->flags &
@@ -178,8 +179,6 @@ fts_build_body_begin(struct fts_mail_build_context *ctx, bool *binary_body_r)
 		*binary_body_r = TRUE;
 		key.type = FTS_BACKEND_BUILD_KEY_BODY_PART_BINARY;
 	}
-	if (ctx->body_parser == NULL)
-		ctx->body_parser = fts_parser_text_init();
 	key.body_content_type = content_type;
 	key.body_content_disposition = ctx->content_disposition;
 	return fts_backend_update_set_build_key(ctx->update_ctx, &key);
@@ -267,7 +266,6 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 		    struct mail *mail)
 {
 	struct fts_mail_build_context ctx;
-	enum message_decoder_flags decoder_flags = 0;
 	struct istream *input;
 	struct message_parser_ctx *parser;
 	struct message_decoder_context *decoder;
@@ -289,9 +287,7 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 				     MESSAGE_HEADER_PARSER_FLAG_CLEAN_ONELINE,
 				     0);
 
-	if ((update_ctx->backend->flags & FTS_BACKEND_FLAG_BUILD_DTCASE) != 0)
-		decoder_flags |= MESSAGE_DECODER_FLAG_DTCASE;
-	decoder = message_decoder_init(decoder_flags);
+	decoder = message_decoder_init(update_ctx->normalizer, 0);
 	for (;;) {
 		ret = message_parser_parse_next_block(parser, &raw_block);
 		i_assert(ret != 0);

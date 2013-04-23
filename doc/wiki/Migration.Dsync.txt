@@ -22,6 +22,9 @@ imapc_master_user = master
 imapc_password = secret
 imapc_features = rfc822.size
 
+# If the old IMAP server uses INBOX. namespace prefix, set:
+#imapc_list_prefix = INBOX
+
 # for SSL:
 #imapc_port = 993
 #imapc_ssl = imaps
@@ -53,7 +56,7 @@ namespace {
   hidden = yes
 }
 protocol doveadm {
-  mail_plugins = $mail_plugins pop3-migration
+  mail_plugins = $mail_plugins pop3_migration
 }
 plugin {
   pop3_migration_mailbox = POP3-MIGRATION-NS/INBOX
@@ -72,11 +75,18 @@ Running
 doveadm backup -R -u user@domain imapc:
 ---%<-------------------------------------------------------------------------
 
+For per-user user/passwords use:
+
+---%<-------------------------------------------------------------------------
+doveadm -o imapc_user=foo -o pop3c_user=foo -o imapc_password=bar -o
+pop3c_password=bar backup -R -u user@domain imapc:
+---%<-------------------------------------------------------------------------
+
 The source IMAP/POP3 mailboxes shouldn't be modified while dsync is running.
 Also "dsync backup" means that if the destination has any changes that don't
 exist in source IMAP server, the changes are deleted.
 
-Once the users are migrated, remember to remove the pop3-migration plugin from
+Once the users are migrated, remember to remove the pop3_migration plugin from
 settings.
 
 Problems
@@ -89,4 +99,4 @@ Problems
  * If source IMAP and POP3 servers return messages somehow differently,
    pop3-migration plugin might not be able to match the messages
 
-(This file was created from the wiki on 2012-04-23 04:42)
+(This file was created from the wiki on 2013-04-15 04:42)

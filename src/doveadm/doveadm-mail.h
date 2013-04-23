@@ -5,9 +5,9 @@
 #include "doveadm.h"
 #include "doveadm-util.h"
 #include "module-context.h"
+#include "mail-error.h"
 #include "mail-storage-service.h"
 
-enum mail_error;
 struct mailbox;
 struct mail_storage;
 struct mail_user;
@@ -43,11 +43,14 @@ struct doveadm_mail_cmd_context {
 	const char *const *args;
 	/* args including -options */
 	const char *const *full_args;
+	/* connection via doveadm-server */
+	struct client_connection *conn;
 
 	const char *getopt_args;
 	const struct doveadm_settings *set;
 	enum mail_storage_service_flags service_flags;
 	struct mail_storage_service_ctx *storage_service;
+	struct mail_storage_service_input storage_service_input;
 	/* search args aren't set for all mail commands */
 	struct mail_search_args *search_args;
 
@@ -56,11 +59,13 @@ struct doveadm_mail_cmd_context {
 	struct mail_user *cur_mail_user;
 	struct doveadm_mail_cmd_vfuncs v;
 
-	ARRAY_DEFINE(module_contexts, union doveadm_mail_cmd_module_context *);
+	ARRAY(union doveadm_mail_cmd_module_context *) module_contexts;
 
 	/* if non-zero, exit with this code */
 	int exit_code;
 
+	/* This command is being called by a remote doveadm client. */
+	unsigned int proxying:1;
 	/* We're handling only a single user */
 	unsigned int iterate_single_user:1;
 	/* We're going through all users (not set for wildcard usernames) */
@@ -92,6 +97,9 @@ bool doveadm_mail_has_subcommands(const char *cmd_name);
 void doveadm_mail_init(void);
 void doveadm_mail_deinit(void);
 
+const struct doveadm_mail_cmd *
+doveadm_mail_cmd_find_from_argv(const char *cmd_name, int *argc,
+				const char *const **argv);
 struct doveadm_mail_cmd_context *
 doveadm_mail_cmd_init(const struct doveadm_mail_cmd *cmd,
 		      const struct doveadm_settings *set);
@@ -127,19 +135,21 @@ void doveadm_mail_failed_storage(struct doveadm_mail_cmd_context *ctx,
 void doveadm_mail_failed_mailbox(struct doveadm_mail_cmd_context *ctx,
 				 struct mailbox *box);
 
-struct doveadm_mail_cmd cmd_expunge;
-struct doveadm_mail_cmd cmd_search;
-struct doveadm_mail_cmd cmd_fetch;
-struct doveadm_mail_cmd cmd_import;
-struct doveadm_mail_cmd cmd_index;
-struct doveadm_mail_cmd cmd_altmove;
-struct doveadm_mail_cmd cmd_move;
-struct doveadm_mail_cmd cmd_mailbox_list;
-struct doveadm_mail_cmd cmd_mailbox_create;
-struct doveadm_mail_cmd cmd_mailbox_delete;
-struct doveadm_mail_cmd cmd_mailbox_rename;
-struct doveadm_mail_cmd cmd_mailbox_subscribe;
-struct doveadm_mail_cmd cmd_mailbox_unsubscribe;
-struct doveadm_mail_cmd cmd_mailbox_status;
+extern struct doveadm_mail_cmd cmd_expunge;
+extern struct doveadm_mail_cmd cmd_search;
+extern struct doveadm_mail_cmd cmd_fetch;
+extern struct doveadm_mail_cmd cmd_import;
+extern struct doveadm_mail_cmd cmd_index;
+extern struct doveadm_mail_cmd cmd_altmove;
+extern struct doveadm_mail_cmd cmd_copy;
+extern struct doveadm_mail_cmd cmd_move;
+extern struct doveadm_mail_cmd cmd_mailbox_list;
+extern struct doveadm_mail_cmd cmd_mailbox_create;
+extern struct doveadm_mail_cmd cmd_mailbox_delete;
+extern struct doveadm_mail_cmd cmd_mailbox_rename;
+extern struct doveadm_mail_cmd cmd_mailbox_subscribe;
+extern struct doveadm_mail_cmd cmd_mailbox_unsubscribe;
+extern struct doveadm_mail_cmd cmd_mailbox_status;
+extern struct doveadm_mail_cmd cmd_batch;
 
 #endif

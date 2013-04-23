@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2013 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "passdb.h"
@@ -85,6 +85,7 @@ passdb_imap_verify_plain(struct auth_request *auth_request,
 		t_strconcat(auth_request->set->base_dir, "/",
 			    DNS_CLIENT_SOCKET_NAME, NULL);
 	set.password = password;
+	set.max_idle_time = IMAPC_DEFAULT_MAX_IDLE_TIME;
 
 	if (module->set_have_vars) {
 		str = t_str_new(128);

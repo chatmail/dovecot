@@ -124,8 +124,8 @@ uploading them to Dovecot via IMAP.
 
 There are several different tools for this, for example UW-IMAP
 [http://www.washington.edu/imap/]'s mailutil, imapsync
-[http://freshmeat.net/projects/imapsync] and YippieMove
-[http://www.yippiemove.com].
+[http://freshmeat.net/projects/imapsync], YippieMove
+[http://www.yippiemove.com] and Larch [https://github.com/rgrove/larch].
 
 imapsync
 --------
@@ -145,4 +145,16 @@ passwords. Even if you do not, imapsync also supports logging in as an admin
 user that has the ability to copy message for sub users, and a variety of other
 authentication options.
 
-(This file was created from the wiki on 2012-04-23 04:42)
+Larch
+-----
+
+Here's an example of how to run Larch:
+
+---%<-------------------------------------------------------------------------
+larch --from imap://mail1.example.com --to imap://mail2.example.com
+---%<-------------------------------------------------------------------------
+
+When run it will ask you for usernames and passwords that will be used for
+logging into servers, but you can also specify them on the command line.
+
+(This file was created from the wiki on 2013-04-15 04:42)

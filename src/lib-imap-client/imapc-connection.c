@@ -1,8 +1,8 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
-#include "network.h"
+#include "net.h"
 #include "istream.h"
 #include "ostream.h"
 #include "base64.h"
@@ -24,8 +24,6 @@
 #define IMAPC_CONNECT_TIMEOUT_MSECS (1000*30)
 #define IMAPC_COMMAND_TIMEOUT_MSECS (1000*60*5)
 #define IMAPC_MAX_INLINE_LITERAL_SIZE (1024*32)
-/* IMAP protocol requires activity at least every 30 minutes */
-#define IMAPC_MAX_IDLE_MSECS (1000*60*29)
 
 enum imapc_input_state {
 	IMAPC_INPUT_STATE_NONE = 0,
@@ -53,7 +51,7 @@ struct imapc_command {
 	   executed */
 	struct imapc_client_mailbox *box;
 
-	ARRAY_DEFINE(streams, struct imapc_command_stream);
+	ARRAY(struct imapc_command_stream) streams;
 
 	imapc_command_callback_t *callback;
 	void *context;
@@ -86,6 +84,7 @@ struct imapc_connection {
 	struct imap_parser *parser;
 	struct timeout *to;
 	struct timeout *to_output;
+	struct dns_lookup *dns_lookup;
 
 	struct ssl_iostream *ssl_iostream;
 
@@ -112,12 +111,11 @@ struct imapc_connection {
 	struct ip_addr *ips;
 
 	struct imapc_connection_literal literal;
-	ARRAY_DEFINE(literal_files, struct imapc_arg_file);
+	ARRAY(struct imapc_arg_file) literal_files;
 
 	unsigned int idling:1;
 	unsigned int idle_stopping:1;
 	unsigned int idle_plus_waiting:1;
-	unsigned int handshake_failed:1;
 };
 
 static int imapc_connection_output(struct imapc_connection *conn);
@@ -212,6 +210,7 @@ static const char *imapc_command_get_readable(struct imapc_command *cmd)
 static void
 imapc_connection_abort_commands_array(ARRAY_TYPE(imapc_command) *cmd_array,
 				      ARRAY_TYPE(imapc_command) *dest_array,
+				      struct imapc_client_mailbox *only_box,
 				      bool keep_retriable)
 {
 	struct imapc_command *const *cmdp, *cmd;
@@ -221,8 +220,10 @@ imapc_connection_abort_commands_array(ARRAY_TYPE(imapc_command) *cmd_array,
 		cmdp = array_idx(cmd_array, i);
 		cmd = *cmdp;
 
-		if (keep_retriable &&
-		    (cmd->flags & IMAPC_COMMAND_FLAG_RETRIABLE) != 0) {
+		if (cmd->box != only_box && only_box != NULL)
+			i++;
+		else if (keep_retriable &&
+			 (cmd->flags & IMAPC_COMMAND_FLAG_RETRIABLE) != 0) {
 			cmd->send_pos = 0;
 			cmd->wait_for_literal = 0;
 			i++;
@@ -234,22 +235,20 @@ imapc_connection_abort_commands_array(ARRAY_TYPE(imapc_command) *cmd_array,
 }
 
 void imapc_connection_abort_commands(struct imapc_connection *conn,
-				     bool disconnected, bool keep_retriable)
+				     struct imapc_client_mailbox *only_box,
+				     bool keep_retriable)
 {
 	struct imapc_command *const *cmdp, *cmd;
 	ARRAY_TYPE(imapc_command) tmp_array;
 	struct imapc_command_reply reply;
 
 	t_array_init(&tmp_array, 8);
-	if (disconnected) {
-		imapc_connection_abort_commands_array(&conn->cmd_wait_list,
-						      &tmp_array,
-						      keep_retriable);
-	}
-	imapc_connection_abort_commands_array(&conn->cmd_send_queue,
-					      &tmp_array, keep_retriable);
+	imapc_connection_abort_commands_array(&conn->cmd_wait_list, &tmp_array,
+					      only_box, keep_retriable);
+	imapc_connection_abort_commands_array(&conn->cmd_send_queue, &tmp_array,
+					      only_box, keep_retriable);
 
-	if (array_count(&conn->cmd_wait_list) > 0 && disconnected) {
+	if (array_count(&conn->cmd_wait_list) > 0 && only_box == NULL) {
 		/* need to move all the waiting commands to send queue */
 		array_append_array(&conn->cmd_wait_list,
 				   &conn->cmd_send_queue);
@@ -352,6 +351,8 @@ void imapc_connection_disconnect(struct imapc_connection *conn)
 	if (conn->client->set.debug)
 		i_debug("imapc(%s): Disconnected", conn->name);
 
+	if (conn->dns_lookup != NULL)
+		dns_lookup_abort(&conn->dns_lookup);
 	imapc_connection_lfiles_free(conn);
 	imapc_connection_literal_reset(&conn->literal);
 	if (conn->to != NULL)
@@ -368,13 +369,13 @@ void imapc_connection_disconnect(struct imapc_connection *conn)
 	conn->fd = -1;
 
 	imapc_connection_set_state(conn, IMAPC_CONNECTION_STATE_DISCONNECTED);
-	imapc_connection_abort_commands(conn, TRUE, reconnecting);
+	imapc_connection_abort_commands(conn, NULL, reconnecting);
 }
 
 static void imapc_connection_set_disconnected(struct imapc_connection *conn)
 {
 	imapc_connection_set_state(conn, IMAPC_CONNECTION_STATE_DISCONNECTED);
-	imapc_connection_abort_commands(conn, TRUE, FALSE);
+	imapc_connection_abort_commands(conn, NULL, FALSE);
 }
 
 static void imapc_connection_reconnect(struct imapc_connection *conn)
@@ -494,7 +495,8 @@ imapc_connection_read_line_more(struct imapc_connection *conn,
 
 	ret = imap_parser_read_args(conn->parser, 0,
 				    IMAP_PARSE_FLAG_LITERAL_SIZE |
-				    IMAP_PARSE_FLAG_ATOM_ALLCHARS, imap_args_r);
+				    IMAP_PARSE_FLAG_ATOM_ALLCHARS |
+				    IMAP_PARSE_FLAG_SERVER_TEXT, imap_args_r);
 	if (ret == -2) {
 		/* need more data */
 		return 0;
@@ -814,6 +816,9 @@ static int imapc_connection_input_banner(struct imapc_connection *conn)
 
 	if ((ret = imapc_connection_read_line(conn, &imap_args)) <= 0)
 		return ret;
+	/* we already verified that the banner beigns with OK */
+	i_assert(imap_arg_atom_equals(imap_args, "OK"));
+	imap_args++;
 
 	if (imapc_connection_handle_imap_resp_text(conn, imap_args,
 						   &key, &value) < 0)
@@ -837,6 +842,8 @@ static int imapc_connection_input_banner(struct imapc_connection *conn)
 static int imapc_connection_input_untagged(struct imapc_connection *conn)
 {
 	const struct imap_arg *imap_args;
+	const unsigned char *data;
+	size_t size;
 	const char *name, *value;
 	struct imap_parser *parser;
 	struct imapc_untagged_reply reply;
@@ -844,13 +851,13 @@ static int imapc_connection_input_untagged(struct imapc_connection *conn)
 
 	if (conn->state == IMAPC_CONNECTION_STATE_CONNECTING) {
 		/* input banner */
-		name = imap_parser_read_word(conn->parser);
-		if (name == NULL)
+		data = i_stream_get_data(conn->input, &size);
+		if (size < 3 && memchr(data, '\n', size) == NULL)
 			return 0;
-
-		if (strcasecmp(name, "OK") != 0) {
+		if (i_memcasecmp(data, "OK ", 3) != 0) {
 			imapc_connection_input_error(conn,
-				"Banner doesn't begin with OK: %s", name);
+				"Banner doesn't begin with OK: %s",
+				t_strcut(t_strndup(data, size), '\n'));
 			return -1;
 		}
 		conn->input_callback = imapc_connection_input_banner;
@@ -1104,7 +1111,7 @@ static void imapc_connection_input(struct imapc_connection *conn)
 		if (conn->ssl_iostream == NULL) {
 			i_error("imapc(%s): Server disconnected unexpectedly",
 				conn->name);
-		} else if (!conn->handshake_failed) {
+		} else {
 			errstr = ssl_iostream_get_last_error(conn->ssl_iostream);
 			if (errstr == NULL) {
 				errstr = conn->input->stream_errno == 0 ? "EOF" :
@@ -1118,42 +1125,36 @@ static void imapc_connection_input(struct imapc_connection *conn)
 	imapc_connection_unref(&conn);
 }
 
-static int imapc_connection_ssl_handshaked(void *context)
+static int imapc_connection_ssl_handshaked(const char **error_r, void *context)
 {
 	struct imapc_connection *conn = context;
+	const char *error;
 
-	if (!conn->client->set.ssl_verify) {
-		/* skip certificate checks */
-		return 0;
-	} else if (!ssl_iostream_has_valid_client_cert(conn->ssl_iostream)) {
-		if (!ssl_iostream_has_broken_client_cert(conn->ssl_iostream)) {
-			i_error("imapc(%s): SSL certificate not received",
-				conn->name);
-		} else {
-			i_error("imapc(%s): Received invalid SSL certificate",
-				conn->name);
-		}
-	} else if (ssl_iostream_cert_match_name(conn->ssl_iostream,
-						conn->client->set.host) < 0) {
-		i_error("imapc(%s): SSL certificate doesn't match host name",
-			conn->name);
-	} else {
+	if (ssl_iostream_check_cert_validity(conn->ssl_iostream,
+					     conn->client->set.host, &error) == 0) {
 		if (conn->client->set.debug) {
 			i_debug("imapc(%s): SSL handshake successful",
 				conn->name);
 		}
 		return 0;
+	} else if (!conn->client->set.ssl_verify) {
+		if (conn->client->set.debug) {
+			i_debug("imapc(%s): SSL handshake successful, "
+				"ignoring invalid certificate: %s",
+				conn->name, error);
+		}
+		return 0;
+	} else {
+		*error_r = error;
+		return -1;
 	}
-	conn->handshake_failed = TRUE;
-	i_stream_close(conn->input);
-	return -1;
 }
 
 static int imapc_connection_ssl_init(struct imapc_connection *conn)
 {
 	struct ssl_iostream_settings ssl_set;
 	struct stat st;
-	const char *source;
+	const char *error;
 
 	if (conn->client->ssl_ctx == NULL) {
 		i_error("imapc(%s): No SSL context", conn->name);
@@ -1180,12 +1181,12 @@ static int imapc_connection_ssl_init(struct imapc_connection *conn)
 		conn->output = conn->raw_output;
 	}
 
-	source = t_strdup_printf("imapc(%s): ", conn->name);
-	if (io_stream_create_ssl(conn->client->ssl_ctx, source, &ssl_set,
-				 &conn->input, &conn->output,
-				 &conn->ssl_iostream) < 0) {
-		i_error("imapc(%s): Couldn't initialize SSL client",
-			conn->name);
+	if (io_stream_create_ssl_client(conn->client->ssl_ctx,
+					conn->client->set.host,
+					&ssl_set, &conn->input, &conn->output,
+					&conn->ssl_iostream, &error) < 0) {
+		i_error("imapc(%s): Couldn't initialize SSL client: %s",
+			conn->name, error);
 		return -1;
 	}
 	ssl_iostream_set_handshake_callback(conn->ssl_iostream,
@@ -1199,8 +1200,8 @@ static int imapc_connection_ssl_init(struct imapc_connection *conn)
 
 	if (*conn->client->set.rawlog_dir != '\0' &&
 	    stat(conn->client->set.rawlog_dir, &st) == 0) {
-		(void)iostream_rawlog_create(conn->client->set.rawlog_dir,
-					     &conn->input, &conn->output);
+		iostream_rawlog_create(conn->client->set.rawlog_dir,
+				       &conn->input, &conn->output);
 	}
 
 	imap_parser_set_streams(conn->parser, conn->input, NULL);
@@ -1281,6 +1282,8 @@ static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 	struct stat st;
 	int fd;
 
+	i_assert(conn->client->set.max_idle_time > 0);
+
 	conn->prev_connect_idx = (conn->prev_connect_idx+1) % conn->ips_count;
 	ip = &conn->ips[conn->prev_connect_idx];
 	fd = net_connect_ip(ip, conn->client->set.port, NULL);
@@ -1291,12 +1294,13 @@ static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 	conn->fd = fd;
 	conn->input = conn->raw_input = i_stream_create_fd(fd, (size_t)-1, FALSE);
 	conn->output = conn->raw_output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	o_stream_set_no_error_handling(conn->output, TRUE);
 
 	if (*conn->client->set.rawlog_dir != '\0' &&
 	    conn->client->set.ssl_mode != IMAPC_CLIENT_SSL_MODE_IMMEDIATE &&
 	    stat(conn->client->set.rawlog_dir, &st) == 0) {
-		(void)iostream_rawlog_create(conn->client->set.rawlog_dir,
-					     &conn->input, &conn->output);
+		iostream_rawlog_create(conn->client->set.rawlog_dir,
+				       &conn->input, &conn->output);
 	}
 
 	o_stream_set_flush_callback(conn->output, imapc_connection_output,
@@ -1305,7 +1309,7 @@ static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 	conn->parser = imap_parser_create(conn->input, NULL, (size_t)-1);
 	conn->to = timeout_add(IMAPC_CONNECT_TIMEOUT_MSECS,
 			       imapc_connection_timeout, conn);
-	conn->to_output = timeout_add(IMAPC_MAX_IDLE_MSECS,
+	conn->to_output = timeout_add(conn->client->set.max_idle_time*1000,
 				      imapc_connection_reset_idle, conn);
 	if (conn->client->set.debug) {
 		i_debug("imapc(%s): Connecting to %s:%u", conn->name,
@@ -1315,9 +1319,9 @@ static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 
 static void
 imapc_connection_dns_callback(const struct dns_lookup_result *result,
-			      void *context)
+			      struct imapc_connection *conn)
 {
-	struct imapc_connection *conn = context;
+	conn->dns_lookup = NULL;
 
 	if (result->ret != 0) {
 		i_error("imapc(%s): dns_lookup(%s) failed: %s",
@@ -1385,7 +1389,8 @@ void imapc_connection_connect(struct imapc_connection *conn,
 
 	if (conn->ips_count == 0) {
 		(void)dns_lookup(conn->client->set.host, &dns_set,
-				 imapc_connection_dns_callback, conn);
+				 imapc_connection_dns_callback, conn,
+				 &conn->dns_lookup);
 	} else {
 		imapc_connection_connect_next_ip(conn);
 	}
@@ -1623,7 +1628,7 @@ static void imapc_command_send_more(struct imapc_connection *conn)
 
 	data = CONST_PTR_OFFSET(cmd->data->data, cmd->send_pos);
 	size = end_pos - cmd->send_pos;
-	o_stream_send(conn->output, data, size);
+	o_stream_nsend(conn->output, data, size);
 	cmd->send_pos = end_pos;
 
 	if (cmd->send_pos == cmd->data->used) {
@@ -1652,7 +1657,7 @@ static void imapc_connection_send_idle_done(struct imapc_connection *conn)
 {
 	if ((conn->idling || conn->idle_plus_waiting) && !conn->idle_stopping) {
 		conn->idle_stopping = TRUE;
-		o_stream_send_str(conn->output, "DONE\r\n");
+		o_stream_nsend_str(conn->output, "DONE\r\n");
 	}
 }
 
@@ -1802,7 +1807,7 @@ void imapc_command_sendvf(struct imapc_command *cmd,
 			const char *arg = va_arg(args, const char *);
 
 			if (!need_literal(arg))
-				imap_dquote_append(cmd->data, arg);
+				imap_append_quoted(cmd->data, arg);
 			else if ((cmd->conn->capabilities &
 				  IMAPC_CAPABILITY_LITERALPLUS) != 0) {
 				str_printfa(cmd->data, "{%"PRIuSIZE_T"+}\r\n%s",
@@ -1852,7 +1857,7 @@ void imapc_connection_unselect(struct imapc_client_mailbox *box)
 		conn->selecting_box = NULL;
 	}
 	imapc_connection_send_idle_done(conn);
-	imapc_connection_abort_commands(conn, FALSE, FALSE);
+	imapc_connection_abort_commands(conn, box, FALSE);
 }
 
 struct imapc_client_mailbox *

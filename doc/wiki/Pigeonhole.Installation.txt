@@ -18,7 +18,9 @@ Contents
 
          3. Debian
 
-         4. OpenBSD
+         4. openSUSE
+
+         5. OpenBSD
 
 Getting the sources
 -------------------
@@ -110,6 +112,12 @@ Older Debian releases have Sieve and ManageSieve support included in the main
 'dovecot-common' package, meaning that this is always available for those
 releases once Dovecot is installed.
 
+openSUSE
+--------
+
+It is part of the dovecot (dovecot21) rpm.  There is no need to install
+additional packages.
+
 OpenBSD
 -------
 
@@ -119,4 +127,4 @@ Pidgeonhole can be installed from packages by running:
 pkg_add dovecot-pigeonhole
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2012-04-23 04:42)
+(This file was created from the wiki on 2013-04-15 04:42)

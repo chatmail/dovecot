@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -79,9 +79,10 @@ static void status_parse_fields(struct status_cmd_context *ctx,
 	}
 }
 
-static void status_output(struct status_cmd_context *ctx, struct mailbox *box,
-			  const struct mailbox_status *status,
-			  const struct mailbox_metadata *metadata)
+static void ATTR_NULL(2)
+status_output(struct status_cmd_context *ctx, struct mailbox *box,
+	      const struct mailbox_status *status,
+	      const struct mailbox_metadata *metadata)
 {
 	if (box != NULL)
 		doveadm_print(mailbox_get_vname(box));
@@ -124,7 +125,7 @@ status_mailbox(struct status_cmd_context *ctx, const struct mailbox_info *info)
 	struct mailbox_status status;
 	struct mailbox_metadata metadata;
 
-	box = doveadm_mailbox_find(ctx->ctx.cur_mail_user, info->name);
+	box = doveadm_mailbox_find(ctx->ctx.cur_mail_user, info->vname);
 	if (mailbox_get_status(box, ctx->status_items, &status) < 0 ||
 	    mailbox_get_metadata(box, ctx->metadata_items, &metadata) < 0) {
 		doveadm_mail_failed_mailbox(&ctx->ctx, box);
@@ -145,7 +146,6 @@ cmd_mailbox_status_run(struct doveadm_mail_cmd_context *_ctx,
 {
 	struct status_cmd_context *ctx = (struct status_cmd_context *)_ctx;
 	enum mailbox_list_iter_flags iter_flags =
-		MAILBOX_LIST_ITER_RAW_LIST |
 		MAILBOX_LIST_ITER_NO_AUTO_BOXES |
 		MAILBOX_LIST_ITER_RETURN_NO_FLAGS;
 	struct doveadm_mailbox_list_iter *iter;
@@ -153,6 +153,7 @@ cmd_mailbox_status_run(struct doveadm_mail_cmd_context *_ctx,
 	int ret = 0;
 
 	memset(&ctx->total_status, 0, sizeof(ctx->total_status));
+	memset(&ctx->total_metadata, 0, sizeof(ctx->total_metadata));
 
 	iter = doveadm_mailbox_list_iter_init(_ctx, user, ctx->search_args,
 					      iter_flags);

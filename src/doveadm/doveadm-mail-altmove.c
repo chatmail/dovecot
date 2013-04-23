@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -32,7 +32,7 @@ cmd_altmove_box(struct doveadm_mail_cmd_context *ctx,
 	while (doveadm_mail_iter_next(iter, &mail)) {
 		if (doveadm_debug) {
 			i_debug("altmove: box=%s uid=%u",
-				info->name, mail->uid);
+				info->vname, mail->uid);
 		}
 		mail_update_flags(mail, modify_type,
 			(enum mail_flags)MAIL_INDEX_MAIL_FLAG_BACKEND);
@@ -57,13 +57,12 @@ cmd_altmove_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 {
 	struct altmove_cmd_context *ctx = (struct altmove_cmd_context *)_ctx;
 	const enum mailbox_list_iter_flags iter_flags =
-		MAILBOX_LIST_ITER_RAW_LIST |
 		MAILBOX_LIST_ITER_NO_AUTO_BOXES |
 		MAILBOX_LIST_ITER_RETURN_NO_FLAGS;
 	struct doveadm_mailbox_list_iter *iter;
 	const struct mailbox_info *info;
 	struct mail_namespace *ns, *prev_ns = NULL;
-	ARRAY_DEFINE(purged_storages, struct mail_storage *);
+	ARRAY(struct mail_storage *) purged_storages;
 	struct mail_storage *const *storages;
 	unsigned int i, count;
 	int ret = 0;
@@ -87,10 +86,16 @@ cmd_altmove_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	if (doveadm_mailbox_list_iter_deinit(&iter) < 0)
 		ret = -1;
 
+	if (prev_ns != NULL) {
+		if (ns_purge(_ctx, prev_ns) < 0)
+			ret = -1;
+		array_append(&purged_storages, &prev_ns->storage, 1);
+	}
+
 	/* make sure all private storages have been purged */
 	storages = array_get(&purged_storages, &count);
 	for (ns = user->namespaces; ns != NULL; ns = ns->next) {
-		if (ns->type != NAMESPACE_PRIVATE)
+		if (ns->type != MAIL_NAMESPACE_TYPE_PRIVATE)
 			continue;
 
 		for (i = 0; i < count; i++) {
@@ -101,6 +106,7 @@ cmd_altmove_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 			if (ns_purge(_ctx, ns) < 0)
 				ret = -1;
 			array_append(&purged_storages, &ns->storage, 1);
+			storages = array_get(&purged_storages, &count);
 		}
 	}
 	return ret;

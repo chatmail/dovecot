@@ -1,6 +1,9 @@
 #ifndef IMAPC_CLIENT_H
 #define IMAPC_CLIENT_H
 
+/* IMAP RFC defines this to be at least 30 minutes. */
+#define IMAPC_DEFAULT_MAX_IDLE_TIME (60*29)
+
 enum imapc_command_state {
 	IMAPC_COMMAND_STATE_OK,
 	IMAPC_COMMAND_STATE_NO,
@@ -18,6 +21,7 @@ enum imapc_capability {
 	IMAPC_CAPABILITY_STARTTLS	= 0x40,
 	IMAPC_CAPABILITY_X_GM_EXT_1	= 0x80,
 	IMAPC_CAPABILITY_CONDSTORE	= 0x100,
+	IMAPC_CAPABILITY_NAMESPACE	= 0x200,
 
 	IMAPC_CAPABILITY_IMAP4REV1	= 0x40000000
 };
@@ -52,12 +56,13 @@ struct imapc_client_settings {
 	const char *master_user;
 	const char *username;
 	const char *password;
+	unsigned int max_idle_time;
 
 	const char *dns_client_socket_path;
 	const char *temp_path_prefix;
 
 	enum imapc_client_ssl_mode ssl_mode;
-	const char *ssl_ca_dir;
+	const char *ssl_ca_dir, *ssl_ca_file;
 	bool ssl_verify;
 
 	const char *rawlog_dir;

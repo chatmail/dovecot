@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "crc32.h"
@@ -6,7 +6,7 @@
 #include "lucene-wrapper.h"
 #include "fts-lucene-plugin.h"
 
-const char *fts_lucene_plugin_version = DOVECOT_VERSION;
+const char *fts_lucene_plugin_version = DOVECOT_ABI_VERSION;
 
 struct fts_lucene_user_module fts_lucene_user_module =
 	MODULE_CONTEXT_INIT(&mail_user_module_register);
@@ -28,6 +28,8 @@ fts_lucene_plugin_init_settings(struct mail_user *user,
 			set->textcat_dir = p_strdup(user->pool, *tmp + 12);
 		} else if (strncmp(*tmp, "whitespace_chars=", 17) == 0) {
 			set->whitespace_chars = p_strdup(user->pool, *tmp + 17);
+		} else if (strcmp(*tmp, "normalize") == 0) {
+			set->normalize = TRUE;
 		} else {
 			i_error("fts_lucene: Invalid setting: %s", *tmp);
 			return -1;
@@ -47,6 +49,11 @@ fts_lucene_plugin_init_settings(struct mail_user *user,
 	if (set->default_language != NULL) {
 		i_error("fts_lucene: default_language set, "
 			"but Dovecot built without stemmer support");
+		return -1;
+	}
+	if (set->normalize) {
+		i_error("fts_lucene: normalize not currently supported "
+			"without stemmer support");
 		return -1;
 	}
 #else
@@ -71,6 +78,8 @@ uint32_t fts_lucene_settings_checksum(const struct fts_lucene_settings *set)
 	crc = set->default_language == NULL ? 0 :
 		crc32_str(set->default_language);
 	crc = crc32_str_more(crc, set->whitespace_chars);
+	if (set->normalize)
+		crc = crc32_str_more(crc, "n");
 	return crc;
 }
 

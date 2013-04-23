@@ -42,7 +42,7 @@ DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -51,16 +51,22 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libmail_la_LIBADD =
-am_libmail_la_OBJECTS = istream-dot.lo istream-header-filter.lo \
-	mail-user-hash.lo mbox-from.lo message-address.lo \
-	message-date.lo message-decoder.lo message-header-decode.lo \
+am_libmail_la_OBJECTS = istream-attachment-connector.lo \
+	istream-attachment-extractor.lo istream-binary-converter.lo \
+	istream-dot.lo istream-header-filter.lo istream-nonuls.lo \
+	istream-qp-decoder.lo mail-user-hash.lo mbox-from.lo \
+	message-address.lo message-binary-part.lo message-date.lo \
+	message-decoder.lo message-header-decode.lo \
 	message-header-encode.lo message-header-parser.lo \
 	message-id.lo message-parser.lo message-part-serialize.lo \
-	message-search.lo message-send.lo message-size.lo \
-	quoted-printable.lo rfc2231-parser.lo rfc822-parser.lo
+	message-search.lo message-size.lo quoted-printable.lo \
+	rfc2231-parser.lo rfc822-parser.lo
 libmail_la_OBJECTS = $(am_libmail_la_OBJECTS)
 am__EXEEXT_1 = test-istream-dot$(EXEEXT) \
-	test-istream-header-filter$(EXEEXT) test-mbox-from$(EXEEXT) \
+	test-istream-attachment$(EXEEXT) \
+	test-istream-binary-converter$(EXEEXT) \
+	test-istream-header-filter$(EXEEXT) \
+	test-istream-qp-decoder$(EXEEXT) test-mbox-from$(EXEEXT) \
 	test-message-address$(EXEEXT) test-message-date$(EXEEXT) \
 	test-message-decoder$(EXEEXT) \
 	test-message-header-decode$(EXEEXT) \
@@ -69,12 +75,24 @@ am__EXEEXT_1 = test-istream-dot$(EXEEXT) \
 	test-message-parser$(EXEEXT) test-quoted-printable$(EXEEXT) \
 	test-rfc2231-parser$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
+am_test_istream_attachment_OBJECTS =  \
+	test-istream-attachment.$(OBJEXT)
+test_istream_attachment_OBJECTS =  \
+	$(am_test_istream_attachment_OBJECTS)
+am_test_istream_binary_converter_OBJECTS =  \
+	test-istream-binary-converter.$(OBJEXT)
+test_istream_binary_converter_OBJECTS =  \
+	$(am_test_istream_binary_converter_OBJECTS)
 am_test_istream_dot_OBJECTS = test-istream-dot.$(OBJEXT)
 test_istream_dot_OBJECTS = $(am_test_istream_dot_OBJECTS)
 am_test_istream_header_filter_OBJECTS =  \
 	test-istream-header-filter.$(OBJEXT)
 test_istream_header_filter_OBJECTS =  \
 	$(am_test_istream_header_filter_OBJECTS)
+am_test_istream_qp_decoder_OBJECTS =  \
+	test-istream-qp-decoder.$(OBJEXT)
+test_istream_qp_decoder_OBJECTS =  \
+	$(am_test_istream_qp_decoder_OBJECTS)
 am_test_mbox_from_OBJECTS = test-mbox-from.$(OBJEXT)
 test_mbox_from_OBJECTS = $(am_test_mbox_from_OBJECTS)
 am_test_message_address_OBJECTS = test-message-address.$(OBJEXT)
@@ -116,20 +134,27 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libmail_la_SOURCES) $(test_istream_dot_SOURCES) \
+SOURCES = $(libmail_la_SOURCES) $(test_istream_attachment_SOURCES) \
+	$(test_istream_binary_converter_SOURCES) \
+	$(test_istream_dot_SOURCES) \
 	$(test_istream_header_filter_SOURCES) \
-	$(test_mbox_from_SOURCES) $(test_message_address_SOURCES) \
-	$(test_message_date_SOURCES) $(test_message_decoder_SOURCES) \
+	$(test_istream_qp_decoder_SOURCES) $(test_mbox_from_SOURCES) \
+	$(test_message_address_SOURCES) $(test_message_date_SOURCES) \
+	$(test_message_decoder_SOURCES) \
 	$(test_message_header_decode_SOURCES) \
 	$(test_message_header_encode_SOURCES) \
 	$(test_message_header_parser_SOURCES) \
 	$(test_message_id_SOURCES) $(test_message_parser_SOURCES) \
 	$(test_quoted_printable_SOURCES) \
 	$(test_rfc2231_parser_SOURCES)
-DIST_SOURCES = $(libmail_la_SOURCES) $(test_istream_dot_SOURCES) \
+DIST_SOURCES = $(libmail_la_SOURCES) \
+	$(test_istream_attachment_SOURCES) \
+	$(test_istream_binary_converter_SOURCES) \
+	$(test_istream_dot_SOURCES) \
 	$(test_istream_header_filter_SOURCES) \
-	$(test_mbox_from_SOURCES) $(test_message_address_SOURCES) \
-	$(test_message_date_SOURCES) $(test_message_decoder_SOURCES) \
+	$(test_istream_qp_decoder_SOURCES) $(test_mbox_from_SOURCES) \
+	$(test_message_address_SOURCES) $(test_message_date_SOURCES) \
+	$(test_message_decoder_SOURCES) \
 	$(test_message_header_decode_SOURCES) \
 	$(test_message_header_encode_SOURCES) \
 	$(test_message_header_parser_SOURCES) \
@@ -180,13 +205,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -218,6 +244,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -265,6 +292,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -350,11 +378,17 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-charset
 
 libmail_la_SOURCES = \
+	istream-attachment-connector.c \
+	istream-attachment-extractor.c \
+	istream-binary-converter.c \
 	istream-dot.c \
 	istream-header-filter.c \
+	istream-nonuls.c \
+	istream-qp-decoder.c \
 	mail-user-hash.c \
 	mbox-from.c \
 	message-address.c \
+	message-binary-part.c \
 	message-date.c \
 	message-decoder.c \
 	message-header-decode.c \
@@ -364,19 +398,24 @@ libmail_la_SOURCES = \
 	message-parser.c \
 	message-part-serialize.c \
 	message-search.c \
-	message-send.c \
 	message-size.c \
 	quoted-printable.c \
 	rfc2231-parser.c \
 	rfc822-parser.c
 
 headers = \
+	istream-attachment-connector.h \
+	istream-attachment-extractor.h \
+	istream-binary-converter.h \
 	istream-dot.h \
 	istream-header-filter.h \
+	istream-nonuls.h \
+	istream-qp.h \
 	mail-user-hash.h \
 	mbox-from.h \
 	mail-types.h \
 	message-address.h \
+	message-binary-part.h \
 	message-date.h \
 	message-decoder.h \
 	message-header-decode.h \
@@ -386,7 +425,6 @@ headers = \
 	message-parser.h \
 	message-part-serialize.h \
 	message-search.h \
-	message-send.h \
 	message-size.h \
 	quoted-printable.h \
 	rfc2231-parser.h \
@@ -396,7 +434,10 @@ pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
 test_programs = \
 	test-istream-dot \
+	test-istream-attachment \
+	test-istream-binary-converter \
 	test-istream-header-filter \
+	test-istream-qp-decoder \
 	test-mbox-from \
 	test-message-address \
 	test-message-date \
@@ -413,45 +454,62 @@ test_libs = \
 	../lib-test/libtest.la \
 	../lib/liblib.la
 
+test_deps = $(noinst_LTLIBRARIES) $(test_libs)
 test_istream_dot_SOURCES = test-istream-dot.c
 test_istream_dot_LDADD = istream-dot.lo $(test_libs)
-test_istream_dot_DEPENDENCIES = istream-dot.lo $(test_libs)
+test_istream_dot_DEPENDENCIES = $(test_deps)
+test_istream_qp_decoder_SOURCES = test-istream-qp-decoder.c
+test_istream_qp_decoder_LDADD = istream-qp-decoder.lo quoted-printable.lo $(test_libs)
+test_istream_qp_decoder_DEPENDENCIES = $(test_deps)
+message_parser_objects = \
+	message-parser.lo \
+	message-header-parser.lo \
+	message-size.lo \
+	rfc822-parser.lo \
+	rfc2231-parser.lo
+
+test_istream_binary_converter_SOURCES = test-istream-binary-converter.c
+test_istream_binary_converter_LDADD = istream-binary-converter.lo $(message_parser_objects)  $(test_libs)
+test_istream_binary_converter_DEPENDENCIES = $(test_deps)
+test_istream_attachment_SOURCES = test-istream-attachment.c
+test_istream_attachment_LDADD = istream-attachment-extractor.lo istream-attachment-connector.lo $(message_parser_objects) $(test_libs)
+test_istream_attachment_DEPENDENCIES = $(test_deps)
 test_istream_header_filter_SOURCES = test-istream-header-filter.c
 test_istream_header_filter_LDADD = istream-header-filter.lo message-header-parser.lo $(test_libs)
-test_istream_header_filter_DEPENDENCIES = istream-header-filter.lo message-header-parser.lo $(test_libs)
+test_istream_header_filter_DEPENDENCIES = $(test_deps)
 test_mbox_from_SOURCES = test-mbox-from.c
 test_mbox_from_LDADD = mbox-from.lo $(test_libs)
-test_mbox_from_DEPENDENCIES = mbox-from.lo $(test_libs)
+test_mbox_from_DEPENDENCIES = $(test_deps)
 test_message_address_SOURCES = test-message-address.c
 test_message_address_LDADD = message-address.lo rfc822-parser.lo $(test_libs)
-test_message_address_DEPENDENCIES = message-address.lo rfc822-parser.lo $(test_libs)
+test_message_address_DEPENDENCIES = $(test_deps)
 test_message_date_SOURCES = test-message-date.c
 test_message_date_LDADD = message-date.lo rfc822-parser.lo $(test_libs)
-test_message_date_DEPENDENCIES = message-date.lo rfc822-parser.lo $(test_libs)
+test_message_date_DEPENDENCIES = $(test_deps)
 test_message_decoder_SOURCES = test-message-decoder.c
 test_message_decoder_LDADD = message-decoder.lo rfc822-parser.lo rfc2231-parser.lo $(test_libs)
-test_message_decoder_DEPENDENCIES = message-decoder.lo rfc822-parser.lo rfc2231-parser.lo $(test_libs)
+test_message_decoder_DEPENDENCIES = $(test_deps)
 test_message_header_decode_SOURCES = test-message-header-decode.c
 test_message_header_decode_LDADD = message-header-decode.lo quoted-printable.lo $(test_libs)
-test_message_header_decode_DEPENDENCIES = message-header-decode.lo quoted-printable.lo $(test_libs)
+test_message_header_decode_DEPENDENCIES = $(test_deps)
 test_message_header_encode_SOURCES = test-message-header-encode.c
 test_message_header_encode_LDADD = message-header-encode.lo $(test_libs)
-test_message_header_encode_DEPENDENCIES = message-header-encode.lo $(test_libs)
+test_message_header_encode_DEPENDENCIES = $(test_deps)
 test_message_header_parser_SOURCES = test-message-header-parser.c
 test_message_header_parser_LDADD = message-header-parser.lo $(test_libs)
-test_message_header_parser_DEPENDENCIES = message-header-parser.lo $(test_libs)
+test_message_header_parser_DEPENDENCIES = $(test_deps)
 test_message_id_SOURCES = test-message-id.c
 test_message_id_LDADD = message-id.lo rfc822-parser.lo $(test_libs)
-test_message_id_DEPENDENCIES = message-id.lo rfc822-parser.lo $(test_libs)
+test_message_id_DEPENDENCIES = $(test_deps)
 test_message_parser_SOURCES = test-message-parser.c
 test_message_parser_LDADD = message-parser.lo message-header-parser.lo message-size.lo rfc822-parser.lo rfc2231-parser.lo $(test_libs)
-test_message_parser_DEPENDENCIES = message-parser.lo message-header-parser.lo message-size.lo rfc822-parser.lo rfc2231-parser.lo $(test_libs)
+test_message_parser_DEPENDENCIES = $(test_deps)
 test_quoted_printable_SOURCES = test-quoted-printable.c
 test_quoted_printable_LDADD = quoted-printable.lo $(test_libs)
-test_quoted_printable_DEPENDENCIES = quoted-printable.lo $(test_libs)
+test_quoted_printable_DEPENDENCIES = $(test_deps)
 test_rfc2231_parser_SOURCES = test-rfc2231-parser.c
 test_rfc2231_parser_LDADD = rfc2231-parser.lo rfc822-parser.lo $(test_libs)
-test_rfc2231_parser_DEPENDENCIES = rfc2231-parser.lo rfc822-parser.lo $(test_libs)
+test_rfc2231_parser_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -506,12 +564,21 @@ clean-noinstPROGRAMS:
 	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
 	echo " rm -f" $$list; \
 	rm -f $$list
+test-istream-attachment$(EXEEXT): $(test_istream_attachment_OBJECTS) $(test_istream_attachment_DEPENDENCIES) $(EXTRA_test_istream_attachment_DEPENDENCIES) 
+	@rm -f test-istream-attachment$(EXEEXT)
+	$(LINK) $(test_istream_attachment_OBJECTS) $(test_istream_attachment_LDADD) $(LIBS)
+test-istream-binary-converter$(EXEEXT): $(test_istream_binary_converter_OBJECTS) $(test_istream_binary_converter_DEPENDENCIES) $(EXTRA_test_istream_binary_converter_DEPENDENCIES) 
+	@rm -f test-istream-binary-converter$(EXEEXT)
+	$(LINK) $(test_istream_binary_converter_OBJECTS) $(test_istream_binary_converter_LDADD) $(LIBS)
 test-istream-dot$(EXEEXT): $(test_istream_dot_OBJECTS) $(test_istream_dot_DEPENDENCIES) $(EXTRA_test_istream_dot_DEPENDENCIES) 
 	@rm -f test-istream-dot$(EXEEXT)
 	$(LINK) $(test_istream_dot_OBJECTS) $(test_istream_dot_LDADD) $(LIBS)
 test-istream-header-filter$(EXEEXT): $(test_istream_header_filter_OBJECTS) $(test_istream_header_filter_DEPENDENCIES) $(EXTRA_test_istream_header_filter_DEPENDENCIES) 
 	@rm -f test-istream-header-filter$(EXEEXT)
 	$(LINK) $(test_istream_header_filter_OBJECTS) $(test_istream_header_filter_LDADD) $(LIBS)
+test-istream-qp-decoder$(EXEEXT): $(test_istream_qp_decoder_OBJECTS) $(test_istream_qp_decoder_DEPENDENCIES) $(EXTRA_test_istream_qp_decoder_DEPENDENCIES) 
+	@rm -f test-istream-qp-decoder$(EXEEXT)
+	$(LINK) $(test_istream_qp_decoder_OBJECTS) $(test_istream_qp_decoder_LDADD) $(LIBS)
 test-mbox-from$(EXEEXT): $(test_mbox_from_OBJECTS) $(test_mbox_from_DEPENDENCIES) $(EXTRA_test_mbox_from_DEPENDENCIES) 
 	@rm -f test-mbox-from$(EXEEXT)
 	$(LINK) $(test_mbox_from_OBJECTS) $(test_mbox_from_LDADD) $(LIBS)
@@ -552,11 +619,17 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-attachment-connector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-attachment-extractor.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-binary-converter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-dot.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-header-filter.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-nonuls.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-qp-decoder.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-user-hash.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mbox-from.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-address.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-binary-part.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-date.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-decoder.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-header-decode.Plo@am__quote@
@@ -566,13 +639,15 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-part-serialize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-search.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-send.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-size.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/quoted-printable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rfc2231-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rfc822-parser.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-istream-attachment.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-istream-binary-converter.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-istream-dot.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-istream-header-filter.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-istream-qp-decoder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mbox-from.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-address.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-date.Po@am__quote@

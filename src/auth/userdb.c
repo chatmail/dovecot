@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2013 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
@@ -9,8 +9,8 @@
 
 #include <stdlib.h>
 
-static ARRAY_DEFINE(userdb_interfaces, struct userdb_module_interface *);
-static ARRAY_DEFINE(userdb_modules, struct userdb_module *);
+static ARRAY(struct userdb_module_interface *) userdb_interfaces;
+static ARRAY(struct userdb_module *) userdb_modules;
 
 static const struct userdb_module_interface userdb_iface_deinit = {
 	.name = "deinit"
@@ -230,6 +230,7 @@ extern struct userdb_module_interface userdb_ldap;
 extern struct userdb_module_interface userdb_sql;
 extern struct userdb_module_interface userdb_nss;
 extern struct userdb_module_interface userdb_checkpassword;
+extern struct userdb_module_interface userdb_dict;
 
 void userdbs_init(void)
 {
@@ -244,6 +245,7 @@ void userdbs_init(void)
 	userdb_register_module(&userdb_sql);
 	userdb_register_module(&userdb_nss);
 	userdb_register_module(&userdb_checkpassword);
+	userdb_register_module(&userdb_dict);
 }
 
 void userdbs_deinit(void)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -30,7 +30,7 @@ static int pop3c_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 	struct message_size hdr_size, body_size;
 	struct istream *input;
 
-	if (mail->data.virtual_size != 0) {
+	if (mail->data.virtual_size != (uoff_t)-1) {
 		/* virtual size is already known. it's the same as our
 		   (correct) physical size */
 		*size_r = mail->data.virtual_size;
@@ -110,10 +110,12 @@ pop3c_mail_get_stream(struct mail *_mail, bool get_body,
 
 	if (mail->data.stream == NULL) {
 		capa = pop3c_client_get_capabilities(mbox->client);
-		if (get_body || (capa & POP3C_CAPABILITY_TOP) == 0)
+		if (get_body || (capa & POP3C_CAPABILITY_TOP) == 0) {
 			cmd = t_strdup_printf("RETR %u\r\n", _mail->seq);
-		else
+			get_body = TRUE;
+		} else {
 			cmd = t_strdup_printf("TOP %u 0\r\n", _mail->seq);
+		}
 		if (pop3c_client_cmd_stream(mbox->client, cmd,
 					    &input, &error) < 0) {
 			mail_storage_set_error(mbox->box.storage,
@@ -130,7 +132,8 @@ pop3c_mail_get_stream(struct mail *_mail, bool get_body,
 			}
 		}
 		i_stream_set_name(mail->data.stream, t_strcut(cmd, '\r'));
-		pop3c_mail_cache_size(mail);
+		if (get_body)
+			pop3c_mail_cache_size(mail);
 	}
 	return index_mail_init_stream(mail, hdr_size, body_size, stream_r);
 }
@@ -169,6 +172,7 @@ struct mail_vfuncs pop3c_mail_vfuncs = {
 	index_mail_get_keywords,
 	index_mail_get_keyword_indexes,
 	index_mail_get_modseq,
+	index_mail_get_pvt_modseq,
 	index_mail_get_parts,
 	index_mail_get_date,
 	pop3c_mail_get_received_date,
@@ -179,11 +183,13 @@ struct mail_vfuncs pop3c_mail_vfuncs = {
 	index_mail_get_headers,
 	index_mail_get_header_stream,
 	pop3c_mail_get_stream,
+	index_mail_get_binary_stream,
 	pop3c_mail_get_special,
 	index_mail_get_real_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
 	index_mail_update_modseq,
+	index_mail_update_pvt_modseq,
 	NULL,
 	index_mail_expunge,
 	index_mail_set_cache_corrupted,

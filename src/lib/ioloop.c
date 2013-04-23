@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -165,6 +165,14 @@ struct timeout *timeout_add(unsigned int msecs, unsigned int source_linenum,
 	return timeout;
 }
 
+#undef timeout_add_short
+struct timeout *
+timeout_add_short(unsigned int msecs, unsigned int source_linenum,
+		  timeout_callback_t *callback, void *context)
+{
+	return timeout_add(msecs, source_linenum, callback, context);
+}
+
 static void timeout_free(struct timeout *timeout)
 {
 	if (timeout->ctx != NULL)
@@ -181,11 +189,11 @@ void timeout_remove(struct timeout **_timeout)
 	timeout_free(timeout);
 }
 
-static void
+static void ATTR_NULL(2)
 timeout_reset_timeval(struct timeout *timeout, struct timeval *tv_now)
 {
 	timeout_update_next(timeout, tv_now);
-	if (timeout->msecs == 0) {
+	if (timeout->msecs <= 1) {
 		/* if we came here from io_loop_handle_timeouts(),
 		   next_run must be larger than tv_now or we could go to
 		   infinite loop. +1000 to get 1 ms further, another +1000 to
@@ -357,7 +365,7 @@ static void io_loop_handle_timeouts_real(struct ioloop *ioloop)
 				(void *)timeout->callback);
 		}
 		if (ioloop->cur_ctx != NULL)
-			io_loop_context_activate(ioloop->cur_ctx);
+			io_loop_context_deactivate(ioloop->cur_ctx);
 	}
 }
 
@@ -594,6 +602,8 @@ void io_loop_context_activate(struct ioloop_context *ctx)
 {
 	const struct ioloop_context_callback *cb;
 
+	i_assert(ctx->ioloop->cur_ctx == NULL);
+
 	ctx->ioloop->cur_ctx = ctx;
 	io_loop_context_ref(ctx);
 	array_foreach(&ctx->callbacks, cb) {
@@ -649,4 +659,16 @@ struct timeout *io_loop_move_timeout(struct timeout **_timeout)
 			     old_to->callback, old_to->context);
 	timeout_remove(_timeout);
 	return new_to;
+}
+
+bool io_loop_have_ios(struct ioloop *ioloop)
+{
+	return ioloop->io_files;
+}
+
+bool io_loop_have_immediate_timeouts(struct ioloop *ioloop)
+{
+	struct timeval tv;
+
+	return io_loop_get_wait_time(ioloop, &tv) == 0;
 }

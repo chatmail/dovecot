@@ -17,13 +17,12 @@ struct imapc_settings {
 	const char *imapc_password;
 
 	const char *imapc_ssl;
-	const char *imapc_ssl_ca_dir;
 	bool imapc_ssl_verify;
 
 	const char *imapc_features;
 	const char *imapc_rawlog_dir;
 	const char *imapc_list_prefix;
-	const char *ssl_crypto_device;
+	unsigned int imapc_max_idle_time;
 
 	enum imapc_features parsed_features;
 };
