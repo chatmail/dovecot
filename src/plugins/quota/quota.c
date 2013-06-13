@@ -195,6 +195,8 @@ int quota_user_read_settings(struct mail_user *user,
 	quota_set->debug = user->mail_debug;
 	quota_set->quota_exceeded_msg =
 		mail_user_plugin_getenv(user, "quota_exceeded_message");
+	quota_set->ignore_save_errors =
+		mail_user_plugin_getenv(user, "quota_ignore_save_errors") != NULL;
 	if (quota_set->quota_exceeded_msg == NULL)
 		quota_set->quota_exceeded_msg = DEFAULT_QUOTA_EXCEEDED_MSG;
 
@@ -359,7 +361,7 @@ quota_rule_parse_percentage(struct quota_root_settings *root_set,
 {
 	int64_t percentage = *limit;
 
-	if (percentage <= 0 || percentage >= -1U) {
+	if (percentage <= -100 || percentage >= -1U) {
 		*error_r = p_strdup_printf(root_set->set->pool,
 			"Invalid rule percentage: %lld", (long long)percentage);
 		return -1;
@@ -383,9 +385,9 @@ static void
 quota_rule_recalculate_relative_rules(struct quota_rule *rule,
 				      int64_t bytes_limit, int64_t count_limit)
 {
-	if (rule->bytes_percent > 0)
+	if (rule->bytes_percent != 0)
 		rule->bytes_limit = bytes_limit * rule->bytes_percent / 100;
-	if (rule->count_percent > 0)
+	if (rule->count_percent != 0)
 		rule->count_limit = count_limit * rule->count_percent / 100;
 }
 
@@ -639,7 +641,7 @@ void quota_add_user_namespace(struct quota *quota, struct mail_namespace *ns)
 		for (i = 0; i < count; i++) {
 			path2 = mailbox_list_get_path(namespaces[i]->list, NULL,
 				     	MAILBOX_LIST_PATH_TYPE_MAILBOX);
-			if (strcmp(path, path2) == 0) {
+			if (path2 != NULL && strcmp(path, path2) == 0) {
 				/* duplicate */
 				return;
 			}
@@ -769,7 +771,7 @@ bool quota_root_is_namespace_visible(struct quota_root *root,
 	    (storage->class_flags & MAIL_STORAGE_CLASS_FLAG_NOQUOTA) != 0)
 		return FALSE;
 
-	if (root->ns != NULL) {
+	if (root->ns_prefix != NULL) {
 		if (root->ns != ns)
 			return FALSE;
 	} else {

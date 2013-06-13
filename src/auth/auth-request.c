@@ -291,10 +291,9 @@ bool auth_request_import(struct auth_request *request,
 		request->no_login = TRUE;
 	else if (strcmp(key, "successful") == 0)
 		request->successful = TRUE;
-	else if (strcmp(key, "skip_password_check") == 0) {
-		i_assert(request->master_user !=  NULL);
+	else if (strcmp(key, "skip_password_check") == 0)
 		request->skip_password_check = TRUE;
-	} else if (strcmp(key, "mech") == 0)
+	else if (strcmp(key, "mech") == 0)
 		request->mech_name = p_strdup(request->pool, value);
 	else
 		return FALSE;
@@ -863,7 +862,7 @@ static bool auth_request_lookup_user_cache(struct auth_request *request,
 	}
 
 	*result_r = USERDB_RESULT_OK;
-	*reply_r = auth_stream_reply_init(request->pool);
+	*reply_r = auth_stream_reply_init_userdb(request->pool);
 	auth_stream_reply_import(*reply_r, value);
 	return TRUE;
 }
@@ -1243,12 +1242,26 @@ auth_request_try_update_username(struct auth_request *request,
 	return TRUE;
 }
 
+static void
+auth_request_passdb_import(struct auth_request *request, const char *args,
+			   const char *key_prefix, const char *default_scheme)
+{
+	const char *const *arg, *field;
+
+	for (arg = t_strsplit(args, "\t"); *arg != NULL; arg++) {
+		field = t_strconcat(key_prefix, *arg, NULL);
+		auth_request_set_field_keyvalue(request, field, default_scheme);
+	}
+}
+
 void auth_request_set_field(struct auth_request *request,
 			    const char *name, const char *value,
 			    const char *default_scheme)
 {
 	i_assert(*name != '\0');
 	i_assert(value != NULL);
+
+	i_assert(request->passdb != NULL);
 
 	if (strcmp(name, "password") == 0) {
 		auth_request_set_password(request, value,
@@ -1284,8 +1297,19 @@ void auth_request_set_field(struct auth_request *request,
 		request->passdb_password = NULL;
 	} else if (strcmp(name, "allow_nets") == 0) {
 		auth_request_validate_networks(request, value);
+	} else if (strcmp(name, "passdb_import") == 0) {
+		auth_request_passdb_import(request, value, "", default_scheme);
+		return;
 	} else if (strncmp(name, "userdb_", 7) == 0) {
 		/* for prefetch userdb */
+		if (strcmp(name, "userdb_userdb_import") == 0) {
+			/* we need can't put the whole userdb_userdb_import
+			   value to extra_cache_fields or it doesn't work
+			   properly. so handle this explicitly. */
+			auth_request_passdb_import(request, value,
+						   "userdb_", default_scheme);
+			return;
+		}
 		if (request->userdb_reply == NULL)
 			auth_request_init_userdb_reply(request);
 		auth_request_set_userdb_field(request, name + 7, value);
@@ -1340,7 +1364,7 @@ void auth_request_init_userdb_reply(struct auth_request *request)
 {
 	struct userdb_module *module = request->userdb->userdb;
 
-	request->userdb_reply = auth_stream_reply_init(request->pool);
+	request->userdb_reply = auth_stream_reply_init_userdb(request->pool);
 	auth_stream_reply_add(request->userdb_reply, NULL, request->user);
 
 	userdb_template_export(module->default_fields_tmpl, request);
@@ -1363,6 +1387,24 @@ static void auth_request_set_uidgid_file(struct auth_request *request,
 				      "uid", dec2str(st.st_uid));
 		auth_stream_reply_add(request->userdb_reply,
 				      "gid", dec2str(st.st_gid));
+	}
+}
+
+static void
+auth_request_userdb_import(struct auth_request *request, const char *args)
+{
+	const char *key, *value, *const *arg;
+
+	for (arg = t_strsplit(args, "\t"); *arg != NULL; arg++) {
+		value = strchr(*arg, '=');
+		if (value == NULL) {
+			key = *arg;
+			value = "";
+		} else {
+			key = t_strdup_until(*arg, value);
+			value++;
+		}
+		auth_request_set_userdb_field(request, key, value);
 	}
 }
 
@@ -1395,7 +1437,7 @@ void auth_request_set_userdb_field(struct auth_request *request,
 		auth_request_set_uidgid_file(request, value);
 		return;
 	} else if (strcmp(name, "userdb_import") == 0) {
-		auth_stream_reply_import(request->userdb_reply, value);
+		auth_request_userdb_import(request, value);
 		return;
 	} else if (strcmp(name, "system_user") == 0) {
 		/* FIXME: the system_user is for backwards compatibility */
@@ -1703,7 +1745,6 @@ int auth_request_password_verify(struct auth_request *request,
 
 	if (request->skip_password_check) {
 		/* currently this can happen only with master logins */
-		i_assert(request->master_user != NULL);
 		return 1;
 	}
 
@@ -1792,18 +1833,27 @@ const struct var_expand_table auth_request_var_expand_static_tab[] = {
 	{ '\0', NULL, NULL }
 };
 
-const struct var_expand_table *
-auth_request_get_var_expand_table(const struct auth_request *auth_request,
-				  auth_request_escape_func_t *escape_func)
+struct var_expand_table *
+auth_request_get_var_expand_table_full(const struct auth_request *auth_request,
+				       auth_request_escape_func_t *escape_func,
+				       unsigned int *count)
 {
-	struct var_expand_table *tab;
+	const unsigned int auth_count =
+		N_ELEMENTS(auth_request_var_expand_static_tab);
+	struct var_expand_table *tab, *ret_tab;
 
 	if (escape_func == NULL)
 		escape_func = escape_none;
 
-	tab = t_malloc(sizeof(auth_request_var_expand_static_tab));
+	/* keep the extra fields at the beginning. the last static_tab field
+	   contains the ending NULL-fields. */
+	tab = ret_tab = t_malloc((*count + auth_count) * sizeof(*tab));
+	memset(tab, 0, *count * sizeof(*tab));
+	tab += *count;
+	*count += auth_count;
+
 	memcpy(tab, auth_request_var_expand_static_tab,
-	       sizeof(auth_request_var_expand_static_tab));
+	       auth_count * sizeof(*tab));
 
 	tab[0].value = escape_func(auth_request->user, auth_request);
 	tab[1].value = escape_func(t_strcut(auth_request->user, '@'),
@@ -1850,7 +1900,17 @@ auth_request_get_var_expand_table(const struct auth_request *auth_request,
 	}
 	tab[18].value = auth_request->session_id == NULL ? NULL :
 		escape_func(auth_request->session_id, auth_request);
-	return tab;
+	return ret_tab;
+}
+
+const struct var_expand_table *
+auth_request_get_var_expand_table(const struct auth_request *auth_request,
+				  auth_request_escape_func_t *escape_func)
+{
+	unsigned int count = 0;
+
+	return auth_request_get_var_expand_table_full(auth_request, escape_func,
+						      &count);
 }
 
 static void get_log_prefix(string_t *str, struct auth_request *auth_request,

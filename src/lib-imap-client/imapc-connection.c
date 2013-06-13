@@ -24,8 +24,6 @@
 #define IMAPC_CONNECT_TIMEOUT_MSECS (1000*30)
 #define IMAPC_COMMAND_TIMEOUT_MSECS (1000*60*5)
 #define IMAPC_MAX_INLINE_LITERAL_SIZE (1024*32)
-/* IMAP protocol requires activity at least every 30 minutes */
-#define IMAPC_MAX_IDLE_MSECS (1000*60*29)
 
 enum imapc_input_state {
 	IMAPC_INPUT_STATE_NONE = 0,
@@ -212,6 +210,7 @@ static const char *imapc_command_get_readable(struct imapc_command *cmd)
 static void
 imapc_connection_abort_commands_array(ARRAY_TYPE(imapc_command) *cmd_array,
 				      ARRAY_TYPE(imapc_command) *dest_array,
+				      struct imapc_client_mailbox *only_box,
 				      bool keep_retriable)
 {
 	struct imapc_command *const *cmdp, *cmd;
@@ -221,8 +220,10 @@ imapc_connection_abort_commands_array(ARRAY_TYPE(imapc_command) *cmd_array,
 		cmdp = array_idx(cmd_array, i);
 		cmd = *cmdp;
 
-		if (keep_retriable &&
-		    (cmd->flags & IMAPC_COMMAND_FLAG_RETRIABLE) != 0) {
+		if (cmd->box != only_box && only_box != NULL)
+			i++;
+		else if (keep_retriable &&
+			 (cmd->flags & IMAPC_COMMAND_FLAG_RETRIABLE) != 0) {
 			cmd->send_pos = 0;
 			cmd->wait_for_literal = 0;
 			i++;
@@ -234,22 +235,20 @@ imapc_connection_abort_commands_array(ARRAY_TYPE(imapc_command) *cmd_array,
 }
 
 void imapc_connection_abort_commands(struct imapc_connection *conn,
-				     bool disconnected, bool keep_retriable)
+				     struct imapc_client_mailbox *only_box,
+				     bool keep_retriable)
 {
 	struct imapc_command *const *cmdp, *cmd;
 	ARRAY_TYPE(imapc_command) tmp_array;
 	struct imapc_command_reply reply;
 
 	t_array_init(&tmp_array, 8);
-	if (disconnected) {
-		imapc_connection_abort_commands_array(&conn->cmd_wait_list,
-						      &tmp_array,
-						      keep_retriable);
-	}
-	imapc_connection_abort_commands_array(&conn->cmd_send_queue,
-					      &tmp_array, keep_retriable);
+	imapc_connection_abort_commands_array(&conn->cmd_wait_list, &tmp_array,
+					      only_box, keep_retriable);
+	imapc_connection_abort_commands_array(&conn->cmd_send_queue, &tmp_array,
+					      only_box, keep_retriable);
 
-	if (array_count(&conn->cmd_wait_list) > 0 && disconnected) {
+	if (array_count(&conn->cmd_wait_list) > 0 && only_box == NULL) {
 		/* need to move all the waiting commands to send queue */
 		array_append_array(&conn->cmd_wait_list,
 				   &conn->cmd_send_queue);
@@ -368,13 +367,13 @@ void imapc_connection_disconnect(struct imapc_connection *conn)
 	conn->fd = -1;
 
 	imapc_connection_set_state(conn, IMAPC_CONNECTION_STATE_DISCONNECTED);
-	imapc_connection_abort_commands(conn, TRUE, reconnecting);
+	imapc_connection_abort_commands(conn, NULL, reconnecting);
 }
 
 static void imapc_connection_set_disconnected(struct imapc_connection *conn)
 {
 	imapc_connection_set_state(conn, IMAPC_CONNECTION_STATE_DISCONNECTED);
-	imapc_connection_abort_commands(conn, TRUE, FALSE);
+	imapc_connection_abort_commands(conn, NULL, FALSE);
 }
 
 static void imapc_connection_reconnect(struct imapc_connection *conn)
@@ -494,7 +493,8 @@ imapc_connection_read_line_more(struct imapc_connection *conn,
 
 	ret = imap_parser_read_args(conn->parser, 0,
 				    IMAP_PARSE_FLAG_LITERAL_SIZE |
-				    IMAP_PARSE_FLAG_ATOM_ALLCHARS, imap_args_r);
+				    IMAP_PARSE_FLAG_ATOM_ALLCHARS |
+				    IMAP_PARSE_FLAG_SERVER_TEXT, imap_args_r);
 	if (ret == -2) {
 		/* need more data */
 		return 0;
@@ -814,6 +814,9 @@ static int imapc_connection_input_banner(struct imapc_connection *conn)
 
 	if ((ret = imapc_connection_read_line(conn, &imap_args)) <= 0)
 		return ret;
+	/* we already verified that the banner beigns with OK */
+	i_assert(imap_arg_atom_equals(imap_args, "OK"));
+	imap_args++;
 
 	if (imapc_connection_handle_imap_resp_text(conn, imap_args,
 						   &key, &value) < 0)
@@ -837,6 +840,8 @@ static int imapc_connection_input_banner(struct imapc_connection *conn)
 static int imapc_connection_input_untagged(struct imapc_connection *conn)
 {
 	const struct imap_arg *imap_args;
+	const unsigned char *data;
+	size_t size;
 	const char *name, *value;
 	struct imap_parser *parser;
 	struct imapc_untagged_reply reply;
@@ -844,13 +849,13 @@ static int imapc_connection_input_untagged(struct imapc_connection *conn)
 
 	if (conn->state == IMAPC_CONNECTION_STATE_CONNECTING) {
 		/* input banner */
-		name = imap_parser_read_word(conn->parser);
-		if (name == NULL)
+		data = i_stream_get_data(conn->input, &size);
+		if (size < 3 && memchr(data, '\n', size) == NULL)
 			return 0;
-
-		if (strcasecmp(name, "OK") != 0) {
+		if (i_memcasecmp(data, "OK ", 3) != 0) {
 			imapc_connection_input_error(conn,
-				"Banner doesn't begin with OK: %s", name);
+				"Banner doesn't begin with OK: %s",
+				t_strcut(t_strndup(data, size), '\n'));
 			return -1;
 		}
 		conn->input_callback = imapc_connection_input_banner;
@@ -1281,6 +1286,8 @@ static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 	struct stat st;
 	int fd;
 
+	i_assert(conn->client->set.max_idle_time > 0);
+
 	conn->prev_connect_idx = (conn->prev_connect_idx+1) % conn->ips_count;
 	ip = &conn->ips[conn->prev_connect_idx];
 	fd = net_connect_ip(ip, conn->client->set.port, NULL);
@@ -1305,7 +1312,7 @@ static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 	conn->parser = imap_parser_create(conn->input, NULL, (size_t)-1);
 	conn->to = timeout_add(IMAPC_CONNECT_TIMEOUT_MSECS,
 			       imapc_connection_timeout, conn);
-	conn->to_output = timeout_add(IMAPC_MAX_IDLE_MSECS,
+	conn->to_output = timeout_add(conn->client->set.max_idle_time*1000,
 				      imapc_connection_reset_idle, conn);
 	if (conn->client->set.debug) {
 		i_debug("imapc(%s): Connecting to %s:%u", conn->name,
@@ -1852,7 +1859,7 @@ void imapc_connection_unselect(struct imapc_client_mailbox *box)
 		conn->selecting_box = NULL;
 	}
 	imapc_connection_send_idle_done(conn);
-	imapc_connection_abort_commands(conn, FALSE, FALSE);
+	imapc_connection_abort_commands(conn, box, FALSE);
 }
 
 struct imapc_client_mailbox *

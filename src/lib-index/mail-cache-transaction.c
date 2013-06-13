@@ -315,6 +315,9 @@ static bool mail_cache_unlink_hole(struct mail_cache *cache, size_t size,
 
 	i_assert(cache->locked);
 
+	if (hdr->minor_version > 0)
+		return FALSE; /* this is record_count field in v2.2+ */
+
 	offset = hdr->hole_offset; prev_offset = 0;
 	while (offset != 0) {
 		if (pread_full(cache->fd, &hole, sizeof(hole), offset) <= 0) {
@@ -481,7 +484,8 @@ mail_cache_free_space(struct mail_cache *cache, uint32_t offset, uint32_t size)
 		/* we can just set used_file_size back */
 		cache->hdr_modified = TRUE;
 		cache->hdr_copy.used_file_size = offset;
-	} else if (size >= MAIL_CACHE_MIN_HOLE_SIZE) {
+	} else if (size >= MAIL_CACHE_MIN_HOLE_SIZE &&
+		   cache->hdr_copy.minor_version == 0) {
 		/* set it up as a hole */
 		hole.next_offset = cache->hdr_copy.hole_offset;
 		hole.size = size;
@@ -1091,6 +1095,8 @@ int mail_cache_link(struct mail_cache *cache, uint32_t old_offset,
 		    uint32_t new_offset)
 {
 	const struct mail_cache_record *rec;
+	const void *data;
+	int ret;
 
 	i_assert(cache->locked);
 
@@ -1107,15 +1113,16 @@ int mail_cache_link(struct mail_cache *cache, uint32_t old_offset,
 	   records at the same time. we'd rather not lose those additions, so
 	   force the linking order to be new_offset -> old_offset if it isn't
 	   already. */
-	if (mail_cache_map(cache, new_offset, sizeof(*rec)) < 0)
-		return -1;
-	if (new_offset + sizeof(*rec) > cache->mmap_length) {
-		mail_cache_set_corrupted(cache,
-			"Cache record offset %u points outside file",
-			new_offset);
+	ret = mail_cache_map(cache, new_offset, sizeof(*rec), &data);
+	if (ret <= 0) {
+		if (ret == 0) {
+			mail_cache_set_corrupted(cache,
+				"Cache record offset %u points outside file",
+				new_offset);
+		}
 		return -1;
 	}
-	rec = CACHE_RECORD(cache, new_offset);
+	rec = data;
 	if (rec->prev_offset == old_offset) {
 		/* link is already correct */
 		return 0;

@@ -131,6 +131,7 @@ maildir_list_init(struct maildir_quota_root *root, struct mailbox_list *list)
 	ctx->path = str_new(default_pool, 512);
 	ctx->list = list;
 	ctx->iter = mailbox_list_iter_init(list, "*",
+					   MAILBOX_LIST_ITER_SKIP_ALIASES |
 					   MAILBOX_LIST_ITER_RETURN_NO_FLAGS);
 	return ctx;
 }
@@ -546,11 +547,14 @@ static bool maildirsize_has_changed(struct maildir_quota_root *root)
 		!CMP_DEV_T(st1.st_dev, st2.st_dev);
 }
 
-static int maildirsize_read(struct maildir_quota_root *root)
+static int maildirsize_read(struct maildir_quota_root *root, bool *retry)
 {
 	char buf[5120+1];
 	unsigned int i, size;
+	bool retry_estale = *retry;
 	int ret;
+
+	*retry = FALSE;
 
 	if (!maildirsize_has_changed(root))
 		return 1;
@@ -562,8 +566,10 @@ static int maildirsize_read(struct maildir_quota_root *root)
 	size = 0;
 	while ((ret = read(root->fd, buf + size, sizeof(buf)-1 - size)) != 0) {
 		if (ret < 0) {
-			if (errno == ESTALE)
+			if (errno == ESTALE && retry_estale) {
+				*retry = TRUE;
 				break;
+			}
 			i_error("read(%s) failed: %m", root->maildirsize_path);
 			break;
 		}
@@ -644,14 +650,20 @@ static bool maildirquota_limits_init(struct maildir_quota_root *root)
 
 static int maildirquota_read_limits(struct maildir_quota_root *root)
 {
-	int ret;
+	bool retry = TRUE;
+	int ret, n = 0;
 
 	if (!maildirquota_limits_init(root))
 		return 1;
 
-	T_BEGIN {
-		ret = maildirsize_read(root);
-	} T_END;
+	do {
+		if (n == NFS_ESTALE_RETRY_COUNT)
+			retry = FALSE;
+		T_BEGIN {
+			ret = maildirsize_read(root, &retry);
+		} T_END;
+		n++;
+	} while (ret == -1 && retry);
 	return ret;
 }
 
@@ -901,6 +913,7 @@ struct quota_backend quota_backend_maildir = {
 		maildir_quota_root_get_resources,
 		maildir_quota_get_resource,
 		maildir_quota_update,
+		NULL,
 		NULL
 	}
 };

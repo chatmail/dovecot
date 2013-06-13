@@ -5,7 +5,7 @@
 #include "str.h"
 #include "env-util.h"
 #include "execv-const.h"
-#include "master-service.h"
+#include "master-service-private.h"
 #include "master-service-settings.h"
 #include "settings-parser.h"
 #include "doveadm-print-private.h"
@@ -163,6 +163,8 @@ static struct doveadm_cmd doveadm_cmd_help = {
 
 static void cmd_config(int argc ATTR_UNUSED, char *argv[])
 {
+	env_put(t_strconcat(MASTER_CONFIG_FILE_ENV"=",
+		master_service_get_config_path(master_service), NULL));
 	argv[0] = BINDIR"/doveconf";
 	(void)execv(argv[0], argv);
 	i_fatal("execv(%s) failed: %m", argv[0]);
@@ -170,6 +172,21 @@ static void cmd_config(int argc ATTR_UNUSED, char *argv[])
 
 static struct doveadm_cmd doveadm_cmd_config = {
 	cmd_config, "config", "[doveconf parameters]"
+};
+
+static void cmd_exec(int argc ATTR_UNUSED, char *argv[])
+{
+	const char *path, *binary = argv[1];
+
+	path = t_strdup_printf("%s/%s", doveadm_settings->libexec_dir, binary);
+	argv++;
+	argv[0] = t_strdup_noconst(path);
+	(void)execv(argv[0], argv);
+	i_fatal("execv(%s) failed: %m", argv[0]);
+}
+
+static struct doveadm_cmd doveadm_cmd_exec = {
+	cmd_exec, "exec", "<binary> [binary parameters]"
 };
 
 static bool
@@ -267,10 +284,9 @@ static void doveadm_read_settings(void)
 static struct doveadm_cmd *doveadm_commands[] = {
 	&doveadm_cmd_help,
 	&doveadm_cmd_config,
+	&doveadm_cmd_exec,
 	&doveadm_cmd_stop,
 	&doveadm_cmd_reload,
-	&doveadm_cmd_auth,
-	&doveadm_cmd_user,
 	&doveadm_cmd_dump,
 	&doveadm_cmd_pw,
 	&doveadm_cmd_who,
@@ -340,6 +356,7 @@ int main(int argc, char *argv[])
 		quick_init = TRUE;
 	} else {
 		quick_init = FALSE;
+		doveadm_register_auth_commands();
 		doveadm_register_director_commands();
 		doveadm_register_instance_commands();
 		doveadm_register_mount_commands();

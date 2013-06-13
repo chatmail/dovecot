@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "array.h"
+#include "abspath.h"
 #include "ioloop.h"
 #include "mkdir-parents.h"
 #include "str.h"
@@ -162,6 +163,7 @@ int mailbox_list_create(const char *driver, struct mail_namespace *ns,
 	list->set.mailbox_dir_name =
 		p_strdup(list->pool, set->mailbox_dir_name);
 	list->set.alt_dir = p_strdup(list->pool, set->alt_dir);
+	list->set.alt_dir_nocheck = set->alt_dir_nocheck;
 
 	if (*set->mailbox_dir_name == '\0')
 		list->set.mailbox_dir_name = "";
@@ -293,7 +295,10 @@ int mailbox_list_settings_parse(struct mail_user *user, const char *data,
 			dest = &set_r->control_dir;
 		else if (strcmp(key, "ALT") == 0)
 			dest = &set_r->alt_dir;
-		else if (strcmp(key, "LAYOUT") == 0)
+		else if (strcmp(key, "ALTNOCHECK") == 0) {
+			set_r->alt_dir_nocheck = TRUE;
+			continue;
+		} else if (strcmp(key, "LAYOUT") == 0)
 			dest = &set_r->layout;
 		else if (strcmp(key, "SUBSCRIPTIONS") == 0)
 			dest = &set_r->subscription_fname;
@@ -397,12 +402,14 @@ const char *mailbox_list_default_get_storage_name(struct mailbox_list *list,
 	string_t *str;
 	char list_sep, ns_sep, *ret, *p;
 
-	if (strcasecmp(storage_name, "INBOX") == 0)
+	if (strcasecmp(storage_name, "INBOX") == 0 &&
+	    (ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0)
 		storage_name = "INBOX";
 	else if (list->set.escape_char != '\0')
 		storage_name = mailbox_list_escape_name(list, vname);
 
-	if (prefix_len > 0 && strcmp(storage_name, "INBOX") != 0) {
+	if (prefix_len > 0 && (strcmp(storage_name, "INBOX") != 0 ||
+			       (ns->flags & NAMESPACE_FLAG_INBOX_USER) == 0)) {
 		/* skip namespace prefix, except if this is INBOX */
 		if (strncmp(ns->prefix, storage_name, prefix_len) == 0)
 			storage_name += prefix_len;
@@ -631,7 +638,7 @@ char mailbox_list_get_hierarchy_sep(struct mailbox_list *list)
 void mailbox_list_get_permissions(struct mailbox_list *list, const char *name,
 				  struct mailbox_permissions *permissions_r)
 {
-	const char *path, *parent_name, *p;
+	const char *path, *parent_name, *parent_path, *p;
 	struct stat st;
 
 	memset(permissions_r, 0, sizeof(*permissions_r));
@@ -701,6 +708,21 @@ void mailbox_list_get_permissions(struct mailbox_list *list, const char *name,
 		} else {
 			permissions_r->file_create_gid = st.st_gid;
 		}
+		if (!S_ISDIR(st.st_mode) &&
+		    permissions_r->file_create_gid != (gid_t)-1) {
+			/* we need to stat() the parent directory to see if
+			   it has setgid-bit set */
+			p = strrchr(path, '/');
+			parent_path = p == NULL ? NULL :
+				t_strdup_until(path, p);
+			if (parent_path != NULL &&
+			    stat(parent_path, &st) == 0 &&
+			    (st.st_mode & S_ISGID) != 0) {
+				/* directory's GID is used automatically for
+				   new files */
+				permissions_r->file_create_gid = (gid_t)-1;
+			}
+		}
 	}
 
 	if (name == NULL) {
@@ -741,27 +763,6 @@ void mailbox_list_get_root_permissions(struct mailbox_list *list,
 		*gid_r = perm.file_create_gid;
 		*gid_origin_r = perm.file_create_gid_origin;
 	}
-}
-
-static int
-mailbox_list_stat_parent(const char *path, const char **root_dir_r,
-			 struct stat *st_r, const char **error_r)
-{
-	const char *p;
-
-	while (stat(path, st_r) < 0) {
-		if (errno != ENOENT || strcmp(path, "/") == 0) {
-			*error_r = t_strdup_printf("stat(%s) failed: %m", path);
-			return -1;
-		}
-		p = strrchr(path, '/');
-		if (p == NULL)
-			path = "/";
-		else
-			path = t_strdup_until(path, p);
-	}
-	*root_dir_r = path;
-	return 0;
 }
 
 static const char *
@@ -851,9 +852,10 @@ int mailbox_list_mkdir_root(struct mailbox_list *list, const char *path,
 		/* up to this directory get the permissions from the first
 		   parent directory that exists, if it has setgid bit
 		   enabled. */
-		if (mailbox_list_stat_parent(expanded, &root_dir, &st,
-					     error_r) < 0)
+		if (stat_first_parent(expanded, &root_dir, &st) < 0) {
+			*error_r = t_strdup_printf("stat(%s) failed: %m", root_dir);
 			return -1;
+		}
 		if ((st.st_mode & S_ISGID) != 0 && root_dir != expanded) {
 			if (mkdir_parents_chgrp(expanded, st.st_mode,
 						(gid_t)-1, root_dir) < 0 &&
@@ -1280,6 +1282,39 @@ mailbox_list_get_file_type(const struct dirent *d ATTR_UNUSED)
 	return type;
 }
 
+int mailbox_list_dirent_is_alias_symlink(struct mailbox_list *list,
+					 const char *dir_path,
+					 const struct dirent *d)
+{
+	struct stat st;
+	int ret;
+
+	if (mailbox_list_get_file_type(d) == MAILBOX_LIST_FILE_TYPE_SYMLINK)
+		return 1;
+
+	T_BEGIN {
+		const char *path, *linkpath;
+
+		path = t_strconcat(dir_path, "/", d->d_name, NULL);
+		if (lstat(path, &st) < 0) {
+			mailbox_list_set_critical(list,
+						  "lstat(%s) failed: %m", path);
+			ret = -1;
+		} else if (!S_ISLNK(st.st_mode)) {
+			ret = 0;
+		} else if (t_readlink(path, &linkpath) < 0) {
+			i_error("readlink(%s) failed: %m", path);
+			ret = -1;
+		} else {
+			/* it's an alias only if it points to the same
+			   directory */
+			ret = strchr(linkpath, '/') == NULL ? 1 : 0;
+		}
+	} T_END;
+	return ret;
+}
+
+
 static bool
 mailbox_list_try_get_home_path(struct mailbox_list *list, const char **name)
 {
@@ -1406,7 +1441,14 @@ int mailbox_list_create_missing_index_dir(struct mailbox_list *list,
 		if (errno != ENOENT || p == NULL || ++n == 2) {
 			mailbox_list_set_critical(list,
 				"mkdir(%s) failed: %m", index_dir);
-			return -1;
+			if (p == NULL || errno != EPERM ||
+			    perm.dir_create_mode == 0700)
+				return -1;
+			/* we can't use the GID. allow it anyway with more
+			   restricted permissions. */
+			perm.file_create_gid = (gid_t)-1;
+			perm.dir_create_mode = 0700;
+			continue;
 		}
 		/* create the parent directory first */
 		parent_dir = t_strdup_until(index_dir, p);

@@ -74,7 +74,8 @@ enum mailbox_status_items {
 	STATUS_HIGHESTMODSEQ	= 0x80,
 	STATUS_PERMANENT_FLAGS	= 0x200,
 	STATUS_FIRST_RECENT_UID	= 0x400,
-	STATUS_LAST_CACHED_SEQ	= 0x800
+	STATUS_LAST_CACHED_SEQ	= 0x800,
+	STATUS_CHECK_OVER_QUOTA	= 0x1000 /* return error if over quota */
 };
 
 enum mailbox_metadata_items {
@@ -93,9 +94,6 @@ enum mailbox_search_result_flags {
 };
 
 enum mail_sort_type {
-/* Maximum size for sort program (each one separately + END) */
-#define MAX_SORT_PROGRAM_SIZE (8 + 1)
-
 	MAIL_SORT_ARRIVAL	= 0x0001,
 	MAIL_SORT_CC		= 0x0002,
 	MAIL_SORT_DATE		= 0x0004,
@@ -107,6 +105,8 @@ enum mail_sort_type {
 	MAIL_SORT_DISPLAYFROM	= 0x0100,
 	MAIL_SORT_DISPLAYTO	= 0x0200,
 	MAIL_SORT_POP3_ORDER	= 0x0400,
+/* Maximum size for sort program (each one separately + END) */
+#define MAX_SORT_PROGRAM_SIZE (11 + 1)
 
 	MAIL_SORT_MASK		= 0x0fff,
 	MAIL_SORT_FLAG_REVERSE	= 0x1000, /* reverse this mask type */
@@ -268,6 +268,9 @@ struct mail_transaction_commit_changes {
 
 	/* TRUE if anything actually changed with this commit */
 	bool changed;
+	/* User doesn't have read ACL for the mailbox, so don't show the
+	   uid_validity / saved_uids. */
+	bool no_read_perm;
 };
 
 struct mailbox_sync_rec {

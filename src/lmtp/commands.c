@@ -74,7 +74,7 @@ int cmd_lhlo(struct client *client, const char *args)
 
 	i_free(client->lhlo);
 	client->lhlo = i_strdup(str_c(domain));
-	client->state.name = "LHLO";
+	client_state_set(client, "LHLO");
 	return 0;
 }
 
@@ -143,7 +143,7 @@ int cmd_mail(struct client *client, const char *args)
 	client->state.mail_from = p_strdup(client->state_pool, addr);
 	p_array_init(&client->state.rcpt_to, client->state_pool, 64);
 	client_send_line(client, "250 2.1.0 OK");
-	client->state.name = "MAIL FROM";
+	client_state_set(client, "MAIL FROM");
 	return 0;
 }
 
@@ -304,6 +304,7 @@ static bool client_proxy_rcpt(struct client *client, const char *address,
 	if (client->proxy == NULL) {
 		client->proxy = lmtp_proxy_init(client->set->hostname,
 						dns_client_socket_path,
+						client->state.session_id,
 						client->output);
 		if (client->state.mail_body_8bitmime)
 			args = " BODY=8BITMIME";
@@ -380,6 +381,105 @@ static void rcpt_address_parse(struct client *client, const char *address,
 	}
 }
 
+static void lmtp_address_translate(struct client *client, const char **address)
+{
+	const char *transpos = client->lmtp_set->lmtp_address_translate;
+	const char *p, *nextstr, *addrpos = *address;
+	unsigned int len;
+	string_t *username, *domain, *dest = NULL;
+
+	if (*transpos == '\0')
+		return;
+
+	username = t_str_new(64);
+	domain = t_str_new(64);
+
+	/* check that string matches up to the first '%' */
+	p = strchr(transpos, '%');
+	if (p == NULL)
+		len = strlen(transpos);
+	else
+		len = p-transpos;
+	if (strncmp(transpos, addrpos, len) != 0)
+		return;
+	transpos += len;
+	addrpos += len;
+
+	while (*transpos != '\0') {
+		switch (transpos[1]) {
+		case 'n':
+		case 'u':
+			dest = username;
+			break;
+		case 'd':
+			dest = domain;
+			break;
+		default:
+			return;
+		}
+		transpos += 2;
+
+		/* find where the next string starts */
+		if (*transpos == '\0') {
+			str_append(dest, addrpos);
+			break;
+		}
+		p = strchr(transpos, '%');
+		if (p == NULL)
+			nextstr = transpos;
+		else
+			nextstr = t_strdup_until(transpos, p);
+		p = strstr(addrpos, nextstr);
+		if (p == NULL)
+			return;
+		str_append_n(dest, addrpos, p-addrpos);
+
+		len = strlen(nextstr);
+		transpos += len;
+		addrpos = p + len;
+	}
+	str_append_c(username, '@');
+	if (domain != NULL)
+		str_append_str(username, domain);
+	*address = str_c(username);
+}
+
+static int
+lmtp_rcpt_to_is_over_quota(struct client *client,
+			   const struct mail_recipient *rcpt)
+{
+	struct mail_user *user;
+	struct mail_namespace *ns;
+	struct mailbox *box;
+	struct mailbox_status status;
+	const char *errstr;
+	enum mail_error error;
+	int ret;
+
+	if (!client->lmtp_set->lmtp_rcpt_check_quota)
+		return 0;
+
+	ret = mail_storage_service_next(storage_service,
+					rcpt->service_user, &user);
+	if (ret < 0)
+		return -1;
+
+	ns = mail_namespace_find_inbox(user->namespaces);
+	box = mailbox_alloc(ns->list, "INBOX", 0);
+	ret = mailbox_get_status(box, STATUS_CHECK_OVER_QUOTA, &status);
+	if (ret < 0) {
+		errstr = mailbox_get_last_error(box, &error);
+		if (error == MAIL_ERROR_NOSPACE) {
+			client_send_line(client, "552 5.2.2 <%s> %s",
+					 rcpt->address, errstr);
+			ret = 1;
+		}
+	}
+	mailbox_free(&box);
+	mail_user_unref(&user);
+	return ret;
+}
+
 int cmd_rcpt(struct client *client, const char *args)
 {
 	struct mail_recipient rcpt;
@@ -388,7 +488,7 @@ int cmd_rcpt(struct client *client, const char *args)
 	const char *error = NULL;
 	int ret = 0;
 
-	client->state.name = "RCPT TO";
+	client_state_set(client, "RCPT TO");
 
 	if (client->state.mail_from == NULL) {
 		client_send_line(client, "503 5.5.1 MAIL needed first");
@@ -415,16 +515,6 @@ int cmd_rcpt(struct client *client, const char *args)
 			return 0;
 	}
 
-	if (client->proxy != NULL) {
-		/* NOTE: if this restriction is ever removed, we'll also need
-		   to send different message bodies to local and proxy
-		   (with and without Return-Path: header) */
-		client_send_line(client, "451 4.3.0 <%s> "
-			"Can't handle mixed proxy/non-proxy destinations",
-			address);
-		return 0;
-	}
-
 	memset(&input, 0, sizeof(input));
 	input.module = input.service = "lmtp";
 	input.username = username;
@@ -448,12 +538,29 @@ int cmd_rcpt(struct client *client, const char *args)
 				 address, username);
 		return 0;
 	}
+	if (client->proxy != NULL) {
+		/* NOTE: if this restriction is ever removed, we'll also need
+		   to send different message bodies to local and proxy
+		   (with and without Return-Path: header) */
+		client_send_line(client, "451 4.3.0 <%s> "
+			"Can't handle mixed proxy/non-proxy destinations",
+			address);
+		return 0;
+	}
+
+	lmtp_address_translate(client, &address);
 
 	rcpt.address = p_strdup(client->state_pool, address);
 	rcpt.detail = p_strdup(client->state_pool, detail);
-	array_append(&client->state.rcpt_to, &rcpt, 1);
-
-	client_send_line(client, "250 2.1.5 OK");
+	if ((ret = lmtp_rcpt_to_is_over_quota(client, &rcpt)) < 0) {
+		client_send_line(client, ERRSTR_TEMP_MAILBOX_FAIL,
+				 rcpt.address);
+		return 0;
+	}
+	if (ret == 0) {
+		array_append(&client->state.rcpt_to, &rcpt, 1);
+		client_send_line(client, "250 2.1.5 OK");
+	}
 	return 0;
 }
 
@@ -771,6 +878,9 @@ static bool client_input_data_write(struct client *client)
 	struct istream *input;
 	bool ret = TRUE;
 
+	/* stop handling client input until saving/proxying is finished */
+	if (client->to_idle != NULL)
+		timeout_remove(&client->to_idle);
 	io_remove(&client->io);
 	i_stream_destroy(&client->dot_input);
 
@@ -904,7 +1014,7 @@ int cmd_data(struct client *client, const char *args ATTR_UNUSED)
 	client_send_line(client, "354 OK");
 
 	io_remove(&client->io);
-	client->state.name = "DATA";
+	client_state_set(client, "DATA");
 	client->io = io_add(client->fd_in, IO_READ, client_input_data, client);
 	client_input_data_handle(client);
 	return -1;

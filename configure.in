@@ -1,5 +1,5 @@
 AC_PREREQ([2.59])
-AC_INIT([Dovecot],[2.1.7],[dovecot@dovecot.org])
+AC_INIT([Dovecot],[2.1.16],[dovecot@dovecot.org])
 AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE([foreign])
@@ -286,6 +286,9 @@ AM_ICONV
 AC_DEFINE_UNQUOTED(DOVECOT_NAME, "$PACKAGE_NAME", Dovecot name)
 AC_DEFINE_UNQUOTED(DOVECOT_STRING, "$PACKAGE_STRING", Dovecot string)
 AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", Dovecot version)
+
+AC_DEFINE([DOVECOT_VERSION_MAJOR], regexp(AC_PACKAGE_VERSION, [^\([0-9]+\)\.\([0-9]+\)], [\1]), [Dovecot major version])
+AC_DEFINE([DOVECOT_VERSION_MINOR], regexp(AC_PACKAGE_VERSION, [^\([0-9]+\)\.\([0-9]+\)], [\2]), [Dovecot minor version])
 
 AC_CHECK_HEADERS(strings.h stdint.h unistd.h dirent.h malloc.h inttypes.h \
   sys/uio.h sys/sysmacros.h sys/resource.h sys/select.h libgen.h \
@@ -951,21 +954,13 @@ fi
 AC_DEFINE_UNQUOTED(MEM_ALIGN_SIZE, $mem_align, Required memory alignment)
 
 dnl * find random source
-AC_MSG_CHECKING([for OpenBSD /dev/arandom])
-if test -c /dev/arandom; then
+AC_MSG_CHECKING([for /dev/urandom])
+if test -c /dev/urandom || test -s /dev/urandom; then
   AC_MSG_RESULT(yes)
-  AC_DEFINE(DEV_URANDOM_PATH, "/dev/arandom", Path to /dev/urandom)
+  AC_DEFINE(DEV_URANDOM_PATH, "/dev/urandom", Path to /dev/urandom)
   have_random_source=yes
 else
   AC_MSG_RESULT(no)
-  AC_MSG_CHECKING([for /dev/urandom])
-  if test -c /dev/urandom || test -s /dev/urandom; then
-    AC_MSG_RESULT(yes)
-    AC_DEFINE(DEV_URANDOM_PATH, "/dev/urandom", Path to /dev/urandom)
-    have_random_source=yes
-  else
-    AC_MSG_RESULT(no)
-  fi
 fi
 
 if test "$have_random_source" != "yes"; then
@@ -2183,6 +2178,7 @@ if test $want_mysql != no; then
   AC_CHECK_PROG(MYSQL_CONFIG, mysql_config, mysql_config, NO)
   if test $MYSQL_CONFIG = NO; then
 	# based on code from PHP
+	MYSQL_LIBS="-lmysqlclient -lz -lm"
 	for i in /usr /usr/local /usr/local/mysql; do
 		for j in include include/mysql ""; do
 			if test -r "$i/$j/mysql.h"; then
@@ -2665,6 +2661,11 @@ if test "$want_lucene" = "yes"; then
       AC_CHECK_LIB(textcat, special_textcat_Init, [
 	have_lucene_textcat=yes
 	AC_DEFINE(HAVE_LUCENE_TEXTCAT,, Define if you want textcat support for CLucene)
+      ], [
+        AC_CHECK_LIB(exttextcat, special_textcat_Init, [
+          have_lucene_exttextcat=yes
+          AC_DEFINE(HAVE_LUCENE_EXTTEXTCAT,, Define if you want textcat (Debian version) support for CLucene)
+        ])
       ])
     ], [
       if test $want_stemmer = yes; then
@@ -2677,6 +2678,7 @@ if test "$want_lucene" = "yes"; then
 fi
 AM_CONDITIONAL(BUILD_LUCENE_STEMMER, test "$have_lucene_stemmer" = "yes")
 AM_CONDITIONAL(BUILD_LUCENE_TEXTCAT, test "$have_lucene_textcat" = "yes")
+AM_CONDITIONAL(BUILD_LUCENE_EXTTEXTCAT, test "$have_lucene_exttextcat" = "yes")
 
 if test $have_lucene = no; then
   not_fts="$not_fts lucene"
@@ -2702,7 +2704,7 @@ dnl **
 dnl IDLE doesn't really belong to banner. It's there just to make Blackberries
 dnl happy, because otherwise BIS server disables push email.
 capability_banner="IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE"
-capability="$capability_banner SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS MULTIAPPEND UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS SPECIAL-USE"
+capability="$capability_banner SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS SPECIAL-USE"
 AC_DEFINE_UNQUOTED(CAPABILITY_STRING, "$capability", IMAP capabilities)
 AC_DEFINE_UNQUOTED(CAPABILITY_BANNER_STRING, "$capability_banner", IMAP capabilities advertised in banner) 
 
@@ -2808,6 +2810,7 @@ src/plugins/fts-squat/Makefile
 src/plugins/lazy-expunge/Makefile
 src/plugins/listescape/Makefile
 src/plugins/mail-log/Makefile
+src/plugins/mailbox-alias/Makefile
 src/plugins/notify/Makefile
 src/plugins/pop3-migration/Makefile
 src/plugins/quota/Makefile

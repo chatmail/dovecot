@@ -21,6 +21,7 @@ static void i_stream_ssl_destroy(struct iostream_private *stream)
 {
 	struct ssl_istream *sstream = (struct ssl_istream *)stream;
 
+	i_free(sstream->istream.w_buffer);
 	ssl_iostream_unref(&sstream->ssl_io);
 }
 
@@ -38,6 +39,7 @@ static ssize_t i_stream_ssl_read(struct istream_private *stream)
 	if (ret <= 0) {
 		if (ret < 0) {
 			/* handshake failed */
+			i_assert(errno != 0);
 			stream->istream.stream_errno = errno;
 		}
 		return ret;
@@ -80,5 +82,6 @@ struct istream *i_stream_create_ssl(struct ssl_iostream *ssl_io)
 	sstream->istream.read = i_stream_ssl_read;
 
 	sstream->istream.istream.readable_fd = FALSE;
-	return i_stream_create(&sstream->istream, NULL, -1);
+	return i_stream_create(&sstream->istream, NULL,
+			       i_stream_get_fd(ssl_io->plain_input));
 }

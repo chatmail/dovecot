@@ -96,6 +96,7 @@ struct index_mail_data {
 	struct istream *stream, *filter_stream;
 	struct tee_istream *tee_stream;
 	struct message_size hdr_size, body_size;
+	struct istream *parser_input;
 	struct message_parser_ctx *parser_ctx;
 	int parsing_count;
 	ARRAY_TYPE(keywords) keywords;
@@ -146,6 +147,8 @@ struct index_mail {
 	unsigned int pop3_state_set:1;
 	/* mail created by mailbox_search_*() */
 	unsigned int search_mail:1;
+	/* close() is being called from mail_free() */
+	unsigned int freeing:1;
 };
 
 struct mail *

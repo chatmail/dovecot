@@ -53,26 +53,27 @@ LTLIBRARIES = $(noinst_LTLIBRARIES)
 liblib_la_LIBADD =
 am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	backtrace-string.lo base64.lo bsearch-insert-pos.lo buffer.lo \
-	child-wait.lo close-keep-errno.lo compat.lo crc32.lo \
-	data-stack.lo eacces-error.lo env-util.lo execv-const.lo \
-	failures.lo fd-close-on-exec.lo fd-set-nonblock.lo \
-	fdatasync-path.lo fdpass.lo file-cache.lo file-copy.lo \
-	file-dotlock.lo file-lock.lo file-set-size.lo guid.lo hash.lo \
-	hash-format.lo hash-method.lo hash2.lo hex-binary.lo \
-	hex-dec.lo hmac-md5.lo hmac-sha1.lo home-expand.lo hostpid.lo \
-	imem.lo ipwd.lo iostream.lo iostream-rawlog.lo istream.lo \
-	istream-base64-encoder.lo istream-concat.lo istream-crlf.lo \
-	istream-data.lo istream-file.lo istream-limit.lo \
-	istream-mmap.lo istream-rawlog.lo istream-seekable.lo \
-	istream-tee.lo ioloop.lo ioloop-iolist.lo \
-	ioloop-notify-none.lo ioloop-notify-fd.lo ioloop-notify-dn.lo \
-	ioloop-notify-inotify.lo ioloop-notify-kqueue.lo \
-	ioloop-poll.lo ioloop-select.lo ioloop-epoll.lo \
-	ioloop-kqueue.lo lib.lo lib-signals.lo md4.lo md5.lo \
-	mempool.lo mempool-alloconly.lo mempool-datastack.lo \
-	mempool-system.lo mempool-unsafe-datastack.lo mkdir-parents.lo \
-	mmap-anon.lo mmap-util.lo module-dir.lo mountpoint.lo \
-	network.lo nfs-workarounds.lo ostream.lo ostream-file.lo \
+	child-wait.lo close-keep-errno.lo compat.lo connection.lo \
+	crc32.lo data-stack.lo eacces-error.lo env-util.lo \
+	execv-const.lo failures.lo fd-close-on-exec.lo \
+	fd-set-nonblock.lo fdatasync-path.lo fdpass.lo file-cache.lo \
+	file-copy.lo file-dotlock.lo file-lock.lo file-set-size.lo \
+	guid.lo hash.lo hash-format.lo hash-method.lo hash2.lo \
+	hex-binary.lo hex-dec.lo hmac-md5.lo hmac-sha1.lo \
+	home-expand.lo hostpid.lo imem.lo ipwd.lo iostream.lo \
+	iostream-rawlog.lo istream.lo istream-base64-encoder.lo \
+	istream-concat.lo istream-crlf.lo istream-data.lo \
+	istream-file.lo istream-limit.lo istream-mmap.lo \
+	istream-rawlog.lo istream-seekable.lo istream-tee.lo ioloop.lo \
+	ioloop-iolist.lo ioloop-notify-none.lo ioloop-notify-fd.lo \
+	ioloop-notify-dn.lo ioloop-notify-inotify.lo \
+	ioloop-notify-kqueue.lo ioloop-poll.lo ioloop-select.lo \
+	ioloop-epoll.lo ioloop-kqueue.lo json-parser.lo lib.lo \
+	lib-signals.lo md4.lo md5.lo mempool.lo mempool-alloconly.lo \
+	mempool-datastack.lo mempool-system.lo \
+	mempool-unsafe-datastack.lo mkdir-parents.lo mmap-anon.lo \
+	mmap-util.lo module-dir.lo mountpoint.lo network.lo \
+	nfs-workarounds.lo ostream.lo ostream-file.lo \
 	ostream-buffer.lo ostream-rawlog.lo primes.lo \
 	printf-format-fix.lo process-title.lo priorityq.lo randgen.lo \
 	read-full.lo restrict-access.lo restrict-process-size.lo \
@@ -104,11 +105,12 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-primes.$(OBJEXT) \
 	test_lib-test-priorityq.$(OBJEXT) \
 	test_lib-test-seq-range-array.$(OBJEXT) \
-	test_lib-test-strescape.$(OBJEXT) \
+	test_lib-test-str.$(OBJEXT) test_lib-test-strescape.$(OBJEXT) \
 	test_lib-test-strfuncs.$(OBJEXT) \
 	test_lib-test-str-find.$(OBJEXT) \
 	test_lib-test-str-sanitize.$(OBJEXT) \
 	test_lib-test-time-util.$(OBJEXT) \
+	test_lib-test-unichar.$(OBJEXT) \
 	test_lib-test-utc-mktime.$(OBJEXT) \
 	test_lib-test-var-expand.$(OBJEXT)
 test_lib_OBJECTS = $(am_test_lib_OBJECTS)
@@ -349,6 +351,7 @@ liblib_la_SOURCES = \
 	child-wait.c \
 	close-keep-errno.c \
 	compat.c \
+	connection.c \
 	crc32.c \
 	data-stack.c \
 	eacces-error.c \
@@ -401,6 +404,7 @@ liblib_la_SOURCES = \
 	ioloop-select.c \
 	ioloop-epoll.c \
 	ioloop-kqueue.c \
+	json-parser.c \
 	lib.c \
 	lib-signals.c \
 	md4.c \
@@ -466,6 +470,7 @@ headers = \
 	child-wait.h \
 	close-keep-errno.h \
 	compat.h \
+	connection.h \
 	crc32.h \
 	data-stack.h \
 	eacces-error.h \
@@ -510,6 +515,7 @@ headers = \
 	ioloop-iolist.h \
 	ioloop-private.h \
 	ioloop-notify-fd.h \
+	json-parser.h \
 	lib.h \
 	lib-signals.h \
 	llist.h \
@@ -589,11 +595,13 @@ test_lib_SOURCES = \
 	test-primes.c \
 	test-priorityq.c \
 	test-seq-range-array.c \
+	test-str.c \
 	test-strescape.c \
 	test-strfuncs.c \
 	test-str-find.c \
 	test-str-sanitize.c \
 	test-time-util.c \
+	test-unichar.c \
 	test-utc-mktime.c \
 	test-var-expand.c
 
@@ -681,6 +689,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/child-wait.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/close-keep-errno.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/compat.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/connection.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/crc32.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/data-stack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eacces-error.Plo@am__quote@
@@ -733,6 +742,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-seekable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-tee.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/json-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lib-signals.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/md4.Plo@am__quote@
@@ -797,9 +807,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-seq-range-array.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-str-find.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-str-sanitize.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-str.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-strescape.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-strfuncs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-time-util.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-unichar.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-utc-mktime.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-var-expand.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/time-util.Plo@am__quote@
@@ -1128,6 +1140,20 @@ test_lib-test-seq-range-array.obj: test-seq-range-array.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-seq-range-array.obj `if test -f 'test-seq-range-array.c'; then $(CYGPATH_W) 'test-seq-range-array.c'; else $(CYGPATH_W) '$(srcdir)/test-seq-range-array.c'; fi`
 
+test_lib-test-str.o: test-str.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-str.o -MD -MP -MF $(DEPDIR)/test_lib-test-str.Tpo -c -o test_lib-test-str.o `test -f 'test-str.c' || echo '$(srcdir)/'`test-str.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-str.Tpo $(DEPDIR)/test_lib-test-str.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-str.c' object='test_lib-test-str.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-str.o `test -f 'test-str.c' || echo '$(srcdir)/'`test-str.c
+
+test_lib-test-str.obj: test-str.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-str.obj -MD -MP -MF $(DEPDIR)/test_lib-test-str.Tpo -c -o test_lib-test-str.obj `if test -f 'test-str.c'; then $(CYGPATH_W) 'test-str.c'; else $(CYGPATH_W) '$(srcdir)/test-str.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-str.Tpo $(DEPDIR)/test_lib-test-str.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-str.c' object='test_lib-test-str.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-str.obj `if test -f 'test-str.c'; then $(CYGPATH_W) 'test-str.c'; else $(CYGPATH_W) '$(srcdir)/test-str.c'; fi`
+
 test_lib-test-strescape.o: test-strescape.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-strescape.o -MD -MP -MF $(DEPDIR)/test_lib-test-strescape.Tpo -c -o test_lib-test-strescape.o `test -f 'test-strescape.c' || echo '$(srcdir)/'`test-strescape.c
 @am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-strescape.Tpo $(DEPDIR)/test_lib-test-strescape.Po
@@ -1197,6 +1223,20 @@ test_lib-test-time-util.obj: test-time-util.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-time-util.c' object='test_lib-test-time-util.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-time-util.obj `if test -f 'test-time-util.c'; then $(CYGPATH_W) 'test-time-util.c'; else $(CYGPATH_W) '$(srcdir)/test-time-util.c'; fi`
+
+test_lib-test-unichar.o: test-unichar.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-unichar.o -MD -MP -MF $(DEPDIR)/test_lib-test-unichar.Tpo -c -o test_lib-test-unichar.o `test -f 'test-unichar.c' || echo '$(srcdir)/'`test-unichar.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-unichar.Tpo $(DEPDIR)/test_lib-test-unichar.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-unichar.c' object='test_lib-test-unichar.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-unichar.o `test -f 'test-unichar.c' || echo '$(srcdir)/'`test-unichar.c
+
+test_lib-test-unichar.obj: test-unichar.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-unichar.obj -MD -MP -MF $(DEPDIR)/test_lib-test-unichar.Tpo -c -o test_lib-test-unichar.obj `if test -f 'test-unichar.c'; then $(CYGPATH_W) 'test-unichar.c'; else $(CYGPATH_W) '$(srcdir)/test-unichar.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-unichar.Tpo $(DEPDIR)/test_lib-test-unichar.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-unichar.c' object='test_lib-test-unichar.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-unichar.obj `if test -f 'test-unichar.c'; then $(CYGPATH_W) 'test-unichar.c'; else $(CYGPATH_W) '$(srcdir)/test-unichar.c'; fi`
 
 test_lib-test-utc-mktime.o: test-utc-mktime.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-utc-mktime.o -MD -MP -MF $(DEPDIR)/test_lib-test-utc-mktime.Tpo -c -o test_lib-test-utc-mktime.o `test -f 'test-utc-mktime.c' || echo '$(srcdir)/'`test-utc-mktime.c

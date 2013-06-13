@@ -433,7 +433,8 @@ static void ssl_handle_error(struct ssl_proxy *proxy, int ret,
 	case SSL_ERROR_SSL:
 		if (ERR_GET_REASON(ERR_peek_error()) == ERR_R_MALLOC_FAILURE) {
 			i_error("OpenSSL malloc() failed. "
-				"You may need to increase login_process_size");
+				"You may need to increase service %s { vsz_limit }",
+				login_binary->process_name);
 		}
 		errstr = t_strdup_printf("%s failed: %s",
 					 func_name, ssl_last_error());
@@ -846,9 +847,9 @@ static void ssl_info_callback(const SSL *ssl, int where, int ret)
 			  where, SSL_state_string_long(ssl),
 			  net_ip2addr(&proxy->ip));
 	} else {
-		i_warning("SSL: where=0x%x, ret=%d: %s [%s]",
-			  where, ret, SSL_state_string_long(ssl),
-			  net_ip2addr(&proxy->ip));
+		i_debug("SSL: where=0x%x, ret=%d: %s [%s]",
+			where, ret, SSL_state_string_long(ssl),
+			net_ip2addr(&proxy->ip));
 	}
 }
 
@@ -1026,6 +1027,17 @@ static const char *ssl_proxy_get_use_certificate_error(const char *cert)
 	}
 }
 
+static const char *ssl_key_load_error(void)
+{
+	unsigned long err = ERR_peek_error();
+
+	if (ERR_GET_LIB(err) == ERR_LIB_X509 &&
+	    ERR_GET_REASON(err) == X509_R_KEY_VALUES_MISMATCH)
+		return "Key is for a different cert than ssl_cert";
+	else
+		return ssl_last_error();
+}
+
 static EVP_PKEY *
 ssl_proxy_load_key(const char *key, const char *password)
 {
@@ -1040,21 +1052,12 @@ ssl_proxy_load_key(const char *key, const char *password)
 	dup_password = t_strdup_noconst(password);
 	pkey = PEM_read_bio_PrivateKey(bio, NULL, pem_password_callback,
 				       dup_password);
-	if (pkey == NULL)
-		i_fatal("Couldn't parse private ssl_key");
+	if (pkey == NULL) {
+		i_fatal("Couldn't parse private ssl_key: %s",
+			ssl_key_load_error());
+	}
 	BIO_free(bio);
 	return pkey;
-}
-
-static const char *ssl_key_load_error(void)
-{
-	unsigned long err = ERR_peek_error();
-
-	if (ERR_GET_LIB(err) == ERR_LIB_X509 &&
-	    ERR_GET_REASON(err) == X509_R_KEY_VALUES_MISMATCH)
-		return "Key is for a different cert than ssl_cert";
-	else
-		return ssl_last_error();
 }
 
 static void ssl_proxy_ctx_use_key(SSL_CTX *ctx, const struct login_settings *set)

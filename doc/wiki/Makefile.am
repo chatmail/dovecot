@@ -9,6 +9,7 @@ EXTRA_DIST = \
 wikifiles = ACL.txt \
 	AixPluginsSupport.txt \
 	AuthDatabase.CheckPassword.txt \
+	AuthDatabase.Dict.txt \
 	AuthDatabase.LDAP.AuthBinds.txt \
 	AuthDatabase.LDAP.PasswordLookups.txt \
 	AuthDatabase.LDAP.Userdb.txt \
@@ -42,6 +43,7 @@ wikifiles = ACL.txt \
 	Design.AuthProcess.txt \
 	Design.AuthProtocol.txt \
 	Design.Buffers.txt \
+	Design.Code.txt \
 	Design.Dsync.txt \
 	Design.Indexes.Cache.txt \
 	Design.Indexes.MailIndexApi.txt \
@@ -124,6 +126,7 @@ wikifiles = ACL.txt \
 	Migration.Vm-pop3d.txt \
 	Migration.txt \
 	MissingMailboxes.txt \
+	Mountpoints.txt \
 	NFS.txt \
 	Namespaces.txt \
 	OSCompatibility.txt \
@@ -136,6 +139,7 @@ wikifiles = ACL.txt \
 	PasswordDatabase.ExtraFields.Proxy.txt \
 	PasswordDatabase.ExtraFields.User.txt \
 	PasswordDatabase.ExtraFields.txt \
+	PasswordDatabase.IMAP.txt \
 	PasswordDatabase.PAM.txt \
 	PasswordDatabase.Shadow.txt \
 	PasswordDatabase.Static.txt \
@@ -153,6 +157,7 @@ wikifiles = ACL.txt \
 	Pigeonhole.Sieve.Extensions.Vacation.txt \
 	Pigeonhole.Sieve.Extensions.txt \
 	Pigeonhole.Sieve.Plugins.Extdata.txt \
+	Pigeonhole.Sieve.Plugins.Extprograms.txt \
 	Pigeonhole.Sieve.Plugins.Pipe.txt \
 	Pigeonhole.Sieve.Plugins.txt \
 	Pigeonhole.Sieve.Troubleshooting.txt \
@@ -169,6 +174,7 @@ wikifiles = ACL.txt \
 	Plugins.Lazyexpunge.txt \
 	Plugins.Listescape.txt \
 	Plugins.MailLog.txt \
+	Plugins.MailboxAlias.txt \
 	Plugins.Notify.txt \
 	Plugins.Snarf.txt \
 	Plugins.Trash.txt \
@@ -184,6 +190,7 @@ wikifiles = ACL.txt \
 	Quota.FS.txt \
 	Quota.Maildir.txt \
 	Quota.txt \
+	Replication.txt \
 	RunningDovecot.txt \
 	SSL.CertificateClientImporting.txt \
 	SSL.CertificateCreation.txt \
@@ -207,6 +214,7 @@ wikifiles = ACL.txt \
 	Upgrading.1.2.txt \
 	Upgrading.2.0.txt \
 	Upgrading.2.1.txt \
+	Upgrading.2.2.txt \
 	Upgrading.txt \
 	UserDatabase.ExtraFields.txt \
 	UserDatabase.NSS.txt \

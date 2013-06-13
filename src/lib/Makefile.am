@@ -22,6 +22,7 @@ liblib_la_SOURCES = \
 	child-wait.c \
 	close-keep-errno.c \
 	compat.c \
+	connection.c \
 	crc32.c \
 	data-stack.c \
 	eacces-error.c \
@@ -74,6 +75,7 @@ liblib_la_SOURCES = \
 	ioloop-select.c \
 	ioloop-epoll.c \
 	ioloop-kqueue.c \
+	json-parser.c \
 	lib.c \
 	lib-signals.c \
 	md4.c \
@@ -139,6 +141,7 @@ headers = \
 	child-wait.h \
 	close-keep-errno.h \
 	compat.h \
+	connection.h \
 	crc32.h \
 	data-stack.h \
 	eacces-error.h \
@@ -183,6 +186,7 @@ headers = \
 	ioloop-iolist.h \
 	ioloop-private.h \
 	ioloop-notify-fd.h \
+	json-parser.h \
 	lib.h \
 	lib-signals.h \
 	llist.h \
@@ -264,11 +268,13 @@ test_lib_SOURCES = \
 	test-primes.c \
 	test-priorityq.c \
 	test-seq-range-array.c \
+	test-str.c \
 	test-strescape.c \
 	test-strfuncs.c \
 	test-str-find.c \
 	test-str-sanitize.c \
 	test-time-util.c \
+	test-unichar.c \
 	test-utc-mktime.c \
 	test-var-expand.c
 

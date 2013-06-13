@@ -11,6 +11,10 @@
 
 #define MAILBOX_LOG_FILE_NAME "dovecot.mailbox.log"
 
+#define T_MAILBOX_LIST_ERR_NOT_FOUND(list, name) \
+	t_strdup_printf(MAIL_ERRSTR_MAILBOX_NOT_FOUND, \
+			mailbox_list_get_vname(list, name))
+
 enum mailbox_log_record_type;
 struct stat;
 struct dirent;
@@ -192,6 +196,9 @@ void mailbox_list_iter_update(struct mailbox_list_iter_update_context *ctx,
 
 bool mailbox_list_name_is_too_large(const char *name, char sep);
 enum mailbox_list_file_type mailbox_list_get_file_type(const struct dirent *d);
+int mailbox_list_dirent_is_alias_symlink(struct mailbox_list *list,
+					 const char *dir_path,
+					 const struct dirent *d);
 bool mailbox_list_try_get_absolute_path(struct mailbox_list *list,
 					const char **name);
 int mailbox_list_create_missing_index_dir(struct mailbox_list *list,

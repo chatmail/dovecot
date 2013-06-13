@@ -1,6 +1,7 @@
 #ifndef MAIL_USER_H
 #define MAIL_USER_H
 
+#include "unichar.h"
 #include "mail-storage-settings.h"
 
 struct module;
@@ -36,10 +37,14 @@ struct mail_user {
 	ARRAY_DEFINE(hooks, const struct mail_storage_hooks *);
 
 	struct mountpoint_list *mountpoints;
+	normalizer_func_t *default_normalizer;
 
 	/* Module-specific contexts. See mail_storage_module_id. */
 	ARRAY_DEFINE(module_contexts, union mail_user_module_context *);
 
+	/* User doesn't exist (as reported by userdb lookup when looking
+	   up home) */
+	unsigned int nonexistent:1;
 	/* Either home is set or there is no home for the user. */
 	unsigned int home_looked_up:1;
 	/* User is an administrator. Allow operations not normally allowed

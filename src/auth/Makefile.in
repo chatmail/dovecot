@@ -136,22 +136,24 @@ am_auth_OBJECTS = auth.$(OBJEXT) auth-cache.$(OBJEXT) \
 	auth-request-handler.$(OBJEXT) auth-settings.$(OBJEXT) \
 	auth-stream.$(OBJEXT) auth-worker-client.$(OBJEXT) \
 	auth-worker-server.$(OBJEXT) db-checkpassword.$(OBJEXT) \
-	db-sql.$(OBJEXT) db-passwd-file.$(OBJEXT) main.$(OBJEXT) \
-	mech.$(OBJEXT) mech-anonymous.$(OBJEXT) mech-plain.$(OBJEXT) \
-	mech-login.$(OBJEXT) mech-cram-md5.$(OBJEXT) \
-	mech-digest-md5.$(OBJEXT) mech-external.$(OBJEXT) \
-	mech-gssapi.$(OBJEXT) mech-ntlm.$(OBJEXT) mech-otp.$(OBJEXT) \
+	db-dict.$(OBJEXT) db-sql.$(OBJEXT) db-passwd-file.$(OBJEXT) \
+	main.$(OBJEXT) mech.$(OBJEXT) mech-anonymous.$(OBJEXT) \
+	mech-plain.$(OBJEXT) mech-login.$(OBJEXT) \
+	mech-cram-md5.$(OBJEXT) mech-digest-md5.$(OBJEXT) \
+	mech-external.$(OBJEXT) mech-gssapi.$(OBJEXT) \
+	mech-ntlm.$(OBJEXT) mech-otp.$(OBJEXT) \
 	mech-scram-sha1.$(OBJEXT) mech-skey.$(OBJEXT) \
 	mech-rpa.$(OBJEXT) mech-apop.$(OBJEXT) mech-winbind.$(OBJEXT) \
 	passdb.$(OBJEXT) passdb-blocking.$(OBJEXT) \
 	passdb-bsdauth.$(OBJEXT) passdb-cache.$(OBJEXT) \
-	passdb-checkpassword.$(OBJEXT) passdb-passwd.$(OBJEXT) \
-	passdb-passwd-file.$(OBJEXT) passdb-pam.$(OBJEXT) \
-	passdb-shadow.$(OBJEXT) passdb-sia.$(OBJEXT) \
-	passdb-vpopmail.$(OBJEXT) passdb-sql.$(OBJEXT) \
-	passdb-static.$(OBJEXT) passdb-template.$(OBJEXT) \
-	userdb.$(OBJEXT) userdb-blocking.$(OBJEXT) \
-	userdb-checkpassword.$(OBJEXT) userdb-nss.$(OBJEXT) \
+	passdb-checkpassword.$(OBJEXT) passdb-dict.$(OBJEXT) \
+	passdb-passwd.$(OBJEXT) passdb-passwd-file.$(OBJEXT) \
+	passdb-pam.$(OBJEXT) passdb-shadow.$(OBJEXT) \
+	passdb-sia.$(OBJEXT) passdb-vpopmail.$(OBJEXT) \
+	passdb-sql.$(OBJEXT) passdb-static.$(OBJEXT) \
+	passdb-template.$(OBJEXT) userdb.$(OBJEXT) \
+	userdb-blocking.$(OBJEXT) userdb-checkpassword.$(OBJEXT) \
+	userdb-dict.$(OBJEXT) userdb-nss.$(OBJEXT) \
 	userdb-passwd.$(OBJEXT) userdb-passwd-file.$(OBJEXT) \
 	userdb-prefetch.$(OBJEXT) userdb-static.$(OBJEXT) \
 	userdb-vpopmail.$(OBJEXT) userdb-sql.$(OBJEXT) \
@@ -382,6 +384,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-auth \
 	-I$(top_srcdir)/src/lib-test \
+	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-dns \
 	-I$(top_srcdir)/src/lib-sql \
 	-I$(top_srcdir)/src/lib-settings \
@@ -427,6 +430,7 @@ auth_SOURCES = \
 	auth-worker-client.c \
 	auth-worker-server.c \
 	db-checkpassword.c \
+	db-dict.c \
 	db-sql.c \
 	db-passwd-file.c \
 	main.c \
@@ -450,6 +454,7 @@ auth_SOURCES = \
 	passdb-bsdauth.c \
 	passdb-cache.c \
 	passdb-checkpassword.c \
+	passdb-dict.c \
 	passdb-passwd.c \
 	passdb-passwd-file.c \
 	passdb-pam.c \
@@ -462,6 +467,7 @@ auth_SOURCES = \
 	userdb.c \
 	userdb-blocking.c \
 	userdb-checkpassword.c \
+	userdb-dict.c \
 	userdb-nss.c \
 	userdb-passwd.c \
 	userdb-passwd-file.c \
@@ -488,6 +494,7 @@ headers = \
 	auth-stream.h \
 	auth-worker-client.h \
 	auth-worker-server.h \
+	db-dict.h \
 	db-ldap.h \
 	db-sql.h \
 	db-passwd-file.h \
@@ -701,6 +708,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/checkpassword-reply.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-checkpassword.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-dict.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-ldap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-passwd-file.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-sql.Po@am__quote@
@@ -732,6 +740,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-bsdauth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-checkpassword.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-dict.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-ldap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-pam.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-passwd-file.Po@am__quote@
@@ -751,6 +760,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-auth-cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-blocking.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-checkpassword.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-dict.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-ldap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-nss.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-passwd-file.Po@am__quote@

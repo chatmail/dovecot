@@ -66,6 +66,36 @@ static void quota_mail_expunge(struct mail *_mail)
 	qmail->super.expunge(_mail);
 }
 
+static int
+quota_get_status(struct mailbox *box, enum mailbox_status_items items,
+		 struct mailbox_status *status_r)
+{
+	struct quota_mailbox *qbox = QUOTA_CONTEXT(box);
+	struct quota_transaction_context *qt;
+	bool too_large;
+	int ret = 0;
+
+	if ((items & STATUS_CHECK_OVER_QUOTA) != 0) {
+		qt = quota_transaction_begin(box);
+		if ((ret = quota_test_alloc(qt, 1, &too_large)) == 0) {
+			mail_storage_set_error(box->storage, MAIL_ERROR_NOSPACE,
+					       qt->quota->set->quota_exceeded_msg);
+			ret = -1;
+		}
+		quota_transaction_rollback(&qt);
+
+		if ((items & ~STATUS_CHECK_OVER_QUOTA) == 0) {
+			/* don't bother calling parent, it may unnecessarily
+			   try to open the mailbox */
+			return ret < 0 ? -1 : 0;
+		}
+	}
+
+	if (qbox->module_ctx.super.get_status(box, items, status_r) < 0)
+		ret = -1;
+	return ret < 0 ? -1 : 0;
+}
+
 static struct mailbox_transaction_context *
 quota_mailbox_transaction_begin(struct mailbox *box,
 				enum mailbox_transaction_flags flags)
@@ -147,7 +177,7 @@ static int quota_check(struct mailbox_transaction_context *t, struct mail *mail)
 	} else {
 		mail_storage_set_critical(t->box->storage,
 					  "Internal quota calculation error");
-		return -1;
+		return qt->quota->set->ignore_save_errors ? 0 : -1;
 	}
 }
 
@@ -204,7 +234,8 @@ quota_save_begin(struct mail_save_context *ctx, struct istream *input)
 		} else if (ret < 0) {
 			mail_storage_set_critical(t->box->storage,
 				"Internal quota calculation error");
-			return -1;
+			if (!qt->quota->set->ignore_save_errors)
+				return -1;
 		}
 	}
 
@@ -335,13 +366,33 @@ static int quota_mailbox_sync_deinit(struct mailbox_sync_context *ctx,
 	return ret;
 }
 
+static void quota_roots_flush(struct quota *quota)
+{
+	struct quota_root *const *roots;
+	unsigned int i, count;
+
+	roots = array_get(&quota->roots, &count);
+	for (i = 0; i < count; i++) {
+		if (roots[i]->backend.v.flush != NULL)
+			roots[i]->backend.v.flush(roots[i]);
+	}
+}
+
 static void quota_mailbox_close(struct mailbox *box)
 {
 	struct quota_mailbox *qbox = QUOTA_CONTEXT(box);
+	struct quota_user *quser = QUOTA_USER_CONTEXT(box->storage->user);
 
 	/* sync_notify() may be called outside sync_begin()..sync_deinit().
 	   make sure we apply changes at close time at latest. */
 	quota_mailbox_sync_commit(qbox);
+
+	/* make sure quota backend flushes all data. this could also be done
+	   somewhat later, but user.deinit() is too late, since the flushing
+	   can trigger quota recalculation which isn't safe to do anymore
+	   at user.deinit() when most of the loaded plugins have already been
+	   deinitialized. */
+	quota_roots_flush(quser->quota);
 
 	qbox->module_ctx.super.close(box);
 }
@@ -375,6 +426,7 @@ void quota_mailbox_allocated(struct mailbox *box)
 	qbox->module_ctx.super = *v;
 	box->vlast = &qbox->module_ctx.super;
 
+	v->get_status = quota_get_status;
 	v->transaction_begin = quota_mailbox_transaction_begin;
 	v->transaction_commit = quota_mailbox_transaction_commit;
 	v->transaction_rollback = quota_mailbox_transaction_rollback;
@@ -468,6 +520,7 @@ void quota_mailbox_list_created(struct mailbox_list *list)
 	struct quota_mailbox_list *qlist;
 	struct quota *quota = NULL;
 	struct quota_root *root;
+	struct mail_user *quota_user;
 	bool add;
 
 	if (QUOTA_USER_CONTEXT(list->ns->user) == NULL)
@@ -476,8 +529,14 @@ void quota_mailbox_list_created(struct mailbox_list *list)
 	/* see if we have a quota explicitly defined for this namespace */
 	quota = quota_get_mail_user_quota(list->ns->user);
 	root = quota_find_root_for_ns(quota, list->ns);
-	if (root != NULL)
+	if (root != NULL) {
+		/* explicit quota root */
 		root->ns = list->ns;
+		quota_user = list->ns->user;
+	} else {
+		quota_user = list->ns->owner != NULL ?
+			list->ns->owner : list->ns->user;
+	}
 
 	if ((list->ns->flags & NAMESPACE_FLAG_NOQUOTA) != 0)
 		add = FALSE;
@@ -486,7 +545,9 @@ void quota_mailbox_list_created(struct mailbox_list *list)
 		   explicitly defined for it */
 		add = root != NULL;
 	} else {
-		add = TRUE;
+		/* for shared namespaces add only if the owner has quota
+		   enabled */
+		add = QUOTA_USER_CONTEXT(quota_user) != NULL;
 	}
 
 	if (add) {
@@ -498,10 +559,7 @@ void quota_mailbox_list_created(struct mailbox_list *list)
 		v->deinit = quota_mailbox_list_deinit;
 		MODULE_CONTEXT_SET(list, quota_mailbox_list_module, qlist);
 
-		/* register to owner's quota roots */
-		quota = list->ns->owner != NULL ?
-			quota_get_mail_user_quota(list->ns->owner) :
-			quota_get_mail_user_quota(list->ns->user);
+		quota = quota_get_mail_user_quota(quota_user);
 		quota_add_user_namespace(quota, list->ns);
 	}
 }

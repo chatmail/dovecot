@@ -469,6 +469,7 @@ struct dbox_file_append_context *dbox_file_append_init(struct dbox_file *file)
 	ctx->file = file;
 	if (file->fd != -1) {
 		ctx->output = o_stream_create_fd_file(file->fd, 0, FALSE);
+		o_stream_set_name(ctx->output, file->cur_path);
 		o_stream_cork(ctx->output);
 	}
 	return ctx;
@@ -532,12 +533,21 @@ int dbox_file_append_flush(struct dbox_file_append_context *ctx)
 {
 	struct mail_storage *storage = &ctx->file->storage->storage;
 
-	if (ctx->last_flush_offset == ctx->output->offset)
+	if (ctx->last_flush_offset == ctx->output->offset &&
+	    ctx->last_checkpoint_offset == ctx->output->offset)
 		return 0;
 
 	if (o_stream_flush(ctx->output) < 0) {
 		dbox_file_set_syscall_error(ctx->file, "write()");
 		return -1;
+	}
+
+	if (ctx->last_checkpoint_offset != ctx->output->offset) {
+		if (ftruncate(ctx->file->fd, ctx->last_checkpoint_offset) < 0) {
+			dbox_file_set_syscall_error(ctx->file, "ftruncate()");
+			return -1;
+		}
+		o_stream_seek(ctx->output, ctx->last_checkpoint_offset);
 	}
 
 	if (storage->set->parsed_fsync_mode != FSYNC_MODE_NEVER) {

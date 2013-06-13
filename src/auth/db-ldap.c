@@ -63,7 +63,6 @@ struct db_ldap_result_iterate_context {
 
 	/* ldap_attr_name => struct db_ldap_value */
 	struct hash_table *ldap_attrs;
-	struct var_expand_table *var_table;
 
 	const char *val_1_arr[2];
 	string_t *var, *debug;
@@ -314,7 +313,8 @@ static int db_ldap_request_search(struct ldap_connection *conn,
 	i_assert(request->msgid == -1);
 
 	request->msgid =
-		ldap_search(conn->ld, srequest->base, conn->set.ldap_scope,
+		ldap_search(conn->ld, *srequest->base == '\0' ? NULL :
+			    srequest->base, conn->set.ldap_scope,
 			    srequest->filter, srequest->attributes, 0);
 	if (request->msgid == -1) {
 		auth_request_log_error(request->auth_request, "ldap",
@@ -866,6 +866,7 @@ int db_ldap_connect(struct ldap_connection *conn)
 		ret = ldap_start_tls_s(conn->ld, NULL, NULL);
 		if (ret != LDAP_SUCCESS) {
 			if (ret == LDAP_OPERATIONS_ERROR &&
+			    conn->set.uris != NULL &&
 			    strncmp(conn->set.uris, "ldaps:", 6) == 0) {
 				i_fatal("LDAP: Don't use both tls=yes "
 					"and ldaps URI");
@@ -989,7 +990,7 @@ db_ldap_field_find(const char *data, void *context)
 	char *ldap_attr;
 
 	if (*data != '\0') {
-		ldap_attr = p_strdup(ctx->pool, data);
+		ldap_attr = p_strdup(ctx->pool, t_strcut(data, ':'));
 		array_append(&ctx->attr_names, &ldap_attr, 1);
 	}
 	return NULL;
@@ -1066,21 +1067,17 @@ void db_ldap_set_attrs(struct ldap_connection *conn, const char *attrlist,
 	*attr_names_r = array_idx_modifiable(&ctx.attr_names, 0);
 }
 
-static struct var_expand_table *
-db_ldap_value_get_var_expand_table(pool_t pool,
-				   struct auth_request *auth_request)
+static const struct var_expand_table *
+db_ldap_value_get_var_expand_table(struct auth_request *auth_request,
+				   const char *ldap_value)
 {
-	const struct var_expand_table *auth_table = NULL;
 	struct var_expand_table *table;
-	unsigned int count;
+	unsigned int count = 1;
 
-	auth_table = auth_request_get_var_expand_table(auth_request, NULL);
-	for (count = 0; auth_table[count].key != '\0'; count++) ;
-	count++;
-
-	table = p_new(pool, struct var_expand_table, count + 2);
+	table = auth_request_get_var_expand_table_full(auth_request, NULL,
+						       &count);
 	table[0].key = '$';
-	memcpy(table + 1, auth_table, sizeof(*table) * count);
+	table[0].value = ldap_value;
 	return table;
 }
 
@@ -1203,28 +1200,42 @@ db_ldap_result_iterate_init(struct ldap_connection *conn, LDAPMessage *entry,
 	return ctx;
 }
 
+static const char *db_ldap_field_get_default(const char *data)
+{
+	const char *p;
+
+	p = strchr(data, ':');
+	if (p == NULL)
+		return "";
+	else {
+		/* default value given */
+		return p+1;
+	}
+}
+
 static const char *db_ldap_field_expand(const char *data, void *context)
 {
 	struct db_ldap_result_iterate_context *ctx = context;
 	struct db_ldap_value *ldap_value;
+	const char *field_name = t_strcut(data, ':');
 
-	ldap_value = hash_table_lookup(ctx->ldap_attrs, data);
+	ldap_value = hash_table_lookup(ctx->ldap_attrs, field_name);
 	if (ldap_value == NULL) {
-		/* ldap attribute wasn't requested */
+		/* requested ldap attribute wasn't returned at all */
 		if (ctx->debug)
-			str_printfa(ctx->debug, "; %s missing", data);
-		return "";
+			str_printfa(ctx->debug, "; %s missing", field_name);
+		return db_ldap_field_get_default(data);
 	}
 	ldap_value->used = TRUE;
 
 	if (ldap_value->values[0] == NULL) {
 		/* no value for ldap attribute */
-		return "";
+		return db_ldap_field_get_default(data);
 	}
 	if (ldap_value->values[1] != NULL) {
 		auth_request_log_warning(ctx->auth_request, "ldap",
 			"Multiple values found for '%s', using value '%s'",
-			data, ldap_value->values[0]);
+			field_name, ldap_value->values[0]);
 	}
 	return ldap_value->values[0];
 }
@@ -1238,6 +1249,7 @@ db_ldap_result_return_value(struct db_ldap_result_iterate_context *ctx,
 		{ "ldap", db_ldap_field_expand },
 		{ NULL, NULL }
 	};
+	const struct var_expand_table *var_table;
 	const char *const *values;
 
 	if (ldap_value != NULL)
@@ -1263,14 +1275,18 @@ db_ldap_result_return_value(struct db_ldap_result_iterate_context *ctx,
 				"using value '%s'",
 				field->name, values[0]);
 		}
-		if (ctx->var_table == NULL) {
-			ctx->var_table = db_ldap_value_get_var_expand_table(
-						ctx->pool, ctx->auth_request);
+
+		/* do this lookup separately for each expansion, because:
+		   1) the values are allocated from data stack
+		   2) if "user" field is updated, we want %u/%n/%d updated
+		      (and less importantly the same for other variables) */
+		var_table = db_ldap_value_get_var_expand_table(ctx->auth_request,
+							       values[0]);
+		if (ctx->var == NULL)
 			ctx->var = str_new(ctx->pool, 256);
-		}
-		ctx->var_table[0].value = values[0];
-		str_truncate(ctx->var, 0);
-		var_expand_with_funcs(ctx->var, field->value, ctx->var_table,
+		else
+			str_truncate(ctx->var, 0);
+		var_expand_with_funcs(ctx->var, field->value, var_table,
 				      var_funcs_table, ctx);
 		ctx->val_1_arr[0] = str_c(ctx->var);
 		values = ctx->val_1_arr;

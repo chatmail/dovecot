@@ -304,6 +304,8 @@ void index_storage_mailbox_alloc(struct mailbox *box, const char *vname,
 	ibox->list_index_sync_ext_id = (uint32_t)-1;
 	ibox->index_flags = MAIL_INDEX_OPEN_FLAG_CREATE |
 		mail_storage_settings_to_index_flags(box->storage->set);
+	if ((box->flags & MAILBOX_FLAG_SAVEONLY) != 0)
+		ibox->index_flags |= MAIL_INDEX_OPEN_FLAG_SAVEONLY;
 	ibox->next_lock_notify = time(NULL) + LOCK_NOTIFY_INTERVAL;
 	MODULE_CONTEXT_SET(box, index_storage_module, ibox);
 
@@ -616,6 +618,14 @@ void index_save_context_free(struct mail_save_context *ctx)
 	i_free_and_null(ctx->guid);
 	i_free_and_null(ctx->pop3_uidl);
 	index_attachment_save_free(ctx);
+
+	ctx->flags = 0;
+	ctx->keywords = NULL;
+	ctx->min_modseq = 0;
+	ctx->received_date = ctx->save_date = 0;
+	ctx->received_tz_offset = 0;
+	ctx->uid = 0;
+	ctx->pop3_order = 0;
 }
 
 static void
@@ -625,6 +635,7 @@ mail_copy_cache_field(struct mail_save_context *ctx, struct mail *src_mail,
 	struct mailbox_transaction_context *dest_trans = ctx->transaction;
 	const struct mail_cache_field *dest_field;
 	unsigned int src_field_idx, dest_field_idx;
+	uint32_t t;
 
 	src_field_idx = mail_cache_register_lookup(src_mail->box->cache, name);
 	i_assert(src_field_idx != -1U);
@@ -643,8 +654,16 @@ mail_copy_cache_field(struct mail_save_context *ctx, struct mail *src_mail,
 	}
 
 	buffer_set_used_size(buf, 0);
-	if (mail_cache_lookup_field(src_mail->transaction->cache_view, buf,
-				    src_mail->seq, src_field_idx) > 0) {
+	if (strcmp(name, "date.save") == 0) {
+		/* save date must update when mail is copied */
+		t = ioloop_time;
+		buffer_append(buf, &t, sizeof(t));
+	} else {
+		if (mail_cache_lookup_field(src_mail->transaction->cache_view, buf,
+					    src_mail->seq, src_field_idx) <= 0)
+			buffer_set_used_size(buf, 0);
+	}
+	if (buf->used > 0) {
 		mail_cache_add(dest_trans->cache_trans, dest_seq,
 			       dest_field_idx, buf->data, buf->used);
 	}

@@ -199,8 +199,6 @@ static int mdbox_save_finish_write(struct mail_save_context *_ctx)
 		return -1;
 
 	dbox_save_end(&ctx->ctx);
-	index_mail_cache_parse_deinit(_ctx->dest_mail,
-				      _ctx->received_date, !ctx->ctx.failed);
 
 	mail = array_idx_modifiable(&ctx->mails, array_count(&ctx->mails) - 1);
 	if (!ctx->ctx.failed) T_BEGIN {
@@ -287,21 +285,17 @@ int mdbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 
 	i_assert(ctx->ctx.finished);
 
+	/* flush/fsync writes to m.* files before locking the map */
+	if (mdbox_map_append_flush(ctx->append_ctx) < 0) {
+		mdbox_transaction_save_rollback(_ctx);
+		return -1;
+	}
+
 	/* make sure the map gets locked */
 	if (mdbox_map_atomic_lock(ctx->atomic) < 0) {
 		mdbox_transaction_save_rollback(_ctx);
 		return -1;
 	}
-
-	/* assign map UIDs for newly saved messages. they're written to
-	   transaction log immediately within this function, but the map
-	   is left locked. */
-	if (mdbox_map_append_assign_map_uids(ctx->append_ctx, &first_map_uid,
-					     &last_map_uid) < 0) {
-		mdbox_transaction_save_rollback(_ctx);
-		return -1;
-	}
-
 	/* lock the mailbox after map to avoid deadlocks. if we've noticed
 	   any corruption, deal with it later, otherwise we won't have
 	   up-to-date atomic->sync_view */
@@ -310,6 +304,16 @@ int mdbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 			     MDBOX_SYNC_FLAG_FSYNC |
 			     MDBOX_SYNC_FLAG_NO_REBUILD, ctx->atomic,
 			     &ctx->sync_ctx) < 0) {
+		mdbox_transaction_save_rollback(_ctx);
+		return -1;
+	}
+
+	/* assign map UIDs for newly saved messages after we've successfully
+	   acquired all the locks. the transaction is now very unlikely to
+	   fail. the UIDs are written to the transaction log immediately within
+	   this function, but the map is left locked. */
+	if (mdbox_map_append_assign_map_uids(ctx->append_ctx, &first_map_uid,
+					     &last_map_uid) < 0) {
 		mdbox_transaction_save_rollback(_ctx);
 		return -1;
 	}
@@ -408,22 +412,38 @@ int mdbox_copy(struct mail_save_context *_ctx, struct mail *mail)
 	struct dbox_save_mail *save_mail;
 	struct mdbox_mailbox *src_mbox;
 	struct mdbox_mail_index_record rec;
-	const void *data;
+	const void *guid_data;
+	guid_128_t wanted_guid;
 	bool expunged;
 
 	ctx->ctx.finished = TRUE;
 
 	if (mail->box->storage != _ctx->transaction->box->storage ||
-	    _ctx->transaction->box->disable_reflink_copy_to ||
-	    _ctx->guid != NULL)
+	    _ctx->transaction->box->disable_reflink_copy_to)
 		return mail_storage_copy(_ctx, mail);
 	src_mbox = (struct mdbox_mailbox *)mail->box;
 
 	memset(&rec, 0, sizeof(rec));
 	rec.save_date = ioloop_time;
 	if (mdbox_mail_lookup(src_mbox, mail->transaction->view, mail->seq,
-			      &rec.map_uid) < 0)
+			      &rec.map_uid) < 0) {
+		index_save_context_free(_ctx);
 		return -1;
+	}
+
+	mail_index_lookup_ext(mail->transaction->view, mail->seq,
+			      src_mbox->guid_ext_id, &guid_data, &expunged);
+	if (guid_data == NULL || guid_128_is_empty(guid_data)) {
+		/* missing GUID, something's broken. don't copy using
+		   refcounting. */
+		return mail_storage_copy(_ctx, mail);
+	} else if (_ctx->guid != NULL &&
+		   (guid_128_from_string(_ctx->guid, wanted_guid) < 0 ||
+		    memcmp(guid_data, wanted_guid, sizeof(wanted_guid)) != 0)) {
+		/* GUID change requested. we can't do it with refcount
+		   copying */
+		return mail_storage_copy(_ctx, mail);
+	}
 
 	/* remember the map_uid so we can later increase its refcount */
 	if (!array_is_created(&ctx->copy_map_uids))
@@ -435,12 +455,8 @@ int mdbox_copy(struct mail_save_context *_ctx, struct mail *mail)
 	mail_index_update_ext(ctx->ctx.trans, ctx->ctx.seq,
 			      ctx->mbox->ext_id, &rec, NULL);
 
-	mail_index_lookup_ext(mail->transaction->view, mail->seq,
-			      src_mbox->guid_ext_id, &data, &expunged);
-	if (data != NULL) {
-		mail_index_update_ext(ctx->ctx.trans, ctx->ctx.seq,
-				      ctx->mbox->guid_ext_id, data, NULL);
-	}
+	mail_index_update_ext(ctx->ctx.trans, ctx->ctx.seq,
+			      ctx->mbox->guid_ext_id, guid_data, NULL);
 	index_copy_cache_fields(_ctx, mail, ctx->ctx.seq);
 
 	save_mail = array_append_space(&ctx->mails);
@@ -448,5 +464,6 @@ int mdbox_copy(struct mail_save_context *_ctx, struct mail *mail)
 
 	if (_ctx->dest_mail != NULL)
 		mail_set_seq_saving(_ctx->dest_mail, ctx->ctx.seq);
+	index_save_context_free(_ctx);
 	return 0;
 }

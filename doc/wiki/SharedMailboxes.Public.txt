@@ -65,11 +65,20 @@ drwxrws--- 1 root mail 0 2007-03-19 03:12 .bugtraq
 
 Note that there are no 'cur/', 'new/' or 'tmp/' directories directly under the
 '/var/mail/public/', because the Public/ namespace isn't a mailbox itself. (If
-you create them manually, it does become a selectable mailbox.)
+you create them manually, it does become a selectable mailbox. )
 
 The 'dovecot-shared' file isn't directly used for either lkml or bugtraq
 mailboxes, but if you create a new public mailbox via Dovecot it's
 automatically copied there.
+
+Note that Dovecot uses Maildir++ layout by default for folders, where the
+folder names must begin with a "." or Dovecot will ignore them. You can also
+optionally use the <"fs" layout> [MailboxFormat.Maildir.txt] if you want the
+directory structure to look like:
+
+ * '/var/mail/public/' (root dir)
+ * '/var/mail/public/info/' (maildir folder)
+ * '/var/mail/public/company/' (maildir folder)
 
 Maildir: Per-user \Seen flag
 ----------------------------
@@ -212,4 +221,4 @@ After this you have to place 'dovecot-acl' files in every mailbox/folder below
 'acl_shared_dict' setting is not relevant for public mailboxes (only for
 shared).
 
-(This file was created from the wiki on 2012-04-23 04:42)
+(This file was created from the wiki on 2013-04-04 04:42)

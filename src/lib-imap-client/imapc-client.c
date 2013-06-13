@@ -57,6 +57,7 @@ imapc_client_init(const struct imapc_client_settings *set)
 	client->set.temp_path_prefix =
 		p_strdup(pool, set->temp_path_prefix);
 	client->set.rawlog_dir = p_strdup(pool, set->rawlog_dir);
+	client->set.max_idle_time = set->max_idle_time;
 
 	if (set->ssl_mode != IMAPC_CLIENT_SSL_MODE_NONE) {
 		client->set.ssl_mode = set->ssl_mode;
@@ -270,7 +271,7 @@ imapc_client_reconnect_cb(const struct imapc_command_reply *reply,
 		/* reopen the mailbox */
 		box->reopen_callback(box->reopen_context);
 	} else {
-		imapc_connection_abort_commands(box->conn, TRUE, FALSE);
+		imapc_connection_abort_commands(box->conn, NULL, FALSE);
 	}
 }
 

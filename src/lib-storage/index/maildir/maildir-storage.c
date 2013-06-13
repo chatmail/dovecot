@@ -97,7 +97,8 @@ maildir_storage_find_root_dir(const struct mail_namespace *ns)
 
 	/* we'll need to figure out the maildir location ourself.
 	   It's ~/Maildir unless we are chrooted. */
-	if (mail_user_get_home(ns->owner, &home) > 0) {
+	if (ns->owner != NULL &&
+	    mail_user_get_home(ns->owner, &home) > 0) {
 		path = t_strconcat(home, "/Maildir", NULL);
 		if (access(path, R_OK|W_OK|X_OK) == 0) {
 			if (debug)
@@ -366,7 +367,7 @@ static int maildir_mailbox_open(struct mailbox *box)
 
 	if (errno == ENOENT || errno == ENAMETOOLONG) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
-			T_MAIL_ERR_MAILBOX_NOT_FOUND(box->name));
+			T_MAIL_ERR_MAILBOX_NOT_FOUND(box->vname));
 		return -1;
 	} else {
 		mail_storage_set_critical(box->storage,

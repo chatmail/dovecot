@@ -25,6 +25,7 @@ struct quota_settings {
 			  uoff_t size, bool *too_large_r);
 
 	const char *quota_exceeded_msg;
+	unsigned int ignore_save_errors:1;
 	unsigned int debug:1;
 };
 
@@ -33,7 +34,7 @@ struct quota_rule {
 
 	int64_t bytes_limit, count_limit;
 	/* relative to default_rule */
-	unsigned int bytes_percent, count_percent;
+	int bytes_percent, count_percent;
 
 	/* Don't include this mailbox in quota */
 	unsigned int ignore:1;
@@ -66,7 +67,7 @@ struct quota_backend_vfuncs {
 	int (*update)(struct quota_root *root, 
 		      struct quota_transaction_context *ctx);
 	bool (*match_box)(struct quota_root *root, struct mailbox *box);
-
+	void (*flush)(struct quota_root *root);
 };
 
 struct quota_backend {
@@ -101,7 +102,10 @@ struct quota_root {
 	/* this quota root applies only to this namespace. it may also be
 	   a public namespace without an owner. */
 	struct mail_namespace *ns;
-	/* this is set in quota init(), because namespaces aren't known yet */
+	/* this is set in quota init(), because namespaces aren't known yet.
+	   when accessing shared users the ns_prefix may be non-NULL but
+	   ns=NULL, so when checking if quota root applies only to a specific
+	   namespace use the ns_prefix!=NULL check. */
 	const char *ns_prefix;
 
 	/* initially the same as set->default_rule.*_limit, but some backends
