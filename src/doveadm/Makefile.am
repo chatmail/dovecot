@@ -22,6 +22,7 @@ AM_CPPFLAGS = \
 	-DDOVEADM_MODULEDIR=\""$(doveadm_moduledir)"\" \
 	-DPKG_RUNDIR=\""$(rundir)"\" \
 	-DPKG_STATEDIR=\""$(statedir)"\" \
+	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
 	-DBINDIR=\""$(bindir)"\" \
 	-DMANDIR=\""$(mandir)"\"
 
@@ -67,6 +68,7 @@ doveadm_server_DEPENDENCIES = \
 common = \
 	doveadm-mail.c \
 	doveadm-mail-altmove.c \
+	doveadm-mail-batch.c \
 	doveadm-mail-expunge.c \
 	doveadm-mail-fetch.c \
 	doveadm-mail-import.c \
@@ -74,7 +76,7 @@ common = \
 	doveadm-mail-iter.c \
 	doveadm-mail-mailbox.c \
 	doveadm-mail-mailbox-status.c \
-	doveadm-mail-move.c \
+	doveadm-mail-copymove.c \
 	doveadm-mailbox-list-iter.c \
 	doveadm-mail-search.c \
 	doveadm-mail-server.c \

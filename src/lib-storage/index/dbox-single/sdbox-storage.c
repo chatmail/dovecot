@@ -34,7 +34,8 @@ sdbox_storage_find_root_dir(const struct mail_namespace *ns)
 	bool debug = ns->mail_set->mail_debug;
 	const char *home, *path;
 
-	if (mail_user_get_home(ns->owner, &home) > 0) {
+	if (ns->owner != NULL &&
+	    mail_user_get_home(ns->owner, &home) > 0) {
 		path = t_strconcat(home, "/sdbox", NULL);
 		if (access(path, R_OK|W_OK|X_OK) == 0) {
 			if (debug)
@@ -368,7 +369,7 @@ dbox_mailbox_update(struct mailbox *box, const struct mailbox_update *update)
 
 struct mail_storage sdbox_storage = {
 	.name = SDBOX_STORAGE_NAME,
-	.class_flags = 0,
+	.class_flags = MAIL_STORAGE_CLASS_FLAG_FILE_PER_MSG,
 
 	.v = {
                 NULL,

@@ -178,6 +178,11 @@ namespace_set_alias_for(struct mail_namespace *ns,
 		if (!namespace_is_valid_alias_storage(ns, error_r))
 			return -1;
 
+		if ((ns->alias_for->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
+			/* copy inbox=yes */
+			ns->flags |= NAMESPACE_FLAG_INBOX_USER;
+		}
+
 		ns->alias_chain_next = ns->alias_for->alias_chain_next;
 		ns->alias_for->alias_chain_next = ns;
 	}
@@ -200,10 +205,9 @@ namespaces_check(struct mail_namespace *namespaces, const char **error_r)
 				ns->prefix);
 			return FALSE;
 		}
-		if (namespace_set_alias_for(ns, namespaces, error_r) < 0)
-			return FALSE;
 		if ((ns->flags & NAMESPACE_FLAG_HIDDEN) == 0)
 			visible_namespaces = TRUE;
+		/* check the inbox=yes status before alias_for changes it */
 		if ((ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
 			if (inbox_ns != NULL) {
 				*error_r = "There can be only one namespace with "
@@ -212,6 +216,9 @@ namespaces_check(struct mail_namespace *namespaces, const char **error_r)
 			}
 			inbox_ns = ns;
 		}
+		if (namespace_set_alias_for(ns, namespaces, error_r) < 0)
+			return FALSE;
+
 		if (*ns->prefix != '\0' &&
 		    (ns->flags & (NAMESPACE_FLAG_LIST_PREFIX |
 				  NAMESPACE_FLAG_LIST_CHILDREN)) != 0 &&
@@ -249,15 +256,15 @@ namespaces_check(struct mail_namespace *namespaces, const char **error_r)
 		return FALSE;
 	}
 	if (list_sep == '\0') {
-		*error_r = "no list=yes namespaces";
+		*error_r = "list=yes namespace missing";
 		return FALSE;
 	}
 	if (!visible_namespaces) {
-		*error_r = "no hidden=no namespaces";
+		*error_r = "hidden=no namespace missing";
 		return FALSE;
 	}
 	if (subscriptions_count == 0) {
-		*error_r = "no subscriptions=yes namespaces";
+		*error_r = "subscriptions=yes namespace missing";
 		return FALSE;
 	}
 	return TRUE;
@@ -286,6 +293,9 @@ int mail_namespaces_init(struct mail_user *user, const char **error_r)
 		count = 0;
 	}
 	for (i = 0; i < count; i++) {
+		if (ns_set[i]->disabled)
+			continue;
+
 		if (namespace_add(user, ns_set[i], unexpanded_ns_set[i],
 				  mail_set, ns_p, error_r) < 0) {
 			if (!ns_set[i]->ignore_on_failure)

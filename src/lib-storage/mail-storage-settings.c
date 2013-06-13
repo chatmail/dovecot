@@ -154,6 +154,7 @@ static const struct setting_define mail_namespace_setting_defines[] = {
 	DEF(SET_ENUM, list),
 	DEF(SET_BOOL, subscriptions),
 	DEF(SET_BOOL, ignore_on_failure),
+	DEF(SET_BOOL, disabled),
 
 	DEFLIST_UNIQUE(mailboxes, "mailbox", &mailbox_setting_parser_info),
 
@@ -173,6 +174,7 @@ const struct mail_namespace_settings mail_namespace_default_settings = {
 	.list = "yes:no:children",
 	.subscriptions = TRUE,
 	.ignore_on_failure = FALSE,
+	.disabled = FALSE,
 
 	.mailboxes = ARRAY_INIT
 };
@@ -444,8 +446,13 @@ static bool namespace_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 			name);
 		return FALSE;
 	}
+	if (!uni_utf8_str_is_valid(name)) {
+		*error_r = t_strdup_printf("Namespace prefix not valid UTF8: %s",
+					   name);
+		return FALSE;
+	}
 
-	if (ns->alias_for != NULL) {
+	if (ns->alias_for != NULL && !ns->disabled) {
 		if (array_is_created(&ns->user_set->namespaces)) {
 			namespaces = array_get(&ns->user_set->namespaces,
 					       &count);

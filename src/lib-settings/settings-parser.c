@@ -201,7 +201,7 @@ settings_parser_init_list(pool_t set_pool,
 	i_assert(count > 0);
 
 	parser_pool = pool_alloconly_create(MEMPOOL_GROWING"settings parser",
-					    8192);
+					    1024);
 	ctx = p_new(parser_pool, struct setting_parser_context, 1);
 	ctx->set_pool = set_pool;
 	ctx->parser_pool = parser_pool;
@@ -945,11 +945,20 @@ int settings_parse_stream_read(struct setting_parser_context *ctx,
 
 	switch (ret) {
 	case -1:
+		if (ctx->error != NULL)
+			break;
 		if (input->stream_errno != 0) {
 			ctx->error = p_strdup_printf(ctx->parser_pool,
 						     "read() failed: %m");
+		} else if (input->v_offset == 0) {
+			ctx->error = p_strdup_printf(ctx->parser_pool,
+				"read(%s) disconnected before receiving any data",
+				i_stream_get_name(input));
 		} else {
-			ctx->error = "input is missing end-of-settings line";
+			ctx->error = p_strdup_printf(ctx->parser_pool,
+				"read(%s) disconnected before receiving "
+				"end-of-settings line",
+				i_stream_get_name(input));
 		}
 		break;
 	case -2:
@@ -980,6 +989,7 @@ int settings_parse_file(struct setting_parser_context *ctx,
 	}
 
 	input = i_stream_create_fd(fd, max_line_length, TRUE);
+	i_stream_set_name(input, path);
 	ret = settings_parse_stream_read(ctx, input);
 	i_stream_unref(&input);
 
@@ -1069,6 +1079,7 @@ int settings_parse_exec(struct setting_parser_context *ctx,
 	(void)close(fd[1]);
 
 	input = i_stream_create_fd(fd[0], (size_t)-1, TRUE);
+	i_stream_set_name(input, bin_path);
 	ret = settings_parse_stream_read(ctx, input);
 	i_stream_destroy(&input);
 
@@ -1739,7 +1750,7 @@ settings_parser_dup(const struct setting_parser_context *old_ctx,
 
 	pool_ref(new_pool);
 	parser_pool = pool_alloconly_create(MEMPOOL_GROWING"dup settings parser",
-					    8192);
+					    1024);
 	new_ctx = p_new(parser_pool, struct setting_parser_context, 1);
 	new_ctx->set_pool = new_pool;
 	new_ctx->parser_pool = parser_pool;

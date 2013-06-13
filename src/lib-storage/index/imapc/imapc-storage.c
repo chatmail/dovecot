@@ -228,6 +228,7 @@ imapc_storage_create(struct mail_storage *_storage,
 		*error_r = "missing imapc_password";
 		return -1;
 	}
+	set.max_idle_time = storage->set->imapc_max_idle_time;
 	set.dns_client_socket_path =
 		*_storage->user->set->base_dir == '\0' ? "" :
 		t_strconcat(_storage->user->set->base_dir, "/",
@@ -273,6 +274,19 @@ static void imapc_storage_destroy(struct mail_storage *_storage)
 	struct imapc_storage *storage = (struct imapc_storage *)_storage;
 
 	imapc_client_deinit(&storage->client);
+}
+
+static void imapc_storage_add_list(struct mail_storage *_storage,
+				   struct mailbox_list *_list)
+{
+	struct imapc_storage *storage = (struct imapc_storage *)_storage;
+	struct imapc_mailbox_list *list = (struct imapc_mailbox_list *)_list;
+
+	i_assert(storage->list != NULL);
+	i_assert(storage->list->sep != '\0');
+
+	list->storage = storage;
+	list->sep = storage->list->sep;
 }
 
 void imapc_storage_register_untagged(struct imapc_storage *storage,
@@ -752,7 +766,7 @@ struct mail_storage imapc_storage = {
 		imapc_storage_alloc,
 		imapc_storage_create,
 		imapc_storage_destroy,
-		NULL,
+		imapc_storage_add_list,
 		imapc_storage_get_list_settings,
 		NULL,
 		imapc_mailbox_alloc,

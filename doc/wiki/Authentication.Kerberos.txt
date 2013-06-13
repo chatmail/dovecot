@@ -20,11 +20,13 @@ correctly at your site, and that each host in your realm also has a host
 For Dovecot, you will need to install the appropriate /service/ keys on your
 server.  By default, Dovecot will look for these in the host's keytab file,
 typically '/etc/krb5.keytab', but you can specify an alternate path using the
-'auth_krb5_keytab' configuration entry in dovecot.conf.  If you wish to provide
-an IMAP service, you will need to install a service ticket of the form
-'imap/hostname@REALM'.  For POP3, you will need a service ticket of the form
-'pop/hostname@REALM'.  When using Dovecot's <SASL> [Sasl.txt] with MTA, you
-will need to install service ticket of the form 'smtp/hostname@REALM'.
+'auth_krb5_keytab' configuration entry in dovecot.conf.  Anyway specified
+keytab file should be readable by user "dovecot" (or whatever user the auth
+process is running as). If you wish to provide an IMAP service, you will need
+to install a service ticket of the form 'imap/hostname@REALM'.  For POP3, you
+will need a service ticket of the form 'pop/hostname@REALM'.  When using
+Dovecot's <SASL> [Sasl.txt] with MTA, you will need to install service ticket
+of the form 'smtp/hostname@REALM'.
 
 Example dovecot.conf configurations
 -----------------------------------
@@ -154,4 +156,4 @@ The test:
     * run command klist (list all kerberos keys) should show imap/HOSTNAME
  * /etc/hosts has to be set properly so that kerberos can find server.
 
-(This file was created from the wiki on 2012-04-23 04:42)
+(This file was created from the wiki on 2013-04-04 04:42)

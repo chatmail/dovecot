@@ -97,6 +97,7 @@ client_create(int fd, bool ssl, pool_t pool,
 	client->set = set;
 	client->local_ip = *local_ip;
 	client->ip = *remote_ip;
+	client->real_ip = *remote_ip;
 	client->fd = fd;
 	client->tls = ssl;
 	client->trusted = client_is_trusted(client);
@@ -346,7 +347,7 @@ void client_cmd_starttls(struct client *client)
 		return;
 	}
 
-	if (!ssl_initialized) {
+	if (!client_is_tls_enabled(client)) {
 		client_send_line(client, CLIENT_CMD_REPLY_BAD,
 				 "TLS support isn't enabled.");
 		return;
@@ -429,6 +430,7 @@ static struct var_expand_table login_var_expand_empty_tab[] = {
 	{ 'k', NULL, "ssl_security" },
 	{ 'e', NULL, "mail_pid" },
 	{ '\0', NULL, "session" },
+	{ '\0', NULL, "real_rip" },
 	{ '\0', NULL, NULL }
 };
 
@@ -478,6 +480,7 @@ get_var_expand_table(struct client *client)
 	tab[13].value = client->mail_pid == 0 ? "" :
 		dec2str(client->mail_pid);
 	tab[14].value = client_get_session_id(client);
+	tab[15].value = net_ip2addr(&client->real_ip);
 	return tab;
 }
 
@@ -589,6 +592,11 @@ bool client_is_trusted(struct client *client)
 			return TRUE;
 	}
 	return FALSE;
+}
+
+bool client_is_tls_enabled(struct client *client)
+{
+	return ssl_initialized && strcmp(client->set->ssl, "no") != 0;
 }
 
 const char *client_get_extra_disconnect_reason(struct client *client)

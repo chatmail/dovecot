@@ -1,6 +1,7 @@
 /* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "abspath.h"
 #include "ioloop.h"
 #include "fs-api.h"
 #include "mkdir-parents.h"
@@ -31,25 +32,22 @@ static bool
 dbox_alt_path_has_changed(const char *root_dir,
 			  const char *alt_path, const char *alt_symlink_path)
 {
-	char buf[PATH_MAX];
-	ssize_t ret;
+	const char *linkpath;
 
-	ret = readlink(alt_symlink_path, buf, sizeof(buf)-1);
-	if (ret < 0) {
+	if (t_readlink(alt_symlink_path, &linkpath) < 0) {
 		if (errno == ENOENT)
 			return alt_path != NULL;
 		i_error("readlink(%s) failed: %m", alt_symlink_path);
 		return FALSE;
 	}
-	buf[ret] = '\0';
 
 	if (alt_path == NULL) {
 		i_warning("dbox %s: Original ALT=%s, "
-			  "but currently no ALT path set", root_dir, buf);
+			  "but currently no ALT path set", root_dir, linkpath);
 		return TRUE;
-	} else if (strcmp(buf, alt_path) != 0) {
+	} else if (strcmp(linkpath, alt_path) != 0) {
 		i_warning("dbox %s: Original ALT=%s, "
-			  "but currently ALT=%s", root_dir, buf, alt_path);
+			  "but currently ALT=%s", root_dir, linkpath, alt_path);
 		return TRUE;
 	}
 	return FALSE;
@@ -101,13 +99,22 @@ int dbox_storage_create(struct mail_storage *_storage,
 		} else {
 			name = t_strdup_until(set->mail_attachment_fs, args++);
 		}
+		if (strcmp(name, "sis-queue") == 0 &&
+		    (_storage->class_flags & MAIL_STORAGE_CLASS_FLAG_FILE_PER_MSG) != 0) {
+			/* FIXME: the deduplication part doesn't work, because
+			   sdbox renames the files.. */
+			*error_r = "mail_attachment_fs: "
+				"sis-queue not currently supported by sdbox";
+			return -1;
+		}
 		dir = mail_user_home_expand(_storage->user,
 					    set->mail_attachment_dir);
 		storage->attachment_dir = p_strdup(_storage->pool, dir);
 		storage->attachment_fs = fs_init(name, args, &fs_set);
 	} T_END;
 
-	dbox_verify_alt_path(ns->list);
+	if (!ns->list->set.alt_dir_nocheck)
+		dbox_verify_alt_path(ns->list);
 	return 0;
 }
 
@@ -177,7 +184,7 @@ int dbox_mailbox_open(struct mailbox *box)
 		;
 	else if (errno == ENOENT || errno == ENAMETOOLONG) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
-			T_MAIL_ERR_MAILBOX_NOT_FOUND(box->name));
+			T_MAIL_ERR_MAILBOX_NOT_FOUND(box->vname));
 		return -1;
 	} else if (errno == EACCES) {
 		mail_storage_set_critical(box->storage, "%s",
@@ -246,6 +253,12 @@ int dbox_mailbox_create(struct mailbox *box,
 
 	if (mailbox_open(box) < 0)
 		return -1;
+
+	if (mail_index_get_header(box->view)->uid_validity != 0) {
+		mail_storage_set_error(box->storage, MAIL_ERROR_EXISTS,
+				       "Mailbox already exists");
+		return -1;
+	}
 
 	/* if alt path already exists and contains files, rebuild storage so
 	   that we don't start overwriting files. */

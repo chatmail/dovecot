@@ -21,6 +21,8 @@
 
 #define MAX_INBUF_SIZE 1024
 
+static void client_connection_input(struct client_connection *conn);
+
 struct client_connection {
 	pool_t pool;
 
@@ -55,6 +57,7 @@ doveadm_mail_cmd_server_parse(const char *cmd_name,
 
 	ctx = doveadm_mail_cmd_init(cmd, set);
 	ctx->full_args = (const void *)(argv + 1);
+	ctx->proxying = TRUE;
 
 	ctx->service_flags |=
 		MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT |
@@ -137,6 +140,10 @@ doveadm_mail_cmd_server_run(struct client_connection *conn,
 		o_stream_send(conn->output, "\n+\n", 3);
 	}
 	pool_unref(&ctx->pool);
+
+	/* clear all headers */
+	doveadm_print_deinit();
+	doveadm_print_init(DOVEADM_PRINT_TYPE_SERVER);
 }
 
 static bool client_is_allowed_command(const struct doveadm_settings *set,
@@ -208,6 +215,10 @@ static bool client_handle_command(struct client_connection *conn, char **args)
 		return FALSE;
 	}
 
+	/* make sure client_connection_input() isn't called by the ioloop that
+	   is going to be run by doveadm_mail_cmd_server_run() */
+	io_remove(&conn->io);
+
 	o_stream_cork(conn->output);
 	ctx = doveadm_mail_cmd_server_parse(cmd_name, conn->set, &input, argc, args);
 	if (ctx == NULL)
@@ -220,6 +231,8 @@ static bool client_handle_command(struct client_connection *conn, char **args)
 	net_set_nonblock(conn->fd, FALSE);
 	(void)o_stream_flush(conn->output);
 	net_set_nonblock(conn->fd, TRUE);
+
+	conn->io = io_add(conn->fd, IO_READ, client_connection_input, conn);
 	return TRUE;
 }
 
@@ -231,8 +244,11 @@ client_connection_authenticate(struct client_connection *conn)
 	const unsigned char *data;
 	size_t size;
 
-	if ((line = i_stream_read_next_line(conn->input)) == NULL)
+	if ((line = i_stream_read_next_line(conn->input)) == NULL) {
+		if (conn->input->eof)
+			return -1;
 		return 0;
+	}
 
 	if (*conn->set->doveadm_password == '\0') {
 		i_error("doveadm_password not set, "

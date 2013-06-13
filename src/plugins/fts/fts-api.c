@@ -318,9 +318,35 @@ int fts_backend_lookup_multi(struct fts_backend *backend,
 			     struct mail_search_arg *args, bool and_args,
 			     struct fts_multi_result *result)
 {
+	unsigned int i;
+
 	i_assert(boxes[0] != NULL);
 
-	return backend->v.lookup_multi(backend, boxes, args, and_args, result);
+	if (backend->v.lookup_multi != NULL) {
+		if (backend->v.lookup_multi(backend, boxes, args,
+					    and_args, result) < 0)
+			return -1;
+		if (result->box_results == NULL) {
+			result->box_results = p_new(result->pool,
+						    struct fts_result, 1);
+		}
+		return 0;
+	}
+
+	for (i = 0; boxes[i] != NULL; i++) ;
+	result->box_results = p_new(result->pool, struct fts_result, i+1);
+
+	for (i = 0; boxes[i] != NULL; i++) {
+		struct fts_result *box_result = &result->box_results[i];
+
+		p_array_init(&box_result->definite_uids, result->pool, 32);
+		p_array_init(&box_result->maybe_uids, result->pool, 32);
+		p_array_init(&box_result->scores, result->pool, 32);
+		if (backend->v.lookup(backend, boxes[i], args,
+				      and_args, box_result) < 0)
+			return -1;
+	}
+	return 0;
 }
 
 void fts_backend_lookup_done(struct fts_backend *backend)

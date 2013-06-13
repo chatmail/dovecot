@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "array.h"
 #include "hash.h"
+#include "mkdir-parents.h"
 #include "file-lock.h"
 #include "file-dotlock.h"
 #include "nfs-workarounds.h"
@@ -186,9 +187,14 @@ static int file_dict_refresh(struct file_dict *dict)
 
 	if (dict->fd != -1) {
 		input = i_stream_create_fd(dict->fd, (size_t)-1, FALSE);
-		while ((key = i_stream_read_next_line(input)) != NULL &&
-		       (value = i_stream_read_next_line(input)) != NULL) {
+
+		while ((key = i_stream_read_next_line(input)) != NULL) {
+			/* strdup() before the second read */
 			key = p_strdup(dict->hash_pool, key);
+
+			if ((value = i_stream_read_next_line(input)) == NULL)
+				break;
+
 			value = p_strdup(dict->hash_pool, value);
 			hash_table_insert(dict->hash, key, value);
 		}
@@ -419,6 +425,33 @@ fd_copy_parent_dir_permissions(const char *src_path, int dest_fd,
 	return fd_copy_stat_permissions(&src_st, dest_fd, dest_path);
 }
 
+static int file_dict_mkdir(struct file_dict *dict)
+{
+	const char *path, *p, *root;
+	struct stat st;
+	mode_t mode = 0700;
+
+	p = strrchr(dict->path, '/');
+	if (p == NULL)
+		return 0;
+	path = t_strdup_until(dict->path, p);
+
+	if (stat_first_parent(path, &root, &st) < 0) {
+		i_error("stat(%s) failed: %m", root);
+		return -1;
+	}
+	if ((st.st_mode & S_ISGID) != 0) {
+		/* preserve parent's permissions when it has setgid bit */
+		mode = st.st_mode;
+	}
+
+	if (mkdir_parents(path, mode) < 0) {
+		i_error("mkdir_parents(%s) failed: %m", path);
+		return -1;
+	}
+	return 0;
+}
+
 static int
 file_dict_lock(struct file_dict *dict, struct file_lock **lock_r)
 {
@@ -430,6 +463,11 @@ file_dict_lock(struct file_dict *dict, struct file_lock **lock_r)
 	if (dict->fd == -1) {
 		/* quota file doesn't exist yet, we need to create it */
 		dict->fd = open(dict->path, O_CREAT | O_RDWR, 0600);
+		if (dict->fd == -1 && errno == ENOENT) {
+			if (file_dict_mkdir(dict) < 0)
+				return -1;
+			dict->fd = open(dict->path, O_CREAT | O_RDWR, 0600);
+		}
 		if (dict->fd == -1) {
 			i_error("creat(%s) failed: %m", dict->path);
 			return -1;
@@ -480,6 +518,12 @@ static int file_dict_write_changes(struct file_dict_transaction_context *ctx)
 	case FILE_LOCK_METHOD_DOTLOCK:
 		fd = file_dotlock_open(&file_dict_dotlock_settings, dict->path, 0,
 				       &dotlock);
+		if (fd == -1 && errno == ENOENT) {
+			if (file_dict_mkdir(dict) < 0)
+				return -1;
+			fd = file_dotlock_open(&file_dict_dotlock_settings,
+					       dict->path, 0, &dotlock);
+		}
 		if (fd == -1) {
 			i_error("file dict commit: file_dotlock_open(%s) failed: %m",
 				dict->path);
@@ -492,7 +536,7 @@ static int file_dict_write_changes(struct file_dict_transaction_context *ctx)
 	/* refresh once more now that we're locked */
 	if (file_dict_refresh(dict) < 0) {
 		if (dotlock != NULL)
-			file_dotlock_delete(&dotlock);
+			(void)file_dotlock_delete(&dotlock);
 		else {
 			(void)close(fd);
 			file_unlock(&lock);
@@ -512,12 +556,20 @@ static int file_dict_write_changes(struct file_dict_transaction_context *ctx)
 	o_stream_cork(output);
 	iter = hash_table_iterate_init(dict->hash);
 	while (hash_table_iterate(iter, &key, &value)) {
-		o_stream_send_str(output, key);
-		o_stream_send(output, "\n", 1);
-		o_stream_send_str(output, value);
-		o_stream_send(output, "\n", 1);
+		(void)o_stream_send_str(output, key);
+		(void)o_stream_send(output, "\n", 1);
+		(void)o_stream_send_str(output, value);
+		(void)o_stream_send(output, "\n", 1);
 	}
+	o_stream_uncork(output);
 	hash_table_iterate_deinit(&iter);
+
+	if (output->stream_errno != 0) {
+		i_error("write(%s) failed: %m", temp_path);
+		o_stream_destroy(&output);
+		(void)close(fd);
+		return -1;
+	}
 	o_stream_destroy(&output);
 
 	if (dotlock != NULL) {

@@ -59,7 +59,8 @@ master_service_settings_cache_init(struct master_service *service,
 	struct master_service_settings_cache *cache;
 	pool_t pool;
 
-	pool = pool_alloconly_create("master service settings cache", 1024*32);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"master service settings cache",
+				     1024*12);
 	cache = p_new(pool, struct master_service_settings_cache, 1);
 	cache->pool = pool;
 	cache->service = service;
@@ -82,6 +83,7 @@ void master_service_settings_cache_deinit(struct master_service_settings_cache *
 	}
 	for (entry = cache->oldest; entry != NULL; entry = next) {
 		next = entry->next;
+		i_assert(entry->parser != cache->global_parser);
 		settings_parser_deinit(&entry->parser);
 		pool_unref(&entry->pool);
 	}
@@ -145,6 +147,10 @@ cache_find(struct master_service_settings_cache *cache,
 	}
 
 	if (entry != NULL) {
+		if (entry->parser != cache->global_parser) {
+			DLLIST2_REMOVE(&cache->oldest, &cache->newest, entry);
+			DLLIST2_APPEND(&cache->oldest, &cache->newest, entry);
+		}
 		*parser_r = entry->parser;
 		return TRUE;
 	}
@@ -166,10 +172,11 @@ setting_entry_detach(struct master_service_settings_cache *cache,
 	settings_parser_deinit(&entry->parser);
 }
 
-static void cache_add(struct master_service_settings_cache *cache,
-		      const struct master_service_settings_input *input,
-		      const struct master_service_settings_output *output,
-		      struct setting_parser_context *parser)
+static struct setting_parser_context *
+cache_add(struct master_service_settings_cache *cache,
+	  const struct master_service_settings_input *input,
+	  const struct master_service_settings_output *output,
+	  struct setting_parser_context *parser)
 {
 	struct settings_entry *entry;
 	pool_t pool;
@@ -185,41 +192,39 @@ static void cache_add(struct master_service_settings_cache *cache,
 	}
 	if (cache->service_uses_remote) {
 		/* for now we don't try to handle caching remote IPs */
-		return;
+		return parser;
 	}
 
 	if (input->local_name == NULL && input->local_ip.family == 0)
-		return;
+		return parser;
 
 	if (!output->used_local) {
 		/* use global settings, but add local_ip/host to hash tables
 		   so we'll find them */
 		pool = pool_alloconly_create("settings global entry", 256);
-		entry = p_new(pool, struct settings_entry, 1);
 	} else if (cache->cache_malloc_size >= cache->max_cache_size) {
 		/* free the oldest and reuse its pool */
-		entry = cache->oldest;
-		pool = entry->pool;
-		setting_entry_detach(cache, entry);
-		p_clear(pool);
+		pool = cache->oldest->pool;
+		setting_entry_detach(cache, cache->oldest);
+		p_clear(pool); /* note: frees also entry */
 	} else {
 		pool_size = cache->approx_entry_pool_size != 0 ?
 			cache->approx_entry_pool_size :
 			CACHE_INITIAL_ENTRY_POOL_SIZE;
 		pool = pool_alloconly_create("settings entry", pool_size);
-		entry = p_new(pool, struct settings_entry, 1);
 	}
+	entry = p_new(pool, struct settings_entry, 1);
 	entry->pool = pool;
 	entry_local_name = p_strdup(pool, input->local_name);
 	entry->local_name = entry_local_name;
 	entry->local_ip = input->local_ip;
 	if (!output->used_local) {
 		entry->parser = cache->global_parser;
-		DLLIST2_PREPEND(&cache->oldest_global, &cache->newest_global,
-				entry);
+		DLLIST2_APPEND(&cache->oldest_global, &cache->newest_global,
+			       entry);
 	} else {
 		entry->parser = settings_parser_dup(parser, entry->pool);
-		DLLIST2_PREPEND(&cache->oldest, &cache->newest, entry);
+		DLLIST2_APPEND(&cache->oldest, &cache->newest, entry);
 
 		pool_size = pool_alloconly_get_total_used_size(pool);
 		if (pool_size > cache->approx_entry_pool_size) {
@@ -249,6 +254,7 @@ static void cache_add(struct master_service_settings_cache *cache,
 		hash_table_insert(cache->local_ip_hash,
 				  &entry->local_ip, entry);
 	}
+	return entry->parser;
 }
 
 int master_service_settings_cache_read(struct master_service_settings_cache *cache,
@@ -294,7 +300,7 @@ int master_service_settings_cache_read(struct master_service_settings_cache *cac
 		return -1;
 	}
 
-	cache_add(cache, &new_input, &output, cache->service->set_parser);
-	*parser_r = cache->service->set_parser;
+	*parser_r = cache_add(cache, &new_input, &output,
+			      cache->service->set_parser);
 	return 0;
 }

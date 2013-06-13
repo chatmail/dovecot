@@ -11,8 +11,7 @@ Master users
 There are two ways for master users to log in as other users:
 
  1. Give the login username in the <SASL mechanism's>
-    [Authentication.Mechanisms.txt] authorization ID field. Currently only the
-    PLAIN SASL mechanism supports this.
+    [Authentication.Mechanisms.txt] authorization ID field.
  2. Specify both the master username and the login username in the same
     username field. The usernames are separated by a string configured by the
     'auth_master_user_separator' setting. UW-IMAP uses "*" as the separator, so
@@ -55,7 +54,9 @@ user's spam mailbox.
 ACLs
 ----
 
-The Master user is still subject to ACLs. The options for handling this are:
+If <ACL.txt> plugin is enabled, the Master user is still subject to ACLs just
+like any other user, which means that by default the master user has no access
+to any mailboxes of the user. The options for handling this are:
 
  1. Adding a global <ACL.txt> for the master user. Unfortunately currently you
     can only create per-mailbox ACLs, there is no "default ACL" that applies to
@@ -306,4 +307,4 @@ user_name = '%n' AND domain_name = '%d' AND ( \
 group by uid
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2012-04-23 04:42)
+(This file was created from the wiki on 2013-04-04 04:42)

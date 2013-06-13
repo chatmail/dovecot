@@ -65,6 +65,7 @@ struct mail_namespace_settings {
 	const char *list;
 	bool subscriptions;
 	bool ignore_on_failure;
+	bool disabled;
 
 	ARRAY_DEFINE(mailboxes, struct mailbox_settings *);
 	struct mail_user_settings *user_set;
@@ -104,6 +105,7 @@ struct pop3c_settings {
 	unsigned int pop3c_port;
 
 	const char *pop3c_user;
+	const char *pop3c_master_user;
 	const char *pop3c_password;
 
 	const char *pop3c_ssl;
@@ -153,6 +155,8 @@ struct imapc_settings {
 	const char *imapc_features;
 	const char *imapc_rawlog_dir;
 	const char *imapc_list_prefix;
+	unsigned int imapc_max_idle_time;
+
 	const char *ssl_crypto_device;
 
 	enum imapc_features parsed_features;
@@ -385,8 +389,13 @@ static bool namespace_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 			name);
 		return FALSE;
 	}
+	if (!uni_utf8_str_is_valid(name)) {
+		*error_r = t_strdup_printf("Namespace prefix not valid UTF8: %s",
+					   name);
+		return FALSE;
+	}
 
-	if (ns->alias_for != NULL) {
+	if (ns->alias_for != NULL && !ns->disabled) {
 		if (array_is_created(&ns->user_set->namespaces)) {
 			namespaces = array_get(&ns->user_set->namespaces,
 					       &count);
@@ -623,6 +632,7 @@ static const struct setting_define mail_namespace_setting_defines[] = {
 	DEF(SET_ENUM, list),
 	DEF(SET_BOOL, subscriptions),
 	DEF(SET_BOOL, ignore_on_failure),
+	DEF(SET_BOOL, disabled),
 
 	DEFLIST_UNIQUE(mailboxes, "mailbox", &mailbox_setting_parser_info),
 
@@ -641,6 +651,7 @@ const struct mail_namespace_settings mail_namespace_default_settings = {
 	.list = "yes:no:children",
 	.subscriptions = TRUE,
 	.ignore_on_failure = FALSE,
+	.disabled = FALSE,
 
 	.mailboxes = ARRAY_INIT
 };
@@ -759,6 +770,7 @@ static const struct setting_define pop3c_setting_defines[] = {
 	DEF(SET_UINT, pop3c_port),
 
 	DEF(SET_STR_VARS, pop3c_user),
+	DEF(SET_STR_VARS, pop3c_master_user),
 	DEF(SET_STR, pop3c_password),
 
 	DEF(SET_ENUM, pop3c_ssl),
@@ -775,6 +787,7 @@ static const struct pop3c_settings pop3c_default_settings = {
 	.pop3c_port = 110,
 
 	.pop3c_user = "%u",
+	.pop3c_master_user = "",
 	.pop3c_password = "",
 
 	.pop3c_ssl = "no:pop3s:starttls",
@@ -921,6 +934,10 @@ static bool imapc_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 		return FALSE;
 	}
 #endif
+	if (set->imapc_max_idle_time == 0) {
+		*error_r = "imapc_max_idle_time must not be 0";
+		return FALSE;
+	}
 	if (imapc_settings_parse_features(set, error_r) < 0)
 		return FALSE;
 	return TRUE;
@@ -943,6 +960,8 @@ static const struct setting_define imapc_setting_defines[] = {
 	DEF(SET_STR, imapc_features),
 	DEF(SET_STR, imapc_rawlog_dir),
 	DEF(SET_STR, imapc_list_prefix),
+	DEF(SET_TIME, imapc_max_idle_time),
+
 	DEF(SET_STR, ssl_crypto_device),
 
 	SETTING_DEFINE_LIST_END
@@ -962,6 +981,8 @@ static const struct imapc_settings imapc_default_settings = {
 	.imapc_features = "",
 	.imapc_rawlog_dir = "",
 	.imapc_list_prefix = "",
+	.imapc_max_idle_time = 60*29,
+
 	.ssl_crypto_device = ""
 };
 static const struct setting_parser_info imapc_setting_parser_info = {
@@ -1241,7 +1262,9 @@ extern const struct setting_parser_info lmtp_setting_parser_info;
 struct lmtp_settings {
 	bool lmtp_proxy;
 	bool lmtp_save_to_detail_mailbox;
+	bool lmtp_rcpt_check_quota;
 	const char *login_greeting;
+	const char *lmtp_address_translate;
 };
 /* ../../src/imap/imap-settings.h */
 extern const struct setting_parser_info imap_setting_parser_info;
@@ -1277,6 +1300,7 @@ struct imap_login_settings {
 extern const struct setting_parser_info doveadm_setting_parser_info;
 struct doveadm_settings {
 	const char *base_dir;
+	const char *libexec_dir;
 	const char *mail_plugins;
 	const char *mail_plugin_dir;
 	const char *doveadm_socket_path;
@@ -2127,6 +2151,13 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 	for (i = 0; i < count; i++) {
 		struct service_settings *service = services[i];
 
+		if (*service->protocol != '\0' &&
+		    !str_array_find((const char **)set->protocols_split,
+				    service->protocol)) {
+			/* protocol not enabled, ignore its settings */
+			continue;
+		}
+
 		if (*service->executable == '\0') {
 			*error_r = t_strdup_printf("service(%s): "
 				"executable is empty", service->name);
@@ -2181,9 +2212,7 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 		}
 #endif
 
-		if (*service->protocol != '\0' &&
-		    str_array_find((const char **)set->protocols_split,
-				   service->protocol)) {
+		if (*service->protocol != '\0') {
 			/* each imap/pop3/lmtp process can use up a connection,
 			   although if service_count=1 it's only temporary */
 			if (service->service_count != 1 ||
@@ -2664,14 +2693,18 @@ struct service_settings lmtp_service_settings = {
 static const struct setting_define lmtp_setting_defines[] = {
 	DEF(SET_BOOL, lmtp_proxy),
 	DEF(SET_BOOL, lmtp_save_to_detail_mailbox),
+	DEF(SET_BOOL, lmtp_rcpt_check_quota),
 	DEF(SET_STR_VARS, login_greeting),
+	DEF(SET_STR, lmtp_address_translate),
 
 	SETTING_DEFINE_LIST_END
 };
 static const struct lmtp_settings lmtp_default_settings = {
 	.lmtp_proxy = FALSE,
 	.lmtp_save_to_detail_mailbox = FALSE,
-	.login_greeting = PACKAGE_NAME" ready."
+	.lmtp_rcpt_check_quota = FALSE,
+	.login_greeting = PACKAGE_NAME" ready.",
+	.lmtp_address_translate = ""
 };
 static const struct setting_parser_info *lmtp_setting_dependencies[] = {
 	&lda_setting_parser_info,
@@ -3070,6 +3103,7 @@ struct service_settings doveadm_service_settings = {
 	{ type, #name, offsetof(struct doveadm_settings, name), NULL }
 static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, base_dir),
+	DEF(SET_STR, libexec_dir),
 	DEF(SET_STR, mail_plugins),
 	DEF(SET_STR, mail_plugin_dir),
 	DEF(SET_STR, doveadm_socket_path),
@@ -3086,6 +3120,7 @@ static const struct setting_define doveadm_setting_defines[] = {
 };
 const struct doveadm_settings doveadm_default_settings = {
 	.base_dir = PKG_RUNDIR,
+	.libexec_dir = PKG_LIBEXECDIR,
 	.mail_plugins = "",
 	.mail_plugin_dir = MODULEDIR,
 	.doveadm_socket_path = "doveadm-server",
@@ -3225,7 +3260,7 @@ const struct director_settings director_default_settings = {
 
 	.director_servers = "",
 	.director_mail_servers = "",
-	.director_username_hash = "%u",
+	.director_username_hash = "%Lu",
 	.director_user_expire = 60*15,
 	.director_doveadm_port = 0
 };

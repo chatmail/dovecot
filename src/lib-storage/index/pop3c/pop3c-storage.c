@@ -60,6 +60,7 @@ pop3c_client_create_from_set(struct mail_user *user,
 	client_set.host = set->pop3c_host;
 	client_set.port = set->pop3c_port;
 	client_set.username = set->pop3c_user;
+	client_set.master_user = set->pop3c_master_user;
 	client_set.password = set->pop3c_password;
 	client_set.dns_client_socket_path =
 		t_strconcat(user->set->base_dir, "/",
@@ -164,7 +165,7 @@ static int pop3c_mailbox_open(struct mailbox *box)
 
 	if (strcmp(box->name, "INBOX") != 0) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
-				       T_MAIL_ERR_MAILBOX_NOT_FOUND(box->name));
+				       T_MAIL_ERR_MAILBOX_NOT_FOUND(box->vname));
 		return -1;
 	}
 

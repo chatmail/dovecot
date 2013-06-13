@@ -48,6 +48,7 @@ struct doveadm_mail_cmd_context {
 	const struct doveadm_settings *set;
 	enum mail_storage_service_flags service_flags;
 	struct mail_storage_service_ctx *storage_service;
+	struct mail_storage_service_input storage_service_input;
 	/* search args aren't set for all mail commands */
 	struct mail_search_args *search_args;
 
@@ -61,6 +62,8 @@ struct doveadm_mail_cmd_context {
 	/* if non-zero, exit with this code */
 	int exit_code;
 
+	/* This command is being called by a remote doveadm client. */
+	unsigned int proxying:1;
 	/* We're handling only a single user */
 	unsigned int iterate_single_user:1;
 	/* We're going through all users (not set for wildcard usernames) */
@@ -92,6 +95,9 @@ bool doveadm_mail_has_subcommands(const char *cmd_name);
 void doveadm_mail_init(void);
 void doveadm_mail_deinit(void);
 
+const struct doveadm_mail_cmd *
+doveadm_mail_cmd_find_from_argv(const char *cmd_name, int *argc,
+				const char *const **argv);
 struct doveadm_mail_cmd_context *
 doveadm_mail_cmd_init(const struct doveadm_mail_cmd *cmd,
 		      const struct doveadm_settings *set);
@@ -133,6 +139,7 @@ struct doveadm_mail_cmd cmd_fetch;
 struct doveadm_mail_cmd cmd_import;
 struct doveadm_mail_cmd cmd_index;
 struct doveadm_mail_cmd cmd_altmove;
+struct doveadm_mail_cmd cmd_copy;
 struct doveadm_mail_cmd cmd_move;
 struct doveadm_mail_cmd cmd_mailbox_list;
 struct doveadm_mail_cmd cmd_mailbox_create;
@@ -141,5 +148,6 @@ struct doveadm_mail_cmd cmd_mailbox_rename;
 struct doveadm_mail_cmd cmd_mailbox_subscribe;
 struct doveadm_mail_cmd cmd_mailbox_unsubscribe;
 struct doveadm_mail_cmd cmd_mailbox_status;
+struct doveadm_mail_cmd cmd_batch;
 
 #endif

@@ -61,7 +61,8 @@ libdict_backend_a_OBJECTS = $(am_libdict_backend_a_OBJECTS) \
 	$(nodist_libdict_backend_a_OBJECTS)
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libdict_la_LIBADD =
-am__objects_1 = dict.lo dict-client.lo dict-file.lo
+am__objects_1 = dict.lo dict-client.lo dict-file.lo dict-memcached.lo \
+	dict-redis.lo
 am_libdict_la_OBJECTS = $(am__objects_1)
 libdict_la_OBJECTS = $(am_libdict_la_OBJECTS)
 am__EXEEXT_1 = test-dict$(EXEEXT)
@@ -305,7 +306,9 @@ AM_CPPFLAGS = \
 base_sources = \
 	dict.c \
 	dict-client.c \
-	dict-file.c
+	dict-file.c \
+	dict-memcached.c \
+	dict-redis.c
 
 libdict_la_SOURCES = \
 	$(base_sources)
@@ -412,6 +415,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-db.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-drivers-register.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-memcached.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-redis.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-sql-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-sql.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict.Plo@am__quote@

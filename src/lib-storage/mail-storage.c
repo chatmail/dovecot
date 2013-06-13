@@ -627,10 +627,12 @@ struct mailbox *mailbox_alloc(struct mailbox_list *list, const char *vname,
 
 	i_assert(uni_utf8_str_is_valid(vname));
 
-	if ((list->ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0 &&
-	    strncasecmp(vname, "INBOX", 5) == 0 &&
+	if (strncasecmp(vname, "INBOX", 5) == 0 &&
 	    strncmp(vname, "INBOX", 5) != 0) {
-		/* make sure INBOX shows up in uppercase everywhere */
+		/* make sure INBOX shows up in uppercase everywhere. do this
+		   regardless of whether we're in inbox=yes namespace, because
+		   clients expect INBOX to be case insensitive regardless of
+		   server's internal configuration. */
 		if (vname[5] == '\0')
 			vname = "INBOX";
 		else if (vname[5] == mail_namespace_get_sep(list->ns))
@@ -819,17 +821,18 @@ static int mailbox_check_mismatching_separators(struct mailbox *box)
 	return 0;
 }
 
-static void mailbox_autocreate(struct mailbox *box)
+static int mailbox_autocreate(struct mailbox *box)
 {
 	const char *errstr;
 	enum mail_error error;
 
 	if (mailbox_create(box, NULL, FALSE) < 0) {
 		errstr = mailbox_get_last_error(box, &error);
-		if (error != MAIL_ERROR_NOTFOUND && !box->inbox_user) {
+		if (error != MAIL_ERROR_NOTFOUND) {
 			mail_storage_set_critical(box->storage,
 				"Failed to autocreate mailbox %s: %s",
 				box->vname, errstr);
+			return -1;
 		}
 	} else if (box->set != NULL &&
 		   strcmp(box->set->autocreate,
@@ -838,15 +841,18 @@ static void mailbox_autocreate(struct mailbox *box)
 			mail_storage_set_critical(box->storage,
 				"Failed to autosubscribe to mailbox %s: %s",
 				box->vname, mailbox_get_last_error(box, NULL));
+			return -1;
 		}
 	}
+	return 0;
 }
 
 static int mailbox_autocreate_and_reopen(struct mailbox *box)
 {
 	int ret;
 
-	mailbox_autocreate(box);
+	if (mailbox_autocreate(box) < 0)
+		return -1;
 	mailbox_close(box);
 
 	ret = box->v.open(box);
@@ -922,6 +928,13 @@ static bool mailbox_try_undelete(struct mailbox *box)
 {
 	time_t mtime;
 
+	if ((box->flags & MAILBOX_FLAG_READONLY) != 0) {
+		/* most importantly we don't do this because we want to avoid
+		   a loop: mdbox storage rebuild -> mailbox_open() ->
+		   mailbox_mark_index_deleted() -> mailbox_sync() ->
+		   mdbox storage rebuild. */
+		return FALSE;
+	}
 	if (mail_index_get_modification_time(box->index, &mtime) < 0)
 		return FALSE;
 	if (mtime + MAILBOX_DELETE_RETRY_SECS > time(NULL))
@@ -1481,7 +1494,6 @@ int mailbox_transaction_commit(struct mailbox_transaction_context **t)
 
 	/* Store changes temporarily so that plugins overriding
 	   transaction_commit() can look at them. */
-	changes.pool = NULL;
 	ret = mailbox_transaction_commit_get_changes(t, &changes);
 	if (changes.pool != NULL)
 		pool_unref(&changes.pool);
@@ -1496,11 +1508,14 @@ int mailbox_transaction_commit_get_changes(
 	int ret;
 
 	t->box->transaction_count--;
+	changes_r->pool = NULL;
 
 	*_t = NULL;
 	T_BEGIN {
 		ret = t->box->v.transaction_commit(t, changes_r);
 	} T_END;
+	if (ret < 0 && changes_r->pool != NULL)
+		pool_unref(&changes_r->pool);
 	return ret;
 }
 
@@ -1676,11 +1691,19 @@ void mailbox_save_cancel(struct mail_save_context **_ctx)
 {
 	struct mail_save_context *ctx = *_ctx;
 	struct mail_keywords *keywords = ctx->keywords;
+	struct mail_private *mail;
 
 	*_ctx = NULL;
 	ctx->transaction->box->v.save_cancel(ctx);
 	if (keywords != NULL)
 		mailbox_keywords_unref(&keywords);
+	if (ctx->dest_mail != NULL) {
+		/* the dest_mail is no longer valid. if we're still saving
+		   more mails, the mail sequence may get reused. make sure
+		   the mail gets reset in between */
+		mail = (struct mail_private *)ctx->dest_mail;
+		mail->v.close(&mail->mail);
+	}
 }
 
 struct mailbox_transaction_context *

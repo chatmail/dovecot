@@ -35,7 +35,7 @@ contain:
  * url=<solr url> : Required base URL for Solr.
  * debug : Enable HTTP debugging. Writes to error log.
  * break-imap-search : Use Solr also for indexing TEXT and BODY searches. This
-   makes your server non-IMAP-compliant.
+   makes your server non-IMAP-compliant. (This is always enabled in v2.1+)
 
 Solr optimization
 -----------------
@@ -104,4 +104,4 @@ External sites with tutorials on using Solr under Dovecot
    - Guide for installing all the dependencies for Solr to work under
    CentOS/Fedora. Step by step tutorial.
 
-(This file was created from the wiki on 2012-04-23 04:42)
+(This file was created from the wiki on 2013-04-04 04:42)

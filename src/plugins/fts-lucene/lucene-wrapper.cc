@@ -18,6 +18,10 @@ extern "C" {
 #include <sys/stat.h>
 #ifdef HAVE_LUCENE_TEXTCAT
 #  include <libtextcat/textcat.h>
+#else
+#ifdef HAVE_LUCENE_EXTTEXTCAT
+#  include <libexttextcat/textcat.h>
+#endif
 #endif
 };
 #include <CLucene.h>
@@ -54,6 +58,7 @@ struct lucene_index {
 	char *path;
 	struct mailbox_list *list;
 	struct fts_lucene_settings set;
+	normalizer_func_t *normalizer;
 
 	wchar_t mailbox_guid[MAILBOX_GUID_HEX_LENGTH + 1];
 
@@ -103,6 +108,8 @@ struct lucene_index *lucene_index_init(const char *path,
 	index = i_new(struct lucene_index, 1);
 	index->path = i_strdup(path);
 	index->list = list;
+	index->normalizer = !set->normalize ? NULL :
+		mailbox_list_get_namespace(list)->user->default_normalizer;
 	if (set != NULL)
 		index->set = *set;
 	else {
@@ -111,9 +118,11 @@ struct lucene_index *lucene_index_init(const char *path,
 	}
 #ifdef HAVE_LUCENE_STEMMER
 	index->default_analyzer =
-		_CLNEW snowball::SnowballAnalyzer(index->set.default_language);
+		_CLNEW snowball::SnowballAnalyzer(index->normalizer,
+						  index->set.default_language);
 #else
 	index->default_analyzer = _CLNEW standard::StandardAnalyzer();
+	i_assert(index->normalizer == NULL);
 #endif
 	i_array_init(&index->analyzers, 32);
 	textcat_refcount++;
@@ -393,6 +402,7 @@ int lucene_index_build_init(struct lucene_index *index)
 #ifdef HAVE_LUCENE_TEXTCAT
 static Analyzer *get_analyzer(struct lucene_index *index, const char *lang)
 {
+	normalizer_func_t *normalizer = index->normalizer;
 	const struct lucene_analyzer *a;
 	struct lucene_analyzer new_analyzer;
 	Analyzer *analyzer;
@@ -404,7 +414,8 @@ static Analyzer *get_analyzer(struct lucene_index *index, const char *lang)
 
 	memset(&new_analyzer, 0, sizeof(new_analyzer));
 	new_analyzer.lang = i_strdup(lang);
-	new_analyzer.analyzer = _CLNEW snowball::SnowballAnalyzer(lang);
+	new_analyzer.analyzer =
+		_CLNEW snowball::SnowballAnalyzer(normalizer, lang);
 	array_append_i(&index->analyzers.arr, &new_analyzer, 1);
 	return new_analyzer.analyzer;
 }
@@ -742,7 +753,8 @@ static void rescan_clear_unseen_mailboxes(struct lucene_index *index,
 	while ((info = mailbox_list_iter_next(iter)) != NULL) {
 		box = mailbox_alloc(index->list, info->name,
 				    (enum mailbox_flags)0);
-		if (mailbox_get_metadata(box, MAILBOX_METADATA_GUID,
+		if (mailbox_open(box) == 0 &&
+		    mailbox_get_metadata(box, MAILBOX_METADATA_GUID,
 					 &metadata) == 0 &&
 		    (guids == NULL ||
 		     hash_table_lookup(guids, metadata.guid) == NULL)) {
@@ -1094,7 +1106,7 @@ lucene_add_definite_query(struct lucene_index *index,
 			return false;
 
 		q = lucene_get_query(index,
-				     t_lucene_utf8_to_tchar(index, arg->hdr_field_name, FALSE),
+				     t_lucene_utf8_to_tchar(index, t_str_lcase(arg->hdr_field_name), FALSE),
 				     arg);
 		break;
 	default:
@@ -1137,7 +1149,7 @@ lucene_add_maybe_query(struct lucene_index *index,
 		if (*arg->value.str == '\0') {
 			/* checking potential existence of the header name */
 			q = lucene_get_query_str(index, _T("hdr"),
-						 arg->hdr_field_name, FALSE);
+				t_str_lcase(arg->hdr_field_name), FALSE);
 			break;
 		}
 

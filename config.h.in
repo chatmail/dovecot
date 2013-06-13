@@ -54,6 +54,12 @@
 /* Dovecot version */
 #undef DOVECOT_VERSION
 
+/* Dovecot major version */
+#undef DOVECOT_VERSION_MAJOR
+
+/* Dovecot minor version */
+#undef DOVECOT_VERSION_MINOR
+
 /* How to define flexible array members in structs */
 #undef FLEXIBLE_ARRAY_MEMBER
 
@@ -202,6 +208,9 @@
 
 /* Define to 1 if you have the `lockf' function. */
 #undef HAVE_LOCKF
+
+/* Define if you want textcat (Debian version) support for CLucene */
+#undef HAVE_LUCENE_EXTTEXTCAT
 
 /* Define if you want stemming support for CLucene */
 #undef HAVE_LUCENE_STEMMER

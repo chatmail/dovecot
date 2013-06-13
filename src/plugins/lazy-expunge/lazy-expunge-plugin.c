@@ -70,11 +70,11 @@ mailbox_open_or_create(struct mailbox_list *list, struct mailbox *src_box,
 	const char *name;
 	char src_sep, dest_sep;
 
-	/* get the storage name, so it doesn't have namespace prefix */
+	/* use the (canonical / unaliased) storage name */
 	name = src_box->name;
-	/* replace hierarchy separators with destination separator */
+	/* replace hierarchy separators with destination virtual separator */
 	src_sep = mailbox_list_get_hierarchy_sep(src_box->list);
-	dest_sep = mailbox_list_get_hierarchy_sep(list);
+	dest_sep = mail_namespace_get_sep(list->ns);
 	if (src_sep != dest_sep) {
 		string_t *str = t_str_new(128);
 		unsigned int i;
@@ -87,7 +87,7 @@ mailbox_open_or_create(struct mailbox_list *list, struct mailbox *src_box,
 		}
 		name = str_c(str);
 	}
-	/* add expunge namespace prefix */
+	/* add expunge namespace prefix. the name is now a proper vname */
 	name = t_strconcat(list->ns->prefix, name, NULL);
 
 	box = mailbox_alloc(list, name, MAILBOX_FLAG_NO_INDEX_FILES);
@@ -121,8 +121,19 @@ static void lazy_expunge_mail_expunge(struct mail *_mail)
 	union mail_module_context *mmail = LAZY_EXPUNGE_MAIL_CONTEXT(mail);
 	struct lazy_expunge_transaction *lt =
 		LAZY_EXPUNGE_CONTEXT(_mail->transaction);
+	struct lazy_expunge_mailbox_list *llist;
+	struct mailbox *real_box;
 	struct mail_save_context *save_ctx;
 	const char *error;
+
+	/* don't copy the mail if we're expunging from lazy_expunge
+	   namespace (even if it's via a virtual mailbox) */
+	real_box = mail_get_real_mail(_mail)->box;
+	llist = LAZY_EXPUNGE_LIST_CONTEXT(real_box->list);
+	if (llist != NULL && llist->internal_namespace) {
+		mmail->super.expunge(_mail);
+		return;
+	}
 
 	if (lt->dest_box == NULL) {
 		lt->dest_box = mailbox_open_or_create(luser->lazy_ns->list,

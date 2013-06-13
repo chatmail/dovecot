@@ -51,6 +51,7 @@ struct mail_user *mail_user_alloc(const char *username,
 	user->unexpanded_set = settings_dup(set_info, set, pool);
 	user->set = settings_dup(set_info, set, pool);
 	user->service = master_service_get_name(master_service);
+	user->default_normalizer = uni_utf8_to_decomposed_titlecase;
 
 	/* check settings so that the duplicated structure will again
 	   contain the parsed fields */
@@ -201,7 +202,9 @@ mail_user_var_expand_table(struct mail_user *user)
 	};
 	struct var_expand_table *tab;
 
-	if (user->var_expand_table != NULL)
+	/* use a cached table, unless home directory has been set afterwards */
+	if (user->var_expand_table != NULL &&
+	    user->var_expand_table[4].value == user->_home)
 		return user->var_expand_table;
 
 	tab = p_malloc(user->pool, sizeof(static_tab));
@@ -286,9 +289,6 @@ static int mail_user_userdb_lookup_home(struct mail_user *user)
 	if (user->remote_ip != NULL)
 		info.remote_ip = *user->remote_ip;
 
-	if (mail_user_auth_master_conn == NULL)
-		return 0;
-
 	userdb_pool = pool_alloconly_create("userdb lookup", 2048);
 	ret = auth_master_user_lookup(mail_user_auth_master_conn,
 				      user->username, &info, userdb_pool,
@@ -310,12 +310,18 @@ int mail_user_get_home(struct mail_user *user, const char **home_r)
 		return user->_home != NULL ? 1 : 0;
 	}
 
-	ret = mail_user_userdb_lookup_home(user);
-	if (ret < 0)
+	if (mail_user_auth_master_conn == NULL) {
+		/* no userdb connection. we can only use mail_home setting. */
+		user->_home = user->set->mail_home;
+	} else if ((ret = mail_user_userdb_lookup_home(user)) < 0) {
+		/* userdb lookup failed */
 		return -1;
-
-	if (ret > 0 && user->_home == NULL && *user->set->mail_home != '\0') {
-		/* no home in userdb, fallback to mail_home setting */
+	} else if (ret == 0) {
+		/* user doesn't exist */
+		user->nonexistent = TRUE;
+	} else if (user->_home == NULL && *user->set->mail_home != '\0') {
+		/* no home returned by userdb lookup, fallback to mail_home
+		   setting. */
 		user->_home = user->set->mail_home;
 	}
 	user->home_looked_up = TRUE;

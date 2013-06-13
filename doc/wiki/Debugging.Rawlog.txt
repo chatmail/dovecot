@@ -63,4 +63,4 @@ You can also give parameters to rawlog:
     * -i: Log only to *.in files
     * -o: Log only to *.out files
 
-(This file was created from the wiki on 2012-04-23 04:42)
+(This file was created from the wiki on 2013-04-04 04:42)
