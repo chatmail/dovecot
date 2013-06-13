@@ -11,3 +11,4 @@ tcpwrapper.patch
 utf8-namespace.patch
 default-mail_location.patch
 chgrp-error.patch
+exampledir.patch

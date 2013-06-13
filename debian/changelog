@@ -1,3 +1,47 @@
+dovecot (1:2.1.7-8) experimental; urgency=low
+
+  * This version is not actually intended for upload.  It merely undoes
+    some changes made for the the wheezy release.  Namely, the following
+    features are back:
+    - TCP Wrappers support
+    - Hurd compatibility support
+    - Triggers.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 13 Jun 2013 16:14:21 -0400
+
+dovecot (1:2.1.7-7) unstable; urgency=high
+
+  * If you are upgrading from stable or earlier versions of this package
+    from testing/unstable please carefully read
+    /usr/share/doc/dovecot-core/README.Debian.gz for important information
+    about changes.
+  * [0d74b31] Move Breaks/Replaces mailavenger from dovecot-common to
+    dovecot-core (Closes: #694376)
+  * [a8030a1] Revamped dovecot-cores README.Debian by adding any info I could
+    think of in order to ease upgrade problems. (Closes: #696820)
+  * [04798d3] Don't touch 10-ssl.conf at all.  Eventually I will DTRT with
+    regards to the default generated ssl certificates but in the mean time
+    this will do the least mischief.  (Closes: #696817)
+  * [fde17d1] Patch to make /etc/dovecot/readme point to the right place for
+    the example configuration.  (Closes: #698941)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 04 Feb 2013 16:27:17 -0500
+
+dovecot (1:2.1.7-6) unstable; urgency=high
+
+  * WARNING: in order to get this package into wheezy some functionality
+    from the previous release had to be removed.  Namely:
+    - TCP Wrappers support
+    - Hurd compatability support
+    - Triggers  
+    All this will be coming back in the next version but for now, if you need
+    any of it, stick with -5.
+  * [1f869e0] NEWS.Debian was not getting added to the package (Closes: #693621)
+  * [564c5e2] Add breaks and replaces mailavenger for debian-common
+    (Closes: #694376)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 14 Dec 2012 17:01:33 -0500
+
 dovecot (1:2.1.7-5) unstable; urgency=high
 
   * [132bc3b] Remove call to ntp-wait in init script.  Dovecot handles a 
