@@ -1,3 +1,11 @@
+dovecot (1:2.1.16-1) experimental; urgency=low
+
+  * [9741bd8] New Upstream version
+  * [3476489] Updated pigeonhole patch to 0.3.5
+  * [d4f236f] Removed some patches which are no longer required.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 14 Jun 2013 16:25:19 -0400
+
 dovecot (1:2.1.7-8) experimental; urgency=low
 
   * This version is not actually intended for upload.  It merely undoes
