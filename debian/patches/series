@@ -1,14 +1,8 @@
-hurd-compat.patch
-dsync-manpage.patch
-mutf-7.patch
 pigeonhole.patch
 dovecot-drac.patch
 split-protocols.patch
 fix-mail_plugin_dir-default.patch
 ssl-cert-location.patch
-fix-checkscript-segfault.patch
 tcpwrapper.patch
-utf8-namespace.patch
 default-mail_location.patch
-chgrp-error.patch
 exampledir.patch
