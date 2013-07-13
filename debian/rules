@@ -194,7 +194,9 @@ binary-arch: build install
 	dh_installexamples -a
 	dh_installpam -a
 	mv $(CURDIR)/debian/dovecot-core/etc/pam.d/dovecot-core $(CURDIR)/debian/dovecot-core/etc/pam.d/dovecot
+	dh_systemd_enable
 	dh_installinit -pdovecot-core --init-script=dovecot -u"defaults 20"
+	dh_systemd_start
 	dh_installman -a
 	dh_installman -p dovecot-core debian/maildirmake.dovecot.1
 	dh_bugfiles -a
