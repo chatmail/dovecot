@@ -4,6 +4,7 @@
 #include "hash.h"
 #include "mail-storage-settings.h"
 #include "mailbox-list.h"
+#include "mail-namespace.h"
 #include "mail-user.h"
 #include "acl-cache.h"
 #include "acl-api-private.h"
@@ -36,7 +37,9 @@ acl_backend_init(const char *data, struct mailbox_list *list,
 		 bool owner)
 {
 	struct mail_user *user = mailbox_list_get_user(list);
+	struct mail_namespace *ns = mailbox_list_get_namespace(list);
 	struct acl_backend *backend;
+	const char *default_name = "";
 	unsigned int i, group_count;
 
 	if (user->mail_debug) {
@@ -83,7 +86,14 @@ acl_backend_init(const char *data, struct mailbox_list *list,
 		acl_cache_mask_init(backend->cache, backend->pool,
 				    backend->default_rights);
 
-	backend->default_aclobj = acl_object_init_from_name(backend, "");
+	/* FIXME: this should probably be made default in v2.3 */
+	if (mail_user_plugin_getenv(user, "acl_defaults_from_inbox") != NULL) {
+		if (ns->type == NAMESPACE_PRIVATE ||
+		    ns->type == NAMESPACE_SHARED)
+			default_name = "INBOX";
+	}
+	backend->default_aclobj =
+		acl_object_init_from_name(backend, default_name);
 	return backend;
 }
 
@@ -164,7 +174,7 @@ int acl_backend_get_default_rights(struct acl_backend *backend,
 	if (backend->v.object_refresh_cache(backend->default_aclobj) < 0)
 		return -1;
 
-	*mask_r = acl_cache_get_my_rights(backend->cache, "");
+	*mask_r = acl_cache_get_my_rights(backend->cache, backend->default_aclobj->name);
 	if (*mask_r == NULL)
 		*mask_r = backend->default_aclmask;
 	return 0;

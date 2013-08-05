@@ -274,7 +274,7 @@ acl_backend_vfile_object_init_parent(struct acl_backend *backend,
 	}
 	if (parent == NULL) {
 		/* use the root */
-		parent = "";
+		parent = backend->default_aclobj->name;
 	}
 	return acl_backend_vfile_object_init(backend, parent);
 }

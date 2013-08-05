@@ -556,7 +556,13 @@ local_worker_mailbox_iter_next(struct dsync_worker_mailbox_iter *_iter,
 		i_error("Failed to sync mailbox %s: %s", info->name,
 			mailbox_get_last_error(box, &error));
 		mailbox_free(&box);
-		if (error == MAIL_ERROR_NOTFOUND ||
+		/* don't check for NOTFOUND in here anymore. if it happens
+		   because of a race condition it's pretty bad luck. more
+		   importantly it happens if there's a UTF8 mailbox name in
+		   filesystem while it should have been mUTF7 and we can't
+		   easily detect this in another way. this has been fixed
+		   properly in v2.2. */
+		if (/*error == MAIL_ERROR_NOTFOUND ||*/
 		    error == MAIL_ERROR_NOTPOSSIBLE) {
 			/* Mailbox isn't selectable, try the next one. We
 			   should have already caught \Noselect mailboxes, but

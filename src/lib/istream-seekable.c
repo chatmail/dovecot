@@ -130,12 +130,12 @@ static ssize_t read_more(struct seekable_istream *sstream)
 	}
 
 	while ((ret = i_stream_read(sstream->cur_input)) < 0) {
-		if (!sstream->cur_input->eof) {
-			/* full / error */
+		if (sstream->cur_input->stream_errno != 0) {
 			sstream->istream.istream.stream_errno =
 				sstream->cur_input->stream_errno;
 			return -1;
 		}
+		i_assert(sstream->cur_input->eof);
 
 		/* go to next stream */
 		sstream->cur_input = sstream->input[sstream->cur_idx++];
@@ -290,13 +290,6 @@ static ssize_t i_stream_seekable_read(struct istream_private *stream)
 	return ret;
 }
 
-static void i_stream_seekable_seek(struct istream_private *stream,
-				   uoff_t v_offset, bool mark ATTR_UNUSED)
-{
-	stream->istream.v_offset = v_offset;
-	stream->skip = stream->pos = 0;
-}
-
 static const struct stat *
 i_stream_seekable_stat(struct istream_private *stream, bool exact)
 {
@@ -338,6 +331,20 @@ i_stream_seekable_stat(struct istream_private *stream, bool exact)
 
 		stream->statbuf.st_size = sstream->buffer->used;
 		return &stream->statbuf;
+	}
+}
+
+static void i_stream_seekable_seek(struct istream_private *stream,
+				   uoff_t v_offset, bool mark)
+{
+	if (v_offset <= stream->istream.v_offset) {
+		/* seeking backwards */
+		stream->istream.v_offset = v_offset;
+		stream->skip = stream->pos = 0;
+	} else {
+		/* we can't skip over data we haven't yet read and written to
+		   our buffer/temp file */
+		i_stream_default_seek(stream, v_offset, mark);
 	}
 }
 
@@ -394,6 +401,7 @@ i_stream_create_seekable(struct istream *input[],
 	sstream->istream.read = i_stream_seekable_read;
 	sstream->istream.seek = i_stream_seekable_seek;
 	sstream->istream.stat = i_stream_seekable_stat;
+	sstream->istream.seek = i_stream_seekable_seek;
 
 	sstream->istream.istream.readable_fd = FALSE;
 	sstream->istream.istream.blocking = blocking;

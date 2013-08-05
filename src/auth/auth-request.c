@@ -747,7 +747,7 @@ void auth_request_lookup_credentials(struct auth_request *request,
 				     const char *scheme,
 				     lookup_credentials_callback_t *callback)
 {
-	struct passdb_module *passdb = request->passdb->passdb;
+	struct passdb_module *passdb;
 	const char *cache_key, *cache_cred, *cache_scheme;
 	enum passdb_result result;
 
@@ -757,6 +757,7 @@ void auth_request_lookup_credentials(struct auth_request *request,
 		callback(PASSDB_RESULT_USER_UNKNOWN, NULL, 0, request);
 		return;
 	}
+	passdb = request->passdb->passdb;
 
 	request->credentials_scheme = p_strdup(request->pool, scheme);
 	request->private_callback.lookup_credentials = callback;
@@ -1594,6 +1595,7 @@ auth_request_proxy_dns_callback(const struct dns_lookup_result *result,
 	}
 	if (ctx->callback != NULL)
 		ctx->callback(result->ret == 0, request);
+	auth_request_unref(&request);
 	i_free(ctx);
 }
 
@@ -1631,11 +1633,10 @@ static int auth_request_proxy_host_lookup(struct auth_request *request,
 
 	ctx = i_new(struct auth_request_proxy_dns_lookup_ctx, 1);
 	ctx->request = request;
+	auth_request_ref(request);
 
 	if (dns_lookup(host, &dns_set, auth_request_proxy_dns_callback, ctx) < 0) {
 		/* failed early */
-		request->internal_failure = TRUE;
-		auth_request_proxy_finish_failure(request);
 		return -1;
 	}
 	ctx->callback = callback;
