@@ -1,8 +1,189 @@
+2013-06-26  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 300a3a81c2cb
+	[edc20123f658] [tip]
+
+	* .hgtags:
+	Added tag 2.1.17 for changeset 300a3a81c2cb
+	[97f4e09a8663]
+
+	* NEWS, configure.in:
+	Released v2.1.17.
+	[300a3a81c2cb] [2.1.17]
+
+2013-06-07  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-request.c:
+	auth: Don't crash in non-plaintext auth if master user login is
+	tried without master passdbs.
+	[98f8fd0b8d1c]
+
+2013-06-05  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/dsync/dsync-worker-local.c:
+	dsync: Added workaround to fail if there are UTF8 mailbox names in
+	filesystem.
+	[a88aca17a92c]
+
+2013-06-01  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-imap-client/imapc-connection.c:
+	lib-imap-client: Ask CAPABILITY again after STARTTLS
+	[7d34543189c6]
+
+2013-05-30  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-request.c:
+	auth: Fixed error handling for proxy host dns_lookup()
+	[e4b66c2912da]
+
+	* src/auth/auth-worker-server.c:
+	Reverted previous wrong commit.
+	[7961f4f3b341]
+
+	* src/auth/auth-worker-server.c:
+	auth: Fixed error handling for proxy host dns_lookup()
+	[99952f2b56ae]
+
+2013-05-29  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-settings/settings-parser.c:
+	lib-settings: Support also "seconds" and "minutes" (instead of just
+	secs/mins)
+	[d16581e2d7cf]
+
+2013-05-28  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/db-ldap.c:
+	auth ldap: If ldap debug_level>0, log how long initialization took.
+	[22c5aff7b25c]
+
+	* src/auth/auth-request.c:
+	auth: Keep auth_request referenced during DNS lookup. If the
+	underlying auth connection gets closed, there's nothing else
+	referencing the auth_request.
+	[f819e0a3a4df]
+
+2013-05-26  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/imapc/imapc-save.c:
+	imapc: Fixed memory leak when copying messages.
+	[c0c5dac8ff48]
+
+2013-05-20  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-sync-index.c, src/lib-
+	storage/index/maildir/maildir-sync.c, src/lib-storage/index/maildir
+	/maildir-sync.h:
+	maildir: If we notice an unexpectedly inserted file, retry the sync
+	to fix it. Without this doveadm force-resync would just ignore the
+	inserted files.
+	[4c05b9447a10]
+
+2013-05-15  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/maildir/maildir-sync-index.c:
+	maildir: Fixed handling over 26 keywords in a mailbox.
+	[7389ff729d2e]
+
+	* src/plugins/quota/quota-status.c:
+	quota-status: If quota_status_* settings are set, don't free them
+	before using.
+	[30c257f2504a]
+
+2013-05-11  Florian Zeitz  <florob@babelmonkeys.de>
+
+	* src/lib/test-unichar.c, src/lib/unichar.c, src/lib/unicodemap.pl:
+	liblib: Fix Unicode decomposition
+	[04451ba65501]
+
+2013-05-12  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/istream-seekable.c:
+	istream-seekable: If underlying stream gives an error at EOF, don't
+	hide it.
+	[4de62bda5244]
+
+2013-05-09  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/zlib/istream-bzlib.c, src/plugins/zlib/istream-zlib.c:
+	istream-[b]zlib: Don't break if parent stream gets seeked in the
+	middle of reads.
+	[4e633c2f9738]
+
+	* src/lib/istream-seekable.c:
+	istream-seekable: Don't crash when seeking forwards past the data we
+	haven't read yet.
+	[48199b8e99cc]
+
+2013-05-06  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/acl/acl-backend-vfile.c, src/plugins/acl/acl-backend.c:
+	acl: Optionally get default ACL's for private/shared namespaces from
+	user's INBOX. This probably should be the default always, but better
+	not break anyone's existing setup until v2.3.0. So for now there's a
+	setting for this: plugin { acl_defaults_from_inbox = yes }
+	[23f7cabad194]
+
+2013-05-03  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/quota/quota-status.c:
+	quota-status: Return 554 instead of 552 on quota failures. This is
+	because RFC 5321/2821 recommends that 552 is treated the same as
+	452.
+	[0fa68f3a8f6c]
+
+2013-04-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts-solr/fts-backend-solr-old.c, src/plugins/fts-solr
+	/fts-backend-solr.c:
+	fts-solr: Don't crash if fts_solr setting is invalid.
+	[c3e487d82df7]
+
+	* src/master/master-settings.c:
+	master: Fixed warning log message.
+	[d044963bf65c]
+
+2013-04-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/zlib/zlib-plugin.c:
+	zlib: Keep the last read mail cached uncompressed in a temp file.
+	This fixes performance problems with partial IMAP FETCH commands.
+	[9c23d1fb8969]
+
+2013-04-20  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/stats/stats-plugin.c:
+	stats plugin: Fixed memory leak.
+	[143bd7f3d4a2]
+
+2013-04-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/imapc/imapc-mailbox.c, src/lib-
+	storage/index/imapc/imapc-save.c, src/lib-storage/index/imapc/imapc-
+	storage.c, src/lib-storage/index/imapc/imapc-storage.h:
+	imapc: If APPEND to selected mailbox doesn't send EXISTS, try if
+	NOOP sends it. This makes Dovecot behave better with Courier.
+	[b63f87ed9311]
+
+	* src/plugins/quota/quota-status.c:
+	quota-status: Fixed compiling with old Solaris.
+	[8e9f1c744516]
+
 2013-04-05  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-mail-batch.c:
+	doveadm batch: Fixed handling subcommand parameters and errors.
+	[850b5d8bbcc9]
+
+	* src/plugins/quota/Makefile.am, src/plugins/quota/quota-status.c:
+	quota-status: Unknown recipients caused a crash.
+	[c6b4a639cae1]
 
 	* .hgsigs:
 	Added signature for changeset 582108c190f8
-	[c42846219939] [tip]
+	[c42846219939]
 
 	* .hgtags:
 	Added tag 2.1.16 for changeset 582108c190f8

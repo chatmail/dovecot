@@ -226,16 +226,21 @@ static struct fts_backend *fts_backend_solr_alloc(void)
 }
 
 static int
-fts_backend_solr_init(struct fts_backend *_backend,
-		      const char **error_r ATTR_UNUSED)
+fts_backend_solr_init(struct fts_backend *_backend, const char **error_r)
 {
 	struct solr_fts_backend *backend = (struct solr_fts_backend *)_backend;
 	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT(_backend->ns->user);
-	const struct fts_solr_settings *set = &fuser->set;
 	const char *str;
 
-	if (solr_conn == NULL)
-		solr_conn = solr_connection_init(set->url, set->debug);
+	if (fuser == NULL) {
+		*error_r = "Invalid fts_solr setting";
+		return -1;
+	}
+
+	if (solr_conn == NULL) {
+		solr_conn = solr_connection_init(fuser->set.url,
+						 fuser->set.debug);
+	}
 
 	str = solr_escape_id_str(_backend->ns->user->username);
 	backend->id_username = i_strdup(str);

@@ -4,13 +4,18 @@
 #include "ostream.h"
 #include "connection.h"
 #include "restrict-access.h"
+#include "settings-parser.h"
 #include "master-service.h"
+#include "master-service-settings.h"
 #include "mail-namespace.h"
 #include "mail-storage.h"
 #include "mail-storage-settings.h"
 #include "mail-storage-service.h"
 #include "quota-private.h"
 #include "quota-plugin.h"
+
+#include <stdio.h>
+#include <unistd.h>
 
 enum quota_protocol {
 	QUOTA_PROTOCOL_UNKNOWN = 0,
@@ -27,6 +32,7 @@ struct quota_client {
 static enum quota_protocol protocol;
 static struct mail_storage_service_ctx *storage_service;
 static struct connection_list *clients;
+static char *nouser_reply;
 
 static void client_connected(struct master_service_connection *conn)
 {
@@ -94,9 +100,7 @@ static void client_handle_request(struct quota_client *client)
 					       &service_user, &user, &error);
 	restrict_access_allow_coredumps(TRUE);
 	if (ret == 0) {
-		value = mail_user_plugin_getenv(user, "quota_status_nouser");
-		if (value == NULL)
-			value = "REJECT Unknown user";
+		value = nouser_reply;
 	} else if (ret > 0) {
 		if ((ret = quota_check(user, client->size, &error)) > 0) {
 			/* under quota */
@@ -107,8 +111,9 @@ static void client_handle_request(struct quota_client *client)
 			/* over quota */
 			value = mail_user_plugin_getenv(user, "quota_status_overquota");
 			if (value == NULL)
-				value = t_strdup_printf("552 5.2.2 %s\n\n", error);
+				value = t_strdup_printf("554 5.2.2 %s\n\n", error);
 		}
+		value = t_strdup(value); /* user's pool is being freed */
 		mail_user_unref(&user);
 		mail_storage_service_user_free(&service_user);
 	}
@@ -173,16 +178,40 @@ static void main_preinit(void)
 
 static void main_init(void)
 {
+	struct mail_storage_service_input input;
+	const struct setting_parser_info *user_info;
+	const struct setting_parser_context *set_parser;
+	const struct mail_user_settings *user_set;
+	const char *value, *error;
+	pool_t pool;
+
 	clients = connection_list_init(&client_set, &client_vfuncs);
 	storage_service = mail_storage_service_init(master_service, NULL,
 		MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP |
 		MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP |
 		MAIL_STORAGE_SERVICE_FLAG_ENABLE_CORE_DUMPS |
 		MAIL_STORAGE_SERVICE_FLAG_NO_CHDIR);
+
+	memset(&input, 0, sizeof(input));
+	input.service = "quota-status";
+	input.module = "mail";
+	input.username = "";
+
+	pool = pool_alloconly_create("service all settings", 4096);
+	if (mail_storage_service_read_settings(storage_service, &input, pool,
+					       &user_info, &set_parser,
+					       &error) < 0)
+		i_fatal("%s", error);
+	user_set = settings_parser_get_list(set_parser)[1];
+	value = mail_user_set_plugin_getenv(user_set, "quota_status_nouser");
+	nouser_reply = value != NULL ? i_strdup(value) :
+		i_strdup("REJECT Unknown user");
+	pool_unref(&pool);
 }
 
 static void main_deinit(void)
 {
+	i_free(nouser_reply);
 	connection_list_deinit(&clients);
 	mail_storage_service_deinit(&storage_service);
 }

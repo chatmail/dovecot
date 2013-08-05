@@ -181,6 +181,7 @@ static int maildir_handle_uid_insertion(struct maildir_index_sync_context *ctx,
 	if ((uflags & MAILDIR_UIDLIST_REC_FLAG_RACING) == 0) {
 		/* mark it racy and check in next sync */
 		ctx->mbox->maildir_hdr.cur_check_time = 0;
+		maildir_sync_set_racing(ctx->maildir_sync_ctx);
 		maildir_uidlist_add_flags(ctx->mbox->uidlist, filename,
 					  MAILDIR_UIDLIST_REC_FLAG_RACING);
 		return 0;
@@ -392,10 +393,11 @@ maildir_sync_mail_keywords(struct maildir_index_sync_context *ctx, uint32_t seq)
 	old_indexes = array_get(&ctx->idx_keywords, &old_count);
 	have_indexonly_keywords = FALSE;
 	for (i = old_count; i > 0; i--) {
-		if (old_indexes[i-1] < MAILDIR_MAX_KEYWORDS)
-			break;
-		have_indexonly_keywords = TRUE;
-		array_delete(&ctx->idx_keywords, i-1, 1);
+		if (maildir_keywords_idx_char(ctx->keywords_sync_ctx,
+					      old_indexes[i-1]) == '\0') {
+			have_indexonly_keywords = TRUE;
+			array_delete(&ctx->idx_keywords, i-1, 1);
+		}
 	}
 
 	if (!have_indexonly_keywords) {

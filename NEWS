@@ -1,3 +1,16 @@
+v2.1.17 2013-06-25  Timo Sirainen <tss@iki.fi>
+
+	+ zlib: Keep the last read mail uncompressed in a temporary file.
+	  This significantly improves performance when IMAP client does
+	  small partial fetches for a large mail.
+	+ acl: Optionally get default ACL's for private/shared namespaces
+	  from user's INBOX (plugin { acl_defaults_from_inbox = yes } 
+	- Case-insensitive unicode character comparisons weren't all working
+	  as they should.
+	- maildir: Fixed handling over 26 keywords in a mailbox.
+	- auth: Don't crash in non-PLAIN/LOGIN auth mechanism if master user
+	  login is attempted without any master passdbs configured.
+
 v2.1.16 2013-04-04  Timo Sirainen <tss@iki.fi>
 
 	+ Added quota-status policy service for Postfix
