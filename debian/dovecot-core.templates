@@ -1,0 +1,28 @@
+Template: dovecot-core/ssl-cert-exists
+Type: note
+_Description: SSL certificate in the wrong location
+ You already have SSL certs for dovecot.  However you should move them out of 
+ /etc/ssl and into /etc/dovecot and update the configuration in
+ /etc/dovecot/conf.d/10-ssl.conf accordingly.
+ .
+ See /usr/share/doc/dovecot-core/README.Debian.gz for details."
+
+Template: dovecot-core/create-ssl-cert
+Type: boolean
+Default: true
+_Description: Create a self-signed SSL certificate?
+ In order to use IMAP or POP3 over SSL/TLS you will need a certificate.  It
+ looks like you don't have one.  If this is incorrect, answer false to this
+ question.  Make sure you have the proper configuration for your certificate
+ set up in /etc/dovecot/conf.d/10-ssl.conf.
+ .
+ Answer true if you would like dovecot to create a self-signed certificate for
+ you.
+
+Template: dovecot-core/ssl-cert-name
+Type: string
+Default: localhost
+_Description: Host name:
+ Please enter the host name to use in the SSL certificate.
+ .
+ It will become the 'commonName' field of the generated SSL certificate.

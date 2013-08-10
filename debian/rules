@@ -82,6 +82,7 @@ clean:
 	[ ! -f $(PIGEONHOLE_DIR)/Makefile ] || $(MAKE) -C $(PIGEONHOLE_DIR) distclean
 	# Cleanup DRAC
 	rm -f src/plugins/drac/drac.so
+	debconf-updatepo
 	dh_clean
 
 install: build
@@ -175,6 +176,7 @@ binary-indep: build install
 	dh_installdocs -i
 	dh_installexamples -i
 	dh_installman -i
+	dh_installdebconf -i
 	dh_link -i
 	dh_strip -i
 	dh_compress -i
@@ -199,6 +201,7 @@ binary-arch: build install
 	dh_systemd_start
 	dh_installman -a
 	dh_installman -p dovecot-core debian/maildirmake.dovecot.1
+	dh_installdebconf -a
 	dh_bugfiles -a
 	dh_lintian -a
 	dh_installchangelogs -a ChangeLog

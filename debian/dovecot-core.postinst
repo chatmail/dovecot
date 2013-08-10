@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+. /usr/share/debconf/confmodule
 
 if [ "$1" = "configure" ]; then
   CONFFILES="dovecot.conf \
@@ -63,7 +64,7 @@ if [ "$1" = "configure" ]; then
       if ucfq --with-colons "/etc/dovecot/${conffile}" | grep -q ":Yes:No"; then
         rm -f "/etc/dovecot/${conffile}"
       fi
-      ucf --purge /etc/dovecot/$conffile
+      ucf --debconf-ok --purge /etc/dovecot/$conffile
       ucfr --purge dovecot-common /etc/dovecot/$conffile
       for ext in '~' '%' .bak .dpkg-tmp .dpkg-new .dpkg-old .dpkg-dist .ucf-new .ucf-old .ucf-dist;  do
         rm -f /etc/dovecot/$conffile$ext
@@ -103,7 +104,7 @@ if [ "$1" = "configure" ]; then
     # Tell ucf that the file in /usr/share/dovecot is the latest
     # maintainer version, and let it handle how to manage the real
     # configuration file in /etc/dovecot.
-    ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
+    ucf --three-way --debconf-ok /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-core /etc/dovecot/$conffile
     if [ "$conffile" != "dovecot.conf" ] && [ -f "/etc/dovecot/$conffile" ] &&
 		[ `echo $conffile | cut -b -7` != "conf.d/" ]; then
@@ -117,61 +118,44 @@ if [ "$1" = "configure" ]; then
     delgroup imapd || true
   fi
 
-  ## SSL Certs
-  # Certs and key file
-  OLD_SSL_CERT="/etc/ssl/certs/dovecot.pem"
-  OLD_SSL_KEY="/etc/ssl/private/dovecot.pem"
-  SSL_CERT="/etc/dovecot/dovecot.pem"
-  SSL_KEY="/etc/dovecot/private/dovecot.pem"
-
   if [ ! -e /etc/dovecot/private ]; then
     install -d -o root -g root -m0700 /etc/dovecot/private
   fi
 
-  if [ -e $OLD_SSL_CERT ] || [ -e $OLD_SSL_KEY ]; then
-      echo "You already have ssl certs for dovecot."
-      echo "However you should move them out of /etc/ssl"
-      echo "and into /etc/dovecot and update the configuration"
-      echo "in /etc/dovecot/conf.d/10-ssl.conf accordingly."
-      echo "See /usr/share/doc/dovecot-core/README.Debian.gz for details."
-  # Generate new certs if needed
-  elif [ -e $SSL_CERT ] || [ -e $SSL_KEY ]; then
-      echo "You already have ssl certs for dovecot."
-  else
-      echo "Creating generic self-signed certificate: $SSL_CERT"
-      echo "This certificate will expire in 10 years."
-      echo "(replace with hand-crafted or authorized one if needed)."
+  SSL_CERT=`doveconf -S ssl_cert | sed -e 's/^ssl_cert=<//'`
+  SSL_KEY=`doveconf -S ssl_key | sed -e 's/^ssl_key=<//'`
+
+    db_get dovecot-core/create-ssl-cert
+    if [ "$RET" = "true" ]; then
       cd /etc/dovecot
+      SSL_CERT=`doveconf -S ssl_cert | sed -e 's/^ssl_cert=<//'`
+      SSL_KEY=`doveconf -S ssl_key | sed -e 's/^ssl_key=<//'`
       PATH=$PATH:/usr/bin/ssl
-      if ! FQDN="$(hostname -f)"; then
-          FQDN="$(hostname)"
-          echo WARNING: Could not get FQDN, using \"$FQDN\".
-      fi
-      MAILNAME="$(cat /etc/mailname 2> /dev/null || echo "$FQDN")"
+      db_get dovecot-core/ssl-cert-name
+      COMMONNAME="$RET"
+      MAILNAME="$(cat /etc/mailname 2> /dev/null || echo "$COMMONNAME")"
       (openssl req -newkey rsa:2048  -x509 -days 3652.5 -nodes \
 	  -rand /dev/urandom -out $SSL_CERT -keyout $SSL_KEY > /dev/null 2>&1 <<+
 .
 .
 .
 Dovecot mail server
-$FQDN
-$FQDN
+$COMMONNAME
+$COMMONNAME
 root@$MAILNAME
 +
       ) || echo "Warning : Bad SSL config, can't generate certificate."
 
-    ucfr dovecot-core $SSL_CERT
-    ucfr dovecot-core $SSL_KEY
+      ucfr dovecot-core $SSL_CERT
+      ucfr dovecot-core $SSL_KEY
 
-    if [ ! -h $SSL_CERT ] && [ ! -h $SSL_KEY ]; then
       chown root:dovecot $SSL_CERT || true
       chmod 0644 $SSL_CERT || true
       chown root:dovecot $SSL_KEY || true
       chmod 0600 $SSL_KEY || true
+
     fi
-
-  fi
-
+    db_stop || true
 fi
 
 if [ "$1" = "triggered" ]; then
