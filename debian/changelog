@@ -1,3 +1,14 @@
+dovecot (1:2.1.17-1) experimental; urgency=low
+
+  [ Jaldhar H. Vyas ]
+  * [38691fb] New upstream version
+  * [1361144] prompts in dovecot-core postinst debconfiscated.
+  * IN MEMORIAM: Goldy the Goldfish (2000-2013)  You were a prince (or
+    perhaps princess?) among fish and we shall all miss you dearly.
+    May your karmas merit much punya in future lives.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 10 Aug 2013 01:31:40 -0400
+
 dovecot (1:2.1.16-1.1) UNRELEASED; urgency=low
 
   * [f4f304a6] Package upstream systemd support
