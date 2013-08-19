@@ -63,10 +63,17 @@ ARRAY_DEFINE_TYPE(dsync_mailbox_node, struct dsync_mailbox_node *);
 #define dsync_mailbox_node_is_dir(node) \
 	guid_128_is_empty((node)->mailbox_guid)
 
+enum dsync_mailbox_delete_type {
+	/* Delete mailbox by given GUID */
+	DSYNC_MAILBOX_DELETE_TYPE_MAILBOX = 1,
+	/* Delete mailbox directory by given SHA1 name */
+	DSYNC_MAILBOX_DELETE_TYPE_DIR,
+	/* Unsubscribe mailbox by given SHA1 name */
+	DSYNC_MAILBOX_DELETE_TYPE_UNSUBSCRIBE,
+};
+
 struct dsync_mailbox_delete {
-	/* true: guid = mailbox GUID
-	   false: guid = sha1 of directory name */
-	bool delete_mailbox;
+	enum dsync_mailbox_delete_type type;
 	guid_128_t guid;
 	time_t timestamp;
 };
@@ -125,7 +132,8 @@ void dsync_mailbox_node_copy_data(struct dsync_mailbox_node *dest,
    non-NULL, add only that mailbox to the tree. */
 int dsync_mailbox_tree_fill(struct dsync_mailbox_tree *tree,
 			    struct mail_namespace *ns, const char *box_name,
-			    const guid_128_t box_guid);
+			    const guid_128_t box_guid,
+			    const char *const *exclude_mailboxes);
 
 /* Return all known deleted mailboxes and directories. */
 const struct dsync_mailbox_delete *

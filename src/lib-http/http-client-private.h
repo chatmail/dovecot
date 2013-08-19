@@ -71,15 +71,20 @@ struct http_client_request {
 };
 
 struct http_client_host_port {
+	struct http_client_host *host;
+
 	unsigned int port;
+	char *https_name;
 
 	/* current index in host->ips */
 	unsigned int ips_connect_idx;
+	/* number of connections trying to connect for this host+port */
+	unsigned int pending_connection_count;
 
 	/* requests pending in queue to be picked up by connections */
 	ARRAY_TYPE(http_client_request) request_queue;
 
-	char *https_name;
+	struct timeout *to_connect;
 };
 
 struct http_client_host {
@@ -121,6 +126,7 @@ struct http_client_peer {
 
 	unsigned int destroyed:1;        /* peer is being destroyed */
 	unsigned int no_payload_sync:1;  /* expect: 100-continue failed before */
+	unsigned int seen_100_response:1;/* expect: 100-continue succeeded before */
 	unsigned int last_connect_failed:1;
 };
 
@@ -134,10 +140,13 @@ struct http_client_connection {
 
 	unsigned int id; // DEBUG: identify parallel connections
 	int connect_errno;
+	struct timeval connect_start_timestamp;
+	struct timeval connected_timestamp;
 
 	struct ssl_iostream *ssl_iostream;
 	struct http_response_parser *http_parser;
-	struct timeout *to_input, *to_idle, *to_response;
+	struct timeout *to_connect, *to_input, *to_idle, *to_response;
+	struct timeout *to_requests;
 
 	struct http_client_request *pending_request;
 	struct istream *incoming_payload;
@@ -224,12 +233,15 @@ struct http_client_peer *
 	http_client_peer_get(struct http_client *client,
 		const struct http_client_peer_addr *addr);
 void http_client_peer_free(struct http_client_peer **_peer);
+bool http_client_peer_have_host(struct http_client_peer *peer,
+				struct http_client_host *host);
 void http_client_peer_add_host(struct http_client_peer *peer,
 	struct http_client_host *host);
 struct http_client_request *
 	http_client_peer_claim_request(struct http_client_peer *peer,
 		bool no_urgent);
 void http_client_peer_handle_requests(struct http_client_peer *peer);
+void http_client_peer_connection_success(struct http_client_peer *peer);
 void http_client_peer_connection_failure(struct http_client_peer *peer,
 					 const char *reason);
 void http_client_peer_connection_lost(struct http_client_peer *peer);
@@ -243,6 +255,8 @@ void http_client_host_submit_request(struct http_client_host *host,
 struct http_client_request *
 http_client_host_claim_request(struct http_client_host *host,
 	const struct http_client_peer_addr *addr, bool no_urgent);
+void http_client_host_connection_success(struct http_client_host *host,
+	const struct http_client_peer_addr *addr);
 void http_client_host_connection_failure(struct http_client_host *host,
 	const struct http_client_peer_addr *addr, const char *reason);
 unsigned int http_client_host_requests_pending(struct http_client_host *host,

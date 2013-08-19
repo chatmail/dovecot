@@ -43,6 +43,11 @@ static void fs_class_register(const struct fs *fs_class)
 	array_append(&fs_classes, &fs_class, 1);
 }
 
+static void fs_classes_deinit(void)
+{
+	array_free(&fs_classes);
+}
+
 static void fs_classes_init(void)
 {
 	i_array_init(&fs_classes, 8);
@@ -50,6 +55,7 @@ static void fs_classes_init(void)
 	fs_class_register(&fs_class_metawrap);
 	fs_class_register(&fs_class_sis);
 	fs_class_register(&fs_class_sis_queue);
+	lib_atexit(fs_classes_deinit);
 }
 
 static const struct fs *fs_class_find(const char *driver)
@@ -138,6 +144,13 @@ void fs_deinit(struct fs **_fs)
 	i_free(fs->temp_path_prefix);
 	fs->v.deinit(fs);
 	str_free(&last_error);
+}
+
+const char *fs_get_root_driver(struct fs *fs)
+{
+	while (fs->parent != NULL)
+		fs = fs->parent;
+	return fs->name;
 }
 
 struct fs_file *fs_file_init(struct fs *fs, const char *path, int mode_flags)
@@ -545,12 +558,16 @@ int fs_default_copy(struct fs_file *src, struct fs_file *dest)
 		errno = dest->copy_input->stream_errno;
 		fs_set_error(dest->fs, "read(%s) failed: %m",
 			     i_stream_get_name(dest->copy_input));
+		i_stream_unref(&dest->copy_input);
+		fs_write_stream_abort(dest, &dest->copy_output);
 		return -1;
 	}
 	if (dest->copy_output->stream_errno != 0) {
 		errno = dest->copy_output->stream_errno;
 		fs_set_error(dest->fs, "write(%s) failed: %m",
 			     o_stream_get_name(dest->copy_output));
+		i_stream_unref(&dest->copy_input);
+		fs_write_stream_abort(dest, &dest->copy_output);
 		return -1;
 	}
 	if (!dest->copy_input->eof) {

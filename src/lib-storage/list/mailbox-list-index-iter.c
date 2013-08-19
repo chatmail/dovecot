@@ -47,7 +47,6 @@ mailbox_list_index_iter_init(struct mailbox_list *list,
 	ctx->ctx.flags = flags;
 	ctx->ctx.glob = imap_match_init_multiple(pool, patterns, TRUE, ns_sep);
 	array_create(&ctx->ctx.module_contexts, pool, sizeof(void *), 5);
-	ctx->sep = ns_sep;
 	ctx->info_pool = pool_alloconly_create("mailbox list index iter info", 128);
 
 	if (!iter_use_index(ctx)) {
@@ -59,7 +58,8 @@ mailbox_list_index_iter_init(struct mailbox_list *list,
 		ctx->info.ns = list->ns;
 		ctx->path = str_new(pool, 128);
 		ctx->next_node = ilist->mailbox_tree;
-		ilist->iter_refcount++;
+		ctx->mailbox_pool = ilist->mailbox_pool;
+		pool_ref(ctx->mailbox_pool);
 	}
 	return &ctx->ctx;
 }
@@ -73,8 +73,10 @@ mailbox_list_index_update_info(struct mailbox_list_index_iterate_context *ctx)
 	p_clear(ctx->info_pool);
 
 	str_truncate(ctx->path, ctx->parent_len);
-	if (str_len(ctx->path) > 0)
-		str_append_c(ctx->path, ctx->sep);
+	if (str_len(ctx->path) > 0) {
+		str_append_c(ctx->path,
+			     mailbox_list_get_hierarchy_sep(ctx->ctx.list));
+	}
 	str_append(ctx->path, node->name);
 
 	ctx->info.vname = mailbox_list_get_vname(ctx->ctx.list, str_c(ctx->path));
@@ -188,10 +190,8 @@ int mailbox_list_index_iter_deinit(struct mailbox_list_iterate_context *_ctx)
 
 	if (ctx->backend_ctx != NULL)
 		ret = ilist->module_ctx.super.iter_deinit(ctx->backend_ctx);
-	else {
-		i_assert(ilist->iter_refcount > 0);
-		ilist->iter_refcount--;
-	}
+	else
+		pool_unref(&ctx->mailbox_pool);
 
 	pool_unref(&ctx->info_pool);
 	pool_unref(&_ctx->pool);

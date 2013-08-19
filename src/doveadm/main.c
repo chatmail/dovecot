@@ -61,6 +61,7 @@ static void main_deinit(void)
 		client_connection_destroy(&doveadm_client);
 	doveadm_mail_deinit();
 	doveadm_unload_modules();
+	doveadm_print_deinit();
 }
 
 int main(int argc, char *argv[])
@@ -84,10 +85,10 @@ int main(int argc, char *argv[])
 
 	master_service_init_log(master_service, "doveadm: ");
 	main_preinit();
-	master_service_init_finish(master_service);
 	master_service_set_die_callback(master_service, doveadm_die);
 
 	main_init();
+	master_service_init_finish(master_service);
 	master_service_run(master_service, client_connected);
 
 	main_deinit();

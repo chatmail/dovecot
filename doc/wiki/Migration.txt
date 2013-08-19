@@ -17,6 +17,7 @@ server-specific instructions:
  * <vm-pop3d> [Migration.Vm-pop3d.txt]
  * <teapop> [Migration.Teapop.txt]
  * <Binc IMAP> [Migration.BincIMAP.txt]
+ * <Gmail> [Migration.Gmail.txt]
 
 Dovecot is one of the easiest IMAP servers to migrate to because of its
 powerful configuration options. Dovecot can store email in both <mbox>
@@ -157,4 +158,4 @@ larch --from imap://mail1.example.com --to imap://mail2.example.com
 When run it will ask you for usernames and passwords that will be used for
 logging into servers, but you can also specify them on the command line.
 
-(This file was created from the wiki on 2013-05-19 04:42)
+(This file was created from the wiki on 2013-06-16 04:42)

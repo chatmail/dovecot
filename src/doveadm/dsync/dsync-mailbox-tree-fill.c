@@ -5,6 +5,7 @@
 #include "hash.h"
 #include "guid.h"
 #include "str.h"
+#include "wildcard-match.h"
 #include "mailbox-log.h"
 #include "mail-namespace.h"
 #include "mail-storage.h"
@@ -163,7 +164,7 @@ dsync_mailbox_tree_add_change_timestamps(struct dsync_mailbox_tree *tree,
 				break;
 			}
 			del = array_append_space(&tree->deletes);
-			del->delete_mailbox = TRUE;
+			del->type = DSYNC_MAILBOX_DELETE_TYPE_MAILBOX;
 			del->timestamp = timestamp;
 			memcpy(del->guid, rec->mailbox_guid, sizeof(del->guid));
 			break;
@@ -177,6 +178,7 @@ dsync_mailbox_tree_add_change_timestamps(struct dsync_mailbox_tree *tree,
 			   dsync side, it can match this deletion to the
 			   name. */
 			del = array_append_space(&tree->deletes);
+			del->type = DSYNC_MAILBOX_DELETE_TYPE_DIR;
 			del->timestamp = timestamp;
 			memcpy(del->guid, rec->mailbox_guid, sizeof(del->guid));
 			break;
@@ -195,9 +197,21 @@ dsync_mailbox_tree_add_change_timestamps(struct dsync_mailbox_tree *tree,
 				node->last_renamed_or_created = timestamp;
 			break;
 		case MAILBOX_LOG_RECORD_SUBSCRIBE:
-		case MAILBOX_LOG_RECORD_UNSUBSCRIBE:
 			if (node != NULL)
 				node->last_subscription_change = timestamp;
+			break;
+		case MAILBOX_LOG_RECORD_UNSUBSCRIBE:
+			if (node != NULL) {
+				node->last_subscription_change = timestamp;
+				break;
+			}
+			/* The mailbox is already deleted, but it may still
+			   exist on the other side (even the subscription
+			   alone). */
+			del = array_append_space(&tree->deletes);
+			del->type = DSYNC_MAILBOX_DELETE_TYPE_UNSUBSCRIBE;
+			del->timestamp = timestamp;
+			memcpy(del->guid, rec->mailbox_guid, sizeof(del->guid));
 			break;
 		}
 	}
@@ -252,9 +266,39 @@ dsync_mailbox_tree_fix_guid_duplicate(struct dsync_mailbox_tree *tree,
 	return ret;
 }
 
+static bool
+dsync_mailbox_info_is_excluded(const struct mailbox_info *info,
+			       const char *const *exclude_mailboxes)
+{
+	const char *const *info_specialuses;
+	unsigned int i;
+
+	if (exclude_mailboxes == NULL)
+		return FALSE;
+
+	info_specialuses = info->special_use == NULL ? NULL :
+		t_strsplit(info->special_use, " ");
+	for (i = 0; exclude_mailboxes[i] != NULL; i++) {
+		const char *exclude = exclude_mailboxes[i];
+
+		if (exclude[0] == '\\') {
+			/* special-use */
+			if (info_specialuses != NULL &&
+			    str_array_icase_find(info_specialuses, exclude))
+				return TRUE;
+		} else {
+			/* mailbox with wildcards */
+			if (wildcard_match(info->vname, exclude))
+				return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 int dsync_mailbox_tree_fill(struct dsync_mailbox_tree *tree,
 			    struct mail_namespace *ns, const char *box_name,
-			    const guid_128_t box_guid)
+			    const guid_128_t box_guid,
+			    const char *const *exclude_mailboxes)
 {
 	const enum mailbox_list_iter_flags list_flags =
 		/* FIXME: we'll skip symlinks, because we can't handle them
@@ -285,10 +329,12 @@ int dsync_mailbox_tree_fill(struct dsync_mailbox_tree *tree,
 
 	/* first add all of the existing mailboxes */
 	iter = mailbox_list_iter_init(ns->list, list_pattern, list_flags);
-	while ((info = mailbox_list_iter_next(iter)) != NULL) {
-		if (dsync_mailbox_tree_add(tree, info, box_guid) < 0)
-			ret = -1;
-	}
+	while ((info = mailbox_list_iter_next(iter)) != NULL) T_BEGIN {
+		if (!dsync_mailbox_info_is_excluded(info, exclude_mailboxes)) {
+			if (dsync_mailbox_tree_add(tree, info, box_guid) < 0)
+				ret = -1;
+		}
+	} T_END;
 	if (mailbox_list_iter_deinit(&iter) < 0) {
 		i_error("Mailbox listing for namespace '%s' failed", ns->prefix);
 		ret = -1;

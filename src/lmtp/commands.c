@@ -694,13 +694,7 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 		client_send_line(client, "250 2.0.0 <%s> %s Saved",
 				 rcpt->address, client->state.session_id);
 		ret = 0;
-	} else if (storage == NULL) {
-		/* This shouldn't happen */
-		i_error("BUG: Saving failed to unknown storage");
-		client_send_line(client, ERRSTR_TEMP_MAILBOX_FAIL,
-				 rcpt->address);
-		ret = -1;
-	} else {
+	} else if (storage != NULL) {
 		error = mail_storage_get_last_error(storage, &mail_error);
 		if (mail_error == MAIL_ERROR_NOSPACE) {
 			client_send_line(client, "%s <%s> %s",
@@ -711,6 +705,16 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 			client_send_line(client, "451 4.2.0 <%s> %s",
 					 rcpt->address, error);
 		}
+		ret = -1;
+	} else if (dctx.tempfail_error != NULL) {
+		client_send_line(client, "451 4.2.0 <%s> %s",
+				 rcpt->address, dctx.tempfail_error);
+		ret = -1;
+	} else {
+		/* This shouldn't happen */
+		i_error("BUG: Saving failed to unknown storage");
+		client_send_line(client, ERRSTR_TEMP_MAILBOX_FAIL,
+				 rcpt->address);
 		ret = -1;
 	}
 	return ret;
@@ -771,6 +775,7 @@ static struct istream *client_get_input(struct client *client)
 	inputs[2] = NULL;
 
 	cinput = i_stream_create_concat(inputs);
+	i_stream_set_name(cinput, "<lmtp DATA>");
 	i_stream_unref(&inputs[0]);
 	i_stream_unref(&inputs[1]);
 	return cinput;

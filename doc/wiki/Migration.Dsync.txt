@@ -99,4 +99,4 @@ Problems
  * If source IMAP and POP3 servers return messages somehow differently,
    pop3-migration plugin might not be able to match the messages
 
-(This file was created from the wiki on 2013-05-19 04:42)
+(This file was created from the wiki on 2013-06-16 04:42)

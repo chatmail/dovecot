@@ -22,6 +22,7 @@ struct cmd_urlfetch_context {
 	unsigned int failed:1;
 	unsigned int finished:1;
 	unsigned int extended:1;
+	unsigned int in_io_handler:1;
 };
 
 struct cmd_urlfetch_url {
@@ -132,6 +133,7 @@ static bool cmd_urlfetch_continue(struct client_command_context *cmd)
 	struct client *client = cmd->client;
 	struct cmd_urlfetch_context *ctx =
 		(struct cmd_urlfetch_context *)cmd->context;
+	bool urls_pending;
 	int ret = 1;
 
 	if (cmd->cancel)
@@ -158,7 +160,11 @@ static bool cmd_urlfetch_continue(struct client_command_context *cmd)
 		client_send_line(client, "");
 	client->output_cmd_lock = NULL;
 
-	if (imap_urlauth_fetch_continue(ctx->ufetch)) {
+	ctx->in_io_handler = TRUE;
+	urls_pending = imap_urlauth_fetch_continue(ctx->ufetch);
+	ctx->in_io_handler = FALSE;
+
+	if (urls_pending) {
 		/* waiting for imap urlauth service */
 		cmd->state = CLIENT_COMMAND_STATE_WAIT_EXTERNAL;
 		cmd->func = cmd_urlfetch_cancel;
@@ -255,10 +261,13 @@ cmd_urlfetch_url_callback(struct imap_urlauth_fetch_reply *reply,
 			  bool last, void *context)
 {
 	struct client_command_context *cmd = context;
+	struct client *client = cmd->client;
 	struct cmd_urlfetch_context *ctx = cmd->context;
+	bool in_io_handler = ctx->in_io_handler;
 	int ret;
 
-	o_stream_cork(cmd->client->output);
+	if (!in_io_handler)
+		o_stream_cork(client->output);
 	if (reply == NULL) {
 		/* fatal failure */
 		ctx->failed = TRUE;
@@ -273,21 +282,21 @@ cmd_urlfetch_url_callback(struct imap_urlauth_fetch_reply *reply,
 		str_append(response, "* URLFETCH ");
 		imap_append_astring(response, reply->url);
 		str_append(response, " NIL");
-		client_send_line(cmd->client, str_c(response));
+		client_send_line(client, str_c(response));
 		if (reply->error != NULL) {
-			client_send_line(cmd->client, t_strdup_printf(
+			client_send_line(client, t_strdup_printf(
 				"* NO %s.", reply->error));
 		}
 		ret = 1;
 	}
-	o_stream_uncork(cmd->client->output);
 
 	if ((last && cmd->state == CLIENT_COMMAND_STATE_WAIT_EXTERNAL) ||
 	    ret < 0) {
-		ctx->ufetch = NULL;
 		cmd_urlfetch_finish(cmd);
 		client_command_free(&cmd);
 	}
+	if (!in_io_handler)
+		o_stream_uncork(client->output);
 	return ret;
 }
 
@@ -358,7 +367,6 @@ bool cmd_urlfetch(struct client_command_context *cmd)
 	const struct cmd_urlfetch_url *url;
 	const struct imap_arg *args;
 	struct cmd_urlfetch_url *ufurl;
-	int ret;
 
 	if (client->urlauth_ctx == NULL) {
 		client_send_command_error(cmd, "URLAUTH disabled.");
@@ -388,17 +396,18 @@ bool cmd_urlfetch(struct client_command_context *cmd)
 	ctx->ufetch = imap_urlauth_fetch_init(client->urlauth_ctx,
 					      cmd_urlfetch_url_callback, cmd);
 
-	ret = 1;
+	ctx->in_io_handler = TRUE;
 	array_foreach(&urls, url) {
-		ret = imap_urlauth_fetch_url(ctx->ufetch, url->url, url->flags);
-		if (ret < 0) {
+		if (imap_urlauth_fetch_url(ctx->ufetch, url->url, url->flags) < 0) {
 			/* fatal error */
 			ctx->failed = TRUE;
 			break;
 		}
 	}
+	ctx->in_io_handler = FALSE;
 
-	if (ret != 0 && cmd->client->output_cmd_lock != cmd) {
+	if ((ctx->failed || !imap_urlauth_fetch_is_pending(ctx->ufetch))
+		&& cmd->client->output_cmd_lock != cmd) {
 		/* finished */
 		cmd_urlfetch_finish(cmd);
 		return TRUE;

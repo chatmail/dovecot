@@ -48,6 +48,9 @@ HOWTOs / Examples / Tutorials
       [http://www.tuxj0b.de/HOWTO_Mailserver_mit_Postfix_Dovecot_Antispam_und_PostgreSQL_Backend]
     * PostgreSQL, Postfix (Dovecot LMTP and Dovecot SASL), Dovecot and vmm
       (command line tool) [http://vmm.localdomain.org/]
+    * Installing a fully fledged, ready to use mailserver on Centos 6 with
+      Postfix, PostgreSQL, Amavis, ClamAV, Spamassassin and Dovecot
+      [http://shisaa.jp/postset/mailserver-1.html]
  * SQLite
     * Postfix+Dovecot with SQLite3 backend [http://rob0.nodns4.us/howto/] (also
       implements system users)
@@ -81,4 +84,4 @@ Others:
  * Postfix + Dovecot2.0.13 + MySQL virtual_users as proxy to DBMail
    [http://content.fens.org/index.php?q=admin-howto/mail/dovecot2dbmail-proxy]
 
-(This file was created from the wiki on 2013-05-19 04:42)
+(This file was created from the wiki on 2013-06-16 04:42)

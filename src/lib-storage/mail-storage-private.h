@@ -69,7 +69,10 @@ enum mail_storage_class_flags {
 	MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_GUIDS	= 0x40,
 	/* mailbox_save_set_guid() works (always set
 	   mailbox_status.have_save_guids=TRUE) */
-	MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_SAVE_GUIDS	= 0x80
+	MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_SAVE_GUIDS	= 0x80,
+	/* message content can be unstructured binary data
+	   (e.g. zlib plugin is allowed to compress/decompress mails) */
+	MAIL_STORAGE_CLASS_FLAG_BINARY_DATA	= 0x100
 };
 
 struct mail_binary_cache {
@@ -320,6 +323,9 @@ struct mailbox {
 	unsigned int deleting:1;
 	/* Delete mailbox only if it's empty */
 	unsigned int deleting_must_be_empty:1;
+	/* The backend wants to skip checking if there are 0 messages before
+	   calling mailbox_list.delete_mailbox() */
+	unsigned int delete_skip_empty_check:1;
 	/* Mailbox was already marked as deleted within this allocation. */
 	unsigned int marked_deleted:1;
 	/* TRUE if this is an INBOX for this user */

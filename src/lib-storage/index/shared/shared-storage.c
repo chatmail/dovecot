@@ -289,6 +289,7 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 		NAMESPACE_FLAG_LIST_PREFIX | NAMESPACE_FLAG_HIDDEN |
 		NAMESPACE_FLAG_AUTOCREATED | NAMESPACE_FLAG_INBOX_ANY;
 	new_ns->mail_set = _storage->set;
+	i_array_init(&new_ns->all_storages, 2);
 
 	location = t_str_new(256);
 	if (ret > 0)
@@ -346,7 +347,8 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 	*_ns = new_ns;
 	if (_storage->class_flags == 0) {
 		/* flags are unset if we were using "auto" storage */
-		_storage->class_flags = new_ns->storage->class_flags;
+		_storage->class_flags =
+			mail_namespace_get_default_storage(new_ns)->class_flags;
 	}
 
 	mail_user_add_namespace(user, &new_ns);

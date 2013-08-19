@@ -15,7 +15,7 @@
 #include "imap-utf7.h"
 #include "mailbox-log.h"
 #include "mailbox-tree.h"
-#include "mail-storage.h"
+#include "mail-storage-private.h"
 #include "mail-storage-hooks.h"
 #include "mailbox-list-private.h"
 
@@ -637,7 +637,7 @@ mailbox_list_escape_broken_name(struct mailbox_list *list,
 	for (; *vname != '\0'; vname++) {
 		if (*vname == '&' || (unsigned char)*vname >= 0x80) {
 			str_printfa(str, "%c%02x", list->set.broken_char,
-				    *vname);
+				    (unsigned char)*vname);
 		} else {
 			str_append_c(str, *vname);
 		}
@@ -770,21 +770,56 @@ mailbox_list_get_user(const struct mailbox_list *list)
 	return list->ns->user;
 }
 
+static int
+mailbox_list_get_storage_driver(struct mailbox_list *list, const char *driver,
+				struct mail_storage **storage_r)
+{
+	struct mail_storage *const *storagep;
+	const char *error, *data;
+
+	array_foreach(&list->ns->all_storages, storagep) {
+		if (strcmp((*storagep)->name, driver) == 0) {
+			*storage_r = *storagep;
+			return 0;
+		}
+	}
+
+	data = strchr(list->ns->set->location, ':');
+	if (data == NULL)
+		data = "";
+	else
+		data++;
+	if (mail_storage_create_full(list->ns, driver, data, 0,
+				     storage_r, &error) < 0) {
+		mailbox_list_set_critical(list,
+			"Namespace %s: Failed to create storage '%s': %s",
+			list->ns->prefix, driver, error);
+		return -1;
+	}
+	return 0;
+}
+
 int mailbox_list_get_storage(struct mailbox_list **list, const char *vname,
 			     struct mail_storage **storage_r)
 {
+	const struct mailbox_settings *set;
+
 	if ((*list)->v.get_storage != NULL)
 		return (*list)->v.get_storage(list, vname, storage_r);
-	else {
-		*storage_r = (*list)->ns->storage;
-		return 0;
+
+	set = mailbox_settings_find((*list)->ns->user, vname);
+	if (set != NULL && set->driver[0] != '\0') {
+		return mailbox_list_get_storage_driver(*list, set->driver,
+						       storage_r);
 	}
+	*storage_r = mail_namespace_get_default_storage((*list)->ns);
+	return 0;
 }
 
-void mailbox_list_get_closest_storage(struct mailbox_list *list,
+void mailbox_list_get_default_storage(struct mailbox_list *list,
 				      struct mail_storage **storage)
 {
-	*storage = list->ns->storage;
+	*storage = mail_namespace_get_default_storage(list->ns);
 }
 
 char mailbox_list_get_hierarchy_sep(struct mailbox_list *list)
@@ -1188,10 +1223,14 @@ mailbox_list_is_valid_fs_name(struct mailbox_list *list, const char *name,
 bool mailbox_list_is_valid_name(struct mailbox_list *list,
 				const char *name, const char **error_r)
 {
-	if (*name == '\0' && *list->ns->prefix != '\0') {
-		/* an ugly way to get to mailbox root (e.g. Maildir/ when
-		   it's not the INBOX) */
-		return TRUE;
+	if (*name == '\0') {
+		if (*list->ns->prefix != '\0') {
+			/* an ugly way to get to mailbox root (e.g. Maildir/
+			   when it's not the INBOX) */
+			return TRUE;
+		}
+		*error_r = "Name is empty";
+		return FALSE;
 	}
 
 	return mailbox_list_is_valid_fs_name(list, name, error_r);
@@ -1271,8 +1310,15 @@ bool mailbox_list_set_get_root_path(const struct mailbox_list_settings *set,
 			set->control_dir : set->root_dir;
 		break;
 	case MAILBOX_LIST_PATH_TYPE_INDEX:
-		path = set->index_dir != NULL ?
-			set->index_dir : set->root_dir;
+		if (set->index_dir != NULL) {
+			if (set->index_dir[0] == '\0') {
+				/* in-memory indexes */
+				return 0;
+			}
+			path = set->index_dir;
+		} else {
+			path = set->root_dir;
+		}
 		break;
 	case MAILBOX_LIST_PATH_TYPE_INDEX_PRIVATE:
 		path = set->index_pvt_dir;

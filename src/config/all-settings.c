@@ -80,6 +80,7 @@ struct mailbox_settings {
 	const char *name;
 	const char *autocreate;
 	const char *special_use;
+	const char *driver;
 };
 struct mail_user_settings {
 	const char *base_dir;
@@ -633,6 +634,7 @@ static const struct setting_define mailbox_setting_defines[] = {
 	DEF(SET_STR, name),
 	{ SET_ENUM, "auto", offsetof(struct mailbox_settings, autocreate), NULL } ,
 	DEF(SET_STR, special_use),
+	DEF(SET_STR, driver),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -641,7 +643,8 @@ const struct mailbox_settings mailbox_default_settings = {
 	.autocreate = MAILBOX_SET_AUTO_NO":"
 		MAILBOX_SET_AUTO_CREATE":"
 		MAILBOX_SET_AUTO_SUBSCRIBE,
-	.special_use = ""
+	.special_use = "",
+	.driver = ""
 };
 const struct setting_parser_info mailbox_setting_parser_info = {
 	.defines = mailbox_setting_defines,
@@ -990,7 +993,7 @@ static const struct imapc_settings imapc_default_settings = {
 	.imapc_host = "",
 	.imapc_port = 143,
 
-	.imapc_user = "%u",
+	.imapc_user = "",
 	.imapc_master_user = "",
 	.imapc_password = "",
 

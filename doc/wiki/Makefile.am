@@ -119,6 +119,7 @@ wikifiles = ACL.txt \
 	Migration.Courier.txt \
 	Migration.Cyrus.txt \
 	Migration.Dsync.txt \
+	Migration.Gmail.txt \
 	Migration.Linuxconf.txt \
 	Migration.MailFormat.txt \
 	Migration.Online.txt \

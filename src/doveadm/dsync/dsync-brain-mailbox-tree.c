@@ -83,20 +83,14 @@ void dsync_brain_mailbox_trees_init(struct dsync_brain *brain)
 					doveadm_settings->dsync_alt_char[0]);
 
 	/* fill the local mailbox tree */
-	if (brain->sync_ns != NULL) {
-		if (dsync_mailbox_tree_fill(brain->local_mailbox_tree,
-					    brain->sync_ns, brain->sync_box,
-					    brain->sync_box_guid) < 0)
+	for (ns = brain->user->namespaces; ns != NULL; ns = ns->next) {
+		if (!dsync_brain_want_namespace(brain, ns))
+			continue;
+		if (dsync_mailbox_tree_fill(brain->local_mailbox_tree, ns,
+					    brain->sync_box,
+					    brain->sync_box_guid,
+					    brain->exclude_mailboxes) < 0)
 			brain->failed = TRUE;
-	} else {
-		for (ns = brain->user->namespaces; ns != NULL; ns = ns->next) {
-			if (!dsync_brain_want_namespace(brain, ns))
-				continue;
-			if (dsync_mailbox_tree_fill(brain->local_mailbox_tree,
-						    ns, brain->sync_box,
-						    brain->sync_box_guid) < 0)
-				brain->failed = TRUE;
-		}
 	}
 
 	brain->local_tree_iter =
@@ -371,33 +365,51 @@ dsync_brain_mailbox_tree_add_delete(struct dsync_mailbox_tree *tree,
 	if (node == NULL)
 		return;
 
-	if (!other_del->delete_mailbox &&
-	    other_del->timestamp <= node->last_renamed_or_created) {
-		/* we don't want to delete this directory, we already have a
-		   newer timestamp for it */
-		return;
+	switch (other_del->type) {
+	case DSYNC_MAILBOX_DELETE_TYPE_MAILBOX:
+		/* mailbox is always deleted */
+		break;
+	case DSYNC_MAILBOX_DELETE_TYPE_DIR:
+		if (other_del->timestamp <= node->last_renamed_or_created) {
+			/* we don't want to delete this directory, we already
+			   have a newer timestamp for it */
+			return;
+		}
+		break;
+	case DSYNC_MAILBOX_DELETE_TYPE_UNSUBSCRIBE:
+		if (other_del->timestamp <= node->last_subscription_change) {
+			/* we don't want to unsubscribe, since we already have
+			   a newer subscription timestamp */
+			return;
+		}
+		break;
 	}
 
 	/* make a node for it in the other mailbox tree */
 	name = dsync_mailbox_node_get_full_name(tree, node);
 	other_node = dsync_mailbox_tree_get(other_tree, name);
 
-	if (!guid_128_is_empty(other_node->mailbox_guid) ||
-	    (other_node->existence == DSYNC_MAILBOX_NODE_EXISTS &&
-	     !other_del->delete_mailbox)) {
+	if (other_node->existence == DSYNC_MAILBOX_NODE_EXISTS &&
+	    (!guid_128_is_empty(other_node->mailbox_guid) ||
+	     other_del->type != DSYNC_MAILBOX_DELETE_TYPE_MAILBOX)) {
 		/* other side has already created a new mailbox or
 		   directory with this name, we can't delete it */
 		return;
 	}
 
 	/* ok, mark the other node deleted */
-	if (other_del->delete_mailbox) {
+	if (other_del->type == DSYNC_MAILBOX_DELETE_TYPE_MAILBOX) {
 		memcpy(other_node->mailbox_guid, node->mailbox_guid,
 		       sizeof(other_node->mailbox_guid));
 	}
 	i_assert(other_node->ns == NULL || other_node->ns == node->ns);
 	other_node->ns = node->ns;
-	other_node->existence = DSYNC_MAILBOX_NODE_DELETED;
+	if (other_del->type != DSYNC_MAILBOX_DELETE_TYPE_UNSUBSCRIBE)
+		other_node->existence = DSYNC_MAILBOX_NODE_DELETED;
+	else {
+		other_node->last_subscription_change = other_del->timestamp;
+		other_node->subscribed = FALSE;
+	}
 
 	if (dsync_mailbox_tree_guid_hash_add(other_tree, other_node,
 					     &old_node) < 0)

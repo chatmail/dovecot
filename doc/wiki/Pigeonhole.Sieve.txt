@@ -247,4 +247,4 @@ protocol. This is also provided by the <Pigeonhole.txt> project. It is
 available as a separate Dovecot service. Its configuration and use is explained
 on the <Pigeonhole ManageSieve page> [Pigeonhole.ManageSieve.txt].
 
-(This file was created from the wiki on 2013-05-19 04:42)
+(This file was created from the wiki on 2013-06-16 04:42)

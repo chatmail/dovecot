@@ -32,6 +32,7 @@
 #define AUTH_DNS_DEFAULT_TIMEOUT_MSECS (1000*10)
 #define AUTH_DNS_WARN_MSECS 500
 #define CACHED_PASSWORD_SCHEME "SHA1"
+#define AUTH_REQUEST_KEY_IGNORE " "
 
 struct auth_request_proxy_dns_lookup_ctx {
 	struct auth_request *request;
@@ -835,7 +836,7 @@ void auth_request_lookup_credentials(struct auth_request *request,
 				     const char *scheme,
 				     lookup_credentials_callback_t *callback)
 {
-	struct passdb_module *passdb = request->passdb->passdb;
+	struct passdb_module *passdb;
 	const char *cache_key, *cache_cred, *cache_scheme;
 	enum passdb_result result;
 
@@ -845,6 +846,7 @@ void auth_request_lookup_credentials(struct auth_request *request,
 		callback(PASSDB_RESULT_USER_UNKNOWN, NULL, 0, request);
 		return;
 	}
+	passdb = request->passdb->passdb;
 
 	request->credentials_scheme = p_strdup(request->pool, scheme);
 	request->private_callback.lookup_credentials = callback;
@@ -923,6 +925,11 @@ static void auth_request_userdb_save_cache(struct auth_request *request,
 		auth_fields_append(request->userdb_reply, str,
 				   AUTH_FIELD_FLAG_CHANGED,
 				   AUTH_FIELD_FLAG_CHANGED);
+		if (str_len(str) == 0) {
+			/* no userdb fields. but we can't save an empty string,
+			   since that means "user unknown". */
+			str_append(str, AUTH_REQUEST_KEY_IGNORE);
+		}
 		cache_value = str_c(str);
 	}
 	/* last_success has no meaning with userdb */
@@ -1503,6 +1510,8 @@ void auth_request_set_userdb_field(struct auth_request *request,
 			warned = TRUE;
 		}
 		name = "system_groups_user";
+	} else if (strcmp(name, AUTH_REQUEST_KEY_IGNORE) == 0) {
+		return;
 	}
 
 	auth_fields_add(request->userdb_reply, name, value, 0);
@@ -1648,6 +1657,7 @@ auth_request_proxy_dns_callback(const struct dns_lookup_result *result,
 	}
 	if (ctx->callback != NULL)
 		ctx->callback(result->ret == 0, request);
+	auth_request_unref(&request);
 }
 
 static int auth_request_proxy_host_lookup(struct auth_request *request,
@@ -1675,12 +1685,11 @@ static int auth_request_proxy_host_lookup(struct auth_request *request,
 
 	ctx = p_new(request->pool, struct auth_request_proxy_dns_lookup_ctx, 1);
 	ctx->request = request;
+	auth_request_ref(request);
 
 	if (dns_lookup(host, &dns_set, auth_request_proxy_dns_callback, ctx,
 		       &ctx->dns_lookup) < 0) {
 		/* failed early */
-		request->internal_failure = TRUE;
-		auth_request_proxy_finish_failure(request);
 		return -1;
 	}
 	ctx->callback = callback;

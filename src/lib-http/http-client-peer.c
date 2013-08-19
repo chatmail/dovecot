@@ -76,7 +76,8 @@ http_client_peer_connect(struct http_client_peer *peer, unsigned int count)
 }
 
 static unsigned int
-http_client_peer_requests_pending(struct http_client_peer *peer, unsigned int *num_urgent_r)
+http_client_peer_requests_pending(struct http_client_peer *peer,
+				  unsigned int *num_urgent_r)
 {
 	struct http_client_host *const *host;
 	unsigned int num_requests = 0, num_urgent = 0, requests, urgent;
@@ -147,7 +148,7 @@ http_client_peer_next_request(struct http_client_peer *peer)
 		   finished connecting successfully. */
 		new_connections = 0;
 	} else if (num_urgent == 0) {
-		new_connections = 1;
+		new_connections = connecting == 0 ? 1 : 0;
 	} else {
 		new_connections = (num_urgent > connecting ? num_urgent - connecting : 0);
 	}
@@ -232,20 +233,22 @@ http_client_peer_get(struct http_client *client,
 	return peer;
 }
 
-void http_client_peer_add_host(struct http_client_peer *peer,
-			   struct http_client_host *host)
+bool http_client_peer_have_host(struct http_client_peer *peer,
+				struct http_client_host *host)
 {
 	struct http_client_host *const *host_idx;
-	bool exists = FALSE;
 
 	array_foreach(&peer->hosts, host_idx) {
-		if (*host_idx == host) {
-			exists = TRUE;
-			break;
-		}
+		if (*host_idx == host)
+			return TRUE;
 	}
+	return FALSE;
+}
 
-	if (!exists)
+void http_client_peer_add_host(struct http_client_peer *peer,
+			       struct http_client_host *host)
+{
+	if (!http_client_peer_have_host(peer, host))
 		array_append(&peer->hosts, &host, 1);
 	http_client_peer_handle_requests(peer);
 }
@@ -267,6 +270,17 @@ http_client_peer_claim_request(struct http_client_peer *peer, bool no_urgent)
 	return NULL;
 }
 
+void http_client_peer_connection_success(struct http_client_peer *peer)
+{
+	struct http_client_host *const *host;
+
+	peer->last_connect_failed = FALSE;
+
+	array_foreach(&peer->hosts, host) {
+		http_client_host_connection_success(*host, &peer->addr);
+	}
+}
+
 void http_client_peer_connection_failure(struct http_client_peer *peer,
 					 const char *reason)
 {
@@ -277,12 +291,12 @@ void http_client_peer_connection_failure(struct http_client_peer *peer,
 
 	http_client_peer_debug(peer, "Failed to make connection");
 
+	peer->last_connect_failed = TRUE;
 	if (array_count(&peer->conns) > 1) {
 		/* if there are other connections attempting to connect, wait
 		   for them before failing the requests. remember that we had
 		   trouble with connecting so in future we don't try to create
 		   more than one connection until connects work again. */
-		peer->last_connect_failed = TRUE;
 	} else {
 		/* this was the only/last connection and connecting to it
 		   failed. a second connect will probably also fail, so just
@@ -306,8 +320,11 @@ void http_client_peer_connection_lost(struct http_client_peer *peer)
 	http_client_peer_debug(peer, "Lost a connection (%d connections left)",
 		array_count(&peer->conns));
 
-	/* if there are pending requests, create a new connection for them. */
-	http_client_peer_handle_requests(peer);
+	if (!peer->last_connect_failed) {
+		/* if there are pending requests, create a new
+		   connection for them. */
+		http_client_peer_handle_requests(peer);
+	}
 	if (array_count(&peer->conns) == 0 &&
 	    http_client_peer_requests_pending(peer, &num_urgent) == 0)
 		http_client_peer_free(&peer);

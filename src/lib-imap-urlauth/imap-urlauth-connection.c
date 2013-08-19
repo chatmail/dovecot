@@ -317,24 +317,35 @@ static void imap_urlauth_request_free(struct imap_urlauth_request *urlreq)
 	i_free(urlreq);
 }
 
-void imap_urlauth_request_abort(struct imap_urlauth_connection *conn,
+static void imap_urlauth_request_drop(struct imap_urlauth_connection *conn,
 				struct imap_urlauth_request *urlreq)
 {
-	if (urlreq->callback != NULL) {
-		T_BEGIN {
-			urlreq->callback(NULL, urlreq->context);
-		} T_END;
-	}
-
-	if (conn->state == IMAP_URLAUTH_STATE_REQUEST_PENDING &&
+	if ((conn->state == IMAP_URLAUTH_STATE_REQUEST_PENDING ||
+			conn->state == IMAP_URLAUTH_STATE_REQUEST_WAIT) &&
 	    conn->targets_head != NULL &&
 	    conn->targets_head->requests_head == urlreq) {
 		/* cannot just drop pending request without breaking
 		   protocol state */
-		urlreq->callback = NULL;
 		return;
 	}
 	imap_urlauth_request_free(urlreq);
+
+}
+
+void imap_urlauth_request_abort(struct imap_urlauth_connection *conn,
+				struct imap_urlauth_request *urlreq)
+{
+	imap_urlauth_request_callback_t *callback;
+
+	callback = urlreq->callback;
+	urlreq->callback = NULL;
+	if (callback != NULL) {
+		T_BEGIN {
+			callback(NULL, urlreq->context);
+		} T_END;
+	}
+
+	imap_urlauth_request_drop(conn, urlreq);
 }
 
 static void
@@ -343,26 +354,32 @@ imap_urlauth_request_fail(struct imap_urlauth_connection *conn,
 			  const char *error)
 {
 	struct imap_urlauth_fetch_reply reply;
+	imap_urlauth_request_callback_t *callback;
+	int ret = 1;
 
-	memset(&reply, 0, sizeof(reply));
-	reply.url = urlreq->url;
-	reply.flags = urlreq->flags;
-	reply.succeeded = FALSE;
-	reply.error = error;
+	callback = urlreq->callback;
+	urlreq->callback = NULL;
+	if (callback != NULL) {
+		memset(&reply, 0, sizeof(reply));
+		reply.url = urlreq->url;
+		reply.flags = urlreq->flags;
+		reply.succeeded = FALSE;
+		reply.error = error;
 
-	if (urlreq->callback != NULL) T_BEGIN {
-		(void)urlreq->callback(&reply, urlreq->context);
-	} T_END;
-
-	if (conn->state == IMAP_URLAUTH_STATE_REQUEST_PENDING &&
-	    conn->targets_head != NULL &&
-	    conn->targets_head->requests_head == urlreq) {
-		/* cannot just drop pending request without breaking protocol state */
-		urlreq->callback = NULL;
-		return;
+		T_BEGIN {
+			ret = callback(&reply, urlreq->context);
+		} T_END;
 	}
 
-	imap_urlauth_request_free(urlreq);
+	imap_urlauth_request_drop(conn, urlreq);
+
+	if (ret < 0) {
+		/* Drop any related requests upon error */
+		imap_urlauth_request_abort_by_context(conn, urlreq->context);
+	}
+
+	if (ret != 0)
+		imap_urlauth_connection_continue(conn);
 }
 
 static void
@@ -617,6 +634,7 @@ imap_urlauth_connection_read_literal(struct imap_urlauth_connection *conn)
 {
 	struct imap_urlauth_request *urlreq = conn->targets_head->requests_head;
 	struct imap_urlauth_fetch_reply reply;
+	imap_urlauth_request_callback_t *callback;
 	int ret;
 
 	i_assert(conn->reading_literal);
@@ -643,8 +661,10 @@ imap_urlauth_connection_read_literal(struct imap_urlauth_connection *conn)
 	reply.succeeded = TRUE;
 
 	ret = 1;
-	if (urlreq->callback != NULL) T_BEGIN {
-		ret = urlreq->callback(&reply, urlreq->context);
+	callback = urlreq->callback;
+	urlreq->callback = NULL;
+	if (callback != NULL) T_BEGIN {
+		ret = callback(&reply, urlreq->context);
 	} T_END;
 
 	if (reply.input != NULL)
@@ -704,6 +724,7 @@ static int imap_urlauth_input_pending(struct imap_urlauth_connection *conn)
 			    param[6] != '\0') {
 				error = param+6;
 			}
+			conn->state = IMAP_URLAUTH_STATE_REQUEST_WAIT;
 			imap_urlauth_request_fail(conn,
 				conn->targets_head->requests_head, error);
 			return 1;

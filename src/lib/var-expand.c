@@ -88,6 +88,33 @@ static const char *m_str_hash(const char *str, struct var_expand_context *ctx)
 }
 
 static const char *
+m_str_newhash(const char *str, struct var_expand_context *ctx)
+{
+	string_t *hash = t_str_new(20);
+	unsigned char result[MD5_RESULTLEN];
+	unsigned int i;
+	uint64_t value = 0;
+
+	md5_get_digest(str, strlen(str), result);
+	for (i = 0; i < sizeof(value); i++) {
+		value <<= 8;
+		value |= result[i];
+	}
+
+	if (ctx->width != 0) {
+		value %= ctx->width;
+		ctx->width = 0;
+	}
+
+	str_printfa(hash, "%x", (unsigned int)value);
+	while ((int)str_len(hash) < ctx->offset)
+		str_insert(hash, 0, "0");
+        ctx->offset = 0;
+
+	return str_c(hash);
+}
+
+static const char *
 m_str_md5(const char *str, struct var_expand_context *ctx ATTR_UNUSED)
 {
 	unsigned char digest[16];
@@ -132,6 +159,7 @@ static const struct var_expand_modifier modifiers[] = {
 	{ 'X', m_str_hex },
 	{ 'R', m_str_reverse },
 	{ 'H', m_str_hash },
+	{ 'N', m_str_newhash },
 	{ 'M', m_str_md5 },
 	{ 'D', m_str_ldap_dn },
 	{ 'T', m_str_trim },

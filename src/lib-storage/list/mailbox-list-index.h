@@ -87,10 +87,6 @@ struct mailbox_list_index {
 	struct mail_index *index;
 	uint32_t ext_id, msgs_ext_id, hmodseq_ext_id, subs_hdr_ext_id;
 
-	/* Number of iterations going on. Don't refresh mailbox list while
-	   any iterations are going on. */
-	int iter_refcount;
-
 	pool_t mailbox_pool;
 	/* uin32_t id => name */
 	HASH_TABLE(void *, char *) mailbox_names;
@@ -115,6 +111,7 @@ struct mailbox_list_index {
 struct mailbox_list_index_iterate_context {
 	struct mailbox_list_iterate_context ctx;
 	struct mailbox_list_iterate_context *backend_ctx;
+	pool_t mailbox_pool;
 
 	struct mailbox_info info;
 	pool_t info_pool;
@@ -122,7 +119,6 @@ struct mailbox_list_index_iterate_context {
 	unsigned int parent_len;
 	string_t *path;
 	struct mailbox_list_index_node *next_node;
-	char sep;
 
 	unsigned int failed:1;
 };

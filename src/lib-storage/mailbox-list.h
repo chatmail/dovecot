@@ -48,7 +48,18 @@ enum mailbox_info_flags {
 	MAILBOX_CHILD_SUBSCRIBED	= 0x100,
 	MAILBOX_CHILD_SPECIALUSE	= 0x200,
 
-	/* Internally used by lib-storage */
+	/* Internally used by lib-storage, use mailbox_info.special_use
+	   to actually access these: */
+	MAILBOX_SPECIALUSE_ALL		= 0x00010000,
+	MAILBOX_SPECIALUSE_ARCHIVE	= 0x00020000,
+	MAILBOX_SPECIALUSE_DRAFTS	= 0x00040000,
+	MAILBOX_SPECIALUSE_FLAGGED	= 0x00080000,
+	MAILBOX_SPECIALUSE_JUNK		= 0x00100000,
+	MAILBOX_SPECIALUSE_SENT		= 0x00200000,
+	MAILBOX_SPECIALUSE_TRASH	= 0x00400000,
+	MAILBOX_SPECIALUSE_IMPORTANT	= 0x00800000,
+
+	/* Internally used by lib-storage: */
 	MAILBOX_SELECT			= 0x20000000,
 	MAILBOX_MATCHED			= 0x40000000
 };
@@ -160,7 +171,7 @@ struct mail_user *
 mailbox_list_get_user(const struct mailbox_list *list) ATTR_PURE;
 int mailbox_list_get_storage(struct mailbox_list **list, const char *vname,
 			     struct mail_storage **storage_r);
-void mailbox_list_get_closest_storage(struct mailbox_list *list,
+void mailbox_list_get_default_storage(struct mailbox_list *list,
 				      struct mail_storage **storage);
 char mailbox_list_get_hierarchy_sep(struct mailbox_list *list);
 

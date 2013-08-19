@@ -36,6 +36,8 @@ struct http_client_settings {
 	const char *ssl_ca_dir, *ssl_ca_file, *ssl_ca;
 	const char *ssl_crypto_device;
 	bool ssl_allow_invalid_cert;
+	/* user cert */
+	const char *ssl_cert, *ssl_key, *ssl_key_password;
 
 	const char *rawlog_dir;
 
@@ -54,6 +56,17 @@ struct http_client_settings {
 
 	/* maximum number of attempts for a request */
 	unsigned int max_attempts;
+
+	/* max time to wait for HTTP request to finish before retrying
+	   (default = unlimited) */
+	unsigned int request_timeout_msecs;
+	/* max time to wait for connect() (and SSL handshake) to finish before
+	   retrying (default = request_timeout_msecs) */
+	unsigned int connect_timeout_msecs;
+	/* time to wait for connect() (and SSL handshake) to finish for the first
+	   connection before trying the next IP in parallel
+	   (default = 0; wait until current connection attempt finishes) */
+	unsigned int soft_connect_timeout_msecs;
 
 	bool debug;
 };

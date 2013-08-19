@@ -107,4 +107,4 @@ The activePath's value can be either "primaryPath" or "secondaryPath". The
 home's value will be the contents of that field. The !field tells Dovecot to
 fetch the field's value but not to do anything with it otherwise.
 
-(This file was created from the wiki on 2013-05-19 04:42)
+(This file was created from the wiki on 2013-06-16 04:42)

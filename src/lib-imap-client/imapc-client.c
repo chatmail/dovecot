@@ -23,6 +23,7 @@ const struct imapc_capability_name imapc_capability_names[] = {
 	{ "X-GM-EXT-1", IMAPC_CAPABILITY_X_GM_EXT_1 },
 	{ "CONDSTORE", IMAPC_CAPABILITY_CONDSTORE },
 	{ "NAMESPACE", IMAPC_CAPABILITY_NAMESPACE },
+	{ "UNSELECT", IMAPC_CAPABILITY_UNSELECT },
 
 	{ "IMAP4REV1", IMAPC_CAPABILITY_IMAP4REV1 },
 	{ NULL, 0 }
@@ -59,6 +60,11 @@ imapc_client_init(const struct imapc_client_settings *set)
 		p_strdup(pool, set->temp_path_prefix);
 	client->set.rawlog_dir = p_strdup(pool, set->rawlog_dir);
 	client->set.max_idle_time = set->max_idle_time;
+	client->set.connect_timeout_msecs = set->connect_timeout_msecs != 0 ?
+		set->connect_timeout_msecs :
+		IMAPC_DEFAULT_CONNECT_TIMEOUT_MSECS;
+	client->set.cmd_timeout_msecs = set->cmd_timeout_msecs != 0 ?
+		set->cmd_timeout_msecs : IMAPC_DEFAULT_COMMAND_TIMEOUT_MSECS;
 
 	if (set->ssl_mode != IMAPC_CLIENT_SSL_MODE_NONE) {
 		client->set.ssl_mode = set->ssl_mode;

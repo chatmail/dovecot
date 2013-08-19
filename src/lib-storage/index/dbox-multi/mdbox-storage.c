@@ -197,7 +197,7 @@ static void mdbox_mailbox_close(struct mailbox *box)
 }
 
 int mdbox_read_header(struct mdbox_mailbox *mbox,
-		      struct mdbox_index_header *hdr)
+		      struct mdbox_index_header *hdr, bool *need_resize_r)
 {
 	const void *data;
 	size_t data_size;
@@ -216,6 +216,7 @@ int mdbox_read_header(struct mdbox_mailbox *mbox,
 	}
 	memset(hdr, 0, sizeof(*hdr));
 	memcpy(hdr, data, I_MIN(data_size, sizeof(*hdr)));
+	*need_resize_r = data_size < sizeof(*hdr);
 	return 0;
 }
 
@@ -224,9 +225,12 @@ void mdbox_update_header(struct mdbox_mailbox *mbox,
 			 const struct mailbox_update *update)
 {
 	struct mdbox_index_header hdr, new_hdr;
+	bool need_resize;
 
-	if (mdbox_read_header(mbox, &hdr) < 0)
+	if (mdbox_read_header(mbox, &hdr, &need_resize) < 0) {
 		memset(&hdr, 0, sizeof(hdr));
+		need_resize = FALSE;
+	}
 
 	new_hdr = hdr;
 
@@ -239,6 +243,10 @@ void mdbox_update_header(struct mdbox_mailbox *mbox,
 
 	new_hdr.map_uid_validity =
 		mdbox_map_get_uid_validity(mbox->storage->map);
+	if (need_resize) {
+		mail_index_ext_resize_hdr(trans, mbox->hdr_ext_id,
+					  sizeof(new_hdr));
+	}
 	if (memcmp(&hdr, &new_hdr, sizeof(hdr)) != 0) {
 		mail_index_update_header_ext(trans, mbox->hdr_ext_id, 0,
 					     &new_hdr, sizeof(new_hdr));
@@ -365,14 +373,15 @@ static int
 mdbox_mailbox_get_guid(struct mdbox_mailbox *mbox, guid_128_t guid_r)
 {
 	struct mdbox_index_header hdr;
+	bool need_resize;
 
-	if (mdbox_read_header(mbox, &hdr) < 0)
+	if (mdbox_read_header(mbox, &hdr, &need_resize) < 0)
 		memset(&hdr, 0, sizeof(hdr));
 
 	if (guid_128_is_empty(hdr.mailbox_guid)) {
 		/* regenerate it */
 		if (mdbox_write_index_header(&mbox->box, NULL, NULL) < 0 ||
-		    mdbox_read_header(mbox, &hdr) < 0)
+		    mdbox_read_header(mbox, &hdr, &need_resize) < 0)
 			return -1;
 	}
 	memcpy(guid_r, hdr.mailbox_guid, GUID_128_SIZE);
@@ -411,7 +420,8 @@ struct mail_storage mdbox_storage = {
 	.name = MDBOX_STORAGE_NAME,
 	.class_flags = MAIL_STORAGE_CLASS_FLAG_UNIQUE_ROOT |
 		MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_GUIDS |
-		MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_SAVE_GUIDS,
+		MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_SAVE_GUIDS |
+		MAIL_STORAGE_CLASS_FLAG_BINARY_DATA,
 
 	.v = {
                 mdbox_get_setting_parser_info,

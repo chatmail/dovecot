@@ -179,8 +179,10 @@ static int mbase64_decode_to_utf8(string_t *dest, const char **_src)
 
 	while (*src != '-') {
 		input[0] = imap_b64dec[(uint8_t)src[0]];
+		if (input[0] == 0xff)
+			return -1;
 		input[1] = imap_b64dec[(uint8_t)src[1]];
-		if (input[0] == 0xff || input[1] == 0xff)
+		if (input[1] == 0xff)
 			return -1;
 
 		output[outpos % 4] = (input[0] << 2) | (input[1] >> 4);
@@ -270,4 +272,23 @@ int imap_utf7_to_utf8(const char *src, string_t *dest)
 		}
 	}
 	return 0;
+}
+
+bool imap_utf7_is_valid(const char *src)
+{
+	const char *p;
+	int ret;
+
+	for (p = src; *p != '\0'; p++) {
+		if (*p == '&' || (unsigned char)*p >= 0x80) {
+			/* slow scan */
+			T_BEGIN {
+				string_t *tmp = t_str_new(128);
+				ret = imap_utf7_to_utf8(p, tmp);
+			} T_END;
+			if (ret < 0)
+				return FALSE;
+		}
+	}
+	return TRUE;
 }

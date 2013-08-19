@@ -5,6 +5,10 @@ Since Dovecot v2.1 one can assign SPECIAL-USE RFC 6154
 [http://www.faqs.org/rfcs/rfc6154.html] tags and specify, which mailboxes to
 create and/or subscribe to automatically.
 
+The autocreated mailboxes are created lazily to disk only when accessed for the
+first time. The autosubscribed mailboxes aren't written to subscriptions file,
+unless SUBSCRIBE command is explicitly used for them.
+
 ---%<-------------------------------------------------------------------------
 namespace inbox {
   #prefix = INBOX. # the namespace prefix isn't added again to the mailbox
@@ -34,4 +38,4 @@ names.
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-05-19 04:42)
+(This file was created from the wiki on 2013-06-16 04:42)

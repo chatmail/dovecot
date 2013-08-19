@@ -9,6 +9,7 @@
 #include "time-util.h"
 #include "login-proxy.h"
 #include "auth-client.h"
+#include "sasl-client.h"
 #include "master-service-ssl-settings.h"
 #include "client-common.h"
 
@@ -104,6 +105,8 @@ static void client_auth_parse_args(struct client *client,
 			reply_r->proxy_timeout_msecs = 1000*atoi(value);
 		else if (strcmp(key, "proxy_refresh") == 0)
 			reply_r->proxy_refresh_secs = atoi(value);
+		else if (strcmp(key, "proxy_mech") == 0)
+			reply_r->proxy_mech = value;
 		else if (strcmp(key, "master") == 0)
 			reply_r->master_user = value;
 		else if (strcmp(key, "ssl") == 0) {
@@ -198,6 +201,8 @@ void client_proxy_failed(struct client *client, bool send_line)
 		client_proxy_error(client, PROXY_FAILURE_MSG);
 	}
 
+	if (client->proxy_sasl_client != NULL)
+		sasl_client_free(&client->proxy_sasl_client);
 	login_proxy_free(&client->login_proxy);
 	proxy_free_password(client);
 	i_free_and_null(client->proxy_user);
@@ -270,10 +275,13 @@ static int proxy_start(struct client *client,
 		       const struct client_auth_reply *reply)
 {
 	struct login_proxy_settings proxy_set;
+	const struct sasl_client_mech *sasl_mech = NULL;
 
 	i_assert(reply->destuser != NULL);
 	i_assert(!client->destroyed);
+	i_assert(client->proxy_sasl_client == NULL);
 
+	client->proxy_mech = NULL;
 	client->v.proxy_reset(client);
 
 	if (reply->password == NULL) {
@@ -285,6 +293,20 @@ static int proxy_start(struct client *client,
 		client_log_err(client, "proxy: host not given");
 		client_proxy_error(client, PROXY_FAILURE_MSG);
 		return -1;
+	}
+
+	if (reply->proxy_mech != NULL) {
+		sasl_mech = sasl_client_mech_find(reply->proxy_mech);
+		if (sasl_mech == NULL) {
+			client_log_err(client, t_strdup_printf(
+				"proxy: Unsupported SASL mechanism %s",
+				reply->proxy_mech));
+			client_proxy_error(client, PROXY_FAILURE_MSG);
+			return -1;
+		}
+	} else if (reply->master_user != NULL) {
+		/* have to use PLAIN authentication with master user logins */
+		sasl_mech = &sasl_client_mech_plain;
 	}
 
 	i_assert(client->refcount > 1);
@@ -318,6 +340,7 @@ static int proxy_start(struct client *client,
 		return -1;
 	}
 
+	client->proxy_mech = sasl_mech;
 	client->proxy_user = i_strdup(reply->destuser);
 	client->proxy_master_user = i_strdup(reply->master_user);
 	client->proxy_password = i_strdup(reply->password);
@@ -538,7 +561,7 @@ sasl_callback(struct client *client, enum sasl_server_reply sasl_reply,
 		} else {
 			client_auth_result(client,
 				CLIENT_AUTH_RESULT_AUTHFAILED_REASON, NULL,
-				AUTH_FAILED_MSG);
+				data);
 		}
 
 		if (!client->destroyed)
@@ -615,7 +638,8 @@ int client_auth_begin(struct client *client, const char *mech_name,
 
 bool client_check_plaintext_auth(struct client *client, bool pass_sent)
 {
-	if (client->secured || !client->set->disable_plaintext_auth)
+	if (client->secured || (!client->set->disable_plaintext_auth &&
+				strcmp(client->ssl_set->ssl, "required") != 0))
 		return TRUE;
 
 	if (client->set->auth_verbose) {
