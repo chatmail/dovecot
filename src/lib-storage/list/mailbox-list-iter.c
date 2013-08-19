@@ -256,6 +256,9 @@ static bool ns_match_next(struct ns_list_iterate_context *ctx,
 		/* non-listable namespace matches only with exact prefix */
 		if (strncmp(ns->prefix, pattern, ns->prefix_len) != 0)
 			return FALSE;
+		/* prefix="" list=no is never listed */
+		if (ns->prefix_len == 0)
+			return FALSE;
 	}
 
 	prefix_without_sep = t_strndup(ns->prefix, len);
@@ -594,9 +597,12 @@ mailbox_list_ns_iter_try_next(struct mailbox_list_iterate_context *_ctx,
 	if (info != NULL) {
 		if (strcasecmp(info->vname, "INBOX") == 0 && ctx->inbox_list) {
 			/* delay sending INBOX reply. we already saved its
-			   flags at init stage, except for \Noinferiors */
+			   flags at init stage, except for \Noinferiors
+			   and subscription states */
 			ctx->inbox_info.flags |=
-				(info->flags & MAILBOX_NOINFERIORS);
+				(info->flags & (MAILBOX_NOINFERIORS |
+						MAILBOX_SUBSCRIBED |
+						MAILBOX_CHILD_SUBSCRIBED));
 			return FALSE;
 		}
 		if (strncasecmp(info->vname, "INBOX", 5) == 0 &&

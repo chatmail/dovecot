@@ -30,6 +30,7 @@ struct mail_storage_settings {
 	const char *mail_attribute_dict;
 	unsigned int mail_prefetch_count;
 	const char *mail_cache_fields;
+	const char *mail_always_cache_fields;
 	const char *mail_never_cache_fields;
 	unsigned int mail_cache_min_mail_count;
 	unsigned int mailbox_idle_check_interval;
@@ -551,6 +552,7 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_STR_VARS, mail_attribute_dict),
 	DEF(SET_UINT, mail_prefetch_count),
 	DEF(SET_STR, mail_cache_fields),
+	DEF(SET_STR, mail_always_cache_fields),
 	DEF(SET_STR, mail_never_cache_fields),
 	DEF(SET_UINT, mail_cache_min_mail_count),
 	DEF(SET_TIME, mailbox_idle_check_interval),
@@ -586,6 +588,7 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.mail_attribute_dict = "",
 	.mail_prefetch_count = 0,
 	.mail_cache_fields = "flags",
+	.mail_always_cache_fields = "",
 	.mail_never_cache_fields = "imap.envelope",
 	.mail_cache_min_mail_count = 0,
 	.mailbox_idle_check_interval = 30,
@@ -1150,6 +1153,7 @@ struct pop3_settings {
 	const char *pop3_client_workarounds;
 	const char *pop3_logout_format;
 	const char *pop3_uidl_duplicates;
+	const char *pop3_deleted_flag;
 
 	enum pop3_client_workarounds parsed_workarounds;
 };
@@ -1791,6 +1795,7 @@ static const struct setting_define pop3_setting_defines[] = {
 	DEF(SET_STR, pop3_client_workarounds),
 	DEF(SET_STR, pop3_logout_format),
 	DEF(SET_ENUM, pop3_uidl_duplicates),
+	DEF(SET_STR, pop3_deleted_flag),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -1805,7 +1810,8 @@ static const struct pop3_settings pop3_default_settings = {
 	.pop3_fast_size_lookups = FALSE,
 	.pop3_client_workarounds = "",
 	.pop3_logout_format = "top=%t/%p, retr=%r/%b, del=%d/%m, size=%s",
-	.pop3_uidl_duplicates = "allow:rename"
+	.pop3_uidl_duplicates = "allow:rename",
+	.pop3_deleted_flag = ""
 };
 static const struct setting_parser_info *pop3_setting_dependencies[] = {
 	&mail_user_setting_parser_info,
@@ -2063,7 +2069,7 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 	const struct service_settings *default_service;
 #else
 	rlim_t fd_limit;
-	const char *max_client_limit_source = "default_client_count";
+	const char *max_client_limit_source = "default_client_limit";
 	unsigned int max_client_limit = set->default_client_limit;
 #endif
 

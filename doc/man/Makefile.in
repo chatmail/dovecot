@@ -618,7 +618,7 @@ uninstall-man: uninstall-man1 uninstall-man7
 
 .1.in.1: $(man_includefiles) Makefile
 	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/$< > $@
+		< $< > $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

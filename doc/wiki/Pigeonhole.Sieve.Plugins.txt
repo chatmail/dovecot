@@ -28,4 +28,4 @@ interpeter:
    (typically shell scripts. Messages can be piped to or filtered through those
    programs and string data can be input to and retrieved from those programs.
 
-(This file was created from the wiki on 2013-04-15 04:42)
+(This file was created from the wiki on 2013-05-19 04:42)

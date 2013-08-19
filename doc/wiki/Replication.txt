@@ -1,12 +1,18 @@
 Replication with dsync
 ======================
 
+Dovecot supports master/master replication using dsync. It's recommended that
+the same user always gets redirected to the same replica, but no changes get
+lost even if the same user modifies mails simultaneously on both replicas, some
+mails just might have to be redownloaded. The replication is done
+asynchronously, so high latency between the replicas isn't a problem. The
+replication is done by looking at Dovecot index files (not what exists in
+filesystem), so no mails get lost due to filesystem corruption or an accidental
+rm -rf, they will simply be replicated back.
+
 NOTE: v2.2 is highly recommended for this. Earlier versions can't do
 incremental metadata syncing. This means that the more mails a mailbox has, the
 slower it is to sync it.
-
-NOTE2: sdbox/mdbox mailbox formats are recommended for replication. Maildir
-still has some issues (although probably not noticeable in normal use).
 
 Make sure that user listing is configured for your userdb, this is required by
 replication:
@@ -112,18 +118,19 @@ The client must be able to verify that the SSL certificate is valid, so you
 need to specify the directory containing valid SSL CA roots:
 
 ---%<-------------------------------------------------------------------------
-ssl_client_ca_dir = /etc/ssl/certs
+ssl_client_ca_dir = /etc/ssl/certs # Debian/Ubuntu
+ssl_client_ca_file = /etc/pki/tls/cert.pem # RedHat
 ---%<-------------------------------------------------------------------------
 
 Now you can use 'tcps:hostname' or 'tcps:hostname:port' as the dsync target.
 
 Note that the SSL certificate must be signed by one of the CAs in the
-'ssl_client_ca_dir'. You can't use a self-signed certificate or a private CA,
-unless you correctly set them up into the CA directory (see openssl
-documentation for details).
+'ssl_client_ca_dir' or 'ssl_client_ca_file'. You can't use a self-signed
+certificate or a private CA, unless you correctly set them up into the CA
+file/directory (see openssl documentation for details).
 
-dsync wrapper script for root (v2.2+)
--------------------------------------
+dsync wrapper script for root SSH login (v2.2+)
+-----------------------------------------------
 
 If you're using multiple UIDs, dsync needs to be started as root, which means
 you need to log in as root with ssh (or use sudo). Another possibility is to
@@ -140,7 +147,7 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-/root/.ssh/authorized_keys2:
+/root/.ssh/authorized_keys:
 
 ---%<-------------------------------------------------------------------------
 command="/usr/local/bin/dsync-in-wrapper.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty
@@ -155,4 +162,4 @@ ulimit -c unlimited # for debugging any crashes
 /usr/local/bin/doveadm dsync-server -u $username
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-04-15 04:42)
+(This file was created from the wiki on 2013-05-19 04:42)

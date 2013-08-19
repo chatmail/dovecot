@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.2.1],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv0($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.2.2],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv2($PACKAGE_VERSION)", [Dovecot ABI version])
 
 AC_CONFIG_SRCDIR([src])
 
@@ -433,7 +433,10 @@ AC_CHECK_FUNCS(fcntl flock lockf inet_aton sigaction getpagesize madvise \
 	       walkcontext dirfd clearenv malloc_usable_size glob fallocate \
 	       posix_fadvise getpeereid getpeerucred)
 
-AC_CHECK_TYPES([struct sockpeercred])
+AC_CHECK_TYPES([struct sockpeercred],,,[
+#include <sys/types.h>
+#include <sys/socket.h>
+])
 
 AC_SEARCH_LIBS(clock_gettime, rt, [
   AC_DEFINE(HAVE_CLOCK_GETTIME,, Define if you have the clock_gettime function)

@@ -214,6 +214,15 @@ Various tips
    noatime,logbufs=8,logbsize=131072' (Source:
    http://www.htiweb.inf.br/benchmark/fsbench.htm)
 
+NFS
+---
+
+NFS v3 performance can be adversely affected by readdirplus, which causes the
+NFS server to stat() every file in a directory.  The solution under Linux is to
+make sure the NFS filesystem is mounted with the "nordirplus" option.
+
+ * http://www.dovecot.org/list/dovecot/2012-July/066939.html
+
 Directory Structure
 -------------------
 
@@ -358,4 +367,4 @@ References
  * Maildir++ [http://www.inter7.com/courierimap/README.maildirquota.html]
  * Wikipedia [http://en.wikipedia.org/wiki/Maildir]
 
-(This file was created from the wiki on 2013-04-15 04:42)
+(This file was created from the wiki on 2013-05-19 04:42)

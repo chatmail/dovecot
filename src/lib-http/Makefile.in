@@ -363,7 +363,9 @@ test_libs = \
 	$(MODULE_LIBS)
 
 test_deps = \
-	$(noinst_LTLIBRARIES)
+	$(noinst_LTLIBRARIES) \
+	../lib-test/libtest.la \
+	../lib/liblib.la
 
 test_http_url_SOURCES = test-http-url.c
 test_http_url_LDADD = http-url.lo  $(test_libs)
@@ -755,8 +757,6 @@ uninstall-am: uninstall-pkginc_libHEADERS
 	pdf pdf-am ps ps-am tags uninstall uninstall-am \
 	uninstall-pkginc_libHEADERS
 
-	../lib-test/libtest.la \
-	../lib/liblib.la
 
 check: check-am check-test
 check-test: all-am

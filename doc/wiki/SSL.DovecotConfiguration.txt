@@ -62,7 +62,8 @@ TLS SNI (Server Name Indication) support required
 
 /It is important to note that having multiple SSL certificates per IP will not
 be compatible with all clients, especially mobile ones. It is a TLS SNI
-limitation./
+limitation./ See <SSL.SNIClientSupport.txt> for list of clients known to (not)
+support SNI.
 
 ---%<-------------------------------------------------------------------------
 local_name imap.example.org {
@@ -344,4 +345,4 @@ B8A55EC91A060575CFB29503FBF7160C2DC8BCBFE02D20A7F704882F72D8D00272D8D002CE5CCC4B
 +OK Dovecot ready.
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-04-15 04:42)
+(This file was created from the wiki on 2013-05-19 04:42)

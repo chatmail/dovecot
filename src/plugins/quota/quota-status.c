@@ -107,8 +107,9 @@ static void client_handle_request(struct quota_client *client)
 			/* over quota */
 			value = mail_user_plugin_getenv(user, "quota_status_overquota");
 			if (value == NULL)
-				value = t_strdup_printf("552 5.2.2 %s\n\n", error);
+				value = t_strdup_printf("554 5.2.2 %s\n\n", error);
 		}
+		value = t_strdup(value); /* user's pool is being freed */
 		mail_user_unref(&user);
 		mail_storage_service_user_free(&service_user);
 	}

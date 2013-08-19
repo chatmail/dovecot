@@ -91,6 +91,7 @@ wikifiles = ACL.txt \
 	LDA.Qmail.txt \
 	LDA.Sendmail.txt \
 	LDA.txt \
+	LMTP.Exim.txt \
 	LMTP.txt \
 	Logging.txt \
 	LoginProcess.txt \
@@ -195,6 +196,7 @@ wikifiles = ACL.txt \
 	SSL.CertificateClientImporting.txt \
 	SSL.CertificateCreation.txt \
 	SSL.DovecotConfiguration.txt \
+	SSL.SNIClientSupport.txt \
 	SSL.txt \
 	Sasl.txt \
 	SecurityTuning.txt \
