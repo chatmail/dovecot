@@ -1,8 +1,137 @@
+2013-06-25  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 4b3c9c3e4fb8
+	[a2555de348a7] [tip]
+
+	* .hgtags:
+	Added tag 2.2.4 for changeset 4b3c9c3e4fb8
+	[e7f3acd34e7b]
+
+	* NEWS, configure.ac:
+	Released v2.2.4.
+	[4b3c9c3e4fb8] [2.2.4]
+
+	* src/doveadm/dsync/dsync-brain-mailbox-tree.c:
+	Make static analyzer happier.
+	[b5e8aed1bf61]
+
+	* src/doveadm/doveadm-mail-deduplicate.c:
+	doveadm deduplicate: Fixed error handling.
+	[09b278416493]
+
+	* src/plugins/quota/quota.c:
+	quota: Fixed quota_rule with non-uppercase INBOX.
+	[f68a955f4c5c]
+
+2013-06-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap-login/imap-proxy.c:
+	imap-login: If CAPABILITY is already in server banner, don't ask for
+	it again.
+	[6e8bbc150fa9]
+
+	* src/doveadm/dsync/dsync-mailbox-export.c:
+	dsync: Fixed "export:/count" value in verbose_proctitle=yes
+	[082fe68e38c9]
+
+	* src/lib-storage/index/mbox/mbox-lock.c:
+	mbox: Avoid assert-crashing by too optimistically upgrading a lock
+	to write-lock.
+	[04c7cf45a597]
+
+	* src/doveadm/dsync/dsync-brain.c:
+	dsync: Don't crash at deinit when dsync fails early.
+	[07e314199f56]
+
+	* src/doveadm/dsync/dsync-brain-mailbox-tree.c, src/doveadm/dsync
+	/dsync-brain-mailbox.c, src/doveadm/dsync/dsync-brain.c,
+	src/doveadm/dsync/dsync-brain.h:
+	dsync: Don't try to find mailboxes from unwanted namespaces.
+	[84014270ee37]
+
+	* src/doveadm/dsync/doveadm-dsync.c, src/doveadm/dsync/dsync-brain-
+	private.h, src/doveadm/dsync/dsync-brain.c, src/doveadm/dsync/dsync-
+	brain.h, src/doveadm/dsync/dsync-mailbox-export.c, src/doveadm/dsync
+	/dsync-mailbox-export.h, src/doveadm/dsync/dsync-mailbox-import.c,
+	src/doveadm/dsync/dsync-mailbox-import.h:
+	dsync: If verbose_proctitle=yes, show the current state in it.
+	[b5876fa03b0e]
+
+	* src/doveadm/dsync/dsync-brain.c:
+	dsync: State names were wrong in debug/error messages.
+	[83bea7e1f136]
+
+2013-06-18  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: Fixed crash with some autocreated (e.g. shared)
+	namespaces.
+	[8a81c5a1b60f]
+
+	* src/lib-storage/index/dbox-single/sdbox-storage.c:
+	sdbox: If sdbox header is corrupted, resize it to make sure its size
+	is correct.
+	[07642120b6ea]
+
+	* src/doveadm/Makefile.am, src/doveadm/doveadm-mail-deduplicate.c,
+	src/doveadm/doveadm-mail.c, src/doveadm/doveadm-mail.h:
+	doveadm: Added deduplicate command. By default it deduplicates only
+	by GUIDs. With -m parameter it deduplicates by Message-Id: header.
+	[3683d7bff095]
+
+	* src/doveadm/Makefile.am, src/doveadm/doveadm-mail-flags.c,
+	src/doveadm/doveadm-mail.c, src/doveadm/doveadm-mail.h:
+	doveadm: Added "flags" command to modify messages' flags.
+	[5e51c5545029]
+
+	* src/lib-storage/index/dbox-multi/mdbox-storage.c:
+	mdbox: If mdbox header is corrupted, resize it to make sure its size
+	is correct.
+	[3056feb418b1]
+
+	* src/lib-index/mail-index-fsck.c, src/lib-index/mail-index-map.c, src
+	/lib-index/mail-index-modseq.c, src/lib-index/mail-index-private.h,
+	src/lib-index/mail-index-sync-ext.c, src/lib-index/mail-index-sync-
+	keywords.c, src/lib-index/mail-index-sync-update.c, src/lib-index
+	/mail-index-write.c:
+	lib-index: Don't bother tracking if header/records were changed.
+	They aren't really needed. When mail_index_write() is called, we
+	already know we want to update the index.
+	[37bd40e27b67]
+
+	* src/lib-index/mail-index-sync.c:
+	lib-index: If error is found from transaction log, update
+	dovecot.index so it won't be read again.
+	[3794e6cb0da8]
+
+	* src/lib-sasl/sasl-client.h:
+	lib-sasl: API usage comment update
+	[3dc92ec58aef]
+
+	* src/imap-login/imap-proxy.c, src/pop3-login/pop3-proxy.c:
+	imap/pop3 proxy: Master user logins were broken by lib-sasl change.
+	[ba720ff91a75]
+
 2013-06-17  Timo Sirainen  <tss@iki.fi>
+
+	* src/pop3/pop3-client.c:
+	pop3: Fixed crash at deinit
+	[1352949265cc]
+
+	* src/doveadm/dsync/dsync-brain-mailbox-tree.c:
+	dsync: Minor fixes to checking if namespace is wanted to be synced.
+	[014003da870e]
+
+	* src/doveadm/dsync/doveadm-dsync.c, src/doveadm/dsync/test-dsync-
+	mailbox-tree-sync.c, src/imap-login/imap-proxy.c,
+	src/pop3-login/pop3-proxy.c:
+	Make static analyzer happier.
+	[178fe5bf943b]
 
 	* .hgsigs:
 	Added signature for changeset 5d9f52c9a287
-	[5a137e3eb51e] [tip]
+	[5a137e3eb51e]
 
 	* .hgtags:
 	Added tag 2.2.3 for changeset 5d9f52c9a287

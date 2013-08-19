@@ -69,8 +69,10 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
 PROGRAMS = $(bin_PROGRAMS) $(pkglibexec_PROGRAMS)
 am__objects_1 = doveadm-mail.$(OBJEXT) doveadm-mail-altmove.$(OBJEXT) \
-	doveadm-mail-batch.$(OBJEXT) doveadm-mail-expunge.$(OBJEXT) \
-	doveadm-mail-fetch.$(OBJEXT) doveadm-mail-import.$(OBJEXT) \
+	doveadm-mail-batch.$(OBJEXT) \
+	doveadm-mail-deduplicate.$(OBJEXT) \
+	doveadm-mail-expunge.$(OBJEXT) doveadm-mail-fetch.$(OBJEXT) \
+	doveadm-mail-flags.$(OBJEXT) doveadm-mail-import.$(OBJEXT) \
 	doveadm-mail-index.$(OBJEXT) doveadm-mail-iter.$(OBJEXT) \
 	doveadm-mail-mailbox.$(OBJEXT) \
 	doveadm-mail-mailbox-status.$(OBJEXT) \
@@ -428,8 +430,10 @@ common = \
 	doveadm-mail.c \
 	doveadm-mail-altmove.c \
 	doveadm-mail-batch.c \
+	doveadm-mail-deduplicate.c \
 	doveadm-mail-expunge.c \
 	doveadm-mail-fetch.c \
+	doveadm-mail-flags.c \
 	doveadm-mail-import.c \
 	doveadm-mail-index.c \
 	doveadm-mail-iter.c \
@@ -654,8 +658,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-altmove.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-batch.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-copymove.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-deduplicate.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-expunge.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-fetch.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-flags.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-import.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-index.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-iter.Po@am__quote@

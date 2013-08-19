@@ -4,17 +4,25 @@
 #include "array.h"
 #include "hash.h"
 #include "hostpid.h"
+#include "str.h"
+#include "process-title.h"
+#include "settings-parser.h"
+#include "master-service.h"
+#include "master-service-settings.h"
 #include "mail-namespace.h"
 #include "dsync-mailbox-tree.h"
 #include "dsync-ibc.h"
 #include "dsync-brain-private.h"
+#include "dsync-mailbox-import.h"
+#include "dsync-mailbox-export.h"
 
 #include <sys/stat.h>
 
-static const char *dsync_state_names[DSYNC_STATE_DONE+1] = {
-	"recv_handshake",
-	"send_last_common",
-	"recv_last_common",
+static const char *dsync_state_names[] = {
+	"master_recv_handshake",
+	"slave_recv_handshake",
+	"master_send_last_common",
+	"slave_recv_last_common",
 	"send_mailbox_tree",
 	"send_mailbox_tree_deletes",
 	"recv_mailbox_tree",
@@ -24,6 +32,42 @@ static const char *dsync_state_names[DSYNC_STATE_DONE+1] = {
 	"sync_mails",
 	"done"
 };
+
+static const char *dsync_brain_get_proctitle(struct dsync_brain *brain)
+{
+	string_t *str = t_str_new(128);
+	const char *import_title, *export_title;
+
+	str_append_c(str, '[');
+	str_append(str, brain->user->username);
+	if (brain->box == NULL) {
+		str_append_c(str, ' ');
+		str_append(str, dsync_state_names[brain->state]);
+	} else {
+		str_append_c(str, ' ');
+		str_append(str, mailbox_get_vname(brain->box));
+		import_title = brain->box_importer == NULL ? "" :
+			dsync_mailbox_import_get_proctitle(brain->box_importer);
+		export_title = brain->box_exporter == NULL ? "" :
+			dsync_mailbox_export_get_proctitle(brain->box_exporter);
+		if (import_title[0] == '\0' && export_title[0] == '\0') {
+			str_printfa(str, " send:%s recv:%s",
+				    dsync_box_state_names[brain->box_send_state],
+				    dsync_box_state_names[brain->box_recv_state]);
+		} else {
+			if (import_title[0] != '\0') {
+				str_append(str, " import:");
+				str_append(str, import_title);
+			}
+			if (export_title[0] != '\0') {
+				str_append(str, " export:");
+				str_append(str, export_title);
+			}
+		}
+	}
+	str_append_c(str, ']');
+	return str_c(str);
+}
 
 static void dsync_brain_run_io(void *context)
 {
@@ -56,7 +100,10 @@ static struct dsync_brain *
 dsync_brain_common_init(struct mail_user *user, struct dsync_ibc *ibc)
 {
 	struct dsync_brain *brain;
+	const struct master_service_settings *service_set;
 	pool_t pool;
+
+	service_set = master_service_settings_get(master_service);
 
 	pool = pool_alloconly_create("dsync brain", 10240);
 	brain = p_new(pool, struct dsync_brain, 1);
@@ -65,6 +112,7 @@ dsync_brain_common_init(struct mail_user *user, struct dsync_ibc *ibc)
 	brain->ibc = ibc;
 	brain->sync_type = DSYNC_BRAIN_SYNC_TYPE_UNKNOWN;
 	brain->lock_fd = -1;
+	brain->verbose_proctitle = service_set->verbose_proctitle;
 	hash_table_create(&brain->mailbox_states, pool, 0,
 			  guid_128_hash, guid_128_cmp);
 	p_array_init(&brain->remote_mailbox_states, pool, 64);
@@ -97,6 +145,7 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 	i_assert(sync_type != DSYNC_BRAIN_SYNC_TYPE_UNKNOWN);
 	i_assert(sync_type != DSYNC_BRAIN_SYNC_TYPE_STATE ||
 		 (set->state != NULL && *set->state != '\0'));
+	i_assert(N_ELEMENTS(dsync_state_names) == DSYNC_STATE_DONE+1);
 
 	brain = dsync_brain_common_init(user, ibc);
 	brain->sync_type = sync_type;
@@ -146,13 +195,20 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 }
 
 struct dsync_brain *
-dsync_brain_slave_init(struct mail_user *user, struct dsync_ibc *ibc)
+dsync_brain_slave_init(struct mail_user *user, struct dsync_ibc *ibc,
+		       bool local)
 {
 	struct dsync_ibc_settings ibc_set;
 	struct dsync_brain *brain;
 
 	brain = dsync_brain_common_init(user, ibc);
 	brain->state = DSYNC_STATE_SLAVE_RECV_HANDSHAKE;
+
+	if (local) {
+		/* both master and slave are running within the same process,
+		   update the proctitle only for master. */
+		brain->verbose_proctitle = FALSE;
+	}
 
 	memset(&ibc_set, 0, sizeof(ibc_set));
 	ibc_set.hostname = my_hostdomain();
@@ -186,8 +242,10 @@ int dsync_brain_deinit(struct dsync_brain **_brain)
 		dsync_brain_sync_mailbox_deinit(brain);
 	if (brain->local_tree_iter != NULL)
 		dsync_mailbox_tree_iter_deinit(&brain->local_tree_iter);
-	dsync_mailbox_tree_deinit(&brain->local_mailbox_tree);
-	dsync_mailbox_tree_deinit(&brain->remote_mailbox_tree);
+	if (brain->local_mailbox_tree != NULL)
+		dsync_mailbox_tree_deinit(&brain->local_mailbox_tree);
+	if (brain->remote_mailbox_tree != NULL)
+		dsync_mailbox_tree_deinit(&brain->remote_mailbox_tree);
 	if (brain->mailbox_states_iter != NULL)
 		hash_table_iterate_deinit(&brain->mailbox_states_iter);
 	hash_table_destroy(&brain->mailbox_states);
@@ -394,6 +452,9 @@ static bool dsync_brain_slave_recv_last_common(struct dsync_brain *brain)
 
 static bool dsync_brain_run_real(struct dsync_brain *brain, bool *changed_r)
 {
+	enum dsync_state orig_state = brain->state;
+	enum dsync_box_state orig_box_recv_state = brain->box_recv_state;
+	enum dsync_box_state orig_box_send_state = brain->box_send_state;
 	bool changed = FALSE, ret = TRUE;
 
 	if (brain->failed)
@@ -451,7 +512,13 @@ static bool dsync_brain_run_real(struct dsync_brain *brain, bool *changed_r)
 			brain->master_brain ? 'M' : 'S',
 			dsync_state_names[brain->state], changed);
 	}
-
+	if (brain->verbose_proctitle) {
+		if (orig_state != brain->state ||
+		    orig_box_recv_state != brain->box_recv_state ||
+		    orig_box_send_state != brain->box_send_state ||
+		    ++brain->proctitle_update_counter % 100 == 0)
+			process_title_set(dsync_brain_get_proctitle(brain));
+	}
 	*changed_r = changed;
 	return brain->failed ? FALSE : ret;
 }
@@ -519,4 +586,26 @@ bool dsync_brain_has_failed(struct dsync_brain *brain)
 bool dsync_brain_has_unexpected_changes(struct dsync_brain *brain)
 {
 	return brain->changes_during_sync;
+}
+
+bool dsync_brain_want_namespace(struct dsync_brain *brain,
+				struct mail_namespace *ns)
+{
+	if (brain->sync_ns != NULL)
+		return brain->sync_ns == ns;
+	if (ns->alias_for != NULL) {
+		/* always skip aliases */
+		return FALSE;
+	}
+	if (brain->sync_visible_namespaces) {
+		if ((ns->flags & NAMESPACE_FLAG_HIDDEN) == 0)
+			return TRUE;
+		if ((ns->flags & (NAMESPACE_FLAG_LIST_PREFIX |
+				  NAMESPACE_FLAG_LIST_CHILDREN)) != 0)
+			return TRUE;
+		return FALSE;
+	} else {
+		return strcmp(ns->unexpanded_set->location,
+			      SETTING_STRVAR_UNEXPANDED) == 0;
+	}
 }

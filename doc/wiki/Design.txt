@@ -7,6 +7,7 @@ Dovecot Design
  * <Design of authentication process> [Design.AuthProcess.txt]
     * <Authentication protocol> [Design.AuthProtocol.txt]
  * <Design of IMAP/POP3 processes> [Design.MailProcess.txt]
+ * <Doveadm server protocol> [Design.DoveadmProtocol.txt]
 
 Code APIs
 ---------
@@ -48,4 +49,4 @@ lib-storage:
  * <Plugins> [Design.Storage.Plugins.txt] - how to hook into lib-storage
    functions.
 
-(This file was created from the wiki on 2013-06-16 04:42)
+(This file was created from the wiki on 2013-06-24 04:42)

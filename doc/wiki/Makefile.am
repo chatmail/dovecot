@@ -44,6 +44,7 @@ wikifiles = ACL.txt \
 	Design.AuthProtocol.txt \
 	Design.Buffers.txt \
 	Design.Code.txt \
+	Design.DoveadmProtocol.txt \
 	Design.Dsync.txt \
 	Design.Indexes.Cache.txt \
 	Design.Indexes.MailIndexApi.txt \

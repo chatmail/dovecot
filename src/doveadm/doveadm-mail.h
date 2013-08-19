@@ -138,10 +138,14 @@ void doveadm_mail_failed_mailbox(struct doveadm_mail_cmd_context *ctx,
 extern struct doveadm_mail_cmd cmd_expunge;
 extern struct doveadm_mail_cmd cmd_search;
 extern struct doveadm_mail_cmd cmd_fetch;
+extern struct doveadm_mail_cmd cmd_flags_add;
+extern struct doveadm_mail_cmd cmd_flags_remove;
+extern struct doveadm_mail_cmd cmd_flags_replace;
 extern struct doveadm_mail_cmd cmd_import;
 extern struct doveadm_mail_cmd cmd_index;
 extern struct doveadm_mail_cmd cmd_altmove;
 extern struct doveadm_mail_cmd cmd_copy;
+extern struct doveadm_mail_cmd cmd_deduplicate;
 extern struct doveadm_mail_cmd cmd_move;
 extern struct doveadm_mail_cmd cmd_mailbox_list;
 extern struct doveadm_mail_cmd cmd_mailbox_create;

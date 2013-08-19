@@ -299,6 +299,9 @@ static bool paths_are_equal(struct mail_user *user1, struct mail_user *user2,
 {
 	const char *path1, *path2;
 
+	i_assert(user1->namespaces != NULL);
+	i_assert(user2->namespaces != NULL);
+
 	return mailbox_list_get_root_path(user1->namespaces->list, type, &path1) &&
 		mailbox_list_get_root_path(user2->namespaces->list, type, &path2) &&
 		strcmp(path1, path2) == 0;
@@ -359,7 +362,7 @@ cmd_dsync_run_local(struct dsync_cmd_context *ctx, struct mail_user *user,
 		return -1;
 	}
 
-	brain2 = dsync_brain_slave_init(user2, ibc2);
+	brain2 = dsync_brain_slave_init(user2, ibc2, TRUE);
 
 	brain1_running = brain2_running = TRUE;
 	changed1 = changed2 = TRUE;
@@ -967,7 +970,7 @@ cmd_dsync_server_run(struct doveadm_mail_cmd_context *_ctx,
 	mail_user_set_get_temp_prefix(temp_prefix, user->set);
 
 	ibc = cmd_dsync_icb_stream_init(ctx, "local", str_c(temp_prefix));
-	brain = dsync_brain_slave_init(user, ibc);
+	brain = dsync_brain_slave_init(user, ibc, FALSE);
 
 	io_loop_run(current_ioloop);
 

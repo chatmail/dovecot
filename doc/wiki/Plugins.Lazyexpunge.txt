@@ -32,6 +32,8 @@ namespace {
 # namespace for lazy_expunge plugin:
 namespace {
   prefix = .EXPUNGED/
+  hidden = yes
+  list = no
   separator = /
   location = maildir:~/Maildir/expunged
 }
@@ -96,21 +98,24 @@ Multi-dbox
 ----------
 
 With multi-dbox use different MAILBOXDIRs (so copying between namespaces works
-quickly within the same storage):
+quickly within the same storage), but otherwise exactly the same paths (index,
+control):
 
 ---%<-------------------------------------------------------------------------
 # the default namespace
 namespace {
   prefix =
   inbox = yes
-  location = mdbox:~/mdbox
+  location = mdbox:~/mdbox:INDEX=/var/index/%d/%n
 }
 
 # lazy_expunge namespace(s):
 namespace {
   prefix = .EXPUNGED/
-  location =
-mdbox:~/mdbox:MAILBOXDIR=expunged:SUBSCRIPTIONS=subscriptions-expunged
+  hidden = yes
+  list = no
+  subscriptions = no
+  location = mdbox:~/mdbox:INDEX=/var/index/%d/%n:MAILBOXDIR=expunged
 }
 ---%<-------------------------------------------------------------------------
 
@@ -162,4 +167,4 @@ specific mailboxes, and expunge them when they've been there for a specified
 amount of time. It keeps an internal database (e.g. SQL) of all such mailboxes,
 so it doesn't have to go through all the mailboxes for all the users.
 
-(This file was created from the wiki on 2013-06-16 04:42)
+(This file was created from the wiki on 2013-06-24 04:42)

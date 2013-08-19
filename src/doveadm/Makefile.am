@@ -62,8 +62,10 @@ common = \
 	doveadm-mail.c \
 	doveadm-mail-altmove.c \
 	doveadm-mail-batch.c \
+	doveadm-mail-deduplicate.c \
 	doveadm-mail-expunge.c \
 	doveadm-mail-fetch.c \
+	doveadm-mail-flags.c \
 	doveadm-mail-import.c \
 	doveadm-mail-index.c \
 	doveadm-mail-iter.c \
