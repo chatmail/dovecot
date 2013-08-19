@@ -10,11 +10,11 @@ Bug: #698941
  doc/example-config/conf.d/Makefile.in |    2 +-
  2 files changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/doc/example-config/Makefile.in b/doc/example-config/Makefile.in
-index 687ec24..c463065 100644
---- a/doc/example-config/Makefile.in
-+++ b/doc/example-config/Makefile.in
-@@ -296,7 +296,7 @@ top_srcdir = @top_srcdir@
+Index: dovecot/doc/example-config/Makefile.in
+===================================================================
+--- dovecot.orig/doc/example-config/Makefile.in	2013-08-19 11:24:01.895980319 -0400
++++ dovecot/doc/example-config/Makefile.in	2013-08-19 11:24:01.891980428 -0400
+@@ -321,7 +321,7 @@
  SUBDIRS = conf.d
  pkgsysconfdir = $(sysconfdir)/dovecot
  nodist_pkgsysconf_DATA = README
@@ -22,12 +22,12 @@ index 687ec24..c463065 100644
 +exampledir = $(datarootdir)/doc/dovecot-core/example-config
  example_DATA = \
  	dovecot.conf \
- 	dovecot-db.conf.ext \
-diff --git a/doc/example-config/conf.d/Makefile.in b/doc/example-config/conf.d/Makefile.in
-index 8292a36..49f93f2 100644
---- a/doc/example-config/conf.d/Makefile.in
-+++ b/doc/example-config/conf.d/Makefile.in
-@@ -253,7 +253,7 @@ top_build_prefix = @top_build_prefix@
+ 	dovecot-dict-auth.conf.ext \
+Index: dovecot/doc/example-config/conf.d/Makefile.in
+===================================================================
+--- dovecot.orig/doc/example-config/conf.d/Makefile.in	2013-08-19 11:24:01.895980319 -0400
++++ dovecot/doc/example-config/conf.d/Makefile.in	2013-08-19 11:24:01.891980428 -0400
+@@ -278,7 +278,7 @@
  top_builddir = @top_builddir@
  top_srcdir = @top_srcdir@
  pkgsysconfdir = $(sysconfdir)/dovecot

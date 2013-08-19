@@ -8,10 +8,10 @@ Bug: #623440
  doc/example-config/conf.d/10-mail.conf |    2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/doc/example-config/conf.d/10-mail.conf b/doc/example-config/conf.d/10-mail.conf
-index efcedc7..444c1c3 100644
---- a/doc/example-config/conf.d/10-mail.conf
-+++ b/doc/example-config/conf.d/10-mail.conf
+Index: dovecot/doc/example-config/conf.d/10-mail.conf
+===================================================================
+--- dovecot.orig/doc/example-config/conf.d/10-mail.conf	2013-08-19 11:23:48.532344413 -0400
++++ dovecot/doc/example-config/conf.d/10-mail.conf	2013-08-19 11:23:48.528344521 -0400
 @@ -27,7 +27,7 @@
  #
  # <doc/wiki/MailLocation.txt>

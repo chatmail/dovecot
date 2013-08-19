@@ -13,9 +13,9 @@ Description: Set default protocols value as empty and enable each
 
 Index: dovecot/doc/example-config/dovecot.conf
 ===================================================================
---- dovecot.orig/doc/example-config/dovecot.conf	2012-03-07 08:19:52.000000000 -0500
-+++ dovecot/doc/example-config/dovecot.conf	2012-03-07 10:37:13.000000000 -0500
-@@ -16,8 +16,8 @@
+--- dovecot.orig/doc/example-config/dovecot.conf	2013-08-19 11:22:26.322584245 -0400
++++ dovecot/doc/example-config/dovecot.conf	2013-08-19 11:22:26.314584463 -0400
+@@ -20,8 +20,8 @@
  # options. The paths listed here are for configure --prefix=/usr
  # --sysconfdir=/etc --localstatedir=/var
  
@@ -28,8 +28,8 @@ Index: dovecot/doc/example-config/dovecot.conf
  # "*" listens in all IPv4 interfaces, "::" listens in all IPv6 interfaces.
 Index: dovecot/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
 ===================================================================
---- dovecot.orig/pigeonhole/doc/example-config/conf.d/20-managesieve.conf	2012-03-07 10:37:11.000000000 -0500
-+++ dovecot/pigeonhole/doc/example-config/conf.d/20-managesieve.conf	2012-03-07 10:37:13.000000000 -0500
+--- dovecot.orig/pigeonhole/doc/example-config/conf.d/20-managesieve.conf	2013-08-19 11:22:26.322584245 -0400
++++ dovecot/pigeonhole/doc/example-config/conf.d/20-managesieve.conf	2013-08-19 11:22:26.314584463 -0400
 @@ -2,9 +2,6 @@
  ## ManageSieve specific settings
  ##
@@ -42,9 +42,9 @@ Index: dovecot/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
  #service managesieve-login {
 Index: dovecot/src/config/all-settings.c
 ===================================================================
---- dovecot.orig/src/config/all-settings.c	2012-03-07 08:19:52.000000000 -0500
-+++ dovecot/src/config/all-settings.c	2012-03-07 10:37:14.000000000 -0500
-@@ -1764,7 +1764,7 @@
+--- dovecot.orig/src/config/all-settings.c	2013-08-19 11:22:26.322584245 -0400
++++ dovecot/src/config/all-settings.c	2013-08-19 11:22:26.318584354 -0400
+@@ -2431,7 +2431,7 @@
  	.libexec_dir = PKG_LIBEXECDIR,
  	.instance_name = PACKAGE,
  	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,
@@ -55,9 +55,9 @@ Index: dovecot/src/config/all-settings.c
  	.default_internal_user = "dovecot",
 Index: dovecot/src/master/master-settings.c
 ===================================================================
---- dovecot.orig/src/master/master-settings.c	2012-03-07 08:19:52.000000000 -0500
-+++ dovecot/src/master/master-settings.c	2012-03-07 10:37:14.000000000 -0500
-@@ -213,7 +213,7 @@
+--- dovecot.orig/src/master/master-settings.c	2013-08-19 11:22:26.322584245 -0400
++++ dovecot/src/master/master-settings.c	2013-08-19 11:22:26.318584354 -0400
+@@ -216,7 +216,7 @@
  	.libexec_dir = PKG_LIBEXECDIR,
  	.instance_name = PACKAGE,
  	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,

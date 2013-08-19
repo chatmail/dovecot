@@ -2,21 +2,21 @@ Description: Update Dovecot name to include Distribution in login greeting
  message.  This patch was found at: https://blueprints.launchpad.net/ubuntu/+spec/servercloud-s-server-app-banner-updates
  and originally provided by Ubuntu for their 2.1.7 package.  The original
  author is  Yolanda Robla <yolanda.robla@canonical.com>.  I updated it
- for Debian's 2.1.17 package.
+ for Debian's 2.2.5 package.
 Author: Jaldhar H. Vyas <jaldhar@debian.org>
-Last-Update: Sat, 07 Sep 2013 01:04:07 -0400
+Last-Update: Sun, 08 Sep 2013 01:23:19 -0400
 ---
- configure.in                      |    7 ++++++-
+ configure.ac                      |    7 ++++++-
  src/config/all-settings.c         |    4 ++--
  src/lmtp/lmtp-settings.c          |    2 +-
  src/login-common/login-settings.c |    2 +-
  4 files changed, 10 insertions(+), 5 deletions(-)
 
-diff --git a/configure.in b/configure.in
-index 977fc1a..85dbc69 100644
---- a/configure.in
-+++ b/configure.in
-@@ -283,7 +283,12 @@ AC_C_INLINE
+diff --git a/configure.ac b/configure.ac
+index 1bb04d7..16d373a 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -293,7 +293,12 @@ AC_C_INLINE
  AC_PROG_LIBTOOL
  AM_ICONV
  
@@ -31,10 +31,10 @@ index 977fc1a..85dbc69 100644
  AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", Dovecot version)
  
 diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index a717b8e..b98db21 100644
+index a9fc655..96de34b 100644
 --- a/src/config/all-settings.c
 +++ b/src/config/all-settings.c
-@@ -2568,7 +2568,7 @@ static const struct setting_define login_setting_defines[] = {
+@@ -2512,7 +2512,7 @@ static const struct setting_define login_setting_defines[] = {
  };
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
@@ -43,33 +43,33 @@ index a717b8e..b98db21 100644
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
-@@ -2703,7 +2703,7 @@ static const struct lmtp_settings lmtp_default_settings = {
- 	.lmtp_proxy = FALSE,
+@@ -2638,7 +2638,7 @@ static const struct lmtp_settings lmtp_default_settings = {
  	.lmtp_save_to_detail_mailbox = FALSE,
  	.lmtp_rcpt_check_quota = FALSE,
+ 	.lmtp_address_translate = "",
 -	.login_greeting = PACKAGE_NAME" ready.",
 +	.login_greeting = DOVECOT_NAME" ready.",
- 	.lmtp_address_translate = ""
+ 	.login_trusted_networks = ""
  };
  static const struct setting_parser_info *lmtp_setting_dependencies[] = {
 diff --git a/src/lmtp/lmtp-settings.c b/src/lmtp/lmtp-settings.c
-index b7e3ae6..a246b4c 100644
+index a2d838a..285296b 100644
 --- a/src/lmtp/lmtp-settings.c
 +++ b/src/lmtp/lmtp-settings.c
-@@ -70,7 +70,7 @@ static const struct lmtp_settings lmtp_default_settings = {
- 	.lmtp_proxy = FALSE,
+@@ -72,7 +72,7 @@ static const struct lmtp_settings lmtp_default_settings = {
  	.lmtp_save_to_detail_mailbox = FALSE,
  	.lmtp_rcpt_check_quota = FALSE,
+ 	.lmtp_address_translate = "",
 -	.login_greeting = PACKAGE_NAME" ready.",
 +	.login_greeting = DOVECOT_NAME" ready.",
- 	.lmtp_address_translate = ""
+ 	.login_trusted_networks = ""
  };
  
 diff --git a/src/login-common/login-settings.c b/src/login-common/login-settings.c
-index df34108..d00e20d 100644
+index 7cc7d1b..6c8c303 100644
 --- a/src/login-common/login-settings.c
 +++ b/src/login-common/login-settings.c
-@@ -55,7 +55,7 @@ static const struct setting_define login_setting_defines[] = {
+@@ -45,7 +45,7 @@ static const struct setting_define login_setting_defines[] = {
  
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",

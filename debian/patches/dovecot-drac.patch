@@ -40,7 +40,7 @@ Author: Timo Sirainen <tss@iki.fi>
 + *   http://dovecot.org/patches/1.1/drac.c
 + */
 +#include "lib.h"
-+#include "network.h"
++#include "net.h"
 +#include "ioloop.h"
 +#include "mail-user.h"
 +#include "mail-storage-private.h"

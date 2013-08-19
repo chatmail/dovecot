@@ -8,11 +8,10 @@ Bug: #685850
  doc/example-config/conf.d/Makefile.am        |    1 +
  2 files changed, 15 insertions(+)
 
-diff --git a/doc/example-config/conf.d/10-tcpwrapper.conf b/doc/example-config/conf.d/10-tcpwrapper.conf
-new file mode 100644
-index 0000000..b237d96
---- /dev/null
-+++ b/doc/example-config/conf.d/10-tcpwrapper.conf
+Index: dovecot/doc/example-config/conf.d/10-tcpwrapper.conf
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ dovecot/doc/example-config/conf.d/10-tcpwrapper.conf	2013-08-19 11:23:32.516780759 -0400
 @@ -0,0 +1,14 @@
 +# 10-tcpwrapper.conf
 +#
@@ -28,11 +27,11 @@ index 0000000..b237d96
 +#    user = $default_login_user
 +#  }
 +#}
-diff --git a/doc/example-config/conf.d/Makefile.am b/doc/example-config/conf.d/Makefile.am
-index 744d202..f9fe79b 100644
---- a/doc/example-config/conf.d/Makefile.am
-+++ b/doc/example-config/conf.d/Makefile.am
-@@ -17,6 +17,7 @@ example_DATA = \
+Index: dovecot/doc/example-config/conf.d/Makefile.am
+===================================================================
+--- dovecot.orig/doc/example-config/conf.d/Makefile.am	2013-08-19 11:23:32.520780651 -0400
++++ dovecot/doc/example-config/conf.d/Makefile.am	2013-08-19 11:23:32.516780759 -0400
+@@ -18,6 +18,7 @@
  	10-mail.conf \
  	10-master.conf \
  	10-ssl.conf \
