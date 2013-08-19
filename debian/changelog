@@ -1,3 +1,10 @@
+dovecot (1:2.2.5-1) UNRELEASED; urgency=low
+  [ Micah Anderson ]
+  * New upstream version
+  * Updated pigeonhole patch to 0.4.1
+
+ -- Micah Anderson <micah@debian.org>  Mon, 19 Aug 2013 11:10:59 -0400
+
 dovecot (1:2.1.17-2) unstable; urgency=low
 
   * [e8286e0] New version of drac patch taken from Ubuntu which works better
@@ -20,12 +27,6 @@ dovecot (1:2.1.17-1) experimental; urgency=low
     May your karmas merit much punya in future lives.
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 23 Aug 2013 01:46:20 -0400
-
-dovecot (1:2.1.16-1.1) UNRELEASED; urgency=low
-
-  * [f4f304a6] Package upstream systemd support
-
- -- Shawn Landden <shawnlandden@gmail.com>  Sat, 13 Jul 2013 14:37:10 -0700
 
 dovecot (1:2.1.16-1) experimental; urgency=low
 
