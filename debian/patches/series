@@ -6,3 +6,4 @@ ssl-cert-location.patch
 tcpwrapper.patch
 default-mail_location.patch
 exampledir.patch
+mboxlocking.patch
