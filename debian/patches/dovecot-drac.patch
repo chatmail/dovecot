@@ -1,87 +1,138 @@
-From: Timo Sirainen <tss@iki.fi>
-Date: Thu, 14 Oct 2010 23:17:44 +0200
-Subject: dovecot-drac
 Description: Adds support for drac
-Origin: http://dovecot.org/patches/1.1/drac.c
----
- src/plugins/drac/Makefile |    2 +
- src/plugins/drac/drac.c   |   60 +++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 62 insertions(+), 0 deletions(-)
- create mode 100644 src/plugins/drac/Makefile
- create mode 100644 src/plugins/drac/drac.c
+Origin: http://sourceforge.jp/projects/dovecot2-drac/releases/53176
+Author: Timo Sirainen <tss@iki.fi>
 
-diff --git a/src/plugins/drac/Makefile b/src/plugins/drac/Makefile
-new file mode 100644
-index 0000000..96d17b6
 --- /dev/null
 +++ b/src/plugins/drac/Makefile
-@@ -0,0 +1,2 @@
-+all:
-+	gcc -Wall -W -shared -fPIC -DHAVE_CONFIG_H -I../../.. -I../../lib drac.c -o drac.so -ldrac
-diff --git a/src/plugins/drac/drac.c b/src/plugins/drac/drac.c
-new file mode 100644
-index 0000000..ab35c86
+@@ -0,0 +1,20 @@
++DOVDIR:=../../..
++LIBS:=-ldrac
++
++local_CFLAGS=-Wall -W -shared -fPIC -DHAVE_CONFIG_H
++INC=-I$(DOVDIR) \
++	-I$(DOVDIR)/src/lib \
++	-I$(DOVDIR)/src/lib-index \
++	-I$(DOVDIR)/src/lib-mail \
++	-I$(DOVDIR)/src/lib-storage \
++	-I$(DOVDIR)/src/lib-storage/index \
++	-I$(DOVDIR)/src/lib-storage/index/maildir \
++	-I../../lib
++
++all: drac_plugin.so
++
++drac_plugin.so: drac-plugin.c
++	$(CC) $(CFLAGS) $(local_CFLAGS) $(INC) $(LDFLAGS) $< -o $@ $(LIBS)
++
++clean:
++	@rm -f *.so *.o
 --- /dev/null
-+++ b/src/plugins/drac/drac.c
-@@ -0,0 +1,60 @@
-+/* Copyright (C) 2003 Timo Sirainen, LGPLv2.1 */
-+
-+/* Installation:
-+
-+   export dovecot=~/src/dovecot
-+
-+   gcc -Wall -W -shared -fPIC -DHAVE_CONFIG_H -I$dovecot -I$dovecot/src/lib \
-+   drac.c -o drac.so -ldrac
-+
-+   cp drac.so /usr/local/lib/dovecot/imap/
-+   cp drac.so /usr/local/lib/dovecot/pop3/
-+*/
-+
++++ b/src/plugins/drac/drac-plugin.c
+@@ -0,0 +1,108 @@
++/*
++ *
++ * dovecot plugin for DRAC authentication
++ *
++ * Copyright (C) 2011 DesigNET, INC.
++ *
++ * $Id: drac-plugin.c,v 1.1.1.1 2011/09/09 08:04:34 usuda Exp $
++ *
++ * based:
++ *   http://dovecot.org/patches/1.1/drac.c
++ */
 +#include "lib.h"
-+#include "ioloop.h"
 +#include "network.h"
-+
++#include "ioloop.h"
++#include "mail-user.h"
++#include "mail-storage-private.h"
 +#include <stdlib.h>
++#include <string.h>
 +
-+#define DRAC_TIMEOUT_SECS 60
-+#define DRAC_HOST "localhost"
++/* default parameters */
++#define DRAC_TIMEOUT_SECS	(60)
++#define DRAC_HOST		"localhost"
 +
-+int dracauth(char *host, unsigned long ip, char **errmsg);
++
++/* libdrac function */
++int dracauth(char *, unsigned long, char **);
++
++const char *drac_plugin_version = DOVECOT_VERSION;
 +
 +static struct timeout *to_drac = NULL;
-+static unsigned long in_ip;
++static const char *drachost = NULL; /* dracd host */
++static unsigned long in_ip = 0; /* remote ip address */
++static unsigned long dractout = 0; /* drac timeout secs */
 +
 +static void drac_timeout(void *context ATTR_UNUSED)
 +{
-+	char *err;
++    char *err;
 +
-+	if (dracauth(DRAC_HOST, in_ip, &err) != 0)
-+		i_error("dracauth() failed: %s", err);
++    if(dracauth((char *)drachost, in_ip, &err) != 0) {
++        i_error("%s: dracauth() failed: %s", __FUNCTION__, err);
++    }
 +}
 +
-+void drac_init(void)
++static void drac_mail_user_created(struct mail_user *user)
 +{
-+	const char *ip_str;
-+	struct ip_addr ip;
++    const char *dractout_str;
++    char addrname[256];
++    char *ep;
 +
-+	ip_str = getenv("IP");
-+	if (ip_str == NULL)
-+		i_error("DRAC: IP environment not given");
-+	else if (net_addr2ip(ip_str, &ip) < 0)
-+		i_error("DRAC: net_ip2addr(%s) failed: %m", ip_str);
-+	else if (!IPADDR_IS_V4(&ip))
-+		i_error("DRAC: Only IPv4 addresses are supported (%s)", ip_str);
-+	else {
-+		in_ip = ((struct in_addr *) &ip.u.ip4)->s_addr;
-+		drac_timeout(NULL);
-+		to_drac = timeout_add(1000*DRAC_TIMEOUT_SECS,
-+				      drac_timeout, NULL);
-+	}
++    /* check address family */
++    if(user->remote_ip->family != AF_INET) {
++        if(inet_ntop(user->remote_ip->family, &user->remote_ip->u,
++           addrname, sizeof(addrname)-1) == NULL) {
++            strcpy(addrname, "<unknown>");
++        }
++        i_error("%s: Only IPv4 addresses are supported (%s)", __FUNCTION__,
++                addrname);
++    } else {
++        /* get remote IPv4 address... uum... */
++        memcpy(&in_ip, &user->remote_ip->u, sizeof(in_ip));
++
++        /* get DRAC server name */
++        drachost = mail_user_plugin_getenv(user, "dracdserver");
++        if(drachost == NULL) {
++            drachost = DRAC_HOST;
++        }
++
++        /* get timeout secs */
++        dractout_str = mail_user_plugin_getenv(user, "dracdtimeout");
++        if(dractout_str == NULL) {
++            dractout = DRAC_TIMEOUT_SECS;
++        } else {
++            dractout = strtoul(dractout_str, &ep, 10);
++            /* bad format -> use default value */
++            if(ep != NULL && *ep != '\0') {
++                i_warning("%s: bad dracdtimeout (%s). using default %d",
++                          __FUNCTION__, dractout_str, DRAC_TIMEOUT_SECS);
++                dractout = DRAC_TIMEOUT_SECS;
++            }
++        }
++        i_debug("%s: dracdserver=%s, timeout=%ldsecs", __FUNCTION__,
++               drachost, dractout);
++
++        /* connect to DRAC server */
++        drac_timeout(NULL);
++        to_drac = timeout_add(1000*dractout, drac_timeout, NULL);
++    }
 +}
 +
-+void drac_deinit(void)
++static struct mail_storage_hooks drac_mail_storage_hooks = {
++    .mail_user_created = drac_mail_user_created,
++};
++
++void drac_plugin_init(struct module *module)
 +{
-+	if (to_drac != NULL)
-+		timeout_remove(&to_drac);
++    mail_storage_hooks_add(module, &drac_mail_storage_hooks);
++    i_debug("%s called", __FUNCTION__);
 +}
--- 
++
++void drac_plugin_deinit(void)
++{
++    if(to_drac != NULL) {
++        timeout_remove(&to_drac);
++        to_drac = NULL;
++    }
++    mail_storage_hooks_remove(&drac_mail_storage_hooks);
++    i_debug("%s called", __FUNCTION__);
++}
