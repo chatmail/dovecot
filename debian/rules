@@ -6,6 +6,7 @@
 #export DH_VERBOSE=1
 
 dpkg_buildflags = DEB_BUILD_MAINT_OPTIONS="hardening=+all" dpkg-buildflags
+drac_buildflags = DEB_BUILD_MAINT_OPTIONS="hardening=+all,-pie" dpkg-buildflags
 
 PIGEONHOLE_DIR=pigeonhole
 
@@ -69,7 +70,7 @@ build-stamp:  config-stamp
 	# Pigeonhole
 	$(MAKE) -C $(PIGEONHOLE_DIR)
 	# DRAC
-	$(MAKE) -C src/plugins/drac $(shell $(dpkg_buildflags) --export=configure)
+	$(MAKE) -C src/plugins/drac $(shell $(drac_buildflags) --export=configure)
 	touch build-stamp
 
 clean:
@@ -81,7 +82,7 @@ clean:
 	# Cleanup pigeonhole
 	[ ! -f $(PIGEONHOLE_DIR)/Makefile ] || $(MAKE) -C $(PIGEONHOLE_DIR) distclean
 	# Cleanup DRAC
-	rm -f src/plugins/drac/drac.so
+	rm -f src/plugins/drac/drac_plugin.so
 	debconf-updatepo
 	dh_clean
 
@@ -93,7 +94,7 @@ install: build
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/dovecot-core
 	$(MAKE) -C $(PIGEONHOLE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-core
 	rm `find $(CURDIR)/debian -name '*.la'`
-	cp $(CURDIR)/src/plugins/drac/drac.so $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules
+	cp $(CURDIR)/src/plugins/drac/drac_plugin.so $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules
 	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/*.conf \
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/
 	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/*.conf.ext \
