@@ -5,8 +5,7 @@ Please refer to http://wiki.dovecot.org for the full documentation of this
 package and its configuration.
 
 Note that the default value for mbox_write_locks differs between Debian and
-upstream Dovecot. Running 'dovecot -n' to get a list of non-default settings
-will reflect this difference, even if not set in the config file.
+upstream Dovecot:
 	Debian:  mbox_write_locks = "fnctl dotlock"
 	Dovecot: mbox_write_locks = "dotlock fnctl"
 
@@ -129,7 +128,7 @@ Upgrading from 1.2 (squeeze) to 2.0 (wheezy)
     + ManageSieve protocol was assigned an official port by IANA:
       4190. This is used by Pigeonhole by default now. If you want to
       listen also on the old 2000 port, see the example in
-      /usr/share/doc/dovecot-common/wiki/ManageSieve.Configuration.txt.gz
+      /usr/share/doc/dovecot-core/dovecot/wiki/Pigeonhole.ManageSieve.Configuration.txt.gz
     + deliver binary was renamed to dovecot-lda (but a symlink still
       exists for now)
     + deliver -n parameter was replaced by lda_mailbox_autocreate
@@ -183,9 +182,9 @@ How to regenerate your self-signed SSL certificate
 
 In order to regenerate the self-signed SSL certificate for dovecot, you have to
 remove both the old certificate and the old key, and then reconfigure the
-package dovecot-common.
+package dovecot-core.
 
 For example, in a standard installation:
 
-    # rm /etc/ssl/certs/dovecot.pem /etc/ssl/private/dovecot.pem
-    # dpkg-reconfigure dovecot-common
+    # rm /etc/dovecot/dovecot.pem /etc/dovecot/private/dovecot.pem
+    # dpkg-reconfigure dovecot-core
