@@ -1,3 +1,13 @@
+dovecot (1:2.1.17-2) unstable; urgency=low
+
+  * [e8286e0] New version of drac patch taken from Ubuntu which works better
+    with 2.x (Closes: #716764)
+  * [23acb40] Add a patch from Ubuntu to report the distro name in the login
+    banner why not.
+  * [f8d566e] Don't need dovecot-common package anymore; get rid of it.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 07 Sep 2013 14:58:05 -0400
+
 dovecot (1:2.1.17-1) experimental; urgency=low
 
   [ Jaldhar H. Vyas ]
