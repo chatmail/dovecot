@@ -184,4 +184,4 @@ jid=USER@DOMAIN.TLD
 password=PASSWORD
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-04-04 04:42)
+(This file was created from the wiki on 2013-08-05 04:42)

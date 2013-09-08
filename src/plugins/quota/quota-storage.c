@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -28,10 +28,11 @@ struct quota_mailbox {
 
 	struct mailbox_transaction_context *expunge_trans;
 	struct quota_transaction_context *expunge_qt;
-	ARRAY_DEFINE(expunge_uids, uint32_t);
-	ARRAY_DEFINE(expunge_sizes, uoff_t);
+	ARRAY(uint32_t) expunge_uids;
+	ARRAY(uoff_t) expunge_sizes;
 
 	unsigned int recalculate:1;
+	unsigned int sync_transaction_expunge:1;
 };
 
 struct quota_user_module quota_user_module =
@@ -61,6 +62,14 @@ static void quota_mail_expunge(struct mail *_mail)
 		}
 		array_append(&qbox->expunge_uids, &_mail->uid, 1);
 		array_append(&qbox->expunge_sizes, &size, 1);
+		if ((_mail->transaction->flags & MAILBOX_TRANSACTION_FLAG_SYNC) != 0) {
+			/* we're running dsync. if this brings the quota below
+			   a negative quota warning, don't execute it, because
+			   it probably was already executed by the replica. */
+			qbox->sync_transaction_expunge = TRUE;
+		} else {
+			qbox->sync_transaction_expunge = FALSE;
+		}
 	}
 
 	qmail->super.expunge(_mail);
@@ -77,7 +86,7 @@ quota_get_status(struct mailbox *box, enum mailbox_status_items items,
 
 	if ((items & STATUS_CHECK_OVER_QUOTA) != 0) {
 		qt = quota_transaction_begin(box);
-		if ((ret = quota_test_alloc(qt, 1, &too_large)) == 0) {
+		if ((ret = quota_test_alloc(qt, 0, &too_large)) == 0) {
 			mail_storage_set_error(box->storage, MAIL_ERROR_NOSPACE,
 					       qt->quota->set->quota_exceeded_msg);
 			ret = -1;
@@ -106,6 +115,7 @@ quota_mailbox_transaction_begin(struct mailbox *box,
 
 	t = qbox->module_ctx.super.transaction_begin(box, flags);
 	qt = quota_transaction_begin(box);
+	qt->sync_transaction = (flags & MAILBOX_TRANSACTION_FLAG_SYNC) != 0;
 
 	MODULE_CONTEXT_SET(t, quota_storage_module, qt);
 	return t;
@@ -161,13 +171,22 @@ void quota_mail_allocated(struct mail *_mail)
 	MODULE_CONTEXT_SET_SELF(mail, quota_mail_module, qmail);
 }
 
-static int quota_check(struct mailbox_transaction_context *t, struct mail *mail)
+static int quota_check(struct mail_save_context *ctx)
 {
+	struct mailbox_transaction_context *t = ctx->transaction;
 	struct quota_transaction_context *qt = QUOTA_CONTEXT(t);
 	int ret;
 	bool too_large;
 
-	ret = quota_try_alloc(qt, mail, &too_large);
+	if (ctx->moving) {
+		/* the mail is being moved. the quota won't increase (after
+		   the following expunge), so allow this even if user is
+		   currently over quota */
+		quota_alloc(qt, ctx->dest_mail);
+		return 0;
+	}
+
+	ret = quota_try_alloc(qt, ctx->dest_mail, &too_large);
 	if (ret > 0)
 		return 0;
 	else if (ret == 0) {
@@ -177,7 +196,8 @@ static int quota_check(struct mailbox_transaction_context *t, struct mail *mail)
 	} else {
 		mail_storage_set_critical(t->box->storage,
 					  "Internal quota calculation error");
-		return qt->quota->set->ignore_save_errors ? 0 : -1;
+		/* allow saving anyway */
+		return 0;
 	}
 }
 
@@ -200,8 +220,12 @@ quota_copy(struct mail_save_context *ctx, struct mail *mail)
 	if (qbox->module_ctx.super.copy(ctx, mail) < 0)
 		return -1;
 
-	/* if copying used saving internally, we already checked the quota */
-	return ctx->copying_via_save ? 0 : quota_check(t, ctx->dest_mail);
+	if (ctx->copying_via_save) {
+		/* copying used saving internally, we already checked the
+		   quota */
+		return 0;
+	}
+	return quota_check(ctx);
 }
 
 static int
@@ -213,7 +237,7 @@ quota_save_begin(struct mail_save_context *ctx, struct istream *input)
 	uoff_t size;
 	int ret;
 
-	if (i_stream_get_size(input, TRUE, &size) > 0) {
+	if (!ctx->moving && i_stream_get_size(input, TRUE, &size) > 0) {
 		/* Input size is known, check for quota immediately. This
 		   check isn't perfect, especially because input stream's
 		   linefeeds may contain CR+LFs while physical message would
@@ -234,8 +258,7 @@ quota_save_begin(struct mail_save_context *ctx, struct istream *input)
 		} else if (ret < 0) {
 			mail_storage_set_critical(t->box->storage,
 				"Internal quota calculation error");
-			if (!qt->quota->set->ignore_save_errors)
-				return -1;
+			/* allow saving anyway */
 		}
 	}
 
@@ -258,7 +281,7 @@ static int quota_save_finish(struct mail_save_context *ctx)
 	if (qbox->module_ctx.super.save_finish(ctx) < 0)
 		return -1;
 
-	return quota_check(ctx->transaction, ctx->dest_mail);
+	return quota_check(ctx);
 }
 
 static void quota_mailbox_sync_cleanup(struct quota_mailbox *qbox)
@@ -272,6 +295,7 @@ static void quota_mailbox_sync_cleanup(struct quota_mailbox *qbox)
 		mail_free(&qbox->expunge_qt->tmp_mail);
 		mailbox_transaction_rollback(&qbox->expunge_trans);
 	}
+	qbox->sync_transaction_expunge = FALSE;
 }
 
 static void quota_mailbox_sync_commit(struct quota_mailbox *qbox)
@@ -317,8 +341,11 @@ static void quota_mailbox_sync_notify(struct mailbox *box, uint32_t uid,
 		}
 	}
 
-	if (qbox->expunge_qt == NULL)
+	if (qbox->expunge_qt == NULL) {
 		qbox->expunge_qt = quota_transaction_begin(box);
+		qbox->expunge_qt->sync_transaction =
+			qbox->sync_transaction_expunge;
+	}
 
 	if (i != count) {
 		/* we already know the size */
@@ -569,11 +596,14 @@ static void quota_root_set_namespace(struct quota_root *root,
 {
 	const struct quota_rule *rule;
 	const char *name;
+	struct mail_namespace *ns;
+	/* silence errors for autocreated (shared) users */
+	bool silent_errors = namespaces->user->autocreated;
 
 	if (root->ns_prefix != NULL && root->ns == NULL) {
 		root->ns = mail_namespace_find_prefix(namespaces,
 						      root->ns_prefix);
-		if (root->ns == NULL) {
+		if (root->ns == NULL && !silent_errors) {
 			i_error("quota: Unknown namespace: %s",
 				root->ns_prefix);
 		}
@@ -581,7 +611,9 @@ static void quota_root_set_namespace(struct quota_root *root,
 
 	array_foreach(&root->set->rules, rule) {
 		name = rule->mailbox_name;
-		if (mail_namespace_find(namespaces, name) == NULL)
+		ns = mail_namespace_find(namespaces, name);
+		if ((ns->flags & NAMESPACE_FLAG_UNUSABLE) != 0 &&
+		    !silent_errors)
 			i_error("quota: Unknown namespace: %s", name);
 	}
 }

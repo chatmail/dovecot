@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -63,8 +63,7 @@ uint32_t mail_cache_lookup_cur_offset(struct mail_index_view *view,
 	const void *data;
 	uint32_t offset;
 
-	mail_index_lookup_ext_full(view, seq, cache->ext_id,
-				   &map, &data, NULL);
+	mail_index_lookup_ext_full(view, seq, cache->ext_id, &map, &data, NULL);
 	if (data == NULL) {
 		/* no cache offsets */
 		return 0;
@@ -164,30 +163,57 @@ void mail_cache_lookup_iter_init(struct mail_cache_view *view, uint32_t seq,
 	memset(&view->loop_track, 0, sizeof(view->loop_track));
 }
 
+static bool
+mail_cache_lookup_iter_transaction(struct mail_cache_lookup_iterate_ctx *ctx)
+{
+	ctx->rec = mail_cache_transaction_lookup_rec(ctx->view->transaction,
+						     ctx->seq,
+						     &ctx->trans_next_idx);
+	if (ctx->rec == NULL)
+		return FALSE;
+
+	ctx->remap_counter = ctx->view->cache->remap_counter;
+	ctx->pos = sizeof(*ctx->rec);
+	ctx->rec_size = ctx->rec->size;
+	return TRUE;
+}
+
 static int
 mail_cache_lookup_iter_next_record(struct mail_cache_lookup_iterate_ctx *ctx)
 {
 	struct mail_cache_view *view = ctx->view;
 
-	if (ctx->stop)
-		return ctx->failed ? -1 : 0;
+	if (ctx->failed)
+		return -1;
 
 	if (ctx->rec != NULL)
 		ctx->offset = ctx->rec->prev_offset;
 	if (ctx->offset == 0) {
 		/* end of this record list. check newly appended data. */
-		if (ctx->appends_checked ||
-		    view->trans_seq1 > ctx->seq ||
+		if (view->trans_seq1 > ctx->seq ||
 		    view->trans_seq2 < ctx->seq ||
-		    MAIL_CACHE_IS_UNUSABLE(view->cache) ||
+		    MAIL_CACHE_IS_UNUSABLE(view->cache))
+			return 0;
+		/* check data still in memory */
+		if (!ctx->memory_appends_checked) {
+			if (mail_cache_lookup_iter_transaction(ctx))
+				return 1;
+			ctx->memory_appends_checked = TRUE;
+		}
+
+		/* check data already written to cache file */
+		if (ctx->disk_appends_checked ||
 		    mail_cache_lookup_offset(view->cache, view->trans_view,
 					     ctx->seq, &ctx->offset) <= 0)
 			return 0;
 
-		ctx->appends_checked = TRUE;
+		ctx->disk_appends_checked = TRUE;
 		ctx->remap_counter = view->cache->remap_counter;
 		memset(&view->loop_track, 0, sizeof(view->loop_track));
 	}
+
+	if (ctx->stop)
+		return 0;
 
 	/* look up the next record */
 	if (mail_cache_get_record(view->cache, ctx->offset, &ctx->rec) < 0)
@@ -254,7 +280,7 @@ int mail_cache_lookup_iter_next(struct mail_cache_lookup_iterate_ctx *ctx,
 
 	field_idx = cache->file_field_map[file_field];
 	data_size = cache->fields[field_idx].field.field_size;
-	if (data_size == (unsigned int)-1 &&
+	if (data_size == UINT_MAX &&
 	    ctx->pos + sizeof(uint32_t) <= ctx->rec->size) {
 		/* variable size field. get its size from the file. */
 		data_size = *((const uint32_t *)
@@ -408,18 +434,19 @@ int mail_cache_lookup_field(struct mail_cache_view *view, buffer_t *dest_buf,
 }
 
 struct header_lookup_data {
-	uint32_t offset;
 	uint32_t data_size;
+	const unsigned char *data;
 };
 
 struct header_lookup_line {
 	uint32_t line_num;
-        struct header_lookup_data *data;
+	struct header_lookup_data *data;
 };
 
 struct header_lookup_context {
 	struct mail_cache_view *view;
-	ARRAY_DEFINE(lines, struct header_lookup_line);
+	pool_t pool;
+	ARRAY(struct header_lookup_line) lines;
 };
 
 enum {
@@ -435,7 +462,8 @@ static void header_lines_save(struct header_lookup_context *ctx,
 	uint32_t data_size = field->size;
 	struct header_lookup_line hdr_line;
         struct header_lookup_data *hdr_data;
-	unsigned int i, lines_count;
+	void *data_dup;
+	unsigned int i, lines_count, pos;
 
 	/* data = { line_nums[], 0, "headers" } */
 	for (i = 0; data_size >= sizeof(uint32_t); i++) {
@@ -444,10 +472,13 @@ static void header_lines_save(struct header_lookup_context *ctx,
 			break;
 	}
 	lines_count = i;
+	pos = (lines_count+1) * sizeof(uint32_t);
 
-	hdr_data = t_new(struct header_lookup_data, 1);
-	hdr_data->offset = field->offset + (lines_count+1) * sizeof(uint32_t);
+	hdr_data = p_new(ctx->pool, struct header_lookup_data, 1);
 	hdr_data->data_size = data_size;
+	hdr_data->data = data_dup = data_size == 0 ? NULL :
+		p_malloc(ctx->pool, data_size);
+	memcpy(data_dup, CONST_PTR_OFFSET(field->data, pos), data_size);
 
 	for (i = 0; i < lines_count; i++) {
 		hdr_line.line_num = lines[i];
@@ -465,14 +496,13 @@ static int header_lookup_line_cmp(const struct header_lookup_line *l1,
 static int
 mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
 			       uint32_t seq, unsigned int field_idxs[],
-			       unsigned int fields_count)
+			       unsigned int fields_count, pool_t *pool_r)
 {
 	struct mail_cache *cache = view->cache;
 	struct mail_cache_lookup_iterate_ctx iter;
 	struct mail_cache_iterate_field field;
 	struct header_lookup_context ctx;
 	struct header_lookup_line *lines;
-	const void *data;
 	const unsigned char *p, *start, *end;
 	uint8_t *field_state;
 	unsigned int i, count, max_field = 0;
@@ -480,6 +510,8 @@ mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
 	uint8_t want = HDR_FIELD_STATE_WANT;
 	buffer_t *buf;
 	int ret;
+
+	*pool_r = NULL;
 
 	if (fields_count == 0)
 		return 1;
@@ -508,6 +540,7 @@ mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
 	/* lookup the fields */
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.view = view;
+	ctx.pool = *pool_r = pool_alloconly_create("mail cache headers", 1024);
 	t_array_init(&ctx.lines, 32);
 
 	mail_cache_lookup_iter_init(view, seq, &iter);
@@ -537,17 +570,7 @@ mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
 
 	/* then start filling dest buffer from the headers */
 	for (i = 0; i < count; i++) {
-		ret = mail_cache_map(cache, lines[i].data->offset,
-				     lines[i].data->data_size, &data);
-		if (ret <= 0) {
-			if (ret < 0)
-				return -1;
-
-			mail_cache_set_corrupted(cache,
-				"header record unexpectedly points outside file");
-			return -1;
-		}
-		start = data;
+		start = lines[i].data->data;
 		end = start + lines[i].data->data_size;
 
 		/* find the end of the (multiline) header */
@@ -563,7 +586,7 @@ mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
 
 		/* if there are more lines for this header, the following lines
 		   continue after this one. so skip this line. */
-		lines[i].data->offset += hdr_size;
+		lines[i].data->data += hdr_size;
 		lines[i].data->data_size -= hdr_size;
 	}
 	return 1;
@@ -573,11 +596,15 @@ int mail_cache_lookup_headers(struct mail_cache_view *view, string_t *dest,
 			      uint32_t seq, unsigned int field_idxs[],
 			      unsigned int fields_count)
 {
+	pool_t pool;
 	int ret;
 
 	T_BEGIN {
 		ret = mail_cache_lookup_headers_real(view, dest, seq,
-						     field_idxs, fields_count);
+						     field_idxs, fields_count,
+						     &pool);
+		if (pool != NULL)
+			pool_unref(&pool);
 	} T_END;
 	return ret;
 }

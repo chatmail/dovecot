@@ -59,7 +59,7 @@ DIST_COMMON = $(noinst_HEADERS) $(pkginc_lib_HEADERS) \
 	$(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -70,36 +70,37 @@ LTLIBRARIES = $(noinst_LTLIBRARIES)
 liblib_la_LIBADD =
 am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	backtrace-string.lo base64.lo bsearch-insert-pos.lo buffer.lo \
-	child-wait.lo close-keep-errno.lo compat.lo connection.lo \
-	crc32.lo data-stack.lo eacces-error.lo env-util.lo \
-	execv-const.lo failures.lo fd-close-on-exec.lo \
-	fd-set-nonblock.lo fdatasync-path.lo fdpass.lo file-cache.lo \
-	file-copy.lo file-dotlock.lo file-lock.lo file-set-size.lo \
-	guid.lo hash.lo hash-format.lo hash-method.lo hash2.lo \
-	hex-binary.lo hex-dec.lo hmac-md5.lo hmac-sha1.lo \
-	home-expand.lo hostpid.lo imem.lo ipwd.lo iostream.lo \
-	iostream-rawlog.lo istream.lo istream-base64-encoder.lo \
-	istream-concat.lo istream-crlf.lo istream-data.lo \
-	istream-file.lo istream-limit.lo istream-mmap.lo \
-	istream-rawlog.lo istream-seekable.lo istream-tee.lo ioloop.lo \
-	ioloop-iolist.lo ioloop-notify-none.lo ioloop-notify-fd.lo \
-	ioloop-notify-dn.lo ioloop-notify-inotify.lo \
-	ioloop-notify-kqueue.lo ioloop-poll.lo ioloop-select.lo \
-	ioloop-epoll.lo ioloop-kqueue.lo json-parser.lo lib.lo \
-	lib-signals.lo md4.lo md5.lo mempool.lo mempool-alloconly.lo \
-	mempool-datastack.lo mempool-system.lo \
-	mempool-unsafe-datastack.lo mkdir-parents.lo mmap-anon.lo \
-	mmap-util.lo module-dir.lo mountpoint.lo network.lo \
-	nfs-workarounds.lo ostream.lo ostream-file.lo \
-	ostream-buffer.lo ostream-rawlog.lo primes.lo \
+	child-wait.lo compat.lo connection.lo crc32.lo data-stack.lo \
+	eacces-error.lo env-util.lo execv-const.lo failures.lo \
+	fd-close-on-exec.lo fd-set-nonblock.lo fdatasync-path.lo \
+	fdpass.lo file-cache.lo file-copy.lo file-dotlock.lo \
+	file-lock.lo file-set-size.lo guid.lo hash.lo hash-format.lo \
+	hash-method.lo hash2.lo hex-binary.lo hex-dec.lo hmac.lo \
+	hmac-cram-md5.lo home-expand.lo hostpid.lo imem.lo ipwd.lo \
+	iostream.lo iostream-rawlog.lo iostream-temp.lo \
+	iso8601-date.lo istream.lo istream-base64-decoder.lo \
+	istream-base64-encoder.lo istream-chain.lo istream-concat.lo \
+	istream-crlf.lo istream-data.lo istream-file.lo \
+	istream-jsonstr.lo istream-limit.lo istream-mmap.lo \
+	istream-rawlog.lo istream-seekable.lo istream-sized.lo \
+	istream-tee.lo ioloop.lo ioloop-iolist.lo \
+	ioloop-notify-none.lo ioloop-notify-fd.lo ioloop-notify-dn.lo \
+	ioloop-notify-inotify.lo ioloop-notify-kqueue.lo \
+	ioloop-poll.lo ioloop-select.lo ioloop-epoll.lo \
+	ioloop-kqueue.lo json-parser.lo lib.lo lib-signals.lo md4.lo \
+	md5.lo mempool.lo mempool-alloconly.lo mempool-datastack.lo \
+	mempool-system.lo mempool-unsafe-datastack.lo mkdir-parents.lo \
+	mmap-anon.lo mmap-util.lo module-dir.lo mountpoint.lo net.lo \
+	nfs-workarounds.lo numpack.lo ostream.lo ostream-buffer.lo \
+	ostream-file.lo ostream-hash.lo ostream-rawlog.lo primes.lo \
 	printf-format-fix.lo process-title.lo priorityq.lo randgen.lo \
 	read-full.lo restrict-access.lo restrict-process-size.lo \
 	safe-memset.lo safe-mkdir.lo safe-mkstemp.lo sendfile-util.lo \
 	seq-range-array.lo sha1.lo sha2.lo str.lo str-find.lo \
 	str-sanitize.lo strescape.lo strfuncs.lo strnum.lo \
 	time-util.lo unix-socket-create.lo unlink-directory.lo \
-	unlink-old-files.lo unichar.lo utc-offset.lo utc-mktime.lo \
-	var-expand.lo wildcard-match.lo write-full.lo
+	unlink-old-files.lo unichar.lo uri-util.lo utc-offset.lo \
+	utc-mktime.lo var-expand.lo wildcard-match.lo write-full.lo
 liblib_la_OBJECTS = $(am_liblib_la_OBJECTS)
 am__EXEEXT_1 = test-lib$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
@@ -110,14 +111,18 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-buffer.$(OBJEXT) test_lib-test-crc32.$(OBJEXT) \
 	test_lib-test-hash-format.$(OBJEXT) \
 	test_lib-test-hex-binary.$(OBJEXT) \
+	test_lib-test-iso8601-date.$(OBJEXT) \
+	test_lib-test-istream-base64-decoder.$(OBJEXT) \
 	test_lib-test-istream-base64-encoder.$(OBJEXT) \
 	test_lib-test-istream-concat.$(OBJEXT) \
 	test_lib-test-istream-crlf.$(OBJEXT) \
 	test_lib-test-istream-seekable.$(OBJEXT) \
 	test_lib-test-istream-tee.$(OBJEXT) \
+	test_lib-test-json-parser.$(OBJEXT) \
 	test_lib-test-llist.$(OBJEXT) \
 	test_lib-test-mempool-alloconly.$(OBJEXT) \
 	test_lib-test-network.$(OBJEXT) \
+	test_lib-test-numpack.$(OBJEXT) \
 	test_lib-test-ostream-file.$(OBJEXT) \
 	test_lib-test-primes.$(OBJEXT) \
 	test_lib-test-priorityq.$(OBJEXT) \
@@ -195,13 +200,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -233,6 +239,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -280,6 +287,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -371,7 +379,6 @@ liblib_la_SOURCES = \
 	bsearch-insert-pos.c \
 	buffer.c \
 	child-wait.c \
-	close-keep-errno.c \
 	compat.c \
 	connection.c \
 	crc32.c \
@@ -396,24 +403,30 @@ liblib_la_SOURCES = \
 	hash2.c \
 	hex-binary.c \
 	hex-dec.c \
-	hmac-md5.c \
-	hmac-sha1.c \
+	hmac.c \
+	hmac-cram-md5.c \
 	home-expand.c \
 	hostpid.c \
 	imem.c \
 	ipwd.c \
 	iostream.c \
 	iostream-rawlog.c \
+	iostream-temp.c \
+	iso8601-date.c \
 	istream.c \
+	istream-base64-decoder.c \
 	istream-base64-encoder.c \
+	istream-chain.c \
 	istream-concat.c \
 	istream-crlf.c \
 	istream-data.c \
 	istream-file.c \
+	istream-jsonstr.c \
 	istream-limit.c \
 	istream-mmap.c \
 	istream-rawlog.c \
 	istream-seekable.c \
+	istream-sized.c \
 	istream-tee.c \
 	ioloop.c \
 	ioloop-iolist.c \
@@ -441,11 +454,13 @@ liblib_la_SOURCES = \
 	mmap-util.c \
 	module-dir.c \
 	mountpoint.c \
-	network.c \
+	net.c \
 	nfs-workarounds.c \
+	numpack.c \
 	ostream.c \
-	ostream-file.c \
 	ostream-buffer.c \
+	ostream-file.c \
+	ostream-hash.c \
 	ostream-rawlog.c \
 	primes.c \
 	printf-format-fix.c \
@@ -473,6 +488,7 @@ liblib_la_SOURCES = \
 	unlink-directory.c \
 	unlink-old-files.c \
 	unichar.c \
+	uri-util.c \
 	utc-offset.c \
 	utc-mktime.c \
 	var-expand.c \
@@ -490,7 +506,6 @@ headers = \
 	bsearch-insert-pos.h \
 	buffer.h \
 	child-wait.h \
-	close-keep-errno.h \
 	compat.h \
 	connection.h \
 	crc32.h \
@@ -511,13 +526,14 @@ headers = \
 	fsync-mode.h \
 	guid.h \
 	hash.h \
+	hash-decl.h \
 	hash-format.h \
 	hash-method.h \
 	hash2.h \
 	hex-binary.h \
 	hex-dec.h \
-	hmac-md5.h \
-	hmac-sha1.h \
+	hmac.h \
+	hmac-cram-md5.h \
 	home-expand.h \
 	hostpid.h \
 	imem.h \
@@ -525,13 +541,18 @@ headers = \
 	iostream-private.h \
 	iostream-rawlog.h \
 	iostream-rawlog-private.h \
+	iostream-temp.h \
+	iso8601-date.h \
 	istream.h \
-	istream-base64-encoder.h \
+	istream-base64.h \
+	istream-chain.h \
 	istream-concat.h \
 	istream-crlf.h \
+	istream-jsonstr.h \
 	istream-private.h \
 	istream-rawlog.h \
 	istream-seekable.h \
+	istream-sized.h \
 	istream-tee.h \
 	ioloop.h \
 	ioloop-iolist.h \
@@ -550,9 +571,11 @@ headers = \
 	module-context.h \
 	module-dir.h \
 	mountpoint.h \
-	network.h \
+	net.h \
 	nfs-workarounds.h \
+	numpack.h \
 	ostream.h \
+	ostream-hash.h \
 	ostream-private.h \
 	ostream-rawlog.h \
 	primes.h \
@@ -581,6 +604,7 @@ headers = \
 	unlink-directory.h \
 	unlink-old-files.h \
 	unichar.h \
+	uri-util.h \
 	utc-offset.h \
 	utc-mktime.h \
 	var-expand.h \
@@ -605,14 +629,18 @@ test_lib_SOURCES = \
 	test-crc32.c \
 	test-hash-format.c \
 	test-hex-binary.c \
+	test-iso8601-date.c \
+	test-istream-base64-decoder.c \
 	test-istream-base64-encoder.c \
 	test-istream-concat.c \
 	test-istream-crlf.c \
 	test-istream-seekable.c \
 	test-istream-tee.c \
+	test-json-parser.c \
 	test-llist.c \
 	test-mempool-alloconly.c \
 	test-network.c \
+	test-numpack.c \
 	test-ostream-file.c \
 	test-primes.c \
 	test-priorityq.c \
@@ -709,7 +737,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bsearch-insert-pos.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/buffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/child-wait.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/close-keep-errno.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/compat.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/connection.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/crc32.Plo@am__quote@
@@ -734,8 +761,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hash2.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hex-binary.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hex-dec.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hmac-md5.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hmac-sha1.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hmac-cram-md5.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hmac.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/home-expand.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hostpid.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imem.Plo@am__quote@
@@ -751,17 +778,23 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ioloop-select.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ioloop.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-rawlog.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-temp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ipwd.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iso8601-date.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-base64-decoder.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-base64-encoder.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-chain.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-concat.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-crlf.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-data.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-jsonstr.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-limit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-mmap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-rawlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-seekable.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-sized.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-tee.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/json-parser.Plo@am__quote@
@@ -779,10 +812,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mmap-util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/module-dir.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mountpoint.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/network.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/net.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nfs-workarounds.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/numpack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-buffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-hash.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-rawlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/primes.Plo@am__quote@
@@ -814,15 +849,19 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-crc32.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hash-format.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hex-binary.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-iso8601-date.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-base64-decoder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-base64-encoder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-concat.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-crlf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-seekable.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-tee.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-json-parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-lib.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-llist.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-mempool-alloconly.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-network.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-numpack.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ostream-file.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-primes.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-priorityq.Po@am__quote@
@@ -841,6 +880,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unix-socket-create.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unlink-directory.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unlink-old-files.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/uri-util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utc-mktime.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utc-offset.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/var-expand.Plo@am__quote@
@@ -994,6 +1034,34 @@ test_lib-test-hex-binary.obj: test-hex-binary.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-hex-binary.obj `if test -f 'test-hex-binary.c'; then $(CYGPATH_W) 'test-hex-binary.c'; else $(CYGPATH_W) '$(srcdir)/test-hex-binary.c'; fi`
 
+test_lib-test-iso8601-date.o: test-iso8601-date.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-iso8601-date.o -MD -MP -MF $(DEPDIR)/test_lib-test-iso8601-date.Tpo -c -o test_lib-test-iso8601-date.o `test -f 'test-iso8601-date.c' || echo '$(srcdir)/'`test-iso8601-date.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-iso8601-date.Tpo $(DEPDIR)/test_lib-test-iso8601-date.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-iso8601-date.c' object='test_lib-test-iso8601-date.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-iso8601-date.o `test -f 'test-iso8601-date.c' || echo '$(srcdir)/'`test-iso8601-date.c
+
+test_lib-test-iso8601-date.obj: test-iso8601-date.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-iso8601-date.obj -MD -MP -MF $(DEPDIR)/test_lib-test-iso8601-date.Tpo -c -o test_lib-test-iso8601-date.obj `if test -f 'test-iso8601-date.c'; then $(CYGPATH_W) 'test-iso8601-date.c'; else $(CYGPATH_W) '$(srcdir)/test-iso8601-date.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-iso8601-date.Tpo $(DEPDIR)/test_lib-test-iso8601-date.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-iso8601-date.c' object='test_lib-test-iso8601-date.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-iso8601-date.obj `if test -f 'test-iso8601-date.c'; then $(CYGPATH_W) 'test-iso8601-date.c'; else $(CYGPATH_W) '$(srcdir)/test-iso8601-date.c'; fi`
+
+test_lib-test-istream-base64-decoder.o: test-istream-base64-decoder.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-base64-decoder.o -MD -MP -MF $(DEPDIR)/test_lib-test-istream-base64-decoder.Tpo -c -o test_lib-test-istream-base64-decoder.o `test -f 'test-istream-base64-decoder.c' || echo '$(srcdir)/'`test-istream-base64-decoder.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-istream-base64-decoder.Tpo $(DEPDIR)/test_lib-test-istream-base64-decoder.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-istream-base64-decoder.c' object='test_lib-test-istream-base64-decoder.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-base64-decoder.o `test -f 'test-istream-base64-decoder.c' || echo '$(srcdir)/'`test-istream-base64-decoder.c
+
+test_lib-test-istream-base64-decoder.obj: test-istream-base64-decoder.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-base64-decoder.obj -MD -MP -MF $(DEPDIR)/test_lib-test-istream-base64-decoder.Tpo -c -o test_lib-test-istream-base64-decoder.obj `if test -f 'test-istream-base64-decoder.c'; then $(CYGPATH_W) 'test-istream-base64-decoder.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-base64-decoder.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-istream-base64-decoder.Tpo $(DEPDIR)/test_lib-test-istream-base64-decoder.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-istream-base64-decoder.c' object='test_lib-test-istream-base64-decoder.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-base64-decoder.obj `if test -f 'test-istream-base64-decoder.c'; then $(CYGPATH_W) 'test-istream-base64-decoder.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-base64-decoder.c'; fi`
+
 test_lib-test-istream-base64-encoder.o: test-istream-base64-encoder.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-base64-encoder.o -MD -MP -MF $(DEPDIR)/test_lib-test-istream-base64-encoder.Tpo -c -o test_lib-test-istream-base64-encoder.o `test -f 'test-istream-base64-encoder.c' || echo '$(srcdir)/'`test-istream-base64-encoder.c
 @am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-istream-base64-encoder.Tpo $(DEPDIR)/test_lib-test-istream-base64-encoder.Po
@@ -1064,6 +1132,20 @@ test_lib-test-istream-tee.obj: test-istream-tee.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-tee.obj `if test -f 'test-istream-tee.c'; then $(CYGPATH_W) 'test-istream-tee.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-tee.c'; fi`
 
+test_lib-test-json-parser.o: test-json-parser.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-json-parser.o -MD -MP -MF $(DEPDIR)/test_lib-test-json-parser.Tpo -c -o test_lib-test-json-parser.o `test -f 'test-json-parser.c' || echo '$(srcdir)/'`test-json-parser.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-json-parser.Tpo $(DEPDIR)/test_lib-test-json-parser.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-json-parser.c' object='test_lib-test-json-parser.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-json-parser.o `test -f 'test-json-parser.c' || echo '$(srcdir)/'`test-json-parser.c
+
+test_lib-test-json-parser.obj: test-json-parser.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-json-parser.obj -MD -MP -MF $(DEPDIR)/test_lib-test-json-parser.Tpo -c -o test_lib-test-json-parser.obj `if test -f 'test-json-parser.c'; then $(CYGPATH_W) 'test-json-parser.c'; else $(CYGPATH_W) '$(srcdir)/test-json-parser.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-json-parser.Tpo $(DEPDIR)/test_lib-test-json-parser.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-json-parser.c' object='test_lib-test-json-parser.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-json-parser.obj `if test -f 'test-json-parser.c'; then $(CYGPATH_W) 'test-json-parser.c'; else $(CYGPATH_W) '$(srcdir)/test-json-parser.c'; fi`
+
 test_lib-test-llist.o: test-llist.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-llist.o -MD -MP -MF $(DEPDIR)/test_lib-test-llist.Tpo -c -o test_lib-test-llist.o `test -f 'test-llist.c' || echo '$(srcdir)/'`test-llist.c
 @am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-llist.Tpo $(DEPDIR)/test_lib-test-llist.Po
@@ -1105,6 +1187,20 @@ test_lib-test-network.obj: test-network.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-network.c' object='test_lib-test-network.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-network.obj `if test -f 'test-network.c'; then $(CYGPATH_W) 'test-network.c'; else $(CYGPATH_W) '$(srcdir)/test-network.c'; fi`
+
+test_lib-test-numpack.o: test-numpack.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-numpack.o -MD -MP -MF $(DEPDIR)/test_lib-test-numpack.Tpo -c -o test_lib-test-numpack.o `test -f 'test-numpack.c' || echo '$(srcdir)/'`test-numpack.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-numpack.Tpo $(DEPDIR)/test_lib-test-numpack.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-numpack.c' object='test_lib-test-numpack.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-numpack.o `test -f 'test-numpack.c' || echo '$(srcdir)/'`test-numpack.c
+
+test_lib-test-numpack.obj: test-numpack.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-numpack.obj -MD -MP -MF $(DEPDIR)/test_lib-test-numpack.Tpo -c -o test_lib-test-numpack.obj `if test -f 'test-numpack.c'; then $(CYGPATH_W) 'test-numpack.c'; else $(CYGPATH_W) '$(srcdir)/test-numpack.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/test_lib-test-numpack.Tpo $(DEPDIR)/test_lib-test-numpack.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='test-numpack.c' object='test_lib-test-numpack.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-numpack.obj `if test -f 'test-numpack.c'; then $(CYGPATH_W) 'test-numpack.c'; else $(CYGPATH_W) '$(srcdir)/test-numpack.c'; fi`
 
 test_lib-test-ostream-file.o: test-ostream-file.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-ostream-file.o -MD -MP -MF $(DEPDIR)/test_lib-test-ostream-file.Tpo -c -o test_lib-test-ostream-file.o `test -f 'test-ostream-file.c' || echo '$(srcdir)/'`test-ostream-file.c

@@ -8,7 +8,7 @@
 
 struct batch_cmd_context {
 	struct doveadm_mail_cmd_context ctx;
-	ARRAY_DEFINE(commands, struct doveadm_mail_cmd_context *);
+	ARRAY(struct doveadm_mail_cmd_context *) commands;
 };
 
 static int cmd_batch_prerun(struct doveadm_mail_cmd_context *_ctx,

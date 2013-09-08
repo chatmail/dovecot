@@ -57,7 +57,7 @@ DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -66,8 +66,9 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libfs_la_LIBADD =
-am_libfs_la_OBJECTS = fs-api.lo fs-posix.lo fs-sis.lo fs-sis-common.lo \
-	fs-sis-queue.lo ostream-cmp.lo
+am_libfs_la_OBJECTS = fs-api.lo fs-metawrap.lo fs-posix.lo fs-sis.lo \
+	fs-sis-common.lo fs-sis-queue.lo istream-metawrap.lo \
+	ostream-metawrap.lo ostream-cmp.lo
 libfs_la_OBJECTS = $(am_libfs_la_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
@@ -133,13 +134,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -171,6 +173,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -218,6 +221,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -298,20 +302,27 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 noinst_LTLIBRARIES = libfs.la
 AM_CPPFLAGS = \
-	-I$(top_srcdir)/src/lib
+	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-ssl-iostream \
+	-DMODULE_DIR=\""$(moduledir)"\"
 
 libfs_la_SOURCES = \
 	fs-api.c \
+	fs-metawrap.c \
 	fs-posix.c \
 	fs-sis.c \
 	fs-sis-common.c \
 	fs-sis-queue.c \
+	istream-metawrap.c \
+	ostream-metawrap.c \
 	ostream-cmp.c
 
 headers = \
 	fs-api.h \
 	fs-api-private.h \
 	fs-sis-common.h \
+	istream-metawrap.h \
+	ostream-metawrap.h \
 	ostream-cmp.h
 
 pkginc_libdir = $(pkgincludedir)
@@ -369,11 +380,14 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-api.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-metawrap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-posix.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis-common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis-queue.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-metawrap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-cmp.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-metawrap.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

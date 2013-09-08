@@ -54,7 +54,7 @@ subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -121,13 +121,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -159,6 +160,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -206,6 +208,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -285,22 +288,27 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 LIBDOVECOT_SUBDIRS = \
+	lib-test \
 	lib \
+	lib-settings \
 	lib-auth \
+	lib-master \
 	lib-charset \
 	lib-dns \
+	lib-dict \
+	lib-sasl \
+	lib-ssl-iostream \
+	lib-http \
 	lib-fs \
 	lib-mail \
 	lib-imap \
-	lib-master \
-	lib-dict \
-	lib-settings
+	lib-imap-storage
 
 SUBDIRS = \
-	lib-test \
 	$(LIBDOVECOT_SUBDIRS) \
-	lib-ssl-iostream \
 	lib-imap-client \
+	lib-imap-urlauth \
+	lib-compression \
 	lib-dovecot \
 	lib-index \
 	lib-storage \
@@ -318,6 +326,7 @@ SUBDIRS = \
 	login-common \
 	imap-login \
 	imap \
+	imap-urlauth \
 	pop3-login \
 	pop3 \
 	lda \

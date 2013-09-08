@@ -60,7 +60,7 @@ DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -74,7 +74,8 @@ libpassword_a_LIBADD =
 am_libpassword_a_OBJECTS = mycrypt.$(OBJEXT) password-scheme.$(OBJEXT) \
 	password-scheme-crypt.$(OBJEXT) \
 	password-scheme-md5crypt.$(OBJEXT) \
-	password-scheme-otp.$(OBJEXT) password-scheme-rpa.$(OBJEXT)
+	password-scheme-scram.$(OBJEXT) password-scheme-otp.$(OBJEXT) \
+	password-scheme-rpa.$(OBJEXT)
 libpassword_a_OBJECTS = $(am_libpassword_a_OBJECTS)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
@@ -108,7 +109,6 @@ am__installdirs = "$(DESTDIR)$(auth_moduledir)" \
 LTLIBRARIES = $(auth_module_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libauthdb_imap_la_DEPENDENCIES = ../lib-imap-client/libimap_client.la \
-	../lib-ssl-iostream/libssl_iostream.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 am_libauthdb_imap_la_OBJECTS = libauthdb_imap_la-passdb-imap.lo
 libauthdb_imap_la_OBJECTS = $(am_libauthdb_imap_la_OBJECTS)
@@ -151,30 +151,31 @@ am_auth_OBJECTS = auth.$(OBJEXT) auth-cache.$(OBJEXT) \
 	mech-otp-skey-common.$(OBJEXT) mech-plain-common.$(OBJEXT) \
 	auth-penalty.$(OBJEXT) auth-request.$(OBJEXT) \
 	auth-request-handler.$(OBJEXT) auth-settings.$(OBJEXT) \
-	auth-stream.$(OBJEXT) auth-worker-client.$(OBJEXT) \
-	auth-worker-server.$(OBJEXT) db-checkpassword.$(OBJEXT) \
-	db-dict.$(OBJEXT) db-sql.$(OBJEXT) db-passwd-file.$(OBJEXT) \
-	main.$(OBJEXT) mech.$(OBJEXT) mech-anonymous.$(OBJEXT) \
-	mech-plain.$(OBJEXT) mech-login.$(OBJEXT) \
-	mech-cram-md5.$(OBJEXT) mech-digest-md5.$(OBJEXT) \
-	mech-external.$(OBJEXT) mech-gssapi.$(OBJEXT) \
-	mech-ntlm.$(OBJEXT) mech-otp.$(OBJEXT) \
+	auth-fields.$(OBJEXT) auth-token.$(OBJEXT) \
+	auth-worker-client.$(OBJEXT) auth-worker-server.$(OBJEXT) \
+	db-checkpassword.$(OBJEXT) db-dict.$(OBJEXT) db-sql.$(OBJEXT) \
+	db-passwd-file.$(OBJEXT) main.$(OBJEXT) mech.$(OBJEXT) \
+	mech-anonymous.$(OBJEXT) mech-plain.$(OBJEXT) \
+	mech-login.$(OBJEXT) mech-cram-md5.$(OBJEXT) \
+	mech-digest-md5.$(OBJEXT) mech-external.$(OBJEXT) \
+	mech-gssapi.$(OBJEXT) mech-ntlm.$(OBJEXT) mech-otp.$(OBJEXT) \
 	mech-scram-sha1.$(OBJEXT) mech-skey.$(OBJEXT) \
 	mech-rpa.$(OBJEXT) mech-apop.$(OBJEXT) mech-winbind.$(OBJEXT) \
-	passdb.$(OBJEXT) passdb-blocking.$(OBJEXT) \
-	passdb-bsdauth.$(OBJEXT) passdb-cache.$(OBJEXT) \
-	passdb-checkpassword.$(OBJEXT) passdb-dict.$(OBJEXT) \
-	passdb-passwd.$(OBJEXT) passdb-passwd-file.$(OBJEXT) \
-	passdb-pam.$(OBJEXT) passdb-shadow.$(OBJEXT) \
-	passdb-sia.$(OBJEXT) passdb-vpopmail.$(OBJEXT) \
-	passdb-sql.$(OBJEXT) passdb-static.$(OBJEXT) \
-	passdb-template.$(OBJEXT) userdb.$(OBJEXT) \
-	userdb-blocking.$(OBJEXT) userdb-checkpassword.$(OBJEXT) \
-	userdb-dict.$(OBJEXT) userdb-nss.$(OBJEXT) \
-	userdb-passwd.$(OBJEXT) userdb-passwd-file.$(OBJEXT) \
-	userdb-prefetch.$(OBJEXT) userdb-static.$(OBJEXT) \
-	userdb-vpopmail.$(OBJEXT) userdb-sql.$(OBJEXT) \
-	userdb-template.$(OBJEXT) $(am__objects_2)
+	mech-dovecot-token.$(OBJEXT) passdb.$(OBJEXT) \
+	passdb-blocking.$(OBJEXT) passdb-bsdauth.$(OBJEXT) \
+	passdb-cache.$(OBJEXT) passdb-checkpassword.$(OBJEXT) \
+	passdb-dict.$(OBJEXT) passdb-passwd.$(OBJEXT) \
+	passdb-passwd-file.$(OBJEXT) passdb-pam.$(OBJEXT) \
+	passdb-shadow.$(OBJEXT) passdb-sia.$(OBJEXT) \
+	passdb-vpopmail.$(OBJEXT) passdb-sql.$(OBJEXT) \
+	passdb-static.$(OBJEXT) passdb-template.$(OBJEXT) \
+	userdb.$(OBJEXT) userdb-blocking.$(OBJEXT) \
+	userdb-checkpassword.$(OBJEXT) userdb-dict.$(OBJEXT) \
+	userdb-nss.$(OBJEXT) userdb-passwd.$(OBJEXT) \
+	userdb-passwd-file.$(OBJEXT) userdb-prefetch.$(OBJEXT) \
+	userdb-static.$(OBJEXT) userdb-vpopmail.$(OBJEXT) \
+	userdb-sql.$(OBJEXT) userdb-template.$(OBJEXT) \
+	$(am__objects_2)
 auth_OBJECTS = $(am_auth_OBJECTS)
 am__DEPENDENCIES_2 = libpassword.a ../lib-ntlm/libntlm.a \
 	../lib-otp/libotp.a $(am__DEPENDENCIES_1)
@@ -228,13 +229,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -266,6 +268,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -315,6 +318,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -424,6 +428,7 @@ libpassword_a_SOURCES = \
 	password-scheme.c \
 	password-scheme-crypt.c \
 	password-scheme-md5crypt.c \
+	password-scheme-scram.c \
 	password-scheme-otp.c \
 	password-scheme-rpa.c
 
@@ -433,7 +438,7 @@ auth_libs = \
 	../lib-otp/libotp.a \
 	$(LIBDOVECOT_SQL)
 
-auth_LDADD = $(auth_libs) $(LIBDOVECOT) $(AUTH_LIBS) $(MODULE_LIBS)
+auth_LDADD = $(auth_libs) $(LIBDOVECOT) $(AUTH_LIBS)
 auth_DEPENDENCIES = $(auth_libs) $(LIBDOVECOT_DEPS)
 ldap_sources = db-ldap.c passdb-ldap.c userdb-ldap.c
 auth_SOURCES = \
@@ -448,7 +453,8 @@ auth_SOURCES = \
 	auth-request.c \
 	auth-request-handler.c \
 	auth-settings.c \
-	auth-stream.c \
+	auth-fields.c \
+	auth-token.c \
 	auth-worker-client.c \
 	auth-worker-server.c \
 	db-checkpassword.c \
@@ -471,6 +477,7 @@ auth_SOURCES = \
 	mech-rpa.c \
 	mech-apop.c \
 	mech-winbind.c \
+	mech-dovecot-token.c \
 	passdb.c \
 	passdb-blocking.c \
 	passdb-bsdauth.c \
@@ -513,7 +520,8 @@ headers = \
 	auth-request.h \
 	auth-request-handler.h \
 	auth-settings.h \
-	auth-stream.h \
+	auth-fields.h \
+	auth-token.h \
 	auth-worker-client.h \
 	auth-worker-server.h \
 	db-dict.h \
@@ -544,8 +552,7 @@ headers = \
 libauthdb_imap_la_LDFLAGS = -module -avoid-version
 libauthdb_imap_la_LIBADD = \
 	../lib-imap-client/libimap_client.la \
-	../lib-ssl-iostream/libssl_iostream.la \
-	$(LIBDOVECOT) $(SSL_LIBS)
+	$(LIBDOVECOT)
 
 libauthdb_imap_la_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
@@ -569,7 +576,7 @@ test_libs = \
 
 test_auth_cache_SOURCES = test-auth-cache.c
 test_auth_cache_LDADD = auth-cache.o $(test_libs)
-test_auth_cache_DEPENDENCIES = auth-cache.o $(test_libs)
+test_auth_cache_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
 all: all-am
 
 .SUFFIXES:
@@ -722,13 +729,14 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-client-connection.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-fields.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-master-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-penalty.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-postfix-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-handler.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-settings.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-stream.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-token.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-worker-client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-worker-server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth.Po@am__quote@
@@ -748,6 +756,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-apop.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-cram-md5.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-digest-md5.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-dovecot-token.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-external.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-gssapi.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-login.Po@am__quote@
@@ -782,6 +791,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-md5crypt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-otp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-rpa.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-scram.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-auth-cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-blocking.Po@am__quote@

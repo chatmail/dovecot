@@ -60,7 +60,7 @@ DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -78,8 +78,9 @@ libdict_backend_a_OBJECTS = $(am_libdict_backend_a_OBJECTS) \
 	$(nodist_libdict_backend_a_OBJECTS)
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libdict_la_LIBADD =
-am__objects_1 = dict.lo dict-client.lo dict-file.lo dict-memcached.lo \
-	dict-redis.lo
+am__objects_1 = dict.lo dict-client.lo dict-file.lo dict-cdb.lo \
+	dict-memcached.lo dict-memcached-ascii.lo dict-redis.lo \
+	dict-transaction-memory.lo
 am_libdict_la_OBJECTS = $(am__objects_1)
 libdict_la_OBJECTS = $(am_libdict_la_OBJECTS)
 am__EXEEXT_1 = test-dict$(EXEEXT)
@@ -153,13 +154,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -191,6 +193,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -238,6 +241,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -329,8 +333,11 @@ base_sources = \
 	dict.c \
 	dict-client.c \
 	dict-file.c \
+	dict-cdb.c \
 	dict-memcached.c \
-	dict-redis.c
+	dict-memcached-ascii.c \
+	dict-redis.c \
+	dict-transaction-memory.c
 
 libdict_la_SOURCES = \
 	$(base_sources)
@@ -348,7 +355,8 @@ headers = \
 	dict-client.h \
 	dict-private.h \
 	dict-sql.h \
-	dict-sql-settings.h
+	dict-sql-settings.h \
+	dict-transaction-memory.h
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
@@ -361,7 +369,7 @@ test_libs = \
 
 test_dict_SOURCES = test-dict.c
 test_dict_LDADD = dict.lo $(test_libs)
-test_dict_DEPENDENCIES = dict.lo $(test_libs)
+test_dict_DEPENDENCIES = $(noinst_LTLIBRARIES) $(test_libs)
 all: all-am
 
 .SUFFIXES:
@@ -433,14 +441,17 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-cdb.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-client.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-db.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-drivers-register.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-memcached-ascii.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-memcached.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-redis.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-sql-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-sql.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-transaction-memory.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dict.Po@am__quote@
 

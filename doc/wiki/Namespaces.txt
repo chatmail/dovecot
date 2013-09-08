@@ -77,8 +77,9 @@ mailbox named "foo.bar". If you need to do this, you can use <listescape>
 [Plugins.Listescape.txt] plugin to add escape the mailbox names as necessary.
 
 A commonly used separator is '/'. It probably causes the least amount of
-trouble with different IMAP clients. '^' separator is troublesome with
-Thunderbird.
+trouble with different IMAP clients.'^' separator is troublesome with
+Thunderbird.When '\' should be used it must be quoted, so one sets separator =
+"\\"
 
 You should use the same hierarchy separator for all namespaces. All list=yes
 namespaces must use the same separator, but if you find it necessary (e.g. for
@@ -233,6 +234,14 @@ The "separator=/" allows the INBOX to have child mailboxes. Otherwise with
 "foo" child or the root "foo" mailbox in "INBOX." compatibility namespace. With
 "separator=/" the difference is clear with "INBOX/foo" vs. "INBOX.foo".
 
+Problems with this:
+
+ * Although clients may do LIST INBOX.*, they may still do LSUB *, resulting in
+   mixed results.
+ * If clients used empty namespace with Courier, they now see the mailboxes
+   with different names, resulting in redownloading of all mails (except
+   INBOX).
+
 Per-user Namespace Location From SQL
 ------------------------------------
 
@@ -264,4 +273,4 @@ user_query = SELECT Location as 'namespace/docs/location' FROM Namespaces WHERE
 ..
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-04-04 04:42)
+(This file was created from the wiki on 2013-08-05 04:42)

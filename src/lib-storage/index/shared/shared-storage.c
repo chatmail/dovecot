@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -49,7 +49,7 @@ shared_storage_create(struct mail_storage *_storage, struct mail_namespace *ns,
 		p_strdup(_storage->pool, ns->unexpanded_set->location);
 	storage->storage_class_name = p_strdup(_storage->pool, driver);
 
-	storage_class = mail_storage_find_class(driver);
+	storage_class = mail_user_get_storage_class(_storage->user, driver);
 	if (storage_class != NULL)
 		_storage->class_flags = storage_class->class_flags;
 	else if (strcmp(driver, "auto") != 0) {
@@ -125,7 +125,7 @@ static bool shared_namespace_exists(struct mail_namespace *ns)
 	const char *path;
 	struct stat st;
 
-	path = mailbox_list_get_path(ns->list, NULL, MAILBOX_LIST_PATH_TYPE_DIR);
+	path = mailbox_list_get_root_forced(ns->list, MAILBOX_LIST_PATH_TYPE_DIR);
 	if (path == NULL) {
 		/* we can't know if this exists */
 		return TRUE;
@@ -281,7 +281,7 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 	/* create the new namespace */
 	new_ns = i_new(struct mail_namespace, 1);
 	new_ns->refcount = 1;
-	new_ns->type = NAMESPACE_SHARED;
+	new_ns->type = MAIL_NAMESPACE_TYPE_SHARED;
 	new_ns->user = user;
 	new_ns->prefix = i_strdup(str_c(prefix));
 	new_ns->owner = owner;
@@ -289,6 +289,7 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 		NAMESPACE_FLAG_LIST_PREFIX | NAMESPACE_FLAG_HIDDEN |
 		NAMESPACE_FLAG_AUTOCREATED | NAMESPACE_FLAG_INBOX_ANY;
 	new_ns->mail_set = _storage->set;
+	i_array_init(&new_ns->all_storages, 2);
 
 	location = t_str_new(256);
 	if (ret > 0)
@@ -318,10 +319,18 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 		p_strdup(user->pool, storage->unexpanded_location);
 	new_ns->unexpanded_set = unexpanded_ns_set;
 
+	/* We need to create a prefix="" namespace for the owner */
+	if (mail_namespaces_init_location(owner, str_c(location), &error) < 0) {
+		/* owner gets freed by namespace deinit */
+		mail_namespace_destroy(new_ns);
+		return -1;
+	}
+
 	if (mail_storage_create(new_ns, NULL, _storage->flags |
 				MAIL_STORAGE_FLAG_NO_AUTOVERIFY, &error) < 0) {
 		mailbox_list_set_critical(list, "Namespace '%s': %s",
 					  new_ns->prefix, error);
+		/* owner gets freed by namespace deinit */
 		mail_namespace_destroy(new_ns);
 		return -1;
 	}
@@ -338,7 +347,8 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 	*_ns = new_ns;
 	if (_storage->class_flags == 0) {
 		/* flags are unset if we were using "auto" storage */
-		_storage->class_flags = new_ns->storage->class_flags;
+		_storage->class_flags =
+			mail_namespace_get_default_storage(new_ns)->class_flags;
 	}
 
 	mail_user_add_namespace(user, &new_ns);
@@ -353,7 +363,7 @@ struct mail_storage shared_storage = {
 		NULL,
 		shared_storage_alloc,
 		shared_storage_create,
-		NULL,
+		index_storage_destroy,
 		NULL,
 		shared_storage_get_list_settings,
 		NULL,

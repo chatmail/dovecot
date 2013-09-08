@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hex-binary.h"
@@ -123,8 +123,10 @@ static const char *log_record_type(unsigned int type)
 		break;
 	}
 
-	if (type & MAIL_TRANSACTION_EXTERNAL)
+	if ((type & MAIL_TRANSACTION_EXTERNAL) != 0)
 		name = t_strconcat(name, " (ext)", NULL);
+	if ((type & MAIL_TRANSACTION_SYNC) != 0)
+		name = t_strconcat(name, " (sync)", NULL);
 	return name;
 }
 
@@ -286,8 +288,8 @@ static void log_record_print(const struct mail_transaction_header *hdr,
 		const struct mail_transaction_flag_update *u = data;
 
 		for (; size > 0; size -= sizeof(*u), u++) {
-			printf(" - uids=%u-%u (flags +%x-%x)\n",
-			       u->uid1, u->uid2, u->add_flags, u->remove_flags);
+			printf(" - uids=%u-%u (flags +%x-%x, modseq_inc_flag=%d)\n",
+			       u->uid1, u->uid2, u->add_flags, u->remove_flags, u->modseq_inc_flag);
 		}
 		break;
 	}
@@ -419,12 +421,37 @@ static void log_record_print(const struct mail_transaction_header *hdr,
 	}
 	case MAIL_TRANSACTION_ATTRIBUTE_UPDATE: {
 		const char *keys = data;
-		unsigned int i;
+		const uint32_t *extra;
+		unsigned int i, extra_pos, extra_count = 0;
 
 		for (i = 0; i < size && keys[i] != '\0'; ) {
-			printf(" - %s\n", keys+i);
+			if (keys[i] == '+')
+				extra_count++;
+			extra_count++;
 			i += strlen(keys+i) + 1;
 		}
+		if (i % sizeof(uint32_t) != 0)
+			i += sizeof(uint32_t) - i%sizeof(uint32_t);
+		extra = (const void *)(keys+i);
+
+		if ((size-i) != extra_count*sizeof(uint32_t)) {
+			printf(" - broken entry\n");
+			break;
+		}
+
+		extra_pos = 0;
+		for (i = 0; i < size && keys[i] != '\0'; ) {
+			printf(" - %s: %s/%s : timestamp=%s",
+			       keys[i] == '+' ? "add" : keys[i] == '-' ? "remove" : "?",
+			       keys[i+1] == 'p' ? "private" :
+			       keys[i+1] == 's' ? "shared" : "?error?",
+			       keys+i+2, unixdate2str(extra[extra_pos++]));
+			if (keys[i] == '+')
+				printf(" value_len=%u", extra[extra_pos++]);
+			printf("\n");
+			i += strlen(keys+i) + 1;
+		}
+
 		break;
 	}
 	default:
@@ -521,7 +548,7 @@ static bool test_dump_log(const char *path)
 	    hdr.major_version == MAIL_TRANSACTION_LOG_MAJOR_VERSION &&
 	    hdr.hdr_size >= MAIL_TRANSACTION_LOG_HEADER_MIN_SIZE)
 		ret = TRUE;
-	(void)close(fd);
+	i_close_fd(&fd);
 	return ret;
 }
 

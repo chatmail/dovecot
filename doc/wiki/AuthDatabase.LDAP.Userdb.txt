@@ -107,4 +107,26 @@ The activePath's value can be either "primaryPath" or "secondaryPath". The
 home's value will be the contents of that field. The !field tells Dovecot to
 fetch the field's value but not to do anything with it otherwise.
 
-(This file was created from the wiki on 2013-04-04 04:42)
+Variables and domains
+---------------------
+
+User names and domains may be distinguished using the <Variables.txt> %n and
+%d.  They split the /previous username/ at the "@" character.  The /prevous
+username/ is:
+
+ * For LMTP, it will be user@hostname, where hostname depends on e.g. the
+   Postfix configuration.
+ * For IMAP, it will be whatever the password database has designated as the
+   username.  If the (LDAP) password database has "user_attrs = =user=%n", then
+   the domain part of the login name will be stripped by the password database.
+    The UserDB will not see any domain part, i.e. %n and %u are the same thing
+   for the UserDB.
+
+The UserDB may set a new username, too, using "user_attrs = =user=...".  This
+will be used for
+
+ * Logging
+ * %u and %d variables in other parts of the configuration (e.g. quota file
+   names)
+
+(This file was created from the wiki on 2013-08-05 04:42)

@@ -266,20 +266,24 @@ namespace {
 }
 
 plugin {
-  quota = maildir:User quota
-  quota2 = dict:Archive quota:%u.archive:ns=Archive/:proxy::quota
+  # Maildir quota
+  quota = maildir:User quota:ns=
+  quota2 = maildir:Archive quota:ns=Archive/
+
+  # Dict quota
+  #quota = dict:User quota:%u.default:ns=:proxy::quota
+  #quota2 = dict:Archive quota:%u.archive:ns=Archive/:proxy::quota
+
   #quota_rules and quota2_rules..
 }
 ---%<-------------------------------------------------------------------------
 
-Note: You need to make sure that the quota of the 'Archive' namespace is
-calculated for another "user" than the default namespace. Either track
-different namespaces in different backends or make sure the users
-differs.'%u.archive' defines '<username>.archive' as key to track quota for the
-'Archive' namespace, the default '<username>' tracks the quota of other
-folders. See <Variables.txt> for further help on variables. Hence, with the
-dict backend one can track both quotas. If you can do similar with other
-backends, is unknown.
+Note: If you're using dict quota, you need to make sure that the quota of the
+'Archive' namespace is calculated for another "user" than the default
+namespace. Either track different namespaces in different backends or make sure
+the users differs.'%u.archive' defines '<username>.archive' as key to track
+quota for the 'Archive' namespace, the '%u.default' tracks the quota of other
+folders. See <Variables.txt> for further help on variables.
 
 Custom Quota Exceeded Message
 -----------------------------
@@ -372,4 +376,4 @@ just insert ":noenforcing" to proper location in it. For example with dict
 quota, you can use something like:'-o "plugin/quota=dict:User
 quota::noenforcing:proxy::quota"'
 
-(This file was created from the wiki on 2013-04-04 04:42)
+(This file was created from the wiki on 2013-08-05 04:42)

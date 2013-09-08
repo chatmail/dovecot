@@ -147,9 +147,10 @@ MySQL
 Add to your 'dovecot-sql.conf' file:
 
 ---%<-------------------------------------------------------------------------
-# The mysqld.sock socket may be in different locations in different systems
 driver = mysql
-# Use "host= ... pass=foo#bar" if your password has '#' character
+# The mysqld.sock socket may be in different locations in different systems.
+# Use "host= ... pass=foo#bar" with double-quotes if your password has '#'
+character.
 connect = host=/var/run/mysqld/mysqld.sock dbname=mails user=admin
 password=pass
 # Alternatively you can connect to localhost as well:
@@ -222,4 +223,4 @@ Note that you will have to change the password encryption in Horde to
 MD5-CRYPT. Also, the example above requires a 'dovecot' user in PostgreSQL with
 read (SELECT) privileges on the 'horde_users' table.
 
-(This file was created from the wiki on 2013-04-04 04:42)
+(This file was created from the wiki on 2013-08-05 04:42)

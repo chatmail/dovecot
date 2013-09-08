@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -27,7 +27,7 @@ struct doveadm_mail_server_cmd {
 	char *username;
 };
 
-static struct hash_table *servers;
+static HASH_TABLE(char *, struct doveadm_server *) servers;
 static pool_t server_pool;
 static struct doveadm_mail_cmd_context *cmd_ctx;
 static bool internal_failure = FALSE;
@@ -41,11 +41,9 @@ doveadm_server_get(struct doveadm_mail_cmd_context *ctx, const char *name)
 	struct doveadm_server *server;
 	char *dup_name;
 
-	if (servers == NULL) {
+	if (!hash_table_is_created(servers)) {
 		server_pool = pool_alloconly_create("doveadm servers", 1024*16);
-		servers = hash_table_create(default_pool, server_pool, 0,
-					    str_hash,
-					    (hash_cmp_callback_t *)strcmp);
+		hash_table_create(&servers, server_pool, 0, str_hash, strcmp);
 	}
 	server = hash_table_lookup(servers, name);
 	if (server == NULL) {
@@ -83,7 +81,7 @@ static bool doveadm_server_have_used_connections(struct doveadm_server *server)
 	return FALSE;
 }
 
-static void doveadm_cmd_callback(enum server_cmd_reply reply, void *context)
+static void doveadm_cmd_callback(int exit_code, void *context)
 {
 	struct doveadm_mail_server_cmd *servercmd = context;
 	struct doveadm_server *server =
@@ -93,21 +91,22 @@ static void doveadm_cmd_callback(enum server_cmd_reply reply, void *context)
 	i_free(servercmd->username);
 	i_free(servercmd);
 
-	switch (reply) {
-	case SERVER_CMD_REPLY_INTERNAL_FAILURE:
+	switch (exit_code) {
+	case 0:
+		break;
+	case SERVER_EXIT_CODE_DISCONNECTED:
 		i_error("%s: Internal failure for %s", server->name, username);
 		internal_failure = TRUE;
 		master_service_stop(master_service);
 		return;
-	case SERVER_CMD_REPLY_UNKNOWN_USER:
+	case EX_NOUSER:
 		i_error("%s: No such user: %s", server->name, username);
 		if (cmd_ctx->exit_code == 0)
 			cmd_ctx->exit_code = EX_NOUSER;
 		break;
-	case SERVER_CMD_REPLY_FAIL:
-		doveadm_mail_failed_error(cmd_ctx, MAIL_ERROR_TEMP);
-		break;
-	case SERVER_CMD_REPLY_OK:
+	default:
+		if (cmd_ctx->exit_code == 0 || exit_code == EX_TEMPFAIL)
+			cmd_ctx->exit_code = exit_code;
 		break;
 	}
 
@@ -142,12 +141,12 @@ static void doveadm_mail_server_handle(struct server_connection *conn,
 		str_append_c(cmd, 'v');
 	str_append_c(cmd, '\t');
 
-	str_tabescape_write(cmd, username);
+	str_append_tabescaped(cmd, username);
 	str_append_c(cmd, '\t');
-	str_tabescape_write(cmd, cmd_ctx->cmd->name);
+	str_append_tabescaped(cmd, cmd_ctx->cmd->name);
 	for (i = 0; cmd_ctx->full_args[i] != NULL; i++) {
 		str_append_c(cmd, '\t');
-		str_tabescape_write(cmd, cmd_ctx->full_args[i]);
+		str_append_tabescaped(cmd, cmd_ctx->full_args[i]);
 	}
 	str_append_c(cmd, '\n');
 
@@ -184,7 +183,7 @@ doveadm_mail_server_user_get_host(struct doveadm_mail_cmd_context *ctx,
 
 	*host_r = ctx->set->doveadm_socket_path;
 
-	if (ctx->set->doveadm_proxy_port == 0)
+	if (ctx->set->doveadm_port == 0)
 		return 0;
 
 	/* make sure we have an auth connection */
@@ -192,6 +191,10 @@ doveadm_mail_server_user_get_host(struct doveadm_mail_cmd_context *ctx,
 
 	memset(&info, 0, sizeof(info));
 	info.service = master_service_get_name(master_service);
+	info.local_ip = input->local_ip;
+	info.remote_ip = input->remote_ip;
+	info.local_port = input->local_port;
+	info.remote_port = input->remote_port;
 
 	pool = pool_alloconly_create("auth lookup", 1024);
 	auth_conn = mail_storage_service_get_auth_conn(ctx->storage_service);
@@ -229,7 +232,7 @@ doveadm_mail_server_user_get_host(struct doveadm_mail_cmd_context *ctx,
 			ret = -1;
 		} else {
 			*host_r = t_strdup_printf("%s:%u", proxy_host,
-						  ctx->set->doveadm_proxy_port);
+						  ctx->set->doveadm_port);
 		}
 	}
 	pool_unref(&pool);
@@ -268,8 +271,10 @@ int doveadm_mail_server_user(struct doveadm_mail_cmd_context *ctx,
 		doveadm_mail_server_handle(conn, input->username);
 	else if (array_count(&server->connections) <
 		 	I_MAX(ctx->set->doveadm_worker_count, 1)) {
-		conn = server_connection_create(server);
-		doveadm_mail_server_handle(conn, input->username);
+		if (server_connection_create(server, &conn) < 0)
+			internal_failure = TRUE;
+		else
+			doveadm_mail_server_handle(conn, input->username);
 	} else {
 		if (array_count(&server->queue) >= DOVEADM_SERVER_QUEUE_MAX)
 			doveadm_server_flush_one(server);
@@ -285,12 +290,11 @@ static struct doveadm_server *doveadm_server_find_used(void)
 {
 	struct hash_iterate_context *iter;
 	struct doveadm_server *ret = NULL;
-	void *key, *value;
+	char *key;
+	struct doveadm_server *server;
 
 	iter = hash_table_iterate_init(servers);
-	while (hash_table_iterate(iter, &key, &value)) {
-		struct doveadm_server *server = value;
-
+	while (hash_table_iterate(iter, servers, &key, &server)) {
 		if (doveadm_server_have_used_connections(server)) {
 			ret = server;
 			break;
@@ -303,12 +307,11 @@ static struct doveadm_server *doveadm_server_find_used(void)
 static void doveadm_servers_destroy_all_connections(void)
 {
 	struct hash_iterate_context *iter;
-	void *key, *value;
+	char *key;
+	struct doveadm_server *server;
 
 	iter = hash_table_iterate_init(servers);
-	while (hash_table_iterate(iter, &key, &value)) {
-		struct doveadm_server *server = value;
-
+	while (hash_table_iterate(iter, servers, &key, &server)) {
 		while (array_count(&server->connections) > 0) {
 			struct server_connection *const *connp, *conn;
 
@@ -324,7 +327,7 @@ void doveadm_mail_server_flush(void)
 {
 	struct doveadm_server *server;
 
-	if (servers == NULL) {
+	if (!hash_table_is_created(servers)) {
 		cmd_ctx = NULL;
 		return;
 	}

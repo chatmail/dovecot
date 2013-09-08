@@ -32,6 +32,7 @@ extern struct doveadm_cmd doveadm_cmd_sis_deduplicate;
 extern struct doveadm_cmd doveadm_cmd_sis_find;
 extern struct doveadm_cmd doveadm_cmd_stats_dump;
 extern struct doveadm_cmd doveadm_cmd_stats_top;
+extern struct doveadm_cmd doveadm_cmd_zlibconnect;
 
 void doveadm_register_cmd(const struct doveadm_cmd *cmd);
 
@@ -45,5 +46,7 @@ void doveadm_register_proxy_commands(void);
 void doveadm_register_log_commands(void);
 void doveadm_register_instance_commands(void);
 void doveadm_register_mount_commands(void);
+void doveadm_register_replicator_commands(void);
+void doveadm_register_fs_commands(void);
 
 #endif

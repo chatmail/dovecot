@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -57,7 +57,7 @@ mailbox_uidset_change(struct mail_search_arg *arg, struct mailbox *box,
 			/* make sure the last message is in the range */
 			mailbox_get_seq_range(box, 1, (uint32_t)-1,
 					      &seq1, &seq2);
-			seq_range_array_add(&arg->value.seqset, 0, seq2);
+			seq_range_array_add(&arg->value.seqset, seq2);
 		}
 	}
 }
@@ -852,7 +852,10 @@ mail_search_args_result_serialize_arg(const struct mail_search_arg *arg,
 void mail_search_args_result_serialize(const struct mail_search_args *args,
 				       buffer_t *dest)
 {
-	mail_search_args_result_serialize_arg(args->args, dest);
+	const struct mail_search_arg *arg;
+
+	for (arg = args->args; arg != NULL; arg = arg->next)
+		mail_search_args_result_serialize_arg(arg, dest);
 }
 
 static void
@@ -883,5 +886,8 @@ mail_search_args_result_deserialize_arg(struct mail_search_arg *arg,
 void mail_search_args_result_deserialize(struct mail_search_args *args,
 					 const unsigned char *data, size_t size)
 {
-	mail_search_args_result_deserialize_arg(args->args, &data, &size);
+	struct mail_search_arg *arg;
+
+	for (arg = args->args; arg != NULL; arg = arg->next)
+		mail_search_args_result_deserialize_arg(arg, &data, &size);
 }

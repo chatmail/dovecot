@@ -55,7 +55,7 @@ DIST_COMMON = $(dist_man1_MANS) $(dist_man7_MANS) \
 	$(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -114,13 +114,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -152,6 +153,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -199,6 +201,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -278,6 +281,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 pkgsysconfdir = $(sysconfdir)/dovecot
+SUFFIXES = .1.in .1
 dist_man1_MANS = \
 	deliver.1 \
 	doveadm-config.1 \
@@ -291,10 +295,13 @@ nodist_man1_MANS = \
 	doveadm.1 \
 	doveadm-altmove.1 \
 	doveadm-auth.1 \
+	doveadm-deduplicate.1 \
 	doveadm-director.1 \
 	doveadm-dump.1 \
+	doveadm-exec.1 \
 	doveadm-expunge.1 \
 	doveadm-fetch.1 \
+	doveadm-flags.1 \
 	doveadm-import.1 \
 	doveadm-instance.1 \
 	doveadm-index.1 \
@@ -329,10 +336,13 @@ EXTRA_DIST = \
 	doveadm.1.in \
 	doveadm-altmove.1.in \
 	doveadm-auth.1.in \
+	doveadm-deduplicate.1.in \
 	doveadm-director.1.in \
 	doveadm-dump.1.in \
+	doveadm-exec.1.in \
 	doveadm-expunge.1.in \
 	doveadm-fetch.1.in \
+	doveadm-flags.1.in \
 	doveadm-import.1.in \
 	doveadm-instance.1.in \
 	doveadm-index.1.in \
@@ -361,6 +371,7 @@ CLEANFILES = $(nodist_man1_MANS)
 all: all-am
 
 .SUFFIXES:
+.SUFFIXES: .1.in .1
 $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -651,117 +662,9 @@ uninstall-man: uninstall-man1 uninstall-man7
 	uninstall-man7
 
 
-doveadm.1: $(srcdir)/doveadm.1.in $(man_includefiles) Makefile
+.1.in.1: $(man_includefiles) Makefile
 	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm.1.in > doveadm.1
-
-doveadm-altmove.1: $(srcdir)/doveadm-altmove.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-altmove.1.in > doveadm-altmove.1
-
-doveadm-auth.1: $(srcdir)/doveadm-auth.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-auth.1.in > doveadm-auth.1
-
-doveadm-director.1: $(srcdir)/doveadm-director.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-director.1.in > doveadm-director.1
-
-doveadm-dump.1: $(srcdir)/doveadm-dump.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-dump.1.in > doveadm-dump.1
-
-doveadm-expunge.1: $(srcdir)/doveadm-expunge.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-expunge.1.in > doveadm-expunge.1
-
-doveadm-fetch.1: $(srcdir)/doveadm-fetch.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-fetch.1.in > doveadm-fetch.1
-
-doveadm-import.1: $(srcdir)/doveadm-import.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-import.1.in > doveadm-import.1
-
-doveadm-instance.1: $(srcdir)/doveadm-instance.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-instance.1.in > doveadm-instance.1
-
-doveadm-index.1: $(srcdir)/doveadm-index.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-index.1.in > doveadm-index.1
-
-doveadm-force-resync.1: $(srcdir)/doveadm-force-resync.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-force-resync.1.in > doveadm-force-resync.1
-
-doveadm-help.1: $(srcdir)/doveadm-help.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-help.1.in > doveadm-help.1
-
-doveadm-kick.1: $(srcdir)/doveadm-kick.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-kick.1.in > doveadm-kick.1
-
-doveadm-log.1: $(srcdir)/doveadm-log.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-log.1.in > doveadm-log.1
-
-doveadm-mailbox.1: $(srcdir)/doveadm-mailbox.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-mailbox.1.in > doveadm-mailbox.1
-
-doveadm-mount.1: $(srcdir)/doveadm-mount.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-mount.1.in > doveadm-mount.1
-
-doveadm-move.1: $(srcdir)/doveadm-move.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-move.1.in > doveadm-move.1
-
-doveadm-penalty.1: $(srcdir)/doveadm-penalty.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-penalty.1.in > doveadm-penalty.1
-
-doveadm-purge.1: $(srcdir)/doveadm-purge.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-purge.1.in > doveadm-purge.1
-
-doveadm-pw.1: $(srcdir)/doveadm-pw.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-pw.1.in > doveadm-pw.1
-
-doveadm-quota.1: $(srcdir)/doveadm-quota.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-quota.1.in > doveadm-quota.1
-
-doveadm-search.1: $(srcdir)/doveadm-search.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-search.1.in > doveadm-search.1
-
-doveadm-user.1: $(srcdir)/doveadm-user.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-user.1.in > doveadm-user.1
-
-doveadm-who.1: $(srcdir)/doveadm-who.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveadm-who.1.in > doveadm-who.1
-
-doveconf.1: $(srcdir)/doveconf.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/doveconf.1.in > doveconf.1
-
-dovecot.1: $(srcdir)/dovecot.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/dovecot.1.in > dovecot.1
-
-dovecot-lda.1: $(srcdir)/dovecot-lda.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/dovecot-lda.1.in > dovecot-lda.1
-
-dsync.1: $(srcdir)/dsync.1.in $(man_includefiles) Makefile
-	$(SHELL) $(srcdir)/sed.sh $(srcdir) $(rundir) $(pkgsysconfdir) \
-		< $(srcdir)/dsync.1.in > dsync.1
+		$(pkglibexecdir) < $< > $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

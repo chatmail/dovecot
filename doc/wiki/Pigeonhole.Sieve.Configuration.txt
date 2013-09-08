@@ -73,16 +73,16 @@ sieve_dir = ~/:
 sieve_extensions = :
   Which Sieve language extensions are available to users. By default, all
   supported extensions are available, except for deprecated extensions,
-  extensions that require explicit configuration or those that are still under
-  development. Some system administrators may want to disable certain Sieve
-  extensions or enable those that are not available by default. All supported
-  extensions are listed <here> [Pigeonhole.Sieve.txt]. Normally, all enabled
-  extensions must be listed for this setting, but starting with Sieve version
-  0.1.7, this setting can use '+' and '-' to specify differences relative to
-  the default. For example 'sieve_extensions = +imapflags' will enable the
-  deprecated imapflags extension
-  [http://tools.ietf.org/html/draft-melnikov-sieve-imapflags-03] in addition to
-  all extensions enabled by default.
+  extensions that add the ability to change messages, extensions that require
+  explicit configuration or extensions that are still under development. Some
+  system administrators may want to disable certain Sieve extensions or enable
+  those that are not available by default. All supported extensions are listed
+  <here> [Pigeonhole.Sieve.txt]. Normally, all enabled extensions must be
+  listed for this setting, but starting with Sieve version 0.1.7, this setting
+  can use '+' and '-' to specify differences relative to the default. For
+  example 'sieve_extensions = +imapflags' will enable the deprecated imapflags
+  extension [http://tools.ietf.org/html/draft-melnikov-sieve-imapflags-03] in
+  addition to all extensions enabled by default.
 
 sieve_global_extensions = (v0.3+) :
   Which Sieve language extensions are ONLY avalable in global scripts. This can
@@ -182,7 +182,7 @@ file :
 
 dict :
   Dovecot dict lookup. The location path is a dict uri. Read
-  doc/scipt-location-dict.txt in the Pigeonhole source package for more
+  doc/script-location-dict.txt in the Pigeonhole source package for more
   information and examples (/FIXME: make a wiki page for this/).
 
 If the type prefix is omitted, the script location type is 'file'.
@@ -380,4 +380,4 @@ From Dovecot Sieve v0.1.x (Dovecot v1.2)
    compatibility, it is recommended to update the setting to the new name,
    since the <LMTP.txt> service also uses the 'recipient_delimiter' setting.
 
-(This file was created from the wiki on 2013-04-04 04:42)
+(This file was created from the wiki on 2013-08-05 04:42)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -372,6 +372,7 @@ maildir_fill_readdir(struct maildir_list_iterate_context *ctx,
 	struct mail_namespace *ns = list->ns;
 	DIR *dirp;
 	struct dirent *d;
+	const char *vname;
 	int ret = 0;
 
 	dirp = opendir(ctx->dir);
@@ -409,8 +410,8 @@ maildir_fill_readdir(struct maildir_list_iterate_context *ctx,
 		return maildir_fill_inbox(ctx, glob, "INBOX", update_only);
 	} else if ((ns->flags & NAMESPACE_FLAG_INBOX_ANY) != 0) {
 		/* show shared INBOX. */
-		return maildir_fill_inbox(ctx, glob,
-			t_strconcat(ns->prefix, "INBOX", NULL), update_only);
+		vname = mailbox_list_get_vname(ns->list, "INBOX");
+		return maildir_fill_inbox(ctx, glob, vname, update_only);
 	} else {
 		return 0;
 	}
@@ -496,7 +497,7 @@ maildir_list_iter_next(struct mailbox_list_iterate_context *_ctx)
 	if (_ctx->failed)
 		return NULL;
 
-	node = mailbox_tree_iterate_next(ctx->tree_iter, &ctx->info.name);
+	node = mailbox_tree_iterate_next(ctx->tree_iter, &ctx->info.vname);
 	if (node == NULL)
 		return NULL;
 
@@ -505,7 +506,7 @@ maildir_list_iter_next(struct mailbox_list_iterate_context *_ctx)
 	    (_ctx->flags & MAILBOX_LIST_ITER_SELECT_SUBSCRIBED) == 0) {
 		/* we're listing all mailboxes but we want to know
 		   \Subscribed flags */
-		mailbox_list_set_subscription_flags(_ctx->list, ctx->info.name,
+		mailbox_list_set_subscription_flags(_ctx->list, ctx->info.vname,
 						    &ctx->info.flags);
 	}
 	return &ctx->info;

@@ -1,10 +1,11 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hostpid.h"
-#include "network.h"
+#include "net.h"
 #include "str.h"
 #include "strescape.h"
+#include "master-service.h"
 #include "mail-storage.h"
 #include "stats-plugin.h"
 #include "stats-connection.h"
@@ -23,7 +24,7 @@ static bool stats_connection_open(struct stats_connection *conn)
 	if (conn->open_failed)
 		return FALSE;
 
-	conn->fd = open(conn->path, O_WRONLY);
+	conn->fd = open(conn->path, O_WRONLY | O_NONBLOCK);
 	if (conn->fd == -1) {
 		i_error("stats: open(%s) failed: %m", conn->path);
 		conn->open_failed = TRUE;
@@ -40,7 +41,7 @@ stats_connection_create(const char *path)
 	conn = i_new(struct stats_connection, 1);
 	conn->refcount = 1;
 	conn->path = i_strdup(path);
-	stats_connection_open(conn);
+	(void)stats_connection_open(conn);
 	return conn;
 }
 
@@ -70,6 +71,12 @@ void stats_connection_send(struct stats_connection *conn, const string_t *str)
 {
 	static bool pipe_warned = FALSE;
 	ssize_t ret;
+
+	/* if master process has been stopped (and restarted), don't even try
+	   to notify the stats process anymore. even if one exists, it doesn't
+	   know about us. */
+	if (master_service_is_master_stopped(master_service))
+		return;
 
 	if (conn->fd == -1) {
 		if (!stats_connection_open(conn))
@@ -108,9 +115,9 @@ void stats_connection_connect(struct stats_connection *conn,
 	/* required fields */
 	str_append(str, guid_128_to_string(suser->session_guid));
 	str_append_c(str, '\t');
-	str_tabescape_write(str, user->username);
+	str_append_tabescaped(str, user->username);
 	str_append_c(str, '\t');
-	str_tabescape_write(str, user->service);
+	str_append_tabescaped(str, user->service);
 	str_printfa(str, "\t%s", my_pid);
 
 	/* optional fields */

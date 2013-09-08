@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "restrict-access.h"
@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
 {
 	const char *error;
 
-	master_service = master_service_init("indexer", 0, &argc, &argv, NULL);
+	master_service = master_service_init("indexer", 0, &argc, &argv, "");
 	if (master_getopt(master_service) > 0)
 		return FATAL_DEFAULT;
 
@@ -134,11 +134,11 @@ int main(int argc, char *argv[])
 	restrict_access_allow_coredumps(TRUE);
 	master_service_set_idle_die_callback(master_service, idle_die);
 
-	master_service_init_finish(master_service);
 	queue = indexer_queue_init(indexer_client_status_callback);
 	indexer_queue_set_listen_callback(queue, queue_listen_callback);
 	worker_pool = worker_pool_init("indexer-worker",
 				       worker_status_callback);
+	master_service_init_finish(master_service);
 
 	master_service_run(master_service, client_connected);
 

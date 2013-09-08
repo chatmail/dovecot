@@ -24,6 +24,8 @@ There are also some changes you should be aware of:
  * mail_shared_explicit_inbox setting's default switched to "no".
  * dsync isn't compatible with v2.1 protocol. (The new protocol will be
    compatible with future Dovecot versions.)
+ * autocreate plugin is being deprecated and it will log warnings. Convert the
+   configuration to <MailboxSettings.txt> instead.
 
 Downgrading can be done fully safely to v2.1.16.
 
@@ -37,4 +39,4 @@ Downgrading can be done fully safely to v2.1.16.
    the 'dovecot.index.cache' files are corrupted and complain about "Invalid
    magic in hole header".
 
-(This file was created from the wiki on 2013-04-04 04:43)
+(This file was created from the wiki on 2013-08-05 04:43)

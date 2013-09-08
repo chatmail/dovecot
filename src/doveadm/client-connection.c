@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "base64.h"
@@ -7,7 +7,9 @@
 #include "ostream.h"
 #include "strescape.h"
 #include "settings-parser.h"
+#include "iostream-ssl.h"
 #include "master-service.h"
+#include "master-service-ssl.h"
 #include "master-service-settings.h"
 #include "mail-storage-service.h"
 #include "doveadm-util.h"
@@ -19,23 +21,9 @@
 
 #include <unistd.h>
 
-#define MAX_INBUF_SIZE 1024
+#define MAX_INBUF_SIZE (1024*1024)
 
 static void client_connection_input(struct client_connection *conn);
-
-struct client_connection {
-	pool_t pool;
-
-	int fd;
-	struct io *io;
-	struct istream *input;
-	struct ostream *output;
-	struct ip_addr local_ip, remote_ip;
-	const struct doveadm_settings *set;
-
-	unsigned int handshaked:1;
-	unsigned int authenticated:1;
-};
 
 static struct doveadm_mail_cmd_context *
 doveadm_mail_cmd_server_parse(const char *cmd_name,
@@ -86,6 +74,7 @@ doveadm_mail_cmd_server_parse(const char *cmd_name,
 					"Client sent unknown parameter: %c",
 					cmd->name, c);
 				ctx->v.deinit(ctx);
+				pool_unref(&ctx->pool);
 				return NULL;
 			}
 		}
@@ -98,6 +87,7 @@ doveadm_mail_cmd_server_parse(const char *cmd_name,
 		i_error("doveadm %s: Client sent unknown parameter: %s",
 			cmd->name, argv[0]);
 		ctx->v.deinit(ctx);
+		pool_unref(&ctx->pool);
 		return NULL;
 	}
 	ctx->args = (const void *)argv;
@@ -119,6 +109,8 @@ doveadm_mail_cmd_server_run(struct client_connection *conn,
 	const char *error;
 	int ret;
 
+	ctx->conn = conn;
+
 	if (ctx->v.preinit != NULL)
 		ctx->v.preinit(ctx);
 
@@ -130,14 +122,15 @@ doveadm_mail_cmd_server_run(struct client_connection *conn,
 
 	if (ret < 0) {
 		i_error("%s: %s", ctx->cmd->name, error);
-		o_stream_send(conn->output, "\n-\n", 3);
+		o_stream_nsend(conn->output, "\n-\n", 3);
 	} else if (ret == 0) {
-		o_stream_send_str(conn->output, "\n-NOUSER\n");
+		o_stream_nsend_str(conn->output, "\n-NOUSER\n");
 	} else if (ctx->exit_code != 0) {
 		/* maybe not an error, but not a full success either */
-		o_stream_send(conn->output, "\n-\n", 3);
+		o_stream_nsend_str(conn->output,
+				   t_strdup_printf("\n-%u\n", ctx->exit_code));
 	} else {
-		o_stream_send(conn->output, "\n+\n", 3);
+		o_stream_nsend(conn->output, "\n+\n", 3);
 	}
 	pool_unref(&ctx->pool);
 
@@ -176,6 +169,10 @@ static bool client_handle_command(struct client_connection *conn, char **args)
 
 	memset(&input, 0, sizeof(input));
 	input.service = "doveadm";
+	input.local_ip = conn->local_ip;
+	input.remote_ip = conn->remote_ip;
+	input.local_port = conn->local_port;
+	input.remote_port = conn->remote_port;
 
 	for (argc = 0; args[argc] != NULL; argc++)
 		args[argc] = str_tabunescape(args[argc]);
@@ -222,7 +219,7 @@ static bool client_handle_command(struct client_connection *conn, char **args)
 	o_stream_cork(conn->output);
 	ctx = doveadm_mail_cmd_server_parse(cmd_name, conn->set, &input, argc, args);
 	if (ctx == NULL)
-		o_stream_send(conn->output, "\n-\n", 3);
+		o_stream_nsend(conn->output, "\n-\n", 3);
 	else
 		doveadm_mail_cmd_server_run(conn, ctx, &input);
 	o_stream_uncork(conn->output);
@@ -309,16 +306,17 @@ static void client_connection_input(struct client_connection *conn)
 	if (!conn->authenticated) {
 		if ((ret = client_connection_authenticate(conn)) <= 0) {
 			if (ret < 0) {
-				o_stream_send(conn->output, "-\n", 2);
+				o_stream_nsend(conn->output, "-\n", 2);
 				client_connection_destroy(&conn);
 			}
 			return;
 		}
-		o_stream_send(conn->output, "+\n", 2);
+		o_stream_nsend(conn->output, "+\n", 2);
 		conn->authenticated = TRUE;
 	}
 
-	while (ok && (line = i_stream_read_next_line(conn->input)) != NULL) {
+	while (ok && !conn->input->closed &&
+	       (line = i_stream_read_next_line(conn->input)) != NULL) {
 		T_BEGIN {
 			char **args;
 
@@ -357,12 +355,48 @@ static int client_connection_read_settings(struct client_connection *conn)
 	return 0;
 }
 
-struct client_connection *client_connection_create(int fd, int listen_fd)
+static int client_connection_init_ssl(struct client_connection *conn)
+{
+	const char *error;
+
+	if (master_service_ssl_init(master_service,
+				    &conn->input, &conn->output,
+				    &conn->ssl_iostream, &error) < 0) {
+		i_error("SSL init failed: %s", error);
+		return -1;
+	}
+	if (ssl_iostream_handshake(conn->ssl_iostream) < 0) {
+		i_error("SSL handshake failed: %s",
+			ssl_iostream_get_last_error(conn->ssl_iostream));
+		return -1;
+	}
+	return 0;
+}
+
+static void
+client_connection_send_auth_handshake(struct client_connection *
+				      conn, int listen_fd)
+{
+	const char *listen_path;
+	struct stat st;
+
+	/* we'll have to do this with stat(), because at least in Linux
+	   fstat() always returns mode as 0777 */
+	if (net_getunixname(listen_fd, &listen_path) == 0 &&
+	    stat(listen_path, &st) == 0 && S_ISSOCK(st.st_mode) &&
+	    (st.st_mode & 0777) == 0600) {
+		/* no need for client to authenticate */
+		conn->authenticated = TRUE;
+		o_stream_nsend(conn->output, "+\n", 2);
+	} else {
+		o_stream_nsend(conn->output, "-\n", 2);
+	}
+}
+
+struct client_connection *
+client_connection_create(int fd, int listen_fd, bool ssl)
 {
 	struct client_connection *conn;
-	struct stat st;
-	const char *listen_path;
-	unsigned int port;
 	pool_t pool;
 
 	pool = pool_alloconly_create("doveadm client", 1024*16);
@@ -372,23 +406,22 @@ struct client_connection *client_connection_create(int fd, int listen_fd)
 	conn->io = io_add(fd, IO_READ, client_connection_input, conn);
 	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
 	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	o_stream_set_no_error_handling(conn->output, TRUE);
 
-	(void)net_getsockname(fd, &conn->local_ip, &port);
-	(void)net_getpeername(fd, &conn->remote_ip, &port);
+	(void)net_getsockname(fd, &conn->local_ip, &conn->local_port);
+	(void)net_getpeername(fd, &conn->remote_ip, &conn->remote_port);
 
-	/* we'll have to do this with stat(), because at least in Linux
-	   fstat() always returns mode as 0777 */
-	if (net_getunixname(listen_fd, &listen_path) == 0 &&
-	    stat(listen_path, &st) == 0 && S_ISSOCK(st.st_mode) &&
-	    (st.st_mode & 0777) == 0600) {
-		/* no need for client to authenticate */
-		conn->authenticated = TRUE;
-		o_stream_send(conn->output, "+\n", 2);
-	} else {
-		o_stream_send(conn->output, "-\n", 2);
-	}
-	if (client_connection_read_settings(conn) < 0)
+	if (client_connection_read_settings(conn) < 0) {
 		client_connection_destroy(&conn);
+		return NULL;
+	}
+	if (ssl) {
+		if (client_connection_init_ssl(conn) < 0) {
+			client_connection_destroy(&conn);
+			return NULL;
+		}
+	}
+	client_connection_send_auth_handshake(conn, listen_fd);
 	return conn;
 }
 
@@ -398,6 +431,8 @@ void client_connection_destroy(struct client_connection **_conn)
 
 	*_conn = NULL;
 
+	if (conn->ssl_iostream != NULL)
+		ssl_iostream_destroy(&conn->ssl_iostream);
 	i_stream_destroy(&conn->input);
 	o_stream_destroy(&conn->output);
 	io_remove(&conn->io);

@@ -10,6 +10,7 @@ extern "C" {
 #include "mail-index.h"
 #include "mail-search.h"
 #include "mail-namespace.h"
+#include "mailbox-list-private.h"
 #include "mail-storage.h"
 #include "fts-expunge-log.h"
 #include "fts-lucene-plugin.h"
@@ -66,8 +67,9 @@ struct lucene_index {
 	IndexWriter *writer;
 	IndexSearcher *searcher;
 
+	buffer_t *normalizer_buf;
 	Analyzer *default_analyzer, *cur_analyzer;
-	ARRAY_DEFINE(analyzers, struct lucene_analyzer);
+	ARRAY(struct lucene_analyzer) analyzers;
 
 	Document *doc;
 	uint32_t prev_uid;
@@ -81,7 +83,7 @@ struct rescan_context {
 	int box_ret;
 
 	pool_t pool;
-	struct hash_table *guids;
+	HASH_TABLE(uint8_t *, uint8_t *) seen_mailbox_guids;
 
 	ARRAY_TYPE(seq_range) uids;
 	struct seq_range_iter uids_iter;
@@ -96,7 +98,7 @@ static bool textcat_broken = FALSE;
 static int textcat_refcount = 0;
 
 static void rescan_clear_unseen_mailboxes(struct lucene_index *index,
-					  struct hash_table *guids);
+					  struct rescan_context *rescan_ctx);
 
 struct lucene_index *lucene_index_init(const char *path,
 				       struct mailbox_list *list,
@@ -117,13 +119,20 @@ struct lucene_index *lucene_index_init(const char *path,
 		index->set.default_language = "";
 	}
 #ifdef HAVE_LUCENE_STEMMER
-	index->default_analyzer =
-		_CLNEW snowball::SnowballAnalyzer(index->normalizer,
-						  index->set.default_language);
-#else
-	index->default_analyzer = _CLNEW standard::StandardAnalyzer();
-	i_assert(index->normalizer == NULL);
+	if (!set->no_snowball) {
+		index->default_analyzer =
+			_CLNEW snowball::SnowballAnalyzer(index->normalizer,
+							  index->set.default_language);
+	} else
 #endif
+	{
+		index->default_analyzer = _CLNEW standard::StandardAnalyzer();
+		if (index->normalizer != NULL) {
+			index->normalizer_buf =
+				buffer_create_dynamic(default_pool, 1024);
+		}
+	}
+
 	i_array_init(&index->analyzers, 32);
 	textcat_refcount++;
 
@@ -154,6 +163,8 @@ void lucene_index_deinit(struct lucene_index *index)
 		textcat = NULL;
 	}
 	_CLDELETE(index->default_analyzer);
+	if (index->normalizer_buf != NULL)
+		buffer_free(&index->normalizer_buf);
 	i_free(index->path);
 	i_free(index);
 }
@@ -181,7 +192,7 @@ void lucene_utf8_n_to_tchar(const unsigned char *src, size_t srcsize,
 
 	i_assert(sizeof(wchar_t) == sizeof(unichar_t));
 
-	buffer_create_data(&buf, dest, sizeof(wchar_t) * destsize);
+	buffer_create_from_data(&buf, dest, sizeof(wchar_t) * destsize);
 	array_create_from_buffer(&dest_arr, &buf, sizeof(wchar_t));
 	if (uni_utf8_to_ucs4_n(src, srcsize, &dest_arr) < 0)
 		i_unreached();
@@ -237,7 +248,9 @@ static void lucene_handle_error(struct lucene_index *index, CLuceneError &err,
 	     err.number() == CL_ERR_IO)) {
 		/* delete corrupted index. most IO errors are also about
 		   missing files and other such corruption.. */
-		if (unlink_directory(index->path, TRUE) < 0 && errno != ENOENT)
+		if (unlink_directory(index->path,
+				     UNLINK_DIRECTORY_FLAG_RMDIR) < 0 &&
+		    errno != ENOENT)
 			i_error("unlink_directory(%s) failed: %m", index->path);
 		rescan_clear_unseen_mailboxes(index, NULL);
 	}
@@ -360,7 +373,7 @@ static int lucene_settings_check(struct lucene_index *index)
 		return ret;
 
 	/* settings changed, rebuild index */
-	if (unlink_directory(index->path, TRUE) < 0) {
+	if (unlink_directory(index->path, UNLINK_DIRECTORY_FLAG_RMDIR) < 0) {
 		i_error("unlink_directory(%s) failed: %m", index->path);
 		ret = -1;
 	} else {
@@ -514,6 +527,13 @@ int lucene_index_build_more(struct lucene_index *index, uint32_t uid,
 		index->doc->add(*_CLNEW Field(_T("box"), index->mailbox_guid, Field::STORE_YES | Field::INDEX_UNTOKENIZED));
 	}
 
+	if (index->normalizer_buf != NULL) {
+		buffer_set_used_size(index->normalizer_buf, 0);
+		index->normalizer(data, size, index->normalizer_buf);
+		data = (const unsigned char *)index->normalizer_buf->data;
+		size = index->normalizer_buf->used;
+	}
+
 	datasize = uni_utf8_strlen_n(data, size) + 1;
 	wchar_t dest[datasize];
 	lucene_utf8_n_to_tchar(data, size, dest, datasize);
@@ -586,7 +606,7 @@ wcharguid_to_guid(guid_128_t dest, const wchar_t *src)
 		return -1;
 	src_chars[i] = '\0';
 
-	buffer_create_data(&buf, dest, GUID_128_SIZE);
+	buffer_create_from_data(&buf, dest, GUID_128_SIZE);
 	return hex_to_binary(src_chars, &buf);
 }
 
@@ -654,7 +674,7 @@ rescan_open_mailbox(struct rescan_context *ctx, Document *doc)
 
 	guidp = p_new(ctx->pool, guid_128_t, 1);
 	memcpy(guidp, guid, sizeof(*guidp));
-	hash_table_insert(ctx->guids, guidp, guidp);
+	hash_table_insert(ctx->seen_mailbox_guids, guidp, guidp);
 
 	if (ctx->box != NULL)
 		rescan_finish(ctx);
@@ -734,7 +754,7 @@ rescan_next(struct rescan_context *ctx, Document *doc)
 }
 
 static void rescan_clear_unseen_mailboxes(struct lucene_index *index,
-					  struct hash_table *guids)
+					  struct rescan_context *rescan_ctx)
 {
 	const enum mailbox_list_iter_flags iter_flags =
 		(enum mailbox_list_iter_flags)
@@ -751,13 +771,14 @@ static void rescan_clear_unseen_mailboxes(struct lucene_index *index,
 
 	iter = mailbox_list_iter_init(index->list, "*", iter_flags);
 	while ((info = mailbox_list_iter_next(iter)) != NULL) {
-		box = mailbox_alloc(index->list, info->name,
+		box = mailbox_alloc(index->list, info->vname,
 				    (enum mailbox_flags)0);
 		if (mailbox_open(box) == 0 &&
 		    mailbox_get_metadata(box, MAILBOX_METADATA_GUID,
 					 &metadata) == 0 &&
-		    (guids == NULL ||
-		     hash_table_lookup(guids, metadata.guid) == NULL)) {
+		    (rescan_ctx == NULL ||
+		     hash_table_lookup(rescan_ctx->seen_mailbox_guids,
+				       metadata.guid) == NULL)) {
 			/* this mailbox had no records in lucene index.
 			   make sure its last indexed uid is 0 */
 			(void)fts_index_set_header(box, &hdr);
@@ -787,8 +808,8 @@ int lucene_index_rescan(struct lucene_index *index)
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.index = index;
 	ctx.pool = pool_alloconly_create("guids", 1024);
-	ctx.guids = hash_table_create(default_pool, ctx.pool, 0,
-				      guid_128_hash, guid_128_cmp);
+	hash_table_create(&ctx.seen_mailbox_guids, ctx.pool, 0,
+			  guid_128_hash, guid_128_cmp);
 	i_array_init(&ctx.uids, 128);
 
 	if (ret > 0) try {
@@ -814,8 +835,8 @@ int lucene_index_rescan(struct lucene_index *index)
 		rescan_finish(&ctx);
 	array_free(&ctx.uids);
 
-	rescan_clear_unseen_mailboxes(index, ctx.guids);
-	hash_table_destroy(&ctx.guids);
+	rescan_clear_unseen_mailboxes(index, &ctx);
+	hash_table_destroy(&ctx.seen_mailbox_guids);
 	pool_unref(&ctx.pool);
 	return failed ? -1 : 0;
 }
@@ -827,7 +848,7 @@ static void guid128_to_wguid(const guid_128_t guid,
 	unsigned char guid_hex[MAILBOX_GUID_HEX_LENGTH];
 	unsigned int i;
 
-	buffer_create_data(&buf, guid_hex, MAILBOX_GUID_HEX_LENGTH);
+	buffer_create_from_data(&buf, guid_hex, MAILBOX_GUID_HEX_LENGTH);
 	binary_to_hex_append(&buf, guid, GUID_128_SIZE);
 	for (i = 0; i < MAILBOX_GUID_HEX_LENGTH; i++)
 		wguid_hex[i] = guid_hex[i];
@@ -1051,8 +1072,18 @@ static Query *
 lucene_get_query_str(struct lucene_index *index,
 		     const TCHAR *key, const char *str, bool fuzzy)
 {
-	const TCHAR *wvalue = t_lucene_utf8_to_tchar(index, str, TRUE);
-	Analyzer *analyzer = guess_analyzer(index, str, strlen(str));
+	const TCHAR *wvalue;
+	Analyzer *analyzer;
+
+	if (index->normalizer_buf != NULL) {
+		buffer_set_used_size(index->normalizer_buf, 0);
+		index->normalizer(str, strlen(str), index->normalizer_buf);
+		buffer_append_c(index->normalizer_buf, '\0');
+		str = (const char *)index->normalizer_buf->data;
+	}
+
+	wvalue = t_lucene_utf8_to_tchar(index, str, TRUE);
+	analyzer = guess_analyzer(index, str, strlen(str));
 	if (analyzer == NULL)
 		analyzer = index->default_analyzer;
 
@@ -1249,7 +1280,7 @@ lucene_index_search(struct lucene_index *index,
 				score->uid = uid;
 				score->score = hits->score(i);
 			}
-			seq_range_array_add(uids_r, 0, uid);
+			seq_range_array_add(uids_r, uid);
 		}
 		_CLDELETE(hits);
 		return ret;
@@ -1305,7 +1336,8 @@ int lucene_index_lookup(struct lucene_index *index,
 }
 
 static int
-lucene_index_search_multi(struct lucene_index *index, struct hash_table *guids,
+lucene_index_search_multi(struct lucene_index *index,
+			  HASH_TABLE_TYPE(wguid_result) guids,
 			  ARRAY_TYPE(lucene_query) &queries,
 			  struct fts_multi_result *result)
 {
@@ -1319,7 +1351,7 @@ lucene_index_search_multi(struct lucene_index *index, struct hash_table *guids,
 	struct hash_iterate_context *iter;
 	void *key, *value;
 	iter = hash_table_iterate_init(guids);
-	while (hash_table_iterate(iter, &key, &value)) {
+	while (hash_table_iterate(iter, guids, &key, &value)) {
 		Term *term = _CLNEW Term(_T("box"), (wchar_t *)key);
 		TermQuery *q = _CLNEW TermQuery(term);
 		mailbox_query.add(q, true, BooleanClause::SHOULD);
@@ -1341,8 +1373,8 @@ lucene_index_search_multi(struct lucene_index *index, struct hash_table *guids,
 				ret = -1;
 				break;
 			}
-			struct fts_result *br = (struct fts_result *)
-				hash_table_lookup(guids, (const void *)box_guid);
+			struct fts_result *br =
+				hash_table_lookup(guids, box_guid);
 			if (br == NULL) {
 				i_warning("lucene: Returned unexpected mailbox with GUID %ls", box_guid);
 				continue;
@@ -1358,7 +1390,7 @@ lucene_index_search_multi(struct lucene_index *index, struct hash_table *guids,
 				p_array_init(&br->definite_uids, result->pool, 32);
 				p_array_init(&br->scores, result->pool, 32);
 			}
-			seq_range_array_add(&br->definite_uids, 0, uid);
+			seq_range_array_add(&br->definite_uids, uid);
 			score = array_append_space(&br->scores);
 			score->uid = uid;
 			score->score = hits->score(i);
@@ -1372,7 +1404,7 @@ lucene_index_search_multi(struct lucene_index *index, struct hash_table *guids,
 }
 
 int lucene_index_lookup_multi(struct lucene_index *index,
-			      struct hash_table *guids,
+			      HASH_TABLE_TYPE(wguid_result) guids,
 			      struct mail_search_arg *args, bool and_args,
 			      struct fts_multi_result *result)
 {

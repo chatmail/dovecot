@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mountpoint.h"
@@ -123,7 +123,8 @@ int mountpoint_get(const char *path, pool_t pool, struct mountpoint *point_r)
                 point_r->dev = mnt->dev;
                 point_r->block_size = st.st_blksize;
         }
-	mountpoint_iter_deinit(&iter);
+	if (mountpoint_iter_deinit(&iter) < 0 && mnt == NULL)
+		return -1;
         return mnt != NULL ? 1 : 0;
 #endif
 }
@@ -136,7 +137,11 @@ struct mountpoint_iter {
 #elif defined(MOUNTPOINT_SOLARIS) || defined(MOUNTPOINT_LINUX)
 	FILE *f;
 #elif defined(HAVE_GETMNTINFO) /* BSDs */
+#ifndef __NetBSD__
 	struct statfs *fs;
+#else
+	struct statvfs *fs;
+#endif
 	int count;
 #endif
 	struct mountpoint mnt;
@@ -286,7 +291,11 @@ const struct mountpoint *mountpoint_iter_next(struct mountpoint_iter *iter)
 	return NULL;
 #elif defined(HAVE_GETMNTINFO) /* BSDs */
 	while (iter->count > 0) {
+#ifndef __NetBSD__
 		struct statfs *fs = iter->fs;
+#else
+		struct statvfs *fs = iter->fs;
+#endif
 
 		iter->fs++;
 		iter->count--;
