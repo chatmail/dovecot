@@ -59,44 +59,31 @@ DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-LIBRARIES = $(noinst_LIBRARIES)
-ARFLAGS = cru
-libdsync_a_AR = $(AR) $(ARFLAGS)
-libdsync_a_LIBADD =
-am_libdsync_a_OBJECTS = doveadm-dsync.$(OBJEXT) dsync-brain.$(OBJEXT) \
-	dsync-brain-msgs.$(OBJEXT) dsync-brain-msgs-new.$(OBJEXT) \
-	dsync-data.$(OBJEXT) dsync-proxy.$(OBJEXT) \
-	dsync-proxy-client.$(OBJEXT) dsync-proxy-server.$(OBJEXT) \
-	dsync-proxy-server-cmd.$(OBJEXT) dsync-worker.$(OBJEXT) \
-	dsync-worker-local.$(OBJEXT)
-libdsync_a_OBJECTS = $(am_libdsync_a_OBJECTS)
-am__EXEEXT_1 = test-dsync-brain$(EXEEXT) \
-	test-dsync-brain-msgs$(EXEEXT) test-dsync-proxy$(EXEEXT) \
-	test-dsync-proxy-server-cmd$(EXEEXT)
+LTLIBRARIES = $(noinst_LTLIBRARIES)
+libdsync_la_LIBADD =
+am_libdsync_la_OBJECTS = doveadm-dsync.lo dsync-brain.lo \
+	dsync-brain-mailbox.lo dsync-brain-mailbox-tree.lo \
+	dsync-brain-mailbox-tree-sync.lo dsync-brain-mails.lo \
+	dsync-deserializer.lo dsync-mail.lo dsync-mailbox.lo \
+	dsync-mailbox-import.lo dsync-mailbox-export.lo \
+	dsync-mailbox-state.lo dsync-mailbox-tree.lo \
+	dsync-mailbox-tree-fill.lo dsync-mailbox-tree-sync.lo \
+	dsync-serializer.lo dsync-ibc.lo dsync-ibc-stream.lo \
+	dsync-ibc-pipe.lo dsync-transaction-log-scan.lo
+libdsync_la_OBJECTS = $(am_libdsync_la_OBJECTS)
+am__EXEEXT_1 = test-dsync-mailbox-tree-sync$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
-am_test_dsync_brain_OBJECTS = test-dsync-brain.$(OBJEXT) \
-	test-dsync-worker.$(OBJEXT) test-dsync-common.$(OBJEXT)
-test_dsync_brain_OBJECTS = $(am_test_dsync_brain_OBJECTS)
-am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = $(test_libs) $(am__DEPENDENCIES_1)
-am_test_dsync_brain_msgs_OBJECTS = test-dsync-brain-msgs.$(OBJEXT) \
-	test-dsync-worker.$(OBJEXT) test-dsync-common.$(OBJEXT)
-test_dsync_brain_msgs_OBJECTS = $(am_test_dsync_brain_msgs_OBJECTS)
-am_test_dsync_proxy_OBJECTS = test-dsync-proxy.$(OBJEXT) \
-	test-dsync-common.$(OBJEXT)
-test_dsync_proxy_OBJECTS = $(am_test_dsync_proxy_OBJECTS)
-am_test_dsync_proxy_server_cmd_OBJECTS =  \
-	test-dsync-proxy-server-cmd.$(OBJEXT) \
-	test-dsync-worker.$(OBJEXT) test-dsync-common.$(OBJEXT)
-test_dsync_proxy_server_cmd_OBJECTS =  \
-	$(am_test_dsync_proxy_server_cmd_OBJECTS)
+am_test_dsync_mailbox_tree_sync_OBJECTS =  \
+	test-dsync-mailbox-tree-sync.$(OBJEXT)
+test_dsync_mailbox_tree_sync_OBJECTS =  \
+	$(am_test_dsync_mailbox_tree_sync_OBJECTS)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -110,12 +97,10 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libdsync_a_SOURCES) $(test_dsync_brain_SOURCES) \
-	$(test_dsync_brain_msgs_SOURCES) $(test_dsync_proxy_SOURCES) \
-	$(test_dsync_proxy_server_cmd_SOURCES)
-DIST_SOURCES = $(libdsync_a_SOURCES) $(test_dsync_brain_SOURCES) \
-	$(test_dsync_brain_msgs_SOURCES) $(test_dsync_proxy_SOURCES) \
-	$(test_dsync_proxy_server_cmd_SOURCES)
+SOURCES = $(libdsync_la_SOURCES) \
+	$(test_dsync_mailbox_tree_sync_SOURCES)
+DIST_SOURCES = $(libdsync_la_SOURCES) \
+	$(test_dsync_mailbox_tree_sync_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -137,13 +122,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -175,6 +161,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -222,6 +209,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -300,11 +288,12 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-noinst_LIBRARIES = libdsync.a
+noinst_LTLIBRARIES = libdsync.la
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-settings \
+	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-imap \
@@ -312,60 +301,55 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-storage \
 	-I$(top_srcdir)/src/doveadm
 
-libdsync_a_SOURCES = \
+libdsync_la_SOURCES = \
 	doveadm-dsync.c \
 	dsync-brain.c \
-	dsync-brain-msgs.c \
-	dsync-brain-msgs-new.c \
-	dsync-data.c \
-	dsync-proxy.c \
-	dsync-proxy-client.c \
-	dsync-proxy-server.c \
-	dsync-proxy-server-cmd.c \
-	dsync-worker.c \
-	dsync-worker-local.c
+	dsync-brain-mailbox.c \
+	dsync-brain-mailbox-tree.c \
+	dsync-brain-mailbox-tree-sync.c \
+	dsync-brain-mails.c \
+	dsync-deserializer.c \
+	dsync-mail.c \
+	dsync-mailbox.c \
+	dsync-mailbox-import.c \
+	dsync-mailbox-export.c \
+	dsync-mailbox-state.c \
+	dsync-mailbox-tree.c \
+	dsync-mailbox-tree-fill.c \
+	dsync-mailbox-tree-sync.c \
+	dsync-serializer.c \
+	dsync-ibc.c \
+	dsync-ibc-stream.c \
+	dsync-ibc-pipe.c \
+	dsync-transaction-log-scan.c
 
 noinst_HEADERS = \
 	doveadm-dsync.h \
 	dsync-brain.h \
 	dsync-brain-private.h \
-	dsync-data.h \
-	dsync-proxy.h \
-	dsync-proxy-server.h \
-	dsync-worker.h \
-	dsync-worker-private.h \
-	test-dsync-common.h \
-	test-dsync-worker.h
+	dsync-mail.h \
+	dsync-mailbox.h \
+	dsync-mailbox-import.h \
+	dsync-mailbox-export.h \
+	dsync-mailbox-state.h \
+	dsync-mailbox-tree.h \
+	dsync-mailbox-tree-private.h \
+	dsync-serializer.h \
+	dsync-deserializer.h \
+	dsync-ibc.h \
+	dsync-ibc-private.h \
+	dsync-transaction-log-scan.h
 
 test_programs = \
-	test-dsync-brain \
-	test-dsync-brain-msgs \
-	test-dsync-proxy \
-	test-dsync-proxy-server-cmd
+	test-dsync-mailbox-tree-sync
 
 test_libs = \
 	../../lib-test/libtest.la \
-	../../lib-mail/libmail.la \
-	../../lib-imap/libimap.la \
-	../../lib-charset/libcharset.la \
 	../../lib/liblib.la
 
-test_ldadd = \
-	$(test_libs) \
-	$(LIBICONV)
-
-test_dsync_brain_SOURCES = test-dsync-brain.c test-dsync-worker.c test-dsync-common.c
-test_dsync_brain_LDADD = dsync-data.o dsync-brain.o dsync-worker.o $(test_ldadd)
-test_dsync_brain_DEPENDENCIES = dsync-data.o dsync-brain.o dsync-worker.o $(test_libs)
-test_dsync_brain_msgs_SOURCES = test-dsync-brain-msgs.c test-dsync-worker.c test-dsync-common.c
-test_dsync_brain_msgs_LDADD = dsync-data.o dsync-brain-msgs.o dsync-worker.o $(test_ldadd)
-test_dsync_brain_msgs_DEPENDENCIES = dsync-data.o dsync-brain-msgs.o dsync-worker.o $(test_libs)
-test_dsync_proxy_SOURCES = test-dsync-proxy.c test-dsync-common.c
-test_dsync_proxy_LDADD = dsync-proxy.o dsync-data.o $(test_ldadd)
-test_dsync_proxy_DEPENDENCIES = dsync-proxy.o dsync-data.o $(test_libs)
-test_dsync_proxy_server_cmd_SOURCES = test-dsync-proxy-server-cmd.c test-dsync-worker.c test-dsync-common.c
-test_dsync_proxy_server_cmd_LDADD = dsync-worker.o dsync-proxy.o dsync-proxy-server-cmd.o dsync-data.o $(test_ldadd)
-test_dsync_proxy_server_cmd_DEPENDENCIES = dsync-worker.o dsync-proxy.o dsync-proxy-server-cmd.o dsync-data.o $(test_libs)
+test_dsync_mailbox_tree_sync_SOURCES = test-dsync-mailbox-tree-sync.c
+test_dsync_mailbox_tree_sync_LDADD = dsync-mailbox-tree-sync.lo dsync-mailbox-tree.lo $(test_libs)
+test_dsync_mailbox_tree_sync_DEPENDENCIES = $(noinst_LTLIBRARIES) $(test_libs)
 all: all-am
 
 .SUFFIXES:
@@ -401,12 +385,16 @@ $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
 
-clean-noinstLIBRARIES:
-	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
-libdsync.a: $(libdsync_a_OBJECTS) $(libdsync_a_DEPENDENCIES) $(EXTRA_libdsync_a_DEPENDENCIES) 
-	-rm -f libdsync.a
-	$(libdsync_a_AR) libdsync.a $(libdsync_a_OBJECTS) $(libdsync_a_LIBADD)
-	$(RANLIB) libdsync.a
+clean-noinstLTLIBRARIES:
+	-test -z "$(noinst_LTLIBRARIES)" || rm -f $(noinst_LTLIBRARIES)
+	@list='$(noinst_LTLIBRARIES)'; for p in $$list; do \
+	  dir="`echo $$p | sed -e 's|/[^/]*$$||'`"; \
+	  test "$$dir" != "$$p" || dir=.; \
+	  echo "rm -f \"$${dir}/so_locations\""; \
+	  rm -f "$${dir}/so_locations"; \
+	done
+libdsync.la: $(libdsync_la_OBJECTS) $(libdsync_la_DEPENDENCIES) $(EXTRA_libdsync_la_DEPENDENCIES) 
+	$(LINK)  $(libdsync_la_OBJECTS) $(libdsync_la_LIBADD) $(LIBS)
 
 clean-noinstPROGRAMS:
 	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
@@ -416,18 +404,9 @@ clean-noinstPROGRAMS:
 	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
 	echo " rm -f" $$list; \
 	rm -f $$list
-test-dsync-brain$(EXEEXT): $(test_dsync_brain_OBJECTS) $(test_dsync_brain_DEPENDENCIES) $(EXTRA_test_dsync_brain_DEPENDENCIES) 
-	@rm -f test-dsync-brain$(EXEEXT)
-	$(LINK) $(test_dsync_brain_OBJECTS) $(test_dsync_brain_LDADD) $(LIBS)
-test-dsync-brain-msgs$(EXEEXT): $(test_dsync_brain_msgs_OBJECTS) $(test_dsync_brain_msgs_DEPENDENCIES) $(EXTRA_test_dsync_brain_msgs_DEPENDENCIES) 
-	@rm -f test-dsync-brain-msgs$(EXEEXT)
-	$(LINK) $(test_dsync_brain_msgs_OBJECTS) $(test_dsync_brain_msgs_LDADD) $(LIBS)
-test-dsync-proxy$(EXEEXT): $(test_dsync_proxy_OBJECTS) $(test_dsync_proxy_DEPENDENCIES) $(EXTRA_test_dsync_proxy_DEPENDENCIES) 
-	@rm -f test-dsync-proxy$(EXEEXT)
-	$(LINK) $(test_dsync_proxy_OBJECTS) $(test_dsync_proxy_LDADD) $(LIBS)
-test-dsync-proxy-server-cmd$(EXEEXT): $(test_dsync_proxy_server_cmd_OBJECTS) $(test_dsync_proxy_server_cmd_DEPENDENCIES) $(EXTRA_test_dsync_proxy_server_cmd_DEPENDENCIES) 
-	@rm -f test-dsync-proxy-server-cmd$(EXEEXT)
-	$(LINK) $(test_dsync_proxy_server_cmd_OBJECTS) $(test_dsync_proxy_server_cmd_LDADD) $(LIBS)
+test-dsync-mailbox-tree-sync$(EXEEXT): $(test_dsync_mailbox_tree_sync_OBJECTS) $(test_dsync_mailbox_tree_sync_DEPENDENCIES) $(EXTRA_test_dsync_mailbox_tree_sync_DEPENDENCIES) 
+	@rm -f test-dsync-mailbox-tree-sync$(EXEEXT)
+	$(LINK) $(test_dsync_mailbox_tree_sync_OBJECTS) $(test_dsync_mailbox_tree_sync_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -435,23 +414,27 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dsync.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-brain-msgs-new.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-brain-msgs.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-brain.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-data.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-proxy-client.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-proxy-server-cmd.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-proxy-server.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-proxy.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-worker-local.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-worker.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dsync-brain-msgs.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dsync-brain.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dsync-common.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dsync-proxy-server-cmd.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dsync-proxy.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dsync-worker.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dsync.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-brain-mailbox-tree-sync.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-brain-mailbox-tree.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-brain-mailbox.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-brain-mails.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-brain.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-deserializer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-ibc-pipe.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-ibc-stream.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-ibc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-mail.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-mailbox-export.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-mailbox-import.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-mailbox-state.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-mailbox-tree-fill.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-mailbox-tree-sync.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-mailbox-tree.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-mailbox.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-serializer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsync-transaction-log-scan.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dsync-mailbox-tree-sync.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -564,7 +547,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LIBRARIES) $(PROGRAMS) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
 install: install-am
 install-exec: install-exec-am
@@ -598,7 +581,7 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-am
 
-clean-am: clean-generic clean-libtool clean-noinstLIBRARIES \
+clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
@@ -670,8 +653,8 @@ uninstall-am:
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-noinstLIBRARIES clean-noinstPROGRAMS ctags \
-	distclean distclean-compile distclean-generic \
+	clean-libtool clean-noinstLTLIBRARIES clean-noinstPROGRAMS \
+	ctags distclean distclean-compile distclean-generic \
 	distclean-libtool distclean-tags distdir dvi dvi-am html \
 	html-am info info-am install install-am install-data \
 	install-data-am install-dvi install-dvi-am install-exec \

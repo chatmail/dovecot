@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -6,6 +6,7 @@
 #include "hash.h"
 #include "strescape.h"
 #include "unichar.h"
+#include "http-url.h"
 #include "mail-storage-private.h"
 #include "mailbox-list-private.h"
 #include "mail-search.h"
@@ -44,7 +45,7 @@ struct solr_fts_backend_update_context {
 	uint32_t prev_uid;
 	string_t *cmd, *cur_value, *cur_value2;
 	string_t *cmd_expunge;
-	ARRAY_DEFINE(fields, struct solr_fts_field);
+	ARRAY(struct solr_fts_field) fields;
 
 	uint32_t last_indexed_uid;
 
@@ -54,8 +55,6 @@ struct solr_fts_backend_update_context {
 	unsigned int expunges:1;
 	unsigned int truncate_header:1;
 };
-
-static struct solr_connection *solr_conn = NULL;
 
 static bool is_valid_xml_char(unichar_t chr)
 {
@@ -142,7 +141,7 @@ static void xml_encode(string_t *dest, const char *str)
 static void solr_quote_http(string_t *dest, const char *str)
 {
 	str_append(dest, "%22");
-	solr_connection_http_escape(solr_conn, dest, str);
+	http_url_escape_param(dest, str);
 	str_append(dest, "%22");
 }
 
@@ -165,8 +164,9 @@ fts_backend_solr_init(struct fts_backend *_backend, const char **error_r)
 		return -1;
 	}
 	if (solr_conn == NULL) {
-		solr_conn = solr_connection_init(fuser->set.url,
-						 fuser->set.debug);
+		if (solr_connection_init(fuser->set.url, fuser->set.debug,
+					 &solr_conn, error_r) < 0)
+			return -1;
 	}
 	return 0;
 }
@@ -239,7 +239,7 @@ fts_backend_solr_get_last_uid(struct fts_backend *_backend,
 	if (get_last_uid_fallback(_backend, box, last_uid_r) < 0)
 		return -1;
 
-	(void)fts_index_set_last_uid(box, *last_uid_r);
+	fts_index_set_last_uid(box, *last_uid_r);
 	return 0;
 }
 
@@ -361,7 +361,7 @@ fts_backend_solr_update_deinit(struct fts_backend_update_context *_ctx)
 		   visible to the following search */
 		if (ctx->expunges)
 			fts_backend_solr_expunge_flush(ctx);
-		str = t_strdup_printf("<commit waitSearcher=\"%s\"/>",
+		str = t_strdup_printf("<commit softCommit=\"true\" waitSearcher=\"%s\"/>",
 				      ctx->documents_added ? "true" : "false");
 		if (solr_connection_post(solr_conn, str) < 0)
 			ret = -1;
@@ -389,7 +389,7 @@ fts_backend_solr_update_set_mailbox(struct fts_backend_update_context *_ctx,
 	const char *box_guid;
 
 	if (ctx->prev_uid != 0) {
-		(void)fts_index_set_last_uid(ctx->cur_box, ctx->prev_uid);
+		fts_index_set_last_uid(ctx->cur_box, ctx->prev_uid);
 		ctx->prev_uid = 0;
 	}
 
@@ -589,7 +589,7 @@ static int fts_backend_solr_rescan(struct fts_backend *backend)
 		     (MAILBOX_NONEXISTENT | MAILBOX_NOSELECT)) != 0)
 			continue;
 
-		box = mailbox_alloc(info->ns->list, info->name, 0);
+		box = mailbox_alloc(info->ns->list, info->vname, 0);
 		if (mailbox_open(box) == 0) {
 			if (fts_index_set_last_uid(box, 0) < 0)
 				ret = -1;
@@ -813,8 +813,8 @@ solr_search_multi(struct fts_backend *_backend, string_t *str,
 {
 	struct solr_result **solr_results;
 	struct fts_result *fts_result;
-	ARRAY_DEFINE(fts_results, struct fts_result);
-	struct hash_table *mailboxes;
+	ARRAY(struct fts_result) fts_results;
+	HASH_TABLE(char *, struct mailbox *) mailboxes;
 	struct mailbox *box;
 	const char *box_guid;
 	unsigned int i, len;
@@ -827,8 +827,7 @@ solr_search_multi(struct fts_backend *_backend, string_t *str,
 	else
 		str_append(str, "%22%22");
 
-	mailboxes = hash_table_create(default_pool, default_pool, 0,
-				      str_hash, (hash_cmp_callback_t *)strcmp);
+	hash_table_create(&mailboxes, default_pool, 0, str_hash, strcmp);
 	str_append(str, "%2B(");
 	len = str_len(str);
 	for (i = 0; boxes[i] != NULL; i++) {
@@ -863,7 +862,7 @@ solr_search_multi(struct fts_backend *_backend, string_t *str,
 		fts_result->scores = solr_results[i]->scores;
 		fts_result->scores_sorted = TRUE;
 	}
-	(void)array_append_space(&fts_results);
+	array_append_zero(&fts_results);
 	result->box_results = array_idx_modifiable(&fts_results, 0);
 	hash_table_destroy(&mailboxes);
 	return 0;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "restrict-access.h"
@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
 	const char *error;
 
 	master_service = master_service_init("ipc", service_flags,
-					     &argc, &argv, NULL);
+					     &argc, &argv, "");
 	if (master_getopt(master_service) > 0)
 		return FATAL_DEFAULT;
 	if (master_service_settings_read_simple(master_service,
@@ -48,8 +48,8 @@ int main(int argc, char *argv[])
 
 	restrict_access_by_env(NULL, FALSE);
 	restrict_access_allow_coredumps(TRUE);
-	master_service_init_finish(master_service);
 	ipc_groups_init();
+	master_service_init_finish(master_service);
 
 	master_service_run(master_service, client_connected);
 

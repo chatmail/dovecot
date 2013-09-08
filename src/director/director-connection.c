@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 /*
    Handshaking:
@@ -31,7 +31,7 @@
 #include "lib.h"
 #include "ioloop.h"
 #include "array.h"
-#include "network.h"
+#include "net.h"
 #include "istream.h"
 #include "ostream.h"
 #include "str.h"
@@ -73,6 +73,7 @@
 #define DIRECTOR_WAIT_DISCONNECT_SECS 10
 #define DIRECTOR_HANDSHAKE_WARN_SECS 29
 #define DIRECTOR_HANDSHAKE_BYTES_LOG_MIN_SECS (60*30)
+#define DIRECTOR_MAX_SYNC_SEQ_DUPLICATES 4
 
 #if DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS <= DIRECTOR_CONNECTION_PING_TIMEOUT_MSECS
 #  error DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS is too low
@@ -119,12 +120,14 @@ struct director_connection {
 	unsigned int synced:1;
 	unsigned int wrong_host:1;
 	unsigned int verifying_left:1;
+	unsigned int users_unsorted:1;
 };
 
 static void director_connection_disconnected(struct director_connection **conn);
 static void director_connection_reconnect(struct director_connection **conn,
 					  const char *reason);
-static void director_connection_log_disconnect(struct director_connection *conn);
+static void
+director_connection_log_disconnect(struct director_connection *conn, int err);
 
 static void ATTR_FORMAT(2, 3)
 director_cmd_error(struct director_connection *conn, const char *fmt, ...)
@@ -175,7 +178,7 @@ director_connection_set_ping_timeout(struct director_connection *conn)
 
 static void director_connection_wait_timeout(struct director_connection *conn)
 {
-	director_connection_log_disconnect(conn);
+	director_connection_log_disconnect(conn, ETIMEDOUT);
 	director_connection_deinit(&conn,
 		"Timeout waiting for disconnect after CONNECT");
 }
@@ -191,7 +194,6 @@ static void director_connection_send_connect(struct director_connection *conn,
 	connect_str = t_strdup_printf("CONNECT\t%s\t%u\n",
 				      net_ip2addr(&host->ip), host->port);
 	director_connection_send(conn, connect_str);
-	(void)o_stream_flush(conn->output);
 	o_stream_uncork(conn->output);
 
 	/* wait for a while for the remote to disconnect, so it will hopefully
@@ -215,7 +217,7 @@ static void director_connection_assigned(struct director_connection *conn)
 		dir->sync_seq++;
 		director_set_ring_unsynced(dir);
 		director_sync_send(dir, dir->self_host, dir->sync_seq,
-				   DIRECTOR_VERSION_MINOR);
+				   DIRECTOR_VERSION_MINOR, ioloop_time);
 	}
 	director_connection_set_ping_timeout(conn);
 }
@@ -475,7 +477,24 @@ director_user_refresh(struct director_connection *conn,
 		dir_debug("user refresh: %u set weak", username_hash);
 		user->weak = TRUE;
 		ret = TRUE;
-	} else if (user->host != host) {
+	} else if (weak) {
+		dir_debug("user refresh: %u weak update to %s ignored, "
+			  "we recently changed it to %s",
+			  username_hash, net_ip2addr(&host->ip),
+			  net_ip2addr(&user->host->ip));
+		host = user->host;
+		ret = TRUE;
+	} else if (user->host == host) {
+		/* update to the same host */
+	} else if (user_directory_user_is_near_expiring(dir->users, user)) {
+		/* host conflict for a user that is already near expiring. we can
+		   assume that the other director had already dropped this user
+		   and we should have as well. use the new host. */
+		dir_debug("user refresh: %u is nearly expired, "
+			  "replacing host %s with %s", username_hash,
+			  net_ip2addr(&user->host->ip), net_ip2addr(&host->ip));
+		ret = TRUE;
+	} else {
 		/* non-weak user received a non-weak update with
 		   conflicting host. this shouldn't happen. */
 		string_t *str = t_str_new(128);
@@ -559,7 +578,12 @@ director_handshake_cmd_user(struct director_connection *conn,
 		return FALSE;
 	}
 
-	director_user_refresh(conn, username_hash, host, timestamp, weak, &user);
+	(void)director_user_refresh(conn, username_hash, host,
+				    timestamp, weak, &user);
+	if (user->timestamp < timestamp) {
+		conn->users_unsorted = TRUE;
+		user->timestamp = timestamp;
+	}
 	return TRUE;
 }
 
@@ -708,11 +732,11 @@ director_cmd_is_seen(struct director_connection *conn,
 		   ourself. */
 		*host_r = NULL;
 	} else {
+		*host_r = host;
 		if (seq <= host->last_seq) {
 			/* already seen this */
 			return 1;
 		}
-		*host_r = host;
 		host->last_seq = seq;
 	}
 	return 0;
@@ -728,7 +752,7 @@ director_cmd_user_weak(struct director_connection *conn,
 	struct mail_host *host;
 	struct user *user;
 	struct director_host *src_host = conn->host;
-	bool weak = TRUE;
+	bool weak = TRUE, weak_forward = FALSE;
 	int ret;
 
 	/* note that unlike other commands we don't want to just ignore
@@ -749,15 +773,28 @@ director_cmd_user_weak(struct director_connection *conn,
 		return TRUE;
 	}
 
-	if (ret > 0) {
-		/* The entire ring has seen this USER-WEAK.
-		   make it non-weak now. */
-		weak = FALSE;
+	if (ret == 0)
+		;
+	else if (dir_host == conn->dir->self_host) {
+		/* We originated this USER-WEAK request. The entire ring has seen
+		   it and there weren't any conflicts. Make the user non-weak. */
+		dir_debug("user refresh: %u Our USER-WEAK seen by the entire ring",
+			  username_hash);
 		src_host = conn->dir->self_host;
+		weak = FALSE;
+	} else {
+		/* The original USER-WEAK sender will send a new non-weak USER
+		   update saying what really happened. We'll still need to forward
+		   this around the ring to the origin so it also knows it has
+		   travelled through the ring. */
+		dir_debug("user refresh: %u Remote USER-WEAK from %s seen by the entire ring, ignoring",
+			  username_hash, net_ip2addr(&dir_host->ip));
+		weak_forward = TRUE;
 	}
 
 	if (director_user_refresh(conn, username_hash,
-				  host, ioloop_time, weak, &user)) {
+				  host, ioloop_time, weak, &user) ||
+	    weak_forward) {
 		if (!user->weak)
 			director_update_user(conn->dir, src_host, user);
 		else {
@@ -768,7 +805,7 @@ director_cmd_user_weak(struct director_connection *conn,
 	return TRUE;
 }
 
-static bool
+static bool ATTR_NULL(3)
 director_cmd_host_int(struct director_connection *conn, const char *const *args,
 		      struct director_host *dir_host)
 {
@@ -944,6 +981,12 @@ static bool director_handshake_cmd_done(struct director_connection *conn)
 	unsigned int handshake_secs = time(NULL) - conn->created;
 	string_t *str;
 
+	if (conn->users_unsorted && conn->user_iter == NULL) {
+		/* we sent our user list before receiving remote's */
+		conn->users_unsorted = FALSE;
+		user_directory_sort(conn->dir->users);
+	}
+
 	if (handshake_secs >= DIRECTOR_HANDSHAKE_WARN_SECS || director_debug) {
 		str = t_str_new(128);
 		str_printfa(str, "director(%s): Handshake took %u secs, "
@@ -1042,10 +1085,11 @@ director_connection_handle_handshake(struct director_connection *conn,
 	return 0;
 }
 
-static void
+static bool
 director_connection_sync_host(struct director_connection *conn,
 			      struct director_host *host,
-			      uint32_t seq, unsigned int minor_version)
+			      uint32_t seq, unsigned int minor_version,
+			      unsigned int timestamp)
 {
 	struct director *dir = conn->dir;
 
@@ -1057,7 +1101,7 @@ director_connection_sync_host(struct director_connection *conn,
 	if (host->self) {
 		if (dir->sync_seq != seq) {
 			/* stale SYNC event */
-			return;
+			return FALSE;
 		}
 		/* sync_seq increases when we get disconnected, so we must be
 		   successfully connected to both directions */
@@ -1075,10 +1119,28 @@ director_connection_sync_host(struct director_connection *conn,
 				  conn->name, seq);
 			director_set_ring_synced(dir);
 		}
-	} else if (dir->right != NULL) {
-		/* forward it to the connection on right */
-		director_sync_send(dir, host, seq, minor_version);
+	} else {
+		if (seq < host->last_sync_seq) {
+			/* stale SYNC event */
+			return FALSE;
+		} else if (host->last_sync_seq != seq ||
+			   timestamp < host->last_sync_timestamp) {
+			host->last_sync_seq = seq;
+			host->last_sync_timestamp = timestamp;
+			host->last_sync_seq_counter = 1;
+		} else if (++host->last_sync_seq_counter >
+			   DIRECTOR_MAX_SYNC_SEQ_DUPLICATES) {
+			/* we've received this too many times already */
+			return FALSE;
+		}
+
+		if (dir->right != NULL) {
+			/* forward it to the connection on right */
+			director_sync_send(dir, host, seq, minor_version,
+					   timestamp);
+		}
 	}
+	return TRUE;
 }
 
 static bool director_connection_sync(struct director_connection *conn,
@@ -1087,7 +1149,7 @@ static bool director_connection_sync(struct director_connection *conn,
 	struct director *dir = conn->dir;
 	struct director_host *host;
 	struct ip_addr ip;
-	unsigned int port, seq, minor_version = 0;
+	unsigned int port, seq, minor_version = 0, timestamp = ioloop_time;
 
 	if (str_array_length(args) < 3 ||
 	    !director_args_parse_ip_port(conn, args, &ip, &port) ||
@@ -1095,19 +1157,26 @@ static bool director_connection_sync(struct director_connection *conn,
 		director_cmd_error(conn, "Invalid parameters");
 		return FALSE;
 	}
-	if (args[3] != NULL)
+	if (args[3] != NULL) {
 		minor_version = atoi(args[3]);
+		if (args[4] != NULL && str_to_uint(args[4], &timestamp) < 0) {
+			director_cmd_error(conn, "Invalid parameters");
+			return FALSE;
+		}
+	}
 
 	/* find the originating director. if we don't see it, it was already
 	   removed and we can ignore this sync. */
 	host = director_host_lookup(dir, &ip, port);
 	if (host != NULL) {
-		director_connection_sync_host(conn, host, seq,
-					      minor_version);
+		if (!director_connection_sync_host(conn, host, seq,
+						   minor_version, timestamp))
+			return TRUE;
 	}
 
-	if (host == NULL || !host->self)
-		director_resend_sync(dir);
+	if ((host == NULL || !host->self) &&
+	    dir->self_host->last_sync_timestamp != ioloop_time)
+		(void)director_resend_sync(dir);
 	return TRUE;
 }
 
@@ -1271,7 +1340,7 @@ director_connection_handle_line(struct director_connection *conn,
 }
 
 static void
-director_connection_log_disconnect(struct director_connection *conn)
+director_connection_log_disconnect(struct director_connection *conn, int err)
 {
 	unsigned int secs = ioloop_time - conn->created;
 	string_t *str = t_str_new(128);
@@ -1287,8 +1356,10 @@ director_connection_log_disconnect(struct director_connection *conn)
 
 	str_printfa(str, "Director %s disconnected: ", conn->name);
 	str_append(str, "Connection closed");
-	if (errno != 0 && errno != EPIPE)
+	if (err != 0 && err != EPIPE) {
+		errno = err;
 		str_printfa(str, ": %m");
+	}
 
 	str_printfa(str, " (connected %u secs, "
 		    "in=%"PRIuUOFF_T" out=%"PRIuUOFF_T,
@@ -1312,7 +1383,7 @@ static void director_connection_input(struct director_connection *conn)
 		return;
 	case -1:
 		/* disconnected */
-		director_connection_log_disconnect(conn);
+		director_connection_log_disconnect(conn, conn->input->stream_errno);
 		director_connection_disconnected(&conn);
 		return;
 	case -2:
@@ -1327,10 +1398,7 @@ static void director_connection_input(struct director_connection *conn)
 		/* just read everything the remote sends, and wait for it
 		   to disconnect. we mainly just want the remote to read the
 		   CONNECT we sent it. */
-		size_t size;
-
-		(void)i_stream_get_data(conn->input, &size);
-		i_stream_skip(conn->input, size);
+		i_stream_skip(conn->input, i_stream_get_data_size(conn->input));
 		return;
 	}
 
@@ -1407,6 +1475,12 @@ static int director_connection_send_users(struct director_connection *conn)
 	user_directory_iter_deinit(&conn->user_iter);
 	director_connection_send(conn, "DONE\n");
 
+	if (conn->users_unsorted && conn->handshake_received) {
+		/* we received remote's list of users before sending ours */
+		conn->users_unsorted = FALSE;
+		user_directory_sort(conn->dir->users);
+	}
+
 	ret = o_stream_flush(conn->output);
 	timeout_reset(conn->to_ping);
 	return ret;
@@ -1441,6 +1515,7 @@ director_connection_init_common(struct director *dir, int fd)
 	conn->dir = dir;
 	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE, FALSE);
 	conn->output = o_stream_create_fd(conn->fd, MAX_OUTBUF_SIZE, FALSE);
+	o_stream_set_no_error_handling(conn->output, TRUE);
 	conn->to_ping = timeout_add(DIRECTOR_CONNECTION_ME_TIMEOUT_MSECS,
 				    director_connection_init_timeout, conn);
 	array_append(&dir->connections, &conn, 1);

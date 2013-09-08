@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -121,7 +121,7 @@ int director_connect_host(struct director *dir, struct director_host *host)
 	   while we're still trying to connect to it */
 	host->last_network_failure = 0;
 
-	director_connection_init_out(dir, fd, host);
+	(void)director_connection_init_out(dir, fd, host);
 	return 0;
 }
 
@@ -302,7 +302,8 @@ void director_set_ring_synced(struct director *dir)
 }
 
 void director_sync_send(struct director *dir, struct director_host *host,
-			uint32_t seq, unsigned int minor_version)
+			uint32_t seq, unsigned int minor_version,
+			unsigned int timestamp)
 {
 	string_t *str;
 
@@ -311,8 +312,8 @@ void director_sync_send(struct director *dir, struct director_host *host,
 		    net_ip2addr(&host->ip), host->port, seq);
 	if (minor_version > 0 &&
 	    director_connection_get_minor_version(dir->right) > 0) {
-		/* only minor_version>0 supports this parameter */
-		str_printfa(str, "\t%u", minor_version);
+		/* only minor_version>0 supports extra parameters */
+		str_printfa(str, "\t%u\t%u", minor_version, timestamp);
 	}
 	str_append_c(str, '\n');
 	director_connection_send(dir->right, str_c(str));
@@ -329,8 +330,9 @@ bool director_resend_sync(struct director *dir)
 {
 	if (!dir->ring_synced && dir->left != NULL && dir->right != NULL) {
 		/* send a new SYNC in case the previous one got dropped */
+		dir->self_host->last_sync_timestamp = ioloop_time;
 		director_sync_send(dir, dir->self_host, dir->sync_seq,
-				   DIRECTOR_VERSION_MINOR);
+				   DIRECTOR_VERSION_MINOR, ioloop_time);
 		if (dir->to_sync != NULL)
 			timeout_reset(dir->to_sync);
 		return TRUE;
@@ -393,7 +395,7 @@ static void director_sync(struct director *dir)
 		director_connection_set_synced(dir->left, FALSE);
 	director_connection_set_synced(dir->right, FALSE);
 	director_sync_send(dir, dir->self_host, dir->sync_seq,
-			   DIRECTOR_VERSION_MINOR);
+			   DIRECTOR_VERSION_MINOR, ioloop_time);
 }
 
 void director_sync_freeze(struct director *dir)

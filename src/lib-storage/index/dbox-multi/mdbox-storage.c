@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -52,7 +52,7 @@ mdbox_storage_create(struct mail_storage *_storage, struct mail_namespace *ns,
 	_storage->unique_root_dir =
 		p_strdup(_storage->pool, ns->list->set.root_dir);
 
-	dir = mailbox_list_get_path(ns->list, NULL, MAILBOX_LIST_PATH_TYPE_DIR);
+	dir = mailbox_list_get_root_forced(ns->list, MAILBOX_LIST_PATH_TYPE_DIR);
 	storage->storage_dir = p_strconcat(_storage->pool, dir,
 					   "/"MDBOX_GLOBAL_DIR_NAME, NULL);
 	storage->alt_storage_dir = p_strconcat(_storage->pool,
@@ -156,8 +156,7 @@ mdbox_mailbox_alloc(struct mail_storage *storage, struct mailbox_list *list,
 	mbox->box.list = list;
 	mbox->box.mail_vfuncs = &mdbox_mail_vfuncs;
 
-	index_storage_mailbox_alloc(&mbox->box, vname,
-				    flags, DBOX_INDEX_PREFIX);
+	index_storage_mailbox_alloc(&mbox->box, vname, flags, MAIL_INDEX_PREFIX);
 
 	ibox = INDEX_STORAGE_CONTEXT(&mbox->box);
 	ibox->index_flags |= MAIL_INDEX_OPEN_FLAG_KEEP_BACKUPS |
@@ -198,10 +197,12 @@ static void mdbox_mailbox_close(struct mailbox *box)
 }
 
 int mdbox_read_header(struct mdbox_mailbox *mbox,
-		      struct mdbox_index_header *hdr)
+		      struct mdbox_index_header *hdr, bool *need_resize_r)
 {
 	const void *data;
 	size_t data_size;
+
+	i_assert(mbox->box.opened);
 
 	mail_index_get_header_ext(mbox->box.view, mbox->hdr_ext_id,
 				  &data, &data_size);
@@ -215,6 +216,7 @@ int mdbox_read_header(struct mdbox_mailbox *mbox,
 	}
 	memset(hdr, 0, sizeof(*hdr));
 	memcpy(hdr, data, I_MIN(data_size, sizeof(*hdr)));
+	*need_resize_r = data_size < sizeof(*hdr);
 	return 0;
 }
 
@@ -223,9 +225,12 @@ void mdbox_update_header(struct mdbox_mailbox *mbox,
 			 const struct mailbox_update *update)
 {
 	struct mdbox_index_header hdr, new_hdr;
+	bool need_resize;
 
-	if (mdbox_read_header(mbox, &hdr) < 0)
+	if (mdbox_read_header(mbox, &hdr, &need_resize) < 0) {
 		memset(&hdr, 0, sizeof(hdr));
+		need_resize = TRUE;
+	}
 
 	new_hdr = hdr;
 
@@ -238,15 +243,20 @@ void mdbox_update_header(struct mdbox_mailbox *mbox,
 
 	new_hdr.map_uid_validity =
 		mdbox_map_get_uid_validity(mbox->storage->map);
+	if (need_resize) {
+		mail_index_ext_resize_hdr(trans, mbox->hdr_ext_id,
+					  sizeof(new_hdr));
+	}
 	if (memcmp(&hdr, &new_hdr, sizeof(hdr)) != 0) {
 		mail_index_update_header_ext(trans, mbox->hdr_ext_id, 0,
 					     &new_hdr, sizeof(new_hdr));
 	}
 }
 
-static int mdbox_write_index_header(struct mailbox *box,
-				    const struct mailbox_update *update,
-				    struct mail_index_transaction *trans)
+static int ATTR_NULL(2, 3)
+mdbox_write_index_header(struct mailbox *box,
+			 const struct mailbox_update *update,
+			 struct mail_index_transaction *trans)
 {
 	struct mdbox_mailbox *mbox = (struct mdbox_mailbox *)box;
 	struct mail_index_transaction *new_trans = NULL;
@@ -273,10 +283,6 @@ static int mdbox_write_index_header(struct mailbox *box,
 	}
 
 	if (hdr->uid_validity != uid_validity) {
-		if (hdr->uid_validity != 0) {
-			/* UIDVALIDITY change requires index to be reset */
-			mail_index_reset(trans);
-		}
 		mail_index_update_header(trans,
 			offsetof(struct mail_index_header, uid_validity),
 			&uid_validity, sizeof(uid_validity), TRUE);
@@ -306,7 +312,7 @@ static int mdbox_write_index_header(struct mailbox *box,
 	mdbox_update_header(mbox, trans, update);
 	if (new_trans != NULL) {
 		if (mail_index_transaction_commit(&new_trans) < 0) {
-			mail_storage_set_index_error(box);
+			mailbox_set_index_error(box);
 			return -1;
 		}
 	}
@@ -367,14 +373,15 @@ static int
 mdbox_mailbox_get_guid(struct mdbox_mailbox *mbox, guid_128_t guid_r)
 {
 	struct mdbox_index_header hdr;
+	bool need_resize;
 
-	if (mdbox_read_header(mbox, &hdr) < 0)
+	if (mdbox_read_header(mbox, &hdr, &need_resize) < 0)
 		memset(&hdr, 0, sizeof(hdr));
 
 	if (guid_128_is_empty(hdr.mailbox_guid)) {
 		/* regenerate it */
 		if (mdbox_write_index_header(&mbox->box, NULL, NULL) < 0 ||
-		    mdbox_read_header(mbox, &hdr) < 0)
+		    mdbox_read_header(mbox, &hdr, &need_resize) < 0)
 			return -1;
 	}
 	memcpy(guid_r, hdr.mailbox_guid, GUID_128_SIZE);
@@ -404,14 +411,17 @@ mdbox_mailbox_update(struct mailbox *box, const struct mailbox_update *update)
 		if (mailbox_open(box) < 0)
 			return -1;
 	}
-	if (update->cache_updates != NULL)
-		index_storage_mailbox_update_cache(box, update);
-	return mdbox_write_index_header(box, update, NULL);
+	if (mdbox_write_index_header(box, update, NULL) < 0)
+		return -1;
+	return index_storage_mailbox_update_common(box, update);
 }
 
 struct mail_storage mdbox_storage = {
 	.name = MDBOX_STORAGE_NAME,
-	.class_flags = MAIL_STORAGE_CLASS_FLAG_UNIQUE_ROOT,
+	.class_flags = MAIL_STORAGE_CLASS_FLAG_UNIQUE_ROOT |
+		MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_GUIDS |
+		MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_SAVE_GUIDS |
+		MAIL_STORAGE_CLASS_FLAG_BINARY_DATA,
 
 	.v = {
                 mdbox_get_setting_parser_info,
@@ -441,6 +451,11 @@ struct mailbox mdbox_mailbox = {
 		index_storage_get_status,
 		mdbox_mailbox_get_metadata,
 		index_storage_set_subscribed,
+		index_storage_attribute_set,
+		index_storage_attribute_get,
+		index_storage_attribute_iter_init,
+		index_storage_attribute_iter_next,
+		index_storage_attribute_iter_deinit,
 		index_storage_list_index_has_changed,
 		index_storage_list_index_update_sync,
 		mdbox_storage_sync_init,

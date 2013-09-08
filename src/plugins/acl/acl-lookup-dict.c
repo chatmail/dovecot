@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -35,17 +35,16 @@ struct acl_lookup_dict_iter {
 struct acl_lookup_dict *acl_lookup_dict_init(struct mail_user *user)
 {
 	struct acl_lookup_dict *dict;
-	const char *uri;
+	const char *uri, *error;
 
 	dict = i_new(struct acl_lookup_dict, 1);
 	dict->user = user;
 
 	uri = mail_user_plugin_getenv(user, "acl_shared_dict");
 	if (uri != NULL) {
-		dict->dict = dict_init(uri, DICT_DATA_TYPE_STRING, "",
-				       user->set->base_dir);
-		if (dict->dict == NULL)
-			i_error("acl: dict_init(%s) failed", uri);
+		if (dict_init(uri, DICT_DATA_TYPE_STRING, "",
+			      user->set->base_dir, &dict->dict, &error) < 0)
+			i_error("acl: dict_init(%s) failed: %s", uri, error);
 	} else if (user->mail_debug) {
 		i_debug("acl: No acl_shared_dict setting - "
 			"shared mailbox listing is disabled");
@@ -111,7 +110,8 @@ static int acl_lookup_dict_rebuild_add_backend(struct mail_namespace *ns,
 	string_t *id;
 	int ret, ret2 = 0;
 
-	if ((ns->flags & NAMESPACE_FLAG_NOACL) != 0 || ns->owner == NULL)
+	if ((ns->flags & NAMESPACE_FLAG_NOACL) != 0 || ns->owner == NULL ||
+	    ACL_LIST_CONTEXT(ns->list) == NULL)
 		return 0;
 
 	id = t_str_new(128);

@@ -44,6 +44,7 @@ wikifiles = ACL.txt \
 	Design.AuthProtocol.txt \
 	Design.Buffers.txt \
 	Design.Code.txt \
+	Design.DoveadmProtocol.txt \
 	Design.Dsync.txt \
 	Design.Indexes.Cache.txt \
 	Design.Indexes.MailIndexApi.txt \
@@ -91,6 +92,7 @@ wikifiles = ACL.txt \
 	LDA.Qmail.txt \
 	LDA.Sendmail.txt \
 	LDA.txt \
+	LMTP.Exim.txt \
 	LMTP.txt \
 	Logging.txt \
 	LoginProcess.txt \
@@ -110,6 +112,7 @@ wikifiles = ACL.txt \
 	MailboxFormat.mbox.txt \
 	MailboxFormat.mbx.txt \
 	MailboxFormat.txt \
+	MailboxSettings.txt \
 	MboxChildFolders.txt \
 	MboxLocking.txt \
 	MboxProblems.txt \
@@ -117,6 +120,7 @@ wikifiles = ACL.txt \
 	Migration.Courier.txt \
 	Migration.Cyrus.txt \
 	Migration.Dsync.txt \
+	Migration.Gmail.txt \
 	Migration.Linuxconf.txt \
 	Migration.MailFormat.txt \
 	Migration.Online.txt \
@@ -176,6 +180,7 @@ wikifiles = ACL.txt \
 	Plugins.MailboxAlias.txt \
 	Plugins.Notify.txt \
 	Plugins.Snarf.txt \
+	Plugins.Stats.txt \
 	Plugins.Trash.txt \
 	Plugins.Virtual.txt \
 	Plugins.Zlib.txt \
@@ -194,6 +199,7 @@ wikifiles = ACL.txt \
 	SSL.CertificateClientImporting.txt \
 	SSL.CertificateCreation.txt \
 	SSL.DovecotConfiguration.txt \
+	SSL.SNIClientSupport.txt \
 	SSL.txt \
 	Sasl.txt \
 	SecurityTuning.txt \

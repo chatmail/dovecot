@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 {
 	const char *error;
 
-	master_service = master_service_init("log", 0, &argc, &argv, NULL);
+	master_service = master_service_init("log", 0, &argc, &argv, "");
 
 	/* use log prefix and log to stderr until we've configured the real
 	   logging */
@@ -74,12 +74,11 @@ int main(int argc, char *argv[])
 	restrict_access_by_env(NULL, FALSE);
 	restrict_access_allow_coredumps(TRUE);
 
-	master_service_init_finish(master_service);
-
 	/* logging should never die if there are some clients */
 	master_service_set_die_with_master(master_service, FALSE);
 
 	main_init();
+	master_service_init_finish(master_service);
 	master_service_run(master_service, client_connected);
 	main_deinit();
 	master_service_deinit(&master_service);

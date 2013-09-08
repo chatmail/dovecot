@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mail-storage.h"
@@ -15,16 +15,15 @@ cmd_search_box(struct doveadm_mail_cmd_context *ctx,
 {
 	struct doveadm_mail_iter *iter;
 	struct mailbox *box;
-	struct mailbox_transaction_context *trans;
 	struct mail *mail;
 	struct mailbox_metadata metadata;
 	const char *guid_str;
 	int ret = 0;
 
 	if (doveadm_mail_iter_init(ctx, info, ctx->search_args, 0, NULL,
-				   &trans, &iter) < 0)
+				   &iter) < 0)
 		return -1;
-	box = mailbox_transaction_get_mailbox(trans);
+	box = doveadm_mail_iter_get_mailbox(iter);
 
 	if (mailbox_get_metadata(box, MAILBOX_METADATA_GUID, &metadata) < 0) {
 		ret = -1;
@@ -47,7 +46,6 @@ static int
 cmd_search_run(struct doveadm_mail_cmd_context *ctx, struct mail_user *user)
 {
 	const enum mailbox_list_iter_flags iter_flags =
-		MAILBOX_LIST_ITER_RAW_LIST |
 		MAILBOX_LIST_ITER_NO_AUTO_BOXES |
 		MAILBOX_LIST_ITER_RETURN_NO_FLAGS;
 	struct doveadm_mailbox_list_iter *iter;

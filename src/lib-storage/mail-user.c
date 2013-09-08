@@ -1,11 +1,12 @@
-/* Copyright (c) 2008-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "hostpid.h"
-#include "network.h"
+#include "net.h"
 #include "module-dir.h"
 #include "home-expand.h"
+#include "safe-mkstemp.h"
 #include "str.h"
 #include "strescape.h"
 #include "var-expand.h"
@@ -13,8 +14,10 @@
 #include "auth-master.h"
 #include "master-service.h"
 #include "mountpoint-list.h"
+#include "dict.h"
 #include "mail-storage-settings.h"
 #include "mail-storage-private.h"
+#include "mail-storage-service.h"
 #include "mail-namespace.h"
 #include "mail-storage.h"
 #include "mail-user.h"
@@ -26,6 +29,10 @@ struct auth_master_connection *mail_user_auth_master_conn;
 
 static void mail_user_deinit_base(struct mail_user *user)
 {
+	if (user->_attr_dict != NULL) {
+		(void)dict_wait(user->_attr_dict);
+		dict_deinit(&user->_attr_dict);
+	}
 	mail_namespaces_deinit(&user->namespaces);
 	if (user->mountpoints != NULL)
 		mountpoint_list_deinit(&user->mountpoints);
@@ -63,15 +70,15 @@ struct mail_user *mail_user_alloc(const char *username,
 	return user;
 }
 
-static int
-mail_user_expand_plugins_envs(struct mail_user *user, const char **error_r)
+static void
+mail_user_expand_plugins_envs(struct mail_user *user)
 {
 	const char **envs, *home;
 	string_t *str;
 	unsigned int i, count;
 
 	if (!array_is_created(&user->set->plugin_envs))
-		return 0;
+		return;
 
 	str = t_str_new(256);
 	envs = array_get_modifiable(&user->set->plugin_envs, &count);
@@ -80,17 +87,16 @@ mail_user_expand_plugins_envs(struct mail_user *user, const char **error_r)
 		if (user->_home == NULL &&
 		    var_has_key(envs[i+1], 'h', "home") &&
 		    mail_user_get_home(user, &home) <= 0) {
-			*error_r = t_strdup_printf(
+			user->error = p_strdup_printf(user->pool,
 				"userdb didn't return a home directory, "
 				"but plugin setting %s used it (%%h): %s",
 				envs[i], envs[i+1]);
-			return -1;
+			return;
 		}
 		str_truncate(str, 0);
 		var_expand(str, envs[i+1], mail_user_var_expand_table(user));
 		envs[i+1] = p_strdup(user->pool, str_c(str));
 	}
-	return 0;
 }
 
 int mail_user_init(struct mail_user *user, const char **error_r)
@@ -108,20 +114,21 @@ int mail_user_init(struct mail_user *user, const char **error_r)
 			    user->pool, mail_user_var_expand_table(user));
 
 	if (need_home_dir && mail_user_get_home(user, &home) <= 0) {
-		*error_r = t_strdup_printf(
+		user->error = p_strdup_printf(user->pool,
 			"userdb didn't return a home directory, "
 			"but %s used it (%%h): %s", key, value);
-		return -1;
 	}
+	mail_user_expand_plugins_envs(user);
 
-	if (mail_user_expand_plugins_envs(user, error_r) < 0)
-		return -1;
+	/* autocreated users for shared mailboxes need to be fully initialized
+	   if they don't exist, since they're going to be used anyway */
+	if (user->error == NULL || user->nonexistent) {
+		mail_set = mail_user_set_get_storage_set(user);
+		user->mail_debug = mail_set->mail_debug;
 
-	mail_set = mail_user_set_get_storage_set(user);
-	user->mail_debug = mail_set->mail_debug;
-
-	user->initialized = TRUE;
-	hook_mail_user_created(user);
+		user->initialized = TRUE;
+		hook_mail_user_created(user);
+	}
 
 	if (user->error != NULL) {
 		*error_r = t_strdup(user->error);
@@ -251,17 +258,25 @@ void mail_user_add_namespace(struct mail_user *user,
 		*tmp = ns;
 	}
 	*namespaces = user->namespaces;
+
+	T_BEGIN {
+		hook_mail_namespaces_added(user->namespaces);
+	} T_END;
 }
 
 void mail_user_drop_useless_namespaces(struct mail_user *user)
 {
 	struct mail_namespace *ns, *next;
 
+	/* drop all autocreated unusable (typically shared) namespaces.
+	   don't drop the autocreated prefix="" namespace that we explicitly
+	   created for being the fallback namespace. */
 	for (ns = user->namespaces; ns != NULL; ns = next) {
 		next = ns->next;
 
 		if ((ns->flags & NAMESPACE_FLAG_USABLE) == 0 &&
-		    (ns->flags & NAMESPACE_FLAG_AUTOCREATED) != 0)
+		    (ns->flags & NAMESPACE_FLAG_AUTOCREATED) != 0 &&
+		    ns->prefix_len > 0)
 			mail_namespace_destroy(ns);
 	}
 }
@@ -431,4 +446,57 @@ bool mail_user_is_path_mounted(struct mail_user *user, const char *path,
 		return FALSE;
 	}
 	return TRUE;
+}
+
+static void
+mail_user_try_load_class_plugin(struct mail_user *user, const char *name)
+{
+	struct module_dir_load_settings mod_set;
+	struct module *module;
+	unsigned int name_len = strlen(name);
+
+	memset(&mod_set, 0, sizeof(mod_set));
+	mod_set.abi_version = DOVECOT_ABI_VERSION;
+	mod_set.binary_name = master_service_get_name(master_service);
+	mod_set.setting_name = "<built-in storage lookup>";
+	mod_set.require_init_funcs = TRUE;
+	mod_set.debug = user->mail_debug;
+
+	mail_storage_service_modules =
+		module_dir_load_missing(mail_storage_service_modules,
+					user->set->mail_plugin_dir,
+					name, &mod_set);
+	/* initialize the module (and only this module!) immediately so that
+	   the class gets registered */
+	for (module = mail_storage_service_modules; module != NULL; module = module->next) {
+		if (strncmp(module->name, name, name_len) == 0 &&
+		    strcmp(module->name + name_len, "_plugin") == 0) {
+			if (!module->initialized) {
+				module->initialized = TRUE;
+				module->init(module);
+			}
+			break;
+		}
+	}
+}
+
+struct mail_storage *
+mail_user_get_storage_class(struct mail_user *user, const char *name)
+{
+	struct mail_storage *storage;
+
+	storage = mail_storage_find_class(name);
+	if (storage == NULL || storage->v.alloc != NULL)
+		return storage;
+
+	/* it's implemented by a plugin. load it and check again. */
+	mail_user_try_load_class_plugin(user, name);
+
+	storage = mail_storage_find_class(name);
+	if (storage != NULL && storage->v.alloc == NULL) {
+		i_error("Storage driver '%s' exists as a stub, "
+			"but its plugin couldn't be loaded", name);
+		return NULL;
+	}
+	return storage;
 }

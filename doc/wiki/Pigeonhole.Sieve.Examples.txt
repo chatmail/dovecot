@@ -22,7 +22,7 @@ Contents
 
      6. Include scripts
 
-     7. Achiving a Mailinglist by Date
+     7. Archiving a Mailinglist by Date
 
      8. Translation from Procmail
 
@@ -364,8 +364,8 @@ character in the script name always fails the include. This is just an extra
 check to avoid potential problems with including scripts within mail
 directories.
 
-Achiving a Mailinglist by Date
-------------------------------
+Archiving a Mailinglist by Date
+-------------------------------
 
 You can archive messages from mailing lists in a date-structured folder tree as
 follows:
@@ -403,4 +403,4 @@ Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
 Here's the original post announcing it:
 http://dovecot.org/list/dovecot/2007-March/020895.html
 
-(This file was created from the wiki on 2013-04-04 04:42)
+(This file was created from the wiki on 2013-08-05 04:42)

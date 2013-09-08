@@ -58,7 +58,7 @@ DIST_COMMON = $(pkginc_lib_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -104,7 +104,8 @@ lib10_doveadm_quota_plugin_la_LINK = $(LIBTOOL) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) \
 	$(lib10_doveadm_quota_plugin_la_LDFLAGS) $(LDFLAGS) -o $@
-lib10_quota_plugin_la_LIBADD =
+am__DEPENDENCIES_1 =
+lib10_quota_plugin_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am__objects_1 = quota.lo quota-count.lo quota-fs.lo quota-dict.lo \
 	quota-dirsize.lo quota-maildir.lo quota-plugin.lo \
 	quota-storage.lo
@@ -119,7 +120,6 @@ lib10_quota_plugin_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 PROGRAMS = $(pkglibexec_PROGRAMS)
 am_quota_status_OBJECTS = quota-status.$(OBJEXT)
 quota_status_OBJECTS = $(am_quota_status_OBJECTS)
-am__DEPENDENCIES_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -161,13 +161,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -199,6 +200,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -246,6 +248,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -327,7 +330,6 @@ top_srcdir = @top_srcdir@
 doveadm_moduledir = $(moduledir)/doveadm
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
-	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-index \
@@ -365,6 +367,7 @@ quota_common_objects = \
 
 lib10_quota_plugin_la_SOURCES = $(quota_dist_sources)
 nodist_lib10_quota_plugin_la_SOURCES = $(RQUOTA_XDR)
+lib10_quota_plugin_la_LIBADD = $(QUOTA_LIBS)
 doveadm_module_LTLIBRARIES = \
 	lib10_doveadm_quota_plugin.la
 
@@ -374,17 +377,11 @@ lib10_doveadm_quota_plugin_la_SOURCES = \
 quota_status_SOURCES = \
 	quota-status.c
 
-@BUILD_SHARED_LIBS_FALSE@unused_objects = \
-@BUILD_SHARED_LIBS_FALSE@	../../lib/mountpoint.o \
-@BUILD_SHARED_LIBS_FALSE@	../../lib-imap/imap-util.o \
-@BUILD_SHARED_LIBS_FALSE@	../../lib-storage/mail-search-parser-imap.o
-
 quota_status_LDADD = \
 	$(quota_common_objects) \
-	$(unused_objects) \
 	$(LIBDOVECOT_STORAGE) \
 	$(LIBDOVECOT) \
-	$(MODULE_LIBS)
+	$(QUOTA_LIBS)
 
 quota_status_DEPENDENCIES = \
 	$(quota_common_objects) \

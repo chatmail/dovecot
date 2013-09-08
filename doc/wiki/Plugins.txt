@@ -22,6 +22,8 @@ Distributed with Dovecot:
    moving all mails from one mailbox to INBOX
  * <quota> [Quota.txt]: Quota tracking and enforcing
     * imap_quota: IMAP commands for requesting current quota
+ * <stats> [Plugins.Stats.txt]: Send statistics from mail processes to the
+   stats process
  * <trash> [Plugins.Trash.txt]: Delete mails from Trash when user would go over
    quota
  * <virtual> [Plugins.Virtual.txt]: Virtual mailboxes
@@ -61,4 +63,4 @@ Experimental Plugins:
 To enable / disable plugins per user you can make your userdb return
 'mail_plugins' extra field. See <UserDatabase.ExtraFields.txt> for examples.
 
-(This file was created from the wiki on 2013-04-04 04:42)
+(This file was created from the wiki on 2013-08-05 04:42)

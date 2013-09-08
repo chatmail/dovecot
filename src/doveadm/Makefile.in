@@ -54,22 +54,25 @@ host_triplet = @host@
 bin_PROGRAMS = doveadm$(EXEEXT)
 pkglibexec_PROGRAMS = doveadm-server$(EXEEXT)
 subdir = src/doveadm
-DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
-	$(srcdir)/Makefile.in
+DIST_COMMON = $(noinst_HEADERS) $(pkginc_lib_HEADERS) \
+	$(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)"
+am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" \
+	"$(DESTDIR)$(pkginc_libdir)"
 PROGRAMS = $(bin_PROGRAMS) $(pkglibexec_PROGRAMS)
 am__objects_1 = doveadm-mail.$(OBJEXT) doveadm-mail-altmove.$(OBJEXT) \
-	doveadm-mail-batch.$(OBJEXT) doveadm-mail-expunge.$(OBJEXT) \
-	doveadm-mail-fetch.$(OBJEXT) doveadm-mail-import.$(OBJEXT) \
+	doveadm-mail-batch.$(OBJEXT) \
+	doveadm-mail-deduplicate.$(OBJEXT) \
+	doveadm-mail-expunge.$(OBJEXT) doveadm-mail-fetch.$(OBJEXT) \
+	doveadm-mail-flags.$(OBJEXT) doveadm-mail-import.$(OBJEXT) \
 	doveadm-mail-index.$(OBJEXT) doveadm-mail-iter.$(OBJEXT) \
 	doveadm-mail-mailbox.$(OBJEXT) \
 	doveadm-mail-mailbox-status.$(OBJEXT) \
@@ -83,15 +86,16 @@ am_doveadm_OBJECTS = $(am__objects_1) doveadm.$(OBJEXT) \
 	doveadm-dump.$(OBJEXT) doveadm-dump-dbox.$(OBJEXT) \
 	doveadm-dump-index.$(OBJEXT) doveadm-dump-log.$(OBJEXT) \
 	doveadm-dump-mailboxlog.$(OBJEXT) \
-	doveadm-dump-thread.$(OBJEXT) doveadm-instance.$(OBJEXT) \
-	doveadm-kick.$(OBJEXT) doveadm-log.$(OBJEXT) \
-	doveadm-master.$(OBJEXT) doveadm-mount.$(OBJEXT) \
-	doveadm-mutf7.$(OBJEXT) doveadm-penalty.$(OBJEXT) \
-	doveadm-print-flow.$(OBJEXT) doveadm-print-pager.$(OBJEXT) \
-	doveadm-print-tab.$(OBJEXT) doveadm-print-table.$(OBJEXT) \
-	doveadm-proxy.$(OBJEXT) doveadm-pw.$(OBJEXT) \
+	doveadm-dump-thread.$(OBJEXT) doveadm-fs.$(OBJEXT) \
+	doveadm-instance.$(OBJEXT) doveadm-kick.$(OBJEXT) \
+	doveadm-log.$(OBJEXT) doveadm-master.$(OBJEXT) \
+	doveadm-mount.$(OBJEXT) doveadm-mutf7.$(OBJEXT) \
+	doveadm-penalty.$(OBJEXT) doveadm-print-flow.$(OBJEXT) \
+	doveadm-print-pager.$(OBJEXT) doveadm-print-tab.$(OBJEXT) \
+	doveadm-print-table.$(OBJEXT) doveadm-proxy.$(OBJEXT) \
+	doveadm-pw.$(OBJEXT) doveadm-replicator.$(OBJEXT) \
 	doveadm-sis.$(OBJEXT) doveadm-stats.$(OBJEXT) \
-	doveadm-who.$(OBJEXT)
+	doveadm-who.$(OBJEXT) doveadm-zlib.$(OBJEXT)
 doveadm_OBJECTS = $(am_doveadm_OBJECTS)
 am__DEPENDENCIES_1 =
 am_doveadm_server_OBJECTS = $(am__objects_1) \
@@ -125,7 +129,34 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-HEADERS = $(noinst_HEADERS)
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
+HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 AM_RECURSIVE_TARGETS = $(RECURSIVE_TARGETS:-recursive=) \
@@ -173,13 +204,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -211,6 +243,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -258,6 +291,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -342,8 +376,10 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-auth \
+	-I$(top_srcdir)/src/lib-compression \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-fs \
+	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-imap \
@@ -358,27 +394,21 @@ AM_CPPFLAGS = \
 	-DBINDIR=\""$(bindir)"\" \
 	-DMANDIR=\""$(mandir)"\"
 
-@BUILD_SHARED_LIBS_FALSE@unused_objects = \
-@BUILD_SHARED_LIBS_FALSE@	../lib/mountpoint.o \
-@BUILD_SHARED_LIBS_FALSE@	../lib-imap/imap-util.o \
-@BUILD_SHARED_LIBS_FALSE@	../lib-storage/mail-search-parser-imap.o
-
 cmd_pw_libs = \
 	../auth/libpassword.a \
 	../lib-ntlm/libntlm.a \
 	../lib-otp/libotp.a
 
 libs = \
-	dsync/libdsync.a \
-	$(unused_objects)
+	dsync/libdsync.la \
+	../lib-compression/libcompression.la
 
 doveadm_LDADD = \
 	$(libs) \
 	$(cmd_pw_libs) \
 	$(CRYPT_LIBS) \
 	$(LIBDOVECOT_STORAGE) \
-	$(LIBDOVECOT) \
-	$(MODULE_LIBS)
+	$(LIBDOVECOT)
 
 doveadm_DEPENDENCIES = \
 	$(libs) \
@@ -389,8 +419,7 @@ doveadm_DEPENDENCIES = \
 doveadm_server_LDADD = \
 	$(libs) \
 	$(LIBDOVECOT_STORAGE) \
-	$(LIBDOVECOT) \
-	$(MODULE_LIBS)
+	$(LIBDOVECOT)
 
 doveadm_server_DEPENDENCIES = \
 	$(libs) \
@@ -401,8 +430,10 @@ common = \
 	doveadm-mail.c \
 	doveadm-mail-altmove.c \
 	doveadm-mail-batch.c \
+	doveadm-mail-deduplicate.c \
 	doveadm-mail-expunge.c \
 	doveadm-mail-fetch.c \
+	doveadm-mail-flags.c \
 	doveadm-mail-import.c \
 	doveadm-mail-index.c \
 	doveadm-mail-iter.c \
@@ -428,6 +459,7 @@ doveadm_SOURCES = \
 	doveadm-dump-log.c \
 	doveadm-dump-mailboxlog.c \
 	doveadm-dump-thread.c \
+	doveadm-fs.c \
 	doveadm-instance.c \
 	doveadm-kick.c \
 	doveadm-log.c \
@@ -441,9 +473,11 @@ doveadm_SOURCES = \
 	doveadm-print-table.c \
 	doveadm-proxy.c \
 	doveadm-pw.c \
+	doveadm-replicator.c \
 	doveadm-sis.c \
 	doveadm-stats.c \
-	doveadm-who.c
+	doveadm-who.c \
+	doveadm-zlib.c
 
 doveadm_server_SOURCES = \
 	$(common) \
@@ -451,9 +485,8 @@ doveadm_server_SOURCES = \
 	doveadm-print-server.c \
 	main.c
 
-noinst_HEADERS = \
-	client-connection.h \
-	server-connection.h \
+pkginc_libdir = $(pkgincludedir)
+pkginc_lib_HEADERS = \
 	doveadm.h \
 	doveadm-dump.h \
 	doveadm-mail.h \
@@ -461,9 +494,13 @@ noinst_HEADERS = \
 	doveadm-mailbox-list-iter.h \
 	doveadm-print.h \
 	doveadm-print-private.h \
-	doveadm-server.h \
 	doveadm-settings.h \
-	doveadm-util.h \
+	doveadm-util.h
+
+noinst_HEADERS = \
+	client-connection.h \
+	server-connection.h \
+	doveadm-server.h \
 	doveadm-who.h
 
 all: all-recursive
@@ -614,14 +651,17 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dump-mailboxlog.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dump-thread.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dump.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-fs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-instance.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-kick.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-log.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-altmove.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-batch.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-copymove.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-deduplicate.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-expunge.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-fetch.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-flags.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-import.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-index.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail-iter.Po@am__quote@
@@ -643,11 +683,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-print.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-proxy.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-pw.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-replicator.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-sis.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-stats.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-util.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-who.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-zlib.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/server-connection.Po@am__quote@
@@ -678,6 +720,27 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+install-pkginc_libHEADERS: $(pkginc_lib_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(pkginc_lib_HEADERS)'; test -n "$(pkginc_libdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(pkginc_libdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(pkginc_libdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(pkginc_libdir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(pkginc_libdir)" || exit $$?; \
+	done
+
+uninstall-pkginc_libHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkginc_lib_HEADERS)'; test -n "$(pkginc_libdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(pkginc_libdir)'; $(am__uninstall_files_from_dir)
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run `make' without going through this Makefile.
@@ -874,7 +937,7 @@ check: check-recursive
 all-am: Makefile $(PROGRAMS) $(HEADERS)
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)"; do \
+	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-recursive
@@ -930,7 +993,7 @@ info: info-recursive
 
 info-am:
 
-install-data-am:
+install-data-am: install-pkginc_libHEADERS
 
 install-dvi: install-dvi-recursive
 
@@ -977,7 +1040,8 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-binPROGRAMS uninstall-pkglibexecPROGRAMS
+uninstall-am: uninstall-binPROGRAMS uninstall-pkginc_libHEADERS \
+	uninstall-pkglibexecPROGRAMS
 
 .MAKE: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) ctags-recursive \
 	install-am install-strip tags-recursive
@@ -991,13 +1055,14 @@ uninstall-am: uninstall-binPROGRAMS uninstall-pkglibexecPROGRAMS
 	install-data install-data-am install-dvi install-dvi-am \
 	install-exec install-exec-am install-exec-local install-html \
 	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-pkglibexecPROGRAMS \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs installdirs-am maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-recursive uninstall uninstall-am \
-	uninstall-binPROGRAMS uninstall-pkglibexecPROGRAMS
+	install-pdf install-pdf-am install-pkginc_libHEADERS \
+	install-pkglibexecPROGRAMS install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	installdirs-am maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-recursive \
+	uninstall uninstall-am uninstall-binPROGRAMS \
+	uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS
 
 
 install-exec-local:

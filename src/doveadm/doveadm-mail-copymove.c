@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mail-storage.h"
@@ -25,14 +25,13 @@ cmd_copy_box(struct copy_cmd_context *ctx, struct mailbox *destbox,
 	     const struct mailbox_info *info)
 {
 	struct doveadm_mail_iter *iter;
-	struct mailbox_transaction_context *trans;
 	struct mailbox_transaction_context *desttrans;
 	struct mail_save_context *save_ctx;
 	struct mail *mail;
 	int ret = 0;
 
 	if (doveadm_mail_iter_init(&ctx->ctx, info, ctx->ctx.search_args, 0,
-				   NULL, &trans, &iter) < 0)
+				   NULL, &iter) < 0)
 		return -1;
 
 	/* use a separately committed transaction for each mailbox.
@@ -49,7 +48,7 @@ cmd_copy_box(struct copy_cmd_context *ctx, struct mailbox *destbox,
 				mail_expunge(mail);
 		} else {
 			i_error("Copying message UID %u from '%s' failed: %s",
-				mail->uid, info->name,
+				mail->uid, info->vname,
 				mailbox_get_last_error(destbox, NULL));
 			doveadm_mail_failed_mailbox(&ctx->ctx, destbox);
 			ret = -1;
@@ -92,7 +91,6 @@ cmd_copy_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 {
 	struct copy_cmd_context *ctx = (struct copy_cmd_context *)_ctx;
 	const enum mailbox_list_iter_flags iter_flags =
-		MAILBOX_LIST_ITER_RAW_LIST |
 		MAILBOX_LIST_ITER_NO_AUTO_BOXES |
 		MAILBOX_LIST_ITER_RETURN_NO_FLAGS;
 	struct doveadm_mailbox_list_iter *iter;
@@ -103,11 +101,6 @@ cmd_copy_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	int ret = 0;
 
 	ns = mail_namespace_find(user->namespaces, ctx->destname);
-	if (ns == NULL) {
-		i_fatal_status(DOVEADM_EX_NOTFOUND,
-			       "Can't find namespace for: %s", ctx->destname);
-	}
-
 	destbox = mailbox_alloc(ns->list, ctx->destname, MAILBOX_FLAG_SAVEONLY);
 	if (mailbox_open(destbox) < 0) {
 		i_error("Can't open mailbox '%s': %s", ctx->destname,

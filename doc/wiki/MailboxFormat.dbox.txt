@@ -226,4 +226,4 @@ however rather deprecated):In this case 'X-UIDL' is used for the POP3 UIDLs.
 Therefore,*in this case, is recommended to strip the 'X-UIDL' mail headers
 _case-insensitively_ at the MTA, MDA or LDA*.
 
-(This file was created from the wiki on 2013-04-04 04:42)
+(This file was created from the wiki on 2013-08-05 04:42)

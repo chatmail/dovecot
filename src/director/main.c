@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -37,7 +37,7 @@ static int director_client_connected(int fd, const struct ip_addr *ip)
 		return -1;
 	}
 
-	director_connection_init_in(director, fd, ip);
+	(void)director_connection_init_in(director, fd, ip);
 	return 0;
 }
 
@@ -90,7 +90,7 @@ static void client_connected(struct master_service_connection *conn)
 	auth = auth_connection_init(socket_path);
 	if (auth_connection_connect(auth) == 0) {
 		master_service_client_connection_accept(conn);
-		login_connection_init(director, conn->fd, auth, userdb);
+		(void)login_connection_init(director, conn->fd, auth, userdb);
 	} else {
 		auth_connection_deinit(&auth);
 	}
@@ -116,7 +116,7 @@ find_inet_listener_port(struct ip_addr *ip_r,
 static void director_state_changed(struct director *dir)
 {
 	struct director_request *const *requestp;
-	ARRAY_DEFINE(new_requests, struct director_request *);
+	ARRAY(struct director_request *) new_requests;
 	bool ret;
 
 	if (!dir->ring_synced ||
@@ -213,7 +213,6 @@ int main(int argc, char *argv[])
 	master_service_init_log(master_service, "director: ");
 
 	main_preinit();
-	master_service_init_finish(master_service);
 	director->test_port = test_port;
 	director_debug = debug;
 	director_connect(director);
@@ -225,6 +224,7 @@ int main(int argc, char *argv[])
 			t_strdup_printf("director(%s): ",
 					net_ip2addr(&director->self_ip)));
 	}
+	master_service_init_finish(master_service);
 
 	master_service_run(master_service, client_connected);
 	main_deinit();

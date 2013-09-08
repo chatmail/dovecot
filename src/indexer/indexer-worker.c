@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "restrict-access.h"
@@ -69,11 +69,11 @@ int main(int argc, char *argv[])
 
 	drop_privileges();
 	master_service_init_log(master_service, "indexer-worker: ");
-	master_service_init_finish(master_service);
 
 	storage_service = mail_storage_service_init(master_service, NULL,
 						    storage_service_flags);
 	restrict_access_allow_coredumps(TRUE);
+	master_service_init_finish(master_service);
 
 	master_service_run(master_service, client_connected);
 

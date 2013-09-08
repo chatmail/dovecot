@@ -57,7 +57,7 @@ DIST_COMMON = $(noinst_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.in
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -95,10 +95,11 @@ am__installdirs = "$(DESTDIR)$(doveadm_moduledir)" \
 	"$(DESTDIR)$(moduledir)"
 LTLIBRARIES = $(doveadm_module_LTLIBRARIES) $(module_LTLIBRARIES)
 lib01_acl_plugin_la_LIBADD =
-am_lib01_acl_plugin_la_OBJECTS = acl-api.lo acl-backend.lo \
-	acl-backend-vfile.lo acl-backend-vfile-acllist.lo acl-cache.lo \
-	acl-lookup-dict.lo acl-mailbox.lo acl-mailbox-list.lo \
-	acl-plugin.lo acl-shared-storage.lo acl-storage.lo
+am_lib01_acl_plugin_la_OBJECTS = acl-api.lo acl-attributes.lo \
+	acl-backend.lo acl-backend-vfile.lo \
+	acl-backend-vfile-acllist.lo acl-cache.lo acl-lookup-dict.lo \
+	acl-mailbox.lo acl-mailbox-list.lo acl-plugin.lo \
+	acl-shared-storage.lo acl-storage.lo
 lib01_acl_plugin_la_OBJECTS = $(am_lib01_acl_plugin_la_OBJECTS)
 lib01_acl_plugin_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
@@ -149,13 +150,14 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
+CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CLUCENE_CFLAGS = @CLUCENE_CFLAGS@
+CLUCENE_LIBS = @CLUCENE_LIBS@
+COMPRESS_LIBS = @COMPRESS_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CRYPT_LIBS = @CRYPT_LIBS@
-CURLCONFIG = @CURLCONFIG@
-CURL_CFLAGS = @CURL_CFLAGS@
-CURL_LIBS = @CURL_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -187,6 +189,7 @@ LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
+LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -234,6 +237,7 @@ PG_CONFIG = @PG_CONFIG@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
@@ -329,6 +333,7 @@ module_LTLIBRARIES = \
 
 lib01_acl_plugin_la_SOURCES = \
 	acl-api.c \
+	acl-attributes.c \
 	acl-backend.c \
 	acl-backend-vfile.c \
 	acl-backend-vfile-acllist.c \
@@ -466,6 +471,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/acl-api.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/acl-attributes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/acl-backend-vfile-acllist.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/acl-backend-vfile.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/acl-backend.Plo@am__quote@

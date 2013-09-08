@@ -109,4 +109,10 @@ Plugins
  * Sieve language support can be added with the <Pigeonhole Sieve plugin>
    [Pigeonhole.Sieve.txt].
 
-(This file was created from the wiki on 2013-04-04 04:42)
+Using LMTP with different MTAs
+------------------------------
+
+ * <Postfix> [HowTo.PostfixDovecotLMTP.txt]
+ * <Exim> [LMTP.Exim.txt]
+
+(This file was created from the wiki on 2013-08-05 04:42)

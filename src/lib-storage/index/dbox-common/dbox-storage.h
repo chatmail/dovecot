@@ -10,7 +10,6 @@ struct dbox_save_context;
 
 #define DBOX_SUBSCRIPTION_FILE_NAME "subscriptions"
 #define DBOX_UIDVALIDITY_FILE_NAME "dovecot-uidvalidity"
-#define DBOX_INDEX_PREFIX "dovecot.index"
 #define DBOX_TEMP_FILE_PREFIX ".temp."
 #define DBOX_ALT_SYMLINK_NAME "dbox-alt-root"
 
@@ -23,6 +22,13 @@ struct dbox_save_context;
 
 /* Flag specifies if the message should be in primary or alternative storage */
 #define DBOX_INDEX_FLAG_ALT MAIL_INDEX_MAIL_FLAG_BACKEND
+
+enum dbox_index_header_flags {
+	/* messages' metadata contain POP3 UIDLs */
+	DBOX_INDEX_HEADER_FLAG_HAVE_POP3_UIDLS	= 0x01,
+	/* messages' metadata contain POP3 orders */
+	DBOX_INDEX_HEADER_FLAG_HAVE_POP3_ORDERS	= 0x02
+};
 
 struct dbox_storage_vfuncs {
 	/* dbox file has zero references now. it should be either freed or
@@ -67,5 +73,8 @@ void dbox_notify_changes(struct mailbox *box);
 int dbox_mailbox_open(struct mailbox *box);
 int dbox_mailbox_create(struct mailbox *box,
 			const struct mailbox_update *update, bool directory);
+int dbox_verify_alt_storage(struct mailbox_list *list);
+bool dbox_header_have_flag(struct mailbox *box, uint32_t ext_id,
+			   unsigned int flags_offset, uint8_t flag);
 
 #endif

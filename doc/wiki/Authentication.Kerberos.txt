@@ -86,6 +86,20 @@ could be that PAM is still trying to use pam_unix.so rather than pam_krb5.so.
 Make sure pam_krb5.so is the first module for account or just change
 pam_unix.so to sufficient.
 
+Cross-realm authentication
+--------------------------
+
+This seems to have all kinds of trouble. Search Dovecot mailing list for
+previous threads about it. Some points about it:
+
+ * krb5_kuserok() is used to check if access is allowed. It may try to do the
+   check by reading ~user/.k5login (good!) or ~dovecot/.k5login (bad!)
+ * v2.2+ has "k5credentials" <passdb extra field>
+   [PasswordDatabase.ExtraFields.txt], which is a comma separated list of
+   usernames that are allowed to log in. If it's set, it bypasses the
+   krb5_kuserok() check.
+ * Solaris uses _gss_userok() instead of krb5_kuserok()
+
 Client support
 --------------
 
@@ -156,4 +170,4 @@ The test:
     * run command klist (list all kerberos keys) should show imap/HOSTNAME
  * /etc/hosts has to be set properly so that kerberos can find server.
 
-(This file was created from the wiki on 2013-04-04 04:42)
+(This file was created from the wiki on 2013-08-05 04:42)

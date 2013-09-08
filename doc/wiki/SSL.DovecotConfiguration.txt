@@ -57,38 +57,15 @@ There are a couple of different ways to specify when SSL/TLS is required:
 Multiple SSL certificates
 -------------------------
 
-TLS SNI (Server Name Indication) support required
--------------------------------------------------
-
-/It is important to note that having multiple SSL certificates per IP will not
-be compatible with all clients, especially mobile ones. It is a TLS SNI
-limitation./
-
----%<-------------------------------------------------------------------------
-local_name imap.example.org {
-  ssl_cert = </etc/ssl/certs/imap.example.org.crt
-  ssl_key = </etc/ssl/private/imap.example.org.key
-}
-local_name imap.example2.org {
-  ssl_cert = </etc/ssl/certs/imap.example2.org.crt
-  ssl_key = </etc/ssl/private/imap.example2.org.key
-}
-# ..etc..
----%<-------------------------------------------------------------------------
-
-Note that you will still need a top-level "default" 'ssl_key' and 'ssl_cert' as
-well, or you will receive errors.
-
----%<-------------------------------------------------------------------------
-# doveconf -n
-doveconf: Error: ssl enabled, but ssl_cert not set
----%<-------------------------------------------------------------------------
-
 Different certificates per IP and protocol
 ------------------------------------------
 
+If you have multiple IPs available, this method is guaranteed to work with all
+clients.
+
 ---%<-------------------------------------------------------------------------
-local 192.0.2.10 {
+local 192.0.2.10 { # instead of IP you can also use hostname, which will be
+resolved
   protocol imap {
     ssl_cert = </etc/ssl/dovecot/imap-01.example.com.cert.pem
     ssl_key  = </etc/ssl/dovecot/imap-01.example.com.key.pem
@@ -111,6 +88,34 @@ local 192.0.2.20 {
     ssl_key  = </etc/ssl/dovecot/pop-02.example.com.key.pem
   }
 }
+---%<-------------------------------------------------------------------------
+
+Note that you will still need a top-level "default" 'ssl_key' and 'ssl_cert' as
+well, or you will receive errors.
+
+---%<-------------------------------------------------------------------------
+# doveconf -n
+doveconf: Error: ssl enabled, but ssl_cert not set
+---%<-------------------------------------------------------------------------
+
+With client TLS SNI (Server Name Indication) support
+----------------------------------------------------
+
+/It is important to note that having multiple SSL certificates per IP will not
+be compatible with all clients, especially mobile ones. It is a TLS SNI
+limitation./ See <SSL.SNIClientSupport.txt> for list of clients known to (not)
+support SNI.
+
+---%<-------------------------------------------------------------------------
+local_name imap.example.org {
+  ssl_cert = </etc/ssl/certs/imap.example.org.crt
+  ssl_key = </etc/ssl/private/imap.example.org.key
+}
+local_name imap.example2.org {
+  ssl_cert = </etc/ssl/certs/imap.example2.org.crt
+  ssl_key = </etc/ssl/private/imap.example2.org.key
+}
+# ..etc..
 ---%<-------------------------------------------------------------------------
 
 Password protected key files
@@ -344,4 +349,4 @@ B8A55EC91A060575CFB29503FBF7160C2DC8BCBFE02D20A7F704882F72D8D00272D8D002CE5CCC4B
 +OK Dovecot ready.
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-04-04 04:42)
+(This file was created from the wiki on 2013-08-05 04:42)

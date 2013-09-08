@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2013 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 
@@ -26,8 +26,9 @@
 
 static struct db_passwd_file *passwd_files;
 
-static void passwd_file_add(struct passwd_file *pw, const char *username,
-			    const char *pass, const char *const *args)
+static void ATTR_NULL(3)
+passwd_file_add(struct passwd_file *pw, const char *username,
+		const char *pass, const char *const *args)
 {
 	/* args = uid, gid, user info, home dir, shell, extra_fields */
 	struct passwd_user *pu;
@@ -95,6 +96,9 @@ static void passwd_file_add(struct passwd_file *pw, const char *username,
 			i_error("passwd-file %s: User %s is missing "
 				"userdb info", pw->path, username);
 		}
+		/* don't allow userdb lookups */
+		pu->uid = 0;
+		pu->gid = 0;
 	} else if (!pw->db->userdb || **args == '\0')
 		args++;
 	else {
@@ -155,12 +159,13 @@ passwd_file_new(struct db_passwd_file *db, const char *expanded_path)
 	pw->path = i_strdup(expanded_path);
 	pw->fd = -1;
 
-	if (db->files != NULL)
+	if (hash_table_is_created(db->files))
 		hash_table_insert(db->files, pw->path, pw);
 	return pw;
 }
 
-static bool passwd_file_open(struct passwd_file *pw, bool startup)
+static int passwd_file_open(struct passwd_file *pw, bool startup,
+			    const char **error_r)
 {
 	const char *no_args = NULL;
 	struct istream *input;
@@ -172,20 +177,20 @@ static bool passwd_file_open(struct passwd_file *pw, bool startup)
 
 	fd = open(pw->path, O_RDONLY);
 	if (fd == -1) {
-		if (errno == EACCES) {
-			i_error("passwd-file %s: %s", pw->path,
-				eacces_error_get("open", pw->path));
-		} else {
-			i_error("passwd-file %s: Can't open file: %m",
-				pw->path);
+		if (errno == EACCES)
+			*error_r = eacces_error_get("open", pw->path);
+		else {
+			*error_r = t_strdup_printf("open(%s) failed: %m",
+						   pw->path);
 		}
-		return FALSE;
+		return -1;
 	}
 
 	if (fstat(fd, &st) != 0) {
-		i_error("passwd-file %s: fstat() failed: %m", pw->path);
-		(void)close(fd);
-		return FALSE;
+		*error_r = t_strdup_printf("fstat(%s) failed: %m",
+					   pw->path);
+		i_close_fd(&fd);
+		return -1;
 	}
 
 	pw->fd = fd;
@@ -193,11 +198,10 @@ static bool passwd_file_open(struct passwd_file *pw, bool startup)
 	pw->size = st.st_size;
 
 	pw->pool = pool_alloconly_create(MEMPOOL_GROWING"passwd_file", 10240);
-	pw->users = hash_table_create(default_pool, pw->pool, 100,
-				      str_hash, (hash_cmp_callback_t *)strcmp);
+	hash_table_create(&pw->users, pw->pool, 0, str_hash, strcmp);
 
 	start_time = time(NULL);
-	input = i_stream_create_fd(pw->fd, 4096, FALSE);
+	input = i_stream_create_fd(pw->fd, (size_t)-1, FALSE);
 	i_stream_set_return_partial_line(input, TRUE);
 	while ((line = i_stream_read_next_line(input)) != NULL) {
 		if (*line == '\0' || *line == ':' || *line == '#')
@@ -226,7 +230,7 @@ static bool passwd_file_open(struct passwd_file *pw, bool startup)
 		i_debug("passwd-file %s: Read %u users in %u secs",
 			pw->path, hash_table_count(pw->users), time_secs);
 	}
-	return TRUE;
+	return 0;
 }
 
 static void passwd_file_close(struct passwd_file *pw)
@@ -237,7 +241,7 @@ static void passwd_file_close(struct passwd_file *pw)
 		pw->fd = -1;
 	}
 
-	if (pw->users != NULL)
+	if (hash_table_is_created(pw->users))
 		hash_table_destroy(&pw->users);
 	if (pw->pool != NULL)
 		pool_unref(&pw->pool);
@@ -245,7 +249,7 @@ static void passwd_file_close(struct passwd_file *pw)
 
 static void passwd_file_free(struct passwd_file *pw)
 {
-	if (pw->db->files != NULL)
+	if (hash_table_is_created(pw->db->files))
 		hash_table_remove(pw->db->files, pw->path);
 
 	passwd_file_close(pw);
@@ -253,30 +257,37 @@ static void passwd_file_free(struct passwd_file *pw)
 	i_free(pw);
 }
 
-static bool passwd_file_sync(struct passwd_file *pw)
+static int passwd_file_sync(struct auth_request *request,
+			    struct passwd_file *pw)
 {
 	struct stat st;
+	const char *error;
 
 	if (stat(pw->path, &st) < 0) {
 		/* with variables don't give hard errors, or errors about
 		   nonexistent files */
 		if (errno == EACCES) {
-			i_error("passwd-file %s: %s", pw->path,
-				eacces_error_get("stat", pw->path));
-		} else if (errno != ENOENT) {
-			i_error("passwd-file %s: stat() failed: %m", pw->path);
+			auth_request_log_error(request, "passwd-file",
+				"%s", eacces_error_get("stat", pw->path));
+		} else {
+			auth_request_log_error(request, "passwd-file",
+				"stat(%s) failed: %m", pw->path);
 		}
 
 		if (pw->db->default_file != pw)
 			passwd_file_free(pw);
-		return FALSE;
+		return -1;
 	}
 
 	if (st.st_mtime != pw->stamp || st.st_size != pw->size) {
 		passwd_file_close(pw);
-		return passwd_file_open(pw, FALSE);
+		if (passwd_file_open(pw, FALSE, &error) < 0) {
+			auth_request_log_error(request, "passwd-file",
+				"%s", error);
+			return -1;
+		}
 	}
-	return TRUE;
+	return 0;
 }
 
 static struct db_passwd_file *db_passwd_file_find(const char *path)
@@ -343,9 +354,8 @@ db_passwd_file_init(const char *path, bool userdb, bool debug)
 
 	db->path = i_strdup(path);
 	if (db->vars) {
-		db->files = hash_table_create(default_pool, default_pool, 100,
-					      str_hash,
-					      (hash_cmp_callback_t *)strcmp);
+		hash_table_create(&db->files, default_pool, 0,
+				  str_hash, strcmp);
 	} else {
 		db->default_file = passwd_file_new(db, path);
 	}
@@ -357,9 +367,12 @@ db_passwd_file_init(const char *path, bool userdb, bool debug)
 
 void db_passwd_file_parse(struct db_passwd_file *db)
 {
+	const char *error;
+
 	if (db->default_file != NULL && db->default_file->stamp == 0) {
 		/* no variables, open the file immediately */
-		(void)passwd_file_open(db->default_file, TRUE);
+		if (passwd_file_open(db->default_file, TRUE, &error) < 0)
+			i_error("passwd-file: %s", error);
 	}
 }
 
@@ -368,7 +381,8 @@ void db_passwd_file_unref(struct db_passwd_file **_db)
         struct db_passwd_file *db = *_db;
         struct db_passwd_file **p;
 	struct hash_iterate_context *iter;
-	void *key, *value;
+	char *path;
+	struct passwd_file *file;
 
 	*_db = NULL;
 	i_assert(db->refcount >= 0);
@@ -386,11 +400,8 @@ void db_passwd_file_unref(struct db_passwd_file **_db)
 		passwd_file_free(db->default_file);
 	else {
 		iter = hash_table_iterate_init(db->files);
-		while (hash_table_iterate(iter, &key, &value)) {
-			struct passwd_file *file = value;
-
+		while (hash_table_iterate(iter, db->files, &path, &file))
 			passwd_file_free(file);
-		}
 		hash_table_iterate_deinit(&iter);
 		hash_table_destroy(&db->files);
 	}
@@ -421,7 +432,6 @@ db_passwd_file_lookup(struct db_passwd_file *db, struct auth_request *request,
 	struct passwd_user *pu;
 	const struct var_expand_table *table;
 	string_t *username, *dest;
-	const char *path;
 
 	if (!db->vars)
 		pw = db->default_file;
@@ -437,11 +447,8 @@ db_passwd_file_lookup(struct db_passwd_file *db, struct auth_request *request,
 		}
 	}
 
-	path = t_strdup(pw->path);
-	if (!passwd_file_sync(pw)) {
+	if (passwd_file_sync(request, pw) < 0) {
 		/* pw may be freed now */
-		auth_request_log_info(request, "passwd-file",
-				      "no passwd file: %s", path);
 		return NULL;
 	}
 

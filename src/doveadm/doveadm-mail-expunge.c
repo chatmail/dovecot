@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -22,19 +22,18 @@ cmd_expunge_box(struct doveadm_mail_cmd_context *_ctx,
 	struct expunge_cmd_context *ctx = (struct expunge_cmd_context *)_ctx;
 	struct doveadm_mail_iter *iter;
 	struct mailbox *box;
-	struct mailbox_transaction_context *trans;
 	struct mail *mail;
 	enum mail_error error;
 	int ret = 0;
 
 	if (doveadm_mail_iter_init(_ctx, info, search_args, 0, NULL,
-				   &trans, &iter) < 0)
+				   &iter) < 0)
 		return -1;
 
 	while (doveadm_mail_iter_next(iter, &mail)) {
 		if (doveadm_debug) {
 			i_debug("expunge: box=%s uid=%u",
-				info->name, mail->uid);
+				info->vname, mail->uid);
 		}
 		mail_expunge(mail);
 	}
@@ -48,7 +47,7 @@ cmd_expunge_box(struct doveadm_mail_cmd_context *_ctx,
 
 	if (ctx->delete_empty_mailbox && ret == 0) {
 		if (mailbox_delete_empty(box) < 0) {
-			(void)mailbox_get_last_error(box, &error);
+			error = mailbox_get_last_mail_error(box);
 			if (error != MAIL_ERROR_EXISTS) {
 				doveadm_mail_failed_mailbox(_ctx, box);
 				ret = -1;
@@ -197,7 +196,6 @@ static int
 cmd_expunge_run(struct doveadm_mail_cmd_context *ctx, struct mail_user *user)
 {
 	const enum mailbox_list_iter_flags iter_flags =
-		MAILBOX_LIST_ITER_RAW_LIST |
 		MAILBOX_LIST_ITER_NO_AUTO_BOXES |
 		MAILBOX_LIST_ITER_RETURN_NO_FLAGS;
 	struct doveadm_mailbox_list_iter *iter;

@@ -45,6 +45,8 @@ enum dbox_metadata_key {
 	DBOX_METADATA_GUID		= 'G',
 	/* POP3 UIDL overriding the default format */
 	DBOX_METADATA_POP3_UIDL		= 'P',
+	/* POP3 message ordering (for migrated mails) */
+	DBOX_METADATA_POP3_ORDER	= 'O',
 	/* Received UNIX timestamp in hex */
 	DBOX_METADATA_RECEIVED_TIME	= 'R',
 	/* Physical message size in hex. Necessary only if it differs from
@@ -113,7 +115,7 @@ struct dbox_file {
 
 	/* Metadata for the currently seeked metadata block. */
 	pool_t metadata_pool;
-	ARRAY_DEFINE(metadata, const char *);
+	ARRAY(const char *) metadata;
 	uoff_t metadata_read_offset;
 
 	unsigned int appending:1;
