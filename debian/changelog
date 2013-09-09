@@ -1,10 +1,13 @@
-dovecot (1:2.2.5-1) UNRELEASED; urgency=low
+dovecot (1:2.2.5-1) experimental; urgency=low
   [ Micah Anderson ]
-  * New upstream version
-  * Updated pigeonhole patch to 0.4.1
-  * Refreshed patches
+  * [a0035bf] New upstream version 2.2.5
+  * [a053c49] Update pigeonhole patch to 0.4.1
+  * [689cd67] refreshed patches
 
- -- Micah Anderson <micah@debian.org>  Mon, 19 Aug 2013 11:10:59 -0400
+  [ Jaldhar H. Vyas ]
+  * Caused bugs and then fixed them again.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 09 Sep 2013 00:57:32 -0400
 
 dovecot (1:2.1.17-2) unstable; urgency=low
 
