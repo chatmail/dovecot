@@ -222,6 +222,7 @@ static const char *get_disconnect_reason(struct istream *input)
 static void proxy_input(struct client *client)
 {
 	struct istream *input;
+	struct ostream *output;
 	const char *line;
 	unsigned int duration;
 
@@ -265,10 +266,15 @@ static void proxy_input(struct client *client)
 		return;
 	}
 
+	output = client->output;
+	o_stream_ref(output);
+	o_stream_cork(output);
 	while ((line = i_stream_next_line(input)) != NULL) {
 		if (client->v.proxy_parse_line(client, line) != 0)
 			break;
 	}
+	o_stream_uncork(output);
+	o_stream_unref(&output);
 }
 
 static int proxy_start(struct client *client,
@@ -355,7 +361,9 @@ static void ATTR_NULL(3, 4)
 client_auth_result(struct client *client, enum client_auth_result result,
 		   const struct client_auth_reply *reply, const char *text)
 {
+	o_stream_cork(client->output);
 	client->v.auth_result(client, result, reply, text);
+	o_stream_uncork(client->output);
 }
 
 static bool

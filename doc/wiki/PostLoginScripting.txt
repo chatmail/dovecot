@@ -40,6 +40,11 @@ whatever user owns the mails (e.g. vmail). If you're using multiple UNIX UIDs
 (e.g. system users), use 'script-login -d' to drop to the UID/GID specified by
 the userdb lookup (ignoring user/group/chroot service settings).
 
+It's not currently possible to run post-login scripts in <proxies>
+[PasswordDatabase.ExtraFields.Proxy.txt], because they're not actually logging
+in to the local Dovecot. An alternative method could be implemented some day,
+maybe as a plugin.
+
 Running environment
 -------------------
 
@@ -234,4 +239,4 @@ NAMESPACE/S-SPAMREP/TYPE NAMESPACE/S-SPAMREP/PREFIX
 NAMESPACE/S-SPAMREP/LOCATION
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

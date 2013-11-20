@@ -226,4 +226,12 @@ however rather deprecated):In this case 'X-UIDL' is used for the POP3 UIDLs.
 Therefore,*in this case, is recommended to strip the 'X-UIDL' mail headers
 _case-insensitively_ at the MTA, MDA or LDA*.
 
-(This file was created from the wiki on 2013-08-05 04:42)
+Mail delivery
+=============
+
+Some MTA configurations have the MTA directly dropping mail into Maildirs or
+mboxes.  Since most MTAs don't understand the dbox format, this option is not
+available.  Instead, the MTA could be set up to use <LMTP#mta> [LMTP.txt] or
+<the Dovecot Local Delivery Agent> [LDA.txt].
+
+(This file was created from the wiki on 2013-11-19 04:42)

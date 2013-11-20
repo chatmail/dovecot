@@ -98,12 +98,17 @@ static void imapc_list_deinit(struct mailbox_list *_list)
 {
 	struct imapc_mailbox_list *list = (struct imapc_mailbox_list *)_list;
 
+	/* make sure all pending commands are aborted before anything is
+	   deinitialized */
+	if (list->client != NULL) {
+		imapc_client_disconnect(list->client->client);
+		imapc_storage_client_unref(&list->client);
+	}
 	if (list->index_list != NULL)
 		mailbox_list_destroy(&list->index_list);
 	mailbox_tree_deinit(&list->mailboxes);
 	if (list->tmp_subscriptions != NULL)
 		mailbox_tree_deinit(&list->tmp_subscriptions);
-	imapc_storage_client_unref(&list->client);
 	pool_unref(&list->list.pool);
 }
 
@@ -264,7 +269,7 @@ static void imapc_storage_sep_callback(const struct imapc_command_reply *reply,
 		imapc_list_sep_verify(list);
 	else if (reply->state == IMAPC_COMMAND_STATE_NO)
 		imapc_list_copy_error_from_reply(list, MAIL_ERROR_PARAMS, reply);
-	else {
+	else if (!list->list.ns->user->deinitializing) {
 		mailbox_list_set_critical(&list->list,
 			"imapc: Command failed: %s", reply->text_full);
 	}

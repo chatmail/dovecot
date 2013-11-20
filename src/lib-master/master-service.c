@@ -760,6 +760,8 @@ void master_service_deinit(struct master_service **_service)
 		pool_unref(&service->set_pool);
 	}
 	lib_signals_deinit();
+	/* run atexit callbacks before destroying ioloop */
+	lib_atexit_run();
 	io_loop_destroy(&service->ioloop);
 
 	if (service->listener_names != NULL)
@@ -839,6 +841,16 @@ static void master_service_listen(struct master_service_listener *l)
 		/* reading FIFOs stays open forever, don't count them
 		   as real clients */
 		master_service_client_connection_destroyed(service);
+	}
+	if (service->master_status.available_count == 0 &&
+	    service->service_count_left == 1) {
+		/* we're not going to accept any more connections after this.
+		   go ahead and close the connection early. don't do this
+		   before calling callback, because it may want to access
+		   the listen_fd (e.g. to check socket permissions). */
+		i_assert(service->listeners != NULL);
+		master_service_io_listeners_remove(service);
+		master_service_io_listeners_close(service);
 	}
 }
 
@@ -923,6 +935,7 @@ static void master_service_io_listeners_close(struct master_service *service)
 					i_error("close(listener %d) failed: %m",
 						service->listeners[i].fd);
 				}
+				service->listeners[i].fd = -1;
 			}
 		}
 	} else {

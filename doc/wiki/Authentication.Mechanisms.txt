@@ -45,7 +45,9 @@ Dovecot supports the following non-plaintext mechanisms:
    Somewhat good support in clients.
  * <DIGEST-MD5> [Authentication.Mechanisms.DigestMD5.txt]: Somewhat stronger
    cryptographically than CRAM-MD5, but clients rarely support it.
- * APOP: This is a POP3-specific authentication. Similiar to CRAM-MD5, but
+ * SCRAM-SHA-1: Salted Challenge Response Authentication Mechanism (SCRAM) SASL
+   and GSS-API Mechanisms. Intended as DIGEST-MD5 replacement.
+ * APOP: This is a POP3-specific authentication. Similar to CRAM-MD5, but
    requires storing password in plaintext.
  * <NTLM> [Authentication.Mechanisms.NTLM.txt]: Mechanism created by Microsoft
    and supported by their clients.
@@ -58,11 +60,9 @@ Dovecot supports the following non-plaintext mechanisms:
  * RPA: Compuserve RPA authentication mechanism. Similar to DIGEST-MD5, but
    client support is rare.
  * ANONYMOUS: Support for logging in anonymously. This may be useful if you're
-   intending to provide publically accessible IMAP archive.
+   intending to provide publicly accessible IMAP archive.
  * OTP and SKEY: One time password mechanisms.
  * EXTERNAL: EXTERNAL SASL mechanism.
- * SCRAM-SHA-1: Salted Challenge Response Authentication Mechanism (SCRAM) SASL
-   and GSS-API Mechanisms
 
 Configuration
 -------------
@@ -73,4 +73,4 @@ By default only PLAIN mechanism is enabled. To use more, set:
 auth_mechanisms = plain login cram-md5
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

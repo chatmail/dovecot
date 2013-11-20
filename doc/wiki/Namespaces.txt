@@ -199,7 +199,7 @@ namespace compat3 {
 Backwards Compatibility: Courier IMAP
 -------------------------------------
 
-You can continue using the same INBOX. namespace as Courier:
+*Recommended:* You can continue using the same INBOX. namespace as Courier:
 
 ---%<-------------------------------------------------------------------------
 namespace inbox {
@@ -209,8 +209,8 @@ namespace inbox {
 }
 ---%<-------------------------------------------------------------------------
 
-Alternatively you can create the INBOX. as a compatibility name, so old clients
-can continue using it while new clients will use the empty prefix namespace:
+*Alternatively:* Create the INBOX. as a compatibility name, so old clients can
+continue using it while new clients will use the empty prefix namespace:
 
 ---%<-------------------------------------------------------------------------
 namespace inbox {
@@ -234,13 +234,17 @@ The "separator=/" allows the INBOX to have child mailboxes. Otherwise with
 "foo" child or the root "foo" mailbox in "INBOX." compatibility namespace. With
 "separator=/" the difference is clear with "INBOX/foo" vs. "INBOX.foo".
 
-Problems with this:
+The alternative configuration is not recommended, as it may introduce there
+problems:
 
  * Although clients may do LIST INBOX.*, they may still do LSUB *, resulting in
    mixed results.
  * If clients used empty namespace with Courier, they now see the mailboxes
    with different names, resulting in redownloading of all mails (except
    INBOX).
+ * Some clients may have random errors auto-detecting the proper default
+   folders (Sent, Drafts etc) if the client settings refer to old paths while
+   the server lists new paths.
 
 Per-user Namespace Location From SQL
 ------------------------------------
@@ -273,4 +277,4 @@ user_query = SELECT Location as 'namespace/docs/location' FROM Namespaces WHERE
 ..
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

@@ -64,6 +64,7 @@ static const struct setting_define inet_listener_setting_defines[] = {
 	DEF(SET_STR, address),
 	DEF(SET_UINT, port),
 	DEF(SET_BOOL, ssl),
+	DEF(SET_BOOL, reuse_port),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -72,7 +73,8 @@ static const struct inet_listener_settings inet_listener_default_settings = {
 	.name = "",
 	.address = "",
 	.port = 0,
-	.ssl = FALSE
+	.ssl = FALSE,
+	.reuse_port = FALSE
 };
 
 static const struct setting_parser_info inet_listener_setting_parser_info = {
@@ -215,7 +217,7 @@ static const struct master_settings master_default_settings = {
 	.state_dir = PKG_STATEDIR,
 	.libexec_dir = PKG_LIBEXECDIR,
 	.instance_name = PACKAGE,
-	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,
+	.import_environment = "TZ DEBUG_OUTOFMEM" ENV_SYSTEMD ENV_GDB,
 	.protocols = "imap pop3 lmtp",
 	.listen = "*, ::",
 	.ssl = "yes:no:required",

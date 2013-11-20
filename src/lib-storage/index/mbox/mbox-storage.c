@@ -379,6 +379,7 @@ mbox_mailbox_alloc(struct mail_storage *storage, struct mailbox_list *list,
 	mbox->storage = (struct mbox_storage *)storage;
 	mbox->mbox_fd = -1;
 	mbox->mbox_lock_type = F_UNLCK;
+	mbox->mbox_list_index_ext_id = (uint32_t)-1;
 
 	if (strcmp(mbox->storage->set->mbox_md5, "apop3d") == 0)
 		mbox->md5_v = mbox_md5_apop3d;
@@ -736,7 +737,8 @@ mbox_transaction_unlock(struct mailbox *box, unsigned int lock_id1,
 	if (lock_id2 != 0)
 		mbox_unlock(mbox, lock_id2);
 	if (mbox->mbox_global_lock_id == 0) {
-		i_assert(mbox->box.transaction_count > 0 ||
+		i_assert(mbox->box.transaction_count > 0);
+		i_assert(mbox->box.transaction_count > 1 ||
 			 mbox->external_transactions > 0 ||
 			 mbox->mbox_lock_type == F_UNLCK);
 	} else {
@@ -836,8 +838,8 @@ struct mailbox mbox_mailbox = {
 		index_storage_attribute_iter_init,
 		index_storage_attribute_iter_next,
 		index_storage_attribute_iter_deinit,
-		index_storage_list_index_has_changed,
-		index_storage_list_index_update_sync,
+		mbox_list_index_has_changed,
+		mbox_list_index_update_sync,
 		mbox_storage_sync_init,
 		index_mailbox_sync_next,
 		index_mailbox_sync_deinit,

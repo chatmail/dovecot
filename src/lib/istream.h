@@ -35,6 +35,9 @@ struct istream *i_stream_create_limit(struct istream *input, uoff_t v_size);
 struct istream *i_stream_create_range(struct istream *input,
 				      uoff_t v_offset, uoff_t v_size);
 struct istream *i_stream_create_error(int stream_errno);
+struct istream *
+i_stream_create_error_str(int stream_errno, const char *fmt, ...)
+	ATTR_FORMAT(2, 3);
 
 /* Set name (e.g. path) for input stream. */
 void i_stream_set_name(struct istream *stream, const char *name);
@@ -65,6 +68,8 @@ void i_stream_remove_destroy_callback(struct istream *stream,
 
 /* Return file descriptor for stream, or -1 if none is available. */
 int i_stream_get_fd(struct istream *stream);
+/* Returns error string for the last error. */
+const char *i_stream_get_error(struct istream *stream);
 
 /* Mark the stream and all of its parent streams closed. Any reads after this
    will return -1. The data already read can still be used. */

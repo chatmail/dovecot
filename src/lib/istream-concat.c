@@ -133,6 +133,10 @@ static ssize_t i_stream_concat_read(struct istream_private *stream)
 			return ret;
 
 		if (ret == -1 && cstream->cur_input->stream_errno != 0) {
+			io_stream_set_error(&cstream->istream.iostream,
+				"read(%s) failed: %s",
+				i_stream_get_name(cstream->cur_input),
+				i_stream_get_error(cstream->cur_input));
 			stream->istream.stream_errno =
 				cstream->cur_input->stream_errno;
 			return -1;
@@ -204,9 +208,13 @@ find_v_offset(struct concat_istream *cstream, uoff_t *v_offset)
 		if (i == cstream->unknown_size_idx) {
 			/* we'll need to figure out this stream's size */
 			if (i_stream_stat(cstream->input[i], TRUE, &st) < 0) {
-				i_error("istream-concat: "
-					"Failed to get size of stream %s",
-					i_stream_get_name(cstream->input[i]));
+				io_stream_set_error(&cstream->istream.iostream,
+					"stat(%s) failed: %s",
+					i_stream_get_name(cstream->input[i]),
+					i_stream_get_error(cstream->input[i]));
+				i_error("istream-concat: stat(%s) failed: %s",
+					i_stream_get_name(cstream->input[i]),
+					i_stream_get_error(cstream->input[i]));
 				cstream->istream.istream.stream_errno =
 					cstream->input[i]->stream_errno;
 				return UINT_MAX;

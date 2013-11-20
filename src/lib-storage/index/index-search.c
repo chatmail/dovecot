@@ -665,7 +665,7 @@ static int search_arg_match_text(struct mail_search_arg *args,
 		mailbox_header_lookup_init(ctx->box, headers);
 	if (headers != NULL &&
 	    (!have_body ||
-	     ctx->cur_mail->lookup_abort == MAIL_LOOKUP_ABORT_NEVER)) {
+	     ctx->cur_mail->lookup_abort != MAIL_LOOKUP_ABORT_NEVER)) {
 		/* try to look up the specified headers from cache */
 		i_assert(*headers != NULL);
 
@@ -679,7 +679,10 @@ static int search_arg_match_text(struct mail_search_arg *args,
 		input = NULL;
 	} else if (have_headers) {
 		/* we need to read the entire header */
-		if (mail_get_hdr_stream(ctx->cur_mail, NULL, &input) < 0)
+		ret = have_body ?
+			mail_get_stream(ctx->cur_mail, NULL, NULL, &input) :
+			mail_get_hdr_stream(ctx->cur_mail, NULL, &input);
+		if (ret < 0)
 			failed = TRUE;
 		else {
 			hdr_ctx.parse_headers =

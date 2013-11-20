@@ -517,6 +517,7 @@ int auth_master_user_lookup(struct auth_master_connection *conn,
 		*username_r = ctx.fields[0];
 		*fields_r = ctx.fields + 1;
 	}
+	conn->reply_context = NULL;
 	return ctx.return_value;
 }
 
@@ -583,33 +584,42 @@ int auth_master_pass_lookup(struct auth_master_connection *conn,
 
 	*fields_r = ctx.fields != NULL ? ctx.fields :
 		p_new(pool, const char *, 1);
+	conn->reply_context = NULL;
 	return ctx.return_value;
 }
+
+struct auth_master_cache_ctx {
+	struct auth_master_connection *conn;
+	unsigned int count;
+	bool failed;
+};
 
 static bool
 auth_cache_flush_reply_callback(const char *cmd, const char *const *args,
 				void *context)
 {
-	unsigned int *countp = context;
+	struct auth_master_cache_ctx *ctx = context;
 
 	if (strcmp(cmd, "OK") != 0)
-		*countp = UINT_MAX;
-	else if (args[0] == NULL || str_to_uint(args[0], countp) < 0)
-		*countp = UINT_MAX;
+		ctx->failed = TRUE;
+	else if (args[0] == NULL || str_to_uint(args[0], &ctx->count) < 0)
+		ctx->failed = TRUE;
 
-	io_loop_stop(current_ioloop);
+	io_loop_stop(ctx->conn->ioloop);
 	return TRUE;
 }
 
 int auth_master_cache_flush(struct auth_master_connection *conn,
 			    const char *const *users, unsigned int *count_r)
 {
+	struct auth_master_cache_ctx ctx;
 	string_t *str;
 
-	*count_r = UINT_MAX;
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.conn = conn;
 
 	conn->reply_callback = auth_cache_flush_reply_callback;
-	conn->reply_context = count_r;
+	conn->reply_context = &ctx;
 
 	str = t_str_new(128);
 	str_printfa(str, "CACHE-FLUSH\t%u", auth_master_next_request_id(conn));
@@ -625,7 +635,9 @@ int auth_master_cache_flush(struct auth_master_connection *conn,
 	(void)auth_master_run_cmd(conn, str_c(str));
 	conn->prefix = DEFAULT_USERDB_LOOKUP_PREFIX;
 
-	return *count_r == UINT_MAX ? -1 : 0;
+	conn->reply_context = NULL;
+	*count_r = ctx.count;
+	return ctx.failed ? -1 : 0;
 }
 
 static bool
@@ -710,7 +722,7 @@ const char *auth_master_user_list_next(struct auth_master_user_list_ctx *ctx)
 		io_loop_set_current(ctx->conn->prev_ioloop);
 	}
 
-	if (ctx->finished || ctx->failed)
+	if (ctx->finished || ctx->failed || ctx->conn->aborted)
 		return NULL;
 	return str_c(ctx->username);
 }

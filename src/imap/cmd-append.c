@@ -52,16 +52,17 @@ static void cmd_append_finish(struct cmd_append_context *ctx);
 static bool cmd_append_continue_message(struct client_command_context *cmd);
 static bool cmd_append_parse_new_msg(struct client_command_context *cmd);
 
-static const char *get_disconnect_reason(struct cmd_append_context *ctx)
+static const char *
+get_disconnect_reason(struct cmd_append_context *ctx, uoff_t lit_offset)
 {
 	string_t *str = t_str_new(128);
 	unsigned int secs = ioloop_time - ctx->started;
 
 	str_printfa(str, "Disconnected in APPEND (%u msgs, %u secs",
 		    ctx->count, secs);
-	if (ctx->litinput != NULL) {
+	if (ctx->literal_size > 0) {
 		str_printfa(str, ", %"PRIuUOFF_T"/%"PRIuUOFF_T" bytes",
-			    ctx->litinput->v_offset, ctx->literal_size);
+			    lit_offset, ctx->literal_size);
 	}
 	str_append_c(str, ')');
 	return str_c(str);
@@ -73,6 +74,7 @@ static void client_input_append(struct client_command_context *cmd)
 	struct client *client = cmd->client;
 	const char *reason;
 	bool finished;
+	uoff_t lit_offset;
 
 	i_assert(!client->destroyed);
 
@@ -82,7 +84,9 @@ static void client_input_append(struct client_command_context *cmd)
 	switch (i_stream_read(client->input)) {
 	case -1:
 		/* disconnected */
-		reason = get_disconnect_reason(ctx);
+		lit_offset = ctx->litinput == NULL ? 0 :
+			ctx->litinput->v_offset;
+		reason = get_disconnect_reason(ctx, lit_offset);
 		cmd_append_finish(cmd->context);
 		/* Reset command so that client_destroy() doesn't try to call
 		   cmd_append_continue_message() anymore. */
@@ -212,8 +216,9 @@ cmd_append_catenate_mpurl(struct client_command_context *cmd,
 	if (mpresult.input->stream_errno != 0) {
 		errno = mpresult.input->stream_errno;
 		mail_storage_set_critical(ctx->box->storage,
-			"read(%s) failed: %m (for CATENATE URL %s)",
-			i_stream_get_name(mpresult.input), caturl);
+			"read(%s) failed: %s (for CATENATE URL %s)",
+			i_stream_get_name(mpresult.input),
+			i_stream_get_error(mpresult.input), caturl);
 		client_send_storage_error(cmd, ctx->storage);
 		ret = -1;
 	} else if (!mpresult.input->eof) {
@@ -539,6 +544,8 @@ cmd_append_handle_args(struct client_command_context *cmd,
 	} else if (!imap_parse_datetime(internal_date_str,
 					&internal_date, &timezone_offset)) {
 		client_send_command_error(cmd, "Invalid internal date.");
+		if (keywords != NULL)
+			mailbox_keywords_unref(&keywords);
 		return -1;
 	}
 
@@ -560,8 +567,11 @@ cmd_append_handle_args(struct client_command_context *cmd,
 					"NO Can't save a zero byte message.");
 				ctx->failed = TRUE;
 			}
-			if (!*nonsync_r)
+			if (!*nonsync_r) {
+				if (keywords != NULL)
+					mailbox_keywords_unref(&keywords);
 				return -1;
+			}
 			/* {0+} used. although there isn't any point in using
 			   MULTIAPPEND here and adding more messages, it is
 			   technically valid so we'll continue parsing.. */
@@ -580,8 +590,6 @@ cmd_append_handle_args(struct client_command_context *cmd,
 		/* save the mail */
 		ctx->save_ctx = mailbox_save_alloc(ctx->t);
 		mailbox_save_set_flags(ctx->save_ctx, flags, keywords);
-		if (keywords != NULL)
-			mailbox_keywords_unref(&keywords);
 		mailbox_save_set_received_date(ctx->save_ctx,
 					       internal_date, timezone_offset);
 		if (mailbox_save_begin(&ctx->save_ctx, ctx->input) < 0) {
@@ -590,6 +598,8 @@ cmd_append_handle_args(struct client_command_context *cmd,
 			ctx->failed = TRUE;
 		}
 	}
+	if (keywords != NULL)
+		mailbox_keywords_unref(&keywords);
 	ctx->count++;
 
 	if (cat_list == NULL) {
@@ -819,12 +829,14 @@ static bool cmd_append_continue_message(struct client_command_context *cmd)
 	}
 
 	if (ctx->litinput->eof || client->input->closed) {
-		bool all_written = ctx->litinput->v_offset == ctx->literal_size;
+		uoff_t lit_offset = ctx->litinput->v_offset;
 
 		/* finished - do one more read, to make sure istream-chain
 		   unreferences its stream, which is needed for litinput's
 		   unreferencing to seek the client->input to correct
-		   position */
+		   position. the seek is needed to avoid trying to seek
+		   backwards in the ctx->input's parent stream. */
+		i_stream_seek(ctx->input, ctx->input->v_offset);
 		(void)i_stream_read(ctx->input);
 		i_stream_unref(&ctx->litinput);
 
@@ -835,12 +847,13 @@ static bool cmd_append_continue_message(struct client_command_context *cmd)
 			/* failed above */
 			client_send_storage_error(cmd, ctx->storage);
 			ctx->failed = TRUE;
-		} else if (!all_written) {
+		} else if (lit_offset != ctx->literal_size) {
 			/* client disconnected before it finished sending the
 			   whole message. */
 			ctx->failed = TRUE;
 			mailbox_save_cancel(&ctx->save_ctx);
-			client_disconnect(client, "EOF while appending");
+			client_disconnect(client,
+				get_disconnect_reason(ctx, lit_offset));
 		} else if (ctx->catenate) {
 			/* CATENATE isn't finished yet */
 		} else if (mailbox_save_finish(&ctx->save_ctx) < 0) {

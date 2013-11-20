@@ -74,6 +74,10 @@
 #define DIRECTOR_HANDSHAKE_WARN_SECS 29
 #define DIRECTOR_HANDSHAKE_BYTES_LOG_MIN_SECS (60*30)
 #define DIRECTOR_MAX_SYNC_SEQ_DUPLICATES 4
+/* If we receive SYNCs with a timestamp this many seconds higher than the last
+   valid received SYNC timestamp, assume that we lost the director's restart
+   notification and reset the last_sync_seq */
+#define DIRECTOR_SYNC_STALE_TIMESTAMP_RESET_SECS (60*2)
 
 #if DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS <= DIRECTOR_CONNECTION_PING_TIMEOUT_MSECS
 #  error DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS is too low
@@ -405,7 +409,7 @@ static bool director_cmd_me(struct director_connection *conn,
 	conn->host->removed = FALSE;
 	director_host_ref(conn->host);
 	/* make sure we don't keep old sequence values across restarts */
-	conn->host->last_seq = 0;
+	director_host_restarted(conn->host);
 
 	next_comm_attempt = conn->host->last_protocol_failure +
 		DIRECTOR_PROTOCOL_FAILURE_RETRY_SECS;
@@ -625,7 +629,6 @@ static bool director_cmd_director(struct director_connection *conn,
 	struct director_host *host;
 	struct ip_addr ip;
 	unsigned int port;
-	bool forward = FALSE;
 
 	if (!director_args_parse_ip_port(conn, args, &ip, &port))
 		return FALSE;
@@ -644,20 +647,18 @@ static bool director_cmd_director(struct director_connection *conn,
 		/* already have this. just reset its last_network_failure
 		   timestamp, since it might be up now. */
 		host->last_network_failure = 0;
-		if (host->last_seq != 0) {
-			/* it also may have been restarted, reset last_seq */
-			host->last_seq = 0;
-			forward = TRUE;
-		}
+		/* it also may have been restarted, reset its state */
+		director_host_restarted(host);
 	} else {
 		/* save the director and forward it */
 		host = director_host_add(conn->dir, &ip, port);
-		forward = TRUE;
 	}
-	if (forward) {
-		director_notify_ring_added(host,
-			director_connection_get_host(conn));
-	}
+	/* just forward this to the entire ring until it reaches back to
+	   itself. some hosts may see this twice, but that's the only way to
+	   guarantee that it gets seen by everyone. reseting the host multiple
+	   times may cause us to handle its commands multiple times, but the
+	   commands can handle that. */
+	director_notify_ring_added(host, director_connection_get_host(conn));
 	return TRUE;
 }
 
@@ -1120,17 +1121,39 @@ director_connection_sync_host(struct director_connection *conn,
 			director_set_ring_synced(dir);
 		}
 	} else {
-		if (seq < host->last_sync_seq) {
+		if (seq < host->last_sync_seq &&
+		    timestamp < host->last_sync_timestamp +
+		    DIRECTOR_SYNC_STALE_TIMESTAMP_RESET_SECS) {
 			/* stale SYNC event */
+			dir_debug("Ignore stale SYNC event for %s "
+				  "(seq %u < %u, timestamp=%u)",
+				  host->name, seq, host->last_sync_seq,
+				  timestamp);
 			return FALSE;
-		} else if (host->last_sync_seq != seq ||
-			   timestamp < host->last_sync_timestamp) {
+		} else if (seq < host->last_sync_seq) {
+			i_warning("Last SYNC seq for %s appears to be stale, reseting "
+				  "(seq=%u, timestamp=%u -> seq=%u, timestamp=%u)",
+				  host->name, host->last_sync_seq,
+				  host->last_sync_timestamp, seq, timestamp);
 			host->last_sync_seq = seq;
 			host->last_sync_timestamp = timestamp;
 			host->last_sync_seq_counter = 1;
+		} else if (seq > host->last_sync_seq ||
+			   timestamp > host->last_sync_timestamp) {
+			host->last_sync_seq = seq;
+			host->last_sync_timestamp = timestamp;
+			host->last_sync_seq_counter = 1;
+			dir_debug("Update SYNC for %s "
+				  "(seq=%u, timestamp=%u -> seq=%u, timestamp=%u)",
+				  host->name, host->last_sync_seq,
+				  host->last_sync_timestamp, seq, timestamp);
 		} else if (++host->last_sync_seq_counter >
 			   DIRECTOR_MAX_SYNC_SEQ_DUPLICATES) {
 			/* we've received this too many times already */
+			dir_debug("Ignore duplicate #%u SYNC event for %s "
+				  "(seq=%u, timestamp %u <= %u)",
+				  host->last_sync_seq_counter, host->name, seq,
+				  timestamp, host->last_sync_timestamp);
 			return FALSE;
 		}
 
@@ -1175,7 +1198,7 @@ static bool director_connection_sync(struct director_connection *conn,
 	}
 
 	if ((host == NULL || !host->self) &&
-	    dir->self_host->last_sync_timestamp != ioloop_time)
+	    (time_t)dir->self_host->last_sync_timestamp != ioloop_time)
 		(void)director_resend_sync(dir);
 	return TRUE;
 }
@@ -1591,7 +1614,7 @@ director_connection_init_out(struct director *dir, int fd,
 	i_assert(!host->removed);
 
 	/* make sure we don't keep old sequence values across restarts */
-	host->last_seq = 0;
+	director_host_restarted(host);
 
 	conn = director_connection_init_common(dir, fd);
 	conn->name = i_strdup_printf("%s/out", host->name);

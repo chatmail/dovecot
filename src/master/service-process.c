@@ -23,6 +23,7 @@
 #include "dup2-array.h"
 #include "service.h"
 #include "service-anvil.h"
+#include "service-listen.h"
 #include "service-log.h"
 #include "service-process-notify.h"
 #include "service-process.h"
@@ -33,6 +34,24 @@
 #include <syslog.h>
 #include <signal.h>
 #include <sys/wait.h>
+
+static void service_reopen_inet_listeners(struct service *service)
+{
+	struct service_listener *const *listeners;
+	unsigned int i, count;
+	int old_fd;
+
+	listeners = array_get(&service->listeners, &count);
+	for (i = 0; i < count; i++) {
+		if (!listeners[i]->reuse_port || listeners[i]->fd == -1)
+			continue;
+
+		old_fd = listeners[i]->fd;
+		listeners[i]->fd = -1;
+		if (service_listener_listen(listeners[i]) < 0)
+			listeners[i]->fd = old_fd;
+	}
+}
 
 static void
 service_dup_fds(struct service *service)
@@ -218,7 +237,8 @@ static void service_process_setup_config_environment(struct service *service)
 }
 
 static void
-service_process_setup_environment(struct service *service, unsigned int uid)
+service_process_setup_environment(struct service *service, unsigned int uid,
+				  const char *hostdomain)
 {
 	master_service_env_clean();
 
@@ -238,7 +258,7 @@ service_process_setup_environment(struct service *service, unsigned int uid)
 	}
 	env_put(t_strdup_printf(MASTER_UID_ENV"=%u", uid));
 	env_put(t_strdup_printf(MY_HOSTNAME_ENV"=%s", my_hostname));
-	env_put(t_strdup_printf(MY_HOSTDOMAIN_ENV"=%s", my_hostdomain()));
+	env_put(t_strdup_printf(MY_HOSTDOMAIN_ENV"=%s", hostdomain));
 
 	if (!service->set->master_set->version_ignore)
 		env_put(MASTER_DOVECOT_VERSION_ENV"="PACKAGE_VERSION);
@@ -272,6 +292,7 @@ struct service_process *service_process_create(struct service *service)
 	static unsigned int uid_counter = 0;
 	struct service_process *process;
 	unsigned int uid = ++uid_counter;
+	const char *hostdomain;
 	pid_t pid;
 	bool process_forked;
 
@@ -286,6 +307,9 @@ struct service_process *service_process_create(struct service *service)
 		   new processes now */
 		return NULL;
 	}
+	/* look this up before fork()ing so that it gets cached for all the
+	   future lookups. */
+	hostdomain = my_hostdomain();
 
 	if (service->type == SERVICE_TYPE_ANVIL &&
 	    service_anvil_global->pid != 0) {
@@ -295,6 +319,7 @@ struct service_process *service_process_create(struct service *service)
 	} else {
 		pid = fork();
 		process_forked = TRUE;
+		service->list->fork_counter++;
 	}
 
 	if (pid < 0) {
@@ -303,7 +328,8 @@ struct service_process *service_process_create(struct service *service)
 	}
 	if (pid == 0) {
 		/* child */
-		service_process_setup_environment(service, uid);
+		service_process_setup_environment(service, uid, hostdomain);
+		service_reopen_inet_listeners(service);
 		service_dup_fds(service);
 		drop_privileges(service);
 		process_exec(service->executable, NULL);
@@ -384,6 +410,8 @@ void service_process_unref(struct service_process *process)
 static const char *
 get_exit_status_message(struct service *service, enum fatal_exit_status status)
 {
+	string_t *str;
+
 	switch (status) {
 	case FATAL_LOGOPEN:
 		return "Can't open log file";
@@ -392,12 +420,17 @@ get_exit_status_message(struct service *service, enum fatal_exit_status status)
 	case FATAL_LOGERROR:
 		return "Internal logging error";
 	case FATAL_OUTOFMEM:
-		if (service->vsz_limit == 0)
-			return "Out of memory";
-		return t_strdup_printf("Out of memory (service %s { vsz_limit=%u MB }, "
-				"you may need to increase it)",
-				service->set->name,
-				(unsigned int)(service->vsz_limit/1024/1024));
+		str = t_str_new(128);
+		str_append(str, "Out of memory");
+		if (service->vsz_limit != 0) {
+			str_printfa(str, " (service %s { vsz_limit=%u MB }, "
+				    "you may need to increase it)",
+				    service->set->name,
+				    (unsigned int)(service->vsz_limit/1024/1024));
+		}
+		if (getenv("DEBUG_OUTOFMEM") == NULL)
+			str_append(str, " - set DEBUG_OUTOFMEM=1 environment to get core dump");
+		return str_c(str);
 	case FATAL_EXEC:
 		return "exec() failed";
 

@@ -75,12 +75,11 @@ struct http_client *http_client_init(const struct http_client_settings *set)
 	pool = pool_alloconly_create("http client", 1024);
 	client = p_new(pool, struct http_client, 1);
 	client->pool = pool;
-	if (set->dns_client_socket_path != NULL && *set->dns_client_socket_path != '\0') {
-		client->set.dns_client_socket_path =
-			p_strdup(pool, set->dns_client_socket_path);
-	}
-	if (set->rawlog_dir != NULL && *set->rawlog_dir != '\0')
-		client->set.rawlog_dir = p_strdup(pool, set->rawlog_dir);
+	client->set.dns_client = set->dns_client;
+	client->set.dns_client_socket_path =
+		p_strdup_empty(pool, set->dns_client_socket_path);
+	client->set.user_agent = p_strdup_empty(pool, set->user_agent);
+	client->set.rawlog_dir = p_strdup_empty(pool, set->rawlog_dir);
 	client->set.ssl_ca_dir = p_strdup(pool, set->ssl_ca_dir);
 	client->set.ssl_ca_file = p_strdup(pool, set->ssl_ca_file);
 	client->set.ssl_ca = p_strdup(pool, set->ssl_ca);
@@ -89,13 +88,25 @@ struct http_client *http_client_init(const struct http_client_settings *set)
 	client->set.ssl_cert = p_strdup(pool, set->ssl_cert);
 	client->set.ssl_key = p_strdup(pool, set->ssl_key);
 	client->set.ssl_key_password = p_strdup(pool, set->ssl_key_password);
+
+	if (set->proxy_socket_path != NULL && *set->proxy_socket_path != '\0') {
+		client->set.proxy_socket_path = p_strdup(pool, set->proxy_socket_path);
+	} else if (set->proxy_url != NULL) {
+		client->set.proxy_url = http_url_clone(pool, set->proxy_url);
+	}
+	client->set.proxy_username = p_strdup_empty(pool, set->proxy_username);
+	client->set.proxy_password = p_strdup_empty(pool, set->proxy_password);
+
 	client->set.max_idle_time_msecs = set->max_idle_time_msecs;
 	client->set.max_parallel_connections =
 		(set->max_parallel_connections > 0 ? set->max_parallel_connections : 1);
 	client->set.max_pipelined_requests =
 		(set->max_pipelined_requests > 0 ? set->max_pipelined_requests : 1);
 	client->set.max_attempts = set->max_attempts;
+	client->set.no_auto_redirect = set->no_auto_redirect;
+	client->set.no_ssl_tunnel = set->no_ssl_tunnel;
 	client->set.max_redirects = set->max_redirects;
+	client->set.response_hdr_limits = set->response_hdr_limits;
 	client->set.request_timeout_msecs = set->request_timeout_msecs;
 	client->set.connect_timeout_msecs = set->connect_timeout_msecs;
 	client->set.soft_connect_timeout_msecs = set->soft_connect_timeout_msecs;
@@ -142,6 +153,7 @@ void http_client_switch_ioloop(struct http_client *client)
 {
 	struct connection *_conn = client->conn_list->connections;
 	struct http_client_host *host;
+	struct http_client_peer *peer;
 
 	/* move connections */
 	/* FIXME: we wouldn't necessarily need to switch all of them
@@ -153,6 +165,10 @@ void http_client_switch_ioloop(struct http_client *client)
 
 		http_client_connection_switch_ioloop(conn);
 	}
+
+	/* move peers */
+	for (peer = client->peers_list; peer != NULL; peer = peer->next)
+		http_client_peer_switch_ioloop(peer);
 
 	/* move dns lookups and delayed requests */
 	for (host = client->hosts_list; host != NULL; host = host->next)
@@ -183,9 +199,9 @@ void http_client_wait(struct http_client *client)
 
 	http_client_debug(client, "All requests finished");
 
-	current_ioloop = prev_ioloop;
+	io_loop_set_current(prev_ioloop);
 	http_client_switch_ioloop(client);
-	current_ioloop = client->ioloop;
+	io_loop_set_current(client->ioloop);
 	io_loop_destroy(&client->ioloop);
 }
 

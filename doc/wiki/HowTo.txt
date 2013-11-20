@@ -43,9 +43,6 @@ HOWTOs / Examples / Tutorials
       Postfix etc.) [http://workaround.org/ispmail]
  * PostgreSQL
     * <PostgreSQL and Postfix> [HowTo.DovecotPostgresql.txt]
-    * Mailserver virtual configuration (Postfix, Dovecot, SMTP Auth, PostgreSQL
-      backend) German
-      [http://www.tuxj0b.de/HOWTO_Mailserver_mit_Postfix_Dovecot_Antispam_und_PostgreSQL_Backend]
     * PostgreSQL, Postfix (Dovecot LMTP and Dovecot SASL), Dovecot and vmm
       (command line tool) [http://vmm.localdomain.org/]
     * Installing a fully fledged, ready to use mailserver on Centos 6 with
@@ -84,4 +81,4 @@ Others:
  * Postfix + Dovecot2.0.13 + MySQL virtual_users as proxy to DBMail
    [http://content.fens.org/index.php?q=admin-howto/mail/dovecot2dbmail-proxy]
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

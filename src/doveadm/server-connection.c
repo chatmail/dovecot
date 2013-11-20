@@ -79,12 +79,13 @@ static void print_connection_released(void)
 }
 
 static void
-server_connection_callback(struct server_connection *conn, int exit_code)
+server_connection_callback(struct server_connection *conn,
+			   int exit_code, const char *error)
 {
 	server_cmd_callback_t *callback = conn->callback;
 
 	conn->callback = NULL;
-	callback(exit_code, conn->context);
+	callback(exit_code, error, conn->context);
 }
 
 static void stream_data(string_t *str, const unsigned char *data, size_t size)
@@ -198,6 +199,19 @@ server_connection_authenticate(struct server_connection *conn)
 	return 0;
 }
 
+static void server_log_disconnect_error(struct server_connection *conn)
+{
+	const char *error;
+
+	error = conn->ssl_iostream == NULL ? NULL :
+		ssl_iostream_get_last_error(conn->ssl_iostream);
+	if (error == NULL) {
+		error = conn->input->stream_errno == 0 ? "EOF" :
+			strerror(conn->input->stream_errno);
+	}
+	i_error("doveadm server disconnected before handshake: %s", error);
+}
+
 static void server_connection_input(struct server_connection *conn)
 {
 	const unsigned char *data;
@@ -207,8 +221,10 @@ static void server_connection_input(struct server_connection *conn)
 
 	if (!conn->handshaked) {
 		if ((line = i_stream_read_next_line(conn->input)) == NULL) {
-			if (conn->input->eof || conn->input->stream_errno != 0)
+			if (conn->input->eof || conn->input->stream_errno != 0) {
+				server_log_disconnect_error(conn);
 				server_connection_destroy(&conn);
+			}
 			return;
 		}
 
@@ -231,6 +247,7 @@ static void server_connection_input(struct server_connection *conn)
 
 	if (i_stream_read(conn->input) < 0) {
 		/* disconnected */
+		server_log_disconnect_error(conn);
 		server_connection_destroy(&conn);
 		return;
 	}
@@ -266,7 +283,7 @@ static void server_connection_input(struct server_connection *conn)
 		if (line == NULL)
 			return;
 		if (line[0] == '+')
-			server_connection_callback(conn, 0);
+			server_connection_callback(conn, 0, "");
 		else if (line[0] == '-') {
 			line++;
 			if (strcmp(line, "NOUSER") == 0)
@@ -275,7 +292,7 @@ static void server_connection_input(struct server_connection *conn)
 				/* old doveadm-server */
 				exit_code = EX_TEMPFAIL;
 			}
-			server_connection_callback(conn, exit_code);
+			server_connection_callback(conn, exit_code, line);
 		} else {
 			i_error("doveadm server sent broken input "
 				"(expected cmd reply): %s", line);
@@ -405,6 +422,7 @@ void server_connection_destroy(struct server_connection **_conn)
 {
 	struct server_connection *conn = *_conn;
 	struct server_connection *const *conns;
+	const char *error;
 	unsigned int i, count;
 
 	*_conn = NULL;
@@ -417,8 +435,16 @@ void server_connection_destroy(struct server_connection **_conn)
 		}
 	}
 
-	if (conn->callback != NULL)
-		server_connection_callback(conn, SERVER_EXIT_CODE_DISCONNECTED);
+	if (conn->callback != NULL) {
+		error = conn->ssl_iostream == NULL ? NULL :
+			ssl_iostream_get_last_error(conn->ssl_iostream);
+		if (error == NULL) {
+			error = conn->input->stream_errno == 0 ? "EOF" :
+				strerror(conn->input->stream_errno);
+		}
+		server_connection_callback(conn, SERVER_EXIT_CODE_DISCONNECTED,
+					   error);
+	}
 	if (printing_conn == conn)
 		print_connection_released();
 

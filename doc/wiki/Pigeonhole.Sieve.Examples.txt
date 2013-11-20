@@ -92,7 +92,7 @@ if anyof (exists "X-Cron-Env",
 Local copy of your emails:
 
 ---%<-------------------------------------------------------------------------
-require "envelope";
+require ["envelope", "imap4flags"];
 if envelope "from" "my_address@my_domain.com"
 {
    setflag "\\seen";
@@ -403,4 +403,4 @@ Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
 Here's the original post announcing it:
 http://dovecot.org/list/dovecot/2007-March/020895.html
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

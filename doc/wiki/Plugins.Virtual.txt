@@ -58,6 +58,9 @@ prefix. For example if you have namespaces with an empty prefix and a prefix
    empty prefix
  * 'mail/*' matches only mailboxes from the mail/ namespace
 
+Beware that "*" will not match any mailbox which already has a more specialised
+match!
+
 It's possible to give negative matches for mailbox names by prefixing the
 mailbox name with '-' character.
 
@@ -153,6 +156,17 @@ work/*
   all younger 172800
 ---%<-------------------------------------------------------------------------
 
+ * List unseen messages from foo and flagged messages from all mailboxes
+   (including foo):
+
+---%<-------------------------------------------------------------------------
+# ~/Maildir/virtual/example/dovecot-virtual
+foo
+  or unseen flagged
+*
+  flagged
+---%<-------------------------------------------------------------------------
+
 Virtual POP3 INBOX
 ------------------
 
@@ -225,4 +239,4 @@ IMAP UIDs. Instead use for GUIDs (with maildir the same as base filename):
 pop3_uidl_format = %g
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

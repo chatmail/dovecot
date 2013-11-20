@@ -1,3 +1,70 @@
+v2.2.8 2013-11-19  Timo Sirainen <tss@iki.fi>
+
+	+ Mail cache lookups work for the mail being saved. This improves
+	  performance by avoiding the need to parse the mail multiple times
+	  when using some plugins (e.g. mail_log).
+	+ Mail cache works for recently cached data also with in-memory
+	  indexes.
+	+ imapc: Many performance improvements, especially when working with
+	  dsync. Also added imapc_feature=fetch-headers which allows using
+	  FETCH BODY.PEEK[HEADER.FIELDS (..)] to avoid reading the entire
+	  header.
+	+ mail_location = ..:FULLDIRNAME=dbox-Mails is the same as
+	  :DIRNAME=dbox-Mails, but it will also be used for
+	  :INDEX and :CONTROL directories. (It should have worked this way
+	  from the beginning, but can't be changed anymore without breaking
+	  existing installations).
+	- Fixed infinite loop in message parsing if message ends with
+	  "--boundary" and CR (without LF). Messages saved via SMTP/LMTP can't
+	  trigger this, because messages must end with an "LF.". A user could
+	  trigger this for him/herself though.
+	- lmtp: Client was sometimes disconnected before all the output was
+	  sent to it.
+	- imap_zlib plugin caused crashes during client disconnection in
+	  v2.2.7
+	- replicator: Database wasn't being exported to disk every 15 minutes
+	  as it should have. Instead it was being imported, causing "doveadm
+	  replicator remove" commands to not work very well.
+
+v2.2.7 2013-11-03  Timo Sirainen <tss@iki.fi>
+
+	* Some usage of passdb checkpassword could have been exploitable by
+	  local users. You may need to modify your setup to keep it working.
+	  See http://wiki2.dovecot.org/AuthDatabase/CheckPassword#Security
+
+	+ auth: Added ability to truncate values logged by
+	  auth_verbose_passwords (see 10-logging.conf comment)
+	+ mdbox: Added "mdbox_deleted" storage, which can be used to access
+	  messages with refcount=0. For example: doveadm import
+	  mdbox_deleted:~/mdbox "" mailbox inbox subject oops
+	+ ssl-params: Added ssl_dh_parameters_length setting.
+	- master process was doing a hostname.domain lookup for each created
+	  process, which may have caused a lot of unnecessary DNS lookups.
+	- dsync: Syncing over 100 messages at once caused problems in some
+	  situations, causing messages to get new UIDs.
+	- fts-solr: Different Solr hosts for different users didn't work.
+
+v2.2.6 2013-09-25  Timo Sirainen <tss@iki.fi>
+
+	* acl: If public/shared namespace has a shared subscriptions file for
+	  all users, don't list subscription entries that are not visible to
+	  the user accessing it.
+
+	+ doveadm: Added "auth lookup" command for doing passdb lookup.
+	+ login_log_format_elements: Added %{orig_user}, %{orig_username}
+	  and %{orig_domain} expanding to the username exactly as sent by
+	  the client (before any changes auth process made).
+	+ Added ssl_prefer_server_ciphers setting.
+	+ auth_verbose_passwords: Log the password also for unknown users.
+	+ Linux: Added optional support for SO_REUSEPORT with
+	  inet_listener { reuse_port=yes }
+	- director: v2.2.5 changes caused "SYNC lost" errors
+	- dsync: Many fixes and error handling improvements
+	- doveadm -A: Don't waste CPU by doing a separate config lookup
+	  for each user
+	- Long-running ssl-params process no longer prevents Dovecot restart
+	- mbox: Fixed mailbox_list_index=yes to work correctly
+
 v2.2.5 2013-08-05  Timo Sirainen <tss@iki.fi>
 
 	+ SSL: Added support for ECDH/ECDHE cipher suites (by David Hicks)

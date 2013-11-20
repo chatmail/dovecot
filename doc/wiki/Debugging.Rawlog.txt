@@ -5,7 +5,9 @@ Dovecot supports logging post-login IMAP/POP3 traffic (also TLS/SSL encrypted)
 using 'rawlog' binary. It works by checking if 'dovecot.rawlog/' directory
 exists in the logged in user's home directory, and writing the traffic to
 'yyyymmdd-HHMMSS-pid.in' and '.out' files. Each connection gets their own
-in/out files.
+in/out files. Rawlog will simply skip users who don't have the
+'dovecot.rawlog/' directory and the performance impact for those users is
+minimal.
 
 Home directory
 --------------
@@ -65,4 +67,25 @@ You can also give parameters to rawlog:
     * -i: Log only to *.in files
     * -o: Log only to *.out files
 
-(This file was created from the wiki on 2013-08-05 04:42)
+Pre-login rawlog (v2.1+)
+------------------------
+
+You can enable pre-login rawlog for all users by telling the login processes to
+log to a rawlog directory, for example:
+
+---%<-------------------------------------------------------------------------
+service imap-login {
+  executable = imap-login -R rawlogs
+}
+---%<-------------------------------------------------------------------------
+
+This tries to write the rawlogs under $base_dir/rawlogs directory. You need to
+create it first with enough write permissions, e.g.:
+
+---%<-------------------------------------------------------------------------
+mkdir /var/run/dovecot/login/rawlogs
+chown dovenull /var/run/dovecot/login/rawlogs
+chmod 0700 /var/run/dovecot/login/rawlogs
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2013-11-19 04:42)

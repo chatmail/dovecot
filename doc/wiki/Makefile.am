@@ -209,6 +209,7 @@ wikifiles = ACL.txt \
 	SharedMailboxes.Shared.txt \
 	SharedMailboxes.Symlinks.txt \
 	SharedMailboxes.txt \
+	SocketUnavailable.txt \
 	Statistics.txt \
 	SystemUsers.txt \
 	TestInstallation.txt \

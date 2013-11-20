@@ -173,6 +173,12 @@ auth_str_append_extra_fields(struct auth_request *request, string_t *dest)
 	auth_fields_append(request->extra_fields, dest,
 			   AUTH_FIELD_FLAG_HIDDEN, 0);
 
+	if (request->original_username != NULL &&
+	    null_strcmp(request->original_username, request->user) != 0) {
+		auth_str_add_keyvalue(dest, "original_user",
+				      request->original_username);
+	}
+
 	if (!request->auth_only &&
 	    auth_fields_exists(request->extra_fields, "proxy")) {
 		/* we're proxying */
@@ -664,7 +670,8 @@ static void userdb_callback(enum userdb_result result,
 			str_append(str, "\tanonymous");
 		}
 		/* generate auth_token when master service provided session_pid */
-		if (request->session_pid != (pid_t)-1) {
+		if (request->request_auth_token &&
+		    request->session_pid != (pid_t)-1) {
 			const char *auth_token =
 				auth_token_get(request->service,
 					       dec2str(request->session_pid),

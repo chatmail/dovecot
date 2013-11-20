@@ -10,6 +10,9 @@ v2.2 has a couple of changes to settings since v2.1:
 
 There are also some changes you should be aware of:
 
+ * fts-solr no longer does "hard commits" to the Solr index for performance
+   reasons. <You must do this manually once in a while> [Plugins.FTS.Solr.txt].
+
  * When creating home directories, the permissions are copied from the parent
    directory if it has setgid-bit set. For full details, see
    <SharedMailboxes.Permissions.txt>.
@@ -39,4 +42,4 @@ Downgrading can be done fully safely to v2.1.16.
    the 'dovecot.index.cache' files are corrupted and complain about "Invalid
    magic in hole header".
 
-(This file was created from the wiki on 2013-08-05 04:43)
+(This file was created from the wiki on 2013-11-19 04:43)

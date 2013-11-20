@@ -29,6 +29,10 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 
+#if !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10000000L
+#  define HAVE_ECDH
+#endif
+
 /* Check every 30 minutes if parameters file has been updated */
 #define SSL_PARAMFILE_CHECK_INTERVAL (60*30)
 
@@ -82,7 +86,7 @@ struct ssl_parameters {
 	time_t last_refresh;
 	int fd;
 
-	DH *dh_512, *dh_1024;
+	DH *dh_512, *dh_default;
 };
 
 struct ssl_server_context {
@@ -95,6 +99,7 @@ struct ssl_server_context {
 	const char *cipher_list;
 	const char *protocols;
 	bool verify_client_cert;
+	bool prefer_server_ciphers;
 };
 
 static int extdata_index;
@@ -121,7 +126,9 @@ static void ssl_server_context_deinit(struct ssl_server_context **_ctx);
 
 static void ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
                                             const struct master_service_ssl_settings *set);
+#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
 static int ssl_proxy_ctx_get_pkey_ec_curve_name(const struct master_service_ssl_settings *set);
+#endif
 
 static unsigned int ssl_server_context_hash(const struct ssl_server_context *ctx)
 {
@@ -156,9 +163,9 @@ static int ssl_server_context_cmp(const struct ssl_server_context *ctx1,
 	return ctx1->verify_client_cert == ctx2->verify_client_cert ? 0 : 1;
 }
 
-static void ssl_params_corrupted(void)
+static void ssl_params_corrupted(const char *reason)
 {
-	i_fatal("Corrupted SSL parameters file in state_dir: ssl-parameters.dat");
+	i_fatal("Corrupted SSL ssl-parameters.dat in state_dir: %s", reason);
 }
 
 static void read_next(struct ssl_parameters *params, void *data, size_t size)
@@ -168,7 +175,7 @@ static void read_next(struct ssl_parameters *params, void *data, size_t size)
 	if ((ret = read_full(params->fd, data, size)) < 0)
 		i_fatal("read(%s) failed: %m", params->path);
 	if (ret == 0)
-		ssl_params_corrupted();
+		ssl_params_corrupted("Truncated file");
 }
 
 static bool read_dh_parameters_next(struct ssl_parameters *params)
@@ -187,7 +194,7 @@ static bool read_dh_parameters_next(struct ssl_parameters *params)
 	/* read data size. */
 	read_next(params, &len, sizeof(len));
 	if (len > 1024*100) /* should be enough? */
-		ssl_params_corrupted();
+		ssl_params_corrupted("File too large");
 
 	buf = i_malloc(len);
 	read_next(params, buf, len);
@@ -195,13 +202,15 @@ static bool read_dh_parameters_next(struct ssl_parameters *params)
 	cbuf = buf;
 	switch (bits) {
 	case 512:
+		if (params->dh_512 != NULL)
+			ssl_params_corrupted("Duplicate 512bit parameters");
 		params->dh_512 = d2i_DHparams(NULL, &cbuf, len);
 		break;
-	case 1024:
-		params->dh_1024 = d2i_DHparams(NULL, &cbuf, len);
-		break;
 	default:
-		ssl_params_corrupted();
+		if (params->dh_default != NULL)
+			ssl_params_corrupted("Duplicate default parameters");
+		params->dh_default = d2i_DHparams(NULL, &cbuf, len);
+		break;
 	}
 
 	i_free(buf);
@@ -214,9 +223,9 @@ static void ssl_free_parameters(struct ssl_parameters *params)
 		DH_free(params->dh_512);
                 params->dh_512 = NULL;
 	}
-	if (params->dh_1024 != NULL) {
-		DH_free(params->dh_1024);
-                params->dh_1024 = NULL;
+	if (params->dh_default != NULL) {
+		DH_free(params->dh_default);
+                params->dh_default = NULL;
 	}
 }
 
@@ -243,7 +252,7 @@ static void ssl_refresh_parameters(struct ssl_parameters *params)
 		i_fatal("read(%s) failed: %m", params->path);
 	else if (ret != 0) {
 		/* more data than expected */
-		ssl_params_corrupted();
+		ssl_params_corrupted("More data than expected");
 	}
 
 	if (close(params->fd) < 0)
@@ -628,6 +637,7 @@ ssl_server_context_get(const struct login_settings *login_set,
 	lookup_ctx.verify_client_cert = set->ssl_verify_client_cert ||
 		login_set->auth_ssl_require_client_cert ||
 		login_set->auth_ssl_username_from_cert;
+	lookup_ctx.prefer_server_ciphers = set->ssl_prefer_server_ciphers;
 
 	ctx = hash_table_lookup(ssl_servers, &lookup_ctx);
 	if (ctx == NULL)
@@ -832,12 +842,10 @@ static RSA *ssl_gen_rsa_key(SSL *ssl ATTR_UNUSED,
 static DH *ssl_tmp_dh_callback(SSL *ssl ATTR_UNUSED,
 			       int is_export, int keylength)
 {
-	/* Well, I'm not exactly sure why the logic in here is this.
-	   It's the same as in Postfix, so it can't be too wrong. */
 	if (is_export && keylength == 512 && ssl_params.dh_512 != NULL)
 		return ssl_params.dh_512;
 
-	return ssl_params.dh_1024;
+	return ssl_params.dh_default;
 }
 
 static void ssl_info_callback(const SSL *ssl, int where, int ret)
@@ -1013,9 +1021,9 @@ ssl_proxy_ctx_init(SSL_CTX *ssl_ctx, const struct master_service_ssl_settings *s
 
 static void
 ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
-                                const struct master_service_ssl_settings *set)
+	const struct master_service_ssl_settings *set ATTR_UNUSED)
 {
-#if !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10000000L && OPENSSL_VERSION_NUMBER < 0x10002000L
+#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
 	EC_KEY *ecdh;
 	int nid;
 	const char *curve_name;
@@ -1023,17 +1031,16 @@ ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
 	if (SSL_CTX_need_tmp_RSA(ssl_ctx))
 		SSL_CTX_set_tmp_rsa_callback(ssl_ctx, ssl_gen_rsa_key);
 	SSL_CTX_set_tmp_dh_callback(ssl_ctx, ssl_tmp_dh_callback);
-#if !defined(OPENSSL_NO_ECDH)
+#ifdef HAVE_ECDH
 	/* In the non-recommended situation where ECDH cipher suites are being
 	   used instead of ECDHE, do not reuse the same ECDH key pair for
 	   different sessions. This option improves forward secrecy. */
 	SSL_CTX_set_options(ssl_ctx, SSL_OP_SINGLE_ECDH_USE);
-#endif
-#if !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10002000L
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
 	/* OpenSSL >= 1.0.2 automatically handles ECDH temporary key parameter
 	   selection. */
 	SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
-#elif !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10000000L
+#else
 	/* For OpenSSL < 1.0.2, ECDH temporary key parameter selection must be
 	   performed manually. Attempt to select the same curve as that used
 	   in the server's private EC key file. Otherwise fall back to the
@@ -1057,6 +1064,7 @@ ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
 		SSL_CTX_set_tmp_ecdh(ssl_ctx, ecdh);
 		EC_KEY_free(ecdh);
 	}
+#endif
 #endif
 }
 
@@ -1143,7 +1151,7 @@ ssl_proxy_ctx_use_key(SSL_CTX *ctx,
 	EVP_PKEY_free(pkey);
 }
 
-#if !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10000000L && OPENSSL_VERSION_NUMBER < 0x10002000L
+#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
 static int
 ssl_proxy_ctx_get_pkey_ec_curve_name(const struct master_service_ssl_settings *set)
 {
@@ -1265,6 +1273,7 @@ ssl_server_context_init(const struct login_settings *login_set,
 	ctx->verify_client_cert = ssl_set->ssl_verify_client_cert ||
 		login_set->auth_ssl_require_client_cert ||
 		login_set->auth_ssl_username_from_cert;
+	ctx->prefer_server_ciphers = ssl_set->ssl_prefer_server_ciphers;
 
 	ctx->ctx = ssl_ctx = SSL_CTX_new(SSLv23_server_method());
 	if (ssl_ctx == NULL)
@@ -1275,6 +1284,8 @@ ssl_server_context_init(const struct login_settings *login_set,
 		i_fatal("Can't set cipher list to '%s': %s",
 			ctx->cipher_list, ssl_last_error());
 	}
+	if (ctx->prefer_server_ciphers)
+		SSL_CTX_set_options(ssl_ctx, SSL_OP_CIPHER_SERVER_PREFERENCE);
 	SSL_CTX_set_options(ssl_ctx, openssl_get_protocol_options(ctx->protocols));
 
 	if (ssl_proxy_ctx_use_certificate_chain(ctx->ctx, ctx->cert) != 1) {

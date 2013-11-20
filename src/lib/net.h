@@ -55,6 +55,12 @@ struct net_unix_cred {
 #define IPADDR_IS_V6(ip) ((ip)->family == AF_INET6)
 #define IPADDR_BITS(ip) (IPADDR_IS_V4(ip) ? 32 : 128)
 
+enum net_listen_flags {
+	/* Try to use SO_REUSEPORT if available. If it's not, this flag is
+	   cleared on return. */
+	NET_LISTEN_FLAG_REUSEPORT	= 0x01
+};
+
 /* Returns TRUE if IPs are the same */
 bool net_ip_compare(const struct ip_addr *ip1, const struct ip_addr *ip2);
 /* Returns 0 if IPs are the same, -1 or 1 otherwise. */
@@ -91,6 +97,8 @@ void net_get_ip_any6(struct ip_addr *ip);
 
 /* Listen for connections on a socket */
 int net_listen(const struct ip_addr *my_ip, unsigned int *port, int backlog);
+int net_listen_full(const struct ip_addr *my_ip, unsigned int *port,
+		    enum net_listen_flags *flags, int backlog);
 /* Listen for connections on an UNIX socket */
 int net_listen_unix(const char *path, int backlog);
 /* Like net_listen_unix(), but if socket already exists, try to connect to it.
@@ -133,7 +141,7 @@ int net_getunixname(int fd, const char **name_r);
    unavailable. */
 int net_getunixcred(int fd, struct net_unix_cred *cred_r);
 
-/* Returns ip_addr as string, or NULL if ip is invalid. */
+/* Returns ip_addr as string, or "" if ip isn't valid IPv4 or IPv6 address. */
 const char *net_ip2addr(const struct ip_addr *ip);
 /* char* -> struct ip_addr translation. */
 int net_addr2ip(const char *addr, struct ip_addr *ip);

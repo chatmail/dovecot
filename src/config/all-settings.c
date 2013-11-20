@@ -142,7 +142,8 @@ struct maildir_settings {
 /* <settings checks> */
 enum imapc_features {
 	IMAPC_FEATURE_RFC822_SIZE	= 0x01,
-	IMAPC_FEATURE_GUID_FORCED	= 0x02
+	IMAPC_FEATURE_GUID_FORCED	= 0x02,
+	IMAPC_FEATURE_FETCH_HEADERS	= 0x04
 };
 /* </settings checks> */
 struct imapc_settings {
@@ -211,6 +212,7 @@ struct inet_listener_settings {
 	const char *address;
 	unsigned int port;
 	bool ssl;
+	bool reuse_port;
 };
 ARRAY_DEFINE_TYPE(inet_listener_settings, struct inet_listener_settings *);
 struct service_settings {
@@ -264,6 +266,7 @@ struct master_service_ssl_settings {
 	bool ssl_verify_client_cert;
 	bool ssl_require_crl;
 	bool verbose_ssl;
+	bool ssl_prefer_server_ciphers;
 };
 /* ../../src/lib-master/master-service-settings.h */
 extern const struct setting_parser_info master_service_setting_parser_info;
@@ -921,6 +924,7 @@ struct imapc_feature_list {
 static const struct imapc_feature_list imapc_feature_list[] = {
 	{ "rfc822.size", IMAPC_FEATURE_RFC822_SIZE },
 	{ "guid-forced", IMAPC_FEATURE_GUID_FORCED },
+	{ "fetch-headers", IMAPC_FEATURE_FETCH_HEADERS },
 	{ NULL, 0 }
 };
 
@@ -1056,8 +1060,8 @@ static const struct setting_parser_info mdbox_setting_parser_info = {
 static const struct setting_define lda_setting_defines[] = {
 	DEF(SET_STR_VARS, postmaster_address),
 	DEF(SET_STR, hostname),
-	DEF(SET_STR, submission_host),
-	DEF(SET_STR, sendmail_path),
+	DEF(SET_STR_VARS, submission_host),
+	DEF(SET_STR_VARS, sendmail_path),
 	DEF(SET_STR, rejection_subject),
 	DEF(SET_STR, rejection_reason),
 	DEF(SET_STR, deliver_log_format),
@@ -1119,6 +1123,7 @@ struct stats_settings {
 /* ../../src/ssl-params/ssl-params-settings.h */
 struct ssl_params_settings {
 	unsigned int ssl_parameters_regenerate;
+	unsigned int ssl_dh_parameters_length;
 };
 /* ../../src/replication/replicator/replicator-settings.h */
 extern const struct setting_parser_info replicator_setting_parser_info;
@@ -1245,6 +1250,7 @@ struct imap_settings {
 	const char *imap_logout_format;
 	const char *imap_id_send;
 	const char *imap_id_log;
+	bool imap_metadata;
 
 	/* imap urlauth: */
 	const char *imap_urlauth_host;
@@ -1292,6 +1298,7 @@ struct doveadm_settings {
 	const char *libexec_dir;
 	const char *mail_plugins;
 	const char *mail_plugin_dir;
+	const char *auth_socket_path;
 	const char *doveadm_socket_path;
 	unsigned int doveadm_worker_count;
 	unsigned int doveadm_port;
@@ -1539,11 +1546,13 @@ struct service_settings ssl_params_service_settings = {
 	{ type, #name, offsetof(struct ssl_params_settings, name), NULL }
 static const struct setting_define ssl_params_setting_defines[] = {
 	DEF(SET_TIME, ssl_parameters_regenerate),
+	DEF(SET_UINT, ssl_dh_parameters_length),
 
 	SETTING_DEFINE_LIST_END
 };
 static const struct ssl_params_settings ssl_params_default_settings = {
-	.ssl_parameters_regenerate = 3600*24*7
+	.ssl_parameters_regenerate = 0,
+	.ssl_dh_parameters_length = 1024
 };
 const struct setting_parser_info ssl_params_setting_parser_info = {
 	.module_name = "ssl-params",
@@ -1836,8 +1845,8 @@ const struct setting_parser_info pop3_setting_parser_info = {
 /* ../../src/pop3-login/pop3-login-settings.c */
 /* <settings checks> */
 static struct inet_listener_settings pop3_login_inet_listeners_array[] = {
-	{ "pop3", "", 110, FALSE },
-	{ "pop3s", "", 995, TRUE }
+	{ .name = "pop3", .address = "", .port = 110 },
+	{ .name = "pop3s", .address = "", .port = 995, .ssl = TRUE }
 };
 static struct inet_listener_settings *pop3_login_inet_listeners[] = {
 	&pop3_login_inet_listeners_array[0],
@@ -2301,6 +2310,7 @@ static const struct setting_define inet_listener_setting_defines[] = {
 	DEF(SET_STR, address),
 	DEF(SET_UINT, port),
 	DEF(SET_BOOL, ssl),
+	DEF(SET_BOOL, reuse_port),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -2308,7 +2318,8 @@ static const struct inet_listener_settings inet_listener_default_settings = {
 	.name = "",
 	.address = "",
 	.port = 0,
-	.ssl = FALSE
+	.ssl = FALSE,
+	.reuse_port = FALSE
 };
 static const struct setting_parser_info inet_listener_setting_parser_info = {
 	.defines = inet_listener_setting_defines,
@@ -2430,7 +2441,7 @@ struct master_settings master_default_settings = {
 	.state_dir = PKG_STATEDIR,
 	.libexec_dir = PKG_LIBEXECDIR,
 	.instance_name = PACKAGE,
-	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,
+	.import_environment = "TZ DEBUG_OUTOFMEM" ENV_SYSTEMD ENV_GDB,
 	.protocols = "imap pop3 lmtp",
 	.listen = "*, ::",
 	.ssl = "yes:no:required",
@@ -2875,6 +2886,7 @@ static const struct setting_define imap_setting_defines[] = {
 	DEF(SET_STR, imap_logout_format),
 	DEF(SET_STR, imap_id_send),
 	DEF(SET_STR, imap_id_log),
+	DEF(SET_BOOL, imap_metadata),
 
 	DEF(SET_STR, imap_urlauth_host),
 	DEF(SET_UINT, imap_urlauth_port),
@@ -2894,6 +2906,7 @@ static const struct imap_settings imap_default_settings = {
 	.imap_logout_format = "in=%i out=%o",
 	.imap_id_send = "name *",
 	.imap_id_log = "",
+	.imap_metadata = FALSE,
 
 	.imap_urlauth_host = "",
 	.imap_urlauth_port = 143
@@ -3126,8 +3139,8 @@ const struct setting_parser_info *imap_urlauth_login_setting_roots[] = {
 /* ../../src/imap-login/imap-login-settings.c */
 /* <settings checks> */
 static struct inet_listener_settings imap_login_inet_listeners_array[] = {
-	{ "imap", "", 143, FALSE },
-	{ "imaps", "", 993, TRUE }
+	{ .name = "imap", .address = "", .port = 143 },
+	{ .name = "imaps", .address = "", .port = 993, .ssl = TRUE }
 };
 static struct inet_listener_settings *imap_login_inet_listeners[] = {
 	&imap_login_inet_listeners_array[0],
@@ -3216,6 +3229,7 @@ static bool doveadm_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 	struct doveadm_settings *set = _set;
 
 #ifndef CONFIG_BINARY
+	fix_base_path(set, pool, &set->auth_socket_path);
 	fix_base_path(set, pool, &set->doveadm_socket_path);
 #endif
 	if (*set->dsync_alt_char == '\0') {
@@ -3258,6 +3272,7 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, libexec_dir),
 	DEF(SET_STR, mail_plugins),
 	DEF(SET_STR, mail_plugin_dir),
+	DEF(SET_STR, auth_socket_path),
 	DEF(SET_STR, doveadm_socket_path),
 	DEF(SET_UINT, doveadm_worker_count),
 	DEF(SET_UINT, doveadm_port),
@@ -3278,6 +3293,7 @@ const struct doveadm_settings doveadm_default_settings = {
 	.libexec_dir = PKG_LIBEXECDIR,
 	.mail_plugins = "",
 	.mail_plugin_dir = MODULEDIR,
+	.auth_socket_path = "auth-userdb",
 	.doveadm_socket_path = "doveadm-server",
 	.doveadm_worker_count = 0,
 	.doveadm_port = 0,
@@ -3553,7 +3569,7 @@ static struct file_listener_settings auth_unix_listeners_array[] = {
 	{ "login/login", 0666, "", "" },
 	{ "token-login/tokenlogin", 0666, "", "" },
 	{ "auth-login", 0600, "$default_internal_user", "" },
-	{ "auth-client", 0600, "", "" },
+	{ "auth-client", 0600, "$default_internal_user", "" },
 	{ "auth-userdb", 0666, "$default_internal_user", "" },
 	{ "auth-master", 0600, "", "" }
 };
@@ -3612,6 +3628,32 @@ auth_settings_set_self_ips(struct auth_settings *set, pool_t pool,
 	return TRUE;
 }
 
+static bool
+auth_verify_verbose_password(const struct auth_settings *set,
+			     const char **error_r)
+{
+	const char *p, *value = set->verbose_passwords;
+	unsigned int num;
+
+	p = strchr(value, ':');
+	if (p != NULL) {
+		if (str_to_uint(p+1, &num) < 0 || num == 0) {
+			*error_r = t_strdup_printf("auth_verbose_passwords: "
+				"Invalid truncation number: '%s'", p+1);
+			return FALSE;
+		}
+		value = t_strdup_until(value, p);
+	}
+	if (strcmp(value, "no") == 0)
+		return TRUE;
+	else if (strcmp(value, "plain") == 0)
+		return TRUE;
+	else if (strcmp(value, "sha1") == 0)
+		return TRUE;
+	else
+		return FALSE;
+}
+
 static bool auth_settings_check(void *_set, pool_t pool,
 				const char **error_r)
 {
@@ -3636,6 +3678,9 @@ static bool auth_settings_check(void *_set, pool_t pool,
 					   set->cache_size);
 		return FALSE;
 	}
+
+	if (!auth_verify_verbose_password(set, error_r))
+		return FALSE;
 
 	if (*set->username_chars == '\0') {
 		/* all chars are allowed */
@@ -3843,7 +3888,7 @@ static const struct setting_define auth_setting_defines[] = {
 	DEF(SET_BOOL, verbose),
 	DEF(SET_BOOL, debug),
 	DEF(SET_BOOL, debug_passwords),
-	DEF(SET_ENUM, verbose_passwords),
+	DEF(SET_STR, verbose_passwords),
 	DEF(SET_BOOL, ssl_require_client_cert),
 	DEF(SET_BOOL, ssl_username_from_cert),
 	DEF(SET_BOOL, use_winbind),
@@ -3881,7 +3926,7 @@ static const struct auth_settings auth_default_settings = {
 	.verbose = FALSE,
 	.debug = FALSE,
 	.debug_passwords = FALSE,
-	.verbose_passwords = "no:plain:sha1",
+	.verbose_passwords = "no",
 	.ssl_require_client_cert = FALSE,
 	.ssl_username_from_cert = FALSE,
 	.use_winbind = FALSE,

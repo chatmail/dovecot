@@ -93,6 +93,8 @@ zlib_mail_cache_open(struct zlib_user *zuser, struct mail *mail,
 	input = i_stream_create_seekable_path(inputs,
 				i_stream_get_max_buffer_size(inputs[0]),
 				str_c(temp_prefix));
+	i_stream_set_name(input, t_strdup_printf("zlib(%s)",
+						 i_stream_get_name(inputs[0])));
 	i_stream_unref(&inputs[0]);
 
 	cache->to = timeout_add(ZLIB_MAIL_CACHE_EXPIRE_MSECS,
@@ -312,7 +314,7 @@ static int zlib_mailbox_open_input(struct mailbox *box)
 			i_close_fd(&fd);
 			return 0;
 		}
-		input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
+		input = i_stream_create_fd(fd, MAX_INBUF_SIZE, TRUE);
 		i_stream_set_name(input, box_path);
 		box->input = handler->create_istream(input, TRUE);
 		i_stream_unref(&input);
