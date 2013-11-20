@@ -12,6 +12,8 @@
 #include "time-util.h"
 #include "unichar.h"
 #include "settings-parser.h"
+#include "iostream-ssl.h"
+#include "fs-api.h"
 #include "imap-utf7.h"
 #include "mailbox-log.h"
 #include "mailbox-tree.h"
@@ -167,6 +169,8 @@ int mailbox_list_create(const char *driver, struct mail_namespace *ns,
 		p_strdup(list->pool, set->mailbox_dir_name);
 	list->set.alt_dir = p_strdup(list->pool, set->alt_dir);
 	list->set.alt_dir_nocheck = set->alt_dir_nocheck;
+	list->set.index_control_use_maildir_name =
+		set->index_control_use_maildir_name;
 
 	if (*set->mailbox_dir_name == '\0')
 		list->set.mailbox_dir_name = "";
@@ -323,7 +327,10 @@ mailbox_list_settings_parse_full(struct mail_user *user, const char *data,
 			dest = &set_r->maildir_name;
 		else if (strcmp(key, "MAILBOXDIR") == 0)
 			dest = &set_r->mailbox_dir_name;
-		else {
+		else if (strcmp(key, "FULLDIRNAME") == 0) {
+			set_r->index_control_use_maildir_name = TRUE;
+			dest = &set_r->maildir_name;
+		} else {
 			*error_r = t_strdup_printf("Unknown setting: %s", key);
 			return -1;
 		}
@@ -429,7 +436,7 @@ mailbox_list_escape_name(struct mailbox_list *list, const char *vname)
 	}
 	for (; *vname != '\0'; vname++) {
 		if (*vname == ns_sep)
-			str_append_c(escaped_name, *vname);
+			str_append_c(escaped_name, list_sep);
 		else if (*vname == list_sep ||
 			 *vname == list->set.escape_char ||
 			 *vname == '/' ||
@@ -541,7 +548,7 @@ const char *mailbox_list_default_get_storage_name(struct mailbox_list *list,
 		storage_name = "INBOX";
 	}
 
-	if (list_sep != ns_sep) {
+	if (list_sep != ns_sep && list->set.escape_char == '\0') {
 		if (ns->type == MAIL_NAMESPACE_TYPE_SHARED &&
 		    (ns->flags & NAMESPACE_FLAG_AUTOCREATED) == 0) {
 			/* shared namespace root. the backend storage's
@@ -689,6 +696,12 @@ const char *mailbox_list_default_get_vname(struct mailbox_list *list,
 	}
 
 	prefix_len = strlen(list->ns->prefix);
+	if (list->set.escape_char != '\0') {
+		vname = mailbox_list_unescape_name(list, vname);
+		return prefix_len == 0 ? vname :
+			t_strconcat(list->ns->prefix, vname, NULL);
+	}
+
 	list_sep = mailbox_list_get_hierarchy_sep(list);
 	ns_sep = mail_namespace_get_sep(list->ns);
 
@@ -704,8 +717,6 @@ const char *mailbox_list_default_get_vname(struct mailbox_list *list,
 		ret[i + prefix_len] = '\0';
 		vname = ret;
 	}
-	if (list->set.escape_char != '\0')
-		vname = mailbox_list_unescape_name(list, vname);
 	return vname;
 }
 
@@ -1793,4 +1804,26 @@ bool mailbox_list_set_error_from_errno(struct mailbox_list *list)
 
 	mailbox_list_set_error(list, error, error_string);
 	return TRUE;
+}
+
+int mailbox_list_init_fs(struct mailbox_list *list, const char *driver,
+			 const char *args, const char *root_dir,
+			 struct fs **fs_r, const char **error_r)
+{
+	struct fs_settings fs_set;
+	struct ssl_iostream_settings ssl_set;
+
+	memset(&ssl_set, 0, sizeof(ssl_set));
+	ssl_set.ca_dir = list->mail_set->ssl_client_ca_dir;
+	ssl_set.ca_file = list->mail_set->ssl_client_ca_file;
+
+	memset(&fs_set, 0, sizeof(fs_set));
+	fs_set.temp_file_prefix = mailbox_list_get_global_temp_prefix(list);
+	fs_set.base_dir = list->ns->user->set->base_dir;
+	fs_set.temp_dir = list->ns->user->set->mail_temp_dir;
+	fs_set.ssl_client_set = &ssl_set;
+	fs_set.root_path = root_dir;
+	fs_set.debug = list->ns->user->mail_debug;
+
+	return fs_init(driver, args, &fs_set, fs_r, error_r);
 }

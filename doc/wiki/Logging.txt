@@ -17,12 +17,20 @@ Dovecot Logging
 ===============
 
 *Dovecot always logs a detailed error message* if something goes wrong. If it
-doesn't, it's considered a bug and will be fixed. However almost always the
-problem is that you're looking at the wrong log file; error messages may be
-logged to a different file than informational messages. By default Dovecot logs
-to syslog using *mail* facility. You can change the facility from
-'syslog_facility' setting. You can also configure Dovecot to write to log files
-directly, see below.
+doesn't, it's considered a bug and will be fixed. However, almost always the
+problem is that *you're looking at the wrong log file*; error messages may be
+logged to a different file than informational messages.
+
+You can find the log file locations by running:
+
+---%<-------------------------------------------------------------------------
+doveadm log find
+---%<-------------------------------------------------------------------------
+
+By default Dovecot logs to syslog using *mail* facility. You can change the
+facility from 'syslog_facility' setting. The syslog configuration is often in
+'/etc/syslog.conf' or '/etc/rsyslog*' files. You can also configure Dovecot to
+write to log files directly, see below.
 
 When using syslog, Dovecot uses 5 different logging levels:
 
@@ -38,13 +46,16 @@ configuration. Often everything is logged to '/var/log/mail.log' or
 '/var/log/maillog', and *err* and *crit* are logged to '/var/log/mail.err'.
 This is not necessarily true for your configuration though.
 
-You can find the log file locations by running:
+In an ideal configuration the errors would be logged to a separate file than
+non-errors. For example you could set 'syslog_facility = local5' and set:
 
 ---%<-------------------------------------------------------------------------
-doveadm log find
+local5.*        -/var/log/dovecot.log
+local5.warning;local5.error;local5.crit -/var/log/dovecot-errors.log
 ---%<-------------------------------------------------------------------------
 
-You can also check your '/etc/syslog.conf' to see how it's configured.
+Here all the Dovecot messages get logged into 'dovecot.log', while all the
+important error/warning messages get logged into 'dovecot-errors.log'.
 
 Internal Errors
 ---------------
@@ -88,13 +99,13 @@ to 'info_log_path' file.
 Syslog Example
 --------------
 
-Dovecot logging asynchronously via 'syslog_facility = local0' with basic rules:
+Dovecot logging asynchronously via 'syslog_facility = local5' with basic rules:
 
 ---%<-------------------------------------------------------------------------
-local0.* -/var/log/dovecot.log
-local0.info -/var/log/dovecot.info
-local0.warn -/var/log/dovecot.warn
-local0.err -/var/log/dovecot.err
+local5.* -/var/log/dovecot.log
+local5.info -/var/log/dovecot.info
+local5.warn -/var/log/dovecot.warn
+local5.err -/var/log/dovecot.err
 :msg,contains,"stored mail into mailbox"\
                                   -/var/log/dovecot.lmtp
 ---%<-------------------------------------------------------------------------
@@ -144,4 +155,4 @@ all disabled, but they may be useful for debugging.
    That's enough to know if the password is same or different between login
    attempts.
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

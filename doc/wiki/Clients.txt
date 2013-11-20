@@ -111,6 +111,11 @@ Thunderbird
       have to disable "Server supports folders that contain sub-folders and
       messages" setting from Thunderbird.Enhancement request
       [https://bugzilla.mozilla.org/show_bug.cgi?id=284933].
+ * Versions of Thunderbird from at least 17 (possibly earlier) up to 24.0
+   display incorrect new mail counts in the New Mail notification box.  This is
+   due to a bug in Thunderbird's handling of the CONDSTORE extension.  See Bug
+   Report [https://bugzilla.mozilla.org/show_bug.cgi?id=885220] for details and
+   a client-side workaround.
 
 Mutt
 ----
@@ -164,4 +169,4 @@ Uses the namespace returned via Dovecot, full support via IMAP/POP3 using @Mail
 [http://atmail.com/]. Can also read mailbox quota via the getquotaroot IMAP
 command.
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

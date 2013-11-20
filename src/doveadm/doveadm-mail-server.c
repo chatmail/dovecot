@@ -81,7 +81,8 @@ static bool doveadm_server_have_used_connections(struct doveadm_server *server)
 	return FALSE;
 }
 
-static void doveadm_cmd_callback(int exit_code, void *context)
+static void doveadm_cmd_callback(int exit_code, const char *error,
+				 void *context)
 {
 	struct doveadm_mail_server_cmd *servercmd = context;
 	struct doveadm_server *server =
@@ -95,9 +96,10 @@ static void doveadm_cmd_callback(int exit_code, void *context)
 	case 0:
 		break;
 	case SERVER_EXIT_CODE_DISCONNECTED:
-		i_error("%s: Internal failure for %s", server->name, username);
+		i_error("%s: Command %s failed for %s: %s",
+			server->name, cmd_ctx->cmd->name, username, error);
 		internal_failure = TRUE;
-		master_service_stop(master_service);
+		io_loop_stop(current_ioloop);
 		return;
 	case EX_NOUSER:
 		i_error("%s: No such user: %s", server->name, username);
@@ -123,7 +125,7 @@ static void doveadm_cmd_callback(int exit_code, void *context)
 		}
 	}
 
-	master_service_stop(master_service);
+	io_loop_stop(current_ioloop);
 }
 
 static void doveadm_mail_server_handle(struct server_connection *conn,
@@ -162,7 +164,7 @@ static void doveadm_server_flush_one(struct doveadm_server *server)
 	unsigned int count = array_count(&server->queue);
 
 	do {
-		master_service_run(master_service, NULL);
+		io_loop_run(current_ioloop);
 	} while (array_count(&server->queue) == count &&
 		 doveadm_server_have_used_connections(server) &&
 		 !DOVEADM_MAIL_SERVER_FAILED());
@@ -205,7 +207,7 @@ doveadm_mail_server_user_get_host(struct doveadm_mail_cmd_context *ctx,
 		*error_r = fields[0] != NULL ?
 			t_strdup(fields[0]) : "passdb lookup failed";
 		*error_r = t_strdup_printf("%s: %s (to see if user is proxied, "
-					   "because doveadm_proxy_port is set)",
+					   "because doveadm_port is set)",
 					   auth_socket_path, *error_r);
 	} else if (ret == 0) {
 		/* user not found from passdb. it could be in userdb though,

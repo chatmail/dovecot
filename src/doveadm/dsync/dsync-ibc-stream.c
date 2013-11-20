@@ -29,7 +29,7 @@
 
 #define DSYNC_PROTOCOL_VERSION_MAJOR 3
 #define DSYNC_PROTOCOL_VERSION_MINOR 2
-#define DSYNC_HANDSHAKE_VERSION "VERSION\tdsync\t3\t1\n"
+#define DSYNC_HANDSHAKE_VERSION "VERSION\tdsync\t3\t2\n"
 
 #define DSYNC_PROTOCOL_MINOR_HAVE_ATTRIBUTES 1
 #define DSYNC_PROTOCOL_MINOR_HAVE_SAVE_GUID 2
@@ -75,7 +75,7 @@ static const struct {
 	  .optional_keys = "sync_ns_prefix sync_box sync_box_guid sync_type "
 	  	"debug sync_visible_namespaces exclude_mailboxes "
 	  	"send_mail_requests backup_send backup_recv lock_timeout "
-	  	"no_mail_sync no_backup_overwrite"
+	  	"no_mail_sync no_backup_overwrite purge_remote"
 	},
 	{ .name = "mailbox_state",
 	  .chr = 'S',
@@ -98,7 +98,7 @@ static const struct {
 	  .chr = 'B',
 	  .required_keys = "mailbox_guid uid_validity uid_next messages_count "
 		"first_recent_uid highest_modseq highest_pvt_modseq",
-	  .optional_keys = "mailbox_lost cache_fields have_guids have_save_guids"
+	  .optional_keys = "mailbox_lost cache_fields have_guids have_save_guids have_only_guid128"
 	},
 	{ .name = "mailbox_attribute",
 	  .chr = 'A',
@@ -174,8 +174,8 @@ static int dsync_ibc_stream_read_mail_stream(struct dsync_ibc_stream *ibc)
 	} while (i_stream_read(ibc->value_input) > 0);
 	if (ibc->value_input->eof) {
 		if (ibc->value_input->stream_errno != 0) {
-			errno = ibc->value_input->stream_errno;
-			i_error("dsync(%s): read() failed: %m", ibc->name);
+			i_error("dsync(%s): read() failed: %s", ibc->name,
+				i_stream_get_error(ibc->value_input));
 			dsync_ibc_stream_stop(ibc);
 			return -1;
 		}
@@ -246,8 +246,9 @@ static int dsync_ibc_stream_send_value_stream(struct dsync_ibc_stream *ibc)
 	i_assert(ret == -1);
 
 	if (ibc->value_output->stream_errno != 0) {
-		i_error("dsync(%s): read(%s) failed: %m",
-			ibc->name, i_stream_get_name(ibc->value_output));
+		i_error("dsync(%s): read(%s) failed: %s",
+			ibc->name, i_stream_get_name(ibc->value_output),
+			i_stream_get_error(ibc->value_output));
 		dsync_ibc_stream_stop(ibc);
 		return -1;
 	}
@@ -323,7 +324,14 @@ static void dsync_ibc_stream_init(struct dsync_ibc_stream *ibc)
 static void dsync_ibc_stream_deinit(struct dsync_ibc *_ibc)
 {
 	struct dsync_ibc_stream *ibc = (struct dsync_ibc_stream *)_ibc;
+	unsigned int i;
 
+	for (i = ITEM_DONE + 1; i < ITEM_END_OF_LIST; i++) {
+		if (ibc->serializers[i] != NULL)
+			dsync_serializer_deinit(&ibc->serializers[i]);
+		if (ibc->deserializers[i] != NULL)
+			dsync_deserializer_deinit(&ibc->deserializers[i]);
+	}
 	if (ibc->cur_decoder != NULL)
 		dsync_deserializer_decode_finish(&ibc->cur_decoder);
 	if (ibc->value_output != NULL)
@@ -350,6 +358,7 @@ static void dsync_ibc_stream_deinit(struct dsync_ibc *_ibc)
 static int dsync_ibc_stream_next_line(struct dsync_ibc_stream *ibc,
 				      const char **line_r)
 {
+	string_t *error;
 	const char *line;
 
 	line = i_stream_next_line(ibc->input);
@@ -361,13 +370,19 @@ static int dsync_ibc_stream_next_line(struct dsync_ibc_stream *ibc,
 	if (i_stream_read(ibc->input) == -1) {
 		if (ibc->stopped)
 			return -1;
+		error = t_str_new(128);
 		if (ibc->input->stream_errno != 0) {
-			errno = ibc->input->stream_errno;
-			i_error("read(%s) failed: %m", ibc->name);
+			str_printfa(error, "read(%s) failed: %s", ibc->name,
+				    i_stream_get_error(ibc->input));
 		} else {
 			i_assert(ibc->input->eof);
-			i_error("read(%s) failed: EOF", ibc->name);
+			str_printfa(error, "read(%s) failed: EOF", ibc->name);
 		}
+		if (!ibc->version_received)
+			str_append(error, " (version not received)");
+		else if (!ibc->handshake_received)
+			str_append(error, " (handshake not received)");
+		i_error("%s", str_c(error));
 		dsync_ibc_stream_stop(ibc);
 		return -1;
 	}
@@ -646,6 +661,8 @@ dsync_ibc_stream_send_handshake(struct dsync_ibc *_ibc,
 		dsync_serializer_encode_add(encoder, "no_mail_sync", "");
 	if ((set->brain_flags & DSYNC_BRAIN_FLAG_NO_BACKUP_OVERWRITE) != 0)
 		dsync_serializer_encode_add(encoder, "no_backup_overwrite", "");
+	if ((set->brain_flags & DSYNC_BRAIN_FLAG_PURGE_REMOTE) != 0)
+		dsync_serializer_encode_add(encoder, "purge_remote", "");
 
 	dsync_serializer_encode_finish(&encoder, str);
 	dsync_ibc_stream_send_string(ibc, str);
@@ -677,6 +694,11 @@ dsync_ibc_stream_recv_handshake(struct dsync_ibc *_ibc,
 
 	value = dsync_deserializer_decode_get(decoder, "hostname");
 	set->hostname = p_strdup(pool, value);
+	/* now that we know the remote's hostname, use it for the
+	   stream's name */
+	i_free(ibc->name);
+	ibc->name = i_strdup(set->hostname);
+
 	if (dsync_deserializer_decode_try(decoder, "sync_ns_prefix", &value))
 		set->sync_ns_prefix = p_strdup(pool, value);
 	if (dsync_deserializer_decode_try(decoder, "sync_box", &value))
@@ -731,6 +753,8 @@ dsync_ibc_stream_recv_handshake(struct dsync_ibc *_ibc,
 		set->brain_flags |= DSYNC_BRAIN_FLAG_NO_MAIL_SYNC;
 	if (dsync_deserializer_decode_try(decoder, "no_backup_overwrite", &value))
 		set->brain_flags |= DSYNC_BRAIN_FLAG_NO_BACKUP_OVERWRITE;
+	if (dsync_deserializer_decode_try(decoder, "purge_remote", &value))
+		set->brain_flags |= DSYNC_BRAIN_FLAG_PURGE_REMOTE;
 
 	*set_r = set;
 	return DSYNC_IBC_RECV_RET_OK;
@@ -1154,6 +1178,8 @@ dsync_ibc_stream_send_mailbox(struct dsync_ibc *_ibc,
 		dsync_serializer_encode_add(encoder, "have_guids", "");
 	if (dsync_box->have_save_guids)
 		dsync_serializer_encode_add(encoder, "have_save_guids", "");
+	if (dsync_box->have_only_guid128)
+		dsync_serializer_encode_add(encoder, "have_only_guid128", "");
 	dsync_serializer_encode_add(encoder, "uid_validity",
 				    dec2str(dsync_box->uid_validity));
 	dsync_serializer_encode_add(encoder, "uid_next",
@@ -1257,6 +1283,8 @@ dsync_ibc_stream_recv_mailbox(struct dsync_ibc *_ibc,
 	if (dsync_deserializer_decode_try(decoder, "have_save_guids", &value) ||
 	    (box->have_guids && ibc->minor_version < DSYNC_PROTOCOL_MINOR_HAVE_SAVE_GUID))
 		box->have_save_guids = TRUE;
+	if (dsync_deserializer_decode_try(decoder, "have_only_guid128", &value))
+		box->have_only_guid128 = TRUE;
 	value = dsync_deserializer_decode_get(decoder, "uid_validity");
 	if (str_to_uint32(value, &box->uid_validity) < 0) {
 		dsync_ibc_input_error(ibc, decoder, "Invalid uid_validity");

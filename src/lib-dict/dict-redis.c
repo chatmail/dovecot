@@ -109,9 +109,9 @@ static void redis_wait(struct redis_dict *dict)
 		io_loop_run(dict->ioloop);
 	} while (array_count(&dict->input_states) > 0);
 
-	current_ioloop = prev_ioloop;
+	io_loop_set_current(prev_ioloop);
 	connection_switch_ioloop(&dict->conn.conn);
-	current_ioloop = dict->ioloop;
+	io_loop_set_current(dict->ioloop);
 	io_loop_destroy(&dict->ioloop);
 }
 
@@ -137,8 +137,7 @@ static int redis_input_get(struct redis_connection *conn)
 		if (line[0] != '$' || str_to_uint(line+1, &conn->bytes_left) < 0) {
 			i_error("redis: Unexpected input (wanted $size): %s",
 				line);
-			redis_conn_destroy(&conn->conn);
-			return 1;
+			return -1;
 		}
 		conn->bytes_left += 2; /* include trailing CRLF */
 	}
@@ -465,9 +464,9 @@ redis_dict_lookup_real(struct redis_dict *dict, pool_t pool,
 		timeout_remove(&to);
 	}
 
-	current_ioloop = prev_ioloop;
+	io_loop_set_current(prev_ioloop);
 	connection_switch_ioloop(&dict->conn.conn);
-	current_ioloop = dict->ioloop;
+	io_loop_set_current(dict->ioloop);
 	io_loop_destroy(&dict->ioloop);
 
 	if (!dict->conn.value_received) {
@@ -592,6 +591,11 @@ static int redis_check_transaction(struct redis_dict_transaction_context *ctx)
 
 	if (ctx->failed)
 		return -1;
+	if (!dict->connected) {
+		/* disconnected during transaction */
+		ctx->failed = TRUE;
+		return -1;
+	}
 	if (ctx->ctx.changed)
 		return 0;
 

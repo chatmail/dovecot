@@ -19,7 +19,6 @@
 
 extern struct mail_storage mdbox_storage;
 extern struct mailbox mdbox_mailbox;
-extern struct dbox_storage_vfuncs mdbox_dbox_storage_vfuncs;
 
 static struct mail_storage *mdbox_storage_alloc(void)
 {
@@ -34,9 +33,8 @@ static struct mail_storage *mdbox_storage_alloc(void)
 	return &storage->storage.storage;
 }
 
-static int
-mdbox_storage_create(struct mail_storage *_storage, struct mail_namespace *ns,
-		     const char **error_r)
+int mdbox_storage_create(struct mail_storage *_storage,
+			 struct mail_namespace *ns, const char **error_r)
 {
 	struct mdbox_storage *storage = (struct mdbox_storage *)_storage;
 	const char *dir;
@@ -64,7 +62,7 @@ mdbox_storage_create(struct mail_storage *_storage, struct mail_namespace *ns,
 	return dbox_storage_create(_storage, ns, error_r);
 }
 
-static void mdbox_storage_destroy(struct mail_storage *_storage)
+void mdbox_storage_destroy(struct mail_storage *_storage)
 {
 	struct mdbox_storage *storage = (struct mdbox_storage *)_storage;
 
@@ -166,7 +164,7 @@ mdbox_mailbox_alloc(struct mail_storage *storage, struct mailbox_list *list,
 	return &mbox->box;
 }
 
-static int mdbox_mailbox_open(struct mailbox *box)
+int mdbox_mailbox_open(struct mailbox *box)
 {
 	struct mdbox_mailbox *mbox = (struct mdbox_mailbox *)box;
 
@@ -319,9 +317,9 @@ mdbox_write_index_header(struct mailbox *box,
 	return 0;
 }
 
-static int mdbox_mailbox_create_indexes(struct mailbox *box,
-					const struct mailbox_update *update,
-					struct mail_index_transaction *trans)
+int mdbox_mailbox_create_indexes(struct mailbox *box,
+				 const struct mailbox_update *update,
+				 struct mail_index_transaction *trans)
 {
 	struct mdbox_mailbox *mbox = (struct mdbox_mailbox *)box;
 	int ret;
@@ -355,14 +353,14 @@ mdbox_get_attachment_path_suffix(struct dbox_file *file ATTR_UNUSED)
 	return "";
 }
 
-static void mdbox_set_mailbox_corrupted(struct mailbox *box)
+void mdbox_set_mailbox_corrupted(struct mailbox *box)
 {
 	struct mdbox_storage *mstorage = (struct mdbox_storage *)box->storage;
 
 	mdbox_storage_set_corrupted(mstorage);
 }
 
-static void mdbox_set_file_corrupted(struct dbox_file *file)
+void mdbox_set_file_corrupted(struct dbox_file *file)
 {
 	struct mdbox_storage *mstorage = (struct mdbox_storage *)file->storage;
 
@@ -372,9 +370,19 @@ static void mdbox_set_file_corrupted(struct dbox_file *file)
 static int
 mdbox_mailbox_get_guid(struct mdbox_mailbox *mbox, guid_128_t guid_r)
 {
+	const struct mail_index_header *idx_hdr;
 	struct mdbox_index_header hdr;
 	bool need_resize;
+	int ret = 0;
 
+	i_assert(!mbox->creating);
+
+	/* there's a race condition between mkdir and getting the mailbox GUID.
+	   normally this is handled by mdbox syncing, but GUID can be looked up
+	   without syncing. when mbox->creating=TRUE, the errors are hidden
+	   and we'll simply finish the mailbox creation */
+	idx_hdr = mail_index_get_header(mbox->box.view);
+	mbox->creating = idx_hdr->uid_validity == 0 && idx_hdr->next_uid == 1;
 	if (mdbox_read_header(mbox, &hdr, &need_resize) < 0)
 		memset(&hdr, 0, sizeof(hdr));
 
@@ -382,10 +390,12 @@ mdbox_mailbox_get_guid(struct mdbox_mailbox *mbox, guid_128_t guid_r)
 		/* regenerate it */
 		if (mdbox_write_index_header(&mbox->box, NULL, NULL) < 0 ||
 		    mdbox_read_header(mbox, &hdr, &need_resize) < 0)
-			return -1;
+			ret = -1;
 	}
-	memcpy(guid_r, hdr.mailbox_guid, GUID_128_SIZE);
-	return 0;
+	if (ret == 0)
+		memcpy(guid_r, hdr.mailbox_guid, GUID_128_SIZE);
+	mbox->creating = FALSE;
+	return ret;
 }
 
 static int

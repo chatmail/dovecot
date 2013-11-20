@@ -46,6 +46,7 @@ void io_stream_unref(struct iostream_private *stream)
 		array_free(&stream->destroy_callbacks);
 	}
 
+        i_free(stream->error);
         i_free(stream->name);
         i_free(stream);
 }
@@ -59,4 +60,21 @@ void io_stream_set_max_buffer_size(struct iostream_private *stream,
 				   size_t max_size)
 {
 	stream->set_max_buffer_size(stream, max_size);
+}
+
+void io_stream_set_error(struct iostream_private *stream,
+			 const char *fmt, ...)
+{
+	va_list args;
+
+	va_start(args, fmt);
+	io_stream_set_verror(stream, fmt, args);
+	va_end(args);
+}
+
+void io_stream_set_verror(struct iostream_private *stream,
+			  const char *fmt, va_list args)
+{
+	i_free(stream->error);
+	stream->error = i_strdup_vprintf(fmt, args);
 }

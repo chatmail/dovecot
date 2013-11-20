@@ -124,6 +124,14 @@ mailbox_uidvalidity_next_rescan(struct mailbox_list *list, const char *path)
 	}
 
 	d = opendir(dir);
+	if (d == NULL && errno == ENOENT) {
+		/* FIXME: the PATH_TYPE_CONTROL should come as a parameter, but
+		   that's an API change, do it in v2.3. it's not really a
+		   problem though, since currently all backends use control
+		   dirs for the uidvalidity file. */
+		(void)mailbox_list_mkdir_root(list, dir, MAILBOX_LIST_PATH_TYPE_CONTROL);
+		d = opendir(dir);
+	}
 	if (d == NULL) {
 		i_error("opendir(%s) failed: %m", dir);
 		return mailbox_uidvalidity_next_fallback();
@@ -213,8 +221,10 @@ uint32_t mailbox_uidvalidity_next(struct mailbox_list *list, const char *path)
 	}
 
 	/* we now have the current uidvalidity value that's hopefully correct */
-	if (mailbox_uidvalidity_rename(path, &cur_value, FALSE) < 0)
+	if (mailbox_uidvalidity_rename(path, &cur_value, FALSE) < 0) {
+		i_close_fd(&fd);
 		return mailbox_uidvalidity_next_rescan(list, path);
+	}
 
 	/* fast path succeeded. write the current value to the main
 	   uidvalidity file. */

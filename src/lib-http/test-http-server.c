@@ -37,10 +37,10 @@ client_handle_request(struct client *client, struct http_request *request)
 	}
 	str_append(str, "HTTP/1.1 200 OK\r\n");
 	str_printfa(str, "Date: %s\r\n", http_date_create(ioloop_time));
-	str_printfa(str, "Content-Length: %d\r\n", (int)strlen(request->target));
+	str_printfa(str, "Content-Length: %d\r\n", (int)strlen(request->target_raw));
 	str_append(str, "Content-Type: text/plain\r\n");
 	str_append(str, "\r\n");
-	str_append(str, request->target);
+	str_append(str, request->target_raw);
 	o_stream_send(client->conn.output, str_data(str), str_len(str));
 	return 0;
 }
@@ -48,13 +48,15 @@ client_handle_request(struct client *client, struct http_request *request)
 static void client_input(struct connection *conn)
 {
 	struct client *client = (struct client *)conn;
-	struct http_request *request;
+	struct http_request request;
+	enum http_request_parse_error error_code;
 	const char *error;
 	int ret;
 
-	while ((ret = http_request_parse_next(client->parser, &request, &error)) > 0) {
-		if (client_handle_request(client, request) < 0 ||
-		    request->connection_close) {
+	while ((ret = http_request_parse_next
+		(client->parser, NULL, &request, &error_code, &error)) > 0) {
+		if (client_handle_request(client, &request) < 0 ||
+		    request.connection_close) {
 			client_destroy(conn);
 			return;
 		}
@@ -79,11 +81,15 @@ static const struct connection_vfuncs client_vfuncs = {
 static void client_init(int fd)
 {
 	struct client *client;
+	struct http_request_limits req_limits;
+
+	memset(&req_limits, 0, sizeof(req_limits));
+	req_limits.max_target_length = 4096;
 
 	client = i_new(struct client, 1);
 	connection_init_server(clients, &client->conn,
 			       "(http client)", fd, fd);
-	client->parser = http_request_parser_init(client->conn.input);
+	client->parser = http_request_parser_init(client->conn.input, &req_limits);
 }
 
 static void client_accept(void *context ATTR_UNUSED)
@@ -119,7 +125,7 @@ int main(int argc, char *argv[])
 	fd_listen = net_listen(&my_ip, &port, 128);
 	if (fd_listen == -1)
 		i_fatal("listen(port=%u) failed: %m", port);
-	io_listen = io_add(fd_listen, IO_READ, client_accept, NULL);
+	io_listen = io_add(fd_listen, IO_READ, client_accept, (void *)NULL);
 
 	io_loop_run(ioloop);
 

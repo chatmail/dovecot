@@ -154,6 +154,8 @@ openssl_iostream_set(struct ssl_iostream *ssl_io,
 			return -1;
 		}
 	}
+	if (set->prefer_server_ciphers)
+		SSL_set_options(ssl_io->ssl, SSL_OP_CIPHER_SERVER_PREFERENCE);
 	if (set->protocols != NULL) {
 		SSL_clear_options(ssl_io->ssl, OPENSSL_ALL_PROTOCOL_OPTIONS);
 		SSL_set_options(ssl_io->ssl,
@@ -270,6 +272,7 @@ static void openssl_iostream_free(struct ssl_iostream *ssl_io)
 	o_stream_unref(&ssl_io->plain_output);
 	BIO_free(ssl_io->bio_ext);
 	SSL_free(ssl_io->ssl);
+	i_free(ssl_io->plain_stream_errstr);
 	i_free(ssl_io->last_error);
 	i_free(ssl_io->host);
 	i_free(ssl_io->log_prefix);
@@ -331,6 +334,9 @@ static bool openssl_iostream_bio_output(struct ssl_iostream *ssl_io)
 		if (sent < 0) {
 			i_assert(ssl_io->plain_output->closed ||
 				 ssl_io->plain_output->stream_errno != 0);
+			i_free(ssl_io->plain_stream_errstr);
+			ssl_io->plain_stream_errstr =
+				i_strdup(o_stream_get_error(ssl_io->plain_output));
 			ssl_io->plain_stream_errno =
 				ssl_io->plain_output->stream_errno;
 			ssl_io->closed = TRUE;
@@ -376,6 +382,9 @@ static bool openssl_iostream_bio_input(struct ssl_iostream *ssl_io)
 		ret = openssl_iostream_read_more(ssl_io, &data, &size);
 		ssl_io->plain_input->real_stream->try_alloc_limit = 0;
 		if (ret == -1 && size == 0 && !bytes_read) {
+			i_free(ssl_io->plain_stream_errstr);
+			ssl_io->plain_stream_errstr =
+				i_strdup(i_stream_get_error(ssl_io->plain_input));
 			ssl_io->plain_stream_errno =
 				ssl_io->plain_input->stream_errno;
 			ssl_io->closed = TRUE;
@@ -397,12 +406,18 @@ static bool openssl_iostream_bio_input(struct ssl_iostream *ssl_io)
 	if (bytes == 0 && !bytes_read && ssl_io->want_read) {
 		/* shouldn't happen */
 		i_error("SSL BIO buffer size too small");
+		i_free(ssl_io->plain_stream_errstr);
+		ssl_io->plain_stream_errstr =
+			i_strdup("SSL BIO buffer size too small");
 		ssl_io->plain_stream_errno = EINVAL;
 		ssl_io->closed = TRUE;
 		return FALSE;
 	}
 	if (i_stream_get_data_size(ssl_io->plain_input) > 0) {
 		i_error("SSL: Too much data in buffered plain input buffer");
+		i_free(ssl_io->plain_stream_errstr);
+		ssl_io->plain_stream_errstr =
+			i_strdup("SSL: Too much data in buffered plain input buffer");
 		ssl_io->plain_stream_errno = EINVAL;
 		ssl_io->closed = TRUE;
 		return FALSE;
@@ -455,6 +470,8 @@ openssl_iostream_handle_error_full(struct ssl_iostream *ssl_io, int ret,
 			return 0;
 		}
 		if (ssl_io->closed) {
+			if (ssl_io->plain_stream_errstr != NULL)
+				openssl_iostream_set_error(ssl_io, ssl_io->plain_stream_errstr);
 			errno = ssl_io->plain_stream_errno != 0 ?
 				ssl_io->plain_stream_errno : EPIPE;
 			return -1;
@@ -464,6 +481,8 @@ openssl_iostream_handle_error_full(struct ssl_iostream *ssl_io, int ret,
 		ssl_io->want_read = TRUE;
 		(void)openssl_iostream_bio_sync(ssl_io);
 		if (ssl_io->closed) {
+			if (ssl_io->plain_stream_errstr != NULL)
+				openssl_iostream_set_error(ssl_io, ssl_io->plain_stream_errstr);
 			errno = ssl_io->plain_stream_errno != 0 ?
 				ssl_io->plain_stream_errno : EPIPE;
 			return -1;
@@ -489,7 +508,8 @@ openssl_iostream_handle_error_full(struct ssl_iostream *ssl_io, int ret,
 	case SSL_ERROR_ZERO_RETURN:
 		/* clean connection closing */
 		errno = ECONNRESET;
-		break;
+		i_free_and_null(ssl_io->last_error);
+		return -1;
 	case SSL_ERROR_SSL:
 		errstr = t_strdup_printf("%s failed: %s",
 					 func_name, openssl_iostream_error());
@@ -503,8 +523,7 @@ openssl_iostream_handle_error_full(struct ssl_iostream *ssl_io, int ret,
 		break;
 	}
 
-	if (errstr != NULL)
-		openssl_iostream_set_error(ssl_io, errstr);
+	openssl_iostream_set_error(ssl_io, errstr);
 	return -1;
 }
 
@@ -687,6 +706,8 @@ openssl_iostream_get_last_error(struct ssl_iostream *ssl_io)
 }
 
 const struct iostream_ssl_vfuncs ssl_vfuncs = {
+	openssl_iostream_global_deinit,
+
 	openssl_iostream_context_init_client,
 	openssl_iostream_context_init_server,
 	openssl_iostream_context_deinit,

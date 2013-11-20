@@ -12,6 +12,10 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 
+#if !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10000000L
+#  define HAVE_ECDH
+#endif
+
 struct ssl_iostream_password_context {
 	const char *password;
 	const char *error;
@@ -345,7 +349,9 @@ ssl_iostream_context_load_ca(struct ssl_iostream_context *ctx,
 	}
 
 	if (!have_ca) {
-		*error_r = "Can't verify remote certs without CA";
+		*error_r = !ctx->client_ctx ?
+			"Can't verify remote client certs without CA (ssl_ca setting)" :
+			"Can't verify remote server certs without trusted CAs (ssl_client_ca_* settings)";
 		return -1;
 	}
 	return 0;
@@ -362,6 +368,10 @@ ssl_iostream_context_set(struct ssl_iostream_context *ctx,
 		*error_r = t_strdup_printf("Can't set cipher list to '%s': %s",
 			set->cipher_list, openssl_iostream_error());
 		return -1;
+	}
+	if (set->prefer_server_ciphers) {
+		SSL_CTX_set_options(ctx->ssl_ctx,
+				    SSL_OP_CIPHER_SERVER_PREFERENCE);
 	}
 	if (ctx->set->protocols != NULL) {
 		SSL_CTX_set_options(ctx->ssl_ctx,
@@ -406,7 +416,7 @@ ssl_iostream_context_set(struct ssl_iostream_context *ctx,
 	return 0;
 }
 
-#if !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10000000L && OPENSSL_VERSION_NUMBER < 0x10002000L
+#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
 static int
 ssl_proxy_ctx_get_pkey_ec_curve_name(const struct ssl_iostream_settings *set,
 				     int *nid_r, const char **error_r)
@@ -433,10 +443,10 @@ ssl_proxy_ctx_get_pkey_ec_curve_name(const struct ssl_iostream_settings *set,
 
 static int
 ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
-				const struct ssl_iostream_settings *set,
-				const char **error_r)
+				const struct ssl_iostream_settings *set ATTR_UNUSED,
+				const char **error_r ATTR_UNUSED)
 {
-#if !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10000000L && OPENSSL_VERSION_NUMBER < 0x10002000L
+#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
 	EC_KEY *ecdh;
 	int nid;
 	const char *curve_name;
@@ -444,17 +454,16 @@ ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
 	if (SSL_CTX_need_tmp_RSA(ssl_ctx))
 		SSL_CTX_set_tmp_rsa_callback(ssl_ctx, ssl_gen_rsa_key);
 	SSL_CTX_set_tmp_dh_callback(ssl_ctx, ssl_tmp_dh_callback);
-#if !defined(OPENSSL_NO_ECDH)
+#ifdef HAVE_ECDH
 	/* In the non-recommended situation where ECDH cipher suites are being
 	   used instead of ECDHE, do not reuse the same ECDH key pair for
 	   different sessions. This option improves forward secrecy. */
 	SSL_CTX_set_options(ssl_ctx, SSL_OP_SINGLE_ECDH_USE);
-#endif
-#if !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10002000L
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
 	/* OpenSSL >= 1.0.2 automatically handles ECDH temporary key parameter
 	   selection. */
 	SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
-#elif !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10000000L
+#else
 	/* For OpenSSL < 1.0.2, ECDH temporary key parameter selection must be
 	   performed manually. Attempt to select the same curve as that used
 	   in the server's private EC key file. Otherwise fall back to the
@@ -480,6 +489,7 @@ ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
 		SSL_CTX_set_tmp_ecdh(ssl_ctx, ecdh);
 		EC_KEY_free(ecdh);
 	}
+#endif
 #endif
 	return 0;
 }
@@ -561,7 +571,7 @@ void openssl_iostream_context_deinit(struct ssl_iostream_context *ctx)
 	i_free(ctx);
 }
 
-static void ssl_iostream_deinit_global(void)
+void openssl_iostream_global_deinit(void)
 {
 	if (ssl_iostream_engine != NULL)
 		ENGINE_finish(ssl_iostream_engine);
@@ -581,7 +591,6 @@ static int ssl_iostream_init_global(const struct ssl_iostream_settings *set,
 	if (ssl_global_initialized)
 		return 0;
 
-	atexit(ssl_iostream_deinit_global);
 	ssl_global_initialized = TRUE;
 	SSL_library_init();
 	SSL_load_error_strings();
@@ -603,7 +612,7 @@ static int ssl_iostream_init_global(const struct ssl_iostream_settings *set,
 			*error_r = t_strdup_printf(
 				"Unknown ssl_crypto_device: %s",
 				set->crypto_device);
-			ssl_iostream_deinit_global();
+			/* we'll deinit at exit in any case */
 			return -1;
 		}
 		ENGINE_init(ssl_iostream_engine);

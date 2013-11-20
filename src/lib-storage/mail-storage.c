@@ -118,7 +118,7 @@ mail_storage_set_autodetection(const char **data, const char **driver)
 
 	/* check if data is in driver:data format (eg. mbox:~/mail) */
 	p = *data;
-	while (i_isalnum(*p)) p++;
+	while (i_isalnum(*p) || *p == '_') p++;
 
 	if (*p == ':' && p != *data) {
 		/* no autodetection if the storage driver is given. */
@@ -664,8 +664,18 @@ struct mailbox *mailbox_alloc(struct mailbox_list *list, const char *vname,
 		   server's internal configuration. */
 		if (vname[5] == '\0')
 			vname = "INBOX";
-		else if (vname[5] == mail_namespace_get_sep(list->ns))
+		else if (vname[5] != mail_namespace_get_sep(list->ns))
+			/* not INBOX prefix */ ;
+		else if (strncasecmp(list->ns->prefix, vname, 6) == 0 &&
+			 strncmp(list->ns->prefix, "INBOX", 5) != 0) {
+			mailbox_list_set_critical(list,
+				"Invalid server configuration: "
+				"Namespace prefix=%s must be uppercase INBOX",
+				list->ns->prefix);
+			open_error = MAIL_ERROR_TEMP;
+		} else {
 			vname = t_strconcat("INBOX", vname + 5, NULL);
+		}
 	}
 
 	T_BEGIN {
@@ -1492,6 +1502,8 @@ mailbox_get_status_set_defaults(struct mailbox *box,
 		status_r->have_guids = TRUE;
 	if ((box->storage->class_flags & MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_SAVE_GUIDS) != 0)
 		status_r->have_save_guids = TRUE;
+	if ((box->storage->class_flags & MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_GUID128) != 0)
+		status_r->have_only_guid128 = TRUE;
 }
 
 int mailbox_get_status(struct mailbox *box,
@@ -1836,15 +1848,15 @@ int mailbox_transaction_commit_get_changes(
 	struct mail_transaction_commit_changes *changes_r)
 {
 	struct mailbox_transaction_context *t = *_t;
+	struct mailbox *box = t->box;
 	unsigned int save_count = t->save_count;
 	int ret;
 
-	t->box->transaction_count--;
 	changes_r->pool = NULL;
 
 	*_t = NULL;
 	T_BEGIN {
-		ret = t->box->v.transaction_commit(t, changes_r);
+		ret = box->v.transaction_commit(t, changes_r);
 	} T_END;
 	/* either all the saved messages get UIDs or none, because a) we
 	   failed, b) MAILBOX_TRANSACTION_FLAG_ASSIGN_UIDS not set,
@@ -1852,6 +1864,11 @@ int mailbox_transaction_commit_get_changes(
 	i_assert(ret < 0 ||
 		 seq_range_count(&changes_r->saved_uids) == save_count ||
 		 array_count(&changes_r->saved_uids) == 0);
+	/* decrease the transaction count only after transaction_commit().
+	   that way if it creates and destroys transactions internally, we
+	   don't see transaction_count=0 until the parent transaction is fully
+	   finished */
+	box->transaction_count--;
 	if (ret < 0 && changes_r->pool != NULL)
 		pool_unref(&changes_r->pool);
 	return ret;
@@ -1860,11 +1877,11 @@ int mailbox_transaction_commit_get_changes(
 void mailbox_transaction_rollback(struct mailbox_transaction_context **_t)
 {
 	struct mailbox_transaction_context *t = *_t;
-
-	t->box->transaction_count--;
+	struct mailbox *box = t->box;
 
 	*_t = NULL;
-	t->box->v.transaction_rollback(t);
+	box->v.transaction_rollback(t);
+	box->transaction_count--;
 }
 
 unsigned int mailbox_transaction_get_count(const struct mailbox *box)

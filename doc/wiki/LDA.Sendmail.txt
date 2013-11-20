@@ -21,7 +21,7 @@ Mdovecot,   P=/usr/local/libexec/dovecot/dovecot-lda, F=DFMPhnu9,
 ---%<-------------------------------------------------------------------------
 
 If you're using 'sendmail.mc' then put the lines above into a new file
-'/usr/share/sendmail/cf/mailer/dovecot.m4' and put 'MAILER(dovecot)' into your
+'/usr/share/sendmail-cf/mailer/dovecot.m4' and put 'MAILER(dovecot)' into your
 'sendmail.mc'
 
 ===================================
@@ -86,7 +86,8 @@ allows to run virtual users under one system account without applying SUID.
 
 Sendmail can pass a user account to LDA with or without the domain. Passing a
 user name without the domain can be achievedwith S=/R= rewriting rules of the
-local mailer. Finally, into 'cf/mailer/dovecot.m4' goes the block of lines:
+local mailer. Finally, into '/usr/share/sendmail-cf/mailer/dovecot.m4' goes the
+block of lines:
 
 ---%<-------------------------------------------------------------------------
 Mdovecot,      P=/usr/libexec/dovecot/dovecot-lda,
@@ -101,4 +102,4 @@ Mdovecot,      P=/usr/libexec/dovecot/dovecot-lda,
 dovecot.m4 [http://sites.google.com/site/mclroy/dovecot/dovecot-m4] can be a
 bit more complex.
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

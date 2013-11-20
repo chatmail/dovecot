@@ -47,8 +47,8 @@ passdb {
 }
 ---%<-------------------------------------------------------------------------
 
-Parameters
-----------
+Passwd-file args
+----------------
 
  * *scheme=<s>*: Allows you to specify the default <password scheme>
    [Authentication.PasswordSchemes.txt]. The default is CRYPT. This is
@@ -56,11 +56,9 @@ Parameters
  * *username_format=<s>*: Look up usernames using this format instead of the
    full username ('%u'). If you want to enable user@domain logins but have only
    "user" in the file, set this to '%n'.
- * *default fields= <var>=<value> ...*: pass environment variables to
-   post-login script ('<var>' converted to upper-case).  '<value>' can contain
-   dovecot <variables> [Variables.txt].
 
-For example:
+Examples
+--------
 
 ---%<-------------------------------------------------------------------------
 passdb {
@@ -70,12 +68,15 @@ passdb {
 userdb {
   driver = passwd-file
   args = username_format=%n /etc/imap.passwd
-  default_fields = local_port=%a
+  default_fields = uid=vmail gid=vmail home=/home/vmail/%u
 }
 ---%<-------------------------------------------------------------------------
 
-Examples
---------
+ * The default_fields is explained in <UserDatabase#Userdb_settings>
+   [UserDatabase.txt]. They can be used to provide default userdb fields based
+   on templates in case they're not specified for everyone in the passwd file.
+   If you leave any of the standard userdb fields (uid, gid, home) empty, these
+   defaults will be used.
 
 This file can be used as a passdb:
 
@@ -98,4 +99,4 @@ allow_nets=192.168.0.0/24
 user2:{plain}pass2:1001:1001::/home/user2
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

@@ -7,7 +7,9 @@
 #include "base64.h"
 #include "str.h"
 #include "wildcard-match.h"
+#include "settings-parser.h"
 #include "master-service.h"
+#include "master-service-settings.h"
 #include "auth-client.h"
 #include "auth-master.h"
 #include "auth-server-connection.h"
@@ -29,35 +31,45 @@ struct authtest_input {
 
 static void auth_cmd_help(doveadm_command_t *cmd);
 
-static int
-cmd_user_input(const char *auth_socket_path, const struct authtest_input *input,
-	       const char *show_field)
+static struct auth_master_connection *
+doveadm_get_auth_master_conn(const char *auth_socket_path)
 {
-	struct auth_master_connection *conn;
+	enum auth_master_flags flags = 0;
+
+	if (doveadm_debug)
+		flags |= AUTH_MASTER_FLAG_DEBUG;
+	return auth_master_init(auth_socket_path, flags);
+}
+
+static int
+cmd_user_input(struct auth_master_connection *conn,
+	       const struct authtest_input *input,
+	       const char *show_field, bool userdb)
+{
+	const char *lookup_name = userdb ? "userdb lookup" : "passdb lookup";
 	pool_t pool;
 	const char *username, *const *fields, *p;
 	int ret;
 
-	if (auth_socket_path == NULL) {
-		auth_socket_path = t_strconcat(doveadm_settings->base_dir,
-					       "/auth-userdb", NULL);
-	}
-
 	pool = pool_alloconly_create("auth master lookup", 1024);
 
-	conn = auth_master_init(auth_socket_path, 0);
-	ret = auth_master_user_lookup(conn, input->username, &input->info,
-				      pool, &username, &fields);
+	if (userdb) {
+		ret = auth_master_user_lookup(conn, input->username, &input->info,
+					      pool, &username, &fields);
+	} else {
+		ret = auth_master_pass_lookup(conn, input->username, &input->info,
+					      pool, &fields);
+	}
 	if (ret < 0) {
 		if (fields[0] == NULL)
-			i_error("userdb lookup failed for %s", input->username);
+			i_error("%s failed for %s", lookup_name, input->username);
 		else {
-			i_error("userdb lookup failed for %s: %s",
+			i_error("%s failed for %s: %s", lookup_name,
 				input->username, fields[0]);
 		}
 	} else if (ret == 0) {
 		fprintf(show_field == NULL ? stdout : stderr,
-			"userdb lookup: user %s doesn't exist\n",
+			"%s: user %s doesn't exist\n", lookup_name,
 			input->username);
 	} else if (show_field != NULL) {
 		unsigned int show_field_len = strlen(show_field);
@@ -68,7 +80,7 @@ cmd_user_input(const char *auth_socket_path, const struct authtest_input *input,
 				printf("%s\n", *fields + show_field_len + 1);
 		}
 	} else {
-		printf("userdb: %s\n", input->username);
+		printf("%s: %s\n", userdb ? "userdb" : "passdb", input->username);
 
 		for (; *fields; fields++) {
 			p = strchr(*fields, '=');
@@ -80,7 +92,6 @@ cmd_user_input(const char *auth_socket_path, const struct authtest_input *input,
 			}
 		}
 	}
-	auth_master_deinit(&conn);
 	return ret;
 }
 
@@ -185,23 +196,17 @@ static void auth_user_info_parse(struct auth_user_info *info, const char *arg)
 }
 
 static void
-cmd_user_list(const char *auth_socket_path, const struct authtest_input *input,
+cmd_user_list(struct auth_master_connection *conn,
+	      const struct authtest_input *input,
 	      char *const *users)
 {
 	struct auth_master_user_list_ctx *ctx;
-	struct auth_master_connection *conn;
 	const char *username, *user_mask = NULL;
 	unsigned int i;
-
-	if (auth_socket_path == NULL) {
-		auth_socket_path = t_strconcat(doveadm_settings->base_dir,
-					       "/auth-userdb", NULL);
-	}
 
 	if (users[0] != NULL && users[1] == NULL)
 		user_mask = users[0];
 
-	conn = auth_master_init(auth_socket_path, 0);
 	ctx = auth_master_user_list_init(conn, user_mask, &input->info);
 	while ((username = auth_master_user_list_next(ctx)) != NULL) {
 		for (i = 0; users[i] != NULL; i++) {
@@ -213,12 +218,11 @@ cmd_user_list(const char *auth_socket_path, const struct authtest_input *input,
 	}
 	if (auth_master_user_list_deinit(&ctx) < 0)
 		i_fatal("user listing failed");
-	auth_master_deinit(&conn);
 }
 
 static void cmd_auth_cache_flush(int argc, char *argv[])
 {
-	const char *auth_socket_path = NULL;
+	const char *master_socket_path = NULL;
 	struct auth_master_connection *conn;
 	unsigned int count;
 	int c;
@@ -226,7 +230,7 @@ static void cmd_auth_cache_flush(int argc, char *argv[])
 	while ((c = getopt(argc, argv, "a:")) > 0) {
 		switch (c) {
 		case 'a':
-			auth_socket_path = optarg;
+			master_socket_path = optarg;
 			break;
 		default:
 			auth_cmd_help(cmd_auth_cache_flush);
@@ -234,12 +238,12 @@ static void cmd_auth_cache_flush(int argc, char *argv[])
 	}
 	argv += optind;
 
-	if (auth_socket_path == NULL) {
-		auth_socket_path = t_strconcat(doveadm_settings->base_dir,
-					       "/auth-master", NULL);
+	if (master_socket_path == NULL) {
+		master_socket_path = t_strconcat(doveadm_settings->base_dir,
+						 "auth-master", NULL);
 	}
 
-	conn = auth_master_init(auth_socket_path, 0);
+	conn = doveadm_get_auth_master_conn(master_socket_path);
 	if (auth_master_cache_flush(conn, (void *)argv, &count) < 0) {
 		i_error("Cache flush failed");
 		doveadm_exit_code = EX_TEMPFAIL;
@@ -282,6 +286,57 @@ static void cmd_auth_test(int argc, char *argv[])
 	cmd_auth_input(auth_socket_path, &input);
 	if (!input.success)
 		doveadm_exit_code = EX_NOPERM;
+}
+
+static void cmd_auth_lookup(int argc, char *argv[])
+{
+	const char *auth_socket_path = doveadm_settings->auth_socket_path;
+	struct auth_master_connection *conn;
+	struct authtest_input input;
+	const char *show_field = NULL;
+	bool first = TRUE;
+	int c, ret;
+
+	memset(&input, 0, sizeof(input));
+	input.info.service = "doveadm";
+
+	while ((c = getopt(argc, argv, "a:f:x:")) > 0) {
+		switch (c) {
+		case 'a':
+			auth_socket_path = optarg;
+			break;
+		case 'f':
+			show_field = optarg;
+			break;
+		case 'x':
+			auth_user_info_parse(&input.info, optarg);
+			break;
+		default:
+			auth_cmd_help(cmd_auth_lookup);
+		}
+	}
+
+	if (optind == argc)
+		auth_cmd_help(cmd_auth_lookup);
+
+	conn = doveadm_get_auth_master_conn(auth_socket_path);
+	while ((input.username = argv[optind++]) != NULL) {
+		if (first)
+			first = FALSE;
+		else
+			putchar('\n');
+
+		ret = cmd_user_input(conn, &input, show_field, FALSE);
+		switch (ret) {
+		case -1:
+			doveadm_exit_code = EX_TEMPFAIL;
+			break;
+		case 0:
+			doveadm_exit_code = EX_NOUSER;
+			break;
+		}
+	}
+	auth_master_deinit(&conn);
 }
 
 static void cmd_user_mail_input_field(const char *key, const char *value,
@@ -333,12 +388,6 @@ static int cmd_user_mail_input(struct mail_storage_service_ctx *storage_service,
 		return 0;
 	}
 
-	if (show_field == NULL) {
-		doveadm_print_init(DOVEADM_PRINT_TYPE_TAB);
-		doveadm_print_header_simple("field");
-		doveadm_print_header_simple("value");
-	}
-
 	cmd_user_mail_input_field("uid", user->set->mail_uid, show_field);
 	cmd_user_mail_input_field("gid", user->set->mail_gid, show_field);
 	cmd_user_mail_input_field("home", user->set->mail_home, show_field);
@@ -371,7 +420,8 @@ static int cmd_user_mail_input(struct mail_storage_service_ctx *storage_service,
 
 static void cmd_user(int argc, char *argv[])
 {
-	const char *auth_socket_path = NULL;
+	const char *auth_socket_path = doveadm_settings->auth_socket_path;
+	struct auth_master_connection *conn;
 	struct authtest_input input;
 	const char *show_field = NULL;
 	struct mail_storage_service_ctx *storage_service = NULL;
@@ -404,6 +454,8 @@ static void cmd_user(int argc, char *argv[])
 	if (optind == argc)
 		auth_cmd_help(cmd_user);
 
+	conn = doveadm_get_auth_master_conn(auth_socket_path);
+
 	have_wildcards = FALSE;
 	for (i = optind; argv[i] != NULL; i++) {
 		if (strchr(argv[i], '*') != NULL ||
@@ -414,7 +466,8 @@ static void cmd_user(int argc, char *argv[])
 	}
 
 	if (have_wildcards) {
-		cmd_user_list(auth_socket_path, &input, argv + optind);
+		cmd_user_list(conn, &input, argv + optind);
+		auth_master_deinit(&conn);
 		return;
 	}
 
@@ -424,7 +477,15 @@ static void cmd_user(int argc, char *argv[])
 			MAIL_STORAGE_SERVICE_FLAG_NO_CHDIR |
 			MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT |
 			MAIL_STORAGE_SERVICE_FLAG_NO_PLUGINS |
-			MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES);
+			MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES |
+			MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP);
+		mail_storage_service_set_auth_conn(storage_service, conn);
+		conn = NULL;
+		if (show_field == NULL) {
+			doveadm_print_init(DOVEADM_PRINT_TYPE_TAB);
+			doveadm_print_header_simple("field");
+			doveadm_print_header_simple("value");
+		}
 	}
 
 	while ((input.username = argv[optind++]) != NULL) {
@@ -435,7 +496,7 @@ static void cmd_user(int argc, char *argv[])
 
 		ret = !userdb_only ?
 			cmd_user_mail_input(storage_service, &input, show_field) :
-			cmd_user_input(auth_socket_path, &input, show_field);
+			cmd_user_input(conn, &input, show_field, TRUE);
 		switch (ret) {
 		case -1:
 			doveadm_exit_code = EX_TEMPFAIL;
@@ -447,11 +508,15 @@ static void cmd_user(int argc, char *argv[])
 	}
 	if (storage_service != NULL)
 		mail_storage_service_deinit(&storage_service);
+	if (conn != NULL)
+		auth_master_deinit(&conn);
 }
 
 struct doveadm_cmd doveadm_cmd_auth[] = {
 	{ cmd_auth_test, "auth test",
 	  "[-a <auth socket path>] [-x <auth info>] <user> [<password>]" },
+	{ cmd_auth_lookup, "auth lookup",
+	  "[-a <userdb socket path>] [-x <auth info>] [-f field] <user> [...]" },
 	{ cmd_auth_cache_flush, "auth cache flush",
 	  "[-a <master socket path>] [<user> [...]]" },
 	{ cmd_user, "user",

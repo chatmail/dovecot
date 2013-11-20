@@ -24,6 +24,7 @@ struct dsync_mailbox_exporter {
 	struct dsync_transaction_log_scan *log_scan;
 	uint32_t last_common_uid;
 
+	struct mailbox_header_lookup_ctx *wanted_headers;
 	struct mailbox_transaction_context *trans;
 	struct mail_search_context *search_ctx;
 	unsigned int search_pos, search_count;
@@ -272,6 +273,12 @@ search_add_save(struct dsync_mailbox_exporter *exporter, struct mail *mail)
 	time_t save_timestamp;
 	int ret;
 
+	/* update wanted fields in case we didn't already set them for the
+	   search */
+	mail_add_temp_wanted_fields(mail, MAIL_FETCH_GUID |
+				    MAIL_FETCH_SAVE_DATE,
+				    exporter->wanted_headers);
+
 	/* If message is already expunged here, just skip it */
 	if ((ret = exporter_get_guids(exporter, mail, &guid, &hdr_hash)) <= 0)
 		return ret;
@@ -333,6 +340,8 @@ dsync_mailbox_export_search(struct dsync_mailbox_exporter *exporter)
 	struct mail_search_args *search_args;
 	struct mail_search_arg *sarg;
 	struct mail *mail;
+	enum mail_fetch_field wanted_fields = 0;
+	struct mailbox_header_lookup_ctx *wanted_headers = NULL;
 	int ret;
 
 	search_args = mail_search_build_init();
@@ -352,9 +361,16 @@ dsync_mailbox_export_search(struct dsync_mailbox_exporter *exporter)
 					  (uint32_t)-1);
 	}
 
+	if (exporter->last_common_uid == 0) {
+		/* we're syncing all mails, so we can request the wanted
+		   fields for all the mails */
+		wanted_fields = MAIL_FETCH_GUID | MAIL_FETCH_SAVE_DATE;
+		wanted_headers = exporter->wanted_headers;
+	}
+
 	exporter->trans = mailbox_transaction_begin(exporter->box, 0);
 	search_ctx = mailbox_search_init(exporter->trans, search_args, NULL,
-					 0, NULL);
+					 wanted_fields, wanted_headers);
 	mail_search_args_unref(&search_args);
 
 	while (mailbox_search_next(search_ctx, &mail)) {
@@ -467,6 +483,9 @@ dsync_mailbox_export_init(struct mailbox *box,
 	hash_table_create(&exporter->export_guids, pool, 0, str_hash, strcmp);
 	p_array_init(&exporter->expunged_seqs, pool, 16);
 	p_array_init(&exporter->expunged_guids, pool, 16);
+
+	if (!exporter->mails_have_guids)
+		exporter->wanted_headers = dsync_mail_get_hash_headers(box);
 
 	/* first scan transaction log and save any expunges and flag changes */
 	dsync_mailbox_export_log_scan(exporter, log_scan);
@@ -705,7 +724,9 @@ dsync_mailbox_export_body_search_init(struct dsync_mailbox_exporter *exporter)
 				    MAIL_FETCH_GUID |
 				    MAIL_FETCH_UIDL_BACKEND |
 				    MAIL_FETCH_POP3_ORDER |
-				    MAIL_FETCH_RECEIVED_DATE, NULL);
+				    MAIL_FETCH_RECEIVED_DATE |
+				    MAIL_FETCH_STREAM_HEADER |
+				    MAIL_FETCH_STREAM_BODY, NULL);
 	mail_search_args_unref(&search_args);
 	return array_count(&sarg->value.seqset) > 0 ? 1 : 0;
 }
@@ -843,6 +864,8 @@ int dsync_mailbox_export_deinit(struct dsync_mailbox_exporter **_exporter,
 
 	dsync_mailbox_export_body_search_deinit(exporter);
 	(void)mailbox_transaction_commit(&exporter->trans);
+	if (exporter->wanted_headers != NULL)
+		mailbox_header_lookup_unref(&exporter->wanted_headers);
 
 	if (exporter->attr.value_stream != NULL)
 		i_stream_unref(&exporter->attr.value_stream);

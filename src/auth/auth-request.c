@@ -60,7 +60,7 @@ auth_request_new(const struct mech_module *mech)
 
 	request->set = global_auth_settings;
 	request->mech = mech;
-	request->mech_name = mech == NULL ? NULL : mech->mech_name;
+	request->mech_name = mech->mech_name;
 	request->extra_fields = auth_fields_init(request->pool);
 	return request;
 }
@@ -331,7 +331,9 @@ bool auth_request_import_master(struct auth_request *request,
 	if (strcmp(key, "session_pid") == 0) {
 		if (str_to_pid(value, &pid) == 0)
 			request->session_pid = pid;
-	} else
+	} else if (strcmp(key, "request_auth_token") == 0)
+		request->request_auth_token = TRUE;
+	else
 		return FALSE;
 	return TRUE;
 }
@@ -409,8 +411,7 @@ static void auth_request_save_cache(struct auth_request *request,
 		i_unreached();
 	}
 
-	if (passdb_cache == NULL || passdb->cache_key == NULL ||
-	    request->master_user != NULL)
+	if (passdb_cache == NULL || passdb->cache_key == NULL)
 		return;
 
 	if (result < 0) {
@@ -923,8 +924,7 @@ static void auth_request_userdb_save_cache(struct auth_request *request,
 	string_t *str;
 	const char *cache_value;
 
-	if (passdb_cache == NULL || userdb->cache_key == NULL ||
-	    request->master_user != NULL)
+	if (passdb_cache == NULL || userdb->cache_key == NULL)
 		return;
 
 	if (result == USERDB_RESULT_USER_UNKNOWN)
@@ -955,9 +955,6 @@ static bool auth_request_lookup_user_cache(struct auth_request *request,
 	const char *value;
 	struct auth_cache_node *node;
 	bool expired, neg_expired;
-
-	if (request->master_user != NULL)
-		return FALSE;
 
 	value = auth_cache_lookup(passdb_cache, request, key, &node,
 				  &expired, &neg_expired);
@@ -1782,13 +1779,44 @@ static void log_password_failure(struct auth_request *request,
 	auth_request_log_debug(request, subsystem, "%s", str_c(str));
 }
 
+static void
+auth_request_append_password(struct auth_request *request, string_t *str)
+{
+	const char *p, *log_type = request->set->verbose_passwords;
+	unsigned int max_len = 1024;
+
+	if (request->mech_password == NULL)
+		return;
+
+	p = strchr(log_type, ':');
+	if (p != NULL) {
+		if (str_to_uint(p+1, &max_len) < 0)
+			i_unreached();
+		log_type = t_strdup_until(log_type, p);
+	}
+
+	if (strcmp(log_type, "plain") == 0) {
+		str_printfa(str, "(given password: %s)",
+			    t_strndup(request->mech_password, max_len));
+	} else if (strcmp(log_type, "sha1") == 0) {
+		unsigned char sha1[SHA1_RESULTLEN];
+
+		sha1_get_digest(request->mech_password,
+				strlen(request->mech_password), sha1);
+		str_printfa(str, "(SHA1 of given password: %s)",
+			    t_strndup(binary_to_hex(sha1, sizeof(sha1)),
+				      max_len));
+	} else {
+		i_unreached();
+	}
+}
+
 void auth_request_log_password_mismatch(struct auth_request *request,
 					const char *subsystem)
 {
 	string_t *str;
-	const char *log_type = request->set->verbose_passwords;
 
-	if (strcmp(log_type, "no") == 0) {
+	if (strcmp(request->set->verbose_passwords, "no") == 0) {
 		auth_request_log_info(request, subsystem, "Password mismatch");
 		return;
 	}
@@ -1797,20 +1825,25 @@ void auth_request_log_password_mismatch(struct auth_request *request,
 	get_log_prefix(str, request, subsystem);
 	str_append(str, "Password mismatch ");
 
-	if (strcmp(log_type, "plain") == 0) {
-		str_printfa(str, "(given password: %s)",
-			    request->mech_password);
-	} else if (strcmp(log_type, "sha1") == 0) {
-		unsigned char sha1[SHA1_RESULTLEN];
+	auth_request_append_password(request, str);
+	i_info("%s", str_c(str));
+}
 
-		sha1_get_digest(request->mech_password,
-				strlen(request->mech_password), sha1);
-		str_printfa(str, "(SHA1 of given password: %s)",
-			    binary_to_hex(sha1, sizeof(sha1)));
-	} else {
-		i_unreached();
+void auth_request_log_unknown_user(struct auth_request *request,
+				   const char *subsystem)
+{
+	string_t *str;
+
+	if (strcmp(request->set->verbose_passwords, "no") == 0 ||
+	    !request->set->verbose) {
+		auth_request_log_info(request, subsystem, "unknown user");
+		return;
 	}
+	str = t_str_new(128);
+	get_log_prefix(str, request, subsystem);
+	str_append(str, "unknown user ");
 
+	auth_request_append_password(request, str);
 	i_info("%s", str_c(str));
 }
 
@@ -1891,7 +1924,8 @@ auth_request_str_escape(const char *string,
 	return str_escape(string);
 }
 
-const struct var_expand_table auth_request_var_expand_static_tab[] = {
+const struct var_expand_table
+auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_COUNT+1] = {
 	{ 'u', NULL, "user" },
 	{ 'n', NULL, "username" },
 	{ 'd', NULL, "domain" },
@@ -1915,6 +1949,11 @@ const struct var_expand_table auth_request_var_expand_static_tab[] = {
 	{ '\0', NULL, "real_rip" },
 	{ '\0', NULL, "real_lport" },
 	{ '\0', NULL, "real_rport" },
+	{ '\0', NULL, "domain_first" },
+	{ '\0', NULL, "domain_last" },
+	{ '\0', NULL, "master_user" },
+	{ '\0', NULL, "session_pid" },
+	/* be sure to update AUTH_REQUEST_VAR_TAB_COUNT */
 	{ '\0', NULL, NULL }
 };
 
@@ -1991,6 +2030,18 @@ auth_request_get_var_expand_table_full(const struct auth_request *auth_request,
 		tab[20].value = net_ip2addr(&auth_request->real_remote_ip);
 	tab[21].value = dec2str(auth_request->real_local_port);
 	tab[22].value = dec2str(auth_request->real_remote_port);
+	tab[23].value = strchr(auth_request->user, '@');
+	if (tab[23].value != NULL) {
+		tab[23].value = escape_func(t_strcut(tab[23].value+1, '@'),
+					    auth_request);
+	}
+	tab[24].value = strrchr(auth_request->user, '@');
+	if (tab[24].value != NULL)
+		tab[24].value = escape_func(tab[24].value+1, auth_request);
+	tab[25].value = auth_request->master_user == NULL ? NULL :
+		escape_func(auth_request->master_user, auth_request);
+	tab[26].value = auth_request->session_pid == (pid_t)-1 ? NULL :
+		dec2str(auth_request->session_pid);
 	return ret_tab;
 }
 
@@ -2021,7 +2072,7 @@ static void get_log_prefix(string_t *str, struct auth_request *auth_request,
 	}
 
 	ip = net_ip2addr(&auth_request->remote_ip);
-	if (ip != NULL) {
+	if (ip[0] != '\0') {
 		str_append_c(str, ',');
 		str_append(str, ip);
 	}

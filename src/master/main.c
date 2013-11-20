@@ -201,7 +201,7 @@ static void fatal_log_check(const struct master_settings *set)
 	if (fd == -1)
 		return;
 
-	ret = read(fd, buf, sizeof(buf));
+	ret = read(fd, buf, sizeof(buf)-1);
 	if (ret < 0)
 		i_error("read(%s) failed: %m", path);
 	else {
@@ -231,7 +231,7 @@ static bool pid_file_read(const char *path, pid_t *pid_r)
 		i_fatal("open(%s) failed: %m", path);
 	}
 
-	ret = read(fd, buf, sizeof(buf));
+	ret = read(fd, buf, sizeof(buf)-1);
 	if (ret <= 0) {
 		if (ret == 0)
 			i_error("Empty PID file in %s, overriding", path);
@@ -438,6 +438,9 @@ static void sig_die(const siginfo_t *si, void *context ATTR_UNUSED)
 		  si->si_signo, dec2str(si->si_pid),
 		  dec2str(si->si_uid),
 		  lib_signal_code_to_str(si->si_signo, si->si_code));
+	/* make sure new processes won't be created by the currently
+	   running ioloop. */
+	services->destroying = TRUE;
 	master_service_stop(master_service);
 }
 
@@ -627,7 +630,7 @@ static void print_help(void)
 {
 	fprintf(stderr,
 "Usage: dovecot [-F] [-c <config file>] [-p] [-n] [-a] [--help] [--version]\n"
-"       [--build-options] [reload] [stop]\n");
+"       [--build-options] [--hostdomain] [reload] [stop]\n");
 }
 
 static void print_build_options(void)
@@ -822,6 +825,9 @@ int main(int argc, char *argv[])
 		i_fatal("execv("BINDIR"/doveadm) failed: %m");
 	} else if (strcmp(argv[optind], "version") == 0) {
 		printf("%s\n", DOVECOT_VERSION_FULL);
+		return 0;
+	} else if (strcmp(argv[optind], "hostdomain") == 0) {
+		printf("%s\n", my_hostdomain());
 		return 0;
 	} else if (strcmp(argv[optind], "build-options") == 0) {
 		print_build_options();

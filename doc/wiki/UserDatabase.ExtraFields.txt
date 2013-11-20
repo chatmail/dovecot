@@ -14,7 +14,10 @@ A user database lookup typically returns <uid, gid, home and mail>
    TAB-separated field. It's useful for userdbs which are a bit less flexible
    for returning a variable number of fields (e.g. SQL).
  * *uidgid_file*: Get uid and gid for user based on the given filename.
- * It's possible to override settings from 'dovecot.conf'.
+ * It's possible to override settings from 'dovecot.conf' (most commonly
+   quota_rule to set per-user quota limits).
+ * The extra fields are also passed to <post-login scripts>
+   [PostLoginScripting.txt].
 
 These fields can be returned the exact same way as uid, gid, home and mail
 fields. Below are examples for some user databases.
@@ -90,4 +93,4 @@ user2:{plain}pass2:1001:1001::/home/user2::userdb_mail=maildir:~/Maildir
 userdb_quota_rule=*:storage=200M
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-08-05 04:43)
+(This file was created from the wiki on 2013-11-19 04:43)

@@ -1,6 +1,7 @@
 /* Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "lib-signals.h"
 #include "base64.h"
 #include "ioloop.h"
 #include "istream.h"
@@ -107,10 +108,16 @@ doveadm_mail_cmd_server_run(struct client_connection *conn,
 			    const struct mail_storage_service_input *input)
 {
 	const char *error;
+	struct ioloop *ioloop, *prev_ioloop = current_ioloop;
 	int ret;
 
 	ctx->conn = conn;
 
+	/* some commands will want to call io_loop_run(), but we're already
+	   running one and we can't call the original one recursively, so
+	   create a new ioloop. */
+	ioloop = io_loop_create();
+	lib_signals_reset_ioloop();
 	if (ctx->v.preinit != NULL)
 		ctx->v.preinit(ctx);
 
@@ -119,6 +126,12 @@ doveadm_mail_cmd_server_run(struct client_connection *conn,
 	ctx->v.deinit(ctx);
 	doveadm_print_flush();
 	mail_storage_service_deinit(&ctx->storage_service);
+
+	io_loop_set_current(prev_ioloop);
+	lib_signals_reset_ioloop();
+	o_stream_switch_ioloop(conn->output);
+	io_loop_set_current(ioloop);
+	io_loop_destroy(&ioloop);
 
 	if (ret < 0) {
 		i_error("%s: %s", ctx->cmd->name, error);
@@ -212,10 +225,6 @@ static bool client_handle_command(struct client_connection *conn, char **args)
 		return FALSE;
 	}
 
-	/* make sure client_connection_input() isn't called by the ioloop that
-	   is going to be run by doveadm_mail_cmd_server_run() */
-	io_remove(&conn->io);
-
 	o_stream_cork(conn->output);
 	ctx = doveadm_mail_cmd_server_parse(cmd_name, conn->set, &input, argc, args);
 	if (ctx == NULL)
@@ -228,8 +237,6 @@ static bool client_handle_command(struct client_connection *conn, char **args)
 	net_set_nonblock(conn->fd, FALSE);
 	(void)o_stream_flush(conn->output);
 	net_set_nonblock(conn->fd, TRUE);
-
-	conn->io = io_add(conn->fd, IO_READ, client_connection_input, conn);
 	return TRUE;
 }
 
@@ -256,7 +263,7 @@ client_connection_authenticate(struct client_connection *conn)
 	/* FIXME: some day we should probably let auth process do this and
 	   support all kinds of authentication */
 	if (strncmp(line, "PLAIN\t", 6) != 0) {
-		i_error("doveadm client attempted non-PLAIN authentication");
+		i_error("doveadm client attempted non-PLAIN authentication: %s", line);
 		return -1;
 	}
 
@@ -281,6 +288,19 @@ client_connection_authenticate(struct client_connection *conn)
 	return 1;
 }
 
+static void client_log_disconnect_error(struct client_connection *conn)
+{
+	const char *error;
+
+	error = conn->ssl_iostream == NULL ? NULL :
+		ssl_iostream_get_last_error(conn->ssl_iostream);
+	if (error == NULL) {
+		error = conn->input->stream_errno == 0 ? "EOF" :
+			strerror(conn->input->stream_errno);
+	}
+	i_error("doveadm client disconnected before handshake: %s", error);
+}
+
 static void client_connection_input(struct client_connection *conn)
 {
 	const char *line;
@@ -289,8 +309,10 @@ static void client_connection_input(struct client_connection *conn)
 
 	if (!conn->handshaked) {
 		if ((line = i_stream_read_next_line(conn->input)) == NULL) {
-			if (conn->input->eof || conn->input->stream_errno != 0)
+			if (conn->input->eof || conn->input->stream_errno != 0) {
+				client_log_disconnect_error(conn);
 				client_connection_destroy(&conn);
+			}
 			return;
 		}
 
@@ -397,6 +419,7 @@ struct client_connection *
 client_connection_create(int fd, int listen_fd, bool ssl)
 {
 	struct client_connection *conn;
+	const char *ip;
 	pool_t pool;
 
 	pool = pool_alloconly_create("doveadm client", 1024*16);
@@ -410,6 +433,13 @@ client_connection_create(int fd, int listen_fd, bool ssl)
 
 	(void)net_getsockname(fd, &conn->local_ip, &conn->local_port);
 	(void)net_getpeername(fd, &conn->remote_ip, &conn->remote_port);
+
+	i_stream_set_name(conn->input, net_ip2addr(&conn->remote_ip));
+	o_stream_set_name(conn->output, net_ip2addr(&conn->remote_ip));
+
+	ip = net_ip2addr(&conn->remote_ip);
+	if (ip[0] != '\0')
+		i_set_failure_prefix("doveadm(%s): ", ip);
 
 	if (client_connection_read_settings(conn) < 0) {
 		client_connection_destroy(&conn);

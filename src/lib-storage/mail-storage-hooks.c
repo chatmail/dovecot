@@ -121,6 +121,12 @@ mail_storage_module_hooks_cmp(const struct mail_storage_module_hooks *h1,
 			      const struct mail_storage_module_hooks *h2)
 {
 	const char *s1 = h1->module->path, *s2 = h2->module->path;
+	const char *p;
+
+	p = strrchr(s1, '/');
+	if (p != NULL) s1 = p+1;
+	p = strrchr(s2, '/');
+	if (p != NULL) s2 = p+1;
 
 	if (strncmp(s1, "lib", 3) == 0)
 		s1 += 3;
@@ -140,9 +146,12 @@ static void mail_user_add_plugin_hooks(struct mail_user *user)
 	t_array_init(&tmp_hooks, array_count(&module_hooks));
 	plugins = t_strsplit_spaces(user->set->mail_plugins, ", ");
 	array_foreach(&module_hooks, module_hook) {
-		name = module_get_plugin_name(module_hook->module);
-		if (str_array_find(plugins, name) || module_hook->forced)
-			array_append(&tmp_hooks, module_hook, 1);
+		if (!module_hook->forced) {
+			name = module_get_plugin_name(module_hook->module);
+			if (!str_array_find(plugins, name))
+				continue;
+		}
+		array_append(&tmp_hooks, module_hook, 1);
 	}
 
 	/* next we have to sort them by the modules' priority (based on name) */

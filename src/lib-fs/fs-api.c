@@ -4,6 +4,7 @@
 #include "array.h"
 #include "module-dir.h"
 #include "str.h"
+#include "hash-method.h"
 #include "istream.h"
 #include "istream-seekable.h"
 #include "ostream.h"
@@ -158,6 +159,8 @@ struct fs_file *fs_file_init(struct fs *fs, const char *path, int mode_flags)
 	struct fs_file *file;
 
 	i_assert(path != NULL);
+	i_assert((mode_flags & FS_OPEN_FLAG_ASYNC_NOQUEUE) == 0 ||
+		 (mode_flags & FS_OPEN_FLAG_ASYNC) != 0);
 
 	T_BEGIN {
 		file = fs->v.file_init(fs, path, mode_flags & FS_OPEN_MODE_MASK,
@@ -199,6 +202,7 @@ void fs_file_close(struct fs_file *file)
 		i_stream_unref(&file->copy_input);
 		(void)fs_write_stream_abort(file, &file->copy_output);
 	}
+	i_free_and_null(file->write_digest);
 	if (file->fs->v.file_close != NULL) T_BEGIN {
 		file->fs->v.file_close(file);
 	} T_END;
@@ -249,6 +253,11 @@ const char *fs_file_path(struct fs_file *file)
 {
 	return file->fs->v.get_path == NULL ? file->path :
 		file->fs->v.get_path(file);
+}
+
+struct fs *fs_file_fs(struct fs_file *file)
+{
+	return file->fs;
 }
 
 static void ATTR_FORMAT(2, 0)
@@ -475,6 +484,16 @@ void fs_write_stream_abort(struct fs_file *file, struct ostream **output)
 	} T_END;
 }
 
+void fs_write_set_hash(struct fs_file *file, const struct hash_method *method,
+		       const void *digest)
+{
+	file->write_digest_method = method;
+
+	i_free(file->write_digest);
+	file->write_digest = i_malloc(method->digest_size);
+	memcpy(file->write_digest, digest, method->digest_size);
+}
+
 void fs_file_set_async_callback(struct fs_file *file,
 				fs_file_async_callback_t *callback,
 				void *context)
@@ -519,8 +538,16 @@ void fs_unlock(struct fs_lock **_lock)
 
 int fs_exists(struct fs_file *file)
 {
+	struct stat st;
 	int ret;
 
+	if (file->fs->v.exists == NULL) {
+		/* fallback to stat() */
+		if (fs_stat(file, &st) == 0)
+			return 1;
+		else
+			return errno == ENOENT ? 0 : -1;
+	}
 	T_BEGIN {
 		ret = file->fs->v.exists(file);
 	} T_END;
@@ -651,6 +678,19 @@ int fs_iter_deinit(struct fs_iter **_iter)
 const char *fs_iter_next(struct fs_iter *iter)
 {
 	return iter->fs->v.iter_next(iter);
+}
+
+void fs_iter_set_async_callback(struct fs_iter *iter,
+				fs_file_async_callback_t *callback,
+				void *context)
+{
+	iter->async_callback = callback;
+	iter->async_context = context;
+}
+
+bool fs_iter_have_more(struct fs_iter *iter)
+{
+	return iter->async_have_more;
 }
 
 void fs_set_error(struct fs *fs, const char *fmt, ...)

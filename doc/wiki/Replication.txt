@@ -21,7 +21,8 @@ replication:
 doveadm user '*'
 ---%<-------------------------------------------------------------------------
 
-Enable the replication plugin:
+Enable the replication plugin globally (most likely you'll need to do this in
+10-mail.conf):
 
 ---%<-------------------------------------------------------------------------
 mail_plugins = $mail_plugins notify replication
@@ -100,6 +101,13 @@ doveadm_password = secret
 Now you can use 'tcp:hostname' as the dsync target. You can also override the
 port with 'tcp:hostname:port'.
 
+---%<-------------------------------------------------------------------------
+plugin {
+  mail_replica = tcp:anotherhost.example.com # use doveadm_port
+  #mail_replica = tcp:anotherhost.example.com:12345 # use port 12345 explicitly
+}
+---%<-------------------------------------------------------------------------
+
 SSL
 ---
 
@@ -172,5 +180,9 @@ Random things to remember:
  * With mdbox format "doveadm purge" won't be replicated
  * "doveadm force-resync", "doveadm quota recalc" and other similar fixing
    commands don't get replicated
+ * The servers must have different hostnames or the locking doesn't work and
+   can cause replication problems.
+    * v2.2.6+: If you're having trouble, verify that 'dovecot --hostdomain'
+      returns different values for the servers.
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

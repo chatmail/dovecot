@@ -38,6 +38,9 @@ o_stream_create_fd_file(int fd, uoff_t offset, bool autoclose_fd);
 struct ostream *o_stream_create_buffer(buffer_t *buf);
 /* Create an output streams that always fails the writes. */
 struct ostream *o_stream_create_error(int stream_errno);
+struct ostream *
+o_stream_create_error_str(int stream_errno, const char *fmt, ...)
+	ATTR_FORMAT(2, 3);
 
 /* Set name (e.g. path) for output stream. */
 void o_stream_set_name(struct ostream *stream, const char *name);
@@ -46,6 +49,9 @@ const char *o_stream_get_name(struct ostream *stream);
 
 /* Return file descriptor for stream, or -1 if none is available. */
 int o_stream_get_fd(struct ostream *stream);
+/* Returns error string for the previous error (stream_errno,
+   not last_failed_errno). */
+const char *o_stream_get_error(struct ostream *stream);
 
 /* Close this stream (but not its parents) and unreference it. */
 void o_stream_destroy(struct ostream **stream);

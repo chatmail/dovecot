@@ -953,7 +953,7 @@ static int imapc_connection_input_plus(struct imapc_connection *conn)
 		conn->idle_plus_waiting = FALSE;
 		conn->idling = TRUE;
 		/* no timeouting while IDLEing */
-		if (conn->to != NULL)
+		if (conn->to != NULL && !conn->idle_stopping)
 			timeout_remove(&conn->to);
 	} else if (cmds_count > 0 && cmds[0]->wait_for_literal) {
 		/* reply for literal */
@@ -1301,10 +1301,14 @@ static void imapc_connection_reset_idle(struct imapc_connection *conn)
 {
 	struct imapc_command *cmd;
 
-	if (!conn->idling)
-		cmd = imapc_connection_cmd(conn, imapc_noop_callback, NULL);
-	else
+	if (conn->idling)
 		cmd = imapc_connection_cmd(conn, imapc_reidle_callback, conn);
+	else if (array_count(&conn->cmd_wait_list) == 0)
+		cmd = imapc_connection_cmd(conn, imapc_noop_callback, NULL);
+	else {
+		/* IMAP command reply is taking a long time */
+		return;
+	}
 	imapc_command_send(cmd, "NOOP");
 }
 
@@ -1435,7 +1439,7 @@ void imapc_connection_input_pending(struct imapc_connection *conn)
 	if (conn->input == NULL)
 		return;
 
-	if (conn->to != NULL)
+	if (conn->to != NULL && !conn->idle_stopping)
 		timeout_reset(conn->to);
 
 	o_stream_cork(conn->output);
@@ -1479,6 +1483,19 @@ static void imapc_command_free(struct imapc_command *cmd)
 			i_stream_unref(&stream->input);
 	}
 	pool_unref(&cmd->pool);
+}
+
+static void imapc_command_timeout(struct imapc_connection *conn)
+{
+	struct imapc_command *const *cmds;
+	unsigned int count;
+
+	cmds = array_get(&conn->cmd_wait_list, &count);
+	i_assert(count > 0);
+
+	i_error("imapc(%s): Command '%s' timed out, disconnecting",
+		conn->name, imapc_command_get_readable(cmds[0]));
+	imapc_connection_disconnect(conn);
 }
 
 static bool
@@ -1632,6 +1649,13 @@ static void imapc_command_send_more(struct imapc_connection *conn)
 		return;
 	}
 
+	/* add timeout for commands if there's not one yet
+	   (pre-login has its own timeout) */
+	if (conn->to == NULL) {
+		conn->to = timeout_add(conn->client->set.cmd_timeout_msecs,
+				       imapc_command_timeout, conn);
+	}
+
 	timeout_reset(conn->to_output);
 	if ((ret = imapc_command_try_send_stream(conn, cmd)) == 0)
 		return;
@@ -1672,24 +1696,15 @@ static void imapc_command_send_more(struct imapc_connection *conn)
 	}
 }
 
-static void imapc_command_timeout(struct imapc_connection *conn)
-{
-	struct imapc_command *const *cmds;
-	unsigned int count;
-
-	cmds = array_get(&conn->cmd_wait_list, &count);
-	i_assert(count > 0);
-
-	i_error("imapc(%s): Command '%s' timed out, disconnecting",
-		conn->name, imapc_command_get_readable(cmds[0]));
-	imapc_connection_disconnect(conn);
-}
-
 static void imapc_connection_send_idle_done(struct imapc_connection *conn)
 {
 	if ((conn->idling || conn->idle_plus_waiting) && !conn->idle_stopping) {
 		conn->idle_stopping = TRUE;
 		o_stream_nsend_str(conn->output, "DONE\r\n");
+		if (conn->to == NULL) {
+			conn->to = timeout_add(conn->client->set.cmd_timeout_msecs,
+					       imapc_command_timeout, conn);
+		}
 	}
 }
 
@@ -1707,14 +1722,6 @@ static void imapc_connection_cmd_send(struct imapc_command *cmd)
 		return;
 	}
 
-	if (conn->state == IMAPC_CONNECTION_STATE_DONE) {
-		/* add timeout for commands if there's not one yet
-		   (pre-login has its own timeout) */
-		if (conn->to == NULL) {
-			conn->to = timeout_add(conn->client->set.cmd_timeout_msecs,
-					       imapc_command_timeout, conn);
-		}
-	}
 	if ((cmd->flags & IMAPC_COMMAND_FLAG_SELECT) != 0 &&
 	    conn->selected_box == NULL) {
 		/* reopening the mailbox. add it before other
@@ -1854,7 +1861,8 @@ void imapc_command_sendvf(struct imapc_command *cmd,
 			/* %1s - no quoting */
 			const char *arg = va_arg(args, const char *);
 
-			i_assert(cmd_fmt[++i] == 's');
+			i++;
+			i_assert(cmd_fmt[i] == 's');
 			str_append(cmd->data, arg);
 			break;
 		}

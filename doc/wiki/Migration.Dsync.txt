@@ -21,6 +21,9 @@ imapc_user = %u
 imapc_master_user = master
 imapc_password = secret
 imapc_features = rfc822.size
+# If you have Dovecot v2.2.8+ you may get a significant performance improvement
+with fetch-headers:
+imapc_features = $imapc_features fetch-headers
 
 # If the old IMAP server uses INBOX. namespace prefix, set:
 #imapc_list_prefix = INBOX
@@ -71,9 +74,19 @@ returns the appropriate POP3 UIDL.
 Running
 -------
 
+Make sure destination is exactly as source, deleting data if necessary:
+
 ---%<-------------------------------------------------------------------------
-doveadm backup -R -u user@domain imapc:
+doveadm -o mail_fsync=never backup -R -u user@domain imapc:
 ---%<-------------------------------------------------------------------------
+
+or incremental one-way merge:
+
+---%<-------------------------------------------------------------------------
+doveadm -o mail_fsync=never sync -1 -R -u user@domain imapc:
+---%<-------------------------------------------------------------------------
+
+(Fsyncing is disabled just for migration efficiency.)
 
 For per-user user/passwords use:
 
@@ -99,4 +112,4 @@ Problems
  * If source IMAP and POP3 servers return messages somehow differently,
    pop3-migration plugin might not be able to match the messages
 
-(This file was created from the wiki on 2013-08-05 04:42)
+(This file was created from the wiki on 2013-11-19 04:42)

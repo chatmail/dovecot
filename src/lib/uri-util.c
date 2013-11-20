@@ -509,21 +509,15 @@ static int uri_parse_port(struct uri_parser *parser, struct uri_authority *auth)
 	return 0;
 }
 
-int uri_parse_authority(struct uri_parser *parser, struct uri_authority *auth)
+int uri_parse_authority(struct uri_parser *parser,
+	struct uri_authority *auth)
 {
 	const unsigned char *p;
 	int ret;
 	
-	/* hier-part     = "//" authority {...}
-	 * relative-part = "//" authority {...}
+	/*
 	 * authority     = [ userinfo "@" ] host [ ":" port ]
 	 */
-
-	/* Parse "//" as part of authority */
-	if ((parser->end - parser->cur) <= 2 || parser->cur[0] != '/' ||
-	    parser->cur[1] != '/')
-		return 0;
-	parser->cur += 2;
 
 	if (auth != NULL)
 		memset(auth, 0, sizeof(*auth));
@@ -549,7 +543,10 @@ int uri_parse_authority(struct uri_parser *parser, struct uri_authority *auth)
 	/* host */
 	if ((ret = uri_parse_host(parser, auth)) <= 0) {
 		if (ret == 0) {
-			parser->error = "Missing 'host' component";
+			if (p == parser->end || *p == ':' || *p == '/')
+				parser->error = "Missing 'host' component";
+			else
+				parser->error = "Invalid 'host' component";
 			return -1;
 		}
 		return ret;
@@ -564,6 +561,19 @@ int uri_parse_authority(struct uri_parser *parser, struct uri_authority *auth)
 	if ((ret = uri_parse_port(parser, auth)) < 0)
 		return ret;
 	return 1;
+}
+
+int uri_parse_slashslash_authority(struct uri_parser *parser,
+	struct uri_authority *auth)
+{
+	/* "//" authority */
+
+	if ((parser->end - parser->cur) <= 2 || parser->cur[0] != '/' ||
+	    parser->cur[1] != '/')
+		return 0;
+
+	parser->cur += 2;
+	return uri_parse_authority(parser, auth);
 }
 
 int uri_parse_path_segment(struct uri_parser *parser, const char **segment_r)
@@ -798,8 +808,6 @@ void uri_append_host_name(string_t *out, const char *name)
 void uri_append_host_ip(string_t *out, const struct ip_addr *host_ip)
 {
 	const char *addr = net_ip2addr(host_ip);
-
-	i_assert(addr != NULL);
 
 	if (host_ip->family == AF_INET) {
 		str_append(out, addr);

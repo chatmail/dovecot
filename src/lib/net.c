@@ -384,6 +384,14 @@ void net_get_ip_any6(struct ip_addr *ip)
 
 int net_listen(const struct ip_addr *my_ip, unsigned int *port, int backlog)
 {
+	enum net_listen_flags flags = 0;
+
+	return net_listen_full(my_ip, port, &flags, backlog);
+}
+
+int net_listen_full(const struct ip_addr *my_ip, unsigned int *port,
+		    enum net_listen_flags *flags, int backlog)
+{
 	union sockaddr_union so;
 	int ret, fd, opt = 1;
 	socklen_t len;
@@ -412,6 +420,14 @@ int net_listen(const struct ip_addr *my_ip, unsigned int *port, int backlog)
 	/* set socket options */
 	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt));
+
+	if ((*flags & NET_LISTEN_FLAG_REUSEPORT) != 0) {
+#ifdef SO_REUSEPORT
+		if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT,
+			       &opt, sizeof(opt)) < 0)
+#endif
+			*flags &= ~NET_LISTEN_FLAG_REUSEPORT;
+	}
 
 	/* If using IPv6, bind only to IPv6 if possible. This avoids
 	   ambiguities with IPv4-mapped IPv6 addresses. */
@@ -461,7 +477,7 @@ int net_listen_unix(const char *path, int backlog)
 	sa.un.sun_family = AF_UNIX;
 	if (i_strocpy(sa.un.sun_path, path, sizeof(sa.un.sun_path)) < 0) {
 		/* too long path */
-		errno = EINVAL;
+		errno = EOVERFLOW;
 		return -1;
 	}
 
@@ -870,14 +886,14 @@ const char *net_ip2addr(const struct ip_addr *ip)
 
 	addr[MAX_IP_LEN] = '\0';
 	if (inet_ntop(ip->family, &ip->u.ip6, addr, MAX_IP_LEN) == NULL)
-		return NULL;
+		return "";
 
 	return t_strdup(addr);
 #else
 	unsigned long ip4;
 
 	if (ip->family != AF_INET)
-		return NULL;
+		return "";
 
 	ip4 = ntohl(ip->u.ip4.s_addr);
 	return t_strdup_printf("%lu.%lu.%lu.%lu",

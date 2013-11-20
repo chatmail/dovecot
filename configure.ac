@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.2.5],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv5($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.2.8],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv7($PACKAGE_VERSION)", [Dovecot ABI version])
 
 AC_CONFIG_SRCDIR([src])
 
@@ -2523,10 +2523,14 @@ LINKED_STORAGE_LIBS=
 
 mailbox_list_drivers="maildir imapdir fs index none shared"
 have_sdbox=no
+have_mdbox=no
 for storage in $mail_storages; do
   LINKED_STORAGE_LIBS="$LINKED_STORAGE_LIBS `eval echo \\$${storage}_libs`"
   if test $storage = sdbox; then
     have_sdbox=yes
+  fi
+  if test $storage = mdbox; then
+    have_mdbox=yes
   fi
   if test $storage = sdbox || test $storage = mdbox; then
     LINKED_STORAGE_LIBS="$LINKED_STORAGE_LIBS $dbox_common_libs"
@@ -2545,6 +2549,9 @@ AC_DEFINE_UNQUOTED(MAIL_STORAGES, "$mail_storages", List of compiled in mail sto
 if test $have_sdbox = yes; then
   # create alias for sdbox
   mail_storages="$mail_storages dbox"
+fi
+if test $have_mdbox = yes; then
+  mail_storages="$mail_storages mdbox_deleted"
 fi
 
 dnl **

@@ -316,9 +316,6 @@ int mdbox_map_lookup_full(struct mdbox_map *map, uint32_t map_uid,
 			  struct mdbox_map_mail_index_record *rec_r,
 			  uint16_t *refcount_r)
 {
-	const struct mdbox_map_mail_index_record *rec;
-	const uint16_t *ref16_p;
-	const void *data;
 	uint32_t seq;
 	int ret;
 
@@ -327,6 +324,17 @@ int mdbox_map_lookup_full(struct mdbox_map *map, uint32_t map_uid,
 
 	if ((ret = mdbox_map_get_seq(map, map_uid, &seq)) <= 0)
 		return ret;
+
+	return mdbox_map_lookup_seq_full(map, seq, rec_r, refcount_r);
+}
+
+int mdbox_map_lookup_seq_full(struct mdbox_map *map, uint32_t seq,
+			      struct mdbox_map_mail_index_record *rec_r,
+			      uint16_t *refcount_r)
+{
+	const struct mdbox_map_mail_index_record *rec;
+	const uint16_t *ref16_p;
+	const void *data;
 
 	if (mdbox_map_lookup_seq(map, seq, &rec) < 0)
 		return -1;
@@ -340,6 +348,19 @@ int mdbox_map_lookup_full(struct mdbox_map *map, uint32_t map_uid,
 	ref16_p = data;
 	*refcount_r = *ref16_p;
 	return 1;
+}
+
+uint32_t mdbox_map_lookup_uid(struct mdbox_map *map, uint32_t seq)
+{
+	uint32_t uid;
+
+	mail_index_lookup_uid(map->view, seq, &uid);
+	return uid;
+}
+
+unsigned int mdbox_map_get_messages_count(struct mdbox_map *map)
+{
+	return mail_index_view_get_messages_count(map->view);
 }
 
 int mdbox_map_view_lookup_rec(struct mdbox_map *map,
@@ -628,7 +649,7 @@ int mdbox_map_update_refcount(struct mdbox_map_transaction_context *ctx,
 					map_uid);
 		return -1;
 	}
-	if (old_diff + new_diff >= 32768) {
+	if (old_diff + new_diff >= 32768 && new_diff > 0) {
 		/* we're getting close to the 64k limit. fail early
 		   to make it less likely that two processes increase
 		   the refcount enough times to cross the limit */

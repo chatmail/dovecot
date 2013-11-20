@@ -147,7 +147,10 @@ master_input_cache_flush(struct auth_master_connection *conn, const char *args)
 		return FALSE;
 	}
 
-	if (list[1] == NULL) {
+	if (passdb_cache == NULL) {
+		/* cache disabled */
+		count = 0;
+	} else if (list[1] == NULL) {
 		/* flush the whole cache */
 		count = auth_cache_clear(passdb_cache);
 	} else {
@@ -337,8 +340,11 @@ static void pass_callback_finish(struct auth_request *auth_request,
 		break;
 	case PASSDB_RESULT_PASSWORD_MISMATCH:
 	case PASSDB_RESULT_INTERNAL_FAILURE:
-	case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
 		str_printfa(str, "FAIL\t%u", auth_request->id);
+		break;
+	case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
+		str_printfa(str, "FAIL\t%u\treason=Configured passdbs don't support crentials lookups",
+			    auth_request->id);
 		break;
 	}
 
@@ -447,8 +453,10 @@ static int master_output_list(struct master_list_iter_ctx *ctx)
 		master_input_list_finish(ctx);
 		return 1;
 	}
-	if (ret > 0)
+	if (ret > 0) {
+		o_stream_cork(ctx->conn->output);
 		userdb_blocking_iter_next(ctx->iter);
+	}
 	return 1;
 }
 
@@ -502,6 +510,8 @@ static void master_input_list_callback(const char *user, void *context)
 	}
 	if (o_stream_get_buffer_used_size(ctx->conn->output) < MAX_OUTBUF_SIZE)
 		userdb_blocking_iter_next(ctx->iter);
+	else
+		o_stream_uncork(ctx->conn->output);
 }
 
 static bool

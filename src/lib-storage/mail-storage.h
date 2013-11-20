@@ -209,7 +209,12 @@ enum mailbox_sync_type {
 #define MAILBOX_ATTRIBUTE_PREFIX_DOVECOT "vendor/vendor.dovecot/"
 /* Prefix used for attributes reserved for Dovecot's internal use. Normal
    users cannot access these in any way. */
-#define MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT "vendor/vendor.dovecot/pvt/"
+#define MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT \
+	MAILBOX_ATTRIBUTE_PREFIX_DOVECOT"pvt/"
+/* Prefix used for server attributes in INBOX. INBOX deletion won't delete
+   any attributes under this prefix. */
+#define MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER \
+	MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT"server/"
 
 enum mail_attribute_type {
 	MAIL_ATTRIBUTE_TYPE_PRIVATE,
@@ -277,6 +282,8 @@ struct mailbox_status {
 	unsigned int have_guids:1;
 	/* mailbox_save_set_guid() works (always set) */
 	unsigned int have_save_guids:1;
+	/* GUIDs are always 128bit (always set) */
+	unsigned int have_only_guid128:1;
 };
 
 struct mailbox_cache_field {
@@ -865,7 +872,10 @@ int mail_get_headers(struct mail *mail, const char *field,
    Do not use for structured fields (see mail_get_first_header_utf8()). */
 int mail_get_headers_utf8(struct mail *mail, const char *field,
 			  const char *const **value_r);
-/* Returns stream containing specified headers. */
+/* Returns stream containing specified headers. The returned stream will be
+   automatically freed when the mail is closed, or when another
+   mail_get_header_stream() call is made (so you can't have multiple header
+   streams open at the same time). */
 int mail_get_header_stream(struct mail *mail,
 			   struct mailbox_header_lookup_ctx *headers,
 			   struct istream **stream_r);
