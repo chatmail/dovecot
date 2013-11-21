@@ -1,3 +1,10 @@
+dovecot (1:2.2.8-1) unstable; urgency=low
+
+  * [6157a2b] New upstream version 2.2.8
+  * [b759ee7] Update pigeonhole patch to 0.4.2
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 21 Nov 2013 16:54:46 -0500
+
 dovecot (1:2.2.5-1) experimental; urgency=low
   [ Micah Anderson ]
   * [a0035bf] New upstream version 2.2.5
