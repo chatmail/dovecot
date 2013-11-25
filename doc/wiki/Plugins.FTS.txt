@@ -13,13 +13,16 @@ The following FTS indexers (in preferred order) are supported:
 Indexing
 --------
 
-Currently the FTS indexes are updated *only* while searching, so neither the
+By default the FTS indexes are updated *only* while searching, so neither the
 <LDA.txt> nor an IMAP APPEND command updates the indexes immediately. This
 means that if user has received a lot of mail since the last indexing (==
 search operation), it may take a while to index all the mails before replying
 to the search command. Dovecot sends periodic "* OK Indexed n% of the mailbox"
 updates which can be caught by webmail implementations to implement a progress
 bar.
+
+In v2.2.9+ the indexing can be done automatically with 'fts_autoindex=yes'
+setting (see below).
 
 The indexing can be done manually (e.g. cronjob) or by a LDA script by running:
 
@@ -41,15 +44,21 @@ few mails), you'll need to do a rescan:
 doveadm fts rescan -u user@domain
 ---%<-------------------------------------------------------------------------
 
-Settings (v2.1+)
-----------------
+Settings
+--------
 
+ * 'fts_autoindex=yes': Index new messages immediately after they've been
+   saved/copied. (v2.2.9+)
+ * 'fts_autoindex_max_recent_msgs=n': Skip autoindexing the mailbox if it has
+   more than n \Recent messages (implying that the mailbox is never actually
+   being accessed). (v2.2.9+)
  * 'fts_index_timeout': When SEARCH notices that index isn't up to date, it
    tells indexer to index the mails and waits until it is finished. This
    setting adds a maximum timeout to this wait. If the timeout is reached, the
    SEARCH fails with:'NO [INUSE] Timeout while waiting for indexing to finish'
+   (v2.1+)
  * 'fts_decoder': Decode attachments to plaintext using this service and index
    the resulting plaintext. See the 'decode2text.sh' script included in Dovecot
-   for how to use this.
+   for how to use this. (v2.1+)
 
-(This file was created from the wiki on 2013-11-19 04:42)
+(This file was created from the wiki on 2013-11-24 04:42)

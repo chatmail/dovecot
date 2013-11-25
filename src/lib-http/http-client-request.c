@@ -50,7 +50,6 @@ http_client_request_debug(struct http_client_request *req,
 /*
  * Request
  */
-static void http_client_request_remove_delayed(struct http_client_request *req);
 
 static struct http_client_request *
 http_client_request_new(struct http_client *client, const char *method, 
@@ -166,8 +165,8 @@ void http_client_request_unref(struct http_client_request **_req)
 	if (client->pending_requests == 0 && client->ioloop != NULL)
 		io_loop_stop(client->ioloop);
 
-	if (req->to_delayed_error != NULL)
-		http_client_request_remove_delayed(req);
+	if (req->delayed_error != NULL)
+		http_client_host_remove_request_error(req->host, req);
 	if (req->payload_input != NULL)
 		i_stream_unref(&req->payload_input);
 	if (req->payload_output != NULL)
@@ -268,6 +267,40 @@ void http_client_request_set_payload(struct http_client_request *req,
 	/* prepare request payload sync using 100 Continue response from server */
 	if ((req->payload_chunked || req->payload_size > 0) && sync)
 		req->payload_sync = TRUE;
+}
+
+void http_client_request_delay_until(struct http_client_request *req,
+	time_t time)
+{
+	req->release_time.tv_sec = time;
+	req->release_time.tv_usec = 0;
+}
+
+void http_client_request_delay(struct http_client_request *req,
+	time_t seconds)
+{
+	req->release_time = ioloop_timeval;
+	req->release_time.tv_sec += seconds;
+}
+
+int http_client_request_delay_from_response(struct http_client_request *req,
+	const struct http_response *response)
+{
+	time_t retry_after = response->retry_after;
+	unsigned int max;
+
+	if (retry_after == (time_t)-1)
+		return 0;  /* no delay */
+	if (retry_after < ioloop_time)
+		return 0;  /* delay already expired */
+	max = (req->client->set.max_auto_retry_delay == 0 ?
+		req->client->set.request_timeout_msecs / 1000 :
+		req->client->set.max_auto_retry_delay);
+	if ((unsigned int)(retry_after - ioloop_time) > max)
+		return -1; /* delay too long */
+	req->release_time.tv_sec = retry_after;
+	req->release_time.tv_usec = 0;
+	return 1;    /* valid delay */
 }
 
 enum http_request_state
@@ -718,30 +751,14 @@ http_client_request_send_error(struct http_client_request *req,
 	}
 }
 
-static void http_client_request_remove_delayed(struct http_client_request *req)
+void http_client_request_error_delayed(struct http_client_request **_req)
 {
-	struct http_client_request *const *reqs;
-	unsigned int i, count;
+	struct http_client_request *req = *_req;
 
+	i_assert(req->delayed_error != NULL && req->delayed_error_status != 0);
 	http_client_request_send_error(req, req->delayed_error_status,
 				       req->delayed_error);
-
-	timeout_remove(&req->to_delayed_error);
-
-	reqs = array_get(&req->host->delayed_failing_requests, &count);
-	for (i = 0; i < count; i++) {
-		if (reqs[i] == req) {
-			array_delete(&req->host->delayed_failing_requests, i, 1);
-			return;
-		}
-	}
-	i_unreached();
-}
-
-static void http_client_request_error_delayed(struct http_client_request *req)
-{
-	http_client_request_remove_delayed(req);
-	http_client_request_unref(&req);
+	http_client_request_unref(_req);
 }
 
 void http_client_request_error(struct http_client_request *req,
@@ -754,9 +771,7 @@ void http_client_request_error(struct http_client_request *req,
 		i_assert(req->delayed_error == NULL);
 		req->delayed_error = p_strdup(req->pool, error);
 		req->delayed_error_status = status;
-		req->to_delayed_error = timeout_add_short(0,
-			http_client_request_error_delayed, req);
-		array_append(&req->host->delayed_failing_requests, &req, 1);
+		http_client_host_delay_request_error(req->host, req);
 	} else {
 		http_client_request_send_error(req, status, error);
 		http_client_request_unref(&req);
@@ -771,8 +786,8 @@ void http_client_request_abort(struct http_client_request **_req)
 		return;
 	req->callback = NULL;
 	req->state = HTTP_REQUEST_STATE_ABORTED;
-	if (req->host != NULL)
-		http_client_host_drop_request(req->host, req);
+	if (req->queue != NULL)
+		http_client_queue_drop_request(req->queue, req);
 	http_client_request_unref(_req);
 }
 
@@ -848,6 +863,7 @@ void http_client_request_redirect(struct http_client_request *req,
 	}
 	
 	req->host = NULL;
+	req->queue = NULL;
 	req->conn = NULL;
 
 	origin_url = http_url_create(&req->origin_url);
@@ -928,16 +944,6 @@ void http_client_request_retry(struct http_client_request *req,
 {
 	if (!http_client_request_try_retry(req))
 		http_client_request_error(req, status, error);
-}
-
-void http_client_request_retry_response(struct http_client_request *req,
-	struct http_response *response)
-{
-	if (!http_client_request_try_retry(req)) {
-		i_assert(req->submitted || req->state >= HTTP_REQUEST_STATE_FINISHED);
-		(void)http_client_request_callback(req, response);
-		http_client_request_unref(&req);
-	}
 }
 
 bool http_client_request_try_retry(struct http_client_request *req)

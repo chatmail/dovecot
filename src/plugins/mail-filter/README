@@ -1,0 +1,61 @@
+See the beginning of the mail-filter-plugin.c for how to compile.
+
+Mail filter plugin can read an email from any storage supported by Dovecot
+and modify the mail in some way. Note that IMAP protocol requires that
+emails never change, so the output must be predictable. If the output
+changes you'll probably see some errors about Dovecot's cache file being
+corrupted and the IMAP client may also become confused if it has already
+cached some of the mail data.
+
+For saving mails via Dovecot, you can also do this via a mail_filter_out.
+Note that when the mail is read (via mail_filter), the message must match
+exactly the original message, because Dovecot had already cached
+information about the message.
+
+(If you want to modify the message while saving, this could be done also
+somewhat easily by patching mail_filter_mail_save_begin() to set ctx->input
+instead of ctx->data.output. If you want to combine them, e.g. add a new
+header and then save the mail encrypted, you need to do them both.)
+
+dovecot.conf:
+
+mail_plugins = $mail_plugins mail_filter
+plugin {
+ mail_filter = mail-filter %u # %u = username as first parameter
+ mail_filter_out = mail-filter-out %u
+}
+service mail-filter {
+ executable = script /usr/local/bin/mail-filter.sh
+ user = dovecot # run unprivileged
+ unix_listener mail-filter {
+   # enough permissions to give imap/pop3/etc processes access to this socket
+   mode = 0600
+   user = vmail
+ }
+}
+service mail-filter-out {
+ executable = script /usr/local/bin/mail-filter-out.sh
+ user = dovecot # run unprivileged
+ unix_listener mail-filter {
+   # enough permissions to give imap/pop3/etc processes access to this socket
+   mode = 0600
+   user = vmail
+ }
+}
+
+Where the mail-filter.sh have something like:
+
+#!/bin/sh
+
+cat > tempfile # need to save the mail first to a temp file or it can hang
+gpg -d tempfile
+rm -f tempfile
+
+And mail-filter-out.sh have something like:
+
+#!/bin/sh
+
+USER=$1
+cat > tempfile # need to save the mail first to a temp file or it can hang
+gpg -e -r $USER tempfile
+rm -f tempfile
