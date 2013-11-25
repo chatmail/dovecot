@@ -224,6 +224,9 @@
 /* Define if you want textcat support for CLucene */
 #undef HAVE_LUCENE_TEXTCAT
 
+/* Define if you have lzma library */
+#undef HAVE_LZMA
+
 /* Define to 1 if you have the `madvise' function. */
 #undef HAVE_MADVISE
 

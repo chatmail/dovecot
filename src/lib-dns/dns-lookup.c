@@ -102,7 +102,7 @@ static int dns_lookup_input_line(struct dns_lookup *lookup, const char *line)
 		}
 		/* first line: <ret> <ip count> */
 		if (sscanf(line, "%d %u", &result->ret,
-			   &result->ips_count) == 0)
+			   &result->ips_count) != 2)
 			return -1;
 		if (result->ret != 0) {
 			result->error = net_gethosterror(result->ret);
@@ -303,6 +303,28 @@ int dns_client_connect(struct dns_client *client, const char **error_r)
 }
 
 static int
+dns_client_send_request(struct dns_client *client, const char *cmd,
+			const char **error_r)
+{
+	int ret;
+
+	if (client->fd == -1) {
+		if (dns_client_connect(client, error_r) < 0)
+			return -1;
+		ret = -1;
+	} else {
+		/* already connected. if write() fails, retry connecting */
+		ret = 0;
+	}
+
+	if (write_full(client->fd, cmd, strlen(cmd)) < 0) {
+		*error_r = t_strdup_printf("write(%s) failed: %m", client->path);
+		return ret;
+	}
+	return 1;
+}
+
+static int
 dns_client_lookup_common(struct dns_client *client,
 			 const char *cmd, bool ptr_lookup,
 			 dns_lookup_callback_t *callback, void *context,
@@ -310,18 +332,20 @@ dns_client_lookup_common(struct dns_client *client,
 {
 	struct dns_lookup *lookup;
 	struct dns_lookup_result result;
+	int ret;
 
 	memset(&result, 0, sizeof(result));
 	result.ret = EAI_FAIL;
 
-	if (dns_client_connect(client, &result.error) < 0) {
-		callback(&result, context);
-		return -1;
-	}
-	if (write_full(client->fd, cmd, strlen(cmd)) < 0) {
-		dns_client_disconnect(client, t_strdup_printf(
-			"write(%s) failed: %m", client->path));
-		return -1;
+	if ((ret = dns_client_send_request(client, cmd, &result.error)) <= 0) {
+		if (ret == 0) {
+			/* retry once */
+			ret = dns_client_send_request(client, cmd, &result.error);
+		}
+		if (ret <= 0) {
+			callback(&result, context);
+			return -1;
+		}
 	}
 
 	lookup = i_new(struct dns_lookup, 1);

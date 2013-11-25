@@ -1,8 +1,280 @@
+2013-11-25  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 2852a7c55fc7
+	[7af50f53cc7e] [tip]
+
+	* .hgtags:
+	Added tag 2.2.9 for changeset 2852a7c55fc7
+	[a09e0dced4c4]
+
+	* NEWS, configure.ac:
+	Released v2.2.9.
+	[2852a7c55fc7] [2.2.9]
+
+	* src/plugins/mail-filter/Makefile.am:
+	Makefile: Added missing \
+	[c86996b40168]
+
+	* src/plugins/mail-filter/Makefile.am:
+	Makefile: Added missing header files
+	[22aef00ae211]
+
+2013-11-24  Timo Sirainen  <tss@iki.fi>
+
+	* configure.ac, src/lib-compression/Makefile.am, src/lib-
+	compression/compression.c, src/lib-compression/istream-lzma.c, src
+	/lib-compression/istream-zlib.h, src/lib-compression/ostream-lzma.c,
+	src/lib-compression/ostream-zlib.h:
+	lib-compression: Added support for liblzma (xz) Annoyingly this is
+	mainly copy&pasted [io]stream-bzlib, but I'm not sure if it's worth
+	the effort to try to create common functions for them.
+	[81e486aacbc7]
+
+2013-11-24  Pascal Volk  <user@localhost.localdomain.org>
+
+	* doc/man/doveadm-mailbox.1.in:
+	man: doveadm-mailbox.1: Added -g's description for mailbox create.
+	[ace36e525e1f]
+
+2013-11-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-dns/dns-lookup.c, src/lib-settings/settings.c:
+	Fixed sscanf() error handling. Patch by Jann Horn.
+	[a9d4cdb09297]
+
+2013-11-24  Pascal Volk  <user@localhost.localdomain.org>
+
+	* doc/man/doveadm-log.1.in:
+	man: doveadm-log.1: Added description for option -s.
+	[89dd80dfb86e]
+
+	* doc/man/doveadm-import.1.in:
+	man: doveadm-import.1: Added description for option -s.
+	[be86adfff0ca]
+
+	* doc/man/doveadm-expunge.1.in:
+	man: doveadm-expunge.1: Added option -d also to section synopsis.
+	[440acf9fd5ce]
+
+2013-11-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/data-stack.c:
+	Data stack has now an extra NULL pointer padding before its actual
+	data starts. This is just an extra safety measure against buffer
+	overflows. Patch by Jann Horn.
+	[2d2614769339]
+
+	* src/auth/mech-digest-md5.c:
+	auth: Fixed (non-exploitable) buffer overflow in DIGEST-MD5 data
+	parsing. Found by Jann Horn.
+	[2b3541c3e262]
+
+2013-11-23  Pascal Volk  <user@localhost.localdomain.org>
+
+	* doc/man/doveadm-move.1.in:
+	man: doveadm-move.1: Fixed syntax errors, escaped some dashes.
+	[8a3d0426f514]
+
+	* doc/man/doveadm-index.1.in:
+	man: doveadm-index.1: Added description for options -n and -q.
+	[151a2cfe3d34]
+
+2013-11-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts/fts-storage.c:
+	fts: Renamed fts_autoindex_on_save to fts_autoindex
+	[14be468c8963]
+
+	* src/replication/replicator/dsync-client.c:
+	replicator: Memory leak fix for previous commit
+	[faf8af1b375d]
+
+	* src/replication/replicator/dsync-client.c,
+	src/replication/replicator/dsync-client.h,
+	src/replication/replicator/replicator-brain.c,
+	src/replication/replicator/replicator-settings.c,
+	src/replication/replicator/replicator-settings.h:
+	replicator: Added replication_dsync_parameters setting to pass
+	"doveadm sync" parameters.
+	-f and -s parameters are added automatically when needed.
+	[556e654cc9a0]
+
+2013-11-23  Pascal Volk  <user@localhost.localdomain.org>
+
+	* doc/man/doveadm-move.1.in:
+	man: doveadm-move.1: Added description for 'user source_user'.
+	[0870cca2b4fb]
+
+2013-11-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts/fts-storage.c:
+	fts: Added plugin { fts_autoindex_on_save } setting. When enabled
+	and a mail is saved/copied, the indexer process is requested to
+	index the changed mailbox.
+
+	fts_autoindex_max_recent_msgs setting can also be used to skip
+	indexing mailboxes that have too many \Recent messages (implying
+	that the mailbox is never actually accessed). This corresponds to
+	doveadm index -n parameter.
+	[3aa27f41fc42]
+
+2013-11-23  Pascal Volk  <user@localhost.localdomain.org>
+
+	* doc/man/doveadm-user.1.in:
+	man: doveadm-user.1: Added description for the -u option.
+	[bab3e86bdb6a]
+
+2013-11-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-dns/dns-lookup.c:
+	lib-dns: If existing dns connection dies in write(), retry connect
+	once.
+	[29e98eb92955]
+
+	* src/lib-http/http-client-request.c:
+	lib-http: Compiler warning fix
+	[8bd6c378afd2]
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: Non-crashing way of avoiding fs lookups for storages
+	without mail root.
+	[f1e8dc453fd2]
+
+	* src/lib-http/http-client-connection.c:
+	lib-http: Fixed request hang on connect() timeout.
+	[7df4141eb57a]
+
+2013-11-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: Don't do filesystem permission lookups if storage has
+	no mailbox root dir.
+	[2b79848b013f]
+
+	* src/dns/dns-client.c:
+	dns: Don't idle-disconnect clients It's the job for the clients.
+	[fd071679352a]
+
+	* src/lib-dns/dns-lookup.c:
+	lib-dns: Fixed handling write() failure to dns-lookup server
+	process.
+	[75b6c3b8ee20]
+
+2013-11-22  Stephan Bosch  <stephan@rename-it.nl>
+
+	* src/lib-http/http-client-connection.c, src/lib-http/http-client-
+	private.h, src/lib-http/http-client-queue.c, src/lib-http/http-
+	client-request.c, src/lib-http/http-client.c, src/lib-http/http-
+	client.h:
+	http: Implemented delayed requests scheduling. Requests can now be
+	(re)submitted with a delay. The request is not sent until the delay
+	time expires. This facilitates handling the Retry-After header in
+	responses. This can either be performed automatically if the
+	indicated delay is not too long or explicitly by the code using lib-
+	http.
+	[d2f2423615d7]
+
+	* src/lib-http/http-response-parser.c, src/lib-http/http-response.h:
+	http: Preparse Retry-After header if response status is 503 or 3xx.
+	[c215131c2c18]
+
+	* src/lib-http/http-client-host.c, src/lib-http/http-client-private.h,
+	src/lib-http/http-client-request.c:
+	http-client: Improved handing of delayed request errors. Originally
+	each request would have its own zero timeout, but now only one
+	timeout is put in the host object.
+	[6b48a5675512]
+
+	* src/lib-http/Makefile.am, src/lib-http/http-client-host.c, src/lib-
+	http/http-client-peer.c, src/lib-http/http-client-private.h, src
+	/lib-http/http-client-queue.c, src/lib-http/http-client-request.c,
+	src/lib-http/http-client.c:
+	http-client: Changed struct http_client_host_port into a struct
+	http_client_queue object. Peer and request objects now reference the
+	queue object directly rather than the host object. This way, there
+	is no need to find the matching host:port in the host anymore. This
+	makes the queueing structure more intuitive and more efficient. This
+	is a first step towards support for connecting to HTTP services
+	through unix sockets or directing requests at specific hosts (so not
+	from the URL). This patch also fixes a potential timeout leak
+	(to_connect) in http_client_host_port (now http_client_queue) and
+	makes sure it is moved during switch_ioloop(). Finally it updates
+	the structure comment at the top of http-client.c.
+	[160e489d7c12]
+
+2013-11-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/iostream-rawlog-private.h, src/lib/iostream-rawlog.c:
+	iostream-rawlog: Timestamp prefix is now optional.
+	[cf38c8eb8493]
+
+	* configure.ac, src/plugins/Makefile.am, src/plugins/mail-
+	filter/Makefile.am, src/plugins/mail-filter/istream-ext-filter.c,
+	src/plugins/mail-filter/istream-ext-filter.h, src/plugins/mail-
+	filter/mail-filter-plugin.c, src/plugins/mail-filter/mail-filter-
+	plugin.h, src/plugins/mail-filter/ostream-ext-filter.c, src/plugins
+	/mail-filter/ostream-ext-filter.h:
+	Added mail-filter plugin.
+	[84ccfa053bcd]
+
+	* src/plugins/acl/doveadm-acl.c:
+	doveadm acl debug: Improved output
+	[157b428d4ea4]
+
+	* src/lib/ostream-private.h, src/lib/ostream.c:
+	ostream: Don't mark the stream closed too early after all. Use
+	another flag instead to avoid losing the last data written to the
+	stream before closing.
+	[e3a87c25e0b2]
+
+2013-11-21  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: Improved EACCES error messages for some stat() calls
+	[af96719b5d9c]
+
+2013-11-20  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-fs.c:
+	doveadm: Added "fs metadata" command
+	[d2e95af17305]
+
+	* src/doveadm/dsync/dsync-mailbox-import.c:
+	dsync: Fix to 128bit GUID syncing
+	[df2b27885c9d]
+
+	* src/doveadm/dsync/dsync-brain-mailbox.c:
+	dsync: have_only_guid128 was never actually being set.
+	[fbf77af0233c]
+
+	* src/lib-storage/index/index-mail-headers.c:
+	lib-storage: mail_get_headers*() returned only the first header from
+	cache.
+	[47923cfd4b56]
+
+	* src/lib-storage/index/index-mail-headers.c:
+	lib-storage: mail_get_*header*() still didn't handle cached values
+	correctly. If header ends with ":", the ":" shouldn't be returned as
+	part of the value.
+	[4ef184875799]
+
+	* src/lib-storage/index/index-mail-headers.c:
+	lib-storage: mail_get_*header*() were unnecessarily looking up the
+	headers twice.
+	[a91437fe94b6]
+
+	* src/lib-storage/index/index-mail-headers.c:
+	lib-storage: mail_get_*header*() didn't remove leading whitespace
+	for headers from cache. But it was removed when the headers were
+	found by parsing the full header.
+	[f4eb4b5884b2]
+
 2013-11-19  Timo Sirainen  <tss@iki.fi>
 
 	* .hgsigs:
 	Added signature for changeset 095a777edc26
-	[4a0c03f98ca3] [tip]
+	[4a0c03f98ca3]
 
 	* .hgtags:
 	Added tag 2.2.8 for changeset 095a777edc26
@@ -5549,8 +5821,8 @@
 	ldap auth: Support field values containing DNs to other LDAP records
 	and getting them. For example:
 
-	user_attrs = \ =user=%{ldap:uid}, \ @mail=base(%{ldap:mailDN}),
-	\ =uid=%{ldap:uidNumber@mail}, \ =gid=%{ldap:gidNumber@mail}, \
+	user_attrs = \ =user=%{ldap:uid}, \ @mail=base(%{ldap:mailDN}), \
+	=uid=%{ldap:uidNumber@mail}, \ =gid=%{ldap:gidNumber@mail}, \
 	=home=%{ldap:rootPath@mail}/%d/%n
 
 	This first does the regular lookup, and then does another lookup
@@ -6527,8 +6799,8 @@
 
 	Postfix:
 
-	smtpd_recipient_restrictions = ... check_policy_service
-	unix:private/quota-status
+	smtpd_recipient_restrictions = ... check_policy_service unix:private
+	/quota-status
 	[980be1dc80c2]
 
 2013-02-17  Timo Sirainen  <tss@iki.fi>
@@ -11527,8 +11799,8 @@
 	The reserved areas were acquired by doing (whenever needed):
 	 - lock dovecot.index.cache
 	 - reserve data from dovecot.index.cache for writing, potentially
-	increasing the file size by writing 0 bytes. the reserved area
-	size varies.
+	increasing the file size by writing 0 bytes. the reserved area size
+	varies.
 	 - unlock dovecot.index.cache
 
 	This worked, but if multiple processes were writing to the cache
@@ -12000,9 +12272,8 @@
 	src/plugins/mailbox-alias/mailbox-alias-plugin.h:
 	Added mailbox-alias plugin. Aliases can be created like:
 
-	plugin { mailbox_alias_old = Sent mailbox_alias_new = Sent
-	Messages mailbox_alias_old2 = Sent mailbox_alias_new2 = Sent
-	Items }
+	plugin { mailbox_alias_old = Sent mailbox_alias_new = Sent Messages
+	mailbox_alias_old2 = Sent mailbox_alias_new2 = Sent Items }
 
 	When creating an alias, the original mailbox is also created. The
 	alias itself is a symlink to the original. Deleting an alias deletes
@@ -12069,8 +12340,8 @@
 	lib-storage: Fixed memory leak getting MAILBOX_METADATA_VIRTUAL_SIZE
 	Function virtual_size_add_new forgets to free the 'search_args'
 	object after it searches the mails.
-	--- src/lib-storage/index/index-status.c | 1 + 1 files changed,
-	1 insertions(+), 0 deletions(-)
+	--- src/lib-storage/index/index-status.c | 1 + 1 files changed, 1
+	insertions(+), 0 deletions(-)
 	[3e1f1b6887c8]
 
 2012-09-11  Timo Sirainen  <tss@iki.fi>
@@ -15000,9 +15271,8 @@
 	quota: Support for fs hard limit Support for hard limit is
 	implemented for NFS, but sadly not for other filesystems. If
 	softlimit is not set (it's 0), hardlimit should be used.
-	--- src/plugins/quota/quota-fs.c | 31
-	+++++++++++++++++++++++++++++++ 1 files changed, 31 insertions(+),
-	0 deletions(-)
+	--- src/plugins/quota/quota-fs.c | 31 +++++++++++++++++++++++++++++++
+	1 files changed, 31 insertions(+), 0 deletions(-)
 	[cdba6fec5ddf]
 
 2012-07-16  Timo Sirainen  <tss@iki.fi>
@@ -17538,8 +17808,8 @@
 	SET_STRLIST arrays. This fixes overriding strlist keys in config
 	file filters, e.g.:
 
-	plugin { foo = general } protocol lda { plugin { foo = lda-
-	specific setting } }
+	plugin { foo = general } protocol lda { plugin { foo = lda- specific
+	setting } }
 	[bb8387e6b18f]
 
 	* src/lib-storage/index/maildir/maildir-save.c:
@@ -28338,8 +28608,8 @@
 	- Changeset 9002:
 	http://hg.dovecot.org/dovecot-2.0/diff/9d0037a997f4/src/auth/mech-
 	winbind.c
-	--- src/auth/mech-winbind.c | 2 +- 1 files changed, 1
-	insertions(+), 1 deletions(-)
+	--- src/auth/mech-winbind.c | 2 +- 1 files changed, 1 insertions(+),
+	1 deletions(-)
 	[d8179b523116]
 
 2011-01-16  Timo Sirainen  <tss@iki.fi>
@@ -35407,9 +35677,9 @@
 
 	Example configuration:
 
-	plugin { quota_warning = storage=90%% quota-warning 90 %u }
-	service quota-warning { executable = script /usr/local/bin/quota-
-	warning.sh user = vmail unix_listener quota-warning { } }
+	plugin { quota_warning = storage=90%% quota-warning 90 %u } service
+	quota-warning { executable = script /usr/local/bin/quota- warning.sh
+	user = vmail unix_listener quota-warning { } }
 
 	The quota-warning.sh will be executed with parameters 90 and
 	username.

@@ -170,6 +170,22 @@ ulimit -c unlimited # for debugging any crashes
 /usr/local/bin/doveadm dsync-server -u $username
 ---%<-------------------------------------------------------------------------
 
+dsync parameters
+----------------
+
+With v2.2.9+ you can configure what parameters replicator uses for the 'doveadm
+sync' command:
+
+---%<-------------------------------------------------------------------------
+replication_dsync_parameters = -d -N -l 30 -U
+---%<-------------------------------------------------------------------------
+
+The '-f' and '-s' parameters are added automatically when needed.
+
+Usually the only change you may want to do is replace '-N' (= sync all
+namespaces) with '-n <namespace>' or maybe just add '-x <exclude>'
+parameter(s).
+
 Notes
 -----
 
@@ -185,4 +201,4 @@ Random things to remember:
     * v2.2.6+: If you're having trouble, verify that 'dovecot --hostdomain'
       returns different values for the servers.
 
-(This file was created from the wiki on 2013-11-19 04:42)
+(This file was created from the wiki on 2013-11-24 04:42)
