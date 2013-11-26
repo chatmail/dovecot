@@ -1,6 +1,6 @@
 From: Marco Nenciarini <mnencia@debian.org>
 Date: Sat, 5 Mar 2011 11:19:07 +0100
-Updated: Wed, 7 Mar 2012 10:43:09 -0500
+Updated: Mon, 25 Nov 2013 20:11:59 -0500
 Subject: split-protocols
 Description: Set default protocols value as empty and enable each
  protocol in its own configuration file
@@ -11,10 +11,10 @@ Description: Set default protocols value as empty and enable each
  src/master/master-settings.c                       |    2 +-
  4 files changed, 4 insertions(+), 7 deletions(-)
 
-Index: dovecot/doc/example-config/dovecot.conf
-===================================================================
---- dovecot.orig/doc/example-config/dovecot.conf	2013-08-19 11:22:26.322584245 -0400
-+++ dovecot/doc/example-config/dovecot.conf	2013-08-19 11:22:26.314584463 -0400
+diff --git a/doc/example-config/dovecot.conf b/doc/example-config/dovecot.conf
+index 5697661..c802011 100644
+--- a/doc/example-config/dovecot.conf
++++ b/doc/example-config/dovecot.conf
 @@ -20,8 +20,8 @@
  # options. The paths listed here are for configure --prefix=/usr
  # --sysconfdir=/etc --localstatedir=/var
@@ -26,10 +26,10 @@ Index: dovecot/doc/example-config/dovecot.conf
  
  # A comma separated list of IPs or hosts where to listen in for connections. 
  # "*" listens in all IPv4 interfaces, "::" listens in all IPv6 interfaces.
-Index: dovecot/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
-===================================================================
---- dovecot.orig/pigeonhole/doc/example-config/conf.d/20-managesieve.conf	2013-08-19 11:22:26.322584245 -0400
-+++ dovecot/pigeonhole/doc/example-config/conf.d/20-managesieve.conf	2013-08-19 11:22:26.314584463 -0400
+diff --git a/pigeonhole/doc/example-config/conf.d/20-managesieve.conf b/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
+index 784b660..e1dedb1 100644
+--- a/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
++++ b/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
 @@ -2,9 +2,6 @@
  ## ManageSieve specific settings
  ##
@@ -40,27 +40,27 @@ Index: dovecot/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
  # Service definitions
  
  #service managesieve-login {
-Index: dovecot/src/config/all-settings.c
-===================================================================
---- dovecot.orig/src/config/all-settings.c	2013-08-19 11:22:26.322584245 -0400
-+++ dovecot/src/config/all-settings.c	2013-08-19 11:22:26.318584354 -0400
-@@ -2431,7 +2431,7 @@
+diff --git a/src/config/all-settings.c b/src/config/all-settings.c
+index c0846f4..8643193 100644
+--- a/src/config/all-settings.c
++++ b/src/config/all-settings.c
+@@ -2445,7 +2445,7 @@ struct master_settings master_default_settings = {
  	.libexec_dir = PKG_LIBEXECDIR,
  	.instance_name = PACKAGE,
- 	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,
+ 	.import_environment = "TZ DEBUG_OUTOFMEM" ENV_SYSTEMD ENV_GDB,
 -	.protocols = "imap pop3 lmtp",
 +	.protocols = "",
  	.listen = "*, ::",
  	.ssl = "yes:no:required",
  	.default_internal_user = "dovecot",
-Index: dovecot/src/master/master-settings.c
-===================================================================
---- dovecot.orig/src/master/master-settings.c	2013-08-19 11:22:26.322584245 -0400
-+++ dovecot/src/master/master-settings.c	2013-08-19 11:22:26.318584354 -0400
-@@ -216,7 +216,7 @@
+diff --git a/src/master/master-settings.c b/src/master/master-settings.c
+index 16e4ebf..3e21f7d 100644
+--- a/src/master/master-settings.c
++++ b/src/master/master-settings.c
+@@ -218,7 +218,7 @@ static const struct master_settings master_default_settings = {
  	.libexec_dir = PKG_LIBEXECDIR,
  	.instance_name = PACKAGE,
- 	.import_environment = "TZ" ENV_SYSTEMD ENV_GDB,
+ 	.import_environment = "TZ DEBUG_OUTOFMEM" ENV_SYSTEMD ENV_GDB,
 -	.protocols = "imap pop3 lmtp",
 +	.protocols = "",
  	.listen = "*, ::",
