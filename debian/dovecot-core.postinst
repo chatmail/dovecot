@@ -96,7 +96,7 @@ if [ "$1" = "configure" ]; then
   fi
 
   if [ -z "`id -u dovenull 2> /dev/null`" ]; then
-    adduser --system --home /nonexistent --no-create-home --gecos "Dovecot login user" \
+    adduser --system --group --home /nonexistent --no-create-home --gecos "Dovecot login user" \
             --disabled-password --quiet dovenull || true
   fi
 
