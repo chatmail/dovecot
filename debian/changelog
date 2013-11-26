@@ -2,8 +2,22 @@ dovecot (1:2.2.9-1) unstable; urgency=low
 
   * [77468cf] Imported Upstream version 2.2.9
   * [b759ee7] Update pigeonhole patch to 0.4.2
+  * Debconf templates and debian/control reviewed by the debian-l10n-
+    english team as part of the Smith review project. (Closes: #725615)
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 25 Nov 2013 17:42:50 -0500
+  [Debconf translation updates]
+  * Russian (Yuri Kozlov).  (Closes: #729106)
+  * German (Chris Leick).  (Closes: #729358)
+  * Danish (Joe Hansen).  (Closes: #729425)
+  * French (Julien Patriarca).  (Closes: #729966)
+  * Portuguese (Américo Monteiro).  (Closes: #730006)
+  * Polish (Michał Kułach).  (Closes: #730061)
+  * Italian (Beatrice Torracca).  (Closes: #730136)
+  * Japanese (victory).  (Closes: #73017)
+  * Swedish (Martin Bagge / brother).  (Closes: #730188)
+  * Spanish; (Camaleón).  (Closes: #730354)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 25 Nov 2013 21:15:20 -0500
 
 dovecot (1:2.2.8-1) UNRELEASED; urgency=low
 

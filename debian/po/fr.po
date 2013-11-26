@@ -1,27 +1,26 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# Translation of dovecot debconf templates to french.
+# Copyright (C) 2013, French l10n team <debian-l10n-french@lists.debian.org>
+# This file is distributed under the same license as the dovecot package.
+# Julien Patriarca <leatherface@debian.org>, 2013.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: dovecot\n"
 "Report-Msgid-Bugs-To: dovecot@packages.debian.org\n"
 "POT-Creation-Date: 2013-11-07 07:06+0100\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
+"PO-Revision-Date: 2013-11-08 10:15+0100\n"
+"Last-Translator: Julien Patriarca <leatherface@debian.org>\n"
+"Language-Team: FRENCH <debian-l10n-french@lists.debian.org>\n"
+"Language: fr\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
 #. Type: error
 #. Description
 #: ../dovecot-core.templates:2001
 msgid "Wrong location for SSL certificates"
-msgstr ""
+msgstr "Mauvais emplacement pour les certificats SSL"
 
 #. Type: error
 #. Description
@@ -31,18 +30,24 @@ msgid ""
 "moved from /etc/ssl to /etc/dovecot and Dovecot's configuration file (/etc/"
 "dovecot/conf.d/10-ssl.conf) should be updated accordingly."
 msgstr ""
+"Cette machine utilise des certificats SSL pour Dovecot. Ces certificats "
+"doivent être déplacés de /etc/ssl vers /etc/dovecot, et le fichier de "
+"configuration de Dovecot (/etc/dovecot/conf.d/10-ssl.conf) doit être mis à "
+"jour en conséquence."
 
 #. Type: error
 #. Description
 #: ../dovecot-core.templates:2001
 msgid "Please read /usr/share/doc/dovecot-core/README.Debian.gz for details."
 msgstr ""
+"Veuillez lire le fichier /usr/share/doc/dovecot-core/README.Debian.gz pour "
+"les détails."
 
 #. Type: boolean
 #. Description
 #: ../dovecot-core.templates:3001
 msgid "Create a self-signed SSL certificate?"
-msgstr ""
+msgstr "Faut-il créer un certificat SSL auto-signé ?"
 
 #. Type: boolean
 #. Description
@@ -51,6 +56,8 @@ msgid ""
 "An SSL certificate is needed in order to use IMAP or POP3 over SSL/TLS. No "
 "such certificate was found."
 msgstr ""
+"Un certificat SSL est nécessaire pour utiliser les protocoles IMAP et POP3 "
+"avec SSL. Aucun certificat n'a été trouvé."
 
 #. Type: boolean
 #. Description
@@ -59,6 +66,8 @@ msgid ""
 "Please choose whether you want to create one now. This will then be a self-"
 "signed certificate."
 msgstr ""
+"Veuillez choisir si vous souhaitez en créer un maintenant. Ce sera alors un "
+"certificat auto-signé."
 
 #. Type: boolean
 #. Description
@@ -67,22 +76,24 @@ msgid ""
 "If you choose not to create a certificate, please adapt Dovecot's "
 "configuration file (/etc/dovecot/conf.d/10-ssl.conf)."
 msgstr ""
+"Si vous choisissez de ne pas créer de certificat, veuillez modifier le "
+"fichier de configuration de Dovecot (/etc/dovecot/conf.d/10-ssl.conf)."
 
 #. Type: string
 #. Description
 #: ../dovecot-core.templates:4001
 msgid "Host name:"
-msgstr ""
+msgstr "Nom d'hôte :"
 
 #. Type: string
 #. Description
 #: ../dovecot-core.templates:4001
 msgid "Please enter the host name to use in the SSL certificate."
-msgstr ""
+msgstr "Veuillez indiquer le nom d'hôte à utiliser dans le certificat SSL."
 
 #. Type: string
 #. Description
 #: ../dovecot-core.templates:4001
 msgid ""
 "It will become the \"commonName\" field of the generated SSL certificate."
-msgstr ""
+msgstr "Il constituera le champ « commonName » du certificat SSL créé."
