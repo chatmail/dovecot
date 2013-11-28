@@ -4,7 +4,6 @@ set -e
 
 if [ "$1" = "configure" ]; then
   CONFFILES="dovecot.conf \
-    dovecot-db.conf.ext \
     dovecot-dict-sql.conf.ext \
     dovecot-sql.conf.ext \
     conf.d/10-auth.conf \
@@ -29,6 +28,7 @@ if [ "$1" = "configure" ]; then
     conf.d/auth-vpopmail.conf.ext"
 
   OLD_CONFFILES="dovecot-ldap.conf \
+    dovecot-db.conf.ext \
     dovecot-sql.conf \
     protocols.conf \
     dovecot-ldap.conf.ext \
