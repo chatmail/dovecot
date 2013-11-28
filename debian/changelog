@@ -1,9 +1,10 @@
 dovecot (1:2.2.9-1) unstable; urgency=low
 
+  [ Jaldhar H. Vyas ]
   * [77468cf] Imported Upstream version 2.2.9
-  * [b759ee7] Update pigeonhole patch to 0.4.2
-  * Debconf templates and debian/control reviewed by the debian-l10n-
-    english team as part of the Smith review project. (Closes: #725615)
+  * [43e08f3] Place dovenull user in its own group. (Closes: #725164)
+  * [e1a3e9c] Handled the fact that dovecot-db.conf.ext is no longer used.
+    (Closes: #728107, #730403)
 
   [Debconf translation updates]
   * Russian (Yuri Kozlov).  (Closes: #729106)
@@ -17,7 +18,7 @@ dovecot (1:2.2.9-1) unstable; urgency=low
   * Swedish (Martin Bagge / brother).  (Closes: #730188)
   * Spanish; (Camaleón).  (Closes: #730354)
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 25 Nov 2013 21:15:20 -0500
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 28 Nov 2013 00:40:37 -0500
 
 dovecot (1:2.2.8-1) UNRELEASED; urgency=low
 
