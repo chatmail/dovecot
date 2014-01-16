@@ -59,4 +59,4 @@ SSL port deprecation never really happened, probably because of a few reasons:
    capabilities, insist on TLS, then start all over again inside the encrypted
    session.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2013-12-19 04:42)

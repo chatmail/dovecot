@@ -47,6 +47,8 @@ doveadm fts rescan -u user@domain
 Settings
 --------
 
+All the FTS settings go inside 'plugin {} ' section.
+
  * 'fts_autoindex=yes': Index new messages immediately after they've been
    saved/copied. (v2.2.9+)
  * 'fts_autoindex_max_recent_msgs=n': Skip autoindexing the mailbox if it has
@@ -61,4 +63,4 @@ Settings
    the resulting plaintext. See the 'decode2text.sh' script included in Dovecot
    for how to use this. (v2.1+)
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2013-12-19 04:42)

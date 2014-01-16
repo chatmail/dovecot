@@ -130,10 +130,15 @@ struct auth_request {
 	   at the end. mechanisms that don't require passdb, but do a passdb
 	   lookup anyway (e.g. GSSAPI) need to set this to TRUE by default. */
 	unsigned int passdb_success:1;
+	/* userdb equivalent of passdb_success */
+	unsigned int userdb_success:1;
 	/* the last userdb lookup failed either due to "tempfail" extra field
 	   or because one of the returned uid/gid fields couldn't be translated
 	   to a number */
-	unsigned int userdb_lookup_failed:1;
+	unsigned int userdb_lookup_tempfailed:1;
+	/* userdb_* fields have been set by the passdb lookup, userdb prefetch
+	   will work. */
+	unsigned int userdb_prefetch_set:1;
 
 	/* ... mechanism specific data ... */
 };
