@@ -257,6 +257,10 @@
 /* Define if your MySQL library supports setting cipher */
 #undef HAVE_MYSQL_SSL_CIPHER
 
+/* Define if your MySQL library supports verifying the name in the SSL
+   certificate */
+#undef HAVE_MYSQL_SSL_VERIFY_SERVER_CERT
+
 /* Define if you don't have C99 compatible vsnprintf() call */
 #undef HAVE_OLD_VSNPRINTF
 

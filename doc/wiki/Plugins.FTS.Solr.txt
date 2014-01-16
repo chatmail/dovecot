@@ -167,4 +167,4 @@ External sites with tutorials on using Solr under Dovecot
    support guide)
    [http://support.atmail.com/display/AKB/Installing+Apache+Solr+with+Dovecot+for+fulltext+search+results]
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2013-12-19 04:42)

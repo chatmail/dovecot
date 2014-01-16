@@ -57,10 +57,16 @@ userdb {
 
   default_fields = uid=vmail gid=vmail
   override_fields =
+
+  skip = never
+
+  result_failure = continue
+  result_internalfail = continue
+  result_success = return-ok
 }
 ---%<-------------------------------------------------------------------------
 
-Here you have settings:
+First we have the settings that provide content for the userdb lookup:
 
  * driver: The userdb backend name
  * args: Arguments for the userdb backend. The format of this value depends on
@@ -74,4 +80,32 @@ Here you have settings:
    example useful with <userdb passwd> [AuthDatabase.Passwd.txt] for overriding
    e.g. home directory or the uid/gid.
 
-(This file was created from the wiki on 2013-11-24 04:43)
+Then we have the setting which specify when the userdb is used (v2.2.10+):
+
+ * skip: Do we sometimes want to skip over this userdb?
+    * never
+    * found: Skip if an earlier userdb already found the user
+    * notfound: Skip if previous userdbs haven't yet found the user
+
+And finally we can control what happens when we're finished with this userdb
+(v2.2.10+):
+
+result_success: What to do if the user was found from the userdb (default:
+return-ok)result_failure: What to do if the user wasn't found from the userdb
+(default: continue)result_internalfail: What to do if the userdb lookup had an
+internal failure (default: continue). If any of the userdbs had an internal
+failure and the final userdb also returns "continue", the lookup will fail with
+"internal error".
+
+The result values that can be used:
+
+return-ok: Return success, don't continue to the next userdb. return-fail:
+Return "user doesn't exist", don't continue to the next userdb.return: Return
+earlier userdb's success or failure, don't continue to the next userdb. If this
+was the first userdb, return "user doesn't exist".continue-ok: Set the current
+user existence state to "found", and continue to the next userdb.continue-fail:
+Set the current user existence state to "not found", and continue to the next
+userdb.continue: Continue to the next userdb without changing the user
+existence state. The initial state is "not found".
+
+(This file was created from the wiki on 2013-12-19 04:43)

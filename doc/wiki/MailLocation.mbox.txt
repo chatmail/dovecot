@@ -191,4 +191,4 @@ that value, in a directory with a name equivalent to the mailbox name.
 There are, however, some further considerations when doing this; see
 <MboxChildFolders.txt> for an example.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2013-12-19 04:42)

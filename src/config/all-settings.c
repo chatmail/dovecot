@@ -119,6 +119,7 @@ struct pop3c_settings {
 	bool pop3c_ssl_verify;
 
 	const char *pop3c_rawlog_dir;
+	bool pop3c_quick_received_date;
 };
 /* ../../src/lib-storage/index/mbox/mbox-settings.h */
 struct mbox_settings {
@@ -819,6 +820,7 @@ static const struct setting_define pop3c_setting_defines[] = {
 	DEF(SET_BOOL, pop3c_ssl_verify),
 
 	DEF(SET_STR, pop3c_rawlog_dir),
+	DEF(SET_BOOL, pop3c_quick_received_date),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -833,7 +835,8 @@ static const struct pop3c_settings pop3c_default_settings = {
 	.pop3c_ssl = "no:pop3s:starttls",
 	.pop3c_ssl_verify = TRUE,
 
-	.pop3c_rawlog_dir = ""
+	.pop3c_rawlog_dir = "",
+	.pop3c_quick_received_date = FALSE
 };
 static const struct setting_parser_info pop3c_setting_parser_info = {
 	.module_name = "pop3c",
@@ -1337,12 +1340,13 @@ struct auth_passdb_settings {
 	const char *args;
 	const char *default_fields;
 	const char *override_fields;
+
 	const char *skip;
 	const char *result_success;
 	const char *result_failure;
 	const char *result_internalfail;
 	bool deny;
-	bool pass;
+	bool pass; /* deprecated, use result_success=continue instead */
 	bool master;
 };
 struct auth_userdb_settings {
@@ -1350,6 +1354,11 @@ struct auth_userdb_settings {
 	const char *args;
 	const char *default_fields;
 	const char *override_fields;
+
+	const char *skip;
+	const char *result_success;
+	const char *result_failure;
+	const char *result_internalfail;
 };
 struct auth_settings {
 	const char *mechanisms;
@@ -2444,7 +2453,7 @@ struct master_settings master_default_settings = {
 	.state_dir = PKG_STATEDIR,
 	.libexec_dir = PKG_LIBEXECDIR,
 	.instance_name = PACKAGE,
-	.import_environment = "TZ DEBUG_OUTOFMEM" ENV_SYSTEMD ENV_GDB,
+	.import_environment = "TZ CORE_OUTOFMEM CORE_ERROR" ENV_SYSTEMD ENV_GDB,
 	.protocols = "imap pop3 lmtp",
 	.listen = "*, ::",
 	.ssl = "yes:no:required",
@@ -3797,10 +3806,12 @@ static const struct setting_define auth_passdb_setting_defines[] = {
 	DEF(SET_STR, args),
 	DEF(SET_STR, default_fields),
 	DEF(SET_STR, override_fields),
+
 	DEF(SET_ENUM, skip),
 	DEF(SET_ENUM, result_success),
 	DEF(SET_ENUM, result_failure),
 	DEF(SET_ENUM, result_internalfail),
+
 	DEF(SET_BOOL, deny),
 	DEF(SET_BOOL, pass),
 	DEF(SET_BOOL, master),
@@ -3812,10 +3823,12 @@ static const struct auth_passdb_settings auth_passdb_default_settings = {
 	.args = "",
 	.default_fields = "",
 	.override_fields = "",
+
 	.skip = "never:authenticated:unauthenticated",
 	.result_success = "return-ok:return:return-fail:continue:continue-ok:continue-fail",
 	.result_failure = "continue:return:return-ok:return-fail:continue-ok:continue-fail",
 	.result_internalfail = "continue:return:return-ok:return-fail:continue-ok:continue-fail",
+
 	.deny = FALSE,
 	.pass = FALSE,
 	.master = FALSE
@@ -3841,13 +3854,24 @@ static const struct setting_define auth_userdb_setting_defines[] = {
 	DEF(SET_STR, default_fields),
 	DEF(SET_STR, override_fields),
 
+	DEF(SET_ENUM, skip),
+	DEF(SET_ENUM, result_success),
+	DEF(SET_ENUM, result_failure),
+	DEF(SET_ENUM, result_internalfail),
+
 	SETTING_DEFINE_LIST_END
 };
 static const struct auth_userdb_settings auth_userdb_default_settings = {
+	/* NOTE: when adding fields, update also auth.c:userdb_dummy_set */
 	.driver = "",
 	.args = "",
 	.default_fields = "",
-	.override_fields = ""
+	.override_fields = "",
+
+	.skip = "never:found:notfound",
+	.result_success = "return-ok:return:return-fail:continue:continue-ok:continue-fail",
+	.result_failure = "continue:return:return-ok:return-fail:continue-ok:continue-fail",
+	.result_internalfail = "continue:return:return-ok:return-fail:continue-ok:continue-fail"
 };
 const struct setting_parser_info auth_userdb_setting_parser_info = {
 	.defines = auth_userdb_setting_defines,
@@ -4032,32 +4056,32 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&stats_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&master_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&replicator_setting_parser_info, 
 	&lda_setting_parser_info, 
 	&imap_urlauth_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&pop3c_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&director_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&mail_user_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
 	&mdbox_setting_parser_info, 
 	&doveadm_setting_parser_info, 
-	&master_setting_parser_info, 
-	&aggregator_setting_parser_info, 
-	&login_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
+	&mail_user_setting_parser_info, 
 	&imap_login_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&director_setting_parser_info, 
+	&stats_setting_parser_info, 
 	&imapc_setting_parser_info, 
-	&imap_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&dict_setting_parser_info, 
 	&maildir_setting_parser_info, 
+	&lmtp_setting_parser_info, 
 	&imap_urlauth_worker_setting_parser_info, 
+	&login_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&imap_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

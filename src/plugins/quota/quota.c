@@ -7,6 +7,8 @@
 #include "net.h"
 #include "write-full.h"
 #include "eacces-error.h"
+#include "wildcard-match.h"
+#include "dict.h"
 #include "mailbox-list-private.h"
 #include "quota-private.h"
 #include "quota-fs.h"
@@ -20,6 +22,7 @@
 	"Quota exceeded (mailbox for user is full)"
 #define RULE_NAME_DEFAULT_FORCE "*"
 #define RULE_NAME_DEFAULT_NONFORCE "?"
+#define QUOTA_LIMIT_SET_PATH DICT_PATH_PRIVATE"quota/limit/"
 
 struct quota_root_iter {
 	struct quota *quota;
@@ -111,6 +114,26 @@ quota_root_add_warning_rules(struct mail_user *user, const char *root_name,
 }
 
 static int
+quota_root_parse_set(struct mail_user *user, const char *root_name,
+		     struct quota_root_settings *root_set,
+		     const char **error_r)
+{
+	const char *name, *value;
+
+	name = t_strconcat(root_name, "_set", NULL);
+	value = mail_user_plugin_getenv(user, name);
+	if (value == NULL)
+		return 0;
+
+	if (strncmp(value, "dict:", 5) != 0) {
+		*error_r = t_strdup_printf("%s supports only dict backend", name);
+		return -1;
+	}
+	root_set->limit_set = p_strdup(root_set->set->pool, value+5);
+	return 0;
+}
+
+static int
 quota_root_settings_init(struct quota_settings *quota_set, const char *root_def,
 			 struct quota_root_settings **set_r,
 			 const char **error_r)
@@ -182,6 +205,8 @@ quota_root_add(struct quota_settings *quota_set, struct mail_user *user,
 		return -1;
 	if (quota_root_parse_grace(user, root_name, root_set, error_r) < 0)
 		return -1;
+	if (quota_root_parse_set(user, root_name, root_set, error_r) < 0)
+		return -1;
 	return 0;
 }
 
@@ -246,6 +271,8 @@ static void quota_root_deinit(struct quota_root *root)
 {
 	pool_t pool = root->pool;
 
+	if (root->limit_set_dict != NULL)
+		dict_deinit(&root->limit_set_dict);
 	root->backend.v.deinit(root);
 	pool_unref(&pool);
 }
@@ -358,7 +385,20 @@ quota_root_rule_find(struct quota_root_settings *root_set, const char *name)
 	struct quota_rule *rule;
 
 	array_foreach_modifiable(&root_set->rules, rule) {
-		if (strcmp(rule->mailbox_name, name) == 0)
+		if (wildcard_match(name, rule->mailbox_mask))
+			return rule;
+	}
+	return NULL;
+}
+
+static struct quota_rule *
+quota_root_rule_find_exact(struct quota_root_settings *root_set,
+			   const char *name)
+{
+	struct quota_rule *rule;
+
+	array_foreach_modifiable(&root_set->rules, rule) {
+		if (strcmp(rule->mailbox_mask, name) == 0)
 			return rule;
 	}
 	return NULL;
@@ -544,7 +584,7 @@ int quota_root_add_rule(struct quota_root_settings *root_set,
 			const char *rule_def, const char **error_r)
 {
 	struct quota_rule *rule;
-	const char *p, *mailbox_name;
+	const char *p, *mailbox_mask;
 	int ret = 0;
 
 	p = strchr(rule_def, ':');
@@ -553,20 +593,20 @@ int quota_root_add_rule(struct quota_root_settings *root_set,
 		return -1;
 	}
 
-	/* <mailbox name>:<quota limits> */
-	mailbox_name = t_strdup_until(rule_def, p++);
+	/* <mailbox mask>:<quota limits> */
+	mailbox_mask = t_strdup_until(rule_def, p++);
 
-	rule = quota_root_rule_find(root_set, mailbox_name);
+	rule = quota_root_rule_find_exact(root_set, mailbox_mask);
 	if (rule == NULL) {
-		if (strcmp(mailbox_name, RULE_NAME_DEFAULT_NONFORCE) == 0)
+		if (strcmp(mailbox_mask, RULE_NAME_DEFAULT_NONFORCE) == 0)
 			rule = &root_set->default_rule;
-		else if (strcmp(mailbox_name, RULE_NAME_DEFAULT_FORCE) == 0) {
+		else if (strcmp(mailbox_mask, RULE_NAME_DEFAULT_FORCE) == 0) {
 			rule = &root_set->default_rule;
 			root_set->force_default_rule = TRUE;
 		} else {
 			rule = array_append_space(&root_set->rules);
-			rule->mailbox_name = strcasecmp(mailbox_name, "INBOX") == 0 ? "INBOX" :
-				p_strdup(root_set->set->pool, mailbox_name);
+			rule->mailbox_mask = strcasecmp(mailbox_mask, "INBOX") == 0 ? "INBOX" :
+				p_strdup(root_set->set->pool, mailbox_mask);
 		}
 	}
 
@@ -574,7 +614,7 @@ int quota_root_add_rule(struct quota_root_settings *root_set,
 		rule->ignore = TRUE;
 		if (root_set->set->debug) {
 			i_debug("Quota rule: root=%s mailbox=%s ignored",
-				root_set->name, mailbox_name);
+				root_set->name, mailbox_mask);
 		}
 		return 0;
 	}
@@ -603,7 +643,7 @@ int quota_root_add_rule(struct quota_root_settings *root_set,
 
 		i_debug("Quota rule: root=%s mailbox=%s "
 			"bytes=%s%lld%s messages=%s%lld%s",
-			root_set->name, mailbox_name,
+			root_set->name, mailbox_mask,
 			rule->bytes_limit > 0 ? rule_plus : "",
 			(long long)rule->bytes_limit,
 			rule->bytes_percent == 0 ? "" :
@@ -972,15 +1012,43 @@ int quota_get_resource(struct quota_root *root, const char *mailbox_name,
 	return *limit_r == 0 ? 0 : 1;
 }
 
-int quota_set_resource(struct quota_root *root ATTR_UNUSED,
-		       const char *name ATTR_UNUSED,
-		       uint64_t value ATTR_UNUSED, const char **error_r)
+int quota_set_resource(struct quota_root *root, const char *name,
+		       uint64_t value, const char **error_r)
 {
-	/* the quota information comes from userdb (or even config file),
-	   so there's really no way to support this until some major changes
-	   are done */
-	*error_r = MAIL_ERRSTR_NO_PERMISSION;
-	return -1;
+	struct dict_transaction_context *trans;
+	const char *key;
+
+	if (root->set->limit_set == NULL) {
+		*error_r = MAIL_ERRSTR_NO_PERMISSION;
+		return -1;
+	}
+	if (strcasecmp(name, QUOTA_NAME_STORAGE_KILOBYTES) == 0)
+		key = "storage";
+	else if (strcasecmp(name, QUOTA_NAME_STORAGE_BYTES) == 0)
+		key = "bytes";
+	else if (strcasecmp(name, QUOTA_NAME_MESSAGES) == 0)
+		key = "messages";
+	else {
+		*error_r = t_strdup_printf("Unsupported resource name: %s", name);
+		return -1;
+	}
+
+	if (root->limit_set_dict == NULL) {
+		if (dict_init(root->set->limit_set, DICT_DATA_TYPE_STRING,
+			      root->quota->user->username,
+			      root->quota->user->set->base_dir,
+			      &root->limit_set_dict, error_r) < 0)
+			return -1;
+	}
+
+	trans = dict_transaction_begin(root->limit_set_dict);
+	key = t_strdup_printf(QUOTA_LIMIT_SET_PATH"%s", key);
+	dict_set(trans, key, dec2str(value));
+	if (dict_transaction_commit(&trans) < 0) {
+		*error_r = "Internal quota limit update error";
+		return -1;
+	}
+	return 0;
 }
 
 struct quota_transaction_context *quota_transaction_begin(struct mailbox *box)
@@ -1016,7 +1084,7 @@ static int quota_transaction_set_limits(struct quota_transaction_context *ctx)
 
 	ctx->limits_set = TRUE;
 	mailbox_name = mailbox_get_vname(ctx->box);
-	/* use last_mail_max_extra_bytes only for LDA/LMTP */
+	/* use quota_grace only for LDA/LMTP */
 	use_grace = (ctx->box->flags & MAILBOX_FLAG_POST_SESSION) != 0;
 
 	/* find the lowest quota limits from all roots and use them */
