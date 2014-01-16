@@ -5,11 +5,10 @@ Subject: split-protocols
 Description: Set default protocols value as empty and enable each
  protocol in its own configuration file
 ---
- doc/example-config/dovecot.conf                    |    4 ++--
- .../doc/example-config/conf.d/20-managesieve.conf  |    3 ---
- src/config/all-settings.c                          |    2 +-
- src/master/master-settings.c                       |    2 +-
- 4 files changed, 4 insertions(+), 7 deletions(-)
+ doc/example-config/dovecot.conf |    4 ++--
+ src/config/all-settings.c       |    2 +-
+ src/master/master-settings.c    |    2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/doc/example-config/dovecot.conf b/doc/example-config/dovecot.conf
 index 5697661..c802011 100644
@@ -26,41 +25,27 @@ index 5697661..c802011 100644
  
  # A comma separated list of IPs or hosts where to listen in for connections. 
  # "*" listens in all IPv4 interfaces, "::" listens in all IPv6 interfaces.
-diff --git a/pigeonhole/doc/example-config/conf.d/20-managesieve.conf b/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
-index 784b660..e1dedb1 100644
---- a/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
-+++ b/pigeonhole/doc/example-config/conf.d/20-managesieve.conf
-@@ -2,9 +2,6 @@
- ## ManageSieve specific settings
- ##
- 
--# Uncomment to enable managesieve protocol:
--#protocols = $protocols sieve
--
- # Service definitions
- 
- #service managesieve-login {
 diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index c0846f4..8643193 100644
+index f6ba21f..a6bb57c 100644
 --- a/src/config/all-settings.c
 +++ b/src/config/all-settings.c
-@@ -2445,7 +2445,7 @@ struct master_settings master_default_settings = {
+@@ -2454,7 +2454,7 @@ struct master_settings master_default_settings = {
  	.libexec_dir = PKG_LIBEXECDIR,
  	.instance_name = PACKAGE,
- 	.import_environment = "TZ DEBUG_OUTOFMEM" ENV_SYSTEMD ENV_GDB,
+ 	.import_environment = "TZ CORE_OUTOFMEM CORE_ERROR" ENV_SYSTEMD ENV_GDB,
 -	.protocols = "imap pop3 lmtp",
 +	.protocols = "",
  	.listen = "*, ::",
  	.ssl = "yes:no:required",
  	.default_internal_user = "dovecot",
 diff --git a/src/master/master-settings.c b/src/master/master-settings.c
-index 16e4ebf..3e21f7d 100644
+index 4beb97d..0d574c9 100644
 --- a/src/master/master-settings.c
 +++ b/src/master/master-settings.c
 @@ -218,7 +218,7 @@ static const struct master_settings master_default_settings = {
  	.libexec_dir = PKG_LIBEXECDIR,
  	.instance_name = PACKAGE,
- 	.import_environment = "TZ DEBUG_OUTOFMEM" ENV_SYSTEMD ENV_GDB,
+ 	.import_environment = "TZ CORE_OUTOFMEM CORE_ERROR" ENV_SYSTEMD ENV_GDB,
 -	.protocols = "imap pop3 lmtp",
 +	.protocols = "",
  	.listen = "*, ::",
