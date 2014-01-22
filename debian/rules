@@ -37,6 +37,7 @@ config-stamp: configure
 		        --with-solr \
 	            --with-ioloop=best \
 	            --with-libwrap \
+	            --with-lucene \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \
 	            --prefix=/usr \
@@ -166,6 +167,9 @@ install: build
 
 	# solr
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_fts_solr_* $(CURDIR)/debian/dovecot-solr/usr/lib/dovecot/modules
+
+	# lucene
+	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_fts_lucene_* $(CURDIR)/debian/dovecot-lucene/usr/lib/dovecot/modules
 
 	# dev
 	mv $(CURDIR)/debian/dovecot-core/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include
