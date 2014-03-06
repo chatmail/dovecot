@@ -1,8 +1,20 @@
 dovecot (1:2.2.10-1) unstable; urgency=low
 
   * [0496c52] Imported Upstream version 2.2.10
+  * [515dd61] Added new package for Lucene full text search support.
+    Thanks to Jelmer Vernooij <jelmer@debian.org> for the patch.
+    (Closes: #685979)
+  * [718a68e] Fix old private key location in README.Debian.
+    Thanks to Jelmer Vernooij <jelmer@debian.org> for the patch.
+    (Closes: #702385)
+  * [42da568] dovecot-solr: Make sure solr-schema.xml gets installed.
+    (In /usr/share/dovecot)
+    (Closes: #695185)
+  * [77acbf7] Added /usr/share/dovecot/dovecot-abi file in dovecot-dev to
+    document -- you guessed it! -- the dovecot ABI version.
+  * [feb597a] Added support for xz compression.
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 16 Jan 2014 15:43:39 -0500
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 06 Mar 2014 02:51:34 -0500
 
 dovecot (1:2.2.9-1) unstable; urgency=low
 
