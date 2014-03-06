@@ -33,4 +33,4 @@ PLAIN password scheme. But they mean completely different things.
  * Non-plaintext authentication mechanisms require either PLAIN password scheme
    or a mechanism-specific password scheme.
 
-(This file was created from the wiki on 2013-12-19 04:42)
+(This file was created from the wiki on 2014-02-11 22:29)

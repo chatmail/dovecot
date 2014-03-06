@@ -8,6 +8,7 @@ EXTRA_DIST = \
 
 wikifiles = ACL.txt \
 	AixPluginsSupport.txt \
+	AntiSpam.txt \
 	AuthDatabase.CheckPassword.txt \
 	AuthDatabase.Dict.txt \
 	AuthDatabase.LDAP.AuthBinds.txt \
@@ -78,13 +79,17 @@ wikifiles = ACL.txt \
 	Errors.ChgrpNoPerm.txt \
 	FindMailLocation.txt \
 	FinishBasicConfiguration.txt \
+	HowTo.ConvertPasswordSchemes.txt \
 	HowTo.EximAndDovecotSASL.txt \
+	HowTo.F5SLBTLSOffload.txt \
 	HowTo.ImapcProxy.txt \
 	HowTo.PopBSMTPAndDovecot.txt \
 	HowTo.PopRelay.txt \
 	HowTo.PostfixAndDovecotSASL.txt \
 	HowTo.Rootless.txt \
 	HowTo.SimpleVirtualInstall.txt \
+	HowTo.TriggerGetmailOnIMAPAccess.txt \
+	HowTo.Virtual(2b)Postfix(2b)Dspam(2b)Dovecot.txt \
 	HowTo.txt \
 	IndexFiles.txt \
 	LDA.Exim.txt \
@@ -114,6 +119,7 @@ wikifiles = ACL.txt \
 	MailboxFormat.mbx.txt \
 	MailboxFormat.txt \
 	MailboxSettings.txt \
+	MainConfig.txt \
 	MboxChildFolders.txt \
 	MboxLocking.txt \
 	MboxProblems.txt \

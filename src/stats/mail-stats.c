@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "time-util.h"
@@ -19,6 +19,7 @@ struct mail_stats_parse_map {
 #define EN(parsename, name) E(parsename, name, TYPE_NUM)
 	E("ucpu", user_cpu, TYPE_TIMEVAL),
 	E("scpu", sys_cpu, TYPE_TIMEVAL),
+	E("time", clock_time, TYPE_TIMEVAL),
 	EN("minflt", min_faults),
 	EN("majflt", maj_faults),
 	EN("volcs", vol_cs),

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2013 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -83,6 +83,16 @@ static int fail_mailbox_get_status(struct mailbox *box ATTR_UNUSED,
 {
 	status_r->uidvalidity = TEST_UID_VALIDITY;
 	status_r->uidnext = 1;
+	mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
+			       T_MAIL_ERR_MAILBOX_NOT_FOUND(box->vname));
+	return -1;
+}
+
+static int
+fail_mailbox_get_metadata(struct mailbox *box,
+			  enum mailbox_metadata_items items ATTR_UNUSED,
+			  struct mailbox_metadata *metadata_r ATTR_UNUSED)
+{
 	mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
 			       T_MAIL_ERR_MAILBOX_NOT_FOUND(box->vname));
 	return -1;
@@ -257,7 +267,7 @@ struct mailbox fail_mailbox = {
 		fail_mailbox_delete,
 		fail_mailbox_rename,
 		fail_mailbox_get_status,
-		NULL,
+		fail_mailbox_get_metadata,
 		fail_mailbox_set_subscribed,
 		NULL,
 		NULL,

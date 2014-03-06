@@ -135,4 +135,4 @@ transaction log on top of that. With empty mailboxes (eg. download+delete POP3
 users) it would even be possible to delete the whole main index and keep only
 the transaction log (although this isn't done currently).
 
-(This file was created from the wiki on 2013-12-19 04:42)
+(This file was created from the wiki on 2014-02-11 22:29)

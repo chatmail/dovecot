@@ -32,6 +32,8 @@ Contents
 
      7. Quota grace
 
+     8. Quota admin commands
+
 The configuration is split into multiple settings:
 
 First you have the quota root backend configuration. Quota root is a concept
@@ -399,4 +401,48 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-12-19 04:42)
+Quota admin commands
+--------------------
+
+The imap_quota plugin implements the SETQUOTA command, which allows changing
+the logged in user's quota limit if the user is admin. Normally this means that
+a master user must log in with 'userdb_admin=y' set in the master passdb. The
+changing is done via dic_set() command, so you must configure the 'quota_set'
+setting to point to some dictionary where your quota limit exists. Usually this
+is in SQL, e.g.:
+
+dovecot.conf:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  quota_set = dict:proxy::sqlquota
+}
+dict {
+  sqlquota = mysql:/etc/dovecot/dovecot-dict-sql.conf.ext
+}
+---%<-------------------------------------------------------------------------
+
+dovecot-dict-sql.conf.ext:
+
+---%<-------------------------------------------------------------------------
+map {
+  pattern = priv/quota/limit/storage
+  table = quota
+  username_field = username
+  value_field = bytes
+}
+map {
+  pattern = priv/quota/limit/messages
+  table = quota
+  username_field = username
+  value_field = messages
+}
+---%<-------------------------------------------------------------------------
+
+Afterwards the quota can be changed with:
+
+---%<-------------------------------------------------------------------------
+a SETQUOTA "User quota" (STORAGE 12345 MESSAGES 123)
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2014-02-11 22:29)

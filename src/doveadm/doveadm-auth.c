@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2013 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -201,7 +201,7 @@ cmd_user_list(struct auth_master_connection *conn,
 	      char *const *users)
 {
 	struct auth_master_user_list_ctx *ctx;
-	const char *username, *user_mask = NULL;
+	const char *username, *user_mask = "*";
 	unsigned int i;
 
 	if (users[0] != NULL && users[1] == NULL)
@@ -240,7 +240,7 @@ static void cmd_auth_cache_flush(int argc, char *argv[])
 
 	if (master_socket_path == NULL) {
 		master_socket_path = t_strconcat(doveadm_settings->base_dir,
-						 "auth-master", NULL);
+						 "/auth-master", NULL);
 	}
 
 	conn = doveadm_get_auth_master_conn(master_socket_path);

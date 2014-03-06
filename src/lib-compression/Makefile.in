@@ -124,8 +124,9 @@ LTLIBRARIES = $(noinst_LTLIBRARIES) $(pkglib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libcompression_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am_libcompression_la_OBJECTS = compression.lo istream-lzma.lo \
-	istream-zlib.lo istream-bzlib.lo ostream-lzma.lo \
-	ostream-zlib.lo ostream-bzlib.lo
+	istream-lz4.lo istream-zlib.lo istream-bzlib.lo \
+	ostream-lzma.lo ostream-lz4.lo ostream-zlib.lo \
+	ostream-bzlib.lo
 libcompression_la_OBJECTS = $(am_libcompression_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -389,9 +390,11 @@ AM_CPPFLAGS = \
 libcompression_la_SOURCES = \
 	compression.c \
 	istream-lzma.c \
+	istream-lz4.c \
 	istream-zlib.c \
 	istream-bzlib.c \
 	ostream-lzma.c \
+	ostream-lz4.c \
 	ostream-zlib.c \
 	ostream-bzlib.c
 
@@ -401,6 +404,7 @@ libcompression_la_LIBADD = \
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = \
 	compression.h \
+	iostream-lz4.h \
 	istream-zlib.h \
 	ostream-zlib.h
 
@@ -504,9 +508,11 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/compression.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-bzlib.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-lz4.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-lzma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-zlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-bzlib.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-lz4.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-lzma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-zlib.Plo@am__quote@
 

@@ -2,11 +2,22 @@ Lucene Full Text Search Indexing
 ================================
 
 Requires Dovecot v2.1+ to work properly. The CLucene version must be v2.3 (not
-v0.9).
+v0.9).Dovecot builds only a single Lucene index for all mailboxes. The Lucene
+indexes are stored in 'lucene-indexes/' directory under the mail root index
+directory (e.g.'~/Maildir/lucene-indexes/').
 
-Dovecot builds only a single Lucene index for all mailboxes. The Lucene indexes
-are stored in 'lucene-indexes/' directory under the mail root index directory
-(e.g.'~/Maildir/lucene-indexes/').
+Compilation
+-----------
+
+If you compile Dovecot yourself, you must add the following switches to your
+configure command for the plugin to be built:
+
+---%<-------------------------------------------------------------------------
+--with-lucene --with-stemmer
+---%<-------------------------------------------------------------------------
+
+The second switch is only required if you have compiled libstemmer yourself or
+if it's included in the CLucene you are using.
 
 Configuration
 -------------
@@ -44,4 +55,4 @@ Libraries
    which you can rename to libstemmer.a
  * textcat [http://textcat.sourceforge.net/]
 
-(This file was created from the wiki on 2013-12-19 04:42)
+(This file was created from the wiki on 2014-02-11 22:29)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -201,7 +201,11 @@ void http_client_request_set_urgent(struct http_client_request *req)
 void http_client_request_add_header(struct http_client_request *req,
 				    const char *key, const char *value)
 {
-	i_assert(req->state == HTTP_REQUEST_STATE_NEW);
+	i_assert(req->state == HTTP_REQUEST_STATE_NEW ||
+		 /* allow calling for retries */
+		 req->state == HTTP_REQUEST_STATE_GOT_RESPONSE ||
+		 req->state == HTTP_REQUEST_STATE_ABORTED);
+
 	/* mark presence of special headers */
 	switch (key[0]) {
 	case 'c': case 'C':
@@ -234,6 +238,34 @@ void http_client_request_add_header(struct http_client_request *req,
 	if (req->headers == NULL)
 		req->headers = str_new(default_pool, 256);
 	str_printfa(req->headers, "%s: %s\r\n", key, value);
+}
+
+void http_client_request_remove_header(struct http_client_request *req,
+				       const char *key)
+{
+	const unsigned char *data, *p;
+	size_t size, line_len, line_start_pos;
+	unsigned int key_len = strlen(key);
+
+	i_assert(req->state == HTTP_REQUEST_STATE_NEW ||
+		 /* allow calling for retries */
+		 req->state == HTTP_REQUEST_STATE_GOT_RESPONSE ||
+		 req->state == HTTP_REQUEST_STATE_ABORTED);
+
+	data = str_data(req->headers);
+	size = str_len(req->headers);
+	while ((p = memchr(data, '\n', size)) != NULL) {
+		line_len = (p+1) - data;
+		if (size > key_len && i_memcasecmp(data, key, key_len) == 0 &&
+		    data[key_len] == ':' && data[key_len+1] == ' ') {
+			/* key was found from header, replace its value */
+			line_start_pos = str_len(req->headers) - size;
+			str_delete(req->headers, line_start_pos, line_len);
+			break;
+		}
+		size -= line_len;
+		data += line_len;
+	}
 }
 
 void http_client_request_set_date(struct http_client_request *req,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2013 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -278,7 +278,7 @@ void mdbox_file_unrefed(struct dbox_file *file)
 
 	if (mfile->file_id != 0) {
 		count = array_count(&mfile->storage->open_files);
-		if (!file->deleted && count <= MDBOX_MAX_OPEN_UNUSED_FILES) {
+		if (count <= MDBOX_MAX_OPEN_UNUSED_FILES) {
 			/* we can leave this file open for now */
 			mdbox_file_close_later(mfile);
 			return;

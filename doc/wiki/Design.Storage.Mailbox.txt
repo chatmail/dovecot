@@ -31,4 +31,4 @@ are:
  * <Saving> [Design.Storage.Mailbox.Save.txt]: 'mailbox_save_*()' and
    'mailbox_copy()' is used for saving/copying new messages to mailbox.
 
-(This file was created from the wiki on 2013-12-19 04:42)
+(This file was created from the wiki on 2014-02-11 22:29)

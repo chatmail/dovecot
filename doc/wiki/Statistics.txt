@@ -81,6 +81,8 @@ Statistics gathered using the 'getrusage()' system call:
 
  * user_cpu: User CPU (seconds.microseconds)
  * sys_cpu: System CPU (seconds.microseconds)
+ * clock_time: Wall-clock time (seconds.microseconds). Doesn't include time
+   spent waiting in ioloop. (v2.2.11+)
  * min_faults: Minor page faults (page reclaims)
  * maj_faults: Major page faults
  * vol_cs: Voluntary context switches
@@ -190,4 +192,4 @@ EXPORT<tab>session<tab>connected<lf>
 
 The output will be identical to 'doveadm stats dump session connected' command.
 
-(This file was created from the wiki on 2013-12-19 04:42)
+(This file was created from the wiki on 2014-02-11 22:29)

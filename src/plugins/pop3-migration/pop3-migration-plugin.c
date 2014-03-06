@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2013 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -6,6 +6,7 @@
 #include "istream-header-filter.h"
 #include "sha1.h"
 #include "message-size.h"
+#include "message-header-parser.h"
 #include "mail-namespace.h"
 #include "mail-search-build.h"
 #include "mail-storage-private.h"
@@ -47,6 +48,7 @@ struct pop3_migration_mail_storage {
 
 	unsigned int all_mailboxes:1;
 	unsigned int pop3_all_hdr_sha1_set:1;
+	unsigned int ignore_missing_uidls:1;
 };
 
 struct pop3_migration_mailbox {
@@ -110,42 +112,104 @@ static int imap_msg_map_hdr_cmp(const struct imap_msg_map *map1,
 	return memcmp(map1->hdr_sha1, map2->hdr_sha1, sizeof(map1->hdr_sha1));
 }
 
-static int get_hdr_sha1(struct mail *mail, unsigned char sha1[SHA1_RESULTLEN])
+static void
+pop3_header_filter_callback(struct header_filter_istream *input ATTR_UNUSED,
+			    struct message_header_line *hdr,
+			    bool *matched ATTR_UNUSED, bool *have_eoh)
 {
-	struct message_size hdr_size;
-	struct istream *input, *input2;
-	const unsigned char *data;
-	size_t size;
+	if (hdr != NULL && hdr->eoh)
+		*have_eoh = TRUE;
+}
+
+static int
+get_hdr_sha1_stream(struct mail *mail, struct istream *input, uoff_t hdr_size,
+		    unsigned char sha1_r[SHA1_RESULTLEN], bool *have_eoh_r)
+{
+	struct istream *input2;
+	const unsigned char *data, *p;
+	size_t size, idx;
 	struct sha1_ctxt sha1_ctx;
+
+	*have_eoh_r = FALSE;
+
+	input2 = i_stream_create_limit(input, hdr_size);
+	/* hide headers that might change or be different in IMAP vs. POP3 */
+	input = i_stream_create_header_filter(input2,
+				HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR,
+				hdr_hash_skip_headers,
+				N_ELEMENTS(hdr_hash_skip_headers),
+				pop3_header_filter_callback, have_eoh_r);
+	i_stream_unref(&input2);
+
+	sha1_init(&sha1_ctx);
+	while (i_stream_read_data(input, &data, &size, 0) > 0) {
+		/* if there are NULs in header, replace them with 0x80
+		   character. This is done by at least Dovecot IMAP and also
+		   POP3 with outlook-no-nuls workaround. */
+		while ((p = memchr(data, '\0', size)) != NULL) {
+			idx = p - data;
+			sha1_loop(&sha1_ctx, data, idx);
+			sha1_loop(&sha1_ctx, "\x80", 1);
+			i_assert(size > idx);
+			data += idx + 1;
+			size -= idx + 1;
+		}
+		sha1_loop(&sha1_ctx, data, size);
+		i_stream_skip(input, size);
+	}
+	if (input->stream_errno != 0) {
+		i_error("pop3_migration: Failed to read header for msg %u: %s",
+			mail->seq, i_stream_get_error(input));
+		i_stream_unref(&input);
+		return -1;
+	}
+	sha1_result(&sha1_ctx, sha1_r);
+	i_stream_unref(&input);
+	return 0;
+}
+
+static int
+get_hdr_sha1(struct mail *mail, unsigned char sha1_r[SHA1_RESULTLEN])
+{
+	struct istream *input;
+	struct message_size hdr_size;
+	bool have_eoh;
 
 	if (mail_get_hdr_stream(mail, &hdr_size, &input) < 0) {
 		i_error("pop3_migration: Failed to get header for msg %u: %s",
 			mail->seq, mailbox_get_last_error(mail->box, NULL));
 		return -1;
 	}
-	input2 = i_stream_create_limit(input, hdr_size.physical_size);
-	/* hide headers that might change or be different in IMAP vs. POP3 */
-	input = i_stream_create_header_filter(input2,
-				HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR,
-				hdr_hash_skip_headers,
-				N_ELEMENTS(hdr_hash_skip_headers),
-				*null_header_filter_callback, (void *)NULL);
-	i_stream_unref(&input2);
+	if (get_hdr_sha1_stream(mail, input, hdr_size.physical_size,
+				sha1_r, &have_eoh) < 0)
+		return -1;
+	if (have_eoh)
+		return 0;
 
-	sha1_init(&sha1_ctx);
-	while (i_stream_read_data(input, &data, &size, 0) > 0) {
-		sha1_loop(&sha1_ctx, data, size);
-		i_stream_skip(input, size);
-	}
-	if (input->stream_errno != 0) {
-		i_error("pop3_migration: Failed to read header for msg %u: %m",
-			mail->seq);
-		i_stream_unref(&input);
+	/* The empty "end of headers" line is missing. Either this means that
+	   the headers ended unexpectedly (which is ok) or that the remote
+	   server is buggy. Some servers have problems with
+
+	   1) header line continuations that contain only whitespace and
+	   2) headers that have no ":". The header gets truncated when such
+	   line is reached.
+
+	   At least Oracle IMS IMAP FETCH BODY[HEADER] handles 1) by not
+	   returning the whitespace line and 2) by returning the line but
+	   truncating the rest. POP3 TOP instead returns the entire header.
+	   This causes the IMAP and POP3 hashes not to match.
+
+	   So we'll try to avoid this by falling back to full FETCH BODY[]
+	   (and/or RETR) and we'll parse the header ourself from it. This
+	   should work around any similar bugs in all IMAP/POP3 servers. */
+	if (mail_get_stream(mail, &hdr_size, NULL, &input) < 0) {
+		i_error("pop3_migration: Failed to get body for msg %u: %s",
+			mail->seq, mailbox_get_last_error(mail->box, NULL));
 		return -1;
 	}
-	sha1_result(&sha1_ctx, sha1);
-	i_stream_unref(&input);
-	return 0;
+	return get_hdr_sha1_stream(mail, input, hdr_size.physical_size,
+				   sha1_r, &have_eoh);
+
 }
 
 static struct mailbox *pop3_mailbox_alloc(struct mail_storage *storage)
@@ -438,6 +502,13 @@ pop3_uidl_assign_by_hdr_hash(struct mailbox *box, struct mailbox *pop3_box)
 			missing_uids_count++;
 	}
 	if (missing_uids_count > 0 && !mstorage->all_mailboxes) {
+		if (!mstorage->ignore_missing_uidls) {
+			i_error("pop3_migration: %u POP3 messages have no "
+				"matching IMAP messages (set "
+				"pop3_migration_ignore_missing_uidls=yes "
+				"to continue anyway)", missing_uids_count);
+			return -1;
+		}
 		i_warning("pop3_migration: %u POP3 messages have no "
 			  "matching IMAP messages", missing_uids_count);
 	}
@@ -607,6 +678,9 @@ static void pop3_migration_mail_storage_created(struct mail_storage *storage)
 	mstorage->all_mailboxes =
 		mail_user_plugin_getenv(storage->user,
 					"pop3_migration_all_mailboxes") != NULL;
+	mstorage->ignore_missing_uidls =
+		mail_user_plugin_getenv(storage->user,
+			"pop3_migration_ignore_missing_uidls") != NULL;
 
 	MODULE_CONTEXT_SET(storage, pop3_migration_storage_module, mstorage);
 }
