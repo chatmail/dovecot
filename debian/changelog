@@ -1,3 +1,11 @@
+dovecot (1:2.2.12-1) UNRELEASED; urgency=medium
+
+  * [52b67de] Update watch file for 2.2 series.
+  * [c4eac1f] Verify upstream tarball signature in watch file.
+  * [3a81ff9] Imported Upstream version 2.2.12
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Thu, 06 Mar 2014 22:45:19 +0000
+
 dovecot (1:2.2.10-1) unstable; urgency=low
 
   * [0496c52] Imported Upstream version 2.2.10
