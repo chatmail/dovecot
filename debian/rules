@@ -168,6 +168,7 @@ install: build
 
 	# solr
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_fts_solr_* $(CURDIR)/debian/dovecot-solr/usr/lib/dovecot/modules
+	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/dovecot/solr-schema.xml $(CURDIR)/debian/dovecot-solr/usr/share/dovecot
 
 	# lucene
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_fts_lucene_* $(CURDIR)/debian/dovecot-lucene/usr/lib/dovecot/modules
