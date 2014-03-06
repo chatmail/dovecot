@@ -62,6 +62,7 @@ struct client_auth_reply {
 	enum login_proxy_ssl_flags ssl_flags;
 
 	unsigned int proxy:1;
+	unsigned int proxy_nopipelining:1;
 	unsigned int temp:1;
 	unsigned int nologin:1;
 	unsigned int authz_failure:1;
@@ -141,7 +142,7 @@ struct client {
 	unsigned int auth_attempts, auth_successes;
 	pid_t mail_pid;
 
-	char *virtual_user, *virtual_user_orig;
+	char *virtual_user, *virtual_user_orig, *virtual_auth_user;
 	unsigned int destroyed:1;
 	unsigned int input_blocked:1;
 	unsigned int login_success:1;
@@ -157,6 +158,7 @@ struct client {
 	unsigned int auth_initializing:1;
 	unsigned int auth_process_comm_fail:1;
 	unsigned int proxy_auth_failed:1;
+	unsigned int proxy_nopipelining:1;
 	unsigned int auth_waiting:1;
 	unsigned int auth_user_disabled:1;
 	unsigned int auth_pass_expired:1;

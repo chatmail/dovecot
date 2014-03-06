@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2013 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "array.h"
@@ -63,8 +63,22 @@ static int proxy_write_login(struct imap_client *client, string_t *str)
 	unsigned int len;
 	const char *mech_name, *error;
 
-	if (client->proxy_backend_capability == NULL)
+	/* Send CAPABILITY command if we don't know the capabilities yet.
+	   Also as kind of a Dovecot-backend workaround if the client insisted
+	   on sending CAPABILITY command (even though our banner already sent
+	   it), send the (unnecessary) CAPABILITY command to backend as well
+	   to avoid sending the CAPABILITY reply twice (untagged and OK resp
+	   code). */
+	if (!client->proxy_capability_request_sent &&
+	    (client->proxy_backend_capability == NULL ||
+	     client->client_ignores_capability_resp_code)) {
+		client->proxy_capability_request_sent = TRUE;
 		str_append(str, "C CAPABILITY\r\n");
+		if (client->common.proxy_nopipelining) {
+			/* authenticate only after receiving C OK reply. */
+			return 0;
+		}
+	}
 
 	if (client->common.proxy_mech == NULL) {
 		/* logging in normally - use LOGIN command */
@@ -326,8 +340,17 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 		imap_client->proxy_backend_capability = i_strdup(line + 13);
 		return 0;
 	} else if (strncmp(line, "C ", 2) == 0) {
-		/* Reply to CAPABILITY command we sent, ignore it */
+		/* Reply to CAPABILITY command we sent */
 		client->proxy_state = IMAP_PROXY_STATE_CAPABILITY;
+		if (strncmp(line, "C OK ", 5) == 0 &&
+		    client->proxy_password != NULL) {
+			/* pipelining was disabled, send the login now. */
+			str = t_str_new(128);
+			if (proxy_write_login(imap_client, str) < 0)
+				return -1;
+			o_stream_nsend(output, str_data(str), str_len(str));
+			return 1;
+		}
 		return 0;
 	} else if (strncasecmp(line, "I ", 2) == 0 ||
 		   strncasecmp(line, "* ID ", 5) == 0) {
@@ -353,6 +376,7 @@ void imap_proxy_reset(struct client *client)
 
 	imap_client->proxy_sasl_ir = FALSE;
 	imap_client->proxy_seen_banner = FALSE;
+	imap_client->proxy_capability_request_sent = FALSE;
 	client->proxy_state = IMAP_PROXY_STATE_NONE;
 }
 

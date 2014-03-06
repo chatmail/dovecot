@@ -26,7 +26,10 @@ plugin {
   # Without global ACLs:
   acl = vfile
 
-  # With global ACLs in /etc/dovecot/acls/ directory:
+  # With global ACL files in /etc/dovecot/dovecot-acls file (v2.2.11+):
+  #acl = vfile:/etc/dovecot/dovecot-acl
+
+  # With global ACLs in /etc/dovecot/acls/ directory (obsolete):
   #acl = vfile:/etc/dovecot/acls
 }
 ---%<-------------------------------------------------------------------------
@@ -82,18 +85,41 @@ mailboxes. They are used mainly for two purposes:
     <Authentication/MasterUsers#ACLs> [Authentication.MasterUsers.txt] for more
     information.
 
+If a mailbox has both global ACLs and the per-mailbox ACL file, both of them
+are read and the ACLs are merged. If there are any conflicts, the global ACL
+file overrides per-mailbox ACL file. This is because users can modify their own
+per-mailbox ACL files via IMAP ACL extension. Global ACLs can only be modified
+by administrator, so users shouldn't be able to override them.
+
+Global ACL file (v2.2.11+)
+--------------------------
+
+Global ACL file path is specified as a parameter to vfile backend in 'acl'
+setting ('/etc/dovecot/dovecot-acl' in the above example). The file contains
+otherwise the same data as regular per-mailbox 'dovecot-acl' files, except each
+line is prefixed by the mailbox name pattern. The pattern may contain "*" and
+"?" wildcards. For example:
+
+---%<-------------------------------------------------------------------------
+* user=foo lrw
+Public user=bar lrwstipekxa
+Public/* user=bar lrwstipekxa
+---%<-------------------------------------------------------------------------
+
+Global ACL directory (obsolete)
+-------------------------------
+
 Global ACL directory is specified as a parameter to vfile backend in 'acl'
 setting ('/etc/dovecot/acls/' in the above example). They are looked up using
-the mailbox's real name. For example:
+the mailbox's virtual name. For example:
 
  * INBOX: '/etc/dovecot/acls/INBOX'
  * archives.2007: '/etc/dovecot/acls/archives.2007'
  * archives/2007: '/etc/dovecot/acls/archives/2007'
 
-The mailbox names are looked up using the real separators, not the virtual ones
-that can be configured in namespaces. So even if you specify 'separator=/' with
-Maildir, the ACL files still use the '.' separator, just as the Maildir
-directory names are also stored using '.'. There is no leading '.' however.
+The filenames must start with namespace prefix (if it has one). For example
+with namespace 'prefix=INBOX/' containing mailbox "foo" use
+'/etc/dovecot/acls/INBOX/foo'.
 
 There is an extra problem with mailbox formats that use '/' as the separator
 (e.g. mbox, dbox): For example if you have mailboxes "foo" and "foo/bar" and
@@ -104,16 +130,6 @@ can instead create a .DEFAULT file for "foo":
 
  * foo: '/etc/dovecot/acls/foo/.DEFAULT'
  * foo/bar: '/etc/dovecot/acls/foo/bar'
-
-The filenames must start with namespace prefix (if it has one). For example
-with namespace 'prefix=INBOX/' containing mailbox "foo" use
-'/etc/dovecot/acls/INBOX/foo'.
-
-If a mailbox has both global and per-mailbox ACL file, both of them are read
-and the ACLs are merged. If there are any conflicts, the global ACL file
-overrides per-mailbox ACL file. This is because users can modify their own
-per-mailbox ACL files via IMAP ACL extension. Global ACLs can only be modified
-by administrator, so users shouldn't be able to override them.
 
 ACL files
 ---------
@@ -216,4 +232,4 @@ List cache
 you manually add/edit 'dovecot-acl' files, you may need to delete the
 'dovecot-acl-list' to get the mailboxes visible.
 
-(This file was created from the wiki on 2013-12-19 04:42)
+(This file was created from the wiki on 2014-02-11 22:29)

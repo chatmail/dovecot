@@ -15,33 +15,43 @@ You can use special variables in several places:
 The variables that work (almost) everywhere are:
 
  *
-+------------+----------+-----------------------------------------------------+
-| *Variable* | *Long    | *Description*                                       |
-|            | name*    |                                                     |
-+------------+----------+-----------------------------------------------------+
-| %%         |          | '%' character. See <SharedMailboxes.Shared.txt> for |
-|            |          | further information about %% variables              |
-+------------+----------+-----------------------------------------------------+
-| %u         | user     | full username (e.g. user@domain)                    |
-+------------+----------+-----------------------------------------------------+
-| %n         | username | user part in user@domain, same as %u if there's no  |
-|            |          | domain                                              |
-+------------+----------+-----------------------------------------------------+
-| %d         | domain   | domain part in user@domain, empty if user there's no|
-|            |          | domain                                              |
-+------------+----------+-----------------------------------------------------+
-| %s         | service  | imap, pop3, smtp, lda (and doveadm, dsync, etc.)    |
-+------------+----------+-----------------------------------------------------+
-| %p         | pid      | PID of the current process (login or imap/pop3      |
-|            |          | process)                                            |
-+------------+----------+-----------------------------------------------------+
-| %l         | lip      | local IP address                                    |
-+------------+----------+-----------------------------------------------------+
-| %r         | rip      | remote IP address                                   |
-+------------+----------+-----------------------------------------------------+
-|            | session  | session ID for this client connection (unique for 9 |
-|            |          | years) (v2.1.6+)                                    |
-+------------+----------+-----------------------------------------------------+
++------------+---------------+------------------------------------------------+
+| *Variable* | *Long name*   | *Description*                                  |
++------------+---------------+------------------------------------------------+
+| %%         |               | '%' character. See <SharedMailboxes.Shared.txt>|
+|            |               | for further information about %% variables     |
++------------+---------------+------------------------------------------------+
+| %u         | user          | full username (e.g. user@domain)               |
++------------+---------------+------------------------------------------------+
+| %n         | username      | user part in user@domain, same as %u if there's|
+|            |               | no domain                                      |
++------------+---------------+------------------------------------------------+
+| %d         | domain        | domain part in user@domain, empty if user with |
+|            |               | no domain                                      |
++------------+---------------+------------------------------------------------+
+| %s         | service       | imap, pop3, smtp, lda (and doveadm, dsync, etc.)|
++------------+---------------+------------------------------------------------+
+| %p         | pid           | PID of the current process (login or imap/pop3 |
+|            |               | process)                                       |
++------------+---------------+------------------------------------------------+
+| %l         | lip           | local IP address                               |
++------------+---------------+------------------------------------------------+
+| %r         | rip           | remote IP address                              |
++------------+---------------+------------------------------------------------+
+|            | session       | session ID for this client connection (unique  |
+|            |               | for 9 years) (v2.1.6+)                         |
++------------+---------------+------------------------------------------------+
+|            | auth_user     | SASL authentication ID (e.g. if master user    |
+|            |               | login is done, this contains the master        |
+|            |               | username). If username changes during          |
+|            |               | authentication, this value contains the        |
+|            |               | original username. Otherwise the same as       |
+|            |               | %{user}. (v2.2.11+)                            |
++------------+---------------+------------------------------------------------+
+|            | auth_username | user part in %{auth_user} (v2.2.11+)           |
++------------+---------------+------------------------------------------------+
+|            | auth_domain   | domain part in %{auth_user} (v2.2.11+)         |
++------------+---------------+------------------------------------------------+
 
 These variables work almost everywhere else except in Dovecot-auth (userdb
 queries/templates):
@@ -203,4 +213,4 @@ with '0' character if the string is shorter. For example %04i may return
 The modifiers are applied from left-to-right order, except the substring is
 always taken from the final string.
 
-(This file was created from the wiki on 2013-12-19 04:43)
+(This file was created from the wiki on 2014-02-11 22:30)

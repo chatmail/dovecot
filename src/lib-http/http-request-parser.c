@@ -1,4 +1,4 @@
-/* Copyright (c) 2013 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -66,7 +66,7 @@ http_request_parser_init(struct istream *input,
 		max_payload_size = HTTP_REQUEST_DEFAULT_MAX_PAYLOAD_SIZE;
 
 	http_message_parser_init
-		(&parser->parser, input, &hdr_limits, max_payload_size);
+		(&parser->parser, input, &hdr_limits, max_payload_size, FALSE);
 	return parser;
 }
 

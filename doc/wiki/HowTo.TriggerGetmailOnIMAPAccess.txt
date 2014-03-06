@@ -1,0 +1,178 @@
+Contents
+
+
+ 1. Triggering getmail on IMAP access
+
+     1. Prerequisites
+
+     2. Using getmail to fetch your remote mail
+
+     3. Get mail of virtual accounts
+
+     4. Using incron to get mail only when needed
+
+Triggering getmail on IMAP access
+=================================
+
+Getmail is a secure, easy-to-use python-based application to retrieve e-mail
+froma remote mail server and write it immediately to your local maildir store.
+Many home-based users prefer the 24/7 reliability of their ISP mail server over
+redirecting e-mail for their domain directly to their home server. Doing so, no
+e-mail needs to be missed when the home server happens to be down.Standard
+recommendation is to run getmail in a cron job every 5 minutes or so.This poses
+two potential problems:
+
+ * ISPs are not too happy with this practice, and more importantly,
+ * The hard disks of your home server will no longer spin down.
+
+Hence, a recurring question on fora is: How can I trigger getmail on IMAP
+access?
+
+This HOWTO helps you to run getmail only when needed, and have dovecot deliver
+and filter that mail.
+
+Prerequisites
+-------------
+
+This HOWTO assumes that you use the IMAP protocol, a Maildir mail store in
+'~/.maildir', and the <"deliver" LDA> [LDA.txt].
+
+You will also need:
+
+ * getmail [http://pyropus.ca/software/getmail/],
+ * incron [http://incron.aiken.cz/], and a Linux kernel with inotify and flock
+   [http://linux.die.net/man/1/flock] support.
+
+Using getmail to fetch your remote mail
+---------------------------------------
+
+First, create the directory '~/.getmail', change its permissions with 'chmod
+700 ~/.getmail', and create '~/.getmail/mvmailrc' with the following contents:
+
+---%<-------------------------------------------------------------------------
+[retriever]
+type = SimpleIMAPSSLRetriever
+server = remotehost
+port = 993
+username = yourusername
+password = yourpassword
+mailboxes = ('INBOX',)
+
+[destination]
+type = MDA_external
+path = /usr/lib/dovecot/deliver
+arguments = ("-e",)
+
+[options]
+read_all = false
+delete = true
+received = false
+delivered_to = false
+message_log = ~/.getmail/mvmail.log
+---%<-------------------------------------------------------------------------
+
+Running getmail with this mvmailrc will:
+
+ * Log into the imaps server on remotehost on port 993 (use SimpleIMAPRetriever
+   if you do not use SSL) with the specified username and password.
+ * Retrieve only new mails 'read_all = false' from the remote INBOX folder.
+ * Pass each mail to Dovecot's LDA "deliver" for filtering and delivery.  The
+   '-e' ensures that dovecot will return an error if filtering or delivery
+   fails; getmail will leave the mail alone if such an error occurs, to prevent
+   you from losing mail.
+ * Delete mail from your remote INBOX, only after successfully delivering it.
+ * 'received = false' and 'delivered_to = false' prevent getmail from adding
+   additional headers to your mail.
+
+So, to run getmail and move your mail:
+
+'getmail -g ~/.getmail -r mvmailrc'
+
+Get mail of virtual accounts
+----------------------------
+
+When using getmail to retrieve virtual mail accounts, more configuration is
+needed. Here is an example of a config file used to retrieve mail for a virtual
+account:
+
+---%<-------------------------------------------------------------------------
+[retriever]
+type = MultidropIMAPSSLRetriever
+envelope_recipient = delivered-to:1
+server = localhost
+port = 993
+username = yourusername
+password = yourpassword
+mailboxes = ("INBOX",)
+move_on_delete = .Trash
+
+[destination]
+type = MDA_external
+path = /usr/local/libexec/dovecot/deliver
+arguments = ("-e", "-f", "%(sender)", "-d", "%(recipient)")
+user = mailaccess
+group = mailaccess
+
+[options]
+read_all = false
+delete = true
+received = false
+delivered_to = false
+message_log = ~/.getmail/mvmail.log
+---%<-------------------------------------------------------------------------
+
+This file use MultidropIMAPSSLRetriever in order to extract the recipient info
+in the mail. This is configured in the property envelope_recipient. The
+recipient must be passed to deliver with the -d parameter as shown with the
+arguments line. It's important to specify the arguments as separate strings as
+shown here, not "-d %(recipient)" in one string.
+
+Another important note is that if dovecot.conf is configured to restrict
+allowed users (first_valid_uid), one might need to specify which user getmail
+should run as, as shown here with user = mailaccess.
+
+Using incron to get mail only when needed
+-----------------------------------------
+
+Running getmail every 5 minutes seems wasteful, since it usually won't have
+anything to do; it also means you will have to wait 5 minutes for mailto be
+retrieved when opening your mail reader.  With 'incron', you can instead
+trigger getmailwhenever you access your INBOX. This means that getmail will run
+immediately when you open your mail reader client, and not run at all whenit
+has nothing to do. After that, it will sleep for 10 minutes to keep your ISP
+happy.
+
+Create an executable script '~/local/bin/mvmail' with the following contents:
+
+---%<-------------------------------------------------------------------------
+#!/bin/bash
+DATE=$(date); echo "--- $DATE: mvmail was called. ---" >> ~/.getmail/mvmail.log
+flock -n ~/.getmail/mvmail.lock getmail -q -g ~/.getmail/ -r mvmailrc
+flock -n ~/.getmail/mvmail.lock DATE=$(date)
+flock -n ~/.getmail/mvmail.lock echo "--- $DATE: mvmail went to sleep for 10
+minutes. ---" >> ~/.getmail/mvmail.log
+flock -n ~/.getmail/mvmail.lock sleep 10m
+
+DATE=$(date); echo "--- $DATE: mvmail rearmed the incron one-shot.  ---" >>
+~/.getmail/mvmail.log
+incrontab --reload # Rearm the one-shot rule
+---%<-------------------------------------------------------------------------
+
+Run 'incrontab -e' as a normal user -not root- to edit your incrontab, and put
+this in it:
+
+BEWARE: Do not add any comments nor any additional space characters or tabs!
+incrontab is very sensitive to this and will not run.
+
+---%<-------------------------------------------------------------------------
+/home/username/.maildir/cur/ IN_ALL_EVENTS,IN_ONESHOT
+/home/username/local/bin/mvmail
+---%<-------------------------------------------------------------------------
+
+This 'incrontab' will run 'mvmail' whenever you access the INBOX folder.
+'IN_ONESHOT' will disable the incron rule after one event, to prevent incron
+from running one instance of 'mvmail' for every INBOX access. 'mvmail' will
+then sleep for 10 minutesbefore finally re-enabling the one-shot incron rule.
+Every step is logged in '~/.getmail/mvmail.log'.
+
+(This file was created from the wiki on 2014-02-11 22:29)

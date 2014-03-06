@@ -54,6 +54,12 @@ There are a couple of different ways to specify when SSL/TLS is required:
    login }'), you can use either (or both) of the above settings. They behave
    exactly the same way then.
 
+Note that plaintext authentication is always allowed (and SSL not required) for
+connections from localhost, as they're assumed to be secure anyway. This
+applies to all connections where the local and the remote IP addresses are
+equal. Also IP ranges specified by 'login_trusted_networks' setting are assumed
+to be secure.
+
 Multiple SSL certificates
 -------------------------
 
@@ -349,4 +355,4 @@ B8A55EC91A060575CFB29503FBF7160C2DC8BCBFE02D20A7F704882F72D8D00272D8D002CE5CCC4B
 +OK Dovecot ready.
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-12-19 04:42)
+(This file was created from the wiki on 2014-02-11 22:29)

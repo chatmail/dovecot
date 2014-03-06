@@ -367,4 +367,4 @@ References
  * Maildir++ [http://www.inter7.com/courierimap/README.maildirquota.html]
  * Wikipedia [http://en.wikipedia.org/wiki/Maildir]
 
-(This file was created from the wiki on 2013-12-19 04:42)
+(This file was created from the wiki on 2014-02-11 22:29)

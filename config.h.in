@@ -224,6 +224,9 @@
 /* Define if you want textcat support for CLucene */
 #undef HAVE_LUCENE_TEXTCAT
 
+/* Define if you have lz4 library */
+#undef HAVE_LZ4
+
 /* Define if you have lzma library */
 #undef HAVE_LZMA
 

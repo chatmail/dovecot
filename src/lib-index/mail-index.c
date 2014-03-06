@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2013 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -636,7 +636,7 @@ void mail_index_close(struct mail_index *index)
 		return;
 
 	i_assert(!index->syncing);
-	i_assert(index->view_count == 0);
+	i_assert(index->views == NULL);
 
 	if (index->map != NULL)
 		mail_index_unmap(&index->map);
