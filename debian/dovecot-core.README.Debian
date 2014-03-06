@@ -96,7 +96,7 @@ Upgrading from 1.2 (squeeze) to 2.0 (wheezy)
     1.  Move /etc/ssl/certs/dovecot.pem to /etc/dovecot
     2.  Create a directory called /etc/dovecot/private owned by root:root
         with 0700 permissions.
-    3.  Move /etc/ssl/certs/private/dovecot.pem to /etc/dovecot/private
+    3.  Move /etc/ssl/private/dovecot.pem to /etc/dovecot/private
     4.  In /etc/dovecot/conf.d/10-ssl.conf make sure you have these lines:
         ssl_cert = </etc/dovecot/dovecot.pem
         ssl_key = </etc/dovecot/private/dovecot.pem
