@@ -1,4 +1,4 @@
-dovecot (1:2.2.12-1) UNRELEASED; urgency=medium
+dovecot (1:2.2.12-1) experimental; urgency=medium
 
   * [52b67de] Update watch file for 2.2 series.
   * [c4eac1f] Verify upstream tarball signature in watch file.
