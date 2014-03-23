@@ -16,4 +16,4 @@ dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib21_fts_s
 dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/replicator
 dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/script
 dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/script-login
-
+dovecot-core: non-standard-dir-perm etc/dovecot/private/ 0700 != 0755
