@@ -25,6 +25,7 @@ endif
 
 config-stamp: configure
 	dh_testdir
+	dh_autotools-dev_updateconfig
 	# Dovecot
 	$(shell $(dpkg_buildflags) --export=configure) sh configure \
 	            --with-ldap=plugin \
@@ -86,6 +87,7 @@ clean:
 	# Cleanup DRAC
 	rm -f src/plugins/drac/drac_plugin.so
 	debconf-updatepo
+	dh_autotools-dev_restoreconfig
 	dh_clean
 
 install: build
