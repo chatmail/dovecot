@@ -1,6 +1,7 @@
 dovecot (1:2.2.12-2) unstable; urgency=medium
 
-  * [c882a38] Add build dependencies libstemmer-dev and libexttextcat-dev, used by dovecot-lucene.
+  * [c882a38] Add build dependencies libstemmer-dev and libexttextcat-dev,
+    used by dovecot-lucene.
   * [67762d4] Use autotools-dev to update config.guess and config.sub.
   * [33e79b7] Update Japenese po file. Thanks, victory. Closes: #730171
   * [cbf213b] Add non-standard-dir-perm override for /etc/dovecot/private.
