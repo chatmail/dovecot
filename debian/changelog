@@ -1,4 +1,4 @@
-dovecot (1:2.2.12-3) UNRELEASED; urgency=medium
+dovecot (1:2.2.12-3) unstable; urgency=medium
 
   * [0383db0] Break long line.
   * [c961b6a] Fix installation of sieve plugins. Closes: #742770, #684271
