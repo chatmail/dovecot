@@ -2,7 +2,8 @@ dovecot (1:2.2.12-3) unstable; urgency=medium
 
   * [0383db0] Break long line.
   * [c961b6a] Fix installation of sieve plugins. Closes: #742770, #684271
-  * [388d2bf] Strip body.rfc5173.txt from the pigeonhole patch, as it is non-free. Closes: #745398
+  * [388d2bf] Strip body.rfc5173.txt from the pigeonhole patch, as it is
+    non-free. Closes: #745398
 
  -- Jelmer Vernooij <jelmer@debian.org>  Wed, 23 Apr 2014 02:56:56 +0200
 
