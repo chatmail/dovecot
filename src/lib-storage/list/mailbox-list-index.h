@@ -107,6 +107,7 @@ struct mailbox_list_index {
 	unsigned int syncing:1;
 	unsigned int updating_status:1;
 	unsigned int has_backing_store:1;
+	unsigned int index_last_check_changed:1;
 };
 
 struct mailbox_list_index_iterate_context {
@@ -137,6 +138,7 @@ void mailbox_list_index_node_get_path(const struct mailbox_list_index_node *node
 void mailbox_list_index_node_unlink(struct mailbox_list_index *ilist,
 				    struct mailbox_list_index_node *node);
 
+int mailbox_list_index_index_open(struct mailbox_list *list);
 bool mailbox_list_index_need_refresh(struct mailbox_list_index *ilist,
 				     struct mail_index_view *view);
 int mailbox_list_index_refresh(struct mailbox_list *list);

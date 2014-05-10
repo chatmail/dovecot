@@ -182,4 +182,4 @@ jane:{PLAIN}pass::::::userdb_quota_rule=*:storage=200M
 Joe has now 100MB quota and Jane has 200MB quota. See <Quota.txt> for more
 information about quota settings.
 
-(This file was created from the wiki on 2014-02-11 22:29)
+(This file was created from the wiki on 2013-11-24 04:42)

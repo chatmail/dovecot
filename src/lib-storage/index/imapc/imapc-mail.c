@@ -194,6 +194,8 @@ imapc_mail_get_headers(struct mail *_mail, const char *field,
 {
 	struct mailbox_header_lookup_ctx *headers;
 	const char *header_names[2];
+	const unsigned char *data;
+	size_t size;
 	struct istream *input;
 	int ret;
 
@@ -204,6 +206,9 @@ imapc_mail_get_headers(struct mail *_mail, const char *field,
 	mailbox_header_lookup_unref(&headers);
 	if (ret < 0)
 		return -1;
+
+	while (i_stream_read_data(input, &data, &size, 0) > 0)
+		i_stream_skip(input, size);
 	/* the header should cached now. */
 	return index_mail_get_headers(_mail, field, decode_to_utf8, value_r);
 }
@@ -357,8 +362,11 @@ static void imapc_mail_close(struct mail *_mail)
 	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
 	struct imapc_mail_cache *cache = &mbox->prev_mail_cache;
 
-	while (mail->fetch_count > 0)
-		imapc_mailbox_run(mbox);
+	if (mail->fetch_count > 0) {
+		imapc_mail_fetch_flush(mbox);
+		while (mail->fetch_count > 0)
+			imapc_mailbox_run_nofetch(mbox);
+	}
 
 	index_mail_close(_mail);
 

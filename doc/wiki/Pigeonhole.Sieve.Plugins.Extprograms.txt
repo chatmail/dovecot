@@ -195,4 +195,4 @@ Read the specification (v0.3 plugin
 [http://hg.rename-it.nl/dovecot-2.2-pigeonhole/raw-file/tip/doc/rfc/spec-bosch-sieve-extprograms.txt])
 for detailed information on how to use the new language extensions.
 
-(This file was created from the wiki on 2014-02-11 22:29)
+(This file was created from the wiki on 2013-11-24 04:42)

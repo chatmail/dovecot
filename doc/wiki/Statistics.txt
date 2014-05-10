@@ -1,12 +1,8 @@
 Statistics
 ==========
 
-Dovecot v2.1+ supports gathering statistics (CPU, disk usage, etc.) from mail
-processes (IMAP, POP3, LMTP, etc.) to the stats process. The stats process can
-later be queried what's going on in the system. With imap_stats plugin you can
-get per-command level statistics for IMAP commands.
-
-There are different "zoom levels" you can look at the statistics:
+Dovecot v2.1+ supports gathering/reporting mail (IMAP, POP3, LDA, LMTP, etc.)
+statistics. There are different "zoom levels" you can look at the statistics:
 
  * command: Per-IMAP command
  * session: Per IMAP/POP3 connection
@@ -81,8 +77,6 @@ Statistics gathered using the 'getrusage()' system call:
 
  * user_cpu: User CPU (seconds.microseconds)
  * sys_cpu: System CPU (seconds.microseconds)
- * clock_time: Wall-clock time (seconds.microseconds). Doesn't include time
-   spent waiting in ioloop. (v2.2.11+)
  * min_faults: Minor page faults (page reclaims)
  * maj_faults: Major page faults
  * vol_cs: Voluntary context switches
@@ -128,10 +122,6 @@ optional sort field is one of:
  * disk: disk_input and disk_output summed up (default)
  * cpu: user_cpu and sys_cpu summed up
  * any other statistics field
-
-This "top" isn't very good, but a much better one can be found as a Perl
-script:stats-top.pl [http://www.dovecot.org/tools/stats-top.pl], which also
-requires stats.pl [http://www.dovecot.org/tools/stats.pl]
 
 dump
 ----
@@ -192,4 +182,4 @@ EXPORT<tab>session<tab>connected<lf>
 
 The output will be identical to 'doveadm stats dump session connected' command.
 
-(This file was created from the wiki on 2014-02-11 22:29)
+(This file was created from the wiki on 2013-11-24 04:42)

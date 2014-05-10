@@ -9,7 +9,10 @@
 
 string_t *str_new(pool_t pool, size_t initial_size)
 {
-	return buffer_create_dynamic(pool, initial_size);
+	/* never allocate a 0 byte size buffer. this is especially important
+	   when str_c() is called on an empty string from a different stack
+	   frame (see the comment in buffer.c about this). */
+	return buffer_create_dynamic(pool, I_MAX(initial_size, 1));
 }
 
 string_t *str_new_const(pool_t pool, const char *str, size_t len)
@@ -102,6 +105,11 @@ void str_append_n(string_t *str, const void *cstr, size_t max_len)
 		len++;
 
 	buffer_append(str, cstr, len);
+}
+
+void str_append_data(string_t *str, const void *data, size_t len)
+{
+	buffer_append(str, data, len);
 }
 
 void str_append_c(string_t *str, unsigned char chr)

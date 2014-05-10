@@ -304,8 +304,9 @@ static const char *maildir_mf_get_path(struct maildir_save_context *ctx,
 	return t_strdup_printf("%s/%s", dir, fname);
 }
 
-const char *maildir_save_file_get_path(struct mailbox_transaction_context *t,
-				       uint32_t seq)
+
+static struct maildir_filename *
+maildir_save_get_mf(struct mailbox_transaction_context *t, uint32_t seq)
 {
 	struct maildir_save_context *save_ctx =
 		(struct maildir_save_context *)t->save_ctx;
@@ -320,6 +321,24 @@ const char *maildir_save_file_get_path(struct mailbox_transaction_context *t,
 		i_assert(mf != NULL);
 		seq--;
 	}
+	return mf;
+}
+
+int maildir_save_file_get_size(struct mailbox_transaction_context *t,
+			       uint32_t seq, bool vsize, uoff_t *size_r)
+{
+	struct maildir_filename *mf = maildir_save_get_mf(t, seq);
+
+	*size_r = vsize ? mf->vsize : mf->size;
+	return *size_r == (uoff_t)-1 ? -1 : 0;
+}
+
+const char *maildir_save_file_get_path(struct mailbox_transaction_context *t,
+				       uint32_t seq)
+{
+	struct maildir_save_context *save_ctx =
+		(struct maildir_save_context *)t->save_ctx;
+	struct maildir_filename *mf = maildir_save_get_mf(t, seq);
 
 	return maildir_mf_get_path(save_ctx, mf);
 }
@@ -587,6 +606,9 @@ static int maildir_save_finish_real(struct mail_save_context *_ctx)
 		/* e.g. zlib plugin was used. the "physical size" must be in
 		   the maildir filename, since stat() will return wrong size */
 		ctx->file_last->preserve_filename = FALSE;
+		/* preserve the GUID if needed */
+		if (ctx->file_last->guid == NULL)
+			ctx->file_last->guid = ctx->file_last->dest_basename;
 		/* reset the base name as well, just in case there's a
 		   ,W=vsize */
 		ctx->file_last->dest_basename = ctx->file_last->tmp_name;
@@ -816,25 +838,33 @@ maildir_filename_check_conflicts(struct maildir_save_context *ctx,
 				 struct maildir_filename *mf,
 				 struct maildir_filename *prev_mf)
 {
-	uoff_t size;
+	uoff_t size, vsize;
 
 	if (!ctx->locked_uidlist_refresh && ctx->locked) {
 		(void)maildir_uidlist_refresh(ctx->mbox->uidlist);
 		ctx->locked_uidlist_refresh = TRUE;
 	}
 
-	if (!ctx->locked_uidlist_refresh ||
+	if (!maildir_filename_get_size(mf->dest_basename,
+				       MAILDIR_EXTRA_FILE_SIZE, &size))
+		size = (uoff_t)-1;
+	if (!maildir_filename_get_size(mf->dest_basename,
+				       MAILDIR_EXTRA_VIRTUAL_SIZE, &vsize))
+		vsize = (uoff_t)-1;
+
+	if (size != mf->size || vsize != mf->vsize ||
+	    !ctx->locked_uidlist_refresh ||
 	    (prev_mf != NULL && maildir_filename_has_conflict(mf, prev_mf)) ||
 	    maildir_uidlist_get_full_filename(ctx->mbox->uidlist,
 					      mf->dest_basename) != NULL) {
-		/* file already exists. give it another name.
+		/* a) dest_basename didn't contain the (correct) size/vsize.
+		   they're required for good performance.
+
+		   b) file already exists. give it another name.
 		   but preserve the size/vsize in the filename if possible */
-		if (maildir_filename_get_size(mf->dest_basename,
-					      MAILDIR_EXTRA_FILE_SIZE, &size))
+		if (mf->size == (uoff_t)-1)
 			mf->size = size;
-		if (maildir_filename_get_size(mf->dest_basename,
-					      MAILDIR_EXTRA_VIRTUAL_SIZE,
-					      &size))
+		if (mf->vsize == (uoff_t)-1)
 			mf->vsize = size;
 
 		mf->guid = mf->dest_basename;
@@ -867,7 +897,8 @@ maildir_save_move_files_to_newcur(struct maildir_save_context *ctx)
 		array_append(&files, &mf, 1);
 	array_sort(&files, maildir_filename_dest_basename_cmp);
 
-	new_changed = cur_changed = FALSE; prev_mf = FALSE;
+	new_changed = cur_changed = FALSE;
+	prev_mf = NULL;
 	array_foreach(&files, mfp) {
 		mf = *mfp;
 		T_BEGIN {

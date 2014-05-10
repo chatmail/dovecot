@@ -49,7 +49,8 @@ struct dsync_brain {
 	pool_t pool;
 	struct mail_user *user;
 	struct dsync_ibc *ibc;
-	struct mail_namespace *sync_ns;
+	const char *process_title_prefix;
+	ARRAY(struct mail_namespace *) sync_namespaces;
 	const char *sync_box;
 	guid_128_t sync_box_guid;
 	const char *const *exclude_mailboxes;
@@ -98,6 +99,7 @@ struct dsync_brain {
 	unsigned int no_mail_sync:1;
 	unsigned int no_backup_overwrite:1;
 	unsigned int changes_during_sync:1;
+	unsigned int require_full_resync:1;
 	unsigned int verbose_proctitle:1;
 	unsigned int failed:1;
 };
@@ -115,7 +117,7 @@ int dsync_brain_mailbox_tree_sync_change(struct dsync_brain *brain,
 void dsync_brain_sync_mailbox_deinit(struct dsync_brain *brain);
 int dsync_brain_mailbox_alloc(struct dsync_brain *brain, const guid_128_t guid,
 			      struct mailbox **box_r, const char **error_r);
-void dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
+bool dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
 				    struct mailbox *box,
 				    const struct dsync_mailbox *local_box,
 				    const struct dsync_mailbox *remote_box);

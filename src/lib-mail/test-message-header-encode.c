@@ -168,6 +168,8 @@ static void test_message_header_encode(void)
 		"a ää ä b", "a =?utf-8?b?w6TDpCDDpA==?= b",
 		"ä a ä", "=?utf-8?q?=C3=A4_a_=C3=A4?=",
 		"ää a ä", "=?utf-8?b?w6TDpCBhIMOk?=",
+		"foo\001bar", "=?utf-8?q?foo=01bar?=",
+		"\x01\x02\x03\x04\x05\x06\x07\x08", "=?utf-8?b?AQIDBAUGBwg=?="
 	};                          
 	string_t *str = t_str_new(128);
 	unsigned int i;
@@ -181,12 +183,28 @@ static void test_message_header_encode(void)
 	test_end();
 }
 
+static void test_message_header_encode_data(void)
+{
+	string_t *str = t_str_new(128);
+	static unsigned char nuls[10] = { 0, };
+
+	test_begin("message header encode data");
+	message_header_encode_data(nuls, 1, str);
+	test_assert(strcmp(str_c(str), "=?utf-8?q?=00?=") == 0);
+
+	str_truncate(str, 0);
+	message_header_encode_data(nuls, sizeof(nuls), str);
+	test_assert(strcmp(str_c(str), "=?utf-8?b?AAAAAAAAAAAAAA==?=") == 0);
+	test_end();
+}
+
 int main(void)
 {
 	static void (*test_functions[])(void) = {
 		test_message_header_encode_q,
 		test_message_header_encode_b,
 		test_message_header_encode,
+		test_message_header_encode_data,
 		NULL
 	};
 	return test_run(test_functions);

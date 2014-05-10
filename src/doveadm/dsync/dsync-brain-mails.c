@@ -22,6 +22,7 @@ static bool dsync_brain_master_sync_recv_mailbox(struct dsync_brain *brain)
 {
 	const struct dsync_mailbox *dsync_box;
 	enum dsync_ibc_recv_ret ret;
+	bool resync;
 
 	i_assert(brain->master_brain);
 
@@ -42,19 +43,29 @@ static bool dsync_brain_master_sync_recv_mailbox(struct dsync_brain *brain)
 	if (dsync_box->mailbox_lost) {
 		/* remote lost the mailbox. it's probably already deleted, but
 		   verify it on next sync just to be sure */
+		brain->changes_during_sync = TRUE;
+		brain->require_full_resync = TRUE;
 		dsync_brain_sync_mailbox_deinit(brain);
 		return TRUE;
 	}
-	dsync_brain_mailbox_update_pre(brain, brain->box,
-				       &brain->local_dsync_box, dsync_box);
+	resync = !dsync_brain_mailbox_update_pre(brain, brain->box,
+						 &brain->local_dsync_box,
+						 dsync_box);
 
 	if (!dsync_boxes_need_sync(brain, &brain->local_dsync_box, dsync_box)) {
 		/* no fields appear to have changed, skip this mailbox */
 		dsync_brain_sync_mailbox_deinit(brain);
 		return TRUE;
 	}
-	if (dsync_brain_sync_mailbox_open(brain, dsync_box) < 0)
+	if ((ret = dsync_brain_sync_mailbox_open(brain, dsync_box)) < 0)
 		return TRUE;
+	if (ret == 0 || resync) {
+		brain->changes_during_sync = TRUE;
+		brain->require_full_resync = TRUE;
+		brain->failed = TRUE;
+		dsync_brain_sync_mailbox_deinit(brain);
+		return TRUE;
+	}
 	dsync_brain_sync_init_box_states(brain);
 	return TRUE;
 }
@@ -200,11 +211,14 @@ static void dsync_brain_sync_half_finished(struct dsync_brain *brain)
 			brain->local_dsync_box.highest_modseq;
 		state.last_common_pvt_modseq =
 			brain->local_dsync_box.highest_pvt_modseq;
+		state.last_messages_count =
+			brain->local_dsync_box.messages_count;
 	} else {
 		if (dsync_mailbox_import_deinit(&brain->box_importer, TRUE,
 						&state.last_common_uid,
 						&state.last_common_modseq,
 						&state.last_common_pvt_modseq,
+						&state.last_messages_count,
 						&state.changes_during_sync) < 0) {
 			brain->failed = TRUE;
 			return;

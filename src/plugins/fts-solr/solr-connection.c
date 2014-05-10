@@ -260,8 +260,9 @@ static void solr_lookup_add_doc(struct solr_lookup_xml_context *ctx)
 	}
 	result = solr_result_get(ctx, box_id);
 
-	seq_range_array_add(&result->uids, ctx->uid);
-	if (ctx->score != 0) {
+	if (seq_range_array_add(&result->uids, ctx->uid)) {
+		/* duplicate result */
+	} else if (ctx->score != 0) {
 		score = array_append_space(&result->scores);
 		score->uid = ctx->uid;
 		score->score = ctx->score;
@@ -390,8 +391,8 @@ solr_connection_select_response(const struct http_response *response,
 
 	i_stream_ref(response->payload);
 	conn->payload = response->payload;
-	conn->io = io_add(i_stream_get_fd(response->payload), IO_READ,
-			  solr_connection_payload_input, conn);
+	conn->io = io_add_istream(response->payload,
+				  solr_connection_payload_input, conn);
 	solr_connection_payload_input(conn);
 }
 
@@ -447,17 +448,9 @@ static void
 solr_connection_update_response(const struct http_response *response,
 				struct solr_connection *conn)
 {
-	if (response == NULL) {
-		/* request failed */
-		i_error("fts_solr: HTTP POST request failed");
-		conn->request_status = -1;
-		return;
-	}
-
 	if (response->status / 100 != 2) {
 		i_error("fts_solr: Indexing failed: %s", response->reason);
 		conn->request_status = -1;
-		return;
 	}
 }
 

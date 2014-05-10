@@ -223,4 +223,4 @@ If the recipient address exists (status=deliverable) Postfix accepts the mail.
 *Info:* you can not use "reject_unverified_recipient" with "pipe" so this
 doesn't work with the Dovecot LDA "deliver".
 
-(This file was created from the wiki on 2014-02-11 22:29)
+(This file was created from the wiki on 2013-11-24 04:42)

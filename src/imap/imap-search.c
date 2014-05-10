@@ -229,24 +229,43 @@ static void
 imap_search_send_partial(struct imap_search_context *ctx, string_t *str)
 {
 	struct seq_range *range;
-	unsigned int i, count;
+	uint32_t n, diff;
+	unsigned int i, count, delete_count;
 
 	str_printfa(str, " PARTIAL (%u:%u ", ctx->partial1, ctx->partial2);
+	ctx->partial1--;
+	ctx->partial2--;
 
 	/* we need to be able to handle non-sorted seq ranges (for SORT
 	   replies), so do this ourself instead of using seq_range_array_*()
 	   functions. */
 	range = array_get_modifiable(&ctx->result, &count);
-	for (i = count; i > 0; ) {
-		i--;
-		if (range[i].seq1 < ctx->partial1)
-			range[i].seq1 = ctx->partial1;
-		if (range[i].seq2 > ctx->partial2)
-			range[i].seq2 = ctx->partial2;
-		if (range[i].seq1 > range[i].seq2) {
-			array_delete(&ctx->result, i, 1);
-			range = array_get_modifiable(&ctx->result, &count);
+	/* delete everything up to partial1 */
+	delete_count = 0;
+	for (i = n = 0; i < count; i++) {
+		diff = range[i].seq2 - range[i].seq1;
+		if (n + diff >= ctx->partial1) {
+			range[i].seq1 += ctx->partial1 - n;
+			delete_count = i;
+			break;
 		}
+		n += diff + 1;
+	}
+	if (i == count) {
+		/* partial1 points past the result */
+		array_clear(&ctx->result);
+	} else {
+		/* delete everything after partial2 */
+		for (n = ctx->partial1; i < count; i++) {
+			diff = range[i].seq2 - range[i].seq1;
+			if (n + diff >= ctx->partial2) {
+				range[i].seq2 = range[i].seq1 + (ctx->partial2 - n);
+				array_delete(&ctx->result, i + 1, count-(i+1));
+				break;
+			}
+			n += diff + 1;
+		}
+		array_delete(&ctx->result, 0, delete_count);
 	}
 
 	if (array_count(&ctx->result) == 0) {

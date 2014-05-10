@@ -70,6 +70,7 @@ liblib_la_SOURCES = \
 	istream-seekable.c \
 	istream-sized.c \
 	istream-tee.c \
+	istream-timeout.c \
 	ioloop.c \
 	ioloop-iolist.c \
 	ioloop-notify-none.c \
@@ -197,6 +198,7 @@ headers = \
 	istream-seekable.h \
 	istream-sized.h \
 	istream-tee.h \
+	istream-timeout.h \
 	ioloop.h \
 	ioloop-iolist.h \
 	ioloop-private.h \
@@ -273,6 +275,7 @@ test_lib_SOURCES = \
 	test-buffer.c \
 	test-crc32.c \
 	test-hash-format.c \
+	test-hash-method.c \
 	test-hex-binary.c \
 	test-iso8601-date.c \
 	test-istream-base64-decoder.c \

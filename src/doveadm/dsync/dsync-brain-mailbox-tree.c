@@ -17,11 +17,6 @@ static void dsync_brain_check_namespaces(struct dsync_brain *brain)
 
 	i_assert(brain->hierarchy_sep == '\0');
 
-	if (brain->sync_ns != NULL) {
-		brain->hierarchy_sep = mail_namespace_get_sep(brain->sync_ns);
-		return;
-	}
-
 	for (ns = brain->user->namespaces; ns != NULL; ns = ns->next) {
 		if (!dsync_brain_want_namespace(brain, ns))
 			continue;
@@ -135,7 +130,15 @@ dsync_namespace_match_parts(struct mail_namespace *ns,
 			return FALSE;
 		prefix += part_len + 1;
 	}
-	return *name_parts != NULL;
+	if (*name_parts != NULL) {
+		/* namespace prefix found with a mailbox */
+		return TRUE;
+	}
+	if (*prefix == '\0') {
+		/* namespace prefix itself matched */
+		return TRUE;
+	}
+	return FALSE;
 }
 
 static struct mail_namespace *
@@ -384,7 +387,14 @@ dsync_brain_mailbox_tree_add_delete(struct dsync_mailbox_tree *tree,
 		memcpy(other_node->mailbox_guid, node->mailbox_guid,
 		       sizeof(other_node->mailbox_guid));
 	}
-	i_assert(other_node->ns == NULL || other_node->ns == node->ns);
+	if (other_node->ns != node->ns && other_node->ns != NULL) {
+		/* namespace mismatch for this node. this shouldn't happen
+		   normally, but especially during some misconfigurations it's
+		   possible that one side has created mailboxes that conflict
+		   with another namespace's prefix. since we're here because
+		   one of the mailboxes was deleted, we'll just ignore this. */
+		return;
+	}
 	other_node->ns = node->ns;
 	if (other_del->type != DSYNC_MAILBOX_DELETE_TYPE_UNSUBSCRIBE)
 		other_node->existence = DSYNC_MAILBOX_NODE_DELETED;

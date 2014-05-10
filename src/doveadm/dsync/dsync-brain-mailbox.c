@@ -47,12 +47,6 @@ int dsync_brain_mailbox_alloc(struct dsync_brain *brain, const guid_128_t guid,
 	int ret;
 
 	*box_r = NULL;
-	if (brain->sync_ns != NULL) {
-		ret = ns_mailbox_try_alloc(brain->sync_ns, guid, box_r, error_r);
-		if (ret < 0)
-			brain->failed = TRUE;
-		return ret;
-	}
 
 	for (ns = brain->user->namespaces; ns != NULL; ns = ns->next) {
 		if (!dsync_brain_want_namespace(brain, ns))
@@ -202,9 +196,11 @@ dsync_brain_sync_mailbox_init_remote(struct dsync_brain *brain,
 int dsync_brain_sync_mailbox_open(struct dsync_brain *brain,
 				  const struct dsync_mailbox *remote_dsync_box)
 {
+	struct mailbox_status status;
 	enum dsync_mailbox_exporter_flags exporter_flags = 0;
 	uint32_t last_common_uid, highest_wanted_uid;
 	uint64_t last_common_modseq, last_common_pvt_modseq;
+	int ret;
 
 	i_assert(brain->log_scan == NULL);
 	i_assert(brain->box_exporter == NULL);
@@ -214,16 +210,39 @@ int dsync_brain_sync_mailbox_open(struct dsync_brain *brain,
 	last_common_pvt_modseq = brain->mailbox_state.last_common_pvt_modseq;
 	highest_wanted_uid = last_common_uid == 0 ?
 		(uint32_t)-1 : last_common_uid;
-	if (dsync_transaction_log_scan_init(brain->box->view,
-					    brain->box->view_pvt,
-					    highest_wanted_uid,
-					    last_common_modseq,
-					    last_common_pvt_modseq,
-					    &brain->log_scan) < 0) {
+	ret = dsync_transaction_log_scan_init(brain->box->view,
+					      brain->box->view_pvt,
+					      highest_wanted_uid,
+					      last_common_modseq,
+					      last_common_pvt_modseq,
+					      &brain->log_scan);
+	if (ret < 0) {
 		i_error("Failed to read transaction log for mailbox %s",
 			mailbox_get_vname(brain->box));
 		brain->failed = TRUE;
 		return -1;
+	}
+
+	if (last_common_uid != 0) {
+		mailbox_get_open_status(brain->box, STATUS_UIDNEXT |
+					STATUS_HIGHESTMODSEQ |
+					STATUS_HIGHESTPVTMODSEQ, &status);
+		if (status.uidnext < last_common_uid ||
+		    status.highest_modseq < last_common_modseq ||
+		    status.highest_pvt_modseq < last_common_pvt_modseq) {
+			/* last_common_* is higher than our current ones.
+			   incremental sync state is stale, we need to do
+			   a full resync */
+			ret = 0;
+		}
+	}
+	if (ret == 0) {
+		i_warning("Failed to do incremental sync for mailbox %s, "
+			  "retry with a full sync",
+			  mailbox_get_vname(brain->box));
+		brain->changes_during_sync = TRUE;
+		brain->require_full_resync = TRUE;
+		return 0;
 	}
 
 	if (!brain->mail_requests)
@@ -238,13 +257,17 @@ int dsync_brain_sync_mailbox_open(struct dsync_brain *brain,
 					  last_common_uid,
 					  exporter_flags);
 	dsync_brain_sync_mailbox_init_remote(brain, remote_dsync_box);
-	return 0;
+	return 1;
 }
 
 void dsync_brain_sync_mailbox_deinit(struct dsync_brain *brain)
 {
 	i_assert(brain->box != NULL);
 
+	if (brain->require_full_resync) {
+		brain->mailbox_state.last_uidvalidity = 0;
+		brain->require_full_resync = FALSE;
+	}
 	array_append(&brain->remote_mailbox_states, &brain->mailbox_state, 1);
 	if (brain->box_exporter != NULL) {
 		const char *error;
@@ -254,7 +277,7 @@ void dsync_brain_sync_mailbox_deinit(struct dsync_brain *brain)
 		(void)dsync_mailbox_export_deinit(&brain->box_exporter, &error);
 	}
 	if (brain->box_importer != NULL) {
-		uint32_t last_common_uid;
+		uint32_t last_common_uid, last_messages_count;
 		uint64_t last_common_modseq, last_common_pvt_modseq;
 		bool changes_during_sync;
 
@@ -264,6 +287,7 @@ void dsync_brain_sync_mailbox_deinit(struct dsync_brain *brain)
 						  &last_common_uid,
 						  &last_common_modseq,
 						  &last_common_pvt_modseq,
+						  &last_messages_count,
 						  &changes_during_sync);
 	}
 	if (brain->log_scan != NULL)
@@ -335,7 +359,8 @@ dsync_brain_has_mailbox_state_changed(struct dsync_brain *brain,
 		state->last_uidvalidity != dsync_box->uid_validity ||
 		state->last_common_uid+1 != dsync_box->uid_next ||
 		state->last_common_modseq != dsync_box->highest_modseq ||
-		state->last_common_pvt_modseq != dsync_box->highest_pvt_modseq;
+		state->last_common_pvt_modseq != dsync_box->highest_pvt_modseq ||
+		state->last_messages_count != dsync_box->messages_count;
 }
 
 static int
@@ -380,6 +405,17 @@ dsync_brain_try_next_mailbox(struct dsync_brain *brain, struct mailbox **box_r,
 		/* if mailbox's last_common_* state equals the current state,
 		   we can skip the mailbox */
 		if (!dsync_brain_has_mailbox_state_changed(brain, &dsync_box)) {
+			if (brain->debug) {
+				i_debug("brain %c: Skipping mailbox %s with unchanged state "
+					"uidvalidity=%u uidnext=%u highestmodseq=%llu highestpvtmodseq=%llu messages=%u",
+					brain->master_brain ? 'M' : 'S',
+					guid_128_to_string(dsync_box.mailbox_guid),
+					dsync_box.uid_validity,
+					dsync_box.uid_next,
+					(unsigned long long)dsync_box.highest_modseq,
+					(unsigned long long)dsync_box.highest_pvt_modseq,
+					dsync_box.messages_count);
+			}
 			mailbox_free(&box);
 			return 0;
 		}
@@ -537,13 +573,14 @@ dsync_cache_fields_update(const struct dsync_mailbox *local_box,
 	}
 }
 
-void dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
+bool dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
 				    struct mailbox *box,
 				    const struct dsync_mailbox *local_box,
 				    const struct dsync_mailbox *remote_box)
 {
 	struct mailbox_update update;
 	const struct dsync_mailbox_state *state;
+	bool ret = TRUE;
 
 	memset(&update, 0, sizeof(update));
 
@@ -561,7 +598,7 @@ void dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
 			   session, because the other side already started
 			   sending mailbox changes, but not for all mails. */
 			dsync_mailbox_state_remove(brain, local_box->mailbox_guid);
-			// FIXME: handle this properly
+			ret = FALSE;
 		}
 	}
 
@@ -570,7 +607,7 @@ void dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
 	if (update.uid_validity == 0 &&
 	    update.cache_updates == NULL) {
 		/* no changes */
-		return;
+		return ret;
 	}
 
 	if (mailbox_update(box, &update) < 0) {
@@ -579,6 +616,7 @@ void dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
 			mailbox_get_last_error(box, NULL));
 		brain->failed = TRUE;
 	}
+	return ret;
 }
 
 static void
@@ -607,6 +645,7 @@ bool dsync_brain_slave_recv_mailbox(struct dsync_brain *brain)
 	struct mailbox *box;
 	const char *error;
 	int ret;
+	bool resync;
 
 	i_assert(!brain->master_brain);
 	i_assert(brain->box == NULL);
@@ -664,27 +703,46 @@ bool dsync_brain_slave_recv_mailbox(struct dsync_brain *brain)
 			return TRUE;
 		}
 		/* another process just deleted this mailbox? */
+		if (brain->debug) {
+			i_debug("brain %c: Skipping lost mailbox %s",
+				brain->master_brain ? 'M' : 'S',
+				guid_128_to_string(dsync_box->mailbox_guid));
+		}
 		dsync_brain_slave_send_mailbox_lost(brain, dsync_box);
 		return TRUE;
 	}
 	i_assert(local_dsync_box.uid_validity != 0);
 	i_assert(memcmp(dsync_box->mailbox_guid, local_dsync_box.mailbox_guid,
 			sizeof(dsync_box->mailbox_guid)) == 0);
-	dsync_ibc_send_mailbox(brain->ibc, &local_dsync_box);
 
-	dsync_brain_mailbox_update_pre(brain, box, &local_dsync_box, dsync_box);
+	resync = !dsync_brain_mailbox_update_pre(brain, box, &local_dsync_box,
+						 dsync_box);
 
 	if (!dsync_boxes_need_sync(brain, &local_dsync_box, dsync_box)) {
 		/* no fields appear to have changed, skip this mailbox */
+		if (brain->debug) {
+			i_debug("brain %c: Skipping unchanged mailbox %s",
+				brain->master_brain ? 'M' : 'S',
+				guid_128_to_string(dsync_box->mailbox_guid));
+		}
+		dsync_ibc_send_mailbox(brain->ibc, &local_dsync_box);
 		mailbox_free(&box);
 		return TRUE;
 	}
 
 	/* start export/import */
 	dsync_brain_sync_mailbox_init(brain, box, &local_dsync_box, FALSE);
-	if (dsync_brain_sync_mailbox_open(brain, dsync_box) < 0)
+	if ((ret = dsync_brain_sync_mailbox_open(brain, dsync_box)) < 0)
 		return TRUE;
+	if (ret == 0 || resync) {
+		brain->changes_during_sync = TRUE;
+		brain->require_full_resync = TRUE;
+		dsync_brain_sync_mailbox_deinit(brain);
+		dsync_brain_slave_send_mailbox_lost(brain, dsync_box);
+		return TRUE;
+	}
 
+	dsync_ibc_send_mailbox(brain->ibc, &local_dsync_box);
 	brain->state = DSYNC_STATE_SYNC_MAILS;
 	return TRUE;
 }

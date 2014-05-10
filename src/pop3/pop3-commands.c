@@ -269,7 +269,6 @@ bool client_update_mails(struct client *client)
 	ctx = mailbox_search_init(client->trans, search_args, NULL, 0, NULL);
 	mail_search_args_unref(&search_args);
 
-	msgnum = 0;
 	while (mailbox_search_next(ctx, &mail)) {
 		if (seq_range_exists(&deleted_msgs, mail->seq))
 			client_expunge(client, mail);
@@ -826,7 +825,7 @@ static void client_uidls_save(struct client *client)
 				      client->messages_count+1);
 	for (msgnum = 0; msgnum < client->messages_count; msgnum++) {
 		client->message_uidls[msgnum] =
-			seq_uidls[msgnum_to_seq(client, msgnum)];
+			seq_uidls[msgnum_to_seq(client, msgnum) - 1];
 	}
 	i_free(seq_uidls);
 }
@@ -838,7 +837,8 @@ cmd_uidl_init(struct client *client, uint32_t seq)
 	struct mail_search_args *search_args;
 	enum mail_fetch_field wanted_fields;
 
-	if (client->message_uidls_save && client->message_uidls == NULL)
+	if (client->message_uidls_save && client->message_uidls == NULL &&
+	    client->messages_count > 0)
 		client_uidls_save(client);
 
 	ctx = i_new(struct cmd_uidl_context, 1);

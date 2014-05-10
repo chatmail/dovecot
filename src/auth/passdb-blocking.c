@@ -55,7 +55,7 @@ auth_worker_reply_parse(struct auth_request *request, const char *reply)
 		}
 	}
 
-	auth_request_log_error(request, "blocking",
+	auth_request_log_error(request, AUTH_SUBSYS_DB,
 		"Received invalid reply from worker: %s", reply);
 	return PASSDB_RESULT_INTERNAL_FAILURE;
 }
@@ -83,7 +83,7 @@ void passdb_blocking_verify_plain(struct auth_request *request)
 	auth_request_export(request, str);
 
 	auth_request_ref(request);
-	auth_worker_call(request->pool, str_c(str),
+	auth_worker_call(request->pool, request->user, str_c(str),
 			 verify_plain_callback, request);
 }
 
@@ -98,7 +98,7 @@ static bool lookup_credentials_callback(const char *reply, void *context)
 		password = request->passdb_password;
 		scheme = password_get_scheme(&password);
 		if (scheme == NULL) {
-			auth_request_log_error(request, "blocking",
+			auth_request_log_error(request, AUTH_SUBSYS_DB,
 				"Received reply from worker without "
 				"password scheme");
 			result = PASSDB_RESULT_INTERNAL_FAILURE;
@@ -123,7 +123,7 @@ void passdb_blocking_lookup_credentials(struct auth_request *request)
 	auth_request_export(request, str);
 
 	auth_request_ref(request);
-	auth_worker_call(request->pool, str_c(str),
+	auth_worker_call(request->pool, request->user, str_c(str),
 			 lookup_credentials_callback, request);
 }
 
@@ -151,6 +151,6 @@ void passdb_blocking_set_credentials(struct auth_request *request,
 	auth_request_export(request, str);
 
 	auth_request_ref(request);
-	auth_worker_call(request->pool, str_c(str),
+	auth_worker_call(request->pool, request->user, str_c(str),
 			 set_credentials_callback, request);
 }

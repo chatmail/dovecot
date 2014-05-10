@@ -124,7 +124,7 @@ struct auth_request {
 	unsigned int prefer_plain_credentials:1;
 	unsigned int in_delayed_failure_queue:1;
 	unsigned int removed_from_handler:1;
-	unsigned int snapshot_has_userdb_reply:1;
+	unsigned int snapshot_have_userdb_prefetch_set:1;
 	/* each passdb lookup can update the current success-status using the
 	   result_* rules. the authentication succeeds only if this is TRUE
 	   at the end. mechanisms that don't require passdb, but do a passdb
@@ -149,9 +149,13 @@ extern unsigned int auth_request_state_count[AUTH_REQUEST_STATE_MAX];
 #define AUTH_REQUEST_VAR_TAB_USER_IDX 0
 #define AUTH_REQUEST_VAR_TAB_USERNAME_IDX 1
 #define AUTH_REQUEST_VAR_TAB_DOMAIN_IDX 2
-#define AUTH_REQUEST_VAR_TAB_COUNT 27
+#define AUTH_REQUEST_VAR_TAB_COUNT 30
 extern const struct var_expand_table
 auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_COUNT+1];
+
+extern const char auth_default_subsystems[2];
+#define AUTH_SUBSYS_DB &auth_default_subsystems[0]
+#define AUTH_SUBSYS_MECH &auth_default_subsystems[1]
 
 struct auth_request *
 auth_request_new(const struct mech_module *mech);

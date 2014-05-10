@@ -620,12 +620,10 @@ bool mail_storage_set_error_from_errno(struct mail_storage *storage)
 }
 
 const struct mailbox_settings *
-mailbox_settings_find(struct mail_user *user, const char *vname)
+mailbox_settings_find(struct mail_namespace *ns, const char *vname)
 {
 	struct mailbox_settings *const *box_set;
-	struct mail_namespace *ns;
 
-	ns = mail_namespace_find(user->namespaces, vname);
 	if (!array_is_created(&ns->set->mailboxes))
 		return NULL;
 
@@ -687,7 +685,7 @@ struct mailbox *mailbox_alloc(struct mailbox_list *list, const char *vname,
 		}
 
 		box = storage->v.mailbox_alloc(storage, new_list, vname, flags);
-		box->set = mailbox_settings_find(storage->user, vname);
+		box->set = mailbox_settings_find(new_list->ns, vname);
 		box->open_error = open_error;
 		if (open_error != 0)
 			mail_storage_set_error(storage, open_error, errstr);
@@ -1239,18 +1237,25 @@ int mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 	box->creating = TRUE;
 	ret = box->v.create_box(box, update, directory);
 	box->creating = FALSE;
+	if (ret == 0)
+		box->list->guid_cache_updated = TRUE;
 	return ret;
 }
 
 int mailbox_update(struct mailbox *box, const struct mailbox_update *update)
 {
+	int ret;
+
 	i_assert(update->min_next_uid == 0 ||
 		 update->min_first_recent_uid == 0 ||
 		 update->min_first_recent_uid <= update->min_next_uid);
 
 	if (mailbox_verify_existing_name(box) < 0)
 		return -1;
-	return box->v.update_box(box, update);
+	ret = box->v.update_box(box, update);
+	if (!guid_128_is_empty(update->mailbox_guid))
+		box->list->guid_cache_invalidated = TRUE;
+	return ret;
 }
 
 int mailbox_mark_index_deleted(struct mailbox *box, bool del)
@@ -1425,7 +1430,11 @@ int mailbox_rename(struct mailbox *src, struct mailbox *dest)
 		return -1;
 	}
 
-	return src->v.rename_box(src, dest);
+	if (src->v.rename_box(src, dest) < 0)
+		return -1;
+	src->list->guid_cache_invalidated = TRUE;
+	dest->list->guid_cache_invalidated = TRUE;
+	return 0;
 }
 
 int mailbox_set_subscribed(struct mailbox *box, bool set)
@@ -2070,7 +2079,10 @@ int mailbox_save_finish(struct mail_save_context **_ctx)
 	}
 	*_ctx = NULL;
 
+	ctx->finishing = TRUE;
 	ret = t->box->v.save_finish(ctx);
+	ctx->finishing = FALSE;
+
 	if (ret == 0 && !copying_via_save) {
 		if (pvt_flags != 0)
 			mailbox_save_add_pvt_flags(t, pvt_flags);
@@ -2091,7 +2103,7 @@ void mailbox_save_cancel(struct mail_save_context **_ctx)
 
 	*_ctx = NULL;
 	ctx->transaction->box->v.save_cancel(ctx);
-	if (keywords != NULL)
+	if (keywords != NULL && !ctx->finishing)
 		mailbox_keywords_unref(&keywords);
 	if (ctx->dest_mail != NULL) {
 		/* the dest_mail is no longer valid. if we're still saving
@@ -2116,7 +2128,7 @@ int mailbox_copy(struct mail_save_context **_ctx, struct mail *mail)
 	struct mailbox_transaction_context *t = ctx->transaction;
 	struct mail_keywords *keywords = ctx->data.keywords;
 	enum mail_flags pvt_flags = ctx->data.pvt_flags;
-	struct mail *real_mail;
+	struct mail *backend_mail;
 	int ret;
 
 	*_ctx = NULL;
@@ -2129,8 +2141,13 @@ int mailbox_copy(struct mail_save_context **_ctx, struct mail *mail)
 
 	/* bypass virtual storage, so hard linking can be used whenever
 	   possible */
-	real_mail = mail_get_real_mail(mail);
-	ret = t->box->v.copy(ctx, real_mail);
+	if (mail_get_backend_mail(mail, &backend_mail) < 0) {
+		mailbox_save_cancel(&ctx);
+		return -1;
+	}
+	ctx->finishing = TRUE;
+	ret = t->box->v.copy(ctx, backend_mail);
+	ctx->finishing = FALSE;
 	if (ret == 0) {
 		if (pvt_flags != 0)
 			mailbox_save_add_pvt_flags(t, pvt_flags);

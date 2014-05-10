@@ -106,6 +106,9 @@ char *t_noalloc_strdup_vprintf(const char *format, va_list args,
 	char *tmp;
 	unsigned int init_size;
 	int ret;
+#ifdef DEBUG
+	int old_errno = errno;
+#endif
 
 	VA_COPY(args2, args);
 
@@ -127,6 +130,10 @@ char *t_noalloc_strdup_vprintf(const char *format, va_list args,
 		ret = vsnprintf(tmp, *size_r, format, args2);
 		i_assert((unsigned int)ret == *size_r-1);
 	}
+#ifdef DEBUG
+	/* we rely on errno not changing. it shouldn't. */
+	i_assert(errno == old_errno);
+#endif
 	return tmp;
 }
 
@@ -359,9 +366,9 @@ int bsearch_strcmp(const char *key, const char *const *member)
 	return strcmp(key, *member);
 }
 
-int i_strcmp_p(const char *const *s1, const char *const *s2)
+int i_strcmp_p(const char *const *p1, const char *const *p2)
 {
-	return strcmp(*s1, *s2);
+	return strcmp(*p1, *p2);
 }
 
 int bsearch_strcasecmp(const char *key, const char *const *member)
@@ -369,9 +376,9 @@ int bsearch_strcasecmp(const char *key, const char *const *member)
 	return strcasecmp(key, *member);
 }
 
-int i_strcasecmp_p(const char *const *s1, const char *const *s2)
+int i_strcasecmp_p(const char *const *p1, const char *const *p2)
 {
-	return strcasecmp(*s1, *s2);
+	return strcasecmp(*p1, *p2);
 }
 
 static char **

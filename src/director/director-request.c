@@ -68,7 +68,7 @@ director_request_get_timeout_error(struct director_request *request,
 		str_printfa(str, ", user refreshed %u secs ago",
 			    (unsigned int)(ioloop_time - user->timestamp));
 	}
-	str_append_c(str, ')');
+	str_printfa(str, "hash=%u)", request->username_hash);
 	return str_c(str);
 }
 
@@ -241,7 +241,7 @@ director_request_existing(struct director_request *request, struct user *user)
 		return TRUE;
 	} else {
 		user->weak = TRUE;
-		director_update_user_weak(dir, dir->self_host, NULL, user);
+		director_update_user_weak(dir, dir->self_host, NULL, NULL, user);
 		request->delay_reason = REQUEST_DELAY_WEAK;
 		dir_debug("request: %u set to weak", request->username_hash);
 		return FALSE;

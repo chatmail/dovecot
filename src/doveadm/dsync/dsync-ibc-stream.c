@@ -81,7 +81,7 @@ static const struct {
 	  .chr = 'S',
 	  .required_keys = "mailbox_guid last_uidvalidity last_common_uid "
 	  	"last_common_modseq last_common_pvt_modseq",
-	  .optional_keys = "changes_during_sync"
+	  .optional_keys = "last_messages_count changes_during_sync"
 	},
 	{ .name = "mailbox_tree_node",
 	  .chr = 'N',
@@ -109,7 +109,7 @@ static const struct {
 	{ .name = "mail_change",
 	  .chr = 'C',
 	  .required_keys = "type uid",
-	  .optional_keys = "guid hdr_hash modseq pvt_modseq save_timestamp "
+	  .optional_keys = "guid hdr_hash modseq pvt_modseq "
 	  	"add_flags remove_flags final_flags "
 	  	"keywords_reset keyword_changes"
 	},
@@ -119,7 +119,7 @@ static const struct {
 	},
 	{ .name = "mail",
 	  .chr = 'M',
-	  .optional_keys = "guid uid pop3_uidl pop3_order received_date stream"
+	  .optional_keys = "guid uid pop3_uidl pop3_order received_date saved_date stream"
 	},
 	{ .name = "mailbox_cache_field",
 	  .chr = 'c',
@@ -134,7 +134,6 @@ struct dsync_ibc_stream {
 	struct dsync_ibc ibc;
 
 	char *name, *temp_path_prefix;
-	int fd_in, fd_out;
 	struct istream *input;
 	struct ostream *output;
 	struct io *io;
@@ -292,7 +291,7 @@ static void dsync_ibc_stream_init(struct dsync_ibc_stream *ibc)
 {
 	unsigned int i;
 
-	ibc->io = io_add(ibc->fd_in, IO_READ, dsync_ibc_stream_input, ibc);
+	ibc->io = io_add_istream(ibc->input, dsync_ibc_stream_input, ibc);
 	o_stream_set_no_error_handling(ibc->output, TRUE);
 	o_stream_set_flush_callback(ibc->output, dsync_ibc_stream_output, ibc);
 	ibc->to = timeout_add(DSYNC_IBC_STREAM_TIMEOUT_MSECS,
@@ -360,6 +359,7 @@ static int dsync_ibc_stream_next_line(struct dsync_ibc_stream *ibc,
 {
 	string_t *error;
 	const char *line;
+	ssize_t ret;
 
 	line = i_stream_next_line(ibc->input);
 	if (line != NULL) {
@@ -367,7 +367,7 @@ static int dsync_ibc_stream_next_line(struct dsync_ibc_stream *ibc,
 		return 1;
 	}
 	/* try reading some */
-	if (i_stream_read(ibc->input) == -1) {
+	if ((ret = i_stream_read(ibc->input)) == -1) {
 		if (ibc->stopped)
 			return -1;
 		error = t_str_new(128);
@@ -386,6 +386,7 @@ static int dsync_ibc_stream_next_line(struct dsync_ibc_stream *ibc,
 		dsync_ibc_stream_stop(ibc);
 		return -1;
 	}
+	i_assert(ret >= 0);
 	*line_r = i_stream_next_line(ibc->input);
 	if (*line_r == NULL) {
 		ibc->has_pending_data = FALSE;
@@ -604,9 +605,9 @@ dsync_ibc_stream_send_handshake(struct dsync_ibc *_ibc,
 	str_append_c(str, items[ITEM_HANDSHAKE].chr);
 	encoder = dsync_serializer_encode_begin(ibc->serializers[ITEM_HANDSHAKE]);
 	dsync_serializer_encode_add(encoder, "hostname", set->hostname);
-	if (set->sync_ns_prefix != NULL) {
+	if (set->sync_ns_prefixes != NULL) {
 		dsync_serializer_encode_add(encoder, "sync_ns_prefix",
-					    set->sync_ns_prefix);
+					    set->sync_ns_prefixes);
 	}
 	if (set->sync_box != NULL)
 		dsync_serializer_encode_add(encoder, "sync_box", set->sync_box);
@@ -700,7 +701,7 @@ dsync_ibc_stream_recv_handshake(struct dsync_ibc *_ibc,
 	ibc->name = i_strdup(set->hostname);
 
 	if (dsync_deserializer_decode_try(decoder, "sync_ns_prefix", &value))
-		set->sync_ns_prefix = p_strdup(pool, value);
+		set->sync_ns_prefixes = p_strdup(pool, value);
 	if (dsync_deserializer_decode_try(decoder, "sync_box", &value))
 		set->sync_box = p_strdup(pool, value);
 	if (dsync_deserializer_decode_try(decoder, "sync_box_guid", &value) &&
@@ -800,6 +801,8 @@ dsync_ibc_stream_send_mailbox_state(struct dsync_ibc *_ibc,
 				    dec2str(state->last_common_modseq));
 	dsync_serializer_encode_add(encoder, "last_common_pvt_modseq",
 				    dec2str(state->last_common_pvt_modseq));
+	dsync_serializer_encode_add(encoder, "last_messages_count",
+				    dec2str(state->last_messages_count));
 	if (state->changes_during_sync)
 		dsync_serializer_encode_add(encoder, "changes_during_sync", "");
 
@@ -845,6 +848,11 @@ dsync_ibc_stream_recv_mailbox_state(struct dsync_ibc *_ibc,
 	value = dsync_deserializer_decode_get(decoder, "last_common_pvt_modseq");
 	if (str_to_uint64(value, &state_r->last_common_pvt_modseq) < 0) {
 		dsync_ibc_input_error(ibc, decoder, "Invalid last_common_pvt_modseq");
+		return DSYNC_IBC_RECV_RET_TRYAGAIN;
+	}
+	if (dsync_deserializer_decode_try(decoder, "last_messages_count", &value) &&
+	    str_to_uint32(value, &state_r->last_messages_count) < 0) {
+		dsync_ibc_input_error(ibc, decoder, "Invalid last_messages_count");
 		return DSYNC_IBC_RECV_RET_TRYAGAIN;
 	}
 	if (dsync_deserializer_decode_try(decoder, "changes_during_sync", &value))
@@ -1500,10 +1508,6 @@ dsync_ibc_stream_send_change(struct dsync_ibc *_ibc,
 		dsync_serializer_encode_add(encoder, "pvt_modseq",
 					    dec2str(change->pvt_modseq));
 	}
-	if (change->save_timestamp != 0) {
-		dsync_serializer_encode_add(encoder, "save_timestamp",
-					    dec2str(change->save_timestamp));
-	}
 	if (change->add_flags != 0) {
 		dsync_serializer_encode_add(encoder, "add_flags",
 			t_strdup_printf("%x", change->add_flags));
@@ -1591,11 +1595,6 @@ dsync_ibc_stream_recv_change(struct dsync_ibc *_ibc,
 	if (dsync_deserializer_decode_try(decoder, "pvt_modseq", &value) &&
 	    str_to_uint64(value, &change->pvt_modseq) < 0) {
 		dsync_ibc_input_error(ibc, decoder, "Invalid pvt_modseq");
-		return DSYNC_IBC_RECV_RET_TRYAGAIN;
-	}
-	if (dsync_deserializer_decode_try(decoder, "save_timestamp", &value) &&
-	    str_to_time(value, &change->save_timestamp) < 0) {
-		dsync_ibc_input_error(ibc, decoder, "Invalid save_timestamp");
 		return DSYNC_IBC_RECV_RET_TRYAGAIN;
 	}
 
@@ -1701,6 +1700,10 @@ dsync_ibc_stream_send_mail(struct dsync_ibc *_ibc,
 		dsync_serializer_encode_add(encoder, "received_date",
 					    dec2str(mail->received_date));
 	}
+	if (mail->saved_date != 0) {
+		dsync_serializer_encode_add(encoder, "saved_date",
+					    dec2str(mail->saved_date));
+	}
 	if (mail->input != NULL)
 		dsync_serializer_encode_add(encoder, "stream", "");
 
@@ -1760,6 +1763,11 @@ dsync_ibc_stream_recv_mail(struct dsync_ibc *_ibc, struct dsync_mail **mail_r)
 	if (dsync_deserializer_decode_try(decoder, "received_date", &value) &&
 	    str_to_time(value, &mail->received_date) < 0) {
 		dsync_ibc_input_error(ibc, decoder, "Invalid received_date");
+		return DSYNC_IBC_RECV_RET_TRYAGAIN;
+	}
+	if (dsync_deserializer_decode_try(decoder, "saved_date", &value) &&
+	    str_to_time(value, &mail->saved_date) < 0) {
+		dsync_ibc_input_error(ibc, decoder, "Invalid saved_date");
 		return DSYNC_IBC_RECV_RET_TRYAGAIN;
 	}
 	if (dsync_deserializer_decode_try(decoder, "stream", &value)) {
@@ -1845,7 +1853,6 @@ dsync_ibc_init_stream(struct istream *input, struct ostream *output,
 	ibc->ibc.v = dsync_ibc_stream_vfuncs;
 	ibc->input = input;
 	ibc->output = output;
-	ibc->fd_in = i_stream_get_fd(input);
 	ibc->name = i_strdup(name);
 	ibc->temp_path_prefix = i_strdup(temp_path_prefix);
 	ibc->ret_pool = pool_alloconly_create("ibc stream data", 2048);

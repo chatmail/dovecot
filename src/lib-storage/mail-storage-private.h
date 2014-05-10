@@ -343,6 +343,8 @@ struct mailbox {
 	unsigned int disallow_new_keywords:1;
 	/* Mailbox has been synced at least once */
 	unsigned int synced:1;
+	/* Updating cache file is disabled */
+	unsigned int mail_cache_disabled:1;
 };
 
 struct mail_vfuncs {
@@ -391,6 +393,9 @@ struct mail_vfuncs {
 
 	int (*get_special)(struct mail *mail, enum mail_fetch_field field,
 			   const char **value_r);
+	/* FIXME: v2.3 API should change this to return -1 on failure.
+	   for now NULL means failure so we don't break backwards
+	   compatibility. */
 	struct mail *(*get_real_mail)(struct mail *mail);
 
 	void (*update_flags)(struct mail *mail, enum modify_type modify_type,
@@ -559,6 +564,8 @@ struct mail_save_context {
 	/* mailbox_save_alloc() called, but finish/cancel not.
 	   the same context is usually returned by the backends for reuse. */
 	unsigned int unfinished:1;
+	/* mailbox_save_finish() or mailbox_copy() is being called. */
+	unsigned int finishing:1;
 	/* mail was copied using saving */
 	unsigned int copying_via_save:1;
 	/* mail is being saved, not copied */

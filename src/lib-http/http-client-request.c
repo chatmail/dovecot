@@ -7,6 +7,7 @@
 #include "array.h"
 #include "istream.h"
 #include "ostream.h"
+#include "dns-lookup.h"
 #include "http-url.h"
 #include "http-date.h"
 #include "http-response-parser.h"
@@ -484,8 +485,10 @@ http_client_request_continue_payload(struct http_client_request **_req,
 	i_assert(client->ioloop == NULL);
 	client->ioloop = io_loop_create();
 	http_client_switch_ioloop(client);
+	if (client->set.dns_client != NULL)
+		dns_client_switch_ioloop(client->set.dns_client);
 
-	while (req->state < HTTP_REQUEST_STATE_FINISHED) {
+	while (req->state < HTTP_REQUEST_STATE_PAYLOAD_IN) {
 		http_client_request_debug(req, "Waiting for request to finish");
 		
 		if (req->state == HTTP_REQUEST_STATE_PAYLOAD_OUT)
@@ -502,16 +505,32 @@ http_client_request_continue_payload(struct http_client_request **_req,
 
 	io_loop_set_current(prev_ioloop);
 	http_client_switch_ioloop(client);
+	if (client->set.dns_client != NULL)
+		dns_client_switch_ioloop(client->set.dns_client);
 	io_loop_set_current(client->ioloop);
 	io_loop_destroy(&client->ioloop);
 
-	if (req->state == HTTP_REQUEST_STATE_FINISHED)
+	switch (req->state) {
+	case HTTP_REQUEST_STATE_PAYLOAD_IN:
+	case HTTP_REQUEST_STATE_FINISHED:
 		ret = 1;
-	else
-		ret = (req->state == HTTP_REQUEST_STATE_ABORTED ? -1 : 0);
+		break;
+	case HTTP_REQUEST_STATE_ABORTED:
+		ret = -1;
+		break;
+	default:
+		ret = 0;
+		break;
+	}
 
 	req->payload_wait = FALSE;
-	http_client_request_unref(_req);
+
+	/* callback may have messed with our pointer,
+	   so unref using local variable */	
+	http_client_request_unref(&req);
+	if (req == NULL)
+		*_req = NULL;
+
 	if (conn != NULL)
 		http_client_connection_unref(&conn);
 
@@ -548,7 +567,6 @@ int http_client_request_send_more(struct http_client_request *req,
 	struct http_client_connection *conn = req->conn;
 	struct ostream *output = req->payload_output;
 	off_t ret;
-	int fd;
 
 	i_assert(req->payload_input != NULL);
 	i_assert(req->payload_output != NULL);
@@ -574,23 +592,25 @@ int http_client_request_send_more(struct http_client_request *req,
 		*error_r = t_strdup_printf("read(%s) failed: %s",
 					   i_stream_get_name(req->payload_input),
 					   i_stream_get_error(req->payload_input));
-		ret = -1;
+		return -1;
 	} else if (output->stream_errno != 0) {
 		/* failed to send request */
 		errno = output->stream_errno;
 		*error_r = t_strdup_printf("write(%s) failed: %s",
 					   o_stream_get_name(output),
 					   o_stream_get_error(output));
-		ret = -1;
-	} else {
-		i_assert(ret >= 0);
+		return -1;
 	}
+	i_assert(ret >= 0);
 
-	if (ret < 0 || i_stream_is_eof(req->payload_input)) {
+	if (i_stream_is_eof(req->payload_input)) {
 		if (!req->payload_chunked &&
-			req->payload_input->v_offset - req->payload_offset != req->payload_size) {
-			*error_r = "stream input size changed [BUG]";
-			i_error("stream input size changed"); //FIXME
+		    req->payload_input->v_offset - req->payload_offset != req->payload_size) {
+			*error_r = t_strdup_printf("BUG: stream '%s' input size changed: "
+				"%"PRIuUOFF_T"-%"PRIuUOFF_T" != %"PRIuUOFF_T,
+				i_stream_get_name(req->payload_input),
+				req->payload_input->v_offset, req->payload_offset, req->payload_size);
+			i_error("%s", *error_r); //FIXME: remove?
 			return -1;
 		}
 
@@ -608,13 +628,11 @@ int http_client_request_send_more(struct http_client_request *req,
 		http_client_request_debug(req, "Partially sent payload");
 	} else {
 		/* input is blocking */
-		fd = i_stream_get_fd(req->payload_input);
 		conn->output_locked = TRUE;	
-		i_assert(fd >= 0);
-		conn->io_req_payload = io_add
-			(fd, IO_READ, http_client_request_payload_input, req);
+		conn->io_req_payload = io_add_istream(req->payload_input,
+			http_client_request_payload_input, req);
 	}
-	return ret < 0 ? -1 : 0;
+	return 0;
 }
 
 static int http_client_request_send_real(struct http_client_request *req,

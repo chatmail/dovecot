@@ -540,7 +540,7 @@ const struct mail_storage_settings *
 mailbox_get_settings(struct mailbox *box) ATTR_PURE;
 /* Returns the mailbox's settings, or NULL if there are none. */
 const struct mailbox_settings *
-mailbox_settings_find(struct mail_user *user, const char *vname);
+mailbox_settings_find(struct mail_namespace *ns, const char *vname);
 
 /* Returns the (virtual) name of the given mailbox. */
 const char *mailbox_get_vname(const struct mailbox *box) ATTR_PURE;
@@ -909,6 +909,9 @@ int mail_get_special(struct mail *mail, enum mail_fetch_field field,
 		     const char **value_r);
 /* Returns the mail for the physical message. Normally this is the mail itself,
    but in virtual mailboxes it points to the backend mailbox. */
+int mail_get_backend_mail(struct mail *mail, struct mail **real_mail_r);
+/* FIXME: For backwards compatibility for now, use mail_get_backend_mail()
+   instead. */
 struct mail *mail_get_real_mail(struct mail *mail);
 
 /* Update message flags. */
