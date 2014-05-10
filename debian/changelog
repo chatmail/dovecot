@@ -1,4 +1,4 @@
-dovecot (1:2.2.13~rc1-1) UNRELEASED; urgency=medium
+dovecot (1:2.2.13~rc1-1) unstable; urgency=medium
 
   * [7751508] Imported Upstream version 2.2.13~rc1
     + Fixes denial of service vulnerability (CVE-2014-3430). Closes: #747549
