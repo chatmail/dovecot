@@ -38,8 +38,9 @@ enum dsync_brain_sync_type {
 };
 
 struct dsync_brain_settings {
-	/* Sync only this namespace */
-	struct mail_namespace *sync_ns;
+	const char *process_title_prefix;
+	/* Sync only these namespaces */
+	ARRAY(struct mail_namespace *) sync_namespaces;
 	/* Sync only this mailbox name */
 	const char *sync_box;
 	/* Sync only this mailbox GUID */
@@ -61,7 +62,7 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 			const struct dsync_brain_settings *set);
 struct dsync_brain *
 dsync_brain_slave_init(struct mail_user *user, struct dsync_ibc *ibc,
-		       bool local);
+		       bool local, const char *process_title_prefix);
 /* Returns 0 if everything was successful, -1 if syncing failed in some way */
 int dsync_brain_deinit(struct dsync_brain **brain);
 

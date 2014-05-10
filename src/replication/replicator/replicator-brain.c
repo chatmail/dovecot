@@ -19,7 +19,7 @@ struct replicator_brain {
 	const struct replicator_settings *set;
 	struct timeout *to;
 
-	ARRAY(struct dsync_client *) dsync_clients;
+	ARRAY_TYPE(dsync_client) dsync_clients;
 
 	unsigned int deinitializing:1;
 };
@@ -65,6 +65,24 @@ void replicator_brain_deinit(struct replicator_brain **_brain)
 	if (brain->to != NULL)
 		timeout_remove(&brain->to);
 	pool_unref(&brain->pool);
+}
+
+struct replicator_queue *
+replicator_brain_get_queue(struct replicator_brain *brain)
+{
+	return brain->queue;
+}
+
+const struct replicator_settings *
+replicator_brain_get_settings(struct replicator_brain *brain)
+{
+	return brain->set;
+}
+
+const ARRAY_TYPE(dsync_client) *
+replicator_brain_get_dsync_clients(struct replicator_brain *brain)
+{
+	return &brain->dsync_clients;
 }
 
 static struct dsync_client *
@@ -123,8 +141,10 @@ dsync_replicate(struct replicator_brain *brain, struct replicator_user *user)
 	/* update the sync times immediately. if the replication fails we still
 	   wouldn't want it to be retried immediately. */
 	user->last_fast_sync = ioloop_time;
-	if (full)
+	if (full || user->force_full_sync) {
 		user->last_full_sync = ioloop_time;
+		user->force_full_sync = FALSE;
+	}
 	/* reset priority also. if more updates arrive during replication
 	   we'll do another replication to make sure nothing gets lost */
 	user->priority = REPLICATION_PRIORITY_NONE;

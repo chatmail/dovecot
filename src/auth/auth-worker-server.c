@@ -26,6 +26,7 @@
 struct auth_worker_request {
 	unsigned int id;
 	time_t created;
+	const char *username;
 	const char *data;
 	auth_worker_callback_t *callback;
 	void *context;
@@ -82,6 +83,8 @@ static bool auth_worker_request_send(struct auth_worker_connection *conn,
 {
 	struct const_iovec iov[3];
 	unsigned int age_secs = ioloop_time - request->created;
+
+	i_assert(conn->to != NULL);
 
 	if (age_secs >= AUTH_WORKER_ABORT_SECS) {
 		i_error("Aborting auth request that was queued for %d secs, "
@@ -223,7 +226,9 @@ static void auth_worker_destroy(struct auth_worker_connection **_conn,
 		idle_count--;
 
 	if (conn->request != NULL) {
-		i_error("auth worker: Aborted request: %s", reason);
+		i_error("auth worker: Aborted %s request for %s: %s",
+			t_strcut(conn->request->data, '\t'),
+			conn->request->username, reason);
 		conn->request->callback(t_strdup_printf(
 				"FAIL\t%d", PASSDB_RESULT_INTERNAL_FAILURE),
 				conn->request->context);
@@ -233,7 +238,8 @@ static void auth_worker_destroy(struct auth_worker_connection **_conn,
 		io_remove(&conn->io);
 	i_stream_destroy(&conn->input);
 	o_stream_destroy(&conn->output);
-	timeout_remove(&conn->to);
+	if (conn->to != NULL)
+		timeout_remove(&conn->to);
 
 	if (close(conn->fd) < 0)
 		i_error("close(auth worker) failed: %m");
@@ -263,7 +269,7 @@ static struct auth_worker_connection *auth_worker_find_free(void)
 	return NULL;
 }
 
-static void auth_worker_request_handle(struct auth_worker_connection *conn,
+static bool auth_worker_request_handle(struct auth_worker_connection *conn,
 				       struct auth_worker_request *request,
 				       const char *line)
 {
@@ -278,8 +284,12 @@ static void auth_worker_request_handle(struct auth_worker_connection *conn,
 		idle_count++;
 	}
 
-	if (!request->callback(line, request->context) && conn->io != NULL)
+	if (!request->callback(line, request->context) && conn->io != NULL) {
+		timeout_remove(&conn->to);
 		io_remove(&conn->io);
+		return FALSE;
+	}
+	return TRUE;
 }
 
 static bool auth_worker_error(struct auth_worker_connection *conn)
@@ -373,8 +383,9 @@ static void worker_input(struct auth_worker_connection *conn)
 			continue;
 
 		if (conn->request != NULL && id == conn->request->id) {
-			auth_worker_request_handle(conn, conn->request,
-						   line + 1);
+			if (!auth_worker_request_handle(conn, conn->request,
+							line + 1))
+				break;
 		} else {
 			if (conn->request != NULL) {
 				i_error("BUG: Worker sent reply with id %u, "
@@ -398,8 +409,16 @@ static void worker_input(struct auth_worker_connection *conn)
 		auth_worker_request_send_next(conn);
 }
 
+static void worker_input_resume(struct auth_worker_connection *conn)
+{
+	timeout_remove(&conn->to);
+	conn->to = timeout_add(AUTH_WORKER_LOOKUP_TIMEOUT_SECS * 1000,
+			       auth_worker_call_timeout, conn);
+	worker_input(conn);
+}
+
 struct auth_worker_connection *
-auth_worker_call(pool_t pool, const char *data,
+auth_worker_call(pool_t pool, const char *username, const char *data,
 		 auth_worker_callback_t *callback, void *context)
 {
 	struct auth_worker_connection *conn;
@@ -407,6 +426,7 @@ auth_worker_call(pool_t pool, const char *data,
 
 	request = p_new(pool, struct auth_worker_request, 1);
 	request->created = ioloop_time;
+	request->username = p_strdup(pool, username);
 	request->data = p_strdup(pool, data);
 	request->callback = callback;
 	request->context = context;
@@ -436,6 +456,9 @@ void auth_worker_server_resume_input(struct auth_worker_connection *conn)
 {
 	if (conn->io == NULL)
 		conn->io = io_add(conn->fd, IO_READ, worker_input, conn);
+	if (conn->to != NULL)
+		timeout_remove(&conn->to);
+	conn->to = timeout_add_short(0, worker_input_resume, conn);
 }
 
 void auth_worker_server_init(void)

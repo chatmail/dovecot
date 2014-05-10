@@ -19,6 +19,7 @@ struct replicator_context {
 	const char *socket_path;
 	const char *priority;
 	struct istream *input;
+	bool full_sync;
 };
 
 extern struct doveadm_cmd doveadm_cmd_replicator[];
@@ -70,7 +71,7 @@ static void replicator_disconnect(struct replicator_context *ctx)
 }
 
 static struct replicator_context *
-cmd_replicator_init(int argc, char *argv[], const char *getopt_args,
+cmd_replicator_init(int *argc, char **argv[], const char *getopt_args,
 		    doveadm_command_t *cmd)
 {
 	struct replicator_context *ctx;
@@ -80,10 +81,13 @@ cmd_replicator_init(int argc, char *argv[], const char *getopt_args,
 	ctx->socket_path = t_strconcat(doveadm_settings->base_dir,
 				       "/replicator-doveadm", NULL);
 
-	while ((c = getopt(argc, argv, getopt_args)) > 0) {
+	while ((c = getopt(*argc, *argv, getopt_args)) > 0) {
 		switch (c) {
 		case 'a':
 			ctx->socket_path = optarg;
+			break;
+		case 'f':
+			ctx->full_sync = TRUE;
 			break;
 		case 'p':
 			ctx->priority = optarg;
@@ -92,6 +96,8 @@ cmd_replicator_init(int argc, char *argv[], const char *getopt_args,
 			replicator_cmd_help(cmd);
 		}
 	}
+	*argc -= optind-1;
+	*argv += optind-1;
 	replicator_connect(ctx);
 	return ctx;
 }
@@ -137,7 +143,7 @@ static void cmd_replicator_status(int argc, char *argv[])
 	const char *line, *const *args;
 	time_t last_fast, last_full;
 
-	ctx = cmd_replicator_init(argc, argv, "a:", cmd_replicator_status);
+	ctx = cmd_replicator_init(&argc, &argv, "a:", cmd_replicator_status);
 
 	if (argv[1] == NULL) {
 		cmd_replicator_status_overview(ctx);
@@ -177,6 +183,39 @@ static void cmd_replicator_status(int argc, char *argv[])
 	replicator_disconnect(ctx);
 }
 
+static void cmd_replicator_dsync_status(int argc, char *argv[])
+{
+	struct replicator_context *ctx;
+	const char *line;
+	unsigned int i;
+
+	ctx = cmd_replicator_init(&argc, &argv, "a:", cmd_replicator_dsync_status);
+
+	doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
+	doveadm_print_header("username", "username",
+			     DOVEADM_PRINT_HEADER_FLAG_EXPAND);
+	doveadm_print_header_simple("type");
+	doveadm_print_header_simple("status");
+
+	replicator_send(ctx, "STATUS-DSYNC\n");
+	while ((line = i_stream_read_next_line(ctx->input)) != NULL) {
+		if (*line == '\0')
+			break;
+		T_BEGIN {
+			const char *const *args = t_strsplit_tab(line);
+
+			for (i = 0; i < 3; i++) {
+				if (args[i] == NULL)
+					break;
+				doveadm_print(args[i]);
+			}
+			for (; i < 3; i++)
+				doveadm_print("");
+		} T_END;
+	}
+	replicator_disconnect(ctx);
+}
+
 static void cmd_replicator_replicate(int argc, char *argv[])
 {
 	struct replicator_context *ctx;
@@ -186,7 +225,7 @@ static void cmd_replicator_replicate(int argc, char *argv[])
 	if (argv[1] == NULL)
 		replicator_cmd_help(cmd_replicator_replicate);
 
-	ctx = cmd_replicator_init(argc, argv, "a:p:", cmd_replicator_replicate);
+	ctx = cmd_replicator_init(&argc, &argv, "a:fp:", cmd_replicator_replicate);
 
 	str = t_str_new(128);
 	str_append(str, "REPLICATE\t");
@@ -194,6 +233,9 @@ static void cmd_replicator_replicate(int argc, char *argv[])
 		str_append_tabescaped(str, "low");
 	else
 		str_append_tabescaped(str, ctx->priority);
+	str_append_c(str, '\t');
+	if (ctx->full_sync)
+		str_append_c(str, 'f');
 	str_append_c(str, '\t');
 	str_append_tabescaped(str, argv[1]);
 	str_append_c(str, '\n');
@@ -216,6 +258,34 @@ static void cmd_replicator_replicate(int argc, char *argv[])
 	replicator_disconnect(ctx);
 }
 
+static void cmd_replicator_add(int argc, char *argv[])
+{
+	struct replicator_context *ctx;
+	string_t *str;
+	const char *line;
+
+	if (argv[1] == NULL)
+		replicator_cmd_help(cmd_replicator_add);
+
+	ctx = cmd_replicator_init(&argc, &argv, "a:", cmd_replicator_add);
+
+	str = t_str_new(128);
+	str_append(str, "ADD\t");
+	str_append_tabescaped(str, argv[1]);
+	str_append_c(str, '\n');
+	replicator_send(ctx, str_c(str));
+
+	line = i_stream_read_next_line(ctx->input);
+	if (line == NULL) {
+		i_error("Replicator disconnected unexpectedly");
+		doveadm_exit_code = EX_TEMPFAIL;
+	} else if (line[0] != '+') {
+		i_error("Replicator failed: %s", line+1);
+		doveadm_exit_code = EX_USAGE;
+	}
+	replicator_disconnect(ctx);
+}
+
 static void cmd_replicator_remove(int argc, char *argv[])
 {
 	struct replicator_context *ctx;
@@ -225,7 +295,7 @@ static void cmd_replicator_remove(int argc, char *argv[])
 	if (argv[1] == NULL)
 		replicator_cmd_help(cmd_replicator_remove);
 
-	ctx = cmd_replicator_init(argc, argv, "a:", cmd_replicator_remove);
+	ctx = cmd_replicator_init(&argc, &argv, "a:", cmd_replicator_remove);
 
 	str = t_str_new(128);
 	str_append(str, "REMOVE\t");
@@ -247,8 +317,12 @@ static void cmd_replicator_remove(int argc, char *argv[])
 struct doveadm_cmd doveadm_cmd_replicator[] = {
 	{ cmd_replicator_status, "replicator status",
 	  "[-a <replicator socket path>] [<user mask>]" },
+	{ cmd_replicator_dsync_status, "replicator dsync-status",
+	  "[-a <replicator socket path>]" },
 	{ cmd_replicator_replicate, "replicator replicate",
-	  "[-a <replicator socket path>] [-p <priority>] <user mask>" },
+	  "[-a <replicator socket path>] [-f] [-p <priority>] <user mask>" },
+	{ cmd_replicator_add, "replicator add",
+	  "[-a <replicator socket path>] <user mask>" },
 	{ cmd_replicator_remove, "replicator remove",
 	  "[-a <replicator socket path>] <username>" },
 };

@@ -24,6 +24,7 @@ libmail_la_SOURCES = \
 	message-header-parser.c \
 	message-id.c \
 	message-parser.c \
+	message-part.c \
 	message-part-serialize.c \
 	message-search.c \
 	message-size.c \
@@ -51,6 +52,7 @@ headers = \
 	message-header-parser.h \
 	message-id.h \
 	message-parser.h \
+	message-part.h \
 	message-part-serialize.h \
 	message-search.h \
 	message-size.h \
@@ -76,6 +78,7 @@ test_programs = \
 	test-message-header-parser \
 	test-message-id \
 	test-message-parser \
+	test-message-part \
 	test-quoted-printable \
 	test-rfc2231-parser
 
@@ -131,7 +134,7 @@ test_message_decoder_LDADD = message-decoder.lo rfc822-parser.lo rfc2231-parser.
 test_message_decoder_DEPENDENCIES = $(test_deps)
 
 test_message_header_decode_SOURCES = test-message-header-decode.c
-test_message_header_decode_LDADD = message-header-decode.lo quoted-printable.lo $(test_libs)
+test_message_header_decode_LDADD = message-header-decode.lo quoted-printable.lo message-header-encode.lo $(test_libs)
 test_message_header_decode_DEPENDENCIES = $(test_deps)
 
 test_message_header_encode_SOURCES = test-message-header-encode.c
@@ -149,6 +152,10 @@ test_message_id_DEPENDENCIES = $(test_deps)
 test_message_parser_SOURCES = test-message-parser.c
 test_message_parser_LDADD = message-parser.lo message-header-parser.lo message-size.lo rfc822-parser.lo rfc2231-parser.lo $(test_libs)
 test_message_parser_DEPENDENCIES = $(test_deps)
+
+test_message_part_SOURCES = test-message-part.c
+test_message_part_LDADD = message-part.lo message-parser.lo message-header-parser.lo message-size.lo rfc822-parser.lo rfc2231-parser.lo $(test_libs)
+test_message_part_DEPENDENCIES = $(test_deps)
 
 test_quoted_printable_SOURCES = test-quoted-printable.c
 test_quoted_printable_LDADD = quoted-printable.lo $(test_libs)

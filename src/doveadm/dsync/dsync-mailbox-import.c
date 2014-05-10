@@ -112,7 +112,7 @@ static void dsync_mailbox_save_newmails(struct dsync_mailbox_importer *importer,
 static int dsync_mailbox_import_commit(struct dsync_mailbox_importer *importer,
 				       bool final);
 
-static void
+static void ATTR_FORMAT(2, 3)
 imp_debug(struct dsync_mailbox_importer *importer, const char *fmt, ...)
 {
 	va_list args;
@@ -326,6 +326,9 @@ dsync_attributes_cmp_values(const struct dsync_mailbox_attribute *attr1,
 {
 	struct istream *input1, *input2;
 	int ret;
+
+	i_assert(attr1->value_stream != NULL || attr1->value != NULL);
+	i_assert(attr2->value_stream != NULL || attr2->value != NULL);
 
 	if (attr1->value != NULL && attr2->value != NULL) {
 		*cmp_r = strcmp(attr1->value, attr2->value);
@@ -557,9 +560,14 @@ importer_next_mail(struct dsync_mailbox_importer *importer, uint32_t wanted_uid)
 {
 	int ret;
 
-	while ((ret = importer_try_next_mail(importer, wanted_uid)) == 0 &&
-	       !importer->failed)
+	for (;;) {
+		T_BEGIN {
+			ret = importer_try_next_mail(importer, wanted_uid);
+		} T_END;
+		if (ret != 0 || importer->failed)
+			break;
 		importer->next_local_seq = importer->cur_mail->seq + 1;
+	}
 	return ret > 0;
 }
 
@@ -616,7 +624,10 @@ static void newmail_link(struct dsync_mailbox_importer *importer,
 		}
 	}
 	/* 1) add the newmail to the end of the linked list
-	   2) find our link */
+	   2) find our link
+
+	   FIXME: this loop is slow if the same GUID has a ton of instances.
+	   Could it be improved in some way? */
 	last = &first_mail->next;
 	for (mail = first_mail; mail != NULL; mail = mail->next) {
 		if (mail->final_uid == newmail->final_uid)
@@ -1864,7 +1875,6 @@ dsync_mailbox_save_set_metadata(struct dsync_mailbox_importer *importer,
 	if (keywords != NULL)
 		mailbox_keywords_unref(&keywords);
 
-	mailbox_save_set_save_date(save_ctx, change->save_timestamp);
 	if (change->modseq > 1) {
 		(void)mailbox_enable(importer->box, MAILBOX_FEATURE_CONDSTORE);
 		mailbox_save_set_min_modseq(save_ctx, change->modseq);
@@ -1877,20 +1887,22 @@ dsync_mailbox_save_set_metadata(struct dsync_mailbox_importer *importer,
 static int
 dsync_msg_try_copy(struct dsync_mailbox_importer *importer,
 		   struct mail_save_context **save_ctx_p,
-		   struct importer_new_mail *all_newmails)
+		   struct importer_new_mail **all_newmails_forcopy)
 {
 	struct importer_new_mail *inst;
 
-	for (inst = all_newmails; inst != NULL; inst = inst->next) {
+	for (inst = *all_newmails_forcopy; inst != NULL; inst = inst->next) {
 		if (inst->uid_in_local && !inst->copy_failed &&
 		    mail_set_uid(importer->mail, inst->local_uid)) {
 			if (mailbox_copy(save_ctx_p, importer->mail) < 0) {
 				inst->copy_failed = TRUE;
 				return -1;
 			}
+			*all_newmails_forcopy = inst;
 			return 1;
 		}
 	}
+	*all_newmails_forcopy = NULL;
 	return 0;
 }
 
@@ -1905,6 +1917,8 @@ dsync_mailbox_save_init(struct dsync_mailbox_importer *importer,
 	mailbox_save_set_uid(save_ctx, newmail->final_uid);
 	if (*mail->guid != '\0')
 		mailbox_save_set_guid(save_ctx, mail->guid);
+	if (mail->saved_date != 0)
+		mailbox_save_set_save_date(save_ctx, mail->saved_date);
 	dsync_mailbox_save_set_metadata(importer, save_ctx, newmail->change);
 	if (mail->pop3_uidl != NULL && *mail->pop3_uidl != '\0')
 		mailbox_save_set_pop3_uidl(save_ctx, mail->pop3_uidl);
@@ -1914,10 +1928,11 @@ dsync_mailbox_save_init(struct dsync_mailbox_importer *importer,
 	return save_ctx;
 }
 
-static void dsync_mailbox_save_body(struct dsync_mailbox_importer *importer,
-				    const struct dsync_mail *mail,
-				    struct importer_new_mail *newmail,
-				    struct importer_new_mail *all_newmails)
+static void
+dsync_mailbox_save_body(struct dsync_mailbox_importer *importer,
+			const struct dsync_mail *mail,
+			struct importer_new_mail *newmail,
+			struct importer_new_mail **all_newmails_forcopy)
 {
 	struct mail_save_context *save_ctx;
 	ssize_t ret;
@@ -1925,7 +1940,7 @@ static void dsync_mailbox_save_body(struct dsync_mailbox_importer *importer,
 
 	/* try to save the mail by copying an existing mail */
 	save_ctx = dsync_mailbox_save_init(importer, mail, newmail);
-	if ((ret = dsync_msg_try_copy(importer, &save_ctx, all_newmails)) < 0) {
+	if ((ret = dsync_msg_try_copy(importer, &save_ctx, all_newmails_forcopy)) < 0) {
 		if (save_ctx == NULL)
 			save_ctx = dsync_mailbox_save_init(importer, mail, newmail);
 	}
@@ -2000,13 +2015,17 @@ static void dsync_mailbox_save_newmails(struct dsync_mailbox_importer *importer,
 					const struct dsync_mail *mail,
 					struct importer_new_mail *all_newmails)
 {
-	struct importer_new_mail *newmail;
+	struct importer_new_mail *newmail, *all_newmails_forcopy;
+
+	/* if all_newmails list is large, avoid scanning through the
+	   uninteresting ones for each newmail */
+	all_newmails_forcopy = all_newmails;
 
 	/* save all instances of the message */
 	for (newmail = all_newmails; newmail != NULL; newmail = newmail->next) {
 		if (!newmail->skip) T_BEGIN {
 			dsync_mailbox_save_body(importer, mail, newmail,
-						all_newmails);
+						&all_newmails_forcopy);
 		} T_END;
 	}
 }
@@ -2249,8 +2268,8 @@ static int dsync_mailbox_import_finish(struct dsync_mailbox_importer *importer,
 			  "min_first_recent_uid=%u min_highest_modseq=%llu "
 			  "min_highest_pvt_modseq=%llu",
 			  update.min_next_uid, update.min_first_recent_uid,
-			  update.min_highest_modseq,
-			  update.min_highest_pvt_modseq);
+			  (unsigned long long)update.min_highest_modseq,
+			  (unsigned long long)update.min_highest_pvt_modseq);
 
 		if (mailbox_update(importer->box, &update) < 0) {
 			i_error("Mailbox %s: Update failed: %s",
@@ -2325,9 +2344,11 @@ int dsync_mailbox_import_deinit(struct dsync_mailbox_importer **_importer,
 				uint32_t *last_common_uid_r,
 				uint64_t *last_common_modseq_r,
 				uint64_t *last_common_pvt_modseq_r,
+				uint32_t *last_messages_count_r,
 				bool *changes_during_sync_r)
 {
 	struct dsync_mailbox_importer *importer = *_importer;
+	struct mailbox_status status;
 	int ret;
 
 	*_importer = NULL;
@@ -2377,6 +2398,8 @@ int dsync_mailbox_import_deinit(struct dsync_mailbox_importer **_importer,
 		*last_common_modseq_r = importer->local_initial_highestmodseq;
 		*last_common_pvt_modseq_r = importer->local_initial_highestpvtmodseq;
 	}
+	mailbox_get_open_status(importer->box, STATUS_MESSAGES, &status);
+	*last_messages_count_r = status.messages;
 
 	ret = importer->failed ? -1 : 0;
 	pool_unref(&importer->pool);

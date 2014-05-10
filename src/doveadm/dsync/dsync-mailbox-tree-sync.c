@@ -202,7 +202,7 @@ sync_delete_mailbox(struct dsync_mailbox_tree_sync_ctx *ctx,
 static void
 sync_tree_sort_and_delete_mailboxes(struct dsync_mailbox_tree_sync_ctx *ctx,
 				    struct dsync_mailbox_tree *tree,
-				    bool ignore_deletes)
+				    bool twoway_sync)
 {
 	struct dsync_mailbox_tree_bfs_iter *iter;
 	struct dsync_mailbox_node *node, *parent = NULL;
@@ -219,14 +219,18 @@ sync_tree_sort_and_delete_mailboxes(struct dsync_mailbox_tree_sync_ctx *ctx,
 		}
 		if (node->existence == DSYNC_MAILBOX_NODE_DELETED &&
 		    !dsync_mailbox_node_is_dir(node)) {
-			if (!ignore_deletes) {
+			if (twoway_sync) {
 				/* this mailbox was deleted. delete it from the
 				   other side as well */
 				sync_delete_mailbox(ctx, tree, node,
 						    "Mailbox has been deleted");
 			} else {
-				/* we want to restore the mailbox back.
-				   just treat it as if it didn't exist */
+				/* treat the node as if it didn't exist. it'll
+				   get either recreated or deleted later. in
+				   any case this function must handle all
+				   existence=DELETED mailbox nodes by changing
+				   them into directories (setting GUID=0) or
+				   we'll assert-crash later */
 				sync_set_node_deleted(tree, node);
 			}
 		}
@@ -1202,7 +1206,6 @@ dsync_mailbox_trees_sync_init(struct dsync_mailbox_tree *local_tree,
 {
 	struct dsync_mailbox_tree_sync_ctx *ctx;
 	pool_t pool;
-	bool ignore_deletes;
 
 	i_assert(hash_table_is_created(local_tree->guid_hash));
 	i_assert(hash_table_is_created(remote_tree->guid_hash));
@@ -1217,10 +1220,10 @@ dsync_mailbox_trees_sync_init(struct dsync_mailbox_tree *local_tree,
 	ctx->sync_flags = sync_flags;
 	i_array_init(&ctx->changes, 128);
 
-	ignore_deletes = sync_type == DSYNC_MAILBOX_TREES_SYNC_TYPE_PRESERVE_REMOTE;
-	sync_tree_sort_and_delete_mailboxes(ctx, remote_tree, ignore_deletes);
-	ignore_deletes = sync_type == DSYNC_MAILBOX_TREES_SYNC_TYPE_PRESERVE_LOCAL;
-	sync_tree_sort_and_delete_mailboxes(ctx, local_tree, ignore_deletes);
+	sync_tree_sort_and_delete_mailboxes(ctx, remote_tree,
+		sync_type == DSYNC_MAILBOX_TREES_SYNC_TYPE_TWOWAY);
+	sync_tree_sort_and_delete_mailboxes(ctx, local_tree,
+		sync_type == DSYNC_MAILBOX_TREES_SYNC_TYPE_TWOWAY);
 
 	dsync_mailbox_tree_update_child_timestamps(&local_tree->root, 0);
 	dsync_mailbox_tree_update_child_timestamps(&remote_tree->root, 0);

@@ -7,6 +7,7 @@
 struct io;
 struct timeout;
 struct ioloop;
+struct istream;
 
 enum io_condition {
 	IO_READ		= 0x01,
@@ -60,12 +61,24 @@ io_add_notify(const char *path, io_callback_t *callback,
 	io_add_notify(path + \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context, io_r)
+struct io *io_add_istream(struct istream *input, unsigned int source_linenum,
+			  io_callback_t *callback, void *context) ATTR_NULL(3);
+#define io_add_istream(input, callback, context) \
+	io_add_istream(input, __LINE__ + \
+		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
+		(io_callback_t *)callback, context)
 
 /* Remove I/O handler, and set io pointer to NULL. */
 void io_remove(struct io **io);
 /* Like io_remove(), but assume that the file descriptor is already closed.
    With some backends this simply frees the memory. */
 void io_remove_closed(struct io **io);
+
+/* Make sure the I/O callback is called by io_loop_run() even if there isn't
+   any input actually pending currently as seen by the OS. This may be useful
+   if some of the input has already read into some internal buffer and the
+   caller wants to handle it the same way as if the fd itself had input. */
+void io_set_pending(struct io *io);
 
 /* Timeout handlers */
 struct timeout *

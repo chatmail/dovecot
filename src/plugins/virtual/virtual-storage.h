@@ -92,10 +92,12 @@ struct virtual_backend_box {
 	struct imap_match_glob *glob;
 	struct mail_namespace *ns;
 
+	unsigned int open_failed:1;
 	unsigned int sync_seen:1;
 	unsigned int wildcard:1;
 	unsigned int clear_recent:1;
 	unsigned int uids_nonsorted:1;
+	unsigned int search_args_initialized:1;
 };
 ARRAY_DEFINE_TYPE(virtual_backend_box, struct virtual_backend_box *);
 
@@ -144,6 +146,7 @@ struct virtual_mailbox {
 	unsigned int uids_mapped:1;
 	unsigned int sync_initialized:1;
 	unsigned int inconsistent:1;
+	unsigned int have_guid_flags_set:1;
 	unsigned int have_guids:1;
 	unsigned int have_save_guids:1;
 };

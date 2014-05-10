@@ -77,7 +77,7 @@ void i_stream_remove_destroy_callback(struct istream *stream,
 
 	dcs = array_get(&iostream->destroy_callbacks, &count);
 	for (i = 0; i < count; i++) {
-		if (dcs[i].callback == callback) {
+		if (dcs[i].callback == (istream_callback_t *)callback) {
 			array_delete(&iostream->destroy_callbacks, i, 1);
 			return;
 		}
@@ -152,13 +152,12 @@ ssize_t i_stream_read(struct istream *stream)
 	size_t old_size;
 	ssize_t ret;
 
-	if (unlikely(stream->closed)) {
+	if (unlikely(stream->closed || stream->stream_errno != 0)) {
 		errno = stream->stream_errno;
 		return -1;
 	}
 
 	stream->eof = FALSE;
-	stream->stream_errno = 0;
 
 	if (_stream->parent != NULL)
 		i_stream_seek(_stream->parent, _stream->parent_expected_offset);
@@ -427,7 +426,7 @@ char *i_stream_read_next_line(struct istream *stream)
 
 		switch (i_stream_read(stream)) {
 		case -2:
-			stream->stream_errno = ENOBUFS;
+			stream->stream_errno = errno = ENOBUFS;
 			stream->eof = TRUE;
 			return NULL;
 		case -1:
@@ -607,6 +606,50 @@ bool i_stream_add_data(struct istream *_stream, const unsigned char *data,
 	memcpy(stream->w_buffer + stream->pos, data, size);
 	stream->pos += size;
 	return TRUE;
+}
+
+void i_stream_set_input_pending(struct istream *stream, bool pending)
+{
+	if (!pending)
+		return;
+
+	while (stream->real_stream->parent != NULL) {
+		i_assert(stream->real_stream->io == NULL);
+		stream = stream->real_stream->parent;
+	}
+	if (stream->real_stream->io != NULL)
+		io_set_pending(stream->real_stream->io);
+}
+
+void i_stream_switch_ioloop(struct istream *stream)
+{
+	do {
+		if (stream->real_stream->switch_ioloop != NULL)
+			stream->real_stream->switch_ioloop(stream->real_stream);
+		stream = stream->real_stream->parent;
+	} while (stream != NULL);
+}
+
+void i_stream_set_io(struct istream *stream, struct io *io)
+{
+	while (stream->real_stream->parent != NULL) {
+		i_assert(stream->real_stream->io == NULL);
+		stream = stream->real_stream->parent;
+	}
+
+	i_assert(stream->real_stream->io == NULL);
+	stream->real_stream->io = io;
+}
+
+void i_stream_unset_io(struct istream *stream, struct io *io)
+{
+	while (stream->real_stream->parent != NULL) {
+		i_assert(stream->real_stream->io == NULL);
+		stream = stream->real_stream->parent;
+	}
+
+	i_assert(stream->real_stream->io == io);
+	stream->real_stream->io = NULL;
 }
 
 static void

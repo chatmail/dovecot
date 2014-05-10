@@ -50,13 +50,14 @@ const char *t_str_lcase(const char *str);
 const char *t_str_ucase(const char *str);
 
 int null_strcmp(const char *s1, const char *s2) ATTR_PURE;
-int bsearch_strcmp(const char *p1, const char *const *member) ATTR_PURE;
+int bsearch_strcmp(const char *key, const char *const *member) ATTR_PURE;
 int bsearch_strcasecmp(const char *key, const char *const *member) ATTR_PURE;
 int i_memcasecmp(const void *p1, const void *p2, size_t size) ATTR_PURE;
 int i_strcmp_p(const char *const *p1, const char *const *p2) ATTR_PURE;
 int i_strcasecmp_p(const char *const *p1, const char *const *p2) ATTR_PURE;
 
-/* separators is an array of separator characters, not a separator string. */
+/* separators is an array of separator characters, not a separator string.
+   an empty data string results in an array containing only NULL. */
 char **p_strsplit(pool_t pool, const char *data, const char *separators)
 	ATTR_MALLOC;
 const char **t_strsplit(const char *data, const char *separators)

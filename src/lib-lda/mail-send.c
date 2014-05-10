@@ -21,8 +21,6 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 
-int global_outgoing_count = 0;
-
 static const struct var_expand_table *
 get_var_expand_table(struct mail *mail, const char *reason,
 		     const char *recipient)
@@ -58,7 +56,7 @@ int mail_send_rejection(struct mail_deliver_context *ctx, const char *recipient,
     struct smtp_client *smtp_client;
     struct ostream *output;
     const char *return_addr, *hdr;
-    const char *value, *msgid, *orig_msgid, *boundary;
+    const char *value, *msgid, *orig_msgid, *boundary, *error;
     string_t *str;
     int ret;
 
@@ -86,7 +84,9 @@ int mail_send_rejection(struct mail_deliver_context *ctx, const char *recipient,
 		    str_sanitize(reason, 512));
     }
 
-    smtp_client = smtp_client_open(ctx->set, return_addr, NULL, &output);
+    smtp_client = smtp_client_init(ctx->set, NULL);
+    smtp_client_add_rcpt(smtp_client, return_addr);
+    output = smtp_client_send(smtp_client);
 
     msgid = mail_deliver_get_new_message_id(ctx);
     boundary = t_strdup_printf("%s/%s", my_pid, ctx->set->hostname);
@@ -180,38 +180,14 @@ int mail_send_rejection(struct mail_deliver_context *ctx, const char *recipient,
     str_truncate(str, 0);
     str_printfa(str, "\r\n\r\n--%s--\r\n", boundary);
     o_stream_nsend(output, str_data(str), str_len(str));
-    return smtp_client_close(smtp_client);
-}
-
-int mail_send_forward(struct mail_deliver_context *ctx, const char *forwardto)
-{
-    static const char *hide_headers[] = {
-        "Return-Path"
-    };
-    struct istream *input;
-    struct ostream *output;
-    struct smtp_client *smtp_client;
-    const char *return_path;
-
-    if (mail_get_stream(ctx->src_mail, NULL, NULL, &input) < 0)
-	    return -1;
-
-    return_path = mail_deliver_get_return_address(ctx);
-    if (mailbox_get_settings(ctx->src_mail->box)->mail_debug) {
-	    i_debug("Sending a forward to <%s> with return path <%s>",
-		    forwardto, return_path);
+    if ((ret = smtp_client_deinit(smtp_client, &error)) < 0) {
+	    i_error("msgid=%s: Temporarily failed to send rejection: %s",
+		    orig_msgid == NULL ? "" : str_sanitize(orig_msgid, 80),
+		    str_sanitize(error, 512));
+    } else if (ret == 0) {
+	    i_info("msgid=%s: Permanently failed to send rejection: %s",
+		   orig_msgid == NULL ? "" : str_sanitize(orig_msgid, 80),
+		   str_sanitize(error, 512));
     }
-
-    smtp_client = smtp_client_open(ctx->set, forwardto, return_path, &output);
-
-    input = i_stream_create_header_filter(input, HEADER_FILTER_EXCLUDE |
-                                          HEADER_FILTER_NO_CR, hide_headers,
-                                          N_ELEMENTS(hide_headers),
-					  *null_header_filter_callback,
-					  (void *)NULL);
-
-    (void)o_stream_send_istream(output, input);
-    i_stream_unref(&input);
-
-    return smtp_client_close(smtp_client);
+    return ret < 0 ? -1 : 0;
 }

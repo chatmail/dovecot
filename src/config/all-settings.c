@@ -138,6 +138,7 @@ struct maildir_settings {
 	bool maildir_copy_with_hardlinks;
 	bool maildir_very_dirty_syncs;
 	bool maildir_broken_filename_sizes;
+	bool maildir_empty_new;
 };
 /* ../../src/lib-storage/index/imapc/imapc-settings.h */
 /* <settings checks> */
@@ -168,6 +169,7 @@ struct imapc_settings {
 /* ../../src/lib-storage/index/dbox-multi/mdbox-settings.h */
 struct mdbox_settings {
 	bool mdbox_preallocate_space;
+	bool mdbox_purge_preserve_alt;
 	uoff_t mdbox_rotate_size;
 	unsigned int mdbox_rotate_interval;
 };
@@ -898,13 +900,15 @@ static const struct setting_define maildir_setting_defines[] = {
 	DEF(SET_BOOL, maildir_copy_with_hardlinks),
 	DEF(SET_BOOL, maildir_very_dirty_syncs),
 	DEF(SET_BOOL, maildir_broken_filename_sizes),
+	DEF(SET_BOOL, maildir_empty_new),
 
 	SETTING_DEFINE_LIST_END
 };
 static const struct maildir_settings maildir_default_settings = {
 	.maildir_copy_with_hardlinks = TRUE,
 	.maildir_very_dirty_syncs = FALSE,
-	.maildir_broken_filename_sizes = FALSE
+	.maildir_broken_filename_sizes = FALSE,
+	.maildir_empty_new = FALSE
 };
 static const struct setting_parser_info maildir_setting_parser_info = {
 	.module_name = "maildir",
@@ -1031,6 +1035,7 @@ static const struct setting_parser_info imapc_setting_parser_info = {
 	{ type, #name, offsetof(struct mdbox_settings, name), NULL }
 static const struct setting_define mdbox_setting_defines[] = {
 	DEF(SET_BOOL, mdbox_preallocate_space),
+	DEF(SET_BOOL, mdbox_purge_preserve_alt),
 	DEF(SET_SIZE, mdbox_rotate_size),
 	DEF(SET_TIME, mdbox_rotate_interval),
 
@@ -1038,6 +1043,7 @@ static const struct setting_define mdbox_setting_defines[] = {
 };
 static const struct mdbox_settings mdbox_default_settings = {
 	.mdbox_preallocate_space = FALSE,
+	.mdbox_purge_preserve_alt = FALSE,
 	.mdbox_rotate_size = 2*1024*1024,
 	.mdbox_rotate_interval = 0
 };
@@ -1312,6 +1318,7 @@ struct doveadm_settings {
 	const char *dsync_remote_cmd;
 	const char *ssl_client_ca_dir;
 	const char *ssl_client_ca_file;
+	const char *director_username_hash;
 
 	ARRAY(const char *) plugin_envs;
 };
@@ -1336,6 +1343,7 @@ struct dict_settings {
 /* ../../src/auth/auth-settings.h */
 extern const struct setting_parser_info auth_setting_parser_info;
 struct auth_passdb_settings {
+	const char *name;
 	const char *driver;
 	const char *args;
 	const char *default_fields;
@@ -1350,6 +1358,7 @@ struct auth_passdb_settings {
 	bool master;
 };
 struct auth_userdb_settings {
+	const char *name;
 	const char *driver;
 	const char *args;
 	const char *default_fields;
@@ -3295,6 +3304,7 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, dsync_remote_cmd),
 	DEF(SET_STR, ssl_client_ca_dir),
 	DEF(SET_STR, ssl_client_ca_file),
+	DEF(SET_STR, director_username_hash),
 
 	{ SET_STRLIST, "plugin", offsetof(struct doveadm_settings, plugin_envs), NULL },
 
@@ -3315,6 +3325,7 @@ const struct doveadm_settings doveadm_default_settings = {
 	.dsync_remote_cmd = "ssh -l%{login} %{host} doveadm dsync-server -u%u -U",
 	.ssl_client_ca_dir = "",
 	.ssl_client_ca_file = "",
+	.director_username_hash = "%Lu",
 
 	.plugin_envs = ARRAY_INIT
 };
@@ -3808,6 +3819,7 @@ struct service_settings auth_worker_service_settings = {
 #define DEF(type, name) \
 	{ type, #name, offsetof(struct auth_passdb_settings, name), NULL }
 static const struct setting_define auth_passdb_setting_defines[] = {
+	DEF(SET_STR, name),
 	DEF(SET_STR, driver),
 	DEF(SET_STR, args),
 	DEF(SET_STR, default_fields),
@@ -3825,6 +3837,7 @@ static const struct setting_define auth_passdb_setting_defines[] = {
 	SETTING_DEFINE_LIST_END
 };
 static const struct auth_passdb_settings auth_passdb_default_settings = {
+	.name = "",
 	.driver = "",
 	.args = "",
 	.default_fields = "",
@@ -3843,7 +3856,7 @@ const struct setting_parser_info auth_passdb_setting_parser_info = {
 	.defines = auth_passdb_setting_defines,
 	.defaults = &auth_passdb_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = offsetof(struct auth_passdb_settings, name),
 	.struct_size = sizeof(struct auth_passdb_settings),
 
 	.parent_offset = (size_t)-1,
@@ -3855,6 +3868,7 @@ const struct setting_parser_info auth_passdb_setting_parser_info = {
 #define DEF(type, name) \
 	{ type, #name, offsetof(struct auth_userdb_settings, name), NULL }
 static const struct setting_define auth_userdb_setting_defines[] = {
+	DEF(SET_STR, name),
 	DEF(SET_STR, driver),
 	DEF(SET_STR, args),
 	DEF(SET_STR, default_fields),
@@ -3869,6 +3883,7 @@ static const struct setting_define auth_userdb_setting_defines[] = {
 };
 static const struct auth_userdb_settings auth_userdb_default_settings = {
 	/* NOTE: when adding fields, update also auth.c:userdb_dummy_set */
+	.name = "",
 	.driver = "",
 	.args = "",
 	.default_fields = "",
@@ -3883,7 +3898,7 @@ const struct setting_parser_info auth_userdb_setting_parser_info = {
 	.defines = auth_userdb_setting_defines,
 	.defaults = &auth_userdb_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = offsetof(struct auth_userdb_settings, name),
 	.struct_size = sizeof(struct auth_userdb_settings),
 
 	.parent_offset = (size_t)-1,
@@ -4062,32 +4077,32 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&dict_setting_parser_info, 
-	&master_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&lda_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&aggregator_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
-	&mdbox_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&imap_login_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&director_setting_parser_info, 
-	&stats_setting_parser_info, 
 	&imapc_setting_parser_info, 
-	&maildir_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
 	&login_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&pop3c_setting_parser_info, 
+	&director_setting_parser_info, 
+	&lmtp_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&replicator_setting_parser_info, 
 	&imap_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&maildir_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&master_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&mdbox_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

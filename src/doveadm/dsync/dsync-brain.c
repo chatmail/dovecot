@@ -33,12 +33,16 @@ static const char *dsync_state_names[] = {
 	"done"
 };
 
+static void dsync_brain_mailbox_states_dump(struct dsync_brain *brain);
+
 static const char *dsync_brain_get_proctitle(struct dsync_brain *brain)
 {
 	string_t *str = t_str_new(128);
 	const char *import_title, *export_title;
 
 	str_append_c(str, '[');
+	if (brain->process_title_prefix != NULL)
+		str_append(str, brain->process_title_prefix);
 	str_append(str, brain->user->username);
 	if (brain->box == NULL) {
 		str_append_c(str, ' ');
@@ -143,6 +147,8 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 {
 	struct dsync_ibc_settings ibc_set;
 	struct dsync_brain *brain;
+	struct mail_namespace *const *nsp;
+	string_t *sync_ns_str = NULL;
 	const char *error;
 
 	i_assert(sync_type != DSYNC_BRAIN_SYNC_TYPE_UNKNOWN);
@@ -151,9 +157,20 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 	i_assert(N_ELEMENTS(dsync_state_names) == DSYNC_STATE_DONE+1);
 
 	brain = dsync_brain_common_init(user, ibc);
+	brain->process_title_prefix =
+		p_strdup(brain->pool, set->process_title_prefix);
 	brain->sync_type = sync_type;
-	if (set->sync_ns != NULL)
-		brain->sync_ns = set->sync_ns;
+	if (array_count(&set->sync_namespaces) > 0) {
+		sync_ns_str = t_str_new(128);
+		p_array_init(&brain->sync_namespaces, brain->pool,
+			     array_count(&set->sync_namespaces));
+		array_foreach(&set->sync_namespaces, nsp) {
+			str_append(sync_ns_str, (*nsp)->prefix);
+			str_append_c(sync_ns_str, '\n');
+			array_append(&brain->sync_namespaces, nsp, 1);
+		}
+		str_delete(sync_ns_str, str_len(sync_ns_str)-1, 1);
+	}
 	brain->sync_box = p_strdup(brain->pool, set->sync_box);
 	brain->exclude_mailboxes = set->exclude_mailboxes == NULL ? NULL :
 		p_strarray_dup(brain->pool, set->exclude_mailboxes);
@@ -163,20 +180,27 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 	brain->master_brain = TRUE;
 	dsync_brain_set_flags(brain, flags);
 
-	if (sync_type == DSYNC_BRAIN_SYNC_TYPE_STATE &&
-	    dsync_mailbox_states_import(brain->mailbox_states,
-					brain->pool, set->state, &error) < 0) {
+	if (sync_type != DSYNC_BRAIN_SYNC_TYPE_STATE)
+		;
+	else if (dsync_mailbox_states_import(brain->mailbox_states, brain->pool,
+					     set->state, &error) < 0) {
 		hash_table_clear(brain->mailbox_states, FALSE);
 		i_error("Saved sync state is invalid, "
 			"falling back to full sync: %s", error);
 		brain->sync_type = sync_type = DSYNC_BRAIN_SYNC_TYPE_FULL;
+	} else {
+		if (brain->debug) {
+			i_debug("brain %c: Imported mailbox states:",
+				brain->master_brain ? 'M' : 'S');
+			dsync_brain_mailbox_states_dump(brain);
+		}
 	}
 	dsync_brain_mailbox_trees_init(brain);
 
 	memset(&ibc_set, 0, sizeof(ibc_set));
 	ibc_set.hostname = my_hostdomain();
-	ibc_set.sync_ns_prefix = set->sync_ns == NULL ? NULL :
-		set->sync_ns->prefix;
+	ibc_set.sync_ns_prefixes = sync_ns_str == NULL ?
+		NULL : str_c(sync_ns_str);
 	ibc_set.sync_box = set->sync_box;
 	ibc_set.exclude_mailboxes = set->exclude_mailboxes;
 	memcpy(ibc_set.sync_box_guid, set->sync_box_guid,
@@ -199,12 +223,14 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 
 struct dsync_brain *
 dsync_brain_slave_init(struct mail_user *user, struct dsync_ibc *ibc,
-		       bool local)
+		       bool local, const char *process_title_prefix)
 {
 	struct dsync_ibc_settings ibc_set;
 	struct dsync_brain *brain;
 
 	brain = dsync_brain_common_init(user, ibc);
+	brain->process_title_prefix =
+		p_strdup(brain->pool, process_title_prefix);
 	brain->state = DSYNC_STATE_SLAVE_RECV_HANDSHAKE;
 
 	if (local) {
@@ -380,6 +406,8 @@ static bool dsync_brain_master_recv_handshake(struct dsync_brain *brain)
 static bool dsync_brain_slave_recv_handshake(struct dsync_brain *brain)
 {
 	const struct dsync_ibc_settings *ibc_set;
+	struct mail_namespace *ns;
+	const char *const *prefixes;
 
 	i_assert(!brain->master_brain);
 
@@ -394,9 +422,25 @@ static bool dsync_brain_slave_recv_handshake(struct dsync_brain *brain)
 		}
 	}
 
-	if (ibc_set->sync_ns_prefix != NULL) {
-		brain->sync_ns = mail_namespace_find(brain->user->namespaces,
-						     ibc_set->sync_ns_prefix);
+	if (ibc_set->sync_ns_prefixes != NULL) {
+		p_array_init(&brain->sync_namespaces, brain->pool, 4);
+		prefixes = t_strsplit(ibc_set->sync_ns_prefixes, "\n");
+		if (prefixes[0] == NULL) {
+			/* ugly workaround for strsplit API: there was one
+			   prefix="" entry */
+			static const char *empty_prefix[] = { "", NULL };
+			prefixes = empty_prefix;
+		}
+		for (; *prefixes != NULL; prefixes++) {
+			ns = mail_namespace_find(brain->user->namespaces,
+						 *prefixes);
+			if (ns == NULL) {
+				i_error("Namespace not found: '%s'", *prefixes);
+				brain->failed = TRUE;
+				return FALSE;
+			}
+			array_append(&brain->sync_namespaces, &ns, 1);
+		}
 	}
 	brain->sync_box = p_strdup(brain->pool, ibc_set->sync_box);
 	brain->exclude_mailboxes = ibc_set->exclude_mailboxes == NULL ? NULL :
@@ -568,6 +612,27 @@ bool dsync_brain_run(struct dsync_brain *brain, bool *changed_r)
 	return ret;
 }
 
+static void dsync_brain_mailbox_states_dump(struct dsync_brain *brain)
+{
+	struct hash_iterate_context *iter;
+	struct dsync_mailbox_state *state;
+	uint8_t *guid;
+
+	iter = hash_table_iterate_init(brain->mailbox_states);
+	while (hash_table_iterate(iter, brain->mailbox_states, &guid, &state)) {
+		i_debug("brain %c: Mailbox %s state: uidvalidity=%u uid=%u modseq=%llu pvt_modseq=%llu messages=%u changes_during_sync=%d",
+			brain->master_brain ? 'M' : 'S',
+			guid_128_to_string(guid),
+			state->last_uidvalidity,
+			state->last_common_uid,
+			(unsigned long long)state->last_common_modseq,
+			(unsigned long long)state->last_common_pvt_modseq,
+			state->last_messages_count,
+			state->changes_during_sync);
+	}
+	hash_table_iterate_deinit(&iter);
+}
+
 void dsync_brain_get_state(struct dsync_brain *brain, string_t *output)
 {
 	struct hash_iterate_context *iter;
@@ -593,11 +658,22 @@ void dsync_brain_get_state(struct dsync_brain *brain, string_t *output)
 		node = dsync_mailbox_tree_lookup_guid(brain->local_mailbox_tree,
 						      guid);
 		if (node == NULL ||
-		    node->existence != DSYNC_MAILBOX_NODE_EXISTS)
+		    node->existence != DSYNC_MAILBOX_NODE_EXISTS) {
+			if (brain->debug) {
+				i_debug("brain %c: Removed state for deleted mailbox %s",
+					brain->master_brain ? 'M' : 'S',
+					guid_128_to_string(guid));
+			}
 			hash_table_remove(brain->mailbox_states, guid);
+		}
 	}
 	hash_table_iterate_deinit(&iter);
 
+	if (brain->debug) {
+		i_debug("brain %c: Exported mailbox states:",
+			brain->master_brain ? 'M' : 'S');
+		dsync_brain_mailbox_states_dump(brain);
+	}
 	dsync_mailbox_states_export(brain->mailbox_states, output);
 }
 
@@ -619,8 +695,15 @@ bool dsync_brain_has_unexpected_changes(struct dsync_brain *brain)
 bool dsync_brain_want_namespace(struct dsync_brain *brain,
 				struct mail_namespace *ns)
 {
-	if (brain->sync_ns != NULL)
-		return brain->sync_ns == ns;
+	struct mail_namespace *const *nsp;
+
+	if (array_is_created(&brain->sync_namespaces)) {
+		array_foreach(&brain->sync_namespaces, nsp) {
+			if (ns == *nsp)
+				return TRUE;
+		}
+		return FALSE;
+	}
 	if (ns->alias_for != NULL) {
 		/* always skip aliases */
 		return FALSE;

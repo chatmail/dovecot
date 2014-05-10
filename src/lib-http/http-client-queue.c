@@ -228,11 +228,24 @@ void http_client_queue_connection_setup(struct http_client_queue *queue)
 
 	if (!http_client_peer_is_connected(peer)) {
 		unsigned int msecs;
+		bool new_peer = TRUE;
 
 		/* not already connected, wait for connections */
 		if (!array_is_created(&queue->pending_peers))
 			i_array_init(&queue->pending_peers, 8);
-		array_append(&queue->pending_peers, &peer, 1);			
+		else {
+			struct http_client_peer *const *peer_idx;
+
+			/* we may be waiting for this peer already */
+			array_foreach(&queue->pending_peers, peer_idx) {
+				if (http_client_peer_addr_cmp(&(*peer_idx)->addr, addr) == 0) {
+					new_peer = FALSE;
+					break;
+				}
+			}
+		}
+		if (new_peer)
+			array_append(&queue->pending_peers, &peer, 1);
 
 		/* start soft connect time-out (but only if we have another IP left) */
 		msecs = host->client->set.soft_connect_timeout_msecs;
@@ -286,6 +299,14 @@ http_client_queue_connection_failure(struct http_client_queue *queue,
 {
 	struct http_client_host *host = queue->host;
 
+	http_client_queue_debug(queue, "Failed to set up connection to %s%s: %s "
+		"(%u peers pending, %u requests pending)",
+		http_client_peer_addr2str(addr),
+		(addr->https_name == NULL ? "" :
+			t_strdup_printf(" (SSL=%s)", addr->https_name)), reason,
+		(array_is_created(&queue->pending_peers) ?
+		 	array_count(&queue->pending_peers): 0),
+		array_count(&queue->request_queue));
 	if (array_is_created(&queue->pending_peers) &&
 		array_count(&queue->pending_peers) > 0) {
 		struct http_client_peer *const *peer_idx;
@@ -301,8 +322,11 @@ http_client_queue_connection_failure(struct http_client_queue *queue,
 				break;
 			}
 		}
-		if (array_count(&queue->pending_peers) > 0)
+		if (array_count(&queue->pending_peers) > 0) {
+			http_client_queue_debug(queue,
+				"Waiting for remaining pending peers.");
 			return TRUE;
+		}
 	}
 
 	/* one of the connections failed. if we're not using soft timeouts,
@@ -312,6 +336,9 @@ http_client_queue_connection_failure(struct http_client_queue *queue,
 		timeout_remove(&queue->to_connect);
 
 	if (http_client_queue_is_last_connect_ip(queue)) {
+		http_client_queue_debug(queue,
+			"Failed to set up any connection; failing all queued requests");
+
 		/* all IPs failed, but retry all of them again on the
 		   next request. */
 		queue->ips_connect_idx = queue->ips_connect_start_idx =

@@ -72,7 +72,7 @@ struct lucene_index {
 	ARRAY(struct lucene_analyzer) analyzers;
 
 	Document *doc;
-	uint32_t prev_uid;
+	uint32_t prev_uid, prev_part_idx;
 };
 
 struct rescan_context {
@@ -119,7 +119,7 @@ struct lucene_index *lucene_index_init(const char *path,
 		index->set.default_language = "";
 	}
 #ifdef HAVE_LUCENE_STEMMER
-	if (!set->no_snowball) {
+	if (set == NULL || !set->no_snowball) {
 		index->default_analyzer =
 			_CLNEW snowball::SnowballAnalyzer(index->normalizer,
 							  index->set.default_language);
@@ -305,6 +305,22 @@ lucene_doc_get_uid(struct lucene_index *index, Document *doc, uint32_t *uid_r)
 	}
 	*uid_r = num;
 	return 0;
+}
+
+static uint32_t
+lucene_doc_get_part(struct lucene_index *index, Document *doc)
+{
+	Field *field = doc->getField(_T("part"));
+	const TCHAR *part = field == NULL ? NULL : field->stringValue();
+	if (part == NULL)
+		return 0;
+
+	uint32_t num = 0;
+	while (*part != 0) {
+		num = num*10 + (*part - '0');
+		part++;
+	}
+	return num;
 }
 
 int lucene_index_get_last_uid(struct lucene_index *index, uint32_t *last_uid_r)
@@ -510,20 +526,25 @@ static int lucene_index_build_flush(struct lucene_index *index)
 }
 
 int lucene_index_build_more(struct lucene_index *index, uint32_t uid,
-			    const unsigned char *data, size_t size,
-			    const char *hdr_name)
+			    uint32_t part_idx, const unsigned char *data,
+			    size_t size, const char *hdr_name)
 {
 	wchar_t id[MAX_INT_STRLEN];
 	size_t namesize, datasize;
 
-	if (uid != index->prev_uid) {
+	if (uid != index->prev_uid || part_idx != index->prev_part_idx) {
 		if (lucene_index_build_flush(index) < 0)
 			return -1;
 		index->prev_uid = uid;
+		index->prev_part_idx = part_idx;
 
 		index->doc = _CLNEW Document();
 		swprintf(id, N_ELEMENTS(id), L"%u", uid);
 		index->doc->add(*_CLNEW Field(_T("uid"), id, Field::STORE_YES | Field::INDEX_UNTOKENIZED));
+		if (part_idx != 0) {
+			swprintf(id, N_ELEMENTS(id), L"%u", part_idx);
+			index->doc->add(*_CLNEW Field(_T("part"), id, Field::STORE_YES | Field::INDEX_UNTOKENIZED));
+		}
 		index->doc->add(*_CLNEW Field(_T("box"), index->mailbox_guid, Field::STORE_YES | Field::INDEX_UNTOKENIZED));
 	}
 
@@ -535,7 +556,11 @@ int lucene_index_build_more(struct lucene_index *index, uint32_t uid,
 	}
 
 	datasize = uni_utf8_strlen_n(data, size) + 1;
-	wchar_t dest[datasize];
+	wchar_t *dest, *dest_free = NULL;
+	if (datasize < 4096)
+		dest = t_new(wchar_t, datasize);
+	else
+		dest = dest_free = i_new(wchar_t, datasize);
 	lucene_utf8_n_to_tchar(data, size, dest, datasize);
 	lucene_data_translate(index, dest, datasize);
 
@@ -556,6 +581,7 @@ int lucene_index_build_more(struct lucene_index *index, uint32_t uid,
 			index->cur_analyzer = guess_analyzer(index, data, size);
 		index->doc->add(*_CLNEW Field(_T("body"), dest, Field::STORE_NO | Field::INDEX_TOKENIZED));
 	}
+	i_free(dest_free);
 	return 0;
 }
 
@@ -568,6 +594,7 @@ int lucene_index_build_deinit(struct lucene_index *index)
 		return 0;
 	}
 	index->prev_uid = 0;
+	index->prev_part_idx = 0;
 
 	if (index->writer == NULL) {
 		lucene_index_close(index);
@@ -1271,7 +1298,9 @@ lucene_index_search(struct lucene_index *index,
 				break;
 			}
 
-			if (result != NULL) {
+			if (seq_range_array_add(uids_r, uid)) {
+				/* duplicate result */
+			} else if (result != NULL) {
 				if (uid < last_uid)
 					result->scores_sorted = false;
 				last_uid = uid;
@@ -1280,7 +1309,6 @@ lucene_index_search(struct lucene_index *index,
 				score->uid = uid;
 				score->score = hits->score(i);
 			}
-			seq_range_array_add(uids_r, uid);
 		}
 		_CLDELETE(hits);
 		return ret;
@@ -1314,6 +1342,13 @@ int lucene_index_lookup(struct lucene_index *index,
 		if (lucene_index_search(index, def_queries, result,
 					&result->definite_uids) < 0)
 			return -1;
+	}
+
+	if (have_definites) {
+		/* FIXME: mixing up definite + maybe queries is broken. if the
+		   definite query matched, it'll just assume that the maybe
+		   queries matched as well */
+		return 0;
 	}
 
 	ARRAY_TYPE(lucene_query) maybe_queries;
@@ -1390,10 +1425,13 @@ lucene_index_search_multi(struct lucene_index *index,
 				p_array_init(&br->definite_uids, result->pool, 32);
 				p_array_init(&br->scores, result->pool, 32);
 			}
-			seq_range_array_add(&br->definite_uids, uid);
-			score = array_append_space(&br->scores);
-			score->uid = uid;
-			score->score = hits->score(i);
+			if (seq_range_array_add(&br->definite_uids, uid)) {
+				/* duplicate result */
+			} else {
+				score = array_append_space(&br->scores);
+				score->uid = uid;
+				score->score = hits->score(i);
+			}
 		}
 		_CLDELETE(hits);
 		return ret;
@@ -1488,6 +1526,7 @@ lucene_index_iter_next(struct lucene_index_iter *iter)
 	(void)fts_lucene_get_mailbox_guid(iter->index, doc,
 					  iter->rec.mailbox_guid);
 	(void)lucene_doc_get_uid(iter->index, doc, &iter->rec.uid);
+	iter->rec.part_num = lucene_doc_get_part(iter->index, doc);
 	return &iter->rec;
 }
 

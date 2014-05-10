@@ -44,7 +44,7 @@ void mailbox_list_index_reset(struct mailbox_list_index *ilist)
 	mailbox_list_index_init_pool(ilist);
 }
 
-static int mailbox_list_index_index_open(struct mailbox_list *list)
+int mailbox_list_index_index_open(struct mailbox_list *list)
 {
 	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(list);
 	const struct mail_storage_settings *set = list->mail_set;
@@ -72,6 +72,7 @@ static int mailbox_list_index_index_open(struct mailbox_list *list)
 				   perm.file_create_gid,
 				   perm.file_create_gid_origin);
 
+	mail_index_set_fsync_mode(ilist->index, set->parsed_fsync_mode, 0);
 	mail_index_set_lock_method(ilist->index, set->parsed_lock_method,
 				   lock_timeout);
 	if (mail_index_open_or_create(ilist->index, index_flags) < 0) {
