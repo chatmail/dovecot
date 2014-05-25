@@ -1,4 +1,4 @@
-dovecot (1:2.2.13-1) UNRELEASED; urgency=medium
+dovecot (1:2.2.13-1) unstable; urgency=medium
 
   * [0680040] Imported Upstream version 2.2.13
 
