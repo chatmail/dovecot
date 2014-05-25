@@ -1,8 +1,63 @@
+2014-05-11  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset c55c660d6e9d
+	[2392c1c0c751] [tip]
+
+	* .hgtags:
+	Added tag 2.2.13 for changeset c55c660d6e9d
+	[0802fa398c25]
+
+	* NEWS, configure.ac:
+	Released v2.2.13.
+	[c55c660d6e9d] [2.2.13]
+
+	* src/lib-mail/test-message-header-decode.c:
+	lib-mail: test-message-header-decoder unit test fixed
+	[71f168f3b7e6]
+
+	* src/lib-mail/message-header-encode.c:
+	lib-mail: Fix to previous message_header_encode() commit
+	[3db2d96381ca]
+
+	* src/doveadm/doveadm-penalty.c:
+	doveadm penalty: Fixed using -a parameter
+	[2ea729128dbe]
+
+	* src/lib-mail/message-header-encode.c, src/lib-mail/message-header-
+	encode.h, src/lib-mail/test-message-header-encode.c:
+	lib-mail: message_header_encode() now preserves folding whitespace
+	This function could still use some cleaning up, but good enough for
+	now..
+
+	Also it should try to minimize the encoded words, not necessarily
+	encoding everything between the first and the last words that have
+	to be encoded.
+	[e6c96db70cfb]
+
+	* src/lib-mail/message-header-encode.c, src/lib-mail/message-header-
+	encode.h, src/lib-mail/test-message-header-encode.c:
+	lib-mail: message_header_encode_[bq]() now explicitly takes the
+	first line length parameter. So this change partially reverts the
+	previous change, because message_header_encode() was actually
+	internally relying on this behavior. The explicit parameter makes it
+	clearer.
+	[009caac530e9]
+
+	* src/lib-mail/message-header-encode.c, src/lib-mail/message-header-
+	encode.h:
+	lib-mail: message_header_encode() no longer tries to lookup the
+	first line's length from output string. This function is used only
+	by Pigeonhole, which only uses it for empty output strings, so it's
+	not useful there. Also that behavior is somewhat unexpected and
+	confusing.
+	[4892a941d63b]
+
 2014-05-08  Timo Sirainen  <tss@iki.fi>
 
 	* .hgsigs:
 	Added signature for changeset 791ec610422c
-	[f557dada0649] [tip]
+	[f557dada0649]
 
 	* .hgtags:
 	Added tag 2.2.13.rc1 for changeset 791ec610422c
