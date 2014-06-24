@@ -1,0 +1,97 @@
+# Czech PO debconf template translation of dovecot.
+# Copyright (C) 2014 Michal Simunek <michal.simunek@gmail.com>
+# This file is distributed under the same license as the dovecot package.
+# Michal Simunek <michal.simunek@gmail.com>, 2014.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: dovecot 1:2.2.5-2\n"
+"Report-Msgid-Bugs-To: dovecot@packages.debian.org\n"
+"POT-Creation-Date: 2013-11-07 07:06+0100\n"
+"PO-Revision-Date: 2014-06-12 10:22+0200\n"
+"Last-Translator: Michal Simunek <michal.simunek@gmail.com>\n"
+"Language-Team: Czech <debian-l10n-czech@lists.debian.org>\n"
+"Language: cs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Type: error
+#. Description
+#: ../dovecot-core.templates:2001
+msgid "Wrong location for SSL certificates"
+msgstr "Špatné umístění SSL certifikátů"
+
+#. Type: error
+#. Description
+#: ../dovecot-core.templates:2001
+msgid ""
+"This machine uses SSL certificates for Dovecot. These certificates should be "
+"moved from /etc/ssl to /etc/dovecot and Dovecot's configuration file (/etc/"
+"dovecot/conf.d/10-ssl.conf) should be updated accordingly."
+msgstr ""
+"Tento počítač používá SSL certifikáty pro Dovecot. Tyto certifikáty je třeba "
+"přesunout z /etc/ssl do /etc/dovecot a konfigurační soubor pro Dovecot (/etc/"
+"dovecot/conf.d/10-ssl.conf) by měl být odpovídajícím způsobem aktualizován."
+
+#. Type: error
+#. Description
+#: ../dovecot-core.templates:2001
+msgid "Please read /usr/share/doc/dovecot-core/README.Debian.gz for details."
+msgstr "Pro podrobnější informace si prosím přečtěte /usr/share/doc/dovecot-core/README.Debian.gz."
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid "Create a self-signed SSL certificate?"
+msgstr "Vytvořit SSL certifikát podepsaný sám sebou?"
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid ""
+"An SSL certificate is needed in order to use IMAP or POP3 over SSL/TLS. No "
+"such certificate was found."
+msgstr ""
+"Pokud se má používat IMAP či POP3 přes SSL/TLS, je nutný SSL certifikát. "
+"Žádný takový certifikát nebyl nalezen."
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid ""
+"Please choose whether you want to create one now. This will then be a self-"
+"signed certificate."
+msgstr ""
+"Zvolte si prosím, zda chcete vytvořit nový certifikát. Ten bude poté "
+"podepsán sám sebou."
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid ""
+"If you choose not to create a certificate, please adapt Dovecot's "
+"configuration file (/etc/dovecot/conf.d/10-ssl.conf)."
+msgstr ""
+"Pokud se rozhodnete certifikát nevytvářet, upravte prosím konfigurační "
+"soubor pro Dovecot (/etc/dovecot/conf.d/10-ssl.conf)."
+
+#. Type: string
+#. Description
+#: ../dovecot-core.templates:4001
+msgid "Host name:"
+msgstr "Název hostitele:"
+
+#. Type: string
+#. Description
+#: ../dovecot-core.templates:4001
+msgid "Please enter the host name to use in the SSL certificate."
+msgstr "Zadejte prosím název hostitele, který se použije v SSL certifikátu."
+
+#. Type: string
+#. Description
+#: ../dovecot-core.templates:4001
+msgid ""
+"It will become the \"commonName\" field of the generated SSL certificate."
+msgstr ""
+"Ten se stane políčkem \"commonName\" vytvořeného certifikátu."
