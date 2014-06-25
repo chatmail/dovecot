@@ -1,3 +1,12 @@
+dovecot (1:2.2.13-2) unstable; urgency=medium
+
+  * [bd5e34b] Patches from upstreams' hg repo to fix BYE and LOGOUT not being 
+    sent. (Closes: #751682)
+  * [452e336] Czech translation for debconf.
+    Thanks to Michal Šimůnek (Closes: #751389)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 25 Jun 2014 01:38:59 -0400
+
 dovecot (1:2.2.13-1) unstable; urgency=medium
 
   * [0680040] Imported Upstream version 2.2.13
