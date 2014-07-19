@@ -6,6 +6,7 @@ dovecot (1:2.2.13-3) UNRELEASED; urgency=medium
   * Use canonical address for Vcs-Browser header.
   * Remove unnecessary asterisk from NEWS entry; fixes lintian warning.
   * Remove unused lintian override for usr/lib/dovecot/imap.
+  * dovecot-core: Ignore lintian warnings for empty directories.
 
  -- Jelmer Vernooij <jelmer@debian.org>  Tue, 08 Jul 2014 01:48:08 +0200
 
