@@ -1,9 +1,9 @@
 dovecot (1:2.1.7-7) unstable; urgency=high
 
-  * If you are upgrading from stable or the earlier 2.1.7 packages in testing,
-    you are advised to  backup your configuration files before continuing.
-    Carefully read /usr/share/doc/dovecot-core/README.Debian.gz for important
-    information about problems that might affect your upgrade.
+  If you are upgrading from stable or the earlier 2.1.7 packages in testing,
+  you are advised to  backup your configuration files before continuing.
+  Carefully read /usr/share/doc/dovecot-core/README.Debian.gz for important
+  information about problems that might affect your upgrade.
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 04 Feb 2013 16:27:17 -0500
 

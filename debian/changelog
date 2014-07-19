@@ -4,6 +4,7 @@ dovecot (1:2.2.13-3) UNRELEASED; urgency=medium
     minimum version. Closes: #754141
   * Use configuration file for openssl certificate configuration.
   * Use canonical address for Vcs-Browser header.
+  * Remove unnecessary asterisk from NEWS entry; fixes lintian warning.
 
  -- Jelmer Vernooij <jelmer@debian.org>  Tue, 08 Jul 2014 01:48:08 +0200
 
