@@ -139,7 +139,7 @@ if [ "$1" = "configure" ]; then
 
       sed -e s#@commonName@#"$COMMONNAME"# \
           -e s#@emailAddress@#"$root@MAILNAME"# \
-          /usr/share/dovecot/ssleay.cnf > $SSLCONF
+          /usr/share/dovecot/openssl.cnf > $SSLCONF
 
       if ! openssl req -config $SSLCONF -newkey rsa:2048  -x509 -days 3652.5 -nodes \
       -out $SSL_CERT -keyout $SSL_KEY > $TMPOUT 2>&1; then
