@@ -1,6 +1,6 @@
 dovecot (1:2.2.13-4) UNRELEASED; urgency=medium
 
-  * Add Provides with dovecot ABI version, for plugins to depend on.
+  * Add Provides with dovecot ABI version, for plugins to depend on. Closes: #456021
 
  -- Jelmer Vernooij <jelmer@debian.org>  Sun, 20 Jul 2014 19:31:09 +0200
 
