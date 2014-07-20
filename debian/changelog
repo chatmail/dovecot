@@ -1,4 +1,4 @@
-dovecot (1:2.2.13-3) UNRELEASED; urgency=medium
+dovecot (1:2.2.13-3) unstable; urgency=medium
 
   * Build-depend on clucene 2.3 or later, which upstream lists as the
     minimum version. Closes: #754141
