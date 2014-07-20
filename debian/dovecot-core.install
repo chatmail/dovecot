@@ -1,3 +1,2 @@
 dovecot.service /lib/systemd/system
 dovecot.socket /lib/systemd/system
-debian/openssl.cnf /usr/share/dovecot

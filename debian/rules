@@ -112,6 +112,8 @@ install: build
 	install -o root -g root -m 0644 $(CURDIR)/$(PIGEONHOLE_DIR)/doc/example-config/conf.d/*.conf \
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/
 	install -D -m 0755 -o root -g root $(CURDIR)/debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-core/usr/bin/maildirmake.dovecot
+	install -o root -g root -m 0644 $(CURDIR)/debian/openssl.cnf \
+		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/
 	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core
 	cp $(PIGEONHOLE_DIR)/ChangeLog $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/pigeonhole.ChangeLog
 	cp $(PIGEONHOLE_DIR)/README $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/pigeonhole.README
