@@ -180,7 +180,7 @@ install: build
 	mv $(CURDIR)/debian/dovecot-core/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/dovecot-config $(CURDIR)/debian/dovecot-dev/usr/lib/dovecot
 	rmdir $(CURDIR)/debian/dovecot-core/usr/include
-	grep ABI_VERSION config.h | perl -ne '/"(.+)\(.+\)"/ && print $$1' > $(CURDIR)/debian/dovecot-dev/usr/share/dovecot/dovecot-abi
+	grep ABI_VERSION config.h | perl -ne '/"(.+)\(.+\)"/ && print $$1' | tr '[A-Z]' '[a-z]' > $(CURDIR)/debian/dovecot-dev/usr/share/dovecot/dovecot-abi
 
 # Build architecture-independent files here.
 binary-indep: build install
