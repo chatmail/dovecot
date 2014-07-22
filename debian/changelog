@@ -1,4 +1,4 @@
-dovecot (1:2.2.13-4) UNRELEASED; urgency=medium
+dovecot (1:2.2.13-4) unstable; urgency=medium
 
   * Add Provides with dovecot ABI version, for plugins to depend on. Closes: #456021
 
