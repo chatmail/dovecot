@@ -14,7 +14,7 @@ req_extensions          = v3_req
 x509_extensions         = v3_req
 
 [ req_distinguished_name ]
-organizationalName = Dovecot mail server
+organizationName = Dovecot mail server
 organizationalUnitName = @commonName@
 commonName = @commonName@
 emailAddress = @emailAddress@

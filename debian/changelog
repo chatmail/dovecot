@@ -1,6 +1,14 @@
+dovecot (1:2.2.13-5) UNRELEASED; urgency=medium
+
+  * Fix name of organizationName field in SSL configuration for self-
+    signed certs. Closes: #760653
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Sat, 06 Sep 2014 23:19:51 +0200
+
 dovecot (1:2.2.13-4) unstable; urgency=medium
 
-  * Add Provides with dovecot ABI version, for plugins to depend on. Closes: #456021
+  * Add Provides with dovecot ABI version, for plugins to depend on.
+    Closes: #456021
 
  -- Jelmer Vernooij <jelmer@debian.org>  Sun, 20 Jul 2014 19:31:09 +0200
 
