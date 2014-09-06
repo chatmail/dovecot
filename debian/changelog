@@ -1,4 +1,4 @@
-dovecot (1:2.2.13-5) UNRELEASED; urgency=medium
+dovecot (1:2.2.13-5) unstable; urgency=medium
 
   * Fix name of organizationName field in SSL configuration for self-
     signed certs. Closes: #760653
