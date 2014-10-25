@@ -95,6 +95,19 @@ static struct message_part *get_unserialized_parts(struct index_mail *mail)
 	return parts;
 }
 
+static bool message_parts_have_nuls(const struct message_part *part)
+{
+	for (; part != NULL; part = part->next) {
+		if ((part->flags & MESSAGE_PART_FLAG_HAS_NULS) != 0)
+			return TRUE;
+		if (part->children != NULL) {
+			if (message_parts_have_nuls(part->children))
+				return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 static bool get_cached_parts(struct index_mail *mail)
 {
 	struct message_part *part;
@@ -106,7 +119,7 @@ static bool get_cached_parts(struct index_mail *mail)
 		return FALSE;
 
 	/* we know the NULs now, update them */
-	if ((part->flags & MESSAGE_PART_FLAG_HAS_NULS) != 0) {
+	if (message_parts_have_nuls(part)) {
 		mail->mail.mail.has_nuls = TRUE;
 		mail->mail.mail.has_no_nuls = FALSE;
 	} else {
@@ -580,7 +593,7 @@ static void index_mail_body_parsed_cache_flags(struct index_mail *mail)
 			 MAIL_CACHE_FLAG_BINARY_BODY |
 			 MAIL_CACHE_FLAG_HAS_NULS |
 			 MAIL_CACHE_FLAG_HAS_NO_NULS);
-	if ((data->parts->flags & MESSAGE_PART_FLAG_HAS_NULS) != 0) {
+	if (message_parts_have_nuls(data->parts)) {
 		_mail->has_nuls = TRUE;
 		_mail->has_no_nuls = FALSE;
 		cache_flags |= MAIL_CACHE_FLAG_HAS_NULS;
@@ -671,6 +684,7 @@ index_mail_body_parsed_cache_bodystructure(struct index_mail *mail,
 
 	if (!data->parsed_bodystructure)
 		return;
+	i_assert(data->parts != NULL);
 
 	/* If BODY is fetched first but BODYSTRUCTURE is also wanted, we don't
 	   normally want to first cache BODY and then BODYSTRUCTURE. So check
@@ -833,19 +847,22 @@ index_mail_parse_body_finish(struct index_mail *mail,
 		i_stream_ref(parser_input);
 		ret = message_parser_deinit(&mail->data.parser_ctx,
 					    &mail->data.parts) < 0 ? 0 : 1;
-		if (parser_input->stream_errno == 0 ||
-		    parser_input->stream_errno == EPIPE) {
-			/* EPIPE = input already closed. allow the caller to
-			   decide if that is an error or not. */
-			i_assert(!success ||
-				 (i_stream_read(parser_input) == -1 &&
-				  !i_stream_have_bytes_left(parser_input)));
-		} else {
-			errno = parser_input->stream_errno;
-			mail_storage_set_critical(mail->mail.mail.box->storage,
-				"mail parser: read(%s, box=%s) failed: %m",
-				i_stream_get_name(parser_input),
-				mail->mail.mail.box->vname);
+		if (success && (parser_input->stream_errno == 0 ||
+				parser_input->stream_errno == EPIPE)) {
+			/* do one final read, which verifies that the message
+			   size is correct. */
+			if (i_stream_read(parser_input) != -1 ||
+			    i_stream_have_bytes_left(parser_input))
+				i_unreached();
+		}
+		/* EPIPE = input already closed. allow the caller to
+		   decide if that is an error or not. (for example we
+		   could be coming here from IMAP APPEND when IMAP
+		   client has closed the connection too early. we
+		   don't want to log an error in that case.) */
+		if (parser_input->stream_errno != 0 &&
+		    parser_input->stream_errno != EPIPE) {
+			index_mail_stream_log_failure_for(mail, parser_input);
 			ret = -1;
 		}
 		i_stream_unref(&parser_input);
@@ -857,7 +874,15 @@ index_mail_parse_body_finish(struct index_mail *mail,
 		}
 		mail->data.parts = NULL;
 		mail->data.parsed_bodystructure = FALSE;
+		if (mail->data.save_bodystructure_body)
+			mail->data.save_bodystructure_header = TRUE;
 		return -1;
+	}
+	if (mail->data.save_bodystructure_body) {
+		mail->data.parsed_bodystructure = TRUE;
+		mail->data.save_bodystructure_header = FALSE;
+		mail->data.save_bodystructure_body = FALSE;
+		i_assert(mail->data.parts != NULL);
 	}
 
 	if (mail->data.no_caching) {
@@ -877,16 +902,45 @@ index_mail_parse_body_finish(struct index_mail *mail,
 	return 0;
 }
 
+static void index_mail_stream_log_failure(struct index_mail *mail)
+{
+	index_mail_stream_log_failure_for(mail, mail->data.stream);
+}
+
 int index_mail_stream_check_failure(struct index_mail *mail)
 {
 	if (mail->data.stream->stream_errno == 0)
 		return 0;
-
-	errno = mail->data.stream->stream_errno;
-	mail_storage_set_critical(mail->mail.mail.box->storage,
-		"read(%s) failed: %m (uid=%u)",
-		i_stream_get_name(mail->data.stream), mail->mail.mail.uid);
+	index_mail_stream_log_failure(mail);
 	return -1;
+}
+
+void index_mail_refresh_expunged(struct mail *mail)
+{
+	mail_index_refresh(mail->box->index);
+	if (mail_index_is_expunged(mail->transaction->view, mail->seq))
+		mail_set_expunged(mail);
+}
+
+void index_mail_stream_log_failure_for(struct index_mail *mail,
+				       struct istream *input)
+{
+	struct mail *_mail = &mail->mail.mail;
+
+	i_assert(input->stream_errno != 0);
+
+	if (input->stream_errno == ENOENT) {
+		/* was the mail just expunged? we could get here especially if
+		   external attachments are used and the attachment is deleted
+		   before we've opened the file. */
+		index_mail_refresh_expunged(_mail);
+		if (_mail->expunged)
+			return;
+	}
+	mail_storage_set_critical(_mail->box->storage,
+		"read(%s) failed: %s (uid=%u, box=%s)",
+		i_stream_get_name(input), i_stream_get_error(input),
+		_mail->uid, mailbox_get_vname(_mail->box));
 }
 
 static int index_mail_parse_body(struct index_mail *mail,
@@ -908,8 +962,6 @@ static int index_mail_parse_body(struct index_mail *mail,
 		message_parser_parse_body(data->parser_ctx,
 					  parse_bodystructure_part_header,
 					  mail->mail.data_pool);
-		data->save_bodystructure_body = FALSE;
-		data->parsed_bodystructure = TRUE;
 	} else {
 		message_parser_parse_body(data->parser_ctx,
 			*null_message_part_header_callback, (void *)NULL);
@@ -982,9 +1034,7 @@ int index_mail_init_stream(struct index_mail *mail,
 				if (message_get_header_size(data->stream,
 							    &data->hdr_size,
 							    &has_nuls) < 0) {
-					mail_storage_set_critical(_mail->box->storage,
-						"read(%s) failed: %m",
-						i_stream_get_name(data->stream));
+					index_mail_stream_log_failure(mail);
 					return -1;
 				}
 				data->hdr_size_set = TRUE;
@@ -1008,9 +1058,7 @@ int index_mail_init_stream(struct index_mail *mail,
 				if (message_get_body_size(data->stream,
 							  &data->body_size,
 							  &has_nuls) < 0) {
-					mail_storage_set_critical(_mail->box->storage,
-						"read(%s) failed: %m",
-						i_stream_get_name(data->stream));
+					index_mail_stream_log_failure(mail);
 					return -1;
 				}
 				data->body_size_set = TRUE;
@@ -1052,8 +1100,11 @@ static int index_mail_parse_bodystructure(struct index_mail *mail,
 			data->save_bodystructure_header = TRUE;
 			data->save_bodystructure_body = TRUE;
 			(void)get_cached_parts(mail);
-			if (index_mail_parse_headers(mail, NULL) < 0)
+			if (index_mail_parse_headers(mail, NULL) < 0) {
+				data->save_bodystructure_header = TRUE;
 				return -1;
+			}
+			i_assert(data->parser_ctx != NULL);
 		}
 
 		if (index_mail_parse_body(mail, field) < 0)
@@ -1271,6 +1322,8 @@ static void index_mail_close_streams_full(struct index_mail *mail, bool closing)
 						 MAIL_FETCH_MESSAGE_PARTS);
 		}
 		mail->data.parser_input = NULL;
+		if (mail->data.save_bodystructure_body)
+			mail->data.save_bodystructure_header = TRUE;
 	}
 	if (data->filter_stream != NULL)
 		i_stream_unref(&data->filter_stream);
@@ -1489,21 +1542,6 @@ static void index_mail_update_access_parts(struct index_mail *mail)
 				(void)mail_get_hdr_stream(_mail, NULL, &input);
 		}
 	}
-
-	if ((data->wanted_fields & MAIL_FETCH_VIRTUAL_SIZE) != 0 &&
-	    data->virtual_size == (uoff_t)-1 &&
-	    _mail->lookup_abort == MAIL_LOOKUP_ABORT_NEVER &&
-	    ((data->access_part & (READ_HDR | PARSE_HDR)) == 0 ||
-	      (data->access_part & (READ_BODY | PARSE_BODY)) == 0)) {
-		/* we want virtual size, and we'd prefer not to read the entire
-		   message for it. see if it's possible. */
-		uoff_t vsize;
-
-		_mail->lookup_abort = MAIL_LOOKUP_ABORT_NOT_IN_CACHE;
-		if (mail_get_virtual_size(_mail, &vsize) < 0)
-			mail->data.access_part |= READ_HDR | READ_BODY;
-		_mail->lookup_abort = MAIL_LOOKUP_ABORT_NEVER;
-	}
 }
 
 void index_mail_set_seq(struct mail *_mail, uint32_t seq, bool saving)
@@ -1713,8 +1751,6 @@ void index_mail_cache_parse_deinit(struct mail *_mail, time_t received_date,
 		mail->data.save_date = ioloop_time;
 	}
 
-	mail->data.save_bodystructure_body = FALSE;
-	mail->data.parsed_bodystructure = TRUE;
 	(void)index_mail_parse_body_finish(mail, 0, success);
 }
 

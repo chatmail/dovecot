@@ -206,10 +206,14 @@ static bool parse_section(const char *type, const char *name,
 		return FALSE;
 	}
 	if (strcmp(type, "key") == 0) {
-		if (name == NULL)
-			return "Key section is missing name";
-		if (strchr(name, '.') != NULL)
-			return "Key section names must not contain '.'";
+		if (name == NULL) {
+			*errormsg = "Key section is missing name";
+			return FALSE;
+		}
+		if (strchr(name, '.') != NULL) {
+			*errormsg = "Key section names must not contain '.'";
+			return FALSE;
+		}
 		ctx->section = DICT_SETTINGS_SECTION_KEY;
 		ctx->cur_key = array_append_space(&ctx->conn->set.keys);
 		*ctx->cur_key = default_key_settings;
@@ -439,7 +443,7 @@ int db_dict_value_iter_init(struct dict_connection *conn,
 	pool_t pool;
 	int ret;
 
-	pool = pool_alloconly_create("auth dict lookup", 1024);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"auth dict lookup", 1024);
 	iter = p_new(pool, struct db_dict_value_iter, 1);
 	iter->pool = pool;
 	iter->conn = conn;

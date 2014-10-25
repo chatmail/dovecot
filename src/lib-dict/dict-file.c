@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "array.h"
 #include "hash.h"
+#include "home-expand.h"
 #include "mkdir-parents.h"
 #include "file-lock.h"
 #include "file-dotlock.h"
@@ -54,13 +55,11 @@ static struct dotlock_settings file_dict_dotlock_settings = {
 
 static int
 file_dict_init(struct dict *driver, const char *uri,
-	       enum dict_data_type value_type ATTR_UNUSED,
-	       const char *username ATTR_UNUSED,
-	       const char *base_dir ATTR_UNUSED, struct dict **dict_r,
-	       const char **error_r)
+	       const struct dict_settings *set,
+	       struct dict **dict_r, const char **error_r)
 {
 	struct file_dict *dict;
-	const char *p;
+	const char *p, *path;
 
 	dict = i_new(struct file_dict, 1);
 	dict->lock_method = FILE_LOCK_METHOD_DOTLOCK;
@@ -68,20 +67,21 @@ file_dict_init(struct dict *driver, const char *uri,
 	p = strchr(uri, ':');
 	if (p == NULL) {
 		/* no parameters */
-		dict->path = i_strdup(uri);
+		path = uri;
 	} else {
-		dict->path = i_strdup_until(uri, p++);
+		path = t_strdup_until(uri, p++);
 		if (strcmp(p, "lock=fcntl") == 0)
 			dict->lock_method = FILE_LOCK_METHOD_FCNTL;
 		else if (strcmp(p, "lock=flock") == 0)
 			dict->lock_method = FILE_LOCK_METHOD_FLOCK;
 		else {
 			*error_r = t_strdup_printf("Invalid parameter: %s", p+1);
-			i_free(dict->path);
 			i_free(dict);
 			return -1;
 		}
 	}
+	dict->path = set->home_dir == NULL ? i_strdup(path) :
+		i_strdup(home_expand_tilde(path, set->home_dir));
 	dict->dict = *driver;
 	dict->hash_pool = pool_alloconly_create("file dict", 1024);
 	hash_table_create(&dict->hash, dict->hash_pool, 0, str_hash, strcmp);
@@ -111,7 +111,11 @@ static bool file_dict_need_refresh(struct file_dict *dict)
 	if (dict->fd == -1)
 		return TRUE;
 
-	nfs_flush_file_handle_cache(dict->path);
+	/* Disable NFS flushing for now since it can cause unnecessary
+	   problems and there's no easy way for us to know here if
+	   mail_nfs_storage=yes. In any case it's pretty much an unsupported
+	   setting nowadays. */
+	/*nfs_flush_file_handle_cache(dict->path);*/
 	if (nfs_safe_stat(dict->path, &st1) < 0) {
 		i_error("stat(%s) failed: %m", dict->path);
 		return FALSE;
@@ -441,7 +445,7 @@ static int file_dict_mkdir(struct file_dict *dict)
 		mode = st.st_mode;
 	}
 
-	if (mkdir_parents(path, mode) < 0) {
+	if (mkdir_parents(path, mode) < 0 && errno != EEXIST) {
 		i_error("mkdir_parents(%s) failed: %m", path);
 		return -1;
 	}

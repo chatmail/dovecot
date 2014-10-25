@@ -43,9 +43,9 @@ with this are:
  * And vice versa: If user creates "dovecot.sieve" mailbox, Dovecot will
    probably start logging all kinds of errors because the mailbox directory
    isn't a valid <Sieve> [Pigeonhole.Sieve.txt] script.
- * If you ever intend to migrate to another mailbox format, it's much more
-   easier to do if you can have both old and new mail directories under the
-   user's home directory.
+ * If you ever intend to migrate to another mailbox format, it's much easier to
+   do if you can have both old and new mail directories under the user's home
+   directory.
 
 Ways to set up home directory
 -----------------------------
@@ -86,4 +86,4 @@ user_attrs = .., mailDirectory=home=/var/vmail/%$
 
 Then just use 'mail_location = maildir:~/Maildir'.
 
-(This file was created from the wiki on 2013-11-24 04:43)
+(This file was created from the wiki on 2014-10-03 04:43)

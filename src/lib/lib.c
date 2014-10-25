@@ -13,16 +13,6 @@
 
 static ARRAY(lib_atexit_callback_t *) atexit_callbacks = ARRAY_INIT;
 
-size_t nearest_power(size_t num)
-{
-	size_t n = 1;
-
-	i_assert(num <= ((size_t)1 << (CHAR_BIT*sizeof(size_t) - 1)));
-
-	while (n < num) n <<= 1;
-	return n;
-}
-
 int close_keep_errno(int *fd)
 {
 	int ret, old_errno = errno;
@@ -71,7 +61,7 @@ void lib_init(void)
 	/* standard way to get rand() return different values. */
 	if (gettimeofday(&tv, NULL) < 0)
 		i_fatal("gettimeofday(): %m");
-	srand((unsigned int) (tv.tv_sec ^ tv.tv_usec ^ getpid()));
+	rand_set_seed((unsigned int) (tv.tv_sec ^ tv.tv_usec ^ getpid()));
 
 	data_stack_init();
 	hostpid_init();

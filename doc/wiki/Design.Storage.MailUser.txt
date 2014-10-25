@@ -22,4 +22,4 @@ users (not public namespaces), a mail user is also created whenever necessary
 to list/access the user's mailboxes. Again there is no attempt to share the
 created mail user with other connections.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2014-10-03 04:43)

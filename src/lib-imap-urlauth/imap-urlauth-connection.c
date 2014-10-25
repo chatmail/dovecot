@@ -607,8 +607,8 @@ imap_urlauth_fetch_reply_set_literal_stream(struct imap_urlauth_connection *conn
 	uoff_t fd_size;
 
 	if (conn->literal_fd != -1) {
-		reply->input = i_stream_create_fd(conn->literal_fd,
-						  (size_t)-1, TRUE);
+		reply->input = i_stream_create_fd_autoclose(&conn->literal_fd,
+							    (size_t)-1);
 		if (i_stream_get_size(reply->input, TRUE, &fd_size) < 1 ||
 		    fd_size != conn->literal_size) {
 			i_stream_unref(&reply->input);
@@ -835,7 +835,8 @@ static int imap_urlauth_input_next(struct imap_urlauth_connection *conn)
 		if ((response = i_stream_next_line(conn->input)) == NULL)
 			return 0;
 
-		i_error("imap-urlauth: Received input while no requests were pending");
+		i_error("imap-urlauth: Received input while no requests were pending: %s",
+			str_sanitize(response, 80));
 		imap_urlauth_connection_abort(conn, NULL);
 		return -1;
 	case IMAP_URLAUTH_STATE_REQUEST_PENDING:

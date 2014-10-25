@@ -557,10 +557,13 @@ static const char *client_get_disconnect_reason(struct client *client)
 	errno = client->input->stream_errno != 0 ?
 		client->input->stream_errno :
 		client->output->stream_errno;
-	return errno == 0 || errno == EPIPE ? "Connection closed" :
-		t_strdup_printf("Connection closed: %m");
+	if (errno == 0 || errno == EPIPE)
+		return "Connection closed";
+	return t_strdup_printf("Connection closed: %s",
+			       client->input->stream_errno != 0 ?
+			       i_stream_get_error(client->input) :
+			       o_stream_get_error(client->output));
 }
-
 void client_destroy(struct client *client, const char *reason)
 {
 	client->v.destroy(client, reason);
@@ -584,8 +587,6 @@ static void client_default_destroy(struct client *client, const char *reason)
 		client->cmd(client);
 		i_assert(client->cmd == NULL);
 	}
-	pop3_client_count--;
-	DLLIST_REMOVE(&pop3_clients, client);
 
 	if (client->trans != NULL) {
 		/* client didn't QUIT, but we still want to save any changes
@@ -632,6 +633,9 @@ static void client_default_destroy(struct client *client, const char *reason)
 	if (client->fd_in != client->fd_out)
 		net_disconnect(client->fd_out);
 	mail_storage_service_user_free(&client->service_user);
+
+	pop3_client_count--;
+	DLLIST_REMOVE(&pop3_clients, client);
 	pool_unref(&client->pool);
 
 	master_service_client_connection_destroyed(master_service);
@@ -713,7 +717,7 @@ void client_send_storage_error(struct client *client)
 	errstr = mailbox_get_last_error(client->mailbox, &error);
 	switch (error) {
 	case MAIL_ERROR_TEMP:
-	case MAIL_ERROR_NOSPACE:
+	case MAIL_ERROR_NOQUOTA:
 	case MAIL_ERROR_INUSE:
 		client_send_line(client, "-ERR [SYS/TEMP] %s", errstr);
 		break;
@@ -810,7 +814,8 @@ static int client_output(struct client *client)
 
 	if (client->cmd == NULL) {
 		if (o_stream_get_buffer_used_size(client->output) <
-		    POP3_OUTBUF_THROTTLE_SIZE/2 && client->io == NULL) {
+		    POP3_OUTBUF_THROTTLE_SIZE/2 && client->io == NULL &&
+		    !client->input->closed) {
 			/* enable input again */
 			client->io = io_add_istream(client->input, client_input,
 						    client);
@@ -835,15 +840,17 @@ static int client_output(struct client *client)
 	}
 }
 
-void clients_destroy_all(void)
+void clients_destroy_all(struct mail_storage_service_ctx *storage_service)
 {
 	while (pop3_clients != NULL) {
 		if (pop3_clients->cmd == NULL) {
 			client_send_line(pop3_clients,
 				"-ERR [SYS/TEMP] Server shutting down.");
 		}
+		mail_storage_service_io_activate_user(pop3_clients->service_user);
 		client_destroy(pop3_clients, "Server shutting down.");
 	}
+	mail_storage_service_io_deactivate(storage_service);
 }
 
 struct pop3_client_vfuncs pop3_client_vfuncs = {

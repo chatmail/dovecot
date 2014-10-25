@@ -54,4 +54,14 @@ It's not finding my emails
 'auth_debug=yes' may be helpful in debugging. See <MailLocation.txt> for how to
 configure where the mails are looked up from.
 
-(This file was created from the wiki on 2013-11-24 04:43)
+Authenticated SMTP is hanging when authenticating, when configured with dovecot
+authenticator
+---------------------------------------------------------------------------------------------
+
+It is possible that you SMTP daemon is configured with the wrong socket. Please
+note that '/run/dovecot/auth-client' and '/run/dovecot/auth-userdb' do respond
+do different protocols. Theyare however very similar and it is possible that
+the difference may notbe reported as an error and the SMTP server is waiting
+for a responsethat will never come.
+
+(This file was created from the wiki on 2014-10-03 04:43)

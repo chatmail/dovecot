@@ -760,7 +760,9 @@ db_ldap_handle_request_result(struct ldap_connection *conn,
 		final_result = TRUE;
 		ret = ldap_result2error(conn->ld, res->msg, 0);
 	}
-	if (ret != LDAP_SUCCESS && request->type == LDAP_REQUEST_TYPE_SEARCH) {
+	/* LDAP_NO_SUCH_OBJECT is returned for nonexistent base */
+	if (ret != LDAP_SUCCESS && ret != LDAP_NO_SUCH_OBJECT &&
+	    request->type == LDAP_REQUEST_TYPE_SEARCH) {
 		/* handle search failures here */
 		struct ldap_request_search *srequest =
 			(struct ldap_request_search *)request;
@@ -1503,7 +1505,7 @@ db_ldap_result_iterate_init_full(struct ldap_connection *conn,
 	const char *suffix;
 	pool_t pool;
 
-	pool = pool_alloconly_create("ldap result iter", 1024);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"ldap result iter", 1024);
 	ctx = p_new(pool, struct db_ldap_result_iterate_context, 1);
 	ctx->pool = pool;
 	ctx->auth_request = ldap_request->request.auth_request;

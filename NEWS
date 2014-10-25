@@ -1,3 +1,74 @@
+v2.2.15 2014-10-24  Timo Sirainen <tss@iki.fi>
+
+	* Plugins can now print a banner comment in doveconf output
+	  (typically the plugin version)
+	* Replication plugin now triggers low (instead of high) priority for
+	  mail copying operations.
+	* IMAP/POP3/ManageSieve proxy: If destination server can't be
+	  connected to, retry connecting once per second up to the value of
+	  proxy_timeout. This allows quick restarts/upgrades on the backend
+	  server without returning login failures.
+	* Internal passdb lookups (e.g. done by lmtp/doveadm proxy) wasn't
+	  returning failure in some situations where it should have (e.g.
+	  allow_nets mismatch)
+	* LMTP uses mail_log_prefix now for logging mail deliveries instead of
+	  a hardcoded prefix. The non-delivery log prefix is still hardcoded
+	  though.
+
+	+ passdb allow_nets=local matches lookups that don't contain an IP
+	  address (internally done by Dovecot services)
+	+ Various debug logging and error logging improvements
+	- Various race condition fixes to LAYOUT=index
+	- v2.2.14 virtual plugin crashed in some situations
+
+v2.2.14 2014-10-14  Timo Sirainen <tss@iki.fi>
+
+	* lmtp: Delivered-To: header no longer contains <> around the email
+	  address. Other MDAs don't have it either.
+	* "Out of disk space" errors are now treated as temporary errors
+	  (not the same as "Out of disk quota").
+	* replication plugin: Use replication only for users who have a
+	  non-empty mail_replica setting.
+
+	+ lmtp proxy: Log a line about each mail delivery.
+	+ Added login_source_ips setting. This can be used to set the source IP
+	  address round-robin from a pool of IPs (in case you run out of TCP
+	  ports).
+	+ Rawlog settings can use tcp:<host>:<port> as the path.
+	+ virtual plugin: Don't keep more than virtual_max_open_mailboxes
+	  (default 64) number of backend mailboxes open.
+	+ SSL/TLS compression can be disabled with ssl_options=no_compression
+	+ acl: Global ACL file now supports "quotes" around patterns.
+	+ Added last-login plugin to set user's last-login timestamp on login.
+	+ LDAP auth: Allow passdb credentials lookup also with auth_bind=yes	
+	- IMAP: MODSEQ was sent in FETCH reply even if CONDSTORE/QRESYNC wasn't
+	  enabled. This broke at least old Outlooks.
+	- passdb static treated missing password field the same as an empty
+	  password field.
+	- mdbox: Fixed potential infinite looping when scanning a broken
+	  mdbox file.
+	- imap-login, pop3-login: Fixed potential crashes when client
+	  disconnected unexpectedly.
+	- imap proxy: The connection was hanging in some usage patterns. This
+	  mainly affected older Outlooks.
+	- lmtp proxy: The proxy sometimes delivered empty mails in error
+	  situations or potentially delivered truncated mails.
+	- fts-lucene: If whitespace_chars was set, we may have ended up
+	  indexing some garbage words, growing the index size unnecessarily.
+	- -c and -i parameters for dovecot/doveadm commands were ignored if
+	  the config socket was readable.
+	- quota: Quota recalculation didn't include INBOX in some setups.
+	- Mail headers were sometimes added to dovecot.index.cache in wrong
+	  order. The main problem this caused was with dsync+imapc incremental
+	  syncing when the second sync thought the local mailbox had changed.
+	- Fixed several race conditions with dovecot.index.cache handling that
+	  may have caused unnecessary "cache is corrupted" errors.
+	- doveadm backup didn't notice if emails were missing from the middle
+	  of the destination mailbox. Now it deletes and resyncs the mailbox.
+	- auth: If auth client listed userdb and disconnected before finishing,
+	  the auth worker process got stuck (and eventually all workers could
+	  get used up and requests would start failing).
+
 v2.2.13 2014-05-11  Timo Sirainen <tss@iki.fi>
 
 	* Fixed a DoS attack against imap/pop3-login processes. If SSL/TLS

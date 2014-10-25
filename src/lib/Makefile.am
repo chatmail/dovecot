@@ -17,6 +17,7 @@ liblib_la_SOURCES = \
 	askpass.c \
 	backtrace-string.c \
 	base64.c \
+	bits.c \
 	bsearch-insert-pos.c \
 	buffer.c \
 	child-wait.c \
@@ -57,6 +58,7 @@ liblib_la_SOURCES = \
 	istream.c \
 	istream-base64-decoder.c \
 	istream-base64-encoder.c \
+	istream-callback.c \
 	istream-chain.c \
 	istream-concat.c \
 	istream-crlf.c \
@@ -110,6 +112,7 @@ liblib_la_SOURCES = \
 	process-title.c \
 	priorityq.c \
 	randgen.c \
+	rand.c \
 	read-full.c \
 	restrict-access.c \
 	restrict-process-size.c \
@@ -146,6 +149,7 @@ headers = \
 	askpass.h \
 	backtrace-string.h \
 	base64.h \
+	bits.h \
 	bsearch-insert-pos.h \
 	buffer.h \
 	child-wait.h \
@@ -188,6 +192,7 @@ headers = \
 	iso8601-date.h \
 	istream.h \
 	istream-base64.h \
+	istream-callback.h \
 	istream-chain.h \
 	istream-concat.h \
 	istream-crlf.h \
@@ -227,6 +232,7 @@ headers = \
 	printf-format-fix.h \
 	process-title.h \
 	priorityq.h \
+	rand.h \
 	randgen.h \
 	read-full.h \
 	restrict-access.h \
@@ -271,13 +277,18 @@ test_lib_SOURCES = \
 	test-array.c \
 	test-aqueue.c \
 	test-base64.c \
+	test-bits.c \
 	test-bsearch-insert-pos.c \
 	test-buffer.c \
 	test-crc32.c \
+	test-data-stack.c \
+	test-guid.c \
+	test-hash.c \
 	test-hash-format.c \
 	test-hash-method.c \
 	test-hex-binary.c \
 	test-iso8601-date.c \
+	test-istream.c \
 	test-istream-base64-decoder.c \
 	test-istream-base64-encoder.c \
 	test-istream-concat.c \
@@ -291,17 +302,20 @@ test_lib_SOURCES = \
 	test-numpack.c \
 	test-ostream-file.c \
 	test-primes.c \
+	test-printf-format-fix.c \
 	test-priorityq.c \
 	test-seq-range-array.c \
 	test-str.c \
 	test-strescape.c \
 	test-strfuncs.c \
+	test-strnum.c \
 	test-str-find.c \
 	test-str-sanitize.c \
 	test-time-util.c \
 	test-unichar.c \
 	test-utc-mktime.c \
-	test-var-expand.c
+	test-var-expand.c \
+	test-wildcard-match.c
 
 test_headers = \
 	test-lib.h

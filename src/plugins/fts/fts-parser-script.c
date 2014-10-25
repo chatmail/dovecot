@@ -82,7 +82,7 @@ static int script_contents_read(struct mail_user *user)
 		i_close_fd(&fd);
 		return -1;
 	}
-	input = i_stream_create_fd(fd, 1024, TRUE);
+	input = i_stream_create_fd_autoclose(&fd, 1024);
 	while ((line = i_stream_read_next_line(input)) != NULL) {
 		/* <content-type> <extension> [<extension> ...] */
 		args = p_strsplit_spaces(user->pool, line, " ");
@@ -100,7 +100,8 @@ static int script_contents_read(struct mail_user *user)
 		content->extensions = (const void *)(args+1);
 	}
 	if (input->stream_errno != 0) {
-		i_error("parser script read() failed: %m");
+		i_error("parser script read(%s) failed: %s", path,
+			i_stream_get_error(input));
 		ret = -1;
 	} else if (!eof_seen) {
 		if (input->v_offset == 0)

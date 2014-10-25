@@ -61,8 +61,15 @@ prefix. For example if you have namespaces with an empty prefix and a prefix
 Beware that "*" will not match any mailbox which already has a more specialised
 match!
 
-It's possible to give negative matches for mailbox names by prefixing the
-mailbox name with '-' character.
+The mailbox names have special prefixes:
+
+ * '-': Don't include this mailbox.
+ * '+': Drop \Recent flags from the backend mailbox when opening it.
+ * '!': Save new mails to this mailbox (see below).
+
+If you need to actually include a mailbox name that contains such prefix, you
+can currently just kludge it by using '+' prefix (if you don't care about the
+\Recent flags) and adding the mailbox name after that (e.g. "+-box").
 
 Search program is compatible with IMAP SEARCH command
 [http://tools.ietf.org/html/rfc3501#section-6.4.4]. Besides the standard SEARCH
@@ -239,4 +246,4 @@ IMAP UIDs. Instead use for GUIDs (with maildir the same as base filename):
 pop3_uidl_format = %g
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2014-10-03 04:43)

@@ -633,6 +633,8 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 	const char *home = priv->home;
 	struct mail_user *mail_user;
 
+	/* NOTE: if more user initialization is added, add it also to
+	   mail_user_dup() */
 	mail_user = mail_user_alloc(user->input.username, user->user_info,
 				    user->user_set);
 	mail_user_set_home(mail_user, *home == '\0' ? NULL : home);
@@ -644,6 +646,8 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 	mail_user->admin = user->admin;
 	mail_user->auth_token = p_strdup(mail_user->pool, user->auth_token);
 	mail_user->auth_user = p_strdup(mail_user->pool, user->auth_user);
+	mail_user->session_id =
+		p_strdup(mail_user->pool, user->input.session_id);
 	
 	mail_set = mail_user_set_get_storage_set(mail_user);
 
@@ -691,18 +695,19 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 	return 0;
 }
 
-static void mail_storage_service_io_activate(void *context)
+void mail_storage_service_io_activate_user(struct mail_storage_service_user *user)
 {
-	struct mail_storage_service_user *user = context;
-
 	i_set_failure_prefix("%s", user->log_prefix);
 }
 
-static void mail_storage_service_io_deactivate(void *context)
+void mail_storage_service_io_deactivate_user(struct mail_storage_service_user *user)
 {
-	struct mail_storage_service_user *user = context;
-
 	i_set_failure_prefix("%s", user->service_ctx->default_log_prefix);
+}
+
+void mail_storage_service_io_deactivate(struct mail_storage_service_ctx *ctx)
+{
+	i_set_failure_prefix("%s", ctx->default_log_prefix);
 }
 
 static void
@@ -726,8 +731,8 @@ mail_storage_service_init_log(struct mail_storage_service_ctx *ctx,
 		i_set_failure_send_prefix(user->log_prefix);
 	user->ioloop_ctx = io_loop_context_new(current_ioloop);
 	io_loop_context_add_callbacks(user->ioloop_ctx,
-				      mail_storage_service_io_activate,
-				      mail_storage_service_io_deactivate,
+				      mail_storage_service_io_activate_user,
+				      mail_storage_service_io_deactivate_user,
 				      user);
 }
 
@@ -1018,7 +1023,7 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 	pool_t user_pool, temp_pool;
 	int ret = 1;
 
-	user_pool = pool_alloconly_create("mail storage service user", 1024*6);
+	user_pool = pool_alloconly_create(MEMPOOL_GROWING"mail storage service user", 1024*6);
 	flags = mail_storage_service_input_get_flags(ctx, input);
 
 	if ((flags & MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP) != 0 &&
@@ -1088,6 +1093,7 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 	user->input = *input;
 	user->input.userdb_fields = NULL;
 	user->input.username = p_strdup(user_pool, username);
+	user->input.session_id = p_strdup(user_pool, input->session_id);
 	user->user_info = user_info;
 	user->flags = flags;
 
@@ -1274,8 +1280,8 @@ void mail_storage_service_user_free(struct mail_storage_service_user **_user)
 
 	if (user->ioloop_ctx != NULL) {
 		io_loop_context_remove_callbacks(user->ioloop_ctx,
-			mail_storage_service_io_activate,
-			mail_storage_service_io_deactivate, user);
+			mail_storage_service_io_activate_user,
+			mail_storage_service_io_deactivate_user, user);
 		io_loop_context_unref(&user->ioloop_ctx);
 	}
 	settings_parser_deinit(&user->set_parser);

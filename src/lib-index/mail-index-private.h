@@ -37,6 +37,9 @@ struct mail_index_sync_map_ctx;
 #define MAIL_INDEX_MAP_IDX(map, idx) \
 	((struct mail_index_record *) \
 	 PTR_OFFSET((map)->rec_map->records, (idx) * (map)->hdr.record_size))
+#define MAIL_INDEX_REC_AT_SEQ(map, seq)					\
+	((struct mail_index_record *)					\
+	 PTR_OFFSET((map)->rec_map->records, ((seq)-1) * (map)->hdr.record_size))
 
 #define MAIL_TRANSACTION_FLAG_UPDATE_IS_INTERNAL(u) \
 	((((u)->add_flags | (u)->remove_flags) & MAIL_INDEX_FLAGS_MASK) == 0 && \
@@ -199,13 +202,8 @@ struct mail_index {
 	/* syncing will update this if non-NULL */
 	struct mail_index_transaction_commit_result *sync_commit_result;
 
-	int lock_type;
-	unsigned int lock_id_counter;
 	enum file_lock_method lock_method;
 	unsigned int max_lock_timeout_secs;
-
-	struct file_lock *file_lock;
-	struct dotlock *dotlock;
 
 	pool_t keywords_pool;
 	ARRAY_TYPE(keywords) keywords;
@@ -256,7 +254,8 @@ void mail_index_register_sync_lost_handler(struct mail_index *index,
 void mail_index_unregister_sync_lost_handler(struct mail_index *index,
 					mail_index_sync_lost_handler_t *cb);
 
-int mail_index_create_tmp_file(struct mail_index *index, const char **path_r);
+int mail_index_create_tmp_file(struct mail_index *index,
+			       const char *path_prefix, const char **path_r);
 
 int mail_index_try_open_only(struct mail_index *index);
 void mail_index_close_file(struct mail_index *index);

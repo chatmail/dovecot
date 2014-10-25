@@ -77,6 +77,8 @@ virtual_config_add_rule(struct virtual_parse_context *ctx, const char **error_r)
 	struct mail_search_args *search_args;
 	unsigned int i, count;
 
+	*error_r = NULL;
+
 	if (ctx->rule_idx == array_count(&ctx->mbox->backend_boxes)) {
 		i_assert(str_len(ctx->rule) == 0);
 		return 0;
@@ -87,6 +89,7 @@ virtual_config_add_rule(struct virtual_parse_context *ctx, const char **error_r)
 	search_args = virtual_search_args_parse(ctx->rule, error_r);
 	str_truncate(ctx->rule, 0);
 	if (search_args == NULL) {
+		i_assert(*error_r != NULL);
 		*error_r = t_strconcat("Previous search rule is invalid: ",
 				       *error_r, NULL);
 		return -1;
@@ -170,6 +173,10 @@ virtual_config_parse_line(struct virtual_parse_context *ctx, const char *line,
 		}
 		bbox->name++;
 		ctx->mbox->save_bbox = bbox;
+	}
+	if (strcmp(bbox->name, ctx->mbox->box.vname) == 0) {
+		*error_r = "Virtual mailbox can't point to itself";
+		return -1;
 	}
 	ctx->have_mailbox_defines = TRUE;
 	array_append(&ctx->mbox->backend_boxes, &bbox, 1);
@@ -259,6 +266,14 @@ static bool virtual_ns_match(struct mail_namespace *config_ns,
 	    (config_ns->flags & NAMESPACE_FLAG_AUTOCREATED) == 0 &&
 	    (iter_ns->flags & NAMESPACE_FLAG_AUTOCREATED) != 0)
 		return TRUE;
+	if ((iter_ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0 &&
+	    (config_ns->flags & NAMESPACE_FLAG_AUTOCREATED) != 0 &&
+	    config_ns->prefix_len == 0) {
+		/* prefix="" namespace was autocreated, so e.g. "*" would match
+		   only that empty namespace. but we want "*" to also match
+		   the inbox=yes namespace, so check it here separately. */
+		return TRUE;
+	}
 	return FALSE;
 }
 
@@ -324,6 +339,10 @@ static int virtual_config_expand_wildcards(struct virtual_parse_context *ctx)
 		   directories) */
 		if ((info->flags & MAILBOX_NOSELECT) != 0)
 			continue;
+		if (strcmp(info->vname, ctx->mbox->box.vname) == 0) {
+			/* don't allow virtual folder to point to itself */
+			continue;
+		}
 
 		if (virtual_config_match(info, &wildcard_boxes, &i) &&
 		    !virtual_config_match(info, &neg_boxes, &j) &&

@@ -133,7 +133,7 @@ imap_get_error_string(struct client_command_context *cmd,
 	case MAIL_ERROR_PERM:
 		resp_code = IMAP_RESP_CODE_NOPERM;
 		break;
-	case MAIL_ERROR_NOSPACE:
+	case MAIL_ERROR_NOQUOTA:
 		resp_code = IMAP_RESP_CODE_OVERQUOTA;
 		break;
 	case MAIL_ERROR_NOTFOUND:
@@ -173,12 +173,6 @@ void client_send_list_error(struct client_command_context *cmd,
 void client_send_box_error(struct client_command_context *cmd,
 			   struct mailbox *box)
 {
-	if (mailbox_is_inconsistent(box)) {
-		/* we can't do forced CLOSE, so have to disconnect */
-		client_disconnect_with_error(cmd->client,
-			"IMAP session state is inconsistent, please relogin.");
-		return;
-	}
 	client_send_storage_error(cmd, mailbox_get_storage(box));
 }
 
@@ -188,17 +182,16 @@ void client_send_storage_error(struct client_command_context *cmd,
 	const char *error_string;
 	enum mail_error error;
 
+	error_string = mail_storage_get_last_error(storage, &error);
+	client_send_tagline(cmd, imap_get_error_string(cmd, error_string,
+						       error));
+
 	if (cmd->client->mailbox != NULL &&
 	    mailbox_is_inconsistent(cmd->client->mailbox)) {
 		/* we can't do forced CLOSE, so have to disconnect */
 		client_disconnect_with_error(cmd->client,
 			"IMAP session state is inconsistent, please relogin.");
-		return;
 	}
-
-	error_string = mail_storage_get_last_error(storage, &error);
-	client_send_tagline(cmd, imap_get_error_string(cmd, error_string,
-						       error));
 }
 
 void client_send_untagged_storage_error(struct client *client,
@@ -207,16 +200,15 @@ void client_send_untagged_storage_error(struct client *client,
 	const char *error_string;
 	enum mail_error error;
 
+	error_string = mail_storage_get_last_error(storage, &error);
+	client_send_line(client, t_strconcat("* NO ", error_string, NULL));
+
 	if (client->mailbox != NULL &&
 	    mailbox_is_inconsistent(client->mailbox)) {
 		/* we can't do forced CLOSE, so have to disconnect */
 		client_disconnect_with_error(client,
 			"IMAP session state is inconsistent, please relogin.");
-		return;
 	}
-
-	error_string = mail_storage_get_last_error(storage, &error);
-	client_send_line(client, t_strconcat("* NO ", error_string, NULL));
 }
 
 bool client_parse_mail_flags(struct client_command_context *cmd,

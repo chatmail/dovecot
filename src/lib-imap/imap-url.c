@@ -119,7 +119,7 @@ struct imap_url_parser {
 	enum imap_url_parse_flags flags;
 
 	struct imap_url *url;
-	struct imap_url *base;
+	const struct imap_url *base;
 
 	unsigned int relative:1;
 };
@@ -128,9 +128,6 @@ static int
 imap_url_parse_number(struct uri_parser *parser, const char *data,
 		      uint32_t *number_r)
 {
-	uint32_t number = 0;
-	const char *p = data;
-
 	/* [IMAP4] RFC3501, Section 9
 	 *
 	 * number          = 1*DIGIT
@@ -138,23 +135,11 @@ imap_url_parse_number(struct uri_parser *parser, const char *data,
 	 *                   ; (0 <= n < 4,294,967,296)
 	 */
 
-	if (i_isdigit(*p)) {
-		do {
-			uint32_t prev = number;
-
-			number = number * 10 + (*p - '0');
-			if (number < prev) {
-				parser->error = "IMAP number is too high";
-				return -1;
-			}
-			p++;
-		} while (i_isdigit(*p));
-
-		if (*p == '\0') {
-			if (number_r != NULL)
-				*number_r = number;
+	if (i_isdigit(*data)) {
+		if (str_to_uint32(data, number_r) == 0)
 			return 1;
-		}
+		parser->error = "IMAP number is too high";
+		return -1;
 	}
 
 	parser->error = t_strdup_printf(
@@ -166,29 +151,14 @@ static int
 imap_url_parse_offset(struct uri_parser *parser, const char *data,
 		      uoff_t *number_r)
 {
-	uoff_t number = 0;
-	const char *p = data;
-
 	/* Syntax for big (uoff_t) numbers. Not strictly IMAP syntax, but this
 	   is handled similarly for Dovecot IMAP FETCH BODY partial <.>
 	   implementation. */
-	if (i_isdigit(*p)) {
-		do {
-			uoff_t prev = number;
-
-			number = number * 10 + (*p - '0');
-			if (number < prev) {
-				parser->error = "IMAP number is too high";
-				return -1;
-			}
-			p++;
-		} while (i_isdigit(*p));
-
-		if (*p == '\0') {
-			if (number_r != NULL)
-				*number_r = number;
+	if (i_isdigit(*data)) {
+		if (str_to_uoff(data, number_r) == 0)
 			return 1;
-		}
+		parser->error = "IMAP number is too high";
+		return -1;
 	}
 
 	parser->error = t_strdup_printf(
@@ -504,11 +474,11 @@ imap_url_parse_path(struct imap_url_parser *url_parser,
 
 	/* Resolve relative URI path; determine what to copy from the base URI */
 	if (url != NULL && url_parser->base != NULL && relative > 0) {
-		struct imap_url *base = url_parser->base;
+		const struct imap_url *base = url_parser->base;
 		int rel = relative;
 
 		/* /;PARTIAL= */
-		if (base->have_partial && rel-- <= 0) {
+		if (base->have_partial && --rel <= 0) {
 			have_partial = base->have_partial;
 			partial_offset = base->partial_offset;
 			partial_size = base->partial_size;
@@ -528,7 +498,7 @@ imap_url_parse_path(struct imap_url_parser *url_parser,
 			}
 		}
 		/* /;UID= */
-		if (base->uid > 0 && rel-- <= 0) {
+		if (base->uid > 0 && --rel <= 0) {
 			uid = base->uid;
 		}
 		/* /mail/box;UIDVALIDITY= */
@@ -556,196 +526,198 @@ imap_url_parse_path(struct imap_url_parser *url_parser,
 	}
 
 	/* Scan for last mailbox-ref segment */
-	if (uid == 0) {
-		p = NULL;
-		while (*segment != NULL) {
-			/* ';' must be pct-encoded; if it is not, this is
-			   either the last mailbox-ref path segment containing
-			   ';UIDVALIDITY=' or the subsequent iuid ';UID=' path
-			   segment */
-			if ((p = strchr(*segment, ';')) != NULL)
-				break;
+	if (segment != NULL) {
+		if (relative == 0 || (!have_partial && section == NULL)) {
+			p = NULL;
+			while (*segment != NULL) {
+				/* ';' must be pct-encoded; if it is not, this is
+					 either the last mailbox-ref path segment containing
+					 ';UIDVALIDITY=' or the subsequent iuid ';UID=' path
+					 segment */
+				if ((p = strchr(*segment, ';')) != NULL)
+					break;
 
-			if (segment > path ||
-			    (!mailbox_endslash && str_len(mailbox) > 0))
-				str_append_c(mailbox, '/');
-			if (**segment != '\0') {
-				if (!uri_data_decode(parser, *segment, NULL, &value))
-					return -1;
-				str_append(mailbox, value);
-				mailbox_endslash = FALSE;
-			}
-			segment++;
-		}
-
-		/* Handle ';' */
-		if (p != NULL) {
-			/* [uidvalidity] */
-			if (strncasecmp(p, ";UIDVALIDITY=", 13) == 0) {
-				/* append last bit of mailbox */
-				if (segment > path ||
-				    (!mailbox_endslash && str_len(mailbox) > 0))
-					str_append_c(mailbox, '/');
-				if (*segment != p) {
-					if (!uri_data_decode(parser, *segment, p, &value))
+				if (**segment != '\0') {
+					if (segment > path ||
+							(!mailbox_endslash && str_len(mailbox) > 0))
+						str_append_c(mailbox, '/');
+					if (!uri_data_decode(parser, *segment, NULL, &value))
 						return -1;
 					str_append(mailbox, value);
-				}
-
-				/* ";UIDVALIDITY=" nz-number */
-				if (strchr(p+13, ';') != NULL) {
-					parser->error = "Encountered stray ';' after UIDVALIDITY";
-					return -1;
-				}
-
-				/* nz-number */
-				if (p[13] == '\0') {
-					parser->error = "Empty UIDVALIDITY value";
-					return -1;
-				}
-				if (imap_url_parse_number(parser, p+13, &uidvalidity) <= 0)
-					return -1;
-				if (uidvalidity == 0) {
-					parser->error = "UIDVALIDITY cannot be zero";
-					return -1;
+					mailbox_endslash = FALSE;
 				}
 				segment++;
-			} else if (p != *segment) {
-				parser->error = "Encountered stray ';' in mailbox reference";
-				return -1;
-			}
-		}
-
-		/* iuid */
-	 	if (*segment != NULL && strncasecmp(*segment, ";UID=", 5) == 0) {
-			/* ";UID=" nz-number */
-			value = (*segment)+5;
-			if ((p = strchr(value,';')) != NULL) {
-				if (segment[1] != NULL ) {
-					/* not the last segment, so it cannot be extension like iurlauth */
-					parser->error = "Encountered stray ';' in UID path segment";
-					return -1;
-				}
-				urlext = p;
-				value = t_strdup_until(value, p);
-			}
-			/* nz-number */
-			if (*value == '\0') {
-				parser->error = "Empty UID value";
-				return -1;
-			}
-			if (imap_url_parse_number(parser, value, &uid) <= 0)
-				return -1;
-			if (uid == 0) {
-				parser->error = "UID cannot be zero";
-				return -1;
-			}
-			segment++;
-		}
-	}
-
-	/* [isection] [ipartial] */
-	if (*segment != NULL && uid > 0 && !have_partial) {
-		/* [isection] */
-		if (section != NULL ||
-		    strncasecmp(*segment, ";SECTION=", 9) == 0) {
-			/* ";SECTION=" enc-section */
-			if (section == NULL) {
-				section = t_str_new(256);
-				value = (*segment) + 9;
-			} else {
-				value = *segment;
 			}
 
-			/* enc-section can contain slashes, so we merge path segments until one
-			   contains ';' */
-			while ((p = strchr(value,';')) == NULL) {
-				if (!section_endslash && str_len(section) > 0)
-					str_append_c(section, '/');
-				if (*value != '\0') {
-					if (!uri_data_decode(parser, value, NULL, &value))
-						return -1;
-					str_append(section, value);
-					section_endslash = FALSE;
-				}
-
-				segment++;
-				if (*segment == NULL)
-					break;
-				value = *segment;
-			}
-
+			/* Handle ';' */
 			if (p != NULL) {
-				/* found ';' */
-				if (p != value) {
-					/* it is not at the beginning of the path segment */
-					if (segment[1] != NULL) {
+				/* [uidvalidity] */
+				if (strncasecmp(p, ";UIDVALIDITY=", 13) == 0) {
+					/* append last bit of mailbox */
+					if (*segment != p) {
+						if (segment > path ||
+								(!mailbox_endslash && str_len(mailbox) > 0))
+							str_append_c(mailbox, '/');
+						if (!uri_data_decode(parser, *segment, p, &value))
+							return -1;
+						str_append(mailbox, value);
+					}
+
+					/* ";UIDVALIDITY=" nz-number */
+					if (strchr(p+13, ';') != NULL) {
+						parser->error = "Encountered stray ';' after UIDVALIDITY";
+						return -1;
+					}
+
+					/* nz-number */
+					if (p[13] == '\0') {
+						parser->error = "Empty UIDVALIDITY value";
+						return -1;
+					}
+					if (imap_url_parse_number(parser, p+13, &uidvalidity) <= 0)
+						return -1;
+					if (uidvalidity == 0) {
+						parser->error = "UIDVALIDITY cannot be zero";
+						return -1;
+					}
+					segment++;
+				} else if (p != *segment) {
+					parser->error = "Encountered stray ';' in mailbox reference";
+					return -1;
+				}
+			}
+
+			/* iuid */
+		 	if (*segment != NULL && strncasecmp(*segment, ";UID=", 5) == 0) {
+				/* ";UID=" nz-number */
+				value = (*segment)+5;
+				if ((p = strchr(value,';')) != NULL) {
+					if (segment[1] != NULL ) {
 						/* not the last segment, so it cannot be extension like iurlauth */
-						parser->error = "Encountered stray ';' in SECTION path segment";
+						parser->error = "Encountered stray ';' in UID path segment";
 						return -1;
 					}
 					urlext = p;
 					value = t_strdup_until(value, p);
+				}
+				/* nz-number */
+				if (*value == '\0') {
+					parser->error = "Empty UID value";
+					return -1;
+				}
+				if (imap_url_parse_number(parser, value, &uid) <= 0)
+					return -1;
+				if (uid == 0) {
+					parser->error = "UID cannot be zero";
+					return -1;
+				}
+				segment++;
+			}
+		}
+
+		/* [isection] [ipartial] */
+		if (*segment != NULL && uid > 0) {
+			/* [isection] */
+			if (section != NULL ||
+				  strncasecmp(*segment, ";SECTION=", 9) == 0) {
+				/* ";SECTION=" enc-section */
+				if (section == NULL) {
+					section = t_str_new(256);
+					value = (*segment) + 9;
+				} else {
+					value = *segment;
+				}
+
+				/* enc-section can contain slashes, so we merge path segments until one
+					 contains ';' */
+				while ((p = strchr(value,';')) == NULL) {
 					if (!section_endslash && str_len(section) > 0)
 						str_append_c(section, '/');
-					if (!uri_data_decode(parser, value, NULL, &value))
-						return -1;
-					str_append(section, value);
+					if (*value != '\0') {
+						if (!uri_data_decode(parser, value, NULL, &value))
+							return -1;
+						str_append(section, value);
+						section_endslash = FALSE;
+					}
+
 					segment++;
+					if (*segment == NULL)
+						break;
+					value = *segment;
+				}
+
+				if (p != NULL) {
+					/* found ';' */
+					if (p != value) {
+						/* it is not at the beginning of the path segment */
+						if (segment[1] != NULL) {
+							/* not the last segment, so it cannot be extension like iurlauth */
+							parser->error = "Encountered stray ';' in SECTION path segment";
+							return -1;
+						}
+						urlext = p;
+						value = t_strdup_until(value, p);
+						if (!section_endslash && str_len(section) > 0)
+							str_append_c(section, '/');
+						if (!uri_data_decode(parser, value, NULL, &value))
+							return -1;
+						str_append(section, value);
+						segment++;
+					}
+				}
+
+				if (str_len(section) == 0) {
+					parser->error = "Empty SECTION value";
+					return -1;
 				}
 			}
 
-			if (str_len(section) == 0) {
-				parser->error = "Empty SECTION value";
-				return -1;
-			}
-		}
+			/* [ipartial] */
+			if (*segment != NULL &&
+				  strncasecmp(*segment, ";PARTIAL=", 9) == 0) {
+				have_partial = TRUE;
 
-		/* [ipartial] */
-		if (*segment != NULL &&
-		    strncasecmp(*segment, ";PARTIAL=", 9) == 0) {
-			have_partial = TRUE;
-
-			/* ";PARTIAL=" partial-range */
-			value = (*segment) + 9;
-			if ((p = strchr(value,';')) != NULL) {
-				urlext = p;
-				value = t_strdup_until(value, p);
-			}
-			if (*value == '\0') {
-				parser->error = "Empty PARTIAL value";
-				return -1;
-			}
-			/* partial-range = number ["." nz-number] */
-			if ((p = strchr(value,'.')) != NULL) {
-				if (p[1] == '\0') {
-					parser->error = "Empty PARTIAL size";
-					return -1;
+				/* ";PARTIAL=" partial-range */
+				value = (*segment) + 9;
+				if ((p = strchr(value,';')) != NULL) {
+					urlext = p;
+					value = t_strdup_until(value, p);
 				}
-				if (imap_url_parse_offset(parser, p+1, &partial_size) <= 0)
-					return -1;
-				if (partial_size == 0) {
-					parser->error = "PARTIAL size cannot be zero";
-					return -1;
-				}
-				value = t_strdup_until(value, p);
 				if (*value == '\0') {
-					parser->error = "Empty PARTIAL offset";
+					parser->error = "Empty PARTIAL value";
 					return -1;
 				}
+				/* partial-range = number ["." nz-number] */
+				if ((p = strchr(value,'.')) != NULL) {
+					if (p[1] == '\0') {
+						parser->error = "Empty PARTIAL size";
+						return -1;
+					}
+					if (imap_url_parse_offset(parser, p+1, &partial_size) <= 0)
+						return -1;
+					if (partial_size == 0) {
+						parser->error = "PARTIAL size cannot be zero";
+						return -1;
+					}
+					value = t_strdup_until(value, p);
+					if (*value == '\0') {
+						parser->error = "Empty PARTIAL offset";
+						return -1;
+					}
+				}
+				if (imap_url_parse_offset(parser,value, &partial_offset) <= 0)
+					return -1;
+				segment++;
 			}
-			if (imap_url_parse_offset(parser,value, &partial_offset) <= 0)
-				return -1;
-			segment++;
 		}
-	}
 
-	if (*segment != NULL) {
-		if (urlext != NULL || **segment != '\0' || *(segment+1) != NULL ) {
-			parser->error = t_strdup_printf(
-				"Unexpected IMAP URL path segment: `%s'",
-				str_sanitize(*segment, 80));
-			return -1;
+		if (*segment != NULL) {
+			if (urlext != NULL || **segment != '\0' || *(segment+1) != NULL ) {
+				parser->error = t_strdup_printf(
+					"Unexpected IMAP URL path segment: `%s'",
+					str_sanitize(*segment, 80));
+				return -1;
+			}
 		}
 	}
 
@@ -857,7 +829,7 @@ static bool imap_url_do_parse(struct imap_url_parser *url_parser)
 			return FALSE;
 		} else if (url_parser->url != NULL) {
 			struct imap_url *url = url_parser->url;
-			struct imap_url *base = url_parser->base;
+			const struct imap_url *base = url_parser->base;
 
 			url->host_name = p_strdup_empty(parser->pool, base->host_name); 
 			url->host_ip = base->host_ip;
@@ -872,7 +844,7 @@ static bool imap_url_do_parse(struct imap_url_parser *url_parser)
 	}
 
 	/* Parse path, i.e. `[ icommand ]` from `*( "/" segment )` */
-	if (ret > 0) {
+	if (ret > 0 || url_parser->relative) {
 		if ((ret = imap_url_parse_path(url_parser, path, relative,
 					       &is_messagelist)) < 0)
 			return FALSE;
@@ -914,7 +886,7 @@ static bool imap_url_do_parse(struct imap_url_parser *url_parser)
 
 /* Public API */
 
-int imap_url_parse(const char *url, struct imap_url *base,
+int imap_url_parse(const char *url, const struct imap_url *base,
 		   enum imap_url_parse_flags flags,
 		   struct imap_url **url_r, const char **error_r)
 {

@@ -26,6 +26,8 @@
 
 struct mail_index_module_register mail_index_module_register = { 0 };
 
+static void mail_index_close_nonopened(struct mail_index *index);
+
 struct mail_index *mail_index_alloc(const char *dir, const char *prefix)
 {
 	struct mail_index *index;
@@ -436,7 +438,8 @@ mail_index_try_open(struct mail_index *index)
 	return ret;
 }
 
-int mail_index_create_tmp_file(struct mail_index *index, const char **path_r)
+int mail_index_create_tmp_file(struct mail_index *index,
+			       const char *path_prefix, const char **path_r)
 {
         mode_t old_mask;
 	const char *path;
@@ -444,7 +447,7 @@ int mail_index_create_tmp_file(struct mail_index *index, const char **path_r)
 
 	i_assert(!MAIL_INDEX_IS_IN_MEMORY(index));
 
-	path = *path_r = t_strconcat(index->filepath, ".tmp", NULL);
+	path = *path_r = t_strconcat(path_prefix, ".tmp", NULL);
 	old_mask = umask(0);
 	fd = open(path, O_RDWR|O_CREAT|O_EXCL, index->mode);
 	umask(old_mask);
@@ -472,7 +475,6 @@ static int mail_index_open_files(struct mail_index *index,
 				 enum mail_index_open_flags flags)
 {
 	int ret;
-	bool created = FALSE;
 
 	ret = mail_transaction_log_open(index->log);
 	if (ret == 0) {
@@ -499,7 +501,6 @@ static int mail_index_open_files(struct mail_index *index,
 			index->map->hdr.indexid = index->indexid;
 		}
 		index->initial_create = FALSE;
-		created = TRUE;
 	}
 	if (ret >= 0) {
 		ret = index->map != NULL ? 1 : mail_index_try_open(index);
@@ -523,10 +524,8 @@ static int mail_index_open_files(struct mail_index *index,
 			return -1;
 	}
 
-	if (index->cache == NULL) {
-		index->cache = created ? mail_cache_create(index) :
-			mail_cache_open_or_create(index);
-	}
+	if (index->cache == NULL)
+		index->cache = mail_cache_open_or_create(index);
 	return 1;
 }
 
@@ -541,8 +540,7 @@ mail_index_open_opened(struct mail_index *index,
 	if ((index->map->hdr.flags & MAIL_INDEX_HDR_FLAG_CORRUPTED) != 0) {
 		/* index was marked corrupted. we'll probably need to
 		   recreate the files. */
-		if (index->map != NULL)
-			mail_index_unmap(&index->map);
+		mail_index_unmap(&index->map);
 		mail_index_close_file(index);
 		mail_transaction_log_close(index->log);
 		if ((ret = mail_index_open_files(index, flags)) <= 0)
@@ -560,8 +558,6 @@ int mail_index_open(struct mail_index *index, enum mail_index_open_flags flags)
 	if (index->open_count > 0) {
 		if ((ret = mail_index_open_opened(index, flags)) <= 0) {
 			/* doesn't exist and create flag not used */
-			index->open_count++;
-			mail_index_close(index);
 		}
 		return ret;
 	}
@@ -569,9 +565,6 @@ int mail_index_open(struct mail_index *index, enum mail_index_open_flags flags)
 	index->filepath = MAIL_INDEX_IS_IN_MEMORY(index) ?
 		i_strdup("(in-memory index)") :
 		i_strconcat(index->dir, "/", index->prefix, NULL);
-
-	index->lock_type = F_UNLCK;
-	index->lock_id_counter = 2;
 
 	index->readonly = FALSE;
 	index->nodiskspace = FALSE;
@@ -592,8 +585,7 @@ int mail_index_open(struct mail_index *index, enum mail_index_open_flags flags)
 	   of the index files */
 	if ((ret = mail_index_open_files(index, flags)) <= 0) {
 		/* doesn't exist and create flag not used */
-		index->open_count++;
-		mail_index_close(index);
+		mail_index_close_nonopened(index);
 		return ret;
 	}
 	index->open_count++;
@@ -616,25 +608,15 @@ int mail_index_open_or_create(struct mail_index *index,
 
 void mail_index_close_file(struct mail_index *index)
 {
-	if (index->file_lock != NULL)
-		file_lock_free(&index->file_lock);
-
 	if (index->fd != -1) {
 		if (close(index->fd) < 0)
 			mail_index_set_syscall_error(index, "close()");
 		index->fd = -1;
 	}
-
-	index->lock_id_counter += 2;
-	index->lock_type = F_UNLCK;
 }
 
-void mail_index_close(struct mail_index *index)
+static void mail_index_close_nonopened(struct mail_index *index)
 {
-	i_assert(index->open_count > 0);
-	if (--index->open_count > 0)
-		return;
-
 	i_assert(!index->syncing);
 	i_assert(index->views == NULL);
 
@@ -649,6 +631,15 @@ void mail_index_close(struct mail_index *index)
 	i_free_and_null(index->filepath);
 
 	index->indexid = 0;
+}
+
+void mail_index_close(struct mail_index *index)
+{
+	i_assert(index->open_count > 0);
+
+	mail_index_alloc_cache_index_closing(index);
+	if (--index->open_count == 0)
+		mail_index_close_nonopened(index);
 }
 
 int mail_index_unlink(struct mail_index *index)
@@ -793,9 +784,6 @@ int mail_index_move_to_memory(struct mail_index *index)
 		/* move transaction log to memory */
 		mail_transaction_log_move_to_memory(index->log);
 	}
-
-	if (index->file_lock != NULL)
-		file_lock_free(&index->file_lock);
 
 	if (index->fd != -1) {
 		if (close(index->fd) < 0)

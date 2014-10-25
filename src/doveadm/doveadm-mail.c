@@ -20,7 +20,7 @@
 #include "doveadm.h"
 #include "doveadm-settings.h"
 #include "doveadm-print.h"
-#include "dsync/doveadm-dsync.h"
+#include "doveadm-dsync.h"
 #include "doveadm-mail.h"
 
 #include <stdio.h>
@@ -57,7 +57,7 @@ void doveadm_mail_failed_error(struct doveadm_mail_cmd_context *ctx,
 	case MAIL_ERROR_PERM:
 		exit_code = EX_NOPERM;
 		break;
-	case MAIL_ERROR_NOSPACE:
+	case MAIL_ERROR_NOQUOTA:
 		exit_code = EX_CANTCREAT;
 		break;
 	case MAIL_ERROR_NOTFOUND:
@@ -604,7 +604,7 @@ doveadm_mail_cmd_find_from_argv(const char *cmd_name, int *argc,
 		}
 	}
 
-	return FALSE;
+	return NULL;
 }
 
 bool doveadm_mail_try_run(const char *cmd_name, int argc, char *argv[])
@@ -714,6 +714,10 @@ static struct doveadm_mail_cmd *mail_commands[] = {
 	&cmd_mailbox_subscribe,
 	&cmd_mailbox_unsubscribe,
 	&cmd_mailbox_status,
+	&cmd_mailbox_metadata_set,
+	&cmd_mailbox_metadata_unset,
+	&cmd_mailbox_metadata_get,
+	&cmd_mailbox_metadata_list,
 	&cmd_batch,
 	&cmd_dsync_backup,
 	&cmd_dsync_mirror,

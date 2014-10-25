@@ -19,7 +19,7 @@
 	(sizeof(arr) / sizeof((arr)[0]))
 
 #define MEM_ALIGN(size) \
-	(((size) + MEM_ALIGN_SIZE-1) & ~((unsigned int) MEM_ALIGN_SIZE-1))
+	(((size) + MEM_ALIGN_SIZE-1) & ~((size_t) MEM_ALIGN_SIZE-1))
 
 #define PTR_OFFSET(ptr, offset) \
 	((void *) (((unsigned char *) (ptr)) + (offset)))
@@ -140,6 +140,12 @@
 #  define ATTR_HOT
 #  define ATTR_COLD
 #endif
+#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 9)
+/* GCC 4.9 and later */
+#  define ATTR_RETURNS_NONNULL __attribute__((returns_nonnull))
+#else
+#  define ATTR_RETURNS_NONNULL
+#endif
 
 /* Macros to provide type safety for callback functions' context parameters */
 #if (__GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ > 3))
@@ -199,6 +205,7 @@
 #endif
 
 #define i_close_fd(fd) STMT_START {  \
+	i_assert(*fd != -1); \
 	if (unlikely(close_keep_errno(fd) < 0)) \
 		i_error("close(%d[%s:%d]) failed: %m", \
 			*(fd), __FILE__, __LINE__); \

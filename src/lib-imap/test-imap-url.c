@@ -14,7 +14,7 @@ struct valid_imap_url_test {
 };
 
 /* Valid IMAP URL tests */
-struct valid_imap_url_test valid_url_tests[] = {
+static const struct valid_imap_url_test valid_url_tests[] = {
 	{
 		.url = "imap://localhost",
 		.url_parsed = {
@@ -96,13 +96,12 @@ struct valid_imap_url_test valid_url_tests[] = {
 		.url_parsed = {
 			.host_name = "example.com",
 			.userid = "user",
-			.mailbox = "INBOX/" }
+			.mailbox = "INBOX" }
 	},{
 		.url = "imap://user@example.com//",
 		.url_parsed = {
 			.host_name = "example.com",
-			.userid = "user",
-			.mailbox = "/" }
+			.userid = "user"}
 	},{
 		.url = "imap://user@example.com/INBOX/Trash",
 		.url_parsed = {
@@ -114,13 +113,13 @@ struct valid_imap_url_test valid_url_tests[] = {
 		.url_parsed = {
 			.host_name = "example.com",
 			.userid = "user",
-			.mailbox = "INBOX/" }
+			.mailbox = "INBOX" }
 	},{
 		.url = "imap://user@example.com/INBOX/Trash/../",
 		.url_parsed = {
 			.host_name = "example.com",
 			.userid = "user",
-			.mailbox = "INBOX/" }
+			.mailbox = "INBOX" }
 	},{
 		.url = "imap://user@example.com/INBOX/Trash/../..",
 		.url_parsed = {
@@ -150,7 +149,7 @@ struct valid_imap_url_test valid_url_tests[] = {
 		.url_parsed = {
 			.host_name = "example.com",
 			.userid = "user",
-			.mailbox = "INBOX/", .uidvalidity = 23423 }
+			.mailbox = "INBOX", .uidvalidity = 23423 }
 	},{
 		.url = "imap://user@example.com/INBOX/Drafts;UIDVALIDITY=6567",
 		.url_parsed = {
@@ -176,7 +175,7 @@ struct valid_imap_url_test valid_url_tests[] = {
 		.url_parsed = {
 			.host_name = "example.com",
 			.userid = "user",
-			.mailbox = "INBOX/", .uidvalidity = 0,
+			.mailbox = "INBOX", .uidvalidity = 0,
 			.uid = 0 }
 	},{
 		.url = "imap://user@example.com/INBOX/Junk;UIDVALIDITY=27667/"
@@ -347,6 +346,66 @@ struct valid_imap_url_test valid_url_tests[] = {
 			.mailbox = "#news",
 			.uidvalidity = 546,
 			.uid = 456 }
+	},{
+		.url = "",
+		.url_base = {
+			.host_name = "example.com",
+			.userid = "user",
+			.mailbox = "INBOX/Trash",
+			.uidvalidity = 23452 },
+		.url_parsed = {
+			.host_name = "example.com",
+			.userid = "user",
+			.mailbox = "INBOX/Trash",
+			.uidvalidity = 23452 }
+	},{
+		.url = "",
+		.url_base = {
+			.host_name = "example.com",
+			.userid = "user",
+			.mailbox = "INBOX/Trash",
+			.uidvalidity = 23452,
+			.uid = 65 },
+		.url_parsed = {
+			.host_name = "example.com",
+			.userid = "user",
+			.mailbox = "INBOX/Trash",
+			.uidvalidity = 23452,
+			.uid = 65 }
+	},{
+		.url = "",
+		.url_base = {
+			.host_name = "example.com",
+			.userid = "user",
+			.mailbox = "INBOX/Trash",
+			.uidvalidity = 23452,
+			.uid = 65,
+			.section = "AA/BB",
+			.have_partial = TRUE, .partial_offset = 1024, .partial_size = 1024 },
+		.url_parsed = {
+			.host_name = "example.com",
+			.userid = "user",
+			.mailbox = "INBOX/Trash",
+			.uidvalidity = 23452,
+			.uid = 65,
+			.section = "AA/BB",
+			.have_partial = TRUE, .partial_offset = 1024, .partial_size = 1024 }
+	},{
+		.url = "",
+		.url_base = {
+			.host_name = "example.com",
+			.userid = "user",
+			.mailbox = "INBOX/Trash",
+			.uidvalidity = 23452,
+			.uid = 65,
+			.have_partial = TRUE, .partial_offset = 1024, .partial_size = 1024 },
+		.url_parsed = {
+			.host_name = "example.com",
+			.userid = "user",
+			.mailbox = "INBOX/Trash",
+			.uidvalidity = 23452,
+			.uid = 65,
+			.have_partial = TRUE, .partial_offset = 1024, .partial_size = 1024 }
 	},{
 		.url = ";UID=4767",
 		.url_base = {
@@ -547,7 +606,7 @@ struct valid_imap_url_test valid_url_tests[] = {
 	}
 };
 
-unsigned int valid_url_test_count = N_ELEMENTS(valid_url_tests);
+static const unsigned int valid_url_test_count = N_ELEMENTS(valid_url_tests);
 
 static void test_imap_url_valid(void)
 {
@@ -556,8 +615,8 @@ static void test_imap_url_valid(void)
 	for (i = 0; i < valid_url_test_count; i++) T_BEGIN {
 		const char *url = valid_url_tests[i].url;
 		enum imap_url_parse_flags flags = valid_url_tests[i].flags;
-		struct imap_url *urlt = &valid_url_tests[i].url_parsed;
-		struct imap_url *urlb = &valid_url_tests[i].url_base;
+		const struct imap_url *urlt = &valid_url_tests[i].url_parsed;
+		const struct imap_url *urlb = &valid_url_tests[i].url_base;
 		struct imap_url *urlp;
 		const char *error = NULL;
 
@@ -571,121 +630,121 @@ static void test_imap_url_valid(void)
 			valid_url_tests[i].url), urlp != NULL, error);
 		if (urlp != NULL) {
 			if (urlp->host_name == NULL || urlt->host_name == NULL) {
-				test_out(t_strdup_printf("url->host_name = %s", urlp->host_name),
-					urlp->host_name == urlt->host_name);
+				test_out_quiet(t_strdup_printf("url->host_name = %s", urlp->host_name),
+					       urlp->host_name == urlt->host_name);
 			} else {
-				test_out(t_strdup_printf("url->host_name = %s", urlp->host_name),
-					strcmp(urlp->host_name, urlt->host_name) == 0);
+				test_out_quiet(t_strdup_printf("url->host_name = %s", urlp->host_name),
+					       strcmp(urlp->host_name, urlt->host_name) == 0);
 			}
 			if (urlp->userid == NULL || urlt->userid == NULL) {
-				test_out(t_strdup_printf("url->userid = %s", urlp->userid),
-					urlp->userid == urlt->userid);
+				test_out_quiet(t_strdup_printf("url->userid = %s", urlp->userid),
+					       urlp->userid == urlt->userid);
 			} else {
-				test_out(t_strdup_printf("url->userid = %s", urlp->userid),
-					strcmp(urlp->userid, urlt->userid) == 0);
+				test_out_quiet(t_strdup_printf("url->userid = %s", urlp->userid),
+					       strcmp(urlp->userid, urlt->userid) == 0);
 			}
 			if (urlp->auth_type == NULL || urlt->auth_type == NULL) {
-				test_out(t_strdup_printf("url->auth_type = %s", urlp->auth_type),
-					urlp->auth_type == urlt->auth_type);
+				test_out_quiet(t_strdup_printf("url->auth_type = %s", urlp->auth_type),
+					       urlp->auth_type == urlt->auth_type);
 			} else {
-				test_out(t_strdup_printf("url->auth_type = %s", urlp->auth_type),
-					strcmp(urlp->auth_type, urlt->auth_type) == 0);
+				test_out_quiet(t_strdup_printf("url->auth_type = %s", urlp->auth_type),
+					       strcmp(urlp->auth_type, urlt->auth_type) == 0);
 			}
-			if (urlp->have_port) {
-				test_out("url->port = (unspecified)",
-					urlp->have_port == urlt->have_port);
+			if (!urlp->have_port) {
+				test_out_quiet("url->port = (unspecified)",
+					       urlp->have_port == urlt->have_port);
 			} else {
-				test_out(t_strdup_printf("url->port = %u", urlp->port),
-					urlp->have_port == urlt->have_port && urlp->port == urlt->port);
+				test_out_quiet(t_strdup_printf("url->port = %u", urlp->port),
+					       urlp->have_port == urlt->have_port && urlp->port == urlt->port);
 			}
 			if (!urlp->have_host_ip) {
-				test_out("url->host_ip = (unspecified)",
-					urlp->have_host_ip == urlt->have_host_ip);
+				test_out_quiet("url->host_ip = (unspecified)",
+					       urlp->have_host_ip == urlt->have_host_ip);
 			} else {
-				test_out("url->host_ip = (valid)",
-					urlp->have_host_ip == urlt->have_host_ip);
+				test_out_quiet("url->host_ip = (valid)",
+					       urlp->have_host_ip == urlt->have_host_ip);
 			}
 			if (urlp->mailbox == NULL || urlt->mailbox == NULL) {
-				test_out(t_strdup_printf("url->mailbox = %s", urlp->mailbox),
-					urlp->mailbox == urlt->mailbox);
+				test_out_quiet(t_strdup_printf("url->mailbox = %s", urlp->mailbox),
+					       urlp->mailbox == urlt->mailbox);
 			} else {
-				test_out(t_strdup_printf("url->mailbox = %s", urlp->mailbox),
-					strcmp(urlp->mailbox, urlt->mailbox) == 0);
+				test_out_quiet(t_strdup_printf("url->mailbox = %s", urlp->mailbox),
+					       strcmp(urlp->mailbox, urlt->mailbox) == 0);
 			}
-			test_out(t_strdup_printf("url->uidvalidity = %u", urlp->uidvalidity),
-				urlp->uidvalidity == urlt->uidvalidity);
-			test_out(t_strdup_printf("url->uid = %u", urlp->uid),
-				urlp->uid == urlt->uid);
+			test_out_quiet(t_strdup_printf("url->uidvalidity = %u", urlp->uidvalidity),
+				       urlp->uidvalidity == urlt->uidvalidity);
+			test_out_quiet(t_strdup_printf("url->uid = %u", urlp->uid),
+				       urlp->uid == urlt->uid);
 			if (urlp->section == NULL || urlt->section == NULL) {
-				test_out(t_strdup_printf("url->section = %s", urlp->section),
-					urlp->section == urlt->section);
+				test_out_quiet(t_strdup_printf("url->section = %s", urlp->section),
+					       urlp->section == urlt->section);
 			} else {
-				test_out(t_strdup_printf("url->section = %s", urlp->section),
-					strcmp(urlp->section, urlt->section) == 0);
+				test_out_quiet(t_strdup_printf("url->section = %s", urlp->section),
+					       strcmp(urlp->section, urlt->section) == 0);
 			}
-			test_out(t_strdup_printf("url->partial = %"PRIuUOFF_T".%"PRIuUOFF_T,
-					urlp->partial_offset, urlp->partial_size),
-				urlp->partial_offset == urlt->partial_offset &&
-					urlp->partial_size == urlt->partial_size);
+			test_out_quiet(t_strdup_printf("url->partial = %"PRIuUOFF_T".%"PRIuUOFF_T,
+						       urlp->partial_offset, urlp->partial_size),
+				       urlp->partial_offset == urlt->partial_offset &&
+				       urlp->partial_size == urlt->partial_size);
 			if (urlp->search_program == NULL || urlt->search_program == NULL) {
-				test_out(t_strdup_printf(
-						"url->search_program = %s", urlp->search_program),
-					urlp->search_program == urlt->search_program);
+				test_out_quiet(t_strdup_printf(
+						       "url->search_program = %s", urlp->search_program),
+					       urlp->search_program == urlt->search_program);
 			} else {
-				test_out(t_strdup_printf(
-						"url->search_program = %s", urlp->search_program),
-					strcmp(urlp->search_program, urlt->search_program) == 0);
+				test_out_quiet(t_strdup_printf(
+						       "url->search_program = %s", urlp->search_program),
+					       strcmp(urlp->search_program, urlt->search_program) == 0);
 			}
 			if (urlt->uauth_rumpurl != NULL) {
 				if (urlp->uauth_rumpurl == NULL) {
-					test_out(t_strdup_printf(
-							"url->uauth_rumpurl = %s", urlp->uauth_rumpurl), FALSE);				
+					test_out_quiet(t_strdup_printf(
+							       "url->uauth_rumpurl = %s", urlp->uauth_rumpurl), FALSE);
 				} else {
-					test_out(t_strdup_printf(
-							"url->uauth_rumpurl = %s", urlp->uauth_rumpurl),
-						strcmp(urlp->uauth_rumpurl, urlt->uauth_rumpurl) == 0);				
+					test_out_quiet(t_strdup_printf(
+							       "url->uauth_rumpurl = %s", urlp->uauth_rumpurl),
+						       strcmp(urlp->uauth_rumpurl, urlt->uauth_rumpurl) == 0);
 				}
 				if (urlp->uauth_access_application == NULL ||
-					urlt->uauth_access_application == NULL) {
-					test_out(t_strdup_printf("url->uauth_access_application = %s",
-							urlp->uauth_access_application),
-						urlp->uauth_access_application == urlt->uauth_access_application);				
+				    urlt->uauth_access_application == NULL) {
+					test_out_quiet(t_strdup_printf("url->uauth_access_application = %s",
+								       urlp->uauth_access_application),
+						       urlp->uauth_access_application == urlt->uauth_access_application);
 				} else {
-					test_out(t_strdup_printf("url->uauth_access_application = %s",
-							urlp->uauth_access_application),
-						strcmp(urlp->uauth_access_application,
-							urlt->uauth_access_application) == 0);				
+					test_out_quiet(t_strdup_printf("url->uauth_access_application = %s",
+								       urlp->uauth_access_application),
+						       strcmp(urlp->uauth_access_application,
+							      urlt->uauth_access_application) == 0);
 				}
 				if (urlp->uauth_access_user == NULL ||
-					urlt->uauth_access_user == NULL) {
-					test_out(t_strdup_printf("url->uauth_access_user = %s",
-							urlp->uauth_access_user),
-						urlp->uauth_access_user == urlt->uauth_access_user);				
+				    urlt->uauth_access_user == NULL) {
+					test_out_quiet(t_strdup_printf("url->uauth_access_user = %s",
+								       urlp->uauth_access_user),
+						       urlp->uauth_access_user == urlt->uauth_access_user);
 				} else {
-					test_out(t_strdup_printf("url->uauth_access_user = %s",
-							urlp->uauth_access_user),
-						strcmp(urlp->uauth_access_user,
-							urlt->uauth_access_user) == 0);				
+					test_out_quiet(t_strdup_printf("url->uauth_access_user = %s",
+								       urlp->uauth_access_user),
+						       strcmp(urlp->uauth_access_user,
+							      urlt->uauth_access_user) == 0);
 				}
 				if (urlp->uauth_mechanism == NULL || urlt->uauth_mechanism == NULL) {
-					test_out(t_strdup_printf(
-							"url->uauth_mechanism = %s", urlp->uauth_mechanism),
-						urlp->uauth_mechanism == urlt->uauth_mechanism);				
+					test_out_quiet(t_strdup_printf(
+							       "url->uauth_mechanism = %s", urlp->uauth_mechanism),
+						       urlp->uauth_mechanism == urlt->uauth_mechanism);
 				} else {
-					test_out(t_strdup_printf(
+					test_out_quiet(t_strdup_printf(
 							"url->uauth_mechanism = %s", urlp->uauth_mechanism),
-						strcmp(urlp->uauth_mechanism, urlt->uauth_mechanism) == 0);				
+						       strcmp(urlp->uauth_mechanism, urlt->uauth_mechanism) == 0);
 				}
 				if (urlp->uauth_token == NULL || urlt->uauth_token == NULL) {
-					test_out(t_strdup_printf(
-							"url->uauth_token = %s", urlp->uauth_token),
-						urlp->uauth_token == urlt->uauth_token);				
+					test_out_quiet(t_strdup_printf(
+							       "url->uauth_token = %s", urlp->uauth_token),
+						       urlp->uauth_token == urlt->uauth_token);
 				} else {
 					bool equal = urlp->uauth_token_size == urlt->uauth_token_size;
 					size_t i;
-					test_out(t_strdup_printf(
-							"url->uauth_token_size = %"PRIuSIZE_T, urlp->uauth_token_size),
-						equal);
+					test_out_quiet(t_strdup_printf(
+							       "url->uauth_token_size = %"PRIuSIZE_T, urlp->uauth_token_size),
+						       equal);
 
 					if (equal) {
 						for (i = 0; i < urlp->uauth_token_size; i++) {
@@ -694,8 +753,8 @@ static void test_imap_url_valid(void)
 								break;
 							}
 						}
-						test_out(t_strdup_printf("url->uauth_token [index=%d]", (int)i),
-							equal);
+						test_out_quiet(t_strdup_printf("url->uauth_token [index=%d]", (int)i),
+							       equal);
 					}
 				}
 			}
@@ -711,7 +770,7 @@ struct invalid_imap_url_test {
 	struct imap_url url_base;
 };
 
-struct invalid_imap_url_test invalid_url_tests[] = {
+static const struct invalid_imap_url_test invalid_url_tests[] = {
 	{
 		.url = "http://www.dovecot.org"
 	},{
@@ -872,7 +931,7 @@ struct invalid_imap_url_test invalid_url_tests[] = {
 	},
 };
 
-unsigned int invalid_url_test_count = N_ELEMENTS(invalid_url_tests);
+static const unsigned int invalid_url_test_count = N_ELEMENTS(invalid_url_tests);
 
 static void test_imap_url_invalid(void)
 {
@@ -881,7 +940,7 @@ static void test_imap_url_invalid(void)
 	for (i = 0; i < invalid_url_test_count; i++) T_BEGIN {
 		const char *url = invalid_url_tests[i].url;
 		enum imap_url_parse_flags flags = invalid_url_tests[i].flags;
-		struct imap_url *urlb = &invalid_url_tests[i].url_base;
+		const struct imap_url *urlb = &invalid_url_tests[i].url_base;
 		struct imap_url *urlp;
 		const char *error = NULL;
 
@@ -899,7 +958,7 @@ static void test_imap_url_invalid(void)
 
 }
 
-const char *parse_create_url_tests[] = {
+static const char *parse_create_url_tests[] = {
 	"imap://host.example.com/",
 	"imap://10.0.0.1/",
 #ifdef HAVE_IPV6
@@ -922,7 +981,7 @@ const char *parse_create_url_tests[] = {
 		"/;SECTION=TEXT/;PARTIAL=1.14;URLAUTH=anonymous",
 	"imap://user;AUTH=PLAIN@host.example.com/INBOX;UIDVALIDITY=15/;UID=5"
 		"/;SECTION=TEXT/;PARTIAL=1.14;URLAUTH=user+username",
-	"imap://user;AUTH=PLAIN@host.example.com/INBOX/?SUBJECT%20%22Frop?%22",
+	"imap://user;AUTH=PLAIN@host.example.com/INBOX?SUBJECT%20%22Frop?%22",
 	"imap://host.%23example.com/",
 	"imap://user%3ba@host.example.com/",
 	"imap://user%40example.com@host.example.com/",
@@ -935,7 +994,7 @@ const char *parse_create_url_tests[] = {
 		"/;SECTION=TEXT/;PARTIAL=1.14;URLAUTH=user+user%3bname",
 };
 
-unsigned int parse_create_url_test_count = N_ELEMENTS(parse_create_url_tests);
+static const unsigned int parse_create_url_test_count = N_ELEMENTS(parse_create_url_tests);
 
 static void test_imap_url_parse_create(void)
 {
@@ -955,7 +1014,7 @@ static void test_imap_url_parse_create(void)
 		if (urlp != NULL) {
 			const char *urlnew = imap_url_create(urlp);
 			test_out(t_strdup_printf
-				("create %s", urlnew), strcmp(url, urlnew) == 0);
+				 ("create %s", urlnew), strcmp(url, urlnew) == 0);
 		}
 
 		test_end();

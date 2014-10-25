@@ -119,7 +119,7 @@ static int http_transfer_chunked_skip_token
 static int http_transfer_chunked_skip_qdtext
 (struct http_transfer_chunked_istream *tcstream)
 {
-	/* qdtext-nf      = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text */
+	/* qdtext      = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text */
 	while (tcstream->cur < tcstream->end && http_char_is_qdtext(*tcstream->cur))
 		tcstream->cur++;
 	if (tcstream->cur == tcstream->end)
@@ -132,13 +132,12 @@ http_transfer_chunked_parse(struct http_transfer_chunked_istream *tcstream)
 {
 	int ret;
 
-	/* http://tools.ietf.org/html/draft-ietf-httpbis-p1-messaging-21;
-		   Section 4.1:
+	/* RFC 7230, Section 4.1: Chunked Transfer Encoding
 
 	   chunked-body   = *chunk
-	                    last-chunk
-	                    trailer-part
-	                    CRLF
+	   	                last-chunk
+		                  trailer-part
+		                  CRLF
 
 	   chunk          = chunk-size [ chunk-ext ] CRLF
 	                    chunk-data CRLF
@@ -147,14 +146,9 @@ http_transfer_chunked_parse(struct http_transfer_chunked_istream *tcstream)
 
 	   chunk-ext      = *( ";" chunk-ext-name [ "=" chunk-ext-val ] )
 	   chunk-ext-name = token
-	   chunk-ext-val  = token / quoted-str-nf
+	   chunk-ext-val  = token / quoted-string
 	   chunk-data     = 1*OCTET ; a sequence of chunk-size octets
 	   trailer-part   = *( header-field CRLF )
-
-	   quoted-str-nf  = DQUOTE *( qdtext-nf / quoted-pair ) DQUOTE
-	                  ; like quoted-string, but disallowing line folding
-	   qdtext-nf      = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text
-	   quoted-pair    = "\" ( HTAB / SP / VCHAR / obs-text )
 	*/
 
 	for (;;) {
@@ -201,7 +195,7 @@ http_transfer_chunked_parse(struct http_transfer_chunked_istream *tcstream)
 				return 0;
 			/* fall through */
 		case HTTP_CHUNKED_PARSE_STATE_EXT_VALUE:
-			/* chunk-ext-val  = token / quoted-str-nf */
+			/* chunk-ext-val  = token / quoted-string */
 			if (*tcstream->cur != '"') {
 				tcstream->state = HTTP_CHUNKED_PARSE_STATE_EXT_VALUE_TOKEN;
 				break;
@@ -212,29 +206,25 @@ http_transfer_chunked_parse(struct http_transfer_chunked_istream *tcstream)
 				return 0;
 			/* fall through */
 		case HTTP_CHUNKED_PARSE_STATE_EXT_VALUE_STRING:
-			for (;;) {
-				if (*tcstream->cur == '"') {
-					tcstream->cur++;
-					tcstream->state = HTTP_CHUNKED_PARSE_STATE_EXT;
-					if (tcstream->cur >= tcstream->end)
-						return 0;
-					break;
-				} else if ((ret=http_transfer_chunked_skip_qdtext(tcstream)) <= 0) {
-					if (ret < 0)
-						tcstream->error = "Invalid chunked extension value";
-					return ret;
-				} else if (*tcstream->cur == '\\') {
-					tcstream->cur++;
-					tcstream->state = HTTP_CHUNKED_PARSE_STATE_EXT_VALUE_ESCAPE;
-					if (tcstream->cur >= tcstream->end)
-						return 0;
-					break;
-				} else {
-					tcstream->error = t_strdup_printf(
-						"Invalid character %s in chunked extension value string",
-						_chr_sanitize(*tcstream->cur));
-					return -1;
-				}
+			if (*tcstream->cur == '"') {
+				tcstream->cur++;
+				tcstream->state = HTTP_CHUNKED_PARSE_STATE_EXT;
+				if (tcstream->cur >= tcstream->end)
+					return 0;
+			} else if ((ret=http_transfer_chunked_skip_qdtext(tcstream)) <= 0) {
+				if (ret < 0)
+					tcstream->error = "Invalid chunked extension value";
+				return ret;
+			} else if (*tcstream->cur == '\\') {
+				tcstream->cur++;
+				tcstream->state = HTTP_CHUNKED_PARSE_STATE_EXT_VALUE_ESCAPE;
+				if (tcstream->cur >= tcstream->end)
+					return 0;
+			} else {
+				tcstream->error = t_strdup_printf(
+					"Invalid character %s in chunked extension value string",
+					_chr_sanitize(*tcstream->cur));
+				return -1;
 			}
 			break;
 		case HTTP_CHUNKED_PARSE_STATE_EXT_VALUE_ESCAPE:
@@ -437,7 +427,7 @@ static int http_transfer_chunked_parse_trailer(
 		/* NOTE: trailer is currently ignored */
 		/* FIXME: limit trailer size */
 		tcstream->header_parser =
-			http_header_parser_init(tcstream->istream.parent, 0, TRUE);
+			http_header_parser_init(tcstream->istream.parent, NULL, TRUE);
 	}
 
 	while ((ret=http_header_parse_next_field(tcstream->header_parser,
@@ -559,7 +549,7 @@ static size_t _max_chunk_size(size_t avail)
 
 	/* Make sure we have room for both chunk data and overhead
 
-	   chunk          = chunk-size CRLF
+	   chunk          = chunk-size [ chunk-ext ] CRLF
 	                    chunk-data CRLF
 	   chunk-size     = 1*HEXDIG
 	 */

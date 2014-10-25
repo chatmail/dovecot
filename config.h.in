@@ -172,6 +172,9 @@
 /* Define to 1 if you have the `inet_aton' function. */
 #undef HAVE_INET_ATON
 
+/* Define to 1 if you have the `inotify_init' function. */
+#undef HAVE_INOTIFY_INIT
+
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 

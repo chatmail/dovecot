@@ -60,6 +60,24 @@ int dsync_brain_mailbox_alloc(struct dsync_brain *brain, const guid_128_t guid,
 	return 0;
 }
 
+static void
+dsync_mailbox_cache_field_dup(ARRAY_TYPE(mailbox_cache_field) *dest,
+			      const ARRAY_TYPE(mailbox_cache_field) *src,
+			      pool_t pool)
+{
+	const struct mailbox_cache_field *src_field;
+	struct mailbox_cache_field *dest_field;
+
+	p_array_init(dest, pool, array_count(src));
+	array_foreach(src, src_field) {
+		dest_field = array_append_space(dest);
+		dest_field->name = p_strdup(pool, src_field->name);
+		dest_field->decision = src_field->decision;
+		dest_field->last_used = src_field->last_used;
+	}
+}
+
+
 static const struct dsync_mailbox_state *
 dsync_mailbox_state_find(struct dsync_brain *brain,
 			 const guid_128_t mailbox_guid)
@@ -122,6 +140,15 @@ dsync_brain_sync_mailbox_init(struct dsync_brain *brain,
 		dsync_brain_sync_init_box_states(brain);
 	}
 	brain->local_dsync_box = *local_dsync_box;
+	if (brain->dsync_box_pool != NULL)
+		p_clear(brain->dsync_box_pool);
+	else {
+		brain->dsync_box_pool =
+			pool_alloconly_create(MEMPOOL_GROWING"dsync brain box pool", 2048);
+	}
+	dsync_mailbox_cache_field_dup(&brain->local_dsync_box.cache_fields,
+				      &local_dsync_box->cache_fields,
+				      brain->dsync_box_pool);
 	memset(&brain->remote_dsync_box, 0, sizeof(brain->remote_dsync_box));
 
 	state = dsync_mailbox_state_find(brain, local_dsync_box->mailbox_guid);
@@ -154,6 +181,9 @@ dsync_brain_sync_mailbox_init_remote(struct dsync_brain *brain,
 			sizeof(remote_dsync_box->mailbox_guid)) == 0);
 
 	brain->remote_dsync_box = *remote_dsync_box;
+	dsync_mailbox_cache_field_dup(&brain->remote_dsync_box.cache_fields,
+				      &remote_dsync_box->cache_fields,
+				      brain->dsync_box_pool);
 
 	state = dsync_mailbox_state_find(brain, remote_dsync_box->mailbox_guid);
 	if (state != NULL) {
@@ -200,6 +230,8 @@ int dsync_brain_sync_mailbox_open(struct dsync_brain *brain,
 	enum dsync_mailbox_exporter_flags exporter_flags = 0;
 	uint32_t last_common_uid, highest_wanted_uid;
 	uint64_t last_common_modseq, last_common_pvt_modseq;
+	const char *desync_reason = "";
+	bool pvt_too_old;
 	int ret;
 
 	i_assert(brain->log_scan == NULL);
@@ -215,31 +247,52 @@ int dsync_brain_sync_mailbox_open(struct dsync_brain *brain,
 					      highest_wanted_uid,
 					      last_common_modseq,
 					      last_common_pvt_modseq,
-					      &brain->log_scan);
+					      &brain->log_scan, &pvt_too_old);
 	if (ret < 0) {
 		i_error("Failed to read transaction log for mailbox %s",
 			mailbox_get_vname(brain->box));
 		brain->failed = TRUE;
 		return -1;
 	}
+	if (ret == 0) {
+		if (pvt_too_old) {
+			desync_reason = t_strdup_printf(
+				"Private modseq %llu no longer in transaction log",
+				(unsigned long long)last_common_pvt_modseq);
+		} else {
+			desync_reason = t_strdup_printf(
+				"Modseq %llu no longer in transaction log",
+				(unsigned long long)last_common_modseq);
+		}
+	}
 
 	if (last_common_uid != 0) {
 		mailbox_get_open_status(brain->box, STATUS_UIDNEXT |
 					STATUS_HIGHESTMODSEQ |
 					STATUS_HIGHESTPVTMODSEQ, &status);
-		if (status.uidnext < last_common_uid ||
-		    status.highest_modseq < last_common_modseq ||
-		    status.highest_pvt_modseq < last_common_pvt_modseq) {
-			/* last_common_* is higher than our current ones.
-			   incremental sync state is stale, we need to do
-			   a full resync */
+		/* if last_common_* is higher than our current ones it means
+		   that the incremental sync state is stale and we need to do
+		   a full resync */
+		if (status.uidnext < last_common_uid) {
+			desync_reason = t_strdup_printf("uidnext %u < %u",
+				status.uidnext, last_common_uid);
+			ret = 0;
+		} else if (status.highest_modseq < last_common_modseq) {
+			desync_reason = t_strdup_printf("highest_modseq %llu < %llu",
+				(unsigned long long)status.highest_modseq,
+				(unsigned long long)last_common_modseq);
+			ret = 0;
+		} else if (status.highest_pvt_modseq < last_common_pvt_modseq) {
+			desync_reason = t_strdup_printf("highest_pvt_modseq %llu < %llu",
+				(unsigned long long)status.highest_pvt_modseq,
+				(unsigned long long)last_common_pvt_modseq);
 			ret = 0;
 		}
 	}
 	if (ret == 0) {
 		i_warning("Failed to do incremental sync for mailbox %s, "
-			  "retry with a full sync",
-			  mailbox_get_vname(brain->box));
+			  "retry with a full sync (%s)",
+			  mailbox_get_vname(brain->box), desync_reason);
 		brain->changes_during_sync = TRUE;
 		brain->require_full_resync = TRUE;
 		return 0;
@@ -251,6 +304,8 @@ int dsync_brain_sync_mailbox_open(struct dsync_brain *brain,
 	    (brain->local_dsync_box.have_save_guids ||
 	     (brain->backup_send && brain->local_dsync_box.have_guids)))
 		exporter_flags |= DSYNC_MAILBOX_EXPORTER_FLAG_MAILS_HAVE_GUIDS;
+	if (brain->no_mail_prefetch)
+		exporter_flags |= DSYNC_MAILBOX_EXPORTER_FLAG_MINIMAL_DMAIL_FILL;
 
 	brain->box_exporter = brain->backup_recv ? NULL :
 		dsync_mailbox_export_init(brain->box, brain->log_scan,
@@ -338,7 +393,9 @@ static int dsync_box_get(struct mailbox *box, struct dsync_mailbox *dsync_box_r)
 	dsync_box_r->first_recent_uid = status.first_recent_uid;
 	dsync_box_r->highest_modseq = status.highest_modseq;
 	dsync_box_r->highest_pvt_modseq = status.highest_pvt_modseq;
-	dsync_box_r->cache_fields = *metadata.cache_fields;
+	dsync_mailbox_cache_field_dup(&dsync_box_r->cache_fields,
+				      metadata.cache_fields,
+				      pool_datastack_create());
 	dsync_box_r->have_guids = status.have_guids;
 	dsync_box_r->have_save_guids = status.have_save_guids;
 	dsync_box_r->have_only_guid128 = status.have_only_guid128;

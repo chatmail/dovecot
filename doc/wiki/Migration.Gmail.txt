@@ -22,4 +22,4 @@ there are a few things different with Gmail compared to other IMAP servers:
    their SPECIAL-USE flag rather than their name (which may be different for
    different user depending on their language).
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2014-10-03 04:43)

@@ -33,21 +33,35 @@
 
 extern unsigned int data_stack_frame;
 
-/* All t_..() allocations between t_push() and t_pop() are freed after t_pop()
+/* All t_..() allocations between t_push*() and t_pop() are freed after t_pop()
    is called. Returns the current stack frame number, which can be used
    to detect missing t_pop() calls:
 
-   x = t_push(); .. if (t_pop() != x) abort();
+   x = t_push(__func__); .. if (t_pop() != x) abort();
+
+   In DEBUG mode, t_push_named() makes a temporary allocation for the name,
+   but is safe to call in a loop as it performs the allocation within its own
+   frame. However, you should always prefer to use T_BEGIN { ... } T_END below.
 */
-unsigned int t_push(void) ATTR_HOT;
+unsigned int t_push(const char *marker) ATTR_HOT;
+unsigned int t_push_named(const char *format, ...) ATTR_HOT ATTR_FORMAT(1, 2);
 unsigned int t_pop(void) ATTR_HOT;
 /* Simplifies the if (t_pop() != x) check by comparing it internally and
    panicking if it doesn't match. */
 void t_pop_check(unsigned int *id) ATTR_HOT;
 
 /* Usage: T_BEGIN { code } T_END */
+#ifndef DEBUG
 #define T_BEGIN \
-	STMT_START { unsigned int _data_stack_cur_id = t_push();
+	STMT_START { unsigned int _data_stack_cur_id = t_push(NULL);
+#elif defined (__GNUC__) && !defined (__STRICT_ANSI__)
+#define T_BEGIN \
+	STMT_START { unsigned int _data_stack_cur_id = t_push(__FUNCTION__);
+#else
+#define T_CAT2(a,b) (a ":" #b)
+#define T_BEGIN \
+	STMT_START { unsigned int _data_stack_cur_id = t_push(T_CAT2(__FILE__,__LINE__));
+#endif
 #define T_END \
 	t_pop_check(&_data_stack_cur_id); } STMT_END
 
@@ -61,8 +75,8 @@ void t_pop_check(unsigned int *id) ATTR_HOT;
 
    t_malloc() calls never fail. If there's not enough memory left,
    i_panic() will be called. */
-void *t_malloc(size_t size) ATTR_MALLOC;
-void *t_malloc0(size_t size) ATTR_MALLOC;
+void *t_malloc(size_t size) ATTR_MALLOC ATTR_RETURNS_NONNULL;
+void *t_malloc0(size_t size) ATTR_MALLOC ATTR_RETURNS_NONNULL;
 
 /* Try growing allocated memory. Returns TRUE if successful. Works only
    for last allocated memory in current stack frame. */
@@ -84,18 +98,18 @@ size_t t_get_bytes_available(void) ATTR_PURE;
    new one (or do some other trickery). See t_buffer_reget(). */
 #define t_buffer_get_type(type, size) \
 	t_buffer_get(sizeof(type) * (size))
-void *t_buffer_get(size_t size);
+void *t_buffer_get(size_t size) ATTR_RETURNS_NONNULL;
 
 /* Grow the buffer, memcpy()ing the memory to new location if needed. */
 #define t_buffer_reget_type(buffer, type, size) \
 	t_buffer_reget(buffer, sizeof(type) * (size))
-void *t_buffer_reget(void *buffer, size_t size);
+void *t_buffer_reget(void *buffer, size_t size) ATTR_RETURNS_NONNULL;
 
 /* Make the last t_buffer_get()ed buffer permanent. Note that size MUST be
    less or equal than the size you gave with last t_buffer_get() or the
    result will be undefined. */
 #define t_buffer_alloc_type(type, size) \
-        t_buffer_alloc(sizeof(type) * (size))
+	t_buffer_alloc(sizeof(type) * (size))
 void t_buffer_alloc(size_t size);
 /* Allocate the last t_buffer_get()ed data entirely. */
 void t_buffer_alloc_last_full(void);

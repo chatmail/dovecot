@@ -129,8 +129,7 @@ static int o_stream_temp_dup_cancel(struct temp_ostream *tstream)
 
 	input = i_stream_create_limit(tstream->dupstream, size);
 	do {
-		ret = io_stream_copy(&tstream->ostream.ostream,
-				     input, IO_BLOCK_SIZE);
+		ret = io_stream_copy(&tstream->ostream.ostream, input);
 	} while (input->v_offset < tstream->dupstream_offset && ret > 0);
 	if (ret < 0 && tstream->ostream.ostream.stream_errno == 0) {
 		i_assert(input->stream_errno != 0);
@@ -187,8 +186,7 @@ static off_t o_stream_temp_send_istream(struct ostream_private *_outstream,
 			return -1;
 		outstream->flags &= ~IOSTREAM_TEMP_FLAG_TRY_FD_DUP;
 	}
-	return io_stream_copy(&outstream->ostream.ostream,
-			      instream, IO_BLOCK_SIZE);
+	return io_stream_copy(&outstream->ostream.ostream, instream);
 }
 
 static int
@@ -255,9 +253,9 @@ struct istream *iostream_temp_finish(struct ostream **output,
 			tstream->dupstream_start_offset;
 		fd = dup(i_stream_get_fd(tstream->dupstream));
 		if (fd == -1)
-			input = i_stream_create_error(errno);
+			input = i_stream_create_error_str(errno, "dup() failed: %m");
 		else {
-			input2 = i_stream_create_fd(fd, max_buffer_size, TRUE);
+			input2 = i_stream_create_fd_autoclose(&fd, max_buffer_size);
 			i_stream_seek(input2, abs_offset);
 			input = i_stream_create_limit(input2, size);
 			i_stream_unref(&input2);
@@ -270,11 +268,11 @@ struct istream *iostream_temp_finish(struct ostream **output,
 		/* return the original failed stream. */
 		input = tstream->dupstream;
 	} else if (tstream->fd != -1) {
-		input = i_stream_create_fd(tstream->fd, max_buffer_size, TRUE);
+		int fd = tstream->fd;
+		input = i_stream_create_fd_autoclose(&tstream->fd, max_buffer_size);
 		i_stream_set_name(input, t_strdup_printf(
 			"(Temp file fd %d in %s, %"PRIuUOFF_T" bytes)",
-			tstream->fd, tstream->temp_path_prefix, tstream->fd_size));
-		tstream->fd = -1;
+			fd, tstream->temp_path_prefix, tstream->fd_size));
 	} else {
 		input = i_stream_create_from_data(tstream->buf->data,
 						  tstream->buf->used);

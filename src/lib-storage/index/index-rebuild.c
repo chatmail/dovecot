@@ -167,9 +167,7 @@ index_index_rebuild_init(struct mailbox *box, struct mail_index_view *view,
 	mail_cache_reset(box->cache);
 
 	/* if backup index file exists, try to use it */
-	if (mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX,
-				&index_dir) <= 0)
-		i_unreached();
+	index_dir = mailbox_get_index_path(box);
 	backup_path = t_strconcat(box->index_prefix, ".backup", NULL);
 	ctx->backup_index = mail_index_alloc(index_dir, backup_path);
 
@@ -191,11 +189,19 @@ void index_index_rebuild_deinit(struct index_rebuild_context **_ctx,
 				index_rebuild_generate_uidvalidity_t *cb)
 {
 	struct index_rebuild_context *ctx = *_ctx;
+	struct mail_cache_compress_lock *lock = NULL;
 
 	*_ctx = NULL;
 
 	/* initialize cache file with the old field decisions */
-	(void)mail_cache_compress(ctx->box->cache, ctx->trans);
+	(void)mail_cache_compress(ctx->box->cache, ctx->trans, &lock);
+	if (lock != NULL) {
+		/* FIXME: this is a bit too early. ideally we should return it
+		   from this function and unlock only after the transaction is
+		   committed, but it would be an API change and this rebuilding
+		   isn't happening normally anyway. */
+		mail_cache_compress_unlock(&lock);
+	}
 	index_rebuild_header(ctx, cb);
 	if (ctx->backup_index != NULL) {
 		mail_index_view_close(&ctx->backup_view);

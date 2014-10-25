@@ -109,10 +109,18 @@ Plugins
  * Sieve language support can be added with the <Pigeonhole Sieve plugin>
    [Pigeonhole.Sieve.txt].
 
+Address extension delivery
+--------------------------
+
+To make address extension work with LMTP you must check these variables are set
+
+ * lmtp_save_to_detail_mailbox = yes
+ * recipient_delimiter = +
+
 Using LMTP with different MTAs
 ------------------------------
 
  * <Postfix> [HowTo.PostfixDovecotLMTP.txt]
  * <Exim> [LMTP.Exim.txt]
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2014-10-03 04:43)

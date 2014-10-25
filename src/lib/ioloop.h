@@ -97,6 +97,13 @@ timeout_add_short(unsigned int msecs, unsigned int source_linenum,
 	timeout_add_short(msecs, __LINE__ + \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context)
+struct timeout *timeout_add_absolute(const struct timeval *time,
+			    unsigned int source_linenum,
+			    timeout_callback_t *callback, void *context) ATTR_NULL(4);
+#define timeout_add_absolute(time, callback, context) \
+	timeout_add_absolute(time, __LINE__ + \
+		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
+		(io_callback_t *)callback, context)
 /* Remove timeout handler, and set timeout pointer to NULL. */
 void timeout_remove(struct timeout **timeout);
 /* Reset timeout so it's next run after now+msecs. */
@@ -142,10 +149,20 @@ void io_loop_context_unref(struct ioloop_context **ctx);
 void io_loop_context_add_callbacks(struct ioloop_context *ctx,
 				   io_callback_t *activate,
 				   io_callback_t *deactivate, void *context);
+#define io_loop_context_add_callbacks(ctx, activate, deactivate, context) \
+	io_loop_context_add_callbacks(ctx, 1 ? (io_callback_t *)activate : \
+		CALLBACK_TYPECHECK(activate, void (*)(typeof(context))) + \
+		CALLBACK_TYPECHECK(deactivate, void (*)(typeof(context))), \
+		(io_callback_t *)deactivate, context)
 /* Remove callbacks with the given callbacks and context. */
 void io_loop_context_remove_callbacks(struct ioloop_context *ctx,
 				      io_callback_t *activate,
 				      io_callback_t *deactivate, void *context);
+#define io_loop_context_remove_callbacks(ctx, activate, deactivate, context) \
+	io_loop_context_remove_callbacks(ctx, 1 ? (io_callback_t *)activate : \
+		CALLBACK_TYPECHECK(activate, void (*)(typeof(context))) + \
+		CALLBACK_TYPECHECK(deactivate, void (*)(typeof(context))), \
+		(io_callback_t *)deactivate, context)
 /* Returns the current context set to ioloop. */
 struct ioloop_context *io_loop_get_current_context(struct ioloop *ioloop);
 

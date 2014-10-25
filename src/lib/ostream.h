@@ -30,10 +30,13 @@ typedef int stream_flush_callback_t(void *context);
    If max_buffer_size is 0, an "optimal" buffer size is used (max 128kB). */
 struct ostream *
 o_stream_create_fd(int fd, size_t max_buffer_size, bool autoclose_fd);
+/* The fd is set to -1 immediately to avoid accidentally closing it twice. */
+struct ostream *o_stream_create_fd_autoclose(int *fd, size_t max_buffer_size);
 /* Create an output stream from a regular file which begins at given offset.
    If offset==(uoff_t)-1, the current offset isn't known. */
 struct ostream *
 o_stream_create_fd_file(int fd, uoff_t offset, bool autoclose_fd);
+struct ostream *o_stream_create_fd_file_autoclose(int *fd, uoff_t offset);
 /* Create an output stream to a buffer. */
 struct ostream *o_stream_create_buffer(buffer_t *buf);
 /* Create an output streams that always fails the writes. */
@@ -84,6 +87,7 @@ size_t o_stream_get_max_buffer_size(struct ostream *stream);
    TCP_CORK on if supported. */
 void o_stream_cork(struct ostream *stream);
 void o_stream_uncork(struct ostream *stream);
+bool o_stream_is_corked(struct ostream *stream);
 /* Try to flush the output stream. Returns 1 if all sent, 0 if not,
    -1 if error. */
 int o_stream_flush(struct ostream *stream);
@@ -123,9 +127,9 @@ void o_stream_ignore_last_errors(struct ostream *stream);
    When creating wrapper streams, they copy this behavior from the parent
    stream. */
 void o_stream_set_no_error_handling(struct ostream *stream, bool set);
-/* Send data from input stream. Returns number of bytes sent, or -1 if error.
-   Note that this function may block if either instream or outstream is
-   blocking.
+/* Send data from input stream. Returns number of bytes sent, or -1 if error
+   in either outstream or instream. Note that this function may block if either
+   instream or outstream is blocking.
 
    Also note that this function may not add anything to the output buffer, so
    if you want the flush callback to be called when more data can be written,

@@ -43,7 +43,9 @@ enum mail_cache_record_flag {
 	/* Mail header or body is known to contain NUL characters. */
 	MAIL_CACHE_FLAG_HAS_NULS		= 0x0004,
 	/* Mail header or body is known to not contain NUL characters. */
-	MAIL_CACHE_FLAG_HAS_NO_NULS		= 0x0008,
+	MAIL_CACHE_FLAG_HAS_NO_NULS		= 0x0020,
+	/* obsolete _HAS_NO_NULS flag, which was being set incorrectly */
+	MAIL_CACHE_FLAG_HAS_NO_NULS_BROKEN	= 0x0008,
 
 	/* BODY is IMAP_BODY_PLAIN_7BIT_ASCII and rest of BODYSTRUCTURE
 	   fields are NIL */
@@ -124,6 +126,7 @@ struct index_mail_data {
 	unsigned int initialized_wrapper_stream:1;
 	unsigned int destroy_callback_set:1;
 	unsigned int prefetch_sent:1;
+	unsigned int header_parser_initialized:1;
 };
 
 struct index_mail {
@@ -230,6 +233,9 @@ void index_mail_set_cache_corrupted(struct mail *mail,
 				    enum mail_fetch_field field);
 int index_mail_opened(struct mail *mail, struct istream **stream);
 int index_mail_stream_check_failure(struct index_mail *mail);
+void index_mail_stream_log_failure_for(struct index_mail *mail,
+				       struct istream *input);
+void index_mail_refresh_expunged(struct mail *mail);
 struct index_mail *index_mail_get_index_mail(struct mail *mail);
 
 bool index_mail_get_cached_uoff_t(struct index_mail *mail,

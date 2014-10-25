@@ -27,6 +27,10 @@ service auth {
   }
   ...
 }
+
+# Outlook Express and Windows Mail works only with LOGIN mechanism, not the
+standard PLAIN:
+auth_mechanisms = plain login
 ---%<-------------------------------------------------------------------------
 
 Example Postfix main.cf excerpt
@@ -80,20 +84,30 @@ submission inet n - - - - smtpd
 smtpd_recipient_restrictions=reject_non_fqdn_recipient,reject_unknown_recipient_domain,permit_sasl_authenticated,reject
 ---%<-------------------------------------------------------------------------
 
+Dovecot authentication via TCP
+------------------------------
+
+If Postfix and Dovecot are running on separate servers, you can also
+authenticate via TCP. For Dovecot set up an inet_listener:
+
+---%<-------------------------------------------------------------------------
+service auth {
+ inet_listener {
+   port = 12345
+ }
+}
+---%<-------------------------------------------------------------------------
+
+And configure Postfix to use it:
+
+---%<-------------------------------------------------------------------------
+smtpd_sasl_path = inet:dovecot.example.com:12345
+smtpd_sasl_type = dovecot
+---%<-------------------------------------------------------------------------
+
 See also:
 ---------
 
  * http://www.postfix.org/SASL_README.html#server_dovecot
 
-Remark
-------
-
-If Outlook Express (and/or Windows Mail) doesn't seem to login, even though you
-checked "My server requires authentication" in it's configuration, then verify
-that the "mechanisms" line contains "login" in addition to "plain". "plain" is
-the default, and most clients can work with it, but Outlook Express needs the
-"login" mechanism. Also see:
-
- * http://archives.neohapsis.com/archives/postfix/2000-11/0881.html
-
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2014-10-03 04:43)

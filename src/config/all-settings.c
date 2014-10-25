@@ -44,6 +44,7 @@ struct mail_storage_settings {
 	bool mail_nfs_storage;
 	bool mail_nfs_index;
 	bool mailbox_list_index;
+	bool mailbox_list_index_very_dirty_syncs;
 	bool mail_debug;
 	bool mail_full_filesystem_access;
 	bool maildir_stat_dirs;
@@ -266,10 +267,17 @@ struct master_service_ssl_settings {
 	const char *ssl_protocols;
 	const char *ssl_cert_username_field;
 	const char *ssl_crypto_device;
+	const char *ssl_options;
+
 	bool ssl_verify_client_cert;
 	bool ssl_require_crl;
 	bool verbose_ssl;
 	bool ssl_prefer_server_ciphers;
+
+	/* These are derived from ssl_options, not set directly */
+	struct {
+		bool compression;
+	} parsed_opts;
 };
 /* ../../src/lib-master/master-service-settings.h */
 extern const struct setting_parser_info master_service_setting_parser_info;
@@ -285,6 +293,20 @@ struct master_service_settings {
 	bool version_ignore;
 	bool shutdown_clients;
 	bool verbose_proctitle;
+};
+/* ../../src/lib-master/master-service-dns-settings.h */
+extern const struct setting_parser_info master_service_dns_setting_parser_info;
+struct master_service_dns_settings {
+	const char *dns_resolver_config_path;
+	const char *dns_resolver_nameservers;
+	const char *dns_resolver_domains;
+	unsigned int dns_resolver_ndots;
+	unsigned int dns_resolver_timeout_msecs;
+	unsigned int dns_resolver_max_attempts;
+	bool dns_resolver_enable_edns0;
+	bool dns_resolver_single_request;
+
+	bool dns_debug;
 };
 /* ../../src/lib-lda/lda-settings.h */
 extern const struct setting_parser_info lda_setting_parser_info;
@@ -573,6 +595,7 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_BOOL, mail_nfs_storage),
 	DEF(SET_BOOL, mail_nfs_index),
 	DEF(SET_BOOL, mailbox_list_index),
+	DEF(SET_BOOL, mailbox_list_index_very_dirty_syncs),
 	DEF(SET_BOOL, mail_debug),
 	DEF(SET_BOOL, mail_full_filesystem_access),
 	DEF(SET_BOOL, maildir_stat_dirs),
@@ -609,6 +632,7 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.mail_nfs_storage = FALSE,
 	.mail_nfs_index = FALSE,
 	.mailbox_list_index = FALSE,
+	.mailbox_list_index_very_dirty_syncs = FALSE,
 	.mail_debug = FALSE,
 	.mail_full_filesystem_access = FALSE,
 	.maildir_stat_dirs = FALSE,
@@ -1116,6 +1140,7 @@ const struct setting_parser_info lda_setting_parser_info = {
 #endif
 	.dependencies = lda_setting_dependencies
 };
+/* ../../src/lib-dns/dns-resolver-settings.c */
 /* ../../src/lib-dict/dict-sql-settings.c */
 #define DEF_STR(name) DEF_STRUCT_STR(name, dict_sql_map)
 /* ../../src/stats/stats-settings.h */
@@ -1208,6 +1233,7 @@ extern const struct setting_parser_info **login_set_roots;
 extern const struct setting_parser_info login_setting_parser_info;
 struct login_settings {
 	const char *login_trusted_networks;
+	const char *login_source_ips;
 	const char *login_greeting;
 	const char *login_log_format_elements, *login_log_format;
 	const char *login_access_sockets;
@@ -1335,7 +1361,7 @@ struct director_settings {
 };
 /* ../../src/dict/dict-settings.h */
 extern const struct setting_parser_info dict_setting_parser_info;
-struct dict_settings {
+struct dict_server_settings {
 	const char *base_dir;
 	const char *dict_db_config;
 	ARRAY(const char *) dicts;
@@ -1446,7 +1472,7 @@ static struct file_listener_settings *stats_unix_listeners[] = {
 	&stats_unix_listeners_array[0]
 };
 static buffer_t stats_unix_listeners_buf = {
-	stats_unix_listeners, sizeof(stats_unix_listeners), { 0, }
+	stats_unix_listeners, sizeof(stats_unix_listeners), { NULL, }
 };
 static struct file_listener_settings stats_fifo_listeners_array[] = {
 	{ "stats-mail", 0600, "", "" }
@@ -1456,7 +1482,7 @@ static struct file_listener_settings *stats_fifo_listeners[] = {
 };
 static buffer_t stats_fifo_listeners_buf = {
 	stats_fifo_listeners,
-	sizeof(stats_fifo_listeners), { 0, }
+	sizeof(stats_fifo_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings stats_service_settings = {
@@ -1483,7 +1509,9 @@ struct service_settings stats_service_settings = {
 			      sizeof(stats_unix_listeners[0]) } },
 	.fifo_listeners = { { &stats_fifo_listeners_buf,
 			      sizeof(stats_fifo_listeners[0]) } },
-	.inet_listeners = ARRAY_INIT
+	.inet_listeners = ARRAY_INIT,
+
+	.process_limit_1 = TRUE
 };
 #undef DEF
 #define DEF(type, name) \
@@ -1528,7 +1556,7 @@ static struct file_listener_settings *ssl_params_unix_listeners[] = {
 	&ssl_params_unix_listeners_array[1]
 };
 static buffer_t ssl_params_unix_listeners_buf = {
-	ssl_params_unix_listeners, sizeof(ssl_params_unix_listeners), { 0, }
+	ssl_params_unix_listeners, sizeof(ssl_params_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings ssl_params_service_settings = {
@@ -1594,7 +1622,7 @@ static struct file_listener_settings *replicator_unix_listeners[] = {
 	&replicator_unix_listeners_array[1]
 };
 static buffer_t replicator_unix_listeners_buf = {
-	replicator_unix_listeners, sizeof(replicator_unix_listeners), { 0, }
+	replicator_unix_listeners, sizeof(replicator_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings replicator_service_settings = {
@@ -1620,7 +1648,9 @@ struct service_settings replicator_service_settings = {
 	.unix_listeners = { { &replicator_unix_listeners_buf,
 			      sizeof(replicator_unix_listeners[0]) } },
 	.fifo_listeners = ARRAY_INIT,
-	.inet_listeners = ARRAY_INIT
+	.inet_listeners = ARRAY_INIT,
+
+	.process_limit_1 = TRUE
 };
 #undef DEF
 #define DEF(type, name) \
@@ -1662,7 +1692,7 @@ static struct file_listener_settings *aggregator_unix_listeners[] = {
 	&aggregator_unix_listeners_array[0]
 };
 static buffer_t aggregator_unix_listeners_buf = {
-	aggregator_unix_listeners, sizeof(aggregator_unix_listeners), { 0, }
+	aggregator_unix_listeners, sizeof(aggregator_unix_listeners), { NULL, }
 };
 
 static struct file_listener_settings aggregator_fifo_listeners_array[] = {
@@ -1672,7 +1702,7 @@ static struct file_listener_settings *aggregator_fifo_listeners[] = {
 	&aggregator_fifo_listeners_array[0]
 };
 static buffer_t aggregator_fifo_listeners_buf = {
-	aggregator_fifo_listeners, sizeof(aggregator_fifo_listeners), { 0, }
+	aggregator_fifo_listeners, sizeof(aggregator_fifo_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings aggregator_service_settings = {
@@ -1733,7 +1763,7 @@ static struct file_listener_settings *pop3_unix_listeners[] = {
 	&pop3_unix_listeners_array[0]
 };
 static buffer_t pop3_unix_listeners_buf = {
-	pop3_unix_listeners, sizeof(pop3_unix_listeners), { 0, }
+	pop3_unix_listeners, sizeof(pop3_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 /* <settings checks> */
@@ -1874,7 +1904,7 @@ static struct inet_listener_settings *pop3_login_inet_listeners[] = {
 	&pop3_login_inet_listeners_array[1]
 };
 static buffer_t pop3_login_inet_listeners_buf = {
-	pop3_login_inet_listeners, sizeof(pop3_login_inet_listeners), { 0, }
+	pop3_login_inet_listeners, sizeof(pop3_login_inet_listeners), { NULL, }
 };
 
 /* </settings checks> */
@@ -2521,6 +2551,7 @@ static bool login_settings_check(void *_set, pool_t pool,
 	{ type, #name, offsetof(struct login_settings, name), NULL }
 static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, login_trusted_networks),
+	DEF(SET_STR, login_source_ips),
 	DEF(SET_STR_VARS, login_greeting),
 	DEF(SET_STR, login_log_format_elements),
 	DEF(SET_STR, login_log_format),
@@ -2544,6 +2575,7 @@ static const struct setting_define login_setting_defines[] = {
 };
 static const struct login_settings login_default_settings = {
 	.login_trusted_networks = "",
+	.login_source_ips = "",
 	.login_greeting = PACKAGE_NAME" ready.",
 	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
 	.login_log_format = "%$: %s",
@@ -2585,7 +2617,7 @@ static struct file_listener_settings *log_unix_listeners[] = {
 };
 static buffer_t log_unix_listeners_buf = {
 	log_unix_listeners,
-	sizeof(log_unix_listeners), { 0, }
+	sizeof(log_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings log_service_settings = {
@@ -2624,7 +2656,7 @@ static struct file_listener_settings *lmtp_unix_listeners[] = {
 	&lmtp_unix_listeners_array[0]
 };
 static buffer_t lmtp_unix_listeners_buf = {
-	lmtp_unix_listeners, sizeof(lmtp_unix_listeners), { 0, }
+	lmtp_unix_listeners, sizeof(lmtp_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings lmtp_service_settings = {
@@ -2700,7 +2732,7 @@ static struct file_listener_settings *ipc_unix_listeners[] = {
 	&ipc_unix_listeners_array[1]
 };
 static buffer_t ipc_unix_listeners_buf = {
-	ipc_unix_listeners, sizeof(ipc_unix_listeners), { 0, }
+	ipc_unix_listeners, sizeof(ipc_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings ipc_service_settings = {
@@ -2726,7 +2758,9 @@ struct service_settings ipc_service_settings = {
 	.unix_listeners = { { &ipc_unix_listeners_buf,
 			      sizeof(ipc_unix_listeners[0]) } },
 	.fifo_listeners = ARRAY_INIT,
-	.inet_listeners = ARRAY_INIT
+	.inet_listeners = ARRAY_INIT,
+
+	.process_limit_1 = TRUE
 };
 /* ../../src/indexer/indexer-worker-settings.c */
 /* <settings checks> */
@@ -2737,7 +2771,7 @@ static struct file_listener_settings *indexer_worker_unix_listeners[] = {
 	&indexer_worker_unix_listeners_array[0]
 };
 static buffer_t indexer_worker_unix_listeners_buf = {
-	indexer_worker_unix_listeners, sizeof(indexer_worker_unix_listeners), { 0, }
+	indexer_worker_unix_listeners, sizeof(indexer_worker_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings indexer_worker_service_settings = {
@@ -2775,7 +2809,7 @@ static struct file_listener_settings *indexer_unix_listeners[] = {
 	&indexer_unix_listeners_array[0]
 };
 static buffer_t indexer_unix_listeners_buf = {
-	indexer_unix_listeners, sizeof(indexer_unix_listeners), { 0, }
+	indexer_unix_listeners, sizeof(indexer_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings indexer_service_settings = {
@@ -2801,7 +2835,9 @@ struct service_settings indexer_service_settings = {
 	.unix_listeners = { { &indexer_unix_listeners_buf,
 			      sizeof(indexer_unix_listeners[0]) } },
 	.fifo_listeners = ARRAY_INIT,
-	.inet_listeners = ARRAY_INIT
+	.inet_listeners = ARRAY_INIT,
+
+	.process_limit_1 = TRUE
 };
 /* ../../src/imap/imap-settings.c */
 /* <settings checks> */
@@ -2812,7 +2848,7 @@ static struct file_listener_settings *imap_unix_listeners[] = {
 	&imap_unix_listeners_array[0]
 };
 static buffer_t imap_unix_listeners_buf = {
-	imap_unix_listeners, sizeof(imap_unix_listeners), { 0, }
+	imap_unix_listeners, sizeof(imap_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 /* <settings checks> */
@@ -2958,7 +2994,7 @@ static struct file_listener_settings *imap_urlauth_worker_unix_listeners[] = {
 	&imap_urlauth_worker_unix_listeners_array[0]
 };
 static buffer_t imap_urlauth_worker_unix_listeners_buf = {
-	imap_urlauth_worker_unix_listeners, sizeof(imap_urlauth_worker_unix_listeners), { 0, }
+	imap_urlauth_worker_unix_listeners, sizeof(imap_urlauth_worker_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings imap_urlauth_worker_service_settings = {
@@ -3028,7 +3064,7 @@ static struct file_listener_settings *imap_urlauth_unix_listeners[] = {
 	&imap_urlauth_unix_listeners_array[0]
 };
 static buffer_t imap_urlauth_unix_listeners_buf = {
-	imap_urlauth_unix_listeners, sizeof(imap_urlauth_unix_listeners), { 0, }
+	imap_urlauth_unix_listeners, sizeof(imap_urlauth_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings imap_urlauth_service_settings = {
@@ -3108,7 +3144,7 @@ static struct file_listener_settings *imap_urlauth_login_unix_listeners[] = {
 };
 static buffer_t imap_urlauth_login_unix_listeners_buf = {
 	imap_urlauth_login_unix_listeners,
-		sizeof(imap_urlauth_login_unix_listeners), { 0, }
+		sizeof(imap_urlauth_login_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings imap_urlauth_login_service_settings = {
@@ -3168,7 +3204,7 @@ static struct inet_listener_settings *imap_login_inet_listeners[] = {
 	&imap_login_inet_listeners_array[1]
 };
 static buffer_t imap_login_inet_listeners_buf = {
-	imap_login_inet_listeners, sizeof(imap_login_inet_listeners), { 0, }
+	imap_login_inet_listeners, sizeof(imap_login_inet_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings imap_login_service_settings = {
@@ -3240,7 +3276,7 @@ static struct file_listener_settings *doveadm_unix_listeners[] = {
 	&doveadm_unix_listeners_array[0]
 };
 static buffer_t doveadm_unix_listeners_buf = {
-	doveadm_unix_listeners, sizeof(doveadm_unix_listeners), { 0, }
+	doveadm_unix_listeners, sizeof(doveadm_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 /* <settings checks> */
@@ -3354,7 +3390,7 @@ static struct file_listener_settings *dns_client_unix_listeners[] = {
 	&dns_client_unix_listeners_array[0]
 };
 static buffer_t dns_client_unix_listeners_buf = {
-	dns_client_unix_listeners, sizeof(dns_client_unix_listeners), { 0, }
+	dns_client_unix_listeners, sizeof(dns_client_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings dns_client_service_settings = {
@@ -3396,7 +3432,7 @@ static struct file_listener_settings *director_unix_listeners[] = {
 };
 static buffer_t director_unix_listeners_buf = {
 	director_unix_listeners,
-	sizeof(director_unix_listeners), { 0, }
+	sizeof(director_unix_listeners), { NULL, }
 };
 static struct file_listener_settings director_fifo_listeners_array[] = {
 	{ "login/proxy-notify", 0, "", "" }
@@ -3406,7 +3442,7 @@ static struct file_listener_settings *director_fifo_listeners[] = {
 };
 static buffer_t director_fifo_listeners_buf = {
 	director_fifo_listeners,
-	sizeof(director_fifo_listeners), { 0, }
+	sizeof(director_fifo_listeners), { NULL, }
 };
 /* </settings checks> */
 /* <settings checks> */
@@ -3494,7 +3530,7 @@ static struct file_listener_settings *dict_unix_listeners[] = {
 	&dict_unix_listeners_array[0]
 };
 static buffer_t dict_unix_listeners_buf = {
-	dict_unix_listeners, sizeof(dict_unix_listeners), { 0, }
+	dict_unix_listeners, sizeof(dict_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings dict_service_settings = {
@@ -3524,15 +3560,15 @@ struct service_settings dict_service_settings = {
 };
 #undef DEF
 #define DEF(type, name) \
-	{ type, #name, offsetof(struct dict_settings, name), NULL }
+	{ type, #name, offsetof(struct dict_server_settings, name), NULL }
 static const struct setting_define dict_setting_defines[] = {
 	DEF(SET_STR, base_dir),
 	DEF(SET_STR, dict_db_config),
-	{ SET_STRLIST, "dict", offsetof(struct dict_settings, dicts), NULL },
+	{ SET_STRLIST, "dict", offsetof(struct dict_server_settings, dicts), NULL },
 
 	SETTING_DEFINE_LIST_END
 };
-const struct dict_settings dict_default_settings = {
+const struct dict_server_settings dict_default_settings = {
 	.base_dir = PKG_RUNDIR,
 	.dict_db_config = "",
 	.dicts = ARRAY_INIT
@@ -3543,7 +3579,7 @@ const struct setting_parser_info dict_setting_parser_info = {
 	.defaults = &dict_default_settings,
 
 	.type_offset = (size_t)-1,
-	.struct_size = sizeof(struct dict_settings),
+	.struct_size = sizeof(struct dict_server_settings),
 
 	.parent_offset = (size_t)-1
 };
@@ -3556,7 +3592,7 @@ static struct file_listener_settings *config_unix_listeners[] = {
 	&config_unix_listeners_array[0]
 };
 static buffer_t config_unix_listeners_buf = {
-	config_unix_listeners, sizeof(config_unix_listeners), { 0, }
+	config_unix_listeners, sizeof(config_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings config_service_settings = {
@@ -3605,7 +3641,7 @@ static struct file_listener_settings *auth_unix_listeners[] = {
 	&auth_unix_listeners_array[5]
 };
 static buffer_t auth_unix_listeners_buf = {
-	auth_unix_listeners, sizeof(auth_unix_listeners), { 0, }
+	auth_unix_listeners, sizeof(auth_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 /* <settings checks> */
@@ -3616,7 +3652,7 @@ static struct file_listener_settings *auth_worker_unix_listeners[] = {
 	&auth_worker_unix_listeners_array[0]
 };
 static buffer_t auth_worker_unix_listeners_buf = {
-	auth_worker_unix_listeners, sizeof(auth_worker_unix_listeners), { 0, }
+	auth_worker_unix_listeners, sizeof(auth_worker_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 /* <settings checks> */
@@ -4012,7 +4048,7 @@ static struct file_listener_settings *anvil_unix_listeners[] = {
 	&anvil_unix_listeners_array[1]
 };
 static buffer_t anvil_unix_listeners_buf = {
-	anvil_unix_listeners, sizeof(anvil_unix_listeners), { 0, }
+	anvil_unix_listeners, sizeof(anvil_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 struct service_settings anvil_service_settings = {
@@ -4072,37 +4108,37 @@ static struct service_settings *config_all_services[] = {
 	&anvil_service_settings,
 };
 buffer_t config_all_services_buf = {
-	config_all_services, sizeof(config_all_services), { 0, }
+	config_all_services, sizeof(config_all_services), { NULL, }
 };
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&imapc_setting_parser_info, 
-	&login_setting_parser_info, 
 	&director_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&stats_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&imap_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&imap_login_setting_parser_info, 
-	&dict_setting_parser_info, 
 	&pop3_login_setting_parser_info, 
-	&maildir_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&aggregator_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&lda_setting_parser_info, 
-	&master_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&pop3c_setting_parser_info, 
 	&mdbox_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&imap_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&login_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
 	&ssl_params_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&lmtp_setting_parser_info, 
+	&imapc_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&master_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&maildir_setting_parser_info, 
+	&dict_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

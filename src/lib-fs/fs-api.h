@@ -22,7 +22,10 @@ enum fs_properties {
 	   when its children are deleted. */
 	FS_PROPERTY_DIRECTORIES	= 0x80,
 	FS_PROPERTY_WRITE_HASH_MD5	= 0x100,
-	FS_PROPERTY_WRITE_HASH_SHA256	= 0x200
+	FS_PROPERTY_WRITE_HASH_SHA256	= 0x200,
+	/* fs_copy() will copy the metadata if fs_set_metadata() hasn't
+	   been explicitly called. */
+	FS_PROPERTY_COPY_METADATA	= 0x400
 };
 
 enum fs_open_mode {
@@ -70,6 +73,12 @@ enum fs_iter_flags {
 };
 
 struct fs_settings {
+	/* Username and session ID are mainly used for debugging/logging,
+	   but may also be useful for other purposes if they exist (they
+	   may be NULL). */
+	const char *username;
+	const char *session_id;
+
 	/* Dovecot instance's base_dir */
 	const char *base_dir;
 	/* Directory where temporary files can be created at any time

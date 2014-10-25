@@ -169,15 +169,18 @@ void mailbox_list_index_node_unlink(struct mailbox_list_index *ilist,
 static int mailbox_list_index_parse_header(struct mailbox_list_index *ilist,
 					   struct mail_index_view *view)
 {
-	const void *data, *p;
+	const void *data, *name_start, *p;
 	size_t i, len, size;
 	uint32_t id, prev_id = 0;
+	string_t *str;
 	char *name;
+	int ret = 0;
 
 	mail_index_map_get_header_ext(view, view->map, ilist->ext_id, &data, &size);
 	if (size == 0)
 		return 0;
 
+	str = t_str_new(128);
 	for (i = sizeof(struct mailbox_list_index_header); i < size; ) {
 		/* get id */
 		if (i + sizeof(id) > size)
@@ -189,16 +192,24 @@ static int mailbox_list_index_parse_header(struct mailbox_list_index *ilist,
 			/* allow extra space in the end as long as last id=0 */
 			return id == 0 ? 0 : -1;
 		}
+		prev_id = id;
 
 		/* get name */
 		p = memchr(CONST_PTR_OFFSET(data, i), '\0', size-i);
 		if (p == NULL)
 			return -1;
-		len = (const char *)p -
-			(const char *)(CONST_PTR_OFFSET(data, i));
+		name_start = CONST_PTR_OFFSET(data, i);
+		len = (const char *)p - (const char *)name_start;
 
-		name = p_strndup(ilist->mailbox_pool,
-				 CONST_PTR_OFFSET(data, i), len);
+		if (uni_utf8_get_valid_data(name_start, len, str)) {
+			name = p_strndup(ilist->mailbox_pool, name_start, len);
+		} else {
+			/* corrupted index. fix the name. */
+			name = p_strdup(ilist->mailbox_pool, str_c(str));
+			str_truncate(str, 0);
+			ret = -1;
+		}
+
 		i += len + 1;
 
 		/* add id => name to hash table */
@@ -206,7 +217,7 @@ static int mailbox_list_index_parse_header(struct mailbox_list_index *ilist,
 		ilist->highest_name_id = id;
 	}
 	i_assert(i == size);
-	return 0;
+	return ret;
 }
 
 static void
@@ -361,12 +372,30 @@ bool mailbox_list_index_need_refresh(struct mailbox_list_index *ilist,
 int mailbox_list_index_refresh(struct mailbox_list *list)
 {
 	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(list);
-	struct mail_index_view *view;
-	int ret;
 
 	if (ilist->syncing)
 		return 0;
+	if (ilist->last_refresh_timeval.tv_usec == ioloop_timeval.tv_usec &&
+	    ilist->last_refresh_timeval.tv_sec == ioloop_timeval.tv_sec) {
+		/* we haven't been to ioloop since last refresh, skip checking
+		   it. when we're accessing many mailboxes at once (e.g.
+		   opening a virtual mailbox) we don't want to stat/read the
+		   index every single time. */
+		return 0;
+	}
 
+	return mailbox_list_index_refresh_force(list);
+}
+
+int mailbox_list_index_refresh_force(struct mailbox_list *list)
+{
+	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(list);
+	struct mail_index_view *view;
+	int ret;
+
+	i_assert(!ilist->syncing);
+
+	ilist->last_refresh_timeval = ioloop_timeval;
 	if (mailbox_list_index_index_open(list) < 0)
 		return -1;
 	if (mail_index_refresh(ilist->index) < 0) {
@@ -400,6 +429,9 @@ void mailbox_list_index_refresh_later(struct mailbox_list *list)
 	struct mailbox_list_index_header new_hdr;
 	struct mail_index_view *view;
 	struct mail_index_transaction *trans;
+
+	memset(&ilist->last_refresh_timeval, 0,
+	       sizeof(ilist->last_refresh_timeval));
 
 	if (!ilist->has_backing_store)
 		return;

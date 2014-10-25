@@ -59,6 +59,7 @@ doveadm_server_DEPENDENCIES = \
 	$(LIBDOVECOT_DEPS)
 
 common = \
+	doveadm-dsync.c \
 	doveadm-mail.c \
 	doveadm-mail-altmove.c \
 	doveadm-mail-batch.c \
@@ -70,6 +71,7 @@ common = \
 	doveadm-mail-index.c \
 	doveadm-mail-iter.c \
 	doveadm-mail-mailbox.c \
+	doveadm-mail-mailbox-metadata.c \
 	doveadm-mail-mailbox-status.c \
 	doveadm-mail-copymove.c \
 	doveadm-mailbox-list-iter.c \
@@ -84,6 +86,7 @@ doveadm_SOURCES = \
 	$(common) \
 	doveadm.c \
 	doveadm-auth.c \
+	doveadm-dict.c \
 	doveadm-director.c \
 	doveadm-dump.c \
 	doveadm-dump-dbox.c \
@@ -120,6 +123,7 @@ doveadm_server_SOURCES = \
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = \
 	doveadm.h \
+	doveadm-dsync.h \
 	doveadm-dump.h \
 	doveadm-mail.h \
 	doveadm-mail-iter.h \

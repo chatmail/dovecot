@@ -10,7 +10,7 @@ doveadm expunge -A mailbox Trash savedbefore 30d
 
 Note that:
 
- * This command runs fine even without expire plugin loaded. Then it just goes
+ * *This command runs fine even without the expire plugin.* Then it just goes
    through all users rather than those users who have something to actually
    expunge.
  * The plugin actually works for all doveadm mail commands, not just expunge.
@@ -339,4 +339,4 @@ exactly need to be expunged.
 After running expire-tool without --test you'll see that the Trash mailbox is
 empty and the database row is deleted.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2014-10-03 04:43)

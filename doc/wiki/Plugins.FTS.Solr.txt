@@ -112,8 +112,7 @@ Dovecot creates the following fields:
  * uid: Message's IMAP UID.
  * uidv: Mailbox's UIDVALIDITY. This changes if mailbox gets recreated.
  * box: Mailbox name
- * user: User name who owns the mailbox (indexing shared/public mailboxes is
-   probably broken currently)
+ * user: User name who owns the mailbox, or empty for public namespaces
  * hdr: Indexed message headers
  * body: Indexed message body
  * any: "Copy field" from hdr and body, i.e. searching based on this will
@@ -167,4 +166,4 @@ External sites with tutorials on using Solr under Dovecot
    support guide)
    [http://support.atmail.com/display/AKB/Installing+Apache+Solr+with+Dovecot+for+fulltext+search+results]
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2014-10-03 04:43)

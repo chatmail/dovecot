@@ -23,8 +23,8 @@ section of the config file (default values are shown if applicable):
 sieve = ~/.dovecot.sieve :
   The path to the user's main active Sieve script. When <ManageSieve>
   [Pigeonhole.ManageSieve.txt] is used, this is a symbolic link pointing to the
-  active script in the 'sieve_dir' directory. Avoid placing the active Sieve
-  script inside the 'sieve_dir' directory.
+  active script in the 'sieve_dir' directory. Avoid placing the symbolic link
+  to the active Sieve script inside the 'sieve_dir' directory itself.
 
 sieve_default = (v0.3+) :
   The location of the default personal sieve script file which gets executed
@@ -183,7 +183,8 @@ file :
 dict :
   Dovecot dict lookup. The location path is a dict uri. Read
   doc/script-location-dict.txt in the Pigeonhole source package for more
-  information and examples (/FIXME: make a wiki page for this/).
+  information and examples, or see <this wiki page>
+  [Pigeonhole.Sieve.Configuration.Dict.txt].
 
 If the type prefix is omitted, the script location type is 'file'.
 
@@ -380,4 +381,4 @@ From Dovecot Sieve v0.1.x (Dovecot v1.2)
    compatibility, it is recommended to update the setting to the new name,
    since the <LMTP.txt> service also uses the 'recipient_delimiter' setting.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2014-10-03 04:43)

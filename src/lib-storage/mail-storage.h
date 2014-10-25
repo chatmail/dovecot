@@ -460,6 +460,12 @@ mailbox_get_last_error(struct mailbox *box, enum mail_error *error_r)
 /* Wrapper for mail_storage_get_last_error(); */
 enum mail_error mailbox_get_last_mail_error(struct mailbox *box);
 
+/* Save the last error until it's popped. This is useful for cases where the
+   storage has already failed, but the cleanup code path changes the error to
+   something else unwanted. */
+void mail_storage_last_error_push(struct mail_storage *storage);
+void mail_storage_last_error_pop(struct mail_storage *storage);
+
 /* Returns TRUE if mailboxes are files. */
 bool mail_storage_is_mailbox_file(struct mail_storage *storage) ATTR_PURE;
 
@@ -719,8 +725,9 @@ void mailbox_search_result_sync(struct mail_search_result *result,
 				ARRAY_TYPE(seq_range) *removed_uids,
 				ARRAY_TYPE(seq_range) *added_uids);
 
-/* Build mail_keywords from NULL-terminated keywords list.
-   Returns 0 if successful, -1 if there are invalid keywords (error is set). */
+/* Build mail_keywords from NULL-terminated keywords list. Any duplicate
+   keywords are removed. Returns 0 if successful, -1 if there are invalid
+   keywords (error is set). */
 int mailbox_keywords_create(struct mailbox *box, const char *const keywords[],
 			    struct mail_keywords **keywords_r);
 /* Like mailbox_keywords_create(), except ignore invalid keywords. */

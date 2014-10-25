@@ -85,6 +85,14 @@ struct mail_namespace *mail_namespaces_init_empty(struct mail_user *user);
    for user's namespaces. */
 void mail_namespaces_deinit(struct mail_namespace **namespaces);
 
+/* Manually initialize namespaces one by one. */
+int mail_namespaces_init_add(struct mail_user *user,
+			     struct mail_namespace_settings *ns_set,
+			     struct mail_namespace_settings *unexpanded_ns_set,
+			     struct mail_namespace **ns_p, const char **error_r);
+int mail_namespaces_init_finish(struct mail_namespace *namespaces,
+				const char **error_r);
+
 void mail_namespace_ref(struct mail_namespace *ns);
 void mail_namespace_unref(struct mail_namespace **ns);
 
@@ -149,5 +157,10 @@ mail_namespace_find_prefix_nosep(struct mail_namespace *namespaces,
 /* Called internally by mailbox_list_create(). */
 void mail_namespace_finish_list_init(struct mail_namespace *ns,
 				     struct mailbox_list *list);
+
+/* Returns TRUE if this is the root of a type=shared namespace that is actually
+   used for accessing shared users' mailboxes (as opposed to marking a
+   type=public namespace "wrong"). */
+bool mail_namespace_is_shared_user_root(struct mail_namespace *ns);
 
 #endif
