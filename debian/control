@@ -27,7 +27,7 @@ Description: secure POP3/IMAP server - core files
 
 Package: dovecot-dev
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Replaces: dovecot-common (<< 1:2.0.14-2~)
 Breaks: dovecot-common (<< 1:2.0.14-2~)
 Description: secure POP3/IMAP server - header files
