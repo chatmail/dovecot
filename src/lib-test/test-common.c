@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <setjmp.h> /* for fatal tests */
+
 #define OUT_NAME_ALIGN 70
 
 static char *test_prefix;
@@ -16,6 +18,7 @@ static unsigned int total_count;
 
 struct test_istream {
 	struct istream_private istream;
+	const void *orig_buffer;
 	unsigned int skip_diff;
 	size_t max_pos;
 	bool allow_eof;
@@ -25,6 +28,7 @@ static ssize_t test_read(struct istream_private *stream)
 {
 	struct test_istream *tstream = (struct test_istream *)stream;
 	unsigned int new_skip_diff;
+	size_t cur_max;
 	ssize_t ret;
 
 	i_assert(stream->skip <= stream->pos);
@@ -36,10 +40,9 @@ static ssize_t test_read(struct istream_private *stream)
 		/* we seeked past the end of file. */
 		ret = 0;
 	} else {
-		/* move around the buffer */
+		/* copy data to a buffer in somewhat random place. this could
+		   help catch bugs. */
 		new_skip_diff = rand() % 128;
-		stream->buffer = (stream->buffer + tstream->skip_diff) -
-			new_skip_diff;
 		stream->skip = (stream->skip - tstream->skip_diff) +
 			new_skip_diff;
 		stream->pos = (stream->pos - tstream->skip_diff) +
@@ -48,8 +51,25 @@ static ssize_t test_read(struct istream_private *stream)
 			new_skip_diff;
 		tstream->skip_diff = new_skip_diff;
 
-		ret = tstream->max_pos - stream->pos;
-		stream->pos = tstream->max_pos;
+		cur_max = tstream->max_pos;
+		if (stream->max_buffer_size < (size_t)-1 - stream->skip &&
+		    cur_max > stream->skip + stream->max_buffer_size)
+			cur_max = stream->skip + stream->max_buffer_size;
+
+		/* use exactly correct buffer size so valgrind can catch
+		   read overflows */
+		if (stream->buffer_size != cur_max && cur_max > 0) {
+			stream->w_buffer = i_realloc(stream->w_buffer,
+						     stream->buffer_size,
+						     cur_max);
+			stream->buffer = stream->w_buffer;
+			stream->buffer_size = cur_max;
+		}
+		memcpy(stream->w_buffer + new_skip_diff, tstream->orig_buffer,
+		       cur_max - new_skip_diff);
+
+		ret = cur_max - stream->pos;
+		stream->pos = cur_max;
 	}
 
 	if (ret > 0)
@@ -78,7 +98,7 @@ struct istream *test_istream_create_data(const void *data, size_t size)
 	struct test_istream *tstream;
 
 	tstream = i_new(struct test_istream, 1);
-	tstream->istream.buffer = data;
+	tstream->orig_buffer = data;
 
 	tstream->istream.read = test_read;
 	tstream->istream.seek = test_seek;
@@ -130,10 +150,37 @@ void test_begin(const char *name)
 	test_success = TRUE;
 }
 
+bool test_has_failed(void)
+{
+	return !test_success;
+}
+
 void test_assert_failed(const char *code, const char *file, unsigned int line)
 {
 	printf("%s:%u: Assert failed: %s\n", file, line, code);
 	test_success = FALSE;
+}
+
+void test_assert_failed_idx(const char *code, const char *file, unsigned int line, long long i)
+{
+	printf("%s:%u: Assert(#%lld) failed: %s\n", file, line, i, code);
+	test_success = FALSE;
+}
+
+static void
+test_dump_rand_state(void)
+{
+	static int seen_count = -1;
+	int count = rand_get_seed_count();
+	if (count == seen_count)
+		return;
+	seen_count = count;
+	if (count > 0)
+		printf("test: random seed #%i was %u\n", 
+		       rand_get_seed_count(),
+		       rand_get_last_seed());
+	else
+		printf("test: random seed unknown\n");
 }
 
 void test_end(void)
@@ -141,6 +188,8 @@ void test_end(void)
 	i_assert(test_prefix != NULL);
 
 	test_out("", test_success);
+	if (!test_success)
+		test_dump_rand_state();
 	i_free_and_null(test_prefix);
 	test_success = FALSE;
 }
@@ -148,6 +197,15 @@ void test_end(void)
 void test_out(const char *name, bool success)
 {
 	test_out_reason(name, success, NULL);
+}
+
+void test_out_quiet(const char *name, bool success)
+{
+	if (success) {
+		total_count++;
+		return;
+	}
+	test_out(name, success);
 }
 
 void test_out_reason(const char *name, bool success, const char *reason)
@@ -189,6 +247,7 @@ static void ATTR_FORMAT(2, 0)
 test_error_handler(const struct failure_context *ctx,
 		   const char *format, va_list args)
 {
+	test_dump_rand_state();
 	default_error_handler(ctx, format, args);
 #ifdef DEBUG
 	if (ctx->type == LOG_TYPE_WARNING &&
@@ -201,7 +260,24 @@ test_error_handler(const struct failure_context *ctx,
 	test_success = FALSE;
 }
 
-void test_init(void)
+/* To test the firing of i_assert, we need non-local jumps, i.e. setjmp */
+static volatile bool expecting_fatal = FALSE;
+static jmp_buf fatal_jmpbuf;
+
+static void ATTR_FORMAT(2, 0) ATTR_NORETURN
+test_fatal_handler(const struct failure_context *ctx,
+		   const char *format, va_list args)
+{
+	/* Prevent recursion, we can't handle our own errors */
+	i_set_fatal_handler(default_fatal_handler);
+	i_assert(expecting_fatal); /* if not at the right time, bail */
+	i_set_fatal_handler(test_fatal_handler);
+	longjmp(fatal_jmpbuf, 1);
+	/* we simply can't get here - will the compiler complain? */
+	default_fatal_handler(ctx, format, args);
+}
+
+static void test_init(void)
 {
 	test_prefix = NULL;
 	failure_count = 0;
@@ -209,9 +285,10 @@ void test_init(void)
 
 	lib_init();
 	i_set_error_handler(test_error_handler);
+	/* Don't set fatal handler until actually needed for fatal testing */
 }
 
-int test_deinit(void)
+static int test_deinit(void)
 {
 	i_assert(test_prefix == NULL);
 	printf("%u / %u tests failed\n", failure_count, total_count);
@@ -219,7 +296,7 @@ int test_deinit(void)
 	return failure_count == 0 ? 0 : 1;
 }
 
-void test_run_funcs(void (*test_functions[])(void))
+static void test_run_funcs(void (*test_functions[])(void))
 {
 	unsigned int i;
 
@@ -230,9 +307,60 @@ void test_run_funcs(void (*test_functions[])(void))
 	}
 }
 
+static void run_one_fatal(enum fatal_test_state (*fatal_function)(int))
+{
+	static int index = 0;
+	for (;;) {
+		volatile int jumped = setjmp(fatal_jmpbuf);
+		if (jumped == 0) {
+			/* normal flow */
+			expecting_fatal = TRUE;
+			enum fatal_test_state ret = fatal_function(index);
+			expecting_fatal = FALSE;
+			if (ret == FATAL_TEST_FINISHED) {
+				/* ran out of tests - good */
+				index = 0;
+				break;
+			} else if (ret == FATAL_TEST_FAILURE) {
+				/* failed to fire assert - bad, but can continue */
+				test_success = FALSE;
+				i_error("Desired assert failed to fire at step %i", index);
+				index++;
+			} else { /* FATAL_TEST_ABORT or other value */
+				test_success = FALSE;
+				test_end();
+				index = 0;
+				break;
+			}
+		} else {
+			/* assert fired, continue with next test */
+			index++;
+		}
+	}
+}
+static void test_run_fatals(enum fatal_test_state (*fatal_functions[])(int index))
+{
+	unsigned int i;
+
+	for (i = 0; fatal_functions[i] != NULL; i++) {
+		T_BEGIN {
+			run_one_fatal(fatal_functions[i]);
+		} T_END;
+	}
+}
+
 int test_run(void (*test_functions[])(void))
 {
 	test_init();
 	test_run_funcs(test_functions);
+	return test_deinit();
+}
+int test_run_with_fatals(void (*test_functions[])(void),
+			 enum fatal_test_state (*fatal_functions[])(int))
+{
+	test_init();
+	test_run_funcs(test_functions);
+	i_set_fatal_handler(test_fatal_handler);
+	test_run_fatals(fatal_functions);
 	return test_deinit();
 }

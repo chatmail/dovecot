@@ -78,6 +78,8 @@ void fts_expunge_log_deinit(struct fts_expunge_log **_log)
 	struct fts_expunge_log *log = *_log;
 
 	*_log = NULL;
+	if (log->fd != -1)
+		i_close_fd(&log->fd);
 	i_free(log->path);
 	i_free(log);
 }
@@ -458,6 +460,11 @@ int fts_expunge_log_read_end(struct fts_expunge_log_read_ctx **_ctx)
 	int ret = ctx->failed ? -1 : (ctx->corrupted ? 0 : 1);
 
 	*_ctx = NULL;
+
+	if (ctx->corrupted) {
+		if (unlink(ctx->log->path) < 0 && errno != ENOENT)
+			i_error("unlink(%s) failed: %m", ctx->log->path);
+	}
 
 	if (ctx->input != NULL)
 		i_stream_unref(&ctx->input);

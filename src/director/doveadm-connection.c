@@ -238,11 +238,16 @@ static void
 doveadm_cmd_host_flush_all(struct doveadm_connection *conn)
 {
 	struct mail_host *const *hostp;
+	unsigned int total_user_count = 0;
 
 	array_foreach(mail_hosts_get(conn->dir->mail_hosts), hostp) {
+		total_user_count += (*hostp)->user_count;
 		director_flush_host(conn->dir, conn->dir->self_host,
 				    NULL, *hostp);
 	}
+	i_warning("Flushed all backend hosts with %u users. This is an unsafe "
+		  "operation and may cause the same users to end up in multiple backends.",
+		  total_user_count);
 	o_stream_nsend(conn->output, "OK\n", 3);
 }
 
@@ -380,6 +385,22 @@ doveadm_cmd_user_move(struct doveadm_connection *conn, const char *line)
 	return TRUE;
 }
 
+static bool
+doveadm_cmd_user_kick(struct doveadm_connection *conn, const char *line)
+{
+	const char *const *args;
+
+	args = t_strsplit_tab(line);
+	if (args[0] == NULL) {
+		i_error("doveadm sent invalid USER-KICK parameters: %s", line);
+		return FALSE;
+	}
+
+	director_kick_user(conn->dir, conn->dir->self_host, NULL, args[0]);
+	o_stream_nsend(conn->output, "OK\n", 3);
+	return TRUE;
+}
+
 static void doveadm_connection_input(struct doveadm_connection *conn)
 {
 	const char *line, *cmd, *args;
@@ -434,6 +455,8 @@ static void doveadm_connection_input(struct doveadm_connection *conn)
 			ret = doveadm_cmd_user_list(conn, args);
 		else if (strcmp(cmd, "USER-MOVE") == 0)
 			ret = doveadm_cmd_user_move(conn, args);
+		else if (strcmp(cmd, "USER-KICK") == 0)
+			ret = doveadm_cmd_user_kick(conn, args);
 		else {
 			i_error("doveadm sent unknown command: %s", line);
 			ret = FALSE;

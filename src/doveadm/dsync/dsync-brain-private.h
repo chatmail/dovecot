@@ -55,6 +55,7 @@ struct dsync_brain {
 	guid_128_t sync_box_guid;
 	const char *const *exclude_mailboxes;
 	enum dsync_brain_sync_type sync_type;
+	char alt_char;
 
 	unsigned int lock_timeout;
 	int lock_fd;
@@ -77,6 +78,7 @@ struct dsync_brain {
 
 	struct mailbox *box;
 	struct dsync_mailbox local_dsync_box, remote_dsync_box;
+	pool_t dsync_box_pool;
 	/* list of mailbox states
 	   for master brain: given to brain at init and
 	   for slave brain: received from DSYNC_STATE_SLAVE_RECV_LAST_COMMON */
@@ -98,6 +100,7 @@ struct dsync_brain {
 	unsigned int sync_visible_namespaces:1;
 	unsigned int no_mail_sync:1;
 	unsigned int no_backup_overwrite:1;
+	unsigned int no_mail_prefetch:1;
 	unsigned int changes_during_sync:1;
 	unsigned int require_full_resync:1;
 	unsigned int verbose_proctitle:1;

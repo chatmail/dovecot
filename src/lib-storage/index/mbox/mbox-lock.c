@@ -411,7 +411,7 @@ mbox_lock_dotlock_int(struct mbox_lock_context *ctx, int lock_type, bool try)
 	if (mbox->mbox_dotlocked)
 		return 1;
 
-        ctx->dotlock_last_stale = -1;
+        ctx->dotlock_last_stale = TRUE;
 
 	memset(&set, 0, sizeof(set));
 	set.use_excl_lock = mbox->storage->storage.set->dotlock_use_excl;
@@ -797,11 +797,6 @@ int mbox_lock(struct mbox_mailbox *mbox, int lock_type,
 	/* allow only unlock -> shared/exclusive or exclusive -> shared */
 	i_assert(lock_type == F_RDLCK || lock_type == F_WRLCK);
 	i_assert(lock_type == F_RDLCK || mbox->mbox_lock_type != F_RDLCK);
-
-	/* mbox must be locked before index (the NULL check is for
-	   MAILBOX_FLAG_KEEP_LOCKED) */
-	i_assert(mbox->box.index == NULL ||
-		 mbox->box.index->lock_type != F_WRLCK);
 
 	if (mbox->mbox_lock_type == F_UNLCK) {
 		ret = mbox_update_locking(mbox, lock_type, &fcntl_locked);

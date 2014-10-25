@@ -137,6 +137,13 @@ void o_stream_uncork(struct ostream *stream)
 	_stream->cork(_stream, FALSE);
 }
 
+bool o_stream_is_corked(struct ostream *stream)
+{
+	struct ostream_private *_stream = stream->real_stream;
+
+	return _stream->corked;
+}
+
 static void o_stream_clear_error(struct ostream *stream)
 {
 	stream->stream_errno = 0;
@@ -322,9 +329,12 @@ off_t o_stream_send_istream(struct ostream *outstream,
 	o_stream_clear_error(outstream);
 	ret = _outstream->send_istream(_outstream, instream);
 	if (unlikely(ret < 0)) {
-		i_assert(outstream->stream_errno != 0);
-		outstream->last_failed_errno = outstream->stream_errno;
-		errno = outstream->stream_errno;
+		if (outstream->stream_errno != 0) {
+			outstream->last_failed_errno = outstream->stream_errno;
+			errno = outstream->stream_errno;
+		} else {
+			i_assert(instream->stream_errno != 0);
+		}
 	}
 	return ret;
 }
@@ -350,8 +360,7 @@ int o_stream_pwrite(struct ostream *stream, const void *data, size_t size,
 	return ret;
 }
 
-off_t io_stream_copy(struct ostream *outstream, struct istream *instream,
-		     size_t block_size)
+off_t io_stream_copy(struct ostream *outstream, struct istream *instream)
 {
 	uoff_t start_offset;
 	struct const_iovec iov;
@@ -359,11 +368,12 @@ off_t io_stream_copy(struct ostream *outstream, struct istream *instream,
 	ssize_t ret;
 
 	start_offset = instream->v_offset;
-	for (;;) {
-		(void)i_stream_read_data(instream, &data, &iov.iov_len,
-					 block_size-1);
+	do {
+		(void)i_stream_read_data(instream, &data, &iov.iov_len, 0);
 		if (iov.iov_len == 0) {
 			/* all sent */
+			if (instream->stream_errno != 0)
+				return -1;
 			break;
 		}
 
@@ -375,10 +385,7 @@ off_t io_stream_copy(struct ostream *outstream, struct istream *instream,
 			return -1;
 		}
 		i_stream_skip(instream, ret);
-
-		if ((size_t)ret != iov.iov_len)
-			break;
-	}
+	} while ((size_t)ret == iov.iov_len);
 
 	return (off_t)(instream->v_offset - start_offset);
 }
@@ -444,6 +451,23 @@ void o_stream_copy_error_from_parent(struct ostream_private *_stream)
 		o_stream_close(dest);
 }
 
+int o_stream_flush_parent_if_needed(struct ostream_private *_stream)
+{
+	if (o_stream_get_buffer_used_size(_stream->parent) >= IO_BLOCK_SIZE) {
+		/* we already have quite a lot of data in parent stream.
+		   unless we can flush it, don't add any more to it or we
+		   could keep wasting memory by just increasing the buffer
+		   size all the time. */
+		if (o_stream_flush(_stream->parent) < 0) {
+			o_stream_copy_error_from_parent(_stream);
+			return -1;
+		}
+		if (o_stream_get_buffer_used_size(_stream->parent) >= IO_BLOCK_SIZE)
+			return 0;
+	}
+	return 1;
+}
+
 static int o_stream_default_flush(struct ostream_private *_stream)
 {
 	int ret;
@@ -504,7 +528,7 @@ o_stream_default_write_at(struct ostream_private *_stream,
 static off_t o_stream_default_send_istream(struct ostream_private *outstream,
 					   struct istream *instream)
 {
-	return io_stream_copy(&outstream->ostream, instream, IO_BLOCK_SIZE);
+	return io_stream_copy(&outstream->ostream, instream);
 }
 
 static void o_stream_default_switch_ioloop(struct ostream_private *_stream)

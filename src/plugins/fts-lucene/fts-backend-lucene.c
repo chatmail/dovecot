@@ -126,14 +126,35 @@ static struct fts_backend *fts_backend_lucene_alloc(void)
 	return &backend->backend;
 }
 
+static void fts_backend_lucene_real_init(struct lucene_fts_backend *backend)
+{
+	struct fts_lucene_user *fuser =
+		FTS_LUCENE_USER_CONTEXT(backend->backend.ns->user);
+	const char *path;
+
+	if (backend->index != NULL)
+		return;
+
+	/* initialize this path lazily, because with mbox format the get_path()
+	   is overridden by the mbox code, but it hasn't had a chance to do
+	   that yet in fts_backend_lucene_init(). */
+	path = mailbox_list_get_root_forced(backend->backend.ns->list,
+					    MAILBOX_LIST_PATH_TYPE_INDEX);
+
+	backend->dir_path = i_strconcat(path, "/"LUCENE_INDEX_DIR_NAME, NULL);
+	backend->index = lucene_index_init(backend->dir_path,
+					   backend->backend.ns->list,
+					   &fuser->set);
+
+	path = t_strconcat(backend->dir_path, "/"LUCENE_EXPUNGE_LOG_NAME, NULL);
+	backend->expunge_log = fts_expunge_log_init(path);
+}
+
 static int
 fts_backend_lucene_init(struct fts_backend *_backend, const char **error_r)
 {
-	struct lucene_fts_backend *backend =
-		(struct lucene_fts_backend *)_backend;
 	struct fts_lucene_user *fuser =
 		FTS_LUCENE_USER_CONTEXT(_backend->ns->user);
-	const char *path;
 
 	if (fuser == NULL) {
 		/* invalid settings */
@@ -142,15 +163,6 @@ fts_backend_lucene_init(struct fts_backend *_backend, const char **error_r)
 	}
 
 	/* fts already checked that index exists */
-	path = mailbox_list_get_root_forced(_backend->ns->list,
-					    MAILBOX_LIST_PATH_TYPE_INDEX);
-
-	backend->dir_path = i_strconcat(path, "/"LUCENE_INDEX_DIR_NAME, NULL);
-	backend->index = lucene_index_init(backend->dir_path,
-					   _backend->ns->list, &fuser->set);
-
-	path = t_strconcat(backend->dir_path, "/"LUCENE_EXPUNGE_LOG_NAME, NULL);
-	backend->expunge_log = fts_expunge_log_init(path);
 	return 0;
 }
 
@@ -159,8 +171,10 @@ static void fts_backend_lucene_deinit(struct fts_backend *_backend)
 	struct lucene_fts_backend *backend =
 		(struct lucene_fts_backend *)_backend;
 
-	lucene_index_deinit(backend->index);
-	fts_expunge_log_deinit(&backend->expunge_log);
+	if (backend->index != NULL)
+		lucene_index_deinit(backend->index);
+	if (backend->expunge_log != NULL)
+		fts_expunge_log_deinit(&backend->expunge_log);
 	i_free(backend->dir_path);
 	i_free(backend);
 }
@@ -175,6 +189,8 @@ fts_backend_lucene_get_last_uid(struct fts_backend *_backend,
 		FTS_LUCENE_USER_CONTEXT(_backend->ns->user);
 	struct fts_index_header hdr;
 	uint32_t set_checksum;
+
+	fts_backend_lucene_real_init(backend);
 
 	if (fts_index_get_header(box, &hdr)) {
 		set_checksum = fts_lucene_settings_checksum(&fuser->set);
@@ -209,6 +225,8 @@ fts_backend_lucene_update_init(struct fts_backend *_backend)
 		FTS_LUCENE_USER_CONTEXT(_backend->ns->user);
 
 	i_assert(!backend->updating);
+
+	fts_backend_lucene_real_init(backend);
 
 	ctx = i_new(struct lucene_fts_backend_update_context, 1);
 	ctx->ctx.backend = _backend;
@@ -254,14 +272,24 @@ fts_backend_lucene_update_deinit(struct fts_backend_update_context *_ctx)
 	}
 
 	if (ctx->expunge_ctx != NULL) {
-		if (fts_expunge_log_append_commit(&ctx->expunge_ctx) < 0)
+		if (fts_expunge_log_append_commit(&ctx->expunge_ctx) < 0) {
+			struct stat st;
+
+			if (stat(backend->dir_path, &st) < 0 && errno == ENOENT) {
+				/* lucene-indexes directory doesn't even exist,
+				   so dovecot.index's last_index_uid is wrong.
+				   rescan to update them. */
+				(void)lucene_index_rescan(backend->index);
+				ret = 0;
+			}
 			ret = -1;
+		}
 	}
 
 	if (fts_backend_lucene_need_optimize(ctx)) {
 		if (ctx->lucene_opened)
 			(void)fts_backend_optimize(_ctx->backend);
-		else {
+		else if (ctx->first_box_vname != NULL) {
 			struct mail_user *user = backend->backend.ns->user;
 			const char *cmd, *path;
 			int fd;
@@ -425,7 +453,8 @@ fts_backend_lucene_refresh(struct fts_backend *_backend)
 	struct lucene_fts_backend *backend =
 		(struct lucene_fts_backend *)_backend;
 
-	lucene_index_close(backend->index);
+	if (backend->index != NULL)
+		lucene_index_close(backend->index);
 	return 0;
 }
 
@@ -433,6 +462,8 @@ static int fts_backend_lucene_rescan(struct fts_backend *_backend)
 {
 	struct lucene_fts_backend *backend =
 		(struct lucene_fts_backend *)_backend;
+
+	fts_backend_lucene_real_init(backend);
 
 	if (lucene_index_rescan(backend->index) < 0)
 		return -1;
@@ -444,6 +475,8 @@ static int fts_backend_lucene_optimize(struct fts_backend *_backend)
 	struct lucene_fts_backend *backend =
 		(struct lucene_fts_backend *)_backend;
 	int ret;
+
+	fts_backend_lucene_real_init(backend);
 
 	ret = lucene_index_expunge_from_log(backend->index,
 					    backend->expunge_log);
@@ -458,18 +491,20 @@ static int fts_backend_lucene_optimize(struct fts_backend *_backend)
 
 static int
 fts_backend_lucene_lookup(struct fts_backend *_backend, struct mailbox *box,
-			  struct mail_search_arg *args, bool and_args,
+			  struct mail_search_arg *args,
+			  enum fts_lookup_flags flags,
 			  struct fts_result *result)
 {
 	struct lucene_fts_backend *backend =
 		(struct lucene_fts_backend *)_backend;
 	int ret;
 
+	fts_backend_lucene_real_init(backend);
+
 	if (fts_backend_select(backend, box) < 0)
 		return -1;
 	T_BEGIN {
-		ret = lucene_index_lookup(backend->index, args, and_args,
-					  result);
+		ret = lucene_index_lookup(backend->index, args, flags, result);
 	} T_END;
 	return ret;
 }
@@ -525,12 +560,15 @@ mailboxes_get_guids(struct mailbox *const boxes[],
 static int
 fts_backend_lucene_lookup_multi(struct fts_backend *_backend,
 				struct mailbox *const boxes[],
-				struct mail_search_arg *args, bool and_args,
+				struct mail_search_arg *args,
+				enum fts_lookup_flags flags,
 				struct fts_multi_result *result)
 {
 	struct lucene_fts_backend *backend =
 		(struct lucene_fts_backend *)_backend;
 	int ret;
+
+	fts_backend_lucene_real_init(backend);
 
 	T_BEGIN {
 		HASH_TABLE_TYPE(wguid_result) guids;
@@ -539,7 +577,7 @@ fts_backend_lucene_lookup_multi(struct fts_backend *_backend,
 		ret = mailboxes_get_guids(boxes, guids, result);
 		if (ret == 0) {
 			ret = lucene_index_lookup_multi(backend->index,
-							guids, args, and_args,
+							guids, args, flags,
 							result);
 		}
 		hash_table_destroy(&guids);

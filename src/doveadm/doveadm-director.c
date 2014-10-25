@@ -53,7 +53,7 @@ static void director_connect(struct director_context *ctx)
 	fd = doveadm_connect(ctx->socket_path);
 	net_set_nonblock(fd, FALSE);
 
-	ctx->input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	ctx->input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	director_send(ctx, DIRECTOR_HANDSHAKE);
 
 	alarm(5);
@@ -243,7 +243,7 @@ user_file_get_user_list(const char *path, pool_t pool,
 	fd = open(path, O_RDONLY);
 	if (fd == -1)
 		i_fatal("open(%s) failed: %m", path);
-	input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	while ((username = i_stream_read_next_line(input)) != NULL)
 		user_list_add(username, pool, users);
 	i_stream_unref(&input);
@@ -500,6 +500,32 @@ static void cmd_director_move(int argc, char *argv[])
 	director_disconnect(ctx);
 }
 
+static void cmd_director_kick(int argc, char *argv[])
+{
+	struct director_context *ctx;
+	const char *username, *line;
+
+	ctx = cmd_director_init(argc, argv, "a:", cmd_director_kick);
+	if (argv[optind] == NULL || argv[optind+1] != NULL)
+		director_cmd_help(cmd_director_kick);
+
+	username = argv[optind];
+
+	director_send(ctx, t_strdup_printf("USER-KICK\t%s\n", username));
+	line = i_stream_read_next_line(ctx->input);
+	if (line == NULL) {
+		i_error("failed");
+		doveadm_exit_code = EX_TEMPFAIL;
+	} else if (strcmp(line, "OK") == 0) {
+		if (doveadm_verbose)
+			printf("User %s kicked\n", username);
+	} else {
+		i_error("failed: %s", line);
+		doveadm_exit_code = EX_TEMPFAIL;
+	}
+	director_disconnect(ctx);
+}
+
 static void cmd_director_flush_all(struct director_context *ctx)
 {
 	const char *line;
@@ -685,7 +711,7 @@ static void cmd_director_ring_status(int argc, char *argv[])
 	const char *line, *const *args;
 	unsigned long l;
 
-	ctx = cmd_director_init(argc, argv, "a:", cmd_director_status);
+	ctx = cmd_director_init(argc, argv, "a:", cmd_director_ring_status);
 
 	doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
 	doveadm_print_header_simple("director ip");
@@ -729,6 +755,8 @@ struct doveadm_cmd doveadm_cmd_director[] = {
 	  "[-a <director socket path>] <host>" },
 	{ cmd_director_move, "director move",
 	  "[-a <director socket path>] <user> <host>" },
+	{ cmd_director_kick, "director kick",
+	  "[-a <director socket path>] <user>" },
 	{ cmd_director_flush, "director flush",
 	  "[-a <director socket path>] <host>|all" },
 	{ cmd_director_dump, "director dump",

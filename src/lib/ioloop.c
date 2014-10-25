@@ -36,7 +36,6 @@ io_add_file(int fd, enum io_condition condition,
 {
 	struct io_file *io;
 
-	i_assert(fd >= 0);
 	i_assert(callback != NULL);
 	i_assert((condition & IO_NOTIFY) == 0);
 
@@ -56,7 +55,12 @@ io_add_file(int fd, enum io_condition condition,
 
 	if (io->io.ioloop->handler_context == NULL)
 		io_loop_initialize_handler(io->io.ioloop);
-	io_loop_handle_add(io);
+	if (fd != -1)
+		io_loop_handle_add(io);
+	else {
+		/* we're adding an istream whose only way to get notified
+		   is to call i_stream_set_input_pending() */
+	}
 
 	if (io->io.ioloop->io_files != NULL) {
 		io->io.ioloop->io_files->prev = io;
@@ -73,6 +77,7 @@ struct io *io_add(int fd, enum io_condition condition,
 {
 	struct io_file *io;
 
+	i_assert(fd >= 0);
 	io = io_add_file(fd, condition, source_linenum, callback, context);
 	return &io->io;
 }
@@ -139,7 +144,8 @@ static void io_remove_full(struct io **_io, bool closed)
 		}
 
 		io_file_unlink(io_file);
-		io_loop_handle_remove(io_file, closed);
+		if (io_file->fd != -1)
+			io_loop_handle_remove(io_file, closed);
 	}
 }
 
@@ -188,15 +194,14 @@ static void timeout_update_next(struct timeout *timeout, struct timeval *tv_now)
 	}
 }
 
-#undef timeout_add
-struct timeout *timeout_add(unsigned int msecs, unsigned int source_linenum,
+static struct timeout *
+timeout_add_common(unsigned int source_linenum,
 			    timeout_callback_t *callback, void *context)
 {
 	struct timeout *timeout;
 
 	timeout = i_new(struct timeout, 1);
         timeout->source_linenum = source_linenum;
-        timeout->msecs = msecs;
 	timeout->ioloop = current_ioloop;
 
 	timeout->callback = callback;
@@ -206,6 +211,18 @@ struct timeout *timeout_add(unsigned int msecs, unsigned int source_linenum,
 		timeout->ctx = timeout->ioloop->cur_ctx;
 		io_loop_context_ref(timeout->ctx);
 	}
+
+	return timeout;
+}
+
+#undef timeout_add
+struct timeout *timeout_add(unsigned int msecs, unsigned int source_linenum,
+			    timeout_callback_t *callback, void *context)
+{
+	struct timeout *timeout;
+
+	timeout = timeout_add_common(source_linenum, callback, context);
+	timeout->msecs = msecs;
 
 	timeout_update_next(timeout, timeout->ioloop->running ?
 			    NULL : &ioloop_timeval);
@@ -221,6 +238,37 @@ timeout_add_short(unsigned int msecs, unsigned int source_linenum,
 	return timeout_add(msecs, source_linenum, callback, context);
 }
 
+#undef timeout_add_absolute
+struct timeout *
+timeout_add_absolute(const struct timeval *time,
+		     unsigned int source_linenum,
+		     timeout_callback_t *callback, void *context)
+{
+	struct timeout *timeout;
+
+	timeout = timeout_add_common(source_linenum, callback, context);
+	timeout->one_shot = TRUE;
+	timeout->next_run = *time;
+
+	priorityq_add(timeout->ioloop->timeouts, &timeout->item);
+	return timeout;
+}
+
+static struct timeout *
+timeout_copy(const struct timeout *old_to)
+{
+	struct timeout *new_to;
+
+	new_to = timeout_add_common
+		(old_to->source_linenum, old_to->callback, old_to->context);
+	new_to->one_shot = old_to->one_shot;
+	new_to->msecs = old_to->msecs;
+	new_to->next_run = old_to->next_run;
+	priorityq_add(new_to->ioloop->timeouts, &new_to->item);
+
+	return new_to;
+}
+
 static void timeout_free(struct timeout *timeout)
 {
 	if (timeout->ctx != NULL)
@@ -233,7 +281,8 @@ void timeout_remove(struct timeout **_timeout)
 	struct timeout *timeout = *_timeout;
 
 	*_timeout = NULL;
-	priorityq_remove(timeout->ioloop->timeouts, &timeout->item);
+	if (timeout->item.idx != UINT_MAX)
+		priorityq_remove(timeout->ioloop->timeouts, &timeout->item);
 	timeout_free(timeout);
 }
 
@@ -262,6 +311,7 @@ timeout_reset_timeval(struct timeout *timeout, struct timeval *tv_now)
 
 void timeout_reset(struct timeout *timeout)
 {
+	i_assert(!timeout->one_shot);
 	timeout_reset_timeval(timeout, NULL);
 }
 
@@ -401,12 +451,18 @@ static void io_loop_handle_timeouts_real(struct ioloop *ioloop)
 		if (timeout_get_wait_time(timeout, &tv, &tv_call) > 0)
 			break;
 
-		/* update timeout's next_run and reposition it in the queue */
-		timeout_reset_timeval(timeout, &tv_call);
+		if (timeout->one_shot) {
+			/* remove timeout from queue */
+			priorityq_remove(timeout->ioloop->timeouts, &timeout->item);
+		} else {
+			/* update timeout's next_run and reposition it in the queue */
+			timeout_reset_timeval(timeout, &tv_call);
+		}
 
 		if (timeout->ctx != NULL)
 			io_loop_context_activate(timeout->ctx);
-                t_id = t_push();
+		t_id = t_push_named("ioloop timeout handler %p",
+				    (void *)timeout->callback);
 		timeout->callback(timeout->context);
 		if (t_pop() != t_id) {
 			i_panic("Leaked a t_pop() call in timeout handler %p",
@@ -437,7 +493,8 @@ void io_loop_call_io(struct io *io)
 
 	if (io->ctx != NULL)
 		io_loop_context_activate(io->ctx);
-	t_id = t_push();
+	t_id = t_push_named("ioloop handler %p",
+			    (void *)io->callback);
 	io->callback(io->context);
 	if (t_pop() != t_id) {
 		i_panic("Leaked a t_pop() call in I/O handler %p",
@@ -666,6 +723,7 @@ void io_loop_context_unref(struct ioloop_context **_ctx)
 	i_free(ctx);
 }
 
+#undef io_loop_context_add_callbacks
 void io_loop_context_add_callbacks(struct ioloop_context *ctx,
 				   io_callback_t *activate,
 				   io_callback_t *deactivate, void *context)
@@ -680,6 +738,7 @@ void io_loop_context_add_callbacks(struct ioloop_context *ctx,
 	array_append(&ctx->callbacks, &cb, 1);
 }
 
+#undef io_loop_context_remove_callbacks
 void io_loop_context_remove_callbacks(struct ioloop_context *ctx,
 				      io_callback_t *activate,
 				      io_callback_t *deactivate, void *context)
@@ -785,8 +844,7 @@ struct timeout *io_loop_move_timeout(struct timeout **_timeout)
 	if (old_to->ioloop == current_ioloop)
 		return old_to;
 
-	new_to = timeout_add(old_to->msecs, old_to->source_linenum,
-			     old_to->callback, old_to->context);
+	new_to = timeout_copy(old_to);
 	timeout_remove(_timeout);
 	return new_to;
 }

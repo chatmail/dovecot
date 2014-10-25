@@ -20,14 +20,16 @@ dbox_file_match_pre_magic(struct istream *input,
 	const unsigned char *data;
 	size_t size;
 	uoff_t offset = input->v_offset;
+	bool have_lf = FALSE;
 
 	data = i_stream_get_data(input, &size);
 	if (data[0] == '\n') {
 		data++; size--; offset++;
+		have_lf = TRUE;
 	}
 	i_assert(data[0] == DBOX_MAGIC_PRE[0]);
 	if (size < sizeof(*hdr)) {
-		*need_bytes = sizeof(*hdr);
+		*need_bytes = sizeof(*hdr) + (have_lf ? 1 : 0);
 		return -1;
 	}
 	hdr = (const void *)data;
@@ -140,19 +142,24 @@ dbox_file_find_next_magic(struct dbox_file *file, uoff_t *offset_r, bool *pre_r)
 	   magic markers. */
 
 	struct istream *input = file->input;
-	uoff_t orig_offset, pre_offset, post_offset;
+	uoff_t orig_offset, pre_offset, post_offset, prev_offset;
 	const unsigned char *data, *magic;
-	size_t size, need_bytes;
+	size_t size, need_bytes, prev_need_bytes;
 	int ret, match;
 
 	*pre_r = FALSE;
 
-	orig_offset = input->v_offset;
-	need_bytes = strlen(DBOX_MAGIC_POST);
+	orig_offset = prev_offset = input->v_offset;
+	need_bytes = strlen(DBOX_MAGIC_POST); prev_need_bytes = 0;
 	while ((ret = i_stream_read_data(input, &data, &size, need_bytes-1)) > 0 ||
 	       ret == -2) {
 		/* search for the beginning of a potential pre/post magic */
 		i_assert(size > 1);
+		i_assert(prev_offset != input->v_offset ||
+			 need_bytes > prev_need_bytes);
+		prev_offset = input->v_offset;
+		prev_need_bytes = need_bytes;
+
 		magic = memchr(data, DBOX_MAGIC_PRE[0], size);
 		if (magic == NULL) {
 			i_stream_skip(input, size-1);

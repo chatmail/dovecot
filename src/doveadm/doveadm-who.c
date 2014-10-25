@@ -50,7 +50,7 @@ who_user_has_ip(const struct who_user *user, const struct ip_addr *ip)
 	return FALSE;
 }
 
-static void who_parse_line(const char *line, struct who_line *line_r)
+static int who_parse_line(const char *line, struct who_line *line_r)
 {
 	const char *const *args = t_strsplit_tab(line);
 	const char *ident = args[0];
@@ -61,12 +61,17 @@ static void who_parse_line(const char *line, struct who_line *line_r)
 	memset(line_r, 0, sizeof(*line_r));
 
 	p = strchr(ident, '/');
+	if (p == NULL)
+		return -1;
 	line_r->pid = strtoul(pid_str, NULL, 10);
 	line_r->service = t_strdup_until(ident, p++);
 	line_r->username = strchr(p, '/');
+	if (line_r->username == NULL)
+		return -1;
 	line_r->refcount = atoi(refcount_str);
 	ip_str = t_strdup_until(p, line_r->username++);
 	(void)net_addr2ip(ip_str, &line_r->ip);
+	return 0;
 }
 
 static bool who_user_has_pid(struct who_user *user, pid_t pid)
@@ -136,18 +141,20 @@ void who_lookup(struct who_context *ctx, who_callback_t *callback)
 
 	fd = doveadm_connect(ctx->anvil_path);
 	net_set_nonblock(fd, FALSE);
-
-	input = i_stream_create_fd(fd, (size_t)-1, TRUE);
 	if (write(fd, ANVIL_CMD, strlen(ANVIL_CMD)) < 0)
 		i_fatal("write(%s) failed: %m", ctx->anvil_path);
+
+	input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	while ((line = i_stream_read_next_line(input)) != NULL) {
 		if (*line == '\0')
 			break;
 		T_BEGIN {
 			struct who_line who_line;
 
-			who_parse_line(line, &who_line);
-			callback(ctx, &who_line);
+			if (who_parse_line(line, &who_line) < 0)
+				i_error("Invalid input: %s", line);
+			else
+				callback(ctx, &who_line);
 		} T_END;
 	}
 	if (input->stream_errno != 0)

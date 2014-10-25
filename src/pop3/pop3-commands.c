@@ -26,28 +26,25 @@ static uint32_t msgnum_to_seq(struct client *client, uint32_t msgnum)
 }
 
 static const char *get_msgnum(struct client *client, const char *args,
-			      unsigned int *msgnum)
+			      unsigned int *msgnum, bool thenspace)
 {
-	unsigned int num, last_num;
+	unsigned int num;
 
-	num = 0;
-	while (*args != '\0' && *args != ' ') {
-		if (*args < '0' || *args > '9') {
-			client_send_line(client,
-				"-ERR Invalid message number: %s", args);
-			return NULL;
-		}
-
-		last_num = num;
-		num = num*10 + (*args - '0');
-		if (num < last_num) {
-			client_send_line(client,
-				"-ERR Message number too large: %s", args);
-			return NULL;
-		}
-		args++;
+	if (*args < '0' || *args > '9') {
+		client_send_line(client,
+				 "-ERR Invalid message number: %s", args);
+		return NULL;
 	}
-
+	if (str_parse_uint(args, &num, &args) < 0) {
+		client_send_line(client,
+				 "-ERR Message number too large: %s", args);
+		return NULL;
+	}
+	if (*args != (thenspace ? ' ' : '\0')) {
+		client_send_line(client,
+				 "-ERR Noise after message number: %s", args);
+		return NULL;
+	}
 	if (num == 0 || num > client->messages_count) {
 		client_send_line(client,
 				 "-ERR There's no message %u.", num);
@@ -70,26 +67,23 @@ static const char *get_msgnum(struct client *client, const char *args,
 }
 
 static const char *get_size(struct client *client, const char *args,
-			    uoff_t *size)
+			    uoff_t *size, bool thenspace)
 {
-	uoff_t num, last_num;
+	uoff_t num;
 
-	num = 0;
-	while (*args != '\0' && *args != ' ') {
-		if (*args < '0' || *args > '9') {
-			client_send_line(client, "-ERR Invalid size: %s",
-					 args);
-			return NULL;
-		}
-
-		last_num = num;
-		num = num*10 + (*args - '0');
-		if (num < last_num) {
-			client_send_line(client, "-ERR Size too large: %s",
-					 args);
-			return NULL;
-		}
-		args++;
+	if (*args < '0' || *args > '9') {
+		client_send_line(client, "-ERR Invalid size: %s",
+				 args);
+		return NULL;
+	}
+	if (str_parse_uoff(args, &num, &args) < 0) {
+		client_send_line(client, "-ERR Size too large: %s",
+				 args);
+		return NULL;
+	}
+	if (*args != (thenspace ? ' ' : '\0')) {
+		client_send_line(client, "-ERR Noise after size: %s", args);
+		return NULL;
 	}
 
 	while (*args == ' ') args++;
@@ -108,7 +102,7 @@ static int cmd_dele(struct client *client, const char *args)
 {
 	unsigned int msgnum;
 
-	if (get_msgnum(client, args, &msgnum) == NULL)
+	if (get_msgnum(client, args, &msgnum, FALSE) == NULL)
 		return -1;
 
 	if (!client->deleted) {
@@ -170,7 +164,7 @@ static int cmd_list(struct client *client, const char *args)
 	} else {
 		unsigned int msgnum;
 
-		if (get_msgnum(client, args, &msgnum) == NULL)
+		if (get_msgnum(client, args, &msgnum, FALSE) == NULL)
 			return -1;
 
 		client_send_line(client, "+OK %u %"PRIuUOFF_T, msgnum+1,
@@ -485,7 +479,7 @@ static int cmd_retr(struct client *client, const char *args)
 {
 	unsigned int msgnum;
 
-	if (get_msgnum(client, args, &msgnum) == NULL)
+	if (get_msgnum(client, args, &msgnum, FALSE) == NULL)
 		return -1;
 
 	if (client->lowest_retr_pop3_msn > msgnum+1 ||
@@ -549,10 +543,10 @@ static int cmd_top(struct client *client, const char *args)
 	unsigned int msgnum;
 	uoff_t max_lines;
 
-	args = get_msgnum(client, args, &msgnum);
+	args = get_msgnum(client, args, &msgnum, TRUE);
 	if (args == NULL)
 		return -1;
-	if (get_size(client, args, &max_lines) == NULL)
+	if (get_size(client, args, &max_lines, FALSE) == NULL)
 		return -1;
 
 	client->top_count++;
@@ -790,7 +784,9 @@ static void client_uidls_save(struct client *client)
 
 	uidl_duplicates_rename =
 		strcmp(client->set->pop3_uidl_duplicates, "rename") == 0;
-	hash_table_create(&prev_uidls, default_pool, 0, str_hash, strcmp);
+	if (uidl_duplicates_rename)
+		hash_table_create(&prev_uidls, default_pool, 0, str_hash,
+				  strcmp);
 	client->uidl_pool = pool_alloconly_create("message uidls", 1024);
 
 	/* first read all the UIDLs into a temporary [seq] array */
@@ -810,10 +806,12 @@ static void client_uidls_save(struct client *client)
 			mail_update_pop3_uidl(mail, uidl);
 
 		seq_uidls[mail->seq-1] = uidl;
-		hash_table_insert(prev_uidls, uidl, POINTER_CAST(1));
+		if (uidl_duplicates_rename)
+			hash_table_insert(prev_uidls, uidl, POINTER_CAST(1));
 	}
 	(void)mailbox_search_deinit(&search_ctx);
-	hash_table_destroy(&prev_uidls);
+	if (uidl_duplicates_rename)
+		hash_table_destroy(&prev_uidls);
 
 	if (failed) {
 		pool_unref(&client->uidl_pool);
@@ -875,7 +873,7 @@ static int cmd_uidl(struct client *client, const char *args)
 	} else {
 		unsigned int msgnum;
 
-		if (get_msgnum(client, args, &msgnum) == NULL)
+		if (get_msgnum(client, args, &msgnum, FALSE) == NULL)
 			return -1;
 
 		seq = msgnum_to_seq(client, msgnum);

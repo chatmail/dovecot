@@ -175,6 +175,7 @@ mailbox_list_index_sync_names(struct mailbox_list_index_sync_context *ctx)
 			buffer_append(hdr_buf, id_p, sizeof(*id_p));
 			name = hash_table_lookup(ilist->mailbox_names,
 						 POINTER_CAST(*id_p));
+			i_assert(name != NULL);
 			buffer_append(hdr_buf, name, strlen(name) + 1);
 			prev_id = *id_p;
 		}
@@ -392,4 +393,49 @@ int mailbox_list_index_sync(struct mailbox_list *list)
 	if (sync_ctx->ilist->has_backing_store)
 		ret = mailbox_list_index_sync_list(sync_ctx);
 	return mailbox_list_index_sync_end(&sync_ctx, ret == 0);
+}
+
+int mailbox_list_index_sync_delete(struct mailbox_list_index_sync_context *sync_ctx,
+				   const char *name, bool delete_selectable)
+{
+	struct mailbox_list_index_record rec;
+	struct mailbox_list_index_node *node;
+	const void *data;
+	bool expunged;
+	uint32_t seq;
+
+	node = mailbox_list_index_lookup(sync_ctx->list, name);
+	if (node == NULL) {
+		mailbox_list_set_error(sync_ctx->list, MAIL_ERROR_NOTFOUND,
+				       T_MAIL_ERR_MAILBOX_NOT_FOUND(name));
+		return -1;
+	}
+	if (!mail_index_lookup_seq(sync_ctx->view, node->uid, &seq))
+		i_panic("mailbox list index: lost uid=%u", node->uid);
+	if (delete_selectable) {
+		/* make it at least non-selectable */
+		node->flags = MAILBOX_LIST_INDEX_FLAG_NOSELECT;
+		mail_index_update_flags(sync_ctx->trans, seq, MODIFY_REPLACE,
+					(enum mail_flags)node->flags);
+
+		mail_index_lookup_ext(sync_ctx->view, seq,
+				      sync_ctx->ilist->ext_id,
+				      &data, &expunged);
+		i_assert(data != NULL && !expunged);
+		memcpy(&rec, data, sizeof(rec));
+		rec.uid_validity = 0;
+		memset(&rec.guid, 0, sizeof(rec.guid));
+		mail_index_update_ext(sync_ctx->trans, seq,
+				      sync_ctx->ilist->ext_id, &rec, NULL);
+	}
+	if (node->children != NULL) {
+		/* can't delete this directory before its children,
+		   but we may have made it non-selectable already */
+		return 0;
+	}
+
+	/* we can remove the entire node */
+	mail_index_expunge(sync_ctx->trans, seq);
+	mailbox_list_index_node_unlink(sync_ctx->ilist, node);
+	return 1;
 }

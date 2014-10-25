@@ -16,10 +16,14 @@ enum html_state {
 	HTML_STATE_TEXT,
 	/* tag outside "quoted string" */
 	HTML_STATE_TAG,
-	/* tag inside "quoted string" */
-	HTML_STATE_TAG_QUOTED,
+	/* tag inside "double quoted string" */
+	HTML_STATE_TAG_DQUOTED,
 	/* tag -> "escape\ */
-	HTML_STATE_TAG_QUOTED_ESCAPE,
+	HTML_STATE_TAG_DQUOTED_ESCAPE,
+	/* tag inside 'single quoted string' */
+	HTML_STATE_TAG_SQUOTED,
+	/* tag -> 'escape\ */
+	HTML_STATE_TAG_SQUOTED_ESCAPE,
 	/* script/stype content */
 	HTML_STATE_IGNORE,
 	/* comment */
@@ -60,7 +64,7 @@ fts_parser_html_try_init(struct mail_user *user ATTR_UNUSED,
 	return &parser->parser;
 }
 
-static bool
+static size_t
 parse_tag_name(struct html_fts_parser *parser,
 	       const unsigned char *data, size_t size)
 {
@@ -68,7 +72,7 @@ parse_tag_name(struct html_fts_parser *parser,
 
 	if (size >= 3 && memcmp(data, "!--", 3) == 0) {
 		parser->state = HTML_STATE_COMMENT;
-		return 3;
+		return 3 + 1;
 	}
 
 	if (size > 5 && i_memcasecmp(data, "style", 5) == 0) {
@@ -171,21 +175,32 @@ parse_data(struct html_fts_parser *parser,
 			break;
 		case HTML_STATE_TAG:
 			if (c == '"')
-				parser->state = HTML_STATE_TAG_QUOTED;
+				parser->state = HTML_STATE_TAG_DQUOTED;
+			else if (c == '\'')
+				parser->state = HTML_STATE_TAG_DQUOTED;
 			else if (c == '>') {
 				parser->state = parser->ignore_next_text ?
 					HTML_STATE_IGNORE : HTML_STATE_TEXT;
 				parser_add_space(parser);
 			}
 			break;
-		case HTML_STATE_TAG_QUOTED:
+		case HTML_STATE_TAG_DQUOTED:
 			if (c == '"')
 				parser->state = HTML_STATE_TAG;
 			else if (c == '\\')
-				parser->state = HTML_STATE_TAG_QUOTED_ESCAPE;
+				parser->state = HTML_STATE_TAG_DQUOTED_ESCAPE;
 			break;
-		case HTML_STATE_TAG_QUOTED_ESCAPE:
-			parser->state = HTML_STATE_TAG_QUOTED;
+		case HTML_STATE_TAG_DQUOTED_ESCAPE:
+			parser->state = HTML_STATE_TAG_DQUOTED;
+			break;
+		case HTML_STATE_TAG_SQUOTED:
+			if (c == '\'')
+				parser->state = HTML_STATE_TAG;
+			else if (c == '\\')
+				parser->state = HTML_STATE_TAG_SQUOTED_ESCAPE;
+			break;
+		case HTML_STATE_TAG_SQUOTED_ESCAPE:
+			parser->state = HTML_STATE_TAG_SQUOTED;
 			break;
 		case HTML_STATE_IGNORE:
 			if (c == '<') {

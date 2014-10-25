@@ -231,8 +231,12 @@ int i_my_clock_gettime(int clk_id, struct timespec *tp);
 
 #ifdef EDQUOT
 #  define ENOSPACE(errno) ((errno) == ENOSPC || (errno) == EDQUOT)
+#  define ENOQUOTA(errno) ((errno) == EDQUOT)
 #else
+/* probably all modern OSes have EDQUOT, but just in case one doesn't assume
+   that ENOSPC is the same as "over quota". */
 #  define ENOSPACE(errno) ((errno) == ENOSPC)
+#  define ENOQUOTA(errno) ((errno) == ENOSPC)
 #endif
 
 /* EPERM is returned sometimes if device doesn't support such modification */
@@ -249,6 +253,11 @@ int i_my_clock_gettime(int clk_id, struct timespec *tp);
 
 #define ECANTLINK(errno) \
 	((errno) == EXDEV || (errno) == EMLINK || (errno) == EPERM)
+
+/* Returns TRUE if unlink() failed because it attempted to delete a directory */
+#define UNLINK_EISDIR(errno) \
+	((errno) == EPERM || /* POSIX */ \
+	 (errno) == EISDIR) /* Linux */
 
 /* EBUSY is given by some NFS implementations */
 #define EDESTDIREXISTS(errno) \

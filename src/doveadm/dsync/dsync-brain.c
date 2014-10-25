@@ -137,6 +137,8 @@ dsync_brain_set_flags(struct dsync_brain *brain, enum dsync_brain_flags flags)
 	brain->no_mail_sync = (flags & DSYNC_BRAIN_FLAG_NO_MAIL_SYNC) != 0;
 	brain->no_backup_overwrite =
 		(flags & DSYNC_BRAIN_FLAG_NO_BACKUP_OVERWRITE) != 0;
+	brain->no_mail_prefetch =
+		(flags & DSYNC_BRAIN_FLAG_NO_MAIL_PREFETCH) != 0;
 }
 
 struct dsync_brain *
@@ -171,6 +173,8 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 		}
 		str_delete(sync_ns_str, str_len(sync_ns_str)-1, 1);
 	}
+	brain->alt_char = set->mailbox_alt_char == '\0' ? '_' :
+		set->mailbox_alt_char;
 	brain->sync_box = p_strdup(brain->pool, set->sync_box);
 	brain->exclude_mailboxes = set->exclude_mailboxes == NULL ? NULL :
 		p_strarray_dup(brain->pool, set->exclude_mailboxes);
@@ -298,6 +302,9 @@ int dsync_brain_deinit(struct dsync_brain **_brain)
 	if (brain->mailbox_states_iter != NULL)
 		hash_table_iterate_deinit(&brain->mailbox_states_iter);
 	hash_table_destroy(&brain->mailbox_states);
+
+	if (brain->dsync_box_pool != NULL)
+		pool_unref(&brain->dsync_box_pool);
 
 	if (brain->lock_fd != -1) {
 		/* unlink the lock file before it gets unlocked */
@@ -532,10 +539,6 @@ static bool dsync_brain_run_real(struct dsync_brain *brain, bool *changed_r)
 	if (brain->failed)
 		return FALSE;
 
-	if (brain->debug) {
-		i_debug("brain %c: in state=%s", brain->master_brain ? 'M' : 'S',
-			dsync_state_names[brain->state]);
-	}
 	switch (brain->state) {
 	case DSYNC_STATE_MASTER_RECV_HANDSHAKE:
 		changed = dsync_brain_master_recv_handshake(brain);
@@ -578,11 +581,6 @@ static bool dsync_brain_run_real(struct dsync_brain *brain, bool *changed_r)
 		changed = TRUE;
 		ret = FALSE;
 		break;
-	}
-	if (brain->debug) {
-		i_debug("brain %c: out state=%s changed=%d",
-			brain->master_brain ? 'M' : 'S',
-			dsync_state_names[brain->state], changed);
 	}
 	if (brain->verbose_proctitle) {
 		if (orig_state != brain->state ||

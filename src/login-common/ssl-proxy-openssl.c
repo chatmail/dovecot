@@ -79,6 +79,7 @@ struct ssl_proxy {
 	unsigned int cert_received:1;
 	unsigned int cert_broken:1;
 	unsigned int client_proxy:1;
+	unsigned int flushing:1;
 };
 
 struct ssl_parameters {
@@ -100,6 +101,7 @@ struct ssl_server_context {
 	const char *protocols;
 	bool verify_client_cert;
 	bool prefer_server_ciphers;
+	bool compression;
 };
 
 static int extdata_index;
@@ -125,7 +127,7 @@ static void ssl_server_context_deinit(struct ssl_server_context **_ctx);
 
 static void ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
                                             const struct master_service_ssl_settings *set);
-#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
+#if defined(HAVE_ECDH) && !defined(SSL_CTRL_SET_ECDH_AUTO)
 static int ssl_proxy_ctx_get_pkey_ec_curve_name(const struct master_service_ssl_settings *set);
 #endif
 
@@ -332,7 +334,7 @@ static void plain_read(struct ssl_proxy *proxy)
 	}
 
 	if (corked)
-		net_set_cork(proxy->fd_ssl, FALSE);
+		(void)net_set_cork(proxy->fd_ssl, FALSE);
 
 	ssl_proxy_unref(proxy);
 }
@@ -552,9 +554,9 @@ static void ssl_step(struct ssl_proxy *proxy)
 		if (proxy->sslout_size == 0)
 			ssl_set_io(proxy, SSL_REMOVE_OUTPUT);
 		else {
-			net_set_cork(proxy->fd_ssl, TRUE);
+			(void)net_set_cork(proxy->fd_ssl, TRUE);
 			ssl_write(proxy);
-			net_set_cork(proxy->fd_ssl, FALSE);
+			(void)net_set_cork(proxy->fd_ssl, FALSE);
 		}
 	}
 
@@ -639,6 +641,7 @@ ssl_server_context_get(const struct login_settings *login_set,
 		login_set->auth_ssl_require_client_cert ||
 		login_set->auth_ssl_username_from_cert;
 	lookup_ctx.prefer_server_ciphers = set->ssl_prefer_server_ciphers;
+	lookup_ctx.compression = set->parsed_opts.compression;
 
 	ctx = hash_table_lookup(ssl_servers, &lookup_ctx);
 	if (ctx == NULL)
@@ -769,7 +772,7 @@ const char *ssl_proxy_get_security_string(struct ssl_proxy *proxy)
 
 const char *ssl_proxy_get_compression(struct ssl_proxy *proxy ATTR_UNUSED)
 {
-#ifdef HAVE_SSL_COMPRESSION
+#if defined(HAVE_SSL_COMPRESSION) && !defined(OPENSSL_NO_COMP)
 	const COMP_METHOD *comp;
 
 	comp = SSL_get_current_compression(proxy->ssl);
@@ -806,10 +809,20 @@ static void ssl_proxy_unref(struct ssl_proxy *proxy)
 	i_free(proxy);
 }
 
+static void ssl_proxy_flush(struct ssl_proxy *proxy)
+{
+	/* this is pretty kludgy. mainly this is just for flushing the final
+	   LOGOUT command output. */
+	plain_read(proxy);
+	ssl_step(proxy);
+}
+
 void ssl_proxy_destroy(struct ssl_proxy *proxy)
 {
-	if (proxy->destroyed)
+	if (proxy->destroyed || proxy->flushing)
 		return;
+	proxy->flushing = TRUE;
+	ssl_proxy_flush(proxy);
 	proxy->destroyed = TRUE;
 
 	ssl_proxy_count--;
@@ -1000,11 +1013,15 @@ ssl_proxy_ctx_init(SSL_CTX *ssl_ctx, const struct master_service_ssl_settings *s
 {
 	X509_STORE *store;
 	STACK_OF(X509_NAME) *xnames = NULL;
-
 	/* enable all SSL workarounds, except empty fragments as it
 	   makes SSL more vulnerable against attacks */
-	SSL_CTX_set_options(ssl_ctx, SSL_OP_ALL &
-			    ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS);
+	long ssl_ops = SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS;
+
+#ifdef SSL_OP_NO_COMPRESSION
+	if (!set->parsed_opts.compression)
+		ssl_ops |= SSL_OP_NO_COMPRESSION;
+#endif
+	SSL_CTX_set_options(ssl_ctx, ssl_ops);
 
 #ifdef SSL_MODE_RELEASE_BUFFERS
 	SSL_CTX_set_mode(ssl_ctx, SSL_MODE_RELEASE_BUFFERS);
@@ -1024,7 +1041,7 @@ static void
 ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
 	const struct master_service_ssl_settings *set ATTR_UNUSED)
 {
-#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
+#if defined(HAVE_ECDH) && !defined(SSL_CTRL_SET_ECDH_AUTO)
 	EC_KEY *ecdh;
 	int nid;
 	const char *curve_name;
@@ -1037,7 +1054,7 @@ ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
 	   used instead of ECDHE, do not reuse the same ECDH key pair for
 	   different sessions. This option improves forward secrecy. */
 	SSL_CTX_set_options(ssl_ctx, SSL_OP_SINGLE_ECDH_USE);
-#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+#ifdef SSL_CTRL_SET_ECDH_AUTO
 	/* OpenSSL >= 1.0.2 automatically handles ECDH temporary key parameter
 	   selection. */
 	SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
@@ -1152,7 +1169,7 @@ ssl_proxy_ctx_use_key(SSL_CTX *ctx,
 	EVP_PKEY_free(pkey);
 }
 
-#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
+#if defined(HAVE_ECDH) && !defined(SSL_CTRL_SET_ECDH_AUTO)
 static int
 ssl_proxy_ctx_get_pkey_ec_curve_name(const struct master_service_ssl_settings *set)
 {
@@ -1275,6 +1292,7 @@ ssl_server_context_init(const struct login_settings *login_set,
 		login_set->auth_ssl_require_client_cert ||
 		login_set->auth_ssl_username_from_cert;
 	ctx->prefer_server_ciphers = ssl_set->ssl_prefer_server_ciphers;
+	ctx->compression = ssl_set->parsed_opts.compression;
 
 	ctx->ctx = ssl_ctx = SSL_CTX_new(SSLv23_server_method());
 	if (ssl_ctx == NULL)
@@ -1307,6 +1325,7 @@ ssl_server_context_init(const struct login_settings *login_set,
 	if (ctx->verify_client_cert)
 		ssl_proxy_ctx_verify_client(ctx->ctx, xnames);
 
+	i_assert(hash_table_lookup(ssl_servers, ctx) == NULL);
 	hash_table_insert(ssl_servers, ctx, ctx);
 	return ctx;
 }

@@ -11,6 +11,7 @@
 #include "ostream.h"
 #include "istream-dot.h"
 #include "safe-mkstemp.h"
+#include "var-expand.h"
 #include "restrict-access.h"
 #include "settings-parser.h"
 #include "master-service.h"
@@ -488,7 +489,7 @@ lmtp_rcpt_to_is_over_quota(struct client *client,
 	ret = mailbox_get_status(box, STATUS_CHECK_OVER_QUOTA, &status);
 	if (ret < 0) {
 		errstr = mailbox_get_last_error(box, &error);
-		if (error == MAIL_ERROR_NOSPACE) {
+		if (error == MAIL_ERROR_NOQUOTA) {
 			client_send_line(client, "552 5.2.2 <%s> %s",
 					 rcpt->address, errstr);
 			ret = 1;
@@ -541,6 +542,7 @@ int cmd_rcpt(struct client *client, const char *args)
 	input.remote_ip = client->remote_ip;
 	input.local_port = client->local_port;
 	input.remote_port = client->remote_port;
+	input.session_id = client->state.session_id;
 
 	ret = mail_storage_service_lookup(storage_service, &input,
 					  &rcpt.service_user, &error);
@@ -625,6 +627,7 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 	struct setting_parser_context *set_parser;
 	void **sets;
 	const char *line, *error, *username;
+	string_t *str;
 	enum mail_error mail_error;
 	int ret;
 
@@ -654,6 +657,11 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 				 rcpt->address);
 		return -1;
 	}
+	str = t_str_new(256);
+	var_expand(str, client->state.dest_user->set->mail_log_prefix,
+		   mail_user_var_expand_table(client->state.dest_user));
+	i_set_failure_prefix("%s", str_c(str));
+
 	sets = mail_storage_service_user_get_set(rcpt->service_user);
 	lda_set = sets[1];
 	settings_var_expand(&lda_setting_parser_info, lda_set, client->pool,
@@ -694,9 +702,13 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 		client_send_line(client, "250 2.0.0 <%s> %s Saved",
 				 rcpt->address, client->state.session_id);
 		ret = 0;
+	} else if (dctx.tempfail_error != NULL) {
+		client_send_line(client, "451 4.2.0 <%s> %s",
+				 rcpt->address, dctx.tempfail_error);
+		ret = -1;
 	} else if (storage != NULL) {
 		error = mail_storage_get_last_error(storage, &mail_error);
-		if (mail_error == MAIL_ERROR_NOSPACE) {
+		if (mail_error == MAIL_ERROR_NOQUOTA) {
 			client_send_line(client, "%s <%s> %s",
 					 dctx.set->quota_full_tempfail ?
 					 "452 4.2.2" : "552 5.2.2",
@@ -705,10 +717,6 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 			client_send_line(client, "451 4.2.0 <%s> %s",
 					 rcpt->address, error);
 		}
-		ret = -1;
-	} else if (dctx.tempfail_error != NULL) {
-		client_send_line(client, "451 4.2.0 <%s> %s",
-				 rcpt->address, dctx.tempfail_error);
 		ret = -1;
 	} else {
 		/* This shouldn't happen */
@@ -906,7 +914,7 @@ static const char *client_get_added_headers(struct client *client)
 		str_printfa(str, "Return-Path: <%s>\r\n",
 			    client->state.mail_from);
 		if (rcpt_to != NULL)
-			str_printfa(str, "Delivered-To: <%s>\r\n", rcpt_to);
+			str_printfa(str, "Delivered-To: %s\r\n", rcpt_to);
 	}
 
 	str_printfa(str, "Received: from %s", client->lhlo);
@@ -938,7 +946,7 @@ static bool client_input_data_write(struct client *client)
 	if (array_count(&client->state.rcpt_to) != 0)
 		client_input_data_write_local(client, input);
 	if (client->proxy != NULL) {
-		lmtp_proxy_start(client->proxy, input, NULL,
+		lmtp_proxy_start(client->proxy, input,
 				 client_proxy_finish, client);
 		ret = FALSE;
 	}
@@ -1062,6 +1070,8 @@ int cmd_data(struct client *client, const char *args ATTR_UNUSED)
 	i_assert(client->dot_input == NULL);
 	client->dot_input = i_stream_create_dot(client->input, TRUE);
 	client_send_line(client, "354 OK");
+	/* send the DATA reply immediately before we start handling any data */
+	o_stream_uncork(client->output);
 
 	io_remove(&client->io);
 	client_state_set(client, "DATA");

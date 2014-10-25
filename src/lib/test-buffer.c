@@ -18,10 +18,9 @@ void test_buffer(void)
 
 	buf = buffer_create_dynamic(default_pool, 1);
 	for (i = 0; i < BUF_TEST_SIZE; i++)
-		testdata[i] = random();
+		testdata[i] = rand();
 	memset(shadowbuf, 0, sizeof(shadowbuf));
 
-	srand(1);
 	shadowbuf_size = 0;
 	for (i = 0; i < BUF_TEST_COUNT; i++) {
 		if (buf->used == BUF_TEST_SIZE) {
@@ -98,7 +97,7 @@ void test_buffer(void)
 			}
 			break;
 		case 4:
-			if (shadowbuf_size == 0)
+			if (shadowbuf_size <= 1)
 				break;
 			pos = rand() % (shadowbuf_size-1); /* dest */
 			pos2 = rand() % (shadowbuf_size-1); /* source */

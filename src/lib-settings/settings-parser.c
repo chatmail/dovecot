@@ -118,7 +118,7 @@ copy_unique_defaults(struct setting_parser_context *ctx,
 	memset(&info, 0, sizeof(info));
 	info = *def->list_info;
 
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < count; i++) T_BEGIN {
 		new_set = p_malloc(ctx->set_pool, info.struct_size);
 		array_append(arr, &new_set, 1);
 
@@ -143,11 +143,12 @@ copy_unique_defaults(struct setting_parser_context *ctx,
 		new_link->change_array = carr;
 		new_link->set_struct = new_set;
 		new_link->change_struct = new_changes;
+		i_assert(hash_table_lookup(ctx->links, full_key) == NULL);
 		hash_table_insert(ctx->links, full_key, new_link);
 
 		info.defaults = children[i];
 		setting_parser_copy_defaults(ctx, &info, new_link);
-	}
+	} T_END;
 }
 
 static void
@@ -524,6 +525,7 @@ setting_link_add(struct setting_parser_context *ctx,
 	link = p_new(ctx->parser_pool, struct setting_link, 1);
 	*link = *link_copy;
 	link->full_key = key;
+	i_assert(hash_table_lookup(ctx->links, key) == NULL);
 	hash_table_insert(ctx->links, key, link);
 
 	if (link->info->struct_size != 0)
@@ -960,7 +962,8 @@ int settings_parse_stream_read(struct setting_parser_context *ctx,
 			break;
 		if (input->stream_errno != 0) {
 			ctx->error = p_strdup_printf(ctx->parser_pool,
-						     "read() failed: %m");
+				"read(%s) failed: %s", i_stream_get_name(input),
+				i_stream_get_error(input));
 		} else if (input->v_offset == 0) {
 			ctx->error = p_strdup_printf(ctx->parser_pool,
 				"read(%s) disconnected before receiving any data",
@@ -999,7 +1002,7 @@ int settings_parse_file(struct setting_parser_context *ctx,
 		return -1;
 	}
 
-	input = i_stream_create_fd(fd, max_line_length, TRUE);
+	input = i_stream_create_fd_autoclose(&fd, max_line_length);
 	i_stream_set_name(input, path);
 	ret = settings_parse_stream_read(ctx, input);
 	i_stream_unref(&input);
@@ -1089,7 +1092,7 @@ int settings_parse_exec(struct setting_parser_context *ctx,
 	}
 	i_close_fd(&fd[1]);
 
-	input = i_stream_create_fd(fd[0], (size_t)-1, TRUE);
+	input = i_stream_create_fd_autoclose(&fd[0], (size_t)-1);
 	i_stream_set_name(input, bin_path);
 	ret = settings_parse_stream_read(ctx, input);
 	i_stream_destroy(&input);
@@ -1744,6 +1747,7 @@ settings_link_get_new(struct setting_parser_context *new_ctx,
 		}
 		i_assert(i < count);
 	}
+	i_assert(hash_table_lookup(links, old_link) == NULL);
 	hash_table_insert(links, old_link, new_link);
 	return new_link;
 }

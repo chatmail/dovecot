@@ -435,11 +435,11 @@ int main(int argc, char *argv[])
 	lda_set_dest_addr(&ctx, user, destaddr_source);
 
 	if (mail_deliver(&ctx, &storage) < 0) {
-		if (storage != NULL) {
-			errstr = mail_storage_get_last_error(storage, &error);
-		} else if (ctx.tempfail_error != NULL) {
+		if (ctx.tempfail_error != NULL) {
 			errstr = ctx.tempfail_error;
 			error = MAIL_ERROR_TEMP;
+		} else if (storage != NULL) {
+			errstr = mail_storage_get_last_error(storage, &error);
 		} else {
 			/* This shouldn't happen */
 			i_error("BUG: Saving failed to unknown storage");
@@ -452,7 +452,7 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "%s\n", errstr);
 		}
 
-		if (error != MAIL_ERROR_NOSPACE ||
+		if (error != MAIL_ERROR_NOQUOTA ||
 		    ctx.set->quota_full_tempfail) {
 			/* Saving to INBOX should always work unless
 			   we're over quota. If it didn't, it's probably a

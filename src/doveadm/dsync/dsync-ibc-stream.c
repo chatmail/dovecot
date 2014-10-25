@@ -190,6 +190,7 @@ static int dsync_ibc_stream_read_mail_stream(struct dsync_ibc_stream *ibc)
 
 static void dsync_ibc_stream_input(struct dsync_ibc_stream *ibc)
 {
+	timeout_reset(ibc->to);
 	if (ibc->value_input != NULL) {
 		if (dsync_ibc_stream_read_mail_stream(ibc) == 0)
 			return;
@@ -340,7 +341,7 @@ static void dsync_ibc_stream_deinit(struct dsync_ibc *_ibc)
 		   "read() failed: EOF" errors on failing dsyncs */
 		o_stream_nsend_str(ibc->output,
 			t_strdup_printf("%c\n", items[ITEM_DONE].chr));
-		o_stream_nfinish(ibc->output);
+		(void)o_stream_nfinish(ibc->output);
 	}
 
 	timeout_remove(&ibc->to);
@@ -1680,6 +1681,7 @@ dsync_ibc_stream_send_mail(struct dsync_ibc *_ibc,
 	struct dsync_serializer_encoder *encoder;
 	string_t *str = t_str_new(128);
 
+	i_assert(!mail->minimal_fields);
 	i_assert(ibc->value_output == NULL);
 
 	str_append_c(str, items[ITEM_MAIL].chr);

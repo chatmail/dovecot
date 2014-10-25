@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.2.13],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv13($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.2.15],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv15($PACKAGE_VERSION)", [Dovecot ABI version])
 
 AC_CONFIG_SRCDIR([src])
 
@@ -441,7 +441,7 @@ AC_CHECK_FUNCS(fcntl flock lockf inet_aton sigaction getpagesize madvise \
 	       strtoull strtoll strtouq strtoq getmntinfo \
 	       setpriority quotactl getmntent kqueue kevent backtrace_symbols \
 	       walkcontext dirfd clearenv malloc_usable_size glob fallocate \
-	       posix_fadvise getpeereid getpeerucred)
+	       posix_fadvise getpeereid getpeerucred inotify_init)
 
 AC_CHECK_TYPES([struct sockpeercred],,,[
 #include <sys/types.h>
@@ -555,50 +555,14 @@ have_notify=none
 
 if test "$notify" = "" || test "$notify" = "inotify" ; then
   dnl * inotify?
-  AC_CACHE_CHECK([whether we can use inotify],i_cv_inotify_works,[
-    AC_TRY_RUN([
-      #define _GNU_SOURCE
-      #include <sys/ioctl.h>
-      #include <fcntl.h>
-      #include <sys/inotify.h>
-      #include <stdio.h>
-    
-      int main()
-      {
-	int wd, fd;
-	char * fn = "/tmp";
-      
-	fd = inotify_init ();
-	if (fd < 0)
-	  {
-	    perror ("inotify_init");
-	    return 1;
-	  }
-  
-	wd = inotify_add_watch (fd, fn, IN_ALL_EVENTS);
-  
-	if (wd < 0)
-	  {
-	    perror ("inotify_add_watch");
-	    return 2;
-	  }
-  
-	inotify_rm_watch (fd, wd);
-  
-	close (fd);
-	return 0;
-      }
-    ], [
-      i_cv_inotify_works=yes
-    ], [
-      i_cv_inotify_works=no
-    ])
-  ])
-  if test $i_cv_inotify_works = yes; then
+  AC_MSG_CHECKING([whether we can use inotify])
+  if test "$ac_cv_func_inotify_init" = yes; then
     have_notify=inotify
     notify=inotify
+    AC_MSG_RESULT("yes")
     AC_DEFINE(IOLOOP_NOTIFY_INOTIFY,, Use Linux inotify)
   else
+    AC_MSG_RESULT("no")
     if test "$notify" = "inotify"; then
       AC_MSG_ERROR([inotify requested but not available])
       notify=""
@@ -2595,6 +2559,7 @@ else
   LIBDOVECOT_LDA='$(top_builddir)/src/lib-lda/liblda.la'
 fi
 LIBDOVECOT_STORAGE="$LIBDOVECOT_STORAGE_DEPS $LINKED_STORAGE_LDADD"
+LIBDOVECOT_DSYNC='$(top_builddir)/src/doveadm/dsync/libdovecot-dsync.la'
 LIBDOVECOT_SQL='$(top_builddir)/src/lib-sql/libsql.la'
 AC_SUBST(LIBDOVECOT)
 AC_SUBST(LIBDOVECOT_DEPS)
@@ -2603,6 +2568,7 @@ AC_SUBST(LIBDOVECOT_STORAGE_DEPS)
 AC_SUBST(LIBDOVECOT_LOGIN)
 AC_SUBST(LIBDOVECOT_SQL)
 AC_SUBST(LIBDOVECOT_COMPRESS)
+AC_SUBST(LIBDOVECOT_DSYNC)
 AC_SUBST(LIBDOVECOT_LDA)
 
 dnl **
@@ -2941,6 +2907,7 @@ src/plugins/fts/Makefile
 src/plugins/fts-lucene/Makefile
 src/plugins/fts-solr/Makefile
 src/plugins/fts-squat/Makefile
+src/plugins/last-login/Makefile
 src/plugins/lazy-expunge/Makefile
 src/plugins/listescape/Makefile
 src/plugins/mail-filter/Makefile

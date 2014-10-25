@@ -28,6 +28,11 @@ struct metawrap_fs_file {
 	bool metadata_read;
 };
 
+struct metawrap_fs_iter {
+	struct fs_iter iter;
+	struct fs_iter *super;
+};
+
 static struct fs *fs_metawrap_alloc(void)
 {
 	struct metawrap_fs *fs;
@@ -85,6 +90,8 @@ static enum fs_properties fs_metawrap_get_properties(struct fs *_fs)
 		/* we don't have a quick stat() to see the file's size,
 		   because of the metadata header */
 		props &= ~FS_PROPERTY_STAT;
+		/* Copying can copy the whole metadata. */
+		props |= FS_PROPERTY_COPY_METADATA;
 	}
 	return props;
 }
@@ -378,7 +385,7 @@ static int fs_metawrap_copy(struct fs_file *_src, struct fs_file *_dest)
 	struct metawrap_fs_file *src = (struct metawrap_fs_file *)_src;
 	struct metawrap_fs_file *dest = (struct metawrap_fs_file *)_dest;
 
-	if (!dest->fs->wrap_metadata) {
+	if (!dest->fs->wrap_metadata || !_dest->metadata_changed) {
 		if (_src != NULL)
 			return fs_copy(src->super, dest->super);
 		else
@@ -404,9 +411,38 @@ static int fs_metawrap_delete(struct fs_file *_file)
 
 static struct fs_iter *
 fs_metawrap_iter_init(struct fs *_fs, const char *path,
-			  enum fs_iter_flags flags)
+		      enum fs_iter_flags flags)
 {
-	return fs_iter_init(_fs->parent, path, flags);
+	struct metawrap_fs_iter *iter;
+
+	iter = i_new(struct metawrap_fs_iter, 1);
+	iter->iter.fs = _fs;
+	iter->iter.flags = flags;
+	iter->super = fs_iter_init(_fs->parent, path, flags);
+	return &iter->iter;
+}
+
+static const char *fs_metawrap_iter_next(struct fs_iter *_iter)
+{
+	struct metawrap_fs_iter *iter = (struct metawrap_fs_iter *)_iter;
+	const char *fname;
+
+	iter->super->async_callback = _iter->async_callback;
+	iter->super->async_context = _iter->async_context;
+
+	fname = fs_iter_next(iter->super);
+	_iter->async_have_more = iter->super->async_have_more;
+	return fname;
+}
+
+static int fs_metawrap_iter_deinit(struct fs_iter *_iter)
+{
+	struct metawrap_fs_iter *iter = (struct metawrap_fs_iter *)_iter;
+	int ret;
+
+	ret = fs_iter_deinit(&iter->super);
+	i_free(iter);
+	return ret;
 }
 
 const struct fs fs_class_metawrap = {
@@ -438,7 +474,7 @@ const struct fs fs_class_metawrap = {
 		fs_metawrap_rename,
 		fs_metawrap_delete,
 		fs_metawrap_iter_init,
-		NULL,
-		NULL
+		fs_metawrap_iter_next,
+		fs_metawrap_iter_deinit
 	}
 };

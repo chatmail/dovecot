@@ -14,7 +14,7 @@ static struct file_listener_settings *dict_unix_listeners[] = {
 	&dict_unix_listeners_array[0]
 };
 static buffer_t dict_unix_listeners_buf = {
-	dict_unix_listeners, sizeof(dict_unix_listeners), { 0, }
+	dict_unix_listeners, sizeof(dict_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 
@@ -46,17 +46,17 @@ struct service_settings dict_service_settings = {
 
 #undef DEF
 #define DEF(type, name) \
-	{ type, #name, offsetof(struct dict_settings, name), NULL }
+	{ type, #name, offsetof(struct dict_server_settings, name), NULL }
 
 static const struct setting_define dict_setting_defines[] = {
 	DEF(SET_STR, base_dir),
 	DEF(SET_STR, dict_db_config),
-	{ SET_STRLIST, "dict", offsetof(struct dict_settings, dicts), NULL },
+	{ SET_STRLIST, "dict", offsetof(struct dict_server_settings, dicts), NULL },
 
 	SETTING_DEFINE_LIST_END
 };
 
-const struct dict_settings dict_default_settings = {
+const struct dict_server_settings dict_default_settings = {
 	.base_dir = PKG_RUNDIR,
 	.dict_db_config = "",
 	.dicts = ARRAY_INIT
@@ -68,9 +68,9 @@ const struct setting_parser_info dict_setting_parser_info = {
 	.defaults = &dict_default_settings,
 
 	.type_offset = (size_t)-1,
-	.struct_size = sizeof(struct dict_settings),
+	.struct_size = sizeof(struct dict_server_settings),
 
 	.parent_offset = (size_t)-1
 };
 
-const struct dict_settings *dict_settings;
+const struct dict_server_settings *dict_settings;

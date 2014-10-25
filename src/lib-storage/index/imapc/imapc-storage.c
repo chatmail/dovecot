@@ -45,7 +45,7 @@ static struct imapc_resp_code_map imapc_resp_code_map[] = {
 	/* { IMAP_RESP_CODE_CLIENTBUG, 0 }, */
 	{ IMAP_RESP_CODE_CANNOT, MAIL_ERROR_NOTPOSSIBLE },
 	{ IMAP_RESP_CODE_LIMIT, MAIL_ERROR_NOTPOSSIBLE },
-	{ IMAP_RESP_CODE_OVERQUOTA, MAIL_ERROR_NOSPACE },
+	{ IMAP_RESP_CODE_OVERQUOTA, MAIL_ERROR_NOQUOTA },
 	{ IMAP_RESP_CODE_ALREADYEXISTS, MAIL_ERROR_EXISTS },
 	{ IMAP_RESP_CODE_NONEXISTENT, MAIL_ERROR_NOTFOUND }
 };
@@ -149,6 +149,11 @@ void imapc_mailbox_noop(struct imapc_mailbox *mbox)
 {
 	struct imapc_command *cmd;
 	struct imapc_simple_context sctx;
+
+	if (mbox->client_box == NULL) {
+		/* mailbox opening hasn't finished yet */
+		return;
+	}
 
 	imapc_simple_context_init(&sctx, mbox->storage->client);
 	cmd = imapc_client_mailbox_cmd(mbox->client_box,

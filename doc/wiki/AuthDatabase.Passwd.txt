@@ -38,4 +38,4 @@ userdb {
 This uses the UID and GID fields from passwd, but home directory is overridden.
 Also the default <mail_location> [MailLocation.txt] setting is overridden.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2014-10-03 04:42)

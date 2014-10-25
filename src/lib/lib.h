@@ -28,6 +28,7 @@
 #include "data-stack.h"
 #include "mempool.h"
 #include "imem.h"
+#include "rand.h"
 
 typedef struct buffer buffer_t;
 typedef struct buffer string_t;
@@ -38,11 +39,11 @@ struct ostream;
 typedef void lib_atexit_callback_t(void);
 
 #include "array-decl.h" /* ARRAY*()s may exist in any header */
+#include "bits.h"
 #include "hash-decl.h" /* HASH_TABLE*()s may exist in any header */
 #include "strfuncs.h"
 #include "strnum.h"
 
-size_t nearest_power(size_t num) ATTR_CONST;
 int close_keep_errno(int *fd);
 
 /* Call the given callback at the beginning of lib_deinit(). The main

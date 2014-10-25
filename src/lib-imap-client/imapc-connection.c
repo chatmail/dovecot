@@ -630,7 +630,7 @@ imapc_connection_handle_resp_text(struct imapc_connection *conn,
 		*value_r = value + 1;
 	} else {
 		*key_r = text;
-		*value_r = NULL;
+		*value_r = "";
 	}
 	return imapc_connection_handle_resp_text_code(conn, *key_r, *value_r);
 }
@@ -1185,7 +1185,6 @@ static int imapc_connection_ssl_handshaked(const char **error_r, void *context)
 static int imapc_connection_ssl_init(struct imapc_connection *conn)
 {
 	struct ssl_iostream_settings ssl_set;
-	struct stat st;
 	const char *error;
 
 	if (conn->client->ssl_ctx == NULL) {
@@ -1230,8 +1229,7 @@ static int imapc_connection_ssl_init(struct imapc_connection *conn)
 		return -1;
 	}
 
-	if (*conn->client->set.rawlog_dir != '\0' &&
-	    stat(conn->client->set.rawlog_dir, &st) == 0) {
+	if (*conn->client->set.rawlog_dir != '\0') {
 		iostream_rawlog_create(conn->client->set.rawlog_dir,
 				       &conn->input, &conn->output);
 	}
@@ -1315,7 +1313,6 @@ static void imapc_connection_reset_idle(struct imapc_connection *conn)
 static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 {
 	const struct ip_addr *ip;
-	struct stat st;
 	int fd;
 
 	i_assert(conn->client->set.max_idle_time > 0);
@@ -1333,8 +1330,7 @@ static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 	o_stream_set_no_error_handling(conn->output, TRUE);
 
 	if (*conn->client->set.rawlog_dir != '\0' &&
-	    conn->client->set.ssl_mode != IMAPC_CLIENT_SSL_MODE_IMMEDIATE &&
-	    stat(conn->client->set.rawlog_dir, &st) == 0) {
+	    conn->client->set.ssl_mode != IMAPC_CLIENT_SSL_MODE_IMMEDIATE) {
 		iostream_rawlog_create(conn->client->set.rawlog_dir,
 				       &conn->input, &conn->output);
 	}
@@ -1483,6 +1479,14 @@ static void imapc_command_free(struct imapc_command *cmd)
 			i_stream_unref(&stream->input);
 	}
 	pool_unref(&cmd->pool);
+}
+
+void imapc_command_abort(struct imapc_command **_cmd)
+{
+	struct imapc_command *cmd = *_cmd;
+
+	*_cmd = NULL;
+	imapc_command_free(cmd);
 }
 
 static void imapc_command_timeout(struct imapc_connection *conn)
@@ -1782,6 +1786,12 @@ void imapc_command_set_mailbox(struct imapc_command *cmd,
 {
 	cmd->box = box;
 	box->pending_box_command_count++;
+}
+
+bool imapc_command_connection_is_selected(struct imapc_command *cmd)
+{
+	return cmd->conn->selected_box != NULL ||
+		cmd->conn->selecting_box != NULL;
 }
 
 void imapc_command_send(struct imapc_command *cmd, const char *cmd_str)

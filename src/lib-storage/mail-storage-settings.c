@@ -47,6 +47,7 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_BOOL, mail_nfs_storage),
 	DEF(SET_BOOL, mail_nfs_index),
 	DEF(SET_BOOL, mailbox_list_index),
+	DEF(SET_BOOL, mailbox_list_index_very_dirty_syncs),
 	DEF(SET_BOOL, mail_debug),
 	DEF(SET_BOOL, mail_full_filesystem_access),
 	DEF(SET_BOOL, maildir_stat_dirs),
@@ -84,6 +85,7 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.mail_nfs_storage = FALSE,
 	.mail_nfs_index = FALSE,
 	.mailbox_list_index = FALSE,
+	.mailbox_list_index_very_dirty_syncs = FALSE,
 	.mail_debug = FALSE,
 	.mail_full_filesystem_access = FALSE,
 	.maildir_stat_dirs = FALSE,
@@ -320,7 +322,7 @@ mail_storage_get_dynamic_parsers(pool_t pool)
 	unsigned int i, j, count;
 
 	storages = array_get(&mail_storage_classes, &count);
-	parsers = p_new(pool, struct dynamic_settings_parser, count + 1);
+	parsers = p_new(pool, struct dynamic_settings_parser, 1 + count + 1);
 	parsers[0].name = MAIL_STORAGE_SET_DRIVER_NAME;
 	parsers[0].info = &mail_storage_setting_parser_info;
 
@@ -332,6 +334,7 @@ mail_storage_get_dynamic_parsers(pool_t pool)
 		parsers[j].info = storages[i]->v.get_setting_parser_info();
 		j++;
 	}
+	parsers[j].name = NULL;
 	return parsers;
 }
 

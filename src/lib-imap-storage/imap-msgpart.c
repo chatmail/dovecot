@@ -365,7 +365,8 @@ imap_msgpart_get_partial_header(struct mail *mail, struct istream *mail_input,
 	if (message_get_header_size(input, &hdr_size, &has_nuls) < 0) {
 		errno = input->stream_errno;
 		mail_storage_set_critical(mail->box->storage,
-			"read(%s) failed: %m", i_stream_get_name(mail_input));
+			"read(%s) failed: %s", i_stream_get_name(mail_input),
+			i_stream_get_error(mail_input));
 		i_stream_unref(&input);
 		return -1;
 	}
@@ -400,7 +401,7 @@ imap_msgpart_crlf_seek(struct mail *mail, struct istream *input,
 		virtual_skip -= cache->virtual_pos;
 	}
 	if (message_skip_virtual(input, virtual_skip, &cr_skipped) < 0) {
-		errinput = i_stream_create_error(errno);
+		errinput = i_stream_create_error_str(errno, "%s", i_stream_get_error(input));
 		i_stream_set_name(errinput, i_stream_get_name(input));
 		i_stream_unref(&input);
 		return errinput;

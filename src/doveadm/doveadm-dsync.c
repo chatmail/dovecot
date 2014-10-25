@@ -26,8 +26,8 @@
 #include "doveadm-server.h"
 #include "client-connection.h"
 #include "server-connection.h"
-#include "dsync-brain.h"
-#include "dsync-ibc.h"
+#include "dsync/dsync-brain.h"
+#include "dsync/dsync-ibc.h"
 #include "doveadm-dsync.h"
 
 #include <stdio.h>
@@ -541,6 +541,7 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	memcpy(set.sync_box_guid, ctx->mailbox_guid, sizeof(set.sync_box_guid));
 	set.lock_timeout_secs = ctx->lock_timeout;
 	set.state = ctx->state_input;
+	set.mailbox_alt_char = doveadm_settings->dsync_alt_char[0];
 	if (array_count(&ctx->exclude_mailboxes) > 0) {
 		/* array is NULL-terminated in init() */
 		set.exclude_mailboxes = array_idx(&ctx->exclude_mailboxes, 0);
@@ -1100,11 +1101,11 @@ static struct doveadm_mail_cmd_context *cmd_dsync_server_alloc(void)
 
 struct doveadm_mail_cmd cmd_dsync_mirror = {
 	cmd_dsync_alloc, "sync",
-	"[-1dfR] [-l <secs>] [-r <rawlog path>] [-m <mailbox>] [-n <namespace> | -N] [-x <exclude>] [-s <state>] <dest>"
+	"[-1fPRU] [-l <secs>] [-r <rawlog path>] [-m <mailbox>] [-g <mailbox_guid>] [-n <namespace> | -N] [-x <exclude>] [-s <state>] -d|<dest>"
 };
 struct doveadm_mail_cmd cmd_dsync_backup = {
 	cmd_dsync_backup_alloc, "backup",
-	"[-dfR] [-l <secs>] [-r <rawlog path>] [-m <mailbox>] [-n <namespace> | -N] [-x <exclude>] [-s <state>] <dest>"
+	"[-fPRU] [-l <secs>] [-r <rawlog path>] [-m <mailbox>] [-g <mailbox_guid>] [-n <namespace> | -N] [-x <exclude>] [-s <state>] -d|<dest>"
 };
 struct doveadm_mail_cmd cmd_dsync_server = {
 	cmd_dsync_server_alloc, "dsync-server", &doveadm_mail_cmd_hide

@@ -72,6 +72,26 @@ static struct valid_http_url_test valid_url_tests[] = {
 			.host_name = "www.example.com",
 			.enc_query = "question=What%20are%20you%20doing%3f&answer=Nothing." }
 	},{
+		/* These next 2 URLs don't follow the recommendations in
+		   http://tools.ietf.org/html/rfc1034#section-3.5 and
+		   http://tools.ietf.org/html/rfc3696
+		   However they satisfy the grammar in
+		   http://tools.ietf.org/html/rfc1123#section-2 and
+		   http://tools.ietf.org/html/rfc952
+		   so we should parse them.
+		*/
+		.url = "http://256.0.0.1/that/reverts/to/DNS",
+		.url_parsed = {
+			.path = "/that/reverts/to/DNS",
+			.host_name = "256.0.0.1"
+		}
+	},{
+		.url = "http://127.0.0.284/this/also/reverts/to/DNS",
+		.url_parsed = {
+			.path = "/this/also/reverts/to/DNS",
+			.host_name = "127.0.0.284"
+		}
+	},{
 		.url = "http://www.example.com/#Status%20of%20development",
 		.flags = HTTP_URL_ALLOW_FRAGMENT_PART,
 		.url_parsed = {
@@ -372,7 +392,9 @@ static struct invalid_http_url_test invalid_url_tests[] = {
 	},{
 		.url = "http://example%00.com/index.html"
 	},{
-		.url = "http://example.com:65539/index.html"
+		.url = "http://example.com:65536/index.html"
+	},{
+		.url = "http://example.com:72817/index.html"
 	},{
 		.url = "http://example.com/settings/%00/"
 	},{

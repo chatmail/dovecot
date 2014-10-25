@@ -138,10 +138,10 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 		if (!explicit_capability)
 			str_append(client->capability_string, " URLAUTH URLAUTH=BINARY");
 	}
-	if (set->imap_metadata && *mail_set->mail_attribute_dict != '\0' &&
-	    !explicit_capability) {
+	if (set->imap_metadata && *mail_set->mail_attribute_dict != '\0') {
 		client->imap_metadata_enabled = TRUE;
-		str_append(client->capability_string, " METADATA");
+		if (!explicit_capability)
+			str_append(client->capability_string, " METADATA");
 	}
 
 	ident = mail_user_get_anvil_userip_ident(client->user);
@@ -223,8 +223,12 @@ static const char *client_get_disconnect_reason(struct client *client)
 	errno = client->input->stream_errno != 0 ?
 		client->input->stream_errno :
 		client->output->stream_errno;
-	return errno == 0 || errno == EPIPE ? "Connection closed" :
-		t_strdup_printf("Connection closed: %m");
+	if (errno == 0 || errno == EPIPE)
+		return "Connection closed";
+	return t_strdup_printf("Connection closed: %s",
+			       client->input->stream_errno != 0 ?
+			       i_stream_get_error(client->input) :
+			       o_stream_get_error(client->output));
 }
 
 void client_destroy(struct client *client, const char *reason)
@@ -245,9 +249,6 @@ static void client_default_destroy(struct client *client, const char *reason)
 			reason = client_get_disconnect_reason(client);
 		i_info("%s %s", reason, client_stats(client));
 	}
-
-	imap_client_count--;
-	DLLIST_REMOVE(&imap_clients, client);
 
 	i_stream_close(client->input);
 	o_stream_close(client->output);
@@ -305,6 +306,9 @@ static void client_default_destroy(struct client *client, const char *reason)
 		array_free(&client->search_updates);
 	pool_unref(&client->command_pool);
 	mail_storage_service_user_free(&client->service_user);
+
+	imap_client_count--;
+	DLLIST_REMOVE(&imap_clients, client);
 	pool_unref(&client->pool);
 
 	master_service_client_connection_destroyed(master_service);
@@ -813,8 +817,8 @@ static bool client_command_input(struct client_command_context *cmd)
 
 	client->input_skip_line = TRUE;
 
-	if (cmd->name == '\0') {
-		/* command not given - cmd_func is already NULL. */
+	if (cmd->name[0] == '\0') {
+		/* command not given - cmd->func is already NULL. */
 	} else if ((command = command_find(cmd->name)) != NULL) {
 		cmd->func = command->func;
 		cmd->cmd_flags = command->flags;
@@ -942,6 +946,7 @@ void client_input(struct client *client)
 	}
 	o_stream_uncork(output);
 	o_stream_unref(&output);
+	imap_refresh_proctitle();
 
 	if (client->disconnected)
 		client_destroy(client, NULL);
@@ -1017,6 +1022,7 @@ int client_output(struct client *client)
 	(void)cmd_sync_delayed(client);
 
 	o_stream_uncork(client->output);
+	imap_refresh_proctitle();
 	if (client->disconnected)
 		client_destroy(client, NULL);
 	else
@@ -1109,12 +1115,14 @@ void client_search_updates_free(struct client *client)
 	array_clear(&client->search_updates);
 }
 
-void clients_destroy_all(void)
+void clients_destroy_all(struct mail_storage_service_ctx *storage_service)
 {
 	while (imap_clients != NULL) {
 		client_send_line(imap_clients, "* BYE Server shutting down.");
+		mail_storage_service_io_activate_user(imap_clients->service_user);
 		client_destroy(imap_clients, "Server shutting down.");
 	}
+	mail_storage_service_io_deactivate(storage_service);
 }
 
 struct imap_client_vfuncs imap_client_vfuncs = {

@@ -1,5 +1,5 @@
-.\" Copyright (c) 2010-2013 Dovecot authors, see the included COPYING file
-.TH DOVEADM 1 "2013-11-16" "Dovecot v2.2" "Dovecot"
+.\" Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file
+.TH DOVEADM 1 "2014-10-07" "Dovecot v2.2" "Dovecot"
 .SH NAME
 doveadm \- Dovecot\(aqs administration utility
 .\"------------------------------------------------------------------------
@@ -74,6 +74,11 @@ Manage the list of mountpoints where mails are stored.
 Show current penalties.
 .\"-------------------------------------
 .TP
+.B doveadm proxy
+.BR doveadm\-proxy (1),
+Handle Dovecot proxy connections.
+.\"-------------------------------------
+.TP
 .B doveadm who
 .BR doveadm\-who (1);
 Show who is logged in to the Dovecot server.
@@ -97,9 +102,19 @@ Perform a user lookup in Dovecot\(aqs userdbs
 .\"------------------------------------------------------------------------
 .SS MAILBOX COMMANDS
 .TP
+.B doveadm acl
+.BR doveadm\-acl (1),
+Manage Access Control List (ACL).
+.\"-------------------------------------
+.TP
 .B doveadm altmove
 .BR doveadm\-altmove (1),
 Move matching mails to the alternative storage.
+.\"-------------------------------------
+.TP
+.B doveadm backup
+.BR doveadm\-backup (1),
+Dovecot\(aqs one\-way mailbox synchronization utility.
 .\"-------------------------------------
 .TP
 .B doveadm batch
@@ -137,6 +152,11 @@ Fetch messages matching given search query.
 Add, remove or replace messages\(aq flags.
 .\"-------------------------------------
 .TP
+.B doveadm fts
+.BR doveadm\-fts (1),
+Manipulate the Full Text Search (FTS) index.
+.\"-------------------------------------
+.TP
 .B doveadm force\-resync
 .BR doveadm\-force\-resync (1),
 Repair broken mailboxes, in case Dovecot doesn\(aqt automatically do that.
@@ -170,6 +190,16 @@ Remove messages with refcount=0 from mdbox files.
 .B doveadm quota
 .BR doveadm\-quota (1),
 Initialize/recalculate or show current quota usage.
+.\"-------------------------------------
+.TP
+.B doveadm replicator
+.BR doveadm\-replicator (1),
+Manage users\(aq mail replicaton.
+.\"-------------------------------------
+.TP
+.B doveadm sync
+.BR doveadm\-sync (1),
+Dovecot\(aqs two\-way mailbox synchronization utility.
 .\"-------------------------------------
 .TP
 .B doveadm search
@@ -212,5 +242,4 @@ Plugin specific settings.
 .BR doveadm\-help (1),
 .BR doveconf (1),
 .BR dovecot (1),
-.BR dsync (1),
 .BR doveadm\-search\-query (7)

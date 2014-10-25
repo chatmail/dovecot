@@ -22,6 +22,12 @@ And for Pigeonhole v0.3:
 hg clone  http://hg.rename-it.nl/pigeonhole-0.3-sieve-extdata/
 ---%<-------------------------------------------------------------------------
 
+And for Pigeonhole v0.4:
+
+---%<-------------------------------------------------------------------------
+hg clone  http://hg.rename-it.nl/pigeonhole-0.4-sieve-extdata/
+---%<-------------------------------------------------------------------------
+
 Compiling
 ---------
 
@@ -101,10 +107,53 @@ keep;
 ---%<-------------------------------------------------------------------------
 
 where "priv/vacation_subject" & "priv/vacation_message" would be looked up in
-the Dovecot dict.
+the Dovecot dict. See below for some example dicts:
+
+Dict with flat file backend
+---------------------------
+
+To use a flat file backend for the above example, create a dict file with the
+following format (for example /etc/dovecot/sieve-extdata-lookup.dict):
+
+---%<-------------------------------------------------------------------------
+priv/vacation_message
+Sorry I am out of the office
+---%<-------------------------------------------------------------------------
+
+Dict with a SQL backend
+-----------------------
+
+To use a SQL backend for the above example, first set up a dict proxy. In
+/etc/dovecot.conf:
+
+---%<-------------------------------------------------------------------------
+dict {
+    sieve = mysql:/etc/dovecot/pigeonhole-sieve.dict
+}
+---%<-------------------------------------------------------------------------
+
+And in /etc/dovecot/pigeonhole-sieve.dict:
+
+---%<-------------------------------------------------------------------------
+connect = host=localhost dbname=dovecot user=dovecot password=password
+
+map {
+  pattern = priv/vacation_message   # The dict value to lookup
+  table = virtual_users             # The SQL table to perform the lookup in
+  username_field = email            # The username field to search on in the
+table
+  value_field = vacation_msg        # The database value to return
+}
+---%<-------------------------------------------------------------------------
+
+Finally configure extdata to use the proxy:
+
+---%<-------------------------------------------------------------------------
+sieve_extdata_dict_uri = proxy::sieve
+---%<-------------------------------------------------------------------------
 
 Read the (preliminary) specification
 [http://hg.rename-it.nl/pigeonhole-0.2-sieve-extdata/raw-file/tip/doc/rfc/spec-bosch-sieve-external-data.txt]
 for more information.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2014-10-03 04:43)

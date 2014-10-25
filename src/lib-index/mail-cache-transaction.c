@@ -168,6 +168,7 @@ mail_cache_transaction_compress(struct mail_cache_transaction_ctx *ctx)
 	struct mail_cache *cache = ctx->cache;
 	struct mail_index_view *view;
 	struct mail_index_transaction *trans;
+	struct mail_cache_compress_lock *lock;
 	int ret;
 
 	ctx->tried_compression = TRUE;
@@ -178,11 +179,13 @@ mail_cache_transaction_compress(struct mail_cache_transaction_ctx *ctx)
 	view = mail_index_view_open(cache->index);
 	trans = mail_index_transaction_begin(view,
 					MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
-	if (mail_cache_compress(cache, trans) < 0) {
+	if (mail_cache_compress(cache, trans, &lock) < 0) {
 		mail_index_transaction_rollback(&trans);
 		ret = -1;
 	} else {
 		ret = mail_index_transaction_commit(&trans);
+		if (lock != NULL)
+			mail_cache_compress_unlock(&lock);
 	}
 	mail_index_view_close(&view);
 	mail_cache_transaction_reset(ctx);
@@ -251,7 +254,7 @@ static int mail_cache_transaction_lock(struct mail_cache_transaction_ctx *ctx)
 
 	mail_cache_transaction_open_if_needed(ctx);
 
-	if ((ret = mail_cache_lock(cache, FALSE)) <= 0) {
+	if ((ret = mail_cache_lock(cache)) <= 0) {
 		if (ret < 0)
 			return -1;
 
@@ -799,19 +802,4 @@ bool mail_cache_field_can_add(struct mail_cache_transaction_ctx *ctx,
 		return FALSE;
 
 	return mail_cache_field_exists(ctx->view, seq, field_idx) == 0;
-}
-
-void mail_cache_delete(struct mail_cache *cache)
-{
-	i_assert(cache->locked);
-
-	/* we'll only update the deleted record count in the header. we can't
-	   really do any actual deleting as other processes might still be
-	   using the data. also it's actually useful as old index views are
-	   still able to ask cached data for messages that have already been
-	   expunged. */
-	cache->hdr_copy.deleted_record_count++;
-	if (cache->hdr_copy.record_count > 0)
-		cache->hdr_copy.record_count--;
-	cache->hdr_modified = TRUE;
 }

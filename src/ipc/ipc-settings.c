@@ -17,7 +17,7 @@ static struct file_listener_settings *ipc_unix_listeners[] = {
 	&ipc_unix_listeners_array[1]
 };
 static buffer_t ipc_unix_listeners_buf = {
-	ipc_unix_listeners, sizeof(ipc_unix_listeners), { 0, }
+	ipc_unix_listeners, sizeof(ipc_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 
@@ -44,5 +44,7 @@ struct service_settings ipc_service_settings = {
 	.unix_listeners = { { &ipc_unix_listeners_buf,
 			      sizeof(ipc_unix_listeners[0]) } },
 	.fifo_listeners = ARRAY_INIT,
-	.inet_listeners = ARRAY_INIT
+	.inet_listeners = ARRAY_INIT,
+
+	.process_limit_1 = TRUE
 };

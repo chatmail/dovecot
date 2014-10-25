@@ -81,6 +81,18 @@ log_get_hdr_update_buffer(struct mail_index_transaction *t, bool prepend)
 	return buf;
 }
 
+static unsigned int
+ext_hdr_update_get_size(const struct mail_index_transaction_ext_hdr_update *hu)
+{
+	unsigned int i;
+
+	for (i = hu->alloc_size; i > 0; i--) {
+		if (hu->mask[i-1] != 0)
+			return i;
+	}
+	return 0;
+}
+
 static void log_append_ext_intro(struct mail_index_export_context *ctx,
 				 uint32_t ext_id, uint32_t reset_id,
 				 unsigned int *hdr_size_r)
@@ -114,10 +126,10 @@ static void log_append_ext_intro(struct mail_index_export_context *ctx,
 		/* we're resizing the extension. use the resize struct. */
 		intro = &resizes[ext_id];
 
-		i_assert(intro->ext_id == idx || idx == (uint32_t)-1);
-		if (idx != (uint32_t)-1)
+		if (idx != (uint32_t)-1) {
+			intro->ext_id = idx;
 			intro->name_size = 0;
-		else {
+		} else {
 			intro->ext_id = (uint32_t)-1;
 			intro->name_size = strlen(rext->name);
 		}
@@ -139,6 +151,18 @@ static void log_append_ext_intro(struct mail_index_export_context *ctx,
 			intro->name_size = 0;
 		}
 		intro->flags = MAIL_TRANSACTION_EXT_INTRO_FLAG_NO_SHRINK;
+
+		/* handle increasing header size automatically */
+		if (array_is_created(&t->ext_hdr_updates) &&
+		    ext_id < array_count(&t->ext_hdr_updates)) {
+			const struct mail_index_transaction_ext_hdr_update *hu;
+			unsigned int hdr_update_size;
+
+			hu = array_idx(&t->ext_hdr_updates, ext_id);
+			hdr_update_size = ext_hdr_update_get_size(hu);
+			if (intro->hdr_size < hdr_update_size)
+				intro->hdr_size = hdr_update_size;
+		}
 	}
 	if (reset_id != 0) {
 		/* we're going to reset this extension in this transaction */
@@ -476,12 +500,8 @@ void mail_index_transaction_export(struct mail_index_transaction *t,
 						&null4, 4);
 	}
 
-	/* Update the tail offsets only when committing the sync transaction.
-	   Other transactions may not know the latest tail offset and might
-	   end up shrinking it. (Alternatively the shrinking tail offsets could
-	   just be ignored, which would probably work fine too.) */
-	append_ctx->append_sync_offset = t->sync_transaction;
-
+	append_ctx->index_sync_transaction = t->sync_transaction;
+	append_ctx->tail_offset_changed = t->tail_offset_changed;
 	append_ctx->want_fsync =
 		(t->view->index->fsync_mask & change_mask) != 0 ||
 		(t->flags & MAIL_INDEX_TRANSACTION_FLAG_FSYNC) != 0;

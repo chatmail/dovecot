@@ -22,19 +22,25 @@
 #endif
 
 #ifdef DEBUG
-#  define CLEAR_CHR 0xde
+#  define CLEAR_CHR 0xD5               /* D5 is mnemonic for "Data 5tack" */
 #  define SENTRY_COUNT (4*8)
+#  define BLOCK_CANARY ((void *)0xBADBADD5BADBADD5)      /* contains 'D5' */
+#  define BLOCK_CANARY_CHECK(block) i_assert((block)->canary == BLOCK_CANARY)
+#  define ALLOC_SIZE(size) (MEM_ALIGN(sizeof(size_t)) + MEM_ALIGN(size + SENTRY_COUNT))
 #else
 #  define CLEAR_CHR 0
+#  define BLOCK_CANARY NULL
+#  define BLOCK_CANARY_CHECK(block) do { ; } while(0)
+#  define ALLOC_SIZE(size) MEM_ALIGN(size)
 #endif
 
 struct stack_block {
 	struct stack_block *next;
 
 	size_t size, left, lowwater;
-	/* always NULL and here just in case something accesses
+	/* NULL or a poison value, just in case something accesses
 	   the memory in front of an allocated area */
-	char *nullpad;
+	void *canary;
 	/* unsigned char data[]; */
 };
 
@@ -52,8 +58,14 @@ struct stack_frame_block {
 	struct stack_frame_block *prev;
 
 	struct stack_block *block[BLOCK_FRAME_COUNT];
-        size_t block_space_used[BLOCK_FRAME_COUNT];
+	size_t block_space_used[BLOCK_FRAME_COUNT];
 	size_t last_alloc_size[BLOCK_FRAME_COUNT];
+#ifdef DEBUG
+	const char *marker[BLOCK_FRAME_COUNT];
+	/* Fairly arbitrary profiling data */
+	unsigned long long alloc_bytes[BLOCK_FRAME_COUNT];
+	unsigned int alloc_count[BLOCK_FRAME_COUNT];
+#endif
 };
 
 unsigned int data_stack_frame = 0;
@@ -79,16 +91,21 @@ static union {
 	unsigned char data[512];
 } outofmem_area;
 
+static inline
+unsigned char *data_stack_after_last_alloc(struct stack_block *block)
+{
+	return STACK_BLOCK_DATA(block) + (block->size - block->left);
+}
+
 static void data_stack_last_buffer_reset(bool preserve_data ATTR_UNUSED)
 {
 	if (last_buffer_block != NULL) {
 #ifdef DEBUG
-		unsigned char *p;
-		unsigned int i;
+		unsigned char *last_alloc_end, *p, *pend;
 
-		p = STACK_BLOCK_DATA(current_block) +
-			(current_block->size - current_block->left) +
-			MEM_ALIGN(sizeof(size_t)) + MEM_ALIGN(last_buffer_size);
+		last_alloc_end = data_stack_after_last_alloc(current_block);
+		p = last_alloc_end + MEM_ALIGN(sizeof(size_t)) + last_buffer_size;
+		pend = last_alloc_end + ALLOC_SIZE(last_buffer_size);
 #endif
 		/* reset t_buffer_get() mark - not really needed but makes it
 		   easier to notice if t_malloc()/t_push()/t_pop() is called
@@ -98,23 +115,21 @@ static void data_stack_last_buffer_reset(bool preserve_data ATTR_UNUSED)
 		last_buffer_block = NULL;
 
 #ifdef DEBUG
-		for (i = 0; i < SENTRY_COUNT; i++) {
-			if (p[i] != CLEAR_CHR)
+		while (p < pend)
+			if (*p++ != CLEAR_CHR)
 				i_panic("t_buffer_get(): buffer overflow");
-		}
 
 		if (!preserve_data) {
-			p = STACK_BLOCK_DATA(current_block) +
-				(current_block->size - current_block->left);
+			p = last_alloc_end;
 			memset(p, CLEAR_CHR, SENTRY_COUNT);
 		}
 #endif
 	}
 }
 
-unsigned int t_push(void)
+unsigned int t_push(const char *marker)
 {
-        struct stack_frame_block *frame_block;
+	struct stack_frame_block *frame_block;
 
 	frame_pos++;
 	if (frame_pos == BLOCK_FRAME_COUNT) {
@@ -123,7 +138,7 @@ unsigned int t_push(void)
 			/* kludgy, but allow this before initialization */
 			frame_pos = 0;
 			data_stack_init();
-			return t_push();
+			return t_push(marker);
 		}
 
 		frame_pos = 0;
@@ -152,9 +167,31 @@ unsigned int t_push(void)
 	/* mark our current position */
 	current_frame_block->block[frame_pos] = current_block;
 	current_frame_block->block_space_used[frame_pos] = current_block->left;
-        current_frame_block->last_alloc_size[frame_pos] = 0;
+	current_frame_block->last_alloc_size[frame_pos] = 0;
+#ifdef DEBUG
+	current_frame_block->marker[frame_pos] = marker;
+	current_frame_block->alloc_bytes[frame_pos] = 0ULL;
+	current_frame_block->alloc_count[frame_pos] = 0;
+#else
+	(void)marker; /* only used for debugging */
+#endif
 
-        return data_stack_frame++;
+	return data_stack_frame++;
+}
+
+unsigned int t_push_named(const char *format, ...)
+{
+	unsigned int ret = t_push(NULL);
+#ifdef DEBUG
+	va_list args;
+	va_start(args, format);
+	current_frame_block->marker[frame_pos] = p_strdup_vprintf(unsafe_data_stack_pool, format, args);
+	va_end(args);
+#else
+	(void)format; /* unused in non-DEBUG builds */
+#endif
+
+	return ret;
 }
 
 static void free_blocks(struct stack_block *block)
@@ -164,6 +201,7 @@ static void free_blocks(struct stack_block *block)
 	/* free all the blocks, except if any of them is bigger than
 	   unused_block, replace it */
 	while (block != NULL) {
+		BLOCK_CANARY_CHECK(block);
 		next = block->next;
 
 		if (clean_after_pop)
@@ -190,24 +228,26 @@ static void t_pop_verify(void)
 {
 	struct stack_block *block;
 	unsigned char *p;
-	size_t pos, max_pos, used_size, alloc_size;
+	size_t pos, max_pos, used_size;
 
 	block = current_frame_block->block[frame_pos];
 	pos = block->size - current_frame_block->block_space_used[frame_pos];
 	while (block != NULL) {
+		BLOCK_CANARY_CHECK(block);
 		used_size = block->size - block->left;
 		p = STACK_BLOCK_DATA(block);
 		while (pos < used_size) {
-			alloc_size = *(size_t *)(p + pos);
-			if (used_size - pos < alloc_size)
-				i_panic("data stack: saved alloc size broken");
-			pos += MEM_ALIGN(sizeof(alloc_size));
-			max_pos = pos + MEM_ALIGN(alloc_size + SENTRY_COUNT);
-			pos += alloc_size;
+			size_t requested_size = *(size_t *)(p + pos);
+			if (used_size - pos < requested_size)
+				i_panic("data stack[%s]: saved alloc size broken",
+					current_frame_block->marker[frame_pos]);
+			max_pos = pos + ALLOC_SIZE(requested_size);
+			pos += MEM_ALIGN(sizeof(size_t)) + requested_size;
 
 			for (; pos < max_pos; pos++) {
 				if (p[pos] != CLEAR_CHR)
-					i_panic("data stack: buffer overflow");
+					i_panic("data stack[%s]: buffer overflow",
+						current_frame_block->marker[frame_pos]);
 			}
 		}
 
@@ -234,12 +274,14 @@ unsigned int t_pop(void)
 
 	/* update the current block */
 	current_block = current_frame_block->block[frame_pos];
+	BLOCK_CANARY_CHECK(current_block);
 	if (clean_after_pop) {
 		size_t pos, used_size;
 
 		pos = current_block->size -
 			current_frame_block->block_space_used[frame_pos];
 		used_size = current_block->size - current_block->lowwater;
+		i_assert(used_size >= pos);
 		memset(STACK_BLOCK_DATA(current_block) + pos, CLEAR_CHR,
 		       used_size - pos);
 	}
@@ -265,7 +307,7 @@ unsigned int t_pop(void)
 		unused_frame_blocks = frame_block;
 	}
 
-        return --data_stack_frame;
+	return --data_stack_frame;
 }
 
 void t_pop_check(unsigned int *id)
@@ -302,7 +344,7 @@ static struct stack_block *mem_block_alloc(size_t min_size)
 	block->left = 0;
 	block->lowwater = block->size;
 	block->next = NULL;
-	block->nullpad = NULL;
+	block->canary = BLOCK_CANARY;
 
 #ifdef DEBUG
 	memset(STACK_BLOCK_DATA(block), CLEAR_CHR, alloc_size);
@@ -312,7 +354,6 @@ static struct stack_block *mem_block_alloc(size_t min_size)
 
 static void *t_malloc_real(size_t size, bool permanent)
 {
-	struct stack_block *block;
 	void *ret;
 	size_t alloc_size;
 #ifdef DEBUG
@@ -327,32 +368,25 @@ static void *t_malloc_real(size_t size, bool permanent)
 		/* kludgy, but allow this before initialization */
 		data_stack_init();
 	}
+	BLOCK_CANARY_CHECK(current_block);
 
 	/* allocate only aligned amount of memory so alignment comes
 	   always properly */
-#ifndef DEBUG
-	alloc_size = MEM_ALIGN(size);
-#else
-	alloc_size = MEM_ALIGN(sizeof(size)) + MEM_ALIGN(size + SENTRY_COUNT);
+	alloc_size = ALLOC_SIZE(size);
+#ifdef DEBUG
+	if(permanent) {
+		current_frame_block->alloc_bytes[frame_pos] += alloc_size;
+		current_frame_block->alloc_count[frame_pos]++;
+	}
 #endif
 	data_stack_last_buffer_reset(TRUE);
 
 	/* used for t_try_realloc() */
 	current_frame_block->last_alloc_size[frame_pos] = alloc_size;
 
-	if (current_block->left >= alloc_size) {
-		/* enough space in current block, use it */
-		ret = STACK_BLOCK_DATA(current_block) +
-			(current_block->size - current_block->left);
+	if (current_block->left < alloc_size) {
+		struct stack_block *block;
 
-		if (current_block->left - alloc_size <
-		    current_block->lowwater) {
-			current_block->lowwater =
-				current_block->left - alloc_size;
-		}
-                if (permanent)
-			current_block->left -= alloc_size;
-	} else {
 		/* current block is full, see if we can use the unused_block */
 		if (unused_block != NULL && unused_block->size >= alloc_size) {
 			block = unused_block;
@@ -365,26 +399,30 @@ static void *t_malloc_real(size_t size, bool permanent)
 		}
 
 		block->left = block->size;
-		if (block->left - alloc_size < block->lowwater)
-			block->lowwater = block->left - alloc_size;
-		if (permanent)
-			block->left -= alloc_size;
 		block->next = NULL;
-
 		current_block->next = block;
 		current_block = block;
-
-		ret = STACK_BLOCK_DATA(current_block);
-#ifdef DEBUG
-		if (warn && getenv("DEBUG_SILENT") == NULL) {
-			/* warn after allocation, so if i_warning() wants to
-			   allocate more memory we don't go to infinite loop */
-			i_warning("Growing data stack with: %"PRIuSIZE_T,
-				  block->size);
-		}
-#endif
 	}
+
+	/* enough space in current block, use it */
+	ret = data_stack_after_last_alloc(current_block);
+
+	if (current_block->left - alloc_size < current_block->lowwater)
+		current_block->lowwater = current_block->left - alloc_size;
+	if (permanent)
+		current_block->left -= alloc_size;
+
 #ifdef DEBUG
+	if (warn && getenv("DEBUG_SILENT") == NULL) {
+		/* warn after allocation, so if i_warning() wants to
+		   allocate more memory we don't go to infinite loop */
+		i_warning("Growing data stack by %"PRIuSIZE_T" as "
+			  "'%s' reaches %llu bytes from %u allocations.",
+			  current_block->size,
+			  current_frame_block->marker[frame_pos],
+			  current_frame_block->alloc_bytes[frame_pos],
+			  current_frame_block->alloc_count[frame_pos]);
+	}
 	memcpy(ret, &size, sizeof(size));
 	ret = PTR_OFFSET(ret, MEM_ALIGN(sizeof(size)));
 	/* make sure the sentry contains CLEAR_CHRs. it might not if we
@@ -395,12 +433,12 @@ static void *t_malloc_real(size_t size, bool permanent)
 	/* we rely on errno not changing. it shouldn't. */
 	i_assert(errno == old_errno);
 #endif
-        return ret;
+	return ret;
 }
 
 void *t_malloc(size_t size)
 {
-        return t_malloc_real(size, TRUE);
+	return t_malloc_real(size, TRUE);
 }
 
 void *t_malloc0(size_t size)
@@ -409,28 +447,55 @@ void *t_malloc0(size_t size)
 
 	mem = t_malloc_real(size, TRUE);
 	memset(mem, 0, size);
-        return mem;
+	return mem;
 }
 
 bool t_try_realloc(void *mem, size_t size)
 {
-	size_t last_alloc_size;
+	size_t debug_adjust = 0, last_alloc_size;
+	unsigned char *after_last_alloc;
 
 	if (unlikely(size == 0 || size > SSIZE_T_MAX))
 		i_panic("Trying to allocate %"PRIuSIZE_T" bytes", size);
+	BLOCK_CANARY_CHECK(current_block);
 
 	last_alloc_size = current_frame_block->last_alloc_size[frame_pos];
 
 	/* see if we're trying to grow the memory we allocated last */
-	if (STACK_BLOCK_DATA(current_block) +
-	    (current_block->size - current_block->left -
-	     last_alloc_size) == mem) {
+	after_last_alloc = data_stack_after_last_alloc(current_block);
+#ifdef DEBUG
+	debug_adjust = MEM_ALIGN(sizeof(size_t));
+#endif
+	if (after_last_alloc - last_alloc_size + debug_adjust == mem) {
 		/* yeah, see if we have space to grow */
-		size = MEM_ALIGN(size);
-		if (current_block->left >= size - last_alloc_size) {
+		size_t new_alloc_size, alloc_growth;
+
+		new_alloc_size = ALLOC_SIZE(size);
+		alloc_growth = (new_alloc_size - last_alloc_size);
+#ifdef DEBUG
+		size_t old_raw_size; /* sorry, non-C99 users - add braces if you need them */
+		old_raw_size = *(size_t *)PTR_OFFSET(mem, -MEM_ALIGN(sizeof(size_t)));
+		i_assert(ALLOC_SIZE(old_raw_size) == last_alloc_size);
+		/* Only check one byte for over-run, that catches most
+		   offenders who are likely to use t_try_realloc() */
+		i_assert(((unsigned char*)mem)[old_raw_size] == CLEAR_CHR);
+#endif
+
+		if (current_block->left >= alloc_growth) {
 			/* just shrink the available size */
-			current_block->left -= size - last_alloc_size;
-			current_frame_block->last_alloc_size[frame_pos] = size;
+			current_block->left -= alloc_growth;
+			if (current_block->left < current_block->lowwater)
+				current_block->lowwater = current_block->left;
+			current_frame_block->last_alloc_size[frame_pos] =
+				new_alloc_size;
+#ifdef DEBUG
+			/* All reallocs are permanent by definition
+			   However, they don't count as a new allocation */
+			current_frame_block->alloc_bytes[frame_pos] += alloc_growth;
+			*(size_t *)PTR_OFFSET(mem, -MEM_ALIGN(sizeof(size_t))) = size;
+			memset(PTR_OFFSET(mem, size), CLEAR_CHR,
+			       new_alloc_size - size - MEM_ALIGN(sizeof(size_t)));
+#endif
 			return TRUE;
 		}
 	}
@@ -446,6 +511,7 @@ size_t t_get_bytes_available(void)
 	const unsigned int extra = MEM_ALIGN_SIZE-1 + SENTRY_COUNT +
 		MEM_ALIGN(sizeof(size_t));
 #endif
+	BLOCK_CANARY_CHECK(current_block);
 	return current_block->left < extra ? current_block->left :
 		current_block->left - extra;
 }
@@ -464,17 +530,17 @@ void *t_buffer_get(size_t size)
 void *t_buffer_reget(void *buffer, size_t size)
 {
 	size_t old_size;
-        void *new_buffer;
+	void *new_buffer;
 
 	old_size = last_buffer_size;
 	if (size <= old_size)
-                return buffer;
+		return buffer;
 
 	new_buffer = t_buffer_get(size);
 	if (new_buffer != buffer)
-                memcpy(new_buffer, buffer, old_size);
+		memcpy(new_buffer, buffer, old_size);
 
-        return new_buffer;
+	return new_buffer;
 }
 
 void t_buffer_alloc(size_t size)
@@ -523,7 +589,7 @@ void data_stack_init(void)
 	last_buffer_block = NULL;
 	last_buffer_size = 0;
 
-	(void)t_push();
+	(void)t_push("data_stack_init");
 }
 
 void data_stack_deinit(void)
@@ -535,7 +601,7 @@ void data_stack_deinit(void)
 
 #ifndef USE_GC
 	while (unused_frame_blocks != NULL) {
-                struct stack_frame_block *frame_block = unused_frame_blocks;
+		struct stack_frame_block *frame_block = unused_frame_blocks;
 		unused_frame_blocks = unused_frame_blocks->prev;
 
 		free(frame_block);

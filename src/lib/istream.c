@@ -207,8 +207,10 @@ ssize_t i_stream_read_copy_from_parent(struct istream *istream)
 	if (pos > stream->pos)
 		ret = 0;
 	else do {
-		if ((ret = i_stream_read(stream->parent)) == -2)
+		if ((ret = i_stream_read(stream->parent)) == -2) {
+			i_stream_update(stream);
 			return -2;
+		}
 
 		stream->istream.stream_errno = stream->parent->stream_errno;
 		stream->istream.eof = stream->parent->eof;
@@ -223,6 +225,7 @@ ssize_t i_stream_read_copy_from_parent(struct istream *istream)
 	stream->pos = pos;
 	i_assert(ret != -1 || stream->istream.eof ||
 		 stream->istream.stream_errno != 0);
+	i_stream_update(stream);
 	return ret;
 }
 
@@ -329,18 +332,14 @@ int i_stream_get_size(struct istream *stream, bool exact, uoff_t *size_r)
 	return _stream->get_size(_stream, exact, size_r);
 }
 
-bool i_stream_have_bytes_left(const struct istream *stream)
+bool i_stream_have_bytes_left(struct istream *stream)
 {
-	const struct istream_private *_stream = stream->real_stream;
-
-	return !stream->eof || _stream->skip != _stream->pos;
+	return i_stream_get_data_size(stream) > 0 || !stream->eof;
 }
 
 bool i_stream_is_eof(struct istream *stream)
 {
-	const struct istream_private *_stream = stream->real_stream;
-
-	if (_stream->skip == _stream->pos)
+	if (i_stream_get_data_size(stream) == 0)
 		(void)i_stream_read(stream);
 	return !i_stream_have_bytes_left(stream);
 }
@@ -426,6 +425,10 @@ char *i_stream_read_next_line(struct istream *stream)
 
 		switch (i_stream_read(stream)) {
 		case -2:
+			io_stream_set_error(&stream->real_stream->iostream,
+				"Line is too long (over %"PRIuSIZE_T
+				" bytes at offset %"PRIuUOFF_T")",
+				i_stream_get_data_size(stream), stream->v_offset);
 			stream->stream_errno = errno = ENOBUFS;
 			stream->eof = TRUE;
 			return NULL;
@@ -443,13 +446,58 @@ bool i_stream_last_line_crlf(struct istream *stream)
 	return stream->real_stream->line_crlf;
 }
 
-const unsigned char *
-i_stream_get_data(const struct istream *stream, size_t *size_r)
+static bool i_stream_is_buffer_invalid(const struct istream_private *stream)
 {
-	const struct istream_private *_stream = stream->real_stream;
+	if (stream->parent == NULL) {
+		/* the buffer can't point to parent, because it doesn't exist */
+		return FALSE;
+	}
+	if (stream->w_buffer != NULL) {
+		/* we can pretty safely assume that the stream is using its
+		   own private buffer, so it can never become invalid. */
+		return FALSE;
+	}
+	if (stream->access_counter !=
+	    stream->parent->real_stream->access_counter) {
+		/* parent has been modified behind this stream, we can't trust
+		   that our buffer is valid */
+		return TRUE;
+	}
+	return i_stream_is_buffer_invalid(stream->parent->real_stream);
+}
+
+const unsigned char *
+i_stream_get_data(struct istream *stream, size_t *size_r)
+{
+	struct istream_private *_stream = stream->real_stream;
 
 	if (_stream->skip >= _stream->pos) {
 		*size_r = 0;
+		return NULL;
+	}
+
+	if (i_stream_is_buffer_invalid(_stream)) {
+		/* This stream may be using parent's buffer directly as
+		   _stream->buffer, but the parent stream has already been
+		   modified indirectly. This means that the buffer might no
+		   longer point to where we assume it points to. So we'll
+		   just return the stream as empty until it's read again.
+
+		   It's a bit ugly to suddenly drop data from the stream that
+		   was already read, but since this happens only with shared
+		   parent istreams the caller is hopefully aware enough that
+		   something like this might happen. The other solutions would
+		   be to a) try to automatically read the data back (but we
+		   can't handle errors..) or b) always copy data to stream's
+		   own buffer instead of pointing to parent's buffer (but this
+		   causes data copying that is nearly always unnecessary). */
+		*size_r = 0;
+		/* if we had already read until EOF, mark the stream again as
+		   not being at the end of file. */
+		if (stream->stream_errno == 0) {
+			_stream->skip = _stream->pos = 0;
+			stream->eof = FALSE;
+		}
 		return NULL;
 	}
 
@@ -457,20 +505,18 @@ i_stream_get_data(const struct istream *stream, size_t *size_r)
         return _stream->buffer + _stream->skip;
 }
 
-size_t i_stream_get_data_size(const struct istream *stream)
+size_t i_stream_get_data_size(struct istream *stream)
 {
-	const struct istream_private *_stream = stream->real_stream;
+	size_t size;
 
-	if (_stream->skip >= _stream->pos)
-		return 0;
-	else
-		return _stream->pos - _stream->skip;
+	(void)i_stream_get_data(stream, &size);
+	return size;
 }
 
-unsigned char *i_stream_get_modifiable_data(const struct istream *stream,
+unsigned char *i_stream_get_modifiable_data(struct istream *stream,
 					    size_t *size_r)
 {
-	const struct istream_private *_stream = stream->real_stream;
+	struct istream_private *_stream = stream->real_stream;
 
 	if (_stream->skip >= _stream->pos || _stream->w_buffer == NULL) {
 		*size_r = 0;
@@ -703,6 +749,11 @@ void i_stream_default_seek_nonseekable(struct istream_private *stream,
 
 		available = stream->pos - stream->skip;
 		if (available == 0) {
+			io_stream_set_error(&stream->iostream,
+				"Can't seek to offset %"PRIuUOFF_T
+				", because we have data only up to offset %"
+				PRIuUOFF_T" (eof=%d)", v_offset,
+				stream->istream.v_offset, stream->istream.eof);
 			stream->istream.stream_errno = ESPIPE;
 			return;
 		}

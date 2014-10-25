@@ -1251,6 +1251,15 @@ bool mailbox_list_is_valid_name(struct mailbox_list *list,
 		return FALSE;
 	}
 
+	/* either the list backend uses '/' as the hierarchy separator or
+	   it doesn't use filesystem at all (PROP_NO_ROOT) */
+	if ((list->props & MAILBOX_LIST_PROP_NO_ROOT) == 0 &&
+	    mailbox_list_get_hierarchy_sep(list) != '/' &&
+	    strchr(name, '/') != NULL) {
+		*error_r = "Name must not have '/' characters";
+		return FALSE;
+	}
+
 	return mailbox_list_is_valid_fs_name(list, name, error_r);
 }
 
@@ -1825,6 +1834,8 @@ int mailbox_list_init_fs(struct mailbox_list *list, const char *driver,
 	ssl_set.ca_file = list->mail_set->ssl_client_ca_file;
 
 	memset(&fs_set, 0, sizeof(fs_set));
+	fs_set.username = list->ns->user->username;
+	fs_set.session_id = list->ns->user->session_id;
 	fs_set.temp_file_prefix = mailbox_list_get_global_temp_prefix(list);
 	fs_set.base_dir = list->ns->user->set->base_dir;
 	fs_set.temp_dir = list->ns->user->set->mail_temp_dir;
