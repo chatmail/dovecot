@@ -1,4 +1,4 @@
-/* Copyright (c) 2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -25,14 +25,20 @@ struct replicator_sync_lookup {
 struct replicator_queue {
 	struct priorityq *user_queue;
 	/* username => struct replicator_user* */
-	struct hash_table *user_hash;
+	HASH_TABLE(char *, struct replicator_user *) user_hash;
 
-	ARRAY_DEFINE(sync_lookups, struct replicator_sync_lookup);
+	ARRAY(struct replicator_sync_lookup) sync_lookups;
 
 	unsigned int full_sync_interval;
+	unsigned int failure_resync_interval;
 
 	void (*change_callback)(void *context);
 	void *change_context;
+};
+
+struct replicator_queue_iter {
+	struct replicator_queue *queue;
+	struct hash_iterate_context *iter;
 };
 
 static int user_priority_cmp(const void *p1, const void *p2)
@@ -50,6 +56,18 @@ static int user_priority_cmp(const void *p1, const void *p2)
 			return -1;
 		if (user1->last_fast_sync > user2->last_fast_sync)
 			return 1;
+	} else if (user1->last_sync_failed != user2->last_sync_failed) {
+		/* resync failures first */
+		if (user1->last_sync_failed)
+			return -1;
+		else
+			return 1;
+	} else if (user1->last_sync_failed) {
+		/* both have failed. resync failures with fast-sync timestamp */
+		if (user1->last_fast_sync < user2->last_fast_sync)
+			return -1;
+		if (user1->last_fast_sync > user2->last_fast_sync)
+			return 1;
 	} else {
 		/* nothing to replicate, but do still periodic full syncs */
 		if (user1->last_full_sync < user2->last_full_sync)
@@ -60,16 +78,18 @@ static int user_priority_cmp(const void *p1, const void *p2)
 	return 0;
 }
 
-struct replicator_queue *replicator_queue_init(unsigned int full_sync_interval)
+struct replicator_queue *
+replicator_queue_init(unsigned int full_sync_interval,
+		      unsigned int failure_resync_interval)
 {
 	struct replicator_queue *queue;
 
 	queue = i_new(struct replicator_queue, 1);
 	queue->full_sync_interval = full_sync_interval;
+	queue->failure_resync_interval = failure_resync_interval;
 	queue->user_queue = priorityq_init(user_priority_cmp, 1024);
-	queue->user_hash =
-		hash_table_create(default_pool, default_pool, 1024,
-				  str_hash, (hash_cmp_callback_t *)strcmp);
+	hash_table_create(&queue->user_hash, default_pool, 1024,
+			  str_hash, strcmp);
 	i_array_init(&queue->sync_lookups, 32);
 	return queue;
 }
@@ -105,13 +125,19 @@ void replicator_queue_set_change_callback(struct replicator_queue *queue,
 	queue->change_context = context;
 }
 
+struct replicator_user *
+replicator_queue_lookup(struct replicator_queue *queue, const char *username)
+{
+	return hash_table_lookup(queue->user_hash, username);
+}
+
 static struct replicator_user *
 replicator_queue_add_int(struct replicator_queue *queue, const char *username,
 			 enum replication_priority priority)
 {
 	struct replicator_user *user;
 
-	user = hash_table_lookup(queue->user_hash, username);
+	user = replicator_queue_lookup(queue, username);
 	if (user == NULL) {
 		user = i_new(struct replicator_user, 1);
 		user->username = i_strdup(username);
@@ -175,11 +201,34 @@ void replicator_queue_remove(struct replicator_queue *queue,
 		priorityq_remove(queue->user_queue, &user->item);
 	hash_table_remove(queue->user_hash, user->username);
 
+	i_free(user->state);
 	i_free(user->username);
 	i_free(user);
 
 	if (queue->change_callback != NULL)
 		queue->change_callback(queue->change_context);
+}
+
+bool replicator_queue_want_sync_now(struct replicator_queue *queue,
+				    struct replicator_user *user,
+				    unsigned int *next_secs_r)
+{
+	time_t next_sync;
+
+	if (user->priority != REPLICATION_PRIORITY_NONE)
+		return TRUE;
+
+	if (user->last_sync_failed) {
+		next_sync = user->last_fast_sync +
+			queue->failure_resync_interval;
+	} else {
+		next_sync = user->last_full_sync + queue->full_sync_interval;
+	}
+	if (next_sync <= ioloop_time)
+		return TRUE;
+
+	*next_secs_r = next_sync - ioloop_time;
+	return FALSE;
 }
 
 struct replicator_user *
@@ -188,7 +237,6 @@ replicator_queue_pop(struct replicator_queue *queue,
 {
 	struct priorityq_item *item;
 	struct replicator_user *user;
-	time_t next_full_sync;
 
 	item = priorityq_peek(queue->user_queue);
 	if (item == NULL) {
@@ -197,12 +245,8 @@ replicator_queue_pop(struct replicator_queue *queue,
 		return NULL;
 	}
 	user = (struct replicator_user *)item;
-
-	next_full_sync = user->last_full_sync + queue->full_sync_interval;
-	if (user->priority == REPLICATION_PRIORITY_NONE &&
-	    next_full_sync > ioloop_time) {
-		/* we don't want to do a full sync yet */
-		*next_secs_r = next_full_sync - ioloop_time;
+	if (!replicator_queue_want_sync_now(queue, user, next_secs_r)) {
+		/* we don't want to sync the user yet */
 		return NULL;
 	}
 	priorityq_remove(queue->user_queue, &user->item);
@@ -215,7 +259,7 @@ replicator_queue_handle_sync_lookups(struct replicator_queue *queue,
 				     struct replicator_user *user)
 {
 	struct replicator_sync_lookup *lookups;
-	ARRAY_DEFINE(callbacks, struct replicator_sync_lookup);
+	ARRAY(struct replicator_sync_lookup) callbacks;
 	unsigned int i, count;
 	bool success = !user->last_sync_failed;
 
@@ -256,24 +300,27 @@ void replicator_queue_push(struct replicator_queue *queue,
 static int
 replicator_queue_import_line(struct replicator_queue *queue, const char *line)
 {
-	const char *const *args, *username;
+	const char *const *args, *username, *state;
 	unsigned int priority;
 	struct replicator_user *user, tmp_user;
 
-	/* <user> <priority> <last update> <last fast sync> <last full sync> */
+	/* <user> <priority> <last update> <last fast sync> <last full sync>
+	   <last failed> <state> */
 	args = t_strsplit_tabescaped(line);
-	if (str_array_length(args) < 5)
+	if (str_array_length(args) < 7)
 		return -1;
 
 	memset(&tmp_user, 0, sizeof(tmp_user));
 	username = args[0];
+	state = t_strdup_noconst(args[6]);
 	if (username[0] == '\0' ||
 	    str_to_uint(args[1], &priority) < 0 ||
 	    str_to_time(args[2], &tmp_user.last_update) < 0 ||
 	    str_to_time(args[3], &tmp_user.last_fast_sync) < 0 ||
-	    str_to_time(args[3], &tmp_user.last_full_sync) < 0)
+	    str_to_time(args[4], &tmp_user.last_full_sync) < 0)
 		return -1;
 	tmp_user.priority = priority;
+	tmp_user.last_sync_failed = args[5][0] != '0';
 
 	user = hash_table_lookup(queue->user_hash, username);
 	if (user != NULL) {
@@ -288,11 +335,14 @@ replicator_queue_import_line(struct replicator_queue *queue, const char *line)
 				return 0;
 		}
 	}
-	user = replicator_queue_add(queue, tmp_user.username,
+	user = replicator_queue_add(queue, username,
 				    tmp_user.priority);
 	user->last_update = tmp_user.last_update;
 	user->last_fast_sync = tmp_user.last_fast_sync;
 	user->last_full_sync = tmp_user.last_full_sync;
+	user->last_sync_failed = tmp_user.last_sync_failed;
+	i_free(user->state);
+	user->state = i_strdup(state);
 	return 0;
 }
 
@@ -316,12 +366,15 @@ int replicator_queue_import(struct replicator_queue *queue, const char *path)
 			ret = replicator_queue_import_line(queue, line);
 		} T_END;
 		if (ret < 0) {
-			i_error("Invalid replicator db record: %s", line);
+			i_error("Corrupted replicator record in %s: %s",
+				path, line);
 			break;
 		}
 	}
-	if (input->stream_errno != 0)
+	if (input->stream_errno != 0) {
+		i_error("read(%s) failed: %s", path, i_stream_get_error(input));
 		ret = -1;
+	}
 	i_stream_destroy(&input);
 	return ret;
 }
@@ -329,20 +382,24 @@ int replicator_queue_import(struct replicator_queue *queue, const char *path)
 static void
 replicator_queue_export_user(struct replicator_user *user, string_t *str)
 {
-	str_tabescape_write(str, user->username);
-	str_printfa(str, "\t%d\t%lld\t%lld\t%lld", (int)user->priority,
+	str_append_tabescaped(str, user->username);
+	str_printfa(str, "\t%d\t%lld\t%lld\t%lld\t%d\t", (int)user->priority,
 		    (long long)user->last_update,
 		    (long long)user->last_fast_sync,
-		    (long long)user->last_full_sync);
+		    (long long)user->last_full_sync,
+		    user->last_sync_failed);
+	if (user->state != NULL)
+		str_append_tabescaped(str, user->state);
+	str_append_c(str, '\n');
 }
 
 int replicator_queue_export(struct replicator_queue *queue, const char *path)
 {
+	struct replicator_queue_iter *iter;
+	struct replicator_user *user;
 	struct ostream *output;
-	struct priorityq_item *const *items;
-	unsigned int i, count;
 	string_t *str;
-	int fd, ret;
+	int fd, ret = 0;
 
 	fd = creat(path, 0600);
 	if (fd == -1) {
@@ -353,19 +410,51 @@ int replicator_queue_export(struct replicator_queue *queue, const char *path)
 	o_stream_cork(output);
 
 	str = t_str_new(128);
-	items = priorityq_items(queue->user_queue);
-	count = priorityq_count(queue->user_queue);
-	for (i = 0; i < count; i++) {
-		struct replicator_user *user =
-			(struct replicator_user *)items[i];
-
+	iter = replicator_queue_iter_init(queue);
+	while ((user = replicator_queue_iter_next(iter)) != NULL) {
 		str_truncate(str, 0);
 		replicator_queue_export_user(user, str);
 		if (o_stream_send(output, str_data(str), str_len(str)) < 0)
 			break;
 	}
-
-	ret = output->last_failed_errno != 0 ? -1 : 0;
+	replicator_queue_iter_deinit(&iter);
+	if (o_stream_nfinish(output) < 0) {
+		i_error("write(%s) failed: %s", path, o_stream_get_error(output));
+		ret = -1;
+	}
 	o_stream_destroy(&output);
 	return ret;
+}
+
+struct replicator_queue_iter *
+replicator_queue_iter_init(struct replicator_queue *queue)
+{
+	struct replicator_queue_iter *iter;
+
+	iter = i_new(struct replicator_queue_iter, 1);
+	iter->queue = queue;
+	iter->iter = hash_table_iterate_init(queue->user_hash);
+	return iter;
+}
+
+struct replicator_user *
+replicator_queue_iter_next(struct replicator_queue_iter *iter)
+{
+	struct replicator_user *user;
+	char *username;
+
+	if (!hash_table_iterate(iter->iter, iter->queue->user_hash,
+				&username, &user))
+		return NULL;
+	return user;
+}
+
+void replicator_queue_iter_deinit(struct replicator_queue_iter **_iter)
+{
+	struct replicator_queue_iter *iter = *_iter;
+
+	*_iter = NULL;
+
+	hash_table_iterate_deinit(&iter->iter);
+	i_free(iter);
 }

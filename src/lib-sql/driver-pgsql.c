@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -45,7 +45,7 @@ struct pgsql_result {
 	const char **fields;
 	const char **values;
 
-	ARRAY_DEFINE(binary_values, struct pgsql_binary_value);
+	ARRAY(struct pgsql_binary_value) binary_values;
 
 	sql_query_callback_t *callback;
 	void *context;
@@ -86,10 +86,10 @@ static void driver_pgsql_set_state(struct pgsql_db *db, enum sql_db_state state)
 	/* switch back to original ioloop in case the caller wants to
 	   add/remove timeouts */
 	if (db->ioloop != NULL)
-		current_ioloop = db->orig_ioloop;
+		io_loop_set_current(db->orig_ioloop);
 	sql_db_set_state(&db->api, state);
 	if (db->ioloop != NULL)
-		current_ioloop = db->ioloop;
+		io_loop_set_current(db->ioloop);
 }
 
 static void driver_pgsql_stop_io(struct pgsql_db *db)
@@ -168,8 +168,6 @@ static void connect_callback(struct pgsql_db *db)
 	}
 
 	if (io_dir == 0) {
-		i_info("%s: Connected to database %s",
-		       pgsql_prefix(db), PQdb(db->pg));
 		if (db->to_connect != NULL)
 			timeout_remove(&db->to_connect);
 		driver_pgsql_set_state(db, SQL_DB_STATE_IDLE);
@@ -485,8 +483,10 @@ driver_pgsql_escape_string(struct sql_db *_db, const char *string)
 		(void)sql_connect(&db->api);
 	}
 	if (db->api.state != SQL_DB_STATE_DISCONNECTED) {
+		int error;
+
 		to = t_buffer_get(len * 2 + 1);
-		len = PQescapeStringConn(db->pg, to, string, len, NULL);
+		len = PQescapeStringConn(db->pg, to, string, len, &error);
 	} else
 #endif
 	{
@@ -1085,7 +1085,7 @@ const struct sql_result driver_pgsql_result = {
 	}
 };
 
-const char *driver_pgsql_version = DOVECOT_VERSION;
+const char *driver_pgsql_version = DOVECOT_ABI_VERSION;
 
 void driver_pgsql_init(void);
 void driver_pgsql_deinit(void);

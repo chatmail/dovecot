@@ -32,7 +32,7 @@ struct ioloop_handler_context {
 	int kq;
 
 	unsigned int deleted_count;
-	ARRAY_DEFINE(events, struct kevent);
+	ARRAY(struct kevent) events;
 };
 
 void io_loop_handler_init(struct ioloop *ioloop, unsigned int initial_fd_count)
@@ -64,12 +64,12 @@ void io_loop_handle_add(struct io_file *io)
 	if ((io->io.condition & (IO_READ | IO_ERROR)) != 0) {
 		MY_EV_SET(&ev, io->fd, EVFILT_READ, EV_ADD, 0, 0, io);
 		if (kevent(ctx->kq, &ev, 1, NULL, 0, NULL) < 0)
-			i_fatal("kevent(EV_ADD, READ, %d) failed: %m", io->fd);
+			i_panic("kevent(EV_ADD, READ, %d) failed: %m", io->fd);
 	}
 	if ((io->io.condition & IO_WRITE) != 0) {
 		MY_EV_SET(&ev, io->fd, EVFILT_WRITE, EV_ADD, 0, 0, io);
 		if (kevent(ctx->kq, &ev, 1, NULL, 0, NULL) < 0)
-			i_fatal("kevent(EV_ADD, WRITE, %d) failed: %m", io->fd);
+			i_panic("kevent(EV_ADD, WRITE, %d) failed: %m", io->fd);
 	}
 
 	/* allow kevent() to return the maximum number of events
@@ -77,7 +77,7 @@ void io_loop_handle_add(struct io_file *io)
 	if (ctx->deleted_count > 0)
 		ctx->deleted_count--;
 	else
-		(void)array_append_space(&ctx->events);
+		array_append_zero(&ctx->events);
 }
 
 void io_loop_handle_remove(struct io_file *io, bool closed)
@@ -85,6 +85,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 	struct ioloop_handler_context *ctx = io->io.ioloop->handler_context;
 	struct kevent ev;
 
+	i_assert(io->io.condition != 0);
 	if ((io->io.condition & (IO_READ | IO_ERROR)) != 0 && !closed) {
 		MY_EV_SET(&ev, io->fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
 		if (kevent(ctx->kq, &ev, 1, NULL, 0, NULL) < 0)
@@ -95,6 +96,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 		if (kevent(ctx->kq, &ev, 1, NULL, 0, NULL) < 0)
 			i_error("kevent(EV_DELETE, %d) failed: %m", io->fd);
 	}
+	io->io.condition = 0;
 
 	/* since we're not freeing memory in any case, just increase
 	   deleted counter so next handle_add() can just decrease it
@@ -106,7 +108,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 		i_free(io);
 }
 
-void io_loop_handler_run(struct ioloop *ioloop)
+void io_loop_handler_run_internal(struct ioloop *ioloop)
 {
 	struct ioloop_handler_context *ctx = ioloop->handler_context;
 	struct kevent *events;
@@ -126,11 +128,12 @@ void io_loop_handler_run(struct ioloop *ioloop)
 	events = array_get_modifiable(&ctx->events, &events_count);
 	ret = kevent (ctx->kq, NULL, 0, events, events_count, &ts);
 	if (ret < 0 && errno != EINTR)
-		i_fatal("kevent(): %m");
+		i_panic("kevent(): %m");
 
 	/* reference all IOs */
 	for (i = 0; i < ret; i++) {
 		io = (void *)events[i].udata;
+		i_assert(io->refcount > 0);
 		io->refcount++;
 	}
 

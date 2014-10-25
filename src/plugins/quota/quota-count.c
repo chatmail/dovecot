@@ -1,10 +1,11 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "mail-search-build.h"
 #include "mail-storage.h"
 #include "mail-namespace.h"
+#include "mailbox-list-iter.h"
 #include "quota-private.h"
 
 static int
@@ -71,11 +72,12 @@ quota_count_namespace(struct quota_root *root, struct mail_namespace *ns,
 	int ret = 0;
 
 	ctx = mailbox_list_iter_init(ns->list, "*",
+				     MAILBOX_LIST_ITER_SKIP_ALIASES |
 				     MAILBOX_LIST_ITER_RETURN_NO_FLAGS);
 	while ((info = mailbox_list_iter_next(ctx)) != NULL) {
 		if ((info->flags & (MAILBOX_NONEXISTENT |
 				    MAILBOX_NOSELECT)) == 0) {
-			ret = quota_count_mailbox(root, ns, info->name,
+			ret = quota_count_mailbox(root, ns, info->vname,
 						  bytes, count);
 			if (ret < 0)
 				break;
@@ -83,7 +85,12 @@ quota_count_namespace(struct quota_root *root, struct mail_namespace *ns,
 	}
 	if (mailbox_list_iter_deinit(&ctx) < 0)
 		ret = -1;
-
+	if (ns->prefix_len > 0 && ret == 0 &&
+	    (ns->prefix_len != 6 || strncasecmp(ns->prefix, "INBOX", 5) != 0)) {
+		/* if the namespace prefix itself exists, count it also */
+		const char *name = t_strndup(ns->prefix, ns->prefix_len-1);
+		ret = quota_count_mailbox(root, ns, name, bytes, count);
+	}
 	return ret;
 }
 

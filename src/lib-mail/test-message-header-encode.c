@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "base64.h"
@@ -67,7 +67,8 @@ static void test_message_header_encode_q(void)
 				str_append_c(str, ' ');
 
 			message_header_encode_q(str_data(input) + skip,
-						str_len(input) - skip, str);
+						str_len(input) - skip, str,
+						i == 0 ? 0 : i+1);
 			test_assert(verify_q(str_c(str), i, !skip));
 		}
 	}
@@ -80,7 +81,7 @@ static bool verify_b(const char *str, unsigned int i, bool starts_with_a)
 	char bufdata[1000];
 	buffer_t buf;
 
-	buffer_create_data(&buf, bufdata, sizeof(bufdata));
+	buffer_create_from_data(&buf, bufdata, sizeof(bufdata));
 	if (strncmp(str+i, "\n\t", 2) == 0) {
 		i += 2;
 		line_start = i - 1;
@@ -153,7 +154,8 @@ static void test_message_header_encode_b(void)
 				str_append_c(str, ' ');
 
 			message_header_encode_b(str_data(input) + skip,
-						str_len(input) - skip, str);
+						str_len(input) - skip, str,
+						i == 0 ? 0 : i+1);
 			test_assert(verify_b(str_c(str), i, !skip));
 		}
 	}
@@ -168,6 +170,27 @@ static void test_message_header_encode(void)
 		"a ää ä b", "a =?utf-8?b?w6TDpCDDpA==?= b",
 		"ä a ä", "=?utf-8?q?=C3=A4_a_=C3=A4?=",
 		"ää a ä", "=?utf-8?b?w6TDpCBhIMOk?=",
+		"=", "=",
+		"?", "?",
+		"a=?", "a=?",
+		"=?", "=?utf-8?q?=3D=3F?=",
+		"=?x", "=?utf-8?q?=3D=3Fx?=",
+		"a\n=?", "a\n\t=?utf-8?q?=3D=3F?=",
+		"a\t=?", "a\t=?utf-8?q?=3D=3F?=",
+		"a =?", "a =?utf-8?q?=3D=3F?=",
+		"foo\001bar", "=?utf-8?q?foo=01bar?=",
+		"\x01\x02\x03\x04\x05\x06\x07\x08", "=?utf-8?b?AQIDBAUGBwg=?=",
+
+		"a\r\n b", "a\r\n b",
+		"a\r\n\tb", "a\r\n\tb",
+		"a\r\nb", "a\r\n\tb",
+		"a\n b", "a\n b",
+		"a\n  b", "a\n  b",
+		"a\nb", "a\n\tb",
+		"a\r\n", "a",
+		"a\n", "a",
+		"foo\n \001bar", "foo\n =?utf-8?q?=01bar?=",
+		"foo\001\n bar", "=?utf-8?q?foo=01?=\n bar"
 	};                          
 	string_t *str = t_str_new(128);
 	unsigned int i;
@@ -181,12 +204,28 @@ static void test_message_header_encode(void)
 	test_end();
 }
 
+static void test_message_header_encode_data(void)
+{
+	string_t *str = t_str_new(128);
+	static unsigned char nuls[10] = { 0, };
+
+	test_begin("message header encode data");
+	message_header_encode_data(nuls, 1, str);
+	test_assert(strcmp(str_c(str), "=?utf-8?q?=00?=") == 0);
+
+	str_truncate(str, 0);
+	message_header_encode_data(nuls, sizeof(nuls), str);
+	test_assert(strcmp(str_c(str), "=?utf-8?b?AAAAAAAAAAAAAA==?=") == 0);
+	test_end();
+}
+
 int main(void)
 {
 	static void (*test_functions[])(void) = {
 		test_message_header_encode_q,
 		test_message_header_encode_b,
 		test_message_header_encode,
+		test_message_header_encode_data,
 		NULL
 	};
 	return test_run(test_functions);

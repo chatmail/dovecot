@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "settings-parser.h"
@@ -13,6 +13,7 @@
 
 static const struct setting_define mdbox_setting_defines[] = {
 	DEF(SET_BOOL, mdbox_preallocate_space),
+	DEF(SET_BOOL, mdbox_purge_preserve_alt),
 	DEF(SET_SIZE, mdbox_rotate_size),
 	DEF(SET_TIME, mdbox_rotate_interval),
 
@@ -21,6 +22,7 @@ static const struct setting_define mdbox_setting_defines[] = {
 
 static const struct mdbox_settings mdbox_default_settings = {
 	.mdbox_preallocate_space = FALSE,
+	.mdbox_purge_preserve_alt = FALSE,
 	.mdbox_rotate_size = 2*1024*1024,
 	.mdbox_rotate_interval = 0
 };

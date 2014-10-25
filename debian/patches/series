@@ -2,3 +2,10 @@ pigeonhole.patch
 dovecot-drac.patch
 split-protocols.patch
 fix-mail_plugin_dir-default.patch
+ssl-cert-location.patch
+tcpwrapper.patch
+default-mail_location.patch
+exampledir.patch
+mboxlocking.patch
+dovecot_name.patch
+bye_logout_not_sent.patch

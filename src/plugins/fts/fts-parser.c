@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -6,9 +6,10 @@
 #include "message-parser.h"
 #include "fts-parser.h"
 
-const struct fts_parser_vfuncs *parsers[] = {
+static const struct fts_parser_vfuncs *parsers[] = {
 	&fts_parser_html,
-	&fts_parser_script
+	&fts_parser_script,
+	&fts_parser_tika
 };
 
 bool fts_parser_init(struct mail_user *user,
@@ -16,6 +17,12 @@ bool fts_parser_init(struct mail_user *user,
 		     struct fts_parser **parser_r)
 {
 	unsigned int i;
+
+	if (strcmp(content_type, "text/plain") == 0) {
+		/* we probably don't want/need to allow parsers to handle
+		   plaintext? */
+		return NULL;
+	}
 
 	for (i = 0; i < N_ELEMENTS(parsers); i++) {
 		*parser_r = parsers[i]->try_init(user, content_type,
@@ -88,4 +95,14 @@ void fts_parser_deinit(struct fts_parser **_parser)
 		parser->v.deinit(parser);
 	else
 		i_free(parser);
+}
+
+void fts_parsers_unload(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < N_ELEMENTS(parsers); i++) {
+		if (parsers[i]->unload != NULL)
+			parsers[i]->unload();
+	}
 }

@@ -11,19 +11,22 @@ AM_CPPFLAGS = \
 	-DPKG_STATEDIR=\""$(statedir)"\"
 
 replicator_LDFLAGS = -export-dynamic
-replicator_LDADD = $(LIBDOVECOT) $(MODULE_LIBS)
+replicator_LDADD = $(LIBDOVECOT)
 replicator_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 
 replicator_SOURCES = \
 	doveadm-connection.c \
+	dsync-client.c \
 	replicator.c \
 	replicator-brain.c \
 	replicator-queue.c \
+	replicator-queue-auth.c \
 	replicator-settings.c \
 	notify-connection.c
 
 noinst_HEADERS = \
 	doveadm-connection.h \
+	dsync-client.h \
 	replicator-brain.h \
 	replicator-queue.h \
 	replicator-settings.h \

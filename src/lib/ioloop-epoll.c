@@ -1,10 +1,4 @@
-/*
- * Linux epoll() based ioloop handler.
- *
- * Copyright (c) 2004 Andrey Panin <pazke@donpac.ru>
- *
- * This software is released under the MIT license.
- */
+/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -21,8 +15,8 @@ struct ioloop_handler_context {
 	int epfd;
 
 	unsigned int deleted_count;
-	ARRAY_DEFINE(fd_index, struct io_list *);
-	ARRAY_DEFINE(events, struct epoll_event);
+	ARRAY(struct io_list *) fd_index;
+	ARRAY(struct epoll_event) events;
 };
 
 void io_loop_handler_init(struct ioloop *ioloop, unsigned int initial_fd_count)
@@ -126,7 +120,7 @@ void io_loop_handle_add(struct io_file *io)
 		if (ctx->deleted_count > 0)
 			ctx->deleted_count--;
 		else
-			(void)array_append_space(&ctx->events);
+			array_append_zero(&ctx->events);
 	}
 }
 
@@ -149,8 +143,13 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 		op = last ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
 
 		if (epoll_ctl(ctx->epfd, op, io->fd, &event) < 0) {
-			i_error("epoll_ctl(%s, %d) failed: %m",
+			const char *errstr = t_strdup_printf(
+				"epoll_ctl(%s, %d) failed: %m",
 				op == EPOLL_CTL_DEL ? "del" : "mod", io->fd);
+			if (errno == EBADF)
+				i_panic("%s", errstr);
+			else
+				i_error("%s", errstr);
 		}
 	}
 	if (last) {
@@ -162,7 +161,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 	i_free(io);
 }
 
-void io_loop_handler_run(struct ioloop *ioloop)
+void io_loop_handler_run_internal(struct ioloop *ioloop)
 {
 	struct ioloop_handler_context *ctx = ioloop->handler_context;
 	struct epoll_event *events;
@@ -178,9 +177,17 @@ void io_loop_handler_run(struct ioloop *ioloop)
 	msecs = io_loop_get_wait_time(ioloop, &tv);
 
 	events = array_get_modifiable(&ctx->events, &events_count);
-	ret = epoll_wait(ctx->epfd, events, events_count, msecs);
-	if (ret < 0 && errno != EINTR)
-		i_fatal("epoll_wait(): %m");
+	if (events_count > 0) {
+		ret = epoll_wait(ctx->epfd, events, events_count, msecs);
+		if (ret < 0 && errno != EINTR)
+			i_fatal("epoll_wait(): %m");
+	} else {
+		/* no I/Os, but we should have some timeouts.
+		   just wait for them. */
+		i_assert(msecs >= 0);
+		usleep(msecs*1000);
+		ret = 0;
+	}
 
 	/* execute timeout handlers */
         io_loop_handle_timeouts(ioloop);

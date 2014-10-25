@@ -1,10 +1,10 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
 #include "array.h"
 #include "aqueue.h"
-#include "network.h"
+#include "net.h"
 #include "istream.h"
 #include "ostream.h"
 #include "hex-binary.h"
@@ -19,13 +19,15 @@
 
 #define AUTH_WORKER_LOOKUP_TIMEOUT_SECS 60
 #define AUTH_WORKER_MAX_IDLE_SECS (60*5)
+#define AUTH_WORKER_ABORT_SECS 60
 #define AUTH_WORKER_DELAY_WARN_SECS 3
 #define AUTH_WORKER_DELAY_WARN_MIN_INTERVAL_SECS 300
 
 struct auth_worker_request {
 	unsigned int id;
 	time_t created;
-	const char *data_str;
+	const char *username;
+	const char *data;
 	auth_worker_callback_t *callback;
 	void *context;
 };
@@ -46,9 +48,9 @@ struct auth_worker_connection {
 	unsigned int shutdown:1;
 };
 
-static ARRAY_DEFINE(connections, struct auth_worker_connection *) = ARRAY_INIT;
+static ARRAY(struct auth_worker_connection *) connections = ARRAY_INIT;
 static unsigned int idle_count = 0, auth_workers_with_errors = 0;
-static ARRAY_DEFINE(worker_request_array, struct auth_worker_request *);
+static ARRAY(struct auth_worker_request *) worker_request_array;
 static struct aqueue *worker_request_queue;
 static time_t auth_worker_last_warn;
 static unsigned int auth_workers_throttle_count;
@@ -57,7 +59,7 @@ static const char *worker_socket_path;
 
 static void worker_input(struct auth_worker_connection *conn);
 static void auth_worker_destroy(struct auth_worker_connection **conn,
-				const char *reason, bool restart);
+				const char *reason, bool restart) ATTR_NULL(2);
 
 static void auth_worker_idle_timeout(struct auth_worker_connection *conn)
 {
@@ -76,32 +78,43 @@ static void auth_worker_call_timeout(struct auth_worker_connection *conn)
 	auth_worker_destroy(&conn, "Lookup timed out", TRUE);
 }
 
-static void auth_worker_request_send(struct auth_worker_connection *conn,
+static bool auth_worker_request_send(struct auth_worker_connection *conn,
 				     struct auth_worker_request *request)
 {
 	struct const_iovec iov[3];
+	unsigned int age_secs = ioloop_time - request->created;
 
-	if (ioloop_time - request->created > AUTH_WORKER_DELAY_WARN_SECS &&
+	i_assert(conn->to != NULL);
+
+	if (age_secs >= AUTH_WORKER_ABORT_SECS) {
+		i_error("Aborting auth request that was queued for %d secs, "
+			"%d left in queue",
+			age_secs, aqueue_count(worker_request_queue));
+		request->callback(t_strdup_printf(
+			"FAIL\t%d", PASSDB_RESULT_INTERNAL_FAILURE),
+			request->context);
+		return FALSE;
+	}
+	if (age_secs >= AUTH_WORKER_DELAY_WARN_SECS &&
 	    ioloop_time - auth_worker_last_warn >
 	    AUTH_WORKER_DELAY_WARN_MIN_INTERVAL_SECS) {
 		auth_worker_last_warn = ioloop_time;
 		i_warning("auth workers: Auth request was queued for %d "
 			  "seconds, %d left in queue "
 			  "(see auth_worker_max_count)",
-			  (int)(ioloop_time - request->created),
-			  aqueue_count(worker_request_queue));
+			  age_secs, aqueue_count(worker_request_queue));
 	}
 
 	request->id = ++conn->id_counter;
 
 	iov[0].iov_base = t_strdup_printf("%d\t", request->id);
 	iov[0].iov_len = strlen(iov[0].iov_base);
-	iov[1].iov_base = request->data_str;
-	iov[1].iov_len = strlen(request->data_str);
+	iov[1].iov_base = request->data;
+	iov[1].iov_len = strlen(request->data);
 	iov[2].iov_base = "\n";
 	iov[2].iov_len = 1;
 
-	o_stream_sendv(conn->output, iov, 3);
+	o_stream_nsendv(conn->output, iov, 3);
 
 	i_assert(conn->request == NULL);
 	conn->request = request;
@@ -110,20 +123,22 @@ static void auth_worker_request_send(struct auth_worker_connection *conn,
 	conn->to = timeout_add(AUTH_WORKER_LOOKUP_TIMEOUT_SECS * 1000,
 			       auth_worker_call_timeout, conn);
 	idle_count--;
+	return TRUE;
 }
 
 static void auth_worker_request_send_next(struct auth_worker_connection *conn)
 {
 	struct auth_worker_request *request, *const *requestp;
 
-	if (aqueue_count(worker_request_queue) == 0)
-		return;
+	do {
+		if (aqueue_count(worker_request_queue) == 0)
+			return;
 
-	requestp = array_idx(&worker_request_array,
-			     aqueue_idx(worker_request_queue, 0));
-	request = *requestp;
-	aqueue_delete_tail(worker_request_queue);
-	auth_worker_request_send(conn, request);
+		requestp = array_idx(&worker_request_array,
+				     aqueue_idx(worker_request_queue, 0));
+		request = *requestp;
+		aqueue_delete_tail(worker_request_queue);
+	} while (!auth_worker_request_send(conn, request));
 }
 
 static void auth_worker_send_handshake(struct auth_worker_connection *conn)
@@ -145,7 +160,7 @@ static void auth_worker_send_handshake(struct auth_worker_connection *conn)
 	binary_to_hex_append(str, userdb_md5, sizeof(userdb_md5));
 	str_append_c(str, '\n');
 
-	o_stream_send(conn->output, str_data(str), str_len(str));
+	o_stream_nsend(conn->output, str_data(str), str_len(str));
 }
 
 static struct auth_worker_connection *auth_worker_create(void)
@@ -173,6 +188,7 @@ static struct auth_worker_connection *auth_worker_create(void)
 	conn->input = i_stream_create_fd(fd, AUTH_WORKER_MAX_LINE_LENGTH,
 					 FALSE);
 	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	o_stream_set_no_error_handling(conn->output, TRUE);
 	conn->io = io_add(fd, IO_READ, worker_input, conn);
 	conn->to = timeout_add(AUTH_WORKER_MAX_IDLE_SECS * 1000,
 			       auth_worker_idle_timeout, conn);
@@ -210,7 +226,9 @@ static void auth_worker_destroy(struct auth_worker_connection **_conn,
 		idle_count--;
 
 	if (conn->request != NULL) {
-		i_error("auth worker: Aborted request: %s", reason);
+		i_error("auth worker: Aborted %s request for %s: %s",
+			t_strcut(conn->request->data, '\t'),
+			conn->request->username, reason);
 		conn->request->callback(t_strdup_printf(
 				"FAIL\t%d", PASSDB_RESULT_INTERNAL_FAILURE),
 				conn->request->context);
@@ -220,7 +238,8 @@ static void auth_worker_destroy(struct auth_worker_connection **_conn,
 		io_remove(&conn->io);
 	i_stream_destroy(&conn->input);
 	o_stream_destroy(&conn->output);
-	timeout_remove(&conn->to);
+	if (conn->to != NULL)
+		timeout_remove(&conn->to);
 
 	if (close(conn->fd) < 0)
 		i_error("close(auth worker) failed: %m");
@@ -250,7 +269,7 @@ static struct auth_worker_connection *auth_worker_find_free(void)
 	return NULL;
 }
 
-static void auth_worker_request_handle(struct auth_worker_connection *conn,
+static bool auth_worker_request_handle(struct auth_worker_connection *conn,
 				       struct auth_worker_request *request,
 				       const char *line)
 {
@@ -265,8 +284,12 @@ static void auth_worker_request_handle(struct auth_worker_connection *conn,
 		idle_count++;
 	}
 
-	if (!request->callback(line, request->context) && conn->io != NULL)
+	if (!request->callback(line, request->context) && conn->io != NULL) {
+		timeout_remove(&conn->to);
 		io_remove(&conn->io);
+		return FALSE;
+	}
+	return TRUE;
 }
 
 static bool auth_worker_error(struct auth_worker_connection *conn)
@@ -360,8 +383,9 @@ static void worker_input(struct auth_worker_connection *conn)
 			continue;
 
 		if (conn->request != NULL && id == conn->request->id) {
-			auth_worker_request_handle(conn, conn->request,
-						   line + 1);
+			if (!auth_worker_request_handle(conn, conn->request,
+							line + 1))
+				break;
 		} else {
 			if (conn->request != NULL) {
 				i_error("BUG: Worker sent reply with id %u, "
@@ -385,8 +409,16 @@ static void worker_input(struct auth_worker_connection *conn)
 		auth_worker_request_send_next(conn);
 }
 
+static void worker_input_resume(struct auth_worker_connection *conn)
+{
+	timeout_remove(&conn->to);
+	conn->to = timeout_add(AUTH_WORKER_LOOKUP_TIMEOUT_SECS * 1000,
+			       auth_worker_call_timeout, conn);
+	worker_input(conn);
+}
+
 struct auth_worker_connection *
-auth_worker_call(pool_t pool, struct auth_stream_reply *data,
+auth_worker_call(pool_t pool, const char *username, const char *data,
 		 auth_worker_callback_t *callback, void *context)
 {
 	struct auth_worker_connection *conn;
@@ -394,7 +426,8 @@ auth_worker_call(pool_t pool, struct auth_stream_reply *data,
 
 	request = p_new(pool, struct auth_worker_request, 1);
 	request->created = ioloop_time;
-	request->data_str = p_strdup(pool, auth_stream_reply_export(data));
+	request->username = p_strdup(pool, username);
+	request->data = p_strdup(pool, data);
 	request->callback = callback;
 	request->context = context;
 
@@ -409,9 +442,10 @@ auth_worker_call(pool_t pool, struct auth_stream_reply *data,
 			conn = auth_worker_create();
 		}
 	}
-	if (conn != NULL)
-		auth_worker_request_send(conn, request);
-	else {
+	if (conn != NULL) {
+		if (!auth_worker_request_send(conn, request))
+			i_unreached();
+	} else {
 		/* reached the limit, queue the request */
 		aqueue_append(worker_request_queue, &request);
 	}
@@ -422,6 +456,9 @@ void auth_worker_server_resume_input(struct auth_worker_connection *conn)
 {
 	if (conn->io == NULL)
 		conn->io = io_add(conn->fd, IO_READ, worker_input, conn);
+	if (conn->to != NULL)
+		timeout_remove(&conn->to);
+	conn->to = timeout_add_short(0, worker_input_resume, conn);
 }
 
 void auth_worker_server_init(void)

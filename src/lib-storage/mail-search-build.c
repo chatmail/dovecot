@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -207,7 +207,7 @@ mail_search_build_add(struct mail_search_args *args,
 
 void mail_search_build_add_all(struct mail_search_args *args)
 {
-	mail_search_build_add(args, SEARCH_ALL);
+	(void)mail_search_build_add(args, SEARCH_ALL);
 }
 
 void mail_search_build_add_seqset(struct mail_search_args *args,
@@ -230,7 +230,7 @@ int mail_search_build_get_utf8(struct mail_search_build_context *ctx,
 		string_t *utf8 = t_str_new(128);
 		enum charset_result result;
 
-		if (charset_to_utf8_str(ctx->charset, 0,
+		if (charset_to_utf8_str(ctx->charset, NULL,
 					input, utf8, &result) < 0) {
 			/* unknown charset */
 			ctx->_error = "Unknown charset";

@@ -12,6 +12,9 @@ struct fts_lucene_settings {
 	const char *default_language;
 	const char *textcat_conf, *textcat_dir;
 	const char *whitespace_chars;
+	bool normalize;
+	bool no_snowball;
+	bool mime_parts;
 };
 
 struct fts_lucene_user {

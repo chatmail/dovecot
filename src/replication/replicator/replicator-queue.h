@@ -8,21 +8,27 @@ struct replicator_user {
 	struct priorityq_item item;
 
 	char *username;
-	enum replication_priority priority;
+	/* dsync state for incremental syncing */
+	char *state;
 	/* last time this user's state was updated */
 	time_t last_update;
-	/* last_fast_run is always >= last_full_run. */
+	/* last_fast_sync is always >= last_full_sync. */
 	time_t last_fast_sync, last_full_sync;
 
+	enum replication_priority priority;
 	/* User isn't currently in replication queue */
 	unsigned int popped:1;
 	/* Last replication sync failed */
 	unsigned int last_sync_failed:1;
+	/* Force a full sync on the next replication */
+	unsigned int force_full_sync:1;
 };
 
 typedef void replicator_sync_callback_t(bool success, void *context);
 
-struct replicator_queue *replicator_queue_init(unsigned int full_sync_interval);
+struct replicator_queue *
+replicator_queue_init(unsigned int full_sync_interval,
+		      unsigned int failure_resync_interval);
 void replicator_queue_deinit(struct replicator_queue **queue);
 
 /* Call the specified callback when data is added/removed/moved in queue
@@ -31,6 +37,9 @@ void replicator_queue_set_change_callback(struct replicator_queue *queue,
 					  void (*callback)(void *context),
 					  void *context);
 
+/* Lookup an existing user */
+struct replicator_user *
+replicator_queue_lookup(struct replicator_queue *queue, const char *username);
 /* Add a user to queue and return it. If the user already exists, it's updated
    only if the new priority is higher. */
 struct replicator_user *
@@ -56,5 +65,21 @@ void replicator_queue_push(struct replicator_queue *queue,
 
 int replicator_queue_import(struct replicator_queue *queue, const char *path);
 int replicator_queue_export(struct replicator_queue *queue, const char *path);
+
+/* Returns TRUE if user replication can be started now, FALSE if not. When
+   returning FALSE, next_secs_r is set to user's next replication time. */
+bool replicator_queue_want_sync_now(struct replicator_queue *queue,
+				    struct replicator_user *user,
+				    unsigned int *next_secs_r);
+/* Iterate through all users in the queue. */
+struct replicator_queue_iter *
+replicator_queue_iter_init(struct replicator_queue *queue);
+struct replicator_user *
+replicator_queue_iter_next(struct replicator_queue_iter *iter);
+void replicator_queue_iter_deinit(struct replicator_queue_iter **iter);
+
+void replicator_queue_add_auth_users(struct replicator_queue *queue,
+				     const char *auth_socket_path,
+				     const char *usermask, time_t last_update);
 
 #endif

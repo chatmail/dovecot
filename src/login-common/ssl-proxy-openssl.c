@@ -1,15 +1,16 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "array.h"
 #include "ioloop.h"
-#include "network.h"
+#include "net.h"
 #include "ostream.h"
 #include "read-full.h"
 #include "safe-memset.h"
 #include "hash.h"
 #include "llist.h"
 #include "master-interface.h"
+#include "master-service-ssl-settings.h"
 #include "client-common.h"
 #include "ssl-proxy.h"
 
@@ -27,6 +28,10 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
+
+#if !defined(OPENSSL_NO_ECDH) && OPENSSL_VERSION_NUMBER >= 0x10000000L
+#  define HAVE_ECDH
+#endif
 
 /* Check every 30 minutes if parameters file has been updated */
 #define SSL_PARAMFILE_CHECK_INTERVAL (60*30)
@@ -51,7 +56,8 @@ struct ssl_proxy {
 	SSL *ssl;
 	struct client *client;
 	struct ip_addr ip;
-	const struct login_settings *set;
+	const struct login_settings *login_set;
+	const struct master_service_ssl_settings *ssl_set;
 	pool_t set_pool;
 
 	int fd_ssl, fd_plain;
@@ -66,6 +72,7 @@ struct ssl_proxy {
 	ssl_handshake_callback_t *handshake_callback;
 	void *handshake_context;
 
+	const char *cert_error;
 	char *last_error;
 	unsigned int handshaked:1;
 	unsigned int destroyed:1;
@@ -79,7 +86,7 @@ struct ssl_parameters {
 	time_t last_refresh;
 	int fd;
 
-	DH *dh_512, *dh_1024;
+	DH *dh_512, *dh_default;
 };
 
 struct ssl_server_context {
@@ -92,10 +99,12 @@ struct ssl_server_context {
 	const char *cipher_list;
 	const char *protocols;
 	bool verify_client_cert;
+	bool prefer_server_ciphers;
 };
 
 static int extdata_index;
-static struct hash_table *ssl_servers;
+static HASH_TABLE(struct ssl_server_context *,
+		  struct ssl_server_context *) ssl_servers;
 static SSL_CTX *ssl_client_ctx;
 static unsigned int ssl_proxy_count;
 static struct ssl_proxy *ssl_proxies;
@@ -107,16 +116,21 @@ static void plain_read(struct ssl_proxy *proxy);
 static void ssl_read(struct ssl_proxy *proxy);
 static void ssl_write(struct ssl_proxy *proxy);
 static void ssl_step(struct ssl_proxy *proxy);
-static void ssl_proxy_destroy(struct ssl_proxy *proxy);
 static void ssl_proxy_unref(struct ssl_proxy *proxy);
 
 static struct ssl_server_context *
-ssl_server_context_init(const struct login_settings *set);
+ssl_server_context_init(const struct login_settings *login_set,
+			const struct master_service_ssl_settings *ssl_set);
 static void ssl_server_context_deinit(struct ssl_server_context **_ctx);
 
-static unsigned int ssl_server_context_hash(const void *p)
+static void ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
+                                            const struct master_service_ssl_settings *set);
+#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
+static int ssl_proxy_ctx_get_pkey_ec_curve_name(const struct master_service_ssl_settings *set);
+#endif
+
+static unsigned int ssl_server_context_hash(const struct ssl_server_context *ctx)
 {
-	const struct ssl_server_context *ctx = p;
 	unsigned int i, g, h = 0;
 
 	/* checking for different certs is typically good enough,
@@ -131,13 +145,14 @@ static unsigned int ssl_server_context_hash(const void *p)
 	return h;
 }
 
-static int ssl_server_context_cmp(const void *p1, const void *p2)
+static int ssl_server_context_cmp(const struct ssl_server_context *ctx1,
+				  const struct ssl_server_context *ctx2)
 {
-	const struct ssl_server_context *ctx1 = p1, *ctx2 = p2;
-
 	if (strcmp(ctx1->cert, ctx2->cert) != 0)
 		return 1;
 	if (strcmp(ctx1->key, ctx2->key) != 0)
+		return 1;
+	if (null_strcmp(ctx1->ca, ctx2->ca) != 0)
 		return 1;
 	if (null_strcmp(ctx1->cipher_list, ctx2->cipher_list) != 0)
 		return 1;
@@ -147,10 +162,9 @@ static int ssl_server_context_cmp(const void *p1, const void *p2)
 	return ctx1->verify_client_cert == ctx2->verify_client_cert ? 0 : 1;
 }
 
-static void ssl_params_corrupted(void)
+static void ssl_params_corrupted(const char *reason)
 {
-	i_fatal("Corrupted SSL parameters file: "
-		PKG_STATEDIR"/ssl-parameters.dat");
+	i_fatal("Corrupted SSL ssl-parameters.dat in state_dir: %s", reason);
 }
 
 static void read_next(struct ssl_parameters *params, void *data, size_t size)
@@ -160,7 +174,7 @@ static void read_next(struct ssl_parameters *params, void *data, size_t size)
 	if ((ret = read_full(params->fd, data, size)) < 0)
 		i_fatal("read(%s) failed: %m", params->path);
 	if (ret == 0)
-		ssl_params_corrupted();
+		ssl_params_corrupted("Truncated file");
 }
 
 static bool read_dh_parameters_next(struct ssl_parameters *params)
@@ -179,7 +193,7 @@ static bool read_dh_parameters_next(struct ssl_parameters *params)
 	/* read data size. */
 	read_next(params, &len, sizeof(len));
 	if (len > 1024*100) /* should be enough? */
-		ssl_params_corrupted();
+		ssl_params_corrupted("File too large");
 
 	buf = i_malloc(len);
 	read_next(params, buf, len);
@@ -187,13 +201,15 @@ static bool read_dh_parameters_next(struct ssl_parameters *params)
 	cbuf = buf;
 	switch (bits) {
 	case 512:
+		if (params->dh_512 != NULL)
+			ssl_params_corrupted("Duplicate 512bit parameters");
 		params->dh_512 = d2i_DHparams(NULL, &cbuf, len);
 		break;
-	case 1024:
-		params->dh_1024 = d2i_DHparams(NULL, &cbuf, len);
-		break;
 	default:
-		ssl_params_corrupted();
+		if (params->dh_default != NULL)
+			ssl_params_corrupted("Duplicate default parameters");
+		params->dh_default = d2i_DHparams(NULL, &cbuf, len);
+		break;
 	}
 
 	i_free(buf);
@@ -206,9 +222,9 @@ static void ssl_free_parameters(struct ssl_parameters *params)
 		DH_free(params->dh_512);
                 params->dh_512 = NULL;
 	}
-	if (params->dh_1024 != NULL) {
-		DH_free(params->dh_1024);
-                params->dh_1024 = NULL;
+	if (params->dh_default != NULL) {
+		DH_free(params->dh_default);
+                params->dh_default = NULL;
 	}
 }
 
@@ -235,7 +251,7 @@ static void ssl_refresh_parameters(struct ssl_parameters *params)
 		i_fatal("read(%s) failed: %m", params->path);
 	else if (ret != 0) {
 		/* more data than expected */
-		ssl_params_corrupted();
+		ssl_params_corrupted("More data than expected");
 	}
 
 	if (close(params->fd) < 0)
@@ -308,8 +324,8 @@ static void plain_read(struct ssl_proxy *proxy)
 		} else {
 			proxy->sslout_size += ret;
 			if (!corked) {
-				net_set_cork(proxy->fd_ssl, TRUE);
-				corked = TRUE;
+				if (net_set_cork(proxy->fd_ssl, TRUE) == 0)
+					corked = TRUE;
 			}
 			ssl_write(proxy);
 		}
@@ -430,7 +446,8 @@ static void ssl_handle_error(struct ssl_proxy *proxy, int ret,
 	case SSL_ERROR_SSL:
 		if (ERR_GET_REASON(ERR_peek_error()) == ERR_R_MALLOC_FAILURE) {
 			i_error("OpenSSL malloc() failed. "
-				"You may need to increase login_process_size");
+				"You may need to increase service %s { vsz_limit }",
+				login_binary->process_name);
 		}
 		errstr = t_strdup_printf("%s failed: %s",
 					 func_name, ssl_last_error());
@@ -521,8 +538,10 @@ static void ssl_step(struct ssl_proxy *proxy)
 {
 	proxy->refcount++;
 
-	if (!proxy->handshaked)
+	if (!proxy->handshaked) {
+		ssl_set_io(proxy, SSL_REMOVE_OUTPUT);
 		ssl_handshake(proxy);
+	}
 
 	if (proxy->handshaked) {
 		if (proxy->plainout_size == sizeof(proxy->plainout_buf))
@@ -544,7 +563,8 @@ static void ssl_step(struct ssl_proxy *proxy)
 
 static int
 ssl_proxy_alloc_common(SSL_CTX *ssl_ctx, int fd, const struct ip_addr *ip,
-		       pool_t set_pool, const struct login_settings *set,
+		       pool_t set_pool, const struct login_settings *login_set,
+		       const struct master_service_ssl_settings *ssl_set,
 		       struct ssl_proxy **proxy_r)
 {
 	struct ssl_proxy *proxy;
@@ -587,7 +607,8 @@ ssl_proxy_alloc_common(SSL_CTX *ssl_ctx, int fd, const struct ip_addr *ip,
 	proxy = i_new(struct ssl_proxy, 1);
 	proxy->refcount = 2;
 	proxy->ssl = ssl;
-	proxy->set = set;
+	proxy->login_set = login_set;
+	proxy->ssl_set = ssl_set;
 	proxy->fd_ssl = fd;
 	proxy->fd_plain = sfd[0];
 	proxy->ip = *ip;
@@ -603,7 +624,8 @@ ssl_proxy_alloc_common(SSL_CTX *ssl_ctx, int fd, const struct ip_addr *ip,
 }
 
 static struct ssl_server_context *
-ssl_server_context_get(const struct login_settings *set)
+ssl_server_context_get(const struct login_settings *login_set,
+		       const struct master_service_ssl_settings *set)
 {
 	struct ssl_server_context *ctx, lookup_ctx;
 
@@ -613,34 +635,39 @@ ssl_server_context_get(const struct login_settings *set)
 	lookup_ctx.ca = set->ssl_ca;
 	lookup_ctx.cipher_list = set->ssl_cipher_list;
 	lookup_ctx.protocols = set->ssl_protocols;
-	lookup_ctx.verify_client_cert = set->ssl_verify_client_cert;
+	lookup_ctx.verify_client_cert = set->ssl_verify_client_cert ||
+		login_set->auth_ssl_require_client_cert ||
+		login_set->auth_ssl_username_from_cert;
+	lookup_ctx.prefer_server_ciphers = set->ssl_prefer_server_ciphers;
 
 	ctx = hash_table_lookup(ssl_servers, &lookup_ctx);
 	if (ctx == NULL)
-		ctx = ssl_server_context_init(set);
+		ctx = ssl_server_context_init(login_set, set);
 	return ctx;
 }
 
 int ssl_proxy_alloc(int fd, const struct ip_addr *ip, pool_t set_pool,
-		    const struct login_settings *set,
+		    const struct login_settings *login_set,
+		    const struct master_service_ssl_settings *ssl_set,
 		    struct ssl_proxy **proxy_r)
 {
 	struct ssl_server_context *ctx;
 
-	ctx = ssl_server_context_get(set);
+	ctx = ssl_server_context_get(login_set, ssl_set);
 	return ssl_proxy_alloc_common(ctx->ctx, fd, ip,
-				      set_pool, set, proxy_r);
+				      set_pool, login_set, ssl_set, proxy_r);
 }
 
 int ssl_proxy_client_alloc(int fd, struct ip_addr *ip, pool_t set_pool,
-			   const struct login_settings *set,
+			   const struct login_settings *login_set,
+			   const struct master_service_ssl_settings *ssl_set,
 			   ssl_handshake_callback_t *callback, void *context,
 			   struct ssl_proxy **proxy_r)
 {
 	int ret;
 
 	ret = ssl_proxy_alloc_common(ssl_client_ctx, fd, ip,
-				     set_pool, set, proxy_r);
+				     set_pool, login_set, ssl_set, proxy_r);
 	if (ret < 0)
 		return -1;
 
@@ -752,6 +779,12 @@ const char *ssl_proxy_get_compression(struct ssl_proxy *proxy ATTR_UNUSED)
 #endif
 }
 
+const char *ssl_proxy_get_cert_error(struct ssl_proxy *proxy)
+{
+	return proxy->cert_error != NULL ? proxy->cert_error :
+		"(Unknown error)";
+}
+
 void ssl_proxy_free(struct ssl_proxy **_proxy)
 {
 	struct ssl_proxy *proxy = *_proxy;
@@ -773,7 +806,7 @@ static void ssl_proxy_unref(struct ssl_proxy *proxy)
 	i_free(proxy);
 }
 
-static void ssl_proxy_destroy(struct ssl_proxy *proxy)
+void ssl_proxy_destroy(struct ssl_proxy *proxy)
 {
 	if (proxy->destroyed)
 		return;
@@ -793,8 +826,8 @@ static void ssl_proxy_destroy(struct ssl_proxy *proxy)
 
 	(void)SSL_shutdown(proxy->ssl);
 
-	(void)net_disconnect(proxy->fd_ssl);
-	(void)net_disconnect(proxy->fd_plain);
+	net_disconnect(proxy->fd_ssl);
+	net_disconnect(proxy->fd_plain);
 
 	if (proxy->client != NULL)
 		client_unref(&proxy->client);
@@ -810,12 +843,10 @@ static RSA *ssl_gen_rsa_key(SSL *ssl ATTR_UNUSED,
 static DH *ssl_tmp_dh_callback(SSL *ssl ATTR_UNUSED,
 			       int is_export, int keylength)
 {
-	/* Well, I'm not exactly sure why the logic in here is this.
-	   It's the same as in Postfix, so it can't be too wrong. */
 	if (is_export && keylength == 512 && ssl_params.dh_512 != NULL)
 		return ssl_params.dh_512;
 
-	return ssl_params.dh_1024;
+	return ssl_params.dh_default;
 }
 
 static void ssl_info_callback(const SSL *ssl, int where, int ret)
@@ -824,22 +855,31 @@ static void ssl_info_callback(const SSL *ssl, int where, int ret)
 
 	proxy = SSL_get_ex_data(ssl, extdata_index);
 
-	if (!proxy->set->verbose_ssl)
+	if (!proxy->ssl_set->verbose_ssl)
 		return;
 
 	if ((where & SSL_CB_ALERT) != 0) {
-		i_warning("SSL alert: where=0x%x, ret=%d: %s %s [%s]",
-			  where, ret, SSL_alert_type_string_long(ret),
-			  SSL_alert_desc_string_long(ret),
-			  net_ip2addr(&proxy->ip));
+		switch (ret & 0xff) {
+		case SSL_AD_CLOSE_NOTIFY:
+			i_debug("SSL alert: %s [%s]",
+				SSL_alert_desc_string_long(ret),
+				net_ip2addr(&proxy->ip));
+			break;
+		default:
+			i_warning("SSL alert: where=0x%x, ret=%d: %s %s [%s]",
+				  where, ret, SSL_alert_type_string_long(ret),
+				  SSL_alert_desc_string_long(ret),
+				  net_ip2addr(&proxy->ip));
+			break;
+		}
 	} else if (ret == 0) {
 		i_warning("SSL failed: where=0x%x: %s [%s]",
 			  where, SSL_state_string_long(ssl),
 			  net_ip2addr(&proxy->ip));
 	} else {
-		i_warning("SSL: where=0x%x, ret=%d: %s [%s]",
-			  where, ret, SSL_state_string_long(ssl),
-			  net_ip2addr(&proxy->ip));
+		i_debug("SSL: where=0x%x, ret=%d: %s [%s]",
+			where, ret, SSL_state_string_long(ssl),
+			net_ip2addr(&proxy->ip));
 	}
 }
 
@@ -847,31 +887,41 @@ static int ssl_verify_client_cert(int preverify_ok, X509_STORE_CTX *ctx)
 {
 	SSL *ssl;
         struct ssl_proxy *proxy;
+	char buf[1024];
+	X509_NAME *subject;
 
 	ssl = X509_STORE_CTX_get_ex_data(ctx,
 					 SSL_get_ex_data_X509_STORE_CTX_idx());
 	proxy = SSL_get_ex_data(ssl, extdata_index);
 	proxy->cert_received = TRUE;
 
-	if (proxy->set->verbose_ssl ||
-	    (proxy->set->auth_verbose && !preverify_ok)) {
-		char buf[1024];
-		X509_NAME *subject;
-
-		subject = X509_get_subject_name(ctx->current_cert);
-		(void)X509_NAME_oneline(subject, buf, sizeof(buf));
-		buf[sizeof(buf)-1] = '\0'; /* just in case.. */
-		if (!preverify_ok)
-			i_info("Invalid certificate: %s: %s", X509_verify_cert_error_string(ctx->error),buf);
-		else
-			i_info("Valid certificate: %s", buf);
-	}
-	if (ctx->error == X509_V_ERR_UNABLE_TO_GET_CRL && proxy->client_proxy) {
+	if (proxy->client_proxy && !proxy->login_set->ssl_require_crl &&
+	    (ctx->error == X509_V_ERR_UNABLE_TO_GET_CRL ||
+	     ctx->error == X509_V_ERR_CRL_HAS_EXPIRED)) {
 		/* no CRL given with the CA list. don't worry about it. */
 		preverify_ok = 1;
 	}
 	if (!preverify_ok)
 		proxy->cert_broken = TRUE;
+
+	subject = X509_get_subject_name(ctx->current_cert);
+	(void)X509_NAME_oneline(subject, buf, sizeof(buf));
+	buf[sizeof(buf)-1] = '\0'; /* just in case.. */
+
+	if (proxy->cert_error == NULL) {
+		proxy->cert_error = p_strdup_printf(proxy->client->pool, "%s: %s",
+			X509_verify_cert_error_string(ctx->error), buf);
+	}
+
+	if (proxy->ssl_set->verbose_ssl ||
+	    (proxy->login_set->auth_verbose && !preverify_ok)) {
+		if (preverify_ok)
+			i_info("Valid certificate: %s", buf);
+		else {
+			i_info("Invalid certificate: %s: %s",
+			       X509_verify_cert_error_string(ctx->error), buf);
+		}
+	}
 
 	/* Return success anyway, because if ssl_require_client_cert=no we
 	   could still allow authentication. */
@@ -903,11 +953,11 @@ static bool is_pem_key(const char *cert)
 	return strstr(cert, "PRIVATE KEY---") != NULL;
 }
 
-static STACK_OF(X509_NAME) *load_ca(X509_STORE *store, const char *ca)
+static void load_ca(X509_STORE *store, const char *ca,
+		    STACK_OF(X509_NAME) **xnames_r)
 {
 	/* mostly just copy&pasted from X509_load_cert_crl_file() */
 	STACK_OF(X509_INFO) *inf;
-	STACK_OF(X509_NAME) *xnames;
 	X509_INFO *itmp;
 	X509_NAME *xname;
 	BIO *bio;
@@ -921,28 +971,32 @@ static STACK_OF(X509_NAME) *load_ca(X509_STORE *store, const char *ca)
 		i_fatal("Couldn't parse ssl_ca: %s", ssl_last_error());
 	BIO_free(bio);
 
-	xnames = sk_X509_NAME_new_null();
-	if (xnames == NULL)
-		i_fatal("sk_X509_NAME_new_null() failed");
+	if (xnames_r != NULL) {
+		*xnames_r = sk_X509_NAME_new_null();
+		if (*xnames_r == NULL)
+			i_fatal_status(FATAL_OUTOFMEM, "sk_X509_NAME_new_null() failed");
+	}
 	for(i = 0; i < sk_X509_INFO_num(inf); i++) {
 		itmp = sk_X509_INFO_value(inf, i);
 		if(itmp->x509) {
 			X509_STORE_add_cert(store, itmp->x509);
 			xname = X509_get_subject_name(itmp->x509);
-			if (xname != NULL)
+			if (xname != NULL && xnames_r != NULL) {
 				xname = X509_NAME_dup(xname);
-			if (xname != NULL)
-				sk_X509_NAME_push(xnames, xname);
+				if (xname == NULL)
+					i_fatal_status(FATAL_OUTOFMEM, "X509_NAME_dup() failed");
+				sk_X509_NAME_push(*xnames_r, xname);
+			}
 		}
 		if(itmp->crl)
 			X509_STORE_add_crl(store, itmp->crl);
 	}
 	sk_X509_INFO_pop_free(inf, X509_INFO_free);
-	return xnames;
 }
 
 static STACK_OF(X509_NAME) *
-ssl_proxy_ctx_init(SSL_CTX *ssl_ctx, const struct login_settings *set)
+ssl_proxy_ctx_init(SSL_CTX *ssl_ctx, const struct master_service_ssl_settings *set,
+		   bool load_xnames)
 {
 	X509_STORE *store;
 	STACK_OF(X509_NAME) *xnames = NULL;
@@ -959,13 +1013,60 @@ ssl_proxy_ctx_init(SSL_CTX *ssl_ctx, const struct login_settings *set)
 	if (*set->ssl_ca != '\0') {
 		/* set trusted CA certs */
 		store = SSL_CTX_get_cert_store(ssl_ctx);
-		xnames = load_ca(store, set->ssl_ca);
+		load_ca(store, set->ssl_ca, load_xnames ? &xnames : NULL);
 	}
+	ssl_proxy_ctx_set_crypto_params(ssl_ctx, set);
 	SSL_CTX_set_info_callback(ssl_ctx, ssl_info_callback);
+	return xnames;
+}
+
+static void
+ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
+	const struct master_service_ssl_settings *set ATTR_UNUSED)
+{
+#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
+	EC_KEY *ecdh;
+	int nid;
+	const char *curve_name;
+#endif
 	if (SSL_CTX_need_tmp_RSA(ssl_ctx))
 		SSL_CTX_set_tmp_rsa_callback(ssl_ctx, ssl_gen_rsa_key);
 	SSL_CTX_set_tmp_dh_callback(ssl_ctx, ssl_tmp_dh_callback);
-	return xnames;
+#ifdef HAVE_ECDH
+	/* In the non-recommended situation where ECDH cipher suites are being
+	   used instead of ECDHE, do not reuse the same ECDH key pair for
+	   different sessions. This option improves forward secrecy. */
+	SSL_CTX_set_options(ssl_ctx, SSL_OP_SINGLE_ECDH_USE);
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+	/* OpenSSL >= 1.0.2 automatically handles ECDH temporary key parameter
+	   selection. */
+	SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
+#else
+	/* For OpenSSL < 1.0.2, ECDH temporary key parameter selection must be
+	   performed manually. Attempt to select the same curve as that used
+	   in the server's private EC key file. Otherwise fall back to the
+	   NIST P-384 (secp384r1) curve to be compliant with RFC 6460 when
+	   AES-256 TLS cipher suites are in use. This fall back option does
+	   however make Dovecot non-compliant with RFC 6460 which requires
+	   curve NIST P-256 (prime256v1) be used when AES-128 TLS cipher
+	   suites are in use. At least the non-compliance is in the form of
+	   providing too much security rather than too little. */
+	nid = ssl_proxy_ctx_get_pkey_ec_curve_name(set);
+	ecdh = EC_KEY_new_by_curve_name(nid);
+	if (ecdh == NULL) {
+		/* Fall back option */
+		nid = NID_secp384r1;
+		ecdh = EC_KEY_new_by_curve_name(nid);
+	}
+	if ((curve_name = OBJ_nid2sn(nid)) != NULL && set->verbose_ssl)
+		i_debug("SSL: elliptic curve %s will be used for ECDH and"
+		        " ECDHE key exchanges", curve_name);
+	if (ecdh != NULL) {
+		SSL_CTX_set_tmp_ecdh(ssl_ctx, ecdh);
+		EC_KEY_free(ecdh);
+	}
+#endif
+#endif
 }
 
 static void
@@ -1003,7 +1104,18 @@ static const char *ssl_proxy_get_use_certificate_error(const char *cert)
 	}
 }
 
-static EVP_PKEY *
+static const char *ssl_key_load_error(void)
+{
+	unsigned long err = ERR_peek_error();
+
+	if (ERR_GET_LIB(err) == ERR_LIB_X509 &&
+	    ERR_GET_REASON(err) == X509_R_KEY_VALUES_MISMATCH)
+		return "Key is for a different cert than ssl_cert";
+	else
+		return ssl_last_error();
+}
+
+static EVP_PKEY * ATTR_NULL(2)
 ssl_proxy_load_key(const char *key, const char *password)
 {
 	EVP_PKEY *pkey;
@@ -1017,24 +1129,17 @@ ssl_proxy_load_key(const char *key, const char *password)
 	dup_password = t_strdup_noconst(password);
 	pkey = PEM_read_bio_PrivateKey(bio, NULL, pem_password_callback,
 				       dup_password);
-	if (pkey == NULL)
-		i_fatal("Couldn't parse private ssl_key");
+	if (pkey == NULL) {
+		i_fatal("Couldn't parse private ssl_key: %s",
+			ssl_key_load_error());
+	}
 	BIO_free(bio);
 	return pkey;
 }
 
-static const char *ssl_key_load_error(void)
-{
-	unsigned long err = ERR_peek_error();
-
-	if (ERR_GET_LIB(err) == ERR_LIB_X509 &&
-	    ERR_GET_REASON(err) == X509_R_KEY_VALUES_MISMATCH)
-		return "Key is for a different cert than ssl_cert";
-	else
-		return ssl_last_error();
-}
-
-static void ssl_proxy_ctx_use_key(SSL_CTX *ctx, const struct login_settings *set)
+static void
+ssl_proxy_ctx_use_key(SSL_CTX *ctx,
+		      const struct master_service_ssl_settings *set)
 {
 	EVP_PKEY *pkey;
 	const char *password;
@@ -1046,6 +1151,28 @@ static void ssl_proxy_ctx_use_key(SSL_CTX *ctx, const struct login_settings *set
 		i_fatal("Can't load private ssl_key: %s", ssl_key_load_error());
 	EVP_PKEY_free(pkey);
 }
+
+#if defined(HAVE_ECDH) && OPENSSL_VERSION_NUMBER < 0x10002000L
+static int
+ssl_proxy_ctx_get_pkey_ec_curve_name(const struct master_service_ssl_settings *set)
+{
+	int nid = 0;
+	EVP_PKEY *pkey;
+	const char *password;
+	EC_KEY *eckey;
+	const EC_GROUP *ecgrp;
+
+	password = *set->ssl_key_password != '\0' ? set->ssl_key_password :
+		getenv(MASTER_SSL_KEY_PASSWORD_ENV);
+	pkey = ssl_proxy_load_key(set->ssl_key, password);
+	if (pkey != NULL &&
+	    (eckey = EVP_PKEY_get1_EC_KEY(pkey)) != NULL &&
+	    (ecgrp = EC_KEY_get0_group(eckey)) != NULL)
+		nid = EC_GROUP_get_curve_name(ecgrp);
+	EVP_PKEY_free(pkey);
+	return nid;
+}
+#endif
 
 static int
 ssl_proxy_ctx_use_certificate_chain(SSL_CTX *ctx, const char *cert)
@@ -1119,66 +1246,17 @@ static void ssl_servername_callback(SSL *ssl, int *al ATTR_UNUSED,
 		client->set = login_settings_read(client->pool,
 						  &client->local_ip,
 						  &client->ip, host,
+						  &client->ssl_set,
 						  &other_sets);
 	}
-	ctx = ssl_server_context_get(client->set);
+	ctx = ssl_server_context_get(client->set, client->ssl_set);
 	SSL_set_SSL_CTX(ssl, ctx->ctx);
 }
 #endif
 
-enum {
-	DOVECOT_SSL_PROTO_SSLv2	= 0x01,
-	DOVECOT_SSL_PROTO_SSLv3	= 0x02,
-	DOVECOT_SSL_PROTO_TLSv1	= 0x04,
-	DOVECOT_SSL_PROTO_ALL	= 0x07
-};
-
-static void
-ssl_proxy_ctx_set_protocols(struct ssl_server_context *ssl_ctx,
-			    const char *protocols)
-{
-	const char *const *tmp;
-	int proto, op = 0, include = 0, exclude = 0;
-	bool neg;
-
-	tmp = t_strsplit_spaces(protocols, " ");
-	for (; *tmp != NULL; tmp++) {
-		const char *name = *tmp;
-
-		if (*name != '!')
-			neg = FALSE;
-		else {
-			name++;
-			neg = TRUE;
-		}
-		if (strcasecmp(name, SSL_TXT_SSLV2) == 0)
-			proto = DOVECOT_SSL_PROTO_SSLv2;
-		else if (strcasecmp(name, SSL_TXT_SSLV3) == 0)
-			proto = DOVECOT_SSL_PROTO_SSLv3;
-		else if (strcasecmp(name, SSL_TXT_TLSV1) == 0)
-			proto = DOVECOT_SSL_PROTO_TLSv1;
-		else {
-			i_fatal("Invalid ssl_protocols setting: "
-				"Unknown protocol '%s'", name);
-		}
-		if (neg)
-			exclude |= proto;
-		else
-			include |= proto;
-	}
-	if (include != 0) {
-		/* exclude everything, except those that are included
-		   (and let excludes still override those) */
-		exclude |= DOVECOT_SSL_PROTO_ALL & ~include;
-	}
-	if ((exclude & DOVECOT_SSL_PROTO_SSLv2) != 0) op |= SSL_OP_NO_SSLv2;
-	if ((exclude & DOVECOT_SSL_PROTO_SSLv3) != 0) op |= SSL_OP_NO_SSLv3;
-	if ((exclude & DOVECOT_SSL_PROTO_TLSv1) != 0) op |= SSL_OP_NO_TLSv1;
-	SSL_CTX_set_options(ssl_ctx->ctx, op);
-}
-
 static struct ssl_server_context *
-ssl_server_context_init(const struct login_settings *set)
+ssl_server_context_init(const struct login_settings *login_set,
+			const struct master_service_ssl_settings *ssl_set)
 {
 	struct ssl_server_context *ctx;
 	SSL_CTX *ssl_ctx;
@@ -1188,23 +1266,28 @@ ssl_server_context_init(const struct login_settings *set)
 	pool = pool_alloconly_create("ssl server context", 4096);
 	ctx = p_new(pool, struct ssl_server_context, 1);
 	ctx->pool = pool;
-	ctx->cert = p_strdup(pool, set->ssl_cert);
-	ctx->key = p_strdup(pool, set->ssl_key);
-	ctx->ca = p_strdup(pool, set->ssl_ca);
-	ctx->cipher_list = p_strdup(pool, set->ssl_cipher_list);
-	ctx->protocols = p_strdup(pool, set->ssl_protocols);
-	ctx->verify_client_cert = set->ssl_verify_client_cert;
+	ctx->cert = p_strdup(pool, ssl_set->ssl_cert);
+	ctx->key = p_strdup(pool, ssl_set->ssl_key);
+	ctx->ca = p_strdup(pool, ssl_set->ssl_ca);
+	ctx->cipher_list = p_strdup(pool, ssl_set->ssl_cipher_list);
+	ctx->protocols = p_strdup(pool, ssl_set->ssl_protocols);
+	ctx->verify_client_cert = ssl_set->ssl_verify_client_cert ||
+		login_set->auth_ssl_require_client_cert ||
+		login_set->auth_ssl_username_from_cert;
+	ctx->prefer_server_ciphers = ssl_set->ssl_prefer_server_ciphers;
 
 	ctx->ctx = ssl_ctx = SSL_CTX_new(SSLv23_server_method());
 	if (ssl_ctx == NULL)
 		i_fatal("SSL_CTX_new() failed");
-	xnames = ssl_proxy_ctx_init(ssl_ctx, set);
+	xnames = ssl_proxy_ctx_init(ssl_ctx, ssl_set, ctx->verify_client_cert);
 
 	if (SSL_CTX_set_cipher_list(ssl_ctx, ctx->cipher_list) != 1) {
 		i_fatal("Can't set cipher list to '%s': %s",
 			ctx->cipher_list, ssl_last_error());
 	}
-	ssl_proxy_ctx_set_protocols(ctx, ctx->protocols);
+	if (ctx->prefer_server_ciphers)
+		SSL_CTX_set_options(ssl_ctx, SSL_OP_CIPHER_SERVER_PREFERENCE);
+	SSL_CTX_set_options(ssl_ctx, openssl_get_protocol_options(ctx->protocols));
 
 	if (ssl_proxy_ctx_use_certificate_chain(ctx->ctx, ctx->cert) != 1) {
 		i_fatal("Can't load ssl_cert: %s",
@@ -1214,13 +1297,12 @@ ssl_server_context_init(const struct login_settings *set)
 #ifdef HAVE_SSL_GET_SERVERNAME
 	if (SSL_CTX_set_tlsext_servername_callback(ctx->ctx,
 						   ssl_servername_callback) != 1) {
-		if (set->verbose_ssl)
+		if (ssl_set->verbose_ssl)
 			i_debug("OpenSSL library doesn't support SNI");
 	}
 #endif
 
-	ssl_proxy_ctx_use_key(ctx->ctx, set);
-	SSL_CTX_set_info_callback(ctx->ctx, ssl_info_callback);
+	ssl_proxy_ctx_use_key(ctx->ctx, ssl_set);
 
 	if (ctx->verify_client_cert)
 		ssl_proxy_ctx_verify_client(ctx->ctx, xnames);
@@ -1259,37 +1341,40 @@ ssl_proxy_client_ctx_set_client_cert(SSL_CTX *ctx,
 	EVP_PKEY_free(pkey);
 }
 
-static void ssl_proxy_init_client(const struct login_settings *set)
+static void
+ssl_proxy_init_client(const struct login_settings *login_set,
+		      const struct master_service_ssl_settings *ssl_set)
 {
 	STACK_OF(X509_NAME) *xnames;
 
 	if ((ssl_client_ctx = SSL_CTX_new(SSLv23_client_method())) == NULL)
 		i_fatal("SSL_CTX_new() failed");
-	xnames = ssl_proxy_ctx_init(ssl_client_ctx, set);
+	xnames = ssl_proxy_ctx_init(ssl_client_ctx, ssl_set, TRUE);
 	ssl_proxy_ctx_verify_client(ssl_client_ctx, xnames);
 
-	ssl_proxy_client_ctx_set_client_cert(ssl_client_ctx, set);
+	ssl_proxy_client_ctx_set_client_cert(ssl_client_ctx, login_set);
 }
 
 void ssl_proxy_init(void)
 {
-	const struct login_settings *set = global_login_settings;
+	const struct login_settings *login_set = global_login_settings;
+	const struct master_service_ssl_settings *ssl_set = global_ssl_settings;
 	static char dovecot[] = "dovecot";
 	unsigned char buf;
 
-	if (strcmp(set->ssl, "no") == 0)
+	if (strcmp(ssl_set->ssl, "no") == 0)
 		return;
 
 	SSL_library_init();
 	SSL_load_error_strings();
 	OpenSSL_add_all_algorithms();
 
-	if (*set->ssl_crypto_device != '\0') {
+	if (*ssl_set->ssl_crypto_device != '\0') {
 		ENGINE_load_builtin_engines();
-		ssl_engine = ENGINE_by_id(set->ssl_crypto_device);
+		ssl_engine = ENGINE_by_id(ssl_set->ssl_crypto_device);
 		if (ssl_engine == NULL) {
 			i_fatal("Unknown ssl_crypto_device: %s",
-				set->ssl_crypto_device);
+				ssl_set->ssl_crypto_device);
 		}
 		ENGINE_init(ssl_engine);
 		ENGINE_set_default_RSA(ssl_engine);
@@ -1299,16 +1384,15 @@ void ssl_proxy_init(void)
 
 	extdata_index = SSL_get_ex_new_index(0, dovecot, NULL, NULL, NULL);
 
-	ssl_servers = hash_table_create(default_pool, default_pool, 0,
-					ssl_server_context_hash,
-					ssl_server_context_cmp);
-	(void)ssl_server_context_init(set);
+	hash_table_create(&ssl_servers, default_pool, 0,
+			  ssl_server_context_hash, ssl_server_context_cmp);
+	(void)ssl_server_context_init(login_set, ssl_set);
 
-	ssl_proxy_init_client(set);
-	ssl_username_nid = OBJ_txt2nid(set->ssl_cert_username_field);
+	ssl_proxy_init_client(login_set, ssl_set);
+	ssl_username_nid = OBJ_txt2nid(ssl_set->ssl_cert_username_field);
 	if (ssl_username_nid == NID_undef) {
 		i_fatal("Invalid ssl_cert_username_field: %s",
-			set->ssl_cert_username_field);
+			ssl_set->ssl_cert_username_field);
 	}
 
 	/* PRNG initialization might want to use /dev/urandom, make sure it
@@ -1328,7 +1412,7 @@ void ssl_proxy_init(void)
 void ssl_proxy_deinit(void)
 {
 	struct hash_iterate_context *iter;
-	void *key, *value;
+	struct ssl_server_context *ctx;
 
 	if (!ssl_initialized)
 		return;
@@ -1337,11 +1421,8 @@ void ssl_proxy_deinit(void)
 		ssl_proxy_destroy(ssl_proxies);
 
 	iter = hash_table_iterate_init(ssl_servers);
-	while (hash_table_iterate(iter, &key, &value)) {
-		struct ssl_server_context *ctx = value;
-
+	while (hash_table_iterate(iter, ssl_servers, &ctx, &ctx))
 		ssl_server_context_deinit(&ctx);
-	}
 	hash_table_iterate_deinit(&iter);
 	hash_table_destroy(&ssl_servers);
 

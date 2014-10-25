@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -143,7 +143,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed ATTR_UNUSED)
 	}
 }
 
-void io_loop_handler_run(struct ioloop *ioloop)
+void io_loop_handler_run_internal(struct ioloop *ioloop)
 {
 	struct ioloop_handler_context *ctx = ioloop->handler_context;
         struct pollfd *pollfd;

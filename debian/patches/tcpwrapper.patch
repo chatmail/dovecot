@@ -1,0 +1,41 @@
+From: Joerg Dorchain <joerg@dorchain.net>
+Date: Sun, 26 Aug 2012 10:10:28 +0200
+Subject: Add TCP wrapper support
+Description: Configuration file for TCP wrapper support.
+Bug: #685850
+---
+ doc/example-config/conf.d/10-tcpwrapper.conf |   14 ++++++++++++++
+ doc/example-config/conf.d/Makefile.am        |    1 +
+ 2 files changed, 15 insertions(+)
+
+Index: dovecot/doc/example-config/conf.d/10-tcpwrapper.conf
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ dovecot/doc/example-config/conf.d/10-tcpwrapper.conf	2013-08-19 11:23:32.516780759 -0400
+@@ -0,0 +1,14 @@
++# 10-tcpwrapper.conf
++#
++# service name for hosts.{allow|deny} are those defined as
++# inet_listener in master.conf
++#
++#login_access_sockets = tcpwrap
++#
++#service tcpwrap {
++#  unix_listener login/tcpwrap {
++#    group = $default_login_user
++#    mode = 0600
++#    user = $default_login_user
++#  }
++#}
+Index: dovecot/doc/example-config/conf.d/Makefile.am
+===================================================================
+--- dovecot.orig/doc/example-config/conf.d/Makefile.am	2013-08-19 11:23:32.520780651 -0400
++++ dovecot/doc/example-config/conf.d/Makefile.am	2013-08-19 11:23:32.516780759 -0400
+@@ -18,6 +18,7 @@
+ 	10-mail.conf \
+ 	10-master.conf \
+ 	10-ssl.conf \
++	10-tcpwrapper.conf \
+ 	15-lda.conf \
+ 	15-mailboxes.conf \
+ 	20-imap.conf \

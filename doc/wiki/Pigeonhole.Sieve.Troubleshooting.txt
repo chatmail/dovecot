@@ -86,6 +86,9 @@ The Sieve plugin is not enabled :
   into mailbox 'INBOX'
   ---%<-----------------------------------------------------------------------
 
+  Without actually running LDA, you can also check if 'doveconf -f service=lda
+  mail_plugins' includes "sieve".
+
 The Sieve plugin is misconfigured or the involved Sieve scripts contain errors
   :
   If there is a configuration error or when a Sieve script cannot be compiled
@@ -137,4 +140,4 @@ configuration option to enable the correct behavior:
 $sieverules_config['folder_encoding'] = 'UTF-8';
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2012-04-09 04:42)
+(This file was created from the wiki on 2013-11-24 04:42)

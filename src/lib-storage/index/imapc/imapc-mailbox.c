@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -70,7 +70,7 @@ static int imapc_mailbox_commit_delayed_expunges(struct imapc_mailbox *mbox)
 	array_clear(&mbox->delayed_expunged_uids);
 	ret = mail_index_transaction_commit(&trans);
 	if (ret < 0)
-		mail_storage_set_index_error(&mbox->box);
+		mailbox_set_index_error(&mbox->box);
 	return ret;
 }
 
@@ -85,7 +85,7 @@ int imapc_mailbox_commit_delayed_trans(struct imapc_mailbox *mbox,
 		mail_index_view_close(&mbox->delayed_sync_view);
 	if (mbox->delayed_sync_trans != NULL) {
 		if (mail_index_transaction_commit(&mbox->delayed_sync_trans) < 0) {
-			mail_storage_set_index_error(&mbox->box);
+			mailbox_set_index_error(&mbox->box);
 			ret = -1;
 		}
 		*changes_r = TRUE;
@@ -117,8 +117,8 @@ static void imapc_mailbox_idle_notify(struct imapc_mailbox *mbox)
 	    mbox->to_idle_delay == NULL) {
 		io_loop_set_current(mbox->storage->root_ioloop);
 		mbox->to_idle_delay =
-			timeout_add(NOTIFY_DELAY_MSECS,
-				    imapc_mailbox_idle_timeout, mbox);
+			timeout_add_short(NOTIFY_DELAY_MSECS,
+					  imapc_mailbox_idle_timeout, mbox);
 		io_loop_set_current(old_ioloop);
 	}
 }
@@ -127,13 +127,14 @@ static void
 imapc_untagged_exists(const struct imapc_untagged_reply *reply,
 		      struct imapc_mailbox *mbox)
 {
-	struct mail_index_view *view = mbox->delayed_sync_view;
+	struct mail_index_view *view;
 	uint32_t exists_count = reply->num;
 	const struct mail_index_header *hdr;
 
 	if (mbox == NULL)
 		return;
 
+	view = mbox->delayed_sync_view;
 	if (view == NULL)
 		view = imapc_mailbox_get_sync_view(mbox);
 
@@ -145,6 +146,7 @@ imapc_untagged_exists(const struct imapc_untagged_reply *reply,
 		mbox->sync_fetch_first_uid = hdr->next_uid;
 	}
 	mbox->exists_count = exists_count;
+	mbox->exists_received = TRUE;
 	imapc_mailbox_idle_notify(mbox);
 }
 
@@ -252,6 +254,7 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 				 struct imapc_mailbox *mbox)
 {
 	uint32_t lseq, rseq = reply->num;
+	struct imapc_fetch_request *const *fetch_requestp;
 	struct imapc_mail *const *mailp;
 	const struct imap_arg *list, *flags_list;
 	const char *atom;
@@ -301,11 +304,13 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 		return;
 
 	/* if this is a reply to some FETCH request, update the mail's fields */
-	array_foreach(&mbox->fetch_mails, mailp) {
-		struct imapc_mail *mail = *mailp;
+	array_foreach(&mbox->fetch_requests, fetch_requestp) {
+		array_foreach(&(*fetch_requestp)->mails, mailp) {
+			struct imapc_mail *mail = *mailp;
 
-		if (mail->imail.mail.mail.uid == uid)
-			imapc_mail_fetch_update(mail, reply, list);
+			if (mail->imail.mail.mail.uid == uid)
+				imapc_mail_fetch_update(mail, reply, list);
+		}
 	}
 
 	if (lseq == 0) {
@@ -338,7 +343,7 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 		mail_index_update_flags(mbox->delayed_sync_trans, lseq,
 					MODIFY_REPLACE, flags);
 	}
-	if (seen_flags) T_BEGIN {
+	if (seen_flags) {
 		ARRAY_TYPE(keyword_indexes) old_kws;
 		struct mail_keywords *kw;
 
@@ -346,7 +351,7 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 		mail_index_lookup_keywords(mbox->delayed_sync_view, lseq,
 					   &old_kws);
 
-		(void)array_append_space(&keywords);
+		array_append_zero(&keywords);
 		kw = mail_index_keywords_create(mbox->box.index,
 						array_idx(&keywords, 0));
 		if (!keywords_are_equal(kw, &old_kws)) {
@@ -354,7 +359,7 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 						   lseq, MODIFY_REPLACE, kw);
 		}
 		mail_index_keywords_unref(&kw);
-	} T_END;
+	}
 	imapc_mailbox_idle_notify(mbox);
 }
 

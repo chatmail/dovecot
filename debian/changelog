@@ -1,6 +1,289 @@
+dovecot (1:2.2.13-5) unstable; urgency=medium
+
+  * Fix name of organizationName field in SSL configuration for self-
+    signed certs. Closes: #760653
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Sat, 06 Sep 2014 23:19:51 +0200
+
+dovecot (1:2.2.13-4) unstable; urgency=medium
+
+  * Add Provides with dovecot ABI version, for plugins to depend on.
+    Closes: #456021
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Sun, 20 Jul 2014 19:31:09 +0200
+
+dovecot (1:2.2.13-3) unstable; urgency=medium
+
+  * Build-depend on clucene 2.3 or later, which upstream lists as the
+    minimum version. Closes: #754141
+  * Use configuration file for openssl certificate configuration.
+  * Use canonical address for Vcs-Browser header.
+  * Remove unnecessary asterisk from NEWS entry; fixes lintian warning.
+  * Remove unused lintian override for usr/lib/dovecot/imap.
+  * dovecot-core: Ignore lintian warnings for empty directories.
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Tue, 08 Jul 2014 01:48:08 +0200
+
+dovecot (1:2.2.13-2) unstable; urgency=medium
+
+  * [bd5e34b] Patches from upstreams' hg repo to fix BYE and LOGOUT not being 
+    sent. (Closes: #751682)
+  * [452e336] Czech translation for debconf.
+    Thanks to Michal Šimůnek (Closes: #751389)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 25 Jun 2014 01:38:59 -0400
+
+dovecot (1:2.2.13-1) unstable; urgency=medium
+
+  * [0680040] Imported Upstream version 2.2.13
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Sun, 25 May 2014 18:45:38 +0200
+
+dovecot (1:2.2.13~rc1-1) unstable; urgency=medium
+
+  * [7751508] Imported Upstream version 2.2.13~rc1
+    + Fixes denial of service vulnerability (CVE-2014-3430). Closes: #747549
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Sat, 10 May 2014 14:34:14 +0200
+
+dovecot (1:2.2.12-3) unstable; urgency=medium
+
+  * [0383db0] Break long line.
+  * [c961b6a] Fix installation of sieve plugins. Closes: #742770, #684271
+  * [388d2bf] Strip body.rfc5173.txt from the pigeonhole patch, as it is
+    non-free. Closes: #745398
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Wed, 23 Apr 2014 02:56:56 +0200
+
+dovecot (1:2.2.12-2) unstable; urgency=medium
+
+  * [c882a38] Add build dependencies libstemmer-dev and libexttextcat-dev,
+    used by dovecot-lucene.
+  * [67762d4] Use autotools-dev to update config.guess and config.sub.
+  * [33e79b7] Update Japenese po file. Thanks, victory. Closes: #730171
+  * [cbf213b] Add non-standard-dir-perm override for /etc/dovecot/private.
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Sun, 23 Mar 2014 17:57:04 +0000
+
+dovecot (1:2.2.12-1) experimental; urgency=medium
+
+  * [52b67de] Update watch file for 2.2 series.
+  * [c4eac1f] Verify upstream tarball signature in watch file.
+  * [3a81ff9] Imported Upstream version 2.2.12
+  * [8950a86] Bump standards version to 3.9.5 (no changes).
+  * [cd82417] Add myself to uploaders.
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Thu, 06 Mar 2014 22:45:19 +0000
+
+dovecot (1:2.2.10-1) unstable; urgency=low
+
+  * [0496c52] Imported Upstream version 2.2.10
+  * [515dd61] Added new package for Lucene full text search support.
+    Thanks to Jelmer Vernooij <jelmer@debian.org> for the patch.
+    (Closes: #685979)
+  * [718a68e] Fix old private key location in README.Debian.
+    Thanks to Jelmer Vernooij <jelmer@debian.org> for the patch.
+    (Closes: #702385)
+  * [42da568] dovecot-solr: Make sure solr-schema.xml gets installed.
+    (In /usr/share/dovecot)
+    (Closes: #695185)
+  * [77acbf7] Added /usr/share/dovecot/dovecot-abi file in dovecot-dev to
+    document -- you guessed it! -- the dovecot ABI version.
+  * [feb597a] Added support for xz compression.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 06 Mar 2014 02:51:34 -0500
+
+dovecot (1:2.2.9-1) unstable; urgency=low
+
+  [ Jaldhar H. Vyas ]
+  * [77468cf] Imported Upstream version 2.2.9
+  * [43e08f3] Place dovenull user in its own group. (Closes: #725164)
+  * [e1a3e9c] Handled the fact that dovecot-db.conf.ext is no longer used.
+    (Closes: #728107, #730403)
+
+  [Debconf translation updates]
+  * Russian (Yuri Kozlov).  (Closes: #729106)
+  * German (Chris Leick).  (Closes: #729358)
+  * Danish (Joe Hansen).  (Closes: #729425)
+  * French (Julien Patriarca).  (Closes: #729966)
+  * Portuguese (Américo Monteiro).  (Closes: #730006)
+  * Polish (Michał Kułach).  (Closes: #730061)
+  * Italian (Beatrice Torracca).  (Closes: #730136)
+  * Japanese (victory).  (Closes: #73017)
+  * Swedish (Martin Bagge / brother).  (Closes: #730188)
+  * Spanish; (Camaleón).  (Closes: #730354)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 16 Jan 2014 15:42:13 -0500
+
+dovecot (1:2.2.8-1) UNRELEASED; urgency=low
+
+  * [6157a2b] New upstream version 2.2.8
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 21 Nov 2013 16:54:46 -0500
+
+dovecot (1:2.2.5-1) experimental; urgency=low
+  [ Micah Anderson ]
+  * [a0035bf] New upstream version 2.2.5
+  * [a053c49] Update pigeonhole patch to 0.4.1
+  * [689cd67] refreshed patches
+
+  [ Jaldhar H. Vyas ]
+  * Caused bugs and then fixed them again.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 09 Sep 2013 00:57:32 -0400
+
+dovecot (1:2.1.17-2) unstable; urgency=low
+
+  * [e8286e0] New version of drac patch taken from Ubuntu which works better
+    with 2.x (Closes: #716764)
+  * [23acb40] Add a patch from Ubuntu to report the distro name in the login
+    banner why not.
+  * [f8d566e] Don't need dovecot-common package anymore; get rid of it.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 07 Sep 2013 14:58:05 -0400
+
+dovecot (1:2.1.17-1) experimental; urgency=low
+
+  [ Jaldhar H. Vyas ]
+  * [fa0d6aa] Re-enable mbox write locking patch to comply with policy 11.6
+    (Closes: #720502)
+  * [38691fb] New upstream version (Closes: #719021)
+  * [1361144] prompts in dovecot-core postinst debconfiscated.
+  * IN MEMORIAM: Goldy the Goldfish (2000-2013)  You were a prince (or
+    perhaps princess?) among fish and we shall all miss you dearly.
+    May your karmas merit much punya in future lives.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 23 Aug 2013 01:46:20 -0400
+
+dovecot (1:2.1.16-1) experimental; urgency=low
+
+  * [9741bd8] New Upstream version
+  * [3476489] Updated pigeonhole patch to 0.3.5
+  * [d4f236f] Removed some patches which are no longer required.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 14 Jun 2013 16:25:19 -0400
+
+dovecot (1:2.1.7-8) experimental; urgency=low
+
+  * This version is not actually intended for upload.  It merely undoes
+    some changes made for the the wheezy release.  Namely, the following
+    features are back:
+    - TCP Wrappers support
+    - Hurd compatibility support
+    - Triggers.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 13 Jun 2013 16:14:21 -0400
+
+dovecot (1:2.1.7-7) unstable; urgency=high
+
+  * If you are upgrading from stable or earlier versions of this package
+    from testing/unstable please carefully read
+    /usr/share/doc/dovecot-core/README.Debian.gz for important information
+    about changes.
+  * [0d74b31] Move Breaks/Replaces mailavenger from dovecot-common to
+    dovecot-core (Closes: #694376)
+  * [a8030a1] Revamped dovecot-cores README.Debian by adding any info I could
+    think of in order to ease upgrade problems. (Closes: #696820)
+  * [04798d3] Don't touch 10-ssl.conf at all.  Eventually I will DTRT with
+    regards to the default generated ssl certificates but in the mean time
+    this will do the least mischief.  (Closes: #696817)
+  * [fde17d1] Patch to make /etc/dovecot/readme point to the right place for
+    the example configuration.  (Closes: #698941)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 04 Feb 2013 16:27:17 -0500
+
+dovecot (1:2.1.7-6) unstable; urgency=high
+
+  * WARNING: in order to get this package into wheezy some functionality
+    from the previous release had to be removed.  Namely:
+    - TCP Wrappers support
+    - Hurd compatability support
+    - Triggers  
+    All this will be coming back in the next version but for now, if you need
+    any of it, stick with -5.
+  * [1f869e0] NEWS.Debian was not getting added to the package (Closes: #693621)
+  * [564c5e2] Add breaks and replaces mailavenger for debian-common
+    (Closes: #694376)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 14 Dec 2012 17:01:33 -0500
+
+dovecot (1:2.1.7-5) unstable; urgency=high
+
+  * [132bc3b] Remove call to ntp-wait in init script.  Dovecot handles a 
+    skewed clock much better now.  (Closes: #693225)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 14 Nov 2012 14:45:29 -0500
+
+dovecot (1:2.1.7-4) unstable; urgency=high
+
+  * [68ef7ad] piuparts complained /etc/dovecot/private was left unowned on
+    purge which is against policy (Closes: #692944)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 11 Nov 2012 23:45:07 -0500
+
+dovecot (1:2.1.7-3) unstable; urgency=high
+
+  [ Jaldhar H. Vyas ]
+  * [03d5499] Do not generate new dovecot cert if key or cert is already
+    present (Closes: #685896,#631257) Thanks to Alexander Ufimtsev
+    <alexu@ucd.ie> and Jörg-Volker Peetz <jvpeetz@web.de> for patches.
+  * [5be6c2a] You should be able to upgrade and remove dovecot-managesieved
+    without errors (Closes: #665487)
+  * [1a9ad5c] Fixes instances where UTF-8 was misused instead of mUTF-7
+    (Closes: #680035)
+  * [c0ac3ba] Backport of fix for failure to autocreate mailboxes
+    (Closes: #623440) This also requires setting the default mail_location.
+  * [ba1d3f5] Fix FTBS on Hurd (Closes: #686931) via upstream patch backported
+    from mercurial.
+  * [cfa92b5] Upgrade pigeonhole page to 0.3.1 (Closes: #688407)
+  * [58f01c2] Generated certificates will now be created in /etc/dovecot
+    (Closes: #608719)
+  * [8e40ea5] Patch to build with PIE and bindnow
+    by intrigeri@debian.org (Closes: #679017)
+  * [87d982b] Use libwrap (Closes: #685850)
+  * [ebb5421] Start after nslcd (Closes: #692632)
+  * [2db5c1a] Add support for dpkg triggers.  This means dovecot will not be
+    repeatedly restarted when installing or removing lots of plugins
+    (Closes: #601744)
+  * [bc66629] Patch to document -k in dsync.1
+    by Luca Capello <luca@pca.it> (Closes: #680992)
+  * [ba67766] Add lintian overrides.
+
+  [ Marco Nenciarini ]
+  * [ffba408] Updated watch file
+  * [9777434] Install missing default configuration files from upstream
+  * [9496828] Backport fix for segfault in managesieve triggered by
+    CHECKSCRIPT command. (Closes: #688197)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 10 Nov 2012 03:50:30 -0500
+
+dovecot (1:2.1.7-2) unstable; urgency=low
+
+  * [e23a136] Just a quick upload to make dovecot buildable on non-linux
+    platforms again. (Closes: #676817) I did it by removing the systemd
+    build-dep altogether.  sd-daemon.[ch] is included in the source so if
+    systemd is installed on a system, it should be detected and socket
+    activation should happen.  That is, assuming I've got everything right
+    (and documented) which is something I'll be looking into for the next
+    version.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 21 Jun 2012 23:54:47 -0400
+
+dovecot (1:2.1.7-1) unstable; urgency=low
+
+  * [7668742] Imported upstream 2.1.7 (Closes: #663243)
+              + doveadm.1 documents the move command. (Closes: #641750)
+  * [4db927a] Patch to enable systemd support.  (Closes: #672266)
+              Thanks Riku Voipio.
+  * [e17ac86] Previous attempt at setting hardening flags did not include the
+              drac plugin.  Simon Ruderich provided an extra patch.
+              (Closes: #653530)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 30 May 2012 16:27:21 -0400
+
 dovecot (1:2.1.4-1) experimental; urgency=low
 
-  * [9c27844] Imported upstream 2.1.4
+  * [6cc1e7d] Imported upstream 2.1.4
 
  -- Micah Anderson <micah@debian.org>  Tue, 10 Apr 2012 11:33:05 -0400
 
@@ -13,14 +296,14 @@ dovecot (1:2.1.3-1) experimental; urgency=low
 dovecot (1:2.1.2-1) experimental; urgency=low
 
   * [70c3f6e] Imported upstream 2.1.2
-  * [75cc17b] Add missing dependency on dpkg-dev 1.16.1
+  * Add missing dependency on dpkg-dev 1.16.1
 
  -- Micah Anderson <micah@debian.org>  Thu, 15 Mar 2012 20:26:35 -0400
 
 dovecot (1:2.1.1-1) experimental; urgency=low
 
-  * [c16887c] Updated pigeonhole patch to 0.3.0, supporting 2.1
-  * [ed2a7e4] Imported upstream 2.1.1
+  * [e113636] Imported upstream 2.1.1
+  * Updated pigeonhole patch to 0.3.0, supporting 2.1
 
  -- Micah Anderson <micah@debian.org>  Tue, 13 Mar 2012 23:08:06 -0400
 

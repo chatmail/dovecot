@@ -1,7 +1,7 @@
 #ifndef MASTER_INSTANCE_H
 #define MASTER_INSTANCE_H
 
-#define MASTER_INSTANCE_PATH PKG_STATEDIR"/instances"
+#define MASTER_INSTANCE_FNAME "instances"
 
 struct master_instance_list;
 
@@ -9,6 +9,7 @@ struct master_instance {
 	time_t last_used;
 	const char *name;
 	const char *base_dir;
+	const char *config_path;
 };
 
 struct master_instance_list *master_instance_list_init(const char *path);

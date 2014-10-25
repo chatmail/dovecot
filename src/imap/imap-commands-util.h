@@ -13,6 +13,9 @@ struct mailbox_keywords;
    or mailbox name is invalid, sends a tagged NO reply to client. */
 struct mail_namespace *
 client_find_namespace(struct client_command_context *cmd, const char **mailbox);
+struct mail_namespace *
+client_find_namespace_full(struct client *client,
+			   const char **mailbox, const char **error_r);
 
 /* Returns TRUE if mailbox is selected. If not, sends "No mailbox selected"
    error message to client. */
@@ -32,6 +35,9 @@ void client_send_list_error(struct client_command_context *cmd,
 /* Send last mail storage error message to client. */
 void client_send_storage_error(struct client_command_context *cmd,
 			       struct mail_storage *storage);
+/* Send last mailbox's storage error message to client. */
+void client_send_box_error(struct client_command_context *cmd,
+			   struct mailbox *box);
 
 /* Send untagged error message to client. */
 void client_send_untagged_storage_error(struct client *client,
@@ -49,15 +55,12 @@ bool client_parse_mail_flags(struct client_command_context *cmd,
 void client_send_mailbox_flags(struct client *client, bool selecting);
 /* Update client->keywords array. Use keywords=NULL when unselecting. */
 void client_update_mailbox_flags(struct client *client,
-				 const ARRAY_TYPE(keywords) *keywords);
+				 const ARRAY_TYPE(keywords) *keywords)
+	ATTR_NULL(2);
 /* Convert keyword indexes to keyword names in selected mailbox. */
 const char *const *
 client_get_keyword_names(struct client *client, ARRAY_TYPE(keywords) *dest,
 			 const ARRAY_TYPE(keyword_indexes) *src);
-
-bool mailbox_equals(const struct mailbox *box1,
-		    const struct mail_namespace *ns2,
-		    const char *name2) ATTR_PURE;
 
 void msgset_generator_init(struct msgset_generator_context *ctx, string_t *str);
 void msgset_generator_next(struct msgset_generator_context *ctx, uint32_t uid);

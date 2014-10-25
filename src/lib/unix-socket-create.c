@@ -1,7 +1,7 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "network.h"
+#include "net.h"
 #include "unix-socket-create.h"
 
 #include <unistd.h>
@@ -27,6 +27,7 @@ int unix_socket_create(const char *path, int mode,
 		if (chown(path, uid, gid) < 0) {
 			i_error("chown(%s, %s, %s) failed: %m",
 				path, dec2str(uid), dec2str(gid));
+			i_close_fd(&fd);
 			return -1;
 		}
 	}

@@ -1,10 +1,12 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
 #include "settings-parser.h"
 #include "config-parser-private.h"
 #include "old-set-parser.h"
+
+#define config_apply_line (void)config_apply_line
 
 struct socket_set {
 	const char *path, *mode, *user, *group;
@@ -102,14 +104,14 @@ old_settings_handle_root(struct config_parser_context *ctx,
 		value = t_strarray_join((const char *const *)protos, " ");
 
 		if (have_imaps && !have_imap) {
-			obsolete(ctx, "'imaps' protocol is no longer supported. to disable non-ssl imap, use service imap-login { inet_listener imap { port=0 } }");
+			obsolete(ctx, "'imaps' protocol can no longer be specified (use protocols=imap). to disable non-ssl imap, use service imap-login { inet_listener imap { port=0 } }");
 			value = t_strconcat(value, " imap", NULL);
 			config_apply_line(ctx, "port",
 				"service/imap-login/inet_listener/imap/port=0", NULL);
 		} else if (have_imaps)
 			obsolete(ctx, "'imaps' protocol is no longer necessary, remove it");
 		if (have_pop3s && !have_pop3) {
-			obsolete(ctx, "'pop3s' protocol is no longer supported. to disable non-ssl pop3, use service pop3-login { inet_listener pop3 { port=0 } }");
+			obsolete(ctx, "'pop3s' protocol can no longer be specified (use protocols=pop3). to disable non-ssl pop3, use service pop3-login { inet_listener pop3 { port=0 } }");
 			value = t_strconcat(value, " pop3", NULL);
 			config_apply_line(ctx, "port",
 				"service/pop3-login/inet_listener/pop3/port=0", NULL);
@@ -305,7 +307,7 @@ old_settings_handle_proto(struct config_parser_context *ctx,
 			return TRUE;
 		}
 		p = strrchr(value, ':');
-		if (p != NULL) {
+		if (p != NULL && listen_has_port(value)) {
 			obsolete(ctx, "%s=..:port has been replaced by service { inet_listener { port } }", key);
 			value = t_strdup_until(value, p++);
 			if (config_filter_match(&old_section->filter, &imap_filter)) {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -6,7 +6,8 @@
 #include "hex-binary.h"
 #include "md4.h"
 #include "md5.h"
-#include "hmac-md5.h"
+#include "hmac.h"
+#include "hmac-cram-md5.h"
 #include "ntlm.h"
 #include "mycrypt.h"
 #include "randgen.h"
@@ -367,7 +368,7 @@ md5_verify(const char *plaintext, const char *user,
 		str = password_generate_md5_crypt(plaintext, password);
 		return strcmp(str, password) == 0 ? 1 : 0;
 	} else if (password_decode(password, "PLAIN-MD5",
-				   &md5_password, &md5_size, &error) < 0) {
+				   &md5_password, &md5_size, &error) <= 0) {
 		*error_r = "Not a valid MD5-CRYPT or PLAIN-MD5 password";
 		return -1;
 	} else {
@@ -655,12 +656,12 @@ static void
 cram_md5_generate(const char *plaintext, const char *user ATTR_UNUSED,
 		  const unsigned char **raw_password_r, size_t *size_r)
 {
-	struct hmac_md5_context ctx;
+	struct hmac_context ctx;
 	unsigned char *context_digest;
 
 	context_digest = t_malloc(CRAM_MD5_CONTEXTLEN);
-	hmac_md5_init(&ctx, (const unsigned char *)plaintext,
-		      strlen(plaintext));
+	hmac_init(&ctx, (const unsigned char *)plaintext,
+		  strlen(plaintext), &hash_method_md5);
 	hmac_md5_get_cram_context(&ctx, context_digest);
 
 	*raw_password_r = context_digest;
@@ -817,10 +818,13 @@ static const struct password_scheme builtin_schemes[] = {
 	{ "SSHA256", PW_ENCODING_BASE64, 0, ssha256_verify, ssha256_generate },
 	{ "SSHA512", PW_ENCODING_BASE64, 0, ssha512_verify, ssha512_generate },
 	{ "PLAIN", PW_ENCODING_NONE, 0, NULL, plain_generate },
+	{ "CLEAR", PW_ENCODING_NONE, 0, NULL, plain_generate },
 	{ "CLEARTEXT", PW_ENCODING_NONE, 0, NULL, plain_generate },
 	{ "PLAIN-TRUNC", PW_ENCODING_NONE, 0, plain_trunc_verify, plain_generate },
 	{ "CRAM-MD5", PW_ENCODING_HEX, CRAM_MD5_CONTEXTLEN,
 	  NULL, cram_md5_generate },
+	{ "SCRAM-SHA-1", PW_ENCODING_NONE, 0, scram_sha1_verify,
+	  scram_sha1_generate},
 	{ "HMAC-MD5", PW_ENCODING_HEX, CRAM_MD5_CONTEXTLEN,
 	  NULL, cram_md5_generate },
 	{ "DIGEST-MD5", PW_ENCODING_HEX, MD5_RESULTLEN,

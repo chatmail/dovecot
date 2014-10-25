@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 /* Digest-MD5 SASL authentication, see RFC-2831 */
 
@@ -78,7 +78,7 @@ static string_t *get_digest_challenge(struct digest_auth_request *request)
 	/* get 128bit of random data as nonce */
 	random_fill(nonce, sizeof(nonce));
 
-	buffer_create_data(&buf, nonce_base64, sizeof(nonce_base64));
+	buffer_create_from_data(&buf, nonce_base64, sizeof(nonce_base64));
 	base64_encode(nonce, sizeof(nonce), &buf);
 	buffer_append_c(&buf, '\0');
 	request->nonce = p_strdup(request->pool, buf.data);
@@ -122,7 +122,7 @@ static bool verify_credentials(struct digest_auth_request *request,
 
 	/* get the MD5 password */
 	if (size != MD5_RESULTLEN) {
-                auth_request_log_error(&request->auth_request, "digest-md5",
+                auth_request_log_error(&request->auth_request, AUTH_SUBSYS_MECH,
 				       "invalid credentials length");
 		return FALSE;
 	}
@@ -211,7 +211,7 @@ static bool verify_credentials(struct digest_auth_request *request,
 			/* verify response */
 			if (memcmp(response_hex, request->response, 32) != 0) {
 				auth_request_log_info(&request->auth_request,
-						      "digest-md5",
+						      AUTH_SUBSYS_MECH,
 						      "password mismatch");
 				return FALSE;
 			}
@@ -246,7 +246,7 @@ static bool parse_next(char **data, char **key, char **value)
 	*value = p+1;
 
 	/* skip trailing whitespace in key */
-	while (IS_LWS(p[-1]))
+	while (p > *data && IS_LWS(p[-1]))
 		p--;
 	*p = '\0';
 
@@ -283,7 +283,7 @@ static bool auth_handle_response(struct digest_auth_request *request,
 {
 	unsigned int i;
 
-	str_lcase(key);
+	(void)str_lcase(key);
 
 	if (strcmp(key, "realm") == 0) {
 		if (request->auth_request.realm == NULL && *value != '\0')
@@ -566,7 +566,7 @@ mech_digest_md5_auth_continue(struct auth_request *auth_request,
 	}
 
 	if (error != NULL)
-                auth_request_log_info(auth_request, "digest-md5", "%s", error);
+                auth_request_log_info(auth_request, AUTH_SUBSYS_MECH, "%s", error);
 
 	auth_request_fail(auth_request);
 }

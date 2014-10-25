@@ -1,11 +1,9 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "mail-storage-private.h"
 #include "fail-mail-storage.h"
-
-extern struct mail_storage fail_storage;
 
 static struct mail_storage *fail_storage_alloc(void)
 {
@@ -17,6 +15,10 @@ static struct mail_storage *fail_storage_alloc(void)
 	*storage = fail_storage;
 	storage->pool = pool;
 	return storage;
+}
+
+static void fail_storage_destroy(struct mail_storage *storage ATTR_UNUSED)
+{
 }
 
 static void
@@ -31,13 +33,13 @@ fail_storage_get_list_settings(const struct mail_namespace *ns ATTR_UNUSED,
 
 struct mail_storage fail_storage = {
 	.name = "fail",
-	.class_flags = 0,
+	.class_flags = MAIL_STORAGE_CLASS_FLAG_NO_ROOT,
 
 	.v = {
 		NULL,
 		fail_storage_alloc,
 		NULL,
-		NULL,
+		fail_storage_destroy,
 		NULL,
 		fail_storage_get_list_settings,
 		NULL,

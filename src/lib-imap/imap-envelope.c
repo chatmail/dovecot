@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -146,13 +146,19 @@ void imap_envelope_parse_header(pool_t pool,
 	if (addr_p != NULL) {
 		*addr_p = message_address_parse(pool, hdr->full_value,
 						hdr->full_value_len,
-						(unsigned int)-1, TRUE);
-	}
+						UINT_MAX, TRUE);
+	} else if (str_p != NULL) T_BEGIN {
+		string_t *str = t_str_new(128);
 
-	if (str_p != NULL) {
-		*str_p = imap_quote(pool, hdr->full_value,
-				    hdr->full_value_len, TRUE);
-	}
+		if (str_p != &d->subject) {
+			imap_append_string(str,
+				t_strndup(hdr->full_value, hdr->full_value_len));
+		} else {
+			imap_append_string_for_humans(str,
+				hdr->full_value, hdr->full_value_len);
+		}
+		*str_p = p_strdup(pool, str_c(str));
+	} T_END;
 }
 
 static void imap_write_address(string_t *str, struct message_address *addr)
@@ -165,13 +171,18 @@ static void imap_write_address(string_t *str, struct message_address *addr)
 	str_append_c(str, '(');
 	while (addr != NULL) {
 		str_append_c(str, '(');
-		imap_quote_append_string(str, addr->name, TRUE);
+		if (addr->name == NULL)
+			str_append(str, "NIL");
+		else {
+			imap_append_string_for_humans(str,
+				(const void *)addr->name, strlen(addr->name));
+		}
 		str_append_c(str, ' ');
-		imap_quote_append_string(str, addr->route, TRUE);
+		imap_append_nstring(str, addr->route);
 		str_append_c(str, ' ');
-		imap_quote_append_string(str, addr->mailbox, TRUE);
+		imap_append_nstring(str, addr->mailbox);
 		str_append_c(str, ' ');
-		imap_quote_append_string(str, addr->domain, TRUE);
+		imap_append_nstring(str, addr->domain);
 		str_append_c(str, ')');
 
 		addr = addr->next;
@@ -215,7 +226,7 @@ void imap_envelope_write_part_data(struct message_part_envelope_data *data,
 }
 
 static bool imap_address_arg_append(const struct imap_arg *arg, string_t *str,
-				    bool *in_group)
+				    bool *in_group, bool *begin_group)
 {
 	const struct imap_arg *list_args;
 	unsigned int list_count;
@@ -239,10 +250,11 @@ static bool imap_address_arg_append(const struct imap_arg *arg, string_t *str,
 		/* end of group */
 		str_append_c(str, ';');
 		*in_group = FALSE;
+		*begin_group = FALSE;
 		return TRUE;
 	}
 
-	if (str_len(str) > 0)
+	if (str_len(str) > 0 && !*begin_group)
 		str_append(str, ", ");
 
 	if (!*in_group && args[0] == NULL && args[1] == NULL &&
@@ -251,8 +263,10 @@ static bool imap_address_arg_append(const struct imap_arg *arg, string_t *str,
 		str_append(str, args[2]);
 		str_append(str, ": ");
 		*in_group = TRUE;
+		*begin_group = TRUE;
 		return TRUE;
 	}
+	*begin_group = FALSE;
 
 	/* a) mailbox@domain
 	   b) name <@route:mailbox@domain> */
@@ -291,15 +305,17 @@ static const char *imap_envelope_parse_address(const struct imap_arg *arg)
 	const struct imap_arg *list_args;
 	string_t *str;
 	bool in_group;
+	bool begin_group;
 
 	if (!imap_arg_get_list(arg, &list_args))
 		return NULL;
 
 	in_group = FALSE;
+	begin_group = FALSE;
 	str = t_str_new(128);
 
 	for (; !IMAP_ARG_IS_EOL(list_args); list_args++) {
-		if (!imap_address_arg_append(list_args, str, &in_group))
+		if (!imap_address_arg_append(list_args, str, &in_group, &begin_group))
 			return NULL;
 	}
 

@@ -1,0 +1,97 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the dovecot package.
+# victory <victory.deb@gmail.com>, 2013.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: dovecot\n"
+"Report-Msgid-Bugs-To: dovecot@packages.debian.org\n"
+"POT-Creation-Date: 2013-11-07 07:06+0100\n"
+"PO-Revision-Date: 2013-11-07 15:06+0900\n"
+"Last-Translator: victory <victory.deb@gmail.com>\n"
+"Language-Team: Japanese <debian-japanese@lists.debian.org>\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. Type: error
+#. Description
+#: ../dovecot-core.templates:2001
+msgid "Wrong location for SSL certificates"
+msgstr "SSL 証明書が良くない位置にあります"
+
+#. Type: error
+#. Description
+#: ../dovecot-core.templates:2001
+msgid ""
+"This machine uses SSL certificates for Dovecot. These certificates should be "
+"moved from /etc/ssl to /etc/dovecot and Dovecot's configuration file (/etc/"
+"dovecot/conf.d/10-ssl.conf) should be updated accordingly."
+msgstr ""
+"このマシンでは Dovecot 用の SSL 証明書を利用しています。その証明書を /etc/ssl "
+"から /etc/dovecot に移動するとともに Dovecot の設定ファイル (/etc/dovecot/"
+"conf.d/10-ssl.conf) の設定をそれに合わせて更新すべきです。"
+
+#. Type: error
+#. Description
+#: ../dovecot-core.templates:2001
+msgid "Please read /usr/share/doc/dovecot-core/README.Debian.gz for details."
+msgstr ""
+"詳細については /usr/share/doc/dovecot-core/README.Debian.gz を見てください。"
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid "Create a self-signed SSL certificate?"
+msgstr "自己署名した SSL 証明書を作成しますか?"
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid ""
+"An SSL certificate is needed in order to use IMAP or POP3 over SSL/TLS. No "
+"such certificate was found."
+msgstr ""
+"IMAP や POP3 を SSL/TLS 越しに利用するには証明書が必要ですが、その証明書が見つ"
+"かりませんでした。"
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid ""
+"Please choose whether you want to create one now. This will then be a self-"
+"signed certificate."
+msgstr ""
+"ここで作成するかどうか選択してください。作成する場合は自己署名した証明書を作成"
+"します。"
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid ""
+"If you choose not to create a certificate, please adapt Dovecot's "
+"configuration file (/etc/dovecot/conf.d/10-ssl.conf)."
+msgstr ""
+"ここで作成しない場合は Dovecot の設定ファイル (/etc/dovecot/conf.d/10-ssl."
+"conf) をそれに合わせて変更してください。"
+
+#. Type: string
+#. Description
+#: ../dovecot-core.templates:4001
+msgid "Host name:"
+msgstr "ホスト名:"
+
+#. Type: string
+#. Description
+#: ../dovecot-core.templates:4001
+msgid "Please enter the host name to use in the SSL certificate."
+msgstr "SSL 証明書で利用するホスト名を入力してください。"
+
+#. Type: string
+#. Description
+#: ../dovecot-core.templates:4001
+msgid ""
+"It will become the \"commonName\" field of the generated SSL certificate."
+msgstr "これは生成した SSL 証明書の「一般名 (CN)」として利用されます。"

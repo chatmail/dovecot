@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -11,8 +11,8 @@
 
 /* <settings checks> */
 static struct inet_listener_settings imap_login_inet_listeners_array[] = {
-	{ "imap", "", 143, FALSE },
-	{ "imaps", "", 993, TRUE }
+	{ .name = "imap", .address = "", .port = 143 },
+	{ .name = "imaps", .address = "", .port = 993, .ssl = TRUE }
 };
 static struct inet_listener_settings *imap_login_inet_listeners[] = {
 	&imap_login_inet_listeners_array[0],
@@ -63,7 +63,7 @@ static const struct setting_define imap_login_setting_defines[] = {
 
 static const struct imap_login_settings imap_login_default_settings = {
 	.imap_capability = "",
-	.imap_id_send = "",
+	.imap_id_send = "name *",
 	.imap_id_log = ""
 };
 

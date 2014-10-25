@@ -1,8 +1,8 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
-#include "network.h"
+#include "net.h"
 #include "istream.h"
 #include "hash.h"
 #include "doveadm.h"
@@ -27,7 +27,7 @@ struct penalty_context {
 
 static void penalty_parse_line(const char *line, struct penalty_line *line_r)
 {
-	const char *const *args = t_strsplit(line, "\t");
+	const char *const *args = t_strsplit_tab(line);
 	const char *ident = args[0];
 	const char *penalty_str = args[1];
 	const char *last_penalty_str = args[2];
@@ -35,7 +35,7 @@ static void penalty_parse_line(const char *line, struct penalty_line *line_r)
 
 	memset(line_r, 0, sizeof(*line_r));
 
-	net_addr2ip(ident, &line_r->ip);
+	(void)net_addr2ip(ident, &line_r->ip);
 	line_r->penalty = strtoul(penalty_str, NULL, 10);
 	line_r->last_penalty = strtoul(last_penalty_str, NULL, 10);
 	line_r->last_update = strtoul(last_update_str, NULL, 10);
@@ -106,6 +106,7 @@ static void cmd_penalty(int argc, char *argv[])
 			help(&doveadm_cmd_penalty);
 		}
 	}
+	argv += optind-1;
 
 	if (argv[1] != NULL) {
 		if (net_parse_range(argv[1], &ctx.net_ip, &ctx.net_bits) == 0)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -11,6 +11,8 @@
 #include <ctype.h>
 
 #define STRCONCAT_BUFSIZE 512
+
+const unsigned char uchar_nul = '\0';
 
 int i_snprintf(char *dest, size_t max_chars, const char *format, ...)
 {
@@ -104,6 +106,9 @@ char *t_noalloc_strdup_vprintf(const char *format, va_list args,
 	char *tmp;
 	unsigned int init_size;
 	int ret;
+#ifdef DEBUG
+	int old_errno = errno;
+#endif
 
 	VA_COPY(args2, args);
 
@@ -125,6 +130,10 @@ char *t_noalloc_strdup_vprintf(const char *format, va_list args,
 		ret = vsnprintf(tmp, *size_r, format, args2);
 		i_assert((unsigned int)ret == *size_r-1);
 	}
+#ifdef DEBUG
+	/* we rely on errno not changing. it shouldn't. */
+	i_assert(errno == old_errno);
+#endif
 	return tmp;
 }
 
@@ -352,34 +361,24 @@ int i_memcasecmp(const void *p1, const void *p2, size_t size)
         return 0;
 }
 
-int bsearch_strcmp(const void *p1, const void *p2)
+int bsearch_strcmp(const char *key, const char *const *member)
 {
-	const char *key = p1;
-	const char *const *member = p2;
-
 	return strcmp(key, *member);
 }
 
-int i_strcmp_p(const void *p1, const void *p2)
+int i_strcmp_p(const char *const *p1, const char *const *p2)
 {
-	const char *const *s1 = p1, *const *s2 = p2;
-
-	return strcmp(*s1, *s2);
+	return strcmp(*p1, *p2);
 }
 
-int bsearch_strcasecmp(const void *p1, const void *p2)
+int bsearch_strcasecmp(const char *key, const char *const *member)
 {
-	const char *key = p1;
-	const char *const *member = p2;
-
 	return strcasecmp(key, *member);
 }
 
-int i_strcasecmp_p(const void *p1, const void *p2)
+int i_strcasecmp_p(const char *const *p1, const char *const *p2)
 {
-	const char *const *s1 = p1, *const *s2 = p2;
-
-	return strcasecmp(*s1, *s2);
+	return strcasecmp(*p1, *p2);
 }
 
 static char **
@@ -461,6 +460,47 @@ char **p_strsplit_spaces(pool_t pool, const char *data,
 			 const char *separators)
 {
 	return split_str(pool, data, separators, TRUE);
+}
+
+const char **t_strsplit_tab(const char *data)
+{
+        const char **array;
+	char *dest;
+        unsigned int i, array_idx, array_size, dest_size;
+
+	if (*data == '\0')
+		return t_new(const char *, 1);
+
+	array_size = 1;
+	dest_size = 128;
+	dest = t_buffer_get(dest_size+1);
+	for (i = 0; data[i] != '\0'; i++) {
+		if (i >= dest_size) {
+			dest_size = nearest_power(dest_size+1);
+			dest = t_buffer_reget(dest, dest_size+1);
+		}
+		if (data[i] != '\t')
+			dest[i] = data[i];
+		else {
+			dest[i] = '\0';
+			array_size++;
+		}
+	}
+	i_assert(i <= dest_size);
+	dest[i] = '\0';
+	t_buffer_alloc(i+1);
+	dest_size = i;
+
+	array = t_new(const char *, array_size + 1);
+	array[0] = dest; array_idx = 1;
+
+	for (i = 0; i < dest_size; i++) {
+		if (dest[i] == '\0')
+			array[array_idx++] = dest+i+1;
+	}
+	i_assert(array_idx == array_size);
+	array[array_idx] = NULL;
+        return array;
 }
 
 void p_strsplit_free(pool_t pool, char **arr)

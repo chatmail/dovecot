@@ -53,6 +53,14 @@ int mdbox_map_lookup(struct mdbox_map *map, uint32_t map_uid,
 int mdbox_map_lookup_full(struct mdbox_map *map, uint32_t map_uid,
 			  struct mdbox_map_mail_index_record *rec_r,
 			  uint16_t *refcount_r);
+/* Like mdbox_map_lookup_full(), but look up with sequence. */
+int mdbox_map_lookup_seq_full(struct mdbox_map *map, uint32_t seq,
+			      struct mdbox_map_mail_index_record *rec_r,
+			      uint16_t *refcount_r);
+/* Return map UID for the map sequence. */
+uint32_t mdbox_map_lookup_uid(struct mdbox_map *map, uint32_t seq);
+/* Returns the total number of messages in the map. */
+unsigned int mdbox_map_get_messages_count(struct mdbox_map *map);
 
 /* Get all messages from file */
 int mdbox_map_get_file_msgs(struct mdbox_map *map, uint32_t file_id,
@@ -115,6 +123,8 @@ int mdbox_map_append_assign_map_uids(struct mdbox_map_append_context *ctx,
 int mdbox_map_append_move(struct mdbox_map_append_context *ctx,
 			  const ARRAY_TYPE(uint32_t) *map_uids,
 			  const ARRAY_TYPE(seq_range) *expunge_map_uids);
+/* Flush/fsync appends. */
+int mdbox_map_append_flush(struct mdbox_map_append_context *ctx);
 /* Returns 0 if ok, -1 if error. */
 int mdbox_map_append_commit(struct mdbox_map_append_context *ctx);
 void mdbox_map_append_free(struct mdbox_map_append_context **ctx);

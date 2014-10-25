@@ -1,8 +1,9 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "time-util.h"
+#include "istream-private.h"
 #include "ioloop-private.h"
 
 #include <unistd.h>
@@ -16,6 +17,7 @@ time_t ioloop_time = 0;
 struct timeval ioloop_timeval;
 
 struct ioloop *current_ioloop = NULL;
+static ARRAY(io_switch_callback_t *) io_switch_callbacks = ARRAY_INIT;
 
 static void io_loop_initialize_handler(struct ioloop *ioloop)
 {
@@ -27,10 +29,10 @@ static void io_loop_initialize_handler(struct ioloop *ioloop)
 	io_loop_handler_init(ioloop, initial_fd_count);
 }
 
-#undef io_add
-struct io *io_add(int fd, enum io_condition condition,
-		  unsigned int source_linenum,
-		  io_callback_t *callback, void *context)
+static struct io_file *
+io_add_file(int fd, enum io_condition condition,
+	    unsigned int source_linenum,
+	    io_callback_t *callback, void *context)
 {
 	struct io_file *io;
 
@@ -61,6 +63,31 @@ struct io *io_add(int fd, enum io_condition condition,
 		io->next = io->io.ioloop->io_files;
 	}
 	io->io.ioloop->io_files = io;
+	return io;
+}
+
+#undef io_add
+struct io *io_add(int fd, enum io_condition condition,
+		  unsigned int source_linenum,
+		  io_callback_t *callback, void *context)
+{
+	struct io_file *io;
+
+	io = io_add_file(fd, condition, source_linenum, callback, context);
+	return &io->io;
+}
+
+#undef io_add_istream
+struct io *io_add_istream(struct istream *input, unsigned int source_linenum,
+			  io_callback_t *callback, void *context)
+{
+	struct io_file *io;
+
+	io = io_add_file(i_stream_get_fd(input), IO_READ, source_linenum,
+			 callback, context);
+	io->istream = input;
+	i_stream_ref(io->istream);
+	i_stream_set_io(io->istream, &io->io);
 	return &io->io;
 }
 
@@ -92,6 +119,11 @@ static void io_remove_full(struct io **_io, bool closed)
 	   kqueue code relies on this. */
 	io->callback = NULL;
 
+	if (io->pending) {
+		i_assert(io->ioloop->io_pending_count > 0);
+		io->ioloop->io_pending_count--;
+	}
+
 	if (io->ctx != NULL)
 		io_loop_context_unref(&io->ctx);
 
@@ -99,6 +131,12 @@ static void io_remove_full(struct io **_io, bool closed)
 		io_loop_notify_remove(io);
 	else {
 		struct io_file *io_file = (struct io_file *)io;
+
+		if (io_file->istream != NULL) {
+			i_stream_unset_io(io_file->istream, io);
+			i_stream_unref(&io_file->istream);
+			io_file->istream = NULL;
+		}
 
 		io_file_unlink(io_file);
 		io_loop_handle_remove(io_file, closed);
@@ -115,6 +153,16 @@ void io_remove_closed(struct io **io)
 	i_assert(((*io)->condition & IO_NOTIFY) == 0);
 
 	io_remove_full(io, TRUE);
+}
+
+void io_set_pending(struct io *io)
+{
+	i_assert((io->condition & IO_NOTIFY) == 0);
+
+	if (!io->pending) {
+		io->pending = TRUE;
+		io->ioloop->io_pending_count++;
+	}
 }
 
 static void timeout_update_next(struct timeout *timeout, struct timeval *tv_now)
@@ -165,6 +213,14 @@ struct timeout *timeout_add(unsigned int msecs, unsigned int source_linenum,
 	return timeout;
 }
 
+#undef timeout_add_short
+struct timeout *
+timeout_add_short(unsigned int msecs, unsigned int source_linenum,
+		  timeout_callback_t *callback, void *context)
+{
+	return timeout_add(msecs, source_linenum, callback, context);
+}
+
 static void timeout_free(struct timeout *timeout)
 {
 	if (timeout->ctx != NULL)
@@ -181,11 +237,11 @@ void timeout_remove(struct timeout **_timeout)
 	timeout_free(timeout);
 }
 
-static void
+static void ATTR_NULL(2)
 timeout_reset_timeval(struct timeout *timeout, struct timeval *tv_now)
 {
 	timeout_update_next(timeout, tv_now);
-	if (timeout->msecs == 0) {
+	if (timeout->msecs <= 1) {
 		/* if we came here from io_loop_handle_timeouts(),
 		   next_run must be larger than tv_now or we could go to
 		   infinite loop. +1000 to get 1 ms further, another +1000 to
@@ -206,8 +262,7 @@ timeout_reset_timeval(struct timeout *timeout, struct timeval *tv_now)
 
 void timeout_reset(struct timeout *timeout)
 {
-	timeout_reset_timeval(timeout, timeout->ioloop->running ? NULL :
-			      &ioloop_timeval);
+	timeout_reset_timeval(timeout, NULL);
 }
 
 static int timeout_get_wait_time(struct timeout *timeout, struct timeval *tv_r,
@@ -358,7 +413,7 @@ static void io_loop_handle_timeouts_real(struct ioloop *ioloop)
 				(void *)timeout->callback);
 		}
 		if (ioloop->cur_ctx != NULL)
-			io_loop_context_activate(ioloop->cur_ctx);
+			io_loop_context_deactivate(ioloop->cur_ctx);
 	}
 }
 
@@ -373,6 +428,12 @@ void io_loop_call_io(struct io *io)
 {
 	struct ioloop *ioloop = io->ioloop;
 	unsigned int t_id;
+
+	if (io->pending) {
+		i_assert(ioloop->io_pending_count > 0);
+		ioloop->io_pending_count--;
+		io->pending = FALSE;
+	}
 
 	if (io->ctx != NULL)
 		io_loop_context_activate(io->ctx);
@@ -394,9 +455,38 @@ void io_loop_run(struct ioloop *ioloop)
 	if (ioloop->cur_ctx != NULL)
 		io_loop_context_unref(&ioloop->cur_ctx);
 
+	/* recursive io_loop_run() isn't allowed for the same ioloop.
+	   it can break backends. */
+	i_assert(!ioloop->iolooping);
+	ioloop->iolooping = TRUE;
+
 	ioloop->running = TRUE;
 	while (ioloop->running)
 		io_loop_handler_run(ioloop);
+	ioloop->iolooping = FALSE;
+}
+
+static void io_loop_call_pending(struct ioloop *ioloop)
+{
+	struct io_file *io;
+
+	while (ioloop->io_pending_count > 0) {
+		io = ioloop->io_files;
+		do {
+			ioloop->next_io_file = io->next;
+			if (io->io.pending)
+				io_loop_call_io(&io->io);
+			if (ioloop->io_pending_count == 0)
+				break;
+			io = ioloop->next_io_file;
+		} while (io != NULL);
+	}
+}
+
+void io_loop_handler_run(struct ioloop *ioloop)
+{
+	io_loop_handler_run_internal(ioloop);
+	io_loop_call_pending(ioloop);
 }
 
 void io_loop_stop(struct ioloop *ioloop)
@@ -443,8 +533,7 @@ struct ioloop *io_loop_create(void)
 		io_loop_default_time_moved;
 
 	ioloop->prev = current_ioloop;
-        current_ioloop = ioloop;
-
+        io_loop_set_current(ioloop);
         return ioloop;
 }
 
@@ -454,6 +543,10 @@ void io_loop_destroy(struct ioloop **_ioloop)
 	struct priorityq_item *item;
 
 	*_ioloop = NULL;
+
+	/* ->prev won't work unless loops are destroyed in create order */
+        i_assert(ioloop == current_ioloop);
+	io_loop_set_current(current_ioloop->prev);
 
 	if (ioloop->notify_handler_context != NULL)
 		io_loop_notify_handler_deinit(ioloop);
@@ -467,6 +560,7 @@ void io_loop_destroy(struct ioloop **_ioloop)
 			  io->io.source_linenum, io->fd);
 		io_remove(&_io);
 	}
+	i_assert(ioloop->io_pending_count == 0);
 
 	while ((item = priorityq_pop(ioloop->timeouts)) != NULL) {
 		struct timeout *to = (struct timeout *)item;
@@ -483,10 +577,6 @@ void io_loop_destroy(struct ioloop **_ioloop)
 	if (ioloop->cur_ctx != NULL)
 		io_loop_context_deactivate(ioloop->cur_ctx);
 
-	/* ->prev won't work unless loops are destroyed in create order */
-        i_assert(ioloop == current_ioloop);
-	current_ioloop = current_ioloop->prev;
-
 	i_free(ioloop);
 }
 
@@ -496,9 +586,45 @@ void io_loop_set_time_moved_callback(struct ioloop *ioloop,
 	ioloop->time_moved_callback = callback;
 }
 
+static void io_switch_callbacks_free(void)
+{
+	array_free(&io_switch_callbacks);
+}
+
 void io_loop_set_current(struct ioloop *ioloop)
 {
+	io_switch_callback_t *const *callbackp;
+	struct ioloop *prev_ioloop = current_ioloop;
+
 	current_ioloop = ioloop;
+	if (array_is_created(&io_switch_callbacks)) {
+		array_foreach(&io_switch_callbacks, callbackp)
+			(*callbackp)(prev_ioloop);
+	}
+}
+
+void io_loop_add_switch_callback(io_switch_callback_t *callback)
+{
+	if (!array_is_created(&io_switch_callbacks)) {
+		i_array_init(&io_switch_callbacks, 4);
+		lib_atexit(io_switch_callbacks_free);
+	}
+	array_append(&io_switch_callbacks, &callback, 1);
+}
+
+void io_loop_remove_switch_callback(io_switch_callback_t *callback)
+{
+	io_switch_callback_t *const *callbackp;
+	unsigned int idx;
+
+	array_foreach(&io_switch_callbacks, callbackp) {
+		if (*callbackp == callback) {
+			idx = array_foreach_idx(&io_switch_callbacks, callbackp);
+			array_delete(&io_switch_callbacks, idx, 1);
+			return;
+		}
+	}
+	i_unreached();
 }
 
 struct ioloop_context *io_loop_context_new(struct ioloop *ioloop)
@@ -595,6 +721,8 @@ void io_loop_context_activate(struct ioloop_context *ctx)
 {
 	const struct ioloop_context_callback *cb;
 
+	i_assert(ctx->ioloop->cur_ctx == NULL);
+
 	ctx->ioloop->cur_ctx = ctx;
 	io_loop_context_ref(ctx);
 	array_foreach(&ctx->callbacks, cb) {
@@ -623,8 +751,8 @@ struct ioloop_context *io_loop_get_current_context(struct ioloop *ioloop)
 
 struct io *io_loop_move_io(struct io **_io)
 {
-	struct io *new_io, *old_io = *_io;
-	struct io_file *old_io_file;
+	struct io *old_io = *_io;
+	struct io_file *old_io_file, *new_io_file;
 
 	i_assert((old_io->condition & IO_NOTIFY) == 0);
 
@@ -632,11 +760,22 @@ struct io *io_loop_move_io(struct io **_io)
 		return old_io;
 
 	old_io_file = (struct io_file *)old_io;
-	new_io = io_add(old_io_file->fd, old_io->condition,
-			old_io->source_linenum,
-			old_io->callback, old_io->context);
+	new_io_file = io_add_file(old_io_file->fd, old_io->condition,
+				  old_io->source_linenum,
+				  old_io->callback, old_io->context);
+	if (old_io_file->istream != NULL) {
+		/* reference before io_remove() */
+		new_io_file->istream = old_io_file->istream;
+		i_stream_ref(new_io_file->istream);
+	}
+	if (old_io->pending)
+		io_set_pending(&new_io_file->io);
 	io_remove(_io);
-	return new_io;
+	if (new_io_file->istream != NULL) {
+		/* update istream io after it was removed with io_remove() */
+		i_stream_set_io(new_io_file->istream, &new_io_file->io);
+	}
+	return &new_io_file->io;
 }
 
 struct timeout *io_loop_move_timeout(struct timeout **_timeout)
@@ -650,4 +789,16 @@ struct timeout *io_loop_move_timeout(struct timeout **_timeout)
 			     old_to->callback, old_to->context);
 	timeout_remove(_timeout);
 	return new_to;
+}
+
+bool io_loop_have_ios(struct ioloop *ioloop)
+{
+	return ioloop->io_files != NULL;
+}
+
+bool io_loop_have_immediate_timeouts(struct ioloop *ioloop)
+{
+	struct timeval tv;
+
+	return io_loop_get_wait_time(ioloop, &tv) == 0;
 }

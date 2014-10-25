@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -11,8 +11,8 @@
 
 /* <settings checks> */
 static struct inet_listener_settings pop3_login_inet_listeners_array[] = {
-	{ "pop3", "", 110, FALSE },
-	{ "pop3s", "", 995, TRUE }
+	{ .name = "pop3", .address = "", .port = 110 },
+	{ .name = "pop3s", .address = "", .port = 995, .ssl = TRUE }
 };
 static struct inet_listener_settings *pop3_login_inet_listeners[] = {
 	&pop3_login_inet_listeners_array[0],

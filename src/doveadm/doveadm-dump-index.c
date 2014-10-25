@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -36,14 +36,47 @@ struct mbox_index_header {
 struct sdbox_index_header {
 	uint32_t rebuild_count;
 	guid_128_t mailbox_guid;
+	uint8_t flags;
+	uint8_t unused[3];
 };
 struct mdbox_index_header {
 	uint32_t map_uid_validity;
 	guid_128_t mailbox_guid;
+	uint8_t flags;
+	uint8_t unused[3];
 };
 struct mdbox_mail_index_record {
 	uint32_t map_uid;
 	uint32_t save_date;
+};
+struct obox_mail_index_record {
+	unsigned char guid[GUID_128_SIZE];
+	unsigned char oid[GUID_128_SIZE];
+};
+struct mobox_mail_index_header {
+	uint32_t rebuild_count;
+	uint32_t map_uid_validity;
+	uint8_t unused[4];
+	guid_128_t mailbox_guid;
+};
+struct mobox_mail_index_record {
+	uint32_t map_uid;
+	uint32_t save_date;
+};
+struct mobox_map_mail_index_header {
+	uint32_t rebuild_count;
+};
+
+struct mobox_map_mail_index_record {
+	uint32_t offset;
+	uint32_t size;
+	guid_128_t oid;
+};
+struct mailbox_list_index_record {
+	uint32_t name_id;
+	uint32_t parent_uid;
+	guid_128_t guid;
+	uint32_t uid_validity;
 };
 
 struct fts_index_header {
@@ -112,11 +145,18 @@ static void dump_extension_header(struct mail_index *index,
 				  const struct mail_index_ext *ext)
 {
 	const void *data;
+	void *buf;
 
 	if (strcmp(ext->name, MAIL_INDEX_EXT_KEYWORDS) == 0)
 		return;
 
+	/* add some padding, since we don't bother to handle undersized
+	   headers correctly */
+	buf = t_malloc0(ext->hdr_size + 128);
 	data = CONST_PTR_OFFSET(index->map->hdr_base, ext->hdr_offset);
+	memcpy(buf, data, ext->hdr_size);
+	data = buf;
+
 	if (strcmp(ext->name, "hdr-vsize") == 0) {
 		const struct index_vsize_header *hdr = data;
 
@@ -154,6 +194,7 @@ static void dump_extension_header(struct mail_index *index,
 		printf(" - map_uid_validity .. = %u\n", hdr->map_uid_validity);
 		printf(" - mailbox_guid ...... = %s\n",
 		       guid_128_to_string(hdr->mailbox_guid));
+		printf(" - flags ............. = 0x%x\n", hdr->flags);
 	} else if (strcmp(ext->name, "dbox-hdr") == 0) {
 		const struct sdbox_index_header *hdr = data;
 
@@ -161,6 +202,20 @@ static void dump_extension_header(struct mail_index *index,
 		printf(" - rebuild_count . = %u\n", hdr->rebuild_count);
 		printf(" - mailbox_guid .. = %s\n",
 		       guid_128_to_string(hdr->mailbox_guid));
+		printf(" - flags ......... = 0x%x\n", hdr->flags);
+	} else if (strcmp(ext->name, "mobox-hdr") == 0) {
+		const struct mobox_mail_index_header *hdr = data;
+
+		printf("header\n");
+		printf(" - rebuild_count    .. = %u\n", hdr->rebuild_count);
+		printf(" - map_uid_validity .. = %u\n", hdr->map_uid_validity);
+		printf(" - mailbox_guid ...... = %s\n",
+		       guid_128_to_string(hdr->mailbox_guid));
+	} else if (strcmp(ext->name, "mobox-map") == 0) {
+		const struct mobox_map_mail_index_header *hdr = data;
+
+		printf("header\n");
+		printf(" - rebuild_count    .. = %u\n", hdr->rebuild_count);
 	} else if (strcmp(ext->name, "modseq") == 0) {
 		const struct mail_index_modseq_header *hdr = data;
 
@@ -231,8 +286,9 @@ static void dump_extensions(struct mail_index *index)
 		printf("record_offset = %u\n", ext->record_offset);
 		printf("record_size . = %u\n", ext->record_size);
 		printf("record_align  = %u\n", ext->record_align);
-		if (ext->hdr_size > 0)
+		if (ext->hdr_size > 0) T_BEGIN {
 			dump_extension_header(index, ext);
+		} T_END;
 	}
 }
 
@@ -312,15 +368,16 @@ static void dump_cache_hdr(struct mail_cache *cache)
 	}
 
 	hdr = cache->hdr;
-	printf("version .............. = %u\n", hdr->version);
+	printf("major version ........ = %u\n", hdr->major_version);
+	printf("minor version ........ = %u\n", hdr->minor_version);
 	printf("indexid .............. = %u (%s)\n", hdr->indexid, unixdate2str(hdr->indexid));
 	printf("file_seq ............. = %u (%s) (%d compressions)\n",
 	       hdr->file_seq, unixdate2str(hdr->file_seq),
 	       hdr->file_seq - hdr->indexid);
 	printf("continued_record_count = %u\n", hdr->continued_record_count);
-	printf("hole_offset .......... = %u\n", hdr->hole_offset);
-	printf("used_file_size ....... = %u\n", hdr->used_file_size);
-	printf("deleted_space ........ = %u\n", hdr->deleted_space);
+	printf("record_count ......... = %u\n", hdr->record_count);
+	printf("used_file_size (old) . = %u\n", hdr->backwards_compat_used_file_size);
+	printf("deleted_record_count . = %u\n", hdr->deleted_record_count);
 	printf("field_header_offset .. = %u (0x%08x nontranslated)\n",
 	       mail_index_offset_to_uint32(hdr->field_header_offset),
 	       hdr->field_header_offset);
@@ -550,6 +607,25 @@ static void dump_record(struct mail_index_view *view, unsigned int seq)
 			const struct mdbox_mail_index_record *drec = data;
 			printf("                   : map_uid   = %u\n", drec->map_uid);
 			printf("                   : save_date = %u (%s)\n", drec->save_date, unixdate2str(drec->save_date));
+		} else if (strcmp(ext[i].name, "obox") == 0) {
+			const struct obox_mail_index_record *orec = data;
+			printf("                   : guid = %s\n", guid_128_to_string(orec->guid));
+			printf("                   : oid  = %s\n", guid_128_to_string(orec->oid));
+		} else if (strcmp(ext[i].name, "mobox") == 0) {
+			const struct mobox_mail_index_record *orec = data;
+			printf("                   : map_uid   = %u\n", orec->map_uid);
+			printf("                   : save_date = %u (%s)\n", orec->save_date, unixdate2str(orec->save_date));
+		} else if (strcmp(ext[i].name, "mobox-map") == 0) {
+			const struct mobox_map_mail_index_record *orec = data;
+			printf("                   : offset = %u\n", orec->offset);
+			printf("                   : size   = %u\n", orec->size);
+			printf("                   : oid    = %s\n", guid_128_to_string(orec->oid));
+		} else if (strcmp(ext[i].name, "list") == 0) {
+			const struct mailbox_list_index_record *lrec = data;
+			printf("                   : name_id      = %u\n", lrec->name_id);
+			printf("                   : parent_uid   = %u\n", lrec->parent_uid);
+			printf("                   : guid         = %s\n", guid_128_to_string(lrec->guid));
+			printf("                   : uid_validity = %u\n", lrec->uid_validity);
 		}
 	}
 }

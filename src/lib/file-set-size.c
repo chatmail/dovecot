@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
@@ -14,7 +14,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#ifdef HAVE_LINUX_FALLOC_H
+#if defined(HAVE_LINUX_FALLOC_H) && !defined(FALLOC_FL_KEEP_SIZE)
+/* Legacy Linux does not have the FALLOC_FL_* flags under fcntl.h */
 #  include <linux/falloc.h>
 #endif
 
@@ -100,7 +101,7 @@ int file_preallocate(int fd ATTR_UNUSED, off_t size ATTR_UNUSED)
 	fs.fst_bytesalloc = 0;
 	if (fcntl(fd, F_PREALLOCATE, &fs) < 0)
 		return -1;
-	return 0;
+	return fs.fst_bytesalloc > 0 ? 1 : 0;
 #else
 	return 0;
 #endif

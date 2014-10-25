@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "userdb.h"
@@ -86,7 +86,7 @@ static void passwd_lookup(struct auth_request *auth_request,
 	struct timeval start_tv;
 	int ret;
 
-	auth_request_log_debug(auth_request, "passwd", "lookup");
+	auth_request_log_debug(auth_request, AUTH_SUBSYS_DB, "lookup");
 
 	if (gettimeofday(&start_tv, NULL) < 0)
 		start_tv.tv_sec = 0;
@@ -96,19 +96,18 @@ static void passwd_lookup(struct auth_request *auth_request,
 
 	switch (ret) {
 	case -1:
-		auth_request_log_error(auth_request, "passwd",
+		auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
 				       "getpwnam() failed: %m");
 		callback(USERDB_RESULT_INTERNAL_FAILURE, auth_request);
 		return;
 	case 0:
-		auth_request_log_info(auth_request, "passwd", "unknown user");
+		auth_request_log_unknown_user(auth_request, AUTH_SUBSYS_DB);
 		callback(USERDB_RESULT_USER_UNKNOWN, auth_request);
 		return;
 	}
 
 	auth_request_set_field(auth_request, "user", pw.pw_name, NULL);
 
-	auth_request_init_userdb_reply(auth_request);
 	auth_request_set_userdb_field(auth_request, "system_groups_user",
 				      pw.pw_name);
 	auth_request_set_userdb_field(auth_request, "uid", dec2str(pw.pw_uid));
@@ -146,13 +145,6 @@ passwd_iterate_want_pw(struct passwd *pw, const struct auth_settings *set)
 		return FALSE;
 	if (pw->pw_uid > (uid_t)set->last_valid_uid && set->last_valid_uid != 0)
 		return FALSE;
-
-	/* skip entries that don't have a valid shell.
-	   they're again probably not real users. */
-	if (strcmp(pw->pw_shell, "/bin/false") == 0 ||
-	    strcmp(pw->pw_shell, "/sbin/nologin") == 0 ||
-	    strcmp(pw->pw_shell, "/usr/sbin/nologin") == 0)
-		return FALSE;
 	return TRUE;
 }
 
@@ -185,7 +177,8 @@ static void passwd_iterate_next(struct userdb_iterate_context *_ctx)
 	_ctx->callback(NULL, _ctx->context);
 }
 
-static void passwd_iterate_next_timeout(void *context ATTR_UNUSED)
+static void ATTR_NULL(1)
+passwd_iterate_next_timeout(void *context ATTR_UNUSED)
 {
 	timeout_remove(&cur_userdb_iter_to);
 	passwd_iterate_next(&cur_userdb_iter->ctx);
@@ -201,8 +194,8 @@ static int passwd_iterate_deinit(struct userdb_iterate_context *_ctx)
 	i_free(ctx);
 
 	if (cur_userdb_iter != NULL) {
-		cur_userdb_iter_to =
-			timeout_add(0, passwd_iterate_next_timeout, NULL);
+		cur_userdb_iter_to = timeout_add(0, passwd_iterate_next_timeout,
+						 (void *)NULL);
 	}
 	return ret;
 }
@@ -216,11 +209,10 @@ passwd_passwd_preinit(pool_t pool, const char *args)
 	module = p_new(pool, struct passwd_userdb_module, 1);
 	module->module.cache_key = USER_CACHE_KEY;
 	module->tmpl = userdb_template_build(pool, "passwd", args);
+	module->module.blocking = TRUE;
 
-	if (userdb_template_remove(module->tmpl, "blocking", &value)) {
-		module->module.blocking = value == NULL ||
-			strcasecmp(value, "yes") == 0;
-	}
+	if (userdb_template_remove(module->tmpl, "blocking", &value))
+		module->module.blocking = strcasecmp(value, "yes") == 0;
 	/* FIXME: backwards compatibility */
 	if (!userdb_template_is_empty(module->tmpl))
 		i_warning("userdb passwd: Move templates args to override_fields setting");

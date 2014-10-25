@@ -24,12 +24,18 @@ struct ioloop {
 	io_loop_time_moved_callback_t *time_moved_callback;
 	time_t next_max_time;
 
+	unsigned int io_pending_count;
+
 	unsigned int running:1;
+	unsigned int iolooping:1;
 };
 
 struct io {
 	enum io_condition condition;
 	unsigned int source_linenum;
+	/* trigger I/O callback even if OS doesn't think there is input
+	   pending */
+	bool pending;
 
 	io_callback_t *callback;
         void *context;
@@ -46,6 +52,9 @@ struct io_file {
 
 	int refcount;
 	int fd;
+
+	/* only for io_add_istream(), a bit kludgy to be here.. */
+	struct istream *istream;
 };
 
 struct timeout {
@@ -71,12 +80,14 @@ struct ioloop_context_callback {
 struct ioloop_context {
 	int refcount;
 	struct ioloop *ioloop;
-	ARRAY_DEFINE(callbacks, struct ioloop_context_callback);
+	ARRAY(struct ioloop_context_callback) callbacks;
 };
 
 int io_loop_get_wait_time(struct ioloop *ioloop, struct timeval *tv_r);
 void io_loop_handle_timeouts(struct ioloop *ioloop);
 void io_loop_call_io(struct io *io);
+
+void io_loop_handler_run_internal(struct ioloop *ioloop);
 
 /* I/O handler calls */
 void io_loop_handle_add(struct io_file *io);

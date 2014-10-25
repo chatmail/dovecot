@@ -1,10 +1,13 @@
-/* config.h.in.  Generated from configure.in by autoheader.  */
+/* config.h.in.  Generated from configure.ac by autoheader.  */
 
 /* Define if building universal (internal helper macro) */
 #undef AC_APPLE_UNIVERSAL_BUILD
 
 /* Define if you have buggy CMSG macros */
 #undef BUGGY_CMSG_MACROS
+
+/* Build with CDB support */
+#undef BUILD_CDB
 
 /* Build with Berkeley DB support */
 #undef BUILD_DB
@@ -45,6 +48,9 @@
 /* Disable asserts */
 #undef DISABLE_ASSERTS
 
+/* Dovecot ABI version */
+#undef DOVECOT_ABI_VERSION
+
 /* Dovecot name */
 #undef DOVECOT_NAME
 
@@ -53,6 +59,12 @@
 
 /* Dovecot version */
 #undef DOVECOT_VERSION
+
+/* Dovecot major version */
+#undef DOVECOT_VERSION_MAJOR
+
+/* Dovecot minor version */
+#undef DOVECOT_VERSION_MINOR
 
 /* How to define flexible array members in structs */
 #undef FLEXIBLE_ARRAY_MEMBER
@@ -66,7 +78,7 @@
 /* Define to 1 if you have the `clearenv' function. */
 #undef HAVE_CLEARENV
 
-/* Define to 1 if you have the `clock_gettime' function. */
+/* Define if you have the clock_gettime function */
 #undef HAVE_CLOCK_GETTIME
 
 /* Define if you have struct dirent->d_type */
@@ -203,11 +215,20 @@
 /* Define to 1 if you have the `lockf' function. */
 #undef HAVE_LOCKF
 
+/* Define if you want textcat (Debian version) support for CLucene */
+#undef HAVE_LUCENE_EXTTEXTCAT
+
 /* Define if you want stemming support for CLucene */
 #undef HAVE_LUCENE_STEMMER
 
 /* Define if you want textcat support for CLucene */
 #undef HAVE_LUCENE_TEXTCAT
+
+/* Define if you have lz4 library */
+#undef HAVE_LZ4
+
+/* Define if you have lzma library */
+#undef HAVE_LZMA
 
 /* Define to 1 if you have the `madvise' function. */
 #undef HAVE_MADVISE
@@ -238,6 +259,10 @@
 
 /* Define if your MySQL library supports setting cipher */
 #undef HAVE_MYSQL_SSL_CIPHER
+
+/* Define if your MySQL library supports verifying the name in the SSL
+   certificate */
+#undef HAVE_MYSQL_SSL_VERIFY_SERVER_CERT
 
 /* Define if you don't have C99 compatible vsnprintf() call */
 #undef HAVE_OLD_VSNPRINTF
@@ -280,6 +305,12 @@
 
 /* Define to 1 if you have the `quotactl' function. */
 #undef HAVE_QUOTACTL
+
+/* Define to 1 if you have the <quota.h> header file. */
+#undef HAVE_QUOTA_H
+
+/* Define if you have quota_open() */
+#undef HAVE_QUOTA_OPEN
 
 /* Define if Q_QUOTACTL exists */
 #undef HAVE_Q_QUOTACTL
@@ -404,6 +435,9 @@
 /* Define if you have struct iovec */
 #undef HAVE_STRUCT_IOVEC
 
+/* Define to 1 if the system has the type `struct sockpeercred'. */
+#undef HAVE_STRUCT_SOCKPEERCRED
+
 /* Define if you want to use systemd socket activation */
 #undef HAVE_SYSTEMD
 
@@ -443,6 +477,9 @@
 /* Define to 1 if you have the <sys/types.h> header file. */
 #undef HAVE_SYS_TYPES_H
 
+/* Define to 1 if you have the <sys/ucred.h> header file. */
+#undef HAVE_SYS_UCRED_H
+
 /* Define to 1 if you have the <sys/uio.h> header file. */
 #undef HAVE_SYS_UIO_H
 
@@ -454,6 +491,9 @@
 
 /* Define if you have struct tm->tm_gmtoff */
 #undef HAVE_TM_GMTOFF
+
+/* Define if you have typeof() */
+#undef HAVE_TYPEOF
 
 /* Define to 1 if you have the <ucontext.h> header file. */
 #undef HAVE_UCONTEXT_H
@@ -712,6 +752,11 @@
 # ifndef WORDS_BIGENDIAN
 #  undef WORDS_BIGENDIAN
 # endif
+#endif
+
+/* Enable large inode numbers on Mac OS X 10.5.  */
+#ifndef _DARWIN_USE_64_BIT_INODE
+# define _DARWIN_USE_64_BIT_INODE 1
 #endif
 
 /* Number of bits in a file offset, on hosts where this is settable. */

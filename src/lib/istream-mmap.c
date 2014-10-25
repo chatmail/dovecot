@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -22,7 +22,8 @@ struct mmap_istream {
 
 static size_t mmap_pagemask = 0;
 
-static void i_stream_mmap_close(struct iostream_private *stream)
+static void i_stream_mmap_close(struct iostream_private *stream,
+				bool close_parent ATTR_UNUSED)
 {
 	struct mmap_istream *mstream = (struct mmap_istream *) stream;
 
@@ -118,6 +119,8 @@ static ssize_t i_stream_mmap_read(struct istream_private *stream)
 			stream->buffer = NULL;
 			stream->buffer_size = 0;
 			stream->skip = stream->pos = 0;
+			io_stream_set_error(&stream->iostream,
+					    "mmap() failed: %m");
 			i_error("mmap_istream.mmap(%s) failed: %m",
 				i_stream_get_name(&stream->istream));
 			return -1;
@@ -183,15 +186,12 @@ static int fstat_cached(struct mmap_istream *mstream)
 	return 0;
 }
 
-static const struct stat *
+static int
 i_stream_mmap_stat(struct istream_private *stream, bool exact ATTR_UNUSED)
 {
 	struct mmap_istream *mstream = (struct mmap_istream *) stream;
 
-	if (fstat_cached(mstream) < 0)
-		return NULL;
-
-	return &stream->statbuf;
+	return fstat_cached(mstream);
 }
 
 struct istream *i_stream_create_mmap(int fd, size_t block_size,

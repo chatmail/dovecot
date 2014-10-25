@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
@@ -9,8 +9,8 @@
 
 #include <stdlib.h>
 
-static ARRAY_DEFINE(userdb_interfaces, struct userdb_module_interface *);
-static ARRAY_DEFINE(userdb_modules, struct userdb_module *);
+static ARRAY(struct userdb_module_interface *) userdb_interfaces;
+static ARRAY(struct userdb_module *) userdb_modules;
 
 static const struct userdb_module_interface userdb_iface_deinit = {
 	.name = "deinit"
@@ -76,7 +76,7 @@ uid_t userdb_parse_uid(struct auth_request *request, const char *str)
 		return (uid_t)-1;
 	case 0:
 		if (request != NULL) {
-			auth_request_log_error(request, "userdb",
+			auth_request_log_error(request, AUTH_SUBSYS_DB,
 					       "Invalid UID value '%s'", str);
 		}
 		return (uid_t)-1;
@@ -102,7 +102,7 @@ gid_t userdb_parse_gid(struct auth_request *request, const char *str)
 		return (gid_t)-1;
 	case 0:
 		if (request != NULL) {
-			auth_request_log_error(request, "userdb",
+			auth_request_log_error(request, AUTH_SUBSYS_DB,
 					       "Invalid GID value '%s'", str);
 		}
 		return (gid_t)-1;
@@ -230,6 +230,7 @@ extern struct userdb_module_interface userdb_ldap;
 extern struct userdb_module_interface userdb_sql;
 extern struct userdb_module_interface userdb_nss;
 extern struct userdb_module_interface userdb_checkpassword;
+extern struct userdb_module_interface userdb_dict;
 
 void userdbs_init(void)
 {
@@ -244,6 +245,7 @@ void userdbs_init(void)
 	userdb_register_module(&userdb_sql);
 	userdb_register_module(&userdb_nss);
 	userdb_register_module(&userdb_checkpassword);
+	userdb_register_module(&userdb_dict);
 }
 
 void userdbs_deinit(void)

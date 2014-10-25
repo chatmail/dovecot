@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "restrict-process-size.h"
@@ -21,7 +21,7 @@ passdb_cache_log_hit(struct auth_request *request, const char *value)
 		p = strchr(value, '\t');
 		value = t_strconcat(PASSWORD_HIDDEN_STR, p, NULL);
 	}
-	auth_request_log_debug(request, "cache", "hit: %s", value);
+	auth_request_log_debug(request, AUTH_SUBSYS_DB, "cache hit: %s", value);
 }
 
 bool passdb_cache_verify_plain(struct auth_request *request, const char *key,
@@ -33,39 +33,41 @@ bool passdb_cache_verify_plain(struct auth_request *request, const char *key,
 	int ret;
 	bool expired, neg_expired;
 
-	if (passdb_cache == NULL || key == NULL || request->master_user != NULL)
+	if (passdb_cache == NULL || key == NULL)
 		return FALSE;
 
 	/* value = password \t ... */
 	value = auth_cache_lookup(passdb_cache, request, key, &node,
 				  &expired, &neg_expired);
 	if (value == NULL || (expired && !use_expired)) {
-		auth_request_log_debug(request, "cache",
-				       value == NULL ? "miss" : "expired");
+		auth_request_log_debug(request, AUTH_SUBSYS_DB,
+				       value == NULL ? "cache miss" :
+				       "cache expired");
 		return FALSE;
 	}
 	passdb_cache_log_hit(request, value);
 
 	if (*value == '\0') {
 		/* negative cache entry */
-		auth_request_log_info(request, "cache", "User unknown");
+		auth_request_log_unknown_user(request, AUTH_SUBSYS_DB);
 		*result_r = PASSDB_RESULT_USER_UNKNOWN;
 		return TRUE;
 	}
 
-	list = t_strsplit(value, "\t");
+	list = t_strsplit_tab(value);
 
 	cached_pw = list[0];
 	if (*cached_pw == '\0') {
 		/* NULL password */
-		auth_request_log_info(request, "cache", "NULL password access");
+		auth_request_log_info(request, AUTH_SUBSYS_DB,
+				      "Cached NULL password access");
 		ret = 1;
 	} else {
 		scheme = password_get_scheme(&cached_pw);
 		i_assert(scheme != NULL);
 
 		ret = auth_request_password_verify(request, password, cached_pw,
-						   scheme, "cache");
+						   scheme, AUTH_SUBSYS_DB);
 
 		if (ret == 0 && (node->last_success || neg_expired)) {
 			/* a) the last authentication was successful. assume
@@ -97,14 +99,15 @@ bool passdb_cache_lookup_credentials(struct auth_request *request,
 	struct auth_cache_node *node;
 	bool expired, neg_expired;
 
-	if (passdb_cache == NULL || request->master_user != NULL)
+	if (passdb_cache == NULL)
 		return FALSE;
 
 	value = auth_cache_lookup(passdb_cache, request, key, &node,
 				  &expired, &neg_expired);
 	if (value == NULL || (expired && !use_expired)) {
-		auth_request_log_debug(request, "cache",
-				       value == NULL ? "miss" : "expired");
+		auth_request_log_debug(request, AUTH_SUBSYS_DB,
+				       value == NULL ? "cache miss" :
+				       "cache expired");
 		return FALSE;
 	}
 	passdb_cache_log_hit(request, value);
@@ -117,7 +120,7 @@ bool passdb_cache_lookup_credentials(struct auth_request *request,
 		return TRUE;
 	}
 
-	list = t_strsplit(value, "\t");
+	list = t_strsplit_tab(value);
 	auth_request_set_fields(request, list + 1, NULL);
 
 	*result_r = PASSDB_RESULT_OK;

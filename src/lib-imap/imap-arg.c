@@ -1,11 +1,11 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "imap-arg.h"
 
 bool imap_arg_get_atom(const struct imap_arg *arg, const char **str_r)
 {
-	if (arg->type != IMAP_ARG_ATOM)
+	if (arg->type != IMAP_ARG_ATOM && arg->type != IMAP_ARG_NIL)
 		return FALSE;
 
 	*str_r = arg->_data.str;
@@ -32,7 +32,9 @@ bool imap_arg_get_string(const struct imap_arg *arg, const char **str_r)
 
 bool imap_arg_get_astring(const struct imap_arg *arg, const char **str_r)
 {
-	if (!IMAP_ARG_IS_ASTRING(arg))
+	/* RFC 3501 4.5. specifies that NIL is the same as "NIL" when
+	   reading astring. */
+	if (!IMAP_ARG_IS_ASTRING(arg) && arg->type != IMAP_ARG_NIL)
 		return FALSE;
 
 	*str_r = arg->_data.str;

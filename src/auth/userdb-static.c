@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 
@@ -29,7 +29,6 @@ static void static_lookup_real(struct auth_request *auth_request,
 	struct static_userdb_module *module =
 		(struct static_userdb_module *)_module;
 
-	auth_request_init_userdb_reply(auth_request);
 	userdb_template_export(module->tmpl, auth_request);
 	callback(USERDB_RESULT_OK, auth_request);
 }
@@ -41,6 +40,8 @@ static_credentials_callback(enum passdb_result result,
 			    struct auth_request *auth_request)
 {
 	struct static_context *ctx = auth_request->context;
+
+	auth_request->userdb_lookup = TRUE;
 
 	auth_request->private_callback.userdb = ctx->old_callback;
 	auth_request->context = ctx->old_context;
@@ -56,7 +57,7 @@ static_credentials_callback(enum passdb_result result,
 		ctx->callback(USERDB_RESULT_USER_UNKNOWN, auth_request);
 		break;
 	case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
-		auth_request_log_error(auth_request, "static",
+		auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
 			"passdb doesn't support lookups, "
 			"can't verify user's existence");
 		/* fall through */
@@ -92,12 +93,16 @@ static void static_lookup(struct auth_request *auth_request,
 
 		auth_request->context = ctx;
 		if (auth_request->passdb != NULL) {
+			/* kludge: temporarily work as if we weren't doing
+			   a userdb lookup. this is to get auth cache to use
+			   passdb caching instead of userdb caching. */
+			auth_request->userdb_lookup = FALSE;
 			auth_request_lookup_credentials(auth_request, "",
 				static_credentials_callback);
 		} else {
 			static_credentials_callback(
 				PASSDB_RESULT_SCHEME_NOT_AVAILABLE,
-				NULL, 0, auth_request);
+				&uchar_nul, 0, auth_request);
 		}
 	} else {
 		static_lookup_real(auth_request, callback);

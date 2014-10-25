@@ -3,6 +3,8 @@
 
 #define MAX_INT_STRLEN ((sizeof(uintmax_t) * CHAR_BIT + 2) / 3 + 1)
 
+extern const unsigned char uchar_nul; /* (const unsigned char *)"" */
+
 /* Returns -1 if dest wasn't large enough, 0 if not. */
 int i_snprintf(char *dest, size_t max_chars, const char *format, ...)
 	ATTR_FORMAT(3, 4);
@@ -48,13 +50,14 @@ const char *t_str_lcase(const char *str);
 const char *t_str_ucase(const char *str);
 
 int null_strcmp(const char *s1, const char *s2) ATTR_PURE;
-int bsearch_strcmp(const void *p1, const void *p2) ATTR_PURE;
-int bsearch_strcasecmp(const void *p1, const void *p2) ATTR_PURE;
+int bsearch_strcmp(const char *key, const char *const *member) ATTR_PURE;
+int bsearch_strcasecmp(const char *key, const char *const *member) ATTR_PURE;
 int i_memcasecmp(const void *p1, const void *p2, size_t size) ATTR_PURE;
-int i_strcmp_p(const void *p1, const void *p2) ATTR_PURE;
-int i_strcasecmp_p(const void *p1, const void *p2) ATTR_PURE;
+int i_strcmp_p(const char *const *p1, const char *const *p2) ATTR_PURE;
+int i_strcasecmp_p(const char *const *p1, const char *const *p2) ATTR_PURE;
 
-/* separators is an array of separator characters, not a separator string. */
+/* separators is an array of separator characters, not a separator string.
+   an empty data string results in an array containing only NULL. */
 char **p_strsplit(pool_t pool, const char *data, const char *separators)
 	ATTR_MALLOC;
 const char **t_strsplit(const char *data, const char *separators)
@@ -66,6 +69,8 @@ char **p_strsplit_spaces(pool_t pool, const char *data, const char *separators)
 const char **t_strsplit_spaces(const char *data, const char *separators)
 	ATTR_MALLOC;
 void p_strsplit_free(pool_t pool, char **arr);
+/* Optimized version of t_strsplit(data, "\t") */
+const char **t_strsplit_tab(const char *data);
 
 const char *dec2str(uintmax_t number);
 
@@ -83,6 +88,18 @@ bool str_array_icase_find(const char *const *arr, const char *value);
 /* Duplicate array of strings. The memory can be freed by freeing the
    return value. */
 const char **p_strarray_dup(pool_t pool, const char *const *arr);
+
+#define i_qsort(base, nmemb, size, cmp) \
+	qsort(base, nmemb, size + \
+		CALLBACK_TYPECHECK(cmp, int (*)(typeof(const typeof(*base) *), \
+						typeof(const typeof(*base) *))), \
+		(int (*)(const void *, const void *))cmp)
+#define i_bsearch(key, base, nmemb, size, cmp) \
+	bsearch(key, base, nmemb, size + \
+		CALLBACK_TYPECHECK(cmp, int (*)(typeof(const typeof(*key) *), \
+						typeof(const typeof(*base) *))), \
+		(int (*)(const void *, const void *))cmp)
+
 
 /* INTERNAL */
 char *t_noalloc_strdup_vprintf(const char *format, va_list args,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -19,6 +19,7 @@ int mbox_move(struct mbox_sync_context *sync_ctx,
 	struct ostream *output;
 	off_t ret;
 
+	i_assert(source > 0 || (dest != 1 && dest != 2));
 	i_assert(size < OFF_T_MAX);
 
 	if (size == 0 || source == dest)

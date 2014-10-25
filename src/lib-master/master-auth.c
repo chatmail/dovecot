@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -37,7 +37,7 @@ struct master_auth {
 	const char *path;
 
 	unsigned int tag_counter;
-	struct hash_table *connections;
+	HASH_TABLE(void *, struct master_auth_connection *) connections;
 };
 
 struct master_auth *
@@ -51,8 +51,7 @@ master_auth_init(struct master_service *service, const char *path)
 	auth->pool = pool;
 	auth->service = service;
 	auth->path = p_strdup(pool, path);
-	auth->connections = hash_table_create(default_pool, pool,
-					      0, NULL, NULL);
+	hash_table_create_direct(&auth->connections, pool, 0);
 	return auth;
 }
 
@@ -63,10 +62,9 @@ master_auth_connection_deinit(struct master_auth_connection **_conn)
 
 	*_conn = NULL;
 
-	if (conn->tag != 0) {
+	if (conn->tag != 0)
 		hash_table_remove(conn->auth->connections,
 				  POINTER_CAST(conn->tag));
-	}
 
 	if (conn->callback != NULL)
 		conn->callback(NULL, conn->context);
@@ -87,14 +85,13 @@ void master_auth_deinit(struct master_auth **_auth)
 {
 	struct master_auth *auth = *_auth;
 	struct hash_iterate_context *iter;
-	void *key, *value;
+	void *key;
+	struct master_auth_connection *conn;
 
 	*_auth = NULL;
 
 	iter = hash_table_iterate_init(auth->connections);
-	while (hash_table_iterate(iter, &key, &value)) {
-		struct master_auth_connection *conn = value;
-
+	while (hash_table_iterate(iter, auth->connections, &key, &conn)) {
 		conn->tag = 0;
 		master_auth_connection_deinit(&conn);
 	}
@@ -111,14 +108,14 @@ static void master_auth_connection_input(struct master_auth_connection *conn)
 	ret = read(conn->fd, conn->buf + conn->buf_pos,
 		   sizeof(conn->buf) - conn->buf_pos);
 	if (ret <= 0) {
-		if (ret < 0) {
+		if (ret == 0 || errno == ECONNRESET) {
+			i_error("read(%s) failed: Remote closed connection "
+				"(service's process_limit reached?)",
+				conn->auth->path);
+		} else {
 			if (errno == EAGAIN)
 				return;
 			i_error("read(%s) failed: %m", conn->auth->path);
-		} else {
-			i_error("read(%s) failed: Remote closed connection "
-				"(process_limit reached?)",
-				conn->auth->path);
 		}
 		master_auth_connection_deinit(&conn);
 		return;
@@ -189,7 +186,9 @@ void master_auth_request(struct master_auth *auth, int fd,
 	conn->fd = net_connect_unix_with_retries(auth->path,
 						 SOCKET_CONNECT_RETRY_MSECS);
 	if (conn->fd == -1) {
-		i_error("net_connect_unix(%s) failed: %m", auth->path);
+		i_error("net_connect_unix(%s) failed: %m%s",
+			auth->path, errno != EAGAIN ? "" :
+			" - http://wiki2.dovecot.org/SocketUnavailable");
 		master_auth_connection_deinit(&conn);
 		return;
 	}

@@ -2,11 +2,15 @@
 #define MAIL_STORAGE_PRIVATE_H
 
 #include "module-context.h"
+#include "unichar.h"
 #include "file-lock.h"
 #include "mail-storage.h"
 #include "mail-storage-hooks.h"
 #include "mail-storage-settings.h"
 #include "mail-index-private.h"
+
+/* Default prefix for indexes */
+#define MAIL_INDEX_PREFIX "dovecot.index"
 
 /* Block size when read()ing message header. */
 #define MAIL_READ_HDR_BLOCK_SIZE (1024*4)
@@ -60,7 +64,29 @@ enum mail_storage_class_flags {
 	/* Storage doesn't need a mail root directory */
 	MAIL_STORAGE_CLASS_FLAG_NO_ROOT		= 0x10,
 	/* Storage uses one file per message */
-	MAIL_STORAGE_CLASS_FLAG_FILE_PER_MSG	= 0x20
+	MAIL_STORAGE_CLASS_FLAG_FILE_PER_MSG	= 0x20,
+	/* Messages have GUIDs (always set mailbox_status.have_guids=TRUE) */
+	MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_GUIDS	= 0x40,
+	/* mailbox_save_set_guid() works (always set
+	   mailbox_status.have_save_guids=TRUE) */
+	MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_SAVE_GUIDS	= 0x80,
+	/* message content can be unstructured binary data
+	   (e.g. zlib plugin is allowed to compress/decompress mails) */
+	MAIL_STORAGE_CLASS_FLAG_BINARY_DATA	= 0x100,
+	/* Message GUIDs can only be 128bit (always set
+	   mailbox_status.have_only_guid128) */
+	MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_GUID128 = 0x200
+};
+
+struct mail_binary_cache {
+	struct timeout *to;
+	struct mailbox *box;
+	uint32_t uid;
+
+	uoff_t orig_physical_pos;
+	bool include_hdr;
+	struct istream *input;
+	uoff_t size;
 };
 
 struct mail_storage {
@@ -95,8 +121,16 @@ struct mail_storage {
 	struct mail_storage_callbacks callbacks;
 	void *callback_context;
 
+	struct mail_binary_cache binary_cache;
+	/* Filled lazily by mailbox_attribute_*() when accessing shared
+	   attributes. */
+	struct dict *_shared_attr_dict;
+
 	/* Module-specific contexts. See mail_storage_module_id. */
-	ARRAY_DEFINE(module_contexts, union mail_storage_module_context *);
+	ARRAY(union mail_storage_module_context *) module_contexts;
+
+	/* Failed to create shared attribute dict, don't try again */
+	unsigned int shared_attr_dict_failed:1;
 };
 
 struct mail_attachment_part {
@@ -114,12 +148,12 @@ struct mailbox_vfuncs {
 	void (*close)(struct mailbox *box);
 	void (*free)(struct mailbox *box);
 
-	int (*create)(struct mailbox *box, const struct mailbox_update *update,
-		      bool directory);
-	int (*update)(struct mailbox *box, const struct mailbox_update *update);
-	int (*delete)(struct mailbox *box);
-	int (*rename)(struct mailbox *src, struct mailbox *dest,
-		      bool rename_children);
+	int (*create_box)(struct mailbox *box,
+			  const struct mailbox_update *update, bool directory);
+	int (*update_box)(struct mailbox *box,
+			  const struct mailbox_update *update);
+	int (*delete_box)(struct mailbox *box);
+	int (*rename_box)(struct mailbox *src, struct mailbox *dest);
 
 	int (*get_status)(struct mailbox *box, enum mailbox_status_items items,
 			  struct mailbox_status *status_r);
@@ -127,6 +161,19 @@ struct mailbox_vfuncs {
 			    enum mailbox_metadata_items items,
 			    struct mailbox_metadata *metadata_r);
 	int (*set_subscribed)(struct mailbox *box, bool set);
+
+	int (*attribute_set)(struct mailbox_transaction_context *t,
+			     enum mail_attribute_type type, const char *key,
+			     const struct mail_attribute_value *value);
+	int (*attribute_get)(struct mailbox_transaction_context *t,
+			     enum mail_attribute_type type, const char *key,
+			     struct mail_attribute_value *value_r);
+	struct mailbox_attribute_iter *
+		(*attribute_iter_init)(struct mailbox *box,
+				       enum mail_attribute_type type,
+				       const char *prefix);
+	const char *(*attribute_iter_next)(struct mailbox_attribute_iter *iter);
+	int (*attribute_iter_deinit)(struct mailbox_attribute_iter *iter);
 
 	/* Lookup sync extension record and figure out if it mailbox has
 	   changed since. Returns 1 = yes, 0 = no, -1 = error. */
@@ -203,6 +250,12 @@ union mailbox_module_context {
 	struct mail_storage_module_register *reg;
 };
 
+struct mail_msgpart_partial_cache {
+	uint32_t uid;
+	uoff_t physical_start;
+	uoff_t physical_pos, virtual_pos;
+};
+
 struct mailbox {
 	const char *name;
 	/* mailbox's virtual name (from mail_namespace_get_vname()) */
@@ -212,7 +265,7 @@ struct mailbox {
 
         struct mailbox_vfuncs v, *vlast;
 /* private: */
-	pool_t pool;
+	pool_t pool, metadata_pool;
 	/* Linked list of all mailboxes in this storage */
 	struct mailbox *prev, *next;
 
@@ -220,9 +273,15 @@ struct mailbox {
 	struct mail_index *index;
 	struct mail_index_view *view;
 	struct mail_cache *cache;
+	/* Private per-user index/view for shared mailboxes. These are synced
+	   against the primary index and used to store per-user flags.
+	   These are non-NULL only when mailbox has per-user flags. */
+	struct mail_index *index_pvt;
+	struct mail_index_view *view_pvt;
 	/* Filled lazily by mailbox_get_permissions() */
 	struct mailbox_permissions _perm;
-	/* Filled lazily by mailbox_get_path() */
+	/* Filled lazily when mailbox is opened, use mailbox_get_path()
+	   to access it */
 	const char *_path;
 
 	/* default vfuncs for new struct mails. */
@@ -239,11 +298,11 @@ struct mailbox {
 	enum mailbox_flags flags;
 	unsigned int transaction_count;
 	enum mailbox_feature enabled_features;
+	struct mail_msgpart_partial_cache partial_cache;
 
 	struct mail_index_view *tmp_sync_view;
 
 	/* Mailbox notification settings: */
-	unsigned int notify_min_interval;
 	mailbox_notify_callback_t *notify_callback;
 	void *notify_context;
 
@@ -251,10 +310,10 @@ struct mailbox {
 	unsigned int generation_sequence;
 
 	/* Saved search results */
-	ARRAY_DEFINE(search_results, struct mail_search_result *);
+	ARRAY(struct mail_search_result *) search_results;
 
 	/* Module-specific contexts. See mail_storage_module_id. */
-	ARRAY_DEFINE(module_contexts, union mailbox_module_context *);
+	ARRAY(union mailbox_module_context *) module_contexts;
 
 	/* When FAST open flag is used, the mailbox isn't actually opened until
 	   it's synced for the first time. */
@@ -265,6 +324,11 @@ struct mailbox {
 	unsigned int creating:1;
 	/* Mailbox is being deleted */
 	unsigned int deleting:1;
+	/* Delete mailbox only if it's empty */
+	unsigned int deleting_must_be_empty:1;
+	/* The backend wants to skip checking if there are 0 messages before
+	   calling mailbox_list.delete_mailbox() */
+	unsigned int delete_skip_empty_check:1;
 	/* Mailbox was already marked as deleted within this allocation. */
 	unsigned int marked_deleted:1;
 	/* TRUE if this is an INBOX for this user */
@@ -277,6 +341,10 @@ struct mailbox {
 	unsigned int disable_reflink_copy_to:1;
 	/* Don't allow creating any new keywords */
 	unsigned int disallow_new_keywords:1;
+	/* Mailbox has been synced at least once */
+	unsigned int synced:1;
+	/* Updating cache file is disabled */
+	unsigned int mail_cache_disabled:1;
 };
 
 struct mail_vfuncs {
@@ -296,6 +364,7 @@ struct mail_vfuncs {
 	const ARRAY_TYPE(keyword_indexes) *
 		(*get_keyword_indexes)(struct mail *mail);
 	uint64_t (*get_modseq)(struct mail *mail);
+	uint64_t (*get_pvt_modseq)(struct mail *mail);
 
 	int (*get_parts)(struct mail *mail,
 			 struct message_part **parts_r);
@@ -316,9 +385,17 @@ struct mail_vfuncs {
 			  struct message_size *hdr_size,
 			  struct message_size *body_size,
 			  struct istream **stream_r);
+	int (*get_binary_stream)(struct mail *mail,
+				 const struct message_part *part,
+				 bool include_hdr, uoff_t *size_r,
+				 unsigned int *lines_r, bool *binary_r,
+				 struct istream **stream_r);
 
 	int (*get_special)(struct mail *mail, enum mail_fetch_field field,
 			   const char **value_r);
+	/* FIXME: v2.3 API should change this to return -1 on failure.
+	   for now NULL means failure so we don't break backwards
+	   compatibility. */
 	struct mail *(*get_real_mail)(struct mail *mail);
 
 	void (*update_flags)(struct mail *mail, enum modify_type modify_type,
@@ -326,6 +403,7 @@ struct mail_vfuncs {
 	void (*update_keywords)(struct mail *mail, enum modify_type modify_type,
 				struct mail_keywords *keywords);
 	void (*update_modseq)(struct mail *mail, uint64_t min_modseq);
+	void (*update_pvt_modseq)(struct mail *mail, uint64_t min_pvt_modseq);
 	void (*update_pop3_uidl)(struct mail *mail, const char *uidl);
 	void (*expunge)(struct mail *mail);
 	void (*set_cache_corrupted)(struct mail *mail,
@@ -341,13 +419,21 @@ union mail_module_context {
 struct mail_private {
 	struct mail mail;
 	struct mail_vfuncs v, *vlast;
+	/* normally NULL, but in case this is a "backend mail" for a mail
+	   created by virtual storage, this points back to the original virtual
+	   mail. at least mailbox_copy() bypasses the virtual storage, so this
+	   allows mail_log plugin to log the copy operation using the original
+	   mailbox name. */
+	struct mail *vmail;
+
+	uint32_t seq_pvt;
 
 	/* initial wanted fields/headers, set by mail_alloc(): */
 	enum mail_fetch_field wanted_fields;
 	struct mailbox_header_lookup_ctx *wanted_headers;
 
-	pool_t pool;
-	ARRAY_DEFINE(module_contexts, union mail_module_context *);
+	pool_t pool, data_pool;
+	ARRAY(union mail_module_context *) module_contexts;
 };
 
 struct mailbox_list_context {
@@ -372,6 +458,13 @@ struct mailbox_transaction_stats {
 	unsigned long cache_hit_count;
 };
 
+struct mail_save_private_changes {
+	/* first saved mail is 0, second is 1, etc. we'll map these to UIDs
+	   using struct mail_transaction_commit_changes. */
+	unsigned int mailnum;
+	enum mail_flags flags;
+};
+
 struct mailbox_transaction_context {
 	struct mailbox *box;
 	enum mailbox_transaction_flags flags;
@@ -381,17 +474,26 @@ struct mailbox_transaction_context {
 	int mail_ref_count;
 
 	struct mail_index_transaction *itrans;
+	struct dict_transaction_context *attr_pvt_trans, *attr_shared_trans;
 	/* view contains all changes done within this transaction */
 	struct mail_index_view *view;
+
+	/* for private index updates: */
+	struct mail_index_transaction *itrans_pvt;
+	struct mail_index_view *view_pvt;
 
 	struct mail_cache_view *cache_view;
 	struct mail_cache_transaction_ctx *cache_trans;
 
 	struct mail_transaction_commit_changes *changes;
-	ARRAY_DEFINE(module_contexts,
-		     union mailbox_transaction_module_context *);
+	ARRAY(union mailbox_transaction_module_context *) module_contexts;
 
 	struct mail_save_context *save_ctx;
+	/* number of mails saved/copied within this transaction. */
+	unsigned int save_count;
+	/* List of private flags added with save/copy. These are added to the
+	   private index after committing the mails to the shared index. */
+	ARRAY(struct mail_save_private_changes) pvt_saves;
 
 	/* these statistics are never reset by mail-storage API: */
 	struct mailbox_transaction_stats stats;
@@ -412,6 +514,7 @@ struct mail_search_context {
 	struct mail_search_sort_program *sort_program;
 	enum mail_fetch_field wanted_fields;
 	struct mailbox_header_lookup_ctx *wanted_headers;
+	normalizer_func_t *normalizer;
 
 	/* if non-NULL, specifies that a search resulting is being updated.
 	   this can be used as a search optimization: if searched message
@@ -419,22 +522,20 @@ struct mail_search_context {
 	   static data matches. */
 	struct mail_search_result *update_result;
 	/* add matches to these search results */
-	ARRAY_DEFINE(results, struct mail_search_result *);
+	ARRAY(struct mail_search_result *) results;
 
 	uint32_t seq;
 	uint32_t progress_cur, progress_max;
 
-	ARRAY_DEFINE(module_contexts, union mail_search_module_context *);
+	ARRAY(union mail_search_module_context *) module_contexts;
 
 	unsigned int seen_lost_data:1;
 	unsigned int progress_hidden:1;
 };
 
-struct mail_save_context {
-	struct mailbox_transaction_context *transaction;
-	struct mail *dest_mail;
-
+struct mail_save_data {
 	enum mail_flags flags;
+	enum mail_flags pvt_flags;
 	struct mail_keywords *keywords;
 	uint64_t min_modseq;
 
@@ -443,19 +544,34 @@ struct mail_save_context {
 
 	uint32_t uid;
 	char *guid, *pop3_uidl, *from_envelope;
-	struct ostream *output;
 	unsigned int pop3_order;
 
+	struct ostream *output;
 	struct mail_save_attachment *attach;
+};
+
+struct mail_save_context {
+	struct mailbox_transaction_context *transaction;
+	struct mail *dest_mail;
+
+	/* data that changes for each saved mail */
+	struct mail_save_data data;
 
 	/* returns TRUE if message part is an attachment. */
 	bool (*part_is_attachment)(struct mail_save_context *ctx,
 				   const struct mail_attachment_part *part);
 
+	/* mailbox_save_alloc() called, but finish/cancel not.
+	   the same context is usually returned by the backends for reuse. */
+	unsigned int unfinished:1;
+	/* mailbox_save_finish() or mailbox_copy() is being called. */
+	unsigned int finishing:1;
 	/* mail was copied using saving */
 	unsigned int copying_via_save:1;
 	/* mail is being saved, not copied */
 	unsigned int saving:1;
+	/* mail is being moved - ignore quota */
+	unsigned int moving:1;
 };
 
 struct mailbox_sync_context {
@@ -471,6 +587,10 @@ struct mailbox_header_lookup_ctx {
 	unsigned int count;
 	const char *const *name;
 	unsigned int *idx;
+};
+
+struct mailbox_attribute_iter {
+	struct mailbox *box;
 };
 
 /* Modules should use do "my_id = mail_storage_module_id++" and
@@ -496,29 +616,58 @@ void mail_storage_set_error(struct mail_storage *storage,
 void mail_storage_set_critical(struct mail_storage *storage,
 			       const char *fmt, ...) ATTR_FORMAT(2, 3);
 void mail_storage_set_internal_error(struct mail_storage *storage);
-void mail_storage_set_index_error(struct mailbox *box);
+void mailbox_set_index_error(struct mailbox *box);
 bool mail_storage_set_error_from_errno(struct mail_storage *storage);
 void mail_storage_copy_list_error(struct mail_storage *storage,
 				  struct mailbox_list *list);
+void mail_storage_copy_error(struct mail_storage *dest,
+			     struct mail_storage *src);
 
-/* Returns TRUE if everything should already be in memory after this call. */
+/* Returns TRUE if everything should already be in memory after this call
+   or if prefetching is not supported, i.e. the caller shouldn't do more
+   prefetching before this message is handled. */
 bool mail_prefetch(struct mail *mail);
-int mail_set_aborted(struct mail *mail);
+void mail_set_aborted(struct mail *mail);
 void mail_set_expunged(struct mail *mail);
 void mail_set_seq_saving(struct mail *mail, uint32_t seq);
 void mailbox_set_deleted(struct mailbox *box);
 int mailbox_mark_index_deleted(struct mailbox *box, bool del);
-/* Easy wrapper for getting mailbox's MAILBOX_LIST_PATH_TYPE_MAILBOX */
+/* Easy wrapper for getting mailbox's MAILBOX_LIST_PATH_TYPE_MAILBOX.
+   The mailbox must already be opened and the caller must know that the
+   storage has mailbox files (i.e. NULL/empty path is never returned). */
 const char *mailbox_get_path(struct mailbox *box) ATTR_PURE;
+/* Wrapper to mailbox_list_get_path() */
+int mailbox_get_path_to(struct mailbox *box, enum mailbox_list_path_type type,
+			const char **path_r);
 /* Get mailbox permissions. */
 const struct mailbox_permissions *mailbox_get_permissions(struct mailbox *box);
 /* Force permissions to be refreshed on next lookup */
 void mailbox_refresh_permissions(struct mailbox *box);
+
+/* Open private index files for mailbox. Returns 1 if opened, 0 if there
+   are no private indexes (or flags) in this mailbox, -1 if error. */
+int mailbox_open_index_pvt(struct mailbox *box);
+/* Create path's directory with proper permissions. The root directory is also
+   created if necessary. Returns 1 if created, 0 if it already existed,
+   -1 if error. */
+int mailbox_mkdir(struct mailbox *box, const char *path,
+		  enum mailbox_list_path_type type);
+/* Create a non-mailbox type directory for mailbox if it's missing (e.g. index).
+   Optimized for case where the directory usually exists. */
+int mailbox_create_missing_dir(struct mailbox *box,
+			       enum mailbox_list_path_type type);
 
 /* Returns -1 if error, 0 if failed with EEXIST, 1 if ok */
 int mailbox_create_fd(struct mailbox *box, const char *path, int flags,
 		      int *fd_r);
 unsigned int mail_storage_get_lock_timeout(struct mail_storage *storage,
 					   unsigned int secs);
+void mail_storage_free_binary_cache(struct mail_storage *storage);
+int mailbox_attribute_value_to_string(struct mail_storage *storage,
+				      const struct mail_attribute_value *value,
+				      const char **str_r);
+
+enum mail_index_open_flags
+mail_storage_settings_to_index_flags(const struct mail_storage_settings *set);
 
 #endif

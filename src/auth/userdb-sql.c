@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "userdb.h"
@@ -42,8 +42,6 @@ sql_query_get_result(struct sql_result *result,
 	const char *name, *value;
 	unsigned int i, fields_count;
 
-	auth_request_init_userdb_reply(auth_request);
-
 	fields_count = sql_result_get_fields_count(result);
 	for (i = 0; i < fields_count; i++) {
 		name = sql_result_get_field_name(result, i);
@@ -71,11 +69,11 @@ static void sql_query_callback(struct sql_result *sql_result,
 		db_sql_success(module->conn);
 	if (ret < 0) {
 		if (!module->conn->default_user_query) {
-			auth_request_log_error(auth_request, "sql",
+			auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
 				"User query failed: %s",
 				sql_result_get_error(sql_result));
 		} else {
-			auth_request_log_error(auth_request, "sql",
+			auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
 				"User query failed: %s "
 				"(using built-in default user_query: %s)",
 				sql_result_get_error(sql_result),
@@ -83,7 +81,7 @@ static void sql_query_callback(struct sql_result *sql_result,
 		}
 	} else if (ret == 0) {
 		result = USERDB_RESULT_USER_UNKNOWN;
-		auth_request_log_info(auth_request, "sql", "Unknown user");
+		auth_request_log_unknown_user(auth_request, AUTH_SUBSYS_DB);
 	} else {
 		sql_query_get_result(sql_result, auth_request);
 		result = USERDB_RESULT_OK;
@@ -123,7 +121,7 @@ static void userdb_sql_lookup(struct auth_request *auth_request,
 	sql_request->callback = callback;
 	sql_request->auth_request = auth_request;
 
-	auth_request_log_debug(auth_request, "sql", "%s", str_c(query));
+	auth_request_log_debug(auth_request, AUTH_SUBSYS_DB, "%s", str_c(query));
 
 	sql_query(module->conn->db, str_c(query),
 		  sql_query_callback, sql_request);
@@ -136,7 +134,7 @@ static void sql_iter_query_callback(struct sql_result *sql_result,
 	sql_result_ref(sql_result);
 
 	if (ctx->freed)
-		userdb_sql_iterate_deinit(&ctx->ctx);
+		(void)userdb_sql_iterate_deinit(&ctx->ctx);
 	else if (ctx->call_iter)
 		userdb_sql_iterate_next(&ctx->ctx);
 }
@@ -164,7 +162,7 @@ userdb_sql_iterate_init(struct auth_request *auth_request,
 
 	sql_query(module->conn->db, str_c(query),
 		  sql_iter_query_callback, ctx);
-	auth_request_log_debug(auth_request, "sql", "%s", str_c(query));
+	auth_request_log_debug(auth_request, AUTH_SUBSYS_DB, "%s", str_c(query));
 	return &ctx->ctx;
 }
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -70,7 +70,7 @@ imap_id_reply_generate_from_imap_args(const struct imap_arg *args)
 			/* key */
 			if (str_len(str) > 1)
 				str_append_c(str, ' ');
-			imap_dquote_append(str, key);
+			imap_append_quoted(str, key);
 			str_append_c(str, ' ');
 			/* value */
 			if (IMAP_ARG_IS_EOL(&args[1])) {
@@ -84,11 +84,7 @@ imap_id_reply_generate_from_imap_args(const struct imap_arg *args)
 				if (strcmp(value, "*") == 0)
 					value = imap_id_get_default(key);
 			}
-
-			if (value == NULL)
-				str_append(str, "NIL");
-			else
-				imap_quote_append_string(str, value, FALSE);
+			imap_append_nstring(str, value);
 		}
 	}
 	if (str_len(str) == 1) {
@@ -121,6 +117,16 @@ const char *imap_id_reply_generate(const char *settings)
 	imap_parser_unref(&parser);
 	i_stream_destroy(&input);
 	return ret;
+}
+
+void imap_id_log_reply_append(string_t *reply, const char *key,
+			      const char *value)
+{
+	if (str_len(reply) > 0)
+		str_append(reply, ", ");
+	str_append(reply, str_sanitize(key, IMAP_ID_KEY_MAX_LEN));
+	str_append_c(reply, '=');
+	str_append(reply, value == NULL ? "NIL" : str_sanitize(value, 80));
 }
 
 const char *imap_id_args_get_log_reply(const struct imap_arg *args,
@@ -156,13 +162,7 @@ const char *imap_id_args_get_log_reply(const struct imap_arg *args,
 		if (log_all || str_array_icase_find(keys, key)) {
 			if (!imap_arg_get_nstring(args, &value))
 				value = "";
-			else if (value == NULL)
-				value = "NIL";
-			if (str_len(reply) > 0)
-				str_append(reply, ", ");
-			str_append(reply, str_sanitize(key, 30));
-			str_append_c(reply, '=');
-			str_append(reply, str_sanitize(value, 80));
+			imap_id_log_reply_append(reply, key, value);
 		}
 		args++;
 	}

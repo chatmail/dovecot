@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hex-binary.h"
@@ -45,6 +45,9 @@ static int dump_record(int fd)
 	case MAILBOX_LOG_RECORD_UNSUBSCRIBE:
 		printf("unsubscribe");
 		break;
+	case MAILBOX_LOG_RECORD_CREATE_DIR:
+		printf("create-dir");
+		break;
 	}
 	printf(" %s", binary_to_hex(rec.mailbox_guid,
 				    sizeof(rec.mailbox_guid)));
@@ -70,6 +73,7 @@ static void cmd_dump_mailboxlog(int argc ATTR_UNUSED, char *argv[])
 			ret = dump_record(fd);
 		} T_END;
 	} while (ret > 0);
+	i_close_fd(&fd);
 }
 
 static bool test_dump_mailboxlog(const char *path)
@@ -96,11 +100,12 @@ static bool test_dump_mailboxlog(const char *path)
 		case MAILBOX_LOG_RECORD_RENAME:
 		case MAILBOX_LOG_RECORD_SUBSCRIBE:
 		case MAILBOX_LOG_RECORD_UNSUBSCRIBE:
+		case MAILBOX_LOG_RECORD_CREATE_DIR:
 			ret = TRUE;
 			break;
 		}
 	}
-	(void)close(fd);
+	i_close_fd(&fd);
 	return ret;
 }
 

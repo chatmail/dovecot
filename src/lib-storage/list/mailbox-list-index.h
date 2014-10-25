@@ -23,15 +23,17 @@
 */
 
 #include "module-context.h"
+#include "mail-types.h"
+#include "mail-storage.h"
 #include "mailbox-list-private.h"
 
+#define MAILBOX_LIST_INDEX_HIERARHCY_SEP '~'
 #define MAILBOX_LIST_INDEX_PREFIX "dovecot.list.index"
 
 #define INDEX_LIST_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, mailbox_list_index_module)
 
 struct mail_index_view;
-struct mailbox;
 
 /* stored in mail_index_record.flags: */
 enum mailbox_list_index_flags {
@@ -83,32 +85,35 @@ struct mailbox_list_index {
 
 	const char *path;
 	struct mail_index *index;
-	uint32_t ext_id, msgs_ext_id, hmodseq_ext_id;
-
-	/* Number of iterations going on. Don't refresh mailbox list while
-	   any iterations are going on. */
-	int iter_refcount;
+	uint32_t ext_id, msgs_ext_id, hmodseq_ext_id, subs_hdr_ext_id;
 
 	pool_t mailbox_pool;
-	/* uint32_t id => const char *name */
-	struct hash_table *mailbox_names;
+	/* uin32_t id => name */
+	HASH_TABLE(void *, char *) mailbox_names;
 	uint32_t highest_name_id;
 
+	struct mailbox_list_index_sync_context *sync_ctx;
 	uint32_t sync_log_file_seq;
 	uoff_t sync_log_file_offset;
-
 	uint32_t sync_stamp;
+	struct timeout *to_refresh;
 
-	/* uint32_t uid => struct mailbox_list_index_node* */
-	struct hash_table *mailbox_hash;
+	/* uint32_t uid => node */
+	HASH_TABLE(void *, struct mailbox_list_index_node *) mailbox_hash;
 	struct mailbox_list_index_node *mailbox_tree;
 
+	unsigned int pending_init:1;
 	unsigned int opened:1;
+	unsigned int syncing:1;
+	unsigned int updating_status:1;
+	unsigned int has_backing_store:1;
+	unsigned int index_last_check_changed:1;
 };
 
 struct mailbox_list_index_iterate_context {
 	struct mailbox_list_iterate_context ctx;
 	struct mailbox_list_iterate_context *backend_ctx;
+	pool_t mailbox_pool;
 
 	struct mailbox_info info;
 	pool_t info_pool;
@@ -116,7 +121,6 @@ struct mailbox_list_index_iterate_context {
 	unsigned int parent_len;
 	string_t *path;
 	struct mailbox_list_index_node *next_node;
-	char sep;
 
 	unsigned int failed:1;
 };
@@ -127,7 +131,14 @@ extern MODULE_CONTEXT_DEFINE(mailbox_list_index_module,
 void mailbox_list_index_set_index_error(struct mailbox_list *list);
 struct mailbox_list_index_node *
 mailbox_list_index_lookup(struct mailbox_list *list, const char *name);
+struct mailbox_list_index_node *
+mailbox_list_index_lookup_uid(struct mailbox_list_index *ilist, uint32_t uid);
+void mailbox_list_index_node_get_path(const struct mailbox_list_index_node *node,
+				      char sep, string_t *str);
+void mailbox_list_index_node_unlink(struct mailbox_list_index *ilist,
+				    struct mailbox_list_index_node *node);
 
+int mailbox_list_index_index_open(struct mailbox_list *list);
 bool mailbox_list_index_need_refresh(struct mailbox_list_index *ilist,
 				     struct mail_index_view *view);
 int mailbox_list_index_refresh(struct mailbox_list *list);
@@ -137,9 +148,8 @@ struct mailbox_list_index_node *
 mailbox_list_index_node_find_sibling(struct mailbox_list_index_node *node,
 				     const char *name);
 void mailbox_list_index_reset(struct mailbox_list_index *ilist);
-int mailbox_list_index_parse(struct mailbox_list_index *ilist,
+int mailbox_list_index_parse(struct mailbox_list *list,
 			     struct mail_index_view *view, bool force);
-int mailbox_list_index_sync(struct mailbox_list *list);
 
 struct mailbox_list_iterate_context *
 mailbox_list_index_iter_init(struct mailbox_list *list,
@@ -149,10 +159,28 @@ const struct mailbox_info *
 mailbox_list_index_iter_next(struct mailbox_list_iterate_context *ctx);
 int mailbox_list_index_iter_deinit(struct mailbox_list_iterate_context *ctx);
 
+bool mailbox_list_index_status(struct mailbox_list *list,
+			       struct mail_index_view *view,
+			       uint32_t seq, enum mailbox_status_items items,
+			       struct mailbox_status *status_r,
+			       uint8_t *mailbox_guid);
 void mailbox_list_index_status_set_info_flags(struct mailbox *box, uint32_t uid,
 					      enum mailbox_info_flags *flags);
+void mailbox_list_index_update_mailbox_index(struct mailbox *box,
+					     const struct mailbox_update *update);
 
-void mailbox_list_index_status_init(void);
-void mailbox_list_index_status_init_list(struct mailbox_list *list);
+int mailbox_list_index_notify_init(struct mailbox_list *list,
+				   enum mailbox_list_notify_event mask,
+				   struct mailbox_list_notify **notify_r);
+void mailbox_list_index_notify_deinit(struct mailbox_list_notify *notify);
+int mailbox_list_index_notify_next(struct mailbox_list_notify *notify,
+				   const struct mailbox_list_notify_rec **rec_r);
+void mailbox_list_index_notify_wait(struct mailbox_list_notify *notify,
+				    void (*callback)(void *context),
+				    void *context);
+
+void mailbox_list_index_status_init_mailbox(struct mailbox *box);
+void mailbox_list_index_backend_init_mailbox(struct mailbox *box);
+void mailbox_list_index_status_init_finish(struct mailbox_list *list);
 
 #endif

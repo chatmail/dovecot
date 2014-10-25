@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -53,15 +53,21 @@ struct service_settings doveadm_service_settings = {
 
 static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, base_dir),
+	DEF(SET_STR, libexec_dir),
 	DEF(SET_STR, mail_plugins),
 	DEF(SET_STR, mail_plugin_dir),
+	DEF(SET_STR, auth_socket_path),
 	DEF(SET_STR, doveadm_socket_path),
 	DEF(SET_UINT, doveadm_worker_count),
-	DEF(SET_UINT, doveadm_proxy_port),
+	DEF(SET_UINT, doveadm_port),
+	{ SET_ALIAS, "doveadm_proxy_port", 0, NULL },
 	DEF(SET_STR, doveadm_password),
 	DEF(SET_STR, doveadm_allowed_commands),
 	DEF(SET_STR, dsync_alt_char),
 	DEF(SET_STR, dsync_remote_cmd),
+	DEF(SET_STR, ssl_client_ca_dir),
+	DEF(SET_STR, ssl_client_ca_file),
+	DEF(SET_STR, director_username_hash),
 
 	{ SET_STRLIST, "plugin", offsetof(struct doveadm_settings, plugin_envs), NULL },
 
@@ -70,15 +76,20 @@ static const struct setting_define doveadm_setting_defines[] = {
 
 const struct doveadm_settings doveadm_default_settings = {
 	.base_dir = PKG_RUNDIR,
+	.libexec_dir = PKG_LIBEXECDIR,
 	.mail_plugins = "",
 	.mail_plugin_dir = MODULEDIR,
+	.auth_socket_path = "auth-userdb",
 	.doveadm_socket_path = "doveadm-server",
 	.doveadm_worker_count = 0,
-	.doveadm_proxy_port = 0,
+	.doveadm_port = 0,
 	.doveadm_password = "",
 	.doveadm_allowed_commands = "",
 	.dsync_alt_char = "_",
-	.dsync_remote_cmd = "ssh -l%{login} %{host} doveadm dsync-server -u%u -l%{lock_timeout} -n%{namespace}",
+	.dsync_remote_cmd = "ssh -l%{login} %{host} doveadm dsync-server -u%u -U",
+	.ssl_client_ca_dir = "",
+	.ssl_client_ca_file = "",
+	.director_username_hash = "%Lu",
 
 	.plugin_envs = ARRAY_INIT
 };
@@ -102,6 +113,7 @@ const struct setting_parser_info doveadm_setting_parser_info = {
 };
 
 struct doveadm_settings *doveadm_settings;
+const struct master_service_settings *service_set;
 
 static void
 fix_base_path(struct doveadm_settings *set, pool_t pool, const char **str)
@@ -111,15 +123,19 @@ fix_base_path(struct doveadm_settings *set, pool_t pool, const char **str)
 }
 
 /* <settings checks> */
-static bool doveadm_settings_check(void *_set ATTR_UNUSED,
-				   pool_t pool ATTR_UNUSED,
-				   const char **error_r ATTR_UNUSED)
+static bool doveadm_settings_check(void *_set, pool_t pool ATTR_UNUSED,
+				   const char **error_r)
 {
-#ifndef CONFIG_BINARY
 	struct doveadm_settings *set = _set;
 
+#ifndef CONFIG_BINARY
+	fix_base_path(set, pool, &set->auth_socket_path);
 	fix_base_path(set, pool, &set->doveadm_socket_path);
 #endif
+	if (*set->dsync_alt_char == '\0') {
+		*error_r = "dsync_alt_char must not be empty";
+		return FALSE;
+	}
 	return TRUE;
 }
 /* </settings checks> */

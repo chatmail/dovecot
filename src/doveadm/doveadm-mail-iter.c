@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mail-storage.h"
@@ -21,21 +21,27 @@ int doveadm_mail_iter_init(struct doveadm_mail_cmd_context *ctx,
 			   struct mail_search_args *search_args,
 			   enum mail_fetch_field wanted_fields,
 			   const char *const *wanted_headers,
-			   struct mailbox_transaction_context **trans_r,
 			   struct doveadm_mail_iter **iter_r)
 {
 	struct doveadm_mail_iter *iter;
 	struct mailbox_header_lookup_ctx *headers_ctx;
+	const char *errstr;
+	enum mail_error error;
 
 	iter = i_new(struct doveadm_mail_iter, 1);
 	iter->ctx = ctx;
-	iter->box = mailbox_alloc(info->ns->list, info->name,
+	iter->box = mailbox_alloc(info->ns->list, info->vname,
 				  MAILBOX_FLAG_IGNORE_ACLS);
 	iter->search_args = search_args;
 
 	if (mailbox_sync(iter->box, MAILBOX_SYNC_FLAG_FULL_READ) < 0) {
-		i_error("Syncing mailbox %s failed: %s", info->name,
-			mailbox_get_last_error(iter->box, NULL));
+		errstr = mailbox_get_last_error(iter->box, &error);
+		if (error == MAIL_ERROR_NOTFOUND) {
+			/* just ignore this mailbox */
+			*iter_r = iter;
+			return 0;
+		}
+		i_error("Syncing mailbox %s failed: %s", info->vname, errstr);
 		doveadm_mail_failed_mailbox(ctx, iter->box);
 		mailbox_free(&iter->box);
 		i_free(iter);
@@ -49,8 +55,6 @@ int doveadm_mail_iter_init(struct doveadm_mail_cmd_context *ctx,
 	iter->t = mailbox_transaction_begin(iter->box, 0);
 	iter->search_ctx = mailbox_search_init(iter->t, search_args, NULL,
 					       wanted_fields, headers_ctx);
-
-	*trans_r = iter->t;
 	*iter_r = iter;
 	return 0;
 }
@@ -61,13 +65,17 @@ doveadm_mail_iter_deinit_transaction(struct doveadm_mail_iter *iter,
 {
 	int ret = 0;
 
-	if (mailbox_search_deinit(&iter->search_ctx) < 0) {
-		i_error("Searching mailbox %s failed: %s",
-			mailbox_get_vname(iter->box),
-			mailbox_get_last_error(iter->box, NULL));
-		ret = -1;
+	if (iter->search_ctx != NULL) {
+		if (mailbox_search_deinit(&iter->search_ctx) < 0) {
+			i_error("Searching mailbox %s failed: %s",
+				mailbox_get_vname(iter->box),
+				mailbox_get_last_error(iter->box, NULL));
+			ret = -1;
+		}
 	}
-	if (commit) {
+	if (iter->t == NULL)
+		;
+	else if (commit) {
 		if (mailbox_transaction_commit(&iter->t) < 0) {
 			i_error("Committing mailbox %s failed: %s",
 				mailbox_get_vname(iter->box),
@@ -83,7 +91,7 @@ doveadm_mail_iter_deinit_transaction(struct doveadm_mail_iter *iter,
 
 static int
 doveadm_mail_iter_deinit_full(struct doveadm_mail_iter **_iter,
-			      bool sync, bool commit)
+			      bool sync, bool commit, bool keep_box)
 {
 	struct doveadm_mail_iter *iter = *_iter;
 	int ret;
@@ -95,28 +103,43 @@ doveadm_mail_iter_deinit_full(struct doveadm_mail_iter **_iter,
 		ret = mailbox_sync(iter->box, 0);
 	if (ret < 0)
 		doveadm_mail_failed_mailbox(iter->ctx, iter->box);
-	mailbox_free(&iter->box);
+	if (!keep_box)
+		mailbox_free(&iter->box);
 	i_free(iter);
 	return ret;
 }
 
 int doveadm_mail_iter_deinit(struct doveadm_mail_iter **_iter)
 {
-	return doveadm_mail_iter_deinit_full(_iter, FALSE, TRUE);
+	return doveadm_mail_iter_deinit_full(_iter, FALSE, TRUE, FALSE);
 }
 
 int doveadm_mail_iter_deinit_sync(struct doveadm_mail_iter **_iter)
 {
-	return doveadm_mail_iter_deinit_full(_iter, TRUE, TRUE);
+	return doveadm_mail_iter_deinit_full(_iter, TRUE, TRUE, FALSE);
+}
+
+int doveadm_mail_iter_deinit_keep_box(struct doveadm_mail_iter **iter,
+				      struct mailbox **box_r)
+{
+	*box_r = (*iter)->box;
+	return doveadm_mail_iter_deinit_full(iter, FALSE, TRUE, TRUE);
 }
 
 void doveadm_mail_iter_deinit_rollback(struct doveadm_mail_iter **_iter)
 {
-	(void)doveadm_mail_iter_deinit_full(_iter, FALSE, FALSE);
+	(void)doveadm_mail_iter_deinit_full(_iter, FALSE, FALSE, FALSE);
 }
 
 bool doveadm_mail_iter_next(struct doveadm_mail_iter *iter,
 			    struct mail **mail_r)
 {
+	if (iter->search_ctx == NULL)
+		return FALSE;
 	return mailbox_search_next(iter->search_ctx, mail_r);
+}
+
+struct mailbox *doveadm_mail_iter_get_mailbox(struct doveadm_mail_iter *iter)
+{
+	return iter->box;
 }

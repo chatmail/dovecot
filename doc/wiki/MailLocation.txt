@@ -57,7 +57,12 @@ where:
       formats> [MailboxFormat.dbox.txt] the default is "dbox-Mails/" while with
       other mailbox formats the default is empty. Can be used under either
       <mbox> [MailLocation.mbox.txt], <Maildir> [MailLocation.Maildir.txt] or
-      <dbox> [MailLocation.dbox.txt] formats.
+      <dbox> [MailLocation.dbox.txt] formats. Note that this directory is used
+      only for the mail directory and the alt directory, not for index/control
+      directories (but see below).
+    * 'FULLDIRNAME' : Same as 'DIRNAME', but use the directory name also for
+      index and control directory paths. This should be used instead of
+      'DIRNAME' for new installations. (v2.2.8+)
     * 'ALT' : specifies the <Alternate storage> [MailLocation.dbox.txt] path
       for dbox formats.
  * The colons and equals signs are literal and there are no spaces in an actual
@@ -140,6 +145,13 @@ before the user logs in.
 
 If you really want to, you can also disable the index files completely by
 appending ':INDEX=MEMORY'.
+
+Private index files (v2.2+)
+---------------------------
+
+Since v2.2 the recommended way to enable private flags for shared mailboxes is
+to create private indexes with :INDEXPVT=<path>. See
+<SharedMailboxes.Public.txt> for more information.
 
 INBOX path
 ----------
@@ -263,4 +275,4 @@ export USERDB_KEYS="$USERDB_KEYS namespace/user/location"
 exec env "NAMESPACE/USER/LOCATION=$location" "$@"
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2012-04-09 04:42)
+(This file was created from the wiki on 2013-11-24 04:42)

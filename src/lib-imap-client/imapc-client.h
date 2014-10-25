@@ -1,6 +1,9 @@
 #ifndef IMAPC_CLIENT_H
 #define IMAPC_CLIENT_H
 
+/* IMAP RFC defines this to be at least 30 minutes. */
+#define IMAPC_DEFAULT_MAX_IDLE_TIME (60*29)
+
 enum imapc_command_state {
 	IMAPC_COMMAND_STATE_OK,
 	IMAPC_COMMAND_STATE_NO,
@@ -18,6 +21,8 @@ enum imapc_capability {
 	IMAPC_CAPABILITY_STARTTLS	= 0x40,
 	IMAPC_CAPABILITY_X_GM_EXT_1	= 0x80,
 	IMAPC_CAPABILITY_CONDSTORE	= 0x100,
+	IMAPC_CAPABILITY_NAMESPACE	= 0x200,
+	IMAPC_CAPABILITY_UNSELECT	= 0x400,
 
 	IMAPC_CAPABILITY_IMAP4REV1	= 0x40000000
 };
@@ -45,6 +50,9 @@ enum imapc_client_ssl_mode {
 	IMAPC_CLIENT_SSL_MODE_STARTTLS
 };
 
+#define IMAPC_DEFAULT_CONNECT_TIMEOUT_MSECS (1000*30)
+#define IMAPC_DEFAULT_COMMAND_TIMEOUT_MSECS (1000*60*5)
+
 struct imapc_client_settings {
 	const char *host;
 	unsigned int port;
@@ -52,17 +60,24 @@ struct imapc_client_settings {
 	const char *master_user;
 	const char *username;
 	const char *password;
+	unsigned int max_idle_time;
 
 	const char *dns_client_socket_path;
 	const char *temp_path_prefix;
 
 	enum imapc_client_ssl_mode ssl_mode;
-	const char *ssl_ca_dir;
+	const char *ssl_ca_dir, *ssl_ca_file;
 	bool ssl_verify;
 
 	const char *rawlog_dir;
 	const char *ssl_crypto_device;
 	bool debug;
+
+	/* Timeout for logging in. 0 = default. */
+	unsigned int connect_timeout_msecs;
+	/* Timeout for IMAP commands. Reset every time more data is being
+	   sent or received. 0 = default. */
+	unsigned int cmd_timeout_msecs;
 };
 
 struct imapc_command_reply {
@@ -119,6 +134,7 @@ typedef void imapc_untagged_callback_t(const struct imapc_untagged_reply *reply,
 
 struct imapc_client *
 imapc_client_init(const struct imapc_client_settings *set);
+void imapc_client_disconnect(struct imapc_client *client);
 void imapc_client_deinit(struct imapc_client **client);
 
 /* Explicitly login to server (also done automatically). */

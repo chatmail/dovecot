@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -14,10 +14,10 @@
 
 #define QUOTA_USER_SEPARATOR ':'
 
-const char *imap_quota_plugin_version = DOVECOT_VERSION;
+const char *imap_quota_plugin_version = DOVECOT_ABI_VERSION;
 
 static struct module *imap_quota_module;
-static void (*next_hook_client_created)(struct client **client);
+static imap_client_created_func_t *next_hook_client_created;
 
 static const char *
 imap_quota_root_get_name(struct mail_user *user, struct mail_user *owner,
@@ -43,7 +43,7 @@ quota_reply_write(string_t *str, struct mail_user *user,
 
 	str_append(str, "* QUOTA ");
 	name = imap_quota_root_get_name(user, owner, root);
-	imap_quote_append_string(str, name, FALSE);
+	imap_append_astring(str, name);
 
 	str_append(str, " (");
 	list = quota_root_get_resources(root);
@@ -74,12 +74,13 @@ static bool cmd_getquotaroot(struct client_command_context *cmd)
 	struct mailbox *box;
 	struct quota_root_iter *iter;
         struct quota_root *root;
-	const char *mailbox, *name;
+	const char *mailbox, *orig_mailbox, *name;
 	string_t *quotaroot_reply, *quota_reply;
 
 	/* <mailbox> */
 	if (!client_read_string_args(cmd, 1, &mailbox))
 		return FALSE;
+	orig_mailbox = mailbox;
 
 	ns = client_find_namespace(cmd, &mailbox);
 	if (ns == NULL)
@@ -89,8 +90,7 @@ static bool cmd_getquotaroot(struct client_command_context *cmd)
 		client_send_tagline(cmd, "OK No quota.");
 		return TRUE;
 	}
-	if (ns->owner != NULL && ns->owner != client->user &&
-	    !client->user->admin) {
+	if (ns->owner != NULL && ns->owner != client->user) {
 		client_send_tagline(cmd, "NO Not showing other users' quota.");
 		return TRUE;
 	}
@@ -101,13 +101,13 @@ static bool cmd_getquotaroot(struct client_command_context *cmd)
 	quotaroot_reply = t_str_new(128);
 	quota_reply = t_str_new(256);
 	str_append(quotaroot_reply, "* QUOTAROOT ");
-	imap_quote_append_string(quotaroot_reply, mailbox, FALSE);
+	imap_append_astring(quotaroot_reply, orig_mailbox);
 
 	iter = quota_root_iter_init(box);
 	while ((root = quota_root_iter_next(iter)) != NULL) {
 		str_append_c(quotaroot_reply, ' ');
 		name = imap_quota_root_get_name(client->user, ns->owner, root);
-		imap_quote_append_string(quotaroot_reply, name, FALSE);
+		imap_append_astring(quotaroot_reply, name);
 
 		quota_reply_write(quota_reply, client->user, ns->owner, root);
 	}
@@ -119,45 +119,54 @@ static bool cmd_getquotaroot(struct client_command_context *cmd)
 		client_send_tagline(cmd, "OK No quota.");
 	else {
 		client_send_line(client, str_c(quotaroot_reply));
-		o_stream_send(client->output, str_data(quota_reply),
-			      str_len(quota_reply));
+		o_stream_nsend(client->output, str_data(quota_reply),
+			       str_len(quota_reply));
 		client_send_tagline(cmd, "OK Getquotaroot completed.");
 	}
 	return TRUE;
 }
 
+static bool
+parse_quota_root(struct mail_user *user, const char *root_name,
+		 struct mail_user **owner_r, struct quota_root **root_r)
+{
+	const char *p;
+
+	*owner_r = user;
+	*root_r = quota_root_lookup(user, root_name);
+	if (*root_r != NULL || !user->admin)
+		return *root_r != NULL;
+
+	/* we're an admin. see if there's a quota root for another user. */
+	p = strchr(root_name, QUOTA_USER_SEPARATOR);
+	if (p != NULL) {
+		*owner_r = mail_user_find(user, t_strdup_until(root_name, p));
+		*root_r = *owner_r == NULL ? NULL :
+			quota_root_lookup(*owner_r, p + 1);
+	}
+	return *root_r != NULL;
+}
+
 static bool cmd_getquota(struct client_command_context *cmd)
 {
-	struct mail_user *owner = cmd->client->user;
+	struct mail_user *owner;
         struct quota_root *root;
-	const char *root_name, *p;
+	const char *root_name;
 	string_t *quota_reply;
 
 	/* <quota root> */
 	if (!client_read_string_args(cmd, 1, &root_name))
 		return FALSE;
 
-	root = quota_root_lookup(cmd->client->user, root_name);
-	if (root == NULL && cmd->client->user->admin) {
-		/* we're an admin. see if there's a quota root for another
-		   user. */
-		p = strchr(root_name, QUOTA_USER_SEPARATOR);
-		if (p != NULL) {
-			owner = mail_user_find(cmd->client->user,
-					       t_strdup_until(root_name, p));
-			root = owner == NULL ? NULL :
-				quota_root_lookup(owner, p + 1);
-		}
-	}
-	if (root == NULL) {
+	if (!parse_quota_root(cmd->client->user, root_name, &owner, &root)) {
 		client_send_tagline(cmd, "NO Quota root doesn't exist.");
 		return TRUE;
 	}
 
 	quota_reply = t_str_new(128);
 	quota_reply_write(quota_reply, cmd->client->user, owner, root);
-	o_stream_send(cmd->client->output, str_data(quota_reply),
-		      str_len(quota_reply));
+	o_stream_nsend(cmd->client->output, str_data(quota_reply),
+		       str_len(quota_reply));
 
 	client_send_tagline(cmd, "OK Getquota completed.");
 	return TRUE;
@@ -166,6 +175,7 @@ static bool cmd_getquota(struct client_command_context *cmd)
 static bool cmd_setquota(struct client_command_context *cmd)
 {
 	struct quota_root *root;
+	struct mail_user *owner;
         const struct imap_arg *args, *list_args;
 	const char *root_name, *name, *value_str, *error;
 	uint64_t value;
@@ -180,8 +190,12 @@ static bool cmd_setquota(struct client_command_context *cmd)
 		return TRUE;
 	}
 
-	root = quota_root_lookup(cmd->client->user, root_name);
-	if (root == NULL) {
+	if (!cmd->client->user->admin) {
+		client_send_tagline(cmd, "NO Quota can be changed only by admin.");
+		return TRUE;
+	}
+
+	if (!parse_quota_root(cmd->client->user, root_name, &owner, &root)) {
 		client_send_tagline(cmd, "NO Quota root doesn't exist.");
 		return TRUE;
 	}

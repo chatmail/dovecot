@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "userdb.h"
@@ -42,16 +42,15 @@ struct ldap_userdb_iterate_context {
 };
 
 static void
-ldap_query_get_result(struct ldap_connection *conn, LDAPMessage *entry,
-		      struct auth_request *auth_request)
+ldap_query_get_result(struct ldap_connection *conn,
+		      struct auth_request *auth_request,
+		      struct ldap_request_search *ldap_request,
+		      LDAPMessage *res)
 {
 	struct db_ldap_result_iterate_context *ldap_iter;
 	const char *name, *const *values;
 
-	auth_request_init_userdb_reply(auth_request);
-
-	ldap_iter = db_ldap_result_iterate_init(conn, entry, auth_request,
-						&conn->user_attr_map);
+	ldap_iter = db_ldap_result_iterate_init(conn, ldap_request, res, TRUE);
 	while (db_ldap_result_iterate_next(ldap_iter, &name, &values)) {
 		auth_request_set_userdb_field_values(auth_request,
 						     name, values);
@@ -70,10 +69,9 @@ userdb_ldap_lookup_finish(struct auth_request *auth_request,
 		result = USERDB_RESULT_INTERNAL_FAILURE;
 	} else if (urequest->entries == 0) {
 		result = USERDB_RESULT_USER_UNKNOWN;
-		auth_request_log_info(auth_request, "ldap",
-				      "unknown user");
+		auth_request_log_unknown_user(auth_request, AUTH_SUBSYS_DB);
 	} else if (urequest->entries > 1) {
-		auth_request_log_error(auth_request, "ldap",
+		auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
 			"user_filter matched multiple objects, aborting");
 		result = USERDB_RESULT_INTERNAL_FAILURE;
 	} else {
@@ -100,7 +98,8 @@ static void userdb_ldap_lookup_callback(struct ldap_connection *conn,
 
 	if (urequest->entries++ == 0) {
 		/* first entry */
-		ldap_query_get_result(conn, res, auth_request);
+		ldap_query_get_result(conn, auth_request,
+				      &urequest->request, res);
 	}
 }
 
@@ -130,9 +129,10 @@ static void userdb_ldap_lookup(struct auth_request *auth_request,
 	var_expand(str, conn->set.user_filter, vars);
 	request->request.filter = p_strdup(auth_request->pool, str_c(str));
 
+	request->request.attr_map = &conn->user_attr_map;
 	request->request.attributes = conn->user_attr_names;
 
-	auth_request_log_debug(auth_request, "ldap", "user search: "
+	auth_request_log_debug(auth_request, AUTH_SUBSYS_DB, "user search: "
 			       "base=%s scope=%s filter=%s fields=%s",
 			       request->request.base, conn->set.scope,
 			       request->request.filter,
@@ -166,9 +166,8 @@ static void userdb_ldap_iterate_callback(struct ldap_connection *conn,
 	request->create_time = ioloop_time;
 
 	ctx->in_callback = TRUE;
-	ldap_iter = db_ldap_result_iterate_init(conn, res,
-						request->auth_request,
-						&conn->iterate_attr_map);
+	ldap_iter = db_ldap_result_iterate_init(conn, &urequest->request,
+						res, TRUE);
 	while (db_ldap_result_iterate_next(ldap_iter, &name, &values)) {
 		if (strcmp(name, "user") != 0) {
 			i_warning("ldap: iterate: "
@@ -220,7 +219,9 @@ userdb_ldap_iterate_init(struct auth_request *auth_request,
 	str_truncate(str, 0);
 	var_expand(str, conn->set.iterate_filter, vars);
 	request->request.filter = p_strdup(auth_request->pool, str_c(str));
+	request->request.attr_map = &conn->iterate_attr_map;
 	request->request.attributes = conn->iterate_attr_names;
+	request->request.multi_entry = TRUE;
 
 	if (global_auth_settings->debug) {
 		i_debug("ldap: iterate: base=%s scope=%s filter=%s fields=%s",
@@ -271,6 +272,7 @@ userdb_ldap_preinit(pool_t pool, const char *args)
 	db_ldap_set_attrs(conn, conn->set.iterate_attrs,
 			  &conn->iterate_attr_names,
 			  &conn->iterate_attr_map, NULL);
+	module->module.blocking = conn->set.blocking;
 	module->module.cache_key =
 		auth_cache_parse_key(pool,
 				     t_strconcat(conn->set.base,

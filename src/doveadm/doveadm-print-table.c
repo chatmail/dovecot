@@ -1,7 +1,8 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
+#include "str.h"
 #include "doveadm-print-private.h"
 
 #include <stdio.h>
@@ -22,8 +23,9 @@ struct doveadm_print_table_header {
 
 struct doveadm_print_table_context {
 	pool_t pool;
-	ARRAY_DEFINE(headers, struct doveadm_print_table_header);
+	ARRAY(struct doveadm_print_table_header) headers;
 	ARRAY_TYPE(const_string) buffered_values;
+	string_t *stream;
 	unsigned int hdr_idx;
 	unsigned int columns;
 
@@ -133,15 +135,19 @@ static void doveadm_print_next(const char *value)
 	}
 }
 
-static void doveadm_buffer_flush(void)
+static void doveadm_print_headers(void)
 {
 	const struct doveadm_print_table_header *headers;
-	const char *const *valuep;
 	unsigned int i, count;
 
-	doveadm_calc_header_length();
-
 	headers = array_get(&ctx->headers, &count);
+	/* if all headers are hidden, don't print any of them */
+	for (i = 0; i < count; i++) {
+		if ((headers[i].flags & DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE) == 0)
+			break;
+	}
+	if (i == count)
+		return;
 	for (i = 0; i < count; i++) {
 		if (i > 0) fprintf(stderr, " ");
 
@@ -155,6 +161,14 @@ static void doveadm_buffer_flush(void)
 		}
 	}
 	fprintf(stderr, "\n");
+}
+
+static void doveadm_buffer_flush(void)
+{
+	const char *const *valuep;
+
+	doveadm_calc_header_length();
+	doveadm_print_headers();
 
 	array_foreach(&ctx->buffered_values, valuep)
 		doveadm_print_next(*valuep);
@@ -179,10 +193,17 @@ static void doveadm_print_table_print(const char *value)
 }
 
 static void
-doveadm_print_table_print_stream(const unsigned char *value ATTR_UNUSED,
-				 size_t size ATTR_UNUSED)
+doveadm_print_table_print_stream(const unsigned char *value, size_t size)
 {
-	i_fatal("table formatter doesn't support multi-line values");
+	if (memchr(value, '\n', size) != NULL)
+		i_fatal("table formatter doesn't support multi-line values");
+
+	if (size != 0)
+		str_append_n(ctx->stream, value, size);
+	else {
+		doveadm_print_table_print(str_c(ctx->stream));
+		str_truncate(ctx->stream, 0);
+	}
 }
 
 static void doveadm_print_table_flush(void)
@@ -199,6 +220,7 @@ static void doveadm_print_table_init(void)
 	pool = pool_alloconly_create("doveadm print table", 2048);
 	ctx = p_new(pool, struct doveadm_print_table_context, 1);
 	ctx->pool = pool;
+	ctx->stream = str_new(default_pool, 128);
 	p_array_init(&ctx->headers, pool, 16);
 	i_array_init(&ctx->buffered_values, 64);
 	ctx->columns = DEFAULT_COLUMNS;
@@ -211,6 +233,7 @@ static void doveadm_print_table_init(void)
 
 static void doveadm_print_table_deinit(void)
 {
+	str_free(&ctx->stream);
 	array_free(&ctx->buffered_values);
 	pool_unref(&ctx->pool);
 	ctx = NULL;

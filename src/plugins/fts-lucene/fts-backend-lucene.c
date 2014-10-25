@@ -1,10 +1,11 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "hash.h"
 #include "hex-binary.h"
 #include "strescape.h"
+#include "message-part.h"
 #include "mail-namespace.h"
 #include "mail-storage-private.h"
 #include "fts-expunge-log.h"
@@ -41,7 +42,7 @@ struct lucene_fts_backend_update_context {
 	uint32_t last_indexed_uid;
 	char *first_box_vname;
 
-	uint32_t uid;
+	uint32_t uid, part_num;
 	char *hdr_name;
 
 	unsigned int added_msgs;
@@ -49,23 +50,19 @@ struct lucene_fts_backend_update_context {
 
 	bool lucene_opened;
 	bool last_indexed_uid_set;
+	bool mime_parts;
 };
 
 static int fts_backend_lucene_mkdir(struct lucene_fts_backend *backend)
 {
-	const char *error;
-
 	if (backend->dir_created)
 		return 0;
 
 	backend->dir_created = TRUE;
 	if (mailbox_list_mkdir_root(backend->backend.ns->list,
 				    backend->dir_path,
-				    MAILBOX_LIST_PATH_TYPE_INDEX, &error) < 0) {
-		i_error("lucene: Couldn't create root dir %s: %s",
-			backend->dir_path, error);
+				    MAILBOX_LIST_PATH_TYPE_INDEX) < 0)
 		return -1;
-	}
 	return 0;
 }
 
@@ -102,7 +99,7 @@ fts_backend_select(struct lucene_fts_backend *backend, struct mailbox *box)
 	if (box != NULL) {
 		if (fts_lucene_get_mailbox_guid(box, guid) < 0)
 			return -1;
-		buffer_create_data(&buf, guid_hex, MAILBOX_GUID_HEX_LENGTH);
+		buffer_create_from_data(&buf, guid_hex, MAILBOX_GUID_HEX_LENGTH);
 		binary_to_hex_append(&buf, guid, GUID_128_SIZE);
 		for (i = 0; i < N_ELEMENTS(wguid_hex); i++)
 			wguid_hex[i] = guid_hex[i];
@@ -144,9 +141,9 @@ fts_backend_lucene_init(struct fts_backend *_backend, const char **error_r)
 		return -1;
 	}
 
-	path = mailbox_list_get_path(_backend->ns->list, NULL,
-				     MAILBOX_LIST_PATH_TYPE_INDEX);
-	i_assert(path != NULL); /* fts already checked this */
+	/* fts already checked that index exists */
+	path = mailbox_list_get_root_forced(_backend->ns->list,
+					    MAILBOX_LIST_PATH_TYPE_INDEX);
 
 	backend->dir_path = i_strconcat(path, "/"LUCENE_INDEX_DIR_NAME, NULL);
 	backend->index = lucene_index_init(backend->dir_path,
@@ -198,7 +195,7 @@ fts_backend_lucene_get_last_uid(struct fts_backend *_backend,
 	if (lucene_index_get_last_uid(backend->index, last_uid_r) < 0)
 		return -1;
 
-	(void)fts_index_set_last_uid(box, *last_uid_r);
+	fts_index_set_last_uid(box, *last_uid_r);
 	return 0;
 }
 
@@ -208,11 +205,14 @@ fts_backend_lucene_update_init(struct fts_backend *_backend)
 	struct lucene_fts_backend *backend =
 		(struct lucene_fts_backend *)_backend;
 	struct lucene_fts_backend_update_context *ctx;
+	struct fts_lucene_user *fuser =
+		FTS_LUCENE_USER_CONTEXT(_backend->ns->user);
 
 	i_assert(!backend->updating);
 
 	ctx = i_new(struct lucene_fts_backend_update_context, 1);
 	ctx->ctx.backend = _backend;
+	ctx->mime_parts = fuser->set.mime_parts;
 	backend->updating = TRUE;
 	return &ctx->ctx;
 }
@@ -248,8 +248,10 @@ fts_backend_lucene_update_deinit(struct fts_backend_update_context *_ctx)
 	i_assert(backend->updating);
 
 	backend->updating = FALSE;
-	if (ctx->lucene_opened)
-		lucene_index_build_deinit(backend->index);
+	if (ctx->lucene_opened) {
+		if (lucene_index_build_deinit(backend->index) < 0)
+			ret = -1;
+	}
 
 	if (ctx->expunge_ctx != NULL) {
 		if (fts_expunge_log_append_commit(&ctx->expunge_ctx) < 0)
@@ -271,7 +273,7 @@ fts_backend_lucene_update_deinit(struct fts_backend_update_context *_ctx)
 				str_tabescape(ctx->first_box_vname));
 			fd = fts_indexer_cmd(user, cmd, &path);
 			if (fd != -1)
-				(void)close(fd);
+				i_close_fd(&fd);
 		}
 	}
 
@@ -288,7 +290,7 @@ fts_backend_lucene_update_set_mailbox(struct fts_backend_update_context *_ctx,
 		(struct lucene_fts_backend_update_context *)_ctx;
 
 	if (ctx->last_uid != 0) {
-		(void)fts_index_set_last_uid(ctx->box, ctx->last_uid);
+		fts_index_set_last_uid(ctx->box, ctx->last_uid);
 		ctx->last_uid = 0;
 	}
 	if (ctx->first_box_vname == NULL)
@@ -378,6 +380,8 @@ fts_backend_lucene_update_set_build_key(struct fts_backend_update_context *_ctx,
 	}
 
 	ctx->uid = key->uid;
+	if (ctx->mime_parts)
+		ctx->part_num = message_part_to_idx(key->part);
 	return TRUE;
 }
 
@@ -388,6 +392,7 @@ fts_backend_lucene_update_unset_build_key(struct fts_backend_update_context *_ct
 		(struct lucene_fts_backend_update_context *)_ctx;
 
 	ctx->uid = 0;
+	ctx->part_num = 0;
 	i_free_and_null(ctx->hdr_name);
 }
 
@@ -408,7 +413,8 @@ fts_backend_lucene_update_build_more(struct fts_backend_update_context *_ctx,
 
 	T_BEGIN {
 		ret = lucene_index_build_more(backend->index, ctx->uid,
-					      data, size, ctx->hdr_name);
+					      ctx->part_num, data, size,
+					      ctx->hdr_name);
 	} T_END;
 	return ret;
 }
@@ -469,9 +475,8 @@ fts_backend_lucene_lookup(struct fts_backend *_backend, struct mailbox *box,
 }
 
 /* a char* hash function from ASU -- from glib */
-static unsigned int wstr_hash(const void *p)
+static unsigned int wstr_hash(const wchar_t *s)
 {
-        const wchar_t *s = p;
 	unsigned int g, h = 0;
 
 	while (*s != '\0') {
@@ -488,9 +493,10 @@ static unsigned int wstr_hash(const void *p)
 
 static int
 mailboxes_get_guids(struct mailbox *const boxes[],
-		    struct hash_table *guids, struct fts_multi_result *result)
+		    HASH_TABLE_TYPE(wguid_result) guids,
+		    struct fts_multi_result *result)
 {
-	ARRAY_DEFINE(box_results, struct fts_result);
+	ARRAY(struct fts_result) box_results;
 	struct fts_result *box_result;
 	const char *guid;
 	wchar_t *guid_dup;
@@ -511,7 +517,7 @@ mailboxes_get_guids(struct mailbox *const boxes[],
 		hash_table_insert(guids, guid_dup, box_result);
 	}
 
-	(void)array_append_space(&box_results);
+	array_append_zero(&box_results);
 	result->box_results = array_idx_modifiable(&box_results, 0);
 	return 0;
 }
@@ -527,11 +533,9 @@ fts_backend_lucene_lookup_multi(struct fts_backend *_backend,
 	int ret;
 
 	T_BEGIN {
-		struct hash_table *guids;
+		HASH_TABLE_TYPE(wguid_result) guids;
 
-		guids = hash_table_create(default_pool, default_pool, 0,
-					  wstr_hash,
-					  (hash_cmp_callback_t *)wcscmp);
+		hash_table_create(&guids, default_pool, 0, wstr_hash, wcscmp);
 		ret = mailboxes_get_guids(boxes, guids, result);
 		if (ret == 0) {
 			ret = lucene_index_lookup_multi(backend->index,
@@ -547,7 +551,7 @@ static void fts_backend_lucene_lookup_done(struct fts_backend *_backend)
 {
 	/* the next refresh is going to close the index anyway, so we might as
 	   well do it now */
-	fts_backend_lucene_refresh(_backend);
+	(void)fts_backend_lucene_refresh(_backend);
 }
 
 struct fts_backend fts_backend_lucene = {

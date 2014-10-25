@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "passdb.h"
@@ -17,9 +17,9 @@ static void
 auth_checkpassword_callback(struct auth_request *request,
 			    enum db_checkpassword_status status,
 			    const char *const *extra_fields,
-			    void *context)
+			    void (*request_callback)())
 {
-	verify_plain_callback_t *callback = context;
+	verify_plain_callback_t *callback = request_callback;
 	const char *scheme, *crypted_pass = NULL;
 	unsigned int i;
 
@@ -48,7 +48,7 @@ auth_checkpassword_callback(struct auth_request *request,
 			auth_request_set_field(request, "password",
 					       crypted_pass, scheme);
 		} else {
-			auth_request_log_error(request, "checkpassword",
+			auth_request_log_error(request, AUTH_SUBSYS_DB,
 				"password field returned without {scheme} prefix");
 		}
 	}
@@ -71,9 +71,9 @@ static void
 credentials_checkpassword_callback(struct auth_request *request,
 				   enum db_checkpassword_status status,
 				   const char *const *extra_fields,
-				   void *context)
+				   void (*request_callback)())
 {
-	lookup_credentials_callback_t *callback = context;
+	lookup_credentials_callback_t *callback = request_callback;
 	const char *scheme, *crypted_pass = NULL;
 	unsigned int i;
 

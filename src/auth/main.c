@@ -1,9 +1,9 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
 #include "ioloop.h"
-#include "network.h"
+#include "net.h"
 #include "lib-signals.h"
 #include "restrict-access.h"
 #include "child-wait.h"
@@ -16,11 +16,13 @@
 #include "master-service.h"
 #include "master-service-settings.h"
 #include "master-interface.h"
+#include "dict.h"
 #include "password-scheme.h"
 #include "passdb-cache.h"
 #include "mech.h"
 #include "auth.h"
 #include "auth-penalty.h"
+#include "auth-token.h"
 #include "auth-request-handler.h"
 #include "auth-worker-server.h"
 #include "auth-worker-client.h"
@@ -39,7 +41,9 @@ enum auth_socket_type {
 	AUTH_SOCKET_LOGIN_CLIENT,
 	AUTH_SOCKET_MASTER,
 	AUTH_SOCKET_USERDB,
-	AUTH_SOCKET_POSTFIX
+	AUTH_SOCKET_POSTFIX,
+	AUTH_SOCKET_TOKEN,
+	AUTH_SOCKET_TOKEN_LOGIN
 };
 
 struct auth_socket_listener {
@@ -55,7 +59,7 @@ struct auth_penalty *auth_penalty;
 static pool_t auth_set_pool;
 static struct module *modules = NULL;
 static struct mechanisms_register *mech_reg;
-static ARRAY_DEFINE(listeners, struct auth_socket_listener);
+static ARRAY(struct auth_socket_listener) listeners;
 
 void auth_refresh_proctitle(void)
 {
@@ -117,6 +121,10 @@ auth_socket_type_get(const char *path)
 		return AUTH_SOCKET_USERDB;
 	else if (strcmp(suffix, "postmap") == 0)
 		return AUTH_SOCKET_POSTFIX;
+	else if (strcmp(suffix, "token") == 0)
+		return AUTH_SOCKET_TOKEN;
+	else if (strcmp(suffix, "tokenlogin") == 0)
+		return AUTH_SOCKET_TOKEN_LOGIN;
 	else
 		return AUTH_SOCKET_CLIENT;
 }
@@ -180,7 +188,7 @@ static void main_preinit(void)
 	services = read_global_settings();
 
 	memset(&mod_set, 0, sizeof(mod_set));
-	mod_set.version = master_service_get_version_string(master_service);
+	mod_set.abi_version = DOVECOT_ABI_VERSION;
 	mod_set.require_init_funcs = TRUE;
 	mod_set.debug = global_auth_settings->debug;
 	mod_set.filter_callback = auth_module_filter;
@@ -192,10 +200,13 @@ static void main_preinit(void)
 		auth_penalty = auth_penalty_init(AUTH_PENALTY_ANVIL_PATH);
 	mech_init(global_auth_settings);
 	mech_reg = mech_register_init(global_auth_settings);
+	dict_drivers_register_builtin();
 	auths_preinit(global_auth_settings, auth_set_pool,
 		      mech_reg, services);
 
 	listeners_init();
+	if (!worker)
+		auth_token_init();
 
 	/* Password lookups etc. may require roots, allow it. */
 	restrict_access_by_env(NULL, FALSE);
@@ -207,7 +218,7 @@ void auth_module_load(const char *names)
 	struct module_dir_load_settings mod_set;
 
 	memset(&mod_set, 0, sizeof(mod_set));
-	mod_set.version = master_service_get_version_string(master_service);
+	mod_set.abi_version = DOVECOT_ABI_VERSION;
 	mod_set.require_init_funcs = TRUE;
 	mod_set.debug = global_auth_settings->debug;
 	mod_set.ignore_missing = TRUE;
@@ -227,7 +238,7 @@ static void main_init(void)
 
 	/* set proctitles before init()s, since they may set them to error */
 	auth_refresh_proctitle();
-	auth_worker_refresh_proctitle(NULL);
+	auth_worker_refresh_proctitle("");
 
 	child_wait_init();
 	auth_worker_server_init();
@@ -260,6 +271,9 @@ static void main_deinit(void)
 	auth_request_handler_deinit();
 	/* there are no more auth requests */
 	auths_free();
+	dict_drivers_unregister_builtin();
+
+	auth_token_deinit();
 
 	auth_client_connections_destroy_all();
 	auth_master_connections_destroy_all();
@@ -297,7 +311,7 @@ static void worker_connected(struct master_service_connection *conn)
 	}
 
 	master_service_client_connection_accept(conn);
-	(void)auth_worker_client_create(auth_find_service(NULL), conn->fd);
+	(void)auth_worker_client_create(auth_default_service(), conn->fd);
 }
 
 static void client_connected(struct master_service_connection *conn)
@@ -312,7 +326,7 @@ static void client_connected(struct master_service_connection *conn)
 		l->type = auth_socket_type_get(conn->name);
 		l->path = i_strdup(conn->name);
 	}
-	auth = auth_find_service(NULL);
+	auth = auth_default_service();
 	switch (l->type) {
 	case AUTH_SOCKET_MASTER:
 		(void)auth_master_connection_create(auth, conn->fd,
@@ -326,10 +340,16 @@ static void client_connected(struct master_service_connection *conn)
 		(void)auth_postfix_connection_create(auth, conn->fd);
 		break;
 	case AUTH_SOCKET_LOGIN_CLIENT:
-		(void)auth_client_connection_create(auth, conn->fd, TRUE);
+		auth_client_connection_create(auth, conn->fd, TRUE, FALSE);
 		break;
 	case AUTH_SOCKET_CLIENT:
-		(void)auth_client_connection_create(auth, conn->fd, FALSE);
+		auth_client_connection_create(auth, conn->fd, FALSE, FALSE);
+		break;
+	case AUTH_SOCKET_TOKEN_LOGIN:
+		auth_client_connection_create(auth, conn->fd, TRUE, TRUE);
+		break;
+	case AUTH_SOCKET_TOKEN:
+		auth_client_connection_create(auth, conn->fd, FALSE, TRUE);
 		break;
 	default:
 		i_unreached();
@@ -367,9 +387,9 @@ int main(int argc, char *argv[])
 	}
 
 	main_preinit();
-	master_service_init_finish(master_service);
 	master_service_set_die_callback(master_service, auth_die);
 	main_init();
+	master_service_init_finish(master_service);
 	master_service_run(master_service, worker ? worker_connected :
 			   client_connected);
 	main_deinit();

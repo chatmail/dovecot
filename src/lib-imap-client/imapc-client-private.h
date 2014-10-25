@@ -3,6 +3,8 @@
 
 #include "imapc-client.h"
 
+#define IMAPC_CLIENT_IDLE_SEND_DELAY_MSECS 100
+
 struct imapc_client_connection {
 	struct imapc_connection *conn;
 	struct imapc_client_mailbox *box;
@@ -18,7 +20,7 @@ struct imapc_client {
 	imapc_untagged_callback_t *untagged_callback;
 	void *untagged_context;
 
-	ARRAY_DEFINE(conns, struct imapc_client_connection *);
+	ARRAY(struct imapc_client_connection *) conns;
 
 	struct ioloop *ioloop;
 };
@@ -27,6 +29,7 @@ struct imapc_client_mailbox {
 	struct imapc_client *client;
 	struct imapc_connection *conn;
 	struct imapc_msgmap *msgmap;
+	struct timeout *to_send_idle;
 
 	void (*reopen_callback)(void *context);
 	void *reopen_context;

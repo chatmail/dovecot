@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -7,6 +7,7 @@
 #include "passdb.h"
 
 #include <stdlib.h>
+#include <ctype.h>
 
 static struct mech_module_list *mech_modules;
 
@@ -50,7 +51,7 @@ void mech_generic_auth_initial(struct auth_request *request,
 			       const unsigned char *data, size_t data_size)
 {
 	if (data == NULL) {
-		auth_request_handler_reply_continue(request, NULL, 0);
+		auth_request_handler_reply_continue(request, &uchar_nul, 0);
 	} else {
 		/* initial reply given, even if it was 0 bytes */
 		request->mech->auth_continue(request, data, data_size);
@@ -112,6 +113,20 @@ static void mech_register_add(struct mechanisms_register *reg,
 	reg->modules = list;
 }
 
+static const char *mech_get_plugin_name(const char *name)
+{
+	string_t *str = t_str_new(32);
+
+	str_append(str, "mech_");
+	for (; *name != '\0'; name++) {
+		if (*name == '-')
+			str_append_c(str, '_');
+		else
+			str_append_c(str, i_tolower(*name));
+	}
+	return str_c(str);
+}
+
 struct mechanisms_register *
 mech_register_init(const struct auth_settings *set)
 {
@@ -139,7 +154,7 @@ mech_register_init(const struct auth_settings *set)
 		mech = mech_module_find(name);
 		if (mech == NULL) {
 			/* maybe it's a plugin. try to load it. */
-			auth_module_load(t_strconcat("mech_", name, NULL));
+			auth_module_load(mech_get_plugin_name(name));
 			mech = mech_module_find(name);
 		}
 		if (mech == NULL)
@@ -205,6 +220,7 @@ void mech_deinit(const struct auth_settings *set)
 #endif
 	}
 	mech_unregister_module(&mech_otp);
+	mech_unregister_module(&mech_scram_sha1);
 	mech_unregister_module(&mech_skey);
 	mech_unregister_module(&mech_rpa);
 	mech_unregister_module(&mech_anonymous);

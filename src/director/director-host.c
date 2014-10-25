@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -29,6 +29,8 @@ director_host_add(struct director *dir,
 	struct director_host *host;
 
 	host = i_new(struct director_host, 1);
+	host->dir = dir;
+	host->refcount = 1;
 	host->ip = *ip;
 	host->port = port;
 	host->name = i_strdup_printf("%s:%u", net_ip2addr(ip), port);
@@ -41,10 +43,49 @@ director_host_add(struct director *dir,
 	return host;
 }
 
-void director_host_free(struct director_host *host)
+void director_host_free(struct director_host **_host)
 {
+	struct director_host *host = *_host;
+
+	i_assert(host->refcount == 1);
+
+	*_host = NULL;
+	director_host_unref(host);
+}
+
+void director_host_ref(struct director_host *host)
+{
+	i_assert(host->refcount > 0);
+	host->refcount++;
+}
+
+void director_host_unref(struct director_host *host)
+{
+	struct director_host *const *hosts;
+	unsigned int i, count;
+
+	i_assert(host->refcount > 0);
+
+	if (--host->refcount > 0)
+		return;
+
+	hosts = array_get(&host->dir->dir_hosts, &count);
+	for (i = 0; i < count; i++) {
+		if (hosts[i] == host) {
+			array_delete(&host->dir->dir_hosts, i, 1);
+			break;
+		}
+	}
 	i_free(host->name);
 	i_free(host);
+}
+
+void director_host_restarted(struct director_host *host)
+{
+	host->last_seq = 0;
+	host->last_sync_seq = 0;
+	host->last_sync_seq_counter = 0;
+	host->last_sync_timestamp = 0;
 }
 
 struct director_host *
@@ -125,7 +166,7 @@ static void director_host_add_string(struct director *dir, const char *host)
 		i_fatal("Unknown director host: %s", host);
 
 	for (i = 0; i < ips_count; i++)
-		director_host_add(dir, &ips[i], port);
+		(void)director_host_add(dir, &ips[i], port);
 }
 
 void director_host_add_from_string(struct director *dir, const char *hosts)
@@ -142,7 +183,8 @@ void director_host_add_from_string(struct director *dir, const char *hosts)
 		/* standalone director */
 		struct ip_addr ip;
 
-		net_addr2ip("127.0.0.1", &ip);
+		if (net_addr2ip("127.0.0.1", &ip) < 0)
+			i_unreached();
 		dir->self_host = director_host_add(dir, &ip, 0);
 		dir->self_host->self = TRUE;
 	}

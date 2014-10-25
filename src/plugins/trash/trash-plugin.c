@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -37,10 +37,10 @@ struct trash_user {
 	union mail_user_module_context module_ctx;
 
 	/* ordered by priority, highest first */
-	ARRAY_DEFINE(trash_boxes, struct trash_mailbox);
+	ARRAY(struct trash_mailbox) trash_boxes;
 };
 
-const char *trash_plugin_version = DOVECOT_VERSION;
+const char *trash_plugin_version = DOVECOT_ABI_VERSION;
 
 static MODULE_CONTEXT_DEFINE_INIT(trash_user_module,
 				  &mail_user_module_register);
@@ -97,13 +97,15 @@ static int trash_clean_mailbox_get_next(struct trash_mailbox *trash,
 }
 
 static int trash_try_clean_mails(struct quota_transaction_context *ctx,
-				 uint64_t size_needed)
+				 uint64_t size_needed,
+				 unsigned int count_needed)
 {
 	struct trash_user *tuser = TRASH_USER_CONTEXT(ctx->quota->user);
 	struct trash_mailbox *trashes;
 	unsigned int i, j, count, oldest_idx;
 	time_t oldest, received = 0;
-	uint64_t size, size_expunged = 0, expunged_count = 0;
+	uint64_t size, size_expunged = 0;
+	unsigned int expunged_count = 0;
 	int ret = 0;
 
 	trashes = array_get_modifiable(&tuser->trash_boxes, &count);
@@ -139,7 +141,8 @@ static int trash_try_clean_mails(struct quota_transaction_context *ctx,
 			mail_expunge(trashes[oldest_idx].mail);
 			expunged_count++;
 			size_expunged += size;
-			if (size_expunged >= size_needed)
+			if (size_expunged >= size_needed &&
+			    expunged_count >= count_needed)
 				break;
 			trashes[oldest_idx].mail = NULL;
 		} else {
@@ -158,9 +161,11 @@ err:
 		trash->mail = NULL;
 		(void)mailbox_search_deinit(&trash->search_ctx);
 
-		if (size_expunged >= size_needed)
+		if (size_expunged >= size_needed &&
+		    expunged_count >= count_needed) {
 			(void)mailbox_transaction_commit(&trash->trans);
-		else {
+			(void)mailbox_sync(trash->box, 0);
+		} else {
 			/* couldn't get enough space, don't expunge anything */
                         mailbox_transaction_rollback(&trash->trans);
 		}
@@ -175,14 +180,33 @@ err:
 				(unsigned long long)size_needed,
 				(unsigned long long)size_expunged);
 		}
-		return FALSE;
+		return 0;
+	}
+	if (expunged_count < count_needed) {
+		if (ctx->quota->user->mail_debug) {
+			i_debug("trash plugin: Failed to remove enough messages "
+				"(needed %u messages, expunged only %u messages)",
+				count_needed, expunged_count);
+		}
+		return 0;
 	}
 
-	ctx->bytes_used = ctx->bytes_used > (int64_t)size_expunged ?
-		ctx->bytes_used - size_expunged : 0;
-	ctx->count_used = ctx->count_used > (int64_t)expunged_count ?
-		ctx->count_used - expunged_count : 0;
-	return TRUE;
+	if (ctx->bytes_over > 0) {
+		/* user is over quota. drop the over-bytes first. */
+		i_assert(ctx->bytes_over <= size_expunged);
+		size_expunged -= ctx->bytes_over;
+		ctx->bytes_over = 0;
+	}
+	if (ctx->count_over > 0) {
+		/* user is over quota. drop the over-count first. */
+		i_assert(ctx->count_over <= expunged_count);
+		expunged_count -= ctx->count_over;
+		ctx->count_over = 0;
+	}
+
+	ctx->bytes_ceil += size_expunged;
+	ctx->count_ceil += expunged_count;
+	return 1;
 }
 
 static int
@@ -210,11 +234,11 @@ trash_quota_test_alloc(struct quota_transaction_context *ctx,
 		}
 
 		/* not enough space. try deleting some from mailbox. */
-		ret = trash_try_clean_mails(ctx, size);
+		ret = trash_try_clean_mails(ctx, size + ctx->bytes_over,
+					    1 + ctx->count_over);
 		if (ret <= 0)
 			return 0;
 	}
-
 	return 0;
 }
 
@@ -224,11 +248,11 @@ static bool trash_find_storage(struct mail_user *user,
 	struct mail_namespace *ns;
 
 	ns = mail_namespace_find(user->namespaces, trash->name);
-	if (ns != NULL) {
-		trash->ns = ns;
-		return TRUE;
-	}
-	return FALSE;
+	if ((ns->flags & NAMESPACE_FLAG_UNUSABLE) != 0)
+		return FALSE;
+
+	trash->ns = ns;
+	return TRUE;
 }
 
 static int trash_mailbox_priority_cmp(const struct trash_mailbox *t1,
@@ -287,7 +311,7 @@ static int read_configuration(struct mail_user *user, const char *path)
 		}
 	}
 	i_stream_destroy(&input);
-	(void)close(fd);
+	i_close_fd(&fd);
 
 	array_sort(&tuser->trash_boxes, trash_mailbox_priority_cmp);
 	return ret;

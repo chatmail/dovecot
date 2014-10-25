@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 /* doc/thread-refs.txt describes the incremental algorithm we use here. */
 
@@ -28,6 +28,7 @@ struct mail_thread_context {
 	ARRAY_TYPE(seq_range) added_uids;
 
 	unsigned int failed:1;
+	unsigned int corrupted:1;
 };
 
 struct mail_thread_mailbox {
@@ -52,10 +53,11 @@ static MODULE_CONTEXT_DEFINE_INIT(mail_thread_storage_module,
 static void mail_thread_clear(struct mail_thread_context *ctx);
 
 static int
-mail_strmap_rec_get_msgid(struct mail *mail,
+mail_strmap_rec_get_msgid(struct mail_thread_context *ctx,
 			  const struct mail_index_strmap_rec *rec,
 			  const char **msgid_r)
 {
+	struct mail *mail = ctx->tmp_mail;
 	const char *msgids = NULL, *msgid;
 	unsigned int n = 0;
 	int ret;
@@ -91,14 +93,18 @@ mail_strmap_rec_get_msgid(struct mail *mail,
 	/* get the nth message-id */
 	msgid = message_id_get_next(&msgids);
 	if (msgid != NULL) {
-		for (; n > 0 && *msgids != '\0'; n--)
+		for (; n > 0; n--)
 			msgid = message_id_get_next(&msgids);
 	}
 
 	if (msgid == NULL) {
-		/* shouldn't have happened */
+		/* shouldn't have happened, probably corrupted */
 		mail_storage_set_critical(mail->box->storage,
-					  "Threading lost Message ID");
+			"Corrupted thread index for mailbox %s: "
+			"UID %u lost Message ID %u",
+			mail->box->vname, mail->uid, rec->ref_index);
+		ctx->failed = TRUE;
+		ctx->corrupted = TRUE;
 		return -1;
 	}
 	*msgid_r = msgid;
@@ -118,7 +124,7 @@ mail_thread_hash_key_cmp(const char *key,
 
 	/* either a match or a collision, need to look closer */
 	T_BEGIN {
-		ret = mail_strmap_rec_get_msgid(ctx->tmp_mail, rec, &msgid);
+		ret = mail_strmap_rec_get_msgid(ctx, rec, &msgid);
 		if (ret <= 0) {
 			if (ret < 0)
 				ctx->failed = TRUE;
@@ -141,11 +147,10 @@ mail_thread_hash_rec_cmp(const struct mail_index_strmap_rec *rec1,
 	int ret;
 
 	T_BEGIN {
-		ret = mail_strmap_rec_get_msgid(ctx->tmp_mail, rec1, &msgid1);
+		ret = mail_strmap_rec_get_msgid(ctx, rec1, &msgid1);
 		if (ret > 0) {
 			msgid1 = t_strdup(msgid1);
-			ret = mail_strmap_rec_get_msgid(ctx->tmp_mail, rec2,
-							&msgid2);
+			ret = mail_strmap_rec_get_msgid(ctx, rec2, &msgid2);
 		}
 		ret = ret <= 0 ? -1 :
 			strcmp(msgid1, msgid2) == 0;
@@ -325,6 +330,7 @@ static int mail_thread_index_map_build(struct mail_thread_context *ctx)
 	if (seq1 == 0) {
 		/* nothing is missing */
 		mail_index_strmap_view_sync_commit(&ctx->strmap_sync);
+		mailbox_header_lookup_unref(&headers_ctx);
 		return 0;
 	}
 
@@ -332,6 +338,8 @@ static int mail_thread_index_map_build(struct mail_thread_context *ctx)
 	mail_search_build_add_seqset(search_args, seq1, seq2);
 	search_ctx = mailbox_search_init(ctx->t, search_args, NULL,
 					 0, headers_ctx);
+	mailbox_header_lookup_unref(&headers_ctx);
+	mail_search_args_unref(&search_args);
 
 	while (mailbox_search_next(search_ctx, &mail)) {
 		if (mail_thread_map_add_mail(ctx, mail) < 0) {
@@ -349,11 +357,9 @@ static int mail_thread_index_map_build(struct mail_thread_context *ctx)
 	return ret;
 }
 
-static int msgid_map_cmp(const void *key, const void *value)
+static int msgid_map_cmp(const uint32_t *uid,
+			 const struct mail_index_strmap_rec *rec)
 {
-	const uint32_t *uid = key;
-	const struct mail_index_strmap_rec *rec = value;
-
 	return *uid < rec->uid ? -1 :
 		(*uid > rec->uid ? 1 : 0);
 }
@@ -384,8 +390,9 @@ static bool mail_thread_cache_update_removes(struct mail_thread_mailbox *tbox,
 	uids = array_get(&removed_uids, &uid_count);
 	for (i = j = 0; i < uid_count; i++) {
 		/* find and remove from the map */
-		bsearch_insert_pos(&uids[i].seq1, &msgid_map[j], map_count - j,
-				   sizeof(*msgid_map), msgid_map_cmp, &idx);
+		bsearch_insert_pos(&uids[i].seq1, &msgid_map[j],
+				   map_count - j, sizeof(*msgid_map),
+				   msgid_map_cmp, &idx);
 		j += idx;
 		if (j == map_count) {
 			/* all removals after this are about messages we never
@@ -564,7 +571,11 @@ int mail_thread_init(struct mailbox *box, struct mail_search_args *args,
 		mail_thread_cache_sync_add(tbox, ctx, search_ctx);
 	if (mailbox_search_deinit(&search_ctx) < 0)
 		ret = -1;
-
+	if (ctx->failed) {
+		ret = -1;
+		if (ctx->corrupted)
+			mail_index_strmap_view_set_corrupted(tbox->strmap_view);
+	}
 	if (ret < 0) {
 		mail_thread_deinit(&ctx);
 		return -1;

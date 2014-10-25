@@ -5,11 +5,37 @@
 
 #define PASSWORD_HIDDEN_STR "<hidden>"
 
+enum auth_passdb_skip {
+	AUTH_PASSDB_SKIP_NEVER,
+	AUTH_PASSDB_SKIP_AUTHENTICATED,
+	AUTH_PASSDB_SKIP_UNAUTHENTICATED
+};
+
+enum auth_userdb_skip {
+	AUTH_USERDB_SKIP_NEVER,
+	AUTH_USERDB_SKIP_FOUND,
+	AUTH_USERDB_SKIP_NOTFOUND
+};
+
+enum auth_db_rule {
+	AUTH_DB_RULE_RETURN,
+	AUTH_DB_RULE_RETURN_OK,
+	AUTH_DB_RULE_RETURN_FAIL,
+	AUTH_DB_RULE_CONTINUE,
+	AUTH_DB_RULE_CONTINUE_OK,
+	AUTH_DB_RULE_CONTINUE_FAIL
+};
+
 struct auth_passdb {
 	struct auth_passdb *next;
 
 	const struct auth_passdb_settings *set;
 	struct passdb_module *passdb;
+
+	enum auth_passdb_skip skip;
+	enum auth_db_rule result_success;
+	enum auth_db_rule result_failure;
+	enum auth_db_rule result_internalfail;
 };
 
 struct auth_userdb {
@@ -17,6 +43,11 @@ struct auth_userdb {
 
 	const struct auth_userdb_settings *set;
 	struct userdb_module *userdb;
+
+	enum auth_userdb_skip skip;
+	enum auth_db_rule result_success;
+	enum auth_db_rule result_failure;
+	enum auth_db_rule result_internalfail;
 };
 
 struct auth {
@@ -33,6 +64,7 @@ struct auth {
 extern struct auth_penalty *auth_penalty;
 
 struct auth *auth_find_service(const char *name);
+struct auth *auth_default_service(void);
 
 void auths_preinit(const struct auth_settings *set, pool_t pool,
 		   const struct mechanisms_register *reg,

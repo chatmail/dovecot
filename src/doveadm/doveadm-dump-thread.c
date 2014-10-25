@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mmap-util.h"
@@ -120,6 +120,7 @@ static void cmd_dump_thread(int argc ATTR_UNUSED, char *argv[])
 			pos += ret;
 		} T_END;
 	} while (ret > 0);
+	i_close_fd(&fd);
 }
 
 static bool test_dump_thread(const char *path)

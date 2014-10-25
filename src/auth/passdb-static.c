@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
@@ -21,11 +21,11 @@ static_save_fields(struct auth_request *request, const char **password_r)
         const struct var_expand_table *table;
 	string_t *str = t_str_new(128);
 
-	auth_request_log_debug(request, "static", "lookup");
+	auth_request_log_debug(request, AUTH_SUBSYS_DB, "lookup");
 	passdb_template_export(module->tmpl, request);
 
 	if (module->static_password_tmpl == NULL)
-		*password_r = NULL;
+		*password_r = "";
 	else {
 		table = auth_request_get_var_expand_table(request, NULL);
 		var_expand(str, module->static_password_tmpl, table);
@@ -43,7 +43,7 @@ static_verify_plain(struct auth_request *request, const char *password,
 	static_save_fields(request, &static_password);
 
 	ret = auth_request_password_verify(request, password, static_password,
-					   STATIC_PASS_SCHEME, "static");
+					   STATIC_PASS_SCHEME, AUTH_SUBSYS_DB);
 	if (ret <= 0) {
 		callback(PASSDB_RESULT_PASSWORD_MISMATCH, request);
 		return;

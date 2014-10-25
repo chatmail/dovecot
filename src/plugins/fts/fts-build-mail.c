@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -37,7 +37,7 @@ static void fts_build_parse_content_type(struct fts_mail_build_context *ctx,
 	string_t *content_type;
 
 	rfc822_parser_init(&parser, hdr->full_value, hdr->full_value_len, NULL);
-	(void)rfc822_skip_lwsp(&parser);
+	rfc822_skip_lwsp(&parser);
 
 	T_BEGIN {
 		content_type = t_str_new(64);
@@ -111,6 +111,7 @@ static void fts_build_mail_header(struct fts_mail_build_context *ctx,
 	key.uid = ctx->mail->uid;
 	key.type = block->part->physical_pos == 0 ?
 		FTS_BACKEND_BUILD_KEY_HDR : FTS_BACKEND_BUILD_KEY_MIME_HDR;
+	key.part = block->part;
 	key.hdr_name = hdr->name;
 
 	if (!fts_backend_update_set_build_key(ctx->update_ctx, &key))
@@ -128,7 +129,7 @@ static void fts_build_mail_header(struct fts_mail_build_context *ctx,
 		addr = message_address_parse(pool_datastack_create(),
 					     hdr->full_value,
 					     hdr->full_value_len,
-					     -1U, TRUE);
+					     UINT_MAX, TRUE);
 		str = t_str_new(hdr->full_value_len);
 		message_address_write(str, addr);
 
@@ -139,7 +140,8 @@ static void fts_build_mail_header(struct fts_mail_build_context *ctx,
 }
 
 static bool
-fts_build_body_begin(struct fts_mail_build_context *ctx, bool *binary_body_r)
+fts_build_body_begin(struct fts_mail_build_context *ctx,
+		     struct message_part *part, bool *binary_body_r)
 {
 	struct mail_storage *storage;
 	const char *content_type;
@@ -150,6 +152,7 @@ fts_build_body_begin(struct fts_mail_build_context *ctx, bool *binary_body_r)
 	*binary_body_r = FALSE;
 	memset(&key, 0, sizeof(key));
 	key.uid = ctx->mail->uid;
+	key.part = part;
 
 	content_type = ctx->content_type != NULL ?
 		ctx->content_type : "text/plain";
@@ -170,6 +173,7 @@ fts_build_body_begin(struct fts_mail_build_context *ctx, bool *binary_body_r)
 		   strncmp(content_type, "message/", 8) == 0) {
 		/* text body parts */
 		key.type = FTS_BACKEND_BUILD_KEY_BODY_PART;
+		ctx->body_parser = fts_parser_text_init();
 	} else {
 		/* possibly binary */
 		if ((ctx->update_ctx->backend->flags &
@@ -178,8 +182,6 @@ fts_build_body_begin(struct fts_mail_build_context *ctx, bool *binary_body_r)
 		*binary_body_r = TRUE;
 		key.type = FTS_BACKEND_BUILD_KEY_BODY_PART_BINARY;
 	}
-	if (ctx->body_parser == NULL)
-		ctx->body_parser = fts_parser_text_init();
 	key.body_content_type = content_type;
 	key.body_content_disposition = ctx->content_disposition;
 	return fts_backend_update_set_build_key(ctx->update_ctx, &key);
@@ -267,7 +269,6 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 		    struct mail *mail)
 {
 	struct fts_mail_build_context ctx;
-	enum message_decoder_flags decoder_flags = 0;
 	struct istream *input;
 	struct message_parser_ctx *parser;
 	struct message_decoder_context *decoder;
@@ -289,9 +290,7 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 				     MESSAGE_HEADER_PARSER_FLAG_CLEAN_ONELINE,
 				     0);
 
-	if ((update_ctx->backend->flags & FTS_BACKEND_FLAG_BUILD_DTCASE) != 0)
-		decoder_flags |= MESSAGE_DECODER_FLAG_DTCASE;
-	decoder = message_decoder_init(decoder_flags);
+	decoder = message_decoder_init(update_ctx->normalizer, 0);
 	for (;;) {
 		ret = message_parser_parse_next_block(parser, &raw_block);
 		i_assert(ret != 0);
@@ -327,7 +326,8 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 			/* always handle headers */
 		} else if (raw_block.size == 0) {
 			/* end of headers */
-			skip_body = !fts_build_body_begin(&ctx, &binary_body);
+			skip_body = !fts_build_body_begin(&ctx, raw_block.part,
+							  &binary_body);
 			if (binary_body)
 				message_decoder_set_return_binary(decoder, TRUE);
 			body_part = TRUE;
@@ -356,8 +356,12 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 			body_added = TRUE;
 		}
 	}
-	if (ret == 0 && ctx.body_parser != NULL)
-		ret = fts_body_parser_finish(&ctx);
+	if (ctx.body_parser != NULL) {
+		if (ret == 0)
+			ret = fts_body_parser_finish(&ctx);
+		else
+			fts_parser_deinit(&ctx.body_parser);
+	}
 	if (ret == 0 && body_part && !skip_body && !body_added) {
 		/* make sure body is added even when it doesn't exist */
 		block.data = NULL; block.size = 0;

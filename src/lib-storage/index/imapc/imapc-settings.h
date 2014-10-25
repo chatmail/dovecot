@@ -3,7 +3,9 @@
 
 /* <settings checks> */
 enum imapc_features {
-	IMAPC_FEATURE_RFC822_SIZE	= 0x01
+	IMAPC_FEATURE_RFC822_SIZE	= 0x01,
+	IMAPC_FEATURE_GUID_FORCED	= 0x02,
+	IMAPC_FEATURE_FETCH_HEADERS	= 0x04
 };
 /* </settings checks> */
 
@@ -16,12 +18,12 @@ struct imapc_settings {
 	const char *imapc_password;
 
 	const char *imapc_ssl;
-	const char *imapc_ssl_ca_dir;
 	bool imapc_ssl_verify;
 
 	const char *imapc_features;
 	const char *imapc_rawlog_dir;
-	const char *ssl_crypto_device;
+	const char *imapc_list_prefix;
+	unsigned int imapc_max_idle_time;
 
 	enum imapc_features parsed_features;
 };

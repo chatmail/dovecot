@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -6,6 +6,7 @@
 #include "istream-header-filter.h"
 #include "sha1.h"
 #include "message-size.h"
+#include "message-header-parser.h"
 #include "mail-namespace.h"
 #include "mail-search-build.h"
 #include "mail-storage-private.h"
@@ -43,17 +44,17 @@ struct pop3_migration_mail_storage {
 	union mail_storage_module_context module_ctx;
 
 	const char *pop3_box_vname;
-	struct mailbox *pop3_box;
-	ARRAY_DEFINE(pop3_uidl_map, struct pop3_uidl_map);
+	ARRAY(struct pop3_uidl_map) pop3_uidl_map;
 
 	unsigned int all_mailboxes:1;
 	unsigned int pop3_all_hdr_sha1_set:1;
+	unsigned int ignore_missing_uidls:1;
 };
 
 struct pop3_migration_mailbox {
 	union mailbox_module_context module_ctx;
 
-	ARRAY_DEFINE(imap_msg_map, struct imap_msg_map);
+	ARRAY(struct imap_msg_map) imap_msg_map;
 	unsigned int first_unfound_idx;
 
 	unsigned int uidl_synced:1;
@@ -72,7 +73,7 @@ static const char *hdr_hash_skip_headers[] = {
 	"X-UID",
 	"X-UIDL"
 };
-const char *pop3_migration_plugin_version = DOVECOT_VERSION;
+const char *pop3_migration_plugin_version = DOVECOT_ABI_VERSION;
 
 static MODULE_CONTEXT_DEFINE_INIT(pop3_migration_storage_module,
 				  &mail_storage_module_register);
@@ -111,74 +112,123 @@ static int imap_msg_map_hdr_cmp(const struct imap_msg_map *map1,
 	return memcmp(map1->hdr_sha1, map2->hdr_sha1, sizeof(map1->hdr_sha1));
 }
 
-static int get_hdr_sha1(struct mail *mail, unsigned char sha1[SHA1_RESULTLEN])
+static void
+pop3_header_filter_callback(struct header_filter_istream *input ATTR_UNUSED,
+			    struct message_header_line *hdr,
+			    bool *matched ATTR_UNUSED, bool *have_eoh)
 {
-	struct message_size hdr_size;
-	struct istream *input, *input2;
-	const unsigned char *data;
-	size_t size;
+	if (hdr != NULL && hdr->eoh)
+		*have_eoh = TRUE;
+}
+
+static int
+get_hdr_sha1_stream(struct mail *mail, struct istream *input, uoff_t hdr_size,
+		    unsigned char sha1_r[SHA1_RESULTLEN], bool *have_eoh_r)
+{
+	struct istream *input2;
+	const unsigned char *data, *p;
+	size_t size, idx;
 	struct sha1_ctxt sha1_ctx;
+
+	*have_eoh_r = FALSE;
+
+	input2 = i_stream_create_limit(input, hdr_size);
+	/* hide headers that might change or be different in IMAP vs. POP3 */
+	input = i_stream_create_header_filter(input2,
+				HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR,
+				hdr_hash_skip_headers,
+				N_ELEMENTS(hdr_hash_skip_headers),
+				pop3_header_filter_callback, have_eoh_r);
+	i_stream_unref(&input2);
+
+	sha1_init(&sha1_ctx);
+	while (i_stream_read_data(input, &data, &size, 0) > 0) {
+		/* if there are NULs in header, replace them with 0x80
+		   character. This is done by at least Dovecot IMAP and also
+		   POP3 with outlook-no-nuls workaround. */
+		while ((p = memchr(data, '\0', size)) != NULL) {
+			idx = p - data;
+			sha1_loop(&sha1_ctx, data, idx);
+			sha1_loop(&sha1_ctx, "\x80", 1);
+			i_assert(size > idx);
+			data += idx + 1;
+			size -= idx + 1;
+		}
+		sha1_loop(&sha1_ctx, data, size);
+		i_stream_skip(input, size);
+	}
+	if (input->stream_errno != 0) {
+		i_error("pop3_migration: Failed to read header for msg %u: %s",
+			mail->seq, i_stream_get_error(input));
+		i_stream_unref(&input);
+		return -1;
+	}
+	sha1_result(&sha1_ctx, sha1_r);
+	i_stream_unref(&input);
+	return 0;
+}
+
+static int
+get_hdr_sha1(struct mail *mail, unsigned char sha1_r[SHA1_RESULTLEN])
+{
+	struct istream *input;
+	struct message_size hdr_size;
+	bool have_eoh;
 
 	if (mail_get_hdr_stream(mail, &hdr_size, &input) < 0) {
 		i_error("pop3_migration: Failed to get header for msg %u: %s",
 			mail->seq, mailbox_get_last_error(mail->box, NULL));
 		return -1;
 	}
-	input2 = i_stream_create_limit(input, hdr_size.physical_size);
-	/* hide headers that might change or be different in IMAP vs. POP3 */
-	input = i_stream_create_header_filter(input2,
-				HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR,
-				hdr_hash_skip_headers,
-				N_ELEMENTS(hdr_hash_skip_headers),
-				null_header_filter_callback, NULL);
-	i_stream_unref(&input2);
+	if (get_hdr_sha1_stream(mail, input, hdr_size.physical_size,
+				sha1_r, &have_eoh) < 0)
+		return -1;
+	if (have_eoh)
+		return 0;
 
-	sha1_init(&sha1_ctx);
-	while (i_stream_read_data(input, &data, &size, 0) > 0) {
-		sha1_loop(&sha1_ctx, data, size);
-		i_stream_skip(input, size);
-	}
-	if (input->stream_errno != 0) {
-		i_error("pop3_migration: Failed to read header for msg %u: %m",
-			mail->seq);
-		i_stream_unref(&input);
+	/* The empty "end of headers" line is missing. Either this means that
+	   the headers ended unexpectedly (which is ok) or that the remote
+	   server is buggy. Some servers have problems with
+
+	   1) header line continuations that contain only whitespace and
+	   2) headers that have no ":". The header gets truncated when such
+	   line is reached.
+
+	   At least Oracle IMS IMAP FETCH BODY[HEADER] handles 1) by not
+	   returning the whitespace line and 2) by returning the line but
+	   truncating the rest. POP3 TOP instead returns the entire header.
+	   This causes the IMAP and POP3 hashes not to match.
+
+	   So we'll try to avoid this by falling back to full FETCH BODY[]
+	   (and/or RETR) and we'll parse the header ourself from it. This
+	   should work around any similar bugs in all IMAP/POP3 servers. */
+	if (mail_get_stream(mail, &hdr_size, NULL, &input) < 0) {
+		i_error("pop3_migration: Failed to get body for msg %u: %s",
+			mail->seq, mailbox_get_last_error(mail->box, NULL));
 		return -1;
 	}
-	sha1_result(&sha1_ctx, sha1);
-	i_stream_unref(&input);
-	return 0;
+	return get_hdr_sha1_stream(mail, input, hdr_size.physical_size,
+				   sha1_r, &have_eoh);
+
 }
 
-static int pop3_mailbox_open(struct mail_storage *storage)
+static struct mailbox *pop3_mailbox_alloc(struct mail_storage *storage)
 {
 	struct pop3_migration_mail_storage *mstorage =
 		POP3_MIGRATION_CONTEXT(storage);
 	struct mail_namespace *ns;
 
-	if (mstorage->pop3_box != NULL)
-		return 0;
-
 	ns = mail_namespace_find(storage->user->namespaces,
 				 mstorage->pop3_box_vname);
-	if (ns == NULL) {
-		i_error("pop3_migration: Namespace not found for mailbox %s",
-			mstorage->pop3_box_vname);
-		return -1;
-	}
-	mstorage->pop3_box = mailbox_alloc(ns->list, mstorage->pop3_box_vname,
-					   MAILBOX_FLAG_READONLY |
-					   MAILBOX_FLAG_POP3_SESSION);
-	mstorage->all_mailboxes =
-		mail_user_plugin_getenv(storage->user,
-					"pop3_migration_all_mailboxes") != NULL;
-	return 0;
+	i_assert(ns != NULL);
+	return mailbox_alloc(ns->list, mstorage->pop3_box_vname,
+			     MAILBOX_FLAG_READONLY | MAILBOX_FLAG_POP3_SESSION);
 }
 
-static int pop3_map_read(struct mail_storage *storage)
+static int pop3_map_read(struct mail_storage *storage, struct mailbox *pop3_box)
 {
 	struct pop3_migration_mail_storage *mstorage =
 		POP3_MIGRATION_CONTEXT(storage);
-	struct mailbox *pop3_box = mstorage->pop3_box;
 	struct mailbox_transaction_context *t;
 	struct mail_search_args *search_args;
 	struct mail_search_context *ctx;
@@ -242,8 +292,9 @@ static int pop3_map_read(struct mail_storage *storage)
 	return ret;
 }
 
-static int pop3_map_read_hdr_hashes(struct mail_storage *storage,
-				    unsigned first_seq)
+static int
+pop3_map_read_hdr_hashes(struct mail_storage *storage, struct mailbox *pop3_box,
+			 unsigned first_seq)
 {
 	struct pop3_migration_mail_storage *mstorage =
 		POP3_MIGRATION_CONTEXT(storage);
@@ -262,7 +313,7 @@ static int pop3_map_read_hdr_hashes(struct mail_storage *storage,
 		first_seq = 1;
 	}
 
-	t = mailbox_transaction_begin(mstorage->pop3_box, 0);
+	t = mailbox_transaction_begin(pop3_box, 0);
 	search_args = mail_search_build_init();
 	mail_search_build_add_seqset(search_args, first_seq,
 				     array_count(&mstorage->pop3_uidl_map)+1);
@@ -395,7 +446,8 @@ static bool pop3_uidl_assign_by_size(struct mailbox *box)
 	return i == count;
 }
 
-static int pop3_uidl_assign_by_hdr_hash(struct mailbox *box)
+static int
+pop3_uidl_assign_by_hdr_hash(struct mailbox *box, struct mailbox *pop3_box)
 {
 	struct pop3_migration_mail_storage *mstorage =
 		POP3_MIGRATION_CONTEXT(box->storage);
@@ -407,7 +459,7 @@ static int pop3_uidl_assign_by_hdr_hash(struct mailbox *box)
 	int ret;
 
 	first_seq = mbox->first_unfound_idx+1;
-	if (pop3_map_read_hdr_hashes(box->storage, first_seq) < 0 ||
+	if (pop3_map_read_hdr_hashes(box->storage, pop3_box, first_seq) < 0 ||
 	    imap_map_read_hdr_hashes(box) < 0)
 		return -1;
 
@@ -450,6 +502,13 @@ static int pop3_uidl_assign_by_hdr_hash(struct mailbox *box)
 			missing_uids_count++;
 	}
 	if (missing_uids_count > 0 && !mstorage->all_mailboxes) {
+		if (!mstorage->ignore_missing_uidls) {
+			i_error("pop3_migration: %u POP3 messages have no "
+				"matching IMAP messages (set "
+				"pop3_migration_ignore_missing_uidls=yes "
+				"to continue anyway)", missing_uids_count);
+			return -1;
+		}
 		i_warning("pop3_migration: %u POP3 messages have no "
 			  "matching IMAP messages", missing_uids_count);
 	}
@@ -463,6 +522,7 @@ static int pop3_migration_uidl_sync(struct mailbox *box)
 	struct pop3_migration_mailbox *mbox = POP3_MIGRATION_CONTEXT(box);
 	struct pop3_migration_mail_storage *mstorage =
 		POP3_MIGRATION_CONTEXT(box->storage);
+	struct mailbox *pop3_box;
 	const struct pop3_uidl_map *pop3_map;
 	unsigned int i, count;
 	uint32_t prev_uid;
@@ -470,17 +530,23 @@ static int pop3_migration_uidl_sync(struct mailbox *box)
 	if (mbox->uidl_synced)
 		return 0;
 
-	if (pop3_mailbox_open(box->storage) < 0)
+	pop3_box = pop3_mailbox_alloc(box->storage);
+	/* the POP3 server isn't connected to yet. handle all IMAP traffic
+	   first before connecting, so POP3 server won't disconnect us due to
+	   idling. */
+	if (imap_map_read(box) < 0 ||
+	    pop3_map_read(box->storage, pop3_box) < 0) {
+		mailbox_free(&pop3_box);
 		return -1;
-
-	if (pop3_map_read(box->storage) < 0 || imap_map_read(box) < 0)
-		return -1;
+	}
 
 	if (!pop3_uidl_assign_by_size(box)) {
 		/* everything wasn't assigned, figure out the rest with
 		   header hashes */
-		if (pop3_uidl_assign_by_hdr_hash(box) < 0)
+		if (pop3_uidl_assign_by_hdr_hash(box, pop3_box) < 0) {
+			mailbox_free(&pop3_box);
 			return -1;
+		}
 	}
 
 	/* see if the POP3 UIDL order is the same as IMAP UID order */
@@ -499,6 +565,7 @@ static int pop3_migration_uidl_sync(struct mailbox *box)
 	}
 
 	mbox->uidl_synced = TRUE;
+	mailbox_free(&pop3_box);
 	return 0;
 }
 
@@ -585,13 +652,10 @@ static void pop3_migration_mail_storage_destroy(struct mail_storage *storage)
 	struct pop3_migration_mail_storage *mstorage =
 		POP3_MIGRATION_CONTEXT(storage);
 
-	if (mstorage->pop3_box != NULL)
-		mailbox_free(&mstorage->pop3_box);
 	if (array_is_created(&mstorage->pop3_uidl_map))
 		array_free(&mstorage->pop3_uidl_map);
 
-	if (mstorage->module_ctx.super.destroy != NULL)
-		mstorage->module_ctx.super.destroy(storage);
+	mstorage->module_ctx.super.destroy(storage);
 }
 
 static void pop3_migration_mail_storage_created(struct mail_storage *storage)
@@ -611,6 +675,12 @@ static void pop3_migration_mail_storage_created(struct mail_storage *storage)
 	v->destroy = pop3_migration_mail_storage_destroy;
 
 	mstorage->pop3_box_vname = p_strdup(storage->pool, pop3_box_vname);
+	mstorage->all_mailboxes =
+		mail_user_plugin_getenv(storage->user,
+					"pop3_migration_all_mailboxes") != NULL;
+	mstorage->ignore_missing_uidls =
+		mail_user_plugin_getenv(storage->user,
+			"pop3_migration_ignore_missing_uidls") != NULL;
 
 	MODULE_CONTEXT_SET(storage, pop3_migration_storage_module, mstorage);
 }

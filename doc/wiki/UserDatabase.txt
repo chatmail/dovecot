@@ -16,8 +16,12 @@ The user database lookup returns these fields:
    even for virtual users> [VirtualUsers.Home.txt].
  * *mail*: <Mail location> [MailLocation.txt], overrides the global
    'mail_location' setting.
- * Optional <extra fields> [UserDatabase.ExtraFields.txt] which are passed to
-   the IMAP/POP3 process in environment variables.
+ * Optional <extra fields> [UserDatabase.ExtraFields.txt], which can be used
+   for example:
+    * Overwriting all mail-related settings (e.g. quota_rule to specify
+      per-user quota limit)
+    * The extra fields are also passed to <post-login scripts>
+      [PostLoginScripting.txt]
 
 The user and <password databases> [PasswordDatabase.txt] may be the same or
 they may be different depending on your needs. You can also have <multiple
@@ -32,6 +36,8 @@ Currently supported user databases are:
  * <NSS> [UserDatabase.NSS.txt]: Name Service Switch
  * <LDAP> [AuthDatabase.LDAP.txt]: Lightweight Directory Access Protocol
  * <SQL> [AuthDatabase.SQL.txt]: SQL database (PostgreSQL, MySQL, SQLite)
+ * <Dict> [AuthDatabase.Dict.txt]: Dict key-value database (Redis, memcached,
+   etc.)
  * <Static> [UserDatabase.Static.txt]: Userdb information generated from a
    given template
  * <VPopMail> [AuthDatabase.VPopMail.txt]: External software used to handle
@@ -39,4 +45,33 @@ Currently supported user databases are:
  * <Prefetch> [UserDatabase.Prefetch.txt]: This assumes that the passdb already
    returned also all the required user database information
 
-(This file was created from the wiki on 2012-04-09 04:42)
+Userdb settings
+---------------
+
+An example userdb entry might look like this:
+
+---%<-------------------------------------------------------------------------
+userdb {
+  driver = passwd-file
+  args = username_format=%n /etc/dovecot/users
+
+  default_fields = uid=vmail gid=vmail
+  override_fields =
+}
+---%<-------------------------------------------------------------------------
+
+Here you have settings:
+
+ * driver: The userdb backend name
+ * args: Arguments for the userdb backend. The format of this value depends on
+   the userdb driver. Each one uses different args.
+ * default_fields: Userdb fields (and <extra fields>
+   [UserDatabase.ExtraFields.txt]) that are used, unless overwritten by the
+   userdb backend. They are in format 'key=value key2=value2 ...'. The values
+   can contain <%variables> [Variables.txt].
+ * override_fields: Same as default_fields, but instead of providing the
+   default values, these values override what the userdb backend returned. For
+   example useful with <userdb passwd> [AuthDatabase.Passwd.txt] for overriding
+   e.g. home directory or the uid/gid.
+
+(This file was created from the wiki on 2013-11-24 04:43)

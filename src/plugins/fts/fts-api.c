@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -10,7 +10,7 @@
 #include "../virtual/virtual-storage.h"
 #include "fts-api-private.h"
 
-static ARRAY_DEFINE(backends, const struct fts_backend *);
+static ARRAY(const struct fts_backend *) backends;
 
 void fts_backend_register(const struct fts_backend *backend)
 {
@@ -110,10 +110,15 @@ bool fts_backend_is_updating(struct fts_backend *backend)
 struct fts_backend_update_context *
 fts_backend_update_init(struct fts_backend *backend)
 {
+	struct fts_backend_update_context *ctx;
+
 	i_assert(!backend->updating);
 
 	backend->updating = TRUE;
-	return backend->v.update_init(backend);
+	ctx = backend->v.update_init(backend);
+	if ((backend->flags & FTS_BACKEND_FLAG_NORMALIZE_INPUT) != 0)
+		ctx->normalizer = backend->ns->user->default_normalizer;
+	return ctx;
 }
 
 static void fts_backend_set_cur_mailbox(struct fts_backend_update_context *ctx)
@@ -235,7 +240,7 @@ fts_merge_maybies(ARRAY_TYPE(seq_range) *dest_maybe,
 	for (i = 0; i < count; i++) {
 		for (seq = range[i].seq1; seq <= range[i].seq2; seq++) {
 			if (seq_range_exists(src_maybe, seq))
-				seq_range_array_add(dest_maybe, 0, seq);
+				seq_range_array_add(dest_maybe, seq);
 		}
 	}
 }
@@ -318,9 +323,35 @@ int fts_backend_lookup_multi(struct fts_backend *backend,
 			     struct mail_search_arg *args, bool and_args,
 			     struct fts_multi_result *result)
 {
+	unsigned int i;
+
 	i_assert(boxes[0] != NULL);
 
-	return backend->v.lookup_multi(backend, boxes, args, and_args, result);
+	if (backend->v.lookup_multi != NULL) {
+		if (backend->v.lookup_multi(backend, boxes, args,
+					    and_args, result) < 0)
+			return -1;
+		if (result->box_results == NULL) {
+			result->box_results = p_new(result->pool,
+						    struct fts_result, 1);
+		}
+		return 0;
+	}
+
+	for (i = 0; boxes[i] != NULL; i++) ;
+	result->box_results = p_new(result->pool, struct fts_result, i+1);
+
+	for (i = 0; boxes[i] != NULL; i++) {
+		struct fts_result *box_result = &result->box_results[i];
+
+		p_array_init(&box_result->definite_uids, result->pool, 32);
+		p_array_init(&box_result->maybe_uids, result->pool, 32);
+		p_array_init(&box_result->scores, result->pool, 32);
+		if (backend->v.lookup(backend, boxes[i], args,
+				      and_args, box_result) < 0)
+			return -1;
+	}
+	return 0;
 }
 
 void fts_backend_lookup_done(struct fts_backend *backend)
@@ -343,7 +374,7 @@ bool fts_index_get_header(struct mailbox *box, struct fts_index_header *hdr_r)
 	size_t data_size;
 	bool ret;
 
-	(void)mail_index_refresh(box->index);
+	mail_index_refresh(box->index);
 	view = mail_index_view_open(box->index);
 	mail_index_get_header_ext(view, fts_index_get_ext_id(box),
 				  &data, &data_size);

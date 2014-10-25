@@ -1,3 +1,5 @@
+/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+
 #include "lib.h"
 #include "primes.h"
 
@@ -34,14 +36,12 @@ static const unsigned int primes[] = {
 	4294967291U /* previous from 2^32 */
 };
 
-static const unsigned int primes_count = N_ELEMENTS(primes);
-
 unsigned int primes_closest(unsigned int num)
 {
 	unsigned int i;
 
 	for (i = 31; i > PRIME_SKIP_COUNT; i--) {
-		if ((num & (1 << i)) != 0)
+		if ((num & (1U << i)) != 0)
 			return primes[i - PRIME_SKIP_COUNT];
 	}
 	return primes[0];

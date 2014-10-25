@@ -1,9 +1,9 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "hex-dec.h"
 #include "istream.h"
 #include "ostream.h"
-#include "str-find.h"
 #include "message-size.h"
 #include "dbox-storage.h"
 #include "dbox-file.h"
@@ -13,38 +13,187 @@
 #define DBOX_MAIL_FILE_BROKEN_COPY_SUFFIX ".broken"
 
 static int
-dbox_file_find_next_magic(struct dbox_file *file, uoff_t *offset_r, bool *pre_r)
+dbox_file_match_pre_magic(struct istream *input,
+			  uoff_t *pre_offset, size_t *need_bytes)
 {
-	struct istream *input = file->input;
-	struct str_find_context *pre_ctx, *post_ctx;
-	uoff_t orig_offset, pre_offset, post_offset;
+	const struct dbox_message_header *hdr;
 	const unsigned char *data;
 	size_t size;
-	int ret;
+	uoff_t offset = input->v_offset;
+
+	data = i_stream_get_data(input, &size);
+	if (data[0] == '\n') {
+		data++; size--; offset++;
+	}
+	i_assert(data[0] == DBOX_MAGIC_PRE[0]);
+	if (size < sizeof(*hdr)) {
+		*need_bytes = sizeof(*hdr);
+		return -1;
+	}
+	hdr = (const void *)data;
+	if (memcmp(hdr->magic_pre, DBOX_MAGIC_PRE, strlen(DBOX_MAGIC_PRE)) != 0)
+		return 0;
+	if (hdr->type != DBOX_MESSAGE_TYPE_NORMAL)
+		return 0;
+	if (hdr->space1 != ' ' || hdr->space2 != ' ')
+		return 0;
+	if (hex2dec(hdr->message_size_hex, sizeof(hdr->message_size_hex)) == 0 &&
+	    memcmp(hdr->message_size_hex, "0000000000000000", sizeof(hdr->message_size_hex)) != 0)
+		return 0;
+
+	*pre_offset = offset;
+	return 1;
+}
+
+static bool memchr_nocontrol(const unsigned char *data, char chr,
+			     unsigned int len, const unsigned char **pos_r)
+{
+	unsigned int i;
+
+	for (i = 0; i < len; i++) {
+		if (data[i] == chr) {
+			*pos_r = data+i;
+			return TRUE;
+		}
+		if (data[i] < ' ')
+			return FALSE;
+	}
+	*pos_r = NULL;
+	return TRUE;
+}
+
+static int
+dbox_file_match_post_magic(struct istream *input, bool input_full,
+			   size_t *need_bytes)
+{
+	const unsigned char *data, *p;
+	size_t i, size;
+	bool allow_control;
+
+	data = i_stream_get_data(input, &size);
+	if (size < strlen(DBOX_MAGIC_POST)) {
+		*need_bytes = strlen(DBOX_MAGIC_POST);
+		return -1;
+	}
+	if (memcmp(data, DBOX_MAGIC_POST, strlen(DBOX_MAGIC_POST)) != 0)
+		return 0;
+
+	/* see if the metadata block looks valid */
+	for (i = strlen(DBOX_MAGIC_POST); i < size; ) {
+		switch (data[i]) {
+		case '\n':
+			return 1;
+		case DBOX_METADATA_GUID:
+		case DBOX_METADATA_POP3_UIDL:
+		case DBOX_METADATA_ORIG_MAILBOX:
+		case DBOX_METADATA_OLDV1_KEYWORDS:
+			/* these could contain anything */
+			allow_control = TRUE;
+			break;
+		case DBOX_METADATA_POP3_ORDER:
+		case DBOX_METADATA_RECEIVED_TIME:
+		case DBOX_METADATA_PHYSICAL_SIZE:
+		case DBOX_METADATA_VIRTUAL_SIZE:
+		case DBOX_METADATA_EXT_REF:
+		case DBOX_METADATA_OLDV1_EXPUNGED:
+		case DBOX_METADATA_OLDV1_FLAGS:
+		case DBOX_METADATA_OLDV1_SAVE_TIME:
+		case DBOX_METADATA_OLDV1_SPACE:
+			/* no control chars */
+			allow_control = FALSE;
+			break;
+		default:
+			if (data[i] < 'A' || data[i] > 'Z')
+				return 0;
+			/* unknown */
+			allow_control = TRUE;
+			break;
+		}
+		if (allow_control) {
+			p = memchr(data+i, '\n', size-i);
+		} else {
+			if (!memchr_nocontrol(data+i, '\n', size-i, &p))
+				return 0;
+		}
+		if (p == NULL) {
+			/* LF not found - try to find the end-of-metadata LF */
+			if (input_full) {
+				/* can't look any further - assume it's ok */
+				return 1;
+			}
+			*need_bytes = size+1;
+			return -1;
+		}
+		i = p - data+1;
+	}
+	*need_bytes = size+1;
+	return -1;
+}
+
+static int
+dbox_file_find_next_magic(struct dbox_file *file, uoff_t *offset_r, bool *pre_r)
+{
+	/* We're scanning message bodies here, trying to find the beginning of
+	   the next message. Although our magic strings are very unlikely to
+	   be found in regular emails, they are much more likely when emails
+	   are stored compressed.. So try to be sure we find the correct
+	   magic markers. */
+
+	struct istream *input = file->input;
+	uoff_t orig_offset, pre_offset, post_offset;
+	const unsigned char *data, *magic;
+	size_t size, need_bytes;
+	int ret, match;
 
 	*pre_r = FALSE;
 
-	pre_ctx = str_find_init(default_pool, "\n"DBOX_MAGIC_PRE);
-	post_ctx = str_find_init(default_pool, DBOX_MAGIC_POST);
-
-	/* \n isn't part of the DBOX_MAGIC_PRE, but it always preceds it.
-	   assume that at this point we've already just read the \n. when
-	   scanning for it later we'll need to find the \n though. */
-	str_find_more(pre_ctx, (const unsigned char *)"\n", 1);
-
 	orig_offset = input->v_offset;
-	while ((ret = i_stream_read_data(input, &data, &size, 0)) > 0) {
-		pre_offset = (uoff_t)-1;
-		if (str_find_more(pre_ctx, data, size)) {
-			pre_offset = input->v_offset +
-				str_find_get_match_end_pos(pre_ctx) -
-				(strlen(DBOX_MAGIC_PRE) + 1);
-			*pre_r = TRUE;
+	need_bytes = strlen(DBOX_MAGIC_POST);
+	while ((ret = i_stream_read_data(input, &data, &size, need_bytes-1)) > 0 ||
+	       ret == -2) {
+		/* search for the beginning of a potential pre/post magic */
+		i_assert(size > 1);
+		magic = memchr(data, DBOX_MAGIC_PRE[0], size);
+		if (magic == NULL) {
+			i_stream_skip(input, size-1);
+			need_bytes = strlen(DBOX_MAGIC_POST);
+			continue;
 		}
-		if (str_find_more(post_ctx, data, size)) {
-			post_offset = input->v_offset +
-				str_find_get_match_end_pos(post_ctx) -
-				strlen(DBOX_MAGIC_POST);
+		if (magic == data && input->v_offset == orig_offset) {
+			/* beginning of the file */
+		} else if (magic != data && magic[-1] == '\n') {
+			/* PRE/POST block? leave \n */
+			i_stream_skip(input, magic-data-1);
+		} else {
+			i_stream_skip(input, magic-data+1);
+			need_bytes = strlen(DBOX_MAGIC_POST);
+			continue;
+		}
+
+		pre_offset = (uoff_t)-1;
+		match = dbox_file_match_pre_magic(input, &pre_offset, &need_bytes);
+		if (match < 0) {
+			/* more data needed */
+			if (ret == -2) {
+				i_stream_skip(input, 2);
+				need_bytes = strlen(DBOX_MAGIC_POST);
+			}
+			continue;
+		}
+		if (match > 0)
+			*pre_r = TRUE;
+
+		match = dbox_file_match_post_magic(input, ret == -2, &need_bytes);
+		if (match < 0) {
+			/* more data needed */
+			if (ret == -2) {
+				i_stream_skip(input, 2);
+				need_bytes = strlen(DBOX_MAGIC_POST);
+			}
+			continue;
+		}
+		if (match > 0) {
+			post_offset = input->v_offset;
 			if (pre_offset == (uoff_t)-1 ||
 			    post_offset < pre_offset) {
 				pre_offset = post_offset;
@@ -53,14 +202,11 @@ dbox_file_find_next_magic(struct dbox_file *file, uoff_t *offset_r, bool *pre_r)
 		}
 
 		if (pre_offset != (uoff_t)-1) {
-			if (*pre_r) {
-				/* LF isn't part of the magic */
-				pre_offset++;
-			}
 			*offset_r = pre_offset;
+			ret = 1;
 			break;
 		}
-		i_stream_skip(input, size);
+		i_stream_skip(input, size-1);
 	}
 	if (ret <= 0) {
 		i_assert(ret == -1);
@@ -72,33 +218,37 @@ dbox_file_find_next_magic(struct dbox_file *file, uoff_t *offset_r, bool *pre_r)
 		} 
 	}
 	i_stream_seek(input, orig_offset);
-	str_find_deinit(&pre_ctx);
-	str_find_deinit(&post_ctx);
-	return ret;
+	return ret <= 0 ? ret : 1;
 }
 
 static int
 stream_copy(struct dbox_file *file, struct ostream *output,
-	    const char *path, uoff_t count)
+	    const char *out_path, uoff_t count)
 {
 	struct istream *input;
 	off_t bytes;
 
 	input = i_stream_create_limit(file->input, count);
 	bytes = o_stream_send_istream(output, input);
+	errno = input->stream_errno;
 	i_stream_unref(&input);
 
-	if (bytes < 0) {
+	if (errno != 0) {
 		mail_storage_set_critical(&file->storage->storage,
-			"o_stream_send_istream(%s, %s) failed: %m",
-			file->cur_path, path);
+			"read(%s) failed: %m", file->cur_path);
 		return -1;
 	}
+	if (o_stream_nfinish(output) < 0) {
+		mail_storage_set_critical(&file->storage->storage,
+			"write(%s) failed: %m", out_path);
+		return -1;
+	}
+	i_assert(bytes >= 0);
 	if ((uoff_t)bytes != count) {
 		mail_storage_set_critical(&file->storage->storage,
 			"o_stream_send_istream(%s) copied only %"
 			PRIuUOFF_T" of %"PRIuUOFF_T" bytes",
-			path, bytes, count);
+			out_path, bytes, count);
 		return -1;
 	}
 	return 0;
@@ -151,8 +301,8 @@ dbox_file_copy_metadata(struct dbox_file *file, struct ostream *output,
 		}
 		if (*line == DBOX_METADATA_GUID)
 			*have_guid_r = TRUE;
-		o_stream_send_str(output, line);
-		o_stream_send_str(output, "\n");
+		o_stream_nsend_str(output, line);
+		o_stream_nsend_str(output, "\n");
 	}
 }
 
@@ -164,6 +314,7 @@ dbox_file_fix_write_stream(struct dbox_file *file, uoff_t start_offset,
 	uoff_t offset, msg_size, hdr_offset, body_offset;
 	bool pre, write_header, have_guid;
 	struct message_size body;
+	bool has_nuls;
 	struct istream *body_input;
 	guid_128_t guid_128;
 	int ret;
@@ -237,7 +388,7 @@ dbox_file_fix_write_stream(struct dbox_file *file, uoff_t start_offset,
 		/* write msg header */
 		if (write_header) {
 			dbox_msg_header_fill(&msg_hdr, msg_size);
-			(void)o_stream_send(output, &msg_hdr, sizeof(msg_hdr));
+			o_stream_nsend(output, &msg_hdr, sizeof(msg_hdr));
 		}
 		/* write msg body */
 		i_assert(file->input->v_offset == body_offset);
@@ -248,10 +399,10 @@ dbox_file_fix_write_stream(struct dbox_file *file, uoff_t start_offset,
 		/* get message body size */
 		i_stream_seek(file->input, body_offset);
 		body_input = i_stream_create_limit(file->input, msg_size);
-		ret = message_get_body_size(body_input, &body, NULL);
+		ret = message_get_body_size(body_input, &body, &has_nuls);
 		i_stream_unref(&body_input);
 		if (ret < 0) {
-			errno = output->stream_errno;
+			errno = body_input->stream_errno;
 			mail_storage_set_critical(&file->storage->storage,
 				"read(%s) failed: %m", file->cur_path);
 			return -1;
@@ -262,27 +413,28 @@ dbox_file_fix_write_stream(struct dbox_file *file, uoff_t start_offset,
 		ret = dbox_file_metadata_skip_header(file);
 		if (ret < 0)
 			return -1;
-		o_stream_send_str(output, DBOX_MAGIC_POST);
+		o_stream_nsend_str(output, DBOX_MAGIC_POST);
 		if (ret == 0)
 			have_guid = FALSE;
 		else
 			dbox_file_copy_metadata(file, output, &have_guid);
 		if (!have_guid) {
 			guid_128_generate(guid_128);
-			o_stream_send_str(output,
+			o_stream_nsend_str(output,
 				t_strdup_printf("%c%s\n", DBOX_METADATA_GUID,
 				guid_128_to_string(guid_128)));
 		}
-		o_stream_send_str(output,
+		o_stream_nsend_str(output,
 			t_strdup_printf("%c%llx\n", DBOX_METADATA_VIRTUAL_SIZE,
 					(unsigned long long)body.virtual_size));
-		o_stream_send_str(output, "\n");
-		if (output->stream_errno != 0) {
-			errno = output->stream_errno;
-			mail_storage_set_critical(&file->storage->storage,
-				"write(%s) failed: %m", temp_path);
-			return -1;
-		}
+		o_stream_nsend_str(output, "\n");
+		if (output->stream_errno != 0)
+			break;
+	}
+	if (o_stream_nfinish(output) < 0) {
+		mail_storage_set_critical(&file->storage->storage,
+					  "write(%s) failed: %m", temp_path);
+		ret = -1;
 	}
 	return ret;
 }
@@ -291,7 +443,7 @@ int dbox_file_fix(struct dbox_file *file, uoff_t start_offset)
 {
 	struct ostream *output;
 	const char *dir, *p, *temp_path, *broken_path;
-	bool deleted;
+	bool deleted, have_messages;
 	int fd, ret;
 
 	i_assert(dbox_file_is_open(file));
@@ -306,7 +458,11 @@ int dbox_file_fix(struct dbox_file *file, uoff_t start_offset)
 		return -1;
 
 	output = o_stream_create_fd_file(fd, 0, FALSE);
+	o_stream_cork(output);
 	ret = dbox_file_fix_write_stream(file, start_offset, temp_path, output);
+	if (ret < 0)
+		o_stream_ignore_last_errors(output);
+	have_messages = output->offset > file->file_header_size;
 	o_stream_unref(&output);
 	if (close(fd) < 0) {
 		mail_storage_set_critical(&file->storage->storage,
@@ -332,6 +488,15 @@ int dbox_file_fix(struct dbox_file *file, uoff_t start_offset)
 		i_warning("dbox: Copy of the broken file saved to %s",
 			  broken_path);
 	}
+	if (!have_messages) {
+		/* the resulting file has no messages. just delete the file. */
+		dbox_file_close(file);
+		if (unlink(temp_path) < 0)
+			i_error("unlink(%s) failed: %m", temp_path);
+		if (unlink(file->cur_path) < 0)
+			i_error("unlink(%s) failed: %m", file->cur_path);
+		return 0;
+	}
 	if (rename(temp_path, file->cur_path) < 0) {
 		mail_storage_set_critical(&file->storage->storage,
 					  "rename(%s, %s) failed: %m",
@@ -347,5 +512,5 @@ int dbox_file_fix(struct dbox_file *file, uoff_t start_offset)
 			file->cur_path);
 		return -1;
 	}
-	return 0;
+	return 1;
 }

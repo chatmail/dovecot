@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
@@ -9,8 +9,8 @@
 
 #include <stdlib.h>
 
-static ARRAY_DEFINE(passdb_interfaces, struct passdb_module_interface *);
-static ARRAY_DEFINE(passdb_modules, struct passdb_module *);
+static ARRAY(struct passdb_module_interface *) passdb_interfaces;
+static ARRAY(struct passdb_module *) passdb_modules;
 
 static const struct passdb_module_interface passdb_iface_deinit = {
 	.name = "deinit"
@@ -78,11 +78,11 @@ bool passdb_get_credentials(struct auth_request *auth_request,
 			      credentials_r, size_r, &error);
 	if (ret <= 0) {
 		if (ret < 0) {
-			auth_request_log_error(auth_request, "password",
+			auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
 				"Password data is not valid for scheme %s: %s",
 				input_scheme, error);
 		} else {
-			auth_request_log_error(auth_request, "password",
+			auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
 				"Unknown scheme %s", input_scheme);
 		}
 		return FALSE;
@@ -92,7 +92,7 @@ bool passdb_get_credentials(struct auth_request *auth_request,
 		/* anything goes. change the credentials_scheme to what we
 		   actually got, so blocking passdbs work. */
 		auth_request->credentials_scheme =
-			p_strdup(auth_request->pool, input_scheme);
+			p_strdup(auth_request->pool, t_strcut(input_scheme, '.'));
 		return TRUE;
 	}
 
@@ -105,7 +105,7 @@ bool passdb_get_credentials(struct auth_request *auth_request,
 				error = t_strdup_printf("%s (input: %s)",
 							error, input);
 			}
-			auth_request_log_info(auth_request, "password",
+			auth_request_log_info(auth_request, AUTH_SUBSYS_DB,
 					      "%s", error);
 			return FALSE;
 		}
@@ -120,13 +120,13 @@ bool passdb_get_credentials(struct auth_request *auth_request,
 					       auth_request->realm, NULL);
 		}
 		if (auth_request->set->debug_passwords) {
-			auth_request_log_debug(auth_request, "password",
+			auth_request_log_debug(auth_request, AUTH_SUBSYS_DB,
 				"Generating %s from user '%s', password '%s'",
 				wanted_scheme, username, plaintext);
 		}
 		if (!password_generate(plaintext, username,
 				       wanted_scheme, credentials_r, size_r)) {
-			auth_request_log_error(auth_request, "password",
+			auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
 				"Requested unknown scheme %s", wanted_scheme);
 			return FALSE;
 		}
@@ -156,7 +156,7 @@ void passdb_handle_credentials(enum passdb_result result,
 		/* We're doing a passdb lookup (not authenticating).
 		   Pass through a NULL password without an error. */
 	} else {
-		auth_request_log_info(auth_request, "password",
+		auth_request_log_info(auth_request, AUTH_SUBSYS_DB,
 			"Requested %s scheme, but we have a NULL password",
 			auth_request->credentials_scheme);
 		result = PASSDB_RESULT_SCHEME_NOT_AVAILABLE;
@@ -278,6 +278,7 @@ void passdbs_generate_md5(unsigned char md5[MD5_RESULTLEN])
 
 extern struct passdb_module_interface passdb_passwd;
 extern struct passdb_module_interface passdb_bsdauth;
+extern struct passdb_module_interface passdb_dict;
 extern struct passdb_module_interface passdb_shadow;
 extern struct passdb_module_interface passdb_passwd_file;
 extern struct passdb_module_interface passdb_pam;
@@ -294,6 +295,7 @@ void passdbs_init(void)
 	i_array_init(&passdb_modules, 16);
 	passdb_register_module(&passdb_passwd);
 	passdb_register_module(&passdb_bsdauth);
+	passdb_register_module(&passdb_dict);
 	passdb_register_module(&passdb_passwd_file);
 	passdb_register_module(&passdb_pam);
 	passdb_register_module(&passdb_checkpassword);

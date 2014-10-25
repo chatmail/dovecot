@@ -61,10 +61,13 @@ If you're creating a root-level mailbox, it uses the namespace's default ACLs.
 There is no actual inheritance, however: If you modify parent's ACLs, the
 child's ACLs stay the same. There is currently no support for ACL inheritance.
 
-Namespace's default ACLs are read from "dovecot-acl" file in the namespace's
-mail root directory (e.g.'/var/public/Maildir'). Note that currently these
-default ACLs are used only when creating new mailboxes, they aren't used for
-mailboxes without ACLs.
+ * Maildir: Namespace's default ACLs are read from "dovecot-acl" file in the
+   namespace's mail root directory (e.g.'/var/public/Maildir'). Note that
+   currently these default ACLs are used only when creating new mailboxes, they
+   aren't used for mailboxes without ACLs.
+ * v2.2.2+: If 'plugin { acl_defaults_from_inbox=yes } ', the default ACLs for
+   private and shared namespaces (but not public namespaces) are taken from the
+   INBOX.
 
 Global ACLs
 -----------
@@ -75,7 +78,9 @@ mailboxes. They are used mainly for two purposes:
  1. Removing some permissions from users' personal mailboxes. For example each
     user might have an "Invoices" mailbox which will be read-only.
  2. Giving permissions to master user logins. Master user is not the mailbox
-    owner, so by default it has no permissions to any of the mailboxes.
+    owner, so by default it has no permissions to any of the mailboxes. See
+    <Authentication/MasterUsers#ACLs> [Authentication.MasterUsers.txt] for more
+    information.
 
 Global ACL directory is specified as a parameter to vfile backend in 'acl'
 setting ('/etc/dovecot/acls/' in the above example). They are looked up using
@@ -182,11 +187,26 @@ The ACLs are compatible with RFC 4314 (IMAP ACL extension, updated version).
 Unknown ACL letters are complained about, but unknown named ACLs are ignored.
 Named ACLs are mostly intended for future extensions.
 
-Example ACL file:
+Note that the file is rather picky about formatting; using a tab (or multiple
+spaces) instead of a space character between fields may not work.  If you are
+having problems, make sure to check for tabs, extra spaces and other unwanted
+characters.
+
+Examples
+--------
+
+Mailbox owner has all privileges, "timo" has list-read privileges:
 
 ---%<-------------------------------------------------------------------------
 owner lrwstipekxa
-user=timo rl
+user=timo lr
+---%<-------------------------------------------------------------------------
+
+Allow everyone to list and read a public mailbox (public namespace has no
+owner):
+
+---%<-------------------------------------------------------------------------
+anyone lr
 ---%<-------------------------------------------------------------------------
 
 List cache
@@ -196,4 +216,4 @@ List cache
 you manually add/edit 'dovecot-acl' files, you may need to delete the
 'dovecot-acl-list' to get the mailboxes visible.
 
-(This file was created from the wiki on 2012-04-09 04:42)
+(This file was created from the wiki on 2013-11-24 04:42)

@@ -6,6 +6,7 @@ dict_drivers = @dict_drivers@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
+	-I$(top_srcdir)/src/lib-fs \
 	-I$(top_srcdir)/src/lib-sql \
 	-I$(top_srcdir)/src/lib-settings \
 	$(SQL_CFLAGS)
@@ -13,7 +14,14 @@ AM_CPPFLAGS = \
 base_sources = \
 	dict.c \
 	dict-client.c \
-	dict-file.c
+	dict-file.c \
+	dict-cdb.c \
+	dict-fs.c \
+	dict-memcached.c \
+	dict-memcached-ascii.c \
+	dict-redis.c \
+	dict-register.c \
+	dict-transaction-memory.c
 
 libdict_la_SOURCES = \
 	$(base_sources)
@@ -31,7 +39,8 @@ headers = \
 	dict-client.h \
 	dict-private.h \
 	dict-sql.h \
-	dict-sql-settings.h
+	dict-sql-settings.h \
+	dict-transaction-memory.h
 
 pkginc_libdir=$(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
@@ -80,7 +89,7 @@ test_libs = \
 
 test_dict_SOURCES = test-dict.c
 test_dict_LDADD = dict.lo $(test_libs)
-test_dict_DEPENDENCIES = dict.lo $(test_libs)
+test_dict_DEPENDENCIES = $(noinst_LTLIBRARIES) $(test_libs)
 
 check: check-am check-test
 check-test: all-am

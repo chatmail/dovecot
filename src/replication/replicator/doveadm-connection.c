@@ -1,195 +1,343 @@
-/* Copyright (c) 2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "ioloop.h"
-#include "network.h"
-#include "istream.h"
+#include "array.h"
+#include "connection.h"
 #include "ostream.h"
 #include "str.h"
 #include "strescape.h"
+#include "wildcard-match.h"
+#include "master-service.h"
+#include "replicator-brain.h"
+#include "replicator-queue.h"
+#include "replicator-settings.h"
+#include "dsync-client.h"
 #include "doveadm-connection.h"
 
 #include <unistd.h>
 
-#define DOVEADM_FAIL_TIMEOUT_MSECS (1000*5)
-#define DOVEADM_HANDSHAKE "VERSION\tdoveadm-server\t1\t0\n"
-#define MAX_INBUF_SIZE 1024
+#define REPLICATOR_DOVEADM_MAJOR_VERSION 1
+#define REPLICATOR_DOVEADM_MINOR_VERSION 0
 
 struct doveadm_connection {
-	char *path;
-	int fd;
-	struct io *io;
-	struct istream *input;
-	struct ostream *output;
-	struct timeout *to;
-
-	doveadm_callback_t *callback;
-	void *context;
-
-	time_t last_connect_failure;
-	unsigned int handshaked:1;
-	unsigned int end_of_print:1;
+	struct connection conn;
+	struct replicator_brain *brain;
 };
+static struct connection_list *doveadm_connections;
 
-struct doveadm_connection *doveadm_connection_init(const char *path)
+static int client_input_status_overview(struct doveadm_connection *client)
 {
-	struct doveadm_connection *conn;
+	struct replicator_queue *queue =
+		replicator_brain_get_queue(client->brain);
+	struct replicator_queue_iter *iter;
+	struct replicator_user *user;
+	enum replication_priority priority;
+	unsigned int pending_counts[REPLICATION_PRIORITY_SYNC+1];
+	unsigned int user_count, next_secs, pending_failed_count;
+	unsigned int pending_full_resync_count, waiting_failed_count;
+	string_t *str = t_str_new(256);
 
-	conn = i_new(struct doveadm_connection, 1);
-	conn->path = i_strdup(path);
-	conn->fd = -1;
-	return conn;
-}
+	memset(pending_counts, 0, sizeof(pending_counts));
+	pending_failed_count = 0; waiting_failed_count = 0;
+	pending_full_resync_count = 0;
 
-static void doveadm_callback(struct doveadm_connection *conn,
-			     enum doveadm_reply reply)
-{
-	doveadm_callback_t *callback = conn->callback;
-	void *context = conn->context;
-
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
-
-	conn->callback = NULL;
-	conn->context = NULL;
-	callback(reply, context);
-}
-
-static void doveadm_disconnect(struct doveadm_connection *conn)
-{
-	if (conn->fd == -1)
-		return;
-
-	io_remove(&conn->io);
-	o_stream_destroy(&conn->output);
-	i_stream_destroy(&conn->input);
-	if (close(conn->fd) < 0)
-		i_error("close(doveadm) failed: %m");
-	conn->fd = -1;
-
-	if (conn->callback != NULL)
-		doveadm_callback(conn, DOVEADM_REPLY_FAIL);
-}
-
-void doveadm_connection_deinit(struct doveadm_connection **_conn)
-{
-	struct doveadm_connection *conn = *_conn;
-
-	*_conn = NULL;
-
-	doveadm_disconnect(conn);
-	i_free(conn->path);
-	i_free(conn);
-}
-
-static int doveadm_input_line(struct doveadm_connection *conn, const char *line)
-{
-	if (!conn->handshaked) {
-		if (strcmp(line, "+") != 0) {
-			i_error("%s: Unexpected handshake: %s",
-				conn->path, line);
-			return -1;
+	user_count = 0;
+	iter = replicator_queue_iter_init(queue);
+	while ((user = replicator_queue_iter_next(iter)) != NULL) {
+		if (user->priority != REPLICATION_PRIORITY_NONE)
+			pending_counts[user->priority]++;
+		else if (replicator_queue_want_sync_now(queue, user, &next_secs)) {
+			if (user->last_sync_failed)
+				pending_failed_count++;
+			else
+				pending_full_resync_count++;
+		} else {
+			if (user->last_sync_failed)
+				waiting_failed_count++;
 		}
-		conn->handshaked = TRUE;
-		return 0;
+		user_count++;
 	}
-	if (conn->callback == NULL) {
-		i_error("%s: Unexpected input: %s", conn->path, line);
-		return -1;
-	}
-	if (!conn->end_of_print) {
-		if (line[0] == '\0')
-			conn->end_of_print = TRUE;
-		return 0;
-	}
-	if (line[0] == '+')
-		doveadm_callback(conn, DOVEADM_REPLY_OK);
-	else if (line[0] == '-') {
-		if (strcmp(line+1, "NOUSER") == 0)
-			doveadm_callback(conn, DOVEADM_REPLY_NOUSER);
-		else
-			doveadm_callback(conn, DOVEADM_REPLY_FAIL);
-	} else {
-		i_error("%s: Invalid input: %s", conn->path, line);
-		return -1;
-	}
-	conn->end_of_print = FALSE;
-	/* FIXME: disconnect after each request for now.
-	   doveadm server's getopt() handling seems to break otherwise */
-	return -1;
-}
+	replicator_queue_iter_deinit(&iter);
 
-static void doveadm_input(struct doveadm_connection *conn)
-{
-	const char *line;
-
-	while ((line = i_stream_read_next_line(conn->input)) != NULL) {
-		if (doveadm_input_line(conn, line) < 0) {
-			doveadm_disconnect(conn);
-			return;
-		}
+	for (priority = REPLICATION_PRIORITY_SYNC; priority > 0; priority--) {
+		str_printfa(str, "Queued '%s' requests\t%u\n",
+			    replicator_priority_to_str(priority),
+			    pending_counts[priority]);
 	}
-	if (conn->input->eof)
-		doveadm_disconnect(conn);
-}
-
-static int doveadm_connect(struct doveadm_connection *conn)
-{
-	if (conn->fd != -1)
-		return 0;
-
-	if (conn->last_connect_failure == ioloop_time)
-		return -1;
-
-	conn->fd = net_connect_unix(conn->path);
-	if (conn->fd == -1) {
-		i_error("net_connect_unix(%s) failed: %m", conn->path);
-		conn->last_connect_failure = ioloop_time;
-		return -1;
-	}
-	conn->last_connect_failure = 0;
-	conn->io = io_add(conn->fd, IO_READ, doveadm_input, conn);
-	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE, FALSE);
-	conn->output = o_stream_create_fd(conn->fd, (size_t)-1, FALSE);
-	o_stream_send_str(conn->output, DOVEADM_HANDSHAKE);
+	str_printfa(str, "Queued 'failed' requests\t%u\n",
+		    pending_failed_count);
+	str_printfa(str, "Queued 'full resync' requests\t%u\n",
+		    pending_full_resync_count);
+	str_printfa(str, "Waiting 'failed' requests\t%u\n",
+		    waiting_failed_count);
+	str_printfa(str, "Total number of known users\t%u\n", user_count);
+	str_append_c(str, '\n');
+	o_stream_send(client->conn.output, str_data(str), str_len(str));
 	return 0;
 }
 
-static void doveadm_fail_timeout(struct doveadm_connection *conn)
+static int
+client_input_status(struct doveadm_connection *client, const char *const *args)
 {
-	doveadm_callback(conn, DOVEADM_REPLY_FAIL);
-}
+	struct replicator_queue *queue =
+		replicator_brain_get_queue(client->brain);
+	struct replicator_queue_iter *iter;
+	struct replicator_user *user;
+	const char *mask = args[0];
+	string_t *str = t_str_new(128);
 
-void doveadm_connection_sync(struct doveadm_connection *conn,
-			     const char *username, bool full,
-			     doveadm_callback_t *callback, void *context)
-{
-	string_t *cmd;
+	if (mask == NULL)
+		return client_input_status_overview(client);
 
-	i_assert(callback != NULL);
-	i_assert(!doveadm_connection_is_busy(conn));
+	iter = replicator_queue_iter_init(queue);
+	while ((user = replicator_queue_iter_next(iter)) != NULL) {
+		if (!wildcard_match(user->username, mask))
+			continue;
 
-	conn->callback = callback;
-	conn->context = context;
-
-	if (doveadm_connect(conn) < 0) {
-		i_assert(conn->to == NULL);
-		conn->to = timeout_add(DOVEADM_FAIL_TIMEOUT_MSECS,
-				       doveadm_fail_timeout, conn);
-	} else {
-		/* <flags> <username> <command> [<args>] */
-		cmd = t_str_new(256);
-		str_append_c(cmd, '\t');
-		str_tabescape_write(cmd, username);
-		str_append(cmd, "\tsync\t-d");
-		if (full)
-			str_append(cmd, "\t-f");
-		str_append_c(cmd, '\n');
-		o_stream_send(conn->output, str_data(cmd), str_len(cmd));
+		str_truncate(str, 0);
+		str_append_tabescaped(str, user->username);
+		str_append_c(str, '\t');
+		str_append(str, replicator_priority_to_str(user->priority));
+		str_printfa(str, "\t%lld\t%lld\t%d\n",
+			    (long long)user->last_fast_sync,
+			    (long long)user->last_full_sync,
+			    user->last_sync_failed);
+		o_stream_send(client->conn.output, str_data(str), str_len(str));
 	}
+	replicator_queue_iter_deinit(&iter);
+	o_stream_send(client->conn.output, "\n", 1);
+	return 0;
 }
 
-bool doveadm_connection_is_busy(struct doveadm_connection *conn)
+static int
+client_input_status_dsyncs(struct doveadm_connection *client)
 {
-	return conn->callback != NULL;
+	string_t *str = t_str_new(256);
+	const ARRAY_TYPE(dsync_client) *clients;
+	struct dsync_client *const *clientp;
+	const char *username;
+
+	clients = replicator_brain_get_dsync_clients(client->brain);
+	array_foreach(clients, clientp) {
+		username = dsync_client_get_username(*clientp);
+		if (username != NULL) {
+			str_append_tabescaped(str, username);
+			str_append_c(str, '\t');
+			switch (dsync_client_get_type(*clientp)) {
+			case DSYNC_TYPE_FULL:
+				str_append(str, "full");
+				break;
+			case DSYNC_TYPE_NORMAL:
+				str_append(str, "normal");
+				break;
+			case DSYNC_TYPE_INCREMENTAL:
+				str_append(str, "incremental");
+				break;
+			}
+		} else {
+			str_append(str, "\t-");
+		}
+		str_append_c(str, '\t');
+		str_append_tabescaped(str, dsync_client_get_state(*clientp));
+		str_append_c(str, '\n');
+	}
+
+	str_append_c(str, '\n');
+	o_stream_send(client->conn.output, str_data(str), str_len(str));
+	return 0;
+}
+
+static int
+client_input_replicate(struct doveadm_connection *client, const char *const *args)
+{
+	struct replicator_queue *queue =
+		replicator_brain_get_queue(client->brain);
+	struct replicator_queue_iter *iter;
+	struct replicator_user *user;
+	const char *usermask;
+	enum replication_priority priority;
+	unsigned int match_count;
+	bool full;
+
+	/* <priority> <flags> <username>|<mask> */
+	if (str_array_length(args) != 3) {
+		i_error("%s: REPLICATE: Invalid parameters", client->conn.name);
+		return -1;
+	}
+	if (replication_priority_parse(args[0], &priority) < 0) {
+		o_stream_send_str(client->conn.output, "-Invalid priority\n");
+		return 0;
+	}
+	full = strchr(args[1], 'f') != NULL;
+	usermask = args[2];
+	if (strchr(usermask, '*') == NULL && strchr(usermask, '?') == NULL) {
+		user = replicator_queue_add(queue, usermask, priority);
+		if (full)
+			user->force_full_sync = TRUE;
+		o_stream_send_str(client->conn.output, "+1\n");
+		return 0;
+	}
+
+	match_count = 0;
+	iter = replicator_queue_iter_init(queue);
+	while ((user = replicator_queue_iter_next(iter)) != NULL) {
+		if (!wildcard_match(user->username, usermask))
+			continue;
+		user = replicator_queue_add(queue, user->username, priority);
+		if (full)
+			user->force_full_sync = TRUE;
+		match_count++;
+	}
+	replicator_queue_iter_deinit(&iter);
+	o_stream_send_str(client->conn.output,
+			  t_strdup_printf("+%u\n", match_count));
+	return 0;
+}
+
+static int
+client_input_add(struct doveadm_connection *client, const char *const *args)
+{
+	struct replicator_queue *queue =
+		replicator_brain_get_queue(client->brain);
+	const struct replicator_settings *set =
+		replicator_brain_get_settings(client->brain);
+
+	/* <usermask> */
+	if (str_array_length(args) != 1) {
+		i_error("%s: ADD: Invalid parameters", client->conn.name);
+		return -1;
+	}
+
+	if (strchr(args[0], '*') == NULL && strchr(args[0], '?') == NULL) {
+		(void)replicator_queue_add(queue, args[0],
+					   REPLICATION_PRIORITY_NONE);
+	} else {
+		replicator_queue_add_auth_users(queue, set->auth_socket_path,
+						args[0], ioloop_time);
+	}
+	o_stream_send_str(client->conn.output, "+\n");
+	return 0;
+}
+
+static int
+client_input_remove(struct doveadm_connection *client, const char *const *args)
+{
+	struct replicator_queue *queue =
+		replicator_brain_get_queue(client->brain);
+	struct replicator_user *user;
+
+	/* <username> */
+	if (str_array_length(args) != 1) {
+		i_error("%s: REMOVE: Invalid parameters", client->conn.name);
+		return -1;
+	}
+	user = replicator_queue_lookup(queue, args[0]);
+	if (user == NULL)
+		o_stream_send_str(client->conn.output, "-User not found\n");
+	else {
+		replicator_queue_remove(queue, &user);
+		o_stream_send_str(client->conn.output, "+\n");
+	}
+	return 0;
+}
+
+static int
+client_input_notify(struct doveadm_connection *client, const char *const *args)
+{
+	struct replicator_queue *queue =
+		replicator_brain_get_queue(client->brain);
+	struct replicator_user *user;
+
+	/* <username> <flags> <state> */
+	if (str_array_length(args) < 3) {
+		i_error("%s: NOTIFY: Invalid parameters", client->conn.name);
+		return -1;
+	}
+
+	user = replicator_queue_add(queue, args[0], REPLICATION_PRIORITY_NONE);
+	if (args[1][0] == 'f')
+		user->last_full_sync = ioloop_time;
+	user->last_fast_sync = ioloop_time;
+	user->last_update = ioloop_time;
+
+	if (args[2][0] != '\0') {
+		i_free(user->state);
+		user->state = i_strdup(args[2]);
+	}
+	o_stream_send_str(client->conn.output, "+\n");
+	return 0;
+}
+
+static int client_input_args(struct connection *conn, const char *const *args)
+{
+	struct doveadm_connection *client = (struct doveadm_connection *)conn;
+	const char *cmd = args[0];
+
+	if (cmd == NULL) {
+		i_error("%s: Empty command", conn->name);
+		return 0;
+	}
+	args++;
+
+	if (strcmp(cmd, "STATUS") == 0)
+		return client_input_status(client, args);
+	else if (strcmp(cmd, "STATUS-DSYNC") == 0)
+		return client_input_status_dsyncs(client);
+	else if (strcmp(cmd, "REPLICATE") == 0)
+		return client_input_replicate(client, args);
+	else if (strcmp(cmd, "ADD") == 0)
+		return client_input_add(client, args);
+	else if (strcmp(cmd, "REMOVE") == 0)
+		return client_input_remove(client, args);
+	else if (strcmp(cmd, "NOTIFY") == 0)
+		return client_input_notify(client, args);
+	i_error("%s: Unknown command: %s", conn->name, cmd);
+	return -1;
+}
+
+static void client_destroy(struct connection *conn)
+{
+	struct doveadm_connection *client = (struct doveadm_connection *)conn;
+
+	connection_deinit(&client->conn);
+	i_free(client);
+
+	master_service_client_connection_destroyed(master_service);
+}
+
+void doveadm_connection_create(struct replicator_brain *brain, int fd)
+{
+	struct doveadm_connection *client;
+
+	client = i_new(struct doveadm_connection, 1);
+	client->brain = brain;
+	connection_init_server(doveadm_connections, &client->conn,
+			       "(doveadm client)", fd, fd);
+}
+
+static struct connection_settings doveadm_conn_set = {
+	.service_name_in = "replicator-doveadm-client",
+	.service_name_out = "replicator-doveadm-server",
+	.major_version = REPLICATOR_DOVEADM_MAJOR_VERSION,
+	.minor_version = REPLICATOR_DOVEADM_MINOR_VERSION,
+
+	.input_max_size = (size_t)-1,
+	.output_max_size = (size_t)-1,
+	.client = FALSE
+};
+
+static const struct connection_vfuncs doveadm_conn_vfuncs = {
+	.destroy = client_destroy,
+	.input_args = client_input_args
+};
+
+void doveadm_connections_init(void)
+{
+	doveadm_connections = connection_list_init(&doveadm_conn_set,
+						   &doveadm_conn_vfuncs);
+}
+
+void doveadm_connections_deinit(void)
+{
+	connection_list_deinit(&doveadm_connections);
 }

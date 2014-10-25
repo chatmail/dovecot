@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -7,6 +7,7 @@
 #include "index-sync-private.h"
 #include "imapc-client.h"
 #include "imapc-msgmap.h"
+#include "imapc-list.h"
 #include "imapc-storage.h"
 #include "imapc-sync.h"
 
@@ -34,7 +35,7 @@ static void imapc_sync_callback(const struct imapc_command_reply *reply,
 	}
 	
 	if (--ctx->sync_command_count == 0)
-		imapc_client_stop(ctx->mbox->storage->client);
+		imapc_client_stop(ctx->mbox->storage->client->client);
 }
 
 static void imapc_sync_cmd(struct imapc_sync_context *ctx, const char *cmd_str)
@@ -128,26 +129,6 @@ imapc_sync_index_keyword(struct imapc_sync_context *ctx,
 	imapc_sync_cmd(ctx, str_c(str));
 }
 
-static void
-imapc_sync_index_keyword_reset(struct imapc_sync_context *ctx,
-			       uint32_t seq1, uint32_t seq2)
-{
-	const struct mail_index_record *rec;
-	string_t *str = t_str_new(128);
-	uint32_t seq;
-
-	for (seq = seq1; seq <= seq2; seq++) {
-		rec = mail_index_lookup(ctx->sync_view, seq);
-		i_assert((rec->flags & MAIL_RECENT) == 0);
-
-		str_truncate(str, 0);
-		str_printfa(str, "UID STORE %u FLAGS (", rec->uid);
-		imap_write_flags(str, rec->flags, NULL);
-		str_append_c(str, ')');
-		imapc_sync_cmd(ctx, str_c(str));
-	}
-}
-
 static void imapc_sync_expunge_finish(struct imapc_sync_context *ctx)
 {
 	string_t *str;
@@ -156,7 +137,7 @@ static void imapc_sync_expunge_finish(struct imapc_sync_context *ctx)
 	if (array_count(&ctx->expunged_uids) == 0)
 		return;
 
-	caps = imapc_client_get_capabilities(ctx->mbox->storage->client);
+	caps = imapc_client_get_capabilities(ctx->mbox->storage->client->client);
 	if ((caps & IMAPC_CAPABILITY_UIDPLUS) == 0) {
 		/* just expunge everything */
 		imapc_sync_cmd(ctx, "EXPUNGE");
@@ -308,9 +289,6 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 						 &seq1, &seq2)) {
 			/* already expunged, nothing to do. */
 		} else switch (sync_rec.type) {
-		case MAIL_INDEX_SYNC_TYPE_APPEND:
-			/* don't care */
-			break;
 		case MAIL_INDEX_SYNC_TYPE_EXPUNGE:
 			imapc_sync_add_missing_deleted_flags(ctx, seq1, seq2);
 			seq_range_array_add_range(&ctx->expunged_uids,
@@ -322,9 +300,6 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 		case MAIL_INDEX_SYNC_TYPE_KEYWORD_ADD:
 		case MAIL_INDEX_SYNC_TYPE_KEYWORD_REMOVE:
 			imapc_sync_index_keyword(ctx, &sync_rec);
-			break;
-		case MAIL_INDEX_SYNC_TYPE_KEYWORD_RESET:
-			imapc_sync_index_keyword_reset(ctx, seq1, seq2);
 			break;
 		}
 	} T_END;
@@ -348,7 +323,7 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 
 	imapc_sync_expunge_finish(ctx);
 	while (ctx->sync_command_count > 0)
-		imapc_storage_run(mbox->storage);
+		imapc_mailbox_run(mbox);
 	array_free(&ctx->expunged_uids);
 
 	/* add uidnext after all appends */
@@ -403,7 +378,7 @@ imapc_sync_begin(struct imapc_mailbox *mbox,
 				    sync_flags);
 	if (ret <= 0) {
 		if (ret < 0)
-			mail_storage_set_index_error(&mbox->box);
+			mailbox_set_index_error(&mbox->box);
 		i_free(ctx);
 		*ctx_r = NULL;
 		return ret;
@@ -438,7 +413,7 @@ static int imapc_sync_finish(struct imapc_sync_context **_ctx)
 	*_ctx = NULL;
 	if (ret == 0) {
 		if (mail_index_sync_commit(&ctx->index_sync_ctx) < 0) {
-			mail_storage_set_index_error(&ctx->mbox->box);
+			mailbox_set_index_error(&ctx->mbox->box);
 			ret = -1;
 		}
 	} else {
@@ -474,19 +449,30 @@ struct mailbox_sync_context *
 imapc_mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 {
 	struct imapc_mailbox *mbox = (struct imapc_mailbox *)box;
+	struct imapc_mailbox_list *list = mbox->storage->client->_list;
 	enum imapc_capability capabilities;
 	bool changes;
 	int ret = 0;
+
+	if (list != NULL) {
+		if (!list->refreshed_mailboxes &&
+		    list->last_refreshed_mailboxes < ioloop_time)
+			list->refreshed_mailboxes_recently = FALSE;
+	}
 
 	if (!box->opened) {
 		if (mailbox_open(box) < 0)
 			ret = -1;
 	}
 
-	capabilities = imapc_client_get_capabilities(mbox->storage->client);
-	if ((capabilities & IMAPC_CAPABILITY_IDLE) == 0) {
-		/* IDLE not supported. do NOOP to get latest changes
-		   before starting sync. */
+	capabilities = imapc_client_get_capabilities(mbox->storage->client->client);
+	if ((capabilities & IMAPC_CAPABILITY_IDLE) == 0 ||
+	    (flags & MAILBOX_SYNC_FLAG_FULL_READ) != 0) {
+		/* do NOOP to make sure we have the latest changes before
+		   starting sync. this is necessary either because se don't
+		   support IDLE at all, or because we want to be sure that we
+		   have the latest changes (IDLE is started with a small delay,
+		   so we might not actually even be in IDLE right not) */
 		imapc_mailbox_noop(mbox);
 	}
 

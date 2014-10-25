@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -228,6 +228,8 @@ mail_log_update_wanted_fields(struct mail *mail, enum mail_log_field fields)
 		wanted_fields |= MAIL_FETCH_VIRTUAL_SIZE;
 
 	mail_add_temp_wanted_fields(mail, wanted_fields, wanted_headers);
+	if (wanted_headers != NULL)
+		mailbox_header_lookup_unref(&wanted_headers);
 }
 
 static void
@@ -358,19 +360,20 @@ static void mail_log_mail_copy(void *txn, struct mail *src, struct mail *dst)
 {
 	struct mail_log_mail_txn_context *ctx =
 		(struct mail_log_mail_txn_context *)txn;
+	struct mail_private *src_pmail = (struct mail_private *)src;
+	struct mailbox *src_box = src->box;
 	const char *desc;
 
-	if (dst->saving) {
-		/* we came from mailbox_save_using_mail() */
-		mail_log_append_mail_message(ctx, dst,
-					     MAIL_LOG_EVENT_SAVE, "save");
-	} else {
-		desc = t_strdup_printf("copy from %s",
-				       str_sanitize(mailbox_get_name(src->box),
-						    MAILBOX_NAME_LOG_LEN));
-		mail_log_append_mail_message(ctx, dst,
-					     MAIL_LOG_EVENT_COPY, desc);
+	if (src_pmail->vmail != NULL) {
+		/* copying a mail from virtual storage. src points to the
+		   backend mail, but we want to log the virtual mailbox name. */
+		src_box = src_pmail->vmail->box;
 	}
+	desc = t_strdup_printf("copy from %s",
+			       str_sanitize(mailbox_get_vname(src_box),
+					    MAILBOX_NAME_LOG_LEN));
+	mail_log_append_mail_message(ctx, dst,
+				     MAIL_LOG_EVENT_COPY, desc);
 }
 
 static void mail_log_mail_expunge(void *txn, struct mail *mail)
@@ -470,7 +473,7 @@ mail_log_mailbox_create(struct mailbox *box)
 		return;
 
 	i_info("Mailbox created: %s",
-	       str_sanitize(box->name, MAILBOX_NAME_LOG_LEN));
+	       str_sanitize(mailbox_get_vname(box), MAILBOX_NAME_LOG_LEN));
 }
 
 static void
@@ -482,12 +485,11 @@ mail_log_mailbox_delete_commit(void *txn ATTR_UNUSED, struct mailbox *box)
 		return;
 
 	i_info("Mailbox deleted: %s",
-	       str_sanitize(box->name, MAILBOX_NAME_LOG_LEN));
+	       str_sanitize(mailbox_get_vname(box), MAILBOX_NAME_LOG_LEN));
 }
 
 static void
-mail_log_mailbox_rename(struct mailbox *src,
-			struct mailbox *dest, bool rename_children ATTR_UNUSED)
+mail_log_mailbox_rename(struct mailbox *src, struct mailbox *dest)
 {
 	struct mail_log_user *muser = MAIL_LOG_USER_CONTEXT(src->storage->user);
 
@@ -495,8 +497,8 @@ mail_log_mailbox_rename(struct mailbox *src,
 		return;
 
 	i_info("Mailbox renamed: %s -> %s",
-	       str_sanitize(src->name, MAILBOX_NAME_LOG_LEN),
-	       str_sanitize(dest->name, MAILBOX_NAME_LOG_LEN));
+	       str_sanitize(mailbox_get_vname(src), MAILBOX_NAME_LOG_LEN),
+	       str_sanitize(mailbox_get_vname(dest), MAILBOX_NAME_LOG_LEN));
 }
 
 static const struct notify_vfuncs mail_log_vfuncs = {

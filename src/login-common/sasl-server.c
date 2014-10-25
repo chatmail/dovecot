@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -13,6 +13,7 @@
 #include "auth-client.h"
 #include "ssl-proxy.h"
 #include "master-service.h"
+#include "master-service-ssl-settings.h"
 #include "master-interface.h"
 #include "master-auth.h"
 #include "client-common.h"
@@ -38,7 +39,8 @@ sasl_server_get_advertised_mechs(struct client *client, unsigned int *count_r)
 	unsigned int i, j, count;
 
 	mech = auth_client_get_available_mechs(auth_client, &count);
-	if (count == 0) {
+	if (count == 0 || (!client->secured &&
+			   strcmp(client->ssl_set->ssl, "required") == 0)) {
 		*count_r = 0;
 		return NULL;
 	}
@@ -77,7 +79,7 @@ client_get_auth_flags(struct client *client)
 	return auth_flags;
 }
 
-static void
+static void ATTR_NULL(3, 4)
 call_client_callback(struct client *client, enum sasl_server_reply reply,
 		     const char *data, const char *const *args)
 {
@@ -154,7 +156,8 @@ static void master_send_request(struct anvil_request *anvil_request)
 			    master_auth_callback, client, &client->master_tag);
 }
 
-static void anvil_lookup_callback(const char *reply, void *context)
+static void ATTR_NULL(1)
+anvil_lookup_callback(const char *reply, void *context)
 {
 	struct anvil_request *req = context;
 	struct client *client = req->client;
@@ -188,7 +191,7 @@ anvil_check_too_many_connections(struct client *client,
 	req->auth_pid = auth_client_request_get_server_pid(request);
 	req->auth_id = auth_client_request_get_id(request);
 
-	buffer_create_data(&buf, req->cookie, sizeof(req->cookie));
+	buffer_create_from_data(&buf, req->cookie, sizeof(req->cookie));
 	cookie = auth_client_request_get_cookie(request);
 	if (strlen(cookie) == MASTER_AUTH_COOKIE_SIZE*2)
 		(void)hex_to_binary(cookie, &buf);
@@ -236,7 +239,16 @@ authenticate_callback(struct auth_client_request *request,
 		for (i = 0; args[i] != NULL; i++) {
 			if (strncmp(args[i], "user=", 5) == 0) {
 				i_free(client->virtual_user);
+				i_free_and_null(client->virtual_user_orig);
+				i_free_and_null(client->virtual_auth_user);
 				client->virtual_user = i_strdup(args[i] + 5);
+			} else if (strncmp(args[i], "original_user=", 14) == 0) {
+				i_free(client->virtual_user_orig);
+				client->virtual_user_orig = i_strdup(args[i] + 14);
+			} else if (strncmp(args[i], "auth_user=", 10) == 0) {
+				i_free(client->virtual_auth_user);
+				client->virtual_auth_user =
+					i_strdup(args[i] + 10);
 			} else if (strcmp(args[i], "nologin") == 0 ||
 				   strcmp(args[i], "proxy") == 0) {
 				/* user can't login */
@@ -268,8 +280,18 @@ authenticate_callback(struct auth_client_request *request,
 			for (i = 0; args[i] != NULL; i++) {
 				if (strncmp(args[i], "user=", 5) == 0) {
 					i_free(client->virtual_user);
+					i_free_and_null(client->virtual_user_orig);
+					i_free_and_null(client->virtual_auth_user);
 					client->virtual_user =
 						i_strdup(args[i] + 5);
+				} else if (strncmp(args[i], "original_user=", 14) == 0) {
+					i_free(client->virtual_user_orig);
+					client->virtual_user_orig =
+						i_strdup(args[i] + 14);
+				} else if (strncmp(args[i], "auth_user=", 10) == 0) {
+					i_free(client->virtual_auth_user);
+					client->virtual_auth_user =
+						i_strdup(args[i] + 10);
 				}
 			}
 		}
@@ -318,6 +340,7 @@ void sasl_server_auth_begin(struct client *client,
 	memset(&info, 0, sizeof(info));
 	info.mech = mech->name;
 	info.service = service;
+	info.session_id = client_get_session_id(client);
 	info.cert_username = client->ssl_proxy == NULL ? NULL :
 		ssl_proxy_get_peer_name(client->ssl_proxy);
 	info.flags = client_get_auth_flags(client);
@@ -325,6 +348,10 @@ void sasl_server_auth_begin(struct client *client,
 	info.remote_ip = client->ip;
 	info.local_port = client->local_port;
 	info.remote_port = client->remote_port;
+	info.real_local_ip = client->real_local_ip;
+	info.real_remote_ip = client->real_remote_ip;
+	info.real_local_port = client->real_local_port;
+	info.real_remote_port = client->real_remote_port;
 	info.initial_resp_base64 = initial_resp_base64;
 
 	client->auth_request =
@@ -332,8 +359,9 @@ void sasl_server_auth_begin(struct client *client,
 					authenticate_callback, client);
 }
 
-static void sasl_server_auth_cancel(struct client *client, const char *reason,
-				    enum sasl_server_reply reply)
+static void ATTR_NULL(2)
+sasl_server_auth_cancel(struct client *client, const char *reason,
+			enum sasl_server_reply reply)
 {
 	i_assert(client->authenticating);
 

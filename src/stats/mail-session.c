@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -23,7 +23,7 @@
    flooding the error log with hundreds of warnings.) */
 #define SESSION_GUID_WARN_HIDE_SECS (60*5)
 
-static struct hash_table *mail_sessions_hash;
+static HASH_TABLE(uint8_t *, struct mail_session *) mail_sessions_hash;
 /* sessions are sorted by their last_update timestamp, oldest first */
 static struct mail_session *mail_sessions_head, *mail_sessions_tail;
 static time_t session_guid_warn_hide_until;
@@ -38,7 +38,9 @@ static size_t mail_session_memsize(const struct mail_session *session)
 
 static void mail_session_disconnect(struct mail_session *session)
 {
-	hash_table_remove(mail_sessions_hash, session->guid);
+	uint8_t *guid_p = session->guid;
+
+	hash_table_remove(mail_sessions_hash, guid_p);
 	session->disconnected = TRUE;
 	timeout_remove(&session->to_idle);
 	mail_session_unref(&session);
@@ -46,10 +48,17 @@ static void mail_session_disconnect(struct mail_session *session)
 
 static void mail_session_idle_timeout(struct mail_session *session)
 {
-	i_warning("Session %s (user %s, service %s) appears to have crashed, "
-		  "disconnecting it",
-		  guid_128_to_string(session->guid), session->user->name,
-		  session->service);
+	/* user="" service="" pid=0 is used for incoming sessions that were
+	   received after we detected a stats process crash/restart. there's
+	   no point in logging anything about them, since they contain no
+	   useful information. */
+	if (session->user->name[0] == '\0' && session->service[0] != '\0' &&
+	    session->pid == 0) {
+		i_warning("Session %s (user %s, service %s) "
+			  "appears to have crashed, disconnecting it",
+			  guid_128_to_string(session->guid),
+			  session->user->name, session->service);
+	}
 	mail_session_disconnect(session);
 }
 
@@ -57,6 +66,7 @@ int mail_session_connect_parse(const char *const *args, const char **error_r)
 {
 	struct mail_session *session;
 	guid_128_t session_guid;
+	uint8_t *guid_p;
 	pid_t pid;
 	struct ip_addr ip;
 	unsigned int i;
@@ -75,7 +85,8 @@ int mail_session_connect_parse(const char *const *args, const char **error_r)
 		return -1;
 	}
 
-	session = hash_table_lookup(mail_sessions_hash, session_guid);
+	guid_p = session_guid;
+	session = hash_table_lookup(mail_sessions_hash, guid_p);
 	if (session != NULL) {
 		*error_r = "CONNECT: Duplicate session GUID";
 		return -1;
@@ -96,7 +107,8 @@ int mail_session_connect_parse(const char *const *args, const char **error_r)
 			session->ip = mail_ip_login(&ip);
 	}
 
-	hash_table_insert(mail_sessions_hash, session->guid, session);
+	guid_p = session->guid;
+	hash_table_insert(mail_sessions_hash, guid_p, session);
 	DLLIST_PREPEND_FULL(&stable_mail_sessions, session,
 			    stable_prev, stable_next);
 	DLLIST2_APPEND_FULL(&mail_sessions_head, &mail_sessions_tail, session,
@@ -130,6 +142,8 @@ void mail_session_unref(struct mail_session **_session)
 
 static void mail_session_free(struct mail_session *session)
 {
+	uint8_t *guid_p = session->guid;
+
 	i_assert(session->refcount == 0);
 
 	global_memory_free(mail_session_memsize(session));
@@ -137,7 +151,7 @@ static void mail_session_free(struct mail_session *session)
 	if (session->to_idle != NULL)
 		timeout_remove(&session->to_idle);
 	if (!session->disconnected)
-		hash_table_remove(mail_sessions_hash, session->guid);
+		hash_table_remove(mail_sessions_hash, guid_p);
 	DLLIST_REMOVE_FULL(&stable_mail_sessions, session,
 			   stable_prev, stable_next);
 	DLLIST2_REMOVE_FULL(&mail_sessions_head, &mail_sessions_tail, session,
@@ -174,6 +188,7 @@ int mail_session_lookup(const char *guid, struct mail_session **session_r,
 			const char **error_r)
 {
 	guid_128_t session_guid;
+	uint8_t *guid_p;
 
 	if (guid == NULL) {
 		*error_r = "Too few parameters";
@@ -183,7 +198,8 @@ int mail_session_lookup(const char *guid, struct mail_session **session_r,
 		*error_r = "Invalid GUID";
 		return -1;
 	}
-	*session_r = hash_table_lookup(mail_sessions_hash, session_guid);
+	guid_p = session_guid;
+	*session_r = hash_table_lookup(mail_sessions_hash, guid_p);
 	if (*session_r == NULL) {
 		mail_session_guid_lost(session_guid);
 		return 0;
@@ -255,13 +271,16 @@ int mail_session_update_parse(const char *const *args, const char **error_r)
 		return -1;
 
 	if (mail_stats_parse(args+1, &stats, error_r) < 0) {
-		*error_r = t_strconcat("UPDATE-SESSION: ", *error_r, NULL);
+		*error_r = t_strdup_printf("UPDATE-SESSION %s %s: %s",
+					   session->user->name,
+					   session->service, *error_r);
 		return -1;
 	}
 
 	if (!mail_stats_diff(&session->stats, &stats, &diff_stats, &error)) {
-		*error_r = t_strconcat("UPDATE-SESSION: stats shrank: ",
-				       error, NULL);
+		*error_r = t_strdup_printf("UPDATE-SESSION %s %s: stats shrank: %s",
+					   session->user->name,
+					   session->service, error);
 		return -1;
 	}
 	mail_session_refresh(session, &diff_stats);
@@ -291,9 +310,8 @@ void mail_sessions_init(void)
 {
 	session_guid_warn_hide_until =
 		ioloop_time + SESSION_GUID_WARN_HIDE_SECS;
-	mail_sessions_hash =
-		hash_table_create(default_pool, default_pool, 0,
-				  guid_128_hash, guid_128_cmp);
+	hash_table_create(&mail_sessions_hash, default_pool, 0,
+			  guid_128_hash, guid_128_cmp);
 }
 
 void mail_sessions_deinit(void)

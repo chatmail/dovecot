@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "settings-parser.h"
@@ -22,12 +22,12 @@ static const struct setting_define imapc_setting_defines[] = {
 	DEF(SET_STR, imapc_password),
 
 	DEF(SET_ENUM, imapc_ssl),
-	DEF(SET_STR, imapc_ssl_ca_dir),
 	DEF(SET_BOOL, imapc_ssl_verify),
 
 	DEF(SET_STR, imapc_features),
 	DEF(SET_STR, imapc_rawlog_dir),
-	DEF(SET_STR, ssl_crypto_device),
+	DEF(SET_STR, imapc_list_prefix),
+	DEF(SET_TIME, imapc_max_idle_time),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -36,17 +36,17 @@ static const struct imapc_settings imapc_default_settings = {
 	.imapc_host = "",
 	.imapc_port = 143,
 
-	.imapc_user = "%u",
+	.imapc_user = "",
 	.imapc_master_user = "",
 	.imapc_password = "",
 
 	.imapc_ssl = "no:imaps:starttls",
-	.imapc_ssl_ca_dir = "",
 	.imapc_ssl_verify = TRUE,
 
 	.imapc_features = "",
 	.imapc_rawlog_dir = "",
-	.ssl_crypto_device = ""
+	.imapc_list_prefix = "",
+	.imapc_max_idle_time = 60*29
 };
 
 static const struct setting_parser_info imapc_setting_parser_info = {
@@ -76,6 +76,8 @@ struct imapc_feature_list {
 
 static const struct imapc_feature_list imapc_feature_list[] = {
 	{ "rfc822.size", IMAPC_FEATURE_RFC822_SIZE },
+	{ "guid-forced", IMAPC_FEATURE_GUID_FORCED },
+	{ "fetch-headers", IMAPC_FEATURE_FETCH_HEADERS },
 	{ NULL, 0 }
 };
 
@@ -115,15 +117,10 @@ static bool imapc_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 		*error_r = "invalid imapc_port";
 		return FALSE;
 	}
-#ifndef CONFIG_BINARY
-	if (*set->imapc_ssl_ca_dir != '\0' &&
-	    access(set->imapc_ssl_ca_dir, X_OK) < 0) {
-		*error_r = t_strdup_printf(
-			"imapc_ssl_ca_dir: access(%s) failed: %m",
-			set->imapc_ssl_ca_dir);
+	if (set->imapc_max_idle_time == 0) {
+		*error_r = "imapc_max_idle_time must not be 0";
 		return FALSE;
 	}
-#endif
 	if (imapc_settings_parse_features(set, error_r) < 0)
 		return FALSE;
 	return TRUE;

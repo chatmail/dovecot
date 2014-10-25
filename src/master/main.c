@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "ioloop.h"
@@ -10,6 +10,7 @@
 #include "hostpid.h"
 #include "abspath.h"
 #include "ipwd.h"
+#include "str.h"
 #include "execv-const.h"
 #include "mountpoint-list.h"
 #include "restrict-process-size.h"
@@ -155,8 +156,8 @@ master_fatal_callback(const struct failure_context *ctx,
 		if (fd != -1) {
 			VA_COPY(args2, args);
 			str = t_strdup_vprintf(format, args2);
-			write_full(fd, str, strlen(str));
-			(void)close(fd);
+			(void)write_full(fd, str, strlen(str));
+			i_close_fd(&fd);
 		}
 	}
 
@@ -201,7 +202,7 @@ static void fatal_log_check(const struct master_settings *set)
 	if (fd == -1)
 		return;
 
-	ret = read(fd, buf, sizeof(buf));
+	ret = read(fd, buf, sizeof(buf)-1);
 	if (ret < 0)
 		i_error("read(%s) failed: %m", path);
 	else {
@@ -222,6 +223,8 @@ static bool pid_file_read(const char *path, pid_t *pid_r)
 	ssize_t ret;
 	bool found;
 
+	*pid_r = (pid_t)-1;
+
 	fd = open(path, O_RDONLY);
 	if (fd == -1) {
 		if (errno == ENOENT)
@@ -229,7 +232,7 @@ static bool pid_file_read(const char *path, pid_t *pid_r)
 		i_fatal("open(%s) failed: %m", path);
 	}
 
-	ret = read(fd, buf, sizeof(buf));
+	ret = read(fd, buf, sizeof(buf)-1);
 	if (ret <= 0) {
 		if (ret == 0)
 			i_error("Empty PID file in %s, overriding", path);
@@ -245,7 +248,7 @@ static bool pid_file_read(const char *path, pid_t *pid_r)
 		found = !(*pid_r == getpid() ||
 			  (kill(*pid_r, 0) < 0 && errno == ESRCH));
 	}
-	(void)close(fd);
+	i_close_fd(&fd);
 	return found;
 }
 
@@ -272,7 +275,7 @@ static void create_pid_file(const char *path)
 		i_fatal("open(%s) failed: %m", path);
 	if (write_full(fd, pid, strlen(pid)) < 0)
 		i_fatal("write() failed in %s: %m", path);
-	(void)close(fd);
+	i_close_fd(&fd);
 }
 
 static void create_config_symlink(const struct master_settings *set)
@@ -299,8 +302,7 @@ static void mountpoints_warn_missing(struct mountpoint_list *mountpoints)
 	while ((rec = mountpoint_list_iter_next(iter)) != NULL) {
 		if (MOUNTPOINT_WRONGLY_NOT_MOUNTED(rec)) {
 			i_warning("%s is no longer mounted. "
-				  "If this is intentional, "
-				  "remove it with doveadm mount",
+				  "See http://wiki2.dovecot.org/Mountpoints",
 				  rec->mount_path);
 		}
 	}
@@ -312,7 +314,7 @@ static void mountpoints_update(const struct master_settings *set)
 	struct mountpoint_list *mountpoints;
 	const char *perm_path, *state_path;
 
-	perm_path = t_strconcat(PKG_STATEDIR"/"MOUNTPOINT_LIST_FNAME, NULL);
+	perm_path = t_strconcat(set->state_dir, "/"MOUNTPOINT_LIST_FNAME, NULL);
 	state_path = t_strconcat(set->base_dir, "/"MOUNTPOINT_LIST_FNAME, NULL);
 	mountpoints = mountpoint_list_init(perm_path, state_path);
 
@@ -332,7 +334,7 @@ static void instance_update_now(struct master_instance_list *list)
 					    services->set->instance_name);
 	if (ret == 0) {
 		/* duplicate instance names. allow without warning.. */
-		master_instance_list_update(list, services->set->base_dir);
+		(void)master_instance_list_update(list, services->set->base_dir);
 	}
 	
 	if (to_instance != NULL)
@@ -341,9 +343,12 @@ static void instance_update_now(struct master_instance_list *list)
 				  instance_update_now, list);
 }
 
-static void instance_update(void)
+static void instance_update(const struct master_settings *set)
 {
-	instances = master_instance_list_init(MASTER_INSTANCE_PATH);
+	const char *path;
+
+	path = t_strconcat(set->state_dir, "/"MASTER_INSTANCE_FNAME, NULL);
+	instances = master_instance_list_init(path);
 	instance_update_now(instances);
 }
 
@@ -434,6 +439,9 @@ static void sig_die(const siginfo_t *si, void *context ATTR_UNUSED)
 		  si->si_signo, dec2str(si->si_pid),
 		  dec2str(si->si_uid),
 		  lib_signal_code_to_str(si->si_signo, si->si_code));
+	/* make sure new processes won't be created by the currently
+	   running ioloop. */
+	services->destroying = TRUE;
 	master_service_stop(master_service);
 }
 
@@ -474,23 +482,31 @@ static void master_set_import_environment(const struct master_settings *set)
 		}
 		array_append(&keys, &key, 1);
 	}
-	(void)array_append_space(&keys);
+	array_append_zero(&keys);
 
 	value = t_strarray_join(array_idx(&keys, 0), " ");
 	env_put(t_strconcat(DOVECOT_PRESERVE_ENVS_ENV"=", value, NULL));
 }
 
-static void main_log_startup(void)
+static void main_log_startup(char **protocols)
 {
 #define STARTUP_STRING PACKAGE_NAME" v"DOVECOT_VERSION_FULL" starting up"
+	string_t *str = t_str_new(128);
 	rlim_t core_limit;
+
+	str_append(str, STARTUP_STRING);
+	if (protocols[0] == NULL)
+		str_append(str, " without any protocols");
+	else {
+		str_printfa(str, " for %s",
+			    t_strarray_join((const char **)protocols, ", "));
+	}
 
 	core_dumps_disabled = restrict_get_core_limit(&core_limit) == 0 &&
 		core_limit == 0;
 	if (core_dumps_disabled)
-		i_info(STARTUP_STRING" (core dumps disabled)");
-	else
-		i_info(STARTUP_STRING);
+		str_append(str, " (core dumps disabled)");
+	i_info("%s", str_c(str));
 }
 
 static void master_set_process_limit(void)
@@ -522,7 +538,7 @@ static void main_init(const struct master_settings *set)
 	/* deny file access from everyone else except owner */
         (void)umask(0077);
 
-	main_log_startup();
+	main_log_startup(set->protocols_split);
 
 	lib_signals_init();
         lib_signals_ignore(SIGPIPE, TRUE);
@@ -539,7 +555,7 @@ static void main_init(const struct master_settings *set)
 	create_pid_file(pidfile_path);
 	create_config_symlink(set);
 	mountpoints_update(set);
-	instance_update();
+	instance_update(set);
 
 	services_monitor_start(services);
 }
@@ -623,7 +639,7 @@ static void print_help(void)
 {
 	fprintf(stderr,
 "Usage: dovecot [-F] [-c <config file>] [-p] [-n] [-a] [--help] [--version]\n"
-"       [--build-options] [reload] [stop]\n");
+"       [--build-options] [--hostdomain] [reload] [stop]\n");
 }
 
 static void print_build_options(void)
@@ -766,7 +782,7 @@ int main(int argc, char *argv[])
 				MASTER_SERVICE_FLAG_STANDALONE |
 				MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR,
 				&argc, &argv, "+Fanp");
-	i_set_failure_prefix("");
+	i_unset_failure_prefix();
 
 	io_loop_set_time_moved_callback(current_ioloop, master_time_moved);
 
@@ -818,6 +834,9 @@ int main(int argc, char *argv[])
 		i_fatal("execv("BINDIR"/doveadm) failed: %m");
 	} else if (strcmp(argv[optind], "version") == 0) {
 		printf("%s\n", DOVECOT_VERSION_FULL);
+		return 0;
+	} else if (strcmp(argv[optind], "hostdomain") == 0) {
+		printf("%s\n", my_hostdomain());
 		return 0;
 	} else if (strcmp(argv[optind], "build-options") == 0) {
 		print_build_options();
@@ -890,12 +909,6 @@ int main(int argc, char *argv[])
 	if (chdir(set->base_dir) < 0)
 		i_fatal("chdir(%s) failed: %m", set->base_dir);
 
-	if (strcmp(services->service_set->log_path, "/dev/stderr") != 0 &&
-	    strcmp(services->service_set->info_log_path, "/dev/stderr") != 0 &&
-	    strcmp(services->service_set->debug_log_path, "/dev/stderr") != 0) {
-		if (dup2(null_fd, STDERR_FILENO) < 0)
-			i_fatal("dup2(null_fd) failed: %m");
-	}
 	i_set_fatal_handler(master_fatal_callback);
 	i_set_error_handler(orig_error_callback);
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "log-error-buffer.h"
@@ -10,7 +10,7 @@ struct log_error_data {
 
 	enum log_type type;
 	time_t timestamp;
-	unsigned char prefix_text[];
+	unsigned char prefix_text[FLEXIBLE_ARRAY_MEMBER];
 };
 
 struct log_error_buffer {

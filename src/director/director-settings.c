@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -7,6 +7,8 @@
 #include "director-settings.h"
 
 /* <settings checks> */
+static bool director_settings_verify(void *_set, pool_t pool, const char **error_r);
+
 static struct file_listener_settings director_unix_listeners_array[] = {
 	{ "login/director", 0, "", "" },
 	{ "director-admin", 0600, "", "" }
@@ -48,7 +50,7 @@ struct service_settings director_service_settings = {
 	.process_limit = 1,
 	.client_limit = 0,
 	.service_count = 0,
-	.idle_kill = -1U,
+	.idle_kill = UINT_MAX,
 	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &director_unix_listeners_buf,
@@ -80,7 +82,7 @@ const struct director_settings director_default_settings = {
 
 	.director_servers = "",
 	.director_mail_servers = "",
-	.director_username_hash = "%u",
+	.director_username_hash = "%Lu",
 	.director_user_expire = 60*15,
 	.director_doveadm_port = 0
 };
@@ -93,5 +95,21 @@ const struct setting_parser_info director_setting_parser_info = {
 	.type_offset = (size_t)-1,
 	.struct_size = sizeof(struct director_settings),
 
-	.parent_offset = (size_t)-1
+	.parent_offset = (size_t)-1,
+
+	.check_func = director_settings_verify
 };
+
+/* <settings checks> */
+static bool
+director_settings_verify(void *_set, pool_t pool ATTR_UNUSED, const char **error_r)
+{
+	struct director_settings *set = _set;
+
+	if (set->director_user_expire < 10) {
+		*error_r = "director_user_expire is too low";
+		return FALSE;
+	}
+	return TRUE;
+}
+/* </settings checks> */

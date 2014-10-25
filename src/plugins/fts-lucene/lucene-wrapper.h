@@ -4,7 +4,6 @@
 #include "fts-api-private.h"
 #include "guid.h"
 
-struct hash_table;
 struct mailbox_list;
 struct fts_expunge_log;
 struct fts_lucene_settings;
@@ -13,12 +12,15 @@ struct fts_lucene_settings;
 
 struct lucene_index_record {
 	guid_128_t mailbox_guid;
-	uint32_t uid;
+	uint32_t uid, part_num;
 };
 
-struct lucene_index *lucene_index_init(const char *path,
-				       struct mailbox_list *list,
-				       const struct fts_lucene_settings *set);
+HASH_TABLE_DEFINE_TYPE(wguid_result, wchar_t *, struct fts_result *);
+
+struct lucene_index *
+lucene_index_init(const char *path, struct mailbox_list *list,
+		  const struct fts_lucene_settings *set)
+	ATTR_NULL(2, 3);
 void lucene_index_deinit(struct lucene_index *index);
 
 void lucene_index_select_mailbox(struct lucene_index *index,
@@ -29,8 +31,8 @@ int lucene_index_get_doc_count(struct lucene_index *index, uint32_t *count_r);
 
 int lucene_index_build_init(struct lucene_index *index);
 int lucene_index_build_more(struct lucene_index *index, uint32_t uid,
-			    const unsigned char *data, size_t size,
-			    const char *hdr_name);
+			    uint32_t part_num, const unsigned char *data,
+			    size_t size, const char *hdr_name);
 int lucene_index_build_deinit(struct lucene_index *index);
 
 void lucene_index_close(struct lucene_index *index);
@@ -44,7 +46,7 @@ int lucene_index_lookup(struct lucene_index *index,
 			struct fts_result *result);
 
 int lucene_index_lookup_multi(struct lucene_index *index,
-			      struct hash_table *guids,
+			      HASH_TABLE_TYPE(wguid_result) guids,
 			      struct mail_search_arg *args, bool and_args,
 			      struct fts_multi_result *result);
 

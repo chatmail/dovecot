@@ -1,13 +1,15 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "md5.h"
 #include "hash.h"
-#include "network.h"
+#include "str.h"
+#include "net.h"
 #include "istream.h"
 #include "write-full.h"
 #include "master-service.h"
 #include "auth-master.h"
+#include "mail-user-hash.h"
 #include "doveadm.h"
 #include "doveadm-print.h"
 
@@ -21,12 +23,15 @@ struct director_context {
 	const char *users_path;
 	struct istream *input;
 	bool explicit_socket_path;
+	bool hash_map, user_map;
 };
 
 struct user_list {
 	struct user_list *next;
 	const char *name;
 };
+
+HASH_TABLE_DEFINE_TYPE(user_list, void *, struct user_list *);
 
 extern struct doveadm_cmd doveadm_cmd_director[];
 
@@ -73,9 +78,11 @@ static void director_connect(struct director_context *ctx)
 
 static void director_disconnect(struct director_context *ctx)
 {
-	if (ctx->input->stream_errno != 0)
-		i_fatal("read(%s) failed: %m", ctx->socket_path);
-	i_stream_destroy(&ctx->input);
+	if (ctx->input != NULL) {
+		if (ctx->input->stream_errno != 0)
+			i_fatal("read(%s) failed: %m", ctx->socket_path);
+		i_stream_destroy(&ctx->input);
+	}
 }
 
 static struct director_context *
@@ -98,11 +105,18 @@ cmd_director_init(int argc, char *argv[], const char *getopt_args,
 		case 'f':
 			ctx->users_path = optarg;
 			break;
+		case 'h':
+			ctx->hash_map = TRUE;
+			break;
+		case 'u':
+			ctx->user_map = TRUE;
+			break;
 		default:
 			director_cmd_help(cmd);
 		}
 	}
-	director_connect(ctx);
+	if (!ctx->user_map)
+		director_connect(ctx);
 	return ctx;
 }
 
@@ -120,7 +134,7 @@ cmd_director_status_user(struct director_context *ctx, const char *user)
 		return;
 	}
 
-	args = t_strsplit(line, "\t");
+	args = t_strsplit_tab(line);
 	if (str_array_length(args) != 4 ||
 	    str_to_uint(args[1], &expires) < 0) {
 		i_error("Invalid reply from director");
@@ -162,7 +176,7 @@ static void cmd_director_status(int argc, char *argv[])
 		if (*line == '\0')
 			break;
 		T_BEGIN {
-			args = t_strsplit(line, "\t");
+			args = t_strsplit_tab(line);
 			if (str_array_length(args) >= 3) {
 				doveadm_print(args[0]);
 				doveadm_print(args[1]);
@@ -177,26 +191,16 @@ static void cmd_director_status(int argc, char *argv[])
 	director_disconnect(ctx);
 }
 
-static unsigned int director_username_hash(const char *username)
-{
-	unsigned char md5[MD5_RESULTLEN];
-	unsigned int i, hash = 0;
-
-	md5_get_digest(username, strlen(username), md5);
-	for (i = 0; i < sizeof(hash); i++)
-		hash = (hash << CHAR_BIT) | md5[i];
-	return hash;
-}
-
 static void
-user_list_add(const char *username, pool_t pool, struct hash_table *users)
+user_list_add(const char *username, pool_t pool,
+	      HASH_TABLE_TYPE(user_list) users)
 {
 	struct user_list *user, *old_user;
 	unsigned int user_hash;
 
 	user = p_new(pool, struct user_list, 1);
 	user->name = p_strdup(pool, username);
-	user_hash = director_username_hash(username);
+	user_hash = mail_user_hash(username, doveadm_settings->director_username_hash);
 
 	old_user = hash_table_lookup(users, POINTER_CAST(user_hash));
 	if (old_user != NULL)
@@ -204,9 +208,9 @@ user_list_add(const char *username, pool_t pool, struct hash_table *users)
 	hash_table_insert(users, POINTER_CAST(user_hash), user);
 }
 
-static void
+static void ATTR_NULL(1)
 userdb_get_user_list(const char *auth_socket_path, pool_t pool,
-		     struct hash_table *users)
+		     HASH_TABLE_TYPE(user_list) users)
 {
 	struct auth_master_user_list_ctx *ctx;
 	struct auth_master_connection *conn;
@@ -218,7 +222,7 @@ userdb_get_user_list(const char *auth_socket_path, pool_t pool,
 	}
 
 	conn = auth_master_init(auth_socket_path, 0);
-	ctx = auth_master_user_list_init(conn, NULL, NULL);
+	ctx = auth_master_user_list_init(conn, "", NULL);
 	while ((username = auth_master_user_list_next(ctx)) != NULL)
 		user_list_add(username, pool, users);
 	if (auth_master_user_list_deinit(&ctx) < 0) {
@@ -229,7 +233,8 @@ userdb_get_user_list(const char *auth_socket_path, pool_t pool,
 }
 
 static void
-user_file_get_user_list(const char *path, pool_t pool, struct hash_table *users)
+user_file_get_user_list(const char *path, pool_t pool,
+			HASH_TABLE_TYPE(user_list) users)
 {
 	struct istream *input;
 	const char *username;
@@ -281,27 +286,56 @@ static void cmd_director_map(int argc, char *argv[])
 	const char *line, *const *args;
 	struct ip_addr *ips, user_ip;
 	pool_t pool;
-	struct hash_table *users;
+	HASH_TABLE_TYPE(user_list) users;
 	struct user_list *user;
 	unsigned int ips_count, user_hash, expires;
 
-	ctx = cmd_director_init(argc, argv, "a:f:", cmd_director_map);
-	if (argv[optind] == NULL)
-		ips_count = 0;
-	else if (argv[optind+1] != NULL)
+	ctx = cmd_director_init(argc, argv, "a:f:hu", cmd_director_map);
+	argc -= optind;
+	argv += optind;
+	if (argc > 1 ||
+	    (ctx->hash_map && ctx->user_map) ||
+	    ((ctx->hash_map || ctx->user_map) && argc == 0))
 		director_cmd_help(cmd_director_map);
+
+	if (ctx->user_map) {
+		/* user -> hash mapping */
+		user_hash = mail_user_hash(argv[0], doveadm_settings->director_username_hash);
+		doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
+		doveadm_print_header("hash", "hash", DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE);
+		doveadm_print(t_strdup_printf("%u", user_hash));
+		director_disconnect(ctx);
+		return;
+	}
+
+	if (argv[0] == NULL || ctx->hash_map)
+		ips_count = 0;
 	else
-		director_get_host(argv[optind], &ips, &ips_count);
+		director_get_host(argv[0], &ips, &ips_count);
 
 	pool = pool_alloconly_create("director map users", 1024*128);
-	users = hash_table_create(default_pool, pool, 0, NULL, NULL);
+	hash_table_create_direct(&users, pool, 0);
 	if (ctx->users_path == NULL)
 		userdb_get_user_list(NULL, pool, users);
 	else
 		user_file_get_user_list(ctx->users_path, pool, users);
 
+	if (ctx->hash_map) {
+		/* hash -> usernames mapping */
+		if (str_to_uint(argv[0], &user_hash) < 0)
+			i_fatal("Invalid username hash: %s", argv[0]);
+
+		doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
+		doveadm_print_header("user", "user", DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE);
+		user = hash_table_lookup(users, POINTER_CAST(user_hash));
+		for (; user != NULL; user = user->next)
+			doveadm_print(user->name);
+		goto deinit;
+	}
+
 	doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
 	doveadm_print_header("user", "user", DOVEADM_PRINT_HEADER_FLAG_EXPAND);
+	doveadm_print_header_simple("hash");
 	doveadm_print_header_simple("mail server ip");
 	doveadm_print_header_simple("expire time");
 
@@ -315,7 +349,7 @@ static void cmd_director_map(int argc, char *argv[])
 		if (*line == '\0')
 			break;
 		T_BEGIN {
-			args = t_strsplit(line, "\t");
+			args = t_strsplit_tab(line);
 			if (str_array_length(args) < 3 ||
 			    str_to_uint(args[0], &user_hash) < 0 ||
 			    str_to_uint(args[1], &expires) < 0 ||
@@ -325,14 +359,16 @@ static void cmd_director_map(int argc, char *argv[])
 			} else if (ips_count == 0 ||
 				 ip_find(ips, ips_count, &user_ip)) {
 				user = hash_table_lookup(users,
-						POINTER_CAST(user_hash));
+							 POINTER_CAST(user_hash));
 				if (user == NULL) {
 					doveadm_print("<unknown>");
+					doveadm_print(args[0]);
 					doveadm_print(args[2]);
 					doveadm_print(unixdate2str(expires));
 				}
 				for (; user != NULL; user = user->next) {
 					doveadm_print(user->name);
+					doveadm_print(args[0]);
 					doveadm_print(args[2]);
 					doveadm_print(unixdate2str(expires));
 				}
@@ -343,6 +379,7 @@ static void cmd_director_map(int argc, char *argv[])
 		i_error("Director disconnected unexpectedly");
 		doveadm_exit_code = EX_TEMPFAIL;
 	}
+deinit:
 	director_disconnect(ctx);
 	hash_table_destroy(&users);
 	pool_unref(&pool);
@@ -352,7 +389,7 @@ static void cmd_director_add(int argc, char *argv[])
 {
 	struct director_context *ctx;
 	struct ip_addr *ips;
-	unsigned int i, ips_count, vhost_count = -1U;
+	unsigned int i, ips_count, vhost_count = UINT_MAX;
 	const char *host, *cmd, *line;
 
 	ctx = cmd_director_init(argc, argv, "a:", cmd_director_add);
@@ -368,7 +405,7 @@ static void cmd_director_add(int argc, char *argv[])
 
 	director_get_host(host, &ips, &ips_count);
 	for (i = 0; i < ips_count; i++) {
-		cmd = vhost_count == -1U ?
+		cmd = vhost_count == UINT_MAX ?
 			t_strdup_printf("HOST-SET\t%s\n",
 					net_ip2addr(&ips[i])) :
 			t_strdup_printf("HOST-SET\t%s\t%u\n",
@@ -435,7 +472,7 @@ static void cmd_director_move(int argc, char *argv[])
 	    argv[optind+2] != NULL)
 		director_cmd_help(cmd_director_move);
 
-	user_hash = director_username_hash(argv[optind++]);
+	user_hash = mail_user_hash(argv[optind++], doveadm_settings->director_username_hash);
 	host = argv[optind];
 
 	director_get_host(host, &ips, &ips_count);
@@ -559,7 +596,7 @@ static void cmd_director_dump(int argc, char *argv[])
 		if (*line == '\0')
 			break;
 		T_BEGIN {
-			args = t_strsplit(line, "\t");
+			args = t_strsplit_tab(line);
 			if (str_array_length(args) >= 2) {
 				director_dump_cmd(ctx, "add", "%s %s",
 						  args[0], args[1]);
@@ -577,6 +614,68 @@ static void cmd_director_dump(int argc, char *argv[])
 		i_error("Director disconnected unexpectedly");
 		doveadm_exit_code = EX_TEMPFAIL;
 	}
+	director_disconnect(ctx);
+}
+
+
+static void director_read_ok_reply(struct director_context *ctx)
+{
+	const char *line;
+
+	line = i_stream_read_next_line(ctx->input);
+	if (line == NULL) {
+		i_error("Director disconnected unexpectedly");
+		doveadm_exit_code = EX_TEMPFAIL;
+	} else if (strcmp(line, "NOTFOUND") == 0) {
+		i_error("Not found");
+		doveadm_exit_code = DOVEADM_EX_NOTFOUND;
+	} else if (strcmp(line, "OK") != 0) {
+		i_error("Failed: %s", line);
+		doveadm_exit_code = EX_TEMPFAIL;
+	}
+}
+
+static void cmd_director_ring_add(int argc, char *argv[])
+{
+	struct director_context *ctx;
+	struct ip_addr ip;
+	string_t *str = t_str_new(64);
+	unsigned int port = 0;
+
+	ctx = cmd_director_init(argc, argv, "a:", cmd_director_ring_add);
+	if (argv[optind] == NULL ||
+	    net_addr2ip(argv[optind], &ip) < 0 ||
+	    (argv[optind+1] != NULL && str_to_uint(argv[optind+1], &port) < 0))
+		director_cmd_help(cmd_director_ring_add);
+
+	str_printfa(str, "DIRECTOR-ADD\t%s", net_ip2addr(&ip));
+	if (port != 0)
+		str_printfa(str, "\t%u", port);
+	str_append_c(str, '\n');
+	director_send(ctx, str_c(str));
+	director_read_ok_reply(ctx);
+	director_disconnect(ctx);
+}
+
+static void cmd_director_ring_remove(int argc, char *argv[])
+{
+	struct director_context *ctx;
+	struct ip_addr ip;
+	string_t *str = t_str_new(64);
+	unsigned int port = 0;
+
+	ctx = cmd_director_init(argc, argv, "a:", cmd_director_ring_remove);
+	if (argv[optind] == NULL ||
+	    net_addr2ip(argv[optind], &ip) < 0 ||
+	    (argv[optind+1] != NULL && str_to_uint(argv[optind+1], &port) < 0))
+		director_cmd_help(cmd_director_ring_remove);
+
+	str_printfa(str, "DIRECTOR-REMOVE\t%s", net_ip2addr(&ip));
+	if (port != 0)
+		str_printfa(str, "\t%u", port);
+	str_append_c(str, '\n');
+	director_send(ctx, str_c(str));
+	director_read_ok_reply(ctx);
 	director_disconnect(ctx);
 }
 
@@ -599,7 +698,7 @@ static void cmd_director_ring_status(int argc, char *argv[])
 		if (*line == '\0')
 			break;
 		T_BEGIN {
-			args = t_strsplit(line, "\t");
+			args = t_strsplit_tab(line);
 			if (str_array_length(args) >= 4 &&
 			    str_to_ulong(args[3], &l) == 0) {
 				doveadm_print(args[0]);
@@ -623,7 +722,7 @@ struct doveadm_cmd doveadm_cmd_director[] = {
 	{ cmd_director_status, "director status",
 	  "[-a <director socket path>] [<user>]" },
 	{ cmd_director_map, "director map",
-	  "[-a <director socket path>] [-f <users file>] [<host>]" },
+	  "[-a <director socket path>] [-f <users file>] [-h | -u] [<host>]" },
 	{ cmd_director_add, "director add",
 	  "[-a <director socket path>] <host> [<vhost count>]" },
 	{ cmd_director_remove, "director remove",
@@ -634,6 +733,10 @@ struct doveadm_cmd doveadm_cmd_director[] = {
 	  "[-a <director socket path>] <host>|all" },
 	{ cmd_director_dump, "director dump",
 	  "[-a <director socket path>]" },
+	{ cmd_director_ring_add, "director ring add",
+	  "[-a <director socket path>] <ip> [<port>]" },
+	{ cmd_director_ring_remove, "director ring remove",
+	  "[-a <director socket path>] <ip> [<port>]" },
 	{ cmd_director_ring_status, "director ring status",
 	  "[-a <director socket path>]" }
 };

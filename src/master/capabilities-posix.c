@@ -1,3 +1,5 @@
+/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+
 #include "common.h"
 #include "capabilities.h"
 

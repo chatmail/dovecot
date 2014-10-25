@@ -1,0 +1,25 @@
+From: Jaldhar H. Vyas <jaldhar@debian.org>
+Date: Tue, 25 Sep 2012 01:12:07 -0400
+Subject: SSL cert location
+Description: Move dovecots generated X.509 certificate out of /etc/ssl where
+ it doesn't belong.
+Bug: #608719
+---
+ doc/example-config/conf.d/10-ssl.conf |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+Index: dovecot/doc/example-config/conf.d/10-ssl.conf
+===================================================================
+--- dovecot.orig/doc/example-config/conf.d/10-ssl.conf	2013-08-19 11:23:18.797154554 -0400
++++ dovecot/doc/example-config/conf.d/10-ssl.conf	2013-08-19 11:23:18.793154664 -0400
+@@ -9,8 +9,8 @@
+ # dropping root privileges, so keep the key file unreadable by anyone but
+ # root. Included doc/mkcert.sh can be used to easily generate self-signed
+ # certificate, just make sure to update the domains in dovecot-openssl.cnf
+-ssl_cert = </etc/ssl/certs/dovecot.pem
+-ssl_key = </etc/ssl/private/dovecot.pem
++ssl_cert = </etc/dovecot/dovecot.pem
++ssl_key = </etc/dovecot/private/dovecot.pem
+ 
+ # If key file is password protected, give the password here. Alternatively
+ # give it when starting dovecot with -p parameter. Since this file is often

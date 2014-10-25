@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
 
 /*
    Here's a description of how we handle Maildir synchronization and
@@ -229,7 +229,13 @@ struct maildir_sync_context {
 
 	unsigned int partial:1;
 	unsigned int locked:1;
+	unsigned int racing:1;
 };
+
+void maildir_sync_set_racing(struct maildir_sync_context *ctx)
+{
+	ctx->racing = TRUE;
+}
 
 void maildir_sync_notify(struct maildir_sync_context *ctx)
 {
@@ -288,6 +294,7 @@ static int maildir_fix_duplicate(struct maildir_sync_context *ctx,
 	const char *fname1, *path1, *path2;
 	const char *new_fname, *new_path;
 	struct stat st1, st2;
+	uoff_t size;
 
 	fname1 = maildir_uidlist_sync_get_full_filename(ctx->uidlist_sync_ctx,
 							fname2);
@@ -330,6 +337,16 @@ static int maildir_fix_duplicate(struct maildir_sync_context *ctx,
 	}
 
 	new_fname = maildir_filename_generate();
+	/* preserve S= and W= sizes if they're available.
+	   (S=size is required for zlib plugin to work) */
+	if (maildir_filename_get_size(fname2, MAILDIR_EXTRA_FILE_SIZE, &size)) {
+		new_fname = t_strdup_printf("%s,%c=%"PRIuUOFF_T,
+			new_fname, MAILDIR_EXTRA_FILE_SIZE, size);
+	}
+	if (maildir_filename_get_size(fname2, MAILDIR_EXTRA_VIRTUAL_SIZE, &size)) {
+		new_fname = t_strdup_printf("%s,%c=%"PRIuUOFF_T,
+			new_fname, MAILDIR_EXTRA_VIRTUAL_SIZE, size);
+	}
 	new_path = t_strconcat(mailbox_get_path(&ctx->mbox->box),
 			       "/new/", new_fname, NULL);
 
@@ -339,6 +356,27 @@ static int maildir_fix_duplicate(struct maildir_sync_context *ctx,
 		mail_storage_set_critical(&ctx->mbox->storage->storage,
 			"Couldn't fix a duplicate: rename(%s, %s) failed: %m",
 			path2, new_path);
+		return -1;
+	}
+	return 0;
+}
+
+static int
+maildir_rename_empty_basename(struct maildir_sync_context *ctx,
+			      const char *dir, const char *fname)
+{
+	const char *old_path, *new_fname, *new_path;
+
+	old_path = t_strconcat(dir, "/", fname, NULL);
+	new_fname = maildir_filename_generate();
+	new_path = t_strconcat(mailbox_get_path(&ctx->mbox->box),
+			       "/new/", new_fname, NULL);
+	if (rename(old_path, new_path) == 0)
+		i_warning("Fixed broken filename: %s -> %s", old_path, new_fname);
+	else if (errno != ENOENT) {
+		mail_storage_set_critical(&ctx->mbox->storage->storage,
+			"Couldn't fix a broken filename: rename(%s, %s) failed: %m",
+			old_path, new_path);
 		return -1;
 	}
 	return 0;
@@ -431,14 +469,22 @@ maildir_scan_dir(struct maildir_sync_context *ctx, bool new_dir, bool final,
 	src = t_str_new(1024);
 	dest = t_str_new(1024);
 
-	move_new = new_dir && !mailbox_is_readonly(&ctx->mbox->box) &&
-		(ctx->mbox->box.flags & MAILBOX_FLAG_DROP_RECENT) != 0 &&
-		ctx->locked;
+	move_new = new_dir && ctx->locked &&
+		((ctx->mbox->box.flags & MAILBOX_FLAG_DROP_RECENT) != 0 ||
+		 ctx->mbox->storage->set->maildir_empty_new);
 
 	errno = 0;
 	for (; (dp = readdir(dirp)) != NULL; errno = 0) {
 		if (dp->d_name[0] == '.')
 			continue;
+
+		if (dp->d_name[0] == MAILDIR_INFO_SEP) {
+			/* don't even try to use file with empty base name */
+			if (maildir_rename_empty_basename(ctx, path,
+							  dp->d_name) < 0)
+				break;
+			continue;
+		}
 
 		flags = 0;
 		if (move_new) {
@@ -569,7 +615,7 @@ static void maildir_sync_get_header(struct maildir_mailbox *mbox)
 int maildir_sync_header_refresh(struct maildir_mailbox *mbox)
 {
 	if (mail_index_refresh(mbox->box.index) < 0) {
-		mail_storage_set_index_error(&mbox->box);
+		mailbox_set_index_error(&mbox->box);
 		return -1;
 	}
 	maildir_sync_get_header(mbox);
@@ -744,13 +790,14 @@ static int maildir_sync_get_changes(struct maildir_sync_context *ctx,
 	if (mbox->synced) {
 		/* refresh index only after the first sync, i.e. avoid wasting
 		   time on refreshing it immediately after it was just opened */
-		(void)mail_index_refresh(mbox->box.index);
+		mail_index_refresh(mbox->box.index);
 	}
 	return mail_index_sync_have_any(mbox->box.index, flags) ? 1 : 0;
 }
 
-static int maildir_sync_context(struct maildir_sync_context *ctx, bool forced,
-				uint32_t *find_uid, bool *lost_files_r)
+static int ATTR_NULL(3)
+maildir_sync_context(struct maildir_sync_context *ctx, bool forced,
+		     uint32_t *find_uid, bool *lost_files_r)
 {
 	enum maildir_uidlist_sync_flags sync_flags;
 	enum maildir_uidlist_rec_flag flags;
@@ -969,35 +1016,79 @@ int maildir_sync_lookup(struct maildir_mailbox *mbox, uint32_t uid,
 	return maildir_uidlist_lookup(mbox->uidlist, uid, flags_r, fname_r);
 }
 
-int maildir_storage_sync_force(struct maildir_mailbox *mbox, uint32_t uid)
+static int maildir_sync_run(struct maildir_mailbox *mbox,
+			    enum mailbox_sync_flags flags, bool force_resync,
+			    uint32_t *uid, bool *lost_files_r)
 {
-        struct maildir_sync_context *ctx;
-	bool lost_files;
+	struct maildir_sync_context *ctx;
+	bool retry, lost_files;
 	int ret;
 
 	T_BEGIN {
-		ctx = maildir_sync_context_new(mbox, MAILBOX_SYNC_FLAG_FAST);
-		ret = maildir_sync_context(ctx, TRUE, &uid, &lost_files);
+		ctx = maildir_sync_context_new(mbox, flags);
+		ret = maildir_sync_context(ctx, force_resync, uid, lost_files_r);
+		retry = ctx->racing;
 		maildir_sync_deinit(ctx);
 	} T_END;
 
+	if (retry) T_BEGIN {
+		/* we're racing some file. retry the sync again to see if the
+		   file is really gone or not. if it is, this is a bit of
+		   unnecessary work, but if it's not, this is necessary for
+		   e.g. doveadm force-resync to work. */
+		ctx = maildir_sync_context_new(mbox, 0);
+		ret = maildir_sync_context(ctx, TRUE, NULL, &lost_files);
+		maildir_sync_deinit(ctx);
+	} T_END;
+	return ret;
+}
+
+int maildir_storage_sync_force(struct maildir_mailbox *mbox, uint32_t uid)
+{
+	bool lost_files;
+	int ret;
+
+	ret = maildir_sync_run(mbox, MAILBOX_SYNC_FLAG_FAST,
+			       TRUE, &uid, &lost_files);
 	if (uid != 0) {
 		/* maybe it's expunged. check again. */
-		T_BEGIN {
-			ctx = maildir_sync_context_new(mbox, 0);
-			ret = maildir_sync_context(ctx, TRUE, NULL,
-						   &lost_files);
-			maildir_sync_deinit(ctx);
-		} T_END;
+		ret = maildir_sync_run(mbox, 0, TRUE, NULL, &lost_files);
 	}
 	return ret;
+}
+
+int maildir_sync_refresh_flags_view(struct maildir_mailbox *mbox)
+{
+	struct mail_index_view_sync_ctx *sync_ctx;
+	bool delayed_expunges;
+
+	mail_index_refresh(mbox->box.index);
+	if (mbox->flags_view == NULL)
+		mbox->flags_view = mail_index_view_open(mbox->box.index);
+
+	sync_ctx = mail_index_view_sync_begin(mbox->flags_view,
+			MAIL_INDEX_VIEW_SYNC_FLAG_FIX_INCONSISTENT);
+	if (mail_index_view_sync_commit(&sync_ctx, &delayed_expunges) < 0) {
+		mailbox_set_index_error(&mbox->box);
+		return -1;
+	}
+	/* make sure the map stays in private memory */
+	if (mbox->flags_view->map->refcount > 1) {
+		struct mail_index_map *map;
+
+		map = mail_index_map_clone(mbox->flags_view->map);
+		mail_index_unmap(&mbox->flags_view->map);
+		mbox->flags_view->map = map;
+	}
+	mail_index_record_map_move_to_private(mbox->flags_view->map);
+	mail_index_map_move_to_memory(mbox->flags_view->map);
+	return 0;
 }
 
 struct mailbox_sync_context *
 maildir_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 {
 	struct maildir_mailbox *mbox = (struct maildir_mailbox *)box;
-	struct maildir_sync_context *ctx;
 	bool lost_files, force_resync;
 	int ret = 0;
 
@@ -1008,13 +1099,8 @@ maildir_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 
 	force_resync = (flags & MAILBOX_SYNC_FLAG_FORCE_RESYNC) != 0;
 	if (index_mailbox_want_full_sync(&mbox->box, flags)) {
-		T_BEGIN {
-			ctx = maildir_sync_context_new(mbox, flags);
-			ret = maildir_sync_context(ctx, force_resync, NULL,
-						   &lost_files);
-			maildir_sync_deinit(ctx);
-		} T_END;
-
+		ret = maildir_sync_run(mbox, flags, force_resync,
+				       NULL, &lost_files);
 		i_assert(!maildir_uidlist_is_locked(mbox->uidlist) ||
 			 (box->flags & MAILBOX_FLAG_KEEP_LOCKED) != 0);
 
@@ -1025,29 +1111,8 @@ maildir_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 	}
 
 	if (mbox->storage->set->maildir_very_dirty_syncs) {
-		struct mail_index_view_sync_ctx *sync_ctx;
-		bool b;
-
-		if (mbox->flags_view == NULL) {
-			mbox->flags_view =
-				mail_index_view_open(mbox->box.index);
-		}
-		sync_ctx = mail_index_view_sync_begin(mbox->flags_view,
-				MAIL_INDEX_VIEW_SYNC_FLAG_FIX_INCONSISTENT);
-		if (mail_index_view_sync_commit(&sync_ctx, &b) < 0) {
-			mail_storage_set_index_error(&mbox->box);
+		if (maildir_sync_refresh_flags_view(mbox) < 0)
 			ret = -1;
-		}
-		/* make sure the map stays in private memory */
-		if (mbox->flags_view->map->refcount > 1) {
-			struct mail_index_map *map;
-
-			map = mail_index_map_clone(mbox->flags_view->map);
-			mail_index_unmap(&mbox->flags_view->map);
-			mbox->flags_view->map = map;
-		}
-		mail_index_record_map_move_to_private(mbox->flags_view->map);
-		mail_index_map_move_to_memory(mbox->flags_view->map);
 		maildir_uidlist_set_all_nonsynced(mbox->uidlist);
 	}
 	mbox->synced = TRUE;

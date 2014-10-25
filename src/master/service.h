@@ -1,7 +1,7 @@
 #ifndef SERVICE_H
 #define SERVICE_H
 
-#include "network.h"
+#include "net.h"
 #include "master-settings.h"
 
 /* If a service process doesn't send its first status notification in
@@ -38,6 +38,8 @@ struct service_listener {
 			struct ip_addr ip;
 		} inetset;
 	} set;
+
+	bool reuse_port;
 };
 
 struct service {
@@ -55,7 +57,7 @@ struct service {
 	const char *extra_gids; /* comma-separated list */
 
 	/* all listeners, even those that aren't currently listening */
-	ARRAY_DEFINE(listeners, struct service_listener *);
+	ARRAY(struct service_listener *) listeners;
 	/* linked list of all processes belonging to this service */
 	struct service_process *processes;
 
@@ -100,6 +102,10 @@ struct service {
 	   start dropping pending connections */
 	struct timeout *to_drop;
 
+	/* prefork processes up to process_min_avail if there's time */
+	struct timeout *to_prefork;
+	unsigned int prefork_counter;
+
 	/* Last time a "dropping client connections" warning was logged */
 	time_t last_drop_warning;
 
@@ -120,6 +126,7 @@ struct service_list {
 	pool_t set_pool;
 	int refcount;
 	struct timeout *to_kill;
+	unsigned int fork_counter;
 
 	const struct master_settings *set;
 	const struct master_service_settings *service_set;
@@ -134,7 +141,7 @@ struct service_list {
 
 	int master_dead_pipe_fd[2];
 
-	ARRAY_DEFINE(services, struct service *);
+	ARRAY(struct service *) services;
 
 	unsigned int destroying:1;
 	unsigned int destroyed:1;
@@ -142,7 +149,8 @@ struct service_list {
 	unsigned int sigterm_sent_to_log:1;
 };
 
-extern struct hash_table *service_pids;
+HASH_TABLE_DEFINE_TYPE(pid_process, void *, struct service_process *);
+extern HASH_TABLE_TYPE(pid_process) service_pids;
 
 /* Create all services from settings */
 int services_create(const struct master_settings *set,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "passdb.h"
@@ -53,17 +53,18 @@ passdb_imap_login_callback(const struct imapc_command_reply *reply,
 		break;
 	case IMAPC_COMMAND_STATE_NO:
 		result = passdb_imap_get_failure_result(reply);
-		auth_request_log_info(request->auth_request, "imap",
+		auth_request_log_info(request->auth_request, AUTH_SUBSYS_DB,
 				      "%s", reply->text_full);
 		break;
 	case IMAPC_COMMAND_STATE_BAD:
 	case IMAPC_COMMAND_STATE_DISCONNECTED:
-		auth_request_log_error(request->auth_request, "imap",
+		auth_request_log_error(request->auth_request, AUTH_SUBSYS_DB,
 				       "%s", reply->text_full);
 		break;
 	}
 	request->verify_callback(result, request->auth_request);
 	imapc_client_deinit(&client);
+	auth_request_unref(&request->auth_request);
 }
 
 static void
@@ -85,6 +86,7 @@ passdb_imap_verify_plain(struct auth_request *auth_request,
 		t_strconcat(auth_request->set->base_dir, "/",
 			    DNS_CLIENT_SOCKET_NAME, NULL);
 	set.password = password;
+	set.max_idle_time = IMAPC_DEFAULT_MAX_IDLE_TIME;
 
 	if (module->set_have_vars) {
 		str = t_str_new(128);
@@ -96,14 +98,15 @@ passdb_imap_verify_plain(struct auth_request *auth_request,
 		var_expand(str, set.host, table);
 		set.host = t_strdup(str_c(str));
 	}
-	auth_request_log_debug(auth_request, "imap", "lookup host=%s port=%d",
-			       set.host, set.port);
+	auth_request_log_debug(auth_request, AUTH_SUBSYS_DB,
+			       "lookup host=%s port=%d", set.host, set.port);
 
 	request = p_new(auth_request->pool, struct imap_auth_request, 1);
 	request->client = imapc_client_init(&set);
 	request->auth_request = auth_request;
 	request->verify_callback = callback;
 
+	auth_request_ref(auth_request);
 	imapc_client_login(request->client, passdb_imap_login_callback,
 			   request);
 }

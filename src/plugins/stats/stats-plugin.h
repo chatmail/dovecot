@@ -6,12 +6,16 @@
 #include "mail-user.h"
 #include "mail-storage-private.h"
 
+#include <sys/time.h>
+
 #define STATS_USER_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, stats_user_module)
 
 struct mail_stats {
 	/* user/system CPU time used */
 	struct timeval user_cpu, sys_cpu;
+	/* clock time used (not counting the time in ioloop wait) */
+	struct timeval clock_time;
 	/* minor / major page faults */
 	uint32_t min_faults, maj_faults;
 	/* voluntary / involuntary context switches */

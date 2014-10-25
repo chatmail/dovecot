@@ -1,10 +1,11 @@
-/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 
 #if defined(PASSDB_CHECKPASSWORD) || defined(USERDB_CHECKPASSWORD)
 
 #include "lib-signals.h"
+#include "array.h"
 #include "buffer.h"
 #include "str.h"
 #include "ioloop.h"
@@ -29,7 +30,7 @@ struct chkpw_auth_request {
 	char *auth_password;
 
 	db_checkpassword_callback_t *callback;
-	void *context;
+	void (*request_callback)();
 
 	pid_t pid;
 	int fd_out, fd_in;
@@ -45,22 +46,20 @@ struct chkpw_auth_request {
 struct db_checkpassword {
 	char *checkpassword_path, *checkpassword_reply_path;
 
-	struct hash_table *clients;
+	HASH_TABLE(void *, struct chkpw_auth_request *) clients;
 	struct child_wait *child_wait;
 };
 
-static void env_put_extra_fields(const char *extra_fields)
+static void
+env_put_extra_fields(const ARRAY_TYPE(auth_field) *extra_fields)
 {
-	const char *const *tmp;
-	const char *key, *p;
+	const struct auth_field *field;
+	const char *key, *value;
 
-	for (tmp = t_strsplit(extra_fields, "\t"); *tmp != NULL; tmp++) {
-		key = t_str_ucase(t_strcut(*tmp, '='));
-		p = strchr(*tmp, '=');
-		if (p == NULL)
-			env_put(t_strconcat(key, "=1", NULL));
-		else
-			env_put(t_strconcat(key, p, NULL));
+	array_foreach(extra_fields, field) {
+		key = t_str_ucase(field->key);
+		value = field->value != NULL ? field->value : "1";
+		env_put(t_strconcat(key, "=", value, NULL));
 	}
 }
 
@@ -115,7 +114,7 @@ static void checkpassword_finish(struct chkpw_auth_request **_request,
 
 	extra_fields = t_strsplit_tabescaped(str_c(request->input_buf));
 	request->callback(request->request, status, extra_fields,
-			  request->context);
+			  request->request_callback);
 	checkpassword_request_free(&request);
 }
 
@@ -142,14 +141,14 @@ checkpassword_request_finish_auth(struct chkpw_auth_request *request)
 	case 1:
 		/* (1 is additionally defined in vpopmail for
 		   "pop/smtp/webmal/ imap/access denied") */
-		auth_request_log_info(request->request, "checkpassword",
+		auth_request_log_info(request->request, AUTH_SUBSYS_DB,
 				      "Login failed (status=%d)",
 				      request->exit_status);
 		checkpassword_finish(&request, DB_CHECKPASSWORD_STATUS_FAILURE);
 		break;
 	case 0:
 		if (request->input_buf->used == 0) {
-			auth_request_log_error(request->request, "checkpassword",
+			auth_request_log_error(request->request, AUTH_SUBSYS_DB,
 					       "Received no input");
 			checkpassword_internal_failure(&request);
 			break;
@@ -158,7 +157,7 @@ checkpassword_request_finish_auth(struct chkpw_auth_request *request)
 		break;
 	case 2:
 		/* checkpassword is called with wrong parameters? unlikely */
-		auth_request_log_error(request->request, "checkpassword",
+		auth_request_log_error(request->request, AUTH_SUBSYS_DB,
 			"Child %s exited with status 2 (tried to use "
 			"userdb-only checkpassword program for passdb?)",
 			dec2str(request->pid));
@@ -168,7 +167,7 @@ checkpassword_request_finish_auth(struct chkpw_auth_request *request)
 		/* temporary problem, treat as internal error */
 	default:
 		/* whatever error.. */
-		auth_request_log_error(request->request, "checkpassword",
+		auth_request_log_error(request->request, AUTH_SUBSYS_DB,
 			"Child %s exited with status %d",
 			dec2str(request->pid), request->exit_status);
 		checkpassword_internal_failure(&request);
@@ -182,7 +181,7 @@ checkpassword_request_finish_lookup(struct chkpw_auth_request *request)
 	switch (request->exit_status) {
 	case 3:
 		/* User does not exist. */
-		auth_request_log_info(request->request, "userdb-checkpassword",
+		auth_request_log_info(request->request, AUTH_SUBSYS_DB,
 				      "User unknown");
 		checkpassword_finish(&request, DB_CHECKPASSWORD_STATUS_FAILURE);
 		break;
@@ -190,7 +189,7 @@ checkpassword_request_finish_lookup(struct chkpw_auth_request *request)
 		/* This is intentionally not 0. checkpassword-reply exits with
 		   2 on success when AUTHORIZED is set. */
 		if (request->input_buf->used == 0) {
-			auth_request_log_error(request->request, "checkpassword",
+			auth_request_log_error(request->request, AUTH_SUBSYS_DB,
 					       "Received no input");
 			checkpassword_internal_failure(&request);
 			break;
@@ -199,7 +198,7 @@ checkpassword_request_finish_lookup(struct chkpw_auth_request *request)
 		break;
 	default:
 		/* whatever error... */
-		auth_request_log_error(request->request, "userdb-checkpassword",
+		auth_request_log_error(request->request, AUTH_SUBSYS_DB,
 			"Child %s exited with status %d",
 			dec2str(request->pid), request->exit_status);
 		checkpassword_internal_failure(&request);
@@ -227,7 +226,18 @@ static void env_put_auth_vars(struct auth_request *request)
 
 	tab = auth_request_get_var_expand_table(request, NULL);
 	for (i = 0; tab[i].key != '\0' || tab[i].long_key != NULL; i++) {
-		if (tab[i].long_key != NULL && tab[i].value != NULL) {
+		/* avoid keeping passwords in environment .. just in case
+		   an attacker might find it from there. environment is no
+		   longer world-readable in modern OSes, but maybe the attacker
+		   could be running with the same UID. of course then the
+		   attacker could usually ptrace() the process, except that is
+		   disabled on some secured systems. so, although I find it
+		   highly unlikely anyone could actually attack Dovecot this
+		   way in a real system, be safe just in case. besides, lets
+		   try to keep at least minimally compatible with the
+		   checkpassword API. */
+		if (tab[i].long_key != NULL && tab[i].value != NULL &&
+		    strcasecmp(tab[i].long_key, "password") != 0) {
 			env_put(t_strdup_printf("AUTH_%s=%s",
 						t_str_ucase(tab[i].long_key),
 						tab[i].value));
@@ -241,6 +251,7 @@ static void checkpassword_setup_env(struct auth_request *request)
 	   pipe, also pass some other possibly interesting information
 	   via environment. Use UCSPI names for local/remote IPs. */
 	env_put("PROTO=TCP"); /* UCSPI */
+	env_put(t_strdup_printf("ORIG_UID=%s", dec2str(getuid())));
 	env_put(t_strconcat("SERVICE=", request->service, NULL));
 	if (request->local_ip.family != 0) {
 		env_put(t_strconcat("TCPLOCALIP=",
@@ -270,9 +281,9 @@ static void checkpassword_setup_env(struct auth_request *request)
 		env_put(t_strconcat("MASTER_USER=",
 				    request->master_user, NULL));
 	}
-	if (request->extra_fields != NULL) {
-		const char *fields =
-			auth_stream_reply_export(request->extra_fields);
+	if (!auth_fields_is_empty(request->extra_fields)) {
+		const ARRAY_TYPE(auth_field) *fields =
+			auth_fields_export(request->extra_fields);
 
 		/* extra fields could come from master db */
 		env_put_extra_fields(fields);
@@ -304,15 +315,15 @@ static void checkpassword_child_input(struct chkpw_auth_request *request)
 	}
 
 	if (ret < 0) {
-		auth_request_log_error(request->request,
-			"checkpassword", "read() failed: %m");
+		auth_request_log_error(request->request, AUTH_SUBSYS_DB,
+				       "read() failed: %m");
 		checkpassword_internal_failure(&request);
 	} else if (strchr(str_c(request->input_buf), '\n') != NULL) {
-		auth_request_log_error(request->request, "checkpassword",
+		auth_request_log_error(request->request, AUTH_SUBSYS_DB,
 				       "LF characters in checkpassword reply");
 		checkpassword_internal_failure(&request);
 	} else {
-		auth_request_log_debug(request->request, "checkpassword",
+		auth_request_log_debug(request->request, AUTH_SUBSYS_DB,
 			"Received input: %s", str_c(request->input_buf));
 		checkpassword_request_close(request);
 		checkpassword_request_half_finish(request);
@@ -351,11 +362,11 @@ static void checkpassword_child_output(struct chkpw_auth_request *request)
 		    size - request->output_pos);
 	if (ret <= 0) {
 		if (ret < 0) {
-			auth_request_log_error(request->request,
-				"checkpassword", "write() failed: %m");
+			auth_request_log_error(request->request, AUTH_SUBSYS_DB,
+					       "write() failed: %m");
 		} else {
-			auth_request_log_error(request->request,
-				"checkpassword", "write() returned 0");
+			auth_request_log_error(request->request, AUTH_SUBSYS_DB,
+					       "write() returned 0");
 		}
 		checkpassword_internal_failure(&request);
 		return;
@@ -382,7 +393,7 @@ checkpassword_exec(struct db_checkpassword *db, struct auth_request *request,
 	/* fd 3 is used to send the username+password for the script
 	   fd 4 is used to communicate with checkpassword-reply */
 	if (dup2(fd_out, 3) < 0 || dup2(fd_in, 4) < 0) {
-		auth_request_log_error(request, "checkpassword",
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
 				       "dup2() failed: %m");
 		exit(111);
 	}
@@ -405,7 +416,7 @@ checkpassword_exec(struct db_checkpassword *db, struct auth_request *request,
 	checkpassword_setup_env(request);
 	cmd = checkpassword_get_cmd(request, db->checkpassword_path,
 				    db->checkpassword_reply_path);
-	auth_request_log_debug(request, "checkpassword", "execute: %s", cmd);
+	auth_request_log_debug(request, AUTH_SUBSYS_DB, "execute: %s", cmd);
 
 	/* very simple argument splitting. */
 	args = t_strsplit(cmd, " ");
@@ -424,20 +435,19 @@ static void sigchld_handler(const struct child_wait_status *status,
 	request->exited = TRUE;
 
 	if (WIFSIGNALED(status->status)) {
-		auth_request_log_error(request->request, "checkpassword",
+		auth_request_log_error(request->request, AUTH_SUBSYS_DB,
 			"Child %s died with signal %d",
 			dec2str(status->pid), WTERMSIG(status->status));
 		checkpassword_internal_failure(&request);
 	} else if (WIFEXITED(status->status)) {
 		request->exit_status = WEXITSTATUS(status->status);
 
-		auth_request_log_debug(request->request,
-				       "checkpassword", "exit_status=%d",
-				       request->exit_status);
+		auth_request_log_debug(request->request, AUTH_SUBSYS_DB,
+				       "exit_status=%d", request->exit_status);
 		checkpassword_request_half_finish(request);
 	} else {
 		/* shouldn't happen */
-		auth_request_log_debug(request->request, "checkpassword",
+		auth_request_log_debug(request->request, AUTH_SUBSYS_DB,
 				       "Child %s exited with status=%d",
 				       dec2str(status->pid), status->status);
 		checkpassword_internal_failure(&request);
@@ -448,7 +458,7 @@ void db_checkpassword_call(struct db_checkpassword *db,
 			   struct auth_request *request,
 			   const char *auth_password,
 			   db_checkpassword_callback_t *callback,
-			   void *context)
+			   void (*request_callback)())
 {
 	struct chkpw_auth_request *chkpw_auth_request;
 	unsigned int output_len;
@@ -460,55 +470,55 @@ void db_checkpassword_call(struct db_checkpassword *db,
 	if (auth_password != NULL)
 		output_len += strlen(auth_password);
 	if (output_len > CHECKPASSWORD_MAX_REQUEST_LEN) {
-		auth_request_log_info(request, "checkpassword",
+		auth_request_log_info(request, AUTH_SUBSYS_DB,
 			"Username+password combination too long (%u bytes)",
 			output_len);
 		callback(request, DB_CHECKPASSWORD_STATUS_FAILURE,
-			 NULL, context);
+			 NULL, request_callback);
 		return;
 	}
 
 	fd_in[0] = -1;
 	if (pipe(fd_in) < 0 || pipe(fd_out) < 0) {
-		auth_request_log_error(request, "checkpassword",
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
 				       "pipe() failed: %m");
 		if (fd_in[0] != -1) {
-			(void)close(fd_in[0]);
-			(void)close(fd_in[1]);
+			i_close_fd(&fd_in[0]);
+			i_close_fd(&fd_in[1]);
 		}
 		callback(request, DB_CHECKPASSWORD_STATUS_INTERNAL_FAILURE,
-			 NULL, context);
+			 NULL, request_callback);
 		return;
 	}
 
 	pid = fork();
 	if (pid == -1) {
-		auth_request_log_error(request, "checkpassword",
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
 				       "fork() failed: %m");
-		(void)close(fd_in[0]);
-		(void)close(fd_in[1]);
-		(void)close(fd_out[0]);
-		(void)close(fd_out[1]);
+		i_close_fd(&fd_in[0]);
+		i_close_fd(&fd_in[1]);
+		i_close_fd(&fd_out[0]);
+		i_close_fd(&fd_out[1]);
 		callback(request, DB_CHECKPASSWORD_STATUS_INTERNAL_FAILURE,
-			 NULL, context);
+			 NULL, request_callback);
 		return;
 	}
 
 	if (pid == 0) {
 		/* child */
-		(void)close(fd_in[0]);
-		(void)close(fd_out[1]);
+		i_close_fd(&fd_in[0]);
+		i_close_fd(&fd_out[1]);
 		checkpassword_exec(db, request, fd_in[1], fd_out[0],
 				   auth_password != NULL);
 		/* not reached */
 	}
 
 	if (close(fd_in[1]) < 0) {
-		auth_request_log_error(request, "checkpassword",
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
 				       "close(fd_in[1]) failed: %m");
 	}
 	if (close(fd_out[0]) < 0) {
-		auth_request_log_error(request, "checkpassword",
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
 				       "close(fd_out[0]) failed: %m");
 	}
 
@@ -523,7 +533,7 @@ void db_checkpassword_call(struct db_checkpassword *db,
 	chkpw_auth_request->output_len = output_len;
 	chkpw_auth_request->input_buf = str_new(default_pool, 256);
 	chkpw_auth_request->callback = callback;
-	chkpw_auth_request->context = context;
+	chkpw_auth_request->request_callback = request_callback;
 
 	chkpw_auth_request->io_in =
 		io_add(fd_in[0], IO_READ, checkpassword_child_input,
@@ -545,8 +555,7 @@ db_checkpassword_init(const char *checkpassword_path,
 	db = i_new(struct db_checkpassword, 1);
 	db->checkpassword_path = i_strdup(checkpassword_path);
 	db->checkpassword_reply_path = i_strdup(checkpassword_reply_path);
-	db->clients = hash_table_create(default_pool, default_pool, 0,
-					NULL, NULL);
+	hash_table_create_direct(&db->clients, default_pool, 0);
 	db->child_wait =
 		child_wait_new_with_pid((pid_t)-1, sigchld_handler, db);
 	return db;
@@ -556,15 +565,14 @@ void db_checkpassword_deinit(struct db_checkpassword **_db)
 {
 	struct db_checkpassword *db = *_db;
 	struct hash_iterate_context *iter;
-	void *key, *value;
+	void *key;
+	struct chkpw_auth_request *request;
 
 	*_db = NULL;
 
 	iter = hash_table_iterate_init(db->clients);
-	while (hash_table_iterate(iter, &key, &value)) {
-		struct chkpw_auth_request *request = value;
+	while (hash_table_iterate(iter, db->clients, &key, &request))
 		checkpassword_internal_failure(&request);
-	}
 	hash_table_iterate_deinit(&iter);
 
 	child_wait_free(&db->child_wait);

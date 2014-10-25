@@ -1,26 +1,42 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "ioloop.h"
 #include "istream.h"
 #include "index-mail.h"
+#include "pop3c-settings.h"
 #include "pop3c-client.h"
 #include "pop3c-sync.h"
 #include "pop3c-storage.h"
 
 static int pop3c_mail_get_received_date(struct mail *_mail, time_t *date_r)
 {
-	mail_storage_set_error(_mail->box->storage, MAIL_ERROR_NOTPOSSIBLE,
-			       "POP3 has no received date");
-	*date_r = (time_t)-1;
-	return -1;
+	struct pop3c_mailbox *mbox = (struct pop3c_mailbox *)_mail->box;
+	int tz;
+
+	if (mbox->storage->set->pop3c_quick_received_date) {
+		/* we don't care about the date, just return the current date */
+		*date_r = ioloop_time;
+		return 0;
+	}
+
+	/* FIXME: we could also parse the first Received: header and get
+	   the date from there, but since this code is unlikely to be called
+	   except during migration, I don't think it really matters. */
+	return index_mail_get_date(_mail, date_r, &tz);
 }
 
 static int pop3c_mail_get_save_date(struct mail *_mail, time_t *date_r)
 {
-	mail_storage_set_error(_mail->box->storage, MAIL_ERROR_NOTPOSSIBLE,
-			       "POP3 has no save date");
-	*date_r = (time_t)-1;
-	return -1;
+	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail_data *data = &mail->data;
+
+	if (data->save_date == (time_t)-1) {
+		/* FIXME: we could use a value stored in cache */
+		return pop3c_mail_get_received_date(_mail, date_r);
+	}
+	*date_r = data->save_date;
+	return 0;
 }
 
 static int pop3c_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
@@ -30,7 +46,7 @@ static int pop3c_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 	struct message_size hdr_size, body_size;
 	struct istream *input;
 
-	if (mail->data.virtual_size != 0) {
+	if (mail->data.virtual_size != (uoff_t)-1) {
 		/* virtual size is already known. it's the same as our
 		   (correct) physical size */
 		*size_r = mail->data.virtual_size;
@@ -110,10 +126,12 @@ pop3c_mail_get_stream(struct mail *_mail, bool get_body,
 
 	if (mail->data.stream == NULL) {
 		capa = pop3c_client_get_capabilities(mbox->client);
-		if (get_body || (capa & POP3C_CAPABILITY_TOP) == 0)
+		if (get_body || (capa & POP3C_CAPABILITY_TOP) == 0) {
 			cmd = t_strdup_printf("RETR %u\r\n", _mail->seq);
-		else
-			cmd = t_strdup_printf("TOP %u\r\n", _mail->seq);
+			get_body = TRUE;
+		} else {
+			cmd = t_strdup_printf("TOP %u 0\r\n", _mail->seq);
+		}
 		if (pop3c_client_cmd_stream(mbox->client, cmd,
 					    &input, &error) < 0) {
 			mail_storage_set_error(mbox->box.storage,
@@ -130,7 +148,8 @@ pop3c_mail_get_stream(struct mail *_mail, bool get_body,
 			}
 		}
 		i_stream_set_name(mail->data.stream, t_strcut(cmd, '\r'));
-		pop3c_mail_cache_size(mail);
+		if (get_body)
+			pop3c_mail_cache_size(mail);
 	}
 	return index_mail_init_stream(mail, hdr_size, body_size, stream_r);
 }
@@ -143,6 +162,7 @@ pop3c_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 
 	switch (field) {
 	case MAIL_FETCH_UIDL_BACKEND:
+	case MAIL_FETCH_GUID:
 		if (mbox->msg_uidls == NULL) {
 			if (pop3c_sync_get_uidls(mbox) < 0)
 				return -1;
@@ -169,6 +189,7 @@ struct mail_vfuncs pop3c_mail_vfuncs = {
 	index_mail_get_keywords,
 	index_mail_get_keyword_indexes,
 	index_mail_get_modseq,
+	index_mail_get_pvt_modseq,
 	index_mail_get_parts,
 	index_mail_get_date,
 	pop3c_mail_get_received_date,
@@ -179,11 +200,13 @@ struct mail_vfuncs pop3c_mail_vfuncs = {
 	index_mail_get_headers,
 	index_mail_get_header_stream,
 	pop3c_mail_get_stream,
+	index_mail_get_binary_stream,
 	pop3c_mail_get_special,
 	index_mail_get_real_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
 	index_mail_update_modseq,
+	index_mail_update_pvt_modseq,
 	NULL,
 	index_mail_expunge,
 	index_mail_set_cache_corrupted,

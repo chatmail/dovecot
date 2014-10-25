@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -52,7 +52,7 @@ struct mail_storage_service_ctx {
 	struct master_service *service;
 	const char *default_log_prefix;
 
-	struct auth_master_connection *conn;
+	struct auth_master_connection *conn, *iter_conn;
 	struct auth_master_user_list_ctx *auth_list;
 	const struct setting_parser_info **set_roots;
 	enum mail_storage_service_flags flags;
@@ -60,8 +60,12 @@ struct mail_storage_service_ctx {
 	const char *set_cache_module, *set_cache_service;
 	struct master_service_settings_cache *set_cache;
 
+	pool_t userdb_next_pool;
+	const char *const **userdb_next_fieldsp;
+
 	unsigned int debug:1;
 	unsigned int log_initialized:1;
+	unsigned int config_permission_denied:1;
 };
 
 struct mail_storage_service_user {
@@ -71,12 +75,15 @@ struct mail_storage_service_user {
 	enum mail_storage_service_flags flags;
 
 	struct ioloop_context *ioloop_ctx;
-	const char *log_prefix;
+	const char *log_prefix, *auth_token, *auth_user;
 
 	const char *system_groups_user, *uid_source, *gid_source;
 	const struct mail_user_settings *user_set;
 	const struct setting_parser_info *user_info;
 	struct setting_parser_context *set_parser;
+
+	unsigned int anonymous:1;
+	unsigned int admin:1;
 };
 
 struct module *mail_storage_service_modules = NULL;
@@ -252,6 +259,8 @@ user_reply_handle(struct mail_storage_service_ctx *ctx,
 		set_keyval(ctx, user, "mail_chroot", chroot);
 	}
 
+	user->anonymous = reply->anonymous;
+
 	str = array_get(&reply->extra_fields, &count);
 	for (i = 0; i < count; i++) {
 		line = str[i];
@@ -267,6 +276,13 @@ user_reply_handle(struct mail_storage_service_ctx *ctx,
 					i_error("setpriority(%d) failed: %m", n);
 			}
 #endif
+		} else if (strncmp(line, "auth_token=", 11) == 0) {
+			user->auth_token = p_strdup(user->pool, line+11);
+		} else if (strncmp(line, "auth_user=", 10) == 0) {
+			user->auth_user = p_strdup(user->pool, line+10);
+		} else if (strncmp(line, "admin=", 6) == 0) {
+			user->admin = line[6] == 'y' || line[6] == 'Y' ||
+				line[6] == '1';
 		} else T_BEGIN {
 			ret = set_line(ctx, user, line);
 		} T_END;
@@ -293,7 +309,8 @@ service_auth_userdb_lookup(struct mail_storage_service_ctx *ctx,
 	int ret;
 
 	memset(&info, 0, sizeof(info));
-	info.service = ctx->service->name;
+	info.service = input->service != NULL ? input->service :
+		ctx->service->name;
 	info.local_ip = input->local_ip;
 	info.remote_ip = input->remote_ip;
 	info.local_port = input->local_port;
@@ -361,6 +378,7 @@ static bool parse_gid(const char *str, gid_t *gid_r, const char **error_r)
 
 static const struct var_expand_table *
 get_var_expand_table(struct master_service *service,
+		     struct mail_storage_service_user *user,
 		     struct mail_storage_service_input *input,
 		     struct mail_storage_service_privileges *priv)
 {
@@ -375,6 +393,9 @@ get_var_expand_table(struct master_service *service,
 		{ 'i', NULL, "uid" },
 		{ '\0', NULL, "gid" },
 		{ '\0', NULL, "session" },
+		{ '\0', NULL, "auth_user" },
+		{ '\0', NULL, "auth_username" },
+		{ '\0', NULL, "auth_domain" },
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
@@ -393,6 +414,15 @@ get_var_expand_table(struct master_service *service,
 	tab[7].value = dec2str(priv->uid == (uid_t)-1 ? geteuid() : priv->uid);
 	tab[8].value = dec2str(priv->gid == (gid_t)-1 ? getegid() : priv->gid);
 	tab[9].value = input->session_id;
+	if (user == NULL || user->auth_user == NULL) {
+		tab[10].value = tab[0].value;
+		tab[11].value = tab[1].value;
+		tab[12].value = tab[2].value;
+	} else {
+		tab[10].value = user->auth_user;
+		tab[11].value = t_strcut(user->auth_user, '@');
+		tab[12].value = strchr(user->auth_user, '@');
+	}
 	return tab;
 }
 
@@ -405,12 +435,12 @@ mail_storage_service_get_var_expand_table(struct mail_storage_service_ctx *ctx,
 	memset(&priv, 0, sizeof(priv));
 	priv.uid = (uid_t)-1;
 	priv.gid = (gid_t)-1;
-	return get_var_expand_table(ctx->service, input, &priv);
+	return get_var_expand_table(ctx->service, NULL, input, &priv);
 }
 
 static const char *
 user_expand_varstr(struct master_service *service,
-		   struct mail_storage_service_input *input,
+		   struct mail_storage_service_user *user,
 		   struct mail_storage_service_privileges *priv,
 		   const char *str)
 {
@@ -422,7 +452,8 @@ user_expand_varstr(struct master_service *service,
 	i_assert(*str == SETTING_STRVAR_UNEXPANDED[0]);
 
 	ret = t_str_new(256);
-	var_expand(ret, str + 1, get_var_expand_table(service, input, priv));
+	var_expand(ret, str + 1,
+		   get_var_expand_table(service, user, &user->input, priv));
 	return str_c(ret);
 }
 
@@ -477,11 +508,20 @@ service_parse_privileges(struct mail_storage_service_ctx *ctx,
 
 	/* variable strings are expanded in mail_user_init(),
 	   but we need the home and chroot sooner so do them separately here. */
-	priv_r->home = user_expand_varstr(ctx->service, &user->input, priv_r,
+	priv_r->home = user_expand_varstr(ctx->service, user, priv_r,
 					  user->user_set->mail_home);
-	priv_r->chroot = user_expand_varstr(ctx->service, &user->input, priv_r,
+	priv_r->chroot = user_expand_varstr(ctx->service, user, priv_r,
 					    user->user_set->mail_chroot);
 	return 0;
+}
+
+static void mail_storage_service_seteuid_root(void)
+{
+	if (seteuid(0) < 0) {
+		i_fatal("mail-storage-service: "
+			"Failed to restore temporarily dropped root privileges: "
+			"seteuid(0) failed: %m");
+	}
 }
 
 static int
@@ -561,8 +601,7 @@ service_drop_privileges(struct mail_storage_service_user *user,
 			if (current_euid != 0) {
 				/* we're changing the UID,
 				   switch back to root first */
-				if (seteuid(0) < 0)
-					i_fatal("seteuid(0) failed: %m");
+				mail_storage_service_seteuid_root();
 			}
 			setuid_uid = rset.uid;
 		}
@@ -577,7 +616,8 @@ service_drop_privileges(struct mail_storage_service_user *user,
 	}
 	if (setuid_uid != 0 && !setenv_only) {
 		if (seteuid(setuid_uid) < 0)
-			i_fatal("seteuid(%s) failed: %m", dec2str(setuid_uid));
+			i_fatal("mail-storage-service: seteuid(%s) failed: %m",
+				dec2str(setuid_uid));
 	}
 	return 0;
 }
@@ -600,12 +640,21 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 			   &user->input.local_ip, &user->input.remote_ip);
 	mail_user->uid = priv->uid == (uid_t)-1 ? geteuid() : priv->uid;
 	mail_user->gid = priv->gid == (gid_t)-1 ? getegid() : priv->gid;
-
+	mail_user->anonymous = user->anonymous;
+	mail_user->admin = user->admin;
+	mail_user->auth_token = p_strdup(mail_user->pool, user->auth_token);
+	mail_user->auth_user = p_strdup(mail_user->pool, user->auth_user);
+	
 	mail_set = mail_user_set_get_storage_set(mail_user);
 
 	if (mail_set->mail_debug) {
-		i_debug("Effective uid=%s, gid=%s, home=%s",
-			dec2str(geteuid()), dec2str(getegid()), home);
+		string_t *str = t_str_new(64);
+
+		str_printfa(str, "Effective uid=%s, gid=%s, home=%s",
+			    dec2str(geteuid()), dec2str(getegid()), home);
+		if (*priv->chroot != '\0')
+			str_printfa(str, ", chroot=%s", priv->chroot);
+		i_debug("%s", str_c(str));
 	}
 
 	if ((user->flags & MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP) != 0 &&
@@ -646,14 +695,14 @@ static void mail_storage_service_io_activate(void *context)
 {
 	struct mail_storage_service_user *user = context;
 
-	i_set_failure_prefix(user->log_prefix);
+	i_set_failure_prefix("%s", user->log_prefix);
 }
 
 static void mail_storage_service_io_deactivate(void *context)
 {
 	struct mail_storage_service_user *user = context;
 
-	i_set_failure_prefix(user->service_ctx->default_log_prefix);
+	i_set_failure_prefix("%s", user->service_ctx->default_log_prefix);
 }
 
 static void
@@ -667,7 +716,7 @@ mail_storage_service_init_log(struct mail_storage_service_ctx *ctx,
 
 		str = t_str_new(256);
 		var_expand(str, user->user_set->mail_log_prefix,
-			   get_var_expand_table(ctx->service, &user->input, priv));
+			   get_var_expand_table(ctx->service, user, &user->input, priv));
 		user->log_prefix = p_strdup(user->pool, str_c(str));
 	} T_END;
 
@@ -720,8 +769,23 @@ mail_storage_service_init(struct master_service *service,
 			  enum mail_storage_service_flags flags)
 {
 	struct mail_storage_service_ctx *ctx;
+	const char *version;
 	pool_t pool;
 	unsigned int count;
+
+	version = master_service_get_version_string(service);
+	if (version != NULL && strcmp(version, PACKAGE_VERSION) != 0) {
+		i_fatal("Version mismatch: libdovecot-storage.so is '%s', "
+			"while the running Dovecot binary is '%s'",
+			PACKAGE_VERSION, version);
+	}
+
+	if ((flags & MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP) != 0 &&
+	    geteuid() != 0) {
+		/* service { user } isn't root. the permission drop can't be
+		   temporary. */
+		flags &= ~MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP;
+	}
 
 	(void)umask(0077);
 	io_loop_set_time_moved_callback(current_ioloop,
@@ -799,6 +863,8 @@ int mail_storage_service_read_settings(struct mail_storage_service_ctx *ctx,
 	enum mail_storage_service_flags flags;
 	unsigned int i;
 
+	ctx->config_permission_denied = FALSE;
+
 	flags = input == NULL ? ctx->flags :
 		mail_storage_service_input_get_flags(ctx, input);
 
@@ -820,7 +886,9 @@ int mail_storage_service_read_settings(struct mail_storage_service_ctx *ctx,
 		set_input.local_ip = input->local_ip;
 		set_input.remote_ip = input->remote_ip;
 	}
-	if (ctx->set_cache == NULL) {
+	if (input == NULL) {
+		/* global settings read - don't create a cache for thi */
+	} else if (ctx->set_cache == NULL) {
 		ctx->set_cache_module = p_strdup(ctx->pool, set_input.module);
 		ctx->set_cache_service = p_strdup(ctx->pool, set_input.service);
 		ctx->set_cache = master_service_settings_cache_init(
@@ -833,7 +901,8 @@ int mail_storage_service_read_settings(struct mail_storage_service_ctx *ctx,
 
 	dyn_parsers = mail_storage_get_dynamic_parsers(pool);
 	if (null_strcmp(set_input.module, ctx->set_cache_module) == 0 &&
-	    null_strcmp(set_input.service, ctx->set_cache_service) == 0) {
+	    null_strcmp(set_input.service, ctx->set_cache_service) == 0 &&
+	    ctx->set_cache != NULL) {
 		if (master_service_settings_cache_read(ctx->set_cache,
 						       &set_input, dyn_parsers,
 						       parser_r, error_r) < 0) {
@@ -847,6 +916,8 @@ int mail_storage_service_read_settings(struct mail_storage_service_ctx *ctx,
 						 &set_output, error_r) < 0) {
 			*error_r = t_strdup_printf(
 				"Error reading configuration: %s", *error_r);
+			ctx->config_permission_denied =
+				set_output.permission_denied;
 			return -1;
 		}
 		*parser_r = ctx->service->set_parser;
@@ -864,6 +935,16 @@ int mail_storage_service_read_settings(struct mail_storage_service_ctx *ctx,
 	return -1;
 }
 
+void mail_storage_service_set_auth_conn(struct mail_storage_service_ctx *ctx,
+					struct auth_master_connection *conn)
+{
+	i_assert(ctx->conn == NULL);
+	i_assert(mail_user_auth_master_conn == NULL);
+
+	ctx->conn = conn;
+	mail_user_auth_master_conn = conn;
+}
+
 static void
 mail_storage_service_first_init(struct mail_storage_service_ctx *ctx,
 				const struct setting_parser_info *user_info,
@@ -871,17 +952,13 @@ mail_storage_service_first_init(struct mail_storage_service_ctx *ctx,
 {
 	enum auth_master_flags flags = 0;
 
-	i_assert(ctx->conn == NULL);
-
 	ctx->debug = mail_user_set_get_mail_debug(user_info, user_set);
 	if (ctx->debug)
 		flags |= AUTH_MASTER_FLAG_DEBUG;
 	if ((ctx->flags & MAIL_STORAGE_SERVICE_FLAG_NO_IDLE_TIMEOUT) != 0)
 		flags |= AUTH_MASTER_FLAG_NO_IDLE_TIMEOUT;
-	ctx->conn = auth_master_init(user_set->auth_socket_path, flags);
-
-	i_assert(mail_user_auth_master_conn == NULL);
-	mail_user_auth_master_conn = ctx->conn;
+	mail_storage_service_set_auth_conn(ctx,
+		auth_master_init(user_set->auth_socket_path, flags));
 }
 
 static void
@@ -897,7 +974,7 @@ mail_storage_service_load_modules(struct mail_storage_service_ctx *ctx,
 		return;
 
 	memset(&mod_set, 0, sizeof(mod_set));
-	mod_set.version = master_service_get_version_string(ctx->service);
+	mod_set.abi_version = DOVECOT_ABI_VERSION;
 	mod_set.binary_name = master_service_get_name(ctx->service);
 	mod_set.setting_name = "mail_plugins";
 	mod_set.require_init_funcs = TRUE;
@@ -907,6 +984,21 @@ mail_storage_service_load_modules(struct mail_storage_service_ctx *ctx,
 		module_dir_load_missing(mail_storage_service_modules,
 					user_set->mail_plugin_dir,
 					user_set->mail_plugins, &mod_set);
+}
+
+static int extra_field_key_cmp_p(const char *const *s1, const char *const *s2)
+{
+	const char *p1 = *s1, *p2 = *s2;
+
+	for (; *p1 == *p2; p1++, p2++) {
+		if (*p1 == '\0')
+			return 0;
+	}
+	if (*p1 == '=')
+		return -1;
+	if (*p2 == '=')
+		return 1;
+	return *p1 - *p2;
 }
 
 int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
@@ -922,21 +1014,35 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 	const char *const *userdb_fields, *error;
 	struct auth_user_reply reply;
 	const struct setting_parser_context *set_parser;
+	void **sets;
 	pool_t user_pool, temp_pool;
 	int ret = 1;
 
-	user_pool = pool_alloconly_create("mail storage service user", 1024*8);
+	user_pool = pool_alloconly_create("mail storage service user", 1024*6);
+	flags = mail_storage_service_input_get_flags(ctx, input);
+
+	if ((flags & MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP) != 0 &&
+	    geteuid() != 0) {
+		/* we dropped privileges only temporarily. switch back to root
+		   before reading settings, so we'll definitely have enough
+		   permissions to connect to the config socket. */
+		mail_storage_service_seteuid_root();
+	}
 
 	if (mail_storage_service_read_settings(ctx, input, user_pool,
 					       &user_info, &set_parser,
 					       &error) < 0) {
+		if (ctx->config_permission_denied) {
+			/* just restart and maybe next time we will open the
+			   config socket before dropping privileges */
+			i_fatal("user %s: %s", username, error);
+		}
 		i_error("user %s: %s", username, error);
 		pool_unref(&user_pool);
 		*error_r = MAIL_ERRSTR_CRITICAL_MSG;
 		return -1;
 	}
 
-	flags = mail_storage_service_input_get_flags(ctx, input);
 	if ((flags & MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT) == 0 &&
 	    !ctx->log_initialized) {
 		/* initialize logging again, in case we only read the
@@ -945,14 +1051,22 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 		master_service_init_log(ctx->service,
 			t_strconcat(ctx->service->name, ": ", NULL));
 	}
-	user_set = settings_parser_get_list(set_parser)[1];
+	sets = master_service_settings_parser_get_others(master_service,
+							 set_parser);
+	user_set = sets[0];
 
 	if (ctx->conn == NULL)
 		mail_storage_service_first_init(ctx, user_info, user_set);
 	/* load global plugins */
 	mail_storage_service_load_modules(ctx, user_info, user_set);
 
-	temp_pool = pool_alloconly_create("userdb lookup", 2048);
+	if (ctx->userdb_next_pool == NULL)
+		temp_pool = pool_alloconly_create("userdb lookup", 2048);
+	else {
+		temp_pool = ctx->userdb_next_pool;
+		ctx->userdb_next_pool = NULL;
+		pool_ref(temp_pool);
+	}
 	if ((flags & MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP) != 0) {
 		ret = service_auth_userdb_lookup(ctx, input, temp_pool,
 						 &username, &userdb_fields,
@@ -962,6 +1076,8 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 			pool_unref(&user_pool);
 			return ret;
 		}
+		if (ctx->userdb_next_fieldsp != NULL)
+			*ctx->userdb_next_fieldsp = userdb_fields;
 	} else {
 		userdb_fields = input->userdb_fields;
 	}
@@ -979,7 +1095,9 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 	if (!settings_parser_check(user->set_parser, user_pool, &error))
 		i_panic("settings_parser_check() failed: %s", error);
 
-	user->user_set = settings_parser_get_list(user->set_parser)[1];
+	sets = master_service_settings_parser_get_others(master_service,
+							 user->set_parser);
+	user->user_set = sets[0];
 	user->gid_source = "mail_gid setting";
 	user->uid_source = "mail_uid setting";
 
@@ -994,6 +1112,7 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 
 	if (userdb_fields != NULL) {
 		auth_user_fields_parse(userdb_fields, temp_pool, &reply);
+		array_sort(&reply.extra_fields, extra_field_key_cmp_p);
 		if (user_reply_handle(ctx, user, &reply, &error) < 0) {
 			i_error("user %s: Invalid settings in userdb: %s",
 				username, error);
@@ -1011,6 +1130,17 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 
 	*user_r = user;
 	return ret;
+}
+
+void mail_storage_service_save_userdb_fields(struct mail_storage_service_ctx *ctx,
+					     pool_t pool, const char *const **userdb_fields_r)
+{
+	i_assert(pool != NULL);
+	i_assert(userdb_fields_r != NULL);
+
+	ctx->userdb_next_pool = pool;
+	ctx->userdb_next_fieldsp = userdb_fields_r;
+	*userdb_fields_r = NULL;
 }
 
 int mail_storage_service_next(struct mail_storage_service_ctx *ctx,
@@ -1160,6 +1290,7 @@ void mail_storage_service_init_settings(struct mail_storage_service_ctx *ctx,
 	const struct setting_parser_context *set_parser;
 	const char *error;
 	pool_t temp_pool;
+	void **sets;
 
 	if (ctx->conn != NULL)
 		return;
@@ -1169,21 +1300,41 @@ void mail_storage_service_init_settings(struct mail_storage_service_ctx *ctx,
 					       &user_info, &set_parser,
 					       &error) < 0)
 		i_fatal("%s", error);
-	user_set = settings_parser_get_list(set_parser)[1];
+	sets = master_service_settings_parser_get_others(master_service,
+							 set_parser);
+	user_set = sets[0];
 
 	mail_storage_service_first_init(ctx, user_info, user_set);
 	pool_unref(&temp_pool);
 }
 
-unsigned int
-mail_storage_service_all_init(struct mail_storage_service_ctx *ctx)
+static int
+mail_storage_service_all_iter_deinit(struct mail_storage_service_ctx *ctx)
 {
-	if (ctx->auth_list != NULL)
-		(void)auth_master_user_list_deinit(&ctx->auth_list);
+	int ret = 0;
+
+	if (ctx->auth_list != NULL) {
+		ret = auth_master_user_list_deinit(&ctx->auth_list);
+		auth_master_deinit(&ctx->iter_conn);
+	}
+	return ret;
+}
+
+void mail_storage_service_all_init(struct mail_storage_service_ctx *ctx)
+{
+	enum auth_master_flags flags = 0;
+
+	(void)mail_storage_service_all_iter_deinit(ctx);
 	mail_storage_service_init_settings(ctx, NULL);
 
-	ctx->auth_list = auth_master_user_list_init(ctx->conn, NULL, NULL);
-	return auth_master_user_list_count(ctx->auth_list);
+	/* create a new connection, because the iteration might take a while
+	   and we might want to do USER lookups during it, which don't mix
+	   well in the same connection. */
+	if (ctx->debug)
+		flags |= AUTH_MASTER_FLAG_DEBUG;
+	ctx->iter_conn = auth_master_init(auth_master_get_socket_path(ctx->conn),
+					  flags);
+	ctx->auth_list = auth_master_user_list_init(ctx->iter_conn, "", NULL);
 }
 
 int mail_storage_service_all_next(struct mail_storage_service_ctx *ctx,
@@ -1194,7 +1345,7 @@ int mail_storage_service_all_next(struct mail_storage_service_ctx *ctx,
 	*username_r = auth_master_user_list_next(ctx->auth_list);
 	if (*username_r != NULL)
 		return 1;
-	return auth_master_user_list_deinit(&ctx->auth_list);
+	return mail_storage_service_all_iter_deinit(ctx);
 }
 
 void mail_storage_service_deinit(struct mail_storage_service_ctx **_ctx)
@@ -1202,8 +1353,7 @@ void mail_storage_service_deinit(struct mail_storage_service_ctx **_ctx)
 	struct mail_storage_service_ctx *ctx = *_ctx;
 
 	*_ctx = NULL;
-	if (ctx->auth_list != NULL)
-		(void)auth_master_user_list_deinit(&ctx->auth_list);
+	(void)mail_storage_service_all_iter_deinit(ctx);
 	if (ctx->conn != NULL) {
 		if (mail_user_auth_master_conn == ctx->conn)
 			mail_user_auth_master_conn = NULL;
@@ -1220,7 +1370,16 @@ void mail_storage_service_deinit(struct mail_storage_service_ctx **_ctx)
 
 void **mail_storage_service_user_get_set(struct mail_storage_service_user *user)
 {
-	return settings_parser_get_list(user->set_parser) + 1;
+	return master_service_settings_parser_get_others(master_service,
+							 user->set_parser);
+}
+
+const struct mail_storage_settings *
+mail_storage_service_user_get_mail_set(struct mail_storage_service_user *user)
+{
+	return mail_user_set_get_driver_settings(
+				user->user_info, user->user_set,
+				MAIL_STORAGE_SET_DRIVER_NAME);
 }
 
 const struct mail_storage_service_input *

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "mech.h"
@@ -14,13 +14,14 @@ mech_anonymous_auth_continue(struct auth_request *request,
 		   so that the log message goes right */
 		request->user =
 			p_strndup(pool_datastack_create(), data, data_size);
-		auth_request_log_info(request, "anonymous", "login");
+		auth_request_log_info(request, AUTH_SUBSYS_MECH, "login");
 	}
 
 	request->user = p_strdup(request->pool,
 				 request->set->anonymous_username);
 
-	auth_request_success(request, NULL, 0);
+	request->passdb_success = TRUE;
+	auth_request_success(request, "", 0);
 }
 
 static struct auth_request *mech_anonymous_auth_new(void)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -8,10 +8,12 @@
 
 /* <settings checks> */
 static struct file_listener_settings replicator_unix_listeners_array[] = {
-	{ "replicator", 0600, "$default_internal_user", "" }
+	{ "replicator", 0600, "$default_internal_user", "" },
+	{ "replicator-doveadm", 0, "$default_internal_user", "" }
 };
 static struct file_listener_settings *replicator_unix_listeners[] = {
-	&replicator_unix_listeners_array[0]
+	&replicator_unix_listeners_array[0],
+	&replicator_unix_listeners_array[1]
 };
 static buffer_t replicator_unix_listeners_buf = {
 	replicator_unix_listeners, sizeof(replicator_unix_listeners), { 0, }
@@ -35,7 +37,7 @@ struct service_settings replicator_service_settings = {
 	.process_limit = 1,
 	.client_limit = 0,
 	.service_count = 0,
-	.idle_kill = -1U,
+	.idle_kill = UINT_MAX,
 	.vsz_limit = (uoff_t)-1,
 
 	.unix_listeners = { { &replicator_unix_listeners_buf,
@@ -51,6 +53,7 @@ struct service_settings replicator_service_settings = {
 static const struct setting_define replicator_setting_defines[] = {
 	DEF(SET_STR, auth_socket_path),
 	DEF(SET_STR, doveadm_socket_path),
+	DEF(SET_STR, replication_dsync_parameters),
 
 	DEF(SET_TIME, replication_full_sync_interval),
 	DEF(SET_UINT, replication_max_conns),
@@ -61,8 +64,9 @@ static const struct setting_define replicator_setting_defines[] = {
 const struct replicator_settings replicator_default_settings = {
 	.auth_socket_path = "auth-userdb",
 	.doveadm_socket_path = "doveadm-server",
+	.replication_dsync_parameters = "-d -N -l 30 -U",
 
-	.replication_full_sync_interval = 60*60*12,
+	.replication_full_sync_interval = 60*60*24,
 	.replication_max_conns = 10
 };
 

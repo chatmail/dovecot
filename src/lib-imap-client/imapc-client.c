@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -22,6 +22,8 @@ const struct imapc_capability_name imapc_capability_names[] = {
 	{ "STARTTLS", IMAPC_CAPABILITY_STARTTLS },
 	{ "X-GM-EXT-1", IMAPC_CAPABILITY_X_GM_EXT_1 },
 	{ "CONDSTORE", IMAPC_CAPABILITY_CONDSTORE },
+	{ "NAMESPACE", IMAPC_CAPABILITY_NAMESPACE },
+	{ "UNSELECT", IMAPC_CAPABILITY_UNSELECT },
 
 	{ "IMAP4REV1", IMAPC_CAPABILITY_IMAP4REV1 },
 	{ NULL, 0 }
@@ -38,7 +40,7 @@ imapc_client_init(const struct imapc_client_settings *set)
 {
 	struct imapc_client *client;
 	struct ssl_iostream_settings ssl_set;
-	const char *source;
+	const char *error;
 	pool_t pool;
 
 	pool = pool_alloconly_create("imapc client", 1024);
@@ -57,22 +59,29 @@ imapc_client_init(const struct imapc_client_settings *set)
 	client->set.temp_path_prefix =
 		p_strdup(pool, set->temp_path_prefix);
 	client->set.rawlog_dir = p_strdup(pool, set->rawlog_dir);
+	client->set.max_idle_time = set->max_idle_time;
+	client->set.connect_timeout_msecs = set->connect_timeout_msecs != 0 ?
+		set->connect_timeout_msecs :
+		IMAPC_DEFAULT_CONNECT_TIMEOUT_MSECS;
+	client->set.cmd_timeout_msecs = set->cmd_timeout_msecs != 0 ?
+		set->cmd_timeout_msecs : IMAPC_DEFAULT_COMMAND_TIMEOUT_MSECS;
 
 	if (set->ssl_mode != IMAPC_CLIENT_SSL_MODE_NONE) {
 		client->set.ssl_mode = set->ssl_mode;
 		client->set.ssl_ca_dir = p_strdup(pool, set->ssl_ca_dir);
+		client->set.ssl_ca_file = p_strdup(pool, set->ssl_ca_file);
 		client->set.ssl_verify = set->ssl_verify;
 
 		memset(&ssl_set, 0, sizeof(ssl_set));
 		ssl_set.ca_dir = set->ssl_ca_dir;
+		ssl_set.ca_file = set->ssl_ca_file;
 		ssl_set.verify_remote_cert = set->ssl_verify;
 		ssl_set.crypto_device = set->ssl_crypto_device;
 
-		source = t_strdup_printf("%s:%u", set->host, set->port);
-		if (ssl_iostream_context_init_client(source, &ssl_set,
-						     &client->ssl_ctx) < 0) {
-			i_error("imapc(%s): Couldn't initialize SSL context",
-				source);
+		if (ssl_iostream_context_init_client(&ssl_set, &client->ssl_ctx,
+						     &error) < 0) {
+			i_error("imapc(%s:%u): Couldn't initialize SSL context: %s",
+				set->host, set->port, error);
 		}
 	}
 	client->untagged_callback = default_untagged_callback;
@@ -101,17 +110,27 @@ void imapc_client_unref(struct imapc_client **_client)
 	pool_unref(&client->pool);
 }
 
+void imapc_client_disconnect(struct imapc_client *client)
+{
+	struct imapc_client_connection *const *conns, *conn;
+	unsigned int i, count;
+
+	conns = array_get(&client->conns, &count);
+	for (i = count; i > 0; i--) {
+		conn = conns[i-1];
+		array_delete(&client->conns, i-1, 1);
+
+		i_assert(imapc_connection_get_mailbox(conn->conn) == NULL);
+		imapc_connection_deinit(&conn->conn);
+		i_free(conn);
+	}
+}
+
 void imapc_client_deinit(struct imapc_client **_client)
 {
 	struct imapc_client *client = *_client;
-	struct imapc_client_connection **connp;
 
-	array_foreach_modifiable(&client->conns, connp) {
-		i_assert(imapc_connection_get_mailbox((*connp)->conn) == NULL);
-		imapc_connection_deinit(&(*connp)->conn);
-		i_free(*connp);
-	}
-	array_clear(&client->conns);
+	imapc_client_disconnect(client);
 	imapc_client_unref(_client);
 }
 
@@ -140,7 +159,7 @@ static void imapc_client_run_pre(struct imapc_client *client)
 
 	if (io_loop_is_running(client->ioloop))
 		io_loop_run(client->ioloop);
-	current_ioloop = prev_ioloop;
+	io_loop_set_current(prev_ioloop);
 }
 
 static void imapc_client_run_post(struct imapc_client *client)
@@ -152,7 +171,7 @@ static void imapc_client_run_post(struct imapc_client *client)
 	array_foreach(&client->conns, connp)
 		imapc_connection_ioloop_changed((*connp)->conn);
 
-	current_ioloop = ioloop;
+	io_loop_set_current(ioloop);
 	io_loop_destroy(&ioloop);
 }
 
@@ -270,7 +289,7 @@ imapc_client_reconnect_cb(const struct imapc_command_reply *reply,
 		/* reopen the mailbox */
 		box->reopen_callback(box->reopen_context);
 	} else {
-		imapc_connection_abort_commands(box->conn, TRUE, FALSE);
+		imapc_connection_abort_commands(box->conn, NULL, FALSE);
 	}
 }
 
@@ -318,6 +337,8 @@ void imapc_client_mailbox_close(struct imapc_client_mailbox **_box)
 	}
 
 	imapc_msgmap_deinit(&box->msgmap);
+	if (box->to_send_idle != NULL)
+		timeout_remove(&box->to_send_idle);
 	i_free(box);
 }
 
@@ -340,10 +361,22 @@ imapc_client_mailbox_get_msgmap(struct imapc_client_mailbox *box)
 	return box->msgmap;
 }
 
-void imapc_client_mailbox_idle(struct imapc_client_mailbox *box)
+static void imapc_client_mailbox_idle_send(struct imapc_client_mailbox *box)
 {
+	timeout_remove(&box->to_send_idle);
 	if (imapc_client_mailbox_is_opened(box))
 		imapc_connection_idle(box->conn);
+}
+
+void imapc_client_mailbox_idle(struct imapc_client_mailbox *box)
+{
+	/* send the IDLE with a delay to avoid unnecessary IDLEs that are
+	   immediately aborted */
+	if (box->to_send_idle == NULL && imapc_client_mailbox_is_opened(box)) {
+		box->to_send_idle =
+			timeout_add_short(IMAPC_CLIENT_IDLE_SEND_DELAY_MSECS,
+					  imapc_client_mailbox_idle_send, box);
+	}
 	box->reconnect_ok = TRUE;
 }
 
@@ -405,7 +438,7 @@ int imapc_client_create_temp_fd(struct imapc_client *client,
 	if (unlink(str_c(path)) < 0) {
 		/* shouldn't happen.. */
 		i_error("unlink(%s) failed: %m", str_c(path));
-		(void)close(fd);
+		i_close_fd(&fd);
 		return -1;
 	}
 	*path_r = str_c(path);

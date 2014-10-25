@@ -39,12 +39,16 @@ enum dbox_header_key {
 	DBOX_HEADER_OLDV1_APPEND_OFFSET	= 'A'
 };
 
+/* NOTE: all valid keys are uppercase characters. if this changes, change
+   dbox-file-fix.c:dbox_file_match_post_magic() to recognize them */
 enum dbox_metadata_key {
 	/* Globally unique identifier for the message. Preserved when
 	   copying. */
 	DBOX_METADATA_GUID		= 'G',
 	/* POP3 UIDL overriding the default format */
 	DBOX_METADATA_POP3_UIDL		= 'P',
+	/* POP3 message ordering (for migrated mails) */
+	DBOX_METADATA_POP3_ORDER	= 'O',
 	/* Received UNIX timestamp in hex */
 	DBOX_METADATA_RECEIVED_TIME	= 'R',
 	/* Physical message size in hex. Necessary only if it differs from
@@ -113,11 +117,10 @@ struct dbox_file {
 
 	/* Metadata for the currently seeked metadata block. */
 	pool_t metadata_pool;
-	ARRAY_DEFINE(metadata, const char *);
+	ARRAY(const char *) metadata;
 	uoff_t metadata_read_offset;
 
 	unsigned int appending:1;
-	unsigned int deleted:1;
 	unsigned int corrupted:1;
 };
 
@@ -190,7 +193,8 @@ uoff_t dbox_file_get_plaintext_size(struct dbox_file *file);
 
 /* Fix a broken dbox file by rename()ing over it with a fixed file. Everything
    before start_offset is assumed to be valid and is simply copied. The file
-   is reopened afterwards. Returns 0 if ok, -1 if I/O error. */
+   is reopened afterwards. Returns 1 if ok, 0 if the resulting file has no
+   mails and was deleted, -1 if I/O error. */
 int dbox_file_fix(struct dbox_file *file, uoff_t start_offset);
 /* Delete the given dbox file. Returns 1 if deleted, 0 if file wasn't found
    or -1 if error. */

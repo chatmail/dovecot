@@ -44,6 +44,7 @@ union mail_index_view_module_context {
 };
 
 struct mail_index_view {
+	struct mail_index_view *prev, *next;
 	int refcount;
 
 	struct mail_index_view_vfuncs v;
@@ -57,7 +58,7 @@ struct mail_index_view {
 	struct mail_index_map *map;
 	/* All mappings where we have returned records. They need to be kept
 	   valid until view is synchronized. */
-	ARRAY_DEFINE(map_refs, struct mail_index_map *);
+	ARRAY(struct mail_index_map *) map_refs;
 
 	/* expunge <= head */
 	uint32_t log_file_expunge_seq, log_file_head_seq;
@@ -67,8 +68,9 @@ struct mail_index_view {
 	ARRAY_TYPE(view_log_sync_area) syncs_hidden;
 
 	/* Module-specific contexts. */
-	ARRAY_DEFINE(module_contexts, union mail_index_view_module_context *);
+	ARRAY(union mail_index_view_module_context *) module_contexts;
 
+	struct mail_index_transaction *transactions_list;
 	int transactions;
 
 	unsigned int inconsistent:1;
@@ -83,6 +85,8 @@ mail_index_view_open_with_map(struct mail_index *index,
 			      struct mail_index_map *map);
 void mail_index_view_clone(struct mail_index_view *dest,
 			   const struct mail_index_view *src);
+struct mail_index_view *
+mail_index_view_dup_private(const struct mail_index_view *src);
 void mail_index_view_ref(struct mail_index_view *view);
 void mail_index_view_unref_maps(struct mail_index_view *view);
 void mail_index_view_add_hidden_transaction(struct mail_index_view *view,

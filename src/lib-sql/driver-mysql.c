@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -10,7 +10,16 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+#ifdef HAVE_ATTR_NULL
+/* ugly way to tell clang that mysql.h is a system header and we don't want
+   to enable nonnull attributes for it by default.. */
+# 4 "driver-mysql.c" 3
+#endif
 #include <mysql.h>
+#ifdef HAVE_ATTR_NULL
+# 4 "driver-mysql.c" 3
+# line 20
+#endif
 #include <errmsg.h>
 
 struct mysql_db {
@@ -19,6 +28,7 @@ struct mysql_db {
 	pool_t pool;
 	const char *user, *password, *dbname, *host, *unix_socket;
 	const char *ssl_cert, *ssl_key, *ssl_ca, *ssl_ca_path, *ssl_cipher;
+	int ssl_verify_server_cert;
 	const char *option_file, *option_group;
 	unsigned int port, client_flags;
 	time_t last_success;
@@ -95,6 +105,10 @@ static int driver_mysql_connect(struct sql_db *_db)
 			      , db->ssl_cipher
 #endif
 			     );
+#ifdef HAVE_MYSQL_SSL_VERIFY_SERVER_CERT
+		mysql_options(db->mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
+			      (void *)&db->ssl_verify_server_cert);
+#endif
 		db->ssl_set = TRUE;
 #else
 		i_fatal("mysql: SSL support not compiled in "
@@ -126,9 +140,6 @@ static int driver_mysql_connect(struct sql_db *_db)
 			mysql_error(db->mysql), db->api.connect_delay);
 		return -1;
 	} else {
-		i_info("%s: Connected to database %s%s", mysql_prefix(db),
-		       db->dbname, db->ssl_set ? " using SSL" : "");
-
 		db->last_success = ioloop_time;
 		sql_db_set_state(&db->api, SQL_DB_STATE_IDLE);
 		return 1;
@@ -146,6 +157,7 @@ static void driver_mysql_parse_connect_string(struct mysql_db *db,
 	const char **field;
 
 	db->ssl_cipher = "HIGH";
+	db->ssl_verify_server_cert = 0; /* FIXME: change to 1 for v2.3 */
 
 	args = t_strsplit_spaces(connect_string, " ");
 	for (; *args != NULL; args++) {
@@ -181,7 +193,14 @@ static void driver_mysql_parse_connect_string(struct mysql_db *db,
 			field = &db->ssl_ca_path;
 		else if (strcmp(name, "ssl_cipher") == 0)
 			field = &db->ssl_cipher;
-		else if (strcmp(name, "option_file") == 0)
+		else if (strcmp(name, "ssl_verify_server_cert") == 0) {
+			if (strcmp(value, "yes") == 0)
+				db->ssl_verify_server_cert = 1;
+			else if (strcmp(value, "no") == 0)
+				db->ssl_verify_server_cert = 0;
+			else
+				i_fatal("mysql: Invalid boolean: %s", value);
+		} else if (strcmp(name, "option_file") == 0)
 			field = &db->option_file;
 		else if (strcmp(name, "option_group") == 0)
 			field = &db->option_group;
@@ -500,7 +519,7 @@ driver_mysql_transaction_commit(struct sql_transaction_context *ctx,
 		callback(NULL, context);
 }
 
-static int
+static int ATTR_NULL(3)
 transaction_send_query(struct mysql_transaction_context *ctx, const char *query,
 		       unsigned int *affected_rows_r)
 {
@@ -650,7 +669,7 @@ const struct sql_result driver_mysql_error_result = {
 	.failed_try_retry = TRUE
 };
 
-const char *driver_mysql_version = DOVECOT_VERSION;
+const char *driver_mysql_version = DOVECOT_ABI_VERSION;
 
 void driver_mysql_init(void);
 void driver_mysql_deinit(void);

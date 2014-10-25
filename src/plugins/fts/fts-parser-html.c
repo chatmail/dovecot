@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -36,7 +36,7 @@ struct html_fts_parser {
 	bool ignore_next_text;
 };
 
-struct {
+static struct {
 	const char *name;
 	unichar_t chr;
 } html_entities[] = {
@@ -262,5 +262,6 @@ static void fts_parser_html_deinit(struct fts_parser *_parser)
 struct fts_parser_vfuncs fts_parser_html = {
 	fts_parser_html_try_init,
 	fts_parser_html_more,
-	fts_parser_html_deinit
+	fts_parser_html_deinit,
+	NULL
 };

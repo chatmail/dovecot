@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "userdb.h"
@@ -16,9 +16,9 @@ static void
 userdb_checkpassword_callback(struct auth_request *request,
 			      enum db_checkpassword_status status,
 			      const char *const *extra_fields,
-			      void *context)
+			      void (*request_callback)())
 {
-	userdb_callback_t *callback = context;
+	userdb_callback_t *callback = request_callback;
 	unsigned int i;
 
 	switch (status) {

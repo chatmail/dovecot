@@ -111,15 +111,15 @@ winbind_helper_connect(const struct auth_settings *set,
 		return;
 	}
 	if (pipe(outfd) < 0) {
-		(void)close(infd[0]); (void)close(infd[1]);
+		i_close_fd(&infd[0]); i_close_fd(&infd[1]);
 		return;
 	}
 
 	pid = fork();
 	if (pid < 0) {
 		i_error("fork() failed: %m");
-		(void)close(infd[0]); (void)close(infd[1]);
-		(void)close(outfd[0]); (void)close(outfd[1]);
+		i_close_fd(&infd[0]); i_close_fd(&infd[1]);
+		i_close_fd(&outfd[0]); i_close_fd(&outfd[1]);
 		return;
 	}
 
@@ -127,8 +127,8 @@ winbind_helper_connect(const struct auth_settings *set,
 		/* child */
 		const char *args[3];
 
-		(void)close(infd[0]);
-		(void)close(outfd[1]);
+		i_close_fd(&infd[0]);
+		i_close_fd(&outfd[1]);
 
 		if (dup2(outfd[0], STDIN_FILENO) < 0 ||
 		    dup2(infd[1], STDOUT_FILENO) < 0)
@@ -141,8 +141,8 @@ winbind_helper_connect(const struct auth_settings *set,
 	}
 
 	/* parent */
-	(void)close(infd[1]);
-	(void)close(outfd[0]);
+	i_close_fd(&infd[1]);
+	i_close_fd(&outfd[0]);
 
 	winbind->pid = pid;
 	winbind->in_pipe =
@@ -177,9 +177,10 @@ do_auth_continue(struct auth_request *auth_request,
 	base64_encode(data, data_size, str);
 	str_append_c(str, '\n');
 
-	if (o_stream_send_str(request->winbind->out_pipe, str_c(str)) < 0 ||
+	if (o_stream_send(request->winbind->out_pipe,
+			  str_data(str), str_len(str)) < 0 ||
 	    o_stream_flush(request->winbind->out_pipe) < 0) {
-		auth_request_log_error(auth_request, "winbind",
+		auth_request_log_error(auth_request, AUTH_SUBSYS_MECH,
 				       "write(out_pipe) failed: %m");
 		return HR_RESTART;
 	}
@@ -190,7 +191,7 @@ do_auth_continue(struct auth_request *auth_request,
 			break;
 	}
 	if (answer == NULL) {
-		auth_request_log_error(auth_request, "winbind",
+		auth_request_log_error(auth_request, AUTH_SUBSYS_MECH,
 				       "read(in_pipe) failed: %m");
 		return HR_RESTART;
 	}
@@ -199,7 +200,7 @@ do_auth_continue(struct auth_request *auth_request,
 	if (token[0] == NULL ||
 	    (token[1] == NULL && strcmp(token[0], "BH") != 0) ||
 	    (gss_spnego && (token[1] == NULL || token[2] == NULL))) {
-		auth_request_log_error(auth_request, "winbind",
+		auth_request_log_error(auth_request, AUTH_SUBSYS_MECH,
 				       "Invalid input from helper: %s", answer);
 		return HR_RESTART;
 	}
@@ -234,13 +235,13 @@ do_auth_continue(struct auth_request *auth_request,
 	} else if (strcmp(token[0], "NA") == 0) {
 		const char *error = gss_spnego ? token[2] : token[1];
 
-		auth_request_log_info(auth_request, "winbind",
+		auth_request_log_info(auth_request, AUTH_SUBSYS_MECH,
 				      "user not authenticated: %s", error);
 		return HR_FAIL;
 	} else if (strcmp(token[0], "AF") == 0) {
 		const char *user, *p, *error;
 
-		user = gss_spnego ? token[2] : token[1];
+		user = t_strarray_join(gss_spnego ? token+2 : token+1, " ");
 		i_assert(user != NULL);
 
 		p = strchr(user, '\\');
@@ -252,11 +253,12 @@ do_auth_continue(struct auth_request *auth_request,
 		}
 
 		if (!auth_request_set_username(auth_request, user, &error)) {
-			auth_request_log_info(auth_request, "winbind",
+			auth_request_log_info(auth_request, AUTH_SUBSYS_MECH,
 					      "%s", error);
 			return HR_FAIL;
 		}
- 
+
+		request->auth_request.passdb_success = TRUE;
 		if (gss_spnego && strcmp(token[1], "*") != 0) {
 			buffer_t *buf;
 
@@ -264,16 +266,16 @@ do_auth_continue(struct auth_request *auth_request,
 			auth_request_success(&request->auth_request,
 					     buf->data, buf->used);
 		} else {
-			auth_request_success(&request->auth_request, NULL, 0);
+			auth_request_success(&request->auth_request, "", 0);
 		}
 		return HR_OK;
 	} else if (strcmp(token[0], "BH") == 0) {
-		auth_request_log_info(auth_request, "winbind",
+		auth_request_log_info(auth_request, AUTH_SUBSYS_MECH,
 				      "ntlm_auth reports broken helper: %s",
 				      token[1] != NULL ? token[1] : "");
 		return HR_RESTART;
 	} else {
-		auth_request_log_error(auth_request, "winbind",
+		auth_request_log_error(auth_request, AUTH_SUBSYS_MECH,
 				       "Invalid input from helper: %s", answer);
 		return HR_RESTART;
 	}

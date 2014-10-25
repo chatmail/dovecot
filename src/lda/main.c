@@ -1,17 +1,15 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
 #include "env-util.h"
 #include "fd-set-nonblock.h"
-#include "close-keep-errno.h"
 #include "istream.h"
 #include "istream-seekable.h"
 #include "abspath.h"
 #include "safe-mkstemp.h"
 #include "eacces-error.h"
 #include "ipwd.h"
-#include "mkdir-parents.h"
 #include "str.h"
 #include "str-sanitize.h"
 #include "strescape.h"
@@ -102,7 +100,7 @@ static int seekable_fd_callback(const char **path_r, void *context)
 	if (unlink(str_c(path)) < 0) {
 		/* shouldn't happen.. */
 		i_error("unlink(%s) failed: %m", str_c(path));
-		close_keep_errno(fd);
+		i_close_fd(&fd);
 		return -1;
 	}
 
@@ -277,6 +275,7 @@ int main(int argc, char *argv[])
 	struct mail_deliver_context ctx;
 	enum mail_storage_service_flags service_flags = 0;
 	const char *user, *errstr, *path;
+	struct lda_settings *lda_set;
 	struct mail_storage_service_ctx *storage_service;
 	struct mail_storage_service_user *service_user;
 	struct mail_storage_service_input service_input;
@@ -421,7 +420,11 @@ int main(int argc, char *argv[])
 #ifdef SIGXFSZ
         lib_signals_ignore(SIGXFSZ, TRUE);
 #endif
-	ctx.set = mail_storage_service_user_get_set(service_user)[1];
+	lda_set = mail_storage_service_user_get_set(service_user)[1];
+	settings_var_expand(&lda_setting_parser_info, lda_set,
+			    ctx.dest_user->pool,
+			    mail_user_var_expand_table(ctx.dest_user));
+	ctx.set = lda_set;
 
 	if (ctx.dest_user->mail_debug && *user_source != '\0') {
 		i_debug("userdb lookup skipped, username taken from %s",
@@ -432,13 +435,16 @@ int main(int argc, char *argv[])
 	lda_set_dest_addr(&ctx, user, destaddr_source);
 
 	if (mail_deliver(&ctx, &storage) < 0) {
-		if (storage == NULL) {
+		if (storage != NULL) {
+			errstr = mail_storage_get_last_error(storage, &error);
+		} else if (ctx.tempfail_error != NULL) {
+			errstr = ctx.tempfail_error;
+			error = MAIL_ERROR_TEMP;
+		} else {
 			/* This shouldn't happen */
 			i_error("BUG: Saving failed to unknown storage");
 			return EX_TEMPFAIL;
 		}
-
-		errstr = mail_storage_get_last_error(storage, &error);
 
 		if (stderr_rejection) {
 			/* write to stderr also for tempfails so that MTA

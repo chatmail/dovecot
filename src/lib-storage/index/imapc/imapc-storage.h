@@ -5,22 +5,22 @@
 #include "imapc-settings.h"
 
 #define IMAPC_STORAGE_NAME "imapc"
-#define IMAPC_INDEX_PREFIX "dovecot.index"
 #define IMAPC_LIST_ESCAPE_CHAR '%'
+#define IMAPC_LIST_BROKEN_CHAR '~'
 
 struct imap_arg;
 struct imapc_untagged_reply;
 struct imapc_command_reply;
 struct imapc_mailbox;
-struct imapc_storage;
+struct imapc_storage_client;
 
 typedef void imapc_storage_callback_t(const struct imapc_untagged_reply *reply,
-				      struct imapc_storage *storage);
+				      struct imapc_storage_client *client);
 typedef void imapc_mailbox_callback_t(const struct imapc_untagged_reply *reply,
 				      struct imapc_mailbox *mbox);
 
 struct imapc_storage_event_callback {
-	const char *name;
+	char *name;
 	imapc_storage_callback_t *callback;
 };
 
@@ -34,19 +34,38 @@ struct imapc_mailbox_event_callback {
 #define IMAPC_BOX_HAS_FEATURE(mbox, feature) \
 	(((mbox)->storage->set->parsed_features & feature) != 0)
 
+struct imapc_namespace {
+	const char *prefix;
+	char separator;
+	enum mail_namespace_type type;
+};
+
+struct imapc_storage_client {
+	int refcount;
+
+	/* either one of these may not be available: */
+	struct imapc_storage *_storage;
+	struct imapc_mailbox_list *_list;
+
+	struct imapc_client *client;
+
+	ARRAY(struct imapc_storage_event_callback) untagged_callbacks;
+};
+
 struct imapc_storage {
 	struct mail_storage storage;
 	const struct imapc_settings *set;
 
 	struct ioloop *root_ioloop;
-	struct imapc_mailbox_list *list;
-	struct imapc_client *client;
+	struct imapc_storage_client *client;
 
 	struct imapc_mailbox *cur_status_box;
 	struct mailbox_status *cur_status;
 	unsigned int reopen_count;
 
-	ARRAY_DEFINE(untagged_callbacks, struct imapc_storage_event_callback);
+	ARRAY(struct imapc_namespace) remote_namespaces;
+
+	unsigned int namespaces_requested:1;
 };
 
 struct imapc_mail_cache {
@@ -55,6 +74,10 @@ struct imapc_mail_cache {
 	/* either fd != -1 or buf != NULL */
 	int fd;
 	buffer_t *buf;
+};
+
+struct imapc_fetch_request {
+	ARRAY(struct imapc_mail *) mails;
 };
 
 struct imapc_mailbox {
@@ -66,10 +89,16 @@ struct imapc_mailbox {
 	struct mail_index_view *sync_view, *delayed_sync_view;
 	struct timeout *to_idle_check, *to_idle_delay;
 
-	ARRAY_DEFINE(fetch_mails, struct imapc_mail *);
+	ARRAY(struct imapc_fetch_request *) fetch_requests;
+	/* if non-empty, contains the latest FETCH command we're going to be
+	   sending soon (but still waiting to see if we can increase its
+	   UID range) */
+	string_t *pending_fetch_cmd;
+	struct imapc_fetch_request *pending_fetch_request;
+	struct timeout *to_pending_fetch_send;
 
-	ARRAY_DEFINE(untagged_callbacks, struct imapc_mailbox_event_callback);
-	ARRAY_DEFINE(resp_text_callbacks, struct imapc_mailbox_event_callback);
+	ARRAY(struct imapc_mailbox_event_callback) untagged_callbacks;
+	ARRAY(struct imapc_mailbox_event_callback) resp_text_callbacks;
 
 	enum mail_flags permanent_flags;
 
@@ -94,12 +123,21 @@ struct imapc_mailbox {
 	unsigned int selecting:1;
 	unsigned int syncing:1;
 	unsigned int initial_sync_done:1;
+	unsigned int selected:1;
+	unsigned int exists_received:1;
 };
 
 struct imapc_simple_context {
-	struct imapc_storage *storage;
+	struct imapc_storage_client *client;
 	int ret;
 };
+
+int imapc_storage_client_create(struct mail_namespace *ns,
+				const struct imapc_settings *imapc_set,
+				const struct mail_storage_settings *mail_set,
+				struct imapc_storage_client **client_r,
+				const char **error_r);
+void imapc_storage_client_unref(struct imapc_storage_client **client);
 
 struct mail_save_context *
 imapc_save_alloc(struct mailbox_transaction_context *_t);
@@ -114,15 +152,17 @@ void imapc_transaction_save_commit_post(struct mail_save_context *ctx,
 					struct mail_index_transaction_commit_result *result);
 void imapc_transaction_save_rollback(struct mail_save_context *ctx);
 
-void imapc_storage_run(struct imapc_storage *storage);
+void imapc_mailbox_run(struct imapc_mailbox *mbox);
+void imapc_mailbox_run_nofetch(struct imapc_mailbox *mbox);
 void imapc_mail_cache_free(struct imapc_mail_cache *cache);
 int imapc_mailbox_select(struct imapc_mailbox *mbox);
 
+bool imap_resp_text_code_parse(const char *str, enum mail_error *error_r);
 void imapc_copy_error_from_reply(struct imapc_storage *storage,
 				 enum mail_error default_error,
 				 const struct imapc_command_reply *reply);
 void imapc_simple_context_init(struct imapc_simple_context *sctx,
-			       struct imapc_storage *storage);
+			       struct imapc_storage_client *client);
 void imapc_simple_run(struct imapc_simple_context *sctx);
 void imapc_simple_callback(const struct imapc_command_reply *reply,
 			   void *context);
@@ -132,9 +172,9 @@ void imapc_mailbox_noop(struct imapc_mailbox *mbox);
 void imapc_mailbox_set_corrupted(struct imapc_mailbox *mbox,
 				 const char *reason, ...) ATTR_FORMAT(2, 3);
 
-void imapc_storage_register_untagged(struct imapc_storage *storage,
-				     const char *name,
-				     imapc_storage_callback_t *callback);
+void imapc_storage_client_register_untagged(struct imapc_storage_client *client,
+					    const char *name,
+					    imapc_storage_callback_t *callback);
 void imapc_mailbox_register_untagged(struct imapc_mailbox *mbox,
 				     const char *name,
 				     imapc_mailbox_callback_t *callback);

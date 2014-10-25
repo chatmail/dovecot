@@ -5,6 +5,9 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+dpkg_buildflags = DEB_BUILD_MAINT_OPTIONS="hardening=+all" dpkg-buildflags
+drac_buildflags = DEB_BUILD_MAINT_OPTIONS="hardening=+all,-pie" dpkg-buildflags
+
 PIGEONHOLE_DIR=pigeonhole
 
 # These are used for cross-compiling and for saving the configure script
@@ -22,8 +25,9 @@ endif
 
 config-stamp: configure
 	dh_testdir
+	dh_autotools-dev_updateconfig
 	# Dovecot
-	$(shell dpkg-buildflags --export=configure) sh configure \
+	$(shell $(dpkg_buildflags) --export=configure) sh configure \
 	            --with-ldap=plugin \
 	            --with-ssl=openssl \
 	            --with-sql=plugin \
@@ -33,6 +37,8 @@ config-stamp: configure
 	            --with-gssapi=plugin \
 		        --with-solr \
 	            --with-ioloop=best \
+	            --with-libwrap \
+	            --with-lucene \
 	            --host=$(DEB_HOST_GNU_TYPE) \
 	            --build=$(DEB_BUILD_GNU_TYPE) \
 	            --prefix=/usr \
@@ -43,12 +49,13 @@ config-stamp: configure
 	            --infodir=\$${prefix}/share/info \
 	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
 	            --disable-rpath \
+	            --with-systemdsystemunitdir=auto \
 	            --disable-static
 	$(MAKE) dovecot-config
 	# Pigeonhole
 	(cd $(PIGEONHOLE_DIR)/ && \
 	    touch stamp.h.in && \
-	    $(shell dpkg-buildflags --export=configure) sh configure \
+	    $(shell $(dpkg_buildflags) --export=configure) sh configure \
 	    --with-dovecot=../ \
 		--prefix=/usr \
 		--sysconfdir=/etc \
@@ -65,7 +72,8 @@ build-stamp:  config-stamp
 	# Pigeonhole
 	$(MAKE) -C $(PIGEONHOLE_DIR)
 	# DRAC
-	$(MAKE) -C src/plugins/drac
+	$(MAKE) -C src/plugins/drac $(shell $(drac_buildflags) --export=configure)
+
 	touch build-stamp
 
 clean:
@@ -77,7 +85,9 @@ clean:
 	# Cleanup pigeonhole
 	[ ! -f $(PIGEONHOLE_DIR)/Makefile ] || $(MAKE) -C $(PIGEONHOLE_DIR) distclean
 	# Cleanup DRAC
-	rm -f src/plugins/drac/drac.so
+	rm -f src/plugins/drac/drac_plugin.so
+	debconf-updatepo
+	dh_autotools-dev_restoreconfig
 	dh_clean
 
 install: build
@@ -88,7 +98,7 @@ install: build
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/dovecot-core
 	$(MAKE) -C $(PIGEONHOLE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-core
 	rm `find $(CURDIR)/debian -name '*.la'`
-	cp $(CURDIR)/src/plugins/drac/drac.so $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules
+	cp $(CURDIR)/src/plugins/drac/drac_plugin.so $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules
 	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/*.conf \
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/
 	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/*.conf.ext \
@@ -102,6 +112,8 @@ install: build
 	install -o root -g root -m 0644 $(CURDIR)/$(PIGEONHOLE_DIR)/doc/example-config/conf.d/*.conf \
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/
 	install -D -m 0755 -o root -g root $(CURDIR)/debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-core/usr/bin/maildirmake.dovecot
+	install -o root -g root -m 0644 $(CURDIR)/debian/openssl.cnf \
+		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/
 	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core
 	cp $(PIGEONHOLE_DIR)/ChangeLog $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/pigeonhole.ChangeLog
 	cp $(PIGEONHOLE_DIR)/README $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/pigeonhole.README
@@ -151,17 +163,24 @@ install: build
 	# sieve
 	mv $(CURDIR)/debian/dovecot-core/usr/bin/sieve* $(CURDIR)/debian/dovecot-sieve/usr/bin
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules
+	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/doveadm/lib??_doveadm_sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules/doveadm
+	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/sieve $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules/sieve
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/libdovecot-sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/*-sieve.conf $(CURDIR)/debian/dovecot-sieve/usr/share/dovecot/conf.d
 	mv $(CURDIR)/debian/dovecot-core/usr/share/man/man1/sieve* $(CURDIR)/debian/dovecot-sieve/usr/share/man/man1
 
 	# solr
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_fts_solr_* $(CURDIR)/debian/dovecot-solr/usr/lib/dovecot/modules
+	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/dovecot/solr-schema.xml $(CURDIR)/debian/dovecot-solr/usr/share/dovecot
+
+	# lucene
+	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_fts_lucene_* $(CURDIR)/debian/dovecot-lucene/usr/lib/dovecot/modules
 
 	# dev
 	mv $(CURDIR)/debian/dovecot-core/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/dovecot-config $(CURDIR)/debian/dovecot-dev/usr/lib/dovecot
 	rmdir $(CURDIR)/debian/dovecot-core/usr/include
+	grep ABI_VERSION config.h | perl -ne '/"(.+)\(.+\)"/ && print $$1' | tr '[A-Z]' '[a-z]' > $(CURDIR)/debian/dovecot-dev/usr/share/dovecot/dovecot-abi
 
 # Build architecture-independent files here.
 binary-indep: build install
@@ -171,6 +190,7 @@ binary-indep: build install
 	dh_installdocs -i
 	dh_installexamples -i
 	dh_installman -i
+	dh_installdebconf -i
 	dh_link -i
 	dh_strip -i
 	dh_compress -i
@@ -190,19 +210,24 @@ binary-arch: build install
 	dh_installexamples -a
 	dh_installpam -a
 	mv $(CURDIR)/debian/dovecot-core/etc/pam.d/dovecot-core $(CURDIR)/debian/dovecot-core/etc/pam.d/dovecot
+	dh_systemd_enable
 	dh_installinit -pdovecot-core --init-script=dovecot -u"defaults 20"
+	dh_systemd_start
 	dh_installman -a
 	dh_installman -p dovecot-core debian/maildirmake.dovecot.1
+	dh_installdebconf -a
 	dh_bugfiles -a
+	dh_lintian -a
 	dh_installchangelogs -a ChangeLog
 	dh_link -a
 	dh_strip -a --dbg-package=dovecot-dbg
 	dh_compress -a
 	dh_fixperms -a
+	chmod 0700 debian/dovecot-core/etc/dovecot/private
 	dh_makeshlibs -a -n
 	dh_installdeb -a
 	dh_shlibdeps -a
-	dh_gencontrol -a
+	dh_gencontrol -a -- -Vdovecot:ABI-Version=$(shell cat $(CURDIR)/debian/dovecot-dev/usr/share/dovecot/dovecot-abi)
 	dh_md5sums -a
 	dh_builddeb $(foreach pkg,$(dbgpkg),-p$(pkg)) -- -Zxz
 	dh_builddeb $(foreach pkg,$(otherpkg),-p$(pkg))

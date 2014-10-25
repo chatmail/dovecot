@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "seq-range-array.h"
@@ -57,6 +57,11 @@ store_parse_modifiers(struct imap_store_context *ctx,
 		}
 
 		if (strcasecmp(name, "UNCHANGEDSINCE") == 0) {
+			if (ctx->cmd->client->nonpermanent_modseqs) {
+				client_send_command_error(ctx->cmd,
+					"STORE UNCHANGEDSINCE can't be used with non-permanent modseqs");
+				return FALSE;
+			}
 			if (str_to_uint64(value, &ctx->max_modseq) < 0) {
 				client_send_command_error(ctx->cmd,
 							  "Invalid modseq");
@@ -109,8 +114,7 @@ store_parse_args(struct imap_store_context *ctx, const struct imap_arg *args)
 		if (mailbox_keywords_create(cmd->client->mailbox, keywords_list,
 					    &ctx->keywords) < 0) {
 			/* invalid keywords */
-			client_send_storage_error(cmd,
-				mailbox_get_storage(cmd->client->mailbox));
+			client_send_box_error(cmd, cmd->client->mailbox);
 			return FALSE;
 		}
 	}
@@ -189,8 +193,7 @@ bool cmd_store(struct client_command_context *cmd)
 			/* check early so there's less work for transaction
 			   commit if something has to be cancelled */
 			if (mail_get_modseq(mail) > ctx.max_modseq) {
-				seq_range_array_add(&modified_set, 0,
-						    mail->seq);
+				seq_range_array_add(&modified_set, mail->seq);
 				continue;
 			}
 		}
@@ -212,8 +215,7 @@ bool cmd_store(struct client_command_context *cmd)
 		ret = mailbox_transaction_commit(&t);
 	if (ret < 0) {
 		array_free(&modified_set);
-		client_send_storage_error(cmd,
-			mailbox_get_storage(client->mailbox));
+		client_send_box_error(cmd, client->mailbox);
 		return TRUE;
 	}
 

@@ -1,7 +1,8 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
+#include "array.h"
 #include "str.h"
 #include "istream-private.h"
 
@@ -21,9 +22,18 @@ const char *i_stream_get_name(struct istream *stream)
 	return stream->real_stream->iostream.name;
 }
 
+static void i_stream_close_full(struct istream *stream, bool close_parents)
+{
+	io_stream_close(&stream->real_stream->iostream, close_parents);
+	stream->closed = TRUE;
+
+	if (stream->stream_errno == 0)
+		stream->stream_errno = EPIPE;
+}
+
 void i_stream_destroy(struct istream **stream)
 {
-	i_stream_close(*stream);
+	i_stream_close_full(*stream, FALSE);
 	i_stream_unref(stream);
 }
 
@@ -44,22 +54,35 @@ void i_stream_unref(struct istream **stream)
 	*stream = NULL;
 }
 
-#undef i_stream_set_destroy_callback
-void i_stream_set_destroy_callback(struct istream *stream,
+#undef i_stream_add_destroy_callback
+void i_stream_add_destroy_callback(struct istream *stream,
 				   istream_callback_t *callback, void *context)
 {
 	struct iostream_private *iostream = &stream->real_stream->iostream;
+	struct iostream_destroy_callback *dc;
 
-	iostream->destroy_callback = callback;
-	iostream->destroy_context = context;
+	if (!array_is_created(&iostream->destroy_callbacks))
+		i_array_init(&iostream->destroy_callbacks, 2);
+	dc = array_append_space(&iostream->destroy_callbacks);
+	dc->callback = callback;
+	dc->context = context;
 }
 
-void i_stream_unset_destroy_callback(struct istream *stream)
+void i_stream_remove_destroy_callback(struct istream *stream,
+				      void (*callback)())
 {
 	struct iostream_private *iostream = &stream->real_stream->iostream;
+	const struct iostream_destroy_callback *dcs;
+	unsigned int i, count;
 
-	iostream->destroy_callback = NULL;
-	iostream->destroy_context = NULL;
+	dcs = array_get(&iostream->destroy_callbacks, &count);
+	for (i = 0; i < count; i++) {
+		if (dcs[i].callback == (istream_callback_t *)callback) {
+			array_delete(&iostream->destroy_callbacks, i, 1);
+			return;
+		}
+	}
+	i_unreached();
 }
 
 int i_stream_get_fd(struct istream *stream)
@@ -69,13 +92,27 @@ int i_stream_get_fd(struct istream *stream)
 	return _stream->fd;
 }
 
+const char *i_stream_get_error(struct istream *stream)
+{
+	struct istream *s;
+
+	/* we'll only return errors for streams that have stream_errno set.
+	   we might be returning unintended error otherwise. */
+	if (stream->stream_errno == 0)
+		return "<no error>";
+
+	for (s = stream; s != NULL; s = s->real_stream->parent) {
+		if (s->stream_errno == 0)
+			break;
+		if (s->real_stream->iostream.error != NULL)
+			return s->real_stream->iostream.error;
+	}
+	return strerror(stream->stream_errno);
+}
+
 void i_stream_close(struct istream *stream)
 {
-	io_stream_close(&stream->real_stream->iostream);
-	stream->closed = TRUE;
-
-	if (stream->stream_errno == 0)
-		stream->stream_errno = ENOENT;
+	i_stream_close_full(stream, TRUE);
 }
 
 void i_stream_set_init_buffer_size(struct istream *stream, size_t size)
@@ -115,19 +152,19 @@ ssize_t i_stream_read(struct istream *stream)
 	size_t old_size;
 	ssize_t ret;
 
-	if (unlikely(stream->closed)) {
+	if (unlikely(stream->closed || stream->stream_errno != 0)) {
 		errno = stream->stream_errno;
 		return -1;
 	}
 
 	stream->eof = FALSE;
-	stream->stream_errno = 0;
 
 	if (_stream->parent != NULL)
 		i_stream_seek(_stream->parent, _stream->parent_expected_offset);
 
 	old_size = _stream->pos - _stream->skip;
 	ret = _stream->read(_stream);
+	i_assert(old_size <= _stream->pos - _stream->skip);
 	switch (ret) {
 	case -2:
 		i_assert(_stream->skip != _stream->pos);
@@ -140,6 +177,7 @@ ssize_t i_stream_read(struct istream *stream)
 			errno = stream->stream_errno;
 		} else {
 			i_assert(stream->eof);
+			i_assert(old_size == _stream->pos - _stream->skip);
 		}
 		break;
 	case 0:
@@ -268,14 +306,17 @@ void i_stream_sync(struct istream *stream)
 	}
 }
 
-const struct stat *i_stream_stat(struct istream *stream, bool exact)
+int i_stream_stat(struct istream *stream, bool exact, const struct stat **st_r)
 {
 	struct istream_private *_stream = stream->real_stream;
 
 	if (unlikely(stream->closed))
-		return NULL;
+		return -1;
 
-	return _stream->stat(_stream, exact);
+	if (_stream->stat(_stream, exact) < 0)
+		return -1;
+	*st_r = &_stream->statbuf;
+	return 0;
 }
 
 int i_stream_get_size(struct istream *stream, bool exact, uoff_t *size_r)
@@ -314,10 +355,13 @@ static char *i_stream_next_line_finish(struct istream_private *stream, size_t i)
 	char *ret;
 	size_t end;
 
-	if (i > 0 && stream->buffer[i-1] == '\r')
+	if (i > 0 && stream->buffer[i-1] == '\r') {
 		end = i - 1;
-	else
+		stream->line_crlf = TRUE;
+	} else {
 		end = i;
+		stream->line_crlf = FALSE;
+	}
 
 	if (stream->w_buffer != NULL) {
 		/* modify the buffer directly */
@@ -356,7 +400,8 @@ char *i_stream_next_line(struct istream *stream)
 	const unsigned char *pos;
 
 	if (_stream->skip >= _stream->pos) {
-		stream->stream_errno = 0;
+		if (!unlikely(stream->closed))
+			stream->stream_errno = 0;
 		return NULL;
 	}
 
@@ -379,10 +424,23 @@ char *i_stream_read_next_line(struct istream *stream)
 		if (line != NULL)
 			break;
 
-		if (i_stream_read(stream) <= 0)
+		switch (i_stream_read(stream)) {
+		case -2:
+			stream->stream_errno = errno = ENOBUFS;
+			stream->eof = TRUE;
+			return NULL;
+		case -1:
 			return i_stream_last_line(stream->real_stream);
+		case 0:
+			return NULL;
+		}
 	}
 	return line;
+}
+
+bool i_stream_last_line_crlf(struct istream *stream)
+{
+	return stream->real_stream->line_crlf;
 }
 
 const unsigned char *
@@ -397,6 +455,16 @@ i_stream_get_data(const struct istream *stream, size_t *size_r)
 
         *size_r = _stream->pos - _stream->skip;
         return _stream->buffer + _stream->skip;
+}
+
+size_t i_stream_get_data_size(const struct istream *stream)
+{
+	const struct istream_private *_stream = stream->real_stream;
+
+	if (_stream->skip >= _stream->pos)
+		return 0;
+	else
+		return _stream->pos - _stream->skip;
 }
 
 unsigned char *i_stream_get_modifiable_data(const struct istream *stream,
@@ -485,8 +553,8 @@ void i_stream_grow_buffer(struct istream_private *stream, size_t bytes)
 	}
 }
 
-bool i_stream_get_buffer_space(struct istream_private *stream,
-			       size_t wanted_size, size_t *size_r)
+bool i_stream_try_alloc(struct istream_private *stream,
+			size_t wanted_size, size_t *size_r)
 {
 	i_assert(wanted_size > 0);
 
@@ -501,9 +569,28 @@ bool i_stream_get_buffer_space(struct istream_private *stream,
 		}
 	}
 
-	if (size_r != NULL)
-		*size_r = stream->buffer_size - stream->pos;
-	return stream->pos != stream->buffer_size;
+	*size_r = stream->buffer_size - stream->pos;
+	if (stream->try_alloc_limit > 0 &&
+	    *size_r > stream->try_alloc_limit)
+		*size_r = stream->try_alloc_limit;
+	return *size_r > 0;
+}
+
+void *i_stream_alloc(struct istream_private *stream, size_t size)
+{
+	size_t old_size, avail_size;
+
+	i_stream_try_alloc(stream, size, &avail_size);
+	if (avail_size < size) {
+		old_size = stream->buffer_size;
+		stream->buffer_size = nearest_power(stream->pos + size);
+		stream->w_buffer = i_realloc(stream->w_buffer, old_size,
+					     stream->buffer_size);
+		stream->buffer = stream->w_buffer;
+		i_stream_try_alloc(stream, size, &avail_size);
+		i_assert(avail_size >= size);
+	}
+	return stream->w_buffer + stream->pos;
 }
 
 bool i_stream_add_data(struct istream *_stream, const unsigned char *data,
@@ -512,13 +599,57 @@ bool i_stream_add_data(struct istream *_stream, const unsigned char *data,
 	struct istream_private *stream = _stream->real_stream;
 	size_t size2;
 
-	(void)i_stream_get_buffer_space(stream, size, &size2);
+	i_stream_try_alloc(stream, size, &size2);
 	if (size > size2)
 		return FALSE;
 
 	memcpy(stream->w_buffer + stream->pos, data, size);
 	stream->pos += size;
 	return TRUE;
+}
+
+void i_stream_set_input_pending(struct istream *stream, bool pending)
+{
+	if (!pending)
+		return;
+
+	while (stream->real_stream->parent != NULL) {
+		i_assert(stream->real_stream->io == NULL);
+		stream = stream->real_stream->parent;
+	}
+	if (stream->real_stream->io != NULL)
+		io_set_pending(stream->real_stream->io);
+}
+
+void i_stream_switch_ioloop(struct istream *stream)
+{
+	do {
+		if (stream->real_stream->switch_ioloop != NULL)
+			stream->real_stream->switch_ioloop(stream->real_stream);
+		stream = stream->real_stream->parent;
+	} while (stream != NULL);
+}
+
+void i_stream_set_io(struct istream *stream, struct io *io)
+{
+	while (stream->real_stream->parent != NULL) {
+		i_assert(stream->real_stream->io == NULL);
+		stream = stream->real_stream->parent;
+	}
+
+	i_assert(stream->real_stream->io == NULL);
+	stream->real_stream->io = io;
+}
+
+void i_stream_unset_io(struct istream *stream, struct io *io)
+{
+	while (stream->real_stream->parent != NULL) {
+		i_assert(stream->real_stream->io == NULL);
+		stream = stream->real_stream->parent;
+	}
+
+	i_assert(stream->real_stream->io == io);
+	stream->real_stream->io = NULL;
 }
 
 static void
@@ -532,6 +663,15 @@ i_stream_default_set_max_buffer_size(struct iostream_private *stream,
 		i_stream_set_max_buffer_size(_stream->parent, max_size);
 }
 
+static void i_stream_default_close(struct iostream_private *stream,
+				   bool close_parent)
+{
+	struct istream_private *_stream = (struct istream_private *)stream;
+
+	if (close_parent && _stream->parent != NULL)
+		i_stream_close(_stream->parent);
+}
+
 static void i_stream_default_destroy(struct iostream_private *stream)
 {
 	struct istream_private *_stream = (struct istream_private *)stream;
@@ -541,13 +681,22 @@ static void i_stream_default_destroy(struct iostream_private *stream)
 		i_stream_unref(&_stream->parent);
 }
 
-void i_stream_default_seek(struct istream_private *stream,
-			   uoff_t v_offset, bool mark ATTR_UNUSED)
+static void
+i_stream_default_seek_seekable(struct istream_private *stream,
+			       uoff_t v_offset, bool mark ATTR_UNUSED)
+{
+	stream->istream.v_offset = v_offset;
+	stream->skip = stream->pos = 0;
+}
+
+void i_stream_default_seek_nonseekable(struct istream_private *stream,
+				       uoff_t v_offset, bool mark ATTR_UNUSED)
 {
 	size_t available;
 
 	if (stream->istream.v_offset > v_offset)
-		i_panic("stream doesn't support seeking backwards");
+		i_panic("stream %s doesn't support seeking backwards",
+			i_stream_get_name(&stream->istream));
 
 	while (stream->istream.v_offset < v_offset) {
 		(void)i_stream_read(&stream->istream);
@@ -566,48 +715,68 @@ void i_stream_default_seek(struct istream_private *stream,
 	}
 }
 
-static const struct stat *
-i_stream_default_stat(struct istream_private *stream, bool exact ATTR_UNUSED)
+static int
+i_stream_default_stat(struct istream_private *stream, bool exact)
 {
-	return &stream->statbuf;
+	const struct stat *st;
+
+	if (stream->parent == NULL)
+		return stream->istream.stream_errno == 0 ? 0 : -1;
+
+	if (i_stream_stat(stream->parent, exact, &st) < 0)
+		return -1;
+	stream->statbuf = *st;
+	if (exact && !stream->stream_size_passthrough) {
+		/* exact size is not known, even if parent returned something */
+		stream->statbuf.st_size = -1;
+	}
+	return 0;
 }
 
 static int
 i_stream_default_get_size(struct istream_private *stream,
 			  bool exact, uoff_t *size_r)
 {
-	const struct stat *st;
-
-	st = stream->stat(stream, exact);
-	if (st == NULL)
+	if (stream->stat(stream, exact) < 0)
 		return -1;
-	if (st->st_size == -1)
+	if (stream->statbuf.st_size == -1)
 		return 0;
 
-	*size_r = st->st_size;
+	*size_r = stream->statbuf.st_size;
 	return 1;
+}
+
+void i_stream_init_parent(struct istream_private *_stream,
+			  struct istream *parent)
+{
+	_stream->access_counter = parent->real_stream->access_counter;
+	_stream->parent = parent;
+	_stream->parent_start_offset = parent->v_offset;
+	_stream->parent_expected_offset = parent->v_offset;
+	_stream->abs_start_offset = parent->v_offset +
+		parent->real_stream->abs_start_offset;
+	/* if parent stream is an istream-error, copy the error */
+	_stream->istream.stream_errno = parent->stream_errno;
+	_stream->istream.eof = parent->eof;
+	i_stream_ref(parent);
 }
 
 struct istream *
 i_stream_create(struct istream_private *_stream, struct istream *parent, int fd)
 {
 	_stream->fd = fd;
-	if (parent != NULL) {
-		_stream->access_counter = parent->real_stream->access_counter;
-		_stream->parent = parent;
-		_stream->parent_start_offset = parent->v_offset;
-		_stream->parent_expected_offset = parent->v_offset;
-		_stream->abs_start_offset = parent->v_offset +
-			parent->real_stream->abs_start_offset;
-		i_stream_ref(parent);
-	}
+	if (parent != NULL)
+		i_stream_init_parent(_stream, parent);
 	_stream->istream.real_stream = _stream;
 
+	if (_stream->iostream.close == NULL)
+		_stream->iostream.close = i_stream_default_close;
 	if (_stream->iostream.destroy == NULL)
 		_stream->iostream.destroy = i_stream_default_destroy;
 	if (_stream->seek == NULL) {
-		i_assert(!_stream->istream.seekable);
-		_stream->seek = i_stream_default_seek;
+		_stream->seek = _stream->istream.seekable ?
+			i_stream_default_seek_seekable :
+			i_stream_default_seek_nonseekable;
 	}
 	if (_stream->stat == NULL)
 		_stream->stat = i_stream_default_stat;
@@ -628,4 +797,33 @@ i_stream_create(struct istream_private *_stream, struct istream *parent, int fd)
 
 	io_stream_init(&_stream->iostream);
 	return &_stream->istream;
+}
+
+struct istream *i_stream_create_error(int stream_errno)
+{
+	struct istream_private *stream;
+
+	stream = i_new(struct istream_private, 1);
+	stream->istream.closed = TRUE;
+	stream->istream.readable_fd = FALSE;
+	stream->istream.blocking = TRUE;
+	stream->istream.seekable = TRUE;
+	stream->istream.eof = TRUE;
+	stream->istream.stream_errno = stream_errno;
+	i_stream_create(stream, NULL, -1);
+	i_stream_set_name(&stream->istream, "(error)");
+	return &stream->istream;
+}
+
+struct istream *
+i_stream_create_error_str(int stream_errno, const char *fmt, ...)
+{
+	struct istream *input;
+	va_list args;
+
+	va_start(args, fmt);
+	input = i_stream_create_error(stream_errno);
+	io_stream_set_verror(&input->real_stream->iostream, fmt, args);
+	va_end(args);
+	return input;
 }

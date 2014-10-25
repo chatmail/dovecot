@@ -1,11 +1,11 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "pop3-common.h"
 #include "array.h"
 #include "istream.h"
 #include "ostream.h"
+#include "hash.h"
 #include "str.h"
-#include "crc32.h"
 #include "var-expand.h"
 #include "message-size.h"
 #include "mail-storage.h"
@@ -130,10 +130,11 @@ struct cmd_list_context {
 static void cmd_list_callback(struct client *client)
 {
 	struct cmd_list_context *ctx = client->cmd_context;
-	int ret = 1;
 
 	for (; ctx->msgnum != client->messages_count; ctx->msgnum++) {
-		if (ret == 0) {
+		if (client->output->closed)
+			break;
+		if (POP3_CLIENT_OUTPUT_FULL(client)) {
 			/* buffer full */
 			return;
 		}
@@ -144,10 +145,8 @@ static void cmd_list_callback(struct client *client)
 				continue;
 		}
 
-		ret = client_send_line(client, "%u %"PRIuUOFF_T, ctx->msgnum+1,
-				       client->message_sizes[ctx->msgnum]);
-		if (ret < 0)
-			break;
+		client_send_line(client, "%u %"PRIuUOFF_T, ctx->msgnum+1,
+				 client->message_sizes[ctx->msgnum]);
 	}
 
 	client_send_line(client, ".");
@@ -197,11 +196,12 @@ static struct mail_search_args *
 pop3_search_build(struct client *client, uint32_t seq)
 {
 	struct mail_search_args *search_args;
+	struct mail_search_arg *sarg;
 
 	search_args = mail_search_build_init();
 	if (seq == 0) {
-		mail_search_build_add_seqset(search_args,
-					     1, client->messages_count);
+		sarg = mail_search_build_add(search_args, SEARCH_SEQSET);
+		sarg->value.seqset = client->all_seqs;
 	} else {
 		mail_search_build_add_seqset(search_args, seq, seq);
 	}
@@ -223,11 +223,21 @@ static int client_verify_ordering(struct client *client,
 	return 0;
 }
 
+static void client_expunge(struct client *client, struct mail *mail)
+{
+	if (client->deleted_kw != NULL)
+		mail_update_keywords(mail, MODIFY_ADD, client->deleted_kw);
+	else
+		mail_expunge(mail);
+	client->expunged_count++;
+}
+
 bool client_update_mails(struct client *client)
 {
 	struct mail_search_args *search_args;
 	struct mail_search_context *ctx;
 	struct mail *mail;
+	ARRAY_TYPE(seq_range) deleted_msgs, seen_msgs;
 	uint32_t msgnum, bit;
 	bool ret = TRUE;
 
@@ -236,28 +246,34 @@ bool client_update_mails(struct client *client)
 		return TRUE;
 	}
 
+	/* translate msgnums to sequences (in case POP3 ordering is
+	   different) */
+	t_array_init(&deleted_msgs, 8);
+	if (client->deleted_bitmask != NULL) {
+		for (msgnum = 0; msgnum < client->messages_count; msgnum++) {
+			bit = 1 << (msgnum % CHAR_BIT);
+			if ((client->deleted_bitmask[msgnum / CHAR_BIT] & bit) != 0)
+				seq_range_array_add(&deleted_msgs, msgnum_to_seq(client, msgnum));
+		}
+	}
+	t_array_init(&seen_msgs, 8);
+	if (client->seen_bitmask != NULL) {
+		for (msgnum = 0; msgnum < client->messages_count; msgnum++) {
+			bit = 1 << (msgnum % CHAR_BIT);
+			if ((client->seen_bitmask[msgnum / CHAR_BIT] & bit) != 0)
+				seq_range_array_add(&seen_msgs, msgnum_to_seq(client, msgnum));
+		}
+	}
+
 	search_args = pop3_search_build(client, 0);
-	ctx = mailbox_search_init(client->trans, search_args,
-				  pop3_sort_program, 0, NULL);
+	ctx = mailbox_search_init(client->trans, search_args, NULL, 0, NULL);
 	mail_search_args_unref(&search_args);
 
-	msgnum = 0;
 	while (mailbox_search_next(ctx, &mail)) {
-		if (client_verify_ordering(client, mail, msgnum) < 0) {
-			ret = FALSE;
-			break;
-		}
-
-		bit = 1 << (msgnum % CHAR_BIT);
-		if (client->deleted_bitmask != NULL &&
-		    (client->deleted_bitmask[msgnum / CHAR_BIT] & bit) != 0) {
-			mail_expunge(mail);
-			client->expunged_count++;
-		} else if (client->seen_bitmask != NULL &&
-			   (client->seen_bitmask[msgnum / CHAR_BIT] & bit) != 0) {
+		if (seq_range_exists(&deleted_msgs, mail->seq))
+			client_expunge(client, mail);
+		else if (seq_range_exists(&seen_msgs, mail->seq))
 			mail_update_flags(mail, MODIFY_ADD, MAIL_SEEN);
-		}
-		msgnum++;
 	}
 
 	client->seen_change_count = 0;
@@ -391,13 +407,13 @@ static void fetch_callback(struct client *client)
 
 	if (ctx->last != '\n') {
 		/* didn't end with CRLF */
-		(void)o_stream_send(client->output, "\r\n", 2);
+		o_stream_nsend(client->output, "\r\n", 2);
 	}
 
 	if (!ctx->in_body &&
 	    (client->set->parsed_workarounds & WORKAROUND_OE_NS_EOH) != 0) {
 		/* Add the missing end of headers line. */
-		(void)o_stream_send(client->output, "\r\n", 2);
+		o_stream_nsend(client->output, "\r\n", 2);
 	}
 
 	*ctx->byte_counter +=
@@ -512,7 +528,7 @@ static int cmd_rset(struct client *client, const char *args ATTR_UNUSED)
 			mail_update_flags(mail, MODIFY_REMOVE, MAIL_SEEN);
 		(void)mailbox_search_deinit(&search_ctx);
 
-		mailbox_transaction_commit(&client->trans);
+		(void)mailbox_transaction_commit(&client->trans);
 		client->trans = mailbox_transaction_begin(client->mailbox, 0);
 	}
 
@@ -550,62 +566,9 @@ struct cmd_uidl_context {
 	bool list_all;
 };
 
-static bool pop3_get_uid(struct client *client, struct cmd_uidl_context *ctx,
-			 struct var_expand_table *tab, string_t *str)
-{
-	char uid_str[MAX_INT_STRLEN];
-	const char *uidl;
-
-	if (mail_get_special(ctx->mail, MAIL_FETCH_UIDL_BACKEND, &uidl) == 0 &&
-	    *uidl != '\0') {
-		str_append(str, uidl);
-		return TRUE;
-	}
-
-	if (client->set->pop3_reuse_xuidl &&
-	    mail_get_first_header(ctx->mail, "X-UIDL", &uidl) > 0) {
-		str_append(str, uidl);
-		return FALSE;
-	}
-
-	if ((client->uidl_keymask & UIDL_UID) != 0) {
-		i_snprintf(uid_str, sizeof(uid_str), "%u",
-			   ctx->mail->uid);
-		tab[1].value = uid_str;
-	}
-	if ((client->uidl_keymask & UIDL_MD5) != 0) {
-		if (mail_get_special(ctx->mail, MAIL_FETCH_HEADER_MD5,
-				     &tab[2].value) < 0 ||
-		    *tab[2].value == '\0') {
-			/* broken */
-			i_fatal("UIDL: Header MD5 not found "
-				"(pop3_uidl_format=%%m not supported by storage?)");
-		}
-	}
-	if ((client->uidl_keymask & UIDL_FILE_NAME) != 0) {
-		if (mail_get_special(ctx->mail,
-				     MAIL_FETCH_UIDL_FILE_NAME,
-				     &tab[3].value) < 0 ||
-		    *tab[3].value == '\0') {
-			/* broken */
-			i_fatal("UIDL: File name not found "
-				"(pop3_uidl_format=%%f not supported by storage?)");
-		}
-	}
-	if ((client->uidl_keymask & UIDL_GUID) != 0) {
-		if (mail_get_special(ctx->mail, MAIL_FETCH_GUID,
-				     &tab[4].value) < 0 ||
-		    *tab[4].value == '\0') {
-			/* broken */
-			i_fatal("UIDL: Message GUID not found "
-				"(pop3_uidl_format=%%g not supported by storage?)");
-		}
-	}
-	var_expand(str, client->mail_set->pop3_uidl_format, tab);
-	return FALSE;
-}
-
-static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
+static int
+pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
+	     bool *permanent_uidl_r)
 {
 	static struct var_expand_table static_tab[] = {
 		{ 'v', NULL, "uidvalidity" },
@@ -616,27 +579,126 @@ static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
-	string_t *str;
-	int ret;
-	unsigned int uidl_pos;
-	bool save_hashes, found = FALSE;
+	char uid_str[MAX_INT_STRLEN];
+	const char *uidl;
+
+	if (mail_get_special(mail, MAIL_FETCH_UIDL_BACKEND, &uidl) == 0 &&
+	    *uidl != '\0') {
+		str_append(str, uidl);
+		/* UIDL is already permanent */
+		*permanent_uidl_r = TRUE;
+		return 0;
+	}
+
+	*permanent_uidl_r = FALSE;
+
+	if (client->set->pop3_reuse_xuidl &&
+	    mail_get_first_header(mail, "X-UIDL", &uidl) > 0) {
+		str_append(str, uidl);
+		return 0;
+	}
 
 	tab = t_malloc(sizeof(static_tab));
 	memcpy(tab, static_tab, sizeof(static_tab));
 	tab[0].value = t_strdup_printf("%u", client->uid_validity);
 
-	save_hashes = client->message_uidl_hashes_save && ctx->list_all;
-	if (save_hashes && client->message_uidl_hashes == NULL) {
-		client->message_uidl_hashes =
-			i_new(uint32_t, client->messages_count);
+	if ((client->uidl_keymask & UIDL_UID) != 0) {
+		if (i_snprintf(uid_str, sizeof(uid_str), "%u", mail->uid) < 0)
+			i_unreached();
+		tab[1].value = uid_str;
 	}
+	if ((client->uidl_keymask & UIDL_MD5) != 0) {
+		if (mail_get_special(mail, MAIL_FETCH_HEADER_MD5,
+				     &tab[2].value) < 0) {
+			i_error("UIDL: Header MD5 lookup failed: %s",
+				mailbox_get_last_error(mail->box, NULL));
+			return -1;
+		} else if (*tab[2].value == '\0') {
+			i_error("UIDL: Header MD5 not found "
+				"(pop3_uidl_format=%%m not supported by storage?)");
+			return -1;
+		}
+	}
+	if ((client->uidl_keymask & UIDL_FILE_NAME) != 0) {
+		if (mail_get_special(mail, MAIL_FETCH_UIDL_FILE_NAME,
+				     &tab[3].value) < 0) {
+			i_error("UIDL: File name lookup failed: %s",
+				mailbox_get_last_error(mail->box, NULL));
+			return -1;
+		} else if (*tab[3].value == '\0') {
+			i_error("UIDL: File name not found "
+				"(pop3_uidl_format=%%f not supported by storage?)");
+			return -1;
+		}
+	}
+	if ((client->uidl_keymask & UIDL_GUID) != 0) {
+		if (mail_get_special(mail, MAIL_FETCH_GUID,
+				     &tab[4].value) < 0) {
+			i_error("UIDL: Message GUID lookup failed: %s",
+				mailbox_get_last_error(mail->box, NULL));
+			return -1;
+		} else if (*tab[4].value == '\0') {
+			i_error("UIDL: Message GUID not found "
+				"(pop3_uidl_format=%%g not supported by storage?)");
+			return -1;
+		}
+	}
+	var_expand(str, client->mail_set->pop3_uidl_format, tab);
+	return 0;
+}
+
+static bool
+list_uidls_saved_iter(struct client *client, struct cmd_uidl_context *ctx)
+{
+	bool found = FALSE;
+
+	while (ctx->msgnum < client->messages_count) {
+		uint32_t msgnum = ctx->msgnum++;
+
+		if (client->deleted) {
+			if (client->deleted_bitmask[msgnum / CHAR_BIT] &
+			    (1 << (msgnum % CHAR_BIT)))
+				continue;
+		}
+		found = TRUE;
+
+		client_send_line(client,
+				 ctx->list_all ? "%u %s" : "+OK %u %s",
+				 msgnum+1, client->message_uidls[msgnum]);
+		if (client->output->closed || !ctx->list_all)
+			break;
+		if (POP3_CLIENT_OUTPUT_FULL(client)) {
+			/* output is being buffered, continue when there's
+			   more space */
+			return FALSE;
+		}
+	}
+	/* finished */
+	client->cmd = NULL;
+
+	if (ctx->list_all)
+		client_send_line(client, ".");
+	i_free(ctx);
+	return found;
+}
+
+static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
+{
+	string_t *str;
+	bool permanent_uidl, found = FALSE;
+	bool failed = FALSE;
+
+	if (client->message_uidls != NULL)
+		return list_uidls_saved_iter(client, ctx);
 
 	str = t_str_new(128);
 	while (mailbox_search_next(ctx->search_ctx, &ctx->mail)) {
 		uint32_t msgnum = ctx->msgnum++;
 
-		if (client_verify_ordering(client, ctx->mail, msgnum) < 0)
-			i_fatal("Can't finish POP3 UIDL command");
+		if (client_verify_ordering(client, ctx->mail, msgnum) < 0) {
+			failed = TRUE;
+			break;
+		}
 		if (client->deleted) {
 			if (client->deleted_bitmask[msgnum / CHAR_BIT] &
 			    (1 << (msgnum % CHAR_BIT)))
@@ -645,21 +707,18 @@ static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
 		found = TRUE;
 
 		str_truncate(str, 0);
-		str_printfa(str, ctx->list_all ? "%u " : "+OK %u ", msgnum+1);
-		uidl_pos = str_len(str);
-		if (!pop3_get_uid(client, ctx, tab, str) &&
-		    client->set->pop3_save_uidl)
-			mail_update_pop3_uidl(ctx->mail, str_c(str) + uidl_pos);
-
-		if (save_hashes) {
-			client->message_uidl_hashes[msgnum] =
-				crc32_str(str_c(str) + uidl_pos);
-		}
-
-		ret = client_send_line(client, "%s", str_c(str));
-		if (ret < 0)
+		if (pop3_get_uid(client, ctx->mail, str, &permanent_uidl) < 0) {
+			failed = TRUE;
 			break;
-		if (ret == 0 && ctx->list_all) {
+		}
+		if (client->set->pop3_save_uidl && !permanent_uidl)
+			mail_update_pop3_uidl(ctx->mail, str_c(str));
+
+		client_send_line(client, ctx->list_all ? "%u %s" : "+OK %u %s",
+				 msgnum+1, str_c(str));
+		if (client->output->closed)
+			break;
+		if (POP3_CLIENT_OUTPUT_FULL(client) && ctx->list_all) {
 			/* output is being buffered, continue when there's
 			   more space */
 			return FALSE;
@@ -671,12 +730,12 @@ static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
 
 	client->cmd = NULL;
 
-	if (save_hashes)
-		client->message_uidl_hashes_save = FALSE;
-	if (ctx->list_all)
+	if (ctx->list_all && !failed)
 		client_send_line(client, ".");
 	i_free(ctx);
-	return found;
+	if (failed)
+		client_disconnect(client, "POP3 UIDLs couldn't be listed");
+	return found || failed;
 }
 
 static void cmd_uidl_callback(struct client *client)
@@ -686,6 +745,91 @@ static void cmd_uidl_callback(struct client *client)
         (void)list_uids_iter(client, ctx);
 }
 
+HASH_TABLE_DEFINE_TYPE(uidl_counter, char *, void *);
+
+static void
+uidl_rename_duplicate(string_t *uidl, HASH_TABLE_TYPE(uidl_counter) prev_uidls)
+{
+	char *key;
+	void *value;
+	unsigned int counter;
+
+	while (hash_table_lookup_full(prev_uidls, str_c(uidl), &key, &value)) {
+		/* duplicate. the value contains the number of duplicates. */
+		counter = POINTER_CAST_TO(value, unsigned int) + 1;
+		hash_table_update(prev_uidls, key, POINTER_CAST(counter));
+		str_printfa(uidl, "-%u", counter);
+		/* the second lookup really should return NULL, but just in
+		   case of some weird UIDLs do this as many times as needed */
+	}
+}
+
+static void client_uidls_save(struct client *client)
+{
+	struct mail_search_context *search_ctx;
+	struct mail_search_args *search_args;
+	struct mail *mail;
+	HASH_TABLE_TYPE(uidl_counter) prev_uidls;
+	const char **seq_uidls;
+	string_t *str;
+	char *uidl;
+	enum mail_fetch_field wanted_fields;
+	uint32_t msgnum;
+	bool permanent_uidl, uidl_duplicates_rename, failed = FALSE;
+
+	i_assert(client->message_uidls == NULL);
+
+	search_args = pop3_search_build(client, 0);
+	wanted_fields = 0;
+	if ((client->uidl_keymask & UIDL_MD5) != 0)
+		wanted_fields |= MAIL_FETCH_HEADER_MD5;
+
+	search_ctx = mailbox_search_init(client->trans, search_args,
+					 NULL, wanted_fields, NULL);
+	mail_search_args_unref(&search_args);
+
+	uidl_duplicates_rename =
+		strcmp(client->set->pop3_uidl_duplicates, "rename") == 0;
+	hash_table_create(&prev_uidls, default_pool, 0, str_hash, strcmp);
+	client->uidl_pool = pool_alloconly_create("message uidls", 1024);
+
+	/* first read all the UIDLs into a temporary [seq] array */
+	seq_uidls = i_new(const char *, client->messages_count);
+	str = t_str_new(128);
+	while (mailbox_search_next(search_ctx, &mail)) {
+		str_truncate(str, 0);
+		if (pop3_get_uid(client, mail, str, &permanent_uidl) < 0) {
+			failed = TRUE;
+			break;
+		}
+		if (uidl_duplicates_rename)
+			uidl_rename_duplicate(str, prev_uidls);
+
+		uidl = p_strdup(client->uidl_pool, str_c(str));
+		if (client->set->pop3_save_uidl && !permanent_uidl)
+			mail_update_pop3_uidl(mail, uidl);
+
+		seq_uidls[mail->seq-1] = uidl;
+		hash_table_insert(prev_uidls, uidl, POINTER_CAST(1));
+	}
+	(void)mailbox_search_deinit(&search_ctx);
+	hash_table_destroy(&prev_uidls);
+
+	if (failed) {
+		pool_unref(&client->uidl_pool);
+		i_free(seq_uidls);
+		return;
+	}
+	/* map UIDLs to msgnums (in case POP3 sort ordering is different) */
+	client->message_uidls = p_new(client->uidl_pool, const char *,
+				      client->messages_count+1);
+	for (msgnum = 0; msgnum < client->messages_count; msgnum++) {
+		client->message_uidls[msgnum] =
+			seq_uidls[msgnum_to_seq(client, msgnum) - 1];
+	}
+	i_free(seq_uidls);
+}
+
 static struct cmd_uidl_context *
 cmd_uidl_init(struct client *client, uint32_t seq)
 {
@@ -693,19 +837,24 @@ cmd_uidl_init(struct client *client, uint32_t seq)
 	struct mail_search_args *search_args;
 	enum mail_fetch_field wanted_fields;
 
-	search_args = pop3_search_build(client, seq);
+	if (client->message_uidls_save && client->message_uidls == NULL &&
+	    client->messages_count > 0)
+		client_uidls_save(client);
 
 	ctx = i_new(struct cmd_uidl_context, 1);
 	ctx->list_all = seq == 0;
 
-	wanted_fields = 0;
-	if ((client->uidl_keymask & UIDL_MD5) != 0)
-		wanted_fields |= MAIL_FETCH_HEADER_MD5;
+	if (client->message_uidls == NULL) {
+		wanted_fields = 0;
+		if ((client->uidl_keymask & UIDL_MD5) != 0)
+			wanted_fields |= MAIL_FETCH_HEADER_MD5;
 
-	ctx->search_ctx = mailbox_search_init(client->trans, search_args,
-					      pop3_sort_program,
-					      wanted_fields, NULL);
-	mail_search_args_unref(&search_args);
+		search_args = pop3_search_build(client, seq);
+		ctx->search_ctx = mailbox_search_init(client->trans, search_args,
+						      pop3_sort_program,
+						      wanted_fields, NULL);
+		mail_search_args_unref(&search_args);
+	}
 
 	if (seq == 0) {
 		client->cmd = cmd_uidl_callback;

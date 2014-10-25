@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
@@ -15,37 +15,52 @@
 #include "imap-commands-util.h"
 
 struct mail_namespace *
-client_find_namespace(struct client_command_context *cmd, const char **mailbox)
+client_find_namespace_full(struct client *client,
+			   const char **mailbox, const char **error_r)
 {
-	struct mail_namespace *namespaces = cmd->client->user->namespaces;
+	struct mail_namespace *namespaces = client->user->namespaces;
 	struct mail_namespace *ns;
-	unsigned int name_len;
 	string_t *utf8_name;
-
-	ns = mail_namespace_find(namespaces, *mailbox);
-	if (ns == NULL) {
-		client_send_tagline(cmd, t_strdup_printf(
-			"NO Client tried to access nonexistent namespace. "
-			"(Mailbox name should probably be prefixed with: %s)",
-			mail_namespace_find_inbox(namespaces)->prefix));
-		return NULL;
-	}
-
-	name_len = strlen(*mailbox);
-	if ((cmd->client->set->parsed_workarounds &
-	     		WORKAROUND_TB_EXTRA_MAILBOX_SEP) != 0 &&
-	    name_len > 0 &&
-	    (*mailbox)[name_len-1] == mail_namespace_get_sep(ns)) {
-		/* drop the extra trailing hierarchy separator */
-		*mailbox = t_strndup(*mailbox, name_len-1);
-	}
 
 	utf8_name = t_str_new(64);
 	if (imap_utf7_to_utf8(*mailbox, utf8_name) < 0) {
-		client_send_tagline(cmd, "NO Mailbox name is not valid mUTF-7");
+		*error_r = "NO Mailbox name is not valid mUTF-7";
 		return NULL;
 	}
+
+	ns = mail_namespace_find(namespaces, str_c(utf8_name));
+	if ((ns->flags & NAMESPACE_FLAG_AUTOCREATED) != 0 &&
+	    ns->prefix_len == 0) {
+		/* this matched only the autocreated prefix="" namespace.
+		   give a nice human-readable error message */
+		*error_r = t_strdup_printf(
+			"NO Client tried to access nonexistent namespace. "
+			"(Mailbox name should probably be prefixed with: %s)",
+			mail_namespace_find_inbox(namespaces)->prefix);
+		return NULL;
+	}
+
+	if ((client->set->parsed_workarounds &
+	     		WORKAROUND_TB_EXTRA_MAILBOX_SEP) != 0 &&
+	    str_len(utf8_name) > 0 &&
+	    str_c(utf8_name)[str_len(utf8_name)-1] == mail_namespace_get_sep(ns)) {
+		/* drop the extra trailing hierarchy separator */
+		str_truncate(utf8_name, str_len(utf8_name)-1);
+	}
+
 	*mailbox = str_c(utf8_name);
+	return ns;
+}
+
+struct mail_namespace *
+client_find_namespace(struct client_command_context *cmd, const char **mailbox)
+{
+	struct mail_namespace *ns;
+	const char *error;
+
+	ns = client_find_namespace_full(cmd->client, mailbox, &error);
+	if (ns == NULL)
+		client_send_tagline(cmd, error);
 	return ns;
 }
 
@@ -83,14 +98,14 @@ int client_open_save_dest_box(struct client_command_context *cmd,
 			client_send_tagline(cmd,  t_strdup_printf(
 				"NO [TRYCREATE] %s", error_string));
 		} else {
-			client_send_storage_error(cmd, mailbox_get_storage(box));
+			client_send_box_error(cmd, box);
 		}
 		mailbox_free(&box);
 		return -1;
 	}
 	if (cmd->client->enabled_features != 0) {
 		if (mailbox_enable(box, cmd->client->enabled_features) < 0) {
-			client_send_storage_error(cmd, mailbox_get_storage(box));
+			client_send_box_error(cmd, box);
 			mailbox_free(&box);
 			return -1;
 		}
@@ -134,6 +149,9 @@ imap_get_error_string(struct client_command_context *cmd,
 	case MAIL_ERROR_INUSE:
 		resp_code = IMAP_RESP_CODE_INUSE;
 		break;
+	case MAIL_ERROR_CONVERSION:
+	case MAIL_ERROR_INVALIDDATA:
+		break;
 	}
 	if (resp_code == NULL || *error_string == '[')
 		return t_strconcat("NO ", error_string, NULL);
@@ -150,6 +168,18 @@ void client_send_list_error(struct client_command_context *cmd,
 	error_string = mailbox_list_get_last_error(list, &error);
 	client_send_tagline(cmd, imap_get_error_string(cmd, error_string,
 						       error));
+}
+
+void client_send_box_error(struct client_command_context *cmd,
+			   struct mailbox *box)
+{
+	if (mailbox_is_inconsistent(box)) {
+		/* we can't do forced CLOSE, so have to disconnect */
+		client_disconnect_with_error(cmd->client,
+			"IMAP session state is inconsistent, please relogin.");
+		return;
+	}
+	client_send_storage_error(cmd, mailbox_get_storage(box));
 }
 
 void client_send_storage_error(struct client_command_context *cmd,
@@ -196,7 +226,7 @@ bool client_parse_mail_flags(struct client_command_context *cmd,
 {
 	const char *atom;
 	enum mail_flags flag;
-	ARRAY_DEFINE(keywords, const char *);
+	ARRAY(const char *) keywords;
 
 	*flags_r = 0;
 	*keywords_r = NULL;
@@ -216,9 +246,8 @@ bool client_parse_mail_flags(struct client_command_context *cmd,
 			if (flag != 0 && flag != MAIL_RECENT)
 				*flags_r |= flag;
 			else {
-				client_send_tagline(cmd, t_strconcat(
-					"BAD Invalid system flag ",
-					atom, NULL));
+				client_send_command_error(cmd, t_strconcat(
+					"Invalid system flag ", atom, NULL));
 				return FALSE;
 			}
 		} else {
@@ -232,7 +261,7 @@ bool client_parse_mail_flags(struct client_command_context *cmd,
 	if (array_count(&keywords) == 0)
 		*keywords_r = NULL;
 	else {
-		(void)array_append_space(&keywords); /* NULL-terminate */
+		array_append_zero(&keywords); /* NULL-terminate */
 		*keywords_r = array_idx(&keywords, 0);
 	}
 	return TRUE;
@@ -309,25 +338,8 @@ client_get_keyword_names(struct client *client, ARRAY_TYPE(keywords) *dest,
 		array_append(dest, &all_names[kw_index], 1);
 	}
 
-	(void)array_append_space(dest);
+	array_append_zero(dest);
 	return array_idx(dest, 0);
-}
-
-bool mailbox_equals(const struct mailbox *box1,
-		    const struct mail_namespace *ns2, const char *name2)
-{
-	struct mail_namespace *ns1 = mailbox_get_namespace(box1);
-	const char *name1;
-
-	if (ns1 != ns2)
-		return FALSE;
-
-        name1 = mailbox_get_vname(box1);
-	if (strcmp(name1, name2) == 0)
-		return TRUE;
-
-	return strcasecmp(name1, "INBOX") == 0 &&
-		strcasecmp(name2, "INBOX") == 0;
 }
 
 void msgset_generator_init(struct msgset_generator_context *ctx, string_t *str)
@@ -339,7 +351,9 @@ void msgset_generator_init(struct msgset_generator_context *ctx, string_t *str)
 
 void msgset_generator_next(struct msgset_generator_context *ctx, uint32_t uid)
 {
-	if (uid != ctx->last_uid+1) {
+	i_assert(uid > 0);
+
+	if (uid-1 != ctx->last_uid) {
 		if (ctx->first_uid == 0)
 			;
 		else if (ctx->first_uid == ctx->last_uid)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -77,7 +77,31 @@ char *str_unescape(char *str)
 	return start;
 }
 
-void str_tabescape_write(string_t *dest, const char *src)
+int str_unescape_next(const char **str, const char **unescaped_r)
+{
+	const char *p;
+	char *escaped;
+	bool esc_found = FALSE;
+
+	for (p = *str; *p != '\0'; p++) {
+		if (*p == '"')
+			break;
+		else if (*p == '\\') {
+			if (p[1] == '\0')
+				return -1;
+			esc_found = TRUE;
+			p++;
+		}
+	}
+	if (*p != '"')
+		return -1;
+	escaped = p_strdup_until(unsafe_data_stack_pool, *str, p);
+	*str = p+1;
+	*unescaped_r = !esc_found ? escaped : str_unescape(escaped);
+	return 0;
+}
+
+void str_append_tabescaped(string_t *dest, const char *src)
 {
 	for (; *src != '\0'; src++) {
 		switch (*src) {
@@ -113,7 +137,7 @@ const char *str_tabescape(const char *str)
 		if (*p <= '\r') {
 			tmp = t_str_new(128);
 			str_append_n(tmp, str, p-str);
-			str_tabescape_write(tmp, p);
+			str_append_tabescaped(tmp, p);
 			return str_c(tmp);
 		}
 	}

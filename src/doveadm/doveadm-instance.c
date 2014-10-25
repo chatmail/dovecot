@@ -1,10 +1,12 @@
-/* Copyright (c) 2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "master-instance.h"
+#include "master-service-settings.h"
 #include "doveadm.h"
 #include "doveadm-print.h"
 
+#include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -38,26 +40,51 @@ static bool pid_file_read(const char *path)
 				  (kill(pid, 0) < 0 && errno == ESRCH));
 		}
 	}
-	(void)close(fd);
+	i_close_fd(&fd);
 	return found;
 }
 
-static void cmd_instance_list(int argc ATTR_UNUSED, char *argv[] ATTR_UNUSED)
+static void cmd_instance_list(int argc, char *argv[])
 {
 	struct master_instance_list *list;
 	struct master_instance_list_iter *iter;
 	const struct master_instance *inst;
-	const char *pidfile_path;
+	const char *instance_path, *pidfile_path;
+	bool show_config = FALSE;
+	int c;
 
-	doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
-	doveadm_print_header("path", "path", DOVEADM_PRINT_HEADER_FLAG_EXPAND);
-	doveadm_print_header_simple("name");
-	doveadm_print_header_simple("last used");
-	doveadm_print_header_simple("running");
+	while ((c = getopt(argc, argv, "c")) > 0) {
+		switch (c) {
+		case 'c':
+			show_config = TRUE;
+			break;
+		default:
+			help(&doveadm_cmd_instance[0]);
+		}
+	}
+	argv += optind;
 
-	list = master_instance_list_init(MASTER_INSTANCE_PATH);
+	if (!show_config) {
+		doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
+		doveadm_print_header("path", "path", DOVEADM_PRINT_HEADER_FLAG_EXPAND);
+		doveadm_print_header_simple("name");
+		doveadm_print_header_simple("last used");
+		doveadm_print_header_simple("running");
+	}
+
+	instance_path = t_strconcat(service_set->state_dir,
+				    "/"MASTER_INSTANCE_FNAME, NULL);
+	list = master_instance_list_init(instance_path);
 	iter = master_instance_list_iterate_init(list);
 	while ((inst = master_instance_iterate_list_next(iter)) != NULL) {
+		if (argv[0] != NULL && strcmp(argv[0], inst->name) != 0)
+			continue;
+
+		if (show_config) {
+			printf("%s\n", inst->config_path == NULL ? "" :
+			       inst->config_path);
+			continue;
+		}
 		doveadm_print(inst->base_dir);
 		doveadm_print(inst->name);
 		doveadm_print(unixdate2str(inst->last_used));
@@ -75,13 +102,15 @@ static void cmd_instance_remove(int argc, char *argv[])
 {
 	struct master_instance_list *list;
 	const struct master_instance *inst;
-	const char *base_dir;
+	const char *base_dir, *instance_path;
 	int ret;
 
 	if (argc != 2)
 		instance_cmd_help(cmd_instance_remove);
 
-	list = master_instance_list_init(MASTER_INSTANCE_PATH);
+	instance_path = t_strconcat(service_set->state_dir,
+				    "/"MASTER_INSTANCE_FNAME, NULL);
+	list = master_instance_list_init(instance_path);
 	inst = master_instance_list_find_by_name(list, argv[1]);
 	base_dir = inst != NULL ? inst->base_dir : argv[1];
 	if ((ret = master_instance_list_remove(list, base_dir)) < 0) {
@@ -95,7 +124,7 @@ static void cmd_instance_remove(int argc, char *argv[])
 }
 
 struct doveadm_cmd doveadm_cmd_instance[] = {
-	{ cmd_instance_list, "instance list", "" },
+	{ cmd_instance_list, "instance list", "[-c] [<name>]" },
 	{ cmd_instance_remove, "instance remove", "<name> | <base dir>" }
 };
 

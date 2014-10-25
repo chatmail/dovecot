@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
@@ -10,13 +10,58 @@
 #include "auth.h"
 
 struct auth_userdb_settings userdb_dummy_set = {
+	.name = "",
 	.driver = "static",
 	.args = "",
 	.default_fields = "",
-	.override_fields = ""
+	.override_fields = "",
+
+	.skip = "never",
+	.result_success = "return-ok",
+	.result_failure = "continue",
+	.result_internalfail = "continue"
 };
 
-static ARRAY_DEFINE(auths, struct auth *);
+static ARRAY(struct auth *) auths;
+
+static enum auth_passdb_skip auth_passdb_skip_parse(const char *str)
+{
+	if (strcmp(str, "never") == 0)
+		return AUTH_PASSDB_SKIP_NEVER;
+	if (strcmp(str, "authenticated") == 0)
+		return AUTH_PASSDB_SKIP_AUTHENTICATED;
+	if (strcmp(str, "unauthenticated") == 0)
+		return AUTH_PASSDB_SKIP_UNAUTHENTICATED;
+	i_unreached();
+}
+
+static enum auth_userdb_skip auth_userdb_skip_parse(const char *str)
+{
+	if (strcmp(str, "never") == 0)
+		return AUTH_USERDB_SKIP_NEVER;
+	if (strcmp(str, "found") == 0)
+		return AUTH_USERDB_SKIP_FOUND;
+	if (strcmp(str, "notfound") == 0)
+		return AUTH_USERDB_SKIP_NOTFOUND;
+	i_unreached();
+}
+
+static enum auth_db_rule auth_db_rule_parse(const char *str)
+{
+	if (strcmp(str, "return") == 0)
+		return AUTH_DB_RULE_RETURN;
+	if (strcmp(str, "return-ok") == 0)
+		return AUTH_DB_RULE_RETURN_OK;
+	if (strcmp(str, "return-fail") == 0)
+		return AUTH_DB_RULE_RETURN_FAIL;
+	if (strcmp(str, "continue") == 0)
+		return AUTH_DB_RULE_CONTINUE;
+	if (strcmp(str, "continue-ok") == 0)
+		return AUTH_DB_RULE_CONTINUE_OK;
+	if (strcmp(str, "continue-fail") == 0)
+		return AUTH_DB_RULE_CONTINUE_FAIL;
+	i_unreached();
+}
 
 static void
 auth_passdb_preinit(struct auth *auth, const struct auth_passdb_settings *set,
@@ -26,6 +71,17 @@ auth_passdb_preinit(struct auth *auth, const struct auth_passdb_settings *set,
 
 	auth_passdb = p_new(auth->pool, struct auth_passdb, 1);
 	auth_passdb->set = set;
+	auth_passdb->skip = auth_passdb_skip_parse(set->skip);
+	auth_passdb->result_success =
+		auth_db_rule_parse(set->result_success);
+	auth_passdb->result_failure =
+		auth_db_rule_parse(set->result_failure);
+	auth_passdb->result_internalfail =
+		auth_db_rule_parse(set->result_internalfail);
+
+	/* for backwards compatibility: */
+	if (set->pass)
+		auth_passdb->result_success = AUTH_DB_RULE_CONTINUE;
 
 	for (dest = passdbs; *dest != NULL; dest = &(*dest)->next) ;
 	*dest = auth_passdb;
@@ -40,6 +96,13 @@ auth_userdb_preinit(struct auth *auth, const struct auth_userdb_settings *set)
 
 	auth_userdb = p_new(auth->pool, struct auth_userdb, 1);
 	auth_userdb->set = set;
+	auth_userdb->skip = auth_userdb_skip_parse(set->skip);
+	auth_userdb->result_success =
+		auth_db_rule_parse(set->result_success);
+	auth_userdb->result_failure =
+		auth_db_rule_parse(set->result_failure);
+	auth_userdb->result_internalfail =
+		auth_db_rule_parse(set->result_internalfail);
 
 	for (dest = &auth->userdbs; *dest != NULL; dest = &(*dest)->next) ;
 	*dest = auth_userdb;
@@ -137,7 +200,7 @@ static void auth_mech_list_verify_passdb(struct auth *auth)
 	}
 }
 
-static struct auth *
+static struct auth * ATTR_NULL(2)
 auth_preinit(const struct auth_settings *set, const char *service, pool_t pool,
 	     const struct mechanisms_register *reg)
 {
@@ -244,6 +307,15 @@ struct auth *auth_find_service(const char *name)
 	return a[0];
 }
 
+struct auth *auth_default_service(void)
+{
+	struct auth *const *a;
+	unsigned int count;
+
+	a = array_get(&auths, &count);
+	return a[0];
+}
+
 void auths_preinit(const struct auth_settings *set, pool_t pool,
 		   const struct mechanisms_register *reg,
 		   const char *const *services)
@@ -287,6 +359,15 @@ void auths_preinit(const struct auth_settings *set, pool_t pool,
 void auths_init(void)
 {
 	struct auth *const *auth;
+
+	/* sanity checks */
+	i_assert(auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_USER_IDX].key == 'u');
+	i_assert(auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_USERNAME_IDX].key == 'n');
+	i_assert(auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_DOMAIN_IDX].key == 'd');
+	i_assert(auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_COUNT].key == '\0' &&
+		 auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_COUNT].long_key == NULL);
+	i_assert(auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_COUNT-1].key != '\0' ||
+		 auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_COUNT-1].long_key != NULL);
 
 	array_foreach(&auths, auth)
 		auth_init(*auth);

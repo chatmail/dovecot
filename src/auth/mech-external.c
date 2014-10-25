@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "passdb.h"
@@ -13,13 +13,25 @@ mech_external_auth_continue(struct auth_request *request,
 
 	authzid = t_strndup(data, data_size);
 	if (request->user == NULL) {
-		auth_request_log_info(request, "external",
+		auth_request_log_info(request, AUTH_SUBSYS_MECH,
 				      "username not known");
 		auth_request_fail(request);
-        } else if (*authzid != '\0' &&
-		   !auth_request_set_login_username(request, authzid, &error)) {
+		return;
+	}
+
+	/* this call is done simply to put the username through translation
+	   settings */
+	if (!auth_request_set_username(request, "", &error)) {
+		auth_request_log_info(request, AUTH_SUBSYS_MECH,
+				      "Invalid username");
+		auth_request_fail(request);
+		return;
+	}
+
+	if (*authzid != '\0' &&
+	    !auth_request_set_login_username(request, authzid, &error)) {
 		/* invalid login username */
-		auth_request_log_info(request, "plain",
+		auth_request_log_info(request, AUTH_SUBSYS_MECH,
 				      "login user: %s", error);
 		auth_request_fail(request);
 	} else {

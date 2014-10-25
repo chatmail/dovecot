@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -9,7 +9,10 @@
 
 string_t *str_new(pool_t pool, size_t initial_size)
 {
-	return buffer_create_dynamic(pool, initial_size);
+	/* never allocate a 0 byte size buffer. this is especially important
+	   when str_c() is called on an empty string from a different stack
+	   frame (see the comment in buffer.c about this). */
+	return buffer_create_dynamic(pool, I_MAX(initial_size, 1));
 }
 
 string_t *str_new_const(pool_t pool, const char *str, size_t len)
@@ -19,7 +22,7 @@ string_t *str_new_const(pool_t pool, const char *str, size_t len)
 	i_assert(str[len] == '\0');
 
 	ret = p_new(pool, buffer_t, 1);
-	buffer_create_const_data(ret, str, len + 1);
+	buffer_create_from_const_data(ret, str, len + 1);
 	str_truncate(ret, len);
 	return ret;
 }
@@ -104,6 +107,11 @@ void str_append_n(string_t *str, const void *cstr, size_t max_len)
 	buffer_append(str, cstr, len);
 }
 
+void str_append_data(string_t *str, const void *data, size_t len)
+{
+	buffer_append(str, data, len);
+}
+
 void str_append_c(string_t *str, unsigned char chr)
 {
 	buffer_append_c(str, chr);
@@ -145,6 +153,12 @@ void str_vprintfa(string_t *str, const char *fmt, va_list args)
 	init_size += SNPRINTF_INITIAL_EXTRA_SIZE;
 
 	/* @UNSAFE */
+	if (pos+init_size > buffer_get_size(str) &&
+	    pos < buffer_get_size(str)) {
+		/* avoid growing buffer larger if possible. this is also
+		   required if buffer isn't dynamically growing. */
+		init_size = buffer_get_size(str)-pos;
+	}
 	tmp = buffer_get_space_unsafe(str, pos, init_size);
 	ret = vsnprintf(tmp, init_size, fmt, args);
 	i_assert(ret >= 0);

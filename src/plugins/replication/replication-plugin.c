@@ -1,4 +1,4 @@
-/* Copyright (c) 2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -6,7 +6,7 @@
 #include "strescape.h"
 #include "fd-set-nonblock.h"
 #include "ioloop.h"
-#include "network.h"
+#include "net.h"
 #include "write-full.h"
 #include "mail-user.h"
 #include "mail-namespace.h"
@@ -56,17 +56,16 @@ replication_fifo_notify(struct mail_user *user,
 	if (fifo_failed)
 		return -1;
 	if (fifo_fd == -1) {
-		fifo_fd = open(fifo_path, O_WRONLY);
+		fifo_fd = open(fifo_path, O_WRONLY | O_NONBLOCK);
 		if (fifo_fd == -1) {
 			i_error("open(%s) failed: %m", fifo_path);
 			fifo_failed = TRUE;
 			return -1;
 		}
-		fd_set_nonblock(fifo_fd, TRUE);
 	}
 	/* <username> \t <priority> */
 	str = t_str_new(256);
-	str_tabescape_write(str, user->username);
+	str_append_tabescaped(str, user->username);
 	str_append_c(str, '\t');
 	switch (priority) {
 	case REPLICATION_PRIORITY_NONE:
@@ -86,10 +85,14 @@ replication_fifo_notify(struct mail_user *user,
 		return 0;
 	}
 	if (ret != (ssize_t)str_len(str)) {
-		if (ret < 0)
-			i_error("write(%s) failed: %m", fifo_path);
-		else
+		if (ret > 0)
 			i_error("write(%s) wrote partial data", fifo_path);
+		else if (errno != EPIPE)
+			i_error("write(%s) failed: %m", fifo_path);
+		else {
+			/* server was probably restarted, don't bother logging
+			   this. */
+		}
 		if (close(fifo_fd) < 0)
 			i_error("close(%s) failed: %m", fifo_path);
 		fifo_fd = -1;
@@ -134,7 +137,7 @@ static int replication_notify_sync(struct mail_user *user)
 
 	/* <username> \t "sync" */
 	str = t_str_new(256);
-	str_tabescape_write(str, user->username);
+	str_append_tabescaped(str, user->username);
 	str_append(str, "\tsync\n");
 	alarm(ruser->sync_secs);
 	if (write_full(fd, str_data(str), str_len(str)) < 0) {
@@ -187,14 +190,10 @@ static void replication_notify(struct mail_namespace *ns,
 		return;
 	}
 
-	if (ns->owner == NULL) {
-		/* public namespace. we can't handle this for now. */
-		return;
-	}
-	ruser = REPLICATION_USER_CONTEXT(ns->owner);
+	ruser = REPLICATION_USER_CONTEXT(ns->user);
 
 	if (priority == REPLICATION_PRIORITY_SYNC) {
-		if (replication_notify_sync(ns->owner) == 0) {
+		if (replication_notify_sync(ns->user) == 0) {
 			timeout_remove(&ruser->to);
 			ruser->priority = REPLICATION_PRIORITY_NONE;
 			return;
@@ -206,8 +205,8 @@ static void replication_notify(struct mail_namespace *ns,
 	if (ruser->priority < priority)
 		ruser->priority = priority;
 	if (ruser->to == NULL) {
-		ruser->to = timeout_add(REPLICATION_NOTIFY_DELAY_MSECS,
-					replication_notify_now, ns->owner);
+		ruser->to = timeout_add_short(REPLICATION_NOTIFY_DELAY_MSECS,
+					      replication_notify_now, ns->user);
 	}
 }
 
@@ -273,8 +272,7 @@ replication_mailbox_delete_commit(void *txn ATTR_UNUSED,
 
 static void
 replication_mailbox_rename(struct mailbox *src ATTR_UNUSED,
-			   struct mailbox *dest,
-			   bool rename_children ATTR_UNUSED)
+			   struct mailbox *dest)
 {
 	replication_notify(mailbox_get_namespace(dest),
 			   REPLICATION_PRIORITY_LOW);

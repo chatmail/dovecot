@@ -11,12 +11,37 @@
 int main(void)
 {
 	string_t *str;
-	const char *user, *home, *authorized;
+	const char *user, *home, *authorized, *orig_uid;
 	const char *extra_env, *key, *value, *const *tmp;
 	bool uid_found = FALSE, gid_found = FALSE;
 
 	lib_init();
 	str = t_str_new(1024);
+
+	orig_uid = getenv("ORIG_UID");
+	/* ORIG_UID should have the auth process's UID that forked us.
+	   if the checkpassword changed the UID, this could be a security hole
+	   because the UID's other processes can ptrace this process and write
+	   any kind of a reply to fd 4. so we can run only if:
+
+	   a) INSECURE_SETUID environment is set.
+	   b) process isn't ptraceable (this binary is setuid/setgid)
+	   c) checkpassword didn't actually change the UID (but used
+	      userdb_uid instead)
+	   */
+	if (getenv("INSECURE_SETUID") == NULL &&
+	    (orig_uid == NULL || strtoul(orig_uid, NULL, 10) != getuid()) &&
+	    getuid() == geteuid() && getgid() == getegid()) {
+		if (orig_uid == NULL) {
+			i_error("checkpassword: ORIG_UID environment was dropped by checkpassword. "
+				"Can't verify if we're safe to run. See "
+				"http://wiki2.dovecot.org/AuthDatabase/CheckPassword#Security");
+		} else {
+			i_error("checkpassword: The checkpassword couldn't be run securely. See "
+				"http://wiki2.dovecot.org/AuthDatabase/CheckPassword#Security");
+		}
+		return 111;
+	}
 
 	user = getenv("USER");
 	if (user != NULL) {
@@ -25,7 +50,7 @@ int main(void)
 			return 1;
 		}
 		str_printfa(str, "user=");
-		str_tabescape_write(str, user);
+		str_append_tabescaped(str, user);
 		str_append_c(str, '\t');
 	}
 
@@ -36,7 +61,7 @@ int main(void)
 			return 1;
 		}
 		str_printfa(str, "userdb_home=");
-		str_tabescape_write(str, home);
+		str_append_tabescaped(str, home);
 		str_append_c(str, '\t');
 	}
 
@@ -50,9 +75,9 @@ int main(void)
 					uid_found = TRUE;
 				else if (strcmp(key, "userdb_gid") == 0)
 					gid_found = TRUE;
-				str_tabescape_write(str, key);
+				str_append_tabescaped(str, key);
 				str_append_c(str, '=');
-				str_tabescape_write(str, value);
+				str_append_tabescaped(str, value);
 				str_append_c(str, '\t');
 			}
 		}

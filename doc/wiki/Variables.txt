@@ -12,7 +12,7 @@ You can use special variables in several places:
  * log prefix for imap/pop3 process
  * <Plugin> [Plugins.txt] settings
 
-The variables that work everywhere are:
+The variables that work (almost) everywhere are:
 
  *
 +------------+----------+-----------------------------------------------------+
@@ -39,6 +39,9 @@ The variables that work everywhere are:
 +------------+----------+-----------------------------------------------------+
 | %r         | rip      | remote IP address                                   |
 +------------+----------+-----------------------------------------------------+
+|            | session  | session ID for this client connection (unique for 9 |
+|            |          | years) (v2.1.6+)                                    |
++------------+----------+-----------------------------------------------------+
 
 These variables work almost everywhere else except in Dovecot-auth (userdb
 queries/templates):
@@ -53,6 +56,46 @@ queries/templates):
 +------------+----------+-----------------------------------------------------+
 | %i         | uid      | UNIX UID of the user                                |
 +------------+----------+-----------------------------------------------------+
+|            | gid      | UNIX group identifier of the user (v2.0.17+)        |
++------------+----------+-----------------------------------------------------+
+
+These variables work only in Dovecot-auth and 'login_log_format_elements'
+setting:
+
+ *
++----+---------------+--------------------------------------------------------+
+| %m | mech          | <authentication mechanism>                             |
+|    |               | [Authentication.Mechanisms.txt], e.g. PLAIN            |
++----+---------------+--------------------------------------------------------+
+| %a | lport         | Local port                                             |
++----+---------------+--------------------------------------------------------+
+| %b | rport         | Remote port                                            |
++----+---------------+--------------------------------------------------------+
+| %c | secured       | "secured" string with SSL, TLS and localhost           |
+|    |               | connections. Otherwise empty.                          |
++----+---------------+--------------------------------------------------------+
+|    | real_rip      | Same as %{rip}, except in proxy setups contains the    |
+|    |               | remote proxy's IP instead of the client's IP (v2.1.10+)|
++----+---------------+--------------------------------------------------------+
+|    | real_lip      | Same as %{lip}, except in proxy setups contains the    |
+|    |               | local proxy's IP instead of the remote proxy's IP      |
+|    |               | (v2.2+)                                                |
++----+---------------+--------------------------------------------------------+
+|    | real_rport    | Similar to %{real_rip} except for port instead of IP   |
+|    |               | (v2.2+)                                                |
++----+---------------+--------------------------------------------------------+
+|    | real_lport    | Similar to %{real_lip} except for port instead of IP   |
+|    |               | (v2.2+)                                                |
++----+---------------+--------------------------------------------------------+
+|    | orig_user     | Same as %{user}, except using the original username the|
+|    |               | client sent before any changes by auth process (v2.2.6+)|
++----+---------------+--------------------------------------------------------+
+|    | orig_username | Same as %{username}, except using the original username|
+|    |               | (v2.2.6+)                                              |
++----+---------------+--------------------------------------------------------+
+|    | orig_domain   | Same as %{domain}, except using the original username  |
+|    |               | (v2.2.6+)                                              |
++----+---------------+--------------------------------------------------------+
 
 These variables work only in Dovecot-auth:
 
@@ -63,16 +106,6 @@ These variables work only in Dovecot-auth:
 | %w         | password       | plaintext password from plaintext             |
 |            |                | authentication mechanism                      |
 +------------+----------------+-----------------------------------------------+
-| %m         | mech           | <authentication mechanism>                    |
-|            |                | [Authentication.Mechanisms.txt], e.g. PLAIN   |
-+------------+----------------+-----------------------------------------------+
-| %a         | lport          | Local port                                    |
-+------------+----------------+-----------------------------------------------+
-| %b         | rport          | Remote port                                   |
-+------------+----------------+-----------------------------------------------+
-| %c         | secured        | "secured" string with SSL, TLS and localhost  |
-|            |                | connections. Otherwise empty.                 |
-+------------+----------------+-----------------------------------------------+
 | %k         | cert           | "valid" if client had sent a valid client     |
 |            |                | certificate, otherwise empty.                 |
 +------------+----------------+-----------------------------------------------+
@@ -82,21 +115,15 @@ These variables work only in Dovecot-auth:
 +------------+----------------+-----------------------------------------------+
 |            | login_domain   | For master user logins: Logged in domain      |
 +------------+----------------+-----------------------------------------------+
+|            | session_pid    | For user logins: The PID of the IMAP/POP3     |
+|            |                | process handling the session. (v2.2.7+)       |
++------------+----------------+-----------------------------------------------+
 
 These variables work only in 'login_log_format_elements' setting:
 
  *
 +------------+--------------+-------------------------------------------------+
 | *Variable* | *Long name*  | *Description*                                   |
-+------------+--------------+-------------------------------------------------+
-| %m         | mech         | <authentication mechanism>                      |
-|            |              | [Authentication.Mechanisms.txt], e.g. PLAIN     |
-+------------+--------------+-------------------------------------------------+
-| %a         | lport        | Local port                                      |
-+------------+--------------+-------------------------------------------------+
-| %b         | rport        | Remote port                                     |
-+------------+--------------+-------------------------------------------------+
-| %c         | secured      | SSL, TLS or empty                               |
 +------------+--------------+-------------------------------------------------+
 | %k         | ssl_security | SSL protocol and cipher information, e.g. "TLSv1|
 |            |              | with cipher DHE-RSA-AES256-SHA (256/256 bits)"  |
@@ -105,10 +132,32 @@ These variables work only in 'login_log_format_elements' setting:
 |            |              | post-login connection                           |
 +------------+--------------+-------------------------------------------------+
 
-Long variable names can be used like '%{long_name} ' or with L modifier:
-'%L{long_name}'. Environment variables can be accessed with
-'%{env:ENVIRONMENT_VARIABLE}'. Additionally, the (self-explanatory) variables
-'%{pid}' and '%{hostname} ' are available.
+These variables work only in 'deliver_log_format' setting:
+
+ *
++------------+---------------+----------------------+
+| *Variable* | *Long name*   | *Description*        |
++------------+---------------+----------------------+
+| %$         |               | Log entry            |
++------------+---------------+----------------------+
+| %m         | msgid         | Message-ID           |
++------------+---------------+----------------------+
+| %s         | subject       | Subject              |
++------------+---------------+----------------------+
+| %f         | from          | From address         |
++------------+---------------+----------------------+
+| %e         | from_envelope | Envelope sender      |
++------------+---------------+----------------------+
+| %p         | size          | Message size         |
++------------+---------------+----------------------+
+| %w         | vsize         | Virtual message size |
++------------+---------------+----------------------+
+
+ * Long variable names can be used like '%{long_name} ' or with L modifier:
+   '%L{long_name}'.
+ * Environment variables can be accessed with '%{env:ENVIRONMENT_VARIABLE} '.
+ * Additionally, the (self-explanatory) variables '%{pid} ' and '%{hostname} '
+   are available.
 
 Modifiers
 ---------
@@ -131,6 +180,8 @@ You can apply a modifiers for each variable (e.g. %Us = POP3):
       so if you're hashing usernames being in user@domain form, you probably
       want to reverse the username to get better hash value variety, e.g.
       %3RHu.
+ * %N - "New hash" - same as %H, but based on MD5 to give better distribution
+   of values (no need for any string reversing kludges either). (v2.2.3+)
  * %M - return the string's MD5 sum as hex.
  * %D - return "sub.domain.org" as "sub,dc=domain,dc=org" (for LDAP queries)
  * %T - Trim trailing whitespace
@@ -152,4 +203,4 @@ with '0' character if the string is shorter. For example %04i may return
 The modifiers are applied from left-to-right order, except the substring is
 always taken from the final string.
 
-(This file was created from the wiki on 2012-04-09 04:42)
+(This file was created from the wiki on 2013-11-24 04:43)

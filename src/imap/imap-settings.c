@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -69,6 +69,10 @@ static const struct setting_define imap_setting_defines[] = {
 	DEF(SET_STR, imap_logout_format),
 	DEF(SET_STR, imap_id_send),
 	DEF(SET_STR, imap_id_log),
+	DEF(SET_BOOL, imap_metadata),
+
+	DEF(SET_STR, imap_urlauth_host),
+	DEF(SET_UINT, imap_urlauth_port),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -84,8 +88,12 @@ static const struct imap_settings imap_default_settings = {
 	.imap_capability = "",
 	.imap_client_workarounds = "",
 	.imap_logout_format = "in=%i out=%o",
-	.imap_id_send = "",
-	.imap_id_log = ""
+	.imap_id_send = "name *",
+	.imap_id_log = "",
+	.imap_metadata = FALSE,
+
+	.imap_urlauth_host = "",
+	.imap_urlauth_port = 143
 };
 
 static const struct setting_parser_info *imap_setting_dependencies[] = {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -32,6 +32,9 @@ struct stack_block {
 	struct stack_block *next;
 
 	size_t size, left, lowwater;
+	/* always NULL and here just in case something accesses
+	   the memory in front of an allocated area */
+	char *nullpad;
 	/* unsigned char data[]; */
 };
 
@@ -299,6 +302,7 @@ static struct stack_block *mem_block_alloc(size_t min_size)
 	block->left = 0;
 	block->lowwater = block->size;
 	block->next = NULL;
+	block->nullpad = NULL;
 
 #ifdef DEBUG
 	memset(STACK_BLOCK_DATA(block), CLEAR_CHR, alloc_size);
@@ -313,6 +317,7 @@ static void *t_malloc_real(size_t size, bool permanent)
 	size_t alloc_size;
 #ifdef DEBUG
 	bool warn = FALSE;
+	int old_errno = errno;
 #endif
 
 	if (unlikely(size == 0 || size > SSIZE_T_MAX))
@@ -371,7 +376,7 @@ static void *t_malloc_real(size_t size, bool permanent)
 
 		ret = STACK_BLOCK_DATA(current_block);
 #ifdef DEBUG
-		if (warn) {
+		if (warn && getenv("DEBUG_SILENT") == NULL) {
 			/* warn after allocation, so if i_warning() wants to
 			   allocate more memory we don't go to infinite loop */
 			i_warning("Growing data stack with: %"PRIuSIZE_T,
@@ -386,6 +391,9 @@ static void *t_malloc_real(size_t size, bool permanent)
 	   had used t_buffer_get(). */
 	memset(PTR_OFFSET(ret, size), CLEAR_CHR,
 	       MEM_ALIGN(size + SENTRY_COUNT) - size);
+
+	/* we rely on errno not changing. it shouldn't. */
+	i_assert(errno == old_errno);
 #endif
         return ret;
 }
@@ -476,13 +484,13 @@ void t_buffer_alloc(size_t size)
 	i_assert(current_block->left >= size);
 
 	/* we've already reserved the space, now we just mark it used */
-	t_malloc_real(size, TRUE);
+	(void)t_malloc_real(size, TRUE);
 }
 
 void t_buffer_alloc_last_full(void)
 {
 	if (last_buffer_block != NULL)
-		t_malloc_real(last_buffer_size, TRUE);
+		(void)t_malloc_real(last_buffer_size, TRUE);
 }
 
 void data_stack_set_clean_after_pop(bool enable ATTR_UNUSED)
@@ -515,12 +523,12 @@ void data_stack_init(void)
 	last_buffer_block = NULL;
 	last_buffer_size = 0;
 
-	t_push();
+	(void)t_push();
 }
 
 void data_stack_deinit(void)
 {
-	t_pop();
+	(void)t_pop();
 
 	if (frame_pos != BLOCK_FRAME_COUNT-1)
 		i_panic("Missing t_pop() call");

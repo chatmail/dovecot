@@ -12,10 +12,15 @@ void str_append_unescaped(string_t *dest, const void *src, size_t src_size);
 /* remove all '\' characters */
 char *str_unescape(char *str);
 
+/* Remove all '\' chars from str until '"' is reached and return the unescaped
+   string. *str is updated to point to the character after the '"'. Returns 0
+   if ok, -1 if '"' wasn't found. */
+int str_unescape_next(const char **str, const char **unescaped_r);
+
 /* For Dovecot's internal protocols: Escape \001, \t, \r and \n characters
    using \001. */
 const char *str_tabescape(const char *str);
-void str_tabescape_write(string_t *dest, const char *src);
+void str_append_tabescaped(string_t *dest, const char *src);
 void str_append_tabunescaped(string_t *dest, const void *src, size_t src_size);
 char *str_tabunescape(char *str);
 

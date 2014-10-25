@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "passdb.h"
@@ -28,16 +28,14 @@ static void passwd_file_save_results(struct auth_request *request,
 	string_t *str;
 	char **p;
 
-	*crypted_pass_r = pu->password;
+	*crypted_pass_r = pu->password != NULL ? pu->password : "";
 	*scheme_r = password_get_scheme(crypted_pass_r);
 	if (*scheme_r == NULL)
 		*scheme_r = request->passdb->passdb->default_pass_scheme;
 
 	/* save the password so cache can use it */
-	if (*crypted_pass_r != NULL) {
-		auth_request_set_field(request, "password",
-				       *crypted_pass_r, *scheme_r);
-        }
+	auth_request_set_field(request, "password",
+			       *crypted_pass_r, *scheme_r);
 
 	if (pu->extra_fields != NULL) {
 		str = t_str_new(512);
@@ -80,7 +78,7 @@ passwd_file_verify_plain(struct auth_request *request, const char *password,
 	passwd_file_save_results(request, pu, &crypted_pass, &scheme);
 
 	ret = auth_request_password_verify(request, password, crypted_pass,
-					   scheme, "passwd-file");
+					   scheme, AUTH_SUBSYS_DB);
 
 	callback(ret > 0 ? PASSDB_RESULT_OK : PASSDB_RESULT_PASSWORD_MISMATCH,
 		 request);

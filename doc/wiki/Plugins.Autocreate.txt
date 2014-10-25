@@ -1,5 +1,8 @@
-Autocreate plugin
-=================
+Autocreate plugin (v2.0 and older)
+==================================
+
+With v2.1+ you don't need this plugin. Use <mailbox { auto } setting>
+[MailboxSettings.txt] instead.
 
 This plugin allows administrator to specify mailboxes that must always exist
 for all users. They can optionally also be subscribed. The mailboxes are
@@ -22,4 +25,4 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2012-04-09 04:42)
+(This file was created from the wiki on 2013-11-24 04:42)

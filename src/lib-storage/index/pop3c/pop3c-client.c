@@ -1,15 +1,14 @@
-/* Copyright (c) 2011-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
-#include "network.h"
+#include "net.h"
 #include "istream.h"
 #include "istream-dot.h"
 #include "istream-seekable.h"
 #include "ostream.h"
 #include "iostream-rawlog.h"
 #include "iostream-ssl.h"
-#include "close-keep-errno.h"
 #include "safe-mkstemp.h"
 #include "base64.h"
 #include "str.h"
@@ -50,6 +49,7 @@ struct pop3c_client {
 	struct ostream *output, *raw_output;
 	struct ssl_iostream *ssl_iostream;
 	struct timeout *to;
+	struct dns_lookup *dns_lookup;
 
 	enum pop3c_client_state state;
 	enum pop3c_capability capabilities;
@@ -61,19 +61,19 @@ struct pop3c_client {
 	const char *input_line;
 	struct istream *dot_input;
 
-	unsigned int handshake_failed:1;
 	unsigned int running:1;
 };
 
 static void
-pop3c_dns_callback(const struct dns_lookup_result *result, void *context);
+pop3c_dns_callback(const struct dns_lookup_result *result,
+		   struct pop3c_client *client);
 
 struct pop3c_client *
 pop3c_client_init(const struct pop3c_client_settings *set)
 {
 	struct pop3c_client *client;
 	struct ssl_iostream_settings ssl_set;
-	const char *source;
+	const char *error;
 	pool_t pool;
 
 	pool = pool_alloconly_create("pop3c client", 1024);
@@ -84,7 +84,7 @@ pop3c_client_init(const struct pop3c_client_settings *set)
 	client->set.debug = set->debug;
 	client->set.host = p_strdup(pool, set->host);
 	client->set.port = set->port;
-	client->set.master_user = p_strdup(pool, set->master_user);
+	client->set.master_user = p_strdup_empty(pool, set->master_user);
 	client->set.username = p_strdup(pool, set->username);
 	client->set.password = p_strdup(pool, set->password);
 	client->set.dns_client_socket_path =
@@ -95,18 +95,19 @@ pop3c_client_init(const struct pop3c_client_settings *set)
 	if (set->ssl_mode != POP3C_CLIENT_SSL_MODE_NONE) {
 		client->set.ssl_mode = set->ssl_mode;
 		client->set.ssl_ca_dir = p_strdup(pool, set->ssl_ca_dir);
+		client->set.ssl_ca_file = p_strdup(pool, set->ssl_ca_file);
 		client->set.ssl_verify = set->ssl_verify;
 
 		memset(&ssl_set, 0, sizeof(ssl_set));
 		ssl_set.ca_dir = set->ssl_ca_dir;
+		ssl_set.ca_file = set->ssl_ca_file;
 		ssl_set.verify_remote_cert = set->ssl_verify;
 		ssl_set.crypto_device = set->ssl_crypto_device;
 
-		source = t_strdup_printf("%s:%u", set->host, set->port);
-		if (ssl_iostream_context_init_client(source, &ssl_set,
-						     &client->ssl_ctx) < 0) {
-			i_error("pop3c(%s): Couldn't initialize SSL context",
-				source);
+		if (ssl_iostream_context_init_client(&ssl_set, &client->ssl_ctx,
+						     &error) < 0) {
+			i_error("pop3c(%s:%u): Couldn't initialize SSL context: %s",
+				set->host, set->port, error);
 		}
 	}
 	return client;
@@ -134,6 +135,8 @@ static void pop3c_client_disconnect(struct pop3c_client *client)
 	if (client->running)
 		io_loop_stop(current_ioloop);
 
+	if (client->dns_lookup != NULL)
+		dns_lookup_abort(&client->dns_lookup);
 	if (client->to != NULL)
 		timeout_remove(&client->to);
 	if (client->io != NULL)
@@ -166,7 +169,7 @@ void pop3c_client_deinit(struct pop3c_client **_client)
 static void pop3c_client_ioloop_changed(struct pop3c_client *client)
 {
 	if (client->to != NULL)
-		io_loop_move_timeout(&client->to);
+		client->to = io_loop_move_timeout(&client->to);
 	if (client->io != NULL)
 		client->io = io_loop_move_io(&client->io);
 	if (client->output != NULL)
@@ -196,7 +199,7 @@ static void pop3c_client_timeout(struct pop3c_client *client)
 void pop3c_client_run(struct pop3c_client *client)
 {
 	struct ioloop *ioloop, *prev_ioloop = current_ioloop;
-	bool timeout_added = FALSE;
+	bool timeout_added = FALSE, failed = FALSE;
 
 	i_assert(client->fd != -1 ||
 		 client->state == POP3C_CLIENT_STATE_CONNECTING);
@@ -214,24 +217,28 @@ void pop3c_client_run(struct pop3c_client *client)
 		dns_set.dns_client_socket_path =
 			client->set.dns_client_socket_path;
 		dns_set.timeout_msecs = POP3C_DNS_LOOKUP_TIMEOUT_MSECS;
-		(void)dns_lookup(client->set.host, &dns_set,
-				 pop3c_dns_callback, client);
+		if (dns_lookup(client->set.host, &dns_set,
+			       pop3c_dns_callback, client,
+			       &client->dns_lookup) < 0)
+			failed = TRUE;
 	} else if (client->to == NULL) {
 		client->to = timeout_add(POP3C_COMMAND_TIMEOUT_MSECS,
 					 pop3c_client_timeout, client);
 		timeout_added = TRUE;
 	}
 
-	client->running = TRUE;
-	io_loop_run(ioloop);
-	client->running = FALSE;
+	if (!failed) {
+		client->running = TRUE;
+		io_loop_run(ioloop);
+		client->running = FALSE;
+	}
 
 	if (timeout_added && client->to != NULL)
 		timeout_remove(&client->to);
 
-	current_ioloop = prev_ioloop;
+	io_loop_set_current(prev_ioloop);
 	pop3c_client_ioloop_changed(client);
-	current_ioloop = ioloop;
+	io_loop_set_current(ioloop);
 	io_loop_destroy(&ioloop);
 }
 
@@ -251,12 +258,12 @@ static void pop3c_client_authenticate1(struct pop3c_client *client)
 	}
 
 	if (set->master_user == NULL) {
-		o_stream_send_str(client->output,
+		o_stream_nsend_str(client->output,
 			t_strdup_printf("USER %s\r\n", set->username));
 		client->state = POP3C_CLIENT_STATE_USER;
 	} else {
 		client->state = POP3C_CLIENT_STATE_AUTH;
-		o_stream_send_str(client->output, "AUTH PLAIN\r\n");
+		o_stream_nsend_str(client->output, "AUTH PLAIN\r\n");
 	}
 }
 
@@ -315,7 +322,7 @@ pop3c_client_prelogin_input_line(struct pop3c_client *client, const char *line)
 				client->set.host, line);
 			return -1;
 		}
-		o_stream_send_str(client->output,
+		o_stream_nsend_str(client->output,
 			t_strdup_printf("PASS %s\r\n", client->set.password));
 		client->state = POP3C_CLIENT_STATE_PASS;
 		break;
@@ -325,7 +332,7 @@ pop3c_client_prelogin_input_line(struct pop3c_client *client, const char *line)
 				client->set.host, line);
 			return -1;
 		}
-		o_stream_send_str(client->output,
+		o_stream_nsend_str(client->output,
 			pop3c_client_get_sasl_plain_request(client));
 		client->state = POP3C_CLIENT_STATE_PASS;
 		break;
@@ -344,12 +351,17 @@ pop3c_client_prelogin_input_line(struct pop3c_client *client, const char *line)
 		if (!success)
 			return -1;
 
-		o_stream_send_str(client->output, "CAPA\r\n");
+		o_stream_nsend_str(client->output, "CAPA\r\n");
 		client->state = POP3C_CLIENT_STATE_CAPA;
 		break;
 	case POP3C_CLIENT_STATE_CAPA:
-		if (strncasecmp(line, "-ERR", 4) == 0 ||
-		    strcmp(line, ".") == 0) {
+		if (strncasecmp(line, "-ERR", 4) == 0) {
+			/* CAPA command not supported. some commands still
+			   support UIDL though. */
+			client->capabilities |= POP3C_CAPABILITY_UIDL;
+			pop3c_client_login_finished(client);
+			break;
+		} else if (strcmp(line, ".") == 0) {
 			pop3c_client_login_finished(client);
 			break;
 		}
@@ -388,7 +400,7 @@ static void pop3c_client_prelogin_input(struct pop3c_client *client)
 		if (client->ssl_iostream == NULL) {
 			i_error("pop3c(%s): Server disconnected unexpectedly",
 				client->set.host);
-		} else if (!client->handshake_failed) {
+		} else {
 			errstr = ssl_iostream_get_last_error(client->ssl_iostream);
 			if (errstr == NULL) {
 				errstr = client->input->stream_errno == 0 ? "EOF" :
@@ -401,42 +413,36 @@ static void pop3c_client_prelogin_input(struct pop3c_client *client)
 	}
 }
 
-static int pop3c_client_ssl_handshaked(void *context)
+static int pop3c_client_ssl_handshaked(const char **error_r, void *context)
 {
 	struct pop3c_client *client = context;
+	const char *error;
 
-	if (!client->set.ssl_verify) {
-		/* skip certificate checks */
-		return 0;
-	} else if (!ssl_iostream_has_valid_client_cert(client->ssl_iostream)) {
-		if (!ssl_iostream_has_broken_client_cert(client->ssl_iostream)) {
-			i_error("pop3c(%s): SSL certificate not received",
-				client->set.host);
-		} else {
-			i_error("pop3c(%s): Received invalid SSL certificate",
-				client->set.host);
-		}
-	} else if (ssl_iostream_cert_match_name(client->ssl_iostream,
-						client->set.host) < 0) {
-		i_error("pop3c(%s): SSL certificate doesn't match host name",
-			client->set.host);
-	} else {
+	if (ssl_iostream_check_cert_validity(client->ssl_iostream,
+					     client->set.host, &error) == 0) {
 		if (client->set.debug) {
 			i_debug("pop3c(%s): SSL handshake successful",
 				client->set.host);
 		}
 		return 0;
+	} else if (!client->set.ssl_verify) {
+		if (client->set.debug) {
+			i_debug("pop3c(%s): SSL handshake successful, "
+				"ignoring invalid certificate: %s",
+				client->set.host, error);
+		}
+		return 0;
+	} else {
+		*error_r = error;
+		return -1;
 	}
-	client->handshake_failed = TRUE;
-	i_stream_close(client->input);
-	return -1;
 }
 
 static int pop3c_client_ssl_init(struct pop3c_client *client)
 {
 	struct ssl_iostream_settings ssl_set;
 	struct stat st;
-	const char *source;
+	const char *error;
 
 	if (client->ssl_ctx == NULL) {
 		i_error("pop3c(%s): No SSL context", client->set.host);
@@ -463,12 +469,11 @@ static int pop3c_client_ssl_init(struct pop3c_client *client)
 		client->output = client->raw_output;
 	}
 
-	source = t_strdup_printf("pop3c(%s): ", client->set.host);
-	if (io_stream_create_ssl(client->ssl_ctx, source, &ssl_set,
-				 &client->input, &client->output,
-				 &client->ssl_iostream) < 0) {
-		i_error("pop3c(%s): Couldn't initialize SSL client",
-			client->set.host);
+	if (io_stream_create_ssl_client(client->ssl_ctx, client->set.host,
+					&ssl_set, &client->input, &client->output,
+					&client->ssl_iostream, &error) < 0) {
+		i_error("pop3c(%s): Couldn't initialize SSL client: %s",
+			client->set.host, error);
 		return -1;
 	}
 	ssl_iostream_set_handshake_callback(client->ssl_iostream,
@@ -482,8 +487,8 @@ static int pop3c_client_ssl_init(struct pop3c_client *client)
 
 	if (*client->set.rawlog_dir != '\0' &&
 	    stat(client->set.rawlog_dir, &st) == 0) {
-		(void)iostream_rawlog_create(client->set.rawlog_dir,
-					     &client->input, &client->output);
+		iostream_rawlog_create(client->set.rawlog_dir,
+				       &client->input, &client->output);
 	}
 	return 0;
 }
@@ -524,12 +529,13 @@ static void pop3c_client_connect_ip(struct pop3c_client *client)
 		i_stream_create_fd(client->fd, POP3C_MAX_INBUF_SIZE, FALSE);
 	client->output = client->raw_output =
 		o_stream_create_fd(client->fd, (size_t)-1, FALSE);
+	o_stream_set_no_error_handling(client->output, TRUE);
 
 	if (*client->set.rawlog_dir != '\0' &&
 	    client->set.ssl_mode != POP3C_CLIENT_SSL_MODE_IMMEDIATE &&
 	    stat(client->set.rawlog_dir, &st) == 0) {
-		(void)iostream_rawlog_create(client->set.rawlog_dir,
-					     &client->input, &client->output);
+		iostream_rawlog_create(client->set.rawlog_dir,
+				       &client->input, &client->output);
 	}
 	client->io = io_add(client->fd, IO_WRITE,
 			    pop3c_client_connected, client);
@@ -542,9 +548,10 @@ static void pop3c_client_connect_ip(struct pop3c_client *client)
 }
 
 static void
-pop3c_dns_callback(const struct dns_lookup_result *result, void *context)
+pop3c_dns_callback(const struct dns_lookup_result *result,
+		   struct pop3c_client *client)
 {
-	struct pop3c_client *client = context;
+	client->dns_lookup = NULL;
 
 	if (result->ret != 0) {
 		i_error("pop3c(%s): dns_lookup() failed: %s",
@@ -656,14 +663,14 @@ int pop3c_client_cmd_line(struct pop3c_client *client, const char *cmd,
 
 	if (pop3c_client_flush_asyncs(client, reply_r) < 0)
 		return -1;
-	o_stream_send_str(client->output, cmd);
+	o_stream_nsend_str(client->output, cmd);
 	if (pop3c_client_read_line(client, &line, reply_r) < 0)
 		return -1;
 	if (strncasecmp(line, "+OK", 3) == 0) {
 		*reply_r = line + 3;
 		ret = 0;
 	} else if (strncasecmp(line, "-ERR", 4) == 0) {
-		*reply_r = line + 3;
+		*reply_r = line + 4;
 		ret = -1;
 	} else {
 		*reply_r = line;
@@ -687,7 +694,7 @@ void pop3c_client_cmd_line_async(struct pop3c_client *client, const char *cmd)
 		if (pop3c_client_flush_asyncs(client, &error) < 0)
 			return;
 	}
-	o_stream_send_str(client->output, cmd);
+	o_stream_nsend_str(client->output, cmd);
 	client->async_commands++;
 }
 
@@ -709,7 +716,7 @@ static int seekable_fd_callback(const char **path_r, void *context)
 	if (unlink(str_c(path)) < 0) {
 		/* shouldn't happen.. */
 		i_error("unlink(%s) failed: %m", str_c(path));
-		close_keep_errno(fd);
+		i_close_fd(&fd);
 		return -1;
 	}
 
@@ -720,15 +727,13 @@ static int seekable_fd_callback(const char **path_r, void *context)
 static void pop3c_client_dot_input(struct pop3c_client *client)
 {
 	ssize_t ret;
-	size_t size;
 
 	if (client->to != NULL)
 		timeout_reset(client->to);
 	while ((ret = i_stream_read(client->dot_input)) > 0 || ret == -2) {
-		(void)i_stream_get_data(client->dot_input, &size);
-		i_stream_skip(client->dot_input, size);
+		i_stream_skip(client->dot_input,
+			      i_stream_get_data_size(client->dot_input));
 	}
-	(void)i_stream_get_data(client->dot_input, &size);
 	if (ret != 0) {
 		i_assert(ret == -1);
 		if (client->dot_input->stream_errno != 0) {
@@ -757,6 +762,7 @@ int pop3c_client_cmd_stream(struct pop3c_client *client, const char *cmd,
 	client->dot_input =
 		i_stream_create_seekable(inputs, POP3C_MAX_INBUF_SIZE,
 					 seekable_fd_callback, client);
+	i_stream_unref(&inputs[0]);
 
 	i_assert(client->io == NULL);
 	client->io = io_add(client->fd, IO_READ,

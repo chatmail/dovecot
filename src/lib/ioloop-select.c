@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2012 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop-private.h"
@@ -103,7 +103,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed ATTR_UNUSED)
 	 (FD_ISSET((fd), &(ctx)->tmp_write_fds) && ((cond) & IO_WRITE)) || \
 	 (FD_ISSET((fd), &(ctx)->tmp_except_fds)))
 
-void io_loop_handler_run(struct ioloop *ioloop)
+void io_loop_handler_run_internal(struct ioloop *ioloop)
 {
 	struct ioloop_handler_context *ctx = ioloop->handler_context;
 	struct timeval tv;
