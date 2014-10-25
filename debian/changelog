@@ -1,6 +1,11 @@
+dovecot (1:2.2.15-1) experimental; urgency=medium
+
+  * New upstream version (Closes: #766036)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 25 Oct 2014 15:13:06 -0400
+
 dovecot (1:2.2.14-1) UNRELEASED; urgency=medium
 
-  * [f1ebe86] Imported Upstream version 2.2.14
   * refresh patches
     + drop d/patches/bye_logout_not_sent.patch, included upstream
     + update d/patches/dovecot_name.patch for new struct member
