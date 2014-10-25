@@ -1,0 +1,102 @@
+# Dutch translation of dovecot debconf templates.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the dovecot package.
+# Frans Spiesschaert <Frans.Spiesschaert@yucom.be>, 2014.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: dovecot\n"
+"Report-Msgid-Bugs-To: dovecot@packages.debian.org\n"
+"POT-Creation-Date: 2013-11-07 07:06+0100\n"
+"PO-Revision-Date: 2014-10-04 22:25+0200\n"
+"Last-Translator: Frans Spiesschaert <Frans.Spiesschaert@yucom.be>\n"
+"Language-Team: Debian Dutch l10n Team <debian-l10n-dutch@lists.debian.org>\n"
+"Language: nl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. Type: error
+#. Description
+#: ../dovecot-core.templates:2001
+msgid "Wrong location for SSL certificates"
+msgstr "De SSL-certificaten staan op een verkeerde plaats"
+
+#. Type: error
+#. Description
+#: ../dovecot-core.templates:2001
+msgid ""
+"This machine uses SSL certificates for Dovecot. These certificates should be "
+"moved from /etc/ssl to /etc/dovecot and Dovecot's configuration file (/etc/"
+"dovecot/conf.d/10-ssl.conf) should be updated accordingly."
+msgstr ""
+"Deze computer gebruikt SSL-certificaten voor Dovecot. Deze certificaten "
+"moeten verplaatst worden van /etc/ssl naar /etc/dovecot en het "
+"configuratiebestand van Dovecot (/etc/dovecot/conf.d/10-ssl.conf) moet in "
+"die zin aangepast worden."
+
+#. Type: error
+#. Description
+#: ../dovecot-core.templates:2001
+msgid "Please read /usr/share/doc/dovecot-core/README.Debian.gz for details."
+msgstr ""
+"Raadpleeg /usr/share/doc/dovecot-core/README.Debian.gz voor de details."
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid "Create a self-signed SSL certificate?"
+msgstr "Een door uzelf ondertekend SSL-certificaat aanmaken?"
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid ""
+"An SSL certificate is needed in order to use IMAP or POP3 over SSL/TLS. No "
+"such certificate was found."
+msgstr ""
+"U heeft een SSL-certificaat nodig om IMAP of POP3 over SSL/TLS te kunnen "
+"gebruiken. Een dergelijk certificaat werd niet gevonden."
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid ""
+"Please choose whether you want to create one now. This will then be a self-"
+"signed certificate."
+msgstr ""
+"Geef aan of u nu een dergelijk certificaat wilt aanmaken. In dat geval zal "
+"het een door uzelf ondertekend certificaat zijn."
+
+#. Type: boolean
+#. Description
+#: ../dovecot-core.templates:3001
+msgid ""
+"If you choose not to create a certificate, please adapt Dovecot's "
+"configuration file (/etc/dovecot/conf.d/10-ssl.conf)."
+msgstr ""
+"Indien u ervoor kiest om geen certificaat aan te maken, dan moet u het "
+"configuratiebestand van Dovecot (/etc/dovecot/conf.d/10-ssl.conf) wijzigen."
+
+#. Type: string
+#. Description
+#: ../dovecot-core.templates:4001
+msgid "Host name:"
+msgstr "Computernaam"
+
+#. Type: string
+#. Description
+#: ../dovecot-core.templates:4001
+msgid "Please enter the host name to use in the SSL certificate."
+msgstr ""
+"Geef aan welke computernaam gebruikt moet worden in het SSL-certificaat."
+
+#. Type: string
+#. Description
+#: ../dovecot-core.templates:4001
+msgid ""
+"It will become the \"commonName\" field of the generated SSL certificate."
+msgstr ""
+"Die komt terecht in het veld \"commonName\" van het SSL-certificaat dat "
+"aangemaakt wordt."
