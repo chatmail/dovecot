@@ -12,11 +12,11 @@ Last-Update: Sun, 08 Sep 2013 01:23:19 -0400
  src/login-common/login-settings.c |    2 +-
  4 files changed, 10 insertions(+), 5 deletions(-)
 
-diff --git a/configure.ac b/configure.ac
-index 1bb04d7..16d373a 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -293,7 +293,12 @@ AC_C_INLINE
+Index: dovecot/configure.ac
+===================================================================
+--- dovecot.orig/configure.ac
++++ dovecot/configure.ac
+@@ -303,7 +303,12 @@ AC_C_INLINE
  AC_PROG_LIBTOOL
  AM_ICONV
  
@@ -30,20 +30,20 @@ index 1bb04d7..16d373a 100644
  AC_DEFINE_UNQUOTED(DOVECOT_STRING, "$PACKAGE_STRING", Dovecot string)
  AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", Dovecot version)
  
-diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index a9fc655..96de34b 100644
---- a/src/config/all-settings.c
-+++ b/src/config/all-settings.c
-@@ -2512,7 +2512,7 @@ static const struct setting_define login_setting_defines[] = {
- };
+Index: dovecot/src/config/all-settings.c
+===================================================================
+--- dovecot.orig/src/config/all-settings.c
++++ dovecot/src/config/all-settings.c
+@@ -2561,7 +2561,7 @@ static const struct setting_define login
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
+ 	.login_source_ips = "",
 -	.login_greeting = PACKAGE_NAME" ready.",
 +	.login_greeting = DOVECOT_NAME" ready.",
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
-@@ -2638,7 +2638,7 @@ static const struct lmtp_settings lmtp_default_settings = {
+@@ -2687,7 +2687,7 @@ static const struct lmtp_settings lmtp_d
  	.lmtp_save_to_detail_mailbox = FALSE,
  	.lmtp_rcpt_check_quota = FALSE,
  	.lmtp_address_translate = "",
@@ -52,11 +52,11 @@ index a9fc655..96de34b 100644
  	.login_trusted_networks = ""
  };
  static const struct setting_parser_info *lmtp_setting_dependencies[] = {
-diff --git a/src/lmtp/lmtp-settings.c b/src/lmtp/lmtp-settings.c
-index a2d838a..285296b 100644
---- a/src/lmtp/lmtp-settings.c
-+++ b/src/lmtp/lmtp-settings.c
-@@ -72,7 +72,7 @@ static const struct lmtp_settings lmtp_default_settings = {
+Index: dovecot/src/lmtp/lmtp-settings.c
+===================================================================
+--- dovecot.orig/src/lmtp/lmtp-settings.c
++++ dovecot/src/lmtp/lmtp-settings.c
+@@ -72,7 +72,7 @@ static const struct lmtp_settings lmtp_d
  	.lmtp_save_to_detail_mailbox = FALSE,
  	.lmtp_rcpt_check_quota = FALSE,
  	.lmtp_address_translate = "",
@@ -65,14 +65,14 @@ index a2d838a..285296b 100644
  	.login_trusted_networks = ""
  };
  
-diff --git a/src/login-common/login-settings.c b/src/login-common/login-settings.c
-index 7cc7d1b..6c8c303 100644
---- a/src/login-common/login-settings.c
-+++ b/src/login-common/login-settings.c
-@@ -45,7 +45,7 @@ static const struct setting_define login_setting_defines[] = {
- 
+Index: dovecot/src/login-common/login-settings.c
+===================================================================
+--- dovecot.orig/src/login-common/login-settings.c
++++ dovecot/src/login-common/login-settings.c
+@@ -47,7 +47,7 @@ static const struct setting_define login
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
+ 	.login_source_ips = "",
 -	.login_greeting = PACKAGE_NAME" ready.",
 +	.login_greeting = DOVECOT_NAME" ready.",
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",

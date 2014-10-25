@@ -10,11 +10,11 @@ Bug: #720502
  src/lib-storage/index/mbox/mbox-settings.c |    2 +-
  3 files changed, 9 insertions(+), 3 deletions(-)
 
-diff --git a/doc/example-config/conf.d/10-mail.conf b/doc/example-config/conf.d/10-mail.conf
-index efcedc7..2d9b95e 100644
---- a/doc/example-config/conf.d/10-mail.conf
-+++ b/doc/example-config/conf.d/10-mail.conf
-@@ -276,8 +276,14 @@ namespace inbox {
+Index: dovecot/doc/example-config/conf.d/10-mail.conf
+===================================================================
+--- dovecot.orig/doc/example-config/conf.d/10-mail.conf
++++ dovecot/doc/example-config/conf.d/10-mail.conf
+@@ -281,8 +281,14 @@ namespace inbox {
  # in is important to avoid deadlocks if other MTAs/MUAs are using multiple
  # locking methods as well. Some operating systems don't allow using some of
  # them simultaneously.
@@ -30,11 +30,11 @@ index efcedc7..2d9b95e 100644
  
  # Maximum time to wait for lock (all of them) before aborting.
  #mbox_lock_timeout = 5 mins
-diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index a717b8e..c6c7921 100644
---- a/src/config/all-settings.c
-+++ b/src/config/all-settings.c
-@@ -829,7 +829,7 @@ static const struct setting_define mbox_setting_defines[] = {
+Index: dovecot/src/config/all-settings.c
+===================================================================
+--- dovecot.orig/src/config/all-settings.c
++++ dovecot/src/config/all-settings.c
+@@ -882,7 +882,7 @@ static const struct setting_define mbox_
  };
  static const struct mbox_settings mbox_default_settings = {
  	.mbox_read_locks = "fcntl",
@@ -43,11 +43,11 @@ index a717b8e..c6c7921 100644
  	.mbox_lock_timeout = 5*60,
  	.mbox_dotlock_change_timeout = 2*60,
  	.mbox_min_index_size = 0,
-diff --git a/src/lib-storage/index/mbox/mbox-settings.c b/src/lib-storage/index/mbox/mbox-settings.c
-index 019e85a..efe1001 100644
---- a/src/lib-storage/index/mbox/mbox-settings.c
-+++ b/src/lib-storage/index/mbox/mbox-settings.c
-@@ -27,7 +27,7 @@ static const struct setting_define mbox_setting_defines[] = {
+Index: dovecot/src/lib-storage/index/mbox/mbox-settings.c
+===================================================================
+--- dovecot.orig/src/lib-storage/index/mbox/mbox-settings.c
++++ dovecot/src/lib-storage/index/mbox/mbox-settings.c
+@@ -27,7 +27,7 @@ static const struct setting_define mbox_
  
  static const struct mbox_settings mbox_default_settings = {
  	.mbox_read_locks = "fcntl",

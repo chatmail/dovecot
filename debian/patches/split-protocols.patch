@@ -10,10 +10,10 @@ Description: Set default protocols value as empty and enable each
  src/master/master-settings.c    |    2 +-
  3 files changed, 4 insertions(+), 4 deletions(-)
 
-diff --git a/doc/example-config/dovecot.conf b/doc/example-config/dovecot.conf
-index 5697661..c802011 100644
---- a/doc/example-config/dovecot.conf
-+++ b/doc/example-config/dovecot.conf
+Index: dovecot/doc/example-config/dovecot.conf
+===================================================================
+--- dovecot.orig/doc/example-config/dovecot.conf
++++ dovecot/doc/example-config/dovecot.conf
 @@ -20,8 +20,8 @@
  # options. The paths listed here are for configure --prefix=/usr
  # --sysconfdir=/etc --localstatedir=/var
@@ -25,11 +25,11 @@ index 5697661..c802011 100644
  
  # A comma separated list of IPs or hosts where to listen in for connections. 
  # "*" listens in all IPv4 interfaces, "::" listens in all IPv6 interfaces.
-diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index f6ba21f..a6bb57c 100644
---- a/src/config/all-settings.c
-+++ b/src/config/all-settings.c
-@@ -2454,7 +2454,7 @@ struct master_settings master_default_settings = {
+Index: dovecot/src/config/all-settings.c
+===================================================================
+--- dovecot.orig/src/config/all-settings.c
++++ dovecot/src/config/all-settings.c
+@@ -2478,7 +2478,7 @@ struct master_settings master_default_se
  	.libexec_dir = PKG_LIBEXECDIR,
  	.instance_name = PACKAGE,
  	.import_environment = "TZ CORE_OUTOFMEM CORE_ERROR" ENV_SYSTEMD ENV_GDB,
@@ -38,11 +38,11 @@ index f6ba21f..a6bb57c 100644
  	.listen = "*, ::",
  	.ssl = "yes:no:required",
  	.default_internal_user = "dovecot",
-diff --git a/src/master/master-settings.c b/src/master/master-settings.c
-index 4beb97d..0d574c9 100644
---- a/src/master/master-settings.c
-+++ b/src/master/master-settings.c
-@@ -218,7 +218,7 @@ static const struct master_settings master_default_settings = {
+Index: dovecot/src/master/master-settings.c
+===================================================================
+--- dovecot.orig/src/master/master-settings.c
++++ dovecot/src/master/master-settings.c
+@@ -218,7 +218,7 @@ static const struct master_settings mast
  	.libexec_dir = PKG_LIBEXECDIR,
  	.instance_name = PACKAGE,
  	.import_environment = "TZ CORE_OUTOFMEM CORE_ERROR" ENV_SYSTEMD ENV_GDB,

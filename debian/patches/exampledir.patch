@@ -12,9 +12,9 @@ Bug: #698941
 
 Index: dovecot/doc/example-config/Makefile.in
 ===================================================================
---- dovecot.orig/doc/example-config/Makefile.in	2013-08-19 11:24:01.895980319 -0400
-+++ dovecot/doc/example-config/Makefile.in	2013-08-19 11:24:01.891980428 -0400
-@@ -321,7 +321,7 @@
+--- dovecot.orig/doc/example-config/Makefile.in
++++ dovecot/doc/example-config/Makefile.in
+@@ -383,7 +383,7 @@ top_srcdir = @top_srcdir@
  SUBDIRS = conf.d
  pkgsysconfdir = $(sysconfdir)/dovecot
  nodist_pkgsysconf_DATA = README
@@ -25,9 +25,9 @@ Index: dovecot/doc/example-config/Makefile.in
  	dovecot-dict-auth.conf.ext \
 Index: dovecot/doc/example-config/conf.d/Makefile.in
 ===================================================================
---- dovecot.orig/doc/example-config/conf.d/Makefile.in	2013-08-19 11:24:01.895980319 -0400
-+++ dovecot/doc/example-config/conf.d/Makefile.in	2013-08-19 11:24:01.891980428 -0400
-@@ -278,7 +278,7 @@
+--- dovecot.orig/doc/example-config/conf.d/Makefile.in
++++ dovecot/doc/example-config/conf.d/Makefile.in
+@@ -320,7 +320,7 @@ top_build_prefix = @top_build_prefix@
  top_builddir = @top_builddir@
  top_srcdir = @top_srcdir@
  pkgsysconfdir = $(sysconfdir)/dovecot

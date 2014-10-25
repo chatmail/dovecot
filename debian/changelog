@@ -1,3 +1,12 @@
+dovecot (1:2.2.14-1) UNRELEASED; urgency=medium
+
+  * [f1ebe86] Imported Upstream version 2.2.14
+  * refresh patches
+    + drop d/patches/bye_logout_not_sent.patch, included upstream
+    + update d/patches/dovecot_name.patch for new struct member
+
+ -- Bernhard Schmidt <berni+deb@birkenwald.de>  Mon, 20 Oct 2014 20:49:37 +0200
+
 dovecot (1:2.2.13-5) unstable; urgency=medium
 
   * Fix name of organizationName field in SSL configuration for self-

@@ -9,9 +9,9 @@ Bug: #624294
 
 Index: dovecot/doc/example-config/conf.d/10-mail.conf
 ===================================================================
---- dovecot.orig/doc/example-config/conf.d/10-mail.conf	2013-08-19 11:23:01.709620109 -0400
-+++ dovecot/doc/example-config/conf.d/10-mail.conf	2013-08-19 11:23:01.705620218 -0400
-@@ -201,7 +201,7 @@
+--- dovecot.orig/doc/example-config/conf.d/10-mail.conf
++++ dovecot/doc/example-config/conf.d/10-mail.conf
+@@ -194,7 +194,7 @@ namespace inbox {
  #auth_socket_path = /var/run/dovecot/auth-userdb
  
  # Directory where to look up mail plugins.
