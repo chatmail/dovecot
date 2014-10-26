@@ -1,17 +1,19 @@
 From: Jaldhar H. Vyas <jaldhar@debian.org>
 Date: Tue, 25 Sep 2012 01:12:07 -0400
+Last-Update: Sat, 25 Oct 2014 20:35:01 -0400
 Subject: SSL cert location
 Description: Move dovecots generated X.509 certificate out of /etc/ssl where
  it doesn't belong.
 Bug: #608719
 ---
- doc/example-config/conf.d/10-ssl.conf |    4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+ doc/example-config/conf.d/10-ssl.conf | 4 ++--
+ doc/mkcert.sh                         | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
 
-Index: dovecot/doc/example-config/conf.d/10-ssl.conf
-===================================================================
---- dovecot.orig/doc/example-config/conf.d/10-ssl.conf	2013-08-19 11:23:18.797154554 -0400
-+++ dovecot/doc/example-config/conf.d/10-ssl.conf	2013-08-19 11:23:18.793154664 -0400
+diff --git a/doc/example-config/conf.d/10-ssl.conf b/doc/example-config/conf.d/10-ssl.conf
+index 31b750c..58e6f13 100644
+--- a/doc/example-config/conf.d/10-ssl.conf
++++ b/doc/example-config/conf.d/10-ssl.conf
 @@ -9,8 +9,8 @@
  # dropping root privileges, so keep the key file unreadable by anyone but
  # root. Included doc/mkcert.sh can be used to easily generate self-signed
@@ -23,3 +25,18 @@ Index: dovecot/doc/example-config/conf.d/10-ssl.conf
  
  # If key file is password protected, give the password here. Alternatively
  # give it when starting dovecot with -p parameter. Since this file is often
+diff --git a/doc/mkcert.sh b/doc/mkcert.sh
+index 2fedd48..3ee5143 100644
+--- a/doc/mkcert.sh
++++ b/doc/mkcert.sh
+@@ -7,8 +7,8 @@ OPENSSL=${OPENSSL-openssl}
+ SSLDIR=${SSLDIR-/etc/ssl}
+ OPENSSLCONFIG=${OPENSSLCONFIG-dovecot-openssl.cnf}
+ 
+-CERTDIR=$SSLDIR/certs
+-KEYDIR=$SSLDIR/private
++CERTDIR=/etc/dovecot
++KEYDIR=/etc/dovecot/private
+ 
+ CERTFILE=$CERTDIR/dovecot.pem
+ KEYFILE=$KEYDIR/dovecot.pem

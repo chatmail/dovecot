@@ -117,51 +117,10 @@ if [ "$1" = "configure" ]; then
     deluser imapd || true
     delgroup imapd || true
   fi
-
-  if [ ! -e /etc/dovecot/private ]; then
-    install -d -o root -g root -m0700 /etc/dovecot/private
-  fi
-
-  SSL_CERT=`doveconf -S ssl_cert | sed -e 's/^ssl_cert=<//'`
-  SSL_KEY=`doveconf -S ssl_key | sed -e 's/^ssl_key=<//'`
-
-    db_get dovecot-core/create-ssl-cert
-    if [ "$RET" = "true" ]; then
-      cd /etc/dovecot
-      SSL_CERT=`doveconf -S ssl_cert | sed -e 's/^ssl_cert=<//'`
-      SSL_KEY=`doveconf -S ssl_key | sed -e 's/^ssl_key=<//'`
-      PATH=$PATH:/usr/bin/ssl
-      db_get dovecot-core/ssl-cert-name
-      COMMONNAME="$RET"
-      MAILNAME="$(cat /etc/mailname 2> /dev/null || echo "$COMMONNAME")"
-      SSLCONF="$(mktemp)" || exit 1
-      TMPOUT="$(mktemp)" || exit 1
-
-      sed -e s#@commonName@#"$COMMONNAME"# \
-          -e s#@emailAddress@#"$root@MAILNAME"# \
-          /usr/share/dovecot/openssl.cnf > $SSLCONF
-
-      if ! openssl req -config $SSLCONF -newkey rsa:2048  -x509 -days 3652.5 -nodes \
-      -out $SSL_CERT -keyout $SSL_KEY > $TMPOUT 2>&1; then
-          echo "Warning : Bad SSL config, can't generate certificate. Openssl output was: " >&2
-        cat $TMPOUT >&2
-      fi
-
-      ucfr dovecot-core $SSL_CERT
-      ucfr dovecot-core $SSL_KEY
-
-      chown root:dovecot $SSL_CERT || true
-      chmod 0644 $SSL_CERT || true
-      chown root:dovecot $SSL_KEY || true
-      chmod 0600 $SSL_KEY || true
-
-    fi
-    db_stop || true
 fi
 
 if [ "$1" = "triggered" ]; then
     if [ -x "/etc/init.d/dovecot" ]; then
-        db_stop || true
         if [ -x /usr/sbin/invoke-rc.d ]; then
             invoke-rc.d dovecot restart
         else

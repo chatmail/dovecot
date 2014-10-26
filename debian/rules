@@ -86,7 +86,7 @@ clean:
 	[ ! -f $(PIGEONHOLE_DIR)/Makefile ] || $(MAKE) -C $(PIGEONHOLE_DIR) distclean
 	# Cleanup DRAC
 	rm -f src/plugins/drac/drac_plugin.so
-	debconf-updatepo
+	# debconf-updatepo
 	dh_autotools-dev_restoreconfig
 	dh_clean
 
