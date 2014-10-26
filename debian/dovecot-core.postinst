@@ -117,6 +117,7 @@ if [ "$1" = "configure" ]; then
     deluser imapd || true
     delgroup imapd || true
   fi
+fi
 
 if [ "$1" = "triggered" ]; then
     if [ -x "/etc/init.d/dovecot" ]; then
