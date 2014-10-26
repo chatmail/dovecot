@@ -1,3 +1,12 @@
+dovecot (1:2.2.13-6) unstable; urgency=medium
+
+  * [f7205c0] dovecot-dev: removed dependency on dovecot-core
+  * [e393868] Removed SSL certificate generation from postinst.  From now on
+    you have to do this yourself.  See dovecot-core's README.debian for
+    instructions. (Closes: #730828)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 25 Oct 2014 23:31:42 -0400
+
 dovecot (1:2.2.13-5) unstable; urgency=medium
 
   * Fix name of organizationName field in SSL configuration for self-
