@@ -1,6 +1,9 @@
 dovecot (1:2.2.15-1) experimental; urgency=medium
 
   * New upstream version (Closes: #766036)
+  * [20c2644] dovecot-dev: removed dependency on dovecot-core
+  * [9163856] Removed SSL certificate from postinst.  From now on you have to 
+    do this yourself.  See dovecot-core's README.debian for instructions.
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat, 25 Oct 2014 15:13:06 -0400
 
