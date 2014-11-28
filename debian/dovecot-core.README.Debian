@@ -24,20 +24,20 @@ themselves like this:
 Setting up SSL certificates
 ---------------------------
 
-In order to use TLS or the IMAP over SSL (imaps) and POP3 over SSL (pop3s) 
+In order to use TLS or the IMAP over SSL (imaps) and POP3 over SSL (pop3s)
 protocols you need a digital document that verifies the identity of your
-server called an SSL certificate.  The easist way to get one of these is to
-buy one from one of the many commercial Certification Authorities (CAs.)  But
+server called an SSL certificate.  The easiest way to get one of these is to
+buy one from one of the many commercial Certification Authorities (CAs.).  But
 you can also be your own CA and create your own SSL certificate.  In fact this
 package used to generate one for you but this turned out to be buggy and so
 now we leave it up to you.
 
-The certificate will have two pieces, a public part and a private part.  The 
+The certificate will have two pieces, a public part and a private part.  The
 first step is to create a secure directory for the private part:
 
 # install -d -o root -g root -m0700 /etc/dovecot/private
 
-... next copy two files mkcert.sh and openssl.cnf from 
+... next copy two files mkcert.sh and openssl.cnf from
 /usr/share/doc/dovecot-core/dovecot/ to somewhere you can edit them.  Make
 openssl.cnf writable and mkcert.sh executable.  Edit openssl.cnf to give
 relevant parameters for your certificate.  Run mkcert.sh.  It should create
@@ -52,7 +52,7 @@ certificate has the right permissions:
 ...finally edit /etc/dovecot/conf.d/10-ssl.conf to enable ssl.
 
 You can find out more about this topic on the dovecot wiki at:
-http://wiki2.dovecot.org/SSL      
+http://wiki2.dovecot.org/SSL
 
 Upgrading from 1.2 (squeeze) to 2.0 (wheezy)
 --------------------------------------------
