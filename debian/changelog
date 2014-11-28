@@ -1,3 +1,11 @@
+dovecot (1:2.2.13-7) unstable; urgency=high
+
+  * [daea09a] Commented out cert locations so install doesn't bomb if the
+    certs haven't been created yet.
+    (Closes: #706216, #732263, #767154, #768253, #769461, #770697)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 28 Nov 2014 00:27:03 -0500
+
 dovecot (1:2.2.13-6) unstable; urgency=medium
 
   * [f7205c0] dovecot-dev: removed dependency on dovecot-core
