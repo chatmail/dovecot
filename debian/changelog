@@ -1,6 +1,6 @@
 dovecot (1:2.2.13-8) unstable; urgency=medium
 
-  * [0817d7f] Turn off SSL by default and leave SSL cert locations commented
+  * [b2f652f] Turn off SSL by default and leave SSL cert locations commented
     out. Hopefully this will be a satisfactory lowest common denominator for
     new installs without messing with upgrades.
     (Closes: #771334, #771407)
