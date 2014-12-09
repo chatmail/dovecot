@@ -38,11 +38,11 @@ first step is to create a secure directory for the private part:
 # install -d -o root -g root -m0700 /etc/dovecot/private
 
 ... next copy two files mkcert.sh and openssl.cnf from
-/usr/share/doc/dovecot-core/dovecot/ to somewhere you can edit them.  Make
-openssl.cnf writable and mkcert.sh executable.  Edit openssl.cnf to give
-relevant parameters for your certificate.  Run mkcert.sh.  It should create
-a certificate for you and install it in the right place.  Then make sure your
-certificate has the right permissions:
+/usr/share/dovecot/ to somewhere you can edit them.  Make openssl.cnf writable
+and mkcert.sh executable.  Edit openssl.cnf to give relevant parameters for
+your certificate.  Run mkcert.sh.  It should create a certificate for you and
+install it in the right place.  Then make sure your certificate has the right
+permissions:
 
 # chown root:dovecot /etc/dovecot/dovecot.pem
 # chmod 0644 /etc/dovecot/dovecot.pem

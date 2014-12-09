@@ -113,11 +113,19 @@ install: build
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/
 	install -D -m 0755 -o root -g root $(CURDIR)/debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-core/usr/bin/maildirmake.dovecot
 	install -o root -g root -m 0644 $(CURDIR)/debian/openssl.cnf \
+		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/dovecot-openssl.cnf
+	install -o root -g root -m 0755 $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/mkcert.sh \
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/
-	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core
+	rm $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/mkcert.sh
+	rm $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/dovecot-openssl.cnf
+	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/*.txt $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core
+	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/sieve $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core
+	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/wiki $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core
 	cp $(PIGEONHOLE_DIR)/ChangeLog $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/pigeonhole.ChangeLog
 	cp $(PIGEONHOLE_DIR)/README $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/pigeonhole.README
 	cp $(PIGEONHOLE_DIR)/NEWS $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/pigeonhole.NEWS
+	rm -rf $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot
+	rm -rf $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/example-config
 
 	# imapd
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
@@ -167,11 +175,12 @@ install: build
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/sieve $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules/sieve
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/libdovecot-sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/*-sieve.conf $(CURDIR)/debian/dovecot-sieve/usr/share/dovecot/conf.d
+	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/*-sieve-extprograms.conf $(CURDIR)/debian/dovecot-sieve/usr/share/dovecot/conf.d
 	mv $(CURDIR)/debian/dovecot-core/usr/share/man/man1/sieve* $(CURDIR)/debian/dovecot-sieve/usr/share/man/man1
 
 	# solr
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_fts_solr_* $(CURDIR)/debian/dovecot-solr/usr/lib/dovecot/modules
-	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/dovecot/solr-schema.xml $(CURDIR)/debian/dovecot-solr/usr/share/dovecot
+	mv $(CURDIR)/doc/solr-schema.xml $(CURDIR)/debian/dovecot-solr/usr/share/dovecot
 
 	# lucene
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_fts_lucene_* $(CURDIR)/debian/dovecot-lucene/usr/lib/dovecot/modules
