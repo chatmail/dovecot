@@ -1,3 +1,13 @@
+dovecot (1:2.2.13-9) unstable; urgency=high
+
+  * [5b689f6] Made some overlooked configuration files into conffiles;
+    deleted excess files from /usr/share/doc/dovecot-core.
+  * [83f2fc4] Explicitly stop debconf in dovecot-core postinst which hopefully
+    fixes the last of the install hangs.
+    Thanks to Chris Gilbert <zeke.gilbert@gmail.com> (Closes: #770695)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 09 Dec 2014 06:17:23 -0500
+
 dovecot (1:2.2.13-8) unstable; urgency=medium
 
   * [b2f652f] Turn off SSL by default and leave SSL cert locations commented
