@@ -128,6 +128,8 @@ if [ "$1" = "configure" ]; then
     deluser imapd || true
     delgroup imapd || true
   fi
+
+  db_stop || true
 fi
 
 if [ "$1" = "triggered" ]; then
