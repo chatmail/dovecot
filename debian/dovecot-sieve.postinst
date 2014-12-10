@@ -4,7 +4,7 @@ set -e
 
 if [ "$1" = "configure" ]; then
   CONFFILES="conf.d/90-sieve.conf \
-  90-sieve-extprograms.conf"
+  conf.d/90-sieve-extprograms.conf"
 
   for conffile in $CONFFILES ; do
     # Tell ucf that the file in /usr/share/dovecot is the latest
