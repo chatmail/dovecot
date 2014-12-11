@@ -1,3 +1,14 @@
+dovecot (1:2.2.13-10) unstable; urgency=high
+
+  [ Jelmer Vernooij ]
+  * [93db7f0] Fix path to 90-sieve-extprograms.conf in dovecot-sieve.postinst.
+    Closes: #772703, #772711
+
+  [ Jaldhar H. Vyas ]
+  * [8c627a4] Add another db_stop this time for triggers.  Die #770695 die!
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 10 Dec 2014 19:56:20 -0500
+
 dovecot (1:2.2.13-9) unstable; urgency=high
 
   * [5b689f6] Made some overlooked configuration files into conffiles;
