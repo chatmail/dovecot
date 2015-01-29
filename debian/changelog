@@ -1,3 +1,11 @@
+dovecot (1:2.2.13-11~bpo70+1) wheezy-backports; urgency=medium
+
+  * Rebuild for wheezy-backports.
+  * Disable systemd which is not in wheezy
+  * Disable lucene because liblucene is too old in wheezy
+
+ -- Marco Nenciarini <mnencia@debian.org>  Fri, 30 Jan 2015 09:30:45 +0100
+
 dovecot (1:2.2.13-11) unstable; urgency=high
 
   * [ebc0377] Don't allow install of dovecot-sieve without a new enough
