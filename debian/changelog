@@ -1,3 +1,11 @@
+dovecot (1:2.2.13-12) unstable; urgency=high
+
+  * [48f6fe4] Add patch cve-2015-3420.patch: Fix SSL/TLS handshake failures
+    leading to a crash of the login process with newer versions of OpenSSL.
+    Closes: #783649 (CVE-2015-3420)
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Mon, 04 May 2015 11:38:30 +0000
+
 dovecot (1:2.2.13-11) unstable; urgency=high
 
   * [ebc0377] Don't allow install of dovecot-sieve without a new enough
