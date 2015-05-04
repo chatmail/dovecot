@@ -9,13 +9,14 @@ Distributed with Dovecot:
  * <expire> [Plugins.Expire.txt]: Delete mails from specified mailboxes after a
    designated number of days
  * <fts> [Plugins.FTS.txt]: Full text search indexing
+ * <last_login> [Plugins.LastLogin.txt]: Last-login timestamp updating
  * <lazy_expunge> [Plugins.Lazyexpunge.txt]: Make EXPUNGE and DELETE commands
    just rename the mails elsewhere
  * <listescape> [Plugins.Listescape.txt]: Allow using characters in mailbox
    names that would otherwise be illegal
  * <mailbox_alias> [Plugins.MailboxAlias.txt]: Map multiple names to the same
    mailbox.
- * <mail_filter> [Plugins.MailLog.txt]: Filter mails while reading/writing
+ * <mail_filter> [Plugins.MailFilter.txt]: Filter mails while reading/writing
    through a script
  * <mail_log> [Plugins.MailLog.txt]: Log several mail actions
  * <notify> [Plugins.Notify.txt]: Wrapper plugin for easily developing other
@@ -44,7 +45,9 @@ External:
  * alert [http://dovecot.org/patches/1.0/imap-alert-plugin.c]: Send IMAP ALERT
    message from '/etc/dovecot.alert'.
  * <Pigeonhole Sieve> [Pigeonhole.Sieve.txt]: Use the Sieve
-   [http://sieve.info/] language for filtering upon message delivery
+   [http://sieve.info/] language to perform actions upon message delivery, such
+   as filtering, forwarding, vacation replies, notifications and many other
+   actions. See the <documentation> [Pigeonhole.Sieve.txt] for a full list.
  * Fetchmail wakeup [http://github.com/marschap/fetchmail_wakeup]: Wakes
    fetchmail when Dovecot looks for new mail. This is a heavily extended and
    updated version that is tested to work with Dovecot 1.1.x and 1.2.x.
@@ -56,6 +59,11 @@ External:
  * <deleted-to-trash> [Plugins.deleted-to-trash.txt]: Automatically move
    deleted item to trash folder, if client side doesn't do it, such as outlook
    and evolution.
+ * extra-copies [https://github.com/vandry/dovecot-plugin-extra-copies]: allows
+   extra copies of messages to be made in other folders whenever a message is
+   added to a particular folder.
+ * fts-elasticsearch [https://github.com/ascendantcom/fts-elasticsearch]:
+   Allows for the use of <ElasticSearch.txt> as a full-text search backend.
 
 Experimental Plugins:
 
@@ -65,4 +73,4 @@ Experimental Plugins:
 To enable / disable plugins per user you can make your userdb return
 'mail_plugins' extra field. See <UserDatabase.ExtraFields.txt> for examples.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -22,7 +22,8 @@ int mail_transaction_log_lock_head(struct mail_transaction_log *log ATTR_UNUSED)
 	return log_lock_failure ? -1 : 0;
 }
 
-void mail_transaction_log_file_unlock(struct mail_transaction_log_file *file ATTR_UNUSED) {}
+void mail_transaction_log_file_unlock(struct mail_transaction_log_file *file ATTR_UNUSED,
+				      const char *lock_reason ATTR_UNUSED) {}
 
 void mail_transaction_update_modseq(const struct mail_transaction_header *hdr,
 				    const void *data ATTR_UNUSED,
@@ -97,7 +98,7 @@ static void test_append_sync_offset(struct mail_transaction_log *log)
 
 	test_begin("transaction log append: append_sync_offset only");
 	test_assert(mail_transaction_log_append_begin(log->index, 0, &ctx) == 0);
-	ctx->append_sync_offset = TRUE;
+	ctx->index_sync_transaction = TRUE;
 	file->max_tail_offset = 123;
 	test_assert(mail_transaction_log_append_commit(&ctx) == 0);
 
@@ -157,6 +158,10 @@ static void test_mail_transaction_log_append(void)
 	file->fd = -1;
 	test_end();
 
+	buffer_free(&log->head->buffer);
+	i_free(log->head);
+	i_free(log->index);
+	i_free(log);
 	unlink(tmp_path);
 }
 

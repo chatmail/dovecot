@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mail-storage.h"
@@ -99,8 +99,14 @@ doveadm_mail_iter_deinit_full(struct doveadm_mail_iter **_iter,
 	*_iter = NULL;
 
 	ret = doveadm_mail_iter_deinit_transaction(iter, commit);
-	if (ret == 0 && sync)
+	if (ret == 0 && sync) {
 		ret = mailbox_sync(iter->box, 0);
+		if (ret < 0) {
+			i_error("Mailbox %s: Mailbox sync failed: %s",
+				mailbox_get_vname(iter->box),
+				mailbox_get_last_error(iter->box, NULL));
+		}
+	}
 	if (ret < 0)
 		doveadm_mail_failed_mailbox(iter->ctx, iter->box);
 	if (!keep_box)

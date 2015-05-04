@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 /* Digest-MD5 SASL authentication, see RFC-2831 */
 
@@ -592,7 +592,7 @@ static struct auth_request *mech_digest_md5_auth_new(void)
 	struct digest_auth_request *request;
 	pool_t pool;
 
-	pool = pool_alloconly_create("digest_md5_auth_request", 2048);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"digest_md5_auth_request", 2048);
 	request = p_new(pool, struct digest_auth_request, 1);
 	request->pool = pool;
 	request->qop = QOP_AUTH;

@@ -1,10 +1,11 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
 #include "istream-private.h"
 #include "istream-qp.h"
 
+static const 
 struct {
 	const char *input;
 	const char *output;

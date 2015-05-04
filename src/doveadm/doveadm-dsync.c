@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -14,8 +14,10 @@
 #include "strescape.h"
 #include "var-expand.h"
 #include "settings-parser.h"
+#include "imap-util.h"
 #include "master-service.h"
 #include "master-service-ssl-settings.h"
+#include "mail-storage.h"
 #include "mail-storage-service.h"
 #include "mail-user.h"
 #include "mail-namespace.h"
@@ -26,8 +28,8 @@
 #include "doveadm-server.h"
 #include "client-connection.h"
 #include "server-connection.h"
-#include "dsync-brain.h"
-#include "dsync-ibc.h"
+#include "dsync/dsync-brain.h"
+#include "dsync/dsync-ibc.h"
 #include "doveadm-dsync.h"
 
 #include <stdio.h>
@@ -36,7 +38,7 @@
 #include <ctype.h>
 #include <sys/wait.h>
 
-#define DSYNC_COMMON_GETOPT_ARGS "+1dEfg:l:m:n:NPr:Rs:Ux:"
+#define DSYNC_COMMON_GETOPT_ARGS "+1a:dEfF:g:l:m:n:NPr:Rs:t:Ux:"
 #define DSYNC_REMOTE_CMD_EXIT_WAIT_SECS 30
 /* The broken_char is mainly set to get a proper error message when trying to
    convert a mailbox with a name that can't be used properly translated between
@@ -55,10 +57,13 @@ struct dsync_cmd_context {
 	struct doveadm_mail_cmd_context ctx;
 	enum dsync_brain_sync_type sync_type;
 	const char *mailbox;
+	const char *sync_flags;
+	const char *virtual_all_box;
 	guid_128_t mailbox_guid;
 	const char *state_input, *rawlog_path;
 	ARRAY_TYPE(const_string) exclude_mailboxes;
 	ARRAY_TYPE(const_string) namespace_prefixes;
+	time_t sync_since_timestamp;
 
 	const char *remote_name;
 	const char *local_location;
@@ -500,6 +505,8 @@ dsync_replicator_notify(struct dsync_cmd_context *ctx,
 		i_error("net_connect_unix(%s) failed: %m", path);
 		return;
 	}
+	fd_set_nonblock(fd, FALSE);
+
 	str = t_str_new(128);
 	str_append(str, REPLICATOR_HANDSHAKE"NOTIFY\t");
 	str_append_tabescaped(str, ctx->ctx.cur_mail_user->username);
@@ -537,10 +544,14 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 		set.process_title_prefix = t_strdup_printf(
 			"%s ", net_ip2addr(&_ctx->cur_client_ip));
 	}
+	set.sync_since_timestamp = ctx->sync_since_timestamp;
 	set.sync_box = ctx->mailbox;
+	set.sync_flag = ctx->sync_flags;
+	set.virtual_all_box = ctx->virtual_all_box;
 	memcpy(set.sync_box_guid, ctx->mailbox_guid, sizeof(set.sync_box_guid));
 	set.lock_timeout_secs = ctx->lock_timeout;
 	set.state = ctx->state_input;
+	set.mailbox_alt_char = doveadm_settings->dsync_alt_char[0];
 	if (array_count(&ctx->exclude_mailboxes) > 0) {
 		/* array is NULL-terminated in init() */
 		set.exclude_mailboxes = array_idx(&ctx->exclude_mailboxes, 0);
@@ -675,6 +686,7 @@ static void dsync_connected_callback(int exit_code, const char *error,
 					  &ctx->output, &ctx->ssl_iostream);
 		break;
 	case SERVER_EXIT_CODE_DISCONNECTED:
+		ctx->ctx.exit_code = EX_TEMPFAIL;
 		ctx->error = p_strdup_printf(ctx->ctx.pool,
 			"Disconnected from remote: %s", error);
 		break;
@@ -751,7 +763,7 @@ dsync_connect_tcp(struct dsync_cmd_context *ctx,
 	str_append_c(cmd, '\n');
 
 	ctx->tcp_conn = conn;
-	server_connection_cmd(conn, str_c(cmd),
+	server_connection_cmd(conn, str_c(cmd), NULL,
 			      dsync_connected_callback, ctx);
 	io_loop_run(ioloop);
 	ctx->tcp_conn = NULL;
@@ -903,6 +915,9 @@ cmd_mailbox_dsync_parse_arg(struct doveadm_mail_cmd_context *_ctx, int c)
 		ctx->oneway = TRUE;
 		ctx->backup = TRUE;
 		break;
+	case 'a':
+		ctx->virtual_all_box = optarg;
+		break;
 	case 'd':
 		ctx->default_replica_location = TRUE;
 		break;
@@ -913,6 +928,18 @@ cmd_mailbox_dsync_parse_arg(struct doveadm_mail_cmd_context *_ctx, int c)
 	case 'f':
 		ctx->sync_type = DSYNC_BRAIN_SYNC_TYPE_FULL;
 		break;
+	case 'F': {
+		const char *str = optarg;
+
+		if (strchr(str, ' ') != NULL)
+			i_fatal("-F parameter doesn't support multiple flags currently");
+		if (str[0] == '-')
+			str++;
+		if (str[0] == '\\' && imap_parse_system_flag(str) == 0)
+			i_fatal("Invalid system flag given for -F parameter: '%s'", str);
+		ctx->sync_flags = optarg;
+		break;
+	}
 	case 'g':
 		if (optarg[0] == '\0')
 			ctx->no_mail_sync = TRUE;
@@ -956,6 +983,10 @@ cmd_mailbox_dsync_parse_arg(struct doveadm_mail_cmd_context *_ctx, int c)
 		    *optarg != '\0')
 			ctx->sync_type = DSYNC_BRAIN_SYNC_TYPE_STATE;
 		ctx->state_input = optarg;
+		break;
+	case 't':
+		if (mail_parse_human_timestamp(optarg, &ctx->sync_since_timestamp) < 0)
+			i_fatal("Invalid -t parameter: %s", optarg);
 		break;
 	case 'U':
 		ctx->replicator_notify = TRUE;
@@ -1100,11 +1131,11 @@ static struct doveadm_mail_cmd_context *cmd_dsync_server_alloc(void)
 
 struct doveadm_mail_cmd cmd_dsync_mirror = {
 	cmd_dsync_alloc, "sync",
-	"[-1dfR] [-l <secs>] [-r <rawlog path>] [-m <mailbox>] [-n <namespace> | -N] [-x <exclude>] [-s <state>] <dest>"
+	"[-1fPRU] [-l <secs>] [-r <rawlog path>] [-m <mailbox>] [-g <mailbox_guid>] [-n <namespace> | -N] [-x <exclude>] [-s <state>] -d|<dest>"
 };
 struct doveadm_mail_cmd cmd_dsync_backup = {
 	cmd_dsync_backup_alloc, "backup",
-	"[-dfR] [-l <secs>] [-r <rawlog path>] [-m <mailbox>] [-n <namespace> | -N] [-x <exclude>] [-s <state>] <dest>"
+	"[-fPRU] [-l <secs>] [-r <rawlog path>] [-m <mailbox>] [-g <mailbox_guid>] [-n <namespace> | -N] [-x <exclude>] [-s <state>] -d|<dest>"
 };
 struct doveadm_mail_cmd cmd_dsync_server = {
 	cmd_dsync_server_alloc, "dsync-server", &doveadm_mail_cmd_hide

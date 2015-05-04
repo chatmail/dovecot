@@ -37,7 +37,7 @@ System configuration
  * Create '/home/vmail' directory owned by vmail:vmail. The mails for all users
    are stored under this directory.
  * Create '/var/log/dovecot.log' and '/var/log/dovecot-info.log' files owned by
-   vmail:vmail, so that <deliver> [LDA.txt] can write to them.
+   vmail:vmail, so that <dovecot-lda> [LDA.txt] can write to them.
 
 dovecot.conf
 ============
@@ -137,9 +137,10 @@ Delivering mails
 ----------------
 
 You can configure the SMTP server to deliver mails internally, or you can use
-Dovecot's <deliver> [LDA.txt]. Using deliver gives you better performance
-because it updates Dovecot's index files while saving the mails. See <LDA.txt>
-for how to configure this. In config you should have:
+<dovecot-lda> [LDA.txt]. Using dovecot-lda gives you better performance because
+it updates Dovecot's index files while saving the mails. See <LDA.txt> for how
+to configure this. Alternatively you can also use <LMTP.txt>. In config you
+should have:
 
 ---%<-------------------------------------------------------------------------
 protocol lda {
@@ -182,4 +183,4 @@ jane:{PLAIN}pass::::::userdb_quota_rule=*:storage=200M
 Joe has now 100MB quota and Jane has 200MB quota. See <Quota.txt> for more
 information about quota settings.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

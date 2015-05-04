@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -87,7 +87,7 @@ quota_get_status(struct mailbox *box, enum mailbox_status_items items,
 	if ((items & STATUS_CHECK_OVER_QUOTA) != 0) {
 		qt = quota_transaction_begin(box);
 		if ((ret = quota_test_alloc(qt, 0, &too_large)) == 0) {
-			mail_storage_set_error(box->storage, MAIL_ERROR_NOSPACE,
+			mail_storage_set_error(box->storage, MAIL_ERROR_NOQUOTA,
 					       qt->quota->set->quota_exceeded_msg);
 			ret = -1;
 		}
@@ -190,7 +190,7 @@ static int quota_check(struct mail_save_context *ctx)
 	if (ret > 0)
 		return 0;
 	else if (ret == 0) {
-		mail_storage_set_error(t->box->storage, MAIL_ERROR_NOSPACE,
+		mail_storage_set_error(t->box->storage, MAIL_ERROR_NOQUOTA,
 				       qt->quota->set->quota_exceeded_msg);
 		return -1;
 	} else {
@@ -252,7 +252,7 @@ quota_save_begin(struct mail_save_context *ctx, struct istream *input)
 		ret = quota_test_alloc(qt, size, &too_large);
 		if (ret == 0) {
 			mail_storage_set_error(t->box->storage,
-				MAIL_ERROR_NOSPACE,
+				MAIL_ERROR_NOQUOTA,
 				qt->quota->set->quota_exceeded_msg);
 			return -1;
 		} else if (ret < 0) {
@@ -631,4 +631,6 @@ void quota_mail_namespaces_created(struct mail_namespace *namespaces)
 	roots = array_get(&quota->roots, &count);
 	for (i = 0; i < count; i++)
 		quota_root_set_namespace(roots[i], namespaces);
+
+	quota_over_flag_check(namespaces->user, quota);
 }

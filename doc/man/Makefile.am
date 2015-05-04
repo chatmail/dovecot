@@ -4,16 +4,19 @@ SUFFIXES = .1.in .1
 
 dist_man1_MANS = \
 	deliver.1 \
+	doveadm-backup.1 \
 	doveadm-config.1 \
 	doveadm-copy.1 \
 	doveadm-reload.1 \
-	doveadm-stop.1
+	doveadm-stop.1 \
+	dsync.1
 
 dist_man7_MANS = \
 	doveadm-search-query.7
 
 nodist_man1_MANS = \
 	doveadm.1 \
+	doveadm-acl.1 \
 	doveadm-altmove.1 \
 	doveadm-auth.1 \
 	doveadm-batch.1 \
@@ -24,6 +27,7 @@ nodist_man1_MANS = \
 	doveadm-expunge.1 \
 	doveadm-fetch.1 \
 	doveadm-flags.1 \
+	doveadm-fts.1 \
 	doveadm-import.1 \
 	doveadm-instance.1 \
 	doveadm-index.1 \
@@ -35,16 +39,18 @@ nodist_man1_MANS = \
 	doveadm-mount.1 \
 	doveadm-move.1 \
 	doveadm-penalty.1 \
+	doveadm-proxy.1 \
 	doveadm-purge.1 \
 	doveadm-pw.1 \
 	doveadm-quota.1 \
+	doveadm-replicator.1 \
 	doveadm-search.1 \
+	doveadm-sync.1 \
 	doveadm-user.1 \
 	doveadm-who.1 \
 	doveconf.1 \
 	dovecot.1 \
-	dovecot-lda.1 \
-	dsync.1
+	dovecot-lda.1
 
 man_includefiles = \
 	$(srcdir)/global-options-formatter.inc \
@@ -56,6 +62,7 @@ man_includefiles = \
 
 EXTRA_DIST = \
 	doveadm.1.in \
+	doveadm-acl.1.in \
 	doveadm-altmove.1.in \
 	doveadm-auth.1.in \
 	doveadm-batch.1.in \
@@ -66,6 +73,7 @@ EXTRA_DIST = \
 	doveadm-expunge.1.in \
 	doveadm-fetch.1.in \
 	doveadm-flags.1.in \
+	doveadm-fts.1.in \
 	doveadm-import.1.in \
 	doveadm-instance.1.in \
 	doveadm-index.1.in \
@@ -77,16 +85,18 @@ EXTRA_DIST = \
 	doveadm-mount.1.in \
 	doveadm-move.1.in \
 	doveadm-penalty.1.in \
+	doveadm-proxy.1.in \
 	doveadm-purge.1.in \
 	doveadm-pw.1.in \
 	doveadm-quota.1.in \
+	doveadm-replicator.1.in \
 	doveadm-search.1.in \
+	doveadm-sync.1.in \
 	doveadm-user.1.in \
 	doveadm-who.1.in \
 	doveconf.1.in \
 	dovecot.1.in \
 	dovecot-lda.1.in \
-	dsync.1.in \
 	sed.sh \
 	$(man_includefiles)
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "module-dir.h"
@@ -40,7 +40,10 @@ static int ssl_module_load(const char **error_r)
 		return -1;
 	}
 
-	lib_atexit(ssl_module_unload);
+	/* Destroy SSL module after (most of) the others. Especially lib-fs
+	   backends may still want to access SSL module in their own
+	   atexit-callbacks. */
+	lib_atexit_priority(ssl_module_unload, LIB_ATEXIT_PRIORITY_LOW);
 	ssl_module_loaded = TRUE;
 	return 0;
 #else
@@ -79,13 +82,14 @@ void ssl_iostream_context_deinit(struct ssl_iostream_context **_ctx)
 	ssl_vfuncs->context_deinit(ctx);
 }
 
-int ssl_iostream_generate_params(buffer_t *output, const char **error_r)
+int ssl_iostream_generate_params(buffer_t *output, unsigned int dh_length,
+				 const char **error_r)
 {
 	if (!ssl_module_loaded) {
 		if (ssl_module_load(error_r) < 0)
 			return -1;
 	}
-	return ssl_vfuncs->generate_params(output, error_r);
+	return ssl_vfuncs->generate_params(output, dh_length, error_r);
 }
 
 int ssl_iostream_context_import_params(struct ssl_iostream_context *ctx,

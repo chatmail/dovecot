@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -119,7 +119,7 @@ static int settings_add_include(const char *path, struct input_stack **inputp,
 	new_input = t_new(struct input_stack, 1);
 	new_input->prev = *inputp;
 	new_input->path = t_strdup(path);
-	new_input->input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	new_input->input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	i_stream_set_return_partial_line(new_input->input, TRUE);
 	*inputp = new_input;
 	return 0;
@@ -201,7 +201,7 @@ bool settings_read_i(const char *path, const char *section,
 
 	full_line = t_str_new(512);
 	sections = 0; root_section = 0; errormsg = NULL;
-	input->input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	input->input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	i_stream_set_return_partial_line(input->input, TRUE);
 prevfile:
 	while ((line = i_stream_read_next_line(input->input)) != NULL) {
@@ -356,6 +356,7 @@ prevfile:
 				if (skip > 0)
 					skip--;
 				else {
+					i_assert(sect_callback != NULL);
 					sect_callback(NULL, NULL, context,
 						      &errormsg);
 					if (root_section == sections &&

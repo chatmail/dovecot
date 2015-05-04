@@ -46,9 +46,12 @@ struct ostream *
 o_stream_create(struct ostream_private *_stream, struct ostream *parent, int fd)
 	ATTR_NULL(2);
 
-off_t io_stream_copy(struct ostream *outstream, struct istream *instream,
-		     size_t block_size);
+off_t io_stream_copy(struct ostream *outstream, struct istream *instream);
 
 void o_stream_copy_error_from_parent(struct ostream_private *_stream);
+/* This should be called before sending data to parent stream. It makes sure
+   that the parent stream's output buffer doesn't become too large.
+   Returns 1 if more data can be safely added, 0 if not, -1 if error. */
+int o_stream_flush_parent_if_needed(struct ostream_private *_stream);
 
 #endif

@@ -94,7 +94,7 @@ previous threads about it. Some points about it:
 
  * krb5_kuserok() is used to check if access is allowed. It may try to do the
    check by reading ~user/.k5login (good!) or ~dovecot/.k5login (bad!)
- * v2.2+ has "k5credentials" <passdb extra field>
+ * v2.2+ has "k5principals" <passdb extra field>
    [PasswordDatabase.ExtraFields.txt], which is a comma separated list of
    usernames that are allowed to log in. If it's set, it bypasses the
    krb5_kuserok() check.
@@ -170,4 +170,4 @@ The test:
     * run command klist (list all kerberos keys) should show imap/HOSTNAME
  * /etc/hosts has to be set properly so that kerberos can find server.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:42)

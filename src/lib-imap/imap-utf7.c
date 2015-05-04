@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -60,7 +60,7 @@ static const char *imap_utf8_first_encode_char(const char *str)
 	const char *p;
 
 	for (p = str; *p != '\0'; p++) {
-		if (*p == '&' || (unsigned char)*p >= 0x80)
+		if (*p == '&' || *p < 0x20 || *p >= 0x7f)
 			return p;
 	}
 	return NULL;
@@ -89,14 +89,14 @@ int imap_utf8_to_utf7(const char *src, string_t *dest)
 			p++;
 			continue;
 		}
-		if ((unsigned char)*p < 0x80) {
+		if (*p >= 0x20 && *p < 0x7f) {
 			str_append_c(dest, *p);
 			p++;
 			continue;
 		}
 
 		u = utf16;
-		while ((unsigned char)*p >= 0x80) {
+		while (*p != '\0' && (*p < 0x20 || *p >= 0x7f)) {
 			if (uni_utf8_get_char(p, &chr) <= 0)
 				return -1;
 			/* @UNSAFE */
@@ -148,7 +148,13 @@ static int utf16buf_to_utf8(string_t *dest, const unsigned char output[4],
 	if (high < UTF16_SURROGATE_HIGH_FIRST ||
 	    high > UTF16_SURROGATE_HIGH_MAX) {
 		/* single byte */
+		size_t oldlen = str_len(dest);
 		uni_ucs4_to_utf8_c(high, dest);
+		if (str_len(dest) - oldlen == 1) {
+			unsigned char last = str_data(dest)[oldlen];
+			if (last >= 0x20 && last < 0x7f)
+				return -1;
+		}
 		*_pos = (pos + 2) % 4;
 		return 0;
 	}
@@ -239,17 +245,15 @@ int imap_utf7_to_utf8(const char *src, string_t *dest)
 	const char *p;
 
 	for (p = src; *p != '\0'; p++) {
-		if (*p == '&' || (unsigned char)*p >= 0x80)
+		if (*p < 0x20 || *p >= 0x7f)
+			return -1;
+		if (*p == '&')
 			break;
 	}
 	if (*p == '\0') {
 		/* no IMAP-UTF-7 encoded characters */
 		str_append(dest, src);
 		return 0;
-	}
-	if ((unsigned char)*p >= 0x80) {
-		/* 8bit characters - the input is broken */
-		return -1;
 	}
 
 	/* at least one encoded character */
@@ -280,7 +284,9 @@ bool imap_utf7_is_valid(const char *src)
 	int ret;
 
 	for (p = src; *p != '\0'; p++) {
-		if (*p == '&' || (unsigned char)*p >= 0x80) {
+		if (*p < 0x20 || *p >= 0x7f)
+			return FALSE;
+		if (*p == '&') {
 			/* slow scan */
 			T_BEGIN {
 				string_t *tmp = t_str_new(128);

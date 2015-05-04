@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -377,12 +377,17 @@ void index_storage_mailbox_close(struct mailbox *box)
 	ibox->sync_last_check = 0;
 }
 
-void index_storage_mailbox_free(struct mailbox *box)
+static void index_storage_mailbox_unref_indexes(struct mailbox *box)
 {
 	if (box->index_pvt != NULL)
 		mail_index_alloc_cache_unref(&box->index_pvt);
 	if (box->index != NULL)
 		mail_index_alloc_cache_unref(&box->index);
+}
+
+void index_storage_mailbox_free(struct mailbox *box)
+{
+	index_storage_mailbox_unref_indexes(box);
 }
 
 static void
@@ -667,14 +672,15 @@ static int mailbox_expunge_all_data(struct mailbox *box)
 		mailbox_transaction_rollback(&t);
 		return -1;
 	}
-	return mailbox_transaction_commit(&t);
+	if (mailbox_transaction_commit(&t) < 0)
+		return -1;
+	/* sync to actually perform the expunges */
+	return mailbox_sync(box, 0);
 }
 
-int index_storage_mailbox_delete(struct mailbox *box)
+int index_storage_mailbox_delete_pre(struct mailbox *box)
 {
-	struct mailbox_metadata metadata;
 	struct mailbox_status status;
-	int ret_guid;
 
 	if (!box->opened) {
 		/* \noselect mailbox, try deleting only the directory */
@@ -714,6 +720,13 @@ int index_storage_mailbox_delete(struct mailbox *box)
 			return -1;
 		}
 	}
+	return 1;
+}
+
+int index_storage_mailbox_delete_post(struct mailbox *box)
+{
+	struct mailbox_metadata metadata;
+	int ret_guid;
 
 	ret_guid = mailbox_get_metadata(box, MAILBOX_METADATA_GUID, &metadata);
 
@@ -722,6 +735,7 @@ int index_storage_mailbox_delete(struct mailbox *box)
 	   implementations if indexes are opened by another session, but
 	   that can't really be helped. */
 	mailbox_close(box);
+	index_storage_mailbox_unref_indexes(box);
 	mail_index_alloc_cache_destroy_unrefed();
 
 	if (box->list->v.delete_mailbox(box->list, box->name) < 0) {
@@ -741,6 +755,19 @@ int index_storage_mailbox_delete(struct mailbox *box)
 		   because it has children. that's not an error. */
 	}
 	return 0;
+}
+
+int index_storage_mailbox_delete(struct mailbox *box)
+{
+	int ret;
+
+	if ((ret = index_storage_mailbox_delete_pre(box)) <= 0)
+		return ret;
+	/* mails have been now successfully deleted. some mailbox formats may
+	   at this point do some other deletion that is required for it.
+	   the _post() deletion will close the index and delete the
+	   directory. */
+	return index_storage_mailbox_delete_post(box);
 }
 
 int index_storage_mailbox_rename(struct mailbox *src, struct mailbox *dest)

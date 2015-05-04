@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -7,8 +7,6 @@
 /* 2 or 5. Haven't seen their difference explained anywhere, but 2 is the
    default.. */
 #define DH_GENERATOR 2
-
-static int dh_param_bitsizes[] = { 512, 1024 };
 
 static int
 generate_dh_parameters(int bitsize, buffer_t *output, const char **error_r)
@@ -43,13 +41,13 @@ generate_dh_parameters(int bitsize, buffer_t *output, const char **error_r)
 	return 0;
 }
 
-int openssl_iostream_generate_params(buffer_t *output, const char **error_r)
+int openssl_iostream_generate_params(buffer_t *output, unsigned int dh_length,
+				     const char **error_r)
 {
-	unsigned int i;
-
-	for (i = 0; i < N_ELEMENTS(dh_param_bitsizes); i++) {
-		if (generate_dh_parameters(dh_param_bitsizes[i],
-					   output, error_r) < 0)
+	if (generate_dh_parameters(512, output, error_r) < 0)
+		return -1;
+	if (dh_length != 512) {
+		if (generate_dh_parameters(dh_length, output, error_r) < 0)
 			return -1;
 	}
 	buffer_append_zero(output, sizeof(int));
@@ -93,13 +91,14 @@ read_dh_parameters_next(struct ssl_iostream_context *ctx,
 
 	switch (bits) {
 	case 512:
+		if (ctx->dh_512 != NULL)
+			return -1;
 		ctx->dh_512 = dh;
 		break;
-	case 1024:
-		ctx->dh_1024 = dh;
-		break;
 	default:
-		ret = -1;
+		if (ctx->dh_default != NULL)
+			return -1;
+		ctx->dh_default = dh;
 		break;
 	}
 	return ret;
@@ -126,8 +125,8 @@ void openssl_iostream_context_free_params(struct ssl_iostream_context *ctx)
 		DH_free(ctx->dh_512);
                 ctx->dh_512 = NULL;
 	}
-	if (ctx->dh_1024 != NULL) {
-		DH_free(ctx->dh_1024);
-                ctx->dh_1024 = NULL;
+	if (ctx->dh_default != NULL) {
+		DH_free(ctx->dh_default);
+                ctx->dh_default = NULL;
 	}
 }

@@ -3,7 +3,7 @@
 
 struct hash_table;
 
-#ifdef __GNUC__
+#ifdef HAVE_TYPEOF
 #  define HASH_VALUE_CAST(table) (typeof((table)._value))
 #else
 #  define HASH_VALUE_CAST(table)
@@ -85,11 +85,14 @@ bool hash_table_lookup_full(const struct hash_table *table,
 #ifndef __cplusplus
 #  define hash_table_lookup_full(table, lookup_key, orig_key_r, value_r) \
 	hash_table_lookup_full((table)._table, \
-		(void *)((const char *)(lookup_key) + COMPILE_ERROR_IF_TYPES2_NOT_COMPATIBLE((table)._const_key, (table)._key, lookup_key)), \
-		(void *)((orig_key_r) + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE((table)._keyp, orig_key_r) + \
-			COMPILE_ERROR_IF_TRUE(sizeof(*orig_key_r) != sizeof(void *))), \
-		(void *)((value_r) + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE((table)._valuep, value_r) + \
-			COMPILE_ERROR_IF_TRUE(sizeof(*value_r) != sizeof(void *))))
+		(void *)((const char *)(lookup_key) + \
+			 COMPILE_ERROR_IF_TYPES2_NOT_COMPATIBLE((table)._const_key, (table)._key, lookup_key)), \
+		(void *)((orig_key_r) + \
+			 COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE((table)._keyp, orig_key_r) + \
+			 COMPILE_ERROR_IF_TRUE(sizeof(*(orig_key_r)) != sizeof(void *))), \
+		(void *)((value_r) + \
+			 COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE((table)._valuep, value_r) + \
+			 COMPILE_ERROR_IF_TRUE(sizeof(*(value_r)) != sizeof(void *))))
 #else
 /* C++ requires (void **) casting, but that's not possible with strict
    aliasing, so .. we'll just disable the type checks */
@@ -110,10 +113,15 @@ void hash_table_update(struct hash_table *table, void *key, void *value);
 		(void *)((char *)(key) + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE((table)._key, key)), \
 		(void *)((char *)(value) + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE((table)._value, value)))
 
-void hash_table_remove(struct hash_table *table, const void *key);
-#define hash_table_remove(table, key) \
-	hash_table_remove((table)._table, \
+bool hash_table_try_remove(struct hash_table *table, const void *key);
+#define hash_table_try_remove(table, key) \
+	hash_table_try_remove((table)._table, \
 		(const void *)((const char *)(key) + COMPILE_ERROR_IF_TYPES2_NOT_COMPATIBLE((table)._const_key, (table)._key, key)))
+#define hash_table_remove(table, key) \
+	STMT_START { \
+		if (unlikely(!hash_table_try_remove(table, key))) \
+        		i_panic("key not found from hash"); \
+	} STMT_END
 unsigned int hash_table_count(const struct hash_table *table) ATTR_PURE;
 #define hash_table_count(table) \
 	hash_table_count((table)._table)
@@ -129,9 +137,10 @@ bool hash_table_iterate(struct hash_iterate_context *ctx,
 #ifndef __cplusplus
 #  define hash_table_iterate(ctx, table, key_r, value_r) \
 	hash_table_iterate(ctx, \
-		(void *)((key_r) + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE((table)._keyp, key_r) + \
-			COMPILE_ERROR_IF_TRUE(sizeof(*key_r) != sizeof(void *)) + \
-			COMPILE_ERROR_IF_TRUE(sizeof(*value_r) != sizeof(void *))), \
+		(void *)((key_r) + \
+			 COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE((table)._keyp, key_r) + \
+			 COMPILE_ERROR_IF_TRUE(sizeof(*(key_r)) != sizeof(void *)) + \
+			 COMPILE_ERROR_IF_TRUE(sizeof(*(value_r)) != sizeof(void *))), \
 		(void *)((value_r) + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE((table)._valuep, value_r)))
 #else
 /* C++ requires (void **) casting, but that's not possible with strict

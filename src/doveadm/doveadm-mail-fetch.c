@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -25,7 +25,6 @@
 struct fetch_cmd_context {
 	struct doveadm_mail_cmd_context ctx;
 
-	struct ostream *output;
 	struct mail *mail;
 
 	ARRAY(struct fetch_field) fields;
@@ -111,28 +110,14 @@ static int fetch_hdr(struct fetch_cmd_context *ctx)
 {
 	struct istream *input;
 	struct message_size hdr_size;
-	const unsigned char *data;
-	size_t size;
-	int ret = 0;
+	int ret;
 
 	if (mail_get_hdr_stream(ctx->mail, &hdr_size, &input) < 0)
 		return -1;
 
 	input = i_stream_create_limit(input, hdr_size.physical_size);
-	while (!i_stream_is_eof(input)) {
-		if (i_stream_read_data(input, &data, &size, 0) == -1)
-			break;
-		if (size == 0)
-			break;
-		doveadm_print_stream(data, size);
-		i_stream_skip(input, size);
-	}
-	if (input->stream_errno != 0) {
-		i_error("read() failed: %m");
-		ret = -1;
-	}
+	ret = doveadm_print_istream(input);
 	i_stream_unref(&input);
-	doveadm_print_stream("", 0);
 	return ret;
 }
 
@@ -205,54 +190,33 @@ static int fetch_body(struct fetch_cmd_context *ctx)
 {
 	struct istream *input;
 	struct message_size hdr_size;
-	const unsigned char *data;
-	size_t size;
-	int ret = 0;
 
 	if (mail_get_stream(ctx->mail, &hdr_size, NULL, &input) < 0)
 		return -1;
 
 	i_stream_skip(input, hdr_size.physical_size);
-	while (!i_stream_is_eof(input)) {
-		if (i_stream_read_data(input, &data, &size, 0) == -1)
-			break;
-		if (size == 0)
-			break;
-		doveadm_print_stream(data, size);
-		i_stream_skip(input, size);
-	}
-	if (input->stream_errno != 0) {
-		i_error("read() failed: %m");
-		ret = -1;
-	}
-	doveadm_print_stream("", 0);
-	return ret;
+	return doveadm_print_istream(input);
+}
+
+static int fetch_body_snippet(struct fetch_cmd_context *ctx)
+{
+	const char *value;
+
+	if (mail_get_special(ctx->mail, MAIL_FETCH_BODY_SNIPPET, &value) < 0)
+		return -1;
+	/* [0] contains the snippet algorithm, skip over it */
+	i_assert(value[0] != '\0');
+	doveadm_print(value + 1);
+	return 0;
 }
 
 static int fetch_text(struct fetch_cmd_context *ctx)
 {
 	struct istream *input;
-	const unsigned char *data;
-	size_t size;
-	int ret = 0;
 
 	if (mail_get_stream(ctx->mail, NULL, NULL, &input) < 0)
 		return -1;
-
-	while (!i_stream_is_eof(input)) {
-		if (i_stream_read_data(input, &data, &size, 0) == -1)
-			break;
-		if (size == 0)
-			break;
-		doveadm_print_stream(data, size);
-		i_stream_skip(input, size);
-	}
-	if (input->stream_errno != 0) {
-		i_error("read() failed: %m");
-		ret = -1;
-	}
-	doveadm_print_stream("", 0);
-	return ret;
+	return doveadm_print_istream(input);
 }
 
 static int fetch_text_utf8(struct fetch_cmd_context *ctx)
@@ -300,7 +264,8 @@ static int fetch_text_utf8(struct fetch_cmd_context *ctx)
 
 	doveadm_print_stream("", 0);
 	if (input->stream_errno != 0) {
-		i_error("read() failed: %m");
+		i_error("read(%s) failed: %s", i_stream_get_name(input),
+			i_stream_get_error(input));
 		return -1;
 	}
 	return 0;
@@ -422,6 +387,7 @@ static const struct fetch_field fetch_fields[] = {
 	{ "modseq",        0,                        fetch_modseq },
 	{ "hdr",           MAIL_FETCH_STREAM_HEADER, fetch_hdr },
 	{ "body",          MAIL_FETCH_STREAM_BODY,   fetch_body },
+	{ "body.snippet",  MAIL_FETCH_BODY_SNIPPET,  fetch_body_snippet },
 	{ "text",          MAIL_FETCH_STREAM_HEADER |
 	                   MAIL_FETCH_STREAM_BODY,   fetch_text },
 	{ "text.utf8",     MAIL_FETCH_STREAM_HEADER |
@@ -558,13 +524,6 @@ cmd_fetch_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	return ret;
 }
 
-static void cmd_fetch_deinit(struct doveadm_mail_cmd_context *_ctx)
-{
-	struct fetch_cmd_context *ctx = (struct fetch_cmd_context *)_ctx;
-
-	o_stream_unref(&ctx->output);
-}
-
 static void cmd_fetch_init(struct doveadm_mail_cmd_context *_ctx,
 			   const char *const args[])
 {
@@ -576,9 +535,6 @@ static void cmd_fetch_init(struct doveadm_mail_cmd_context *_ctx,
 
 	parse_fetch_fields(ctx, fetch_fields);
 	_ctx->search_args = doveadm_mail_build_search_args(args + 1);
-
-	ctx->output = o_stream_create_fd(STDOUT_FILENO, 0, FALSE);
-	o_stream_set_no_error_handling(ctx->output, TRUE);
 }
 
 static struct doveadm_mail_cmd_context *cmd_fetch_alloc(void)
@@ -588,7 +544,6 @@ static struct doveadm_mail_cmd_context *cmd_fetch_alloc(void)
 	ctx = doveadm_mail_cmd_alloc(struct fetch_cmd_context);
 	ctx->ctx.v.init = cmd_fetch_init;
 	ctx->ctx.v.run = cmd_fetch_run;
-	ctx->ctx.v.deinit = cmd_fetch_deinit;
 	doveadm_print_init("pager");
 	return &ctx->ctx;
 }

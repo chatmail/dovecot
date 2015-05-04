@@ -2,7 +2,7 @@ Mailbox Saving
 ==============
 
 Both saving and copying messages begins by calling 'mailbox_save_alloc()'.
-After that you can set message's metadate fields:
+After that you can set message's metadata fields:
 
  * 'mailbox_save_set_flags()' sets flags and keywords.
  * 'mailbox_save_set_received_date()' sets message's received date (IMAP
@@ -48,4 +48,4 @@ existing mail with 'mailbox_copy()' or provide message body with:
  * 'mailbox_save_finish()' finishes saving the mail, or 'mailbox_save_cancel()'
    aborts it.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

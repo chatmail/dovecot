@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "istream-private.h"
@@ -47,17 +47,19 @@ static void test_istream_concat_one(unsigned int buffer_size)
 		}
 	}
 	i_stream_unref(&input);
+
+	for (i = 0; i < STREAM_COUNT; i++)
+		i_stream_unref(&streams[i]);
 }
 
-static void test_istream_concat_random(void)
+static bool test_istream_concat_random(void)
 {
-	struct istream **streams, *input, *input1, *input2;
+	struct istream **streams, *concat, **limits = NULL;
 	const unsigned char *data;
 	unsigned char *w_data;
 	size_t size = 0;
-	unsigned int i, j, offset, stream_count, data_len;
+	unsigned int i, j, offset, stream_count, data_len, simult;
 
-	srand(3);
 	stream_count = (rand() % TEST_MAX_ISTREAM_COUNT) + 2;
 	streams = t_new(struct istream *, stream_count + 1);
 	for (i = 0, offset = 0; i < stream_count; i++) {
@@ -71,14 +73,18 @@ static void test_istream_concat_random(void)
 	streams[i] = NULL;
 	i_assert(offset > 0);
 
-	input = i_stream_create_concat(streams);
-	i_stream_set_max_buffer_size(input, TEST_MAX_BUFFER_SIZE);
-	input1 = i_stream_create_limit(input, (uoff_t)-1);
-	input2 = i_stream_create_limit(input, (uoff_t)-1);
-	i_stream_unref(&input);
+	concat = i_stream_create_concat(streams);
+	i_stream_set_max_buffer_size(concat, TEST_MAX_BUFFER_SIZE);
+
+	simult = rand() % TEST_MAX_ISTREAM_COUNT;
+	if (simult > 0) {
+		limits = t_new(struct istream *, simult);
+		for (i = 0; i < simult; i++)
+			limits[i] = i_stream_create_limit(concat, (uoff_t)-1);
+	}
 
 	for (i = 0; i < 1000; i++) {
-		input = i % 2 == 0 ? input1 : input2;
+		struct istream *input = (simult == 0) ? concat : limits[rand() % simult];
 		if (rand() % 3 == 0) {
 			i_stream_seek(input, rand() % offset);
 		} else {
@@ -97,11 +103,15 @@ static void test_istream_concat_random(void)
 				}
 			}
 		}
+		if (test_has_failed())
+			break;
 	}
 	for (i = 0; i < stream_count; i++)
 		i_stream_unref(&streams[i]);
-	i_stream_unref(&input1);
-	i_stream_unref(&input2);
+	for (i = 0; i < simult; i++)
+		i_stream_unref(&limits[i]);
+	i_stream_unref(&concat);
+	return !test_has_failed();
 }
 
 void test_istream_concat(void)
@@ -116,7 +126,8 @@ void test_istream_concat(void)
 
 	test_begin("istream concat random");
 	for (i = 0; i < 100; i++) T_BEGIN {
-		test_istream_concat_random();
+		if(!test_istream_concat_random())
+			i = 101; /* don't break a T_BEGIN */
 	} T_END;
 	test_end();
 }

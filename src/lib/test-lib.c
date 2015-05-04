@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 
@@ -7,14 +7,20 @@ int main(void)
 	static void (*test_functions[])(void) = {
 		test_aqueue,
 		test_array,
+		test_base32,
 		test_base64,
+		test_bits,
 		test_bsearch_insert_pos,
 		test_buffer,
 		test_crc32,
+		test_data_stack,
+		test_guid,
+		test_hash,
 		test_hash_format,
 		test_hash_method,
 		test_hex_binary,
 		test_iso8601_date,
+		test_istream,
 		test_istream_base64_decoder,
 		test_istream_base64_encoder,
 		test_istream_concat,
@@ -28,18 +34,29 @@ int main(void)
 		test_numpack,
 		test_ostream_file,
 		test_primes,
+		test_printf_format_fix,
 		test_priorityq,
 		test_seq_range_array,
 		test_str,
 		test_strescape,
 		test_strfuncs,
+		test_strnum,
 		test_str_find,
 		test_str_sanitize,
+		test_str_table,
 		test_time_util,
 		test_unichar,
 		test_utc_mktime,
 		test_var_expand,
+		test_wildcard_match,
 		NULL
 	};
-	return test_run(test_functions);
+	static enum fatal_test_state (*fatal_functions[])(int) = {
+		fatal_array,
+		fatal_data_stack,
+		fatal_mempool,
+		fatal_printf_format_fix,
+		NULL
+	};
+	return test_run_with_fatals(test_functions, fatal_functions);
 }

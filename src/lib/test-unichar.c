@@ -1,9 +1,40 @@
-/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
 #include "buffer.h"
 #include "unichar.h"
+
+static void test_unichar_uni_utf8_strlen(void)
+{
+	static const char input[] = "\xC3\xA4\xC3\xA4\0a";
+
+	test_begin("uni_utf8_strlen()");
+	test_assert(uni_utf8_strlen(input) == 2);
+	test_end();
+
+	test_begin("uni_utf8_strlen_n()");
+	test_assert(uni_utf8_strlen_n(input, 1) == 0);
+	test_assert(uni_utf8_strlen_n(input, 2) == 1);
+	test_assert(uni_utf8_strlen_n(input, 3) == 1);
+	test_assert(uni_utf8_strlen_n(input, 4) == 2);
+	test_end();
+}
+
+static void test_unichar_uni_utf8_partial_strlen_n(void)
+{
+	static const char input[] = "\xC3\xA4\xC3\xA4\0a";
+	size_t pos;
+
+	test_begin("uni_utf8_partial_strlen_n()");
+	test_assert(uni_utf8_partial_strlen_n(input, 1, &pos) == 0 && pos == 0);
+	test_assert(uni_utf8_partial_strlen_n(input, 2, &pos) == 1 && pos == 2);
+	test_assert(uni_utf8_partial_strlen_n(input, 3, &pos) == 1 && pos == 2);
+	test_assert(uni_utf8_partial_strlen_n(input, 4, &pos) == 2 && pos == 4);
+	test_assert(uni_utf8_partial_strlen_n(input, 5, &pos) == 3 && pos == 5);
+	test_assert(uni_utf8_partial_strlen_n(input, 6, &pos) == 4 && pos == 6);
+	test_end();
+}
 
 void test_unichar(void)
 {
@@ -32,4 +63,7 @@ void test_unichar(void)
 	test_assert(!uni_utf8_str_is_valid(overlong_utf8));
 	test_assert(uni_utf8_get_char(overlong_utf8, &chr2) < 0);
 	test_end();
+
+	test_unichar_uni_utf8_strlen();
+	test_unichar_uni_utf8_partial_strlen_n();
 }

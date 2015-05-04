@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -306,6 +306,7 @@ static int mail_index_map_latest_file(struct mail_index *index)
 		   build it from the transaction log. */
 		return 1;
 	}
+	i_assert(index->fd != -1);
 
 	if ((index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0)
 		nfs_flush_attr_cache_fd_locked(index->filepath, index->fd);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -20,9 +20,12 @@ dsync_mailbox_tree_add_node(struct dsync_mailbox_tree *tree,
 	struct dsync_mailbox_node *node;
 
 	node = dsync_mailbox_tree_get(tree, info->vname);
-	if (node->ns != info->ns) {
-		i_assert(node->ns != NULL);
-
+	if (node->ns == info->ns)
+		;
+	else if (node->ns == NULL) {
+		i_assert(tree->root.ns == NULL);
+		node->ns = info->ns;
+	} else {
 		i_error("Mailbox '%s' exists in two namespaces: '%s' and '%s'",
 			info->vname, node->ns->prefix, info->ns->prefix);
 		return -1;
@@ -86,7 +89,7 @@ static int dsync_mailbox_tree_add(struct dsync_mailbox_tree *tree,
 	}
 
 	/* get GUID and UIDVALIDITY for selectable mailbox */
-	box = mailbox_alloc(info->ns->list, info->vname, 0);
+	box = mailbox_alloc(info->ns->list, info->vname, MAILBOX_FLAG_READONLY);
 	if (dsync_mailbox_tree_get_selectable(box, &metadata, &status) < 0) {
 		errstr = mailbox_get_last_error(box, &error);
 		switch (error) {
@@ -231,6 +234,7 @@ dsync_mailbox_tree_fix_guid_duplicate(struct dsync_mailbox_tree *tree,
 	struct mailbox *box;
 	struct mailbox_update update;
 	struct dsync_mailbox_node *change_node;
+	const char *change_vname;
 	int ret = 0;
 
 	memset(&update, 0, sizeof(update));
@@ -244,19 +248,19 @@ dsync_mailbox_tree_fix_guid_duplicate(struct dsync_mailbox_tree *tree,
 	else
 		change_node = node2;
 
+	change_vname = dsync_mailbox_node_get_full_name(tree, change_node);
 	i_error("Duplicate mailbox GUID %s for mailboxes %s and %s - "
 		"giving a new GUID %s to %s",
 		guid_128_to_string(node1->mailbox_guid),
 		dsync_mailbox_node_get_full_name(tree, node1),
 		dsync_mailbox_node_get_full_name(tree, node2),
-		guid_128_to_string(update.mailbox_guid),
-		dsync_mailbox_node_get_full_name(tree, change_node));
+		guid_128_to_string(update.mailbox_guid), change_vname);
 
 	i_assert(node1->ns != NULL && node2->ns != NULL);
-	box = mailbox_alloc(change_node->ns->list, change_node->name, 0);
+	box = mailbox_alloc(change_node->ns->list, change_vname, 0);
 	if (mailbox_update(box, &update) < 0) {
 		i_error("Couldn't update mailbox %s GUID: %s",
-			change_node->name, mailbox_get_last_error(box, NULL));
+			change_vname, mailbox_get_last_error(box, NULL));
 		ret = -1;
 	} else {
 		memcpy(change_node->mailbox_guid, update.mailbox_guid,
@@ -267,17 +271,28 @@ dsync_mailbox_tree_fix_guid_duplicate(struct dsync_mailbox_tree *tree,
 }
 
 static bool
-dsync_mailbox_info_is_excluded(const struct mailbox_info *info,
-			       const char *const *exclude_mailboxes)
+dsync_mailbox_info_is_wanted(const struct mailbox_info *info,
+			     const char *box_name,
+			     const char *const *exclude_mailboxes)
 {
 	const char *const *info_specialuses;
 	unsigned int i;
 
-	if (exclude_mailboxes == NULL)
-		return FALSE;
+	if (exclude_mailboxes == NULL &&
+	    (box_name == NULL || box_name[0] != '\\'))
+		return TRUE;
 
 	info_specialuses = info->special_use == NULL ? NULL :
 		t_strsplit(info->special_use, " ");
+	/* include */
+	if (box_name != NULL && box_name[0] == '\\') {
+		if (info_specialuses == NULL ||
+		    !str_array_icase_find(info_specialuses, box_name))
+			return FALSE;
+	}
+	/* exclude */
+	if (exclude_mailboxes == NULL)
+		return TRUE;
 	for (i = 0; exclude_mailboxes[i] != NULL; i++) {
 		const char *exclude = exclude_mailboxes[i];
 
@@ -285,14 +300,14 @@ dsync_mailbox_info_is_excluded(const struct mailbox_info *info,
 			/* special-use */
 			if (info_specialuses != NULL &&
 			    str_array_icase_find(info_specialuses, exclude))
-				return TRUE;
+				return FALSE;
 		} else {
 			/* mailbox with wildcards */
 			if (wildcard_match(info->vname, exclude))
-				return TRUE;
+				return FALSE;
 		}
 	}
-	return FALSE;
+	return TRUE;
 }
 
 int dsync_mailbox_tree_fill(struct dsync_mailbox_tree *tree,
@@ -313,7 +328,8 @@ int dsync_mailbox_tree_fill(struct dsync_mailbox_tree *tree,
 	struct mailbox_list_iterate_context *iter;
 	struct dsync_mailbox_node *node, *dup_node1, *dup_node2;
 	const struct mailbox_info *info;
-	const char *list_pattern = box_name != NULL ? box_name : "*";
+	const char *list_pattern =
+		box_name != NULL && box_name[0] != '\\' ? box_name : "*";
 	int ret = 0;
 
 	i_assert(mail_namespace_get_sep(ns) == tree->sep);
@@ -330,7 +346,8 @@ int dsync_mailbox_tree_fill(struct dsync_mailbox_tree *tree,
 	/* first add all of the existing mailboxes */
 	iter = mailbox_list_iter_init(ns->list, list_pattern, list_flags);
 	while ((info = mailbox_list_iter_next(iter)) != NULL) T_BEGIN {
-		if (!dsync_mailbox_info_is_excluded(info, exclude_mailboxes)) {
+		if (dsync_mailbox_info_is_wanted(info, box_name,
+						 exclude_mailboxes)) {
 			if (dsync_mailbox_tree_add(tree, info, box_guid) < 0)
 				ret = -1;
 		}

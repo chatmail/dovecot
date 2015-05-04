@@ -1,12 +1,13 @@
 SUBDIRS = list index register
 
-noinst_LTLIBRARIES = libstorage.la libstorage_service.la
+noinst_LTLIBRARIES = libstorage.la
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-auth \
 	-I$(top_srcdir)/src/lib-dict \
+	-I$(top_srcdir)/src/lib-sasl \
 	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-I$(top_srcdir)/src/lib-fs \
 	-I$(top_srcdir)/src/lib-master \
@@ -36,6 +37,7 @@ libstorage_la_SOURCES = \
 	mail-search-register-imap.c \
 	mail-storage.c \
 	mail-storage-hooks.c \
+	mail-storage-service.c \
 	mail-storage-settings.c \
 	mail-thread.c \
 	mail-user.c \
@@ -48,9 +50,6 @@ libstorage_la_SOURCES = \
 	mailbox-search-result.c \
 	mailbox-tree.c \
 	mailbox-uidvalidity.c
-
-libstorage_service_la_SOURCES = \
-	mail-storage-service.c
 
 headers = \
 	fail-mail-storage.h \
@@ -80,8 +79,6 @@ headers = \
 
 shlibs = \
 	@LINKED_STORAGE_LIBS@ \
-	libstorage.la \
-	libstorage_service.la \
 	list/libstorage_list.la \
 	index/libstorage_index.la \
 	register/libstorage_register.la \
@@ -89,10 +86,13 @@ shlibs = \
 	../lib-imap-storage/libimap-storage.la \
 	../lib-dovecot/libdovecot.la
 
+libstorage_la_LIBADD = $(shlibs)
+libstorage_la_DEPENDENCIES = $(shlibs)
+
 pkglib_LTLIBRARIES = libdovecot-storage.la
 libdovecot_storage_la_SOURCES = 
-libdovecot_storage_la_LIBADD = $(shlibs) $(LINKED_STORAGE_LDADD)
-libdovecot_storage_la_DEPENDENCIES = $(shlibs)
+libdovecot_storage_la_LIBADD = libstorage.la $(LINKED_STORAGE_LDADD)
+libdovecot_storage_la_DEPENDENCIES = libstorage.la
 libdovecot_storage_la_LDFLAGS = -export-dynamic
 
 test_programs = \

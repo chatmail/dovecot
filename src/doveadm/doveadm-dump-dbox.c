@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hex-dec.h"
@@ -200,7 +200,7 @@ static void cmd_dump_dbox(int argc ATTR_UNUSED, char *argv[])
 	if (fd < 0)
 		i_fatal("open(%s) failed: %m", argv[1]);
 
-	input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	i_stream_set_name(input, argv[1]);
 	hdr_size = dump_file_hdr(input);
 	do {

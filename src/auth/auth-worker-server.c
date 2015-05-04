@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -17,7 +17,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+/* Initial lookup timeout */
 #define AUTH_WORKER_LOOKUP_TIMEOUT_SECS 60
+/* Timeout for multi-line replies, e.g. listing users. This should be a much
+   higher value, because e.g. doveadm could be doing some long-running commands
+   for the users. And because of buffering this timeout is for handling
+   multiple users, not just one. */
+#define AUTH_WORKER_RESUME_TIMEOUT_SECS (30*60)
 #define AUTH_WORKER_MAX_IDLE_SECS (60*5)
 #define AUTH_WORKER_ABORT_SECS 60
 #define AUTH_WORKER_DELAY_WARN_SECS 3
@@ -46,6 +52,8 @@ struct auth_worker_connection {
 	unsigned int received_error:1;
 	unsigned int restart:1;
 	unsigned int shutdown:1;
+	unsigned int timeout_pending_resume:1;
+	unsigned int resuming:1;
 };
 
 static ARRAY(struct auth_worker_connection *) connections = ARRAY_INIT;
@@ -275,9 +283,18 @@ static bool auth_worker_request_handle(struct auth_worker_connection *conn,
 {
 	if (strncmp(line, "*\t", 2) == 0) {
 		/* multi-line reply, not finished yet */
-		timeout_reset(conn->to);
+		if (conn->resuming)
+			timeout_reset(conn->to);
+		else {
+			conn->resuming = TRUE;
+			timeout_remove(&conn->to);
+			conn->to = timeout_add(AUTH_WORKER_RESUME_TIMEOUT_SECS * 1000,
+					       auth_worker_call_timeout, conn);
+		}
 	} else {
+		conn->resuming = FALSE;
 		conn->request = NULL;
+		conn->timeout_pending_resume = FALSE;
 		timeout_remove(&conn->to);
 		conn->to = timeout_add(AUTH_WORKER_MAX_IDLE_SECS * 1000,
 				       auth_worker_idle_timeout, conn);
@@ -285,6 +302,7 @@ static bool auth_worker_request_handle(struct auth_worker_connection *conn,
 	}
 
 	if (!request->callback(line, request->context) && conn->io != NULL) {
+		conn->timeout_pending_resume = FALSE;
 		timeout_remove(&conn->to);
 		io_remove(&conn->io);
 		return FALSE;
@@ -411,8 +429,9 @@ static void worker_input(struct auth_worker_connection *conn)
 
 static void worker_input_resume(struct auth_worker_connection *conn)
 {
+	conn->timeout_pending_resume = FALSE;
 	timeout_remove(&conn->to);
-	conn->to = timeout_add(AUTH_WORKER_LOOKUP_TIMEOUT_SECS * 1000,
+	conn->to = timeout_add(AUTH_WORKER_RESUME_TIMEOUT_SECS * 1000,
 			       auth_worker_call_timeout, conn);
 	worker_input(conn);
 }
@@ -454,11 +473,19 @@ auth_worker_call(pool_t pool, const char *username, const char *data,
 
 void auth_worker_server_resume_input(struct auth_worker_connection *conn)
 {
+	if (conn->request == NULL) {
+		/* request was just finished, don't try to resume it */
+		return;
+	}
+
 	if (conn->io == NULL)
 		conn->io = io_add(conn->fd, IO_READ, worker_input, conn);
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
-	conn->to = timeout_add_short(0, worker_input_resume, conn);
+	if (!conn->timeout_pending_resume) {
+		conn->timeout_pending_resume = TRUE;
+		if (conn->to != NULL)
+			timeout_remove(&conn->to);
+		conn->to = timeout_add_short(0, worker_input_resume, conn);
+	}
 }
 
 void auth_worker_server_init(void)

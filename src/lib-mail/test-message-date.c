@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "message-date.h"
@@ -32,7 +32,7 @@ static void test_message_date_parse(void)
 		{ -2147483647, 0, TRUE },
 #endif
 #if (TIME_T_MAX_BITS > 32 || !defined(TIME_T_SIGNED))
-		{ 4294967295, 0, TRUE },
+		{ 4294967295U, 0, TRUE },
 #endif
 		{ 1194390440, 2*60, TRUE },
 		{ 1194397640, 0, TRUE },

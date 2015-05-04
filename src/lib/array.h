@@ -2,7 +2,7 @@
 #define ARRAY_H
 
 /* Array is a buffer accessible using fixed size elements. As long as the
-   compiler provides typeof() function, the array provides type safety. If
+   compiler provides a typeof() operator, the array provides type safety. If
    a wrong type is tried to be added to the array, or if the array's contents
    are tried to be used using a wrong type, the compiler will give a warning.
 
@@ -20,14 +20,22 @@
 
    If you want to pass an array as a parameter to a function, you'll need to
    create a type for the array using ARRAY_DEFINE_TYPE() and use the type in
-   the parameter using ARRAY_TYPE().
+   the parameter using ARRAY_TYPE(). Any arrays that you want to be passing
+   around, such as structure members as in the above example, must also be
+   defined using ARRAY_TYPE() too, rather than ARRAY().
 
    Example:
 
    ARRAY_DEFINE_TYPE(foo, struct foo);
-   void do_foo(ARRAY_TYPE(foo) *bars) {
-	struct foo *foo = array_idx(bars, 0);
+   void do_foo(ARRAY_TYPE(foo) *foos) {
+	struct foo *foo = array_idx(foos, 0);
    }
+   struct foo_manager {
+        ARRAY_TYPE(foo) foos; // pedantically, ARRAY(struct foo) is a different type
+   };
+   // ...
+        do_foo(&my_foo_manager->foos); // No compiler warning about mismatched types
+
 */
 #include "array-decl.h"
 #include "buffer.h"
@@ -39,18 +47,23 @@
 #define t_array_init(array, init_count) \
 	p_array_init(array, pool_datastack_create(), init_count)
 
-#ifdef __GNUC__
+#ifdef HAVE_TYPEOF
 #  define ARRAY_TYPE_CAST_CONST(array) \
 	(typeof(*(array)->v))
 #  define ARRAY_TYPE_CAST_MODIFIABLE(array) \
 	(typeof(*(array)->v_modifiable))
 #  define ARRAY_TYPE_CHECK(array, data) \
 	COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE( \
-		**(array)->v_modifiable, *data)
+		**(array)->v_modifiable, *(data))
+#  define ARRAY_TYPES_CHECK(array1, array2) \
+	COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE( \
+		**(array1)->v_modifiable, **(array2)->v_modifiable)
+
 #else
 #  define ARRAY_TYPE_CAST_CONST(array)
 #  define ARRAY_TYPE_CAST_MODIFIABLE(array)
 #  define ARRAY_TYPE_CHECK(array, data) 0
+#  define ARRAY_TYPES_CHECK(array1, array2) 0
 #endif
 
 /* usage: struct foo *foo; array_foreach(foo_arr, foo) { .. } */
@@ -64,7 +77,7 @@
 		(const char *)(elem = ARRAY_TYPE_CAST_MODIFIABLE(array) \
 			buffer_get_modifiable_data((array)->arr.buffer, NULL)) + \
 			(array)->arr.buffer->used; \
-	 elem != elem ## _end; elem++)
+	     elem != elem ## _end; (elem)++)
 #else
 #  define array_foreach(array, elem) \
 	for (elem = *(array)->v; \
@@ -77,8 +90,10 @@
 	     (elem)++)
 #endif
 
-#define array_foreach_idx(array, elem) \
+#define array_ptr_to_idx(array, elem) \
 	((elem) - (array)->v[0])
+#define array_foreach_idx(array, elem) \
+	array_ptr_to_idx(array, elem)
 
 static inline void
 array_create_from_buffer_i(struct array *array, buffer_t *buffer,
@@ -141,6 +156,11 @@ array_count_i(const struct array *array)
 }
 #define array_count(array) \
 	array_count_i(&(array)->arr)
+/* No need for the real count if all we're doing is comparing againts 0 */
+#define array_is_empty(array) \
+	((array)->arr.buffer->used == 0)
+#define array_not_empty(array) \
+	((array)->arr.buffer->used > 0)
 
 static inline void
 array_append_i(struct array *array, const void *data, unsigned int count)
@@ -159,7 +179,8 @@ array_append_array_i(struct array *dest_array, const struct array *src_array)
 	buffer_append_buf(dest_array->buffer, src_array->buffer, 0, (size_t)-1);
 }
 #define array_append_array(dest_array, src_array) \
-	array_append_array_i(&(dest_array)->arr, &(src_array)->arr)
+	array_append_array_i(&(dest_array)->arr + ARRAY_TYPES_CHECK(dest_array, src_array), \
+			     &(src_array)->arr)
 
 static inline void
 array_insert_i(struct array *array, unsigned int idx,
@@ -191,6 +212,7 @@ array_get_i(const struct array *array, unsigned int *count_r)
 #define array_get(array, count) \
 	ARRAY_TYPE_CAST_CONST(array)array_get_i(&(array)->arr, count)
 
+/* Re: i_assert() vs. pure: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=51971#c1 */
 static inline const void * ATTR_PURE
 array_idx_i(const struct array *array, unsigned int idx)
 {
@@ -254,10 +276,55 @@ array_copy(struct array *dest, unsigned int dest_idx,
 		    count * dest->element_size);
 }
 
+/* Exchange ownership of two arrays, which should have been allocated
+   from the same pool/context. Useful for updating an array with a
+   replacement. */
+static inline void
+array_swap_i(struct array *array1, struct array *array2)
+{
+	buffer_t *buffer = array1->buffer;
+
+	i_assert(array1->element_size == array2->element_size);
+	array1->buffer = array2->buffer;
+	array2->buffer = buffer;
+}
+#define array_swap(array1, array2)					\
+	array_swap_i(&(array1)->arr + ARRAY_TYPES_CHECK(array1, array2), \
+		     &(array2)->arr)
+
 bool array_cmp_i(const struct array *array1,
 		 const struct array *array2) ATTR_PURE;
 #define array_cmp(array1, array2) \
 	array_cmp_i(&(array1)->arr, &(array2)->arr)
+
+/* Test equality via a comparator */
+bool array_equal_fn_i(const struct array *array1,
+		      const struct array *array2,
+		      int (*cmp)(const void*, const void *)) ATTR_PURE;
+#define array_equal_fn(array1, array2, cmp)				\
+	array_equal_fn_i(&(array1)->arr +					\
+		       ARRAY_TYPES_CHECK(array1, array2),		\
+		       &(array2)->arr +					\
+		       CALLBACK_TYPECHECK(cmp, int (*)(typeof(*(array1)->v), \
+						       typeof(*(array2)->v))), \
+		       (int (*)(const void *, const void *))cmp)
+bool array_equal_fn_ctx_i(const struct array *array1,
+			  const struct array *array2,
+			  int (*cmp)(const void*, const void *, const void *),
+			  const void *context) ATTR_PURE;
+/* Same, but with a context pointer.
+   context can't be void* as ``const typeof(context)'' won't compile,
+   so ``const typeof(*context)*'' is required instead, and that requires a
+   complete type. */
+#define array_equal_fn_ctx(array1, array2, cmp, ctx)			\
+	array_equal_fn_ctx_i(&(array1)->arr +				\
+			     ARRAY_TYPES_CHECK(array1, array2),		\
+			     &(array2)->arr +				\
+			     CALLBACK_TYPECHECK(cmp, int (*)(typeof(*(array1)->v), \
+							     typeof(*(array2)->v), \
+							     const typeof(*ctx)*)), \
+			     (int (*)(const void *, const void *, const void *))cmp, \
+			     ctx)
 
 void array_reverse_i(struct array *array);
 #define array_reverse(array) \
@@ -277,5 +344,25 @@ void *array_bsearch_i(struct array *array, const void *key,
 		CALLBACK_TYPECHECK(cmp, int (*)(typeof(const typeof(*key) *), \
 						typeof(*(array)->v))), \
 		(const void *)key, (int (*)(const void *, const void *))cmp)
+
+/* Returns pointer to first element for which cmp(key,elem)==0, or NULL */
+const void *array_lsearch_i(const struct array *array, const void *key,
+			    int (*cmp)(const void *, const void *));
+static inline void *array_lsearch_modifiable_i(struct array *array, const void *key,
+					       int (*cmp)(const void *, const void *))
+{
+	return (void *)array_lsearch_i(array, key, cmp);
+}
+#define ARRAY_LSEARCH_CALL(modifiable, array, key, cmp)			\
+	array_lsearch##modifiable##i(					\
+		&(array)->arr +						\
+		CALLBACK_TYPECHECK(cmp, int (*)(typeof(const typeof(*key) *), \
+						typeof(*(array)->v))),	\
+		(const void *)key,					\
+		(int (*)(const void *, const void *))cmp)
+#define array_lsearch(array, key, cmp)					\
+	ARRAY_TYPE_CAST_CONST(array)ARRAY_LSEARCH_CALL(_, array, key, cmp)
+#define array_lsearch_modifiable(array, key, cmp)			\
+	ARRAY_TYPE_CAST_MODIFIABLE(array)ARRAY_LSEARCH_CALL(_modifiable_, array, key, cmp)
 
 #endif

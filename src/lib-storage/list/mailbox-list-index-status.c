@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -23,6 +23,12 @@ struct index_list_changes {
 struct index_list_storage_module index_list_storage_module =
 	MODULE_CONTEXT_INIT(&mail_storage_module_register);
 
+/* Never update the STATUS information for INBOX. INBOX is almost always opened
+   anyway, so this just causes extra writes. (Although this could be useful if
+   somebody has a lot of other users' shared INBOXes.) */
+#define MAILBOX_IS_NEVER_IN_INDEX(box) \
+	((box)->inbox_any)
+
 static int
 index_list_open_view(struct mailbox *box, struct mail_index_view **view_r,
 		     uint32_t *seq_r)
@@ -33,6 +39,8 @@ index_list_open_view(struct mailbox *box, struct mail_index_view **view_r,
 	uint32_t seq;
 	int ret;
 
+	if (MAILBOX_IS_NEVER_IN_INDEX(box))
+		return 0;
 	if (mailbox_list_index_refresh(box->list) < 0)
 		return -1;
 
@@ -64,6 +72,36 @@ index_list_open_view(struct mailbox *box, struct mail_index_view **view_r,
 	*view_r = view;
 	*seq_r = seq;
 	return 1;
+}
+
+static int
+index_list_exists(struct mailbox *box, bool auto_boxes,
+		  enum mailbox_existence *existence_r)
+{
+	struct index_list_mailbox *ibox = INDEX_LIST_STORAGE_CONTEXT(box);
+	struct mail_index_view *view;
+	const struct mail_index_record *rec;
+	enum mailbox_list_index_flags flags;
+	uint32_t seq;
+	int ret;
+
+	if ((ret = index_list_open_view(box, &view, &seq)) <= 0) {
+		/* failure / not found. fallback to the real storage check
+		   just in case to see if the mailbox was just created. */
+		return ibox->module_ctx.super.
+			exists(box, auto_boxes, existence_r);
+	}
+	rec = mail_index_lookup(view, seq);
+	flags = rec->flags;
+	mail_index_view_close(&view);
+
+	if ((flags & MAILBOX_LIST_INDEX_FLAG_NONEXISTENT) != 0)
+		*existence_r = MAILBOX_EXISTENCE_NONE;
+	else if ((flags & MAILBOX_LIST_INDEX_FLAG_NOSELECT) != 0)
+		*existence_r = MAILBOX_EXISTENCE_NOSELECT;
+	else
+		*existence_r = MAILBOX_EXISTENCE_SELECT;
+	return 0;
 }
 
 bool mailbox_list_index_status(struct mailbox_list *list,
@@ -283,8 +321,7 @@ index_list_has_changed(struct mailbox *box, struct mail_index_view *list_view,
 	/* update highest-modseq only if they're ever been used */
 	if (old_status.highest_modseq == changes->status.highest_modseq) {
 		changes->hmodseq_changed = FALSE;
-	} else if ((box->enabled_features & MAILBOX_FEATURE_CONDSTORE) != 0 ||
-		   old_status.highest_modseq != 0) {
+	} else if (mail_index_have_modseq_tracking(box->index)) {
 		changes->hmodseq_changed = TRUE;
 	} else {
 		const void *data;
@@ -359,6 +396,14 @@ static int index_list_update_mailbox(struct mailbox *box)
 	i_assert(box->opened);
 
 	if (ilist->syncing || ilist->updating_status)
+		return 0;
+	if (box->deleting) {
+		/* don't update status info while mailbox is being deleted.
+		   especially not a good idea if we're rollbacking a created
+		   mailbox that somebody else had just created */
+		return 0;
+	}
+	if (MAILBOX_IS_NEVER_IN_INDEX(box))
 		return 0;
 
 	/* refresh the mailbox list index once. we can't do this again after
@@ -476,7 +521,11 @@ static int index_list_sync_deinit(struct mailbox_sync_context *ctx,
 		return -1;
 	ctx = NULL;
 
+	/* it probably doesn't matter much here if we push/pop the error,
+	   but might as well do it. */
+	mail_storage_last_error_push(mailbox_get_storage(box));
 	(void)index_list_update_mailbox(box);
+	mail_storage_last_error_pop(mailbox_get_storage(box));
 	return 0;
 }
 
@@ -491,7 +540,12 @@ index_list_transaction_commit(struct mailbox_transaction_context *t,
 		return -1;
 	t = NULL;
 
+	/* this transaction commit may have been done in error handling path
+	   and the caller still wants to access the current error. make sure
+	   that whatever we do here won't change the error. */
+	mail_storage_last_error_push(mailbox_get_storage(box));
 	(void)index_list_update_mailbox(box);
+	mail_storage_last_error_pop(mailbox_get_storage(box));
 	return 0;
 }
 
@@ -532,6 +586,7 @@ void mailbox_list_index_status_set_info_flags(struct mailbox *box, uint32_t uid,
 
 void mailbox_list_index_status_init_mailbox(struct mailbox *box)
 {
+	box->v.exists = index_list_exists;
 	box->v.get_status = index_list_get_status;
 	box->v.get_metadata = index_list_get_metadata;
 	box->v.sync_deinit = index_list_sync_deinit;

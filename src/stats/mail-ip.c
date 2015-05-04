@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -26,11 +26,13 @@ struct mail_ip *mail_ip_login(const struct ip_addr *ip_addr)
 	ip = hash_table_lookup(mail_ips_hash, ip_addr);
 	if (ip != NULL) {
 		ip->num_logins++;
+		ip->num_connected_sessions++;
 		mail_ip_refresh(ip, NULL);
 		return ip;
 	}
 
-	ip = i_new(struct mail_ip, 1);
+	ip = i_malloc(sizeof(struct mail_ip) + stats_alloc_size());
+	ip->stats = (void *)(ip + 1);
 	ip->ip = *ip_addr;
 	ip->reset_timestamp = ioloop_time;
 
@@ -39,9 +41,16 @@ struct mail_ip *mail_ip_login(const struct ip_addr *ip_addr)
 	DLLIST2_APPEND_FULL(&mail_ips_head, &mail_ips_tail, ip,
 			    sorted_prev, sorted_next);
 	ip->num_logins++;
+	ip->num_connected_sessions++;
 	ip->last_update = ioloop_timeval;
 	global_memory_alloc(mail_ip_memsize(ip));
 	return ip;
+}
+
+void mail_ip_disconnected(struct mail_ip *ip)
+{
+	i_assert(ip->num_connected_sessions > 0);
+	ip->num_connected_sessions--;
 }
 
 struct mail_ip *mail_ip_lookup(const struct ip_addr *ip_addr)
@@ -78,10 +87,10 @@ static void mail_ip_free(struct mail_ip *ip)
 	i_free(ip);
 }
 
-void mail_ip_refresh(struct mail_ip *ip, const struct mail_stats *diff_stats)
+void mail_ip_refresh(struct mail_ip *ip, const struct stats *diff_stats)
 {
 	if (diff_stats != NULL)
-		mail_stats_add(&ip->stats, diff_stats);
+		stats_add(ip->stats, diff_stats);
 	ip->last_update = ioloop_timeval;
 	DLLIST2_REMOVE_FULL(&mail_ips_head, &mail_ips_tail, ip,
 			    sorted_prev, sorted_next);

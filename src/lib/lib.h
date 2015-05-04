@@ -28,6 +28,7 @@
 #include "data-stack.h"
 #include "mempool.h"
 #include "imem.h"
+#include "rand.h"
 
 typedef struct buffer buffer_t;
 typedef struct buffer string_t;
@@ -38,11 +39,15 @@ struct ostream;
 typedef void lib_atexit_callback_t(void);
 
 #include "array-decl.h" /* ARRAY*()s may exist in any header */
+#include "bits.h"
 #include "hash-decl.h" /* HASH_TABLE*()s may exist in any header */
 #include "strfuncs.h"
 #include "strnum.h"
 
-size_t nearest_power(size_t num) ATTR_CONST;
+#define LIB_ATEXIT_PRIORITY_HIGH -10
+#define LIB_ATEXIT_PRIORITY_DEFAULT 0
+#define LIB_ATEXIT_PRIORITY_LOW 10
+
 int close_keep_errno(int *fd);
 
 /* Call the given callback at the beginning of lib_deinit(). The main
@@ -50,6 +55,9 @@ int close_keep_errno(int *fd);
    functions are still available. Also if lib_atexit() is called multiple times
    to the same callback, it's added only once. */
 void lib_atexit(lib_atexit_callback_t *callback);
+/* Specify the order in which the callback is called. Lowest numbered
+   priorities are called first. lib_atexit() is called with priority=0. */
+void lib_atexit_priority(lib_atexit_callback_t *callback, int priority);
 /* Manually run the atexit callbacks. lib_deinit() also does this if not
    explicitly called. */
 void lib_atexit_run(void);

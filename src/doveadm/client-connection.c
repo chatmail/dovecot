@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -24,25 +24,63 @@
 
 #define MAX_INBUF_SIZE (1024*1024)
 
+static struct {
+	int code;
+	const char *str;
+} exit_code_strings[] = {
+	{ EX_TEMPFAIL, "TEMPFAIL" },
+	{ EX_USAGE, "USAGE" },
+	{ EX_NOUSER, "NOUSER" },
+	{ EX_NOPERM, "NOPERM" },
+	{ EX_PROTOCOL, "PROTOCOL" },
+	{ EX_DATAERR, "DATAERR" },
+	{ DOVEADM_EX_NOTFOUND, "NOTFOUND" }
+};
+
 static void client_connection_input(struct client_connection *conn);
 
-static struct doveadm_mail_cmd_context *
-doveadm_mail_cmd_server_parse(const char *cmd_name,
+static void
+doveadm_cmd_server_run(struct client_connection *conn,
+		       const struct doveadm_cmd *cmd, int argc, char *argv[])
+{
+	const char *str = NULL;
+	unsigned int i;
+
+	doveadm_exit_code = 0;
+	cmd->cmd(argc, argv);
+
+	if (doveadm_exit_code == 0) {
+		o_stream_nsend(conn->output, "\n+\n", 3);
+		return;
+	}
+
+	for (i = 0; i < N_ELEMENTS(exit_code_strings); i++) {
+		if (exit_code_strings[i].code == doveadm_exit_code) {
+			str = exit_code_strings[i].str;
+			break;
+		}
+	}
+	if (str != NULL) {
+		o_stream_nsend_str(conn->output,
+				   t_strdup_printf("\n-%s\n", str));
+	} else {
+		o_stream_nsend_str(conn->output, "\n-\n");
+		i_error("BUG: Command '%s' returned unknown error code %d",
+			cmd->name, doveadm_exit_code);
+	}
+}
+
+static int
+doveadm_mail_cmd_server_parse(const struct doveadm_mail_cmd *cmd,
 			      const struct doveadm_settings *set,
 			      const struct mail_storage_service_input *input,
-			      int argc, char *argv[])
+			      int argc, char *argv[],
+			      struct doveadm_mail_cmd_context **ctx_r)
 {
 	struct doveadm_mail_cmd_context *ctx;
-	const struct doveadm_mail_cmd *cmd;
 	const char *getopt_args;
 	bool add_username_header = FALSE;
 	int c;
-
-	cmd = doveadm_mail_cmd_find(cmd_name);
-	if (cmd == NULL) {
-		i_error("doveadm: Client sent unknown command: %s", cmd_name);
-		return NULL;
-	}
 
 	ctx = doveadm_mail_cmd_init(cmd, set);
 	ctx->full_args = (const void *)(argv + 1);
@@ -77,7 +115,7 @@ doveadm_mail_cmd_server_parse(const char *cmd_name,
 					cmd->name, c);
 				ctx->v.deinit(ctx);
 				pool_unref(&ctx->pool);
-				return NULL;
+				return -1;
 			}
 		}
 	}
@@ -88,7 +126,7 @@ doveadm_mail_cmd_server_parse(const char *cmd_name,
 			cmd->name, argv[0]);
 		ctx->v.deinit(ctx);
 		pool_unref(&ctx->pool);
-		return NULL;
+		return -1;
 	}
 	ctx->args = (const void *)argv;
 
@@ -98,7 +136,8 @@ doveadm_mail_cmd_server_parse(const char *cmd_name,
 				     DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE);
 		doveadm_print_sticky("username", input->username);
 	}
-	return ctx;
+	*ctx_r = ctx;
+	return 0;
 }
 
 static void
@@ -107,16 +146,10 @@ doveadm_mail_cmd_server_run(struct client_connection *conn,
 			    const struct mail_storage_service_input *input)
 {
 	const char *error;
-	struct ioloop *ioloop, *prev_ioloop = current_ioloop;
 	int ret;
 
 	ctx->conn = conn;
 
-	/* some commands will want to call io_loop_run(), but we're already
-	   running one and we can't call the original one recursively, so
-	   create a new ioloop. */
-	ioloop = io_loop_create();
-	lib_signals_reset_ioloop();
 	if (ctx->v.preinit != NULL)
 		ctx->v.preinit(ctx);
 
@@ -125,12 +158,6 @@ doveadm_mail_cmd_server_run(struct client_connection *conn,
 	ctx->v.deinit(ctx);
 	doveadm_print_flush();
 	mail_storage_service_deinit(&ctx->storage_service);
-
-	io_loop_set_current(prev_ioloop);
-	lib_signals_reset_ioloop();
-	o_stream_switch_ioloop(conn->output);
-	io_loop_set_current(ioloop);
-	io_loop_destroy(&ioloop);
 
 	if (ret < 0) {
 		i_error("%s: %s", ctx->cmd->name, error);
@@ -145,10 +172,6 @@ doveadm_mail_cmd_server_run(struct client_connection *conn,
 		o_stream_nsend(conn->output, "\n+\n", 3);
 	}
 	pool_unref(&ctx->pool);
-
-	/* clear all headers */
-	doveadm_print_deinit();
-	doveadm_print_init(DOVEADM_PRINT_TYPE_SERVER);
 }
 
 static bool client_is_allowed_command(const struct doveadm_settings *set,
@@ -172,10 +195,54 @@ static bool client_is_allowed_command(const struct doveadm_settings *set,
 	return ret;
 }
 
+static int doveadm_cmd_handle(struct client_connection *conn,
+			      const char *cmd_name,
+			      const struct mail_storage_service_input *input,
+			      int argc, char *argv[])
+{
+	struct ioloop *ioloop, *prev_ioloop = current_ioloop;
+	const struct doveadm_cmd *cmd;
+	const struct doveadm_mail_cmd *mail_cmd;
+	struct doveadm_mail_cmd_context *ctx;
+
+	cmd = doveadm_cmd_find(cmd_name, &argc, &argv);
+	if (cmd == NULL) {
+		mail_cmd = doveadm_mail_cmd_find(cmd_name);
+		if (mail_cmd == NULL) {
+			i_error("doveadm: Client sent unknown command: %s", cmd_name);
+			return -1;
+		}
+		if (doveadm_mail_cmd_server_parse(mail_cmd, conn->set, input,
+						  argc, argv, &ctx) < 0)
+			return -1;
+	}
+
+	/* some commands will want to call io_loop_run(), but we're already
+	   running one and we can't call the original one recursively, so
+	   create a new ioloop. */
+	ioloop = io_loop_create();
+	lib_signals_reset_ioloop();
+
+	if (cmd != NULL)
+		doveadm_cmd_server_run(conn, cmd, argc, argv);
+	else
+		doveadm_mail_cmd_server_run(conn, ctx, input);
+
+	io_loop_set_current(prev_ioloop);
+	lib_signals_reset_ioloop();
+	o_stream_switch_ioloop(conn->output);
+	io_loop_set_current(ioloop);
+	io_loop_destroy(&ioloop);
+
+	/* clear all headers */
+	doveadm_print_deinit();
+	doveadm_print_init(DOVEADM_PRINT_TYPE_SERVER);
+	return 0;
+}
+
 static bool client_handle_command(struct client_connection *conn, char **args)
 {
 	struct mail_storage_service_input input;
-	struct doveadm_mail_cmd_context *ctx;
 	const char *flags, *cmd_name;
 	unsigned int argc;
 
@@ -225,11 +292,8 @@ static bool client_handle_command(struct client_connection *conn, char **args)
 	}
 
 	o_stream_cork(conn->output);
-	ctx = doveadm_mail_cmd_server_parse(cmd_name, conn->set, &input, argc, args);
-	if (ctx == NULL)
+	if (doveadm_cmd_handle(conn, cmd_name, &input, argc, args) < 0)
 		o_stream_nsend(conn->output, "\n-\n", 3);
-	else
-		doveadm_mail_cmd_server_run(conn, ctx, &input);
 	o_stream_uncork(conn->output);
 
 	/* flush the output and disconnect */

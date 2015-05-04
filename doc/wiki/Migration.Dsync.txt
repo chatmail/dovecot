@@ -24,6 +24,8 @@ imapc_features = rfc822.size
 # If you have Dovecot v2.2.8+ you may get a significant performance improvement
 with fetch-headers:
 imapc_features = $imapc_features fetch-headers
+# Read multiple mails in parallel, improves performance
+mail_prefetch_count = 20
 
 # If the old IMAP server uses INBOX. namespace prefix, set:
 #imapc_list_prefix = INBOX
@@ -74,13 +76,14 @@ returns the appropriate POP3 UIDL.
 Running
 -------
 
-Make sure destination is exactly as source, deleting data if necessary:
+Make sure destination is exactly as source, deleting/reverting any changes in
+destination if necessary:
 
 ---%<-------------------------------------------------------------------------
 doveadm -o mail_fsync=never backup -R -u user@domain imapc:
 ---%<-------------------------------------------------------------------------
 
-or incremental one-way merge:
+or incremental one-way merge (it's ok to do changes on both sides):
 
 ---%<-------------------------------------------------------------------------
 doveadm -o mail_fsync=never sync -1 -R -u user@domain imapc:
@@ -95,10 +98,6 @@ doveadm -o imapc_user=foo -o pop3c_user=foo -o imapc_password=bar -o
 pop3c_password=bar backup -R -u user@domain imapc:
 ---%<-------------------------------------------------------------------------
 
-The source IMAP/POP3 mailboxes shouldn't be modified while dsync is running.
-Also "dsync backup" means that if the destination has any changes that don't
-exist in source IMAP server, the changes are deleted.
-
 Once the users are migrated, remember to remove the pop3_migration plugin from
 settings.
 
@@ -106,10 +105,10 @@ Problems
 --------
 
  * POP3 message order (when it's different from IMAP message order) is
-   currently preserved only when destination is Maildir
+   currently preserved only when destination is Maildir, sdbox or mdbox.
  * If source POP3 server merges multiple IMAP mailboxes into one POP3 INBOX,
    the migration won't be transparent.
  * If source IMAP and POP3 servers return messages somehow differently,
    pop3-migration plugin might not be able to match the messages
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "md5.h"
@@ -21,6 +21,7 @@
 struct director_context {
 	const char *socket_path;
 	const char *users_path;
+	const char *tag;
 	struct istream *input;
 	bool explicit_socket_path;
 	bool hash_map, user_map;
@@ -53,7 +54,7 @@ static void director_connect(struct director_context *ctx)
 	fd = doveadm_connect(ctx->socket_path);
 	net_set_nonblock(fd, FALSE);
 
-	ctx->input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	ctx->input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	director_send(ctx, DIRECTOR_HANDSHAKE);
 
 	alarm(5);
@@ -111,6 +112,9 @@ cmd_director_init(int argc, char *argv[], const char *getopt_args,
 		case 'u':
 			ctx->user_map = TRUE;
 			break;
+		case 't':
+			ctx->tag = optarg;
+			break;
 		default:
 			director_cmd_help(cmd);
 		}
@@ -121,12 +125,14 @@ cmd_director_init(int argc, char *argv[], const char *getopt_args,
 }
 
 static void
-cmd_director_status_user(struct director_context *ctx, const char *user)
+cmd_director_status_user(struct director_context *ctx, char *argv[])
 {
+	const char *user = argv[0], *tag = argv[1];
 	const char *line, *const *args;
 	unsigned int expires;
 
-	director_send(ctx, t_strdup_printf("USER-LOOKUP\t%s\n", user));
+	director_send(ctx, t_strdup_printf("USER-LOOKUP\t%s\t%s\n", user,
+					   tag != NULL ? tag : ""));
 	line = i_stream_read_next_line(ctx->input);
 	if (line == NULL) {
 		i_error("Lookup failed");
@@ -158,14 +164,15 @@ static void cmd_director_status(int argc, char *argv[])
 	struct director_context *ctx;
 	const char *line, *const *args;
 
-	ctx = cmd_director_init(argc, argv, "a:", cmd_director_status);
+	ctx = cmd_director_init(argc, argv, "a:t:", cmd_director_status);
 	if (argv[optind] != NULL) {
-		cmd_director_status_user(ctx, argv[optind]);
+		cmd_director_status_user(ctx, argv+optind);
 		return;
 	}
 
 	doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
 	doveadm_print_header_simple("mail server ip");
+	doveadm_print_header_simple("tag");
 	doveadm_print_header("vhosts", "vhosts",
 			     DOVEADM_PRINT_HEADER_FLAG_RIGHT_JUSTIFY);
 	doveadm_print_header("users", "users",
@@ -177,8 +184,9 @@ static void cmd_director_status(int argc, char *argv[])
 			break;
 		T_BEGIN {
 			args = t_strsplit_tab(line);
-			if (str_array_length(args) >= 3) {
+			if (str_array_length(args) >= 4) {
 				doveadm_print(args[0]);
+				doveadm_print(args[3]);
 				doveadm_print(args[1]);
 				doveadm_print(args[2]);
 			}
@@ -243,7 +251,7 @@ user_file_get_user_list(const char *path, pool_t pool,
 	fd = open(path, O_RDONLY);
 	if (fd == -1)
 		i_fatal("open(%s) failed: %m", path);
-	input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	while ((username = i_stream_read_next_line(input)) != NULL)
 		user_list_add(username, pool, users);
 	i_stream_unref(&input);
@@ -390,9 +398,12 @@ static void cmd_director_add(int argc, char *argv[])
 	struct director_context *ctx;
 	struct ip_addr *ips;
 	unsigned int i, ips_count, vhost_count = UINT_MAX;
-	const char *host, *cmd, *line;
+	const char *host, *line;
+	string_t *cmd;
 
-	ctx = cmd_director_init(argc, argv, "a:", cmd_director_add);
+	ctx = cmd_director_init(argc, argv, "a:t:", cmd_director_add);
+	if (ctx->tag != NULL && ctx->tag[0] == '\0')
+		ctx->tag = NULL;
 	host = argv[optind++];
 	if (host == NULL)
 		director_cmd_help(cmd_director_add);
@@ -403,14 +414,22 @@ static void cmd_director_add(int argc, char *argv[])
 	if (argv[optind] != NULL)
 		director_cmd_help(cmd_director_add);
 
+	if (ctx->tag == NULL) {
+		ctx->tag = strchr(host, '@');
+		if (ctx->tag != NULL)
+			host = t_strdup_until(host, ctx->tag++);
+	}
 	director_get_host(host, &ips, &ips_count);
+	cmd = t_str_new(128);
 	for (i = 0; i < ips_count; i++) {
-		cmd = vhost_count == UINT_MAX ?
-			t_strdup_printf("HOST-SET\t%s\n",
-					net_ip2addr(&ips[i])) :
-			t_strdup_printf("HOST-SET\t%s\t%u\n",
-					net_ip2addr(&ips[i]), vhost_count);
-		director_send(ctx, cmd);
+		str_truncate(cmd, 0);
+		str_printfa(cmd, "HOST-SET\t%s", net_ip2addr(&ips[i]));
+		if (ctx->tag != NULL)
+			str_printfa(cmd, "@%s", ctx->tag);
+		if (vhost_count != UINT_MAX)
+			str_printfa(cmd, "\t%u", vhost_count);
+		str_append_c(cmd, '\n');
+		director_send(ctx, str_c(cmd));
 	}
 	for (i = 0; i < ips_count; i++) {
 		line = i_stream_read_next_line(ctx->input);
@@ -493,6 +512,32 @@ static void cmd_director_move(int argc, char *argv[])
 		i_error("User is already being moved, "
 			"wait a while for it to be finished");
 		doveadm_exit_code = EX_TEMPFAIL;
+	} else {
+		i_error("failed: %s", line);
+		doveadm_exit_code = EX_TEMPFAIL;
+	}
+	director_disconnect(ctx);
+}
+
+static void cmd_director_kick(int argc, char *argv[])
+{
+	struct director_context *ctx;
+	const char *username, *line;
+
+	ctx = cmd_director_init(argc, argv, "a:", cmd_director_kick);
+	if (argv[optind] == NULL || argv[optind+1] != NULL)
+		director_cmd_help(cmd_director_kick);
+
+	username = argv[optind];
+
+	director_send(ctx, t_strdup_printf("USER-KICK\t%s\n", username));
+	line = i_stream_read_next_line(ctx->input);
+	if (line == NULL) {
+		i_error("failed");
+		doveadm_exit_code = EX_TEMPFAIL;
+	} else if (strcmp(line, "OK") == 0) {
+		if (doveadm_verbose)
+			printf("User %s kicked\n", username);
 	} else {
 		i_error("failed: %s", line);
 		doveadm_exit_code = EX_TEMPFAIL;
@@ -685,13 +730,14 @@ static void cmd_director_ring_status(int argc, char *argv[])
 	const char *line, *const *args;
 	unsigned long l;
 
-	ctx = cmd_director_init(argc, argv, "a:", cmd_director_status);
+	ctx = cmd_director_init(argc, argv, "a:", cmd_director_ring_status);
 
 	doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
 	doveadm_print_header_simple("director ip");
 	doveadm_print_header_simple("port");
 	doveadm_print_header_simple("type");
 	doveadm_print_header_simple("last failed");
+	doveadm_print_header_simple("status");
 
 	director_send(ctx, "DIRECTOR-LIST\n");
 	while ((line = i_stream_read_next_line(ctx->input)) != NULL) {
@@ -699,7 +745,7 @@ static void cmd_director_ring_status(int argc, char *argv[])
 			break;
 		T_BEGIN {
 			args = t_strsplit_tab(line);
-			if (str_array_length(args) >= 4 &&
+			if (str_array_length(args) >= 5 &&
 			    str_to_ulong(args[3], &l) == 0) {
 				doveadm_print(args[0]);
 				doveadm_print(args[1]);
@@ -708,6 +754,7 @@ static void cmd_director_ring_status(int argc, char *argv[])
 					doveadm_print("never");
 				else
 					doveadm_print(unixdate2str(l));
+				doveadm_print(args[4]);
 			}
 		} T_END;
 	}
@@ -724,11 +771,13 @@ struct doveadm_cmd doveadm_cmd_director[] = {
 	{ cmd_director_map, "director map",
 	  "[-a <director socket path>] [-f <users file>] [-h | -u] [<host>]" },
 	{ cmd_director_add, "director add",
-	  "[-a <director socket path>] <host> [<vhost count>]" },
+	  "[-a <director socket path>] [-t <tag>] <host> [<vhost count>]" },
 	{ cmd_director_remove, "director remove",
 	  "[-a <director socket path>] <host>" },
 	{ cmd_director_move, "director move",
 	  "[-a <director socket path>] <user> <host>" },
+	{ cmd_director_kick, "director kick",
+	  "[-a <director socket path>] <user>" },
 	{ cmd_director_flush, "director flush",
 	  "[-a <director socket path>] <host>|all" },
 	{ cmd_director_dump, "director dump",

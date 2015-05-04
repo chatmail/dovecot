@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -160,10 +160,10 @@ master_service_init(const char *name, enum master_service_flags flags,
 	service->config_fd = -1;
 
 	service->config_path = i_strdup(getenv(MASTER_CONFIG_FILE_ENV));
-	if (service->config_path == NULL) {
+	if (service->config_path == NULL)
 		service->config_path = i_strdup(DEFAULT_CONFIG_FILE_PATH);
-		service->config_path_is_default = TRUE;
-	}
+	else
+		service->config_path_from_master = TRUE;
 
 	if ((flags & MASTER_SERVICE_FLAG_STANDALONE) == 0) {
 		service->version_string = getenv(MASTER_DOVECOT_VERSION_ENV);
@@ -262,10 +262,13 @@ int master_getopt(struct master_service *service)
 void master_service_init_log(struct master_service *service,
 			     const char *prefix)
 {
-	const char *path;
+	const char *path, *timestamp;
 
 	if ((service->flags & MASTER_SERVICE_FLAG_STANDALONE) != 0 &&
 	    (service->flags & MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR) == 0) {
+		timestamp = getenv("LOG_STDERR_TIMESTAMP");
+		if (timestamp != NULL)
+			i_set_failure_timestamp_format(timestamp);
 		i_set_failure_file("/dev/stderr", "");
 		return;
 	}
@@ -370,13 +373,13 @@ bool master_service_parse_option(struct master_service *service,
 	switch (opt) {
 	case 'c':
 		service->config_path = i_strdup(arg);
-		service->config_path_is_default = FALSE;
+		service->config_path_changed_with_param = TRUE;
 		break;
 	case 'i':
 		if (!get_instance_config(arg, &path))
 			i_fatal("Unknown instance name: %s", arg);
 		service->config_path = i_strdup(path);
-		service->config_path_is_default = FALSE;
+		service->config_path_changed_with_param = TRUE;
 		break;
 	case 'k':
 		service->keep_environment = TRUE;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -6,7 +6,7 @@
 #include "mail-index-sync-private.h"
 #include "mail-index-transaction-private.h"
 #include "mail-transaction-log-private.h"
-#include "mail-cache.h"
+#include "mail-cache-private.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +24,8 @@ struct mail_index_sync_ctx {
 	ARRAY(struct mail_index_sync_list) sync_list;
 	uint32_t next_uid;
 	uint32_t last_tail_seq, last_tail_offset;
+
+	unsigned int no_warning:1;
 };
 
 static void mail_index_sync_add_expunge(struct mail_index_sync_ctx *ctx)
@@ -348,31 +350,23 @@ mail_index_sync_begin_init(struct mail_index *index,
 	if ((ret = mail_index_map(index, MAIL_INDEX_SYNC_HANDLER_HEAD)) <= 0) {
 		if (ret == 0) {
 			if (locked)
-				mail_transaction_log_sync_unlock(index->log);
+				mail_transaction_log_sync_unlock(index->log, "sync init failure");
 			return -1;
 		}
 
 		/* let's try again */
 		if (mail_index_map(index, MAIL_INDEX_SYNC_HANDLER_HEAD) <= 0) {
 			if (locked)
-				mail_transaction_log_sync_unlock(index->log);
+				mail_transaction_log_sync_unlock(index->log, "sync init failure");
 			return -1;
 		}
 	}
 
-	if (!mail_index_need_sync(index, flags,
-				  log_file_seq, log_file_offset)) {
+	if (!mail_index_need_sync(index, flags, log_file_seq, log_file_offset) &&
+	    !index->index_deleted) {
 		if (locked)
-			mail_transaction_log_sync_unlock(index->log);
+			mail_transaction_log_sync_unlock(index->log, "syncing determined unnecessary");
 		return 0;
-	}
-
-	if (index->index_deleted &&
-	    (flags & MAIL_INDEX_SYNC_FLAG_DELETING_INDEX) == 0) {
-		/* index is already deleted. we can't sync. */
-		if (locked)
-			mail_transaction_log_sync_unlock(index->log);
-		return -1;
 	}
 
 	if (!locked) {
@@ -381,6 +375,14 @@ mail_index_sync_begin_init(struct mail_index *index,
 		flags &= ~MAIL_INDEX_SYNC_FLAG_REQUIRE_CHANGES;
 		return mail_index_sync_begin_init(index, flags, log_file_seq,
 						  log_file_offset);
+	}
+
+	if (index->index_deleted &&
+	    (flags & MAIL_INDEX_SYNC_FLAG_DELETING_INDEX) == 0) {
+		/* index is already deleted. we can't sync. */
+		if (locked)
+			mail_transaction_log_sync_unlock(index->log, "syncing detected deleted index");
+		return -1;
 	}
 
 	hdr = &index->map->hdr;
@@ -482,7 +484,8 @@ mail_index_sync_begin_to2(struct mail_index *index,
 	ctx->ext_trans = mail_index_transaction_begin(ctx->view, trans_flags);
 	ctx->ext_trans->sync_transaction = TRUE;
 	ctx->ext_trans->commit_deleted_index =
-		(flags & MAIL_INDEX_SYNC_FLAG_DELETING_INDEX) != 0;
+		(flags & (MAIL_INDEX_SYNC_FLAG_DELETING_INDEX |
+			  MAIL_INDEX_SYNC_FLAG_TRY_DELETING_INDEX)) != 0;
 
 	*ctx_r = ctx;
 	*view_r = ctx->view;
@@ -715,6 +718,11 @@ void mail_index_sync_reset(struct mail_index_sync_ctx *ctx)
 		sync_list->idx = 0;
 }
 
+void mail_index_sync_no_warning(struct mail_index_sync_ctx *ctx)
+{
+	ctx->no_warning = TRUE;
+}
+
 static void mail_index_sync_end(struct mail_index_sync_ctx **_ctx)
 {
         struct mail_index_sync_ctx *ctx = *_ctx;
@@ -724,7 +732,8 @@ static void mail_index_sync_end(struct mail_index_sync_ctx **_ctx)
 	*_ctx = NULL;
 
 	ctx->index->syncing = FALSE;
-	mail_transaction_log_sync_unlock(ctx->index->log);
+	mail_transaction_log_sync_unlock(ctx->index->log,
+		ctx->no_warning ? NULL : "Mailbox was synchronized");
 
 	mail_index_view_close(&ctx->view);
 	mail_index_transaction_rollback(&ctx->sync_trans);
@@ -751,9 +760,12 @@ mail_index_sync_update_mailbox_offset(struct mail_index_sync_ctx *ctx)
 	mail_transaction_log_set_mailbox_sync_pos(ctx->index->log, seq, offset);
 
 	/* If tail offset has changed, make sure it gets written to
-	   transaction log. */
-	if (ctx->last_tail_offset != offset)
+	   transaction log. do this only if we're required to changes. */
+	if (ctx->last_tail_seq != seq ||
+	    ctx->last_tail_offset < offset) {
 		ctx->ext_trans->log_updates = TRUE;
+		ctx->ext_trans->tail_offset_changed = TRUE;
+	}
 }
 
 static bool mail_index_sync_want_index_write(struct mail_index *index)
@@ -780,16 +792,23 @@ int mail_index_sync_commit(struct mail_index_sync_ctx **_ctx)
 {
         struct mail_index_sync_ctx *ctx = *_ctx;
 	struct mail_index *index = ctx->index;
+	struct mail_cache_compress_lock *cache_lock = NULL;
 	uint32_t next_uid;
 	bool want_rotate, index_undeleted, delete_index;
-	int ret = 0;
+	int ret = 0, ret2;
 
 	index_undeleted = ctx->ext_trans->index_undeleted;
 	delete_index = index->index_delete_requested && !index_undeleted &&
-		(ctx->flags & MAIL_INDEX_SYNC_FLAG_DELETING_INDEX) != 0;
+		(ctx->flags & (MAIL_INDEX_SYNC_FLAG_DELETING_INDEX |
+			       MAIL_INDEX_SYNC_FLAG_TRY_DELETING_INDEX)) != 0;
 	if (delete_index) {
 		/* finish this sync by marking the index deleted */
 		mail_index_set_deleted(ctx->ext_trans);
+	} else if (index->index_deleted && !index_undeleted &&
+		   (ctx->flags & MAIL_INDEX_SYNC_FLAG_TRY_DELETING_INDEX) == 0) {
+		/* another process just marked the index deleted.
+		   finish the sync, but return error. */
+		ret = -1;
 	}
 
 	mail_index_sync_update_mailbox_offset(ctx);
@@ -797,7 +816,8 @@ int mail_index_sync_commit(struct mail_index_sync_ctx **_ctx)
 		/* if cache compression fails, we don't really care.
 		   the cache offsets are updated only if the compression was
 		   successful. */
-		(void)mail_cache_compress(index->cache, ctx->ext_trans);
+		(void)mail_cache_compress(index->cache, ctx->ext_trans,
+					  &cache_lock);
 	}
 
 	if ((ctx->flags & MAIL_INDEX_SYNC_FLAG_DROP_RECENT) != 0) {
@@ -810,7 +830,10 @@ int mail_index_sync_commit(struct mail_index_sync_ctx **_ctx)
 		}
 	}
 
-	if (mail_index_transaction_commit(&ctx->ext_trans) < 0) {
+	ret2 = mail_index_transaction_commit(&ctx->ext_trans);
+	if (cache_lock != NULL)
+		mail_cache_compress_unlock(&cache_lock);
+	if (ret2 < 0) {
 		mail_index_sync_end(&ctx);
 		return -1;
 	}

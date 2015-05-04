@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 /*
    Handshaking:
@@ -35,6 +35,7 @@
 #include "istream.h"
 #include "ostream.h"
 #include "str.h"
+#include "strescape.h"
 #include "master-service.h"
 #include "mail-host.h"
 #include "director.h"
@@ -90,6 +91,8 @@
 #define CMD_IS_USER_HANDHAKE(args) \
 	(str_array_length(args) > 2)
 
+#define DIRECTOR_OPT_CONSISTENT_HASHING "consistent-hashing"
+
 struct director_connection {
 	struct director *dir;
 	char *name;
@@ -125,6 +128,7 @@ struct director_connection {
 	unsigned int wrong_host:1;
 	unsigned int verifying_left:1;
 	unsigned int users_unsorted:1;
+	unsigned int done_pending:1;
 };
 
 static void director_connection_disconnected(struct director_connection **conn);
@@ -132,6 +136,7 @@ static void director_connection_reconnect(struct director_connection **conn,
 					  const char *reason);
 static void
 director_connection_log_disconnect(struct director_connection *conn, int err);
+static int director_connection_send_done(struct director_connection *conn);
 
 static void ATTR_FORMAT(2, 3)
 director_cmd_error(struct director_connection *conn, const char *fmt, ...)
@@ -531,6 +536,11 @@ director_user_refresh(struct director_connection *conn,
 			/* keep the host */
 			host = user->host;
 		}
+		/* especially IMAP connections can take a long time to die.
+		   make sure we kill off the connections in the wrong
+		   backends. */
+		director_kick_user_hash(dir, dir->self_host, NULL,
+					username_hash, &host->ip);
 		ret = TRUE;
 	}
 	if (user->host != host) {
@@ -812,15 +822,18 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 {
 	struct mail_host *host;
 	struct ip_addr ip;
+	const char *tag = "";
 	unsigned int vhost_count;
 	bool update;
 
-	if (str_array_length(args) != 2 ||
+	if (str_array_length(args) < 2 ||
 	    net_addr2ip(args[0], &ip) < 0 ||
 	    str_to_uint(args[1], &vhost_count) < 0) {
 		director_cmd_error(conn, "Invalid parameters");
 		return FALSE;
 	}
+	if (args[2] != NULL)
+		tag = args[2];
 	if (conn->ignore_host_events) {
 		/* remote is sending hosts in a handshake, but it doesn't have
 		   a completed ring and we do. */
@@ -830,10 +843,17 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 
 	host = mail_host_lookup(conn->dir->mail_hosts, &ip);
 	if (host == NULL) {
-		host = mail_host_add_ip(conn->dir->mail_hosts, &ip);
+		host = mail_host_add_ip(conn->dir->mail_hosts, &ip, tag);
 		update = TRUE;
 	} else {
 		update = host->vhost_count != vhost_count;
+		if (strcmp(tag, host->tag) != 0) {
+			i_error("director(%s): Host %s changed tag from '%s' to '%s'",
+				conn->name, net_ip2addr(&host->ip),
+				host->tag, tag);
+			mail_host_set_tag(host, tag);
+			update = TRUE;
+		}
 	}
 
 	if (update) {
@@ -939,6 +959,49 @@ director_cmd_user_move(struct director_connection *conn,
 }
 
 static bool
+director_cmd_user_kick(struct director_connection *conn,
+		       const char *const *args)
+{
+	struct director_host *dir_host;
+	int ret;
+
+	if ((ret = director_cmd_is_seen(conn, &args, &dir_host)) != 0)
+		return ret > 0;
+
+	if (str_array_length(args) != 1) {
+		director_cmd_error(conn, "Invalid parameters");
+		return FALSE;
+	}
+
+	director_kick_user(conn->dir, conn->host, dir_host, args[0]);
+	return TRUE;
+}
+
+static bool
+director_cmd_user_kick_hash(struct director_connection *conn,
+			    const char *const *args)
+{
+	struct director_host *dir_host;
+	unsigned int username_hash;
+	struct ip_addr except_ip;
+	int ret;
+
+	if ((ret = director_cmd_is_seen(conn, &args, &dir_host)) != 0)
+		return ret > 0;
+
+	if (str_array_length(args) != 2 ||
+	    str_to_uint(args[0], &username_hash) < 0 ||
+	    net_addr2ip(args[1], &except_ip) < 0) {
+		director_cmd_error(conn, "Invalid parameters");
+		return FALSE;
+	}
+
+	director_kick_user_hash(conn->dir, conn->host, dir_host,
+				username_hash, &except_ip);
+	return TRUE;
+}
+
+static bool
 director_cmd_user_killed(struct director_connection *conn,
 			 const char *const *args)
 {
@@ -988,17 +1051,15 @@ static bool director_handshake_cmd_done(struct director_connection *conn)
 		user_directory_sort(conn->dir->users);
 	}
 
-	if (handshake_secs >= DIRECTOR_HANDSHAKE_WARN_SECS || director_debug) {
-		str = t_str_new(128);
-		str_printfa(str, "director(%s): Handshake took %u secs, "
-			    "bytes in=%"PRIuUOFF_T" out=%"PRIuUOFF_T,
-			    conn->name, handshake_secs, conn->input->v_offset,
-			    conn->output->offset);
-		if (handshake_secs >= DIRECTOR_HANDSHAKE_WARN_SECS)
-			i_warning("%s", str_c(str));
-		else
-			i_debug("%s", str_c(str));
-	}
+	str = t_str_new(128);
+	str_printfa(str, "director(%s): Handshake finished in %u secs "
+		    "(bytes in=%"PRIuUOFF_T" out=%"PRIuUOFF_T")",
+		    conn->name, handshake_secs, conn->input->v_offset,
+		    conn->output->offset);
+	if (handshake_secs >= DIRECTOR_HANDSHAKE_WARN_SECS)
+		i_warning("%s", str_c(str));
+	else
+		i_info("%s", str_c(str));
 
 	/* the host is up now, make sure we can connect to it immediately
 	   if needed */
@@ -1024,6 +1085,25 @@ static bool director_handshake_cmd_done(struct director_connection *conn)
 }
 
 static int
+director_handshake_cmd_options(struct director_connection *conn,
+			       const char *const *args)
+{
+	bool consistent_hashing = FALSE;
+	unsigned int i;
+
+	for (i = 0; args[i] != NULL; i++) {
+		if (strcmp(args[i], DIRECTOR_OPT_CONSISTENT_HASHING) == 0)
+			consistent_hashing = TRUE;
+	}
+	if (consistent_hashing != conn->dir->set->director_consistent_hashing) {
+		i_error("director(%s): director_consistent_hashing settings differ between directors",
+			conn->name);
+		return -1;
+	}
+	return 1;
+}
+
+static int
 director_connection_handle_handshake(struct director_connection *conn,
 				     const char *cmd, const char *const *args)
 {
@@ -1042,6 +1122,10 @@ director_connection_handle_handshake(struct director_connection *conn,
 		}
 		conn->minor_version = atoi(args[2]);
 		conn->version_received = TRUE;
+		if (conn->done_pending) {
+			if (director_connection_send_done(conn) < 0)
+				return -1;
+		}
 		return 1;
 	}
 	if (!conn->version_received) {
@@ -1068,6 +1152,8 @@ director_connection_handle_handshake(struct director_connection *conn,
 		director_cmd_error(conn, "Unexpected command during host list");
 		return -1;
 	}
+	if (strcmp(cmd, "OPTIONS") == 0)
+		return director_handshake_cmd_options(conn, args);
 	if (strcmp(cmd, "HOST-HAND-START") == 0) {
 		if (!conn->in) {
 			director_cmd_error(conn,
@@ -1316,6 +1402,10 @@ director_connection_handle_cmd(struct director_connection *conn,
 		return director_cmd_host_flush(conn, args);
 	if (strcmp(cmd, "USER-MOVE") == 0)
 		return director_cmd_user_move(conn, args);
+	if (strcmp(cmd, "USER-KICK") == 0)
+		return director_cmd_user_kick(conn, args);
+	if (strcmp(cmd, "USER-KICK-HASH") == 0)
+		return director_cmd_user_kick_hash(conn, args);
 	if (strcmp(cmd, "USER-KILLED") == 0)
 		return director_cmd_user_killed(conn, args);
 	if (strcmp(cmd, "USER-KILLED-EVERYWHERE") == 0)
@@ -1462,10 +1552,34 @@ director_connection_send_hosts(struct director_connection *conn, string_t *str)
 
 	str_printfa(str, "HOST-HAND-START\t%u\n", conn->dir->ring_handshaked);
 	array_foreach(mail_hosts_get(conn->dir->mail_hosts), hostp) {
-		str_printfa(str, "HOST\t%s\t%u\n",
+		str_printfa(str, "HOST\t%s\t%u",
 			    net_ip2addr(&(*hostp)->ip), (*hostp)->vhost_count);
+		if ((*hostp)->tag[0] != '\0') {
+			str_append_c(str, '\t');
+			str_append_tabescaped(str, (*hostp)->tag);
+		}
+		str_append_c(str, '\n');
 	}
 	str_printfa(str, "HOST-HAND-END\t%u\n", conn->dir->ring_handshaked);
+}
+
+static int director_connection_send_done(struct director_connection *conn)
+{
+	i_assert(conn->version_received);
+
+	if (!conn->dir->set->director_consistent_hashing)
+		;
+	else if (conn->minor_version >= DIRECTOR_VERSION_OPTIONS) {
+		director_connection_send(conn,
+			"OPTIONS\t"DIRECTOR_OPT_CONSISTENT_HASHING"\n");
+	} else {
+		i_error("director(%s): Director version is too old for supporting director_consistent_hashing=yes",
+			conn->name);
+		return -1;
+	}
+	director_connection_send(conn, "DONE\n");
+	conn->done_pending = FALSE;
+	return 0;
 }
 
 static int director_connection_send_users(struct director_connection *conn)
@@ -1496,7 +1610,12 @@ static int director_connection_send_users(struct director_connection *conn)
 		}
 	}
 	user_directory_iter_deinit(&conn->user_iter);
-	director_connection_send(conn, "DONE\n");
+	if (!conn->version_received)
+		conn->done_pending = TRUE;
+	else {
+		if (director_connection_send_done(conn) < 0)
+			return -1;
+	}
 
 	if (conn->users_unsorted && conn->handshake_received) {
 		/* we received remote's list of users before sending ours */
@@ -1787,6 +1906,11 @@ director_connection_get_host(struct director_connection *conn)
 bool director_connection_is_handshaked(struct director_connection *conn)
 {
 	return conn->handshake_received;
+}
+
+bool director_connection_is_synced(struct director_connection *conn)
+{
+	return conn->synced;
 }
 
 bool director_connection_is_incoming(struct director_connection *conn)

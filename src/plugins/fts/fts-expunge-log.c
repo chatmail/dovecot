@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -61,6 +61,7 @@ struct fts_expunge_log_read_ctx {
 
 	bool failed;
 	bool corrupted;
+	bool unlink;
 };
 
 struct fts_expunge_log *fts_expunge_log_init(const char *path)
@@ -78,6 +79,8 @@ void fts_expunge_log_deinit(struct fts_expunge_log **_log)
 	struct fts_expunge_log *log = *_log;
 
 	*_log = NULL;
+	if (log->fd != -1)
+		i_close_fd(&log->fd);
 	i_free(log->path);
 	i_free(log);
 }
@@ -179,7 +182,7 @@ fts_expunge_log_append_begin(struct fts_expunge_log *log)
 	ctx->pool = pool;
 	hash_table_create(&ctx->mailboxes, pool, 0, guid_128_hash, guid_128_cmp);
 
-	if (fts_expunge_log_reopen_if_needed(log, TRUE) < 0)
+	if (log != NULL && fts_expunge_log_reopen_if_needed(log, TRUE) < 0)
 		ctx->failed = TRUE;
 	return ctx;
 }
@@ -192,7 +195,7 @@ fts_expunge_log_mailbox_alloc(struct fts_expunge_log_append_ctx *ctx,
 	struct fts_expunge_log_mailbox *mailbox;
 
 	mailbox = p_new(ctx->pool, struct fts_expunge_log_mailbox, 1);
-	memcpy(mailbox->guid, mailbox_guid, sizeof(mailbox->guid));
+	guid_128_copy(mailbox->guid, mailbox_guid);
 	p_array_init(&mailbox->uids, ctx->pool, 16);
 
 	guid_p = mailbox->guid;
@@ -200,15 +203,15 @@ fts_expunge_log_mailbox_alloc(struct fts_expunge_log_append_ctx *ctx,
 	return mailbox;
 }
 
-void fts_expunge_log_append_next(struct fts_expunge_log_append_ctx *ctx,
-				 const guid_128_t mailbox_guid,
-				 uint32_t uid)
+static struct fts_expunge_log_mailbox *
+fts_expunge_log_append_mailbox(struct fts_expunge_log_append_ctx *ctx,
+			       const guid_128_t mailbox_guid)
 {
 	const uint8_t *guid_p = mailbox_guid;
 	struct fts_expunge_log_mailbox *mailbox;
 
 	if (ctx->prev_mailbox != NULL &&
-	    memcmp(mailbox_guid, ctx->prev_mailbox->guid, GUID_128_SIZE) == 0)
+	    guid_128_equals(mailbox_guid, ctx->prev_mailbox->guid))
 		mailbox = ctx->prev_mailbox;
 	else {
 		mailbox = hash_table_lookup(ctx->mailboxes, guid_p);
@@ -216,8 +219,39 @@ void fts_expunge_log_append_next(struct fts_expunge_log_append_ctx *ctx,
 			mailbox = fts_expunge_log_mailbox_alloc(ctx, mailbox_guid);
 		ctx->prev_mailbox = mailbox;
 	}
+	return mailbox;
+}
+void fts_expunge_log_append_next(struct fts_expunge_log_append_ctx *ctx,
+				 const guid_128_t mailbox_guid,
+				 uint32_t uid)
+{
+	struct fts_expunge_log_mailbox *mailbox;
+
+	mailbox = fts_expunge_log_append_mailbox(ctx, mailbox_guid);
 	if (!seq_range_array_add(&mailbox->uids, uid))
 		mailbox->uids_count++;
+}
+void fts_expunge_log_append_range(struct fts_expunge_log_append_ctx *ctx,
+				  const guid_128_t mailbox_guid,
+				  const struct seq_range *uids)
+{
+	struct fts_expunge_log_mailbox *mailbox;
+
+	mailbox = fts_expunge_log_append_mailbox(ctx, mailbox_guid);
+	mailbox->uids_count += seq_range_array_add_range_count(&mailbox->uids,
+							       uids->seq1, uids->seq2);
+	/* To be honest, an unbacked log doesn't need to maintain the uids_count,
+	   but we don't know here if we're supporting an unbacked log or not, so we
+	   have to maintain the value, just in case.
+	   At the moment, the only caller of this function is for unbacked logs. */
+}
+void fts_expunge_log_append_record(struct fts_expunge_log_append_ctx *ctx,
+				   const struct fts_expunge_log_read_record *record)
+{
+	const struct seq_range *range;
+	/* FIXME: Optimise with a merge */
+	array_foreach(&record->uids, range)
+		fts_expunge_log_append_range(ctx, record->mailbox_guid, range);
 }
 
 static void
@@ -262,6 +296,9 @@ fts_expunge_log_write(struct fts_expunge_log_append_ctx *ctx)
 	buffer_t *buf;
 	uint32_t expunge_count, *e;
 	int ret;
+
+	/* Unbacked expunge logs cannot be written, by definition */
+	i_assert(log != NULL);
 
 	/* try to append to the latest file */
 	if (fts_expunge_log_reopen_if_needed(log, TRUE) < 0)
@@ -308,13 +345,14 @@ fts_expunge_log_write(struct fts_expunge_log_append_ctx *ctx)
 	return ret;
 }
 
-int fts_expunge_log_append_commit(struct fts_expunge_log_append_ctx **_ctx)
+static int fts_expunge_log_append_finalise(struct fts_expunge_log_append_ctx **_ctx,
+					   bool commit)
 {
 	struct fts_expunge_log_append_ctx *ctx = *_ctx;
 	int ret = ctx->failed ? -1 : 0;
 
 	*_ctx = NULL;
-	if (ret == 0)
+	if (commit && ret == 0)
 		ret = fts_expunge_log_write(ctx);
 
 	hash_table_destroy(&ctx->mailboxes);
@@ -335,6 +373,16 @@ int fts_expunge_log_uid_count(struct fts_expunge_log *log,
 	return fts_expunge_log_read_expunge_count(log, expunges_r);
 }
 
+int fts_expunge_log_append_commit(struct fts_expunge_log_append_ctx **_ctx)
+{
+	return fts_expunge_log_append_finalise(_ctx, TRUE);
+}
+
+int fts_expunge_log_append_abort(struct fts_expunge_log_append_ctx **_ctx)
+{
+	return fts_expunge_log_append_finalise(_ctx, FALSE);
+}
+
 struct fts_expunge_log_read_ctx *
 fts_expunge_log_read_begin(struct fts_expunge_log *log)
 {
@@ -346,6 +394,7 @@ fts_expunge_log_read_begin(struct fts_expunge_log *log)
 		ctx->failed = TRUE;
 	else if (log->fd != -1)
 		ctx->input = i_stream_create_fd(log->fd, (size_t)-1, FALSE);
+	ctx->unlink = TRUE;
 	return ctx;
 }
 
@@ -393,7 +442,8 @@ fts_expunge_log_read_next(struct fts_expunge_log_read_ctx *ctx)
 	(void)i_stream_read_data(ctx->input, &data, &size, IO_BLOCK_SIZE);
 	if (size == 0 && ctx->input->stream_errno == 0) {
 		/* expected EOF - mark the file as read by unlinking it */
-		if (unlink(ctx->log->path) < 0 && errno != ENOENT)
+		if (ctx->unlink &&
+		    unlink(ctx->log->path) < 0 && errno != ENOENT)
 			i_error("unlink(%s) failed: %m", ctx->log->path);
 
 		/* try reading again, in case something new was written */
@@ -459,8 +509,52 @@ int fts_expunge_log_read_end(struct fts_expunge_log_read_ctx **_ctx)
 
 	*_ctx = NULL;
 
+	if (ctx->corrupted) {
+		if (ctx->unlink &&
+		    unlink(ctx->log->path) < 0 && errno != ENOENT)
+			i_error("unlink(%s) failed: %m", ctx->log->path);
+	}
+
 	if (ctx->input != NULL)
 		i_stream_unref(&ctx->input);
 	i_free(ctx);
 	return ret;
+}
+
+int fts_expunge_log_flatten(const char *path,
+			    struct fts_expunge_log_append_ctx **flattened_r)
+{
+	struct fts_expunge_log *read;
+	struct fts_expunge_log_read_ctx *read_ctx;
+	const struct fts_expunge_log_read_record *record;
+	struct fts_expunge_log_append_ctx *append;
+	int ret;
+
+	i_assert(path != NULL && flattened_r != NULL);
+	read = fts_expunge_log_init(path);
+
+	read_ctx = fts_expunge_log_read_begin(read);
+	read_ctx->unlink = FALSE;
+
+	append = fts_expunge_log_append_begin(NULL);
+	while((record = fts_expunge_log_read_next(read_ctx)) != NULL) {
+		fts_expunge_log_append_record(append, record);
+	}
+
+	if ((ret = fts_expunge_log_read_end(&read_ctx)) > 0)
+		*flattened_r = append;
+	fts_expunge_log_deinit(&read);
+
+	return ret;
+}
+bool fts_expunge_log_contains(const struct fts_expunge_log_append_ctx *ctx,
+			      const guid_128_t mailbox_guid, uint32_t uid)
+{
+	const struct fts_expunge_log_mailbox *mailbox;
+	const uint8_t *guid_p = mailbox_guid;
+
+	mailbox = hash_table_lookup(ctx->mailboxes, guid_p);
+	if (mailbox == NULL)
+		return FALSE;
+	return seq_range_exists(&mailbox->uids, uid);	
 }

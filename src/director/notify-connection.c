@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -42,7 +42,8 @@ static void notify_connection_input(struct notify_connection *conn)
 		i_error("notify: read() unexpectedly returned EOF");
 		notify_connection_deinit(&conn);
 	} else if (conn->input->stream_errno != 0) {
-		i_error("notify: read() failed: %m");
+		i_error("notify: read() failed: %s",
+			i_stream_get_error(conn->input));
 		notify_connection_deinit(&conn);
 	}
 }

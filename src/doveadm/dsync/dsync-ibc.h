@@ -47,11 +47,18 @@ struct dsync_ibc_settings {
 	const char *sync_ns_prefixes;
 	/* if non-NULL, sync only this mailbox name */
 	const char *sync_box;
+	/* if non-NULL, use this mailbox for finding messages with GUIDs and
+	   copying them instead of saving them again. */
+	const char *virtual_all_box;
 	/* if non-empty, sync only this mailbox GUID */
 	guid_128_t sync_box_guid;
 	/* Exclude these mailboxes from the sync. They can contain '*'
 	   wildcards and be \special-use flags. */
 	const char *const *exclude_mailboxes;
+	/* Sync only mails with received timestamp at least this high. */
+	time_t sync_since_timestamp;
+	/* Sync only mails with specified flags. */
+	const char *sync_flags;
 
 	enum dsync_brain_sync_type sync_type;
 	enum dsync_brain_flags brain_flags;
