@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2015 Dovecot authors, see the included COPYING file */
 
 /*
    Version 1 format has been used for most versions of Dovecot up to v1.0.x.
@@ -758,7 +758,7 @@ maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
 							    st.st_size/8));
 	}
 
-	input = i_stream_create_fd(fd, 4096, FALSE);
+	input = i_stream_create_fd(fd, (size_t)-1, FALSE);
 	i_stream_seek(input, last_read_offset);
 
 	orig_uid_validity = uidlist->uid_validity;

@@ -212,7 +212,7 @@ struct mail_cache_lookup_iterate_ctx {
 
 /* Explicitly lock the cache file. Returns -1 if error / timed out,
    1 if ok, 0 if cache is broken/doesn't exist */
-int mail_cache_lock(struct mail_cache *cache, bool require_same_reset_id);
+int mail_cache_lock(struct mail_cache *cache);
 int mail_cache_try_lock(struct mail_cache *cache);
 /* Returns -1 if cache is / just got corrupted, 0 if ok. */
 int mail_cache_unlock(struct mail_cache *cache);
@@ -255,8 +255,6 @@ int mail_cache_map(struct mail_cache *cache, size_t offset, size_t size,
 		   const void **data_r);
 void mail_cache_file_close(struct mail_cache *cache);
 int mail_cache_reopen(struct mail_cache *cache);
-
-void mail_cache_delete(struct mail_cache *cache);
 
 /* Notify the decision handling code that field was looked up for seq.
    This should be called even for fields that aren't currently in cache file */

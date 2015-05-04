@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "pop3-common.h"
 #include "ioloop.h"
@@ -275,7 +275,7 @@ int main(int argc, char *argv[])
 
 	if (io_loop_is_running(current_ioloop))
 		master_service_run(master_service, client_connected);
-	clients_destroy_all();
+	clients_destroy_all(storage_service);
 
 	if (master_login != NULL)
 		master_login_deinit(&master_login);

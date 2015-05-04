@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hash.h"
@@ -18,7 +18,8 @@ struct deduplicate_cmd_context {
 	bool by_msgid;
 };
 
-static int cmd_deduplicate_uidlist(struct mailbox *box, struct uidlist *uidlist)
+static int cmd_deduplicate_uidlist(struct doveadm_mail_cmd_context *_ctx,
+				   struct mailbox *box, struct uidlist *uidlist)
 {
 	struct mailbox_transaction_context *trans;
 	struct mail_search_context *search_ctx;
@@ -47,10 +48,20 @@ static int cmd_deduplicate_uidlist(struct mailbox *box, struct uidlist *uidlist)
 
 	while (mailbox_search_next(search_ctx, &mail))
 		mail_expunge(mail);
-	if (mailbox_search_deinit(&search_ctx) < 0)
+	if (mailbox_search_deinit(&search_ctx) < 0) {
+		i_error("Searching mailbox '%s' failed: %s",
+			mailbox_get_vname(box),
+			mailbox_get_last_error(box, NULL));
+		doveadm_mail_failed_mailbox(_ctx, box);
 		ret = -1;
-	if (mailbox_transaction_commit(&trans) < 0)
+	}
+	if (mailbox_transaction_commit(&trans) < 0) {
+		i_error("Committing mailbox '%s' transaction failed: %s",
+			mailbox_get_vname(box),
+			mailbox_get_last_error(box, NULL));
+		doveadm_mail_failed_mailbox(_ctx, box);
 		ret = -1;
+	}
 	return ret;
 }
 
@@ -85,6 +96,7 @@ cmd_deduplicate_box(struct doveadm_mail_cmd_context *_ctx,
 					continue;
 				i_error("Couldn't lookup Message-ID: for UID=%u: %s",
 					mail->uid, errstr);
+				doveadm_mail_failed_error(_ctx, error);
 				ret = -1;
 				break;
 			}
@@ -95,6 +107,7 @@ cmd_deduplicate_box(struct doveadm_mail_cmd_context *_ctx,
 					continue;
 				i_error("Couldn't lookup GUID: for UID=%u: %s",
 					mail->uid, errstr);
+				doveadm_mail_failed_error(_ctx, error);
 				ret = -1;
 				break;
 			}
@@ -122,7 +135,7 @@ cmd_deduplicate_box(struct doveadm_mail_cmd_context *_ctx,
 		iter = hash_table_iterate_init(hash);
 		while (hash_table_iterate(iter, hash, &key, &value)) {
 			T_BEGIN {
-				if (cmd_deduplicate_uidlist(box, value) < 0)
+				if (cmd_deduplicate_uidlist(_ctx, box, value) < 0)
 					ret = -1;
 			} T_END;
 		}
@@ -133,6 +146,9 @@ cmd_deduplicate_box(struct doveadm_mail_cmd_context *_ctx,
 	pool_unref(&pool);
 
 	if (mailbox_sync(box, 0) < 0) {
+		i_error("Syncing mailbox '%s' failed: %s",
+			mailbox_get_vname(box),
+			mailbox_get_last_error(box, NULL));
 		doveadm_mail_failed_mailbox(_ctx, box);
 		ret = -1;
 	}

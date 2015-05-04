@@ -15,25 +15,27 @@ NFS is commonly used in one of these ways:
 Dovecot configuration
 ---------------------
 
-Single-server setup or <director> [Director.txt] setup:
+Single Dovecot server setup or <Dovecot director> [Director.txt] cluster setup:
 
 ---%<-------------------------------------------------------------------------
 mmap_disable = yes
-dotlock_use_excl = no # only needed with NFSv2, NFSv3+ supports O_EXCL and it's
-faster
+#dotlock_use_excl = no # only needed with NFSv2, NFSv3+ supports O_EXCL and
+it's faster
 mail_fsync = always
 mail_nfs_storage = no
 mail_nfs_index = no
 ---%<-------------------------------------------------------------------------
 
 Multi-server setup that *tries* to flush NFS caches (increases NFS operations,
-and *isn't fully reliable*):
+and *isn't fully reliable*), try not to use this:
 
 ---%<-------------------------------------------------------------------------
 mmap_disable = yes
-dotlock_use_excl = no # only needed with NFSv2, NFSv3+ supports O_EXCL and it's
-faster
+#dotlock_use_excl = no # only needed with NFSv2, NFSv3+ supports O_EXCL and
+it's faster
 mail_fsync = always
+# These settings slow things down and don't fully work, use director proxy
+instead:
 mail_nfs_storage = yes
 mail_nfs_index = yes
 ---%<-------------------------------------------------------------------------
@@ -154,4 +156,4 @@ Misc notes
    point of view, see NFS Coding HOWTO
    [http://iki.fi/tss/nfs-coding-howto.html]
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -294,6 +294,10 @@ static void openssl_iostream_destroy(struct ssl_iostream *ssl_io)
 	(void)SSL_shutdown(ssl_io->ssl);
 	(void)openssl_iostream_more(ssl_io);
 	(void)o_stream_flush(ssl_io->plain_output);
+	/* close the plain i/o streams, because their fd may be closed soon,
+	   but we may still keep this ssl-iostream referenced until later. */
+	i_stream_close(ssl_io->plain_input);
+	o_stream_close(ssl_io->plain_output);
 
 	ssl_iostream_unref(&ssl_io);
 }
@@ -383,11 +387,13 @@ static bool openssl_iostream_bio_input(struct ssl_iostream *ssl_io)
 		ret = openssl_iostream_read_more(ssl_io, &data, &size);
 		ssl_io->plain_input->real_stream->try_alloc_limit = 0;
 		if (ret == -1 && size == 0 && !bytes_read) {
-			i_free(ssl_io->plain_stream_errstr);
-			ssl_io->plain_stream_errstr =
-				i_strdup(i_stream_get_error(ssl_io->plain_input));
-			ssl_io->plain_stream_errno =
-				ssl_io->plain_input->stream_errno;
+			if (ssl_io->plain_input->stream_errno != 0) {
+				i_free(ssl_io->plain_stream_errstr);
+				ssl_io->plain_stream_errstr =
+					i_strdup(i_stream_get_error(ssl_io->plain_input));
+				ssl_io->plain_stream_errno =
+					ssl_io->plain_input->stream_errno;
+			}
 			ssl_io->closed = TRUE;
 			return FALSE;
 		}
@@ -500,7 +506,7 @@ openssl_iostream_handle_error_full(struct ssl_iostream *ssl_io, int ret,
 			errstr = strerror(errno);
 		} else {
 			/* EOF. */
-			errno = ECONNRESET;
+			errno = EPIPE;
 			errstr = "Disconnected";
 			break;
 		}
@@ -509,7 +515,7 @@ openssl_iostream_handle_error_full(struct ssl_iostream *ssl_io, int ret,
 		break;
 	case SSL_ERROR_ZERO_RETURN:
 		/* clean connection closing */
-		errno = ECONNRESET;
+		errno = EPIPE;
 		i_free_and_null(ssl_io->last_error);
 		return -1;
 	case SSL_ERROR_SSL:
@@ -677,7 +683,7 @@ static const char *
 openssl_iostream_get_security_string(struct ssl_iostream *ssl_io)
 {
 	const SSL_CIPHER *cipher;
-#ifdef HAVE_SSL_COMPRESSION
+#if defined(HAVE_SSL_COMPRESSION) && !defined(OPENSSL_NO_COMP)
 	const COMP_METHOD *comp;
 #endif
 	const char *comp_str;
@@ -688,7 +694,7 @@ openssl_iostream_get_security_string(struct ssl_iostream *ssl_io)
 
 	cipher = SSL_get_current_cipher(ssl_io->ssl);
 	bits = SSL_CIPHER_get_bits(cipher, &alg_bits);
-#ifdef HAVE_SSL_COMPRESSION
+#if defined(HAVE_SSL_COMPRESSION) && !defined(OPENSSL_NO_COMP)
 	comp = SSL_get_current_compression(ssl_io->ssl);
 	comp_str = comp == NULL ? "" :
 		t_strconcat(" ", SSL_COMP_get_name(comp), NULL);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -124,7 +124,7 @@ static void connection_init_streams(struct connection *conn)
 		o_stream_set_no_error_handling(conn->output, TRUE);
 		o_stream_set_name(conn->output, conn->name);
 	}
-	conn->io = io_add(conn->fd_in, IO_READ, *conn->list->v.input, conn);
+	conn->io = io_add_istream(conn->input, *conn->list->v.input, conn);
 	if (set->input_idle_timeout_secs != 0) {
 		conn->to = timeout_add(set->input_idle_timeout_secs*1000,
 				       connection_idle_timeout, conn);
@@ -225,7 +225,7 @@ void connection_init_from_streams(struct connection_list *list,
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	o_stream_set_name(conn->output, conn->name);
 
-	conn->io = io_add(conn->fd_in, IO_READ, *list->v.input, conn);
+	conn->io = io_add_istream(conn->input, *list->v.input, conn);
 	
 	DLLIST_PREPEND(&list->connections, conn);
 	list->connections_count++;
@@ -325,6 +325,7 @@ int connection_input_read(struct connection *conn)
 		case CONNECTION_BEHAVIOR_ALLOW:
 			return -2;
 		}
+		i_unreached();
 	case -1:
 		/* disconnected */
 		conn->disconnect_reason =
@@ -359,6 +360,8 @@ void connection_switch_ioloop(struct connection *conn)
 		conn->io = io_loop_move_io(&conn->io);
 	if (conn->to != NULL)
 		conn->to = io_loop_move_timeout(&conn->to);
+	if (conn->input != NULL)
+		i_stream_switch_ioloop(conn->input);
 	if (conn->output != NULL)
 		o_stream_switch_ioloop(conn->output);
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -19,30 +19,42 @@ static size_t mail_domain_memsize(const struct mail_domain *domain)
 	return sizeof(*domain) + strlen(domain->name) + 1;
 }
 
-struct mail_domain *mail_domain_login(const char *name)
+struct mail_domain *mail_domain_login_create(const char *name)
 {
 	struct mail_domain *domain;
 
 	domain = hash_table_lookup(mail_domains_hash, name);
 	if (domain != NULL) {
-		domain->num_logins++;
-		mail_domain_refresh(domain, NULL);
+		mail_domain_login(domain);
 		return domain;
 	}
 
-	domain = i_new(struct mail_domain, 1);
+	domain = i_malloc(sizeof(struct mail_domain) + stats_alloc_size());
+	domain->stats = (void *)(domain + 1);
 	domain->name = i_strdup(name);
 	domain->reset_timestamp = ioloop_time;
 
 	hash_table_insert(mail_domains_hash, domain->name, domain);
 	DLLIST_PREPEND_FULL(&stable_mail_domains, domain,
 			    stable_prev, stable_next);
-	DLLIST2_APPEND_FULL(&mail_domains_head, &mail_domains_tail, domain,
-			    sorted_prev, sorted_next);
-	domain->num_logins++;
-	domain->last_update = ioloop_timeval;
+	mail_domain_login(domain);
 	global_memory_alloc(mail_domain_memsize(domain));
 	return domain;
+}
+
+void mail_domain_login(struct mail_domain *domain)
+{
+	domain->num_logins++;
+	domain->num_connected_sessions++;
+	mail_global_login();
+	mail_domain_refresh(domain, NULL);
+}
+
+void mail_domain_disconnected(struct mail_domain *domain)
+{
+	i_assert(domain->num_connected_sessions > 0);
+	domain->num_connected_sessions--;
+	mail_global_disconnected();
 }
 
 struct mail_domain *mail_domain_lookup(const char *name)
@@ -82,15 +94,16 @@ static void mail_domain_free(struct mail_domain *domain)
 }
 
 void mail_domain_refresh(struct mail_domain *domain,
-			 const struct mail_stats *diff_stats)
+			 const struct stats *diff_stats)
 {
 	if (diff_stats != NULL)
-		mail_stats_add(&domain->stats, diff_stats);
+		stats_add(domain->stats, diff_stats);
 	domain->last_update = ioloop_timeval;
 	DLLIST2_REMOVE_FULL(&mail_domains_head, &mail_domains_tail, domain,
 			    sorted_prev, sorted_next);
 	DLLIST2_APPEND_FULL(&mail_domains_head, &mail_domains_tail, domain,
 			    sorted_prev, sorted_next);
+	mail_global_refresh(diff_stats);
 }
 
 void mail_domains_free_memory(void)

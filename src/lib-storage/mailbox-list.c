@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -27,13 +27,14 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-/* 20 * (200+1) < 4096 which is the standard PATH_MAX. Having these settings
+/* 16 * (255+1) = 4096 which is the standard PATH_MAX. Having these settings
    prevents malicious user from creating eg. "a/a/a/.../a" mailbox name and
    then start renaming them to larger names from end to beginning, which
    eventually would start causing the failures when trying to use too
-   long mailbox names. */
-#define MAILBOX_MAX_HIERARCHY_LEVELS 20
-#define MAILBOX_MAX_HIERARCHY_NAME_LENGTH 200
+   long mailbox names. 255 is the standard single directory name length, so
+   allow up to that high. */
+#define MAILBOX_MAX_HIERARCHY_LEVELS 16
+#define MAILBOX_MAX_HIERARCHY_NAME_LENGTH 255
 
 struct mailbox_list_module_register mailbox_list_module_register = { 0 };
 
@@ -1251,6 +1252,15 @@ bool mailbox_list_is_valid_name(struct mailbox_list *list,
 		return FALSE;
 	}
 
+	/* either the list backend uses '/' as the hierarchy separator or
+	   it doesn't use filesystem at all (PROP_NO_ROOT) */
+	if ((list->props & MAILBOX_LIST_PROP_NO_ROOT) == 0 &&
+	    mailbox_list_get_hierarchy_sep(list) != '/' &&
+	    strchr(name, '/') != NULL) {
+		*error_r = "Name must not have '/' characters";
+		return FALSE;
+	}
+
 	return mailbox_list_is_valid_fs_name(list, name, error_r);
 }
 
@@ -1821,16 +1831,10 @@ int mailbox_list_init_fs(struct mailbox_list *list, const char *driver,
 	struct ssl_iostream_settings ssl_set;
 
 	memset(&ssl_set, 0, sizeof(ssl_set));
-	ssl_set.ca_dir = list->mail_set->ssl_client_ca_dir;
-	ssl_set.ca_file = list->mail_set->ssl_client_ca_file;
-
 	memset(&fs_set, 0, sizeof(fs_set));
-	fs_set.temp_file_prefix = mailbox_list_get_global_temp_prefix(list);
-	fs_set.base_dir = list->ns->user->set->base_dir;
-	fs_set.temp_dir = list->ns->user->set->mail_temp_dir;
-	fs_set.ssl_client_set = &ssl_set;
+	mail_user_init_fs_settings(list->ns->user, &fs_set, &ssl_set);
 	fs_set.root_path = root_dir;
-	fs_set.debug = list->ns->user->mail_debug;
+	fs_set.temp_file_prefix = mailbox_list_get_global_temp_prefix(list);
 
 	return fs_init(driver, args, &fs_set, fs_r, error_r);
 }

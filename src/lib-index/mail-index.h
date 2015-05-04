@@ -12,6 +12,10 @@
 
 #define MAIL_INDEX_HEADER_MIN_SIZE 120
 
+/* Log a warning when transaction log has been locked for this many seconds.
+   This lock is held also between mail_index_sync_begin()..commit(). */
+#define MAIL_TRANSACTION_LOG_LOCK_WARN_SECS 30
+
 enum mail_index_open_flags {
 	/* Create index if it doesn't exist */
 	MAIL_INDEX_OPEN_FLAG_CREATE		= 0x01,
@@ -159,7 +163,11 @@ enum mail_index_sync_flags {
 	MAIL_INDEX_SYNC_FLAG_FSYNC		= 0x10,
 	/* If we see "delete index" request transaction, finish it.
 	   This flag also allows committing more changes to a deleted index. */
-	MAIL_INDEX_SYNC_FLAG_DELETING_INDEX	= 0x20
+	MAIL_INDEX_SYNC_FLAG_DELETING_INDEX	= 0x20,
+	/* Same as MAIL_INDEX_SYNC_FLAG_DELETING_INDEX, but finish index
+	   deletion only once and fail the rest (= avoid race conditions when
+	   multiple processes try to mark the index deleted) */
+	MAIL_INDEX_SYNC_FLAG_TRY_DELETING_INDEX	= 0x40
 };
 
 enum mail_index_view_sync_flags {
@@ -369,6 +377,10 @@ void mail_index_sync_reset(struct mail_index_sync_ctx *ctx);
 /* Update result when refreshing index at the end of sync. */
 void mail_index_sync_set_commit_result(struct mail_index_sync_ctx *ctx,
 				       struct mail_index_transaction_commit_result *result);
+/* Don't log a warning even if syncing took over
+   MAIL_TRANSACTION_LOG_LOCK_WARN_SECS seconds. Usually this is called because
+   the caller itself already logged a warning about it. */
+void mail_index_sync_no_warning(struct mail_index_sync_ctx *ctx);
 /* Commit synchronization by writing all changes to mail index file. */
 int mail_index_sync_commit(struct mail_index_sync_ctx **ctx);
 /* Rollback synchronization - none of the changes listed by sync_next() are

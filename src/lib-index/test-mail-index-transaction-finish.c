@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -152,6 +152,7 @@ static void test_mail_index_transaction_finish_check_conflicts(void)
 	test_assert(conflicts[1].seq1 == 8 && conflicts[1].seq2 == 8);
 
 	test_end();
+	array_free(t->conflict_seqs);
 }
 
 static void test_mail_index_transaction_finish_modseq_updates(void)

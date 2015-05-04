@@ -27,6 +27,8 @@
 #include "mail-storage.h"
 #include "mailbox-list-private.h"
 
+#include <sys/time.h>
+
 #define MAILBOX_LIST_INDEX_HIERARHCY_SEP '~'
 #define MAILBOX_LIST_INDEX_PREFIX "dovecot.list.index"
 
@@ -86,6 +88,7 @@ struct mailbox_list_index {
 	const char *path;
 	struct mail_index *index;
 	uint32_t ext_id, msgs_ext_id, hmodseq_ext_id, subs_hdr_ext_id;
+	struct timeval last_refresh_timeval;
 
 	pool_t mailbox_pool;
 	/* uin32_t id => name */
@@ -141,7 +144,11 @@ void mailbox_list_index_node_unlink(struct mailbox_list_index *ilist,
 int mailbox_list_index_index_open(struct mailbox_list *list);
 bool mailbox_list_index_need_refresh(struct mailbox_list_index *ilist,
 				     struct mail_index_view *view);
+/* Refresh the index, but only if it hasn't been refreshed "recently"
+   (= within this same ioloop run) */
 int mailbox_list_index_refresh(struct mailbox_list *list);
+/* Refresh the index regardless of when the last refresh was done. */
+int mailbox_list_index_refresh_force(struct mailbox_list *list);
 void mailbox_list_index_refresh_later(struct mailbox_list *list);
 
 struct mailbox_list_index_node *

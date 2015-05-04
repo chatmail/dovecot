@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -239,10 +239,19 @@ static void search_index_arg(struct mail_search_arg *arg,
 static int search_arg_match_mailbox(struct index_search_context *ctx,
 				    struct mail_search_arg *arg)
 {
+	struct mailbox *box = ctx->cur_mail->box;
 	const char *str;
 
 	switch (arg->type) {
 	case SEARCH_MAILBOX:
+		/* first try to match the mailbox name itself. this is
+		   important when using "mailbox virtual/foo" parameter foin
+		   doveadm's search query, otherwise we can never fetch
+		   anything with doveadm from virtual mailboxes because the
+		   mailbox parameter is compared to the mail's backend
+		   mailbox. */
+		if (strcmp(box->vname, arg->value.str) == 0)
+			return 1;
 		if (mail_get_special(ctx->cur_mail, MAIL_FETCH_MAILBOX_NAME,
 				     &str) < 0)
 			return -1;
@@ -251,6 +260,8 @@ static int search_arg_match_mailbox(struct index_search_context *ctx,
 			return strcasecmp(arg->value.str, "INBOX") == 0;
 		return strcmp(str, arg->value.str) == 0;
 	case SEARCH_MAILBOX_GLOB:
+		if (imap_match(arg->value.mailbox_glob, box->vname) == IMAP_MATCH_YES)
+			return 1;
 		if (mail_get_special(ctx->cur_mail, MAIL_FETCH_MAILBOX_NAME,
 				     &str) < 0)
 			return -1;
@@ -346,6 +357,13 @@ static int search_arg_match_cached(struct index_search_context *ctx,
 		if (mail_get_special(ctx->cur_mail, MAIL_FETCH_GUID, &str) < 0)
 			return -1;
 		return strcmp(str, arg->value.str) == 0;
+	case SEARCH_REAL_UID: {
+		struct mail *real_mail;
+
+		if (mail_get_backend_mail(ctx->cur_mail, &real_mail) < 0)
+			return -1;
+		return seq_range_exists(&arg->value.seqset, real_mail->uid);
+	}
 	default:
 		return -1;
 	}
@@ -628,7 +646,8 @@ static void search_body(struct mail_search_arg *arg,
 	}
 	if (ctx->input->stream_errno != 0) {
 		mail_storage_set_critical(ctx->index_ctx->box->storage,
-			"read(%s) failed: %m", i_stream_get_name(ctx->input));
+			"read(%s) failed: %s", i_stream_get_name(ctx->input),
+			i_stream_get_error(ctx->input));
 	}
 
 	ARG_SET_RESULT(arg, ret);
@@ -698,7 +717,9 @@ static int search_arg_match_text(struct mail_search_arg *args,
 					     search_header, &hdr_ctx);
 			if (input->stream_errno != 0) {
 				mail_storage_set_critical(ctx->box->storage,
-					"read(%s) failed: %m", i_stream_get_name(input));
+					"read(%s) failed: %s",
+					i_stream_get_name(input),
+					i_stream_get_error(input));
 				failed = TRUE;
 			}
 		}
@@ -1336,6 +1357,7 @@ static bool search_arg_is_static(struct mail_search_arg *arg)
 	case SEARCH_MAILBOX:
 	case SEARCH_MAILBOX_GUID:
 	case SEARCH_MAILBOX_GLOB:
+	case SEARCH_REAL_UID:
 		return TRUE;
 	}
 	return FALSE;
@@ -1528,7 +1550,20 @@ static int search_more_with_mail(struct index_search_context *ctx,
 		mail_search_args_reset(_ctx->args->args, FALSE);
 
 		if (match != 0) {
+			/* either matched or result is still unknown.
+			   anyway we're far enough now that we probably want
+			   to update the access_parts. the only problem here is
+			   if searching would want fewer access_parts than the
+			   fetching part, but that's probably not a big problem
+			   usually. */
+			index_mail_update_access_parts_pre(mail);
 			ret = 1;
+			break;
+		}
+
+		/* non-match */
+		if (_ctx->args->stop_on_nonmatch) {
+			ret = -1;
 			break;
 		}
 
@@ -1622,6 +1657,7 @@ static int search_more_with_prefetching(struct index_search_context *ctx,
 		array_delete(&ctx->mails, 0, 1);
 		array_append(&ctx->mails, mail_r, 1);
 	}
+	index_mail_update_access_parts_post(*mail_r);
 	return 1;
 }
 
@@ -1655,10 +1691,14 @@ static int search_more(struct index_search_context *ctx,
 		if (imail->data.search_results == NULL)
 			break;
 
-		/* searching wasn't finished yet */
+		/* prefetch running - searching wasn't finished yet */
 		if (search_finish_prefetch(ctx, imail))
 			break;
 		/* search finished as non-match */
+		if (ctx->mail_ctx.args->stop_on_nonmatch) {
+			ret = -1;
+			break;
+		}
 	}
 	return ret;
 }
@@ -1702,12 +1742,14 @@ bool index_storage_search_next_nonblock(struct mail_search_context *_ctx,
 	}
 
 	/* everything searched at this point already. just returning
-	   matches from sort list */
+	   matches from sort list. FIXME: we could do prefetching here also. */
 	if (!index_sort_list_next(_ctx->sort_program, &seq))
 		return FALSE;
 
 	mailp = array_idx(&ctx->mails, 0);
 	mail_set_seq(*mailp, seq);
+	index_mail_update_access_parts_pre(*mailp);
+	index_mail_update_access_parts_post(*mailp);
 	*mail_r = *mailp;
 	return TRUE;
 }

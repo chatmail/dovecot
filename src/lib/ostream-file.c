@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -173,9 +173,12 @@ static ssize_t o_stream_writev(struct file_ostream *fstream,
 			       const struct const_iovec *iov, int iov_size)
 {
 	ssize_t ret, ret2;
-	size_t size, sent;
+	size_t size, sent, total_size;
 	bool partial;
 	int i;
+
+	for (i = 0, total_size = 0; i < iov_size; i++)
+		total_size += iov[i].iov_len;
 
 	o_stream_socket_cork(fstream);
 	if (iov_size == 1) {
@@ -234,8 +237,15 @@ static ssize_t o_stream_writev(struct file_ostream *fstream,
 	}
 
 	if (ret < 0) {
-		if (errno == EAGAIN || errno == EINTR)
+		if (fstream->file) {
+			if (errno == EINTR) {
+				/* automatically retry */
+				return o_stream_writev(fstream, iov, iov_size);
+			}
+		} else if (errno == EAGAIN || errno == EINTR) {
+			/* try again later */
 			return 0;
+		}
 		fstream->ostream.ostream.stream_errno = errno;
 		stream_closed(fstream);
 		return -1;
@@ -278,10 +288,14 @@ static ssize_t o_stream_writev(struct file_ostream *fstream,
 				}
 			}
 		}
-		if (ret2 <= 0)
-			return ret2;
-		ret += ret2;
+		i_assert(ret2 != 0);
+		if (ret2 < 0)
+			ret = ret2;
+		else
+			ret += ret2;
 	}
+	i_assert(ret < 0 || !fstream->file ||
+		 (size_t)ret == total_size);
 	return ret;
 }
 
@@ -683,12 +697,15 @@ o_stream_file_write_at(struct ostream_private *stream,
 }
 
 static off_t io_stream_sendfile(struct ostream_private *outstream,
-				struct istream *instream, int in_fd)
+				struct istream *instream, int in_fd,
+				bool *sendfile_not_supported_r)
 {
 	struct file_ostream *foutstream = (struct file_ostream *)outstream;
 	uoff_t start_offset;
 	uoff_t in_size, offset, send_size, v_offset;
 	ssize_t ret;
+
+	*sendfile_not_supported_r = FALSE;
 
 	if ((ret = i_stream_get_size(instream, TRUE, &in_size)) <= 0) {
 		outstream->ostream.stream_errno = ret == 0 ? ESPIPE :
@@ -713,13 +730,23 @@ static off_t io_stream_sendfile(struct ostream_private *outstream,
 		ret = safe_sendfile(foutstream->fd, in_fd, &offset,
 				    MAX_SSIZE_T(send_size));
 		if (ret <= 0) {
-			if (ret == 0 || errno == EINTR || errno == EAGAIN) {
-				ret = 0;
+			if (ret == 0)
 				break;
+			if (foutstream->file) {
+				if (errno == EINTR) {
+					/* automatically retry */
+					continue;
+				}
+			} else {
+				if (errno == EINTR || errno == EAGAIN) {
+					ret = 0;
+					break;
+				}
 			}
-
-			outstream->ostream.stream_errno = errno;
-			if (errno != EINVAL) {
+			if (errno == EINVAL)
+				*sendfile_not_supported_r = TRUE;
+			else {
+				outstream->ostream.stream_errno = errno;
 				/* close only if error wasn't because
 				   sendfile() isn't supported */
 				stream_closed(foutstream);
@@ -735,8 +762,14 @@ static off_t io_stream_sendfile(struct ostream_private *outstream,
 
 	i_stream_seek(instream, v_offset);
 	if (ret == 0) {
-		/* we should be at EOF, verify it by reading instream */
-		(void)i_stream_read(instream);
+		/* we should be at EOF. if not, write more. */
+		i_assert(!foutstream->file ||
+			 instream->v_offset - start_offset == in_size);
+		if (i_stream_read(instream) > 0) {
+			if (io_stream_sendfile(outstream, instream, in_fd,
+					       sendfile_not_supported_r) < 0)
+				return -1;
+		}
 	}
 	return ret < 0 ? -1 : (off_t)(instream->v_offset - start_offset);
 }
@@ -821,7 +854,6 @@ static off_t io_stream_copy_backwards(struct ostream_private *outstream,
 static off_t io_stream_copy_stream(struct ostream_private *outstream,
 				   struct istream *instream, bool same_stream)
 {
-	struct file_ostream *foutstream = (struct file_ostream *)outstream;
 	uoff_t in_size;
 	off_t in_abs_offset, ret = 0;
 
@@ -857,8 +889,7 @@ static off_t io_stream_copy_stream(struct ostream_private *outstream,
 		}
 	}
 
-	return io_stream_copy(&outstream->ostream, instream,
-			      foutstream->optimal_block_size);
+	return io_stream_copy(&outstream->ostream, instream);
 }
 
 static off_t o_stream_file_send_istream(struct ostream_private *outstream,
@@ -868,17 +899,18 @@ static off_t o_stream_file_send_istream(struct ostream_private *outstream,
 	bool same_stream;
 	int in_fd;
 	off_t ret;
+	bool sendfile_not_supported;
 
 	in_fd = !instream->readable_fd ? -1 : i_stream_get_fd(instream);
 	if (!foutstream->no_sendfile && in_fd != -1 &&
 	    in_fd != foutstream->fd && instream->seekable) {
-		ret = io_stream_sendfile(outstream, instream, in_fd);
-		if (ret >= 0 || outstream->ostream.stream_errno != EINVAL)
+		ret = io_stream_sendfile(outstream, instream, in_fd,
+					 &sendfile_not_supported);
+		if (ret >= 0 || !sendfile_not_supported)
 			return ret;
 
 		/* sendfile() not supported (with this fd), fallback to
 		   regular sending. */
-		outstream->ostream.stream_errno = 0;
 		foutstream->no_sendfile = TRUE;
 	}
 
@@ -972,6 +1004,16 @@ o_stream_create_fd(int fd, size_t max_buffer_size, bool autoclose_fd)
 }
 
 struct ostream *
+o_stream_create_fd_autoclose(int *fd, size_t max_buffer_size)
+{
+	struct ostream *output;
+
+	output = o_stream_create_fd(*fd, max_buffer_size, TRUE);
+	*fd = -1;
+	return output;
+}
+
+struct ostream *
 o_stream_create_fd_file(int fd, uoff_t offset, bool autoclose_fd)
 {
 	struct file_ostream *fstream;
@@ -989,4 +1031,13 @@ o_stream_create_fd_file(int fd, uoff_t offset, bool autoclose_fd)
 	ostream = o_stream_create(&fstream->ostream, NULL, fd);
 	ostream->offset = offset;
 	return ostream;
+}
+
+struct ostream *o_stream_create_fd_file_autoclose(int *fd, uoff_t offset)
+{
+	struct ostream *output;
+
+	output = o_stream_create_fd_file(*fd, offset, TRUE);
+	*fd = -1;
+	return output;
 }

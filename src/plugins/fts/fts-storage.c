@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -160,6 +160,25 @@ static bool fts_want_build_args(const struct mail_search_arg *args)
 	return FALSE;
 }
 
+static bool fts_args_have_fuzzy(const struct mail_search_arg *args)
+{
+	for (; args != NULL; args = args->next) {
+		if (args->fuzzy)
+			return TRUE;
+		switch (args->type) {
+		case SEARCH_OR:
+		case SEARCH_SUB:
+		case SEARCH_INTHREAD:
+			if (fts_args_have_fuzzy(args->value.subargs))
+				return TRUE;
+			break;
+		default:
+			break;
+		}
+	}
+	return FALSE;
+}
+
 static struct mail_search_context *
 fts_mailbox_search_init(struct mailbox_transaction_context *t,
 			struct mail_search_args *args,
@@ -194,6 +213,12 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 	i_array_init(&fctx->scores->score_map, 64);
 	MODULE_CONTEXT_SET(ctx, fts_storage_module, fctx);
 
+	/* FIXME: we'll assume that all the args are fuzzy. not good,
+	   but would require much more work to fix it. */
+	if (!fts_args_have_fuzzy(args->args) &&
+	    mail_user_plugin_getenv(t->box->storage->user,
+				    "fts_no_autofuzzy") != NULL)
+		fctx->flags |= FTS_LOOKUP_FLAG_NO_AUTO_FUZZY;
 	/* transaction contains the last search's scores. they can be
 	   queried later with mail_get_special() */
 	if (ft->scores != NULL)
@@ -573,13 +598,17 @@ fts_transaction_commit(struct mailbox_transaction_context *t,
 	struct fts_mailbox *fbox = FTS_CONTEXT(t->box);
 	struct mailbox *box = t->box;
 	bool autoindex;
-	int ret;
+	int ret = 0;
 
 	autoindex = ft->mails_saved &&
 		mail_user_plugin_getenv(box->storage->user,
 					"fts_autoindex") != NULL;
 
-	ret = fts_transaction_end(t);
+	if (fts_transaction_end(t) < 0) {
+		mail_storage_set_error(t->box->storage, MAIL_ERROR_TEMP,
+				       "FTS transaction commit failed");
+		ret = -1;
+	}
 	if (fbox->module_ctx.super.transaction_commit(t, changes_r) < 0)
 		ret = -1;
 	if (ret < 0)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -10,6 +10,8 @@
 #include "imapc-mail.h"
 #include "imapc-client.h"
 #include "imapc-storage.h"
+
+static bool imapc_mail_get_cached_guid(struct mail *_mail);
 
 struct mail *
 imapc_mail_alloc(struct mailbox_transaction_context *t,
@@ -52,22 +54,27 @@ static bool imapc_mail_is_expunged(struct mail *_mail)
 	return !imapc_msgmap_uid_to_rseq(msgmap, _mail->uid, &rseq);
 }
 
-static int imapc_mail_failed(struct mail *mail, const char *field)
+static void imapc_mail_failed(struct mail *mail, const char *field)
 {
 	struct imapc_mailbox *mbox = (struct imapc_mailbox *)mail->box;
 
 	if (mail->expunged || imapc_mail_is_expunged(mail)) {
 		mail_set_expunged(mail);
-		return -1;
 	} else if (!imapc_client_mailbox_is_opened(mbox->client_box)) {
 		/* we've already logged a disconnection error */
 		mail_storage_set_internal_error(mail->box->storage);
-		return -1;
 	} else {
+		/* NOTE: earlier we didn't treat this as a failure, because
+		   old Exchange versions fail to return any data for messages
+		   in Calendars mailbox. But it's a bad idea to always assume
+		   that a missing field is intentional, because there's
+		   potential for data loss. Ideally we could detect whether
+		   this is an Exchange issue or not, but I don't have access
+		   to such an old Exchange anymore. So at least for now until
+		   someone complains, the Exchange workaround is disabled. */
 		mail_storage_set_critical(mail->box->storage,
 			"imapc: Remote server didn't send %s for UID %u in %s",
 			field, mail->uid, mail->box->vname);
-		return 0;
 	}
 }
 
@@ -83,11 +90,8 @@ static int imapc_mail_get_received_date(struct mail *_mail, time_t *date_r)
 		if (imapc_mail_fetch(_mail, MAIL_FETCH_RECEIVED_DATE, NULL) < 0)
 			return -1;
 		if (data->received_date == (time_t)-1) {
-			if (imapc_mail_failed(_mail, "INTERNALDATE") < 0)
-				return -1;
-			/* assume that the server never returns INTERNALDATE
-			   for this mail (see BODY[] failure handling) */
-			data->received_date = 0;
+			imapc_mail_failed(_mail, "INTERNALDATE");
+			return -1;
 		}
 	}
 	*date_r = data->received_date;
@@ -130,11 +134,8 @@ static int imapc_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 		if (imapc_mail_fetch(_mail, MAIL_FETCH_PHYSICAL_SIZE, NULL) < 0)
 			return -1;
 		if (data->physical_size == (uoff_t)-1) {
-			if (imapc_mail_failed(_mail, "RFC822.SIZE") < 0)
-				return -1;
-			/* assume that the server never returns RFC822.SIZE
-			   for this mail (see BODY[] failure handling) */
-			data->physical_size = 0;
+			imapc_mail_failed(_mail, "RFC822.SIZE");
+			return -1;
 		}
 		*size_r = data->physical_size;
 		return 0;
@@ -255,19 +256,8 @@ imapc_mail_get_stream(struct mail *_mail, bool get_body,
 			return -1;
 
 		if (data->stream == NULL) {
-			if (imapc_mail_failed(_mail, "BODY[]") < 0)
-				return -1;
-			i_assert(data->stream == NULL);
-
-			/* this could be either a temporary server bug, or the
-			   server may permanently just not return anything for
-			   this mail. the latter happens at least with Exchange
-			   when trying to fetch calendar "mails", so we'll just
-			   return them as empty mails instead of disconnecting
-			   the client. */
-			mail->body_fetched = TRUE;
-			data->stream = i_stream_create_from_data(&uchar_nul, 0);
-			imapc_mail_init_stream(mail, TRUE);
+			imapc_mail_failed(_mail, "BODY[]");
+			return -1;
 		}
 	}
 
@@ -312,6 +302,8 @@ void imapc_mail_update_access_parts(struct index_mail *mail)
 		    !IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_RFC822_SIZE))
 			data->access_part |= READ_HDR | READ_BODY;
 	}
+	if ((data->wanted_fields & MAIL_FETCH_GUID) != 0)
+		(void)imapc_mail_get_cached_guid(_mail);
 
 	if (data->access_part == 0 && data->wanted_headers != NULL &&
 	    !IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_HEADERS)) {
@@ -418,23 +410,41 @@ static int imapc_mail_get_hdr_hash(struct index_mail *imail)
 	return 0;
 }
 
+static bool imapc_mail_get_cached_guid(struct mail *_mail)
+{
+	struct index_mail *imail = (struct index_mail *)_mail;
+	const enum index_cache_field cache_idx =
+		imail->ibox->cache_fields[MAIL_CACHE_GUID].idx;
+	string_t *str;
+
+	if (imail->data.guid != NULL) {
+		if (mail_cache_field_can_add(_mail->transaction->cache_trans,
+					     _mail->seq, cache_idx)) {
+			/* GUID was prefetched - add to cache */
+			index_mail_cache_add_idx(imail, cache_idx,
+				imail->data.guid, strlen(imail->data.guid)+1);
+		}
+		return TRUE;
+	}
+
+	str = str_new(imail->mail.data_pool, 64);
+	if (mail_cache_lookup_field(_mail->transaction->cache_view,
+				    str, imail->mail.mail.seq, cache_idx) > 0) {
+		imail->data.guid = str_c(str);
+		return TRUE;
+	}
+	return FALSE;
+}
+
 static int imapc_mail_get_guid(struct mail *_mail, const char **value_r)
 {
 	struct index_mail *imail = (struct index_mail *)_mail;
 	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
 	const enum index_cache_field cache_idx =
 		imail->ibox->cache_fields[MAIL_CACHE_GUID].idx;
-	string_t *str;
 
-	if (imail->data.guid != NULL) {
+	if (imapc_mail_get_cached_guid(_mail)) {
 		*value_r = imail->data.guid;
-		return 0;
-	}
-
-	str = str_new(imail->mail.data_pool, 64);
-	if (mail_cache_lookup_field(_mail->transaction->cache_view,
-				    str, imail->mail.mail.seq, cache_idx) > 0) {
-		*value_r = str_c(str);
 		return 0;
 	}
 
@@ -443,7 +453,7 @@ static int imapc_mail_get_guid(struct mail *_mail, const char **value_r)
 		if (imapc_mail_fetch(_mail, MAIL_FETCH_GUID, NULL) < 0)
 			return -1;
 		if (imail->data.guid == NULL) {
-			(void)imapc_mail_failed(_mail, mbox->guid_fetch_field_name);
+			imapc_mail_failed(_mail, mbox->guid_fetch_field_name);
 			return -1;
 		}
 	} else {
@@ -463,6 +473,8 @@ imapc_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 		       const char **value_r)
 {
 	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
+	struct index_mail *imail = (struct index_mail *)_mail;
+	uint64_t num;
 
 	switch (field) {
 	case MAIL_FETCH_GUID:
@@ -473,6 +485,20 @@ imapc_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 		}
 		*value_r = "";
 		return imapc_mail_get_guid(_mail, value_r);
+	case MAIL_FETCH_UIDL_BACKEND:
+		if (!IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_GMAIL_MIGRATION))
+			break;
+		if (imapc_mail_get_guid(_mail, value_r) < 0)
+			return -1;
+		if (str_to_uint64(*value_r, &num) < 0) {
+			mail_storage_set_critical(_mail->box->storage,
+				"X-GM-MSGID not 64bit integer as expected for POP3 UIDL generation: %s", *value_r);
+			return -1;
+		}
+
+		*value_r = p_strdup_printf(imail->mail.data_pool, "GmailId%llx",
+					   (unsigned long long)num);
+		return 0;
 	default:
 		break;
 	}

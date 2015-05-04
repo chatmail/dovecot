@@ -67,10 +67,11 @@ Dovecot supports the following non-plaintext mechanisms:
 Configuration
 -------------
 
-By default only PLAIN mechanism is enabled. To use more, set:
+By default only PLAIN mechanism is enabled. To use more, edit your
+'/etc/dovecot/conf.d/10-auth.conf' and set:
 
 ---%<-------------------------------------------------------------------------
 auth_mechanisms = plain login cram-md5
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

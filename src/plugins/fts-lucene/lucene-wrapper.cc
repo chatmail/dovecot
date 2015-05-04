@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2010 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 extern "C" {
 #include "lib.h"
@@ -6,7 +6,9 @@ extern "C" {
 #include "unichar.h"
 #include "hash.h"
 #include "hex-binary.h"
+#include "ioloop.h"
 #include "unlink-directory.h"
+#include "ioloop.h"
 #include "mail-index.h"
 #include "mail-search.h"
 #include "mail-namespace.h"
@@ -35,6 +37,7 @@ extern "C" {
 #define FTS_LUCENE_MAX_SEARCH_TERMS 1000
 
 #define LUCENE_LOCK_OVERRIDE_SECS 60
+#define LUCENE_INDEX_CLOSE_TIMEOUT_MSECS (120*1000)
 
 using namespace lucene::document;
 using namespace lucene::index;
@@ -66,6 +69,7 @@ struct lucene_index {
 	IndexReader *reader;
 	IndexWriter *writer;
 	IndexSearcher *searcher;
+	struct timeout *to_close;
 
 	buffer_t *normalizer_buf;
 	Analyzer *default_analyzer, *cur_analyzer;
@@ -97,6 +101,8 @@ static void *textcat = NULL;
 static bool textcat_broken = FALSE;
 static int textcat_refcount = 0;
 
+static void lucene_handle_error(struct lucene_index *index, CLuceneError &err,
+				const char *msg);
 static void rescan_clear_unseen_mailboxes(struct lucene_index *index,
 					  struct rescan_context *rescan_ctx);
 
@@ -141,9 +147,26 @@ struct lucene_index *lucene_index_init(const char *path,
 
 void lucene_index_close(struct lucene_index *index)
 {
-	_CLDELETE(index->reader);
-	_CLDELETE(index->writer);
+	if (index->to_close != NULL)
+		timeout_remove(&index->to_close);
+
 	_CLDELETE(index->searcher);
+	if (index->writer != NULL) {
+		try {
+			index->writer->close();
+		} catch (CLuceneError &err) {
+			lucene_handle_error(index, err, "IndexWriter::close");
+		}
+		_CLDELETE(index->writer);
+	}
+	if (index->reader != NULL) {
+		try {
+			index->reader->close();
+		} catch (CLuceneError &err) {
+			lucene_handle_error(index, err, "IndexReader::close");
+		}
+		_CLDELETE(index->reader);
+	}
 }
 
 void lucene_index_deinit(struct lucene_index *index)
@@ -248,8 +271,7 @@ static void lucene_handle_error(struct lucene_index *index, CLuceneError &err,
 	     err.number() == CL_ERR_IO)) {
 		/* delete corrupted index. most IO errors are also about
 		   missing files and other such corruption.. */
-		if (unlink_directory(index->path,
-				     UNLINK_DIRECTORY_FLAG_RMDIR) < 0 &&
+		if (unlink_directory(index->path, (enum unlink_directory_flags)0) < 0 &&
 		    errno != ENOENT)
 			i_error("unlink_directory(%s) failed: %m", index->path);
 		rescan_clear_unseen_mailboxes(index, NULL);
@@ -258,8 +280,11 @@ static void lucene_handle_error(struct lucene_index *index, CLuceneError &err,
 
 static int lucene_index_open(struct lucene_index *index)
 {
-	if (index->reader != NULL)
+	if (index->reader != NULL) {
+		i_assert(index->to_close != NULL);
+		timeout_reset(index->to_close);
 		return 1;
+	}
 
 	if (!IndexReader::indexExists(index->path))
 		return 0;
@@ -270,6 +295,9 @@ static int lucene_index_open(struct lucene_index *index)
 		lucene_handle_error(index, err, "IndexReader::open()");
 		return -1;
 	}
+	i_assert(index->to_close == NULL);
+	index->to_close = timeout_add(LUCENE_INDEX_CLOSE_TIMEOUT_MSECS,
+				      lucene_index_close, index);
 	return 1;
 }
 
@@ -388,8 +416,10 @@ static int lucene_settings_check(struct lucene_index *index)
 	if (ret != 0)
 		return ret;
 
+	i_warning("fts-lucene: Settings have changed, rebuilding index for mailbox");
+
 	/* settings changed, rebuild index */
-	if (unlink_directory(index->path, UNLINK_DIRECTORY_FLAG_RMDIR) < 0) {
+	if (unlink_directory(index->path, (enum unlink_directory_flags)0) < 0) {
 		i_error("unlink_directory(%s) failed: %m", index->path);
 		ret = -1;
 	} else {
@@ -562,7 +592,7 @@ int lucene_index_build_more(struct lucene_index *index, uint32_t uid,
 	else
 		dest = dest_free = i_new(wchar_t, datasize);
 	lucene_utf8_n_to_tchar(data, size, dest, datasize);
-	lucene_data_translate(index, dest, datasize);
+	lucene_data_translate(index, dest, datasize-1);
 
 	if (hdr_name != NULL) {
 		/* hdr_name should be ASCII, but don't break in case it isn't */
@@ -852,12 +882,11 @@ int lucene_index_rescan(struct lucene_index *index)
 				index->reader->deleteDocument(hits->id(i));
 		}
 		_CLDELETE(hits);
-		index->reader->close();
-		lucene_index_close(index);
 	} catch (CLuceneError &err) {
 		lucene_handle_error(index, err, "rescan search");
 		failed = true;
 	}
+	lucene_index_close(index);
 	if (ctx.box != NULL)
 		rescan_finish(&ctx);
 	array_free(&ctx.uids);
@@ -965,14 +994,7 @@ int lucene_index_expunge_from_log(struct lucene_index *index,
 		}
 	}
 
-	try {
-		if (index->reader != NULL)
-			index->reader->close();
-		lucene_index_close(index);
-	} catch (CLuceneError &err) {
-		lucene_handle_error(index, err, "expunge delete");
-		ret = -1;
-	}
+	lucene_index_close(index);
 
 	ret2 = fts_expunge_log_read_end(&ctx);
 	if (ret < 0 || ret2 < 0)
@@ -995,6 +1017,12 @@ int lucene_index_optimize(struct lucene_index *index)
 		writer->optimize();
 	} catch (CLuceneError &err) {
 		lucene_handle_error(index, err, "IndexWriter::optimize()");
+		ret = -1;
+	}
+	try {
+		writer->close();
+	} catch (CLuceneError &err) {
+		lucene_handle_error(index, err, "IndexWriter::close()");
 		ret = -1;
 	}
 	if (writer != NULL)
@@ -1127,8 +1155,10 @@ lucene_get_query(struct lucene_index *index,
 static bool
 lucene_add_definite_query(struct lucene_index *index,
 			  ARRAY_TYPE(lucene_query) &queries,
-			  struct mail_search_arg *arg, bool and_args)
+			  struct mail_search_arg *arg,
+			  enum fts_lookup_flags flags)
 {
+	bool and_args = (flags & FTS_LOOKUP_FLAG_AND_ARGS) != 0;
 	Query *q;
 
 	if (arg->match_not && !and_args) {
@@ -1191,8 +1221,10 @@ lucene_add_definite_query(struct lucene_index *index,
 static bool
 lucene_add_maybe_query(struct lucene_index *index,
 		       ARRAY_TYPE(lucene_query) &queries,
-		       struct mail_search_arg *arg, bool and_args)
+		       struct mail_search_arg *arg,
+		       enum fts_lookup_flags flags)
 {
+	bool and_args = (flags & FTS_LOOKUP_FLAG_AND_ARGS) != 0;
 	Query *q = NULL;
 
 	if (arg->match_not) {
@@ -1235,7 +1267,6 @@ lucene_add_maybe_query(struct lucene_index *index,
 		lq->occur = BooleanClause::MUST;
 	else
 		lq->occur = BooleanClause::MUST_NOT;
-	return true;
 	return true;
 }
 
@@ -1319,7 +1350,8 @@ lucene_index_search(struct lucene_index *index,
 }
 
 int lucene_index_lookup(struct lucene_index *index,
-			struct mail_search_arg *args, bool and_args,
+			struct mail_search_arg *args,
+			enum fts_lookup_flags flags,
 			struct fts_result *result)
 {
 	struct mail_search_arg *arg;
@@ -1332,15 +1364,18 @@ int lucene_index_lookup(struct lucene_index *index,
 	bool have_definites = false;
 
 	for (arg = args; arg != NULL; arg = arg->next) {
-		if (lucene_add_definite_query(index, def_queries, arg, and_args)) {
+		if (lucene_add_definite_query(index, def_queries, arg, flags)) {
 			arg->match_always = true;
 			have_definites = true;
 		}
 	}
 
 	if (have_definites) {
+		ARRAY_TYPE(seq_range) *uids_arr =
+			(flags & FTS_LOOKUP_FLAG_NO_AUTO_FUZZY) == 0 ?
+			&result->definite_uids : &result->maybe_uids;
 		if (lucene_index_search(index, def_queries, result,
-					&result->definite_uids) < 0)
+					uids_arr) < 0)
 			return -1;
 	}
 
@@ -1356,7 +1391,7 @@ int lucene_index_lookup(struct lucene_index *index,
 	bool have_maybies = false;
 
 	for (arg = args; arg != NULL; arg = arg->next) {
-		if (lucene_add_maybe_query(index, maybe_queries, arg, and_args)) {
+		if (lucene_add_maybe_query(index, maybe_queries, arg, flags)) {
 			arg->match_always = true;
 			have_maybies = true;
 		}
@@ -1374,6 +1409,7 @@ static int
 lucene_index_search_multi(struct lucene_index *index,
 			  HASH_TABLE_TYPE(wguid_result) guids,
 			  ARRAY_TYPE(lucene_query) &queries,
+			  enum fts_lookup_flags flags,
 			  struct fts_multi_result *result)
 {
 	struct fts_score_map *score;
@@ -1421,11 +1457,14 @@ lucene_index_search_multi(struct lucene_index *index,
 				break;
 			}
 
-			if (!array_is_created(&br->definite_uids)) {
-				p_array_init(&br->definite_uids, result->pool, 32);
+			ARRAY_TYPE(seq_range) *uids_arr =
+				(flags & FTS_LOOKUP_FLAG_NO_AUTO_FUZZY) == 0 ?
+				&br->maybe_uids : &br->definite_uids;
+			if (!array_is_created(uids_arr)) {
+				p_array_init(uids_arr, result->pool, 32);
 				p_array_init(&br->scores, result->pool, 32);
 			}
-			if (seq_range_array_add(&br->definite_uids, uid)) {
+			if (seq_range_array_add(uids_arr, uid)) {
 				/* duplicate result */
 			} else {
 				score = array_append_space(&br->scores);
@@ -1443,7 +1482,8 @@ lucene_index_search_multi(struct lucene_index *index,
 
 int lucene_index_lookup_multi(struct lucene_index *index,
 			      HASH_TABLE_TYPE(wguid_result) guids,
-			      struct mail_search_arg *args, bool and_args,
+			      struct mail_search_arg *args,
+			      enum fts_lookup_flags flags,
 			      struct fts_multi_result *result)
 {
 	struct mail_search_arg *arg;
@@ -1456,15 +1496,15 @@ int lucene_index_lookup_multi(struct lucene_index *index,
 	bool have_definites = false;
 
 	for (arg = args; arg != NULL; arg = arg->next) {
-		if (lucene_add_definite_query(index, def_queries, arg, and_args)) {
+		if (lucene_add_definite_query(index, def_queries, arg, flags)) {
 			arg->match_always = true;
 			have_definites = true;
 		}
 	}
 
 	if (have_definites) {
-		if (lucene_index_search_multi(index, guids,
-					      def_queries, result) < 0)
+		if (lucene_index_search_multi(index, guids, def_queries, flags,
+					      result) < 0)
 			return -1;
 	}
 	return 0;

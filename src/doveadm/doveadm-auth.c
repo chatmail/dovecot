@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -48,14 +48,14 @@ cmd_user_input(struct auth_master_connection *conn,
 {
 	const char *lookup_name = userdb ? "userdb lookup" : "passdb lookup";
 	pool_t pool;
-	const char *username, *const *fields, *p;
+	const char *updated_username = NULL, *const *fields, *p;
 	int ret;
 
 	pool = pool_alloconly_create("auth master lookup", 1024);
 
 	if (userdb) {
 		ret = auth_master_user_lookup(conn, input->username, &input->info,
-					      pool, &username, &fields);
+					      pool, &updated_username, &fields);
 	} else {
 		ret = auth_master_pass_lookup(conn, input->username, &input->info,
 					      pool, &fields);
@@ -67,6 +67,7 @@ cmd_user_input(struct auth_master_connection *conn,
 			i_error("%s failed for %s: %s", lookup_name,
 				input->username, fields[0]);
 		}
+		ret = -1;
 	} else if (ret == 0) {
 		fprintf(show_field == NULL ? stdout : stderr,
 			"%s: user %s doesn't exist\n", lookup_name,
@@ -82,6 +83,8 @@ cmd_user_input(struct auth_master_connection *conn,
 	} else {
 		printf("%s: %s\n", userdb ? "userdb" : "passdb", input->username);
 
+		if (updated_username != NULL)
+			printf("  %-10s: %s\n", "user", updated_username);
 		for (; *fields; fields++) {
 			p = strchr(*fields, '=');
 			if (p == NULL)
@@ -388,6 +391,8 @@ static int cmd_user_mail_input(struct mail_storage_service_ctx *storage_service,
 		return 0;
 	}
 
+	if (strcmp(input->username, user->username) != 0)
+		cmd_user_mail_input_field("user", user->username, show_field);
 	cmd_user_mail_input_field("uid", user->set->mail_uid, show_field);
 	cmd_user_mail_input_field("gid", user->set->mail_gid, show_field);
 	cmd_user_mail_input_field("home", user->set->mail_home, show_field);

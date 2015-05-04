@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -258,7 +258,7 @@ static int
 uri_parse_dec_octet(struct uri_parser *parser, string_t *literal,
 		    uint8_t *octet_r)
 {
-	uint8_t octet = 0;
+	unsigned int octet = 0;
 	int count = 0;
 
 	/* RFC 3986:
@@ -271,10 +271,8 @@ uri_parse_dec_octet(struct uri_parser *parser, string_t *literal,
 	 */
 
 	while (parser->cur < parser->end && i_isdigit(*parser->cur)) {
-		uint8_t prev = octet;
-
 		octet = octet * 10 + (parser->cur[0] - '0');
-		if (octet < prev)
+		if (octet > 255)
 			return -1;
 
 		if (literal != NULL)
@@ -479,7 +477,7 @@ static int uri_parse_host(struct uri_parser *parser, struct uri_authority *auth)
 
 static int uri_parse_port(struct uri_parser *parser, struct uri_authority *auth)
 {
-	in_port_t port = 0;
+	unsigned long port = 0;
 	int count = 0;
 
 	/* RFC 3986:
@@ -488,10 +486,8 @@ static int uri_parse_port(struct uri_parser *parser, struct uri_authority *auth)
 	 */
 
 	while (parser->cur < parser->end && i_isdigit(*parser->cur)) {
-		in_port_t prev = port;
-
-		port = port * 10 + (in_port_t)(parser->cur[0] - '0');
-		if (port < prev) {
+		port = port * 10 + (parser->cur[0] - '0');
+		if (port > (in_port_t)-1) {
 			parser->error = "Port number is too high";
 			return -1;
 		}
@@ -663,8 +659,11 @@ int uri_parse_path(struct uri_parser *parser,
 			return -1;
 	}
 
+	*path_r = NULL;
+	*relative_r = relative;
+
 	if (parser->cur == pbegin) {
-		/* path part of URI is missing */
+		/* path part of URI is empty */
 		return 0;
 	}
 
@@ -675,7 +674,6 @@ int uri_parse_path(struct uri_parser *parser,
 	}
 	array_append_zero(&segments);
 	*path_r = array_get(&segments, &count);
-	*relative_r = relative;
 	return 1;
 }
 

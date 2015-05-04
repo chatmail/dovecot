@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -119,8 +119,7 @@ static void director_state_changed(struct director *dir)
 	ARRAY(struct director_request *) new_requests;
 	bool ret;
 
-	if (!dir->ring_synced ||
-	    mail_host_get_by_hash(dir->mail_hosts, 0) == NULL)
+	if (!dir->ring_synced || !mail_hosts_have_usable(dir->mail_hosts))
 		return;
 
 	/* if there are any pending client requests, finish them now */
@@ -136,7 +135,7 @@ static void director_state_changed(struct director *dir)
 	array_clear(&dir->pending_requests);
 	array_append_array(&dir->pending_requests, &new_requests);
 
-	if (dir->to_request != NULL)
+	if (dir->to_request != NULL && array_count(&new_requests) == 0)
 		timeout_remove(&dir->to_request);
 }
 

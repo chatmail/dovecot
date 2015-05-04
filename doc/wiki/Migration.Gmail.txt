@@ -14,12 +14,36 @@ there are a few things different with Gmail compared to other IMAP servers:
    will copy the message to multiple folders and each instance will use up
    quota. There's currently no easy fix for this, although there are some
    future plans to optionally not count message copies towards quota.
+    * Even though the quota is duplicated, it doesn't mean that the storage
+      usage has to be duplicated. Use the dsync -v parameter to avoid this. See
+      http://hg.dovecot.org/dovecot-2.2/rev/39d00448490f
  * Gmail has virtual folders: "All Mail", "Starred" and "Important". From
-   migration point of view this means that the migration should skip these
-   folders, since their mails are in other folders anyway. With v2.2.3+ you can
-   tell dsync to skip these folders:'doveadm sync -x '\All' -x '\Flagged' -x
+   migration point of view this means that the migration should skip most of
+   these folders, since their mails are in other folders anyway. With v2.2.3+
+   you can tell dsync to skip these folders:'doveadm sync -x '\Flagged' -x
    '\Important'' - by using the \flag parameters dsync finds the folders by
    their SPECIAL-USE flag rather than their name (which may be different for
    different user depending on their language).
+    * The "All Mail" folder actually contains also "archived mails" that don't
+      exist in any other folder. These mails need to be migrated.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+GMail Migration Feature (v2.2.16+)
+----------------------------------
+
+There's a new 'imapc_features=gmail-migration' setting that helps with this
+migration. It will:
+
+ * Set the pop3_deleted_flag to mails that no longer exist in POP3
+ * Return POP3 UIDL in GMail format so dsync can preserve it.
+ * Add a new $GmailHaveLabels keyword to mails in the \All mailbox, which means
+   those mails are not archived. You probably don't want to migrate these
+   mails.
+
+For example use a command line:
+
+---%<-------------------------------------------------------------------------
+doveadm backup -a 'virtual/All' -F '-$GmailHaveLabels' -x '\Flagged' -x
+'\Important' -R -u user@domain imapc:
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2015-03-06 04:43)

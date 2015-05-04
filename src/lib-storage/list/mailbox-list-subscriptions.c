@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -61,8 +61,7 @@ mailbox_list_subscription_fill_one(struct mailbox_list *list,
 	/* When listing shared namespace's subscriptions, we need to
 	   autocreate all the visible child namespaces. their subscriptions
 	   are listed later. */
-	if (ns != NULL && ns->type == MAIL_NAMESPACE_TYPE_SHARED &&
-	    (ns->flags & NAMESPACE_FLAG_AUTOCREATED) == 0) {
+	if (ns != NULL && mail_namespace_is_shared_user_root(ns)) {
 		/* we'll need to get the namespace autocreated.
 		   one easy way is to just ask to join a reference and
 		   pattern */
@@ -203,7 +202,6 @@ void mailbox_list_subscriptions_fill(struct mailbox_list_iterate_context *ctx,
 {
 	struct mailbox_list_iter_update_context update_ctx;
 	struct mailbox_tree_iterate_context *iter;
-	struct mailbox_node *node;
 	const char *name;
 
 	memset(&update_ctx, 0, sizeof(update_ctx));
@@ -219,7 +217,7 @@ void mailbox_list_subscriptions_fill(struct mailbox_list_iterate_context *ctx,
 
 	iter = mailbox_tree_iterate_init(ctx->list->subscriptions, NULL,
 					 MAILBOX_SUBSCRIBED);
-	while ((node = mailbox_tree_iterate_next(iter, &name)) != NULL)
+	while (mailbox_tree_iterate_next(iter, &name) != NULL)
 		mailbox_list_iter_update(&update_ctx, name);
 	mailbox_tree_iterate_deinit(&iter);
 }

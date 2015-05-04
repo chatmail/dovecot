@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -229,7 +229,7 @@ imap_sync_init(struct client *client, struct mailbox *box,
 
 	ctx->sync_ctx = mailbox_sync_init(box, flags);
 	ctx->t = mailbox_transaction_begin(box, 0);
-	ctx->mail = mail_alloc(ctx->t, MAIL_FETCH_FLAGS, 0);
+	ctx->mail = mail_alloc(ctx->t, MAIL_FETCH_FLAGS, NULL);
 	ctx->messages_count = client->messages_count;
 	i_array_init(&ctx->tmp_keywords, client->keywords.announce_count + 8);
 
@@ -415,8 +415,7 @@ static int imap_sync_send_flags(struct imap_sync_context *ctx, string_t *str)
 	str_printfa(str, "* %u FETCH (", ctx->seq);
 	if (ctx->imap_flags & IMAP_SYNC_FLAG_SEND_UID)
 		str_printfa(str, "UID %u ", ctx->mail->uid);
-	if ((mailbox_get_enabled_features(ctx->box) &
-	     MAILBOX_FEATURE_CONDSTORE) != 0 &&
+	if ((ctx->client->enabled_features & MAILBOX_FEATURE_CONDSTORE) != 0 &&
 	    !ctx->client->nonpermanent_modseqs) {
 		imap_sync_add_modseq(ctx, str);
 		str_append_c(str, ' ');

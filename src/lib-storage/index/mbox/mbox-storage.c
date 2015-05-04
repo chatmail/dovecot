@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -53,7 +53,7 @@ unsigned int mbox_hide_headers_count = N_ELEMENTS(mbox_hide_headers);
 const char *mbox_save_drop_headers[] = {
 	"Content-Length",
 	"Status",
-	"X-Delivery-ID"
+	"X-Delivery-ID",
 	"X-IMAP",
 	"X-IMAPbase",
 	"X-Keywords",
@@ -72,9 +72,9 @@ void mbox_set_syscall_error(struct mbox_mailbox *mbox, const char *function)
 {
 	i_assert(function != NULL);
 
-	if (ENOSPACE(errno)) {
+	if (ENOQUOTA(errno)) {
 		mail_storage_set_error(&mbox->storage->storage,
-			MAIL_ERROR_NOSPACE, MAIL_ERRSTR_NO_SPACE);
+			MAIL_ERROR_NOQUOTA, MAIL_ERRSTR_NO_QUOTA);
 	} else {
 		const char *toobig_error = errno != EFBIG ? "" :
 			" (process was started with ulimit -f limit)";
@@ -618,9 +618,16 @@ static void mbox_mailbox_close(struct mailbox *box)
 static int
 mbox_mailbox_get_guid(struct mbox_mailbox *mbox, guid_128_t guid_r)
 {
+	const char *errstr;
+
 	if (mail_index_is_in_memory(mbox->box.index)) {
-		mail_storage_set_error(mbox->box.storage, MAIL_ERROR_NOTPOSSIBLE,
-			"Mailbox GUIDs are not permanent without index files");
+		errstr = "Mailbox GUIDs are not permanent without index files";
+		if (mbox->storage->set->mbox_min_index_size != 0) {
+			errstr = t_strconcat(errstr,
+				" (mbox_min_index_size is non-zero)", NULL);
+		}
+		mail_storage_set_error(mbox->box.storage,
+				       MAIL_ERROR_NOTPOSSIBLE, errstr);
 		return -1;
 	}
 	if (mbox_sync_header_refresh(mbox) < 0)

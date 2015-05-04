@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -27,6 +27,7 @@ enum pop3c_client_state {
 	POP3C_CLIENT_STATE_DISCONNECTED = 0,
 	/* Trying to connect */
 	POP3C_CLIENT_STATE_CONNECTING,
+	POP3C_CLIENT_STATE_STARTTLS,
 	/* Connected, trying to authenticate */
 	POP3C_CLIENT_STATE_USER,
 	POP3C_CLIENT_STATE_AUTH,
@@ -67,6 +68,8 @@ struct pop3c_client {
 static void
 pop3c_dns_callback(const struct dns_lookup_result *result,
 		   struct pop3c_client *client);
+static void pop3c_client_connect_ip(struct pop3c_client *client);
+static int pop3c_client_ssl_init(struct pop3c_client *client);
 
 struct pop3c_client *
 pop3c_client_init(const struct pop3c_client_settings *set)
@@ -196,6 +199,39 @@ static void pop3c_client_timeout(struct pop3c_client *client)
 	pop3c_client_disconnect(client);
 }
 
+static int pop3c_client_dns_lookup(struct pop3c_client *client)
+{
+	struct dns_lookup_settings dns_set;
+
+	i_assert(client->state == POP3C_CLIENT_STATE_CONNECTING);
+
+	if (client->set.dns_client_socket_path[0] == '\0') {
+		struct ip_addr *ips;
+		unsigned int ips_count;
+		int ret;
+
+		ret = net_gethostbyname(client->set.host, &ips, &ips_count);
+		if (ret != 0) {
+			i_error("pop3c(%s): net_gethostbyname() failed: %s",
+				client->set.host, net_gethosterror(ret));
+			return -1;
+		}
+		i_assert(ips_count > 0);
+		client->ip = ips[0];
+		pop3c_client_connect_ip(client);
+	} else {
+		memset(&dns_set, 0, sizeof(dns_set));
+		dns_set.dns_client_socket_path =
+			client->set.dns_client_socket_path;
+		dns_set.timeout_msecs = POP3C_DNS_LOOKUP_TIMEOUT_MSECS;
+		if (dns_lookup(client->set.host, &dns_set,
+			       pop3c_dns_callback, client,
+			       &client->dns_lookup) < 0)
+			return -1;
+	}
+	return 0;
+}
+
 void pop3c_client_run(struct pop3c_client *client)
 {
 	struct ioloop *ioloop, *prev_ioloop = current_ioloop;
@@ -210,16 +246,7 @@ void pop3c_client_run(struct pop3c_client *client)
 	if (client->ip.family == 0) {
 		/* we're connecting, start DNS lookup after our ioloop
 		   is created */
-		struct dns_lookup_settings dns_set;
-
-		i_assert(client->state == POP3C_CLIENT_STATE_CONNECTING);
-		memset(&dns_set, 0, sizeof(dns_set));
-		dns_set.dns_client_socket_path =
-			client->set.dns_client_socket_path;
-		dns_set.timeout_msecs = POP3C_DNS_LOOKUP_TIMEOUT_MSECS;
-		if (dns_lookup(client->set.host, &dns_set,
-			       pop3c_dns_callback, client,
-			       &client->dns_lookup) < 0)
+		if (pop3c_client_dns_lookup(client) < 0)
 			failed = TRUE;
 	} else if (client->to == NULL) {
 		client->to = timeout_add(POP3C_COMMAND_TIMEOUT_MSECS,
@@ -240,6 +267,12 @@ void pop3c_client_run(struct pop3c_client *client)
 	pop3c_client_ioloop_changed(client);
 	io_loop_set_current(ioloop);
 	io_loop_destroy(&ioloop);
+}
+
+static void pop3c_client_starttls(struct pop3c_client *client)
+{
+	o_stream_nsend_str(client->output, "STLS\r\n");
+	client->state = POP3C_CLIENT_STATE_STARTTLS;
 }
 
 static void pop3c_client_authenticate1(struct pop3c_client *client)
@@ -314,7 +347,19 @@ pop3c_client_prelogin_input_line(struct pop3c_client *client, const char *line)
 				client->set.host, line);
 			return -1;
 		}
-		pop3c_client_authenticate1(client);
+		if (client->set.ssl_mode == POP3C_CLIENT_SSL_MODE_STARTTLS)
+			pop3c_client_starttls(client);
+		else
+			pop3c_client_authenticate1(client);
+		break;
+	case POP3C_CLIENT_STATE_STARTTLS:
+		if (!success) {
+			i_error("pop3c(%s): STLS failed: %s",
+				client->set.host, line);
+			return -1;
+		}
+		if (pop3c_client_ssl_init(client) < 0)
+			pop3c_client_disconnect(client);
 		break;
 	case POP3C_CLIENT_STATE_USER:
 		if (!success) {
@@ -441,7 +486,6 @@ static int pop3c_client_ssl_handshaked(const char **error_r, void *context)
 static int pop3c_client_ssl_init(struct pop3c_client *client)
 {
 	struct ssl_iostream_settings ssl_set;
-	struct stat st;
 	const char *error;
 
 	if (client->ssl_ctx == NULL) {
@@ -485,8 +529,7 @@ static int pop3c_client_ssl_init(struct pop3c_client *client)
 		return -1;
 	}
 
-	if (*client->set.rawlog_dir != '\0' &&
-	    stat(client->set.rawlog_dir, &st) == 0) {
+	if (*client->set.rawlog_dir != '\0') {
 		iostream_rawlog_create(client->set.rawlog_dir,
 				       &client->input, &client->output);
 	}
@@ -517,8 +560,6 @@ static void pop3c_client_connected(struct pop3c_client *client)
 
 static void pop3c_client_connect_ip(struct pop3c_client *client)
 {
-	struct stat st;
-
 	client->fd = net_connect_ip(&client->ip, client->set.port, NULL);
 	if (client->fd == -1) {
 		pop3c_client_disconnect(client);
@@ -532,8 +573,7 @@ static void pop3c_client_connect_ip(struct pop3c_client *client)
 	o_stream_set_no_error_handling(client->output, TRUE);
 
 	if (*client->set.rawlog_dir != '\0' &&
-	    client->set.ssl_mode != POP3C_CLIENT_SSL_MODE_IMMEDIATE &&
-	    stat(client->set.rawlog_dir, &st) == 0) {
+	    client->set.ssl_mode != POP3C_CLIENT_SSL_MODE_IMMEDIATE) {
 		iostream_rawlog_create(client->set.rawlog_dir,
 				       &client->input, &client->output);
 	}

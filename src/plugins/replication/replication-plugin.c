@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -147,7 +147,7 @@ static int replication_notify_sync(struct mail_user *user)
 		/* + | - */
 		ret = read(fd, buf, sizeof(buf));
 		if (ret < 0) {
-			if (ret != EINTR) {
+			if (errno != EINTR) {
 				i_error("read(%s) failed: %m",
 					ruser->socket_path);
 			} else {
@@ -228,13 +228,20 @@ static void replication_mail_save(void *txn, struct mail *mail ATTR_UNUSED)
 	ctx->new_messages = TRUE;
 }
 
-static void replication_mail_copy(void *txn, struct mail *src ATTR_UNUSED,
-				  struct mail *dst ATTR_UNUSED)
+static void replication_mail_copy(void *txn, struct mail *src,
+				  struct mail *dst)
 {
 	struct replication_mail_txn_context *ctx =
 		(struct replication_mail_txn_context *)txn;
 
-	ctx->new_messages = TRUE;
+	if (src->box->storage != dst->box->storage) {
+		/* copy between storages, e.g. new mail delivery */
+		ctx->new_messages = TRUE;
+	} else {
+		/* copy within storage, which isn't as high priority since the
+		   mail already exists. and especially copies to Trash or to
+		   lazy-expunge namespace is pretty low priority. */
+	}
 }
 
 static void
@@ -306,6 +313,10 @@ static void replication_user_created(struct mail_user *user)
 	struct mail_user_vfuncs *v = user->vlast;
 	struct replication_user *ruser;
 	const char *value;
+
+	value = mail_user_plugin_getenv(user, "mail_replica");
+	if (value == NULL || value[0] == '\0')
+		return;
 
 	ruser = p_new(user->pool, struct replication_user, 1);
 	ruser->module_ctx.super = *v;

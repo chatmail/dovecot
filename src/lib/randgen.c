@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "randgen.h"
@@ -53,7 +53,7 @@ void random_init(void)
 	}
 
 	random_fill(&seed, sizeof(seed));
-	srand(seed);
+	rand_set_seed(seed);
 
 	fd_close_on_exec(urandom_fd, TRUE);
 }
@@ -102,7 +102,7 @@ void random_init(void)
 	}
 
 	random_fill(&seed, sizeof(seed));
-	srand(seed);
+	rand_set_seed(seed);
 }
 
 void random_deinit(void) {}

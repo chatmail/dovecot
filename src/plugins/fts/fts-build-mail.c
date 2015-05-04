@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -129,7 +129,7 @@ static void fts_build_mail_header(struct fts_mail_build_context *ctx,
 		addr = message_address_parse(pool_datastack_create(),
 					     hdr->full_value,
 					     hdr->full_value_len,
-					     UINT_MAX, TRUE);
+					     UINT_MAX, FALSE);
 		str = t_str_new(hdr->full_value_len);
 		message_address_write(str, addr);
 
@@ -278,8 +278,14 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 	bool binary_body;
 	int ret;
 
-	if (mail_get_stream(mail, NULL, NULL, &input) < 0)
-		return mail->expunged ? 0 : -1;
+	if (mail_get_stream(mail, NULL, NULL, &input) < 0) {
+		if (mail->expunged)
+			return 0;
+		i_error("Failed to read mailbox %s mail UID=%u stream: %s",
+			mailbox_get_vname(mail->box), mail->uid,
+			mailbox_get_last_error(mail->box, NULL));
+		return -1;
+	}
 
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.update_ctx = update_ctx;

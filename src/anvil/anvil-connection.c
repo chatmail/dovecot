@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "llist.h"
@@ -32,7 +32,7 @@ struct anvil_connection {
 	unsigned int fifo:1;
 };
 
-struct anvil_connection *anvil_connections = NULL;
+static struct anvil_connection *anvil_connections = NULL;
 
 static const char *const *
 anvil_connection_next_line(struct anvil_connection *conn)

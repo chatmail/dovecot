@@ -73,6 +73,12 @@ service replicator {
 }
 ---%<-------------------------------------------------------------------------
 
+You can configure how many dsyncs can be run in parallel (10 by default):
+
+---%<-------------------------------------------------------------------------
+replication_max_conns = 10
+---%<-------------------------------------------------------------------------
+
 dsync over TCP connections (v2.2+)
 ----------------------------------
 
@@ -201,4 +207,4 @@ Random things to remember:
     * v2.2.6+: If you're having trouble, verify that 'dovecot --hostdomain'
       returns different values for the servers.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

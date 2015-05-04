@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -21,6 +21,7 @@ struct temp_ostream {
 
 	struct istream *dupstream;
 	uoff_t dupstream_offset, dupstream_start_offset;
+	char *name;
 
 	buffer_t *buf;
 	int fd;
@@ -39,6 +40,7 @@ o_stream_temp_close(struct iostream_private *stream,
 	if (tstream->buf != NULL)
 		buffer_free(&tstream->buf);
 	i_free(tstream->temp_path_prefix);
+	i_free(tstream->name);
 }
 
 static int o_stream_temp_move_to_fd(struct temp_ostream *tstream)
@@ -129,8 +131,7 @@ static int o_stream_temp_dup_cancel(struct temp_ostream *tstream)
 
 	input = i_stream_create_limit(tstream->dupstream, size);
 	do {
-		ret = io_stream_copy(&tstream->ostream.ostream,
-				     input, IO_BLOCK_SIZE);
+		ret = io_stream_copy(&tstream->ostream.ostream, input);
 	} while (input->v_offset < tstream->dupstream_offset && ret > 0);
 	if (ret < 0 && tstream->ostream.ostream.stream_errno == 0) {
 		i_assert(input->stream_errno != 0);
@@ -187,8 +188,7 @@ static off_t o_stream_temp_send_istream(struct ostream_private *_outstream,
 			return -1;
 		outstream->flags &= ~IOSTREAM_TEMP_FLAG_TRY_FD_DUP;
 	}
-	return io_stream_copy(&outstream->ostream.ostream,
-			      instream, IO_BLOCK_SIZE);
+	return io_stream_copy(&outstream->ostream.ostream, instream);
 }
 
 static int
@@ -216,6 +216,13 @@ o_stream_temp_write_at(struct ostream_private *stream,
 struct ostream *iostream_temp_create(const char *temp_path_prefix,
 				     enum iostream_temp_flags flags)
 {
+	return iostream_temp_create_named(temp_path_prefix, flags, "");
+}
+
+struct ostream *iostream_temp_create_named(const char *temp_path_prefix,
+					   enum iostream_temp_flags flags,
+					   const char *name)
+{
 	struct temp_ostream *tstream;
 	struct ostream *output;
 
@@ -230,7 +237,14 @@ struct ostream *iostream_temp_create(const char *temp_path_prefix,
 	tstream->fd = -1;
 
 	output = o_stream_create(&tstream->ostream, NULL, -1);
-	o_stream_set_name(output, "(temp iostream)");
+	tstream->name = i_strdup(name);
+	if (name[0] == '\0') {
+		o_stream_set_name(output, t_strdup_printf(
+			"(temp iostream in %s)", temp_path_prefix));
+	} else {
+		o_stream_set_name(output, t_strdup_printf(
+			"(temp iostream in %s for %s)", temp_path_prefix, name));
+	}
 	return output;
 }
 
@@ -246,7 +260,13 @@ struct istream *iostream_temp_finish(struct ostream **output,
 		(struct temp_ostream *)(*output)->real_stream;
 	struct istream *input, *input2;
 	uoff_t abs_offset, size;
+	const char *for_path;
 	int fd;
+
+	if (tstream->name[0] == '\0')
+		for_path = "";
+	else
+		for_path = t_strdup_printf(" for %s", tstream->name);
 
 	if (tstream->dupstream != NULL && !tstream->dupstream->closed) {
 		abs_offset = tstream->dupstream->real_stream->abs_start_offset +
@@ -255,32 +275,32 @@ struct istream *iostream_temp_finish(struct ostream **output,
 			tstream->dupstream_start_offset;
 		fd = dup(i_stream_get_fd(tstream->dupstream));
 		if (fd == -1)
-			input = i_stream_create_error(errno);
+			input = i_stream_create_error_str(errno, "dup() failed: %m");
 		else {
-			input2 = i_stream_create_fd(fd, max_buffer_size, TRUE);
+			input2 = i_stream_create_fd_autoclose(&fd, max_buffer_size);
 			i_stream_seek(input2, abs_offset);
 			input = i_stream_create_limit(input2, size);
 			i_stream_unref(&input2);
 		}
 		i_stream_set_name(input, t_strdup_printf(
-			"(Temp file in %s, from %s)", tstream->temp_path_prefix,
-			i_stream_get_name(tstream->dupstream)));
+			"(Temp file in %s%s, from %s)", tstream->temp_path_prefix,
+			for_path, i_stream_get_name(tstream->dupstream)));
 		i_stream_unref(&tstream->dupstream);
 	} else if (tstream->dupstream != NULL) {
 		/* return the original failed stream. */
 		input = tstream->dupstream;
 	} else if (tstream->fd != -1) {
-		input = i_stream_create_fd(tstream->fd, max_buffer_size, TRUE);
+		int fd = tstream->fd;
+		input = i_stream_create_fd_autoclose(&tstream->fd, max_buffer_size);
 		i_stream_set_name(input, t_strdup_printf(
-			"(Temp file fd %d in %s, %"PRIuUOFF_T" bytes)",
-			tstream->fd, tstream->temp_path_prefix, tstream->fd_size));
-		tstream->fd = -1;
+			"(Temp file fd %d in %s%s, %"PRIuUOFF_T" bytes)",
+			fd, tstream->temp_path_prefix, for_path, tstream->fd_size));
 	} else {
 		input = i_stream_create_from_data(tstream->buf->data,
 						  tstream->buf->used);
 		i_stream_set_name(input, t_strdup_printf(
-			"(Temp buffer in %s, %"PRIuSIZE_T" bytes)",
-			tstream->temp_path_prefix, tstream->buf->used));
+			"(Temp buffer in %s%s, %"PRIuSIZE_T" bytes)",
+			tstream->temp_path_prefix, for_path, tstream->buf->used));
 		i_stream_add_destroy_callback(input, iostream_temp_buf_destroyed,
 					      tstream->buf);
 		tstream->buf = NULL;

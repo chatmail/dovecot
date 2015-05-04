@@ -231,15 +231,15 @@ It's not currently possible to safely remove existing keywords.
 Extensions
 ----------
 
-The extensions only specify their wanted size and alignmentation, the index
-file syncing code is free to assign any offset inside the record to them. The
+The extensions only specify their wanted size and alignment, the index file
+syncing code is free to assign any offset inside the record to them. The
 extensions may be reordered at any time.
 
 Dovecot's current extension ordering code works pretty well, but it's not
-perfect. If the extension size isn't the same as its alignmentation, it may
-create larger records than necessary. This will be fixed later.
+perfect. If the extension size isn't the same as its alignment, it may create
+larger records than necessary. This will be fixed later.
 
-The records size is always divisible by the maximum alignmentation requirement.
-This isn't strictly necessary either, so it could be fixed later as well.
+The records size is always divisible by the maximum alignment requirement. This
+isn't strictly necessary either, so it could be fixed later as well.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

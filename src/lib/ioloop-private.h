@@ -69,12 +69,15 @@ struct timeout {
 
 	struct ioloop *ioloop;
 	struct ioloop_context *ctx;
+
+	unsigned int one_shot:1;
 };
 
 struct ioloop_context_callback {
 	io_callback_t *activate;
 	io_callback_t *deactivate;
 	void *context;
+	bool activated;
 };
 
 struct ioloop_context {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mail-namespace.h"
@@ -127,7 +127,7 @@ int dsync_brain_mailbox_tree_sync_change(struct dsync_brain *brain,
 				i_debug("brain %c: Change during sync: "
 					"Mailbox GUID %s deletion conflict: %s",
 					brain->master_brain ? 'M' : 'S',
-					mailbox_get_vname(box), errstr);
+					guid_128_to_string(change->mailbox_guid), errstr);
 			}
 			brain->changes_during_sync = TRUE;
 			return ret;
@@ -146,7 +146,7 @@ int dsync_brain_mailbox_tree_sync_change(struct dsync_brain *brain,
 				i_debug("brain %c: Change during sync: "
 					"Mailbox %s mailbox_list_delete_dir conflict: %s",
 					brain->master_brain ? 'M' : 'S',
-					mailbox_get_vname(box), errstr);
+					change->full_name, errstr);
 			}
 			brain->changes_during_sync = TRUE;
 			return 0;

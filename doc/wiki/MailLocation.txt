@@ -34,7 +34,9 @@ where:
    <Mailbox Formats> [MailboxFormat.txt].
  * /path/ is the path to a directory where the mail is stored. This must be an
    absolute path, not a relative path. Even if relative paths appear to work,
-   this usage is deprecated and will likely stop working at some point.
+   this usage is deprecated and will likely stop working at some point. Do not
+   use the home directory, for reasons see <Home vs. mail directory>
+   [VirtualUsers.Home.txt]
  * /key/ = /value/ can appear zero or more times to set various optional
    parameters. Possible values for /key/ are:
     * 'INDEX' : specifies the location of <index files> [MailLocation.txt].
@@ -275,4 +277,4 @@ export USERDB_KEYS="$USERDB_KEYS namespace/user/location"
 exec env "NAMESPACE/USER/LOCATION=$location" "$@"
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

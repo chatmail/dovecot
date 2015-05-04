@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -85,11 +85,6 @@ static bool cmd_compress(struct client_command_context *cmd)
 		client_send_tagline(cmd, t_strdup_printf(
 			"NO [COMPRESSIONACTIVE] COMPRESSION=%s already enabled.",
 			t_str_ucase(zclient->handler->name)));
-		return TRUE;
-	}
-	if (client->tls_compression) {
-		client_send_tagline(cmd,
-			"NO [COMPRESSIONACTIVE] TLS compression already enabled.");
 		return TRUE;
 	}
 

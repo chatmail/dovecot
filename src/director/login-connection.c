@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -109,7 +109,7 @@ static void auth_input_line(const char *line, void *context)
 {
 	struct login_connection *conn = context;
 	struct login_host_request *request;
-	const char *const *args, *line_params, *username = NULL;
+	const char *const *args, *line_params, *username = NULL, *tag = "";
 	bool proxy = FALSE, host = FALSE;
 
 	if (line == NULL) {
@@ -142,21 +142,22 @@ static void auth_input_line(const char *line, void *context)
 			host = TRUE;
 		else if (strncmp(*args, "destuser=", 9) == 0)
 			username = *args + 9;
+		else if (strncmp(*args, "director_tag=", 13) == 0)
+			tag = *args + 13;
 		else if (strncmp(*args, "user=", 5) == 0) {
 			if (username == NULL)
 				username = *args + 5;
 		}
+	}
+	if (!proxy || host || username == NULL) {
+		login_connection_send_line(conn, line);
+		return;
 	}
 	if (*conn->dir->set->master_user_separator != '\0') {
 		/* with master user logins we still want to use only the
 		   login username */
 		username = t_strcut(username,
 				    *conn->dir->set->master_user_separator);
-	}
-
-	if (!proxy || host || username == NULL) {
-		login_connection_send_line(conn, line);
-		return;
 	}
 
 	/* we need to add the host. the lookup might be asynchronous */
@@ -166,7 +167,7 @@ static void auth_input_line(const char *line, void *context)
 	request->username = i_strdup(username);
 
 	conn->refcount++;
-	director_request(conn->dir, username, login_host_callback, request);
+	director_request(conn->dir, username, tag, login_host_callback, request);
 }
 
 struct login_connection *

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "utc-offset.h"
@@ -97,7 +97,7 @@ static int is08601_date_parse_time_offset(struct iso8601_date_parser *parser)
 	switch (parser->cur[0]) {
 	case '-':
 		tz_sign = -1;
-
+		/* fall through */
 	case '+':
 		parser->cur++;
 

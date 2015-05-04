@@ -5,6 +5,7 @@ pkglibexec_PROGRAMS = quota-status
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-index \
@@ -29,7 +30,8 @@ quota_dist_sources = \
 	quota-dirsize.c \
 	quota-maildir.c \
         quota-plugin.c \
-	quota-storage.c
+	quota-storage.c \
+	quota-util.c
 
 quota_common_objects = \
 	quota.lo \
@@ -40,6 +42,7 @@ quota_common_objects = \
 	quota-maildir.lo \
         quota-plugin.lo \
 	quota-storage.lo \
+	quota-util.lo \
 	$(RQUOTA_XDR_LO)
 
 lib10_quota_plugin_la_SOURCES = $(quota_dist_sources)
@@ -103,3 +106,22 @@ clean-generic:
 	  rm -f $(top_builddir)/src/plugins/quota/rquota.x; \
 	fi; \
 	rm -f rquota_xdr.c rquota.h
+
+test_programs = \
+	test-quota-util
+noinst_PROGRAMS = $(test_programs)
+
+test_libs = \
+	../../lib-test/libtest.la \
+	../../lib/liblib.la
+test_deps = $(noinst_LTLIBRARIES) $(test_libs)
+
+test_quota_util_SOURCES = test-quota-util.c
+test_quota_util_LDADD = quota-util.lo $(test_libs)
+test_quota_util_DEPENDENCIES = quota-util.lo $(test_deps)
+
+check: check-am check-test
+check-test: all-am
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done

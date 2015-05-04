@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -42,7 +42,7 @@ static void replicator_connect(struct replicator_context *ctx)
 	fd = doveadm_connect(ctx->socket_path);
 	net_set_nonblock(fd, FALSE);
 
-	ctx->input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	ctx->input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	replicator_send(ctx, REPLICATOR_HANDSHAKE);
 
 	alarm(5);
@@ -141,7 +141,7 @@ static void cmd_replicator_status(int argc, char *argv[])
 {
 	struct replicator_context *ctx;
 	const char *line, *const *args;
-	time_t last_fast, last_full;
+	time_t last_fast, last_full, last_success;
 
 	ctx = cmd_replicator_init(&argc, &argv, "a:", cmd_replicator_status);
 
@@ -156,6 +156,7 @@ static void cmd_replicator_status(int argc, char *argv[])
 	doveadm_print_header_simple("priority");
 	doveadm_print_header_simple("fast sync");
 	doveadm_print_header_simple("full sync");
+	doveadm_print_header_simple("success sync");
 	doveadm_print_header_simple("failed");
 
 	replicator_send(ctx, t_strdup_printf("STATUS\t%s\n",
@@ -167,11 +168,13 @@ static void cmd_replicator_status(int argc, char *argv[])
 			args = t_strsplit_tab(line);
 			if (str_array_length(args) >= 5 &&
 			    str_to_time(args[2], &last_fast) == 0 &&
-			    str_to_time(args[3], &last_full) == 0) {
+			    str_to_time(args[3], &last_full) == 0 &&
+			    str_to_time(args[5], &last_success) == 0) {
 				doveadm_print(args[0]);
 				doveadm_print(args[1]);
 				doveadm_print(time_ago(last_fast));
 				doveadm_print(time_ago(last_full));
+				doveadm_print(time_ago(last_success));
 				doveadm_print(args[4][0] == '0' ? "-" : "y");
 			}
 		} T_END;

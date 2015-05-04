@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -146,9 +146,8 @@ int mail_search_build(struct mail_search_register *reg,
 	*args_r = NULL;
 	*error_r = NULL;
 
-	args = mail_search_build_init();
-
 	memset(&ctx, 0, sizeof(ctx));
+	ctx.args = args = mail_search_build_init();
 	ctx.pool = args->pool;
 	ctx.reg = reg;
 	ctx.parser = parser;

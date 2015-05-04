@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -305,7 +305,7 @@ replicator_queue_import_line(struct replicator_queue *queue, const char *line)
 	struct replicator_user *user, tmp_user;
 
 	/* <user> <priority> <last update> <last fast sync> <last full sync>
-	   <last failed> <state> */
+	   <last failed> <state> <last successful sync>*/
 	args = t_strsplit_tabescaped(line);
 	if (str_array_length(args) < 7)
 		return -1;
@@ -321,6 +321,14 @@ replicator_queue_import_line(struct replicator_queue *queue, const char *line)
 		return -1;
 	tmp_user.priority = priority;
 	tmp_user.last_sync_failed = args[5][0] != '0';
+
+	if (str_array_length(args) >= 8) { 
+		if (str_to_time(args[7], &tmp_user.last_successful_sync) < 0)
+			return -1;
+	} else {
+		tmp_user.last_successful_sync = 0;
+                /* On-disk format didn't have this yet */
+	}
 
 	user = hash_table_lookup(queue->user_hash, username);
 	if (user != NULL) {
@@ -340,6 +348,7 @@ replicator_queue_import_line(struct replicator_queue *queue, const char *line)
 	user->last_update = tmp_user.last_update;
 	user->last_fast_sync = tmp_user.last_fast_sync;
 	user->last_full_sync = tmp_user.last_full_sync;
+	user->last_successful_sync = tmp_user.last_successful_sync;
 	user->last_sync_failed = tmp_user.last_sync_failed;
 	i_free(user->state);
 	user->state = i_strdup(state);
@@ -360,7 +369,7 @@ int replicator_queue_import(struct replicator_queue *queue, const char *path)
 		return -1;
 	}
 
-	input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	while ((line = i_stream_read_next_line(input)) != NULL) {
 		T_BEGIN {
 			ret = replicator_queue_import_line(queue, line);
@@ -390,7 +399,7 @@ replicator_queue_export_user(struct replicator_user *user, string_t *str)
 		    user->last_sync_failed);
 	if (user->state != NULL)
 		str_append_tabescaped(str, user->state);
-	str_append_c(str, '\n');
+	str_printfa(str, "\t%lld\n", (long long)user->last_successful_sync);
 }
 
 int replicator_queue_export(struct replicator_queue *queue, const char *path)
@@ -406,7 +415,7 @@ int replicator_queue_export(struct replicator_queue *queue, const char *path)
 		i_error("creat(%s) failed: %m", path);
 		return -1;
 	}
-	output = o_stream_create_fd_file(fd, 0, TRUE);
+	output = o_stream_create_fd_file_autoclose(&fd, 0);
 	o_stream_cork(output);
 
 	str = t_str_new(128);

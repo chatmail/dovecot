@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -24,6 +24,7 @@ const struct imapc_capability_name imapc_capability_names[] = {
 	{ "CONDSTORE", IMAPC_CAPABILITY_CONDSTORE },
 	{ "NAMESPACE", IMAPC_CAPABILITY_NAMESPACE },
 	{ "UNSELECT", IMAPC_CAPABILITY_UNSELECT },
+	{ "ESEARCH", IMAPC_CAPABILITY_ESEARCH },
 
 	{ "IMAP4REV1", IMAPC_CAPABILITY_IMAP4REV1 },
 	{ NULL, 0 }
@@ -54,6 +55,7 @@ imapc_client_init(const struct imapc_client_settings *set)
 	client->set.master_user = p_strdup_empty(pool, set->master_user);
 	client->set.username = p_strdup(pool, set->username);
 	client->set.password = p_strdup(pool, set->password);
+	client->set.sasl_mechanisms = p_strdup(pool, set->sasl_mechanisms);
 	client->set.dns_client_socket_path =
 		p_strdup(pool, set->dns_client_socket_path);
 	client->set.temp_path_prefix =
@@ -65,6 +67,14 @@ imapc_client_init(const struct imapc_client_settings *set)
 		IMAPC_DEFAULT_CONNECT_TIMEOUT_MSECS;
 	client->set.cmd_timeout_msecs = set->cmd_timeout_msecs != 0 ?
 		set->cmd_timeout_msecs : IMAPC_DEFAULT_COMMAND_TIMEOUT_MSECS;
+	client->set.throttle_set = set->throttle_set;
+
+	if (client->set.throttle_set.init_msecs == 0)
+		client->set.throttle_set.init_msecs = IMAPC_THROTTLE_DEFAULT_INIT_MSECS;
+	if (client->set.throttle_set.max_msecs == 0)
+		client->set.throttle_set.max_msecs = IMAPC_THROTTLE_DEFAULT_MAX_MSECS;
+	if (client->set.throttle_set.shrink_min_msecs == 0)
+		client->set.throttle_set.shrink_min_msecs = IMAPC_THROTTLE_DEFAULT_SHRINK_MIN_MSECS;
 
 	if (set->ssl_mode != IMAPC_CLIENT_SSL_MODE_NONE) {
 		client->set.ssl_mode = set->ssl_mode;
@@ -411,6 +421,7 @@ imapc_client_get_capabilities(struct imapc_client *client)
 	}
 
 	/* fallback to whatever exists (there always exists one) */
+	i_assert(conn != NULL);
 	return imapc_connection_get_capabilities(conn);
 }
 

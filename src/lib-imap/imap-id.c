@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -26,9 +26,9 @@ static const char *imap_id_get_uname(const char *key)
 		}
 	}
 
-	if (strcmp(key, "os") == 0)
+	if (strcasecmp(key, "os") == 0)
 		return utsname_result.sysname;
-	if (strcmp(key, "os-version") == 0)
+	if (strcasecmp(key, "os-version") == 0)
 		return utsname_result.release;
 	return NULL;
 }

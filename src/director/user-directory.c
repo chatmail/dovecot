@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -328,7 +328,7 @@ struct user *user_directory_iter_next(struct user_directory_iter *iter)
 
 	user = iter->pos;
 	if (user == NULL)
-		return FALSE;
+		return NULL;
 
 	iter->pos = user->next;
 	return user;

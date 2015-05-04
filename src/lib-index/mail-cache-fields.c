@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -232,6 +232,15 @@ mail_cache_header_fields_get_offset(struct mail_cache *cache,
 		if (next_offset == offset) {
 			mail_cache_set_corrupted(cache,
 				"next_offset in field header loops");
+			return -1;
+		}
+		/* In Dovecot v2.2+ we don't try to use any holes,
+		   so next_offset must always be larger than current offset.
+		   also makes it easier to guarantee there aren't any loops
+		   (which we don't bother doing for old files) */
+		if (next_offset < offset && cache->hdr->minor_version != 0) {
+			mail_cache_set_corrupted(cache,
+				"next_offset in field header decreases");
 			return -1;
 		}
 		offset = next_offset;
@@ -531,7 +540,7 @@ int mail_cache_header_fields_update(struct mail_cache *cache)
 		return ret;
 	}
 
-	if (mail_cache_lock(cache, FALSE) <= 0)
+	if (mail_cache_lock(cache) <= 0)
 		return -1;
 
 	T_BEGIN {

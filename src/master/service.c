@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "ioloop.h"
@@ -497,7 +497,7 @@ int services_create(const struct master_settings *set,
 {
 	pool_t pool;
 
-	pool = pool_alloconly_create("services pool", 4096);
+	pool = pool_alloconly_create("services pool", 32768);
 	if (services_create_real(set, pool, services_r, error_r) < 0) {
 		pool_unref(&pool);
 		return -1;

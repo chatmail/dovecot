@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -62,7 +62,7 @@ static pool_t dsync_ibc_pipe_get_pool(struct dsync_ibc_pipe *pipe)
 
 	pools = array_get_modifiable(&pipe->pools, &count);
 	if (count == 0)
-		return pool_alloconly_create("pipe item pool", 1024);
+		return pool_alloconly_create(MEMPOOL_GROWING"pipe item pool", 1024);
 
 	ret = pools[count-1];
 	array_delete(&pipe->pools, count-1, 1);
@@ -167,10 +167,13 @@ dsync_ibc_pipe_send_handshake(struct dsync_ibc *ibc,
 	item->u.set.sync_ns_prefixes =
 		p_strdup(item->pool, set->sync_ns_prefixes);
 	item->u.set.sync_box = p_strdup(item->pool, set->sync_box);
+	item->u.set.virtual_all_box = p_strdup(item->pool, set->virtual_all_box);
 	item->u.set.exclude_mailboxes = set->exclude_mailboxes == NULL ? NULL :
 		p_strarray_dup(item->pool, set->exclude_mailboxes);
 	memcpy(item->u.set.sync_box_guid, set->sync_box_guid,
 	       sizeof(item->u.set.sync_box_guid));
+	item->u.set.sync_since_timestamp = set->sync_since_timestamp;
+	item->u.set.sync_flags = p_strdup(item->pool, set->sync_flags);
 }
 
 static enum dsync_ibc_recv_ret

@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #define _GNU_SOURCE
 #include "lib.h"
@@ -61,6 +61,7 @@ static bool inotify_input_more(struct ioloop *ioloop)
 			break;
 
 		event = (struct inotify_event *)(event_buf + pos);
+		i_assert(event->len < (size_t)ret);
 		pos += sizeof(*event) + event->len;
 
 		io = io_notify_fd_find(&ctx->fd_ctx, event->wd);

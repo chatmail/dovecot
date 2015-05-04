@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "buffer.h"
@@ -167,7 +167,7 @@ master_input_auth_request(struct auth_master_connection *conn, const char *args,
 			  const char **error_r)
 {
 	struct auth_request *auth_request;
-	const char *const *list, *name, *arg;
+	const char *const *list, *name, *arg, *username;
 	unsigned int id;
 
 	/* <id> <userid> [<parameters>] */
@@ -182,11 +182,7 @@ master_input_auth_request(struct auth_master_connection *conn, const char *args,
 	auth_request->id = id;
 	auth_request->master = conn;
 	auth_master_connection_ref(conn);
-
-	if (!auth_request_set_username(auth_request, list[1], error_r)) {
-		*request_r = auth_request;
-		return 0;
-	}
+	username = list[1];
 
 	for (list += 2; *list != NULL; list++) {
 		arg = strchr(*list, '=');
@@ -209,6 +205,11 @@ master_input_auth_request(struct auth_master_connection *conn, const char *args,
 	}
 
 	auth_request_init(auth_request);
+
+	if (!auth_request_set_username(auth_request, username, error_r)) {
+		*request_r = auth_request;
+		return 0;
+	}
 	*request_r = auth_request;
 	return 1;
 }
@@ -325,6 +326,10 @@ static void pass_callback_finish(struct auth_request *auth_request,
 	str = t_str_new(128);
 	switch (result) {
 	case PASSDB_RESULT_OK:
+		if (auth_request->failed || !auth_request->passdb_success) {
+			str_printfa(str, "FAIL\t%u", auth_request->id);
+			break;
+		}
 		str_printfa(str, "PASS\t%u\tuser=", auth_request->id);
 		str_append_tabescaped(str, auth_request->user);
 		if (!auth_fields_is_empty(auth_request->extra_fields)) {
@@ -434,6 +439,9 @@ master_input_pass(struct auth_master_connection *conn, const char *args)
 
 static void master_input_list_finish(struct master_list_iter_ctx *ctx)
 {
+	i_assert(ctx->conn->iter_ctx == ctx);
+
+	ctx->conn->iter_ctx = NULL;
 	ctx->conn->io = io_add(ctx->conn->fd, IO_READ, master_input, ctx->conn);
 
 	if (ctx->iter != NULL)
@@ -527,9 +535,16 @@ master_input_list(struct auth_master_connection *conn, const char *args)
 	list = t_strsplit_tab(args);
 	if (list[0] == NULL || str_to_uint(list[0], &id) < 0) {
 		i_error("BUG: Master sent broken LIST");
-		return -1;
+		return FALSE;
 	}
 	list++;
+
+	if (conn->iter_ctx != NULL) {
+		i_error("Auth client is already iterating users");
+		str = t_strdup_printf("DONE\t%u\tfail\n", id);
+		o_stream_nsend_str(conn->output, str);
+		return TRUE;
+	}
 
 	if (conn->userdb_restricted_uid != 0) {
 		i_error("Auth client doesn't have permissions to list users: %s",
@@ -586,6 +601,7 @@ master_input_list(struct auth_master_connection *conn, const char *args)
 	o_stream_set_flush_callback(conn->output, master_output_list, ctx);
 	ctx->iter = userdb_blocking_iter_init(auth_request,
 					      master_input_list_callback, ctx);
+	conn->iter_ctx = ctx;
 	return TRUE;
 }
 
@@ -765,6 +781,8 @@ void auth_master_connection_destroy(struct auth_master_connection **_conn)
 
 	DLLIST_REMOVE(&auth_master_connections, conn);
 
+	if (conn->iter_ctx != NULL)
+		master_input_list_finish(conn->iter_ctx);
 	if (conn->input != NULL)
 		i_stream_close(conn->input);
 	if (conn->output != NULL)

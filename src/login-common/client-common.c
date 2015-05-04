@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "hostpid.h"
@@ -172,6 +172,8 @@ void client_destroy(struct client *client, const char *reason)
 		last_client = client->prev;
 	DLLIST_REMOVE(&clients, client);
 
+	if (client->output != NULL)
+		o_stream_uncork(client->output);
 	if (!client->login_success && client->ssl_proxy != NULL)
 		ssl_proxy_destroy(client->ssl_proxy);
 	if (client->input != NULL)

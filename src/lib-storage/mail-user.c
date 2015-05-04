@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -11,6 +11,8 @@
 #include "strescape.h"
 #include "var-expand.h"
 #include "settings-parser.h"
+#include "iostream-ssl.h"
+#include "fs-api.h"
 #include "auth-master.h"
 #include "master-service.h"
 #include "mountpoint-list.h"
@@ -38,6 +40,11 @@ static void mail_user_deinit_base(struct mail_user *user)
 		mountpoint_list_deinit(&user->mountpoints);
 }
 
+static void mail_user_stats_fill_base(struct mail_user *user ATTR_UNUSED,
+				      struct stats *stats ATTR_UNUSED)
+{
+}
+
 struct mail_user *mail_user_alloc(const char *username,
 				  const struct setting_parser_info *set_info,
 				  const struct mail_user_settings *set)
@@ -49,7 +56,7 @@ struct mail_user *mail_user_alloc(const char *username,
 	i_assert(username != NULL);
 	i_assert(*username != '\0');
 
-	pool = pool_alloconly_create("mail user", 16*1024);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"mail user", 16*1024);
 	user = p_new(pool, struct mail_user, 1);
 	user->pool = pool;
 	user->refcount = 1;
@@ -66,6 +73,7 @@ struct mail_user *mail_user_alloc(const char *username,
 		i_panic("Settings check unexpectedly failed: %s", error);
 
 	user->v.deinit = mail_user_deinit_base;
+	user->v.stats_fill = mail_user_stats_fill_base;
 	p_array_init(&user->module_contexts, user->pool, 5);
 	return user;
 }
@@ -207,6 +215,7 @@ mail_user_var_expand_table(struct mail_user *user)
 		{ 'p', NULL, "pid" },
 		{ 'i', NULL, "uid" },
 		{ '\0', NULL, "gid" },
+		{ '\0', NULL, "session" },
 		{ '\0', NULL, "auth_user" },
 		{ '\0', NULL, "auth_username" },
 		{ '\0', NULL, "auth_domain" },
@@ -235,14 +244,15 @@ mail_user_var_expand_table(struct mail_user *user)
 	tab[7].value = my_pid;
 	tab[8].value = p_strdup(user->pool, dec2str(user->uid));
 	tab[9].value = p_strdup(user->pool, dec2str(user->gid));
+	tab[10].value = user->session_id;
 	if (user->auth_user == NULL) {
-		tab[10].value = tab[0].value;
-		tab[11].value = tab[1].value;
-		tab[12].value = tab[2].value;
+		tab[11].value = tab[0].value;
+		tab[12].value = tab[1].value;
+		tab[13].value = tab[2].value;
 	} else {
-		tab[10].value = user->auth_user;
-		tab[11].value = t_strcut(user->auth_user, '@');
-		tab[12].value = strchr(user->auth_user, '@');
+		tab[11].value = user->auth_user;
+		tab[12].value = t_strcut(user->auth_user, '@');
+		tab[13].value = strchr(user->auth_user, '@');
 	}
 
 	user->var_expand_table = tab;
@@ -513,4 +523,47 @@ mail_user_get_storage_class(struct mail_user *user, const char *name)
 		return NULL;
 	}
 	return storage;
+}
+
+struct mail_user *mail_user_dup(struct mail_user *user)
+{
+	struct mail_user *user2;
+
+	user2 = mail_user_alloc(user->username, user->set_info,
+				user->unexpanded_set);
+	if (user->_home != NULL)
+		mail_user_set_home(user2, user->_home);
+	mail_user_set_vars(user2, user->service,
+			   user->local_ip, user->remote_ip);
+	user2->uid = user->uid;
+	user2->gid = user->gid;
+	user2->anonymous = user->anonymous;
+	user2->admin = user->admin;
+	user2->auth_token = p_strdup(user2->pool, user->auth_token);
+	user2->auth_user = p_strdup(user2->pool, user->auth_user);
+	user2->session_id = p_strdup(user2->pool, user->session_id);
+	return user2;
+}
+
+void mail_user_init_fs_settings(struct mail_user *user,
+				struct fs_settings *fs_set,
+				struct ssl_iostream_settings *ssl_set)
+{
+	const struct mail_storage_settings *mail_set =
+		mail_user_set_get_storage_set(user);
+
+	fs_set->username = user->username;
+	fs_set->session_id = user->session_id;
+	fs_set->base_dir = user->set->base_dir;
+	fs_set->temp_dir = user->set->mail_temp_dir;
+	fs_set->debug = user->mail_debug;
+
+	fs_set->ssl_client_set = ssl_set;
+	ssl_set->ca_dir = mail_set->ssl_client_ca_dir;
+	ssl_set->ca_file = mail_set->ssl_client_ca_file;
+}
+
+void mail_user_stats_fill(struct mail_user *user, struct stats *stats)
+{
+	user->v.stats_fill(user, stats);
 }

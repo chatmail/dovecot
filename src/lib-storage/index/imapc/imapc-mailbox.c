@@ -1,12 +1,14 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
 #include "imap-arg.h"
+#include "imap-seqset.h"
 #include "imap-util.h"
 #include "imapc-client.h"
 #include "imapc-mail.h"
 #include "imapc-msgmap.h"
+#include "imapc-search.h"
 #include "imapc-sync.h"
 #include "imapc-storage.h"
 
@@ -46,11 +48,20 @@ static void imapc_mailbox_init_delayed_trans(struct imapc_mailbox *mbox)
 	if (mbox->delayed_sync_trans != NULL)
 		return;
 
+	i_assert(mbox->delayed_sync_cache_view == NULL);
+	i_assert(mbox->delayed_sync_cache_trans == NULL);
+
 	mbox->delayed_sync_trans =
 		mail_index_transaction_begin(imapc_mailbox_get_sync_view(mbox),
 					MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
 	mbox->delayed_sync_view =
 		mail_index_transaction_open_updated_view(mbox->delayed_sync_trans);
+
+	mbox->delayed_sync_cache_view =
+		mail_cache_view_open(mbox->box.cache, mbox->delayed_sync_view);
+	mbox->delayed_sync_cache_trans =
+		mail_cache_get_transaction(mbox->delayed_sync_cache_view,
+					   mbox->delayed_sync_trans);
 }
 
 static int imapc_mailbox_commit_delayed_expunges(struct imapc_mailbox *mbox)
@@ -90,6 +101,9 @@ int imapc_mailbox_commit_delayed_trans(struct imapc_mailbox *mbox,
 		}
 		*changes_r = TRUE;
 	}
+	mbox->delayed_sync_cache_trans = NULL;
+	if (mbox->delayed_sync_cache_view != NULL)
+		mail_cache_view_close(&mbox->delayed_sync_cache_view);
 	if (mbox->sync_view != NULL)
 		mail_index_view_close(&mbox->sync_view);
 
@@ -257,13 +271,13 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 	struct imapc_fetch_request *const *fetch_requestp;
 	struct imapc_mail *const *mailp;
 	const struct imap_arg *list, *flags_list;
-	const char *atom;
+	const char *atom, *guid = NULL;
 	const struct mail_index_record *rec = NULL;
 	enum mail_flags flags;
 	uint32_t fetch_uid, uid;
 	unsigned int i, j;
 	ARRAY_TYPE(const_string) keywords = ARRAY_INIT;
-	bool seen_flags = FALSE;
+	bool seen_flags = FALSE, have_labels = FALSE;
 
 	if (mbox == NULL || rseq == 0 || !imap_arg_get_list(reply->args, &list))
 		return;
@@ -293,15 +307,31 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 					array_append(&keywords, &atom, 1);
 				}
 			}
+		} else if (strcasecmp(atom, "X-GM-MSGID") == 0 &&
+			   !mbox->initial_sync_done) {
+			if (imap_arg_get_atom(&list[i+1], &atom))
+				guid = atom;
+		} else if (strcasecmp(atom, "X-GM-LABELS") == 0 &&
+			   IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_GMAIL_MIGRATION)) {
+			if (!imap_arg_get_list(&list[i+1], &flags_list))
+				return;
+			if (flags_list[0].type != IMAP_ARG_EOL)
+				have_labels = TRUE;
 		}
 	}
-	/* FIXME: need to do something about recent flags */
-	flags &= ~MAIL_RECENT;
 
 	imapc_mailbox_init_delayed_trans(mbox);
 	if (imapc_mailbox_msgmap_update(mbox, rseq, fetch_uid,
 					&lseq, &uid) < 0 || uid == 0)
 		return;
+
+	if ((flags & MAIL_RECENT) == 0 && mbox->highest_nonrecent_uid < uid) {
+		/* remember for STATUS_FIRST_RECENT_UID */
+		mbox->highest_nonrecent_uid = uid;
+	}
+	/* FIXME: we should ideally also pass these through so they show up
+	   to clients. */
+	flags &= ~MAIL_RECENT;
 
 	/* if this is a reply to some FETCH request, update the mail's fields */
 	array_foreach(&mbox->fetch_requests, fetch_requestp) {
@@ -351,6 +381,14 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 		mail_index_lookup_keywords(mbox->delayed_sync_view, lseq,
 					   &old_kws);
 
+		if (have_labels) {
+			/* add keyword for mails that have GMail labels.
+			   this can be used for "All Mail" mailbox migrations
+			   with dsync */
+			atom = "$GMailHaveLabels";
+			array_append(&keywords, &atom, 1);
+		}
+
 		array_append_zero(&keywords);
 		kw = mail_index_keywords_create(mbox->box.index,
 						array_idx(&keywords, 0));
@@ -359,6 +397,17 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 						   lseq, MODIFY_REPLACE, kw);
 		}
 		mail_index_keywords_unref(&kw);
+	}
+	if (guid != NULL) {
+		struct index_mailbox_context *ibox = INDEX_STORAGE_CONTEXT(&mbox->box);
+		const enum index_cache_field guid_cache_idx =
+			ibox->cache_fields[MAIL_CACHE_GUID].idx;
+
+		if (mail_cache_field_can_add(mbox->delayed_sync_cache_trans,
+					     lseq, guid_cache_idx)) {
+			mail_cache_add(mbox->delayed_sync_cache_trans, lseq,
+				       guid_cache_idx, guid, strlen(guid)+1);
+		}
 	}
 	imapc_mailbox_idle_notify(mbox);
 }
@@ -408,12 +457,89 @@ static void imapc_untagged_expunge(const struct imapc_untagged_reply *reply,
 }
 
 static void
+imapc_untagged_esearch_gmail_pop3(const struct imap_arg *args,
+				  struct imapc_mailbox *mbox)
+{
+	struct imapc_msgmap *msgmap;
+	const char *atom;
+	struct seq_range_iter iter;
+	ARRAY_TYPE(seq_range) rseqs;
+	unsigned int n;
+	uint32_t rseq, lseq, uid;
+	ARRAY_TYPE(keyword_indexes) keywords;
+	struct mail_keywords *kw;
+	unsigned int pop3_deleted_kw_idx;
+
+	i_free_and_null(mbox->sync_gmail_pop3_search_tag);
+
+	/* It should contain ALL <seqset> or nonexistent if nothing matched */
+	if (args[0].type == IMAP_ARG_EOL)
+		return;
+	t_array_init(&rseqs, 64);
+	if (!imap_arg_atom_equals(&args[0], "ALL") ||
+	    !imap_arg_get_atom(&args[1], &atom) ||
+	    imap_seq_set_parse(atom, &rseqs) < 0) {
+		i_error("Invalid gmail-pop3 ESEARCH reply");
+		return;
+	}
+
+	mail_index_keyword_lookup_or_create(mbox->box.index,
+		mbox->storage->set->pop3_deleted_flag, &pop3_deleted_kw_idx);
+
+	t_array_init(&keywords, 1);
+	array_append(&keywords, &pop3_deleted_kw_idx, 1);
+	kw = mail_index_keywords_create_from_indexes(mbox->box.index, &keywords);
+
+	msgmap = imapc_client_mailbox_get_msgmap(mbox->client_box);
+	seq_range_array_iter_init(&iter, &rseqs); n = 0;
+	while (seq_range_array_iter_nth(&iter, n++, &rseq)) {
+		if (rseq > imapc_msgmap_count(msgmap)) {
+			/* we haven't even seen this message yet */
+			break;
+		}
+		uid = imapc_msgmap_rseq_to_uid(msgmap, rseq);
+		if (!mail_index_lookup_seq(mbox->delayed_sync_view,
+					   uid, &lseq))
+			continue;
+
+		/* add the pop3_deleted_flag */
+		mail_index_update_keywords(mbox->delayed_sync_trans,
+					   lseq, MODIFY_ADD, kw);
+	}
+	mail_index_keywords_unref(&kw);
+}
+
+static void imapc_untagged_esearch(const struct imapc_untagged_reply *reply,
+				   struct imapc_mailbox *mbox)
+{
+	const struct imap_arg *tag_list;
+	const char *str;
+
+	if (mbox == NULL || !imap_arg_get_list(reply->args, &tag_list))
+		return;
+
+	/* ESEARCH begins with (TAG <tag>) */
+	if (!imap_arg_atom_equals(&tag_list[0], "TAG") ||
+	    !imap_arg_get_string(&tag_list[1], &str) ||
+	    tag_list[2].type != IMAP_ARG_EOL)
+		return;
+
+	/* for now the only ESEARCH reply that we have is for getting GMail's
+	   list of hidden POP3 messages. */
+	if (mbox->sync_gmail_pop3_search_tag != NULL &&
+	    strcmp(mbox->sync_gmail_pop3_search_tag, str) == 0)
+		imapc_untagged_esearch_gmail_pop3(reply->args+1, mbox);
+	else
+		imapc_search_reply(reply->args+1, mbox);
+}
+
+static void
 imapc_resp_text_uidvalidity(const struct imapc_untagged_reply *reply,
 			    struct imapc_mailbox *mbox)
 {
 	uint32_t uid_validity;
 
-	if (mbox == NULL || reply->resp_text_value == NULL ||
+	if (mbox == NULL ||
 	    str_to_uint32(reply->resp_text_value, &uid_validity) < 0)
 		return;
 
@@ -429,7 +555,7 @@ imapc_resp_text_uidnext(const struct imapc_untagged_reply *reply,
 {
 	uint32_t uid_next;
 
-	if (mbox == NULL || reply->resp_text_value == NULL ||
+	if (mbox == NULL ||
 	    str_to_uint32(reply->resp_text_value, &uid_next) < 0)
 		return;
 
@@ -498,6 +624,8 @@ void imapc_mailbox_register_callbacks(struct imapc_mailbox *mbox)
 					imapc_untagged_fetch);
 	imapc_mailbox_register_untagged(mbox, "EXPUNGE",
 					imapc_untagged_expunge);
+	imapc_mailbox_register_untagged(mbox, "ESEARCH",
+					imapc_untagged_esearch);
 	imapc_mailbox_register_resp_text(mbox, "UIDVALIDITY",
 					 imapc_resp_text_uidvalidity);
 	imapc_mailbox_register_resp_text(mbox, "UIDNEXT",

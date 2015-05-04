@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "abspath.h"
@@ -29,7 +29,7 @@ struct master_instance_list_iter {
 };
 
 static const struct dotlock_settings dotlock_set = {
-	.timeout = 1,
+	.timeout = 2,
 	.stale_timeout = 60
 };
 
@@ -38,7 +38,7 @@ struct master_instance_list *master_instance_list_init(const char *path)
 	struct master_instance_list *list;
 	pool_t pool;
 
-	pool = pool_alloconly_create("master instances", 256);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"master instances", 256);
 	list = p_new(pool, struct master_instance_list, 1);
 	list->pool = pool;
 	list->path = p_strdup(pool, path);
@@ -110,7 +110,7 @@ static int master_instance_list_refresh(struct master_instance_list *list)
 		i_error("open(%s) failed: %m", list->path);
 		return -1;
 	}
-	input = i_stream_create_fd(fd, (size_t)-1, TRUE);
+	input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
 	while ((line = i_stream_read_next_line(input)) != NULL) T_BEGIN {
 		if (master_instance_list_add_line(list, line) < 0)
 			i_error("Invalid line in %s: %s", list->path, line);

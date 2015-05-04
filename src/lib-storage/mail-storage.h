@@ -154,7 +154,8 @@ enum mail_fetch_field {
 	MAIL_FETCH_SEARCH_RELEVANCY	= 0x00100000,
 	MAIL_FETCH_GUID			= 0x00200000,
 	MAIL_FETCH_POP3_ORDER		= 0x00400000,
-	MAIL_FETCH_REFCOUNT		= 0x00800000
+	MAIL_FETCH_REFCOUNT		= 0x00800000,
+	MAIL_FETCH_BODY_SNIPPET		= 0x01000000
 };
 
 enum mailbox_transaction_flags {
@@ -460,6 +461,12 @@ mailbox_get_last_error(struct mailbox *box, enum mail_error *error_r)
 /* Wrapper for mail_storage_get_last_error(); */
 enum mail_error mailbox_get_last_mail_error(struct mailbox *box);
 
+/* Save the last error until it's popped. This is useful for cases where the
+   storage has already failed, but the cleanup code path changes the error to
+   something else unwanted. */
+void mail_storage_last_error_push(struct mail_storage *storage);
+void mail_storage_last_error_pop(struct mail_storage *storage);
+
 /* Returns TRUE if mailboxes are files. */
 bool mail_storage_is_mailbox_file(struct mail_storage *storage) ATTR_PURE;
 
@@ -719,8 +726,9 @@ void mailbox_search_result_sync(struct mail_search_result *result,
 				ARRAY_TYPE(seq_range) *removed_uids,
 				ARRAY_TYPE(seq_range) *added_uids);
 
-/* Build mail_keywords from NULL-terminated keywords list.
-   Returns 0 if successful, -1 if there are invalid keywords (error is set). */
+/* Build mail_keywords from NULL-terminated keywords list. Any duplicate
+   keywords are removed. Returns 0 if successful, -1 if there are invalid
+   keywords (error is set). */
 int mailbox_keywords_create(struct mailbox *box, const char *const keywords[],
 			    struct mail_keywords **keywords_r);
 /* Like mailbox_keywords_create(), except ignore invalid keywords. */
@@ -939,5 +947,10 @@ void mail_set_cache_corrupted(struct mail *mail, enum mail_fetch_field field);
    encoded, it's returned as-is. Otherwise SHA1 sum is taken and its last
    128 bits are returned. */
 void mail_generate_guid_128_hash(const char *guid, guid_128_t guid_128_r);
+
+/* Parse a human-writable string into a timestamp. Returns 0 and timestamp on
+   success, -1 if the string couldn't be parsed. Currently supported string
+   formats: yyyy-mm-dd, imap date, unix timestamp, interval (e.g. n days). */
+int mail_parse_human_timestamp(const char *str, time_t *timestamp_r);
 
 #endif

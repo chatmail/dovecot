@@ -2,21 +2,31 @@
 #define CLIENT_H
 
 #include "net.h"
+#include "lmtp-client.h"
 
 #define CLIENT_MAIL_DATA_MAX_INMEMORY_SIZE (1024*128)
 
 struct mail_recipient {
+	struct client *client;
+
 	const char *address;
 	const char *detail; /* +detail part is also in address */
+	struct lmtp_recipient_params params;
+
+	struct anvil_query *anvil_query;
 	struct mail_storage_service_user *service_user;
+	unsigned int parallel_count;
 };
 
 struct client_state {
 	const char *name;
 	const char *session_id;
 	const char *mail_from;
-	ARRAY(struct mail_recipient) rcpt_to;
+	ARRAY(struct mail_recipient *) rcpt_to;
 	unsigned int rcpt_idx;
+
+	unsigned int anvil_queries;
+	bool anvil_pending_data_write;
 
 	unsigned int data_end_idx;
 
@@ -48,6 +58,7 @@ struct client {
 	struct io *io;
 	struct istream *input;
 	struct ostream *output;
+	struct ssl_iostream *ssl_iostream;
 
 	struct timeout *to_idle;
 	time_t last_input;
@@ -78,8 +89,8 @@ void client_destroy(struct client *client, const char *prefix,
 void client_disconnect(struct client *client, const char *prefix,
 		       const char *reason);
 void client_io_reset(struct client *client);
-void client_state_reset(struct client *client);
-void client_state_set(struct client *client, const char *name);
+void client_state_reset(struct client *client, const char *state_name);
+void client_state_set(struct client *client, const char *name, const char *args);
 const char *client_remote_id(struct client *client);
 
 void client_input_handle(struct client *client);

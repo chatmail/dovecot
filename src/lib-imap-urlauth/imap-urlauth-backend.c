@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -136,7 +136,10 @@ int imap_urlauth_backend_reset_all_keys(struct mail_user *user)
 			ret = -1;
 		mailbox_free(&box);
 	}
-	if (mailbox_list_iter_deinit(&iter) < 0)
+	if (mailbox_list_iter_deinit(&iter) < 0) {
+		i_error("urlauth key reset: Couldn't iterate mailboxes: %s",
+			mailbox_list_get_last_error(user->namespaces->list, NULL));
 		ret = -1;
+	}
 	return ret;
 }

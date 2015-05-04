@@ -1,7 +1,11 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
+#include "md5.h"
+#include "sha2.h"
+#include "hash-method.h"
+#include "hex-binary.h"
 #include "istream.h"
 #include "ostream.h"
 #include "iostream-ssl.h"
@@ -77,17 +81,48 @@ static void cmd_fs_get(int argc, char *argv[])
 static void cmd_fs_put(int argc, char *argv[])
 {
 	struct fs *fs;
+	enum fs_properties props;
 	const char *src_path, *dest_path;
 	struct fs_file *file;
 	struct istream *input;
 	struct ostream *output;
+	buffer_t *hash = NULL;
 	off_t ret;
+	int c;
+
+	while ((c = getopt(argc, argv, "h:")) > 0) {
+		switch (c) {
+		case 'h':
+			hash = buffer_create_dynamic(pool_datastack_create(), 32);
+			if (hex_to_binary(optarg, hash) < 0)
+				i_fatal("Invalid -h parameter: Hash not in hex");
+			break;
+		default:
+			fs_cmd_help(cmd_fs_put);
+		}
+	}
+	argc -= optind-1; argv += optind-1;
 
 	fs = cmd_fs_init(&argc, &argv, 2, cmd_fs_put);
 	src_path = argv[0];
 	dest_path = argv[1];
 
 	file = fs_file_init(fs, dest_path, FS_OPEN_MODE_REPLACE);
+	props = fs_get_properties(fs);
+	if (hash == NULL)
+		;
+	else if (hash->used == hash_method_md5.digest_size) {
+		if ((props & FS_PROPERTY_WRITE_HASH_MD5) == 0)
+			i_fatal("fs backend doesn't support MD5 hashes");
+		fs_write_set_hash(file,
+			hash_method_lookup(hash_method_md5.name), hash->data);
+	} else  if (hash->used == hash_method_sha256.digest_size) {
+		if ((props & FS_PROPERTY_WRITE_HASH_SHA256) == 0)
+			i_fatal("fs backend doesn't support SHA256 hashes");
+		fs_write_set_hash(file,
+			hash_method_lookup(hash_method_sha256.name), hash->data);
+	}
+
 	output = fs_write_stream(file);
 	input = i_stream_create_file(src_path, IO_BLOCK_SIZE);
 	if ((ret = o_stream_send_istream(output, input)) < 0) {
@@ -228,7 +263,7 @@ cmd_fs_delete_dir_recursive(struct fs *fs, unsigned int async_count,
 	t_array_init(&fnames, 8);
 	iter = fs_iter_init(fs, path, FS_ITER_FLAG_DIRS);
 	while ((fname = fs_iter_next(iter)) != NULL) {
-		fname = t_strdup(fname);
+		fname = t_strconcat(fname, "/", NULL);
 		array_append(&fnames, &fname, 1);
 	}
 	if (fs_iter_deinit(&iter) < 0) {
@@ -243,7 +278,11 @@ cmd_fs_delete_dir_recursive(struct fs *fs, unsigned int async_count,
 
 	/* delete files. again because we're doing this asynchronously finish
 	   the iteration first. */
-	array_clear(&fnames);
+	if ((fs_get_properties(fs) & FS_PROPERTY_DIRECTORIES) != 0) {
+		/* we need to explicitly delete also the directories */
+	} else {
+		array_clear(&fnames);
+	}
 	iter = fs_iter_init(fs, path, 0);
 	while ((fname = fs_iter_next(iter)) != NULL) {
 		fname = t_strdup(fname);
@@ -296,9 +335,23 @@ static void
 cmd_fs_delete_recursive(int argc, char *argv[], unsigned int async_count)
 {
 	struct fs *fs;
+	struct fs_file *file;
+	const char *path;
 
 	fs = cmd_fs_init(&argc, &argv, 1, cmd_fs_delete);
-	cmd_fs_delete_dir_recursive(fs, async_count, argv[0]);
+	path = argv[0];
+
+	cmd_fs_delete_dir_recursive(fs, async_count, path);
+	if ((fs_get_properties(fs) & FS_PROPERTY_DIRECTORIES) != 0) {
+		/* delete the root itself */
+		file = fs_file_init(fs, path, FS_OPEN_MODE_READONLY);
+		if (fs_delete(file) < 0) {
+			i_error("fs_delete(%s) failed: %s",
+				fs_file_path(file), fs_file_last_error(file));
+			doveadm_exit_code = EX_TEMPFAIL;
+		}
+		fs_file_deinit(&file);
+	}
 	fs_deinit(&fs);
 }
 
@@ -379,11 +432,11 @@ static void cmd_fs_iter_dirs(int argc, char *argv[])
 
 struct doveadm_cmd doveadm_cmd_fs[] = {
 	{ cmd_fs_get, "fs get", "<fs-driver> <fs-args> <path>" },
-	{ cmd_fs_put, "fs put", "<fs-driver> <fs-args> <input path> <path>" },
+	{ cmd_fs_put, "fs put", "[-h <hash>] <fs-driver> <fs-args> <input path> <path>" },
 	{ cmd_fs_copy, "fs copy", "<fs-driver> <fs-args> <source path> <dest path>" },
 	{ cmd_fs_stat, "fs stat", "<fs-driver> <fs-args> <path>" },
 	{ cmd_fs_metadata, "fs metadata", "<fs-driver> <fs-args> <path>" },
-	{ cmd_fs_delete, "fs delete", "[-R] <fs-driver> <fs-args> <path>" },
+	{ cmd_fs_delete, "fs delete", "[-R] [-n <count>] <fs-driver> <fs-args> <path>" },
 	{ cmd_fs_iter, "fs iter", "<fs-driver> <fs-args> <path>" },
 	{ cmd_fs_iter_dirs, "fs iter-dirs", "<fs-driver> <fs-args> <path>" },
 };

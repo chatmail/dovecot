@@ -11,8 +11,10 @@
 
 #define HTTP_CLIENT_DNS_LOOKUP_TIMEOUT_MSECS (1000*30)
 #define HTTP_CLIENT_CONNECT_TIMEOUT_MSECS (1000*30)
-#define HTTP_CLIENT_DEFAULT_REQUEST_TIMEOUT_MSECS (1000*60*5)
 #define HTTP_CLIENT_CONTINUE_TIMEOUT_MSECS (1000*2)
+#define HTTP_CLIENT_DEFAULT_REQUEST_TIMEOUT_MSECS (1000*60*5)
+#define HTTP_CLIENT_DEFAULT_BACKOFF_TIME_MSECS (100)
+#define HTTP_CLIENT_DEFAULT_BACKOFF_MAX_TIME_MSECS (1000*60)
 
 enum http_response_payload_type;
 
@@ -51,6 +53,8 @@ struct http_client_request {
 	unsigned int refcount;
 	const char *label;
 
+	struct http_client_request *prev, *next;
+
 	const char *method, *target;
 	struct http_url origin_url;
 
@@ -71,6 +75,11 @@ struct http_client_request {
 	struct ostream *payload_output;
 
 	struct timeval release_time;
+	struct timeval submit_time;
+	struct timeval sent_time;
+	struct timeval response_time;
+	struct timeval timeout_time;
+	unsigned int timeout_msecs;
 
 	unsigned int attempts;
 	unsigned int redirects;
@@ -125,6 +134,7 @@ struct http_client_connection {
 	struct http_client_request *pending_request;
 	struct istream *incoming_payload;
 	struct io *io_req_payload;
+	struct ioloop *last_ioloop;
 
 	/* requests that have been sent, waiting for response */
 	ARRAY_TYPE(http_client_request) request_wait_list;
@@ -132,12 +142,15 @@ struct http_client_connection {
 	unsigned int connected:1;           /* connection is connected */
 	unsigned int tunneling:1;          /* last sent request turns this
 	                                      connection into tunnel */
+	unsigned int connect_initialized:1; /* connection was initialized */
 	unsigned int connect_succeeded:1;
 	unsigned int closing:1;
 	unsigned int close_indicated:1;
 	unsigned int output_locked:1;       /* output is locked; no pipelining */
+	unsigned int output_broken:1;       /* output is broken; no more requests */
 	unsigned int payload_continue:1;    /* received 100-continue for current
 	                                        request */
+	unsigned int in_req_callback:1;  /* performin request callback (busy) */
 };
 
 struct http_client_peer {
@@ -156,10 +169,14 @@ struct http_client_peer {
 	/* zero time-out for consolidating request handling */
 	struct timeout *to_req_handling;
 
+	/* connection retry */
+	struct timeval last_failure;
+	struct timeout *to_backoff;
+	unsigned int backoff_time_msecs;
+
 	unsigned int destroyed:1;        /* peer is being destroyed */
 	unsigned int no_payload_sync:1;  /* expect: 100-continue failed before */
 	unsigned int seen_100_response:1;/* expect: 100-continue succeeded before */
-	unsigned int last_connect_failed:1;
 	unsigned int allows_pipelining:1;/* peer is known to allow persistent
 	                                     connections */
 };
@@ -179,14 +196,23 @@ struct http_client_queue {
 	   connected IP */
 	unsigned int ips_connect_start_idx;
 
+	unsigned int connect_attempts;
+
 	/* peers we are trying to connect to;
 	   this can be more than one when soft connect timeouts are enabled */
 	ARRAY_TYPE(http_client_peer) pending_peers;
 
-	/* requests pending in queue to be picked up by connections */
-	ARRAY_TYPE(http_client_request) request_queue, delayed_request_queue;
+	/* all requests associated to this queue
+	   (ordered by earliest timeout first) */
+	ARRAY_TYPE(http_client_request) requests; 
 
-	struct timeout *to_connect, *to_delayed;
+	/* delayed requests waiting to be released after delay */
+	ARRAY_TYPE(http_client_request) delayed_requests;
+
+	/* requests pending in queue to be picked up by connections */
+	ARRAY_TYPE(http_client_request) queued_requests, queued_urgent_requests;
+
+	struct timeout *to_connect, *to_request, *to_delayed;
 };
 
 struct http_client_host {
@@ -198,10 +224,6 @@ struct http_client_host {
 	/* the ip addresses DNS returned for this host */
 	unsigned int ips_count;
 	struct ip_addr *ips;
-
-	/* list of requests in this host that are waiting for ioloop */
-	ARRAY(struct http_client_request *) delayed_failing_requests;
-	struct timeout *to_failing_requests;
 
 	/* requests are managed on a per-port basis */
 	ARRAY_TYPE(http_client_queue) queues;
@@ -218,13 +240,18 @@ struct http_client {
 	struct ioloop *ioloop;
 	struct ssl_iostream_context *ssl_ctx;
 
+	/* list of failed requests that are waiting for ioloop */
+	ARRAY(struct http_client_request *) delayed_failing_requests;
+	struct timeout *to_failing_requests;
+
 	struct connection_list *conn_list;
 
 	HASH_TABLE_TYPE(http_client_host) hosts;
 	struct http_client_host *hosts_list;
 	HASH_TABLE_TYPE(http_client_peer) peers;
 	struct http_client_peer *peers_list;
-	unsigned int pending_requests;
+	struct http_client_request *requests_list;
+	unsigned int requests_count;
 };
 
 int http_client_init_ssl_ctx(struct http_client *client, const char **error_r);
@@ -247,8 +274,6 @@ void http_client_request_connect_callback(struct http_client_request *req,
 void http_client_request_resubmit(struct http_client_request *req);
 void http_client_request_retry(struct http_client_request *req,
 	unsigned int status, const char *error);
-void http_client_request_send_error(struct http_client_request *req,
-			       unsigned int status, const char *error);
 void http_client_request_error_delayed(struct http_client_request **_req);
 void http_client_request_error(struct http_client_request *req,
 	unsigned int status, const char *error);
@@ -262,6 +287,7 @@ struct http_client_connection *
 	http_client_connection_create(struct http_client_peer *peer);
 void http_client_connection_ref(struct http_client_connection *conn);
 void http_client_connection_unref(struct http_client_connection **_conn);
+void http_client_connection_close(struct http_client_connection **_conn);
 int http_client_connection_output(struct http_client_connection *conn);
 unsigned int
 http_client_connection_count_pending(struct http_client_connection *conn);
@@ -298,7 +324,10 @@ void http_client_peer_connection_failure(struct http_client_peer *peer,
 					 const char *reason);
 void http_client_peer_connection_lost(struct http_client_peer *peer);
 bool http_client_peer_is_connected(struct http_client_peer *peer);
-unsigned int http_client_peer_idle_connections(struct http_client_peer *peer);
+unsigned int
+http_client_peer_idle_connections(struct http_client_peer *peer);
+unsigned int
+http_client_peer_pending_connections(struct http_client_peer *peer);
 void http_client_peer_switch_ioloop(struct http_client_peer *peer);
 
 struct http_client_queue *
@@ -318,13 +347,12 @@ http_client_queue_claim_request(struct http_client_queue *queue,
 	const struct http_client_peer_addr *addr, bool no_urgent);
 unsigned int
 http_client_queue_requests_pending(struct http_client_queue *queue,
-	unsigned int *num_urgent_r);
+	unsigned int *num_urgent_r) ATTR_NULL(2);
 void
 http_client_queue_connection_success(struct http_client_queue *queue,
 					 const struct http_client_peer_addr *addr);
-bool
-http_client_queue_connection_failure(struct http_client_queue *queue,
-	const struct http_client_peer_addr *addr, const char *reason);
+void http_client_queue_connection_failure(struct http_client_queue *queue,
+ 	const struct http_client_peer_addr *addr, const char *reason);
 void http_client_queue_switch_ioloop(struct http_client_queue *queue);
 
 struct http_client_host *
@@ -333,11 +361,13 @@ http_client_host_get(struct http_client *client,
 void http_client_host_free(struct http_client_host **_host);
 void http_client_host_submit_request(struct http_client_host *host,
 	struct http_client_request *req);
-void http_client_host_delay_request_error(struct http_client_host *host,
-	struct http_client_request *req);
-void http_client_host_remove_request_error(struct http_client_host *host,
-	struct http_client_request *req);
 void http_client_host_switch_ioloop(struct http_client_host *host);
+
+void http_client_delay_request_error(struct http_client *client,
+	struct http_client_request *req);
+void http_client_remove_request_error(struct http_client *client,
+	struct http_client_request *req);
+
 
 static inline const char *
 http_client_peer_addr2str(const struct http_client_peer_addr *addr)

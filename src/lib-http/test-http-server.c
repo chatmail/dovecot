@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -10,7 +10,7 @@
 
 static struct connection_list *clients;
 static int fd_listen;
-struct io *io_listen;
+static struct io *io_listen;
 
 struct client {
 	struct connection conn;

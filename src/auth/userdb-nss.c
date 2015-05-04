@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
 
 /* Currently supports only GLIBC-compatible NSS modules */
 
@@ -104,9 +104,13 @@ userdb_nss_preinit(pool_t pool, const char *args)
 {
 	struct nss_userdb_module *module;
 	const char *const *tmp;
+	long bufsize;
+
+	bufsize = sysconf(_SC_GETPW_R_SIZE_MAX);
+	i_assert(bufsize > 0);
 
 	module = p_new(pool, struct nss_userdb_module, 1);
-	module->bufsize = sysconf(_SC_GETPW_R_SIZE_MAX);
+	module->bufsize = bufsize;
 	module->buf = p_malloc(pool, module->bufsize);
 	module->module.blocking = TRUE;
 

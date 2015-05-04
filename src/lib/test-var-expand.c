@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
@@ -34,7 +34,7 @@ static void test_var_expand_ranges(void)
 	string_t *str = t_str_new(128);
 	unsigned int i;
 
-	test_begin("var_expand");
+	test_begin("var_expand - ranges");
 	for (i = 0; i < N_ELEMENTS(tests); i++) {
 		str_truncate(str, 0);
 		var_expand(str, tests[i].in, table);
@@ -66,11 +66,11 @@ static void test_var_expand_builtin(void)
 	tests[1].out = my_pid;
 	env_put("FOO=baR");
 
-	test_begin("var_expand");
+	test_begin("var_expand - builtin");
 	for (i = 0; i < N_ELEMENTS(tests); i++) {
 		str_truncate(str, 0);
 		var_expand(str, tests[i].in, table);
-		test_assert(strcmp(tests[i].out, str_c(str)) == 0);
+		test_assert_idx(strcmp(tests[i].out, str_c(str)) == 0, i);
 	}
 	test_end();
 }
@@ -91,11 +91,11 @@ static void test_var_get_key_range(void)
 	test_begin("var_get_key_range");
 	for (i = 0; i < N_ELEMENTS(tests); i++) {
 		var_get_key_range(tests[i].in, &idx, &size);
-		test_assert(tests[i].idx == idx);
-		test_assert(tests[i].size == size);
+		test_assert_idx(tests[i].idx == idx, i);
+		test_assert_idx(tests[i].size == size, i);
 
 		if (tests[i].size == 1)
-			test_assert(tests[i].in[idx] == var_get_key(tests[i].in));
+			test_assert_idx(tests[i].in[idx] == var_get_key(tests[i].in), i);
 	}
 	test_end();
 }

@@ -214,11 +214,9 @@ Proxy
 -----
 
 Like Dovecot's imapd, the ManageSieve login daemon supports proxying to
-multiple backend servers. Although the underlying code is copied from the imapd
-sources for the most part, it has someManageSieve-specifics that have not seen
-much testing. The <proxy configuration wiki page>
-[PasswordDatabase.ExtraFields.Proxy.txt] for POP3 and IMAP should apply to
-ManageSieve as well.
+multiple backend servers. The <proxy configuration wiki page>
+[PasswordDatabase.ExtraFields.Proxy.txt] for POP3 and IMAP applies
+automatically toManageSieve as well.
 
 Migration from Dovecot v1.x ManageSieve
 ---------------------------------------
@@ -245,4 +243,4 @@ The following has changed since the ManageSieve releases for Dovecot v1.x:
    and the services are still called 'managesieve' and 'managesieve-login'. The
    example section demonstrates how this affects the configuration.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

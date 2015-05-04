@@ -265,14 +265,26 @@ containing four control-A's. This eliminates the need to escape From: lines.
 Dovecot currently uses mboxcl2 format internally, but it's planned to move to
 combination of mboxrd and mboxcl.
 
+*How a message is read stored in mbox extension ?*
+
+ * An email client reader scans throughout mbox file looking for From_ lines.
+ * Any From_ line marks the beginning of a message.
+ * Once the reader finds a message, it extracts a (possibly corrupted) envelope
+   sender and delivery date out of the From_ line.
+ * It then reads until the next From_ line or scans till the  end of file,
+   whenever From_ comes first.
+ * It removes the last blank line and deletes the quoting of >From_ lines and
+   >>From_ lines and so on.
+
 References
 ----------
 
  * Wikipedia [http://en.wikipedia.org/wiki/Mbox]
  * Qmail mbox [http://www.qmail.org/man/man5/mbox.html]
  * Mbox family
-   [http://homepages.tesco.net/~J.deBoynePollard/FGA/mail-mbox-formats.html]
+   [http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/mail-mbox-formats.html]
  * CommuniGatePro mbox
    [http://www.communigate.com/CommuniGatePro/Mailboxes.html#mbox]
+ * MBOX File Viewer [http://www.freeviewer.org/mbox/]
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

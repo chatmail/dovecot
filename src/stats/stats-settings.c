@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -14,7 +14,7 @@ static struct file_listener_settings *stats_unix_listeners[] = {
 	&stats_unix_listeners_array[0]
 };
 static buffer_t stats_unix_listeners_buf = {
-	stats_unix_listeners, sizeof(stats_unix_listeners), { 0, }
+	stats_unix_listeners, sizeof(stats_unix_listeners), { NULL, }
 };
 static struct file_listener_settings stats_fifo_listeners_array[] = {
 	{ "stats-mail", 0600, "", "" }
@@ -24,7 +24,7 @@ static struct file_listener_settings *stats_fifo_listeners[] = {
 };
 static buffer_t stats_fifo_listeners_buf = {
 	stats_fifo_listeners,
-	sizeof(stats_fifo_listeners), { 0, }
+	sizeof(stats_fifo_listeners), { NULL, }
 };
 /* </settings checks> */
 
@@ -52,7 +52,9 @@ struct service_settings stats_service_settings = {
 			      sizeof(stats_unix_listeners[0]) } },
 	.fifo_listeners = { { &stats_fifo_listeners_buf,
 			      sizeof(stats_fifo_listeners[0]) } },
-	.inet_listeners = ARRAY_INIT
+	.inet_listeners = ARRAY_INIT,
+
+	.process_limit_1 = TRUE
 };
 
 /* we're kind of kludging here to avoid "stats_" prefix in the struct fields */

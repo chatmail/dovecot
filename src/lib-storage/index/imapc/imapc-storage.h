@@ -87,6 +87,8 @@ struct imapc_mailbox {
 
 	struct mail_index_transaction *delayed_sync_trans;
 	struct mail_index_view *sync_view, *delayed_sync_view;
+	struct mail_cache_view *delayed_sync_cache_view;
+	struct mail_cache_transaction_ctx *delayed_sync_cache_trans;
 	struct timeout *to_idle_check, *to_idle_delay;
 
 	ARRAY(struct imapc_fetch_request *) fetch_requests;
@@ -101,6 +103,7 @@ struct imapc_mailbox {
 	ARRAY(struct imapc_mailbox_event_callback) resp_text_callbacks;
 
 	enum mail_flags permanent_flags;
+	uint32_t highest_nonrecent_uid;
 
 	ARRAY_TYPE(uint32_t) delayed_expunged_uids;
 	uint32_t sync_uid_validity;
@@ -110,6 +113,7 @@ struct imapc_mailbox {
 	uint32_t sync_next_rseq;
 	uint32_t exists_count;
 	uint32_t min_append_uid;
+	char *sync_gmail_pop3_search_tag;
 
 	/* keep the previous fetched message body cached,
 	   mainly for partial IMAP fetches */
@@ -119,6 +123,7 @@ struct imapc_mailbox {
 	struct imapc_sync_context *sync_ctx;
 
 	const char *guid_fetch_field_name;
+	struct imapc_search_context *search_ctx;
 
 	unsigned int selecting:1;
 	unsigned int syncing:1;

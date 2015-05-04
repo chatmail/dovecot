@@ -2,11 +2,22 @@ Lucene Full Text Search Indexing
 ================================
 
 Requires Dovecot v2.1+ to work properly. The CLucene version must be v2.3 (not
-v0.9).
+v0.9).Dovecot builds only a single Lucene index for all mailboxes. The Lucene
+indexes are stored in 'lucene-indexes/' directory under the mail root index
+directory (e.g.'~/Maildir/lucene-indexes/').
 
-Dovecot builds only a single Lucene index for all mailboxes. The Lucene indexes
-are stored in 'lucene-indexes/' directory under the mail root index directory
-(e.g.'~/Maildir/lucene-indexes/').
+Compilation
+-----------
+
+If you compile Dovecot yourself, you must add the following switches to your
+configure command for the plugin to be built:
+
+---%<-------------------------------------------------------------------------
+--with-lucene --with-stemmer
+---%<-------------------------------------------------------------------------
+
+The second switch is only required if you have compiled libstemmer yourself or
+if it's included in the CLucene you are using.
 
 Configuration
 -------------
@@ -34,6 +45,11 @@ The fts-lucene settings include:
    stemming language for emails and search keywords. This is a little bit
    problematic in practice, since indexing and searching languages may differ
    and may not find even exact words because they stem differently.
+ * no_snowball: Support normalization of indexed words even without stemming
+   and libstemmer (Snowball). (v2.2.3+)
+ * mime_parts: Index each MIME part separately and include the MIME part number
+   in the "part" field. In future versions this will allowing showing which
+   attachment matched the search result. (v2.2.13+)
 
 Libraries
 ---------
@@ -44,4 +60,4 @@ Libraries
    which you can rename to libstemmer.a
  * textcat [http://textcat.sourceforge.net/]
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-03-06 04:43)

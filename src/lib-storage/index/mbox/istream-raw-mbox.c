@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -506,7 +506,8 @@ uoff_t istream_raw_mbox_get_start_offset(struct istream *stream)
 	return rstream->from_offset;
 }
 
-uoff_t istream_raw_mbox_get_header_offset(struct istream *stream)
+int istream_raw_mbox_get_header_offset(struct istream *stream,
+				       uoff_t *hdr_offset_r)
 {
 	struct raw_mbox_istream *rstream =
 		(struct raw_mbox_istream *)stream->real_stream;
@@ -514,19 +515,23 @@ uoff_t istream_raw_mbox_get_header_offset(struct istream *stream)
 	i_assert(rstream->seeked);
 
 	if (rstream->hdr_offset == rstream->from_offset)
-		(void)i_stream_raw_mbox_read(&rstream->istream);
+		(void)i_stream_read(stream);
 
 	if (rstream->corrupted) {
 		i_error("Unexpectedly lost From-line from mbox file %s at "
 			"%"PRIuUOFF_T, i_stream_get_name(stream),
 			rstream->from_offset);
-		return (uoff_t)-1;
+		return -1;
 	}
+	if (stream->stream_errno != 0)
+		return -1;
 
-	return rstream->hdr_offset;
+	*hdr_offset_r = rstream->hdr_offset;
+	return 0;
 }
 
-uoff_t istream_raw_mbox_get_body_offset(struct istream *stream)
+int istream_raw_mbox_get_body_offset(struct istream *stream,
+				     uoff_t *body_offset_r)
 {
 	struct raw_mbox_istream *rstream =
 		(struct raw_mbox_istream *)stream->real_stream;
@@ -534,15 +539,17 @@ uoff_t istream_raw_mbox_get_body_offset(struct istream *stream)
 
 	i_assert(rstream->seeked);
 
-	if (rstream->body_offset != (uoff_t)-1)
-		return rstream->body_offset;
+	if (rstream->body_offset != (uoff_t)-1) {
+		*body_offset_r = rstream->body_offset;
+		return 0;
+	}
 
 	offset = stream->v_offset;
 	i_stream_seek(stream, rstream->hdr_offset);
 	while (rstream->body_offset == (uoff_t)-1) {
 		i_stream_skip(stream, i_stream_get_data_size(stream));
 
-		if (i_stream_raw_mbox_read(&rstream->istream) < 0) {
+		if (i_stream_read(stream) < 0) {
 			if (rstream->corrupted) {
 				i_error("Unexpectedly lost From-line from mbox file "
 					"%s at %"PRIuUOFF_T,
@@ -551,27 +558,30 @@ uoff_t istream_raw_mbox_get_body_offset(struct istream *stream)
 			} else {
 				i_assert(rstream->body_offset != (uoff_t)-1);
 			}
-			break;
+			return -1;
 		}
 	}
 
 	i_stream_seek(stream, offset);
-	return rstream->body_offset;
+	*body_offset_r = rstream->body_offset;
+	return 0;
 }
 
-uoff_t istream_raw_mbox_get_body_size(struct istream *stream,
-				      uoff_t expected_body_size)
+int istream_raw_mbox_get_body_size(struct istream *stream,
+				   uoff_t expected_body_size,
+				   uoff_t *body_size_r)
 {
 	struct raw_mbox_istream *rstream =
 		(struct raw_mbox_istream *)stream->real_stream;
 	const unsigned char *data;
 	size_t size;
-	uoff_t old_offset, body_size, next_body_offset;
+	uoff_t old_offset, body_offset, body_size, next_body_offset;
 
 	i_assert(rstream->seeked);
 	i_assert(rstream->hdr_offset != (uoff_t)-1);
 
-	(void)istream_raw_mbox_get_body_offset(stream);
+	if (istream_raw_mbox_get_body_offset(stream, &body_offset) < 0)
+		return -1;
 	body_size = rstream->mail_size == (uoff_t)-1 ? (uoff_t)-1 :
 		rstream->mail_size - (rstream->body_offset -
 				      rstream->hdr_offset);
@@ -580,8 +590,10 @@ uoff_t istream_raw_mbox_get_body_size(struct istream *stream,
 		/* if we already have the existing body size, use it as long as
 		   it's >= expected body_size. otherwise the previous parsing
 		   may have stopped at a From_-line that belongs to the body. */
-		if (body_size != (uoff_t)-1 && body_size >= expected_body_size)
-			return body_size;
+		if (body_size != (uoff_t)-1 && body_size >= expected_body_size) {
+			*body_size_r = body_size;
+			return 0;
+		}
 
 		next_body_offset = rstream->body_offset + expected_body_size;
 		/* If header_missing_eoh is set, the message body begins with
@@ -600,21 +612,27 @@ uoff_t istream_raw_mbox_get_body_size(struct istream *stream,
 			rstream->mail_size =
 				next_body_offset - rstream->hdr_offset;
 			i_stream_seek(stream, old_offset);
-			return expected_body_size;
+			*body_size_r = expected_body_size;
+			return 0;
 		}
 		/* invalid expected_body_size */
 	}
-	if (body_size != (uoff_t)-1)
-		return body_size;
+	if (body_size != (uoff_t)-1) {
+		*body_size_r = body_size;
+		return 0;
+	}
 
 	/* have to read through the message body */
 	while (i_stream_read_data(stream, &data, &size, 0) > 0)
 		i_stream_skip(stream, size);
 	i_stream_seek(stream, old_offset);
+	if (stream->stream_errno != 0)
+		return -1;
 
 	i_assert(rstream->mail_size != (uoff_t)-1);
-	return rstream->mail_size -
+	*body_size_r = rstream->mail_size -
 		(rstream->body_offset - rstream->hdr_offset);
+	return 0;
 }
 
 time_t istream_raw_mbox_get_received_time(struct istream *stream)
@@ -625,7 +643,7 @@ time_t istream_raw_mbox_get_received_time(struct istream *stream)
 	i_assert(rstream->seeked);
 
 	if (rstream->received_time == (time_t)-1)
-		(void)i_stream_raw_mbox_read(&rstream->istream);
+		(void)i_stream_read(stream);
 	return rstream->received_time;
 }
 
@@ -637,7 +655,7 @@ const char *istream_raw_mbox_get_sender(struct istream *stream)
 	i_assert(rstream->seeked);
 
 	if (rstream->sender == NULL)
-		(void)i_stream_raw_mbox_read(&rstream->istream);
+		(void)i_stream_read(stream);
 	return rstream->sender == NULL ? "" : rstream->sender;
 }
 
@@ -651,13 +669,15 @@ bool istream_raw_mbox_has_crlf_ending(struct istream *stream)
 	return rstream->crlf_ending;
 }
 
-void istream_raw_mbox_next(struct istream *stream, uoff_t expected_body_size)
+int istream_raw_mbox_next(struct istream *stream, uoff_t expected_body_size)
 {
 	struct raw_mbox_istream *rstream =
 		(struct raw_mbox_istream *)stream->real_stream;
 	uoff_t body_size;
 
-	body_size = istream_raw_mbox_get_body_size(stream, expected_body_size);
+	if (istream_raw_mbox_get_body_size(stream, expected_body_size,
+					   &body_size) < 0)
+		return -1;
 	rstream->mail_size = (uoff_t)-1;
 
 	rstream->received_time = rstream->next_received_time;
@@ -678,6 +698,7 @@ void istream_raw_mbox_next(struct istream *stream, uoff_t expected_body_size)
 
 	rstream->eof = FALSE;
 	rstream->istream.istream.eof = FALSE;
+	return 0;
 }
 
 int istream_raw_mbox_seek(struct istream *stream, uoff_t offset)
@@ -688,6 +709,9 @@ int istream_raw_mbox_seek(struct istream *stream, uoff_t offset)
 
 	i_assert(rstream->locked);
 
+	/* reset any (corruption) errors */
+	stream->stream_errno = 0;
+	i_free_and_null(stream->real_stream->iostream.error);
 	rstream->corrupted = FALSE;
 	rstream->eof = FALSE;
 	rstream->istream.istream.eof = FALSE;
@@ -695,10 +719,8 @@ int istream_raw_mbox_seek(struct istream *stream, uoff_t offset)
 	/* if seeked is FALSE, we unlocked in the middle. don't try to use
 	   any cached state then. */
 	if (rstream->mail_size != (uoff_t)-1 && rstream->seeked &&
-	    rstream->hdr_offset + rstream->mail_size == offset) {
-		istream_raw_mbox_next(stream, (uoff_t)-1);
-		return 0;
-	}
+	    rstream->hdr_offset + rstream->mail_size == offset)
+		return istream_raw_mbox_next(stream, (uoff_t)-1);
 
 	if (offset == rstream->from_offset && rstream->seeked) {
 		/* back to beginning of current message */
@@ -726,7 +748,7 @@ int istream_raw_mbox_seek(struct istream *stream, uoff_t offset)
 	i_stream_seek_mark(rstream->istream.parent, offset);
 
 	if (check)
-		(void)i_stream_raw_mbox_read(&rstream->istream);
+		(void)i_stream_read(stream);
 	return rstream->corrupted ? -1 : 0;
 }
 

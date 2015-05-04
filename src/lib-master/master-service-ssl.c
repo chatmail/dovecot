@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -106,6 +106,10 @@ void master_service_ssl_ctx_init(struct master_service *service)
 	i_assert(service->listeners != NULL || service->socket_count == 0);
 
 	set = master_service_ssl_settings_get(service);
+	if (strcmp(set->ssl, "no") == 0) {
+		/* SSL disabled, don't use it */
+		return;
+	}
 
 	memset(&ssl_set, 0, sizeof(ssl_set));
 	ssl_set.protocols = set->ssl_protocols;
@@ -120,6 +124,7 @@ void master_service_ssl_ctx_init(struct master_service *service)
 	ssl_set.verbose = set->verbose_ssl;
 	ssl_set.verify_remote_cert = set->ssl_verify_client_cert;
 	ssl_set.prefer_server_ciphers = set->ssl_prefer_server_ciphers;
+	ssl_set.compression = set->parsed_opts.compression;
 
 	if (ssl_iostream_context_init_server(&ssl_set, &service->ssl_ctx,
 					     &error) < 0) {

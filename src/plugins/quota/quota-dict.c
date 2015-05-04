@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -32,6 +32,7 @@ static int dict_quota_init(struct quota_root *_root, const char *args,
 			   const char **error_r)
 {
 	struct dict_quota_root *root = (struct dict_quota_root *)_root;
+	struct dict_settings set;
 	const char *username, *p, *error;
 
 	p = args == NULL ? NULL : strchr(args, ':');
@@ -49,6 +50,11 @@ static int dict_quota_init(struct quota_root *_root, const char *args,
 		if (strncmp(args, "noenforcing:", 12) == 0) {
 			_root->no_enforcing = TRUE;
 			args += 12;
+			continue;
+		}
+		if (strncmp(args, "hidden:", 7) == 0) {
+			_root->hidden = TRUE;
+			args += 7;
 			continue;
 		}
 		if (strncmp(args, "ignoreunlimited:", 16) == 0) {
@@ -78,9 +84,12 @@ static int dict_quota_init(struct quota_root *_root, const char *args,
 
 	/* FIXME: we should use 64bit integer as datatype instead but before
 	   it can actually be used don't bother */
-	if (dict_init(args, DICT_DATA_TYPE_STRING, username,
-		      _root->quota->user->set->base_dir, &root->dict,
-		      &error) < 0) {
+	memset(&set, 0, sizeof(set));
+	set.username = username;
+	set.base_dir = _root->quota->user->set->base_dir;
+	if (mail_user_get_home(_root->quota->user, &set.home_dir) <= 0)
+		set.home_dir = NULL;
+	if (dict_init_full(args, &set, &root->dict, &error) < 0) {
 		*error_r = t_strdup_printf("dict_init(%s) failed: %s", args, error);
 		return -1;
 	}

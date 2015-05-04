@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -315,6 +315,7 @@ int main(int argc, char *argv[])
 	ctx.session = mail_deliver_session_init();
 	ctx.pool = ctx.session->pool;
 	ctx.dest_mailbox_name = "INBOX";
+	ctx.timeout_secs = LDA_SUBMISSION_TIMEOUT_SECS;
 	path = NULL;
 
 	user = getenv("USER");
@@ -435,11 +436,11 @@ int main(int argc, char *argv[])
 	lda_set_dest_addr(&ctx, user, destaddr_source);
 
 	if (mail_deliver(&ctx, &storage) < 0) {
-		if (storage != NULL) {
-			errstr = mail_storage_get_last_error(storage, &error);
-		} else if (ctx.tempfail_error != NULL) {
+		if (ctx.tempfail_error != NULL) {
 			errstr = ctx.tempfail_error;
 			error = MAIL_ERROR_TEMP;
+		} else if (storage != NULL) {
+			errstr = mail_storage_get_last_error(storage, &error);
 		} else {
 			/* This shouldn't happen */
 			i_error("BUG: Saving failed to unknown storage");
@@ -452,7 +453,7 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "%s\n", errstr);
 		}
 
-		if (error != MAIL_ERROR_NOSPACE ||
+		if (error != MAIL_ERROR_NOQUOTA ||
 		    ctx.set->quota_full_tempfail) {
 			/* Saving to INBOX should always work unless
 			   we're over quota. If it didn't, it's probably a
