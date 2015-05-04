@@ -8,5 +8,4 @@ default-mail_location.patch
 exampledir.patch
 mboxlocking.patch
 dovecot_name.patch
-bye_logout_not_sent.patch
 cve-2015-3420.patch
