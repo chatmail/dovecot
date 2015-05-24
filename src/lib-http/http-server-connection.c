@@ -296,12 +296,15 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 		   actual payload stream. */
 		conn->incoming_payload = req->req.payload =
 			i_stream_create_limit(req->req.payload, (uoff_t)-1);
-		i_stream_add_destroy_callback(req->req.payload,
-					      http_server_payload_destroyed, req);
-		/* the callback may add its own I/O, so we need to remove
-		   our one before calling it */
-		http_server_connection_input_halt(conn);
+	} else {
+		conn->incoming_payload = req->req.payload =
+			i_stream_create_from_data("", 0);
 	}
+	i_stream_add_destroy_callback(req->req.payload,
+				      http_server_payload_destroyed, req);
+	/* the callback may add its own I/O, so we need to remove
+	   our one before calling it */
+	http_server_connection_input_halt(conn);
 
 	http_server_connection_request_callback(conn, req);
 	if (conn->closed) {
@@ -541,11 +544,13 @@ static void http_server_connection_input(struct connection *_conn)
 			switch (error_code) {
 			case HTTP_REQUEST_PARSE_ERROR_BROKEN_REQUEST:
 				conn->input_broken = TRUE;
+				/* fall through */
 			case HTTP_REQUEST_PARSE_ERROR_BAD_REQUEST:
 				http_server_request_fail(req, 400, "Bad Request");
 				break;
 			case HTTP_REQUEST_PARSE_ERROR_METHOD_TOO_LONG:
 				conn->input_broken = TRUE;
+				/* fall through */
 			case HTTP_REQUEST_PARSE_ERROR_NOT_IMPLEMENTED:
 				http_server_request_fail(req, 501, "Not Implemented");
 				break;

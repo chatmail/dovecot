@@ -68,6 +68,8 @@ tika_get_http_client_url(struct mail_user *user, struct http_url **http_url_r)
 		http_set.max_pipelined_requests = 1;
 		http_set.max_redirects = 1;
 		http_set.max_attempts = 3;
+		http_set.connect_timeout_msecs = 5*1000;
+		http_set.request_timeout_msecs = 60*1000;
 		http_set.debug = user->mail_debug;
 		tika_http_client = http_client_init(&http_set);
 	}
@@ -194,12 +196,19 @@ static void fts_parser_tika_more(struct fts_parser *_parser,
 	} else {
 		/* finished */
 		i_assert(ret == -1);
+		if (parser->payload->stream_errno != 0) {
+			i_error("read(%s) failed: %s",
+				i_stream_get_name(parser->payload),
+				i_stream_get_error(parser->payload));
+			parser->failed = TRUE;
+		}
 	}
 }
 
-static void fts_parser_tika_deinit(struct fts_parser *_parser)
+static int fts_parser_tika_deinit(struct fts_parser *_parser)
 {
 	struct tika_fts_parser *parser = (struct tika_fts_parser *)_parser;
+	int ret = parser->failed ? -1 : 0;
 
 	if (parser->ioloop != NULL) {
 		io_remove(&parser->io);
@@ -212,6 +221,7 @@ static void fts_parser_tika_deinit(struct fts_parser *_parser)
 	if (parser->http_req != NULL)
 		http_client_request_abort(&parser->http_req);
 	i_free(parser);
+	return ret;
 }
 
 static void fts_parser_tika_unload(void)

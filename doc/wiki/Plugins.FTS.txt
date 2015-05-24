@@ -7,6 +7,8 @@ The following FTS indexers (in preferred order) are supported:
    [http://lucene.apache.org/solr/].
  * <Lucene> [Plugins.FTS.Lucene.txt] uses Lucene's C++ library. (Requires
    v2.1+)
+ * <NewSquat> [Plugins.FTS.NewSquat.txt] is Dovecot's new search index, under
+   development. (Requires v2.2+)
  * <Squat> [Plugins.FTS.Squat.txt] is Dovecot's own search index. (Obsolete in
    v2.1+)
 
@@ -60,7 +62,7 @@ doveadm fts rescan -u user@domain
 Other Settings
 --------------
 
-All the FTS settings go inside 'plugin {} ' section.
+All the FTS settings go inside 'plugin {} ' section of 90-plugin.conf.
 
  * 'fts_autoindex=yes': Index new messages immediately after they've been
    saved/copied. (v2.2.9+)
@@ -73,4 +75,4 @@ All the FTS settings go inside 'plugin {} ' section.
    SEARCH fails with:'NO [INUSE] Timeout while waiting for indexing to finish'
    (v2.1+)
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

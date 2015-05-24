@@ -78,14 +78,18 @@ static bool client_exec_script(struct master_service_connection *conn)
 	/* Input contains:
 
 	   VERSION .. <lf>
-	   [timeout=<timeout>]
-	   <noreply> | "-" <lf>
+	   [alarm=<secs> <lf>]
+	   "noreply" | "-" (or anything really) <lf>
 
 	   arg 1 <lf>
 	   arg 2 <lf>
 	   ...
 	   <lf>
 	   DATA
+
+	   This is quite a horrible protocol. If alarm is specified, it MUST be
+	   before "noreply". If "noreply" isn't given, something other string
+	   (typically "-") must be given which is eaten away.
 	*/		
 	alarm(SCRIPT_READ_TIMEOUT_SECS);
 	scanpos = 1;

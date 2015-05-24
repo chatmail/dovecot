@@ -46,6 +46,8 @@ unsigned int auth_request_state_count[AUTH_REQUEST_STATE_MAX];
 
 static void get_log_prefix(string_t *str, struct auth_request *auth_request,
 			   const char *subsystem);
+static void
+auth_request_userdb_import(struct auth_request *request, const char *args);
 
 struct auth_request *
 auth_request_new(const struct mech_module *mech)
@@ -550,6 +552,15 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 		}
 		return TRUE;
 	}
+	if (request->failed) {
+		/* The passdb didn't fail, but something inside it failed
+		   (e.g. allow_nets mismatch). Make sure we'll fail this
+		   lookup, but reset the failure so the next passdb can
+		   succeed. */
+		if (*result == PASSDB_RESULT_OK)
+			*result = PASSDB_RESULT_USER_UNKNOWN;
+		request->failed = FALSE;
+	}
 
 	/* users that exist but can't log in are special. we don't try to match
 	   any of the success/failure rules to them. they'll always fail. */
@@ -616,29 +627,27 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 	       auth_request_want_skip_passdb(request, next_passdb))
 		next_passdb = next_passdb->next;
 
+	if (*result == PASSDB_RESULT_OK) {
+		/* this passdb lookup succeeded, preserve its extra fields */
+		auth_fields_snapshot(request->extra_fields);
+		request->snapshot_have_userdb_prefetch_set =
+			request->userdb_prefetch_set;
+		if (request->userdb_reply != NULL)
+			auth_fields_snapshot(request->userdb_reply);
+	} else {
+		/* this passdb lookup failed, remove any extra fields it set */
+		auth_fields_rollback(request->extra_fields);
+		if (request->userdb_reply != NULL) {
+			auth_fields_rollback(request->userdb_reply);
+			request->userdb_prefetch_set =
+				request->snapshot_have_userdb_prefetch_set;
+		}
+	}
+
 	if (passdb_continue && next_passdb != NULL) {
 		/* try next passdb. */
                 request->passdb = next_passdb;
 		request->passdb_password = NULL;
-
-		if (*result == PASSDB_RESULT_OK) {
-			/* this passdb lookup succeeded, preserve its extra
-			   fields */
-			auth_fields_snapshot(request->extra_fields);
-			request->snapshot_have_userdb_prefetch_set =
-				request->userdb_prefetch_set;
-			if (request->userdb_reply != NULL)
-				auth_fields_snapshot(request->userdb_reply);
-		} else {
-			/* this passdb lookup failed, remove any extra fields
-			   it set */
-			auth_fields_rollback(request->extra_fields);
-			if (request->userdb_reply != NULL) {
-				auth_fields_rollback(request->userdb_reply);
-				request->userdb_prefetch_set =
-					request->snapshot_have_userdb_prefetch_set;
-			}
-		}
 
 		if (*result == PASSDB_RESULT_USER_UNKNOWN) {
 			/* remember that we did at least one successful
@@ -971,6 +980,13 @@ static void auth_request_userdb_save_cache(struct auth_request *request,
 		auth_fields_append(request->userdb_reply, str,
 				   AUTH_FIELD_FLAG_CHANGED,
 				   AUTH_FIELD_FLAG_CHANGED);
+		if (strcmp(request->user, request->translated_username) != 0) {
+			/* username was changed by passdb or userdb */
+			if (str_len(str) > 0)
+				str_append_c(str, '\t');
+			str_append(str, "user=");
+			str_append_tabescaped(str, request->user);
+		}
 		if (str_len(str) == 0) {
 			/* no userdb fields. but we can't save an empty string,
 			   since that means "user unknown". */
@@ -985,7 +1001,6 @@ static void auth_request_userdb_save_cache(struct auth_request *request,
 
 static bool auth_request_lookup_user_cache(struct auth_request *request,
 					   const char *key,
-					   struct auth_fields **reply_r,
 					   enum userdb_result *result_r,
 					   bool use_expired)
 {
@@ -1007,13 +1022,13 @@ static bool auth_request_lookup_user_cache(struct auth_request *request,
 	if (*value == '\0') {
 		/* negative cache entry */
 		*result_r = USERDB_RESULT_USER_UNKNOWN;
-		*reply_r = auth_fields_init(request->pool);
+		request->userdb_reply = auth_fields_init(request->pool);
 		return TRUE;
 	}
 
+	request->userdb_reply = auth_fields_init(request->pool);
+	auth_request_userdb_import(request, value);
 	*result_r = USERDB_RESULT_OK;
-	*reply_r = auth_fields_init(request->pool);
-	auth_fields_import(*reply_r, value, 0);
 	return TRUE;
 }
 
@@ -1114,11 +1129,9 @@ void auth_request_userdb_callback(enum userdb_result result,
 		   request was expired in cache, fallback to using cached
 		   expired record. */
 		const char *cache_key = userdb->cache_key;
-		struct auth_fields *reply;
 
-		if (auth_request_lookup_user_cache(request, cache_key, &reply,
+		if (auth_request_lookup_user_cache(request, cache_key,
 						   &result, TRUE)) {
-			request->userdb_reply = reply;
 			auth_request_log_info(request, AUTH_SUBSYS_DB,
 				"Falling back to expired data from cache");
 		}
@@ -1141,12 +1154,10 @@ void auth_request_lookup_user(struct auth_request *request,
 	/* (for now) auth_cache is shared between passdb and userdb */
 	cache_key = passdb_cache == NULL ? NULL : userdb->cache_key;
 	if (cache_key != NULL) {
-		struct auth_fields *reply;
 		enum userdb_result result;
 
-		if (auth_request_lookup_user_cache(request, cache_key, &reply,
+		if (auth_request_lookup_user_cache(request, cache_key,
 						   &result, FALSE)) {
-			request->userdb_reply = reply;
 			request->private_callback.userdb(result, request);
 			return;
 		}
@@ -1270,7 +1281,10 @@ bool auth_request_set_login_username(struct auth_request *request,
 {
 	struct auth_passdb *master_passdb;
 
-        i_assert(*username != '\0');
+	if (username[0] == '\0') {
+		*error_r = "Master user login attempted to use empty login username";
+		return FALSE;
+	}
 
 	if (strcmp(username, request->user) == 0) {
 		/* The usernames are the same, we don't really wish to log
@@ -1832,8 +1846,17 @@ int auth_request_proxy_finish(struct auth_request *request,
 
 	host = auth_fields_find(request->extra_fields, "host");
 	if (host == NULL) {
-		/* director can set the host */
+		/* director can set the host. give it access to lip and lport
+		   so it can also perform proxy_maybe internally */
 		proxy_host_is_self = FALSE;
+		if (request->local_ip.family != 0) {
+			auth_fields_add(request->extra_fields, "lip",
+					net_ip2addr(&request->local_ip), 0);
+		}
+		if (request->local_port != 0) {
+			auth_fields_add(request->extra_fields, "lport",
+					dec2str(request->local_port), 0);
+		}
 	} else if (net_addr2ip(host, &ip) == 0) {
 		proxy_host_is_self =
 			auth_request_proxy_ip_is_self(request, &ip);

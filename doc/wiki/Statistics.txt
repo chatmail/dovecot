@@ -13,6 +13,7 @@ There are different "zoom levels" you can look at the statistics:
  * user: Per user (all of user's sessions summed up)
  * domain: Per domain (all of domain's users summed up)
  * ip: Per IP address (all sessions from the IP summed up)
+ * global: Everything summed up (2.2.16+)
 
 Basic Configuration
 -------------------
@@ -77,6 +78,12 @@ tight it can go below these values to honor the 'stats_memory_limit' setting.
 Statistics gathered
 -------------------
 
+Statistics gathered internally by the stats process:
+
+ * num_logins: Number of logins (2.2.14+)
+ * num_cmds: Number of IMAP commands run (2.2.14+)
+ * num_connected_sessions: Number of current IMAP sessions (2.2.14+)
+
 Statistics gathered using the 'getrusage()' system call:
 
  * user_cpu: User CPU (seconds.microseconds)
@@ -114,6 +121,9 @@ Statistics gathered by Dovecot's lib-storage internally:
    not counted)
  * mail_read_bytes: Number of message bytes read()
  * mail_cache_hits: Number of cache hits from 'dovecot.index.cache' file
+
+Note that statistics are collected only on backends so stats service doesn't do
+anything on directors and proxies.
 
 doveadm stats
 -------------
@@ -193,4 +203,4 @@ EXPORT<tab>session<tab>connected<lf>
 
 The output will be identical to 'doveadm stats dump session connected' command.
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

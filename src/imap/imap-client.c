@@ -55,6 +55,17 @@ static void client_init_urlauth(struct client *client)
 	client->urlauth_ctx = imap_urlauth_init(client->user, &config);
 }
 
+static bool user_has_special_use_mailboxes(struct mail_user *user)
+{
+	struct mail_namespace *ns;
+
+	for (ns = user->namespaces; ns != NULL; ns = ns->next) {
+		if (ns->special_use_mailboxes)
+			return TRUE;
+	}
+	return FALSE;
+}
+
 struct client *client_create(int fd_in, int fd_out, const char *session_id,
 			     struct mail_user *user,
 			     struct mail_storage_service_user *service_user,
@@ -143,6 +154,11 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 		if (!explicit_capability)
 			str_append(client->capability_string, " METADATA");
 	}
+	if (!explicit_capability && user_has_special_use_mailboxes(user)) {
+		/* Advertise SPECIAL-USE only if there are actually some
+		   SPECIAL-USE flags in mailbox configuration. */
+		str_append(client->capability_string, " SPECIAL-USE");
+	}
 
 	ident = mail_user_get_anvil_userip_ident(client->user);
 	if (ident != NULL) {
@@ -187,7 +203,7 @@ void client_command_cancel(struct client_command_context **_cmd)
 
 	cmd_ret = !cmd->cancel || cmd->func == NULL ? TRUE :
 		command_exec(cmd);
-	if (!cmd_ret && cmd->state != CLIENT_COMMAND_STATE_DONE) {
+	if (!cmd_ret) {
 		if (cmd->client->output->closed)
 			i_panic("command didn't cancel itself: %s", cmd->name);
 	} else {
@@ -379,6 +395,7 @@ void client_send_tagline(struct client_command_context *cmd, const char *data)
 {
 	struct client *client = cmd->client;
 	const char *tag = cmd->tag;
+	int time_msecs;
 
 	if (client->output->closed || cmd->cancel)
 		return;
@@ -389,10 +406,24 @@ void client_send_tagline(struct client_command_context *cmd, const char *data)
 	if (tag == NULL || *tag == '\0')
 		tag = "*";
 
-	o_stream_nsend_str(client->output, tag);
-	o_stream_nsend(client->output, " ", 1);
-	o_stream_nsend_str(client->output, data);
-	o_stream_nsend(client->output, "\r\n", 2);
+	T_BEGIN {
+		string_t *str = t_str_new(256);
+		str_printfa(str, "%s %s", tag, data);
+		if (cmd->start_time.tv_sec != 0) {
+			if (str_data(str)[str_len(str)-1] == '.')
+				str_truncate(str, str_len(str)-1);
+			io_loop_time_refresh();
+			time_msecs = timeval_diff_msecs(&ioloop_timeval,
+							&cmd->start_time);
+			time_msecs -= cmd->usecs_in_ioloop/1000;
+			if (time_msecs >= 0) {
+				str_printfa(str, " (%d.%03d secs).",
+					    time_msecs/1000, time_msecs%1000);
+			}
+		}
+		str_append(str, "\r\n");
+		o_stream_nsend(client->output, str_data(str), str_len(str));
+	} T_END;
 
 	client->last_output = ioloop_time;
 }
@@ -459,6 +490,7 @@ bool client_read_args(struct client_command_context *cmd, unsigned int count,
 		str = t_str_new(256);
 		imap_write_args(str, *args_r);
 		cmd->args = p_strdup(cmd->pool, str_c(str));
+		cmd->start_time = ioloop_timeval;
 
 		cmd->client->input_lock = NULL;
 		return TRUE;
@@ -779,8 +811,7 @@ static bool client_command_input(struct client_command_context *cmd)
 
         if (cmd->func != NULL) {
 		/* command is being executed - continue it */
-		if (command_exec(cmd) ||
-		    cmd->state == CLIENT_COMMAND_STATE_DONE) {
+		if (command_exec(cmd)) {
 			/* command execution was finished */
 			client_command_free(&cmd);
 			client_add_missing_io(client);
@@ -959,7 +990,7 @@ static void client_output_cmd(struct client_command_context *cmd)
 	bool finished;
 
 	/* continue processing command */
-	finished = command_exec(cmd) || cmd->state == CLIENT_COMMAND_STATE_DONE;
+	finished = command_exec(cmd);
 
 	if (!finished)
 		(void)client_handle_unfinished_cmd(cmd);

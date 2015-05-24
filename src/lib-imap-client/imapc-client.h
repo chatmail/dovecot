@@ -24,6 +24,7 @@ enum imapc_capability {
 	IMAPC_CAPABILITY_NAMESPACE	= 0x200,
 	IMAPC_CAPABILITY_UNSELECT	= 0x400,
 	IMAPC_CAPABILITY_ESEARCH	= 0x800,
+	IMAPC_CAPABILITY_WITHIN		= 0x1000,
 
 	IMAPC_CAPABILITY_IMAP4REV1	= 0x40000000
 };
@@ -182,6 +183,7 @@ void imapc_client_mailbox_set_reopen_cb(struct imapc_client_mailbox *box,
 					void (*callback)(void *context),
 					void *context);
 void imapc_client_mailbox_close(struct imapc_client_mailbox **box);
+bool imapc_client_mailbox_can_reconnect(struct imapc_client_mailbox *box);
 void imapc_client_mailbox_reconnect(struct imapc_client_mailbox *box);
 struct imapc_command *
 imapc_client_mailbox_cmd(struct imapc_client_mailbox *box,

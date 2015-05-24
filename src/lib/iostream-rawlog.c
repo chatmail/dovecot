@@ -285,13 +285,18 @@ void iostream_rawlog_create_from_stream(struct ostream *rawlog_output,
 	struct istream *old_input;
 	struct ostream *old_output;
 
-	old_input = *input;
-	old_output = *output;
-	o_stream_ref(rawlog_output);
-	*input = i_stream_create_rawlog_from_stream(old_input, rawlog_output,
-						    rawlog_flags);
-	*output = o_stream_create_rawlog_from_stream(old_output, rawlog_output,
-						     rawlog_flags);
-	i_stream_unref(&old_input);
-	o_stream_unref(&old_output);
+	if (input != NULL) {
+		old_input = *input;
+		*input = i_stream_create_rawlog_from_stream(old_input,
+				rawlog_output, rawlog_flags);
+		i_stream_unref(&old_input);
+	}
+	if (output != NULL) {
+		old_output = *output;
+		*output = o_stream_create_rawlog_from_stream(old_output,
+				rawlog_output, rawlog_flags);
+		o_stream_unref(&old_output);
+	}
+	if (input != NULL && output != NULL)
+		o_stream_ref(rawlog_output);
 }

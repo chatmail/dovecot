@@ -28,6 +28,8 @@ libstorage_la_SOURCES = \
 	mail-error.c \
 	mail-namespace.c \
 	mail-search.c \
+	mail-search-args-imap.c \
+	mail-search-args-simplify.c \
 	mail-search-build.c \
 	mail-search-parser.c \
 	mail-search-parser-imap.c \
@@ -41,6 +43,7 @@ libstorage_la_SOURCES = \
 	mail-storage-settings.c \
 	mail-thread.c \
 	mail-user.c \
+	mailbox-attribute.c \
 	mailbox-get.c \
 	mailbox-guid-cache.c \
 	mailbox-header.c \
@@ -68,6 +71,8 @@ headers = \
 	mail-storage-service.h \
 	mail-storage-settings.h \
 	mail-user.h \
+	mailbox-attribute.h \
+	mailbox-attribute-private.h \
 	mailbox-guid-cache.h \
 	mailbox-list.h \
 	mailbox-list-iter.h \
@@ -96,6 +101,8 @@ libdovecot_storage_la_DEPENDENCIES = libstorage.la
 libdovecot_storage_la_LDFLAGS = -export-dynamic
 
 test_programs = \
+	test-mail-search-args-imap \
+	test-mail-search-args-simplify \
 	test-mailbox-get
 
 noinst_PROGRAMS = $(test_programs)
@@ -103,6 +110,14 @@ noinst_PROGRAMS = $(test_programs)
 test_libs = \
 	$(top_builddir)/src/lib-test/libtest.la \
 	$(top_builddir)/src/lib/liblib.la
+
+test_mail_search_args_imap_SOURCES = test-mail-search-args-imap.c
+test_mail_search_args_imap_LDADD = libstorage.la $(LIBDOVECOT)
+test_mail_search_args_imap_DEPENDENCIES = libstorage.la $(LIBDOVECOT_DEPS)
+
+test_mail_search_args_simplify_SOURCES = test-mail-search-args-simplify.c
+test_mail_search_args_simplify_LDADD = libstorage.la $(LIBDOVECOT)
+test_mail_search_args_simplify_DEPENDENCIES = libstorage.la $(LIBDOVECOT_DEPS)
 
 test_mailbox_get_SOURCES = test-mailbox-get.c
 test_mailbox_get_LDADD = mailbox-get.lo $(test_libs)

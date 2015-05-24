@@ -12,6 +12,7 @@
 #include "istream-dot.h"
 #include "safe-mkstemp.h"
 #include "hex-dec.h"
+#include "time-util.h"
 #include "var-expand.h"
 #include "restrict-access.h"
 #include "settings-parser.h"
@@ -212,6 +213,8 @@ int cmd_mail(struct client *client, const char *args)
 	p_array_init(&client->state.rcpt_to, client->state_pool, 64);
 	client_send_line(client, "250 2.1.0 OK");
 	client_state_set(client, "MAIL FROM", client->state.mail_from);
+
+	client->state.mail_from_timeval = ioloop_timeval;
 	return 0;
 }
 
@@ -747,6 +750,7 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 	struct lda_settings *lda_set;
 	struct mail_namespace *ns;
 	struct setting_parser_context *set_parser;
+	struct timeval delivery_time_started;
 	void **sets;
 	const char *line, *error, *username;
 	string_t *str;
@@ -782,6 +786,10 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 			i_unreached();
 	}
 
+	/* get the timestamp before user is created, since it starts the I/O */
+	io_loop_time_refresh();
+	delivery_time_started = ioloop_timeval;
+
 	client_state_set(client, "DATA", username);
 	i_set_failure_prefix("lmtp(%s, %s): ", my_pid, username);
 	if (mail_storage_service_next(storage_service, rcpt->service_user,
@@ -809,6 +817,11 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 	dctx.src_mail = src_mail;
 	dctx.src_envelope_sender = client->state.mail_from;
 	dctx.dest_user = client->state.dest_user;
+	dctx.session_time_msecs =
+		timeval_diff_msecs(&client->state.data_end_timeval,
+				   &client->state.mail_from_timeval);
+	dctx.delivery_time_started = delivery_time_started;
+
 	if (orcpt_get_valid_rfc822(rcpt->params.dsn_orcpt, &dctx.dest_addr)) {
 		/* used ORCPT */
 	} else if (*dctx.set->lda_original_recipient_header != '\0') {
@@ -1024,7 +1037,8 @@ client_input_data_write_local(struct client *client, struct istream *input)
 		/* enable core dumping again. we need to chdir also to
 		   root-owned directory to get core dumps. */
 		restrict_access_allow_coredumps(TRUE);
-		(void)chdir(base_dir);
+		if (chdir(base_dir) < 0)
+			i_error("chdir(%s) failed: %m", base_dir);
 	}
 }
 
@@ -1047,13 +1061,29 @@ static void client_proxy_finish(void *context)
 static const char *client_get_added_headers(struct client *client)
 {
 	string_t *str = t_str_new(200);
+	void **sets;
+	const struct lmtp_settings *lmtp_set;
 	const char *host, *rcpt_to = NULL;
 
 	if (array_count(&client->state.rcpt_to) == 1) {
 		struct mail_recipient *const *rcptp =
 			array_idx(&client->state.rcpt_to, 0);
 
-		rcpt_to = (*rcptp)->address;
+		sets = mail_storage_service_user_get_set((*rcptp)->service_user);
+		lmtp_set = sets[2];
+
+		switch (lmtp_set->parsed_lmtp_hdr_delivery_address) {
+		case LMTP_HDR_DELIVERY_ADDRESS_NONE:
+			break;
+		case LMTP_HDR_DELIVERY_ADDRESS_FINAL:
+			rcpt_to = (*rcptp)->address;
+			break;
+		case LMTP_HDR_DELIVERY_ADDRESS_ORIGINAL:
+			if (!orcpt_get_valid_rfc822((*rcptp)->params.dsn_orcpt,
+						    &rcpt_to))
+				rcpt_to = (*rcptp)->address;
+			break;
+		}
 	}
 
 	/* don't set Return-Path when proxying so it won't get added twice */
@@ -1092,6 +1122,8 @@ static void client_input_data_write(struct client *client)
 		timeout_remove(&client->to_idle);
 	io_remove(&client->io);
 	i_stream_destroy(&client->dot_input);
+
+	client->state.data_end_timeval = ioloop_timeval;
 
 	input = client_get_input(client);
 	if (array_count(&client->state.rcpt_to) != 0)

@@ -51,11 +51,12 @@ name and key with '/'. For example:
 ---%<-------------------------------------------------------------------------
 namespace default {
   inbox = yes
+  location = maildir:~/Maildir
 }
 ---%<-------------------------------------------------------------------------
 
 The inbox setting can be overridden by returning 'namespace/default/inbox=yes'
-extra field.
+or 'namespace/default/location=mbox:/var/mail/%u' extra field.
 
 Examples
 --------
@@ -97,4 +98,4 @@ user2:{plain}pass2:1001:1001::/home/user2::userdb_mail=maildir:~/Maildir
 userdb_quota_rule=*:storage=200M
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

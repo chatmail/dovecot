@@ -191,11 +191,16 @@ Per-user mail locations
 It's possible to override the default 'mail_location' for specific users by
 making the <user database> [UserDatabase.txt] return 'mail' <extra field>
 [UserDatabase.ExtraFields.txt]. See the <user database> [UserDatabase.txt] page
-for the specific userdb you're using for more information how to do this. Below
-are however a couple of examples.
+for the specific userdb you're using for more information how to do this. 
+Below are however a couple of examples.
 
 Note that %h doesn't work in the userdb queries or templates. ~/ gets expanded
 later, so use it instead.
+
+Note also that since 'location' specified within a <namespace> [Namespaces.txt]
+overrides mail_location setting, in case you specified that parameter, you'll
+have to override in in the user database, specifying 'namespace/inbox/location'
+extra field instead of 'mail'.
 
 SQL
 ---
@@ -277,4 +282,4 @@ export USERDB_KEYS="$USERDB_KEYS namespace/user/location"
 exec env "NAMESPACE/USER/LOCATION=$location" "$@"
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

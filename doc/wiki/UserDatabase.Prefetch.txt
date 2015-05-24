@@ -84,4 +84,4 @@ pass_attrs = uid=user, userPassword=password, \
 user_attrs = homeDirectory=home, uidNumber=uid, gidNumber=gid
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

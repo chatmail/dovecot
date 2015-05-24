@@ -60,6 +60,7 @@ You can also give parameters to rawlog:
  * -b: Write IP packet boundaries (or whatever read() sees anyway) to the log
    files. The packet is written between<<< and >>>.
  * -t: Log a microsecond resolution timestamp at the beginning of each line.
+ * -I: Include IP address in the filename (v2.2.16+)
  * v2.1 and newer:
     * -f in: Log only to *.in files
     * -f out: Log only to *.out files
@@ -88,4 +89,4 @@ chown dovenull /var/run/dovecot/login/rawlogs
 chmod 0700 /var/run/dovecot/login/rawlogs
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)
