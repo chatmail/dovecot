@@ -1,8 +1,2304 @@
+2015-05-15  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 917d027836d0
+	[c627a0f64719] [tip]
+
+	* .hgtags:
+	Added tag 2.2.18 for changeset 917d027836d0
+	[9e2df74a37c7]
+
+	* NEWS, configure.ac:
+	Released v2.2.18.
+	[917d027836d0] [2.2.18]
+
+	* src/plugins/replication/replication-plugin.c:
+	replication plugin: Fixed handling EAGAIN errors when writing to
+	replication-pipe.
+	[d46270397a2f]
+
+	* src/plugins/replication/replication-plugin.c:
+	replication plugin: Added debug logging when mail_debug=yes
+	[7cf62f28fd62]
+
+	* src/plugins/replication/replication-plugin.c:
+	replication plugin: A small optimization to check the user's
+	"dsyncing" status only once.
+	[6a40cb15e48f]
+
+	* src/lib-sql/driver-pgsql.c:
+	pgsql: Don't crash at disconnect/deinit if there's an unfinished
+	query.
+	[b19ca4214e63]
+
+	* src/lib-sql/driver-pgsql.c:
+	pgsql: Log a warning if DNS lookup takes too long. Don't include it
+	in connect timeout.
+	[db41043041cb]
+
+	* src/config/Makefile.am, src/lib-dict/Makefile.am, src/lib-
+	fts/Makefile.am, src/lib-sql/Makefile.am, src/lib-
+	storage/register/Makefile.am, src/lib/Makefile.am,
+	src/plugins/quota/Makefile.am:
+	Reverted d592417ec815 which added unnecessary code to Makefiles. The
+	original problem it tried to solve was properly fixed by
+	46969c4cc57e. make will actually wait for processes to finish
+	creating files before it continues to the next program that wants to
+	access the file. As long as the dependencies are correct.
+	[55bcb0e792fc]
+
+	* src/plugins/quota/Makefile.am:
+	quota: Fixed dependency tracking in Makefile The earlier fix attempt
+	was done by creating a .tmp file first, but that didn't really solve
+	anything.
+	[46969c4cc57e]
+
+	* src/lib-storage/index/dbox-single/sdbox-copy.c, src/lib-
+	storage/index/dbox-single/sdbox-file.c:
+	sdbox: When hardlink-copying a mail in alt storage, keep it within
+	the alt storage. Also make sure that the alt-flag is set correctly
+	no matter where we copy the mail.
+	[9ad3f11617f1]
+
+2015-05-14  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/test-istream-unix.c:
+	lib: Use /dev/zero instead of /dev/stderr in test-istream-unix unit
+	test Some distros don't seem to allow opening stderr.
+	[91bbd6753689]
+
+	* src/lib-imap/imap-keepalive.c:
+	lib-imap: Fixed crash in IDLE for non-TCP connections.
+	[4c4eff229426]
+
+	* src/lib-fts/test-fts-filter.c:
+	lib-fts: Fixed test-fts-filter when building without libstemmer
+	[d09429bdb340]
+
+2015-05-14  Matti Hamalainen  <ccr@tnsp.org>
+
+	* configure.ac:
+	configure: Use consistent quotation for AC_DEFINEs as per autoconf
+	recommendations. Also fix one minor typo.
+	[a2c3a0f671a6]
+
+2015-05-14  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-sql/driver-pgsql.c:
+	pgsql: Include connect state string on connect failure errors.
+	[a0dd9dad3b8c]
+
+	* src/lib-lda/mail-deliver.h:
+	lib-lda: Added missing include file. This fixes building Pigeonhole
+	in some systems.
+	[05e14a49507f]
+
+	* src/director/main.c:
+	director: UNIX auth sockets were wrongly detected as doveadm or ring
+	sockets. A workaround would be to use login/director-auth socket
+	name instead of login/director.
+	[cc6b6d7c1574]
+
+2015-05-13  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts-lucene/fts-backend-lucene.c:
+	fts-lucene: Removed dead code Found by Coverity
+	[041b6b9921c5]
+
+	* src/lib-fts/Makefile.am:
+	lib-fts: Makefile compiling dependency fix
+	[13787b077df4]
+
+	* .hgsigs:
+	Added signature for changeset 166106aaefc5
+	[ce1aa9c639ab]
+
+	* .hgtags:
+	Added tag 2.2.17 for changeset 166106aaefc5
+	[7e437ea0cc0f]
+
+	* NEWS, configure.ac:
+	Released v2.2.17.
+	[166106aaefc5] [2.2.17]
+
+	* src/lib-lda/lda-settings.c:
+	lib-lda: Don't crash if postmaster_address is given as command line
+	parameter.
+	[25dc311a5faa]
+
+	* src/lib-storage/index/mbox/mbox-sync-rewrite.c:
+	mbox: If we notice our internal state is wrong, avoid further
+	corruption by returning error.
+	[1171265c3834]
+
+	* src/lib-storage/index/mbox/mbox-sync.c:
+	mbox: Fixed corruption in some usage patterns. Something like:
+	 - first mail is being expunged
+	 - other mails are being rewritten and they get their space from the
+	expunged mail
+	 - there's not enough space for the last mail to get space
+	 - we add more space
+	 - we'll now need to use up the space. We can't just decide to mark the
+	mails dirty.
+	[b6ea460e7cc4]
+
+	* src/plugins/fts-solr/fts-backend-solr-old.c, src/plugins/fts-solr
+	/fts-backend-solr.c, src/plugins/fts-solr/solr-connection.c,
+	src/plugins/fts-solr/solr-connection.h:
+	fts-solr: Fixed memory leak at user deinit.
+	[8973648dd361]
+
+	* src/plugins/fts-solr/fts-backend-solr-old.c, src/plugins/fts-solr
+	/fts-backend-solr.c, src/plugins/fts-solr/solr-connection.c,
+	src/plugins/fts-solr/solr-connection.h:
+	fts-solr: Crashfixes
+	[e6e04177374d]
+
+	* src/plugins/fts-solr/fts-backend-solr.c:
+	fts-solr: Don't update "last indexed UID" if we couldn't actually
+	add the mails to Solr.
+	[5483aeb1ce9b]
+
+	* src/director/login-connection.c, src/director/login-connection.h,
+	src/director/main.c:
+	director: Added "authreply" socket type. This allows defining a
+	socket, which receives auth replies. Director then adds the "host"
+	field to it if it's missing and returns back the original string.
+	The idea is that eventually a director ring could be running
+	independently from Dovecot proxies.
+	[52cdf321fa07]
+
+	* src/director/main.c:
+	director: Removed accidentally committed debug log message
+	[c97d10467b62]
+
+	* src/lib-master/master-service-settings.c:
+	lib-master: If executing doveconf, use
+	master_service_settings_input.service for filter Instead of
+	hardcoding to the master_service->name, which may be different. This
+	fixes reading protocol sieve {} settings when if managesieve was
+	reading settings via doveconf (= executed from command line).
+	[f8f0a782213b]
+
+	* src/director/main.c:
+	director: Cleanup for director socket type configuration. It's now
+	possible to use any type of a socket for inet listeners by
+	specifying the name for the listener. The available types are: auth
+	(default), userdb, ring (= director<->director connection),
+	admin/doveadm. This change should be backwards compatible with
+	previous configuration. This setting also deprecates
+	director_doveadm_port setting.
+	[fea09ab164dc]
+
+	* src/lib-master/master-service.c, src/lib-master/master-service.h:
+	lib-master: Added master_service_get_socket_name()
+	[5614bc437643]
+
+	* src/director/auth-connection.c, src/director/auth-connection.h,
+	src/director/login-connection.c:
+	director: Minor code cleanup - allow access to auth connection's
+	ostream directly.
+	[d54dc360cd3c]
+
+	* src/director/auth-connection.c, src/director/auth-connection.h,
+	src/director/login-connection.c:
+	director: Reverted previous e178413a905d commit after all - do it a
+	bit differently.
+	[67fdd6f962f5]
+
+	* NEWS, configure.ac, src/plugins/Makefile.am, src/plugins/quota-
+	clone/Makefile.am, src/plugins/quota-clone/quota-clone-plugin.c,
+	src/plugins/quota-clone/quota-clone-plugin.h:
+	Added quota-clone plugin.
+	[f5749f22276b]
+
+	* src/lib-sql/Makefile.am:
+	lib-sql: sqlite and cassandra libs were mixed up in the Makefile
+	[69dcc2c8cd9d]
+
+	* src/director/auth-connection.c, src/director/auth-connection.h,
+	src/director/login-connection.c:
+	director: Added a new DIRECTOR-LOOKUP command that auth connections
+	can use. The parameters are the same as what auth lookup would
+	receive from auth process. So the idea is that a proxy could do an
+	auth lookup, then forward the reply to director, which would return
+	back the updated reply with the host field added.
+	[e178413a905d]
+
+	* src/director/director-connection.c:
+	director: Don't send DIRECTOR command infinitely in loop if that
+	director got disconnected.
+	[b7aed6290e7e]
+
+	* src/director/director-connection.c, src/director/director-request.c,
+	src/director/director.h, src/director/main.c, src/director/user-
+	directory.c, src/director/user-directory.h:
+	director: Include useful statistics in process title.
+	[502755a1af5f]
+
+	* src/director/director-connection.c:
+	director: Fixed crash if director sent invalid data too early.
+	[1c268a7cc74a]
+
+	* src/director/director-connection.c:
+	director: If we disconnect a director, pass the reason all the way
+	to deinit's debug logging.
+	[27baf04f2b18]
+
+	* src/director/director.c:
+	director: Improved debug logging about connecting to another
+	director.
+	[f43adca71e15]
+
+	* src/doveadm/doveadm-dict.c:
+	Make static analyzer happier.
+	[e899171adc14]
+
+2015-05-12  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset 2c1ce55de520
+	[71d88e63b183]
+
+	* .hgtags:
+	Added tag 2.2.17.rc2 for changeset 2c1ce55de520
+	[b93731b6bc98]
+
+	* NEWS, configure.ac:
+	Released v2.2.17.rc2.
+	[2c1ce55de520] [2.2.17.rc2]
+
+	* src/lib/connection.c, src/lib/connection.h:
+	lib: connection API: Added delayed_unix_client_connected_callback
+	setting. 092a51d80bad commit changed this functionality first to fix
+	lib-http code, but it broke other code. 1fac17a2bc53 reversed the
+	original behavior. This change allows either behavior optionally.
+	[6f167f2e550d]
+
+	* src/doveadm/doveadm-fs.c:
+	doveadm fs: Improved error message logging.
+	[c4bef3533ecd]
+
+	* src/doveadm/doveadm-dict.c:
+	doveadm dict iter: Added -1 parameter to enable
+	DICT_ITERATE_FLAG_EXACT_KEY
+	[04e169b3bfe6]
+
+	* src/lib-dict/dict-sql.c:
+	dict-sql: Fixed non-recursive iteration. If path has e.g.
+	"a/$var/b/$var2" and we're iterating "a/", we shouldn't return
+	anything under "a/*/b/".
+	[fce3e3eef9f0]
+
+	* src/lib-sql/driver-cassandra.c:
+	cassandra: Leave consistency to default if it's not specified in
+	config.
+	[f0273ba240ae]
+
+	* src/lib/connection.c:
+	lib: connection API was unnecessarily delaying client_connected()
+	calls for UNIX sockets.
+	[1fac17a2bc53]
+
+	* src/doveadm/doveadm.c:
+	doveadm: Register builtin dict drivers always at init
+	[2460008d50d1]
+
+	* src/lib-dict/dict-register.c:
+	lib-dict: Allow registering builtin dict drivers multiple times.
+	[ac259cd62fbc]
+
+	* src/lib-sql/driver-cassandra.c:
+	lib-sql: Don't crash in Cassandra if connection to it failed.
+	[d71fa3ae930f]
+
+2015-05-12  Teemu Huovila  <teemu.huovila@dovecot.fi>
+
+	* src/lib-fts/fts-filter-normalizer-icu.c:
+	lib-fts: ICU normalizer code cleanup.
+
+	Fold some long lines. Rename the internal struct to be more aligned
+	with the other filters.
+	[d09d2ea2c31a]
+
+2015-05-12  Phil Carmody  <phil@dovecot.fi>
+
+	* src/lib-fts/Makefile.am, src/lib-fts/word-boundary-data.sh, src/lib-
+	fts/word-break-data.sh, src/lib-fts/word-properties.pl:
+	lib-fts: autogenerate C arrays using perl
+
+	The sh script had bashisms, the awk script crashed mawk, so let's
+	try perl...
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[58d7234a6658]
+
+2015-05-12  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fs-compress/Makefile.am:
+	fs-compress: Added NOPLUGIN_LDFLAGS to Makefile for helping with
+	linking
+	[0cbb125046a5]
+
+	* src/lib-fts/Makefile.am:
+	lib-fts: .sh scripts weren't executable - changed them to be run via
+	bash directly. Better to avoid relying on the executable bit.
+	[e991baeb8bb7]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/word-boundary-data.awk, src
+	/lib-fts/word-boundary-data.sh, src/lib-fts/word-break-data.awk, src
+	/lib-fts/word-break-data.sh:
+	lib-fts: Reverted e80969ea8684 which replaced .sh scripts with awk
+	Bugs in older awk versions (used at least by Debian squeeze &
+	wheezy) caused awk to crash while processing the script.
+	[2cfb80f7785e]
+
+2015-05-11  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-fts/Makefile.am:
+	Makefile: Fixed build concurrency issues with lib-fts
+	[7d52d6595f5e]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/word-boundary-data.awk, src
+	/lib-fts/word-boundary-data.sh, src/lib-fts/word-break-data.awk, src
+	/lib-fts/word-break-data.sh:
+	lib-fts: Replaced word-boundary/break-data.sh with more portable awk
+	scripts Patch by Michael Grimm.
+	[e80969ea8684]
+
+	* configure.ac, src/lib-sql/Makefile.am, src/lib-sql/driver-
+	cassandra.c:
+	lib-sql: Added support for Cassandra CQL as lib-sql backend.
+	Implemented using DataStax's cpp-driver.
+
+	Many things are still unimplemented. Column name specific
+	functionality isn't even supported by the Cassandra library. So this
+	can currently mainly be used as one of the dict backends for some
+	simple functionality.
+	[3725c601dbaf]
+
+	* src/lib-dict/dict-sql.c:
+	dict-sql: If DICT_ITERATE_FLAG_EXACT_KEY is used, use only the first
+	found map.
+	[7abdcf42b63b]
+
+	* src/lib-dict/dict-file.c, src/lib-dict/dict-fs.c, src/lib-dict/dict-
+	sql.c, src/lib-dict/dict.h:
+	lib-dict: Added DICT_ITERATE_FLAG_EXACT_KEY flag. This is mainly
+	useful with SQL for iterating through a result that has multiple
+	rows.
+	[bb7d35fa9b43]
+
+	* src/lib-fts/test-fts-filter.c:
+	lib-fts: Fixed/improved test-fts-filter unit tests for previous
+	changes.
+	[44a87e17f988]
+
+	* src/lib-fts/fts-filter-normalizer-icu.c:
+	lib-fts: normalizer-icu no longer returns empty tokens.
+	[d4541fd7a531]
+
+	* src/lib-fts/fts-filter.c:
+	lib-fts: Added assert to fts_filter_filter() to make sure input
+	token isn't empty
+	[cc59ac0f6a45]
+
+	* src/lib-fts/fts-tokenizer-generic.c:
+	lib-fts: Fixed assert-crash in fts-tokenizer-generic
+	[aa3374b9ce0f]
+
+	* src/lib-fts/test-fts-tokenizer.c:
+	lib-fts: Test trailing "number." for TR29 in test-fts-tokenizer
+	[2483039db977]
+
+	* src/lib-fts/test-fts-tokenizer.c:
+	lib-fts: Improved test-fts-tokenizer to run multiple text inputs
+	[9f06c6054e3e]
+
+	* src/lmtp/commands.c:
+	lmtp: Earlier compiler warning fix broke compiling completely..
+	[103f64df4e77]
+
+	* src/lib-fts/fts-filter.c, src/lib-fts/fts-tokenizer.c:
+	lib-fts: Added asserts to make sure we don't return empty tokens.
+	[13461d146be0]
+
+	* src/imap-urlauth/imap-urlauth.c, src/plugins/fts-lucene/lucene-
+	wrapper.cc, src/pop3/main.c:
+	Compiler warning fixes
+	[9c4d1e1e252f]
+
+	* src/lmtp/commands.c:
+	lmtp: chdir() to base_dir shouldn't fail - log an error if it does
+	[413962f2b7e7]
+
+2015-05-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-index/mail-index-map-hdr.c, src/lib-index/mail-index-map-
+	read.c, src/lib-index/mail-index-private.h, src/lib-index/mail-
+	index-sync-update.c:
+	lib-index: If header is corrupted after syncing, log the reason why.
+	[69630e6048fd]
+
+	* src/plugins/fts/fts-build-mail.c:
+	fts: Fixed crash when not using lib-fts
+	[fddd3dbdf987]
+
+	* src/lib-http/http-server-connection.c:
+	lib-http: http-server now always creates a payload istream, even
+	empty one. This simplifies the caller's logic so that it doesn't
+	need to explicitly check if payload is NULL everywhere.
+	[05ee9da60255]
+
+2015-05-09  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/pop3-migration/pop3-migration-plugin.c:
+	pop3-migration: Added more debug and error logging.
+	[3903badc4ee0]
+
+	* .hgsigs:
+	Added signature for changeset da685736985a
+	[8b20d717a3e9]
+
+	* .hgtags:
+	Added tag 2.2.17.rc1 for changeset da685736985a
+	[8e9dfdfea3ce]
+
+	* NEWS, configure.ac:
+	Released v2.2.17.rc1.
+	[da685736985a] [2.2.17.rc1]
+
+	* configure.ac, src/lib-compression/Makefile.am, src/lib-compression
+	/fs-compress.c, src/plugins/Makefile.am, src/plugins/fs-
+	compress/Makefile.am, src/plugins/fs-compress/fs-compress.c:
+	Moved fs-compress to a separate plugin directory. Mainly because I
+	couldn't figure out how to make automake dependencies work on "make
+	install" stage. It was trying to link fs-compress.so using
+	-ldovecot-storage, but libdovecot-storage.so was also concurrently
+	being installed.
+	[7799886e017a]
+
+	* src/lib-http/http-server-connection.c, src/lib-index/mail-
+	transaction-log-file.c, src/lib-mail/ostream-dot.c, src/lib-
+	storage/index/index-mail.c, src/lib-storage/index/maildir/maildir-
+	uidlist.c:
+	Make Coverity happier.
+	[49f5131a502e]
+
+	* src/plugins/quota/quota-dict.c:
+	quota-dict: It wasn't possible to use multiple quota settings. Found
+	by Coverity
+	[8b452eb97422]
+
+	* src/anvil/penalty.c:
+	anvil: Penalty tracking was moving last checksums wrongly with
+	memcpy(). Depending on the OS/etc this could have caused the
+	checksum tracking to go wrong. Found by Coverity.
+	[398d94f08407]
+
+	* src/doveadm/server-connection.c:
+	doveadm-server: Fixed potential crash if doveadm client disconnected
+	Found by Coverity
+	[e702b7a745e0]
+
+	* src/doveadm/doveadm-mail.c, src/doveadm/doveadm-mail.h:
+	doveadm: Removed unused doveadm_mailbox_find_and_sync() function
+	[cff670d68f69]
+
+	* src/imap/cmd-append.c:
+	imap: Don't crash if APPEND command is given with invalid
+	parameters. Found by Coverity.
+	[1c2e42bf8825]
+
+	* src/lib-mail/istream-attachment-extractor.c:
+	lib-mail: Improved istream-attachment-extractor error logging.
+	[024fb73d7d62]
+
+	* src/lib-mail/istream-attachment-extractor.c:
+	lib-mail: Fixed crash in istream-attachment-extractor error handling
+	path
+	[d547eee8a8c7]
+
+	* src/indexer/master-connection.c:
+	indexer-worker: Don't crash if we failed to get mailbox path. Found
+	by Coverity
+	[a982d64d1727]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/fts-tokenizer-
+	generic.c, src/lib-fts/fts-tokenizer-private.h, src/lib-fts/fts-
+	tokenizer.c, src/lib-fts/fts-tokenizer.h, src/lib-fts/test-fts-
+	tokenizer.c, src/plugins/fts/fts-build-mail.c, src/plugins/fts/fts-
+	search-args.c:
+	lib-fts: Changed fts_tokenizer_next/final() to return error string.
+	The current tokenizers can't fail, but if we're doing tokenization
+	via external services they could fail.
+	[7f151aca47ac]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/fts-tokenizer-
+	generic.c:
+	lib-fts: Minor code cleanup - avoid functions always returning same
+	value Makes it clearer to see in the code that the function can't
+	return any failures.
+	[fa55a06ffae2]
+
+	* src/lib-fts/fts-language.c, src/lib-fts/fts-language.h, src/lib-fts
+	/test-fts-language.c, src/plugins/fts/fts-user.c:
+	lib-fts: fts_language_list_init() API changed to return errors.
+	[1fc7ae2640b0]
+
+	* src/plugins/virtual/virtual-save.c:
+	virtual: Don't crash if trying to save mail to a virtual mailbox
+	without configured save-mailbox. Found by Coverity
+	[0a1726e7015b]
+
+	* src/lib-fs/fs-metawrap.c:
+	lib-fs: Minor code cleanup Both temp_output and super_output are
+	NULL so it doesn't matter which we use, but this change makes it use
+	the intended variable.
+	[24c2adaded28]
+
+	* src/lib-compression/Makefile.am:
+	lib-compression: Fixed dependency tracking in Makefile
+	[ceb9c13eb3c0]
+
+2015-05-09  Pascal Volk  <user@localhost.localdomain.org>
+
+	* doc/man/Makefile.am, doc/man/doveadm-acl.1.in, doc/man/doveadm-
+	altmove.1.in, doc/man/doveadm-batch.1.in, doc/man/doveadm-
+	deduplicate.1.in, doc/man/doveadm-expunge.1.in, doc/man/doveadm-
+	fetch.1.in, doc/man/doveadm-flags.1.in, doc/man/doveadm-force-
+	resync.1.in, doc/man/doveadm-fts.1.in, doc/man/doveadm-import.1.in,
+	doc/man/doveadm-index.1.in, doc/man/doveadm-mailbox.1.in, doc/man
+	/doveadm-move.1.in, doc/man/doveadm-purge.1.in, doc/man/doveadm-
+	quota.1.in, doc/man/doveadm-search.1.in, doc/man/doveadm-sync.1.in,
+	doc/man/option-F-file.inc, doc/man/option-u-user.inc,
+	doc/man/sed.sh:
+	man: Added description of option `-F file'.
+	[c469d8f4cde7]
+
+2015-05-09  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-fts/test-fts-tokenizer.c:
+	lib-fts: Various improvements to test-fts-tokenizer
+	[e4b62ba0fb5a]
+
+	* src/lib-fts/fts-tokenizer.c, src/lib-fts/fts-tokenizer.h,
+	src/plugins/fts/fts-search-args.c:
+	lib-fts: Added fts_tokenizer_final() as a convenience wrapper.
+	[7542e3be6721]
+
+	* src/lib-fts/fts-tokenizer-generic.c:
+	lib-fts: Fixed token truncation.
+	[dd04199a689f]
+
+	* src/lib-fts/fts-filter-normalizer-icu.c:
+	lib-fts: Fixed compiling without libicu
+	[99ad974a3828]
+
+	* src/lib-storage/mail-storage-hooks.c:
+	lib-storage: Run each storage hook inside its own data stack frame.
+	[de8561d67b38]
+
+	* src/plugins/fts/fts-user.c:
+	fts: Renamed filter and tokenizer specific setting keys. Having the
+	plural in the name didn't make a lot of sense, so all the settings
+	are now:
+
+	 fts_filters = name1 name2 fts_filters_<lang> = name3 name 4
+	fts_filter_<name> = key1=value1 fts_filter_<lang>_<name> =
+	key2=value2
+
+	 fts_tokenizers = name1 name2 fts_tokenizer_<name> = key1=value1
+
+	So this also removes the confusion in settings if there existed a
+	filter with one of the language names.
+	[f5cebd75975f]
+
+	* src/plugins/fts/fts-user.c:
+	fts: Simplify error messages a little bit to be more consistent with
+	other such errors. Only the setting name is really important.
+	[cfe29a5d66ed]
+
+	* src/plugins/fts/fts-user.c:
+	fts: Use key=value instead of "key value" settings for tokenizers
+	and filters.
+	[82831550757b]
+
+	* src/plugins/fts/fts-user.c:
+	fts: If fts_filters setting doesn't exist, use built-in defaults.
+	[461bb302bd03]
+
+	* src/plugins/fts/fts-user.c:
+	fts: Prefer language-specific filter settings over global
+	fts_filters setting.
+	[b0ac652f9e2f]
+
+	* src/lib-fts/fts-filter-normalizer-icu.c, src/lib-fts/fts-filter.c,
+	src/lib-fts/fts-filter.h, src/lib-fts/fts-tokenizer-address.c, src
+	/lib-fts/fts-tokenizer-generic-private.h, src/lib-fts/fts-
+	tokenizer.c, src/lib-fts/fts-tokenizer.h:
+	lib-fts: Minor code cleanups
+	[7bd196b84518]
+
+	* src/lib-fts/fts-tokenizer-generic-private.h, src/lib-fts/fts-
+	tokenizer-generic.c:
+	lib-fts: fts-tokenizer-generic-private.h had content that didn't
+	really belog there.
+	[00240870d0bd]
+
+	* src/lib-fts/fts-filter-lowercase.c, src/lib-fts/fts-filter-
+	normalizer-icu.c, src/lib-fts/fts-filter-private.h, src/lib-fts/fts-
+	filter-stemmer-snowball.c, src/lib-fts/fts-filter-stopwords.c:
+	lib-fts: Removed supports() function from filter API I think the
+	original idea was that this could be used to automatically create
+	filters for many languages, but this probably won't be needed or
+	wanted.
+	[e2a0b43e73ef]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/fts-tokenizer-
+	generic.c, src/lib-fts/fts-tokenizer.h, src/lib-fts/test-fts-
+	tokenizer.c:
+	lib-fts: Removed tokenizer name macros from fts-tokenizer.h The
+	tokenizers can be directly accessed via their class structs.
+	[12aeb1ac8f0d]
+
+	* src/lib-fts/fts-tokenizer.c:
+	lib-fts: Store pointers to fts_tokenizer classes instead of copying
+	the data. The same reason as for doing this for fts-filter.
+	[5937f4d505c5]
+
+	* src/lib-fts/test-fts-tokenizer.c:
+	lib-fts: test-fts-tokenizer cleanup - moved tokenizers_init/deinit()
+	to be done globally
+	[cd376c0ac132]
+
+	* src/lib-fts/fts-filter-lowercase.c, src/lib-fts/fts-filter-
+	normalizer-icu.c, src/lib-fts/fts-filter-stemmer-snowball.c, src
+	/lib-fts/fts-filter-stopwords.c, src/lib-fts/fts-filter.h, src/lib-
+	fts/test-fts-filter.c:
+	lib-fts: Removed filter name macros from fts-filter.h The filters
+	can be directly accessed via their class structs.
+	[055666aaba5a]
+
+	* src/lib-fts/fts-filter.c:
+	lib-fts: Store pointers to fts_filter classes instead of copying the
+	data. Doesn't really matter, but it's a bit cleaner when
+	fts_filter_find() returns the same pointer as the fts_filter class
+	originally was.
+	[307fe289f1b7]
+
+	* src/plugins/fts/fts-build-mail.c, src/plugins/fts/fts-user.c,
+	src/plugins/fts/fts-user.h:
+	fts: Lowecase non-human language input while indexing.
+	[fcc20dce3c83]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/fts-filter-lowercase.c, src
+	/lib-fts/fts-filter.c, src/lib-fts/fts-filter.h, src/lib-fts/test-
+	fts-filter.c:
+	lib-fts: Added "lowercase" filter. For now it handles only ASCII
+	characters, but that's enough for our use.
+	[75b4b312ea09]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/fts-filter-normalizer-simple.c,
+	src/lib-fts/fts-filter.c, src/lib-fts/fts-filter.h:
+	lib-fts: Removed "simple" normalizer. It translated input to
+	titlecase, which wasn't suitable for snowball stemming that wanted
+	lowercase input. Since that doesn't work, there's probably no good
+	for the existence of this (perhaps in future it's replaced by
+	unicode-aware lowercaser).
+	[1963690280b7]
+
+	* src/lib-fts/test-fts-filter.c:
+	lib-fts: Minor unit test cleanups
+	[b2f9e4cf17db]
+
+	* src/plugins/fts/fts-build-mail.c, src/plugins/fts/fts-search-args.c:
+	fts: Reset tokenizers before using them This is mainly needed if the
+	previous tokenization had failed.
+	[d2e0e9aed81c]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/fts-tokenizer-
+	generic.c, src/lib-fts/fts-tokenizer-private.h, src/lib-fts/fts-
+	tokenizer.c, src/lib-fts/fts-tokenizer.h, src/lib-fts/test-fts-
+	tokenizer.c:
+	lib-fts: Added fts_tokenizer_reset()
+	[2dca6925bd88]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/test-fts-
+	tokenizer.c:
+	lib-fts: fts-tokenizer-address didn't reset state properly when
+	input ended.
+	[363397c3701e]
+
+	* src/lib-fts/fts-tokenizer-generic.c, src/plugins/fts/fts-user.c:
+	fts: When tokenizing a search word, give "search" parameter to all
+	the tokenizers.
+	[eff53aa9cb58]
+
+	* src/plugins/fts/fts-search-args.c:
+	fts: Don't crash if search arg string expands to empty token list.
+	[162668a63045]
+
+	* src/lib-fts/fts-tokenizer-generic.c:
+	lib-fts: Use case-sensitive settings comparisons in fts-tokenizer
+	Dovecot in general doesn't allow case-insensitive settings.
+	[3bcd04bf5635]
+
+	* src/lib-fts/test-fts-filter.c:
+	lib-fts: Minor unit test fix - use case sensitive checks for word
+	comparison.
+	[6c284e61013f]
+
+	* src/lib-storage/mail-search.c, src/lib-storage/mail-search.h:
+	lib-storage: mail_search_arg_dup() is now a public function.
+	[eb6fbab30cf6]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/test-fts-
+	tokenizer.c:
+	lib-fts: Implemented "search" parameter to fts-tokenizer-address.
+	[60f07e741c57]
+
+	* src/plugins/fts/fts-search-args.c:
+	fts: If filtering fails during search arg expansion, fail the fts
+	search.
+	[07597666aa29]
+
+	* src/lib-fts/fts-filter-normalizer-icu.c:
+	lib-fts: Compiler warning fix when building without libicu
+	[3363fadc2e13]
+
+	* src/lib-fts/fts-tokenizer-address.c:
+	lib-fts: Minor fts-tokenizer-address cleanups
+	[ac6ae1b9f5c4]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/test-fts-
+	tokenizer.c:
+	lib-fts: Removed explicit no_parent setting from fts-address-
+	tokenizer It was used only by unit tests and we can check it without
+	the setting as well.
+	[7c1fe66e8855]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/fts-tokenizer-address.c:
+	lib-fts: Use rfc822-parser in fts-tokenizer-address instead of
+	duplicating its code.
+	[f4b2aa500cde]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/test-fts-
+	tokenizer.c:
+	lib-fts: Don't treat empty domains as valid addresses. This actually
+	pretty much reverts the previous patch and just fixes the original
+	code's chars_after_at() to work correctly. Also renamed the function
+	to make it a bit clearer what was intended.
+	[bcfe4c592427]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/test-fts-
+	tokenizer.c:
+	lib-fts: Removed unnecessary code from fts-address-tokenizer.
+	chars_after_at() was only used to check if local-part was empty, but
+	it was checked at a state where it never could have been empty.
+	[b9f85e125639]
+
+	* src/lib-fts/fts-filter-stopwords.c:
+	lib-fts: Various fixes and cleanups to stopwords filter. Most
+	importantly words added to hash table needs to be allocated from the
+	pool and not data stack.
+	[adf9eb277499]
+
+	* src/lib-fts/fts-filter-stemmer-snowball.c, src/lib-fts/fts-filter-
+	stopwords.c, src/lib-fts/fts-language.h, src/lib-fts/test-fts-
+	filter.c:
+	lib-fts: Assume that fts_language.name is always lowercased and has
+	two letters. Anything else just unnecessarily complicates the code.
+	[92ee245b1406]
+
+	* src/lib-fts/fts-filter.c, src/lib-fts/test-fts-filter.c:
+	lib-fts: Fixed test-fts-filter unit test to handle errors a bit
+	better.
+	[e1d2702eea84]
+
+	* src/lib-fts/fts-filter-normalizer-icu.c, src/lib-fts/fts-filter-
+	normalizer-simple.c, src/lib-fts/fts-filter-private.h, src/lib-fts
+	/fts-filter-stemmer-snowball.c, src/lib-fts/fts-filter-stopwords.c,
+	src/lib-fts/fts-filter.c, src/lib-fts/fts-filter.h:
+	lib-fts: Changed filter's internal APIs to return error_r directly.
+	It's not very safe to store strings allocated from data stack to any
+	permanent structs.
+	[cfa35069876b]
+
+	* src/lib-fts/fts-filter-stemmer-snowball.c:
+	lib-fts: Snowball's sb_stemmer_stem() can only fail because it runs
+	out of memory.
+	[7de648f42bc0]
+
+2015-05-09  Teemu Huovila  <teemu.huovila@dovecot.fi>
+
+	* src/lib-fts/fts-tokenizer-generic.c, src/lib-fts/test-fts-
+	tokenizer.c:
+	lib-fts: Improve using max_length in tr29 tokenizer
+	[b0a934361563]
+
+	* src/lib-fts/fts-tokenizer-generic.c, src/lib-fts/test-fts-
+	tokenizer.c:
+	lib-fts: Fixed using max_length setting in simple tokenizer
+	[2048dade16e7]
+
+	* src/lib-fts/fts-tokenizer-generic.c:
+	lib-fts: Default to simple tokenizer algorithm
+	[8d445959df03]
+
+	* src/lib-fts/fts-filter-stopwords.c, src/lib-fts/test-fts-filter.c:
+	lib-fts: Delay stopwords filter full initialization until it's
+	needed.
+	[6a6ce51597f7]
+
+	* src/lib-fts/fts-filter-stemmer-snowball.c:
+	lib-fts: Delay snowball filter initialization until it's needed.
+	[a45a328c5019]
+
+	* src/lib-fts/fts-filter-normalizer-icu.c, src/lib-fts/fts-filter-
+	private.h, src/lib-fts/fts-filter.c, src/lib-fts/fts-filter.h, src
+	/lib-fts/test-fts-filter.c, src/plugins/fts/fts-build-mail.c,
+	src/plugins/fts/fts-search-args.c:
+	fts: Improve filter error handling.
+
+	In lib-fts: Move error storage to the generic filter struct level.
+	Change make_utf8 helper to void also.
+
+	In fts: Add the error argument to _filter() calls.
+	[230698a51fbb]
+
+	* src/lib-fts/fts-filter-normalizer-icu.c:
+	lib-fts: Removed make_uchar() return value. It was already de facto
+	meaningless, so best we remove it.
+	[8c33d375c73e]
+
+	* src/lib-fts/fts-filter-normalizer-icu.c, src/lib-fts/test-fts-
+	filter.c:
+	lib-fts: normalizer-icu now delays initialization of libicu. This
+	way the normalizer can be quickly created even if it's never even
+	used.
+	[3ae8ae7f1022]
+
+	* src/lib-fts/fts-filter-normalizer-icu.c, src/lib-fts/fts-filter-
+	normalizer-simple.c, src/lib-fts/fts-filter-private.h, src/lib-fts
+	/fts-filter-stemmer-snowball.c, src/lib-fts/fts-filter-stopwords.c,
+	src/lib-fts/fts-filter.c, src/lib-fts/fts-filter.h, src/lib-fts
+	/test-fts-filter.c, src/plugins/fts/fts-build-mail.c,
+	src/plugins/fts/fts-search-args.c:
+	fts: Change filter API to be able to return errors
+
+	Modify fts_filter_filter() to return integer status codes. It
+	returns 1 if a token was returned, 0 if it was filtered away and -1
+	on error.
+	[95a827d97e5b]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/fts-tokenizer-
+	generic.c, src/lib-fts/fts-tokenizer-private.h, src/lib-fts/fts-
+	tokenizer.c, src/lib-fts/fts-tokenizer.h, src/lib-fts/test-fts-
+	tokenizer.c, src/plugins/fts/fts-build-mail.c, src/plugins/fts/fts-
+	search-args.c:
+	fts: Change tokenizer API to be able to return errors
+
+	Modify fts_tokenizer_next() to return integer status codes. It
+	returns 1 if a token was returned in *token_r, 0 if more input is
+	needed and -1 on error.
+	[7fe766887394]
+
+	* src/plugins/fts/fts-user.c:
+	fts: Replace '-' with '_' in tokenizer-specific fts_tokenizers_*
+	settings
+	[cebe8be92034]
+
+	* src/lib-fts/fts-tokenizer-address.c, src/lib-fts/fts-tokenizer.c,
+	src/lib-fts/fts-tokenizer.h, src/lib-fts/test-fts-tokenizer.c,
+	src/plugins/fts/fts-api-private.h, src/plugins/fts/fts-build-mail.c,
+	src/plugins/fts/fts-plugin.c, src/plugins/fts/fts-search-args.c,
+	src/plugins/fts/fts-storage.c, src/plugins/fts/fts-user.c,
+	src/plugins/fts/fts-user.h:
+	fts: Create tokenizers differently
+
+	Create tokenizers earlier. Create separate tokenizers for search and
+	indexing. Enable configuration of tokenizers. Add some helpers in
+	fts-tokenizer.h api. Change tokenizer unit tests to match those
+	changes.
+
+	lib-fts: Refactor lib-fts settings a bit
+
+	Turned address tokenizer settings into "boolean" values. Changed
+	have_parent to "no_parent" and added "search" setting. Added
+	documentation in fts-tokenizer.h. Change unit tests accordingly.
+	[ae0458c63761]
+
+	* src/plugins/fts/fts-build-mail.c, src/plugins/fts/fts-search-args.c,
+	src/plugins/fts/fts-user.c, src/plugins/fts/fts-user.h:
+	fts: Create filters earlier
+
+	This builds on the assumption that early initialization will be made
+	less costly, in a coming change.
+	[abbd71252175]
+
+2015-05-08  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts/fts-search-args.c:
+	fts: Fixed handling NOT when using lib-fts
+	[6ec2073bbf5c]
+
+	* src/doveadm/doveadm-dsync.c, src/doveadm/doveadm-mail.c, src/doveadm
+	/doveadm-mail.h:
+	dsync: Stop running if SIGINT/SIGTERM is received.
+	[60e48bb43f19]
+
+	* src/lib-compression/Makefile.am, src/lib-compression/fs-compress.c,
+	src/lib-fs/Makefile.am, src/lib-fs/fs-compress.c:
+	Moved fs-compress from lib-fs to lib-compression. This solves build
+	ordering issues.
+	[f2a8e1793718]
+
+2015-05-07  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-fs/fs-api-private.h, src/lib-fs/fs-api.c, src/lib-fs/fs-
+	compress.c:
+	lib-fs: Fixed fs-compress code to actually build and run. It's a
+	plugin (because it depends on extra compression libraries). We want
+	to register it only when it's explicitly attempted to be used, not
+	before.
+	[7516211ff7e6]
+
+	* src/lib-fs/Makefile.am, src/lib-fs/fs-api-private.h, src/lib-fs/fs-
+	api.c, src/lib-fs/fs-compress.c:
+	lib-fs: Added fs-compress wrapper. Future TODO could include
+	automatically detecting the format of the input file, but this
+	should be optional.
+	[4c8fc477d68a]
+
+	* src/lib-storage/list/mailbox-list-maildir.c:
+	lib-storage: Fixed LAYOUT=imapdir to work again Patch by Jason
+	Gunthorpe
+	[c45fe041ccfb]
+
+	* src/director/doveadm-connection.c:
+	director: Fixed "doveadm director status <user>" lookup to return
+	"Current" correctly.
+	[04ac1a15e6e4]
+
+	* doc/example-config/conf.d/20-lmtp.conf:
+	example-config: s/Recipient:/Received:/
+	[7a972218b15e]
+
+	* doc/example-config/conf.d/20-lmtp.conf:
+	exmaple-config: Added lmtp_hdr_delivery_address setting.
+	[6417e972a602]
+
+	* src/auth/auth-worker-client.c:
+	auth: Added assert to make sure previous change is correct.
+	[d3332ee1d26a]
+
+	* src/auth/auth-worker-client.c:
+	auth: Fixed credentials lookups via auth-workers when no actual
+	password was returned. For example LDAP lookup with auth_bind=yes
+	should still return any extra fields.
+	[8a3da4ef590f]
+
+	* src/auth/passdb-ldap.c:
+	ldap auth: If password is already verified (e.g. master user login),
+	skip LDAP auth binding. This happens only if auth_bind_userdn isn't
+	set, i.e. it only makes sense if the LDAP DN lookup also returns
+	some extra fields.
+	[5dc00179dd60]
+
+	* src/lib-storage/index/mbox/mbox-sync-rewrite.c:
+	mbox: Added an extra assert
+	[34b5abf6b9b7]
+
+	* src/lib-storage/index/mbox/mbox-sync.c:
+	mbox: Fixed crash/corruption in some situations when the first mail
+	was expunged. This could be reproduced with default mbox settings,
+	IMAP session that does
+	 - STORE 1 +FLAGS \DELETED
+	 - EXPUNGE
+
+	With mbox containing:
+
+	=== From root@example.com Tue Jan 13 10:18:16 2015
+
+	a
+
+	From root@example.com Tue Jan 13 10:18:20 2015
+
+	a
+
+	===
+	[94bd895721d8]
+
+2015-05-06  Timo Sirainen  <tss@iki.fi>
+
+	* configure.ac, src/imap/imap-client.c:
+	imap: Don't advertise SPECIAL-USE if there are no such mailboxes
+	configured.
+	[18b71db74d31]
+
+	* src/doveadm/dsync/dsync-mailbox-tree-sync.c, src/doveadm/dsync/test-
+	dsync-mailbox-tree-sync.c:
+	dsync: Don't try to rename namespace roots. It'll just cause an
+	assert-crash.
+	[6612d20f2fb8]
+
+	* src/doveadm/client-connection.c, src/doveadm/doveadm-mail.c:
+	doveadm: Changed -U to -F Otherwise -U collides with doveadm sync -U
+	parameter. -F isn't currently used by anything.
+	[13c933ed6371]
+
+	* src/doveadm/client-connection.c, src/doveadm/doveadm-mail.c,
+	src/doveadm/doveadm-mail.h:
+	doveadm: Added -U <file> parameter for executing the command for all
+	the users in the file. This is similar to -A parameter, but instead
+	of getting the list of users from userdb they are read from the
+	file. The file contains one username per line.
+	[14eae320322c]
+
+	* src/doveadm/doveadm-mail-mailbox-status.c, src/doveadm/doveadm-mail-
+	mailbox.c, src/doveadm/doveadm-mail.h:
+	doveadm-server: Invalid parameters for some commands caused crash at
+	deinit handlers. deinit() can be called even if init() was never
+	called.
+	[5fce0eaa75d6]
+
+	* src/util/script.c:
+	script: Another comment update about protocol - the previous one was
+	wrong.
+	[956e152467de]
+
+	* src/util/script.c:
+	script: Updated comment to describe the current script protocol.
+	[cf9e0cbf55a9]
+
+2015-05-05  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-fs.c:
+	doveadm fs delete: Fixed function return type
+	[2a2b3897dfe1]
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: After mailbox_list_init_fs() is finished, notify fs
+	about it. Creating a separate fs_init_finish() would perhaps have
+	been clearner, but it's a lot more work and usually isn't even
+	necessary for most backends. So I simply chose to use
+	fs_get_properties() which is a fast call in all fs backends and the
+	few ones that actually care about the initialization finish can then
+	do their work in there.
+	[5c80c7309635]
+
+	* src/plugins/fts-lucene/fts-backend-lucene.c:
+	fts-lucene: Removed lazy initialization code. This is no longer
+	needed after the previous fts commit.
+	[25f29613908f]
+
+	* src/plugins/fts/fts-plugin.c, src/plugins/fts/fts-storage.c,
+	src/plugins/fts/fts-storage.h:
+	fts: Initialize fts backend in mail_namespaces_added(), not in
+	mailbox_list_created() This way the storage has already been created
+	by the time fts initialization starts, which simplifies things.
+	[eee937dc9438]
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: mailbox_list_fs_get_list() shouldn't crash if fs wasn't
+	created by mailbox_list_init_fs()
+	[164d4d499069]
+
+	* src/auth/auth-request.c:
+	auth: If passdb has non-matching allow_nets, don't fail the other
+	passdb lookups also. We might want to use e.g.:
+
+	passdb { driver = static args = password=secretmasterpass
+	allow_nets=10.1.2.3 } passdb { ... }
+
+	If allow_nets didn't match in the first passdb, we should just
+	ignore it and continue to the next passdb.
+	[5e445c659f89]
+
+	* src/doveadm/doveadm-fs.c:
+	doveadm fs delete: Another attempt at fixing recursive deletion. I'm
+	not entirely sure anymore what the original infinite looping was,
+	but this fixes all the potential problems that I see.
+	[a46620d6e0ff]
+
+	* src/doveadm/doveadm-fs.c:
+	doveadm fs delete: Reverted last two patches - they were all
+	completely wrong..
+	[9b2b3c609367]
+
+	* src/doveadm/doveadm-fs.c:
+	doveadm fs delete: Recent changes broke it completely.
+	[5d67814a596d]
+
+2015-05-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/index-attribute.c, src/lib-storage/mailbox-
+	attribute.h:
+	lib-storage: Fixed setting/getting server metadata. Also added a
+	MAILBOX_ATTRIBUTE_KEY_IS_USER_ACCESSIBLE() macro to make it a bit
+	easier to check if a key should be accessible to a user or not.
+	[986cbdfb887d]
+
+2015-05-04  Stephan Bosch  <stephan@rename-it.nl>
+
+	* src/lib-storage/Makefile.am, src/lib-storage/mail-storage-private.h,
+	src/lib-storage/mail-storage.c, src/lib-storage/mail-storage.h, src
+	/lib-storage/mailbox-attribute-private.h, src/lib-storage/mailbox-
+	attribute.c, src/lib-storage/mailbox-attribute.h:
+	mail-storage: Moved mailbox attributes API to separate module.
+	[5f43c88e2c87]
+
+2015-05-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-fs/fs-api.c:
+	lib-fs: Forgot to initialize refcount in previous commit
+	[6403ccd2f5f9]
+
+	* src/lib-fs/fs-api-private.h, src/lib-fs/fs-api.c, src/lib-fs/fs-
+	api.h:
+	lib-fs: Added fs_ref() and fs_unref() for reference counting.
+	[0b297bc94746]
+
+	* src/imap/imap-fetch-body.c, src/lib-imap-storage/imap-msgpart.c, src
+	/lib-imap-storage/imap-msgpart.h:
+	imap: FETCH BODY.PEEK[HEADER.FIELDS (..)] didn't set wanted_headers
+	optimization. Primarily this fixes imapc's prefetching.
+	[8c49fb6d789b]
+
+	* src/lib-storage/index/imapc/imapc-mail-fetch.c, src/lib-
+	storage/index/imapc/imapc-mail.c:
+	imapc: Various optimization fixes to fetching messages' virtual
+	size.
+	[d350a23207c2]
+
+	* src/lib-storage/index/imapc/imapc-mail.c:
+	imapc: imapc-features=rfc822.size didn't work for fetching mail's
+	virtual size. Physical and virtual sizes are the same for imapc.
+	[8f20aa806bcc]
+
+	* configure.ac:
+	configure: When compiling with sqlite3, don't forcibly link with
+	zlib. Looks like -lz was originally added when it was copy&pasted
+	from some other code. Hopefully this isn't actually needed by any
+	(current) system.
+	[e4ad83ed88c9]
+
+	* doc/man/doveadm-sync.1.in:
+	man: Fixed -Dv parameter position in doveadm-sync.1
+	[e9cf0ac3a629]
+
+2015-05-03  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/acl/acl-backend-vfile.c, src/plugins/acl/acl-global-
+	file.c, src/plugins/acl/acl-global-file.h:
+	acl: Log more debug info with mail_debug=yes
+	[a0b2217b1eab]
+
+	* src/lib-mail/quoted-printable.c, src/lib-mail/quoted-printable.h,
+	src/lib-mail/test-quoted-printable.c:
+	lib-mail: Removed quoted_printable_decode*()
+	quoted_printable_q_decode() was still left in quoted-printable.h,
+	but maybe it should be moved to qp-decoder.c as well.
+	[780a8f4544ec]
+
+	* src/lib-mail/Makefile.am, src/lib-mail/message-decoder.c, src/lib-
+	mail/test-message-decoder.c:
+	lib-mail: Switched message-decoder to use qp-decoder. This probably
+	doesn't fix any actual bugs, but allows getting rid of the
+	quoted_printable_decode*()
+	[b10aebbb42df]
+
+	* src/lib-mail/Makefile.am, src/lib-mail/istream-qp-decoder.c, src
+	/lib-mail/test-istream-qp-decoder.c:
+	lib-mail: Fixed various istream-qp-decoder bugs by switching to qp-
+	decoder API
+	[a8e9fdcb17c5]
+
+	* src/lib-mail/Makefile.am, src/lib-mail/qp-decoder.c, src/lib-mail
+	/qp-decoder.h, src/lib-mail/test-qp-decoder.c:
+	lib-mail: Added qp-decoder, which is a rewritten
+	quoted_printable_decode() The main benefit is that qp-decoder allows
+	feeding data to it in smaller pieces. It can also give better error
+	reporting.
+	[a9f8a617dc02]
+
+2015-04-29  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/login-connection.c:
+	director: Log error if auth sends invalid lip/lport/port parameter.
+	This also fixes compiler warnings.
+	[333533e2d231]
+
+	* src/lib/test-net.c:
+	lib: Added unit test for net_ip2addr() and fixed net_is_in_network()
+	test.
+	[009648acd7fb]
+
+	* src/lib/Makefile.am, src/lib/test-lib.c, src/lib/test-lib.h, src/lib
+	/test-net.c, src/lib/test-network.c:
+	lib: Renamed test-network to test-net Since network.c had been
+	renamed to net.c some time ago.
+	[334bb95f27d4]
+
+	* src/lib/net.c:
+	lib: net_addr2ip() sets the family now only after address is
+	successfully converted.
+	[4903ab967807]
+
+	* src/lib-imap/imap-utf7.c:
+	lib-imap: imap_utf7_to_utf8() returns failure now for encoded NULs.
+	All the callers change the string to NUL-terminated string, so the
+	earlier behavior was just truncating the string at the encoded NUL.
+	It's a bit safer to just return failure so in future if the callers
+	didn't convert the string to NUL-terminated string it wouldn't be
+	handled inconsistently in different places.
+	[46065d7276ab]
+
+	* src/auth/auth-request.c, src/director/login-connection.c:
+	director: Implemented director_proxy_maybe passdb extra field. This
+	allows running director and backend in the same Dovecot instance. It
+	was implemented into director instead of login-common to allow
+	doveadm and lmtp proxying to work as well (although currently lmtp
+	can't handle mixed proxying and non-proxying destinations, which
+	makes this a bit less useful).
+	[c5cdf42e398a]
+
+2015-04-25  Stephan Bosch  <stephan@rename-it.nl>
+
+	* src/lib/uri-util.c, src/lib/uri-util.h:
+	uri-util: Added the possibility of only checking the URI without
+	parsing any of the data.
+	[49bcc3954799]
+
+	* src/lib-http/http-url.c, src/lib-imap/imap-url.c, src/lib/uri-
+	util.c:
+	uri-util: Improve errors about invalid characters in URI by
+	reporting the component where the offending character is located.
+	[5ae8cd8e42f7]
+
+	* src/lib-http/http-url.c, src/lib-imap/imap-url.c, src/lib/uri-
+	util.c:
+	uri-util: Allow empty host name in the generic URI syntax as
+	specified in RFC 3986.
+	[9024d226b813]
+
+	* src/lib-http/http-client-connection.c:
+	lib-http: client: Fixed memory leak in CONNECT tunnel support.
+	Forgot to dereference streams once tunnel was completed and passed
+	to the new connection object.
+	[63224afb8c02]
+
+	* src/lib/connection.c:
+	lib: connection: Connect to unix socket asynchronously if connected
+	callback is set. Prevents problems in lib-http unix socket support.
+	[092a51d80bad]
+
+2015-04-29  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts/fts-user.c:
+	fts: Do not deinit uncreated fts context Fixes crash with fts-lucene
+	and fts-solr when lib-fts wasn't used. Patch by Teemu Huovila
+	[1081d57b524e]
+
+	* src/plugins/trash/trash-plugin.c:
+	trash plugin: Count more correctly the number of bytes/messages
+	needed to get under quota. If there already were some messages
+	saved, those weren't counted when figuring out how many/much mails
+	are still needed to be expunged.
+
+	Patch by Alexei Gradinari
+	[8898c5ea38f2]
+
+	* src/plugins/trash/trash-plugin.c:
+	trash plugin: Fixed handling unlimited quota limits. Patch by Alexei
+	Gradinari
+	[2dbee58a1a0d]
+
+	* src/plugins/quota/quota.c:
+	quota: Don't assume mail is too large if a quota root has mail count
+	limit but not size limit. Based on patch by Alexei Gradinari
+	[e00f9e93a9a3]
+
+2015-04-28  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-mail/istream-header-filter.c, src/lib-mail/test-istream-
+	header-filter.c:
+	lib-mail: Fixed modifying headers with i_stream_header_filter_add()
+	If the stream was read twice, the second time the callback wasn't
+	called and the header wasn't modified.
+	[aa8786771490]
+
+	* src/login-common/ssl-proxy-openssl.c:
+	*-login: Don't try to flush SSL output if SSL handshake fails. This
+	fixes a crash on failed handshakes on some OpenSSL builds.
+	[86f535375750]
+
+2015-04-25  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-imap/imap-keepalive.c, src/lib/istream-unix.c:
+	Forgot to include year 2015 in earlier new files' Copyright lines.
+	[a2d342257b25]
+
+	* src/log/log-connection.c:
+	log: Don't confuse process sending a partial log line to process
+	sending logs too fast. If it's a partial line we don't want to show
+	the "service too fast" error in ps title.
+	[211099aefe77]
+
+	* src/lib/connection.c:
+	lib: Fixed crash in connection API if input streams aren't used
+	(only input fd).
+	[1b3224f0135f]
+
+	* src/lib/test-istream-unix.c:
+	lib: Fixed test-istream-unix to not send uninitialized bytes. Fixes
+	Valgrind errors in make check.
+	[2c5b0ad65885]
+
+	* src/imap/cmd-idle.c, src/lib-imap/Makefile.am, src/lib-imap/imap-
+	keepalive.c, src/lib-imap/imap-keepalive.h:
+	imap: Code cleanup: Moved IDLE keepalive timer calculation to lib-
+	imap.
+	[25c848f10517]
+
+	* src/lib/Makefile.am, src/lib/istream-file-private.h, src/lib
+	/istream-file.c, src/lib/istream-unix.c, src/lib/istream-unix.h,
+	src/lib/test-istream-unix.c, src/lib/test-lib.c, src/lib/test-lib.h:
+	lib: Added istream-unix for reading fd sockets via istream.
+	[21a2ce6f8f37]
+
+	* src/lib/numpack.c, src/lib/numpack.h:
+	lib: Added numpack_decode32()
+	[1c275f718758]
+
+2015-04-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts-lucene/fts-lucene-plugin.c, src/plugins/fts-solr
+	/fts-solr-plugin.c, src/plugins/fts/fts-user.c, src/plugins/fts/fts-
+	user.h:
+	fts: Fixed infinite looping at deinit. fts_mail_user_deinit() was
+	calling itself. Now the fts backend is responsible for calling it at
+	deinit.
+	[008632bdfd2c]
+
+	* src/doveadm/doveadm-fs.c:
+	doveadm fs delete -R: Fixed infinite looping when deleting a lot of
+	files with some backends. After file was deleted, we closed it. Then
+	later on we tried to delete it all over again.
+	[17b93a5ae095]
+
+	* src/doveadm/doveadm-fs.c:
+	doveadm fs delete -R: When deleting directories, include "/" suffix
+	in the name.
+	[98c111d5bd76]
+
+	* src/lmtp/commands.c, src/lmtp/lmtp-settings.c, src/lmtp/lmtp-
+	settings.h:
+	lmtp: Added lmtp_hdr_delivery_address=final|original|none setting.
+	This controls what username is used for logging Delivered-To: header
+	and the "for user@domain" in Received: header. The default "final"
+	is the regular username as earlier, "original" logs the RFC822
+	address received via ORCPT parameter or fallbacks to username,
+	"none" logs nothing.
+	[df0eba01d105]
+
+	* src/doveadm/doveadm-mail.c:
+	doveadm-server: Fixed returning command input stream when its data
+	was already in the input stream.
+	[daa426965e5a]
+
+	* src/plugins/fts-solr/fts-backend-solr.c, src/plugins/fts-solr/fts-
+	solr-plugin.c, src/plugins/fts-solr/fts-solr-plugin.h:
+	fts-solr: fts_solr=use_libfts send data to Solr via space-separated
+	tokens. In this case Solr should be configured to not do any kind of
+	filtering and use only WhitespaceTokenizerFactory.
+	[9974c748f72a]
+
+	* src/plugins/fts/fts-build-mail.c:
+	fts: Minor error messagage prefix change.
+	[066db31d4dea]
+
+	* src/plugins/fts-lucene/fts-lucene-plugin.c, src/plugins/fts/fts-
+	plugin.c, src/plugins/fts/fts-user.c, src/plugins/fts/fts-user.h:
+	fts: Don't always try to initialize lib-fts. Require backend to
+	explictly do it now.
+	[6d5240e7d344]
+
+	* src/plugins/fts/Makefile.am:
+	fts: Install fts-user.h header
+	[9905ebbf8395]
+
+	* src/plugins/fts/fts-user.c:
+	fts: Replace '-' with '_' in filter-specific fts_filters_* settings.
+	So for example using fts_filters_normalizer_icu instead of
+	fts_filters_normalizer-icu.
+	[26d37653d247]
+
+	* src/lib-fs/fs-api.c:
+	lib-fs: Use the new t_str_replace() instead of doing it ourself.
+	[cf3c7bcbbdd9]
+
+	* src/lib/strfuncs.c, src/lib/strfuncs.h, src/lib/test-strfuncs.c:
+	lib: Added t_str_replace() to replace one character with another one
+	[90298bc1a481]
+
+2015-04-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/dict/dict-commands.c:
+	dict: Fixed unescaping strings from lib-dict. This may potentially
+	break backwards compatibility with someone, but it's probably pretty
+	rare that anybody is yet using dict proxy with multi-line fields.
+	Also even though the current behavior happens to work, it's very
+	much non-ideal and can be potentially dangerous.
+	[3905d7fce3ba]
+
+	* src/auth/auth-request.c:
+	auth: Don't assert-crash if master user login attempts to use empty
+	login username.
+	[65f825a8cd0b]
+
+	* src/lib-storage/mail-search-args-simplify.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: mail_search_args_simplify() handles now
+	SEARCH_HEADER*/TEXT/BODY These are especially useful with lib-fts,
+	where stemming and other filtering can produce duplicates. There's
+	some internal deduplication, but it doesn't catch all of these.
+	[c5751819176f]
+
+	* src/lib-storage/mail-search-args-simplify.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: mail_search_args_simplify() handles now
+	SEARCH_SMALLER/LARGER
+	[b2c20d9ff296]
+
+	* src/lib-storage/mail-search-args-simplify.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: mail_search_args_simplify() handles now
+	SEARCH_BEFORE/ON/SINCE
+	[f2756661f594]
+
+	* src/lib-storage/mail-search-args-simplify.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: mail_search_args_simplify() merges now seqsets and
+	uidsets.
+	[25974d8e5b5f]
+
+	* src/lib-storage/mail-search-args-simplify.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: If mail_search_args_simplify() merges flags, check
+	again if any SUBs can be removed. The subquery may have been
+	replaced with a single SEARCH_FLAGS parameter.
+	[dcad04c2bab0]
+
+	* src/lib-storage/Makefile.am:
+	lib-storage: Makefile fixes for previous test programs
+	[447b82d4ecb1]
+
+	* src/lib-imap-client/imapc-client.c, src/lib-imap-client/imapc-
+	client.h, src/lib-storage/index/imapc/imapc-search.c:
+	imapc: Don't write SEARCH YOUNGER/OLDER queries if server doesn't
+	support WITHIN extension
+	[3654b56b6fd2]
+
+	* src/lib-storage/Makefile.am, src/lib-storage/mail-search-args-
+	simplify.c, src/lib-storage/mail-search.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: Moved mail_search_args_simplify() to its own file and
+	added unit tests. No functional changes.
+	[faa7d6c473f7]
+
+	* src/lib-storage/index/imapc/imapc-search.c:
+	imapc: Use mail_search_arg_to_imap() to write IMAP SEARCH
+	parameters. This also fixes a few bugs, since some of the search
+	parameters weren't written entirely correctly.
+	[de60c42e6ad6]
+
+	* src/lib-storage/Makefile.am, src/lib-storage/mail-search-args-
+	imap.c, src/lib-storage/mail-search.h, src/lib-storage/test-mail-
+	search-args-imap.c:
+	lib-storage: Added mail_search_args_to_imap() Useful for writing
+	IMAP SEARCH parameters from struct mail_search_arg.
+	[fdd0f4d50256]
+
+	* src/lib-storage/mail-thread.c, src/lib-storage/mail-thread.h:
+	lib-storage: Added mail_thread_type_to_str()
+	[3d7b8a09d85d]
+
+	* src/lib-imap/imap-date.c, src/lib-imap/imap-date.h:
+	lib-imap: Added imap_to_date()
+	[274b42b7d0de]
+
+	* src/lib-storage/list/mailbox-list-index-iter.c:
+	lib-storage: Fixed assert-crash with mailbox_list_index=yes if root
+	mailbox name was empty. This happened if the index was used for a
+	non-listable namespace whose prefix started with the namespace
+	separator (e.g. prefix="/expunged/")
+	[b4a81e123f1a]
+
+	* src/lib-storage/index/imapc/imapc-storage.c:
+	imapc: After auth failed, return failure immediately when opening a
+	mailbox. Instead of trying to re-authenticate which again will most
+	likely fail. Based on patch by Michael M Slusarz
+	[d64fbe56a742]
+
+	* src/lib-storage/index/index-mail-binary.c:
+	lib-storage: Small code cleanup for index_mail_get_binary_stream()
+	stream_r is always non-NULL here. Also move unreferencing cache
+	istream to be last in case it might fix data.stream=NULL being here
+	in some situations.
+	[de2023e630cb]
+
+	* src/lib/iostream-rawlog.c:
+	lib: Fixed reference counting in iostream-rawlog if either i/ostream
+	wasn't used.
+	[c3acdfc64a0b]
+
+	* src/lib/iostream-rawlog.c:
+	lib: iostream_rawlog_create_from_stream() now allows input or output
+	to be NULL.
+	[49dd781d8f26]
+
+	* src/lib-storage/list/subscription-file.c:
+	lib-storage: Fixed subscription file reading when file was (nearly)
+	empty. Broken by the earlier changes.
+	[fedd88ce9315]
+
+2015-04-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/list/subscription-file.c:
+	lib-storage: Added support for subscriptions file version 2 format.
+	The v2 format's main benefit is that it doesn't write the hierarchy
+	separator to the subscriptions file, which allows the separator to
+	be changed without breaking subscriptions. This mainly affects
+	LAYOUT=INDEX, which doesn't have a native hardcoded separator.
+
+	The plan is to start writing v2 subscription files in Dovecot v2.3.
+	So for now we simply read such files and if we find v2 file we also
+	modify it in v2 format, but we never create new v2 format files or
+	convert v0 to v2.
+	[faafabb58036]
+
+2015-04-21  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts-lucene/lucene-wrapper.cc:
+	fts-lucene: Fix to earlier commit: Header names must be indexed
+	without libfts, not with.
+	[7a0d3453600a]
+
+	* src/plugins/fts-lucene/fts-backend-lucene.c, src/plugins/fts-lucene
+	/fts-lucene-plugin.c, src/plugins/fts-lucene/fts-lucene-plugin.h,
+	src/plugins/fts-lucene/lucene-wrapper.cc:
+	fts-lucene: Optionally use lib-fts instead of CLucene's own
+	analyzers. fts_lucene = use_libfts enables this.
+	[1ba63410b902]
+
+	* src/plugins/fts/fts-build-mail.c:
+	fts: If backend has FTS_BACKEND_FLAG_TOKENIZED_INPUT set, index also
+	the header name. We were sending the hdr_name to the backend without
+	tokenizing it or filtering it, so the backend couldn't have done
+	anything useful about it.
+	[3f24c8cab32d]
+
+	* src/lib-fs/fs-posix.c:
+	lib-fs: Fixed fs-posix to work with fs_iter_init(path="") when fs
+	prefix wasn't set.
+	[5b8959b2ff5e]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/fts-filter-normalizer-simple.c,
+	src/lib-fts/fts-filter.c, src/lib-fts/fts-filter.h:
+	lib-fts: Added normalizer-simple for doing normalization without
+	libicu.
+	[9aaacd260a7d]
+
+	* src/lib-fts/test-fts-filter.c:
+	lib-fts: Fixed test-fts-filter to work again after previous
+	normalizer changes.
+	[782594d44002]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/fts-filter-normalizer-icu.c,
+	src/lib-fts/fts-filter-normalizer.c, src/lib-fts/fts-filter.c, src
+	/lib-fts/fts-filter.h:
+	lib-fts: Renamed normalizer to icu-normalizer, including the source
+	code.
+	[41abc9c7eca2]
+
+	* configure.ac, src/lib-fts/Makefile.am, src/lib-fts/fts-filter-
+	normalizer.c:
+	configure: s/normalizer/libicu/ since we it could be used for
+	something else as well.
+	[b179bbd226e5]
+
+	* src/lmtp/lmtp-proxy.c:
+	lmtp proxy: Include in log messages how long it took to deliver the
+	mail. In multi-RCPT TO sessions it's a bit unreliable to split the
+	single DATA reply's times to multiple lines, so instead each line
+	just says "(2/3 at 123 ms)" meaning that the second mail was
+	delivered at the time when 123 milliseconds had elapsed since the
+	delivery was started.
+	[b64bcee2ffa0]
+
+	* src/lda/main.c, src/lib-lda/mail-deliver.c, src/lmtp/commands.c:
+	lib-lda: Assume that the caller sets delivery_time_started This is
+	required because parts of the delivery time may be done at the time
+	the user is being initialized, so it needs to be set before the user
+	init is done.
+	[7ef1722d8f7a]
+
+	* src/lib-lda/mail-deliver.c:
+	lib-lda: mail_deliver_log() now updates the %{delivery_time} instead
+	of using the first cached value. The first time the cached values
+	are set the transaction isn't committed and the mailbox isn't
+	synced.
+	[6ecca5308232]
+
+	* src/lib-lda/lmtp-client.c, src/lib-lda/lmtp-client.h:
+	lib-lda: Added lmtp-client to track timestamps when various events
+	happen.
+	[860af8c30c59]
+
+	* src/imap/cmd-select.c:
+	imap: Finishing previous commit by removing now-unnecessary code.
+	[881ab9a0dc2e]
+
+	* src/imap/cmd-select.c, src/imap/imap-search.c, src/imap/imap-
+	search.h:
+	imap: Removed separate time counting from SELECT and SEARCH
+	commands.
+	[b651fba04408]
+
+	* src/imap/imap-client.c, src/imap/imap-client.h, src/imap/imap-
+	commands.c:
+	imap: Include in tagged reply how much running time each IMAP
+	command takes. The running time doesn't include time spent waiting
+	for the client on ioloop.
+	[abf2727d469a]
+
+	* src/imap/cmd-append.c, src/imap/imap-client.c, src/imap/imap-
+	commands.c:
+	imap: Small code cleanup. Removed all the checks of
+	CLIENT_COMMAND_STATE_DONE to command_exec() itself.
+	[7a09ddcd62b4]
+
+	* src/lib-lda/mail-deliver.c, src/lib-lda/mail-deliver.h,
+	src/lmtp/client.h, src/lmtp/commands.c:
+	lda, lmtp: Added delivery_time and session_time variables to
+	deliver_log_format session_time is meaningful only with LMTP. The
+	delivery_time is separate for each mail delivery. The results are in
+	milliseconds now. If needed we could add a new %modifier that
+	converts it into secs.millisecs.
+	[3ea5becbb56c]
+
+	* src/stats/mail-command.c:
+	stats: num_cmds was always 0 in global stats
+	[4f95a2b5a154]
+
+	* src/lib-fts/Makefile.am:
+	lib-fts: Added udhr_fra.txt to EXTRA_DIST
+	[9196358b6779]
+
+2015-04-20  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-fts/Makefile.am:
+	lib-fts: Added PropList.txt to EXTRA_DIST
+	[a2f45d31d1c5]
+
+	* configure.ac, src/lib-fts/fts-language.c:
+	lib-fts requires libexttextcat actually - don't even try to use
+	textcat for it. I'm also not sure yet if some libexttextcats are too
+	old for it.
+	[50ef619ce58a]
+
+	* src/lib-fts/stopwords_fi.txt, src/lib-fts/stopwords_fr.txt:
+	lib-fts: Updated Finnish/French stopword lists from Lucene code.
+	Most importantly they added the licensing info to the files.
+	[5b7e0fbd2565]
+
+	* src/lib-fts/Makefile.am:
+	lib-fts: Fixed using FTS_NORMALIZER_CFLAGS/LIBS.
+	[aa0424c40ced]
+
+	* src/lib-fts/test-fts-filter.c:
+	lib-fts: Don't crash in test-fts-filter if libstemmer support isn't
+	built in
+	[eff8774c6473]
+
+	* src/lib-fts/fts-filter-normalizer.c, src/lib-fts/fts-filter-stemmer-
+	snowball.c, src/lib-fts/test-fts-filter.c:
+	lib-fts: Fixed some wrong macro name checks. Forgot to change these
+	ones while renaming them..
+	[197c703f32da]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/stopwords_fi.txt:
+	lib-fts: Added missing stopwords_fi.txt
+	[0ad7f8da2471]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/test-fts-language.c:
+	lib-fts: Fixed test-fts-language to use TEXTCAT_DATADIR This may
+	still make too many assumptions about what data exists where.. So we
+	may need to remove this test from "make check". But for now leave it
+	there.
+	[9b777c7ede0d]
+
+	* configure.ac:
+	configure: Fixed building without textcat.
+	[56228757382d]
+
+	* configure.ac:
+	configure: Added Debian Wheezy workaround for finding textcat.h
+	[e06740c8515a]
+
+	* configure.ac, src/lib-fts/fts-language.c:
+	lib-fts: Fixed default textcat datadir paths.
+	[cf04173f3f69]
+
+	* configure.ac:
+	configure: Fixed linking with libexttextcat when it was found via
+	pkg-config
+	[b93306938a88]
+
+	* src/plugins/fts/Makefile.am, src/plugins/fts/fts-api-private.h,
+	src/plugins/fts/fts-build-mail.c, src/plugins/fts/fts-plugin.c,
+	src/plugins/fts/fts-search-args.c, src/plugins/fts/fts-search-
+	args.h, src/plugins/fts/fts-storage.c, src/plugins/fts/fts-user.c,
+	src/plugins/fts/fts-user.h:
+	fts: Added FTS_BACKEND_FLAG_TOKENIZED_INPUT, which is implemented
+	via lib-fts.
+	[914bdca67d1f]
+
+	* .hgignore, configure.ac, src/Makefile.am, src/lib-fts/Makefile.am,
+	src/lib-fts/fts-filter-normalizer.c, src/lib-fts/fts-filter-
+	private.h, src/lib-fts/fts-filter-stemmer-snowball.c, src/lib-fts
+	/fts-filter-stopwords.c, src/lib-fts/fts-filter.c, src/lib-fts/fts-
+	filter.h, src/lib-fts/fts-language.c, src/lib-fts/fts-language.h,
+	src/lib-fts/fts-tokenizer-address.c, src/lib-fts/fts-tokenizer-
+	generic-private.h, src/lib-fts/fts-tokenizer-generic.c, src/lib-fts
+	/fts-tokenizer-private.h, src/lib-fts/fts-tokenizer.c, src/lib-fts
+	/fts-tokenizer.h, src/lib-fts/stopwords_en.txt, src/lib-
+	fts/stopwords_fr.txt, src/lib-fts/test-fts-filter.c, src/lib-fts
+	/test-fts-language.c, src/lib-fts/test-fts-tokenizer.c, src/lib-
+	fts/udhr_fra.txt, src/lib-fts/word-boundary-data.sh, src/lib-fts
+	/word-break-data.sh:
+	Initial import for lib-fts. Parts of what this code does was already
+	implemented internally by fts-lucene. lib-fts is intended to be
+	usable for all the FTS backends. The APIs are still going to change
+	a bit, but hopefully not after v2.2.17 release.
+
+	Mostly written by Teemu Huovila.
+	[81e5b977e5c5]
+
+	* configure.ac, src/plugins/fts-lucene/Makefile.am, src/plugins/fts-
+	lucene/lucene-wrapper.cc:
+	configure: Fixed/improved finding and using libexttextcat.
+	libexttextcat wasn't actually being used at all by fts-lucene. Now
+	we'll first prefer finding it via pkg-config, next finding
+	exttextcat and only last look up textcat.
+	[68c5e0db61db]
+
+	* configure.ac, src/plugins/fts-lucene/Makefile.am, src/plugins/fts-
+	lucene/fts-lucene-plugin.c, src/plugins/fts-lucene/lucene-
+	wrapper.cc:
+	configure: Stemmer and textcat checks are now done even if CLucene
+	isn't used. They'll be useful for other FTS backends as well. This
+	patch doesn't change any actual functionality.
+	[1c516f905152]
+
+	* src/plugins/fts/fts-build-mail.c:
+	fts: Code cleanup to do all index updates via fts_build_data() This
+	doesn't actually change the behavior.
+	[14e6d5289a87]
+
+2015-04-17  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-fs.c:
+	doveadm fs delete -R: Don't add extra '/' chars in the middle of
+	paths
+	[3215ef3e3031]
+
+	* dovecot-config.in.in:
+	dovecot-config: Added lib-stats to LIBDOVECOT_INCLUDE
+	[87ec8d53c9fa]
+
+2015-04-16  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-fs/fs-api-private.h, src/lib-fs/fs-api.c:
+	lib-fs: fs_class_register() can now be called externally.
+	[4ced4305d960]
+
+	* src/doveadm/doveadm-mail-mailbox-metadata.c:
+	doveadm mailbox metadata: The keys must always be lowercased. The
+	keys need to be case-insensitive in IMAP, so the IMAP code always
+	also lowercases them.
+	[0f4b010b78b6]
+
+	* src/stats/mail-stats.h:
+	stats: Fixed compiling with some OSes. struct timeval wasn't
+	necessarily already defined by existing includes.
+	[736730cf45f0]
+
+2015-04-16  Phil Carmody  <phil@dovecot.fi>
+
+	* src/lib/test-array.c:
+	lib: test-array build warnings on Solaris 10 Solaris cc doesn't
+	think I've read N1570 6.7.9p11, 6.5.16.1p2, and 6.3.1.3p2, and wants
+	to save me from myself.
+
+	Reported-by: Juergen Obermann
+	<http://www.dovecot.org/list/dovecot/2015-April/100427.html> Signed-
+	off-by: Phil Carmody <phil@dovecot.fi>
+	[7c90285a72a6]
+
+2015-04-15  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/imapc/imapc-mail-fetch.c, src/lib-
+	storage/index/imapc/imapc-mail.c, src/lib-storage/index/imapc/imapc-
+	mail.h, src/lib-storage/index/imapc/imapc-save.c, src/lib-
+	storage/index/imapc/imapc-settings.c, src/lib-storage/index/imapc
+	/imapc-settings.h:
+	imapc: Added imapc_features=zimbra-workarounds Zimbra (at least
+	v5.0.18_GA_3011.RHEL4_64) can return different headers depending on
+	whether the whole message body was fetched or only (partial)
+	headers. This probably happens only for invalid characters that are
+	translated into '?'. With this workaround enabled we don't use FETCH
+	BODY.PEEK[], but we do FETCH (BODY.PEEK[HEADER] BODY.PEEK[TEXT]) and
+	merge the results together. This way the results are always
+	consistent and headers don't suddenly change.
+	[1c17f06d5e52]
+
+2015-04-14  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-dict/dict-file.c:
+	dict-file: Use tabescaping for keys and values to allow LFs in them.
+	Although this makes the format slightly incompatible, it's doubtful
+	anybody is using dict values containing \001 characters.
+	[93dab55ae36e]
+
+2015-04-13  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-request.c:
+	auth: If passdb/userdb changes the username, add the changed
+	username also to the cache.
+	[635f9c7d5991]
+
+	* src/auth/auth-request.c:
+	auth: Setting userdb fields from cache didn't set handle any special
+	fields. The special fields were relatively rarely used though.
+	[08b2f79e8212]
+
+	* src/plugins/replication/replication-plugin.c:
+	replication plugin: Don't crash for users who don't have replication
+	enabled.
+	[631cd10e62b2]
+
+2015-04-08  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/Makefile.am, src/lib/json-tree.c, src/lib/json-tree.h,
+	src/lib/test-json-tree.c, src/lib/test-lib.c, src/lib/test-lib.h:
+	lib: Added json-tree API for parsing JSON input into a tree
+	structure. This makes it easier to access complicated JSON structs
+	that can fit into memory.
+	[6bde7868cffd]
+
+2015-04-06  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/dsync/dsync-transaction-log-scan.c, src/lib-index/mail-
+	index-modseq.c, src/lib-index/mail-index-sync-update.c, src/lib-
+	index/mail-index-sync.c, src/lib-index/mail-index-view-sync.c, src
+	/lib-index/mail-transaction-log-view.c, src/lib-index/mail-
+	transaction-log.h, src/lib-index/test-mail-transaction-log-view.c,
+	src/lib-storage/mailbox-get.c, src/lib-storage/test-mailbox-get.c:
+	lib-index: Added reason_r parameter to
+	mail_transaction_log_view_set() This is used to improve some of the
+	error messages about index corruption.
+	[8146fdc0de34]
+
+	* src/util/rawlog.c:
+	rawlog: Flush output to disk every second instead of only when
+	buffer is full.
+	[ee001c131952]
+
+2015-04-03  Timo Sirainen  <tss@iki.fi>
+
+	* configure.ac:
+	configure: Added --with-textcat parameter
+	[33685b996cf2]
+
+2015-04-02  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-dsync.c:
+	dsync: Improved error message when remote dsync-server couldn't be
+	started.
+	[9e85aeb92fa8]
+
+2015-04-01  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/dsync/dsync-ibc-stream.c:
+	dsync: Don't try to use the new "finish" state with old dsync
+	versions.
+	[89cbb9347de7]
+
+2015-03-28  Timo Sirainen  <tss@iki.fi>
+
+	* src/Makefile.am:
+	Makefile: Build lib-dovecot before lib-compression Because lib-
+	compression depends on it.
+	[00477ec143b9]
+
+2015-03-27  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/quota/quota.c:
+	quota: Added debug information for quota_over_flag handling.
+	[750d46c4c111]
+
+2015-03-25  Teemu Huovila  <teemu.huovila@dovecot.fi>
+
+	* configure.ac:
+	configure: Add missing (auto) to autodetected options.
+	[11f7bbed333e]
+
+2015-03-27  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-compression/Makefile.am:
+	lib-compression: Use libdovecot.so as dependency. Don't include
+	liblib.a itself!
+	[8be26d22925a]
+
+	* src/lib-storage/index/imapc/imapc-sync.c:
+	imapc: Don't assert-crash when trying to sync a mailbox with
+	MAILBOX_FLAG_SAVEONLY. We can just skip the sync, because we don't
+	do anything except save mails.
+	[ee8934a2a7f4]
+
+	* src/plugins/quota/quota.c:
+	quota: When reporting quota value/limit in kilobytes, round the
+	value upwards. Most importantly this doesn't truncate <1024 values
+	to 0, which also in quota limit means unlimited.
+	[c34724e1c08b]
+
+	* src/auth/auth-request-handler.c:
+	auth: Don't add original_user or auth_user to passdb reply if they
+	already exist. This allows passdb to override their values cleanly.
+	[0540c2834f68]
+
+2015-03-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/imapc/imapc-mailbox.c:
+	imapc: Fix to previous change - labels are strings and not atoms.
+	Allow also atoms just in case
+	[acb0590787a0]
+
+	* src/lib-storage/index/imapc/imapc-mailbox.c:
+	imapc: Ignore \Muted GMail label
+	[41985233e1e8]
+
+2015-03-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mailbox-list-private.h, src/lib-storage/mailbox-
+	list.c, src/lib-storage/mailbox-list.h:
+	lib-storage: Added mailbox_list_fs_get_list() Using
+	mailbox_list_init_fs() now sets the mailbox_list pointer to root fs,
+	which allows the fs backends to lookup the list. Although this can't
+	be done in the init() function since the list is set only
+	afterwards.
+	[0bbdc413285e]
+
+	* src/lib-fs/fs-api-private.h, src/lib-fs/fs-api.c:
+	lib-fs: Added support for module_contexts in fs. They could also be
+	added to fs_file if needed, but for now I didn't bother adding it.
+	[66689aaa85de]
+
+	* src/lib-fs/fs-api.c:
+	lib-fs: When autoloading fs plugins with '-' in the name, translate
+	them to '_' It's not possible for the function names to contain '-'
+	in any case. Also Dovecot in general uses '-' instead of '_' in the
+	configuration names. This change actually allows using either of
+	them.
+	[35a4828d11f7]
+
+	* src/lib-charset/Makefile.am, src/lib-dovecot/Makefile.am, src/lib-
+	mail/Makefile.am:
+	Cleanup for libcharset's iconv linking. Linking libcharset.la now
+	automatically links with the necessary iconv libraries.
+	[36ca0e03bd06]
+
+2015-03-20  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/module-dir.c:
+	lib: Fixed potential build error when building without modules.
+	[1bbde199a6e3]
+
+	* src/lib-dict/dict-client.c:
+	lib-dict: Fixed crash when transaction failed due to dict server
+	disconnection.
+	[d8f24038d3cb]
+
+	* src/lib/ostream-rawlog.c:
+	lib: o_stream_create_rawlog_from_stream() should preserve the output
+	stream fd. ostream-rawlog is just a passthrough stream after all.
+	[ebc2672a30f6]
+
+	* src/doveadm/doveadm-print-tab.c, src/doveadm/doveadm-print-table.c,
+	src/doveadm/doveadm-print.c, src/doveadm/doveadm-print.h,
+	src/doveadm/doveadm.c:
+	doveadm: Added -h parameter to hide header line from tab and table
+	formatter output.
+	[b84f4b881b88]
+
+	* src/lib-storage/mail-user.c, src/lib-storage/mail-user.h, src/lib-
+	storage/mailbox-list.c, src/master/main.c:
+	Removed mountpoint checking and updating code. After a few years it
+	seems like it has just caused more problems than it has actually
+	fixed. The only thing it's been used for is to make sure that
+	Dovecot can't create empty user directories when the user's mail
+	filesystem isn't mounted. But that's supposed to be normally
+	prevented already if the mount root directory permissions are only
+	writable by root.
+
+	For now the mountpoint listing code and doveadm mount code still
+	exists just in case people have some scripts using those. Those
+	could be removed in v2.3.
+
+	If we somehow figured out which mountpoints existed (not so easy
+	because they could be only visible in userdb lookups for different
+	users), we could maybe create some kind of a script that checks the
+	permissions at startup. This would work with Linux at least:
+
+	mkdir test mount / -o bind test ls -ld test/var/mail # assuming
+	/var/mail mountpoint umount test
+	[ef1a64509d68]
+
+2015-03-19  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/dsync/dsync-ibc-stream.c:
+	dsync: Fixed returning wrong mail_error in some remote dsync.
+	[cf74e2179dce]
+
+	* src/lib-storage/index/imapc/imapc-list.c:
+	imapc: Don't wait for login to succeed at mailbox list creation. The
+	failure will be visible in the next command. This wait was here
+	mainly for imap, but cbdfca7d24a6 implements the wait in imap
+	process directly. Other (current) protocols don't need such wait at
+	all.
+
+	Most importantly this change allows doveadm to handle imapc login
+	failures by seeing them as MAIL_ERROR_PERM errors when listing
+	mailboxes or opening a mailbox. This allows it to return a different
+	exit code from temporary failure (which it is not).
+	[9c7c345f2b2a]
+
+	* src/lib-storage/index/imapc/imapc-storage.c:
+	imapc: Don't crash in mailbox_is_inconsistent() with unopened
+	mailbox.
+	[995df5989e56]
+
+	* src/imap/main.c:
+	imap: If mailbox list is unusable at startup, return failure
+	immediately. This is currently used only by imapc when login fails.
+	[cbdfca7d24a6]
+
+	* src/doveadm/doveadm-dsync.c, src/doveadm/dsync/dsync-brain-mailbox-
+	tree-sync.c, src/doveadm/dsync/dsync-brain-mailbox-tree.c,
+	src/doveadm/dsync/dsync-brain-mailbox.c, src/doveadm/dsync/dsync-
+	brain-mails.c, src/doveadm/dsync/dsync-brain-private.h,
+	src/doveadm/dsync/dsync-brain.c, src/doveadm/dsync/dsync-brain.h,
+	src/doveadm/dsync/dsync-ibc-pipe.c, src/doveadm/dsync/dsync-ibc-
+	private.h, src/doveadm/dsync/dsync-ibc-stream.c, src/doveadm/dsync
+	/dsync-ibc.c, src/doveadm/dsync/dsync-ibc.h, src/doveadm/dsync
+	/dsync-mailbox-export.c, src/doveadm/dsync/dsync-mailbox-export.h,
+	src/doveadm/dsync/dsync-mailbox-import.c, src/doveadm/dsync/dsync-
+	mailbox-import.h, src/doveadm/dsync/dsync-mailbox-tree-fill.c,
+	src/doveadm/dsync/dsync-mailbox-tree.h:
+	dsync: Use storage's mail_error to choose the doveadm exit code.
+	Instead of always assuming that all errors are EX_TEMPFAIL.
+	[b900b50085fc]
+
+	* src/lib-storage/index/imapc/imapc-list.c, src/lib-
+	storage/index/imapc/imapc-storage.c, src/lib-storage/index/imapc
+	/imapc-storage.h:
+	imapc: If authentication fails, preserve the error message as
+	storage/list error. This isn't very helpful yet, because the mailbox
+	list creation itself fails.
+	[b28de884c470]
+
+	* src/lib-storage/mailbox-list.c:
+	lib-storage: mailbox_list_mailbox() now copies the mailbox_exists()
+	error. Instead of assuming it has to be an internal error.
+	[fca7232724dd]
+
+2015-03-18  Phil Carmody  <phil@dovecot.fi>
+
+	* src/lib/buffer.c:
+	lib: buffer - paranoid compile-time check for struct sizes At the
+	moment, nothing guarantees that the public struct is big enough to
+	contain the private struct.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[3ed51d56e2a3]
+
+	* src/lib/bits.h:
+	lib: bits - improve bits_required to recurse downwards, not sideways
+	Ooops.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[30953774f034]
+
+	* src/lib/bits.h:
+	lib: bits - Add macro for '1 << i' It's used all over the place. It
+	feels weird not having access to such a macro.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[305f5c2cf13e]
+
+2015-03-18  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts/fts-build-mail.c:
+	fts: Fixed assert-crash if fts-parser was created for a body part
+	that backend didn't want to index.
+	[128115b3807c]
+
+2015-03-17  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/db-ldap.c:
+	auth ldap: Crashfixes for earlier changes. Hopefully works correctly
+	now
+	[3546457ae3fb]
+
+	* src/auth/db-ldap.c:
+	auth ldap: Fixed crash when handling invalid SSL option.
+	[a4acf88b0c91]
+
+	* src/auth/db-ldap.c, src/auth/db-ldap.h:
+	auth ldap: Fixed assert-crash when both passdb ldap and userdb ldap
+	was used
+	[870cb73e5960]
+
+2015-03-16  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/db-ldap.c, src/auth/db-ldap.h, src/auth/passdb-ldap.c,
+	src/auth/userdb-ldap.c:
+	auth ldap: Start LDAP connection only after auth process
+	initialization is finished. This way even if connecting to LDAP
+	takes a while it won't cause the master process to kill the auth
+	process due to it not sending the startup "I'm ok" notification
+	early enough.
+	[0a17875f0ece]
+
+	* src/auth/db-ldap.c:
+	auth ldap: Make sure config file path is included in all fatal error
+	messages.
+	[d9a0d4f4f4b6]
+
+	* src/auth/db-ldap.c:
+	auth ldap: If any tls_* settings are given when they're not
+	supported, fail with fatal instead of just warning. These may be
+	important for intended security, especially tls_cipher_suite. We
+	shouldn't allow setting them and then somewhat silently just ignore
+	them.
+	[ec2e7ae958c5]
+
+	* src/auth/db-ldap.c:
+	auth ldap: Call ldap_init*() already at db_ldap_init(). ldap_init*()
+	doesn't start connecting yet, but this way we can verify that all
+	the settings are correct.
+	[804dc641f448]
+
+	* src/auth/db-ldap.c, src/auth/db-ldap.h:
+	auth ldap: More concentration of i_fatal() calls to db_ldap_init()
+	[b3fd99432298]
+
+	* src/auth/db-ldap.c:
+	auth ldap: Moved more LDAP fatal checks to db_ldap_init()
+	[226d34f3a54a]
+
+	* src/auth/db-ldap.c:
+	auth ldap: Improved ldap_initialize() failure's error logging.
+	[8c77d80e014c]
+
+	* src/auth/db-ldap.c:
+	auth ldap: Include LDAP config path in all fatal errors. Also moved
+	all such error checks to db_ldap_init().
+	[fe05443b3cd6]
+
+	* src/plugins/stats/stats-plugin.c:
+	stats: Don't allow stats_refresh setting to be set too large.
+	[3d8a054a93a9]
+
+	* src/plugins/stats/stats-plugin.c:
+	stats: Initial stats refresh timeout callback wasn't set. This broke
+	after the ioloop change that caused stats_io_deactivate() not to be
+	called immediately anymore.
+	[d88af513a942]
+
+2015-03-13  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/dsync/dsync-brain-mailbox.c, src/doveadm/dsync/dsync-
+	brain-private.h, src/doveadm/dsync/dsync-brain.c, src/doveadm/dsync
+	/dsync-ibc-pipe.c, src/doveadm/dsync/dsync-ibc-private.h,
+	src/doveadm/dsync/dsync-ibc-stream.c, src/doveadm/dsync/dsync-ibc.c,
+	src/doveadm/dsync/dsync-ibc.h:
+	dsync: Added an extra "finish" state to allow slave-dsync to report
+	error to master-dsync. I'm not sure if that's actually necessary,
+	but just trying to follow the different possibilities on how dsync
+	run can finish made me unsure about it. This should make it at least
+	clear that if a slave-dsync has a failure flag set at deinit master-
+	dsync will know about it before it returns success.
+	[b4dbe64c0032]
+
+	* src/doveadm/dsync/dsync-mailbox-export.c:
+	dsync: Added an extra assert.
+	[e86211e8d728]
+
+	* src/lib-storage/index/imapc/imapc-mail.c:
+	imapc: If reconnect fails during syncing, don't treat all mails as
+	expunged in error handling code.
+	[6efdf22c96f1]
+
+	* src/lib-imap-client/imapc-client.c, src/lib-imap-client/imapc-
+	client.h, src/lib-imap-client/imapc-connection.c:
+	lib-imap-client: If we get disconnected and reconnect, log it as
+	warning instead of as error.
+	[cf60180695ac]
+
+	* src/plugins/fts/fts-parser.c:
+	fts: fts-parser doesn't need to be asked about all the known-
+	plaintext content-types.
+	[c82e9e5832a0]
+
+	* src/plugins/fts-solr/solr-connection.c, src/plugins/fts/fts-parser-
+	tika.c:
+	fts-tika, fts-solr: Added timeouts to requests so they aren't
+	attempted infinitely.
+	[4f8bfc6673a3]
+
+	* src/plugins/fts/fts-build-mail.c, src/plugins/fts/fts-parser-html.c,
+	src/plugins/fts/fts-parser-script.c, src/plugins/fts/fts-parser-
+	tika.c, src/plugins/fts/fts-parser.c, src/plugins/fts/fts-parser.h:
+	fts: If fts-parser fails, stop indexing instead of ignoring the
+	error and continuing. This is especially important in case there's
+	just some temporary error.
+	[f409deb63c40]
+
+	* src/config/Makefile.am, src/lib-dict/Makefile.am, src/lib-
+	sql/Makefile.am, src/lib-storage/register/Makefile.am,
+	src/lib/Makefile.am, src/plugins/quota/Makefile.am:
+	Makefile: Avoid make race conditions when generating files that are
+	used as dependencies. The file creation needs to be atomic,
+	otherwise another process can start trying to use an unfinished
+	file. So we first create .tmp file and then mv it into the final
+	one.
+	[d592417ec815]
+
 2015-03-12  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-mail/istream-header-filter.c, src/lib-mail/istream-header-
+	filter.h:
+	lib-mail: Added HEADER_FILTER_CRLF_PRESERVE flag to istream-header-
+	filter.
+	[308a97126244]
 
 	* .hgsigs:
 	Added signature for changeset 0f8f0d8ee607
-	[34862aea421d] [tip]
+	[34862aea421d]
 
 	* .hgtags:
 	Added tag 2.2.16 for changeset 0f8f0d8ee607

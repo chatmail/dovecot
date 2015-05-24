@@ -3,7 +3,7 @@ Post-login scripting
 
 If you want to do something special after authentication, but before beginning
 the IMAP or POP3 session, you can do this by telling imap/pop3 executable to
-use post-login service:
+use post-login service by editing conf.d/10-master.conf:
 
 ---%<-------------------------------------------------------------------------
 service imap {
@@ -239,4 +239,4 @@ NAMESPACE/S-SPAMREP/TYPE NAMESPACE/S-SPAMREP/PREFIX
 NAMESPACE/S-SPAMREP/LOCATION
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

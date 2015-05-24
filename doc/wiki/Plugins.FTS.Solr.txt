@@ -21,10 +21,10 @@ configure it.
 
 On Dovecot's side add:
 
-Into 10-mail.conf (note add existing plugins to sting)
+Into 10-mail.conf (note add existing plugins to string)
 
 ---%<-------------------------------------------------------------------------
-mail_plugins = fts fts_solr
+mail_plugins = $mail_plugins fts fts_solr
 ---%<-------------------------------------------------------------------------
 
 Into 90-plugins.conf
@@ -166,4 +166,4 @@ External sites with tutorials on using Solr under Dovecot
    support guide)
    [http://support.atmail.com/display/AKB/Installing+Apache+Solr+with+Dovecot+for+fulltext+search+results]
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

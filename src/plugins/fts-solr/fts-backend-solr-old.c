@@ -249,6 +249,7 @@ static void fts_backend_solr_deinit(struct fts_backend *_backend)
 {
 	struct solr_fts_backend *backend = (struct solr_fts_backend *)_backend;
 
+	solr_connection_deinit(&backend->solr_conn);
 	i_free(backend->id_namespace);
 	i_free(backend->id_username);
 	i_free(backend);
@@ -433,7 +434,7 @@ fts_backed_solr_build_commit(struct solr_fts_backend_update_context *ctx)
 
 	solr_connection_post_more(ctx->post, str_data(ctx->cmd),
 				  str_len(ctx->cmd));
-	return solr_connection_post_end(ctx->post);
+	return solr_connection_post_end(&ctx->post);
 }
 
 static int

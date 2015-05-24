@@ -157,8 +157,13 @@ wikifiles = ACL.txt \
 	Pigeonhole.ManageSieve.Troubleshooting.txt \
 	Pigeonhole.ManageSieve.txt \
 	Pigeonhole.Sieve.Configuration.Dict.txt \
+	Pigeonhole.Sieve.Configuration.File.txt \
+	Pigeonhole.Sieve.Configuration.LDAP.txt \
 	Pigeonhole.Sieve.Configuration.txt \
 	Pigeonhole.Sieve.Examples.txt \
+	Pigeonhole.Sieve.Extensions.Duplicate.txt \
+	Pigeonhole.Sieve.Extensions.Editheader.txt \
+	Pigeonhole.Sieve.Extensions.Include.txt \
 	Pigeonhole.Sieve.Extensions.SpamtestVirustest.txt \
 	Pigeonhole.Sieve.Extensions.Vacation.txt \
 	Pigeonhole.Sieve.Extensions.txt \
@@ -184,6 +189,7 @@ wikifiles = ACL.txt \
 	Plugins.MailLog.txt \
 	Plugins.MailboxAlias.txt \
 	Plugins.Notify.txt \
+	Plugins.QuotaClone.txt \
 	Plugins.Snarf.txt \
 	Plugins.Stats.txt \
 	Plugins.Trash.txt \
@@ -221,6 +227,7 @@ wikifiles = ACL.txt \
 	TestInstallation.txt \
 	TestPop3Installation.txt \
 	TimeMovedBackwards.txt \
+	Timeouts.txt \
 	Upgrading.1.0.txt \
 	Upgrading.1.1.txt \
 	Upgrading.1.2.txt \

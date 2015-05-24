@@ -39,4 +39,4 @@ formail -q- -s perl script.pl < inbox > newinbox
 When Dovecot now looks at newinbox, it will use the X-UIDL: header and clients
 will not redownload mail.
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

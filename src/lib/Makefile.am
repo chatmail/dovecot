@@ -74,6 +74,7 @@ liblib_la_SOURCES = \
 	istream-sized.c \
 	istream-tee.c \
 	istream-timeout.c \
+	istream-unix.c \
 	ioloop.c \
 	ioloop-iolist.c \
 	ioloop-notify-none.c \
@@ -86,6 +87,7 @@ liblib_la_SOURCES = \
 	ioloop-epoll.c \
 	ioloop-kqueue.c \
 	json-parser.c \
+	json-tree.c \
 	lib.c \
 	lib-signals.c \
 	md4.c \
@@ -199,6 +201,7 @@ headers = \
 	istream-chain.h \
 	istream-concat.h \
 	istream-crlf.h \
+	istream-file-private.h \
 	istream-hash.h \
 	istream-jsonstr.h \
 	istream-private.h \
@@ -207,11 +210,13 @@ headers = \
 	istream-sized.h \
 	istream-tee.h \
 	istream-timeout.h \
+	istream-unix.h \
 	ioloop.h \
 	ioloop-iolist.h \
 	ioloop-private.h \
 	ioloop-notify-fd.h \
 	json-parser.h \
+	json-tree.h \
 	lib.h \
 	lib-signals.h \
 	llist.h \
@@ -300,10 +305,12 @@ test_lib_SOURCES = \
 	test-istream-crlf.c \
 	test-istream-seekable.c \
 	test-istream-tee.c \
+	test-istream-unix.c \
 	test-json-parser.c \
+	test-json-tree.c \
 	test-llist.c \
 	test-mempool-alloconly.c \
-	test-network.c \
+	test-net.c \
 	test-numpack.c \
 	test-ostream-file.c \
 	test-primes.c \

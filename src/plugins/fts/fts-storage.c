@@ -11,8 +11,10 @@
 #include "mailbox-list-private.h"
 #include "../virtual/virtual-storage.h"
 #include "fts-api-private.h"
+#include "fts-tokenizer.h"
 #include "fts-indexer.h"
 #include "fts-build-mail.h"
+#include "fts-search-args.h"
 #include "fts-search-serialize.h"
 #include "fts-plugin.h"
 #include "fts-storage.h"
@@ -120,20 +122,26 @@ static void fts_scores_unref(struct fts_scores **_scores)
 static void fts_try_build_init(struct mail_search_context *ctx,
 			       struct fts_search_context *fctx)
 {
+	int ret;
+
 	i_assert(!fts_backend_is_updating(fctx->backend));
 
-	switch (fts_indexer_init(fctx->backend, ctx->transaction->box,
-				 &fctx->indexer_ctx)) {
-	case -1:
-		break;
-	case 0:
+	ret = fts_indexer_init(fctx->backend, ctx->transaction->box,
+			       &fctx->indexer_ctx);
+	if (ret < 0)
+		return;
+
+	if ((fctx->backend->flags & FTS_BACKEND_FLAG_TOKENIZED_INPUT) != 0) {
+		if (fts_search_args_expand(fctx->backend, fctx->args) < 0)
+			return;
+	}
+
+	if (ret == 0) {
 		/* the index was up to date */
 		fts_search_lookup(fctx);
-		break;
-	case 1:
+	} else {
 		/* hide "searching" notifications while building index */
 		ctx->progress_hidden = TRUE;
-		break;
 	}
 }
 
@@ -734,17 +742,13 @@ static void fts_mailbox_list_deinit(struct mailbox_list *list)
 	flist->module_ctx.super.deinit(list);
 }
 
-void fts_mailbox_list_created(struct mailbox_list *list)
+
+
+static void
+fts_mailbox_list_init(struct mailbox_list *list, const char *name)
 {
 	struct fts_backend *backend;
-	const char *name, *path, *error;
-
-	name = mail_user_plugin_getenv(list->ns->user, "fts");
-	if (name == NULL) {
-		if (list->mail_set->mail_debug)
-			i_debug("fts: No fts setting - plugin disabled");
-		return;
-	}
+	const char *path, *error;
 
 	if (!mailbox_list_get_root_path(list, MAILBOX_LIST_PATH_TYPE_INDEX, &path)) {
 		if (list->mail_set->mail_debug) {
@@ -771,6 +775,22 @@ void fts_mailbox_list_created(struct mailbox_list *list)
 		v->deinit = fts_mailbox_list_deinit;
 		MODULE_CONTEXT_SET(list, fts_mailbox_list_module, flist);
 	}
+}
+
+void fts_mail_namespaces_added(struct mail_namespace *namespaces)
+{
+	struct mail_namespace *ns;
+	const char *name;
+
+	name = mail_user_plugin_getenv(namespaces->user, "fts");
+	if (name == NULL) {
+		if (namespaces->user->mail_debug)
+			i_debug("fts: No fts setting - plugin disabled");
+		return;
+	}
+
+	for (ns = namespaces; ns != NULL; ns = ns->next)
+		fts_mailbox_list_init(ns->list, name);
 }
 
 struct fts_backend *fts_mailbox_backend(struct mailbox *box)

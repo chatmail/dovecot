@@ -165,4 +165,4 @@ initial permissions on parent directory's permissions. After the initial
 creation, the permissions are permanently preserved. So if you want to use
 different permissions, just chown/chmod the file.
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

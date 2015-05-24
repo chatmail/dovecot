@@ -193,7 +193,14 @@ static int imap_url_parse_iserver(struct imap_url_parser *url_parser)
 	/* "//" iserver */
 	if ((ret = uri_parse_slashslash_authority(parser, &auth)) <= 0)
 		return ret;
-
+	if (auth.host_literal == NULL || *auth.host_literal == '\0') {
+		/* This situation is not documented anywhere, but it is not
+		   currently useful either and potentially problematic if not
+		   handled explicitly everywhere. So, it is denied hier for now.
+		 */
+		parser->error = "IMAP URL does not allow empty host identifier";
+		return -1;
+	}
 	/* iuserinfo        = enc-user [iauth] / [enc-user] iauth */
 	if (auth.enc_userinfo != NULL) {
 		const char *p, *uend;
@@ -872,15 +879,16 @@ static bool imap_url_do_parse(struct imap_url_parser *url_parser)
 		}
 	}
 
+	/* IMAP URL has no fragment */
 	if ((ret = uri_parse_fragment(parser, &query)) != 0) {
 		if (ret == 1)
 			parser->error = "Fragment component not allowed in IMAP URL";
 		return FALSE;
 	}
-	if (parser->cur != parser->end) {
-		parser->error = "IMAP URL contains invalid character.";
-		return FALSE;
-	}
+
+	/* must be at end of URL now */
+	i_assert(parser->cur == parser->end);
+
 	return TRUE;
 }
 

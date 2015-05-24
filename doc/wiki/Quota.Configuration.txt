@@ -36,10 +36,6 @@ Contents
 
      9. Quota admin commands
 
-     10. Troubleshooting
-
-          1. Log file permissions
-
 The configuration is split into multiple settings:
 
 First you have the quota root backend configuration. Quota root is a concept
@@ -484,56 +480,4 @@ Afterwards the quota can be changed with:
 a SETQUOTA "User quota" (STORAGE 12345 MESSAGES 123)
 ---%<-------------------------------------------------------------------------
 
-Troubleshooting
----------------
-
-Log file permissions
---------------------
-
-If you did not get quota warning messages and have user= definition in your
-quota_warning configuration as suggested above, try:
-
----%<-------------------------------------------------------------------------
-su quota_script_user
-/usr/local/bin/quota-warning.sh 90 user
----%<-------------------------------------------------------------------------
-
-If you get
-
----%<-------------------------------------------------------------------------
-su quota_script_user
-/usr/local/bin/quota-warning.sh 90 user
-Can't open log file /var/log/dovecot.log: Permission denied
-Can't open log file /var/log/dovecot.log: Permission denied
----%<-------------------------------------------------------------------------
-
-and after
-
----%<-------------------------------------------------------------------------
-chmod 660 /var/log/dovecot.log
-chown root:quota_script_user /var/log/dovecot.log
----%<-------------------------------------------------------------------------
-
-you still have
-
----%<-------------------------------------------------------------------------
-su quota_script_user
-/usr/local/bin/quota-warning.sh 90 user
-Can't open log file /var/log/dovecot-debug.log: Permission denied
-Can't open log file /var/log/dovecot-debug.log: Permission denied
----%<-------------------------------------------------------------------------
-
-Your problem most probably only with log file permissions.
-
-Edit your logrotate configuration:
-
----%<-------------------------------------------------------------------------
-...
-create 0660 root quota_script_user
-...
----%<-------------------------------------------------------------------------
-
-/Should I fill a bug about this? Such small permission issue - but no quota
-warning at all./
-
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

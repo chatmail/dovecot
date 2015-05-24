@@ -45,7 +45,8 @@ struct doveadm_mail_cmd_vfuncs {
 	   command. This is called once per each user. */
 	int (*run)(struct doveadm_mail_cmd_context *ctx,
 		   struct mail_user *mail_user);
-	/* Deinitialize the command. Called once at the end. */
+	/* Deinitialize the command. Called once at the end - even if
+	   preinit() or init() was never called. */
 	void (*deinit)(struct doveadm_mail_cmd_context *ctx);
 };
 
@@ -74,6 +75,7 @@ struct doveadm_mail_cmd_context {
 	struct mail_storage_service_input storage_service_input;
 	/* search args aren't set for all mail commands */
 	struct mail_search_args *search_args;
+	struct istream *users_list_input;
 
 	struct ip_addr cur_client_ip;
 	const char *cur_username;
@@ -109,6 +111,8 @@ extern void (*hook_doveadm_mail_init)(struct doveadm_mail_cmd_context *ctx);
 extern struct doveadm_mail_cmd_module_register doveadm_mail_cmd_module_register;
 extern char doveadm_mail_cmd_hide;
 
+bool doveadm_is_killed(void);
+
 bool doveadm_mail_try_run(const char *cmd_name, int argc, char *argv[]);
 void doveadm_mail_register_cmd(const struct doveadm_mail_cmd *cmd);
 const struct doveadm_mail_cmd *doveadm_mail_cmd_find(const char *cmd_name);
@@ -142,8 +146,6 @@ void doveadm_mail_get_input(struct doveadm_mail_cmd_context *ctx);
 
 struct mailbox *
 doveadm_mailbox_find(struct mail_user *user, const char *mailbox);
-int doveadm_mailbox_find_and_sync(struct mail_user *user, const char *mailbox,
-				  struct mailbox **box_r);
 struct mail_search_args *
 doveadm_mail_build_search_args(const char *const args[]);
 void doveadm_mailbox_args_check(const char *const args[]);

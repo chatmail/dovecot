@@ -137,12 +137,12 @@ lib20_doveadm_fts_plugin_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(lib20_doveadm_fts_plugin_la_LDFLAGS) \
 	$(LDFLAGS) -o $@
-lib20_fts_plugin_la_LIBADD =
+lib20_fts_plugin_la_DEPENDENCIES = ../../lib-fts/libfts.la
 am_lib20_fts_plugin_la_OBJECTS = fts-api.lo fts-build-mail.lo \
 	fts-expunge-log.lo fts-indexer.lo fts-parser.lo \
 	fts-parser-html.lo fts-parser-script.lo fts-parser-tika.lo \
-	fts-plugin.lo fts-search.lo fts-search-serialize.lo \
-	fts-storage.lo
+	fts-plugin.lo fts-search.lo fts-search-args.lo \
+	fts-search-serialize.lo fts-storage.lo fts-user.lo
 lib20_fts_plugin_la_OBJECTS = $(am_lib20_fts_plugin_la_OBJECTS)
 lib20_fts_plugin_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
@@ -229,6 +229,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
+CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CDB_LIBS = @CDB_LIBS@
@@ -278,7 +280,11 @@ LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBDOVECOT_STORAGE_DEPS = @LIBDOVECOT_STORAGE_DEPS@
+LIBEXTTEXTCAT_CFLAGS = @LIBEXTTEXTCAT_CFLAGS@
+LIBEXTTEXTCAT_LIBS = @LIBEXTTEXTCAT_LIBS@
 LIBICONV = @LIBICONV@
+LIBICU_CFLAGS = @LIBICU_CFLAGS@
+LIBICU_LIBS = @LIBICU_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
@@ -402,6 +408,7 @@ doveadm_moduledir = $(moduledir)/doveadm
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-settings \
+	-I$(top_srcdir)/src/lib-fts \
 	-I$(top_srcdir)/src/lib-http \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-index \
@@ -414,6 +421,7 @@ lib20_fts_plugin_la_LDFLAGS = -module -avoid-version
 module_LTLIBRARIES = \
 	lib20_fts_plugin.la
 
+lib20_fts_plugin_la_LIBADD = ../../lib-fts/libfts.la
 lib20_fts_plugin_la_SOURCES = \
 	fts-api.c \
 	fts-build-mail.c \
@@ -425,8 +433,10 @@ lib20_fts_plugin_la_SOURCES = \
 	fts-parser-tika.c \
 	fts-plugin.c \
 	fts-search.c \
+	fts-search-args.c \
 	fts-search-serialize.c \
-	fts-storage.c
+	fts-storage.c \
+	fts-user.c
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = \
@@ -434,12 +444,14 @@ pkginc_lib_HEADERS = \
 	fts-api-private.h \
 	fts-expunge-log.h \
 	fts-indexer.h \
-	fts-parser.h
+	fts-parser.h \
+	fts-user.h
 
 noinst_HEADERS = \
 	doveadm-fts.h \
 	fts-build-mail.h \
 	fts-plugin.h \
+	fts-search-args.h \
 	fts-search-serialize.h \
 	fts-storage.h
 
@@ -671,9 +683,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-parser-tika.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-plugin.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-search-args.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-search-serialize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-search.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-storage.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-user.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/xml2text.Po@am__quote@
 
 .c.o:

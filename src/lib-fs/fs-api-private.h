@@ -2,6 +2,17 @@
 #define FS_API_PRIVATE_H
 
 #include "fs-api.h"
+#include "module-context.h"
+
+struct fs_api_module_register {
+	unsigned int id;
+};
+
+union fs_api_module_context {
+	struct fs_api_module_register *reg;
+};
+
+extern struct fs_api_module_register fs_api_module_register;
 
 struct fs_vfuncs {
 	struct fs *(*alloc)(void);
@@ -58,6 +69,7 @@ struct fs {
 	const char *name;
 	struct fs_vfuncs v;
 	char *temp_path_prefix;
+	int refcount;
 
 	char *username, *session_id;
 
@@ -72,6 +84,8 @@ struct fs {
 	struct fs_iter *iters;
 
 	struct fs_stats stats;
+
+	ARRAY(union fs_api_module_context *) module_contexts;
 };
 
 struct fs_file {
@@ -124,6 +138,8 @@ extern const struct fs fs_class_posix;
 extern const struct fs fs_class_metawrap;
 extern const struct fs fs_class_sis;
 extern const struct fs fs_class_sis_queue;
+
+void fs_class_register(const struct fs *fs_class);
 
 void fs_set_error(struct fs *fs, const char *fmt, ...) ATTR_FORMAT(2, 3);
 void fs_set_critical(struct fs *fs, const char *fmt, ...) ATTR_FORMAT(2, 3);

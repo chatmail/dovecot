@@ -674,8 +674,8 @@ int quota_get_resource(struct quota_root *root, const char *mailbox_name,
 		*limit_r = 0;
 
 	if (kilobytes) {
-		*value_r /= 1024;
-		*limit_r /= 1024;
+		*value_r = (*value_r + 1023) / 1024;
+		*limit_r = (*limit_r + 1023) / 1024;
 	}
 	return *limit_r == 0 ? 0 : 1;
 }
@@ -996,10 +996,25 @@ quota_over_flag_check_root(struct mail_user *user, struct quota_root *root)
 		ret = quota_get_resource(root, "", resources[i], &value, &limit);
 		if (ret < 0) {
 			/* can't reliably verify this */
+			if (root->quota->set->debug) {
+				i_debug("quota: Quota %s lookup failed - can't verify quota_over_flag",
+					resources[i]);
+			}
 			return;
+		}
+		if (root->quota->set->debug) {
+			i_debug("quota: quota_over_flag check: %s ret=%d value=%llu limit=%llu",
+				resources[i], ret,
+				(unsigned long long)value,
+				(unsigned long long)limit);
 		}
 		if (ret > 0 && value > limit)
 			cur_overquota = TRUE;
+	}
+	if (root->quota->set->debug) {
+		i_debug("quota: quota_over_flag=%d(%s) vs currently overquota=%d",
+			overquota_flag, overquota_value != NULL ? "(null)" : overquota_value,
+			cur_overquota);
 	}
 	if (cur_overquota != overquota_flag)
 		quota_warning_execute(root, overquota_script, overquota_value);
@@ -1078,14 +1093,12 @@ static int quota_default_test_alloc(struct quota_transaction_context *ctx,
 		ret = quota_root_get_rule_limits(roots[i],
 						 mailbox_get_vname(ctx->box),
 						 &bytes_limit, &count_limit);
-		if (ret == 0)
-			continue;
 		if (ret < 0)
 			return -1;
 
 		/* if size is bigger than any limit, then
 		   it is bigger than the lowest limit */
-		if (size > bytes_limit) {
+		if (bytes_limit > 0 && size > bytes_limit) {
 			*too_large_r = TRUE;
 			break;
 		}

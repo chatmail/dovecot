@@ -6,6 +6,9 @@
 /* Define if you have buggy CMSG macros */
 #undef BUGGY_CMSG_MACROS
 
+/* Built-in Cassandra support */
+#undef BUILD_CASSANDRA
+
 /* Build with CDB support */
 #undef BUILD_CDB
 
@@ -75,6 +78,9 @@
 /* Define if you have bzlib library */
 #undef HAVE_BZLIB
 
+/* Build with Cassandra support */
+#undef HAVE_CASSANDRA
+
 /* Define to 1 if you have the `clearenv' function. */
 #undef HAVE_CLEARENV
 
@@ -110,6 +116,15 @@
 
 /* Define if you have FreeBSD-compatible sendfile() */
 #undef HAVE_FREEBSD_SENDFILE
+
+/* Define if you want exttextcat support for FTS */
+#undef HAVE_FTS_EXTTEXTCAT
+
+/* Define if you want stemming support for FTS */
+#undef HAVE_FTS_STEMMER
+
+/* Define if you want textcat support for FTS */
+#undef HAVE_FTS_TEXTCAT
 
 /* Define to 1 if you have the <gc/gc.h> header file. */
 #undef HAVE_GC_GC_H
@@ -197,8 +212,17 @@
 /* libcap is installed for cap_init() */
 #undef HAVE_LIBCAP
 
+/* Define to 1 if you have the <libexttextcat/textcat.h> header file. */
+#undef HAVE_LIBEXTTEXTCAT_TEXTCAT_H
+
 /* Define to 1 if you have the <libgen.h> header file. */
 #undef HAVE_LIBGEN_H
+
+/* Define if you want ICU normalization support for FTS */
+#undef HAVE_LIBICU
+
+/* Define to 1 if you have the <libtextcat/textcat.h> header file. */
+#undef HAVE_LIBTEXTCAT_TEXTCAT_H
 
 /* Define if you have libwrap */
 #undef HAVE_LIBWRAP
@@ -217,15 +241,6 @@
 
 /* Define to 1 if you have the `lockf' function. */
 #undef HAVE_LOCKF
-
-/* Define if you want textcat (Debian version) support for CLucene */
-#undef HAVE_LUCENE_EXTTEXTCAT
-
-/* Define if you want stemming support for CLucene */
-#undef HAVE_LUCENE_STEMMER
-
-/* Define if you want textcat support for CLucene */
-#undef HAVE_LUCENE_TEXTCAT
 
 /* Define if you have lz4 library */
 #undef HAVE_LZ4
@@ -652,7 +667,7 @@
 /* Build with vpopmail support */
 #undef PASSDB_VPOPMAIL
 
-/* Defint if pread/pwrite implementation is broken */
+/* Define if pread/pwrite implementation is broken */
 #undef PREAD_BROKEN
 
 /* Define if pread/pwrite needs _XOPEN_SOURCE 500 */
@@ -690,6 +705,9 @@
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
+
+/* Points to textcat pkgdatadir containing the language files */
+#undef TEXTCAT_DATADIR
 
 /* max. time_t bits gmtime() can handle */
 #undef TIME_T_MAX_BITS

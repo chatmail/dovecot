@@ -179,8 +179,7 @@ having the same (identical) file in both storages.
 Keep the unmounted '/altstorage' directory permissions such that Dovecot mail
 processes can't create directories under it (e.g. root:root 0755). This way if
 the alt storage isn't mounted for some reason, Dovecot won't think that all the
-messages in alt storage were deleted and lose their flags. With v2.1 this isn't
-strictly requires anymore, because it keeps track of missing mountpoints.
+messages in alt storage were deleted and lose their flags.
 
 When messages are moved from primary storage to alternate storage, only the
 actual message data (stored in files 'u.*' under *single-dbox* and 'm.*' under
@@ -249,4 +248,4 @@ mboxes.  Since most MTAs don't understand the dbox format, this option is not
 available.  Instead, the MTA could be set up to use <LMTP#mta> [LMTP.txt] or
 <the Dovecot Local Delivery Agent> [LDA.txt].
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

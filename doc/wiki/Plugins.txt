@@ -25,6 +25,8 @@ Distributed with Dovecot:
    moving all mails from one mailbox to INBOX
  * <quota> [Quota.txt]: Quota tracking and enforcing
     * imap_quota: IMAP commands for requesting current quota
+    * <quota_clone> [Plugins.QuotaClone.txt]: Copy the current quota usage to a
+      dict.
  * <stats> [Plugins.Stats.txt]: Send statistics from mail processes to the
    stats process
  * <trash> [Plugins.Trash.txt]: Delete mails from Trash when user would go over
@@ -64,6 +66,10 @@ External:
    added to a particular folder.
  * fts-elasticsearch [https://github.com/ascendantcom/fts-elasticsearch]:
    Allows for the use of <ElasticSearch.txt> as a full-text search backend.
+ * openchange
+   [https://github.com/openchange/openchange/tree/master/mapiproxy/services/plugins/dovecot]:
+   Allows <OpenChange.txt> to update Microsoft Outook mailboxes automatically
+   when new emails are received by Dovecot 2.x.
 
 Experimental Plugins:
 
@@ -73,4 +79,4 @@ Experimental Plugins:
 To enable / disable plugins per user you can make your userdb return
 'mail_plugins' extra field. See <UserDatabase.ExtraFields.txt> for examples.
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

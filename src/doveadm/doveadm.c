@@ -5,6 +5,7 @@
 #include "str.h"
 #include "env-util.h"
 #include "execv-const.h"
+#include "dict.h"
 #include "master-service-private.h"
 #include "master-service-settings.h"
 #include "settings-parser.h"
@@ -271,7 +272,7 @@ int main(int argc, char *argv[])
 	/* "+" is GNU extension to stop at the first non-option.
 	   others just accept -+ option. */
 	master_service = master_service_init("doveadm", service_flags,
-					     &argc, &argv, "+Df:v");
+					     &argc, &argv, "+Df:hv");
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
 		case 'D':
@@ -280,6 +281,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'f':
 			doveadm_print_init(optarg);
+			break;
+		case 'h':
+			doveadm_print_hide_titles = TRUE;
 			break;
 		case 'v':
 			doveadm_verbose = TRUE;
@@ -314,6 +318,7 @@ int main(int argc, char *argv[])
 		quick_init = FALSE;
 		doveadm_dump_init();
 		doveadm_mail_init();
+		dict_drivers_register_builtin();
 		doveadm_load_modules();
 
 		if (cmd_name == NULL) {
@@ -353,6 +358,7 @@ int main(int argc, char *argv[])
 		doveadm_mail_deinit();
 		doveadm_dump_deinit();
 		doveadm_unload_modules();
+		dict_drivers_unregister_builtin();
 		doveadm_print_deinit();
 	}
 	doveadm_cmds_deinit();

@@ -30,6 +30,7 @@ static const char *dsync_state_names[] = {
 	"master_send_mailbox",
 	"slave_recv_mailbox",
 	"sync_mails",
+	"finish",
 	"done"
 };
 
@@ -287,7 +288,7 @@ static void dsync_brain_purge(struct dsync_brain *brain)
 	}
 }
 
-int dsync_brain_deinit(struct dsync_brain **_brain)
+int dsync_brain_deinit(struct dsync_brain **_brain, enum mail_error *error_r)
 {
 	struct dsync_brain *brain = *_brain;
 	int ret;
@@ -337,6 +338,9 @@ int dsync_brain_deinit(struct dsync_brain **_brain)
 
 	ret = brain->failed ? -1 : 0;
 	mail_user_unref(&brain->user);
+
+	*error_r = !brain->failed ? 0 :
+		(brain->mail_error == 0 ? MAIL_ERROR_TEMP : brain->mail_error);
 	pool_unref(&brain->pool);
 	return ret;
 }
@@ -554,6 +558,33 @@ static bool dsync_brain_slave_recv_last_common(struct dsync_brain *brain)
 	return changed;
 }
 
+static bool dsync_brain_finish(struct dsync_brain *brain)
+{
+	const char *error;
+	enum mail_error mail_error;
+	enum dsync_ibc_recv_ret ret;
+
+	if (!brain->master_brain) {
+		dsync_ibc_send_finish(brain->ibc,
+				      brain->failed ? "dsync failed" : NULL,
+				      brain->mail_error);
+		brain->state = DSYNC_STATE_DONE;
+		return TRUE;
+	} 
+	ret = dsync_ibc_recv_finish(brain->ibc, &error, &mail_error);
+	if (ret == DSYNC_IBC_RECV_RET_TRYAGAIN)
+		return FALSE;
+	if (error != NULL) {
+		i_error("Remote dsync failed: %s", error);
+		brain->failed = TRUE;
+		if (mail_error != 0 &&
+		    (brain->mail_error == 0 || brain->mail_error == MAIL_ERROR_TEMP))
+			brain->mail_error = mail_error;
+	}
+	brain->state = DSYNC_STATE_DONE;
+	return TRUE;
+}
+
 static bool dsync_brain_run_real(struct dsync_brain *brain, bool *changed_r)
 {
 	enum dsync_state orig_state = brain->state;
@@ -601,6 +632,9 @@ static bool dsync_brain_run_real(struct dsync_brain *brain, bool *changed_r)
 		break;
 	case DSYNC_STATE_SYNC_MAILS:
 		changed = dsync_brain_sync_mails(brain);
+		break;
+	case DSYNC_STATE_FINISH:
+		changed = dsync_brain_finish(brain);
 		break;
 	case DSYNC_STATE_DONE:
 		changed = TRUE;

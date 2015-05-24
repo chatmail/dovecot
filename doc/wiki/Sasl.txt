@@ -17,7 +17,9 @@ Dovecot SASL can already be used with:
  * Postfix *v2.3* and later. See <HowTo.PostfixAndDovecotSASL.txt> for details.
 
  * Exim *v4.64* and later. See <HowTo.EximAndDovecotSASL.txt> for details.
+ * Prosody (with mod_auth_dovecot)
+ * ejabberd (with check_dovecot.pl)
 
 Hopefully more software will follow.
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

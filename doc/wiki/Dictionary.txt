@@ -10,6 +10,7 @@ be accessed via <dict proxy> [Dict.txt] processes.
 Currently supported dict backends are:
 
  * Flat files
+ * FS (lib-fs wrapper)
  * Redis
  * Proxy
  * SQL
@@ -24,6 +25,22 @@ file:<path>
 The file will simply contain all the keys that are used. Not very efficient for
 large databases, but good for small ones such as a single user's quota.
 
+FS (v2.2.11+)
+-------------
+
+---%<-------------------------------------------------------------------------
+fs:<driver>:<driver args>
+---%<-------------------------------------------------------------------------
+
+This is a wrapper for lib-fs, which most importantly has the "posix" backend.
+So using:
+
+---%<-------------------------------------------------------------------------
+fs:posix:prefix=/var/lib/dovecot/dict
+---%<-------------------------------------------------------------------------
+
+Would create a separate file under /var/lib/dovecot/dict for each key.
+
 Redis
 -----
 
@@ -36,6 +53,8 @@ Supported parameters are:
  * host: Redis server host (default: 127.0.0.1)
  * port: Redis server port (default: 6379)
  * prefix: Prefix to add to all keys (default: empty)
+ * db: Database number (default: 0)
+ * expire_secs=<n>: Set expiration value to all the keys
  * timeout_msecs: Abort lookups after specified number of milliseconds
    (default: 30000)
 
@@ -90,4 +109,4 @@ SQL Mapping
 
 FIXME: Write this. For now see 'example-config/dovecot-dict-sql.conf.ext'
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

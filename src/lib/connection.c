@@ -117,6 +117,9 @@ static void connection_init_streams(struct connection *conn)
 		conn->input = i_stream_create_fd(conn->fd_in,
 						 set->input_max_size, FALSE);
 		i_stream_set_name(conn->input, conn->name);
+		conn->io = io_add_istream(conn->input, *conn->list->v.input, conn);
+	} else {
+		conn->io = io_add(conn->fd_in, IO_READ, *conn->list->v.input, conn);
 	}
 	if (set->output_max_size != 0) {
 		conn->output = o_stream_create_fd(conn->fd_out,
@@ -124,7 +127,6 @@ static void connection_init_streams(struct connection *conn)
 		o_stream_set_no_error_handling(conn->output, TRUE);
 		o_stream_set_name(conn->output, conn->name);
 	}
-	conn->io = io_add_istream(conn->input, *conn->list->v.input, conn);
 	if (set->input_idle_timeout_secs != 0) {
 		conn->to = timeout_add(set->input_idle_timeout_secs*1000,
 				       connection_idle_timeout, conn);
@@ -234,7 +236,7 @@ void connection_init_from_streams(struct connection_list *list,
 		list->v.client_connected(conn, TRUE);
 }
 
-static void connection_ip_connected(struct connection *conn)
+static void connection_socket_connected(struct connection *conn)
 {
 	io_remove(&conn->io);
 	if (conn->to != NULL)
@@ -260,9 +262,10 @@ int connection_client_connect(struct connection *conn)
 		return -1;
 	conn->fd_in = conn->fd_out = fd;
 
-	if (conn->port != 0) {
+	if (conn->port != 0 ||
+	    conn->list->set.delayed_unix_client_connected_callback) {
 		conn->io = io_add(conn->fd_out, IO_WRITE,
-				  connection_ip_connected, conn);
+				  connection_socket_connected, conn);
 		if (set->client_connect_timeout_msecs != 0) {
 			conn->to = timeout_add(set->client_connect_timeout_msecs,
 					       connection_connect_timeout, conn);

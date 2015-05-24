@@ -104,8 +104,8 @@ am_libmail_la_OBJECTS = istream-attachment-connector.lo \
 	message-header-encode.lo message-header-parser.lo \
 	message-id.lo message-parser.lo message-part.lo \
 	message-part-serialize.lo message-search.lo message-size.lo \
-	message-snippet.lo ostream-dot.lo quoted-printable.lo \
-	rfc2231-parser.lo rfc822-parser.lo
+	message-snippet.lo ostream-dot.lo qp-decoder.lo \
+	quoted-printable.lo rfc2231-parser.lo rfc822-parser.lo
 libmail_la_OBJECTS = $(am_libmail_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -123,7 +123,8 @@ am__EXEEXT_1 = test-istream-dot$(EXEEXT) \
 	test-message-header-parser$(EXEEXT) test-message-id$(EXEEXT) \
 	test-message-parser$(EXEEXT) test-message-part$(EXEEXT) \
 	test-message-snippet$(EXEEXT) test-ostream-dot$(EXEEXT) \
-	test-quoted-printable$(EXEEXT) test-rfc2231-parser$(EXEEXT)
+	test-qp-decoder$(EXEEXT) test-quoted-printable$(EXEEXT) \
+	test-rfc2231-parser$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am_test_istream_attachment_OBJECTS =  \
 	test-istream-attachment.$(OBJEXT)
@@ -153,7 +154,6 @@ am_test_message_date_OBJECTS = test-message-date.$(OBJEXT)
 test_message_date_OBJECTS = $(am_test_message_date_OBJECTS)
 am_test_message_decoder_OBJECTS = test-message-decoder.$(OBJEXT)
 test_message_decoder_OBJECTS = $(am_test_message_decoder_OBJECTS)
-am__DEPENDENCIES_1 =
 am_test_message_header_decode_OBJECTS =  \
 	test-message-header-decode.$(OBJEXT)
 test_message_header_decode_OBJECTS =  \
@@ -174,12 +174,10 @@ am_test_message_part_OBJECTS = test-message-part.$(OBJEXT)
 test_message_part_OBJECTS = $(am_test_message_part_OBJECTS)
 am_test_message_snippet_OBJECTS = test-message-snippet.$(OBJEXT)
 test_message_snippet_OBJECTS = $(am_test_message_snippet_OBJECTS)
-am__DEPENDENCIES_2 = message-decoder.lo quoted-printable.lo \
-	rfc822-parser.lo rfc2231-parser.lo \
-	../lib-charset/libcharset.la $(test_libs) \
-	$(am__DEPENDENCIES_1)
 am_test_ostream_dot_OBJECTS = test-ostream-dot.$(OBJEXT)
 test_ostream_dot_OBJECTS = $(am_test_ostream_dot_OBJECTS)
+am_test_qp_decoder_OBJECTS = test-qp-decoder.$(OBJEXT)
+test_qp_decoder_OBJECTS = $(am_test_qp_decoder_OBJECTS)
 am_test_quoted_printable_OBJECTS = test-quoted-printable.$(OBJEXT)
 test_quoted_printable_OBJECTS = $(am_test_quoted_printable_OBJECTS)
 am_test_rfc2231_parser_OBJECTS = test-rfc2231-parser.$(OBJEXT)
@@ -231,7 +229,8 @@ SOURCES = $(libmail_la_SOURCES) $(test_istream_attachment_SOURCES) \
 	$(test_message_header_parser_SOURCES) \
 	$(test_message_id_SOURCES) $(test_message_parser_SOURCES) \
 	$(test_message_part_SOURCES) $(test_message_snippet_SOURCES) \
-	$(test_ostream_dot_SOURCES) $(test_quoted_printable_SOURCES) \
+	$(test_ostream_dot_SOURCES) $(test_qp_decoder_SOURCES) \
+	$(test_quoted_printable_SOURCES) \
 	$(test_rfc2231_parser_SOURCES)
 DIST_SOURCES = $(libmail_la_SOURCES) \
 	$(test_istream_attachment_SOURCES) \
@@ -247,7 +246,8 @@ DIST_SOURCES = $(libmail_la_SOURCES) \
 	$(test_message_header_parser_SOURCES) \
 	$(test_message_id_SOURCES) $(test_message_parser_SOURCES) \
 	$(test_message_part_SOURCES) $(test_message_snippet_SOURCES) \
-	$(test_ostream_dot_SOURCES) $(test_quoted_printable_SOURCES) \
+	$(test_ostream_dot_SOURCES) $(test_qp_decoder_SOURCES) \
+	$(test_quoted_printable_SOURCES) \
 	$(test_rfc2231_parser_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
@@ -314,6 +314,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
+CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CDB_LIBS = @CDB_LIBS@
@@ -363,7 +365,11 @@ LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBDOVECOT_STORAGE_DEPS = @LIBDOVECOT_STORAGE_DEPS@
+LIBEXTTEXTCAT_CFLAGS = @LIBEXTTEXTCAT_CFLAGS@
+LIBEXTTEXTCAT_LIBS = @LIBEXTTEXTCAT_LIBS@
 LIBICONV = @LIBICONV@
+LIBICU_CFLAGS = @LIBICU_CFLAGS@
+LIBICU_LIBS = @LIBICU_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
@@ -515,6 +521,7 @@ libmail_la_SOURCES = \
 	message-size.c \
 	message-snippet.c \
 	ostream-dot.c \
+	qp-decoder.c \
 	quoted-printable.c \
 	rfc2231-parser.c \
 	rfc822-parser.c
@@ -549,6 +556,7 @@ headers = \
 	message-size.h \
 	message-snippet.h \
 	ostream-dot.h \
+	qp-decoder.h \
 	quoted-printable.h \
 	rfc2231-parser.h \
 	rfc822-parser.h
@@ -574,6 +582,7 @@ test_programs = \
 	test-message-part \
 	test-message-snippet \
 	test-ostream-dot \
+	test-qp-decoder \
 	test-quoted-printable \
 	test-rfc2231-parser
 
@@ -586,7 +595,7 @@ test_istream_dot_SOURCES = test-istream-dot.c
 test_istream_dot_LDADD = istream-dot.lo $(test_libs)
 test_istream_dot_DEPENDENCIES = $(test_deps)
 test_istream_qp_decoder_SOURCES = test-istream-qp-decoder.c
-test_istream_qp_decoder_LDADD = istream-qp-decoder.lo quoted-printable.lo $(test_libs)
+test_istream_qp_decoder_LDADD = istream-qp-decoder.lo qp-decoder.lo $(test_libs)
 test_istream_qp_decoder_DEPENDENCIES = $(test_deps)
 message_parser_objects = \
 	message-parser.lo \
@@ -614,7 +623,7 @@ test_message_date_SOURCES = test-message-date.c
 test_message_date_LDADD = message-date.lo rfc822-parser.lo $(test_libs)
 test_message_date_DEPENDENCIES = $(test_deps)
 test_message_decoder_SOURCES = test-message-decoder.c
-test_message_decoder_LDADD = message-decoder.lo quoted-printable.lo rfc822-parser.lo rfc2231-parser.lo ../lib-charset/libcharset.la $(test_libs) $(LIBICONV)
+test_message_decoder_LDADD = message-decoder.lo qp-decoder.lo quoted-printable.lo rfc822-parser.lo rfc2231-parser.lo ../lib-charset/libcharset.la $(test_libs)
 test_message_decoder_DEPENDENCIES = ../lib-charset/libcharset.la $(test_deps)
 test_message_header_decode_SOURCES = test-message-header-decode.c
 test_message_header_decode_LDADD = message-header-decode.lo quoted-printable.lo message-header-encode.lo $(test_libs)
@@ -643,6 +652,9 @@ test_mail_html2text_DEPENDENCIES = $(test_deps)
 test_ostream_dot_SOURCES = test-ostream-dot.c
 test_ostream_dot_LDADD = ostream-dot.lo $(test_libs)
 test_ostream_dot_DEPENDENCIES = $(test_deps)
+test_qp_decoder_SOURCES = test-qp-decoder.c
+test_qp_decoder_LDADD = qp-decoder.lo $(test_libs)
+test_qp_decoder_DEPENDENCIES = $(test_deps)
 test_quoted_printable_SOURCES = test-quoted-printable.c
 test_quoted_printable_LDADD = quoted-printable.lo $(test_libs)
 test_quoted_printable_DEPENDENCIES = $(test_deps)
@@ -779,6 +791,10 @@ test-ostream-dot$(EXEEXT): $(test_ostream_dot_OBJECTS) $(test_ostream_dot_DEPEND
 	@rm -f test-ostream-dot$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_ostream_dot_OBJECTS) $(test_ostream_dot_LDADD) $(LIBS)
 
+test-qp-decoder$(EXEEXT): $(test_qp_decoder_OBJECTS) $(test_qp_decoder_DEPENDENCIES) $(EXTRA_test_qp_decoder_DEPENDENCIES) 
+	@rm -f test-qp-decoder$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_qp_decoder_OBJECTS) $(test_qp_decoder_LDADD) $(LIBS)
+
 test-quoted-printable$(EXEEXT): $(test_quoted_printable_OBJECTS) $(test_quoted_printable_DEPENDENCIES) $(EXTRA_test_quoted_printable_DEPENDENCIES) 
 	@rm -f test-quoted-printable$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_quoted_printable_OBJECTS) $(test_quoted_printable_LDADD) $(LIBS)
@@ -818,6 +834,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-size.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-snippet.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-dot.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/qp-decoder.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/quoted-printable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rfc2231-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rfc822-parser.Plo@am__quote@
@@ -839,6 +856,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-part.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-snippet.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-ostream-dot.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-qp-decoder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-quoted-printable.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-rfc2231-parser.Po@am__quote@
 

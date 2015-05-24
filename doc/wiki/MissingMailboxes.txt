@@ -51,4 +51,4 @@ C logout
 If you see a list of expected mailboxes, the problem is with your IMAP client.
 If not, set 'mail_debug=yes' and look at the logs.
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

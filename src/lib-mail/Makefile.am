@@ -31,6 +31,7 @@ libmail_la_SOURCES = \
 	message-size.c \
 	message-snippet.c \
 	ostream-dot.c \
+	qp-decoder.c \
 	quoted-printable.c \
 	rfc2231-parser.c \
 	rfc822-parser.c
@@ -65,6 +66,7 @@ headers = \
 	message-size.h \
 	message-snippet.h \
 	ostream-dot.h \
+	qp-decoder.h \
 	quoted-printable.h \
 	rfc2231-parser.h \
 	rfc822-parser.h
@@ -91,6 +93,7 @@ test_programs = \
 	test-message-part \
 	test-message-snippet \
 	test-ostream-dot \
+	test-qp-decoder \
 	test-quoted-printable \
 	test-rfc2231-parser
 
@@ -107,7 +110,7 @@ test_istream_dot_LDADD = istream-dot.lo $(test_libs)
 test_istream_dot_DEPENDENCIES = $(test_deps)
 
 test_istream_qp_decoder_SOURCES = test-istream-qp-decoder.c
-test_istream_qp_decoder_LDADD = istream-qp-decoder.lo quoted-printable.lo $(test_libs)
+test_istream_qp_decoder_LDADD = istream-qp-decoder.lo qp-decoder.lo $(test_libs)
 test_istream_qp_decoder_DEPENDENCIES = $(test_deps)
 
 message_parser_objects = \
@@ -142,7 +145,7 @@ test_message_date_LDADD = message-date.lo rfc822-parser.lo $(test_libs)
 test_message_date_DEPENDENCIES = $(test_deps)
 
 test_message_decoder_SOURCES = test-message-decoder.c
-test_message_decoder_LDADD = message-decoder.lo quoted-printable.lo rfc822-parser.lo rfc2231-parser.lo ../lib-charset/libcharset.la $(test_libs) $(LIBICONV)
+test_message_decoder_LDADD = message-decoder.lo qp-decoder.lo quoted-printable.lo rfc822-parser.lo rfc2231-parser.lo ../lib-charset/libcharset.la $(test_libs)
 test_message_decoder_DEPENDENCIES = ../lib-charset/libcharset.la $(test_deps)
 
 test_message_header_decode_SOURCES = test-message-header-decode.c
@@ -180,6 +183,10 @@ test_mail_html2text_DEPENDENCIES = $(test_deps)
 test_ostream_dot_SOURCES = test-ostream-dot.c
 test_ostream_dot_LDADD = ostream-dot.lo $(test_libs)
 test_ostream_dot_DEPENDENCIES = $(test_deps)
+
+test_qp_decoder_SOURCES = test-qp-decoder.c
+test_qp_decoder_LDADD = qp-decoder.lo $(test_libs)
+test_qp_decoder_DEPENDENCIES = $(test_deps)
 
 test_quoted_printable_SOURCES = test-quoted-printable.c
 test_quoted_printable_LDADD = quoted-printable.lo $(test_libs)

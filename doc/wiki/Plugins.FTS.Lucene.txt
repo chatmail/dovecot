@@ -22,9 +22,15 @@ if it's included in the CLucene you are using.
 Configuration
 -------------
 
+Into 10-mail.conf (note add existing plugins to string)
+
 ---%<-------------------------------------------------------------------------
 mail_plugins = $mail_plugins fts fts_lucene
+---%<-------------------------------------------------------------------------
 
+Into 90-plugins.conf
+
+---%<-------------------------------------------------------------------------
 plugin {
   fts = lucene
   # Lucene-specific settings, good ones are:
@@ -60,4 +66,4 @@ Libraries
    which you can rename to libstemmer.a
  * textcat [http://textcat.sourceforge.net/]
 
-(This file was created from the wiki on 2015-03-06 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

@@ -145,6 +145,8 @@ void mail_search_args_unref(struct mail_search_args **args);
 
 struct mail_search_args *
 mail_search_args_dup(const struct mail_search_args *args);
+struct mail_search_arg *
+mail_search_arg_dup(pool_t pool, const struct mail_search_arg *arg);
 
 /* Reset the results in search arguments. match_always is reset only if
    full_reset is TRUE. */
@@ -176,6 +178,15 @@ bool mail_search_args_match_mailbox(struct mail_search_args *args,
 /* Simplify/optimize search arguments. Afterwards all OR/SUB args are
    guaranteed to have match_not=FALSE. */
 void mail_search_args_simplify(struct mail_search_args *args);
+
+/* Append all args as IMAP SEARCH AND-query to the dest string and returns TRUE.
+   If some search arg can't be written as IMAP SEARCH parameter, error_r is set
+   and FALSE is returned. */
+bool mail_search_args_to_imap(string_t *dest, const struct mail_search_arg *args,
+			      const char **error_r);
+/* Like mail_search_args_to_imap(), but append only a single arg. */
+bool mail_search_arg_to_imap(string_t *dest, const struct mail_search_arg *arg,
+			     const char **error_r);
 
 /* Serialization for search args' results. */
 void mail_search_args_result_serialize(const struct mail_search_args *args,

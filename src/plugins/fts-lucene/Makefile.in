@@ -135,11 +135,12 @@ lib20_doveadm_fts_lucene_plugin_la_LINK = $(LIBTOOL) $(AM_V_lt) \
 	$(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(lib20_doveadm_fts_lucene_plugin_la_LDFLAGS) $(LDFLAGS) -o $@
 am__DEPENDENCIES_1 =
+@BUILD_FTS_EXTTEXTCAT_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
 lib21_fts_lucene_plugin_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_1)
 am__lib21_fts_lucene_plugin_la_SOURCES_DIST = fts-lucene-plugin.c \
 	fts-backend-lucene.c lucene-wrapper.cc Snowball.cc
-@BUILD_LUCENE_STEMMER_TRUE@am__objects_1 = Snowball.lo
+@BUILD_FTS_STEMMER_TRUE@am__objects_1 = Snowball.lo
 am_lib21_fts_lucene_plugin_la_OBJECTS = fts-lucene-plugin.lo \
 	fts-backend-lucene.lo lucene-wrapper.lo $(am__objects_1)
 lib21_fts_lucene_plugin_la_OBJECTS =  \
@@ -242,6 +243,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
+CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CDB_LIBS = @CDB_LIBS@
@@ -291,7 +294,11 @@ LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
 LIBDOVECOT_STORAGE_DEPS = @LIBDOVECOT_STORAGE_DEPS@
+LIBEXTTEXTCAT_CFLAGS = @LIBEXTTEXTCAT_CFLAGS@
+LIBEXTTEXTCAT_LIBS = @LIBEXTTEXTCAT_LIBS@
 LIBICONV = @LIBICONV@
+LIBICU_CFLAGS = @LIBICU_CFLAGS@
+LIBICU_LIBS = @LIBICU_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
@@ -421,17 +428,18 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/doveadm
 
 AM_CXXFLAGS = \
-	$(CLUCENE_CFLAGS)
+	$(CLUCENE_CFLAGS) \
+	$(LIBEXTTEXTCAT_CFLAGS)
 
 lib21_fts_lucene_plugin_la_LDFLAGS = -module -avoid-version
 lib20_doveadm_fts_lucene_plugin_la_LDFLAGS = -module -avoid-version
 module_LTLIBRARIES = \
 	lib21_fts_lucene_plugin.la
 
-@BUILD_LUCENE_STEMMER_TRUE@STEMMER_LIBS = -lstemmer
-@BUILD_LUCENE_STEMMER_TRUE@SHOWBALL_SOURCES = Snowball.cc
-@BUILD_LUCENE_EXTTEXTCAT_TRUE@@BUILD_LUCENE_TEXTCAT_FALSE@TEXTCAT_LIBS = -lexttextcat
-@BUILD_LUCENE_TEXTCAT_TRUE@TEXTCAT_LIBS = -ltextcat
+@BUILD_FTS_STEMMER_TRUE@STEMMER_LIBS = -lstemmer
+@BUILD_FTS_STEMMER_TRUE@SHOWBALL_SOURCES = Snowball.cc
+@BUILD_FTS_EXTTEXTCAT_FALSE@@BUILD_FTS_TEXTCAT_TRUE@TEXTCAT_LIBS = -ltextcat
+@BUILD_FTS_EXTTEXTCAT_TRUE@TEXTCAT_LIBS = $(LIBEXTTEXTCAT_LIBS)
 lib21_fts_lucene_plugin_la_LIBADD = \
 	$(CLUCENE_LIBS) $(TEXTCAT_LIBS) $(STEMMER_LIBS)
 
@@ -447,9 +455,9 @@ noinst_HEADERS = \
 	SnowballAnalyzer.h \
 	SnowballFilter.h
 
-@BUILD_LUCENE_TEXTCAT_TRUE@exampledir = $(docdir)/example-config
-@BUILD_LUCENE_TEXTCAT_TRUE@example_DATA = \
-@BUILD_LUCENE_TEXTCAT_TRUE@	textcat.conf
+@BUILD_FTS_TEXTCAT_TRUE@exampledir = $(docdir)/example-config
+@BUILD_FTS_TEXTCAT_TRUE@example_DATA = \
+@BUILD_FTS_TEXTCAT_TRUE@	textcat.conf
 
 EXTRA_DIST = textcat.conf
 doveadm_module_LTLIBRARIES = \

@@ -149,7 +149,8 @@ enum imapc_features {
 	IMAPC_FEATURE_GUID_FORCED		= 0x02,
 	IMAPC_FEATURE_FETCH_HEADERS		= 0x04,
 	IMAPC_FEATURE_GMAIL_MIGRATION		= 0x08,
-	IMAPC_FEATURE_SEARCH			= 0x10
+	IMAPC_FEATURE_SEARCH			= 0x10,
+	IMAPC_FEATURE_ZIMBRA_WORKAROUNDS	= 0x20
 };
 /* </settings checks> */
 struct imapc_settings {
@@ -955,6 +956,7 @@ static const struct imapc_feature_list imapc_feature_list[] = {
 	{ "fetch-headers", IMAPC_FEATURE_FETCH_HEADERS },
 	{ "gmail-migration", IMAPC_FEATURE_GMAIL_MIGRATION },
 	{ "search", IMAPC_FEATURE_SEARCH },
+	{ "zimbra-workarounds", IMAPC_FEATURE_ZIMBRA_WORKAROUNDS },
 	{ NULL, 0 }
 };
 
@@ -1284,14 +1286,24 @@ struct login_settings {
 };
 /* ../../src/lmtp/lmtp-settings.h */
 extern const struct setting_parser_info lmtp_setting_parser_info;
+/* <settings checks> */
+enum lmtp_hdr_delivery_address {
+	LMTP_HDR_DELIVERY_ADDRESS_NONE,
+	LMTP_HDR_DELIVERY_ADDRESS_FINAL,
+	LMTP_HDR_DELIVERY_ADDRESS_ORIGINAL
+};
+/* </settings checks> */
 struct lmtp_settings {
 	bool lmtp_proxy;
 	bool lmtp_save_to_detail_mailbox;
 	bool lmtp_rcpt_check_quota;
 	unsigned int lmtp_user_concurrency_limit;
 	const char *lmtp_address_translate;
+	const char *lmtp_hdr_delivery_address;
 	const char *login_greeting;
 	const char *login_trusted_networks;
+
+	enum lmtp_hdr_delivery_address parsed_lmtp_hdr_delivery_address;
 };
 /* ../../src/imap/imap-settings.h */
 extern const struct setting_parser_info imap_setting_parser_info;
@@ -2687,6 +2699,29 @@ static buffer_t lmtp_unix_listeners_buf = {
 	lmtp_unix_listeners, sizeof(lmtp_unix_listeners), { NULL, }
 };
 /* </settings checks> */
+/* <settings checks> */
+static bool lmtp_settings_check(void *_set, pool_t pool ATTR_UNUSED,
+				const char **error_r)
+{
+	struct lmtp_settings *set = _set;
+
+	if (strcmp(set->lmtp_hdr_delivery_address, "none") == 0) {
+		set->parsed_lmtp_hdr_delivery_address =
+			LMTP_HDR_DELIVERY_ADDRESS_NONE;
+	} else if (strcmp(set->lmtp_hdr_delivery_address, "final") == 0) {
+		set->parsed_lmtp_hdr_delivery_address =
+			LMTP_HDR_DELIVERY_ADDRESS_FINAL;
+	} else if (strcmp(set->lmtp_hdr_delivery_address, "original") == 0) {
+		set->parsed_lmtp_hdr_delivery_address =
+			LMTP_HDR_DELIVERY_ADDRESS_ORIGINAL;
+	} else {
+		*error_r = t_strdup_printf("Unknown lmtp_hdr_delivery_address: %s",
+					   set->lmtp_hdr_delivery_address);
+		return FALSE;
+	}
+	return TRUE;
+}
+/* </settings checks> */
 struct service_settings lmtp_service_settings = {
 	.name = "lmtp",
 	.protocol = "lmtp",
@@ -2721,6 +2756,7 @@ static const struct setting_define lmtp_setting_defines[] = {
 	DEF(SET_BOOL, lmtp_rcpt_check_quota),
 	DEF(SET_UINT, lmtp_user_concurrency_limit),
 	DEF(SET_STR, lmtp_address_translate),
+	DEF(SET_ENUM, lmtp_hdr_delivery_address),
 	DEF(SET_STR_VARS, login_greeting),
 	DEF(SET_STR, login_trusted_networks),
 
@@ -2732,6 +2768,7 @@ static const struct lmtp_settings lmtp_default_settings = {
 	.lmtp_rcpt_check_quota = FALSE,
 	.lmtp_user_concurrency_limit = 0,
 	.lmtp_address_translate = "",
+	.lmtp_hdr_delivery_address = "final:none:original",
 	.login_greeting = PACKAGE_NAME" ready.",
 	.login_trusted_networks = ""
 };
@@ -2749,6 +2786,7 @@ const struct setting_parser_info lmtp_setting_parser_info = {
 
 	.parent_offset = (size_t)-1,
 
+	.check_func = lmtp_settings_check,
 	.dependencies = lmtp_setting_dependencies
 };
 /* ../../src/ipc/ipc-settings.c */
@@ -4144,32 +4182,32 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&pop3_setting_parser_info, 
-	&dict_setting_parser_info, 
-	&aggregator_setting_parser_info, 
-	&maildir_setting_parser_info, 
-	&director_setting_parser_info, 
 	&lda_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&imap_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&director_setting_parser_info, 
 	&login_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
+	&pop3c_setting_parser_info, 
 	&mdbox_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&stats_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
+	&maildir_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&mbox_setting_parser_info, 
 	&imapc_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&master_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&imap_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&pop3_setting_parser_info, 
 	&auth_setting_parser_info, 
 	&mail_storage_setting_parser_info, 
-	&pop3c_setting_parser_info, 
-	&imap_login_setting_parser_info, 
-	&master_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
+	&lmtp_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;
