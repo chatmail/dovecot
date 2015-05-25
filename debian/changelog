@@ -1,6 +1,9 @@
 dovecot (1:2.2.18-1) UNRELEASED; urgency=medium
 
-  * [cce20a5] Imported Upstream version 2.2.18
+  * [cce20a5] Imported Upstream version 2.2.18. Closes: #786760
+  * [36d2ec1] Refresh patch dovecot_name.patch.
+  * [109e6f8] Drop patch cve-2015-3420.patch: applied upstream.
+  * [6c59f09] Depend on krb5-multidev rather than libkrb5-dev.
 
  -- Jelmer Vernooij <jelmer@debian.org>  Sun, 24 May 2015 15:01:19 +0000
 
