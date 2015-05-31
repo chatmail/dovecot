@@ -1,0 +1,18 @@
+From: Timo Sirainen <tss@iki.fi>
+Subject: mbox: Fixed corruption in some usage patterns.
+
+--- a/src/lib-storage/index/mbox/mbox-sync.c
++++ b/src/lib-storage/index/mbox/mbox-sync.c
+@@ -679,8 +679,10 @@
+ 		}
+ 	} else if (mail_ctx->need_rewrite) {
+ 		mbox_sync_update_header(mail_ctx);
+-		if (sync_ctx->delay_writes) {
+-			/* mark it dirty and do it later */
++		if (sync_ctx->delay_writes && sync_ctx->need_space_seq == 0) {
++			/* mark it dirty and do it later. we can't do this
++			   if we're in the middle of rewriting acquiring more
++			   space. */
+ 			mail_ctx->dirty = TRUE;
+ 			return 0;
+ 		}
