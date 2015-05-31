@@ -1,3 +1,13 @@
+dovecot (1:2.2.13-12~deb8u1) stable; urgency=high
+
+  * [6e16721] Fix a mbox corruption problem by applying two patches from
+    mercurial upstream.
+    - fix-mbox-corruption-18534.patch (changeset 18534:94bd895721d8).
+    - fix-mbox-corruption-18679.patch (changeset 18679:b6ea460e7cc4).
+    Thanks to Santiago Vila <sanvila@unex.es> (Closes: 776094)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 31 May 2015 01:38:40 -0400
+
 dovecot (1:2.2.13-12) unstable; urgency=high
 
   * [48f6fe4] Add patch cve-2015-3420.patch: Fix SSL/TLS handshake failures
