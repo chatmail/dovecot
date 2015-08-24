@@ -172,7 +172,7 @@ install: build
 	mv $(CURDIR)/debian/dovecot-core/usr/bin/sieve* $(CURDIR)/debian/dovecot-sieve/usr/bin
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/doveadm/lib??_doveadm_sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules/doveadm
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/sieve $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules/sieve
+	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/sieve $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules/sieve
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/libdovecot-sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot
 	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/*-sieve.conf $(CURDIR)/debian/dovecot-sieve/usr/share/dovecot/conf.d
 	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/*-sieve-extprograms.conf $(CURDIR)/debian/dovecot-sieve/usr/share/dovecot/conf.d
