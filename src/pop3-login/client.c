@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -20,7 +20,7 @@
 #include "pop3-login-settings.h"
 
 /* Disconnect client when it sends too many bad commands */
-#define CLIENT_MAX_BAD_COMMANDS 10
+#define CLIENT_MAX_BAD_COMMANDS 3
 
 static bool cmd_stls(struct pop3_client *client)
 {
@@ -57,8 +57,12 @@ static bool cmd_xclient(struct pop3_client *client, const char *args)
 			else
 				client->common.remote_port = remote_port;
 		} else if (strncasecmp(*tmp, "SESSION=", 8) == 0) {
-			client->common.session_id =
-				p_strdup(client->common.pool, *tmp + 8);
+			const char *value = *tmp + 8;
+
+			if (strlen(value) <= LOGIN_MAX_SESSION_ID_LEN) {
+				client->common.session_id =
+					p_strdup(client->common.pool, value);
+			}
 		} else if (strncasecmp(*tmp, "TTL=", 4) == 0) {
 			if (str_to_uint(*tmp + 4, &client->common.proxy_ttl) < 0)
 				args_ok = FALSE;
@@ -126,7 +130,7 @@ static void pop3_client_input(struct client *client)
 		if (client_command_execute(pop3_client, line,
 					   args != NULL ? args : ""))
 			client->bad_counter = 0;
-		else if (++client->bad_counter > CLIENT_MAX_BAD_COMMANDS) {
+		else if (++client->bad_counter >= CLIENT_MAX_BAD_COMMANDS) {
 			client_send_reply(client, POP3_CMD_REPLY_ERROR,
 				"Too many invalid bad commands.");
 			client_destroy(client,

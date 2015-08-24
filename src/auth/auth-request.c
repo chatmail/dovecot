@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -46,6 +46,8 @@ unsigned int auth_request_state_count[AUTH_REQUEST_STATE_MAX];
 
 static void get_log_prefix(string_t *str, struct auth_request *auth_request,
 			   const char *subsystem);
+static void
+auth_request_userdb_import(struct auth_request *request, const char *args);
 
 struct auth_request *
 auth_request_new(const struct mech_module *mech)
@@ -73,7 +75,7 @@ struct auth_request *auth_request_new_dummy(void)
 	struct auth_request *request;
 	pool_t pool;
 
-	pool = pool_alloconly_create("auth_request", 1024);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"auth_request", 1024);
 	request = p_new(pool, struct auth_request, 1);
 	request->pool = pool;
 
@@ -550,6 +552,15 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 		}
 		return TRUE;
 	}
+	if (request->failed) {
+		/* The passdb didn't fail, but something inside it failed
+		   (e.g. allow_nets mismatch). Make sure we'll fail this
+		   lookup, but reset the failure so the next passdb can
+		   succeed. */
+		if (*result == PASSDB_RESULT_OK)
+			*result = PASSDB_RESULT_USER_UNKNOWN;
+		request->failed = FALSE;
+	}
 
 	/* users that exist but can't log in are special. we don't try to match
 	   any of the success/failure rules to them. they'll always fail. */
@@ -616,29 +627,27 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 	       auth_request_want_skip_passdb(request, next_passdb))
 		next_passdb = next_passdb->next;
 
+	if (*result == PASSDB_RESULT_OK) {
+		/* this passdb lookup succeeded, preserve its extra fields */
+		auth_fields_snapshot(request->extra_fields);
+		request->snapshot_have_userdb_prefetch_set =
+			request->userdb_prefetch_set;
+		if (request->userdb_reply != NULL)
+			auth_fields_snapshot(request->userdb_reply);
+	} else {
+		/* this passdb lookup failed, remove any extra fields it set */
+		auth_fields_rollback(request->extra_fields);
+		if (request->userdb_reply != NULL) {
+			auth_fields_rollback(request->userdb_reply);
+			request->userdb_prefetch_set =
+				request->snapshot_have_userdb_prefetch_set;
+		}
+	}
+
 	if (passdb_continue && next_passdb != NULL) {
 		/* try next passdb. */
                 request->passdb = next_passdb;
 		request->passdb_password = NULL;
-
-		if (*result == PASSDB_RESULT_OK) {
-			/* this passdb lookup succeeded, preserve its extra
-			   fields */
-			auth_fields_snapshot(request->extra_fields);
-			request->snapshot_have_userdb_prefetch_set =
-				request->userdb_prefetch_set;
-			if (request->userdb_reply != NULL)
-				auth_fields_snapshot(request->userdb_reply);
-		} else {
-			/* this passdb lookup failed, remove any extra fields
-			   it set */
-			auth_fields_rollback(request->extra_fields);
-			if (request->userdb_reply != NULL) {
-				auth_fields_rollback(request->userdb_reply);
-				request->userdb_prefetch_set =
-					request->snapshot_have_userdb_prefetch_set;
-			}
-		}
 
 		if (*result == PASSDB_RESULT_USER_UNKNOWN) {
 			/* remember that we did at least one successful
@@ -651,14 +660,14 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 			request->passdbs_seen_internal_failure = TRUE;
 		}
 		return FALSE;
+	} else if (request->passdb_success) {
+		/* either this or a previous passdb lookup succeeded. */
+		*result = PASSDB_RESULT_OK;
 	} else if (request->passdbs_seen_internal_failure) {
 		/* last passdb lookup returned internal failure. it may have
 		   had the correct password, so return internal failure
 		   instead of plain failure. */
 		*result = PASSDB_RESULT_INTERNAL_FAILURE;
-	} else if (request->passdb_success) {
-		/* either this or a previous passdb lookup succeeded. */
-		*result = PASSDB_RESULT_OK;
 	}
 	return TRUE;
 }
@@ -800,10 +809,29 @@ auth_request_lookup_credentials_finish(enum passdb_result result,
 {
 	if (!auth_request_handle_passdb_callback(&result, request)) {
 		/* try next passdb */
+		if (request->skip_password_check &&
+		    request->delayed_credentials == NULL) {
+			/* passdb continue* rule after a successful lookup.
+			   remember these credentials and use them later on. */
+			unsigned char *dup;
+
+			dup = p_malloc(request->pool, size);
+			memcpy(dup, credentials, size);
+			request->delayed_credentials = dup;
+			request->delayed_credentials_size = size;
+		}
 		auth_request_lookup_credentials(request,
 			request->credentials_scheme,
                 	request->private_callback.lookup_credentials);
 	} else {
+		if (request->delayed_credentials != NULL && size == 0) {
+			/* we did multiple passdb lookups, but the last one
+			   didn't provide any credentials (e.g. just wanted to
+			   add some extra fields). so use the first passdb's
+			   credentials instead. */
+			credentials = request->delayed_credentials;
+			size = request->delayed_credentials_size;
+		}
 		if (request->set->debug_passwords &&
 		    result == PASSDB_RESULT_OK) {
 			auth_request_log_debug(request, AUTH_SUBSYS_DB,
@@ -931,7 +959,7 @@ void auth_request_set_credentials(struct auth_request *request,
 					      callback);
 	} else {
 		/* this passdb doesn't support credentials update */
-		callback(PASSDB_RESULT_INTERNAL_FAILURE, request);
+		callback(FALSE, request);
 	}
 }
 
@@ -952,6 +980,13 @@ static void auth_request_userdb_save_cache(struct auth_request *request,
 		auth_fields_append(request->userdb_reply, str,
 				   AUTH_FIELD_FLAG_CHANGED,
 				   AUTH_FIELD_FLAG_CHANGED);
+		if (strcmp(request->user, request->translated_username) != 0) {
+			/* username was changed by passdb or userdb */
+			if (str_len(str) > 0)
+				str_append_c(str, '\t');
+			str_append(str, "user=");
+			str_append_tabescaped(str, request->user);
+		}
 		if (str_len(str) == 0) {
 			/* no userdb fields. but we can't save an empty string,
 			   since that means "user unknown". */
@@ -966,7 +1001,6 @@ static void auth_request_userdb_save_cache(struct auth_request *request,
 
 static bool auth_request_lookup_user_cache(struct auth_request *request,
 					   const char *key,
-					   struct auth_fields **reply_r,
 					   enum userdb_result *result_r,
 					   bool use_expired)
 {
@@ -988,13 +1022,13 @@ static bool auth_request_lookup_user_cache(struct auth_request *request,
 	if (*value == '\0') {
 		/* negative cache entry */
 		*result_r = USERDB_RESULT_USER_UNKNOWN;
-		*reply_r = auth_fields_init(request->pool);
+		request->userdb_reply = auth_fields_init(request->pool);
 		return TRUE;
 	}
 
+	request->userdb_reply = auth_fields_init(request->pool);
+	auth_request_userdb_import(request, value);
 	*result_r = USERDB_RESULT_OK;
-	*reply_r = auth_fields_init(request->pool);
-	auth_fields_import(*reply_r, value, 0);
 	return TRUE;
 }
 
@@ -1095,11 +1129,9 @@ void auth_request_userdb_callback(enum userdb_result result,
 		   request was expired in cache, fallback to using cached
 		   expired record. */
 		const char *cache_key = userdb->cache_key;
-		struct auth_fields *reply;
 
-		if (auth_request_lookup_user_cache(request, cache_key, &reply,
+		if (auth_request_lookup_user_cache(request, cache_key,
 						   &result, TRUE)) {
-			request->userdb_reply = reply;
 			auth_request_log_info(request, AUTH_SUBSYS_DB,
 				"Falling back to expired data from cache");
 		}
@@ -1122,12 +1154,10 @@ void auth_request_lookup_user(struct auth_request *request,
 	/* (for now) auth_cache is shared between passdb and userdb */
 	cache_key = passdb_cache == NULL ? NULL : userdb->cache_key;
 	if (cache_key != NULL) {
-		struct auth_fields *reply;
 		enum userdb_result result;
 
-		if (auth_request_lookup_user_cache(request, cache_key, &reply,
+		if (auth_request_lookup_user_cache(request, cache_key,
 						   &result, FALSE)) {
-			request->userdb_reply = reply;
 			request->private_callback.userdb(result, request);
 			return;
 		}
@@ -1190,6 +1220,11 @@ auth_request_fix_username(struct auth_request *request, const char *username,
 		request->user = old_username;
 	}
 
+	if (user[0] == '\0') {
+		/* Some PAM plugins go nuts with empty usernames */
+		*error_r = "Empty username";
+		return NULL;
+	}
         return user;
 }
 
@@ -1206,11 +1241,6 @@ bool auth_request_set_username(struct auth_request *request,
 			/* it does, set it. */
 			login_username = t_strdup_until(username, p);
 
-			if (*login_username == '\0') {
-				*error_r = "Empty login username";
-				return FALSE;
-			}
-
 			/* username is the master user */
 			username = p + 1;
 		}
@@ -1226,12 +1256,6 @@ bool auth_request_set_username(struct auth_request *request,
 		   authentication mechanism. but still do checks and
 		   translations to it. */
 		username = request->user;
-	}
-
-	if (*username == '\0') {
-		/* Some PAM plugins go nuts with empty usernames */
-		*error_r = "Empty username";
-		return FALSE;
 	}
 
         request->user = auth_request_fix_username(request, username, error_r);
@@ -1255,7 +1279,12 @@ bool auth_request_set_login_username(struct auth_request *request,
                                      const char *username,
                                      const char **error_r)
 {
-        i_assert(*username != '\0');
+	struct auth_passdb *master_passdb;
+
+	if (username[0] == '\0') {
+		*error_r = "Master user login attempted to use empty login username";
+		return FALSE;
+	}
 
 	if (strcmp(username, request->user) == 0) {
 		/* The usernames are the same, we don't really wish to log
@@ -1264,7 +1293,12 @@ bool auth_request_set_login_username(struct auth_request *request,
 	}
 
         /* lookup request->user from masterdb first */
-        request->passdb = auth_request_get_auth(request)->masterdbs;
+	master_passdb = auth_request_get_auth(request)->masterdbs;
+	if (master_passdb == NULL) {
+		*error_r = "Master user login attempted without master passdbs";
+		return FALSE;
+	}
+	request->passdb = master_passdb;
 
         request->requested_login_user =
                 auth_request_fix_username(request, username, error_r);
@@ -1285,30 +1319,33 @@ static void auth_request_validate_networks(struct auth_request *request,
 	unsigned int bits;
 	bool found = FALSE;
 
-	if (request->remote_ip.family == 0) {
-		/* IP not known */
-		auth_request_log_info(request, AUTH_SUBSYS_DB,
-			"allow_nets check failed: Remote IP not known");
-		request->failed = TRUE;
-		return;
-	}
-
 	for (net = t_strsplit_spaces(networks, ", "); *net != NULL; net++) {
 		auth_request_log_debug(request, AUTH_SUBSYS_DB,
 			"allow_nets: Matching for network %s", *net);
+
+		if (strcmp(*net, "local") == 0 && request->remote_ip.family == 0) {
+			found = TRUE;
+			break;
+		}
 
 		if (net_parse_range(*net, &net_ip, &bits) < 0) {
 			auth_request_log_info(request, AUTH_SUBSYS_DB,
 				"allow_nets: Invalid network '%s'", *net);
 		}
 
-		if (net_is_in_network(&request->remote_ip, &net_ip, bits)) {
+		if (request->remote_ip.family != 0 &&
+		    net_is_in_network(&request->remote_ip, &net_ip, bits)) {
 			found = TRUE;
 			break;
 		}
 	}
 
-	if (!found) {
+	if (found)
+		;
+	else if (request->remote_ip.family == 0) {
+		auth_request_log_info(request, AUTH_SUBSYS_DB,
+			"allow_nets check failed: Remote IP not known and 'local' missing");
+	} else if (!found) {
 		auth_request_log_info(request, AUTH_SUBSYS_DB,
 			"allow_nets check failed: IP not in allowed networks");
 	}
@@ -1381,6 +1418,12 @@ auth_request_try_update_username(struct auth_request *request,
 	new_value = get_updated_username(request->user, name, value);
 	if (new_value == NULL)
 		return FALSE;
+	if (new_value[0] == '\0') {
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
+			"username attempted to be changed to empty");
+		request->failed = TRUE;
+		return TRUE;
+	}
 
 	if (strcmp(request->user, new_value) != 0) {
 		auth_request_log_debug(request, AUTH_SUBSYS_DB,
@@ -1434,6 +1477,14 @@ void auth_request_set_field(struct auth_request *request,
 		request->userdb_prefetch_set = TRUE;
 		if (request->userdb_reply == NULL)
 			auth_request_init_userdb_reply(request);
+		if (strcmp(name, "userdb_userdb_import") == 0) {
+			/* we can't put the whole userdb_userdb_import
+			   value to extra_cache_fields or it doesn't work
+			   properly. so handle this explicitly. */
+			auth_request_passdb_import(request, value,
+						   "userdb_", default_scheme);
+			return;
+		}
 		auth_request_set_userdb_field(request, name + 7, value);
 	} else if (strcmp(name, "nopassword") == 0) {
 		/* NULL password - anything goes */
@@ -1454,14 +1505,6 @@ void auth_request_set_field(struct auth_request *request,
 	} else if (strcmp(name, "passdb_import") == 0) {
 		auth_request_passdb_import(request, value, "", default_scheme);
 		return;
-		if (strcmp(name, "userdb_userdb_import") == 0) {
-			/* we need can't put the whole userdb_userdb_import
-			   value to extra_cache_fields or it doesn't work
-			   properly. so handle this explicitly. */
-			auth_request_passdb_import(request, value,
-						   "userdb_", default_scheme);
-			return;
-		}
 	} else {
 		/* these fields are returned to client */
 		auth_fields_add(request->extra_fields, name, value, 0);
@@ -1566,6 +1609,8 @@ void auth_request_set_userdb_field(struct auth_request *request,
 {
 	uid_t uid;
 	gid_t gid;
+
+	i_assert(value != NULL);
 
 	if (strcmp(name, "uid") == 0) {
 		uid = userdb_parse_uid(request, value);
@@ -1801,8 +1846,17 @@ int auth_request_proxy_finish(struct auth_request *request,
 
 	host = auth_fields_find(request->extra_fields, "host");
 	if (host == NULL) {
-		/* director can set the host */
+		/* director can set the host. give it access to lip and lport
+		   so it can also perform proxy_maybe internally */
 		proxy_host_is_self = FALSE;
+		if (request->local_ip.family != 0) {
+			auth_fields_add(request->extra_fields, "lip",
+					net_ip2addr(&request->local_ip), 0);
+		}
+		if (request->local_port != 0) {
+			auth_fields_add(request->extra_fields, "lport",
+					dec2str(request->local_port), 0);
+		}
 	} else if (net_addr2ip(host, &ip) == 0) {
 		proxy_host_is_self =
 			auth_request_proxy_ip_is_self(request, &ip);
@@ -2149,15 +2203,18 @@ static void get_log_prefix(string_t *str, struct auth_request *auth_request,
 
 	if (subsystem == AUTH_SUBSYS_DB) {
 		if (!auth_request->userdb_lookup) {
+			i_assert(auth_request->passdb != NULL);
 			name = auth_request->passdb->set->name[0] != '\0' ?
 				auth_request->passdb->set->name :
 				auth_request->passdb->passdb->iface.name;
 		} else {
+			i_assert(auth_request->userdb != NULL);
 			name = auth_request->userdb->set->name[0] != '\0' ?
 				auth_request->userdb->set->name :
 				auth_request->userdb->userdb->iface->name;
 		}
 	} else if (subsystem == AUTH_SUBSYS_MECH) {
+		i_assert(auth_request->mech != NULL);
 		name = t_str_lcase(auth_request->mech->mech_name);
 	} else {
 		name = subsystem;

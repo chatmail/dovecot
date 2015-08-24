@@ -30,6 +30,12 @@ Contents
 
      6. Quota warnings
 
+     7. Overquota-flag (v2.2.16+)
+
+     8. Quota grace
+
+     9. Quota admin commands
+
 The configuration is split into multiple settings:
 
 First you have the quota root backend configuration. Quota root is a concept
@@ -376,4 +382,102 @@ just insert ":noenforcing" to proper location in it. For example with dict
 quota, you can use something like:'-o "plugin/quota=dict:User
 quota::noenforcing:proxy::quota"'
 
-(This file was created from the wiki on 2013-11-24 04:42)
+Overquota-flag (v2.2.16+)
+-------------------------
+
+Quota warnings scripts can be used to set an overquota-flag to userdb (e.g.
+LDAP) when user goes over/under quota. This flag can be used by MTA to reject
+mails to an user who is over quota already at SMTP RCPT TO stage. The only
+problem with this has been that there are race conditions that in some rare
+situations cause the overquota-flag to be set even when user is already under
+quota. This situation doesn't get solved itself without manual admin
+intervention or the new overquota-flag feature: This feature checks the flag's
+value every time user logs in (or mail gets delivered or any other email access
+to user) and compares it to the current actual quota usage. If the flag is
+wrong, a script is executed that should fix up the situation.
+
+The overquota-flag name in userdb must be "quota_over_flag". There are two
+settings to configure what to do:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  # If quota_over_flag=TRUE, the overquota-flag is enabled. Otherwise not.
+  quota_over_flag_value = TRUE
+
+  # Any non-empty value for quota_over_flag means user is over quota.
+  # Wildcards can be used in a generic way, e.g. "*yes" or "*TRUE*"
+  #quota_over_flag_value = *
+
+  # Service script to execute if overquota-flag is wrong. Configured the
+  # same as quota_warning scripts. The current quota_over_flag's value is
+  # appended as the last parameter.
+  quota_over_script = quota-warning mismatch %u
+}
+---%<-------------------------------------------------------------------------
+
+Quota grace
+-----------
+
+With v2.2+ by default the last mail can bring user over quota. This is useful
+to allow user to actually unambiguously become over quota instead of fail some
+of the last larger mails and pass through some smaller mails. Of course the
+last mail shouldn't be allowed to bring the user hugely over quota, so by
+default in v2.2+ this limit is 10% of the user's quota limit. (In v2.1 this is
+disabled by default.)
+
+To change the quota grace, use:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  # allow user to become max 10% over quota
+  quota_grace = 10%%
+  # allow user to become max 50 MB over quota
+  quota_grace = 50 M
+}
+---%<-------------------------------------------------------------------------
+
+Quota admin commands
+--------------------
+
+The imap_quota plugin implements the SETQUOTA command, which allows changing
+the logged in user's quota limit if the user is admin. Normally this means that
+a master user must log in with 'userdb_admin=y' set in the master passdb. The
+changing is done via dic_set() command, so you must configure the 'quota_set'
+setting to point to some dictionary where your quota limit exists. Usually this
+is in SQL, e.g.:
+
+dovecot.conf:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  quota_set = dict:proxy::sqlquota
+}
+dict {
+  sqlquota = mysql:/etc/dovecot/dovecot-dict-sql.conf.ext
+}
+---%<-------------------------------------------------------------------------
+
+dovecot-dict-sql.conf.ext:
+
+---%<-------------------------------------------------------------------------
+map {
+  pattern = priv/quota/limit/storage
+  table = quota
+  username_field = username
+  value_field = bytes
+}
+map {
+  pattern = priv/quota/limit/messages
+  table = quota
+  username_field = username
+  value_field = messages
+}
+---%<-------------------------------------------------------------------------
+
+Afterwards the quota can be changed with:
+
+---%<-------------------------------------------------------------------------
+a SETQUOTA "User quota" (STORAGE 12345 MESSAGES 123)
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2015-05-13 16:45)

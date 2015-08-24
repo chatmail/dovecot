@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -984,6 +984,8 @@ message_parser_init_from_parts(struct message_part *parts,
 {
 	struct message_parser_ctx *ctx;
 
+	i_assert(parts != NULL);
+
 	ctx = message_parser_init_int(input, hdr_flags, flags);
 	ctx->parts = ctx->part = parts;
 	ctx->parse_next_block = preparsed_parse_next_header_init;
@@ -1003,6 +1005,7 @@ int message_parser_deinit(struct message_parser_ctx **_ctx,
 		message_parse_header_deinit(&ctx->hdr_parser_ctx);
 	i_stream_unref(&ctx->input);
 	pool_unref(&ctx->parser_pool);
+	i_assert(ret < 0 || *parts_r != NULL);
 	return ret;
 }
 
@@ -1011,6 +1014,8 @@ int message_parser_parse_next_block(struct message_parser_ctx *ctx,
 {
 	int ret;
 	bool eof = FALSE, full;
+
+	memset(block_r, 0, sizeof(*block_r));
 
 	while ((ret = ctx->parse_next_block(ctx, block_r)) == 0) {
 		ret = message_parser_read_more(ctx, block_r, &full);
@@ -1039,6 +1044,10 @@ int message_parser_parse_next_block(struct message_parser_ctx *ctx,
 		}
 	}
 
+	if (block_r->size == 0) {
+		/* data isn't supposed to be read, so make sure it's NULL */
+		block_r->data = NULL;
+	}
 	return ret;
 }
 

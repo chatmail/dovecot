@@ -1,10 +1,12 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
 #include "str.h"
 #include "hash.h"
 #include "array.h"
+#include "llist.h"
+#include "time-util.h"
 #include "istream.h"
 #include "ostream.h"
 #include "dns-lookup.h"
@@ -51,6 +53,10 @@ http_client_request_debug(struct http_client_request *req,
 /*
  * Request
  */
+
+static void
+http_client_request_send_error(struct http_client_request *req,
+			       unsigned int status, const char *error);
 
 static struct http_client_request *
 http_client_request_new(struct http_client *client, const char *method, 
@@ -151,23 +157,34 @@ void http_client_request_unref(struct http_client_request **_req)
 	if (--req->refcount > 0)
 		return;
 
+	/* cannot be destroyed while it is still pending */
+	i_assert(req->conn == NULL || req->conn->pending_request == NULL);
+
+	if (req->queue != NULL)
+		http_client_queue_drop_request(req->queue, req);
+
 	if (req->destroy_callback != NULL) {
 		req->destroy_callback(req->destroy_context);
 		req->destroy_callback = NULL;
 	}
 
 	/* only decrease pending request counter if this request was submitted */
-	if (req->state > HTTP_REQUEST_STATE_NEW)
-		req->client->pending_requests--;
+	if (req->submitted) {
+		DLLIST_REMOVE(&client->requests_list, req);
+		client->requests_count--;
+	}
 
 	http_client_request_debug(req, "Destroy (requests left=%d)",
-		client->pending_requests);
+		client->requests_count);
 
-	if (client->pending_requests == 0 && client->ioloop != NULL)
+	if (req->queue != NULL)
+		http_client_queue_drop_request(req->queue, req);
+
+	if (client->requests_count == 0 && client->ioloop != NULL)
 		io_loop_stop(client->ioloop);
 
 	if (req->delayed_error != NULL)
-		http_client_host_remove_request_error(req->host, req);
+		http_client_remove_request_error(req->client, req);
 	if (req->payload_input != NULL)
 		i_stream_unref(&req->payload_input);
 	if (req->payload_output != NULL)
@@ -302,6 +319,25 @@ void http_client_request_set_payload(struct http_client_request *req,
 		req->payload_sync = TRUE;
 }
 
+void http_client_request_set_timeout_msecs(struct http_client_request *req,
+	unsigned int msecs)
+{
+	i_assert(req->state == HTTP_REQUEST_STATE_NEW ||
+		req->state == HTTP_REQUEST_STATE_GOT_RESPONSE);
+
+	req->timeout_msecs = msecs;
+}
+
+void http_client_request_set_timeout(struct http_client_request *req,
+	const struct timeval *time)
+{
+	i_assert(req->state == HTTP_REQUEST_STATE_NEW ||
+		req->state == HTTP_REQUEST_STATE_GOT_RESPONSE);
+
+	req->timeout_time = *time;
+	req->timeout_msecs = 0;
+}
+
 void http_client_request_delay_until(struct http_client_request *req,
 	time_t time)
 {
@@ -314,6 +350,13 @@ void http_client_request_delay(struct http_client_request *req,
 {
 	req->release_time = ioloop_timeval;
 	req->release_time.tv_sec += seconds;
+}
+
+void http_client_request_delay_msecs(struct http_client_request *req,
+	unsigned int msecs)
+{
+	req->release_time = ioloop_timeval;
+	timeval_add_msecs(&req->release_time, msecs);
 }
 
 int http_client_request_delay_from_response(struct http_client_request *req,
@@ -336,6 +379,16 @@ int http_client_request_delay_from_response(struct http_client_request *req,
 	return 1;    /* valid delay */
 }
 
+const char *http_client_request_get_method(struct http_client_request *req)
+{
+	return req->method;
+}
+
+const char *http_client_request_get_target(struct http_client_request *req)
+{
+	return req->target;
+}
+
 enum http_request_state
 http_client_request_get_state(struct http_client_request *req)
 {
@@ -345,16 +398,18 @@ http_client_request_get_state(struct http_client_request *req)
 enum http_response_payload_type
 http_client_request_get_payload_type(struct http_client_request *req)
 {
-	/* https://tools.ietf.org/html/draft-ietf-httpbis-p1-messaging-23
-	     Section 3.3:
+	/* RFC 7230, Section 3.3:
 
-	   The presence of a message body in a response depends on both the
-	   request method to which it is responding and the response status code.
-	   Responses to the HEAD request method never include a message body
-	   because the associated response header fields, if present, indicate only
-	   what their values would have been if the request method had been GET
-	   2xx (Successful) responses to CONNECT switch to tunnel mode instead of
-	   having a message body (Section 4.3.6 of [Part2]).
+		 The presence of a message body in a response depends on both the
+		 request method to which it is responding and the response status code
+		 (Section 3.1.2 of [RFC7230]). Responses to the HEAD request method
+	   (Section 4.3.2 of [RFC7231]) never include a message body because the
+	   associated response header fields (e.g., Transfer-Encoding,
+	   Content-Length, etc.), if present, indicate only what their values
+	   would have been if the request method had been GET (Section 4.3.1 of
+	   [RFC7231]). 2xx (Successful) responses to a CONNECT request method
+	   (Section 4.3.6 of [RFC7231]) switch to tunnel mode instead of having a
+	   message body.
 	 */
 	if (strcmp(req->method, "HEAD") == 0)
 		return HTTP_RESPONSE_PAYLOAD_TYPE_NOT_PRESENT;
@@ -417,6 +472,16 @@ static void http_client_request_do_submit(struct http_client_request *req)
 			req->urgent = TRUE;
 	}
 
+	if (req->timeout_time.tv_sec == 0) {
+		if (req->timeout_msecs > 0) {
+			req->timeout_time = ioloop_timeval;
+			timeval_add_msecs(&req->timeout_time, req->timeout_msecs);
+		} else if (	client->set.request_absolute_timeout_msecs > 0) {
+			req->timeout_time = ioloop_timeval;
+			timeval_add_msecs(&req->timeout_time, client->set.request_absolute_timeout_msecs);
+		}
+	}
+
 	host = http_client_host_get(req->client, req->host_url);
 	req->state = HTTP_REQUEST_STATE_QUEUED;
 
@@ -425,11 +490,16 @@ static void http_client_request_do_submit(struct http_client_request *req)
 
 void http_client_request_submit(struct http_client_request *req)
 {
-	req->client->pending_requests++;
+	struct http_client *client = req->client;
+
+	req->submit_time = ioloop_timeval;
 
 	http_client_request_do_submit(req);
 	http_client_request_debug(req, "Submitted");
+
 	req->submitted = TRUE;
+	DLLIST_PREPEND(&client->requests_list, req);
+	client->requests_count++;
 }
 
 static void
@@ -437,14 +507,23 @@ http_client_request_finish_payload_out(struct http_client_request *req)
 {
 	i_assert(req->conn != NULL);
 
+	/* drop payload output stream */
 	if (req->payload_output != NULL) {
 		o_stream_unref(&req->payload_output);
 		req->payload_output = NULL;
 	}
-	req->state = HTTP_REQUEST_STATE_WAITING;
+
+	/* advance state only when request didn't get aborted in the mean time */
+	if (req->state != HTTP_REQUEST_STATE_ABORTED) {
+		i_assert(req->state == HTTP_REQUEST_STATE_PAYLOAD_OUT);
+		req->state = HTTP_REQUEST_STATE_WAITING;
+	}
+
+	/* release connection */
 	req->conn->output_locked = FALSE;
 
-	http_client_request_debug(req, "Finished sending payload");
+	http_client_request_debug(req, "Finished sending%s payload",
+		(req->state == HTTP_REQUEST_STATE_ABORTED ? " aborted" : ""));
 }
 
 static int
@@ -717,27 +796,34 @@ static int http_client_request_send_real(struct http_client_request *req,
 	iov[2].iov_len = 2;
 
 	req->state = HTTP_REQUEST_STATE_PAYLOAD_OUT;
+	req->sent_time = ioloop_timeval;
 	o_stream_cork(output);
 	if (o_stream_sendv(output, iov, N_ELEMENTS(iov)) < 0) {
 		*error_r = t_strdup_printf("write(%s) failed: %s",
 					   o_stream_get_name(output),
 					   o_stream_get_error(output));
 		ret = -1;
-	}
-
-	http_client_request_debug(req, "Sent header");
-
-	if (ret >= 0 && req->payload_output != NULL) {
-		if (!req->payload_sync) {
-			if (http_client_request_send_more(req, error_r) < 0)
-				ret = -1;
-		} else {
-			http_client_request_debug(req, "Waiting for 100-continue");
-			conn->output_locked = TRUE;
-		}
 	} else {
-		req->state = HTTP_REQUEST_STATE_WAITING;
-		conn->output_locked = FALSE;
+		http_client_request_debug(req, "Sent header");
+
+		if (req->payload_output != NULL) {
+			if (!req->payload_sync) {
+				if (http_client_request_send_more(req, error_r) < 0)
+					ret = -1;
+			} else {
+				http_client_request_debug(req, "Waiting for 100-continue");
+				conn->output_locked = TRUE;
+			}
+		} else {
+			req->state = HTTP_REQUEST_STATE_WAITING;
+			conn->output_locked = FALSE;
+		}
+		if (ret >= 0 && o_stream_flush(output) < 0) {
+			*error_r = t_strdup_printf("flush(%s) failed: %s",
+   	                   o_stream_get_name(output),
+           	           o_stream_get_error(output));
+			ret = -1;
+		}
 	}
 	o_stream_uncork(output);
 	return ret;
@@ -779,14 +865,13 @@ bool http_client_request_callback(struct http_client_request *req,
 	return TRUE;
 }
 
-void
+static void
 http_client_request_send_error(struct http_client_request *req,
 			       unsigned int status, const char *error)
 {
 	http_client_request_callback_t *callback;
+	bool sending = (req->state == HTTP_REQUEST_STATE_PAYLOAD_OUT);
 
-	if (req->state >= HTTP_REQUEST_STATE_FINISHED)
-		return;
 	req->state = HTTP_REQUEST_STATE_ABORTED;
 
 	callback = req->callback;
@@ -797,8 +882,8 @@ http_client_request_send_error(struct http_client_request *req,
 		http_response_init(&response, status, error);
 		(void)callback(&response, req->context);
 
-		/* release payload early (prevents server/client in proxy) */
-		if (req->payload_input != NULL)
+		/* release payload early (prevents server/client deadlock in proxy) */
+		if (!sending && req->payload_input != NULL)
 			i_stream_unref(&req->payload_input);
 	}
 }
@@ -807,23 +892,35 @@ void http_client_request_error_delayed(struct http_client_request **_req)
 {
 	struct http_client_request *req = *_req;
 
+	i_assert(req->state == HTTP_REQUEST_STATE_ABORTED);
+
 	i_assert(req->delayed_error != NULL && req->delayed_error_status != 0);
 	http_client_request_send_error(req, req->delayed_error_status,
 				       req->delayed_error);
+	if (req->queue != NULL)
+		http_client_queue_drop_request(req->queue, req);
 	http_client_request_unref(_req);
 }
 
 void http_client_request_error(struct http_client_request *req,
 	unsigned int status, const char *error)
 {
-	if (!req->submitted && req->state < HTTP_REQUEST_STATE_FINISHED) {
-		/* we're still in http_client_request_submit(). delay
-		   reporting the error, so the caller doesn't have to handle
-		   immediate callbacks. */
+	if (req->state >= HTTP_REQUEST_STATE_FINISHED)
+		return;
+	req->state = HTTP_REQUEST_STATE_ABORTED;
+
+	if (req->queue != NULL)
+		http_client_queue_drop_request(req->queue, req);
+
+	if (!req->submitted ||
+		req->state == HTTP_REQUEST_STATE_GOT_RESPONSE) {
+		/* we're still in http_client_request_submit() or in the callback
+		   during a retry attempt. delay reporting the error, so the caller
+		   doesn't have to handle immediate or nested callbacks. */
 		i_assert(req->delayed_error == NULL);
 		req->delayed_error = p_strdup(req->pool, error);
 		req->delayed_error_status = status;
-		http_client_host_delay_request_error(req->host, req);
+		http_client_delay_request_error(req->client, req);
 	} else {
 		http_client_request_send_error(req, status, error);
 		http_client_request_unref(&req);
@@ -833,11 +930,18 @@ void http_client_request_error(struct http_client_request *req,
 void http_client_request_abort(struct http_client_request **_req)
 {
 	struct http_client_request *req = *_req;
+	bool sending = (req->state == HTTP_REQUEST_STATE_PAYLOAD_OUT);
 
 	if (req->state >= HTTP_REQUEST_STATE_FINISHED)
 		return;
+
 	req->callback = NULL;
 	req->state = HTTP_REQUEST_STATE_ABORTED;
+
+	/* release payload early (prevents server/client deadlock in proxy) */
+	if (!sending && req->payload_input != NULL)
+		i_stream_unref(&req->payload_input);
+
 	if (req->queue != NULL)
 		http_client_queue_drop_request(req->queue, req);
 	http_client_request_unref(_req);
@@ -855,6 +959,8 @@ void http_client_request_finish(struct http_client_request **_req)
 	req->callback = NULL;
 	req->state = HTTP_REQUEST_STATE_FINISHED;
 
+	if (req->queue != NULL)
+		http_client_queue_drop_request(req->queue, req);
 	if (req->payload_wait && req->client->ioloop != NULL)
 		io_loop_stop(req->client->ioloop);
 	http_client_request_unref(_req);
@@ -917,7 +1023,6 @@ void http_client_request_redirect(struct http_client_request *req,
 	}
 	
 	req->host = NULL;
-	req->queue = NULL;
 	req->conn = NULL;
 
 	origin_url = http_url_create(&req->origin_url);
@@ -928,8 +1033,7 @@ void http_client_request_redirect(struct http_client_request *req,
 	req->label = p_strdup_printf(req->pool, "[%s %s%s]",
 		req->method, origin_url, req->target);
 
-	/* https://tools.ietf.org/html/draft-ietf-httpbis-p2-semantics-21
-	      Section-7.4.4
+	/* RFC 7231, Section 6.4.4:
 	
 	   -> A 303 `See Other' redirect status response is handled a bit differently.
 	   Basically, the response content is located elsewhere, but the original
@@ -1004,6 +1108,13 @@ void http_client_request_retry(struct http_client_request *req,
 
 bool http_client_request_try_retry(struct http_client_request *req)
 {
+	/* don't ever retry if we're sending data in small blocks via
+	   http_client_request_send_payload() and we're not waiting for a
+	   100 continue (there's no way to rewind the payload for a retry)
+	 */
+	if (req->payload_wait &&
+		(!req->payload_sync || req->conn->payload_continue))
+		return FALSE;
 	/* limit the number of attempts for each request */
 	if (req->attempts+1 >= req->client->set.max_attempts)
 		return FALSE;

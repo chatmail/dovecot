@@ -1,10 +1,11 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "str.h"
 #include "env-util.h"
 #include "execv-const.h"
+#include "dict.h"
 #include "master-service-private.h"
 #include "master-service-settings.h"
 #include "settings-parser.h"
@@ -12,7 +13,7 @@
 #include "doveadm-dump.h"
 #include "doveadm-mail.h"
 #include "doveadm-settings.h"
-#include "dsync/doveadm-dsync.h"
+#include "doveadm-dsync.h"
 #include "doveadm.h"
 
 #include <stdlib.h>
@@ -27,8 +28,6 @@ const struct doveadm_print_vfuncs *doveadm_print_vfuncs_all[] = {
 };
 
 int doveadm_exit_code = 0;
-
-static ARRAY(struct doveadm_cmd) doveadm_cmds;
 
 static void failure_exit_callback(int *status)
 {
@@ -46,15 +45,11 @@ static void failure_exit_callback(int *status)
 	}
 }
 
-void doveadm_register_cmd(const struct doveadm_cmd *cmd)
-{
-	array_append(&doveadm_cmds, cmd, 1);
-}
-
 static void
 doveadm_usage_compress_lines(FILE *out, const char *str, const char *prefix)
 {
-	const char *cmd, *args, *p, *short_name, *prev_name = "";
+	const char *cmd, *args, *p, *short_name, *sub_name;
+	const char *prev_name = "", *prev_sub_name = "";
 	const char **lines;
 	unsigned int i, count, prefix_len = strlen(prefix);
 
@@ -97,8 +92,13 @@ doveadm_usage_compress_lines(FILE *out, const char *str, const char *prefix)
 				fprintf(out, USAGE_CMDNAME_FMT" %s",
 					short_name, t_strcut(p + 1, ' '));
 				prev_name = short_name;
+				prev_sub_name = "";
 			} else {
-				fprintf(out, "|%s", t_strcut(p + 1, ' '));
+				sub_name = t_strcut(p + 1, ' ');
+				if (strcmp(prev_sub_name, sub_name) != 0) {
+					fprintf(out, "|%s", sub_name);
+					prev_sub_name = sub_name;
+				}
 			}
 		}
 	}
@@ -174,9 +174,17 @@ static struct doveadm_cmd doveadm_cmd_config = {
 	cmd_config, "config", "[doveconf parameters]"
 };
 
+static void cmd_exec(int argc ATTR_UNUSED, char *argv[]);
+static struct doveadm_cmd doveadm_cmd_exec = {
+	cmd_exec, "exec", "<binary> [binary parameters]"
+};
+
 static void cmd_exec(int argc ATTR_UNUSED, char *argv[])
 {
 	const char *path, *binary = argv[1];
+
+	if (binary == NULL)
+		help(&doveadm_cmd_exec);
 
 	path = t_strdup_printf("%s/%s", doveadm_settings->libexec_dir, binary);
 	argv++;
@@ -185,62 +193,15 @@ static void cmd_exec(int argc ATTR_UNUSED, char *argv[])
 	i_fatal("execv(%s) failed: %m", argv[0]);
 }
 
-static struct doveadm_cmd doveadm_cmd_exec = {
-	cmd_exec, "exec", "<binary> [binary parameters]"
-};
-
-static bool
-doveadm_try_run_multi_word(const struct doveadm_cmd *cmd,
-			   const char *cmdname, int argc, char *argv[])
-{
-	unsigned int len;
-
-	if (argc < 2)
-		return FALSE;
-
-	len = strlen(argv[1]);
-	if (strncmp(cmdname, argv[1], len) != 0)
-		return FALSE;
-
-	if (cmdname[len] == ' ') {
-		/* more args */
-		return doveadm_try_run_multi_word(cmd, cmdname + len + 1,
-						  argc - 1, argv + 1);
-	}
-	if (cmdname[len] != '\0')
-		return FALSE;
-
-	/* match */
-	cmd->cmd(argc - 1, argv + 1);
-	return TRUE;
-}
-
 static bool doveadm_try_run(const char *cmd_name, int argc, char *argv[])
 {
 	const struct doveadm_cmd *cmd;
-	unsigned int cmd_name_len;
 
-	i_assert(argc > 0);
-
-	cmd_name_len = strlen(cmd_name);
-	array_foreach(&doveadm_cmds, cmd) {
-		if (strcmp(cmd->name, cmd_name) == 0) {
-			cmd->cmd(argc, argv);
-			return TRUE;
-		}
-
-		/* see if it matches a multi-word command */
-		if (strncmp(cmd->name, cmd_name, cmd_name_len) == 0 &&
-		    cmd->name[cmd_name_len] == ' ') {
-			const char *subcmd = cmd->name + cmd_name_len + 1;
-
-			if (doveadm_try_run_multi_word(cmd, subcmd,
-						       argc, argv))
-				return TRUE;
-		}
-	}
-
-	return FALSE;
+	cmd = doveadm_cmd_find(cmd_name, &argc, &argv);
+	if (cmd == NULL)
+		return FALSE;
+	cmd->cmd(argc, argv);
+	return TRUE;
 }
 
 static bool doveadm_has_subcommands(const char *cmd_name)
@@ -285,21 +246,12 @@ static void doveadm_read_settings(void)
 					pool_datastack_create());
 }
 
-static struct doveadm_cmd *doveadm_commands[] = {
+static struct doveadm_cmd *doveadm_cmdline_commands[] = {
 	&doveadm_cmd_help,
 	&doveadm_cmd_config,
 	&doveadm_cmd_exec,
-	&doveadm_cmd_stop,
-	&doveadm_cmd_reload,
 	&doveadm_cmd_dump,
 	&doveadm_cmd_pw,
-	&doveadm_cmd_who,
-	&doveadm_cmd_penalty,
-	&doveadm_cmd_kick,
-	&doveadm_cmd_mailbox_mutf7,
-	&doveadm_cmd_sis_deduplicate,
-	&doveadm_cmd_sis_find,
-	&doveadm_cmd_stats_dump,
 	&doveadm_cmd_stats_top,
 	&doveadm_cmd_zlibconnect
 };
@@ -320,7 +272,7 @@ int main(int argc, char *argv[])
 	/* "+" is GNU extension to stop at the first non-option.
 	   others just accept -+ option. */
 	master_service = master_service_init("doveadm", service_flags,
-					     &argc, &argv, "+Df:v");
+					     &argc, &argv, "+Df:hv");
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
 		case 'D':
@@ -329,6 +281,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'f':
 			doveadm_print_init(optarg);
+			break;
+		case 'h':
+			doveadm_print_hide_titles = TRUE;
 			break;
 		case 'v':
 			doveadm_verbose = TRUE;
@@ -346,11 +301,11 @@ int main(int argc, char *argv[])
 	} else {
 		doveadm_read_settings();
 	}
+	master_service_init_log(master_service, "doveadm: ");
 
-	i_array_init(&doveadm_cmds, 32);
-	for (i = 0; i < N_ELEMENTS(doveadm_commands); i++)
-		doveadm_register_cmd(doveadm_commands[i]);
-
+	doveadm_cmds_init();
+	for (i = 0; i < N_ELEMENTS(doveadm_cmdline_commands); i++)
+		doveadm_register_cmd(doveadm_cmdline_commands[i]);
 	if (cmd_name != NULL && (quick_init ||
 				 strcmp(cmd_name, "config") == 0 ||
 				 strcmp(cmd_name, "stop") == 0 ||
@@ -361,16 +316,9 @@ int main(int argc, char *argv[])
 		quick_init = TRUE;
 	} else {
 		quick_init = FALSE;
-		doveadm_register_auth_commands();
-		doveadm_register_director_commands();
-		doveadm_register_instance_commands();
-		doveadm_register_mount_commands();
-		doveadm_register_proxy_commands();
-		doveadm_register_log_commands();
-		doveadm_register_replicator_commands();
-		doveadm_register_fs_commands();
 		doveadm_dump_init();
 		doveadm_mail_init();
+		dict_drivers_register_builtin();
 		doveadm_load_modules();
 
 		if (cmd_name == NULL) {
@@ -410,9 +358,10 @@ int main(int argc, char *argv[])
 		doveadm_mail_deinit();
 		doveadm_dump_deinit();
 		doveadm_unload_modules();
+		dict_drivers_unregister_builtin();
 		doveadm_print_deinit();
 	}
-	array_free(&doveadm_cmds);
+	doveadm_cmds_deinit();
 	master_service_deinit(&master_service);
 	return doveadm_exit_code;
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -183,7 +183,8 @@ static bool dsync_brain_send_mail_request(struct dsync_brain *brain)
 static void dsync_brain_sync_half_finished(struct dsync_brain *brain)
 {
 	struct dsync_mailbox_state state;
-	const char *error;
+	const char *errstr;
+	enum mail_error error;
 
 	if (brain->box_recv_state < DSYNC_BOX_STATE_RECV_LAST_COMMON ||
 	    brain->box_send_state < DSYNC_BOX_STATE_RECV_LAST_COMMON)
@@ -192,9 +193,10 @@ static void dsync_brain_sync_half_finished(struct dsync_brain *brain)
 	/* finished with this mailbox */
 	if (brain->box_exporter != NULL) {
 		if (dsync_mailbox_export_deinit(&brain->box_exporter,
-						&error) < 0) {
+						&errstr, &error) < 0) {
 			i_error("Exporting mailbox %s failed: %s",
-				mailbox_get_vname(brain->box), error);
+				mailbox_get_vname(brain->box), errstr);
+			brain->mail_error = error;
 			brain->failed = TRUE;
 			return;
 		}
@@ -219,7 +221,8 @@ static void dsync_brain_sync_half_finished(struct dsync_brain *brain)
 						&state.last_common_modseq,
 						&state.last_common_pvt_modseq,
 						&state.last_messages_count,
-						&state.changes_during_sync) < 0) {
+						&state.changes_during_sync,
+						&brain->mail_error) < 0) {
 			brain->failed = TRUE;
 			return;
 		}
@@ -315,13 +318,6 @@ bool dsync_brain_sync_mails(struct dsync_brain *brain)
 
 	i_assert(brain->box != NULL);
 
-	if (brain->debug) {
-		i_debug("brain %c: in box '%s' recv_state=%s send_state=%s",
-			brain->master_brain ? 'M' : 'S',
-			mailbox_get_vname(brain->box),
-			dsync_box_state_names[brain->box_recv_state],
-			dsync_box_state_names[brain->box_send_state]);
-	}
 	switch (brain->box_recv_state) {
 	case DSYNC_BOX_STATE_MAILBOX:
 		changed = dsync_brain_master_sync_recv_mailbox(brain);
@@ -371,13 +367,6 @@ bool dsync_brain_sync_mails(struct dsync_brain *brain)
 		case DSYNC_BOX_STATE_DONE:
 			break;
 		}
-	}
-	if (brain->debug) {
-		i_debug("brain %c: out box '%s' recv_state=%s send_state=%s changed=%d",
-			brain->master_brain ? 'M' : 'S',
-			brain->box == NULL ? "" : mailbox_get_vname(brain->box),
-			dsync_box_state_names[brain->box_recv_state],
-			dsync_box_state_names[brain->box_send_state], changed);
 	}
 	return changed;
 }

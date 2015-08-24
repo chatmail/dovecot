@@ -9,22 +9,44 @@
 #include "mail-storage-service.h"
 
 struct mailbox;
+struct mailbox_list;
 struct mail_storage;
 struct mail_user;
 struct doveadm_mail_cmd_context;
 
 struct doveadm_mail_cmd_vfuncs {
-	bool (*parse_arg)(struct doveadm_mail_cmd_context *ctx,int c);
+	/* Parse one getopt() parameter. This is called for each parameter. */
+	bool (*parse_arg)(struct doveadm_mail_cmd_context *ctx, int c);
+	/* Usually not needed. The preinit() is called just after parsing all
+	   parameters, but before any userdb lookups are done. This allows the
+	   preinit() to alter the userdb lookup behavior (especially
+	   service_flags). */
 	void (*preinit)(struct doveadm_mail_cmd_context *ctx);
+	/* Initialize the command. Most importantly if the function prints
+	   anything, this should initialize the headers. It shouldn't however
+	   do any actual work. The init() is called also when doveadm is
+	   performing the work via doveadm-server, which could be running
+	   remotely with completely different Dovecot configuration. */
 	void (*init)(struct doveadm_mail_cmd_context *ctx,
 		     const char *const args[]);
+	/* Usually not needed. When iterating through multiple users, use this
+	   function to get the next username. Overriding this is usually done
+	   only when there's a known username filter, such as the expire
+	   plugin. */
 	int (*get_next_user)(struct doveadm_mail_cmd_context *ctx,
 			     const char **username_r);
+	/* Usually not needed. This is called between
+	   mail_storage_service_lookup() and mail_storage_service_next() for
+	   each user. */
 	int (*prerun)(struct doveadm_mail_cmd_context *ctx,
 		      struct mail_storage_service_user *service_user,
 		      const char **error_r);
+	/* This is the main function which performs all the work for the
+	   command. This is called once per each user. */
 	int (*run)(struct doveadm_mail_cmd_context *ctx,
 		   struct mail_user *mail_user);
+	/* Deinitialize the command. Called once at the end - even if
+	   preinit() or init() was never called. */
 	void (*deinit)(struct doveadm_mail_cmd_context *ctx);
 };
 
@@ -53,12 +75,16 @@ struct doveadm_mail_cmd_context {
 	struct mail_storage_service_input storage_service_input;
 	/* search args aren't set for all mail commands */
 	struct mail_search_args *search_args;
+	struct istream *users_list_input;
 
 	struct ip_addr cur_client_ip;
 	const char *cur_username;
 	struct mail_storage_service_user *cur_service_user;
 	struct mail_user *cur_mail_user;
 	struct doveadm_mail_cmd_vfuncs v;
+
+	struct istream *cmd_input;
+	int cmd_input_fd;
 
 	ARRAY(union doveadm_mail_cmd_module_context *) module_contexts;
 
@@ -84,6 +110,8 @@ extern ARRAY_TYPE(doveadm_mail_cmd) doveadm_mail_cmds;
 extern void (*hook_doveadm_mail_init)(struct doveadm_mail_cmd_context *ctx);
 extern struct doveadm_mail_cmd_module_register doveadm_mail_cmd_module_register;
 extern char doveadm_mail_cmd_hide;
+
+bool doveadm_is_killed(void);
 
 bool doveadm_mail_try_run(const char *cmd_name, int argc, char *argv[]);
 void doveadm_mail_register_cmd(const struct doveadm_mail_cmd *cmd);
@@ -112,10 +140,12 @@ int doveadm_mail_server_user(struct doveadm_mail_cmd_context *ctx,
 			     const char **error_r);
 void doveadm_mail_server_flush(void);
 
+/* Request input stream to be read (from stdin). This must be called from
+   the command's init() function. */
+void doveadm_mail_get_input(struct doveadm_mail_cmd_context *ctx);
+
 struct mailbox *
 doveadm_mailbox_find(struct mail_user *user, const char *mailbox);
-int doveadm_mailbox_find_and_sync(struct mail_user *user, const char *mailbox,
-				  struct mailbox **box_r);
 struct mail_search_args *
 doveadm_mail_build_search_args(const char *const args[]);
 void doveadm_mailbox_args_check(const char *const args[]);
@@ -135,8 +165,11 @@ void doveadm_mail_failed_storage(struct doveadm_mail_cmd_context *ctx,
 				 struct mail_storage *storage);
 void doveadm_mail_failed_mailbox(struct doveadm_mail_cmd_context *ctx,
 				 struct mailbox *box);
+void doveadm_mail_failed_list(struct doveadm_mail_cmd_context *ctx,
+			      struct mailbox_list *list);
 
 extern struct doveadm_mail_cmd cmd_expunge;
+extern struct doveadm_mail_cmd cmd_save;
 extern struct doveadm_mail_cmd cmd_search;
 extern struct doveadm_mail_cmd cmd_fetch;
 extern struct doveadm_mail_cmd cmd_flags_add;
@@ -155,6 +188,10 @@ extern struct doveadm_mail_cmd cmd_mailbox_rename;
 extern struct doveadm_mail_cmd cmd_mailbox_subscribe;
 extern struct doveadm_mail_cmd cmd_mailbox_unsubscribe;
 extern struct doveadm_mail_cmd cmd_mailbox_status;
+extern struct doveadm_mail_cmd cmd_mailbox_metadata_set;
+extern struct doveadm_mail_cmd cmd_mailbox_metadata_unset;
+extern struct doveadm_mail_cmd cmd_mailbox_metadata_get;
+extern struct doveadm_mail_cmd cmd_mailbox_metadata_list;
 extern struct doveadm_mail_cmd cmd_batch;
 
 #endif

@@ -54,6 +54,12 @@ There are a couple of different ways to specify when SSL/TLS is required:
    login }'), you can use either (or both) of the above settings. They behave
    exactly the same way then.
 
+Note that plaintext authentication is always allowed (and SSL not required) for
+connections from localhost, as they're assumed to be secure anyway. This
+applies to all connections where the local and the remote IP addresses are
+equal. Also IP ranges specified by 'login_trusted_networks' setting are assumed
+to be secure.
+
 Multiple SSL certificates
 -------------------------
 
@@ -155,14 +161,21 @@ SSL security settings
 
 When Dovecot starts up for the first time, it generates new 512bit and 1024bit
 Diffie Hellman parameters and saves them into
-'<prefix>/var/lib/dovecot/ssl-parameters.ssl'. After the initial creation
+'<prefix>/var/lib/dovecot/ssl-parameters.dat'. After the initial creation
 they're by default regenerated every week. With newer computers the generation
 shouldn't take more than a few seconds, but with older computers it can take as
 long as half an hour. The extra security gained by the regeneration is quite
-small, so with slower computers you might want to disable it:
+small, so with slower computers, for Dovecot versions prior to v2.2, you might
+want to disable it:
 
 ---%<-------------------------------------------------------------------------
 ssl_parameters_regenerate = 0
+---%<-------------------------------------------------------------------------
+
+From version 2.2, you can specify the wanted DH parameters length using:
+
+---%<-------------------------------------------------------------------------
+ssl_dh_parameters_length = 2048
 ---%<-------------------------------------------------------------------------
 
 By default Dovecot's allowed ciphers list contains:
@@ -349,4 +362,4 @@ B8A55EC91A060575CFB29503FBF7160C2DC8BCBFE02D20A7F704882F72D8D00272D8D002CE5CCC4B
 +OK Dovecot ready.
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

@@ -176,7 +176,10 @@ struct mail_transaction_log_append_ctx {
 	uint64_t new_highest_modseq;
 	unsigned int transaction_count;
 
-	unsigned int append_sync_offset:1;
+	/* same as mail_index_transaction->sync_transaction */
+	unsigned int index_sync_transaction:1;
+	/* same as mail_index_transaction->tail_offset_changed */
+	unsigned int tail_offset_changed:1;
 	unsigned int sync_includes_this:1;
 	unsigned int want_fsync:1;
 };
@@ -224,7 +227,7 @@ void mail_transaction_log_view_close(struct mail_transaction_log_view **view);
 int mail_transaction_log_view_set(struct mail_transaction_log_view *view,
 				  uint32_t min_file_seq, uoff_t min_file_offset,
 				  uint32_t max_file_seq, uoff_t max_file_offset,
-				  bool *reset_r);
+				  bool *reset_r, const char **reason_r);
 /* Scan through all of the log files that we can find.
    Returns -1 if error, 0 if ok. */
 int mail_transaction_log_view_set_all(struct mail_transaction_log_view *view);
@@ -276,7 +279,8 @@ int mail_transaction_log_append_commit(struct mail_transaction_log_append_ctx **
    written to while it's locked. Returns end offset. */
 int mail_transaction_log_sync_lock(struct mail_transaction_log *log,
 				   uint32_t *file_seq_r, uoff_t *file_offset_r);
-void mail_transaction_log_sync_unlock(struct mail_transaction_log *log);
+void mail_transaction_log_sync_unlock(struct mail_transaction_log *log,
+				      const char *lock_reason);
 /* Returns the current head. Works only when log is locked. */
 void mail_transaction_log_get_head(struct mail_transaction_log *log,
 				   uint32_t *file_seq_r, uoff_t *file_offset_r);

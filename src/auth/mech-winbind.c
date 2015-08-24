@@ -146,9 +146,9 @@ winbind_helper_connect(const struct auth_settings *set,
 
 	winbind->pid = pid;
 	winbind->in_pipe =
-		i_stream_create_fd(infd[0], AUTH_CLIENT_MAX_LINE_LENGTH, TRUE);
+		i_stream_create_fd_autoclose(&infd[0], AUTH_CLIENT_MAX_LINE_LENGTH);
 	winbind->out_pipe =
-		o_stream_create_fd(outfd[1], (size_t)-1, TRUE);
+		o_stream_create_fd_autoclose(&outfd[1], (size_t)-1);
 
 	if (!sigchld_handler_set) {
 		sigchld_handler_set = TRUE;
@@ -313,7 +313,7 @@ static struct auth_request *do_auth_new(struct winbind_helper *winbind)
 	struct winbind_auth_request *request;
 	pool_t pool;
 
-	pool = pool_alloconly_create("winbind_auth_request", 1024);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"winbind_auth_request", 2048);
 	request = p_new(pool, struct winbind_auth_request, 1);
 	request->auth_request.pool = pool;
 

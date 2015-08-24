@@ -2,12 +2,14 @@ Dictionary quota
 ================
 
 The /dictionary/ quota backend supports both *storage* and *messages* quota
-limits. The current quota is kept in a dictionary. The available dictionaries
-are:
+limits. The current quota is kept in the specified <dictionary>
+[Dictionary.txt]. The available dictionaries include:
 
  * SQL
  * Redis
  * Flat file
+
+See <Dictionary.txt> for full description of the available backends.
 
 The quota root format is:
 
@@ -97,6 +99,9 @@ UPDATE table SET bytes=bytes-14433,messages=messages-2 WHERE username =
 DELETE FROM table WHERE username = 'foo@example.com';
 ---%<-------------------------------------------------------------------------
 
+If you're using SQLite, then take a look at the trigger in this post:
+http://dovecot.org/pipermail/dovecot/2013-July/091421.html
+
 If you're using PostgreSQL, you'll need a trigger:
 
 ---%<-------------------------------------------------------------------------
@@ -162,4 +167,4 @@ dict {
 
 See <Dict.txt> for more information, especially about permission issues.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -200,7 +200,7 @@ int mail_index_modseq_set(struct mail_index_view *view,
 	if (mmap == NULL)
 		return -1;
 
-	rec = MAIL_INDEX_MAP_IDX(view->map, seq-1);
+	rec = MAIL_INDEX_REC_AT_SEQ(view->map, seq);
 	if (!mail_index_map_get_ext_idx(view->map, view->index->modseq_ext_id,
 					&ext_map_idx))
 		return -1;
@@ -304,7 +304,7 @@ mail_index_modseq_update(struct mail_index_modseq_sync *ctx,
 
 	ext = array_idx(&ctx->view->map->extensions, ext_map_idx);
 	for (; seq1 <= seq2; seq1++) {
-		rec = MAIL_INDEX_MAP_IDX(ctx->view->map, seq1-1);
+		rec = MAIL_INDEX_REC_AT_SEQ(ctx->view->map, seq1);
 		modseqp = PTR_OFFSET(rec, ext->record_offset);
 		if (*modseqp == 0 || (nonzeros && *modseqp < modseq))
 			*modseqp = modseq;
@@ -403,6 +403,7 @@ static void mail_index_modseq_sync_init(struct mail_index_modseq_sync *ctx)
 	const struct mail_index_modseq_header *hdr;
 	const struct mail_transaction_header *thdr;
 	const void *tdata;
+	const char *reason;
 	uint32_t ext_map_idx;
 	uint32_t end_seq;
 	uoff_t end_offset;
@@ -437,12 +438,12 @@ static void mail_index_modseq_sync_init(struct mail_index_modseq_sync *ctx)
 	ret = mail_transaction_log_view_set(ctx->log_view,
 					    I_MAX(1, hdr->log_seq),
 					    hdr->log_offset,
-					    end_seq, end_offset, &reset);
+					    end_seq, end_offset, &reset, &reason);
 	if (ret <= 0) {
 		/* missing files / error - try with only the last file */
 		ret = mail_transaction_log_view_set(ctx->log_view, end_seq, 0,
 						    end_seq, end_offset,
-						    &reset);
+						    &reset, &reason);
 		/* since we don't know if we skipped some changes, set all
 		   modseqs to beginning of the latest file. */
 		cur_modseq = mail_transaction_log_view_get_prev_modseq(
@@ -691,9 +692,24 @@ bool mail_index_modseq_get_next_log_offset(struct mail_index_view *view,
 					   uint64_t modseq, uint32_t *log_seq_r,
 					   uoff_t *log_offset_r)
 {
-	struct mail_transaction_log_file *file, *prev_file = NULL;
+	struct mail_transaction_log *log = view->index->log;
+	struct mail_transaction_log_file *file, *prev_file;
+	int ret;
 
-	for (file = view->index->log->files; file != NULL; file = file->next) {
+	if (log->files == NULL) {
+		/* we shouldn't normally get here */
+		return FALSE;
+	}
+	while (modseq < log->files->hdr.initial_modseq) {
+		/* try to find the previous log file if it still exists */
+		ret = mail_transaction_log_find_file(log,
+			log->files->hdr.file_seq - 1, FALSE, &file);
+		if (ret <= 0)
+			return FALSE;
+	}
+
+	prev_file = NULL;
+	for (file = log->files; file != NULL; file = file->next) {
 		if (modseq < file->hdr.initial_modseq)
 			break;
 		prev_file = file;

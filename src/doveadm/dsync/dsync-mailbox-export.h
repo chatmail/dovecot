@@ -3,7 +3,9 @@
 
 enum dsync_mailbox_exporter_flags {
 	DSYNC_MAILBOX_EXPORTER_FLAG_AUTO_EXPORT_MAILS	= 0x01,
-	DSYNC_MAILBOX_EXPORTER_FLAG_MAILS_HAVE_GUIDS	= 0x02
+	DSYNC_MAILBOX_EXPORTER_FLAG_MAILS_HAVE_GUIDS	= 0x02,
+	DSYNC_MAILBOX_EXPORTER_FLAG_MINIMAL_DMAIL_FILL	= 0x04,
+	DSYNC_MAILBOX_EXPORTER_FLAG_TIMESTAMPS		= 0x08
 };
 
 struct dsync_mailbox_exporter *
@@ -21,7 +23,7 @@ void dsync_mailbox_export_want_mail(struct dsync_mailbox_exporter *exporter,
 const struct dsync_mail *
 dsync_mailbox_export_next_mail(struct dsync_mailbox_exporter *exporter);
 int dsync_mailbox_export_deinit(struct dsync_mailbox_exporter **exporter,
-				const char **error_r);
+				const char **errstr_r, enum mail_error *error_r);
 
 const char *dsync_mailbox_export_get_proctitle(struct dsync_mailbox_exporter *exporter);
 

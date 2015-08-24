@@ -109,4 +109,4 @@ user_query = SELECT uid, gid, 'maildir:/var/vmail/%u' as mail FROM users WHERE
 userid = '%u'
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

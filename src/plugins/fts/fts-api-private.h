@@ -42,11 +42,12 @@ struct fts_backend_vfuncs {
 	bool (*can_lookup)(struct fts_backend *backend,
 			   const struct mail_search_arg *args);
 	int (*lookup)(struct fts_backend *backend, struct mailbox *box,
-		      struct mail_search_arg *args, bool and_args,
+		      struct mail_search_arg *args, enum fts_lookup_flags flags,
 		      struct fts_result *result);
 	int (*lookup_multi)(struct fts_backend *backend,
 			    struct mailbox *const boxes[],
-			    struct mail_search_arg *args, bool and_args,
+			    struct mail_search_arg *args,
+			    enum fts_lookup_flags flags,
 			    struct fts_multi_result *result);
 	void (*lookup_done)(struct fts_backend *backend);
 };
@@ -60,7 +61,12 @@ enum fts_backend_flags {
 	/* Send only fully indexable words rather than randomly sized blocks */
 	FTS_BACKEND_FLAG_BUILD_FULL_WORDS	= 0x04,
 	/* Fuzzy search works */
-	FTS_BACKEND_FLAG_FUZZY_SEARCH		= 0x08
+	FTS_BACKEND_FLAG_FUZZY_SEARCH		= 0x08,
+	/* Tokenize all the input. update_build_more() will be called a single
+	   directly indexable token at a time. Searching will modify the search
+	   args so that lookup() sees only tokens that can be directly
+	   searched. */
+	FTS_BACKEND_FLAG_TOKENIZED_INPUT	= 0x10
 };
 
 struct fts_backend {
@@ -109,6 +115,7 @@ int fts_index_set_header(struct mailbox *box,
 			 const struct fts_index_header *hdr);
 int ATTR_NOWARN_UNUSED_RESULT
 fts_index_set_last_uid(struct mailbox *box, uint32_t last_uid);
+int fts_backend_reset_last_uids(struct fts_backend *backend);
 int fts_index_have_compatible_settings(struct mailbox_list *list,
 				       uint32_t checksum);
 

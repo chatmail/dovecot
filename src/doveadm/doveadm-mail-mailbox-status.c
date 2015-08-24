@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -129,6 +129,8 @@ status_mailbox(struct status_cmd_context *ctx, const struct mailbox_info *info)
 	box = doveadm_mailbox_find(ctx->ctx.cur_mail_user, info->vname);
 	if (mailbox_get_status(box, ctx->status_items, &status) < 0 ||
 	    mailbox_get_metadata(box, ctx->metadata_items, &metadata) < 0) {
+		i_error("Mailbox %s: Failed to lookup mailbox status: %s",
+			mailbox_get_vname(box), mailbox_get_last_error(box, NULL));
 		doveadm_mail_failed_mailbox(&ctx->ctx, box);
 		mailbox_free(&box);
 		return -1;
@@ -212,7 +214,8 @@ static void cmd_mailbox_status_deinit(struct doveadm_mail_cmd_context *_ctx)
 {
 	struct status_cmd_context *ctx = (struct status_cmd_context *)_ctx;
 
-	mail_search_args_unref(&ctx->search_args);
+	if (ctx->search_args != NULL)
+		mail_search_args_unref(&ctx->search_args);
 }
 
 static bool

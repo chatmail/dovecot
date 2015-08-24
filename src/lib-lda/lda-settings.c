@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hostpid.h"
@@ -77,8 +77,8 @@ static bool lda_settings_check(void *_set, pool_t pool, const char **error_r)
 
 	if (*set->hostname == '\0')
 		set->hostname = p_strdup(pool, my_hostdomain());
-	i_assert(set->postmaster_address[0] == SETTING_STRVAR_UNEXPANDED[0]);
-	if (set->postmaster_address[1] == '\0') {
+	if (set->postmaster_address[0] == SETTING_STRVAR_UNEXPANDED[0] &&
+	    set->postmaster_address[1] == '\0') {
 		/* check for valid looking fqdn in hostname */
 		if (strchr(set->hostname, '.') == NULL) {
 			*error_r = "postmaster_address setting not given";

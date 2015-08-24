@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -11,9 +11,15 @@
 #include "ostream.h"
 #include "istream-dot.h"
 #include "safe-mkstemp.h"
+#include "hex-dec.h"
+#include "time-util.h"
+#include "var-expand.h"
 #include "restrict-access.h"
 #include "settings-parser.h"
+#include "anvil-client.h"
 #include "master-service.h"
+#include "master-service-ssl.h"
+#include "iostream-ssl.h"
 #include "rfc822-parser.h"
 #include "message-date.h"
 #include "auth-master.h"
@@ -36,6 +42,8 @@
 	ERRSTR_TEMP_USERDB_FAIL_PREFIX "Temporary user lookup failure"
 
 #define LMTP_PROXY_DEFAULT_TIMEOUT_MSECS (1000*30)
+
+static void client_input_data_write(struct client *client);
 
 int cmd_lhlo(struct client *client, const char *args)
 {
@@ -67,8 +75,11 @@ int cmd_lhlo(struct client *client, const char *args)
 		str_append(domain, "invalid");
 	}
 
-	client_state_reset(client);
+	client_state_reset(client, "LHLO");
 	client_send_line(client, "250-%s", client->my_domain);
+	if (master_service_ssl_is_enabled(master_service) &&
+	    client->ssl_iostream == NULL)
+		client_send_line(client, "250-STARTTLS");
 	if (client_is_trusted(client))
 		client_send_line(client, "250-XCLIENT ADDR PORT TTL TIMEOUT");
 	client_send_line(client, "250-8BITMIME");
@@ -77,7 +88,35 @@ int cmd_lhlo(struct client *client, const char *args)
 
 	i_free(client->lhlo);
 	client->lhlo = i_strdup(str_c(domain));
-	client_state_set(client, "LHLO");
+	client_state_set(client, "LHLO", "");
+	return 0;
+}
+
+int cmd_starttls(struct client *client)
+{
+	struct ostream *plain_output = client->output;
+	const char *error;
+
+	if (client->ssl_iostream != NULL) {
+		o_stream_nsend_str(client->output,
+				   "443 5.5.1 TLS is already active.\r\n");
+		return 0;
+	}
+
+	if (master_service_ssl_init(master_service,
+				    &client->input, &client->output,
+				    &client->ssl_iostream, &error) < 0) {
+		i_error("TLS initialization failed: %s", error);
+		o_stream_nsend_str(client->output,
+			"454 4.7.0 Internal error, TLS not available.\r\n");
+		return 0;
+	}
+	o_stream_nsend_str(plain_output,
+			   "220 2.0.0 Begin TLS negotiation now.\r\n");
+	if (ssl_iostream_handshake(client->ssl_iostream) < 0) {
+		client_destroy(client, NULL, NULL);
+		return -1;
+	}
 	return 0;
 }
 
@@ -115,6 +154,33 @@ static int parse_address(const char *str, const char **address_r,
 	return 0;
 }
 
+static const char *
+parse_xtext(struct client *client, const char *value)
+{
+	const char *p;
+	string_t *str;
+	unsigned int i;
+
+	p = strchr(value, '+');
+	if (p == NULL)
+		return p_strdup(client->state_pool, value);
+
+	/*
+	   hexchar = ASCII "+" immediately followed by two upper case
+		     hexadecimal digits
+	*/
+	str = t_str_new(128);
+	for (i = 0; value[i] != '\0'; i++) {
+		if (value[i] == '+' && value[i+1] != '\0' && value[i+2] != '\0') {
+			str_append_c(str, hex2dec((const void *)(value+i+1), 2));
+			i += 2;
+		} else {
+			str_append_c(str, value[i]);
+		}
+	}
+	return p_strdup(client->state_pool, str_c(str));
+}
+
 int cmd_mail(struct client *client, const char *args)
 {
 	const char *addr, *const *argv;
@@ -146,7 +212,9 @@ int cmd_mail(struct client *client, const char *args)
 	client->state.mail_from = p_strdup(client->state_pool, addr);
 	p_array_init(&client->state.rcpt_to, client->state_pool, 64);
 	client_send_line(client, "250 2.1.0 OK");
-	client_state_set(client, "MAIL FROM");
+	client_state_set(client, "MAIL FROM", client->state.mail_from);
+
+	client->state.mail_from_timeval = ioloop_timeval;
 	return 0;
 }
 
@@ -235,7 +303,8 @@ address_add_detail(struct client *client, const char *username,
 }
 
 static bool client_proxy_rcpt(struct client *client, const char *address,
-			      const char *username, const char *detail)
+			      const char *username, const char *detail,
+			      const struct lmtp_recipient_params *params)
 {
 	struct auth_master_connection *auth_conn;
 	struct lmtp_proxy_rcpt_settings set;
@@ -277,6 +346,7 @@ static bool client_proxy_rcpt(struct client *client, const char *address,
 	set.port = client->local_port;
 	set.protocol = LMTP_CLIENT_PROTOCOL_LMTP;
 	set.timeout_msecs = LMTP_PROXY_DEFAULT_TIMEOUT_MSECS;
+	set.params = *params;
 
 	if (!client_proxy_rcpt_parse_fields(&set, fields, &username)) {
 		/* not proxying this user */
@@ -488,7 +558,7 @@ lmtp_rcpt_to_is_over_quota(struct client *client,
 	ret = mailbox_get_status(box, STATUS_CHECK_OVER_QUOTA, &status);
 	if (ret < 0) {
 		errstr = mailbox_get_last_error(box, &error);
-		if (error == MAIL_ERROR_NOSPACE) {
+		if (error == MAIL_ERROR_NOQUOTA) {
 			client_send_line(client, "552 5.2.2 <%s> %s",
 					 rcpt->address, errstr);
 			ret = 1;
@@ -499,15 +569,42 @@ lmtp_rcpt_to_is_over_quota(struct client *client,
 	return ret;
 }
 
+static void rcpt_anvil_lookup_callback(const char *reply, void *context)
+{
+	struct mail_recipient *rcpt = context;
+
+	i_assert(rcpt->client->state.anvil_queries > 0);
+
+	rcpt->anvil_query = NULL;
+	if (reply == NULL) {
+		/* lookup failed */
+	} else if (str_to_uint(reply, &rcpt->parallel_count) < 0) {
+		i_error("Invalid reply from anvil: %s", reply);
+	}
+	if (--rcpt->client->state.anvil_queries == 0 &&
+	    rcpt->client->state.anvil_pending_data_write) {
+		/* DATA command was finished, but we were still waiting on
+		   anvil before handling any users */
+		client_input_data_write(rcpt->client);
+	}
+}
+
+static void lmtp_anvil_init(void)
+{
+	if (anvil == NULL) {
+		const char *path = t_strdup_printf("%s/anvil", base_dir);
+		anvil = anvil_client_init(path, NULL, 0);
+	}
+}
+
 int cmd_rcpt(struct client *client, const char *args)
 {
-	struct mail_recipient rcpt;
+	struct mail_recipient *rcpt;
 	struct mail_storage_service_input input;
-	const char *address, *username, *detail, *prefix;
+	const char *params, *address, *username, *detail, *prefix;
+	const char *const *argv;
 	const char *error = NULL;
 	int ret = 0;
-
-	client_state_set(client, "RCPT TO");
 
 	if (client->state.mail_from == NULL) {
 		client_send_line(client, "503 5.5.1 MAIL needed first");
@@ -515,22 +612,31 @@ int cmd_rcpt(struct client *client, const char *args)
 	}
 
 	if (strncasecmp(args, "TO:", 3) != 0 ||
-	    parse_address(args + 3, &address, &args) < 0) {
+	    parse_address(args + 3, &address, &params) < 0) {
 		client_send_line(client, "501 5.5.4 Invalid parameters");
 		return 0;
 	}
 
-	memset(&rcpt, 0, sizeof(rcpt));
+	rcpt = p_new(client->state_pool, struct mail_recipient, 1);
+	rcpt->client = client;
 	address = lmtp_unescape_address(address);
 
-	if (*args != '\0') {
-		client_send_line(client, "501 5.5.4 Unsupported options");
-		return 0;
+	argv = t_strsplit(params, " ");
+	for (; *argv != NULL; argv++) {
+		if (strncasecmp(*argv, "ORCPT=", 6) == 0) {
+			rcpt->params.dsn_orcpt = parse_xtext(client, *argv + 6);
+		} else {
+			client_send_line(client, "501 5.5.4 Unsupported options");
+			return 0;
+		}
 	}
 	rcpt_address_parse(client, address, &username, &detail);
 
+	client_state_set(client, "RCPT TO", address);
+
 	if (client->lmtp_set->lmtp_proxy) {
-		if (client_proxy_rcpt(client, address, username, detail))
+		if (client_proxy_rcpt(client, address, username, detail,
+				      &rcpt->params))
 			return 0;
 	}
 
@@ -541,9 +647,10 @@ int cmd_rcpt(struct client *client, const char *args)
 	input.remote_ip = client->remote_ip;
 	input.local_port = client->local_port;
 	input.remote_port = client->remote_port;
+	input.session_id = client->state.session_id;
 
 	ret = mail_storage_service_lookup(storage_service, &input,
-					  &rcpt.service_user, &error);
+					  &rcpt->service_user, &error);
 
 	if (ret < 0) {
 		prefix = t_strdup_printf(ERRSTR_TEMP_USERDB_FAIL_PREFIX,
@@ -569,16 +676,27 @@ int cmd_rcpt(struct client *client, const char *args)
 
 	lmtp_address_translate(client, &address);
 
-	rcpt.address = p_strdup(client->state_pool, address);
-	rcpt.detail = p_strdup(client->state_pool, detail);
-	if ((ret = lmtp_rcpt_to_is_over_quota(client, &rcpt)) < 0) {
+	rcpt->address = p_strdup(client->state_pool, address);
+	rcpt->detail = p_strdup(client->state_pool, detail);
+	if ((ret = lmtp_rcpt_to_is_over_quota(client, rcpt)) < 0) {
 		client_send_line(client, ERRSTR_TEMP_MAILBOX_FAIL,
-				 rcpt.address);
+				 rcpt->address);
 		return 0;
 	}
 	if (ret == 0) {
 		array_append(&client->state.rcpt_to, &rcpt, 1);
 		client_send_line(client, "250 2.1.5 OK");
+	}
+
+	if (client->lmtp_set->lmtp_user_concurrency_limit > 0) {
+		const char *query = t_strconcat("LOOKUP\t",
+			master_service_get_name(master_service),
+			"/", str_tabescape(username), NULL);
+		lmtp_anvil_init();
+		rcpt->anvil_query = anvil_client_query(anvil, query,
+					rcpt_anvil_lookup_callback, rcpt);
+		if (rcpt->anvil_query != NULL)
+			client->state.anvil_queries++;
 	}
 	return 0;
 }
@@ -601,7 +719,7 @@ int cmd_vrfy(struct client *client, const char *args ATTR_UNUSED)
 
 int cmd_rset(struct client *client, const char *args ATTR_UNUSED)
 {
-	client_state_reset(client);
+	client_state_reset(client, "RSET");
 	client_send_line(client, "250 2.0.0 OK");
 	return 0;
 }
@@ -610,6 +728,15 @@ int cmd_noop(struct client *client, const char *args ATTR_UNUSED)
 {
 	client_send_line(client, "250 2.0.0 OK");
 	return 0;
+}
+
+static bool orcpt_get_valid_rfc822(const char *orcpt, const char **addr_r)
+{
+	if (orcpt == NULL || strncasecmp(orcpt, "rfc822;", 7) != 0)
+		return FALSE;
+	/* FIXME: we should verify the address further */
+	*addr_r = orcpt + 7;
+	return TRUE;
 }
 
 static int
@@ -623,13 +750,25 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 	struct lda_settings *lda_set;
 	struct mail_namespace *ns;
 	struct setting_parser_context *set_parser;
+	struct timeval delivery_time_started;
 	void **sets;
 	const char *line, *error, *username;
+	string_t *str;
 	enum mail_error mail_error;
 	int ret;
 
+	i_assert(client->state.anvil_queries == 0);
+
 	input = mail_storage_service_user_get_input(rcpt->service_user);
 	username = t_strdup(input->username);
+
+	if (client->lmtp_set->lmtp_user_concurrency_limit > 0 &&
+	    rcpt->parallel_count >= client->lmtp_set->lmtp_user_concurrency_limit) {
+		client_send_line(client, ERRSTR_TEMP_USERDB_FAIL_PREFIX
+				 "Too many concurrent deliveries for user",
+				 rcpt->address);
+		return -1;
+	}
 
 	mail_set = mail_storage_service_user_get_mail_set(rcpt->service_user);
 	set_parser = mail_storage_service_user_get_settings_parser(rcpt->service_user);
@@ -647,6 +786,11 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 			i_unreached();
 	}
 
+	/* get the timestamp before user is created, since it starts the I/O */
+	io_loop_time_refresh();
+	delivery_time_started = ioloop_timeval;
+
+	client_state_set(client, "DATA", username);
 	i_set_failure_prefix("lmtp(%s, %s): ", my_pid, username);
 	if (mail_storage_service_next(storage_service, rcpt->service_user,
 				      &client->state.dest_user) < 0) {
@@ -654,6 +798,11 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 				 rcpt->address);
 		return -1;
 	}
+	str = t_str_new(256);
+	var_expand(str, client->state.dest_user->set->mail_log_prefix,
+		   mail_user_var_expand_table(client->state.dest_user));
+	i_set_failure_prefix("%s", str_c(str));
+
 	sets = mail_storage_service_user_get_set(rcpt->service_user);
 	lda_set = sets[1];
 	settings_var_expand(&lda_setting_parser_info, lda_set, client->pool,
@@ -663,11 +812,19 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 	dctx.session = session;
 	dctx.pool = session->pool;
 	dctx.set = lda_set;
+	dctx.timeout_secs = LDA_SUBMISSION_TIMEOUT_SECS;
 	dctx.session_id = client->state.session_id;
 	dctx.src_mail = src_mail;
 	dctx.src_envelope_sender = client->state.mail_from;
 	dctx.dest_user = client->state.dest_user;
-	if (*dctx.set->lda_original_recipient_header != '\0') {
+	dctx.session_time_msecs =
+		timeval_diff_msecs(&client->state.data_end_timeval,
+				   &client->state.mail_from_timeval);
+	dctx.delivery_time_started = delivery_time_started;
+
+	if (orcpt_get_valid_rfc822(rcpt->params.dsn_orcpt, &dctx.dest_addr)) {
+		/* used ORCPT */
+	} else if (*dctx.set->lda_original_recipient_header != '\0') {
 		dctx.dest_addr = mail_deliver_get_address(src_mail,
 				dctx.set->lda_original_recipient_header);
 	}
@@ -686,6 +843,11 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 	dctx.save_dest_mail = array_count(&client->state.rcpt_to) > 1 &&
 		client->state.first_saved_mail == NULL;
 
+	if (client->lmtp_set->lmtp_user_concurrency_limit > 0) {
+		master_service_anvil_send(master_service, t_strconcat(
+			"CONNECT\t", my_pid, "\t", master_service_get_name(master_service),
+			"/", username, "\n", NULL));
+	}
 	if (mail_deliver(&dctx, &storage) == 0) {
 		if (dctx.dest_mail != NULL) {
 			i_assert(client->state.first_saved_mail == NULL);
@@ -694,9 +856,13 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 		client_send_line(client, "250 2.0.0 <%s> %s Saved",
 				 rcpt->address, client->state.session_id);
 		ret = 0;
+	} else if (dctx.tempfail_error != NULL) {
+		client_send_line(client, "451 4.2.0 <%s> %s",
+				 rcpt->address, dctx.tempfail_error);
+		ret = -1;
 	} else if (storage != NULL) {
 		error = mail_storage_get_last_error(storage, &mail_error);
-		if (mail_error == MAIL_ERROR_NOSPACE) {
+		if (mail_error == MAIL_ERROR_NOQUOTA) {
 			client_send_line(client, "%s <%s> %s",
 					 dctx.set->quota_full_tempfail ?
 					 "452 4.2.2" : "552 5.2.2",
@@ -706,10 +872,6 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 					 rcpt->address, error);
 		}
 		ret = -1;
-	} else if (dctx.tempfail_error != NULL) {
-		client_send_line(client, "451 4.2.0 <%s> %s",
-				 rcpt->address, dctx.tempfail_error);
-		ret = -1;
 	} else {
 		/* This shouldn't happen */
 		i_error("BUG: Saving failed to unknown storage");
@@ -717,20 +879,26 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 				 rcpt->address);
 		ret = -1;
 	}
+	if (client->lmtp_set->lmtp_user_concurrency_limit > 0) {
+		master_service_anvil_send(master_service, t_strconcat(
+			"DISCONNECT\t", my_pid, "\t", master_service_get_name(master_service),
+			"/", username, "\n", NULL));
+	}
 	return ret;
 }
 
 static bool client_deliver_next(struct client *client, struct mail *src_mail,
 				struct mail_deliver_session *session)
 {
-	const struct mail_recipient *rcpts;
+	struct mail_recipient *const *rcpts;
 	unsigned int count;
 	int ret;
 
 	rcpts = array_get(&client->state.rcpt_to, &count);
 	while (client->state.rcpt_idx < count) {
-		ret = client_deliver(client, &rcpts[client->state.rcpt_idx],
+		ret = client_deliver(client, rcpts[client->state.rcpt_idx],
 				     src_mail, session);
+		client_state_set(client, "DATA", "");
 		i_set_failure_prefix("lmtp(%s): ", my_pid);
 
 		client->state.rcpt_idx++;
@@ -745,11 +913,11 @@ static bool client_deliver_next(struct client *client, struct mail *src_mail,
 
 static void client_rcpt_fail_all(struct client *client)
 {
-	const struct mail_recipient *rcpt;
+	struct mail_recipient *const *rcptp;
 
-	array_foreach(&client->state.rcpt_to, rcpt) {
+	array_foreach(&client->state.rcpt_to, rcptp) {
 		client_send_line(client, ERRSTR_TEMP_MAILBOX_FAIL,
-				 rcpt->address);
+				 (*rcptp)->address);
 	}
 }
 
@@ -869,14 +1037,15 @@ client_input_data_write_local(struct client *client, struct istream *input)
 		/* enable core dumping again. we need to chdir also to
 		   root-owned directory to get core dumps. */
 		restrict_access_allow_coredumps(TRUE);
-		(void)chdir(base_dir);
+		if (chdir(base_dir) < 0)
+			i_error("chdir(%s) failed: %m", base_dir);
 	}
 }
 
 static void client_input_data_finish(struct client *client)
 {
 	client_io_reset(client);
-	client_state_reset(client);
+	client_state_reset(client, "DATA finished");
 	if (i_stream_have_bytes_left(client->input))
 		client_input_handle(client);
 }
@@ -892,13 +1061,29 @@ static void client_proxy_finish(void *context)
 static const char *client_get_added_headers(struct client *client)
 {
 	string_t *str = t_str_new(200);
+	void **sets;
+	const struct lmtp_settings *lmtp_set;
 	const char *host, *rcpt_to = NULL;
 
 	if (array_count(&client->state.rcpt_to) == 1) {
-		const struct mail_recipient *rcpt =
+		struct mail_recipient *const *rcptp =
 			array_idx(&client->state.rcpt_to, 0);
 
-		rcpt_to = rcpt->address;
+		sets = mail_storage_service_user_get_set((*rcptp)->service_user);
+		lmtp_set = sets[2];
+
+		switch (lmtp_set->parsed_lmtp_hdr_delivery_address) {
+		case LMTP_HDR_DELIVERY_ADDRESS_NONE:
+			break;
+		case LMTP_HDR_DELIVERY_ADDRESS_FINAL:
+			rcpt_to = (*rcptp)->address;
+			break;
+		case LMTP_HDR_DELIVERY_ADDRESS_ORIGINAL:
+			if (!orcpt_get_valid_rfc822((*rcptp)->params.dsn_orcpt,
+						    &rcpt_to))
+				rcpt_to = (*rcptp)->address;
+			break;
+		}
 	}
 
 	/* don't set Return-Path when proxying so it won't get added twice */
@@ -906,14 +1091,19 @@ static const char *client_get_added_headers(struct client *client)
 		str_printfa(str, "Return-Path: <%s>\r\n",
 			    client->state.mail_from);
 		if (rcpt_to != NULL)
-			str_printfa(str, "Delivered-To: <%s>\r\n", rcpt_to);
+			str_printfa(str, "Delivered-To: %s\r\n", rcpt_to);
 	}
 
 	str_printfa(str, "Received: from %s", client->lhlo);
 	host = net_ip2addr(&client->remote_ip);
 	if (host[0] != '\0')
 		str_printfa(str, " ([%s])", host);
-	str_printfa(str, "\r\n\tby %s ("PACKAGE_NAME") with LMTP id %s",
+	str_append(str, "\r\n");
+	if (client->ssl_iostream != NULL) {
+		str_printfa(str, "\t(using %s)\r\n",
+			    ssl_iostream_get_security_string(client->ssl_iostream));
+	}
+	str_printfa(str, "\tby %s ("PACKAGE_NAME") with LMTP id %s",
 		    client->my_domain, client->state.session_id);
 
 	str_append(str, "\r\n\t");
@@ -923,10 +1113,9 @@ static const char *client_get_added_headers(struct client *client)
 	return str_c(str);
 }
 
-static bool client_input_data_write(struct client *client)
+static void client_input_data_write(struct client *client)
 {
 	struct istream *input;
-	bool ret = TRUE;
 
 	/* stop handling client input until saving/proxying is finished */
 	if (client->to_idle != NULL)
@@ -934,16 +1123,19 @@ static bool client_input_data_write(struct client *client)
 	io_remove(&client->io);
 	i_stream_destroy(&client->dot_input);
 
+	client->state.data_end_timeval = ioloop_timeval;
+
 	input = client_get_input(client);
 	if (array_count(&client->state.rcpt_to) != 0)
 		client_input_data_write_local(client, input);
 	if (client->proxy != NULL) {
-		lmtp_proxy_start(client->proxy, input, NULL,
+		client_state_set(client, "DATA", "proxying");
+		lmtp_proxy_start(client->proxy, input,
 				 client_proxy_finish, client);
-		ret = FALSE;
+	} else {
+		client_input_data_finish(client);
 	}
 	i_stream_unref(&input);
-	return ret;
 }
 
 static int client_input_add_file(struct client *client,
@@ -1030,8 +1222,10 @@ static void client_input_data_handle(struct client *client)
 		return;
 	}
 
-	if (client_input_data_write(client))
-		client_input_data_finish(client);
+	if (client->state.anvil_queries == 0)
+		client_input_data_write(client);
+	else
+		client->state.anvil_pending_data_write = TRUE;
 }
 
 static void client_input_data(struct client *client)
@@ -1062,9 +1256,11 @@ int cmd_data(struct client *client, const char *args ATTR_UNUSED)
 	i_assert(client->dot_input == NULL);
 	client->dot_input = i_stream_create_dot(client->input, TRUE);
 	client_send_line(client, "354 OK");
+	/* send the DATA reply immediately before we start handling any data */
+	o_stream_uncork(client->output);
 
 	io_remove(&client->io);
-	client_state_set(client, "DATA");
+	client_state_set(client, "DATA", "");
 	client->io = io_add(client->fd_in, IO_READ, client_input_data, client);
 	client_input_data_handle(client);
 	return -1;
@@ -1104,7 +1300,7 @@ int cmd_xclient(struct client *client, const char *args)
 	}
 
 	/* args ok, set them and reset the state */
-	client_state_reset(client);
+	client_state_reset(client, "XCLIENT");
 	if (remote_ip.family != 0)
 		client->remote_ip = remote_ip;
 	if (remote_port != 0)

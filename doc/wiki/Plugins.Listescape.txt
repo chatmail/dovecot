@@ -50,15 +50,15 @@ plugin {
 ---%<-------------------------------------------------------------------------
 
 Allow both '.' and '/' characters when virtual hierarchy separator is changed
-to '$':
+to '$'. The '$' has to be quoted to avoid variable expansion.:
 
 ---%<-------------------------------------------------------------------------
 mail_plugins = $mail_plugins listescape
 
 namespace private {
-  separator = $
+  separator = "$"
   inbox = yes
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2015 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "passdb.h"
@@ -17,9 +17,8 @@ static void
 auth_checkpassword_callback(struct auth_request *request,
 			    enum db_checkpassword_status status,
 			    const char *const *extra_fields,
-			    void (*request_callback)())
+			    verify_plain_callback_t *callback)
 {
-	verify_plain_callback_t *callback = request_callback;
 	const char *scheme, *crypted_pass = NULL;
 	unsigned int i;
 
@@ -71,9 +70,8 @@ static void
 credentials_checkpassword_callback(struct auth_request *request,
 				   enum db_checkpassword_status status,
 				   const char *const *extra_fields,
-				   void (*request_callback)())
+				   lookup_credentials_callback_t *callback)
 {
-	lookup_credentials_callback_t *callback = request_callback;
 	const char *scheme, *crypted_pass = NULL;
 	unsigned int i;
 

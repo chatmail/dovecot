@@ -1,7 +1,8 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
+#include "istream.h"
 #include "doveadm-print-private.h"
 
 #include <stdio.h>
@@ -20,6 +21,8 @@ struct doveadm_print_context {
 	unsigned int header_idx;
 	bool print_stream_open;
 };
+
+bool doveadm_print_hide_titles = FALSE;
 
 static struct doveadm_print_context *ctx;
 
@@ -99,6 +102,26 @@ void doveadm_print_stream(const void *value, size_t size)
 		ctx->header_idx++;
 		ctx->print_stream_open = FALSE;
 	}
+}
+
+int doveadm_print_istream(struct istream *input)
+{
+	const unsigned char *data;
+	size_t size;
+	ssize_t ret;
+
+	while ((ret = i_stream_read_data(input, &data, &size, 0)) > 0) {
+		doveadm_print_stream(data, size);
+		i_stream_skip(input, size);
+	}
+	i_assert(ret == -1);
+	doveadm_print_stream("", 0);
+	if (input->stream_errno != 0) {
+		i_error("read(%s) failed: %s", i_stream_get_name(input),
+			i_stream_get_error(input));
+		return -1;
+	}
+	return 0;
 }
 
 void doveadm_print_sticky(const char *key, const char *value)

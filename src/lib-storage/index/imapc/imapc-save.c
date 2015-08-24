@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -152,9 +152,11 @@ imapc_save_add_to_index(struct imapc_save_context *ctx, uint32_t uid)
 	imail->data.forced_no_caching = TRUE;
 
 	if (ctx->fd != -1) {
-		imail->data.stream = i_stream_create_fd(ctx->fd, 0, TRUE);
-		imapc_mail_init_stream((struct imapc_mail *)imail, TRUE);
-		ctx->fd = -1;
+		struct imapc_mail *imapc_mail = (struct imapc_mail *)imail;
+		imail->data.stream = i_stream_create_fd_autoclose(&ctx->fd, 0);
+		imapc_mail->header_fetched = TRUE;
+		imapc_mail->body_fetched = TRUE;
+		imapc_mail_init_stream(imapc_mail);
 	}
 
 	ctx->save_count++;

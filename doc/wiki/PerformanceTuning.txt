@@ -17,6 +17,9 @@ optimization you can do.
    command.
  * See <POP3Server.txt> for POP3 optimizations, especially
    'pop3_no_flag_updates=yes'
+ * mailbox_list_index=yes can help a lot by replying to IMAP STATUS (and
+   similar) lookups from a single index without having to open each mailbox
+   index separately.
 
 CPU usage optimization
 ----------------------
@@ -46,4 +49,4 @@ Note that these settings do not directly affect the memory usage:
  * 'service { process_limit, client_limit } ': These are mostly to avoid DoS
    attacks using up all your memory.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

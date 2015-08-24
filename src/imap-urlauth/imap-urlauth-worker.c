@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -373,30 +373,27 @@ client_fetch_urlpart(struct client *client, const char *url,
 	if ((url_flags & IMAP_URLAUTH_FETCH_FLAG_BINARY) != 0)
 		imap_msgpart_url_set_decode_to_binary(client->url);
 	if ((url_flags & IMAP_URLAUTH_FETCH_FLAG_BODYPARTSTRUCTURE) != 0) {
-		if (imap_msgpart_url_get_bodypartstructure(client->url,
-							   bpstruct_r,
-							   &error) <= 0) {
-			if (ret < 0)
-				return -1;
+		ret = imap_msgpart_url_get_bodypartstructure(client->url,
+							     bpstruct_r, &error);
+		if (ret <= 0) {
 			*errormsg_r = t_strdup_printf(
 				"Failed to read URLAUTH \"%s\": %s", url, error);
 			if (client->debug)
 				i_debug("%s", *errormsg_r);
-			return 0;
+			return ret;
 		}
 	}
 
 	/* if requested, read the message part the URL points to */
 	if ((url_flags & IMAP_URLAUTH_FETCH_FLAG_BODY) != 0 ||
 	    (url_flags & IMAP_URLAUTH_FETCH_FLAG_BINARY) != 0) {
-		if (imap_msgpart_url_read_part(client->url, &mpresult, &error) <= 0) {
-			if (ret < 0)
-				return -1;
+		ret = imap_msgpart_url_read_part(client->url, &mpresult, &error);
+		if (ret <= 0) {
 			*errormsg_r = t_strdup_printf(
 				"Failed to read URLAUTH \"%s\": %s", url, error);
 			if (client->debug)
 				i_debug("%s", *errormsg_r);
-			return 0;
+			return ret;
 		}
 		client->msg_part_size = mpresult.size;
 		client->msg_part_input = mpresult.input;
@@ -481,7 +478,7 @@ static int client_fetch_url(struct client *client, const char *url,
 		}
 		if (client_run_url(client) < 0) {
 			client_abort(client,
-				"Session aborted: Fatal failure while transfering URL");
+				"Session aborted: Fatal failure while transferring URL");
 			return 0;
 		}		
 	}

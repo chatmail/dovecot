@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -13,7 +13,7 @@
 #include "unichar.h"
 #include "settings-parser.h"
 #include "iostream-ssl.h"
-#include "fs-api.h"
+#include "fs-api-private.h"
 #include "imap-utf7.h"
 #include "mailbox-log.h"
 #include "mailbox-tree.h"
@@ -27,17 +27,28 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-/* 20 * (200+1) < 4096 which is the standard PATH_MAX. Having these settings
+/* 16 * (255+1) = 4096 which is the standard PATH_MAX. Having these settings
    prevents malicious user from creating eg. "a/a/a/.../a" mailbox name and
    then start renaming them to larger names from end to beginning, which
    eventually would start causing the failures when trying to use too
-   long mailbox names. */
-#define MAILBOX_MAX_HIERARCHY_LEVELS 20
-#define MAILBOX_MAX_HIERARCHY_NAME_LENGTH 200
+   long mailbox names. 255 is the standard single directory name length, so
+   allow up to that high. */
+#define MAILBOX_MAX_HIERARCHY_LEVELS 16
+#define MAILBOX_MAX_HIERARCHY_NAME_LENGTH 255
+
+#define MAILBOX_LIST_FS_CONTEXT(obj) \
+	MODULE_CONTEXT(obj, mailbox_list_fs_module)
+
+struct mailbox_list_fs_context {
+	union fs_api_module_context module_ctx;
+	struct mailbox_list *list;
+};
 
 struct mailbox_list_module_register mailbox_list_module_register = { 0 };
 
 static ARRAY(const struct mailbox_list *) mailbox_list_drivers;
+static MODULE_CONTEXT_DEFINE_INIT(mailbox_list_fs_module,
+				  &fs_api_module_register);
 
 void mailbox_lists_init(void)
 {
@@ -1108,7 +1119,7 @@ int mailbox_list_try_mkdir_root(struct mailbox_list *list, const char *path,
 				enum mailbox_list_path_type type,
 				const char **error_r)
 {
-	const char *root_dir, *error;
+	const char *root_dir;
 	struct stat st;
 	struct mailbox_permissions perm;
 
@@ -1126,14 +1137,10 @@ int mailbox_list_try_mkdir_root(struct mailbox_list *list, const char *path,
 	if (strcmp(root_dir, path) != 0 && stat(root_dir, &st) == 0) {
 		/* creating a subdirectory under an already existing root dir.
 		   use the root's permissions */
-	} else if (mail_user_is_path_mounted(list->ns->user, path, &error)) {
+	} else {
 		if (mailbox_list_try_mkdir_root_parent(list, type,
 						       &perm, error_r) < 0)
 			return -1;
-	} else {
-		*error_r = t_strdup_printf(
-			"Can't create mailbox root dir %s: %s", path, error);
-		return -1;
 	}
 
 	/* the rest of the directories exist only for one user. create them
@@ -1248,6 +1255,15 @@ bool mailbox_list_is_valid_name(struct mailbox_list *list,
 			return TRUE;
 		}
 		*error_r = "Name is empty";
+		return FALSE;
+	}
+
+	/* either the list backend uses '/' as the hierarchy separator or
+	   it doesn't use filesystem at all (PROP_NO_ROOT) */
+	if ((list->props & MAILBOX_LIST_PROP_NO_ROOT) == 0 &&
+	    mailbox_list_get_hierarchy_sep(list) != '/' &&
+	    strchr(name, '/') != NULL) {
+		*error_r = "Name must not have '/' characters";
 		return FALSE;
 	}
 
@@ -1407,12 +1423,18 @@ int mailbox_list_mailbox(struct mailbox_list *list, const char *name,
 		   list=Maildir++ (for indexes), but list->ns->list=imapc */
 		box = mailbox_alloc(list->ns->list, "INBOX", 0);
 		ret = mailbox_exists(box, FALSE, &existence);
-		mailbox_free(&box);
 		if (ret < 0) {
-			/* this can only be an internal error */
-			mailbox_list_set_internal_error(list);
-			return -1;
+			const char *errstr;
+			enum mail_error error;
+
+			/* internal error or with imapc we can get here with
+			   login failures */
+			errstr = mailbox_get_last_error(box, &error);
+			mailbox_list_set_error(list, error, errstr);
 		}
+		mailbox_free(&box);
+		if (ret < 0)
+			return -1;
 		switch (existence) {
 		case MAILBOX_EXISTENCE_NONE:
 		case MAILBOX_EXISTENCE_NOSELECT:
@@ -1819,18 +1841,40 @@ int mailbox_list_init_fs(struct mailbox_list *list, const char *driver,
 {
 	struct fs_settings fs_set;
 	struct ssl_iostream_settings ssl_set;
+	struct mailbox_list_fs_context *ctx;
+	struct fs *parent_fs;
 
 	memset(&ssl_set, 0, sizeof(ssl_set));
-	ssl_set.ca_dir = list->mail_set->ssl_client_ca_dir;
-	ssl_set.ca_file = list->mail_set->ssl_client_ca_file;
-
 	memset(&fs_set, 0, sizeof(fs_set));
-	fs_set.temp_file_prefix = mailbox_list_get_global_temp_prefix(list);
-	fs_set.base_dir = list->ns->user->set->base_dir;
-	fs_set.temp_dir = list->ns->user->set->mail_temp_dir;
-	fs_set.ssl_client_set = &ssl_set;
+	mail_user_init_fs_settings(list->ns->user, &fs_set, &ssl_set);
 	fs_set.root_path = root_dir;
-	fs_set.debug = list->ns->user->mail_debug;
+	fs_set.temp_file_prefix = mailbox_list_get_global_temp_prefix(list);
 
-	return fs_init(driver, args, &fs_set, fs_r, error_r);
+	if (fs_init(driver, args, &fs_set, fs_r, error_r) < 0)
+		return -1;
+
+	/* add mailbox_list context to the parent fs, which allows
+	   mailbox_list_fs_get_list() to work */
+	for (parent_fs = *fs_r; parent_fs->parent != NULL;
+	     parent_fs = parent_fs->parent) ;
+
+	ctx = p_new(list->pool, struct mailbox_list_fs_context, 1);
+	ctx->list = list;
+	MODULE_CONTEXT_SET(parent_fs, mailbox_list_fs_module, ctx);
+
+	/* a bit kludgy notification to the fs that we're now finished setting
+	   up the module context. */
+	(void)fs_get_properties(*fs_r);
+	return 0;
+}
+
+struct mailbox_list *mailbox_list_fs_get_list(struct fs *fs)
+{
+	struct mailbox_list_fs_context *ctx;
+
+	while (fs->parent != NULL)
+		fs = fs->parent;
+
+	ctx = MAILBOX_LIST_FS_CONTEXT(fs);
+	return ctx == NULL ? NULL : ctx->list;
 }

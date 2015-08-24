@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -22,7 +22,7 @@ static struct file_listener_settings *pop3_unix_listeners[] = {
 	&pop3_unix_listeners_array[0]
 };
 static buffer_t pop3_unix_listeners_buf = {
-	pop3_unix_listeners, sizeof(pop3_unix_listeners), { 0, }
+	pop3_unix_listeners, sizeof(pop3_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 

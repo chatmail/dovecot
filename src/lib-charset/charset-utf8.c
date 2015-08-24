@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -30,6 +30,16 @@ int charset_to_utf8_str(const char *charset, normalizer_func_t *normalizer,
 				    &len, output);
 	charset_to_utf8_end(&t);
 	return 0;
+}
+
+struct charset_translation *
+charset_utf8_to_utf8_begin(normalizer_func_t *normalizer)
+{
+	struct charset_translation *trans;
+
+	if (charset_to_utf8_begin("UTF-8", normalizer, &trans) < 0)
+		i_unreached();
+	return trans;
 }
 
 #ifndef HAVE_ICONV
@@ -70,15 +80,32 @@ enum charset_result
 charset_to_utf8(struct charset_translation *t,
 		const unsigned char *src, size_t *src_size, buffer_t *dest)
 {
-	if (t->normalizer != NULL) {
-		if (t->normalizer(src, *src_size, dest) < 0)
+	return charset_utf8_to_utf8(t->normalizer, src, src_size, dest);
+}
+
+#endif
+
+enum charset_result
+charset_utf8_to_utf8(normalizer_func_t *normalizer,
+		     const unsigned char *src, size_t *src_size, buffer_t *dest)
+{
+	enum charset_result res = CHARSET_RET_OK;
+	size_t pos;
+
+	uni_utf8_partial_strlen_n(src, *src_size, &pos);
+	if (pos < *src_size) {
+		i_assert(*src_size - pos <= CHARSET_MAX_PENDING_BUF_SIZE);
+		*src_size = pos;
+		res = CHARSET_RET_INCOMPLETE_INPUT;
+	}
+
+	if (normalizer != NULL) {
+		if (normalizer(src, *src_size, dest) < 0)
 			return CHARSET_RET_INVALID_INPUT;
 	} else if (!uni_utf8_get_valid_data(src, *src_size, dest)) {
 		return CHARSET_RET_INVALID_INPUT;
 	} else {
 		buffer_append(dest, src, *src_size);
 	}
-	return CHARSET_RET_OK;
+	return res;
 }
-
-#endif

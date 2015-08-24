@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "llist.h"
@@ -38,7 +38,7 @@ struct indexer_client_request {
 	unsigned int tag;
 };
 
-struct indexer_client *clients = NULL;
+static struct indexer_client *clients = NULL;
 static unsigned int clients_count = 0;
 
 static void indexer_client_destroy(struct indexer_client *client);

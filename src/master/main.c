@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "ioloop.h"
@@ -12,7 +12,6 @@
 #include "ipwd.h"
 #include "str.h"
 #include "execv-const.h"
-#include "mountpoint-list.h"
 #include "restrict-process-size.h"
 #include "master-instance.h"
 #include "master-service.h"
@@ -156,6 +155,7 @@ master_fatal_callback(const struct failure_context *ctx,
 		if (fd != -1) {
 			VA_COPY(args2, args);
 			str = t_strdup_vprintf(format, args2);
+			va_end(args2);
 			(void)write_full(fd, str, strlen(str));
 			i_close_fd(&fd);
 		}
@@ -174,6 +174,7 @@ startup_fatal_handler(const struct failure_context *ctx,
 	VA_COPY(args2, args);
 	fprintf(stderr, "%s%s\n", failure_log_type_prefixes[ctx->type],
 		t_strdup_vprintf(fmt, args2));
+	va_end(args2);
 	orig_fatal_callback(ctx, fmt, args);
 	abort();
 }
@@ -187,6 +188,7 @@ startup_error_handler(const struct failure_context *ctx,
 	VA_COPY(args2, args);
 	fprintf(stderr, "%s%s\n", failure_log_type_prefixes[ctx->type],
 		t_strdup_vprintf(fmt, args2));
+	va_end(args2);
 	orig_error_callback(ctx, fmt, args);
 }
 
@@ -211,7 +213,7 @@ static void fatal_log_check(const struct master_settings *set)
 			"information): %s\n", buf);
 	}
 
-	close(fd);
+	i_close_fd(&fd);
 	if (unlink(path) < 0)
 		i_error("unlink(%s) failed: %m", path);
 }
@@ -290,40 +292,6 @@ static void create_config_symlink(const struct master_settings *set)
 		i_error("symlink(%s, %s) failed: %m",
 			services->config->config_file_path, base_config_path);
 	}
-}
-
-static void mountpoints_warn_missing(struct mountpoint_list *mountpoints)
-{
-	struct mountpoint_list_iter *iter;
-	struct mountpoint_list_rec *rec;
-
-	/* warn about mountpoints that no longer exist */
-	iter = mountpoint_list_iter_init(mountpoints);
-	while ((rec = mountpoint_list_iter_next(iter)) != NULL) {
-		if (MOUNTPOINT_WRONGLY_NOT_MOUNTED(rec)) {
-			i_warning("%s is no longer mounted. "
-				  "See http://wiki2.dovecot.org/Mountpoints",
-				  rec->mount_path);
-		}
-	}
-	mountpoint_list_iter_deinit(&iter);
-}
-
-static void mountpoints_update(const struct master_settings *set)
-{
-	struct mountpoint_list *mountpoints;
-	const char *perm_path, *state_path;
-
-	perm_path = t_strconcat(set->state_dir, "/"MOUNTPOINT_LIST_FNAME, NULL);
-	state_path = t_strconcat(set->base_dir, "/"MOUNTPOINT_LIST_FNAME, NULL);
-	mountpoints = mountpoint_list_init(perm_path, state_path);
-
-	if (mountpoint_list_add_missing(mountpoints, MOUNTPOINT_STATE_DEFAULT,
-				mountpoint_list_default_ignore_prefixes,
-				mountpoint_list_default_ignore_types) == 0)
-		mountpoints_warn_missing(mountpoints);
-	(void)mountpoint_list_save(mountpoints);
-	mountpoint_list_deinit(&mountpoints);
 }
 
 static void instance_update_now(struct master_instance_list *list)
@@ -554,7 +522,6 @@ static void main_init(const struct master_settings *set)
 
 	create_pid_file(pidfile_path);
 	create_config_symlink(set);
-	mountpoints_update(set);
 	instance_update(set);
 
 	services_monitor_start(services);
@@ -813,6 +780,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
+	i_assert(optind <= argc);
 
 	if (doveconf_arg != NULL) {
 		const char **args;

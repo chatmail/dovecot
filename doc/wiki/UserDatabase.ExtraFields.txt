@@ -1,9 +1,12 @@
 User database extra fields
 ==========================
 
-A user database lookup typically returns <uid, gid, home and mail>
-[UserDatabase.txt] fields. Other possibilities are:
+A user database lookup typically returns <uid, gid and home> [UserDatabase.txt]
+fields, as per traditional /etc/passwd lookups. Other fields may also be stored
+in the userdb, and these are called 'extra fields'. Possibilities are:
 
+ * *mail*: <Mail location> [MailLocation.txt], overrides the global
+   'mail_location' setting.
  * *nice*: Set the mail process's priority to be the given value.
  * *chroot*: Chroot to given directory. Overrides 'mail_chroot' setting in
    'dovecot.conf'.
@@ -15,12 +18,12 @@ A user database lookup typically returns <uid, gid, home and mail>
    for returning a variable number of fields (e.g. SQL).
  * *uidgid_file*: Get uid and gid for user based on the given filename.
  * It's possible to override settings from 'dovecot.conf' (most commonly
-   quota_rule to set per-user quota limits).
+   quota_rule to set per-user quota limits or also plugin-settings).
  * The extra fields are also passed to <post-login scripts>
    [PostLoginScripting.txt].
 
-These fields can be returned the exact same way as uid, gid, home and mail
-fields. Below are examples for some user databases.
+These fields can be returned the exact same way as uid, gid, and home fields.
+Below are examples for some user databases.
 
 Overriding settings
 -------------------
@@ -48,11 +51,12 @@ name and key with '/'. For example:
 ---%<-------------------------------------------------------------------------
 namespace default {
   inbox = yes
+  location = maildir:~/Maildir
 }
 ---%<-------------------------------------------------------------------------
 
 The inbox setting can be overridden by returning 'namespace/default/inbox=yes'
-extra field.
+or 'namespace/default/location=mbox:/var/mail/%u' extra field.
 
 Examples
 --------
@@ -64,7 +68,8 @@ dovecot-sql.conf:
 
 ---%<-------------------------------------------------------------------------
 user_query = SELECT home, uid, gid, \
-  '*:storage=100M' as quota_rule, mail_plugins \
+  '*:storage=100M' as quota_rule, mail_plugins, \
+  'gz' as `plugin/zlib_save`
   FROM users WHERE userid = '%u'
 ---%<-------------------------------------------------------------------------
 
@@ -93,4 +98,4 @@ user2:{plain}pass2:1001:1001::/home/user2::userdb_mail=maildir:~/Maildir
 userdb_quota_rule=*:storage=200M
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-11-24 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

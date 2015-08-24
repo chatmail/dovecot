@@ -1,9 +1,10 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
 #include "ioloop.h"
 #include "istream.h"
+#include "istream-concat.h"
 #include "istream-header-filter.h"
 #include "message-header-parser.h"
 #include "imap-arg.h"
@@ -146,7 +147,19 @@ imapc_mail_delayed_send_or_merge(struct imapc_mail *mail, string_t *str)
 	}
 	array_append(&mbox->pending_fetch_request->mails, &mail, 1);
 
-	if (mbox->to_pending_fetch_send == NULL) {
+	if (mbox->to_pending_fetch_send == NULL &&
+	    array_count(&mbox->pending_fetch_request->mails) >
+	    			mbox->box.storage->set->mail_prefetch_count) {
+		/* we're now prefetching the maximum number of mails. this
+		   most likely means that we need to flush out the command now
+		   before sending anything else. delay it a little bit though
+		   in case the sending code doesn't actually use
+		   mail_prefetch_count and wants to fetch more.
+
+		   note that we don't want to add this timeout too early,
+		   because we want to optimize the maximum number of messages
+		   placed into a single FETCH. even without timeout the command
+		   gets flushed by imapc_mail_fetch() call. */
 		mbox->to_pending_fetch_send =
 			timeout_add_short(0, imapc_mail_fetch_flush, mbox);
 	}
@@ -171,7 +184,7 @@ imapc_mail_send_fetch(struct mail *_mail, enum mail_fetch_field fields,
 	if (headers_have_subset(mail->fetching_headers, headers))
 		headers = NULL;
 	if (fields == 0 && headers == NULL)
-		return 0;
+		return mail->fetch_sent ? 0 : 1;
 
 	if (!_mail->saving) {
 		/* if we already know that the mail is expunged,
@@ -199,16 +212,25 @@ imapc_mail_send_fetch(struct mail *_mail, enum mail_fetch_field fields,
 	str_printfa(str, "UID FETCH %u (", _mail->uid);
 	if ((fields & MAIL_FETCH_RECEIVED_DATE) != 0)
 		str_append(str, "INTERNALDATE ");
-	if ((fields & MAIL_FETCH_PHYSICAL_SIZE) != 0)
+	if ((fields & (MAIL_FETCH_PHYSICAL_SIZE | MAIL_FETCH_VIRTUAL_SIZE)) != 0)
 		str_append(str, "RFC822.SIZE ");
 	if ((fields & MAIL_FETCH_GUID) != 0) {
 		str_append(str, mbox->guid_fetch_field_name);
 		str_append_c(str, ' ');
 	}
 
-	if ((fields & MAIL_FETCH_STREAM_BODY) != 0)
-		str_append(str, "BODY.PEEK[] ");
-	else if ((fields & MAIL_FETCH_STREAM_HEADER) != 0)
+	if ((fields & MAIL_FETCH_STREAM_BODY) != 0) {
+		if (!IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_ZIMBRA_WORKAROUNDS))
+			str_append(str, "BODY.PEEK[] ");
+		else {
+			/* BODY.PEEK[] can return different headers than
+			   BODY.PEEK[HEADER] (e.g. invalid 8bit chars replaced
+			   with '?' in HEADER) - this violates IMAP protocol
+			   and messes up dsync since it sometimes fetches the
+			   full body and sometimes only the headers. */
+			str_append(str, "BODY.PEEK[HEADER] BODY.PEEK[TEXT] ");
+		}
+	} else if ((fields & MAIL_FETCH_STREAM_HEADER) != 0)
 		str_append(str, "BODY.PEEK[HEADER] ");
 	else if (headers != NULL) {
 		mail->fetching_headers =
@@ -229,6 +251,7 @@ imapc_mail_send_fetch(struct mail *_mail, enum mail_fetch_field fields,
 	pool_ref(mail->imail.mail.pool);
 	mail->fetching_fields |= fields;
 	mail->fetch_count++;
+	mail->fetch_sent = FALSE;
 
 	imapc_mail_delayed_send_or_merge(mail, str);
 	return 1;
@@ -254,8 +277,9 @@ static void imapc_mail_cache_get(struct imapc_mail *mail,
 	} else {
 		return;
 	}
+	mail->header_fetched = TRUE;
 	mail->body_fetched = TRUE;
-	imapc_mail_init_stream(mail, TRUE);
+	imapc_mail_init_stream(mail);
 }
 
 static enum mail_fetch_field
@@ -272,10 +296,11 @@ imapc_mail_get_wanted_fetch_fields(struct imapc_mail *mail)
 	if ((data->wanted_fields & MAIL_FETCH_SAVE_DATE) != 0 &&
 	    data->save_date == (time_t)-1 && data->received_date == (time_t)-1)
 		fields |= MAIL_FETCH_RECEIVED_DATE;
-	if ((data->wanted_fields & MAIL_FETCH_PHYSICAL_SIZE) != 0 &&
+	if ((data->wanted_fields & (MAIL_FETCH_PHYSICAL_SIZE |
+				    MAIL_FETCH_VIRTUAL_SIZE)) != 0 &&
 	    data->physical_size == (uoff_t)-1 &&
 	    IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_RFC822_SIZE))
-		fields |= MAIL_FETCH_PHYSICAL_SIZE;
+		fields |= MAIL_FETCH_PHYSICAL_SIZE | MAIL_FETCH_VIRTUAL_SIZE;
 	if ((data->wanted_fields & MAIL_FETCH_GUID) != 0 &&
 	    data->guid == NULL && mbox->guid_fetch_field_name != NULL)
 		fields |= MAIL_FETCH_GUID;
@@ -302,7 +327,7 @@ bool imapc_mail_prefetch(struct mail *_mail)
 	imapc_mail_update_access_parts(&mail->imail);
 
 	fields = imapc_mail_get_wanted_fetch_fields(mail);
-	if (fields != 0) T_BEGIN {
+	if (fields != 0 || data->wanted_headers != NULL) T_BEGIN {
 		if (imapc_mail_send_fetch(_mail, fields,
 					  data->wanted_headers == NULL ? NULL :
 					  data->wanted_headers->name) > 0)
@@ -319,10 +344,10 @@ imapc_mail_have_fields(struct imapc_mail *imail, enum mail_fetch_field fields)
 			return FALSE;
 		fields &= ~MAIL_FETCH_RECEIVED_DATE;
 	}
-	if ((fields & MAIL_FETCH_PHYSICAL_SIZE) != 0) {
+	if ((fields & (MAIL_FETCH_PHYSICAL_SIZE | MAIL_FETCH_VIRTUAL_SIZE)) != 0) {
 		if (imail->imail.data.physical_size == (uoff_t)-1)
 			return FALSE;
-		fields &= ~MAIL_FETCH_PHYSICAL_SIZE;
+		fields &= ~(MAIL_FETCH_PHYSICAL_SIZE | MAIL_FETCH_VIRTUAL_SIZE);
 	}
 	if ((fields & MAIL_FETCH_GUID) != 0) {
 		if (imail->imail.data.guid == NULL)
@@ -365,7 +390,8 @@ int imapc_mail_fetch(struct mail *_mail, enum mail_fetch_field fields,
 	/* we'll continue waiting until we've got all the fields we wanted,
 	   or until all FETCH replies have been received (i.e. some FETCHes
 	   failed) */
-	imapc_mail_fetch_flush(mbox);
+	if (ret > 0)
+		imapc_mail_fetch_flush(mbox);
 	while (imail->fetch_count > 0 &&
 	       (!imapc_mail_have_fields(imail, fields) ||
 		!imail->header_list_fetched))
@@ -376,11 +402,15 @@ int imapc_mail_fetch(struct mail *_mail, enum mail_fetch_field fields,
 void imapc_mail_fetch_flush(struct imapc_mailbox *mbox)
 {
 	struct imapc_command *cmd;
+	struct imapc_mail *const *mailp;
 
 	if (mbox->pending_fetch_request == NULL) {
 		i_assert(mbox->to_pending_fetch_send == NULL);
 		return;
 	}
+
+	array_foreach(&mbox->pending_fetch_request->mails, mailp)
+		(*mailp)->fetch_sent = TRUE;
 
 	cmd = imapc_client_mailbox_cmd(mbox->client_box,
 				       imapc_mail_fetch_callback,
@@ -391,7 +421,8 @@ void imapc_mail_fetch_flush(struct imapc_mailbox *mbox)
 	imapc_command_send(cmd, str_c(mbox->pending_fetch_cmd));
 
 	mbox->pending_fetch_request = NULL;
-	timeout_remove(&mbox->to_pending_fetch_send);
+	if (mbox->to_pending_fetch_send != NULL)
+		timeout_remove(&mbox->to_pending_fetch_send);
 	str_truncate(mbox->pending_fetch_cmd, 0);
 }
 
@@ -431,7 +462,7 @@ static void imapc_stream_filter(struct istream **input)
 	*input = filter_input;
 }
 
-void imapc_mail_init_stream(struct imapc_mail *mail, bool have_body)
+void imapc_mail_init_stream(struct imapc_mail *mail)
 {
 	struct index_mail *imail = &mail->imail;
 	struct mail *_mail = &imail->mail.mail;
@@ -450,7 +481,7 @@ void imapc_mail_init_stream(struct imapc_mail *mail, bool have_body)
 			index_mail_close_streams(imail);
 			return;
 		}
-	} else if (have_body) {
+	} else if (mail->body_fetched) {
 		ret = i_stream_get_size(imail->data.stream, TRUE, &size);
 		if (ret < 0) {
 			index_mail_close_streams(imail);
@@ -463,7 +494,7 @@ void imapc_mail_init_stream(struct imapc_mail *mail, bool have_body)
 		imail->data.virtual_size = size;
 	}
 
-	imail->data.stream_has_only_header = !have_body;
+	imail->data.stream_has_only_header = !mail->body_fetched;
 	if (index_mail_init_stream(imail, NULL, NULL, &input) < 0)
 		index_mail_close_streams(imail);
 }
@@ -471,52 +502,100 @@ void imapc_mail_init_stream(struct imapc_mail *mail, bool have_body)
 static void
 imapc_fetch_stream(struct imapc_mail *mail,
 		   const struct imapc_untagged_reply *reply,
-		   const struct imap_arg *arg, bool body)
+		   const struct imap_arg *arg,
+		   bool have_header, bool have_body)
 {
 	struct index_mail *imail = &mail->imail;
+	struct istream *hdr_stream = NULL;
 	const char *value;
 	int fd;
 
 	if (imail->data.stream != NULL) {
-		if (!body)
+		i_assert(mail->header_fetched);
+		if (mail->body_fetched || !have_body)
 			return;
-		/* maybe the existing stream has no body. replace it. */
+		if (have_header) {
+			/* replace the existing stream */
+		} else if (mail->fd == -1) {
+			/* append this body stream to the existing
+			   header stream */
+			hdr_stream = imail->data.stream;
+			i_stream_ref(hdr_stream);
+		} else {
+			/* append this body stream to the existing
+			   header stream. we'll need to recreate the stream
+			   with autoclosed fd. */
+			if (lseek(mail->fd, 0, SEEK_SET) < 0)
+				i_error("lseek(imapc) failed: %m");
+			hdr_stream = i_stream_create_fd_autoclose(&mail->fd, 0);
+		}
 		index_mail_close_streams(imail);
 		if (mail->fd != -1) {
 			if (close(mail->fd) < 0)
 				i_error("close(imapc mail) failed: %m");
 			mail->fd = -1;
 		}
+	} else {
+		if (!have_header) {
+			/* BODY.PEEK[TEXT] received - we can't currently handle
+			   this before receiving BODY.PEEK[HEADER] reply */
+			return;
+		}
 	}
 
 	if (arg->type == IMAP_ARG_LITERAL_SIZE) {
-		if (!imapc_find_lfile_arg(reply, arg, &fd))
+		if (!imapc_find_lfile_arg(reply, arg, &fd)) {
+			if (hdr_stream != NULL)
+				i_stream_unref(&hdr_stream);
 			return;
+		}
 		if ((fd = dup(fd)) == -1) {
 			i_error("dup() failed: %m");
+			if (hdr_stream != NULL)
+				i_stream_unref(&hdr_stream);
 			return;
 		}
 		mail->fd = fd;
 		imail->data.stream = i_stream_create_fd(fd, 0, FALSE);
 	} else {
 		if (!imap_arg_get_nstring(arg, &value))
-			return;
+			value = NULL;
 		if (value == NULL) {
 			mail_set_expunged(&imail->mail.mail);
+			if (hdr_stream != NULL)
+				i_stream_unref(&hdr_stream);
 			return;
 		}
 		if (mail->body == NULL) {
 			mail->body = buffer_create_dynamic(default_pool,
 							   arg->str_len + 1);
+		} else if (!have_header && hdr_stream != NULL) {
+			/* header is already in the buffer - add body now
+			   without destroying the existing header data */
+			i_stream_unref(&hdr_stream);
+		} else {
+			buffer_set_used_size(mail->body, 0);
 		}
-		buffer_set_used_size(mail->body, 0);
 		buffer_append(mail->body, value, arg->str_len);
 		imail->data.stream = i_stream_create_from_data(mail->body->data,
 							       mail->body->used);
 	}
-	mail->body_fetched = body;
+	if (have_header)
+		mail->header_fetched = TRUE;
+	mail->body_fetched = have_body;
 
-	imapc_mail_init_stream(mail, body);
+	if (hdr_stream != NULL) {
+		struct istream *inputs[3];
+
+		inputs[0] = hdr_stream;
+		inputs[1] = imail->data.stream;
+		inputs[2] = NULL;
+		imail->data.stream = i_stream_create_concat(inputs);
+		i_stream_unref(&inputs[0]);
+		i_stream_unref(&inputs[1]);
+	}
+
+	imapc_mail_init_stream(mail);
 }
 
 static void
@@ -604,10 +683,13 @@ void imapc_mail_fetch_update(struct imapc_mail *mail,
 			break;
 
 		if (strcasecmp(key, "BODY[]") == 0) {
-			imapc_fetch_stream(mail, reply, &args[i+1], TRUE);
+			imapc_fetch_stream(mail, reply, &args[i+1], TRUE, TRUE);
 			match = TRUE;
 		} else if (strcasecmp(key, "BODY[HEADER]") == 0) {
-			imapc_fetch_stream(mail, reply, &args[i+1], FALSE);
+			imapc_fetch_stream(mail, reply, &args[i+1], TRUE, FALSE);
+			match = TRUE;
+		} else if (strcasecmp(key, "BODY[TEXT]") == 0) {
+			imapc_fetch_stream(mail, reply, &args[i+1], FALSE, TRUE);
 			match = TRUE;
 		} else if (strcasecmp(key, "BODY[HEADER.FIELDS") == 0) {
 			imapc_fetch_header_stream(mail, reply, &args[i+1]);

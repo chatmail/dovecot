@@ -1,10 +1,13 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "ioloop.h"
 #include "istream.h"
+#include "istream-sized.h"
 #include "ostream.h"
+#include "str.h"
+#include "time-util.h"
 #include "lmtp-client.h"
 #include "lmtp-proxy.h"
 
@@ -14,6 +17,7 @@ struct lmtp_proxy_recipient {
 	struct lmtp_proxy_connection *conn;
 	const char *address;
 	const char *reply;
+	unsigned int idx;
 
 	unsigned int rcpt_to_failed:1;
 	unsigned int data_reply_received:1;
@@ -219,7 +223,8 @@ static void lmtp_conn_finish(void *context)
 }
 
 static void
-lmtp_proxy_conn_rcpt_to(bool success, const char *reply, void *context)
+lmtp_proxy_conn_rcpt_to(enum lmtp_client_result result,
+			const char *reply, void *context)
 {
 	struct lmtp_proxy_recipient *rcpt = context;
 	struct lmtp_proxy_connection *conn = rcpt->conn;
@@ -227,14 +232,18 @@ lmtp_proxy_conn_rcpt_to(bool success, const char *reply, void *context)
 	i_assert(rcpt->reply == NULL);
 
 	rcpt->reply = p_strdup(conn->proxy->pool, reply);
-	rcpt->rcpt_to_failed = !success;
+	rcpt->rcpt_to_failed = result != LMTP_CLIENT_RESULT_OK;
 }
 
 static void
-lmtp_proxy_conn_data(bool success ATTR_UNUSED, const char *reply, void *context)
+lmtp_proxy_conn_data(enum lmtp_client_result result,
+		     const char *reply, void *context)
 {
 	struct lmtp_proxy_recipient *rcpt = context;
 	struct lmtp_proxy_connection *conn = rcpt->conn;
+	const struct lmtp_client_times *times =
+		lmtp_client_get_times(conn->client);
+	string_t *msg;
 
 	i_assert(!rcpt->rcpt_to_failed);
 	i_assert(rcpt->reply != NULL);
@@ -246,6 +255,33 @@ lmtp_proxy_conn_data(bool success ATTR_UNUSED, const char *reply, void *context)
 	rcpt->reply = p_strdup(conn->proxy->pool, reply);
 	rcpt->data_reply_received = TRUE;
 
+	msg = t_str_new(128);
+	str_printfa(msg, "%s: ", conn->proxy->set.session_id);
+	switch (result) {
+	case LMTP_CLIENT_RESULT_OK:
+		str_append(msg, "Sent message to");
+		break;
+	case LMTP_CLIENT_RESULT_REMOTE_ERROR:
+	case LMTP_CLIENT_RESULT_INTERNAL_ERROR:
+		str_append(msg, "Failed to send message to");
+		break;
+	}
+	str_printfa(msg, " <%s> at %s:%u: %s (%u/%u at %u ms)",
+		    rcpt->address, conn->set.host, conn->set.port, reply,
+		    rcpt->idx + 1, array_count(&conn->proxy->rcpt_to),
+		    timeval_diff_msecs(&ioloop_timeval, &times->connect_started));
+	switch (result) {
+	case LMTP_CLIENT_RESULT_OK:
+	case LMTP_CLIENT_RESULT_REMOTE_ERROR:
+		/* the problem isn't with the proxy, it's with the remote side.
+		   so the remote side will log an error, while for us this is
+		   just an info event */
+		i_info("%s", str_c(msg));
+		break;
+	case LMTP_CLIENT_RESULT_INTERNAL_ERROR:
+		i_error("%s", str_c(msg));
+		break;
+	}
 	lmtp_proxy_try_finish(conn->proxy);
 }
 
@@ -260,12 +296,14 @@ int lmtp_proxy_add_rcpt(struct lmtp_proxy *proxy, const char *address,
 		return -1;
 
 	rcpt = p_new(proxy->pool, struct lmtp_proxy_recipient, 1);
+	rcpt->idx = array_count(&proxy->rcpt_to);
 	rcpt->conn = conn;
 	rcpt->address = p_strdup(proxy->pool, address);
 	array_append(&proxy->rcpt_to, &rcpt, 1);
 
-	lmtp_client_add_rcpt(conn->client, address, lmtp_proxy_conn_rcpt_to,
-			     lmtp_proxy_conn_data, rcpt);
+	lmtp_client_add_rcpt_params(conn->client, address, &set->params,
+				    lmtp_proxy_conn_rcpt_to,
+				    lmtp_proxy_conn_data, rcpt);
 	return 0;
 }
 
@@ -281,18 +319,25 @@ static void lmtp_proxy_conn_timeout(struct lmtp_proxy_connection *conn)
 }
 
 void lmtp_proxy_start(struct lmtp_proxy *proxy, struct istream *data_input,
-		      const char *header,
 		      lmtp_proxy_finish_callback_t *callback, void *context)
 {
 	struct lmtp_proxy_connection *const *conns;
+	uoff_t size;
 
 	i_assert(data_input->seekable);
+	i_assert(proxy->data_input == NULL);
 
 	proxy->finish_callback = callback;
 	proxy->finish_context = context;
 	proxy->data_input = data_input;
 	i_stream_ref(proxy->data_input);
+	if (i_stream_get_size(proxy->data_input, TRUE, &size) < 0) {
+		i_error("i_stream_get_size(data_input) failed: %s",
+			i_stream_get_error(proxy->data_input));
+		size = (uoff_t)-1;
+	}
 
+	/* create the data_input streams first */
 	array_foreach(&proxy->connections, conns) {
 		struct lmtp_proxy_connection *conn = *conns;
 
@@ -303,11 +348,21 @@ void lmtp_proxy_start(struct lmtp_proxy *proxy, struct istream *data_input,
 
 		conn->to = timeout_add(proxy->max_timeout_msecs,
 				       lmtp_proxy_conn_timeout, conn);
+		if (size == (uoff_t)-1)
+			conn->data_input = i_stream_create_limit(data_input, (uoff_t)-1);
+		else
+			conn->data_input = i_stream_create_sized(data_input, size);
+	}
+	/* now that all the streams are created, start reading them
+	   (reading them earlier could have caused the data_input parent's
+	   offset to change) */
+	array_foreach(&proxy->connections, conns) {
+		struct lmtp_proxy_connection *conn = *conns;
 
-		conn->data_input = i_stream_create_limit(data_input, (uoff_t)-1);
-		lmtp_client_set_data_header(conn->client, header);
-		lmtp_client_send(conn->client, conn->data_input);
-		lmtp_client_send_more(conn->client);
+		if (conn->data_input != NULL) {
+			lmtp_client_send(conn->client, conn->data_input);
+			lmtp_client_send_more(conn->client);
+		}
 	}
 	/* finish if all of the connections have already failed */
 	lmtp_proxy_try_finish(proxy);

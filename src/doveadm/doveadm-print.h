@@ -13,6 +13,7 @@ enum doveadm_print_header_flags {
 };
 
 extern const struct doveadm_print_vfuncs *doveadm_print_vfuncs_all[];
+extern bool doveadm_print_hide_titles;
 
 bool doveadm_print_is_initialized(void);
 
@@ -23,6 +24,8 @@ void doveadm_print(const char *value);
 void doveadm_print_num(uintmax_t value);
 /* Stream for same field continues until len=0 */
 void doveadm_print_stream(const void *value, size_t size);
+/* Print the whole input stream. Returns 0 if ok, -1 if stream read() failed */
+int doveadm_print_istream(struct istream *input);
 void doveadm_print_sticky(const char *key, const char *value);
 void doveadm_print_flush(void);
 void doveadm_print_unstick_headers(void);

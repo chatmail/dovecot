@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -206,19 +206,9 @@ sync_expunge_call_handlers(struct mail_index_sync_map_ctx *ctx,
 	struct mail_index_record *rec;
 	uint32_t seq;
 
-	/* call expunge handlers only when syncing index file */
-	if (ctx->type != MAIL_INDEX_SYNC_HANDLER_FILE)
-		return;
-
-	if (!ctx->expunge_handlers_set)
-		mail_index_sync_init_expunge_handlers(ctx);
-
-	if (!array_is_created(&ctx->expunge_handlers))
-		return;
-
 	array_foreach(&ctx->expunge_handlers, eh) {
 		for (seq = seq1; seq <= seq2; seq++) {
-			rec = MAIL_INDEX_MAP_IDX(ctx->view->map, seq-1);
+			rec = MAIL_INDEX_REC_AT_SEQ(ctx->view->map, seq);
 			/* FIXME: does expunge handler's return value matter?
 			   we probably shouldn't disallow expunges if the
 			   handler returns failure.. should it be just changed
@@ -230,35 +220,82 @@ sync_expunge_call_handlers(struct mail_index_sync_map_ctx *ctx,
 	}
 }
 
+static bool
+sync_expunge_handlers_init(struct mail_index_sync_map_ctx *ctx)
+{
+	/* call expunge handlers only when syncing index file */
+	if (ctx->type != MAIL_INDEX_SYNC_HANDLER_FILE)
+		return FALSE;
+
+	if (!ctx->expunge_handlers_set)
+		mail_index_sync_init_expunge_handlers(ctx);
+
+	if (!array_is_created(&ctx->expunge_handlers))
+		return FALSE;
+	return TRUE;
+}
+
 static void
-sync_expunge(struct mail_index_sync_map_ctx *ctx, uint32_t uid1, uint32_t uid2)
+sync_expunge_range(struct mail_index_sync_map_ctx *ctx, const ARRAY_TYPE(seq_range) *seqs)
 {
 	struct mail_index_map *map;
-	struct mail_index_record *rec;
-	uint32_t seq_count, seq, seq1, seq2;
+	const struct seq_range *range;
+	unsigned int i, count;
+	uint32_t dest_seq1, prev_seq2, orig_rec_count;
 
-	if (!mail_index_lookup_seq_range(ctx->view, uid1, uid2, &seq1, &seq2)) {
-		/* everything expunged already */
+	range = array_get(seqs, &count);
+	if (count == 0)
 		return;
-	}
-
-	sync_expunge_call_handlers(ctx, seq1, seq2);
 
 	map = mail_index_sync_get_atomic_map(ctx);
-	for (seq = seq1; seq <= seq2; seq++) {
-		rec = MAIL_INDEX_MAP_IDX(map, seq-1);
-		mail_index_sync_header_update_counts(ctx, rec->uid, rec->flags, 0);
+
+	/* call the expunge handlers first */
+	if (sync_expunge_handlers_init(ctx)) {
+		for (i = 0; i < count; i++) {
+			sync_expunge_call_handlers(ctx,
+				range[i].seq1, range[i].seq2);
+		}
 	}
 
-	/* @UNSAFE */
-	memmove(MAIL_INDEX_MAP_IDX(map, seq1-1),
-		MAIL_INDEX_MAP_IDX(map, seq2),
-		(map->rec_map->records_count - seq2) * map->hdr.record_size);
+	prev_seq2 = 0;
+	dest_seq1 = 1;
+	orig_rec_count = map->rec_map->records_count;
+	for (i = 0; i < count; i++) {
+		uint32_t seq1 = range[i].seq1;
+		uint32_t seq2 = range[i].seq2;
+		struct mail_index_record *rec;
+		uint32_t seq_count, seq;
 
-	seq_count = seq2 - seq1 + 1;
-	map->rec_map->records_count -= seq_count;
-	map->hdr.messages_count -= seq_count;
-	mail_index_modseq_expunge(ctx->modseq_ctx, seq1, seq2);
+		i_assert(seq1 > prev_seq2);
+
+		for (seq = seq1; seq <= seq2; seq++) {
+			rec = MAIL_INDEX_REC_AT_SEQ(map, seq);
+			mail_index_sync_header_update_counts(ctx, rec->uid, rec->flags, 0);
+		}
+
+		if (prev_seq2+1 <= seq1-1) {
+			/* @UNSAFE: move (prev_seq2+1) .. (seq1-1) to its
+			   final location in the map if necessary */
+			uint32_t move_count = (seq1-1) - (prev_seq2+1) + 1;
+			if (prev_seq2+1-1 != dest_seq1-1)
+				memmove(MAIL_INDEX_REC_AT_SEQ(map, dest_seq1),
+					MAIL_INDEX_REC_AT_SEQ(map, prev_seq2+1),
+					move_count * map->hdr.record_size);
+			dest_seq1 += move_count;
+		}
+		seq_count = seq2 - seq1 + 1;
+		map->rec_map->records_count -= seq_count;
+		map->hdr.messages_count -= seq_count;
+		mail_index_modseq_expunge(ctx->modseq_ctx, seq1, seq2);
+		prev_seq2 = seq2;
+	}
+	/* Final stragglers */
+	if (orig_rec_count > prev_seq2) {
+		uint32_t final_move_count = orig_rec_count - prev_seq2;
+		memmove(MAIL_INDEX_REC_AT_SEQ(map, dest_seq1),
+			MAIL_INDEX_REC_AT_SEQ(map, prev_seq2+1),
+			final_move_count * map->hdr.record_size);
+	}
 }
 
 static void *sync_append_record(struct mail_index_map *map)
@@ -399,7 +436,7 @@ static int sync_flag_update(const struct mail_transaction_flag_update *u,
 	struct mail_index_view *view = ctx->view;
 	struct mail_index_record *rec;
 	uint8_t flag_mask, old_flags;
-	uint32_t idx, seq1, seq2;
+	uint32_t seq, seq1, seq2;
 
 	if (!mail_index_lookup_seq_range(view, u->uid1, u->uid2, &seq1, &seq2))
 		return 1;
@@ -418,13 +455,13 @@ static int sync_flag_update(const struct mail_transaction_flag_update *u,
 	if (((u->add_flags | u->remove_flags) &
 	     (MAIL_SEEN | MAIL_DELETED)) == 0) {
 		/* we're not modifying any counted/lowwatered flags */
-		for (idx = seq1-1; idx < seq2; idx++) {
-			rec = MAIL_INDEX_MAP_IDX(view->map, idx);
+		for (seq = seq1; seq <= seq2; seq++) {
+			rec = MAIL_INDEX_REC_AT_SEQ(view->map, seq);
 			rec->flags = (rec->flags & flag_mask) | u->add_flags;
 		}
 	} else {
-		for (idx = seq1-1; idx < seq2; idx++) {
-			rec = MAIL_INDEX_MAP_IDX(view->map, idx);
+		for (seq = seq1; seq <= seq2; seq++) {
+			rec = MAIL_INDEX_REC_AT_SEQ(view->map, seq);
 
 			old_flags = rec->flags;
 			rec->flags = (rec->flags & flag_mask) | u->add_flags;
@@ -506,38 +543,43 @@ mail_index_sync_record_real(struct mail_index_sync_map_ctx *ctx,
 	case MAIL_TRANSACTION_EXPUNGE:
 	case MAIL_TRANSACTION_EXPUNGE|MAIL_TRANSACTION_EXPUNGE_PROT: {
 		const struct mail_transaction_expunge *rec = data, *end;
+		ARRAY_TYPE(seq_range) seqs;
+		uint32_t seq1, seq2;
 
 		if ((hdr->type & MAIL_TRANSACTION_EXTERNAL) == 0) {
 			/* this is simply a request for expunge */
 			break;
 		}
+		t_array_init(&seqs, 64);
 		end = CONST_PTR_OFFSET(data, hdr->size);
-		for (; rec != end; rec++)
-			sync_expunge(ctx, rec->uid1, rec->uid2);
+		for (; rec != end; rec++) {
+			if (mail_index_lookup_seq_range(ctx->view,
+					rec->uid1, rec->uid2, &seq1, &seq2))
+				seq_range_array_add_range(&seqs, seq1, seq2);
+		}
+		sync_expunge_range(ctx, &seqs);
 		break;
 	}
 	case MAIL_TRANSACTION_EXPUNGE_GUID:
 	case MAIL_TRANSACTION_EXPUNGE_GUID|MAIL_TRANSACTION_EXPUNGE_PROT: {
 		const struct mail_transaction_expunge_guid *rec = data, *end;
-		ARRAY_TYPE(seq_range) uids;
-		const struct seq_range *range;
-		unsigned int i, count;
+		ARRAY_TYPE(seq_range) seqs;
+		uint32_t seq;
 
 		if ((hdr->type & MAIL_TRANSACTION_EXTERNAL) == 0) {
 			/* this is simply a request for expunge */
 			break;
 		}
-		t_array_init(&uids, 64);
+		t_array_init(&seqs, 64);
 		end = CONST_PTR_OFFSET(data, hdr->size);
 		for (; rec != end; rec++) {
 			i_assert(rec->uid != 0);
-			seq_range_array_add(&uids, rec->uid);
+
+			if (mail_index_lookup_seq(ctx->view, rec->uid, &seq))
+				seq_range_array_add(&seqs, seq);
 		}
 
-		/* do this in reverse so the memmove()s are smaller */
-		range = array_get(&uids, &count);
-		for (i = count; i > 0; i--)
-			sync_expunge(ctx, range[i-1].seq1, range[i-1].seq2);
+		sync_expunge_range(ctx, &seqs);
 		break;
 	}
 	case MAIL_TRANSACTION_FLAG_UPDATE: {
@@ -814,14 +856,14 @@ void mail_index_sync_map_deinit(struct mail_index_sync_map_ctx *sync_map_ctx)
 static void mail_index_sync_update_hdr_dirty_flag(struct mail_index_map *map)
 {
 	const struct mail_index_record *rec;
-	unsigned int i;
+	uint32_t seq;
 
 	if ((map->hdr.flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) != 0)
 		return;
 
 	/* do we have dirty flags anymore? */
-	for (i = 0; i < map->rec_map->records_count; i++) {
-		rec = MAIL_INDEX_MAP_IDX(map, i);
+	for (seq = 1; seq <= map->rec_map->records_count; seq++) {
+		rec = MAIL_INDEX_REC_AT_SEQ(map, seq);
 		if ((rec->flags & MAIL_INDEX_MAIL_FLAG_DIRTY) != 0) {
 			map->hdr.flags |= MAIL_INDEX_HDR_FLAG_HAVE_DIRTY;
 			break;
@@ -833,14 +875,14 @@ static void mail_index_sync_update_hdr_dirty_flag(struct mail_index_map *map)
 void mail_index_map_check(struct mail_index_map *map)
 {
 	const struct mail_index_header *hdr = &map->hdr;
-	unsigned int i, del = 0, seen = 0;
-	uint32_t prev_uid = 0;
+	unsigned int del = 0, seen = 0;
+	uint32_t seq, prev_uid = 0;
 
 	i_assert(hdr->messages_count <= map->rec_map->records_count);
-	for (i = 0; i < hdr->messages_count; i++) {
+	for (seq = 1; seq <= hdr->messages_count; seq++) {
 		const struct mail_index_record *rec;
 
-		rec = MAIL_INDEX_MAP_IDX(map, i);
+		rec = MAIL_INDEX_REC_AT_SEQ(map, seq);
 		i_assert(rec->uid > prev_uid);
 		prev_uid = rec->uid;
 
@@ -869,6 +911,7 @@ int mail_index_sync_map(struct mail_index_map **_map,
 	const void *tdata;
 	uint32_t prev_seq;
 	uoff_t start_offset, prev_offset;
+	const char *reason, *error;
 	int ret;
 	bool had_dirty, reset;
 
@@ -910,14 +953,15 @@ int mail_index_sync_map(struct mail_index_map **_map,
 	view = mail_index_view_open_with_map(index, map);
 	ret = mail_transaction_log_view_set(view->log_view,
 					    map->hdr.log_file_seq, start_offset,
-					    (uint32_t)-1, (uoff_t)-1, &reset);
+					    (uint32_t)-1, (uoff_t)-1,
+					    &reset, &reason);
 	if (ret <= 0) {
 		mail_index_view_close(&view);
 		if (force && ret == 0) {
 			/* the seq/offset is probably broken */
 			mail_index_set_error(index, "Index %s: Lost log for "
-				"seq=%u offset=%"PRIuUOFF_T, index->filepath,
-				map->hdr.log_file_seq, start_offset);
+				"seq=%u offset=%"PRIuUOFF_T": %s", index->filepath,
+				map->hdr.log_file_seq, start_offset, reason);
 			(void)mail_index_fsck(index);
 		}
 		/* can't use it. sync by re-reading index. */
@@ -1031,10 +1075,10 @@ int mail_index_sync_map(struct mail_index_map **_map,
 
 	i_assert(index->map == map || type == MAIL_INDEX_SYNC_HANDLER_VIEW);
 
-	if (mail_index_map_check_header(map) <= 0) {
+	if (mail_index_map_check_header(map, &error) <= 0) {
 		mail_index_set_error(index,
-			"Synchronization corrupted index header: %s",
-			index->filepath);
+			"Synchronization corrupted index header %s: %s",
+			index->filepath, error);
 		(void)mail_index_fsck(index);
 		map = index->map;
 	} else if (sync_map_ctx.errors) {

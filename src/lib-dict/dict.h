@@ -7,15 +7,31 @@
 struct dict;
 
 enum dict_iterate_flags {
+	/* Recurse to all the sub-hierarchies (e.g. iterating "foo/" will
+	   return "foo/a", but should it return "foo/a/b"?) */
 	DICT_ITERATE_FLAG_RECURSE             = 0x01,
+	/* Sort returned results by key */
 	DICT_ITERATE_FLAG_SORT_BY_KEY         = 0x02,
+	/* Sort returned results by value */
 	DICT_ITERATE_FLAG_SORT_BY_VALUE       = 0x04,
-	DICT_ITERATE_FLAG_NO_VALUE            = 0x08
+	/* Don't return values, only keys */
+	DICT_ITERATE_FLAG_NO_VALUE            = 0x08,
+	/* Don't recurse at all. This is basically the same as dict_lookup(),
+	   but it'll return all the rows instead of only the first one. */
+	DICT_ITERATE_FLAG_EXACT_KEY           = 0x10
 };
 
 enum dict_data_type {
-	DICT_DATA_TYPE_STRING,
+	DICT_DATA_TYPE_STRING = 0,
 	DICT_DATA_TYPE_UINT32
+};
+
+struct dict_settings {
+	enum dict_data_type value_type;
+	const char *username;
+	const char *base_dir;
+	/* home directory for the user, if known */
+	const char *home_dir;
 };
 
 typedef void dict_transaction_commit_callback_t(int ret, void *context);
@@ -34,6 +50,8 @@ void dict_drivers_unregister_all(void);
 int dict_init(const char *uri, enum dict_data_type value_type,
 	      const char *username, const char *base_dir, struct dict **dict_r,
 	      const char **error_r);
+int dict_init_full(const char *uri, const struct dict_settings *set,
+		   struct dict **dict_r, const char **error_r);
 /* Close dictionary. */
 void dict_deinit(struct dict **dict);
 /* Wait for all pending asynchronous transaction commits to finish.

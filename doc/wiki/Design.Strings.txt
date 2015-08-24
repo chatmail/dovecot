@@ -65,4 +65,4 @@ characters in strings using<\> character.\
 Dovecot's internal protocols are often line-based with TAB as the field
 separator. This file also contains functions to escape and unescape such data.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

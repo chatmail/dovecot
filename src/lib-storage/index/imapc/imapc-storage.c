@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -11,6 +11,7 @@
 #include "imapc-msgmap.h"
 #include "imapc-mail.h"
 #include "imapc-list.h"
+#include "imapc-search.h"
 #include "imapc-sync.h"
 #include "imapc-settings.h"
 #include "imapc-storage.h"
@@ -45,7 +46,7 @@ static struct imapc_resp_code_map imapc_resp_code_map[] = {
 	/* { IMAP_RESP_CODE_CLIENTBUG, 0 }, */
 	{ IMAP_RESP_CODE_CANNOT, MAIL_ERROR_NOTPOSSIBLE },
 	{ IMAP_RESP_CODE_LIMIT, MAIL_ERROR_NOTPOSSIBLE },
-	{ IMAP_RESP_CODE_OVERQUOTA, MAIL_ERROR_NOSPACE },
+	{ IMAP_RESP_CODE_OVERQUOTA, MAIL_ERROR_NOQUOTA },
 	{ IMAP_RESP_CODE_ALREADYEXISTS, MAIL_ERROR_EXISTS },
 	{ IMAP_RESP_CODE_NONEXISTENT, MAIL_ERROR_NOTFOUND }
 };
@@ -109,6 +110,10 @@ void imapc_simple_context_init(struct imapc_simple_context *sctx,
 
 void imapc_simple_run(struct imapc_simple_context *sctx)
 {
+	if (sctx->client->auth_failed) {
+		imapc_client_disconnect(sctx->client->client);
+		sctx->ret = -1;
+	}
 	while (sctx->ret == -2)
 		imapc_client_run(sctx->client->client);
 }
@@ -137,6 +142,8 @@ void imapc_simple_callback(const struct imapc_command_reply *reply,
 		imapc_copy_error_from_reply(ctx->client->_storage,
 					    MAIL_ERROR_PARAMS, reply);
 		ctx->ret = -1;
+	} else if (ctx->client->auth_failed) {
+		ctx->ret = -1;
 	} else {
 		mail_storage_set_critical(&ctx->client->_storage->storage,
 			"imapc: Command failed: %s", reply->text_full);
@@ -149,6 +156,11 @@ void imapc_mailbox_noop(struct imapc_mailbox *mbox)
 {
 	struct imapc_command *cmd;
 	struct imapc_simple_context sctx;
+
+	if (mbox->client_box == NULL) {
+		/* mailbox opening hasn't finished yet */
+		return;
+	}
 
 	imapc_simple_context_init(&sctx, mbox->storage->client);
 	cmd = imapc_client_mailbox_cmd(mbox->client_box,
@@ -187,6 +199,28 @@ imapc_storage_client_untagged_cb(const struct imapc_untagged_reply *reply,
 	}
 }
 
+static void
+imapc_storage_client_login(const struct imapc_command_reply *reply,
+			   void *context)
+{
+	struct imapc_storage_client *client = context;
+
+	if (reply->state == IMAPC_COMMAND_STATE_OK)
+		return;
+
+	i_error("imapc: Authentication failed: %s", reply->text_full);
+	client->auth_failed = TRUE;
+
+	if (client->_storage != NULL) {
+		mail_storage_set_error(&client->_storage->storage,
+				       MAIL_ERROR_PERM, reply->text_full);
+	}
+	if (client->_list != NULL) {
+		mailbox_list_set_error(&client->_list->list,
+				       MAIL_ERROR_PERM, reply->text_full);
+	}
+}
+
 int imapc_storage_client_create(struct mail_namespace *ns,
 				const struct imapc_settings *imapc_set,
 				const struct mail_storage_settings *mail_set,
@@ -216,6 +250,7 @@ int imapc_storage_client_create(struct mail_namespace *ns,
 		*error_r = "missing imapc_password";
 		return -1;
 	}
+	set.sasl_mechanisms = imapc_set->imapc_sasl_mechanisms;
 	set.max_idle_time = imapc_set->imapc_max_idle_time;
 	set.dns_client_socket_path = *ns->user->set->base_dir == '\0' ? "" :
 		t_strconcat(ns->user->set->base_dir, "/",
@@ -239,6 +274,10 @@ int imapc_storage_client_create(struct mail_namespace *ns,
 		set.ssl_mode = IMAPC_CLIENT_SSL_MODE_NONE;
 	set.ssl_crypto_device = mail_set->ssl_crypto_device;
 
+	set.throttle_set.init_msecs = imapc_set->throttle_init_msecs;
+	set.throttle_set.max_msecs = imapc_set->throttle_max_msecs;
+	set.throttle_set.shrink_min_msecs = imapc_set->throttle_shrink_min_msecs;
+
 	client = i_new(struct imapc_storage_client, 1);
 	client->refcount = 1;
 	i_array_init(&client->untagged_callbacks, 16);
@@ -246,7 +285,7 @@ int imapc_storage_client_create(struct mail_namespace *ns,
 	imapc_client_register_untagged(client->client,
 				       imapc_storage_client_untagged_cb, client);
 	/* start logging in immediately */
-	imapc_client_login(client->client, NULL, NULL);
+	imapc_client_login(client->client, imapc_storage_client_login, client);
 
 	*client_r = client;
 	return 0;
@@ -438,6 +477,8 @@ imapc_mailbox_open_callback(const struct imapc_command_reply *reply,
 		imapc_copy_error_from_reply(ctx->mbox->storage,
 					    MAIL_ERROR_NOTFOUND, reply);
 		ctx->ret = -1;
+	} else if (ctx->mbox->storage->client->auth_failed) {
+		ctx->ret = -1;
 	} else {
 		mail_storage_set_critical(ctx->mbox->box.storage,
 			"imapc: Opening mailbox '%s' failed: %s",
@@ -467,6 +508,12 @@ int imapc_mailbox_select(struct imapc_mailbox *mbox)
 	struct imapc_open_context ctx;
 
 	i_assert(mbox->client_box == NULL);
+
+	/* If authentication failed, don't check again. */
+	if (mbox->storage->client->auth_failed) {
+		mail_storage_set_internal_error(&mbox->storage->storage);
+		return -1;
+	}
 
 	mbox->client_box =
 		imapc_client_mailbox_open(mbox->storage->client->client, mbox);
@@ -669,6 +716,8 @@ static void imapc_mailbox_get_selected_status(struct imapc_mailbox *mbox,
 	index_storage_get_open_status(&mbox->box, items, status_r);
 	if ((items & STATUS_PERMANENT_FLAGS) != 0)
 		status_r->permanent_flags = mbox->permanent_flags;
+	if ((items & STATUS_FIRST_RECENT_UID) != 0)
+		status_r->first_recent_uid = mbox->highest_nonrecent_uid + 1;
 }
 
 static int imapc_mailbox_delete(struct mailbox *box)
@@ -728,7 +777,8 @@ static int imapc_mailbox_get_status(struct mailbox *box,
 	if (box->opened) {
 		imapc_mailbox_get_selected_status(mbox, items, status_r);
 	} else if ((items & (STATUS_FIRST_UNSEEN_SEQ | STATUS_KEYWORDS |
-			     STATUS_PERMANENT_FLAGS)) != 0) {
+			     STATUS_PERMANENT_FLAGS |
+			     STATUS_FIRST_RECENT_UID)) != 0) {
 		/* getting these requires opening the mailbox */
 		if (mailbox_open(box) < 0)
 			return -1;
@@ -897,10 +947,12 @@ static bool imapc_is_inconsistent(struct mailbox *box)
 {
 	struct imapc_mailbox *mbox = (struct imapc_mailbox *)box;
 
-	if (mail_index_view_is_inconsistent(box->view))
+	if (box->view != NULL &&
+	    mail_index_view_is_inconsistent(box->view))
 		return TRUE;
 
-	return !imapc_client_mailbox_is_opened(mbox->client_box);
+	return mbox->client_box == NULL ? FALSE :
+		!imapc_client_mailbox_is_opened(mbox->client_box);
 }
 
 struct mail_storage imapc_storage = {
@@ -952,10 +1004,10 @@ struct mailbox imapc_mailbox = {
 		index_transaction_rollback,
 		NULL,
 		imapc_mail_alloc,
-		index_storage_search_init,
-		index_storage_search_deinit,
+		imapc_search_init,
+		imapc_search_deinit,
 		index_storage_search_next_nonblock,
-		index_storage_search_next_update_seq,
+		imapc_search_next_update_seq,
 		imapc_save_alloc,
 		imapc_save_begin,
 		imapc_save_continue,

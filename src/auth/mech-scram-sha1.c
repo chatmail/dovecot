@@ -1,7 +1,7 @@
 /*
  * SCRAM-SHA-1 SASL authentication, see RFC-5802
  *
- * Copyright (c) 2011-2012 Florian Zeitz <florob@babelmonkeys.de>
+ * Copyright (c) 2011-2015 Florian Zeitz <florob@babelmonkeys.de>
  *
  * This software is released under the MIT license.
  */
@@ -390,7 +390,7 @@ static struct auth_request *mech_scram_sha1_auth_new(void)
 	struct scram_auth_request *request;
 	pool_t pool;
 
-	pool = pool_alloconly_create("scram_sha1_auth_request", 2048);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"scram_sha1_auth_request", 2048);
 	request = p_new(pool, struct scram_auth_request, 1);
 	request->pool = pool;
 

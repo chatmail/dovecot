@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -134,6 +134,7 @@ char *t_noalloc_strdup_vprintf(const char *format, va_list args,
 	/* we rely on errno not changing. it shouldn't. */
 	i_assert(errno == old_errno);
 #endif
+	va_end(args2);
 	return tmp;
 }
 
@@ -286,6 +287,26 @@ const char *t_strcut(const char *str, char cutchar)
 	}
 
         return str;
+}
+
+const char *t_str_replace(const char *str, char from, char to)
+{
+	char *out;
+	unsigned int i, len;
+
+	if (strchr(str, from) == NULL)
+		return str;
+
+	len = strlen(str);
+	out = t_malloc(len + 1);
+	for (i = 0; i < len; i++) {
+		if (str[i] == from)
+			out[i] = to;
+		else
+			out[i] = str[i];
+	}
+	out[i] = '\0';
+	return out;
 }
 
 int i_strocpy(char *dest, const char *src, size_t dstsize)

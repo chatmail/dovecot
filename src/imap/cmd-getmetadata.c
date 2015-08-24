@@ -1,10 +1,11 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
 #include "istream.h"
 #include "ostream.h"
 #include "mailbox-list-iter.h"
+#include "imap-utf7.h"
 #include "imap-quote.h"
 #include "imap-metadata.h"
 
@@ -12,7 +13,7 @@ struct imap_getmetadata_context {
 	struct client_command_context *cmd;
 
 	struct mailbox *box;
-	struct mailbox_transaction_context *trans;
+	struct imap_metadata_transaction *trans;
 	struct mailbox_list_iterate_context *list_iter;
 
 	ARRAY_TYPE(const_string) entries;
@@ -23,16 +24,18 @@ struct imap_getmetadata_context {
 	struct istream *cur_stream;
 	uoff_t cur_stream_offset, cur_stream_size;
 
-	struct mailbox_attribute_iter *iter;
+	struct imap_metadata_iter *iter;
 	string_t *iter_entry_prefix;
 
-	const char *key_prefix;
+	string_t *delayed_errors;
+
 	unsigned int entry_idx;
 	bool first_entry_sent;
 	bool failed;
 };
 
-static bool cmd_getmetadata_iter_next(struct imap_getmetadata_context *ctx);
+static bool
+cmd_getmetadata_mailbox_iter_next(struct imap_getmetadata_context *ctx);
 
 static bool
 cmd_getmetadata_parse_options(struct imap_getmetadata_context *ctx,
@@ -80,7 +83,7 @@ static bool
 imap_metadata_parse_entry_names(struct imap_getmetadata_context *ctx,
 				const struct imap_arg *entries)
 {
-	const char *value;
+	const char *value, *error;
 
 	p_array_init(&ctx->entries, ctx->cmd->pool, 4);
 	for (; !IMAP_ARG_IS_EOL(entries); entries++) {
@@ -88,8 +91,10 @@ imap_metadata_parse_entry_names(struct imap_getmetadata_context *ctx,
 			client_send_command_error(ctx->cmd, "Entry isn't astring");
 			return FALSE;
 		}
-		if (!imap_metadata_verify_entry_name(ctx->cmd, value))
+		if (!imap_metadata_verify_entry_name(value, &error)) {
+			client_send_command_error(ctx->cmd, error);
 			return FALSE;
+		}
 
 		/* names are case-insensitive so we'll always lowercase them */
 		value = p_strdup(ctx->cmd->pool, t_str_lcase(value));
@@ -105,9 +110,18 @@ metadata_add_entry(struct imap_getmetadata_context *ctx, const char *entry)
 
 	str = t_str_new(64);
 	if (!ctx->first_entry_sent) {
+		string_t *mailbox_mutf7 = t_str_new(64);
+
 		ctx->first_entry_sent = TRUE;
 		str_append(str, "* METADATA ");
-		imap_append_astring(str, mailbox_get_vname(ctx->box));
+		if (ctx->box == NULL) {
+			/* server metadata reply */
+			str_append(str, "\"\"");
+		} else {
+			if (imap_utf8_to_utf7(mailbox_get_vname(ctx->box), mailbox_mutf7) < 0)
+				i_unreached();
+			imap_append_astring(str, str_c(mailbox_mutf7));
+		}
 		str_append(str, " (");
 
 		/* nothing can be sent until untagged METADATA is finished */
@@ -135,33 +149,24 @@ cmd_getmetadata_send_nil_reply(struct imap_getmetadata_context *ctx,
 static void cmd_getmetadata_send_entry(struct imap_getmetadata_context *ctx,
 				       const char *entry, bool require_reply)
 {
-	enum mail_attribute_type type;
+	struct client *client = ctx->cmd->client;
 	struct mail_attribute_value value;
+	const char *error_string;
 	enum mail_error error;
 	uoff_t value_len;
-	const char *key;
 	string_t *str;
 
-	imap_metadata_entry2key(entry, ctx->key_prefix, &type, &key);
-	if (ctx->key_prefix == NULL &&
-	    strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT,
-		    strlen(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT)) == 0) {
-		/* skip over dovecot's internal attributes. (if key_prefix
-		   isn't NULL, we're getting server metadata, which is handled
-		   inside the private metadata.) */
-		if (require_reply)
-			cmd_getmetadata_send_nil_reply(ctx, entry);
-		return;
-	}
-
-	if (mailbox_attribute_get_stream(ctx->trans, type, key, &value) < 0) {
-		(void)mailbox_get_last_error(ctx->box, &error);
+	if (imap_metadata_get_stream(ctx->trans, entry, &value) < 0) {
+		error_string = imap_metadata_transaction_get_last_error(
+			ctx->trans, &error);
 		if (error != MAIL_ERROR_NOTFOUND && error != MAIL_ERROR_PERM) {
-			client_send_untagged_storage_error(ctx->cmd->client,
-				mailbox_get_storage(ctx->box));
+			str_printfa(ctx->delayed_errors, "* NO %s\r\n",
+				    error_string);
 			ctx->failed = TRUE;
+			return;
 		}
 	}
+
 	if (value.value != NULL)
 		value_len = strlen(value.value);
 	else if (value.value_stream != NULL) {
@@ -193,10 +198,10 @@ static void cmd_getmetadata_send_entry(struct imap_getmetadata_context *ctx,
 	str = metadata_add_entry(ctx, entry);
 	if (value.value != NULL) {
 		str_printfa(str, " {%"PRIuUOFF_T"}\r\n%s", value_len, value.value);
-		o_stream_send(ctx->cmd->client->output, str_data(str), str_len(str));
+		o_stream_nsend(client->output, str_data(str), str_len(str));
 	} else {
 		str_printfa(str, " ~{%"PRIuUOFF_T"}\r\n", value_len);
-		o_stream_send(ctx->cmd->client->output, str_data(str), str_len(str));
+		o_stream_nsend(client->output, str_data(str), str_len(str));
 
 		ctx->cur_stream_offset = 0;
 		ctx->cur_stream_size = value_len;
@@ -226,7 +231,7 @@ cmd_getmetadata_stream_continue(struct imap_getmetadata_context *ctx)
 			i_stream_get_error(ctx->cur_stream));
 		client_disconnect(ctx->cmd->client,
 				  "Internal GETMETADATA failure");
-		return -1;
+		return TRUE;
 	}
 	if (!i_stream_have_bytes_left(ctx->cur_stream)) {
 		/* Input stream gave less data than expected */
@@ -234,41 +239,45 @@ cmd_getmetadata_stream_continue(struct imap_getmetadata_context *ctx)
 			i_stream_get_name(ctx->cur_stream));
 		client_disconnect(ctx->cmd->client,
 				  "Internal GETMETADATA failure");
-		return -1;
+		return TRUE;
 	}
 	o_stream_set_flush_pending(ctx->cmd->client->output, TRUE);
 	return FALSE;
 }
 
-static int cmd_getmetadata_send_entry_tree(struct imap_getmetadata_context *ctx,
+static int
+cmd_getmetadata_send_entry_tree(struct imap_getmetadata_context *ctx,
 					   const char *entry)
 {
-	const char *key;
-	enum mail_attribute_type type;
+	struct client *client = ctx->cmd->client;
 
-	if (o_stream_get_buffer_used_size(ctx->cmd->client->output) >=
+	if (o_stream_get_buffer_used_size(client->output) >=
 	    CLIENT_OUTPUT_OPTIMAL_SIZE) {
-		if (o_stream_flush(ctx->cmd->client->output) <= 0) {
-			o_stream_set_flush_pending(ctx->cmd->client->output, TRUE);
+		if (o_stream_flush(client->output) <= 0) {
+			o_stream_set_flush_pending(client->output, TRUE);
 			return 0;
 		}
 	}
 
 	if (ctx->iter != NULL) {
+		const char *subentry;
+
 		/* DEPTH iteration */
 		do {
-			key = mailbox_attribute_iter_next(ctx->iter);
-			if (key == NULL) {
+			subentry = imap_metadata_iter_next(ctx->iter);
+			if (subentry == NULL) {
 				/* iteration finished, get to the next entry */
-				if (mailbox_attribute_iter_deinit(&ctx->iter) < 0) {
-					client_send_untagged_storage_error(ctx->cmd->client,
-						mailbox_get_storage(ctx->box));
+				if (imap_metadata_iter_deinit(&ctx->iter) < 0) {
+					enum mail_error error;
+
+					str_printfa(ctx->delayed_errors, "* NO %s\r\n",
+						imap_metadata_transaction_get_last_error(ctx->trans, &error));
 					ctx->failed = TRUE;
 				}
 				return -1;
 			}
-		} while (ctx->depth == 1 && strchr(key, '/') != NULL);
-		entry = t_strconcat(str_c(ctx->iter_entry_prefix), key, NULL);
+		} while (ctx->depth == 1 && strchr(subentry, '/') != NULL);
+		entry = t_strconcat(str_c(ctx->iter_entry_prefix), subentry, NULL);
 	}
 	cmd_getmetadata_send_entry(ctx, entry, ctx->iter == NULL);
 
@@ -290,21 +299,19 @@ static int cmd_getmetadata_send_entry_tree(struct imap_getmetadata_context *ctx,
 		str_append(ctx->iter_entry_prefix, entry);
 		str_append_c(ctx->iter_entry_prefix, '/');
 
-		imap_metadata_entry2key(entry, ctx->key_prefix, &type, &key);
-		ctx->iter = mailbox_attribute_iter_init(ctx->box, type,
-			key[0] == '\0' ? "" : t_strconcat(key, "/", NULL));
+		ctx->iter = imap_metadata_iter_init(ctx->trans, entry);
 		return 1;
 	}
 }
 
-static void cmd_getmetadata_mailbox_deinit(struct imap_getmetadata_context *ctx)
+static void cmd_getmetadata_iter_deinit(struct imap_getmetadata_context *ctx)
 {
 	if (ctx->iter != NULL)
-		(void)mailbox_attribute_iter_deinit(&ctx->iter);
-	if (ctx->box != NULL) {
-		(void)mailbox_transaction_commit(&ctx->trans);
+		(void)imap_metadata_iter_deinit(&ctx->iter);
+	if (ctx->trans != NULL)
+		(void)imap_metadata_transaction_commit(&ctx->trans, NULL, NULL);
+	if (ctx->box != NULL)
 		mailbox_free(&ctx->box);
-	}
 	ctx->first_entry_sent = FALSE;
 	ctx->entry_idx = 0;
 }
@@ -313,7 +320,7 @@ static void cmd_getmetadata_deinit(struct imap_getmetadata_context *ctx)
 {
 	struct client_command_context *cmd = ctx->cmd;
 
-	cmd_getmetadata_mailbox_deinit(ctx);
+	cmd_getmetadata_iter_deinit(ctx);
 	cmd->client->output_cmd_lock = NULL;
 
 	if (ctx->list_iter != NULL &&
@@ -361,26 +368,24 @@ static bool cmd_getmetadata_continue(struct client_command_context *cmd)
 	if (ctx->first_entry_sent)
 		o_stream_nsend_str(cmd->client->output, ")\r\n");
 
-	cmd_getmetadata_mailbox_deinit(ctx);
+	if (str_len(ctx->delayed_errors) > 0) {
+		o_stream_nsend(cmd->client->output,
+			       str_data(ctx->delayed_errors),
+			       str_len(ctx->delayed_errors));
+		str_truncate(ctx->delayed_errors, 0);
+	}
+
+	cmd_getmetadata_iter_deinit(ctx);
 	if (ctx->list_iter != NULL)
-		return cmd_getmetadata_iter_next(ctx);
+		return cmd_getmetadata_mailbox_iter_next(ctx);
 	cmd_getmetadata_deinit(ctx);
 	return TRUE;
 }
 
 static bool
-cmd_getmetadata_mailbox(struct imap_getmetadata_context *ctx,
-			struct mail_namespace *ns, const char *mailbox)
+cmd_getmetadata_start(struct imap_getmetadata_context *ctx)
 {
 	struct client_command_context *cmd = ctx->cmd;
-
-	ctx->box = mailbox_alloc(ns->list, mailbox, MAILBOX_FLAG_READONLY);
-	if (mailbox_open(ctx->box) < 0) {
-		client_send_box_error(cmd, ctx->box);
-		mailbox_free(&ctx->box);
-		return TRUE;
-	}
-	ctx->trans = mailbox_transaction_begin(ctx->box, 0);
 
 	if (ctx->depth > 0)
 		ctx->iter_entry_prefix = str_new(cmd->pool, 128);
@@ -393,15 +398,64 @@ cmd_getmetadata_mailbox(struct imap_getmetadata_context *ctx,
 	return TRUE;
 }
 
-static bool cmd_getmetadata_iter_next(struct imap_getmetadata_context *ctx)
+static bool
+cmd_getmetadata_server(struct imap_getmetadata_context *ctx)
+{
+	ctx->trans = imap_metadata_transaction_begin_server(ctx->cmd->client->user);
+	return cmd_getmetadata_start(ctx);
+}
+
+static int
+cmd_getmetadata_try_mailbox(struct imap_getmetadata_context *ctx,
+			    struct mail_namespace *ns, const char *mailbox)
+{
+	ctx->box = mailbox_alloc(ns->list, mailbox, MAILBOX_FLAG_READONLY);
+	if (mailbox_open(ctx->box) < 0)
+		return -1;
+
+	ctx->trans = imap_metadata_transaction_begin(ctx->box);
+	return cmd_getmetadata_start(ctx) ? 1 : 0;
+}
+
+static bool
+cmd_getmetadata_mailbox(struct imap_getmetadata_context *ctx,
+			struct mail_namespace *ns, const char *mailbox)
+{
+	int ret;
+
+	ret = cmd_getmetadata_try_mailbox(ctx, ns, mailbox);
+	if (ret < 0) {
+		client_send_box_error(ctx->cmd, ctx->box);
+		mailbox_free(&ctx->box);
+	}
+	return ret != 0;
+}
+
+static bool
+cmd_getmetadata_mailbox_iter_next(struct imap_getmetadata_context *ctx)
 {
 	const struct mailbox_info *info;
+	int ret;
 
 	while ((info = mailbox_list_iter_next(ctx->list_iter)) != NULL) {
 		if ((info->flags & (MAILBOX_NOSELECT | MAILBOX_NONEXISTENT)) != 0)
 			continue;
-		/* we'll get back here recursively */
-		return cmd_getmetadata_mailbox(ctx, info->ns, info->vname);
+		ret = cmd_getmetadata_try_mailbox(ctx, info->ns, info->vname);
+		if (ret > 0) {
+			/* we'll already recursively went through
+			   all the mailboxes (FIXME: ugly and potentially
+			   stack consuming) */
+			return TRUE;
+		} else if (ret == 0) {
+			/* need to send more data later */
+			return FALSE;
+		}
+		T_BEGIN {
+			client_send_line(ctx->cmd->client, t_strdup_printf(
+				"* NO Failed to open mailbox %s: %s",
+				info->vname, mailbox_get_last_error(ctx->box, NULL)));
+		} T_END;
+		mailbox_free(&ctx->box);
 	}
 	cmd_getmetadata_deinit(ctx);
 	return TRUE;
@@ -426,6 +480,7 @@ bool cmd_getmetadata(struct client_command_context *cmd)
 	ctx->cmd = cmd;
 	ctx->maxsize = (uint32_t)-1;
 	ctx->cmd->context = ctx;
+	ctx->delayed_errors = str_new(cmd->pool, 128);
 
 	if (imap_arg_get_list(&args[0], &options)) {
 		if (!cmd_getmetadata_parse_options(ctx, options))
@@ -449,11 +504,10 @@ bool cmd_getmetadata(struct client_command_context *cmd)
 
 	if (mailbox[0] == '\0') {
 		/* server attribute */
-		ctx->key_prefix = MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER;
-		ns = mail_namespace_find_inbox(cmd->client->user->namespaces);
-		return cmd_getmetadata_mailbox(ctx, ns, "INBOX");
+		return cmd_getmetadata_server(ctx);
 	} else if (strchr(mailbox, '*') == NULL &&
 		   strchr(mailbox, '%') == NULL) {
+		/* mailbox attribute */
 		ns = client_find_namespace(cmd, &mailbox);
 		if (ns == NULL)
 			return TRUE;
@@ -469,6 +523,6 @@ bool cmd_getmetadata(struct client_command_context *cmd)
 			mailbox_list_iter_init_namespaces(
 				cmd->client->user->namespaces,
 				patterns, MAIL_NAMESPACE_TYPE_MASK_ALL, 0);
-		return cmd_getmetadata_iter_next(ctx);
+		return cmd_getmetadata_mailbox_iter_next(ctx);
 	}
 }

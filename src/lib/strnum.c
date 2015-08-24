@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "strnum.h"
@@ -82,26 +82,49 @@ int str_to_uint64(const char *str, uint64_t *num_r)
 	return 0;
 }
 
-int str_to_uintmax(const char *str, uintmax_t *num_r)
+int str_parse_uintmax(const char *str, uintmax_t *num_r, const char **endp_r)
 {
-	uintmax_t next, n = 0;
+	uintmax_t n = 0;
 
 	if (*str < '0' || *str > '9')
 		return -1;
 
 	for (; *str >= '0' && *str <= '9'; str++) {
-		next = n*10;
-		if (next < n) {
-			/* overflow */
-			return -1;
+		if (n >= ((uintmax_t)-1 / 10)) {
+			if (n > (uintmax_t)-1 / 10)
+				return -1;
+			if ((uintmax_t)(*str - '0') > ((uintmax_t)-1 % 10))
+				return -1;
 		}
-		n = next + (*str - '0');
+		n = n * 10 + (*str - '0');
 	}
-	if (*str != '\0')
+	if (endp_r != NULL)
+		*endp_r = str;
+	*num_r = n;
+	return 0;
+}
+int str_to_uintmax(const char *str, uintmax_t *num_r)
+{
+	const char *endp;
+	uintmax_t n;
+	int ret = str_parse_uintmax(str, &n, &endp);
+	if ((ret != 0) || (*endp != '\0'))
 		return -1;
 	*num_r = n;
 	return 0;
 }
+
+#define STR_TO_U__TEMPLATE(name, type)				\
+int name(const char *str, type *num_r, const char **endp_r)	\
+{								\
+	uintmax_t l;						\
+	if (str_parse_uintmax(str, &l, endp_r) < 0 || l > (type)-1)\
+		return -1;					\
+	*num_r = l;						\
+	return 0;						\
+}
+STR_TO_U__TEMPLATE(str_parse_uoff, uoff_t)
+STR_TO_U__TEMPLATE(str_parse_uint, unsigned int)
 
 int str_to_int(const char *str, int *num_r)
 {

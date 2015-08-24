@@ -68,4 +68,4 @@ the listener queue size, but uses a hardcoded upper limit of 511. Most OSes use
 an even lower limit, typically 128. In Linux you can increase this from
 '/proc/sys/net/core/somaxconn'.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

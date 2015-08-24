@@ -22,7 +22,7 @@ There are three ways to fix this:
  2. Use namespaces to allow users to keep using the prefix. See "Backwards
     Compatibility" in <Namespaces.txt> for an example configuration.
  3. Configure Dovecot to use home directory ('mail_location =
-    mbox:~/:INBOX=/var/mail/%u' and set 'full_filesystem_access=yes'). The
+    mbox:~/:INBOX=/var/mail/%u' and set 'mail_full_filesystem_access=yes'). The
     latter is needed to make '~/mail' and '~user/mail' prefixes work.
 
 A typical mailbox location setting is:
@@ -134,4 +134,4 @@ uidl
 quit
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

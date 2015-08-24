@@ -9,6 +9,7 @@ LIBDOVECOT_SUBDIRS = \
 	lib-dict \
 	lib-sasl \
 	lib-ssl-iostream \
+	lib-stats \
 	lib-http \
 	lib-fs \
 	lib-mail \
@@ -17,10 +18,11 @@ LIBDOVECOT_SUBDIRS = \
 
 SUBDIRS = \
 	$(LIBDOVECOT_SUBDIRS) \
+	lib-dovecot \
+	lib-fts \
 	lib-imap-client \
 	lib-imap-urlauth \
 	lib-compression \
-	lib-dovecot \
 	lib-index \
 	lib-storage \
 	lib-sql \

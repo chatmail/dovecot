@@ -18,6 +18,7 @@ struct ssl_iostream_settings {
 	bool verify_remote_cert; /* neither/both */
 	bool require_valid_cert; /* stream-only */
 	bool prefer_server_ciphers;
+	bool compression;
 };
 
 /* Returns 0 if ok, -1 and sets error_r if failed. The returned error string
@@ -63,7 +64,8 @@ const char *ssl_iostream_get_server_name(struct ssl_iostream *ssl_io);
 const char *ssl_iostream_get_security_string(struct ssl_iostream *ssl_io);
 const char *ssl_iostream_get_last_error(struct ssl_iostream *ssl_io);
 
-int ssl_iostream_generate_params(buffer_t *output, const char **error_r);
+int ssl_iostream_generate_params(buffer_t *output, unsigned int dh_length,
+				 const char **error_r);
 int ssl_iostream_context_import_params(struct ssl_iostream_context *ctx,
 				       const buffer_t *input);
 

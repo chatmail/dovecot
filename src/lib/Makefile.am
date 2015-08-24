@@ -16,7 +16,9 @@ liblib_la_SOURCES = \
 	aqueue.c \
 	askpass.c \
 	backtrace-string.c \
+	base32.c \
 	base64.c \
+	bits.c \
 	bsearch-insert-pos.c \
 	buffer.c \
 	child-wait.c \
@@ -57,6 +59,7 @@ liblib_la_SOURCES = \
 	istream.c \
 	istream-base64-decoder.c \
 	istream-base64-encoder.c \
+	istream-callback.c \
 	istream-chain.c \
 	istream-concat.c \
 	istream-crlf.c \
@@ -71,6 +74,7 @@ liblib_la_SOURCES = \
 	istream-sized.c \
 	istream-tee.c \
 	istream-timeout.c \
+	istream-unix.c \
 	ioloop.c \
 	ioloop-iolist.c \
 	ioloop-notify-none.c \
@@ -83,6 +87,7 @@ liblib_la_SOURCES = \
 	ioloop-epoll.c \
 	ioloop-kqueue.c \
 	json-parser.c \
+	json-tree.c \
 	lib.c \
 	lib-signals.c \
 	md4.c \
@@ -110,6 +115,7 @@ liblib_la_SOURCES = \
 	process-title.c \
 	priorityq.c \
 	randgen.c \
+	rand.c \
 	read-full.c \
 	restrict-access.c \
 	restrict-process-size.c \
@@ -123,6 +129,7 @@ liblib_la_SOURCES = \
 	str.c \
 	str-find.c \
 	str-sanitize.c \
+	str-table.c \
 	strescape.c \
 	strfuncs.c \
 	strnum.c \
@@ -145,7 +152,9 @@ headers = \
 	array-decl.h \
 	askpass.h \
 	backtrace-string.h \
+	base32.h \
 	base64.h \
+	bits.h \
 	bsearch-insert-pos.h \
 	buffer.h \
 	child-wait.h \
@@ -188,9 +197,11 @@ headers = \
 	iso8601-date.h \
 	istream.h \
 	istream-base64.h \
+	istream-callback.h \
 	istream-chain.h \
 	istream-concat.h \
 	istream-crlf.h \
+	istream-file-private.h \
 	istream-hash.h \
 	istream-jsonstr.h \
 	istream-private.h \
@@ -199,11 +210,13 @@ headers = \
 	istream-sized.h \
 	istream-tee.h \
 	istream-timeout.h \
+	istream-unix.h \
 	ioloop.h \
 	ioloop-iolist.h \
 	ioloop-private.h \
 	ioloop-notify-fd.h \
 	json-parser.h \
+	json-tree.h \
 	lib.h \
 	lib-signals.h \
 	llist.h \
@@ -227,6 +240,7 @@ headers = \
 	printf-format-fix.h \
 	process-title.h \
 	priorityq.h \
+	rand.h \
 	randgen.h \
 	read-full.h \
 	restrict-access.h \
@@ -241,6 +255,7 @@ headers = \
 	str.h \
 	str-find.h \
 	str-sanitize.h \
+	str-table.h \
 	strescape.h \
 	strfuncs.h \
 	strnum.h \
@@ -270,38 +285,50 @@ test_lib_SOURCES = \
 	test-lib.c \
 	test-array.c \
 	test-aqueue.c \
+	test-base32.c \
 	test-base64.c \
+	test-bits.c \
 	test-bsearch-insert-pos.c \
 	test-buffer.c \
 	test-crc32.c \
+	test-data-stack.c \
+	test-guid.c \
+	test-hash.c \
 	test-hash-format.c \
 	test-hash-method.c \
 	test-hex-binary.c \
 	test-iso8601-date.c \
+	test-istream.c \
 	test-istream-base64-decoder.c \
 	test-istream-base64-encoder.c \
 	test-istream-concat.c \
 	test-istream-crlf.c \
 	test-istream-seekable.c \
 	test-istream-tee.c \
+	test-istream-unix.c \
 	test-json-parser.c \
+	test-json-tree.c \
 	test-llist.c \
 	test-mempool-alloconly.c \
-	test-network.c \
+	test-net.c \
 	test-numpack.c \
 	test-ostream-file.c \
 	test-primes.c \
+	test-printf-format-fix.c \
 	test-priorityq.c \
 	test-seq-range-array.c \
 	test-str.c \
 	test-strescape.c \
 	test-strfuncs.c \
+	test-strnum.c \
 	test-str-find.c \
 	test-str-sanitize.c \
+	test-str-table.c \
 	test-time-util.c \
 	test-unichar.c \
 	test-utc-mktime.c \
-	test-var-expand.c
+	test-var-expand.c \
+	test-wildcard-match.c
 
 test_headers = \
 	test-lib.h

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -36,7 +36,8 @@ virtual_save_alloc(struct mailbox_transaction_context *_t)
 		i_assert(ctx->backend_save_ctx == NULL);
 		i_assert(ctx->open_errstr == NULL);
 
-		if (mailbox_open(mbox->save_bbox->box) < 0) {
+		if (!mbox->save_bbox->box->opened &&
+		    virtual_backend_box_open(mbox, mbox->save_bbox) < 0) {
 			errstr = mailbox_get_last_error(mbox->save_bbox->box,
 							&ctx->open_error);
 			ctx->open_errstr = i_strdup(errstr);
@@ -45,6 +46,7 @@ virtual_save_alloc(struct mailbox_transaction_context *_t)
 				virtual_transaction_get(_t, mbox->save_bbox->box);
 			ctx->backend_save_ctx = mailbox_save_alloc(backend_trans);
 		}
+		virtual_backend_box_accessed(mbox, mbox->save_bbox);
 	}
 	return _t->save_ctx;
 }

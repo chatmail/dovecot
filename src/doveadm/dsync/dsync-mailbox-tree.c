@@ -1,10 +1,9 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "hash.h"
 #include "str.h"
-#include "doveadm-settings.h"
 #include "mailbox-list-private.h"
 #include "dsync-mailbox-tree-private.h"
 
@@ -494,4 +493,28 @@ bool dsync_mailbox_trees_equal(struct dsync_mailbox_tree *tree1,
 		ret = dsync_mailbox_branches_equal(&tree1->root, &tree2->root);
 	} T_END;
 	return ret;
+}
+
+const char *dsync_mailbox_node_to_string(const struct dsync_mailbox_node *node)
+{
+	return t_strdup_printf("guid=%s uid_validity=%u uid_next=%u subs=%s last_change=%ld last_subs=%ld",
+			       guid_128_to_string(node->mailbox_guid),
+			       node->uid_validity, node->uid_next,
+			       node->subscribed ? "yes" : "no",
+			       (long)node->last_renamed_or_created,
+			       (long)node->last_subscription_change);
+}
+
+const char *
+dsync_mailbox_delete_type_to_string(enum dsync_mailbox_delete_type type)
+{
+	switch (type) {
+	case DSYNC_MAILBOX_DELETE_TYPE_MAILBOX:
+		return "mailbox";
+	case DSYNC_MAILBOX_DELETE_TYPE_DIR:
+		return "dir";
+	case DSYNC_MAILBOX_DELETE_TYPE_UNSUBSCRIBE:
+		return "unsubscribe";
+	}
+	return t_strdup_printf("unknown #%u", type);
 }

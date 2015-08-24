@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -71,8 +71,10 @@ test_transaction_log_file_add(uint32_t file_seq)
 
 	/* files must be sorted by file_seq */
 	for (p = &log->files; *p != NULL; p = &(*p)->next) {
-		if ((*p)->hdr.file_seq > file->hdr.file_seq)
+		if ((*p)->hdr.file_seq > file->hdr.file_seq) {
+			file->next = *p;
 			break;
+		}
 	}
 	*p = file;
 	log->head = file;
@@ -119,8 +121,10 @@ static void test_mail_transaction_log_view(void)
 	const struct mail_index_record *rec;
 	struct mail_index_record append_rec;
 	const void *data;
+	void *oldfile;
 	uint32_t seq;
 	uoff_t offset, last_log_size;
+	const char *reason;
 	bool reset;
 
 	test_begin("init");
@@ -148,7 +152,7 @@ static void test_mail_transaction_log_view(void)
 
 	/* we have files 1-3 opened */
 	test_begin("set all");
-	test_assert(mail_transaction_log_view_set(view, 0, 0, (uint32_t)-1, (uoff_t)-1, &reset) == 1 &&
+	test_assert(mail_transaction_log_view_set(view, 0, 0, (uint32_t)-1, (uoff_t)-1, &reset, &reason) == 1 &&
 		    reset && view_is_file_refed(1) && view_is_file_refed(2) &&
 		    view_is_file_refed(3) &&
 		    !mail_transaction_log_view_is_corrupted(view));
@@ -165,7 +169,7 @@ static void test_mail_transaction_log_view(void)
 	test_end();
 
 	test_begin("set first");
-	test_assert(mail_transaction_log_view_set(view, 0, 0, 0, 0, &reset) == 1);
+	test_assert(mail_transaction_log_view_set(view, 0, 0, 0, 0, &reset, &reason) == 1);
 	mail_transaction_log_view_get_prev_pos(view, &seq, &offset);
 	test_assert(seq == 1 && offset == sizeof(struct mail_transaction_log_header));
 	test_assert(mail_transaction_log_view_next(view, &hdr, &data) == 0);
@@ -174,7 +178,7 @@ static void test_mail_transaction_log_view(void)
 	test_end();
 
 	test_begin("set end");
-	test_assert(mail_transaction_log_view_set(view, 3, last_log_size, (uint32_t)-1, (uoff_t)-1, &reset) == 1);
+	test_assert(mail_transaction_log_view_set(view, 3, last_log_size, (uint32_t)-1, (uoff_t)-1, &reset, &reason) == 1);
 	mail_transaction_log_view_get_prev_pos(view, &seq, &offset);
 	test_assert(seq == 3 && offset == last_log_size);
 	test_assert(mail_transaction_log_view_next(view, &hdr, &data) == 0);
@@ -186,25 +190,38 @@ static void test_mail_transaction_log_view(void)
 	mail_transaction_log_view_clear(view, 2);
 	test_assert(!view_is_file_refed(1) && view_is_file_refed(2) &&
 		    view_is_file_refed(3));
+	oldfile = log->files;
+	buffer_free(&log->files->buffer);
 	log->files = log->files->next;
+	i_free(oldfile);
 	test_assert(log->files->hdr.file_seq == 2);
 	test_end();
 
 	/* --- first file has been removed --- */
 
 	test_begin("set 2-3");
-	test_assert(mail_transaction_log_view_set(view, 2, 0, (uint32_t)-1, (uoff_t)-1, &reset) == 1);
+	test_assert(mail_transaction_log_view_set(view, 2, 0, (uint32_t)-1, (uoff_t)-1, &reset, &reason) == 1);
 	test_end();
 
 	test_begin("missing log handing");
-	test_assert(mail_transaction_log_view_set(view, 0, 0, (uint32_t)-1, (uoff_t)-1, &reset) == 0);
+	test_assert(mail_transaction_log_view_set(view, 0, 0, (uint32_t)-1, (uoff_t)-1, &reset, &reason) == 0);
 	test_end();
 
 	test_begin("closed log handling");
 	view->log = NULL;
-	test_assert(mail_transaction_log_view_set(view, 0, 0, (uint32_t)-1, (uoff_t)-1, &reset) == -1);
+	test_assert(mail_transaction_log_view_set(view, 0, 0, (uint32_t)-1, (uoff_t)-1, &reset, &reason) == -1);
 	view->log = log;
 	test_end();
+
+	mail_transaction_log_view_close(&view);
+	i_free(log->index);
+	while (log->files != NULL) {
+		oldfile = log->files;
+		buffer_free(&log->files->buffer);
+		log->files = log->files->next;
+		i_free(oldfile);
+	}
+	i_free(log);
 }
 
 int main(void)

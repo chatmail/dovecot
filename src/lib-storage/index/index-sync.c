@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "seq-range-array.h"
@@ -17,8 +17,11 @@ enum mail_index_sync_flags index_storage_get_sync_flags(struct mailbox *box)
 
 	if ((box->flags & MAILBOX_FLAG_DROP_RECENT) != 0)
 		sync_flags |= MAIL_INDEX_SYNC_FLAG_DROP_RECENT;
-	if (box->deleting)
-		sync_flags |= MAIL_INDEX_SYNC_FLAG_DELETING_INDEX;
+	if (box->deleting) {
+		sync_flags |= box->delete_sync_check ?
+			MAIL_INDEX_SYNC_FLAG_TRY_DELETING_INDEX :
+			MAIL_INDEX_SYNC_FLAG_DELETING_INDEX;
+	}
 	return sync_flags;
 }
 
@@ -517,6 +520,8 @@ int index_storage_list_index_has_changed(struct mailbox *box,
 		/* doesn't exist / not synced */
 		return 1;
 	}
+	if (box->storage->set->mailbox_list_index_very_dirty_syncs)
+		return 0;
 
 	ret = mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX, &dir);
 	if (ret < 0)

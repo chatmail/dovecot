@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -73,7 +73,10 @@ mailbox_list_index_update_info(struct mailbox_list_index_iterate_context *ctx)
 	p_clear(ctx->info_pool);
 
 	str_truncate(ctx->path, ctx->parent_len);
-	if (str_len(ctx->path) > 0) {
+	/* the root directory may have an empty name. in that case we'll still
+	   want to insert the separator, so check for non-NULL parent rather
+	   than non-empty path. */
+	if (node->parent != NULL) {
 		str_append_c(ctx->path,
 			     mailbox_list_get_hierarchy_sep(ctx->ctx.list));
 	}

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -19,7 +19,8 @@ enum item_type {
 	ITEM_MAILBOX_ATTRIBUTE,
 	ITEM_MAIL_CHANGE,
 	ITEM_MAIL_REQUEST,
-	ITEM_MAIL
+	ITEM_MAIL,
+	ITEM_FINISH
 };
 
 struct item {
@@ -41,6 +42,10 @@ struct item {
 			unsigned int count;
 			char hierarchy_sep;
 		} mailbox_delete;
+		struct {
+			const char *error;
+			enum mail_error mail_error;
+		} finish;
 	} u;
 };
 
@@ -62,7 +67,7 @@ static pool_t dsync_ibc_pipe_get_pool(struct dsync_ibc_pipe *pipe)
 
 	pools = array_get_modifiable(&pipe->pools, &count);
 	if (count == 0)
-		return pool_alloconly_create("pipe item pool", 1024);
+		return pool_alloconly_create(MEMPOOL_GROWING"pipe item pool", 1024);
 
 	ret = pools[count-1];
 	array_delete(&pipe->pools, count-1, 1);
@@ -90,6 +95,7 @@ dsync_ibc_pipe_push_item(struct dsync_ibc_pipe *pipe, enum item_type type)
 	case ITEM_MAIL_CHANGE:
 	case ITEM_MAIL_REQUEST:
 	case ITEM_MAIL:
+	case ITEM_FINISH:
 		item->pool = dsync_ibc_pipe_get_pool(pipe);
 		break;
 	}
@@ -167,10 +173,13 @@ dsync_ibc_pipe_send_handshake(struct dsync_ibc *ibc,
 	item->u.set.sync_ns_prefixes =
 		p_strdup(item->pool, set->sync_ns_prefixes);
 	item->u.set.sync_box = p_strdup(item->pool, set->sync_box);
+	item->u.set.virtual_all_box = p_strdup(item->pool, set->virtual_all_box);
 	item->u.set.exclude_mailboxes = set->exclude_mailboxes == NULL ? NULL :
 		p_strarray_dup(item->pool, set->exclude_mailboxes);
 	memcpy(item->u.set.sync_box_guid, set->sync_box_guid,
 	       sizeof(item->u.set.sync_box_guid));
+	item->u.set.sync_since_timestamp = set->sync_since_timestamp;
+	item->u.set.sync_flags = p_strdup(item->pool, set->sync_flags);
 }
 
 static enum dsync_ibc_recv_ret
@@ -480,6 +489,34 @@ dsync_ibc_pipe_recv_mail(struct dsync_ibc *ibc, struct dsync_mail **mail_r)
 	return DSYNC_IBC_RECV_RET_OK;
 }
 
+static void
+dsync_ibc_pipe_send_finish(struct dsync_ibc *ibc, const char *error,
+			   enum mail_error mail_error)
+{
+	struct dsync_ibc_pipe *pipe = (struct dsync_ibc_pipe *)ibc;
+	struct item *item;
+
+	item = dsync_ibc_pipe_push_item(pipe->remote, ITEM_FINISH);
+	item->u.finish.error = p_strdup(item->pool, error);
+	item->u.finish.mail_error = mail_error;
+}
+
+static enum dsync_ibc_recv_ret
+dsync_ibc_pipe_recv_finish(struct dsync_ibc *ibc, const char **error_r,
+			   enum mail_error *mail_error_r)
+{
+	struct dsync_ibc_pipe *pipe = (struct dsync_ibc_pipe *)ibc;
+	struct item *item;
+
+	item = dsync_ibc_pipe_pop_item(pipe, ITEM_FINISH);
+	if (item == NULL)
+		return DSYNC_IBC_RECV_RET_TRYAGAIN;
+
+	*error_r = item->u.finish.error;
+	*mail_error_r = item->u.finish.mail_error;
+	return DSYNC_IBC_RECV_RET_OK;
+}
+
 static void pipe_close_mail_streams(struct dsync_ibc_pipe *pipe)
 {
 	struct item *item;
@@ -521,6 +558,8 @@ static const struct dsync_ibc_vfuncs dsync_ibc_pipe_vfuncs = {
 	dsync_ibc_pipe_recv_mail_request,
 	dsync_ibc_pipe_send_mail,
 	dsync_ibc_pipe_recv_mail,
+	dsync_ibc_pipe_send_finish,
+	dsync_ibc_pipe_recv_finish,
 	dsync_ibc_pipe_close_mail_streams,
 	dsync_ibc_pipe_is_send_queue_full,
 	dsync_ibc_pipe_has_pending_data

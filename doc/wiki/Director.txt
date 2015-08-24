@@ -259,4 +259,30 @@ For moving specific users to other servers (e.g. because there are too many
 move' command in v2.0.14+. This requires the ipc permissions to be configured
 correctly (see above).
 
-(This file was created from the wiki on 2013-11-24 04:42)
+Tags
+----
+
+(Requires v2.2.16+)
+
+With tags you can use a single director ring to serve multiple backend
+clusters. Each backend cluster is assigned a tag name, which can be anything
+you want. By default everything has an empty tag. A passdb lookup can return
+"director_tag" field containing the wanted tag name. If there aren't any
+backend servers with the wanted tag, it's treated the same as if there aren't
+any backend servers available (= wait for 30 secs for a backend and then return
+temporary failure).
+
+Tags can be added to configuration by adding @tag suffix to IPs/hosts. For
+example:
+
+---%<-------------------------------------------------------------------------
+director_mail_servers = 10.0.0.100-10.0.0.110@name1 10.0.0.120@name2
+---%<-------------------------------------------------------------------------
+
+"doveadm director add" can also add tags either with @tag suffix or with -t
+parameter. "doveadm director status user@domain" requires giving the user's
+correct tag with -t parameter or the results won't be correct (empty tag's
+results are shown). Tags can't currently be changed for an existing host
+without removing it first.
+
+(This file was created from the wiki on 2015-05-13 16:45)

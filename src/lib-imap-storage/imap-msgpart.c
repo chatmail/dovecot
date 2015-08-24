@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -333,6 +333,18 @@ enum mail_fetch_field imap_msgpart_get_fetch_data(struct imap_msgpart *msgpart)
 	return msgpart->wanted_fields;
 }
 
+void imap_msgpart_get_wanted_headers(struct imap_msgpart *msgpart,
+				     ARRAY_TYPE(const_string) *headers)
+{
+	unsigned int i;
+
+	if (msgpart->fetch_type != FETCH_HEADER_FIELDS)
+		return;
+
+	for (i = 0; msgpart->headers[i] != NULL; i++)
+		array_append(headers, &msgpart->headers[i], 1);
+}
+
 static int
 imap_msgpart_get_partial_header(struct mail *mail, struct istream *mail_input,
 				const struct imap_msgpart *msgpart,
@@ -365,7 +377,8 @@ imap_msgpart_get_partial_header(struct mail *mail, struct istream *mail_input,
 	if (message_get_header_size(input, &hdr_size, &has_nuls) < 0) {
 		errno = input->stream_errno;
 		mail_storage_set_critical(mail->box->storage,
-			"read(%s) failed: %m", i_stream_get_name(mail_input));
+			"read(%s) failed: %s", i_stream_get_name(mail_input),
+			i_stream_get_error(mail_input));
 		i_stream_unref(&input);
 		return -1;
 	}
@@ -400,7 +413,7 @@ imap_msgpart_crlf_seek(struct mail *mail, struct istream *input,
 		virtual_skip -= cache->virtual_pos;
 	}
 	if (message_skip_virtual(input, virtual_skip, &cr_skipped) < 0) {
-		errinput = i_stream_create_error(errno);
+		errinput = i_stream_create_error_str(errno, "%s", i_stream_get_error(input));
 		i_stream_set_name(errinput, i_stream_get_name(input));
 		i_stream_unref(&input);
 		return errinput;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -66,7 +66,6 @@ static struct mailbox_list *imapc_list_alloc(void)
 static int imapc_list_init(struct mailbox_list *_list, const char **error_r)
 {
 	struct imapc_mailbox_list *list = (struct imapc_mailbox_list *)_list;
-	char sep;
 
 	list->set = mail_user_set_get_driver_settings(_list->ns->user->set_info,
 						      _list->ns->user->set,
@@ -81,17 +80,6 @@ static int imapc_list_init(struct mailbox_list *_list, const char **error_r)
 	imapc_storage_client_register_untagged(list->client, "LSUB",
 					       imapc_untagged_lsub);
 	imapc_list_send_hierarcy_sep_lookup(list);
-	if ((_list->ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
-		/* we're using imapc for the INBOX namespace. wait and make
-		   sure we can successfully access the IMAP server (so if the
-		   username is invalid we don't just keep failing every
-		   command). */
-		if (imapc_list_try_get_root_sep(list, &sep) < 0) {
-			imapc_storage_client_unref(&list->client);
-			*error_r = "Failed to access imapc backend";
-			return -1;
-		}
-	}
 	return 0;
 }
 
@@ -139,6 +127,8 @@ static void imapc_list_simple_callback(const struct imapc_command_reply *reply,
 	else if (reply->state == IMAPC_COMMAND_STATE_NO) {
 		imapc_list_copy_error_from_reply(ctx->client->_list,
 						 MAIL_ERROR_PARAMS, reply);
+		ctx->ret = -1;
+	} else if (ctx->client->auth_failed) {
 		ctx->ret = -1;
 	} else {
 		mailbox_list_set_critical(&ctx->client->_list->list,
@@ -270,6 +260,8 @@ static void imapc_storage_sep_callback(const struct imapc_command_reply *reply,
 		imapc_list_sep_verify(list);
 	else if (reply->state == IMAPC_COMMAND_STATE_NO)
 		imapc_list_copy_error_from_reply(list, MAIL_ERROR_PARAMS, reply);
+	else if (list->client->auth_failed)
+		;
 	else if (!list->list.ns->user->deinitializing) {
 		mailbox_list_set_critical(&list->list,
 			"imapc: Command failed: %s", reply->text_full);
@@ -293,6 +285,8 @@ static void imapc_list_send_hierarcy_sep_lookup(struct imapc_mailbox_list *list)
 int imapc_list_try_get_root_sep(struct imapc_mailbox_list *list, char *sep_r)
 {
 	if (list->root_sep == '\0') {
+		if (list->client->auth_failed)
+			return -1;
 		imapc_list_send_hierarcy_sep_lookup(list);
 		while (list->root_sep_pending)
 			imapc_client_run(list->client->client);
@@ -800,12 +794,16 @@ imapc_list_delete_mailbox(struct mailbox_list *_list, const char *name)
 	capa = imapc_client_get_capabilities(list->client->client);
 
 	cmd = imapc_list_simple_context_init(&ctx, list);
-	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_SELECT);
-	if ((capa & IMAPC_CAPABILITY_UNSELECT) != 0)
-		imapc_command_sendf(cmd, "UNSELECT");
-	else
-		imapc_command_sendf(cmd, "SELECT \"~~~\"");
-	imapc_simple_run(&ctx);
+	if (!imapc_command_connection_is_selected(cmd))
+		imapc_command_abort(&cmd);
+	else {
+		imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_SELECT);
+		if ((capa & IMAPC_CAPABILITY_UNSELECT) != 0)
+			imapc_command_sendf(cmd, "UNSELECT");
+		else
+			imapc_command_sendf(cmd, "SELECT \"~~~\"");
+		imapc_simple_run(&ctx);
+	}
 
 	cmd = imapc_list_simple_context_init(&ctx, list);
 	imapc_command_sendf(cmd, "DELETE %s", name);

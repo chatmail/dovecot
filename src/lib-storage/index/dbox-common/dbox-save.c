@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -101,6 +101,8 @@ void dbox_save_end(struct dbox_save_context *ctx)
 {
 	struct mail_save_data *mdata = &ctx->ctx.data;
 	struct ostream *dbox_output = ctx->dbox_output;
+
+	i_assert(mdata->output != NULL);
 
 	if (mdata->attach != NULL && !ctx->failed) {
 		if (index_attachment_save_finish(&ctx->ctx) < 0)

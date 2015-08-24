@@ -42,4 +42,4 @@ Downgrading can be done fully safely to v2.1.16.
    the 'dovecot.index.cache' files are corrupted and complain about "Invalid
    magic in hole header".
 
-(This file was created from the wiki on 2013-11-24 04:43)
+(This file was created from the wiki on 2015-05-13 16:45)

@@ -97,6 +97,14 @@ doesn't need to be locked for reading, but when writing dovecot-uidlist file
 must be locked. The file must not be directly modified, it can only be replaced
 with rename() call.
 
+For example, a file named
+
+---%<-------------------------------------------------------------------------
+1234567890.M20046P2137.mailserver,S=4542,W=4642:2,Sb
+---%<-------------------------------------------------------------------------
+
+would be flagged as '$NonJunk' with the above keywords.
+
 Maildir filename extensions
 ---------------------------
 
@@ -367,4 +375,4 @@ References
  * Maildir++ [http://www.inter7.com/courierimap/README.maildirquota.html]
  * Wikipedia [http://en.wikipedia.org/wiki/Maildir]
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

@@ -15,25 +15,27 @@ NFS is commonly used in one of these ways:
 Dovecot configuration
 ---------------------
 
-Single-server setup or <director> [Director.txt] setup:
+Single Dovecot server setup or <Dovecot director> [Director.txt] cluster setup:
 
 ---%<-------------------------------------------------------------------------
 mmap_disable = yes
-dotlock_use_excl = no # only needed with NFSv2, NFSv3+ supports O_EXCL and it's
-faster
+#dotlock_use_excl = no # only needed with NFSv2, NFSv3+ supports O_EXCL and
+it's faster
 mail_fsync = always
 mail_nfs_storage = no
 mail_nfs_index = no
 ---%<-------------------------------------------------------------------------
 
 Multi-server setup that *tries* to flush NFS caches (increases NFS operations,
-and *isn't fully reliable*):
+and *isn't fully reliable*), try not to use this:
 
 ---%<-------------------------------------------------------------------------
 mmap_disable = yes
-dotlock_use_excl = no # only needed with NFSv2, NFSv3+ supports O_EXCL and it's
-faster
+#dotlock_use_excl = no # only needed with NFSv2, NFSv3+ supports O_EXCL and
+it's faster
 mail_fsync = always
+# These settings slow things down and don't fully work, use director proxy
+instead:
 mail_nfs_storage = yes
 mail_nfs_index = yes
 ---%<-------------------------------------------------------------------------
@@ -146,12 +148,14 @@ Misc notes
    in /var/run typically which is not in NFS
  * In an environment using Debian (2.6.18) clients with Isilon NFS cluster
    nodes - the following mount options were found to be the most
-   successful:'rsize=32768,wsize=32768,hard,fg,lock,nfsvers=3,tcp,retrans=0,actimeo=0
+   successful:'rsize=32768,wsize=32768,hard,fg,lock,nfsvers=3,tcp,retrans=0,nordirplus
     0 0'
-    * As explained above, actimeo=0 will make the performance bad. With v1.1
-      use mail_nfs_* settings instead.
  * To learn more about NFS caching and other issues, mostly from a programmer's
    point of view, see NFS Coding HOWTO
    [http://iki.fi/tss/nfs-coding-howto.html]
+ * Use such permissions for the unmounted mount point root directory that
+   Dovecot can't create files under it. Otherwise if the NFS server isn't
+   mounted for any reason and user access mails, a new empty user mail
+   directory is created, which breaks things.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

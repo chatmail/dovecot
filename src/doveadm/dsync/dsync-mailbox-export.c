@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -54,10 +54,14 @@ struct dsync_mailbox_exporter {
 	struct dsync_mail dsync_mail;
 
 	const char *error;
+	enum mail_error mail_error;
+
 	unsigned int body_search_initialized:1;
 	unsigned int auto_export_mails:1;
 	unsigned int mails_have_guids:1;
+	unsigned int minimal_dmail_fill:1;
 	unsigned int return_all_mails:1;
+	unsigned int export_received_timestamps:1;
 };
 
 static int dsync_mail_error(struct dsync_mailbox_exporter *exporter,
@@ -70,6 +74,7 @@ static int dsync_mail_error(struct dsync_mailbox_exporter *exporter,
 	if (error == MAIL_ERROR_EXPUNGED)
 		return 0;
 
+	exporter->mail_error = error;
 	exporter->error = p_strdup_printf(exporter->pool,
 		"Can't lookup %s for UID=%u: %s",
 		field, mail->uid, errstr);
@@ -161,6 +166,7 @@ exporter_get_guids(struct dsync_mailbox_exporter *exporter,
 			return dsync_mail_error(exporter, mail, "hdr-stream");
 		return 1;
 	} else if (**guid_r == '\0') {
+		exporter->mail_error = MAIL_ERROR_TEMP;
 		exporter->error = "Backend doesn't support GUIDs, "
 			"sync with header hashes instead";
 		return -1;
@@ -270,21 +276,36 @@ search_add_save(struct dsync_mailbox_exporter *exporter, struct mail *mail)
 {
 	struct dsync_mail_change *change;
 	const char *guid, *hdr_hash;
+	enum mail_fetch_field wanted_fields = MAIL_FETCH_GUID;
+	time_t received_timestamp = 0;
 	int ret;
 
 	/* update wanted fields in case we didn't already set them for the
 	   search */
-	mail_add_temp_wanted_fields(mail, MAIL_FETCH_GUID,
+	if (exporter->export_received_timestamps)
+		wanted_fields |= MAIL_FETCH_RECEIVED_DATE;
+	mail_add_temp_wanted_fields(mail, wanted_fields,
 				    exporter->wanted_headers);
 
 	/* If message is already expunged here, just skip it */
 	if ((ret = exporter_get_guids(exporter, mail, &guid, &hdr_hash)) <= 0)
 		return ret;
 
+	if (exporter->export_received_timestamps) {
+		if (mail_get_received_date(mail, &received_timestamp) < 0)
+			return dsync_mail_error(exporter, mail, "received-time");
+		if (received_timestamp == 0) {
+			/* don't allow timestamps to be zero. we want to have
+			   asserts verify that the timestamp is set properly. */
+			received_timestamp = 1;
+		}
+	}
+
 	change = export_save_change_get(exporter, mail->uid);
 	change->guid = *guid == '\0' ? "" :
 		p_strdup(exporter->pool, guid);
 	change->hdr_hash = p_strdup(exporter->pool, hdr_hash);
+	change->received_timestamp = received_timestamp;
 	search_update_flag_changes(exporter, mail, change);
 
 	export_add_mail_instance(exporter, change, mail->seq);
@@ -336,7 +357,7 @@ dsync_mailbox_export_search(struct dsync_mailbox_exporter *exporter)
 	struct mail *mail;
 	enum mail_fetch_field wanted_fields = 0;
 	struct mailbox_header_lookup_ctx *wanted_headers = NULL;
-	int ret;
+	int ret = 0;
 
 	search_args = mail_search_build_init();
 	sarg = mail_search_build_add(search_args, SEARCH_UIDSET);
@@ -362,7 +383,8 @@ dsync_mailbox_export_search(struct dsync_mailbox_exporter *exporter)
 		wanted_headers = exporter->wanted_headers;
 	}
 
-	exporter->trans = mailbox_transaction_begin(exporter->box, 0);
+	exporter->trans = mailbox_transaction_begin(exporter->box,
+						MAILBOX_TRANSACTION_FLAG_SYNC);
 	search_ctx = mailbox_search_init(exporter->trans, search_args, NULL,
 					 wanted_fields, wanted_headers);
 	mail_search_args_unref(&search_args);
@@ -377,6 +399,7 @@ dsync_mailbox_export_search(struct dsync_mailbox_exporter *exporter)
 		if (ret < 0)
 			break;
 	}
+	i_assert(ret >= 0 || exporter->error != NULL);
 
 	dsync_mailbox_export_drop_expunged_flag_changes(exporter);
 
@@ -384,7 +407,8 @@ dsync_mailbox_export_search(struct dsync_mailbox_exporter *exporter)
 	    exporter->error == NULL) {
 		exporter->error = p_strdup_printf(exporter->pool,
 			"Mail search failed: %s",
-			mailbox_get_last_error(exporter->box, NULL));
+			mailbox_get_last_error(exporter->box,
+					       &exporter->mail_error));
 	}
 }
 
@@ -474,6 +498,10 @@ dsync_mailbox_export_init(struct mailbox *box,
 		(flags & DSYNC_MAILBOX_EXPORTER_FLAG_AUTO_EXPORT_MAILS) != 0;
 	exporter->mails_have_guids =
 		(flags & DSYNC_MAILBOX_EXPORTER_FLAG_MAILS_HAVE_GUIDS) != 0;
+	exporter->minimal_dmail_fill =
+		(flags & DSYNC_MAILBOX_EXPORTER_FLAG_MINIMAL_DMAIL_FILL) != 0;
+	exporter->export_received_timestamps =
+		(flags & DSYNC_MAILBOX_EXPORTER_FLAG_TIMESTAMPS) != 0;
 	p_array_init(&exporter->requested_uids, pool, 16);
 	p_array_init(&exporter->search_uids, pool, 16);
 	hash_table_create(&exporter->export_guids, pool, 0, str_hash, strcmp);
@@ -511,7 +539,8 @@ dsync_mailbox_export_iter_next_nonexistent_attr(struct dsync_mailbox_exporter *e
 						 attr->key, &value) < 0) {
 			exporter->error = p_strdup_printf(exporter->pool,
 				"Mailbox attribute %s lookup failed: %s", attr->key,
-				mailbox_get_last_error(exporter->box, NULL));
+				mailbox_get_last_error(exporter->box,
+						       &exporter->mail_error));
 			break;
 		}
 		if ((value.flags & MAIL_ATTRIBUTE_VALUE_FLAG_READONLY) != 0) {
@@ -563,7 +592,8 @@ dsync_mailbox_export_iter_next_attr(struct dsync_mailbox_exporter *exporter)
 						 &value) < 0) {
 			exporter->error = p_strdup_printf(exporter->pool,
 				"Mailbox attribute %s lookup failed: %s", key,
-				mailbox_get_last_error(exporter->box, NULL));
+				mailbox_get_last_error(exporter->box,
+						       &exporter->mail_error));
 			return -1;
 		}
 		if ((value.flags & MAIL_ATTRIBUTE_VALUE_FLAG_READONLY) != 0) {
@@ -601,7 +631,8 @@ dsync_mailbox_export_iter_next_attr(struct dsync_mailbox_exporter *exporter)
 	if (mailbox_attribute_iter_deinit(&exporter->attr_iter) < 0) {
 		exporter->error = p_strdup_printf(exporter->pool,
 			"Mailbox attribute iteration failed: %s",
-			mailbox_get_last_error(exporter->box, NULL));
+			mailbox_get_last_error(exporter->box,
+					       &exporter->mail_error));
 		return -1;
 	}
 	if (exporter->attr_type == MAIL_ATTRIBUTE_TYPE_PRIVATE) {
@@ -657,6 +688,7 @@ dsync_mailbox_export_body_search_init(struct dsync_mailbox_exporter *exporter)
 	const struct seq_range *uids;
 	char *guid;
 	const char *const_guid;
+	enum mail_fetch_field wanted_fields;
 	struct dsync_mail_guid_instances *instances;
 	const struct seq_range *range;
 	unsigned int i, count;
@@ -714,16 +746,16 @@ dsync_mailbox_export_body_search_init(struct dsync_mailbox_exporter *exporter)
 	array_append_array(&exporter->search_uids, &exporter->requested_uids);
 	array_clear(&exporter->requested_uids);
 
+	wanted_fields = MAIL_FETCH_GUID | MAIL_FETCH_SAVE_DATE;
+	if (!exporter->minimal_dmail_fill) {
+		wanted_fields |= MAIL_FETCH_RECEIVED_DATE |
+			MAIL_FETCH_UIDL_BACKEND | MAIL_FETCH_POP3_ORDER |
+			MAIL_FETCH_STREAM_HEADER | MAIL_FETCH_STREAM_BODY;
+	}
 	exporter->search_count += seq_range_count(&sarg->value.seqset);
 	exporter->search_ctx =
 		mailbox_search_init(exporter->trans, search_args, NULL,
-				    MAIL_FETCH_GUID |
-				    MAIL_FETCH_UIDL_BACKEND |
-				    MAIL_FETCH_POP3_ORDER |
-				    MAIL_FETCH_RECEIVED_DATE |
-				    MAIL_FETCH_SAVE_DATE |
-				    MAIL_FETCH_STREAM_HEADER |
-				    MAIL_FETCH_STREAM_BODY, NULL);
+				    wanted_fields, NULL);
 	mail_search_args_unref(&search_args);
 	return array_count(&sarg->value.seqset) > 0 ? 1 : 0;
 }
@@ -738,7 +770,8 @@ dsync_mailbox_export_body_search_deinit(struct dsync_mailbox_exporter *exporter)
 	    exporter->error == NULL) {
 		exporter->error = p_strdup_printf(exporter->pool,
 			"Mail search failed: %s",
-			mailbox_get_last_error(exporter->box, NULL));
+			mailbox_get_last_error(exporter->box,
+					       &exporter->mail_error));
 	}
 }
 
@@ -748,7 +781,8 @@ static int dsync_mailbox_export_mail(struct dsync_mailbox_exporter *exporter,
 	struct dsync_mail_guid_instances *instances;
 	const char *error_field;
 
-	if (dsync_mail_fill(mail, &exporter->dsync_mail, &error_field) < 0)
+	if (dsync_mail_fill(mail, exporter->minimal_dmail_fill,
+			    &exporter->dsync_mail, &error_field) < 0)
 		return dsync_mail_error(exporter, mail, error_field);
 
 	instances = *exporter->dsync_mail.guid == '\0' ? NULL :
@@ -759,6 +793,7 @@ static int dsync_mailbox_export_mail(struct dsync_mailbox_exporter *exporter,
 	} else if (exporter->dsync_mail.uid != 0) {
 		/* mail requested by UID */
 	} else {
+		exporter->mail_error = MAIL_ERROR_TEMP;
 		exporter->error = p_strdup_printf(exporter->pool,
 			"GUID unexpectedly changed for UID=%u GUID=%s",
 			mail->uid, exporter->dsync_mail.guid);
@@ -791,6 +826,7 @@ void dsync_mailbox_export_want_mail(struct dsync_mailbox_exporter *exporter,
 
 	instances = hash_table_lookup(exporter->export_guids, request->guid);
 	if (instances == NULL) {
+		exporter->mail_error = MAIL_ERROR_TEMP;
 		exporter->error = p_strdup_printf(exporter->pool,
 			"Remote requested unexpected GUID %s", request->guid);
 		return;
@@ -853,7 +889,7 @@ dsync_mailbox_export_next_mail(struct dsync_mailbox_exporter *exporter)
 }
 
 int dsync_mailbox_export_deinit(struct dsync_mailbox_exporter **_exporter,
-				const char **error_r)
+				const char **errstr_r, enum mail_error *error_r)
 {
 	struct dsync_mailbox_exporter *exporter = *_exporter;
 
@@ -869,9 +905,12 @@ int dsync_mailbox_export_deinit(struct dsync_mailbox_exporter **_exporter,
 	hash_table_destroy(&exporter->export_guids);
 	hash_table_destroy(&exporter->changes);
 
-	*error_r = t_strdup(exporter->error);
+	i_assert((exporter->error != NULL) == (exporter->mail_error != 0));
+
+	*error_r = exporter->mail_error;
+	*errstr_r = t_strdup(exporter->error);
 	pool_unref(&exporter->pool);
-	return *error_r != NULL ? -1 : 0;
+	return *errstr_r != NULL ? -1 : 0;
 }
 
 const char *dsync_mailbox_export_get_proctitle(struct dsync_mailbox_exporter *exporter)

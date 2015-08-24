@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -89,6 +89,11 @@ static void user_directory_drop_expired(struct user_directory *dir)
 	while (dir->head != NULL &&
 	       !user_directory_user_has_connections(dir, dir->head))
 		user_free(dir, dir->head);
+}
+
+unsigned int user_directory_count(struct user_directory *dir)
+{
+	return hash_table_count(dir->hash);
 }
 
 struct user *user_directory_lookup(struct user_directory *dir,
@@ -328,7 +333,7 @@ struct user *user_directory_iter_next(struct user_directory_iter *iter)
 
 	user = iter->pos;
 	if (user == NULL)
-		return FALSE;
+		return NULL;
 
 	iter->pos = user->next;
 	return user;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -63,7 +63,8 @@ acl_backend_vfile_init(struct acl_backend *_backend, const char *data)
 			}
 		} else if (!S_ISDIR(st.st_mode)) {
 			_backend->global_file =
-				acl_global_file_init(backend->global_path, backend->cache_secs);
+				acl_global_file_init(backend->global_path, backend->cache_secs,
+						     _backend->debug);
 		}
 	}
 	if (_backend->debug) {

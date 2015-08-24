@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -37,21 +37,30 @@ static bool http_url_parse_authority(struct http_url_parser *url_parser)
 
 	if ((ret = uri_parse_authority(parser, &auth)) < 0)
 		return FALSE;
+	if (auth.host_literal == NULL || *auth.host_literal == '\0') {
+		/* RFC 7230, Section 2.7.1: http URI Scheme
+
+		   A sender MUST NOT generate an "http" URI with an empty host
+		   identifier.  A recipient that processes such a URI reference MUST
+		   reject it as invalid.
+		 */
+		parser->error = "HTTP URL does not allow empty host identifier";
+		return FALSE;
+	}
 	if (ret > 0) {
 		if (auth.enc_userinfo != NULL) {
 			const char *p;
 
 			if ((url_parser->flags & HTTP_URL_ALLOW_USERINFO_PART) == 0) {
-				/* http://tools.ietf.org/html/draft-ietf-httpbis-p1-messaging-20
+				/* RFC 7230, Section 2.7.1: http URI Scheme
 
-					 Section 2.8.1:
-
-					 {...} Senders MUST NOT include a userinfo subcomponent (and its "@"
-					 delimiter) when transmitting an "http" URI in a message. Recipients
-					 of HTTP messages that contain a URI reference SHOULD parse for the
-					 existence of userinfo and treat its presence as an error, likely
-					 indicating that the deprecated subcomponent is being used to
-					 obscure the authority for the sake of phishing attacks.
+				   A sender MUST NOT generate the userinfo subcomponent (and its "@"
+				   delimiter) when an "http" URI reference is generated within a
+				   message as a request target or header field value.  Before making
+				   use of an "http" URI reference received from an untrusted source,
+				   a recipient SHOULD parse for userinfo and treat its presence as
+				   an error; it is likely being used to obscure the authority for
+				   the sake of phishing attacks.
 				 */
 				parser->error = "HTTP URL does not allow `userinfo@' part";
 				return FALSE;
@@ -104,14 +113,12 @@ static bool http_url_do_parse(struct http_url_parser *url_parser)
 	const char *part;
 	int ret;
 
-	/*
-	   http://tools.ietf.org/html/draft-ietf-httpbis-p1-messaging-23
-	     Appendix C:
+	/* RFC 7230, Appendix B:
 
 	   http-URI       = "http://" authority path-abempty [ "?" query ]
-	                      [ "#" fragment ]
+	                    [ "#" fragment ]
 	   https-URI      = "https://" authority path-abempty [ "?" query ]
-	                      [ "#" fragment ]
+	                    [ "#" fragment ]
 	   partial-URI    = relative-part [ "?" query ]
 
 	   request-target = origin-form / absolute-form / authority-form /
@@ -121,12 +128,11 @@ static bool http_url_do_parse(struct http_url_parser *url_parser)
 	   absolute-form  = absolute-URI
 	   authority-form = authority
 	   asterisk-form  = "*"
-	                    ; Not parsed here
+	                  ; Not parsed here
 
 	   absolute-path  = 1*( "/" segment )
 
-	   http://tools.ietf.org/html/rfc3986
-	     Appendix A: (implemented in uri-util.h)
+	   RFC 3986, Appendix A: (implemented in uri-util.h)
 
 	   absolute-URI   = scheme ":" hier-part [ "?" query ]
 
@@ -319,10 +325,8 @@ static bool http_url_do_parse(struct http_url_parser *url_parser)
 		url->enc_fragment = p_strdup(parser->pool, base->enc_fragment);
 	}
 
-	if (parser->cur != parser->end) {
-		parser->error = "HTTP URL contains invalid character";
-		return FALSE;
-	}
+	/* must be at end of URL now */
+	i_assert(parser->cur == parser->end);
 
 	if (have_scheme)
 		url_parser->req_format = HTTP_REQUEST_TARGET_FORMAT_ABSOLUTE;

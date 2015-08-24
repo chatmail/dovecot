@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -129,7 +129,7 @@ config_dump_human_init(const char *const *modules, enum config_dump_scope scope,
 	enum config_dump_flags flags;
 	pool_t pool;
 
-	pool = pool_alloconly_create("config human strings", 1024*32);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"config human strings", 1024*32);
 	ctx = p_new(pool, struct config_dump_human_context, 1);
 	ctx->pool = pool;
 	ctx->list_prefix = str_new(ctx->pool, 128);
@@ -340,7 +340,7 @@ config_dump_filter_begin(string_t *str,
 	unsigned int indent = 0;
 
 	if (filter->local_bits > 0) {
-		str_printfa(str, "local %s", filter->local_host);
+		str_printfa(str, "local %s", net_ip2addr(&filter->local_net));
 
 		if (IPADDR_IS_V4(&filter->local_net)) {
 			if (filter->local_bits != 32)
@@ -361,7 +361,7 @@ config_dump_filter_begin(string_t *str,
 
 	if (filter->remote_bits > 0) {
 		str_append_n(str, indent_str, indent*2);
-		str_printfa(str, "remote %s", filter->remote_host);
+		str_printfa(str, "remote %s", net_ip2addr(&filter->remote_net));
 
 		if (IPADDR_IS_V4(&filter->remote_net)) {
 			if (filter->remote_bits != 32)
@@ -707,6 +707,7 @@ int main(int argc, char *argv[])
 	bool config_path_specified, expand_vars = FALSE, hide_key = FALSE;
 	bool parse_full_config = FALSE, simple_output = FALSE;
 	bool dump_defaults = FALSE, host_verify = FALSE;
+	bool print_plugin_banner = FALSE;
 
 	if (getenv("USE_SYSEXITS") != NULL) {
 		/* we're coming from (e.g.) LDA */
@@ -787,10 +788,22 @@ int main(int argc, char *argv[])
 		/* print the config file path before parsing it, so in case
 		   of errors it's still shown */
 		printf("# "DOVECOT_VERSION_FULL": %s\n", config_path);
+		print_plugin_banner = TRUE;
 		fflush(stdout);
 	}
 	master_service_init_finish(master_service);
 	config_parse_load_modules();
+
+	if (print_plugin_banner) {
+		struct module *m;
+
+		for (m = modules; m != NULL; m = m->next) {
+			const char **str = module_get_symbol_quiet(m,
+				t_strdup_printf("%s_doveconf_banner", m->name));
+			if (str != NULL)
+				printf("# %s\n", *str);
+		}
+	}
 
 	if ((ret = config_parse_file(dump_defaults ? NULL : config_path,
 				     expand_vars,

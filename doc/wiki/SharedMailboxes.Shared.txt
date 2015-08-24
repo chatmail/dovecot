@@ -21,7 +21,13 @@ namespace {
   type = shared
   separator = /
   prefix = shared/%%u/
-  location = maildir:%%h/Maildir:INDEX=~/Maildir/shared/%%u
+  # a) Per-user seen flags. Maildir indexes are shared. (INDEXPVT requires
+v2.2+)
+  location = maildir:%%h/Maildir:INDEXPVT=~/Maildir/shared/%%u
+  # b) Per-user seen flags. Maildir indexes are not shared. If users have
+direct filesystem level access to their mails, this is a safer option:
+  #location =
+maildir:%%h/Maildir:INDEX=~/Maildir/shared/%%u:INDEXPVT=~/Maildir/shared/%%u
   subscriptions = no
   list = children
 }
@@ -51,7 +57,7 @@ socket. See <LDA.txt> for how to configure the socket. If the users' mailboxes
 can be found using a template, it's faster not to use the %%h. For example:
 
 ---%<-------------------------------------------------------------------------
-  location = maildir:/var/mail/%%d/%%n/Maildir:INDEX=~/Maildir/shared/%%u
+  location = maildir:/var/mail/%%d/%%n/Maildir:INDEXPVT=~/Maildir/shared/%%u
 ---%<-------------------------------------------------------------------------
 
 % vs %%
@@ -70,26 +76,23 @@ users' variables. For example if your name is "myself" and "someone1" and
 Note that in e.g. mail_location setting you might need both. For example in:
 
 ---%<-------------------------------------------------------------------------
-mail_location = maildir:%%h/Maildir:INDEX=%h/Maildir/shared/%%u
+mail_location = maildir:%%h/Maildir:INDEXPVT=%h/Maildir/shared/%%u
 ---%<-------------------------------------------------------------------------
 
 What it means is:
 
  * %%h/Maildir points to the other user's Maildir, e.g. "/home/someone1".
- * :INDEX=%h/Maildir/shared/%%u points to a per-user directory under your own
-   Maildir, e.g. "/home/myself/Maildir/someone1" or
-   "/home/myself/Maildir/someone2". This is necessary to keep a local copy of
-   the other users' index files.
+ * :INDEXPVT=%h/Maildir/shared/%%u points to a per-user directory under your
+   own Maildir, e.g. "/home/myself/Maildir/someone1" or
+   "/home/myself/Maildir/someone2". This is necessary for storing per-user seen
+   flags.
 
 dbox
 ----
 
 With dbox the index files are a very important part of the mailboxes. You must
 not try to :INDEX= to have copies of index files. This will only result in
-mailbox corruption. This also means that with dbox there's currently no way to
-have private \Seen flags.
-
-v2.2+ has support for private index files that makes this possible.
+mailbox corruption. (INDEXPVT can be used though.)
 
 Filesystem permissions
 ----------------------
@@ -299,4 +302,4 @@ Troubleshooting
  * 'doveadm acl debug -u user@domain shared/user/box' can be helpful in
    figuring out why a mailbox can't be accessed.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

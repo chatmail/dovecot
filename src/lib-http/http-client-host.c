@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -82,11 +82,12 @@ http_client_host_dns_callback(const struct dns_lookup_result *result,
 	/* make connections to requested ports */
 	array_foreach_modifiable(&host->queues, queue_idx) {
 		struct http_client_queue *queue = *queue_idx;
-		unsigned int count = array_count(&queue->request_queue);
+		unsigned int reqs_pending = 
+			http_client_queue_requests_pending(queue, NULL);
 		queue->ips_connect_idx = queue->ips_connect_start_idx = 0;
-		if (count > 0)
+		if (reqs_pending > 0)
 			http_client_queue_connection_setup(queue);
-		requests += count;
+		requests += reqs_pending;
 	}
 
 	if (requests == 0 && host->client->ioloop != NULL)
@@ -149,7 +150,6 @@ struct http_client_host *http_client_host_get
 		host->client = client;
 		host->name = i_strdup(hostname);
 		i_array_init(&host->queues, 4);
-		i_array_init(&host->delayed_failing_requests, 1);
 
 		hostname = host->name;
 		hash_table_insert(client->hosts, hostname, host);
@@ -205,7 +205,6 @@ void http_client_host_free(struct http_client_host **_host)
 {
 	struct http_client_host *host = *_host;
 	struct http_client_queue *const *queue_idx;
-	struct http_client_request *req, *const *req_idx;
 	const char *hostname = host->name;
 
 	http_client_host_debug(host, "Host destroy");
@@ -222,62 +221,9 @@ void http_client_host_free(struct http_client_host **_host)
 	}
 	array_free(&host->queues);
 
-	while (array_count(&host->delayed_failing_requests) > 0) {
-		req_idx = array_idx(&host->delayed_failing_requests, 0);
-		req = *req_idx;
-
-		i_assert(req->refcount == 1);
-		http_client_request_error_delayed(&req);
-	}
-	array_free(&host->delayed_failing_requests);
-
-	if (host->to_failing_requests != NULL)
-		timeout_remove(&host->to_failing_requests);
-
 	i_free(host->ips);
 	i_free(host->name);
 	i_free(host);
-}
-
-static void
-http_client_host_handle_request_errors(struct http_client_host *host)
-{		
-	timeout_remove(&host->to_failing_requests);
-
-	while (array_count(&host->delayed_failing_requests) > 0) {
-		struct http_client_request *const *req_idx =
-			array_idx(&host->delayed_failing_requests, 0);
-		struct http_client_request *req = *req_idx;
-
-		i_assert(req->refcount == 1);
-		http_client_request_error_delayed(&req);
-	}
-	array_clear(&host->delayed_failing_requests);
-}
-
-void http_client_host_delay_request_error(struct http_client_host *host,
-	struct http_client_request *req)
-{
-	if (host->to_failing_requests == NULL) {
-		host->to_failing_requests = timeout_add_short(0,
-			http_client_host_handle_request_errors, host);
-	}
-	array_append(&host->delayed_failing_requests, &req, 1);
-}
-
-void http_client_host_remove_request_error(struct http_client_host *host,
-	struct http_client_request *req)
-{
-	struct http_client_request *const *reqs;
-	unsigned int i, count;
-
-	reqs = array_get(&host->delayed_failing_requests, &count);
-	for (i = 0; i < count; i++) {
-		if (reqs[i] == req) {
-			array_delete(&host->delayed_failing_requests, i, 1);
-			return;
-		}
-	}
 }
 
 void http_client_host_switch_ioloop(struct http_client_host *host)
@@ -288,8 +234,4 @@ void http_client_host_switch_ioloop(struct http_client_host *host)
 		dns_lookup_switch_ioloop(host->dns_lookup);
 	array_foreach(&host->queues, queue_idx)
 		http_client_queue_switch_ioloop(*queue_idx);
-	if (host->to_failing_requests != NULL) {
-		host->to_failing_requests =
-			io_loop_move_timeout(&host->to_failing_requests);
-	}
 }

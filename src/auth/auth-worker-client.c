@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "base64.h"
@@ -241,8 +241,13 @@ lookup_credentials_callback(enum passdb_result result,
 	else {
 		str_append(str, "OK\t");
 		str_append_tabescaped(str, request->user);
-		str_printfa(str, "\t{%s.b64}", request->credentials_scheme);
-		base64_encode(credentials, size, str);
+		str_append_c(str, '\t');
+		if (request->credentials_scheme[0] != '\0') {
+			str_printfa(str, "{%s.b64}", request->credentials_scheme);
+			base64_encode(credentials, size, str);
+		} else {
+			i_assert(size == 0);
+		}
 		reply_append_extra_fields(str, request);
 	}
 	str_append_c(str, '\n');

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hash.h"
@@ -350,6 +350,7 @@ dsync_log_set(struct dsync_transaction_log_scan *ctx,
 {
 	uint32_t log_seq, end_seq;
 	uoff_t log_offset, end_offset;
+	const char *reason;
 	bool reset;
 	int ret;
 
@@ -371,7 +372,7 @@ dsync_log_set(struct dsync_transaction_log_scan *ctx,
 		ret = mail_transaction_log_view_set(log_view,
 						    log_seq, log_offset,
 						    end_seq, end_offset,
-						    &reset);
+						    &reset, &reason);
 		if (ret != 0)
 			return ret;
 	}
@@ -390,13 +391,14 @@ dsync_log_set(struct dsync_transaction_log_scan *ctx,
 	}
 	ret = mail_transaction_log_view_set(log_view,
 					    log_seq, log_offset,
-					    end_seq, end_offset, &reset);
+					    end_seq, end_offset,
+					    &reset, &reason);
 	if (ret == 0) {
 		/* we shouldn't get here. _view_set_all() already
 		   reserved all the log files, the _view_set() only
 		   removed unwanted ones. */
-		i_error("%s: Couldn't set transaction log view (seq %u..%u)",
-			view->index->filepath, log_seq, end_seq);
+		i_error("%s: Couldn't set transaction log view (seq %u..%u): %s",
+			view->index->filepath, log_seq, end_seq, reason);
 		ret = -1;
 	}
 	if (ret < 0)
@@ -506,11 +508,14 @@ int dsync_transaction_log_scan_init(struct mail_index_view *view,
 				    struct mail_index_view *pvt_view,
 				    uint32_t highest_wanted_uid,
 				    uint64_t modseq, uint64_t pvt_modseq,
-				    struct dsync_transaction_log_scan **scan_r)
+				    struct dsync_transaction_log_scan **scan_r,
+				    bool *pvt_too_old_r)
 {
 	struct dsync_transaction_log_scan *ctx;
 	pool_t pool;
 	int ret, ret2;
+
+	*pvt_too_old_r = FALSE;
 
 	pool = pool_alloconly_create(MEMPOOL_GROWING"dsync transaction log scan",
 				     10240);
@@ -528,8 +533,10 @@ int dsync_transaction_log_scan_init(struct mail_index_view *view,
 	if (pvt_view != NULL) {
 		if ((ret2 = dsync_log_scan(ctx, pvt_view, pvt_modseq, TRUE)) < 0)
 			return -1;
-		if (ret2 == 0)
+		if (ret2 == 0) {
 			ret = 0;
+			*pvt_too_old_r = TRUE;
+		}
 	}
 
 	*scan_r = ctx;
@@ -561,6 +568,7 @@ dsync_transaction_log_scan_find_new_expunge(struct dsync_transaction_log_scan *s
 	struct mail_transaction_log_view *log_view;
 	const struct mail_transaction_header *hdr;
 	const void *data;
+	const char *reason;
 	bool reset, found = FALSE;
 
 	i_assert(uid > 0);
@@ -573,7 +581,7 @@ dsync_transaction_log_scan_find_new_expunge(struct dsync_transaction_log_scan *s
 					  scan->last_log_seq,
 					  scan->last_log_offset,
 					  (uint32_t)-1, (uoff_t)-1,
-					  &reset) > 0) {
+					  &reset, &reason) > 0) {
 		while (!found &&
 		       mail_transaction_log_view_next(log_view, &hdr, &data) > 0) {
 			switch (hdr->type & MAIL_TRANSACTION_TYPE_MASK) {

@@ -51,6 +51,8 @@ struct virtual_storage {
 	/* List of mailboxes while a virtual mailbox is being opened.
 	   Used to track loops. */
 	ARRAY_TYPE(const_string) open_stack;
+
+	unsigned int max_open_mailboxes;
 };
 
 struct virtual_backend_uidmap {
@@ -60,6 +62,9 @@ struct virtual_backend_uidmap {
 };
 
 struct virtual_backend_box {
+	/* linked list for virtual_mailbox->open_backend_boxes_{head,tail} */
+	struct virtual_backend_box *prev_open, *next_open;
+
 	/* Initially zero, updated by syncing */
 	uint32_t mailbox_id;
 	const char *name;
@@ -138,6 +143,13 @@ struct virtual_mailbox {
 	/* backend mailbox where to save messages when saving to this mailbox */
 	struct virtual_backend_box *save_bbox;
 
+	/* linked list of open backend mailboxes. head will contain the oldest
+	   accessed mailbox, tail will contain the newest. */
+	struct virtual_backend_box *open_backend_boxes_head;
+	struct virtual_backend_box *open_backend_boxes_tail;
+	/* number of backend mailboxes that are open currently. */
+	unsigned int backends_open_count;
+
 	ARRAY_TYPE(mailbox_virtual_patterns) list_include_patterns;
 	ARRAY_TYPE(mailbox_virtual_patterns) list_exclude_patterns;
 
@@ -160,10 +172,24 @@ extern struct mail_vfuncs virtual_mail_vfuncs;
 int virtual_config_read(struct virtual_mailbox *mbox);
 void virtual_config_free(struct virtual_mailbox *mbox);
 
+int virtual_mailbox_ext_header_read(struct virtual_mailbox *mbox,
+				    struct mail_index_view *view,
+				    bool *broken_r);
+
 struct virtual_backend_box *
 virtual_backend_box_lookup_name(struct virtual_mailbox *mbox, const char *name);
 struct virtual_backend_box *
 virtual_backend_box_lookup(struct virtual_mailbox *mbox, uint32_t mailbox_id);
+
+int virtual_backend_box_open(struct virtual_mailbox *mbox,
+			     struct virtual_backend_box *bbox);
+void virtual_backend_box_close(struct virtual_mailbox *mbox,
+			       struct virtual_backend_box *bbox);
+void virtual_backend_box_accessed(struct virtual_mailbox *mbox,
+				  struct virtual_backend_box *bbox);
+void virtual_backend_box_opened(struct virtual_mailbox *mbox,
+				struct virtual_backend_box *bbox);
+void virtual_backend_box_sync_mail_unset(struct virtual_backend_box *bbox);
 
 struct mail_search_context *
 virtual_search_init(struct mailbox_transaction_context *t,

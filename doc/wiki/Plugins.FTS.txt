@@ -7,6 +7,8 @@ The following FTS indexers (in preferred order) are supported:
    [http://lucene.apache.org/solr/].
  * <Lucene> [Plugins.FTS.Lucene.txt] uses Lucene's C++ library. (Requires
    v2.1+)
+ * <NewSquat> [Plugins.FTS.NewSquat.txt] is Dovecot's new search index, under
+   development. (Requires v2.2+)
  * <Squat> [Plugins.FTS.Squat.txt] is Dovecot's own search index. (Obsolete in
    v2.1+)
 
@@ -33,6 +35,19 @@ The indexing can be done manually (e.g. cronjob) or by a LDA script by running:
 Of course the INBOX needs to be replaced with whatever mailbox needs to be
 indexed.
 
+Indexing Attachments (v2.1+)
+----------------------------
+
+Attachments can be indexed either via a script that translates the attachment
+to UTF-8 plaintext or Apache Tika server.
+
+ * 'fts_decoder = <service>': Decode attachments to plaintext using this
+   service and index the resulting plaintext. See the 'decode2text.sh' script
+   included in Dovecot for how to use this. (v2.1+)
+ * 'fts_tika = http://tikahost:9998/tika/': This URL needs to be running Apache
+   Tika server (e.g. started with 'java -jar
+   tika-server/target/tika-server-1.5.jar') (v2.2.13+)
+
 Rescan (v2.1+)
 --------------
 
@@ -44,8 +59,10 @@ few mails), you'll need to do a rescan:
 doveadm fts rescan -u user@domain
 ---%<-------------------------------------------------------------------------
 
-Settings
---------
+Other Settings
+--------------
+
+All the FTS settings go inside 'plugin {} ' section of 90-plugin.conf.
 
  * 'fts_autoindex=yes': Index new messages immediately after they've been
    saved/copied. (v2.2.9+)
@@ -57,8 +74,5 @@ Settings
    setting adds a maximum timeout to this wait. If the timeout is reached, the
    SEARCH fails with:'NO [INUSE] Timeout while waiting for indexing to finish'
    (v2.1+)
- * 'fts_decoder': Decode attachments to plaintext using this service and index
-   the resulting plaintext. See the 'decode2text.sh' script included in Dovecot
-   for how to use this. (v2.1+)
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

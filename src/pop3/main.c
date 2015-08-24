@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "pop3-common.h"
 #include "ioloop.h"
@@ -107,7 +107,9 @@ client_create_from_input(const struct mail_storage_service_input *input,
 
 	if (mail_storage_service_lookup_next(storage_service, input,
 					     &user, &mail_user, error_r) <= 0) {
-		(void)write(fd_out, lookup_error_str, strlen(lookup_error_str));
+		if (write(fd_out, lookup_error_str, strlen(lookup_error_str)) < 0) {
+			/* ignored */
+		}
 		return -1;
 	}
 	restrict_access_allow_coredumps(TRUE);
@@ -275,7 +277,7 @@ int main(int argc, char *argv[])
 
 	if (io_loop_is_running(current_ioloop))
 		master_service_run(master_service, client_connected);
-	clients_destroy_all();
+	clients_destroy_all(storage_service);
 
 	if (master_login != NULL)
 		master_login_deinit(&master_login);

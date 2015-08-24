@@ -1,0 +1,112 @@
+Dovecot Dictionaries
+====================
+
+Dovecot's lib-dict can be used to access simple key-value databases. This is
+used by for example <quota-dict> [Quota.Dict.txt], <passdb&userdb>
+[AuthDatabase.Dict.txt], <last-login plugin> [Plugins.LastLogin.txt], etc. The
+dictionaries can be accessed either directly by the mail processes or they can
+be accessed via <dict proxy> [Dict.txt] processes.
+
+Currently supported dict backends are:
+
+ * Flat files
+ * FS (lib-fs wrapper)
+ * Redis
+ * Proxy
+ * SQL
+
+Flat Files
+----------
+
+---%<-------------------------------------------------------------------------
+file:<path>
+---%<-------------------------------------------------------------------------
+
+The file will simply contain all the keys that are used. Not very efficient for
+large databases, but good for small ones such as a single user's quota.
+
+FS (v2.2.11+)
+-------------
+
+---%<-------------------------------------------------------------------------
+fs:<driver>:<driver args>
+---%<-------------------------------------------------------------------------
+
+This is a wrapper for lib-fs, which most importantly has the "posix" backend.
+So using:
+
+---%<-------------------------------------------------------------------------
+fs:posix:prefix=/var/lib/dovecot/dict
+---%<-------------------------------------------------------------------------
+
+Would create a separate file under /var/lib/dovecot/dict for each key.
+
+Redis
+-----
+
+---%<-------------------------------------------------------------------------
+redis:param=value:param2=value2:...
+---%<-------------------------------------------------------------------------
+
+Supported parameters are:
+
+ * host: Redis server host (default: 127.0.0.1)
+ * port: Redis server port (default: 6379)
+ * prefix: Prefix to add to all keys (default: empty)
+ * db: Database number (default: 0)
+ * expire_secs=<n>: Set expiration value to all the keys
+ * timeout_msecs: Abort lookups after specified number of milliseconds
+   (default: 30000)
+
+Proxy
+-----
+
+---%<-------------------------------------------------------------------------
+proxy:[<dict path>]:<destination dict>
+---%<-------------------------------------------------------------------------
+
+Proxying is used to perform all dictionary accessing via the dict processes.
+(The dict processes exist only if dict proxying is used.) This is especially
+useful with backends where their initialization is relatively expensive, such
+as SQL. The dict processes will then perform also connection pooling.
+
+If <dict path> is specified, it points to the socket where the dict server is
+answering. The default is to use $base_dir/dict. Usually there's no need to
+change this, but it may be useful for example if you wish to implement your own
+dict server accessing some proprietary database.
+
+The <destination dict> contains the actual dict settings that the dict process
+will use. For example:'proxy::mysql:/etc/dovecot/dovecot-sql-dict.conf'
+
+See <Dict.txt> for more information about the dict server.
+
+SQL
+---
+
+---%<-------------------------------------------------------------------------
+<sql driver>:<path to dict-sql config>
+---%<-------------------------------------------------------------------------
+
+The <sql driver> contains the SQL driver name, such as "mysql", "pgsql" or
+"sqlite".
+
+The dict-sql config file consists of SQL server configuration and mapping of
+keys to SQL tables/fields.
+
+SQL Connect String
+------------------
+
+---%<-------------------------------------------------------------------------
+connect = host=localhost dbname=mails user=sqluser password=sqlpass
+---%<-------------------------------------------------------------------------
+
+The connect setting is exactly the same as used for <SQL passdb/userdb>
+[AuthDatabase.SQL.txt]. See 'example-config/dovecot-sql.conf.ext' for detailed
+information.
+
+SQL Mapping
+-----------
+
+FIXME: Write this. For now see 'example-config/dovecot-dict-sql.conf.ext'
+
+(This file was created from the wiki on 2015-05-13 16:45)

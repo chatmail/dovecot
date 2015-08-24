@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -32,7 +32,7 @@ struct config_connection {
 	unsigned int handshaked:1;
 };
 
-struct config_connection *config_connections = NULL;
+static struct config_connection *config_connections = NULL;
 
 static const char *const *
 config_connection_next_line(struct config_connection *conn)

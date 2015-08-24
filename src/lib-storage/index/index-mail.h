@@ -23,6 +23,7 @@ enum index_cache_field {
 	MAIL_CACHE_GUID,
 	MAIL_CACHE_MESSAGE_PARTS,
 	MAIL_CACHE_BINARY_PARTS,
+	MAIL_CACHE_BODY_SNIPPET,
 
 	MAIL_INDEX_CACHE_FIELD_COUNT
 };
@@ -43,7 +44,9 @@ enum mail_cache_record_flag {
 	/* Mail header or body is known to contain NUL characters. */
 	MAIL_CACHE_FLAG_HAS_NULS		= 0x0004,
 	/* Mail header or body is known to not contain NUL characters. */
-	MAIL_CACHE_FLAG_HAS_NO_NULS		= 0x0008,
+	MAIL_CACHE_FLAG_HAS_NO_NULS		= 0x0020,
+	/* obsolete _HAS_NO_NULS flag, which was being set incorrectly */
+	MAIL_CACHE_FLAG_HAS_NO_NULS_BROKEN	= 0x0008,
 
 	/* BODY is IMAP_BODY_PLAIN_7BIT_ASCII and rest of BODYSTRUCTURE
 	   fields are NIL */
@@ -81,7 +84,7 @@ struct index_mail_data {
 	struct message_part *parts;
 	struct message_binary_part *bin_parts;
 	const char *envelope, *body, *bodystructure, *guid, *filename;
-	const char *from_envelope;
+	const char *from_envelope, *body_snippet;
 	struct message_part_envelope_data *envelope_data;
 
 	uint32_t seq;
@@ -112,6 +115,7 @@ struct index_mail_data {
 	unsigned int save_bodystructure_header:1;
 	unsigned int save_bodystructure_body:1;
 	unsigned int save_message_parts:1;
+	unsigned int save_body_snippet:1;
 	unsigned int stream_has_only_header:1;
 	unsigned int parsed_bodystructure:1;
 	unsigned int hdr_size_set:1;
@@ -124,6 +128,7 @@ struct index_mail_data {
 	unsigned int initialized_wrapper_stream:1;
 	unsigned int destroy_callback_set:1;
 	unsigned int prefetch_sent:1;
+	unsigned int header_parser_initialized:1;
 };
 
 struct index_mail {
@@ -168,6 +173,8 @@ bool index_mail_prefetch(struct mail *mail);
 void index_mail_add_temp_wanted_fields(struct mail *mail,
 				       enum mail_fetch_field fields,
 				       struct mailbox_header_lookup_ctx *headers);
+void index_mail_update_access_parts_pre(struct mail *mail);
+void index_mail_update_access_parts_post(struct mail *_mail);
 void index_mail_close(struct mail *mail);
 void index_mail_close_streams(struct index_mail *mail);
 void index_mail_free(struct mail *mail);
@@ -230,6 +237,9 @@ void index_mail_set_cache_corrupted(struct mail *mail,
 				    enum mail_fetch_field field);
 int index_mail_opened(struct mail *mail, struct istream **stream);
 int index_mail_stream_check_failure(struct index_mail *mail);
+void index_mail_stream_log_failure_for(struct index_mail *mail,
+				       struct istream *input);
+void index_mail_refresh_expunged(struct mail *mail);
 struct index_mail *index_mail_get_index_mail(struct mail *mail);
 
 bool index_mail_get_cached_uoff_t(struct index_mail *mail,

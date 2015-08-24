@@ -1,4 +1,4 @@
-/* Copyright (c) 1999-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 1999-2015 Dovecot authors, see the included COPYING file */
 
 #define _GNU_SOURCE /* For Linux's struct ucred */
 #include "lib.h"
@@ -155,15 +155,17 @@ static inline unsigned int sin_get_port(union sockaddr_union *so)
 #ifdef __FreeBSD__
 static int
 net_connect_ip_full_freebsd(const struct ip_addr *ip, unsigned int port,
-			    const struct ip_addr *my_ip, bool blocking);
+			    const struct ip_addr *my_ip, int sock_type,
+			    bool blocking);
 
 static int net_connect_ip_full(const struct ip_addr *ip, unsigned int port,
-			       const struct ip_addr *my_ip, bool blocking)
+			       const struct ip_addr *my_ip, int sock_type,
+			       bool blocking)
 {
 	int fd, try;
 
 	for (try = 0;;) {
-		fd = net_connect_ip_full_freebsd(ip, port, my_ip, blocking);
+		fd = net_connect_ip_full_freebsd(ip, port, my_ip, sock_type, blocking);
 		if (fd != -1 || ++try == 5 ||
 		    (errno != EADDRINUSE && errno != EACCES))
 			break;
@@ -182,7 +184,7 @@ static int net_connect_ip_full(const struct ip_addr *ip, unsigned int port,
 #endif
 
 static int net_connect_ip_full(const struct ip_addr *ip, unsigned int port,
-			       const struct ip_addr *my_ip, bool blocking)
+			       const struct ip_addr *my_ip, int sock_type, bool blocking)
 {
 	union sockaddr_union so;
 	int fd, ret, opt = 1;
@@ -195,7 +197,7 @@ static int net_connect_ip_full(const struct ip_addr *ip, unsigned int port,
 	/* create the socket */
 	memset(&so, 0, sizeof(so));
         so.sin.sin_family = ip->family;
-	fd = socket(ip->family, SOCK_STREAM, 0);
+	fd = socket(ip->family, sock_type, 0);
 
 	if (fd == -1) {
 		i_error("socket() failed: %m");
@@ -203,8 +205,9 @@ static int net_connect_ip_full(const struct ip_addr *ip, unsigned int port,
 	}
 
 	/* set socket options */
-	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt));
+	(void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+	if (sock_type == SOCK_STREAM)
+		(void)setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt));
 	if (!blocking)
 		net_set_nonblock(fd, TRUE);
 
@@ -242,13 +245,19 @@ static int net_connect_ip_full(const struct ip_addr *ip, unsigned int port,
 int net_connect_ip(const struct ip_addr *ip, unsigned int port,
 		   const struct ip_addr *my_ip)
 {
-	return net_connect_ip_full(ip, port, my_ip, FALSE);
+	return net_connect_ip_full(ip, port, my_ip, SOCK_STREAM, FALSE);
 }
 
 int net_connect_ip_blocking(const struct ip_addr *ip, unsigned int port,
 			    const struct ip_addr *my_ip)
 {
-	return net_connect_ip_full(ip, port, my_ip, TRUE);
+	return net_connect_ip_full(ip, port, my_ip, SOCK_STREAM, TRUE);
+}
+
+int net_connect_udp(const struct ip_addr *ip, unsigned int port,
+			       const struct ip_addr *my_ip)
+{
+	return net_connect_ip_full(ip, port, my_ip, SOCK_DGRAM, FALSE);
 }
 
 int net_try_bind(const struct ip_addr *ip)
@@ -418,8 +427,8 @@ int net_listen_full(const struct ip_addr *my_ip, unsigned int *port,
 	}
 
 	/* set socket options */
-	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt));
+	(void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+	(void)setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt));
 
 	if ((*flags & NET_LISTEN_FLAG_REUSEPORT) != 0) {
 #ifdef SO_REUSEPORT
@@ -434,7 +443,7 @@ int net_listen_full(const struct ip_addr *my_ip, unsigned int *port,
 #ifdef IPV6_V6ONLY
 	if (so.sin.sin_family == AF_INET6) {
 		opt = 1;
-		setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt));
+		(void)setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt));
 	}
 #endif
 	/* specify the address/port we want to listen in */
@@ -910,7 +919,6 @@ int net_addr2ip(const char *addr, struct ip_addr *ip)
 
 	if (strchr(addr, ':') != NULL) {
 		/* IPv6 */
-		ip->family = AF_INET6;
 #ifdef HAVE_IPV6
 		T_BEGIN {
 			if (addr[0] == '[') {
@@ -926,13 +934,13 @@ int net_addr2ip(const char *addr, struct ip_addr *ip)
 #else
 		ip->u.ip4.s_addr = 0;
 #endif
+		ip->family = AF_INET6;
  	} else {
 		/* IPv4 */
-		ip->family = AF_INET;
 		if (inet_aton(addr, &ip->u.ip4) == 0)
 			return -1;
+		ip->family = AF_INET;
 	}
-
 	return 0;
 }
 
@@ -961,8 +969,12 @@ int net_geterror(int fd)
 	int data;
 	socklen_t len = sizeof(data);
 
-	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &data, &len) == -1)
-		return -1;
+	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &data, &len) == -1) {
+		/* we're now really returning the getsockopt()'s error code
+		   instead of the socket's, but normally we should never get
+		   here anyway. */
+		return errno;
+	}
 
 	return data;
 }

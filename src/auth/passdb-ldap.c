@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2015 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "passdb.h"
@@ -36,6 +36,7 @@ struct passdb_ldap_request {
 	} callback;
 
 	unsigned int entries;
+	bool require_password;
 };
 
 static void
@@ -83,6 +84,7 @@ ldap_lookup_finish(struct auth_request *auth_request,
 			"pass_filter matched multiple objects, aborting");
 		passdb_result = PASSDB_RESULT_INTERNAL_FAILURE;
 	} else if (auth_request->passdb_password == NULL &&
+		   ldap_request->require_password &&
 		   !auth_fields_exists(auth_request->extra_fields, "nopassword")) {
 		auth_request_log_info(auth_request, AUTH_SUBSYS_DB,
 			"No password returned (and no nopassword)");
@@ -258,6 +260,12 @@ static void ldap_bind_lookup_dn_callback(struct ldap_connection *conn,
 	} else if (res == NULL || passdb_ldap_request->entries != 1) {
 		/* failure */
 		ldap_bind_lookup_dn_fail(auth_request, passdb_ldap_request, res);
+	} else if (auth_request->skip_password_check) {
+		/* we've already verified that the password matched -
+		   we just wanted to get any extra fields */
+		passdb_ldap_request->callback.
+			verify_plain(PASSDB_RESULT_OK, auth_request);
+		auth_request_unref(&auth_request);
 	} else {
 		/* create a new bind request */
 		brequest = p_new(auth_request->pool,
@@ -273,7 +281,8 @@ static void ldap_bind_lookup_dn_callback(struct ldap_connection *conn,
 }
 
 static void ldap_lookup_pass(struct auth_request *auth_request,
-			     struct passdb_ldap_request *request)
+			     struct passdb_ldap_request *request,
+			     bool require_password)
 {
 	struct passdb_module *_module = auth_request->passdb->passdb;
 	struct ldap_passdb_module *module =
@@ -284,6 +293,7 @@ static void ldap_lookup_pass(struct auth_request *auth_request,
 	const char **attr_names = (const char **)conn->pass_attr_names;
 	string_t *str;
 
+	request->require_password = require_password;
 	srequest->request.type = LDAP_REQUEST_TYPE_SEARCH;
 	vars = auth_request_get_var_expand_table(auth_request, ldap_escape);
 
@@ -390,7 +400,7 @@ ldap_verify_plain(struct auth_request *request,
 	ldap_request->request.ldap.auth_request = request;
 
 	if (!conn->set.auth_bind)
-		ldap_lookup_pass(request, ldap_request);
+		ldap_lookup_pass(request, ldap_request, TRUE);
 	else if (conn->set.auth_bind_userdn == NULL)
 		ldap_bind_lookup_dn(request, ldap_request);
 	else
@@ -400,7 +410,11 @@ ldap_verify_plain(struct auth_request *request,
 static void ldap_lookup_credentials(struct auth_request *request,
 				    lookup_credentials_callback_t *callback)
 {
+	struct passdb_module *_module = request->passdb->passdb;
+	struct ldap_passdb_module *module =
+		(struct ldap_passdb_module *)_module;
 	struct passdb_ldap_request *ldap_request;
+	bool require_password;
 
 	ldap_request = p_new(request->pool, struct passdb_ldap_request, 1);
 	ldap_request->callback.lookup_credentials = callback;
@@ -408,7 +422,11 @@ static void ldap_lookup_credentials(struct auth_request *request,
 	auth_request_ref(request);
 	ldap_request->request.ldap.auth_request = request;
 
-        ldap_lookup_pass(request, ldap_request);
+	/* with auth_bind=yes we don't necessarily have a password.
+	   this will fail actual password credentials lookups, but it's fine
+	   for passdb lookups done by lmtp/doveadm */
+	require_password = !module->conn->set.auth_bind;
+        ldap_lookup_pass(request, ldap_request, require_password);
 }
 
 static struct passdb_module *
@@ -437,12 +455,7 @@ static void passdb_ldap_init(struct passdb_module *_module)
 	struct ldap_passdb_module *module =
 		(struct ldap_passdb_module *)_module;
 
-	(void)db_ldap_connect(module->conn);
-
-	if (module->conn->set.auth_bind) {
-		/* Credential lookups can't be done with authentication binds */
-		_module->iface.lookup_credentials = NULL;
-	}
+	db_ldap_connect_delayed(module->conn);
 }
 
 static void passdb_ldap_deinit(struct passdb_module *_module)

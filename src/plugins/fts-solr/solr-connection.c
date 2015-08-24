@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -128,6 +128,8 @@ int solr_connection_init(const char *url, bool debug,
 		http_set.max_redirects = 1;
 		http_set.max_attempts = 3;
 		http_set.debug = debug;
+		http_set.connect_timeout_msecs = 5*1000;
+		http_set.request_timeout_msecs = 60*1000;
 		solr_http_client = http_client_init(&http_set);
 	}
 
@@ -140,8 +142,11 @@ int solr_connection_init(const char *url, bool debug,
 	return 0;
 }
 
-void solr_connection_deinit(struct solr_connection *conn)
+void solr_connection_deinit(struct solr_connection **_conn)
 {
+	struct solr_connection *conn = *_conn;
+
+	*_conn = NULL;
 	XML_ParserFree(conn->xml_parser);
 	i_free(conn->http_host);
 	i_free(conn->http_base_url);
@@ -495,17 +500,21 @@ void solr_connection_post_more(struct solr_connection_post *post,
 	if (post->failed)
 		return;
 
-	if (http_client_request_send_payload(&post->http_req, data, size) != 0 &&
-	    conn->request_status < 0)
+	if (conn->request_status == 0)
+		(void)http_client_request_send_payload(&post->http_req, data, size);
+	if (conn->request_status < 0)
 		post->failed = TRUE;
 }
 
-int solr_connection_post_end(struct solr_connection_post *post)
+int solr_connection_post_end(struct solr_connection_post **_post)
 {
+	struct solr_connection_post *post = *_post;
 	struct solr_connection *conn = post->conn;
 	int ret = post->failed ? -1 : 0;
 
 	i_assert(conn->posting);
+
+	*_post = NULL;
 
 	if (!post->failed) {
 		if (http_client_request_finish_payload(&post->http_req) <= 0 ||

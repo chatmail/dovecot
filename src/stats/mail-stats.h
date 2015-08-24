@@ -1,22 +1,11 @@
 #ifndef MAIL_STATS_H
 #define MAIL_STATS_H
 
+#include <sys/time.h>
+
 #include "net.h"
 #include "guid.h"
-
-struct mail_stats {
-	struct timeval user_cpu, sys_cpu, clock_time;
-	uint32_t min_faults, maj_faults;
-	uint32_t vol_cs, invol_cs;
-	uint64_t disk_input, disk_output;
-
-	uint32_t read_count, write_count;
-	uint64_t read_bytes, write_bytes;
-
-	uint32_t mail_lookup_path, mail_lookup_attr, mail_read_count;
-	uint32_t mail_cache_hits;
-	uint64_t mail_read_bytes;
-};
+#include "stats.h"
 
 struct mail_command {
 	struct mail_command *stable_prev, *stable_next;
@@ -28,7 +17,7 @@ struct mail_command {
 	unsigned int id;
 
 	struct timeval last_update;
-	struct mail_stats stats;
+	struct stats *stats;
 
 	int refcount;
 };
@@ -39,16 +28,16 @@ struct mail_session {
 	struct mail_session *user_prev, *user_next;
 	struct mail_session *ip_prev, *ip_next;
 
-	/* if guid is empty, the session no longer exists */
-	guid_128_t guid;
+	/* if id="", the session no longer exists */
+	char *id;
 	struct mail_user *user;
-	char *service;
+	const char *service;
 	pid_t pid;
 	/* ip address may be NULL if there's none */
 	struct mail_ip *ip;
 	struct timeout *to_idle;
 
-	struct mail_stats stats;
+	struct stats *stats;
 	struct timeval last_update;
 	unsigned int num_cmds;
 
@@ -67,7 +56,7 @@ struct mail_user {
 	time_t reset_timestamp;
 
 	struct timeval last_update;
-	struct mail_stats stats;
+	struct stats *stats;
 	unsigned int num_logins;
 	unsigned int num_cmds;
 
@@ -82,9 +71,10 @@ struct mail_domain {
 	time_t reset_timestamp;
 
 	struct timeval last_update;
-	struct mail_stats stats;
+	struct stats *stats;
 	unsigned int num_logins;
 	unsigned int num_cmds;
+	unsigned int num_connected_sessions;
 
 	int refcount;
 	struct mail_user *users;
@@ -97,21 +87,32 @@ struct mail_ip {
 	time_t reset_timestamp;
 
 	struct timeval last_update;
-	struct mail_stats stats;
+	struct stats *stats;
 	unsigned int num_logins;
 	unsigned int num_cmds;
+	unsigned int num_connected_sessions;
 
 	int refcount;
 	struct mail_session *sessions;
 };
 
-int mail_stats_parse(const char *const *args, struct mail_stats *stats_r,
-		     const char **error_r);
-/* diff1 is supposed to have smaller values than diff2. Returns TRUE if this
-   is so, FALSE if not */
-bool mail_stats_diff(const struct mail_stats *stats1,
-		     const struct mail_stats *stats2,
-		     struct mail_stats *diff_stats_r, const char **error_r);
-void mail_stats_add(struct mail_stats *dest, const struct mail_stats *src);
+struct mail_global {
+	time_t reset_timestamp;
+
+	struct timeval last_update;
+	struct stats *stats;
+	unsigned int num_logins;
+	unsigned int num_cmds;
+	unsigned int num_connected_sessions;
+};
+
+extern struct mail_global mail_global_stats;
+
+void mail_global_init(void);
+void mail_global_deinit(void);
+
+void mail_global_login(void);
+void mail_global_disconnected(void);
+void mail_global_refresh(const struct stats *diff_stats);
 
 #endif

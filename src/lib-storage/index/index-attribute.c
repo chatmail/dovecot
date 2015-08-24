@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -82,6 +82,7 @@ index_storage_get_dict(struct mailbox *box, enum mail_attribute_type type,
 	struct mail_storage *storage = box->storage;
 	struct mail_namespace *ns;
 	struct mailbox_metadata metadata;
+	struct dict_settings set;
 	const char *error;
 
 	if (mailbox_get_metadata(box, MAILBOX_METADATA_GUID, &metadata) < 0)
@@ -118,11 +119,13 @@ index_storage_get_dict(struct mailbox *box, enum mail_attribute_type type,
 		return -1;
 	}
 
-	if (dict_init(storage->set->mail_attribute_dict,
-		      DICT_DATA_TYPE_STRING,
-		      storage->user->username,
-		      storage->user->set->base_dir,
-		      &storage->_shared_attr_dict, &error) < 0) {
+	memset(&set, 0, sizeof(set));
+	set.username = storage->user->username;
+	set.base_dir = storage->user->set->base_dir;
+	if (mail_user_get_home(storage->user, &set.home_dir) <= 0)
+		set.home_dir = NULL;
+	if (dict_init_full(storage->set->mail_attribute_dict, &set,
+			   &storage->_shared_attr_dict, &error) < 0) {
 		mail_storage_set_critical(storage,
 			"mail_attribute_dict: dict_init(%s) failed: %s",
 			storage->set->mail_attribute_dict, error);
@@ -183,8 +186,7 @@ int index_storage_attribute_set(struct mailbox_transaction_context *t,
 	time_t ts = value->last_change != 0 ? value->last_change : ioloop_time;
 	int ret = 0;
 
-	if (strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT,
-		    strlen(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT)) == 0) {
+	if (!MAILBOX_ATTRIBUTE_KEY_IS_USER_ACCESSIBLE(key)) {
 		mail_storage_set_error(t->box->storage, MAIL_ERROR_PARAMS,
 			"Internal attributes cannot be changed directly");
 		return -1;
@@ -224,8 +226,7 @@ int index_storage_attribute_get(struct mailbox_transaction_context *t,
 
 	memset(value_r, 0, sizeof(*value_r));
 
-	if (strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT,
-		    strlen(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT)) == 0)
+	if (!MAILBOX_ATTRIBUTE_KEY_IS_USER_ACCESSIBLE(key))
 		return 0;
 
 	if (index_storage_get_dict(t->box, type, &dict, &mailbox_prefix) < 0)

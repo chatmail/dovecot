@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -12,16 +12,23 @@ static const struct fts_parser_vfuncs *parsers[] = {
 	&fts_parser_tika
 };
 
+static const char *plaintext_content_types[] = {
+	"text/plain",
+	"message/delivery-status",
+	"message/disposition-notification",
+	"application/pgp-signature"
+};
+
 bool fts_parser_init(struct mail_user *user,
 		     const char *content_type, const char *content_disposition,
 		     struct fts_parser **parser_r)
 {
 	unsigned int i;
 
-	if (strcmp(content_type, "text/plain") == 0) {
+	if (str_array_find(plaintext_content_types, content_type)) {
 		/* we probably don't want/need to allow parsers to handle
 		   plaintext? */
-		return NULL;
+		return FALSE;
 	}
 
 	for (i = 0; i < N_ELEMENTS(parsers); i++) {
@@ -83,18 +90,20 @@ void fts_parser_more(struct fts_parser *parser, struct message_block *block)
 	}
 }
 
-void fts_parser_deinit(struct fts_parser **_parser)
+int fts_parser_deinit(struct fts_parser **_parser)
 {
 	struct fts_parser *parser = *_parser;
+	int ret = 0;
 
 	*_parser = NULL;
 
 	if (parser->utf8_output != NULL)
 		buffer_free(&parser->utf8_output);
 	if (parser->v.deinit != NULL)
-		parser->v.deinit(parser);
+		ret = parser->v.deinit(parser);
 	else
 		i_free(parser);
+	return ret;
 }
 
 void fts_parsers_unload(void)

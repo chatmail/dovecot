@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -34,9 +34,9 @@ static int do_hardlink(struct maildir_mailbox *mbox, const char *path,
 		if (errno == ENOENT)
 			return 0;
 
-		if (ENOSPACE(errno)) {
+		if (ENOQUOTA(errno)) {
 			mail_storage_set_error(&mbox->storage->storage,
-				MAIL_ERROR_NOSPACE, MAIL_ERRSTR_NO_SPACE);
+				MAIL_ERROR_NOQUOTA, MAIL_ERRSTR_NO_QUOTA);
 			return -1;
 		}
 

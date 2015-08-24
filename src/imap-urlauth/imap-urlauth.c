@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 /*
 The imap-urlauth service provides URLAUTH access between different accounts. If
@@ -143,7 +143,9 @@ login_client_connected(const struct master_login_client *client,
 		i_error("Peer's credentials (uid=%ld) do not match "
 			"the user that logged in (uid=%ld).",
 			(long)cred.uid, (long)reply.uid);
-		(void)write(client->fd, msg, strlen(msg));
+		if (write(client->fd, msg, strlen(msg)) < 0) {
+			/* ignored */
+		}
 		net_disconnect(client->fd);
 		return;
 	}
@@ -159,7 +161,9 @@ static void login_client_failed(const struct master_login_client *client,
 				const char *errormsg ATTR_UNUSED)
 {
 	const char *msg = "NO\n";
-	(void)write(client->fd, msg, strlen(msg));
+	if (write(client->fd, msg, strlen(msg)) < 0) {
+		/* ignored */
+	}
 }
 
 static void client_connected(struct master_service_connection *conn)

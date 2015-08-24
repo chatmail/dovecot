@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -234,7 +234,8 @@ int uri_cut_scheme(const char **uri_p, const char **scheme_r)
 	if (*p != ':')
 		return -1;
 	
-	*scheme_r = t_strdup_until(*uri_p, p);
+	if (scheme_r != NULL)
+		*scheme_r = t_strdup_until(*uri_p, p);
 	*uri_p = p + 1;
 	return 0;
 }
@@ -256,9 +257,9 @@ int uri_parse_scheme(struct uri_parser *parser, const char **scheme_r)
 
 static int
 uri_parse_dec_octet(struct uri_parser *parser, string_t *literal,
-		    uint8_t *octet_r)
+		    uint8_t *octet_r) ATTR_NULL(2)
 {
-	uint8_t octet = 0;
+	unsigned int octet = 0;
 	int count = 0;
 
 	/* RFC 3986:
@@ -271,10 +272,8 @@ uri_parse_dec_octet(struct uri_parser *parser, string_t *literal,
 	 */
 
 	while (parser->cur < parser->end && i_isdigit(*parser->cur)) {
-		uint8_t prev = octet;
-
 		octet = octet * 10 + (parser->cur[0] - '0');
-		if (octet < prev)
+		if (octet > 255)
 			return -1;
 
 		if (literal != NULL)
@@ -293,7 +292,7 @@ uri_parse_dec_octet(struct uri_parser *parser, string_t *literal,
 
 static int
 uri_parse_ipv4address(struct uri_parser *parser, string_t *literal,
-		      struct in_addr *ip4_r)
+		      struct in_addr *ip4_r) ATTR_NULL(2,3)
 {
 	uint8_t octet;
 	uint32_t ip = 0;
@@ -327,10 +326,10 @@ uri_parse_ipv4address(struct uri_parser *parser, string_t *literal,
 	return 1;
 }
 
-static int uri_parse_reg_name(struct uri_parser *parser, string_t *reg_name)
+static int
+uri_parse_reg_name(struct uri_parser *parser,
+	string_t *reg_name) ATTR_NULL(2)
 {
-	int len = 0;
-
 	/* RFC 3986:
 	 *
 	 * reg-name      = *( unreserved / pct-encoded / sub-delims )
@@ -347,7 +346,6 @@ static int uri_parse_reg_name(struct uri_parser *parser, string_t *reg_name)
 		if (ret > 0) {
 			if (reg_name != NULL)
 				str_append_c(reg_name, c);
-			len++;
 			continue;
 		}
 
@@ -357,21 +355,21 @@ static int uri_parse_reg_name(struct uri_parser *parser, string_t *reg_name)
 			if (reg_name != NULL)
 				str_append_c(reg_name, *parser->cur);
 			parser->cur++;
-			len++;
 			continue;
 		}
 		break;
 	}
-	return len > 0 ? 1 : 0;
+	return 0;
 }
 
 #ifdef HAVE_IPV6
 static int
 uri_parse_ip_literal(struct uri_parser *parser, string_t *literal,
-		     struct in6_addr *ip6_r)
+		     struct in6_addr *ip6_r) ATTR_NULL(2,3)
 {
 	const unsigned char *p;
 	const char *address;
+	struct in6_addr ip6;
 	int ret;
 
 	/* IP-literal    = "[" ( IPv6address / IPvFuture  ) "]"
@@ -406,16 +404,20 @@ uri_parse_ip_literal(struct uri_parser *parser, string_t *literal,
 			"Future IP host address '%s' not supported", address);
 		return -1;
 	}
-	if ((ret = inet_pton(AF_INET6, address, ip6_r)) <= 0) {
+	if ((ret = inet_pton(AF_INET6, address, &ip6)) <= 0) {
 		parser->error = t_strdup_printf(
 			"Invalid IPv6 host address '%s'", address);
 		return -1;
 	}
+	if (ip6_r != NULL)
+		*ip6_r = ip6;
 	return 1;
 }
 #endif
 
-static int uri_parse_host(struct uri_parser *parser, struct uri_authority *auth)
+static int 
+uri_parse_host(struct uri_parser *parser,
+	struct uri_authority *auth) ATTR_NULL(2)
 {
 	const unsigned char *preserve;
 	struct in_addr ip4;
@@ -467,19 +469,20 @@ static int uri_parse_host(struct uri_parser *parser, struct uri_authority *auth)
 	str_truncate(literal, 0);
 
 	/* reg-name */
-	if ((ret = uri_parse_reg_name(parser, literal)) != 0) {
-		if (ret > 0 && auth != NULL) {
-			auth->host_literal = t_strdup(str_c(literal));
-			auth->have_host_ip = FALSE;
-		}
-		return ret;
+	if (uri_parse_reg_name(parser, literal) < 0)
+		return -1;
+	if (auth != NULL) {
+		auth->host_literal = t_strdup(str_c(literal));
+		auth->have_host_ip = FALSE;
 	}
 	return 0;
 }
 
-static int uri_parse_port(struct uri_parser *parser, struct uri_authority *auth)
+static int
+uri_parse_port(struct uri_parser *parser,
+	struct uri_authority *auth) ATTR_NULL(2)
 {
-	in_port_t port = 0;
+	unsigned long port = 0;
 	int count = 0;
 
 	/* RFC 3986:
@@ -488,10 +491,8 @@ static int uri_parse_port(struct uri_parser *parser, struct uri_authority *auth)
 	 */
 
 	while (parser->cur < parser->end && i_isdigit(*parser->cur)) {
-		in_port_t prev = port;
-
-		port = port * 10 + (in_port_t)(parser->cur[0] - '0');
-		if (port < prev) {
+		port = port * 10 + (parser->cur[0] - '0');
+		if (port > (in_port_t)-1) {
 			parser->error = "Port number is too high";
 			return -1;
 		}
@@ -541,25 +542,35 @@ int uri_parse_authority(struct uri_parser *parser,
 	}
 
 	/* host */
-	if ((ret = uri_parse_host(parser, auth)) <= 0) {
-		if (ret == 0) {
-			if (p == parser->end || *p == ':' || *p == '/')
-				parser->error = "Missing 'host' component";
-			else
-				parser->error = "Invalid 'host' component";
-			return -1;
-		}
-		return ret;
+	if (uri_parse_host(parser, auth) < 0)
+		return -1;
+	if (parser->cur == parser->end)
+		return 1;
+	switch (*parser->cur) {
+	case ':': case '/': case '?': case '#':
+		break;
+	default:
+		parser->error = "Invalid host identifier";
+		return -1;
 	}
 
-	/* [":" ... */
-	if (parser->cur >= parser->end || *parser->cur != ':')
-		return 1;
-	parser->cur++;
+	/* [":" port] */
+	if (*parser->cur == ':') {
+		parser->cur++;
 	
-	/* ... port] */
-	if ((ret = uri_parse_port(parser, auth)) < 0)
-		return ret;
+		if ((ret = uri_parse_port(parser, auth)) < 0)
+			return ret;
+		if (parser->cur == parser->end)
+			return 1;
+		switch (*parser->cur) {
+		case '/': case '?': case '#':
+			break;
+		default:
+			parser->error = "Invalid host port";
+			return -1;
+		}
+	}
+
 	return 1;
 }
 
@@ -611,7 +622,11 @@ int uri_parse_path(struct uri_parser *parser,
 	int relative = 1;
 	int ret;
 
-	t_array_init(&segments, 16);
+	count = 0;
+	if (path_r != NULL)
+		t_array_init(&segments, 16);
+	else
+		memset(&segments, 0, sizeof(segments));
 
 	/* check for a leading '/' and indicate absolute path
 	   when it is present
@@ -635,9 +650,12 @@ int uri_parse_path(struct uri_parser *parser,
 						segment = NULL;
 
 						/* ... pop last segment (if any) */
-						count = array_count(&segments);
 						if (count > 0) {
-							array_delete(&segments, count-1, 1);
+							if (path_r != NULL) {
+								i_assert(count == array_count(&segments));
+								array_delete(&segments, count-1, 1);
+							}
+							count--;
 						} else if ( relative > 0 ) {
 							relative++;
 						}
@@ -651,8 +669,11 @@ int uri_parse_path(struct uri_parser *parser,
 			segment = "";
 		}
 
-		if (segment != NULL)
-			array_append(&segments, &segment, 1);
+		if (segment != NULL) {
+			if (path_r != NULL)
+				array_append(&segments, &segment, 1);
+			count++;
+		}
 
 		if (parser->cur >= parser->end || *parser->cur != '/')
 			break;
@@ -663,19 +684,30 @@ int uri_parse_path(struct uri_parser *parser,
 			return -1;
 	}
 
+	if (relative_r != NULL)
+		*relative_r = relative;
+	if (path_r != NULL)
+		*path_r = NULL;
+
 	if (parser->cur == pbegin) {
-		/* path part of URI is missing */
+		/* path part of URI is empty */
 		return 0;
 	}
 
-	/* special treatment for a trailing '..' or '.' */
-	if (segment == NULL) {
-		segment = "";
-		array_append(&segments, &segment, 1);
+	if (path_r != NULL) {
+		/* special treatment for a trailing '..' or '.' */
+		if (segment == NULL) {
+			segment = "";
+			array_append(&segments, &segment, 1);
+		}
+		array_append_zero(&segments);
+		*path_r = array_get(&segments, &count);
 	}
-	array_append_zero(&segments);
-	*path_r = array_get(&segments, &count);
-	*relative_r = relative;
+	if (parser->cur < parser->end &&
+		*parser->cur != '?' && *parser->cur != '#') {
+		parser->error = "Path component contains invalid character";
+		return -1;
+	}
 	return 1;
 }
 
@@ -702,6 +734,11 @@ int uri_parse_query(struct uri_parser *parser, const char **query_r)
 		if ((*p & 0x80) != 0 || (_uri_char_lookup[*p] & CHAR_MASK_QCHAR) == 0)
 			break;
 		p++;
+	}
+
+	if (p < parser->end && *p != '#') {
+		parser->error = "Query component contains invalid character";
+		return -1;
 	}
 
 	if (query_r != NULL)
@@ -734,6 +771,11 @@ int uri_parse_fragment(struct uri_parser *parser, const char **fragment_r)
 		if ((*p & 0x80) != 0 || (_uri_char_lookup[*p] & CHAR_MASK_QCHAR) == 0)
 			break;
 		p++;
+	}
+
+	if (p < parser->end) {
+		parser->error = "Fragment component contains invalid character";
+		return -1;
 	}
 
 	if (fragment_r != NULL)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -116,7 +116,8 @@ add_binary_part(struct binary_ctx *ctx, const struct message_part *part,
 	if (ctx->input->stream_errno != 0) {
 		errno = ctx->input->stream_errno;
 		mail_storage_set_critical(ctx->mail->box->storage,
-			"read(%s) failed: %m", i_stream_get_name(ctx->input));
+			"read(%s) failed: %s", i_stream_get_name(ctx->input),
+			i_stream_get_error(ctx->input));
 		return -1;
 	}
 
@@ -407,8 +408,9 @@ index_mail_read_binary_to_cache(struct mail *_mail,
 					       "Invalid data in MIME part");
 		} else {
 			mail_storage_set_critical(_mail->box->storage,
-				"read(%s) failed: %m",
-				i_stream_get_name(cache->input));
+				"read(%s) failed: %s",
+				i_stream_get_name(cache->input),
+				i_stream_get_error(cache->input));
 		}
 		mail_storage_free_binary_cache(_mail->box->storage);
 		binary_streams_free(&ctx);
@@ -569,23 +571,20 @@ int index_mail_get_binary_stream(struct mail *_mail,
 	}
 	*size_r = cache->size;
 	*binary_r = binary;
-	if (stream_r != NULL) {
-		i_stream_ref(cache->input);
-		*stream_r = cache->input;
-	}
 	if (!converted) {
 		/* don't keep this cached. it's exactly the same as
 		   the original stream */
+		i_assert(mail->data.stream != NULL);
+		i_stream_seek(mail->data.stream, part->physical_pos +
+			      (include_hdr ? 0 :
+			       part->header_size.physical_size));
+		input = i_stream_create_crlf(mail->data.stream);
+		*stream_r = i_stream_create_limit(input, *size_r);
+		i_stream_unref(&input);
 		mail_storage_free_binary_cache(_mail->box->storage);
-		if (stream_r != NULL) {
-			i_stream_unref(stream_r);
-			i_stream_seek(mail->data.stream, part->physical_pos +
-				      (include_hdr ? 0 :
-				       part->header_size.physical_size));
-			input = i_stream_create_crlf(mail->data.stream);
-			*stream_r = i_stream_create_limit(input, *size_r);
-			i_stream_unref(&input);
-		}
+	} else {
+		*stream_r = cache->input;
+		i_stream_ref(cache->input);
 	}
 	return 0;
 }

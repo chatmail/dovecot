@@ -1,9 +1,10 @@
-/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "crc32.h"
 #include "mail-storage-hooks.h"
 #include "lucene-wrapper.h"
+#include "fts-user.h"
 #include "fts-lucene-plugin.h"
 
 const char *fts_lucene_plugin_version = DOVECOT_ABI_VERSION;
@@ -34,6 +35,8 @@ fts_lucene_plugin_init_settings(struct mail_user *user,
 			set->no_snowball = TRUE;
 		} else if (strcmp(*tmp, "mime_parts") == 0) {
 			set->mime_parts = TRUE;
+		} else if (strcmp(*tmp, "use_libfts") == 0) {
+			set->use_libfts = TRUE;
 		} else {
 			i_error("fts_lucene: Invalid setting: %s", *tmp);
 			return -1;
@@ -49,7 +52,7 @@ fts_lucene_plugin_init_settings(struct mail_user *user,
 	}
 	if (set->whitespace_chars == NULL)
 		set->whitespace_chars = "";
-#ifndef HAVE_LUCENE_STEMMER
+#ifndef HAVE_FTS_STEMMER
 	if (set->default_language != NULL) {
 		i_error("fts_lucene: default_language set, "
 			"but Dovecot built without stemmer support");
@@ -59,7 +62,7 @@ fts_lucene_plugin_init_settings(struct mail_user *user,
 	if (set->default_language == NULL)
 		set->default_language = "english";
 #endif
-#ifndef HAVE_LUCENE_TEXTCAT
+#ifndef HAVE_FTS_TEXTCAT
 	if (set->textcat_conf != NULL) {
 		i_error("fts_lucene: textcat_dir set, "
 			"but Dovecot built without textcat support");
@@ -72,6 +75,9 @@ fts_lucene_plugin_init_settings(struct mail_user *user,
 uint32_t fts_lucene_settings_checksum(const struct fts_lucene_settings *set)
 {
 	uint32_t crc;
+
+	if (set->use_libfts)
+		return crc32_str("l");
 
 	/* checksum is always different when compiling with/without stemmer */
 	crc = set->default_language == NULL ? 0 :
@@ -86,10 +92,19 @@ uint32_t fts_lucene_settings_checksum(const struct fts_lucene_settings *set)
 	return crc;
 }
 
+static void fts_lucene_mail_user_deinit(struct mail_user *user)
+{
+	struct fts_lucene_user *fuser = FTS_LUCENE_USER_CONTEXT(user);
+
+	fts_mail_user_deinit(user);
+	fuser->module_ctx.super.deinit(user);
+}
+
 static void fts_lucene_mail_user_created(struct mail_user *user)
 {
+	struct mail_user_vfuncs *v = user->vlast;
 	struct fts_lucene_user *fuser;
-	const char *env;
+	const char *env, *error;
 
 	fuser = p_new(user->pool, struct fts_lucene_user, 1);
 	env = mail_user_plugin_getenv(user, "fts_lucene");
@@ -100,6 +115,16 @@ static void fts_lucene_mail_user_created(struct mail_user *user)
 		/* invalid settings, disabling */
 		return;
 	}
+	if (fuser->set.use_libfts) {
+		if (fts_mail_user_init(user, &error) < 0) {
+			i_error("fts_lucene: %s", error);
+			return;
+		}
+	}
+
+	fuser->module_ctx.super = *v;
+	user->vlast = &fuser->module_ctx.super;
+	v->deinit = fts_lucene_mail_user_deinit;
 	MODULE_CONTEXT_SET(user, fts_lucene_user_module, fuser);
 }
 

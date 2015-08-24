@@ -1,8 +1,10 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
+#include "base64.h"
 #include "str.h"
 #include "imap-commands.h"
+#include "stats.h"
 #include "stats-plugin.h"
 #include "stats-connection.h"
 #include "imap-stats-plugin.h"
@@ -15,8 +17,7 @@ struct stats_client_command {
 
 	unsigned int id;
 	bool continued;
-	struct mail_stats stats, pre_stats;
-	struct mailbox_transaction_stats pre_trans_stats;
+	struct stats *stats, *pre_stats;
 };
 
 static MODULE_CONTEXT_DEFINE_INIT(imap_stats_imap_module,
@@ -43,37 +44,38 @@ static void stats_command_pre(struct client_command_context *cmd)
 	if (scmd == NULL) {
 		scmd = p_new(cmd->pool, struct stats_client_command, 1);
 		scmd->id = ++stats_cmd_id_counter;
+		scmd->stats = stats_alloc(cmd->pool);
+		scmd->pre_stats = stats_alloc(cmd->pool);
 		MODULE_CONTEXT_SET(cmd, imap_stats_imap_module, scmd);
 	}
-	mail_stats_get(suser, &scmd->pre_stats);
-	scmd->pre_trans_stats = suser->session_stats.trans_stats;
+
+	mail_user_stats_fill(cmd->client->user, scmd->pre_stats);
 }
 
 static void stats_command_post(struct client_command_context *cmd)
 {
 	struct stats_user *suser = STATS_USER_CONTEXT(cmd->client->user);
 	struct stats_client_command *scmd = IMAP_STATS_IMAP_CONTEXT(cmd);
-	struct mail_stats stats, pre_trans_stats, trans_stats;
-	unsigned int args_pos = 0;
+	struct stats *new_stats, *diff_stats;
+	const char *error;
+	unsigned int args_pos = 0, args_len = 0;
 	string_t *str;
+	buffer_t *buf;
 
 	if (scmd == NULL)
 		return;
 
-	mail_stats_get(suser, &stats);
-	mail_stats_add_diff(&scmd->stats, &scmd->pre_stats, &stats);
+	new_stats = stats_alloc(pool_datastack_create());
+	diff_stats = stats_alloc(pool_datastack_create());
 
-	/* mail_stats_get() can't see the transactions that already went
-	   away, so we'll need to use the session's stats difference */
-	memset(&pre_trans_stats, 0, sizeof(pre_trans_stats));
-	memset(&trans_stats, 0, sizeof(trans_stats));
-	pre_trans_stats.trans_stats = scmd->pre_trans_stats;
-	trans_stats.trans_stats = suser->session_stats.trans_stats;
-	mail_stats_add_diff(&scmd->stats, &pre_trans_stats, &trans_stats);
+	mail_user_stats_fill(cmd->client->user, new_stats);
+	if (!stats_diff(scmd->pre_stats, new_stats, diff_stats, &error))
+		i_error("stats: command stats shrank: %s", error);
+	stats_add(scmd->stats, diff_stats);
 
 	str = t_str_new(128);
 	str_append(str, "UPDATE-CMD\t");
-	str_append(str, guid_128_to_string(suser->session_guid));
+	str_append(str, suser->stats_session_id);
 
 	str_printfa(str, "\t%u\t", scmd->id);
 	if (cmd->state == CLIENT_COMMAND_STATE_DONE)
@@ -87,17 +89,26 @@ static void stats_command_post(struct client_command_context *cmd)
 		args_pos = str_len(str);
 		if (cmd->args != NULL)
 			str_append(str, cmd->args);
+		args_len = str_len(str) - args_pos;
 		scmd->continued = TRUE;
 	}
 
-	mail_stats_export(str, &scmd->stats);
+	buf = buffer_create_dynamic(pool_datastack_create(), 128);
+	stats_export(buf, scmd->stats);
+	str_append_c(str, '\t');
+	base64_encode(buf->data, buf->used, str);
+
 	str_append_c(str, '\n');
 
 	if (str_len(str) > PIPE_BUF) {
 		/* truncate the args so it fits */
+		unsigned int delete_count = str_len(str) - PIPE_BUF;
+
 		i_assert(args_pos != 0);
-		str_delete(str, args_pos, str_len(str) - PIPE_BUF);
-		i_assert(str_len(str) == PIPE_BUF);
+		if (delete_count > args_len)
+			delete_count = args_len;
+		str_delete(str, args_pos + args_len - delete_count,
+			   delete_count);
 	}
 
 	stats_connection_send(suser->stats_conn, str);

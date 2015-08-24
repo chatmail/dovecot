@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -60,6 +60,34 @@ void io_stream_set_max_buffer_size(struct iostream_private *stream,
 				   size_t max_size)
 {
 	stream->set_max_buffer_size(stream, max_size);
+}
+
+void io_stream_add_destroy_callback(struct iostream_private *stream,
+				    void (*callback)(void *), void *context)
+{
+	struct iostream_destroy_callback *dc;
+
+	if (!array_is_created(&stream->destroy_callbacks))
+		i_array_init(&stream->destroy_callbacks, 2);
+	dc = array_append_space(&stream->destroy_callbacks);
+	dc->callback = callback;
+	dc->context = context;
+}
+
+void io_stream_remove_destroy_callback(struct iostream_private *stream,
+				       void (*callback)(void *))
+{
+	const struct iostream_destroy_callback *dcs;
+	unsigned int i, count;
+
+	dcs = array_get(&stream->destroy_callbacks, &count);
+	for (i = 0; i < count; i++) {
+		if (dcs[i].callback == callback) {
+			array_delete(&stream->destroy_callbacks, i, 1);
+			return;
+		}
+	}
+	i_unreached();
 }
 
 void io_stream_set_error(struct iostream_private *stream,

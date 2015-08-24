@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -8,7 +8,9 @@
 #include "base64.h"
 #include "write-full.h"
 #include "str.h"
+#include "time-util.h"
 #include "dns-lookup.h"
+#include "dsasl-client.h"
 #include "iostream-rawlog.h"
 #include "iostream-ssl.h"
 #include "imap-quote.h"
@@ -20,6 +22,7 @@
 #include <unistd.h>
 #include <ctype.h>
 
+#define IMAPC_COMMAND_STATE_AUTHENTICATE_CONTINUE 10000
 #define IMAPC_MAX_INLINE_LITERAL_SIZE (1024*32)
 
 enum imapc_input_state {
@@ -53,6 +56,8 @@ struct imapc_command {
 	imapc_command_callback_t *callback;
 	void *context;
 
+	/* This is the AUTHENTICATE command */
+	unsigned int authenticate:1;
 	/* This is the IDLE command */
 	unsigned int idle:1;
 	/* Waiting for '+' literal reply before we can continue */
@@ -82,6 +87,7 @@ struct imapc_connection {
 	struct timeout *to;
 	struct timeout *to_output;
 	struct dns_lookup *dns_lookup;
+	struct dsasl_client *sasl_client;
 
 	struct ssl_iostream *ssl_iostream;
 
@@ -110,6 +116,13 @@ struct imapc_connection {
 
 	struct imapc_connection_literal literal;
 	ARRAY(struct imapc_arg_file) literal_files;
+
+	unsigned int throttle_msecs;
+	unsigned int throttle_shrink_msecs;
+	unsigned int last_successful_throttle_msecs;
+	bool throttle_pending;
+	struct timeval throttle_end_timeval;
+	struct timeout *to_throttle, *to_throttle_shrink;
 
 	unsigned int idling:1;
 	unsigned int idle_stopping:1;
@@ -185,6 +198,10 @@ void imapc_connection_ioloop_changed(struct imapc_connection *conn)
 		conn->io = io_loop_move_io(&conn->io);
 	if (conn->to != NULL)
 		conn->to = io_loop_move_timeout(&conn->to);
+	if (conn->to_throttle != NULL)
+		conn->to_throttle = io_loop_move_timeout(&conn->to_throttle);
+	if (conn->to_throttle_shrink != NULL)
+		conn->to_throttle_shrink = io_loop_move_timeout(&conn->to_throttle_shrink);
 	if (conn->output != NULL)
 		o_stream_switch_ioloop(conn->output);
 	if (conn->dns_lookup != NULL)
@@ -368,6 +385,10 @@ void imapc_connection_disconnect(struct imapc_connection *conn)
 		timeout_remove(&conn->to);
 	if (conn->to_output != NULL)
 		timeout_remove(&conn->to_output);
+	if (conn->to_throttle != NULL)
+		timeout_remove(&conn->to_throttle);
+	if (conn->to_throttle_shrink != NULL)
+		timeout_remove(&conn->to_throttle_shrink);
 	if (conn->parser != NULL)
 		imap_parser_unref(&conn->parser);
 	if (conn->io != NULL)
@@ -381,6 +402,15 @@ void imapc_connection_disconnect(struct imapc_connection *conn)
 		conn->fd = -1;
 	}
 
+	/* get capabilities again after reconnection. this is especially
+	   important because post-login capabilities often do not contain AUTH=
+	   capabilities. */
+	conn->capabilities = 0;
+	if (conn->capabilities_list != NULL) {
+		p_strsplit_free(default_pool, conn->capabilities_list);
+		conn->capabilities_list = NULL;
+	}
+
 	imapc_connection_set_state(conn, IMAPC_CONNECTION_STATE_DISCONNECTED);
 	imapc_connection_abort_commands(conn, NULL, reconnecting);
 }
@@ -389,6 +419,14 @@ static void imapc_connection_set_disconnected(struct imapc_connection *conn)
 {
 	imapc_connection_set_state(conn, IMAPC_CONNECTION_STATE_DISCONNECTED);
 	imapc_connection_abort_commands(conn, NULL, FALSE);
+}
+
+static bool imapc_connection_can_reconnect(struct imapc_connection *conn)
+{
+	if (conn->selected_box != NULL)
+		return imapc_client_mailbox_can_reconnect(conn->selected_box);
+	else
+		return FALSE;
 }
 
 static void imapc_connection_reconnect(struct imapc_connection *conn)
@@ -630,7 +668,7 @@ imapc_connection_handle_resp_text(struct imapc_connection *conn,
 		*value_r = value + 1;
 	} else {
 		*key_r = text;
-		*value_r = NULL;
+		*value_r = "";
 	}
 	return imapc_connection_handle_resp_text_code(conn, *key_r, *value_r);
 }
@@ -680,11 +718,10 @@ static void imapc_connection_input_reset(struct imapc_connection *conn)
 	imapc_connection_lfiles_free(conn);
 }
 
-static void imapc_connection_login_cb(const struct imapc_command_reply *reply,
-				      void *context)
+static void
+imapc_connection_auth_finish(struct imapc_connection *conn,
+			     const struct imapc_command_reply *reply)
 {
-	struct imapc_connection *conn = context;
-
 	if (reply->state != IMAPC_COMMAND_STATE_OK) {
 		if (conn->login_callback != NULL)
 			imapc_login_callback(conn, reply);
@@ -706,33 +743,102 @@ static void imapc_connection_login_cb(const struct imapc_command_reply *reply,
 	imapc_command_send_more(conn);
 }
 
-static const char *
-imapc_connection_get_sasl_plain_request(struct imapc_connection *conn)
+static void imapc_connection_login_cb(const struct imapc_command_reply *reply,
+				      void *context)
+{
+	struct imapc_connection *conn = context;
+
+	imapc_connection_auth_finish(conn, reply);
+}
+
+static void
+imapc_connection_authenticate_cb(const struct imapc_command_reply *reply,
+				 void *context)
+{
+	struct imapc_connection *conn = context;
+	const unsigned char *sasl_output;
+	unsigned int sasl_output_len;
+	unsigned int input_len;
+	buffer_t *buf;
+	const char *error;
+
+	if ((int)reply->state != IMAPC_COMMAND_STATE_AUTHENTICATE_CONTINUE) {
+		dsasl_client_free(&conn->sasl_client);
+		imapc_connection_auth_finish(conn, reply);
+		return;
+	}
+
+	input_len = strlen(reply->text_full);
+	buf = buffer_create_dynamic(pool_datastack_create(),
+				    MAX_BASE64_DECODED_SIZE(input_len));
+	if (base64_decode(reply->text_full, input_len, NULL, buf) < 0) {
+		i_error("imapc(%s): Authentication failed: Server sent non-base64 input for AUTHENTICATE: %s",
+			conn->name, reply->text_full);
+	} else if (dsasl_client_input(conn->sasl_client, buf->data, buf->used, &error) < 0) {
+		i_error("imapc(%s): Authentication failed: %s",
+			conn->name, error);
+	} else if (dsasl_client_output(conn->sasl_client, &sasl_output,
+				       &sasl_output_len, &error) < 0) {
+		i_error("imapc(%s): Authentication failed: %s",
+			conn->name, error);
+	} else {
+		string_t *imap_output =
+			t_str_new(MAX_BASE64_ENCODED_SIZE(sasl_output_len)+2);
+		base64_encode(sasl_output, sasl_output_len, imap_output);
+		str_append(imap_output, "\r\n");
+		o_stream_nsend(conn->output, str_data(imap_output),
+			       str_len(imap_output));
+		return;
+	}
+	imapc_connection_disconnect(conn);
+}
+
+static bool imapc_connection_have_auth(struct imapc_connection *conn,
+				       const char *mech_name)
+{
+	char *const *capa;
+
+	for (capa = conn->capabilities_list; *capa != NULL; capa++) {
+		if (strncasecmp(*capa, "AUTH=", 5) == 0 &&
+		    strcasecmp((*capa)+5, mech_name) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+static int
+imapc_connection_get_sasl_mech(struct imapc_connection *conn,
+			       const struct dsasl_client_mech **mech_r,
+			       const char **error_r)
 {
 	const struct imapc_client_settings *set = &conn->client->set;
-	string_t *in, *out;
+	const char *const *mechanisms =
+		t_strsplit_spaces(set->sasl_mechanisms, ", ");
 
-	in = t_str_new(128);
-	if (set->master_user != NULL) {
-		str_append(in, set->username);
-		str_append_c(in, '\0');
-		str_append(in, set->master_user);
-	} else {
-		str_append_c(in, '\0');
-		str_append(in, set->username);
+	/* find one of the specified SASL mechanisms */
+	for (; *mechanisms != NULL; mechanisms++) {
+		if (imapc_connection_have_auth(conn, *mechanisms)) {
+			*mech_r = dsasl_client_mech_find(*mechanisms);
+			if (*mech_r != NULL)
+				return 0;
+
+			*error_r = t_strdup_printf(
+				"Support for SASL method '%s' is missing", *mechanisms);
+			return -1;
+		}
 	}
-	str_append_c(in, '\0');
-	str_append(in, set->password);
-
-	out = t_str_new(128);
-	base64_encode(in->data, in->used, out);
-	return str_c(out);
+	*error_r = t_strdup_printf("IMAP server doesn't support any of the requested SASL mechanisms: %s",
+				   set->sasl_mechanisms);
+	return -1;
 }
 
 static void imapc_connection_authenticate(struct imapc_connection *conn)
 {
 	const struct imapc_client_settings *set = &conn->client->set;
 	struct imapc_command *cmd;
+	struct dsasl_client_settings sasl_set;
+	const struct dsasl_client_mech *sasl_mech = NULL;
+	const char *error;
 
 	if (conn->client->set.debug) {
 		if (set->master_user == NULL) {
@@ -744,22 +850,67 @@ static void imapc_connection_authenticate(struct imapc_connection *conn)
 		}
 	}
 
-	cmd = imapc_connection_cmd(conn, imapc_connection_login_cb,
-				   conn);
-	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_PRELOGIN);
+	if (set->sasl_mechanisms != NULL && set->sasl_mechanisms[0] != '\0') {
+		if (imapc_connection_get_sasl_mech(conn, &sasl_mech, &error) < 0) {
+			i_error("imapc(%s): Authentication failed: %s",
+				conn->name, error);
+			imapc_connection_disconnect(conn);
+			return;
+		}
+	}
 
-	if ((set->master_user == NULL &&
-	     !need_literal(set->username) && !need_literal(set->password)) ||
-	    (conn->capabilities & IMAPC_CAPABILITY_AUTH_PLAIN) == 0) {
+	if (sasl_mech == NULL &&
+	    ((set->master_user == NULL &&
+	      !need_literal(set->username) && !need_literal(set->password)) ||
+	     (conn->capabilities & IMAPC_CAPABILITY_AUTH_PLAIN) == 0)) {
 		/* We can use LOGIN command */
+		cmd = imapc_connection_cmd(conn, imapc_connection_login_cb,
+					   conn);
+		imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_PRELOGIN);
 		imapc_command_sendf(cmd, "LOGIN %s %s",
 				    set->username, set->password);
-	} else if ((conn->capabilities & IMAPC_CAPABILITY_SASL_IR) != 0) {
-		imapc_command_sendf(cmd, "AUTHENTICATE PLAIN %1s",
-			imapc_connection_get_sasl_plain_request(conn));
+		return;
+	}
+
+	memset(&sasl_set, 0, sizeof(sasl_set));
+	if (set->master_user == NULL)
+		sasl_set.authid = set->username;
+	else {
+		sasl_set.authid = set->master_user;
+		sasl_set.authzid = set->username;
+	}
+	sasl_set.password = set->password;
+
+	if (sasl_mech == NULL)
+		sasl_mech = &dsasl_client_mech_plain;
+	conn->sasl_client = dsasl_client_new(sasl_mech, &sasl_set);
+
+	cmd = imapc_connection_cmd(conn, imapc_connection_authenticate_cb, conn);
+	cmd->authenticate = TRUE;
+	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_PRELOGIN);
+
+	if ((conn->capabilities & IMAPC_CAPABILITY_SASL_IR) != 0) {
+		const unsigned char *sasl_output;
+		unsigned int sasl_output_len;
+		string_t *sasl_output_base64;
+		const char *error;
+
+		if (dsasl_client_output(conn->sasl_client, &sasl_output,
+					&sasl_output_len, &error) < 0) {
+			i_error("imapc(%s): Failed to create initial SASL reply: %s",
+				conn->name, error);
+			imapc_connection_disconnect(conn);
+			return;
+		}
+		sasl_output_base64 = t_str_new(MAX_BASE64_ENCODED_SIZE(sasl_output_len));
+		base64_encode(sasl_output, sasl_output_len, sasl_output_base64);
+
+		imapc_command_sendf(cmd, "AUTHENTICATE %1s %1s",
+				    dsasl_client_mech_get_name(sasl_mech),
+				    str_c(sasl_output_base64));
 	} else {
-		imapc_command_sendf(cmd, "AUTHENTICATE PLAIN\r\n%1s",
-			imapc_connection_get_sasl_plain_request(conn));
+		imapc_command_sendf(cmd, "AUTHENTICATE %1s",
+				    dsasl_client_mech_get_name(sasl_mech));
 	}
 }
 
@@ -960,12 +1111,89 @@ static int imapc_connection_input_plus(struct imapc_connection *conn)
 		cmds[0]->wait_for_literal = FALSE;
 		imapc_command_send_more(conn);
 	} else {
-		imapc_connection_input_error(conn, "Unexpected '+': %s", line);
-		return -1;
+		cmds = array_get(&conn->cmd_wait_list, &cmds_count);
+		if (cmds_count > 0 && cmds[0]->authenticate) {
+			/* continue AUTHENTICATE */
+			struct imapc_command_reply reply;
+
+			memset(&reply, 0, sizeof(reply));
+			reply.state = (enum imapc_command_state)IMAPC_COMMAND_STATE_AUTHENTICATE_CONTINUE;
+			reply.text_full = line;
+			cmds[0]->callback(&reply, cmds[0]->context);
+		} else {
+			imapc_connection_input_error(conn, "Unexpected '+': %s", line);
+			return -1;
+		}
 	}
 
 	imapc_connection_input_reset(conn);
 	return 1;
+}
+
+static void
+imapc_connection_throttle_shrink_timeout(struct imapc_connection *conn)
+{
+	if (conn->throttle_msecs <= 1)
+		conn->throttle_msecs = 0;
+	else
+		conn->throttle_msecs = conn->throttle_msecs*3 / 4;
+
+	if (conn->throttle_shrink_msecs <= conn->client->set.throttle_set.shrink_min_msecs)
+		conn->throttle_shrink_msecs = 0;
+	else
+		conn->throttle_shrink_msecs = conn->throttle_shrink_msecs*3 / 4;
+
+	timeout_remove(&conn->to_throttle_shrink);
+	if (conn->throttle_shrink_msecs > 0) {
+		conn->to_throttle_shrink =
+			timeout_add(conn->throttle_shrink_msecs,
+				    imapc_connection_throttle_shrink_timeout, conn);
+	}
+}
+
+static void
+imapc_connection_throttle(struct imapc_connection *conn,
+			  const struct imapc_command_reply *reply)
+{
+	if (conn->to_throttle != NULL)
+		timeout_remove(&conn->to_throttle);
+
+	/* If GMail returns [THROTTLED], start slowing down commands.
+	   Unfortunately this isn't a nice resp-text-code, but just
+	   appended at the end of the line (although we kind of support
+	   it as resp-text-code also in here if it's uppercased). */
+	if (strstr(reply->text_full, "[THROTTLED]") != NULL) {
+		if (conn->throttle_msecs == 0)
+			conn->throttle_msecs = conn->client->set.throttle_set.init_msecs;
+		else if (conn->throttle_msecs < conn->last_successful_throttle_msecs)
+			conn->throttle_msecs = conn->last_successful_throttle_msecs;
+		else {
+			conn->throttle_msecs *= 2;
+			if (conn->throttle_msecs > conn->client->set.throttle_set.max_msecs)
+				conn->throttle_msecs = conn->client->set.throttle_set.max_msecs;
+		}
+		if (conn->throttle_shrink_msecs == 0)
+			conn->throttle_shrink_msecs = conn->client->set.throttle_set.shrink_min_msecs;
+		else
+			conn->throttle_shrink_msecs *= 2;
+		if (conn->to_throttle_shrink != NULL)
+			timeout_reset(conn->to_throttle_shrink);
+	} else {
+		if (conn->throttle_shrink_msecs > 0 &&
+		    conn->to_throttle_shrink == NULL) {
+			conn->to_throttle_shrink =
+				timeout_add(conn->throttle_shrink_msecs,
+					    imapc_connection_throttle_shrink_timeout, conn);
+		}
+		conn->last_successful_throttle_msecs = conn->throttle_msecs;
+	}
+
+	if (conn->throttle_msecs > 0) {
+		conn->throttle_end_timeval = ioloop_timeval;
+		timeval_add_msecs(&conn->throttle_end_timeval,
+				  conn->throttle_msecs);
+		conn->throttle_pending = TRUE;
+	}
 }
 
 static void
@@ -1028,6 +1256,10 @@ static int imapc_connection_input_tagged(struct imapc_connection *conn)
 	} else {
 		reply.text_without_resp = reply.text_full;
 	}
+	/* if we've pipelined multiple commands, handle [THROTTLED] reply
+	   from only one of them */
+	if (!conn->throttle_pending)
+		imapc_connection_throttle(conn, &reply);
 
 	/* find the command. it's either the first command in send queue
 	   (literal failed) or somewhere in wait list. */
@@ -1127,6 +1359,7 @@ static int imapc_connection_input_one(struct imapc_connection *conn)
 static void imapc_connection_input(struct imapc_connection *conn)
 {
 	const char *errstr;
+	string_t *str;
 	ssize_t ret = 0;
 
 	/* we need to read as much as we can with SSL streams to avoid
@@ -1137,21 +1370,28 @@ static void imapc_connection_input(struct imapc_connection *conn)
 
 	if (ret < 0) {
 		/* disconnected */
+		str = t_str_new(128);
 		if (conn->disconnect_reason != NULL) {
-			i_error("imapc(%s): Server disconnected with message: %s",
-				conn->name, conn->disconnect_reason);
+			str_printfa(str, "Server disconnected with message: %s",
+				    conn->disconnect_reason);
 		} else if (conn->ssl_iostream == NULL) {
-			i_error("imapc(%s): Server disconnected unexpectedly",
-				conn->name);
+			errstr = conn->input->stream_errno == 0 ? "EOF" :
+				i_stream_get_error(conn->input);
+			str_printfa(str, "Server disconnected unexpectedly: %s",
+				    errstr);
 		} else {
 			errstr = ssl_iostream_get_last_error(conn->ssl_iostream);
 			if (errstr == NULL) {
 				errstr = conn->input->stream_errno == 0 ? "EOF" :
-					strerror(conn->input->stream_errno);
+					i_stream_get_error(conn->input);
 			}
-			i_error("imapc(%s): Server disconnected: %s",
-				conn->name, errstr);
+			str_printfa(str, "Server disconnected unexpectedly: %s",
+				    errstr);
 		}
+		if (!imapc_connection_can_reconnect(conn))
+			i_error("imapc(%s): %s", conn->name, str_c(str));
+		else
+			i_warning("imapc(%s): %s - reconnecting", conn->name, str_c(str));
 		imapc_connection_reconnect(conn);
 	}
 	imapc_connection_unref(&conn);
@@ -1185,7 +1425,6 @@ static int imapc_connection_ssl_handshaked(const char **error_r, void *context)
 static int imapc_connection_ssl_init(struct imapc_connection *conn)
 {
 	struct ssl_iostream_settings ssl_set;
-	struct stat st;
 	const char *error;
 
 	if (conn->client->ssl_ctx == NULL) {
@@ -1230,8 +1469,7 @@ static int imapc_connection_ssl_init(struct imapc_connection *conn)
 		return -1;
 	}
 
-	if (*conn->client->set.rawlog_dir != '\0' &&
-	    stat(conn->client->set.rawlog_dir, &st) == 0) {
+	if (*conn->client->set.rawlog_dir != '\0') {
 		iostream_rawlog_create(conn->client->set.rawlog_dir,
 				       &conn->input, &conn->output);
 	}
@@ -1315,7 +1553,6 @@ static void imapc_connection_reset_idle(struct imapc_connection *conn)
 static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 {
 	const struct ip_addr *ip;
-	struct stat st;
 	int fd;
 
 	i_assert(conn->client->set.max_idle_time > 0);
@@ -1333,8 +1570,7 @@ static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 	o_stream_set_no_error_handling(conn->output, TRUE);
 
 	if (*conn->client->set.rawlog_dir != '\0' &&
-	    conn->client->set.ssl_mode != IMAPC_CLIENT_SSL_MODE_IMMEDIATE &&
-	    stat(conn->client->set.rawlog_dir, &st) == 0) {
+	    conn->client->set.ssl_mode != IMAPC_CLIENT_SSL_MODE_IMMEDIATE) {
 		iostream_rawlog_create(conn->client->set.rawlog_dir,
 				       &conn->input, &conn->output);
 	}
@@ -1485,6 +1721,19 @@ static void imapc_command_free(struct imapc_command *cmd)
 	pool_unref(&cmd->pool);
 }
 
+const char *imapc_command_get_tag(struct imapc_command *cmd)
+{
+	return t_strdup_printf("%u", cmd->tag);
+}
+
+void imapc_command_abort(struct imapc_command **_cmd)
+{
+	struct imapc_command *cmd = *_cmd;
+
+	*_cmd = NULL;
+	imapc_command_free(cmd);
+}
+
 static void imapc_command_timeout(struct imapc_connection *conn)
 {
 	struct imapc_command *const *cmds;
@@ -1602,6 +1851,32 @@ static void imapc_connection_set_selecting(struct imapc_client_mailbox *box)
 	}
 }
 
+static bool imapc_connection_is_throttled(struct imapc_connection *conn)
+{
+	if (conn->to_throttle != NULL)
+		timeout_remove(&conn->to_throttle);
+
+	if (conn->throttle_msecs == 0) {
+		/* we haven't received [THROTTLED] recently */
+		return FALSE;
+	}
+	if (array_count(&conn->cmd_wait_list) > 0) {
+		/* wait until we have received the existing commands' tagged
+		   replies to see if we're still throttled */
+		return TRUE;
+	}
+	if (timeval_cmp(&ioloop_timeval, &conn->throttle_end_timeval) >= 0) {
+		/* we reached the throttle timeout - send the next command */
+		conn->throttle_pending = FALSE;
+		return FALSE;
+	}
+
+	/* we're still being throttled - wait for it to end */
+	conn->to_throttle = timeout_add_absolute(&conn->throttle_end_timeval,
+						 imapc_command_send_more, conn);
+	return TRUE;
+}
+
 static void imapc_command_send_more(struct imapc_connection *conn)
 {
 	struct imapc_command *const *cmds, *cmd;
@@ -1609,6 +1884,9 @@ static void imapc_command_send_more(struct imapc_connection *conn)
 	const unsigned char *p, *data;
 	unsigned int count, seek_pos, start_pos, end_pos, size;
 	int ret;
+
+	if (imapc_connection_is_throttled(conn))
+		return;
 
 	cmds = array_get(&conn->cmd_send_queue, &count);
 	if (count == 0)
@@ -1782,6 +2060,12 @@ void imapc_command_set_mailbox(struct imapc_command *cmd,
 {
 	cmd->box = box;
 	box->pending_box_command_count++;
+}
+
+bool imapc_command_connection_is_selected(struct imapc_command *cmd)
+{
+	return cmd->conn->selected_box != NULL ||
+		cmd->conn->selecting_box != NULL;
 }
 
 void imapc_command_send(struct imapc_command *cmd, const char *cmd_str)

@@ -36,6 +36,7 @@ struct failure_context {
 	enum log_type type;
 	int exit_status; /* for LOG_TYPE_FATAL */
 	const struct tm *timestamp; /* NULL = use time() + localtime() */
+	unsigned int timestamp_usecs;
 };
 
 #define DEFAULT_FAILURE_STAMP_FORMAT "%b %d %H:%M:%S "
@@ -114,6 +115,8 @@ void i_set_debug_file(const char *path);
 void i_set_failure_prefix(const char *prefix_fmt, ...) ATTR_FORMAT(1, 2);
 /* Set prefix to "". */
 void i_unset_failure_prefix(void);
+/* Returns the current failure prefix (never NULL). */
+const char *i_get_failure_prefix(void);
 /* Prefix failures with a timestamp. fmt is in strftime() format. */
 void i_set_failure_timestamp_format(const char *fmt);
 /* When logging with internal error protocol, update the process's current

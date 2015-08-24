@@ -6,6 +6,7 @@
 #include "sasl-server.h"
 #include "master-login.h" /* for LOGIN_MAX_SESSION_ID_LEN */
 
+#define LOGIN_MAX_SESSION_ID_LEN 64
 #define LOGIN_MAX_MASTER_PREFIX_LEN 128
 
 /* max. size of input buffer. this means:
@@ -55,7 +56,8 @@ enum client_auth_result {
 struct client_auth_reply {
 	const char *master_user, *reason;
 	/* for proxying */
-	const char *host, *hostip, *destuser, *password, *proxy_mech;
+	const char *host, *hostip, *source_ip;
+	const char *destuser, *password, *proxy_mech;
 	unsigned int port;
 	unsigned int proxy_timeout_msecs;
 	unsigned int proxy_refresh_secs;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -16,7 +16,7 @@ static struct file_listener_settings *replicator_unix_listeners[] = {
 	&replicator_unix_listeners_array[1]
 };
 static buffer_t replicator_unix_listeners_buf = {
-	replicator_unix_listeners, sizeof(replicator_unix_listeners), { 0, }
+	replicator_unix_listeners, sizeof(replicator_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 
@@ -43,7 +43,9 @@ struct service_settings replicator_service_settings = {
 	.unix_listeners = { { &replicator_unix_listeners_buf,
 			      sizeof(replicator_unix_listeners[0]) } },
 	.fifo_listeners = ARRAY_INIT,
-	.inet_listeners = ARRAY_INIT
+	.inet_listeners = ARRAY_INIT,
+
+	.process_limit_1 = TRUE
 };
 
 #undef DEF

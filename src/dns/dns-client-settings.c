@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -15,7 +15,7 @@ static struct file_listener_settings *dns_client_unix_listeners[] = {
 	&dns_client_unix_listeners_array[0]
 };
 static buffer_t dns_client_unix_listeners_buf = {
-	dns_client_unix_listeners, sizeof(dns_client_unix_listeners), { 0, }
+	dns_client_unix_listeners, sizeof(dns_client_unix_listeners), { NULL, }
 };
 /* </settings checks> */
 

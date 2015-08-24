@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -145,7 +145,7 @@ static ssize_t i_stream_concat_read(struct istream_private *stream)
 		/* we either read something or we're at EOF */
 		last_stream = cstream->input[cstream->cur_idx+1] == NULL;
 		if (ret == -1 && !last_stream) {
-			if (stream->pos >= stream->max_buffer_size)
+			if (stream->pos - stream->skip >= stream->max_buffer_size)
 				return -2;
 
 			i_stream_concat_read_next(cstream);

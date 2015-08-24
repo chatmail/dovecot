@@ -3,6 +3,7 @@ libs = \
 	../lib-master/libmaster.la \
 	../lib-fs/libfs.la \
 	../lib-settings/libsettings.la \
+	../lib-stats/libstats.la \
 	../lib-http/libhttp.la \
 	../lib-dict/libdict.la \
 	../lib-imap/libimap.la \
@@ -21,8 +22,7 @@ libdovecot_la_SOURCES =
 
 libdovecot_la_LIBADD = \
 	$(libs) \
-	$(MODULE_LIBS) \
-	$(LTLIBICONV)
+	$(MODULE_LIBS)
 
 libdovecot_la_DEPENDENCIES = $(libs)
 libdovecot_la_LDFLAGS = -export-dynamic

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 /* CRAM-MD5 SASL authentication, see RFC-2195
    Joshua Goodall <joshua@roughtrade.net> */
@@ -173,7 +173,7 @@ static struct auth_request *mech_cram_md5_auth_new(void)
 	struct cram_auth_request *request;
 	pool_t pool;
 
-	pool = pool_alloconly_create("cram_md5_auth_request", 2048);
+	pool = pool_alloconly_create(MEMPOOL_GROWING"cram_md5_auth_request", 2048);
 	request = p_new(pool, struct cram_auth_request, 1);
 	request->pool = pool;
 

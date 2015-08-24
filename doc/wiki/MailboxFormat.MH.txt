@@ -7,9 +7,9 @@ a single file, with directories indicating folders and subfolders.  The index
 or order of the messages in the folder determine what each message is named
 (which may not correspond to the inode index).  The "safe" way to guarantee a
 message gets written to a mail folder is to first write the message out to a
-randomly chosen temporary file name, then link or rename the file to the number
-LAST+1, where LAST is the last sequential message in the folder.  If the rename
-fails, increment the counter and try again.
+randomly chosen temporary file name, then link the file to the number LAST+1,
+where LAST is the last sequential message in the folder.  If the link fails,
+increment the counter and try again.
 
 MH folders also maintains a meta-file called '~/Mail/.mh_context' that contains
 information about the most current folder and message chosen.  Each sub-folder
@@ -49,4 +49,4 @@ Links
  * Mutt Manual [http://www.mutt.org/doc/manual/manual-4.html#ss4.6]: Describing
    how it handles MH folders
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

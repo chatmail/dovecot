@@ -17,14 +17,20 @@ server will send you back either:
    happens when connecting to the UNIX socket.
  * "-" means you need to authenticate first.
 
+Authentication
+--------------
+
 The authentication is done with a regular SASL PLAIN authentication, i.e.
-"PLAIN<tab>base64(\0user\0password)". For example for user=tss, password=secret
-use:
+"PLAIN<tab>base64(\0username\0password)". Currently the username must be
+"doveadm". For example for user=doveadm, password=secret use:
 
 ---%<-------------------------------------------------------------------------
-C: PLAIN        AHRzcwBzZWNyZXQ=
+C: PLAIN        AGRvdmVhZG0Ac2VjcmV0
 S: +
 ---%<-------------------------------------------------------------------------
+
+Running commands
+----------------
 
 The actual commands are in format: flags<tab>username<tab>command
 name[<tab>parameter[<tab>parameter2...]], where the flags can be either empty,
@@ -53,4 +59,29 @@ line:
     * "-NOUSER" = the user doesn't exist
     * Other "-SOMETHING" errors may be added in future.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+Available commands
+------------------
+
+The command names and output are exactly the same as what regular doveadm
+commands on command line do. Currently only "mail commands" are available via
+doveadm protocol, but this will change in future.
+
+You can use the doveadm itself to find out what the output format will look
+like. For example:
+
+---%<-------------------------------------------------------------------------
+doveadm -f tab search mailbox inbox 1:2
+mailbox-guid    uid
+fa8cb722dfad9c52b62600007049b30b        125159
+fa8cb722dfad9c52b62600007049b30b        125160
+---%<-------------------------------------------------------------------------
+
+There are two fields, "mailbox-guid" and "uid" in the output. The title names
+won't be sent via doveadm protocol, but everything else will be sent in one
+line. So in the above case the protocol output will be:
+
+---%<-------------------------------------------------------------------------
+fa8cb722dfad9c52b62600007049b30b<tab>125159<tab>fa8cb722dfad9c52b62600007049b30b<tab>125160
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2015-05-13 16:45)

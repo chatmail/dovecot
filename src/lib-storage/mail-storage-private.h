@@ -7,6 +7,7 @@
 #include "mail-storage.h"
 #include "mail-storage-hooks.h"
 #include "mail-storage-settings.h"
+#include "mailbox-attribute-private.h"
 #include "mail-index-private.h"
 
 /* Default prefix for indexes */
@@ -16,6 +17,8 @@
 #define MAIL_READ_HDR_BLOCK_SIZE (1024*4)
 /* Block size when read()ing message (header and) body. */
 #define MAIL_READ_FULL_BLOCK_SIZE IO_BLOCK_SIZE
+
+#define MAIL_SHARED_STORAGE_NAME "shared"
 
 struct mail_storage_module_register {
 	unsigned int id;
@@ -89,6 +92,11 @@ struct mail_binary_cache {
 	uoff_t size;
 };
 
+struct mail_storage_error {
+	char *error_string;
+	enum mail_error error;
+};
+
 struct mail_storage {
 	const char *name;
 	enum mail_storage_class_flags class_flags;
@@ -110,6 +118,7 @@ struct mail_storage {
 
 	char *error_string;
 	enum mail_error error;
+	ARRAY(struct mail_storage_error) error_stack;
 
         const struct mail_storage *storage_class;
 	struct mail_user *user;
@@ -283,6 +292,9 @@ struct mailbox {
 	/* Filled lazily when mailbox is opened, use mailbox_get_path()
 	   to access it */
 	const char *_path;
+	/* Filled lazily when mailbox is opened, use mailbox_get_index_path()
+	   to access it */
+	const char *_index_path;
 
 	/* default vfuncs for new struct mails. */
 	const struct mail_vfuncs *mail_vfuncs;
@@ -324,6 +336,8 @@ struct mailbox {
 	unsigned int creating:1;
 	/* Mailbox is being deleted */
 	unsigned int deleting:1;
+	/* Don't use MAIL_INDEX_SYNC_FLAG_DELETING_INDEX for sync flag */
+	unsigned int delete_sync_check:1;
 	/* Delete mailbox only if it's empty */
 	unsigned int deleting_must_be_empty:1;
 	/* The backend wants to skip checking if there are 0 messages before
@@ -589,10 +603,6 @@ struct mailbox_header_lookup_ctx {
 	unsigned int *idx;
 };
 
-struct mailbox_attribute_iter {
-	struct mailbox *box;
-};
-
 /* Modules should use do "my_id = mail_storage_module_id++" and
    use objects' module_contexts[id] for their own purposes. */
 extern struct mail_storage_module_register mail_storage_module_register;
@@ -636,6 +646,8 @@ int mailbox_mark_index_deleted(struct mailbox *box, bool del);
    The mailbox must already be opened and the caller must know that the
    storage has mailbox files (i.e. NULL/empty path is never returned). */
 const char *mailbox_get_path(struct mailbox *box) ATTR_PURE;
+/* Similar to mailbox_get_path() but for MAILBOX_LIST_PATH_TYPE_INDEX. */
+const char *mailbox_get_index_path(struct mailbox *box) ATTR_PURE;
 /* Wrapper to mailbox_list_get_path() */
 int mailbox_get_path_to(struct mailbox *box, enum mailbox_list_path_type type,
 			const char **path_r);
@@ -663,9 +675,6 @@ int mailbox_create_fd(struct mailbox *box, const char *path, int flags,
 unsigned int mail_storage_get_lock_timeout(struct mail_storage *storage,
 					   unsigned int secs);
 void mail_storage_free_binary_cache(struct mail_storage *storage);
-int mailbox_attribute_value_to_string(struct mail_storage *storage,
-				      const struct mail_attribute_value *value,
-				      const char **str_r);
 
 enum mail_index_open_flags
 mail_storage_settings_to_index_flags(const struct mail_storage_settings *set);

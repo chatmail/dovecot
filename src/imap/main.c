@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "ioloop.h"
@@ -51,6 +51,7 @@ void imap_refresh_proctitle(void)
 	struct client *client;
 	struct client_command_context *cmd;
 	string_t *title = t_str_new(128);
+	bool wait_output;
 
 	if (!verbose_proctitle)
 		return;
@@ -67,14 +68,23 @@ void imap_refresh_proctitle(void)
 			str_append_c(title, ' ');
 			str_append(title, net_ip2addr(client->user->remote_ip));
 		}
+		wait_output = FALSE;
 		for (cmd = client->command_queue; cmd != NULL; cmd = cmd->next) {
 			if (cmd->name == NULL)
 				continue;
 
-			if (str_len(title) > IMAP_PROCTITLE_PREFERRED_LEN)
-				break;
-			str_append_c(title, ' ');
-			str_append(title, cmd->name);
+			if (str_len(title) < IMAP_PROCTITLE_PREFERRED_LEN) {
+				str_append_c(title, ' ');
+				str_append(title, cmd->name);
+			}
+			if (cmd->state == CLIENT_COMMAND_STATE_WAIT_OUTPUT)
+				wait_output = TRUE;
+		}
+		if (wait_output) {
+			str_printfa(title, " - %"PRIuSIZE_T" bytes waiting",
+				    o_stream_get_buffer_used_size(client->output));
+			if (o_stream_is_corked(client->output))
+				str_append(title, " corked");
 		}
 		break;
 	default:
@@ -91,7 +101,9 @@ static void client_kill_idle(struct client *client)
 		return;
 
 	client_send_line(client, "* BYE Server shutting down.");
+	mail_storage_service_io_activate_user(client->service_user);
 	client_destroy(client, "Server shutting down.");
+	mail_storage_service_io_deactivate(storage_service);
 }
 
 static void imap_die(void)
@@ -197,14 +209,33 @@ client_create_from_input(const struct mail_storage_service_input *input,
 {
 	struct mail_storage_service_user *user;
 	struct mail_user *mail_user;
+	struct mail_namespace *ns;
 	struct client *client;
 	struct imap_settings *set;
 	enum mail_auth_request_flags flags;
+	const char *errstr;
+	enum mail_error mail_error;
 
 	if (mail_storage_service_lookup_next(storage_service, input,
 					     &user, &mail_user, error_r) <= 0)
 		return -1;
 	restrict_access_allow_coredumps(TRUE);
+
+	/* this is mainly for imapc: make sure we can do at least minimal
+	   access to the mailbox list or fail immediately. otherwise the IMAP
+	   client could be trying a lot of commands and we'd return failures
+	   for all of them. FIXME: There should be a bit less kludgy way to
+	   check this, but I'm not sure if it's worth the trouble just for
+	   imapc. */
+	ns = mail_namespace_find_inbox(mail_user->namespaces);
+	(void)mailbox_list_get_hierarchy_sep(ns->list);
+	errstr = mailbox_list_get_last_error(ns->list, &mail_error);
+	if (mail_error != MAIL_ERROR_NONE) {
+		*error_r = t_strdup(errstr);
+		mail_user_unref(&mail_user);
+		mail_storage_service_user_free(&user);
+		return -1;
+	}
 
 	set = mail_storage_service_user_get_set(user)[1];
 	if (set->verbose_proctitle)
@@ -398,7 +429,7 @@ int main(int argc, char *argv[])
 
 	if (io_loop_is_running(current_ioloop))
 		master_service_run(master_service, client_connected);
-	clients_destroy_all();
+	clients_destroy_all(storage_service);
 
 	if (master_login != NULL)
 		master_login_deinit(&master_login);

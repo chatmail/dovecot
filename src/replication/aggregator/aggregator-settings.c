@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -14,7 +14,7 @@ static struct file_listener_settings *aggregator_unix_listeners[] = {
 	&aggregator_unix_listeners_array[0]
 };
 static buffer_t aggregator_unix_listeners_buf = {
-	aggregator_unix_listeners, sizeof(aggregator_unix_listeners), { 0, }
+	aggregator_unix_listeners, sizeof(aggregator_unix_listeners), { NULL, }
 };
 
 static struct file_listener_settings aggregator_fifo_listeners_array[] = {
@@ -24,7 +24,7 @@ static struct file_listener_settings *aggregator_fifo_listeners[] = {
 	&aggregator_fifo_listeners_array[0]
 };
 static buffer_t aggregator_fifo_listeners_buf = {
-	aggregator_fifo_listeners, sizeof(aggregator_fifo_listeners), { 0, }
+	aggregator_fifo_listeners, sizeof(aggregator_fifo_listeners), { NULL, }
 };
 /* </settings checks> */
 

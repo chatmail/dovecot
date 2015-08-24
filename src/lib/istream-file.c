@@ -1,10 +1,10 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
 #include "lib.h"
 #include "ioloop.h"
-#include "istream-private.h"
+#include "istream-file-private.h"
 #include "net.h"
 
 #include <time.h>
@@ -12,18 +12,8 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-struct file_istream {
-	struct istream_private istream;
-
-	uoff_t skip_left;
-
-	unsigned int file:1;
-	unsigned int autoclose_fd:1;
-	unsigned int seen_eof:1;
-};
-
-static void i_stream_file_close(struct iostream_private *stream,
-				bool close_parent ATTR_UNUSED)
+void i_stream_file_close(struct iostream_private *stream,
+			 bool close_parent ATTR_UNUSED)
 {
 	struct file_istream *fstream = (struct file_istream *)stream;
 	struct istream_private *_stream = (struct istream_private *)stream;
@@ -51,9 +41,10 @@ static int i_stream_file_open(struct istream_private *stream)
 	return 0;
 }
 
-static ssize_t i_stream_file_read(struct istream_private *stream)
+ssize_t i_stream_file_read(struct istream_private *stream)
 {
 	struct file_istream *fstream = (struct file_istream *) stream;
+	uoff_t offset;
 	size_t size;
 	ssize_t ret;
 
@@ -65,11 +56,11 @@ static ssize_t i_stream_file_read(struct istream_private *stream)
 			return -1;
 	}
 
+	offset = stream->istream.v_offset + (stream->pos - stream->skip);
 	do {
 		if (fstream->file) {
 			ret = pread(stream->fd, stream->w_buffer + stream->pos,
-				    size, stream->istream.v_offset +
-				    (stream->pos - stream->skip));
+				    size, offset);
 		} else if (fstream->seen_eof) {
 			/* don't try to read() again. EOF from keyboard (^D)
 			   requires this to work right. */
@@ -97,6 +88,16 @@ static ssize_t i_stream_file_read(struct istream_private *stream)
 			/* if we get EBADF for a valid fd, it means something's
 			   really wrong and we'd better just crash. */
 			i_assert(errno != EBADF);
+			if (fstream->file) {
+				io_stream_set_error(&stream->iostream,
+					"pread(size=%"PRIuSIZE_T
+					" offset=%"PRIuUOFF_T") failed: %m",
+					size, offset);
+			} else {
+				io_stream_set_error(&stream->iostream,
+					"read(size=%"PRIuSIZE_T") failed: %m",
+					size);
+			}
 			stream->istream.stream_errno = errno;
 			return -1;
 		}
@@ -172,16 +173,15 @@ i_stream_file_stat(struct istream_private *stream, bool exact ATTR_UNUSED)
 	return 0;
 }
 
-static struct istream *
-i_stream_create_file_common(int fd, const char *path,
+struct istream *
+i_stream_create_file_common(struct file_istream *fstream,
+			    int fd, const char *path,
 			    size_t max_buffer_size, bool autoclose_fd)
 {
-	struct file_istream *fstream;
 	struct istream *input;
 	struct stat st;
 	bool is_file;
 
-	fstream = i_new(struct file_istream, 1);
 	fstream->autoclose_fd = autoclose_fd;
 
 	fstream->istream.iostream.close = i_stream_file_close;
@@ -224,16 +224,32 @@ i_stream_create_file_common(int fd, const char *path,
 struct istream *i_stream_create_fd(int fd, size_t max_buffer_size,
 				   bool autoclose_fd)
 {
+	struct file_istream *fstream;
+
 	i_assert(fd != -1);
 
-	return i_stream_create_file_common(fd, NULL, max_buffer_size, autoclose_fd);
+	fstream = i_new(struct file_istream, 1);
+	return i_stream_create_file_common(fstream, fd, NULL,
+					   max_buffer_size, autoclose_fd);
+}
+
+struct istream *i_stream_create_fd_autoclose(int *fd, size_t max_buffer_size)
+{
+	struct istream *input;
+
+	input = i_stream_create_fd(*fd, max_buffer_size, TRUE);
+	*fd = -1;
+	return input;
 }
 
 struct istream *i_stream_create_file(const char *path, size_t max_buffer_size)
 {
+	struct file_istream *fstream;
 	struct istream *input;
 
-	input = i_stream_create_file_common(-1, path, max_buffer_size, TRUE);
+	fstream = i_new(struct file_istream, 1);
+	input = i_stream_create_file_common(fstream, -1, path,
+					    max_buffer_size, TRUE);
 	i_stream_set_name(input, path);
 	return input;
 }

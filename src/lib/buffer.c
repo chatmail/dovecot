@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -19,6 +19,7 @@ struct real_buffer {
 	unsigned int alloced:1;
 	unsigned int dynamic:1;
 };
+typedef int buffer_check_sizes[COMPILE_ERROR_IF_TRUE(sizeof(struct real_buffer) > sizeof(buffer_t)) ?1:1];
 
 static void buffer_alloc(struct real_buffer *buf, size_t size)
 {
@@ -93,6 +94,7 @@ buffer_check_limits(struct real_buffer *buf, size_t pos, size_t data_size)
 	i_assert(buf->used <= buf->alloc);
 }
 
+#undef buffer_create_from_data
 void buffer_create_from_data(buffer_t *buffer, void *data, size_t size)
 {
 	struct real_buffer *buf;
@@ -109,6 +111,7 @@ void buffer_create_from_data(buffer_t *buffer, void *data, size_t size)
 	memset(data, 0, size);
 }
 
+#undef buffer_create_from_const_data
 void buffer_create_from_const_data(buffer_t *buffer,
 				   const void *data, size_t size)
 {

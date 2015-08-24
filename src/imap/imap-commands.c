@@ -1,8 +1,10 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
 #include "buffer.h"
+#include "ioloop.h"
+#include "time-util.h"
 #include "imap-commands.h"
 
 #include <stdlib.h>
@@ -151,14 +153,27 @@ void command_hook_unregister(command_hook_callback_t *pre,
 bool command_exec(struct client_command_context *cmd)
 {
 	const struct command_hook *hook;
-	bool ret;
+	long long diff;
+	bool finished;
+
+	if (cmd->last_ioloop_time.tv_sec != 0) {
+		diff = timeval_diff_usecs(&ioloop_timeval, &cmd->last_ioloop_time);
+		if (diff > 0)
+			cmd->usecs_in_ioloop += diff;
+	}
 
 	array_foreach(&command_hooks, hook)
 		hook->pre(cmd);
-	ret = cmd->func(cmd);
+	finished = cmd->func(cmd);
 	array_foreach(&command_hooks, hook)
 		hook->post(cmd);
-	return ret;
+	if (cmd->state == CLIENT_COMMAND_STATE_DONE)
+		finished = TRUE;
+	if (!finished) {
+		io_loop_time_refresh();
+		cmd->last_ioloop_time = ioloop_timeval;
+	}
+	return finished;
 }
 
 static int command_cmp(const struct command *c1, const struct command *c2)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -68,6 +68,8 @@ tika_get_http_client_url(struct mail_user *user, struct http_url **http_url_r)
 		http_set.max_pipelined_requests = 1;
 		http_set.max_redirects = 1;
 		http_set.max_attempts = 3;
+		http_set.connect_timeout_msecs = 5*1000;
+		http_set.request_timeout_msecs = 60*1000;
 		http_set.debug = user->mail_debug;
 		tika_http_client = http_client_init(&http_set);
 	}
@@ -84,22 +86,27 @@ fts_tika_parser_response(const struct http_response *response,
 	switch (response->status) {
 	case 200:
 		/* read response */
-		i_stream_ref(response->payload);
-		parser->payload = response->payload;
+		if (response->payload == NULL)
+			parser->payload = i_stream_create_from_data("", 0);
+		else {
+			i_stream_ref(response->payload);
+			parser->payload = response->payload;
+		}
 		break;
 	case 204: /* empty response */
+	case 415: /* Unsupported Media Type */
 	case 422: /* Unprocessable Entity */
 		if (parser->user->mail_debug) {
-			i_debug("fts_tika: PUT %s failed: %s",
+			i_debug("fts_tika: PUT %s failed: %u %s",
 				mail_user_plugin_getenv(parser->user, "fts_tika"),
-				response->reason);
+				response->status, response->reason);
 		}
 		parser->payload = i_stream_create_from_data("", 0);
 		break;
 	default:
-		i_error("fts_tika: PUT %s failed: %s",
+		i_error("fts_tika: PUT %s failed: %u %s",
 			mail_user_plugin_getenv(parser->user, "fts_tika"),
-			response->reason);
+			response->status, response->reason);
 		parser->failed = TRUE;
 		break;
 	}
@@ -189,12 +196,19 @@ static void fts_parser_tika_more(struct fts_parser *_parser,
 	} else {
 		/* finished */
 		i_assert(ret == -1);
+		if (parser->payload->stream_errno != 0) {
+			i_error("read(%s) failed: %s",
+				i_stream_get_name(parser->payload),
+				i_stream_get_error(parser->payload));
+			parser->failed = TRUE;
+		}
 	}
 }
 
-static void fts_parser_tika_deinit(struct fts_parser *_parser)
+static int fts_parser_tika_deinit(struct fts_parser *_parser)
 {
 	struct tika_fts_parser *parser = (struct tika_fts_parser *)_parser;
+	int ret = parser->failed ? -1 : 0;
 
 	if (parser->ioloop != NULL) {
 		io_remove(&parser->io);
@@ -207,6 +221,7 @@ static void fts_parser_tika_deinit(struct fts_parser *_parser)
 	if (parser->http_req != NULL)
 		http_client_request_abort(&parser->http_req);
 	i_free(parser);
+	return ret;
 }
 
 static void fts_parser_tika_unload(void)

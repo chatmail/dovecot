@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -80,16 +80,16 @@ replication_fifo_notify(struct mail_user *user,
 	}
 	str_append_c(str, '\n');
 	ret = write(fifo_fd, str_data(str), str_len(str));
-	if (ret == 0) {
-		/* busy, try again later */
-		return 0;
-	}
+	i_assert(ret != 0);
 	if (ret != (ssize_t)str_len(str)) {
 		if (ret > 0)
 			i_error("write(%s) wrote partial data", fifo_path);
-		else if (errno != EPIPE)
+		else if (errno == EAGAIN) {
+			/* busy, try again later */
+			return 0;
+		} else if (errno != EPIPE) {
 			i_error("write(%s) failed: %m", fifo_path);
-		else {
+		} else {
 			/* server was probably restarted, don't bother logging
 			   this. */
 		}
@@ -147,7 +147,7 @@ static int replication_notify_sync(struct mail_user *user)
 		/* + | - */
 		ret = read(fd, buf, sizeof(buf));
 		if (ret < 0) {
-			if (ret != EINTR) {
+			if (errno != EINTR) {
 				i_error("read(%s) failed: %m",
 					ruser->socket_path);
 			} else {
@@ -180,17 +180,19 @@ static int replication_notify_sync(struct mail_user *user)
 }
 
 static void replication_notify(struct mail_namespace *ns,
-			       enum replication_priority priority)
+			       enum replication_priority priority,
+			       const char *event)
 {
 	struct replication_user *ruser;
 
-	if (ns->user->dsyncing) {
-		/* we're running dsync, which means that the remote is telling
-		   us about a change. don't trigger a replication back to it */
-		return;
-	}
-
 	ruser = REPLICATION_USER_CONTEXT(ns->user);
+	if (ruser == NULL)
+		return;
+
+	if (ns->user->mail_debug) {
+		i_debug("replication: Replication requested by '%s', priority=%d",
+			event, priority);
+	}
 
 	if (priority == REPLICATION_PRIORITY_SYNC) {
 		if (replication_notify_sync(ns->user) == 0) {
@@ -228,13 +230,20 @@ static void replication_mail_save(void *txn, struct mail *mail ATTR_UNUSED)
 	ctx->new_messages = TRUE;
 }
 
-static void replication_mail_copy(void *txn, struct mail *src ATTR_UNUSED,
-				  struct mail *dst ATTR_UNUSED)
+static void replication_mail_copy(void *txn, struct mail *src,
+				  struct mail *dst)
 {
 	struct replication_mail_txn_context *ctx =
 		(struct replication_mail_txn_context *)txn;
 
-	ctx->new_messages = TRUE;
+	if (src->box->storage != dst->box->storage) {
+		/* copy between storages, e.g. new mail delivery */
+		ctx->new_messages = TRUE;
+	} else {
+		/* copy within storage, which isn't as high priority since the
+		   mail already exists. and especially copies to Trash or to
+		   lazy-expunge namespace is pretty low priority. */
+	}
 }
 
 static void
@@ -247,11 +256,11 @@ replication_mail_transaction_commit(void *txn,
 		REPLICATION_USER_CONTEXT(ctx->ns->user);
 	enum replication_priority priority;
 
-	if (ctx->new_messages || changes->changed) {
+	if (ruser != NULL && (ctx->new_messages || changes->changed)) {
 		priority = !ctx->new_messages ? REPLICATION_PRIORITY_LOW :
 			ruser->sync_secs == 0 ? REPLICATION_PRIORITY_HIGH :
 			REPLICATION_PRIORITY_SYNC;
-		replication_notify(ctx->ns, priority);
+		replication_notify(ctx->ns, priority, "transction commit");
 	}
 	i_free(ctx);
 }
@@ -259,7 +268,7 @@ replication_mail_transaction_commit(void *txn,
 static void replication_mailbox_create(struct mailbox *box)
 {
 	replication_notify(mailbox_get_namespace(box),
-			   REPLICATION_PRIORITY_LOW);
+			   REPLICATION_PRIORITY_LOW, "mailbox create");
 }
 
 static void
@@ -267,7 +276,7 @@ replication_mailbox_delete_commit(void *txn ATTR_UNUSED,
 				  struct mailbox *box)
 {
 	replication_notify(mailbox_get_namespace(box),
-			   REPLICATION_PRIORITY_LOW);
+			   REPLICATION_PRIORITY_LOW, "mailbox delete");
 }
 
 static void
@@ -275,14 +284,14 @@ replication_mailbox_rename(struct mailbox *src ATTR_UNUSED,
 			   struct mailbox *dest)
 {
 	replication_notify(mailbox_get_namespace(dest),
-			   REPLICATION_PRIORITY_LOW);
+			   REPLICATION_PRIORITY_LOW, "mailbox rename");
 }
 
 static void replication_mailbox_set_subscribed(struct mailbox *box,
 					       bool subscribed ATTR_UNUSED)
 {
 	replication_notify(mailbox_get_namespace(box),
-			   REPLICATION_PRIORITY_LOW);
+			   REPLICATION_PRIORITY_LOW, "mailbox subscribe");
 }
 
 static void replication_user_deinit(struct mail_user *user)
@@ -306,6 +315,21 @@ static void replication_user_created(struct mail_user *user)
 	struct mail_user_vfuncs *v = user->vlast;
 	struct replication_user *ruser;
 	const char *value;
+
+	value = mail_user_plugin_getenv(user, "mail_replica");
+	if (value == NULL || value[0] == '\0') {
+		if (user->mail_debug)
+			i_debug("replication: No mail_replica setting - replication disabled");
+		return;
+	}
+
+	if (user->dsyncing) {
+		/* we're running dsync, which means that the remote is telling
+		   us about a change. don't trigger a replication back to it */
+		if (user->mail_debug)
+			i_debug("replication: We're running dsync - replication disabled");
+		return;
+	}
 
 	ruser = p_new(user->pool, struct replication_user, 1);
 	ruser->module_ctx.super = *v;

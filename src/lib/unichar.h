@@ -51,10 +51,16 @@ void uni_ucs4_to_utf8_c(unichar_t chr, buffer_t *output);
    -1 for invalid input. */
 int uni_utf8_get_char(const char *input, unichar_t *chr_r);
 int uni_utf8_get_char_n(const void *input, size_t max_len, unichar_t *chr_r);
-/* Returns UTF-8 string length. */
+/* Returns number of characters in UTF-8 string. */
 unsigned int uni_utf8_strlen(const char *input) ATTR_PURE;
-/* Returns UTF-8 string length with maximum input size. */
+/* Returns number of characters in UTF-8 input of specified size. */
 unsigned int uni_utf8_strlen_n(const void *input, size_t size) ATTR_PURE;
+/* Same as uni_utf8_strlen_n(), but if input ends with a partial UTF-8
+   character, don't include it in the return value and set partial_pos_r to
+   where the character begins. Otherwise partial_pos_r is set to the end
+   of the input. */
+unsigned int uni_utf8_partial_strlen_n(const void *input, size_t size,
+				       size_t *partial_pos_r);
 
 /* Returns the number of bytes belonging to this UTF-8 character. The given
    parameter is the first byte of the UTF-8 sequence. Invalid input is

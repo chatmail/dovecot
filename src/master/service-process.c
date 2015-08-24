@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "array.h"
@@ -227,6 +227,8 @@ static void service_process_setup_config_environment(struct service *service)
 		env_put(t_strconcat("DEBUG_LOG_PATH=", set->debug_log_path, NULL));
 		env_put(t_strconcat("LOG_TIMESTAMP=", set->log_timestamp, NULL));
 		env_put(t_strconcat("SYSLOG_FACILITY=", set->syslog_facility, NULL));
+		if (set->verbose_proctitle)
+			env_put("VERBOSE_PROCTITLE=1");
 		env_put("SSL=no");
 		break;
 	default:
@@ -334,6 +336,7 @@ struct service_process *service_process_create(struct service *service)
 		drop_privileges(service);
 		process_exec(service->executable, NULL);
 	}
+	i_assert(hash_table_lookup(service_pids, POINTER_CAST(pid)) == NULL);
 
 	process = i_new(struct service_process, 1);
 	process->service = service;

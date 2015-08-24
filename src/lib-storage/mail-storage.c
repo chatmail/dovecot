@@ -1,16 +1,20 @@
-/* Copyright (c) 2002-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
 #include "array.h"
 #include "llist.h"
 #include "str.h"
+#include "str-sanitize.h"
 #include "unichar.h"
 #include "istream.h"
 #include "eacces-error.h"
 #include "mkdir-parents.h"
 #include "time-util.h"
 #include "var-expand.h"
+#include "dsasl-client.h"
+#include "imap-date.h"
+#include "settings-parser.h"
 #include "mail-index-private.h"
 #include "mail-index-alloc-cache.h"
 #include "mailbox-tree.h"
@@ -26,7 +30,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-#define MAILBOX_DELETE_RETRY_SECS (60*5)
+#define MAILBOX_DELETE_RETRY_SECS 30
 
 extern struct mail_search_register *mail_search_register_imap;
 extern struct mail_search_register *mail_search_register_human;
@@ -40,6 +44,7 @@ ARRAY_TYPE(mail_storage) mail_storage_classes;
 
 void mail_storage_init(void)
 {
+	dsasl_clients_init();
 	mailbox_lists_init();
 	mail_storage_hooks_init();
 	i_array_init(&mail_storage_classes, 8);
@@ -55,6 +60,7 @@ void mail_storage_deinit(void)
 		array_free(&mail_storage_classes);
 	mail_storage_hooks_deinit();
 	mailbox_lists_deinit();
+	dsasl_clients_deinit();
 }
 
 void mail_storage_class_register(struct mail_storage *storage_class)
@@ -432,6 +438,10 @@ void mail_storage_unref(struct mail_storage **_storage)
 
 	storage->v.destroy(storage);
 	i_free(storage->error_string);
+	if (array_is_created(&storage->error_stack)) {
+		i_assert(array_count(&storage->error_stack) == 0);
+		array_free(&storage->error_stack);
+	}
 
 	*_storage = NULL;
 	pool_unref(&storage->pool);
@@ -593,6 +603,29 @@ enum mail_error mailbox_get_last_mail_error(struct mailbox *box)
 
 	mail_storage_get_last_error(box->storage, &error);
 	return error;
+}
+
+void mail_storage_last_error_push(struct mail_storage *storage)
+{
+	struct mail_storage_error *err;
+
+	if (!array_is_created(&storage->error_stack))
+		i_array_init(&storage->error_stack, 2);
+	err = array_append_space(&storage->error_stack);
+	err->error_string = i_strdup(storage->error_string);
+	err->error = storage->error;
+}
+
+void mail_storage_last_error_pop(struct mail_storage *storage)
+{
+	unsigned int count = array_count(&storage->error_stack);
+	const struct mail_storage_error *err =
+		array_idx(&storage->error_stack, count-1);
+
+	i_free(storage->error_string);
+	storage->error_string = err->error_string;
+	storage->error = err->error;
+	array_delete(&storage->error_stack, count-1, 1);
 }
 
 bool mail_storage_is_mailbox_file(struct mail_storage *storage)
@@ -839,7 +872,19 @@ static int mailbox_verify_name(struct mailbox *box)
 
 	if (ns->prefix_len > 0) {
 		/* vname is either "namespace/box" or "namespace" */
-		i_assert(strncmp(vname, ns->prefix, ns->prefix_len-1) == 0);
+		if (strncmp(vname, ns->prefix, ns->prefix_len-1) != 0 ||
+		    (vname[ns->prefix_len-1] != '\0' &&
+		     vname[ns->prefix_len-1] != ns->prefix[ns->prefix_len-1])) {
+			/* User input shouldn't normally be able to get us in
+			   here. The main reason this isn't an assert is to
+			   allow any input at all to mailbox_verify_*_name()
+			   without crashing. */
+			mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
+				t_strdup_printf("Invalid mailbox name '%s': "
+					"Missing namespace prefix '%s'",
+					str_sanitize(vname, 80), ns->prefix));
+			return -1;
+		}
 		vname += ns->prefix_len - 1;
 		if (vname[0] != '\0') {
 			i_assert(vname[0] == ns->prefix[ns->prefix_len-1]);
@@ -1292,11 +1337,21 @@ int mailbox_mark_index_deleted(struct mailbox *box, bool del)
 	/* sync the mailbox. this finishes the index deletion and it can
 	   succeed only for a single session. we do it here, so the rest of
 	   the deletion code doesn't have to worry about race conditions. */
-	if (mailbox_sync(box, MAILBOX_SYNC_FLAG_FULL_READ) < 0)
+	box->delete_sync_check = TRUE;
+	ret = mailbox_sync(box, MAILBOX_SYNC_FLAG_FULL_READ);
+	box->delete_sync_check = FALSE;
+	if (ret < 0)
 		return -1;
 
 	box->marked_deleted = del;
 	return 0;
+}
+
+static void mailbox_close_reset_path(struct mailbox *box)
+{
+	memset(&box->_perm, 0, sizeof(box->_perm));
+	box->_path = NULL;
+	box->_index_path = NULL;
 }
 
 int mailbox_delete(struct mailbox *box)
@@ -1311,7 +1366,8 @@ int mailbox_delete(struct mailbox *box)
 
 	box->deleting = TRUE;
 	if (mailbox_open(box) < 0) {
-		if (mailbox_get_last_mail_error(box) != MAIL_ERROR_NOTFOUND)
+		if (mailbox_get_last_mail_error(box) != MAIL_ERROR_NOTFOUND &&
+		    !box->mailbox_deleted)
 			return -1;
 		/* \noselect mailbox */
 	}
@@ -1326,6 +1382,10 @@ int mailbox_delete(struct mailbox *box)
 
 	box->deleting = FALSE;
 	mailbox_close(box);
+
+	/* if mailbox is reopened, its path may be different with
+	   LAYOUT=index */
+	mailbox_close_reset_path(box);
 	return ret;
 }
 
@@ -1522,6 +1582,9 @@ int mailbox_get_status(struct mailbox *box,
 	mailbox_get_status_set_defaults(box, status_r);
 	if (mailbox_verify_existing_name(box) < 0)
 		return -1;
+
+	if ((items & STATUS_HIGHESTMODSEQ) != 0)
+		mailbox_enable(box, MAILBOX_FEATURE_CONDSTORE);
 	if (box->v.get_status(box, items, status_r) < 0)
 		return -1;
 	i_assert(status_r->have_guids || !status_r->have_save_guids);
@@ -1536,6 +1599,8 @@ void mailbox_get_open_status(struct mailbox *box,
 	i_assert((items & MAILBOX_STATUS_FAILING_ITEMS) == 0);
 
 	mailbox_get_status_set_defaults(box, status_r);
+	if ((items & STATUS_HIGHESTMODSEQ) != 0)
+		mailbox_enable(box, MAILBOX_FEATURE_CONDSTORE);
 	if (box->v.get_status(box, items, status_r) < 0)
 		i_unreached();
 }
@@ -1566,102 +1631,6 @@ enum mail_flags mailbox_get_private_flags_mask(struct mailbox *box)
 		return MAIL_SEEN; /* FIXME */
 	else
 		return 0;
-}
-
-int mailbox_attribute_set(struct mailbox_transaction_context *t,
-			  enum mail_attribute_type type, const char *key,
-			  const struct mail_attribute_value *value)
-{
-	return t->box->v.attribute_set(t, type, key, value);
-}
-
-int mailbox_attribute_unset(struct mailbox_transaction_context *t,
-			    enum mail_attribute_type type, const char *key)
-{
-	struct mail_attribute_value value;
-
-	memset(&value, 0, sizeof(value));
-	return t->box->v.attribute_set(t, type, key, &value);
-}
-
-int mailbox_attribute_value_to_string(struct mail_storage *storage,
-				      const struct mail_attribute_value *value,
-				      const char **str_r)
-{
-	string_t *str;
-	const unsigned char *data;
-	size_t size;
-
-	if (value->value_stream == NULL) {
-		*str_r = value->value;
-		return 0;
-	}
-	str = t_str_new(128);
-	i_stream_seek(value->value_stream, 0);
-	while (i_stream_read_data(value->value_stream, &data, &size, 0) > 0) {
-		if (memchr(data, '\0', size) != NULL) {
-			mail_storage_set_error(storage, MAIL_ERROR_PARAMS,
-				"Attribute string value has NULs");
-			return -1;
-		}
-		str_append_n(str, data, size);
-		i_stream_skip(value->value_stream, size);
-	}
-	if (value->value_stream->stream_errno != 0) {
-		mail_storage_set_critical(storage, "read(%s) failed: %m",
-			i_stream_get_name(value->value_stream));
-		return -1;
-	}
-	i_assert(value->value_stream->eof);
-	*str_r = str_c(str);
-	return 0;
-}
-
-int mailbox_attribute_get(struct mailbox_transaction_context *t,
-			  enum mail_attribute_type type, const char *key,
-			  struct mail_attribute_value *value_r)
-{
-	int ret;
-
-	memset(value_r, 0, sizeof(*value_r));
-	if ((ret = t->box->v.attribute_get(t, type, key, value_r)) <= 0)
-		return ret;
-	i_assert(value_r->value != NULL);
-	return 1;
-}
-
-int mailbox_attribute_get_stream(struct mailbox_transaction_context *t,
-				 enum mail_attribute_type type, const char *key,
-				 struct mail_attribute_value *value_r)
-{
-	int ret;
-
-	memset(value_r, 0, sizeof(*value_r));
-	value_r->flags |= MAIL_ATTRIBUTE_VALUE_FLAG_INT_STREAMS;
-	if ((ret = t->box->v.attribute_get(t, type, key, value_r)) <= 0)
-		return ret;
-	i_assert(value_r->value != NULL || value_r->value_stream != NULL);
-	return 1;
-}
-
-struct mailbox_attribute_iter *
-mailbox_attribute_iter_init(struct mailbox *box, enum mail_attribute_type type,
-			    const char *prefix)
-{
-	return box->v.attribute_iter_init(box, type, prefix);
-}
-
-const char *mailbox_attribute_iter_next(struct mailbox_attribute_iter *iter)
-{
-	return iter->box->v.attribute_iter_next(iter);
-}
-
-int mailbox_attribute_iter_deinit(struct mailbox_attribute_iter **_iter)
-{
-	struct mailbox_attribute_iter *iter = *_iter;
-
-	*_iter = NULL;
-	return iter->box->v.attribute_iter_deinit(iter);
 }
 
 struct mailbox_sync_context *
@@ -1916,7 +1885,9 @@ mailbox_save_alloc(struct mailbox_transaction_context *t)
 {
 	struct mail_save_context *ctx;
 
-	ctx = t->box->v.save_alloc(t);
+	T_BEGIN {
+		ctx = t->box->v.save_alloc(t);
+	} T_END;
 	i_assert(!ctx->unfinished);
 	ctx->unfinished = TRUE;
 	ctx->data.received_date = (time_t)-1;
@@ -1929,6 +1900,9 @@ void mailbox_save_set_flags(struct mail_save_context *ctx,
 			    struct mail_keywords *keywords)
 {
 	struct mailbox *box = ctx->transaction->box;
+
+	if (ctx->data.keywords != NULL)
+		mailbox_keywords_unref(&ctx->data.keywords);
 
 	ctx->data.flags = flags & ~mailbox_get_private_flags_mask(box);
 	ctx->data.pvt_flags = flags & mailbox_get_private_flags_mask(box);
@@ -2030,9 +2004,9 @@ int mailbox_save_begin(struct mail_save_context **ctx, struct istream *input)
 		mail_storage_set_error(box->storage, MAIL_ERROR_NOTPOSSIBLE,
 				       "Saving messages not supported");
 		ret = -1;
-	} else {
+	} else T_BEGIN {
 		ret = box->v.save_begin(*ctx, input);
-	}
+	} T_END;
 
 	if (ret < 0) {
 		mailbox_save_cancel(ctx);
@@ -2043,7 +2017,12 @@ int mailbox_save_begin(struct mail_save_context **ctx, struct istream *input)
 
 int mailbox_save_continue(struct mail_save_context *ctx)
 {
-	return ctx->transaction->box->v.save_continue(ctx);
+	int ret;
+
+	T_BEGIN {
+		ret = ctx->transaction->box->v.save_continue(ctx);
+	} T_END;
+	return ret;
 }
 
 static void
@@ -2080,7 +2059,9 @@ int mailbox_save_finish(struct mail_save_context **_ctx)
 	*_ctx = NULL;
 
 	ctx->finishing = TRUE;
-	ret = t->box->v.save_finish(ctx);
+	T_BEGIN {
+		ret = t->box->v.save_finish(ctx);
+	} T_END;
 	ctx->finishing = FALSE;
 
 	if (ret == 0 && !copying_via_save) {
@@ -2102,7 +2083,9 @@ void mailbox_save_cancel(struct mail_save_context **_ctx)
 	struct mail_private *mail;
 
 	*_ctx = NULL;
-	ctx->transaction->box->v.save_cancel(ctx);
+	T_BEGIN {
+		ctx->transaction->box->v.save_cancel(ctx);
+	} T_END;
 	if (keywords != NULL && !ctx->finishing)
 		mailbox_keywords_unref(&keywords);
 	if (ctx->dest_mail != NULL) {
@@ -2146,7 +2129,9 @@ int mailbox_copy(struct mail_save_context **_ctx, struct mail *mail)
 		return -1;
 	}
 	ctx->finishing = TRUE;
-	ret = t->box->v.copy(ctx, backend_mail);
+	T_BEGIN {
+		ret = t->box->v.copy(ctx, backend_mail);
+	} T_END;
 	ctx->finishing = FALSE;
 	if (ret == 0) {
 		if (pvt_flags != 0)
@@ -2206,6 +2191,14 @@ int mailbox_get_path_to(struct mailbox *box, enum mailbox_list_path_type type,
 		*path_r = box->_path;
 		return 1;
 	}
+	if (type == MAILBOX_LIST_PATH_TYPE_INDEX && box->_index_path != NULL) {
+		if (box->_index_path[0] == '\0') {
+			*path_r = NULL;
+			return 0;
+		}
+		*path_r = box->_index_path;
+		return 1;
+	}
 	ret = mailbox_list_get_path(box->list, box->name, type, path_r);
 	if (ret < 0) {
 		mail_storage_copy_list_error(box->storage, box->list);
@@ -2213,6 +2206,8 @@ int mailbox_get_path_to(struct mailbox *box, enum mailbox_list_path_type type,
 	}
 	if (type == MAILBOX_LIST_PATH_TYPE_MAILBOX && box->_path == NULL)
 		box->_path = ret == 0 ? "" : p_strdup(box->pool, *path_r);
+	if (type == MAILBOX_LIST_PATH_TYPE_INDEX && box->_index_path == NULL)
+		box->_index_path = ret == 0 ? "" : p_strdup(box->pool, *path_r);
 	return ret;
 }
 
@@ -2221,6 +2216,13 @@ const char *mailbox_get_path(struct mailbox *box)
 	i_assert(box->_path != NULL);
 	i_assert(box->_path[0] != '\0');
 	return box->_path;
+}
+
+const char *mailbox_get_index_path(struct mailbox *box)
+{
+	i_assert(box->_index_path != NULL);
+	i_assert(box->_index_path[0] != '\0');
+	return box->_index_path;
 }
 
 static void mailbox_get_permissions_if_not_set(struct mailbox *box)
@@ -2395,4 +2397,36 @@ mail_storage_settings_to_index_flags(const struct mail_storage_settings *set)
 	if (set->mail_nfs_index)
 		index_flags |= MAIL_INDEX_OPEN_FLAG_NFS_FLUSH;
 	return index_flags;
+}
+
+int mail_parse_human_timestamp(const char *str, time_t *timestamp_r)
+{
+	struct tm tm;
+	unsigned int secs;
+	const char *error;
+
+	if (i_isdigit(str[0]) && i_isdigit(str[1]) &&
+	    i_isdigit(str[2]) && i_isdigit(str[3]) && str[4] == '-' &&
+	    i_isdigit(str[5]) && i_isdigit(str[6]) && str[7] == '-' &&
+	    i_isdigit(str[8]) && i_isdigit(str[9]) && str[10] == '\0') {
+		/* yyyy-mm-dd */
+		memset(&tm, 0, sizeof(tm));
+		tm.tm_year = (str[0]-'0') * 1000 + (str[1]-'0') * 100 +
+			(str[2]-'0') * 10 + (str[3]-'0') - 1900;
+		tm.tm_mon = (str[5]-'0') * 10 + (str[6]-'0') - 1;
+		tm.tm_mday = (str[8]-'0') * 10 + (str[9]-'0');
+		*timestamp_r = mktime(&tm);
+		return 0;
+	} else if (imap_parse_date(str, timestamp_r)) {
+		/* imap date */
+		return 0;
+	} else if (str_to_time(str, timestamp_r) == 0) {
+		/* unix timestamp */
+		return 0;
+	} else if (settings_get_time(str, &secs, &error) == 0) {
+		*timestamp_r = ioloop_time - secs;
+		return 0;
+	} else {
+		return -1;
+	}
 }

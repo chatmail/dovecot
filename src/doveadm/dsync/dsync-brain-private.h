@@ -32,6 +32,7 @@ enum dsync_state {
 	   after the mails are synced, another mailbox is synced. */
 	DSYNC_STATE_SYNC_MAILS,
 
+	DSYNC_STATE_FINISH,
 	DSYNC_STATE_DONE
 };
 
@@ -52,9 +53,13 @@ struct dsync_brain {
 	const char *process_title_prefix;
 	ARRAY(struct mail_namespace *) sync_namespaces;
 	const char *sync_box;
+	struct mailbox *virtual_all_box;
 	guid_128_t sync_box_guid;
 	const char *const *exclude_mailboxes;
 	enum dsync_brain_sync_type sync_type;
+	time_t sync_since_timestamp;
+	const char *sync_flag;
+	char alt_char;
 
 	unsigned int lock_timeout;
 	int lock_fd;
@@ -77,6 +82,7 @@ struct dsync_brain {
 
 	struct mailbox *box;
 	struct dsync_mailbox local_dsync_box, remote_dsync_box;
+	pool_t dsync_box_pool;
 	/* list of mailbox states
 	   for master brain: given to brain at init and
 	   for slave brain: received from DSYNC_STATE_SLAVE_RECV_LAST_COMMON */
@@ -89,6 +95,8 @@ struct dsync_brain {
 	/* new states for synced mailboxes */
 	ARRAY_TYPE(dsync_mailbox_state) remote_mailbox_states;
 
+	enum mail_error mail_error;
+
 	unsigned int master_brain:1;
 	unsigned int mail_requests:1;
 	unsigned int backup_send:1;
@@ -98,6 +106,7 @@ struct dsync_brain {
 	unsigned int sync_visible_namespaces:1;
 	unsigned int no_mail_sync:1;
 	unsigned int no_backup_overwrite:1;
+	unsigned int no_mail_prefetch:1;
 	unsigned int changes_during_sync:1;
 	unsigned int require_full_resync:1;
 	unsigned int verbose_proctitle:1;
@@ -112,11 +121,13 @@ void dsync_brain_send_mailbox_tree_deletes(struct dsync_brain *brain);
 bool dsync_brain_recv_mailbox_tree(struct dsync_brain *brain);
 bool dsync_brain_recv_mailbox_tree_deletes(struct dsync_brain *brain);
 int dsync_brain_mailbox_tree_sync_change(struct dsync_brain *brain,
-			const struct dsync_mailbox_tree_sync_change *change);
+			const struct dsync_mailbox_tree_sync_change *change,
+			enum mail_error *error_r);
 
 void dsync_brain_sync_mailbox_deinit(struct dsync_brain *brain);
 int dsync_brain_mailbox_alloc(struct dsync_brain *brain, const guid_128_t guid,
-			      struct mailbox **box_r, const char **error_r);
+			      struct mailbox **box_r, const char **errstr_r,
+			      enum mail_error *error_r);
 bool dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
 				    struct mailbox *box,
 				    const struct dsync_mailbox *local_box,

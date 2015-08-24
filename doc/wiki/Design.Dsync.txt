@@ -1,6 +1,9 @@
 Dsync Design
 ============
 
+FIXME: This describes the design for v2.0/v2.1. The v2.2 design is somewhat
+different.
+
 Two-way synchronization
 -----------------------
 
@@ -108,4 +111,4 @@ FIXME: This optimization currently works only in full sync mode. If this were
 to work in fast sync mode, the full mailbox list would have to be looked up
 from local side. And this would slow it down..
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

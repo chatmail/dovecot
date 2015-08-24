@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
 
 /*
    This program accepts incoming unauthenticated IMAP connections from
@@ -460,7 +460,7 @@ static struct admin_connection *admin_connect(const char *path)
 					    admin_random_action, conn);
 
 	net_set_nonblock(conn->fd, FALSE);
-	conn->input = i_stream_create_fd(conn->fd, (size_t)-1, TRUE);
+	conn->input = i_stream_create_fd(conn->fd, (size_t)-1, FALSE);
 	admin_send(conn, DIRECTOR_ADMIN_HANDSHAKE);
 
 	line = i_stream_read_next_line(conn->input);

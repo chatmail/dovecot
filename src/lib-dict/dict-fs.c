@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -14,12 +14,20 @@ struct fs_dict {
 	char *username;
 };
 
+struct fs_dict_iterate_context {
+	struct dict_iterate_context ctx;
+	const char **paths;
+	unsigned int path_idx;
+	enum dict_iterate_flags flags;
+	pool_t value_pool;
+	struct fs_iter *fs_iter;
+	bool failed;
+};
+
 static int
 fs_dict_init(struct dict *driver, const char *uri,
-	     enum dict_data_type value_type ATTR_UNUSED,
-	     const char *username,
-	     const char *base_dir, struct dict **dict_r,
-	     const char **error_r)
+	     const struct dict_settings *set,
+	     struct dict **dict_r, const char **error_r)
 {
 	struct fs_settings fs_set;
 	struct fs *fs;
@@ -36,14 +44,15 @@ fs_dict_init(struct dict *driver, const char *uri,
 	}
 
 	memset(&fs_set, 0, sizeof(fs_set));
-	fs_set.base_dir = base_dir;
+	fs_set.username = set->username;
+	fs_set.base_dir = set->base_dir;
 	if (fs_init(fs_driver, fs_args, &fs_set, &fs, error_r) < 0)
 		return -1;
 
 	dict = i_new(struct fs_dict, 1);
 	dict->dict = *driver;
 	dict->fs = fs;
-	dict->username = i_strdup(username);
+	dict->username = i_strdup(set->username);
 
 	*dict_r = &dict->dict;
 	return 0;
@@ -104,6 +113,85 @@ static int fs_dict_lookup(struct dict *_dict, pool_t pool,
 
 	i_stream_unref(&input);
 	fs_file_deinit(&file);
+	return ret;
+}
+
+static struct dict_iterate_context *
+fs_dict_iterate_init(struct dict *_dict, const char *const *paths,
+		     enum dict_iterate_flags flags)
+{
+	struct fs_dict *dict = (struct fs_dict *)_dict;
+	struct fs_dict_iterate_context *iter;
+
+	/* these flags are not supported for now */
+	i_assert((flags & DICT_ITERATE_FLAG_RECURSE) == 0);
+	i_assert((flags & DICT_ITERATE_FLAG_EXACT_KEY) == 0);
+	i_assert((flags & (DICT_ITERATE_FLAG_SORT_BY_KEY |
+			   DICT_ITERATE_FLAG_SORT_BY_VALUE)) == 0);
+
+	iter = i_new(struct fs_dict_iterate_context, 1);
+	iter->ctx.dict = _dict;
+	iter->paths = p_strarray_dup(default_pool, paths);
+	iter->flags = flags;
+	iter->value_pool = pool_alloconly_create("iterate value pool", 128);
+	iter->fs_iter = fs_iter_init(dict->fs,
+				     fs_dict_get_full_key(dict, paths[0]), 0);
+	return &iter->ctx;
+}
+
+static bool fs_dict_iterate(struct dict_iterate_context *ctx,
+			    const char **key_r, const char **value_r)
+{
+	struct fs_dict_iterate_context *iter =
+		(struct fs_dict_iterate_context *)ctx;
+	struct fs_dict *dict = (struct fs_dict *)ctx->dict;
+	const char *path;
+	int ret;
+
+	*key_r = fs_iter_next(iter->fs_iter);
+	if (*key_r == NULL) {
+		if (fs_iter_deinit(&iter->fs_iter) < 0) {
+			iter->failed = TRUE;
+			return FALSE;
+		}
+		if (iter->paths[++iter->path_idx] == NULL)
+			return FALSE;
+		path = fs_dict_get_full_key(dict, iter->paths[iter->path_idx]);
+		iter->fs_iter = fs_iter_init(dict->fs, path, 0);
+		return fs_dict_iterate(ctx, key_r, value_r);
+	}
+	if ((iter->flags & DICT_ITERATE_FLAG_NO_VALUE) != 0) {
+		*value_r = NULL;
+		return TRUE;
+	}
+	p_clear(iter->value_pool);
+	path = t_strconcat(iter->paths[iter->path_idx], *key_r, NULL);
+	if ((ret = fs_dict_lookup(ctx->dict, iter->value_pool, path, value_r)) < 0) {
+		/* I/O error */
+		iter->failed = TRUE;
+		return FALSE;
+	} else if (ret == 0) {
+		/* file was just deleted, just skip to next one */
+		return fs_dict_iterate(ctx, key_r, value_r);
+	}
+	return TRUE;
+}
+
+static int fs_dict_iterate_deinit(struct dict_iterate_context *ctx)
+{
+	struct fs_dict_iterate_context *iter =
+		(struct fs_dict_iterate_context *)ctx;
+	int ret;
+
+	if (iter->fs_iter != NULL) {
+		if (fs_iter_deinit(&iter->fs_iter) < 0)
+			iter->failed = TRUE;
+	}
+	ret = iter->failed ? -1 : 0;
+
+	pool_unref(&iter->value_pool);
+	i_free(iter->paths);
+	i_free(iter);
 	return ret;
 }
 
@@ -187,9 +275,9 @@ struct dict dict_driver_fs = {
 		fs_dict_deinit,
 		NULL,
 		fs_dict_lookup,
-		NULL,
-		NULL,
-		NULL,
+		fs_dict_iterate_init,
+		fs_dict_iterate,
+		fs_dict_iterate_deinit,
 		fs_dict_transaction_init,
 		fs_dict_transaction_commit,
 		dict_transaction_memory_rollback,

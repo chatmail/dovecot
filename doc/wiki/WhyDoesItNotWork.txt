@@ -1,5 +1,5 @@
-Why doesn't Dovecot work?
-=========================
+Why is Dovecot not working for me?
+==================================
 
  * *Dovecot always logs an error message* if anything goes wrong, so make sure
    you're looking at the correct log files. Debug messages may be written to a
@@ -47,6 +47,16 @@ If you're using <PAM> [PasswordDatabase.PAM.txt]:
  * Usually the problem is that you don't have a correctly named file in
    '/etc/pam.d/'. See <PasswordDatabase.PAM.txt>.
 
+Authenticated SMTP is hanging when authenticating, when configured with dovecot
+authenticator
+---------------------------------------------------------------------------------------------
+
+It is possible that you SMTP daemon is configured with the wrong socket. Please
+note that '/run/dovecot/auth-client' and '/run/dovecot/auth-userdb' do respond
+do different protocols. They are however very similar and it is possible that
+the difference may not be reported as an error and the SMTP server is waiting
+for a response that will never come.
+
 It's not finding my emails
 --------------------------
 
@@ -54,4 +64,27 @@ It's not finding my emails
 'auth_debug=yes' may be helpful in debugging. See <MailLocation.txt> for how to
 configure where the mails are looked up from.
 
-(This file was created from the wiki on 2013-11-24 04:43)
+Permission errors accessing the mail storage
+--------------------------------------------
+
+---%<-------------------------------------------------------------------------
+lda(user1): Error: chdir(/home/user1/) failed: Permission denied
+(euid=1025(user1) egid=1026(user1) stat() failed: No such file or directory,
+euid is not dir owner)
+---%<-------------------------------------------------------------------------
+
+Check out the access permissions of the mentioned directory, check:
+
+ 1. Unix permissions with the command 'ls -aln /home/user1', see Unix
+    permissions
+    [https://en.wikipedia.org/wiki/File_system_permissions#Traditional_Unix_permissions],
+    as well as make sure the user has  "x" permission for  "'/'" and all
+    directories, just  "'/home'" in this case, test with:  "'su - user1  ls
+    -aln /home/user1'"
+ 2. security tools, like SELinux: run  "'sestatus'" and "'grep -i AVC
+    /var/log/audit/audit.log'" to identify SELinux caused denials,
+ 3. what file system the storage is located on, for instance AFS implements
+    different access permissions or POSIX eXtended attributes may change the
+    traditional permissions.
+
+(This file was created from the wiki on 2015-05-13 16:45)

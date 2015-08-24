@@ -65,35 +65,48 @@ Sieve Interpreter Configuration
 The part of the <Sieve interpreter> [Pigeonhole.Sieve.txt] configuration that
 is relevant forManageSieve mainly consists of the settings that specify where
 the user's scripts are stored and where the active script is located.
-TheManageSieve service primarily uses the following Sieve interpreter settings
+TheManageSieve service primarily uses the following Sieve interpreter setting
 in the 'plugin' section of the Dovecot configuration:
 
-sieve_dir = ~/sieve:
-  This specifies the path to the directory where the uploaded scripts are
-  stored. Scripts are stored as separate files with extension '.sieve'. All
-  other files are ignored when scripts are listed by aManageSieve client. The
-  Sieve interpreter also uses this setting to locate the user's personal
-  scripts for use with the Sieve include extension
-  [http://tools.ietf.org/html/draft-ietf-sieve-include]. A storage location
-  specified by 'sieve_dir' is always generated automatically if it does not
-  exist (as far as the system permits the user to do so; no root privileges are
-  used). This is similar to the behavior of the mail daemons regarding the
-  'mail_location' configuration.
+sieve = file:~/sieve;active=~/.dovecot.sieve :
+  This specifies the <location> [Pigeonhole.Sieve.Configuration.txt] where the
+  scripts that are uploaded throughManageSieve are stored. During delivery, the
+  LDA Sieve plugin uses this location setting to find the active script for
+  Sieve filtering. The Sieve include extension uses this location for
+  retrieving ":personal" scripts. If the location type does not allow uploading
+  scripts, theManageSieve service cannot be used. Currently, only the ' <file>
+  [Pigeonhole.Sieve.Configuration.File.txt]' <location type>
+  [Pigeonhole.Sieve.Configuration.txt] supports ManageSieve.
 
-sieve = ~/.dovecot.sieve:
-  This specifies the location of the symbolic link pointing to the active
-  script in the Sieve storage directory. The Sieve interpreter uses this
-  setting to locate the main script file that needs to be executed upon
-  delivery. When usingManageSieve, this is a symbolic link managed by the
-  ManageSieve service. ManageSieve thereby determines which script (if any) in
-  the 'sieve_dir' directory is executed for incoming messages. If a regular
-  file already exists at the location specified by the 'sieve' setting, it is
-  moved to the 'sieve_dir' location before the symbolic link is installed. It
-  is renamed to 'dovecot.orig.sieve' and therefore listed as `dovecot.orig' by
-  aManageSieve client. *Note:* It is not wise to place this link inside your
-  mail store, as it may be mistaken for a mail folder. Inside a maildir for
-  instance, the default '.dovecot.sieve' would show up as phantom folder
-  //dovecot/sieve/ in your IMAP tree.
+:
+  For the ' <file> [Pigeonhole.Sieve.Configuration.File.txt]' <location type>
+  [Pigeonhole.Sieve.Configuration.txt]:
+
+   * The location is the path to the storage directory for all the user's
+     personal Sieve scripts.  Scripts are stored as separate files with
+     extension '.sieve'. All other files are ignored when scripts are listed by
+     aManageSieve client. The storage directory is always generated
+     automatically if it does not exist (as far as the system permits the user
+     to do so; no root privileges are used). This is similar to the behavior of
+     the mail daemons regarding the 'mail_location' configuration.
+   * ManageSieve maintains a symbolic link pointing to the currently active
+     script (the script executed at delivery). The location of this symbolic
+     link can be configured using the ';active=<path>' option. If a regular
+     file already exists at the location specified by in the ';active=<path>'
+     location option, it is moved to the storage directory before the symbolic
+     link is installed. It is renamed to 'dovecot.orig.sieve' and therefore
+     listed as 'dovecot.orig' by a ManageSieve client. *Note:* It is not wise
+     to place this active symbolic link inside your mail store, as it may be
+     mistaken for a mail folder. Inside a maildir for instance, the default
+     '.dovecot.sieve' would show up as phantom folder //dovecot/sieve/ in your
+     IMAP tree.
+
+:
+  For Pigeonhole versions before v0.3.1, this setting can only be a filesystem
+  path pointing to a script file, or - whenManageSieve is used - it is the
+  location of the symbolic link pointing to the active script in the storage
+  directory. That storage directory is then configured using the deprecated
+  'sieve_dir' setting.
 
 Quota Support
 -------------
@@ -205,8 +218,7 @@ script
 
 plugin {
   # Used by both the Sieve plugin and the ManageSieve protocol
-  sieve = ~/.dovecot.sieve
-  sieve_dir = ~/sieve
+  sieve = file:~/sieve;active=~/.dovecot.sieve
 }
 ---%<-------------------------------------------------------------------------
 
@@ -214,11 +226,9 @@ Proxy
 -----
 
 Like Dovecot's imapd, the ManageSieve login daemon supports proxying to
-multiple backend servers. Although the underlying code is copied from the imapd
-sources for the most part, it has someManageSieve-specifics that have not seen
-much testing. The <proxy configuration wiki page>
-[PasswordDatabase.ExtraFields.Proxy.txt] for POP3 and IMAP should apply to
-ManageSieve as well.
+multiple backend servers. The <proxy configuration wiki page>
+[PasswordDatabase.ExtraFields.Proxy.txt] for POP3 and IMAP applies
+automatically toManageSieve as well.
 
 Migration from Dovecot v1.x ManageSieve
 ---------------------------------------
@@ -245,4 +255,4 @@ The following has changed since the ManageSieve releases for Dovecot v1.x:
    and the services are still called 'managesieve' and 'managesieve-login'. The
    example section demonstrates how this affects the configuration.
 
-(This file was created from the wiki on 2013-11-24 04:42)
+(This file was created from the wiki on 2015-05-13 16:45)

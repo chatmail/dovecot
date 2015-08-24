@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -6,7 +6,7 @@
 #include "str.h"
 #include "unichar.h"
 #include "charset-utf8.h"
-#include "quoted-printable.h"
+#include "qp-decoder.h"
 #include "rfc822-parser.h"
 #include "rfc2231-parser.h"
 #include "message-parser.h"
@@ -15,10 +15,6 @@
 
 /* base64 takes max 4 bytes per character, q-p takes max 3. */
 #define MAX_ENCODING_BUF_SIZE 3
-
-/* UTF-8 takes max 5 bytes per character. Not sure about others, but I'd think
-   10 is more than enough for everyone.. */
-#define MAX_TRANSLATION_BUF_SIZE 10
 
 struct message_decoder_context {
 	enum message_decoder_flags flags;
@@ -30,15 +26,15 @@ struct message_decoder_context {
 
 	char *charset_trans_charset;
 	struct charset_translation *charset_trans;
-	char translation_buf[MAX_TRANSLATION_BUF_SIZE];
+	char translation_buf[CHARSET_MAX_PENDING_BUF_SIZE];
 	unsigned int translation_size;
 
+	struct qp_decoder *qp;
 	buffer_t *encoding_buf;
 
-	char *content_charset;
+	char *content_type, *content_charset;
 	enum message_cte message_cte;
 
-	unsigned int charset_utf8:1;
 	unsigned int binary_input:1;
 };
 
@@ -69,11 +65,14 @@ void message_decoder_deinit(struct message_decoder_context **_ctx)
 
 	if (ctx->charset_trans != NULL)
 		charset_to_utf8_end(&ctx->charset_trans);
+	if (ctx->qp != NULL)
+		qp_decoder_deinit(&ctx->qp);
 
 	buffer_free(&ctx->encoding_buf);
 	buffer_free(&ctx->buf);
 	buffer_free(&ctx->buf2);
 	i_free(ctx->charset_trans_charset);
+	i_free(ctx->content_type);
 	i_free(ctx->content_charset);
 	i_free(ctx);
 }
@@ -129,20 +128,20 @@ parse_content_type(struct message_decoder_context *ctx,
 	const char *const *results;
 	string_t *str;
 
-	if (ctx->content_charset != NULL)
+	if (ctx->content_type != NULL)
 		return;
 
 	rfc822_parser_init(&parser, hdr->full_value, hdr->full_value_len, NULL);
 	rfc822_skip_lwsp(&parser);
 	str = t_str_new(64);
-	if (rfc822_parse_content_type(&parser, str) <= 0)
+	if (rfc822_parse_content_type(&parser, str) < 0)
 		return;
+	ctx->content_type = i_strdup(str_c(str));
 
 	rfc2231_parse(&parser, &results);
 	for (; *results != NULL; results += 2) {
 		if (strcasecmp(results[0], "charset") == 0) {
 			ctx->content_charset = i_strdup(results[1]);
-			ctx->charset_utf8 = charset_is_utf8(results[1]);
 			break;
 		}
 	}
@@ -199,7 +198,7 @@ static bool message_decode_header(struct message_decoder_context *ctx,
 static void translation_buf_decode(struct message_decoder_context *ctx,
 				   const unsigned char **data, size_t *size)
 {
-	unsigned char trans_buf[MAX_TRANSLATION_BUF_SIZE+1];
+	unsigned char trans_buf[CHARSET_MAX_PENDING_BUF_SIZE+1];
 	unsigned int data_wanted, skip;
 	size_t trans_size, orig_size;
 
@@ -218,7 +217,7 @@ static void translation_buf_decode(struct message_decoder_context *ctx,
 
 	if (trans_size <= ctx->translation_size) {
 		/* need more data to finish the translation. */
-		i_assert(orig_size < MAX_TRANSLATION_BUF_SIZE);
+		i_assert(orig_size < CHARSET_MAX_PENDING_BUF_SIZE);
 		memcpy(ctx->translation_buf, trans_buf, orig_size);
 		ctx->translation_size = orig_size;
 		*data += *size;
@@ -243,7 +242,7 @@ message_decode_body_init_charset(struct message_decoder_context *ctx,
 		(part->flags & (MESSAGE_PART_FLAG_TEXT |
 				MESSAGE_PART_FLAG_MESSAGE_RFC822)) == 0;
 
-	if (ctx->charset_utf8 || ctx->binary_input)
+	if (ctx->binary_input)
 		return;
 
 	if (ctx->charset_trans != NULL && ctx->content_charset != NULL &&
@@ -260,7 +259,7 @@ message_decode_body_init_charset(struct message_decoder_context *ctx,
 					      ctx->content_charset : "UTF-8");
 	if (charset_to_utf8_begin(ctx->charset_trans_charset, ctx->normalizer,
 				  &ctx->charset_trans) < 0)
-		ctx->charset_trans = NULL;
+		ctx->charset_trans = charset_utf8_to_utf8_begin(ctx->normalizer);
 }
 
 static bool message_decode_body(struct message_decoder_context *ctx,
@@ -269,12 +268,11 @@ static bool message_decode_body(struct message_decoder_context *ctx,
 {
 	const unsigned char *data = NULL;
 	size_t pos = 0, size = 0;
+	const char *error;
 	int ret;
 
-	if (ctx->encoding_buf->used != 0) {
-		/* @UNSAFE */
+	if (ctx->encoding_buf->used != 0)
 		buffer_append(ctx->encoding_buf, input->data, input->size);
-	}
 
 	switch (ctx->message_cte) {
 	case MESSAGE_CTE_UNKNOWN:
@@ -283,22 +281,23 @@ static bool message_decode_body(struct message_decoder_context *ctx,
 
 	case MESSAGE_CTE_78BIT:
 	case MESSAGE_CTE_BINARY:
+		i_assert(ctx->encoding_buf->used == 0);
 		data = input->data;
 		size = pos = input->size;
 		break;
-	case MESSAGE_CTE_QP:
+	case MESSAGE_CTE_QP: {
+		i_assert(ctx->encoding_buf->used == 0);
 		buffer_set_used_size(ctx->buf, 0);
-		if (ctx->encoding_buf->used != 0) {
-			(void)quoted_printable_decode(ctx->encoding_buf->data,
-						      ctx->encoding_buf->used,
-						      &pos, ctx->buf);
-		} else {
-			(void)quoted_printable_decode(input->data, input->size,
-						      &pos, ctx->buf);
-		}
+		if (ctx->qp == NULL)
+			ctx->qp = qp_decoder_init(ctx->buf);
+		(void)qp_decoder_more(ctx->qp, input->data, input->size,
+				      &pos, &error);
 		data = ctx->buf->data;
 		size = ctx->buf->used;
+		/* eat away all input. qp-decoder buffers it internally. */
+		pos = input->size;
 		break;
+	}
 	case MESSAGE_CTE_BASE64:
 		buffer_set_used_size(ctx->buf, 0);
 		if (ctx->encoding_buf->used != 0) {
@@ -334,29 +333,6 @@ static bool message_decode_body(struct message_decoder_context *ctx,
 	if (ctx->binary_input) {
 		output->data = data;
 		output->size = size;
-	} else if (ctx->charset_utf8) {
-		buffer_set_used_size(ctx->buf2, 0);
-		if (ctx->normalizer != NULL) {
-			(void)ctx->normalizer(data, size, ctx->buf2);
-			output->data = ctx->buf2->data;
-			output->size = ctx->buf2->used;
-		} else if (uni_utf8_get_valid_data(data, size, ctx->buf2)) {
-			output->data = data;
-			output->size = size;
-		} else {
-			output->data = ctx->buf2->data;
-			output->size = ctx->buf2->used;
-		}
-	} else if (ctx->charset_trans == NULL) {
-		/* unknown charset */
-		buffer_set_used_size(ctx->buf2, 0);
-		if (uni_utf8_get_valid_data(data, size, ctx->buf2)) {
-			output->data = data;
-			output->size = size;
-		} else {
-			output->data = ctx->buf2->data;
-			output->size = ctx->buf2->used;
-		}
 	} else {
 		buffer_set_used_size(ctx->buf2, 0);
 		if (ctx->translation_size != 0)
@@ -392,9 +368,10 @@ bool message_decoder_decode_next_block(struct message_decoder_context *ctx,
 	output->part = input->part;
 	ctx->prev_part = input->part;
 
-	if (input->hdr != NULL)
+	if (input->hdr != NULL) {
+		output->size = 0;
 		return message_decode_header(ctx, input->hdr, output);
-	else if (input->size != 0)
+	} else if (input->size != 0)
 		return message_decode_body(ctx, input, output);
 	else {
 		output->hdr = NULL;
@@ -404,10 +381,20 @@ bool message_decoder_decode_next_block(struct message_decoder_context *ctx,
 	}
 }
 
+const char *
+message_decoder_current_content_type(struct message_decoder_context *ctx)
+{
+	return ctx->content_type;
+}
+
 void message_decoder_decode_reset(struct message_decoder_context *ctx)
 {
+	const char *error;
+
+	if (ctx->qp != NULL)
+		(void)qp_decoder_finish(ctx->qp, &error);
+	i_free_and_null(ctx->content_type);
 	i_free_and_null(ctx->content_charset);
 	ctx->message_cte = MESSAGE_CTE_78BIT;
-	ctx->charset_utf8 = TRUE;
 	buffer_set_used_size(ctx->encoding_buf, 0);
 }

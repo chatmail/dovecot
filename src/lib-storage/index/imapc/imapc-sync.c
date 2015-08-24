@@ -1,9 +1,10 @@
-/* Copyright (c) 2007-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
 #include "str.h"
 #include "imap-util.h"
+#include "mail-cache.h"
 #include "index-sync-private.h"
 #include "imapc-client.h"
 #include "imapc-msgmap.h"
@@ -38,7 +39,8 @@ static void imapc_sync_callback(const struct imapc_command_reply *reply,
 		imapc_client_stop(ctx->mbox->storage->client->client);
 }
 
-static void imapc_sync_cmd(struct imapc_sync_context *ctx, const char *cmd_str)
+static struct imapc_command *
+imapc_sync_cmd(struct imapc_sync_context *ctx, const char *cmd_str)
 {
 	struct imapc_command *cmd;
 
@@ -47,6 +49,7 @@ static void imapc_sync_cmd(struct imapc_sync_context *ctx, const char *cmd_str)
 				       imapc_sync_callback, ctx);
 	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_RETRIABLE);
 	imapc_command_send(cmd, cmd_str);
+	return cmd;
 }
 
 static void
@@ -273,6 +276,42 @@ imapc_initial_sync_check(struct imapc_sync_context *ctx, bool nooped)
 	}
 }
 
+static void
+imapc_sync_send_commands(struct imapc_sync_context *ctx, uint32_t first_uid)
+{
+	string_t *cmd = t_str_new(64);
+
+	str_printfa(cmd, "UID FETCH %u:* (FLAGS", first_uid);
+	if (IMAPC_BOX_HAS_FEATURE(ctx->mbox, IMAPC_FEATURE_GMAIL_MIGRATION)) {
+		enum mailbox_info_flags flags;
+
+		if (first_uid == 1 &&
+		    !mail_index_is_in_memory(ctx->mbox->box.index)) {
+			/* these can be efficiently fetched among flags and
+			   stored into cache */
+			str_append(cmd, " X-GM-MSGID");
+		}
+		/* do this only for the \All mailbox */
+		if (imapc_list_get_mailbox_flags(ctx->mbox->box.list,
+						 ctx->mbox->box.name, &flags) == 0 &&
+		    (flags & MAILBOX_SPECIALUSE_ALL) != 0)
+			str_append(cmd, " X-GM-LABELS");
+
+	}
+	str_append_c(cmd, ')');
+	imapc_sync_cmd(ctx, str_c(cmd));
+
+	if (IMAPC_BOX_HAS_FEATURE(ctx->mbox, IMAPC_FEATURE_GMAIL_MIGRATION) &&
+	    ctx->mbox->storage->set->pop3_deleted_flag[0] != '\0') {
+		struct imapc_command *cmd;
+
+		cmd = imapc_sync_cmd(ctx, "SEARCH RETURN (ALL) X-GM-RAW \"in:^pop\"");
+		i_free(ctx->mbox->sync_gmail_pop3_search_tag);
+		ctx->mbox->sync_gmail_pop3_search_tag =
+			i_strdup(imapc_command_get_tag(cmd));
+	}
+}
+
 static void imapc_sync_index(struct imapc_sync_context *ctx)
 {
 	struct imapc_mailbox *mbox = ctx->mbox;
@@ -316,8 +355,7 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 		/* we'll resync existing messages' flags and add new messages.
 		   adding new messages requires sync locking to avoid
 		   duplicates. */
-		imapc_sync_cmd(ctx, t_strdup_printf(
-			"UID FETCH %u:* FLAGS", mbox->sync_fetch_first_uid));
+		imapc_sync_send_commands(ctx, mbox->sync_fetch_first_uid);
 		mbox->sync_fetch_first_uid = 0;
 	}
 
@@ -352,7 +390,7 @@ void imapc_sync_mailbox_reopened(struct imapc_mailbox *mbox)
 	mbox->sync_next_lseq = 1;
 	mbox->sync_next_rseq = 1;
 
-	imapc_sync_cmd(ctx, "UID FETCH 1:* FLAGS");
+	imapc_sync_send_commands(ctx, 1);
 }
 
 static int
@@ -389,6 +427,11 @@ imapc_sync_begin(struct imapc_mailbox *mbox,
 	mbox->delayed_sync_view =
 		mail_index_transaction_open_updated_view(ctx->trans);
 	mbox->delayed_sync_trans = ctx->trans;
+	mbox->delayed_sync_cache_view =
+		mail_cache_view_open(mbox->box.cache, mbox->delayed_sync_view);
+	mbox->delayed_sync_cache_trans =
+		mail_cache_get_transaction(mbox->delayed_sync_cache_view,
+					   mbox->delayed_sync_trans);
 	mbox->min_append_uid = mail_index_get_header(ctx->sync_view)->next_uid;
 
 	mbox->syncing = TRUE;
@@ -419,6 +462,15 @@ static int imapc_sync_finish(struct imapc_sync_context **_ctx)
 	} else {
 		mail_index_sync_rollback(&ctx->index_sync_ctx);
 	}
+	if (ctx->mbox->sync_gmail_pop3_search_tag != NULL) {
+		mail_storage_set_critical(&ctx->mbox->storage->storage,
+			"gmail-pop3 search not successful");
+		i_free_and_null(ctx->mbox->sync_gmail_pop3_search_tag);
+		ret = -1;
+	}
+	mail_cache_view_close(&ctx->mbox->delayed_sync_cache_view);
+	ctx->mbox->delayed_sync_cache_trans = NULL;
+
 	ctx->mbox->syncing = FALSE;
 	ctx->mbox->sync_ctx = NULL;
 
@@ -435,6 +487,11 @@ static int imapc_sync(struct imapc_mailbox *mbox)
 {
 	struct imapc_sync_context *sync_ctx;
 	bool force = mbox->sync_fetch_first_uid != 0;
+
+	if ((mbox->box.flags & MAILBOX_FLAG_SAVEONLY) != 0) {
+		/* we're only saving mails here - no syncing actually wanted */
+		return 0;
+	}
 
 	if (imapc_sync_begin(mbox, &sync_ctx, force) < 0)
 		return -1;

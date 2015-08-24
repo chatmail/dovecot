@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
 
 /* The idea behind checksums is that the same username+password doesn't
    increase the penalty, because it's most likely a user with a misconfigured
@@ -105,8 +105,8 @@ penalty_bump_checksum(struct penalty_rec *rec, unsigned int checksum)
 	for (i = 0; i < count; i++) {
 		if (checksums[i] == checksum) {
 			if (i > 0) {
-				memcpy(checksums + 1, checksums,
-				       sizeof(checksums[0]) * i);
+				memmove(checksums + 1, checksums,
+					sizeof(checksums[0]) * i);
 				checksums[0] = checksum;
 			}
 			return TRUE;

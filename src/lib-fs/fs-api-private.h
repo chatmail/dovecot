@@ -2,6 +2,17 @@
 #define FS_API_PRIVATE_H
 
 #include "fs-api.h"
+#include "module-context.h"
+
+struct fs_api_module_register {
+	unsigned int id;
+};
+
+union fs_api_module_context {
+	struct fs_api_module_register *reg;
+};
+
+extern struct fs_api_module_register fs_api_module_register;
 
 struct fs_vfuncs {
 	struct fs *(*alloc)(void);
@@ -58,14 +69,29 @@ struct fs {
 	const char *name;
 	struct fs_vfuncs v;
 	char *temp_path_prefix;
+	int refcount;
+
+	char *username, *session_id;
 
 	struct fs_settings set;
 	string_t *last_error;
 
+	/* may be used by fs_wait_async() to do the waiting */
+	struct ioloop *wait_ioloop, *prev_ioloop;
+
 	unsigned int files_open_count;
+	struct fs_file *files;
+	struct fs_iter *iters;
+
+	struct fs_stats stats;
+
+	ARRAY(union fs_api_module_context *) module_contexts;
 };
 
 struct fs_file {
+	/* linked list of all files */
+	struct fs_file *prev, *next;
+
 	struct fs *fs;
 	struct ostream *output;
 	char *path;
@@ -73,7 +99,6 @@ struct fs_file {
 
 	struct istream *seekable_input;
 	struct istream *pending_read_input;
-	bool write_pending;
 
 	const struct hash_method *write_digest_method;
 	void *write_digest;
@@ -84,6 +109,13 @@ struct fs_file {
 	struct fs_file *copy_src;
 	struct istream *copy_input;
 	struct ostream *copy_output;
+
+	unsigned int write_pending:1;
+	unsigned int metadata_changed:1;
+
+	unsigned int read_or_prefetch_counted:1;
+	unsigned int lookup_metadata_counted:1;
+	unsigned int stat_counted:1;
 };
 
 struct fs_lock {
@@ -91,6 +123,9 @@ struct fs_lock {
 };
 
 struct fs_iter {
+	/* linked list of all iters */
+	struct fs_iter *prev, *next;
+
 	struct fs *fs;
 	enum fs_iter_flags flags;
 
@@ -103,6 +138,8 @@ extern const struct fs fs_class_posix;
 extern const struct fs fs_class_metawrap;
 extern const struct fs fs_class_sis;
 extern const struct fs fs_class_sis_queue;
+
+void fs_class_register(const struct fs *fs_class);
 
 void fs_set_error(struct fs *fs, const char *fmt, ...) ATTR_FORMAT(2, 3);
 void fs_set_critical(struct fs *fs, const char *fmt, ...) ATTR_FORMAT(2, 3);
