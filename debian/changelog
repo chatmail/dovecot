@@ -1,3 +1,9 @@
+dovecot (1:2.2.18-2) unstable; urgency=high
+
+  * [3f3bf71] Updated pigeonhole patch to 0.4.8 (Closes: #792669)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 23 Aug 2015 23:16:28 -0400
+
 dovecot (1:2.2.18-1) unstable; urgency=medium
 
   * [cce20a5] Imported Upstream version 2.2.18. Closes: #786760
