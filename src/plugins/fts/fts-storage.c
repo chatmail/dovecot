@@ -14,12 +14,10 @@
 #include "fts-tokenizer.h"
 #include "fts-indexer.h"
 #include "fts-build-mail.h"
-#include "fts-search-args.h"
 #include "fts-search-serialize.h"
 #include "fts-plugin.h"
 #include "fts-storage.h"
 
-#include <stdlib.h>
 
 #define FTS_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, fts_storage_module)
@@ -74,8 +72,10 @@ static int fts_mailbox_get_last_cached_seq(struct mailbox *box, uint32_t *seq_r)
 	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT(box->list);
 	uint32_t seq1, seq2, last_uid;
 
-	if (fts_backend_get_last_uid(flist->backend, box, &last_uid) < 0)
+	if (fts_backend_get_last_uid(flist->backend, box, &last_uid) < 0) {
+		mail_storage_set_internal_error(box->storage);
 		return -1;
+	}
 
 	if (last_uid == 0)
 		*seq_r = 0;
@@ -130,11 +130,6 @@ static void fts_try_build_init(struct mail_search_context *ctx,
 			       &fctx->indexer_ctx);
 	if (ret < 0)
 		return;
-
-	if ((fctx->backend->flags & FTS_BACKEND_FLAG_TOKENIZED_INPUT) != 0) {
-		if (fts_search_args_expand(fctx->backend, fctx->args) < 0)
-			return;
-	}
 
 	if (ret == 0) {
 		/* the index was up to date */
@@ -215,6 +210,9 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 	fctx->orig_matches = buffer_create_dynamic(default_pool, 64);
 	fctx->virtual_mailbox =
 		strcmp(t->box->storage->name, VIRTUAL_STORAGE_NAME) == 0;
+	fctx->enforced =
+		mail_user_plugin_getenv(t->box->storage->user,
+					"fts_enforced") != NULL;
 	i_array_init(&fctx->levels, 8);
 	fctx->scores = i_new(struct fts_scores, 1);
 	fctx->scores->refcount = 1;
@@ -234,7 +232,7 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 	ft->scores = fctx->scores;
 	ft->scores->refcount++;
 
-	if (fts_want_build_args(args->args))
+	if (fctx->enforced || fts_want_build_args(args->args))
 		fts_try_build_init(ctx, fctx);
 	else
 		fts_search_lookup(fctx);
@@ -276,6 +274,13 @@ fts_mailbox_search_next_nonblock(struct mail_search_context *ctx,
 {
 	struct fts_mailbox *fbox = FTS_CONTEXT(ctx->transaction->box);
 	struct fts_search_context *fctx = FTS_CONTEXT(ctx);
+	struct fts_transaction_context *ft = FTS_CONTEXT(ctx->transaction);
+
+	if (fctx == NULL && ft->failed) {
+		/* precaching already failed - stop now instead of potentially
+		   going through the same failure for all the mails */
+		return FALSE;
+	}
 
 	if (fctx != NULL && fctx->indexer_ctx != NULL) {
 		/* this command is still building the indexes */
@@ -288,6 +293,8 @@ fts_mailbox_search_next_nonblock(struct mail_search_context *ctx,
 			return FALSE;
 		}
 	}
+	if (fctx != NULL && !fctx->fts_lookup_success && fctx->enforced)
+		return FALSE;
 
 	return fbox->module_ctx.super.
 		search_next_nonblock(ctx, mail_r, tryagain_r);
@@ -362,12 +369,21 @@ static int fts_mailbox_search_deinit(struct mail_search_context *ctx)
 		}
 		if (fctx->indexing_timed_out)
 			ret = -1;
+		if (!fctx->fts_lookup_success && fctx->enforced) {
+			/* FTS lookup failed and we didn't want to fallback to
+			   opening all the mails and searching manually */
+			mail_storage_set_internal_error(ctx->transaction->box->storage);
+			ret = -1;
+		}
 
 		buffer_free(&fctx->orig_matches);
 		array_free(&fctx->levels);
 		pool_unref(&fctx->result_pool);
 		fts_scores_unref(&fctx->scores);
 		i_free(fctx);
+	} else {
+		if (ft->failed)
+			ret = -1;
 	}
 	if (fbox->module_ctx.super.search_deinit(ctx) < 0)
 		ret = -1;
@@ -425,6 +441,7 @@ fts_mail_precache_range(struct mailbox_transaction_context *trans,
 
 	while (mailbox_search_next(ctx, &mail)) {
 		if (fts_build_mail(update_ctx, mail) < 0) {
+			mail_storage_set_internal_error(trans->box->storage);
 			ret = -1;
 			break;
 		}
@@ -481,8 +498,10 @@ static void fts_mail_index(struct mail *_mail)
 
 	if (ft->next_index_seq == _mail->seq) {
 		fts_backend_update_set_mailbox(flist->update_ctx, _mail->box);
-		if (fts_build_mail(flist->update_ctx, _mail) < 0)
+		if (fts_build_mail(flist->update_ctx, _mail) < 0) {
+			mail_storage_set_internal_error(_mail->box->storage);
 			ft->failed = TRUE;
+		}
 		ft->next_index_seq = _mail->seq + 1;
 	}
 }
@@ -592,7 +611,10 @@ static void fts_queue_index(struct mailbox *box)
 	str_append_tabescaped(str, user->username);
 	str_append_c(str, '\t');
 	str_append_tabescaped(str, box->vname);
-	str_printfa(str, "\t%u\n", max_recent_msgs);
+	str_printfa(str, "\t%u", max_recent_msgs);
+	str_append_c(str, '\t');
+	str_append_tabescaped(str, box->storage->user->session_id);
+	str_append_c(str, '\n');
 	if (write_full(fd, str_data(str), str_len(str)) < 0)
 		i_error("write(%s) failed: %m", path);
 	i_close_fd(&fd);

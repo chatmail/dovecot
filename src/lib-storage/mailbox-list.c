@@ -192,6 +192,8 @@ int mailbox_list_create(const char *driver, struct mail_namespace *ns,
 		list->set.mailbox_dir_name =
 			p_strconcat(list->pool, set->mailbox_dir_name, "/", NULL);
 	}
+	list->set.escape_char = set->escape_char;
+	list->set.broken_char = set->broken_char;
 	list->set.utf8 = set->utf8;
 
 	if (list->v.init != NULL) {
@@ -424,7 +426,7 @@ static bool need_escape_dirstart(const char *vname, const char *maildir_name)
 	return FALSE;
 }
 
-static const char *
+const char *
 mailbox_list_escape_name(struct mailbox_list *list, const char *vname)
 {
 	char ns_sep = mail_namespace_get_sep(list->ns);
@@ -592,7 +594,7 @@ const char *mailbox_list_get_storage_name(struct mailbox_list *list,
 	return list->v.get_storage_name(list, vname);
 }
 
-static const char *
+const char *
 mailbox_list_unescape_name(struct mailbox_list *list, const char *src)
 {
 	char ns_sep = mail_namespace_get_sep(list->ns);

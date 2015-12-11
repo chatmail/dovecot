@@ -14,7 +14,6 @@
 #include "ssl-params.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #ifdef HAVE_SYS_TIME_H
@@ -211,7 +210,7 @@ static int ssl_params_read(struct ssl_params *param)
 	if (st.st_size == 0 || st.st_size > MAX_PARAM_FILE_SIZE) {
 		i_error("Corrupted file: %s", param->path);
 		i_close_fd(&fd);
-		(void)unlink(param->path);
+		i_unlink(param->path);
 		return -1;
 	}
 

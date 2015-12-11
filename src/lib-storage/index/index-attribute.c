@@ -159,6 +159,7 @@ index_storage_attribute_get_dict_trans(struct mailbox_transaction_context *t,
 {
 	struct dict_transaction_context **dtransp = NULL;
 	struct dict *dict;
+	struct mailbox_metadata metadata;
 
 	switch (type) {
 	case MAIL_ATTRIBUTE_TYPE_PRIVATE:
@@ -169,6 +170,16 @@ index_storage_attribute_get_dict_trans(struct mailbox_transaction_context *t,
 		break;
 	}
 	i_assert(dtransp != NULL);
+
+	if (*dtransp != NULL) {
+		/* transaction already created */
+		if (mailbox_get_metadata(t->box, MAILBOX_METADATA_GUID,
+					 &metadata) < 0)
+			return -1;
+		*mailbox_prefix_r = guid_128_to_string(metadata.guid);
+		*dtrans_r = *dtransp;
+		return 0;
+	}
 
 	if (index_storage_get_dict(t->box, type, &dict, mailbox_prefix_r) < 0)
 		return -1;
@@ -186,7 +197,8 @@ int index_storage_attribute_set(struct mailbox_transaction_context *t,
 	time_t ts = value->last_change != 0 ? value->last_change : ioloop_time;
 	int ret = 0;
 
-	if (!MAILBOX_ATTRIBUTE_KEY_IS_USER_ACCESSIBLE(key)) {
+	if (!t->internal_attribute &&
+	    !MAILBOX_ATTRIBUTE_KEY_IS_USER_ACCESSIBLE(key)) {
 		mail_storage_set_error(t->box->storage, MAIL_ERROR_PARAMS,
 			"Internal attributes cannot be changed directly");
 		return -1;
@@ -226,7 +238,8 @@ int index_storage_attribute_get(struct mailbox_transaction_context *t,
 
 	memset(value_r, 0, sizeof(*value_r));
 
-	if (!MAILBOX_ATTRIBUTE_KEY_IS_USER_ACCESSIBLE(key))
+	if (!t->internal_attribute &&
+	    !MAILBOX_ATTRIBUTE_KEY_IS_USER_ACCESSIBLE(key))
 		return 0;
 
 	if (index_storage_get_dict(t->box, type, &dict, &mailbox_prefix) < 0)

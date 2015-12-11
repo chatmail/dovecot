@@ -14,7 +14,6 @@
 #include "fs-api-private.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -32,6 +31,7 @@ enum fs_posix_lock_method {
 struct posix_fs {
 	struct fs fs;
 	char *temp_file_prefix, *root_path, *path_prefix;
+	unsigned int temp_file_prefix_len;
 	enum fs_posix_lock_method lock_method;
 	mode_t mode, dir_mode;
 };
@@ -47,7 +47,6 @@ struct posix_fs_file {
 
 	bool seek_to_beginning;
 	bool success;
-	bool open_failed;
 };
 
 struct posix_fs_lock {
@@ -80,6 +79,7 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 
 	fs->temp_file_prefix = set->temp_file_prefix != NULL ?
 		i_strdup(set->temp_file_prefix) : i_strdup("temp.dovecot.");
+	fs->temp_file_prefix_len = strlen(fs->temp_file_prefix);
 	fs->root_path = i_strdup(set->root_path);
 	fs->fs.set.temp_file_prefix = fs->temp_file_prefix;
 	fs->fs.set.root_path = fs->root_path;
@@ -103,7 +103,12 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 			else
 				fs->path_prefix = i_strdup(arg + 7);
 		} else if (strncmp(arg, "mode=", 5) == 0) {
-			fs->mode = strtoul(arg+5, NULL, 8) & 0666;
+			unsigned int mode;
+			if (str_to_uint_oct(arg+5, &mode) < 0) {
+				fs_set_error(_fs, "Invalid mode value: %s", arg+5);
+				return -1;
+			}
+			fs->mode = mode & 0666;
 			if (fs->mode == 0) {
 				fs_set_error(_fs, "Invalid mode: %s", arg+5);
 				return -1;
@@ -475,7 +480,6 @@ static void fs_posix_write_stream(struct fs_file *_file)
 	} else if (file->fd == -1 && fs_posix_open(file) < 0) {
 		_file->output = o_stream_create_error_str(errno, "%s",
 			fs_file_last_error(_file));
-		file->open_failed = TRUE;
 	} else {
 		_file->output = o_stream_create_fd_file(file->fd,
 							(uoff_t)-1, FALSE);
@@ -488,14 +492,6 @@ static int fs_posix_write_stream_finish(struct fs_file *_file, bool success)
 	struct posix_fs_file *file = (struct posix_fs_file *)_file;
 	int ret = success ? 0 : -1;
 
-	if (file->open_failed)
-		ret = -1;
-	else if (o_stream_nfinish(_file->output) < 0) {
-		fs_set_error(_file->fs, "write(%s) failed: %s",
-			     o_stream_get_name(_file->output),
-			     o_stream_get_error(_file->output));
-		ret = -1;
-	}
 	o_stream_destroy(&_file->output);
 
 	switch (file->open_mode) {
@@ -624,28 +620,28 @@ static int fs_posix_stat(struct fs_file *_file, struct stat *st_r)
 
 static int fs_posix_copy(struct fs_file *_src, struct fs_file *_dest)
 {
+	struct posix_fs_file *src = (struct posix_fs_file *)_src;
 	struct posix_fs_file *dest = (struct posix_fs_file *)_dest;
 	struct posix_fs *fs = (struct posix_fs *)_src->fs;
 	unsigned int try_count = 0;
 	int ret;
 
-	ret = link(_src->path, _dest->path);
+	ret = link(src->full_path, dest->full_path);
 	if (errno == EEXIST && dest->open_mode == FS_OPEN_MODE_REPLACE) {
 		/* destination file already exists - replace it */
-		if (unlink(_dest->path) < 0 && errno != ENOENT)
-			i_error("unlink(%s) failed: %m", _dest->path);
-		ret = link(_src->path, _dest->path);
+		i_unlink_if_exists(dest->full_path);
+		ret = link(src->full_path, dest->full_path);
 	}
 	while (ret < 0 && errno == ENOENT &&
 	       try_count <= MAX_MKDIR_RETRY_COUNT) {
-		if (fs_posix_mkdir_parents(fs, _dest->path) < 0)
+		if (fs_posix_mkdir_parents(fs, dest->full_path) < 0)
 			return -1;
-		ret = link(_src->path, _dest->path);
+		ret = link(src->full_path, dest->full_path);
 		try_count++;
 	}
 	if (ret < 0) {
 		fs_set_error(_src->fs, "link(%s, %s) failed: %m",
-			     _src->path, _dest->path);
+			     src->full_path, dest->full_path);
 		return -1;
 	}
 	return 0;
@@ -740,6 +736,7 @@ static bool fs_posix_iter_want(struct posix_fs_iter *iter, const char *fname)
 static const char *fs_posix_iter_next(struct fs_iter *_iter)
 {
 	struct posix_fs_iter *iter = (struct posix_fs_iter *)_iter;
+	struct posix_fs *fs = (struct posix_fs *)_iter->fs;
 	struct dirent *d;
 
 	if (iter->dir == NULL)
@@ -749,6 +746,9 @@ static const char *fs_posix_iter_next(struct fs_iter *_iter)
 	for (; (d = readdir(iter->dir)) != NULL; errno = 0) {
 		if (strcmp(d->d_name, ".") == 0 ||
 		    strcmp(d->d_name, "..") == 0)
+			continue;
+		if (strncmp(d->d_name, fs->temp_file_prefix,
+			    fs->temp_file_prefix_len) == 0)
 			continue;
 #ifdef HAVE_DIRENT_D_TYPE
 		switch (d->d_type) {

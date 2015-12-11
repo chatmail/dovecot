@@ -10,7 +10,6 @@
 #include "mail-storage-settings.h"
 #include "mail-namespace.h"
 
-#include <stdlib.h>
 
 static struct mail_namespace_settings prefixless_ns_unexpanded_set = {
 	.name = "",
@@ -322,6 +321,8 @@ int mail_namespaces_init_finish(struct mail_namespace *namespaces,
 	struct mail_namespace *ns;
 	bool prefixless_found = FALSE;
 
+	i_assert(namespaces != NULL);
+
 	for (ns = namespaces; ns != NULL; ns = ns->next) {
 		if (ns->prefix_len == 0)
 			prefixless_found = TRUE;
@@ -429,6 +430,9 @@ int mail_namespaces_init_location(struct mail_user *user, const char *location,
 	inbox_set = p_new(user->pool, struct mail_namespace_settings, 1);
 	*inbox_set = mail_namespace_default_settings;
 	inbox_set->inbox = TRUE;
+	/* enums must be changed */
+	inbox_set->type = "private";
+	inbox_set->list = "yes";
 
 	unexpanded_inbox_set = p_new(user->pool, struct mail_namespace_settings, 1);
 	*unexpanded_inbox_set = *inbox_set;

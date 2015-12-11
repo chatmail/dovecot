@@ -1,6 +1,7 @@
 /* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "safe-memset.h"
 #include "ioloop.h"
 #include "istream.h"
 #include "write-full.h"
@@ -181,7 +182,6 @@ static void run_tests(struct http_client *http_client)
 	http_client_request_set_ssl(http_req, TRUE);
 	http_client_request_submit(http_req);
 	http_client_request_abort(&http_req);
-	i_free(test_req);
 
 	test_req = i_new(struct http_test_request, 1);
 	http_req = http_client_request(http_client,
@@ -256,6 +256,14 @@ static void run_tests(struct http_client *http_client)
 		((unsigned char *)test_query3, strlen(test_query3));
 	http_client_request_set_payload(http_req, post_payload, FALSE);
 	i_stream_unref(&post_payload);
+	http_client_request_submit(http_req);
+
+	test_req = i_new(struct http_test_request, 1);
+	http_req = http_client_request(http_client,
+		"GET", "jigsaw.w3.org", "/HTTP/Basic/",
+		got_request_response, test_req);
+	http_client_request_set_auth_simple
+		(http_req, "guest", "guest");
 	http_client_request_submit(http_req);
 
 	test_req = i_new(struct http_test_request, 1);
@@ -335,8 +343,11 @@ int main(int argc, char *argv[])
 	ioloop = io_loop_create();
 	io_loop_set_running(ioloop);
 
-
-	memset(&dns_set, 0, sizeof(dns_set));
+	/* kludge: use safe_memset() here since otherwise it's not included in
+	   the binary in all systems (but is in others! so linking
+	   safe-memset.lo directly causes them to fail.) If safe_memset() isn't
+	   included, libssl-iostream plugin loading fails. */
+	safe_memset(&dns_set, 0, sizeof(dns_set));
 	dns_set.dns_client_socket_path = "/var/run/dovecot/dns-client";
 	dns_set.timeout_msecs = 30*1000;
 	dns_set.idle_timeout_msecs = UINT_MAX;

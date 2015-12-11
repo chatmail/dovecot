@@ -15,7 +15,6 @@
 #include "master-service-settings.h"
 
 #include <stddef.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
 #include <sys/stat.h>
@@ -46,6 +45,9 @@ static const struct setting_define master_service_setting_defines[] = {
 	DEF(SET_BOOL, shutdown_clients),
 	DEF(SET_BOOL, verbose_proctitle),
 
+	DEF(SET_STR, haproxy_trusted_networks),
+	DEF(SET_TIME, haproxy_timeout),
+
 	SETTING_DEFINE_LIST_END
 };
 
@@ -60,7 +62,10 @@ static const struct master_service_settings master_service_default_settings = {
 	.config_cache_size = 1024*1024,
 	.version_ignore = FALSE,
 	.shutdown_clients = TRUE,
-	.verbose_proctitle = FALSE
+	.verbose_proctitle = FALSE,
+
+	.haproxy_trusted_networks = "",
+	.haproxy_timeout = 3
 };
 
 const struct setting_parser_info master_service_setting_parser_info = {

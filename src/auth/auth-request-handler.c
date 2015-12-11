@@ -17,7 +17,6 @@
 #include "auth-master-connection.h"
 #include "auth-request-handler.h"
 
-#include <stdlib.h>
 
 #define AUTH_FAILURE_DELAY_CHECK_MSECS 500
 
@@ -475,8 +474,9 @@ bool auth_request_handler_auth_begin(struct auth_request_handler *handler,
 				handler->client_pid, str_sanitize(list[1], MAX_MECH_NAME_LEN));
 			return FALSE;
 		}
-	} else {		 
-		mech = mech_module_find(list[1]);
+	} else {
+		struct auth *auth_default = auth_default_service();
+		mech = mech_register_find(auth_default->reg, list[1]);
 		if (mech == NULL) {
 			/* unsupported mechanism */
 			i_error("BUG: Authentication client %u requested unsupported "

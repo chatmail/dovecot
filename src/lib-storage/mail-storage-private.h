@@ -265,6 +265,12 @@ struct mail_msgpart_partial_cache {
 	uoff_t physical_pos, virtual_pos;
 };
 
+struct mailbox_index_vsize {
+	uint64_t vsize;
+	uint32_t highest_uid;
+	uint32_t message_count;
+};
+
 struct mailbox {
 	const char *name;
 	/* mailbox's virtual name (from mail_namespace_get_vname()) */
@@ -311,12 +317,20 @@ struct mailbox {
 	unsigned int transaction_count;
 	enum mailbox_feature enabled_features;
 	struct mail_msgpart_partial_cache partial_cache;
+	uint32_t vsize_hdr_ext_id;
+
+	/* MAIL_RECENT flags handling */
+	ARRAY_TYPE(seq_range) recent_flags;
+	uint32_t recent_flags_prev_uid;
+	uint32_t recent_flags_count;
 
 	struct mail_index_view *tmp_sync_view;
 
 	/* Mailbox notification settings: */
 	mailbox_notify_callback_t *notify_callback;
 	void *notify_context;
+	struct timeout *to_notify, *to_notify_delay;
+	struct mailbox_notify_file *notify_files;
 
 	/* Increased by one for each new struct mailbox. */
 	unsigned int generation_sequence;
@@ -515,6 +529,8 @@ struct mailbox_transaction_context {
 	unsigned int stats_track:1;
 	/* We've done some non-transactional (e.g. dovecot-uidlist updates) */
 	unsigned int nontransactional_changes:1;
+	/* FIXME: v2.3: this should be in attribute_get/set() parameters */
+	unsigned int internal_attribute:1;
 };
 
 union mail_search_module_context {

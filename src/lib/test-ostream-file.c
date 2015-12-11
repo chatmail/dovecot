@@ -6,7 +6,6 @@
 #include "randgen.h"
 #include "ostream.h"
 
-#include <stdlib.h>
 #include <unistd.h>
 
 #define MAX_BUFSIZE 256
@@ -24,8 +23,7 @@ static void test_ostream_file_random(void)
 	fd = safe_mkstemp(path, 0600, (uid_t)-1, (gid_t)-1);
 	if (fd == -1)
 		i_fatal("safe_mkstemp(%s) failed: %m", str_c(path));
-	if (unlink(str_c(path)) < 0)
-		i_fatal("unlink(%s) failed: %m", str_c(path));
+	i_unlink(str_c(path));
 	output = o_stream_create_fd(fd, MAX_BUFSIZE, FALSE);
 	o_stream_cork(output);
 

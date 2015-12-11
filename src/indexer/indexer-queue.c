@@ -1,6 +1,7 @@
 /* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "array.h"
 #include "llist.h"
 #include "hash.h"
 #include "indexer-queue.h"
@@ -70,27 +71,18 @@ indexer_queue_lookup(struct indexer_queue *queue,
 
 static void request_add_context(struct indexer_request *request, void *context)
 {
-	unsigned int count = 0;
-
 	if (context == NULL)
 		return;
 
-	if (request->contexts == NULL) {
-		request->contexts = i_new(void *, 2);
-	} else {
-		for (; request->contexts[count] != NULL; count++) ;
-
-		request->contexts =
-			i_realloc(request->contexts,
-				  sizeof(*request->contexts) * (count + 1),
-				  sizeof(*request->contexts) * (count + 2));
-	}
-	request->contexts[count] = context;
+	if (!array_is_created(&request->contexts))
+		i_array_init(&request->contexts, 2);
+	array_append(&request->contexts, &context, 1);
 }
 
 static struct indexer_request *
 indexer_queue_append_request(struct indexer_queue *queue, bool append,
 			     const char *username, const char *mailbox,
+			     const char *session_id,
 			     unsigned int max_recent_msgs, void *context)
 {
 	struct indexer_request *request;
@@ -100,6 +92,7 @@ indexer_queue_append_request(struct indexer_queue *queue, bool append,
 		request = i_new(struct indexer_request, 1);
 		request->username = i_strdup(username);
 		request->mailbox = i_strdup(mailbox);
+		request->session_id = i_strdup(session_id);
 		request->max_recent_msgs = max_recent_msgs;
 		request_add_context(request, context);
 		hash_table_insert(queue->requests, request, request);
@@ -107,6 +100,14 @@ indexer_queue_append_request(struct indexer_queue *queue, bool append,
 		if (request->max_recent_msgs > max_recent_msgs)
 			request->max_recent_msgs = max_recent_msgs;
 		request_add_context(request, context);
+		if (request->working) {
+			/* we're already indexing this mailbox. */
+			if (append)
+				request->reindex_tail = TRUE;
+			else
+				request->reindex_head = TRUE;
+			return request;
+		}
 		if (append) {
 			/* keep the request in its old position */
 			return request;
@@ -131,12 +132,14 @@ static void indexer_queue_append_finish(struct indexer_queue *queue)
 
 void indexer_queue_append(struct indexer_queue *queue, bool append,
 			  const char *username, const char *mailbox,
-			  unsigned int max_recent_msgs, void *context)
+			  const char *session_id, unsigned int max_recent_msgs,
+			  void *context)
 {
 	struct indexer_request *request;
 
 	request = indexer_queue_append_request(queue, append, username, mailbox,
-					       max_recent_msgs, context);
+					       session_id, max_recent_msgs,
+					       context);
 	request->index = TRUE;
 	indexer_queue_append_finish(queue);
 }
@@ -148,7 +151,7 @@ void indexer_queue_append_optimize(struct indexer_queue *queue,
 	struct indexer_request *request;
 
 	request = indexer_queue_append_request(queue, TRUE, username, mailbox,
-					       0, context);
+					       NULL, 0, context);
 	request->optimize = TRUE;
 	indexer_queue_append_finish(queue);
 }
@@ -165,19 +168,18 @@ void indexer_queue_request_remove(struct indexer_queue *queue)
 	i_assert(request != NULL);
 
 	DLLIST2_REMOVE(&queue->head, &queue->tail, request);
-	hash_table_remove(queue->requests, request);
-	indexer_refresh_proctitle();
 }
 
 static void indexer_queue_request_status_int(struct indexer_queue *queue,
 					     struct indexer_request *request,
 					     int percentage)
 {
+	void *const *contextp;
 	unsigned int i;
 
-	if (request->contexts != NULL) {
-		for (i = 0; request->contexts[i] != NULL; i++)
-			queue->callback(percentage, request->contexts[i]);
+	for (i = 0; i < request->working_context_idx; i++) {
+		contextp = array_idx(&request->contexts, i);
+		queue->callback(percentage, *contextp);
 	}
 }
 
@@ -190,6 +192,14 @@ void indexer_queue_request_status(struct indexer_queue *queue,
 	indexer_queue_request_status_int(queue, request, percentage);
 }
 
+void indexer_queue_request_work(struct indexer_request *request)
+{
+	request->working = TRUE;
+	request->working_context_idx =
+		!array_is_created(&request->contexts) ? 0 :
+		array_count(&request->contexts);
+}
+
 void indexer_queue_request_finish(struct indexer_queue *queue,
 				  struct indexer_request **_request,
 				  bool success)
@@ -199,15 +209,45 @@ void indexer_queue_request_finish(struct indexer_queue *queue,
 	*_request = NULL;
 
 	indexer_queue_request_status_int(queue, request, success ? 100 : -1);
-	i_free(request->contexts);
+
+	if (request->reindex_head || request->reindex_tail) {
+		i_assert(request->working);
+		request->working = FALSE;
+		request->reindex_head = FALSE;
+		request->reindex_tail = FALSE;
+		if (request->working_context_idx > 0) {
+			array_delete(&request->contexts, 0,
+				     request->working_context_idx);
+		}
+		if (request->reindex_head)
+			DLLIST2_PREPEND(&queue->head, &queue->tail, request);
+		else
+			DLLIST2_APPEND(&queue->head, &queue->tail, request);
+		return;
+	}
+
+	hash_table_remove(queue->requests, request);
+	if (array_is_created(&request->contexts))
+		array_free(&request->contexts);
 	i_free(request->username);
 	i_free(request->mailbox);
 	i_free(request);
+
+	indexer_refresh_proctitle();
 }
 
 void indexer_queue_cancel_all(struct indexer_queue *queue)
 {
 	struct indexer_request *request;
+	struct hash_iterate_context *iter;
+
+	/* remove all reindex-markers so when the current requests finish
+	   (or are cancelled) we don't try to retry them (especially during
+	   deinit where it crashes) */
+	iter = hash_table_iterate_init(queue->requests);
+	while (hash_table_iterate(iter, queue->requests, &request, &request))
+		request->reindex_head = request->reindex_tail = FALSE;
+	hash_table_iterate_deinit(&iter);
 
 	while ((request = indexer_queue_request_peek(queue)) != NULL) {
 		indexer_queue_request_remove(queue);

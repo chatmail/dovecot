@@ -24,9 +24,9 @@ protocol imap {
   mail_plugins = $mail_plugins imap_stats
 }
 plugin {
-  # how often to session statistics
+  # how often to session statistics (must be set)
   stats_refresh = 30 secs
-  # track per-IMAP command statistics
+  # track per-IMAP command statistics (optional)
   stats_track_cmds = yes
 }
 ---%<-------------------------------------------------------------------------
@@ -142,7 +142,8 @@ optional sort field is one of:
 
 This "top" isn't very good, but a much better one can be found as a Perl
 script:stats-top.pl [http://www.dovecot.org/tools/stats-top.pl], which also
-requires stats.pl [http://www.dovecot.org/tools/stats.pl]
+requires stats.pl [http://www.dovecot.org/tools/stats.pl] and tab-formatter.pl
+[http://www.dovecot.org/tools/tab-formatter.pl].
 
 dump
 ----
@@ -203,4 +204,4 @@ EXPORT<tab>session<tab>connected<lf>
 
 The output will be identical to 'doveadm stats dump session connected' command.
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:48)

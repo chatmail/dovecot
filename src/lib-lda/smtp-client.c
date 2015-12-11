@@ -87,9 +87,8 @@ static int create_temp_file(const char **path_r)
 	}
 
 	/* we just want the fd, unlink it */
-	if (unlink(str_c(path)) < 0) {
+	if (i_unlink(str_c(path)) < 0) {
 		/* shouldn't happen.. */
-		i_error("unlink(%s) failed: %m", str_c(path));
 		i_close_fd(&fd);
 		return -1;
 	}
@@ -256,14 +255,13 @@ smtp_client_send_flush(struct smtp_client *smtp_client,
 	struct ioloop *ioloop;
 	struct istream *input;
 	const char *host, *p, *const *destp;
-	unsigned int port = DEFAULT_SUBMISSION_PORT;
+	in_port_t port = DEFAULT_SUBMISSION_PORT;
 
 	host = smtp_client->set->submission_host;
 	p = strchr(host, ':');
 	if (p != NULL) {
 		host = t_strdup_until(host, p);
-		if (str_to_uint(p + 1, &port) < 0 ||
-		    port == 0 || port > 65535) {
+		if (net_str2port(p + 1, &port) < 0) {
 			*error_r = t_strdup_printf(
 				"Invalid port in submission_host: %s", p+1);
 			return -1;

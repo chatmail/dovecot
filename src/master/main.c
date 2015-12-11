@@ -27,7 +27,6 @@
 #include "dovecot-version.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -143,11 +142,14 @@ master_fatal_callback(const struct failure_context *ctx,
 {
 	const char *path, *str;
 	va_list args2;
+	pid_t pid;
 	int fd;
-
+	
 	/* if we already forked a child process, this isn't fatal for the
 	   main process and there's no need to write the fatal file. */
-	if (getpid() == strtol(my_pid, NULL, 10)) {
+	if (str_to_pid(my_pid, &pid) < 0)
+		i_unreached();
+	if (getpid() == pid) {
 		/* write the error message to a file (we're chdired to
 		   base dir) */
 		path = t_strconcat(FATAL_FILENAME, NULL);
@@ -214,8 +216,7 @@ static void fatal_log_check(const struct master_settings *set)
 	}
 
 	i_close_fd(&fd);
-	if (unlink(path) < 0)
-		i_error("unlink(%s) failed: %m", path);
+	i_unlink(path);
 }
 
 static bool pid_file_read(const char *path, pid_t *pid_r)
@@ -245,10 +246,13 @@ static bool pid_file_read(const char *path, pid_t *pid_r)
 		if (buf[ret-1] == '\n')
 			ret--;
 		buf[ret] = '\0';
-		*pid_r = atoi(buf);
-
-		found = !(*pid_r == getpid() ||
-			  (kill(*pid_r, 0) < 0 && errno == ESRCH));
+		if (str_to_pid(buf, pid_r) < 0) {
+			i_error("PID file contains invalid PID value");
+			found = FALSE;
+		} else {
+			found = !(*pid_r == getpid() ||
+				  (kill(*pid_r, 0) < 0 && errno == ESRCH));
+		}
 	}
 	i_close_fd(&fd);
 	return found;
@@ -285,8 +289,7 @@ static void create_config_symlink(const struct master_settings *set)
 	const char *base_config_path;
 
 	base_config_path = t_strconcat(set->base_dir, "/"PACKAGE".conf", NULL);
-	if (unlink(base_config_path) < 0 && errno != ENOENT)
-		i_error("unlink(%s) failed: %m", base_config_path);
+	i_unlink_if_exists(base_config_path);
 
 	if (symlink(services->config->config_file_path, base_config_path) < 0) {
 		i_error("symlink(%s, %s) failed: %m",
@@ -547,8 +550,7 @@ static void main_deinit(void)
 	global_dead_pipe_close();
 	services_destroy(services, TRUE);
 
-	if (unlink(pidfile_path) < 0)
-		i_error("unlink(%s) failed: %m", pidfile_path);
+	i_unlink(pidfile_path);
 	i_free(pidfile_path);
 
 	service_anvil_global_deinit();
@@ -623,9 +625,6 @@ static void print_build_options(void)
 #endif
 #ifdef IOLOOP_SELECT
 		" ioloop=select"
-#endif
-#ifdef IOLOOP_NOTIFY_DNOTIFY
-		" notify=dnotify"
 #endif
 #ifdef IOLOOP_NOTIFY_INOTIFY
 		" notify=inotify"

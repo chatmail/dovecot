@@ -1,6 +1,5 @@
 #ifndef FTS_FILTER_H
 #define FTS_FILTER_H
-#include "array.h"
 
 struct fts_language;
 struct fts_filter;
@@ -30,8 +29,14 @@ extern const struct fts_filter *fts_filter_stemmer_snowball;
  */
 extern const struct fts_filter *fts_filter_normalizer_icu;
 
-/* Lowecases the input. Currently only ASCII data is lowercased. */
+/* Lowecases the input. Supports UTF8, if libicu is available. */
 extern const struct fts_filter *fts_filter_lowercase;
+
+/* Removes <'s> suffix from words. */
+extern const struct fts_filter *fts_filter_english_possessive;
+
+/* Removes prefixing contractions from words. */
+extern const struct fts_filter *fts_filter_contractions;
 
 /* Register all built-in filters. */
 void fts_filters_init(void);

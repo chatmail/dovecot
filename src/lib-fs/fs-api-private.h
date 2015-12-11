@@ -4,6 +4,8 @@
 #include "fs-api.h"
 #include "module-context.h"
 
+#include <sys/time.h>
+
 struct fs_api_module_register {
 	unsigned int id;
 };
@@ -110,6 +112,8 @@ struct fs_file {
 	struct istream *copy_input;
 	struct ostream *copy_output;
 
+	struct timeval timing_start[FS_OP_COUNT];
+
 	unsigned int write_pending:1;
 	unsigned int metadata_changed:1;
 
@@ -128,13 +132,16 @@ struct fs_iter {
 
 	struct fs *fs;
 	enum fs_iter_flags flags;
+	struct timeval start_time;
 
 	bool async_have_more;
 	fs_file_async_callback_t *async_callback;
 	void *async_context;
 };
 
+extern const struct fs fs_class_dict;
 extern const struct fs fs_class_posix;
+extern const struct fs fs_class_randomfail;
 extern const struct fs fs_class_metawrap;
 extern const struct fs fs_class_sis;
 extern const struct fs fs_class_sis_queue;
@@ -152,5 +159,7 @@ void fs_metadata_init(struct fs_file *file);
 void fs_default_set_metadata(struct fs_file *file,
 			     const char *key, const char *value);
 int fs_default_copy(struct fs_file *src, struct fs_file *dest);
+
+void fs_file_timing_end(struct fs_file *file, enum fs_op op);
 
 #endif

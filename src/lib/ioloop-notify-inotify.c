@@ -85,8 +85,9 @@ static void inotify_input(struct ioloop *ioloop)
 }
 
 #undef io_add_notify
-enum io_notify_result io_add_notify(const char *path, io_callback_t *callback,
-				    void *context, struct io **io_r)
+enum io_notify_result
+io_add_notify(const char *path, unsigned int source_linenum,
+	      io_callback_t *callback, void *context, struct io **io_r)
 {
 	struct ioloop_notify_handler_context *ctx =
 		current_ioloop->notify_handler_context;
@@ -101,7 +102,7 @@ enum io_notify_result io_add_notify(const char *path, io_callback_t *callback,
 
 	wd = inotify_add_watch(ctx->inotify_fd, path,
 			       IN_CREATE | IN_DELETE | IN_DELETE_SELF |
-			       IN_MOVE | IN_CLOSE | IN_MODIFY);
+			       IN_MOVE | IN_MODIFY);
 	if (wd < 0) {
 		/* ESTALE could happen with NFS. Don't bother giving an error
 		   message then. */
@@ -125,6 +126,7 @@ enum io_notify_result io_add_notify(const char *path, io_callback_t *callback,
 	}
 
 	*io_r = io_notify_fd_add(&ctx->fd_ctx, wd, callback, context);
+	(*io_r)->source_linenum = source_linenum;
 	return IO_NOTIFY_ADDED;
 }
 
@@ -144,7 +146,7 @@ void io_loop_notify_remove(struct io *_io)
 
 	io_notify_fd_free(&ctx->fd_ctx, io);
 
-	if (ctx->fd_ctx.notifies == NULL)
+	if (ctx->fd_ctx.notifies == NULL && ctx->event_io != NULL)
 		io_remove(&ctx->event_io);
 }
 
@@ -191,12 +193,49 @@ void io_loop_notify_handler_deinit(struct ioloop *ioloop)
 	struct ioloop_notify_handler_context *ctx =
 		ioloop->notify_handler_context;
 
+	while (ctx->fd_ctx.notifies != NULL) {
+		struct io_notify *io = ctx->fd_ctx.notifies;
+		struct io *_io = &io->io;
+
+		i_warning("I/O notify leak: %p (line %u, fd %d)",
+			  (void *)_io->callback,
+			  _io->source_linenum, io->fd);
+		io_remove(&_io);
+	}
+
 	if (ctx->inotify_fd != -1) {
 		if (close(ctx->inotify_fd) < 0)
 			i_error("close(inotify) failed: %m");
 		ctx->inotify_fd = -1;
 	}
 	i_free(ctx);
+}
+
+int io_loop_extract_notify_fd(struct ioloop *ioloop)
+{
+	struct ioloop_notify_handler_context *ctx =
+		ioloop->notify_handler_context;
+	struct io_notify *io;
+	int fd, new_inotify_fd;
+
+	if (ctx->inotify_fd == -1)
+		return -1;
+
+	new_inotify_fd = inotify_init();
+	if (new_inotify_fd == -1) {
+		if (errno != EMFILE)
+			i_error("inotify_init() failed: %m");
+		else
+			ioloop_inotify_user_limit_exceeded();
+		return -1;
+	}
+	for (io = ctx->fd_ctx.notifies; io != NULL; io = io->next)
+		io->fd = -1;
+	if (ctx->event_io != NULL)
+		io_remove(&ctx->event_io);
+	fd = ctx->inotify_fd;
+	ctx->inotify_fd = new_inotify_fd;
+	return fd;
 }
 
 #endif

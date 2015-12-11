@@ -66,6 +66,14 @@ const char *fts_tokenizer_name(const struct fts_tokenizer *tok)
 	return tok->name;
 }
 
+static void fts_tokenizer_self_reset(struct fts_tokenizer *tok)
+{
+	tok->prev_data = NULL;
+	tok->prev_size = 0;
+	tok->prev_skip = 0;
+	tok->prev_reply_finished = TRUE;
+}
+
 int fts_tokenizer_create(const struct fts_tokenizer *tok_class,
 			 struct fts_tokenizer *parent,
 			 const char *const *settings,
@@ -81,11 +89,11 @@ int fts_tokenizer_create(const struct fts_tokenizer *tok_class,
 		settings = &empty_settings;
 
 	if (tok_class->v->create(settings, &tok, error_r) < 0) {
-		*tokenizer_r = 0;
+		*tokenizer_r = NULL;
 		return -1;
 	}
 	tok->refcount = 1;
-	tok->prev_reply_finished = TRUE;
+	fts_tokenizer_self_reset(tok);
 	if (parent != NULL) {
 		fts_tokenizer_ref(parent);
 		tok->parent = parent;
@@ -150,10 +158,7 @@ fts_tokenizer_next_self(struct fts_tokenizer *tok,
 		tok->prev_reply_finished = FALSE;
 	} else if (ret == 0) {
 		/* we need a new data block */
-		tok->prev_data = NULL;
-		tok->prev_size = 0;
-		tok->prev_skip = 0;
-		tok->prev_reply_finished = TRUE;
+		fts_tokenizer_self_reset(tok);
 	}
 	return ret;
 }
@@ -161,6 +166,7 @@ fts_tokenizer_next_self(struct fts_tokenizer *tok,
 void fts_tokenizer_reset(struct fts_tokenizer *tok)
 {
 	tok->v->reset(tok);
+	fts_tokenizer_self_reset(tok);
 }
 
 int fts_tokenizer_next(struct fts_tokenizer *tok,

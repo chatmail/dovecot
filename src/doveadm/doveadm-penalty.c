@@ -8,7 +8,6 @@
 #include "doveadm.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
 
@@ -36,9 +35,10 @@ static void penalty_parse_line(const char *line, struct penalty_line *line_r)
 	memset(line_r, 0, sizeof(*line_r));
 
 	(void)net_addr2ip(ident, &line_r->ip);
-	line_r->penalty = strtoul(penalty_str, NULL, 10);
-	line_r->last_penalty = strtoul(last_penalty_str, NULL, 10);
-	line_r->last_update = strtoul(last_update_str, NULL, 10);
+	if (str_to_uint(penalty_str, &line_r->penalty) < 0 ||
+	    str_to_time(last_penalty_str, &line_r->last_penalty) < 0 ||
+	    str_to_time(last_update_str, &line_r->last_update) < 0)
+		i_fatal("Read invalid penalty line: %s", line);
 }
 
 static void

@@ -2,6 +2,7 @@
 #define SETTINGS_PARSER_H
 
 struct var_expand_table;
+struct var_expand_func_table;
 
 #define SETTINGS_SEPARATOR '/'
 #define SETTINGS_SEPARATOR_S "/"
@@ -22,6 +23,7 @@ enum setting_type {
 	SET_UINT_OCT,
 	SET_TIME,
 	SET_SIZE,
+	SET_IN_PORT, /* internet port */
 	SET_STR,
 	SET_STR_VARS, /* string with %variables */
 	SET_ENUM,
@@ -62,6 +64,10 @@ struct setting_define {
 #define SETTING_DEFINE_STRUCT_STR(name, struct_name) \
 	{ SET_STR + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE( \
 		((struct struct_name *)0)->name, const char *), \
+	  #name, offsetof(struct struct_name, name), NULL }
+#define SETTING_DEFINE_STRUCT_IN_PORT(name, struct_name) \
+	{ SET_IN_PORT + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE( \
+		((struct struct_name *)0)->name, in_port_t), \
 	  #name, offsetof(struct struct_name, name), NULL }
 
 struct setting_parser_info {
@@ -178,6 +184,11 @@ void settings_parse_var_skip(struct setting_parser_context *ctx);
 void settings_var_expand(const struct setting_parser_info *info,
 			 void *set, pool_t pool,
 			 const struct var_expand_table *table);
+void settings_var_expand_with_funcs(const struct setting_parser_info *info,
+				    void *set, pool_t pool,
+				    const struct var_expand_table *table,
+				    const struct var_expand_func_table *func_table,
+				    void *func_context);
 /* Go through all the settings and return the first one that has an unexpanded
    setting containing the given %key. */
 bool settings_vars_have_key(const struct setting_parser_info *info, void *set,

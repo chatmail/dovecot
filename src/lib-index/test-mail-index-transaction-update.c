@@ -6,7 +6,6 @@
 #include "mail-index-private.h"
 #include "mail-index-transaction-private.h"
 
-#include <stdlib.h>
 
 static struct mail_index_header hdr;
 static struct mail_index_record rec;
@@ -466,7 +465,7 @@ static bool test_flag_update_pos(struct mail_index_transaction *t,
 	count = array_count(&t->updates);
 	for (i = 0; i < idx; i++) {
 		for (j = idx + 1; j <= count; j++) {
-			if (!mail_index_transaction_get_flag_update_pos(t, i, j, seq) == idx) {
+			if (mail_index_transaction_get_flag_update_pos(t, i, j, seq) != idx) {
 				test_assert(FALSE);
 				return FALSE;
 			}

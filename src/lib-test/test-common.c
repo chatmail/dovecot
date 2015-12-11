@@ -5,7 +5,6 @@
 #include "test-common.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 
 #include <setjmp.h> /* for fatal tests */
 
@@ -19,6 +18,8 @@ static char *test_prefix;
 static bool test_success;
 static unsigned int failure_count;
 static unsigned int total_count;
+static unsigned int expected_errors;
+static char *expected_error_str;
 
 struct test_istream {
 	struct istream_private istream;
@@ -165,12 +166,14 @@ bool test_has_failed(void)
 void test_assert_failed(const char *code, const char *file, unsigned int line)
 {
 	printf("%s:%u: Assert failed: %s\n", file, line, code);
+	fflush(stdout);
 	test_success = FALSE;
 }
 
 void test_assert_failed_idx(const char *code, const char *file, unsigned int line, long long i)
 {
 	printf("%s:%u: Assert(#%lld) failed: %s\n", file, line, i, code);
+	fflush(stdout);
 	test_success = FALSE;
 }
 
@@ -250,7 +253,28 @@ void test_out_reason(const char *name, bool success, const char *reason)
 	if (reason != NULL && *reason != '\0')
 		printf(": %s", reason);
 	putchar('\n');
+	fflush(stdout);
 	total_count++;
+}
+
+void
+test_expect_error_string(const char *substr)
+{
+	i_assert(expected_errors == 0);
+	expected_errors = 1;
+	expected_error_str = i_strdup(substr);
+}
+void
+test_expect_errors(unsigned int expected)
+{
+	i_assert(expected_errors == 0);
+	expected_errors = expected;
+}
+void
+test_expect_no_more_errors(void)
+{
+	test_assert(expected_errors == 0 && expected_error_str == NULL);
+	expected_errors = 0;
 }
 
 static void ATTR_FORMAT(2, 0)
@@ -267,6 +291,14 @@ test_error_handler(const struct failure_context *ctx,
 		return;
 	}
 #endif
+	if (expected_errors > 0) {
+		if (expected_error_str != NULL) {
+			test_assert(strstr(format, expected_error_str) != NULL);
+			i_free(expected_error_str);
+		}
+		expected_errors--;
+		return;
+	}
 	test_success = FALSE;
 }
 

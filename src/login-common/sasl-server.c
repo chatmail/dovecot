@@ -18,7 +18,6 @@
 #include "master-auth.h"
 #include "client-common.h"
 
-#include <stdlib.h>
 #include <unistd.h>
 
 #define ERR_TOO_MANY_USERIP_CONNECTIONS \
@@ -163,9 +162,15 @@ anvil_lookup_callback(const char *reply, void *context)
 	struct client *client = req->client;
 	const struct login_settings *set = client->set;
 	const char *errmsg;
+	unsigned int conn_count;
 
-	if (reply == NULL ||
-	    strtoul(reply, NULL, 10) < set->mail_max_userip_connections)
+	conn_count = 0;
+	if (reply != NULL && str_to_uint(reply, &conn_count) < 0)
+		i_fatal("Received invalid reply from anvil: %s", reply);
+
+	/* reply=NULL if we didn't need to do anvil lookup,
+	   or if the anvil lookup failed. allow failed anvil lookups in. */
+	if (reply == NULL || conn_count < set->mail_max_userip_connections)
 		master_send_request(req);
 	else {
 		client->authenticating = FALSE;
@@ -234,6 +239,7 @@ authenticate_callback(struct auth_client_request *request,
 	case AUTH_REQUEST_STATUS_OK:
 		client->auth_request = NULL;
 		client->auth_successes++;
+		client->auth_passdb_args = p_strarray_dup(client->pool, args);
 
 		nologin = FALSE;
 		for (i = 0; args[i] != NULL; i++) {

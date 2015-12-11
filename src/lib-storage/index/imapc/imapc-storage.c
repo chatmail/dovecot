@@ -207,17 +207,31 @@ imapc_storage_client_login(const struct imapc_command_reply *reply,
 
 	if (reply->state == IMAPC_COMMAND_STATE_OK)
 		return;
+	if (client->destroying &&
+	    reply->state == IMAPC_COMMAND_STATE_DISCONNECTED) {
+		/* user's work was finished before imapc login finished -
+		   it's not an error */
+		return;
+	}
 
 	i_error("imapc: Authentication failed: %s", reply->text_full);
 	client->auth_failed = TRUE;
 
 	if (client->_storage != NULL) {
-		mail_storage_set_error(&client->_storage->storage,
-				       MAIL_ERROR_PERM, reply->text_full);
+		if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED)
+			mail_storage_set_internal_error(&client->_storage->storage);
+		else {
+			mail_storage_set_error(&client->_storage->storage,
+					       MAIL_ERROR_PERM, reply->text_full);
+		}
 	}
 	if (client->_list != NULL) {
-		mailbox_list_set_error(&client->_list->list,
-				       MAIL_ERROR_PERM, reply->text_full);
+		if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED)
+			mailbox_list_set_internal_error(&client->_list->list);
+		else {
+			mailbox_list_set_error(&client->_list->list,
+					       MAIL_ERROR_PERM, reply->text_full);
+		}
 	}
 }
 
@@ -284,8 +298,10 @@ int imapc_storage_client_create(struct mail_namespace *ns,
 	client->client = imapc_client_init(&set);
 	imapc_client_register_untagged(client->client,
 				       imapc_storage_client_untagged_cb, client);
-	/* start logging in immediately */
-	imapc_client_login(client->client, imapc_storage_client_login, client);
+	if ((ns->flags & NAMESPACE_FLAG_LIST_PREFIX) != 0) {
+		/* start logging in immediately */
+		imapc_client_login(client->client, imapc_storage_client_login, client);
+	}
 
 	*client_r = client;
 	return 0;
@@ -339,6 +355,8 @@ imapc_storage_create(struct mail_storage *_storage,
 static void imapc_storage_destroy(struct mail_storage *_storage)
 {
 	struct imapc_storage *storage = (struct imapc_storage *)_storage;
+
+	storage->client->destroying = TRUE;
 
 	/* make sure all pending commands are aborted before anything is
 	   deinitialized */
@@ -453,10 +471,13 @@ static void imapc_mailbox_reopen(void *context)
 	cmd = imapc_client_mailbox_cmd(mbox->client_box,
 				       imapc_mailbox_reopen_callback, mbox);
 	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_SELECT);
-	if (imapc_mailbox_want_examine(mbox))
-		imapc_command_sendf(cmd, "EXAMINE %s", mbox->box.name);
-	else
-		imapc_command_sendf(cmd, "SELECT %s", mbox->box.name);
+	if (imapc_mailbox_want_examine(mbox)) {
+		imapc_command_sendf(cmd, "EXAMINE %s",
+			mailbox_list_unescape_name(mbox->box.list, mbox->box.name));
+	} else {
+		imapc_command_sendf(cmd, "SELECT %s",
+			mailbox_list_unescape_name(mbox->box.list, mbox->box.name));
+	}
 	mbox->storage->reopen_count++;
 
 	if (mbox->syncing)
@@ -528,10 +549,13 @@ int imapc_mailbox_select(struct imapc_mailbox *mbox)
 	cmd = imapc_client_mailbox_cmd(mbox->client_box,
 				       imapc_mailbox_open_callback, &ctx);
 	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_SELECT);
-	if (imapc_mailbox_want_examine(mbox))
-		imapc_command_sendf(cmd, "EXAMINE %s", mbox->box.name);
-	else
-		imapc_command_sendf(cmd, "SELECT %s", mbox->box.name);
+	if (imapc_mailbox_want_examine(mbox)) {
+		imapc_command_sendf(cmd, "EXAMINE %s",
+			mailbox_list_unescape_name(mbox->box.list, mbox->box.name));
+	} else {
+		imapc_command_sendf(cmd, "SELECT %s",
+			mailbox_list_unescape_name(mbox->box.list, mbox->box.name));
+	}
 
 	while (ctx.ret == -2)
 		imapc_mailbox_run(mbox);

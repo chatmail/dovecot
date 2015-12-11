@@ -41,6 +41,13 @@ static void i_stream_timeout(struct timeout_istream *tstream)
 	unsigned int msecs;
 	int diff;
 
+	if (tstream->update_timestamp) {
+		/* we came here after a long-running code. timeouts are handled
+		   before IOs, so wait for i_stream_read() to be called again
+		   before assuming that we've timed out. */
+		return;
+	}
+
 	timeout_remove(&tstream->to);
 
 	diff = timeval_diff_msecs(&ioloop_timeval, &tstream->last_read_timestamp);
@@ -64,6 +71,17 @@ static void i_stream_timeout(struct timeout_istream *tstream)
 	i_stream_set_input_pending(tstream->istream.parent, TRUE);
 }
 
+static void i_stream_timeout_set_pending(struct timeout_istream *tstream)
+{
+	/* make sure we get called again on the next ioloop run. this updates
+	   the timeout to the timestamp where we actually would have wanted to
+	   start waiting for more data (so if there is long-running code
+	   outside the ioloop it's not counted) */
+	tstream->update_timestamp = TRUE;
+	tstream->last_read_timestamp = ioloop_timeval;
+	i_stream_set_input_pending(&tstream->istream.istream, TRUE);
+}
+
 static ssize_t
 i_stream_timeout_read(struct istream_private *stream)
 {
@@ -83,26 +101,17 @@ i_stream_timeout_read(struct istream_private *stream)
 				"%s (opened %d secs ago)",
 				i_stream_get_error(stream->parent), diff);
 		}
-	} else if (tstream->to == NULL) {
+	} else if (tstream->to == NULL && tstream->timeout_msecs > 0) {
 		/* first read. add the timeout here instead of in init
 		   in case the stream is created long before it's actually
 		   read from. */
-		tstream->to = tstream->timeout_msecs == 0 ? NULL :
-			timeout_add(tstream->timeout_msecs,
-				    i_stream_timeout, tstream);
-		tstream->update_timestamp = TRUE;
-		tstream->last_read_timestamp = ioloop_timeval;
+		tstream->to = timeout_add(tstream->timeout_msecs,
+					  i_stream_timeout, tstream);
+		i_stream_timeout_set_pending(tstream);
 	} else if (ret > 0 && tstream->to != NULL) {
 		/* we read something, reset the timeout */
 		timeout_reset(tstream->to);
-		/* make sure we get called again on the next ioloop run.
-		   this updates the timeout to the timestamp where we actually
-		   would have wanted to start waiting for more data (so if
-		   there is long-running code outside the ioloop it's not
-		   counted) */
-		tstream->update_timestamp = TRUE;
-		tstream->last_read_timestamp = ioloop_timeval;
-		i_stream_set_input_pending(&stream->istream, TRUE);
+		i_stream_timeout_set_pending(tstream);
 	} else if (tstream->update_timestamp) {
 		tstream->update_timestamp = FALSE;
 		tstream->last_read_timestamp = ioloop_timeval;
@@ -125,6 +134,7 @@ i_stream_create_timeout(struct istream *input, unsigned int timeout_msecs)
 	tstream->istream.switch_ioloop = i_stream_timeout_switch_ioloop;
 	tstream->istream.iostream.close = i_stream_timeout_close;
 
+	tstream->istream.istream.readable_fd = input->readable_fd;
 	tstream->istream.istream.blocking = input->blocking;
 	tstream->istream.istream.seekable = input->seekable;
 	return i_stream_create(&tstream->istream, input,

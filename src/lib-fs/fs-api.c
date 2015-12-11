@@ -9,6 +9,9 @@
 #include "istream.h"
 #include "istream-seekable.h"
 #include "ostream.h"
+#include "timing.h"
+#include "time-util.h"
+#include "istream-fs-stats.h"
 #include "fs-api-private.h"
 
 struct fs_api_module_register fs_api_module_register = { 0 };
@@ -28,6 +31,8 @@ fs_alloc(const struct fs *fs_class, const char *args,
 	fs = fs_class->v.alloc();
 	fs->refcount = 1;
 	fs->last_error = str_new(default_pool, 64);
+	fs->set.debug = set->debug;
+	fs->set.enable_timing = set->enable_timing;
 	i_array_init(&fs->module_contexts, 5);
 
 	T_BEGIN {
@@ -63,7 +68,9 @@ static void fs_classes_deinit(void)
 static void fs_classes_init(void)
 {
 	i_array_init(&fs_classes, 8);
+	fs_class_register(&fs_class_dict);
 	fs_class_register(&fs_class_posix);
+	fs_class_register(&fs_class_randomfail);
 	fs_class_register(&fs_class_metawrap);
 	fs_class_register(&fs_class_sis);
 	fs_class_register(&fs_class_sis_queue);
@@ -126,6 +133,7 @@ int fs_init(const char *driver, const char *args,
 {
 	const struct fs *fs_class;
 	const char *temp_file_prefix;
+	unsigned int i;
 
 	fs_class = fs_class_find(driver);
 	if (fs_class == NULL) {
@@ -140,6 +148,9 @@ int fs_init(const char *driver, const char *args,
 	}
 	if (fs_alloc(fs_class, args, set, fs_r, error_r) < 0)
 		return -1;
+
+	for (i = 0; i < FS_OP_COUNT; i++)
+		(*fs_r)->stats.timings[i] = timing_init();
 
 	temp_file_prefix = set->temp_file_prefix != NULL ?
 		set->temp_file_prefix : ".temp.dovecot";
@@ -165,6 +176,7 @@ void fs_unref(struct fs **_fs)
 	struct fs *fs = *_fs;
 	string_t *last_error = fs->last_error;
 	struct array module_contexts_arr = fs->module_contexts.arr;
+	unsigned int i;
 
 	i_assert(fs->refcount > 0);
 
@@ -182,6 +194,8 @@ void fs_unref(struct fs **_fs)
 	i_free(fs->username);
 	i_free(fs->session_id);
 	i_free(fs->temp_path_prefix);
+	for (i = 0; i < FS_OP_COUNT; i++)
+		timing_deinit(&fs->stats.timings[i]);
 	T_BEGIN {
 		fs->v.deinit(fs);
 	} T_END;
@@ -294,6 +308,40 @@ void fs_set_metadata(struct fs_file *file, const char *key, const char *value)
 	} T_END;
 }
 
+static void fs_file_timing_start(struct fs_file *file, enum fs_op op)
+{
+	if (!file->fs->set.enable_timing)
+		return;
+	if (file->timing_start[op].tv_sec == 0) {
+		if (gettimeofday(&file->timing_start[op], NULL) < 0)
+			i_fatal("gettimeofday() failed: %m");
+	}
+}
+
+static void
+fs_timing_end(struct timing *timing, const struct timeval *start_tv)
+{
+	struct timeval now;
+	long long diff;
+
+	if (gettimeofday(&now, NULL) < 0)
+		i_fatal("gettimeofday() failed: %m");
+
+	diff = timeval_diff_usecs(&now, start_tv);
+	if (diff > 0)
+		timing_add_usecs(timing, diff);
+}
+
+void fs_file_timing_end(struct fs_file *file, enum fs_op op)
+{
+	if (!file->fs->set.enable_timing || file->timing_start[op].tv_sec == 0)
+		return;
+
+	fs_timing_end(file->fs->stats.timings[op], &file->timing_start[op]);
+	/* don't count this again */
+	file->timing_start[op].tv_sec = 0;
+}
+
 int fs_get_metadata(struct fs_file *file,
 		    const ARRAY_TYPE(fs_metadata) **metadata_r)
 {
@@ -307,10 +355,13 @@ int fs_get_metadata(struct fs_file *file,
 	    !file->lookup_metadata_counted) {
 		file->lookup_metadata_counted = TRUE;
 		file->fs->stats.lookup_metadata_count++;
+		fs_file_timing_start(file, FS_OP_METADATA);
 	}
 	T_BEGIN {
 		ret = file->fs->v.get_metadata(file, metadata_r);
 	} T_END;
+	if (!(ret < 0 && errno == EAGAIN))
+		fs_file_timing_end(file, FS_OP_METADATA);
 	return ret;
 }
 
@@ -378,10 +429,12 @@ bool fs_prefetch(struct fs_file *file, uoff_t length)
 	if (!file->read_or_prefetch_counted) {
 		file->read_or_prefetch_counted = TRUE;
 		file->fs->stats.prefetch_count++;
+		fs_file_timing_start(file, FS_OP_PREFETCH);
 	}
 	T_BEGIN {
 		ret = file->fs->v.prefetch(file, length);
 	} T_END;
+	fs_file_timing_end(file, FS_OP_PREFETCH);
 	return ret;
 }
 
@@ -420,12 +473,15 @@ ssize_t fs_read(struct fs_file *file, void *buf, size_t size)
 	if (!file->read_or_prefetch_counted) {
 		file->read_or_prefetch_counted = TRUE;
 		file->fs->stats.read_count++;
+		fs_file_timing_start(file, FS_OP_READ);
 	}
 
 	if (file->fs->v.read != NULL) {
 		T_BEGIN {
 			ret = file->fs->v.read(file, buf, size);
 		} T_END;
+		if (!(ret < 0 && errno == EAGAIN))
+			fs_file_timing_end(file, FS_OP_READ);
 		return ret;
 	}
 
@@ -445,6 +501,7 @@ struct istream *fs_read_stream(struct fs_file *file, size_t max_buffer_size)
 	if (!file->read_or_prefetch_counted) {
 		file->read_or_prefetch_counted = TRUE;
 		file->fs->stats.read_count++;
+		fs_file_timing_start(file, FS_OP_READ);
 	}
 
 	if (file->seekable_input != NULL) {
@@ -457,7 +514,14 @@ struct istream *fs_read_stream(struct fs_file *file, size_t max_buffer_size)
 	} T_END;
 	if (input->stream_errno != 0) {
 		/* read failed already */
+		fs_file_timing_end(file, FS_OP_READ);
 		return input;
+	}
+	if (file->fs->set.enable_timing) {
+		struct istream *input2 = i_stream_create_fs_stats(input, file);
+
+		i_stream_unref(&input);
+		input = input2;
 	}
 
 	if ((file->flags & FS_OPEN_FLAG_SEEKABLE) != 0)
@@ -529,11 +593,15 @@ int fs_write(struct fs_file *file, const void *data, size_t size)
 {
 	int ret;
 
-	file->fs->stats.write_count++;
 	if (file->fs->v.write != NULL) {
+		fs_file_timing_start(file, FS_OP_WRITE);
 		T_BEGIN {
 			ret = file->fs->v.write(file, data, size);
 		} T_END;
+		if (!(ret < 0 && errno == EAGAIN)) {
+			file->fs->stats.write_count++;
+			fs_file_timing_end(file, FS_OP_WRITE);
+		}
 		return ret;
 	}
 
@@ -549,34 +617,52 @@ struct ostream *fs_write_stream(struct fs_file *file)
 		file->fs->v.write_stream(file);
 	} T_END;
 	i_assert(file->output != NULL);
+	o_stream_cork(file->output);
 	return file->output;
+}
+
+static int fs_write_stream_finish_int(struct fs_file *file, bool success)
+{
+	int ret;
+
+	fs_file_timing_start(file, FS_OP_WRITE);
+	T_BEGIN {
+		ret = file->fs->v.write_stream_finish(file, success);
+	} T_END;
+	if (ret != 0) {
+		fs_file_timing_end(file, FS_OP_WRITE);
+		file->metadata_changed = FALSE;
+	} else {
+		/* write didn't finish yet. this shouldn't happen if we
+		   indicated a failure. */
+		i_assert(success);
+	}
+	return ret;
 }
 
 int fs_write_stream_finish(struct fs_file *file, struct ostream **output)
 {
-	int ret;
+	bool success = TRUE;
 
 	i_assert(*output == file->output || *output == NULL);
 
 	*output = NULL;
-	T_BEGIN {
-		ret = file->fs->v.write_stream_finish(file, TRUE);
-	} T_END;
-	if (ret != 0)
-		file->metadata_changed = FALSE;
-	return ret;
+	if (file->output != NULL)
+		o_stream_uncork(file->output);
+	if (file->output != NULL) {
+		if (o_stream_nfinish(file->output) < 0) {
+			fs_set_error(file->fs, "write(%s) failed: %s",
+				     o_stream_get_name(file->output),
+				     o_stream_get_error(file->output));
+			success = FALSE;
+		}
+	}
+	return fs_write_stream_finish_int(file, success);
 }
 
 int fs_write_stream_finish_async(struct fs_file *file)
 {
-	int ret;
-
-	T_BEGIN {
-		ret = file->fs->v.write_stream_finish(file, TRUE);
-	} T_END;
-	if (ret != 0)
-		file->metadata_changed = FALSE;
-	return ret;
+	return fs_write_stream_finish_int(file, TRUE);
 }
 
 void fs_write_stream_abort(struct fs_file *file, struct ostream **output)
@@ -584,10 +670,9 @@ void fs_write_stream_abort(struct fs_file *file, struct ostream **output)
 	i_assert(*output == file->output);
 
 	*output = NULL;
-	T_BEGIN {
-		(void)file->fs->v.write_stream_finish(file, FALSE);
-	} T_END;
-	file->metadata_changed = FALSE;
+	if (file->output != NULL)
+		o_stream_ignore_last_errors(file->output);
+	(void)fs_write_stream_finish_int(file, FALSE);
 }
 
 void fs_write_set_hash(struct fs_file *file, const struct hash_method *method,
@@ -663,9 +748,12 @@ int fs_exists(struct fs_file *file)
 			return errno == ENOENT ? 0 : -1;
 	}
 	file->fs->stats.exists_count++;
+	fs_file_timing_start(file, FS_OP_EXISTS);
 	T_BEGIN {
 		ret = file->fs->v.exists(file);
 	} T_END;
+	if (!(ret < 0 && errno == EAGAIN))
+		fs_file_timing_end(file, FS_OP_EXISTS);
 	return ret;
 }
 
@@ -677,10 +765,13 @@ int fs_stat(struct fs_file *file, struct stat *st_r)
 	    !file->lookup_metadata_counted && !file->stat_counted) {
 		file->stat_counted = TRUE;
 		file->fs->stats.stat_count++;
+		fs_file_timing_start(file, FS_OP_STAT);
 	}
 	T_BEGIN {
 		ret = file->fs->v.stat(file, st_r);
 	} T_END;
+	if (!(ret < 0 && errno == EAGAIN))
+		fs_file_timing_end(file, FS_OP_STAT);
 	return ret;
 }
 
@@ -741,11 +832,14 @@ int fs_copy(struct fs_file *src, struct fs_file *dest)
 	i_assert(src->fs == dest->fs);
 
 	dest->fs->stats.copy_count++;
+	fs_file_timing_start(dest, FS_OP_COPY);
 	T_BEGIN {
 		ret = src->fs->v.copy(src, dest);
 	} T_END;
-	if (ret < 0 || errno != EAGAIN)
+	if (!(ret < 0 && errno == EAGAIN)) {
+		fs_file_timing_end(dest, FS_OP_COPY);
 		dest->metadata_changed = FALSE;
+	}
 	return ret;
 }
 
@@ -756,8 +850,10 @@ int fs_copy_finish_async(struct fs_file *dest)
 	T_BEGIN {
 		ret = dest->fs->v.copy(NULL, dest);
 	} T_END;
-	if (ret < 0 || errno != EAGAIN)
+	if (!(ret < 0 && errno == EAGAIN)) {
+		fs_file_timing_end(dest, FS_OP_COPY);
 		dest->metadata_changed = FALSE;
+	}
 	return ret;
 }
 
@@ -768,9 +864,12 @@ int fs_rename(struct fs_file *src, struct fs_file *dest)
 	i_assert(src->fs == dest->fs);
 
 	dest->fs->stats.rename_count++;
+	fs_file_timing_start(dest, FS_OP_RENAME);
 	T_BEGIN {
 		ret = src->fs->v.rename(src, dest);
 	} T_END;
+	if (!(ret < 0 && errno == EAGAIN))
+		fs_file_timing_end(dest, FS_OP_RENAME);
 	return ret;
 }
 
@@ -779,9 +878,12 @@ int fs_delete(struct fs_file *file)
 	int ret;
 
 	file->fs->stats.delete_count++;
+	fs_file_timing_start(file, FS_OP_DELETE);
 	T_BEGIN {
 		ret = file->fs->v.delete_file(file);
 	} T_END;
+	if (!(ret < 0 && errno == EAGAIN))
+		fs_file_timing_end(file, FS_OP_DELETE);
 	return ret;
 }
 
@@ -789,14 +891,20 @@ struct fs_iter *
 fs_iter_init(struct fs *fs, const char *path, enum fs_iter_flags flags)
 {
 	struct fs_iter *iter;
+	struct timeval now = ioloop_timeval;
 
 	i_assert((flags & FS_ITER_FLAG_OBJECTIDS) == 0 ||
 		 (fs_get_properties(fs) & FS_PROPERTY_OBJECTIDS) != 0);
 
 	fs->stats.iter_count++;
+	if (fs->set.enable_timing) {
+		if (gettimeofday(&now, NULL) < 0)
+			i_fatal("gettimeofday() failed: %m");
+	}
 	T_BEGIN {
 		iter = fs->v.iter_init(fs, path, flags);
 	} T_END;
+	iter->start_time = now;
 	DLLIST_PREPEND(&fs->iters, iter);
 	return iter;
 }
@@ -821,6 +929,15 @@ const char *fs_iter_next(struct fs_iter *iter)
 	T_BEGIN {
 		ret = iter->fs->v.iter_next(iter);
 	} T_END;
+	if (iter->start_time.tv_sec != 0 &&
+	    (ret != NULL || !fs_iter_have_more(iter))) {
+		/* first result returned - count this as the finish time, since
+		   we don't want to count the time caller spends on this
+		   iteration. */
+		fs_timing_end(iter->fs->stats.timings[FS_OP_ITER], &iter->start_time);
+		/* don't count this again */
+		iter->start_time.tv_sec = 0;
+	}
 	return ret;
 }
 

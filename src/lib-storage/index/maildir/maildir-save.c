@@ -19,7 +19,6 @@
 #include "maildir-sync.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <utime.h>
@@ -624,10 +623,7 @@ static int maildir_save_finish_real(struct mail_save_context *_ctx)
 
 	if (ctx->failed) {
 		/* delete the tmp file */
-		if (unlink(path) < 0 && errno != ENOENT) {
-			mail_storage_set_critical(storage,
-				"unlink(%s) failed: %m", path);
-		}
+		i_unlink_if_exists(path);
 
 		errno = output_errno;
 		if (ENOQUOTA(errno)) {
@@ -671,7 +667,7 @@ maildir_save_unlink_files(struct maildir_save_context *ctx)
 	struct maildir_filename *mf;
 
 	for (mf = ctx->files; mf != NULL; mf = mf->next) T_BEGIN {
-		(void)unlink(maildir_mf_get_path(ctx, mf));
+		i_unlink(maildir_mf_get_path(ctx, mf));
 	} T_END;
 	ctx->files = NULL;
 }
@@ -732,7 +728,7 @@ maildir_save_set_recent_flags(struct maildir_save_context *ctx)
 	uids = array_get(&saved_sorted_uids, &count);
 	for (i = 0; i < count; i++) {
 		for (uid = uids[i].seq1; uid <= uids[i].seq2; uid++)
-			index_mailbox_set_recent_uid(&mbox->box, uid);
+			mailbox_recent_flags_set_uid(&mbox->box, uid);
 	}
 	return uids[count-1].seq2 + 1;
 }

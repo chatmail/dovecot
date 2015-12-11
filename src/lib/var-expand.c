@@ -10,7 +10,6 @@
 #include "strescape.h"
 #include "var-expand.h"
 
-#include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
 
@@ -51,7 +50,8 @@ m_str_hex(const char *str, struct var_expand_context *ctx ATTR_UNUSED)
 {
 	unsigned long long l;
 
-	l = strtoull(str, NULL, 10);
+	if (str_to_ullong(str, &l) < 0)
+		l = 0;
 	return t_strdup_printf("%llx", l);
 }
 
@@ -170,14 +170,20 @@ static const char *
 var_expand_func(const struct var_expand_func_table *func_table,
 		const char *key, const char *data, void *context)
 {
-	if (strcmp(key, "env") == 0)
-		return getenv(data);
+	const char *value;
+
+	if (strcmp(key, "env") == 0) {
+		value = getenv(data);
+		return value != NULL ? value : "";
+	}
 	if (func_table == NULL)
 		return NULL;
 
 	for (; func_table->key != NULL; func_table++) {
-		if (strcmp(func_table->key, key) == 0)
-			return func_table->func(data, context);
+		if (strcmp(func_table->key, key) == 0) {
+			value = func_table->func(data, context);
+			return value != NULL ? value : "";
+		}
 	}
 	return NULL;
 }

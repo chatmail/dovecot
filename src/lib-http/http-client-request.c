@@ -12,6 +12,7 @@
 #include "dns-lookup.h"
 #include "http-url.h"
 #include "http-date.h"
+#include "http-auth.h"
 #include "http-response-parser.h"
 #include "http-transfer.h"
 
@@ -104,6 +105,11 @@ http_client_request_url(struct http_client *client,
 	req = http_client_request_new(client, method, callback, context);
 	http_url_copy_authority(req->pool, &req->origin_url, target_url);
 	req->target = p_strdup(req->pool, http_url_create_target(target_url));
+	if (target_url->user != NULL && *target_url->user != '\0' &&
+		target_url->password != NULL) {
+		req->username = p_strdup(req->pool, target_url->user);
+		req->password = p_strdup(req->pool, target_url->password);
+	}
 	return req;
 }
 
@@ -144,6 +150,7 @@ http_client_request_connect_ip(struct http_client *client,
 
 void http_client_request_ref(struct http_client_request *req)
 {
+	i_assert(req->refcount > 0);
 	req->refcount++;
 }
 
@@ -226,6 +233,10 @@ void http_client_request_add_header(struct http_client_request *req,
 
 	/* mark presence of special headers */
 	switch (key[0]) {
+	case 'a': case 'A':
+		if (strcasecmp(key, "Authorization") == 0)
+			req->have_hdr_authorization = TRUE;
+		break;
 	case 'c': case 'C':
 		if (strcasecmp(key, "Connection") == 0)
 			req->have_hdr_connection = TRUE;
@@ -243,6 +254,9 @@ void http_client_request_add_header(struct http_client_request *req,
 	case 'h': case 'H':
 		if (strcasecmp(key, "Host") == 0)
 			req->have_hdr_host = TRUE;
+		break;
+	case 'p': case 'P':
+		i_assert(strcasecmp(key, "Proxy-Authorization") != 0);
 		break;
 	case 't': case 'T':
 		if (strcasecmp(key, "Transfer-Encoding") == 0)
@@ -338,6 +352,13 @@ void http_client_request_set_timeout(struct http_client_request *req,
 	req->timeout_msecs = 0;
 }
 
+void http_client_request_set_auth_simple(struct http_client_request *req,
+	const char *username, const char *password)
+{
+	req->username = p_strdup(req->pool, username);
+	req->password = p_strdup(req->pool, password);
+}
+
 void http_client_request_delay_until(struct http_client_request *req,
 	time_t time)
 {
@@ -422,7 +443,9 @@ static void http_client_request_do_submit(struct http_client_request *req)
 {
 	struct http_client *client = req->client;
 	struct http_client_host *host;
+	const char *proxy_socket_path = client->set.proxy_socket_path;
 	const struct http_url *proxy_url = client->set.proxy_url;
+	bool have_proxy = (proxy_socket_path != NULL) || (proxy_url != NULL);
 	const char *authority, *target;
 
 	i_assert(req->state == HTTP_REQUEST_STATE_NEW);
@@ -438,16 +461,20 @@ static void http_client_request_do_submit(struct http_client_request *req)
 	}
 
 	/* determine what host to contact to submit this request */
-	if (proxy_url != NULL) {
+	if (have_proxy) {
 		if (req->origin_url.have_ssl && !client->set.no_ssl_tunnel &&
 			!req->connect_tunnel) {
-			req->host_url = &req->origin_url;  /* tunnel to origin server */
+			req->host_url = &req->origin_url;           /* tunnel to origin server */
 			req->ssl_tunnel = TRUE;
+		} else if (proxy_socket_path != NULL) {
+			req->host_socket = proxy_socket_path;       /* proxy on unix socket */
+			req->host_url = NULL;
 		} else {
-			req->host_url = proxy_url;         /* proxy server */
+			req->host_url = proxy_url;                  /* normal proxy server */
+			req->host_socket = NULL;
 		}
 	} else {
-		req->host_url = &req->origin_url;    /* origin server */
+		req->host_url = &req->origin_url;             /* origin server */
 	}
 
 	/* use submission date if no date is set explicitly */
@@ -461,10 +488,10 @@ static void http_client_request_do_submit(struct http_client_request *req)
 	req->label = p_strdup_printf(req->pool, "[%s %s]", req->method, target);
 
 	/* update request target */
-	if (req->connect_tunnel || proxy_url != NULL)
+	if (req->connect_tunnel || have_proxy)
 		req->target = p_strdup(req->pool, target);
 
-	if (proxy_url == NULL) {
+	if (!have_proxy) {
 		/* if we don't have a proxy, CONNECT requests are handled by creating
 		   the requested connection directly */
 		req->connect_direct = req->connect_tunnel;
@@ -502,6 +529,45 @@ void http_client_request_submit(struct http_client_request *req)
 	client->requests_count++;
 }
 
+void
+http_client_request_get_peer_addr(const struct http_client_request *req,
+	struct http_client_peer_addr *addr)
+{
+	const char *host_socket = req->host_socket;
+	const struct http_url *host_url = req->host_url;
+	
+	/* the IP address may be unassigned in the returned peer address, since
+	   that is only available at this stage when the target URL has an
+	   explicit IP address. */
+	memset(addr, 0, sizeof(*addr));
+	if (host_socket != NULL) {
+		addr->type = HTTP_CLIENT_PEER_ADDR_UNIX;
+		addr->a.un.path = host_socket;		
+	} else if (req->connect_direct) {
+		addr->type = HTTP_CLIENT_PEER_ADDR_RAW;
+		if (host_url->have_host_ip)
+			addr->a.tcp.ip = host_url->host_ip;
+		addr->a.tcp.port =
+			(host_url->have_port ? host_url->port : HTTPS_DEFAULT_PORT);
+	} else if (host_url->have_ssl) {
+		if (req->ssl_tunnel)
+			addr->type = HTTP_CLIENT_PEER_ADDR_HTTPS_TUNNEL;
+		else
+			addr->type = HTTP_CLIENT_PEER_ADDR_HTTPS;
+		if (host_url->have_host_ip)
+			addr->a.tcp.ip = host_url->host_ip;
+		addr->a.tcp.https_name = host_url->host_name;
+ 		addr->a.tcp.port =
+			(host_url->have_port ? host_url->port : HTTPS_DEFAULT_PORT);
+	} else {
+		addr->type = HTTP_CLIENT_PEER_ADDR_HTTP;
+		if (host_url->have_host_ip)
+			addr->a.tcp.ip = host_url->host_ip;
+		addr->a.tcp.port =
+			(host_url->have_port ? host_url->port : HTTP_DEFAULT_PORT);
+	}
+}
+
 static void
 http_client_request_finish_payload_out(struct http_client_request *req)
 {
@@ -516,7 +582,10 @@ http_client_request_finish_payload_out(struct http_client_request *req)
 	/* advance state only when request didn't get aborted in the mean time */
 	if (req->state != HTTP_REQUEST_STATE_ABORTED) {
 		i_assert(req->state == HTTP_REQUEST_STATE_PAYLOAD_OUT);
+
+		/* we're now waiting for a response from the server */
 		req->state = HTTP_REQUEST_STATE_WAITING;
+		http_client_connection_start_request_timeout(req->conn);
 	}
 
 	/* release connection */
@@ -683,6 +752,7 @@ int http_client_request_send_more(struct http_client_request *req,
 	i_assert(ret >= 0);
 
 	if (i_stream_is_eof(req->payload_input)) {
+		/* finished sending */
 		if (!req->payload_chunked &&
 		    req->payload_input->v_offset - req->payload_offset != req->payload_size) {
 			*error_r = t_strdup_printf("BUG: stream '%s' input size changed: "
@@ -694,20 +764,26 @@ int http_client_request_send_more(struct http_client_request *req,
 		}
 
 		if (req->payload_wait) {
+			/* this chunk of input is finished
+			   (client needs to act; disable timeout) */
 			conn->output_locked = TRUE;
+			http_client_connection_stop_request_timeout(conn);
 			if (req->client->ioloop != NULL)
 				io_loop_stop(req->client->ioloop);
 		} else {
+			/* finished sending payload */
 			http_client_request_finish_payload_out(req);
 		}
 	} else if (i_stream_get_data_size(req->payload_input) > 0) {
-		/* output is blocking */
+		/* output is blocking (server needs to act; enable timeout) */
 		conn->output_locked = TRUE;
+		http_client_connection_start_request_timeout(conn);
 		o_stream_set_flush_pending(output, TRUE);
 		http_client_request_debug(req, "Partially sent payload");
 	} else {
-		/* input is blocking */
+		/* input is blocking (client needs to act; disable timeout) */
 		conn->output_locked = TRUE;	
+		http_client_connection_stop_request_timeout(conn);
 		conn->io_req_payload = io_add_istream(req->payload_input,
 			http_client_request_payload_input, req);
 	}
@@ -717,6 +793,7 @@ int http_client_request_send_more(struct http_client_request *req,
 static int http_client_request_send_real(struct http_client_request *req,
 					 const char **error_r)
 {
+	const struct http_client_settings *set = &req->client->set;
 	struct http_client_connection *conn = req->conn;
 	struct ostream *output = conn->conn.output;
 	string_t *rtext = t_str_new(256);
@@ -744,6 +821,28 @@ static int http_client_request_send_real(struct http_client_request *req,
 		str_append(rtext, http_date_create(req->date));
 		str_append(rtext, "\r\n");
 	}
+	if (!req->have_hdr_authorization &&
+		req->username != NULL && req->password != NULL) {
+		struct http_auth_credentials auth_creds;
+
+		http_auth_basic_credentials_init(&auth_creds,
+			req->username, req->password);
+
+		str_append(rtext, "Authorization: ");
+		http_auth_create_credentials(rtext, &auth_creds);
+		str_append(rtext, "\r\n");
+	}
+	if (http_client_request_to_proxy(req) &&
+		set->proxy_username != NULL && set->proxy_password != NULL) {
+		struct http_auth_credentials auth_creds;
+
+		http_auth_basic_credentials_init(&auth_creds,
+			set->proxy_username, set->proxy_password);
+
+		str_append(rtext, "Proxy-Authorization: ");
+		http_auth_create_credentials(rtext, &auth_creds);
+		str_append(rtext, "\r\n");
+	}
 	if (!req->have_hdr_user_agent && req->client->set.user_agent != NULL) {
 		str_printfa(rtext, "User-Agent: %s\r\n",
 			    req->client->set.user_agent);
@@ -769,7 +868,8 @@ static int http_client_request_send_real(struct http_client_request *req,
 			o_stream_ref(output);
 		}
 	}
-	if (!req->have_hdr_connection && req->host_url == &req->origin_url) {
+	if (!req->have_hdr_connection &&
+		!http_client_request_to_proxy(req)) {
 		/* https://tools.ietf.org/html/rfc2068
 		     Section 19.7.1:
 
@@ -832,11 +932,16 @@ static int http_client_request_send_real(struct http_client_request *req,
 int http_client_request_send(struct http_client_request *req,
 			     const char **error_r)
 {
+	char *errstr = NULL;
 	int ret;
 
 	T_BEGIN {
 		ret = http_client_request_send_real(req, error_r);
+		if (ret < 0)
+			errstr = i_strdup(*error_r);
 	} T_END;
+	*error_r = t_strdup(errstr);
+	i_free(errstr);
 	return ret;
 }
 
@@ -886,6 +991,8 @@ http_client_request_send_error(struct http_client_request *req,
 		if (!sending && req->payload_input != NULL)
 			i_stream_unref(&req->payload_input);
 	}
+	if (req->payload_wait && req->client->ioloop != NULL)
+		io_loop_stop(req->client->ioloop);
 }
 
 void http_client_request_error_delayed(struct http_client_request **_req)
@@ -944,6 +1051,8 @@ void http_client_request_abort(struct http_client_request **_req)
 
 	if (req->queue != NULL)
 		http_client_queue_drop_request(req->queue, req);
+	if (req->payload_wait && req->client->ioloop != NULL)
+		io_loop_stop(req->client->ioloop);
 	http_client_request_unref(_req);
 }
 
@@ -1017,10 +1126,6 @@ void http_client_request_redirect(struct http_client_request *req,
 
 	http_url_copy(req->pool, &req->origin_url, url);
 	req->target = p_strdup(req->pool, target);
-	if (req->host_url == &req->origin_url) {
-		req->authority =
-			p_strdup(req->pool, http_url_create_authority(req->host_url));
-	}
 	
 	req->host = NULL;
 	req->conn = NULL;

@@ -97,13 +97,14 @@ static void fts_parse_mail_header(struct fts_mail_build_context *ctx,
 		fts_build_parse_content_disposition(ctx, hdr);
 }
 
-static void
+static int
 fts_build_unstructured_header(struct fts_mail_build_context *ctx,
 			      const struct message_header_line *hdr)
 {
 	const unsigned char *data = hdr->full_value;
 	unsigned char *buf = NULL;
 	unsigned int i;
+	int ret;
 
 	/* @UNSAFE: if there are any NULs, replace them with spaces */
 	for (i = 0; i < hdr->full_value_len; i++) {
@@ -118,8 +119,9 @@ fts_build_unstructured_header(struct fts_mail_build_context *ctx,
 			buf[i] = data[i];
 		}
 	}
-	(void)fts_build_data(ctx, data, hdr->full_value_len, TRUE);
+	ret = fts_build_data(ctx, data, hdr->full_value_len, TRUE);
 	i_free(buf);
+	return ret;
 }
 
 static bool data_has_8bit(const unsigned char *data, size_t size)
@@ -150,14 +152,15 @@ fts_build_tokenized_hdr_update_lang(struct fts_mail_build_context *ctx,
 		ctx->cur_user_lang = fts_user_get_data_lang(ctx->update_ctx->backend->ns->user);
 }
 
-static void fts_build_mail_header(struct fts_mail_build_context *ctx,
-				  const struct message_block *block)
+static int fts_build_mail_header(struct fts_mail_build_context *ctx,
+				 const struct message_block *block)
 {
 	const struct message_header_line *hdr = block->hdr;
 	struct fts_backend_build_key key;
+	int ret;
 
 	if (hdr->eoh)
-		return;
+		return 0;
 
 	/* hdr->full_value is always set because we get the block from
 	   message_decoder */
@@ -173,11 +176,11 @@ static void fts_build_mail_header(struct fts_mail_build_context *ctx,
 		fts_build_tokenized_hdr_update_lang(ctx, hdr);
 
 	if (!fts_backend_update_set_build_key(ctx->update_ctx, &key))
-		return;
+		return 0;
 
 	if (!message_header_is_address(hdr->name)) {
 		/* regular unstructured header */
-		fts_build_unstructured_header(ctx, hdr);
+		ret = fts_build_unstructured_header(ctx, hdr);
 	} else T_BEGIN {
 		/* message address. normalize it to give better
 		   search results. */
@@ -191,7 +194,7 @@ static void fts_build_mail_header(struct fts_mail_build_context *ctx,
 		str = t_str_new(hdr->full_value_len);
 		message_address_write(str, addr);
 
-		(void)fts_build_data(ctx, str_data(str), str_len(str), TRUE);
+		ret = fts_build_data(ctx, str_data(str), str_len(str), TRUE);
 	} T_END;
 
 	if ((ctx->update_ctx->backend->flags &
@@ -199,10 +202,12 @@ static void fts_build_mail_header(struct fts_mail_build_context *ctx,
 		/* index the header name itself */
 		key.hdr_name = "";
 		if (fts_backend_update_set_build_key(ctx->update_ctx, &key)) {
-			(void)fts_build_data(ctx, (const void *)hdr->name,
-					     strlen(hdr->name), TRUE);
+			if (fts_build_data(ctx, (const void *)hdr->name,
+					   strlen(hdr->name), TRUE) < 0)
+				ret = -1;
 		}
 	}
+	return ret;
 }
 
 static bool
@@ -265,26 +270,23 @@ fts_build_add_tokens_with_filter(struct fts_mail_build_context *ctx,
 {
 	struct fts_tokenizer *tokenizer;
 	struct fts_filter *filter = ctx->cur_user_lang->filter;
-	const char *token;
-	const char *error;
-	int ret;
+	const char *token, *error;
+	int ret = 1, ret2;
 
 	tokenizer = fts_user_get_index_tokenizer(ctx->update_ctx->backend->ns->user);
-	while ((ret = fts_tokenizer_next(tokenizer, data, size, &token, &error)) > 0) {
-		if (filter != NULL) {
-			ret = fts_filter_filter(filter, &token, &error);
-			if (ret == 0)
-				continue;
-			if (ret < 0)
-				break;
+	while (ret > 0) T_BEGIN {
+		ret = ret2 = fts_tokenizer_next(tokenizer, data, size, &token, &error);
+		if (ret2 > 0 && filter != NULL)
+			ret2 = fts_filter_filter(filter, &token, &error);
+		if (ret2 < 0)
+			i_error("fts: Couldn't create indexable tokens: %s", error);
+		if (ret2 > 0) {
+			if (fts_backend_update_build_more(ctx->update_ctx,
+							  (const void *)token,
+							  strlen(token)) < 0)
+				ret = -1;
 		}
-		if (fts_backend_update_build_more(ctx->update_ctx,
-						  (const void *)token,
-						  strlen(token)) < 0)
-			return -1;
-	}
-	if (ret < 0)
-		i_error("fts: Couldn't create indexable tokens: %s", error);
+	} T_END;
 	return ret;
 }
 
@@ -501,6 +503,11 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 		if (ret < 0) {
 			if (input->stream_errno == 0)
 				ret = 0;
+			else {
+				i_error("read(%s) failed: %s",
+					i_stream_get_name(input),
+					i_stream_get_error(input));
+			}
 			break;
 		}
 
@@ -546,7 +553,10 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 
 		if (block.hdr != NULL) {
 			fts_parse_mail_header(&ctx, &raw_block);
-			fts_build_mail_header(&ctx, &block);
+			if (fts_build_mail_header(&ctx, &block) < 0) {
+				ret = -1;
+				break;
+			}
 		} else if (block.size == 0) {
 			/* end of headers */
 		} else {

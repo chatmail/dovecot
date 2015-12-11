@@ -15,7 +15,6 @@
 #include "replication-common.h"
 #include "replication-plugin.h"
 
-#include <stdlib.h>
 
 #define REPLICATION_SOCKET_NAME "replication-notify"
 #define REPLICATION_FIFO_NAME "replication-notify-fifo"
@@ -260,7 +259,7 @@ replication_mail_transaction_commit(void *txn,
 		priority = !ctx->new_messages ? REPLICATION_PRIORITY_LOW :
 			ruser->sync_secs == 0 ? REPLICATION_PRIORITY_HIGH :
 			REPLICATION_PRIORITY_SYNC;
-		replication_notify(ctx->ns, priority, "transction commit");
+		replication_notify(ctx->ns, priority, "transaction commit");
 	}
 	i_free(ctx);
 }

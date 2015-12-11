@@ -29,7 +29,6 @@
 #include "lda-settings.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <sysexits.h>
 
 #define DEFAULT_ENVELOPE_SENDER "MAILER-DAEMON"
@@ -98,9 +97,8 @@ static int seekable_fd_callback(const char **path_r, void *context)
 	}
 
 	/* we just want the fd, unlink it */
-	if (unlink(str_c(path)) < 0) {
+	if (i_unlink(str_c(path)) < 0) {
 		/* shouldn't happen.. */
-		i_error("unlink(%s) failed: %m", str_c(path));
 		i_close_fd(&fd);
 		return -1;
 	}
@@ -310,7 +308,7 @@ int main(int argc, char *argv[])
 	master_service = master_service_init("lda",
 		MASTER_SERVICE_FLAG_STANDALONE |
 		MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR,
-		&argc, &argv, "a:d:ef:km:p:r:");
+		&argc, &argv, "a:d:ef:m:p:r:");
 
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.session = mail_deliver_session_init();

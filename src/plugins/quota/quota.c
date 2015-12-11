@@ -13,7 +13,6 @@
 #include "quota-private.h"
 #include "quota-fs.h"
 
-#include <stdlib.h>
 #include <sys/wait.h>
 
 #define DEFAULT_QUOTA_EXCEEDED_MSG \
@@ -29,6 +28,7 @@ struct quota_root_iter {
 
 unsigned int quota_module_id = 0;
 
+extern struct quota_backend quota_backend_count;
 extern struct quota_backend quota_backend_dict;
 extern struct quota_backend quota_backend_dirsize;
 extern struct quota_backend quota_backend_fs;
@@ -38,6 +38,7 @@ static const struct quota_backend *quota_backends[] = {
 #ifdef HAVE_FS_QUOTA
 	&quota_backend_fs,
 #endif
+	&quota_backend_count,
 	&quota_backend_dict,
 	&quota_backend_dirsize,
 	&quota_backend_maildir
@@ -229,6 +230,7 @@ int quota_user_read_settings(struct mail_user *user,
 		mail_user_plugin_getenv(user, "quota_exceeded_message");
 	if (quota_set->quota_exceeded_msg == NULL)
 		quota_set->quota_exceeded_msg = DEFAULT_QUOTA_EXCEEDED_MSG;
+	quota_set->vsizes = mail_user_plugin_getenv(user, "quota_vsizes") != NULL;
 
 	p_array_init(&quota_set->root_sets, pool, 4);
 	if (i_strocpy(root_name, "quota", sizeof(root_name)) < 0)
@@ -277,12 +279,39 @@ static void quota_root_deinit(struct quota_root *root)
 	pool_unref(&pool);
 }
 
+int quota_root_default_init(struct quota_root *root, const char *args,
+			    const char **error_r)
+{
+	const char *const *tmp;
+
+	if (args == NULL)
+		return 0;
+
+	tmp = t_strsplit_spaces(args, " ");
+	for (; *tmp != NULL; tmp++) {
+		if (strcmp(*tmp, "noenforcing") == 0)
+			root->no_enforcing = TRUE;
+		else if (strcmp(*tmp, "hidden") == 0)
+			root->hidden = TRUE;
+		else if (strcmp(*tmp, "ignoreunlimited") == 0)
+			root->disable_unlimited_tracking = TRUE;
+		else
+			break;
+	}
+	if (*tmp != NULL) {
+		*error_r = t_strdup_printf(
+			"Unknown parameter for backend %s: %s",
+			root->backend.name, *tmp);
+		return -1;
+	}
+	return 0;
+}
+
 static int
 quota_root_init(struct quota_root_settings *root_set, struct quota *quota,
 		struct quota_root **root_r, const char **error_r)
 {
 	struct quota_root *root;
-	const char *const *tmp;
 
 	root = root_set->backend->v.alloc();
 	root->resource_ret = -1;
@@ -302,24 +331,9 @@ quota_root_init(struct quota_root_settings *root_set, struct quota *quota,
 					root->backend.name, *error_r);
 			return -1;
 		}
-	} else if (root_set->args != NULL) {
-		tmp = t_strsplit_spaces(root_set->args, " ");
-		for (; *tmp != NULL; tmp++) {
-			if (strcmp(*tmp, "noenforcing") == 0)
-				root->no_enforcing = TRUE;
-			else if (strcmp(*tmp, "hidden") == 0)
-				root->hidden = TRUE;
-			else if (strcmp(*tmp, "ignoreunlimited") == 0)
-				root->disable_unlimited_tracking = TRUE;
-			else
-				break;
-		}
-		if (*tmp != NULL) {
-			*error_r = t_strdup_printf(
-				"Unknown parameter for backend %s: %s",
-				root->backend.name, *tmp);
+	} else {
+		if (quota_root_default_init(root, root_set->args, error_r) < 0)
 			return -1;
-		}
 	}
 	if (root_set->default_rule.bytes_limit == 0 &&
 	    root_set->default_rule.count_limit == 0 &&
@@ -576,6 +590,9 @@ struct quota_root *quota_root_iter_next(struct quota_root_iter *iter)
 	uint64_t value, limit;
 	int ret;
 
+	if (iter->quota == NULL)
+		return NULL;
+
 	roots = array_get(&iter->quota->roots, &count);
 	if (iter->i >= count)
 		return NULL;
@@ -621,6 +638,8 @@ struct quota_root *quota_root_lookup(struct mail_user *user, const char *name)
 	unsigned int i, count;
 
 	quota = quota_get_mail_user_quota(user);
+	if (quota == NULL)
+		return NULL;
 	roots = array_get(&quota->roots, &count);
 	for (i = 0; i < count; i++) {
 		if (strcmp(roots[i]->set->name, name) == 0)
@@ -650,6 +669,8 @@ int quota_get_resource(struct quota_root *root, const char *mailbox_name,
 	uint64_t bytes_limit, count_limit;
 	bool kilobytes = FALSE;
 	int ret;
+
+	*value_r = *limit_r = 0;
 
 	if (strcmp(name, QUOTA_NAME_STORAGE_KILOBYTES) == 0) {
 		name = QUOTA_NAME_STORAGE_BYTES;

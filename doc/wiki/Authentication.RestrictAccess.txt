@@ -38,8 +38,8 @@ You can use the '%s' variable which expands to 'imap' or 'pop3' in
 'password_query', eg:
 
 ---%<-------------------------------------------------------------------------
-password_query = SELECT password FROM users WHERE userid = '%u' and
-(imap_allowed = true or '%s' = 'pop3')
+password_query = SELECT password FROM users WHERE userid = '%u' and not
+(imap_allowed = false and '%s' = 'imap')
 ---%<-------------------------------------------------------------------------
 
 LDAP
@@ -82,4 +82,4 @@ network. This is especially useful for master users. This can be done by
 returning <allow_nets> [PasswordDatabase.ExtraFields.AllowNets.txt] extra field
 in passdb.
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:46)

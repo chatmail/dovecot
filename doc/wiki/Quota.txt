@@ -13,14 +13,42 @@ Dovecot can use:
  * <maildir> [Quota.Maildir.txt]: Store quota usage in Maildir++ maildirsize
    files. This is the most commonly used quota for virtual users.
 
+Quota service
+-------------
+
+The quota service allows postfix to check quota before delivery:
+
+---%<-------------------------------------------------------------------------
+service quota-status {
+    executable = quota-status -p postfix
+    inet_listener {
+        port = 12340
+        # You can choose any port you want
+    }
+    client_limit = 1
+}
+---%<-------------------------------------------------------------------------
+
+And then have postfix check_policy_service check that:
+
+---%<-------------------------------------------------------------------------
+smtpd_recipient_restrictions =
+    ...
+    check_policy_service inet:mailstore.example.com:12340
+---%<-------------------------------------------------------------------------
+
+For more about this service see
+https://sys4.de/en/blog/2013/04/08/postfix-dovecot-mailbox-quota/
+
 Enabling quota plugins
 ----------------------
 
-There are two quota related plugins:
+There are three quota related plugins:
 
  * quota: Implements the actual quota handling and includes also all the quota
    backends.
  * imap_quota: For reporting quota information via IMAP.
+ * quota_grace: Determines if and how far user can go over quota
 
 Enable them in configuration files, e.g.:
 
@@ -38,6 +66,18 @@ conf.d/20-imap.conf:
 protocol imap {
   # Space separated list of plugins to load (default is global mail_plugins).
   mail_plugins = $mail_plugins imap_quota
+}
+---%<-------------------------------------------------------------------------
+
+conf.d/90-quota.conf: (for use with the quota-status service)
+
+---%<-------------------------------------------------------------------------
+plugin {
+    quota_grace = 10%%
+    # 10% is the default
+    quota_status_success = DUNNO
+    quota_status_nouser = DUNNO
+    quota_status_overquota = "552 5.2.2 Mailbox is full"
 }
 ---%<-------------------------------------------------------------------------
 
@@ -83,4 +123,4 @@ To make sure users don't start keeping messages permanently in Trash you can
 use a nightly <cronjob> [Plugins.Expire.txt] to expunge old messages from Trash
 mailbox.
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:48)

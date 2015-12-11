@@ -9,7 +9,6 @@
 #include "acl-cache.h"
 #include "acl-api-private.h"
 
-#include <stdlib.h>
 
 extern struct acl_backend_vfuncs acl_backend_vfile;
 
@@ -66,8 +65,11 @@ acl_backend_init(const char *data, struct mailbox_list *list,
 		backend->group_count = group_count;
 		backend->groups =
 			p_new(backend->pool, const char *, group_count);
-		for (i = 0; i < group_count; i++)
+		for (i = 0; i < group_count; i++) {
 			backend->groups[i] = p_strdup(backend->pool, groups[i]);
+			if (user->mail_debug)
+				i_debug("acl: group added: %s", groups[i]);
+		}
 		i_qsort(backend->groups, group_count, sizeof(const char *),
 			i_strcmp_p);
 	}

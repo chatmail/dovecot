@@ -38,7 +38,7 @@ static bool cmd_quit(struct pop3_client *client)
 static bool cmd_xclient(struct pop3_client *client, const char *args)
 {
 	const char *const *tmp;
-	unsigned int remote_port;
+	in_port_t remote_port;
 	bool args_ok = TRUE;
 
 	if (!client->common.trusted) {
@@ -51,8 +51,7 @@ static bool cmd_xclient(struct pop3_client *client, const char *args)
 			if (net_addr2ip(*tmp + 5, &client->common.ip) < 0)
 				args_ok = FALSE;
 		} else if (strncasecmp(*tmp, "PORT=", 5) == 0) {
-			if (str_to_uint(*tmp + 5, &remote_port) < 0 ||
-			    remote_port == 0 || remote_port > 65535)
+			if (net_str2port(*tmp + 5, &remote_port) < 0)
 				args_ok = FALSE;
 			else
 				client->common.remote_port = remote_port;
@@ -99,6 +98,10 @@ static bool client_command_execute(struct pop3_client *client, const char *cmd,
 		return cmd_quit(client);
 	if (strcmp(cmd, "XCLIENT") == 0)
 		return cmd_xclient(client, args);
+	if (strcmp(cmd, "XOIP") == 0) {
+		/* Compatibility with Zimbra's patched nginx */
+		return cmd_xclient(client, t_strconcat("ADDR=", args, NULL));
+	}
 
 	client_send_reply(&client->common, POP3_CMD_REPLY_ERROR,
 			  "Unknown command.");
@@ -239,7 +242,10 @@ void client_send_reply(struct client *client, enum pop3_cmd_reply reply,
 		prefix = "-ERR [SYS/TEMP]";
 		break;
 	case POP3_CMD_REPLY_AUTH_ERROR:
-		prefix = "-ERR [AUTH]";
+		if (text[0] == '[')
+			prefix = "-ERR";
+		else
+			prefix = "-ERR [AUTH]";
 		break;
 	case POP3_CMD_REPLY_ERROR:
 		break;

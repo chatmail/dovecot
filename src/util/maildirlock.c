@@ -8,7 +8,6 @@
 #include "index/maildir/maildir-uidlist.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
 
@@ -87,7 +86,8 @@ int main(int argc, const char *argv[])
 	if (dup2(STDERR_FILENO, STDOUT_FILENO) < 0)
 		i_fatal("dup2() failed: %m");
 
-	timeout = strtoul(argv[2], NULL, 10);
+	if (str_to_uint(argv[2], &timeout) < 0)
+		i_fatal("Invalid timeout value: %s", argv[2]);
 	if (maildir_lock(argv[1], timeout, &dotlock) <= 0)
 		return 1;
 

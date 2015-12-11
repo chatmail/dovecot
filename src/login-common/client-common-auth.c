@@ -2,6 +2,7 @@
 
 #include "hostpid.h"
 #include "login-common.h"
+#include "iostream.h"
 #include "istream.h"
 #include "ostream.h"
 #include "str.h"
@@ -12,8 +13,6 @@
 #include "dsasl-client.h"
 #include "master-service-ssl-settings.h"
 #include "client-common.h"
-
-#include <stdlib.h>
 
 #define PROXY_FAILURE_MSG "Account is temporarily unavailable."
 #define PROXY_DEFAULT_TIMEOUT_MSECS (1000*30)
@@ -97,17 +96,27 @@ static void client_auth_parse_args(struct client *client,
 			reply_r->hostip = value;
 		else if (strcmp(key, "source_ip") == 0)
 			reply_r->source_ip = value;
-		else if (strcmp(key, "port") == 0)
-			reply_r->port = atoi(value);
-		else if (strcmp(key, "destuser") == 0)
+		else if (strcmp(key, "port") == 0) {
+			if (net_str2port(value, &reply_r->port) < 0) {
+				i_error("Auth service returned invalid "
+					"port number: %s", value);
+			}
+		} else if (strcmp(key, "destuser") == 0)
 			reply_r->destuser = value;
 		else if (strcmp(key, "pass") == 0)
 			reply_r->password = value;
-		else if (strcmp(key, "proxy_timeout") == 0)
-			reply_r->proxy_timeout_msecs = 1000*atoi(value);
-		else if (strcmp(key, "proxy_refresh") == 0)
-			reply_r->proxy_refresh_secs = atoi(value);
-		else if (strcmp(key, "proxy_mech") == 0)
+		else if (strcmp(key, "proxy_timeout") == 0) {
+			if (str_to_uint(value, &reply_r->proxy_timeout_msecs) < 0) {
+				i_error("BUG: Auth service returned invalid "
+					"proxy_timeout value: %s", value);
+			}
+			reply_r->proxy_timeout_msecs *= 1000;
+		} else if (strcmp(key, "proxy_refresh") == 0) {
+			if (str_to_uint(value, &reply_r->proxy_refresh_secs) < 0) {
+				i_error("BUG: Auth service returned invalid "
+					"proxy_refresh value: %s", value);
+			}
+		} else if (strcmp(key, "proxy_mech") == 0)
 			reply_r->proxy_mech = value;
 		else if (strcmp(key, "proxy_nopipelining") == 0)
 			reply_r->proxy_nopipelining = TRUE;
@@ -216,13 +225,6 @@ void client_proxy_failed(struct client *client, bool send_line)
 	client_auth_failed(client);
 }
 
-static const char *get_disconnect_reason(struct istream *input)
-{
-	errno = input->stream_errno;
-	return errno == 0 || errno == EPIPE ? "Connection closed" :
-		t_strdup_printf("Connection closed: %m");
-}
-
 static void proxy_input(struct client *client)
 {
 	struct istream *input;
@@ -262,7 +264,7 @@ static void proxy_input(struct client *client)
 			"(state=%u, duration=%us)%s",
 			login_proxy_get_host(client->login_proxy),
 			login_proxy_get_port(client->login_proxy),
-			get_disconnect_reason(input),
+			io_stream_get_disconnect_reason(input, NULL),
 			client->proxy_state, duration,
 			line == NULL ? "" : t_strdup_printf(
 				" - BUG: line not read: %s", line)));

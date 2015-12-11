@@ -5,6 +5,7 @@
 #include "array.h"
 #include "execv-const.h"
 #include "fd-set-nonblock.h"
+#include "child-wait.h"
 #include "istream.h"
 #include "ostream.h"
 #include "iostream-ssl.h"
@@ -33,12 +34,11 @@
 #include "doveadm-dsync.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
 #include <sys/wait.h>
 
-#define DSYNC_COMMON_GETOPT_ARGS "+1a:dEfF:g:l:m:n:NPr:Rs:t:Ux:"
+#define DSYNC_COMMON_GETOPT_ARGS "+1a:dDEfg:l:m:n:NO:Pr:Rs:t:T:Ux:"
 #define DSYNC_REMOTE_CMD_EXIT_WAIT_SECS 30
 /* The broken_char is mainly set to get a proper error message when trying to
    convert a mailbox with a name that can't be used properly translated between
@@ -46,6 +46,8 @@
    doesn't exist" error message. This could be any control character, since
    none of them are allowed to be created in regular mailbox names. */
 #define DSYNC_LIST_BROKEN_CHAR '\003'
+
+#define DSYNC_DEFAULT_IO_STREAM_TIMEOUT_SECS (60*10)
 
 enum dsync_run_type {
 	DSYNC_RUN_TYPE_LOCAL,
@@ -64,11 +66,14 @@ struct dsync_cmd_context {
 	ARRAY_TYPE(const_string) exclude_mailboxes;
 	ARRAY_TYPE(const_string) namespace_prefixes;
 	time_t sync_since_timestamp;
+	unsigned int io_timeout_secs;
 
 	const char *remote_name;
 	const char *local_location;
 	pid_t remote_pid;
 	const char *const *remote_cmd_args;
+	struct child_wait *child_wait;
+	int exit_status;
 
 	int fd_in, fd_out, fd_err;
 	struct io *io_err;
@@ -94,8 +99,10 @@ struct dsync_cmd_context {
 	unsigned int reverse_backup:1;
 	unsigned int remote_user_prefix:1;
 	unsigned int no_mail_sync:1;
+	unsigned int no_mailbox_renames:1;
 	unsigned int local_location_from_arg:1;
 	unsigned int replicator_notify:1;
+	unsigned int exited:1;
 };
 
 static bool legacy_dsync = FALSE;
@@ -383,9 +390,12 @@ cmd_dsync_run_local(struct dsync_cmd_context *ctx, struct mail_user *user,
 	changed1 = changed2 = TRUE;
 	while (brain1_running || brain2_running) {
 		if (dsync_brain_has_failed(brain) ||
-		    dsync_brain_has_failed(brain2) ||
-		    doveadm_is_killed())
+		    dsync_brain_has_failed(brain2))
 			break;
+		if (doveadm_is_killed()) {
+			i_warning("Killed with signal %d", doveadm_killed_signo());
+			break;
+		}
 
 		i_assert(changed1 || changed2);
 		brain1_running = dsync_brain_run(brain, &changed1);
@@ -397,26 +407,33 @@ cmd_dsync_run_local(struct dsync_cmd_context *ctx, struct mail_user *user,
 	return doveadm_is_killed() ? -1 : 0;
 }
 
-static void cmd_dsync_wait_remote(struct dsync_cmd_context *ctx,
-				  int *status_r)
+static void cmd_dsync_remote_exited(const struct child_wait_status *status,
+				    struct dsync_cmd_context *ctx)
 {
-	/* wait for the remote command to finish to see any final errors.
-	   don't wait very long though. */
-	alarm(DSYNC_REMOTE_CMD_EXIT_WAIT_SECS);
-	if (waitpid(ctx->remote_pid, status_r, 0) == -1) {
-		if (errno != EINTR) {
-			i_error("waitpid(%ld) failed: %m",
+	ctx->exited = TRUE;
+	ctx->exit_status = status->status;
+	io_loop_stop(current_ioloop);
+}
+
+static void cmd_dsync_wait_remote(struct dsync_cmd_context *ctx)
+{
+	struct timeout *to;
+
+	/* wait in ioloop for the remote process to die. while we're running
+	   we're also reading and printing all errors that still coming from
+	   it. */
+	to = timeout_add(DSYNC_REMOTE_CMD_EXIT_WAIT_SECS*1000,
+			 io_loop_stop, current_ioloop);
+	io_loop_run(current_ioloop);
+	timeout_remove(&to);
+
+	if (!ctx->exited) {
+		i_error("Remote command process isn't dying, killing it");
+		if (kill(ctx->remote_pid, SIGKILL) < 0 && errno != ESRCH) {
+			i_error("kill(%ld, SIGKILL) failed: %m",
 				(long)ctx->remote_pid);
-		} else {
-			i_error("Remote command process isn't dying, killing it");
-			if (kill(ctx->remote_pid, SIGKILL) < 0 && errno != ESRCH) {
-				i_error("kill(%ld, SIGKILL) failed: %m",
-					(long)ctx->remote_pid);
-			}
 		}
-		*status_r = -1;
 	}
-	alarm(0);
 }
 
 static void cmd_dsync_log_remote_status(int status, bool remote_errors_logged,
@@ -482,7 +499,7 @@ cmd_dsync_icb_stream_init(struct dsync_cmd_context *ctx,
 	i_stream_ref(ctx->input);
 	o_stream_ref(ctx->output);
 	return dsync_ibc_init_stream(ctx->input, ctx->output,
-				     name, temp_prefix);
+				     name, temp_prefix, ctx->io_timeout_secs);
 }
 
 static void
@@ -538,7 +555,7 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	enum mail_error mail_error = 0, mail_error2;
 	bool remote_errors_logged = FALSE;
 	bool changes_during_sync = FALSE;
-	int status = 0, ret = 0;
+	int ret = 0;
 
 	memset(&set, 0, sizeof(set));
 	if (_ctx->cur_client_ip.family != 0) {
@@ -589,6 +606,8 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 		brain_flags |= DSYNC_BRAIN_FLAG_SYNC_VISIBLE_NAMESPACES;
 	if (ctx->purge_remote)
 		brain_flags |= DSYNC_BRAIN_FLAG_PURGE_REMOTE;
+	if (ctx->no_mailbox_renames)
+		brain_flags |= DSYNC_BRAIN_FLAG_NO_MAILBOX_RENAMES;
 
 	if (ctx->reverse_backup)
 		brain_flags |= DSYNC_BRAIN_FLAG_BACKUP_RECV;
@@ -602,15 +621,23 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	if (doveadm_debug)
 		brain_flags |= DSYNC_BRAIN_FLAG_DEBUG;
 
+	child_wait_init();
 	brain = dsync_brain_master_init(user, ibc, ctx->sync_type,
 					brain_flags, &set);
 
-	if (ctx->run_type == DSYNC_RUN_TYPE_LOCAL) {
+	switch (ctx->run_type) {
+	case DSYNC_RUN_TYPE_LOCAL:
 		if (cmd_dsync_run_local(ctx, user, brain, ibc2,
 					&changes_during_sync, &mail_error) < 0)
 			ret = -1;
-	} else {
+		break;
+	case DSYNC_RUN_TYPE_CMD:
+		ctx->child_wait = child_wait_new_with_pid(ctx->remote_pid,
+			cmd_dsync_remote_exited, ctx);
+		/* fall through */
+	case DSYNC_RUN_TYPE_STREAM:
 		cmd_dsync_run_remote(user);
+		break;
 	}
 
 	if (ctx->state_input != NULL) {
@@ -658,27 +685,28 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 			i_close_fd(&ctx->fd_out);
 		i_close_fd(&ctx->fd_in);
 	}
-	if (ctx->run_type == DSYNC_RUN_TYPE_CMD)
-		cmd_dsync_wait_remote(ctx, &status);
-
 	/* print any final errors after the process has died. not closing
 	   stdin/stdout before wait() may cause the process to hang, but stderr
 	   shouldn't (at least with ssh) and we need stderr to be open to be
 	   able to print the final errors */
-	if (ctx->err_stream != NULL) {
+	if (ctx->run_type == DSYNC_RUN_TYPE_CMD) {
+		cmd_dsync_wait_remote(ctx);
 		remote_error_input(ctx);
 		remote_errors_logged = ctx->err_stream->v_offset > 0;
 		i_stream_destroy(&ctx->err_stream);
-	}
-	if (ctx->run_type == DSYNC_RUN_TYPE_CMD) {
-		cmd_dsync_log_remote_status(status, remote_errors_logged,
+		cmd_dsync_log_remote_status(ctx->exit_status, remote_errors_logged,
 					    ctx->remote_cmd_args);
+	} else {
+		i_assert(ctx->err_stream == NULL);
 	}
 	if (ctx->io_err != NULL)
 		io_remove(&ctx->io_err);
 	if (ctx->fd_err != -1)
 		i_close_fd(&ctx->fd_err);
 
+	if (ctx->child_wait != NULL)
+		child_wait_free(&ctx->child_wait);
+	child_wait_deinit();
 	return ret;
 }
 
@@ -931,6 +959,9 @@ cmd_mailbox_dsync_parse_arg(struct doveadm_mail_cmd_context *_ctx, int c)
 	case 'd':
 		ctx->default_replica_location = TRUE;
 		break;
+	case 'D':
+		ctx->no_mailbox_renames = TRUE;
+		break;
 	case 'E':
 		/* dsync wrapper detection flag */
 		legacy_dsync = TRUE;
@@ -938,15 +969,15 @@ cmd_mailbox_dsync_parse_arg(struct doveadm_mail_cmd_context *_ctx, int c)
 	case 'f':
 		ctx->sync_type = DSYNC_BRAIN_SYNC_TYPE_FULL;
 		break;
-	case 'F': {
+	case 'O': {
 		const char *str = optarg;
 
 		if (strchr(str, ' ') != NULL)
-			i_fatal("-F parameter doesn't support multiple flags currently");
+			i_fatal("-O parameter doesn't support multiple flags currently");
 		if (str[0] == '-')
 			str++;
 		if (str[0] == '\\' && imap_parse_system_flag(str) == 0)
-			i_fatal("Invalid system flag given for -F parameter: '%s'", str);
+			i_fatal("Invalid system flag given for -O parameter: '%s'", str);
 		ctx->sync_flags = optarg;
 		break;
 	}
@@ -998,6 +1029,10 @@ cmd_mailbox_dsync_parse_arg(struct doveadm_mail_cmd_context *_ctx, int c)
 		if (mail_parse_human_timestamp(optarg, &ctx->sync_since_timestamp) < 0)
 			i_fatal("Invalid -t parameter: %s", optarg);
 		break;
+	case 'T':
+		if (str_to_uint(optarg, &ctx->io_timeout_secs) < 0)
+			i_fatal("Invalid -T parameter: %s", optarg);
+		break;
 	case 'U':
 		ctx->replicator_notify = TRUE;
 		break;
@@ -1012,6 +1047,7 @@ static struct doveadm_mail_cmd_context *cmd_dsync_alloc(void)
 	struct dsync_cmd_context *ctx;
 
 	ctx = doveadm_mail_cmd_alloc(struct dsync_cmd_context);
+	ctx->io_timeout_secs = DSYNC_DEFAULT_IO_STREAM_TIMEOUT_SECS;
 	ctx->ctx.getopt_args = DSYNC_COMMON_GETOPT_ARGS;
 	ctx->ctx.v.parse_arg = cmd_mailbox_dsync_parse_arg;
 	ctx->ctx.v.preinit = cmd_dsync_preinit;
@@ -1033,7 +1069,6 @@ static struct doveadm_mail_cmd_context *cmd_dsync_backup_alloc(void)
 	struct dsync_cmd_context *ctx;
 
 	_ctx = cmd_dsync_alloc();
-	_ctx->getopt_args = DSYNC_COMMON_GETOPT_ARGS"R";
 	ctx = (struct dsync_cmd_context *)_ctx;
 	ctx->backup = TRUE;
 	return _ctx;
@@ -1117,6 +1152,10 @@ cmd_mailbox_dsync_server_parse_arg(struct doveadm_mail_cmd_context *_ctx, int c)
 	case 'r':
 		ctx->rawlog_path = optarg;
 		break;
+	case 'T':
+		if (str_to_uint(optarg, &ctx->io_timeout_secs) < 0)
+			i_fatal("Invalid -T parameter: %s", optarg);
+		break;
 	case 'U':
 		ctx->replicator_notify = TRUE;
 		break;
@@ -1131,7 +1170,8 @@ static struct doveadm_mail_cmd_context *cmd_dsync_server_alloc(void)
 	struct dsync_cmd_context *ctx;
 
 	ctx = doveadm_mail_cmd_alloc(struct dsync_cmd_context);
-	ctx->ctx.getopt_args = "Er:U";
+	ctx->io_timeout_secs = DSYNC_DEFAULT_IO_STREAM_TIMEOUT_SECS;
+	ctx->ctx.getopt_args = "Er:T:U";
 	ctx->ctx.v.parse_arg = cmd_mailbox_dsync_server_parse_arg;
 	ctx->ctx.v.run = cmd_dsync_server_run;
 	ctx->sync_type = DSYNC_BRAIN_SYNC_TYPE_CHANGED;

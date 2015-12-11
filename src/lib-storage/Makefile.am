@@ -28,6 +28,7 @@ libstorage_la_SOURCES = \
 	mail-error.c \
 	mail-namespace.c \
 	mail-search.c \
+	mail-search-args-cmdline.c \
 	mail-search-args-imap.c \
 	mail-search-args-simplify.c \
 	mail-search-build.c \
@@ -44,15 +45,18 @@ libstorage_la_SOURCES = \
 	mail-thread.c \
 	mail-user.c \
 	mailbox-attribute.c \
+	mailbox-attribute-internal.c \
 	mailbox-get.c \
 	mailbox-guid-cache.c \
 	mailbox-header.c \
 	mailbox-keywords.c \
 	mailbox-list.c \
 	mailbox-list-notify.c \
+	mailbox-recent-flags.c \
 	mailbox-search-result.c \
 	mailbox-tree.c \
-	mailbox-uidvalidity.c
+	mailbox-uidvalidity.c \
+	mailbox-watch.c
 
 headers = \
 	fail-mail-storage.h \
@@ -72,15 +76,18 @@ headers = \
 	mail-storage-settings.h \
 	mail-user.h \
 	mailbox-attribute.h \
+	mailbox-attribute-internal.h \
 	mailbox-attribute-private.h \
 	mailbox-guid-cache.h \
 	mailbox-list.h \
 	mailbox-list-iter.h \
 	mailbox-list-private.h \
 	mailbox-list-notify.h \
+	mailbox-recent-flags.h \
 	mailbox-search-result-private.h \
 	mailbox-tree.h \
-	mailbox-uidvalidity.h
+	mailbox-uidvalidity.h \
+	mailbox-watch.h
 
 shlibs = \
 	@LINKED_STORAGE_LIBS@ \

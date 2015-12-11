@@ -209,7 +209,7 @@ ssl_ca = </etc/ssl/ca.pem
 ssl_verify_client_cert = yes
 
 auth_ssl_require_client_cert = yes
-#ssl_username_from_cert = yes
+#auth_ssl_username_from_cert = yes
 ---%<-------------------------------------------------------------------------
 
 The CA file should contain the certificate(s) followed by the matching CRL(s).
@@ -248,7 +248,7 @@ protocol !smtp {
 ---%<-------------------------------------------------------------------------
 
 You may also force the username to be taken from the certificate by setting
-'ssl_username_from_cert = yes'.
+'auth_ssl_username_from_cert = yes'.
 
  * The text is looked up from subject DN's specified field using OpenSSL's
    'X509_NAME_get_text_by_NID()' function.
@@ -362,4 +362,4 @@ B8A55EC91A060575CFB29503FBF7160C2DC8BCBFE02D20A7F704882F72D8D00272D8D002CE5CCC4B
 +OK Dovecot ready.
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:48)

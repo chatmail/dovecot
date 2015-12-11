@@ -7,6 +7,7 @@
 #include "mail-storage-private.h"
 #include "mailbox-list-private.h"
 #include "maildir-storage.h"
+#include "index-mailbox-size.h"
 #include "quota-private.h"
 #include "quota-plugin.h"
 
@@ -48,14 +49,20 @@ static void quota_mail_expunge(struct mail *_mail)
 {
 	struct mail_private *mail = (struct mail_private *)_mail;
 	struct quota_mailbox *qbox = QUOTA_CONTEXT(_mail->box);
+	struct quota_user *quser = QUOTA_USER_CONTEXT(_mail->box->storage->user);
 	union mail_module_context *qmail = QUOTA_MAIL_CONTEXT(mail);
 	uoff_t size;
+	int ret;
 
 	/* We need to handle the situation where multiple transactions expunged
 	   the mail at the same time. In here we'll just save the message's
 	   physical size and do the quota freeing later when the message was
 	   known to be expunged. */
-	if (mail_get_physical_size(_mail, &size) == 0) {
+	if (quser->quota->set->vsizes)
+		ret = mail_get_virtual_size(_mail, &size);
+	else
+		ret = mail_get_physical_size(_mail, &size);
+	if (ret == 0) {
 		if (!array_is_created(&qbox->expunge_uids)) {
 			i_array_init(&qbox->expunge_uids, 64);
 			i_array_init(&qbox->expunge_sizes, 64);
@@ -293,7 +300,7 @@ static void quota_mailbox_sync_cleanup(struct quota_mailbox *qbox)
 
 	if (qbox->expunge_qt != NULL && qbox->expunge_qt->tmp_mail != NULL) {
 		mail_free(&qbox->expunge_qt->tmp_mail);
-		mailbox_transaction_rollback(&qbox->expunge_trans);
+		(void)mailbox_transaction_commit(&qbox->expunge_trans);
 	}
 	qbox->sync_transaction_expunge = FALSE;
 }
@@ -310,6 +317,8 @@ static void quota_mailbox_sync_notify(struct mailbox *box, uint32_t uid,
 				      enum mailbox_sync_type sync_type)
 {
 	struct quota_mailbox *qbox = QUOTA_CONTEXT(box);
+	struct index_mailbox_context *ibox = INDEX_STORAGE_CONTEXT(box);
+	struct quota_user *quser = QUOTA_USER_CONTEXT(box->storage->user);
 	const uint32_t *uids;
 	const uoff_t *sizep;
 	unsigned int i, count;
@@ -351,6 +360,11 @@ static void quota_mailbox_sync_notify(struct mailbox *box, uint32_t uid,
 		/* we already know the size */
 		sizep = array_idx(&qbox->expunge_sizes, i);
 		quota_free_bytes(qbox->expunge_qt, *sizep);
+		/* FIXME: it's not ideal that we do the vsize update here, but
+		   this is the easiest place for it for now.. maybe the mail
+		   size checking code could be moved to lib-storage */
+		if (ibox->vsize_update != NULL && quser->quota->set->vsizes)
+			index_mailbox_vsize_hdr_expunge(ibox->vsize_update, uid, *sizep);
 		return;
 	}
 
@@ -369,10 +383,18 @@ static void quota_mailbox_sync_notify(struct mailbox *box, uint32_t uid,
 			mail_alloc(qbox->expunge_trans,
 				   MAIL_FETCH_PHYSICAL_SIZE, NULL);
 	}
-	if (mail_set_uid(qbox->expunge_qt->tmp_mail, uid) &&
-	    mail_get_physical_size(qbox->expunge_qt->tmp_mail, &size) == 0)
+	if (!mail_set_uid(qbox->expunge_qt->tmp_mail, uid))
+		;
+	else if (!quser->quota->set->vsizes) {
+		if (mail_get_physical_size(qbox->expunge_qt->tmp_mail, &size) == 0) {
+			quota_free_bytes(qbox->expunge_qt, size);
+			return;
+		}
+	} else if (mail_get_virtual_size(qbox->expunge_qt->tmp_mail, &size) == 0) {
 		quota_free_bytes(qbox->expunge_qt, size);
-	else {
+		if (ibox->vsize_update != NULL)
+			index_mailbox_vsize_hdr_expunge(ibox->vsize_update, uid, size);
+	} else {
 		/* there's no way to get the size. recalculate the quota. */
 		quota_recalculate(qbox->expunge_qt);
 		qbox->recalculate = TRUE;
@@ -479,7 +501,7 @@ struct quota *quota_get_mail_user_quota(struct mail_user *user)
 {
 	struct quota_user *quser = QUOTA_USER_CONTEXT(user);
 
-	return quser->quota;
+	return quser == NULL ? NULL : quser->quota;
 }
 
 static void quota_user_deinit(struct mail_user *user)
@@ -550,11 +572,10 @@ void quota_mailbox_list_created(struct mailbox_list *list)
 	struct mail_user *quota_user;
 	bool add;
 
-	if (QUOTA_USER_CONTEXT(list->ns->user) == NULL)
-		return;
-
 	/* see if we have a quota explicitly defined for this namespace */
 	quota = quota_get_mail_user_quota(list->ns->user);
+	if (quota == NULL)
+		return;
 	root = quota_find_root_for_ns(quota, list->ns);
 	if (root != NULL) {
 		/* explicit quota root */
@@ -587,6 +608,7 @@ void quota_mailbox_list_created(struct mailbox_list *list)
 		MODULE_CONTEXT_SET(list, quota_mailbox_list_module, qlist);
 
 		quota = quota_get_mail_user_quota(quota_user);
+		i_assert(quota != NULL);
 		quota_add_user_namespace(quota, list->ns);
 	}
 }
@@ -624,10 +646,9 @@ void quota_mail_namespaces_created(struct mail_namespace *namespaces)
 	struct quota_root *const *roots;
 	unsigned int i, count;
 
-	if (QUOTA_USER_CONTEXT(namespaces->user) == NULL)
-		return;
-
 	quota = quota_get_mail_user_quota(namespaces->user);
+	if (quota == NULL)
+		return;
 	roots = array_get(&quota->roots, &count);
 	for (i = 0; i < count; i++)
 		quota_root_set_namespace(roots[i], namespaces);

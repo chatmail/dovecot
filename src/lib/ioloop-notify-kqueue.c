@@ -10,6 +10,7 @@
 #ifdef IOLOOP_NOTIFY_KQUEUE
 
 #include "ioloop-private.h"
+#include "llist.h"
 #include "fd-close-on-exec.h"
 #include <unistd.h>
 #include <fcntl.h>
@@ -32,12 +33,22 @@ struct io_notify {
 	struct io io;
 	int refcount;
 	int fd;
+	struct io_notify *prev, *next;
 };
 
 struct ioloop_notify_handler_context {
 	int kq;
 	struct io *event_io;
+	struct io_notify *notifies;
 };
+
+static void
+io_loop_notify_free(struct ioloop_notify_handler_context *ctx,
+		    struct io_notify *io)
+{
+	DLLIST_REMOVE(&ctx->notifies, io);
+	i_free(io);
+}
 
 static void event_callback(struct ioloop_notify_handler_context *ctx)
 {
@@ -74,7 +85,7 @@ static void event_callback(struct ioloop_notify_handler_context *ctx)
 			io_loop_call_io(&io->io);
 
 		if (--io->refcount == 0)
-			i_free(io);
+			io_loop_notify_free(ctx, io);
 	}
 }
 
@@ -96,6 +107,16 @@ void io_loop_notify_handler_deinit(struct ioloop *ioloop)
 	struct ioloop_notify_handler_context *ctx =
 		ioloop->notify_handler_context;
 
+	while (ctx->notifies != NULL) {
+		struct io_notify *io = ctx->notifies;
+		struct io *_io = &io->io;
+
+		i_warning("I/O notify leak: %p (line %u, fd %d)",
+			  (void *)_io->callback,
+			  _io->source_linenum, io->fd);
+		io_remove(&_io);
+	}
+
 	if (ctx->event_io)
 		io_remove(&ctx->event_io);
 	if (close(ctx->kq) < 0)
@@ -104,8 +125,9 @@ void io_loop_notify_handler_deinit(struct ioloop *ioloop)
 }
 
 #undef io_add_notify
-enum io_notify_result io_add_notify(const char *path, io_callback_t *callback,
-				    void *context, struct io **io_r)
+enum io_notify_result
+io_add_notify(const char *path, unsigned int source_linenum,
+	      io_callback_t *callback, void *context, struct io **io_r)
 {
 	struct ioloop_notify_handler_context *ctx =
 		current_ioloop->notify_handler_context;
@@ -128,6 +150,7 @@ enum io_notify_result io_add_notify(const char *path, io_callback_t *callback,
 
 	io = i_new(struct io_notify, 1);
 	io->io.condition = IO_NOTIFY;
+	io->io.source_linenum = source_linenum;
 	io->io.callback = callback;
 	io->io.context = context;
 	io->io.ioloop = current_ioloop;
@@ -138,7 +161,8 @@ enum io_notify_result io_add_notify(const char *path, io_callback_t *callback,
 	   event state transitions and not the current state.  With this flag,
 	   the same event is only returned once. */
 	MY_EV_SET(&ev, fd, EVFILT_VNODE, EV_ADD | EV_CLEAR,
-		  NOTE_DELETE | NOTE_WRITE | NOTE_EXTEND | NOTE_REVOKE, 0, io);
+		  NOTE_DELETE | NOTE_RENAME | NOTE_WRITE | NOTE_EXTEND |
+		  NOTE_REVOKE, 0, io);
 	if (kevent(ctx->kq, &ev, 1, NULL, 0, NULL) < 0) {
 		i_error("kevent(%d, %s) for notify failed: %m", fd, path);
 		i_close_fd(&fd);
@@ -150,6 +174,7 @@ enum io_notify_result io_add_notify(const char *path, io_callback_t *callback,
 		ctx->event_io = io_add(ctx->kq, IO_READ, event_callback,
 				       io->io.ioloop->notify_handler_context);
 	}
+	DLLIST_PREPEND(&ctx->notifies, io);
 	*io_r = &io->io;
 	return IO_NOTIFY_ADDED;
 }
@@ -169,7 +194,31 @@ void io_loop_notify_remove(struct io *_io)
 	io->fd = -1;
 
 	if (--io->refcount == 0)
-		i_free(io);
+		io_loop_notify_free(ctx, io);
+}
+
+int io_loop_extract_notify_fd(struct ioloop *ioloop)
+{
+	struct ioloop_notify_handler_context *ctx =
+		ioloop->notify_handler_context;
+	struct io_notify *io;
+	int fd, new_kq;
+
+	if (ctx->kq == -1)
+		return -1;
+
+	new_kq = kqueue();
+	if (new_kq < 0) {
+		i_error("kqueue(notify) failed: %m");
+		return -1;
+	}
+	for (io = ctx->notifies; io != NULL; io = io->next)
+		io->fd = -1;
+	if (ctx->event_io != NULL)
+		io_remove(&ctx->event_io);
+	fd = ctx->kq;
+	ctx->kq = new_kq;
+	return fd;
 }
 
 #endif

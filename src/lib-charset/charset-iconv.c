@@ -74,15 +74,17 @@ charset_to_utf8_try(struct charset_translation *t,
 	ic_srcbuf = (ICONV_CONST char *) src;
 
 	if (iconv(t->cd, &ic_srcbuf, &srcleft,
-		  &ic_destbuf, &destleft) != (size_t)-1)
+		  &ic_destbuf, &destleft) != (size_t)-1) {
+		i_assert(srcleft == 0);
 		*result = CHARSET_RET_OK;
-	else if (errno == E2BIG) {
+	} else if (errno == E2BIG) {
 		/* set result just to avoid compiler warning */
 		*result = CHARSET_RET_INCOMPLETE_INPUT;
 		ret = FALSE;
-	} else if (errno == EINVAL)
+	} else if (errno == EINVAL) {
+		i_assert(srcleft <= CHARSET_MAX_PENDING_BUF_SIZE);
 		*result = CHARSET_RET_INCOMPLETE_INPUT;
-	else {
+	} else {
 		/* should be EILSEQ */
 		*result = CHARSET_RET_INVALID_INPUT;
 		ret = FALSE;
@@ -109,6 +111,7 @@ charset_to_utf8(struct charset_translation *t,
 	bool ret;
 
 	for (pos = 0;;) {
+		i_assert(pos <= *src_size);
 		size = *src_size - pos;
 		ret = charset_to_utf8_try(t, src + pos, &size, dest, &result);
 		pos += size;
@@ -118,11 +121,12 @@ charset_to_utf8(struct charset_translation *t,
 
 		if (result == CHARSET_RET_INVALID_INPUT) {
 			if (prev_invalid_pos != dest->used) {
-				uni_ucs4_to_utf8_c(UNICODE_REPLACEMENT_CHAR,
-						   dest);
+				buffer_append(dest, UNICODE_REPLACEMENT_CHAR_UTF8,
+					      strlen(UNICODE_REPLACEMENT_CHAR_UTF8));
 				prev_invalid_pos = dest->used;
 			}
-			pos++;
+			if (pos < *src_size)
+				pos++;
 		}
 	}
 

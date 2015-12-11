@@ -167,7 +167,8 @@ iostream_rawlog_try_create_tcp(const char *path,
 {
 	const char *p, *host;
 	struct ip_addr *ips;
-	unsigned int port, ips_count;
+	unsigned int ips_count;
+	in_port_t port;
 	int ret, fd;
 
 	/* tcp:host:port */
@@ -179,7 +180,7 @@ iostream_rawlog_try_create_tcp(const char *path,
 		return 0;
 	if ((p = strchr(path, ':')) == NULL)
 		return 0;
-	if (str_to_uint(p+1, &port) < 0 || port == 0 || port > 65535)
+	if (net_str2port(p+1, &port) < 0)
 		return 0;
 	host = t_strdup_until(path, p);
 
@@ -241,7 +242,7 @@ int iostream_rawlog_create_prefix(const char *prefix, struct istream **input,
 	if (out_fd == -1) {
 		i_error("creat(%s) failed: %m", out_path);
 		i_close_fd(&in_fd);
-		(void)unlink(in_path);
+		i_unlink(in_path);
 		return -1;
 	}
 

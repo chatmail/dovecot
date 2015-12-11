@@ -52,7 +52,6 @@
 #include "mbox-sync-private.h"
 
 #include <stddef.h>
-#include <stdlib.h>
 #include <utime.h>
 #include <sys/stat.h>
 
@@ -1544,8 +1543,8 @@ static int mbox_sync_update_index_header(struct mbox_sync_context *sync_ctx)
 	view = mail_index_transaction_open_updated_view(sync_ctx->t);
 	if (mail_index_lookup_seq_range(view, sync_ctx->last_nonrecent_uid + 1,
 					(uint32_t)-1, &seq, &seq2)) {
-		index_mailbox_set_recent_seq(&sync_ctx->mbox->box,
-					     view, seq, seq2);
+		mailbox_recent_flags_set_seqs(&sync_ctx->mbox->box,
+					      view, seq, seq2);
 	}
 	mail_index_view_close(&view);
 
@@ -1576,7 +1575,7 @@ static void mbox_sync_restart(struct mbox_sync_context *sync_ctx)
 		mail_index_reset(sync_ctx->t);
 		sync_ctx->reset_hdr.next_uid = 1;
 		sync_ctx->hdr = &sync_ctx->reset_hdr;
-		index_mailbox_reset_uidvalidity(&sync_ctx->mbox->box);
+		mailbox_recent_flags_reset(&sync_ctx->mbox->box);
 	}
 
 	sync_ctx->prev_msg_uid = 0;
@@ -1789,6 +1788,7 @@ int mbox_sync_has_changed_full(struct mbox_mailbox *mbox, bool leave_dirty,
 static void mbox_sync_context_free(struct mbox_sync_context *sync_ctx)
 {
 	index_sync_changes_deinit(&sync_ctx->sync_changes);
+	index_storage_expunging_deinit(&sync_ctx->mbox->box);
 	if (sync_ctx->index_sync_ctx != NULL)
 		mail_index_sync_rollback(&sync_ctx->index_sync_ctx);
 	pool_unref(&sync_ctx->mail_keyword_pool);
@@ -1877,13 +1877,10 @@ again:
 	if ((flags & MBOX_SYNC_REWRITE) != 0)
 		sync_flags |= MAIL_INDEX_SYNC_FLAG_FLUSH_DIRTY;
 
-	ret = mail_index_sync_begin(mbox->box.index, &index_sync_ctx,
-				    &sync_view, &trans, sync_flags);
-	if (ret <= 0) {
-		if (ret < 0)
-			mailbox_set_index_error(&mbox->box);
+	ret = index_storage_expunged_sync_begin(&mbox->box, &index_sync_ctx,
+						&sync_view, &trans, sync_flags);
+	if (ret <= 0)
 		return ret;
-	}
 
 	if ((mbox->box.flags & MAILBOX_FLAG_DROP_RECENT) != 0) {
 		/* see if we need to drop recent flags */
@@ -1897,6 +1894,7 @@ again:
 	nothing_to_do:
 		/* index may need to do internal syncing though, so commit
 		   instead of rollbacking. */
+		index_storage_expunging_deinit(&mbox->box);
 		if (mail_index_sync_commit(&index_sync_ctx) < 0) {
 			mailbox_set_index_error(&mbox->box);
 			return -1;

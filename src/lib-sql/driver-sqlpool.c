@@ -126,12 +126,15 @@ driver_sqlpool_new_conn_trans(struct sqlpool_transaction_context *trans,
 			      struct sql_db *conndb)
 {
 	struct sql_transaction_context *conn_trans;
+	struct sql_transaction_query *query;
 
 	conn_trans = sql_transaction_begin(conndb);
 	/* backend will use our queries list (we might still append more
 	   queries to the list) */
 	conn_trans->head = trans->ctx.head;
 	conn_trans->tail = trans->ctx.tail;
+	for (query = conn_trans->head; query != NULL; query = query->next)
+		query->trans = conn_trans;
 	return conn_trans;
 }
 
@@ -790,6 +793,25 @@ driver_sqlpool_update(struct sql_transaction_context *_ctx, const char *query,
 				  query, affected_rows);
 }
 
+static const char *
+driver_sqlpool_escape_blob(struct sql_db *_db,
+			   const unsigned char *data, size_t size)
+{
+	struct sqlpool_db *db = (struct sqlpool_db *)_db;
+	const struct sqlpool_connection *conns;
+	unsigned int i, count;
+
+	/* use the first ready connection */
+	conns = array_get(&db->all_connections, &count);
+	for (i = 0; i < count; i++) {
+		if (SQL_DB_IS_READY(conns[i].db))
+			return sql_escape_blob(conns[i].db, data, size);
+	}
+	/* no ready connections. just use the first one (we're guaranteed
+	   to always have one) */
+	return sql_escape_blob(conns[0].db, data, size);
+}
+
 struct sql_db driver_sqlpool_db = {
 	"",
 
@@ -808,6 +830,8 @@ struct sql_db driver_sqlpool_db = {
 		driver_sqlpool_transaction_commit_s,
 		driver_sqlpool_transaction_rollback,
 
-		driver_sqlpool_update
+		driver_sqlpool_update,
+
+		driver_sqlpool_escape_blob
 	}
 };

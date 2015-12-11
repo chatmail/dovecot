@@ -110,6 +110,7 @@ struct imapc_connection {
 	ARRAY_TYPE(imapc_command) cmd_send_queue;
 	/* commands that have been sent, waiting for their tagged reply */
 	ARRAY_TYPE(imapc_command) cmd_wait_list;
+	unsigned int reconnect_command_count;
 
 	unsigned int ips_count, prev_connect_idx;
 	struct ip_addr *ips;
@@ -1303,6 +1304,16 @@ static int imapc_connection_input_tagged(struct imapc_connection *conn)
 		imapc_connection_unselect(conn->selected_box);
 	}
 
+	if (conn->reconnect_command_count > 0) {
+		if (--conn->reconnect_command_count == 0) {
+			/* we've received replies for all the commands started
+			   before reconnection. if we get disconnected now, we
+			   can safely reconnect without worrying about infinite
+			   reconnect loops. */
+			if (conn->selected_box != NULL)
+				conn->selected_box->reconnect_ok = TRUE;
+		}
+	}
 	imapc_connection_input_reset(conn);
 	imapc_command_reply_free(cmd, &reply);
 	imapc_command_send_more(conn);
@@ -1553,16 +1564,27 @@ static void imapc_connection_reset_idle(struct imapc_connection *conn)
 static void imapc_connection_connect_next_ip(struct imapc_connection *conn)
 {
 	const struct ip_addr *ip;
+	unsigned int i;
 	int fd;
 
 	i_assert(conn->client->set.max_idle_time > 0);
 
-	conn->prev_connect_idx = (conn->prev_connect_idx+1) % conn->ips_count;
-	ip = &conn->ips[conn->prev_connect_idx];
-	fd = net_connect_ip(ip, conn->client->set.port, NULL);
-	if (fd == -1) {
-		imapc_connection_set_disconnected(conn);
-		return;
+	for (i = 0;;) {
+		conn->prev_connect_idx = (conn->prev_connect_idx+1) % conn->ips_count;
+		ip = &conn->ips[conn->prev_connect_idx];
+		fd = net_connect_ip(ip, conn->client->set.port, NULL);
+		if (fd != -1)
+			break;
+
+		/* failed to connect to one of the IPs immediately
+		   (e.g. IPv6 address without connectivity). try all IPs
+		   before failing completely. */
+		i_error("net_connect_ip(%s:%u) failed: %m",
+			net_ip2addr(ip), conn->client->set.port);
+		if (++i == conn->ips_count) {
+			imapc_connection_set_disconnected(conn);
+			return;
+		}
 	}
 	conn->fd = fd;
 	conn->input = conn->raw_input = i_stream_create_fd(fd, (size_t)-1, FALSE);
@@ -2059,7 +2081,6 @@ void imapc_command_set_mailbox(struct imapc_command *cmd,
 			       struct imapc_client_mailbox *box)
 {
 	cmd->box = box;
-	box->pending_box_command_count++;
 }
 
 bool imapc_command_connection_is_selected(struct imapc_command *cmd)
@@ -2216,4 +2237,10 @@ void imapc_connection_idle(struct imapc_connection *conn)
 	cmd = imapc_connection_cmd(conn, imapc_connection_idle_callback, conn);
 	cmd->idle = TRUE;
 	imapc_command_send(cmd, "IDLE");
+}
+
+void imapc_connection_set_reconnected(struct imapc_connection *conn)
+{
+	conn->reconnect_command_count = array_count(&conn->cmd_wait_list) +
+		array_count(&conn->cmd_send_queue);
 }

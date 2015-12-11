@@ -3,7 +3,6 @@
 /* Wrap srand() so that we can reproduce fuzzed tests */
 
 #include "lib.h"
-#include <stdlib.h>
 
 static int seeded = 0;
 static unsigned int seed;
@@ -21,9 +20,10 @@ unsigned int rand_get_last_seed(void)
 void rand_set_seed(unsigned int s)
 {
 	if (seeded == 0) {
+		unsigned int seedval;
 		env_seed = getenv("DOVECOT_SRAND");
-		if (env_seed != NULL)
-			seed = strtoul(env_seed, NULL, 0);
+		if (env_seed != NULL && str_to_uint(env_seed, &seedval) >= 0)
+			seed = seedval;
 	}
 	seeded++;
 	if (env_seed == NULL)

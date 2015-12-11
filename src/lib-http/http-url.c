@@ -428,6 +428,7 @@ int http_url_request_target_parse(const char *request_target,
 void http_url_copy_authority(pool_t pool, struct http_url *dest,
 	const struct http_url *src)
 {
+	memset(dest, 0, sizeof(*dest));
 	dest->host_name = p_strdup(pool, src->host_name);
 	if (src->have_host_ip) {
 		dest->host_ip = src->host_ip;
@@ -440,6 +441,17 @@ void http_url_copy_authority(pool_t pool, struct http_url *dest,
 	dest->have_ssl = src->have_ssl;
 }
 
+struct http_url *http_url_clone_authority(pool_t pool,
+	const struct http_url *src)
+{
+	struct http_url *new_url;
+
+	new_url = p_new(pool, struct http_url, 1);
+	http_url_copy_authority(pool, new_url, src);
+
+	return new_url;
+}
+
 void http_url_copy(pool_t pool, struct http_url *dest,
 	const struct http_url *src)
 {
@@ -449,7 +461,15 @@ void http_url_copy(pool_t pool, struct http_url *dest,
 	dest->enc_fragment = p_strdup(pool, src->enc_fragment);
 }
 
-struct http_url *http_url_clone(pool_t pool,const struct http_url *src)
+void http_url_copy_with_userinfo(pool_t pool, struct http_url *dest,
+	const struct http_url *src)
+{
+	http_url_copy(pool, dest, src);
+	dest->user = p_strdup(pool, src->user);
+	dest->password = p_strdup(pool, src->password);
+}
+
+struct http_url *http_url_clone(pool_t pool, const struct http_url *src)
 {
 	struct http_url *new_url;
 
@@ -458,6 +478,18 @@ struct http_url *http_url_clone(pool_t pool,const struct http_url *src)
 
 	return new_url;
 }
+
+struct http_url *http_url_clone_with_userinfo(pool_t pool,
+	const struct http_url *src)
+{
+	struct http_url *new_url;
+
+	new_url = p_new(pool, struct http_url, 1);
+	http_url_copy_with_userinfo(pool, new_url, src);
+
+	return new_url;
+}
+
 
 /*
  * HTTP URL construction

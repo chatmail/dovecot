@@ -79,6 +79,7 @@ wikifiles = ACL.txt \
 	Errors.ChgrpNoPerm.txt \
 	FindMailLocation.txt \
 	FinishBasicConfiguration.txt \
+	HAProxy.txt \
 	HowTo.EximAndDovecotSASL.txt \
 	HowTo.ImapcProxy.txt \
 	HowTo.PopBSMTPAndDovecot.txt \
@@ -87,6 +88,8 @@ wikifiles = ACL.txt \
 	HowTo.Rootless.txt \
 	HowTo.SimpleVirtualInstall.txt \
 	HowTo.txt \
+	IMAPServer.txt \
+	ImapMetadata.txt \
 	IndexFiles.txt \
 	LDA.Exim.txt \
 	LDA.Indexing.txt \

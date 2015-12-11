@@ -44,7 +44,6 @@
 #include "user-directory.h"
 #include "director-connection.h"
 
-#include <stdlib.h>
 #include <unistd.h>
 
 #define MAX_INBUF_SIZE 1024
@@ -345,7 +344,7 @@ static bool director_connection_assign_right(struct director_connection *conn)
 static bool
 director_args_parse_ip_port(struct director_connection *conn,
 			    const char *const *args,
-			    struct ip_addr *ip_r, unsigned int *port_r)
+			    struct ip_addr *ip_r, in_port_t *port_r)
 {
 	if (args[0] == NULL || args[1] == NULL) {
 		director_cmd_error(conn, "Missing IP+port parameters");
@@ -355,7 +354,7 @@ director_args_parse_ip_port(struct director_connection *conn,
 		director_cmd_error(conn, "Invalid IP address: %s", args[0]);
 		return FALSE;
 	}
-	if (str_to_uint(args[1], port_r) < 0) {
+	if (net_str2port(args[1], port_r) < 0) {
 		director_cmd_error(conn, "Invalid port: %s", args[1]);
 		return FALSE;
 	}
@@ -368,7 +367,7 @@ static bool director_cmd_me(struct director_connection *conn,
 	struct director *dir = conn->dir;
 	const char *connect_str;
 	struct ip_addr ip;
-	unsigned int port;
+	in_port_t port;
 	time_t next_comm_attempt;
 
 	if (!director_args_parse_ip_port(conn, args, &ip, &port))
@@ -506,6 +505,15 @@ director_user_refresh(struct director_connection *conn,
 			  "replacing host %s with %s", username_hash,
 			  net_ip2addr(&user->host->ip), net_ip2addr(&host->ip));
 		ret = TRUE;
+	} else if (user->kill_state != USER_KILL_STATE_NONE &&
+		   user->kill_state < USER_KILL_STATE_DELAY) {
+		/* user is still being moved - ignore conflicting host updates
+		   from other directors who don't yet know about the move. */
+		dir_debug("user refresh: %u is being moved, "
+			  "preserve its host %s instead of replacing with %s",
+			  username_hash, net_ip2addr(&user->host->ip),
+			  net_ip2addr(&host->ip));
+		host = user->host;
 	} else {
 		/* non-weak user received a non-weak update with
 		   conflicting host. this shouldn't happen. */
@@ -641,7 +649,7 @@ static bool director_cmd_director(struct director_connection *conn,
 {
 	struct director_host *host;
 	struct ip_addr ip;
-	unsigned int port;
+	in_port_t port;
 
 	if (!director_args_parse_ip_port(conn, args, &ip, &port))
 		return FALSE;
@@ -690,7 +698,7 @@ static bool director_cmd_director_remove(struct director_connection *conn,
 {
 	struct director_host *host;
 	struct ip_addr ip;
-	unsigned int port;
+	in_port_t port;
 
 	if (!director_args_parse_ip_port(conn, args, &ip, &port))
 		return FALSE;
@@ -737,12 +745,13 @@ director_cmd_is_seen(struct director_connection *conn,
 {
 	const char *const *args = *_args;
 	struct ip_addr ip;
-	unsigned int port, seq;
+	in_port_t port;
+	unsigned int seq;
 	struct director_host *host;
 
 	if (str_array_length(args) < 3 ||
 	    net_addr2ip(args[0], &ip) < 0 ||
-	    str_to_uint(args[1], &port) < 0 ||
+	    net_str2port(args[1], &port) < 0 ||
 	    str_to_uint(args[2], &seq) < 0) {
 		director_cmd_error(conn, "Invalid parameters");
 		return -1;
@@ -837,7 +846,8 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 	struct ip_addr ip;
 	const char *tag = "";
 	unsigned int vhost_count;
-	bool update;
+	bool update, down = FALSE;
+	time_t last_updown_change = 0;
 
 	if (str_array_length(args) < 2 ||
 	    net_addr2ip(args[0], &ip) < 0 ||
@@ -845,8 +855,17 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 		director_cmd_error(conn, "Invalid parameters");
 		return FALSE;
 	}
-	if (args[2] != NULL)
+	if (args[2] != NULL) {
 		tag = args[2];
+		if (args[3] != NULL) {
+			if ((args[3][0] != 'D' && args[3][0] != 'U') ||
+			    str_to_time(args[3]+1, &last_updown_change) < 0) {
+				director_cmd_error(conn, "Invalid updown parameters");
+				return FALSE;
+			}
+			down = args[3][0] == 'D';
+		}
+	}
 	if (conn->ignore_host_events) {
 		/* remote is sending hosts in a handshake, but it doesn't have
 		   a completed ring and we do. */
@@ -859,7 +878,10 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 		host = mail_host_add_ip(conn->dir->mail_hosts, &ip, tag);
 		update = TRUE;
 	} else {
-		update = host->vhost_count != vhost_count;
+		update = host->vhost_count != vhost_count ||
+			host->down != down ||
+			host->last_updown_change != last_updown_change;
+;
 		if (strcmp(tag, host->tag) != 0) {
 			i_error("director(%s): Host %s changed tag from '%s' to '%s'",
 				conn->name, net_ip2addr(&host->ip),
@@ -870,6 +892,8 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 	}
 
 	if (update) {
+		mail_host_set_down(conn->dir->mail_hosts, host,
+				   down, last_updown_change);
 		mail_host_set_vhost_count(conn->dir->mail_hosts,
 					  host, vhost_count);
 		director_update_host(conn->dir, conn->host, dir_host, host);
@@ -1120,6 +1144,8 @@ static int
 director_connection_handle_handshake(struct director_connection *conn,
 				     const char *cmd, const char *const *args)
 {
+	unsigned int major_version;
+
 	/* both incoming and outgoing connections get VERSION and ME */
 	if (strcmp(cmd, "VERSION") == 0 && str_array_length(args) >= 3) {
 		if (strcmp(args[0], DIRECTOR_VERSION_NAME) != 0) {
@@ -1127,13 +1153,17 @@ director_connection_handle_handshake(struct director_connection *conn,
 				"(%s vs %s)",
 				conn->name, args[0], DIRECTOR_VERSION_NAME);
 			return -1;
-		} else if (atoi(args[1]) != DIRECTOR_VERSION_MAJOR) {
+		} else if (str_to_uint(args[1], &major_version) < 0 ||
+			str_to_uint(args[2], &conn->minor_version) < 0) {
+			i_error("director(%s): Invalid protocol version: "
+				"%s.%s", conn->name, args[1], args[2]);
+			return -1;
+		} else if (major_version != DIRECTOR_VERSION_MAJOR) {
 			i_error("director(%s): Incompatible protocol version: "
-				"%u vs %u", conn->name, atoi(args[1]),
+				"%u vs %u", conn->name, major_version,
 				DIRECTOR_VERSION_MAJOR);
 			return -1;
 		}
-		conn->minor_version = atoi(args[2]);
 		conn->version_received = TRUE;
 		if (conn->done_pending) {
 			if (director_connection_send_done(conn) < 0)
@@ -1271,7 +1301,8 @@ static bool director_connection_sync(struct director_connection *conn,
 	struct director *dir = conn->dir;
 	struct director_host *host;
 	struct ip_addr ip;
-	unsigned int port, seq, minor_version = 0, timestamp = ioloop_time;
+	in_port_t port;
+	unsigned int seq, minor_version = 0, timestamp = ioloop_time;
 
 	if (str_array_length(args) < 3 ||
 	    !director_args_parse_ip_port(conn, args, &ip, &port) ||
@@ -1280,7 +1311,10 @@ static bool director_connection_sync(struct director_connection *conn,
 		return FALSE;
 	}
 	if (args[3] != NULL) {
-		minor_version = atoi(args[3]);
+		if (str_to_uint(args[3], &minor_version) < 0) {
+			director_cmd_error(conn, "Invalid parameters");
+			return FALSE;
+		}
 		if (args[4] != NULL && str_to_uint(args[4], &timestamp) < 0) {
 			director_cmd_error(conn, "Invalid parameters");
 			return FALSE;
@@ -1308,7 +1342,7 @@ static bool director_cmd_connect(struct director_connection *conn,
 	struct director *dir = conn->dir;
 	struct director_host *host;
 	struct ip_addr ip;
-	unsigned int port;
+	in_port_t port;
 
 	if (str_array_length(args) != 2 ||
 	    !director_args_parse_ip_port(conn, args, &ip, &port)) {
@@ -1572,14 +1606,23 @@ static void
 director_connection_send_hosts(struct director_connection *conn, string_t *str)
 {
 	struct mail_host *const *hostp;
+	bool send_updowns;
+
+	send_updowns = conn->minor_version >= DIRECTOR_VERSION_UPDOWN;
 
 	str_printfa(str, "HOST-HAND-START\t%u\n", conn->dir->ring_handshaked);
 	array_foreach(mail_hosts_get(conn->dir->mail_hosts), hostp) {
+		struct mail_host *host = *hostp;
+
 		str_printfa(str, "HOST\t%s\t%u",
-			    net_ip2addr(&(*hostp)->ip), (*hostp)->vhost_count);
-		if ((*hostp)->tag[0] != '\0') {
+			    net_ip2addr(&host->ip), host->vhost_count);
+		if (host->tag[0] != '\0' || send_updowns) {
 			str_append_c(str, '\t');
-			str_append_tabescaped(str, (*hostp)->tag);
+			str_append_tabescaped(str, host->tag);
+		}
+		if (send_updowns) {
+			str_printfa(str, "\t%c%ld", host->down ? 'D' : 'U',
+				    (long)host->last_updown_change);
 		}
 		str_append_c(str, '\n');
 	}
@@ -1835,8 +1878,8 @@ void director_connection_deinit(struct director_connection **_conn,
 	}
 }
 
-void director_connection_disconnected(struct director_connection **_conn,
-				      const char *reason)
+static void director_connection_disconnected(struct director_connection **_conn,
+					     const char *reason)
 {
 	struct director_connection *conn = *_conn;
 	struct director *dir = conn->dir;

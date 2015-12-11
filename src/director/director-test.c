@@ -27,7 +27,6 @@
 #include "master-service-settings.h"
 #include "director-settings.h"
 
-#include <stdlib.h>
 #include <unistd.h>
 
 #define IMAP_PORT 14300
@@ -388,7 +387,7 @@ static void director_connection_destroy(struct director_connection **_conn)
 static void client_connected(struct master_service_connection *conn)
 {
 	struct ip_addr local_ip, remote_ip;
-	unsigned int local_port;
+	in_port_t local_port;
 
 	if (net_getsockname(conn->fd, &local_ip, &local_port) < 0)
 		i_fatal("net_getsockname() failed: %m");

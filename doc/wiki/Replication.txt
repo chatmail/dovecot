@@ -129,7 +129,7 @@ service doveadm {
 ---%<-------------------------------------------------------------------------
 
 The client must be able to verify that the SSL certificate is valid, so you
-need to specify the directory containing valid SSL CA roots:
+need to specify the directory/file containing valid SSL CA roots:
 
 ---%<-------------------------------------------------------------------------
 ssl_client_ca_dir = /etc/ssl/certs # Debian/Ubuntu
@@ -207,4 +207,4 @@ Random things to remember:
     * v2.2.6+: If you're having trouble, verify that 'dovecot --hostdomain'
       returns different values for the servers.
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:48)

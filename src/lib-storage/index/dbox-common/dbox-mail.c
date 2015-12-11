@@ -10,7 +10,6 @@
 #include "dbox-file.h"
 #include "dbox-mail.h"
 
-#include <stdlib.h>
 
 struct mail *
 dbox_mail_alloc(struct mailbox_transaction_context *t,
@@ -96,6 +95,7 @@ int dbox_mail_get_virtual_size(struct mail *_mail, uoff_t *size_r)
 	struct dbox_mail *mail = (struct dbox_mail *)_mail;
 	struct index_mail_data *data = &mail->imail.data;
 	const char *value;
+	uintmax_t size;
 
 	if (index_mail_get_cached_virtual_size(&mail->imail, size_r))
 		return 0;
@@ -106,7 +106,9 @@ int dbox_mail_get_virtual_size(struct mail *_mail, uoff_t *size_r)
 	if (value == NULL)
 		return index_mail_get_virtual_size(_mail, size_r);
 
-	data->virtual_size = strtoul(value, NULL, 16);
+	if (str_to_uintmax_hex(value, &size) < 0 || size > (uoff_t)-1)
+		return -1;
+	data->virtual_size = (uoff_t)size;
 	*size_r = data->virtual_size;
 	return 0;
 }
@@ -116,6 +118,7 @@ int dbox_mail_get_received_date(struct mail *_mail, time_t *date_r)
 	struct dbox_mail *mail = (struct dbox_mail *)_mail;
 	struct index_mail_data *data = &mail->imail.data;
 	const char *value;
+	uintmax_t time;
 
 	if (index_mail_get_received_date(_mail, date_r) == 0)
 		return 0;
@@ -124,7 +127,11 @@ int dbox_mail_get_received_date(struct mail *_mail, time_t *date_r)
 				   &value) < 0)
 		return -1;
 
-	data->received_date = value == NULL ? 0 : strtoul(value, NULL, 16);
+	time = 0;
+	if (value != NULL && str_to_uintmax_hex(value, &time) < 0)
+		return -1;
+
+	data->received_date = (time_t)time;
 	*date_r = data->received_date;
 	return 0;
 }

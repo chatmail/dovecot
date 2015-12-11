@@ -27,7 +27,6 @@
 #include "mailbox-search-result-private.h"
 #include "mailbox-guid-cache.h"
 
-#include <stdlib.h>
 #include <ctype.h>
 
 #define MAILBOX_DELETE_RETRY_SECS 30
@@ -45,6 +44,7 @@ ARRAY_TYPE(mail_storage) mail_storage_classes;
 void mail_storage_init(void)
 {
 	dsasl_clients_init();
+	mailbox_attributes_init();
 	mailbox_lists_init();
 	mail_storage_hooks_init();
 	i_array_init(&mail_storage_classes, 8);
@@ -60,6 +60,7 @@ void mail_storage_deinit(void)
 		array_free(&mail_storage_classes);
 	mail_storage_hooks_deinit();
 	mailbox_lists_deinit();
+	mailbox_attributes_deinit();
 	dsasl_clients_deinit();
 }
 
@@ -1231,6 +1232,11 @@ void mailbox_close(struct mailbox *box)
 	box->opened = FALSE;
 	box->mailbox_deleted = FALSE;
 	array_clear(&box->search_results);
+
+	if (array_is_created(&box->recent_flags))
+		array_free(&box->recent_flags);
+	box->recent_flags_prev_uid = 0;
+	box->recent_flags_count = 0;
 }
 
 void mailbox_free(struct mailbox **_box)
@@ -1761,6 +1767,7 @@ bool mailbox_search_next_nonblock(struct mail_search_context *ctx,
 	struct mailbox *box = ctx->transaction->box;
 
 	*mail_r = NULL;
+	*tryagain_r = FALSE;
 
 	if (!box->v.search_next_nonblock(ctx, mail_r, tryagain_r))
 		return FALSE;
