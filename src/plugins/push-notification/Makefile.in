@@ -131,7 +131,8 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(moduledir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
 LTLIBRARIES = $(module_LTLIBRARIES)
-lib20_push_notification_plugin_la_LIBADD =
+@DOVECOT_PLUGIN_DEPS_TRUE@lib20_push_notification_plugin_la_DEPENDENCIES =  \
+@DOVECOT_PLUGIN_DEPS_TRUE@	../notify/lib15_notify_plugin.la
 am_lib20_push_notification_plugin_la_OBJECTS =  \
 	push-notification-driver-dlog.lo \
 	push-notification-driver-ox.lo push-notification-drivers.lo \
@@ -282,6 +283,8 @@ LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_DSYNC = @LIBDOVECOT_DSYNC@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LIBFTS = @LIBDOVECOT_LIBFTS@
+LIBDOVECOT_LIBFTS_DEPS = @LIBDOVECOT_LIBFTS_DEPS@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
@@ -422,6 +425,9 @@ AM_CPPFLAGS = \
 
 lib20_push_notification_plugin_la_LDFLAGS = -module -avoid-version
 module_LTLIBRARIES = lib20_push_notification_plugin.la
+@DOVECOT_PLUGIN_DEPS_TRUE@lib20_push_notification_plugin_la_LIBADD = \
+@DOVECOT_PLUGIN_DEPS_TRUE@        ../notify/lib15_notify_plugin.la
+
 lib20_push_notification_plugin_la_SOURCES = \
 	push-notification-driver-dlog.c \
 	push-notification-driver-ox.c \

@@ -1,6 +1,9 @@
 Expire plugin
 =============
 
+(See also <autoexpunge> [MailboxSettings.txt] setting, which partially
+obsoletes this plugin.)
+
 Typically this plugin is used to optimize expunging old mails from users'
 mailboxes. For example:
 
@@ -348,4 +351,4 @@ exactly need to be expunged.
 After running expire-tool without --test you'll see that the Trash mailbox is
 empty and the database row is deleted.
 
-(This file was created from the wiki on 2015-10-02 04:48)
+(This file was created from the wiki on 2015-12-07 04:45)

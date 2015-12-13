@@ -58,6 +58,10 @@ to do is simply to not compress such files.
 
 You should also preserve the file's mtime so INTERNALDATE doesn't change.
 
+If you want to use dsync to convert to a compressed Maildir you may need -o
+maildir_copy_with_hardlinks=no (this is set to yes by default and will prevent
+compression).
+
 Compression
 -----------
 
@@ -93,4 +97,4 @@ the included maildirlock utility. The idea is to:
  6. Unlock the maildir by sending a TERM signal to the maildirlock process
     (killing the PID it wrote to stdout).
 
-(This file was created from the wiki on 2015-10-02 04:48)
+(This file was created from the wiki on 2015-12-07 04:45)

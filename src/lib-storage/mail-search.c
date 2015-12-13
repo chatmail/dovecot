@@ -9,9 +9,6 @@
 #include "mail-search-build.h"
 #include "mail-search.h"
 
-static bool mail_search_arg_equals(const struct mail_search_arg *arg1,
-				   const struct mail_search_arg *arg2);
-
 static void
 mailbox_uidset_change(struct mail_search_arg *arg, struct mailbox *box,
 		      const ARRAY_TYPE(seq_range) *search_saved_uidset)
@@ -263,6 +260,7 @@ mail_search_arg_dup_one(pool_t pool, const struct mail_search_arg *arg)
 	new_arg->match_not = arg->match_not;
 	new_arg->match_always = arg->match_always;
 	new_arg->nonmatch_always = arg->nonmatch_always;
+	new_arg->fuzzy = arg->fuzzy;
 	new_arg->value.search_flags = arg->value.search_flags;
 
 	switch (arg->type) {
@@ -582,11 +580,13 @@ bool mail_search_args_match_mailbox(struct mail_search_args *args,
 	return TRUE;
 }
 
-static bool mail_search_arg_one_equals(const struct mail_search_arg *arg1,
-				       const struct mail_search_arg *arg2)
+bool mail_search_arg_one_equals(const struct mail_search_arg *arg1,
+				const struct mail_search_arg *arg2)
 {
 	if (arg1->type != arg2->type ||
-	    arg1->match_not != arg2->match_not)
+	    arg1->match_not != arg2->match_not ||
+	    arg1->fuzzy != arg2->fuzzy ||
+	    arg1->value.search_flags != arg2->value.search_flags)
 		return FALSE;
 
 	switch (arg1->type) {
@@ -647,6 +647,8 @@ static bool mail_search_arg_one_equals(const struct mail_search_arg *arg1,
 			m1->type == m2->type;
 	}
 	case SEARCH_INTHREAD:
+		if (arg1->value.thread_type != arg2->value.thread_type)
+			return FALSE;
 		return mail_search_args_equal(arg1->initialized.search_args,
 					      arg2->initialized.search_args);
 	}
@@ -654,8 +656,8 @@ static bool mail_search_arg_one_equals(const struct mail_search_arg *arg1,
 	return FALSE;
 }
 
-static bool mail_search_arg_equals(const struct mail_search_arg *arg1,
-				   const struct mail_search_arg *arg2)
+bool mail_search_arg_equals(const struct mail_search_arg *arg1,
+			    const struct mail_search_arg *arg2)
 {
 	while (arg1 != NULL && arg2 != NULL) {
 		if (!mail_search_arg_one_equals(arg1, arg2))

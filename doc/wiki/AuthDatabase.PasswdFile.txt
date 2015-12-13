@@ -29,7 +29,8 @@ set various <passdb settings> [PasswordDatabase.ExtraFields.txt] and <userdb
 settings> [UserDatabase.ExtraFields.txt]. Keys which begin with a 'userdb_'
 prefix are used for userdb, others are used for passdb. So for example if you
 wish to override <mail_location> [MailLocation.txt] setting for one user, use
-'userdb_mail=mbox:~/mail'.
+'userdb_mail=mbox:~/mail'. <Variable> [Variables.txt] expansion is done for
+extra_fields.
 
 Empty lines and lines beginning with '#' character are ignored.
 
@@ -99,4 +100,4 @@ allow_nets=192.168.0.0/24
 user2:{plain}pass2:1001:1001::/home/user2
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-10-02 04:45)
+(This file was created from the wiki on 2015-12-07 04:44)

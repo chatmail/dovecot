@@ -21,6 +21,7 @@
 #include "mail-storage-service.h"
 #include "mail-namespace.h"
 #include "mail-storage.h"
+#include "mail-autoexpunge.h"
 #include "mail-user.h"
 
 
@@ -162,6 +163,8 @@ void mail_user_unref(struct mail_user **_user)
 		user->refcount--;
 		return;
 	}
+
+	mail_user_autoexpunge(user);
 
 	user->deinitializing = TRUE;
 
@@ -377,7 +380,9 @@ static void mail_user_get_mail_home(struct mail_user *user)
 		return;
 
 	str = t_str_new(128);
-	var_expand(str, home, mail_user_var_expand_table(user));
+	var_expand_with_funcs(str, home,
+			      mail_user_var_expand_table(user),
+			      mail_user_var_expand_func_table, user);
 	user->_home = p_strdup(user->pool, str_c(str));
 }
 

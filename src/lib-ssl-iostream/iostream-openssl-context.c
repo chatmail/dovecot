@@ -28,38 +28,6 @@ int dovecot_ssl_extdata_index;
 static int ssl_iostream_init_global(const struct ssl_iostream_settings *set,
 				    const char **error_r);
 
-const char *openssl_iostream_error(void)
-{
-	unsigned long err;
-	char *buf;
-	size_t err_size = 256;
-
-	err = ERR_get_error();
-	if (err == 0) {
-		if (errno != 0)
-			return strerror(errno);
-		return "Unknown error";
-	}
-	if (ERR_GET_REASON(err) == ERR_R_MALLOC_FAILURE)
-		i_fatal_status(FATAL_OUTOFMEM, "OpenSSL malloc() failed");
-
-	buf = t_malloc(err_size);
-	buf[err_size-1] = '\0';
-	ERR_error_string_n(err, buf, err_size-1);
-	return buf;
-}
-
-const char *openssl_iostream_key_load_error(void)
-{
-       unsigned long err = ERR_peek_error();
-
-       if (ERR_GET_LIB(err) == ERR_LIB_X509 &&
-           ERR_GET_REASON(err) == X509_R_KEY_VALUES_MISMATCH)
-               return "Key is for a different cert than ssl_cert";
-       else
-               return openssl_iostream_error();
-}
-
 static RSA *ssl_gen_rsa_key(SSL *ssl ATTR_UNUSED,
 			    int is_export ATTR_UNUSED, int keylength)
 {
@@ -150,27 +118,6 @@ ssl_iostream_ctx_use_key(struct ssl_iostream_context *ctx,
 	}
 	EVP_PKEY_free(pkey);
 	return ret;
-}
-
-static bool is_pem_key(const char *cert)
-{
-	return strstr(cert, "PRIVATE KEY---") != NULL;
-}
-
-const char *ssl_iostream_get_use_certificate_error(const char *cert)
-{
-	unsigned long err;
-
-	err = ERR_peek_error();
-	if (ERR_GET_LIB(err) != ERR_LIB_PEM ||
-	    ERR_GET_REASON(err) != PEM_R_NO_START_LINE)
-		return openssl_iostream_error();
-	else if (is_pem_key(cert)) {
-		return "The file contains a private key "
-			"(you've mixed ssl_cert and ssl_key settings)";
-	} else {
-		return "There is no certificate.";
-	}
 }
 
 static int ssl_ctx_use_certificate_chain(SSL_CTX *ctx, const char *cert)
@@ -379,9 +326,9 @@ ssl_iostream_context_set(struct ssl_iostream_context *ctx,
 	}
 
 	if (set->cert != NULL &&
-	    ssl_ctx_use_certificate_chain(ctx->ssl_ctx, set->cert) < 0) {
+	    ssl_ctx_use_certificate_chain(ctx->ssl_ctx, set->cert) == 0) {
 		*error_r = t_strdup_printf("Can't load SSL certificate: %s",
-			ssl_iostream_get_use_certificate_error(set->cert));
+			openssl_iostream_use_certificate_error(set->cert, NULL));
 		return -1;
 	}
 	if (set->key != NULL) {
@@ -433,6 +380,10 @@ ssl_proxy_ctx_get_pkey_ec_curve_name(const struct ssl_iostream_settings *set,
 		if ((eckey = EVP_PKEY_get1_EC_KEY(pkey)) != NULL &&
 		    (ecgrp = EC_KEY_get0_group(eckey)) != NULL)
 			nid = EC_GROUP_get_curve_name(ecgrp);
+		else {
+			/* clear errors added by the above calls */
+			openssl_iostream_clear_errors();
+		}
 		EVP_PKEY_free(pkey);
 	}
 
@@ -462,7 +413,12 @@ ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
 #ifdef SSL_CTRL_SET_ECDH_AUTO
 	/* OpenSSL >= 1.0.2 automatically handles ECDH temporary key parameter
 	   selection. */
-	SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
+	if (!SSL_CTX_set_ecdh_auto(ssl_ctx, 1)) {
+		/* shouldn't happen */
+		*error_r = t_strdup_printf("SSL_CTX_set_ecdh_auto() failed: %s",
+					   openssl_iostream_error());
+		return -1;
+	}
 #else
 	/* For OpenSSL < 1.0.2, ECDH temporary key parameter selection must be
 	   performed manually. Attempt to select the same curve as that used
@@ -509,6 +465,10 @@ ssl_iostream_context_init_common(struct ssl_iostream_context *ctx,
 #ifdef SSL_OP_NO_COMPRESSION
 	if (!set->compression)
 		ssl_ops |= SSL_OP_NO_COMPRESSION;
+#endif
+#ifdef SSL_OP_NO_TICKET
+	if (!set->tickets)
+		ssl_ops |= SSL_OP_NO_TICKET;
 #endif
 	SSL_CTX_set_options(ctx->ssl_ctx, ssl_ops);
 #ifdef SSL_MODE_RELEASE_BUFFERS

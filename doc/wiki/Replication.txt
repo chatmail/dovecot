@@ -207,4 +207,4 @@ Random things to remember:
     * v2.2.6+: If you're having trouble, verify that 'dovecot --hostdomain'
       returns different values for the servers.
 
-(This file was created from the wiki on 2015-10-02 04:48)
+(This file was created from the wiki on 2015-12-07 04:45)

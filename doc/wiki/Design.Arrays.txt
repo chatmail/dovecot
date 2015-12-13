@@ -106,4 +106,4 @@ Others
  * 'array_bsearch(array, key, cmp_func)' is a wrapper for 'bsearch()' also
    adding type safety, just like 'array_sort()'.
 
-(This file was created from the wiki on 2015-10-02 04:47)
+(This file was created from the wiki on 2015-12-07 04:45)

@@ -13,6 +13,10 @@
 static const char *const stopword_settings[] = {"stopwords_dir", TEST_STOPWORDS_DIR, NULL};
 static struct fts_language english_language = { .name = "en" };
 static struct fts_language french_language = { .name = "fr" };
+static struct fts_language norwegian_language = { .name = "no" };
+#if defined(HAVE_LIBICU) && defined(HAVE_FTS_STEMMER)
+static struct fts_language swedish_language = { .name = "sv" };
+#endif
 
 static void test_fts_filter_find(void)
 {
@@ -61,7 +65,8 @@ static void test_fts_filter_contractions_fr(void)
 		{ "d", "d" },
 		{ "qu'", NULL },
 		{ "j'adore", "adore" },
-		{ "quelqu'un", "quelqu'un" }
+		{ "quelqu'un", "quelqu'un" },
+		{ "l'esprit", "esprit" }
 	};
 	struct fts_filter *filter;
 	const char *error;
@@ -280,6 +285,54 @@ static void test_fts_filter_stopwords_fra(void)
 	test_end();
 }
 
+static void test_fts_filter_stopwords_no(void)
+{
+	struct fts_filter *filter;
+	const char *error;
+	int ret;
+
+	const char *input[] = {"og", "d\xC3\xA5", "medlemsstatane", "har",
+	                       "bunde", "seg", "til", "\xC3\xA5", "fremje",
+	                       "allmenn", "v\xC3\xB8rdnad", "for", "pakta",
+	                       "og", "halde", "seg", "etter", "menneskerettane",
+	                       "og", "den", "grunnleggjande", "fridomen", "i",
+	                       "samarbeid", "med", "Dei", "Sameinte",
+	                       "Nasjonane", NULL};
+
+	const char *output[] = {NULL, NULL, "medlemsstatane", NULL,
+	                       "bunde", NULL, NULL, NULL, "fremje",
+	                       "allmenn", "v\xC3\xB8rdnad", NULL, "pakta",
+	                       NULL, "halde", NULL, NULL, "menneskerettane",
+	                       NULL, NULL, "grunnleggjande", "fridomen", NULL,
+	                       "samarbeid", NULL, "Dei", "Sameinte",
+	                       "Nasjonane"};
+	const char **ip, **op;
+	const char *token;
+
+	test_begin("fts filter stopwords, Norwegian");
+	test_assert(fts_filter_create(fts_filter_stopwords, NULL, &norwegian_language, stopword_settings, &filter, &error) == 0);
+
+	ip = input;
+	op = output;
+	while (*ip != NULL) {
+		token = *ip;
+		ret = fts_filter_filter(filter, &token, &error);
+		if (ret <= 0) {
+			test_assert(ret == 0);
+			test_assert(*op == NULL);
+		} else {
+			test_assert(*op != NULL);
+			test_assert(strcmp(*ip, token)  == 0);
+		}
+		op++;
+		ip++;
+	}
+
+	fts_filter_unref(&filter);
+	test_assert(filter == NULL);
+	test_end();
+}
+
 static void test_fts_filter_stopwords_fail_lazy_init(void)
 {
 	const struct fts_language unknown = { .name = "bebobidoop" };
@@ -415,8 +468,8 @@ static void test_fts_filter_normalizer_swedish_short(void)
 	struct fts_filter *norm = NULL;
 	const char *input[] = {
 		"Vem",
-		"Å",
-		"ÅÄÖ",
+		"\xC3\x85",
+		"\xC3\x85\xC3\x84\xC3\x96",
 		"Vem kan segla f\xC3\xB6rutan vind?\n"
 		"\xC3\x85\xC3\x84\xC3\x96\xC3\xB6\xC3\xA4\xC3\xA5"
 	};
@@ -450,8 +503,8 @@ static void test_fts_filter_normalizer_swedish_short_default_id(void)
 	struct fts_filter *norm = NULL;
 	const char *input[] = {
 		"Vem",
-		"Å",
-		"ÅÄÖ",
+		"\xC3\x85",
+		"\xC3\x85\xC3\x84\xC3\x96",
 		"Vem kan segla f\xC3\xB6rutan vind?\n"
 		"\xC3\x85\xC3\x84\xC3\x96\xC3\xB6\xC3\xA4\xC3\xA5"
 	};
@@ -652,6 +705,119 @@ static void test_fts_filter_normalizer_stopwords_stemmer_eng(void)
 	test_assert(normalizer == NULL);
 	test_end();
 }
+
+static void test_fts_filter_stopwords_normalizer_stemmer_no(void)
+{
+	int ret;
+	struct fts_filter *normalizer;
+	struct fts_filter *stemmer;
+	struct fts_filter *filter;
+	const char *error;
+	const char *token = NULL;
+	const char * const tokens[] = {
+		/* Nynorsk*/
+		"Alle", "har", "plikter", "andsynes", "samfunnet", "d\xC3\xA5",
+		"personlegdomen", "til", "den", "einskilde", "einast", "der",
+		"kan", "f\xC3\xA5", "frie", "og", "fullgode",
+		"voksterk\xC3\xA5r",
+		/* Bokmal */
+		"Alle", "mennesker", "er", "f\xC3\xB8""dt", "frie", "og", "med",
+		"samme", "menneskeverd", "og", "menneskerettigheter", "De",
+		"er", "utstyrt", "med", "fornuft", "og", "samvittighet",
+		"og", "b\xC3\xB8r", "handle", "mot", "hverandre", "i",
+		"brorskapets", "\xC3\xA5nd", NULL};
+
+	const char * const bases[] = {
+		/* Nynorsk*/
+		"all", NULL, "plikt", "andsyn", "samfunn", NULL,
+		"personlegdom", NULL, NULL, "einskild", "ein", NULL, NULL,
+		"fa", "frie", NULL, "fullgod", "voksterk",
+		/* Bokmal */
+		"all", "mennesk", NULL, "f\xC3\xB8""dt", "frie", NULL, NULL,
+		NULL, "menneskeverd", NULL, "menneskerett", "de", NULL,
+		"utstyrt", NULL, "fornuft", NULL, "samvitt", NULL, "b\xC3\xB8r",
+		"handl", NULL, "hverandr", NULL, "brorskap", "and", NULL};
+	const char * const *tpp;
+	const char * const *bpp;
+
+	test_begin("fts filters with stopwords, default normalizer and stemming chained, Norwegian");
+
+	test_assert(fts_filter_create(fts_filter_stopwords, NULL, &norwegian_language, stopword_settings, &filter, &error) == 0);
+	test_assert(fts_filter_create(fts_filter_normalizer_icu, filter, NULL, NULL, &normalizer, &error) == 0);
+	test_assert(fts_filter_create(fts_filter_stemmer_snowball, normalizer, &norwegian_language, NULL, &stemmer, &error) == 0);
+
+	bpp = bases;
+	for (tpp = tokens; *tpp != NULL; tpp++) {
+		token = *tpp;
+		ret = fts_filter_filter(stemmer, &token, &error);
+		if (ret <= 0) {
+			test_assert(ret == 0);
+			test_assert(*bpp == NULL);
+		} else {
+			test_assert(*bpp != NULL);
+			test_assert(null_strcmp(*bpp, token) == 0);
+		}
+		bpp++;
+	}
+	fts_filter_unref(&stemmer);
+	fts_filter_unref(&normalizer);
+	fts_filter_unref(&filter);
+	test_assert(stemmer == NULL);
+	test_assert(filter == NULL);
+	test_assert(normalizer == NULL);
+	test_end();
+}
+
+static void test_fts_filter_stopwords_normalizer_stemmer_sv(void)
+{
+	int ret;
+	struct fts_filter *normalizer;
+	struct fts_filter *stemmer;
+	struct fts_filter *filter;
+	const char *error;
+	const char *token = NULL;
+	const char * const tokens[] = {
+		"Enär", "erkännandet", "av", "det", "inneboende", "värdet",
+		"hos", "alla", "medlemmar", "av", "människosläktet", "och",
+		"av", "deras", "lika", "och", "oförytterliga", "rättigheter",
+		"är", "grundvalen", "för", "frihet", "rättvisa", "och", "fred",
+		"i", "världen",	NULL};
+	const char * const bases[] = {
+		"enar", "erkan", NULL, NULL, "inneboend", "vardet", "hos", NULL,
+		"medlemm", NULL, "manniskoslaktet", NULL, NULL, NULL, "lik",
+		NULL, "oforytter", "ratt", NULL, "grundval", NULL, "frihet",
+		"rattvis", NULL, "fred", NULL, "varld", NULL};
+	const char * const *tpp;
+	const char * const *bpp;
+
+	test_begin("fts filters with stopwords, default normalizer and stemming chained, Swedish");
+
+
+	test_assert(fts_filter_create(fts_filter_stopwords, NULL, &swedish_language, stopword_settings, &filter, &error) == 0);
+	test_assert(fts_filter_create(fts_filter_normalizer_icu, filter, NULL, NULL, &normalizer, &error) == 0);
+	test_assert(fts_filter_create(fts_filter_stemmer_snowball, normalizer, &swedish_language, NULL, &stemmer, &error) == 0);
+
+	bpp = bases;
+	for (tpp = tokens; *tpp != NULL; tpp++) {
+		token = *tpp;
+		ret = fts_filter_filter(stemmer, &token, &error);
+		if (ret <= 0) {
+			test_assert(ret == 0);
+			test_assert(*bpp == NULL);
+		} else {
+			test_assert(*bpp != NULL);
+			test_assert(null_strcmp(*bpp, token) == 0);
+		}
+		bpp++;
+	}
+	fts_filter_unref(&stemmer);
+	fts_filter_unref(&normalizer);
+	fts_filter_unref(&filter);
+	test_assert(stemmer == NULL);
+	test_assert(filter == NULL);
+	test_assert(normalizer == NULL);
+	test_end();
+}
 #endif
 #endif
 
@@ -662,14 +828,14 @@ static void test_fts_filter_english_possessive(void)
 		"foo'",
 
 		"foo's",
-		"fooä's",
+		"foo\xC3\xA4's",
 		"foo'S",
 		"foos'S",
 		"foo's's",
 		"foo'ss",
 
 		"foo\xE2\x80\x99s",
-		"fooä\xE2\x80\x99s",
+		"foo\xC3\xA4\xE2\x80\x99s",
 		"foo\xE2\x80\x99S",
 		"foos\xE2\x80\x99S",
 		"foo\xE2\x80\x99s\xE2\x80\x99s",
@@ -679,14 +845,14 @@ static void test_fts_filter_english_possessive(void)
 		"foo'",
 
 		"foo",
-		"fooä",
+		"foo\xC3\xA4",
 		"foo",
 		"foos",
 		"foo's",
 		"foo'ss",
 
 		"foo",
-		"fooä",
+		"foo\xC3\xA4",
 		"foo",
 		"foos",
 		"foo\xE2\x80\x99s",
@@ -725,6 +891,7 @@ int main(void)
 		test_fts_filter_stopwords_eng,
 		test_fts_filter_stopwords_fin,
 		test_fts_filter_stopwords_fra,
+		test_fts_filter_stopwords_no,
 		test_fts_filter_stopwords_fail_lazy_init,
 #ifdef HAVE_FTS_STEMMER
 		test_fts_filter_stemmer_snowball_stem_english,
@@ -740,6 +907,8 @@ int main(void)
 		test_fts_filter_normalizer_invalid_id,
 #ifdef HAVE_FTS_STEMMER
 		test_fts_filter_normalizer_stopwords_stemmer_eng,
+		test_fts_filter_stopwords_normalizer_stemmer_no,
+		test_fts_filter_stopwords_normalizer_stemmer_sv,
 #endif
 #endif
 		test_fts_filter_english_possessive,

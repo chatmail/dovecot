@@ -20,6 +20,7 @@ void http_message_parser_init(struct http_message_parser *parser,
 {
 	memset(parser, 0, sizeof(*parser));
 	parser->input = input;
+	i_stream_ref(parser->input);
 	if (hdr_limits != NULL)
 		parser->header_limits = *hdr_limits;
 	parser->max_payload_size = max_payload_size;
@@ -34,6 +35,8 @@ void http_message_parser_deinit(struct http_message_parser *parser)
 		pool_unref(&parser->msg.pool);
 	if (parser->payload != NULL)
 		i_stream_unref(&parser->payload);
+	if (parser->input != NULL)
+		i_stream_unref(&parser->input);
 }
 
 void http_message_parser_restart(struct http_message_parser *parser,
@@ -392,7 +395,7 @@ http_istream_error_callback(const struct istream_sized_error_data *data,
 	i_assert(data->eof);
 	i_assert(data->v_offset + data->new_bytes < data->wanted_size);
 
-	return t_strdup_printf("Disconnected from server at offset %"PRIuUOFF_T
+	return t_strdup_printf("Disconnected while reading response payload at offset %"PRIuUOFF_T
 		" (wanted %"PRIuUOFF_T"): %s", data->v_offset + data->new_bytes,
 		data->wanted_size, io_stream_get_disconnect_reason(input, NULL));
 }

@@ -2,9 +2,9 @@
 
 #include "lib.h"
 #include "array.h"
-#include "fts-language.h"
-#include "strfuncs.h"
 #include "llist.h"
+#include "fts-language.h"
+
 
 #ifdef HAVE_LIBEXTTEXTCAT_TEXTCAT_H
 #  include <libexttextcat/textcat.h>
@@ -29,31 +29,70 @@ struct fts_language_list {
 	bool textcat_failed;
 };
 
-const struct fts_language fts_languages[] = {
-	{ "da" },
-	{ "de" },
-	{ "en" },
-	{ "es" },
-	{ "fi" },
-	{ "fr" },
-	{ "it" },
-	{ "nl" },
-	{ "pt" },
-	{ "ro" },
-	{ "ru" },
+pool_t fts_languages_pool;
+ARRAY_TYPE(fts_language) fts_languages;
+
+/*  ISO 639-1 alpha 2 codes for languages */
+const struct fts_language fts_languages_builtin [] = {
+	{ "da" }, /* Danish */
+	{ "de" }, /* German */
+	{ "en" }, /* English */
+	{ "es" }, /* Spanish */
+	{ "fi" }, /* Finnish */
+	{ "fr" }, /* French */
+	{ "it" }, /* Italian */
+	{ "nl" }, /* Dutch */
+	{ "no" }, /* Both Bokmal and Nynorsk are detected as Norwegian */
+	{ "pt" }, /* Portuguese */
+	{ "ro" }, /* Romanian */
+	{ "ru" }, /* Russian */
+	{ "sv" } /* Swedish */
 };
 
 const struct fts_language fts_language_data = {
 	"data"
 };
 
-const struct fts_language *fts_language_find(const char *name)
+void fts_languages_init(void)
 {
 	unsigned int i;
+	const struct fts_language *lp;
 
-	for (i = 0; i < N_ELEMENTS(fts_languages); i++) {
-		if (strcmp(fts_languages[i].name, name) == 0)
-			return &fts_languages[i];
+	fts_languages_pool = pool_alloconly_create("fts_language",
+	                                           sizeof(fts_languages_builtin));
+	p_array_init(&fts_languages, fts_languages_pool,
+	             N_ELEMENTS(fts_languages_builtin));
+	for (i = 0; i < N_ELEMENTS(fts_languages_builtin); i++){
+		lp = &fts_languages_builtin[i];
+		array_append(&fts_languages, &lp, 1);
+	}
+}
+
+void fts_languages_deinit(void)
+{
+	if (fts_languages_pool != NULL)
+		pool_unref(&fts_languages_pool);
+}
+
+void fts_language_register(const char *name)
+{
+	struct fts_language *lang;
+
+	if (fts_language_find(name) != NULL)
+		return;
+
+	lang = p_new(fts_languages_pool, struct fts_language, 1);
+	lang->name = p_strdup(fts_languages_pool, name);
+	array_append(&fts_languages, (const struct fts_language **)&lang, 1);
+}
+
+const struct fts_language *fts_language_find(const char *name)
+{
+	const struct fts_language *const *langp = NULL;
+
+	array_foreach(&fts_languages, langp) {
+		if (strcmp((*langp)->name, name) == 0)
+			return *langp;
 	}
 	return NULL;
 }
@@ -173,6 +212,10 @@ static bool fts_language_match_lists(struct fts_language_list *list,
 		/* name is <lang>-<optional country or characterset>-<encoding> 
 		   eg, fi--utf8 or pt-PT-utf8 */
 		name = t_strcut(candp[i].name, '-');
+
+		/* For Norwegian we treat both bokmal and nynorsk as "no". */
+		if (strcmp(name, "nb") == 0 || strcmp(name, "nn") == 0)
+			name = "no";
 		if ((*lang_r = fts_language_list_find(list, name)) != NULL)
 			return TRUE;
 	}

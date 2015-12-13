@@ -134,6 +134,80 @@ static void test_fts_language_detect_german(void)
 	test_end();
 }
 
+/* Detect Swedish */
+static void test_fts_language_detect_swedish(void)
+{
+	struct fts_language_list *lp = NULL;
+	const struct fts_language *lang_r = NULL;
+	const unsigned char swedish[]  =
+		"Artikel 1."\
+		"Alla m\xC3\xA4nniskor \xC3\xA4ro f\xC3\xB6""dda fria och lika"\
+		" i v\xC3\xA4rde och r\xC3\xA4ttigheter. De \xC3\xA4ro "\
+		"utrustade med f\xC3\xB6rnuft och samvete och b\xC3\xB6ra "\
+		"handla gentemot varandra i en anda av broderskap.";
+
+
+
+	const char names[] = "fi, de, sv, fr, en";
+	const char *unknown, *error;
+	test_begin("fts language detect Swedish");
+	test_assert(fts_language_list_init(settings, &lp, &error) == 0);
+	test_assert(fts_language_list_add_names(lp, names, &unknown) == TRUE);
+	test_assert(fts_language_detect(lp, swedish, sizeof(swedish)-1, &lang_r)
+	            == FTS_LANGUAGE_RESULT_OK);
+	test_assert(strcmp(lang_r->name, "sv") == 0);
+	fts_language_list_deinit(&lp);
+	test_end();
+}
+
+/* Detect Bokmal */
+static void test_fts_language_detect_bokmal(void)
+{
+	struct fts_language_list *lp = NULL;
+	const struct fts_language *lang_r = NULL;
+	const unsigned char bokmal[]  =
+		"Artikkel 1.\n"\
+		"Alle mennesker er f\xC3\xB8""dt frie og med samme menneskeverd"\
+		" og menneskerettigheter. De er utstyrt med fornuft og "\
+		"samvittighet og b\xC3\xB8r handle mot hverandre i "\
+		"brorskapets \xC3\xA5nd";
+
+	const char names[] = "fi, de, sv, no, fr, en";
+	const char *unknown, *error;
+	test_begin("fts language detect Bokmal as Norwegian");
+	test_assert(fts_language_list_init(settings, &lp, &error) == 0);
+	test_assert(fts_language_list_add_names(lp, names, &unknown) == TRUE);
+	test_assert(fts_language_detect(lp, bokmal, sizeof(bokmal)-1, &lang_r)
+	            == FTS_LANGUAGE_RESULT_OK);
+	test_assert(strcmp(lang_r->name, "no") == 0);
+	fts_language_list_deinit(&lp);
+	test_end();
+}
+
+/* Detect Nynorsk */
+static void test_fts_language_detect_nynorsk(void)
+{
+	struct fts_language_list *lp = NULL;
+	const struct fts_language *lang_r = NULL;
+	const unsigned char nynorsk[]  =
+		"Artikkel 1.\n"\
+		"Alle menneske er f\xC3\xB8""dde til fridom og med same "\
+		"menneskeverd og menneskerettar. Dei har f\xC3\xA5tt fornuft "\
+		"og samvit og skal leve med kvarandre som br\xC3\xB8r.";
+
+
+	const char names[] = "fi, de, sv, no, fr, en";
+	const char *unknown, *error;
+	test_begin("fts language detect Nynorsk as Norwegian");
+	test_assert(fts_language_list_init(settings, &lp, &error) == 0);
+	test_assert(fts_language_list_add_names(lp, names, &unknown) == TRUE);
+	test_assert(fts_language_detect(lp, nynorsk, sizeof(nynorsk)-1, &lang_r)
+	            == FTS_LANGUAGE_RESULT_OK);
+	test_assert(strcmp(lang_r->name, "no") == 0);
+	fts_language_list_deinit(&lp);
+	test_end();
+}
+
 /* Detect Finnish as English */
 static void test_fts_language_detect_finnish_as_english(void)
 {
@@ -204,18 +278,46 @@ static void test_fts_language_detect_unknown(void)
 	fts_language_list_deinit(&lp);
 	test_end();
 }
+static void test_fts_language_find_builtin(void)
+{
+	const struct fts_language *lp;
+	test_begin("fts language find built-in");
+	lp = fts_language_find("en");
+	i_assert(lp != NULL);
+	test_assert(strcmp(lp->name, "en") == 0);
+	test_end();
+}
+static void test_fts_language_register(void)
+{
+	const struct fts_language *lp;
+	test_begin("fts language register");
+	fts_language_register("jp");
+	lp = fts_language_find("jp");
+	i_assert(lp != NULL);
+	test_assert(strcmp(lp->name, "jp") == 0);
+	test_end();
+}
 
 int main(void)
 {
+	int ret;
 	static void (*test_functions[])(void) = {
 		test_fts_language_detect_finnish,
 		test_fts_language_detect_english,
 		test_fts_language_detect_french,
 		test_fts_language_detect_german,
+		test_fts_language_detect_swedish,
+		test_fts_language_detect_bokmal,
+		test_fts_language_detect_nynorsk,
 		test_fts_language_detect_finnish_as_english,
 		test_fts_language_detect_na,
 		test_fts_language_detect_unknown,
+		test_fts_language_find_builtin,
+		test_fts_language_register,
 		NULL
 	};
-	return test_run(test_functions);
+	fts_languages_init();
+	ret = test_run(test_functions);
+	fts_languages_deinit();
+	return ret;
 }

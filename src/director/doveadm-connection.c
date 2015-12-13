@@ -50,7 +50,7 @@ static void doveadm_cmd_host_list(struct doveadm_connection *conn)
 		str_printfa(str, "%s\t%u\t%u\t",
 			    net_ip2addr(&(*hostp)->ip), (*hostp)->vhost_count,
 			    (*hostp)->user_count);
-		str_append_tabescaped(str, (*hostp)->tag);
+		str_append_tabescaped(str, mail_host_get_tag(*hostp));
 		str_printfa(str, "\t%c\t%ld", (*hostp)->down ? 'D' : 'U',
 			    (long)(*hostp)->last_updown_change);
 		str_append_c(str, '\n');
@@ -282,9 +282,13 @@ doveadm_cmd_host_set_or_update(struct doveadm_connection *conn, const char *line
 			return TRUE;
 		}
 		host = mail_host_add_ip(dir->mail_hosts, &ip, tag);
+	} else if (host->desynced) {
+		o_stream_nsend_str(conn->output,
+			"host is already being updated - try again later\n");
+		return TRUE;
 	}
 	if (vhost_count != UINT_MAX)
-		mail_host_set_vhost_count(dir->mail_hosts, host, vhost_count);
+		mail_host_set_vhost_count(host, vhost_count);
 	/* NOTE: we don't support changing a tag for an existing host.
 	   it needs to be removed first. otherwise it would be a bit ugly to
 	   handle. */
@@ -323,9 +327,14 @@ doveadm_cmd_host_updown(struct doveadm_connection *conn, bool down,
 		o_stream_nsend_str(conn->output, "NOTFOUND\n");
 		return TRUE;
 	}
-	if (host->down != down) {
-		mail_host_set_down(conn->dir->mail_hosts, host,
-				   down, ioloop_time);
+	if (host->down == down)
+		;
+	else if (host->desynced) {
+		o_stream_nsend_str(conn->output,
+			"host is already being updated - try again later\n");
+		return TRUE;
+	} else {
+		mail_host_set_down(host, down, ioloop_time);
 		director_update_host(conn->dir, conn->dir->self_host,
 				     NULL, host);
 	}
@@ -413,7 +422,8 @@ director_host_reset_users(struct director *dir, struct director_host *src,
 		if (user->host != host)
 			continue;
 		new_host = mail_host_get_by_hash(dir->mail_hosts,
-						 user->username_hash, host->tag);
+						 user->username_hash,
+						 mail_host_get_tag(host));
 		if (new_host != host) T_BEGIN {
 			director_move_user(dir, src, NULL,
 					   user->username_hash, new_host);
@@ -500,7 +510,7 @@ doveadm_cmd_user_lookup(struct doveadm_connection *conn, const char *line)
 	host = mail_host_get_by_hash(conn->dir->orig_config_hosts,
 				     username_hash, tag);
 	if (host == NULL)
-		str_append(str, "\t");
+		str_append(str, "\t\n");
 	else
 		str_printfa(str, "\t%s\n", net_ip2addr(&host->ip));
 	o_stream_nsend(conn->output, str_data(str), str_len(str));

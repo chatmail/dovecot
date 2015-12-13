@@ -14,7 +14,9 @@ stopwordsdir = $(datadir)/${PACKAGE_TARNAME}/stopwords
 dist_stopwords_DATA = \
 	stopwords_en.txt \
 	stopwords_fi.txt \
-	stopwords_fr.txt
+	stopwords_fr.txt \
+	stopwords_no.txt \
+	stopwords_sv.txt
 
 BUILT_SOURCES = word-boundary-data.c word-break-data.c
 
@@ -69,6 +71,7 @@ libfts_la_SOURCES = \
 	fts-filter-stopwords.c \
 	fts-filter-stemmer-snowball.c \
 	fts-language.c \
+	fts-library.c \
 	fts-tokenizer.c \
 	fts-tokenizer-address.c \
 	fts-tokenizer-generic.c \
@@ -80,6 +83,7 @@ headers = \
 	fts-filter-private.h \
 	fts-icu.h \
 	fts-language.h \
+	fts-library.h \
 	fts-tokenizer.h \
 	fts-tokenizer-private.h \
 	fts-tokenizer-generic-private.h

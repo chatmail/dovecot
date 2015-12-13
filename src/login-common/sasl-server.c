@@ -121,6 +121,7 @@ master_auth_callback(const struct master_auth_reply *reply, void *context)
 static void master_send_request(struct anvil_request *anvil_request)
 {
 	struct client *client = anvil_request->client;
+	struct master_auth_request_params params;
 	struct master_auth_request req;
 	const unsigned char *data;
 	size_t size;
@@ -151,8 +152,14 @@ static void master_send_request(struct anvil_request *anvil_request)
 
 	client->auth_finished = ioloop_time;
 	client->master_auth_id = req.auth_id;
-	master_auth_request(master_auth, client->fd, &req, buf->data,
-			    master_auth_callback, client, &client->master_tag);
+
+	memset(&params, 0, sizeof(params));
+	params.client_fd = client->fd;
+	params.socket_path = client->postlogin_socket_path;
+	params.request = req;
+	params.data = buf->data;
+	master_auth_request_full(master_auth, &params, master_auth_callback,
+				 client, &client->master_tag);
 }
 
 static void ATTR_NULL(1)
@@ -240,6 +247,7 @@ authenticate_callback(struct auth_client_request *request,
 		client->auth_request = NULL;
 		client->auth_successes++;
 		client->auth_passdb_args = p_strarray_dup(client->pool, args);
+		client->postlogin_socket_path = NULL;
 
 		nologin = FALSE;
 		for (i = 0; args[i] != NULL; i++) {
@@ -255,6 +263,9 @@ authenticate_callback(struct auth_client_request *request,
 				i_free(client->virtual_auth_user);
 				client->virtual_auth_user =
 					i_strdup(args[i] + 10);
+			} else if (strncmp(args[i], "postlogin_socket=", 17) == 0) {
+				client->postlogin_socket_path =
+					p_strdup(client->pool, args[i] + 17);
 			} else if (strcmp(args[i], "nologin") == 0 ||
 				   strcmp(args[i], "proxy") == 0) {
 				/* user can't login */

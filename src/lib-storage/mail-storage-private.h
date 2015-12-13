@@ -271,6 +271,11 @@ struct mailbox_index_vsize {
 	uint32_t message_count;
 };
 
+struct mailbox_index_first_saved {
+	uint32_t uid;
+	uint32_t timestamp;
+};
+
 struct mailbox {
 	const char *name;
 	/* mailbox's virtual name (from mail_namespace_get_vname()) */
@@ -373,6 +378,8 @@ struct mailbox {
 	unsigned int synced:1;
 	/* Updating cache file is disabled */
 	unsigned int mail_cache_disabled:1;
+	/* Update first_saved field to mailbox list index. */
+	unsigned int update_first_saved:1;
 };
 
 struct mail_vfuncs {

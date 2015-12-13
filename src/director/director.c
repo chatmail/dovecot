@@ -289,8 +289,9 @@ void director_set_ring_synced(struct director *dir)
 		timeout_remove(&dir->to_handshake_warning);
 	if (dir->ring_handshake_warning_sent) {
 		i_warning("Ring is synced, continuing delayed requests "
-			  "(syncing took %d secs)",
-			  (int)(ioloop_time - dir->ring_last_sync_time));
+			  "(syncing took %d secs, hosts_hash=%u)",
+			  (int)(ioloop_time - dir->ring_last_sync_time),
+			  mail_hosts_hash(dir->mail_hosts));
 		dir->ring_handshake_warning_sent = FALSE;
 	}
 
@@ -314,12 +315,13 @@ void director_set_ring_synced(struct director *dir)
 		timeout_remove(&dir->to_sync);
 	dir->ring_synced = TRUE;
 	dir->ring_last_sync_time = ioloop_time;
+	mail_hosts_set_synced(dir->mail_hosts);
 	director_set_state_changed(dir);
 }
 
 void director_sync_send(struct director *dir, struct director_host *host,
 			uint32_t seq, unsigned int minor_version,
-			unsigned int timestamp)
+			unsigned int timestamp, unsigned int hosts_hash)
 {
 	string_t *str;
 
@@ -329,7 +331,8 @@ void director_sync_send(struct director *dir, struct director_host *host,
 	if (minor_version > 0 &&
 	    director_connection_get_minor_version(dir->right) > 0) {
 		/* only minor_version>0 supports extra parameters */
-		str_printfa(str, "\t%u\t%u", minor_version, timestamp);
+		str_printfa(str, "\t%u\t%u\t%u", minor_version,
+			    timestamp, hosts_hash);
 	}
 	str_append_c(str, '\n');
 	director_connection_send(dir->right, str_c(str));
@@ -347,7 +350,8 @@ bool director_resend_sync(struct director *dir)
 		/* send a new SYNC in case the previous one got dropped */
 		dir->self_host->last_sync_timestamp = ioloop_time;
 		director_sync_send(dir, dir->self_host, dir->sync_seq,
-				   DIRECTOR_VERSION_MINOR, ioloop_time);
+				   DIRECTOR_VERSION_MINOR, ioloop_time,
+				   mail_hosts_hash(dir->mail_hosts));
 		if (dir->to_sync != NULL)
 			timeout_reset(dir->to_sync);
 		return TRUE;
@@ -410,7 +414,8 @@ static void director_sync(struct director *dir)
 		director_connection_set_synced(dir->left, FALSE);
 	director_connection_set_synced(dir->right, FALSE);
 	director_sync_send(dir, dir->self_host, dir->sync_seq,
-			   DIRECTOR_VERSION_MINOR, ioloop_time);
+			   DIRECTOR_VERSION_MINOR, ioloop_time,
+			   mail_hosts_hash(dir->mail_hosts));
 }
 
 void director_sync_freeze(struct director *dir)
@@ -513,14 +518,13 @@ void director_ring_remove(struct director_host *removed_host,
 				     DIRECTOR_VERSION_RING_REMOVE, cmd);
 }
 
-void director_update_host(struct director *dir, struct director_host *src,
-			  struct director_host *orig_src,
-			  struct mail_host *host)
+static void
+director_send_host(struct director *dir, struct director_host *src,
+		   struct director_host *orig_src,
+		   struct mail_host *host)
 {
+	const char *host_tag = mail_host_get_tag(host);
 	string_t *str;
-
-	/* update state in case this is the first mail host being added */
-	director_set_state_changed(dir);
 
 	if (orig_src == NULL) {
 		orig_src = dir->self_host;
@@ -532,22 +536,57 @@ void director_update_host(struct director *dir, struct director_host *src,
 		    net_ip2addr(&orig_src->ip), orig_src->port,
 		    orig_src->last_seq,
 		    net_ip2addr(&host->ip), host->vhost_count);
-	if (dir->ring_min_version >= DIRECTOR_VERSION_TAGS) {
+	if (dir->ring_min_version >= DIRECTOR_VERSION_TAGS_V2) {
 		str_append_c(str, '\t');
-		str_append_tabescaped(str, host->tag);
-	} else if (host->tag[0] != '\0' &&
-		   dir->ring_min_version < DIRECTOR_VERSION_TAGS) {
-		i_error("Ring has directors that don't support tags - removing host %s with tag '%s'",
-			net_ip2addr(&host->ip), host->tag);
+		str_append_tabescaped(str, host_tag);
+	} else if (host_tag[0] != '\0' &&
+		   dir->ring_min_version < DIRECTOR_VERSION_TAGS_V2) {
+		if (dir->ring_min_version < DIRECTOR_VERSION_TAGS) {
+			i_error("Ring has directors that don't support tags - removing host %s with tag '%s'",
+				net_ip2addr(&host->ip), host_tag);
+		} else {
+			i_error("Ring has directors that support mixed versions of tags - removing host %s with tag '%s'",
+				net_ip2addr(&host->ip), host_tag);
+		}
 		director_remove_host(dir, NULL, NULL, host);
 		return;
 	}
 	if (dir->ring_min_version >= DIRECTOR_VERSION_UPDOWN) {
-		str_printfa(str, "\t%c%ld", host->down ? 'D' : 'U',
+		str_printfa(str, "\t%c%ld\t", host->down ? 'D' : 'U',
 			    (long)host->last_updown_change);
+		/* add any further version checks here - these directors ignore
+		   any extra unknown arguments */
+		if (host->hostname != NULL)
+			str_append_tabescaped(str, host->hostname);
 	}
 	str_append_c(str, '\n');
 	director_update_send(dir, src, str_c(str));
+}
+
+void director_resend_hosts(struct director *dir)
+{
+	struct mail_host *const *hostp;
+
+	array_foreach(mail_hosts_get(dir->mail_hosts), hostp)
+		director_send_host(dir, dir->self_host, NULL, *hostp);
+}
+
+void director_update_host(struct director *dir, struct director_host *src,
+			  struct director_host *orig_src,
+			  struct mail_host *host)
+{
+	/* update state in case this is the first mail host being added */
+	director_set_state_changed(dir);
+
+	dir_debug("Updating host %s vhost_count=%u "
+		  "down=%d last_updown_change=%ld (hosts_hash=%u)",
+		  net_ip2addr(&host->ip), host->vhost_count, host->down,
+		  (long)host->last_updown_change,
+		  mail_hosts_hash(dir->mail_hosts));
+
+	director_send_host(dir, src, orig_src, host);
+
+	host->desynced = TRUE;
 	director_sync(dir);
 }
 
@@ -568,7 +607,7 @@ void director_remove_host(struct director *dir, struct director_host *src,
 	}
 
 	user_directory_remove_host(dir->users, host);
-	mail_host_remove(dir->mail_hosts, host);
+	mail_host_remove(host);
 	director_sync(dir);
 }
 

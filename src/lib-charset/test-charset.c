@@ -66,10 +66,18 @@ static void test_charset_iconv(void)
 		const char *output;
 		enum charset_result result;
 	} tests[] = {
-		{ "ISO-8859-1", "p\xE4\xE4", "pää", CHARSET_RET_OK }
+		{ "ISO-8859-1", "p\xE4\xE4", "p\xC3\xA4\xC3\xA4", CHARSET_RET_OK },
+		{ "UTF-7", "+AOQA5AD2AOQA9gDkAPYA5AD2AOQA9gDkAPYA5AD2AOQA9gDkAPYA5AD2AOQA9gDkAPYA5AD2AOQA9gDkAPYA5AD2AOQA9gDk",
+		  "\xC3\xA4\xC3\xA4\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4"
+		  "\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4"
+		  "\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4"
+		  "\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4"
+		  "\xC3\xB6\xC3\xA4\xC3\xB6\xC3\xA4", CHARSET_RET_OK }
 	};
 	string_t *str = t_str_new(128);
+	struct charset_translation *trans;
 	enum charset_result result;
+	size_t pos, left, limit, len;
 	unsigned int i;
 
 	test_begin("charset iconv");
@@ -79,6 +87,21 @@ static void test_charset_iconv(void)
 						    tests[i].input, str, &result) == 0, i);
 		test_assert_idx(strcmp(tests[i].output, str_c(str)) == 0, i);
 		test_assert_idx(result == tests[i].result, i);
+
+		str_truncate(str, 0);
+		test_assert_idx(charset_to_utf8_begin(tests[i].charset, NULL, &trans) == 0, i);
+		len = strlen(tests[i].input);
+		for (pos = 0, limit = 1; limit <= len; pos += left, limit++) {
+			left = limit - pos;
+			result = charset_to_utf8(trans, (const void *)(tests[i].input + pos),
+						 &left, str);
+			if (result != CHARSET_RET_INCOMPLETE_INPUT &&
+			    result != CHARSET_RET_OK)
+				break;
+		}
+		test_assert_idx(strcmp(tests[i].output, str_c(str)) == 0, i);
+		test_assert_idx(result == tests[i].result, i);
+		charset_to_utf8_end(&trans);
 	}
 	/* Use //IGNORE just to force handling to be done by iconv
 	   instead of our own UTF-8 routines. */
@@ -107,6 +130,28 @@ static void test_charset_iconv_crashes(void)
 	}
 	test_end();
 }
+
+static void test_charset_iconv_utf7_state(void)
+{
+	struct charset_translation *trans;
+	string_t *str = t_str_new(32);
+	unsigned char nextbuf[5+CHARSET_MAX_PENDING_BUF_SIZE+1];
+	size_t size;
+
+	test_begin("charset iconv utf7 state");
+	test_assert(charset_to_utf8_begin("UTF-7", NULL, &trans) == 0);
+	size = 2;
+	test_assert(charset_to_utf8(trans, (const void *)"a+", &size, str) == CHARSET_RET_INCOMPLETE_INPUT);
+	test_assert(strcmp(str_c(str), "a") == 0);
+	test_assert(size == 1);
+	memset(nextbuf, '?', sizeof(nextbuf));
+	memcpy(nextbuf, "+AOQ-", 5);
+	size = sizeof(nextbuf);
+	test_assert(charset_to_utf8(trans, nextbuf, &size, str) == CHARSET_RET_OK);
+	test_assert(strcmp(str_c(str), "a\xC3\xA4???????????") == 0);
+	charset_to_utf8_end(&trans);
+	test_end();
+}
 #endif
 
 int main(void)
@@ -117,6 +162,7 @@ int main(void)
 #ifdef HAVE_ICONV
 		test_charset_iconv,
 		test_charset_iconv_crashes,
+		test_charset_iconv_utf7_state,
 #endif
 		NULL
 	};

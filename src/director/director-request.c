@@ -111,7 +111,7 @@ static void director_request_timeout(struct director *dir)
 
 		array_delete(&dir->pending_requests, 0, 1);
 		T_BEGIN {
-			request->callback(NULL, errormsg, request->context);
+			request->callback(NULL, NULL, errormsg, request->context);
 		} T_END;
 		director_request_free(request);
 	}
@@ -219,6 +219,7 @@ director_request_existing(struct director_request *request, struct user *user,
 	if (user->host == host) {
 		/* doesn't matter, other directors would
 		   assign the user the same way regardless */
+		dir_debug("request: %u would be weak, but host doesn't change", request->username_hash);
 		return TRUE;
 	}
 
@@ -307,14 +308,16 @@ bool director_request_continue(struct director_request *request)
 		}
 		user = user_directory_add(dir->users, request->username_hash,
 					  host, ioloop_time);
-		dir_debug("request: %u added timeout to %u",
-			  request->username_hash, user->timestamp);
+		dir_debug("request: %u added timeout to %u (hosts_hash=%u)",
+			  request->username_hash, user->timestamp,
+			  mail_hosts_hash(dir->mail_hosts));
 	}
 
 	i_assert(!user->weak);
 	director_update_user(dir, dir->self_host, user);
 	T_BEGIN {
-		request->callback(&user->host->ip, NULL, request->context);
+		request->callback(&user->host->ip, user->host->hostname,
+				  NULL, request->context);
 	} T_END;
 	director_request_free(request);
 	return TRUE;

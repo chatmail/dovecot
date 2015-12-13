@@ -20,6 +20,22 @@ put it in "quotes". The mailbox settings are:
    mailbox. There are no validity checks, so you could specify anything you
    want in here, but it's not a good idea to use other than the standard ones
    specified in the RFC.
+ * autoexpunge=<time>: (v2.2.20+) Automatically at user deinitialization
+   expunge all mails in this mailbox whose saved-timestamp is older than<time>
+   (e.g. autoexpunge=30d). This removes the need for <expire plugin>
+   [Plugins.Expire.txt] if you don't care that the expunging may not always
+   happen in time.
+    * For IMAP and POP3 this happens after the client is already disconnected.
+    * For LMTP this happens when the user's mail delivery is finished. Note
+      that if there are multiple recipients this may delay delivering the mails
+      to the other recipients.
+    * Also doveadm and other processes verify this, which may be unnecessary.
+      So it may be better to explicitly enable this only inside protocol imap,
+      pop3 and maybe lmtp. You can do this with e.g.:'protocol imap { namespace
+      inbox { mailbox Spam { autoexpunge = 10d } } }'
+    * mailbox_list_index=yes is highly recommended when using this setting, as
+      it avoids actually opening the mailbox to see if anything needs to be
+      expunged.
 
 ---%<-------------------------------------------------------------------------
 namespace inbox {
@@ -54,4 +70,4 @@ names.
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-10-02 04:47)
+(This file was created from the wiki on 2015-12-07 04:45)
