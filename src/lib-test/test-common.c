@@ -12,12 +12,6 @@
 static volatile bool expecting_fatal = FALSE;
 static jmp_buf fatal_jmpbuf;
 
-#include <setjmp.h> /* for fatal tests */
-
-/* To test the firing of i_assert, we need non-local jumps, i.e. setjmp */
-static volatile bool expecting_fatal = FALSE;
-static jmp_buf fatal_jmpbuf;
-
 #define OUT_NAME_ALIGN 70
 
 static char *test_prefix;

@@ -252,7 +252,6 @@ void http_client_queue_connection_setup(struct http_client_queue *queue)
 		num_requests);
 
 
-
 	/* create/get peer */
 	peer = http_client_peer_get(queue->client, addr);
 	http_client_peer_link_queue(peer, queue);
@@ -307,9 +306,6 @@ http_client_queue_connection_success(struct http_client_queue *queue,
 		queue->ips_connect_start_idx =
 			http_client_host_get_ip_idx(queue->host, &addr->a.tcp.ip);
 	}
-
-	/* reset attempt counter */
-	queue->connect_attempts = 0;
 
 	/* reset attempt counter */
 	queue->connect_attempts = 0;

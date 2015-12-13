@@ -326,6 +326,7 @@ static const char *client_get_disconnect_reason(struct client *client)
 	}
 	return io_stream_get_disconnect_reason(client->input, client->output);
 }
+
 void client_disconnect(struct client *client, const char *prefix,
 		       const char *reason)
 {

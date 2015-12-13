@@ -1226,8 +1226,6 @@ static void virtual_sync_backend_map_uids(struct virtual_sync_context *ctx)
 
 		if (bbox == NULL || bbox->mailbox_id != vrec->mailbox_id) {
 			/* add the rest of the newly seen messages */
-			i_assert(j == uidmap_count ||
-				 bbox->search_result != NULL);
 			for (; j < uidmap_count; j++) {
 				add_rec.rec.real_uid = uidmap[j].real_uid;
 				array_append(&ctx->all_adds, &add_rec, 1);

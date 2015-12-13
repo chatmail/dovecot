@@ -458,7 +458,6 @@ void client_send_tagline(struct client_command_context *cmd, const char *data)
 {
 	struct client *client = cmd->client;
 	const char *tag = cmd->tag;
-	int time_msecs;
 
 	if (client->output->closed || cmd->cancel)
 		return;

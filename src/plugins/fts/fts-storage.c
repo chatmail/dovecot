@@ -14,7 +14,6 @@
 #include "fts-tokenizer.h"
 #include "fts-indexer.h"
 #include "fts-build-mail.h"
-#include "fts-search-args.h"
 #include "fts-search-serialize.h"
 #include "fts-plugin.h"
 #include "fts-storage.h"

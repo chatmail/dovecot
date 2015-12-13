@@ -1370,7 +1370,6 @@ dsync_mailbox_trees_sync_init(struct dsync_mailbox_tree *local_tree,
 {
 	struct dsync_mailbox_tree_sync_ctx *ctx;
 	pool_t pool;
-	bool changed;
 
 	i_assert(hash_table_is_created(local_tree->guid_hash));
 	i_assert(hash_table_is_created(remote_tree->guid_hash));

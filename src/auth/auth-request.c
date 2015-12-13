@@ -1337,11 +1337,6 @@ auth_request_validate_networks(struct auth_request *request,
 			break;
 		}
 
-		if (strcmp(*net, "local") == 0 && request->remote_ip.family == 0) {
-			found = TRUE;
-			break;
-		}
-
 		if (net_parse_range(*net, &net_ip, &bits) < 0) {
 			auth_request_log_info(request, AUTH_SUBSYS_DB,
 				"%s: Invalid network '%s'", name, *net);

@@ -31,8 +31,6 @@
 
 #define DOVEADM_MAIL_CMD_INPUT_TIMEOUT_MSECS (5*60*1000)
 
-#define DOVEADM_MAIL_CMD_INPUT_TIMEOUT_MSECS (5*60*1000)
-
 ARRAY_TYPE(doveadm_mail_cmd) doveadm_mail_cmds;
 void (*hook_doveadm_mail_init)(struct doveadm_mail_cmd_context *ctx);
 struct doveadm_mail_cmd_module_register

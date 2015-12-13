@@ -753,11 +753,6 @@ mail_storage_service_var_expand(struct mail_storage_service_ctx *ctx,
 		   func_table, user);
 }
 
-void mail_storage_service_io_deactivate(struct mail_storage_service_ctx *ctx)
-{
-	i_set_failure_prefix("%s", ctx->default_log_prefix);
-}
-
 static void
 mail_storage_service_init_log(struct mail_storage_service_ctx *ctx,
 			      struct mail_storage_service_user *user,

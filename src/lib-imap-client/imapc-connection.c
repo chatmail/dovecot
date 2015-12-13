@@ -2089,12 +2089,6 @@ bool imapc_command_connection_is_selected(struct imapc_command *cmd)
 		cmd->conn->selecting_box != NULL;
 }
 
-bool imapc_command_connection_is_selected(struct imapc_command *cmd)
-{
-	return cmd->conn->selected_box != NULL ||
-		cmd->conn->selecting_box != NULL;
-}
-
 void imapc_command_send(struct imapc_command *cmd, const char *cmd_str)
 {
 	unsigned int len = strlen(cmd_str);

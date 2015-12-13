@@ -25,10 +25,6 @@
 #  error LOGIN_MAX_INBUF_SIZE too short to fit all ID command parameters
 #endif
 
-#if LOGIN_MAX_INBUF_SIZE < 1024+2
-#  error LOGIN_MAX_INBUF_SIZE too short to fit all ID command parameters
-#endif
-
 /* maximum length for IMAP command line. */
 #define MAX_IMAP_LINE 8192
 

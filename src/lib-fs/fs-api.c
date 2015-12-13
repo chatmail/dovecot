@@ -593,7 +593,6 @@ int fs_write(struct fs_file *file, const void *data, size_t size)
 {
 	int ret;
 
-	file->fs->stats.write_count++;
 	if (file->fs->v.write != NULL) {
 		fs_file_timing_start(file, FS_OP_WRITE);
 		T_BEGIN {
