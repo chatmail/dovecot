@@ -238,4 +238,4 @@ After this you have to place 'dovecot-acl' files in every mailbox/folder below
 'acl_shared_dict' setting is not relevant for public mailboxes (only for
 shared).
 
-(This file was created from the wiki on 2015-12-07 04:45)
+(This file was created from the wiki on 2015-12-11 04:46)
