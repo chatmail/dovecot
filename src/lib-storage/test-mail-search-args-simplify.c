@@ -11,6 +11,16 @@ struct {
 	const char *input;
 	const char *output;
 } tests[] = {
+	{ "ALL", "ALL" },
+	{ "NOT ALL", "NOT ALL" },
+	{ "ALL NOT ALL", "NOT ALL" },
+	{ "ALL NOT ALL TEXT foo", "NOT ALL" },
+	{ "OR ALL NOT ALL", "ALL" },
+	{ "OR ALL OR NOT ALL TEXT foo", "ALL" },
+	{ "OR ALL OR TEXT foo TEXT bar", "ALL" },
+	{ "OR TEXT FOO ( ALL NOT ALL )", "TEXT FOO" },
+	{ "TEXT FOO OR ALL NOT ALL", "TEXT FOO" },
+
 	{ "TEXT foo", "TEXT foo" },
 	{ "( TEXT foo )", "TEXT foo" },
 	{ "( ( TEXT foo ) )", "TEXT foo" },
@@ -97,6 +107,16 @@ struct {
 	{ "TEXT foo BODY foo", "TEXT foo BODY foo" },
 	{ "OR ( TEXT foo OR TEXT foo TEXT foo ) ( TEXT foo ( TEXT foo ) )", "TEXT foo" },
 
+	/* value="" tests */
+	{ "HEADER foo ", "HEADER FOO \"\"" },
+	{ "SUBJECT ", "SUBJECT \"\"" },
+	{ "BODY ", "ALL" },
+	{ "TEXT ", "ALL" },
+	{ "HEADER foo .", "HEADER FOO ." },
+	{ "SUBJECT .", "SUBJECT ." },
+	{ "BODY .", "BODY ." },
+	{ "TEXT .", "TEXT ." },
+
 	/* OR: drop redundant args */
 	{ "OR ( TEXT common1 TEXT unique1 ) TEXT common1", "TEXT common1" },
 	{ "OR ( TEXT unique1 TEXT common1 ) TEXT common1", "TEXT common1" },
@@ -182,10 +202,24 @@ static void test_mail_search_args_simplify(void)
 	test_end();
 }
 
+static void test_mail_search_args_simplify_empty_lists(void)
+{
+	struct mail_search_args *args;
+
+	test_begin("mail search args simplify empty args");
+
+	args = mail_search_build_init();
+	mail_search_args_simplify(args);
+	mail_search_args_unref(&args);
+
+	test_end();
+}
+
 int main(void)
 {
 	static void (*test_functions[])(void) = {
 		test_mail_search_args_simplify,
+		test_mail_search_args_simplify_empty_lists,
 		NULL
 	};
 

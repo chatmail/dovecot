@@ -3,7 +3,7 @@ Contents
 
  1. Compiling Dovecot From Sources
 
- 2. Compiling Dovecot From Mercurial
+ 2. Compiling Dovecot From Git
 
  3. Compiling Dovecot with rpmbuild (Mandriva, RedHat, etc.)
 
@@ -57,13 +57,13 @@ You'll need to create two users for Dovecot's internal use:
 Both of them should also have their own *dovenull* and *dovecot* groups. See
 <UserIds.txt> for more information.
 
-Compiling Dovecot From Mercurial
-================================
+Compiling Dovecot From Git
+==========================
 
-If you got Dovecot from Mercurial, for instance with
+If you got Dovecot from Git, for instance with
 
 ---%<-------------------------------------------------------------------------
-hg clone http://hg.dovecot.org/dovecot-2.1/
+git clone https://github.com/dovecot/core.git dovecot
 ---%<-------------------------------------------------------------------------
 
 you will first need to run './autogen.sh' to generate the 'configure' script
@@ -90,7 +90,7 @@ sudo make install
 For later updates, you can use:
 
 ---%<-------------------------------------------------------------------------
-hg pull -u
+git pull
 make
 sudo make install
 ---%<-------------------------------------------------------------------------
@@ -364,4 +364,4 @@ The plugin filename is prefixed with a number which specifies the order in
 which the plugins are loaded. This is important if one plugin depends on
 another.
 
-(This file was created from the wiki on 2015-12-07 04:45)
+(This file was created from the wiki on 2015-12-11 04:45)
