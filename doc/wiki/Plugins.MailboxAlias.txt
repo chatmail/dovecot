@@ -1,12 +1,13 @@
 Mailbox alias plugin
 ====================
 
-Requires v2.1.10+. This plugin can be used to configure mailbox aliases, which
-on the filesystem level are symlinks to other mailboxes. This doesn't magically
-solve the problem of showing clients e.g. multiple Sent mailboxes, but it can
-be used to make sure that all of the different variants will have the same
-mails in them. Unfortunately it also means that some clients will download the
-same mails to local cache multiple times.
+Requires v2.1.10+ (and currently mailbox_list_index=no). This plugin can be
+used to configure mailbox aliases, which on the filesystem level are symlinks
+to other mailboxes. This doesn't magically solve the problem of showing clients
+e.g. multiple Sent mailboxes, but it can be used to make sure that all of the
+different variants will have the same mails in them. Unfortunately it also
+means that some clients will download the same mails to local cache multiple
+times.
 
 The way it works is that:
 
@@ -42,4 +43,4 @@ namespace inbox {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-10-02 04:48)
+(This file was created from the wiki on 2015-12-07 04:45)

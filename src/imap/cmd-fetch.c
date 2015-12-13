@@ -172,6 +172,11 @@ fetch_parse_modifiers(struct imap_fetch_context *ctx,
 	return TRUE;
 }
 
+static bool cmd_fetch_finished(struct client_command_context *cmd ATTR_UNUSED)
+{
+	return TRUE;
+}
+
 static bool cmd_fetch_finish(struct imap_fetch_context *ctx,
 			     struct client_command_context *cmd)
 {
@@ -192,8 +197,15 @@ static bool cmd_fetch_finish(struct imap_fetch_context *ctx,
 		const char *errstr;
 
 		if (cmd->client->output->closed) {
-			client_disconnect(cmd->client, "Disconnected");
-			return TRUE;
+			/* If we're canceling we need to finish this command
+			   or we'll assert crash. But normally we want to
+			   return FALSE so that the disconnect message logs
+			   about this fetch command and that these latest
+			   output bytes are included in it (which wouldn't
+			   happen if we called client_disconnect() here
+			   directly). */
+			cmd->func = cmd_fetch_finished;
+			return cmd->cancel;
 		}
 
 		errstr = mailbox_get_last_error(cmd->client->mailbox, &error);

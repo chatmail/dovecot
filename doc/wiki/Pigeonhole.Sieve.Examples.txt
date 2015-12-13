@@ -26,9 +26,8 @@ Contents
 
      8. Translation from Procmail
 
-Below are some simple Sieve code examples, more can be found from
-http://libsieve.sourceforge.net/script1.php and
-http://fastmail.wikia.com/wiki/SieveExamples.
+Below are some simple Sieve code examples, more can be found at
+http://sieve.info/examplescripts.
 
 Mail filtering by various headers
 ---------------------------------
@@ -403,4 +402,4 @@ Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
 Here's the original post announcing it:
 http://dovecot.org/list/dovecot/2007-March/020895.html
 
-(This file was created from the wiki on 2015-10-02 04:48)
+(This file was created from the wiki on 2015-12-07 04:45)

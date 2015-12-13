@@ -86,6 +86,12 @@ You can use:
 You can also add :port after the IP/host. The default port is the same as what
 director service's inet_listener is using (the port 9090 above).
 
+Note that the same director must not be listed multiple times with different
+IPs. This especially means that a hostname can't expand to both IPv4 and IPv6
+address. Otherwise Dovecot becomes confused about what directors actually
+exist. This also means that a single director ring must use either IPv4 or IPv6
+addresses, but not both at the same time.
+
 For example if you have 3 directors, you could set:
 
 ---%<-------------------------------------------------------------------------
@@ -285,4 +291,12 @@ correct tag with -t parameter or the results won't be correct (empty tag's
 results are shown). Tags can't currently be changed for an existing host
 without removing it first.
 
-(This file was created from the wiki on 2015-10-02 04:47)
+Director and Backend in same server
+-----------------------------------
+
+(Requires v2.2.17+)
+
+Have the passdb lookup return 'director_proxy_maybe=y'. LMTP however doesn't
+currently support mixing recipients to both being proxied and store locally.
+
+(This file was created from the wiki on 2015-12-07 04:45)

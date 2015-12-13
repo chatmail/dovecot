@@ -12,6 +12,7 @@ Dovecot can use:
  * <dict> [Quota.Dict.txt]: Store quota usage in a dictionary (e.g. SQL).
  * <maildir> [Quota.Maildir.txt]: Store quota usage in Maildir++ maildirsize
    files. This is the most commonly used quota for virtual users.
+ * <count> [Quota.Count.txt]: Store quota usage within Dovecot's index files.
 
 Quota service
 -------------
@@ -123,4 +124,4 @@ To make sure users don't start keeping messages permanently in Trash you can
 use a nightly <cronjob> [Plugins.Expire.txt] to expunge old messages from Trash
 mailbox.
 
-(This file was created from the wiki on 2015-10-02 04:48)
+(This file was created from the wiki on 2015-12-07 04:45)

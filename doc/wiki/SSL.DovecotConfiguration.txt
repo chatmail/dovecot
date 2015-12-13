@@ -161,16 +161,10 @@ SSL security settings
 
 When Dovecot starts up for the first time, it generates new 512bit and 1024bit
 Diffie Hellman parameters and saves them into
-'<prefix>/var/lib/dovecot/ssl-parameters.dat'. After the initial creation
-they're by default regenerated every week. With newer computers the generation
-shouldn't take more than a few seconds, but with older computers it can take as
-long as half an hour. The extra security gained by the regeneration is quite
-small, so with slower computers, for Dovecot versions prior to v2.2, you might
-want to disable it:
-
----%<-------------------------------------------------------------------------
-ssl_parameters_regenerate = 0
----%<-------------------------------------------------------------------------
+'<prefix>/var/lib/dovecot/ssl-parameters.dat'. Dovecot v2.1.x and older
+regenerated them every week by default, but because the extra security gained
+by the regeneration is quite small, Dovecot v2.2 disabled the regeneration
+feature completely.
 
 From version 2.2, you can specify the wanted DH parameters length using:
 
@@ -362,4 +356,42 @@ B8A55EC91A060575CFB29503FBF7160C2DC8BCBFE02D20A7F704882F72D8D00272D8D002CE5CCC4B
 +OK Dovecot ready.
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-10-02 04:48)
+Testing CA
+----------
+
+The above test procedure returns:
+
+---%<-------------------------------------------------------------------------
+    Verify return code: 19 (self signed certificate in certificate chain)
+---%<-------------------------------------------------------------------------
+
+which is expected result since test command omits option to verify CA root
+certificate.  The following commands will enable CA root certificate
+validation.
+
+Testing CA On Debian
+--------------------
+
+On Debian derived distributions try:
+
+---%<-------------------------------------------------------------------------
+openssl s_client -CApath /etc/ssl/certs -connect mail.sample.com:pop3s
+---%<-------------------------------------------------------------------------
+
+Testing CA On RHEL
+------------------
+
+On Red Hat Enterprise Linux derived distributions try:
+
+---%<-------------------------------------------------------------------------
+openssl s_client -CAfile /etc/pki/tls/cert.pem -connect mail.sample.com:pop3s
+---%<-------------------------------------------------------------------------
+
+Testing CA Success
+------------------
+
+---%<-------------------------------------------------------------------------
+    Verify return code: 0 (ok)
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2015-12-07 04:45)

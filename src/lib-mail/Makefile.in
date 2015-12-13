@@ -134,7 +134,7 @@ am__EXEEXT_1 = test-istream-dot$(EXEEXT) \
 	test-message-parser$(EXEEXT) test-message-part$(EXEEXT) \
 	test-message-snippet$(EXEEXT) test-ostream-dot$(EXEEXT) \
 	test-qp-decoder$(EXEEXT) test-quoted-printable$(EXEEXT) \
-	test-rfc2231-parser$(EXEEXT)
+	test-rfc2231-parser$(EXEEXT) test-rfc822-parser$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am_test_istream_attachment_OBJECTS =  \
 	test-istream-attachment.$(OBJEXT)
@@ -192,6 +192,8 @@ am_test_quoted_printable_OBJECTS = test-quoted-printable.$(OBJEXT)
 test_quoted_printable_OBJECTS = $(am_test_quoted_printable_OBJECTS)
 am_test_rfc2231_parser_OBJECTS = test-rfc2231-parser.$(OBJEXT)
 test_rfc2231_parser_OBJECTS = $(am_test_rfc2231_parser_OBJECTS)
+am_test_rfc822_parser_OBJECTS = test-rfc822-parser.$(OBJEXT)
+test_rfc822_parser_OBJECTS = $(am_test_rfc822_parser_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -241,7 +243,7 @@ SOURCES = $(libmail_la_SOURCES) $(test_istream_attachment_SOURCES) \
 	$(test_message_part_SOURCES) $(test_message_snippet_SOURCES) \
 	$(test_ostream_dot_SOURCES) $(test_qp_decoder_SOURCES) \
 	$(test_quoted_printable_SOURCES) \
-	$(test_rfc2231_parser_SOURCES)
+	$(test_rfc2231_parser_SOURCES) $(test_rfc822_parser_SOURCES)
 DIST_SOURCES = $(libmail_la_SOURCES) \
 	$(test_istream_attachment_SOURCES) \
 	$(test_istream_binary_converter_SOURCES) \
@@ -258,7 +260,7 @@ DIST_SOURCES = $(libmail_la_SOURCES) \
 	$(test_message_part_SOURCES) $(test_message_snippet_SOURCES) \
 	$(test_ostream_dot_SOURCES) $(test_qp_decoder_SOURCES) \
 	$(test_quoted_printable_SOURCES) \
-	$(test_rfc2231_parser_SOURCES)
+	$(test_rfc2231_parser_SOURCES) $(test_rfc822_parser_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -372,6 +374,8 @@ LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_DSYNC = @LIBDOVECOT_DSYNC@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LIBFTS = @LIBDOVECOT_LIBFTS@
+LIBDOVECOT_LIBFTS_DEPS = @LIBDOVECOT_LIBFTS_DEPS@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
@@ -596,7 +600,8 @@ test_programs = \
 	test-ostream-dot \
 	test-qp-decoder \
 	test-quoted-printable \
-	test-rfc2231-parser
+	test-rfc2231-parser \
+	test-rfc822-parser
 
 test_libs = \
 	../lib-test/libtest.la \
@@ -673,6 +678,9 @@ test_quoted_printable_DEPENDENCIES = $(test_deps)
 test_rfc2231_parser_SOURCES = test-rfc2231-parser.c
 test_rfc2231_parser_LDADD = rfc2231-parser.lo rfc822-parser.lo $(test_libs)
 test_rfc2231_parser_DEPENDENCIES = $(test_deps)
+test_rfc822_parser_SOURCES = test-rfc822-parser.c
+test_rfc822_parser_LDADD = rfc822-parser.lo $(test_libs)
+test_rfc822_parser_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -814,6 +822,10 @@ test-rfc2231-parser$(EXEEXT): $(test_rfc2231_parser_OBJECTS) $(test_rfc2231_pars
 	@rm -f test-rfc2231-parser$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_rfc2231_parser_OBJECTS) $(test_rfc2231_parser_LDADD) $(LIBS)
 
+test-rfc822-parser$(EXEEXT): $(test_rfc822_parser_OBJECTS) $(test_rfc822_parser_DEPENDENCIES) $(EXTRA_test_rfc822_parser_DEPENDENCIES) 
+	@rm -f test-rfc822-parser$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_rfc822_parser_OBJECTS) $(test_rfc822_parser_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -870,6 +882,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-qp-decoder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-quoted-printable.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-rfc2231-parser.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-rfc822-parser.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

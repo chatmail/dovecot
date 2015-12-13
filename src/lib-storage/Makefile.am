@@ -24,6 +24,7 @@ libstorage_la_SOURCES = \
 	fail-mailbox.c \
 	fail-mail.c \
 	mail.c \
+	mail-autoexpunge.c \
 	mail-copy.c \
 	mail-error.c \
 	mail-namespace.c \
@@ -60,6 +61,7 @@ libstorage_la_SOURCES = \
 
 headers = \
 	fail-mail-storage.h \
+	mail-autoexpunge.h \
 	mail-copy.h \
 	mail-error.h \
 	mail-namespace.h \

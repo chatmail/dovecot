@@ -1,6 +1,10 @@
 Dictionary quota
 ================
 
+*NOTE:* Using the <count> [Quota.Count.txt] backend (possibly together with
+<quota_clone> [Plugins.QuotaClone.txt] plugin) is now preferred to using this
+backend. It has less of a chance of quota usage becoming wrong.
+
 The /dictionary/ quota backend supports both *storage* and *messages* quota
 limits. The current quota is kept in the specified <dictionary>
 [Dictionary.txt]. The available dictionaries include:
@@ -26,6 +30,12 @@ The supported options are:
  * noenforcing: Don't enforce quota limits, only track them.
  * ignoreunlimited: If user has unlimited quota, don't track it.
  * ns=<prefix>: This quota root is tracked only for the given namespace.
+ * hidden: Hide the quota root from IMAP GETQUOTA* commands.
+ * no-unset: When recalculating quota, don't unset the quota first. This is
+   needed if you wish to store the quota usage among other data in the same SQL
+   row - otherwise the entire row could get deleted. Note that the unset is
+   required with PostgreSQL or the merge_quota() trigger doesn't work
+   correctly. (v2.2.20+)
 
 NOTE: The dictionary stores only the current quota usage. The quota limits are
 still configured in userdb the same way as with other quota backends.
@@ -167,4 +177,4 @@ dict {
 
 See <Dict.txt> for more information, especially about permission issues.
 
-(This file was created from the wiki on 2015-10-02 04:48)
+(This file was created from the wiki on 2015-12-07 04:45)

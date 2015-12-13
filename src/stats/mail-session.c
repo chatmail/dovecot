@@ -84,13 +84,16 @@ int mail_session_connect_parse(const char *const *args, const char **error_r)
 	}
 	session_id = args[0];
 	if (str_to_pid(args[3], &pid) < 0) {
-		*error_r = "CONNECT: Invalid pid";
+		*error_r = t_strdup_printf("CONNECT: Invalid pid %s for session ID %s",
+					   args[3], session_id);
 		return -1;
 	}
 
 	session = hash_table_lookup(mail_sessions_hash, session_id);
 	if (session != NULL) {
-		*error_r = "CONNECT: Duplicate session ID";
+		*error_r = t_strdup_printf(
+			"CONNECT: Duplicate session ID %s for user %s service %s",
+			session_id, args[1], args[2]);
 		return -1;
 	}
 	session = i_malloc(sizeof(struct mail_session) + stats_alloc_size());
@@ -267,9 +270,9 @@ int mail_session_update_parse(const char *const *args, const char **error_r)
 	buf = buffer_create_dynamic(pool_datastack_create(), 256);
 	if (args[1] == NULL ||
 	    base64_decode(args[1], strlen(args[1]), NULL, buf) < 0) {
-		*error_r = t_strdup_printf("UPDATE-SESSION %s %s: Invalid base64 input",
+		*error_r = t_strdup_printf("UPDATE-SESSION %s %s %s: Invalid base64 input",
 					   session->user->name,
-					   session->service);
+					   session->service, session->id);
 		return -1;
 	}
 
@@ -277,16 +280,17 @@ int mail_session_update_parse(const char *const *args, const char **error_r)
 	diff_stats = stats_alloc(pool_datastack_create());
 
 	if (!stats_import(buf->data, buf->used, session->stats, new_stats, &error)) {
-		*error_r = t_strdup_printf("UPDATE-SESSION %s %s: %s",
+		*error_r = t_strdup_printf("UPDATE-SESSION %s %s %s: %s",
 					   session->user->name,
-					   session->service, error);
+					   session->service, session->id, error);
 		return -1;
 	}
 
 	if (!stats_diff(session->stats, new_stats, diff_stats, &error)) {
-		*error_r = t_strdup_printf("UPDATE-SESSION %s %s: stats shrank: %s",
+		*error_r = t_strdup_printf("UPDATE-SESSION %s %s %s: stats shrank: %s",
 					   session->user->name,
-					   session->service, error);
+					   session->service, session->id, error);
+		i_panic("%s", *error_r);
 		return -1;
 	}
 	mail_session_refresh(session, diff_stats);

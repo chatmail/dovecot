@@ -45,6 +45,7 @@ struct sql_dict_iterate_context {
 	const struct dict_sql_map *map;
 	unsigned int key_prefix_len, pattern_prefix_len, next_map_idx;
 	unsigned int path_idx, sql_fields_start_idx;
+	bool synchronous_result;
 	bool failed;
 };
 
@@ -337,7 +338,8 @@ sql_dict_where_build(struct sql_dict *dict, const struct dict_sql_map *map,
 
 static int
 sql_lookup_get_query(struct sql_dict *dict, const char *key,
-		     string_t *query, const struct dict_sql_map **map_r)
+		     string_t *query, const struct dict_sql_map **map_r,
+		     const char **error_r)
 {
 	const struct dict_sql_map *map;
 	ARRAY_TYPE(const_string) values;
@@ -345,14 +347,16 @@ sql_lookup_get_query(struct sql_dict *dict, const char *key,
 
 	map = *map_r = sql_dict_find_map(dict, key, &values);
 	if (map == NULL) {
-		i_error("sql dict lookup: Invalid/unmapped key: %s", key);
+		*error_r = t_strdup_printf(
+			"sql dict lookup: Invalid/unmapped key: %s", key);
 		return -1;
 	}
 	str_printfa(query, "SELECT %s FROM %s",
 		    map->value_field, map->table);
 	if (sql_dict_where_build(dict, map, &values, key[0],
 				 SQL_DICT_RECURSE_NONE, query, &error) < 0) {
-		i_error("sql dict lookup: Failed to lookup key %s: %s", key, error);
+		*error_r = t_strdup_printf(
+			"sql dict lookup: Failed to lookup key %s: %s", key, error);
 		return -1;
 	}
 	return 0;
@@ -380,13 +384,26 @@ sql_dict_result_unescape(enum dict_sql_type type, pool_t pool,
 	return str_c(str);
 }
 
+static enum dict_sql_type 
+sql_dict_map_type(const struct dict_sql_map *map)
+{
+	if (map->value_type != NULL) {
+		if (strcmp(map->value_type, "string") == 0)
+			return DICT_SQL_TYPE_STRING;
+		if (strcmp(map->value_type, "hexblob") == 0)
+			return DICT_SQL_TYPE_HEXBLOB;
+		if (strcmp(map->value_type, "uint") == 0)
+			return DICT_SQL_TYPE_UINT;
+		i_unreached(); /* should have checked already at parsing */
+	}
+	return map->value_hexblob ? DICT_SQL_TYPE_HEXBLOB : DICT_SQL_TYPE_STRING;
+}
+
 static const char *
 sql_dict_result_unescape_value(const struct dict_sql_map *map, pool_t pool,
 			       struct sql_result *result)
 {
-	enum dict_sql_type value_type = map->value_hexblob ?
-		DICT_SQL_TYPE_HEXBLOB : DICT_SQL_TYPE_STRING;
-	return sql_dict_result_unescape(value_type, pool, result, 0);
+	return sql_dict_result_unescape(sql_dict_map_type(map), pool, result, 0);
 }
 
 static const char *
@@ -411,9 +428,12 @@ static int sql_dict_lookup(struct dict *_dict, pool_t pool,
 
 	T_BEGIN {
 		string_t *query = t_str_new(256);
+		const char *error;
 
-		ret = sql_lookup_get_query(dict, key, query, &map);
-		if (ret == 0)
+		ret = sql_lookup_get_query(dict, key, query, &map, &error);
+		if (ret < 0)
+			i_error("%s", error);
+		else
 			result = sql_query_s(dict->db, str_c(query));
 	} T_END;
 
@@ -472,8 +492,16 @@ sql_dict_lookup_async(struct dict *_dict, const char *key,
 
 	T_BEGIN {
 		string_t *query = t_str_new(256);
+		const char *error;
 
-		if (sql_lookup_get_query(dict, key, query, &map) == 0) {
+		if (sql_lookup_get_query(dict, key, query, &map, &error) < 0) {
+			struct dict_lookup_result result;
+
+			memset(&result, 0, sizeof(result));
+			result.ret = -1;
+			result.error = error;
+			callback(&result, context);
+		} else {
 			ctx = i_new(struct sql_dict_lookup_context, 1);
 			ctx->callback = callback;
 			ctx->context = context;
@@ -589,7 +617,7 @@ static void sql_dict_iterate_callback(struct sql_result *result,
 {
 	sql_result_ref(result);
 	ctx->result = result;
-	if (ctx->ctx.async_callback != NULL)
+	if (ctx->ctx.async_callback != NULL && !ctx->synchronous_result)
 		ctx->ctx.async_callback(ctx->ctx.async_context);
 }
 
@@ -611,8 +639,10 @@ static int sql_dict_iterate_next_query(struct sql_dict_iterate_context *ctx,
 			ctx->result = sql_query_s(dict->db, str_c(query));
 		} else {
 			i_assert(ctx->result == NULL);
+			ctx->synchronous_result = TRUE;
 			sql_query(dict->db, str_c(query),
 				  sql_dict_iterate_callback, ctx);
+			ctx->synchronous_result = FALSE;
 		}
 	} T_END;
 	*error_r = t_strdup(error);
@@ -876,8 +906,8 @@ static int sql_dict_set_query(const struct dict_sql_build_query *build,
 		if (build->inc)
 			str_append(suffix, fields[i].value);
 		else {
-			enum dict_sql_type value_type = fields[i].map->value_hexblob ?
-				DICT_SQL_TYPE_HEXBLOB : DICT_SQL_TYPE_STRING;
+			enum dict_sql_type value_type =
+				sql_dict_map_type(fields[i].map);
 			if (sql_dict_value_escape(suffix, dict, value_type,
 				"value", fields[i].value, "", error_r) < 0)
 				return -1;
@@ -919,8 +949,8 @@ static int sql_dict_set_query(const struct dict_sql_build_query *build,
 				    fields[i].map->value_field,
 				    fields[i].value);
 		} else {
-			enum dict_sql_type value_type = fields[i].map->value_hexblob ?
-				DICT_SQL_TYPE_HEXBLOB : DICT_SQL_TYPE_STRING;
+			enum dict_sql_type value_type =
+				sql_dict_map_type(fields[i].map);
 			if (sql_dict_value_escape(prefix, dict, value_type,
 				"value", fields[i].value, "", error_r) < 0)
 				return -1;

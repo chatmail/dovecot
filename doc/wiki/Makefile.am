@@ -203,6 +203,7 @@ wikifiles = ACL.txt \
 	PreAuth.txt \
 	QuickConfiguration.txt \
 	Quota.Configuration.txt \
+	Quota.Count.txt \
 	Quota.Dict.txt \
 	Quota.Dirsize.txt \
 	Quota.FS.txt \

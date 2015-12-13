@@ -287,6 +287,8 @@ LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_DSYNC = @LIBDOVECOT_DSYNC@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LIBFTS = @LIBDOVECOT_LIBFTS@
+LIBDOVECOT_LIBFTS_DEPS = @LIBDOVECOT_LIBFTS_DEPS@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
@@ -458,6 +460,7 @@ pkginc_lib_HEADERS = \
 	fts-expunge-log.h \
 	fts-indexer.h \
 	fts-parser.h \
+	fts-storage.h \
 	fts-user.h
 
 noinst_HEADERS = \
@@ -465,8 +468,7 @@ noinst_HEADERS = \
 	fts-build-mail.h \
 	fts-plugin.h \
 	fts-search-args.h \
-	fts-search-serialize.h \
-	fts-storage.h
+	fts-search-serialize.h
 
 xml2text_SOURCES = xml2text.c
 xml2text_LDADD = fts-parser-html.lo $(LIBDOVECOT)

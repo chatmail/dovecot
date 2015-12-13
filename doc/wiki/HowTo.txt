@@ -81,4 +81,4 @@ Others:
  * Postfix + Dovecot2.0.13 + MySQL virtual_users as proxy to DBMail
    [http://content.fens.org/index.php?q=admin-howto/mail/dovecot2dbmail-proxy]
 
-(This file was created from the wiki on 2015-10-02 04:47)
+(This file was created from the wiki on 2015-12-07 04:45)

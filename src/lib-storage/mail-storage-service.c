@@ -88,6 +88,13 @@ struct mail_storage_service_user {
 
 struct module *mail_storage_service_modules = NULL;
 
+static void
+mail_storage_service_var_expand(struct mail_storage_service_ctx *ctx,
+				string_t *str, const char *format,
+				struct mail_storage_service_user *user,
+				const struct mail_storage_service_input *input,
+				const struct mail_storage_service_privileges *priv);
+
 static bool
 mail_user_set_get_mail_debug(const struct setting_parser_info *user_info,
 			     const struct mail_user_settings *user_set)
@@ -443,7 +450,7 @@ mail_storage_service_get_var_expand_table(struct mail_storage_service_ctx *ctx,
 }
 
 static const char *
-user_expand_varstr(struct master_service *service,
+user_expand_varstr(struct mail_storage_service_ctx *ctx,
 		   struct mail_storage_service_user *user,
 		   struct mail_storage_service_privileges *priv,
 		   const char *str)
@@ -456,8 +463,7 @@ user_expand_varstr(struct master_service *service,
 	i_assert(*str == SETTING_STRVAR_UNEXPANDED[0]);
 
 	ret = t_str_new(256);
-	var_expand(ret, str + 1,
-		   get_var_expand_table(service, user, &user->input, priv));
+	mail_storage_service_var_expand(ctx, ret, str + 1, user, &user->input, priv);
 	return str_c(ret);
 }
 
@@ -512,9 +518,9 @@ service_parse_privileges(struct mail_storage_service_ctx *ctx,
 
 	/* variable strings are expanded in mail_user_init(),
 	   but we need the home and chroot sooner so do them separately here. */
-	priv_r->home = user_expand_varstr(ctx->service, user, priv_r,
+	priv_r->home = user_expand_varstr(ctx, user, priv_r,
 					  user->user_set->mail_home);
-	priv_r->chroot = user_expand_varstr(ctx->service, user, priv_r,
+	priv_r->chroot = user_expand_varstr(ctx, user, priv_r,
 					    user->user_set->mail_chroot);
 	return 0;
 }
@@ -773,7 +779,6 @@ mail_storage_service_init_log(struct mail_storage_service_ctx *ctx,
 
 	if (master_service_get_client_limit(master_service) == 1)
 		i_set_failure_send_prefix(user->log_prefix);
-	user->ioloop_ctx = io_loop_context_new(current_ioloop);
 	io_loop_context_add_callbacks(user->ioloop_ctx,
 				      mail_storage_service_io_activate_user,
 				      mail_storage_service_io_deactivate_user,
@@ -1066,10 +1071,15 @@ mail_storage_service_set_log_prefix(struct mail_storage_service_ctx *ctx,
 	i_set_failure_prefix("%s", str_c(str));
 }
 
-static const char *mail_storage_service_generate_session_id(pool_t pool)
+static const char *
+mail_storage_service_generate_session_id(pool_t pool, const char *prefix)
 {
 	guid_128_t guid;
-	string_t *str = str_new(pool, MAX_BASE64_ENCODED_SIZE(sizeof(guid)));
+	unsigned int prefix_len = prefix == NULL ? 0 : strlen(prefix);
+	string_t *str = str_new(pool, MAX_BASE64_ENCODED_SIZE(prefix_len + 1 + sizeof(guid)));
+
+	if (prefix != NULL)
+		str_printfa(str, "%s-", prefix);
 
 	guid_128_generate(guid);
 	base64_encode(guid, sizeof(guid), str);
@@ -1182,7 +1192,8 @@ mail_storage_service_lookup_real(struct mail_storage_service_ctx *ctx,
 	user->input.session_id = p_strdup(user_pool, input->session_id);
 	if (user->input.session_id == NULL) {
 		user->input.session_id =
-			mail_storage_service_generate_session_id(user_pool);
+			mail_storage_service_generate_session_id(user_pool,
+				input->session_id_prefix);
 	}
 	user->user_info = user_info;
 	user->flags = flags;
@@ -1245,10 +1256,13 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 		/* no user yet. log prefix should be just "imap:" or something
 		   equally unhelpful. we don't know the proper log format yet,
 		   but initialize it to something better until we know it. */
+		const char *session_id =
+			input->session_id != NULL ? input->session_id :
+			(input->session_id_prefix != NULL ?
+			 input->session_id_prefix : NULL);
 		i_set_failure_prefix("%s(%s%s,%s)",
 			master_service_get_name(ctx->service), input->username,
-			input->session_id == NULL ? "" :
-				t_strdup_printf(",%s", input->session_id),
+			session_id == NULL ? "" : t_strdup_printf(",%s", session_id),
 			input->remote_ip.family == 0 ? "" :
 				t_strdup_printf(",%s", net_ip2addr(&input->remote_ip)));
 		update_log_prefix = TRUE;
@@ -1335,6 +1349,10 @@ mail_storage_service_next_real(struct mail_storage_service_ctx *ctx,
 		priv.chroot = "";
 		set_keyval(ctx, user, "mail_home", priv.home);
 	}
+
+	/* create ioloop context regardless of logging. it's also used by
+	   stats plugin. */
+	user->ioloop_ctx = io_loop_context_new(current_ioloop);
 
 	if ((user->flags & MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT) == 0)
 		mail_storage_service_init_log(ctx, user, &priv);
@@ -1424,11 +1442,13 @@ void mail_storage_service_user_free(struct mail_storage_service_user **_user)
 	*_user = NULL;
 
 	if (user->ioloop_ctx != NULL) {
-		io_loop_context_remove_callbacks(user->ioloop_ctx,
-			mail_storage_service_io_activate_user,
-			mail_storage_service_io_deactivate_user, user);
-		if (io_loop_get_current_context(current_ioloop) == user->ioloop_ctx)
-			mail_storage_service_io_deactivate_user(user);
+		if ((user->flags & MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT) == 0) {
+			io_loop_context_remove_callbacks(user->ioloop_ctx,
+				mail_storage_service_io_activate_user,
+				mail_storage_service_io_deactivate_user, user);
+			if (io_loop_get_current_context(current_ioloop) == user->ioloop_ctx)
+				mail_storage_service_io_deactivate_user(user);
+		}
 		io_loop_context_unref(&user->ioloop_ctx);
 	}
 	settings_parser_deinit(&user->set_parser);

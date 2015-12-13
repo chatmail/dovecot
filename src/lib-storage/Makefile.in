@@ -149,14 +149,14 @@ am__DEPENDENCIES_2 = list/libstorage_list.la index/libstorage_index.la \
 	../lib-imap-storage/libimap-storage.la \
 	../lib-dovecot/libdovecot.la
 am_libstorage_la_OBJECTS = fail-mail-storage.lo fail-mailbox.lo \
-	fail-mail.lo mail.lo mail-copy.lo mail-error.lo \
-	mail-namespace.lo mail-search.lo mail-search-args-cmdline.lo \
-	mail-search-args-imap.lo mail-search-args-simplify.lo \
-	mail-search-build.lo mail-search-parser.lo \
-	mail-search-parser-imap.lo mail-search-parser-cmdline.lo \
-	mail-search-register.lo mail-search-register-human.lo \
-	mail-search-register-imap.lo mail-storage.lo \
-	mail-storage-hooks.lo mail-storage-service.lo \
+	fail-mail.lo mail.lo mail-autoexpunge.lo mail-copy.lo \
+	mail-error.lo mail-namespace.lo mail-search.lo \
+	mail-search-args-cmdline.lo mail-search-args-imap.lo \
+	mail-search-args-simplify.lo mail-search-build.lo \
+	mail-search-parser.lo mail-search-parser-imap.lo \
+	mail-search-parser-cmdline.lo mail-search-register.lo \
+	mail-search-register-human.lo mail-search-register-imap.lo \
+	mail-storage.lo mail-storage-hooks.lo mail-storage-service.lo \
 	mail-storage-settings.lo mail-thread.lo mail-user.lo \
 	mailbox-attribute.lo mailbox-attribute-internal.lo \
 	mailbox-get.lo mailbox-guid-cache.lo mailbox-header.lo \
@@ -347,6 +347,8 @@ LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_DSYNC = @LIBDOVECOT_DSYNC@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LIBFTS = @LIBDOVECOT_LIBFTS@
+LIBDOVECOT_LIBFTS_DEPS = @LIBDOVECOT_LIBFTS_DEPS@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
@@ -500,6 +502,7 @@ libstorage_la_SOURCES = \
 	fail-mailbox.c \
 	fail-mail.c \
 	mail.c \
+	mail-autoexpunge.c \
 	mail-copy.c \
 	mail-error.c \
 	mail-namespace.c \
@@ -536,6 +539,7 @@ libstorage_la_SOURCES = \
 
 headers = \
 	fail-mail-storage.h \
+	mail-autoexpunge.h \
 	mail-copy.h \
 	mail-error.h \
 	mail-namespace.h \
@@ -718,6 +722,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fail-mail-storage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fail-mail.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fail-mailbox.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-autoexpunge.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-copy.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-error.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-namespace.Plo@am__quote@

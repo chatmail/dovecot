@@ -110,4 +110,4 @@ SQL Mapping
 
 FIXME: Write this. For now see 'example-config/dovecot-dict-sql.conf.ext'
 
-(This file was created from the wiki on 2015-10-02 04:47)
+(This file was created from the wiki on 2015-12-07 04:45)

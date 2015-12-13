@@ -81,7 +81,8 @@ Optimizations
    directory. If another process (or even Dovecot which doesn't update index
    files) does changes to 'cur/' while the mailbox is simultaneously being
    modified by Dovecot, Dovecot may not notice those external changes. It's
-   still safe to deliver new mails to 'new/' using non-Dovecot software.
+   still safe to deliver new mails to 'new/' using non-Dovecot software (except
+   with 'mailbox_list_index=yes' changes aren't noticed outside INBOX).
  * 'maildir_copy_with_hardlinks=yes' (default): When copying a message, do it
    with hard links whenever possible. This makes the performance much better,
    and it's unlikely to have any side effects. Only reason to disable this is
@@ -138,4 +139,4 @@ The value for 'DIRNAME' should be chosen carefully so as to minimise the
 chances of clashing with mail folder names. In the example here, unusual
 upper/lower casing has been used.
 
-(This file was created from the wiki on 2015-10-02 04:47)
+(This file was created from the wiki on 2015-12-07 04:45)

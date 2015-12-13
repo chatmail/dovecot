@@ -480,4 +480,4 @@ Afterwards the quota can be changed with:
 a SETQUOTA "User quota" (STORAGE 12345 MESSAGES 123)
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-10-02 04:48)
+(This file was created from the wiki on 2015-12-07 04:45)

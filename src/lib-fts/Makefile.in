@@ -113,13 +113,14 @@ libfts_la_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_2) \
 am__libfts_la_SOURCES_DIST = fts-filter.c fts-filter-contractions.c \
 	fts-filter-english-possessive.c fts-filter-lowercase.c \
 	fts-filter-normalizer-icu.c fts-filter-stopwords.c \
-	fts-filter-stemmer-snowball.c fts-language.c fts-tokenizer.c \
-	fts-tokenizer-address.c fts-tokenizer-generic.c fts-icu.c
+	fts-filter-stemmer-snowball.c fts-language.c fts-library.c \
+	fts-tokenizer.c fts-tokenizer-address.c \
+	fts-tokenizer-generic.c fts-icu.c
 @BUILD_LIBICU_TRUE@am__objects_1 = fts-icu.lo
 am_libfts_la_OBJECTS = fts-filter.lo fts-filter-contractions.lo \
 	fts-filter-english-possessive.lo fts-filter-lowercase.lo \
 	fts-filter-normalizer-icu.lo fts-filter-stopwords.lo \
-	fts-filter-stemmer-snowball.lo fts-language.lo \
+	fts-filter-stemmer-snowball.lo fts-language.lo fts-library.lo \
 	fts-tokenizer.lo fts-tokenizer-address.lo \
 	fts-tokenizer-generic.lo $(am__objects_1)
 libfts_la_OBJECTS = $(am_libfts_la_OBJECTS)
@@ -298,6 +299,8 @@ LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_DSYNC = @LIBDOVECOT_DSYNC@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LIBFTS = @LIBDOVECOT_LIBFTS@
+LIBDOVECOT_LIBFTS_DEPS = @LIBDOVECOT_LIBFTS_DEPS@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_STORAGE = @LIBDOVECOT_STORAGE@
@@ -442,7 +445,9 @@ stopwordsdir = $(datadir)/${PACKAGE_TARNAME}/stopwords
 dist_stopwords_DATA = \
 	stopwords_en.txt \
 	stopwords_fi.txt \
-	stopwords_fr.txt
+	stopwords_fr.txt \
+	stopwords_no.txt \
+	stopwords_sv.txt
 
 BUILT_SOURCES = word-boundary-data.c word-break-data.c
 EXTRA_DIST = \
@@ -473,6 +478,7 @@ libfts_la_SOURCES = \
 	fts-filter-stopwords.c \
 	fts-filter-stemmer-snowball.c \
 	fts-language.c \
+	fts-library.c \
 	fts-tokenizer.c \
 	fts-tokenizer-address.c \
 	fts-tokenizer-generic.c \
@@ -484,6 +490,7 @@ headers = \
 	fts-filter-private.h \
 	fts-icu.h \
 	fts-language.h \
+	fts-library.h \
 	fts-tokenizer.h \
 	fts-tokenizer-private.h \
 	fts-tokenizer-generic-private.h
@@ -603,6 +610,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-filter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-icu.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-language.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-library.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-tokenizer-address.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-tokenizer-generic.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-tokenizer.Plo@am__quote@

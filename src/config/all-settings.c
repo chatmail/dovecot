@@ -86,6 +86,7 @@ struct mailbox_settings {
 	const char *special_use;
 	const char *driver;
 	const char *comment;
+	unsigned int autoexpunge;
 };
 struct mail_user_settings {
 	const char *base_dir;
@@ -291,6 +292,7 @@ struct master_service_ssl_settings {
 	/* These are derived from ssl_options, not set directly */
 	struct {
 		bool compression;
+		bool tickets;
 	} parsed_opts;
 };
 /* ../../src/lib-master/master-service-settings.h */
@@ -676,6 +678,7 @@ static const struct setting_define mailbox_setting_defines[] = {
 	DEF(SET_STR, special_use),
 	DEF(SET_STR, driver),
 	DEF(SET_STR, comment),
+	DEF(SET_TIME, autoexpunge),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -686,7 +689,8 @@ const struct mailbox_settings mailbox_default_settings = {
 		MAILBOX_SET_AUTO_SUBSCRIBE,
 	.special_use = "",
 	.driver = "",
-	.comment = ""
+	.comment = "",
+	.autoexpunge = 0
 };
 const struct setting_parser_info mailbox_setting_parser_info = {
 	.defines = mailbox_setting_defines,
@@ -4297,32 +4301,32 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&pop3_setting_parser_info, 
-	&lda_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&imap_login_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&mdbox_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&login_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&director_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&pop3c_setting_parser_info, 
-	&imapc_setting_parser_info, 
-	&stats_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&dict_setting_parser_info, 
 	&mail_user_setting_parser_info, 
-	&imap_setting_parser_info, 
-	&aggregator_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
+	&mdbox_setting_parser_info, 
 	&master_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&replicator_setting_parser_info, 
 	&maildir_setting_parser_info, 
+	&imap_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&director_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&lmtp_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&login_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&imapc_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&mbox_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

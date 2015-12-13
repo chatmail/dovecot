@@ -1,8 +1,1325 @@
+2015-12-07  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset f833b8160e39
+	[46a35dcdb936] [tip]
+
+	* .hgtags:
+	Added tag 2.2.20 for changeset f833b8160e39
+	[99b85e521f6a]
+
+	* NEWS, configure.ac:
+	Released v2.2.20.
+	[f833b8160e39] [2.2.20]
+
+	* src/lib-ssl-iostream/iostream-openssl-common.c, src/lib-ssl-iostream
+	/iostream-openssl-context.c, src/lib-ssl-iostream/iostream-
+	openssl.h, src/login-common/ssl-proxy-openssl.c:
+	lib-ssl-iostream, login-*: Hide unnecessary
+	"EVP_PKEY_get1_EC_KEY:expecting a ec key" errors.
+	[62aa3c6ca7ed]
+
+	* src/doveadm/client-connection.c, src/doveadm/doveadm-dsync.c,
+	src/doveadm/doveadm-mail-batch.c, src/doveadm/doveadm.c,
+	src/lib/lib.c, src/lib/lib.h:
+	doveadm: Fixed reseting getopt() with glibc when processing multiple
+	commands in a single process. This means commands run with doveadm
+	batch or multiple commands in a single doveadm-server connection.
+
+	glibc's getopt() man page says that optind=1 should reset it for
+	scanning a new argument vector, but this doesn't actually seem to
+	work. Setting optind=0 does work though, so use it everywhere.
+	[ed41702f14c2]
+
+	* src/doveadm/client-connection.c:
+	doveadm-server: Reset getopt() before calling non-mail commands.
+	This fixes parsing their parameters when using multiple such
+	commands within a single doveadm connection.
+	[1f1fc5eb4a8e]
+
+2015-12-06  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/mail-search-args-simplify.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: mail_search_args_simplify() handles now "(a OR b) AND
+	(a OR c)" -> "a OR (b AND c)"
+	[33465d1d595c]
+
+	* src/lib-storage/mail-search-args-simplify.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: mail_search_args_simplify() refactoring Removed
+	parent_arg from mail_search_args_simplify_extract_common_and() in
+	preperation for the next changeset.
+	[91b9510237fd]
+
+	* src/lib-storage/mail-search-args-simplify.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: mail_search_args_simplify() handles now "a AND (a OR
+	b)" -> "a"
+	[d68d1c95b52c]
+
+	* src/lib-storage/mail-search-args-simplify.c:
+	lib-storage: Make sure mail_sesarch_args_simplify_sub() is called
+	enough times.
+	[c4cfb7f95bc6]
+
+	* src/lib-storage/test-mail-search-args-simplify.c:
+	lib-storage: Minor test-mail-search-args-simplify unit test
+	improvements
+	[7c984bcb5f57]
+
+	* src/lib-storage/mail-search-args-simplify.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: mail_search_args_simplify() handles now "(a AND b) OR
+	(a AND c)" -> "a AND (b OR c)"
+	[836a0c2bc48a]
+
+	* src/lib-storage/mail-search-args-simplify.c, src/lib-storage/test-
+	mail-search-args-simplify.c:
+	lib-storage: mail_search_args_simplify() handles now "a OR (a AND
+	b)" -> "a"
+	[8749308aad53]
+
+	* src/lib-storage/mail-search.c, src/lib-storage/mail-search.h:
+	lib-storage: Made mail_search_arg_[one_]equals() public.
+	[91509e171e4b]
+
+	* src/lib-storage/mail-search.c:
+	lib-storage: mail_search_args_equal() ignored some differences.
+	 - fuzzy flag
+	 - MAIL_SEARCH_ARG_FLAG_USE_TZ
+	 - INTHREAD thread type
+	[95d355376204]
+
+	* src/lib-storage/mail-search.c:
+	lib-storage: mail_search_arg*_dup() didn't preserve fuzzy-flag.
+	[59a8b0aa6379]
+
+	* src/lib-storage/mail-search-register-imap.c:
+	lib-storage: SEARCH BODY "" wasn't properly being translated to
+	SEARCH_ALL. Instead if the next parameter was "" this happened
+	(which could have been an accidental space in doveadm search-query).
+	[bc3f0e0c7a67]
+
+	* src/lib-storage/mail-storage.c:
+	lib-storage: dovecot.index.pvt* ignored several settings.
+	mmap_disable=yes, dotlock_use_excl=yes and nfs_flush_index=yes
+	weren't used.
+	[00817b01020a]
+
+	* src/plugins/quota/quota-fs.c:
+	quota-fs: File count limits with NetBSD shouldn't be multiplied by
+	DEV_BSIZE
+	[6fda0b88e6fe]
+
+	* src/lib-charset/test-charset.c:
+	lib-charset: Added UTF-7 state checking unit test. This was an idea
+	of a way to test for a bug in FreeBSD iconv(), but nobody reported
+	if it did anything. So lets add it here and see.
+	[74e9e665b8f1]
+
+	* src/lmtp/commands.c:
+	lmtp: quota_full_tempfail=yes didn't work with
+	lmtp_rcpt_check_quota=yes
+	[81450c4bfe96]
+
+	* src/lib-storage/index/dbox-single/sdbox-copy.c:
+	sdbox: Fixed assert-crash when message with external attachments was
+	copied between storages.
+	[183576574417]
+
+2015-12-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts/fts-search-args.c:
+	fts: Fixed FTS search query generation after earlier per-language
+	tokenizer changes.
+	[93b0474fe9d6]
+
+	* src/lib-http/http-client-connection.c:
+	lib-http: Give a better error message if request times out. Instead
+	of just giving the configured timeout, log how long the timeout
+	actually took for the oldest request in wait list. Also if the
+	request was retried, log how many times the request was sent and how
+	long the request took in total.
+	[9a81cb959ce6]
+
+	* src/plugins/fts/doveadm-fts.c:
+	doveadm fts lookup/expand: Don't assert-crash if fts isn't
+	configured.
+	[1b32cd3b872c]
+
+	* src/lib/strfuncs.c, src/lib/strfuncs.h, src/lib/test-strfuncs.c:
+	lib: Removed t_str_trim() for now due to collision in Pigeonhole
+	v0.4.9
+	[6cb9889cc960]
+
+	* src/imap/imap-client.c:
+	imap: Fixed assert-crash if client disconnected at a specific
+	command state. If there was a command with
+	state=CLIENT_COMMAND_STATE_WAIT_SYNC and output stream was already
+	detected to be closed, we crashed with:
+
+	Panic: file imap-client.c: line 841 (client_check_command_hangs):
+	assertion failed: (!have_wait_unfinished || unfinished_count > 0)
+	[0b81127e53da]
+
+	* src/lib-index/mail-transaction-log-file.c:
+	lib-index: mail_transaction_log_file_map() didn't properly check
+	start_offset If it was too high, it still returned successful
+	mapping. This could have caused an assert-crash later on when the
+	start_offset was actually attempted to be used.
+	[a47d273e144f]
+
+	* src/lib-ssl-iostream/iostream-openssl-context.c:
+	lib-ssl-iostream: Fixed compiler warning when OpenSSL didn't support
+	ECDH.
+	[342e453c192d]
+
+	* src/plugins/fts/fts-search-args.c:
+	fts: Error handling fix for previous per-language tokenizer change.
+	[522ae1289d53]
+
+2015-12-03  Timo Sirainen  <tss@iki.fi>
+
+	* .hgsigs:
+	Added signature for changeset c35e62a9e710
+	[207fa3796175]
+
+	* .hgtags:
+	Added tag 2.2.20.rc1 for changeset c35e62a9e710
+	[e4fde48c012e]
+
+	* NEWS, configure.ac:
+	Released v2.2.20.rc1.
+	[c35e62a9e710] [2.2.20.rc1]
+
+	* src/plugins/fts/fts-build-mail.c, src/plugins/fts/fts-search-args.c,
+	src/plugins/fts/fts-user.c, src/plugins/fts/fts-user.h:
+	fts: Added support for per-language tokenizer settings.
+	fts_tokenizer_<lang> now overrides fts_tokenizers setting.
+	fts_tokenizer_<name>_<lang> now overrides fts_tokenizer_<name>
+	setting.
+	[0cb2c54fa452]
+
+	* src/lib-ssl-iostream/iostream-openssl-common.c, src/lib-ssl-iostream
+	/iostream-openssl-context.c:
+	lib-ssl-iostream: Moved openssl_iostream_*error() to -common.c
+	login-common code only links with this file, so that's required for
+	the previous changes to actually work.
+	[be47ca42cbc4]
+
+	* src/lib-ssl-iostream/iostream-openssl-context.c, src/login-common
+	/ssl-proxy-openssl.c:
+	login, lib-ssl-iostream: Clear errors caused by manual EC key
+	selection when there was no EC key. EVP_PKEY_get1_EC_KEY() would
+	return an error, which should be ignored instead of being logged
+	later on.
+	[302c3c7e11f8]
+
+	* src/lib-ssl-iostream/iostream-openssl-context.c:
+	lib-ssl-iostream: Check for SSL_CTX_set_ecdh_auto() failure. This
+	shouldn't happen though.
+	[a0df8b106de1]
+
+	* src/lib-ssl-iostream/iostream-openssl-context.c, src/lib-ssl-
+	iostream/iostream-openssl.c, src/lib-ssl-iostream/iostream-
+	openssl.h, src/login-common/ssl-proxy-openssl.c:
+	login, lib-ssl-iostream: Deduplicate code with shared
+	openssl_iostream_use_certificate_error()
+	[dbbfa124b27d]
+
+	* src/login-common/ssl-proxy-openssl.c:
+	login-common: Use openssl_iostream_*error() to avoid code
+	duplication.
+	[77990d0b1a42]
+
+	* src/lib-ssl-iostream/iostream-openssl-context.c:
+	lib-ssl-iostream: Fixes to error handling. Copy behavior from login-
+	common/ssl-proxy-openssl.c:
+	 - Handle stacked errors.
+	 - Improve errors with ERR_TXT_STRING flag.
+	[151df65d2de5]
+
+	* src/lib-ssl-iostream/iostream-openssl-context.c:
+	lib-ssl-iostream: Don't ignore errors on SSL certificate loading.
+	Patch by Sebastiaan Hoogeveen.
+	[2f823d983832]
+
+2015-12-01  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/mail-log/mail-log-plugin.c:
+	mail-log: If uid field is used, make sure newly saved mails actually
+	get an UID. With Maildir the UID is otherwise assigned on mail
+	deliveries only if dovecot-uidlist happens to get locked.
+	[25d63d9c7f5a]
+
+	* src/lib-mail/test-rfc822-parser.c:
+	lib-mail: test-rfc822-parser unit test fix We didn't check that all
+	the output was necessarily verified. Also this makes static analyzer
+	happier.
+	[374db78da9f0]
+
+2015-11-30  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/mail-host.c:
+	director: Minor code cleanup - removed unnecessary code.
+	[b0e2a14d5a40]
+
+	* src/director/mail-host.c:
+	director: Include tag also in the hosts_hash.
+	[1c826c476dbb]
+
+	* src/director/mail-host.c:
+	director: Fixed recent tag reimplementation to actually work. We
+	still just created one large vhosts pool for all tags containing all
+	the hosts.
+	[a36239ce0f78]
+
+	* src/director/login-connection.c, src/director/mail-host.c:
+	director: Don't treat empty hostname the same as having it. This
+	could have caused "host not given" errors if an empty "host=" was
+	sent to login process, even though hostip was also sent.
+
+	Fixed this in two places, although either one should have been
+	enough.
+	[f643e85f42ec]
+
+	* src/director/doveadm-connection.c:
+	director: Fixed "doveadm director status user@domain" not to hang
+	due to missing LF.
+	[ac30316bed82]
+
+	* src/lib-imap/test-imap-quote.c:
+	lib-imap: Added unit tests for imap_append_[an]string()
+	[326711633532]
+
+	* src/lib-mail/Makefile.am, src/lib-mail/rfc822-parser.c, src/lib-mail
+	/test-rfc822-parser.c:
+	lib-mail: rfc822_parse_content_param() was unescaping already
+	unescaped parameters This caused all Content-* parameter parsing to
+	be unescaped once too many times, resulting in somewhat broken BODY
+	and BODYSTRUCTURE replies if any <\> characters were used. Also MIME
+	boundaries were parsed in case <\> was used in them, but this
+	probably didn't practically happen.
+	[9eab653f5b94]
+
+	* src/doveadm/doveadm-mail-fetch.c:
+	doveadm fetch: Added date.sent/received/saved.unixtime
+	[9a15b989cc41]
+
+2015-11-28  Stephan Bosch  <stephan@rename-it.nl>
+
+	* src/lib/strfuncs.c, src/lib/strfuncs.h, src/lib/test-strfuncs.c:
+	lib: Created t_str_trim() functions to trim characters from
+	beginning and end of string.
+	[922de4bc4777]
+
+2015-11-28  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/Makefile.am:
+	Makefile: Added missing mail-autoexpunge.h
+	[a9c75e48cf8c]
+
+2015-11-27  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib/istream.c:
+	lib: Added extra assert to i_stream_read()
+	[69cb603dec84]
+
+	* src/plugins/fts-solr/fts-backend-solr-old.c, src/plugins/fts-solr
+	/fts-backend-solr.c:
+	fts-solr: Fixed sending empty parameters. Solr probably doesn't do
+	anything useful with them, but we shouldn't get 400 Bad Request
+	errors.
+	[feba082aede2]
+
+	* src/lib-storage/mail-autoexpunge.c:
+	Compiler warning fix for 32bit systems
+	[695391a09045]
+
+	* src/plugins/fts-solr/fts-backend-solr-old.c, src/plugins/fts-solr
+	/fts-backend-solr.c:
+	fts-solr: Fixed escaping query parameters. Solr documentation says
+	that "quoted string" would already work without escaping, but that
+	doesn't seem to be true (we were also missing the \" escaping
+	there). So we'll now escape all the special characters without
+	quotes around it, which seems to work. Also added '/' to list of
+	special characters, which is used by Solr 4.0.
+	[9d5c59d98857]
+
+	* src/plugins/zlib/zlib-plugin.c:
+	zlib: Fixed copying causing cache corruption when zlib_save wasn't
+	set. dovecot.index.cache entries were broken/missing if:
+	- The zlib plugin is enabled;
+	- The zlib_save/zlib_save_level options are NOT enabled;
+	- The source message being copied is compressed;
+	- The mail_log plugin is logging "copy" events;
+	- The mail_log_fields setting includes at least one message header;
+	- The destination mailbox folder has an index file that is recording
+	the logged headers;
+	- The source mailbox folder does NOT have an index file recording the
+	logged headers.
+
+	Found by Robert L Mathews.
+	[574c1e5b3d90]
+
+	* src/lib/test-ioloop.c:
+	lib: Fixed compiling unit test in systems where NULL isn't of type
+	void* For example Solaris.
+	[2ddbdf05b19b]
+
+	* src/auth/test-auth-request-var-expand.c:
+	auth: Fixed test-auth-request-var-expand unit test on big endian
+	CPUs
+	[cf956e34dc11]
+
+	* src/lib-storage/list/mailbox-list-index-status.c:
+	Compiler warning fix for 32bit systems
+	[9bebd787450f]
+
+	* src/lib-storage/list/mailbox-list-index-status.c, src/lib-storage
+	/mail-storage-private.h:
+	lib-storage: Don't add first_saved to mailbox list index unless
+	autoexpunge is set.
+	[d4e5b4ab01dd]
+
+	* src/imap/imap-client.c:
+	imap: Free mail_user only after client is disconnected.
+	[1217e5610865]
+
+	* src/lib-storage/Makefile.am, src/lib-storage/list/mailbox-list-
+	index-status.c, src/lib-storage/list/mailbox-list-index.h, src/lib-
+	storage/mail-autoexpunge.c, src/lib-storage/mail-autoexpunge.h, src
+	/lib-storage/mail-storage-private.h, src/lib-storage/mail-storage-
+	settings.c, src/lib-storage/mail-storage-settings.h, src/lib-storage
+	/mail-storage.h, src/lib-storage/mail-user.c:
+	Added mailbox { autoexpunge } setting. This can be used to
+	automatically expunge mails from specified mailboxes after they're
+	old enough. The expunges are done when the user is being
+	deinitialized. mailbox_list_index=yes should be enabled to have the
+	best performance with this setting.
+
+	Example:
+
+	namespace inbox { mailbox Spam { auto = create special_use = \Junk
+	autoexpunge = 30d } }
+	[82e6a3baa001]
+
+	* src/imap/cmd-setmetadata.c:
+	imap: SETMETADATA didn't set ostream output handler back This caused
+	hangs afterwards when receiving long replies (e.g. FETCH).
+	[db90e76f44dc]
+
+2015-11-26  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/quota-clone/quota-clone-plugin.c:
+	quota-clone: Avoid assert-crash when quota recalculation is
+	triggered. Quota recalculation opened all mailboxes and got us back
+	to quota_clone_flush(), which caused another dict transaction to be
+	opened, which caused a crash with some dict backends.
+	[66a04329b5e9]
+
+2015-11-25  Teemu Huovila  <teemu.huovila@dovecot.fi>
+
+	* src/lib-fts/fts-filter-normalizer-icu.c, src/lib-fts/fts-icu.c, src
+	/lib-fts/fts-icu.h:
+	lib-fts: Move ICU transliterator creation to fts-icu.h This allows
+	others to use transliterators without so much code duplication. The
+	transliterator still has to be destroyed by the user, with
+	utrans_close().
+	[129e61ef9de4]
+
+	* src/lib-fts/test-fts-filter.c:
+	lib-fts: Fix compilation for systems without libicu. The earlier
+	patch, 194e3622d5e6, did not consider both library dependencies.
+	[6dafc8b24681]
+
+2015-11-24  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap/imap-client.c:
+	imap: When logging command disconnection info, log the oldest
+	command's info (not newest)
+	[d204b943dd21]
+
+	* src/imap/imap-client.c, src/imap/imap-client.h:
+	imap: Added extra assert checks to make sure command states are
+	consistent.
+	[ecfd706b0e21]
+
+	* src/imap/cmd-idle.c:
+	imap: IDLE may have called client_continue_pending_input()
+	unnecessarily.
+	[20e51832875e]
+
+	* src/imap/cmd-fetch.c:
+	imap: Fixed crash at FETCH deinit caused by b638e19d3bd4
+	imap_fetch_free() would have been called twice, which caused
+	problems.
+	[8d9b48c59490]
+
+	* src/imap/imap-client.c:
+	imap: Fixed hanging if a pipelined IMAP command was waiting for
+	previous command to sync. ..And the previous command was waiting for
+	the next command to finish before it would start syncing. For
+	example FETCH+LOGOUT pipelined.
+	[26c565042d9d]
+
+	* src/director/director-connection.c, src/director/director.c,
+	src/director/director.h, src/director/mail-host.c, src/director
+	/mail-host.h:
+	director: Fixed backend selection when multiple tags were used. The
+	previous algorithm was causing an uneven load for backends.
+
+	This change breaks compatibility with older director servers that
+	were using tags because of the different selection algorithm. The
+	new director code refuses to run within a cluster with old directors
+	if tags are used.
+	[0e05efd14b39]
+
+2015-11-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/mail-host.c:
+	director: Code cleanup - renamed hosts_unsorted to vhosts_unsorted
+	[5168fdd5127e]
+
+	* src/director/mail-host.c, src/director/mail-host.h:
+	director: Code cleanup - rename tag to tag_name in mail_host_*()
+	parameters. In preparation for the following changes.
+	[11a913488054]
+
+	* src/director/director-connection.c, src/director/director.c,
+	src/director/doveadm-connection.c, src/director/mail-host.c,
+	src/director/mail-host.h:
+	director: Code cleanup - access host->tag via mail_host_get_tag() In
+	preparation for the following changes.
+	[7e47f561ad49]
+
+	* src/director/director-connection.c, src/director/director.c,
+	src/director/doveadm-connection.c, src/director/mail-host.c,
+	src/director/mail-host.h:
+	director: Code cleanup - make most mail_host_*() list parameters
+	unnecessary.
+	[39cfca637d60]
+
+	* src/director/mail-host.c:
+	director: With director_consistent_hashing=yes hosts_hash wasn't
+	always calculated right. If different servers had added hosts in
+	different order, the hosts_hash would have become different, which
+	caused errors and resyncs.
+	[63516762a64c]
+
+2015-11-18  Teemu Huovila  <teemu.huovila@dovecot.fi>
+
+	* src/lib-fts/test-fts-filter.c:
+	lib-fts: Fix compilation for systems without libstemmer.
+	[194e3622d5e6]
+
+	* src/plugins/fts/fts-user.c:
+	fts: Remove default filters and tokenizers. There aren't any
+	specially good defaults that work for all the languages, so it's
+	better to just enforce explicit settings.
+	[7b93d5d71f2e]
+
+2015-11-19  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-fs/fs-posix.c:
+	fs-posix: Added mode=auto parameter to copy mode from parent
+	directory if setgid-bit is set
+	[52e0fb4f2693]
+
+	* src/lib-fs/fs-posix.c:
+	fs-posix: Code cleanup - don't store dir_mode permanently. Cleanup
+	in preparation for mode=auto.
+	[4564f4300c91]
+
+2015-11-19  Teemu Huovila  <teemu.huovila@dovecot.fi>
+
+	* src/lib-fts/test-fts-filter.c, src/lib-fts/test-fts-language.c:
+	lib-fts: Silence clang warnings.
+	[db85dbd62706]
+
+2015-11-19  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/fts/Makefile.am:
+	fts plugin: Install fts-storage.h
+	[1f9f28ce605c]
+
+	* src/lib-fs/fs-api.c, src/lib-fs/fs-api.h:
+	lib-fs: Added fs_stats_get_read/write_usecs() These can be easily
+	used to sum up all the timings for read and write categories.
+	[fac18fa49f2d]
+
+2015-11-18  Timo Sirainen  <tss@iki.fi>
+
+	* src/indexer/master-connection.c:
+	indexer-worker: Use provided session-id only as a prefix for a
+	unique session ID. Fixes stats process's "Duplicate session ID"
+	errors when LMTP delivers to multiple recipients.
+	[cd347fd1791a]
+
+	* src/lib-storage/mail-storage-service.c, src/lib-storage/mail-
+	storage-service.h:
+	lib-storage: Added mail_storage_service_input.session_id_prefix This
+	should make it easier to pass through the original session_id to
+	worker process sessions. Especially if these sessions are somewhat
+	short-lived it can be useful to assign them a unique session ID
+	while still being able to match it to the parent's session ID.
+	[e976d6f988ec]
+
+	* src/stats/mail-session.c:
+	stats: Improved logging on invalid CONNECT input.
+	[626758356cce]
+
+	* src/plugins/stats/stats-plugin.c:
+	stats: Forced sending of UPDATE-SESSION every 5 minutes wasn't
+	working. This caused stats process to forget about idling (imap)
+	sessions if they didn't do anything for over 15 minutes.
+	[dc08ba342085]
+
+	* src/stats/mail-session.c:
+	stats: When logging UPDATE-SESSION stats, log also the session ID.
+	[109c23a7412a]
+
+	* src/lib-storage/mail-storage-service.c:
+	lib-storage: Create ioloop context for users even if log prefix
+	changing is disabled. This fixes stats plugin to work with lmtp,
+	imap-urlauth and doveadm-server.
+	[910656f4b7a0]
+
+	* src/lib-master/master-service.c, src/lib-master/master-service.h:
+	lib-master: master_service_is_master_stopped() now returns FALSE if
+	running standalone. The only caller of this function was stats
+	plugin to see if it should send stats updates. So this fixes
+	dovecot-lda, doveadm and other standalone tools to send stats
+	updates.
+	[52cbfa793147]
+
+	* src/lib-master/ipc-server.c:
+	lib-master: Fixed timeout leak at deinit when we couldn't connect to
+	ipc-server
+	[f78c312bc5a9]
+
+	* src/pop3/pop3-client.c:
+	pop3: When creating session lock file, prefer to write it to the
+	index root dir. This is especially important for mail storage
+	backends that don't have a mail root directory.
+	[fa46e882e8bf]
+
+	* src/pop3/main.c, src/pop3/pop3-client.c, src/pop3/pop3-client.h:
+	pop3: Send "OK Logged in" before reading mailbox. This way if the
+	reading takes a long time, the client still sees that the login
+	itself was successful. This is especially useful to avoid
+	unnecessary errors logged by proxies.
+	[5528fd720619]
+
+	* src/imap/imap-client.c:
+	imap: Disconnection log message incorrectly logged "input/output"
+	even if only "input" was set.
+	[3d209e0982bf]
+
+	* src/imap/cmd-fetch.c, src/imap/imap-client.c:
+	imap: When disconnected during FETCH, include the last byte counts
+	in disconnection log message.
+	[b638e19d3bd4]
+
+2015-11-17  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-fs/fs-metawrap.c:
+	lib-fs: Improved fs-metawrap's fs_stat() error message.
+	[f8dcf8b91282]
+
+	* src/lib-fs/istream-metawrap.c:
+	lib-fs: Fixed fs_stat() for fs-metawrap
+	[392b4cd7a47a]
+
+	* src/login-common/client-common-auth.c, src/login-common/client-
+	common.h, src/login-common/sasl-server.c:
+	*-login: Added postlogin_socket=path passdb extra field. By default
+	e.g. "imap" or "pop3" is the post-login socket, but this can
+	override it. This could be used for example for per-user debugging
+	(e.g. setting executable to be run via strace or valgrind).
+	[605dd1749578]
+
+	* src/lib-master/master-auth.c, src/lib-master/master-auth.h:
+	lib-master: master_auth_request_full() now supports per-request
+	path.
+	[8fa5d235065b]
+
+	* src/lib-master/master-auth.c, src/lib-master/master-auth.h, src
+	/login-common/sasl-server.c:
+	lib-master: Added extensible master_auth_request_full() call. Only
+	the API was changed, no changes to functionality.
+	[b4a406dce5b8]
+
+	* src/lib-fs/fs-api.c:
+	lib-fs: Added asserts to fs_set_metadata() to make sure key and
+	value are non-NULL Otherwise the bug would be noticed only much
+	later when trying to dereference NULL pointer.
+	[d39daee9d72c]
+
+2015-11-17  Teemu Huovila  <teemu.huovila@dovecot.fi>
+
+	* src/lib-fts/Makefile.am, src/lib-fts/fts-library.c, src/lib-fts/fts-
+	library.h, src/plugins/fts/fts-plugin.c:
+	fts: Added fts_library_init() and _deinit() Replaces calling three
+	different functions on init and deinit.
+	[6bf404e276c6]
+
+	* src/lib-fts/fts-language.c, src/lib-fts/fts-language.h, src/lib-fts
+	/test-fts-language.c:
+	lib-fts: Added fts_language_register() to register more languages in
+	plugins.
+	[92aa48461150]
+
+	* configure.ac, dovecot-config.in.in, dovecot.m4:
+	dovecot-config: Added LIBFTS.
+	[ea447bc283e1]
+
+	* src/lib-fts/fts-filter-stemmer-snowball.c:
+	lib-fts: Explicitly state encoding used for stemming.
+	[d2aded3f7065]
+
+	* src/lib-fts/fts-tokenizer-generic.c:
+	lib-fts: Removed TODO comment. The call to uni_utf8_get_char_n()
+	already does easy cases first. Adding more special code paths is not
+	necessary.
+	[f015c3dc7b4b]
+
+	* src/lib-fts/fts-tokenizer-generic.c:
+	lib-fts: Minor code cleanup - Rename some internal functions. Maybe
+	the names are more logical this way.
+	[af09ba0a1360]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/fts-language.c, src/lib-
+	fts/stopwords_no.txt, src/lib-fts/test-fts-filter.c, src/lib-fts
+	/test-fts-language.c:
+	lib-fts: Add Norwegian. Norwegian has two main dialects, Bokmal(nb)
+	and Nynorsk(nn). They are detected separately by libexttextcat, but
+	the stemmer only knows Norwegian. Thus they are treated as a single
+	language, Norwegian (no). This might also make more sense in
+	everyday use of mixed writing style Norwegian.
+
+	Caveat: The default normalizer filter does not modify U+00F8 (Latin
+	Small Letter O with Stroke). In some configurations it might be
+	desirable to rewrite it to e.g. o. Same goes for the upper case
+	version. This can be done by passing a modified "id" setting to the
+	normalizer filter.
+	[301d48ef7398]
+
+	* src/lib-fts/fts-language.c:
+	lib-fts: Add comment to language names. Languages are defined by
+	their ISO 639-1 code, which is a two letters. It is possible, that
+	some languages with only a three letter code, ie. a ISO 639-2 code,
+	could be added in the future.
+	[f31fadf622f2]
+
+	* src/lib-fts/Makefile.am, src/lib-fts/fts-language.c, src/lib-
+	fts/stopwords_sv.txt, src/lib-fts/test-fts-filter.c, src/lib-fts
+	/test-fts-language.c:
+	lib-fts: Add Swedish (sv) to supported languages.
+	[c7f9d3d8f278]
+
+	* src/lib-fts/test-fts-filter.c:
+	lib-fts: Add l' contraction to French unit test.
+	[01bd19136b2c]
+
+2015-11-16  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/pop3-migration/test-pop3-migration-plugin.c:
+	pop3-migration: Fixed memory leak in unit test.
+	[caf770735755]
+
+	* src/lib-mail/istream-header-filter.c, src/lib-mail/test-istream-
+	header-filter.c:
+	lib-mail: Fixed istream-header-filter when callback excluded
+	multiple headers. This only affected pop3-migration plugin.
+	[1146e005bd75]
+
+	* dovecot.m4:
+	dovecot.m4: Run valgrind with --trace-children=yes Some of the unit
+	tests are run via shell and we want to check the unit tests instead
+	of just the shell.
+	[923935a77ca8]
+
+	* run-test-valgrind.supp:
+	Added Valgrind suppressions file for ignoring any bash memory leaks.
+	Some of the unit tests are run via shell.
+	[fdfc926202da]
+
+	* dovecot.m4:
+	dovecot.m4: Added --leak-check=full to valgrind
+	[2a85e0b0dc35]
+
+2015-11-16  Phil Carmody  <phil@dovecot.fi>
+
+	* src/lib-charset/test-charset.c, src/lib-fts/test-fts-filter.c, src
+	/lib-fts/test-fts-tokenizer.c, src/lib-imap/test-imap-utf7.c, src
+	/lib-mail/test-istream-qp-decoder.c, src/lib-mail/test-message-
+	header-decode.c, src/lib-mail/test-message-header-encode.c:
+	various - remove 8-bit characters from literal strings in test cases
+	C has a portable way of expressing characters not in the basic
+	character set, namely \xNN escaping. Otherwise, the interpretation
+	of the raw utf-8 is implentation dependent. This has the benefit of
+	making some tests' expected output more obvious, such as "=c3=a4"
+	matching "\xC3\xA4", even if it hinders the readability of some
+	natural-language-based tests.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[36353046b107]
+
+	* src/lib/str-table.c:
+	lib: fix memory leak of iterator in str_table_deinit() The deinit
+	function uses an iterator, but never cleared it up. Found by
+	Valgrind.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[ae5be2c19fce]
+
+	* src/lib/test-istream-failure-at.c:
+	lib: make test-istream-failure-at not leak memory This permits
+	Valgrind to run without complaint.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[416399bf1643]
+
+	* src/lib/istream-failure-at.c, src/lib/ostream-failure-at.c:
+	lib: fix memory leaks in failure-at streams The parent wasn't
+	getting unref'ed, and would hang around for ever.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[28f088e237d9]
+
+	* src/lib-master/test-master-service-settings-cache.c:
+	lib-master: stop tests from leaking memory This permits Valgrind to
+	run without complaint.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[80a47f533fbf]
+
+	* src/lib-http/test-http-header-parser.c, src/lib-http/test-http-
+	request-parser.c, src/lib-http/test-http-response-parser.c, src/lib-
+	http/test-http-transfer.c:
+	lib-http: free resources used in the tests Signed-off-by: Phil
+	Carmody <phil@dovecot.fi>
+	[f049fe9e7799]
+
+	* src/lib-http/http-message-parser.c:
+	lib-http: ref/unref input stream in http message parser To prevent
+	assidental disappearance of the stream while it's in use. Also, the
+	caller can create and forget - we'll do the cleanup later.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[fe23c9b18c9d]
+
+2015-11-16  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-imap-client/imapc-connection.c:
+	imapc: Treat literal8 input the same as regular literal. This is
+	mainly for migrating away from broken servers (a patched Cyrus) that
+	send literal8 if a (corrupted) message contains NULs.
+	[c0229e018a24]
+
+2015-11-12  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap/imap-client.c:
+	imap: When client disconnects during a running command, log the
+	command wait state.
+	[8dae5dc991ce]
+
+	* src/imap/cmd-fetch.c, src/imap/cmd-idle.c, src/imap/imap-client.c:
+	imap: If IDLE or FETCH notices a disconnection, log the running
+	command statistics.
+	[4c8f7316a659]
+
+	* src/imap/imap-client.c:
+	imap: When client disconnects during a running command, log the IO
+	input/output wait status. This is mainly useful for debugging to
+	make sure that the hang isn't happening because of a bug (missing
+	io) in Dovecot.
+	[5aba08de8b2f]
+
+	* src/lib/ioloop.c, src/lib/ioloop.h, src/lib/test-ioloop.c:
+	lib: Added io_loop_find_fd_conditions()
+	[2f3b58470752]
+
+	* src/plugins/quota/quota-count.c:
+	quota: When recalculating quota, don't try to access nonexistent
+	autocreate-mailboxes. There's no need to physically create them,
+	since they're empty anyway.
+	[53f4464235b3]
+
+2015-11-11  Timo Sirainen  <tss@iki.fi>
+
+	* src/login-common/login-proxy.c:
+	login proxy: If writing to ostream fails, log the ostream's error
+	string. Although for now it's always just based on the errno anyway.
+	[e7f71caad9c5]
+
+	* src/login-common/login-proxy.c:
+	login proxy: Include some extra information in disconnect log lines.
+	[9dd14c376418]
+
+	* src/auth/db-ldap.c, src/auth/db-ldap.h:
+	auth: Added hardcoded 5 second timeout to LDAP connect() Although it
+	doesn't look like the timeout is exactly 5 seconds always due to
+	OpenSSL's internal workings, but this should be good enough.
+	[ca91d540fd87]
+
+2015-11-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/push-notification/push-notification-events.h:
+	push-notification: Removed unused code.
+	[0b1c73b01a5a]
+
+2015-11-09  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/virtual/virtual-sync.c:
+	virtual: Include mailbox name in "Backend mailbox added by another
+	session." error.
+	[a2824031f6a8]
+
+	* src/auth/password-scheme-crypt.c, src/auth/password-scheme.c:
+	auth: Don't crash when trying to use CRYPT scheme when crypt()
+	doesn't support DES
+	[61eb9ac0d29e]
+
+	* src/lib-storage/mail-storage-service.c, src/lib-storage/mail-user.c:
+	lib-storage: Support %{userdb:*} variables in mail_home and
+	mail_chroot settings.
+	[2f2d78bedeed]
+
+	* src/lib/bits.h:
+	lib: Removed unnecessary includes from bits.h All of them are
+	already in lib.h, and bits.h gets included from lib.h. This also
+	solves a compiling problem for systems where stdint.h doesn't exist.
+	[5d58bdcafc7d]
+
+	* src/replication/replicator/replicator.c:
+	replicator: Send initial status notification to master before
+	listing all users To avoid master process from killing us after 30
+	seconds if the user listing takes longer than that.
+	[f5e997d20461]
+
+2015-11-05  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-request-var-expand.c:
+	auth: Fixed crash when using %{passdb:} or %{userdb:} functions when
+	escape_func was NULL Patch by Michael Slusarz.
+	[c129d92e2735]
+
+2015-11-04  Phil Carmody  <phil@dovecot.fi>
+
+	* src/lib/test-istream-crlf.c:
+	lib: test-istream-crlf - fix expected output strings, add more
+	coverage Fix an out-by-one which was missing trailing carriage
+	returns in _lf mode.
+
+	Debug: input = [19]:``...........N.N....R'' Debug: output=
+	[19]:``...........N.N....R'' Debug: data =
+	[18]:``...........N.N....'' test-istream-crlf.c:78: Assert(#20)
+	failed: size == str_len(output)
+
+	Add some randomised tests to get better coverage of all
+	possibilities.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[5717e416f31f]
+
+2015-10-27  Michael M Slusarz  <michael.slusarz@dovecot.fi>
+
+	* src/plugins/push-notification/Makefile.am:
+	push-notification: Fix linking against notify plugin
+	[1e7fe403dd50]
+
+2015-10-29  Timo Sirainen  <tss@iki.fi>
+
+	* src/imap/imap-notify.c:
+	imap: Fixed crash in NOTIFY when there were watched namespaces that
+	didn't support NOTIFY.
+	[787cfed25b0f]
+
+	* src/doveadm/dsync/dsync-mailbox-tree-fill.c:
+	dsync: Fixed handling of deleted directories. We may still know
+	about the directory node even if it doesn't exist, and we still want
+	to delete it.
+	[594cd05217eb]
+
+	* src/auth/auth-request.c:
+	auth: Avoid a crash by not trying to save empty delayed credentials.
+	[308af6582495]
+
+	* src/plugins/acl/acl-api-private.h, src/plugins/acl/acl-api.c:
+	acl: acl_object_list_*() now duplicates rights at init to avoid them
+	changing during listing. Depending on the calling code the
+	acl_object could have been refreshed during the listing and caused
+	bugs/crashes.
+
+	This fixes a crash at least in mailbox deletion during attribute
+	deletion where iter->idx was higher (2) than the number of rights at
+	the time (0).
+	[8f198b569b01]
+
+2015-10-28  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-master-connection.c:
+	auth: Typofix for error message.
+	[9654ab4c337c]
+
+	* src/auth/auth-request.c:
+	auth: nopassword field is specific to a single passdb, remove before
+	next passdb is processed
+	[3a6e503c9ee6]
+
+2015-10-27  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-mail/mail-html2text.h, src/lib-mail/message-snippet.c, src
+	/lib-mail/test-message-snippet.c, src/plugins/fts/fts-parser-html.c:
+	lib-mail, fts: Put application/xhtml+xml MIME parts through html
+	parser as well.
+	[c02969e65b64]
+
+2015-10-26  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/acl/acl-mailbox.c:
+	acl: If mailbox is autocreated, assume it already exists and don't
+	require "create" ACL
+	[c7d384bc3964]
+
+	* src/plugins/acl/acl-attributes.c, src/plugins/acl/acl-mailbox.c:
+	acl: Fixed handling mailbox deletion when only "delete" right was
+	available. So especially when there were no "lookup" or "read"
+	rights.
+	[0660772fb1dd]
+
+2015-10-23  Timo Sirainen  <tss@iki.fi>
+
+	* src/auth/auth-worker-client.c, src/auth/userdb-blocking.c:
+	auth: Fixed userdb changing username via auth-worker
+	[ce132257cbb5]
+
+2015-10-22  Timo Sirainen  <tss@iki.fi>
+
+	* src/plugins/notify/notify-storage.c:
+	notify plugin: Don't access already freed memory. In the same
+	changeset I even added a comment just above that it shouldn't be
+	accessed..
+	[3d576d682137]
+
+	* src/plugins/quota/quota-dict.c:
+	quota-dict: Added "no-unset" parameter.
+	[20b381fd95d0]
+
+2015-10-21  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/list/mailbox-list-index-backend.c:
+	LAYOUT=index: Fixed error handling in mailbox creation race
+	condition. If two processes create the same mailbox, the other one
+	ends up being deleted on failure. However, if the deletion itself
+	also failed the state becomes a big ambiguous. We don't want to
+	return MAIL_ERROR_EXISTS in that case, because the caller may try to
+	open the mailbox with the inconsistent state and fail. So we'll
+	instead return the original mailbox_delete() error to the caller.
+	[4bcca8a822dc]
+
+	* src/login-common/login-proxy.c:
+	login proxy: Separate admin kicks, director kicks and shutdowns in
+	log messages.
+	[a98aaaf55b13]
+
+	* src/lib-master/master-service-ssl-settings.c, src/lib-master/master-
+	service-ssl-settings.h, src/lib-ssl-iostream/iostream-openssl-
+	context.c, src/lib-ssl-iostream/iostream-ssl.h, src/login-common
+	/ssl-proxy-openssl.c:
+	ssl_options: Added support for no_ticket
+	[098de79b89c8]
+
+2015-10-20  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/doveadm-fs.c:
+	doveadm fs: Log also the exact reason for "file doesn't exist"
+	[0c2f8cb41fea]
+
+	* src/dict/main.c:
+	dict: Show number of clients in process title
+	[051505f9a5ae]
+
+	* src/lib-index/mail-index-sync.c:
+	lib-index: tail_offset wasn't updated as often as it should have
+	been. ctx->last_tail_offset was being increased for every non-
+	external transaction and at the end we checked if head was larger
+	than it. This logic didn't really make any sense, since non-external
+	transactions specifically were supposed to update the tail_offset.
+	[a26d8492614e]
+
+	* src/lib-imap-storage/imap-metadata.c:
+	lib-imap-storage: Mark METADATA transactions as external. We never
+	write the metadata values to any storage backend, so they also don't
+	need to be explicitly synced.
+	[89323ed80676]
+
+	* src/lib-sql/driver-mysql.c:
+	mysql: Added connect/read/write_timeout settings. Default to 30s
+	read/write_timeout.
+	[2730e603547d]
+
+	* src/lib-sql/driver-mysql.c:
+	mysql: Fixed client_flags parameter
+	[e9f5db1e5770]
+
+	* src/lib-sql/driver-mysql.c:
+	mysql: Use the correct way of setting a connect timeout. I'm not
+	sure if this didn't exist earlier, or if I just somehow missed it.
+	[5288c66c7d69]
+
+	* src/doveadm/dsync/dsync-brain-mailbox.c, src/doveadm/dsync/dsync-
+	brain-private.h, src/doveadm/dsync/dsync-brain.c, src/doveadm/dsync
+	/dsync-brain.h, src/doveadm/dsync/dsync-ibc-stream.c,
+	src/doveadm/dsync/dsync-mailbox-import.c, src/doveadm/dsync/dsync-
+	mailbox-import.h:
+	dsync: Added DSYNC_BRAIN_FLAG_NO_NOTIFY to enable
+	MAILBOX_TRANSACTION_FLAG_NO_NOTIFY It's arguable that this should be
+	enabled by default, but people might like to keep mail_log
+	notifications for dsync.
+	[f9a143c630a5]
+
+	* src/lib-storage/mail-storage.h, src/plugins/notify/notify-storage.c:
+	lib-storage/notify: Added MAILBOX_TRANSACTION_FLAG_NO_NOTIFY This
+	flag could potentially apply for other things as well, not just
+	notify plugin. In general anything that could do external
+	notifications shouldn't do anything for transactions with this flag.
+	[16ff395c156e]
+
+	* src/lib-dict/dict-sql.c:
+	dict-sql: Fixed async iteration with MySQL and SQLite
+	[467695fee373]
+
+	* src/lib-charset/test-charset.c:
+	lib-charset: Added UTF-7 iconv() unit test Possibly crashes on
+	FreeBSD? Not verified yet. But a good test in any case.
+	[0f5e58361c48]
+
+	* src/lib-charset/test-charset.c:
+	lib-charset: Run iconv unit tests by giving iconv() new data 1 byte
+	at a time.
+	[5bba7529d5d7]
+
+2015-10-19  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/imapc/imapc-mailbox.c:
+	imapc: Set storage's error to "internal error" if we detect mailbox
+	state corruption. This fixes "unknown internal error" in at least
+	syncing code when an expunged message reappears.
+	[56d08de919a1]
+
+	* src/lib/net.c:
+	lib: net_gethostbyname() now supports [ipv6] style bracketed
+	addresses.
+	[c5c34c02fda3]
+
+	* src/director/mail-host.c:
+	director: Fix to previous change - mail_host_dup() wasn't
+	strdup()ing hostname. This could have caused a crash at deinit.
+	[5876ca2d63fb]
+
+	* src/director/director-connection.c, src/director/director-request.c,
+	src/director/director-request.h, src/director/director.c,
+	src/director/login-connection.c, src/director/mail-host.c,
+	src/director/mail-host.h:
+	director: Remember backends' hostnames and send them in login reply.
+	This allows login processes to verify the remote server's hostname
+	in SSL certificate.
+	[7f718c840aff]
+
+	* src/director/director-connection.c:
+	director: Small code cleanup - make it easier to add parameters to
+	HOST
+	[8e9cada0c8fc]
+
+	* doc/man/doveadm-search-query.7:
+	man: Changed "pattern" to "string" in doveamd-search-query(7)
+	[66be949b9bcc]
+
+2015-10-15  Phil Carmody  <phil@dovecot.fi>
+
+	* src/lib-mail/mail-html2text.c:
+	lib-mail: fix html2text parser Silly typo. Fixes bug reported on
+	dovecot list by Akash on Oct 14.
+
+	Signed-off-by: Phil Carmody <phil@dovecot.fi>
+	[17aac21b303d]
+
+2015-10-14  Timo Sirainen  <tss@iki.fi>
+
+	* src/doveadm/dsync/dsync-mailbox-tree-sync.c:
+	dsync: If rename algorithm seems go to an infinite loop, log an
+	error and stop. Ideally we would of course fix the algorithm
+	(especially to not require this kind of looping).
+	[ca17b29b1720]
+
+	* src/imap-login/client-authenticate.c, src/pop3-login/client-
+	authenticate.c:
+	imap/pop3-login: If LOGIN/USER is used with plaintext auth disabled,
+	remember the username for logging. It's still useful to see the
+	username that was sent in the logout message. This won't work for
+	AUTHENTICATE PLAIN, but hopefully the clients that use it understand
+	the LOGINDISABLED capability better.
+	[06908dbcee62]
+
+	* src/lib-sql/driver-cassandra.c:
+	cassandra: Added read/write/delete_fallback_consistency settings.
+	The fallback is attempted if the primary consistency can't be
+	satisfied. One useful use case for this is to have:
+
+	write_consistency=each-quorum write_fallback_consistency=local-
+	quorum
+
+	Which means that during regular operation all writes go to all data
+	centers before they are finished, but if one of the data centers go
+	down we'll switch to just waiting for local data center writes to
+	finish.
+	[8f7a0201ebe3]
+
+	* src/lib-dict/dict-sql.c:
+	dict-sql: dict_lookup_async() didn't call callback on query build
+	failures.
+	[a5e47d9637c3]
+
+2015-10-13  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-storage/index/index-mail.c, src/lib-storage/index/index-
+	status.c:
+	lib-storage: Support latest cache fields in struct
+	mailbox_metadata.precache_fields
+	[3b1e7941542f]
+
+	* src/imap/cmd-append.c:
+	imap: APPEND crashed if invalid keyword was given as parameter.
+	[5e48c5a29ddd]
+
+	* src/auth/db-ldap.c:
+	auth ldap: If tls_* settings are used, pass them to LDAP library
+	even if tls=no Most importantly this allows using the settings for
+	ldaps URLs. And they hopefully won't hurt anything if neither
+	STARTTLS nor ldaps are used.
+	[727acba74cbf]
+
+	* src/lib/uri-util.c:
+	lib: uri_parser_init() wasn't using pool parameter for anything. Now
+	everything is allocated from it instead of from data stack.
+	[b0545670fd99]
+
+	* src/lib-dict/dict-sql-settings.c, src/lib-dict/dict-sql-settings.h,
+	src/lib-dict/dict-sql.c:
+	dict-sql: Added support for value_type field, which deprecates
+	value_hexblob. value_type=string|hexblob|uint are supported now.
+	[6bb60a869c71]
+
+	* src/lib-sql/driver-cassandra.c:
+	cassandra: Added support for returning "int" type values. It looks
+	like we need to explicitly convert all types to strings.
+	[c854e1b3e419]
+
+	* src/auth/db-passwd-file.c, src/auth/db-passwd-file.h:
+	auth: passwd-file now stat()s the file max once per second. It's
+	quite unnecessary to do it more often.
+	[dce5ee506cc8]
+
+2015-10-12  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-fs/fs-dict.c:
+	fs-dict: Implemented hex-encoding for values.
+	[719e7f8fd70b]
+
+	* src/director/director-connection.c:
+	director: Log a warning if directors' clocks are too much out of
+	sync.
+	[d96595e2363b]
+
+	* src/director/director-connection.c, src/director/director-host.h,
+	src/director/director.c, src/director/director.h:
+	director: Detect if directors' hosts have become desynced by sending
+	hosts_hash in SYNC parameter. Also fix up such a situation by
+	resending all HOSTs.
+	[8f225e43e6e3]
+
+	* src/director/director-connection.c, src/director/director-request.c,
+	src/director/director.c:
+	director: Use mail_hosts_hash() to improve debug log messages.
+	[bae8efd8b5b3]
+
+	* src/director/mail-host.c, src/director/mail-host.h:
+	director: Added mail_hosts_hash(), which identifies the current
+	mail_hosts configuration.
+	[eb9b9519db7a]
+
+	* src/director/director-request.c:
+	director: Added another debug log message.
+	[c4fa1bf6da57]
+
+2015-10-11  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/director-connection.c:
+	director: Small code cleanup - make it easier to add parameters to
+	SYNC
+	[4e0c9df36a78]
+
+2015-10-10  Timo Sirainen  <tss@iki.fi>
+
+	* src/director/doveadm-connection.c:
+	director: Don't allow doveadm to update backend's state if the state
+	is already being changed.
+	[5939512ff017]
+
+	* src/director/director-connection.c, src/director/director.c,
+	src/director/mail-host.c, src/director/mail-host.h:
+	director: Don't become desynced if two directors change the same
+	backend in incompatible ways. This would have caused "User hash ..
+	is being redirected to two hosts" errors, which wouldn't easily go
+	away as the directors have a different view of what hosts currently
+	exist.
+	[0f9d4f1a083d]
+
+2015-10-06  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-http/http-message-parser.c:
+	lib-http: Minor improvement to "disconnected during payload read"
+	error message. The same error is also used for http-server for
+	parsing client input, so the message shouldn't say anything about
+	reading the input from server.
+	[9d2dd826ae7e]
+
+2015-10-06  Stephan Bosch  <stephan@rename-it.nl>
+
+	* src/lib-http/http-client-request.c:
+	lib-http: client: Fixed handling of response timout if there is no
+	payload going to the server.
+	[279c156c90e2]
+
+2015-10-04  Timo Sirainen  <tss@iki.fi>
+
+	* src/lib-index/mail-index-map-read.c, src/lib-index/mail-index-
+	private.h, src/lib-index/mail-index-write.c:
+	lib-index: Removed some unnecessary fields.
+	[ef458c0a98b1]
+
+	* src/lib-index/mail-index-sync.c:
+	lib-index: Fixed checking when we want to update dovecot.index This
+	has been broken since 76f576fc28dc. After that dovecot.index was
+	usually updated only when dovecot.index.log was being rotated.
+	[9e3d7e83a075]
+
+	* src/lib-index/mail-index-write.c:
+	lib-index: When writing new index, rotate the log file first before
+	writing it. This way the index contains the new log's seq+offset
+	instead of having to recreate the index almost immediately
+	afterwards.
+	[8322fc090a57]
+
 2015-10-02  Timo Sirainen  <tss@iki.fi>
 
 	* .hgsigs:
 	Added signature for changeset d7e14d388a7e
-	[b483fba06083] [tip]
+	[b483fba06083]
 
 	* .hgtags:
 	Added tag 2.2.19 for changeset d7e14d388a7e

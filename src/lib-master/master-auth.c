@@ -18,6 +18,7 @@ struct master_auth_connection {
 	struct master_auth *auth;
 	unsigned int tag;
 
+	char *path;
 	int fd;
 	struct io *io;
 	struct timeout *to;
@@ -33,7 +34,7 @@ struct master_auth {
 	struct master_service *service;
 	pool_t pool;
 
-	const char *path;
+	const char *default_path;
 
 	unsigned int tag_counter;
 	HASH_TABLE(void *, struct master_auth_connection *) connections;
@@ -49,7 +50,7 @@ master_auth_init(struct master_service *service, const char *path)
 	auth = p_new(pool, struct master_auth, 1);
 	auth->pool = pool;
 	auth->service = service;
-	auth->path = p_strdup(pool, path);
+	auth->default_path = p_strdup(pool, path);
 	hash_table_create_direct(&auth->connections, pool, 0);
 	return auth;
 }
@@ -74,9 +75,10 @@ master_auth_connection_deinit(struct master_auth_connection **_conn)
 		io_remove(&conn->io);
 	if (conn->fd != -1) {
 		if (close(conn->fd) < 0)
-			i_fatal("close(%s) failed: %m", conn->auth->path);
+			i_fatal("close(%s) failed: %m", conn->path);
 		conn->fd = -1;
 	}
+	i_free(conn->path);
 	i_free(conn);
 }
 
@@ -110,11 +112,11 @@ static void master_auth_connection_input(struct master_auth_connection *conn)
 		if (ret == 0 || errno == ECONNRESET) {
 			i_error("read(%s) failed: Remote closed connection "
 				"(destination service { process_limit } reached?)",
-				conn->auth->path);
+				conn->path);
 		} else {
 			if (errno == EAGAIN)
 				return;
-			i_error("read(%s) failed: %m", conn->auth->path);
+			i_error("read(%s) failed: %m", conn->path);
 		}
 		master_auth_connection_deinit(&conn);
 		return;
@@ -130,7 +132,7 @@ static void master_auth_connection_input(struct master_auth_connection *conn)
 
 	if (conn->tag != reply->tag)
 		i_error("master(%s): Received reply with unknown tag %u",
-			conn->auth->path, reply->tag);
+			conn->path, reply->tag);
 	else if (conn->callback == NULL) {
 		/* request aborted */
 	} else {
@@ -143,16 +145,15 @@ static void master_auth_connection_input(struct master_auth_connection *conn)
 static void master_auth_connection_timeout(struct master_auth_connection *conn)
 {
 	i_error("master(%s): Auth request timed out (received %u/%u bytes)",
-		conn->auth->path, conn->buf_pos,
+		conn->path, conn->buf_pos,
 		(unsigned int)sizeof(conn->buf));
 	master_auth_connection_deinit(&conn);
 }
 
-void master_auth_request(struct master_auth *auth, int fd,
-			 const struct master_auth_request *request,
-			 const unsigned char *data,
-			 master_auth_callback_t *callback,
-			 void *context, unsigned int *tag_r)
+void master_auth_request_full(struct master_auth *auth,
+			      const struct master_auth_request_params *params,
+			      master_auth_callback_t *callback, void *context,
+			      unsigned int *tag_r)
 {
         struct master_auth_connection *conn;
 	struct master_auth_request req;
@@ -160,44 +161,47 @@ void master_auth_request(struct master_auth *auth, int fd,
 	struct stat st;
 	ssize_t ret;
 
-	i_assert(request->client_pid != 0);
-	i_assert(request->auth_pid != 0);
+	i_assert(params->request.client_pid != 0);
+	i_assert(params->request.auth_pid != 0);
 
 	conn = i_new(struct master_auth_connection, 1);
 	conn->auth = auth;
 	conn->callback = callback;
 	conn->context = context;
+	conn->path = params->socket_path != NULL ?
+		i_strdup(params->socket_path) : i_strdup(auth->default_path);
 
-	req = *request;
+	req = params->request;
 	req.tag = ++auth->tag_counter;
 	if (req.tag == 0)
 		req.tag = ++auth->tag_counter;
 
-	if (fstat(fd, &st) < 0)
+	if (fstat(params->client_fd, &st) < 0)
 		i_fatal("fstat(auth dest fd) failed: %m");
 	req.ino = st.st_ino;
 
 	buf = buffer_create_dynamic(pool_datastack_create(),
 				    sizeof(req) + req.data_size);
 	buffer_append(buf, &req, sizeof(req));
-	buffer_append(buf, data, req.data_size);
+	buffer_append(buf, params->data, req.data_size);
 
-	conn->fd = net_connect_unix_with_retries(auth->path,
+	conn->fd = net_connect_unix_with_retries(conn->path,
 						 SOCKET_CONNECT_RETRY_MSECS);
 	if (conn->fd == -1) {
 		i_error("net_connect_unix(%s) failed: %m%s",
-			auth->path, errno != EAGAIN ? "" :
+			conn->path, errno != EAGAIN ? "" :
 			" - http://wiki2.dovecot.org/SocketUnavailable");
 		master_auth_connection_deinit(&conn);
 		return;
 	}
 
-	ret = fd_send(conn->fd, fd, buf->data, buf->used);
-	if (ret < 0)
-		i_error("fd_send(%s, %d) failed: %m", auth->path, fd);
-	else if ((size_t)ret != buf->used) {
+	ret = fd_send(conn->fd, params->client_fd, buf->data, buf->used);
+	if (ret < 0) {
+		i_error("fd_send(%s, %d) failed: %m", conn->path,
+			params->client_fd);
+	} else if ((size_t)ret != buf->used) {
 		i_error("fd_send(%s) sent only %d of %d bytes",
-			auth->path, (int)ret, (int)buf->used);
+			conn->path, (int)ret, (int)buf->used);
 		ret = -1;
 	}
 	if (ret < 0) {
@@ -213,6 +217,22 @@ void master_auth_request(struct master_auth *auth, int fd,
 	i_assert(hash_table_lookup(auth->connections, POINTER_CAST(req.tag)) == NULL);
 	hash_table_insert(auth->connections, POINTER_CAST(req.tag), conn);
 	*tag_r = req.tag;
+}
+
+void master_auth_request(struct master_auth *auth, int fd,
+			 const struct master_auth_request *request,
+			 const unsigned char *data,
+			 master_auth_callback_t *callback,
+			 void *context, unsigned int *tag_r)
+{
+	struct master_auth_request_params params;
+
+	memset(&params, 0, sizeof(params));
+	params.client_fd = fd;
+	params.request = *request;
+	params.data = data;
+
+	master_auth_request_full(auth, &params, callback, context, tag_r);
 }
 
 void master_auth_request_abort(struct master_auth *auth, unsigned int tag)
