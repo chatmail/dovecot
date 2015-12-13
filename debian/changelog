@@ -1,3 +1,10 @@
+dovecot (1:2.2.19-1) unstable; urgency=medium
+
+  * [146ef57] Imported Upstream version 2.2.19
+  * [3af7cad] Updated pigeonhole patch to 0.4.9
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 13 Dec 2015 09:41:56 -0500
+
 dovecot (1:2.2.18-2) unstable; urgency=high
 
   * [3f3bf71] Updated pigeonhole patch to 0.4.8 (Closes: #792669)
