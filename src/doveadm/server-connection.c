@@ -243,7 +243,7 @@ server_connection_authenticate(struct server_connection *conn)
 	}
 
 	str_append_c(plain, '\0');
-	str_append(plain, "doveadm");
+	str_append(plain, conn->set->doveadm_username);
 	str_append_c(plain, '\0');
 	str_append(plain, conn->set->doveadm_password);
 
@@ -372,7 +372,7 @@ static int server_connection_read_settings(struct server_connection *conn)
 	struct master_service_settings_input input;
 	struct master_service_settings_output output;
 	const char *error;
-	unsigned int port;
+	in_port_t port;
 	void *set;
 
 	memset(&input, 0, sizeof(input));

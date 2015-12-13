@@ -14,7 +14,6 @@
 #include "lazy-expunge-plugin.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <time.h>
@@ -150,12 +149,19 @@ static int lazy_expunge_mail_is_last_instace(struct mail *_mail)
 {
 	struct lazy_expunge_transaction *lt =
 		LAZY_EXPUNGE_CONTEXT(_mail->transaction);
-	const char *value;
+	const char *value, *errstr;
 	unsigned long refcount;
+	enum mail_error error;
 
 	if (mail_get_special(_mail, MAIL_FETCH_REFCOUNT, &value) < 0) {
+		errstr = mailbox_get_last_error(_mail->box, &error);
+		if (error == MAIL_ERROR_EXPUNGED) {
+			/* already expunged - just ignore it */
+			return 0;
+		}
 		mail_storage_set_critical(_mail->box->storage,
-			"lazy_expunge: Couldn't lookup message's refcount");
+			"lazy_expunge: Couldn't lookup message's refcount: %s",
+			errstr);
 		return -1;
 	}
 	if (*value == '\0') {

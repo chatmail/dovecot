@@ -11,7 +11,6 @@
 #include "maildir-sync.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 
 struct maildir_index_sync_context {
@@ -228,11 +227,9 @@ int maildir_sync_index_begin(struct maildir_mailbox *mbox,
 	if (maildir_sync_ctx == NULL)
 		sync_flags &= ~MAIL_INDEX_SYNC_FLAG_DROP_RECENT;
 
-	if (mail_index_sync_begin(_box->index, &sync_ctx, &view,
-				  &trans, sync_flags) < 0) {
-		mailbox_set_index_error(_box);
+	if (index_storage_expunged_sync_begin(_box, &sync_ctx, &view,
+					      &trans, sync_flags) < 0)
 		return -1;
-	}
 
 	ctx = i_new(struct maildir_index_sync_context, 1);
 	ctx->mbox = mbox;
@@ -336,6 +333,7 @@ static int maildir_sync_index_finish(struct maildir_index_sync_context *ctx,
 		mbox->syncing_commit = FALSE;
 	}
 
+	index_storage_expunging_deinit(&mbox->box);
 	maildir_keywords_sync_deinit(&ctx->keywords_sync_ctx);
 	index_sync_changes_deinit(&ctx->sync_changes);
 	i_free(ctx);
@@ -484,7 +482,7 @@ int maildir_sync_index(struct maildir_index_sync_context *ctx,
 			  mailbox_get_path(&ctx->mbox->box),
 			  hdr->uid_validity, uid_validity);
 		mail_index_reset(trans);
-		index_mailbox_reset_uidvalidity(&mbox->box);
+		mailbox_recent_flags_reset(&mbox->box);
 
 		first_uid = hdr->messages_count + 1;
 		memset(&empty_hdr, 0, sizeof(empty_hdr));
@@ -637,7 +635,7 @@ int maildir_sync_index(struct maildir_index_sync_context *ctx,
 			/* UIDVALIDITY changed, skip over the old messages */
 			seq = first_uid;
 		}
-		index_mailbox_set_recent_seq(&mbox->box, view2, seq, seq2);
+		mailbox_recent_flags_set_seqs(&mbox->box, view2, seq, seq2);
 	}
 	mail_index_view_close(&view2);
 

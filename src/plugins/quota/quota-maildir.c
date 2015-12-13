@@ -14,7 +14,6 @@
 #include "quota-private.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -304,16 +303,14 @@ static int maildirsize_write(struct maildir_quota_root *root, const char *path)
 	if (write_full(fd, str_data(str), str_len(str)) < 0) {
 		i_error("write_full(%s) failed: %m", str_c(temp_path));
 		i_close_fd(&fd);
-		if (unlink(str_c(temp_path)) < 0)
-			i_error("unlink(%s) failed: %m", str_c(temp_path));
+		i_unlink(str_c(temp_path));
 		return -1;
 	}
 	i_close_fd(&fd);
 
 	if (rename(str_c(temp_path), path) < 0) {
 		i_error("rename(%s, %s) failed: %m", str_c(temp_path), path);
-		if (unlink(str_c(temp_path)) < 0 && errno != ENOENT)
-			i_error("unlink(%s) failed: %m", str_c(temp_path));
+		i_unlink_if_exists(str_c(temp_path));
 		return -1;
 	}
 	return 0;
@@ -417,7 +414,7 @@ maildir_parse_limit(const char *str, uint64_t *bytes_r, uint64_t *count_r)
 {
 	const char *const *limit;
 	unsigned long long value;
-	char *pos;
+	const char *pos;
 	bool ret = TRUE;
 
 	*bytes_r = 0;
@@ -425,7 +422,10 @@ maildir_parse_limit(const char *str, uint64_t *bytes_r, uint64_t *count_r)
 
 	/* 0 values mean unlimited */
 	for (limit = t_strsplit(str, ","); *limit != NULL; limit++) {
-		value = strtoull(*limit, &pos, 10);
+		if (str_parse_ullong(*limit, &value, &pos) < 0) {
+			ret = FALSE;
+			continue;
+		}
 		if (pos[0] != '\0' && pos[1] == '\0') {
 			switch (pos[0]) {
 			case 'C':

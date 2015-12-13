@@ -20,7 +20,10 @@ enum dsync_mailbox_trees_sync_flags {
 	/* Enable debugging */
 	DSYNC_MAILBOX_TREES_SYNC_FLAG_DEBUG		= 0x01,
 	/* Show ourself as "master brain" in the debug output */
-	DSYNC_MAILBOX_TREES_SYNC_FLAG_MASTER_BRAIN	= 0x02
+	DSYNC_MAILBOX_TREES_SYNC_FLAG_MASTER_BRAIN	= 0x02,
+	/* Disable mailbox renaming logic. This is just a kludge that should
+	   be removed once the renaming logic has no more bugs.. */
+	DSYNC_MAILBOX_TREES_SYNC_FLAG_NO_RENAMES	= 0x04
 };
 
 enum dsync_mailbox_node_existence {
@@ -132,6 +135,9 @@ dsync_mailbox_tree_get(struct dsync_mailbox_tree *tree, const char *full_name);
 /* Returns full name for the given mailbox node. */
 const char *dsync_mailbox_node_get_full_name(const struct dsync_mailbox_tree *tree,
 					     const struct dsync_mailbox_node *node);
+void dsync_mailbox_node_append_full_name(string_t *str,
+					 const struct dsync_mailbox_tree *tree,
+					 const struct dsync_mailbox_node *node);
 
 /* Copy everything from src to dest, except name and hierarchy pointers */
 void dsync_mailbox_node_copy_data(struct dsync_mailbox_node *dest,

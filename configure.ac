@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.2.18],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv17($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.2.19],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv19($PACKAGE_VERSION)", [Dovecot ABI version])
 
 AC_CONFIG_SRCDIR([src])
 
@@ -64,7 +64,7 @@ AS_HELP_STRING([--with-ioloop=IOLOOP], [Specify the I/O loop method to use (epol
 	ioloop=best)
 
 AC_ARG_WITH(notify,
-AS_HELP_STRING([--with-notify=NOTIFY], [Specify the file system notification method to use (inotify, kqueue, dnotify, none; default is detected in the above order)]),
+AS_HELP_STRING([--with-notify=NOTIFY], [Specify the file system notification method to use (inotify, kqueue, none; default is detected in the above order)]),
 	notify=$withval,
 	notify=)
 
@@ -453,10 +453,10 @@ dnl * after -lsocket and -lnsl tests, inet_aton() may be in them
 AC_CHECK_FUNCS(fcntl flock lockf inet_aton sigaction getpagesize madvise \
                strcasecmp stricmp vsyslog writev pread uname unsetenv \
 	       setrlimit setproctitle seteuid setreuid setegid setresgid \
-	       strtoull strtoll strtouq strtoq getmntinfo \
-	       setpriority quotactl getmntent kqueue kevent backtrace_symbols \
-	       walkcontext dirfd clearenv malloc_usable_size glob fallocate \
-	       posix_fadvise getpeereid getpeerucred inotify_init)
+	       getmntinfo setpriority quotactl getmntent kqueue kevent \
+	       backtrace_symbols walkcontext dirfd clearenv \
+	       malloc_usable_size glob fallocate posix_fadvise \
+	       getpeereid getpeerucred inotify_init)
 
 AC_CHECK_TYPES([struct sockpeercred],,,[
 #include <sys/types.h>
@@ -480,38 +480,6 @@ AC_CACHE_CHECK([for typeof],i_cv_have_typeof,[
 ])
 if test $i_cv_have_typeof = yes; then
   AC_DEFINE(HAVE_TYPEOF,, [Define if you have typeof()])
-fi
-
-dnl strtoimax and strtoumax are macros in HP-UX, so inttypes.h must be included
-dnl Link instead of just compiling since there's something wrong with Tru64
-AC_CACHE_CHECK([for strtoimax],i_cv_have_strtoimax,[
-  AC_TRY_LINK([
-    #include <inttypes.h>
-  ], [
-    strtoimax(0, 0, 0);
-  ], [
-    i_cv_have_strtoimax=yes
-  ], [
-    i_cv_have_strtoimax=no
-  ])
-])
-if test $i_cv_have_strtoimax = yes; then
-  AC_DEFINE(HAVE_STRTOIMAX,, [Define if you have strtoimax function])
-fi
-
-AC_CACHE_CHECK([for strtoumax],i_cv_have_strtoumax,[
-  AC_TRY_LINK([
-    #include <inttypes.h>
-  ], [
-    strtoumax(0, 0, 0);
-  ], [
-    i_cv_have_strtoumax=yes
-  ], [
-    i_cv_have_strtoumax=no
-  ])
-])
-if test $i_cv_have_strtoumax = yes; then
-  AC_DEFINE(HAVE_STRTOUMAX,, [Define if you have strtoumax function])
 fi
 
 dnl * I/O loop function
@@ -598,34 +566,6 @@ if (test "$notify" = "" && test "$ioloop" = kqueue) || test "$notify" = "kqueue"
     if test "$notify" = "kqueue" ; then
       AC_MSG_ERROR([kqueue notify requested but kqueue() is not available])
       notify=""
-    fi
-  fi
-fi
-
-if test "$notify" = "" || test "$notify" = "dnotify"; then
-  dnl * dnotify?
-  AC_CACHE_CHECK([whether we can use dnotify],i_cv_have_dnotify,[
-    AC_TRY_COMPILE([
-      #define _GNU_SOURCE
-      #include <fcntl.h>
-      #include <signal.h>
-      #include <unistd.h>
-    ], [
-      fcntl(0, F_SETSIG, SIGRTMIN);
-      fcntl(0, F_NOTIFY, DN_CREATE | DN_DELETE | DN_RENAME | DN_MULTISHOT);
-    ], [
-      i_cv_have_dnotify=yes
-    ], [
-      i_cv_have_dnotify=no
-    ])
-  ])
-  if test $i_cv_have_dnotify = yes; then
-    AC_DEFINE(IOLOOP_NOTIFY_DNOTIFY,, [Use Linux dnotify])
-    have_notify=dnotify
-    notify=dnotify
-  else
-    if test "$notify" = "dnotify"; then
-      AC_MSG_ERROR([dnotify requested but not available])
     fi
   fi
 fi
@@ -2959,6 +2899,7 @@ src/dns/Makefile
 src/indexer/Makefile
 src/ipc/Makefile
 src/imap/Makefile
+src/imap-hibernate/Makefile
 src/imap-login/Makefile
 src/imap-urlauth/Makefile
 src/login-common/Makefile
@@ -2988,6 +2929,7 @@ src/plugins/mail-filter/Makefile
 src/plugins/mail-log/Makefile
 src/plugins/mailbox-alias/Makefile
 src/plugins/notify/Makefile
+src/plugins/push-notification/Makefile
 src/plugins/pop3-migration/Makefile
 src/plugins/quota/Makefile
 src/plugins/quota-clone/Makefile

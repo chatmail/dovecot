@@ -90,6 +90,7 @@ static void imapc_list_deinit(struct mailbox_list *_list)
 	/* make sure all pending commands are aborted before anything is
 	   deinitialized */
 	if (list->client != NULL) {
+		list->client->destroying = TRUE;
 		imapc_client_disconnect(list->client->client);
 		imapc_storage_client_unref(&list->client);
 	}
@@ -174,6 +175,7 @@ imapc_list_update_tree(struct imapc_mailbox_list *list,
 		flags++;
 	}
 
+	name = mailbox_list_escape_name(&list->list, name);
 	T_BEGIN {
 		const char *vname =
 			mailbox_list_get_vname(&list->list, name);
@@ -677,6 +679,8 @@ imapc_list_iter_next(struct mailbox_list_iterate_context *_ctx)
 {
 	struct imapc_mailbox_list_iterate_context *ctx =
 		(struct imapc_mailbox_list_iterate_context *)_ctx;
+	struct imapc_mailbox_list *list =
+		(struct imapc_mailbox_list *)_ctx->list;
 	struct mailbox_node *node;
 	const char *vname;
 
@@ -691,6 +695,14 @@ imapc_list_iter_next(struct mailbox_list_iterate_context *_ctx)
 		if (node == NULL)
 			return NULL;
 	} while ((node->flags & MAILBOX_MATCHED) == 0);
+
+	if (ctx->info.ns->prefix_len > 0 &&
+	    strncmp(vname, ctx->info.ns->prefix, ctx->info.ns->prefix_len-1) == 0 &&
+	    vname[ctx->info.ns->prefix_len] == '\0' &&
+	    list->set->imapc_list_prefix[0] == '\0') {
+		/* don't return "" name */
+		return imapc_list_iter_next(_ctx);
+	}
 
 	ctx->info.vname = vname;
 	ctx->info.flags = node->flags;

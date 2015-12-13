@@ -13,7 +13,6 @@
 #include "settings-parser.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
 #include <fcntl.h>
@@ -338,13 +337,11 @@ get_octal(struct setting_parser_context *ctx, const char *value,
 	  unsigned int *result_r)
 {
 	unsigned long long octal;
-	char *p;
 
 	if (*value != '0')
 		return get_uint(ctx, value, result_r);
 
-	octal = strtoull(value + 1, &p, 8);
-	if (*p != '\0' || octal > UINT_MAX) {
+	if (str_to_ullong_oct(value+1, &octal) < 0) {
 		ctx->error = p_strconcat(ctx->parser_pool, "Invalid number: ",
 					 value, NULL);
 	}
@@ -355,10 +352,13 @@ get_octal(struct setting_parser_context *ctx, const char *value,
 int settings_get_time(const char *str, unsigned int *secs_r,
 		      const char **error_r)
 {
-	unsigned int num, multiply = 1;
-	char *p;
+	uintmax_t num, multiply = 1;
+	const char *p;
 
-	num = strtoull(str, &p, 10);
+	if (str_parse_uintmax(str, &num, &p) < 0) {
+		*error_r = t_strconcat("Invalid time interval: ", str, NULL);
+		return -1;
+	}
 	while (*p == ' ') p++;
 	switch (i_toupper(*p)) {
 	case 'S':
@@ -406,10 +406,13 @@ int settings_get_time(const char *str, unsigned int *secs_r,
 int settings_get_size(const char *str, uoff_t *bytes_r,
 		      const char **error_r)
 {
-	unsigned long long num, multiply = 1;
-	char *p;
+	uintmax_t num, multiply = 1;
+	const char *p;
 
-	num = strtoull(str, &p, 10);
+	if (str_parse_uintmax(str, &num, &p) < 0) {
+		*error_r = t_strconcat("Invalid size: ", str, NULL);
+		return -1;
+	}
 	while (*p == ' ') p++;
 	switch (i_toupper(*p)) {
 	case 'B':
@@ -445,7 +448,7 @@ int settings_get_size(const char *str, uoff_t *bytes_r,
 		*error_r = t_strconcat("Invalid size: ", str, NULL);
 		return -1;
 	}
-	if (num > ULLONG_MAX / multiply) {
+	if (num > ((uoff_t)-1) / multiply) {
 		*error_r = t_strconcat("Size is too large: ", str, NULL);
 		return -1;
 	}
@@ -579,6 +582,18 @@ get_deflist(struct setting_parser_context *ctx, struct setting_link *parent,
 }
 
 static int
+get_in_port_zero(struct setting_parser_context *ctx, const char *value,
+	 in_port_t *result_r)
+{
+	if (net_str2port_zero(value, result_r) < 0) {
+		ctx->error = p_strdup_printf(ctx->parser_pool,
+			"Invalid port number %s", value);
+		return -1;
+	}
+	return 0;
+}
+
+static int
 settings_parse(struct setting_parser_context *ctx, struct setting_link *link,
 	       const struct setting_define *def,
 	       const char *key, const char *value)
@@ -625,6 +640,10 @@ settings_parse(struct setting_parser_context *ctx, struct setting_link *link,
 			ctx->error = p_strdup(ctx->parser_pool, error);
 			return -1;
 		}
+		break;
+	case SET_IN_PORT:
+		if (get_in_port_zero(ctx, value, (in_port_t *)ptr) < 0)
+			return -1;
 		break;
 	case SET_STR:
 		*((char **)ptr) = p_strdup(ctx->set_pool, value);
@@ -1211,7 +1230,9 @@ void settings_parse_set_keys_expandeded(struct setting_parser_context *ctx,
 static void ATTR_NULL(3, 4, 5)
 settings_var_expand_info(const struct setting_parser_info *info, void *set,
 			 pool_t pool,
-			 const struct var_expand_table *table, string_t *str)
+			 const struct var_expand_table *table,
+			 const struct var_expand_func_table *func_table,
+			 void *func_context, string_t *str)
 {
 	const struct setting_define *def;
 	void *value, *const *children;
@@ -1225,6 +1246,7 @@ settings_var_expand_info(const struct setting_parser_info *info, void *set,
 		case SET_UINT_OCT:
 		case SET_TIME:
 		case SET_SIZE:
+		case SET_IN_PORT:
 		case SET_STR:
 		case SET_ENUM:
 		case SET_STRLIST:
@@ -1242,7 +1264,8 @@ settings_var_expand_info(const struct setting_parser_info *info, void *set,
 				*val += 1;
 			} else if (**val == SETTING_STRVAR_UNEXPANDED[0]) {
 				str_truncate(str, 0);
-				var_expand(str, *val + 1, table);
+				var_expand_with_funcs(str, *val + 1, table,
+						      func_table, func_context);
 				*val = p_strdup(pool, str_c(str));
 			} else {
 				i_assert(**val == SETTING_STRVAR_EXPANDED[0]);
@@ -1260,8 +1283,8 @@ settings_var_expand_info(const struct setting_parser_info *info, void *set,
 			children = array_get(val, &count);
 			for (i = 0; i < count; i++) {
 				settings_var_expand_info(def->list_info,
-							 children[i], pool,
-							 table, str);
+					children[i], pool, table, func_table,
+					func_context, str);
 			}
 			break;
 		}
@@ -1273,11 +1296,21 @@ void settings_var_expand(const struct setting_parser_info *info,
 			 void *set, pool_t pool,
 			 const struct var_expand_table *table)
 {
+	settings_var_expand_with_funcs(info, set, pool, table, NULL, NULL);
+}
+
+void settings_var_expand_with_funcs(const struct setting_parser_info *info,
+				    void *set, pool_t pool,
+				    const struct var_expand_table *table,
+				    const struct var_expand_func_table *func_table,
+				    void *func_context)
+{
 	string_t *str;
 
 	T_BEGIN {
 		str = t_str_new(256);
-		settings_var_expand_info(info, set, pool, table, str);
+		settings_var_expand_info(info, set, pool, table,
+					 func_table, func_context, str);
 	} T_END;
 }
 
@@ -1288,7 +1321,7 @@ void settings_parse_var_skip(struct setting_parser_context *ctx)
 	for (i = 0; i < ctx->root_count; i++) {
 		settings_var_expand_info(ctx->roots[i].info,
 					 ctx->roots[i].set_struct,
-					 NULL, NULL, NULL);
+					 NULL, NULL, NULL, NULL, NULL);
 	}
 }
 
@@ -1309,6 +1342,7 @@ bool settings_vars_have_key(const struct setting_parser_info *info, void *set,
 		case SET_UINT_OCT:
 		case SET_TIME:
 		case SET_SIZE:
+		case SET_IN_PORT:
 		case SET_STR:
 		case SET_ENUM:
 		case SET_STRLIST:
@@ -1389,6 +1423,13 @@ setting_copy(enum setting_type type, const void *src, void *dest, pool_t pool)
 	case SET_SIZE: {
 		const uoff_t *src_size = src;
 		uoff_t *dest_size = dest;
+
+		*dest_size = *src_size;
+		break;
+	}
+	case SET_IN_PORT: {
+		const in_port_t *src_size = src;
+		in_port_t *dest_size = dest;
 
 		*dest_size = *src_size;
 		break;
@@ -1506,6 +1547,7 @@ settings_changes_dup(const struct setting_parser_info *info,
 		case SET_UINT_OCT:
 		case SET_TIME:
 		case SET_SIZE:
+		case SET_IN_PORT:
 		case SET_STR_VARS:
 		case SET_STR:
 		case SET_ENUM:

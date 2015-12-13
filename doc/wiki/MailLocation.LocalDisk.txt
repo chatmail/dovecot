@@ -31,7 +31,7 @@ even knew that the message existed, unless the sender decides to resend it.
 Since power failures and kernel panics are quite rare, many people are tempted
 to disable fsyncing because it may increase the performance quite a lot.
 Dovecot allows this by setting 'mail_fsync=never'. However you should consider
-leaving it at "no" for LDA and LMTP. You can do this with:
+leaving it at "optimized" for LDA and LMTP. You can do this with:
 
 ---%<-------------------------------------------------------------------------
 # Default to no fsyncing
@@ -47,4 +47,4 @@ protocol lmtp {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:47)

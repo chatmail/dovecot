@@ -89,10 +89,8 @@ xml_encode_data(string_t *dest, const unsigned char *data, unsigned int len)
 				/* make sure the character is valid for XML
 				   so we don't get XML parser errors */
 				unsigned int char_len =
-					uni_utf8_char_bytes(data[i]);
-				if (i + char_len <= len &&
-				    uni_utf8_get_char_n(data + i, char_len, &chr) == 1 &&
-				    is_valid_xml_char(chr))
+					uni_utf8_get_char_n(data + i, len - i, &chr);
+				if (char_len > 0 && is_valid_xml_char(chr))
 					str_append_n(dest, data + i, char_len);
 				else {
 					str_append_n(dest, utf8_replacement_char,
@@ -308,10 +306,10 @@ fts_backend_solr_get_last_uid_fallback(struct solr_fts_backend *backend,
 	box_name = fts_box_get_root(box, &ns);
 
 	mailbox_get_open_status(box, STATUS_UIDVALIDITY, &status);
-	str_printfa(str, "uidv:%u+box:", status.uidvalidity);
+	str_printfa(str, "uidv:%u+AND+box:", status.uidvalidity);
 	solr_quote_http(str, box_name);
 	solr_add_ns_query_http(str, backend, ns);
-	str_append(str, "+user:");
+	str_append(str, "+AND+user:");
 	solr_quote_http(str, ns->user->username);
 
 	pool = pool_alloconly_create("solr last uid lookup", 1024);

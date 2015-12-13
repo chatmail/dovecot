@@ -426,24 +426,6 @@
 /* Define to 1 if you have the <string.h> header file. */
 #undef HAVE_STRING_H
 
-/* Define if you have strtoimax function */
-#undef HAVE_STRTOIMAX
-
-/* Define to 1 if you have the `strtoll' function. */
-#undef HAVE_STRTOLL
-
-/* Define to 1 if you have the `strtoq' function. */
-#undef HAVE_STRTOQ
-
-/* Define to 1 if you have the `strtoull' function. */
-#undef HAVE_STRTOULL
-
-/* Define if you have strtoumax function */
-#undef HAVE_STRTOUMAX
-
-/* Define to 1 if you have the `strtouq' function. */
-#undef HAVE_STRTOUQ
-
 /* Define if struct sqblk.dqb_curblocks exists */
 #undef HAVE_STRUCT_DQBLK_CURBLOCKS
 
@@ -569,9 +551,6 @@
 
 /* Implement I/O loop with BSD kqueue() */
 #undef IOLOOP_KQUEUE
-
-/* Use Linux dnotify */
-#undef IOLOOP_NOTIFY_DNOTIFY
 
 /* Use Linux inotify */
 #undef IOLOOP_NOTIFY_INOTIFY

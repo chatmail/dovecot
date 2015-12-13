@@ -266,6 +266,35 @@ http_client_connection_request_timeout(struct http_client_connection *conn)
 		msecs/1000, msecs%1000));
 }
 
+void http_client_connection_start_request_timeout(
+	struct http_client_connection *conn)
+{
+	unsigned int timeout_msecs = conn->client->set.request_timeout_msecs;
+
+	if (timeout_msecs == 0)
+		;
+	else if (conn->to_requests != NULL)
+		timeout_reset(conn->to_requests);
+	else {
+		conn->to_requests = timeout_add(timeout_msecs,
+						http_client_connection_request_timeout, conn);
+	}
+}
+
+void http_client_connection_reset_request_timeout(
+	struct http_client_connection *conn)
+{
+	if (conn->to_requests != NULL)
+		timeout_reset(conn->to_requests);
+}
+
+void http_client_connection_stop_request_timeout(
+	struct http_client_connection *conn)
+{
+	if (conn->to_requests != NULL)
+		timeout_remove(&conn->to_requests);
+}
+
 static void
 http_client_connection_continue_timeout(struct http_client_connection *conn)
 {
@@ -316,14 +345,6 @@ int http_client_connection_next_request(struct http_client_connection *conn)
 	if (conn->to_idle != NULL)
 		timeout_remove(&conn->to_idle);
 
-	if (conn->client->set.request_timeout_msecs == 0)
-		;
-	else if (conn->to_requests != NULL)
-		timeout_reset(conn->to_requests);
-	else {
-		conn->to_requests = timeout_add(conn->client->set.request_timeout_msecs,
-						http_client_connection_request_timeout, conn);
-	}
 	req->conn = conn;
 	conn->payload_continue = FALSE;
 	if (conn->peer->no_payload_sync)
@@ -466,7 +487,7 @@ http_client_connection_return_response(struct http_client_connection *conn,
 	struct http_client_request *req, struct http_response *response)
 {
 	struct istream *payload;
-	bool retrying;
+	bool retrying, ret;
 
 	i_assert(!conn->in_req_callback);
 	i_assert(conn->incoming_payload == NULL);
@@ -489,8 +510,7 @@ http_client_connection_return_response(struct http_client_connection *conn,
 		io_remove(&conn->conn.io);
 		/* we've received the request itself, and we can't reset the
 		   timeout during the payload reading. */
-		if (conn->to_requests != NULL)
-			timeout_remove(&conn->to_requests);
+		http_client_connection_stop_request_timeout(conn);
 	}
 	
 	conn->in_req_callback = TRUE;
@@ -521,6 +541,7 @@ http_client_connection_return_response(struct http_client_connection *conn,
 		return TRUE;
 	}
 
+	http_client_connection_ref(conn);
 	if (response->payload != NULL) {
 		req->state = HTTP_REQUEST_STATE_PAYLOAD_IN;
 		payload = response->payload;
@@ -530,7 +551,7 @@ http_client_connection_return_response(struct http_client_connection *conn,
 		/* request is dereferenced in payload destroy callback */
 		i_stream_unref(&payload);
 
-		if (conn->to_input != NULL) {
+		if (conn->to_input != NULL && conn->conn.input != NULL) {
 			/* already finished reading the payload */
 			http_client_payload_finished(conn);
 		}
@@ -540,13 +561,15 @@ http_client_connection_return_response(struct http_client_connection *conn,
 		http_client_request_unref(&req);
 	}
 
-	if (conn->incoming_payload == NULL) {
+	if (conn->incoming_payload == NULL && conn->conn.input != NULL) {
 		i_assert(conn->conn.io != NULL ||
 			conn->peer->addr.type == HTTP_CLIENT_PEER_ADDR_RAW);
-		return TRUE;
+		ret = TRUE;
+	} else {
+		ret = FALSE;
 	}
-
-	return FALSE;
+	http_client_connection_unref(&conn);
+	return ret;
 }
 
 static void http_client_connection_input(struct connection *_conn)
@@ -607,8 +630,9 @@ static void http_client_connection_input(struct connection *_conn)
 		http_client_payload_finished(conn);
 		finished++;
 	}
-	if (conn->to_requests != NULL)
-		timeout_reset(conn->to_requests);
+
+	/* we've seen activity from the server; reset request timeout */
+	http_client_connection_reset_request_timeout(conn);
 
 	/* get first waiting request */
 	reqs = array_get(&conn->request_wait_list, &count);
@@ -636,7 +660,15 @@ static void http_client_connection_input(struct connection *_conn)
 
 		if (req == NULL) {
 			/* server sent response without any requests in the wait list */
-			http_client_connection_debug(conn, "Got unexpected input from server");
+			if (response.status == 408) {
+				http_client_connection_debug(conn,
+					"Server explicitly closed connection: 408 %s",
+					response.reason);
+			} else {
+				http_client_connection_debug(conn,
+					"Got unexpected input from server: %u %s",
+					response.status, response.reason);
+			}
 			http_client_connection_close(&conn);
 			return;
 		}
@@ -759,6 +791,14 @@ static void http_client_connection_input(struct connection *_conn)
 						http_client_request_delay_from_response(req, &response) > 0 &&
 						http_client_request_try_retry(req))
 						handled = TRUE;
+				/* request timeout (by server) */
+				} else if (response.status == 408) {
+					/* automatically retry */
+					if (http_client_request_try_retry(req))
+						handled = TRUE;
+					/* connection close is implicit, although server should indicate
+					   that explicitly */
+					conn->close_indicated = TRUE;
 				}
 			}
 
@@ -786,8 +826,7 @@ static void http_client_connection_input(struct connection *_conn)
 			payload_type = http_client_request_get_payload_type(req);
 		} else {
 			/* no more requests waiting for the connection */
-			if (conn->to_requests != NULL)
-				timeout_remove(&conn->to_requests);
+			http_client_connection_stop_request_timeout(conn);
 			req = NULL;
 			payload_type = HTTP_RESPONSE_PAYLOAD_TYPE_ALLOWED;
 		}
@@ -839,8 +878,8 @@ int http_client_connection_output(struct http_client_connection *conn)
 	const char *error;
 	int ret;
 
-	if (conn->to_requests != NULL)
-		timeout_reset(conn->to_requests);
+	/* we've seen activity from the server; reset request timeout */
+	http_client_connection_reset_request_timeout(conn);
 
 	if ((ret = o_stream_flush(output)) <= 0) {
 		if (ret < 0) {
@@ -979,7 +1018,7 @@ static int
 http_client_connection_ssl_handshaked(const char **error_r, void *context)
 {
 	struct http_client_connection *conn = context;
-	const char *error, *host = conn->peer->addr.https_name;
+	const char *error, *host = conn->peer->addr.a.tcp.https_name;
 
 	if (ssl_iostream_check_cert_validity(conn->ssl_iostream, host, &error) == 0)
 		http_client_connection_debug(conn, "SSL handshake successful");
@@ -1013,7 +1052,7 @@ http_client_connection_ssl_init(struct http_client_connection *conn,
 		http_client_connection_debug(conn, "Starting SSL handshake");
 
 	if (io_stream_create_ssl_client(conn->client->ssl_ctx,
-					conn->peer->addr.https_name, &ssl_set,
+					conn->peer->addr.a.tcp.https_name, &ssl_set,
 					&conn->conn.input, &conn->conn.output,
 					&conn->ssl_iostream, &error) < 0) {
 		*error_r = t_strdup_printf(
@@ -1053,7 +1092,7 @@ http_client_connection_connected(struct connection *_conn, bool success)
 	} else {
 		conn->connected_timestamp = ioloop_timeval;
 		http_client_connection_debug(conn, "Connected");
-		if (conn->peer->addr.https_name != NULL) {
+		if (http_client_peer_addr_is_https(&conn->peer->addr)) {
 			if (http_client_connection_ssl_init(conn, &error) < 0) {
 				http_client_peer_connection_failure(conn->peer, error);
 				http_client_connection_debug(conn, "%s", error);
@@ -1068,7 +1107,8 @@ http_client_connection_connected(struct connection *_conn, bool success)
 static const struct connection_settings http_client_connection_set = {
 	.input_max_size = (size_t)-1,
 	.output_max_size = (size_t)-1,
-	.client = TRUE
+	.client = TRUE,
+	.delayed_unix_client_connected_callback = TRUE
 };
 
 static const struct connection_vfuncs http_client_connection_vfuncs = {
@@ -1169,7 +1209,7 @@ http_client_connection_tunnel_response(const struct http_response *response,
 
 static void
 http_client_connection_connect_tunnel(struct http_client_connection *conn,
-	const struct ip_addr *ip, unsigned int port)
+	const struct ip_addr *ip, in_port_t port)
 {
 	unsigned int msecs;
 
@@ -1212,6 +1252,9 @@ http_client_connection_create(struct http_client_peer *peer)
 	case HTTP_CLIENT_PEER_ADDR_RAW:
 		conn_type = "Raw";
 		break;
+	case HTTP_CLIENT_PEER_ADDR_UNIX:
+		conn_type = "Unix";
+		break;
 	}
 
 	conn = i_new(struct http_client_connection, 1);
@@ -1222,11 +1265,20 @@ http_client_connection_create(struct http_client_peer *peer)
 	if (peer->addr.type != HTTP_CLIENT_PEER_ADDR_RAW)
 		i_array_init(&conn->request_wait_list, 16);
 
-	if (peer->addr.type == HTTP_CLIENT_PEER_ADDR_HTTPS_TUNNEL) {
-		http_client_connection_connect_tunnel(conn, &addr->ip, addr->port);
-	} else {
-		connection_init_client_ip
-			(peer->client->conn_list, &conn->conn, &addr->ip, addr->port);
+	switch (peer->addr.type) {
+	case HTTP_CLIENT_PEER_ADDR_HTTPS_TUNNEL:
+		http_client_connection_connect_tunnel
+			(conn, &addr->a.tcp.ip, addr->a.tcp.port);
+		break;
+	case HTTP_CLIENT_PEER_ADDR_UNIX:
+		connection_init_client_unix(peer->client->conn_list, &conn->conn,
+			addr->a.un.path);
+		conn->connect_initialized = TRUE;
+		http_client_connection_connect(conn);
+		break;
+	default:
+		connection_init_client_ip(peer->client->conn_list, &conn->conn,
+			&addr->a.tcp.ip, addr->a.tcp.port);
 		conn->connect_initialized = TRUE;
 		http_client_connection_connect(conn);
 	}
@@ -1242,6 +1294,7 @@ http_client_connection_create(struct http_client_peer *peer)
 
 void http_client_connection_ref(struct http_client_connection *conn)
 {
+	i_assert(conn->refcount > 0);
 	conn->refcount++;
 }
 

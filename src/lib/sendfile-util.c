@@ -116,7 +116,7 @@ ssize_t safe_sendfile(int out_fd, int in_fd, uoff_t *offset, size_t count)
 		if (errno == EINVAL) {
 			/* most likely trying to read past EOF */
 			ret = 0;
-		} else if (errno == EAFNOSUPPORT) {
+		} else if (errno == EAFNOSUPPORT || errno == EOPNOTSUPP) {
 			/* not supported, return Linux-like EINVAL so caller
 			   sees only consistent errnos. */
 			errno = EINVAL;
@@ -127,6 +127,7 @@ ssize_t safe_sendfile(int out_fd, int in_fd, uoff_t *offset, size_t count)
 		}
 	}
 	*offset = (uoff_t)s_offset;
+	i_assert(ret < 0 || (size_t)ret <= count);
 	return ret;
 }
 

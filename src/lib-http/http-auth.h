@@ -43,7 +43,7 @@ int http_auth_parse_credentials(const unsigned char *data, size_t size,
 void http_auth_create_challenge(string_t *out,
 	const struct http_auth_challenge *chlng);
 void http_auth_create_challenges(string_t *out,
-	ARRAY_TYPE(http_auth_challenge) *chlngs);
+	const ARRAY_TYPE(http_auth_challenge) *chlngs);
 
 void http_auth_create_credentials(string_t *out,
 	const struct http_auth_credentials *crdts);
@@ -59,12 +59,21 @@ struct http_auth_challenge *
 http_auth_challenge_clone(pool_t pool,
 	const struct http_auth_challenge *src);
 
+void http_auth_credentials_copy(pool_t pool,
+	struct http_auth_credentials *dst,
+	const struct http_auth_credentials *src);
+struct http_auth_credentials *
+http_auth_credentials_clone(pool_t pool,
+	const struct http_auth_credentials *src);
+
 /*
  * Simple schemes
  */
 
 void http_auth_basic_challenge_init(struct http_auth_challenge *chlng,
 	const char *realm);
+void http_auth_basic_credentials_init(struct http_auth_credentials *crdts,
+	const char *username, const char *password);
 
 #endif
 

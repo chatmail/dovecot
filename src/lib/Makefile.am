@@ -35,6 +35,7 @@ liblib_la_SOURCES = \
 	fdatasync-path.c \
 	fdpass.c \
 	file-cache.c \
+	file-create-locked.c \
 	file-copy.c \
 	file-dotlock.c \
 	file-lock.c \
@@ -64,6 +65,7 @@ liblib_la_SOURCES = \
 	istream-concat.c \
 	istream-crlf.c \
 	istream-data.c \
+	istream-failure-at.c \
 	istream-file.c \
 	istream-hash.c \
 	istream-jsonstr.c \
@@ -79,7 +81,6 @@ liblib_la_SOURCES = \
 	ioloop-iolist.c \
 	ioloop-notify-none.c \
 	ioloop-notify-fd.c \
-	ioloop-notify-dn.c \
 	ioloop-notify-inotify.c \
 	ioloop-notify-kqueue.c \
 	ioloop-poll.c \
@@ -107,6 +108,7 @@ liblib_la_SOURCES = \
 	numpack.c \
 	ostream.c \
 	ostream-buffer.c \
+	ostream-failure-at.c \
 	ostream-file.c \
 	ostream-hash.c \
 	ostream-rawlog.c \
@@ -134,6 +136,7 @@ liblib_la_SOURCES = \
 	strfuncs.c \
 	strnum.c \
 	time-util.c \
+	timing.c \
 	unix-socket-create.c \
 	unlink-directory.c \
 	unlink-old-files.c \
@@ -171,6 +174,7 @@ headers = \
 	fdatasync-path.h \
 	fdpass.h \
 	file-cache.h \
+	file-create-locked.h \
 	file-copy.h \
 	file-dotlock.h \
 	file-lock.h \
@@ -190,6 +194,7 @@ headers = \
 	hostpid.h \
 	imem.h \
 	ipwd.h \
+	iostream.h \
 	iostream-private.h \
 	iostream-rawlog.h \
 	iostream-rawlog-private.h \
@@ -201,6 +206,7 @@ headers = \
 	istream-chain.h \
 	istream-concat.h \
 	istream-crlf.h \
+	istream-failure-at.h \
 	istream-file-private.h \
 	istream-hash.h \
 	istream-jsonstr.h \
@@ -233,6 +239,7 @@ headers = \
 	nfs-workarounds.h \
 	numpack.h \
 	ostream.h \
+	ostream-failure-at.h \
 	ostream-hash.h \
 	ostream-private.h \
 	ostream-rawlog.h \
@@ -252,6 +259,7 @@ headers = \
 	seq-range-array.h \
 	sha1.h \
 	sha2.h \
+	sort.h \
 	str.h \
 	str-find.h \
 	str-sanitize.h \
@@ -260,6 +268,7 @@ headers = \
 	strfuncs.h \
 	strnum.h \
 	time-util.h \
+	timing.h \
 	unix-socket-create.h \
 	unlink-directory.h \
 	unlink-old-files.h \
@@ -292,17 +301,20 @@ test_lib_SOURCES = \
 	test-buffer.c \
 	test-crc32.c \
 	test-data-stack.c \
+	test-failures.c \
 	test-guid.c \
 	test-hash.c \
 	test-hash-format.c \
 	test-hash-method.c \
 	test-hex-binary.c \
+	test-ioloop.c \
 	test-iso8601-date.c \
 	test-istream.c \
 	test-istream-base64-decoder.c \
 	test-istream-base64-encoder.c \
 	test-istream-concat.c \
 	test-istream-crlf.c \
+	test-istream-failure-at.c \
 	test-istream-seekable.c \
 	test-istream-tee.c \
 	test-istream-unix.c \
@@ -312,6 +324,7 @@ test_lib_SOURCES = \
 	test-mempool-alloconly.c \
 	test-net.c \
 	test-numpack.c \
+	test-ostream-failure-at.c \
 	test-ostream-file.c \
 	test-primes.c \
 	test-printf-format-fix.c \
@@ -325,6 +338,7 @@ test_lib_SOURCES = \
 	test-str-sanitize.c \
 	test-str-table.c \
 	test-time-util.c \
+	test-timing.c \
 	test-unichar.c \
 	test-utc-mktime.c \
 	test-var-expand.c \

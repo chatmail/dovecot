@@ -4,10 +4,11 @@
 #include "array.h"
 #include "buffer.h"
 #include "ioloop.h"
+#include "istream.h"
+#include "ostream.h"
 #include "time-util.h"
 #include "imap-commands.h"
 
-#include <stdlib.h>
 
 struct command_hook {
 	command_hook_callback_t *pre;
@@ -68,6 +69,7 @@ static const struct command imap_ext_commands[] = {
 	{ "UID THREAD",		cmd_thread,      COMMAND_FLAG_BREAKS_SEQS },
 	{ "UNSELECT",		cmd_unselect,    COMMAND_FLAG_BREAKS_MAILBOX },
 	{ "X-CANCEL",		cmd_x_cancel,    0 },
+	{ "X-STATE",		cmd_x_state,     COMMAND_FLAG_REQUIRES_SYNC },
 	{ "XLIST",		cmd_list,        0 },
 	/* IMAP URLAUTH (RFC4467): */
 	{ "GENURLAUTH",		cmd_genurlauth,  0 },
@@ -153,14 +155,14 @@ void command_hook_unregister(command_hook_callback_t *pre,
 bool command_exec(struct client_command_context *cmd)
 {
 	const struct command_hook *hook;
-	long long diff;
 	bool finished;
+	struct timeval cmd_start_timeval;
+	uint64_t cmd_start_bytes_in, cmd_start_bytes_out;
 
-	if (cmd->last_ioloop_time.tv_sec != 0) {
-		diff = timeval_diff_usecs(&ioloop_timeval, &cmd->last_ioloop_time);
-		if (diff > 0)
-			cmd->usecs_in_ioloop += diff;
-	}
+	io_loop_time_refresh();
+	cmd_start_timeval = ioloop_timeval;
+	cmd_start_bytes_in = i_stream_get_absolute_offset(cmd->client->input);
+	cmd_start_bytes_out = cmd->client->output->offset;
 
 	array_foreach(&command_hooks, hook)
 		hook->pre(cmd);
@@ -169,10 +171,13 @@ bool command_exec(struct client_command_context *cmd)
 		hook->post(cmd);
 	if (cmd->state == CLIENT_COMMAND_STATE_DONE)
 		finished = TRUE;
-	if (!finished) {
-		io_loop_time_refresh();
-		cmd->last_ioloop_time = ioloop_timeval;
-	}
+
+	io_loop_time_refresh();
+	cmd->running_usecs +=
+		timeval_diff_usecs(&ioloop_timeval, &cmd_start_timeval);
+	cmd->bytes_in += i_stream_get_absolute_offset(cmd->client->input) -
+		cmd_start_bytes_in;
+	cmd->bytes_out += cmd->client->output->offset - cmd_start_bytes_out;
 	return finished;
 }
 

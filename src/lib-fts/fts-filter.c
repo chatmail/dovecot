@@ -2,9 +2,13 @@
 
 #include "lib.h"
 #include "array.h"
+#include "str.h"
 #include "fts-language.h"
-#include "fts-filter.h"
 #include "fts-filter-private.h"
+
+#ifdef HAVE_LIBICU
+#  include "fts-icu.h"
+#endif
 
 static ARRAY(const struct fts_filter *) fts_filter_classes;
 
@@ -16,10 +20,15 @@ void fts_filters_init(void)
 	fts_filter_register(fts_filter_stemmer_snowball);
 	fts_filter_register(fts_filter_normalizer_icu);
 	fts_filter_register(fts_filter_lowercase);
+	fts_filter_register(fts_filter_english_possessive);
+	fts_filter_register(fts_filter_contractions);
 }
 
 void fts_filters_deinit(void)
 {
+#ifdef HAVE_LIBICU
+	fts_icu_deinit();
+#endif
 	array_free(&fts_filter_classes);
 }
 
@@ -56,9 +65,19 @@ int fts_filter_create(const struct fts_filter *filter_class,
 	if (settings == NULL)
 		settings = &empty_settings;
 
-	if (filter_class->v->create(lang, settings, &fp, error_r) < 0) {
-		*filter_r = NULL;
-		return -1;
+	if (filter_class->v.create != NULL) {
+		if (filter_class->v.create(lang, settings, &fp, error_r) < 0) {
+			*filter_r = NULL;
+			return -1;
+		}
+	} else {
+		/* default implementation */
+		if (settings[0] != NULL) {
+			*error_r = t_strdup_printf("Unknown setting: %s", settings[0]);
+			return -1;
+		}
+		fp = i_new(struct fts_filter, 1);
+		*fp = *filter_class;
 	}
 	fp->refcount = 1;
 	fp->parent = parent;
@@ -87,7 +106,14 @@ void fts_filter_unref(struct fts_filter **_fpp)
 
 	if (fp->parent != NULL)
 		fts_filter_unref(&fp->parent);
-	fp->v->destroy(fp);
+	if (fp->v.destroy != NULL)
+		fp->v.destroy(fp);
+	else {
+		/* default destroy implementation */
+		if (fp->token != NULL)
+			str_free(&fp->token);
+		i_free(fp);
+	}
 }
 
 int fts_filter_filter(struct fts_filter *filter, const char **token,
@@ -103,7 +129,7 @@ int fts_filter_filter(struct fts_filter *filter, const char **token,
 
 	/* Parent returned token or no parent. */
 	if (ret > 0 || filter->parent == NULL)
-		ret = filter->v->filter(filter, token, error_r);
+		ret = filter->v.filter(filter, token, error_r);
 
 	if (ret <= 0)
 		*token = NULL;

@@ -140,6 +140,8 @@ dsync_brain_set_flags(struct dsync_brain *brain, enum dsync_brain_flags flags)
 		(flags & DSYNC_BRAIN_FLAG_NO_BACKUP_OVERWRITE) != 0;
 	brain->no_mail_prefetch =
 		(flags & DSYNC_BRAIN_FLAG_NO_MAIL_PREFETCH) != 0;
+	brain->no_mailbox_renames =
+		(flags & DSYNC_BRAIN_FLAG_NO_MAILBOX_RENAMES) != 0;
 }
 
 static void
@@ -330,8 +332,7 @@ int dsync_brain_deinit(struct dsync_brain **_brain, enum mail_error *error_r)
 
 	if (brain->lock_fd != -1) {
 		/* unlink the lock file before it gets unlocked */
-		if (unlink(brain->lock_path) < 0)
-			i_error("unlink(%s) failed: %m", brain->lock_path);
+		i_unlink(brain->lock_path);
 		file_lock_free(&brain->lock);
 		i_close_fd(&brain->lock_fd);
 	}

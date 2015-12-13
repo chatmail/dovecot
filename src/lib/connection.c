@@ -4,6 +4,7 @@
 #include "ioloop.h"
 #include "istream.h"
 #include "ostream.h"
+#include "iostream.h"
 #include "net.h"
 #include "strescape.h"
 #include "llist.h"
@@ -27,6 +28,7 @@ void connection_input_default(struct connection *conn)
 {
 	const char *line;
 	struct istream *input;
+	struct ostream *output;
 	int ret = 0;
 
 	switch (connection_input_read(conn)) {
@@ -40,13 +42,22 @@ void connection_input_default(struct connection *conn)
 	}
 
 	input = conn->input;
+	output = conn->output;
 	i_stream_ref(input);
+	if (output != NULL) {
+		o_stream_ref(output);
+		o_stream_cork(output);
+	}
 	while (!input->closed && (line = i_stream_next_line(input)) != NULL) {
 		T_BEGIN {
 			ret = conn->list->v.input_line(conn, line);
 		} T_END;
 		if (ret <= 0)
 			break;
+	}
+	if (output != NULL) {
+		o_stream_uncork(output);
+		o_stream_unref(&output);
 	}
 	if (ret < 0 && !input->closed) {
 		conn->disconnect_reason = CONNECTION_DISCONNECT_DEINIT;
@@ -172,7 +183,7 @@ void connection_init_server(struct connection_list *list,
 
 void connection_init_client_ip(struct connection_list *list,
 			       struct connection *conn,
-			       const struct ip_addr *ip, unsigned int port)
+			       const struct ip_addr *ip, in_port_t port)
 {
 	i_assert(list->set.client);
 
@@ -256,8 +267,10 @@ int connection_client_connect(struct connection *conn)
 
 	if (conn->port != 0)
 		fd = net_connect_ip(&conn->ip, conn->port, NULL);
-	else
+	else if (conn->list->set.unix_client_connect_msecs == 0)
 		fd = net_connect_unix(conn->name);
+	else
+		fd = net_connect_unix_with_retries(conn->name, conn->list->set.unix_client_connect_msecs);
 	if (fd == -1)
 		return -1;
 	conn->fd_in = conn->fd_out = fd;
@@ -346,15 +359,7 @@ int connection_input_read(struct connection *conn)
 
 const char *connection_disconnect_reason(struct connection *conn)
 {
-	if (conn->input != NULL && conn->input->stream_errno != 0)
-		errno = conn->input->stream_errno;
-	else if (conn->output != NULL && conn->output->stream_errno != 0)
-		errno = conn->output->stream_errno;
-	else
-		errno = 0;
-
-	return errno == 0 || errno == EPIPE ? "Connection closed" :
-		t_strdup_printf("Connection closed: %m");
+	return io_stream_get_disconnect_reason(conn->input, conn->output);
 }
 
 void connection_switch_ioloop(struct connection *conn)

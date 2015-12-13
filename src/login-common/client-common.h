@@ -34,6 +34,8 @@
 #define AUTH_MASTER_WAITING_MSG \
 	"Waiting for authentication master process to respond.."
 
+struct master_service_connection;
+
 enum client_disconnect_reason {
 	CLIENT_DISCONNECT_TIMEOUT,
 	CLIENT_DISCONNECT_SYSTEM_SHUTDOWN,
@@ -58,7 +60,7 @@ struct client_auth_reply {
 	/* for proxying */
 	const char *host, *hostip, *source_ip;
 	const char *destuser, *password, *proxy_mech;
-	unsigned int port;
+	in_port_t port;
 	unsigned int proxy_timeout_msecs;
 	unsigned int proxy_refresh_secs;
 	enum login_proxy_ssl_flags ssl_flags;
@@ -106,12 +108,12 @@ struct client {
 	struct ip_addr local_ip;
 	struct ip_addr ip;
 	struct ip_addr real_remote_ip, real_local_ip;
-	unsigned int local_port, remote_port;
-	unsigned int real_local_port, real_remote_port;
+	in_port_t local_port, remote_port;
+	in_port_t real_local_port, real_remote_port;
 	struct ssl_proxy *ssl_proxy;
 	const struct login_settings *set;
 	const struct master_service_ssl_settings *ssl_set;
-	const char *session_id;
+	const char *session_id, *listener_name;
 
 	int fd;
 	struct istream *input;
@@ -135,6 +137,7 @@ struct client {
 	string_t *auth_response;
 	time_t auth_first_started, auth_finished;
 	const char *sasl_final_resp;
+	const char *const *auth_passdb_args;
 
 	unsigned int master_auth_id;
 	unsigned int master_tag;
@@ -173,10 +176,10 @@ extern struct client *clients;
 
 struct client *
 client_create(int fd, bool ssl, pool_t pool,
+	      const struct master_service_connection *conn,
 	      const struct login_settings *set,
 	      const struct master_service_ssl_settings *ssl_set,
-	      void **other_sets,
-	      const struct ip_addr *local_ip, const struct ip_addr *remote_ip);
+	      void **other_sets);
 void client_destroy(struct client *client, const char *reason);
 void client_destroy_success(struct client *client, const char *reason);
 void client_destroy_internal_failure(struct client *client);

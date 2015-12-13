@@ -23,7 +23,6 @@
 #include "mail-storage.h"
 #include "mail-user.h"
 
-#include <stdlib.h>
 
 struct mail_user_module_register mail_user_module_register = { 0 };
 struct auth_master_connection *mail_user_auth_master_conn;
@@ -99,7 +98,9 @@ mail_user_expand_plugins_envs(struct mail_user *user)
 			return;
 		}
 		str_truncate(str, 0);
-		var_expand(str, envs[i+1], mail_user_var_expand_table(user));
+		var_expand_with_funcs(str, envs[i+1],
+				      mail_user_var_expand_table(user),
+				      mail_user_var_expand_func_table, user);
 		envs[i+1] = p_strdup(user->pool, str_c(str));
 	}
 }
@@ -113,16 +114,17 @@ int mail_user_init(struct mail_user *user, const char **error_r)
 	need_home_dir = user->_home == NULL &&
 		settings_vars_have_key(user->set_info, user->set,
 				       'h', "home", &key, &value);
-
-	/* expand mail_home setting before calling mail_user_get_home() */
-	settings_var_expand(user->set_info, user->set,
-			    user->pool, mail_user_var_expand_table(user));
-
 	if (need_home_dir && mail_user_get_home(user, &home) <= 0) {
 		user->error = p_strdup_printf(user->pool,
 			"userdb didn't return a home directory, "
 			"but %s used it (%%h): %s", key, value);
 	}
+
+	/* expand settings after we can expand %h */
+	settings_var_expand_with_funcs(user->set_info, user->set,
+				       user->pool, mail_user_var_expand_table(user),
+				       mail_user_var_expand_func_table, user);
+	user->settings_expanded = TRUE;
 	mail_user_expand_plugins_envs(user);
 
 	/* autocreated users for shared mailboxes need to be fully initialized
@@ -216,6 +218,8 @@ mail_user_var_expand_table(struct mail_user *user)
 		{ '\0', NULL, "auth_user" },
 		{ '\0', NULL, "auth_username" },
 		{ '\0', NULL, "auth_domain" },
+		/* NOTE: keep this synced with imap-hibernate's
+		   imap_client_var_expand_table() */
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
@@ -248,12 +252,32 @@ mail_user_var_expand_table(struct mail_user *user)
 		tab[13].value = tab[2].value;
 	} else {
 		tab[11].value = user->auth_user;
-		tab[12].value = t_strcut(user->auth_user, '@');
+		tab[12].value = p_strdup(user->pool, t_strcut(user->auth_user, '@'));
 		tab[13].value = strchr(user->auth_user, '@');
 	}
 
 	user->var_expand_table = tab;
 	return user->var_expand_table;
+}
+
+static const char *
+mail_user_var_expand_func_userdb(const char *data, void *context)
+{
+	struct mail_user *user = context;
+	const char *field_name = data;
+	unsigned int i, field_name_len;
+
+	if (user->userdb_fields == NULL)
+		return NULL;
+
+	field_name_len = strlen(field_name);
+	for (i = 0; user->userdb_fields[i] != NULL; i++) {
+		if (strncmp(user->userdb_fields[i], field_name,
+			    field_name_len) == 0 &&
+		    user->userdb_fields[i][field_name_len] == '=')
+			return user->userdb_fields[i] + field_name_len+1;
+	}
+	return NULL;
 }
 
 void mail_user_set_home(struct mail_user *user, const char *home)
@@ -337,6 +361,26 @@ static int mail_user_userdb_lookup_home(struct mail_user *user)
 	return ret;
 }
 
+static void mail_user_get_mail_home(struct mail_user *user)
+{
+	const char *home = user->set->mail_home;
+	string_t *str;
+
+	if (user->settings_expanded) {
+		user->_home = home[0] != '\0' ? home : NULL;
+		return;
+	}
+	/* we're still initializing user. need to do the expansion ourself. */
+	i_assert(home[0] == SETTING_STRVAR_UNEXPANDED[0]);
+	home++;
+	if (home[0] == '\0')
+		return;
+
+	str = t_str_new(128);
+	var_expand(str, home, mail_user_var_expand_table(user));
+	user->_home = p_strdup(user->pool, str_c(str));
+}
+
 int mail_user_get_home(struct mail_user *user, const char **home_r)
 {
 	int ret;
@@ -348,17 +392,17 @@ int mail_user_get_home(struct mail_user *user, const char **home_r)
 
 	if (mail_user_auth_master_conn == NULL) {
 		/* no userdb connection. we can only use mail_home setting. */
-		user->_home = user->set->mail_home;
+		mail_user_get_mail_home(user);
 	} else if ((ret = mail_user_userdb_lookup_home(user)) < 0) {
 		/* userdb lookup failed */
 		return -1;
 	} else if (ret == 0) {
 		/* user doesn't exist */
 		user->nonexistent = TRUE;
-	} else if (user->_home == NULL && *user->set->mail_home != '\0') {
-		/* no home returned by userdb lookup, fallback to mail_home
-		   setting. */
-		user->_home = user->set->mail_home;
+	} else if (user->_home == NULL) {
+		/* no home returned by userdb lookup, fallback to
+		   mail_home setting. */
+		mail_user_get_mail_home(user);
 	}
 	user->home_looked_up = TRUE;
 
@@ -496,6 +540,7 @@ struct mail_user *mail_user_dup(struct mail_user *user)
 
 	user2 = mail_user_alloc(user->username, user->set_info,
 				user->unexpanded_set);
+	user2->_service_user = user->_service_user;
 	if (user->_home != NULL)
 		mail_user_set_home(user2, user->_home);
 	mail_user_set_vars(user2, user->service,
@@ -522,6 +567,7 @@ void mail_user_init_fs_settings(struct mail_user *user,
 	fs_set->base_dir = user->set->base_dir;
 	fs_set->temp_dir = user->set->mail_temp_dir;
 	fs_set->debug = user->mail_debug;
+	fs_set->enable_timing = user->stats_enabled;
 
 	fs_set->ssl_client_set = ssl_set;
 	ssl_set->ca_dir = mail_set->ssl_client_ca_dir;
@@ -532,3 +578,10 @@ void mail_user_stats_fill(struct mail_user *user, struct stats *stats)
 {
 	user->v.stats_fill(user, stats);
 }
+
+static const struct var_expand_func_table mail_user_var_expand_func_table_arr[] = {
+	{ "userdb", mail_user_var_expand_func_userdb },
+	{ NULL, NULL }
+};
+const struct var_expand_func_table *mail_user_var_expand_func_table =
+	mail_user_var_expand_func_table_arr;

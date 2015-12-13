@@ -26,6 +26,17 @@ there are a few things different with Gmail compared to other IMAP servers:
    different user depending on their language).
     * The "All Mail" folder actually contains also "archived mails" that don't
       exist in any other folder. These mails need to be migrated. See below.
+ * Google requires that SSL/TLS be enabled to connect through IMAP. Make sure
+   that the following are enabled in your Dovecot configuration and set to
+   appropriate values based on your distribution (usually either one is
+   enough):
+
+   ---%<----------------------------------------------------------------------
+     ssl_client_ca_dir = (''your distribution's trusted TLS CA store (Fedora /
+   CentOS / Redhat uses /etc/pki/tls/ ))''
+     ssl_client_ca_file = (''your distribution's trusted TLS CA file (Fedora /
+   CentOS / Redhat uses /etc/pki/tls/cert.pem ))''
+   ---%<----------------------------------------------------------------------
 
 GMail Migration Feature (v2.2.16+)
 ----------------------------------
@@ -45,8 +56,18 @@ migration. It will:
 
 For example use a command line:
 
+v2.2.16:
+
 ---%<-------------------------------------------------------------------------
 doveadm backup -a 'virtual/All' -F '-$GmailHaveLabels' -R -u user@domain imapc:
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-05-13 16:45)
+Unfortunately -F parameter isn't working in v2.2.17 & v2.2.18 because of
+another parameter collision caused -F to be accidentally used for another
+purpose. For v2.2.19+ use:
+
+---%<-------------------------------------------------------------------------
+doveadm backup -a 'virtual/All' -O '-$GmailHaveLabels' -R -u user@domain imapc:
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2015-10-02 04:47)

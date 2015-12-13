@@ -8,7 +8,6 @@
 #include "imap-settings.h"
 
 #include <stddef.h>
-#include <stdlib.h>
 #include <unistd.h>
 
 static bool imap_settings_verify(void *_set, pool_t pool,
@@ -16,10 +15,12 @@ static bool imap_settings_verify(void *_set, pool_t pool,
 
 /* <settings checks> */
 static struct file_listener_settings imap_unix_listeners_array[] = {
-	{ "login/imap", 0666, "", "" }
+	{ "login/imap", 0666, "", "" },
+	{ "imap-master", 0600, "", "" }
 };
 static struct file_listener_settings *imap_unix_listeners[] = {
-	&imap_unix_listeners_array[0]
+	&imap_unix_listeners_array[0],
+	&imap_unix_listeners_array[1]
 };
 static buffer_t imap_unix_listeners_buf = {
 	imap_unix_listeners, sizeof(imap_unix_listeners), { NULL, }
@@ -70,9 +71,10 @@ static const struct setting_define imap_setting_defines[] = {
 	DEF(SET_STR, imap_id_send),
 	DEF(SET_STR, imap_id_log),
 	DEF(SET_BOOL, imap_metadata),
+	DEF(SET_TIME, imap_hibernate_timeout),
 
 	DEF(SET_STR, imap_urlauth_host),
-	DEF(SET_UINT, imap_urlauth_port),
+	DEF(SET_IN_PORT, imap_urlauth_port),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -91,6 +93,7 @@ static const struct imap_settings imap_default_settings = {
 	.imap_id_send = "name *",
 	.imap_id_log = "",
 	.imap_metadata = FALSE,
+	.imap_hibernate_timeout = 0,
 
 	.imap_urlauth_host = "",
 	.imap_urlauth_port = 143

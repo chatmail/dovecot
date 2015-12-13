@@ -16,7 +16,6 @@
 #include "dict-private.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -329,8 +328,9 @@ static void file_dict_apply_changes(struct dict_transaction_memory_context *ctx,
 				*atomic_inc_not_found_r = TRUE;
 				break;
 			}
-			diff = strtoll(old_value, NULL, 10) +
-				change->value.diff;
+			if (str_to_llong(old_value, &diff) < 0)
+				i_unreached();
+			diff +=	change->value.diff;
 			tmp = t_strdup_printf("%lld", diff);
 			new_len = strlen(tmp);
 			if (old_value == NULL || new_len > strlen(old_value))
@@ -649,6 +649,7 @@ struct dict dict_driver_file = {
 		dict_transaction_memory_set,
 		dict_transaction_memory_unset,
 		dict_transaction_memory_append,
-		dict_transaction_memory_atomic_inc
+		dict_transaction_memory_atomic_inc,
+		NULL
 	}
 };

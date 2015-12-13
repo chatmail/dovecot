@@ -1,6 +1,8 @@
 #ifndef DIRECTOR_SETTINGS_H
 #define DIRECTOR_SETTINGS_H
 
+#include "net.h"
+
 struct director_settings {
 	const char *master_user_separator;
 
@@ -8,7 +10,8 @@ struct director_settings {
 	const char *director_mail_servers;
 	const char *director_username_hash;
 	unsigned int director_user_expire;
-	unsigned int director_doveadm_port;
+	unsigned int director_user_kick_delay;
+	in_port_t director_doveadm_port;
 	bool director_consistent_hashing;
 };
 

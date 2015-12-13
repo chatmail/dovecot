@@ -23,6 +23,8 @@ struct mail_user {
 	/* User's creator if such exists. For example for autocreated shared
 	   mailbox users their creator is the logged in user. */
 	struct mail_user *creator;
+	/* Set if user was created via mail_storage_service. */
+	struct mail_storage_service_user *_service_user;
 
 	const char *username;
 	/* don't access the home directly. It may be set lazily. */
@@ -34,6 +36,7 @@ struct mail_user {
 	const char *session_id;
 	struct ip_addr *local_ip, *remote_ip;
 	const char *auth_token, *auth_user;
+	const char *const *userdb_fields;
 
 	const struct var_expand_table *var_expand_table;
 	/* If non-NULL, fail the user initialization with this error.
@@ -66,6 +69,10 @@ struct mail_user {
 	unsigned int autocreated:1;
 	/* mail_user_init() has been called */
 	unsigned int initialized:1;
+	/* SET_STR_VARS in user's all settings have been expanded.
+	   This happens near the beginning of the user initialization,
+	   so this is rarely needed to be checked. */
+	unsigned int settings_expanded:1;
 	/* Shortcut to mail_storage_settings.mail_debug */
 	unsigned int mail_debug:1;
 	/* If INBOX can't be opened, log an error, but only once. */
@@ -80,6 +87,8 @@ struct mail_user {
 	unsigned int deinitializing:1;
 	/* Enable administrator user commands for the user */
 	unsigned int admin:1;
+	/* Enable all statistics gathering */
+	unsigned int stats_enabled:1;
 };
 
 struct mail_user_module_register {
@@ -92,6 +101,7 @@ union mail_user_module_context {
 };
 extern struct mail_user_module_register mail_user_module_register;
 extern struct auth_master_connection *mail_user_auth_master_conn;
+extern const struct var_expand_func_table *mail_user_var_expand_func_table;
 
 struct mail_user *mail_user_alloc(const char *username,
 				  const struct setting_parser_info *set_info,

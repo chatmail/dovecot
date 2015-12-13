@@ -15,10 +15,8 @@
 #include "safe-memset.h"
 #include "strescape.h"
 #include "child-wait.h"
-#include "var-expand.h"
 #include "db-checkpassword.h"
 
-#include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
 
@@ -298,8 +296,7 @@ checkpassword_get_cmd(struct auth_request *request, const char *args,
 	string_t *str;
 
 	str = t_str_new(256);
-	var_expand(str, args,
-		   auth_request_get_var_expand_table(request, NULL));
+	auth_request_var_expand(str, args, request, NULL);
 	return t_strconcat(str_c(str), " ", checkpassword_reply_path, NULL);
 }
 

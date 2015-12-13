@@ -187,6 +187,12 @@ ssl:
   If yes, the listener does an immediate SSL/TLS handshake after accepting a
   connection. This is needed for the legacy imaps and pop3s ports.
 
+haproxy (v2.2.19+):
+  If yes, this listener is configured for use with <HAProxy.txt>. It expects a
+  Proxy Protocol [http://blog.haproxy.com/haproxy/proxy-protocol/] header right
+  after accepting the connection. Connections are aborted immediately when this
+  protocol is violated.
+
 Default services
 ================
 
@@ -406,6 +412,9 @@ LMTP process for delivering new mails.
  * *client_limit=1*, because most of the time spent on an LMTP client is spent
    waiting for disk I/O and other blocking operations. There's no point in
    having more clients waiting around during that doing nothing.
+    * However, LMTP proxying is only writing to temporary files that normally
+      stay only in memory. So for LMTP proxying a client_limit above 1 could be
+      useful.
  * *user=root*, but the privileges are (temporarily) dropped to the mail user's
    privileges after userdb lookup. If only a single UID is used, user can be
    set to the mail UID for higher security, because the process can't gain root
@@ -440,4 +449,4 @@ Mail process statistics tracking. Its behavior is very similar to the anvil
 process, but anvil's data is of higher importance and lower traffic than stats,
 so stats are tracked in a separate process.
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:48)

@@ -383,7 +383,8 @@ solr_connection_select_response(const struct http_response *response,
 				struct solr_connection *conn)
 {
 	if (response->status / 100 != 2) {
-		i_error("fts_solr: Lookup failed: %s", response->reason);
+		i_error("fts_solr: Lookup failed: %u %s",
+			response->status, response->reason);
 		conn->request_status = -1;
 		return;
 	}
@@ -409,8 +410,6 @@ int solr_connection_select(struct solr_connection *conn, const char *query,
 	const char *url;
 	int parse_ret;
 
-	i_assert(!conn->posting);
-
 	memset(&solr_lookup_context, 0, sizeof(solr_lookup_context));
 	solr_lookup_context.result_pool = pool;
 	hash_table_create(&solr_lookup_context.mailboxes, default_pool, 0,
@@ -432,7 +431,6 @@ int solr_connection_select(struct solr_connection *conn, const char *query,
 				       solr_connection_select_response, conn);
 	http_client_request_set_port(http_req, conn->http_port);
 	http_client_request_set_ssl(http_req, conn->http_ssl);
-	http_client_request_add_header(http_req, "Content-Type", "text/xml");
 	http_client_request_submit(http_req);
 
 	conn->request_status = 0;
@@ -454,7 +452,8 @@ solr_connection_update_response(const struct http_response *response,
 				struct solr_connection *conn)
 {
 	if (response->status / 100 != 2) {
-		i_error("fts_solr: Indexing failed: %s", response->reason);
+		i_error("fts_solr: Indexing failed: %u %s",
+			response->status, response->reason);
 		conn->request_status = -1;
 	}
 }

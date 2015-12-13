@@ -12,7 +12,6 @@
 #include "doveadm-who.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 
 struct who_user {
@@ -63,12 +62,14 @@ static int who_parse_line(const char *line, struct who_line *line_r)
 	p = strchr(ident, '/');
 	if (p == NULL)
 		return -1;
-	line_r->pid = strtoul(pid_str, NULL, 10);
+	if (str_to_pid(pid_str, &line_r->pid) < 0)
+		return -1;
 	line_r->service = t_strdup_until(ident, p++);
 	line_r->username = strchr(p, '/');
 	if (line_r->username == NULL)
 		return -1;
-	line_r->refcount = atoi(refcount_str);
+	if (str_to_uint(refcount_str, &line_r->refcount) < 0)
+		return -1;
 	ip_str = t_strdup_until(p, line_r->username++);
 	(void)net_addr2ip(ip_str, &line_r->ip);
 	return 0;

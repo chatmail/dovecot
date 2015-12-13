@@ -2,16 +2,19 @@
 
 #include "lib.h"
 #include "buffer.h"
+#include "str.h"
 #include "unichar.h"
 #include "bsearch-insert-pos.h"
+#include "fts-common.h"
 #include "fts-tokenizer-private.h"
 #include "fts-tokenizer-generic-private.h"
 #include "word-boundary-data.c"
 #include "word-break-data.c"
 
 #define FTS_DEFAULT_TOKEN_MAX_LENGTH 30
+#define FTS_WB5A_PREFIX_MAX_LENGTH 3 /* Including apostrophe */
 
-static unsigned char fts_ascii_word_boundaries[128] = {
+static unsigned char fts_ascii_word_breaks[128] = {
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 0-15 */
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 16-31 */
 
@@ -31,6 +34,7 @@ fts_tokenizer_generic_create(const char *const *settings,
 	struct generic_fts_tokenizer *tok;
 	unsigned int max_length = FTS_DEFAULT_TOKEN_MAX_LENGTH;
 	enum boundary_algorithm algo = BOUNDARY_ALGORITHM_SIMPLE;
+	bool wb5a = FALSE;
 	unsigned int i;
 
 	for (i = 0; settings[i] != NULL; i += 2) {
@@ -56,10 +60,20 @@ fts_tokenizer_generic_create(const char *const *settings,
 		} else if (strcmp(key, "search") == 0) {
 			/* tokenizing a search string -
 			   makes no difference to us */
+		} else if (strcasecmp(key, "wb5a") == 0) {
+			if (strcasecmp(value, "no") == 0)
+				wb5a = FALSE;
+			else
+				wb5a = TRUE;
 		} else {
 			*error_r = t_strdup_printf("Unknown setting: %s", key);
 			return -1;
 		}
+	}
+
+	if (wb5a && algo != BOUNDARY_ALGORITHM_TR29) {
+		*error_r = "Can not use WB5a for algorithms other than TR29.";
+		return -1;
 	}
 
 	tok = i_new(struct generic_fts_tokenizer, 1);
@@ -69,6 +83,7 @@ fts_tokenizer_generic_create(const char *const *settings,
 		tok->tokenizer.v = &generic_tokenizer_vfuncs_simple;
 	tok->max_length = max_length;
 	tok->algorithm = algo;
+	tok->wb5a = wb5a;
 	tok->token = buffer_create_dynamic(default_pool, 64);
 
 	*tokenizer_r = &tok->tokenizer;
@@ -85,43 +100,76 @@ fts_tokenizer_generic_destroy(struct fts_tokenizer *_tok)
 	i_free(tok);
 }
 
-static const char *fts_uni_strndup(const unsigned char *data, size_t size)
+static void
+fts_tokenizer_delete_trailing_partial_char(const unsigned char *data,
+					   size_t *len)
 {
 	size_t pos;
+	unsigned int char_bytes;
 
-	/* if input is truncated with a partial UTF-8 character, drop it */
-	(void)uni_utf8_partial_strlen_n(data, size, &pos);
-	i_assert(pos > 0);
-	return t_strndup(data, pos);
+	/* the token is truncated - make sure the last character
+	   exists entirely in the token */
+	for (pos = *len-1; pos > 0; pos--) {
+		if (UTF8_IS_START_SEQ(data[pos]))
+			break;
+	}
+	char_bytes = uni_utf8_char_bytes(data[pos]);
+	if (char_bytes != *len-pos) {
+		i_assert(char_bytes > *len-pos);
+		*len = pos;
+	}
 }
 
-static void
+static bool
 fts_tokenizer_generic_simple_current_token(struct generic_fts_tokenizer *tok,
                                            const char **token_r)
 {
-	*token_r = fts_uni_strndup(tok->token->data, tok->token->used);
+	const unsigned char *data = tok->token->data;
+	size_t len = tok->token->used;
+
+	if (tok->untruncated_length <= tok->max_length) {
+		/* Remove the trailing apostrophe - it was made
+		   into U+0027 earlier. There can be only a single such
+		   apostrophe, because otherwise the token would have already
+		   been split. We also want to remove the trailing apostrophe
+		   only if it's the the last character in the nontruncated
+		   token - a truncated token may end with apostrophe. */
+		if (len > 0 && data[len-1] == '\'') {
+			len--;
+			i_assert(len > 0 && data[len-1] != '\'');
+		}
+	} else {
+		fts_tokenizer_delete_trailing_partial_char(data, &len);
+	}
+	i_assert(len <= tok->max_length);
+
+	*token_r = len == 0 ? "" :
+		t_strndup(tok->token->data, len);
 	buffer_set_used_size(tok->token, 0);
+	tok->untruncated_length = 0;
+	tok->prev_letter = LETTER_TYPE_NONE;
+	return len > 0;
 }
 
-/* TODO: This is duplicated from unichar.c */
 static bool uint32_find(const uint32_t *data, unsigned int count,
 			uint32_t value, unsigned int *idx_r)
 {
 	BINARY_NUMBER_SEARCH(data, count, value, idx_r);
 }
 
-static bool is_word_break(unichar_t c)
+static bool fts_uni_word_break(unichar_t c)
 {
 	unsigned int idx;
 
 	/* Unicode General Punctuation, including deprecated characters. */
 	if (c >= 0x2000 && c <= 0x206f)
 		return TRUE;
-
 	/* From word-break-data.c, which is generated from PropList.txt. */
 	if (uint32_find(White_Space, N_ELEMENTS(White_Space), c, &idx))
 		return TRUE;
 	if (uint32_find(Dash, N_ELEMENTS(Dash), c, &idx))
+		return TRUE;
+	if (uint32_find(Quotation_Mark, N_ELEMENTS(Quotation_Mark), c, &idx))
 		return TRUE;
 	if (uint32_find(Terminal_Punctuation, N_ELEMENTS(Terminal_Punctuation), c, &idx))
 		return TRUE;
@@ -132,18 +180,16 @@ static bool is_word_break(unichar_t c)
 	return FALSE;
 }
 
-static bool
-data_is_word_boundary(const unsigned char *data, size_t size, size_t *i)
+static inline bool
+fts_simple_is_word_break(struct generic_fts_tokenizer *tok,
+			 unichar_t c, bool apostrophe)
 {
-	unichar_t c;
-
-	if (data[*i] < 0x80)
-		return fts_ascii_word_boundaries[data[*i]] != 0;
-	/* unicode punctuation? */
-	if (uni_utf8_get_char_n(data + *i, size - *i, &c) <= 0)
-		i_unreached();
-	*i += uni_utf8_char_bytes(data[*i]) - 1;
-	return is_word_break(c);
+	if (apostrophe)
+		return tok->prev_letter == LETTER_TYPE_SINGLE_QUOTE;
+	else if (c < 0x80)
+		return fts_ascii_word_breaks[c] != 0;
+	else
+		return fts_uni_word_break(c);
 }
 
 static void fts_tokenizer_generic_reset(struct fts_tokenizer *_tok)
@@ -153,17 +199,16 @@ static void fts_tokenizer_generic_reset(struct fts_tokenizer *_tok)
 
 	tok->prev_letter = LETTER_TYPE_NONE;
 	tok->prev_prev_letter = LETTER_TYPE_NONE;
-	tok->last_size = 0;
+	tok->untruncated_length = 0;
 	buffer_set_used_size(tok->token, 0);
 }
 
 static void tok_append_truncated(struct generic_fts_tokenizer *tok,
 				 const unsigned char *data, size_t size)
 {
-	i_assert(tok->max_length >= tok->token->used);
-
 	buffer_append(tok->token, data,
 		      I_MIN(size, tok->max_length - tok->token->used));
+	tok->untruncated_length += size;
 }
 
 static int
@@ -174,34 +219,51 @@ fts_tokenizer_generic_next_simple(struct fts_tokenizer *_tok,
 {
 	struct generic_fts_tokenizer *tok =
 		(struct generic_fts_tokenizer *)_tok;
-	size_t i, char_start_i, len, start = 0;
+	size_t i, start = 0;
+	int char_size;
+	unichar_t c;
+	bool apostrophe;
 
-	for (i = 0; i < size; i++) {
-		char_start_i = i;
-		if (data_is_word_boundary(data, size, &i)) {
-			len = char_start_i - start;
-			tok_append_truncated(tok, data + start, len);
-			if (tok->token->used == 0) {
-				/* no text read yet */
-				start = i + 1;
-				continue;
+	for (i = 0; i < size; i += char_size) {
+		char_size = uni_utf8_get_char_n(data + i, size - i, &c);
+		i_assert(char_size > 0);
+
+		apostrophe = IS_APOSTROPHE(c);
+		if (fts_simple_is_word_break(tok, c, apostrophe)) {
+			tok_append_truncated(tok, data + start, i - start);
+			if (fts_tokenizer_generic_simple_current_token(tok, token_r)) {
+				*skip_r = i + char_size;
+				return 1;
 			}
-			/* word boundary found - return a new token */
-			*skip_r = i + 1;
-			fts_tokenizer_generic_simple_current_token(tok, token_r);
-			return 1;
+			start = i + char_size;
+			/* it doesn't actually matter at this point how whether
+			   subsequent apostrophes are handled by prefix
+			   skipping or by ignoring empty tokens - they will be
+			   dropped in any case. */
+			tok->prev_letter = LETTER_TYPE_NONE;
+		} else if (apostrophe) {
+			/* all apostrophes require special handling */
+			const unsigned char apostrophe_char = '\'';
+
+			tok_append_truncated(tok, data + start, i - start);
+			if (tok->token->used > 0)
+				tok_append_truncated(tok, &apostrophe_char, 1);
+			start = i + char_size;
+			tok->prev_letter = LETTER_TYPE_SINGLE_QUOTE;
+		} else {
+			tok->prev_letter = LETTER_TYPE_NONE;
 		}
 	}
 	/* word boundary not found yet */
-	len = i - start;
-	tok_append_truncated(tok, data + start, len);
+	tok_append_truncated(tok, data + start, i - start);
 	*skip_r = i;
 
 	/* return the last token */
-	if (size == 0 && tok->token->used > 0) {
-		fts_tokenizer_generic_simple_current_token(tok, token_r);
-		return 1;
+	if (size == 0) {
+		if (fts_tokenizer_generic_simple_current_token(tok, token_r))
+			return 1;
 	}
+
 	return 0;
 }
 
@@ -217,6 +279,8 @@ static enum letter_type letter_type(unichar_t c)
 {
 	unsigned int idx;
 
+	if (IS_APOSTROPHE(c))
+		return LETTER_TYPE_APOSTROPHE;
 	if (uint32_find(CR, N_ELEMENTS(CR), c, &idx))
 		return LETTER_TYPE_CR;
 	if (uint32_find(LF, N_ELEMENTS(LF), c, &idx))
@@ -298,10 +362,10 @@ static bool letter_hebrew(struct generic_fts_tokenizer *tok)
 	if (tok->prev_letter == LETTER_TYPE_HEBREW_LETTER)
 		return FALSE;
 
-	/* WB7 WB7c */
+	/* WB7 WB7c, except MidNumLet */
 	if (tok->prev_prev_letter == LETTER_TYPE_HEBREW_LETTER &&
 	    (tok->prev_letter == LETTER_TYPE_SINGLE_QUOTE ||
-	     tok->prev_letter == LETTER_TYPE_MIDNUMLET ||
+	     tok->prev_letter == LETTER_TYPE_APOSTROPHE ||
 	     tok->prev_letter == LETTER_TYPE_MIDLETTER ||
 	     tok->prev_letter == LETTER_TYPE_DOUBLE_QUOTE))
 		return FALSE;
@@ -319,14 +383,22 @@ static bool letter_hebrew(struct generic_fts_tokenizer *tok)
 
 static bool letter_aletter(struct generic_fts_tokenizer *tok)
 {
+
+	/* WB5a */
+	if (tok->wb5a && tok->token->used <= FTS_WB5A_PREFIX_MAX_LENGTH)
+		if (IS_WB5A_APOSTROPHE(tok->prev_letter_c) && IS_VOWEL(tok->letter_c)) {
+			tok->seen_wb5a = TRUE;
+			return TRUE;
+		}
+
 	/* WB5 */
 	if (tok->prev_letter == LETTER_TYPE_ALETTER)
 		return FALSE;
 
-	/* WB7 */
+	/* WB7, except MidNumLet */
 	if (tok->prev_prev_letter == LETTER_TYPE_ALETTER &&
 	    (tok->prev_letter == LETTER_TYPE_SINGLE_QUOTE ||
-	     tok->prev_letter == LETTER_TYPE_MIDNUMLET ||
+	     tok->prev_letter == LETTER_TYPE_APOSTROPHE ||
 	     tok->prev_letter == LETTER_TYPE_MIDLETTER))
 		return FALSE;
 
@@ -365,18 +437,11 @@ static bool letter_double_quote(struct generic_fts_tokenizer *tok)
 	return TRUE; /* Any / Any */
 }
 
-static bool letter_midnumlet(struct generic_fts_tokenizer *tok)
+static bool letter_midnumlet(struct generic_fts_tokenizer *tok ATTR_UNUSED)
 {
-	/* WB6 */
-	if (tok->prev_letter == LETTER_TYPE_ALETTER ||
-	    tok->prev_letter == LETTER_TYPE_HEBREW_LETTER)
-		return FALSE;
 
-	/* WB12 */
-	if (tok->prev_letter == LETTER_TYPE_NUMERIC)
-		return FALSE;
-
-	return TRUE; /* Any / Any */
+	/* Break at MidNumLet, non-conformant with WB6/WB7 */
+	return TRUE;
 }
 
 static bool letter_midletter(struct generic_fts_tokenizer *tok)
@@ -437,8 +502,17 @@ static bool letter_extendnumlet(struct generic_fts_tokenizer *tok)
 	return TRUE; /* Any / Any */
 }
 
-static bool letter_other(struct generic_fts_tokenizer *tok ATTR_UNUSED)
+static bool letter_apostrophe(struct generic_fts_tokenizer *tok)
+{
 
+       if (tok->prev_letter == LETTER_TYPE_ALETTER ||
+           tok->prev_letter == LETTER_TYPE_HEBREW_LETTER)
+               return FALSE;
+
+       return TRUE; /* Any / Any */
+}
+
+static bool letter_other(struct generic_fts_tokenizer *tok ATTR_UNUSED)
 {
 	return TRUE; /* Any / Any */
 }
@@ -446,11 +520,17 @@ static bool letter_other(struct generic_fts_tokenizer *tok ATTR_UNUSED)
 static void
 add_prev_letter(struct generic_fts_tokenizer *tok, enum letter_type lt)
 {
-	if(tok->prev_letter != LETTER_TYPE_NONE) {
+	if(tok->prev_letter != LETTER_TYPE_NONE)
 		tok->prev_prev_letter = tok->prev_letter;
-		tok->prev_letter = lt;
-	} else
-		tok->prev_letter = lt;
+	tok->prev_letter = lt;
+}
+
+static void
+add_letter_c(struct generic_fts_tokenizer *tok, unichar_t c)
+{
+	if(tok->letter_c != 0)
+		tok->prev_letter_c = tok->letter_c;
+	tok->letter_c = c;
 }
 
 /*
@@ -459,13 +539,12 @@ add_prev_letter(struct generic_fts_tokenizer *tok, enum letter_type lt)
    TODO: Does this "reverse approach" include too much in "whitespace"?
    TODO: Possibly use is_word_break()?
  */
-static bool is_nonword(enum letter_type lt)
+static bool is_nontoken(enum letter_type lt)
 {
-
 	if (lt == LETTER_TYPE_REGIONAL_INDICATOR || lt == LETTER_TYPE_KATAKANA ||
 	    lt == LETTER_TYPE_HEBREW_LETTER || lt == LETTER_TYPE_ALETTER ||
-	    lt == LETTER_TYPE_SINGLE_QUOTE || lt == LETTER_TYPE_NUMERIC)
-		return FALSE; /* TODO: Include LETTER_TYPE_DOUBLE_QUOTE? */
+	    lt == LETTER_TYPE_NUMERIC)
+		return FALSE;
 
 	return TRUE;
 }
@@ -477,42 +556,63 @@ static bool is_nonword(enum letter_type lt)
 */
 static bool is_one_past_end(struct generic_fts_tokenizer *tok)
 {
-
-	/* Short circuit for simple algorithm. */
-	if (tok->prev_letter == LETTER_TYPE_NONE)
-		return FALSE;
-
 	/* WB6/7 false positive detected at one past end. */
 	if (tok->prev_letter == LETTER_TYPE_MIDLETTER ||
 	    tok->prev_letter == LETTER_TYPE_MIDNUMLET ||
+	    tok->prev_letter == LETTER_TYPE_APOSTROPHE ||
 	    tok->prev_letter == LETTER_TYPE_SINGLE_QUOTE )
 		return TRUE;
 
-	/* WB12/12 false positive detected at one past end. */
+	/* WB11/12 false positive detected at one past end. */
 	if (tok->prev_letter == LETTER_TYPE_MIDNUM ||
 	    tok->prev_letter == LETTER_TYPE_MIDNUMLET ||
+	    tok->prev_letter == LETTER_TYPE_APOSTROPHE ||
 	    tok->prev_letter == LETTER_TYPE_SINGLE_QUOTE)
 		return TRUE;
 
 	return FALSE;
 }
-static bool
+
+static void
 fts_tokenizer_generic_tr29_current_token(struct generic_fts_tokenizer *tok,
                                          const char **token_r)
 {
-	size_t end_skip = 0;
-	ssize_t len;
+	const unsigned char *data = tok->token->data;
+	size_t len = tok->token->used;
 
-	if (is_one_past_end(tok))
-		end_skip = tok->last_size;
+	if (is_one_past_end(tok) &&
+	    tok->untruncated_length <= tok->max_length) {
+		/* delete the last character */
+		while (!UTF8_IS_START_SEQ(data[len-1]))
+			len--;
+		i_assert(len > 0);
+		len--;
+	} else if (tok->untruncated_length > tok->max_length) {
+		fts_tokenizer_delete_trailing_partial_char(data, &len);
+	}
+	/* we're skipping all non-token chars at the beginning of the word,
+	   so by this point we must have something here - even if we just
+	   deleted the last character */
+	i_assert(len > 0);
+	i_assert(len <= tok->max_length);
 
 	tok->prev_prev_letter = LETTER_TYPE_NONE;
 	tok->prev_letter = LETTER_TYPE_NONE;
-
-	len = tok->token->used - end_skip;
-	*token_r = len == 0 ? "" : fts_uni_strndup(tok->token->data, len);
+	*token_r = t_strndup(data, len);
 	buffer_set_used_size(tok->token, 0);
-	return len > 0;
+	tok->untruncated_length = 0;
+}
+
+static void wb5a_reinsert(struct generic_fts_tokenizer *tok)
+{
+	string_t *utf8_str = t_str_new(6);
+
+	uni_ucs4_to_utf8_c(tok->letter_c, utf8_str);
+	buffer_insert(tok->token, 0, str_data(utf8_str), str_len(utf8_str));
+	tok->prev_letter = letter_type(tok->letter_c);
+	tok->letter_c = 0;
+	tok->prev_letter_c = 0;
+	tok->seen_wb5a = FALSE;
 }
 
 struct letter_fn {
@@ -526,7 +626,7 @@ static struct letter_fn letter_fns[] = {
 	{letter_single_quote}, {letter_double_quote},
 	{letter_midnumlet}, {letter_midletter}, {letter_midnum},
 	{letter_numeric}, {letter_extendnumlet}, {letter_panic},
-	{letter_panic}, {letter_other}
+	{letter_panic}, {letter_apostrophe}, {letter_other}
 };
 
 /*
@@ -534,35 +634,34 @@ static struct letter_fn letter_fns[] = {
   #29, but tailored for FTS purposes.
   http://www.unicode.org/reports/tr29/
 
-  Adaptions: No word boundary at Start-Of-Text or End-of-Text (Wb1 and
-  WB2). Break just once, not before and after.  Other things also, not
-  really pure tr29. Meant to assist in finding individual words.
+  Note: The text of tr29 is a living standard, so it keeps
+  changing. In newer specs some characters are combined, like AHLetter
+  (ALetter | Hebrew_Letter) and MidNumLetQ (MidNumLet | Single_Quote).
 
-  TODO: If this letter_fns based approach is too kludgy, do a FSM with function
-  pointers and transition tables.
-
-  TODO: Alternative idea: Replace everything with a super simplistic
-  "lt != ALETTER, HEBREW, NUMERIC, ... --> word break"
-
-  TODO: Rules get split up over several functions. Is it too
-  confusing?
+  Adaptions:
+  * Added optional WB5a as a configurable option. The cut of prefix is
+   max FTS_WB5A_PREFIX chars.
+  * No word boundary at Start-Of-Text or End-of-Text (Wb1 and WB2).
+  * Break just once, not before and after.
+  * Break at MidNumLet, except apostrophes (diverging from WB6/WB7).
+  * Other things also (e.g. is_nontoken(), not really pure tr29. Meant
+  to assist in finding individual words.
 */
 static bool
 uni_found_word_boundary(struct generic_fts_tokenizer *tok, enum letter_type lt)
 {
 	/* No rule knows what to do with just one char, except the linebreaks
 	   we eat away (above) anyway. */
-	if (tok->prev_letter == LETTER_TYPE_NONE)
-		goto false_out;
+	if (tok->prev_letter != LETTER_TYPE_NONE) {
+		if (letter_fns[lt].fn(tok))
+			return TRUE;
+	}
 
-	if (letter_fns[lt].fn(tok))
-		return TRUE;
-
- false_out:
-	/* Extend and format types are ignored. */
-	if (lt == LETTER_TYPE_EXTEND || lt == LETTER_TYPE_FORMAT)
-		return FALSE;
-	add_prev_letter(tok,lt);
+	if (lt == LETTER_TYPE_EXTEND || lt == LETTER_TYPE_FORMAT) {
+		/* These types are completely ignored. */
+	} else {
+		add_prev_letter(tok,lt);
+	}
 	return FALSE;
 }
 
@@ -575,40 +674,60 @@ fts_tokenizer_generic_next_tr29(struct fts_tokenizer *_tok,
 	struct generic_fts_tokenizer *tok =
 		(struct generic_fts_tokenizer *)_tok;
 	unichar_t c;
-	size_t i, char_start_i, start_skip = 0;
+	size_t i, char_start_i, start_pos = 0;
 	enum letter_type lt;
+	int char_size;
 
 	/* TODO: Process 8bit chars separately, to speed things up. */
-	for (i = 0; i < size; i++) {
+	for (i = 0; i < size; ) {
 		char_start_i = i;
-		if (uni_utf8_get_char_n(data + i, size - i, &c) <= 0)
-			i_unreached();
-		tok->last_size = uni_utf8_char_bytes(data[i]);
-		i += tok->last_size - 1; /* Utf8 bytes > 1, for() handles the 1 byte increment. */
+		char_size = uni_utf8_get_char_n(data + i, size - i, &c);
+		i_assert(char_size > 0);
+		i += char_size;
 		lt = letter_type(c);
-		if (tok->prev_letter == LETTER_TYPE_NONE && is_nonword(lt)) {
-			/* TODO: test that start_skip works with multibyte utf8 chars */
-			start_skip = i + 1; /* Skip non-token chars at start of data */
+
+		/* The WB5a break is detected only when the "after
+		   break" char is inspected. That char needs to be
+		   reinserted as the "previous char". */
+		if (tok->seen_wb5a)
+			wb5a_reinsert(tok);
+
+		if (tok->prev_letter == LETTER_TYPE_NONE && is_nontoken(lt)) {
+			/* Skip non-token chars at the beginning of token */
+			i_assert(tok->token->used == 0);
+			start_pos = i;
 			continue;
 		}
+
+		if (tok->wb5a &&  tok->token->used <= FTS_WB5A_PREFIX_MAX_LENGTH)
+			add_letter_c(tok, c);
+
 		if (uni_found_word_boundary(tok, lt)) {
-			i_assert(char_start_i >= start_skip && size >= start_skip);
-			tok_append_truncated(tok, data + start_skip,
-					     char_start_i - start_skip);
-			*skip_r = i + 1;
-			if (fts_tokenizer_generic_tr29_current_token(tok, token_r))
-				return 1;
+			i_assert(char_start_i >= start_pos && size >= start_pos);
+			tok_append_truncated(tok, data + start_pos,
+					     char_start_i - start_pos);
+			*skip_r = i;
+			fts_tokenizer_generic_tr29_current_token(tok, token_r);
+			return 1;
+		} else if (lt == LETTER_TYPE_APOSTROPHE ||
+			   lt == LETTER_TYPE_SINGLE_QUOTE) {
+			/* all apostrophes require special handling */
+			const unsigned char apostrophe_char = '\'';
+			tok_append_truncated(tok, data + start_pos,
+					     char_start_i - start_pos);
+			tok_append_truncated(tok, &apostrophe_char, 1);
+			start_pos = i;
 		}
 	}
-	i_assert(i >= start_skip && size >= start_skip);
-	tok_append_truncated(tok, data + start_skip, i - start_skip);
+	i_assert(i >= start_pos && size >= start_pos);
+	tok_append_truncated(tok, data + start_pos, i - start_pos);
 	*skip_r = i;
 
 	if (size == 0 && tok->token->used > 0) {
 		/* return the last token */
 		*skip_r = 0;
-		if (fts_tokenizer_generic_tr29_current_token(tok, token_r))
-			return 1;
+		fts_tokenizer_generic_tr29_current_token(tok, token_r);
+		return 1;
 	}
 	return 0;
 }

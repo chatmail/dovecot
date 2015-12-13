@@ -62,9 +62,10 @@ static const struct setting_parser_info file_listener_setting_parser_info = {
 static const struct setting_define inet_listener_setting_defines[] = {
 	DEF(SET_STR, name),
 	DEF(SET_STR, address),
-	DEF(SET_UINT, port),
+	DEF(SET_IN_PORT, port),
 	DEF(SET_BOOL, ssl),
 	DEF(SET_BOOL, reuse_port),
+	DEF(SET_BOOL, haproxy),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -74,7 +75,8 @@ static const struct inet_listener_settings inet_listener_default_settings = {
 	.address = "",
 	.port = 0,
 	.ssl = FALSE,
-	.reuse_port = FALSE
+	.reuse_port = FALSE,
+	.haproxy = FALSE
 };
 
 static const struct setting_parser_info inet_listener_setting_parser_info = {
@@ -318,7 +320,7 @@ static void add_inet_listeners(ARRAY_TYPE(inet_listener_settings) *l,
 		struct inet_listener_settings *set = *sets;
 
 		if (set->port != 0) {
-			str = t_strdup_printf("%d:%s", set->port, set->address);
+			str = t_strdup_printf("%u:%s", set->port, set->address);
 			array_append(all_listeners, &str, 1);
 		}
 	}
@@ -709,8 +711,7 @@ static void unlink_sockets(const char *path, const char *prefix)
 			}
 		}
 
-		if (unlink(str_c(str)) < 0 && errno != ENOENT)
-			i_error("unlink(%s) failed: %m", str_c(str));
+		i_unlink_if_exists(str_c(str));
 	}
 	(void)closedir(dirp);
 }

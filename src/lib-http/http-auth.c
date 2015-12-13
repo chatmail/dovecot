@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "str.h"
+#include "base64.h"
 #include "array.h"
 #include "http-parser.h"
 
@@ -285,6 +286,18 @@ http_auth_create_params(string_t *out,
 	}
 }
 
+static void http_auth_check_token68(const char *data)
+{
+	const char *p = data;
+
+	/* Make sure we're not working with nonsense. */
+	i_assert(http_char_is_token68(*p));
+	for (p++; *p != '\0' && *p != '='; p++)
+		i_assert(http_char_is_token68(*p));
+	for (; *p != '\0'; p++)
+		i_assert(*p == '=');
+}
+
 void http_auth_create_challenge(string_t *out,
 	const struct http_auth_challenge *chlng)
 {
@@ -296,12 +309,8 @@ void http_auth_create_challenge(string_t *out,
 	str_append(out, chlng->scheme);
 
 	if (chlng->data != NULL) {
-		const char *p;
-
 		/* SP token68 */
-		for (p = chlng->data; *p != '\0'; p++)
-			i_assert(http_char_is_token68(*p));
-
+		http_auth_check_token68(chlng->data);
 		str_append_c(out, ' ');
 		str_append(out, chlng->data);
 
@@ -313,7 +322,7 @@ void http_auth_create_challenge(string_t *out,
 }
 
 void http_auth_create_challenges(string_t *out,
-	ARRAY_TYPE(http_auth_challenge) *chlngs)
+	const ARRAY_TYPE(http_auth_challenge) *chlngs)
 {
 	const struct http_auth_challenge *chlgs;
 	unsigned int count, i;
@@ -343,12 +352,8 @@ void http_auth_create_credentials(string_t *out,
 	str_append(out, crdts->scheme);
 
 	if (crdts->data != NULL) {
-		const char *p;
-
 		/* SP token68 */
-		for (p = crdts->data; *p != '\0'; p++)
-			i_assert(http_char_is_token68(*p));
-
+		http_auth_check_token68(crdts->data);
 		str_append_c(out, ' ');
 		str_append(out, crdts->data);
 
@@ -369,6 +374,9 @@ http_auth_params_clone(pool_t pool,
 	const ARRAY_TYPE(http_auth_param) *src)
 {
 	const struct http_auth_param *sparam;
+
+	if (!array_is_created(src))
+		return;
 
 	p_array_init(dst, pool, 4);
 	array_foreach(src, sparam) {
@@ -405,6 +413,29 @@ http_auth_challenge_clone(pool_t pool,
 	return new;
 }
 
+void http_auth_credentials_copy(pool_t pool,
+	struct http_auth_credentials *dst,
+	const struct http_auth_credentials *src)
+{
+	dst->scheme = p_strdup(pool, src->scheme);
+	if (src->data != NULL)
+		dst->data = p_strdup(pool, src->data);
+	else
+		http_auth_params_clone(pool, &dst->params, &src->params);
+}
+
+struct http_auth_credentials *
+http_auth_credentials_clone(pool_t pool,
+	const struct http_auth_credentials *src)
+{
+	struct http_auth_credentials *new;
+
+	new = p_new(pool, struct http_auth_credentials, 1);
+	http_auth_credentials_copy(pool, new, src);
+
+	return new;
+}
+
 /*
  * Simple schemes
  */
@@ -413,7 +444,7 @@ void http_auth_basic_challenge_init(struct http_auth_challenge *chlng,
 	const char *realm)
 {
 	memset(chlng, 0, sizeof(*chlng));
-	chlng->scheme = "basic";
+	chlng->scheme = "Basic";
 	if (realm != NULL) {
 		struct http_auth_param param;
 
@@ -424,4 +455,22 @@ void http_auth_basic_challenge_init(struct http_auth_challenge *chlng,
 		t_array_init(&chlng->params, 1);
 		array_append(&chlng->params, &param, 1);
 	}
+}
+
+void http_auth_basic_credentials_init(struct http_auth_credentials *crdts,
+	const char *username, const char *password)
+{
+	const char *auth;
+	string_t *data;
+
+	i_assert(username != NULL && *username != '\0');
+	i_assert(strchr(username, ':') == NULL);
+ 
+	data = t_str_new(64);
+	auth = t_strconcat(username, ":", password, NULL);
+	base64_encode(auth, strlen(auth), data);
+
+	memset(crdts, 0, sizeof(*crdts));
+	crdts->scheme = "Basic";
+	crdts->data = str_c(data);
 }

@@ -77,11 +77,12 @@ struct client_command_context {
 	/* time when command handling was started - typically this is after
 	   reading all the parameters. */
 	struct timeval start_time;
-	/* time when an unfinished command handling entered back to ioloop.
-	   used for calculating usecs_in_ioloop */
-	struct timeval last_ioloop_time;
-	/* how much time was spent waiting for the client in ioloop */
-	uint64_t usecs_in_ioloop;
+	/* io_loop_get_wait_usecs()'s value when the command was started */
+	uint64_t start_ioloop_wait_usecs;
+	/* how many usecs this command itself has spent running */
+	uint64_t running_usecs;
+	/* how many bytes of client input/output command has used */
+	uint64_t bytes_in, bytes_out;
 
 	struct client_sync_context *sync;
 
@@ -95,6 +96,17 @@ struct client_command_context {
 };
 
 struct imap_client_vfuncs {
+	/* Export client state into buffer. Returns 1 if ok, 0 if some state
+	   couldn't be preserved, -1 if temporary internal error occurred. */
+	int (*state_export)(struct client *client, bool internal,
+			    buffer_t *dest, const char **error_r);
+	/* Import a single block of client state from the given data. Returns
+	   number of bytes successfully imported from the block, or 0 if state
+	   is corrupted or contains unknown data (e.g. some plugin is no longer
+	   loaded), -1 if temporary internal error occurred. */
+	ssize_t (*state_import)(struct client *client, bool internal,
+				const unsigned char *data, size_t size,
+				const char **error_r);
 	void (*destroy)(struct client *client, const char *reason);
 };
 
@@ -103,6 +115,7 @@ struct client {
 
 	struct imap_client_vfuncs v;
 	const char *session_id;
+	const char *const *userdb_fields; /* for internal session saving/restoring */
 
 	int fd_in, fd_out;
 	struct io *io;
@@ -135,6 +148,11 @@ struct client {
 
 	uint64_t sync_last_full_modseq;
 	uint64_t highest_fetch_modseq;
+
+	/* For imap_logout_format statistics: */
+	unsigned int fetch_hdr_count, fetch_body_count;
+	uint64_t fetch_hdr_bytes, fetch_body_bytes;
+	unsigned int deleted_count, expunged_count, trashed_count;
 
 	/* SEARCHRES extension: Last saved SEARCH result */
 	ARRAY_TYPE(seq_range) search_saved_uidset;
@@ -175,6 +193,8 @@ struct client {
 	unsigned int notify_flag_changes:1;
 	unsigned int imap_metadata_enabled:1;
 	unsigned int nonpermanent_modseqs:1;
+	unsigned int state_import_bad_idle_done:1;
+	unsigned int state_import_idle_continue:1;
 };
 
 struct imap_module_register {
@@ -236,6 +256,9 @@ bool client_read_string_args(struct client_command_context *cmd,
 bool client_handle_search_save_ambiguity(struct client_command_context *cmd);
 
 int client_enable(struct client *client, enum mailbox_feature features);
+/* Send client processing to imap-idle process. If successful, returns TRUE
+   and destroys the client. */
+bool imap_client_hibernate(struct client **client);
 
 struct imap_search_update *
 client_search_update_lookup(struct client *client, const char *tag,
@@ -248,6 +271,8 @@ void client_command_free(struct client_command_context **cmd);
 
 bool client_handle_unfinished_cmd(struct client_command_context *cmd);
 void client_continue_pending_input(struct client *client);
+void client_add_missing_io(struct client *client);
+const char *client_stats(struct client *client);
 
 void client_input(struct client *client);
 bool client_handle_input(struct client *client);

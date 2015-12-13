@@ -14,7 +14,6 @@
 #include "time-util.h"
 #include "master-service.h"
 
-#include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -383,7 +382,7 @@ int main(int argc, char *argv[])
 	int c;
 
 	master_service = master_service_init("rawlog", 0,
-					     &argc, &argv, "+f:obIt");
+					     &argc, &argv, "+f:bIt");
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
 		case 'f':

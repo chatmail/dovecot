@@ -248,4 +248,4 @@ mboxes.  Since most MTAs don't understand the dbox format, this option is not
 available.  Instead, the MTA could be set up to use <LMTP#mta> [LMTP.txt] or
 <the Dovecot Local Delivery Agent> [LDA.txt].
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:47)

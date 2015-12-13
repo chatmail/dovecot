@@ -16,9 +16,10 @@
 #include "mdbox-sync.h"
 #include "mdbox-storage-rebuild.h"
 
-#include <stdlib.h>
 #include <dirent.h>
 #include <unistd.h>
+
+#define REBUILD_MAX_REFCOUNT 32768
 
 struct mdbox_rebuild_msg {
 	struct mdbox_rebuild_msg *guid_hash_next;
@@ -247,8 +248,7 @@ rebuild_rename_file(struct mdbox_storage_rebuild_context *ctx,
 		/* use link()+unlink() instead of rename() to make sure we
 		   don't overwrite any files. */
 		if (link(old_path, new_path) == 0) {
-			if (unlink(old_path) < 0)
-				i_error("unlink(%s) failed: %m", old_path);
+			i_unlink(old_path);
 			*fname_p = strrchr(new_path, '/') + 1;
 			*file_id_r = ctx->highest_file_id;
 			return 0;
@@ -458,7 +458,8 @@ rebuild_mailbox_multi(struct mdbox_storage_rebuild_context *ctx,
 			   GUID exists multiple times */
 		}
 
-		if (rec != NULL) T_BEGIN {
+		if (rec != NULL &&
+		    rec->refcount < REBUILD_MAX_REFCOUNT) T_BEGIN {
 			/* keep this message. add it to mailbox index. */
 			i_assert(map_uid != 0);
 			rec->refcount++;
@@ -758,6 +759,7 @@ static int rebuild_restore_msg(struct mdbox_storage_rebuild_context *ctx,
 	mail_index_update_ext(ctx->prev_msg.trans, seq, mbox->guid_ext_id,
 			      msg->guid_128, NULL);
 
+	i_assert(msg->refcount == 0);
 	msg->refcount++;
 	return 0;
 }

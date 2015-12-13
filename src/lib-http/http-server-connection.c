@@ -785,7 +785,7 @@ http_server_connection_create(struct http_server *server,
 	struct http_server_connection *conn;
 	static unsigned int id = 0;
 	struct ip_addr addr;
-	unsigned int port;
+	in_port_t port;
 	const char *name;
 
 	conn = i_new(struct http_server_connection, 1);
@@ -806,10 +806,10 @@ http_server_connection_create(struct http_server *server,
 			if (net_getunixcred(fd_in, &cred) < 0) {
 				name = t_strdup_printf("[%u]", id);
 			} else if (cred.pid == (pid_t)-1) {
-				name = t_strdup_printf("unix:uid=%u [%u]", cred.uid, id);
+				name = t_strdup_printf("unix:uid=%ld [%u]", (long)cred.uid, id);
 			} else {
 				name = t_strdup_printf
-					("unix:pid=%u,uid=%u [%u]", cred.pid, cred.uid, id);
+					("unix:pid=%ld,uid=%ld [%u]", (long)cred.pid, (long)cred.uid, id);
 			}
 		} else if (addr.family == AF_INET6) {
 			name = t_strdup_printf("[%s]:%u [%u]", net_ip2addr(&addr), port, id);
@@ -831,6 +831,7 @@ http_server_connection_create(struct http_server *server,
 
 void http_server_connection_ref(struct http_server_connection *conn)
 {
+	i_assert(conn->refcount > 0);
 	conn->refcount++;
 }
 

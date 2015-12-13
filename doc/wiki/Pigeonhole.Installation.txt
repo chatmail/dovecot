@@ -20,7 +20,9 @@ Contents
 
          4. openSUSE
 
-         5. OpenBSD
+         5. FreeBSD
+
+         6. OpenBSD
 
 Getting the sources
 -------------------
@@ -118,13 +120,29 @@ openSUSE
 It is part of the dovecot (dovecot21) rpm.  There is no need to install
 additional packages.
 
+FreeBSD
+-------
+
+Pidgeonhole can be installed from ports by running:
+
+---%<-------------------------------------------------------------------------
+cd /usr/ports/mail/dovecot2-pigeonhole
+make install clean
+---%<-------------------------------------------------------------------------
+
+It can be also be installed from packages by running:
+
+---%<-------------------------------------------------------------------------
+pkg install dovecot2-pigeonhole
+---%<-------------------------------------------------------------------------
+
 OpenBSD
 -------
 
-Pidgeonhole can be installed from packages by running:
+Pigeonhole can be installed from packages by running:
 
 ---%<-------------------------------------------------------------------------
 pkg_add dovecot-pigeonhole
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:48)

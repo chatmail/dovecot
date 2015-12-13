@@ -17,7 +17,6 @@
 #define DIRECTOR_RECONNECT_RETRY_SECS 60
 #define DIRECTOR_RECONNECT_TIMEOUT_MSECS (30*1000)
 #define DIRECTOR_USER_MOVE_TIMEOUT_MSECS (30*1000)
-#define DIRECTOR_USER_MOVE_FINISH_DELAY_MSECS (2*1000)
 #define DIRECTOR_SYNC_TIMEOUT_MSECS (5*1000)
 #define DIRECTOR_RING_MIN_WAIT_SECS 20
 #define DIRECTOR_QUICK_RECONNECT_TIMEOUT_MSECS 1000
@@ -103,7 +102,7 @@ director_has_outgoing_connection(struct director *dir,
 
 int director_connect_host(struct director *dir, struct director_host *host)
 {
-	unsigned int port;
+	in_port_t port;
 	int fd;
 
 	if (director_has_outgoing_connection(dir, host))
@@ -533,17 +532,19 @@ void director_update_host(struct director *dir, struct director_host *src,
 		    net_ip2addr(&orig_src->ip), orig_src->port,
 		    orig_src->last_seq,
 		    net_ip2addr(&host->ip), host->vhost_count);
-	if (host->tag[0] == '\0')
-		;
-	else if (dir->ring_handshaked &&
-		 dir->ring_min_version < DIRECTOR_VERSION_TAGS) {
+	if (dir->ring_min_version >= DIRECTOR_VERSION_TAGS) {
+		str_append_c(str, '\t');
+		str_append_tabescaped(str, host->tag);
+	} else if (host->tag[0] != '\0' &&
+		   dir->ring_min_version < DIRECTOR_VERSION_TAGS) {
 		i_error("Ring has directors that don't support tags - removing host %s with tag '%s'",
 			net_ip2addr(&host->ip), host->tag);
 		director_remove_host(dir, NULL, NULL, host);
 		return;
-	} else {
-		str_append_c(str, '\t');
-		str_append_tabescaped(str, host->tag);
+	}
+	if (dir->ring_min_version >= DIRECTOR_VERSION_UPDOWN) {
+		str_printfa(str, "\t%c%ld", host->down ? 'D' : 'U',
+			    (long)host->last_updown_change);
 	}
 	str_append_c(str, '\n');
 	director_update_send(dir, src, str_c(str));
@@ -665,7 +666,10 @@ director_user_kill_finish_delayed(struct director *dir, struct user *user)
 	user->kill_state = USER_KILL_STATE_DELAY;
 	timeout_remove(&user->to_move);
 
-	user->to_move = timeout_add(DIRECTOR_USER_MOVE_FINISH_DELAY_MSECS,
+	/* wait for a while for the kills to finish in the backend server,
+	   so there are no longer any processes running for the user before we
+	   start letting new in connections to the new server. */
+	user->to_move = timeout_add(dir->set->director_user_kick_delay * 1000,
 				    director_user_kill_finish_delayed_to, ctx);
 }
 
@@ -926,7 +930,7 @@ void director_update_send_version(struct director *dir,
 
 struct director *
 director_init(const struct director_settings *set,
-	      const struct ip_addr *listen_ip, unsigned int listen_port,
+	      const struct ip_addr *listen_ip, in_port_t listen_port,
 	      director_state_change_callback_t *callback)
 {
 	struct director *dir;

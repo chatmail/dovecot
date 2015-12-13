@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "ioloop.h"
 #include "array.h"
+#include "base64.h"
 #include "hostpid.h"
 #include "module-dir.h"
 #include "restrict-access.h"
@@ -21,7 +22,6 @@
 #include "mail-storage.h"
 #include "mail-storage-service.h"
 
-#include <stdlib.h>
 #include <sys/stat.h>
 
 #ifdef HAVE_SYS_TIME_H
@@ -269,9 +269,11 @@ user_reply_handle(struct mail_storage_service_ctx *ctx,
 				p_strdup(user->pool, line + 19);
 		} else if (strncmp(line, "nice=", 5) == 0) {
 #ifdef HAVE_SETPRIORITY
-			int n = atoi(line + 5);
-
-			if (n != 0) {
+			int n;
+			if (str_to_int(line + 5, &n) < 0) {
+				i_error("userdb returned invalid nice value %s",
+					line + 5);
+			} else if (n != 0) {
 				if (setpriority(PRIO_PROCESS, 0, n) < 0)
 					i_error("setpriority(%d) failed: %m", n);
 			}
@@ -639,6 +641,7 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 	   mail_user_dup() */
 	mail_user = mail_user_alloc(user->input.username, user->user_info,
 				    user->user_set);
+	mail_user->_service_user = user;
 	mail_user_set_home(mail_user, *home == '\0' ? NULL : home);
 	mail_user_set_vars(mail_user, ctx->service->name,
 			   &user->input.local_ip, &user->input.remote_ip);
@@ -650,6 +653,8 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 	mail_user->auth_user = p_strdup(mail_user->pool, user->auth_user);
 	mail_user->session_id =
 		p_strdup(mail_user->pool, user->input.session_id);
+	mail_user->userdb_fields = user->input.userdb_fields == NULL ? NULL :
+		p_strarray_dup(mail_user->pool, user->input.userdb_fields);
 	
 	mail_set = mail_user_set_get_storage_set(mail_user);
 
@@ -712,6 +717,47 @@ void mail_storage_service_io_deactivate(struct mail_storage_service_ctx *ctx)
 	i_set_failure_prefix("%s", ctx->default_log_prefix);
 }
 
+static const char *
+mail_storage_service_input_var_userdb(const char *data, void *context)
+{
+	struct mail_storage_service_user *user = context;
+	const char *field_name = data;
+	unsigned int i, field_name_len;
+
+	if (user == NULL || user->input.userdb_fields == NULL)
+		return NULL;
+
+	field_name_len = strlen(field_name);
+	for (i = 0; user->input.userdb_fields[i] != NULL; i++) {
+		if (strncmp(user->input.userdb_fields[i], field_name,
+			    field_name_len) == 0 &&
+		    user->input.userdb_fields[i][field_name_len] == '=')
+			return user->input.userdb_fields[i] + field_name_len+1;
+	}
+	return NULL;
+}
+
+static void
+mail_storage_service_var_expand(struct mail_storage_service_ctx *ctx,
+				string_t *str, const char *format,
+				struct mail_storage_service_user *user,
+				const struct mail_storage_service_input *input,
+				const struct mail_storage_service_privileges *priv)
+{
+	static const struct var_expand_func_table func_table[] = {
+		{ "userdb", mail_storage_service_input_var_userdb },
+		{ NULL, NULL }
+	};
+	var_expand_with_funcs(str, format,
+		   get_var_expand_table(ctx->service, user, input, priv),
+		   func_table, user);
+}
+
+void mail_storage_service_io_deactivate(struct mail_storage_service_ctx *ctx)
+{
+	i_set_failure_prefix("%s", ctx->default_log_prefix);
+}
+
 static void
 mail_storage_service_init_log(struct mail_storage_service_ctx *ctx,
 			      struct mail_storage_service_user *user,
@@ -722,8 +768,9 @@ mail_storage_service_init_log(struct mail_storage_service_ctx *ctx,
 		string_t *str;
 
 		str = t_str_new(256);
-		var_expand(str, user->user_set->mail_log_prefix,
-			   get_var_expand_table(ctx->service, user, &user->input, priv));
+		mail_storage_service_var_expand(ctx, str,
+			user->user_set->mail_log_prefix,
+			user, &user->input, priv);
 		user->log_prefix = p_strdup(user->pool, str_c(str));
 	} T_END;
 
@@ -1019,9 +1066,23 @@ mail_storage_service_set_log_prefix(struct mail_storage_service_ctx *ctx,
 	string_t *str;
 
 	str = t_str_new(256);
-	var_expand(str, user_set->mail_log_prefix,
-		   get_var_expand_table(ctx->service, user, input, priv));
+	mail_storage_service_var_expand(ctx, str, user_set->mail_log_prefix,
+					user, input, priv);
 	i_set_failure_prefix("%s", str_c(str));
+}
+
+static const char *mail_storage_service_generate_session_id(pool_t pool)
+{
+	guid_128_t guid;
+	string_t *str = str_new(pool, MAX_BASE64_ENCODED_SIZE(sizeof(guid)));
+
+	guid_128_generate(guid);
+	base64_encode(guid, sizeof(guid), str);
+	/* remove the trailing "==" */
+	i_assert(str_data(str)[str_len(str)-2] == '=');
+	str_truncate(str, str_len(str)-2);
+	return str_c(str);
+
 }
 
 static int
@@ -1120,9 +1181,14 @@ mail_storage_service_lookup_real(struct mail_storage_service_ctx *ctx,
 	user->service_ctx = ctx;
 	user->pool = user_pool;
 	user->input = *input;
-	user->input.userdb_fields = NULL;
+	user->input.userdb_fields = userdb_fields == NULL ? NULL :
+		p_strarray_dup(user_pool, userdb_fields);
 	user->input.username = p_strdup(user_pool, username);
 	user->input.session_id = p_strdup(user_pool, input->session_id);
+	if (user->input.session_id == NULL) {
+		user->input.session_id =
+			mail_storage_service_generate_session_id(user_pool);
+	}
 	user->user_info = user_info;
 	user->flags = flags;
 
@@ -1366,6 +1432,8 @@ void mail_storage_service_user_free(struct mail_storage_service_user **_user)
 		io_loop_context_remove_callbacks(user->ioloop_ctx,
 			mail_storage_service_io_activate_user,
 			mail_storage_service_io_deactivate_user, user);
+		if (io_loop_get_current_context(current_ioloop) == user->ioloop_ctx)
+			mail_storage_service_io_deactivate_user(user);
 		io_loop_context_unref(&user->ioloop_ctx);
 	}
 	settings_parser_deinit(&user->set_parser);
@@ -1482,6 +1550,12 @@ struct setting_parser_context *
 mail_storage_service_user_get_settings_parser(struct mail_storage_service_user *user)
 {
 	return user->set_parser;
+}
+
+struct mail_storage_service_ctx *
+mail_storage_service_user_get_service_ctx(struct mail_storage_service_user *user)
+{
+	return user->service_ctx;
 }
 
 void *mail_storage_service_get_settings(struct master_service *service)

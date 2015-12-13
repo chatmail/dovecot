@@ -17,7 +17,7 @@ example:
 
 ---%<-------------------------------------------------------------------------
 imap(user): copy -> Trash: uid=908, msgid=<123.foo@bar>
-imap(user): deleted: uid=908, msgid=<123.foo@bar>
+imap(user): delete: uid=908, msgid=<123.foo@bar>
 imap(user): expunged: uid=908, msgid=<123.foo@bar>
 ---%<-------------------------------------------------------------------------
 
@@ -37,12 +37,14 @@ You can configure what and how mail_log plugin logs:
 
 ---%<-------------------------------------------------------------------------
 plugin {
-  # Events to log. Also available: flag_change save mailbox_create
+  # Events to log. Defined in src/plugins/mail-log/mail-log-plugin.c - also
+available: flag_change save mailbox_create
   mail_log_events = delete undelete expunge copy mailbox_delete mailbox_rename
 
-  # Also available: flags vsize from subject
+  # Also available: Defined in src/plugins/mail-log/mail-log-plugin.c - flags
+vsize from subject
   mail_log_fields = uid box msgid size
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:48)

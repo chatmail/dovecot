@@ -10,7 +10,6 @@
 #include "master-interface.h"
 #include "master-service.h"
 
-#include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -144,7 +143,10 @@ static bool client_exec_script(struct master_service_connection *conn)
 	script_verify_version(*args); args++;
 	if (*args != NULL) {
 		if (strncmp(*args, "alarm=", 6) == 0) {
-			alarm(atoi(*args + 6));
+			unsigned int seconds;
+			if (str_to_uint(*args + 6, &seconds) < 0)
+				i_fatal("invalid alarm option");
+			alarm(seconds);
 			args++;
 		}
 		if (strcmp(*args, "noreply") == 0) {

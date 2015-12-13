@@ -15,6 +15,8 @@ Contents
 
          2. Split configuration files
 
+         3. Hints about writing configuration files
+
      2. Authentication
 
      3. Mail Location
@@ -68,6 +70,21 @@ to just have a single 'dovecot.conf' file, which you can create easily using
 
 ---%<-------------------------------------------------------------------------
 doveconf -n > dovecot.conf
+---%<-------------------------------------------------------------------------
+
+Hints about writing configuration files
+---------------------------------------
+
+ * Usually it does not matter in which file you write the setting, however,
+   later settings replace eatlier ones. If you use the same section multiple
+   times, the settings are merged together.
+ * Boolean settings in the 'plugin' section interprete /any/ value as *true*,
+   even '0', 'no' and 'false'.
+ * To read the content of a file, for instance for the SSL certificate option,
+   prefix the filename with a '<', e.g.:
+
+---%<-------------------------------------------------------------------------
+ssl_cert = </etc/ssl/certs/imap.pem
 ---%<-------------------------------------------------------------------------
 
 Authentication
@@ -143,4 +160,4 @@ Running
 
 See <RunningDovecot.txt> and <Logging.txt>.
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:48)

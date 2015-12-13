@@ -9,7 +9,6 @@
 #include "fts-user.h"
 #include "fts-solr-plugin.h"
 
-#include <stdlib.h>
 
 const char *fts_solr_plugin_version = DOVECOT_ABI_VERSION;
 struct http_client *solr_http_client = NULL;
@@ -54,7 +53,8 @@ static void fts_solr_mail_user_deinit(struct mail_user *user)
 {
 	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT(user);
 
-	fts_mail_user_deinit(user);
+	if (fuser->set.use_libfts)
+		fts_mail_user_deinit(user);
 	fuser->module_ctx.super.deinit(user);
 }
 

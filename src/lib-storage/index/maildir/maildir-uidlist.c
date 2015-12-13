@@ -38,7 +38,6 @@
 #include "maildir-uidlist.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <sys/stat.h>
 
 /* NFS: How many times to retry reading dovecot-uidlist file if ESTALE
@@ -591,10 +590,18 @@ maildir_uidlist_read_v3_header(struct maildir_uidlist *uidlist,
 
 		switch (key) {
 		case MAILDIR_UIDLIST_HDR_EXT_UID_VALIDITY:
-			*uid_validity_r = strtoul(value, NULL, 10);
+			if (str_to_uint(value, uid_validity_r) < 0) {
+				maildir_uidlist_set_corrupted(uidlist,
+					"Invalid mailbox UID_VALIDITY: %s", value);
+				return -1;
+			}
 			break;
 		case MAILDIR_UIDLIST_HDR_EXT_NEXT_UID:
-			*next_uid_r = strtoul(value, NULL, 10);
+			if (str_to_uint(value, next_uid_r) < 0) {
+				maildir_uidlist_set_corrupted(uidlist,
+					"Invalid mailbox NEXT_UID: %s", value);
+				return -1;
+			}
 			break;
 		case MAILDIR_UIDLIST_HDR_EXT_GUID:
 			if (guid_128_from_string(value,
@@ -809,7 +816,7 @@ maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
 
         if (ret == 0) {
                 /* file is broken */
-                (void)unlink(uidlist->path);
+                i_unlink(uidlist->path);
         } else if (ret > 0) {
                 /* success */
 		if (readonly)
@@ -1445,12 +1452,9 @@ static int maildir_uidlist_recreate(struct maildir_uidlist *uidlist)
 		}
 	}
 
-	if (ret < 0) {
-		if (unlink(temp_path) < 0) {
-			mail_storage_set_critical(box->storage,
-				"unlink(%s) failed: %m", temp_path);
-		}
-	} else if (fstat(fd, &st) < 0) {
+	if (ret < 0)
+		i_unlink(temp_path);
+	else if (fstat(fd, &st) < 0) {
 		mail_storage_set_critical(box->storage,
 			"fstat(%s) failed: %m", temp_path);
 		ret = -1;

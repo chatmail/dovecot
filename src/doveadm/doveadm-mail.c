@@ -28,7 +28,8 @@
 #include "doveadm-mail.h"
 
 #include <stdio.h>
-#include <stdlib.h>
+
+#define DOVEADM_MAIL_CMD_INPUT_TIMEOUT_MSECS (5*60*1000)
 
 #define DOVEADM_MAIL_CMD_INPUT_TIMEOUT_MSECS (5*60*1000)
 
@@ -43,6 +44,11 @@ static int killed_signo = 0;
 bool doveadm_is_killed(void)
 {
 	return killed_signo != 0;
+}
+
+int doveadm_killed_signo(void)
+{
+	return killed_signo;
 }
 
 void doveadm_mail_failed_error(struct doveadm_mail_cmd_context *ctx,
@@ -544,6 +550,8 @@ doveadm_mail_cmd(const struct doveadm_mail_cmd *cmd, int argc, char *argv[])
 	/* keep context's getopt_args first in case it contains '+' */
 	if (ctx->getopt_args != NULL)
 		getopt_args = t_strconcat(ctx->getopt_args, getopt_args, NULL);
+	i_assert(master_getopt_str_is_valid(getopt_args));
+
 	ctx->cur_username = getenv("USER");
 	wildcard_user = NULL;
 	while ((c = getopt(argc, argv, getopt_args)) > 0) {

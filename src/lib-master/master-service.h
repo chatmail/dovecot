@@ -40,8 +40,11 @@ struct master_service_connection {
 	int listen_fd;
 	const char *name;
 
-	struct ip_addr remote_ip;
-	unsigned int remote_port;
+	struct ip_addr remote_ip, local_ip;
+	in_port_t remote_port, local_port;
+
+	struct ip_addr real_remote_ip, real_local_ip;
+	in_port_t real_remote_port, real_local_port;
 
 	unsigned int fifo:1;
 	unsigned int ssl:1;
@@ -63,6 +66,9 @@ master_service_init(const char *name, enum master_service_flags flags,
 /* Call getopt() and handle internal parameters. Return values are the same as
    getopt()'s. */
 int master_getopt(struct master_service *service);
+/* Returns TRUE if str is a valid getopt_str. Currently this only checks for
+   duplicate args so they aren't accidentally added. */
+bool master_getopt_str_is_valid(const char *str);
 /* Parser command line option. Returns TRUE if processed. */
 bool master_service_parse_option(struct master_service *service,
 				 int opt, const char *arg);

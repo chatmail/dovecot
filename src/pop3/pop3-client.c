@@ -4,6 +4,7 @@
 #include "array.h"
 #include "ioloop.h"
 #include "net.h"
+#include "iostream.h"
 #include "istream.h"
 #include "ostream.h"
 #include "crc32.h"
@@ -19,7 +20,6 @@
 #include "mail-search-build.h"
 #include "mail-namespace.h"
 
-#include <stdlib.h>
 #include <unistd.h>
 
 /* max. length of input command line (spec says 512) */
@@ -193,6 +193,8 @@ static int read_mailbox(struct client *client, uint32_t *failed_uid_r)
 		if ((mail_get_flags(mail) & MAIL_SEEN) != 0)
 			client->last_seen_pop3_msn = msgnum + 1;
 		client->total_size += size;
+		if (client->highest_seq < mail->seq)
+			client->highest_seq = mail->seq;
 
 		array_append(&message_sizes, &size, 1);
 		msgnum++;
@@ -523,6 +525,7 @@ static const char *client_stats(struct client *client)
 		{ 'o', NULL, "output" },
 		{ 'u', NULL, "uidl_change" },
 		{ '\0', NULL, "session" },
+		{ 'd', NULL, "deleted_bytes" },
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
@@ -535,7 +538,8 @@ static const char *client_stats(struct client *client)
 	tab[1].value = dec2str(client->top_count);
 	tab[2].value = dec2str(client->retr_bytes);
 	tab[3].value = dec2str(client->retr_count);
-	tab[4].value = dec2str(client->expunged_count);
+	tab[4].value = client->delete_success ?
+		dec2str(client->deleted_count) : 0;
 	tab[5].value = dec2str(client->messages_count);
 	tab[6].value = dec2str(client->total_size);
 	tab[7].value = dec2str(client->input->v_offset);
@@ -546,24 +550,14 @@ static const char *client_stats(struct client *client)
 	else
 		tab[9].value = "";
 	tab[10].value = client->session_id;
+	tab[11].value = client->delete_success ?
+		dec2str(client->deleted_size) : 0;
 
 	str = t_str_new(128);
 	var_expand(str, client->set->pop3_logout_format, tab);
 	return str_c(str);
 }
 
-static const char *client_get_disconnect_reason(struct client *client)
-{
-	errno = client->input->stream_errno != 0 ?
-		client->input->stream_errno :
-		client->output->stream_errno;
-	if (errno == 0 || errno == EPIPE)
-		return "Connection closed";
-	return t_strdup_printf("Connection closed: %s",
-			       client->input->stream_errno != 0 ?
-			       i_stream_get_error(client->input) :
-			       o_stream_get_error(client->output));
-}
 void client_destroy(struct client *client, const char *reason)
 {
 	client->v.destroy(client, reason);
@@ -575,8 +569,10 @@ static void client_default_destroy(struct client *client, const char *reason)
 		(void)client_update_mails(client);
 
 	if (!client->disconnected) {
-		if (reason == NULL)
-			reason = client_get_disconnect_reason(client);
+		if (reason == NULL) {
+			reason = io_stream_get_disconnect_reason(client->input,
+								 client->output);
+		}
 		i_info("%s %s", reason, client_stats(client));
 	}
 

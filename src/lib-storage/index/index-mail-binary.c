@@ -220,9 +220,8 @@ static int fd_callback(const char **path_r, void *context)
 	}
 
 	/* we just want the fd, unlink it */
-	if (unlink(str_c(path)) < 0) {
+	if (i_unlink(str_c(path)) < 0) {
 		/* shouldn't happen.. */
-		i_error("unlink(%s) failed: %m", str_c(path));
 		i_close_fd(&fd);
 		return -1;
 	}
@@ -345,6 +344,7 @@ blocks_count_lines(struct binary_ctx *ctx, struct istream *full_input)
 			/* go to the next block */
 			if (++block_idx == block_count) {
 				i_assert(i_stream_is_eof(full_input));
+				ret = -1;
 				break;
 			}
 			cur_block++;

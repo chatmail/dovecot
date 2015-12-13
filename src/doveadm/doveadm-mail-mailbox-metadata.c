@@ -263,13 +263,14 @@ cmd_mailbox_metadata_list_init(struct doveadm_mail_cmd_context *_ctx,
 			       const char *const args[])
 {
 	struct metadata_cmd_context *ctx = (struct metadata_cmd_context *)_ctx;
-	const char *key;
+	const char *key = NULL;
 
 	if (args[0] == NULL)
 		doveadm_mail_help_name("mailbox metadata list");
 	if (args[1] != NULL)
 		cmd_mailbox_metadata_parse_key(args[1], &ctx->key_type, &key);
 	ctx->mailbox = p_strdup(_ctx->pool, args[0]);
+	ctx->key = key == NULL ? "" : p_strdup(_ctx->pool, key);
 	doveadm_print_header("key", "key",
 			     DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE);
 }

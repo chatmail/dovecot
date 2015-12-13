@@ -219,11 +219,15 @@ static int client_verify_ordering(struct client *client,
 
 static void client_expunge(struct client *client, struct mail *mail)
 {
-	if (client->deleted_kw != NULL)
-		mail_update_keywords(mail, MODIFY_ADD, client->deleted_kw);
-	else
+	switch (client->set->parsed_delete_type) {
+	case POP3_DELETE_TYPE_EXPUNGE:
 		mail_expunge(mail);
-	client->expunged_count++;
+		break;
+	case POP3_DELETE_TYPE_FLAG:
+		i_assert(client->deleted_kw != NULL);
+		mail_update_keywords(mail, MODIFY_ADD, client->deleted_kw);
+		break;
+	}
 }
 
 bool client_update_mails(struct client *client)
@@ -292,6 +296,8 @@ static int cmd_quit(struct client *client, const char *args ATTR_UNUSED)
 		client_send_storage_error(client);
 		client_disconnect(client, "Storage error during logout.");
 		return 1;
+	} else {
+		client->delete_success = TRUE;
 	}
 
 	if (!client->deleted)
@@ -614,7 +620,7 @@ pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 		}
 	}
 	if ((client->uidl_keymask & UIDL_FILE_NAME) != 0) {
-		if (mail_get_special(mail, MAIL_FETCH_UIDL_FILE_NAME,
+		if (mail_get_special(mail, MAIL_FETCH_STORAGE_ID,
 				     &tab[3].value) < 0) {
 			i_error("UIDL: File name lookup failed: %s",
 				mailbox_get_last_error(mail->box, NULL));
@@ -790,7 +796,7 @@ static void client_uidls_save(struct client *client)
 	client->uidl_pool = pool_alloconly_create("message uidls", 1024);
 
 	/* first read all the UIDLs into a temporary [seq] array */
-	seq_uidls = i_new(const char *, client->messages_count);
+	seq_uidls = i_new(const char *, client->highest_seq);
 	str = t_str_new(128);
 	while (mailbox_search_next(search_ctx, &mail)) {
 		str_truncate(str, 0);
@@ -805,6 +811,7 @@ static void client_uidls_save(struct client *client)
 		if (client->set->pop3_save_uidl && !permanent_uidl)
 			mail_update_pop3_uidl(mail, uidl);
 
+		i_assert(mail->seq <= client->highest_seq);
 		seq_uidls[mail->seq-1] = uidl;
 		if (uidl_duplicates_rename)
 			hash_table_insert(prev_uidls, uidl, POINTER_CAST(1));

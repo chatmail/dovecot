@@ -159,15 +159,15 @@ static int service_fifo_listener_listen(struct service_listener *l)
 
 #ifdef HAVE_SYSTEMD
 static int
-systemd_listen_fd(const struct ip_addr *ip, unsigned int port, int *fd_r)
+systemd_listen_fd(const struct ip_addr *ip, in_port_t port, int *fd_r)
 {
 	static int sd_fds = -1;
 	int fd, fd_max;
 
 	if (sd_fds < 0) {
 		sd_fds = sd_listen_fds(0);
-		if (sd_fds == -1) {
-			i_error("sd_listen_fds() failed: %m");
+		if (sd_fds < 0) {
+			i_error("sd_listen_fds() failed: %s", strerror(-sd_fds));
 			return -1;
 		}
 	}
@@ -191,7 +191,7 @@ static int service_inet_listener_listen(struct service_listener *l)
         struct service *service = l->service;
 	enum net_listen_flags flags = 0;
 	const struct inet_listener_settings *set = l->set.inetset.set;
-	unsigned int port = set->port;
+	in_port_t port = set->port;
 	int fd;
 
 #ifdef HAVE_SYSTEMD
@@ -251,7 +251,7 @@ static int service_listen(struct service *service)
 }
 
 #ifdef HAVE_SYSTEMD
-static int get_socket_info(int fd, unsigned int *family, unsigned int *port)
+static int get_socket_info(int fd, unsigned int *family, in_port_t *port)
 {
 	union sockaddr_union {
 		struct sockaddr sa;
@@ -260,6 +260,7 @@ static int get_socket_info(int fd, unsigned int *family, unsigned int *port)
 	} sockaddr;
 	socklen_t l;
 
+	// FIXME(Stephan): why -1?
 	if (port) *port = -1;
 	if (family) *family = -1;
 
@@ -304,7 +305,8 @@ static int services_verify_systemd(struct service_list *service_list)
 	for (fd = SD_LISTEN_FDS_START; fd <= fd_max; fd++) {
 		if (sd_is_socket_inet(fd, 0, SOCK_STREAM, 1, 0) > 0) {
 			int found = FALSE;
-			unsigned int port, family;
+			in_port_t port;
+			unsigned int family;
 			get_socket_info(fd, &family, &port);
 			
 			array_foreach(&service_list->services, services) {
@@ -444,10 +446,7 @@ int services_listen_using(struct service_list *new_service_list,
 		switch (old_listeners[j]->type) {
 		case SERVICE_LISTENER_UNIX:
 		case SERVICE_LISTENER_FIFO: {
-			const char *path =
-				old_listeners[j]->set.fileset.set->path;
-			if (unlink(path) < 0)
-				i_error("unlink(%s) failed: %m", path);
+			i_unlink(old_listeners[j]->set.fileset.set->path);
 			break;
 		}
 		case SERVICE_LISTENER_INET:

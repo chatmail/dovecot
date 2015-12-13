@@ -5,7 +5,6 @@
 #include "ioloop.h"
 #include "sql-api-private.h"
 
-#include <stdlib.h>
 #include <time.h>
 
 struct sql_db_module_register sql_db_module_register = { 0 };
@@ -124,6 +123,12 @@ void sql_disconnect(struct sql_db *db)
 const char *sql_escape_string(struct sql_db *db, const char *string)
 {
 	return db->v.escape_string(db, string);
+}
+
+const char *sql_escape_blob(struct sql_db *db,
+			    const unsigned char *data, size_t size)
+{
+	return db->v.escape_blob(db, data, size);
 }
 
 void sql_exec(struct sql_db *db, const char *query)

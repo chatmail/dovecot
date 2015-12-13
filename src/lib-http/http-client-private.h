@@ -38,14 +38,22 @@ enum http_client_peer_addr_type {
 	HTTP_CLIENT_PEER_ADDR_HTTP = 0,
 	HTTP_CLIENT_PEER_ADDR_HTTPS,
 	HTTP_CLIENT_PEER_ADDR_HTTPS_TUNNEL,
-	HTTP_CLIENT_PEER_ADDR_RAW
+	HTTP_CLIENT_PEER_ADDR_RAW,
+	HTTP_CLIENT_PEER_ADDR_UNIX,
 };
 
 struct http_client_peer_addr {
 	enum http_client_peer_addr_type type;
-	const char *https_name; /* TLS SNI */
-	struct ip_addr ip;
-	in_port_t port;
+	union {
+		struct {
+			const char *https_name; /* TLS SNI */
+			struct ip_addr ip;
+			in_port_t port;
+		} tcp;
+		struct {
+			const char *path;
+		} un;
+	} a;
 };
 
 struct http_client_request {
@@ -57,7 +65,9 @@ struct http_client_request {
 
 	const char *method, *target;
 	struct http_url origin_url;
+	const char *username, *password;
 
+	const char *host_socket;
 	const struct http_url *host_url;
 	const char *authority;
 
@@ -95,11 +105,12 @@ struct http_client_request {
 
 	enum http_request_state state;
 
-	unsigned int	have_hdr_connection:1;
-	unsigned int	have_hdr_date:1;
-	unsigned int have_hdr_expect:1;
-	unsigned int	have_hdr_host:1;
+	unsigned int have_hdr_authorization:1;
 	unsigned int have_hdr_body_spec:1;
+	unsigned int have_hdr_connection:1;
+	unsigned int have_hdr_date:1;
+	unsigned int have_hdr_expect:1;
+	unsigned int have_hdr_host:1;
 	unsigned int have_hdr_user_agent:1;
 
 	unsigned int payload_sync:1;
@@ -155,7 +166,7 @@ struct http_client_connection {
 
 struct http_client_peer {
 	struct http_client_peer_addr addr;
-	char *https_name;
+	char *addr_name;
 
 	struct http_client *client;
 	struct http_client_peer *prev, *next;
@@ -187,7 +198,7 @@ struct http_client_queue {
 	char *name;
 
 	struct http_client_peer_addr addr;
-	char *https_name;
+	char *addr_name;
 
 	/* current index in host->ips */
 	unsigned int ips_connect_idx;
@@ -230,6 +241,8 @@ struct http_client_host {
 
 	/* active DNS lookup */
 	struct dns_lookup *dns_lookup;
+
+	unsigned int unix_local:1;
 };
 
 struct http_client {
@@ -247,6 +260,7 @@ struct http_client {
 	struct connection_list *conn_list;
 
 	HASH_TABLE_TYPE(http_client_host) hosts;
+	struct http_client_host *unix_host;
 	struct http_client_host *hosts_list;
 	HASH_TABLE_TYPE(http_client_peer) peers;
 	struct http_client_peer *peers_list;
@@ -260,6 +274,8 @@ void http_client_request_ref(struct http_client_request *req);
 void http_client_request_unref(struct http_client_request **_req);
 int http_client_request_delay_from_response(struct http_client_request *req,
 	const struct http_response *response);
+void http_client_request_get_peer_addr(const struct http_client_request *req,
+	struct http_client_peer_addr *addr);
 enum http_response_payload_type
 http_client_request_get_payload_type(struct http_client_request *req);
 int http_client_request_send(struct http_client_request *req,
@@ -289,6 +305,12 @@ void http_client_connection_ref(struct http_client_connection *conn);
 void http_client_connection_unref(struct http_client_connection **_conn);
 void http_client_connection_close(struct http_client_connection **_conn);
 int http_client_connection_output(struct http_client_connection *conn);
+void http_client_connection_start_request_timeout(
+	struct http_client_connection *conn);
+void http_client_connection_reset_request_timeout(
+	struct http_client_connection *conn);
+void http_client_connection_stop_request_timeout(
+	struct http_client_connection *conn);
 unsigned int
 http_client_connection_count_pending(struct http_client_connection *conn);
 bool http_client_connection_is_ready(struct http_client_connection *conn);
@@ -298,6 +320,7 @@ void http_client_connection_check_idle(struct http_client_connection *conn);
 void http_client_connection_switch_ioloop(struct http_client_connection *conn);
 void http_client_connection_start_tunnel(struct http_client_connection **_conn,
 	struct http_client_tunnel *tunnel);
+
 
 unsigned int http_client_peer_addr_hash
 	(const struct http_client_peer_addr *peer) ATTR_PURE;
@@ -369,12 +392,53 @@ void http_client_remove_request_error(struct http_client *client,
 	struct http_client_request *req);
 
 
+static inline bool
+http_client_peer_addr_is_https(const struct http_client_peer_addr *addr)
+{
+	switch (addr->type) {
+	case HTTP_CLIENT_PEER_ADDR_HTTPS:
+	case HTTP_CLIENT_PEER_ADDR_HTTPS_TUNNEL:
+		return TRUE;
+	default:
+		break;
+	}
+	return FALSE;
+}
+
+static inline const char *
+http_client_peer_addr_get_https_name(const struct http_client_peer_addr *addr)
+{
+	switch (addr->type) {
+	case HTTP_CLIENT_PEER_ADDR_HTTPS:
+	case HTTP_CLIENT_PEER_ADDR_HTTPS_TUNNEL:
+		return addr->a.tcp.https_name;
+	default:
+		break;
+	}
+	return NULL;
+}
+
 static inline const char *
 http_client_peer_addr2str(const struct http_client_peer_addr *addr)
 {
-	if (addr->ip.family == AF_INET6)
-		return t_strdup_printf("[%s]:%u", net_ip2addr(&addr->ip), addr->port);
-	return t_strdup_printf("%s:%u", net_ip2addr(&addr->ip), addr->port);
+	switch (addr->type) {
+	case HTTP_CLIENT_PEER_ADDR_HTTP:
+	case HTTP_CLIENT_PEER_ADDR_HTTPS:
+	case HTTP_CLIENT_PEER_ADDR_HTTPS_TUNNEL:
+	case HTTP_CLIENT_PEER_ADDR_RAW:
+		if (addr->a.tcp.ip.family == AF_INET6) {
+			return t_strdup_printf("[%s]:%u",
+				net_ip2addr(&addr->a.tcp.ip), addr->a.tcp.port);
+		}
+		return t_strdup_printf("%s:%u",
+			net_ip2addr(&addr->a.tcp.ip), addr->a.tcp.port);
+	case HTTP_CLIENT_PEER_ADDR_UNIX:
+		return t_strdup_printf("unix:%s", addr->a.un.path);
+	default:
+		break;
+	}
+	i_unreached();
+	return "";
 }
 
 static inline const char *
@@ -387,27 +451,10 @@ http_client_request_label(struct http_client_request *req)
 	return req->label;
 }
 
-static inline void
-http_client_request_get_peer_addr(const struct http_client_request *req,
-	struct http_client_peer_addr *addr)
+static inline bool
+http_client_request_to_proxy(const struct http_client_request *req)
 {
-	const struct http_url *host_url = req->host_url;
-	
-	memset(addr, 0, sizeof(*addr));
-	if (req->connect_direct) {
-		addr->type = HTTP_CLIENT_PEER_ADDR_RAW;
-		addr->port = (host_url->have_port ? host_url->port : HTTPS_DEFAULT_PORT);
-	} else if (host_url->have_ssl) {
-		if (req->ssl_tunnel)
-			addr->type = HTTP_CLIENT_PEER_ADDR_HTTPS_TUNNEL;
-		else
-			addr->type = HTTP_CLIENT_PEER_ADDR_HTTPS;
-		addr->https_name = host_url->host_name;
- 		addr->port = (host_url->have_port ? host_url->port : HTTPS_DEFAULT_PORT);
-	} else {
-		addr->type = HTTP_CLIENT_PEER_ADDR_HTTP;
-		addr->port = (host_url->have_port ? host_url->port : HTTP_DEFAULT_PORT);
-	}
+	return (req->host_url != &req->origin_url);
 }
 
 static inline const char *

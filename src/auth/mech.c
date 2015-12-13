@@ -6,7 +6,6 @@
 #include "str.h"
 #include "passdb.h"
 
-#include <stdlib.h>
 #include <ctype.h>
 
 static struct mech_module_list *mech_modules;
@@ -173,6 +172,18 @@ void mech_register_deinit(struct mechanisms_register **_reg)
 
 	*_reg = NULL;
 	pool_unref(&reg->pool);
+}
+
+const struct mech_module *
+mech_register_find(const struct mechanisms_register *reg, const char *name)
+{
+	const struct mech_module_list *list;
+
+	for (list = reg->modules; list != NULL; list = list->next) {
+		if (strcasecmp(list->module.mech_name, name) == 0)
+			return &list->module;
+	}
+	return NULL;
 }
 
 void mech_init(const struct auth_settings *set)

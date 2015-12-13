@@ -3,9 +3,10 @@ Dovecot Dictionaries
 
 Dovecot's lib-dict can be used to access simple key-value databases. This is
 used by for example <quota-dict> [Quota.Dict.txt], <passdb&userdb>
-[AuthDatabase.Dict.txt], <last-login plugin> [Plugins.LastLogin.txt], etc. The
-dictionaries can be accessed either directly by the mail processes or they can
-be accessed via <dict proxy> [Dict.txt] processes.
+[AuthDatabase.Dict.txt], <last-login plugin> [Plugins.LastLogin.txt],
+<METADATA> [ImapMetadata.txt], etc. The dictionaries can be accessed either
+directly by the mail processes or they can be accessed via <dict proxy>
+[Dict.txt] processes.
 
 Currently supported dict backends are:
 
@@ -109,4 +110,4 @@ SQL Mapping
 
 FIXME: Write this. For now see 'example-config/dovecot-dict-sql.conf.ext'
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:47)

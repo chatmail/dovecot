@@ -167,7 +167,10 @@ enum mail_index_sync_flags {
 	/* Same as MAIL_INDEX_SYNC_FLAG_DELETING_INDEX, but finish index
 	   deletion only once and fail the rest (= avoid race conditions when
 	   multiple processes try to mark the index deleted) */
-	MAIL_INDEX_SYNC_FLAG_TRY_DELETING_INDEX	= 0x40
+	MAIL_INDEX_SYNC_FLAG_TRY_DELETING_INDEX	= 0x40,
+	/* Update header's tail_offset to head_offset, even if it's the only
+	   thing we do and there's no strict need for it. */
+	MAIL_INDEX_SYNC_FLAG_UPDATE_TAIL_OFFSET	= 0x80
 };
 
 enum mail_index_view_sync_flags {
@@ -360,6 +363,8 @@ int mail_index_sync_begin_to(struct mail_index *index,
 /* Returns TRUE if it currently looks like syncing would return changes. */
 bool mail_index_sync_have_any(struct mail_index *index,
 			      enum mail_index_sync_flags flags);
+/* Returns TRUE if it currently looks like syncing would return expunges. */
+bool mail_index_sync_have_any_expunges(struct mail_index *index);
 /* Returns the log file seq+offsets for the area which this sync is handling. */
 void mail_index_sync_get_offsets(struct mail_index_sync_ctx *ctx,
 				 uint32_t *seq1_r, uoff_t *offset1_r,
@@ -559,6 +564,12 @@ uint32_t mail_index_ext_register(struct mail_index *index, const char *name,
 				 uint32_t default_hdr_size,
 				 uint16_t default_record_size,
 				 uint16_t default_record_align);
+/* Change an already registered extension's default sizes. */
+void mail_index_ext_register_resize_defaults(struct mail_index *index,
+					     uint32_t ext_id,
+					     uint32_t default_hdr_size,
+					     uint16_t default_record_size,
+					     uint16_t default_record_align);
 /* Returns TRUE and sets ext_id_r if extension with given name is registered. */
 bool mail_index_ext_lookup(struct mail_index *index, const char *name,
 			   uint32_t *ext_id_r);

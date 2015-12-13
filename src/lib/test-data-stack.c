@@ -2,7 +2,6 @@
 
 #include "test-lib.h"
 #include "data-stack.h"
-#include <stdlib.h>
 
 static void test_ds_buffers(void)
 {
@@ -148,6 +147,7 @@ void test_data_stack(void)
 
 enum fatal_test_state fatal_data_stack(int stage)
 {
+#ifdef DEBUG
 	/* If we abort, then we'll be left with a dangling t_push()
 	   keep a record of our temporary stack id, so we can clean up. */
 	static unsigned int t_id = 999999999;
@@ -158,13 +158,13 @@ enum fatal_test_state fatal_data_stack(int stage)
 		/* Presume that we need to clean up from the prior test:
 		   undo the evil write, then we will be able to t_pop cleanly,
 		   and finally we can end the test stanza. */
-		if (things_are_messed_up || undo_ptr == NULL || t_id == 999999999)
+		if (things_are_messed_up || undo_ptr == NULL)
 			return FATAL_TEST_ABORT; /* abort, things are messed up with t_pop */
 		*undo_ptr = undo_data;
 		undo_ptr = NULL;
 		/* t_pop musn't abort, that would cause recursion */
 		things_are_messed_up = TRUE;
-		if (t_pop() != t_id)
+		if (t_id != 999999999 && t_pop() != t_id)
 			return FATAL_TEST_ABORT; /* abort, things are messed up with us */
 		things_are_messed_up = FALSE;
 		t_id = 999999999;
@@ -172,7 +172,6 @@ enum fatal_test_state fatal_data_stack(int stage)
 	}
 
 	switch(stage) {
-#ifdef DEBUG
 	case 0: {
 		unsigned char *p;
 		test_begin("fatal data-stack underrun");
@@ -206,6 +205,7 @@ enum fatal_test_state fatal_data_stack(int stage)
 		*undo_ptr = '*';
 		/* t_pop will now fail */
 		(void)t_pop();
+		t_id = 999999999; /* We're FUBAR, mustn't pop next entry */
 		return FATAL_TEST_FAILURE;
 	}
 
@@ -218,12 +218,15 @@ enum fatal_test_state fatal_data_stack(int stage)
 		*undo_ptr = '*';
 		/* t_pop will now fail */
 		(void)t_pop();
+		t_id = 999999999; /* We're FUBAR, mustn't pop next entry */
 		return FATAL_TEST_FAILURE;
 	}
 
-#endif
 	default:
 		things_are_messed_up = TRUE;
 		return FATAL_TEST_FINISHED;
 	}
+#else
+	return stage == 0 ? FATAL_TEST_FINISHED : FATAL_TEST_ABORT;
+#endif
 }

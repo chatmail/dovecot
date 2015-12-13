@@ -51,10 +51,12 @@ struct http_client_settings {
 	/* User-Agent: header (default: none) */
 	const char *user_agent;
 
-	/* configuration for using a proxy */
-	const char *proxy_socket_path; /* FIXME: implement */
+	/* proxy on unix socket */
+	const char *proxy_socket_path;
+	/* URL for normal proxy (ignored if proxy_socket_path is set) */   
 	const struct http_url *proxy_url;
-	const char *proxy_username; /* FIXME: implement */
+	/* credentials for proxy */
+	const char *proxy_username;
 	const char *proxy_password;
 
 	const char *rawlog_dir;
@@ -207,6 +209,9 @@ void http_client_request_set_timeout_msecs(struct http_client_request *req,
 	unsigned int msecs);
 void http_client_request_set_timeout(struct http_client_request *req,
 	const struct timeval *time);
+
+void http_client_request_set_auth_simple(struct http_client_request *req,
+	const char *username, const char *password);
 
 void http_client_request_delay_until(struct http_client_request *req,
 	time_t time);

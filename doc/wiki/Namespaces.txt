@@ -246,6 +246,8 @@ problems:
    folders (Sent, Drafts etc) if the client settings refer to old paths while
    the server lists new paths.
 
+See also <Migration.Courier.txt>.
+
 Per-user Namespace Location From SQL
 ------------------------------------
 
@@ -277,4 +279,4 @@ user_query = SELECT Location as 'namespace/docs/location' FROM Namespaces WHERE
 ..
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:47)

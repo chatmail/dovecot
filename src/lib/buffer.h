@@ -20,10 +20,10 @@ void buffer_create_from_const_data(buffer_t *buffer,
 				   const void *data, size_t size);
 #if defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__) > 401
 #define buffer_create_from_data(b,d,s) ({					\
-	(void)COMPILE_ERROR_IF_TRUE(__builtin_object_size((d),3) < ((s)?(s):1)); \
+	(void)COMPILE_ERROR_IF_TRUE(__builtin_object_size((d),1) < ((s)?(s):1)); \
 	buffer_create_from_data((b), (d), (s)); })
 #define buffer_create_from_const_data(b,d,s) ({					\
-	(void)COMPILE_ERROR_IF_TRUE(__builtin_object_size((d),3) < ((s)?(s):1)); \
+	(void)COMPILE_ERROR_IF_TRUE(__builtin_object_size((d),1) < ((s)?(s):1)); \
 	buffer_create_from_const_data((b), (d), (s)); })
 #endif
 /* Creates a dynamically growing buffer. Whenever write would exceed the
@@ -91,6 +91,10 @@ void buffer_set_used_size(buffer_t *buf, size_t used_size);
 
 /* Returns the current buffer size. */
 size_t buffer_get_size(const buffer_t *buf) ATTR_PURE;
+/* Returns how many bytes we can write to buffer without increasing its size.
+   With dynamic buffers this is buffer_get_size()-1, because the extra 1 byte
+   is reserved for str_c()'s NUL. */
+size_t buffer_get_writable_size(const buffer_t *buf) ATTR_PURE;
 
 /* Returns TRUE if buffer contents are identical. */
 bool buffer_cmp(const buffer_t *buf1, const buffer_t *buf2);

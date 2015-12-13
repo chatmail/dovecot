@@ -10,7 +10,6 @@
 #include "mailbox-uidvalidity.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -108,7 +107,6 @@ mailbox_uidvalidity_next_rescan(struct mailbox_list *list, const char *path)
 	DIR *d;
 	struct dirent *dp;
 	const char *fname, *dir, *prefix, *tmp;
-	char *endp;
 	unsigned int i, prefix_len;
 	uint32_t cur_value, min_value, max_value;
 	mode_t old_mask;
@@ -145,8 +143,7 @@ mailbox_uidvalidity_next_rescan(struct mailbox_list *list, const char *path)
 	max_value = 0; min_value = (uint32_t)-1;
 	while ((dp = readdir(d)) != NULL) {
 		if (strncmp(dp->d_name, prefix, prefix_len) == 0) {
-			cur_value = strtoul(dp->d_name + prefix_len, &endp, 16);
-			if (*endp == '\0') {
+			if (str_to_uint32_hex(dp->d_name + prefix_len, &cur_value) >= 0) {
 				if (min_value > cur_value)
 					min_value = cur_value;
 				if (max_value < cur_value)
@@ -183,8 +180,7 @@ mailbox_uidvalidity_next_rescan(struct mailbox_list *list, const char *path)
 	if (min_value != max_value) {
 		/* duplicate uidvalidity files, delete the oldest */
 		tmp = t_strdup_printf("%s.%08x", path, min_value);
-		if (unlink(tmp) < 0 && errno != ENOENT)
-			i_error("unlink(%s) failed: %m", tmp);
+		i_unlink_if_exists(tmp);
 	}
 
 	cur_value = max_value;
@@ -196,7 +192,7 @@ mailbox_uidvalidity_next_rescan(struct mailbox_list *list, const char *path)
 
 uint32_t mailbox_uidvalidity_next(struct mailbox_list *list, const char *path)
 {
-	char buf[8+1], *endp;
+	char buf[8+1];
 	uint32_t cur_value;
 	int fd, ret;
 
@@ -213,8 +209,7 @@ uint32_t mailbox_uidvalidity_next(struct mailbox_list *list, const char *path)
 		return mailbox_uidvalidity_next_rescan(list, path);
 	}
 	buf[sizeof(buf)-1] = 0;
-	cur_value = strtoul(buf, &endp, 16);
-	if (ret == 0 || endp != buf+sizeof(buf)-1) {
+	if (ret == 0 || str_to_uint32_hex(buf, &cur_value) < 0) {
 		/* broken value */
 		i_close_fd(&fd);
 		return mailbox_uidvalidity_next_rescan(list, path);

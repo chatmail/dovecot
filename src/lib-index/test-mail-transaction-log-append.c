@@ -6,7 +6,6 @@
 #include "mail-index-private.h"
 #include "mail-transaction-log-private.h"
 
-#include <stdlib.h>
 #include <sys/stat.h>
 
 static bool log_lock_failure = FALSE;
@@ -162,7 +161,7 @@ static void test_mail_transaction_log_append(void)
 	i_free(log->head);
 	i_free(log->index);
 	i_free(log);
-	unlink(tmp_path);
+	i_unlink(tmp_path);
 }
 
 int main(void)

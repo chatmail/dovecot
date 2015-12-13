@@ -6,7 +6,8 @@ Advantages over <password lookups> [AuthDatabase.LDAP.PasswordLookups.txt]:
  * LDAP server verifies the password, so Dovecot doesn't need to know what
    format the password is stored in.
  * A bit more secure, as a security hole in Dovecot doesn't give attacker
-   access to all the users' passwords.
+   access to all the users' password hashes. (And Dovecot admins in general
+   don't have direct access to them.)
 
 You can enable authentication binds by setting 'auth_bind=yes'. Next Dovecot
 needs to know what DN to use in the binding. There are two ways to configure
@@ -85,4 +86,4 @@ ln -s /etc/dovecot/dovecot-ldap.conf.ext
 /etc/dovecot/dovecot-ldap-userdb.conf.ext
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:45)

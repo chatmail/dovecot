@@ -11,7 +11,6 @@
 #include "mail-storage-settings.h"
 #include "duplicate.h"
 
-#include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -184,10 +183,8 @@ static int duplicate_read(struct duplicate_file *file)
 	}
 
 	if (record_size == 0 ||
-	    duplicate_read_records(file, input, record_size) < 0) {
-		if (unlink(file->path) < 0 && errno != ENOENT)
-			i_error("unlink(%s) failed: %m", file->path);
-	}
+	    duplicate_read_records(file, input, record_size) < 0)
+		i_unlink_if_exists(file->path);
 
 	i_stream_unref(&input);
 	if (close(fd) < 0)

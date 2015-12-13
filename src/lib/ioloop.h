@@ -55,10 +55,11 @@ struct io *io_add(int fd, enum io_condition condition,
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context)
 enum io_notify_result
-io_add_notify(const char *path, io_callback_t *callback,
-	      void *context, struct io **io_r) ATTR_NULL(3);
+io_add_notify(const char *path, unsigned int source_linenum,
+	      io_callback_t *callback, void *context,
+	      struct io **io_r) ATTR_NULL(3);
 #define io_add_notify(path, callback, context, io_r) \
-	io_add_notify(path + \
+	io_add_notify(path, __LINE__ + \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context, io_r)
 struct io *io_add_istream(struct istream *input, unsigned int source_linenum,
@@ -166,6 +167,14 @@ void io_loop_context_remove_callbacks(struct ioloop_context *ctx,
 /* Returns the current context set to ioloop. */
 struct ioloop_context *io_loop_get_current_context(struct ioloop *ioloop);
 
+/* Returns fd, which contains all of the ioloop's current notifications.
+   When it becomes readable, there is a new notification. Calling this function
+   stops the existing notifications in the ioloop from working anymore.
+   This function's main idea is that the fd can be passed to another process,
+   which can use it to find out if an interesting notification happens.
+   Returns fd on success, -1 on error. */
+int io_loop_extract_notify_fd(struct ioloop *ioloop);
+
 /* Move the given I/O into the current I/O loop if it's not already
    there. New I/O is returned, while the old one is freed. */
 struct io *io_loop_move_io(struct io **io);
@@ -176,5 +185,7 @@ bool io_loop_have_ios(struct ioloop *ioloop);
 /* Returns TRUE if there is a pending timeout that is going to be run
    immediately. */
 bool io_loop_have_immediate_timeouts(struct ioloop *ioloop);
+/* Returns number of microseconds spent on the ioloop waiting itself. */
+uint64_t io_loop_get_wait_usecs(struct ioloop *ioloop);
 
 #endif

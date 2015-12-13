@@ -8,7 +8,6 @@
 #include "imap-urlauth-worker-settings.h"
 
 #include <stddef.h>
-#include <stdlib.h>
 #include <unistd.h>
 
 /* <settings checks> */
@@ -57,7 +56,7 @@ static const struct setting_define imap_urlauth_worker_setting_defines[] = {
 	DEF(SET_BOOL, verbose_proctitle),
 
 	DEF(SET_STR, imap_urlauth_host),
-	DEF(SET_UINT, imap_urlauth_port),
+	DEF(SET_IN_PORT, imap_urlauth_port),
 
 	SETTING_DEFINE_LIST_END
 };

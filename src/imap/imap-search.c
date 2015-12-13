@@ -15,7 +15,6 @@
 #include "imap-search-args.h"
 #include "imap-search.h"
 
-#include <stdlib.h>
 
 static int imap_search_deinit(struct imap_search_context *ctx);
 
@@ -516,7 +515,7 @@ static void cmd_search_more_callback(struct client_command_context *cmd)
 	bool finished;
 
 	o_stream_cork(client->output);
-	finished = cmd_search_more(cmd);
+	finished = command_exec(cmd);
 	o_stream_uncork(client->output);
 
 	if (!finished)

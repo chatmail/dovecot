@@ -112,33 +112,56 @@ static int imap_msg_map_hdr_cmp(const struct imap_msg_map *map1,
 	return memcmp(map1->hdr_sha1, map2->hdr_sha1, sizeof(map1->hdr_sha1));
 }
 
+struct pop3_hdr_context {
+	bool have_eoh;
+	bool stop;
+};
+
 static void
 pop3_header_filter_callback(struct header_filter_istream *input ATTR_UNUSED,
 			    struct message_header_line *hdr,
-			    bool *matched ATTR_UNUSED, bool *have_eoh)
+			    bool *matched, struct pop3_hdr_context *ctx)
 {
-	if (hdr != NULL && hdr->eoh)
-		*have_eoh = TRUE;
+	if (hdr == NULL)
+		return;
+	if (hdr->eoh) {
+		ctx->have_eoh = TRUE;
+		if (ctx->stop) {
+			/* matched is handled differently for eoh by
+			 istream-header-filter. a design bug I guess.. */
+			*matched = FALSE;
+		}
+	} else {
+		if (strspn(hdr->name, "\r") == hdr->name_len) {
+			/* CR+CR+LF - some servers stop the header processing
+			 here while others don't. To make sure they can be
+			 matched correctly we want to stop here entirely. */
+			ctx->stop = TRUE;
+		}
+		if (ctx->stop)
+			*matched = TRUE;
+	}
 }
 
-static int
-get_hdr_sha1_stream(struct mail *mail, struct istream *input, uoff_t hdr_size,
-		    unsigned char sha1_r[SHA1_RESULTLEN], bool *have_eoh_r)
+int pop3_migration_get_hdr_sha1(uint32_t mail_seq, struct istream *input,
+				uoff_t hdr_size,
+				unsigned char sha1_r[SHA1_RESULTLEN],
+				bool *have_eoh_r)
 {
 	struct istream *input2;
 	const unsigned char *data, *p;
 	size_t size, idx;
 	struct sha1_ctxt sha1_ctx;
+	struct pop3_hdr_context hdr_ctx;
 
-	*have_eoh_r = FALSE;
-
+	memset(&hdr_ctx, 0, sizeof(hdr_ctx));
 	input2 = i_stream_create_limit(input, hdr_size);
 	/* hide headers that might change or be different in IMAP vs. POP3 */
 	input = i_stream_create_header_filter(input2,
 				HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR,
 				hdr_hash_skip_headers,
 				N_ELEMENTS(hdr_hash_skip_headers),
-				pop3_header_filter_callback, have_eoh_r);
+				pop3_header_filter_callback, &hdr_ctx);
 	i_stream_unref(&input2);
 
 	sha1_init(&sha1_ctx);
@@ -159,12 +182,14 @@ get_hdr_sha1_stream(struct mail *mail, struct istream *input, uoff_t hdr_size,
 	}
 	if (input->stream_errno != 0) {
 		i_error("pop3_migration: Failed to read header for msg %u: %s",
-			mail->seq, i_stream_get_error(input));
+			mail_seq, i_stream_get_error(input));
 		i_stream_unref(&input);
 		return -1;
 	}
 	sha1_result(&sha1_ctx, sha1_r);
 	i_stream_unref(&input);
+
+	*have_eoh_r = hdr_ctx.have_eoh;
 	return 0;
 }
 
@@ -180,8 +205,9 @@ get_hdr_sha1(struct mail *mail, unsigned char sha1_r[SHA1_RESULTLEN])
 			mail->seq, mailbox_get_last_error(mail->box, NULL));
 		return -1;
 	}
-	if (get_hdr_sha1_stream(mail, input, hdr_size.physical_size,
-				sha1_r, &have_eoh) < 0)
+	if (pop3_migration_get_hdr_sha1(mail->seq, input,
+					hdr_size.physical_size,
+					sha1_r, &have_eoh) < 0)
 		return -1;
 	if (have_eoh)
 		return 0;
@@ -199,6 +225,9 @@ get_hdr_sha1(struct mail *mail, unsigned char sha1_r[SHA1_RESULTLEN])
 	   truncating the rest. POP3 TOP instead returns the entire header.
 	   This causes the IMAP and POP3 hashes not to match.
 
+	   If there's LF+CR+CR+LF in the middle of headers, Courier IMAP's
+	   FETCH BODY[HEADER] stops after that, but Courier POP3's TOP doesn't.
+
 	   So we'll try to avoid this by falling back to full FETCH BODY[]
 	   (and/or RETR) and we'll parse the header ourself from it. This
 	   should work around any similar bugs in all IMAP/POP3 servers. */
@@ -207,8 +236,9 @@ get_hdr_sha1(struct mail *mail, unsigned char sha1_r[SHA1_RESULTLEN])
 			mail->seq, mailbox_get_last_error(mail->box, NULL));
 		return -1;
 	}
-	return get_hdr_sha1_stream(mail, input, hdr_size.physical_size,
-				   sha1_r, &have_eoh);
+	return pop3_migration_get_hdr_sha1(mail->seq, input,
+					   hdr_size.physical_size,
+					   sha1_r, &have_eoh);
 
 }
 
@@ -256,11 +286,14 @@ static int pop3_map_read(struct mail_storage *storage, struct mailbox *pop3_box)
 	search_args = mail_search_build_init();
 	mail_search_build_add_all(search_args);
 	ctx = mailbox_search_init(t, search_args, NULL,
-				  MAIL_FETCH_VIRTUAL_SIZE, NULL);
+				  MAIL_FETCH_PHYSICAL_SIZE, NULL);
 	mail_search_args_unref(&search_args);
 
 	while (mailbox_search_next(ctx, &mail)) {
-		if (mail_get_virtual_size(mail, &size) < 0) {
+		/* get the size with LIST instead of RETR */
+		mail->lookup_abort = MAIL_LOOKUP_ABORT_READ_MAIL;
+
+		if (mail_get_physical_size(mail, &size) < 0) {
 			i_error("pop3_migration: Failed to get size for msg %u: %s",
 				mail->seq,
 				mailbox_get_last_error(pop3_box, NULL));
@@ -470,6 +503,7 @@ pop3_uidl_assign_by_hdr_hash(struct mailbox *box, struct mailbox *pop3_box)
 	struct imap_msg_map *imap_map;
 	unsigned int pop3_idx, imap_idx, pop3_count, imap_count;
 	unsigned int first_seq, missing_uids_count;
+	uint32_t first_missing_idx = (uint32_t)-1;
 	int ret;
 
 	first_seq = mbox->first_unfound_idx+1;
@@ -512,8 +546,11 @@ pop3_uidl_assign_by_hdr_hash(struct mailbox *box, struct mailbox *pop3_box)
 	}
 	missing_uids_count = 0;
 	for (pop3_idx = 0; pop3_idx < pop3_count; pop3_idx++) {
-		if (pop3_map[pop3_idx].imap_uid == 0)
+		if (pop3_map[pop3_idx].imap_uid == 0) {
+			if (first_missing_idx == (uint32_t)-1)
+				first_missing_idx = pop3_map[pop3_idx].pop3_seq;
 			missing_uids_count++;
+		}
 	}
 	if (missing_uids_count > 0 && !mstorage->all_mailboxes) {
 		if (!mstorage->ignore_missing_uidls) {
@@ -524,7 +561,10 @@ pop3_uidl_assign_by_hdr_hash(struct mailbox *box, struct mailbox *pop3_box)
 			return -1;
 		}
 		i_warning("pop3_migration: %u POP3 messages have no "
-			  "matching IMAP messages", missing_uids_count);
+			  "matching IMAP messages (first POP3 msg %u UIDL %s)",
+			  missing_uids_count,
+			  pop3_map[first_missing_idx].pop3_seq,
+			  pop3_map[first_missing_idx].pop3_uidl);
 	} else if (box->storage->user->mail_debug) {
 		i_debug("pop3_migration: %u mails matched by headers", pop3_count);
 	}

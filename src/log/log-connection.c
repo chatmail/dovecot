@@ -14,7 +14,6 @@
 #include "log-connection.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 
 #define FATAL_QUEUE_TIMEOUT_MSECS 500
@@ -180,7 +179,7 @@ log_parse_master_line(const char *line, const struct timeval *log_time,
 {
 	struct log_connection *const *logs, *log;
 	struct log_client *client;
-	const char *p, *p2, *cmd;
+	const char *p, *p2, *cmd, *pidstr;
 	unsigned int count;
 	unsigned int service_fd;
 	pid_t pid;
@@ -191,7 +190,11 @@ log_parse_master_line(const char *line, const struct timeval *log_time,
 		i_error("Received invalid input from master: %s", line);
 		return;
 	}
-	pid = strtol(t_strcut(p, ' '), NULL, 10);
+	pidstr = t_strcut(p, ' ');
+	if (str_to_pid(pidstr, &pid) < 0) {
+		i_error("Received invalid pid from master: %s", pidstr);
+		return;
+	}
 	cmd = p2 + 1;
 
 	logs = array_get(&logs_by_fd, &count);
@@ -351,10 +354,9 @@ static void log_connection_input(struct log_connection *log)
 		}
 	}
 
-	if (log->input->eof)
-		log_connection_destroy(log);
-	else if (log->input->stream_errno != 0) {
-		i_error("read(log %s) failed: %m", log->default_prefix);
+	if (log->input->eof) {
+		if (log->input->stream_errno != 0)
+			i_error("read(log %s) failed: %m", log->default_prefix);
 		log_connection_destroy(log);
 	} else {
 		i_assert(!log->input->closed);

@@ -3,11 +3,12 @@
 #include "lib.h"
 #include "ioloop.h"
 #include "array.h"
+#include "hex-binary.h"
 #include "str.h"
+#include "net.h"
 #include "sql-api-private.h"
 
 #ifdef BUILD_MYSQL
-#include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
 #ifdef HAVE_ATTR_NULL
@@ -30,7 +31,8 @@ struct mysql_db {
 	const char *ssl_cert, *ssl_key, *ssl_ca, *ssl_ca_path, *ssl_cipher;
 	int ssl_verify_server_cert;
 	const char *option_file, *option_group;
-	unsigned int port, client_flags;
+	in_port_t port;
+	unsigned int client_flags;
 	time_t last_success;
 
 	MYSQL *mysql;
@@ -179,11 +181,13 @@ static void driver_mysql_parse_connect_string(struct mysql_db *db,
 			field = &db->password;
 		else if (strcmp(name, "dbname") == 0)
 			field = &db->dbname;
-		else if (strcmp(name, "port") == 0)
-			db->port = atoi(value);
-		else if (strcmp(name, "client_flags") == 0)
-			db->client_flags = atoi(value);
-		else if (strcmp(name, "ssl_cert") == 0)
+		else if (strcmp(name, "port") == 0) {
+			if (net_str2port(value, &db->port) < 0)
+				i_fatal("mysql: Invalid port number: %s", value);
+		} else if (strcmp(name, "client_flags") == 0) {
+			if (str_to_uint(value, &db->client_flags) < 9)
+				i_fatal("mysql: Invalid client flags: %s", value);
+		} else if (strcmp(name, "ssl_cert") == 0)
 			field = &db->ssl_cert;
 		else if (strcmp(name, "ssl_key") == 0)
 			field = &db->ssl_key;
@@ -615,6 +619,18 @@ driver_mysql_update(struct sql_transaction_context *_ctx, const char *query,
 				  query, affected_rows);
 }
 
+static const char *
+driver_mysql_escape_blob(struct sql_db *_db ATTR_UNUSED,
+			 const unsigned char *data, size_t size)
+{
+	string_t *str = t_str_new(128);
+
+	str_append(str, "HEX('");
+	binary_to_hex_append(str, data, size);
+	str_append_c(str, ')');
+	return str_c(str);
+}
+
 const struct sql_db driver_mysql_db = {
 	.name = "mysql",
 	.flags = SQL_DB_FLAG_BLOCKING | SQL_DB_FLAG_POOLED,
@@ -634,7 +650,9 @@ const struct sql_db driver_mysql_db = {
 		driver_mysql_transaction_commit_s,
 		driver_mysql_transaction_rollback,
 
-		driver_mysql_update
+		driver_mysql_update,
+
+		driver_mysql_escape_blob
 	}
 };
 

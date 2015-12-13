@@ -116,6 +116,13 @@ bool config_export_type(string_t *str, const void *value,
 		}
 		break;
 	}
+	case SET_IN_PORT: {
+		const in_port_t *val = value, *dval = default_value;
+
+		if (dump_default || dval == NULL || *val != *dval)
+			str_printfa(str, "%u", *val);
+		break;
+	}
 	case SET_STR_VARS: {
 		const char *const *val = value, *sval;
 		const char *const *_dval = default_value;
@@ -199,7 +206,7 @@ settings_export(struct config_export_context *ctx,
 {
 	const struct setting_define *def;
 	const void *value, *default_value, *change_value;
-	void *const *children = NULL, *const *change_children = NULL;
+	void *const *children, *const *change_children = NULL;
 	unsigned int i, count, count2, prefix_len;
 	const char *str;
 	char *key;
@@ -237,7 +244,7 @@ settings_export(struct config_export_context *ctx,
 		}
 
 		dump = FALSE;
-		count = 0;
+		count = 0; children = NULL;
 		str_truncate(ctx->value, 0);
 		switch (def->type) {
 		case SET_BOOL:
@@ -245,6 +252,7 @@ settings_export(struct config_export_context *ctx,
 		case SET_UINT:
 		case SET_UINT_OCT:
 		case SET_TIME:
+		case SET_IN_PORT:
 		case SET_STR_VARS:
 		case SET_STR:
 		case SET_ENUM:
@@ -325,6 +333,7 @@ settings_export(struct config_export_context *ctx,
 			}
 		}
 
+		i_assert(count == 0 || children != NULL);
 		prefix_len = str_len(ctx->prefix);
 		for (i = 0; i < count; i++) {
 			str_append(ctx->prefix, def->key);

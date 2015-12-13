@@ -11,6 +11,8 @@ mountpoint is suddenly not mounted, it's handled as an error condition rather
 than as "this is a new user". This prevents other confusion that follows such a
 situation.
 
+The list of mount points is maintained in the file /var/run/dovecot/mounts.
+
 Removing mountpoints
 --------------------
 
@@ -50,4 +52,4 @@ filesystem with mails while Dovecot is running you can also add it manually:
 doveadm mount add /mnt/foo
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-05-13 16:45)
+(This file was created from the wiki on 2015-10-02 04:47)
