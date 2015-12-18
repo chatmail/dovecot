@@ -1,9 +1,6 @@
 #!/bin/sh
 set -e
 
-PATH=/usr/sbin:$PATH
-export PATH
-
 if [ "$1" = "purge" ] ; then
 	for conffile in `ucfq --with-colons dovecot-core | cut -d: -f1`; do
 		# we mimic dpkg as closely as possible, so we remove configuration
@@ -31,7 +28,7 @@ fi
 
 if [ "$1" = "triggered" ]; then
     if [ -x "/etc/init.d/dovecot" ]; then
-        if [ -x /usr/sbin/invoke-rc.d ]; then
+        if [ -x invoke-rc.d ]; then
             invoke-rc.d dovecot start
         else
             /etc/init.d/dovecot start
