@@ -1,8 +1,10 @@
 dovecot (1:2.2.21-1) unstable; urgency=medium
 
   * [d9c0630] Imported Upstream version 2.2.21
+  * [df66dd1] Updated pigeonhole patch to 0.4.11
+  * [0d16e16] Fixed some lintian warnings.
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 13 Dec 2015 12:08:20 -0500
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 19 Jan 2016 17:27:25 -0500
 
 dovecot (1:2.2.20-1) unstable; urgency=medium
 
