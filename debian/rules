@@ -1,33 +1,15 @@
 #!/usr/bin/make -f
-# Sample debian/rules that uses debhelper.
-# GNU copyright 1997 to 1999 by Joey Hess.
 
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-dpkg_buildflags = DEB_BUILD_MAINT_OPTIONS="hardening=+all" dpkg-buildflags
-drac_buildflags = DEB_BUILD_MAINT_OPTIONS="hardening=+all,-pie" dpkg-buildflags
+PIGEONHOLE_DIR=$(CURDIR)/pigeonhole
 
-PIGEONHOLE_DIR=pigeonhole
+%:
+	dh $@ --with=systemd,autotools-dev
 
-# These are used for cross-compiling and for saving the configure script
-# from having to guess our platform (since we know it already)
-DEB_HOST_GNU_TYPE   ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
-DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
-
-dbgpkg = $(filter %-dbg, $(shell dh_listpackages -a))
-otherpkg = $(filter-out %-dbg, $(shell dh_listpackages -a))
-
-ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-    NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-    MAKEFLAGS += -j$(NUMJOBS)
-endif
-
-config-stamp: configure
-	dh_testdir
-	dh_autotools-dev_updateconfig
-	# Dovecot
-	KRB5CONFIG=krb5-config.mit $(shell $(dpkg_buildflags) --export=configure) sh configure \
+override_dh_auto_configure:
+	KRB5CONFIG=krb5-config.mit ./configure \
 	            --with-ldap=plugin \
 	            --with-ssl=openssl \
 	            --with-sql=plugin \
@@ -35,12 +17,10 @@ config-stamp: configure
 	            --with-mysql \
 	            --with-sqlite \
 	            --with-gssapi=plugin \
-		        --with-solr \
+	            --with-solr \
 	            --with-ioloop=best \
 	            --with-libwrap \
 	            --with-lucene \
-	            --host=$(DEB_HOST_GNU_TYPE) \
-	            --build=$(DEB_BUILD_GNU_TYPE) \
 	            --prefix=/usr \
 	            --sysconfdir=/etc \
 	            --libexecdir=\$${prefix}/lib \
@@ -52,49 +32,32 @@ config-stamp: configure
 	            --with-systemdsystemunitdir=auto \
 	            --disable-static
 	$(MAKE) dovecot-config
+	
 	# Pigeonhole
 	(cd $(PIGEONHOLE_DIR)/ && \
 	    touch stamp.h.in && \
-	    $(shell $(dpkg_buildflags) --export=configure) sh configure \
-	    --with-dovecot=../ \
+	    sh configure \
+	        --with-dovecot=../ \
 		--prefix=/usr \
 		--sysconfdir=/etc \
 		--libexecdir=\$${prefix}/lib \
 		--mandir=\$${prefix}/share/man \
 		--infodir=\$${prefix}/share/info \
-		--disable-static )
-	touch config-stamp
+		--disable-static)
+	
 
-build-stamp:  config-stamp
-	dh_testdir
-	# Dovecot
-	$(MAKE)
-	# Pigeonhole
-	$(MAKE) -C $(PIGEONHOLE_DIR)
-	# DRAC
-	$(MAKE) -C src/plugins/drac $(shell $(drac_buildflags) --export=configure)
+override_dh_auto_build:
+	dh_auto_build
+	dh_auto_build -D $(PIGEONHOLE_DIR)
+	dh_auto_build -D src/plugins/drac
 
-	touch build-stamp
 
-clean:
-	dh_testdir
-	dh_testroot
-	rm -f build-stamp config-stamp
-	# Cleanup dovecot itself
-	[ ! -f Makefile ] || $(MAKE) distclean
-	# Cleanup pigeonhole
-	[ ! -f $(PIGEONHOLE_DIR)/Makefile ] || $(MAKE) -C $(PIGEONHOLE_DIR) distclean
-	# Cleanup DRAC
+override_dh_auto_clean:
+	dh_auto_clean
+	dh_auto_clean -D $(PIGEONHOLE_DIR)
 	rm -f src/plugins/drac/drac_plugin.so
-	# debconf-updatepo
-	dh_autotools-dev_restoreconfig
-	dh_clean
 
-install: build
-	dh_testdir
-	dh_testroot
-	dh_prep
-	dh_installdirs
+override_dh_auto_install:
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/dovecot-core
 	$(MAKE) -C $(PIGEONHOLE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-core
 	rm `find $(CURDIR)/debian -name '*.la'`
@@ -109,7 +72,7 @@ install: build
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/
 	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/conf.d/*.conf.ext \
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/
-	install -o root -g root -m 0644 $(CURDIR)/$(PIGEONHOLE_DIR)/doc/example-config/conf.d/*.conf \
+	install -o root -g root -m 0644 $(PIGEONHOLE_DIR)/doc/example-config/conf.d/*.conf \
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/
 	install -D -m 0755 -o root -g root $(CURDIR)/debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-core/usr/bin/maildirmake.dovecot
 	install -o root -g root -m 0644 $(CURDIR)/debian/openssl.cnf \
@@ -190,59 +153,31 @@ install: build
 	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/dovecot-config $(CURDIR)/debian/dovecot-dev/usr/lib/dovecot
 	rmdir $(CURDIR)/debian/dovecot-core/usr/include
 	grep ABI_VERSION config.h | perl -ne '/"(.+)\(.+\)"/ && print $$1' | tr '[A-Z]' '[a-z]' > $(CURDIR)/debian/dovecot-dev/usr/share/dovecot/dovecot-abi
-
-# Build architecture-independent files here.
-binary-indep: build install
-	dh_testdir -i
-	dh_testroot -i
-	dh_installchangelogs -i
-	dh_installdocs -i
-	dh_installexamples -i
-	dh_installman -i
-	dh_installdebconf -i
-	dh_link -i
-	dh_strip -i
-	dh_compress -i
-	dh_fixperms -i
-	dh_makeshlibs -i
-	dh_installdeb -i
-	dh_shlibdeps -i
-	dh_gencontrol -i
-	dh_md5sums -i
-	dh_builddeb -i
-
-# Build architecture-dependent files here.
-binary-arch: build install
-	dh_testdir -a
-	dh_testroot -a
-	dh_installdocs -a
-	dh_installexamples -a
-	dh_installpam -a
-	mv $(CURDIR)/debian/dovecot-core/etc/pam.d/dovecot-core $(CURDIR)/debian/dovecot-core/etc/pam.d/dovecot
-	dh_systemd_enable
-	dh_installinit -pdovecot-core --init-script=dovecot -u"defaults 20"
-	dh_systemd_start
-	dh_installman -a
-	dh_installman -p dovecot-core debian/maildirmake.dovecot.1
-	dh_installdebconf -a
-	dh_bugfiles -a
-	dh_lintian -a
-	dh_installchangelogs -a ChangeLog
-	dh_link -a
-	dh_strip -a --dbg-package=dovecot-dbg
-	dh_compress -a
-	dh_fixperms -a
 	chmod 0700 debian/dovecot-core/etc/dovecot/private
-	dh_makeshlibs -a -n
-	dh_installdeb -a
-	dh_shlibdeps -a
-	dh_gencontrol -a -- -Vdovecot:ABI-Version=$(shell cat $(CURDIR)/debian/dovecot-dev/usr/share/dovecot/dovecot-abi)
-	dh_md5sums -a
-	dh_builddeb $(foreach pkg,$(dbgpkg),-p$(pkg)) -- -Zxz
-	dh_builddeb $(foreach pkg,$(otherpkg),-p$(pkg))
 
-build: build-arch build-indep
-build-arch: build-stamp
-build-indep: build-stamp
-binary: binary-indep binary-arch
-.PHONY: build build-arch build-indep clean binary-indep binary-arch binary install
+override_dh_installpam:
+	dh_installpam -pdovecot-core --name=dovecot
+
+override_dh_installinit:
+	dh_installinit -pdovecot-core --init-script=dovecot -u"defaults 20"
+
+override_dh_installman:
+	dh_installman
+	dh_installman -p dovecot-core debian/maildirmake.dovecot.1
+
+override_dh_gencontrol:
+	dh_gencontrol -- -Vdovecot:ABI-Version=$(shell cat $(CURDIR)/debian/dovecot-dev/usr/share/dovecot/dovecot-abi)
+
+override_dh_strip:
+	dh_strip --dbg-package=dovecot-dbg
+
+override_dh_makeshlibs:
+	# Do not add an ldconfig trigger; none of the dovecot shared libraries
+	# is public.
+	dh_makeshlibs -n
+
+.PHONY: override_dh_auto_configure override_dh_auto_build \
+	override_dh_auto_clean override_dh_auto_install \
+	override_dh_gencontrol override_dh_installinit \
+	override_dh_installman override_dh_strip \
+	override_dh_installpam override_dh_makeshlibs
