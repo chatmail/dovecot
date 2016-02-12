@@ -159,7 +159,7 @@ override_dh_installpam:
 	dh_installpam -pdovecot-core --name=dovecot
 
 override_dh_installinit:
-	dh_installinit -pdovecot-core --init-script=dovecot -u"defaults 20"
+	dh_installinit -pdovecot-core --name=dovecot -u"defaults 20"
 
 override_dh_installman:
 	dh_installman
