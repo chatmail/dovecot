@@ -1,0 +1,3 @@
+Tests: doveadm
+Depends: dovecot-core
+Restrictions: needs-root
