@@ -100,9 +100,9 @@ override_dh_auto_configure:
 		--disable-static)
 
 override_dh_auto_build:
-	dh_auto_build
-	dh_auto_build -D $(PIGEONHOLE_DIR)
-	dh_auto_build -D src/plugins/drac
+	dh_auto_build --parallel
+	dh_auto_build --parallel -D $(PIGEONHOLE_DIR)
+	dh_auto_build --parallel -D src/plugins/drac
 
 override_dh_auto_clean:
 	dh_auto_clean
