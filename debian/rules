@@ -5,6 +5,59 @@
 
 PIGEONHOLE_DIR=$(CURDIR)/pigeonhole
 
+# Macros to help move files to the module packages
+CORE_DIR=$(CURDIR)/debian/dovecot-core
+PKG_DIR=$(CURDIR)/debian/dovecot-PKG
+MOVE=mv $(CORE_DIR)/$(1) $(PKG_DIR:PKG=$(2))/$(dir $(1));
+
+# Files to move from dovecot-core to the individual packages. Files added to
+# <addon>_files will be automatically moved from dovecot's tree to the
+# respective package.
+imapd_files = usr/lib/dovecot/imap* \
+	      usr/lib/dovecot/modules/lib??_imap* \
+	      usr/share/dovecot/conf.d/??-imap*
+
+pop3d_files = usr/lib/dovecot/pop3* \
+	      usr/share/dovecot/conf.d/??-pop3*
+
+lmtpd_files = usr/lib/dovecot/lmtp* \
+	      usr/share/dovecot/conf.d/??-lmtp*
+
+managesieved_files = usr/lib/dovecot/managesieve* \
+		     usr/lib/dovecot/modules/settings/libmanagesieve*
+
+pgsql_files = usr/lib/dovecot/modules/auth/libdriver_pgsql* \
+	      usr/lib/dovecot/modules/dict/libdriver_pgsql* \
+	      usr/lib/dovecot/modules/libdriver_pgsql*
+
+mysql_files = usr/lib/dovecot/modules/auth/libdriver_mysql* \
+	      usr/lib/dovecot/modules/dict/libdriver_mysql* \
+	      usr/lib/dovecot/modules/libdriver_mysql*
+
+sqlite_files = usr/lib/dovecot/modules/auth/libdriver_sqlite* \
+	       usr/lib/dovecot/modules/dict/libdriver_sqlite* \
+	       usr/lib/dovecot/modules/libdriver_sqlite*
+
+gssapi_files = usr/lib/dovecot/modules/auth/libmech_gssapi*
+
+ldap_files = usr/lib/dovecot/modules/auth/libauthdb_ldap* \
+	     usr/share/dovecot/*-ldap.conf.ext \
+	     usr/share/dovecot/conf.d/*-ldap.conf.ext
+
+sieve_files = usr/bin/sieve* \
+	      usr/lib/dovecot/modules/lib??_sieve* \
+	      usr/lib/dovecot/modules/doveadm/lib??_doveadm_sieve* \
+	      usr/lib/dovecot/modules/sieve \
+	      usr/lib/dovecot/libdovecot-sieve* \
+	      usr/share/man/man1/sieve*
+
+solr_files = usr/lib/dovecot/modules/lib??_fts_solr_*
+
+lucene_files = usr/lib/dovecot/modules/lib??_fts_lucene_*
+
+dev_files = usr/include/* \
+	    usr/lib/dovecot/dovecot-config
+
 %:
 	dh $@ --with=systemd,autotools-dev
 
@@ -27,6 +80,7 @@ override_dh_auto_configure:
 	            --localstatedir=/var \
 	            --mandir=\$${prefix}/share/man \
 	            --infodir=\$${prefix}/share/info \
+		    --docdir=\$${prefix}/share/doc/dovecot-core \
 	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
 	            --disable-rpath \
 	            --with-systemdsystemunitdir=auto \
@@ -44,13 +98,11 @@ override_dh_auto_configure:
 		--mandir=\$${prefix}/share/man \
 		--infodir=\$${prefix}/share/info \
 		--disable-static)
-	
 
 override_dh_auto_build:
 	dh_auto_build
 	dh_auto_build -D $(PIGEONHOLE_DIR)
 	dh_auto_build -D src/plugins/drac
-
 
 override_dh_auto_clean:
 	dh_auto_clean
@@ -58,102 +110,33 @@ override_dh_auto_clean:
 	rm -f src/plugins/drac/drac_plugin.so
 
 override_dh_auto_install:
-	$(MAKE) install DESTDIR=$(CURDIR)/debian/dovecot-core
-	$(MAKE) -C $(PIGEONHOLE_DIR) install DESTDIR=$(CURDIR)/debian/dovecot-core
+	# Install everything under dovecot-core
+	$(MAKE) install DESTDIR=$(CORE_DIR)
+	$(MAKE) -C $(PIGEONHOLE_DIR) install DESTDIR=$(CORE_DIR)
 	rm `find $(CURDIR)/debian -name '*.la'`
-	cp $(CURDIR)/src/plugins/drac/drac_plugin.so $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules
-	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/*.conf \
-		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/
-	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/*.conf.ext \
-		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/
-	install -o root -g root -m 0744 -d $(CURDIR)/debian/dovecot-core/etc/dovecot/conf.d/
-	install -o root -g root -m 0744 -d $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/
-	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/conf.d/*.conf \
-		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/
-	install -o root -g root -m 0644 $(CURDIR)/doc/example-config/conf.d/*.conf.ext \
-		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/
-	install -o root -g root -m 0644 $(PIGEONHOLE_DIR)/doc/example-config/conf.d/*.conf \
-		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/
-	install -D -m 0755 -o root -g root $(CURDIR)/debian/maildirmake.dovecot $(CURDIR)/debian/dovecot-core/usr/bin/maildirmake.dovecot
-	install -o root -g root -m 0644 $(CURDIR)/debian/openssl.cnf \
-		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/dovecot-openssl.cnf
-	install -o root -g root -m 0755 $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/mkcert.sh \
-		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/
-	rm $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/mkcert.sh
-	rm $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/dovecot-openssl.cnf
-	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/*.txt $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core
-	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/sieve $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core
-	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/wiki $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core
-	cp $(PIGEONHOLE_DIR)/ChangeLog $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/pigeonhole.ChangeLog
-	cp $(PIGEONHOLE_DIR)/README $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/pigeonhole.README
-	cp $(PIGEONHOLE_DIR)/NEWS $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/pigeonhole.NEWS
-	rm -rf $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot
-	rm -rf $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/example-config
 
-	# imapd
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_imap* $(CURDIR)/debian/dovecot-imapd/usr/lib/dovecot/modules
-	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/??-imap* $(CURDIR)/debian/dovecot-imapd/usr/share/dovecot/conf.d
-
-	# pop3d
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/pop3* $(CURDIR)/debian/dovecot-pop3d/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/??-pop3* $(CURDIR)/debian/dovecot-pop3d/usr/share/dovecot/conf.d
-
-	# lmtpd
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/lmtp* $(CURDIR)/debian/dovecot-lmtpd/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/??-lmtp* $(CURDIR)/debian/dovecot-lmtpd/usr/share/dovecot/conf.d
-
-	# managesieved
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/managesieve* $(CURDIR)/debian/dovecot-managesieved/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/settings/libmanagesieve* $(CURDIR)/debian/dovecot-managesieved/usr/lib/dovecot/modules/settings
-	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/??-managesieve* $(CURDIR)/debian/dovecot-managesieved/usr/share/dovecot/conf.d
-
-	# pgsql
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/auth/libdriver_pgsql* $(CURDIR)/debian/dovecot-pgsql/usr/lib/dovecot/modules/auth
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/dict/libdriver_pgsql* $(CURDIR)/debian/dovecot-pgsql/usr/lib/dovecot/modules/dict
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/libdriver_pgsql* $(CURDIR)/debian/dovecot-pgsql/usr/lib/dovecot/modules
-
-	# mysql
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/auth/libdriver_mysql* $(CURDIR)/debian/dovecot-mysql/usr/lib/dovecot/modules/auth
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/dict/libdriver_mysql* $(CURDIR)/debian/dovecot-mysql/usr/lib/dovecot/modules/dict
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/libdriver_mysql* $(CURDIR)/debian/dovecot-mysql/usr/lib/dovecot/modules
-
-	# sqlite
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/auth/libdriver_sqlite* $(CURDIR)/debian/dovecot-sqlite/usr/lib/dovecot/modules/auth
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/dict/libdriver_sqlite* $(CURDIR)/debian/dovecot-sqlite/usr/lib/dovecot/modules/dict
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/libdriver_sqlite* $(CURDIR)/debian/dovecot-sqlite/usr/lib/dovecot/modules
-
-	# gssapi
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/auth/libmech_gssapi* $(CURDIR)/debian/dovecot-gssapi/usr/lib/dovecot/modules/auth
-
-	# ldap
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/auth/libauthdb_ldap* $(CURDIR)/debian/dovecot-ldap/usr/lib/dovecot/modules/auth
-	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/*-ldap.conf.ext $(CURDIR)/debian/dovecot-ldap/usr/share/dovecot
-	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/*-ldap.conf.ext $(CURDIR)/debian/dovecot-ldap/usr/share/dovecot/conf.d
-
-	# sieve
-	mv $(CURDIR)/debian/dovecot-core/usr/bin/sieve* $(CURDIR)/debian/dovecot-sieve/usr/bin
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/doveadm/lib??_doveadm_sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules/doveadm
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/sieve $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot/modules/sieve
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/libdovecot-sieve* $(CURDIR)/debian/dovecot-sieve/usr/lib/dovecot
-	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/*-sieve.conf $(CURDIR)/debian/dovecot-sieve/usr/share/dovecot/conf.d
-	mv $(CURDIR)/debian/dovecot-core/usr/share/dovecot/conf.d/*-sieve-extprograms.conf $(CURDIR)/debian/dovecot-sieve/usr/share/dovecot/conf.d
-	mv $(CURDIR)/debian/dovecot-core/usr/share/man/man1/sieve* $(CURDIR)/debian/dovecot-sieve/usr/share/man/man1
-
-	# solr
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_fts_solr_* $(CURDIR)/debian/dovecot-solr/usr/lib/dovecot/modules
-	mv $(CURDIR)/doc/solr-schema.xml $(CURDIR)/debian/dovecot-solr/usr/share/dovecot
-
-	# lucene
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/modules/lib??_fts_lucene_* $(CURDIR)/debian/dovecot-lucene/usr/lib/dovecot/modules
-
-	# dev
-	mv $(CURDIR)/debian/dovecot-core/usr/include/* $(CURDIR)/debian/dovecot-dev/usr/include
-	mv $(CURDIR)/debian/dovecot-core/usr/lib/dovecot/dovecot-config $(CURDIR)/debian/dovecot-dev/usr/lib/dovecot
-	rmdir $(CURDIR)/debian/dovecot-core/usr/include
-	grep ABI_VERSION config.h | perl -ne '/"(.+)\(.+\)"/ && print $$1' | tr '[A-Z]' '[a-z]' > $(CURDIR)/debian/dovecot-dev/usr/share/dovecot/dovecot-abi
+override_dh_install:
 	chmod 0700 debian/dovecot-core/etc/dovecot/private
+	# dh_auto_install has installed everything in the dovecot-core package.
+	# Run dh_install to install additional files from the source directory
+	# or debian/ to the individual packages. NOTE: there is nothing in
+	# debian/tmp!
+	dh_install
+	install -o root -g root -m 0755 $(CORE_DIR)/usr/share/doc/dovecot-core/mkcert.sh \
+		$(CORE_DIR)/usr/share/dovecot/
+	rm $(CORE_DIR)/usr/share/doc/dovecot-core/mkcert.sh
+	rm $(CORE_DIR)/usr/share/doc/dovecot-core/dovecot-openssl.cnf
+	rm $(CORE_DIR)/usr/share/doc/dovecot-core/solr-schema.xml
+	rm -rf $(CORE_DIR)/usr/share/doc/dovecot-core/example-config
+	
+	$(foreach package,$(patsubst dovecot-%,%,$(shell dh_listpackages)),\
+		$(foreach file,$($(package)_files),\
+			$(call MOVE,$(file),$(package))))
+	
+	rmdir $(CORE_DIR)/usr/include
+	grep ABI_VERSION config.h \
+		| perl -ne '/"(.+)\(.+\)"/ && print $$1' \
+		| tr '[A-Z]' '[a-z]' > $(PKG_DIR:PKG=dev)/usr/share/dovecot/dovecot-abi
 
 override_dh_installpam:
 	dh_installpam -pdovecot-core --name=dovecot
@@ -173,11 +156,18 @@ override_dh_strip:
 
 override_dh_makeshlibs:
 	# Do not add an ldconfig trigger; none of the dovecot shared libraries
-	# is public.
+	# are public.
 	dh_makeshlibs -n
+
+override_dh_installdocs:
+	dh_installdocs
+	cp pigeonhole/ChangeLog	$(CORE_DIR)/usr/share/doc/dovecot-core/pigeonhole.ChangeLog
+	cp pigeonhole/README	$(CORE_DIR)/usr/share/doc/dovecot-core/pigeonhole.README
+	cp pigeonhole/NEWS	$(CORE_DIR)/usr/share/doc/dovecot-core/pigeonhole.NEWS
 
 .PHONY: override_dh_auto_configure override_dh_auto_build \
 	override_dh_auto_clean override_dh_auto_install \
 	override_dh_gencontrol override_dh_installinit \
 	override_dh_installman override_dh_strip \
-	override_dh_installpam override_dh_makeshlibs
+	override_dh_installpam override_dh_makeshlibs \
+	override_dh_installdocs override_dh_install

@@ -1,0 +1,2 @@
+pigeonhole/doc/example-config/conf.d/*-sieve.conf usr/share/dovecot/conf.d
+pigeonhole/doc/example-config/conf.d/*-sieve-extprograms.conf usr/share/dovecot/conf.d

@@ -1,3 +1,4 @@
+etc/dovecot/conf.d
 etc/dovecot/private
 usr/sbin
 usr/share/dovecot/protocols.d
