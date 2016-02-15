@@ -157,7 +157,7 @@ Description: secure POP3/IMAP server - GSSAPI support
 Package: dovecot-sieve
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
-Conflicts: dovecot-core (<= 1:2.2.13-6)
+Breaks: dovecot-core (<= 1:2.2.13-6)
 Replaces: dovecot-core (<= 1:2.2.13-6)
 Description: secure POP3/IMAP server - Sieve filters support
  Dovecot is a mail server whose major goals are security and extreme
