@@ -5,6 +5,10 @@
 
 PIGEONHOLE_DIR=$(CURDIR)/pigeonhole
 
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all
+# DRAC doesn't build with -fPIE
+drac_buildflags = DEB_BUILD_MAINT_OPTIONS="hardening=+all,-pie" dpkg-buildflags
+
 # Macros to help move files to the module packages
 CORE_DIR=$(CURDIR)/debian/dovecot-core
 PKG_DIR=$(CURDIR)/debian/dovecot-PKG
@@ -102,7 +106,7 @@ override_dh_auto_configure:
 override_dh_auto_build:
 	dh_auto_build --parallel
 	dh_auto_build --parallel -D $(PIGEONHOLE_DIR)
-	dh_auto_build --parallel -D src/plugins/drac
+	$(MAKE) -C src/plugins/drac $(shell $(drac_buildflags) --export=configure)
 
 override_dh_auto_clean:
 	dh_auto_clean
