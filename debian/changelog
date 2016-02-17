@@ -1,18 +1,21 @@
 dovecot (1:2.2.21-1) unstable; urgency=medium
 
-  * [d9c0630] Imported Upstream version 2.2.21
-  * [df66dd1] Updated pigeonhole patch to 0.4.11
+  * [d9c0630] Imported Upstream version 2.2.21 (Closes: #809666)
+  * [5e6783f] Fixed typo in dovecot-core.README.Debian.
+    Thanks to Ingo Wichmann <iw-debian@linuxhotel.de> (Closes: #809717)
+  * [d00d0c7] Create /var/lib/dovecot in the package. (Closes: #801752)
+  * [5360548] Updated pigeonhole patch to 0.4.12
   * [0d16e16] Fixed some lintian warnings.
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 19 Jan 2016 17:27:25 -0500
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 17 Feb 2016 09:24:02 -0500
 
-dovecot (1:2.2.20-1) unstable; urgency=medium
+dovecot (1:2.2.20-1) UNRELEASED; urgency=medium
 
   * [68d5038] Imported Upstream version 2.2.20
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Sun, 13 Dec 2015 10:21:21 -0500
 
-dovecot (1:2.2.19-1) unstable; urgency=medium
+dovecot (1:2.2.19-1) UNRELEASED; urgency=medium
 
   * [146ef57] Imported Upstream version 2.2.19
   * [3af7cad] Updated pigeonhole patch to 0.4.9
