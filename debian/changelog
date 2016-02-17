@@ -1,5 +1,6 @@
 dovecot (1:2.2.21-1) unstable; urgency=medium
 
+  [ Jaldhar H. Vyas ]
   * [d9c0630] Imported Upstream version 2.2.21 (Closes: #809666)
   * [5e6783f] Fixed typo in dovecot-core.README.Debian.
     Thanks to Ingo Wichmann <iw-debian@linuxhotel.de> (Closes: #809717)
@@ -7,7 +8,19 @@ dovecot (1:2.2.21-1) unstable; urgency=medium
   * [5360548] Updated pigeonhole patch to 0.4.12
   * [0d16e16] Fixed some lintian warnings.
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 17 Feb 2016 09:24:02 -0500
+  [ Apollon Oikonomopoulos ]
+  * [a377ccb] Convert to dh sequencer
+  * [48af954] B-D on debhelper >= 9
+  * [ceb629e] Use dh_installinit --name
+  * [ef8d8ac] d/rules: refactor file installation
+  * [a899bcc] dovecot-core: use dh_installman
+  * [6159e00] d/rules: build in parallel if requested
+  * [51014e6] d/control: use HTTPS Vcs-* URLs
+  * [b385cf5] dovecot-sieve: replace Conflicts with Breaks
+  * [b4a9e68] Add basic DEP-8 tests
+  * [e5101aa] Re-enable PIE and bindnow
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 17 Feb 2016 18:37:32 -0500
 
 dovecot (1:2.2.20-1) UNRELEASED; urgency=medium
 
