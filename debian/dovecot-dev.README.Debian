@@ -1,5 +1,5 @@
 /usr/share/dovecot/dovecot-abi contains that portion of DOVECOT_ABI_VERSION
-from configure.ac outside parantheses (i.e not including the package version.)
+from configure.ac outside parentheses (i.e not including the package version.)
 It might look something like this:
 
 2.2.ABIv10
