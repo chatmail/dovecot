@@ -149,11 +149,6 @@ fi
 if [ "$1" = "configure" ] && [ -n "$2" ] && dpkg --compare-versions "$2" lt "1:2.2.21-1~"; then
     if deb-systemd-helper --quiet was-enabled dovecot.service; then
         deb-systemd-helper disable dovecot.socket
-	if [ -d /run/systemd/system ]; then
-	    # Also stop dovecot.service since it may have been re-started
-	    # midway during the upgrade by means of socket activation.
-            deb-systemd-invoke stop dovecot.socket dovecot.service || true
-        fi
     fi
 fi
 
