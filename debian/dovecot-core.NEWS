@@ -1,3 +1,18 @@
+dovecot (1:2.2.21-1) unstable; urgency=medium
+
+  This release disables the dovecot.socket systemd unit by default. The unit is
+  disabled only if the dovecot.service unit is already enabled, making sure
+  that dovecot will start on system boot. If you are upgrading dovecot and
+  previously relied on dovecot.socket and dovecot.service being both enabled,
+  please re-enable dovecot.socket manually using
+
+     systemctl enable dovecot.socket
+
+  Future package updates will not disable the socket unit again. For details
+  regarding this decision, please see Debian bugs #803915 and #814999.
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Fri, 19 Feb 2016 16:54:27 +0200
+
 dovecot (1:2.1.7-7) unstable; urgency=high
 
   If you are upgrading from stable or the earlier 2.1.7 packages in testing,
