@@ -88,7 +88,7 @@ override_dh_auto_configure:
 		    --docdir=\$${prefix}/share/doc/dovecot-core \
 	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
 	            --disable-rpath \
-	            --with-systemdsystemunitdir=auto \
+	            --with-systemdsystemunitdir=/lib/systemd/system \
 	            --disable-static
 	$(MAKE) dovecot-config
 	
