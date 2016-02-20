@@ -1,3 +1,6 @@
 Tests: doveadm
 Depends: dovecot-core
 Restrictions: needs-root
+
+Tests: systemd
+Depends: dovecot-core, systemd-sysv

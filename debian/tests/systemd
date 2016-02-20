@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -e
+
+echo "Checking whether dovecot.service is enabled"
+systemctl is-enabled dovecot.service
+
+echo "Checking whether dovecot.service is a native unit"
+source=$(systemctl show -pSourcePath dovecot.service | cut -d = -f 2)
+if [ -n "$source" ]; then
+	echo $source
+	exit 1
+else
+	echo "OK (no SourcePath found)"
+fi
+
+echo "Checking whether dovecot.socket is inactive"
+status=$(systemctl show -pActiveState dovecot.socket | cut -d = -f 2)
+echo $status
+if [ "$status" != inactive ]; then
+	exit 1
+fi
