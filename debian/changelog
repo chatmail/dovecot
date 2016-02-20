@@ -7,6 +7,10 @@ dovecot (1:2.2.21-1) unstable; urgency=medium
   * [d00d0c7] Create /var/lib/dovecot in the package. (Closes: #801752)
   * [5360548] Updated pigeonhole patch to 0.4.12
   * [0d16e16] Fixed some lintian warnings.
+  * [fdb7d54] Lintian caught another typo
+  * [040f7fa] dovecot-core: dovecot.socket not enabled on installation
+    (Closes: #814999)
+  * [801ba7e] Added Apollon to uploaders
 
   [ Apollon Oikonomopoulos ]
   * [a377ccb] Convert to dh sequencer
@@ -19,6 +23,16 @@ dovecot (1:2.2.21-1) unstable; urgency=medium
   * [b385cf5] dovecot-sieve: replace Conflicts with Breaks
   * [b4a9e68] Add basic DEP-8 tests
   * [e5101aa] Re-enable PIE and bindnow
+  * [99ef3d8] Build with lz4 support (Closes: #784321)
+  * [92f68aa] Fix nss userdb (Closes: #712764)
+  * [41b9bde] Disable dovecot.socket in existing installations.
+    Do so only if dovecot.service is enabled and only during upgrades from
+    versions that enabled dovecot.socket by default.
+    (Closes: #803915, #814999)
+  * [50eb578] dovecot-core.NEWS: warn about disabling dovecot.socket
+  * [d509768] Stop dovecot.socket before dovecot in prerm.
+  * [49c5b97] d/rules: specify systemd unit dir manually (Closes: #720854)
+  * [7452649] Add DEP-8 tests for systemd support
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 17 Feb 2016 18:37:32 -0500
 
