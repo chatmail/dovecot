@@ -1,6 +1,4 @@
 #!/usr/bin/dh-exec
-dovecot.service 			lib/systemd/system
-dovecot.socket				lib/systemd/system
 src/plugins/drac/drac_plugin.so		usr/lib/dovecot/modules
 doc/example-config/*.conf*		usr/share/dovecot
 doc/example-config/conf.d/*.conf*	usr/share/dovecot/conf.d
