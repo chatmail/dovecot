@@ -17,6 +17,7 @@ dovecot (1:2.2.21-1) unstable; urgency=medium
   * [a377ccb] Convert to dh sequencer
   * [48af954] B-D on debhelper >= 9
   * [ceb629e] Use dh_installinit --name
+  * [591c315] Bump standards to 3.9.7; no changes needed
   * [ef8d8ac] d/rules: refactor file installation
   * [a899bcc] dovecot-core: use dh_installman
   * [6159e00] d/rules: build in parallel if requested
