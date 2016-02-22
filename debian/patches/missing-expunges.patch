@@ -1,0 +1,26 @@
+From: Timo Sirainen <tss@iki.fi>
+Date: Sun, 21 Feb 2016 03:40:48 +0200
+Subject: lib-index: mail_index_sync_next() didn't always return expunges sorted
+Description: Maildir and mbox formats were using index_sync_changes_read(),
+ which assumed that they were sorted. So some of the intended expunges weren't
+ actually always being done. This mainly affected when expunges were being
+ done simultaneously by multiple processes or by pipelined commands.
+Bug: #684499
+
+-- 
+
+ src/lib-index/mail-index-sync.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/lib-index/mail-index-sync.c b/src/lib-index/mail-index-sync.c
+index f93c549..6a532f9 100644
+--- a/src/lib-index/mail-index-sync.c
++++ b/src/lib-index/mail-index-sync.c
+@@ -206,6 +206,7 @@ mail_index_sync_read_and_sort(struct mail_index_sync_ctx *ctx)
+ 	i_array_init(&ctx->sync_list, keyword_count + 2);
+ 
+ 	if (array_is_created(&sync_trans->expunges)) {
++		mail_index_transaction_sort_expunges(sync_trans);
+ 		synclist = array_append_space(&ctx->sync_list);
+ 		synclist->array = (void *)&sync_trans->expunges;
+ 	}
