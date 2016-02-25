@@ -28,11 +28,7 @@ fi
 
 if [ "$1" = "triggered" ]; then
     if [ -x "/etc/init.d/dovecot" ]; then
-        if [ -x invoke-rc.d ]; then
-            invoke-rc.d dovecot start
-        else
-            /etc/init.d/dovecot start
-        fi
+        invoke-rc.d dovecot start
     fi
 fi
 

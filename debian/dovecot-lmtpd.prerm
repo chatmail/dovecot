@@ -6,11 +6,7 @@ if [ -d /run/systemd/system ]; then
 fi
 
 if [ -x "/etc/init.d/dovecot" ]; then
-	if [ -x invoke-rc.d ] ; then
-		invoke-rc.d dovecot stop
-	else
-		/etc/init.d/dovecot stop
-	fi
+	invoke-rc.d dovecot stop
 fi
 
 #DEBHELPER#
