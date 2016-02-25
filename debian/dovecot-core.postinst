@@ -1,6 +1,5 @@
 #!/bin/sh
 set -e
-. /usr/share/debconf/confmodule
 
 if [ "$1" = "configure" ]; then
   CONFFILES="dovecot.conf \
@@ -66,7 +65,7 @@ if [ "$1" = "configure" ]; then
       if ucfq --with-colons "/etc/dovecot/${conffile}" | grep -q ":Yes:No"; then
         rm -f "/etc/dovecot/${conffile}"
       fi
-      ucf --debconf-ok --purge /etc/dovecot/$conffile
+      ucf --purge /etc/dovecot/$conffile
       ucfr --purge dovecot-common /etc/dovecot/$conffile
       for ext in '~' '%' .bak .dpkg-tmp .dpkg-new .dpkg-old .dpkg-dist .ucf-new .ucf-old .ucf-dist;  do
         rm -f /etc/dovecot/$conffile$ext
@@ -115,7 +114,7 @@ if [ "$1" = "configure" ]; then
         echo \# old config >> /etc/dovecot/conf.d/10-ssl.conf
     fi
 
-    ucf --three-way --debconf-ok /usr/share/dovecot/$conffile /etc/dovecot/$conffile
+    ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-core /etc/dovecot/$conffile
     if [ "$conffile" != "dovecot.conf" ] && [ -f "/etc/dovecot/$conffile" ] &&
 		[ `echo $conffile | cut -b -7` != "conf.d/" ]; then
@@ -129,12 +128,10 @@ if [ "$1" = "configure" ]; then
     delgroup imapd || true
   fi
 
-  db_stop || true
 fi
 
 if [ "$1" = "triggered" ]; then
     if [ -x "/etc/init.d/dovecot" ]; then
-        db_stop || true
         invoke-rc.d dovecot restart
     fi
 fi
