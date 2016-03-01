@@ -113,6 +113,8 @@ if [ "$1" = "configure" ]; then
             cp /usr/share/dovecot/$conffile /etc/dovecot/$conffile
             chmod 0644 /etc/dovecot/$conffile
         fi
+        # Unregister 10-ssl.conf from ucf if it's there.
+        ucfr --purge dovecot-core /etc/dovecot/$conffile
         continue
     fi
 
