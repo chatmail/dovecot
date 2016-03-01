@@ -106,12 +106,14 @@ if [ "$1" = "configure" ]; then
     # maintainer version, and let it handle how to manage the real
     # configuration file in /etc/dovecot.
 
-    # special handling for 10-ssl.conf.  If it is the default from <= -6
-    # we want to alter it so ucf in newer packages doesn't overwrite it.
-    if [ "$conffile" = 'conf.d/10-ssl.conf' ] &&
-    [ "`ucfq --with-colons /etc/dovecot/$conffile | cut -d: -f4`" = 'No' ] &&
-    [ "`md5sum /etc/dovecot/$conffile | cut -d\  -f1`" = '6813a2a50ff7e64b2a35af663c88c05f' ]; then
-        echo \# old config >> /etc/dovecot/conf.d/10-ssl.conf
+    # Special handling for 10-ssl.conf.
+    # Copy the file if it does not exist, do nothing otherwise.
+    if [ "$conffile" = 'conf.d/10-ssl.conf' ]; then
+        if [ ! -f /etc/dovecot/$conffile ]; then
+            cp /usr/share/dovecot/$conffile /etc/dovecot/$conffile
+            chmod 0644 /etc/dovecot/$conffile
+        fi
+        continue
     fi
 
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
