@@ -3,40 +3,40 @@ dovecot (1:2.2.21-1) unstable; urgency=medium
   [ Jaldhar H. Vyas ]
   * [d9c0630] Imported Upstream version 2.2.21 (Closes: #809666, #708539,
     #801346, 803223)
+  * [5360548] Updated pigeonhole patch to 0.4.12
   * [5e6783f] Fixed typo in dovecot-core.README.Debian.
     Thanks to Ingo Wichmann <iw-debian@linuxhotel.de> (Closes: #809717)
   * [d00d0c7] Create /var/lib/dovecot in the package. (Closes: #801752)
-  * [5360548] Updated pigeonhole patch to 0.4.12
-  * [0d16e16] Fixed some lintian warnings.
-  * [fdb7d54] Lintian caught another typo
+  * [6510373] Upstream patch for sync problem which could cause expunged
+    messages to keep reappearing. (Closes: #684499)
   * [040f7fa] dovecot-core: dovecot.socket not enabled on installation
     (Closes: #814999)
+  * [fc29003] /etc/dovecot/10-ssl.conf no longer managed by ucf or modified by
+    postinst. Thanks to Santiago Vila <sanvila@unex.es> (Closes: #773237)
+  * [0d16e16] Fixed some lintian warnings.
   * [801ba7e] Added Apollon to uploaders
 
   [ Apollon Oikonomopoulos ]
+  * [99ef3d8] Build with lz4 support (Closes: #784321)
+  * [92f68aa] Fix nss userdb (Closes: #712764)
+  * [41b9bde] Disable dovecot.socket in existing installations.
+  * [49c5b97] d/rules: specify systemd unit dir manually (Closes: #720854)
   * [a377ccb] Convert to dh sequencer
   * [48af954] B-D on debhelper >= 9
-  * [ceb629e] Use dh_installinit --name
   * [591c315] Bump standards to 3.9.7; no changes needed
+  * [ceb629e] Use dh_installinit --name
   * [ef8d8ac] d/rules: refactor file installation
   * [a899bcc] dovecot-core: use dh_installman
   * [6159e00] d/rules: build in parallel if requested
   * [51014e6] d/control: use HTTPS Vcs-* URLs
   * [b385cf5] dovecot-sieve: replace Conflicts with Breaks
   * [b4a9e68] Add basic DEP-8 tests
-  * [e5101aa] Re-enable PIE and bindnow
-  * [99ef3d8] Build with lz4 support (Closes: #784321)
-  * [92f68aa] Fix nss userdb (Closes: #712764)
-  * [41b9bde] Disable dovecot.socket in existing installations.
-    Do so only if dovecot.service is enabled and only during upgrades from
-    versions that enabled dovecot.socket by default.
-    (Closes: #803915, #814999)
-  * [50eb578] dovecot-core.NEWS: warn about disabling dovecot.socket
-  * [d509768] Stop dovecot.socket before dovecot in prerm.
-  * [49c5b97] d/rules: specify systemd unit dir manually (Closes: #720854)
   * [7452649] Add DEP-8 tests for systemd support
+  * [e5101aa] Re-enable PIE and bindnow
+  * [5717808] Fix invoke-rc.d calls and never call init.d directly
+  * [3504241] Drop debconf remains
 
- -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 17 Feb 2016 18:37:32 -0500
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Tue, 01 Mar 2016 19:31:42 -0500
 
 dovecot (1:2.2.20-1) UNRELEASED; urgency=medium
 
