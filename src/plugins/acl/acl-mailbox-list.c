@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -509,7 +509,7 @@ void acl_mail_namespace_storage_added(struct mail_namespace *ns)
 		return;
 
 	owner_username = ns->user->username;
-	current_username = auser->master_user;
+	current_username = auser->acl_user;
 	if (current_username == NULL)
 		current_username = owner_username;
 	else

@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -371,7 +371,7 @@ void virtual_backend_mailbox_opened(struct mailbox *box)
 
 	/* the backend mailbox was already opened. if we didn't get here
 	   from virtual_backend_box_open() we may need to close a mailbox */
-	while (mbox->backends_open_count > mbox->storage->max_open_mailboxes &&
+	while (mbox->backends_open_count >= mbox->storage->max_open_mailboxes &&
 	       virtual_backend_box_close_any_except(mbox, bbox))
 		;
 

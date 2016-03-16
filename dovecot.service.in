@@ -23,10 +23,15 @@ Documentation=http://wiki2.dovecot.org/
 After=local-fs.target network.target
 
 [Service]
-Type=simple
-ExecStart=@sbindir@/dovecot -F $OPTIONS
-ExecReload=@sbindir@/dovecot reload
+Type=forking
+ExecStart=@sbindir@/dovecot
+PIDFile=@rundir@/master.pid
+ExecReload=@bindir@/doveadm reload
+ExecStop=@bindir@/doveadm stop
+PrivateTmp=true
 NonBlocking=yes
+# Enable this if your systemd is new enough to support it:
+#ProtectSystem=full
 
 [Install]
 WantedBy=multi-user.target

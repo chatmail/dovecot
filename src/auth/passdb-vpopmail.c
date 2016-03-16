@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 /* Thanks to Courier-IMAP for showing how the vpopmail API should be used */
 
@@ -184,7 +184,7 @@ vpopmail_preinit(pool_t pool, const char *args)
 	tmp = t_strsplit_spaces(args, " ");
 	for (; *tmp != NULL; tmp++) {
 		if (strncmp(*tmp, "cache_key=", 10) == 0) {
-			module->module.cache_key =
+			module->module.default_cache_key =
 				auth_cache_parse_key(pool, *tmp + 10);
 		} else if (strncmp(*tmp, "webmail=", 8) == 0) {
 			if (net_addr2ip(*tmp + 8, &module->webmail_ip) < 0)

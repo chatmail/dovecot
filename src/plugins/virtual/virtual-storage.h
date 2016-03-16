@@ -99,14 +99,18 @@ struct virtual_backend_box {
 	/* name contains a wildcard, this is a glob for it */
 	struct imap_match_glob *glob;
 	struct mail_namespace *ns;
+	/* mailbox metadata matching */
+	const char *metadata_entry, *metadata_value;
 
 	unsigned int open_tracked:1;
 	unsigned int open_failed:1;
 	unsigned int sync_seen:1;
 	unsigned int wildcard:1;
 	unsigned int clear_recent:1;
+	unsigned int negative_match:1;
 	unsigned int uids_nonsorted:1;
 	unsigned int search_args_initialized:1;
+	unsigned int deleted:1;
 };
 ARRAY_DEFINE_TYPE(virtual_backend_box, struct virtual_backend_box *);
 

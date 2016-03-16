@@ -1,9 +1,13 @@
 noinst_LTLIBRARIES = libfts.la
 
+# I$(top_srcdir)/src/lib-fts needed to include
+# word-break-data.c and word-boundary-data.c
+# in fts-tokenizer-generic.c
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-mail \
+	-I$(top_srcdir)/src/lib-fts \
 	$(LIBEXTTEXTCAT_CFLAGS) \
 	$(LIBICU_CFLAGS) \
 	-DUDHRDIR=\""$(top_srcdir)/src/lib-fts"\" \
@@ -74,6 +78,7 @@ libfts_la_SOURCES = \
 	fts-library.c \
 	fts-tokenizer.c \
 	fts-tokenizer-address.c \
+	fts-tokenizer-common.c \
 	fts-tokenizer-generic.c \
 	$(ICU_SOURCES)
 
@@ -85,11 +90,20 @@ headers = \
 	fts-language.h \
 	fts-library.h \
 	fts-tokenizer.h \
+	fts-tokenizer-common.h \
 	fts-tokenizer-private.h \
 	fts-tokenizer-generic-private.h
 
 pkginc_libdir=$(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
+
+deps=../lib-dovecot/libdovecot.la
+
+pkglib_LTLIBRARIES = libdovecot-fts.la
+libdovecot_fts_la_SOURCES = 
+libdovecot_fts_la_LIBADD = libfts.la $(deps)
+libdovecot_fts_la_DEPENDENCIES = libfts.la $(deps)
+libdovecot_fts_la_LDFLAGS = -export-dynamic
 
 test_programs = \
 	$(ICU_TESTS) \
@@ -120,7 +134,7 @@ test_fts_language_DEPENDENCIES = $(test_deps)
 endif
 
 test_fts_tokenizer_SOURCES = test-fts-tokenizer.c
-test_fts_tokenizer_LDADD = fts-tokenizer.lo fts-tokenizer-generic.lo fts-tokenizer-address.lo ../lib-mail/libmail.la $(test_libs)
+test_fts_tokenizer_LDADD = fts-tokenizer.lo fts-tokenizer-generic.lo fts-tokenizer-address.lo fts-tokenizer-common.lo ../lib-mail/libmail.la $(test_libs)
 test_fts_tokenizer_DEPENDENCIES = ../lib-mail/libmail.la $(test_deps)
 
 check: check-am check-test

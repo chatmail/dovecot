@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -40,6 +40,9 @@ struct search_header_context {
         struct index_search_context *index_ctx;
         struct index_mail *imail;
 	struct mail_search_arg *args;
+
+	struct message_block decoded_block;
+	bool decoded_block_set;
 
         struct message_header_line *hdr;
 
@@ -525,7 +528,7 @@ static void search_header_arg(struct mail_search_arg *arg,
 	if (msg_search_ctx == NULL)
 		return;
 
-	T_BEGIN {
+	if (!ctx->decoded_block_set) { T_BEGIN {
 		struct message_address *addr;
 		string_t *str;
 
@@ -554,8 +557,16 @@ static void search_header_arg(struct mail_search_arg *arg,
 		default:
 			i_unreached();
 		}
-		ret = message_search_more(msg_search_ctx, &block) ? 1 : 0;
-	} T_END;
+		ret = message_search_more_get_decoded(msg_search_ctx, &block,
+						      &ctx->decoded_block) ? 1 : 0;
+		ctx->decoded_block_set = TRUE;
+	} T_END; } else {
+		/* this block was already decoded and saved by an earlier
+		   search arg. use the already-decoded block to avoid
+		   duplicating work. */
+		ret = message_search_more_decoded(msg_search_ctx,
+						  &ctx->decoded_block) ? 1 : 0;
+	}
 
 	/* there may be multiple headers. don't mark this failed yet. */
 	if (ret > 0)
@@ -607,6 +618,7 @@ static void search_header(struct message_header_line *hdr,
 	if (ctx->custom_header || strcasecmp(hdr->name, "Date") == 0) {
 		ctx->hdr = hdr;
 
+		ctx->decoded_block_set = FALSE;
 		ctx->custom_header = FALSE;
 		(void)mail_search_args_foreach(ctx->args, search_header_arg, ctx);
 	}
@@ -616,6 +628,7 @@ static void search_body(struct mail_search_arg *arg,
 			struct search_body_context *ctx)
 {
 	struct message_search_context *msg_search_ctx;
+	const char *error;
 	int ret;
 
 	switch (arg->type) {
@@ -633,14 +646,13 @@ static void search_body(struct mail_search_arg *arg,
 	}
 
 	i_stream_seek(ctx->input, 0);
-	ret = message_search_msg(msg_search_ctx, ctx->input, ctx->part);
+	ret = message_search_msg(msg_search_ctx, ctx->input, ctx->part, &error);
 	if (ret < 0 && ctx->input->stream_errno == 0) {
 		/* try again without cached parts */
-		mail_set_cache_corrupted(ctx->index_ctx->cur_mail,
-					 MAIL_FETCH_MESSAGE_PARTS);
+		index_mail_set_message_parts_corrupted(ctx->index_ctx->cur_mail, error);
 
 		i_stream_seek(ctx->input, 0);
-		ret = message_search_msg(msg_search_ctx, ctx->input, NULL);
+		ret = message_search_msg(msg_search_ctx, ctx->input, NULL, &error);
 		i_assert(ret >= 0 || ctx->input->stream_errno != 0);
 	}
 	if (ctx->input->stream_errno != 0) {

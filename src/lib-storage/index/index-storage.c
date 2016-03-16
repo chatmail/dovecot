@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -999,7 +999,8 @@ int index_storage_expunged_sync_begin(struct mailbox *box,
 	ret = mail_index_sync_begin(box->index, ctx_r, view_r,
 				    trans_r, flags);
 	if (ret <= 0) {
-		mailbox_set_index_error(box);
+		if (ret < 0)
+			mailbox_set_index_error(box);
 		index_storage_expunging_deinit(box);
 		return ret;
 	}

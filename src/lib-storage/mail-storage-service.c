@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -661,6 +661,8 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 		p_strdup(mail_user->pool, user->input.session_id);
 	mail_user->userdb_fields = user->input.userdb_fields == NULL ? NULL :
 		p_strarray_dup(mail_user->pool, user->input.userdb_fields);
+	mail_user->autoexpunge_enabled =
+		(user->flags & MAIL_STORAGE_SERVICE_FLAG_AUTOEXPUNGE) != 0;
 	
 	mail_set = mail_user_set_get_storage_set(mail_user);
 
@@ -723,24 +725,44 @@ void mail_storage_service_io_deactivate(struct mail_storage_service_ctx *ctx)
 	i_set_failure_prefix("%s", ctx->default_log_prefix);
 }
 
+static const char *field_get_default(const char *data)
+{
+	const char *p;
+
+	p = strchr(data, ':');
+	if (p == NULL)
+		return "";
+	else {
+		/* default value given */
+		return p+1;
+	}
+}
+
+const char *mail_storage_service_fields_var_expand(const char *data,
+						   const char *const *fields)
+{
+	const char *field_name = t_strcut(data, ':');
+	unsigned int i, field_name_len;
+
+	if (fields == NULL)
+		return field_get_default(data);
+
+	field_name_len = strlen(field_name);
+	for (i = 0; fields[i] != NULL; i++) {
+		if (strncmp(fields[i], field_name, field_name_len) == 0 &&
+		    fields[i][field_name_len] == '=')
+			return fields[i] + field_name_len+1;
+	}
+	return field_get_default(data);
+}
+
 static const char *
 mail_storage_service_input_var_userdb(const char *data, void *context)
 {
 	struct mail_storage_service_user *user = context;
-	const char *field_name = data;
-	unsigned int i, field_name_len;
 
-	if (user == NULL || user->input.userdb_fields == NULL)
-		return NULL;
-
-	field_name_len = strlen(field_name);
-	for (i = 0; user->input.userdb_fields[i] != NULL; i++) {
-		if (strncmp(user->input.userdb_fields[i], field_name,
-			    field_name_len) == 0 &&
-		    user->input.userdb_fields[i][field_name_len] == '=')
-			return user->input.userdb_fields[i] + field_name_len+1;
-	}
-	return NULL;
+	return mail_storage_service_fields_var_expand(data,
+			user == NULL ? NULL : user->input.userdb_fields);
 }
 
 static void
@@ -835,7 +857,7 @@ mail_storage_service_init(struct master_service *service,
 	}
 
 	if ((flags & MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP) != 0 &&
-	    geteuid() != 0) {
+	    getuid() != 0) {
 		/* service { user } isn't root. the permission drop can't be
 		   temporary. */
 		flags &= ~MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP;
@@ -1199,8 +1221,6 @@ mail_storage_service_lookup_real(struct mail_storage_service_ctx *ctx,
 	user->flags = flags;
 
 	user->set_parser = settings_parser_dup(set_parser, user_pool);
-	if (!settings_parser_check(user->set_parser, user_pool, &error))
-		i_panic("settings_parser_check() failed: %s", error);
 
 	sets = master_service_settings_parser_get_others(master_service,
 							 user->set_parser);
@@ -1225,6 +1245,11 @@ mail_storage_service_lookup_real(struct mail_storage_service_ctx *ctx,
 			*error_r = ERRSTR_INVALID_USER_SETTINGS;
 			ret = -2;
 		}
+	}
+	if (ret > 0 && !settings_parser_check(user->set_parser, user_pool, &error)) {
+		i_error("Invalid settings (probably caused by userdb): %s", error);
+		*error_r = ERRSTR_INVALID_USER_SETTINGS;
+		ret = -2;
 	}
 	pool_unref(&temp_pool);
 

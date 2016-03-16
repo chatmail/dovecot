@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -82,10 +82,11 @@ const char *i_stream_get_error(struct istream *stream)
 {
 	struct istream *s;
 
-	/* we'll only return errors for streams that have stream_errno set.
-	   we might be returning unintended error otherwise. */
+	/* we'll only return errors for streams that have stream_errno set or
+	   that have reached EOF. we might be returning unintended error
+	   otherwise. */
 	if (stream->stream_errno == 0)
-		return "<no error>";
+		return stream->eof ? "EOF" : "<no error>";
 
 	for (s = stream; s != NULL; s = s->real_stream->parent) {
 		if (s->stream_errno == 0)
@@ -119,6 +120,14 @@ size_t i_stream_get_max_buffer_size(struct istream *stream)
 void i_stream_set_return_partial_line(struct istream *stream, bool set)
 {
 	stream->real_stream->return_nolf_line = set;
+}
+
+void i_stream_set_persistent_buffers(struct istream *stream, bool set)
+{
+	do {
+		stream->real_stream->nonpersistent_buffers = !set;
+		stream = stream->real_stream->parent;
+	} while (stream != NULL);
 }
 
 static void i_stream_update(struct istream_private *stream)
@@ -237,6 +246,12 @@ void i_stream_skip(struct istream *stream, uoff_t count)
 		/* within buffer */
 		stream->v_offset += count;
 		_stream->skip += count;
+		if (_stream->nonpersistent_buffers &&
+		    _stream->skip == _stream->pos) {
+			_stream->skip = _stream->pos = 0;
+			_stream->buffer_size = 0;
+			i_free_and_null(_stream->w_buffer);
+		}
 		return;
 	}
 

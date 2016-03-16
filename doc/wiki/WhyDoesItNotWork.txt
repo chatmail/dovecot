@@ -21,6 +21,20 @@ Why is Dovecot not working for me?
    are also <binary packages> [PrebuiltBinaries.txt] available for newer
    versions.
 
+If you have upgraded OpenVZ to LXC (ProxMox 4) and you are getting permisssion
+issues
+-------------------------------------------------------------------------------------
+
+This is due to ACL option being added to mount options. Simple fix is to run
+
+---%<-------------------------------------------------------------------------
+setfacl -k /var/run/dovecot
+setfacl -b /var/run/dovecot/*
+---%<-------------------------------------------------------------------------
+
+and the issue should go away. For more information about this, see
+https://forum.proxmox.com/threads/permission-error-w-sockets-inside-ct-since-migration-to-pve-4-1.25244/
+
 It says "Authentication failed"
 -------------------------------
 
@@ -87,4 +101,4 @@ Check out the access permissions of the mentioned directory, check:
     different access permissions or POSIX eXtended attributes may change the
     traditional permissions.
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-16 04:44)

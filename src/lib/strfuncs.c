@@ -1,10 +1,11 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
 #include "lib.h"
 #include "printf-format-fix.h"
 #include "strfuncs.h"
+#include "array.h"
 
 #include <stdio.h>
 #include <limits.h>
@@ -611,17 +612,21 @@ unsigned int str_array_length(const char *const *arr)
 	return count;
 }
 
-const char *t_strarray_join(const char *const *arr, const char *separator)
+static char *
+p_strarray_join_n(pool_t pool, const char *const *arr, unsigned int arr_len,
+		  const char *separator)
 {
 	size_t alloc_len, sep_len, len, pos, needed_space;
+	unsigned int i;
 	char *str;
 
 	sep_len = strlen(separator);
         alloc_len = 64;
-        str = t_buffer_get(alloc_len);
+	str = t_buffer_get(alloc_len);
+	pos = 0;
 
-	for (pos = 0; *arr != NULL; arr++) {
-		len = strlen(*arr);
+	for (i = 0; i < arr_len; i++) {
+		len = strlen(arr[i]);
 		needed_space = pos + len + sep_len + 1;
 		if (needed_space > alloc_len) {
 			alloc_len = nearest_power(needed_space);
@@ -633,12 +638,20 @@ const char *t_strarray_join(const char *const *arr, const char *separator)
 			pos += sep_len;
 		}
 
-		memcpy(str + pos, *arr, len);
+		memcpy(str + pos, arr[i], len);
 		pos += len;
 	}
 	str[pos] = '\0';
+	if (!pool->datastack_pool)
+		return p_memdup(pool, str, pos + 1);
 	t_buffer_alloc(pos + 1);
 	return str;
+}
+
+const char *t_strarray_join(const char *const *arr, const char *separator)
+{
+	return p_strarray_join_n(unsafe_data_stack_pool, arr,
+				 str_array_length(arr), separator);
 }
 
 bool str_array_remove(const char **arr, const char *value)
@@ -713,4 +726,12 @@ const char *dec2str(uintmax_t number)
 
 	i_assert(pos >= 0);
 	return buffer + pos;
+}
+
+char *p_array_const_string_join(pool_t pool, const ARRAY_TYPE(const_string) *arr,
+				const char *separator)
+{
+	if (array_count(arr) == 0)
+		return "";
+	return p_strarray_join_n(pool, array_idx(arr, 0), array_count(arr), separator);
 }

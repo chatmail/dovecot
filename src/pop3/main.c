@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "pop3-common.h"
 #include "ioloop.h"
@@ -213,8 +213,9 @@ int main(int argc, char *argv[])
 	};
 	struct master_login_settings login_set;
 	enum master_service_flags service_flags = 0;
-	enum mail_storage_service_flags storage_service_flags = 0;
-	const char *username = NULL;
+	enum mail_storage_service_flags storage_service_flags =
+		MAIL_STORAGE_SERVICE_FLAG_AUTOEXPUNGE;
+	const char *username = NULL, *auth_socket_path = "auth-master";
 	int c;
 
 	memset(&login_set, 0, sizeof(login_set));
@@ -237,9 +238,12 @@ int main(int argc, char *argv[])
 	}
 
 	master_service = master_service_init("pop3", service_flags,
-					     &argc, &argv, "t:u:");
+					     &argc, &argv, "a:t:u:");
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
+		case 'a':
+			auth_socket_path = optarg;
+			break;
 		case 't':
 			if (str_to_uint(optarg, &login_set.postlogin_timeout_secs) < 0 ||
 			    login_set.postlogin_timeout_secs == 0)
@@ -255,7 +259,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	login_set.auth_socket_path = t_abspath("auth-master");
+	login_set.auth_socket_path = t_abspath(auth_socket_path);
 	if (argv[optind] != NULL)
 		login_set.postlogin_socket_path = t_abspath(argv[optind]);
 	login_set.callback = login_client_connected;

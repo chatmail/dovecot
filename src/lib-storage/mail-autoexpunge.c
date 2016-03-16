@@ -1,4 +1,4 @@
-/* Copyright (c) 2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -63,6 +63,7 @@ static void mail_namespace_autoexpunge(struct mail_namespace *ns)
 	struct mailbox_settings *const *box_set;
 	struct mailbox *box;
 	time_t expire_time;
+	const char *vname;
 
 	if (!array_is_created(&ns->set->mailboxes))
 		return;
@@ -71,8 +72,17 @@ static void mail_namespace_autoexpunge(struct mail_namespace *ns)
 		if ((*box_set)->autoexpunge == 0 ||
 		    (unsigned int)ioloop_time < (*box_set)->autoexpunge)
 			continue;
+
+		if ((*box_set)->name[0] == '\0' && ns->prefix_len > 0 &&
+		    ns->prefix[ns->prefix_len-1] == mail_namespace_get_sep(ns))
+			vname = t_strndup(ns->prefix, ns->prefix_len - 1);
+		else
+			vname = t_strconcat(ns->prefix, (*box_set)->name, NULL);
 		expire_time = ioloop_time - (*box_set)->autoexpunge;
-		box = mailbox_alloc(ns->list, (*box_set)->name, 0);
+		/* autoexpunge is configured by admin, so we can safely ignore
+		   any ACLs the user might normally have against expunging in
+		   the mailbox. */
+		box = mailbox_alloc(ns->list, vname, MAILBOX_FLAG_IGNORE_ACLS);
 		if (mailbox_autoexpunge(box, expire_time) < 0) {
 			i_error("Failed to autoexpunge mailbox '%s': %s",
 				mailbox_get_vname(box),

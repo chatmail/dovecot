@@ -1,9 +1,10 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "ioloop.h"
 #include "array.h"
 #include "randgen.h"
+#include "module-dir.h"
 #include "process-title.h"
 #include "restrict-access.h"
 #include "restrict-process-size.h"
@@ -35,10 +36,11 @@ struct login_access_lookup {
 const struct login_binary *login_binary;
 struct auth_client *auth_client;
 struct master_auth *master_auth;
-bool closing_down;
+bool closing_down, login_debug;
 struct anvil_client *anvil;
 const char *login_rawlog_dir = NULL;
 unsigned int initial_service_count;
+struct login_module_register login_module_register;
 
 const struct login_settings *global_login_settings;
 const struct master_service_ssl_settings *global_ssl_settings;
@@ -47,7 +49,9 @@ void **global_other_settings;
 const struct ip_addr *login_source_ips;
 unsigned int login_source_ips_idx, login_source_ips_count;
 
+static struct module *modules;
 static struct timeout *auth_client_to;
+static const char *post_login_socket;
 static bool shutting_down = FALSE;
 static bool ssl_connections = FALSE;
 static bool auth_connected_once = FALSE;
@@ -302,7 +306,27 @@ parse_login_source_ips(const char *ips_str, unsigned int *count_r)
 	return array_get(&ips, count_r);
 }
 
-static void main_preinit(bool allow_core_dumps)
+static void login_load_modules(void)
+{
+	struct module_dir_load_settings mod_set;
+
+	if (global_login_settings->login_plugins[0] == '\0')
+		return;
+
+	memset(&mod_set, 0, sizeof(mod_set));
+	mod_set.abi_version = DOVECOT_ABI_VERSION;
+	mod_set.binary_name = login_binary->process_name;
+	mod_set.setting_name = "login_plugins";
+	mod_set.require_init_funcs = TRUE;
+	mod_set.debug = login_debug;
+
+	modules = module_dir_load(global_login_settings->login_plugin_dir,
+				  global_login_settings->login_plugins,
+				  &mod_set);
+	module_dir_init(modules);
+}
+
+static void main_preinit(void)
 {
 	unsigned int max_fds;
 
@@ -348,8 +372,10 @@ static void main_preinit(bool allow_core_dumps)
 		login_source_ips_idx = rand() % login_source_ips_count;
 	}
 
+	login_load_modules();
+
 	restrict_access_by_env(NULL, TRUE);
-	if (allow_core_dumps)
+	if (login_debug)
 		restrict_access_allow_coredumps(TRUE);
 	initial_service_count = master_service_get_service_count(master_service);
 
@@ -378,7 +404,7 @@ static void main_init(const char *login_socket)
 	auth_client = auth_client_init(login_socket, (unsigned int)getpid(),
 				       FALSE);
         auth_client_set_connect_notify(auth_client, auth_connect_notify, NULL);
-	master_auth = master_auth_init(master_service, login_binary->protocol);
+	master_auth = master_auth_init(master_service, post_login_socket);
 
 	login_binary->init();
 	login_proxy_init("proxy-notify");
@@ -410,24 +436,27 @@ int login_binary_run(const struct login_binary *binary,
 		MASTER_SERVICE_FLAG_USE_SSL_SETTINGS |
 		MASTER_SERVICE_FLAG_NO_SSL_INIT;
 	pool_t set_pool;
-	bool allow_core_dumps = FALSE;
 	const char *login_socket;
 	int c;
 
 	login_binary = binary;
 	login_socket = binary->default_login_socket != NULL ?
 		binary->default_login_socket : LOGIN_DEFAULT_SOCKET;
+	post_login_socket = binary->protocol;
 
 	master_service = master_service_init(login_binary->process_name,
 					     service_flags, &argc, &argv,
-					     "DR:S");
+					     "Dl:R:S");
 	master_service_init_log(master_service, t_strconcat(
 		login_binary->process_name, ": ", NULL));
 
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
 		case 'D':
-			allow_core_dumps = TRUE;
+			login_debug = TRUE;
+			break;
+		case 'l':
+			post_login_socket = optarg;
 			break;
 		case 'R':
 			login_rawlog_dir = optarg;
@@ -450,7 +479,7 @@ int login_binary_run(const struct login_binary *binary,
 				    &global_ssl_settings,
 				    &global_other_settings);
 
-	main_preinit(allow_core_dumps);
+	main_preinit();
 	master_service_init_finish(master_service);
 	main_init(login_socket);
 

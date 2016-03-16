@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -73,6 +73,8 @@ http_request_parser_init(struct istream *input,
 void http_request_parser_deinit(struct http_request_parser **_parser)
 {
 	struct http_request_parser *parser = *_parser;
+
+	*_parser = NULL;
 
 	http_message_parser_deinit(&parser->parser);
 	i_free(parser);
@@ -331,7 +333,8 @@ http_request_parser_message_error(struct http_request_parser *parser)
 	return HTTP_REQUEST_PARSE_ERROR_BROKEN_REQUEST;
 }
 
-bool http_request_parser_pending_payload(struct http_request_parser *parser)
+bool http_request_parser_pending_payload(
+	struct http_request_parser *parser)
 {
 	if (parser->parser.payload == NULL)
 		return FALSE;
@@ -478,12 +481,11 @@ http_request_parse_headers(struct http_request_parser *parser,
 	return 0;
 }
 
-int http_request_parse_next(struct http_request_parser *parser,
-			    pool_t pool, struct http_request *request,
-			    enum http_request_parse_error *error_code_r, const char **error_r)
+int http_request_parse_finish_payload(
+	struct http_request_parser *parser,
+	enum http_request_parse_error *error_code_r,
+	const char **error_r)
 {
-	const struct http_header_field *hdr;
-	const char *error;
 	int ret;
 
 	*error_code_r = parser->error_code = HTTP_REQUEST_PARSE_ERROR_NONE;
@@ -496,8 +498,22 @@ int http_request_parse_next(struct http_request_parser *parser,
 			*error_code_r = http_request_parser_message_error(parser);
 			*error_r = parser->parser.error;
 		}
-		return ret;
 	}
+	return ret;
+}
+
+int http_request_parse_next(struct http_request_parser *parser,
+			    pool_t pool, struct http_request *request,
+			    enum http_request_parse_error *error_code_r, const char **error_r)
+{
+	const struct http_header_field *hdr;
+	const char *error;
+	int ret;
+
+	/* initialize and get rid of any payload of previous request */
+	if ((ret=http_request_parse_finish_payload
+		(parser, error_code_r, error_r)) <= 0)
+		return ret;
 
 	/* RFC 7230, Section 3:
 		
@@ -582,5 +598,9 @@ int http_request_parse_next(struct http_request_parser *parser,
 	request->header = parser->parser.msg.header;
 	request->connection_options = parser->parser.msg.connection_options;
 	request->connection_close = parser->parser.msg.connection_close;
+
+	/* reset this state early */
+	parser->request_method = NULL;
+	parser->request_target = NULL;
 	return 1;
 }

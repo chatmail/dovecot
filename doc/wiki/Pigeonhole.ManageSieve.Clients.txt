@@ -32,7 +32,7 @@ client problems.
      (at least with avelsieve-1.9.7) it is impossible to delete the last rule
      of a script. For avelsieve-1.9.7 you find a patch that fixes these two
      issues here
-     [http://www.rename-it.nl/dovecot/client-patches/avelsieve-1.9.7-dovecot.patch].
+     [http://pigeonhole.dovecot.org/client-patches/avelsieve-1.9.7-dovecot.patch].
 
  * *Smartsieve, Websieve*:
  * These clients are specifically written for Cyrus timsieved and fail on
@@ -46,6 +46,8 @@ client problems.
     * /(Mark Titorenko)/: Stephan provides an updated link to Steffen's
       ManageSieve patch in this Dovecot mailing list post dated 2009-09-01
       [http://www.mail-archive.com/dovecot@dovecot.org/msg21862.html]
+    * /(Stephan Bosch)/: Links moved here
+      [http://pigeonhole.dovecot.org/patches/]
  * *Ruby/Managesieve*: Ruby command line client and library to managesieve
    works fine Ruby/Managesieve [http://managesieve.rubyforge.org/]
  * *Ruby/Sieve-Parser*: Ruby library for sieve parsing Sieve-Parser
@@ -56,4 +58,4 @@ to the Dovecot mailing list [http://dovecot.org/mailinglists.html]. In any
 case, you must make sure that the issue is properly explained and that the
 author can contact you for more information.
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-16 04:44)

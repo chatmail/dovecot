@@ -19,6 +19,8 @@ in the userdb, and these are called 'extra fields'. Possibilities are:
  * *uidgid_file*: Get uid and gid for user based on the given filename.
  * It's possible to override settings from 'dovecot.conf' (most commonly
    quota_rule to set per-user quota limits or also plugin-settings).
+ * *user*: User can be overriden (normally set in <passdb>
+   [PasswordDatabase.txt]).
  * The extra fields are also passed to <post-login scripts>
    [PostLoginScripting.txt].
 
@@ -29,21 +31,21 @@ Overriding settings
 -------------------
 
 Most commonly settings are overridden from plugin section. For example if your
-plugin section has 'quota=maildir:storage=1024' value and the userdb lookup
-returns 'quota=maildir:storage=2048', the original quota setting gets
-overridden. In fact if the lookup always returns a quota field, there's no
-point in having the quota setting in plugin section at all, because it always
-gets overridden anyway.
+plugin section has 'quota_rule=*:storage=100M' value and the userdb lookup
+returns 'quota_rule=*:storage=200M', the original quota setting gets
+overridden. In fact if the lookup always returns a 'quota_rule' field, there's
+no point in having the 'quota_rule' setting in the plugin section at all,
+because it always gets overridden anyway.
 
 To understand how imap and pop3 processes see their settings, it may be helpful
 to know how Dovecot internally passes them:
 
  1. First all actual settings are first read into memory.
- 2. Next if <post-login scripting is used> [PostLoginScripting.txt], it may
+ 2. Next all the extra fields returned by userdb lookup are used to override
+    the settings. Any unknown setting is placed into the plugin {} section
+    (e.g.'foo=bar' will be parsed as if it were 'plugin { foo=bar }').
+ 3. Last, if <post-login scripting is used> [PostLoginScripting.txt], it may
     modify the settings if wanted.
- 3. Last all the extra fields returned by userdb lookup are used to override
-    the settings. Any unknown setting is placed into plugin {} section (e.g.
-    foo=bar will be parsed as if it were plugin { foo=bar }).
 
 If you want to override settings inside sections, you can separate the section
 name and key with '/'. For example:
@@ -51,12 +53,13 @@ name and key with '/'. For example:
 ---%<-------------------------------------------------------------------------
 namespace default {
   inbox = yes
+  separator = .
   location = maildir:~/Maildir
 }
 ---%<-------------------------------------------------------------------------
 
-The inbox setting can be overridden by returning 'namespace/default/inbox=yes'
-or 'namespace/default/location=mbox:/var/mail/%u' extra field.
+The separator setting can be overridden by returning
+'namespace/default/separator=.' extra field.
 
 Examples
 --------
@@ -68,9 +71,9 @@ dovecot-sql.conf:
 
 ---%<-------------------------------------------------------------------------
 user_query = SELECT home, uid, gid, \
-  '*:storage=100M' as quota_rule, mail_plugins, \
-  'gz' as `plugin/zlib_save`
-  FROM users WHERE userid = '%u'
+  CONCAT('*:bytes=', quota_bytes) AS quota_rule, \
+  separator AS "namespace/default/separator" \
+  FROM users WHERE username = '%n' and domain = '%d'
 ---%<-------------------------------------------------------------------------
 
 LDAP
@@ -79,8 +82,12 @@ LDAP
 dovecot-ldap.conf:
 
 ---%<-------------------------------------------------------------------------
-user_attrs =
-homeDirectory=home,uidNumber=uid,gidNumber=gid,quotaDovecot=quota,mail_plugins
+user_attrs = \
+  =home=%{ldap:homeDirectory}, \
+  =uid=%{ldap:uidNumber},
+  =gid=%{ldap:gidNumber},
+  =quota_rule=*:bytes=%{ldap:quotaBytes},
+  =namespace/default/separator=%{ldap:mailSeparator}
 ---%<-------------------------------------------------------------------------
 
 passwd-file
@@ -93,9 +100,9 @@ otherwise they're treated as <passdb extra fields>
 
 ---%<-------------------------------------------------------------------------
 user:{plain}pass:1000:1000::/home/user::userdb_mail=mbox:~/mail
-userdb_quota_rule=*:storage=100M
+userdb_quota_rule=*:storage=100M userdb_namespace/default/separator=/
 user2:{plain}pass2:1001:1001::/home/user2::userdb_mail=maildir:~/Maildir
 userdb_quota_rule=*:storage=200M
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-16 04:44)

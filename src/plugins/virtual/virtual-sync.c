@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -49,6 +49,9 @@ struct virtual_sync_context {
 	unsigned int expunge_removed:1;
 	unsigned int index_broken:1;
 };
+
+static void virtual_sync_backend_box_deleted(struct virtual_sync_context *ctx,
+					     struct virtual_backend_box *bbox);
 
 static void virtual_sync_set_uidvalidity(struct virtual_sync_context *ctx)
 {
@@ -1028,7 +1031,14 @@ static int virtual_sync_backend_box_sync(struct virtual_sync_context *ctx,
 			break;
 		}
 	}
-	return mailbox_sync_deinit(&sync_ctx, &sync_status);
+	if (mailbox_sync_deinit(&sync_ctx, &sync_status) < 0) {
+		if (mailbox_get_last_mail_error(bbox->box) != MAIL_ERROR_NOTFOUND)
+			return -1;
+		/* mailbox was deleted */
+		virtual_sync_backend_box_deleted(ctx, bbox);
+		return 0;
+	}
+	return 0;
 }
 
 static void virtual_sync_backend_ext_header(struct virtual_sync_context *ctx,
@@ -1092,6 +1102,29 @@ static void virtual_sync_backend_box_deleted(struct virtual_sync_context *ctx,
 	array_foreach(&bbox->uids, uidmap)
 		seq_range_array_add(&removed_uids, uidmap->real_uid);
 	virtual_sync_mailbox_box_remove(ctx, bbox, &removed_uids);
+
+	bbox->deleted = TRUE;
+}
+
+static int
+virtual_try_open_and_sync_backend_box(struct virtual_sync_context *ctx,
+				      struct virtual_backend_box *bbox,
+				      enum mailbox_sync_flags sync_flags)
+{
+	int ret = 0;
+
+	if (!bbox->box->opened)
+		ret = virtual_backend_box_open(ctx->mbox, bbox);
+	if (ret == 0)
+		ret = mailbox_sync(bbox->box, sync_flags);
+	if (ret < 0) {
+		if (mailbox_get_last_mail_error(bbox->box) != MAIL_ERROR_NOTFOUND)
+			return -1;
+		/* mailbox was deleted */
+		virtual_sync_backend_box_deleted(ctx, bbox);
+		return 0;
+	}
+	return 1;
 }
 
 static int virtual_sync_backend_box(struct virtual_sync_context *ctx,
@@ -1099,8 +1132,10 @@ static int virtual_sync_backend_box(struct virtual_sync_context *ctx,
 {
 	enum mailbox_sync_flags sync_flags;
 	struct mailbox_status status;
-	bool bbox_index_opened = bbox->box->opened;
 	int ret;
+
+	if (bbox->deleted)
+		return 0;
 
 	/* if we already did some changes to index, commit them before
 	   syncing starts. */
@@ -1118,16 +1153,12 @@ static int virtual_sync_backend_box(struct virtual_sync_context *ctx,
 		   if we can do that check from mailbox list index, we don't
 		   even need to open the mailbox. */
 		i_assert(array_count(&bbox->sync_pending_removes) == 0);
-		if (bbox_index_opened || bbox->open_failed) {
+		if (bbox->box->opened || bbox->open_failed) {
 			/* a) index already opened, refresh it
 			   b) delayed error handling for mailbox_open()
 			   that failed in virtual_notify_changes() */
-			if (!bbox_index_opened) {
-				if (virtual_backend_box_open(ctx->mbox, bbox) < 0)
-					return -1;
-			}
-			if (mailbox_sync(bbox->box, sync_flags) < 0)
-				return -1;
+			if ((ret = virtual_try_open_and_sync_backend_box(ctx, bbox, sync_flags)) <= 0)
+				return ret;
 			bbox->open_failed = FALSE;
 		}
 
@@ -1152,21 +1183,16 @@ static int virtual_sync_backend_box(struct virtual_sync_context *ctx,
 				virtual_sync_backend_handle_old_vmsgs(ctx, bbox, NULL);
 			return 0;
 		}
-		if (!bbox_index_opened) {
+		if (!bbox->box->opened) {
 			/* first time we're opening the index */
-			if (!bbox->box->opened) {
-				if (virtual_backend_box_open(ctx->mbox, bbox) < 0)
-					return -1;
-			}
-			if (mailbox_sync(bbox->box, sync_flags) < 0)
-				return -1;
+			if ((ret = virtual_try_open_and_sync_backend_box(ctx, bbox, sync_flags)) <= 0)
+				return ret;
 		}
 
 		virtual_backend_box_sync_mail_set(bbox);
 		if (status.uidvalidity != bbox->sync_uid_validity) {
 			/* UID validity changed since last sync (or this is
 			   the first sync), do a full search */
-			i_assert(ctx->expunge_removed);
 			ret = virtual_sync_backend_box_init(bbox);
 		} else {
 			/* build the initial search using the saved modseq. */
@@ -1175,7 +1201,7 @@ static int virtual_sync_backend_box(struct virtual_sync_context *ctx,
 		i_assert(bbox->search_result != NULL || ret < 0);
 	} else {
 		/* sync using the existing search result */
-		i_assert(bbox_index_opened);
+		i_assert(bbox->box->opened);
 		i_array_init(&ctx->sync_expunges, 32);
 		ret = virtual_sync_backend_box_sync(ctx, bbox, sync_flags);
 		if (ret == 0) T_BEGIN {

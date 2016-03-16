@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -9,6 +9,7 @@
 #include "message-parser.h"
 #include "message-decoder.h"
 #include "mail-storage.h"
+#include "index-mail.h"
 #include "fts-parser.h"
 #include "fts-user.h"
 #include "fts-language.h"
@@ -65,25 +66,6 @@ fts_build_parse_content_disposition(struct fts_mail_build_context *ctx,
 	i_free(ctx->content_disposition);
 	ctx->content_disposition =
 		i_strndup(hdr->full_value, hdr->full_value_len);
-}
-
-static bool header_has_language(const char *name)
-{
-	/* FIXME: should email address headers be detected as different
-	   languages? That mainly contains people's names.. */
-	/*if (message_header_is_address(name))
-		return TRUE;*/
-
-	/* Subject definitely contains language-specific data that can be
-	   detected. Comment and Keywords headers also could contain, although
-	   just about nobody uses those headers.
-
-	   For now we assume that other headers contain non-language specific
-	   data that we don't want to filter in special ways. For example
-	   it is good to be able to search for Message-IDs. */
-	return strcasecmp(name, "Subject") == 0 ||
-		strcasecmp(name, "Comments") == 0 ||
-		strcasecmp(name, "Keywords") == 0;
 }
 
 static void fts_parse_mail_header(struct fts_mail_build_context *ctx,
@@ -157,7 +139,7 @@ fts_build_tokenized_hdr_update_lang(struct fts_mail_build_context *ctx,
 	   human languages, so we have a list of some hardcoded header names
 	   and we'll also assume that if there's any 8bit content it's a human
 	   language. */
-	if (header_has_language(hdr->name) ||
+	if (fts_header_has_language(hdr->name) ||
 	    data_has_8bit(hdr->full_value, hdr->full_value_len))
 		ctx->cur_user_lang = NULL;
 	else {
@@ -483,6 +465,7 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 	struct message_part *prev_part, *parts;
 	bool skip_body = FALSE, body_part = FALSE, body_added = FALSE;
 	bool binary_body;
+	const char *error;
 	int ret;
 
 	if (mail_get_stream(mail, NULL, NULL, &input) < 0) {
@@ -590,8 +573,8 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 		block.data = NULL; block.size = 0;
 		ret = fts_build_body_block(&ctx, &block, TRUE);
 	}
-	if (message_parser_deinit(&parser, &parts) < 0)
-		mail_set_cache_corrupted(mail, MAIL_FETCH_MESSAGE_PARTS);
+	if (message_parser_deinit_from_parts(&parser, &parts, &error) < 0)
+		index_mail_set_message_parts_corrupted(mail, error);
 	message_decoder_deinit(&decoder);
 	i_free(ctx.content_type);
 	i_free(ctx.content_disposition);

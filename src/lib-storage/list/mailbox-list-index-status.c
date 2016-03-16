@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -275,6 +275,7 @@ index_list_get_cached_first_saved(struct mailbox *box,
 {
 	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(box->list);
 	struct mail_index_view *view;
+	struct mailbox_status status;
 	const void *data;
 	bool expunged;
 	uint32_t seq;
@@ -289,6 +290,15 @@ index_list_get_cached_first_saved(struct mailbox *box,
 			      &data, &expunged);
 	if (data != NULL)
 		memcpy(first_saved_r, data, sizeof(*first_saved_r));
+	if (first_saved_r->timestamp != 0 && first_saved_r->uid == 0) {
+		/* mailbox was empty the last time we updated this.
+		   we'll need to verify if it still is. */
+		if (!mailbox_list_index_status(box->list, view, seq,
+					       STATUS_MESSAGES,
+					       &status, NULL, NULL) ||
+		    status.messages != 0)
+			first_saved_r->timestamp = 0;
+	}
 	mail_index_view_close(&view);
 	return first_saved_r->timestamp != 0 ? 1 : 0;
 }
@@ -517,7 +527,6 @@ index_list_update_first_saved(struct mailbox *box,
 	int ret = 0;
 
 	memset(&first_saved, 0, sizeof(first_saved));
-	first_saved.uid = changes->first_uid;
 	first_saved.timestamp = (uint32_t)-1;
 
 	if (changes->first_uid != 0) {
@@ -527,6 +536,7 @@ index_list_update_first_saved(struct mailbox *box,
 		for (seq = 1; seq <= messages_count; seq++) {
 			mail_set_seq(mail, seq);
 			if (mail_get_save_date(mail, &save_date) == 0) {
+				first_saved.uid = mail->uid;
 				first_saved.timestamp = save_date;
 				break;
 			}

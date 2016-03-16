@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -290,7 +290,6 @@ int mail_session_update_parse(const char *const *args, const char **error_r)
 		*error_r = t_strdup_printf("UPDATE-SESSION %s %s %s: stats shrank: %s",
 					   session->user->name,
 					   session->service, session->id, error);
-		i_panic("%s", *error_r);
 		return -1;
 	}
 	mail_session_refresh(session, diff_stats);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "eacces-error.h"
@@ -24,6 +24,7 @@ static void sdbox_file_init_paths(struct sdbox_file *file, const char *fname)
 	i_free(file->file.alt_path);
 	file->file.primary_path =
 		i_strdup_printf("%s/%s", mailbox_get_path(box), fname);
+	file->file.cur_path = file->file.primary_path;
 
 	if (mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_ALT_MAILBOX,
 				&alt_path) > 0)

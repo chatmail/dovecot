@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -73,7 +73,8 @@ static bool is_compressed_lz4(struct istream *input)
 	const unsigned char *data;
 	size_t size;
 
-	if (i_stream_read_data(input, &data, &size, 6 - 1) <= 0)
+	if (i_stream_read_data(input, &data, &size,
+			       IOSTREAM_LZ4_MAGIC_LEN - 1) <= 0)
 		return FALSE;
 	/* there is no standard LZ4 header, so we've created our own */
 	return memcmp(data, IOSTREAM_LZ4_MAGIC, IOSTREAM_LZ4_MAGIC_LEN) == 0;

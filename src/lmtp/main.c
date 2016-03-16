@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -88,7 +88,8 @@ int main(int argc, char *argv[])
 		MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP |
 		MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP |
 		MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT |
-		MAIL_STORAGE_SERVICE_FLAG_NO_IDLE_TIMEOUT;
+		MAIL_STORAGE_SERVICE_FLAG_NO_IDLE_TIMEOUT |
+		MAIL_STORAGE_SERVICE_FLAG_AUTOEXPUNGE;
 	int c;
 
 	if (IS_STANDALONE()) {

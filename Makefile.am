@@ -12,7 +12,6 @@ EXTRA_DIST = \
 	COPYING.LGPL \
 	COPYING.MIT \
 	ChangeLog \
-	is-tagged.py \
 	cc-wrapper.sh.in \
 	update-version.sh \
 	$(conf_DATA)
@@ -21,10 +20,8 @@ noinst_DATA = dovecot-config
 
 nodist_pkginclude_HEADERS = config.h
 
-if MAINTAINER_MODE
-ChangeLog: .git/index
-	git log 2.2.alpha1..HEAD > ChangeLog
-endif
+ChangeLog:
+	git log --name-status --pretty="format:%ai %aN <%aE> (%h)%n%n%w(80,4,4)%s%n%n%b" 5d5c4f2bfb812c767084c0338dae692db476da10^.. > ChangeLog || rm -f ChangeLog
 
 aclocal_DATA = dovecot.m4
 
@@ -50,7 +47,7 @@ dovecot-config: dovecot-config.in Makefile
 
 if HAVE_SYSTEMD
 %.service: %.service.in
-	$(AM_V_GEN)sed -e 's,@sbindir\@,$(sbindir),g' $< > $@
+	$(AM_V_GEN)sed -e 's,@sbindir\@,$(sbindir),g' -e 's,@bindir\@,$(bindir),g' -e 's,@rundir\@,$(rundir),g' $< > $@
 
 systemdsystemunit_DATA = \
         dovecot.socket \
@@ -70,6 +67,7 @@ install-exec-hook:
 	-e "s|^\(LIBDOVECOT_COMPRESS\)=.*$$|\1=-ldovecot-compression|" \
 	-e "s|^\(LIBDOVECOT_DSYNC\)=.*$$|\1=-ldovecot-dsync|" \
 	-e "s|^\(LIBDOVECOT_LDA\)=.*$$|\1=-ldovecot-lda|" \
+	-e "s|^\(LIBDOVECOT_LIBFTS\)=.*$$|\1=-ldovecot-fts|" \
 	-e "s|^\(LIBDOVECOT_STORAGE\)=.*$$|\1='-ldovecot-storage $(LINKED_STORAGE_LDADD)'|" \
 	-e "s|^\(LIBDOVECOT_INCLUDE\)=.*$$|\1=-I$(pkgincludedir)|" \
 	> $(DESTDIR)$(pkglibdir)/dovecot-config

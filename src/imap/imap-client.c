@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "ioloop.h"
@@ -279,6 +279,11 @@ static const char *client_get_commands_status(struct client *client)
 	str = t_str_new(128);
 	str_append(str, " (");
 	for (cmd = client->command_queue; cmd != NULL; cmd = cmd->next) {
+		if (cmd->name == NULL) {
+			/* (parts of a) tag were received, but not yet
+			   the command name */
+			continue;
+		}
 		str_append(str, cmd->name);
 		if (cmd->next != NULL)
 			str_append_c(str, ',');
@@ -287,6 +292,8 @@ static const char *client_get_commands_status(struct client *client)
 		bytes_out += cmd->bytes_out;
 		last_cmd = cmd;
 	}
+	if (last_cmd == NULL)
+		return "";
 
 	cond = io_loop_find_fd_conditions(current_ioloop, client->fd_out);
 	if ((cond & (IO_READ | IO_WRITE)) == (IO_READ | IO_WRITE))
@@ -378,9 +385,7 @@ static void client_default_destroy(struct client *client, const char *reason)
 		timeout_remove(&client->to_delayed_input);
 	timeout_remove(&client->to_idle);
 
-	i_stream_destroy(&client->input);
-	o_stream_destroy(&client->output);
-
+	/* i/ostreams are already closed at this stage, so fd can be closed */
 	net_disconnect(client->fd_in);
 	if (client->fd_in != client->fd_out)
 		net_disconnect(client->fd_out);
@@ -388,6 +393,11 @@ static void client_default_destroy(struct client *client, const char *reason)
 	/* Free the user after client is already disconnected. It may start
 	   some background work like autoexpunging. */
 	mail_user_unref(&client->user);
+
+	/* free the i/ostreams after mail_user_unref(), which could trigger
+	   mail_storage_callbacks notifications that write to the ostream. */
+	i_stream_destroy(&client->input);
+	o_stream_destroy(&client->output);
 
 	if (array_is_created(&client->search_saved_uidset))
 		array_free(&client->search_saved_uidset);
@@ -748,6 +758,7 @@ void client_command_free(struct client_command_context **_cmd)
 
 	*_cmd = NULL;
 
+	i_assert(!cmd->executing);
 	i_assert(client->output_cmd_lock == NULL);
 
 	/* reset input idle time because command output might have taken a
@@ -848,7 +859,7 @@ static bool client_remove_pending_unambiguity(struct client *client)
 		struct client_command_context *cmd = client->input_lock;
 
 		if (cmd->state != CLIENT_COMMAND_STATE_WAIT_UNAMBIGUITY)
-			return FALSE;
+			return TRUE;
 
 		/* the command is waiting for existing ambiguity causing
 		   commands to finish. */
@@ -1014,7 +1025,9 @@ static bool client_handle_next_command(struct client *client, bool *remove_io_r)
 
 	if (client->input_lock != NULL) {
 		if (client->input_lock->state ==
-		    CLIENT_COMMAND_STATE_WAIT_UNAMBIGUITY) {
+		    CLIENT_COMMAND_STATE_WAIT_UNAMBIGUITY ||
+		    (client->output_cmd_lock != NULL &&
+		     client->output_cmd_lock != client->input_lock)) {
 			*remove_io_r = TRUE;
 			return FALSE;
 		}

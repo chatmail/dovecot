@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "userdb.h"
@@ -207,7 +207,7 @@ passwd_passwd_preinit(pool_t pool, const char *args)
 	const char *value;
 
 	module = p_new(pool, struct passwd_userdb_module, 1);
-	module->module.cache_key = USER_CACHE_KEY;
+	module->module.default_cache_key = USER_CACHE_KEY;
 	module->tmpl = userdb_template_build(pool, "passwd", args);
 	module->module.blocking = TRUE;
 

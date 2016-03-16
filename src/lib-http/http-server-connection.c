@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "llist.h"
@@ -20,6 +20,9 @@
 static void
 http_server_connection_disconnect(struct http_server_connection *conn,
 	const char *reason);
+
+static bool
+http_server_connection_unref_is_closed(struct http_server_connection *conn);
 
 /*
  * Logging
@@ -111,8 +114,9 @@ static void
 http_server_connection_input_resume(struct http_server_connection *conn)
 {
 	if (conn->conn.io == NULL && !conn->closed &&
-		!conn->input_broken && !conn->close_indicated) {
-		conn->conn.io = io_add(conn->conn.fd_in, IO_READ,
+		!conn->input_broken && !conn->close_indicated &&
+		!conn->in_req_callback && conn->incoming_payload == NULL) {
+		conn->conn.io = io_add_istream(conn->conn.input,
        http_server_connection_input, &conn->conn);
 	}
 }
@@ -224,13 +228,30 @@ static void http_server_payload_destroyed(struct http_server_request *req)
 		}
 	}
 
-	if (req->state < HTTP_SERVER_REQUEST_STATE_PROCESSING) {
+	/* resource stopped reading payload; update state */
+	switch (req->state) {
+	case HTTP_SERVER_REQUEST_STATE_QUEUED:
+	case HTTP_SERVER_REQUEST_STATE_PAYLOAD_IN:
 		/* finished reading request */
 		req->state = HTTP_SERVER_REQUEST_STATE_PROCESSING;
 		if (req->response != NULL && req->response->submitted)
 			http_server_request_submit_response(req);
-	} else if (req->state == HTTP_SERVER_REQUEST_STATE_SUBMITTED_RESPONSE) {
-		http_server_request_ready_to_respond(req);
+		break;
+	case HTTP_SERVER_REQUEST_STATE_PROCESSING:
+		/* no response submitted yet */
+		break;
+	case HTTP_SERVER_REQUEST_STATE_SUBMITTED_RESPONSE:
+		/* response submitted, but not all payload is necessarily read */
+		if (http_server_request_is_complete(req))
+			http_server_request_ready_to_respond(req);
+		break;
+	case HTTP_SERVER_REQUEST_STATE_READY_TO_RESPOND:
+	case HTTP_SERVER_REQUEST_STATE_FINISHED:
+	case HTTP_SERVER_REQUEST_STATE_ABORTED:
+		/* nothing to do */
+		break;
+	default:
+		i_unreached();
 	}
 
 	/* input stream may have pending input. make sure input handler
@@ -238,7 +259,7 @@ static void http_server_payload_destroyed(struct http_server_request *req)
 	   somewhere from the API user's code, which we can't really know what
 	   state it is in). this call also triggers sending the next response if
 	   necessary. */
-	if (!conn->input_broken) {
+	if (!conn->input_broken && !conn->in_req_callback) {
 		conn->to_input =
 			timeout_add_short(0, http_server_payload_destroyed_timeout, conn);
 	}
@@ -282,6 +303,7 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 {
 	struct istream *payload;
 
+	i_assert(!conn->in_req_callback);
 	i_assert(conn->incoming_payload == NULL);
 
 	if (req->req.version_major != 1) {
@@ -306,11 +328,13 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 	   our one before calling it */
 	http_server_connection_input_halt(conn);
 
+	conn->in_req_callback = TRUE;
 	http_server_connection_request_callback(conn, req);
 	if (conn->closed) {
 		/* the callback managed to get this connection destroyed/closed */
 		return FALSE;
 	}
+	conn->in_req_callback = FALSE;
 
 	if (req->req.payload != NULL) {
 		/* send 100 Continue when appropriate */
@@ -341,7 +365,8 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 	}
 
 	if (conn->incoming_payload == NULL) {
-		i_assert(conn->conn.io != NULL);
+		if (conn->conn.io == NULL && conn->to_input == NULL)
+			http_server_connection_input_resume(conn);
 		return TRUE;
 	}
 
@@ -374,16 +399,125 @@ http_server_connection_ssl_init(struct http_server_connection *conn)
 	return 0;
 }
 
+static bool
+http_server_connection_pipeline_is_full(struct http_server_connection *conn)
+{
+	return (conn->request_queue_count >=
+			conn->server->set.max_pipelined_requests);
+}
+
+static void
+http_server_connection_pipeline_handle_full(
+	struct http_server_connection *conn)
+{
+	http_server_connection_debug(conn,
+		"Pipeline full (%u requests pending; %u maximum)",
+		conn->request_queue_count,
+		conn->server->set.max_pipelined_requests);
+	http_server_connection_input_halt(conn);
+}
+
+static bool
+http_server_connection_check_input(struct http_server_connection *conn)
+{
+	struct istream *input = conn->conn.input;
+	int stream_errno;
+
+	if (input == NULL)
+		return FALSE;
+	stream_errno = input->stream_errno;
+
+	if (input->eof || stream_errno != 0) {
+		/* connection input broken; output may still be intact */
+		if (stream_errno != 0 && stream_errno != EPIPE &&
+			stream_errno != ECONNRESET) {
+			http_server_connection_client_error(conn,
+				"Connection lost: read(%s) failed: %s",
+					i_stream_get_name(input),
+					i_stream_get_error(input));
+			http_server_connection_close(&conn, "Read failure");
+		} else {
+			http_server_connection_debug(conn,
+				"Connection lost: Remote disconnected");
+
+			if (conn->request_queue_head == NULL) {
+				/* no pending requests; close */
+				http_server_connection_close(&conn,
+					"Remote closed connection");
+			} else if (conn->request_queue_head->state <
+					HTTP_SERVER_REQUEST_STATE_SUBMITTED_RESPONSE) {
+				/* unfinished request; close */
+				http_server_connection_close(&conn,
+					"Remote closed connection unexpectedly");
+			} else {
+				/* a request is still processing; only drop input io for now.
+				   the other end may only have shutdown one direction */
+				conn->input_broken = TRUE;
+				http_server_connection_input_halt(conn);
+			}
+		}
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static bool
+http_server_connection_finish_request(struct http_server_connection *conn)
+{
+	struct http_server_request *req;
+	enum http_request_parse_error error_code;
+	const char *error;
+	int ret;
+
+	req = conn->request_queue_tail;
+	if (req != NULL &&
+		req->state == HTTP_SERVER_REQUEST_STATE_SUBMITTED_RESPONSE) {
+
+		http_server_connection_debug(conn, "Finish receiving request");
+
+		ret = http_request_parse_finish_payload
+			(conn->http_parser, &error_code, &error);
+		if (ret <= 0 &&
+			!http_server_connection_check_input(conn))
+			return FALSE;
+		if (ret < 0) {
+			http_server_connection_ref(conn);
+
+			http_server_connection_client_error(conn,
+				"Client sent invalid request: %s", error);
+
+			switch (error_code) {
+			case HTTP_REQUEST_PARSE_ERROR_PAYLOAD_TOO_LARGE:
+				conn->input_broken = TRUE;
+				http_server_request_fail_close(req,
+					413, "Payload Too Large");
+				break;
+			default:
+				i_unreached();
+			}
+
+			http_server_connection_unref(&conn);
+			return FALSE;
+		}
+		if (ret == 0)
+			return FALSE;
+		http_server_request_ready_to_respond(req);
+	}
+
+	return TRUE;
+}
+
 static void http_server_connection_input(struct connection *_conn)
 {
 	struct http_server_connection *conn =
 		(struct http_server_connection *)_conn;
-	struct http_server_request *req, *pending_request;
+	struct http_server_request *req;
 	enum http_request_parse_error error_code;
 	const char *error;
 	bool cont;
 	int ret;
 
+	i_assert(!conn->in_req_callback);
 	i_assert(!conn->input_broken && conn->incoming_payload == NULL);
 	i_assert(!conn->close_indicated);
 
@@ -406,13 +540,17 @@ static void http_server_connection_input(struct connection *_conn)
 		http_server_payload_finished(conn);
 	}
 
+	/* finish up pending request */
+	if (!http_server_connection_finish_request(conn))
+		return;
+
 	/* create request object if none was created already */
 	if (conn->request_queue_tail != NULL &&
 		conn->request_queue_tail->state == HTTP_SERVER_REQUEST_STATE_NEW) {
 		if (conn->request_queue_count >
 			conn->server->set.max_pipelined_requests) {
 			/* pipeline full */
-			http_server_connection_input_halt(conn);
+			http_server_connection_pipeline_handle_full(conn);
 			return;
 		}
 		/* continue last unfinished request*/
@@ -420,17 +558,13 @@ static void http_server_connection_input(struct connection *_conn)
 	} else {
 		if (conn->request_queue_count >=
 			conn->server->set.max_pipelined_requests) {
-			/* pipeline full */			
-			http_server_connection_input_halt(conn);
+			/* pipeline full */
+			http_server_connection_pipeline_handle_full(conn);
 			return;
 		}
 		/* start new request */
 		req = http_server_request_new(conn);
 	}
-
-	pending_request = (req->prev != NULL &&
-		req->prev->state == HTTP_SERVER_REQUEST_STATE_SUBMITTED_RESPONSE ?
-		req->prev : NULL);
 
 	/* parse requests */
 	ret = 1;
@@ -439,15 +573,13 @@ static void http_server_connection_input(struct connection *_conn)
 		while ((ret = http_request_parse_next	(conn->http_parser,
 			req->pool, &req->req, &error_code, &error)) > 0) {
 
-			if (pending_request != NULL) {
-				/* previous request is now fully read and ready to respond */
-				http_server_request_ready_to_respond(pending_request);
-			}
-
-			http_server_connection_debug(conn,
-				"Received new request %s", http_server_request_label(req));
-
 			conn->stats.request_count++;
+			http_server_connection_debug(conn,
+				"Received new request %s "
+				"(%u requests pending; %u maximum)",
+				http_server_request_label(req),
+				conn->request_queue_count,
+				conn->server->set.max_pipelined_requests);
 
 			http_server_request_ref(req);
 			i_assert(!req->delay_destroy);
@@ -470,8 +602,6 @@ static void http_server_connection_input(struct connection *_conn)
 				conn->close_indicated = TRUE;
 			if (req->destroy_pending)
 				http_server_request_destroy(&req);
-			else
-				http_server_request_unref(&req);
 
 			if (conn->closed) {
 				/* connection got closed in destroy callback */
@@ -484,10 +614,15 @@ static void http_server_connection_input(struct connection *_conn)
 				break;
 			}
 
-			if (conn->request_queue_count >=
-				conn->server->set.max_pipelined_requests) {
+			/* finish up pending request if possible */
+			if (!http_server_connection_finish_request(conn)) {
+				http_server_connection_unref(&conn);
+				return;
+			}
+
+			if (http_server_connection_pipeline_is_full(conn)) {
 				/* pipeline full */
-				http_server_connection_input_halt(conn);
+				http_server_connection_pipeline_handle_full(conn);
 				http_server_connection_unref(&conn);
 				return;
 			}
@@ -496,44 +631,14 @@ static void http_server_connection_input(struct connection *_conn)
 			req = http_server_request_new(conn);
 		}
 
-		http_server_connection_unref(&conn);
-		if (conn == NULL || conn->closed) {
+		if (http_server_connection_unref_is_closed(conn)) {
 			/* connection got closed */
 			return;
 		}
 
 		if (ret <= 0 &&
-	    (conn->conn.input->eof || conn->conn.input->stream_errno != 0)) {
-			int stream_errno = conn->conn.input->stream_errno;
-		
-			/* connection input broken; output may still be intact */
-			if (stream_errno != 0 && stream_errno != EPIPE &&
-				stream_errno != ECONNRESET) {
-				http_server_connection_client_error(conn,
-					"Connection lost: read(%s) failed: %s",
-						i_stream_get_name(conn->conn.input), strerror(stream_errno));
-				http_server_connection_close(&conn, "Read failure");
-			} else {
-				http_server_connection_debug(conn,
-					"Connection lost: Remote disconnected");
-
-				if (conn->request_queue_head == NULL) {
-					/* no pending requests; close */
-					http_server_connection_close(&conn, "Remote closed connection");
-				} else if (conn->request_queue_head->state <
-						HTTP_SERVER_REQUEST_STATE_SUBMITTED_RESPONSE) {
-					/* unfinished request; close */
-					http_server_connection_close(&conn,
-						"Remote closed connection unexpectedly");
-				} else {
-					/* a request is still processing; only drop input io for now.
-					   the other end may only have shutdown one direction */
-					conn->input_broken = TRUE;
-					http_server_connection_input_halt(conn);
-				}
-			}
+			!http_server_connection_check_input(conn))
 			return;
-		}
 
 		if (ret < 0) {
 			http_server_connection_ref(conn);
@@ -569,8 +674,7 @@ static void http_server_connection_input(struct connection *_conn)
 				i_unreached();
 			}
 
-			http_server_connection_unref(&conn);
-			if (conn == NULL || conn->closed) {
+			if (http_server_connection_unref_is_closed(conn)) {
 				/* connection got closed */
 				return;
 			}
@@ -580,12 +684,115 @@ static void http_server_connection_input(struct connection *_conn)
 			http_server_connection_input_halt(conn);
 			return;
 		}
+	}
+}
 
-		if (ret == 0 && pending_request != NULL &&
-			!http_request_parser_pending_payload(conn->http_parser)) {
-			/* previous request is now fully read and ready to respond */
-			http_server_request_ready_to_respond(pending_request);
+static void
+http_server_connection_discard_input(struct http_server_connection *conn)
+{
+	struct http_server *server = conn->server;
+	enum http_request_parse_error error_code;
+	const char *error;
+	int ret = 0;
+
+	i_assert(server->ioloop != NULL);
+
+	ret = http_request_parse_finish_payload
+		(conn->http_parser, &error_code, &error);
+
+	if (ret <= 0 &&
+		!http_server_connection_check_input(conn)) {
+		io_loop_stop(server->ioloop);
+		return;
+	}
+
+	if (ret < 0) {
+		http_server_connection_ref(conn);
+
+		http_server_connection_client_error(conn,
+			"Client sent invalid request: %s", error);
+
+		switch (error_code) {
+		case HTTP_REQUEST_PARSE_ERROR_PAYLOAD_TOO_LARGE:
+			conn->input_broken = TRUE;
+			http_server_request_fail_close(conn->request_queue_head,
+				413, "Payload Too Large");
+			break;
+		default:
+			i_unreached();
 		}
+
+		http_server_connection_unref(&conn);
+		io_loop_stop(server->ioloop);
+		return;
+	}
+
+	if (ret > 0)
+		io_loop_stop(server->ioloop);
+}
+
+int http_server_connection_discard_payload(
+	struct http_server_connection *conn)
+{
+	struct http_server *server = conn->server;
+	struct ioloop *prev_ioloop = current_ioloop;
+
+	i_assert(conn->conn.io == NULL);
+	i_assert(server->ioloop == NULL);
+
+	/* destroy payload wrapper early to advance state */
+	if (conn->incoming_payload != NULL) {
+		i_stream_unref(&conn->incoming_payload);
+		conn->incoming_payload = NULL;
+	}
+
+	/* finish reading payload from the parser */
+	if (http_request_parser_pending_payload
+		(conn->http_parser)) {
+		http_server_connection_debug(conn,
+			"Discarding remaining incoming payload");
+
+		server->ioloop = io_loop_create();
+		http_server_connection_switch_ioloop(conn);
+		io_loop_set_running(server->ioloop);
+
+		conn->conn.io = io_add_istream(conn->conn.input,
+			http_server_connection_discard_input, conn);
+		http_server_connection_discard_input(conn);
+		if (io_loop_is_running(server->ioloop))
+			io_loop_run(server->ioloop);
+		io_remove(&conn->conn.io);
+
+		io_loop_set_current(prev_ioloop);
+		http_server_connection_switch_ioloop(conn);
+		io_loop_set_current(server->ioloop);
+		io_loop_destroy(&server->ioloop);
+	} else {
+		http_server_connection_debug(conn,
+			"No remaining incoming payload");
+	}
+
+	/* check whether connection is still viable */
+	http_server_connection_ref(conn);
+	(void)http_server_connection_check_input(conn);
+	return http_server_connection_unref_is_closed(conn) ? -1 : 0;
+}
+
+void http_server_connection_write_failed(struct http_server_connection *conn,
+	const char *error)
+{
+	if (conn->closed)
+		return;
+
+	if (error != NULL) {
+		http_server_connection_error(conn,
+			"Connection lost: %s", error);
+		http_server_connection_close(&conn, "Write failure");
+	} else {
+		http_server_connection_debug(conn,
+			"Connection lost: Remote disconnected");
+		http_server_connection_close(&conn,
+			"Remote closed connection unexpectedly");
 	}
 }
 
@@ -594,6 +801,7 @@ http_server_connection_next_response(struct http_server_connection *conn)
 {
 	struct http_server_request *req;
 	const char *error = NULL;
+	int ret;
 
 	if (conn->output_locked)
 		return FALSE;
@@ -623,18 +831,17 @@ http_server_connection_next_response(struct http_server_connection *conn)
 			struct ostream *output = conn->conn.output;
 
 			if (o_stream_send(output, response, strlen(response)) < 0) {
-				if (errno != EPIPE && errno != ECONNRESET) {
-					http_server_connection_error(conn,
-						"Failed to send 100 response: write(%s) failed: %m",
-						o_stream_get_name(output));
-					http_server_connection_close(&conn,	"Write failure");
-				} else {
-					http_server_connection_debug(conn,
-						"Failed to send 100 response: Remote disconnected");
-					http_server_connection_close(&conn,
-						"Remote closed connection");
+				if (output->stream_errno != EPIPE &&
+					output->stream_errno != ECONNRESET) {
+					error = t_strdup_printf("write(%s) failed: %s",
+						o_stream_get_name(output),
+						o_stream_get_error(output));
 				}
+				http_server_connection_write_failed(conn, error);
+				return FALSE;
 			}
+
+			http_server_connection_debug(conn, "Sent 100 Continue");
 			req->sent_100_continue = TRUE;
 		}
 		return FALSE;
@@ -645,17 +852,12 @@ http_server_connection_next_response(struct http_server_connection *conn)
 
 	http_server_connection_timeout_start(conn);
 
-	if (http_server_response_send(req->response, &error) < 0) {
-		if (error != NULL) {
-			http_server_connection_error(conn,
-				"Failed to send response: %s", error);
-			http_server_connection_close(&conn, "Write failure");
-		} else {
-			http_server_connection_debug(conn,
-				"Failed to send response: Remote disconnected");
-			http_server_connection_close(&conn,
-				"Remote closed connection");
-		}
+	http_server_request_ref(req);
+	ret = http_server_response_send(req->response, &error);
+	http_server_request_unref(&req);
+
+	if (ret < 0) {
+		http_server_connection_write_failed(conn, error);
 		return FALSE;
 	}
 
@@ -672,8 +874,7 @@ static int http_server_connection_send_responses(
 	   blocks again, or the connection is closed */
 	while (!conn->closed && http_server_connection_next_response(conn));
 	
-	http_server_connection_unref(&conn);
-	if (conn == NULL || conn->closed)
+	if (http_server_connection_unref_is_closed(conn))
 		return -1;
 
 	/* accept more requests if possible */
@@ -685,30 +886,37 @@ static int http_server_connection_send_responses(
 	return 0;
 }
 
-int http_server_connection_output(struct http_server_connection *conn)
+int http_server_connection_flush(struct http_server_connection *conn)
 {
 	struct ostream *output = conn->conn.output;
-	const char *error = NULL;
 	int ret;
 
 	if ((ret = o_stream_flush(output)) <= 0) {
 		if (ret < 0) {
-			if (errno != EPIPE && errno != ECONNRESET) {
-				http_server_connection_error(conn,
-					"Connection lost: write(%s) failed: %m",
-						o_stream_get_name(output));
-				http_server_connection_close(&conn, "Write failure");
-			} else {
-				http_server_connection_debug(conn,
-					"Connection lost: Remote disconnected");
-				http_server_connection_close(&conn,
-					"Remote closed connection unexpectedly");
+			const char *error = NULL;
+
+			if (output->stream_errno != EPIPE &&
+				output->stream_errno != ECONNRESET) {
+				error = t_strdup_printf("write(%s) failed: %s",
+					o_stream_get_name(output),
+					o_stream_get_error(output));
 			}
+			http_server_connection_write_failed(conn, error);
 		}
 		return -1;
 	}
 
 	http_server_connection_timeout_reset(conn);
+	return 0;
+}
+
+int http_server_connection_output(struct http_server_connection *conn)
+{
+	bool pipeline_was_full =
+		http_server_connection_pipeline_is_full(conn);
+
+	if (http_server_connection_flush(conn) < 0)
+		return -1;
 
 	if (!conn->output_locked) {
 		if (http_server_connection_send_responses(conn) < 0)
@@ -716,19 +924,11 @@ int http_server_connection_output(struct http_server_connection *conn)
 	} else if (conn->request_queue_head != NULL) {
 		struct http_server_request *req = conn->request_queue_head;
 		struct http_server_response *resp = req->response;
+		const char *error = NULL;
 
 		i_assert(resp != NULL);
 		if (http_server_response_send_more(resp, &error) < 0) {
-			if (error != NULL ) {
-				http_server_connection_error(conn,
-					"Connection lost: %s", error);
-				http_server_connection_close(&conn, "Write failure");
-			} else {
-				http_server_connection_debug(conn,
-					"Connection lost: Remote disconnected");
-				http_server_connection_close(&conn,
-					"Remote closed connection unexpectedly");
-			}
+			http_server_connection_write_failed(conn, error);
 			return -1;
 		}
 
@@ -744,6 +944,13 @@ int http_server_connection_output(struct http_server_connection *conn)
 			http_server_connection_timeout_start(conn);
 		}
 	}
+
+	if (!http_server_connection_pipeline_is_full(conn)) {
+		http_server_connection_input_resume(conn);
+		if (pipeline_was_full && conn->conn.io != NULL)
+			i_stream_set_input_pending(conn->conn.input, TRUE);
+	}
+
 	return 1;
 }
 
@@ -756,7 +963,7 @@ void http_server_connection_trigger_responses(
 bool
 http_server_connection_pending_payload(struct http_server_connection *conn)
 {
-	return conn->incoming_payload != NULL;
+	return http_request_parser_pending_payload(conn->http_parser);
 }
 
 static struct connection_settings http_server_connection_set = {
@@ -839,6 +1046,8 @@ static void
 http_server_connection_disconnect(struct http_server_connection *conn,
 	const char *reason)
 {
+	struct http_server_request *req, *req_next;
+
 	if (conn->closed)
 		return;
 
@@ -850,6 +1059,14 @@ http_server_connection_disconnect(struct http_server_connection *conn,
 
 	/* preserve statistics */
 	http_server_connection_update_stats(conn);
+
+	/* drop all requests before connection is closed */
+	req = conn->request_queue_head;
+	while (req != NULL) {
+		req_next = req->next;
+		http_server_request_abort(&req, NULL);
+		req = req_next;
+	}
 
 	if (conn->to_input != NULL)
 		timeout_remove(&conn->to_input);
@@ -874,25 +1091,19 @@ http_server_connection_disconnect(struct http_server_connection *conn,
 	connection_disconnect(&conn->conn);
 }
 
-void http_server_connection_unref(struct http_server_connection **_conn)
+bool http_server_connection_unref(struct http_server_connection **_conn)
 {
 	struct http_server_connection *conn = *_conn;
-	struct http_server_request *req, *req_next;
 
 	i_assert(conn->refcount > 0);
+
+	*_conn = NULL;
 	if (--conn->refcount > 0)
-		return;
+		return TRUE;
 
 	http_server_connection_disconnect(conn, NULL);
 
 	http_server_connection_debug(conn, "Connection destroy");
-
-	req = conn->request_queue_head;
-	while (req != NULL) {
-		req_next = req->next;
-		http_server_request_abort(&req);
-		req = req_next;
-	}
 
 	if (conn->ssl_iostream != NULL)
 		ssl_iostream_unref(&conn->ssl_iostream);
@@ -906,7 +1117,17 @@ void http_server_connection_unref(struct http_server_connection **_conn)
 
 	i_free(conn->disconnect_reason);
 	i_free(conn);
-	*_conn = NULL;
+	return FALSE;
+}
+
+static bool
+http_server_connection_unref_is_closed(struct http_server_connection *conn)
+{
+	bool closed = conn->closed;
+
+	if (!http_server_connection_unref(&conn))
+		closed = TRUE;
+	return closed;
 }
 
 void http_server_connection_close(struct http_server_connection **_conn,
@@ -943,11 +1164,18 @@ void http_server_connection_tunnel(struct http_server_connection **_conn,
 
 void http_server_connection_switch_ioloop(struct http_server_connection *conn)
 {
+	if (conn->switching_ioloop)
+		return;
+
+	conn->switching_ioloop = TRUE;
 	if (conn->to_input != NULL)
 		conn->to_input = io_loop_move_timeout(&conn->to_input);
 	if (conn->to_idle != NULL)
 		conn->to_idle = io_loop_move_timeout(&conn->to_idle);
 	if (conn->io_resp_payload != NULL)
 		conn->io_resp_payload = io_loop_move_io(&conn->io_resp_payload);
+	if (conn->incoming_payload != NULL)
+		i_stream_switch_ioloop(conn->incoming_payload);
 	connection_switch_ioloop(&conn->conn);
+	conn->switching_ioloop = FALSE;
 }

@@ -1,6 +1,8 @@
 Doveadm protocol
 ================
 
+See also <doveadm HTTP protocol> [Design.DoveadmProtocol.HTTP.txt].
+
 doveadm-server can be accessed via UNIX sockets or TCP protocol (by adding
 inet_listener to doveadm service). The protocol looks like:
 
@@ -84,4 +86,4 @@ line. So in the above case the protocol output will be:
 fa8cb722dfad9c52b62600007049b30b<tab>125159<tab>fa8cb722dfad9c52b62600007049b30b<tab>125160
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-12-11 04:45)
+(This file was created from the wiki on 2016-03-16 04:44)

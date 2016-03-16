@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
@@ -140,7 +140,7 @@ static void test_json_parser_success(bool full_size)
 			} else {
 				ret = jsoninput != NULL ? 1 :
 					json_parse_next_stream(parser, &jsoninput);
-				if (jsoninput != NULL)
+				if (ret > 0 && jsoninput != NULL)
 					ret = stream_read_value(&jsoninput, &value);
 				type = TYPE_STREAM;
 			}
@@ -163,8 +163,127 @@ static void test_json_parser_success(bool full_size)
 	test_end();
 }
 
+static void test_json_parser_skip_array(void)
+{
+	static const char *test_input =
+		"[ 1, {\"foo\": 1 }, 2, \"bar\", 3, 1.234, 4, [], 5, [[]], 6, true ]";
+	struct json_parser *parser;
+	struct istream *input;
+	enum json_type type;
+	const char *value, *error;
+	int i;
+
+	test_begin("json parser skip array");
+
+	input = test_istream_create_data(test_input, strlen(test_input));
+	parser = json_parser_init_flags(input, JSON_PARSER_NO_ROOT_OBJECT);
+	test_assert(json_parse_next(parser, &type, &value) > 0 &&
+		    type == JSON_TYPE_ARRAY);
+	for (i = 1; i <= 6; i++) {
+		test_assert(json_parse_next(parser, &type, &value) > 0 &&
+			    type == JSON_TYPE_NUMBER && atoi(value) == i);
+		json_parse_skip_next(parser);
+	}
+	test_assert(json_parse_next(parser, &type, &value) > 0 &&
+		    type == JSON_TYPE_ARRAY_END);
+	test_assert(json_parser_deinit(&parser, &error) == 0);
+	i_stream_unref(&input);
+	test_end();
+}
+
+static int
+test_json_parse_input(const char *test_input, enum json_parser_flags flags)
+{
+	struct json_parser *parser;
+	struct istream *input;
+	enum json_type type;
+	const char *value, *error;
+	int ret = 0;
+
+	input = test_istream_create_data(test_input, strlen(test_input));
+	parser = json_parser_init_flags(input, flags);
+	while (json_parse_next(parser, &type, &value) > 0)
+		ret++;
+	if (json_parser_deinit(&parser, &error) < 0)
+		ret = -1;
+	i_stream_unref(&input);
+	return ret;
+}
+
+static void test_json_parser_primitive_values(void)
+{
+	static struct {
+		const char *str;
+		int ret;
+	} test_inputs[] = {
+		{ "\"hello\"", 1 },
+		{ "null", 1 },
+		{ "1234", 1 },
+		{ "1234.1234", 1 },
+		{ "{}", 2 },
+		{ "[]", 2 },
+		{ "true", 1 },
+		{ "false", 1 }
+	};
+	unsigned int i;
+
+	test_begin("json_parser (primitives)");
+	for (i = 0; i < N_ELEMENTS(test_inputs); i++)
+		test_assert_idx(test_json_parse_input(test_inputs[i].str, JSON_PARSER_NO_ROOT_OBJECT) == test_inputs[i].ret, i);
+	test_end();
+}
+
+static void test_json_parser_errors(void)
+{
+	static const char *test_inputs[] = {
+		"{",
+		"{:}",
+		"{\"foo\":}",
+		"{\"foo\" []}",
+		"{\"foo\": [1}",
+		"{\"foo\": [1,]}",
+		"{\"foo\": [1,]}",
+		"{\"foo\": 1,}",
+		"{\"foo\": 1.}}",
+		"{\"foo\": 1},{}"
+	};
+	unsigned int i;
+
+	test_begin("json parser error handling");
+	for (i = 0; i < N_ELEMENTS(test_inputs); i++)
+		test_assert_idx(test_json_parse_input(test_inputs[i], 0) < 0, i);
+	test_end();
+}
+
+static void test_json_append_escaped(void)
+{
+	string_t *str = t_str_new(32);
+
+	test_begin("json_append_escaped()");
+	json_append_escaped(str, "\b\f\r\n\t\"\\\001\002-\xC3\xA4");
+	test_assert(strcmp(str_c(str), "\\b\\f\\r\\n\\t\\\"\\\\\\u0001\\u0002-\xC3\xA4") == 0);
+	test_end();
+}
+
+static void test_json_append_escaped_data(void)
+{
+	static const unsigned char test_input[] =
+		"\b\f\r\n\t\"\\\000\001\002-\xC3\xA4";
+	string_t *str = t_str_new(32);
+
+	test_begin("json_append_escaped()");
+	json_append_escaped_data(str, test_input, sizeof(test_input)-1);
+	test_assert(strcmp(str_c(str), "\\b\\f\\r\\n\\t\\\"\\\\\\u0000\\u0001\\u0002-\xC3\xA4") == 0);
+	test_end();
+}
+
 void test_json_parser(void)
 {
 	test_json_parser_success(TRUE);
 	test_json_parser_success(FALSE);
+	test_json_parser_skip_array();
+	test_json_parser_primitive_values();
+	test_json_parser_errors();
+	test_json_append_escaped();
+	test_json_append_escaped_data();
 }

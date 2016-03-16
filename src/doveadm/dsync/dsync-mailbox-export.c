@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -28,6 +28,7 @@ struct dsync_mailbox_exporter {
 	struct mailbox_transaction_context *trans;
 	struct mail_search_context *search_ctx;
 	unsigned int search_pos, search_count;
+	unsigned int hdr_hash_version;
 
 	/* GUID => instances */
 	HASH_TABLE(char *, struct dsync_mail_guid_instances *) export_guids;
@@ -162,7 +163,7 @@ exporter_get_guids(struct dsync_mailbox_exporter *exporter,
 
 	if (!exporter->mails_have_guids) {
 		/* get header hash also */
-		if (dsync_mail_get_hdr_hash(mail, hdr_hash_r) < 0)
+		if (dsync_mail_get_hdr_hash(mail, exporter->hdr_hash_version, hdr_hash_r) < 0)
 			return dsync_mail_error(exporter, mail, "hdr-stream");
 		return 1;
 	} else if (**guid_r == '\0') {
@@ -502,6 +503,8 @@ dsync_mailbox_export_init(struct mailbox *box,
 		(flags & DSYNC_MAILBOX_EXPORTER_FLAG_MINIMAL_DMAIL_FILL) != 0;
 	exporter->export_received_timestamps =
 		(flags & DSYNC_MAILBOX_EXPORTER_FLAG_TIMESTAMPS) != 0;
+	exporter->hdr_hash_version =
+		(flags & DSYNC_MAILBOX_EXPORTER_FLAG_HDR_HASH_V2) ? 2 : 1;
 	p_array_init(&exporter->requested_uids, pool, 16);
 	p_array_init(&exporter->search_uids, pool, 16);
 	hash_table_create(&exporter->export_guids, pool, 0, str_hash, strcmp);
@@ -645,38 +648,41 @@ dsync_mailbox_export_iter_next_attr(struct dsync_mailbox_exporter *exporter)
 	return dsync_mailbox_export_iter_next_nonexistent_attr(exporter);
 }
 
-const struct dsync_mailbox_attribute *
-dsync_mailbox_export_next_attr(struct dsync_mailbox_exporter *exporter)
+int dsync_mailbox_export_next_attr(struct dsync_mailbox_exporter *exporter,
+				   const struct dsync_mailbox_attribute **attr_r)
 {
+	int ret;
+
 	if (exporter->error != NULL)
-		return NULL;
+		return -1;
 
 	if (exporter->attr.value_stream != NULL)
 		i_stream_unref(&exporter->attr.value_stream);
 
 	if (exporter->attr_iter != NULL) {
-		if (dsync_mailbox_export_iter_next_attr(exporter) <= 0)
-			return NULL;
+		ret = dsync_mailbox_export_iter_next_attr(exporter);
 	} else {
-		if (dsync_mailbox_export_iter_next_nonexistent_attr(exporter) <= 0)
-			return NULL;
+		ret = dsync_mailbox_export_iter_next_nonexistent_attr(exporter);
 	}
-	return &exporter->attr;
+	if (ret > 0)
+		*attr_r = &exporter->attr;
+	return ret;
 }
 
-const struct dsync_mail_change *
-dsync_mailbox_export_next(struct dsync_mailbox_exporter *exporter)
+int dsync_mailbox_export_next(struct dsync_mailbox_exporter *exporter,
+			      const struct dsync_mail_change **change_r)
 {
 	struct dsync_mail_change *const *changes;
 	unsigned int count;
 
 	if (exporter->error != NULL)
-		return NULL;
+		return -1;
 
 	changes = array_get(&exporter->sorted_changes, &count);
 	if (exporter->change_idx == count)
-		return NULL;
-	return changes[exporter->change_idx++];
+		return 0;
+	*change_r = changes[exporter->change_idx++];
+	return 1;
 }
 
 static int
@@ -834,8 +840,8 @@ void dsync_mailbox_export_want_mail(struct dsync_mailbox_exporter *exporter,
 	instances->requested = TRUE;
 }
 
-const struct dsync_mail *
-dsync_mailbox_export_next_mail(struct dsync_mailbox_exporter *exporter)
+int dsync_mailbox_export_next_mail(struct dsync_mailbox_exporter *exporter,
+				   const struct dsync_mail **mail_r)
 {
 	struct mail *mail;
 	const char *const *guids;
@@ -843,22 +849,24 @@ dsync_mailbox_export_next_mail(struct dsync_mailbox_exporter *exporter)
 	int ret;
 
 	if (exporter->error != NULL)
-		return NULL;
+		return -1;
 	if (!exporter->body_search_initialized) {
 		exporter->body_search_initialized = TRUE;
 		if (dsync_mailbox_export_body_search_init(exporter) < 0) {
 			i_assert(exporter->error != NULL);
-			return NULL;
+			return -1;
 		}
 	}
 
 	while (mailbox_search_next(exporter->search_ctx, &mail)) {
 		exporter->search_pos++;
-		if ((ret = dsync_mailbox_export_mail(exporter, mail)) > 0)
-			return &exporter->dsync_mail;
+		if ((ret = dsync_mailbox_export_mail(exporter, mail)) > 0) {
+			*mail_r = &exporter->dsync_mail;
+			return 1;
+		}
 		if (ret < 0) {
 			i_assert(exporter->error != NULL);
-			return NULL;
+			return -1;
 		}
 		/* the message was expunged. if the GUID has another instance,
 		   try sending it later. */
@@ -869,11 +877,11 @@ dsync_mailbox_export_next_mail(struct dsync_mailbox_exporter *exporter)
 	dsync_mailbox_export_body_search_deinit(exporter);
 	if ((ret = dsync_mailbox_export_body_search_init(exporter)) < 0) {
 		i_assert(exporter->error != NULL);
-		return NULL;
+		return -1;
 	}
 	if (ret > 0) {
 		/* not finished yet */
-		return dsync_mailbox_export_next_mail(exporter);
+		return dsync_mailbox_export_next_mail(exporter, mail_r);
 	}
 
 	/* finished with messages. if there are any expunged messages,
@@ -883,9 +891,10 @@ dsync_mailbox_export_next_mail(struct dsync_mailbox_exporter *exporter)
 		memset(&exporter->dsync_mail, 0, sizeof(exporter->dsync_mail));
 		exporter->dsync_mail.guid =
 			guids[exporter->expunged_guid_idx++];
-		return &exporter->dsync_mail;
+		*mail_r = &exporter->dsync_mail;
+		return 1;
 	}
-	return NULL;
+	return 0;
 }
 
 int dsync_mailbox_export_deinit(struct dsync_mailbox_exporter **_exporter,

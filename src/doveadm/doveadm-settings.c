@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -69,6 +69,7 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, ssl_client_ca_dir),
 	DEF(SET_STR, ssl_client_ca_file),
 	DEF(SET_STR, director_username_hash),
+	DEF(SET_STR, doveadm_api_key),
 
 	{ SET_STRLIST, "plugin", offsetof(struct doveadm_settings, plugin_envs), NULL },
 
@@ -92,6 +93,7 @@ const struct doveadm_settings doveadm_default_settings = {
 	.ssl_client_ca_dir = "",
 	.ssl_client_ca_file = "",
 	.director_username_hash = "%Lu",
+	.doveadm_api_key = "",
 
 	.plugin_envs = ARRAY_INIT
 };

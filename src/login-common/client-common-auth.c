@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "hostpid.h"
 #include "login-common.h"
@@ -397,6 +397,12 @@ client_auth_handle_reply(struct client *client,
 			return FALSE;
 		if (proxy_start(client, reply) < 0)
 			client_auth_failed(client);
+		else {
+			/* this for plugins being able th hook into auth reply
+			   when proxying is used */
+			client_auth_result(client, CLIENT_AUTH_RESULT_SUCCESS,
+					   reply, NULL);
+		}
 		return TRUE;
 	}
 
@@ -552,17 +558,19 @@ sasl_callback(struct client *client, enum sasl_server_reply sasl_reply,
 		 sasl_reply == SASL_SERVER_REPLY_AUTH_ABORTED ||
 		 sasl_reply == SASL_SERVER_REPLY_MASTER_FAILED);
 
+	memset(&reply, 0, sizeof(reply));
 	switch (sasl_reply) {
 	case SASL_SERVER_REPLY_SUCCESS:
 		if (client->to_auth_waiting != NULL)
 			timeout_remove(&client->to_auth_waiting);
 		if (args != NULL) {
 			client_auth_parse_args(client, args, &reply);
+			reply.all_fields = args;
 			if (client_auth_handle_reply(client, &reply, TRUE))
 				break;
 		}
 		client_auth_result(client, CLIENT_AUTH_RESULT_SUCCESS,
-				   NULL, NULL);
+				   &reply, NULL);
 		client_destroy_success(client, "Login");
 		break;
 	case SASL_SERVER_REPLY_AUTH_FAILED:
@@ -572,20 +580,21 @@ sasl_callback(struct client *client, enum sasl_server_reply sasl_reply,
 		if (args != NULL) {
 			client_auth_parse_args(client, args, &reply);
 			reply.nologin = TRUE;
+			reply.all_fields = args;
 			if (client_auth_handle_reply(client, &reply, FALSE))
 				break;
 		}
 
 		if (sasl_reply == SASL_SERVER_REPLY_AUTH_ABORTED) {
 			client_auth_result(client, CLIENT_AUTH_RESULT_ABORTED,
-				NULL, "Authentication aborted by client.");
+				&reply, "Authentication aborted by client.");
 		} else if (data == NULL) {
 			client_auth_result(client,
-				CLIENT_AUTH_RESULT_AUTHFAILED, NULL,
+				CLIENT_AUTH_RESULT_AUTHFAILED, &reply,
 				AUTH_FAILED_MSG);
 		} else {
 			client_auth_result(client,
-				CLIENT_AUTH_RESULT_AUTHFAILED_REASON, NULL,
+				CLIENT_AUTH_RESULT_AUTHFAILED_REASON, &reply,
 				data);
 		}
 
@@ -597,7 +606,7 @@ sasl_callback(struct client *client, enum sasl_server_reply sasl_reply,
 			/* authentication itself succeeded, we just hit some
 			   internal failure. */
 			client_auth_result(client, CLIENT_AUTH_RESULT_TEMPFAIL,
-					   NULL, data);
+					   &reply, data);
 		}
 
 		/* the fd may still be hanging somewhere in kernel or another

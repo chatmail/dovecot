@@ -111,11 +111,12 @@ am_libmail_la_OBJECTS = istream-attachment-connector.lo \
 	istream-qp-decoder.lo mail-html2text.lo mail-user-hash.lo \
 	mbox-from.lo message-address.lo message-binary-part.lo \
 	message-date.lo message-decoder.lo message-header-decode.lo \
-	message-header-encode.lo message-header-parser.lo \
-	message-id.lo message-parser.lo message-part.lo \
-	message-part-serialize.lo message-search.lo message-size.lo \
-	message-snippet.lo ostream-dot.lo qp-decoder.lo \
-	quoted-printable.lo rfc2231-parser.lo rfc822-parser.lo
+	message-header-encode.lo message-header-hash.lo \
+	message-header-parser.lo message-id.lo message-parser.lo \
+	message-part.lo message-part-serialize.lo message-search.lo \
+	message-size.lo message-snippet.lo ostream-dot.lo \
+	qp-decoder.lo quoted-printable.lo rfc2231-parser.lo \
+	rfc822-parser.lo
 libmail_la_OBJECTS = $(am_libmail_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -130,11 +131,13 @@ am__EXEEXT_1 = test-istream-dot$(EXEEXT) \
 	test-message-date$(EXEEXT) test-message-decoder$(EXEEXT) \
 	test-message-header-decode$(EXEEXT) \
 	test-message-header-encode$(EXEEXT) \
+	test-message-header-hash$(EXEEXT) \
 	test-message-header-parser$(EXEEXT) test-message-id$(EXEEXT) \
 	test-message-parser$(EXEEXT) test-message-part$(EXEEXT) \
-	test-message-snippet$(EXEEXT) test-ostream-dot$(EXEEXT) \
-	test-qp-decoder$(EXEEXT) test-quoted-printable$(EXEEXT) \
-	test-rfc2231-parser$(EXEEXT) test-rfc822-parser$(EXEEXT)
+	test-message-search$(EXEEXT) test-message-snippet$(EXEEXT) \
+	test-ostream-dot$(EXEEXT) test-qp-decoder$(EXEEXT) \
+	test-quoted-printable$(EXEEXT) test-rfc2231-parser$(EXEEXT) \
+	test-rfc822-parser$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am_test_istream_attachment_OBJECTS =  \
 	test-istream-attachment.$(OBJEXT)
@@ -172,6 +175,10 @@ am_test_message_header_encode_OBJECTS =  \
 	test-message-header-encode.$(OBJEXT)
 test_message_header_encode_OBJECTS =  \
 	$(am_test_message_header_encode_OBJECTS)
+am_test_message_header_hash_OBJECTS =  \
+	test-message-header-hash.$(OBJEXT)
+test_message_header_hash_OBJECTS =  \
+	$(am_test_message_header_hash_OBJECTS)
 am_test_message_header_parser_OBJECTS =  \
 	test-message-header-parser.$(OBJEXT)
 test_message_header_parser_OBJECTS =  \
@@ -182,6 +189,8 @@ am_test_message_parser_OBJECTS = test-message-parser.$(OBJEXT)
 test_message_parser_OBJECTS = $(am_test_message_parser_OBJECTS)
 am_test_message_part_OBJECTS = test-message-part.$(OBJEXT)
 test_message_part_OBJECTS = $(am_test_message_part_OBJECTS)
+am_test_message_search_OBJECTS = test-message-search.$(OBJEXT)
+test_message_search_OBJECTS = $(am_test_message_search_OBJECTS)
 am_test_message_snippet_OBJECTS = test-message-snippet.$(OBJEXT)
 test_message_snippet_OBJECTS = $(am_test_message_snippet_OBJECTS)
 am_test_ostream_dot_OBJECTS = test-ostream-dot.$(OBJEXT)
@@ -238,11 +247,12 @@ SOURCES = $(libmail_la_SOURCES) $(test_istream_attachment_SOURCES) \
 	$(test_message_decoder_SOURCES) \
 	$(test_message_header_decode_SOURCES) \
 	$(test_message_header_encode_SOURCES) \
+	$(test_message_header_hash_SOURCES) \
 	$(test_message_header_parser_SOURCES) \
 	$(test_message_id_SOURCES) $(test_message_parser_SOURCES) \
-	$(test_message_part_SOURCES) $(test_message_snippet_SOURCES) \
-	$(test_ostream_dot_SOURCES) $(test_qp_decoder_SOURCES) \
-	$(test_quoted_printable_SOURCES) \
+	$(test_message_part_SOURCES) $(test_message_search_SOURCES) \
+	$(test_message_snippet_SOURCES) $(test_ostream_dot_SOURCES) \
+	$(test_qp_decoder_SOURCES) $(test_quoted_printable_SOURCES) \
 	$(test_rfc2231_parser_SOURCES) $(test_rfc822_parser_SOURCES)
 DIST_SOURCES = $(libmail_la_SOURCES) \
 	$(test_istream_attachment_SOURCES) \
@@ -255,11 +265,12 @@ DIST_SOURCES = $(libmail_la_SOURCES) \
 	$(test_message_decoder_SOURCES) \
 	$(test_message_header_decode_SOURCES) \
 	$(test_message_header_encode_SOURCES) \
+	$(test_message_header_hash_SOURCES) \
 	$(test_message_header_parser_SOURCES) \
 	$(test_message_id_SOURCES) $(test_message_parser_SOURCES) \
-	$(test_message_part_SOURCES) $(test_message_snippet_SOURCES) \
-	$(test_ostream_dot_SOURCES) $(test_qp_decoder_SOURCES) \
-	$(test_quoted_printable_SOURCES) \
+	$(test_message_part_SOURCES) $(test_message_search_SOURCES) \
+	$(test_message_snippet_SOURCES) $(test_ostream_dot_SOURCES) \
+	$(test_qp_decoder_SOURCES) $(test_quoted_printable_SOURCES) \
 	$(test_rfc2231_parser_SOURCES) $(test_rfc822_parser_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
@@ -395,6 +406,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -528,6 +540,7 @@ libmail_la_SOURCES = \
 	message-decoder.c \
 	message-header-decode.c \
 	message-header-encode.c \
+	message-header-hash.c \
 	message-header-parser.c \
 	message-id.c \
 	message-parser.c \
@@ -563,6 +576,7 @@ headers = \
 	message-decoder.h \
 	message-header-decode.h \
 	message-header-encode.h \
+	message-header-hash.h \
 	message-header-parser.h \
 	message-id.h \
 	message-parser.h \
@@ -592,10 +606,12 @@ test_programs = \
 	test-message-decoder \
 	test-message-header-decode \
 	test-message-header-encode \
+	test-message-header-hash \
 	test-message-header-parser \
 	test-message-id \
 	test-message-parser \
 	test-message-part \
+	test-message-search \
 	test-message-snippet \
 	test-ostream-dot \
 	test-qp-decoder \
@@ -648,6 +664,9 @@ test_message_header_decode_DEPENDENCIES = $(test_deps)
 test_message_header_encode_SOURCES = test-message-header-encode.c
 test_message_header_encode_LDADD = message-header-encode.lo $(test_libs)
 test_message_header_encode_DEPENDENCIES = $(test_deps)
+test_message_header_hash_SOURCES = test-message-header-hash.c
+test_message_header_hash_LDADD = message-header-hash.lo $(test_libs)
+test_message_header_hash_DEPENDENCIES = $(test_deps)
 test_message_header_parser_SOURCES = test-message-header-parser.c
 test_message_header_parser_LDADD = message-header-parser.lo $(test_libs)
 test_message_header_parser_DEPENDENCIES = $(test_deps)
@@ -660,6 +679,9 @@ test_message_parser_DEPENDENCIES = $(test_deps)
 test_message_part_SOURCES = test-message-part.c
 test_message_part_LDADD = message-part.lo message-parser.lo message-header-parser.lo message-size.lo rfc822-parser.lo rfc2231-parser.lo $(test_libs)
 test_message_part_DEPENDENCIES = $(test_deps)
+test_message_search_SOURCES = test-message-search.c
+test_message_search_LDADD = libmail.la ../lib-charset/libcharset.la $(test_libs)
+test_message_search_DEPENDENCIES = $(test_deps)
 test_message_snippet_SOURCES = test-message-snippet.c
 test_message_snippet_LDADD = message-snippet.lo mail-html2text.lo $(test_message_decoder_LDADD) message-parser.lo message-header-parser.lo message-header-decode.lo message-size.lo
 test_message_snippet_DEPENDENCIES = $(test_deps)
@@ -786,6 +808,10 @@ test-message-header-encode$(EXEEXT): $(test_message_header_encode_OBJECTS) $(tes
 	@rm -f test-message-header-encode$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_message_header_encode_OBJECTS) $(test_message_header_encode_LDADD) $(LIBS)
 
+test-message-header-hash$(EXEEXT): $(test_message_header_hash_OBJECTS) $(test_message_header_hash_DEPENDENCIES) $(EXTRA_test_message_header_hash_DEPENDENCIES) 
+	@rm -f test-message-header-hash$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_message_header_hash_OBJECTS) $(test_message_header_hash_LDADD) $(LIBS)
+
 test-message-header-parser$(EXEEXT): $(test_message_header_parser_OBJECTS) $(test_message_header_parser_DEPENDENCIES) $(EXTRA_test_message_header_parser_DEPENDENCIES) 
 	@rm -f test-message-header-parser$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_message_header_parser_OBJECTS) $(test_message_header_parser_LDADD) $(LIBS)
@@ -801,6 +827,10 @@ test-message-parser$(EXEEXT): $(test_message_parser_OBJECTS) $(test_message_pars
 test-message-part$(EXEEXT): $(test_message_part_OBJECTS) $(test_message_part_DEPENDENCIES) $(EXTRA_test_message_part_DEPENDENCIES) 
 	@rm -f test-message-part$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_message_part_OBJECTS) $(test_message_part_LDADD) $(LIBS)
+
+test-message-search$(EXEEXT): $(test_message_search_OBJECTS) $(test_message_search_DEPENDENCIES) $(EXTRA_test_message_search_DEPENDENCIES) 
+	@rm -f test-message-search$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_message_search_OBJECTS) $(test_message_search_LDADD) $(LIBS)
 
 test-message-snippet$(EXEEXT): $(test_message_snippet_OBJECTS) $(test_message_snippet_DEPENDENCIES) $(EXTRA_test_message_snippet_DEPENDENCIES) 
 	@rm -f test-message-snippet$(EXEEXT)
@@ -848,6 +878,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-decoder.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-header-decode.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-header-encode.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-header-hash.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-header-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-id.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-parser.Plo@am__quote@
@@ -873,10 +904,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-decoder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-header-decode.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-header-encode.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-header-hash.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-header-parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-id.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-part.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-search.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-snippet.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-ostream-dot.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-qp-decoder.Po@am__quote@

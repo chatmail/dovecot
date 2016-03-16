@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "llist.h"
@@ -13,6 +13,7 @@
 #include "mail-domain.h"
 #include "mail-ip.h"
 #include "client-export.h"
+#include "client-reset.h"
 #include "client.h"
 
 #include <unistd.h>
@@ -49,6 +50,8 @@ client_handle_request(struct client *client, const char *const *args,
 
 	if (strcmp(cmd, "EXPORT") == 0)
 		return client_export(client, args, error_r);
+	if (strcmp(cmd, "RESET") == 0)
+		return client_stats_reset(client, args, error_r);
 
 	*error_r = "Unknown command";
 	return -1;

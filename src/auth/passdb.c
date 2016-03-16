@@ -1,12 +1,10 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
 #include "password-scheme.h"
 #include "auth-worker-server.h"
-#include "passdb-template.h"
 #include "passdb.h"
-
 
 static ARRAY(struct passdb_module_interface *) passdb_interfaces;
 static ARRAY(struct passdb_module *) passdb_modules;
@@ -223,11 +221,6 @@ passdb_preinit(pool_t pool, const struct auth_passdb_settings *set)
 	passdb->iface = *iface;
 	passdb->args = p_strdup(pool, set->args);
 
-	passdb->default_fields_tmpl =
-		passdb_template_build(pool, set->default_fields);
-	passdb->override_fields_tmpl =
-		passdb_template_build(pool, set->override_fields);
-
 	array_append(&passdb_modules, &passdb, 1);
 	return passdb;
 }
@@ -237,9 +230,6 @@ void passdb_init(struct passdb_module *passdb)
 	if (passdb->iface.init != NULL && passdb->init_refcount == 0)
 		passdb->iface.init(passdb);
 	passdb->init_refcount++;
-
-	i_assert(passdb->default_pass_scheme != NULL ||
-		 passdb->cache_key == NULL);
 }
 
 void passdb_deinit(struct passdb_module *passdb)

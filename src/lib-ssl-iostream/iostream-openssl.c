@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -12,6 +12,12 @@ static void openssl_iostream_free(struct ssl_iostream *ssl_io);
 static void
 openssl_iostream_set_error(struct ssl_iostream *ssl_io, const char *str)
 {
+	if (ssl_io->verbose) {
+		/* This error should normally be logged by lib-ssl-iostream's
+		   caller. But if verbose=TRUE, log it here as well to make
+		   sure that the error is always logged. */
+		i_debug("%sSSL error: %s", ssl_io->log_prefix, str);
+	}
 	i_free(ssl_io->last_error);
 	ssl_io->last_error = i_strdup(str);
 }
@@ -29,15 +35,15 @@ static void openssl_info_callback(const SSL *ssl, int where, int ret)
 				SSL_alert_desc_string_long(ret));
 			break;
 		default:
-			i_warning("%sSSL alert: where=0x%x, ret=%d: %s %s",
-				  ssl_io->log_prefix, where, ret,
-				  SSL_alert_type_string_long(ret),
-				  SSL_alert_desc_string_long(ret));
+			i_debug("%sSSL alert: where=0x%x, ret=%d: %s %s",
+				ssl_io->log_prefix, where, ret,
+				SSL_alert_type_string_long(ret),
+				SSL_alert_desc_string_long(ret));
 			break;
 		}
 	} else if (ret == 0) {
-		i_warning("%sSSL failed: where=0x%x: %s",
-			  ssl_io->log_prefix, where, SSL_state_string_long(ssl));
+		i_debug("%sSSL failed: where=0x%x: %s",
+			ssl_io->log_prefix, where, SSL_state_string_long(ssl));
 	} else {
 		i_debug("%sSSL: where=0x%x, ret=%d: %s",
 			ssl_io->log_prefix, where, ret,

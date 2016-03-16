@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -401,10 +401,14 @@ static void index_mail_init_parser(struct index_mail *mail)
 {
 	struct index_mail_data *data = &mail->data;
 	struct message_part *parts;
+	const char *error;
 
 	if (data->parser_ctx != NULL) {
 		data->parser_input = NULL;
-		(void)message_parser_deinit(&data->parser_ctx, &parts);
+		if (message_parser_deinit_from_parts(&data->parser_ctx, &parts, &error) < 0) {
+			index_mail_set_message_parts_corrupted(&mail->mail.mail, error);
+			data->parts = NULL;
+		}
 	}
 
 	if (data->parts == NULL) {

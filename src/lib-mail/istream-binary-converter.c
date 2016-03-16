@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -182,10 +182,19 @@ static ssize_t i_stream_binary_converter_read(struct istream_private *stream)
 
 	if (stream->pos - stream->skip >= stream->max_buffer_size)
 		return -2;
+	old_size = stream->pos - stream->skip;
 
 	switch (message_parser_parse_next_block(bstream->parser, &block)) {
 	case -1:
 		/* done / error */
+		if (bstream->convert_part != NULL &&
+		    bstream->base64_delayed_len > 0) {
+			/* flush any pending base64 output */
+			stream_encode_base64(bstream, "", 0);
+			new_size = stream->pos - stream->skip;
+			i_assert(old_size != new_size);
+			return new_size - old_size;
+		}
 		stream->istream.eof = TRUE;
 		stream->istream.stream_errno = stream->parent->stream_errno;
 		return -1;
@@ -195,8 +204,6 @@ static ssize_t i_stream_binary_converter_read(struct istream_private *stream)
 	default:
 		break;
 	}
-
-	old_size = stream->pos - stream->skip;
 
 	if (block.part != bstream->convert_part &&
 	    bstream->convert_part != NULL) {
@@ -267,8 +274,10 @@ static void i_stream_binary_converter_close(struct iostream_private *stream,
 		(struct binary_converter_istream *)stream;
 	struct message_part *parts;
 
-	if (bstream->parser != NULL)
-		(void)message_parser_deinit(&bstream->parser, &parts);
+	if (bstream->parser != NULL) {
+		if (message_parser_deinit(&bstream->parser, &parts) < 0)
+			i_unreached(); /* we didn't use preparsed message_parts */
+	}
 	if (bstream->pool != NULL)
 		pool_unref(&bstream->pool);
 	if (close_parent)

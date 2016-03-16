@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -165,5 +165,6 @@ struct mail_vfuncs cydir_mail_vfuncs = {
 	NULL,
 	index_mail_expunge,
 	index_mail_set_cache_corrupted,
-	index_mail_opened
+	index_mail_opened,
+	index_mail_set_cache_corrupted_reason
 };

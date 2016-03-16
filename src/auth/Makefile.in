@@ -146,8 +146,9 @@ am__uninstall_files_from_dir = { \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
 am__installdirs = "$(DESTDIR)$(auth_moduledir)" \
-	"$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(pkginc_libdir)"
-LTLIBRARIES = $(auth_module_LTLIBRARIES)
+	"$(DESTDIR)$(stats_moduledir)" "$(DESTDIR)$(pkglibexecdir)" \
+	"$(DESTDIR)$(pkginc_libdir)"
+LTLIBRARIES = $(auth_module_LTLIBRARIES) $(stats_module_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libauthdb_imap_la_DEPENDENCIES = ../lib-imap-client/libimap_client.la \
 	$(am__DEPENDENCIES_1)
@@ -188,6 +189,12 @@ libmech_gssapi_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	-o $@
 @GSSAPI_PLUGIN_TRUE@am_libmech_gssapi_la_rpath = -rpath \
 @GSSAPI_PLUGIN_TRUE@	$(auth_moduledir)
+am_libstats_auth_la_OBJECTS =
+libstats_auth_la_OBJECTS = $(am_libstats_auth_la_OBJECTS)
+libstats_auth_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(libstats_auth_la_LDFLAGS) $(LDFLAGS) \
+	-o $@
 am__EXEEXT_1 = test-auth-cache$(EXEEXT) \
 	test-auth-request-var-expand$(EXEEXT) test-db-dict$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS) $(pkglibexec_PROGRAMS)
@@ -199,12 +206,12 @@ am_auth_OBJECTS = auth.$(OBJEXT) auth-cache.$(OBJEXT) \
 	auth-postfix-connection.$(OBJEXT) \
 	mech-otp-skey-common.$(OBJEXT) mech-plain-common.$(OBJEXT) \
 	auth-penalty.$(OBJEXT) auth-request.$(OBJEXT) \
-	auth-request-handler.$(OBJEXT) \
+	auth-request-handler.$(OBJEXT) auth-request-stats.$(OBJEXT) \
 	auth-request-var-expand.$(OBJEXT) auth-settings.$(OBJEXT) \
-	auth-fields.$(OBJEXT) auth-token.$(OBJEXT) \
-	auth-worker-client.$(OBJEXT) auth-worker-server.$(OBJEXT) \
-	db-checkpassword.$(OBJEXT) db-dict.$(OBJEXT) \
-	db-dict-cache-key.$(OBJEXT) db-sql.$(OBJEXT) \
+	auth-stats.$(OBJEXT) auth-fields.$(OBJEXT) \
+	auth-token.$(OBJEXT) auth-worker-client.$(OBJEXT) \
+	auth-worker-server.$(OBJEXT) db-checkpassword.$(OBJEXT) \
+	db-dict.$(OBJEXT) db-dict-cache-key.$(OBJEXT) db-sql.$(OBJEXT) \
 	db-passwd-file.$(OBJEXT) main.$(OBJEXT) mech.$(OBJEXT) \
 	mech-anonymous.$(OBJEXT) mech-plain.$(OBJEXT) \
 	mech-login.$(OBJEXT) mech-cram-md5.$(OBJEXT) \
@@ -279,13 +286,14 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libpassword_a_SOURCES) $(libauthdb_imap_la_SOURCES) \
 	$(libauthdb_ldap_la_SOURCES) $(libmech_gssapi_la_SOURCES) \
-	$(auth_SOURCES) checkpassword-reply.c \
-	$(test_auth_cache_SOURCES) \
+	$(libstats_auth_la_SOURCES) $(auth_SOURCES) \
+	checkpassword-reply.c $(test_auth_cache_SOURCES) \
 	$(test_auth_request_var_expand_SOURCES) \
 	$(test_db_dict_SOURCES)
 DIST_SOURCES = $(libpassword_a_SOURCES) $(libauthdb_imap_la_SOURCES) \
 	$(am__libauthdb_ldap_la_SOURCES_DIST) \
-	$(am__libmech_gssapi_la_SOURCES_DIST) $(auth_SOURCES) \
+	$(am__libmech_gssapi_la_SOURCES_DIST) \
+	$(libstats_auth_la_SOURCES) $(auth_SOURCES) \
 	checkpassword-reply.c $(test_auth_cache_SOURCES) \
 	$(test_auth_request_var_expand_SOURCES) \
 	$(test_db_dict_SOURCES)
@@ -396,6 +404,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -525,6 +534,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-dns \
 	-I$(top_srcdir)/src/lib-sql \
 	-I$(top_srcdir)/src/lib-settings \
+	-I$(top_srcdir)/src/lib-stats \
 	-I$(top_srcdir)/src/lib-ntlm \
 	-I$(top_srcdir)/src/lib-otp \
 	-I$(top_srcdir)/src/lib-master \
@@ -563,8 +573,10 @@ auth_SOURCES = \
 	auth-penalty.c \
 	auth-request.c \
 	auth-request-handler.c \
+	auth-request-stats.c \
 	auth-request-var-expand.c \
 	auth-settings.c \
+	auth-stats.c \
 	auth-fields.c \
 	auth-token.c \
 	auth-worker-client.c \
@@ -632,8 +644,10 @@ headers = \
 	auth-penalty.h \
 	auth-request.h \
 	auth-request-handler.h \
+	auth-request-stats.h \
 	auth-request-var-expand.h \
 	auth-settings.h \
+	auth-stats.h \
 	auth-fields.h \
 	auth-token.h \
 	auth-worker-client.h \
@@ -681,6 +695,12 @@ checkpassword_reply_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 checkpassword_reply_sources = \
 	checkpassword-reply.c
 
+stats_moduledir = $(moduledir)/stats
+stats_module_LTLIBRARIES = libstats_auth.la
+libstats_auth_la_LDFLAGS = -module -avoid-version
+libstats_auth_la_LIBADD = auth-stats.lo $(LIBDOVECOT)
+libstats_auth_la_DEPENDENCIES = auth-stats.lo
+libstats_auth_la_SOURCES = 
 test_programs = \
 	test-auth-cache \
 	test-auth-request-var-expand \
@@ -776,6 +796,41 @@ clean-auth_moduleLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 
+install-stats_moduleLTLIBRARIES: $(stats_module_LTLIBRARIES)
+	@$(NORMAL_INSTALL)
+	@list='$(stats_module_LTLIBRARIES)'; test -n "$(stats_moduledir)" || list=; \
+	list2=; for p in $$list; do \
+	  if test -f $$p; then \
+	    list2="$$list2 $$p"; \
+	  else :; fi; \
+	done; \
+	test -z "$$list2" || { \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(stats_moduledir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(stats_moduledir)" || exit 1; \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 '$(DESTDIR)$(stats_moduledir)'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL) $(INSTALL_STRIP_FLAG) $$list2 "$(DESTDIR)$(stats_moduledir)"; \
+	}
+
+uninstall-stats_moduleLTLIBRARIES:
+	@$(NORMAL_UNINSTALL)
+	@list='$(stats_module_LTLIBRARIES)'; test -n "$(stats_moduledir)" || list=; \
+	for p in $$list; do \
+	  $(am__strip_dir) \
+	  echo " $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f '$(DESTDIR)$(stats_moduledir)/$$f'"; \
+	  $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=uninstall rm -f "$(DESTDIR)$(stats_moduledir)/$$f"; \
+	done
+
+clean-stats_moduleLTLIBRARIES:
+	-test -z "$(stats_module_LTLIBRARIES)" || rm -f $(stats_module_LTLIBRARIES)
+	@list='$(stats_module_LTLIBRARIES)'; \
+	locs=`for p in $$list; do echo $$p; done | \
+	      sed 's|^[^/]*$$|.|; s|/[^/]*$$||; s|$$|/so_locations|' | \
+	      sort -u`; \
+	test -z "$$locs" || { \
+	  echo rm -f $${locs}; \
+	  rm -f $${locs}; \
+	}
+
 libauthdb_imap.la: $(libauthdb_imap_la_OBJECTS) $(libauthdb_imap_la_DEPENDENCIES) $(EXTRA_libauthdb_imap_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libauthdb_imap_la_LINK) -rpath $(auth_moduledir) $(libauthdb_imap_la_OBJECTS) $(libauthdb_imap_la_LIBADD) $(LIBS)
 
@@ -784,6 +839,9 @@ libauthdb_ldap.la: $(libauthdb_ldap_la_OBJECTS) $(libauthdb_ldap_la_DEPENDENCIES
 
 libmech_gssapi.la: $(libmech_gssapi_la_OBJECTS) $(libmech_gssapi_la_DEPENDENCIES) $(EXTRA_libmech_gssapi_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libmech_gssapi_la_LINK) $(am_libmech_gssapi_la_rpath) $(libmech_gssapi_la_OBJECTS) $(libmech_gssapi_la_LIBADD) $(LIBS)
+
+libstats_auth.la: $(libstats_auth_la_OBJECTS) $(libstats_auth_la_DEPENDENCIES) $(EXTRA_libstats_auth_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(libstats_auth_la_LINK) -rpath $(stats_moduledir) $(libstats_auth_la_OBJECTS) $(libstats_auth_la_LIBADD) $(LIBS)
 
 clean-noinstPROGRAMS:
 	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
@@ -876,9 +934,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-penalty.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-postfix-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-handler.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-stats.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-var-expand.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-stats.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-token.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-worker-client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-worker-server.Po@am__quote@
@@ -1123,7 +1183,7 @@ check-am: all-am
 check: check-am
 all-am: Makefile $(LIBRARIES) $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
-	for dir in "$(DESTDIR)$(auth_moduledir)" "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(pkginc_libdir)"; do \
+	for dir in "$(DESTDIR)$(auth_moduledir)" "$(DESTDIR)$(stats_moduledir)" "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -1160,7 +1220,8 @@ clean: clean-am
 
 clean-am: clean-auth_moduleLTLIBRARIES clean-generic clean-libtool \
 	clean-noinstLIBRARIES clean-noinstPROGRAMS \
-	clean-pkglibexecPROGRAMS mostlyclean-am
+	clean-pkglibexecPROGRAMS clean-stats_moduleLTLIBRARIES \
+	mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -1181,7 +1242,7 @@ info: info-am
 info-am:
 
 install-data-am: install-auth_moduleLTLIBRARIES \
-	install-pkginc_libHEADERS
+	install-pkginc_libHEADERS install-stats_moduleLTLIBRARIES
 
 install-dvi: install-dvi-am
 
@@ -1228,29 +1289,30 @@ ps: ps-am
 ps-am:
 
 uninstall-am: uninstall-auth_moduleLTLIBRARIES \
-	uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS
+	uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS \
+	uninstall-stats_moduleLTLIBRARIES
 
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-am clean \
 	clean-auth_moduleLTLIBRARIES clean-generic clean-libtool \
 	clean-noinstLIBRARIES clean-noinstPROGRAMS \
-	clean-pkglibexecPROGRAMS cscopelist-am ctags ctags-am \
-	distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am \
+	clean-pkglibexecPROGRAMS clean-stats_moduleLTLIBRARIES \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
 	install-auth_moduleLTLIBRARIES install-data install-data-am \
 	install-dvi install-dvi-am install-exec install-exec-am \
 	install-html install-html-am install-info install-info-am \
 	install-man install-pdf install-pdf-am \
 	install-pkginc_libHEADERS install-pkglibexecPROGRAMS \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-am uninstall uninstall-am \
+	install-ps install-ps-am install-stats_moduleLTLIBRARIES \
+	install-strip installcheck installcheck-am installdirs \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
 	uninstall-auth_moduleLTLIBRARIES uninstall-pkginc_libHEADERS \
-	uninstall-pkglibexecPROGRAMS
+	uninstall-pkglibexecPROGRAMS uninstall-stats_moduleLTLIBRARIES
 
 .PRECIOUS: Makefile
 

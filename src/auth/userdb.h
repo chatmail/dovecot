@@ -22,8 +22,10 @@ typedef void userdb_iter_callback_t(const char *user, void *context);
 
 struct userdb_module {
 	const char *args;
-	/* The caching key for this module, or NULL if caching isn't wanted. */
-	const char *cache_key;
+	/* The default caching key for this module, or NULL if caching isn't
+	   wanted. This is updated by settings in auth_userdb. */
+#define default_cache_key cache_key /* FIXME: remove in v2.3 - for API backwards compatibility */
+	const char *default_cache_key;
 
 	/* If blocking is set to TRUE, use child processes to access
 	   this userdb. */
@@ -34,8 +36,9 @@ struct userdb_module {
 	/* number of time init() has been called */
 	int init_refcount;
 
-	struct userdb_template *default_fields_tmpl;
-	struct userdb_template *override_fields_tmpl;
+	/* WARNING: avoid adding anything here that isn't based on args.
+	   if you do, you need to change userdb.c:userdb_find() also to avoid
+	   accidentally merging wrong userdbs. */
 
 	const struct userdb_module_interface *iface;
 };
