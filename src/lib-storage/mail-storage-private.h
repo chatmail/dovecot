@@ -380,6 +380,8 @@ struct mailbox {
 	unsigned int mail_cache_disabled:1;
 	/* Update first_saved field to mailbox list index. */
 	unsigned int update_first_saved:1;
+	/* mailbox_verify_create_name() only checks for mailbox_verify_name() */
+	unsigned int skip_create_name_restrictions:1;
 };
 
 struct mail_vfuncs {
@@ -444,6 +446,9 @@ struct mail_vfuncs {
 	void (*set_cache_corrupted)(struct mail *mail,
 				    enum mail_fetch_field field);
 	int (*istream_opened)(struct mail *mail, struct istream **input);
+	void (*set_cache_corrupted_reason)(struct mail *mail,
+					   enum mail_fetch_field field,
+					   const char *reason);
 };
 
 union mail_module_context {

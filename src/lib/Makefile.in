@@ -132,17 +132,17 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	mempool-unsafe-datastack.lo mkdir-parents.lo mmap-anon.lo \
 	mmap-util.lo module-dir.lo mountpoint.lo net.lo \
 	nfs-workarounds.lo numpack.lo ostream.lo ostream-buffer.lo \
-	ostream-failure-at.lo ostream-file.lo ostream-hash.lo \
-	ostream-rawlog.lo primes.lo printf-format-fix.lo \
-	process-title.lo priorityq.lo randgen.lo rand.lo read-full.lo \
-	restrict-access.lo restrict-process-size.lo safe-memset.lo \
-	safe-mkdir.lo safe-mkstemp.lo sendfile-util.lo \
-	seq-range-array.lo sha1.lo sha2.lo str.lo str-find.lo \
-	str-sanitize.lo str-table.lo strescape.lo strfuncs.lo \
-	strnum.lo time-util.lo timing.lo unix-socket-create.lo \
-	unlink-directory.lo unlink-old-files.lo unichar.lo uri-util.lo \
-	utc-offset.lo utc-mktime.lo var-expand.lo wildcard-match.lo \
-	write-full.lo
+	ostream-escaped.lo ostream-failure-at.lo ostream-file.lo \
+	ostream-hash.lo ostream-rawlog.lo primes.lo \
+	printf-format-fix.lo process-title.lo priorityq.lo randgen.lo \
+	rand.lo read-full.lo restrict-access.lo \
+	restrict-process-size.lo safe-memset.lo safe-mkdir.lo \
+	safe-mkstemp.lo sendfile-util.lo seq-range-array.lo sha1.lo \
+	sha2.lo str.lo str-find.lo str-sanitize.lo str-table.lo \
+	strescape.lo strfuncs.lo strnum.lo time-util.lo timing.lo \
+	unix-socket-create.lo unlink-directory.lo unlink-old-files.lo \
+	unichar.lo uri-util.lo utc-offset.lo utc-mktime.lo \
+	var-expand.lo wildcard-match.lo write-full.lo
 liblib_la_OBJECTS = $(am_liblib_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -164,9 +164,11 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-hex-binary.$(OBJEXT) \
 	test_lib-test-ioloop.$(OBJEXT) \
 	test_lib-test-iso8601-date.$(OBJEXT) \
+	test_lib-test-iostream-temp.$(OBJEXT) \
 	test_lib-test-istream.$(OBJEXT) \
 	test_lib-test-istream-base64-decoder.$(OBJEXT) \
 	test_lib-test-istream-base64-encoder.$(OBJEXT) \
+	test_lib-test-istream-chain.$(OBJEXT) \
 	test_lib-test-istream-concat.$(OBJEXT) \
 	test_lib-test-istream-crlf.$(OBJEXT) \
 	test_lib-test-istream-failure-at.$(OBJEXT) \
@@ -178,6 +180,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-llist.$(OBJEXT) \
 	test_lib-test-mempool-alloconly.$(OBJEXT) \
 	test_lib-test-net.$(OBJEXT) test_lib-test-numpack.$(OBJEXT) \
+	test_lib-test-ostream-escaped.$(OBJEXT) \
 	test_lib-test-ostream-failure-at.$(OBJEXT) \
 	test_lib-test-ostream-file.$(OBJEXT) \
 	test_lib-test-primes.$(OBJEXT) \
@@ -366,6 +369,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -577,6 +581,7 @@ liblib_la_SOURCES = \
 	numpack.c \
 	ostream.c \
 	ostream-buffer.c \
+	ostream-escaped.c \
 	ostream-failure-at.c \
 	ostream-file.c \
 	ostream-hash.c \
@@ -708,6 +713,7 @@ headers = \
 	nfs-workarounds.h \
 	numpack.h \
 	ostream.h \
+	ostream-escaped.h \
 	ostream-failure-at.h \
 	ostream-hash.h \
 	ostream-private.h \
@@ -776,9 +782,11 @@ test_lib_SOURCES = \
 	test-hex-binary.c \
 	test-ioloop.c \
 	test-iso8601-date.c \
+	test-iostream-temp.c \
 	test-istream.c \
 	test-istream-base64-decoder.c \
 	test-istream-base64-encoder.c \
+	test-istream-chain.c \
 	test-istream-concat.c \
 	test-istream-crlf.c \
 	test-istream-failure-at.c \
@@ -791,6 +799,7 @@ test_lib_SOURCES = \
 	test-mempool-alloconly.c \
 	test-net.c \
 	test-numpack.c \
+	test-ostream-escaped.c \
 	test-ostream-failure-at.c \
 	test-ostream-file.c \
 	test-primes.c \
@@ -983,6 +992,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nfs-workarounds.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/numpack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-buffer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-escaped.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-failure-at.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-file.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-hash.Plo@am__quote@
@@ -1027,9 +1037,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hash.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hex-binary.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ioloop.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-iostream-temp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-iso8601-date.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-base64-decoder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-base64-encoder.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-chain.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-concat.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-crlf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-failure-at.Po@am__quote@
@@ -1044,6 +1056,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-mempool-alloconly.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-net.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-numpack.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ostream-escaped.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ostream-failure-at.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ostream-file.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-primes.Po@am__quote@
@@ -1349,6 +1362,20 @@ test_lib-test-iso8601-date.obj: test-iso8601-date.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-iso8601-date.obj `if test -f 'test-iso8601-date.c'; then $(CYGPATH_W) 'test-iso8601-date.c'; else $(CYGPATH_W) '$(srcdir)/test-iso8601-date.c'; fi`
 
+test_lib-test-iostream-temp.o: test-iostream-temp.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-iostream-temp.o -MD -MP -MF $(DEPDIR)/test_lib-test-iostream-temp.Tpo -c -o test_lib-test-iostream-temp.o `test -f 'test-iostream-temp.c' || echo '$(srcdir)/'`test-iostream-temp.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-iostream-temp.Tpo $(DEPDIR)/test_lib-test-iostream-temp.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-iostream-temp.c' object='test_lib-test-iostream-temp.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-iostream-temp.o `test -f 'test-iostream-temp.c' || echo '$(srcdir)/'`test-iostream-temp.c
+
+test_lib-test-iostream-temp.obj: test-iostream-temp.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-iostream-temp.obj -MD -MP -MF $(DEPDIR)/test_lib-test-iostream-temp.Tpo -c -o test_lib-test-iostream-temp.obj `if test -f 'test-iostream-temp.c'; then $(CYGPATH_W) 'test-iostream-temp.c'; else $(CYGPATH_W) '$(srcdir)/test-iostream-temp.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-iostream-temp.Tpo $(DEPDIR)/test_lib-test-iostream-temp.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-iostream-temp.c' object='test_lib-test-iostream-temp.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-iostream-temp.obj `if test -f 'test-iostream-temp.c'; then $(CYGPATH_W) 'test-iostream-temp.c'; else $(CYGPATH_W) '$(srcdir)/test-iostream-temp.c'; fi`
+
 test_lib-test-istream.o: test-istream.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream.o -MD -MP -MF $(DEPDIR)/test_lib-test-istream.Tpo -c -o test_lib-test-istream.o `test -f 'test-istream.c' || echo '$(srcdir)/'`test-istream.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-istream.Tpo $(DEPDIR)/test_lib-test-istream.Po
@@ -1390,6 +1417,20 @@ test_lib-test-istream-base64-encoder.obj: test-istream-base64-encoder.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-istream-base64-encoder.c' object='test_lib-test-istream-base64-encoder.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-base64-encoder.obj `if test -f 'test-istream-base64-encoder.c'; then $(CYGPATH_W) 'test-istream-base64-encoder.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-base64-encoder.c'; fi`
+
+test_lib-test-istream-chain.o: test-istream-chain.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-chain.o -MD -MP -MF $(DEPDIR)/test_lib-test-istream-chain.Tpo -c -o test_lib-test-istream-chain.o `test -f 'test-istream-chain.c' || echo '$(srcdir)/'`test-istream-chain.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-istream-chain.Tpo $(DEPDIR)/test_lib-test-istream-chain.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-istream-chain.c' object='test_lib-test-istream-chain.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-chain.o `test -f 'test-istream-chain.c' || echo '$(srcdir)/'`test-istream-chain.c
+
+test_lib-test-istream-chain.obj: test-istream-chain.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-chain.obj -MD -MP -MF $(DEPDIR)/test_lib-test-istream-chain.Tpo -c -o test_lib-test-istream-chain.obj `if test -f 'test-istream-chain.c'; then $(CYGPATH_W) 'test-istream-chain.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-chain.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-istream-chain.Tpo $(DEPDIR)/test_lib-test-istream-chain.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-istream-chain.c' object='test_lib-test-istream-chain.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-chain.obj `if test -f 'test-istream-chain.c'; then $(CYGPATH_W) 'test-istream-chain.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-chain.c'; fi`
 
 test_lib-test-istream-concat.o: test-istream-concat.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-concat.o -MD -MP -MF $(DEPDIR)/test_lib-test-istream-concat.Tpo -c -o test_lib-test-istream-concat.o `test -f 'test-istream-concat.c' || echo '$(srcdir)/'`test-istream-concat.c
@@ -1558,6 +1599,20 @@ test_lib-test-numpack.obj: test-numpack.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-numpack.c' object='test_lib-test-numpack.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-numpack.obj `if test -f 'test-numpack.c'; then $(CYGPATH_W) 'test-numpack.c'; else $(CYGPATH_W) '$(srcdir)/test-numpack.c'; fi`
+
+test_lib-test-ostream-escaped.o: test-ostream-escaped.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-ostream-escaped.o -MD -MP -MF $(DEPDIR)/test_lib-test-ostream-escaped.Tpo -c -o test_lib-test-ostream-escaped.o `test -f 'test-ostream-escaped.c' || echo '$(srcdir)/'`test-ostream-escaped.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-ostream-escaped.Tpo $(DEPDIR)/test_lib-test-ostream-escaped.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-ostream-escaped.c' object='test_lib-test-ostream-escaped.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-ostream-escaped.o `test -f 'test-ostream-escaped.c' || echo '$(srcdir)/'`test-ostream-escaped.c
+
+test_lib-test-ostream-escaped.obj: test-ostream-escaped.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-ostream-escaped.obj -MD -MP -MF $(DEPDIR)/test_lib-test-ostream-escaped.Tpo -c -o test_lib-test-ostream-escaped.obj `if test -f 'test-ostream-escaped.c'; then $(CYGPATH_W) 'test-ostream-escaped.c'; else $(CYGPATH_W) '$(srcdir)/test-ostream-escaped.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-ostream-escaped.Tpo $(DEPDIR)/test_lib-test-ostream-escaped.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-ostream-escaped.c' object='test_lib-test-ostream-escaped.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-ostream-escaped.obj `if test -f 'test-ostream-escaped.c'; then $(CYGPATH_W) 'test-ostream-escaped.c'; else $(CYGPATH_W) '$(srcdir)/test-ostream-escaped.c'; fi`
 
 test_lib-test-ostream-failure-at.o: test-ostream-failure-at.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-ostream-failure-at.o -MD -MP -MF $(DEPDIR)/test_lib-test-ostream-failure-at.Tpo -c -o test_lib-test-ostream-failure-at.o `test -f 'test-ostream-failure-at.c' || echo '$(srcdir)/'`test-ostream-failure-at.c

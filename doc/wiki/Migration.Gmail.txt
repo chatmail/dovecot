@@ -16,7 +16,7 @@ there are a few things different with Gmail compared to other IMAP servers:
    future plans to optionally not count message copies towards quota.
     * Even though the quota is duplicated, it doesn't mean that the storage
       usage has to be duplicated. Use the dsync -v parameter to avoid this. See
-      http://hg.dovecot.org/dovecot-2.2/rev/39d00448490f
+      https://github.com/dovecot/core/commit/70df8f39fb3db7c49b18c855178f8172176a037a
  * Gmail has virtual folders: "All Mail", "Starred" and "Important". From
    migration point of view this means that the migration should skip most of
    these folders, since their mails are in other folders anyway. With v2.2.3+
@@ -70,4 +70,4 @@ purpose. For v2.2.19+ use:
 doveadm backup -a 'virtual/All' -O '-$GmailHaveLabels' -R -u user@domain imapc:
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-12-11 04:45)
+(This file was created from the wiki on 2016-03-16 04:44)

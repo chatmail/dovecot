@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -142,7 +142,10 @@ struct http_client *http_client_init(const struct http_client_settings *set)
 	client->set.response_hdr_limits = set->response_hdr_limits;
 	client->set.request_absolute_timeout_msecs =
 		set->request_absolute_timeout_msecs;
-	client->set.request_timeout_msecs = set->request_timeout_msecs;
+	client->set.request_timeout_msecs =
+		set->request_timeout_msecs == 0 ?
+			HTTP_CLIENT_DEFAULT_REQUEST_TIMEOUT_MSECS :
+			set->request_timeout_msecs;
 	client->set.connect_timeout_msecs = set->connect_timeout_msecs;
 	client->set.soft_connect_timeout_msecs = set->soft_connect_timeout_msecs;
 	client->set.max_auto_retry_delay = set->max_auto_retry_delay;
@@ -165,6 +168,8 @@ void http_client_deinit(struct http_client **_client)
 	struct http_client_request *req, *const *req_idx;
 	struct http_client_host *host;
 	struct http_client_peer *peer;
+
+	*_client = NULL;
 
 	/* drop delayed failing requests */
 	while (array_count(&client->delayed_failing_requests) > 0) {
@@ -198,7 +203,6 @@ void http_client_deinit(struct http_client **_client)
 	if (client->ssl_ctx != NULL)
 		ssl_iostream_context_deinit(&client->ssl_ctx);
 	pool_unref(&client->pool);
-	*_client = NULL;
 }
 
 void http_client_switch_ioloop(struct http_client *client)

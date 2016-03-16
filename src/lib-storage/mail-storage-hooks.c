@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -49,8 +49,14 @@ void mail_storage_hooks_init(void)
 
 void mail_storage_hooks_deinit(void)
 {
-	array_free(&internal_hooks);
-	array_free(&module_hooks);
+	/* allow calling this even if mail_storage_hooks_init() hasn't been
+	   called, because e.g. doveadm plugins could call
+	   mail_storage_hooks_add() even though mail storage is never
+	   initialized. */
+	if (array_is_created(&internal_hooks))
+		array_free(&internal_hooks);
+	if (array_is_created(&module_hooks))
+		array_free(&module_hooks);
 }
 
 void mail_storage_hooks_add(struct module *module,

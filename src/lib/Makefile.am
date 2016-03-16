@@ -108,6 +108,7 @@ liblib_la_SOURCES = \
 	numpack.c \
 	ostream.c \
 	ostream-buffer.c \
+	ostream-escaped.c \
 	ostream-failure-at.c \
 	ostream-file.c \
 	ostream-hash.c \
@@ -239,6 +240,7 @@ headers = \
 	nfs-workarounds.h \
 	numpack.h \
 	ostream.h \
+	ostream-escaped.h \
 	ostream-failure-at.h \
 	ostream-hash.h \
 	ostream-private.h \
@@ -309,9 +311,11 @@ test_lib_SOURCES = \
 	test-hex-binary.c \
 	test-ioloop.c \
 	test-iso8601-date.c \
+	test-iostream-temp.c \
 	test-istream.c \
 	test-istream-base64-decoder.c \
 	test-istream-base64-encoder.c \
+	test-istream-chain.c \
 	test-istream-concat.c \
 	test-istream-crlf.c \
 	test-istream-failure-at.c \
@@ -324,6 +328,7 @@ test_lib_SOURCES = \
 	test-mempool-alloconly.c \
 	test-net.c \
 	test-numpack.c \
+	test-ostream-escaped.c \
 	test-ostream-failure-at.c \
 	test-ostream-file.c \
 	test-primes.c \

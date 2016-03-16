@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
 
 /* Only for reporting filesystem quota */
 
@@ -316,34 +316,47 @@ fs_quota_root_get_resources(struct quota_root *_root)
 	return root->inode_per_mail ? resources_kb_messages : resources_kb;
 }
 
+#if defined(FS_QUOTA_LINUX) || defined(FS_QUOTA_BSDAIX) || \
+    defined(FS_QUOTA_NETBSD) || defined(HAVE_RQUOTA)
+static void fs_quota_root_disable(struct fs_quota_root *root, bool group)
+{
+	if (group)
+		root->group_disabled = TRUE;
+	else
+		root->user_disabled = TRUE;
+}
+#endif
+
 #ifdef HAVE_RQUOTA
 static void
-rquota_get_result(const rquota *rq, bool bytes,
-		  uint64_t *value_r, uint64_t *limit_r)
+rquota_get_result(const rquota *rq,
+		  uint64_t *bytes_value_r, uint64_t *bytes_limit_r,
+		  uint64_t *count_value_r, uint64_t *count_limit_r)
 {
 	/* use soft limits if they exist, fallback to hard limits */
-	if (bytes) {
-		/* convert the results from blocks to bytes */
-		*value_r = (uint64_t)rq->rq_curblocks *
+
+	/* convert the results from blocks to bytes */
+	*bytes_value_r = (uint64_t)rq->rq_curblocks *
+		(uint64_t)rq->rq_bsize;
+	if (rq->rq_bsoftlimit != 0) {
+		*bytes_limit_r = (uint64_t)rq->rq_bsoftlimit *
 			(uint64_t)rq->rq_bsize;
-		if (rq->rq_bsoftlimit != 0) {
-			*limit_r = (uint64_t)rq->rq_bsoftlimit *
-				(uint64_t)rq->rq_bsize;
-		} else {
-			*limit_r = (uint64_t)rq->rq_bhardlimit *
-				(uint64_t)rq->rq_bsize;
-		}
 	} else {
-		*value_r = rq->rq_curfiles;
-		if (rq->rq_fsoftlimit != 0)
-			*limit_r = rq->rq_fsoftlimit;
-		else
-			*limit_r = rq->rq_fhardlimit;
+		*bytes_limit_r = (uint64_t)rq->rq_bhardlimit *
+			(uint64_t)rq->rq_bsize;
 	}
+
+	*count_value_r = rq->rq_curfiles;
+	if (rq->rq_fsoftlimit != 0)
+		*count_limit_r = rq->rq_fsoftlimit;
+	else
+		*count_limit_r = rq->rq_fhardlimit;
 }
 
-static int do_rquota_user(struct fs_quota_root *root, bool bytes,
-			  uint64_t *value_r, uint64_t *limit_r)
+static int
+do_rquota_user(struct fs_quota_root *root,
+	       uint64_t *bytes_value_r, uint64_t *bytes_limit_r,
+	       uint64_t *count_value_r, uint64_t *count_limit_r)
 {
 	struct getquota_rslt result;
 	struct getquota_args args;
@@ -369,9 +382,8 @@ static int do_rquota_user(struct fs_quota_root *root, bool bytes,
 	}
 
 	if (root->root.quota->set->debug) {
-		i_debug("quota-fs: host=%s, path=%s, uid=%s, %s",
-			host, path, dec2str(root->uid),
-			bytes ? "bytes" : "files");
+		i_debug("quota-fs: host=%s, path=%s, uid=%s",
+			host, path, dec2str(root->uid));
 	}
 
 	/* clnt_create() polls for a while to establish a connection */
@@ -411,13 +423,16 @@ static int do_rquota_user(struct fs_quota_root *root, bool bytes,
 
 	switch (result.status) {
 	case Q_OK: {
-		rquota_get_result(&result.getquota_rslt_u.gqr_rquota, bytes,
-				  value_r, limit_r);
+		rquota_get_result(&result.getquota_rslt_u.gqr_rquota,
+				  bytes_value_r, bytes_limit_r,
+				  count_value_r, count_limit_r);
 		if (root->root.quota->set->debug) {
-			i_debug("quota-fs: uid=%s, value=%llu, limit=%llu",
+			i_debug("quota-fs: uid=%s, bytes=%llu/%llu files=%llu/%llu",
 				dec2str(root->uid),
-				(unsigned long long)*value_r,
-				(unsigned long long)*limit_r);
+				(unsigned long long)*bytes_value_r,
+				(unsigned long long)*bytes_limit_r,
+				(unsigned long long)*count_value_r,
+				(unsigned long long)*count_limit_r);
 		}
 		return 1;
 	}
@@ -426,7 +441,8 @@ static int do_rquota_user(struct fs_quota_root *root, bool bytes,
 			i_debug("quota-fs: uid=%s, limit=unlimited",
 				dec2str(root->uid));
 		}
-		return 1;
+		fs_quota_root_disable(root, FALSE);
+		return 0;
 	case Q_EPERM:
 		i_error("quota-fs: permission denied to rquota service");
 		return -1;
@@ -438,8 +454,11 @@ static int do_rquota_user(struct fs_quota_root *root, bool bytes,
 }
 
 static int
-do_rquota_group(struct fs_quota_root *root ATTR_UNUSED, bool bytes ATTR_UNUSED,
-		uint64_t *value_r ATTR_UNUSED, uint64_t *limit_r ATTR_UNUSED)
+do_rquota_group(struct fs_quota_root *root ATTR_UNUSED,
+		uint64_t *bytes_value_r ATTR_UNUSED,
+		uint64_t *bytes_limit_r ATTR_UNUSED,
+		uint64_t *count_value_r ATTR_UNUSED,
+		uint64_t *count_limit_r ATTR_UNUSED)
 {
 #if defined(EXT_RQUOTAVERS) && defined(GRPQUOTA)
 	struct getquota_rslt result;
@@ -458,9 +477,8 @@ do_rquota_group(struct fs_quota_root *root ATTR_UNUSED, bool bytes ATTR_UNUSED,
 	path++;
 
 	if (root->root.quota->set->debug) {
-		i_debug("quota-fs: host=%s, path=%s, gid=%s, %s",
-			host, path, dec2str(root->gid),
-			bytes ? "bytes" : "files");
+		i_debug("quota-fs: host=%s, path=%s, gid=%s",
+			host, path, dec2str(root->gid));
 	}
 
 	/* clnt_create() polls for a while to establish a connection */
@@ -501,13 +519,16 @@ do_rquota_group(struct fs_quota_root *root ATTR_UNUSED, bool bytes ATTR_UNUSED,
 
 	switch (result.status) {
 	case Q_OK: {
-		rquota_get_result(&result.getquota_rslt_u.gqr_rquota, bytes,
-				  value_r, limit_r);
+		rquota_get_result(&result.getquota_rslt_u.gqr_rquota,
+				  bytes_value_r, bytes_limit_r,
+				  count_value_r, count_limit_r);
 		if (root->root.quota->set->debug) {
-			i_debug("quota-fs: gid=%s, value=%llu, limit=%llu",
+			i_debug("quota-fs: gid=%s, bytes=%llu/%llu files=%llu/%llu",
 				dec2str(root->gid),
-				(unsigned long long)*value_r,
-				(unsigned long long)*limit_r);
+				(unsigned long long)*bytes_value_r,
+				(unsigned long long)*bytes_limit_r,
+				(unsigned long long)*count_value_r,
+				(unsigned long long)*count_limit_r);
 		}
 		return 1;
 	}
@@ -516,7 +537,8 @@ do_rquota_group(struct fs_quota_root *root ATTR_UNUSED, bool bytes ATTR_UNUSED,
 			i_debug("quota-fs: gid=%s, limit=unlimited",
 				dec2str(root->gid));
 		}
-		return 1;
+		fs_quota_root_disable(root, TRUE);
+		return 0;
 	case Q_EPERM:
 		i_error("quota-fs: permission denied to ext rquota service");
 		return -1;
@@ -532,21 +554,11 @@ do_rquota_group(struct fs_quota_root *root ATTR_UNUSED, bool bytes ATTR_UNUSED,
 }
 #endif
 
-#if defined(FS_QUOTA_LINUX) || defined(FS_QUOTA_BSDAIX) || \
-    defined(FS_QUOTA_NETBSD)
-static void fs_quota_root_disable(struct fs_quota_root *root, bool group)
-{
-	if (group)
-		root->group_disabled = TRUE;
-	else
-		root->user_disabled = TRUE;
-}
-#endif
-
 #ifdef FS_QUOTA_LINUX
 static int
-fs_quota_get_linux(struct fs_quota_root *root, bool group, bool bytes,
-		   uint64_t *value_r, uint64_t *limit_r)
+fs_quota_get_linux(struct fs_quota_root *root, bool group,
+		   uint64_t *bytes_value_r, uint64_t *bytes_limit_r,
+		   uint64_t *count_value_r, uint64_t *count_limit_r)
 {
 	struct dqblk dqblk;
 	int type, id;
@@ -570,19 +582,16 @@ fs_quota_get_linux(struct fs_quota_root *root, bool group, bool bytes,
 			return -1;
 		}
 
-		if (bytes) {
-			/* values always returned in 512 byte blocks */
-			*value_r = xdqblk.d_bcount * 512;
-			*limit_r = xdqblk.d_blk_softlimit * 512;
-			if (*limit_r == 0) {
-				*limit_r = xdqblk.d_blk_hardlimit * 512;
-			}
-		} else {
-			*value_r = xdqblk.d_icount;
-			*limit_r = xdqblk.d_ino_softlimit;
-			if (*limit_r == 0) {
-				*limit_r = xdqblk.d_ino_hardlimit;
-			}
+		/* values always returned in 512 byte blocks */
+		*bytes_value_r = xdqblk.d_bcount * 512;
+		*bytes_limit_r = xdqblk.d_blk_softlimit * 512;
+		if (*bytes_limit_r == 0) {
+			*bytes_limit_r = xdqblk.d_blk_hardlimit * 512;
+		}
+		*count_value_r = xdqblk.d_icount;
+		*count_limit_r = xdqblk.d_ino_softlimit;
+		if (*count_limit_r == 0) {
+			*count_limit_r = xdqblk.d_ino_hardlimit;
 		}
 	} else
 #endif
@@ -607,22 +616,19 @@ fs_quota_get_linux(struct fs_quota_root *root, bool group, bool bytes,
 			return -1;
 		}
 
-		if (bytes) {
 #if _LINUX_QUOTA_VERSION == 1
-			*value_r = dqblk.dqb_curblocks * 1024;
+		*bytes_value_r = dqblk.dqb_curblocks * 1024;
 #else
-			*value_r = dqblk.dqb_curblocks;
+		*bytes_value_r = dqblk.dqb_curblocks;
 #endif
-			*limit_r = dqblk.dqb_bsoftlimit * 1024;
-			if (*limit_r == 0) {
-				*limit_r = dqblk.dqb_bhardlimit * 1024;
-			}
-		} else {
-			*value_r = dqblk.dqb_curinodes;
-			*limit_r = dqblk.dqb_isoftlimit;
-			if (*limit_r == 0) {
-				*limit_r = dqblk.dqb_ihardlimit;
-			}
+		*bytes_limit_r = dqblk.dqb_bsoftlimit * 1024;
+		if (*bytes_limit_r == 0) {
+			*bytes_limit_r = dqblk.dqb_bhardlimit * 1024;
+		}
+		*count_value_r = dqblk.dqb_curinodes;
+		*count_limit_r = dqblk.dqb_isoftlimit;
+		if (*count_limit_r == 0) {
+			*count_limit_r = dqblk.dqb_ihardlimit;
 		}
 	}
 	return 1;
@@ -631,8 +637,9 @@ fs_quota_get_linux(struct fs_quota_root *root, bool group, bool bytes,
 
 #ifdef FS_QUOTA_BSDAIX
 static int
-fs_quota_get_bsdaix(struct fs_quota_root *root, bool group, bool bytes,
-		    uint64_t *value_r, uint64_t *limit_r)
+fs_quota_get_bsdaix(struct fs_quota_root *root, bool group,
+		    uint64_t *bytes_value_r, uint64_t *bytes_limit_r,
+		    uint64_t *count_value_r, uint64_t *count_limit_r)
 {
 	struct dqblk dqblk;
 	int type, id;
@@ -650,18 +657,15 @@ fs_quota_get_bsdaix(struct fs_quota_root *root, bool group, bool bytes,
 			root->mount->mount_path);
 		return -1;
 	}
-	if (bytes) {
-		*value_r = (uint64_t)dqblk.dqb_curblocks * DEV_BSIZE;
-		*limit_r = (uint64_t)dqblk.dqb_bsoftlimit * DEV_BSIZE;
-		if (*limit_r == 0) {
-			*limit_r = (uint64_t)dqblk.dqb_bhardlimit * DEV_BSIZE;
-		}
-	} else {
-		*value_r = dqblk.dqb_curinodes;
-		*limit_r = dqblk.dqb_isoftlimit;
-		if (*limit_r == 0) {
-			*limit_r = dqblk.dqb_ihardlimit;
-		}
+	*bytes_value_r = (uint64_t)dqblk.dqb_curblocks * DEV_BSIZE;
+	*bytes_limit_r = (uint64_t)dqblk.dqb_bsoftlimit * DEV_BSIZE;
+	if (*bytes_limit_r == 0) {
+		*bytes_limit_r = (uint64_t)dqblk.dqb_bhardlimit * DEV_BSIZE;
+	}
+	*count_value_r = dqblk.dqb_curinodes;
+	*count_limit_r = dqblk.dqb_isoftlimit;
+	if (*count_limit_r == 0) {
+		*count_limit_r = dqblk.dqb_ihardlimit;
 	}
 	return 1;
 }
@@ -669,8 +673,9 @@ fs_quota_get_bsdaix(struct fs_quota_root *root, bool group, bool bytes,
 
 #ifdef FS_QUOTA_NETBSD
 static int
-fs_quota_get_netbsd(struct fs_quota_root *root, bool group, bool bytes,
-		    uint64_t *value_r, uint64_t *limit_r)
+fs_quota_get_netbsd(struct fs_quota_root *root, bool group,
+		    uint64_t *bytes_value_r, uint64_t *bytes_limit_r,
+		    uint64_t *count_value_r, uint64_t *count_limit_r)
 {
 	struct quotakey qk;
 	struct quotaval qv;
@@ -686,23 +691,26 @@ fs_quota_get_netbsd(struct fs_quota_root *root, bool group, bool bytes,
 
 	qk.qk_idtype = group ? QUOTA_IDTYPE_GROUP : QUOTA_IDTYPE_USER;
 	qk.qk_id = group ? root->gid : root->uid;
-	qk.qk_objtype = bytes ? QUOTA_OBJTYPE_BLOCKS : QUOTA_OBJTYPE_FILES;
 
-	if (quota_get(qh, &qk, &qv) != 0) {
-		if (errno == ESRCH) {
-			fs_quota_root_disable(root, group);
-			return 0;
-		}
-		i_error("quotactl(Q_GETQUOTA, %s) failed: %m",
-			root->mount->mount_path);
-		ret = -1;
-	} else {
-		if (bytes) {
-			*value_r = qv.qv_usage * DEV_BSIZE;
-			*limit_r = qv.qv_softlimit * DEV_BSIZE;
+	for (i = 0; i < 2; i++) {
+		qk.qk_objtype = i == 0 ? QUOTA_OBJTYPE_BLOCKS : QUOTA_OBJTYPE_FILES;
+
+		if (quota_get(qh, &qk, &qv) != 0) {
+			if (errno == ESRCH) {
+				fs_quota_root_disable(root, group);
+				return 0;
+			}
+			i_error("quotactl(Q_GETQUOTA, %s) failed: %m",
+				root->mount->mount_path);
+			ret = -1;
+			break;
+		} 
+		if (i == 0) {
+			*bytes_value_r = qv.qv_usage * DEV_BSIZE;
+			*bytes_limit_r = qv.qv_softlimit * DEV_BSIZE;
 		} else {
-			*value_r = qv.qv_usage;
-			*limit_r = qv.qv_softlimit;
+			*count_value_r = qv.qv_usage;
+			*count_limit_r = qv.qv_softlimit;
 		}
 		ret = 1;
 	}
@@ -713,8 +721,9 @@ fs_quota_get_netbsd(struct fs_quota_root *root, bool group, bool bytes,
 
 #ifdef FS_QUOTA_HPUX
 static int
-fs_quota_get_hpux(struct fs_quota_root *root, bool bytes,
-		  uint64_t *value_r, uint64_t *limit_r)
+fs_quota_get_hpux(struct fs_quota_root *root,
+		  uint64_t *bytes_value_r, uint64_t *bytes_limit_r,
+		  uint64_t *count_value_r, uint64_t *count_limit_r)
 {
 	struct dqblk dqblk;
 
@@ -729,21 +738,18 @@ fs_quota_get_hpux(struct fs_quota_root *root, bool bytes,
 		return -1;
 	}
 
-	if (bytes) {
-		*value_r = (uint64_t)dqblk.dqb_curblocks *
+	*bytes_value_r = (uint64_t)dqblk.dqb_curblocks *
+		root->mount->block_size;
+	*bytes_limit_r = (uint64_t)dqblk.dqb_bsoftlimit *
+		root->mount->block_size;
+	if (*bytes_limit_r == 0) {
+		*bytes_limit_r = (uint64_t)dqblk.dqb_bhardlimit *
 			root->mount->block_size;
-		*limit_r = (uint64_t)dqblk.dqb_bsoftlimit *
-			root->mount->block_size;
-		if (*limit_r == 0) {
-			*limit_r = (uint64_t)dqblk.dqb_bhardlimit *
-				root->mount->block_size;
-		}
-	} else {
-		*value_r = dqblk.dqb_curfiles;
-		*limit_r = dqblk.dqb_fsoftlimit;
-		if (*limit_r == 0) {
-			*limit_r = dqblk.dqb_fhardlimit;
-		}
+	}
+	*count_value_r = dqblk.dqb_curfiles;
+	*count_limit_r = dqblk.dqb_fsoftlimit;
+	if (*count_limit_r == 0) {
+		*count_limit_r = dqblk.dqb_fhardlimit;
 	}
 	return 1;
 }
@@ -751,8 +757,9 @@ fs_quota_get_hpux(struct fs_quota_root *root, bool bytes,
 
 #ifdef FS_QUOTA_SOLARIS
 static int
-fs_quota_get_solaris(struct fs_quota_root *root, bool bytes,
-		     uint64_t *value_r, uint64_t *limit_r)
+fs_quota_get_solaris(struct fs_quota_root *root,
+		     uint64_t *bytes_value_r, uint64_t *bytes_limit_r,
+		     uint64_t *count_value_r, uint64_t *count_limit_r)
 {
 	struct dqblk dqblk;
 	struct quotctl ctl;
@@ -767,26 +774,24 @@ fs_quota_get_solaris(struct fs_quota_root *root, bool bytes,
 		i_error("ioctl(%s, Q_QUOTACTL) failed: %m", root->mount->path);
 		return -1;
 	}
-	if (bytes) {
-		*value_r = (uint64_t)dqblk.dqb_curblocks * DEV_BSIZE;
-		*limit_r = (uint64_t)dqblk.dqb_bsoftlimit * DEV_BSIZE;
-		if (*limit_r == 0) {
-			*limit_r = (uint64_t)dqblk.dqb_bhardlimit * DEV_BSIZE;
-		}
-	} else {
-		*value_r = dqblk.dqb_curfiles;
-		*limit_r = dqblk.dqb_fsoftlimit;
-		if (*limit_r == 0) {
-			*limit_r = dqblk.dqb_fhardlimit;
-		}
+	*bytes_value_r = (uint64_t)dqblk.dqb_curblocks * DEV_BSIZE;
+	*bytes_limit_r = (uint64_t)dqblk.dqb_bsoftlimit * DEV_BSIZE;
+	if (*bytes_limit_r == 0) {
+		*bytes_limit_r = (uint64_t)dqblk.dqb_bhardlimit * DEV_BSIZE;
+	}
+	*count_value_r = dqblk.dqb_curfiles;
+	*count_limit_r = dqblk.dqb_fsoftlimit;
+	if (*count_limit_r == 0) {
+		*count_limit_r = dqblk.dqb_fhardlimit;
 	}
 	return 1;
 }
 #endif
 
 static int
-fs_quota_get_one_resource(struct fs_quota_root *root, bool group, bool bytes,
-			  uint64_t *value_r, uint64_t *limit_r)
+fs_quota_get_resources(struct fs_quota_root *root, bool group,
+		       uint64_t *bytes_value_r, uint64_t *bytes_limit_r,
+		       uint64_t *count_value_r, uint64_t *count_limit_r)
 {
 	if (group) {
 		if (root->group_disabled)
@@ -796,20 +801,20 @@ fs_quota_get_one_resource(struct fs_quota_root *root, bool group, bool bytes,
 			return 0;
 	}
 #ifdef FS_QUOTA_LINUX
-	return fs_quota_get_linux(root, group, bytes, value_r, limit_r);
+	return fs_quota_get_linux(root, group, bytes_value_r, bytes_limit_r, count_value_r, count_limit_r);
 #elif defined (FS_QUOTA_NETBSD)
-	return fs_quota_get_netbsd(root, group, bytes, value_r, limit_r);
+	return fs_quota_get_netbsd(root, group, bytes_value_r, bytes_limit_r, count_value_r, count_limit_r);
 #elif defined (FS_QUOTA_BSDAIX)
-	return fs_quota_get_bsdaix(root, group, bytes, value_r, limit_r);
+	return fs_quota_get_bsdaix(root, group, bytes_value_r, bytes_limit_r, count_value_r, count_limit_r);
 #else
 	if (group) {
 		/* not supported */
 		return 0;
 	}
 #ifdef FS_QUOTA_HPUX
-	return fs_quota_get_hpux(root, bytes, value_r, limit_r);
+	return fs_quota_get_hpux(root, bytes_value_r, bytes_limit_r, count_value_r, count_limit_r);
 #else
-	return fs_quota_get_solaris(root, bytes, value_r, limit_r);
+	return fs_quota_get_solaris(root, bytes_value_r, bytes_limit_r, count_value_r, count_limit_r);
 #endif
 #endif
 }
@@ -852,8 +857,8 @@ fs_quota_get_resource(struct quota_root *_root, const char *name,
 		      uint64_t *value_r)
 {
 	struct fs_quota_root *root = (struct fs_quota_root *)_root;
-	uint64_t limit = 0;
-	bool bytes;
+	uint64_t bytes_value, count_value;
+	uint64_t bytes_limit = 0, count_limit = 0;
 	int ret;
 
 	*value_r = 0;
@@ -862,34 +867,43 @@ fs_quota_get_resource(struct quota_root *_root, const char *name,
 	    (strcasecmp(name, QUOTA_NAME_STORAGE_BYTES) != 0 &&
 	     strcasecmp(name, QUOTA_NAME_MESSAGES) != 0))
 		return 0;
-	bytes = strcasecmp(name, QUOTA_NAME_STORAGE_BYTES) == 0;
 
 #ifdef HAVE_RQUOTA
 	if (mount_type_is_nfs(root->mount)) {
 		T_BEGIN {
-			ret = !root->user_disabled ?
-				do_rquota_user(root, bytes, value_r, &limit) :
-				do_rquota_group(root, bytes, value_r, &limit);
+			ret = root->user_disabled ? 0 :
+				do_rquota_user(root, &bytes_value, &bytes_limit, &count_value, &count_limit);
+			if (ret == 0 && !root->group_disabled)
+				ret = do_rquota_group(root, &bytes_value, &bytes_limit, &count_value, &count_limit);
 		} T_END;
 	} else
 #endif
 	{
-		ret = fs_quota_get_one_resource(root, FALSE, bytes,
-						value_r, &limit);
+		ret = fs_quota_get_resources(root, FALSE, &bytes_value, &bytes_limit,
+					     &count_value, &count_limit);
 		if (ret == 0) {
 			/* fallback to group quota */
-			ret = fs_quota_get_one_resource(root, TRUE, bytes,
-							value_r, &limit);
+			ret = fs_quota_get_resources(root, TRUE, &bytes_value, &bytes_limit,
+						     &count_value, &count_limit);
 		}
 	}
 	if (ret <= 0)
 		return ret;
 
-	/* update limit */
-	if (bytes)
-		_root->bytes_limit = limit;
+	if (strcasecmp(name, QUOTA_NAME_STORAGE_BYTES) == 0)
+		*value_r = bytes_value;
 	else
-		_root->count_limit = limit;
+		*value_r = count_value;
+	if (_root->bytes_limit != (int64_t)bytes_limit ||
+	    _root->count_limit != (int64_t)count_limit) {
+		/* update limit */
+		_root->bytes_limit = bytes_limit;
+		_root->count_limit = count_limit;
+
+		/* limits have changed, so we'll need to recalculate
+		   relative quota rules */
+		quota_root_recalculate_relative_rules(_root->set, bytes_limit, count_limit);
+	}
 	return 1;
 }
 

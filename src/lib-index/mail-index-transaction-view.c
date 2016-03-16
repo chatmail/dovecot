@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -321,16 +321,6 @@ static void tview_lookup_keywords(struct mail_index_view *view, uint32_t seq,
 	}
 }
 
-static struct mail_index_map *
-tview_get_lookup_map(struct mail_index_view_transaction *tview)
-{
-	if (tview->lookup_map == NULL) {
-		tview->lookup_map =
-			mail_index_map_clone(tview->view.index->map);
-	}
-	return tview->lookup_map;
-}
-
 static const void *
 tview_return_updated_ext(struct mail_index_view_transaction *tview,
 			 uint32_t seq, const void *data, uint32_t ext_id)
@@ -402,6 +392,48 @@ tview_is_ext_reset(struct mail_index_view_transaction *tview, uint32_t ext_id)
 	return ext_id < count && resets[ext_id].new_reset_id != 0;
 }
 
+static bool
+tview_lookup_ext_update(struct mail_index_view_transaction *tview, uint32_t seq,
+			uint32_t ext_id, struct mail_index_map **map_r,
+			const void **data_r)
+{
+	const ARRAY_TYPE(seq_array) *ext_buf;
+	const void *data;
+	unsigned int idx;
+	uint32_t map_ext_idx;
+
+	ext_buf = array_idx(&tview->t->ext_rec_updates, ext_id);
+	if (!array_is_created(ext_buf) ||
+	    !mail_index_seq_array_lookup(ext_buf, seq, &idx))
+		return FALSE;
+
+	if (tview->lookup_map == NULL) {
+		tview->lookup_map =
+			mail_index_map_clone(tview->view.index->map);
+	}
+	if (!mail_index_map_get_ext_idx(tview->lookup_map, ext_id, &map_ext_idx)) {
+		/* extension doesn't yet exist in the map. add it there with
+		   the preliminary information (mainly its size) so if caller
+		   looks it up, it's going to be found. */
+		const struct mail_index_registered_ext *rext =
+			array_idx(&tview->view.index->extensions, ext_id);
+		struct mail_index_ext_header ext_hdr;
+
+		memset(&ext_hdr, 0, sizeof(ext_hdr));
+		ext_hdr.hdr_size = rext->hdr_size;
+		ext_hdr.record_size = ext_buf->arr.element_size - sizeof(uint32_t);
+		ext_hdr.record_align = rext->record_align;
+
+		mail_index_map_register_ext(tview->lookup_map, rext->name,
+					    (uint32_t)-1, &ext_hdr);
+	}
+
+	data = array_idx(ext_buf, idx);
+	*map_r = tview->lookup_map;
+	*data_r = tview_return_updated_ext(tview, seq, data, ext_id);
+	return TRUE;
+}
+
 static void
 tview_lookup_ext_full(struct mail_index_view *view, uint32_t seq,
 		      uint32_t ext_id, struct mail_index_map **map_r,
@@ -409,9 +441,6 @@ tview_lookup_ext_full(struct mail_index_view *view, uint32_t seq,
 {
 	struct mail_index_view_transaction *tview =
 		(struct mail_index_view_transaction *)view;
-	const ARRAY_TYPE(seq_array) *ext_buf;
-	const void *data;
-	unsigned int idx;
 
 	i_assert(ext_id < array_count(&view->index->extensions));
 
@@ -422,15 +451,8 @@ tview_lookup_ext_full(struct mail_index_view *view, uint32_t seq,
 	    ext_id < array_count(&tview->t->ext_rec_updates)) {
 		/* there are some ext updates in transaction.
 		   see if there's any for this sequence. */
-		ext_buf = array_idx(&tview->t->ext_rec_updates, ext_id);
-		if (array_is_created(ext_buf) &&
-		    mail_index_seq_array_lookup(ext_buf, seq, &idx)) {
-			data = array_idx(ext_buf, idx);
-			*map_r = tview_get_lookup_map(tview);
-			*data_r = tview_return_updated_ext(tview, seq, data,
-							   ext_id);
+		if (tview_lookup_ext_update(tview, seq, ext_id, map_r, data_r))
 			return;
-		}
 	}
 
 	/* not updated, return the existing value, unless ext was

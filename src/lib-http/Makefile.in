@@ -123,7 +123,8 @@ am__EXEEXT_1 = test-http-date$(EXEEXT) test-http-url$(EXEEXT) \
 	test-http-header-parser$(EXEEXT) test-http-transfer$(EXEEXT) \
 	test-http-auth$(EXEEXT) test-http-response-parser$(EXEEXT) \
 	test-http-request-parser$(EXEEXT)
-am__EXEEXT_2 = test-http-client$(EXEEXT) test-http-server$(EXEEXT)
+am__EXEEXT_2 = test-http-payload$(EXEEXT) test-http-client$(EXEEXT) \
+	test-http-server$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am_test_http_auth_OBJECTS = test-http-auth.$(OBJEXT)
 test_http_auth_OBJECTS = $(am_test_http_auth_OBJECTS)
@@ -142,6 +143,12 @@ am_test_http_header_parser_OBJECTS =  \
 	test-http-header-parser.$(OBJEXT)
 test_http_header_parser_OBJECTS =  \
 	$(am_test_http_header_parser_OBJECTS)
+am_test_http_payload_OBJECTS = test-http-payload.$(OBJEXT)
+test_http_payload_OBJECTS = $(am_test_http_payload_OBJECTS)
+test_http_payload_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(test_http_payload_LDFLAGS) $(LDFLAGS) \
+	-o $@
 am_test_http_request_parser_OBJECTS =  \
 	test-http-request-parser.$(OBJEXT)
 test_http_request_parser_OBJECTS =  \
@@ -197,6 +204,7 @@ am__v_CCLD_1 =
 SOURCES = $(libhttp_la_SOURCES) $(test_http_auth_SOURCES) \
 	$(test_http_client_SOURCES) $(test_http_date_SOURCES) \
 	$(test_http_header_parser_SOURCES) \
+	$(test_http_payload_SOURCES) \
 	$(test_http_request_parser_SOURCES) \
 	$(test_http_response_parser_SOURCES) \
 	$(test_http_server_SOURCES) $(test_http_transfer_SOURCES) \
@@ -204,6 +212,7 @@ SOURCES = $(libhttp_la_SOURCES) $(test_http_auth_SOURCES) \
 DIST_SOURCES = $(libhttp_la_SOURCES) $(test_http_auth_SOURCES) \
 	$(test_http_client_SOURCES) $(test_http_date_SOURCES) \
 	$(test_http_header_parser_SOURCES) \
+	$(test_http_payload_SOURCES) \
 	$(test_http_request_parser_SOURCES) \
 	$(test_http_response_parser_SOURCES) \
 	$(test_http_server_SOURCES) $(test_http_transfer_SOURCES) \
@@ -342,6 +351,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -514,6 +524,7 @@ test_programs = \
 	test-http-request-parser
 
 test_nocheck_programs = \
+	test-http-payload \
 	test-http-client \
 	test-http-server
 
@@ -577,6 +588,24 @@ test_http_request_parser_LDADD = \
 	$(test_libs)
 
 test_http_request_parser_DEPENDENCIES = $(test_deps)
+test_http_payload_SOURCES = test-http-payload.c
+test_http_payload_LDFLAGS = -export-dynamic
+test_http_payload_LDADD = \
+	libhttp.la \
+	../lib-dns/libdns.la \
+	../lib-ssl-iostream/libssl_iostream.la \
+	../lib-master/libmaster.la \
+	../lib-settings/libsettings.la \
+	$(test_libs)
+
+test_http_payload_DEPENDENCIES = \
+	libhttp.la \
+	../lib-dns/libdns.la \
+	../lib-ssl-iostream/libssl_iostream.la \
+	../lib-master/libmaster.la \
+	../lib-settings/libsettings.la \
+	$(test_deps)
+
 test_http_client_SOURCES = test-http-client.c
 test_http_client_LDFLAGS = -export-dynamic
 test_http_client_LDADD = \
@@ -686,6 +715,10 @@ test-http-header-parser$(EXEEXT): $(test_http_header_parser_OBJECTS) $(test_http
 	@rm -f test-http-header-parser$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_http_header_parser_OBJECTS) $(test_http_header_parser_LDADD) $(LIBS)
 
+test-http-payload$(EXEEXT): $(test_http_payload_OBJECTS) $(test_http_payload_DEPENDENCIES) $(EXTRA_test_http_payload_DEPENDENCIES) 
+	@rm -f test-http-payload$(EXEEXT)
+	$(AM_V_CCLD)$(test_http_payload_LINK) $(test_http_payload_OBJECTS) $(test_http_payload_LDADD) $(LIBS)
+
 test-http-request-parser$(EXEEXT): $(test_http_request_parser_OBJECTS) $(test_http_request_parser_DEPENDENCIES) $(EXTRA_test_http_request_parser_DEPENDENCIES) 
 	@rm -f test-http-request-parser$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_http_request_parser_OBJECTS) $(test_http_request_parser_LDADD) $(LIBS)
@@ -738,6 +771,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-date.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-header-parser.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-payload.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-request-parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-response-parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-server.Po@am__quote@

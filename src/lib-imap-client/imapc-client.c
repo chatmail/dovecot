@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -57,6 +57,7 @@ imapc_client_init(const struct imapc_client_settings *set)
 	client->set.username = p_strdup(pool, set->username);
 	client->set.password = p_strdup(pool, set->password);
 	client->set.sasl_mechanisms = p_strdup(pool, set->sasl_mechanisms);
+	client->set.use_proxyauth = set->use_proxyauth;
 	client->set.dns_client_socket_path =
 		p_strdup(pool, set->dns_client_socket_path);
 	client->set.temp_path_prefix =

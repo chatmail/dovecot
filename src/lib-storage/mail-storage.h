@@ -481,6 +481,11 @@ bool mailbox_equals(const struct mailbox *box1,
 /* Returns TRUE if the mailbox is user's INBOX or another user's shared INBOX */
 bool mailbox_is_any_inbox(struct mailbox *box);
 
+/* Change mailbox_verify_create_name() to not verify new mailbox name
+   restrictions (but still check that it's a valid existing name). This is
+   mainly used by dsync to make sure the sync works even though the original
+   name isn't valid anymore. */
+void mailbox_skip_create_name_restrictions(struct mailbox *box, bool set);
 /* Returns -1 if mailbox_create() is guaranteed to fail because the mailbox
    name is invalid, 0 not. The error message contains a reason. */
 int mailbox_verify_create_name(struct mailbox *box);
@@ -892,6 +897,9 @@ void mail_expunge(struct mail *mail);
 void mail_precache(struct mail *mail);
 /* Mark a cached field corrupted and have it recalculated. */
 void mail_set_cache_corrupted(struct mail *mail, enum mail_fetch_field field);
+void mail_set_cache_corrupted_reason(struct mail *mail,
+				     enum mail_fetch_field field,
+				     const char *reason);
 
 /* Return 128 bit GUID using input string. If guid is already 128 bit hex
    encoded, it's returned as-is. Otherwise SHA1 sum is taken and its last

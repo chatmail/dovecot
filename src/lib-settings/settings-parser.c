@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -341,9 +341,10 @@ get_octal(struct setting_parser_context *ctx, const char *value,
 	if (*value != '0')
 		return get_uint(ctx, value, result_r);
 
-	if (str_to_ullong_oct(value+1, &octal) < 0) {
+	if (str_to_ullong_oct(value, &octal) < 0) {
 		ctx->error = p_strconcat(ctx->parser_pool, "Invalid number: ",
 					 value, NULL);
+		return -1;
 	}
 	*result_r = (unsigned int)octal;
 	return 0;
@@ -568,7 +569,7 @@ get_deflist(struct setting_parser_context *ctx, struct setting_link *parent,
 			return -1;
 	}
 
-	list = t_strsplit(value, "\t ");
+	list = t_strsplit(value, ",\t ");
 	for (; *list != NULL; list++) {
 		if (**list == '\0')
 			continue;

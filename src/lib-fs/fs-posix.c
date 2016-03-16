@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -648,7 +648,10 @@ static int fs_posix_stat(struct fs_file *_file, struct stat *st_r)
 {
 	struct posix_fs_file *file = (struct posix_fs_file *)_file;
 
-	if (file->fd != -1) {
+	/* in case output != NULL it means that we're still writing to the file
+	   and fs_stat() shouldn't stat the unfinished file. this is done by
+	   fs-sis after fs_copy(). */
+	if (file->fd != -1 && _file->output == NULL) {
 		if (fstat(file->fd, st_r) < 0) {
 			fs_set_error(_file->fs, "fstat(%s) failed: %m", file->full_path);
 			return -1;

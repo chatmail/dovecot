@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "net.h"
@@ -31,21 +31,34 @@ static void test_net_is_in_network(void)
 		{ "1234:5678::abcf", "1234:5678::abce", 127, TRUE },
 		{ "1234:5678::abcd", "1234:5678::abce", 127, FALSE },
 		{ "123e::ffff", "123e::0", 15, TRUE },
-		{ "123d::ffff", "123e::0", 15, FALSE }
+		{ "::ffff:1.2.3.4", "1.2.3.4", 32, TRUE },
+		{ "::ffff:1.2.3.4", "1.2.3.3", 32, FALSE },
+		{ "::ffff:1.2.3.4", "::ffff:1.2.3.4", 0, FALSE }
 #endif
 	};
 	struct ip_addr ip, net_ip;
 	unsigned int i;
-	bool success;
 
 	test_begin("net_is_in_network()");
 	for (i = 0; i < N_ELEMENTS(input); i++) {
 		test_assert(net_addr2ip(input[i].ip, &ip) == 0);
 		test_assert(net_addr2ip(input[i].net, &net_ip) == 0);
-		success = net_is_in_network(&ip, &net_ip, input[i].bits) ==
-			input[i].ret;
-		test_out(t_strdup_printf("net_is_in_network(%u)", i), success);
+		test_assert_idx(net_is_in_network(&ip, &net_ip, input[i].bits) ==
+				input[i].ret, i);
 	}
+	/* make sure non-IPv4 and non-IPv6 ip_addrs fail */
+	test_assert(net_addr2ip("127.0.0.1", &ip) == 0);
+	net_ip = ip;
+	net_ip.family = 0;
+	test_assert(!net_is_in_network(&ip, &net_ip, 0));
+	test_assert(!net_is_in_network(&net_ip, &ip, 0));
+#ifdef HAVE_IPV6
+	test_assert(net_addr2ip("::1", &ip) == 0);
+	net_ip = ip;
+	net_ip.family = 0;
+	test_assert(!net_is_in_network(&ip, &net_ip, 0));
+	test_assert(!net_is_in_network(&net_ip, &ip, 0));
+#endif
 	test_end();
 }
 
@@ -71,8 +84,57 @@ static void test_net_ip2addr(void)
 	test_end();
 }
 
+static void test_net_str2hostport(void)
+{
+	const char *host;
+	in_port_t port;
+
+	test_begin("net_str2hostport()");
+	/* [IPv6] */
+	test_assert(net_str2hostport("[1::4]", 0, &host, &port) == 0 &&
+		    strcmp(host, "1::4") == 0 && port == 0);
+	test_assert(net_str2hostport("[1::4]", 1234, &host, &port) == 0 &&
+		    strcmp(host, "1::4") == 0 && port == 1234);
+	test_assert(net_str2hostport("[1::4]:78", 1234, &host, &port) == 0 &&
+		    strcmp(host, "1::4") == 0 && port == 78);
+	host = NULL;
+	test_assert(net_str2hostport("[1::4]:", 1234, &host, &port) < 0 && host == NULL);
+	test_assert(net_str2hostport("[1::4]:0", 1234, &host, &port) < 0 && host == NULL);
+	test_assert(net_str2hostport("[1::4]:x", 1234, &host, &port) < 0 && host == NULL);
+	/* IPv6 */
+	test_assert(net_str2hostport("1::4", 0, &host, &port) == 0 &&
+		    strcmp(host, "1::4") == 0 && port == 0);
+	test_assert(net_str2hostport("1::4", 1234, &host, &port) == 0 &&
+		    strcmp(host, "1::4") == 0 && port == 1234);
+	/* host */
+	test_assert(net_str2hostport("foo", 0, &host, &port) == 0 &&
+		    strcmp(host, "foo") == 0 && port == 0);
+	test_assert(net_str2hostport("foo", 1234, &host, &port) == 0 &&
+		    strcmp(host, "foo") == 0 && port == 1234);
+	test_assert(net_str2hostport("foo:78", 1234, &host, &port) == 0 &&
+		    strcmp(host, "foo") == 0 && port == 78);
+	host = NULL;
+	test_assert(net_str2hostport("foo:", 1234, &host, &port) < 0 && host == NULL);
+	test_assert(net_str2hostport("foo:0", 1234, &host, &port) < 0 && host == NULL);
+	test_assert(net_str2hostport("foo:x", 1234, &host, &port) < 0 && host == NULL);
+	/* edge cases with multiple ':' - currently these don't return errors,
+	   but perhaps they should. */
+	test_assert(net_str2hostport("foo::78", 1234, &host, &port) == 0 &&
+		    strcmp(host, "foo::78") == 0 && port == 1234);
+	test_assert(net_str2hostport("::foo:78", 1234, &host, &port) == 0 &&
+		    strcmp(host, "::foo:78") == 0 && port == 1234);
+	test_assert(net_str2hostport("[::foo]:78", 1234, &host, &port) == 0 &&
+		    strcmp(host, "::foo") == 0 && port == 78);
+	test_assert(net_str2hostport("[::::]", 1234, &host, &port) == 0 &&
+		    strcmp(host, "::::") == 0 && port == 1234);
+	test_assert(net_str2hostport("[::::]:78", 1234, &host, &port) == 0 &&
+		    strcmp(host, "::::") == 0 && port == 78);
+	test_end();
+}
+
 void test_net(void)
 {
 	test_net_is_in_network();
 	test_net_ip2addr();
+	test_net_str2hostport();
 }

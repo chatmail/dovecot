@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -14,7 +14,7 @@
 #include "imap-parser.h"
 #include "imap-url.h"
 #include "auth-client.h"
-#include "client.h"
+#include "imap-login-client.h"
 #include "client-authenticate.h"
 #include "imap-proxy.h"
 

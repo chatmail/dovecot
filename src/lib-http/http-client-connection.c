@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -122,6 +122,63 @@ http_client_connection_abort_error(struct http_client_connection **_conn,
 }
 
 static void
+http_client_connection_abort_any_requests(struct http_client_connection *conn)
+{
+	struct http_client_request **req;
+
+	if (array_is_created(&conn->request_wait_list)) {
+		array_foreach_modifiable(&conn->request_wait_list, req) {
+			i_assert((*req)->submitted);
+			http_client_request_error(*req,
+				HTTP_CLIENT_REQUEST_ERROR_ABORTED,
+				"Aborting");
+			http_client_request_unref(req);
+		}
+		array_clear(&conn->request_wait_list);
+	}
+	if (conn->pending_request != NULL) {
+		struct http_client_request *pending_req = conn->pending_request;
+		conn->pending_request = NULL;
+		http_client_request_error(pending_req,
+			HTTP_CLIENT_REQUEST_ERROR_ABORTED,
+			"Aborting");
+		http_client_request_unref(&pending_req);
+	}
+}
+
+static const char *
+http_client_connection_get_timing_info(struct http_client_connection *conn)
+{
+	struct http_client_request *const *requestp;
+	unsigned int sent_msecs, total_msecs, connected_msecs;
+	string_t *str = t_str_new(64);
+
+	if (array_count(&conn->request_wait_list) > 0) {
+		requestp = array_idx(&conn->request_wait_list, 0);
+		sent_msecs = timeval_diff_msecs(&ioloop_timeval, &(*requestp)->sent_time);
+		total_msecs = timeval_diff_msecs(&ioloop_timeval, &(*requestp)->submit_time);
+
+		str_printfa(str, "Request sent %u.%03u secs ago",
+			    sent_msecs/1000, sent_msecs%1000);
+		if ((*requestp)->attempts > 0) {
+			str_printfa(str, ", %u attempts in %u.%03u secs",
+				    (*requestp)->attempts + 1,
+				    total_msecs/1000, total_msecs%1000);
+		}
+	} else {
+		str_append(str, "No requests");
+		if (conn->conn.last_input != 0) {
+			str_printfa(str, ", last input %d secs ago",
+				    (int)(ioloop_time - conn->conn.last_input));
+		}
+	}
+	connected_msecs = timeval_diff_msecs(&ioloop_timeval, &conn->connected_timestamp);
+	str_printfa(str, ", connected %u.%03u secs ago",
+		    connected_msecs/1000, connected_msecs%1000);
+	return str_c(str);
+}
+
+static void
 http_client_connection_abort_temp_error(struct http_client_connection **_conn,
 	unsigned int status, const char *error)
 {
@@ -144,6 +201,8 @@ http_client_connection_abort_temp_error(struct http_client_connection **_conn,
 			return;
 		}
 	}
+	error = t_strdup_printf("%s (%s)", error,
+				http_client_connection_get_timing_info(conn));
 
 	http_client_connection_debug(conn,
 		"Aborting connection with temporary error: %s", error);
@@ -257,24 +316,9 @@ void http_client_connection_check_idle(struct http_client_connection *conn)
 static void
 http_client_connection_request_timeout(struct http_client_connection *conn)
 {
-	struct http_client_request *const *requestp;
-	unsigned int timeout_msecs, total_msecs;
-	string_t *str = t_str_new(64);
-
-	requestp = array_idx(&conn->request_wait_list, 0);
-	timeout_msecs = timeval_diff_msecs(&ioloop_timeval, &(*requestp)->sent_time);
-	total_msecs = timeval_diff_msecs(&ioloop_timeval, &(*requestp)->submit_time);
-
-	str_printfa(str, "No response for request in %u.%03u secs",
-		    timeout_msecs/1000, timeout_msecs%1000);
-	if ((*requestp)->attempts > 0) {
-		str_printfa(str, " (%u attempts in %u.%03u secs)",
-			    (*requestp)->attempts + 1,
-			    total_msecs/1000, total_msecs%1000);
-	}
 	conn->conn.input->stream_errno = ETIMEDOUT;
 	http_client_connection_abort_temp_error(&conn,
-		HTTP_CLIENT_REQUEST_ERROR_TIMED_OUT, str_c(str));
+		HTTP_CLIENT_REQUEST_ERROR_TIMED_OUT, "Request timed out");
 }
 
 void http_client_connection_start_request_timeout(
@@ -325,7 +369,7 @@ http_client_connection_continue_timeout(struct http_client_connection *conn)
 		array_count(&conn->request_wait_list)-1);
 	req = req_idx[0];
 
-	conn->payload_continue = TRUE;
+	req->payload_sync_continue = TRUE;
 	if (http_client_request_send_more(req, &error) < 0) {
 		http_client_connection_abort_temp_error(&conn,
 			HTTP_CLIENT_REQUEST_ERROR_CONNECTION_LOST,
@@ -357,7 +401,7 @@ int http_client_connection_next_request(struct http_client_connection *conn)
 		timeout_remove(&conn->to_idle);
 
 	req->conn = conn;
-	conn->payload_continue = FALSE;
+	req->payload_sync_continue = FALSE;
 	if (conn->peer->no_payload_sync)
 		req->payload_sync = FALSE;
 
@@ -474,7 +518,7 @@ static void http_client_payload_destroyed(struct http_client_request *req)
 	conn->incoming_payload = NULL;
 	conn->pending_request = NULL;
 	http_client_connection_ref(conn);
-	http_client_request_finish(&req);
+	http_client_request_finish(req);
 
 	/* room for new requests */
 	if (http_client_connection_is_ready(conn))
@@ -488,15 +532,15 @@ static void http_client_payload_destroyed(struct http_client_request *req)
 	conn->to_input =
 		timeout_add_short(0, http_client_payload_destroyed_timeout, conn);
 
-	i_assert(req != NULL);
 	http_client_request_unref(&req);
 	http_client_connection_unref(&conn);
 }
 
 static bool
-http_client_connection_return_response(struct http_client_connection *conn,
-	struct http_client_request *req, struct http_response *response)
+http_client_connection_return_response(struct http_client_request *req,
+	struct http_response *response)
 {
+	struct http_client_connection *conn = req->conn, *tmp_conn;
 	struct istream *payload;
 	bool retrying, ret;
 
@@ -527,12 +571,12 @@ http_client_connection_return_response(struct http_client_connection *conn,
 	conn->in_req_callback = TRUE;
 	http_client_connection_ref(conn);
 	retrying = !http_client_request_callback(req, response);
-	http_client_connection_unref(&conn);
-	if (conn == NULL) {
-		req->conn = NULL;
+	tmp_conn = conn;
+	if (!http_client_connection_unref(&tmp_conn)) {
 		/* the callback managed to get this connection destroyed */
+		req->conn = NULL;
 		if (!retrying)
-			http_client_request_finish(&req);
+			http_client_request_finish(req);
 		http_client_request_unref(&req);
 		return FALSE;
 	}
@@ -568,7 +612,7 @@ http_client_connection_return_response(struct http_client_connection *conn,
 		}
 	} else {
 		req->conn = NULL;
-		http_client_request_finish(&req);
+		http_client_request_finish(req);
 		http_client_request_unref(&req);
 	}
 
@@ -589,13 +633,15 @@ static void http_client_connection_input(struct connection *_conn)
 		(struct http_client_connection *)_conn;
 	struct http_response response;
 	struct http_client_request *const *reqs;
-	struct http_client_request *req = NULL;
+	struct http_client_request *req = NULL, *req_ref;
 	enum http_response_payload_type payload_type;
 	unsigned int count;
 	int finished = 0, ret;
 	const char *error;
 
 	i_assert(conn->incoming_payload == NULL);
+
+	_conn->last_input = ioloop_time;
 
 	if (conn->ssl_iostream != NULL &&
 		!ssl_iostream_is_handshaked(conn->ssl_iostream)) {
@@ -696,7 +742,7 @@ static void http_client_connection_input(struct connection *_conn)
 		   user agent MAY ignore unexpected 1xx responses.
 		 */
 		if (req->payload_sync && response.status == 100) {
-			if (conn->payload_continue) {
+			if (req->payload_sync_continue) {
 				http_client_connection_debug(conn,
 					"Got 100-continue response after timeout");
 				continue;
@@ -704,7 +750,7 @@ static void http_client_connection_input(struct connection *_conn)
 
 			conn->peer->no_payload_sync = FALSE;
 			conn->peer->seen_100_response = TRUE;
-			conn->payload_continue = TRUE;
+			req->payload_sync_continue = TRUE;
 
 			http_client_connection_debug(conn,
 				"Got expected 100-continue response");
@@ -746,14 +792,19 @@ static void http_client_connection_input(struct connection *_conn)
 			timeval_diff_msecs(&req->sent_time, &req->submit_time));
 
 		/* make sure connection output is unlocked if 100-continue failed */
-		if (req->payload_sync && !conn->payload_continue)
-			conn->output_locked = FALSE;	
+		if (req->payload_sync && !req->payload_sync_continue) {
+			http_client_connection_debug(conn, "Unlocked output");
+			conn->output_locked = FALSE;
+		}
 
 		/* remove request from queue */
 		array_delete(&conn->request_wait_list, 0, 1);
 		aborted = (req->state == HTTP_REQUEST_STATE_ABORTED);
-		i_assert(req->refcount > 1 || aborted);
-		http_client_request_unref(&req);
+		req_ref = req;
+		if (!http_client_request_unref(&req_ref)) {
+			i_assert(aborted);
+			req = NULL;
+		}
 		
 		conn->close_indicated = response.connection_close;
 
@@ -776,7 +827,7 @@ static void http_client_connection_input(struct connection *_conn)
 			   blocks via http_client_request_send_payload()
 			   and we're not waiting for 100 continue */
 			if (!req->payload_wait ||
-				(req->payload_sync && !conn->payload_continue)) {
+				(req->payload_sync && !req->payload_sync_continue)) {
 				/* failed Expect: */
 				if (response.status == 417 && req->payload_sync) {
 					/* drop Expect: continue */
@@ -815,7 +866,8 @@ static void http_client_connection_input(struct connection *_conn)
 
 			if (!handled) {
 				/* response for application */
-				if (!http_client_connection_return_response(conn, req, &response))
+				i_assert(req->conn == conn);
+				if (!http_client_connection_return_response(req, &response))
 					return;
 			}
 		}
@@ -925,7 +977,7 @@ int http_client_connection_output(struct http_client_connection *conn)
 			return 1;
 		}
 
-		if (!req->payload_sync || conn->payload_continue) {
+		if (!req->payload_sync || req->payload_sync_continue) {
 			if (http_client_request_send_more(req, &error) < 0) {
 				http_client_connection_abort_temp_error(&conn,
 					HTTP_CLIENT_REQUEST_ERROR_CONNECTION_LOST,
@@ -1007,7 +1059,7 @@ http_client_connection_ready(struct http_client_connection *conn)
 			response.status = 200;
 			response.reason = "OK";
 
-			(void)http_client_connection_return_response(conn, req, &response);
+			(void)http_client_connection_return_response(req, &response);
 			http_client_request_unref(&req);
 			return;
 		} 
@@ -1325,6 +1377,11 @@ http_client_connection_disconnect(struct http_client_connection *conn)
 		conn->incoming_payload = NULL;
 	}
 
+	http_client_connection_abort_any_requests(conn);
+
+	if (conn->http_parser != NULL)
+		http_response_parser_deinit(&conn->http_parser);
+
 	if (conn->connect_initialized)
 		connection_disconnect(&conn->conn);
 
@@ -1342,45 +1399,26 @@ http_client_connection_disconnect(struct http_client_connection *conn)
 		timeout_remove(&conn->to_response);
 }
 
-void http_client_connection_unref(struct http_client_connection **_conn)
+bool http_client_connection_unref(struct http_client_connection **_conn)
 {
 	struct http_client_connection *conn = *_conn;
 	struct http_client_connection *const *conn_idx;
 	ARRAY_TYPE(http_client_connection) *conn_arr;
 	struct http_client_peer *peer = conn->peer;
-	struct http_client_request **req;
 
 	i_assert(conn->refcount > 0);
 
+	*_conn = NULL;
+
 	if (--conn->refcount > 0)
-		return;
+		return TRUE;
 
 	http_client_connection_debug(conn, "Connection destroy");
 
 	http_client_connection_disconnect(conn);
 
-	/* abort all pending requests (not supposed to happen here) */
-	if (array_is_created(&conn->request_wait_list)) {
-		array_foreach_modifiable(&conn->request_wait_list, req) {
-			i_assert((*req)->submitted);
-			http_client_request_error(*req,
-				HTTP_CLIENT_REQUEST_ERROR_ABORTED,
-				"Aborting");
-			http_client_request_unref(req);
-		}
+	if (array_is_created(&conn->request_wait_list))
 		array_free(&conn->request_wait_list);
-	}
-	if (conn->pending_request != NULL) {
-		struct http_client_request *pending_req = conn->pending_request;
-		conn->pending_request = NULL;
-		http_client_request_error(pending_req,
- 			HTTP_CLIENT_REQUEST_ERROR_ABORTED,
-			"Aborting");
-		http_client_request_unref(&pending_req);
-	}
-
-	if (conn->http_parser != NULL)
-		http_response_parser_deinit(&conn->http_parser);
 
 	if (conn->ssl_iostream != NULL)
 		ssl_iostream_unref(&conn->ssl_iostream);
@@ -1399,7 +1437,7 @@ void http_client_connection_unref(struct http_client_connection **_conn)
 	if (conn->connect_succeeded)
 		http_client_peer_connection_lost(peer);
 	i_free(conn);
-	*_conn = NULL;
+	return FALSE;
 }
 
 void http_client_connection_close(struct http_client_connection **_conn)

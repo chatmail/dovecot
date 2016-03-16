@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -1254,11 +1254,22 @@ sync_subscription(struct dsync_mailbox_tree_sync_ctx *ctx,
 		  struct dsync_mailbox_node *local_node,
 		  struct dsync_mailbox_node *remote_node)
 {
-	if (ctx->sync_type == DSYNC_MAILBOX_TREES_SYNC_TYPE_PRESERVE_LOCAL ||
-	    local_node->last_subscription_change >
-	    	remote_node->last_subscription_change ||
-	    (local_node->last_subscription_change ==
-	     remote_node->last_subscription_change && local_node->subscribed)) {
+	bool use_local;
+
+	if (ctx->sync_type == DSYNC_MAILBOX_TREES_SYNC_TYPE_PRESERVE_LOCAL)
+		use_local = TRUE;
+	else if (ctx->sync_type == DSYNC_MAILBOX_TREES_SYNC_TYPE_PRESERVE_REMOTE)
+		use_local = FALSE;
+	else if (local_node->last_subscription_change > remote_node->last_subscription_change)
+		use_local = TRUE;
+	else if (local_node->last_subscription_change < remote_node->last_subscription_change)
+		use_local = FALSE;
+	else {
+		/* local and remote have equal timestamps. prefer to subscribe
+		   rather than unsubscribe. */
+		use_local = local_node->subscribed;
+	}
+	if (use_local) {
 		/* use local subscription state */
 		remote_node->subscribed = local_node->subscribed;
 	} else {

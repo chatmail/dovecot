@@ -154,7 +154,11 @@ enum imapc_features {
 	IMAPC_FEATURE_FETCH_HEADERS		= 0x04,
 	IMAPC_FEATURE_GMAIL_MIGRATION		= 0x08,
 	IMAPC_FEATURE_SEARCH			= 0x10,
-	IMAPC_FEATURE_ZIMBRA_WORKAROUNDS	= 0x20
+	IMAPC_FEATURE_ZIMBRA_WORKAROUNDS	= 0x20,
+	IMAPC_FEATURE_NO_EXAMINE		= 0x40,
+	IMAPC_FEATURE_PROXYAUTH			= 0x80,
+	IMAPC_FEATURE_FETCH_MSN_WORKAROUNDS	= 0x100,
+	IMAPC_FEATURE_FETCH_FIX_BROKEN_MAILS	= 0x200
 };
 /* </settings checks> */
 struct imapc_settings {
@@ -172,6 +176,7 @@ struct imapc_settings {
 	const char *imapc_features;
 	const char *imapc_rawlog_dir;
 	const char *imapc_list_prefix;
+	unsigned int imapc_cmd_timeout;
 	unsigned int imapc_max_idle_time;
 
 	const char *pop3_deleted_flag;
@@ -963,6 +968,10 @@ static const struct imapc_feature_list imapc_feature_list[] = {
 	{ "gmail-migration", IMAPC_FEATURE_GMAIL_MIGRATION },
 	{ "search", IMAPC_FEATURE_SEARCH },
 	{ "zimbra-workarounds", IMAPC_FEATURE_ZIMBRA_WORKAROUNDS },
+	{ "no-examine", IMAPC_FEATURE_NO_EXAMINE },
+	{ "proxyauth", IMAPC_FEATURE_PROXYAUTH },
+	{ "fetch-msn-workarounds", IMAPC_FEATURE_FETCH_MSN_WORKAROUNDS },
+	{ "fetch-fix-broken-mails", IMAPC_FEATURE_FETCH_FIX_BROKEN_MAILS },
 	{ NULL, 0 }
 };
 
@@ -1046,6 +1055,7 @@ static const struct setting_define imapc_setting_defines[] = {
 	DEF(SET_STR, imapc_features),
 	DEF(SET_STR, imapc_rawlog_dir),
 	DEF(SET_STR, imapc_list_prefix),
+	DEF(SET_TIME, imapc_cmd_timeout),
 	DEF(SET_TIME, imapc_max_idle_time),
 
 	DEF(SET_STR, pop3_deleted_flag),
@@ -1067,6 +1077,7 @@ static const struct imapc_settings imapc_default_settings = {
 	.imapc_features = "",
 	.imapc_rawlog_dir = "",
 	.imapc_list_prefix = "",
+	.imapc_cmd_timeout = 5*60,
 	.imapc_max_idle_time = 60*29,
 
 	.pop3_deleted_flag = ""
@@ -1274,6 +1285,8 @@ struct login_settings {
 	const char *login_greeting;
 	const char *login_log_format_elements, *login_log_format;
 	const char *login_access_sockets;
+	const char *login_plugin_dir;
+	const char *login_plugins;
 	unsigned int login_proxy_max_disconnect_delay;
 	const char *director_username_hash;
 
@@ -1396,6 +1409,7 @@ struct doveadm_settings {
 	const char *ssl_client_ca_dir;
 	const char *ssl_client_ca_file;
 	const char *director_username_hash;
+	const char *doveadm_api_key;
 
 	ARRAY(const char *) plugin_envs;
 };
@@ -1466,6 +1480,7 @@ struct auth_settings {
 	const char *proxy_self;
 	unsigned int failure_delay;
 
+	bool stats;
 	bool verbose, debug, debug_passwords;
 	const char *verbose_passwords;
 	bool ssl_require_client_cert;
@@ -1528,10 +1543,12 @@ static buffer_t stats_unix_listeners_buf = {
 	stats_unix_listeners, sizeof(stats_unix_listeners), { NULL, }
 };
 static struct file_listener_settings stats_fifo_listeners_array[] = {
-	{ "stats-mail", 0600, "", "" }
+	{ "stats-mail", 0600, "", "" },
+	{ "stats-user", 0600, "", "" }
 };
 static struct file_listener_settings *stats_fifo_listeners[] = {
-	&stats_fifo_listeners_array[0]
+	&stats_fifo_listeners_array[0],
+	&stats_fifo_listeners_array[1]
 };
 static buffer_t stats_fifo_listeners_buf = {
 	stats_fifo_listeners,
@@ -2631,6 +2648,8 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, login_log_format_elements),
 	DEF(SET_STR, login_log_format),
 	DEF(SET_STR, login_access_sockets),
+	DEF(SET_STR, login_plugin_dir),
+	DEF(SET_STR, login_plugins),
 	DEF(SET_TIME, login_proxy_max_disconnect_delay),
 	DEF(SET_STR, director_username_hash),
 
@@ -2656,6 +2675,8 @@ static const struct login_settings login_default_settings = {
 	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
 	.login_log_format = "%$: %s",
 	.login_access_sockets = "",
+	.login_plugin_dir = MODULEDIR"/login",
+	.login_plugins = "",
 	.login_proxy_max_disconnect_delay = 0,
 	.director_username_hash = "%u",
 
@@ -3488,6 +3509,7 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, ssl_client_ca_dir),
 	DEF(SET_STR, ssl_client_ca_file),
 	DEF(SET_STR, director_username_hash),
+	DEF(SET_STR, doveadm_api_key),
 
 	{ SET_STRLIST, "plugin", offsetof(struct doveadm_settings, plugin_envs), NULL },
 
@@ -3510,6 +3532,7 @@ const struct doveadm_settings doveadm_default_settings = {
 	.ssl_client_ca_dir = "",
 	.ssl_client_ca_file = "",
 	.director_username_hash = "%Lu",
+	.doveadm_api_key = "",
 
 	.plugin_envs = ARRAY_INIT
 };
@@ -4155,6 +4178,7 @@ static const struct setting_define auth_setting_defines[] = {
 	DEF(SET_STR, proxy_self),
 	DEF(SET_TIME, failure_delay),
 
+	DEF(SET_BOOL, stats),
 	DEF(SET_BOOL, verbose),
 	DEF(SET_BOOL, debug),
 	DEF(SET_BOOL, debug_passwords),
@@ -4193,6 +4217,7 @@ static const struct auth_settings auth_default_settings = {
 	.proxy_self = "",
 	.failure_delay = 2,
 
+	.stats = FALSE,
 	.verbose = FALSE,
 	.debug = FALSE,
 	.debug_passwords = FALSE,
@@ -4301,32 +4326,32 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&imap_login_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&aggregator_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&login_setting_parser_info, 
-	&master_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&lda_setting_parser_info, 
-	&stats_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&dict_setting_parser_info, 
-	&pop3c_setting_parser_info, 
-	&lmtp_setting_parser_info, 
 	&ssl_params_setting_parser_info, 
-	&imap_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&mdbox_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&replicator_setting_parser_info, 
 	&maildir_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&director_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&imapc_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&master_setting_parser_info, 
 	&pop3_setting_parser_info, 
 	&pop3_login_setting_parser_info, 
-	&replicator_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&lmtp_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&mdbox_setting_parser_info, 
+	&imapc_setting_parser_info, 
+	&imap_setting_parser_info, 
+	&login_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&doveadm_setting_parser_info, 
 	&imap_urlauth_login_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&director_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

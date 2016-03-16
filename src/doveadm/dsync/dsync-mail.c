@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -6,6 +6,7 @@
 #include "md5.h"
 #include "istream.h"
 #include "istream-crlf.h"
+#include "message-header-hash.h"
 #include "message-size.h"
 #include "mail-storage.h"
 #include "dsync-mail.h"
@@ -24,7 +25,8 @@ dsync_mail_get_hash_headers(struct mailbox *box)
 	return mailbox_header_lookup_init(box, hashed_headers);
 }
 
-int dsync_mail_get_hdr_hash(struct mail *mail, const char **hdr_hash_r)
+int dsync_mail_get_hdr_hash(struct mail *mail, unsigned int version,
+			    const char **hdr_hash_r)
 {
 	struct istream *hdr_input, *input;
 	struct mailbox_header_lookup_ctx *hdr_ctx;
@@ -48,7 +50,8 @@ int dsync_mail_get_hdr_hash(struct mail *mail, const char **hdr_hash_r)
 			break;
 		if (size == 0)
 			break;
-		md5_update(&md5_ctx, data, size);
+		message_header_hash_more(&hash_method_md5, &md5_ctx, version,
+					 data, size);
 		i_stream_skip(input, size);
 	}
 	if (input->stream_errno != 0)

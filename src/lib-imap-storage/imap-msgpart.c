@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -763,11 +763,10 @@ imap_msgpart_parse_bodystructure(struct mail *mail,
 
 	if (imap_bodystructure_parse(bodystructure, pmail->data_pool,
 				     all_parts, &error) < 0) {
-		mail_storage_set_critical(mail->box->storage,
+		mail_set_cache_corrupted_reason(mail,
+			MAIL_FETCH_IMAP_BODYSTRUCTURE, t_strdup_printf(
 			"Invalid message_part/BODYSTRUCTURE %s: %s",
-			bodystructure, error);
-		mail_set_cache_corrupted(mail, MAIL_FETCH_MESSAGE_PARTS);
-		mail_set_cache_corrupted(mail, MAIL_FETCH_IMAP_BODYSTRUCTURE);
+			bodystructure, error));
 		return -1;
 	}
 	return 0;

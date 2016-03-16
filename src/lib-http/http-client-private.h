@@ -9,10 +9,9 @@
 #define HTTP_DEFAULT_PORT 80
 #define HTTPS_DEFAULT_PORT 443
 
-#define HTTP_CLIENT_DNS_LOOKUP_TIMEOUT_MSECS (1000*30)
-#define HTTP_CLIENT_CONNECT_TIMEOUT_MSECS (1000*30)
 #define HTTP_CLIENT_CONTINUE_TIMEOUT_MSECS (1000*2)
-#define HTTP_CLIENT_DEFAULT_REQUEST_TIMEOUT_MSECS (1000*60*5)
+#define HTTP_CLIENT_DEFAULT_REQUEST_TIMEOUT_MSECS (1000*60*1)
+#define HTTP_CLIENT_DEFAULT_DNS_LOOKUP_TIMEOUT_MSECS (1000*10)
 #define HTTP_CLIENT_DEFAULT_BACKOFF_TIME_MSECS (100)
 #define HTTP_CLIENT_DEFAULT_BACKOFF_MAX_TIME_MSECS (1000*60)
 
@@ -60,6 +59,7 @@ struct http_client_request {
 	pool_t pool;
 	unsigned int refcount;
 	const char *label;
+	unsigned int id;
 
 	struct http_client_request *prev, *next;
 
@@ -114,6 +114,7 @@ struct http_client_request {
 	unsigned int have_hdr_user_agent:1;
 
 	unsigned int payload_sync:1;
+	unsigned int payload_sync_continue:1;
 	unsigned int payload_chunked:1;
 	unsigned int payload_wait:1;
 	unsigned int urgent:1;
@@ -159,8 +160,6 @@ struct http_client_connection {
 	unsigned int close_indicated:1;
 	unsigned int output_locked:1;       /* output is locked; no pipelining */
 	unsigned int output_broken:1;       /* output is broken; no more requests */
-	unsigned int payload_continue:1;    /* received 100-continue for current
-	                                        request */
 	unsigned int in_req_callback:1;  /* performin request callback (busy) */
 };
 
@@ -190,6 +189,7 @@ struct http_client_peer {
 	unsigned int seen_100_response:1;/* expect: 100-continue succeeded before */
 	unsigned int allows_pipelining:1;/* peer is known to allow persistent
 	                                     connections */
+	unsigned int handling_requests:1;/* currently running request handler */
 };
 
 struct http_client_queue {
@@ -271,7 +271,10 @@ struct http_client {
 int http_client_init_ssl_ctx(struct http_client *client, const char **error_r);
 
 void http_client_request_ref(struct http_client_request *req);
-void http_client_request_unref(struct http_client_request **_req);
+/* Returns FALSE if unrefing destroyed the request entirely */
+bool http_client_request_unref(struct http_client_request **_req);
+void http_client_request_destroy(struct http_client_request **_req);
+
 int http_client_request_delay_from_response(struct http_client_request *req,
 	const struct http_response *response);
 void http_client_request_get_peer_addr(const struct http_client_request *req,
@@ -295,14 +298,15 @@ void http_client_request_error(struct http_client_request *req,
 	unsigned int status, const char *error);
 void http_client_request_redirect(struct http_client_request *req,
 	unsigned int status, const char *location);
-void http_client_request_finish(struct http_client_request **_req);
+void http_client_request_finish(struct http_client_request *req);
 
 struct connection_list *http_client_connection_list_init(void);
 
 struct http_client_connection *
 	http_client_connection_create(struct http_client_peer *peer);
 void http_client_connection_ref(struct http_client_connection *conn);
-void http_client_connection_unref(struct http_client_connection **_conn);
+/* Returns FALSE if unrefing destroyed the connection entirely */
+bool http_client_connection_unref(struct http_client_connection **_conn);
 void http_client_connection_close(struct http_client_connection **_conn);
 int http_client_connection_output(struct http_client_connection *conn);
 void http_client_connection_start_request_timeout(
@@ -445,7 +449,7 @@ static inline const char *
 http_client_request_label(struct http_client_request *req)
 {
 	if (req->label == NULL) {
-		return t_strdup_printf("[%s %s%s]",
+		return t_strdup_printf("[Req%u: %s %s%s]", req->id,
 			req->method, http_url_create(&req->origin_url), req->target);
 	}
 	return req->label;

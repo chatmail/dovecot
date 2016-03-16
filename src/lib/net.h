@@ -152,6 +152,13 @@ int net_addr2ip(const char *addr, struct ip_addr *ip);
 int net_str2port(const char *str, in_port_t *port_r);
 /* char* -> net_port_t translation (allows port zero) */
 int net_str2port_zero(const char *str, in_port_t *port_r);
+/* Parse "host", "host:port", "IPv4", "IPv4:port", "IPv6", "[IPv6]" or
+   "[IPv6]:port" to its host and port components. [IPv6] address is returned
+   without []. If no port is given, return default_port. The :port in the
+   parsed string isn't allowed to be zero, but default_port=0 is passed
+   through. */
+int net_str2hostport(const char *str, in_port_t default_port,
+		     const char **host_r, in_port_t *port_r);
 
 /* Convert IPv6 mapped IPv4 address to an actual IPv4 address. Returns 0 if
    successful, -1 if the source address isn't IPv6 mapped IPv4 address. */
@@ -170,9 +177,10 @@ bool is_ipv6_address(const char *addr) ATTR_PURE;
 /* Parse network as ip/bits. Returns 0 if successful, -1 if invalid input. */
 int net_parse_range(const char *network, struct ip_addr *ip_r,
 		    unsigned int *bits_r);
-/* Returns TRUE if ip is in net_ip/bits network. IPv6 mapped IPv4 addresses
-   are converted to plain IPv4 addresses before matching. Invalid IPs
-   (family=0) never match anything. */
+/* Returns TRUE if ip is in net_ip/bits network. IPv4-mapped IPv6 addresses
+   in "ip" parameter are converted to plain IPv4 addresses before matching.
+   No conversion is done to net_ip though, so using IPv4-mapped IPv6 addresses
+   there will always fail. Invalid IPs (family=0) never match anything. */
 bool net_is_in_network(const struct ip_addr *ip, const struct ip_addr *net_ip,
 		       unsigned int bits) ATTR_PURE;
 

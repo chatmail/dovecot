@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -282,6 +282,9 @@ doveadm_cmd_host_set_or_update(struct doveadm_connection *conn, const char *line
 			return TRUE;
 		}
 		host = mail_host_add_ip(dir->mail_hosts, &ip, tag);
+	} else if (tag[0] != '\0' && strcmp(mail_host_get_tag(host), tag) != 0) {
+		o_stream_nsend_str(conn->output, "host tag can't be changed\n");
+		return TRUE;
 	} else if (host->desynced) {
 		o_stream_nsend_str(conn->output,
 			"host is already being updated - try again later\n");

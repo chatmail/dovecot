@@ -13,9 +13,11 @@ Contents
 
  6. Check that it finds other mailboxes
 
- 7. Check that real mail clients work
+ 7. Check out some other IMAP commands
 
- 8. Make a graceful exit
+ 8. Check that real mail clients work
+
+ 9. Make a graceful exit
 
 For testing POP3 installation, see <TestPop3Installation.txt>.
 
@@ -169,6 +171,28 @@ c OK List completed.
 If they weren't found, set 'mail_debug = yes' and look at the debugging
 information. Fix 'mail_location' setting and try again.
 
+Check out some other IMAP commands
+----------------------------------
+
+If you already have some emails, you can try reading them:
+
+---%<-------------------------------------------------------------------------
+1 SELECT INBOX
+2 FETCH 1:* (FLAGS INTERNALDATE BODY.PEEK[HEADER.FIELDS (SUBJECT)])
+3 FETCH 1 BODY[TEXT]
+---%<-------------------------------------------------------------------------
+
+'1:*' means all messages
+
+You can also try moving a mail to Trash:
+
+---%<-------------------------------------------------------------------------
+4 CREATE Trash
+5 COPY 1 Trash
+6 STORE 1 +FLAGS \Deleted
+7 EXPUNGE
+---%<-------------------------------------------------------------------------
+
 Check that real mail clients work
 ---------------------------------
 
@@ -208,4 +232,4 @@ e logout
 e OK Logout completed.
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-16 04:44)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -10,6 +10,7 @@
 #include "master-service-private.h"
 #include "master-service-settings.h"
 #include "doveadm.h"
+#include "doveadm-print.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -278,6 +279,21 @@ static void cmd_log_find(int argc, char *argv[])
 	}
 }
 
+static const char *t_cmd_log_error_trim(const char *orig)
+{
+	unsigned int pos;
+
+	/* Trim whitespace from suffix and remove ':' if it exists */
+	for (pos = strlen(orig); pos > 0; pos--) {
+		if (orig[pos-1] != ' ') {
+			if (orig[pos-1] == ':') 
+				pos--;
+			break;
+		}
+	}
+	return orig[pos] == '\0' ? orig : t_strndup(orig, pos);
+}
+
 static void cmd_log_error_write(const char *const *args, time_t min_timestamp)
 {
 	/* <type> <timestamp> <prefix> <text> */
@@ -298,8 +314,10 @@ static void cmd_log_error_write(const char *const *args, time_t min_timestamp)
 		t = 0;
 	}
 	if (t >= min_timestamp) {
-		printf("%s %s%s%s\n", t_strflocaltime(LOG_TIMESTAMP_FORMAT, t),
-		       args[2], type_prefix, args[3]);
+		doveadm_print(t_strflocaltime(LOG_TIMESTAMP_FORMAT, t));
+		doveadm_print(t_cmd_log_error_trim(args[2]));
+		doveadm_print(t_cmd_log_error_trim(type_prefix));
+		doveadm_print(args[3]);
 	}
 }
 
@@ -332,6 +350,15 @@ static void cmd_log_errors(int argc, char *argv[])
 	net_set_nonblock(fd, FALSE);
 
 	input = i_stream_create_fd_autoclose(&fd, (size_t)-1);
+
+	doveadm_print_init(DOVEADM_PRINT_TYPE_FORMATTED);
+	doveadm_print_formatted_set_format("%{timestamp} %{type}: %{prefix}: %{text}\n");
+
+	doveadm_print_header_simple("timestamp");
+	doveadm_print_header_simple("prefix");
+	doveadm_print_header_simple("type");
+	doveadm_print_header_simple("text");
+
 	while ((line = i_stream_read_next_line(input)) != NULL) T_BEGIN {
 		args = t_strsplit_tabescaped(line);
 		if (str_array_length(args) == 4)
@@ -348,12 +375,22 @@ struct doveadm_cmd doveadm_cmd_log[] = {
 	{ cmd_log_test, "log test", "" },
 	{ cmd_log_reopen, "log reopen", "" },
 	{ cmd_log_find, "log find", "[<dir>]" },
-	{ cmd_log_errors, "log errors", "[-s <min_timestamp>]" }
+};
+
+struct doveadm_cmd_ver2 doveadm_cmd_log_errors_ver2 = {
+	.name = "log errors",
+	.usage = "[-s <min_timestamp>]",
+	.old_cmd = cmd_log_errors,
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('s', "since", CMD_PARAM_STR, 0)
+DOVEADM_CMD_PARAMS_END
 };
 
 void doveadm_register_log_commands(void)
 {
 	unsigned int i;
+
+	doveadm_cmd_register_ver2(&doveadm_cmd_log_errors_ver2);
 
 	for (i = 0; i < N_ELEMENTS(doveadm_cmd_log); i++)
 		doveadm_register_cmd(&doveadm_cmd_log[i]);

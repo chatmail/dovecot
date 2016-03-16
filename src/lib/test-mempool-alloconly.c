@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 
@@ -16,15 +16,24 @@ static bool mem_has_bytes(const void *mem, size_t size, uint8_t b)
 
 void test_mempool_alloconly(void)
 {
+#define SENTRY_SIZE 32
+#define SENTRY_CHAR '\xDE'
 #define PMALLOC_MAX_COUNT 128
 	pool_t pool;
 	unsigned int i, j, k;
 	void *mem[PMALLOC_MAX_COUNT + 1];
-	bool success = TRUE;
+	char *sentry;
 
+	test_begin("mempool_alloconly");
 	for (i = 0; i < 64; i++) {
 		for (j = 1; j <= 128; j++) {
 			pool = pool_alloconly_create(MEMPOOL_GROWING"test", i);
+			/* make sure p_malloc() doesn't overwrite unallocated
+			   data in data stack. parts of the code relies on
+			   this. */
+			sentry = t_buffer_get(SENTRY_SIZE);
+			memset(sentry, SENTRY_CHAR, SENTRY_SIZE);
+
 			mem[0] = p_malloc(pool, j);
 			memset(mem[0], j, j);
 
@@ -32,17 +41,16 @@ void test_mempool_alloconly(void)
 				mem[k] = p_malloc(pool, k);
 				memset(mem[k], k, k);
 			}
+			test_assert(mem_has_bytes(sentry, SENTRY_SIZE, SENTRY_CHAR));
+			test_assert(t_buffer_get(SENTRY_SIZE) == sentry);
 
-			if (!mem_has_bytes(mem[0], j, j))
-				success = FALSE;
-			for (k = 1; k <= PMALLOC_MAX_COUNT; k++) {
-				if (!mem_has_bytes(mem[k], k, k))
-					success = FALSE;
-			}
+			test_assert(mem_has_bytes(mem[0], j, j));
+			for (k = 1; k <= PMALLOC_MAX_COUNT; k++)
+				test_assert(mem_has_bytes(mem[k], k, k));
 			pool_unref(&pool);
 		}
 	}
-	test_out("mempool_alloconly", success);
+	test_end();
 }
 
 enum fatal_test_state fatal_mempool(int stage)

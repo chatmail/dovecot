@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -6,6 +6,7 @@
 #include "hash.h"
 #include "doveadm.h"
 #include "doveadm-who.h"
+#include "doveadm-print.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -27,6 +28,7 @@ struct kick_pid {
 struct kick_context {
 	struct who_context who;
 	HASH_TABLE(void *, struct kick_pid *) pids;
+	bool cli;
 	bool force_kick;
 	ARRAY(const char *) kicked_users;
 };
@@ -101,25 +103,30 @@ kick_print_kicked(struct kick_context *ctx, const bool show_warning)
 	const char *const *users;
 
 	if (array_count(&ctx->kicked_users) == 0) {
-		printf("no users kicked\n");
+		if (ctx->cli)
+			printf("no users kicked\n");
 		doveadm_exit_code = DOVEADM_EX_NOTFOUND;
 		return;
 	}
 
-	if (show_warning) {
-		printf("warning: other connections would also be "
-		       "kicked from following users:\n");
-	} else
-		printf("kicked connections from the following users:\n");
+	if (ctx->cli) {
+		if (show_warning) {
+			printf("warning: other connections would also be "
+			       "kicked from following users:\n");
+		} else {
+			printf("kicked connections from the following users:\n");
+		}
+	}
 
 	array_sort(&ctx->kicked_users, i_strcmp_p);
 	users = array_get(&ctx->kicked_users, &count);
-	printf("%s ", users[0]);
+	doveadm_print(users[0]);
 	for (i = 1; i < count; i++) {
 		if (strcmp(users[i-1], users[i]) != 0)
-			printf("%s ", users[i]);
+			doveadm_print(users[i]);
 	}
-	printf("\n");
+	if (ctx->cli)
+		printf("\n");
 
 	if (show_warning)
 		printf("Use the '-f' option to enforce the disconnect.\n");
@@ -167,36 +174,43 @@ static void kick_users(struct kick_context *ctx)
 	kick_print_kicked(ctx, show_enforce_warning);
 }
 
-static void cmd_kick(int argc, char *argv[])
+static void cmd_kick(struct doveadm_cmd_context *cctx)
 {
+	const char *const *masks;
 	struct kick_context ctx;
-	int c;
 
 	memset(&ctx, 0, sizeof(ctx));
-	ctx.who.anvil_path = t_strconcat(doveadm_settings->base_dir, "/anvil", NULL);
-	ctx.force_kick = FALSE;
+	if (!doveadm_cmd_param_str(cctx, "socket-path", &(ctx.who.anvil_path)))
+		ctx.who.anvil_path = t_strconcat(doveadm_settings->base_dir, "/anvil", NULL);
+	(void)doveadm_cmd_param_bool(cctx, "force", &(ctx.force_kick));
+	if (!doveadm_cmd_param_array(cctx, "mask", &masks)) {
+		doveadm_exit_code = EX_USAGE;
+		i_error("user and/or ip[/bits] must be specified.");
+		return;
+	}
+	ctx.cli = cctx->cli;
+	if (!ctx.cli) {
+		/* force-kick is a pretty ugly option. its output can't be
+		   nicely translated to an API reply. it also wouldn't be very
+		   useful in scripts, only for preventing a new admin from
+		   accidentally kicking too many users. it's also useful only
+		   in a non-recommended setup where processes are handling
+		   multiple connections. so for now we'll preserve the option
+		   for CLI, but always do a force-kick with non-CLI. */
+		ctx.force_kick = TRUE;
+	}
 	ctx.who.pool = pool_alloconly_create("kick pids", 10240);
 	hash_table_create_direct(&ctx.pids, ctx.who.pool, 0);
 
-	while ((c = getopt(argc, argv, "a:f")) > 0) {
-		switch (c) {
-		case 'a':
-			ctx.who.anvil_path = optarg;
-			break;
-		case 'f':
-			ctx.force_kick = TRUE;
-			break;
-		default:
-			help(&doveadm_cmd_kick);
-		}
+	if (who_parse_args(&ctx.who, masks)!=0) {
+		hash_table_destroy(&ctx.pids);
+		pool_unref(&ctx.who.pool);
+		return;
 	}
 
-	argv += optind - 1;
-	if (argv[1] == NULL) {
-		i_fatal_status(EX_USAGE,
-			       "user and/or ip[/bits] must be specified.");
-	}
-	who_parse_args(&ctx.who, argv);
+	doveadm_print_init(DOVEADM_PRINT_TYPE_FORMATTED);
+	doveadm_print_formatted_set_format("%{result} ");
+	doveadm_print_header_simple("result");
 
 	who_lookup(&ctx.who, kick_aggregate_line);
 	kick_users(&ctx);
@@ -205,7 +219,13 @@ static void cmd_kick(int argc, char *argv[])
 	pool_unref(&ctx.who.pool);
 }
 
-struct doveadm_cmd doveadm_cmd_kick = {
-	cmd_kick, "kick",
-	"[-a <anvil socket path>] [-f] <user mask>[|]<ip/bits>"
+struct doveadm_cmd_ver2 doveadm_cmd_kick_ver2 = {
+	.name = "kick",
+	.cmd = cmd_kick,
+	.usage = "[-a <anvil socket path>] <user mask>[|]<ip/bits>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('a',"socket-path",CMD_PARAM_STR,0)
+DOVEADM_CMD_PARAM('f',"force",CMD_PARAM_BOOL,0)
+DOVEADM_CMD_PARAM('\0',"mask",CMD_PARAM_ARRAY,CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
 };

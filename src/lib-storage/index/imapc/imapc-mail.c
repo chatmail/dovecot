@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -55,13 +55,19 @@ static bool imapc_mail_is_expunged(struct mail *_mail)
 	/* we may be running against a server that hasn't bothered sending
 	   us an EXPUNGE. see if NOOP sends it. */
 	imapc_mailbox_noop(mbox);
+	if (!mbox->initial_sync_done) {
+		/* NOOP caused a reconnection and desync */
+		return FALSE;
+	}
 
 	return !imapc_msgmap_uid_to_rseq(msgmap, _mail->uid, &rseq);
 }
 
-static void imapc_mail_failed(struct mail *mail, const char *field)
+static int imapc_mail_failed(struct mail *mail, const char *field)
 {
+	struct imapc_mail *imail = (struct imapc_mail *)mail;
 	struct imapc_mailbox *mbox = (struct imapc_mailbox *)mail->box;
+	bool fix_broken_mail = FALSE;
 
 	if (mail->expunged || imapc_mail_is_expunged(mail)) {
 		mail_set_expunged(mail);
@@ -69,18 +75,25 @@ static void imapc_mail_failed(struct mail *mail, const char *field)
 		/* we've already logged a disconnection error */
 		mail_storage_set_internal_error(mail->box->storage);
 	} else {
-		/* NOTE: earlier we didn't treat this as a failure, because
-		   old Exchange versions fail to return any data for messages
-		   in Calendars mailbox. But it's a bad idea to always assume
-		   that a missing field is intentional, because there's
-		   potential for data loss. Ideally we could detect whether
-		   this is an Exchange issue or not, but I don't have access
-		   to such an old Exchange anymore. So at least for now until
-		   someone complains, the Exchange workaround is disabled. */
+		/* By default we'll assume that this is a critical failure,
+		   because we don't want to lose any data. We can be here
+		   either because it's a temporary failure on the server or
+		   it's a permanent failure. Unfortunately we can't know
+		   which case it is, so permanent failures need to be worked
+		   around by setting imapc_features=fetch-fix-broken-mails.
+
+		   One reason for permanent failures was that earlier Exchange
+		   versions failed to return any data for messages in Calendars
+		   mailbox. This seems to be fixed in newer versions.
+		   */
+		fix_broken_mail = imail->fetch_ignore_if_missing;
 		mail_storage_set_critical(mail->box->storage,
-			"imapc: Remote server didn't send %s for UID %u in %s",
-			field, mail->uid, mail->box->vname);
+			"imapc: Remote server didn't send %s for UID %u in %s%s (FETCH replied: %s)",
+			field, mail->uid, mail->box->vname,
+			fix_broken_mail ? " - treating it as empty" : "",
+			imail->last_fetch_reply);
 	}
+	return fix_broken_mail ? 0 : -1;
 }
 
 static int imapc_mail_get_received_date(struct mail *_mail, time_t *date_r)
@@ -95,8 +108,11 @@ static int imapc_mail_get_received_date(struct mail *_mail, time_t *date_r)
 		if (imapc_mail_fetch(_mail, MAIL_FETCH_RECEIVED_DATE, NULL) < 0)
 			return -1;
 		if (data->received_date == (time_t)-1) {
-			imapc_mail_failed(_mail, "INTERNALDATE");
-			return -1;
+			if (imapc_mail_failed(_mail, "INTERNALDATE") < 0)
+				return -1;
+			/* assume that the server never returns INTERNALDATE
+			   for this mail (see BODY[] failure handling) */
+			data->received_date = 0;
 		}
 	}
 	*date_r = data->received_date;
@@ -138,8 +154,11 @@ static int imapc_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 		if (imapc_mail_fetch(_mail, MAIL_FETCH_PHYSICAL_SIZE, NULL) < 0)
 			return -1;
 		if (data->physical_size == (uoff_t)-1) {
-			imapc_mail_failed(_mail, "RFC822.SIZE");
-			return -1;
+			if (imapc_mail_failed(_mail, "RFC822.SIZE") < 0)
+				return -1;
+			/* assume that the server never returns RFC822.SIZE
+			   for this mail (see BODY[] failure handling) */
+			data->physical_size = 0;
 		}
 		*size_r = data->physical_size;
 		return 0;
@@ -271,8 +290,14 @@ imapc_mail_get_stream(struct mail *_mail, bool get_body,
 			return -1;
 
 		if (data->stream == NULL) {
-			imapc_mail_failed(_mail, "BODY[]");
-			return -1;
+			if (imapc_mail_failed(_mail, "BODY[]"))
+				return -1;
+			i_assert(data->stream == NULL);
+
+			/* return the broken email as empty */
+			mail->body_fetched = TRUE;
+			data->stream = i_stream_create_from_data(NULL, 0);
+			imapc_mail_init_stream(mail);
 		}
 	}
 
@@ -280,9 +305,8 @@ imapc_mail_get_stream(struct mail *_mail, bool get_body,
 				      stream_r);
 }
 
-static bool
-imapc_mail_has_headers_in_cache(struct index_mail *mail,
-				struct mailbox_header_lookup_ctx *headers)
+bool imapc_mail_has_headers_in_cache(struct index_mail *mail,
+				     struct mailbox_header_lookup_ctx *headers)
 {
 	struct mail *_mail = &mail->mail.mail;
 	unsigned int i;
@@ -471,7 +495,7 @@ static int imapc_mail_get_guid(struct mail *_mail, const char **value_r)
 		if (imapc_mail_fetch(_mail, MAIL_FETCH_GUID, NULL) < 0)
 			return -1;
 		if (imail->data.guid == NULL) {
-			imapc_mail_failed(_mail, mbox->guid_fetch_field_name);
+			(void)imapc_mail_failed(_mail, mbox->guid_fetch_field_name);
 			return -1;
 		}
 	} else {
@@ -559,5 +583,6 @@ struct mail_vfuncs imapc_mail_vfuncs = {
 	NULL,
 	index_mail_expunge,
 	index_mail_set_cache_corrupted,
-	index_mail_opened
+	index_mail_opened,
+	index_mail_set_cache_corrupted_reason
 };

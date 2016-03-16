@@ -12,6 +12,8 @@ Currently supported dict backends are:
 
  * Flat files
  * FS (lib-fs wrapper)
+ * Memcached (ASCII protocol)
+ * Memcached (Binary protocol)
  * Redis
  * Proxy
  * SQL
@@ -42,8 +44,46 @@ fs:posix:prefix=/var/lib/dovecot/dict
 
 Would create a separate file under /var/lib/dovecot/dict for each key.
 
-Redis
------
+Memcached (Binary Protocol) (v2.2.9+)
+-------------------------------------
+
+This driver uses the "new" Memcache binary protocol.
+
+https://code.google.com/p/memcached/wiki/MemcacheBinaryProtocol
+
+---%<-------------------------------------------------------------------------
+memcached:param=value:param2=value2:...
+---%<-------------------------------------------------------------------------
+
+Supported parameters are:
+
+ * host: Memcached server host (default: 127.0.0.1)
+ * port: Memcached server port (default: 11211)
+ * prefix: Prefix to add to all keys (default: empty)
+ * timeout_msecs: Abort lookups after specified number of milliseconds
+   (default: 30000)
+
+Memcached (ASCII Protocol) (v2.2.9+)
+------------------------------------
+
+This driver uses the "legacy" Memcache ASCII protocol.
+
+https://github.com/memcached/memcached/blob/master/doc/protocol.txt
+
+---%<-------------------------------------------------------------------------
+memcached_ascii:param=value:param2=value2:...
+---%<-------------------------------------------------------------------------
+
+Supported parameters are:
+
+ * host: Memcached server host (default: 127.0.0.1)
+ * port: Memcached server port (default: 11211)
+ * prefix: Prefix to add to all keys (default: empty)
+ * timeout_msecs: Abort lookups after specified number of milliseconds
+   (default: 30000)
+
+Redis (v2.2.9+)
+---------------
 
 ---%<-------------------------------------------------------------------------
 redis:param=value:param2=value2:...
@@ -110,4 +150,4 @@ SQL Mapping
 
 FIXME: Write this. For now see 'example-config/dovecot-dict-sql.conf.ext'
 
-(This file was created from the wiki on 2015-12-11 04:45)
+(This file was created from the wiki on 2016-03-16 04:44)

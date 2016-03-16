@@ -103,7 +103,8 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsasl_la_LIBADD =
-am_libsasl_la_OBJECTS = mech-login.lo mech-plain.lo dsasl-client.lo
+am_libsasl_la_OBJECTS = mech-external.lo mech-login.lo mech-plain.lo \
+	dsasl-client.lo
 libsasl_la_OBJECTS = $(am_libsasl_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -279,6 +280,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -394,6 +396,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib
 
 libsasl_la_SOURCES = \
+	mech-external.c \
 	mech-login.c \
 	mech-plain.c \
 	dsasl-client.c 
@@ -459,6 +462,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsasl-client.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-external.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-login.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain.Plo@am__quote@
 

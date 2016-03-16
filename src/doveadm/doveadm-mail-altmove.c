@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -150,6 +150,13 @@ static struct doveadm_mail_cmd_context *cmd_altmove_alloc(void)
 	return &ctx->ctx;
 }
 
-struct doveadm_mail_cmd cmd_altmove = {
-	cmd_altmove_alloc, "altmove", "[-r] <search query>"
+struct doveadm_cmd_ver2 doveadm_cmd_altmove_ver2 = {
+	.name = "altmove",
+	.mail_cmd = cmd_altmove_alloc,
+	.usage = DOVEADM_CMD_MAIL_USAGE_PREFIX "[-r] <search query>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_MAIL_COMMON
+DOVEADM_CMD_PARAM('r', "reverse", CMD_PARAM_BOOL, 0)
+DOVEADM_CMD_PARAM('\0', "query", CMD_PARAM_ARRAY, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
 };

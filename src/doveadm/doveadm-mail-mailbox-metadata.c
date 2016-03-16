@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -286,22 +286,47 @@ static struct doveadm_mail_cmd_context *cmd_mailbox_metadata_list_alloc(void)
 	return &ctx->ctx;
 }
 
-struct doveadm_mail_cmd cmd_mailbox_metadata_set = {
-	cmd_mailbox_metadata_set_alloc, "mailbox metadata set",
-	"<mailbox> <key> <value>"
+struct doveadm_cmd_ver2 doveadm_cmd_mailbox_metadata_set_ver2 = {
+	.name = "mailbox metadata set",
+	.mail_cmd = cmd_mailbox_metadata_set_alloc,
+	.usage = DOVEADM_CMD_MAIL_USAGE_PREFIX"<mailbox> <key> <value>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_MAIL_COMMON
+DOVEADM_CMD_PARAM('\0', "mailbox", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "key", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "value", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
 };
 
-struct doveadm_mail_cmd cmd_mailbox_metadata_unset = {
-	cmd_mailbox_metadata_unset_alloc, "mailbox metadata unset",
-	"<mailbox> <key>"
+struct doveadm_cmd_ver2 doveadm_cmd_mailbox_metadata_unset_ver2 = {
+	.name = "mailbox metadata unset",
+	.mail_cmd = cmd_mailbox_metadata_unset_alloc,
+	.usage = DOVEADM_CMD_MAIL_USAGE_PREFIX"<mailbox> <key>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_MAIL_COMMON
+DOVEADM_CMD_PARAM('\0', "mailbox", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "key", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
 };
 
-struct doveadm_mail_cmd cmd_mailbox_metadata_get = {
-	cmd_mailbox_metadata_get_alloc, "mailbox metadata get",
-	"<mailbox> <key>"
+struct doveadm_cmd_ver2 doveadm_cmd_mailbox_metadata_get_ver2 = {
+	.name = "mailbox metadata get",
+	.mail_cmd = cmd_mailbox_metadata_get_alloc,
+	.usage = DOVEADM_CMD_MAIL_USAGE_PREFIX"<mailbox> <key>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_MAIL_COMMON
+DOVEADM_CMD_PARAM('\0', "mailbox", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "key", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
 };
 
-struct doveadm_mail_cmd cmd_mailbox_metadata_list = {
-	cmd_mailbox_metadata_list_alloc, "mailbox metadata list",
-	"<mailbox> [<key prefix>]"
+struct doveadm_cmd_ver2 doveadm_cmd_mailbox_metadata_list_ver2 = {
+	.name = "mailbox metadata list",
+	.mail_cmd = cmd_mailbox_metadata_list_alloc,
+	.usage = DOVEADM_CMD_MAIL_USAGE_PREFIX"<mailbox> [<key prefix>]",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_MAIL_COMMON
+DOVEADM_CMD_PARAM('\0', "mailbox", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "key-prefix", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
 };

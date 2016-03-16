@@ -10,7 +10,11 @@ enum imapc_features {
 	IMAPC_FEATURE_FETCH_HEADERS		= 0x04,
 	IMAPC_FEATURE_GMAIL_MIGRATION		= 0x08,
 	IMAPC_FEATURE_SEARCH			= 0x10,
-	IMAPC_FEATURE_ZIMBRA_WORKAROUNDS	= 0x20
+	IMAPC_FEATURE_ZIMBRA_WORKAROUNDS	= 0x20,
+	IMAPC_FEATURE_NO_EXAMINE		= 0x40,
+	IMAPC_FEATURE_PROXYAUTH			= 0x80,
+	IMAPC_FEATURE_FETCH_MSN_WORKAROUNDS	= 0x100,
+	IMAPC_FEATURE_FETCH_FIX_BROKEN_MAILS	= 0x200
 };
 /* </settings checks> */
 
@@ -29,6 +33,7 @@ struct imapc_settings {
 	const char *imapc_features;
 	const char *imapc_rawlog_dir;
 	const char *imapc_list_prefix;
+	unsigned int imapc_cmd_timeout;
 	unsigned int imapc_max_idle_time;
 
 	const char *pop3_deleted_flag;

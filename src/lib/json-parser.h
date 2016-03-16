@@ -19,8 +19,18 @@ enum json_type {
 	JSON_TYPE_NULL
 };
 
+enum json_parser_flags {
+	/* By default we assume that the input is an object and parsing skips
+	   the root level "{" and "}". If this flag is set, it's possible to
+	   parse any other type of JSON values directly. */
+	JSON_PARSER_NO_ROOT_OBJECT	= 0x01
+};
+
 /* Parse JSON tokens from the input stream. */
 struct json_parser *json_parser_init(struct istream *input);
+struct json_parser *json_parser_init_flags(struct istream *input,
+					   enum json_parser_flags flags);
+
 int json_parser_deinit(struct json_parser **parser, const char **error_r);
 
 /* Parse the next token. Returns 1 if found, 0 if more input stream is
@@ -36,7 +46,10 @@ void json_parse_skip_next(struct json_parser *parser);
 int json_parse_next_stream(struct json_parser *parser,
 			   struct istream **input_r);
 
-/* Append data to already opened JSON string. */
+/* Append data to already opened JSON string. src should be valid UTF-8 data. */
 void json_append_escaped(string_t *dest, const char *src);
+/* Same as json_append_escaped(), but append non-\0 terminated input. */
+void json_append_escaped_data(string_t *dest, const unsigned char *src, size_t size);
+void ostream_escaped_json_format(string_t *dest, unsigned char src);
 
 #endif

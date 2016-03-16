@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -12,16 +12,23 @@
 #include "imapc-storage.h"
 #include "imapc-sync.h"
 
+struct imapc_sync_command {
+	struct imapc_sync_context *ctx;
+	char *cmd_str;
+	bool ignore_no;
+};
+
 static void imapc_sync_callback(const struct imapc_command_reply *reply,
 				void *context)
 {
-	struct imapc_sync_context *ctx = context;
+	struct imapc_sync_command *cmd = context;
+	struct imapc_sync_context *ctx = cmd->ctx;
 
 	i_assert(ctx->sync_command_count > 0);
 
 	if (reply->state == IMAPC_COMMAND_STATE_OK)
 		;
-	else if (reply->state == IMAPC_COMMAND_STATE_NO) {
+	else if (reply->state == IMAPC_COMMAND_STATE_NO && cmd->ignore_no) {
 		/* maybe the message was expunged already.
 		   some servers fail STOREs with NO in such situation. */
 	} else if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED) {
@@ -31,25 +38,47 @@ static void imapc_sync_callback(const struct imapc_command_reply *reply,
 		ctx->failed = TRUE;
 	} else {
 		mail_storage_set_critical(&ctx->mbox->storage->storage,
-			"imapc: Sync command failed: %s", reply->text_full);
+					  "imapc: Sync command '%s' failed: %s",
+					  cmd->cmd_str, reply->text_full);
 		ctx->failed = TRUE;
 	}
 	
 	if (--ctx->sync_command_count == 0)
 		imapc_client_stop(ctx->mbox->storage->client->client);
+	i_free(cmd->cmd_str);
+	i_free(cmd);
+}
+
+static struct imapc_command *
+imapc_sync_cmd_full(struct imapc_sync_context *ctx, const char *cmd_str,
+		    bool ignore_no)
+{
+	struct imapc_sync_command *sync_cmd;
+	struct imapc_command *cmd;
+
+	sync_cmd = i_new(struct imapc_sync_command, 1);
+	sync_cmd->ctx = ctx;
+	sync_cmd->cmd_str = i_strdup(cmd_str);
+	sync_cmd->ignore_no = ignore_no;
+
+	ctx->sync_command_count++;
+	cmd = imapc_client_mailbox_cmd(ctx->mbox->client_box,
+				       imapc_sync_callback, sync_cmd);
+	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_RETRIABLE);
+	imapc_command_send(cmd, cmd_str);
+	return cmd;
 }
 
 static struct imapc_command *
 imapc_sync_cmd(struct imapc_sync_context *ctx, const char *cmd_str)
 {
-	struct imapc_command *cmd;
+	return imapc_sync_cmd_full(ctx, cmd_str, FALSE);
+}
 
-	ctx->sync_command_count++;
-	cmd = imapc_client_mailbox_cmd(ctx->mbox->client_box,
-				       imapc_sync_callback, ctx);
-	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_RETRIABLE);
-	imapc_command_send(cmd, cmd_str);
-	return cmd;
+static struct imapc_command *
+imapc_sync_store_cmd(struct imapc_sync_context *ctx, const char *cmd_str)
+{
+	return imapc_sync_cmd_full(ctx, cmd_str, TRUE);
 }
 
 static void
@@ -73,7 +102,7 @@ imapc_sync_add_missing_deleted_flags(struct imapc_sync_context *ctx,
 		mail_index_lookup_uid(ctx->sync_view, seq2, &uid2);
 		cmd = t_strdup_printf("UID STORE %u:%u +FLAGS \\Deleted",
 				      uid1, uid2);
-		imapc_sync_cmd(ctx, cmd);
+		imapc_sync_store_cmd(ctx, cmd);
 	}
 }
 
@@ -90,7 +119,7 @@ static void imapc_sync_index_flags(struct imapc_sync_context *ctx,
 			    sync_rec->uid1, sync_rec->uid2);
 		imap_write_flags(str, sync_rec->add_flags, NULL);
 		str_append_c(str, ')');
-		imapc_sync_cmd(ctx, str_c(str));
+		imapc_sync_store_cmd(ctx, str_c(str));
 	}
 
 	if (sync_rec->remove_flags != 0) {
@@ -100,7 +129,7 @@ static void imapc_sync_index_flags(struct imapc_sync_context *ctx,
 			    sync_rec->uid1, sync_rec->uid2);
 		imap_write_flags(str, sync_rec->remove_flags, NULL);
 		str_append_c(str, ')');
-		imapc_sync_cmd(ctx, str_c(str));
+		imapc_sync_store_cmd(ctx, str_c(str));
 	}
 }
 
@@ -129,7 +158,7 @@ imapc_sync_index_keyword(struct imapc_sync_context *ctx,
 	kw_p = array_idx(ctx->keywords, sync_rec->keyword_idx);
 	str_append(str, *kw_p);
 	str_append_c(str, ')');
-	imapc_sync_cmd(ctx, str_c(str));
+	imapc_sync_store_cmd(ctx, str_c(str));
 }
 
 static void imapc_sync_expunge_finish(struct imapc_sync_context *ctx)
@@ -372,9 +401,8 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 	if (mbox->box.v.sync_notify != NULL)
 		mbox->box.v.sync_notify(&mbox->box, 0, 0);
 
-	if (!mbox->initial_sync_done) {
-		if (!ctx->failed)
-			imapc_initial_sync_check(ctx, FALSE);
+	if (!mbox->initial_sync_done && !ctx->failed) {
+		imapc_initial_sync_check(ctx, FALSE);
 		mbox->initial_sync_done = TRUE;
 	}
 }
@@ -502,12 +530,28 @@ static int imapc_sync(struct imapc_mailbox *mbox)
 	return 0;
 }
 
+static void
+imapc_noop_if_needed(struct imapc_mailbox *mbox, enum mailbox_sync_flags flags)
+{
+	enum imapc_capability capabilities;
+
+	capabilities = imapc_client_get_capabilities(mbox->storage->client->client);
+	if ((capabilities & IMAPC_CAPABILITY_IDLE) == 0 ||
+	    (flags & MAILBOX_SYNC_FLAG_FULL_READ) != 0) {
+		/* do NOOP to make sure we have the latest changes before
+		   starting sync. this is necessary either because se don't
+		   support IDLE at all, or because we want to be sure that we
+		   have the latest changes (IDLE is started with a small delay,
+		   so we might not actually even be in IDLE right not) */
+		imapc_mailbox_noop(mbox);
+	}
+}
+
 struct mailbox_sync_context *
 imapc_mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 {
 	struct imapc_mailbox *mbox = (struct imapc_mailbox *)box;
 	struct imapc_mailbox_list *list = mbox->storage->client->_list;
-	enum imapc_capability capabilities;
 	bool changes;
 	int ret = 0;
 
@@ -522,16 +566,8 @@ imapc_mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 			ret = -1;
 	}
 
-	capabilities = imapc_client_get_capabilities(mbox->storage->client->client);
-	if ((capabilities & IMAPC_CAPABILITY_IDLE) == 0 ||
-	    (flags & MAILBOX_SYNC_FLAG_FULL_READ) != 0) {
-		/* do NOOP to make sure we have the latest changes before
-		   starting sync. this is necessary either because se don't
-		   support IDLE at all, or because we want to be sure that we
-		   have the latest changes (IDLE is started with a small delay,
-		   so we might not actually even be in IDLE right not) */
-		imapc_mailbox_noop(mbox);
-	}
+	if (ret == 0)
+		imapc_noop_if_needed(mbox, flags);
 
 	if (imapc_mailbox_commit_delayed_trans(mbox, &changes) < 0)
 		ret = -1;

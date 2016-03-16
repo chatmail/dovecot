@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
@@ -65,6 +65,9 @@ void userdb_template_export(struct userdb_template *tmpl,
 	string_t *str;
 	const char *const *args, *value;
 	unsigned int i, count;
+
+	if (userdb_template_is_empty(tmpl))
+		return;
 
 	str = t_str_new(256);
 	table = auth_request_get_var_expand_table(auth_request, NULL);

@@ -74,7 +74,8 @@ http_server_connection_create(struct http_server *server,
 	int fd_in, int fd_out, bool ssl,
 	const struct http_server_callbacks *callbacks, void *context);
 void http_server_connection_ref(struct http_server_connection *conn);
-void http_server_connection_unref(struct http_server_connection **_conn);
+/* Returns FALSE if unrefing destroyed the connection entirely */
+bool http_server_connection_unref(struct http_server_connection **_conn);
 void http_server_connection_close(struct http_server_connection **_conn,
 	const char *reason);
 const struct http_server_stats *
@@ -90,6 +91,14 @@ http_server_request_get_response(struct http_server_request *req);
 /* Returns TRUE if request is finished either because a response was sent
    or because the request was aborted. */
 bool http_server_request_is_finished(struct http_server_request *req);
+
+/* Return input stream for the request's payload. Optionally, this stream
+   can be made blocking. Do *NOT* meddle with the FD of the http_request
+   payload to achieve the same, because protocol violations will result.
+ */
+struct istream *
+http_server_request_get_payload_input(struct http_server_request *req,
+	bool blocking);
 
 /* Get the authentication credentials provided in this request. Returns 0 if
    the Authorization header is absent, returns -1 when that header cannot be
@@ -144,6 +153,9 @@ http_server_response_create(struct http_server_request *req,
 	unsigned int status, const char *reason);
 void http_server_response_add_header(struct http_server_response *resp,
 				    const char *key, const char *value);
+/* Change the response code and text, cannot be used after submission */
+void http_server_response_update_status(struct http_server_response *resp,
+					unsigned int status, const char *reason);
 void http_server_response_set_date(struct http_server_response *resp,
 				    time_t date);
 void http_server_response_set_payload(struct http_server_response *resp,
@@ -151,6 +163,14 @@ void http_server_response_set_payload(struct http_server_response *resp,
 void http_server_response_set_payload_data(struct http_server_response *resp,
 				     const unsigned char *data, size_t size);
 
+struct ostream *
+http_server_response_get_payload_output(struct http_server_response *resp,
+	bool blocking);
+
+/* get some information about response */
+void http_server_response_get_status(struct http_server_response *resp,
+	int *status_r, const char **reason_r);
+uoff_t http_server_response_get_total_size(struct http_server_response *resp);
 void http_server_response_add_auth(
 	struct http_server_response *resp,
 	const struct http_auth_challenge *chlng);
@@ -164,5 +184,19 @@ void http_server_response_submit_tunnel(struct http_server_response *resp,
 	http_server_tunnel_callback_t callback, void *context);
 
 void http_server_switch_ioloop(struct http_server *server);
+
+/* submits response and blocks until provided payload is sent. Multiple calls
+   are allowed; payload transmission is finished with
+   http_server_response_finish_payload(). If the sending fails, returns -1
+   and sets resp=NULL to indicate that the response was freed, otherwise
+   returns 0 and resp is unchanged. */
+int http_server_response_send_payload(struct http_server_response **resp,
+	const unsigned char *data, size_t size);
+/* Finish sending the payload. Always frees resp and sets it to NULL.
+   Returns 0 on success, -1 on error. */
+int http_server_response_finish_payload(struct http_server_response **resp);
+/* abort response payload transmission prematurely. this closes the associated
+   connection */
+void http_server_response_abort_payload(struct http_server_response **resp);
 
 #endif

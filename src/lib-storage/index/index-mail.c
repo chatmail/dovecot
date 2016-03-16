@@ -1,10 +1,11 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "buffer.h"
 #include "ioloop.h"
 #include "istream.h"
+#include "hex-binary.h"
 #include "str.h"
 #include "message-date.h"
 #include "message-part-serialize.h"
@@ -81,25 +82,30 @@ int index_mail_cache_lookup_field(struct index_mail *mail, buffer_t *buf,
 	return ret;
 }
 
-static struct message_part *get_unserialized_parts(struct index_mail *mail)
+static int get_serialized_parts(struct index_mail *mail, buffer_t **part_buf_r)
 {
 	const unsigned int field_idx =
 		mail->ibox->cache_fields[MAIL_CACHE_MESSAGE_PARTS].idx;
+
+	*part_buf_r = buffer_create_dynamic(pool_datastack_create(), 128);
+	return index_mail_cache_lookup_field(mail, *part_buf_r, field_idx);
+}
+
+static struct message_part *get_unserialized_parts(struct index_mail *mail)
+{
 	struct message_part *parts;
 	buffer_t *part_buf;
 	const char *error;
-	int ret;
 
-	part_buf = buffer_create_dynamic(pool_datastack_create(), 128);
-	ret = index_mail_cache_lookup_field(mail, part_buf, field_idx);
-	if (ret <= 0)
+	if (get_serialized_parts(mail, &part_buf) <= 0)
 		return NULL;
 
 	parts = message_part_deserialize(mail->mail.data_pool, part_buf->data,
 					 part_buf->used, &error);
 	if (parts == NULL) {
 		mail_cache_set_corrupted(mail->mail.mail.box->cache,
-			"Corrupted cached mime.parts data (%s)", error);
+			"Corrupted cached mime.parts data: %s (parts=%s)",
+			error, binary_to_hex(part_buf->data, part_buf->used));
 	}
 	return parts;
 }
@@ -138,6 +144,22 @@ static bool get_cached_parts(struct index_mail *mail)
 
 	mail->data.parts = part;
 	return TRUE;
+}
+
+void index_mail_set_message_parts_corrupted(struct mail *mail, const char *error)
+{
+	buffer_t *part_buf;
+	const char *parts_str;
+
+	if (get_serialized_parts((struct index_mail *)mail, &part_buf) <= 0)
+		parts_str = "";
+	else
+		parts_str = binary_to_hex(part_buf->data, part_buf->used);
+
+	mail_set_cache_corrupted_reason(mail,
+		MAIL_FETCH_MESSAGE_PARTS, t_strdup_printf(
+		"Cached MIME parts don't match message during parsing: %s (parts=%s)",
+		error, parts_str));
 }
 
 static bool index_mail_get_fixed_field(struct index_mail *mail,
@@ -945,16 +967,17 @@ index_mail_parse_body_finish(struct index_mail *mail,
 			     enum index_cache_field field, bool success)
 {
 	struct istream *parser_input = mail->data.parser_input;
+	const char *error = NULL;
 	int ret;
 
 	if (parser_input == NULL) {
-		ret = message_parser_deinit(&mail->data.parser_ctx,
-					    &mail->data.parts) < 0 ? 0 : 1;
+		ret = message_parser_deinit_from_parts(&mail->data.parser_ctx,
+			&mail->data.parts, &error) < 0 ? 0 : 1;
 	} else {
 		mail->data.parser_input = NULL;
 		i_stream_ref(parser_input);
-		ret = message_parser_deinit(&mail->data.parser_ctx,
-					    &mail->data.parts) < 0 ? 0 : 1;
+		ret = message_parser_deinit_from_parts(&mail->data.parser_ctx,
+			&mail->data.parts, &error) < 0 ? 0 : 1;
 		if (success && (parser_input->stream_errno == 0 ||
 				parser_input->stream_errno == EPIPE)) {
 			/* do one final read, which verifies that the message
@@ -977,8 +1000,8 @@ index_mail_parse_body_finish(struct index_mail *mail,
 	}
 	if (ret <= 0) {
 		if (ret == 0) {
-			mail_set_cache_corrupted(&mail->mail.mail,
-						 MAIL_FETCH_MESSAGE_PARTS);
+			i_assert(error != NULL);
+			index_mail_set_message_parts_corrupted(&mail->mail.mail, error);
 		}
 		mail->data.parts = NULL;
 		mail->data.parsed_bodystructure = FALSE;
@@ -1339,11 +1362,10 @@ int index_mail_get_special(struct mail *_mail,
 			if (imap_body_parse_from_bodystructure(
 					data->bodystructure, str, &error) < 0) {
 				/* broken, continue.. */
-				mail_storage_set_critical(_mail->box->storage,
+				mail_set_cache_corrupted_reason(_mail,
+					MAIL_FETCH_IMAP_BODYSTRUCTURE, t_strdup_printf(
 					"Invalid BODYSTRUCTURE %s: %s",
-					data->bodystructure, error);
-				mail_set_cache_corrupted(_mail,
-					MAIL_FETCH_IMAP_BODYSTRUCTURE);
+					data->bodystructure, error));
 			} else {
 				data->body = str_c(str);
 			}
@@ -1465,12 +1487,11 @@ static void index_mail_close_streams_full(struct index_mail *mail, bool closing)
 {
 	struct index_mail_data *data = &mail->data;
 	struct message_part *parts;
+	const char *error;
 
 	if (data->parser_ctx != NULL) {
-		if (message_parser_deinit(&data->parser_ctx, &parts) < 0) {
-			mail_set_cache_corrupted(&mail->mail.mail,
-						 MAIL_FETCH_MESSAGE_PARTS);
-		}
+		if (message_parser_deinit_from_parts(&data->parser_ctx, &parts, &error) < 0)
+			index_mail_set_message_parts_corrupted(&mail->mail.mail, error);
 		mail->data.parser_input = NULL;
 		if (mail->data.save_bodystructure_body)
 			mail->data.save_bodystructure_header = TRUE;
@@ -1816,6 +1837,7 @@ void index_mail_add_temp_wanted_fields(struct mail *_mail,
 {
 	struct index_mail *mail = (struct index_mail *)_mail;
 	struct index_mail_data *data = &mail->data;
+	struct mailbox_header_lookup_ctx *new_wanted_headers;
 	ARRAY_TYPE(const_string) names;
 	unsigned int i;
 
@@ -1833,11 +1855,12 @@ void index_mail_add_temp_wanted_fields(struct mail *_mail,
 		for (i = 0; i < headers->count; i++)
 			array_append(&names, &headers->name[i], 1);
 		array_append_zero(&names);
-		if (data->wanted_headers != NULL)
-			mailbox_header_lookup_unref(&data->wanted_headers);
-		data->wanted_headers =
+		new_wanted_headers =
 			mailbox_header_lookup_init(_mail->box,
 						   array_idx(&names, 0));
+		if (data->wanted_headers != NULL)
+			mailbox_header_lookup_unref(&data->wanted_headers);
+		data->wanted_headers = new_wanted_headers;
 	}
 	index_mail_update_access_parts_pre(_mail);
 	index_mail_update_access_parts_post(_mail);
@@ -2114,6 +2137,13 @@ void index_mail_precache(struct mail *mail)
 void index_mail_set_cache_corrupted(struct mail *mail,
 				    enum mail_fetch_field field)
 {
+	index_mail_set_cache_corrupted_reason(mail, field, "");
+}
+
+void index_mail_set_cache_corrupted_reason(struct mail *mail,
+					   enum mail_fetch_field field,
+					   const char *reason)
+{
 	struct index_mail *imail = (struct index_mail *)mail;
 	const char *field_name;
 
@@ -2155,9 +2185,15 @@ void index_mail_set_cache_corrupted(struct mail *mail,
 	mail_cache_transaction_reset(mail->transaction->cache_trans);
 	imail->data.no_caching = TRUE;
 	imail->data.forced_no_caching = TRUE;
-	mail_cache_set_corrupted(mail->box->cache,
-				 "Broken %s for mail UID %u",
-				 field_name, mail->uid);
+	if (reason[0] == '\0') {
+		mail_cache_set_corrupted(mail->box->cache,
+			"Broken %s for mail UID %u in mailbox %s",
+			field_name, mail->uid, mail->box->vname);
+	} else {
+		mail_cache_set_corrupted(mail->box->cache,
+			"Broken %s for mail UID %u in mailbox %s: %s",
+			field_name, mail->uid, mail->box->vname, reason);
+	}
 }
 
 int index_mail_opened(struct mail *mail ATTR_UNUSED,

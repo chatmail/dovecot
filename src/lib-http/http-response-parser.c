@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -45,6 +45,8 @@ http_response_parser_init(struct istream *input,
 void http_response_parser_deinit(struct http_response_parser **_parser)
 {
 	struct http_response_parser *parser = *_parser;
+
+	*_parser = NULL;
 
 	http_message_parser_deinit(&parser->parser);
 	i_free(parser);

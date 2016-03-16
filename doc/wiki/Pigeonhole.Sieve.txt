@@ -127,7 +127,7 @@ The Pigeonhole Sieve interpreter recognizes the following Sieve extensions:
 |                                                                 |            |          | mailboxes upon |
 |                                                                 |            |          | fileinto       |
 +-----------------------------------------------------------------+------------+----------+----------------+
-| mboxmetadata [http://tools.ietf.org/html/rfc5490]               | supported  | yes      | Provides access|
+| mboxmetadata [http://tools.ietf.org/html/rfc5490]               | supported  | no       | Provides access|
 |                                                                 | (v0.4.7+)  |          | to mailbox     |
 |                                                                 |            |          | METADATA entries|
 +-----------------------------------------------------------------+------------+----------+----------------+
@@ -146,7 +146,7 @@ The Pigeonhole Sieve interpreter recognizes the following Sieve extensions:
 |                                                                 |            |          | relational     |
 |                                                                 |            |          | match support  |
 +-----------------------------------------------------------------+------------+----------+----------------+
-| servermetadata [http://tools.ietf.org/html/rfc5490]             | supported  | yes      | Provides access|
+| servermetadata [http://tools.ietf.org/html/rfc5490]             | supported  | no       | Provides access|
 |                                                                 | (v0.4.7+)  |          | to server      |
 |                                                                 |            |          | METADATA entries|
 +-----------------------------------------------------------------+------------+----------+----------------+
@@ -278,4 +278,4 @@ protocol. This is also provided by the <Pigeonhole.txt> project. It is
 available as a separate Dovecot service. Its configuration and use is explained
 on the <Pigeonhole ManageSieve page> [Pigeonhole.ManageSieve.txt].
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-16 04:44)
