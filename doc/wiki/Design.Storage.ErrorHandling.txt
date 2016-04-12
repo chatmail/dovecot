@@ -60,4 +60,4 @@ There are also a few other calls that aren't used as often, but can be helpful:
     * ENOENT, ENOTDIR: Not found
     * ELOOP: Directory structure is broken
 
-(This file was created from the wiki on 2016-03-16 04:44)
+(This file was created from the wiki on 2016-03-30 04:43)

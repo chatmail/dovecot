@@ -1,10 +1,229 @@
-2016-03-16 09:48:21 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (0968566)
+2016-03-29 15:29:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (806d709)
 
-    Released v2.2.22.
+    Released v2.2.23
 
 
 M	NEWS
 M	configure.ac
+
+2016-03-30 10:51:50 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (edc8b27)
+
+    lib-storage: Fixed memory leak when iterating attributes.
+
+
+M	src/lib-storage/mailbox-attribute.c
+
+2016-03-30 10:34:06 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (7b52bed)
+
+    doveadm-mail: Don't lose rip/lip/lport/rport in passdb lookups for doveadm
+    TCP connections
+
+
+M	src/doveadm/doveadm-mail.c
+
+2016-03-30 08:24:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (128216e)
+
+    director: Avoid a potential assert-crash after removing a director from
+    ring.
+
+    This should fix the crash: Panic: director: file director-connection.c: line
+    1926 (director_connection_init_out): assertion failed: (!host->removed)
+
+    Also moved the last_network_failure timestamp reset a bit later, since 
+    there's no need to reset the timestamp if we're not actually connecting to
+    the server.
+
+M	src/director/director-connection.c
+
+2016-03-29 21:17:22 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b32d195)
+
+    doveadm: Fixed reading USER environment for v1 commands.
+
+
+M	src/doveadm/doveadm-mail.c
+
+2016-03-29 15:04:01 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (593b096)
+
+    doveadm-batch: Fixed error message for an unknown subcommand.
+
+
+M	src/doveadm/doveadm-mail-batch.c
+
+2016-03-29 14:57:20 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (bbf6694)
+
+    doveadm: Fixed adding username header to commands iterating through multiple
+    users.
+
+
+M	src/doveadm/doveadm-mail.c
+
+2016-03-29 14:17:01 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d9fa0b9)
+
+    doveadm-server: v2 mail commands weren't doing a userdb lookup.
+
+
+M	src/doveadm/doveadm-mail.c
+
+2016-03-29 14:10:10 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (8a0f558)
+
+    doveadm-server: Fixed running multi-word commands.
+
+    The problem with for example "mailbox status" command is that:
+    - doveadm cli: argv[0] = "mailbox", argv[1] = "status"
+    - doveadm-server: argv[0] = "mailbox status"
+
+    So with doveadm cli we'll now instead just skip over words until argv[0] is
+    the last word of the command ("status").
+
+M	src/doveadm/client-connection.c
+M	src/doveadm/doveadm-cmd.c
+M	src/doveadm/doveadm-cmd.h
+M	src/doveadm/doveadm-mail-batch.c
+
+2016-03-29 14:06:43 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4e92ade)
+
+    doveadm: Code cleanup - always use const char *const[] type for argv.
+
+    Needed to fix compiler warnings in the following patch.
+
+M	src/doveadm/client-connection.c
+M	src/doveadm/doveadm-cmd.c
+M	src/doveadm/doveadm-cmd.h
+M	src/doveadm/doveadm.c
+
+2016-03-25 02:48:55 +0900 Stephan Bosch <stephan@rename-it.nl> (b291fa3)
+
+    lib-http: client: Fixed request timeout handling during pipelining.
+
+    The timeout was not managed correctly. If an earlier request finished, it 
+    would not restart the timeout for the next pending request.
+
+    Also, filling the pipeline caused the timout to be reset inappropriately, 
+    postponing its expiry.
+
+M	src/lib-http/http-client-connection.c
+M	src/lib-http/http-client-private.h
+M	src/lib-http/http-client-request.c
+
+2016-03-25 02:47:28 +0900 Stephan Bosch <stephan@rename-it.nl> (bbbf8a9)
+
+    lib-http: client: Fixed handling of stalled connections that emerge when the
+    client ioloop hasn't run for a long time.
+
+    Inside the peer's request handler routine, the connections are verified 
+    after the ioloop continues. If they turn out to be broken, they 
+    self-destruct while the handler routine is active, leading to problems.
+
+    Solved by referencing the connection and retrying the connection statistics 
+    loop when a connection is lost in the process.
+
+M	src/lib-http/http-client-peer.c
+
+2016-03-24 10:07:15 +0900 Timo Sirainen <timo.sirainen@dovecot.fi> (6f84e4f)
+
+    director: Make sure freeing a user doesn't leak a timeout.
+
+
+M	src/director/user-directory.c
+
+2016-03-24 10:01:17 +0900 Timo Sirainen <timo.sirainen@dovecot.fi> (c3b5e55)
+
+    director: Fixed memory leak when killing a user.
+
+
+M	src/director/director.c
+
+2016-03-24 10:00:00 +0900 Timo Sirainen <timo.sirainen@dovecot.fi> (6e06d93)
+
+    director: Make sure a long-delayed kill reply for user doesn't mess up the
+    state.
+
+    This should fix assert-crash:
+
+    director: Panic: file director.c: line 690
+    (director_user_kill_finish_delayed_to): assertion failed:
+    (ctx->user->kill_state == USER_KILL_STATE_DELAY)
+
+M	src/director/director.c
+
+2016-03-24 09:43:43 +0900 Timo Sirainen <timo.sirainen@dovecot.fi> (0d4a162)
+
+    director: Small improvements to director-test.sh
+
+    Test with a bigger director ring. Include microseconds in log timestamps to 
+    make debugging easier. Changed the name of the info_log_path.
+
+M	src/director/director-test.sh
+
+2016-03-24 09:42:50 +0900 Timo Sirainen <timo.sirainen@dovecot.fi> (c5274b7)
+
+    director: Don't re-send SYNC unnecessarily often.
+
+
+M	src/director/director-connection.c
+M	src/director/director.c
+M	src/director/director.h
+
+2016-03-24 09:36:14 +0900 Timo Sirainen <timo.sirainen@dovecot.fi> (d592ce4)
+
+    director: Fixed user weakness getting stuck if multiple directors set user
+    weak simultaneously
+
+
+M	src/director/director-connection.c
+
+2016-03-23 09:01:31 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (1cccb7f)
+
+    doveadm: Move getenv to correct place
+
+    All getenv()s must be done after master_service_init() or the pointer will
+    be corrupted with Linux and other OSes without setproctitle().
+
+M	src/doveadm/doveadm.c
+
+2016-03-22 09:19:45 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (102279b)
+
+    doveadm-server: Fixed initializing username for mail commands.
+
+
+M	src/doveadm/client-connection.c
+
+2016-03-23 10:08:06 +0900 Timo Sirainen <timo.sirainen@dovecot.fi> (9112e6d)
+
+    doveadm: Getting user from USER environment wasn't done in the right place.
+
+    doveadm_mail_cmdline_init() is also called when parsing commands from 
+    doveadm-server. The USER environment is supposed to be read only from 
+    doveadm command line.
+
+M	src/doveadm/doveadm-mail.c
+M	src/doveadm/doveadm.c
+
+2016-03-21 21:51:49 +0900 Timo Sirainen <timo.sirainen@dovecot.fi> (aea44e1)
+
+    lib: Avoid assert-crash in istream-concat at close.
+
+    If stream was seeked to EOF, cur_input=NULL and closing the stream would
+    cause i_stream_concat_skip() to crash. Fixed this by making sure cur_input
+    is never NULL. This also adds a check to not allow seeking past EOF, but
+    this shouldn't happen anyway.
+
+M	src/lib/istream-concat.c
+
+2016-03-21 21:46:47 +0900 Timo Sirainen <timo.sirainen@dovecot.fi> (43ed7f9)
+
+    lib: Small code cleanup to istream-concat - don't use a magic UINT_MAX value
+    as error code
+
+
+M	src/lib/istream-concat.c
+
+2016-03-03 19:55:03 -0700 Michael M Slusarz <michael.slusarz@dovecot.fi> (4313a5b)
+
+    doveadm: Fix typos in error messages
+
+
+M	src/doveadm/client-connection-http.c
 
 2016-03-16 09:27:04 +0200 Teemu Huovila <teemu.huovila@dovecot.fi> (ab36e80)
 

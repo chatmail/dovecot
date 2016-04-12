@@ -210,7 +210,8 @@ static void cmd_exec(int argc ATTR_UNUSED, char *argv[])
 	i_fatal("execv(%s) failed: %m", argv[0]);
 }
 
-static bool doveadm_try_run(const char *cmd_name, int argc, const char *argv[])
+static bool doveadm_try_run(const char *cmd_name, int argc,
+			    const char *const argv[])
 {
 	const struct doveadm_cmd *cmd;
 
@@ -367,6 +368,10 @@ int main(int argc, char *argv[])
 		/* disable debugging unless -D is given */
 		i_set_debug_file("/dev/null");
 	}
+
+	/* this has to be done here because proctitle hack can break
+	   the env pointer */
+	cctx.username = getenv("USER");
 
 	if (!doveadm_cmd_try_run_ver2(cmd_name, argc, (const char**)argv, &cctx) &&
 	    !doveadm_try_run(cmd_name, argc, (const char **)argv) &&
