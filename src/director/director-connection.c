@@ -824,9 +824,16 @@ director_cmd_user_weak(struct director_connection *conn,
 		return TRUE;
 	}
 
-	if (ret == 0)
-		;
-	else if (dir_host == conn->dir->self_host) {
+	if (ret == 0) {
+		/* First time we're seeing this - forward it to others also.
+		   We'll want to do it even if the user was already marked as
+		   weak, because otherwise if two directors mark the user weak
+		   at the same time both the USER-WEAK notifications reach
+		   only half the directors until they collide and neither one
+		   finishes going through the whole ring marking the user
+		   non-weak. */
+		weak_forward = TRUE;
+	} else if (dir_host == conn->dir->self_host) {
 		/* We originated this USER-WEAK request. The entire ring has seen
 		   it and there weren't any conflicts. Make the user non-weak. */
 		dir_debug("user refresh: %u Our USER-WEAK seen by the entire ring",
@@ -1437,7 +1444,14 @@ static bool director_connection_sync(struct director_connection *conn,
 			return TRUE;
 	}
 
+	/* If directors got disconnected while we were waiting a SYNC reply,
+	   it might have gotten lost. If we've received a DIRECTOR update since
+	   the last time we sent a SYNC, retry sending it here to make sure
+	   it doesn't get stuck. We don't want to do this too eagerly because
+	   it may trigger desynced_hosts_hash != hosts_hash mismatch, which
+	   causes unnecessary error logging and hosts-resending. */
 	if ((host == NULL || !host->self) &&
+	    dir->last_sync_sent_ring_change_counter != dir->ring_change_counter &&
 	    (time_t)dir->self_host->last_sync_timestamp != ioloop_time)
 		(void)director_resend_sync(dir);
 	return TRUE;
@@ -1458,8 +1472,6 @@ static bool director_cmd_connect(struct director_connection *conn,
 	}
 
 	host = director_host_get(conn->dir, &ip, port);
-	/* reset failure timestamp so we'll actually try to connect there. */
-	host->last_network_failure = 0;
 
 	/* remote suggests us to connect elsewhere */
 	if (dir->right != NULL &&
@@ -1470,6 +1482,11 @@ static bool director_cmd_connect(struct director_connection *conn,
 			  host->name, dir->right->name);
 		return TRUE;
 	}
+
+	/* reset failure timestamp so we'll actually try to connect there. */
+	host->last_network_failure = 0;
+	/* reset removed-flag, so we don't crash */
+	host->removed = FALSE;
 
 	if (dir->right == NULL) {
 		dir_debug("Received CONNECT request to %s, "

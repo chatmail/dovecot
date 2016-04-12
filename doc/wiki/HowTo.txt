@@ -34,7 +34,6 @@ HOWTOs / Examples / Tutorials
     * <Dovecot, Postfix with Dovecot LDA transport and Dovecot SASL Auth,
       Postfix Admin, MySQL and SquirrelMail>
       [HowTo.DovecotLDAPostfixAdminMySQL.txt]
-    * MySQL, Postfix and CCC [http://postfix.pentachron.net/]
     * MySQL, Exim, SpamAssassin and ClamAV
       [http://struction.de/projects/HOWTO_VirtualMail_Exim-MySQL-Spamassassin-ClamAV-Dovecot/]
     * Postfix and Dovecot with MySQL and TLS/SSL, Postgrey and DSPAM
@@ -82,4 +81,4 @@ Others:
    [http://content.fens.org/index.php?q=admin-howto/mail/dovecot2dbmail-proxy]
  * <Configuration files> [HowTo.WriteConfiguration.txt]
 
-(This file was created from the wiki on 2016-03-16 04:44)
+(This file was created from the wiki on 2016-03-30 04:43)

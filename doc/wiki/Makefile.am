@@ -116,6 +116,7 @@ wikifiles = ACL.txt \
 	MailboxFormat.MH.txt \
 	MailboxFormat.Maildir.txt \
 	MailboxFormat.dbox.txt \
+	MailboxFormat.imapc.txt \
 	MailboxFormat.mailstore.txt \
 	MailboxFormat.mbox.txt \
 	MailboxFormat.mbx.txt \

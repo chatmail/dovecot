@@ -62,6 +62,14 @@ Mailbox formats supported by Dovecot:
 |                             |               | testing and       |
 |                             |               | benchmarking only.|
 +-----------------------------+---------------+-------------------+-------------+
+| <imapc>                     | 'imapc'       | Use remote IMAP   |
+| [MailboxFormat.imapc.txt]   |               | server as mail    |
+|                             |               | storage.          |
++-----------------------------+---------------+-------------------+-------------+
+| <pop3c>                     | 'pop3c'       | Use remote POP3   |
+| [MailboxFormat.pop3c.txt]   |               | server as mail    |
+|                             |               | storage.          |
++-----------------------------+---------------+-------------------+-------------+
 
 The *Tag* column indicates the tag which is used at the beginning of a <mailbox
 location specification> [MailLocation.txt].
@@ -136,4 +144,4 @@ References
    http://www.linuxmail.info/mbox-maildir-mail-storage-formats/
    [http://www.linux-mail.info/mbox-maildir-mail-storage-formats/]
 
-(This file was created from the wiki on 2016-03-16 04:44)
+(This file was created from the wiki on 2016-03-30 04:43)

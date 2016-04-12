@@ -41,6 +41,7 @@ put it in "quotes". The mailbox settings are:
 namespace inbox {
   #prefix = INBOX. # the namespace prefix isn't added again to the mailbox
 names.
+  inbox = yes
   # ...
 
   mailbox Trash {
@@ -70,4 +71,4 @@ names.
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-03-16 04:44)
+(This file was created from the wiki on 2016-03-30 04:43)

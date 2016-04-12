@@ -170,4 +170,4 @@ The test:
     * run command klist (list all kerberos keys) should show imap/HOSTNAME
  * /etc/hosts has to be set properly so that kerberos can find server.
 
-(This file was created from the wiki on 2016-03-16 04:43)
+(This file was created from the wiki on 2016-03-30 04:43)
