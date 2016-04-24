@@ -33,7 +33,9 @@ enum mail_storage_service_flags {
 	/* When executing doveconf, tell it to use sysexits codes */
 	MAIL_STORAGE_SERVICE_FLAG_USE_SYSEXITS		= 0x400,
 	/* Don't create namespaces, only the user. */
-	MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES		= 0x800
+	MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES		= 0x800,
+	/* Enable autoexpunging at deinit. */
+	MAIL_STORAGE_SERVICE_FLAG_AUTOEXPUNGE		= 0x1000
 };
 
 struct mail_storage_service_input {
@@ -137,6 +139,8 @@ mail_storage_service_user_get_service_ctx(struct mail_storage_service_user *user
 const struct var_expand_table *
 mail_storage_service_get_var_expand_table(struct mail_storage_service_ctx *ctx,
 					  struct mail_storage_service_input *input);
+const char *mail_storage_service_fields_var_expand(const char *data,
+						   const char *const *fields);
 /* Return the settings pointed to by set_root parameter in _init() */
 void *mail_storage_service_get_settings(struct master_service *service);
 

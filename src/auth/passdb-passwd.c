@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "passdb.h"
@@ -99,7 +99,7 @@ passwd_preinit(pool_t pool, const char *args)
 	else if (*args != '\0')
 		i_fatal("passdb passwd: Unknown setting: %s", args);
 
-	module->cache_key = PASSWD_CACHE_KEY;
+	module->default_cache_key = PASSWD_CACHE_KEY;
 	module->default_pass_scheme = PASSWD_PASS_SCHEME;
 	return module;
 }

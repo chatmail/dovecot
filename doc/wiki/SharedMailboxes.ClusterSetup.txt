@@ -48,4 +48,4 @@ possibilities for it are:
  * sql: Shared SQL server
  * Any other <shared dictionary> [Dictionary.txt]
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-30 04:43)

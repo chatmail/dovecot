@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 
@@ -22,9 +22,11 @@ int main(void)
 		test_hex_binary,
 		test_ioloop,
 		test_iso8601_date,
+		test_iostream_temp,
 		test_istream,
 		test_istream_base64_decoder,
 		test_istream_base64_encoder,
+		test_istream_chain,
 		test_istream_concat,
 		test_istream_crlf,
 		test_istream_failure_at,
@@ -37,6 +39,7 @@ int main(void)
 		test_mempool_alloconly,
 		test_net,
 		test_numpack,
+		test_ostream_escaped,
 		test_ostream_failure_at,
 		test_ostream_file,
 		test_primes,

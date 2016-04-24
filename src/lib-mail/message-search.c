@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -110,8 +110,20 @@ static bool message_search_more_decoded2(struct message_search_context *ctx,
 bool message_search_more(struct message_search_context *ctx,
 			 struct message_block *raw_block)
 {
+	struct message_block decoded_block;
+
+	return message_search_more_get_decoded(ctx, raw_block, &decoded_block);
+}
+
+bool message_search_more_get_decoded(struct message_search_context *ctx,
+				     struct message_block *raw_block,
+				     struct message_block *decoded_block_r)
+{
 	struct message_header_line *hdr = raw_block->hdr;
-	struct message_block block;
+	struct message_block decoded_block;
+
+	memset(decoded_block_r, 0, sizeof(*decoded_block_r));
+	decoded_block_r->part = raw_block->part;
 
 	if (raw_block->part != ctx->prev_part) {
 		/* part changes. we must change this before looking at
@@ -143,16 +155,18 @@ bool message_search_more(struct message_search_context *ctx,
 		if (!ctx->content_type_text)
 			return FALSE;
 	}
-	if (!message_decoder_decode_next_block(ctx->decoder, raw_block, &block))
+	if (!message_decoder_decode_next_block(ctx->decoder, raw_block,
+					       &decoded_block))
 		return FALSE;
 
-	if (block.hdr != NULL &&
+	if (decoded_block.hdr != NULL &&
 	    (ctx->flags & MESSAGE_SEARCH_FLAG_SKIP_HEADERS) != 0) {
 		/* Content-* header */
 		return FALSE;
 	}
 
-	return message_search_more_decoded2(ctx, &block);
+	*decoded_block_r = decoded_block;
+	return message_search_more_decoded2(ctx, &decoded_block);
 }
 
 bool message_search_more_decoded(struct message_search_context *ctx,
@@ -179,7 +193,8 @@ void message_search_reset(struct message_search_context *ctx)
 
 static int
 message_search_msg_real(struct message_search_context *ctx,
-			struct istream *input, struct message_part *parts)
+			struct istream *input, struct message_part *parts,
+			const char **error_r)
 {
 	const enum message_header_parser_flags hdr_parser_flags =
 		MESSAGE_HEADER_PARSER_FLAG_CLEAN_ONELINE;
@@ -210,7 +225,7 @@ message_search_msg_real(struct message_search_context *ctx,
 		/* normal exit */
 		ret = 0;
 	}
-	if (message_parser_deinit(&parser_ctx, &new_parts) < 0) {
+	if (message_parser_deinit_from_parts(&parser_ctx, &new_parts, error_r) < 0) {
 		/* broken parts */
 		ret = -1;
 	}
@@ -218,12 +233,17 @@ message_search_msg_real(struct message_search_context *ctx,
 }
 
 int message_search_msg(struct message_search_context *ctx,
-		       struct istream *input, struct message_part *parts)
+		       struct istream *input, struct message_part *parts,
+		       const char **error_r)
 {
+	char *error;
 	int ret;
 
 	T_BEGIN {
-		ret = message_search_msg_real(ctx, input, parts);
+		ret = message_search_msg_real(ctx, input, parts, error_r);
+		error = i_strdup(*error_r);
 	} T_END;
+	*error_r = t_strdup(error);
+	i_free(error);
 	return ret;
 }

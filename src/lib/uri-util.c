@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -601,6 +601,13 @@ int uri_parse_path_segment(struct uri_parser *parser, const char **segment_r)
 			break;
 
 		p++;
+	}
+
+	if (p < parser->end &&
+		*p != '/' && *p != '?' && *p != '#' ) {
+		parser->error =
+			"Path component contains invalid character";
+		return -1;
 	}
 
 	if (p == parser->cur)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -447,6 +447,7 @@ int mailbox_attribute_iter_deinit(struct mailbox_attribute_iter **_iter)
 	/* wrapped */
 	intiter = (struct mailbox_attribute_internal_iter *)iter;
 	ret = intiter->real_iter->box->v.attribute_iter_deinit(intiter->real_iter);
+	array_free(&intiter->extra_attrs);
 	i_free(intiter);
 	return ret;
 }

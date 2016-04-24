@@ -24,32 +24,37 @@ LDAP.
 Example:
 
 ---%<-------------------------------------------------------------------------
-user_attrs = homeDirectory=home, uidNumber=uid, gidNumber=gid
+user_attrs = \
+  =home=%{ldap:homeDirectory}, \
+  =uid=%{ldap:uidNumber}, \
+  =gid=%{ldap:gidNumber}
 user_filter = (&(objectClass=posixAccount)(uid=%u))
 
 # For using doveadm -A:
-iterate_attrs = uid=user
+iterate_attrs = =user=%{ldap:uid}
 iterate_filter = (objectClass=posixAccount)
 ---%<-------------------------------------------------------------------------
 
-Attribute templates
--------------------
+Attribute templates (v2.1+)
+---------------------------
 
-You can mix static text with the value returned from LDAP by using %$ in the
-value. Some examples:
+You can mix static text with the value returned from LDAP by using %{ldap:*}
+variables, which expand to the named LDAP attribute's value. Some examples:
 
 Create a "quota_rule" field with value "*:bytes=<n>" where <n> comes from
 "quotaBytes" LDAP attribute:
 
 ---%<-------------------------------------------------------------------------
-user_attrs = quotaBytes=quota_rule=*:bytes=%$
+user_attrs = \
+  =quota_rule=*:bytes=%{ldap:quotaBytes}
 ---%<-------------------------------------------------------------------------
 
 Create a "mail" field with value "maildir:/var/mail/<dir>/Maildir" where <dir>
 comes from "sAMAccountName" LDAP attribute:
 
 ---%<-------------------------------------------------------------------------
-user_attrs = sAMAccountName=mail=maildir:/var/spool/vmail/%$/Maildir
+user_attrs = \
+  =mail=maildir:/var/spool/vmail/%{ldap:sAMAccountName}/Maildir
 ---%<-------------------------------------------------------------------------
 
 You can add static fields that aren't looked up from LDAP. For example create a
@@ -57,20 +62,20 @@ You can add static fields that aren't looked up from LDAP. For example create a
 
 ---%<-------------------------------------------------------------------------
 user_attrs = \
-  quotaBytes=quota_rule=*:bytes=%$, \
+  =quota_rule=*:bytes=%{ldap:quotaBytes}, \
   =mail=maildir:/var/vmail/%d/%n/Maildir
 ---%<-------------------------------------------------------------------------
 
-Attribute templates (v2.1)
---------------------------
-
-With v2.1+ you can use more than one LDAP attribute in a variable. The new
-syntax is also easier to understand. For example:
+If you don't want a field to exist at all when its LDAP attribute doesn't
+exist, you can give the attribute name before the first "=" character. For
+example this doesn't return "home" or "mail" fields if "mailboxPath" doesn't
+exist:
 
 ---%<-------------------------------------------------------------------------
 user_attrs = \
   =quota_rule=*:bytes=%{ldap:quotaBytes}, \
-  =home=/home/%{ldap:userDomain}/%{ldap:userName}
+  mailboxPath=home=/home/%{ldap:mailboxPath}, \
+  mailboxPath=mail=maildir:~/Maildir
 ---%<-------------------------------------------------------------------------
 
 It's also possible to give default values to nonexistent attributes in v2.1.11+
@@ -81,6 +86,10 @@ Subqueries and pointers (v2.2)
 ------------------------------
 
 LDAP values can now have DN pointers to other entries that are queried.
+
+*Note*: These aren't actually very useful anymore. See the next section for how
+to do multiple queries more easily using multiple userdbs.
+
 Example:
 
 ---%<-------------------------------------------------------------------------
@@ -107,6 +116,45 @@ The activePath's value can be either "primaryPath" or "secondaryPath". The
 home's value will be the contents of that field. The !field tells Dovecot to
 fetch the field's value but not to do anything with it otherwise.
 
+Multiple queries via userdbs (v2.2+)
+------------------------------------
+
+Example: Give the user a class attribute, which defines the default quota:
+
+dovecot.conf:
+
+---%<-------------------------------------------------------------------------
+userdb {
+  driver = ldap
+  args = /etc/dovecot/dovecot-users-ldap.conf.ext
+}
+userdb {
+  driver = ldap
+  args = /etc/dovecot/dovecot-class-ldap.conf.ext
+  skip = notfound
+}
+---%<-------------------------------------------------------------------------
+
+/etc/dovecot/dovecot-users-ldap.conf.ext:
+
+---%<-------------------------------------------------------------------------
+# If user has overridden quota, quota_rule is set below. Otherwise it's still
+unset.
+user_attrs = \
+  =class=%{ldap:userClass}
+  quotaBytes=quota_rule=*:bytes=%{ldap:quotaBytes}
+---%<-------------------------------------------------------------------------
+
+/etc/dovecot/dovecot-class-ldap.conf.ext:
+
+---%<-------------------------------------------------------------------------
+# Do the lookup using the user's class:
+user_filter = (&(objectClass=userClass)(class=%{userdb:class}))
+# With :protected suffix the quota_rule isn't overridden if it's already set.
+user_attrs = \
+  classQuotaBytes=quota_rule:protected=*:bytes=%{ldap:classQuotaBytes}
+---%<-------------------------------------------------------------------------
+
 Variables and domains
 ---------------------
 
@@ -129,4 +177,4 @@ will be used for
  * %u and %d variables in other parts of the configuration (e.g. quota file
    names)
 
-(This file was created from the wiki on 2015-12-11 04:45)
+(This file was created from the wiki on 2016-03-30 04:43)

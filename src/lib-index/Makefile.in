@@ -129,12 +129,15 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__EXEEXT_1 = test-mail-index-sync-ext$(EXEEXT) \
+am__EXEEXT_1 = test-mail-index-map$(EXEEXT) \
+	test-mail-index-sync-ext$(EXEEXT) \
 	test-mail-index-transaction-finish$(EXEEXT) \
 	test-mail-index-transaction-update$(EXEEXT) \
 	test-mail-transaction-log-append$(EXEEXT) \
 	test-mail-transaction-log-view$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
+am_test_mail_index_map_OBJECTS = test-mail-index-map.$(OBJEXT)
+test_mail_index_map_OBJECTS = $(am_test_mail_index_map_OBJECTS)
 am_test_mail_index_sync_ext_OBJECTS =  \
 	test-mail-index-sync-ext.$(OBJEXT)
 test_mail_index_sync_ext_OBJECTS =  \
@@ -189,12 +192,13 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libindex_la_SOURCES) $(test_mail_index_sync_ext_SOURCES) \
+SOURCES = $(libindex_la_SOURCES) $(test_mail_index_map_SOURCES) \
+	$(test_mail_index_sync_ext_SOURCES) \
 	$(test_mail_index_transaction_finish_SOURCES) \
 	$(test_mail_index_transaction_update_SOURCES) \
 	$(test_mail_transaction_log_append_SOURCES) \
 	$(test_mail_transaction_log_view_SOURCES)
-DIST_SOURCES = $(libindex_la_SOURCES) \
+DIST_SOURCES = $(libindex_la_SOURCES) $(test_mail_index_map_SOURCES) \
 	$(test_mail_index_sync_ext_SOURCES) \
 	$(test_mail_index_transaction_finish_SOURCES) \
 	$(test_mail_index_transaction_update_SOURCES) \
@@ -334,6 +338,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -506,6 +511,7 @@ headers = \
         mailbox-log.h
 
 test_programs = \
+	test-mail-index-map \
 	test-mail-index-sync-ext \
 	test-mail-index-transaction-finish \
 	test-mail-index-transaction-update \
@@ -518,6 +524,9 @@ test_libs = \
 	../lib/liblib.la
 
 test_deps = $(noinst_LTLIBRARIES) $(test_libs)
+test_mail_index_map_SOURCES = test-mail-index-map.c
+test_mail_index_map_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
+test_mail_index_map_DEPENDENCIES = $(test_deps)
 test_mail_index_sync_ext_SOURCES = test-mail-index-sync-ext.c
 test_mail_index_sync_ext_LDADD = mail-index-sync-ext.lo $(test_libs)
 test_mail_index_sync_ext_DEPENDENCIES = $(test_deps)
@@ -592,6 +601,10 @@ clean-noinstPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
+test-mail-index-map$(EXEEXT): $(test_mail_index_map_OBJECTS) $(test_mail_index_map_DEPENDENCIES) $(EXTRA_test_mail_index_map_DEPENDENCIES) 
+	@rm -f test-mail-index-map$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_mail_index_map_OBJECTS) $(test_mail_index_map_LDADD) $(LIBS)
+
 test-mail-index-sync-ext$(EXEEXT): $(test_mail_index_sync_ext_OBJECTS) $(test_mail_index_sync_ext_DEPENDENCIES) $(EXTRA_test_mail_index_sync_ext_DEPENDENCIES) 
 	@rm -f test-mail-index-sync-ext$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_mail_index_sync_ext_OBJECTS) $(test_mail_index_sync_ext_LDADD) $(LIBS)
@@ -654,6 +667,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-view.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-log.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-map.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-sync-ext.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-transaction-finish.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-transaction-update.Po@am__quote@

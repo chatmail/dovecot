@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "passdb.h"
@@ -159,7 +159,7 @@ passdb_dict_preinit(pool_t pool, const char *args)
 	module->conn = conn = db_dict_init(args);
 
 	module->module.blocking = TRUE;
-	module->module.cache_key = auth_cache_parse_key(pool,
+	module->module.default_cache_key = auth_cache_parse_key(pool,
 		db_dict_parse_cache_key(&conn->set.keys, &conn->set.passdb_fields,
 					&conn->set.parsed_passdb_objects));
 	module->module.default_pass_scheme = conn->set.default_pass_scheme;

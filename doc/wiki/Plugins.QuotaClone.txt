@@ -1,6 +1,8 @@
 Quota Clone Plugin
 ==================
 
+(Requires v2.2.17+)
+
 Quota clone plugin is useful when you want to store everybody's current quota
 usage to a database, but you don't want to use the database as the
 authoritative quota database. For example you might want to access everybody's
@@ -26,4 +28,4 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-30 04:43)

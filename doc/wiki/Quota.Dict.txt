@@ -11,7 +11,7 @@ limits. The current quota is kept in the specified <dictionary>
 
  * SQL
  * Redis
- * Flat file
+ * Flat files
 
 See <Dictionary.txt> for full description of the available backends.
 
@@ -47,14 +47,34 @@ information, or you'll lose the other data.
 Examples
 --------
 
+Simple per-user flat file
+-------------------------
+
+This will create one quota-accounting file for each user.
+
+The Dovecot user process (imap, pop3 or lda) needs write access to this file,
+so %h or mail_location are good candidates to store it.
+
+*Warning*: if a user has shell or file access to this location, he can mangle
+his quota file, thus overcoming his quota limit by lying about his used
+capacity.
+
+---%<-------------------------------------------------------------------------
+plugin {
+  quota = dict:User quota::file:%h/Maildir/dovecot-quota
+  quota_rule = *:storage=10M:messages=1000
+}
+---%<-------------------------------------------------------------------------
+
+Server-based dictionaries
+-------------------------
+
 ---%<-------------------------------------------------------------------------
 plugin {
   # SQL backend:
   quota = dict:User quota::proxy::sqlquota
   # Redis backend (v2.1.9+):
   quota = dict:User quota::redis:host=127.0.0.1:prefix=user/
-  # file backend:
-  quota = dict:User quota::file:%h/Maildir/dovecot-quota
 
   quota_rule = *:storage=10M:messages=1000
 }
@@ -177,4 +197,4 @@ dict {
 
 See <Dict.txt> for more information, especially about permission issues.
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-30 04:43)

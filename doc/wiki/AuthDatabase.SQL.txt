@@ -154,7 +154,7 @@ character.
 connect = host=/var/run/mysqld/mysqld.sock dbname=mails user=admin
 password=pass
 # Alternatively you can connect to localhost as well:
-#connect = host=localhost dbname=mails user=admin password=pass
+#connect = host=localhost dbname=mails user=admin password=pass # port=3306
 
 password_query = SELECT userid AS username, domain, password \
   FROM users WHERE userid = '%n' AND domain = '%d'
@@ -223,4 +223,4 @@ Note that you will have to change the password encryption in Horde to
 MD5-CRYPT. Also, the example above requires a 'dovecot' user in PostgreSQL with
 read (SELECT) privileges on the 'horde_users' table.
 
-(This file was created from the wiki on 2015-12-11 04:45)
+(This file was created from the wiki on 2016-03-30 04:43)

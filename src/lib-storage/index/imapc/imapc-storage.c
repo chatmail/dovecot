@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -265,6 +265,8 @@ int imapc_storage_client_create(struct mail_namespace *ns,
 		return -1;
 	}
 	set.sasl_mechanisms = imapc_set->imapc_sasl_mechanisms;
+	set.use_proxyauth = (imapc_set->parsed_features & IMAPC_FEATURE_PROXYAUTH) != 0;
+	set.cmd_timeout_msecs = imapc_set->imapc_cmd_timeout * 1000;
 	set.max_idle_time = imapc_set->imapc_max_idle_time;
 	set.dns_client_socket_path = *ns->user->set->base_dir == '\0' ? "" :
 		t_strconcat(ns->user->set->base_dir, "/",
@@ -414,6 +416,14 @@ imapc_mailbox_alloc(struct mail_storage *storage, struct mailbox_list *list,
 	return &mbox->box;
 }
 
+const char *imapc_mailbox_get_remote_name(struct imapc_mailbox *mbox)
+{
+	if (strcmp(mbox->box.list->name, MAILBOX_LIST_NAME_IMAPC) != 0)
+		return mbox->box.name;
+	return imapc_list_to_remote((struct imapc_mailbox_list *)mbox->box.list,
+				    mbox->box.name);
+}
+
 static int
 imapc_mailbox_exists(struct mailbox *box, bool auto_boxes ATTR_UNUSED,
 		     enum mailbox_existence *existence_r)
@@ -433,6 +443,12 @@ imapc_mailbox_exists(struct mailbox *box, bool auto_boxes ATTR_UNUSED,
 
 static bool imapc_mailbox_want_examine(struct imapc_mailbox *mbox)
 {
+	if (IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_NO_EXAMINE)) {
+		/* mainly a Courier-workaround: With POP3-only Maildir that
+		   doesn't have UIDVALIDITY set, EXAMINE won't generate a
+		   permanent UIDVALIDITY while SELECT will. */
+		return FALSE;
+	}
 	return (mbox->box.flags & MAILBOX_FLAG_DROP_RECENT) == 0 &&
 		((mbox->box.flags & MAILBOX_FLAG_READONLY) != 0 ||
 		 (mbox->box.flags & MAILBOX_FLAG_SAVEONLY) != 0);
@@ -473,10 +489,10 @@ static void imapc_mailbox_reopen(void *context)
 	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_SELECT);
 	if (imapc_mailbox_want_examine(mbox)) {
 		imapc_command_sendf(cmd, "EXAMINE %s",
-			mailbox_list_unescape_name(mbox->box.list, mbox->box.name));
+				    imapc_mailbox_get_remote_name(mbox));
 	} else {
 		imapc_command_sendf(cmd, "SELECT %s",
-			mailbox_list_unescape_name(mbox->box.list, mbox->box.name));
+				    imapc_mailbox_get_remote_name(mbox));
 	}
 	mbox->storage->reopen_count++;
 
@@ -551,10 +567,10 @@ int imapc_mailbox_select(struct imapc_mailbox *mbox)
 	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_SELECT);
 	if (imapc_mailbox_want_examine(mbox)) {
 		imapc_command_sendf(cmd, "EXAMINE %s",
-			mailbox_list_unescape_name(mbox->box.list, mbox->box.name));
+			imapc_mailbox_get_remote_name(mbox));
 	} else {
 		imapc_command_sendf(cmd, "SELECT %s",
-			mailbox_list_unescape_name(mbox->box.list, mbox->box.name));
+			imapc_mailbox_get_remote_name(mbox));
 	}
 
 	while (ctx.ret == -2)
@@ -634,11 +650,17 @@ imapc_mailbox_create(struct mailbox *box,
 	struct imapc_mailbox *mbox = (struct imapc_mailbox *)box;
 	struct imapc_command *cmd;
 	struct imapc_simple_context sctx;
-	const char *name = box->name;
+	const char *name = imapc_mailbox_get_remote_name(mbox);
 
-	if (directory) {
+	if (!directory)
+		;
+	else if (strcmp(box->list->name, MAILBOX_LIST_NAME_IMAPC) == 0) {
+		struct imapc_mailbox_list *imapc_list =
+			(struct imapc_mailbox_list *)box->list;
+		name = t_strdup_printf("%s%c", name, imapc_list->root_sep);
+	} else {
 		name = t_strdup_printf("%s%c", name,
-				mailbox_list_get_hierarchy_sep(box->list));
+			mailbox_list_get_hierarchy_sep(box->list));
 	}
 	imapc_simple_context_init(&sctx, mbox->storage->client);
 	cmd = imapc_client_cmd(mbox->storage->client->client,
@@ -674,9 +696,16 @@ static void imapc_untagged_status(const struct imapc_untagged_reply *reply,
 	    !imap_arg_get_list(&reply->args[1], &list))
 		return;
 
-	if (storage->cur_status_box == NULL ||
-	    strcmp(storage->cur_status_box->box.name, name) != 0)
+	if (storage->cur_status_box == NULL)
 		return;
+	if (strcmp(storage->cur_status_box->box.name, name) == 0) {
+		/* match */
+	} else if (strcasecmp(storage->cur_status_box->box.name, "INBOX") == 0 &&
+		   strcasecmp(name, "INBOX") == 0) {
+		/* case-insensitive INBOX */
+	} else {
+		return;
+	}
 
 	status = storage->cur_status;
 	for (i = 0; list[i].type != IMAP_ARG_EOL; i += 2) {
@@ -781,7 +810,8 @@ static int imapc_mailbox_run_status(struct mailbox *box,
 	mbox->storage->cur_status = status_r;
 	cmd = imapc_client_cmd(mbox->storage->client->client,
 			       imapc_simple_callback, &sctx);
-	imapc_command_sendf(cmd, "STATUS %s (%1s)", box->name, str_c(str)+1);
+	imapc_command_sendf(cmd, "STATUS %s (%1s)",
+			    imapc_mailbox_get_remote_name(mbox), str_c(str)+1);
 	imapc_simple_run(&sctx);
 	mbox->storage->cur_status_box = NULL;
 	mbox->storage->cur_status = NULL;

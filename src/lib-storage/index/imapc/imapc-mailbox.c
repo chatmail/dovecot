@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -222,6 +222,16 @@ imapc_mailbox_msgmap_update(struct imapc_mailbox *mbox,
 
 	msgmap = imapc_client_mailbox_get_msgmap(mbox->client_box);
 	msg_count = imapc_msgmap_count(msgmap);
+	if (fetch_uid != 0 &&
+	    IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_MSN_WORKAROUNDS)) {
+		/* if we know the UID, use own own generated rseq instead of
+		   the potentially broken rseq that the server sent. */
+		uint32_t fixed_rseq;
+
+		if (imapc_msgmap_uid_to_rseq(msgmap, fetch_uid, &fixed_rseq))
+			rseq = fixed_rseq;
+	}
+
 	if (rseq <= msg_count) {
 		uid = imapc_msgmap_rseq_to_uid(msgmap, rseq);
 		if (uid != fetch_uid && fetch_uid != 0) {
@@ -317,17 +327,12 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 			   IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_GMAIL_MIGRATION)) {
 			if (!imap_arg_get_list(&list[i+1], &flags_list))
 				return;
-#if 0
-			if (flags_list[0].type != IMAP_ARG_EOL)
-				have_labels = TRUE;
-#else
 			for (j = 0; flags_list[j].type != IMAP_ARG_EOL; j++) {
 				if (!imap_arg_get_astring(&flags_list[j], &atom))
 					return;
 				if (strcasecmp(atom, "\\Muted") != 0)
 					have_labels = TRUE;
 			}
-#endif
 		}
 	}
 

@@ -1,5 +1,5 @@
-#ifndef CLIENT_H
-#define CLIENT_H
+#ifndef IMAP_LOGIN_CLIENT_H
+#define IMAP_LOGIN_CLIENT_H
 
 #include "net.h"
 #include "imap-id.h"
@@ -36,6 +36,7 @@ struct imap_client {
 
 	unsigned int cmd_finished:1;
 	unsigned int proxy_sasl_ir:1;
+	unsigned int proxy_logindisabled:1;
 	unsigned int proxy_seen_banner:1;
 	unsigned int skip_line:1;
 	unsigned int id_logged:1;

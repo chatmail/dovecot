@@ -96,14 +96,16 @@ am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
-	$(am__DIST_COMMON)
+	$(pkginc_lib_HEADERS) $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-am__installdirs = "$(DESTDIR)$(pkglibexecdir)"
+am__installdirs = "$(DESTDIR)$(pkglibexecdir)" \
+	"$(DESTDIR)$(pkginc_libdir)"
 PROGRAMS = $(pkglibexec_PROGRAMS)
-am_imap_login_OBJECTS = client.$(OBJEXT) client-authenticate.$(OBJEXT) \
+am_imap_login_OBJECTS = imap-login-client.$(OBJEXT) \
+	client-authenticate.$(OBJEXT) imap-login-commands.$(OBJEXT) \
 	imap-login-settings.$(OBJEXT) imap-proxy.$(OBJEXT)
 imap_login_OBJECTS = $(am_imap_login_OBJECTS)
 am__DEPENDENCIES_1 =
@@ -152,7 +154,34 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-HEADERS = $(noinst_HEADERS)
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
+HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -254,6 +283,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -383,16 +413,21 @@ imap_login_DEPENDENCIES = \
 	$(LIBDOVECOT_DEPS)
 
 imap_login_SOURCES = \
-	client.c \
+	imap-login-client.c \
 	client-authenticate.c \
+	imap-login-commands.c \
 	imap-login-settings.c \
 	imap-proxy.c
 
 noinst_HEADERS = \
-	client.h \
 	client-authenticate.h \
-	imap-login-settings.h \
 	imap-proxy.h
+
+pkginc_libdir = $(pkgincludedir)
+pkginc_lib_HEADERS = \
+	imap-login-client.h \
+	imap-login-commands.h \
+	imap-login-settings.h
 
 all: all-am
 
@@ -488,7 +523,8 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-authenticate.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-login-client.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-login-commands.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-login-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-proxy.Po@am__quote@
 
@@ -518,6 +554,27 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+install-pkginc_libHEADERS: $(pkginc_lib_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(pkginc_lib_HEADERS)'; test -n "$(pkginc_libdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(pkginc_libdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(pkginc_libdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(pkginc_libdir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(pkginc_libdir)" || exit $$?; \
+	done
+
+uninstall-pkginc_libHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkginc_lib_HEADERS)'; test -n "$(pkginc_libdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(pkginc_libdir)'; $(am__uninstall_files_from_dir)
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
@@ -605,7 +662,7 @@ check-am: all-am
 check: check-am
 all-am: Makefile $(PROGRAMS) $(HEADERS)
 installdirs:
-	for dir in "$(DESTDIR)$(pkglibexecdir)"; do \
+	for dir in "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -661,7 +718,7 @@ info: info-am
 
 info-am:
 
-install-data-am:
+install-data-am: install-pkginc_libHEADERS
 
 install-dvi: install-dvi-am
 
@@ -707,7 +764,7 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-pkglibexecPROGRAMS
+uninstall-am: uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS
 
 .MAKE: install-am install-strip
 
@@ -719,12 +776,13 @@ uninstall-am: uninstall-pkglibexecPROGRAMS
 	install-data-am install-dvi install-dvi-am install-exec \
 	install-exec-am install-html install-html-am install-info \
 	install-info-am install-man install-pdf install-pdf-am \
-	install-pkglibexecPROGRAMS install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
-	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
-	uninstall-pkglibexecPROGRAMS
+	install-pkginc_libHEADERS install-pkglibexecPROGRAMS \
+	install-ps install-ps-am install-strip installcheck \
+	installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-am uninstall uninstall-am \
+	uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS
 
 .PRECIOUS: Makefile
 

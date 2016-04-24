@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -200,15 +200,6 @@ http_client_peer_disconnect(struct http_client_peer *peer)
 	i_assert(array_count(&peer->conns) == 0);
 }
 
-static void http_client_peer_check_idle(struct http_client_peer *peer)
-{
-	struct http_client_connection *const *conn_idx;
-
-	array_foreach(&peer->conns, conn_idx) {
-		http_client_connection_check_idle(*conn_idx);
-	}
-}
-
 static unsigned int
 http_client_peer_requests_pending(struct http_client_peer *peer,
 				  unsigned int *num_urgent_r)
@@ -224,6 +215,24 @@ http_client_peer_requests_pending(struct http_client_peer *peer,
 	}
 	*num_urgent_r = num_urgent;
 	return num_requests;
+}
+
+static void http_client_peer_check_idle(struct http_client_peer *peer)
+{
+	struct http_client_connection *const *conn_idx;
+	unsigned int num_urgent = 0;
+
+	if (array_count(&peer->conns) == 0 &&
+		http_client_peer_requests_pending(peer, &num_urgent) == 0) {
+		/* no connections or pending requests; die immediately */
+		http_client_peer_free(&peer);
+		return;
+	}
+
+	/* check all connections for idle status */
+	array_foreach(&peer->conns, conn_idx) {
+		http_client_connection_check_idle(*conn_idx);
+	}
 }
 
 static void
@@ -263,19 +272,25 @@ http_client_peer_handle_requests_real(struct http_client_peer *peer)
 		return;
 	}
 
+	peer->handling_requests = TRUE;
 	t_array_init(&conns_avail, array_count(&peer->conns));
 	do {
+		bool conn_lost = FALSE;
+
 		array_clear(&conns_avail);
 		connecting = closing = idle = 0;
 
 		/* gather connection statistics */
 		array_foreach(&peer->conns, conn_idx) {
-			if (http_client_connection_is_ready(*conn_idx)) {			
+			struct http_client_connection *conn = *conn_idx;
+
+			http_client_connection_ref(conn);
+			if (http_client_connection_is_ready(conn)) {
 				struct _conn_available *conn_avail;
 				unsigned int insert_idx, pending_requests;
 
 				/* compile sorted availability list */
-				pending_requests = http_client_connection_count_pending(*conn_idx);
+				pending_requests = http_client_connection_count_pending(conn);
 				if (array_count(&conns_avail) == 0) {
 					insert_idx = 0;
 				} else {
@@ -288,16 +303,26 @@ http_client_peer_handle_requests_real(struct http_client_peer *peer)
 					}
 				}
 				conn_avail = array_insert_space(&conns_avail, insert_idx);
-				conn_avail->conn = *conn_idx;
+				conn_avail->conn = conn;
 				conn_avail->pending_requests = pending_requests;
 				if (pending_requests == 0)
 					idle++;
 			}
+			if (!http_client_connection_unref(&conn)) {
+				conn_lost = TRUE;
+				break;
+			}
+			conn = *conn_idx;
 			/* count the number of connecting and closing connections */
-			if ((*conn_idx)->closing)
+			if (conn->closing)
 				closing++;
-			else if (!(*conn_idx)->connected)
+			else if (!conn->connected)
 				connecting++;
+		}
+
+		if (conn_lost) {
+			/* connection array changed while iterating; retry */
+			continue;
 		}
 
 		working_conn_count = array_count(&peer->conns) - closing;
@@ -336,9 +361,13 @@ http_client_peer_handle_requests_real(struct http_client_peer *peer)
 				"No more requests to service for this peer "
 				"(%u connections exist)", array_count(&peer->conns));
 			http_client_peer_check_idle(peer);
-			return;
+			break;
 		}
 	} while (statistics_dirty);
+	peer->handling_requests = FALSE;
+
+	if (num_pending == 0)
+		return;
 
 	i_assert(idle == 0);
 
@@ -503,6 +532,8 @@ void http_client_peer_free(struct http_client_peer **_peer)
 {
 	struct http_client_peer *peer = *_peer;
 
+	*_peer = NULL;
+
 	if (peer->destroyed)
 		return;
 	peer->destroyed = TRUE;
@@ -524,7 +555,6 @@ void http_client_peer_free(struct http_client_peer **_peer)
 
 	i_free(peer->addr_name);
 	i_free(peer);
-	*_peer = NULL;
 }
 
 struct http_client_peer *
@@ -678,13 +708,21 @@ void http_client_peer_connection_lost(struct http_client_peer *peer)
 	http_client_peer_debug(peer, "Lost a connection (%d connections left)",
 		array_count(&peer->conns));
 
+	if (peer->handling_requests) {
+		/* we got here from the request handler loop */
+		return;
+	}
+
+	/* check if peer is still relevant */
+	if (array_count(&peer->conns) == 0 &&
+		http_client_peer_requests_pending(peer, &num_urgent) == 0) {
+		http_client_peer_free(&peer);
+		return;
+	}
+
 	/* if there are pending requests for this peer, create a new connection
 	   for them. */
 	http_client_peer_trigger_request_handler(peer);
-
-	if (array_count(&peer->conns) == 0 &&
-	    http_client_peer_requests_pending(peer, &num_urgent) == 0)
-		http_client_peer_free(&peer);
 }
 
 unsigned int

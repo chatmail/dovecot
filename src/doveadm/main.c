@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "restrict-access.h"
@@ -6,13 +6,17 @@
 #include "master-service-settings.h"
 #include "settings-parser.h"
 #include "client-connection.h"
+#include "client-connection-private.h"
 #include "doveadm-settings.h"
+#include "doveadm-dump.h"
 #include "doveadm-mail.h"
 #include "doveadm-print-private.h"
 #include "doveadm-server.h"
+#include "ostream.h"
 
 const struct doveadm_print_vfuncs *doveadm_print_vfuncs_all[] = {
 	&doveadm_print_server_vfuncs,
+	&doveadm_print_json_vfuncs,
 	NULL
 };
 
@@ -32,14 +36,24 @@ static void client_connected(struct master_service_connection *conn)
 	}
 
 	master_service_client_connection_accept(conn);
-	doveadm_client = client_connection_create(conn->fd, conn->listen_fd,
-						  conn->ssl);
+	if (strcmp(conn->name, "http") == 0) {
+		doveadm_client = client_connection_create_http(conn->fd, conn->ssl);
+	} else {
+		doveadm_client = client_connection_create(conn->fd, conn->listen_fd,
+							  conn->ssl);
+	}
 }
 
 void help(const struct doveadm_cmd *cmd)
 {
 	i_fatal("Client sent invalid command. Usage: %s %s",
 		cmd->name, cmd->short_usage);
+}
+
+void help_ver2(const struct doveadm_cmd_ver2 *cmd)
+{
+	i_fatal("Client sent invalid command. Usage: %s %s",
+		cmd->name, cmd->usage);
 }
 
 static void main_preinit(void)
@@ -56,10 +70,11 @@ static void main_init(void)
 					doveadm_settings,
 					pool_datastack_create());
 
+	doveadm_http_server_init();
 	doveadm_cmds_init();
+	doveadm_dump_init();
 	doveadm_mail_init();
 	doveadm_load_modules();
-	doveadm_print_init(DOVEADM_PRINT_TYPE_SERVER);
 }
 
 static void main_deinit(void)
@@ -67,9 +82,11 @@ static void main_deinit(void)
 	if (doveadm_client != NULL)
 		client_connection_destroy(&doveadm_client);
 	doveadm_mail_deinit();
+	doveadm_dump_deinit();
 	doveadm_unload_modules();
 	doveadm_print_deinit();
 	doveadm_cmds_deinit();
+	doveadm_http_server_deinit();
 }
 
 int main(int argc, char *argv[])
@@ -81,11 +98,20 @@ int main(int argc, char *argv[])
 	enum master_service_flags service_flags =
 		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
 	const char *error;
+	int c;
 
 	master_service = master_service_init("doveadm", service_flags,
-					     &argc, &argv, "");
-	if (master_getopt(master_service) > 0)
-		return FATAL_DEFAULT;
+					     &argc, &argv, "D");
+	while ((c = master_getopt(master_service)) > 0) {
+		switch (c) {
+		case 'D':
+			doveadm_debug = TRUE;
+			doveadm_verbose = TRUE;
+			break;
+		default:
+			return FATAL_DEFAULT;
+		}
+	}
 
 	if (master_service_settings_read_simple(master_service, set_roots,
 						&error) < 0)

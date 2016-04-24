@@ -79,7 +79,7 @@ just like user@domain.com ), but still shows the original address for Sieve:
 ---%<-------------------------------------------------------------------------
 dovecot   unix  -       n       n       -       -       pipe
   flags=DRhu user=vmail:vmail argv=/usr/lib/dovecot/dovecot-lda -f ${sender} -a
-${recipient} -d ${user}@${nexthop}
+${original_recipient} -d ${user}@${nexthop}
 ---%<-------------------------------------------------------------------------
 
 Replace 'vmail' above with your virtual mail user account.
@@ -223,4 +223,4 @@ If the recipient address exists (status=deliverable) Postfix accepts the mail.
 *Info:* you can not use "reject_unverified_recipient" with "pipe" so this
 doesn't work with the Dovecot LDA "deliver".
 
-(This file was created from the wiki on 2015-12-11 04:45)
+(This file was created from the wiki on 2016-03-30 04:43)

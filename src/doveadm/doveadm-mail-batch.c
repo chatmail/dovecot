@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2012-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -54,15 +54,26 @@ cmd_batch_add(struct batch_cmd_context *batchctx,
 	      int argc, const char *const *argv)
 {
 	struct doveadm_mail_cmd_context *subctx;
+	const struct doveadm_cmd_ver2 *cmd_ver2;
+	struct doveadm_mail_cmd tmpcmd;
 	const struct doveadm_mail_cmd *cmd;
 	const char *getopt_args;
 	int c;
 
-	cmd = doveadm_mail_cmd_find_from_argv(argv[0], &argc, &argv);
-	if (cmd == NULL) {
-		i_fatal_status(EX_USAGE, "doveadm batch: Unknown subcommand %s",
-			       argv[1]);
+	cmd_ver2 = doveadm_cmd_find_with_args_ver2(argv[0], &argc, &argv);
+
+	if (cmd_ver2 == NULL)
+		cmd = doveadm_mail_cmd_find_from_argv(argv[0], &argc, &argv);
+	else {
+		memset(&tmpcmd, 0, sizeof(tmpcmd));
+		tmpcmd.usage_args = cmd_ver2->usage;
+		tmpcmd.name = cmd_ver2->name;
+		tmpcmd.alloc = cmd_ver2->mail_cmd;
+		cmd = &tmpcmd;
 	}
+
+	if (cmd == NULL)
+		i_fatal_status(EX_USAGE, "doveadm batch: '%s' mail command doesn't exist", argv[0]);
 
 	subctx = doveadm_mail_cmd_init(cmd, doveadm_settings);
 	subctx->full_args = argv + 1;

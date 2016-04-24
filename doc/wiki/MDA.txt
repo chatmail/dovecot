@@ -14,4 +14,4 @@ Common choices include:
  * procmail [http://www.procmail.org/] (appears to be unmaintained)
  * <Dovecot's `deliver` LDA> [LDA.txt]
 
-(This file was created from the wiki on 2015-12-11 04:45)
+(This file was created from the wiki on 2016-03-30 04:43)

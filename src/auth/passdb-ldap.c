@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "passdb.h"
@@ -436,9 +436,10 @@ passdb_ldap_preinit(pool_t pool, const char *args)
 			  &conn->pass_attr_map,
 			  conn->set.auth_bind ? "password" : NULL);
 	module->module.blocking = conn->set.blocking;
-	module->module.cache_key =
+	module->module.default_cache_key =
 		auth_cache_parse_key(pool,
 				     t_strconcat(conn->set.base,
+						 conn->set.pass_attrs,
 						 conn->set.pass_filter, NULL));
 	module->module.default_pass_scheme = conn->set.default_pass_scheme;
 	return &module->module;

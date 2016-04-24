@@ -255,4 +255,4 @@ The following has changed since the ManageSieve releases for Dovecot v1.x:
    and the services are still called 'managesieve' and 'managesieve-login'. The
    example section demonstrates how this affects the configuration.
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-30 04:43)

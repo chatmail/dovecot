@@ -76,12 +76,12 @@ If you keep the index files stored on NFS, you'll need to set
 installations have problems with lockd. If you're beginning to get all kinds of
 locking related errors, try if the problems go away with dotlocking.
 
-With mbox/Maildir format it's also possible to store index files on local disk
-instead of on NFS. If the user gets redirected to different servers, the local
-indexes are automatically created/updated. If the user is (nearly) always
-redirected to the same server this should be fine and you would likely get
-higher performance than indexes stored on NFS, but if the server changes it can
-be slow to recreate the index/cache files.
+With mbox/Maildir formats (but not dbox!) it's also possible to store index
+files on local disk instead of on NFS. If the user gets redirected to different
+servers, the local indexes are automatically created/updated. If the user is
+(nearly) always redirected to the same server this should be fine and you would
+likely get higher performance than indexes stored on NFS, but if the server
+changes it can be slow to recreate the index/cache files.
 
 Single computer setup
 ---------------------
@@ -158,4 +158,4 @@ Misc notes
    mounted for any reason and user access mails, a new empty user mail
    directory is created, which breaks things.
 
-(This file was created from the wiki on 2015-12-11 04:45)
+(This file was created from the wiki on 2016-03-30 04:43)

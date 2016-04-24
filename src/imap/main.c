@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "ioloop.h"
@@ -202,6 +202,13 @@ client_add_input(struct client *client, const unsigned char *client_input,
 	(void)client_handle_input(client);
 	o_stream_uncork(output);
 	o_stream_unref(&output);
+
+	/* we could have already handled LOGOUT, or we might need to continue
+	   pending ambigious commands. */
+	if (client->disconnected)
+		client_destroy(client, NULL);
+	else
+		client_continue_pending_input(client);
 }
 
 int client_create_from_input(const struct mail_storage_service_input *input,
@@ -280,6 +287,7 @@ static void main_stdio_run(const char *username)
 		const buffer_t *input_buf = t_base64_decode_str(input_base64);
 		client_add_input(client, input_buf->data, input_buf->used);
 	}
+	/* client may be destroyed now */
 }
 
 static void
@@ -314,12 +322,12 @@ login_client_connected(const struct master_login_client *login_client,
 		master_service_client_connection_destroyed(master_service);
 		return;
 	}
-	client_add_input(client, login_client->data,
-			 login_client->auth_req.data_size);
-
 	flags = login_client->auth_req.flags;
 	if ((flags & MAIL_AUTH_REQUEST_FLAG_TLS_COMPRESSION) != 0)
 		client->tls_compression = TRUE;
+	client_add_input(client, login_client->data,
+			 login_client->auth_req.data_size);
+	/* client may be destroyed now */
 }
 
 static void login_client_failed(const struct master_login_client *client,
@@ -358,8 +366,9 @@ int main(int argc, char *argv[])
 	};
 	struct master_login_settings login_set;
 	enum master_service_flags service_flags = 0;
-	enum mail_storage_service_flags storage_service_flags = 0;
-	const char *username = NULL;
+	enum mail_storage_service_flags storage_service_flags =
+		MAIL_STORAGE_SERVICE_FLAG_AUTOEXPUNGE;
+	const char *username = NULL, *auth_socket_path = "auth-master";
 	int c;
 
 	memset(&login_set, 0, sizeof(login_set));
@@ -383,9 +392,12 @@ int main(int argc, char *argv[])
 	}
 
 	master_service = master_service_init("imap", service_flags,
-					     &argc, &argv, "Dt:u:");
+					     &argc, &argv, "a:Dt:u:");
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
+		case 'a':
+			auth_socket_path = optarg;
+			break;
 		case 't':
 			if (str_to_uint(optarg, &login_set.postlogin_timeout_secs) < 0 ||
 			    login_set.postlogin_timeout_secs == 0)
@@ -426,7 +438,7 @@ int main(int argc, char *argv[])
 			main_stdio_run(username);
 		} T_END;
 	} else T_BEGIN {
-		login_set.auth_socket_path = t_abspath("auth-master");
+		login_set.auth_socket_path = t_abspath(auth_socket_path);
 		if (argv[optind] != NULL) {
 			login_set.postlogin_socket_path =
 				t_abspath(argv[optind]);

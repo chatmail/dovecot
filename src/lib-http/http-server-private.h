@@ -53,6 +53,8 @@ struct http_server_response {
 	uoff_t payload_size, payload_offset;
 	struct ostream *payload_output;
 
+	struct ostream *blocking_output;
+
 	http_server_tunnel_callback_t tunnel_callback;
 	void *tunnel_context;
 
@@ -61,6 +63,9 @@ struct http_server_response {
 	unsigned int have_hdr_body_spec:1;
 
 	unsigned int payload_chunked:1;
+	unsigned int payload_blocking:1;
+	unsigned int payload_direct:1;
+	unsigned int payload_corked:1;
 	unsigned int close:1;
 	unsigned int submitted:1;
 };
@@ -69,6 +74,7 @@ struct http_server_request {
 	struct http_request req;
 	pool_t pool;
 	unsigned int refcount;
+	unsigned int id;
 
 	enum http_server_request_state state;
 
@@ -76,6 +82,8 @@ struct http_server_request {
 
 	struct http_server *server;
 	struct http_server_connection *conn;
+
+	struct istream *payload_input;
 
 	struct http_server_response *response;
 
@@ -118,6 +126,8 @@ struct http_server_connection {
 	unsigned int close_indicated:1;
 	unsigned int input_broken:1;
 	unsigned int output_locked:1;
+	unsigned int in_req_callback:1;  /* performing request callback (busy) */
+	unsigned int switching_ioloop:1; /* in the middle of switching ioloop */
 };
 
 struct http_server {
@@ -134,9 +144,14 @@ struct http_server {
 static inline const char *
 http_server_request_label(struct http_server_request *req)
 {
-	if (req->req.method == NULL || req->req.target_raw == NULL)
-		return "[INVALID]";
-	return t_strdup_printf("[%s %s]", req->req.method, req->req.target_raw);
+	if (req->req.method == NULL) {
+		if (req->req.target_raw == NULL)
+			return t_strdup_printf("[Req%u: <NEW>]", req->id);
+		return t_strdup_printf("[Req%u: %s <INCOMPLETE>]",
+			req->id, req->req.method);
+	}
+	return t_strdup_printf("[Req%u: %s %s]", req->id,
+		req->req.method, req->req.target_raw);
 }
 
 static inline const char *
@@ -161,7 +176,8 @@ int http_server_response_send_more(struct http_server_response *resp,
 struct http_server_request *
 http_server_request_new(struct http_server_connection *conn);
 void http_server_request_destroy(struct http_server_request **_req);
-void http_server_request_abort(struct http_server_request **_req);
+void http_server_request_abort(struct http_server_request **_req,
+	const char *reason) ATTR_NULL(2);
 
 void http_server_request_halt_payload(struct http_server_request *req);
 void http_server_request_continue_payload(struct http_server_request *req);
@@ -196,11 +212,20 @@ http_server_request_version_equals(struct http_server_request *req,
 struct connection_list *http_server_connection_list_init(void);
 
 void http_server_connection_switch_ioloop(struct http_server_connection *conn);
+
+void http_server_connection_write_failed(struct http_server_connection *conn,
+	const char *error);
+
 void http_server_connection_trigger_responses(
 	struct http_server_connection *conn);
+int http_server_connection_flush(struct http_server_connection *conn);
 int http_server_connection_output(struct http_server_connection *conn);
+
 void http_server_connection_tunnel(struct http_server_connection **_conn,
 	http_server_tunnel_callback_t callback, void *context);
+
+int http_server_connection_discard_payload(
+	struct http_server_connection *conn);
 bool http_server_connection_pending_payload(struct http_server_connection *conn);
 
 static inline void http_server_connection_add_request(struct http_server_connection *conn,

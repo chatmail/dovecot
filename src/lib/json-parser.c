@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -21,12 +21,15 @@ enum json_state {
 	JSON_STATE_ARRAY_VALUE,
 	JSON_STATE_ARRAY_SKIP_STRING,
 	JSON_STATE_ARRAY_NEXT,
+	JSON_STATE_ARRAY_NEXT_SKIP,
+	JSON_STATE_VALUE,
 	JSON_STATE_DONE
 };
 
 struct json_parser {
 	struct istream *input;
 	uoff_t highwater_offset;
+	enum json_parser_flags flags;
 
 	const unsigned char *start, *end, *data;
 	const char *error;
@@ -37,6 +40,7 @@ struct json_parser {
 	ARRAY(enum json_state) nesting;
 	unsigned int nested_skip_count;
 	bool skipping;
+	bool seen_eof;
 };
 
 static int json_parser_read_more(struct json_parser *parser)
@@ -57,13 +61,19 @@ static int json_parser_read_more(struct json_parser *parser)
 			parser->error = "Token too large";
 			return -1;
 		}
-		if (ret <= 0)
+		if (ret < 0 && !parser->seen_eof &&
+		    i_stream_get_data_size(parser->input) > 0 &&
+		    parser->input->stream_errno == 0) {
+			/* call it once more to finish any pending number */
+			parser->seen_eof = TRUE;
+		} else if (ret <= 0) {
 			return ret;
-
-		cur_highwater = parser->input->v_offset +
-			i_stream_get_data_size(parser->input);
-		i_assert(parser->highwater_offset < cur_highwater);
-		parser->highwater_offset = cur_highwater;
+		} else {
+			cur_highwater = parser->input->v_offset +
+				i_stream_get_data_size(parser->input);
+			i_assert(parser->highwater_offset < cur_highwater);
+			parser->highwater_offset = cur_highwater;
+		}
 	}
 
 	parser->start = parser->data = i_stream_get_data(parser->input, &size);
@@ -93,13 +103,23 @@ static void json_parser_update_input_pos(struct json_parser *parser)
 
 struct json_parser *json_parser_init(struct istream *input)
 {
+	return json_parser_init_flags(input, 0);
+}
+
+struct json_parser *json_parser_init_flags(struct istream *input,
+					   enum json_parser_flags flags)
+{
 	struct json_parser *parser;
 
 	parser = i_new(struct json_parser, 1);
 	parser->input = input;
+	parser->flags = flags;
 	parser->value = str_new(default_pool, 128);
 	i_array_init(&parser->nesting, 8);
 	i_stream_ref(input);
+
+	if ((flags & JSON_PARSER_NO_ROOT_OBJECT) != 0)
+		parser->state = JSON_STATE_VALUE;
 	return parser;
 }
 
@@ -335,21 +355,19 @@ static int json_parse_denest(struct json_parser *parser)
 	json_parser_update_input_pos(parser);
 
 	nested_states = array_get(&parser->nesting, &count);
-	if (count == 0) {
+	i_assert(count > 0);
+	if (count == 1) {
 		/* closing root */
 		parser->state = JSON_STATE_DONE;
-		return 0;
+		if ((parser->flags & JSON_PARSER_NO_ROOT_OBJECT) == 0)
+			return 0;
+		/* we want to return the ending "]" or "}" to caller */
+		return 1;
 	}
 
 	/* closing a nested object */
-	if (count == 1) {
-		/* we're back to root */
-		parser->state = JSON_STATE_OBJECT_NEXT;
-	} else {
-		/* back to previous nested object */
-		parser->state = nested_states[count-2] == JSON_STATE_OBJECT_OPEN ?
-			JSON_STATE_OBJECT_NEXT : JSON_STATE_ARRAY_NEXT;
-	}
+	parser->state = nested_states[count-2] == JSON_STATE_OBJECT_OPEN ?
+		JSON_STATE_OBJECT_NEXT : JSON_STATE_ARRAY_NEXT;
 	array_delete(&parser->nesting, count-1, 1);
 
 	if (parser->nested_skip_count > 0) {
@@ -377,6 +395,14 @@ json_parse_close_array(struct json_parser *parser, enum json_type *type_r)
 	return 1;
 }
 
+static void json_parser_object_open(struct json_parser *parser)
+{
+	parser->data++;
+	parser->state = JSON_STATE_OBJECT_OPEN;
+	array_append(&parser->nesting, &parser->state, 1);
+	json_parser_update_input_pos(parser);
+}
+
 static int
 json_try_parse_next(struct json_parser *parser, enum json_type *type_r,
 		    const char **value_r)
@@ -393,17 +419,13 @@ json_try_parse_next(struct json_parser *parser, enum json_type *type_r,
 			parser->error = "Object doesn't begin with '{'";
 			return -1;
 		}
-		parser->data++;
-		parser->state = JSON_STATE_OBJECT_OPEN;
-		json_parser_update_input_pos(parser);
+		json_parser_object_open(parser);
 		return 0;
 	case JSON_STATE_OBJECT_VALUE:
 	case JSON_STATE_ARRAY_VALUE:
+	case JSON_STATE_VALUE:
 		if (*parser->data == '{') {
-			parser->data++;
-			parser->state = JSON_STATE_OBJECT_OPEN;
-			array_append(&parser->nesting, &parser->state, 1);
-			json_parser_update_input_pos(parser);
+			json_parser_object_open(parser);
 
 			if (parser->skipping) {
 				parser->nested_skip_count++;
@@ -454,8 +476,19 @@ json_try_parse_next(struct json_parser *parser, enum json_type *type_r,
 			}
 			return -1;
 		}
-		parser->state = parser->state == JSON_STATE_OBJECT_VALUE ?
-			JSON_STATE_OBJECT_NEXT : JSON_STATE_ARRAY_NEXT;
+		switch (parser->state) {
+		case JSON_STATE_OBJECT_VALUE:
+			parser->state = JSON_STATE_OBJECT_NEXT;
+			break;
+		case JSON_STATE_ARRAY_VALUE:
+			parser->state = JSON_STATE_ARRAY_NEXT;
+			break;
+		case JSON_STATE_VALUE:
+			parser->state = JSON_STATE_DONE;
+			break;
+		default:
+			i_unreached();
+		}
 		break;
 	case JSON_STATE_OBJECT_OPEN:
 		if (*parser->data == '}')
@@ -504,6 +537,7 @@ json_try_parse_next(struct json_parser *parser, enum json_type *type_r,
 			/* we skipped over the previous value */
 			parser->skipping = FALSE;
 		}
+	case JSON_STATE_ARRAY_NEXT_SKIP:
 		if (*parser->data == ']')
 			return json_parse_close_array(parser, type_r);
 		if (*parser->data != ',') {
@@ -560,9 +594,12 @@ void json_parse_skip_next(struct json_parser *parser)
 	i_assert(parser->strinput == NULL);
 	i_assert(parser->state == JSON_STATE_OBJECT_COLON ||
 		 parser->state == JSON_STATE_OBJECT_VALUE ||
-		 parser->state == JSON_STATE_ARRAY_VALUE);
+		 parser->state == JSON_STATE_ARRAY_VALUE ||
+		 parser->state == JSON_STATE_ARRAY_NEXT);
 
 	parser->skipping = TRUE;
+	if (parser->state == JSON_STATE_ARRAY_NEXT)
+		parser->state = JSON_STATE_ARRAY_NEXT_SKIP;
 }
 
 static void json_strinput_destroyed(struct json_parser *parser)
@@ -602,7 +639,7 @@ json_try_parse_stream_start(struct json_parser *parser,
 				      json_strinput_destroyed, parser);
 
 	*input_r = parser->strinput;
-	return 1;
+	return 0;
 }
 
 int json_parse_next_stream(struct json_parser *parser,
@@ -632,37 +669,54 @@ int json_parse_next_stream(struct json_parser *parser,
 	return ret;
 }
 
+static void json_append_escaped_char(string_t *dest, unsigned char src)
+{
+	switch (src) {
+	case '\b':
+		str_append(dest, "\\b");
+		break;
+	case '\f':
+		str_append(dest, "\\f");
+		break;
+	case '\n':
+		str_append(dest, "\\n");
+		break;
+	case '\r':
+		str_append(dest, "\\r");
+		break;
+	case '\t':
+		str_append(dest, "\\t");
+		break;
+	case '"':
+		str_append(dest, "\\\"");
+		break;
+	case '\\':
+		str_append(dest, "\\\\");
+		break;
+	default:
+		if (src < 32)
+			str_printfa(dest, "\\u%04x", src);
+		else
+			str_append_c(dest, src);
+		break;
+	}
+}
+
+void ostream_escaped_json_format(string_t *dest, unsigned char src)
+{
+	json_append_escaped_char(dest, src);
+}
+
 void json_append_escaped(string_t *dest, const char *src)
 {
-	for (; *src != '\0'; src++) {
-		switch (*src) {
-		case '\b':
-			str_append(dest, "\\b");
-			break;
-		case '\f':
-			str_append(dest, "\\f");
-			break;
-		case '\n':
-			str_append(dest, "\\n");
-			break;
-		case '\r':
-			str_append(dest, "\\r");
-			break;
-		case '\t':
-			str_append(dest, "\\t");
-			break;
-		case '"':
-			str_append(dest, "\\\"");
-			break;
-		case '\\':
-			str_append(dest, "\\\\");
-			break;
-		default:
-			if (*src < 32)
-				str_printfa(dest, "\\u%04x", *src);
-			else
-				str_append_c(dest, *src);
-			break;
-		}
-	}
+	for (; *src != '\0'; src++)
+		json_append_escaped_char(dest, *src);
+}
+
+void json_append_escaped_data(string_t *dest, const unsigned char *src, size_t size)
+{
+	unsigned int i;
+
+	for (i = 0; i < size; i++)
+		json_append_escaped_char(dest, src[i]);
 }

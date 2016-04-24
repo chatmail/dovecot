@@ -22,6 +22,7 @@ libmail_la_SOURCES = \
 	message-decoder.c \
 	message-header-decode.c \
 	message-header-encode.c \
+	message-header-hash.c \
 	message-header-parser.c \
 	message-id.c \
 	message-parser.c \
@@ -57,6 +58,7 @@ headers = \
 	message-decoder.h \
 	message-header-decode.h \
 	message-header-encode.h \
+	message-header-hash.h \
 	message-header-parser.h \
 	message-id.h \
 	message-parser.h \
@@ -87,10 +89,12 @@ test_programs = \
 	test-message-decoder \
 	test-message-header-decode \
 	test-message-header-encode \
+	test-message-header-hash \
 	test-message-header-parser \
 	test-message-id \
 	test-message-parser \
 	test-message-part \
+	test-message-search \
 	test-message-snippet \
 	test-ostream-dot \
 	test-qp-decoder \
@@ -157,6 +161,10 @@ test_message_header_encode_SOURCES = test-message-header-encode.c
 test_message_header_encode_LDADD = message-header-encode.lo $(test_libs)
 test_message_header_encode_DEPENDENCIES = $(test_deps)
 
+test_message_header_hash_SOURCES = test-message-header-hash.c
+test_message_header_hash_LDADD = message-header-hash.lo $(test_libs)
+test_message_header_hash_DEPENDENCIES = $(test_deps)
+
 test_message_header_parser_SOURCES = test-message-header-parser.c
 test_message_header_parser_LDADD = message-header-parser.lo $(test_libs)
 test_message_header_parser_DEPENDENCIES = $(test_deps)
@@ -172,6 +180,10 @@ test_message_parser_DEPENDENCIES = $(test_deps)
 test_message_part_SOURCES = test-message-part.c
 test_message_part_LDADD = message-part.lo message-parser.lo message-header-parser.lo message-size.lo rfc822-parser.lo rfc2231-parser.lo $(test_libs)
 test_message_part_DEPENDENCIES = $(test_deps)
+
+test_message_search_SOURCES = test-message-search.c
+test_message_search_LDADD = libmail.la ../lib-charset/libcharset.la $(test_libs)
+test_message_search_DEPENDENCIES = $(test_deps)
 
 test_message_snippet_SOURCES = test-message-snippet.c
 test_message_snippet_LDADD = message-snippet.lo mail-html2text.lo $(test_message_decoder_LDADD) message-parser.lo message-header-parser.lo message-header-decode.lo message-size.lo

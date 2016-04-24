@@ -21,8 +21,8 @@ struct client_connection {
 
 struct client_connection *
 client_connection_create(int fd, int listen_fd, bool ssl);
+struct client_connection *
+client_connection_create_http(int fd, bool ssl);
 void client_connection_destroy(struct client_connection **conn);
-
-struct ostream *client_connection_get_output(struct client_connection *conn);
 
 #endif

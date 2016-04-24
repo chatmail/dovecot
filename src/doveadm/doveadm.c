@@ -1,8 +1,9 @@
-/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "str.h"
+#include "ostream.h"
 #include "env-util.h"
 #include "execv-const.h"
 #include "dict.h"
@@ -23,6 +24,8 @@ const struct doveadm_print_vfuncs *doveadm_print_vfuncs_all[] = {
 	&doveadm_print_tab_vfuncs,
 	&doveadm_print_table_vfuncs,
 	&doveadm_print_pager_vfuncs,
+	&doveadm_print_json_vfuncs,
+	&doveadm_print_formatted_vfuncs,
 	NULL
 };
 
@@ -108,6 +111,7 @@ doveadm_usage_compress_lines(FILE *out, const char *str, const char *prefix)
 static void ATTR_NORETURN
 usage_to(FILE *out, const char *prefix)
 {
+	const struct doveadm_cmd_ver2 *cmd2;
 	const struct doveadm_cmd *cmd;
 	string_t *str = t_str_new(1024);
 
@@ -118,6 +122,8 @@ usage_to(FILE *out, const char *prefix)
 
 	array_foreach(&doveadm_cmds, cmd)
 		str_printfa(str, "%s\t%s\n", cmd->name, cmd->short_usage);
+	array_foreach(&doveadm_cmds_ver2, cmd2)
+		str_printfa(str, "%s\t%s\n", cmd2->name, cmd2->usage);
 
 	doveadm_mail_usage(str);
 	doveadm_usage_compress_lines(out, str_c(str), prefix);
@@ -140,6 +146,18 @@ help_to(const struct doveadm_cmd *cmd, FILE *out)
 void help(const struct doveadm_cmd *cmd)
 {
 	help_to(cmd, stdout);
+}
+
+static void ATTR_NORETURN
+help_to_ver2(const struct doveadm_cmd_ver2 *cmd, FILE *out)
+{
+	fprintf(out, "doveadm %s %s\n", cmd->name, cmd->usage);
+	exit(EX_USAGE);
+}
+
+void help_ver2(const struct doveadm_cmd_ver2 *cmd)
+{
+	help_to_ver2(cmd, stdout);
 }
 
 static void cmd_help(int argc ATTR_UNUSED, char *argv[])
@@ -192,25 +210,32 @@ static void cmd_exec(int argc ATTR_UNUSED, char *argv[])
 	i_fatal("execv(%s) failed: %m", argv[0]);
 }
 
-static bool doveadm_try_run(const char *cmd_name, int argc, char *argv[])
+static bool doveadm_try_run(const char *cmd_name, int argc,
+			    const char *const argv[])
 {
 	const struct doveadm_cmd *cmd;
 
-	cmd = doveadm_cmd_find(cmd_name, &argc, &argv);
+	cmd = doveadm_cmd_find_with_args(cmd_name, &argc, &argv);
 	if (cmd == NULL)
 		return FALSE;
-	cmd->cmd(argc, argv);
+	cmd->cmd(argc, (char **)argv);
 	return TRUE;
 }
 
 static bool doveadm_has_subcommands(const char *cmd_name)
 {
+	const struct doveadm_cmd_ver2 *cmd2;
 	const struct doveadm_cmd *cmd;
 	unsigned int len = strlen(cmd_name);
 
 	array_foreach(&doveadm_cmds, cmd) {
 		if (strncmp(cmd->name, cmd_name, len) == 0 &&
 		    cmd->name[len] == ' ')
+			return TRUE;
+	}
+	array_foreach(&doveadm_cmds_ver2, cmd2) {
+		if (strncmp(cmd2->name, cmd_name, len) == 0 &&
+		    cmd2->name[len] == ' ')
 			return TRUE;
 	}
 	return doveadm_mail_has_subcommands(cmd_name);
@@ -251,7 +276,6 @@ static struct doveadm_cmd *doveadm_cmdline_commands[] = {
 	&doveadm_cmd_exec,
 	&doveadm_cmd_dump,
 	&doveadm_cmd_pw,
-	&doveadm_cmd_stats_top,
 	&doveadm_cmd_zlibconnect
 };
 
@@ -260,10 +284,14 @@ int main(int argc, char *argv[])
 	enum master_service_flags service_flags =
 		MASTER_SERVICE_FLAG_STANDALONE |
 		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
+	struct doveadm_cmd_context cctx;
 	const char *cmd_name;
 	unsigned int i;
 	bool quick_init = FALSE;
 	int c;
+
+	memset(&cctx,0,sizeof(cctx));
+	cctx.cli = TRUE;
 
 	i_set_failure_exit_callback(failure_exit_callback);
 	doveadm_dsync_main(&argc, &argv);
@@ -305,6 +333,9 @@ int main(int argc, char *argv[])
 	doveadm_cmds_init();
 	for (i = 0; i < N_ELEMENTS(doveadm_cmdline_commands); i++)
 		doveadm_register_cmd(doveadm_cmdline_commands[i]);
+
+	doveadm_cmd_register_ver2(&doveadm_cmd_stats_top_ver2);
+
 	if (cmd_name != NULL && (quick_init ||
 				 strcmp(cmd_name, "config") == 0 ||
 				 strcmp(cmd_name, "stop") == 0 ||
@@ -315,6 +346,8 @@ int main(int argc, char *argv[])
 		quick_init = TRUE;
 	} else {
 		quick_init = FALSE;
+		doveadm_print_ostream = o_stream_create_fd(STDOUT_FILENO, 0, FALSE);
+		o_stream_set_no_error_handling(doveadm_print_ostream, TRUE);
 		doveadm_dump_init();
 		doveadm_mail_init();
 		dict_drivers_register_builtin();
@@ -336,7 +369,12 @@ int main(int argc, char *argv[])
 		i_set_debug_file("/dev/null");
 	}
 
-	if (!doveadm_try_run(cmd_name, argc, argv) &&
+	/* this has to be done here because proctitle hack can break
+	   the env pointer */
+	cctx.username = getenv("USER");
+
+	if (!doveadm_cmd_try_run_ver2(cmd_name, argc, (const char**)argv, &cctx) &&
+	    !doveadm_try_run(cmd_name, argc, (const char **)argv) &&
 	    !doveadm_mail_try_run(cmd_name, argc, argv)) {
 		if (doveadm_has_subcommands(cmd_name))
 			usage_to(stdout, cmd_name);
@@ -354,6 +392,7 @@ int main(int argc, char *argv[])
 		doveadm_unload_modules();
 		dict_drivers_unregister_builtin();
 		doveadm_print_deinit();
+		o_stream_unref(&doveadm_print_ostream);
 	}
 	doveadm_cmds_deinit();
 	master_service_deinit(&master_service);

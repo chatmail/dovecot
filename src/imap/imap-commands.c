@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
@@ -20,7 +20,11 @@ static const struct command imap4rev1_commands[] = {
 	{ "LOGOUT",		cmd_logout,      COMMAND_FLAG_BREAKS_MAILBOX },
 	{ "NOOP",		cmd_noop,        COMMAND_FLAG_BREAKS_SEQS },
 
-	{ "APPEND",		cmd_append,      COMMAND_FLAG_BREAKS_SEQS },
+	{ "APPEND",		cmd_append,      COMMAND_FLAG_BREAKS_SEQS |
+						 /* finish syncing and sending
+						    all tagged commands before
+						    we wait for APPEND input */
+						 COMMAND_FLAG_BREAKS_MAILBOX },
 	{ "EXAMINE",		cmd_examine,     COMMAND_FLAG_BREAKS_MAILBOX },
 	{ "CREATE",		cmd_create,      0 },
 	{ "DELETE",		cmd_delete,      COMMAND_FLAG_BREAKS_MAILBOX |
@@ -54,7 +58,11 @@ static const struct command imap_ext_commands[] = {
 	{ "ENABLE",		cmd_enable,      0 },
 	{ "ID",			cmd_id,          0 },
 	{ "IDLE",		cmd_idle,        COMMAND_FLAG_BREAKS_SEQS |
-						 COMMAND_FLAG_REQUIRES_SYNC },
+						 COMMAND_FLAG_REQUIRES_SYNC |
+						 /* finish syncing and sending
+						    all tagged commands before
+						    IDLE is started */
+						 COMMAND_FLAG_BREAKS_MAILBOX },
 	{ "GETMETADATA",	cmd_getmetadata, 0 },
 	{ "SETMETADATA",	cmd_setmetadata, 0 },
 	{ "NAMESPACE",		cmd_namespace,   0 },
@@ -159,16 +167,20 @@ bool command_exec(struct client_command_context *cmd)
 	struct timeval cmd_start_timeval;
 	uint64_t cmd_start_bytes_in, cmd_start_bytes_out;
 
+	i_assert(!cmd->executing);
+
 	io_loop_time_refresh();
 	cmd_start_timeval = ioloop_timeval;
 	cmd_start_bytes_in = i_stream_get_absolute_offset(cmd->client->input);
 	cmd_start_bytes_out = cmd->client->output->offset;
 
+	cmd->executing = TRUE;
 	array_foreach(&command_hooks, hook)
 		hook->pre(cmd);
 	finished = cmd->func(cmd);
 	array_foreach(&command_hooks, hook)
 		hook->post(cmd);
+	cmd->executing = FALSE;
 	if (cmd->state == CLIENT_COMMAND_STATE_DONE)
 		finished = TRUE;
 

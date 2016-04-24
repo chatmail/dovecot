@@ -1,7 +1,7 @@
-/* Copyright (c) 2009-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
-
+#include "array.h"
 
 static void test_p_strarray_dup(void)
 {
@@ -159,6 +159,62 @@ static void test_t_str_rtrim(void)
 	test_end();
 }
 
+static const char *const test_strarray_input[] = {
+	"", "hello", "world", "", "yay", "", NULL
+};
+static struct {
+	const char *separator;
+	const char *output;
+} test_strarray_outputs[] = {
+	{ "", "helloworldyay" },
+	/* FIXME: v2.3 - test_output should have separator in the beginning */
+	{ " ", "hello world  yay " },
+	{ "!-?", "hello!-?world!-?!-?yay!-?" }
+};
+
+static void test_t_strarray_join(void)
+{
+	const char *null = NULL;
+	unsigned int i;
+
+	test_begin("t_strarray_join()");
+
+	/* empty array -> empty string */
+	test_assert(strcmp(t_strarray_join(&null, " "), "") == 0);
+
+	for (i = 0; i < N_ELEMENTS(test_strarray_outputs); i++) {
+		test_assert_idx(strcmp(t_strarray_join(test_strarray_input,
+						       test_strarray_outputs[i].separator),
+				       test_strarray_outputs[i].output) == 0, i);
+	}
+	test_end();
+}
+
+static void test_p_array_const_string_join(void)
+{
+	ARRAY_TYPE(const_string) arr;
+	unsigned int i;
+	char *res;
+
+	test_begin("p_array_const_string_join()");
+
+	i_array_init(&arr, 2);
+	/* empty array -> empty string */
+	test_assert(strcmp(t_array_const_string_join(&arr, " "), "") == 0);
+
+	array_append(&arr, test_strarray_input,
+		     str_array_length(test_strarray_input));
+	for (i = 0; i < N_ELEMENTS(test_strarray_outputs); i++) {
+		res = p_array_const_string_join(default_pool, &arr,
+						test_strarray_outputs[i].separator);
+		test_assert_idx(strcmp(res, test_strarray_outputs[i].output) == 0, i);
+		i_free(res);
+	}
+
+	array_free(&arr);
+	test_end();
+}
+
 void test_strfuncs(void)
 {
 	test_p_strarray_dup();
@@ -168,4 +224,6 @@ void test_strfuncs(void)
 	/*test_t_str_trim();*/
 	test_t_str_ltrim();
 	test_t_str_rtrim();
+	test_t_strarray_join();
+	test_p_array_const_string_join();
 }

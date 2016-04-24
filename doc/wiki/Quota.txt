@@ -3,13 +3,14 @@ Quota
 
 Quota backend specifies the method how Dovecot keeps track of the current quota
 usage. They don't (usually) specify users' quota limits, that's done by
-returning extra fields from userdb. There are different quota backends that
-Dovecot can use:
+<returning extra fields from userdb> [Quota.Configuration.txt]. There are
+different quota backends that Dovecot can use:
 
  * <fs> [Quota.FS.txt]: Filesystem quota.
  * <dirsize> [Quota.Dirsize.txt]: The simplest and slowest quota backend, but
    it works quite well with mboxes.
- * <dict> [Quota.Dict.txt]: Store quota usage in a dictionary (e.g. SQL).
+ * <dict> [Quota.Dict.txt]: Store quota usage in a dictionary (e.g. SQL, or
+   flat files).
  * <maildir> [Quota.Maildir.txt]: Store quota usage in Maildir++ maildirsize
    files. This is the most commonly used quota for virtual users.
  * <count> [Quota.Count.txt]: Store quota usage within Dovecot's index files.
@@ -124,4 +125,4 @@ To make sure users don't start keeping messages permanently in Trash you can
 use a nightly <cronjob> [Plugins.Expire.txt] to expunge old messages from Trash
 mailbox.
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-30 04:43)

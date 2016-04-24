@@ -1,8 +1,20 @@
-dovecot (1:2.2.21-1~bpo8+1) jessie-backports; urgency=medium
+dovecot (1:2.2.23-1) unstable; urgency=medium
 
-  * Rebuild for jessie-backports.
+  [ Jaldhar H. Vyas ]
+  * Drop missing-expunges.patch, merged upstream
 
- -- Apollon Oikonomopoulos <apoikos@debian.org>  Sat, 05 Mar 2016 01:37:26 +0200
+  [ Apollon Oikonomopoulos ]
+  * [8a01915] Imported Upstream version 2.2.23
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Tue, 12 Apr 2016 17:30:03 +0300
+
+dovecot (1:2.2.22-1) unstable; urgency=medium
+
+  [ Jaldhar H. Vyas ]
+  * [2321581] Imported Upstream version 2.2.22
+  * [3fa8a62] Updated pigeonhole patch to 0.4.13
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 18 Mar 2016 19:18:34 -0400
 
 dovecot (1:2.2.21-1) unstable; urgency=medium
 

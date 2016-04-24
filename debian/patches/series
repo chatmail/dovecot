@@ -9,4 +9,3 @@ exampledir.patch
 mboxlocking.patch
 dovecot_name.patch
 libnss_location.patch
-missing-expunges.patch

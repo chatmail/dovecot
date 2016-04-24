@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -153,6 +153,28 @@ imap_list_flag_parse(const char *str, enum mailbox_info_flags *flag_r)
 	return FALSE;
 }
 
+static const char *
+imapc_list_to_vname(struct imapc_mailbox_list *list, const char *imapc_name)
+{
+	const char *list_name;
+
+	/* typically mailbox_list_escape_name() is used to escape vname into
+	   a list name. but we want to convert remote IMAP name to a list name,
+	   so we need to use the remote IMAP separator. */
+	list_name = mailbox_list_escape_name_params(imapc_name, "", list->root_sep,
+		mailbox_list_get_hierarchy_sep(&list->list),
+		list->list.set.escape_char, "");
+	/* list_name is now valid, so we can convert it to vname */
+	return mailbox_list_get_vname(&list->list, list_name);
+}
+
+const char *imapc_list_to_remote(struct imapc_mailbox_list *list, const char *name)
+{
+	return mailbox_list_unescape_name_params(name, "", list->root_sep,
+				mailbox_list_get_hierarchy_sep(&list->list),
+				list->list.set.escape_char);
+}
+
 static struct mailbox_node *
 imapc_list_update_tree(struct imapc_mailbox_list *list,
 		       struct mailbox_tree_context *tree,
@@ -175,10 +197,8 @@ imapc_list_update_tree(struct imapc_mailbox_list *list,
 		flags++;
 	}
 
-	name = mailbox_list_escape_name(&list->list, name);
 	T_BEGIN {
-		const char *vname =
-			mailbox_list_get_vname(&list->list, name);
+		const char *vname = imapc_list_to_vname(list, name);
 
 		if ((info_flags & MAILBOX_NONEXISTENT) != 0)
 			node = mailbox_tree_lookup(tree, vname);
@@ -660,7 +680,8 @@ imapc_list_write_special_use(struct imapc_mailbox_list_iterate_context *ctx,
 	str_truncate(ctx->special_use, 0);
 
 	for (i = 0; i < N_ELEMENTS(imap_list_flags); i++) {
-		if ((node->flags & imap_list_flags[i].flag) != 0) {
+		if ((node->flags & imap_list_flags[i].flag) != 0 &&
+		    (node->flags & MAILBOX_SPECIALUSE_MASK) != 0) {
 			str_append(ctx->special_use, imap_list_flags[i].str);
 			str_append_c(ctx->special_use, ' ');
 		}
@@ -789,7 +810,8 @@ static int imapc_list_set_subscribed(struct mailbox_list *_list,
 	struct imapc_simple_context ctx;
 
 	cmd = imapc_list_simple_context_init(&ctx, list);
-	imapc_command_sendf(cmd, set ? "SUBSCRIBE %s" : "UNSUBSCRIBE %s", name);
+	imapc_command_sendf(cmd, set ? "SUBSCRIBE %s" : "UNSUBSCRIBE %s",
+			    imapc_list_to_remote(list, name));
 	imapc_simple_run(&ctx);
 	return ctx.ret;
 }
@@ -818,7 +840,7 @@ imapc_list_delete_mailbox(struct mailbox_list *_list, const char *name)
 	}
 
 	cmd = imapc_list_simple_context_init(&ctx, list);
-	imapc_command_sendf(cmd, "DELETE %s", name);
+	imapc_command_sendf(cmd, "DELETE %s", imapc_list_to_remote(list, name));
 	imapc_simple_run(&ctx);
 
 	if (fs_list != NULL && ctx.ret == 0) {
@@ -865,7 +887,9 @@ imapc_list_rename_mailbox(struct mailbox_list *oldlist, const char *oldname,
 	}
 
 	cmd = imapc_list_simple_context_init(&ctx, list);
-	imapc_command_sendf(cmd, "RENAME %s %s", oldname, newname);
+	imapc_command_sendf(cmd, "RENAME %s %s",
+			    imapc_list_to_remote(list, oldname),
+			    imapc_list_to_remote(list, newname));
 	imapc_simple_run(&ctx);
 	if (ctx.ret == 0 && fs_list != NULL && oldlist == newlist) {
 		oldname = imapc_list_get_fs_name(list, oldname);

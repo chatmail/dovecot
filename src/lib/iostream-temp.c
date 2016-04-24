@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -11,13 +11,14 @@
 
 #include <unistd.h>
 
-#define IOSTREAM_TEMP_MAX_BUF_SIZE (1024*128)
+#define IOSTREAM_TEMP_MAX_BUF_SIZE_DEFAULT (1024*128)
 
 struct temp_ostream {
 	struct ostream_private ostream;
 
 	char *temp_path_prefix;
 	enum iostream_temp_flags flags;
+	size_t max_mem_size;
 
 	struct istream *dupstream;
 	uoff_t dupstream_offset, dupstream_start_offset;
@@ -67,6 +68,9 @@ static int o_stream_temp_move_to_fd(struct temp_ostream *tstream)
 		i_close_fd(&tstream->fd);
 		return -1;
 	}
+	/* make the fd available also to o_stream_get_fd(),
+	   e.g. for unit tests */
+	tstream->ostream.fd = tstream->fd;
 	tstream->fd_size = tstream->buf->used;
 	buffer_free(&tstream->buf);
 	return 0;
@@ -105,7 +109,7 @@ o_stream_temp_sendv(struct ostream_private *stream,
 		return o_stream_temp_fd_sendv(tstream, iov, iov_count);
 
 	for (i = 0; i < iov_count; i++) {
-		if (tstream->buf->used + iov[i].iov_len > IOSTREAM_TEMP_MAX_BUF_SIZE) {
+		if (tstream->buf->used + iov[i].iov_len > tstream->max_mem_size) {
 			if (o_stream_temp_move_to_fd(tstream) == 0) {
 				return o_stream_temp_fd_sendv(tstream, iov+i,
 							      iov_count-i);
@@ -212,6 +216,12 @@ o_stream_temp_write_at(struct ostream_private *stream,
 	return 0;
 }
 
+static int o_stream_temp_seek(struct ostream_private *_stream, uoff_t offset)
+{
+	_stream->ostream.offset = offset;
+	return 0;
+}
+
 struct ostream *iostream_temp_create(const char *temp_path_prefix,
 				     enum iostream_temp_flags flags)
 {
@@ -222,6 +232,15 @@ struct ostream *iostream_temp_create_named(const char *temp_path_prefix,
 					   enum iostream_temp_flags flags,
 					   const char *name)
 {
+	return iostream_temp_create_sized(temp_path_prefix, flags, name,
+					  IOSTREAM_TEMP_MAX_BUF_SIZE_DEFAULT);
+}
+
+struct ostream *iostream_temp_create_sized(const char *temp_path_prefix,
+					   enum iostream_temp_flags flags,
+					   const char *name,
+					   size_t max_mem_size)
+{
 	struct temp_ostream *tstream;
 	struct ostream *output;
 
@@ -229,9 +248,11 @@ struct ostream *iostream_temp_create_named(const char *temp_path_prefix,
 	tstream->ostream.sendv = o_stream_temp_sendv;
 	tstream->ostream.send_istream = o_stream_temp_send_istream;
 	tstream->ostream.write_at = o_stream_temp_write_at;
+	tstream->ostream.seek = o_stream_temp_seek;
 	tstream->ostream.iostream.close = o_stream_temp_close;
 	tstream->temp_path_prefix = i_strdup(temp_path_prefix);
 	tstream->flags = flags;
+	tstream->max_mem_size = max_mem_size;
 	tstream->buf = buffer_create_dynamic(default_pool, 8192);
 	tstream->fd = -1;
 

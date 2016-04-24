@@ -99,6 +99,29 @@ The !-prefixed virtual mailbox is also selected from; you don't need to list it
 again without an ! or you'll get two copies of your messages in the virtual
 mailbox.
 
+Mailbox selection base on metadata (v2.2.22+)
+---------------------------------------------
+
+Instead of a mailbox name, you can specify a metadata filter:
+
+---%<-------------------------------------------------------------------------
+[-]/<metadata-entry-name>:<value-wildcard>
+---%<-------------------------------------------------------------------------
+
+There can be multiple metadata entries. All the entries must match.
+
+For example:
+
+---%<-------------------------------------------------------------------------
+*
+/private/vendor/vendor.dovecot/virtual:*
+-/private/vendor/vendor.dovecot/virtual:ignore
+  all
+---%<-------------------------------------------------------------------------
+
+This matches all mailboxes, which contain a virtual METADATA entry that has any
+value except "ignore".
+
 Examples
 --------
 
@@ -246,4 +269,4 @@ IMAP UIDs. Instead use for GUIDs (with maildir the same as base filename):
 pop3_uidl_format = %g
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-30 04:43)

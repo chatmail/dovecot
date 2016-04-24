@@ -66,7 +66,7 @@ The credentials are the base64-encoded version of the string
 Generating this is cumbersome and a bit daunting for the novice user, so for
 convenience a simple Perl script is provided to generate the 'AUTHENTICATE'
 command for you. It is available here
-[http://www.rename-it.nl/dovecot/utilities/sieve-auth-command.pl] and used as
+[http://pigeonhole.dovecot.org/utilities/sieve-auth-command.pl] and used as
 follows:
 
 ---%<-------------------------------------------------------------------------
@@ -198,4 +198,4 @@ to the Dovecot mailing list [http://dovecot.org/mailinglists.html]. In any
 case, you must make sure that the issue is properly explained and that the
 author can contact you for more information.
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-30 04:43)

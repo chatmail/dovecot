@@ -272,7 +272,7 @@ full address, so pass it with the -a flag.
 ---%<-------------------------------------------------------------------------
 dovecot unix    -       n       n       -       -      pipe
   flags=DRhu user=mail:mail argv=/usr/local/libexec/dovecot/dovecot-lda
-  -f ${sender} -d ${user}@${nexthop} -a ${recipient}
+  -f ${sender} -d ${user}@${nexthop} -a ${original_recipient}
 ---%<-------------------------------------------------------------------------
 
 or
@@ -402,4 +402,4 @@ Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
 Here's the original post announcing it:
 http://dovecot.org/list/dovecot/2007-March/020895.html
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-30 04:43)

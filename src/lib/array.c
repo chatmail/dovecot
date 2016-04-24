@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -124,6 +124,8 @@ void array_sort_i(struct array *array, int (*cmp)(const void *, const void *))
 	unsigned int count;
 
 	count = array_count_i(array);
+	if (count == 0)
+		return;
 	qsort(buffer_get_modifiable_data(array->buffer, NULL),
 	      count, array->element_size, cmp);
 }

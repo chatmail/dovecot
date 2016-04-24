@@ -90,6 +90,7 @@ build_triplet = @build@
 host_triplet = @host@
 bin_PROGRAMS = doveadm$(EXEEXT)
 pkglibexec_PROGRAMS = doveadm-server$(EXEEXT)
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/doveadm
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
@@ -104,7 +105,8 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
-PROGRAMS = $(bin_PROGRAMS) $(pkglibexec_PROGRAMS)
+am__EXEEXT_1 = test-doveadm-util$(EXEEXT)
+PROGRAMS = $(bin_PROGRAMS) $(noinst_PROGRAMS) $(pkglibexec_PROGRAMS)
 am__objects_1 = doveadm-auth.$(OBJEXT) doveadm-dict.$(OBJEXT) \
 	doveadm-director.$(OBJEXT) doveadm-fs.$(OBJEXT) \
 	doveadm-instance.$(OBJEXT) doveadm-kick.$(OBJEXT) \
@@ -126,28 +128,31 @@ am__objects_2 = doveadm-dsync.$(OBJEXT) doveadm-mail.$(OBJEXT) \
 	doveadm-mailbox-list-iter.$(OBJEXT) \
 	doveadm-mail-save.$(OBJEXT) doveadm-mail-search.$(OBJEXT) \
 	doveadm-mail-server.$(OBJEXT)
-am__objects_3 = $(am__objects_1) $(am__objects_2) \
-	doveadm-cmd.$(OBJEXT) doveadm-print.$(OBJEXT) \
-	doveadm-settings.$(OBJEXT) doveadm-util.$(OBJEXT) \
-	server-connection.$(OBJEXT)
-am_doveadm_OBJECTS = $(am__objects_3) doveadm.$(OBJEXT) \
-	doveadm-dump.$(OBJEXT) doveadm-dump-dbox.$(OBJEXT) \
+am__objects_3 = doveadm-dump.$(OBJEXT) doveadm-dump-dbox.$(OBJEXT) \
 	doveadm-dump-index.$(OBJEXT) doveadm-dump-log.$(OBJEXT) \
 	doveadm-dump-mailboxlog.$(OBJEXT) \
-	doveadm-dump-thread.$(OBJEXT) doveadm-print-flow.$(OBJEXT) \
-	doveadm-print-pager.$(OBJEXT) doveadm-print-tab.$(OBJEXT) \
-	doveadm-print-table.$(OBJEXT) doveadm-pw.$(OBJEXT) \
-	doveadm-zlib.$(OBJEXT)
+	doveadm-dump-thread.$(OBJEXT) doveadm-zlib.$(OBJEXT)
+am__objects_4 = $(am__objects_1) $(am__objects_2) $(am__objects_3) \
+	doveadm-cmd.$(OBJEXT) doveadm-print.$(OBJEXT) \
+	doveadm-settings.$(OBJEXT) doveadm-util.$(OBJEXT) \
+	server-connection.$(OBJEXT) doveadm-print-formatted.$(OBJEXT)
+am_doveadm_OBJECTS = $(am__objects_4) doveadm.$(OBJEXT) \
+	doveadm-print-flow.$(OBJEXT) doveadm-print-pager.$(OBJEXT) \
+	doveadm-print-tab.$(OBJEXT) doveadm-print-table.$(OBJEXT) \
+	doveadm-print-json.$(OBJEXT) doveadm-pw.$(OBJEXT)
 doveadm_OBJECTS = $(am_doveadm_OBJECTS)
 am__DEPENDENCIES_1 =
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am_doveadm_server_OBJECTS = $(am__objects_3) \
-	client-connection.$(OBJEXT) doveadm-print-server.$(OBJEXT) \
+am_doveadm_server_OBJECTS = $(am__objects_4) \
+	client-connection.$(OBJEXT) client-connection-http.$(OBJEXT) \
+	doveadm-print-server.$(OBJEXT) doveadm-print-json.$(OBJEXT) \
 	main.$(OBJEXT)
 doveadm_server_OBJECTS = $(am_doveadm_server_OBJECTS)
+am_test_doveadm_util_OBJECTS = test-doveadm-util.$(OBJEXT)
+test_doveadm_util_OBJECTS = $(am_test_doveadm_util_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -182,8 +187,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(doveadm_SOURCES) $(doveadm_server_SOURCES)
-DIST_SOURCES = $(doveadm_SOURCES) $(doveadm_server_SOURCES)
+SOURCES = $(doveadm_SOURCES) $(doveadm_server_SOURCES) \
+	$(test_doveadm_util_SOURCES)
+DIST_SOURCES = $(doveadm_SOURCES) $(doveadm_server_SOURCES) \
+	$(test_doveadm_util_SOURCES)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -360,6 +367,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -474,6 +482,7 @@ doveadm_moduledir = $(moduledir)/doveadm
 SUBDIRS = dsync
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-auth \
 	-I$(top_srcdir)/src/lib-compression \
@@ -485,8 +494,10 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-storage \
+	-I$(top_srcdir)/src/lib-http \
 	-I$(top_srcdir)/src/auth \
 	-DMODULEDIR=\""$(moduledir)"\" \
+	-DAUTH_MODULE_DIR=\""$(moduledir)/auth"\" \
 	-DDOVEADM_MODULEDIR=\""$(doveadm_moduledir)"\" \
 	-DPKG_RUNDIR=\""$(rundir)"\" \
 	-DPKG_STATEDIR=\""$(statedir)"\" \
@@ -565,35 +576,46 @@ doveadm_common_mail_cmds = \
 	doveadm-mail-search.c \
 	doveadm-mail-server.c
 
-common = \
-	$(doveadm_common_cmds) \
-	$(doveadm_common_mail_cmds) \
-	doveadm-cmd.c \
-	doveadm-print.c \
-	doveadm-settings.c \
-	doveadm-util.c \
-	server-connection.c
 
-doveadm_SOURCES = \
-	$(common) \
-	doveadm.c \
+# these aren't actually useful in doveadm-server, but plugins may implement
+# both dumping and some other commands inside a single plugin. not having the
+# dump functions in doveadm-server fails to load such plugins.
+doveadm_common_dump_cmds = \
 	doveadm-dump.c \
 	doveadm-dump-dbox.c \
 	doveadm-dump-index.c \
 	doveadm-dump-log.c \
 	doveadm-dump-mailboxlog.c \
 	doveadm-dump-thread.c \
+	doveadm-zlib.c
+
+common = \
+	$(doveadm_common_cmds) \
+	$(doveadm_common_mail_cmds) \
+	$(doveadm_common_dump_cmds) \
+	doveadm-cmd.c \
+	doveadm-print.c \
+	doveadm-settings.c \
+	doveadm-util.c \
+	server-connection.c \
+	doveadm-print-formatted.c
+
+doveadm_SOURCES = \
+	$(common) \
+	doveadm.c \
 	doveadm-print-flow.c \
 	doveadm-print-pager.c \
 	doveadm-print-tab.c \
 	doveadm-print-table.c \
-	doveadm-pw.c \
-	doveadm-zlib.c
+	doveadm-print-json.c \
+	doveadm-pw.c
 
 doveadm_server_SOURCES = \
 	$(common) \
 	client-connection.c \
+	client-connection-http.c \
 	doveadm-print-server.c \
+	doveadm-print-json.c \
 	main.c
 
 pkginc_libdir = $(pkgincludedir)
@@ -612,10 +634,22 @@ pkginc_lib_HEADERS = \
 
 noinst_HEADERS = \
 	client-connection.h \
+	client-connection-private.h \
 	server-connection.h \
 	doveadm-server.h \
 	doveadm-who.h
 
+test_programs = \
+	test-doveadm-util
+
+test_libs = \
+	../lib-test/libtest.la \
+	../lib/liblib.la
+
+test_deps = $(noinst_LTLIBRARIES) $(test_libs)
+test_doveadm_util_SOURCES = test-doveadm-util.c
+test_doveadm_util_LDADD = doveadm-util.o $(test_libs) $(MODULE_LIBS)
+test_doveadm_util_DEPENDENCIES = $(test_deps)
 all: all-recursive
 
 .SUFFIXES:
@@ -698,6 +732,15 @@ clean-binPROGRAMS:
 	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
 	echo " rm -f" $$list; \
 	rm -f $$list
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
 install-pkglibexecPROGRAMS: $(pkglibexec_PROGRAMS)
 	@$(NORMAL_INSTALL)
 	@list='$(pkglibexec_PROGRAMS)'; test -n "$(pkglibexecdir)" || list=; \
@@ -756,12 +799,17 @@ doveadm-server$(EXEEXT): $(doveadm_server_OBJECTS) $(doveadm_server_DEPENDENCIES
 	@rm -f doveadm-server$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(doveadm_server_OBJECTS) $(doveadm_server_LDADD) $(LIBS)
 
+test-doveadm-util$(EXEEXT): $(test_doveadm_util_OBJECTS) $(test_doveadm_util_DEPENDENCIES) $(EXTRA_test_doveadm_util_DEPENDENCIES) 
+	@rm -f test-doveadm-util$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_doveadm_util_OBJECTS) $(test_doveadm_util_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-connection-http.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-auth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-cmd.Po@am__quote@
@@ -801,6 +849,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mutf7.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-penalty.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-print-flow.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-print-formatted.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-print-json.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-print-pager.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-print-server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-print-tab.Po@am__quote@
@@ -818,6 +868,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/server-connection.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-doveadm-util.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -1062,7 +1113,7 @@ maintainer-clean-generic:
 clean: clean-recursive
 
 clean-am: clean-binPROGRAMS clean-generic clean-libtool \
-	clean-pkglibexecPROGRAMS mostlyclean-am
+	clean-noinstPROGRAMS clean-pkglibexecPROGRAMS mostlyclean-am
 
 distclean: distclean-recursive
 	-rm -rf ./$(DEPDIR)
@@ -1136,8 +1187,8 @@ uninstall-am: uninstall-binPROGRAMS uninstall-pkginc_libHEADERS \
 
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am check \
 	check-am clean clean-binPROGRAMS clean-generic clean-libtool \
-	clean-pkglibexecPROGRAMS cscopelist-am ctags ctags-am \
-	distclean distclean-compile distclean-generic \
+	clean-noinstPROGRAMS clean-pkglibexecPROGRAMS cscopelist-am \
+	ctags ctags-am distclean distclean-compile distclean-generic \
 	distclean-libtool distclean-tags distdir dvi dvi-am html \
 	html-am info info-am install install-am install-binPROGRAMS \
 	install-data install-data-am install-dvi install-dvi-am \
@@ -1158,6 +1209,12 @@ uninstall-am: uninstall-binPROGRAMS uninstall-pkginc_libHEADERS \
 install-exec-local:
 	rm -f $(DESTDIR)$(bindir)/dsync
 	$(LN_S) doveadm $(DESTDIR)$(bindir)/dsync
+
+check: check-am check-test
+check-test: all-am
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

@@ -1,4 +1,4 @@
-/* Copyright (c) 2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -217,4 +217,9 @@ bool stats_import(const unsigned char *data, size_t size,
 void *stats_fill_ptr(struct stats *stats, struct stats_item *item)
 {
 	return PTR_OFFSET(stats, item->pos);
+}
+
+void stats_reset(struct stats *stats)
+{
+	memset(stats, 0, stats_total_size);
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -962,6 +962,11 @@ static bool mailbox_name_has_control_chars(const char *name)
 	return FALSE;
 }
 
+void mailbox_skip_create_name_restrictions(struct mailbox *box, bool set)
+{
+	box->skip_create_name_restrictions = set;
+}
+
 int mailbox_verify_create_name(struct mailbox *box)
 {
 	char sep = mail_namespace_get_sep(box->list->ns);
@@ -973,6 +978,8 @@ int mailbox_verify_create_name(struct mailbox *box)
 	   visible to users, while storage name may be a fixed length GUID. */
 	if (mailbox_verify_name(box) < 0)
 		return -1;
+	if (box->skip_create_name_restrictions)
+		return 0;
 	if (mailbox_name_has_control_chars(box->vname)) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
 			"Control characters not allowed in new mailbox names");
@@ -1029,7 +1036,7 @@ int mailbox_exists(struct mailbox *box, bool auto_boxes,
 		return 0;
 	}
 
-	if (auto_boxes && box->set != NULL && mailbox_is_autocreated(box)) {
+	if (auto_boxes && mailbox_is_autocreated(box)) {
 		*existence_r = MAILBOX_EXISTENCE_SELECT;
 		return 0;
 	}

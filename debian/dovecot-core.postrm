@@ -20,6 +20,9 @@ if [ "$1" = "purge" ] ; then
 		fi
 	done
 
+	# Remove 10-ssl.conf, which is not registered with ucf
+	rm -f /etc/dovecot/conf.d/10-ssl.conf
+
     userdel dovecot || true;
     userdel dovenull || true;
 

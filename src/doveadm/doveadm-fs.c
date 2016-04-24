@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -11,6 +11,7 @@
 #include "iostream-ssl.h"
 #include "fs-api.h"
 #include "doveadm.h"
+#include "doveadm-print.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -62,14 +63,18 @@ static void cmd_fs_get(int argc, char *argv[])
 	size_t size;
 	ssize_t ret;
 
+	doveadm_print_init(DOVEADM_PRINT_TYPE_FLOW);
+	doveadm_print_header("content", "content", DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE);
+
 	fs = cmd_fs_init(&argc, &argv, 1, cmd_fs_get);
 
 	file = fs_file_init(fs, argv[0], FS_OPEN_MODE_READONLY);
 	input = fs_read_stream(file, IO_BLOCK_SIZE);
 	while ((ret = i_stream_read_data(input, &data, &size, 0)) > 0) {
-		fwrite(data, 1, size, stdout);
+		doveadm_print_stream(data, size);
 		i_stream_skip(input, size);
 	}
+	doveadm_print_stream("", 0);
 	i_assert(ret == -1);
 	if (input->stream_errno == ENOENT) {
 		i_error("%s doesn't exist: %s", fs_file_path(file),
@@ -188,9 +193,15 @@ static void cmd_fs_stat(int argc, char *argv[])
 	fs = cmd_fs_init(&argc, &argv, 1, cmd_fs_stat);
 
 	file = fs_file_init(fs, argv[0], FS_OPEN_MODE_READONLY);
+
+	doveadm_print_init(DOVEADM_PRINT_TYPE_FORMATTED);
+	doveadm_print_formatted_set_format("%{path} size=%{size}");
+	doveadm_print_header_simple("path");
+	doveadm_print_header("size", "size", DOVEADM_PRINT_HEADER_FLAG_NUMBER);
+
 	if (fs_stat(file, &st) == 0) {
-		printf("%s size=%lld\n", fs_file_path(file),
-		       (long long)st.st_size);
+		doveadm_print(fs_file_path(file));
+		doveadm_print(dec2str(st.st_size));
 	} else if (errno == ENOENT) {
 		i_error("%s doesn't exist: %s", fs_file_path(file),
 			fs_file_last_error(file));
@@ -214,9 +225,17 @@ static void cmd_fs_metadata(int argc, char *argv[])
 	fs = cmd_fs_init(&argc, &argv, 1, cmd_fs_metadata);
 
 	file = fs_file_init(fs, argv[0], FS_OPEN_MODE_READONLY);
+
+	doveadm_print_init(DOVEADM_PRINT_TYPE_FORMATTED);
+	doveadm_print_formatted_set_format("%{key}=%{value}\n");
+	doveadm_print_header_simple("key");
+	doveadm_print_header_simple("value");
+
 	if (fs_get_metadata(file, &metadata) == 0) {
-		array_foreach(metadata, m)
-			printf("%s=%s\n", m->key, m->value);
+		array_foreach(metadata, m) {
+			doveadm_print(m->key);
+			doveadm_print(m->value);
+		}
 	} else if (errno == ENOENT) {
 		i_error("%s doesn't exist: %s", fs_file_path(file),
 			fs_file_last_error(file));
@@ -470,9 +489,14 @@ static void cmd_fs_iter_full(int argc, char *argv[], enum fs_iter_flags flags,
 
 	fs = cmd_fs_init(&argc, &argv, 1, cmd);
 
+	doveadm_print_init(DOVEADM_PRINT_TYPE_FORMATTED);
+	doveadm_print_formatted_set_format("%{path}\n");
+	doveadm_print_header_simple("path");
+
 	iter = fs_iter_init(fs, argv[0], flags);
-	while ((fname = fs_iter_next(iter)) != NULL)
-		printf("%s\n", fname);
+	while ((fname = fs_iter_next(iter)) != NULL) {
+		doveadm_print(fname);
+	}
 	if (fs_iter_deinit(&iter) < 0) {
 		i_error("fs_iter_deinit(%s) failed: %s",
 			argv[0], fs_last_error(fs));
@@ -491,15 +515,92 @@ static void cmd_fs_iter_dirs(int argc, char *argv[])
 	cmd_fs_iter_full(argc, argv, FS_ITER_FLAG_DIRS, cmd_fs_iter_dirs);
 }
 
-struct doveadm_cmd doveadm_cmd_fs[] = {
-	{ cmd_fs_get, "fs get", "<fs-driver> <fs-args> <path>" },
-	{ cmd_fs_put, "fs put", "[-h <hash>] <fs-driver> <fs-args> <input path> <path>" },
-	{ cmd_fs_copy, "fs copy", "<fs-driver> <fs-args> <source path> <dest path>" },
-	{ cmd_fs_stat, "fs stat", "<fs-driver> <fs-args> <path>" },
-	{ cmd_fs_metadata, "fs metadata", "<fs-driver> <fs-args> <path>" },
-	{ cmd_fs_delete, "fs delete", "[-R] [-n <count>] <fs-driver> <fs-args> <path> [<path> ...]" },
-	{ cmd_fs_iter, "fs iter", "<fs-driver> <fs-args> <path>" },
-	{ cmd_fs_iter_dirs, "fs iter-dirs", "<fs-driver> <fs-args> <path>" },
+struct doveadm_cmd_ver2 doveadm_cmd_fs[] = {
+{
+	.name = "fs get",
+	.old_cmd = cmd_fs_get,
+	.usage = "<fs-driver> <fs-args> <path>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('\0', "fs-driver", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "fs-args", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "path", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
+},
+{
+	.name = "fs put",
+	.old_cmd = cmd_fs_put,
+	.usage = "[-h <hash>] <fs-driver> <fs-args> <input path> <path>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('h', "hash", CMD_PARAM_STR, 0)
+DOVEADM_CMD_PARAM('\0', "fs-driver", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "fs-args", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "input-path", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "path", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
+},
+{
+	.name = "fs copy",
+	.old_cmd = cmd_fs_copy,
+	.usage = "<fs-driver> <fs-args> <source path> <dest path>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('\0', "fs-driver", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "fs-args", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "source-path", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "destination-path", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
+},
+{
+	.name = "fs stat",
+	.old_cmd = cmd_fs_stat,
+	.usage = "<fs-driver> <fs-args> <path>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('\0', "fs-driver", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "fs-args", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "path", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
+},
+{
+	.name = "fs metadata",
+	.old_cmd = cmd_fs_metadata,
+	.usage = "<fs-driver> <fs-args> <path>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('\0', "fs-driver", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "fs-args", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "path", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
+},
+{
+	.name = "fs delete",
+	.old_cmd = cmd_fs_delete,
+	.usage = "[-R] [-n <count>] <fs-driver> <fs-args> <path> [<path> ...]",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('R', "recursive", CMD_PARAM_BOOL, 0)
+DOVEADM_CMD_PARAM('n', "max-parallel", CMD_PARAM_INT64, 0)
+DOVEADM_CMD_PARAM('\0', "fs-driver", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "fs-args", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "path", CMD_PARAM_ARRAY, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
+},
+{
+	.name = "fs iter",
+	.old_cmd = cmd_fs_iter,
+	.usage = "<fs-driver> <fs-args> <path>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('\0', "fs-driver", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "fs-args", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "path", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
+},
+{
+	.name = "fs iter-dirs",
+	.old_cmd = cmd_fs_iter_dirs,
+	.usage = "<fs-driver> <fs-args> <path>",
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('\0', "fs-driver", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "fs-args", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "path", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
+}
 };
 
 static void fs_cmd_help(doveadm_command_t *cmd)
@@ -507,8 +608,8 @@ static void fs_cmd_help(doveadm_command_t *cmd)
 	unsigned int i;
 
 	for (i = 0; i < N_ELEMENTS(doveadm_cmd_fs); i++) {
-		if (doveadm_cmd_fs[i].cmd == cmd)
-			help(&doveadm_cmd_fs[i]);
+		if (doveadm_cmd_fs[i].old_cmd == cmd)
+			help_ver2(&doveadm_cmd_fs[i]);
 	}
 	i_unreached();
 }
@@ -518,5 +619,5 @@ void doveadm_register_fs_commands(void)
 	unsigned int i;
 
 	for (i = 0; i < N_ELEMENTS(doveadm_cmd_fs); i++)
-		doveadm_register_cmd(&doveadm_cmd_fs[i]);
+		doveadm_cmd_register_ver2(&doveadm_cmd_fs[i]);
 }

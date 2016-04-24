@@ -36,6 +36,7 @@ wikifiles = ACL.txt \
 	Clients.NegativeUIDs.txt \
 	Clients.txt \
 	CompilingSource.txt \
+	ConfigFile.txt \
 	Debugging.Authentication.txt \
 	Debugging.ProcessTracing.txt \
 	Debugging.Rawlog.txt \
@@ -45,6 +46,7 @@ wikifiles = ACL.txt \
 	Design.AuthProtocol.txt \
 	Design.Buffers.txt \
 	Design.Code.txt \
+	Design.DoveadmProtocol.HTTP.txt \
 	Design.DoveadmProtocol.txt \
 	Design.Dsync.txt \
 	Design.Indexes.Cache.txt \
@@ -87,6 +89,7 @@ wikifiles = ACL.txt \
 	HowTo.PostfixAndDovecotSASL.txt \
 	HowTo.Rootless.txt \
 	HowTo.SimpleVirtualInstall.txt \
+	HowTo.WriteConfiguration.txt \
 	HowTo.txt \
 	IMAPServer.txt \
 	ImapMetadata.txt \
@@ -113,6 +116,7 @@ wikifiles = ACL.txt \
 	MailboxFormat.MH.txt \
 	MailboxFormat.Maildir.txt \
 	MailboxFormat.dbox.txt \
+	MailboxFormat.imapc.txt \
 	MailboxFormat.mailstore.txt \
 	MailboxFormat.mbox.txt \
 	MailboxFormat.mbx.txt \

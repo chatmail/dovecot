@@ -290,6 +290,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -409,7 +410,8 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-I$(top_srcdir)/src/lib-mail \
-	-DPKG_STATEDIR=\""$(statedir)"\"
+	-DPKG_STATEDIR=\""$(statedir)"\" \
+	-DMODULEDIR=\""$(moduledir)"\"
 
 liblogin_la_SOURCES = \
 	access-lookup.c \

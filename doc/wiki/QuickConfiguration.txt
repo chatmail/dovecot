@@ -76,7 +76,7 @@ Hints about writing configuration files
 ---------------------------------------
 
  * Usually it does not matter in which file you write the setting, however,
-   later settings replace eatlier ones. If you use the same section multiple
+   later settings replace earlier ones. If you use the same section multiple
    times, the settings are merged together.
  * Boolean settings in the 'plugin' section interprete /any/ value as *true*,
    even '0', 'no' and 'false'.
@@ -160,4 +160,4 @@ Running
 
 See <RunningDovecot.txt> and <Logging.txt>.
 
-(This file was created from the wiki on 2015-12-11 04:46)
+(This file was created from the wiki on 2016-03-30 04:43)

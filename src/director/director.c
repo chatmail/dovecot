@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -325,6 +325,9 @@ void director_sync_send(struct director *dir, struct director_host *host,
 {
 	string_t *str;
 
+	if (host == dir->self_host)
+		dir->last_sync_sent_ring_change_counter = dir->ring_change_counter;
+
 	str = t_str_new(128);
 	str_printfa(str, "SYNC\t%s\t%u\t%u",
 		    net_ip2addr(&host->ip), host->port, seq);
@@ -450,6 +453,7 @@ void director_notify_ring_added(struct director_host *added_host,
 {
 	const char *cmd;
 
+	added_host->dir->ring_change_counter++;
 	cmd = t_strdup_printf("DIRECTOR\t%s\t%u\n",
 			      net_ip2addr(&added_host->ip), added_host->port);
 	director_update_send(added_host->dir, src, cmd);
@@ -724,6 +728,8 @@ struct director_kill_context {
 static void
 director_finish_user_kill(struct director *dir, struct user *user, bool self)
 {
+	i_assert(user->kill_state != USER_KILL_STATE_DELAY);
+
 	if (dir->right == NULL) {
 		/* we're alone */
 		director_user_kill_finish_delayed(dir, user);
@@ -744,8 +750,12 @@ static void director_kill_user_callback(enum ipc_client_cmd_state state,
 	struct director_kill_context *ctx = context;
 	struct user *user;
 
+	/* this is an asynchronous notification about user being killed.
+	   there are no guarantees about what might have happened to the user
+	   in the mean time. */
 	switch (state) {
 	case IPC_CLIENT_CMD_STATE_REPLY:
+		/* shouldn't get here. the command reply isn't finished yet. */
 		return;
 	case IPC_CLIENT_CMD_STATE_OK:
 		break;
@@ -757,14 +767,22 @@ static void director_kill_user_callback(enum ipc_client_cmd_state state,
 	}
 
 	user = user_directory_lookup(ctx->dir->users, ctx->username_hash);
-	if (user == NULL || user->kill_state == USER_KILL_STATE_NONE)
-		return;
-
-	director_finish_user_kill(ctx->dir, user, ctx->self);
+	if (user == NULL) {
+		/* user was already freed - ignore */
+	} else if (user->kill_state == USER_KILL_STATE_KILLING ||
+		   user->kill_state == USER_KILL_STATE_KILLING_NOTIFY_RECEIVED) {
+		/* we were still waiting for the kill notification */
+		director_finish_user_kill(ctx->dir, user, ctx->self);
+	} else {
+		/* we don't currently want to kill the user */
+	}
+	i_free(ctx);
 }
 
 static void director_user_move_timeout(struct user *user)
 {
+	i_assert(user->kill_state != USER_KILL_STATE_DELAY);
+
 	i_error("Finishing user %u move timed out, "
 		"its state may now be inconsistent", user->username_hash);
 

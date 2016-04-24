@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -12,14 +12,18 @@ struct concat_istream {
 	uoff_t *input_size;
 
 	unsigned int cur_idx, unknown_size_idx;
-	size_t prev_stream_left, prev_skip;
+	size_t prev_stream_left, prev_stream_skip, prev_skip;
 };
+
+static void i_stream_concat_skip(struct concat_istream *cstream);
 
 static void i_stream_concat_close(struct iostream_private *stream,
 				  bool close_parent)
 {
 	struct concat_istream *cstream = (struct concat_istream *)stream;
 	unsigned int i;
+
+	(void)i_stream_concat_skip(cstream);
 
 	if (close_parent) {
 		for (i = 0; cstream->input[i] != NULL; i++)
@@ -53,10 +57,16 @@ i_stream_concat_set_max_buffer_size(struct iostream_private *stream,
 
 static void i_stream_concat_read_next(struct concat_istream *cstream)
 {
+	struct istream *prev_input = cstream->cur_input;
 	const unsigned char *data;
 	size_t data_size, size;
 
 	i_assert(cstream->cur_input->eof);
+
+	if (cstream->prev_stream_skip != 0) {
+		i_stream_skip(cstream->input[cstream->cur_idx-1], cstream->prev_stream_skip);
+		cstream->prev_stream_skip = 0;
+	}
 
 	data = i_stream_get_data(cstream->cur_input, &data_size);
 	cstream->cur_idx++;
@@ -64,11 +74,14 @@ static void i_stream_concat_read_next(struct concat_istream *cstream)
 	i_stream_seek(cstream->cur_input, 0);
 
 	if (cstream->prev_stream_left > 0 || cstream->istream.pos == 0) {
+		/* all the pending data is already in w_buffer */
+		cstream->prev_stream_skip = data_size;
 		cstream->prev_stream_left += data_size;
 		i_assert(cstream->prev_stream_left ==
 			 cstream->istream.pos - cstream->istream.skip);
 		return;
 	}
+	i_assert(cstream->prev_stream_skip == 0);
 
 	/* we already verified that the data size is less than the
 	   maximum buffer size */
@@ -81,23 +94,15 @@ static void i_stream_concat_read_next(struct concat_istream *cstream)
 
 	cstream->prev_stream_left = data_size;
 	memcpy(cstream->istream.w_buffer, data, data_size);
+	i_stream_skip(prev_input, data_size);
 	cstream->istream.skip = 0;
 	cstream->istream.pos = data_size;
 }
 
-static ssize_t i_stream_concat_read(struct istream_private *stream)
+static void i_stream_concat_skip(struct concat_istream *cstream)
 {
-	struct concat_istream *cstream = (struct concat_istream *)stream;
-	const unsigned char *data;
-	size_t size, data_size, cur_data_pos, new_pos, bytes_skipped;
-	size_t new_bytes_count;
-	ssize_t ret;
-	bool last_stream;
-
-	if (cstream->cur_input == NULL) {
-		stream->istream.stream_errno = EINVAL;
-		return -1;
-	}
+	struct istream_private *stream = &cstream->istream;
+	size_t bytes_skipped;
 
 	i_assert(stream->skip >= cstream->prev_skip);
 	bytes_skipped = stream->skip - cstream->prev_skip;
@@ -110,6 +115,9 @@ static ssize_t i_stream_concat_read(struct istream_private *stream)
 		bytes_skipped = 0;
 	} else {
 		/* done with the buffer */
+		i_stream_skip(cstream->input[cstream->cur_idx-1], cstream->prev_stream_skip);
+		cstream->prev_stream_skip = 0;
+
 		bytes_skipped -= cstream->prev_stream_left;
 		cstream->prev_stream_left = 0;
 	}
@@ -118,6 +126,19 @@ static ssize_t i_stream_concat_read(struct istream_private *stream)
 	stream->buffer += bytes_skipped;
 	cstream->prev_skip = stream->skip;
 	i_stream_skip(cstream->cur_input, bytes_skipped);
+}
+
+static ssize_t i_stream_concat_read(struct istream_private *stream)
+{
+	struct concat_istream *cstream = (struct concat_istream *)stream;
+	const unsigned char *data;
+	size_t size, data_size, cur_data_pos, new_pos;
+	size_t new_bytes_count;
+	ssize_t ret;
+	bool last_stream;
+
+	i_assert(cstream->cur_input != NULL);
+	i_stream_concat_skip(cstream);
 
 	i_assert(stream->pos >= stream->skip + cstream->prev_stream_left);
 	cur_data_pos = stream->pos - (stream->skip + cstream->prev_stream_left);
@@ -180,6 +201,9 @@ static ssize_t i_stream_concat_read(struct istream_private *stream)
 		}
 		stream->buffer = stream->w_buffer;
 
+		/* we'll copy all the new input to w_buffer. if we skip over
+		   prev_stream_left bytes, the next read will switch to
+		   pointing to cur_input's data directly. */
 		if (new_bytes_count > size)
 			new_bytes_count = size;
 		memcpy(stream->w_buffer + stream->pos,
@@ -194,8 +218,9 @@ static ssize_t i_stream_concat_read(struct istream_private *stream)
 	return ret;
 }
 
-static unsigned int
-find_v_offset(struct concat_istream *cstream, uoff_t *v_offset)
+static int
+find_v_offset(struct concat_istream *cstream, uoff_t *v_offset,
+	      unsigned int *idx_r)
 {
 	const struct stat *st;
 	unsigned int i;
@@ -217,7 +242,7 @@ find_v_offset(struct concat_istream *cstream, uoff_t *v_offset)
 					i_stream_get_error(cstream->input[i]));
 				cstream->istream.istream.stream_errno =
 					cstream->input[i]->stream_errno;
-				return UINT_MAX;
+				return -1;
 			}
 
 			/* @UNSAFE */
@@ -229,7 +254,8 @@ find_v_offset(struct concat_istream *cstream, uoff_t *v_offset)
 		*v_offset -= cstream->input_size[i];
 	}
 
-	return i;
+	*idx_r = i;
+	return 0;
 }
 
 static void i_stream_concat_seek(struct istream_private *stream,
@@ -240,18 +266,28 @@ static void i_stream_concat_seek(struct istream_private *stream,
 	stream->istream.v_offset = v_offset;
 	stream->skip = stream->pos = 0;
 	cstream->prev_stream_left = 0;
+	cstream->prev_stream_skip = 0;
 	cstream->prev_skip = 0;
 
-	cstream->cur_idx = find_v_offset(cstream, &v_offset);
-	if (cstream->cur_idx == UINT_MAX) {
+	if (find_v_offset(cstream, &v_offset, &cstream->cur_idx) < 0) {
 		/* failed */
-		cstream->cur_input = NULL;
 		stream->istream.stream_errno = EINVAL;
 		return;
 	}
 	cstream->cur_input = cstream->input[cstream->cur_idx];
-	if (cstream->cur_input != NULL)
-		i_stream_seek(cstream->cur_input, v_offset);
+	if (cstream->cur_input == NULL) {
+		/* we allow seeking to EOF, but not past it. */
+		if (v_offset != 0) {
+			io_stream_set_error(&cstream->istream.iostream,
+				"Seeking past EOF by %"PRIuUOFF_T" bytes", v_offset);
+			cstream->istream.istream.stream_errno = EINVAL;
+			return;
+		}
+		i_assert(cstream->cur_idx > 0);
+		cstream->cur_input = cstream->input[cstream->cur_idx-1];
+		v_offset = cstream->input_size[cstream->cur_idx-1];
+	}
+	i_stream_seek(cstream->cur_input, v_offset);
 }
 
 static int
@@ -259,10 +295,10 @@ i_stream_concat_stat(struct istream_private *stream, bool exact ATTR_UNUSED)
 {
 	struct concat_istream *cstream = (struct concat_istream *)stream;
 	uoff_t v_offset = (uoff_t)-1;
-	unsigned int i;
+	unsigned int i, cur_idx;
 
 	/* make sure we have all sizes */
-	if (find_v_offset(cstream, &v_offset) == UINT_MAX)
+	if (find_v_offset(cstream, &v_offset, &cur_idx) < 0)
 		return -1;
 
 	stream->statbuf.st_size = 0;

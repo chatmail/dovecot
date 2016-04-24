@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
@@ -7,6 +7,8 @@
 #include "mech.h"
 #include "userdb.h"
 #include "passdb.h"
+#include "passdb-template.h"
+#include "userdb-template.h"
 #include "auth.h"
 
 static const struct auth_userdb_settings userdb_dummy_set = {
@@ -79,6 +81,11 @@ auth_passdb_preinit(struct auth *auth, const struct auth_passdb_settings *set,
 	auth_passdb->result_internalfail =
 		auth_db_rule_parse(set->result_internalfail);
 
+	auth_passdb->default_fields_tmpl =
+		passdb_template_build(auth->pool, set->default_fields);
+	auth_passdb->override_fields_tmpl =
+		passdb_template_build(auth->pool, set->override_fields);
+
 	/* for backwards compatibility: */
 	if (set->pass)
 		auth_passdb->result_success = AUTH_DB_RULE_CONTINUE;
@@ -87,6 +94,10 @@ auth_passdb_preinit(struct auth *auth, const struct auth_passdb_settings *set,
 	*dest = auth_passdb;
 
 	auth_passdb->passdb = passdb_preinit(auth->pool, set);
+	/* make sure any %variables in default_fields exist in cache_key */
+	auth_passdb->cache_key =
+		p_strconcat(auth->pool, auth_passdb->passdb->default_cache_key,
+			    set->default_fields, NULL);
 }
 
 static void
@@ -104,20 +115,27 @@ auth_userdb_preinit(struct auth *auth, const struct auth_userdb_settings *set)
 	auth_userdb->result_internalfail =
 		auth_db_rule_parse(set->result_internalfail);
 
+	auth_userdb->default_fields_tmpl =
+		userdb_template_build(auth->pool, set->driver,
+				      set->default_fields);
+	auth_userdb->override_fields_tmpl =
+		userdb_template_build(auth->pool, set->driver,
+				      set->override_fields);
+
 	for (dest = &auth->userdbs; *dest != NULL; dest = &(*dest)->next) ;
 	*dest = auth_userdb;
 
 	auth_userdb->userdb = userdb_preinit(auth->pool, set);
+	/* make sure any %variables in default_fields exist in cache_key */
+	auth_userdb->cache_key =
+		p_strconcat(auth->pool, auth_userdb->userdb->default_cache_key,
+			    set->default_fields, NULL);
 }
 
 static bool auth_passdb_list_have_verify_plain(const struct auth *auth)
 {
 	const struct auth_passdb *passdb;
 
-	for (passdb = auth->masterdbs; passdb != NULL; passdb = passdb->next) {
-		if (passdb->passdb->iface.verify_plain != NULL)
-			return TRUE;
-	}
 	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next) {
 		if (passdb->passdb->iface.verify_plain != NULL)
 			return TRUE;
@@ -129,10 +147,6 @@ static bool auth_passdb_list_have_lookup_credentials(const struct auth *auth)
 {
 	const struct auth_passdb *passdb;
 
-	for (passdb = auth->masterdbs; passdb != NULL; passdb = passdb->next) {
-		if (passdb->passdb->iface.lookup_credentials != NULL)
-			return TRUE;
-	}
 	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next) {
 		if (passdb->passdb->iface.lookup_credentials != NULL)
 			return TRUE;
@@ -272,15 +286,23 @@ auth_preinit(const struct auth_settings *set, const char *service, pool_t pool,
 	return auth;
 }
 
+static void auth_passdb_init(struct auth_passdb *passdb)
+{
+	passdb_init(passdb->passdb);
+
+	i_assert(passdb->passdb->default_pass_scheme != NULL ||
+		 passdb->cache_key == NULL);
+}
+
 static void auth_init(struct auth *auth)
 {
 	struct auth_passdb *passdb;
 	struct auth_userdb *userdb;
 
 	for (passdb = auth->masterdbs; passdb != NULL; passdb = passdb->next)
-		passdb_init(passdb->passdb);
+		auth_passdb_init(passdb);
 	for (passdb = auth->passdbs; passdb != NULL; passdb = passdb->next)
-		passdb_init(passdb->passdb);
+		auth_passdb_init(passdb);
 	for (userdb = auth->userdbs; userdb != NULL; userdb = userdb->next)
 		userdb_init(userdb->userdb);
 }

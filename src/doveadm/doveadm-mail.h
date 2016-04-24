@@ -97,6 +97,8 @@ struct doveadm_mail_cmd_context {
 	unsigned int iterate_single_user:1;
 	/* We're going through all users (not set for wildcard usernames) */
 	unsigned int iterate_all_users:1;
+	/* Running from CLI doveadm (not doveadm-server) */
+	unsigned int cli:1;
 };
 
 struct doveadm_mail_cmd {
@@ -134,7 +136,7 @@ struct doveadm_mail_cmd_context *
 doveadm_mail_cmd_init(const struct doveadm_mail_cmd *cmd,
 		      const struct doveadm_settings *set);
 int doveadm_mail_single_user(struct doveadm_mail_cmd_context *ctx,
-			     const struct mail_storage_service_input *input,
+			     const struct doveadm_cmd_context *cctx,
 			     const char **error_r);
 int doveadm_mail_server_user(struct doveadm_mail_cmd_context *ctx,
 			     const struct mail_storage_service_input *input,
@@ -169,30 +171,40 @@ void doveadm_mail_failed_mailbox(struct doveadm_mail_cmd_context *ctx,
 void doveadm_mail_failed_list(struct doveadm_mail_cmd_context *ctx,
 			      struct mailbox_list *list);
 
-extern struct doveadm_mail_cmd cmd_expunge;
-extern struct doveadm_mail_cmd cmd_save;
-extern struct doveadm_mail_cmd cmd_search;
-extern struct doveadm_mail_cmd cmd_fetch;
-extern struct doveadm_mail_cmd cmd_flags_add;
-extern struct doveadm_mail_cmd cmd_flags_remove;
-extern struct doveadm_mail_cmd cmd_flags_replace;
-extern struct doveadm_mail_cmd cmd_import;
-extern struct doveadm_mail_cmd cmd_index;
-extern struct doveadm_mail_cmd cmd_altmove;
-extern struct doveadm_mail_cmd cmd_copy;
-extern struct doveadm_mail_cmd cmd_deduplicate;
-extern struct doveadm_mail_cmd cmd_move;
-extern struct doveadm_mail_cmd cmd_mailbox_list;
-extern struct doveadm_mail_cmd cmd_mailbox_create;
-extern struct doveadm_mail_cmd cmd_mailbox_delete;
-extern struct doveadm_mail_cmd cmd_mailbox_rename;
-extern struct doveadm_mail_cmd cmd_mailbox_subscribe;
-extern struct doveadm_mail_cmd cmd_mailbox_unsubscribe;
-extern struct doveadm_mail_cmd cmd_mailbox_status;
-extern struct doveadm_mail_cmd cmd_mailbox_metadata_set;
-extern struct doveadm_mail_cmd cmd_mailbox_metadata_unset;
-extern struct doveadm_mail_cmd cmd_mailbox_metadata_get;
-extern struct doveadm_mail_cmd cmd_mailbox_metadata_list;
 extern struct doveadm_mail_cmd cmd_batch;
+
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_metadata_set_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_metadata_unset_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_metadata_get_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_metadata_list_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_status_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_list_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_create_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_delete_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_rename_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_subscribe_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_unsubscribe_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_fetch_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_save_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_index_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_altmove_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_deduplicate_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_expunge_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_flags_add_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_flags_remove_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_flags_replace_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_import_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_search_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_copy_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_move_ver2;
+
+#define DOVEADM_CMD_MAIL_COMMON \
+DOVEADM_CMD_PARAM('A', "all-users", CMD_PARAM_BOOL, 0) \
+DOVEADM_CMD_PARAM('S', "socket-path", CMD_PARAM_STR, 0) \
+DOVEADM_CMD_PARAM('u', "user", CMD_PARAM_STR, 0) \
+DOVEADM_CMD_PARAM('F', "user-file", CMD_PARAM_ISTREAM, 0)
+
+#define DOVEADM_CMD_MAIL_USAGE_PREFIX \
+	"[-u <user>|-A] [-S <socket_path>] "
 
 #endif

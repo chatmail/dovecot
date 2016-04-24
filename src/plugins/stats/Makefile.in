@@ -133,7 +133,7 @@ am__installdirs = "$(DESTDIR)$(moduledir)" \
 LTLIBRARIES = $(module_LTLIBRARIES) $(stats_module_LTLIBRARIES)
 lib90_stats_plugin_la_LIBADD =
 am_lib90_stats_plugin_la_OBJECTS = mail-stats.lo mail-stats-fill.lo \
-	stats-connection.lo stats-plugin.lo
+	mail-stats-connection.lo stats-plugin.lo
 lib90_stats_plugin_la_OBJECTS = $(am_lib90_stats_plugin_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -293,6 +293,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -419,12 +420,12 @@ module_LTLIBRARIES = \
 lib90_stats_plugin_la_SOURCES = \
 	mail-stats.c \
 	mail-stats-fill.c \
-	stats-connection.c \
+	mail-stats-connection.c \
 	stats-plugin.c
 
 noinst_HEADERS = \
 	mail-stats.h \
-	stats-connection.h \
+	mail-stats-connection.h \
 	stats-plugin.h
 
 stats_moduledir = $(moduledir)/stats
@@ -549,9 +550,9 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-stats-connection.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-stats-fill.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-stats.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stats-connection.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stats-plugin.Plo@am__quote@
 
 .c.o:

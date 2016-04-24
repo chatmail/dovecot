@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -164,7 +164,8 @@ void mail_user_unref(struct mail_user **_user)
 		return;
 	}
 
-	mail_user_autoexpunge(user);
+	if (user->autoexpunge_enabled)
+		mail_user_autoexpunge(user);
 
 	user->deinitializing = TRUE;
 
@@ -267,20 +268,8 @@ static const char *
 mail_user_var_expand_func_userdb(const char *data, void *context)
 {
 	struct mail_user *user = context;
-	const char *field_name = data;
-	unsigned int i, field_name_len;
 
-	if (user->userdb_fields == NULL)
-		return NULL;
-
-	field_name_len = strlen(field_name);
-	for (i = 0; user->userdb_fields[i] != NULL; i++) {
-		if (strncmp(user->userdb_fields[i], field_name,
-			    field_name_len) == 0 &&
-		    user->userdb_fields[i][field_name_len] == '=')
-			return user->userdb_fields[i] + field_name_len+1;
-	}
-	return NULL;
+	return mail_storage_service_fields_var_expand(data, user->userdb_fields);
 }
 
 void mail_user_set_home(struct mail_user *user, const char *home)

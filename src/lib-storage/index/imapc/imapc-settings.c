@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "settings-parser.h"
@@ -28,6 +28,7 @@ static const struct setting_define imapc_setting_defines[] = {
 	DEF(SET_STR, imapc_features),
 	DEF(SET_STR, imapc_rawlog_dir),
 	DEF(SET_STR, imapc_list_prefix),
+	DEF(SET_TIME, imapc_cmd_timeout),
 	DEF(SET_TIME, imapc_max_idle_time),
 
 	DEF(SET_STR, pop3_deleted_flag),
@@ -50,6 +51,7 @@ static const struct imapc_settings imapc_default_settings = {
 	.imapc_features = "",
 	.imapc_rawlog_dir = "",
 	.imapc_list_prefix = "",
+	.imapc_cmd_timeout = 5*60,
 	.imapc_max_idle_time = 60*29,
 
 	.pop3_deleted_flag = ""
@@ -87,6 +89,10 @@ static const struct imapc_feature_list imapc_feature_list[] = {
 	{ "gmail-migration", IMAPC_FEATURE_GMAIL_MIGRATION },
 	{ "search", IMAPC_FEATURE_SEARCH },
 	{ "zimbra-workarounds", IMAPC_FEATURE_ZIMBRA_WORKAROUNDS },
+	{ "no-examine", IMAPC_FEATURE_NO_EXAMINE },
+	{ "proxyauth", IMAPC_FEATURE_PROXYAUTH },
+	{ "fetch-msn-workarounds", IMAPC_FEATURE_FETCH_MSN_WORKAROUNDS },
+	{ "fetch-fix-broken-mails", IMAPC_FEATURE_FETCH_FIX_BROKEN_MAILS },
 	{ NULL, 0 }
 };
 
