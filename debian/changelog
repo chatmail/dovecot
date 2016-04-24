@@ -1,3 +1,9 @@
+dovecot (1:2.2.23-1~bpo8+1) jessie-backports; urgency=medium
+
+  * Rebuild for jessie-backports.
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Mon, 25 Apr 2016 00:28:33 +0300
+
 dovecot (1:2.2.23-1) unstable; urgency=medium
 
   [ Jaldhar H. Vyas ]
