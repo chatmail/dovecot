@@ -5,7 +5,9 @@ Dynamic Strings
 actually only a simple wrapper on top of <buffers> [Design.Buffers.txt]. Even
 the 'string_t' type is only a typedef of 'buffer_t', so it's possible to use
 'buffer_*()' functions with strings (although it's ugly so it should be
-avoided).
+avoided). The decision of whether to use a string_t or a buffer_t is mainly for
+human readability: if the buffer's contents are (ASCII/UTF8) text use string_t,
+otherwise for binary data use buffer_t.
 
 Once you're done modifying a string with 'str_*()' functions, you can get it
 out as a NUL-terminated string with 'str_c()' or 'str_c_modifiable()'. These
@@ -65,4 +67,4 @@ characters in strings using<\> character.\
 Dovecot's internal protocols are often line-based with TAB as the field
 separator. This file also contains functions to escape and unescape such data.
 
-(This file was created from the wiki on 2016-03-30 04:43)
+(This file was created from the wiki on 2016-04-26 04:43)

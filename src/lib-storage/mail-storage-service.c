@@ -82,6 +82,8 @@ struct mail_storage_service_user {
 	const struct setting_parser_info *user_info;
 	struct setting_parser_context *set_parser;
 
+	unsigned int session_id_counter;
+
 	unsigned int anonymous:1;
 	unsigned int admin:1;
 };
@@ -324,6 +326,7 @@ service_auth_userdb_lookup(struct mail_storage_service_ctx *ctx,
 	info.remote_ip = input->remote_ip;
 	info.local_port = input->local_port;
 	info.remote_port = input->remote_port;
+	info.debug = input->debug;
 
 	ret = auth_master_user_lookup(ctx->conn, *user, &info, pool,
 				      &new_username, fields_r);
@@ -657,8 +660,15 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 	mail_user->admin = user->admin;
 	mail_user->auth_token = p_strdup(mail_user->pool, user->auth_token);
 	mail_user->auth_user = p_strdup(mail_user->pool, user->auth_user);
-	mail_user->session_id =
-		p_strdup(mail_user->pool, user->input.session_id);
+	if (user->session_id_counter++ == 0) {
+		mail_user->session_id =
+			p_strdup(mail_user->pool, user->input.session_id);
+	} else {
+		mail_user->session_id =
+			p_strdup_printf(mail_user->pool, "%s:%u",
+					user->input.session_id,
+					user->session_id_counter);
+	}
 	mail_user->userdb_fields = user->input.userdb_fields == NULL ? NULL :
 		p_strarray_dup(mail_user->pool, user->input.userdb_fields);
 	mail_user->autoexpunge_enabled =
@@ -1101,7 +1111,7 @@ mail_storage_service_generate_session_id(pool_t pool, const char *prefix)
 	string_t *str = str_new(pool, MAX_BASE64_ENCODED_SIZE(prefix_len + 1 + sizeof(guid)));
 
 	if (prefix != NULL)
-		str_printfa(str, "%s-", prefix);
+		str_printfa(str, "%s:", prefix);
 
 	guid_128_generate(guid);
 	base64_encode(guid, sizeof(guid), str);
@@ -1520,6 +1530,12 @@ mail_storage_service_all_iter_deinit(struct mail_storage_service_ctx *ctx)
 
 void mail_storage_service_all_init(struct mail_storage_service_ctx *ctx)
 {
+	mail_storage_service_all_init_mask(ctx, "");
+}
+
+void mail_storage_service_all_init_mask(struct mail_storage_service_ctx *ctx,
+					const char *user_mask_hint)
+{
 	enum auth_master_flags flags = 0;
 
 	(void)mail_storage_service_all_iter_deinit(ctx);
@@ -1532,7 +1548,8 @@ void mail_storage_service_all_init(struct mail_storage_service_ctx *ctx)
 		flags |= AUTH_MASTER_FLAG_DEBUG;
 	ctx->iter_conn = auth_master_init(auth_master_get_socket_path(ctx->conn),
 					  flags);
-	ctx->auth_list = auth_master_user_list_init(ctx->iter_conn, "", NULL);
+	ctx->auth_list = auth_master_user_list_init(ctx->iter_conn,
+						    user_mask_hint, NULL);
 }
 
 int mail_storage_service_all_next(struct mail_storage_service_ctx *ctx,

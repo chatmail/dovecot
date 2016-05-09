@@ -62,6 +62,9 @@ userdb {
   result_failure = continue
   result_internalfail = continue
   result_success = return-ok
+
+  # v2.2.24+:
+  auth_verbose = default
 }
 ---%<-------------------------------------------------------------------------
 
@@ -78,6 +81,9 @@ First we have the settings that provide content for the userdb lookup:
    default values, these values override what the userdb backend returned. For
    example useful with <userdb passwd> [AuthDatabase.Passwd.txt] for overriding
    e.g. home directory or the uid/gid.
+ * auth_verbose: If this is explicitly set to yes or no, it overrides the
+   global auth_verbose setting. (However, auth_debug=yes overrides the
+   auth_verbose setting.) (v2.2.24+)
 
 Then we have the setting which specify when the userdb is used (v2.2.10+):
 
@@ -115,4 +121,4 @@ The result values that can be used:
  * continue: Continue to the next userdb without changing the user existence
    state. The initial state is "not found".
 
-(This file was created from the wiki on 2016-03-30 04:44)
+(This file was created from the wiki on 2016-04-26 04:43)

@@ -22,20 +22,24 @@ userdb {
 }
 ---%<-------------------------------------------------------------------------
 
-Field overriding and extra fields
----------------------------------
+Field overriding and extra fields (obsolete in v2.1+)
+-----------------------------------------------------
 
 It's possible to override fields from passwd and add <extra fields>
-[UserDatabase.ExtraFields.txt] with templates. For example:
+[UserDatabase.ExtraFields.txt] with templates, but in v2.1+ it's done in a
+better way by using override_fields. For example:
 
 ---%<-------------------------------------------------------------------------
 userdb {
   driver = passwd
-  args = home=/var/mail/%u mail=maildir:/var/mail/%u/Maildir
+  # Pre-v2.1:
+  #args = home=/var/mail/%u mail=maildir:/var/mail/%u/Maildir
+  # v2.1+:
+  override_fields = home=/var/mail/%u mail=maildir:/var/mail/%u/Maildir
 }
 ---%<-------------------------------------------------------------------------
 
 This uses the UID and GID fields from passwd, but home directory is overridden.
 Also the default <mail_location> [MailLocation.txt] setting is overridden.
 
-(This file was created from the wiki on 2016-03-30 04:43)
+(This file was created from the wiki on 2016-04-26 04:43)

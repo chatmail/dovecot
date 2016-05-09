@@ -17,6 +17,7 @@ Currently supported dict backends are:
  * Redis
  * Proxy
  * SQL
+ * LDAP
 
 Flat Files
 ----------
@@ -128,8 +129,8 @@ SQL
 <sql driver>:<path to dict-sql config>
 ---%<-------------------------------------------------------------------------
 
-The <sql driver> contains the SQL driver name, such as "mysql", "pgsql" or
-"sqlite".
+The <sql driver> contains the SQL driver name, such as "mysql", "pgsql",
+"sqlite" or "cassandra".
 
 The dict-sql config file consists of SQL server configuration and mapping of
 keys to SQL tables/fields.
@@ -148,6 +149,119 @@ information.
 SQL Mapping
 -----------
 
-FIXME: Write this. For now see 'example-config/dovecot-dict-sql.conf.ext'
+SQL mapping is done with a dict key pattern and fields. When a dict lookup or
+update is done, Dovecot goes through all the maps and uses the first one whose
+pattern matches the dict key.
 
-(This file was created from the wiki on 2016-03-30 04:43)
+For example when using dict for a per-user quota value the map looks like:
+
+---%<-------------------------------------------------------------------------
+map {
+  pattern = priv/quota/storage
+  table = quota
+  username_field = username
+  value_field = quota_bytes
+}
+---%<-------------------------------------------------------------------------
+
+This means that:
+
+ * The dict key must match exactly "priv/quota/storage". The dict keys are
+   hardcoded in the Dovecot code, so depending on what functionality you're
+   configuring you need to know the available dict keys used it.
+ * This is a private dict key ("priv/" prefix), which means that there must be
+   a username_field. The username_field is assumed to be (at least part of) the
+   primary key. In this example we don't have any other primary keys.
+ * With MySQL the above map translates to SQL queries:
+    * 'SELECT quota_bytes FROM quota WHERE username = '$username_field''
+    * 'INSERT INTO quota (username, quota_bytes) VALUES ('$username_field',
+      '$value') ON DUPLICATE KEY UPDATE quota_bytes='$value''
+
+You can also access multiple SQL fields. For example acl_shared_dict can
+contain:
+
+---%<-------------------------------------------------------------------------
+map {
+  pattern = shared/shared-boxes/user/$to/$from
+  table = user_shares
+  value_field = dummy
+
+  fields {
+    from_user = $from
+    to_user = $to
+  }
+}
+---%<-------------------------------------------------------------------------
+
+ * The acl_shared_dict always uses "1" as the value, so here the value_field is
+   called "dummy".
+ * The SQL from_user and to_user fields are the interesting ones. Typically the
+   extra fields would be part of the primary key.
+ * With MySQL the above map translates to SQL queries:
+    * 'SELECT dummy FROM user_shares WHERE from_user = '$from' AND to_user =
+      '$to''
+    * 'INSERT INTO user_shares (from_user, to_user, dummy) VALUES ('$from',
+      '$to', '$value') ON DUPLICATE KEY UPDATE dummy='$value''
+
+LDAP (v2.3+)
+------------
+
+LDAP support is very similar to SQL support.
+
+Configuration
+-------------
+
+---%<-------------------------------------------------------------------------
+dict {
+  somedict = ldap:/path/to/dovecot-ldap-dict.conf.ext
+}
+---%<-------------------------------------------------------------------------
+
+Then in ext file put
+
+---%<-------------------------------------------------------------------------
+uri = ldap://hostname
+bind_dn = optional bind dn
+password = optional password
+timeout = optional timeout
+debug = 0 or 1 (optional, as well)
+tls = yes|try|no (default is try)
+---%<-------------------------------------------------------------------------
+
+ * uri - LDAP connection URI as expected by OpenLDAP.
+ * bind_dn - DN or upn to use for binding
+ * password - password to use, only SIMPLE auth is supported at the moment
+ * timeout - How long to wait for reply, default is 30 seconds
+ * debug - 0 off, 1 on, will produce metric ton of output
+ * tls - yes = require either ldaps or successful start TLS, try = send start
+   TLS if necessary, no = do not send start TLS
+
+To map some key to a search do
+
+---%<-------------------------------------------------------------------------
+map {
+  pattern = priv/test/mail
+  filter = (mail=*)  # the () is required
+  base_dn = ou=container,dc=domain
+  username_attribute = uid # default is cn
+  value_attribute = mail
+}
+---%<-------------------------------------------------------------------------
+
+To do some more complex search
+
+---%<-------------------------------------------------------------------------
+map {
+  pattern = priv/test/mail/$location
+  filter = (&(mail=*)(location=%{location}) # the () is required
+  base_dn = ou=container,dc=domain
+  username_attribute = uid # default is cn
+  value_attribute = mail
+
+  fields {
+    location=$location
+  }
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2016-04-26 04:43)

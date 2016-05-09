@@ -450,7 +450,8 @@ doveadm_mail_all_users(struct doveadm_mail_cmd_context *ctx,
 
 	ctx->v.init(ctx, ctx->args);
 
-	mail_storage_service_all_init(ctx->storage_service);
+	mail_storage_service_all_init_mask(ctx->storage_service,
+		wildcard_user != NULL ? wildcard_user : "");
 
 	if (hook_doveadm_mail_init != NULL)
 		hook_doveadm_mail_init(ctx);
@@ -634,7 +635,6 @@ doveadm_mail_cmd(const struct doveadm_mail_cmd *cmd, int argc, char *argv[])
 	ctx->cur_username = getenv("USER");
 
 	memset(&cctx, 0, sizeof(cctx));
-	cctx.username = ctx->cur_username;
 
 	getopt_args = "AF:S:u:";
 	/* keep context's getopt_args first in case it contains '+' */
@@ -682,6 +682,7 @@ doveadm_mail_cmd(const struct doveadm_mail_cmd *cmd, int argc, char *argv[])
 			       cmd->name, argv[0]);
 	}
 	ctx->args = (const void *)argv;
+	cctx.username = ctx->cur_username;
 	doveadm_mail_cmd_exec(ctx, &cctx, wildcard_user);
 	doveadm_mail_cmd_free(ctx);
 }

@@ -27,6 +27,10 @@ buffer_t buf;
 buffer_create_data(&buf, buf_data, sizeof(buf_data));
 ---%<-------------------------------------------------------------------------
 
+Trying to write more than 1024 bytes to the buffer will cause an assert-crash,
+so these buffers shouldn't be used unless you know exactly what the maximum
+buffer size is.
+
 To avoid accidental buffer overflows, don't use any more complex calculations
 in the size parameter of 'buffer_create_data()'. It should always be
 'sizeof(data_buffer)'.
@@ -40,7 +44,9 @@ Dynamic buffers
 Dynamically growing buffers can be created with 'buffer_create_dynamic(pool,
 init_size)'. Memory for buffer is allocated from the given pool. When memory
 needs to be grown, it's grown exponentially (2^n), with some exceptions to
-avoid growing the given memory pool unless necessary.
+avoid growing the given memory pool unless necessary. The initial buffer size
+is always a guess - try to make it large enough that buffer wouldn't be grown
+most of the time, but not so large that it wastes memory.
 
 You should be careful with memory returned by 'buffer_get_space_unsafe()' and
 'buffer_append_space_unsafe()'. This returned memory should be accessed
@@ -56,4 +62,4 @@ want to just temporarily shrink the buffer size and then change it back, you
 can use 'buffer_set_used_size()' to grow it back to its original size (but no
 larger).
 
-(This file was created from the wiki on 2016-03-30 04:43)
+(This file was created from the wiki on 2016-04-26 04:43)

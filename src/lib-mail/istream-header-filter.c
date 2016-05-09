@@ -39,6 +39,7 @@ struct header_filter_istream {
 	unsigned int end_body_with_lf:1;
 	unsigned int last_lf_added:1;
 	unsigned int eoh_not_matched:1;
+	unsigned int prev_matched:1;
 };
 
 header_filter_callback *null_header_filter_callback = NULL;
@@ -144,6 +145,9 @@ static ssize_t hdr_stream_update_pos(struct header_filter_istream *mstream)
 	ret = (ssize_t)(pos - mstream->istream.pos - mstream->istream.skip);
 	i_assert(ret >= 0);
 	mstream->istream.pos = pos;
+
+	if (pos >= mstream->istream.max_buffer_size)
+		return -2;
 	return ret;
 }
 
@@ -152,7 +156,6 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 	struct message_header_line *hdr;
 	uoff_t highwater_offset;
 	ssize_t ret, ret2;
-	bool matched;
 	int hdr_ret;
 
 	if (mstream->hdr_ctx == NULL) {
@@ -181,10 +184,15 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 		}
 	}
 
+	if (mstream->hdr_buf->used >= mstream->istream.max_buffer_size)
+		return -2;
+
 	while ((hdr_ret = message_parse_header_next(mstream->hdr_ctx,
 						    &hdr)) > 0) {
-		mstream->cur_line++;
+		bool matched;
 
+		if (!hdr->continued)
+			mstream->cur_line++;
 		if (hdr->eoh) {
 			mstream->seen_eoh = TRUE;
 			matched = TRUE;
@@ -206,15 +214,25 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 			continue;
 		}
 
-		matched = mstream->headers_count == 0 ? FALSE :
-			i_bsearch(hdr->name, mstream->headers,
-				  mstream->headers_count,
-				  sizeof(*mstream->headers),
-				  bsearch_strcasecmp) != NULL;
+		if (hdr->continued) {
+			/* Header line continued - use only the first line's
+			   matched-result. Otherwise multiline headers might
+			   end up being only partially picked, which wouldn't
+			   be very good. However, allow callbacks to modify
+			   the headers in any way they want. */
+			matched = mstream->prev_matched;
+		} else if (mstream->headers_count == 0) {
+			/* no include/exclude headers - default matching */
+			matched = FALSE;
+		} else {
+			matched = i_bsearch(hdr->name, mstream->headers,
+					    mstream->headers_count,
+					    sizeof(*mstream->headers),
+					    bsearch_strcasecmp) != NULL;
+		}
 		if (mstream->callback == NULL) {
 			/* nothing gets excluded */
-		} else if (mstream->cur_line > mstream->parsed_lines ||
-			   mstream->headers_edited) {
+		} else if (!mstream->header_parsed || mstream->headers_edited) {
 			/* first time in this line or we have actually modified
 			   the header so we always want to call the callbacks */
 			bool orig_matched = matched;
@@ -223,18 +241,19 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 			mstream->callback(mstream, hdr, &matched,
 					  mstream->context);
 			if (matched != orig_matched &&
-			    !mstream->headers_edited) {
+			    !hdr->continued && !mstream->headers_edited) {
 				if (!array_is_created(&mstream->match_change_lines))
 					i_array_init(&mstream->match_change_lines, 8);
 				array_append(&mstream->match_change_lines,
 					     &mstream->cur_line, 1);
 			}
-		} else {
+		} else if (!hdr->continued) {
 			/* second time in this line. was it excluded by the
 			   callback the first time? */
 			if (match_line_changed(mstream))
 				matched = !matched;
 		}
+		mstream->prev_matched = matched;
 
 		if (matched == mstream->exclude) {
 			/* ignore */
@@ -263,6 +282,8 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 				break;
 			}
 		}
+		if (mstream->hdr_buf->used >= mstream->istream.max_buffer_size)
+			break;
 	}
 
 	if (hdr_ret < 0) {
@@ -295,6 +316,7 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 		mstream->hdr_ctx = NULL;
 
 		if (!mstream->header_parsed && mstream->callback != NULL) {
+			bool matched = FALSE;
 			mstream->callback(mstream, NULL,
 					  &matched, mstream->context);
 			/* check if the callback added more headers.
@@ -419,6 +441,7 @@ i_stream_header_filter_seek_to_header(struct header_filter_istream *mstream,
 		message_parse_header_deinit(&mstream->hdr_ctx);
 	mstream->skip_count = v_offset;
 	mstream->cur_line = 0;
+	mstream->prev_matched = FALSE;
 	mstream->header_read = FALSE;
 	mstream->seen_eoh = FALSE;
 }
