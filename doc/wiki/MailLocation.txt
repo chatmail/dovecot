@@ -41,8 +41,13 @@ where:
    parameters. Possible values for /key/ are:
     * 'INDEX' : specifies the location of <index files> [MailLocation.txt].
     * 'INBOX' : specifies the location of the <INBOX> [MailLocation.txt].
-    * 'LAYOUT' : specifies the directory layout under the <mbox>
-      [MailLocation.mbox.txt] or <Maildir> [MailLocation.Maildir.txt] formats.
+    * 'LAYOUT' : specifies the directory layout to use:
+       * Maildir++: The default used by Maildir format
+       * fs: The default used by mbox and dbox formats
+       * index: Uses mailbox GUIDs as the directory names. The mapping between
+         mailbox names and GUIDs exists in dovecot.list.index* files.
+    * 'UTF-8' : Store mailbox names on disk using UTF-8 instead of modified
+      UTF-7.
     * 'CONTROL' : specifies the location of control files under the <mbox>
       [MailLocation.mbox.txt] or <Maildir> [MailLocation.Maildir.txt] formats.
     * 'SUBSCRIPTIONS' : specifies the file used for storing subscriptions.  The
@@ -282,4 +287,4 @@ export USERDB_KEYS="$USERDB_KEYS namespace/user/location"
 exec env "NAMESPACE/USER/LOCATION=$location" "$@"
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-03-30 04:43)
+(This file was created from the wiki on 2016-04-26 04:43)

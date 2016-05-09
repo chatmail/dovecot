@@ -255,4 +255,4 @@ but the last two characters from the username. (v2.2.13+)
 The modifiers are applied from left-to-right order, except the substring is
 always taken from the final string.
 
-(This file was created from the wiki on 2016-03-30 04:44)
+(This file was created from the wiki on 2016-04-26 04:43)

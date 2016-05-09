@@ -340,7 +340,9 @@ LIBDOVECOT = @LIBDOVECOT@
 LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_DSYNC = @LIBDOVECOT_DSYNC@
+LIBDOVECOT_LA_LIBS = @LIBDOVECOT_LA_LIBS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LDAP = @LIBDOVECOT_LDAP@
 LIBDOVECOT_LIBFTS = @LIBDOVECOT_LIBFTS@
 LIBDOVECOT_LIBFTS_DEPS = @LIBDOVECOT_LIBFTS_DEPS@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -491,6 +493,7 @@ SQL_DRIVER_PLUGINS = $(am__append_1) $(am__append_2) $(am__append_3) \
 @SQL_PLUGINS_TRUE@sql_moduledir = $(moduledir)
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-settings \
 	$(SQL_CFLAGS)
 
 dist_sources = \
@@ -514,19 +517,19 @@ deplibs = \
 
 @SQL_PLUGINS_TRUE@libdriver_mysql_la_LDFLAGS = -module -avoid-version
 @SQL_PLUGINS_TRUE@libdriver_mysql_la_LIBADD = $(MYSQL_LIBS)
-@SQL_PLUGINS_TRUE@libdriver_mysql_la_CPPFLAGS = -I$(top_srcdir)/src/lib $(MYSQL_CFLAGS)
+@SQL_PLUGINS_TRUE@libdriver_mysql_la_CPPFLAGS = $(AM_CPPFLAGS) $(MYSQL_CFLAGS)
 @SQL_PLUGINS_TRUE@libdriver_mysql_la_SOURCES = driver-mysql.c
 @SQL_PLUGINS_TRUE@libdriver_pgsql_la_LDFLAGS = -module -avoid-version
 @SQL_PLUGINS_TRUE@libdriver_pgsql_la_LIBADD = $(PGSQL_LIBS)
-@SQL_PLUGINS_TRUE@libdriver_pgsql_la_CPPFLAGS = -I$(top_srcdir)/src/lib $(PGSQL_CFLAGS)
+@SQL_PLUGINS_TRUE@libdriver_pgsql_la_CPPFLAGS = $(AM_CPPFLAGS) $(PGSQL_CFLAGS)
 @SQL_PLUGINS_TRUE@libdriver_pgsql_la_SOURCES = driver-pgsql.c
 @SQL_PLUGINS_TRUE@libdriver_sqlite_la_LDFLAGS = -module -avoid-version
 @SQL_PLUGINS_TRUE@libdriver_sqlite_la_LIBADD = $(SQLITE_LIBS)
-@SQL_PLUGINS_TRUE@libdriver_sqlite_la_CPPFLAGS = -I$(top_srcdir)/src/lib $(SQLITE_CFLAGS)
+@SQL_PLUGINS_TRUE@libdriver_sqlite_la_CPPFLAGS = $(AM_CPPFLAGS) $(SQLITE_CFLAGS)
 @SQL_PLUGINS_TRUE@libdriver_sqlite_la_SOURCES = driver-sqlite.c
 @SQL_PLUGINS_TRUE@libdriver_cassandra_la_LDFLAGS = -module -avoid-version
 @SQL_PLUGINS_TRUE@libdriver_cassandra_la_LIBADD = $(CASSANDRA_LIBS)
-@SQL_PLUGINS_TRUE@libdriver_cassandra_la_CPPFLAGS = -I$(top_srcdir)/src/lib $(CASSANDRA_CFLAGS)
+@SQL_PLUGINS_TRUE@libdriver_cassandra_la_CPPFLAGS = $(AM_CPPFLAGS) $(CASSANDRA_CFLAGS)
 @SQL_PLUGINS_TRUE@libdriver_cassandra_la_SOURCES = driver-cassandra.c
 @SQL_PLUGINS_FALSE@sql_libs = \
 @SQL_PLUGINS_FALSE@	$(MYSQL_LIBS) \

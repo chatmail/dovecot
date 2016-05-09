@@ -235,6 +235,7 @@ setting_key = \
 
 All the whitespace between lines is converted to a single space regardless of
 how many spaces or tabs are at the beginning of the line or before the '\'.
+Even if there is zero whitespace a single space is added.
 
 Reading value from file
 -----------------------
@@ -294,6 +295,11 @@ protocol imap {
 # protocol imap {
 #   mail_plugins = " acl imap_acl imap_quota" - NOT OK
 # }
+# v2.2.24+ also gives a warning about this:
+# doveconf: Warning: /etc/dovecot/dovecot.conf line 8: Global setting
+mail_plugins won't change the setting inside an earlier filter at
+/etc/dovecot/dovecot.conf line 5 (if this is intentional, avoid this warning by
+moving the global setting before /etc/dovecot/dovecot.conf line 5)
 ---%<-------------------------------------------------------------------------
 
 This is because the second mail_plugins change that added "quota" globally
@@ -303,4 +309,4 @@ Some variables exist in the plugin section only, such as sieve_extensions.
 Those variables *cannot* be referred to, that is '$sieve_extensions' won't
 work.
 
-(This file was created from the wiki on 2016-03-30 04:43)
+(This file was created from the wiki on 2016-04-26 04:43)

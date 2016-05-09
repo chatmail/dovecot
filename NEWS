@@ -1,3 +1,47 @@
+v2.2.24 2016-04-26  Timo Sirainen <tss@iki.fi>
+
+	* doveconf now warns if it sees a global setting being changed when
+	  the same setting was already set inside some filters. (A common
+	  mistake has been adding more plugins to a global mail_plugins
+	  setting after it was already set inside protocol { .. }, which
+	  caused the global setting to be ignored for that protocol.)
+	* LMTP proxy: Increased default timeout 30s -> 125s. This makes it
+	  less likely to reach the timeout and cause duplicate deliveries.
+	* LMTP and indexer now append ":suffix" to session IDs to make it
+	  unique for the specific user's delivery. (Fixes duplicate session
+	  ID warnings in stats process.)
+
+	+ Added dict-ldap for performing read-only LDAP dict lookups.
+	+ lazy-expunge: All mails can be saved to a single specified mailbox.
+	+ mailbox { autoexpunge } supports now wildcards in mailbox names.
+	+ doveadm HTTP API: Added support for proxy commands
+	+ imapc: Reconnect when getting disconnected in non-selected state.
+	+ imapc: Added imapc_features=modseq to access MODSEQs/HIGHESTMODSEQ.
+	  This is especially useful for incremental dsync.
+	+ doveadm auth/user: Auth lookup performs debug logging if
+	  -o auth_debug=yes is given to doveadm.
+	+ Added passdb/userdb { auth_verbose=yes|no } setting.
+	+ Cassandra: Added user, password, num_threads, connect_timeout and
+	  request_timeout settings.
+	+ doveadm user -e <value>: Print <value> with %variables expanded.
+	- Huge header lines could have caused Dovecot to use too much memory
+	  (depending on config and used IMAP commands). (Typically this would
+	  result in only the single user's process dying with out of memory
+	  due to reaching service { vsz_limit } - not a global DoS).
+	- dsync: Detect and handle invalid/stale -s state string better.
+	- dsync: Fixed crash caused by specific mailbox renames
+	- auth: Auth cache is now disabled passwd-file. It was unnecessary and
+	  it broke %variables in extra fields.
+	- fts-tika: Don't crash if it returns 500 error
+	- dict-redis: Fixed timeout handling
+	- SEARCH INTHREAD was crashing
+	- stats: Only a single fifo_listeners was supported, making it
+	  impossible to use both auth_stats=yes and mail stats plugin.
+	- SSL errors were logged in separate "Stacked error" log lines
+	  instead of as part of the disconnection reason.
+	- MIME body parser didn't handle properly when a child MIME part's
+	  --boundary had the same prefix as the parent.
+
 v2.2.23 2016-03-30  Timo Sirainen <tss@iki.fi>
 
 	- Various fixes to doveadm. Especially running commands via

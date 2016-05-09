@@ -140,4 +140,4 @@ configuration option to enable the correct behavior:
 $sieverules_config['folder_encoding'] = 'UTF-8';
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-03-30 04:43)
+(This file was created from the wiki on 2016-04-26 04:43)

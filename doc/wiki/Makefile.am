@@ -242,6 +242,7 @@ wikifiles = ACL.txt \
 	Upgrading.2.0.txt \
 	Upgrading.2.1.txt \
 	Upgrading.2.2.txt \
+	Upgrading.2.3.txt \
 	Upgrading.txt \
 	UserDatabase.ExtraFields.txt \
 	UserDatabase.NSS.txt \

@@ -277,6 +277,9 @@ imapc_client_mailbox_open(struct imapc_client *client,
 	conn->box = box;
 	box->conn = conn->conn;
 	box->msgmap = imapc_msgmap_init();
+	/* if we get disconnected before the SELECT is finished, allow
+	   one reconnect retry. */
+	box->reconnect_ok = TRUE;
 	return box;
 }
 
@@ -300,7 +303,6 @@ imapc_client_reconnect_cb(const struct imapc_command_reply *reply,
 	if (reply->state == IMAPC_COMMAND_STATE_OK) {
 		/* reopen the mailbox */
 		box->reopen_callback(box->reopen_context);
-		imapc_connection_set_reconnected(box->conn);
 	} else {
 		imapc_connection_abort_commands(box->conn, NULL, FALSE);
 	}
@@ -316,21 +318,16 @@ bool imapc_client_mailbox_can_reconnect(struct imapc_client_mailbox *box)
 
 void imapc_client_mailbox_reconnect(struct imapc_client_mailbox *box)
 {
-	bool reconnect = imapc_client_mailbox_can_reconnect(box);
+	i_assert(!box->reconnecting);
 
-	if (reconnect) {
-		i_assert(!box->reconnecting);
-		box->reconnecting = TRUE;
-	}
-	imapc_connection_disconnect(box->conn);
-	if (reconnect) {
-		imapc_connection_connect(box->conn,
-					 imapc_client_reconnect_cb, box);
-	}
+	box->reconnecting = TRUE;
 	/* if we fail again, avoid reconnecting immediately. if the server is
 	   broken we could just get into an infinitely failing reconnection
 	   loop. */
 	box->reconnect_ok = FALSE;
+
+	imapc_connection_disconnect(box->conn);
+	imapc_connection_connect(box->conn, imapc_client_reconnect_cb, box);
 }
 
 void imapc_client_mailbox_close(struct imapc_client_mailbox **_box)

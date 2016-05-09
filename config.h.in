@@ -489,6 +489,9 @@
 /* Define to 1 if you have the <sys/vmount.h> header file. */
 #undef HAVE_SYS_VMOUNT_H
 
+/* Define to 1 if you have the `timegm' function. */
+#undef HAVE_TIMEGM
+
 /* Define if you have struct tm->tm_gmtoff */
 #undef HAVE_TM_GMTOFF
 

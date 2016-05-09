@@ -194,6 +194,7 @@ void http_client_request_set_port(struct http_client_request *req,
 void http_client_request_set_ssl(struct http_client_request *req,
 	bool ssl);
 void http_client_request_set_urgent(struct http_client_request *req);
+void http_client_request_set_preserve_exact_reason(struct http_client_request *req);
 
 void http_client_request_add_header(struct http_client_request *req,
 				    const char *key, const char *value);
@@ -204,6 +205,8 @@ void http_client_request_set_date(struct http_client_request *req,
 
 void http_client_request_set_payload(struct http_client_request *req,
 				     struct istream *input, bool sync);
+void http_client_request_set_payload_data(struct http_client_request *req,
+				     const unsigned char *data, size_t size);
 
 void http_client_request_set_timeout_msecs(struct http_client_request *req,
 	unsigned int msecs);

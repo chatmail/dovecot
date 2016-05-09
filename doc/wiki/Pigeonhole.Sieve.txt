@@ -278,4 +278,4 @@ protocol. This is also provided by the <Pigeonhole.txt> project. It is
 available as a separate Dovecot service. Its configuration and use is explained
 on the <Pigeonhole ManageSieve page> [Pigeonhole.ManageSieve.txt].
 
-(This file was created from the wiki on 2016-03-30 04:43)
+(This file was created from the wiki on 2016-04-26 04:43)

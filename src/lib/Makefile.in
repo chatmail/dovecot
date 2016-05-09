@@ -133,7 +133,7 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	mmap-util.lo module-dir.lo mountpoint.lo net.lo \
 	nfs-workarounds.lo numpack.lo ostream.lo ostream-buffer.lo \
 	ostream-escaped.lo ostream-failure-at.lo ostream-file.lo \
-	ostream-hash.lo ostream-rawlog.lo primes.lo \
+	ostream-hash.lo ostream-null.lo ostream-rawlog.lo primes.lo \
 	printf-format-fix.lo process-title.lo priorityq.lo randgen.lo \
 	rand.lo read-full.lo restrict-access.lo \
 	restrict-process-size.lo safe-memset.lo safe-mkdir.lo \
@@ -347,7 +347,9 @@ LIBDOVECOT = @LIBDOVECOT@
 LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_DSYNC = @LIBDOVECOT_DSYNC@
+LIBDOVECOT_LA_LIBS = @LIBDOVECOT_LA_LIBS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LDAP = @LIBDOVECOT_LDAP@
 LIBDOVECOT_LIBFTS = @LIBDOVECOT_LIBFTS@
 LIBDOVECOT_LIBFTS_DEPS = @LIBDOVECOT_LIBFTS_DEPS@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -585,6 +587,7 @@ liblib_la_SOURCES = \
 	ostream-failure-at.c \
 	ostream-file.c \
 	ostream-hash.c \
+	ostream-null.c \
 	ostream-rawlog.c \
 	primes.c \
 	printf-format-fix.c \
@@ -717,6 +720,7 @@ headers = \
 	ostream-failure-at.h \
 	ostream-hash.h \
 	ostream-private.h \
+	ostream-null.h \
 	ostream-rawlog.h \
 	primes.h \
 	printf-format-fix.h \
@@ -996,6 +1000,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-failure-at.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-file.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-hash.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-null.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-rawlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/primes.Plo@am__quote@
