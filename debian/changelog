@@ -1,8 +1,8 @@
-dovecot (1:2.2.23-1~bpo8+1) jessie-backports; urgency=medium
+dovecot (1:2.2.24-1) unstable; urgency=medium
 
-  * Rebuild for jessie-backports.
+  * [26020b6] Imported Upstream version 2.2.24 (Closes: #818652)
 
- -- Apollon Oikonomopoulos <apoikos@debian.org>  Mon, 25 Apr 2016 00:28:33 +0300
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Mon, 09 May 2016 10:42:08 +0300
 
 dovecot (1:2.2.23-1) unstable; urgency=medium
 

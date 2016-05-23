@@ -158,7 +158,8 @@ enum imapc_features {
 	IMAPC_FEATURE_NO_EXAMINE		= 0x40,
 	IMAPC_FEATURE_PROXYAUTH			= 0x80,
 	IMAPC_FEATURE_FETCH_MSN_WORKAROUNDS	= 0x100,
-	IMAPC_FEATURE_FETCH_FIX_BROKEN_MAILS	= 0x200
+	IMAPC_FEATURE_FETCH_FIX_BROKEN_MAILS	= 0x200,
+	IMAPC_FEATURE_MODSEQ			= 0x400
 };
 /* </settings checks> */
 struct imapc_settings {
@@ -341,6 +342,19 @@ struct dict_sql_settings {
 
 	unsigned int max_field_count;
 	ARRAY(struct dict_sql_map) maps;
+};
+/* ../../src/lib-dict-extra/dict-ldap-settings.h */
+struct dict_ldap_settings {
+	const char *uri;
+	const char *bind_dn;
+	const char *password;
+	unsigned int timeout;
+	unsigned int max_idle_time;
+	unsigned int debug;
+	unsigned int max_attribute_count;
+	bool require_ssl;
+	bool start_tls;
+	ARRAY(struct dict_ldap_map) maps;
 };
 /* ../../src/lib-storage/mail-storage-settings.c */
 extern const struct setting_parser_info mailbox_setting_parser_info;
@@ -972,6 +986,7 @@ static const struct imapc_feature_list imapc_feature_list[] = {
 	{ "proxyauth", IMAPC_FEATURE_PROXYAUTH },
 	{ "fetch-msn-workarounds", IMAPC_FEATURE_FETCH_MSN_WORKAROUNDS },
 	{ "fetch-fix-broken-mails", IMAPC_FEATURE_FETCH_FIX_BROKEN_MAILS },
+	{ "modseq", IMAPC_FEATURE_MODSEQ },
 	{ NULL, 0 }
 };
 
@@ -1149,7 +1164,7 @@ static const struct setting_define lda_setting_defines[] = {
 	SETTING_DEFINE_LIST_END
 };
 static const struct lda_settings lda_default_settings = {
-	.postmaster_address = "",
+	.postmaster_address = "postmaster@%d",
 	.hostname = "",
 	.submission_host = "",
 	.sendmail_path = "/usr/sbin/sendmail",
@@ -1185,6 +1200,13 @@ const struct setting_parser_info lda_setting_parser_info = {
 /* ../../src/lib-dict/dict-sql-settings.c */
 #define DEF_STR(name) DEF_STRUCT_STR(name, dict_sql_map)
 #define DEF_BOOL(name) DEF_STRUCT_BOOL(name, dict_sql_map)
+/* ../../src/lib-dict-extra/dict-ldap-settings.c */
+#undef DEF_STR
+#undef DEF_BOOL
+#undef DEF_UINT
+#define DEF_STR(name) DEF_STRUCT_STR(name, dict_ldap_map)
+#define DEF_BOOL(name) DEF_STRUCT_BOOL(name, dict_ldap_map)
+#define DEF_UINT(name) DEF_STRUCT_UINT(name ,dict_ldap_map)
 /* ../../src/stats/stats-settings.h */
 extern const struct setting_parser_info stats_setting_parser_info;
 struct stats_settings {
@@ -1397,6 +1419,7 @@ struct doveadm_settings {
 	const char *libexec_dir;
 	const char *mail_plugins;
 	const char *mail_plugin_dir;
+	bool auth_debug;
 	const char *auth_socket_path;
 	const char *doveadm_socket_path;
 	unsigned int doveadm_worker_count;
@@ -1449,6 +1472,7 @@ struct auth_passdb_settings {
 	bool deny;
 	bool pass; /* deprecated, use result_success=continue instead */
 	bool master;
+	const char *auth_verbose;
 };
 struct auth_userdb_settings {
 	const char *name;
@@ -1461,6 +1485,7 @@ struct auth_userdb_settings {
 	const char *result_success;
 	const char *result_failure;
 	const char *result_internalfail;
+	const char *auth_verbose;
 };
 struct auth_settings {
 	const char *mechanisms;
@@ -3496,6 +3521,7 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, libexec_dir),
 	DEF(SET_STR, mail_plugins),
 	DEF(SET_STR, mail_plugin_dir),
+	DEF(SET_BOOL, auth_debug),
 	DEF(SET_STR, auth_socket_path),
 	DEF(SET_STR, doveadm_socket_path),
 	DEF(SET_UINT, doveadm_worker_count),
@@ -3520,6 +3546,7 @@ const struct doveadm_settings doveadm_default_settings = {
 	.libexec_dir = PKG_LIBEXECDIR,
 	.mail_plugins = "",
 	.mail_plugin_dir = MODULEDIR,
+	.auth_debug = FALSE,
 	.auth_socket_path = "auth-userdb",
 	.doveadm_socket_path = "doveadm-server",
 	.doveadm_worker_count = 0,
@@ -4078,6 +4105,7 @@ static const struct setting_define auth_passdb_setting_defines[] = {
 	DEF(SET_BOOL, deny),
 	DEF(SET_BOOL, pass),
 	DEF(SET_BOOL, master),
+	DEF(SET_ENUM, auth_verbose),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -4095,7 +4123,8 @@ static const struct auth_passdb_settings auth_passdb_default_settings = {
 
 	.deny = FALSE,
 	.pass = FALSE,
-	.master = FALSE
+	.master = FALSE,
+	.auth_verbose = "default:yes:no"
 };
 const struct setting_parser_info auth_passdb_setting_parser_info = {
 	.defines = auth_passdb_setting_defines,
@@ -4124,6 +4153,8 @@ static const struct setting_define auth_userdb_setting_defines[] = {
 	DEF(SET_ENUM, result_failure),
 	DEF(SET_ENUM, result_internalfail),
 
+	DEF(SET_ENUM, auth_verbose),
+
 	SETTING_DEFINE_LIST_END
 };
 static const struct auth_userdb_settings auth_userdb_default_settings = {
@@ -4137,7 +4168,9 @@ static const struct auth_userdb_settings auth_userdb_default_settings = {
 	.skip = "never:found:notfound",
 	.result_success = "return-ok:return:return-fail:continue:continue-ok:continue-fail",
 	.result_failure = "continue:return:return-ok:return-fail:continue-ok:continue-fail",
-	.result_internalfail = "continue:return:return-ok:return-fail:continue-ok:continue-fail"
+	.result_internalfail = "continue:return:return-ok:return-fail:continue-ok:continue-fail",
+
+	.auth_verbose = "default:yes:no"
 };
 const struct setting_parser_info auth_userdb_setting_parser_info = {
 	.defines = auth_userdb_setting_defines,
@@ -4326,32 +4359,32 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&mdbox_setting_parser_info, 
-	&director_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&imap_login_setting_parser_info, 
-	&pop3c_setting_parser_info, 
-	&login_setting_parser_info, 
-	&master_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&stats_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
 	&lmtp_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&mdbox_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&director_setting_parser_info, 
 	&aggregator_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&imapc_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
-	&lda_setting_parser_info, 
 	&imap_urlauth_setting_parser_info, 
-	&maildir_setting_parser_info, 
-	&dict_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
+	&login_setting_parser_info, 
+	&imapc_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&doveadm_setting_parser_info, 
 	&imap_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&maildir_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&master_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&pop3_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

@@ -64,6 +64,7 @@ auth_request_new(const struct mech_module *mech)
 	request->session_pid = (pid_t)-1;
 
 	request->set = global_auth_settings;
+	request->debug = request->set->debug;
 	request->mech = mech;
 	request->mech_name = mech->mech_name;
 	request->extra_fields = auth_fields_init(request->pool);
@@ -86,6 +87,7 @@ struct auth_request *auth_request_new_dummy(void)
 	request->last_access = ioloop_time;
 	request->session_pid = (pid_t)-1;
 	request->set = global_auth_settings;
+	request->debug = request->set->debug;
 	request->extra_fields = auth_fields_init(request->pool);
 	return request;
 }
@@ -110,6 +112,9 @@ void auth_request_init(struct auth_request *request)
 
 	auth = auth_request_get_auth(request);
 	request->set = auth->set;
+	/* NOTE: request->debug may already be TRUE here */
+	if (request->set->debug)
+		request->debug = TRUE;
 	request->passdb = auth->passdbs;
 	request->userdb = auth->userdbs;
 }
@@ -260,6 +265,8 @@ void auth_request_export(struct auth_request *request, string_t *dest)
 		str_printfa(dest, "\treal_lport=%u", request->real_local_port);
 	if (request->real_remote_port != 0)
 		str_printfa(dest, "\treal_rport=%u", request->real_remote_port);
+	if (request->debug)
+		str_append(dest, "\tdebug");
 	if (request->secured)
 		str_append(dest, "\tsecured");
 	if (request->skip_password_check)
@@ -307,6 +314,8 @@ bool auth_request_import_info(struct auth_request *request,
 		(void)net_str2port(value, &request->real_remote_port);
 	else if (strcmp(key, "session") == 0)
 		request->session_id = p_strdup(request->pool, value);
+	else if (strcmp(key, "debug") == 0)
+		request->debug = TRUE;
 	else
 		return FALSE;
 	return TRUE;
@@ -2022,6 +2031,14 @@ void auth_request_log_unknown_user(struct auth_request *request,
 	str_append(str, "unknown user ");
 
 	auth_request_append_password(request, str);
+
+	if (request->userdb_lookup) {
+		if (request->userdb->next != NULL)
+			str_append(str, " - trying the next userdb");
+	} else {
+		if (request->passdb->next != NULL)
+			str_append(str, " - trying the next passdb");
+	}
 	i_info("%s", str_c(str));
 }
 
@@ -2152,7 +2169,7 @@ void auth_request_log_debug(struct auth_request *auth_request,
 {
 	va_list va;
 
-	if (!auth_request->set->debug)
+	if (!auth_request->debug)
 		return;
 
 	va_start(va, format);
@@ -2168,8 +2185,25 @@ void auth_request_log_info(struct auth_request *auth_request,
 {
 	va_list va;
 
-	if (!auth_request->set->verbose)
-		return;
+	if (auth_request->set->debug) {
+		/* auth_debug=yes overrides auth_verbose settings */
+	} else {
+		const char *db_auth_verbose = auth_request->userdb_lookup ?
+			auth_request->userdb->set->auth_verbose :
+			auth_request->passdb->set->auth_verbose;
+		switch (db_auth_verbose[0]) {
+		case 'y':
+			break;
+		case 'n':
+			return;
+		case 'd':
+			if (!auth_request->set->verbose)
+				return;
+			break;
+		default:
+			i_unreached();
+		}
+	}
 
 	va_start(va, format);
 	T_BEGIN {

@@ -152,7 +152,15 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = $(SUBDIRS)
+DIST_SUBDIRS = lib-test lib lib-settings lib-auth lib-master \
+	lib-charset lib-dns lib-dict lib-sasl lib-ssl-iostream \
+	lib-stats lib-http lib-fs lib-mail lib-imap lib-imap-storage \
+	lib-ldap lib-dict-extra lib-dovecot lib-fts lib-imap-client \
+	lib-imap-urlauth lib-compression lib-index lib-storage lib-sql \
+	lib-ntlm lib-otp lib-lda anvil auth dict dns indexer ipc \
+	master login-common imap-hibernate imap-login imap \
+	imap-urlauth pop3-login pop3 lda lmtp log config director \
+	replication util doveadm ssl-params stats plugins
 am__DIST_COMMON = $(srcdir)/Makefile.in
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -237,7 +245,9 @@ LIBDOVECOT = @LIBDOVECOT@
 LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_DSYNC = @LIBDOVECOT_DSYNC@
+LIBDOVECOT_LA_LIBS = @LIBDOVECOT_LA_LIBS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LDAP = @LIBDOVECOT_LDAP@
 LIBDOVECOT_LIBFTS = @LIBDOVECOT_LIBFTS@
 LIBDOVECOT_LIBFTS_DEPS = @LIBDOVECOT_LIBFTS_DEPS@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -370,6 +380,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+@HAVE_LDAP_TRUE@LIB_LDAP = lib-ldap
 LIBDOVECOT_SUBDIRS = \
 	lib-test \
 	lib \
@@ -390,6 +401,8 @@ LIBDOVECOT_SUBDIRS = \
 
 SUBDIRS = \
 	$(LIBDOVECOT_SUBDIRS) \
+	$(LIB_LDAP) \
+	lib-dict-extra \
 	lib-dovecot \
 	lib-fts \
 	lib-imap-client \

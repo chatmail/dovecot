@@ -48,6 +48,43 @@ application/json'
 ]
 ---%<-------------------------------------------------------------------------
 
+In following examples, you can either use Basic or X-Dovecot-API authorization.
+X-Dovecot-API usage:
+
+---%<-------------------------------------------------------------------------
+curl -H "Authorization: X-Dovecot-API <base64 dovecot_api_key>"
+---%<-------------------------------------------------------------------------
+
+Basic authorization uses "doveadm" as the username, and doveadm_password
+setting as the password:
+
+---%<-------------------------------------------------------------------------
+curl -H "Authorization: Basic <base64 doveadm:doveadm_password>"
+---%<-------------------------------------------------------------------------
+
+To get acceptable routes
+
+---%<-------------------------------------------------------------------------
+curl -H "Authorization: Basic <base64 doveadm:doveadm_password>"
+http://server:8080/
+---%<-------------------------------------------------------------------------
+
+To get acceptable commands and their parameters
+
+---%<-------------------------------------------------------------------------
+curl -H "Authorization: Basic <base64 doveadm:doveadm_password>"
+http://server:8080/doveadm/v1
+---%<-------------------------------------------------------------------------
+
+an example command would be
+
+---%<-------------------------------------------------------------------------
+curl -H "Content-Type: application/json" -H "Authorization: Basic <base64
+doveadm:doveadm_password>" -d
+'[["fetch",{"user":"username","field":["uid"],"query":["mailbox","INBOX"]},"c01"]]'
+http://server:8080/doveadm/v1
+---%<-------------------------------------------------------------------------
+
 You can have multiple commands in the array, but for now it is safest *not* to
 do so, as some commands may kill the server in certain error conditions and
 leaving you without any response.
@@ -65,4 +102,4 @@ The logs will indicated execute command(s) and also Apache access.log format
 strings on requests. In case of fatal errors, the access.log string might be
 missing.
 
-(This file was created from the wiki on 2016-03-30 04:43)
+(This file was created from the wiki on 2016-04-26 04:43)

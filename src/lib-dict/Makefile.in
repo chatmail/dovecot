@@ -119,9 +119,9 @@ libdict_backend_a_OBJECTS = $(am_libdict_backend_a_OBJECTS) \
 	$(nodist_libdict_backend_a_OBJECTS)
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libdict_la_LIBADD =
-am__objects_1 = dict.lo dict-client.lo dict-file.lo dict-fs.lo \
-	dict-memcached.lo dict-memcached-ascii.lo dict-redis.lo \
-	dict-register.lo dict-transaction-memory.lo
+am__objects_1 = dict.lo dict-client.lo dict-file.lo dict-memcached.lo \
+	dict-memcached-ascii.lo dict-redis.lo \
+	dict-transaction-memory.lo
 am_libdict_la_OBJECTS = $(am__objects_1)
 libdict_la_OBJECTS = $(am_libdict_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -283,7 +283,9 @@ LIBDOVECOT = @LIBDOVECOT@
 LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_DSYNC = @LIBDOVECOT_DSYNC@
+LIBDOVECOT_LA_LIBS = @LIBDOVECOT_LA_LIBS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LDAP = @LIBDOVECOT_LDAP@
 LIBDOVECOT_LIBFTS = @LIBDOVECOT_LIBFTS@
 LIBDOVECOT_LIBFTS_DEPS = @LIBDOVECOT_LIBFTS_DEPS@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -421,7 +423,6 @@ noinst_LIBRARIES = libdict_backend.a
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
-	-I$(top_srcdir)/src/lib-fs \
 	-I$(top_srcdir)/src/lib-sql \
 	-I$(top_srcdir)/src/lib-settings \
 	$(SQL_CFLAGS)
@@ -430,11 +431,9 @@ base_sources = \
 	dict.c \
 	dict-client.c \
 	dict-file.c \
-	dict-fs.c \
 	dict-memcached.c \
 	dict-memcached-ascii.c \
 	dict-redis.c \
-	dict-register.c \
 	dict-transaction-memory.c
 
 libdict_la_SOURCES = \
@@ -549,11 +548,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-db.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-drivers-register.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-file.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-fs.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-memcached-ascii.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-memcached.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-redis.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-register.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-sql-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-sql.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-transaction-memory.Plo@am__quote@

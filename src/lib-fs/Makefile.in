@@ -15,6 +15,7 @@
 @SET_MAKE@
 
 
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -89,6 +90,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-fs
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
@@ -104,14 +106,21 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libfs_la_LIBADD =
 am_libfs_la_OBJECTS = fs-api.lo fs-dict.lo fs-metawrap.lo \
-	fs-randomfail.lo fs-posix.lo fs-sis.lo fs-sis-common.lo \
-	fs-sis-queue.lo istream-fs-file.lo istream-fs-stats.lo \
-	istream-metawrap.lo ostream-metawrap.lo ostream-cmp.lo
+	fs-randomfail.lo fs-posix.lo fs-test.lo fs-sis.lo \
+	fs-sis-common.lo fs-sis-queue.lo istream-fs-file.lo \
+	istream-fs-stats.lo istream-metawrap.lo ostream-metawrap.lo \
+	ostream-cmp.lo
 libfs_la_OBJECTS = $(am_libfs_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am__EXEEXT_1 = test-fs-metawrap$(EXEEXT)
+PROGRAMS = $(noinst_PROGRAMS)
+am_test_fs_metawrap_OBJECTS = test-fs-metawrap.$(OBJEXT)
+test_fs_metawrap_OBJECTS = $(am_test_fs_metawrap_OBJECTS)
+am__DEPENDENCIES_1 =
+am__DEPENDENCIES_2 = $(test_deps) $(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -146,8 +155,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libfs_la_SOURCES)
-DIST_SOURCES = $(libfs_la_SOURCES)
+SOURCES = $(libfs_la_SOURCES) $(test_fs_metawrap_SOURCES)
+DIST_SOURCES = $(libfs_la_SOURCES) $(test_fs_metawrap_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -260,7 +269,9 @@ LIBDOVECOT = @LIBDOVECOT@
 LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
 LIBDOVECOT_DEPS = @LIBDOVECOT_DEPS@
 LIBDOVECOT_DSYNC = @LIBDOVECOT_DSYNC@
+LIBDOVECOT_LA_LIBS = @LIBDOVECOT_LA_LIBS@
 LIBDOVECOT_LDA = @LIBDOVECOT_LDA@
+LIBDOVECOT_LDAP = @LIBDOVECOT_LDAP@
 LIBDOVECOT_LIBFTS = @LIBDOVECOT_LIBFTS@
 LIBDOVECOT_LIBFTS_DEPS = @LIBDOVECOT_LIBFTS_DEPS@
 LIBDOVECOT_LOGIN = @LIBDOVECOT_LOGIN@
@@ -396,6 +407,7 @@ top_srcdir = @top_srcdir@
 noinst_LTLIBRARIES = libfs.la
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-DMODULE_DIR=\""$(moduledir)"\"
@@ -406,6 +418,7 @@ libfs_la_SOURCES = \
 	fs-metawrap.c \
 	fs-randomfail.c \
 	fs-posix.c \
+	fs-test.c \
 	fs-sis.c \
 	fs-sis-common.c \
 	fs-sis-queue.c \
@@ -419,6 +432,7 @@ headers = \
 	fs-api.h \
 	fs-api-private.h \
 	fs-sis-common.h \
+	fs-test.h \
 	istream-fs-file.h \
 	istream-fs-stats.h \
 	istream-metawrap.h \
@@ -427,6 +441,22 @@ headers = \
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
+test_programs = \
+	test-fs-metawrap
+
+test_deps = \
+	$(noinst_LTLIBRARIES) \
+	../lib-dict/libdict.la \
+	../lib-test/libtest.la \
+	../lib/liblib.la
+
+test_libs = \
+	$(test_deps) \
+	$(MODULE_LIBS)
+
+test_fs_metawrap_SOURCES = test-fs-metawrap.c
+test_fs_metawrap_LDADD = $(test_libs)
+test_fs_metawrap_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -475,6 +505,19 @@ clean-noinstLTLIBRARIES:
 libfs.la: $(libfs_la_OBJECTS) $(libfs_la_DEPENDENCIES) $(EXTRA_libfs_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libfs_la_OBJECTS) $(libfs_la_LIBADD) $(LIBS)
 
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+
+test-fs-metawrap$(EXEEXT): $(test_fs_metawrap_OBJECTS) $(test_fs_metawrap_DEPENDENCIES) $(EXTRA_test_fs_metawrap_DEPENDENCIES) 
+	@rm -f test-fs-metawrap$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_fs_metawrap_OBJECTS) $(test_fs_metawrap_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -489,11 +532,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis-common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis-queue.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-test.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-fs-file.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-fs-stats.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-metawrap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-cmp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-metawrap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-fs-metawrap.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -627,7 +672,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LTLIBRARIES) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -665,7 +710,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
-	mostlyclean-am
+	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -736,22 +781,28 @@ uninstall-am: uninstall-pkginc_libHEADERS
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-noinstLTLIBRARIES cscopelist-am ctags \
-	ctags-am distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-pdf install-pdf-am \
-	install-pkginc_libHEADERS install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
-	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
-	uninstall-pkginc_libHEADERS
+	clean-libtool clean-noinstLTLIBRARIES clean-noinstPROGRAMS \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-pkginc_libHEADERS install-ps \
+	install-ps-am install-strip installcheck installcheck-am \
+	installdirs maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
+	uninstall-am uninstall-pkginc_libHEADERS
 
 .PRECIOUS: Makefile
 
+
+check: check-am check-test
+check-test: all-am
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

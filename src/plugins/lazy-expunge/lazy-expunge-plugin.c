@@ -31,6 +31,7 @@ struct lazy_expunge_mail_user {
 	union mail_user_module_context module_ctx;
 
 	struct mail_namespace *lazy_ns;
+	const char *lazy_mailbox_vname;
 	const char *env;
 	bool copy_only_last_instance;
 };
@@ -66,14 +67,16 @@ static MODULE_CONTEXT_DEFINE_INIT(lazy_expunge_mailbox_list_module,
 static MODULE_CONTEXT_DEFINE_INIT(lazy_expunge_mail_user_module,
 				  &mail_user_module_register);
 
-static struct mailbox *
-mailbox_open_or_create(struct mailbox_list *list, struct mailbox *src_box,
-		       const char **error_r)
+static const char *
+get_dest_vname(struct mailbox_list *list, struct mailbox *src_box)
 {
-	struct mailbox *box;
-	enum mail_error error;
+	struct lazy_expunge_mail_user *luser =
+		LAZY_EXPUNGE_USER_CONTEXT(list->ns->user);
 	const char *name;
 	char src_sep, dest_sep;
+
+	if (luser->lazy_mailbox_vname != NULL)
+		return luser->lazy_mailbox_vname;
 
 	/* use the (canonical / unaliased) storage name */
 	name = src_box->name;
@@ -93,7 +96,18 @@ mailbox_open_or_create(struct mailbox_list *list, struct mailbox *src_box,
 		name = str_c(str);
 	}
 	/* add expunge namespace prefix. the name is now a proper vname */
-	name = t_strconcat(list->ns->prefix, name, NULL);
+	return t_strconcat(list->ns->prefix, name, NULL);
+}
+
+static struct mailbox *
+mailbox_open_or_create(struct mailbox_list *list, struct mailbox *src_box,
+		       const char **error_r)
+{
+	struct mailbox *box;
+	enum mail_error error;
+	const char *name;
+
+	name = get_dest_vname(list, src_box);
 
 	box = mailbox_alloc(list, name, MAILBOX_FLAG_NO_INDEX_FILES);
 	if (mailbox_open(box) == 0) {
@@ -195,6 +209,30 @@ static int lazy_expunge_mail_is_last_instace(struct mail *_mail)
 	return refcount <= 1 ? 1 : 0;
 }
 
+static bool lazy_expunge_is_internal_mailbox(struct mailbox *box)
+{
+	struct mail_namespace *ns = box->list->ns;
+	struct lazy_expunge_mail_user *luser =
+		LAZY_EXPUNGE_USER_CONTEXT(ns->user);
+	struct lazy_expunge_mailbox_list *llist =
+		LAZY_EXPUNGE_LIST_CONTEXT(box->list);
+
+	if (llist == NULL) {
+		/* lazy_expunge not enabled at all */
+		return FALSE;
+	}
+	if (llist->internal_namespace) {
+		/* lazy-expunge namespace */
+		return TRUE;
+	}
+	if (luser->lazy_mailbox_vname != NULL &&
+	    strcmp(luser->lazy_mailbox_vname, box->vname) == 0) {
+		/* lazy-expunge mailbox */
+		return TRUE;
+	}
+	return FALSE;
+}
+
 static void lazy_expunge_mail_expunge(struct mail *_mail)
 {
 	struct mail_namespace *ns = _mail->box->list->ns;
@@ -204,8 +242,6 @@ static void lazy_expunge_mail_expunge(struct mail *_mail)
 	union mail_module_context *mmail = LAZY_EXPUNGE_MAIL_CONTEXT(mail);
 	struct lazy_expunge_transaction *lt =
 		LAZY_EXPUNGE_CONTEXT(_mail->transaction);
-	struct lazy_expunge_mailbox_list *llist;
-	struct mailbox *real_box;
 	struct mail *real_mail;
 	struct mail_save_context *save_ctx;
 	const char *error;
@@ -217,9 +253,7 @@ static void lazy_expunge_mail_expunge(struct mail *_mail)
 		lt->failed = TRUE;
 		return;
 	}
-	real_box = real_mail->box;
-	llist = LAZY_EXPUNGE_LIST_CONTEXT(real_box->list);
-	if (llist != NULL && llist->internal_namespace) {
+	if (lazy_expunge_is_internal_mailbox(real_mail->box)) {
 		mmail->super.expunge(_mail);
 		return;
 	}
@@ -385,13 +419,17 @@ static void lazy_expunge_mailbox_allocated(struct mailbox *box)
 	box->vlast = &mbox->super;
 	MODULE_CONTEXT_SET_SELF(box, lazy_expunge_mail_storage_module, mbox);
 
-	if (!llist->internal_namespace) {
+	if (!lazy_expunge_is_internal_mailbox(box)) {
 		v->transaction_begin = lazy_expunge_transaction_begin;
 		v->transaction_commit = lazy_expunge_transaction_commit;
 		v->transaction_rollback = lazy_expunge_transaction_rollback;
 		v->rename_box = lazy_expunge_mailbox_rename;
-	} else {
+	} else if (llist->internal_namespace) {
 		v->rename_box = lazy_expunge_mailbox_rename;
+	} else {
+		/* internal mailbox in a non-internal namespace -
+		   don't add any unnecessary restrictions to it. if it's not
+		   wanted, just use the ACL plugin. */
 	}
 }
 
@@ -427,13 +465,16 @@ lazy_expunge_mail_namespaces_created(struct mail_namespace *namespaces)
 		return;
 
 	luser->lazy_ns = mail_namespace_find_prefix(namespaces, luser->env);
-	if (luser->lazy_ns == NULL)
-		i_fatal("lazy_expunge: Unknown namespace: '%s'", luser->env);
+	if (luser->lazy_ns != NULL) {
+		/* we don't want to override this namespace's expunge operation. */
+		llist = LAZY_EXPUNGE_LIST_CONTEXT(luser->lazy_ns->list);
+		llist->internal_namespace = TRUE;
+	} else {
+		/* store the the expunged mails to the specified mailbox. */
+		luser->lazy_ns = mail_namespace_find(namespaces, luser->env);
+		luser->lazy_mailbox_vname = luser->env;
+	}
 	mail_namespace_ref(luser->lazy_ns);
-
-	/* we don't want to override this namespace's expunge operation. */
-	llist = LAZY_EXPUNGE_LIST_CONTEXT(luser->lazy_ns->list);
-	llist->internal_namespace = TRUE;
 }
 
 static void lazy_expunge_user_deinit(struct mail_user *user)

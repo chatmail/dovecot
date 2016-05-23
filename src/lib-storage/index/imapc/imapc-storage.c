@@ -55,6 +55,9 @@ static void imapc_untagged_status(const struct imapc_untagged_reply *reply,
 				  struct imapc_storage_client *client);
 static void imapc_untagged_namespace(const struct imapc_untagged_reply *reply,
 				     struct imapc_storage_client *client);
+static int imapc_mailbox_run_status(struct mailbox *box,
+				    enum mailbox_status_items items,
+				    struct mailbox_status *status_r);
 
 bool imap_resp_text_code_parse(const char *str, enum mail_error *error_r)
 {
@@ -70,6 +73,16 @@ bool imap_resp_text_code_parse(const char *str, enum mail_error *error_r)
 		}
 	}
 	return FALSE;
+}
+
+bool imapc_storage_has_modseqs(struct imapc_storage *storage)
+{
+	enum imapc_capability capa =
+		imapc_client_get_capabilities(storage->client->client);
+
+	return (capa & (IMAPC_CAPABILITY_CONDSTORE |
+			IMAPC_CAPABILITY_QRESYNC)) != 0 &&
+		IMAPC_HAS_FEATURE(storage, IMAPC_FEATURE_MODSEQ);
 }
 
 static struct mail_storage *imapc_storage_alloc(void)
@@ -430,8 +443,10 @@ imapc_mailbox_exists(struct mailbox *box, bool auto_boxes ATTR_UNUSED,
 {
 	enum mailbox_info_flags flags;
 
-	if (imapc_list_get_mailbox_flags(box->list, box->name, &flags) < 0)
+	if (imapc_list_get_mailbox_flags(box->list, box->name, &flags) < 0) {
+		mail_storage_copy_list_error(box->storage, box->list);
 		return -1;
+	}
 	if ((flags & MAILBOX_NONEXISTENT) != 0)
 		*existence_r = MAILBOX_EXISTENCE_NONE;
 	else if ((flags & MAILBOX_NOSELECT) != 0)
@@ -564,7 +579,8 @@ int imapc_mailbox_select(struct imapc_mailbox *mbox)
 	ctx.ret = -2;
 	cmd = imapc_client_mailbox_cmd(mbox->client_box,
 				       imapc_mailbox_open_callback, &ctx);
-	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_SELECT);
+	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_SELECT |
+				IMAPC_COMMAND_FLAG_RETRIABLE);
 	if (imapc_mailbox_want_examine(mbox)) {
 		imapc_command_sendf(cmd, "EXAMINE %s",
 			imapc_mailbox_get_remote_name(mbox));
@@ -600,6 +616,13 @@ static int imapc_mailbox_open(struct mailbox *box)
 		return -1;
 	}
 
+	if (imapc_storage_has_modseqs(mbox->storage)) {
+		if (!array_is_created(&mbox->rseq_modseqs))
+			i_array_init(&mbox->rseq_modseqs, 32);
+		else
+			array_clear(&mbox->rseq_modseqs);
+	}
+
 	if (imapc_mailbox_select(mbox) < 0) {
 		mailbox_close(box);
 		return -1;
@@ -632,6 +655,8 @@ static void imapc_mailbox_close(struct mailbox *box)
 		if (mail_index_transaction_commit(&mbox->delayed_sync_trans) < 0)
 			mailbox_set_index_error(&mbox->box);
 	}
+	if (array_is_created(&mbox->rseq_modseqs))
+		array_free(&mbox->rseq_modseqs);
 	if (mbox->sync_view != NULL)
 		mail_index_view_close(&mbox->sync_view);
 	if (mbox->to_idle_delay != NULL)
@@ -724,6 +749,9 @@ static void imapc_untagged_status(const struct imapc_untagged_reply *reply,
 			status->uidvalidity = num;
 		else if (strcasecmp(key, "UNSEEN") == 0)
 			status->unseen = num;
+		else if (strcasecmp(key, "HIGHESTMODSEQ") == 0 &&
+			 imapc_storage_has_modseqs(storage))
+			status->highest_modseq = num;
 	}
 }
 
@@ -762,15 +790,32 @@ static void imapc_untagged_namespace(const struct imapc_untagged_reply *reply,
 	}
 }
 
-static void imapc_mailbox_get_selected_status(struct imapc_mailbox *mbox,
-					      enum mailbox_status_items items,
-					      struct mailbox_status *status_r)
+static int imapc_mailbox_get_selected_status(struct imapc_mailbox *mbox,
+					     enum mailbox_status_items items,
+					     struct mailbox_status *status_r)
 {
+	int ret = 0;
+
 	index_storage_get_open_status(&mbox->box, items, status_r);
 	if ((items & STATUS_PERMANENT_FLAGS) != 0)
 		status_r->permanent_flags = mbox->permanent_flags;
 	if ((items & STATUS_FIRST_RECENT_UID) != 0)
 		status_r->first_recent_uid = mbox->highest_nonrecent_uid + 1;
+	if ((items & STATUS_HIGHESTMODSEQ) != 0) {
+		/* FIXME: this doesn't work perfectly. we're now just returning
+		   the HIGHESTMODSEQ from the current index, which may or may
+		   not be correct. with QRESYNC enabled we could be returning
+		   sync_highestmodseq, but that would require implementing
+		   VANISHED replies. and without QRESYNC we'd have to issue
+		   STATUS (HIGHESTMODSEQ), which isn't efficient since we get
+		   here constantly (after every IMAP command). */
+	}
+	if (imapc_storage_has_modseqs(mbox->storage)) {
+		/* even if local indexes are only in memory, we still
+		   have modseqs on the IMAP server itself. */
+		status_r->nonpermanent_modseqs = FALSE;
+	}
+	return ret;
 }
 
 static int imapc_mailbox_delete(struct mailbox *box)
@@ -799,6 +844,9 @@ static int imapc_mailbox_run_status(struct mailbox *box,
 		str_append(str, " UIDVALIDITY");
 	if ((items & STATUS_UNSEEN) != 0)
 		str_append(str, " UNSEEN");
+	if ((items & STATUS_HIGHESTMODSEQ) != 0 &&
+	    imapc_storage_has_modseqs(mbox->storage))
+		str_append(str, " HIGHESTMODSEQ");
 
 	if (str_len(str) == 0) {
 		/* nothing requested */
@@ -810,6 +858,7 @@ static int imapc_mailbox_run_status(struct mailbox *box,
 	mbox->storage->cur_status = status_r;
 	cmd = imapc_client_cmd(mbox->storage->client->client,
 			       imapc_simple_callback, &sctx);
+	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_RETRIABLE);
 	imapc_command_sendf(cmd, "STATUS %s (%1s)",
 			    imapc_mailbox_get_remote_name(mbox), str_c(str)+1);
 	imapc_simple_run(&sctx);
@@ -829,14 +878,17 @@ static int imapc_mailbox_get_status(struct mailbox *box,
 		status_r->have_guids = TRUE;
 
 	if (box->opened) {
-		imapc_mailbox_get_selected_status(mbox, items, status_r);
+		if (imapc_mailbox_get_selected_status(mbox, items, status_r) < 0) {
+			/* can't do anything about this */
+		}
 	} else if ((items & (STATUS_FIRST_UNSEEN_SEQ | STATUS_KEYWORDS |
 			     STATUS_PERMANENT_FLAGS |
 			     STATUS_FIRST_RECENT_UID)) != 0) {
 		/* getting these requires opening the mailbox */
 		if (mailbox_open(box) < 0)
 			return -1;
-		imapc_mailbox_get_selected_status(mbox, items, status_r);
+		if (imapc_mailbox_get_selected_status(mbox, items, status_r) < 0)
+			return -1;
 	} else {
 		if (imapc_mailbox_run_status(box, items, status_r) < 0)
 			return -1;
@@ -869,6 +921,7 @@ static int imapc_mailbox_get_namespaces(struct imapc_storage *storage)
 	imapc_simple_context_init(&sctx, storage->client);
 	cmd = imapc_client_cmd(storage->client->client,
 			       imapc_simple_callback, &sctx);
+	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_RETRIABLE);
 	imapc_command_send(cmd, "NAMESPACE");
 	imapc_simple_run(&sctx);
 
