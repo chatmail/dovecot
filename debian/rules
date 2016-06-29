@@ -142,6 +142,12 @@ override_dh_install:
 	grep ABI_VERSION config.h \
 		| perl -ne '/"(.+)\(.+\)"/ && print $$1' \
 		| tr '[A-Z]' '[a-z]' > $(PKG_DIR:PKG=dev)/usr/share/dovecot/dovecot-abi
+	
+	# Install apport hook
+	install -D -m 644 debian/source_dovecot.py $(CURDIR)/debian/dovecot-core/usr/share/apport/package-hooks/dovecot-core.py
+
+	install -m644 debian/dovecot-imapd.ufw.profile debian/dovecot-imapd/etc/ufw/applications.d/dovecot-imapd
+	install -m644 debian/dovecot-pop3d.ufw.profile debian/dovecot-pop3d/etc/ufw/applications.d/dovecot-pop3d
 
 override_dh_installpam:
 	dh_installpam -pdovecot-core --name=dovecot

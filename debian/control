@@ -37,7 +37,7 @@ Vcs-Browser: https://anonscm.debian.org/gitweb/?p=collab-maint/dovecot.git
 
 Package: dovecot-core
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020)
+Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020), lsb-base
 Suggests: ntp, dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite, dovecot-ldap, dovecot-imapd, dovecot-pop3d, dovecot-lmtpd, dovecot-managesieved, dovecot-solr, dovecot-lucene
 Provides: dovecot-common, dovecot-abi-${dovecot:ABI-Version}
 Replaces: dovecot-common (<< 1:2.0.14-2~), mailavenger (<< 0.8.1-4)
@@ -69,6 +69,7 @@ Description: secure POP3/IMAP server - header files
 Package: dovecot-imapd
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
+Suggests: ufw
 Provides: imap-server
 Description: secure POP3/IMAP server - IMAP daemon
  Dovecot is a mail server whose major goals are security and extreme
@@ -82,6 +83,7 @@ Description: secure POP3/IMAP server - IMAP daemon
 Package: dovecot-pop3d
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
+Suggests: ufw
 Provides: pop3-server
 Description: secure POP3/IMAP server - POP3 daemon
  Dovecot is a mail server whose major goals are security and extreme
