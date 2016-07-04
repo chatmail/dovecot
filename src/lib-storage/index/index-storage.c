@@ -293,6 +293,9 @@ int index_storage_mailbox_open(struct mailbox *box, bool move_to_memory)
 		mail_index_ext_register(box->index, "hdr-vsize",
 					sizeof(struct mailbox_index_vsize), 0,
 					sizeof(uint64_t));
+	box->pop3_uidl_hdr_ext_id =
+		mail_index_ext_register(box->index, "hdr-pop3-uidl",
+					sizeof(struct mailbox_index_pop3_uidl), 0, 0);
 
 	box->opened = TRUE;
 
@@ -715,7 +718,13 @@ int index_storage_mailbox_delete_pre(struct mailbox *box)
 		if (mailbox_sync(box, MAILBOX_SYNC_FLAG_FULL_READ) < 0)
 			return -1;
 		mailbox_get_open_status(box, STATUS_MESSAGES, &status);
-		if (status.messages != 0) {
+		if (status.messages == 0)
+			;
+		else if (box->deleting_must_be_empty) {
+			mail_storage_set_error(box->storage, MAIL_ERROR_EXISTS,
+					       "Mailbox isn't empty");
+			return -1;
+		} else {
 			mail_storage_set_error(box->storage, MAIL_ERROR_EXISTS,
 				"New mails were added to mailbox during deletion");
 			return -1;

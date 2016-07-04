@@ -66,6 +66,7 @@ struct client_command_context {
 	   them. */
 	const char *args;
 	enum command_flags cmd_flags;
+	const char *tagline_reply;
 
 	command_func_t *func;
 	void *context;
@@ -78,6 +79,9 @@ struct client_command_context {
 	/* time when command handling was started - typically this is after
 	   reading all the parameters. */
 	struct timeval start_time;
+	/* time when command handling was last finished. this is before
+	   mailbox syncing is done. */
+	struct timeval last_run_timeval;
 	/* io_loop_get_wait_usecs()'s value when the command was started */
 	uint64_t start_ioloop_wait_usecs;
 	/* how many usecs this command itself has spent running */

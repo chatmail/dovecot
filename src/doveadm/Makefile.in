@@ -113,8 +113,9 @@ am__objects_1 = doveadm-auth.$(OBJEXT) doveadm-dict.$(OBJEXT) \
 	doveadm-log.$(OBJEXT) doveadm-master.$(OBJEXT) \
 	doveadm-mount.$(OBJEXT) doveadm-mutf7.$(OBJEXT) \
 	doveadm-penalty.$(OBJEXT) doveadm-proxy.$(OBJEXT) \
-	doveadm-replicator.$(OBJEXT) doveadm-sis.$(OBJEXT) \
-	doveadm-stats.$(OBJEXT) doveadm-who.$(OBJEXT)
+	doveadm-replicator.$(OBJEXT) doveadm-service.$(OBJEXT) \
+	doveadm-sis.$(OBJEXT) doveadm-stats.$(OBJEXT) \
+	doveadm-who.$(OBJEXT)
 am__objects_2 = doveadm-dsync.$(OBJEXT) doveadm-mail.$(OBJEXT) \
 	doveadm-mail-altmove.$(OBJEXT) doveadm-mail-batch.$(OBJEXT) \
 	doveadm-mail-deduplicate.$(OBJEXT) \
@@ -147,7 +148,8 @@ am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
 am_doveadm_server_OBJECTS = $(am__objects_4) \
-	client-connection.$(OBJEXT) client-connection-http.$(OBJEXT) \
+	doveadm-auth-server.$(OBJEXT) client-connection.$(OBJEXT) \
+	client-connection-http.$(OBJEXT) \
 	doveadm-print-server.$(OBJEXT) doveadm-print-json.$(OBJEXT) \
 	main.$(OBJEXT)
 doveadm_server_OBJECTS = $(am_doveadm_server_OBJECTS)
@@ -496,6 +498,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-storage \
+	-I$(top_srcdir)/src/lib-imap-storage \
 	-I$(top_srcdir)/src/lib-http \
 	-I$(top_srcdir)/src/auth \
 	-DMODULEDIR=\""$(moduledir)"\" \
@@ -553,6 +556,7 @@ doveadm_common_cmds = \
 	doveadm-penalty.c \
 	doveadm-proxy.c \
 	doveadm-replicator.c \
+	doveadm-service.c \
 	doveadm-sis.c \
 	doveadm-stats.c \
 	doveadm-who.c
@@ -614,6 +618,7 @@ doveadm_SOURCES = \
 
 doveadm_server_SOURCES = \
 	$(common) \
+	doveadm-auth-server.c \
 	client-connection.c \
 	client-connection-http.c \
 	doveadm-print-server.c \
@@ -813,6 +818,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-connection-http.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-connection.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-auth-server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-auth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-cmd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dict.Po@am__quote@
@@ -861,6 +867,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-proxy.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-pw.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-replicator.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-service.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-sis.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-stats.Po@am__quote@

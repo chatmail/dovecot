@@ -496,6 +496,7 @@ static int sync_header_update(const struct mail_transaction_header_update *u,
 
 	buffer_write(map->hdr_copy_buf, u->offset, u + 1, u->size);
 	map->hdr_base = map->hdr_copy_buf->data;
+	i_assert(map->hdr_copy_buf->used == map->hdr.header_size);
 
 	/* @UNSAFE */
 	if ((uint32_t)(u->offset + u->size) <= sizeof(map->hdr)) {
@@ -711,7 +712,6 @@ mail_index_sync_record_real(struct mail_index_sync_map_ctx *ctx,
 	}
 	case MAIL_TRANSACTION_EXT_REC_UPDATE: {
 		const struct mail_transaction_ext_rec_update *rec;
-		const struct mail_index_ext *ext;
 		unsigned int i, record_size;
 
 		if (ctx->cur_ext_map_idx == (uint32_t)-1) {
@@ -727,10 +727,8 @@ mail_index_sync_record_real(struct mail_index_sync_map_ctx *ctx,
 			break;
 		}
 
-		ext = array_idx(&ctx->view->map->extensions,
-				ctx->cur_ext_map_idx);
 		/* the record is padded to 32bits in the transaction log */
-		record_size = (sizeof(*rec) + ext->record_size + 3) & ~3;
+		record_size = (sizeof(*rec) + ctx->cur_ext_record_size + 3) & ~3;
 
 		for (i = 0; i < hdr->size; i += record_size) {
 			rec = CONST_PTR_OFFSET(data, i);
@@ -957,6 +955,11 @@ int mail_index_sync_map(struct mail_index_map **_map,
 					    &reset, &reason);
 	if (ret <= 0) {
 		mail_index_view_close(&view);
+		if (force && ret < 0) {
+			/* if we failed because of a syscall error, make sure
+			   we return a failure. */
+			return -1;
+		}
 		if (force && ret == 0) {
 			/* the seq/offset is probably broken */
 			mail_index_set_error(index, "Index %s: Lost log for "

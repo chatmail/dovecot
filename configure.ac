@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.2.24],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv24($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.2.25],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv25($PACKAGE_VERSION)", [Dovecot ABI version])
 
 AC_CONFIG_SRCDIR([src])
 
@@ -1007,6 +1007,24 @@ if test $i_cv_signed_time_t = yes; then
   AC_DEFINE(TIME_T_SIGNED,, [Define if your time_t is signed])
 fi
 
+AC_CACHE_CHECK([if we can use C99 static in array sizes],i_cv_c99_static_arrays,[
+  AC_TRY_COMPILE([
+    void foo(int arr[static 20]);
+  ], [
+  ], [
+    i_cv_c99_static_arrays=yes
+  ], [
+    i_cv_c99_static_arrays=no
+  ])
+])
+
+if test $i_cv_c99_static_arrays = yes; then
+  static_value=static
+else
+  static_value=
+fi
+AC_DEFINE_UNQUOTED(STATIC_ARRAY, $static_value, [C99 static array])
+
 dnl Our implementation of AC_C_FLEXIBLE_ARRAY_MEMBER.
 dnl Use it until autoconf 2.61+ becomes more widely used
 AC_CACHE_CHECK([if we can use C99-like flexible array members],i_cv_c99_flex_arrays,[
@@ -1692,6 +1710,9 @@ if test $want_openssl != no && test $have_ssl = no; then
     AC_CHECK_LIB(ssl, SSL_get_servername, [
       AC_DEFINE(HAVE_SSL_GET_SERVERNAME,, [Build with TLS hostname support])
     ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, SSL_COMP_free_compression_methods, [
+      AC_DEFINE(HAVE_SSL_COMP_FREE_COMPRESSION_METHODS,, [Build with SSL_COMP_free_compression_methods() support])
+    ],, $SSL_LIBS)
   fi
 fi
 AM_CONDITIONAL(BUILD_OPENSSL, test "$have_openssl" = "yes")
@@ -2044,7 +2065,7 @@ else
   fi
 fi
 AM_CONDITIONAL(LDAP_PLUGIN, test "$have_ldap_plugin" = "yes")
-AM_CONDITIONAL(HAVE_LDAP, test "$want_ldap" = "yes")
+AM_CONDITIONAL(HAVE_LDAP, test "$want_ldap" != "no")
 dict_drivers=
 
 if test $want_db != no; then
@@ -2516,7 +2537,7 @@ dnl **
 dnl ** Shared libraries usage
 dnl **
 
-LIBDOVECOT_LA_LIBS='$(top_builddir)/src/lib-dict-extra/libdict_extra.la $(top_builddir)/src/lib-master/libmaster.la $(top_builddir)/src/lib-settings/libsettings.la $(top_builddir)/src/lib-stats/libstats.la $(top_builddir)/src/lib-http/libhttp.la $(top_builddir)/src/lib-fs/libfs.la $(top_builddir)/src/lib-dict/libdict.la $(top_builddir)/src/lib-dns/libdns.la $(top_builddir)/src/lib-imap/libimap.la $(top_builddir)/src/lib-mail/libmail.la $(top_builddir)/src/lib-sasl/libsasl.la $(top_builddir)/src/lib-auth/libauth.la $(top_builddir)/src/lib-charset/libcharset.la $(top_builddir)/src/lib-ssl-iostream/libssl_iostream.la $(top_builddir)/src/lib-test/libtest.la $(top_builddir)/src/lib/liblib.la'
+LIBDOVECOT_LA_LIBS='$(top_builddir)/src/lib-dict-extra/libdict_extra.la $(top_builddir)/src/lib-master/libmaster.la $(top_builddir)/src/lib-settings/libsettings.la $(top_builddir)/src/lib-stats/libstats.la $(top_builddir)/src/lib-http/libhttp.la $(top_builddir)/src/lib-fs/libfs.la $(top_builddir)/src/lib-dict/libdict.la $(top_builddir)/src/lib-dns/libdns.la $(top_builddir)/src/lib-imap/libimap.la $(top_builddir)/src/lib-mail/libmail.la $(top_builddir)/src/lib-sasl/libsasl.la $(top_builddir)/src/lib-auth/libauth.la $(top_builddir)/src/lib-charset/libcharset.la $(top_builddir)/src/lib-ssl-iostream/libssl_iostream.la $(top_builddir)/src/lib-dcrypt/libdcrypt.la $(top_builddir)/src/lib-test/libtest.la $(top_builddir)/src/lib/liblib.la'
 if test "$want_shared_libs" = "yes"; then
   LIBDOVECOT_DEPS='$(top_builddir)/src/lib-dovecot/libdovecot.la'
   LIBDOVECOT="$LIBDOVECOT_DEPS \$(MODULE_LIBS)"
@@ -2860,6 +2881,7 @@ src/lib-sql/Makefile
 src/lib-auth/Makefile
 src/lib-charset/Makefile
 src/lib-compression/Makefile
+src/lib-dcrypt/Makefile
 src/lib-dict/Makefile
 src/lib-dict-extra/Makefile
 src/lib-dns/Makefile
@@ -2928,6 +2950,7 @@ src/plugins/Makefile
 src/plugins/acl/Makefile
 src/plugins/imap-acl/Makefile
 src/plugins/autocreate/Makefile
+src/plugins/dict-ldap/Makefile
 src/plugins/expire/Makefile
 src/plugins/fs-compress/Makefile
 src/plugins/fts/Makefile
@@ -2952,6 +2975,7 @@ src/plugins/stats/Makefile
 src/plugins/imap-stats/Makefile
 src/plugins/trash/Makefile
 src/plugins/virtual/Makefile
+src/plugins/welcome/Makefile
 src/plugins/zlib/Makefile
 src/plugins/imap-zlib/Makefile
 stamp.h

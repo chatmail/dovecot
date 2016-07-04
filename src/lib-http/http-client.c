@@ -137,6 +137,7 @@ struct http_client *http_client_init(const struct http_client_settings *set)
 			HTTP_CLIENT_DEFAULT_BACKOFF_MAX_TIME_MSECS :
 			set->connect_backoff_max_time_msecs;
 	client->set.no_auto_redirect = set->no_auto_redirect;
+	client->set.no_auto_retry = set->no_auto_retry;
 	client->set.no_ssl_tunnel = set->no_ssl_tunnel;
 	client->set.max_redirects = set->max_redirects;
 	client->set.response_hdr_limits = set->response_hdr_limits;
@@ -149,6 +150,8 @@ struct http_client *http_client_init(const struct http_client_settings *set)
 	client->set.connect_timeout_msecs = set->connect_timeout_msecs;
 	client->set.soft_connect_timeout_msecs = set->soft_connect_timeout_msecs;
 	client->set.max_auto_retry_delay = set->max_auto_retry_delay;
+	client->set.socket_send_buffer_size = set->socket_send_buffer_size;
+	client->set.socket_recv_buffer_size = set->socket_recv_buffer_size;
 	client->set.debug = set->debug;
 
 	i_array_init(&client->delayed_failing_requests, 1);
@@ -165,29 +168,25 @@ struct http_client *http_client_init(const struct http_client_settings *set)
 void http_client_deinit(struct http_client **_client)
 {
 	struct http_client *client = *_client;
-	struct http_client_request *req, *const *req_idx;
+	struct http_client_request *req;
 	struct http_client_host *host;
 	struct http_client_peer *peer;
 
 	*_client = NULL;
 
-	/* drop delayed failing requests */
-	while (array_count(&client->delayed_failing_requests) > 0) {
-		req_idx = array_idx(&client->delayed_failing_requests, 0);
-		req = *req_idx;
-
-		i_assert(req->refcount == 1);
-		http_client_request_error_delayed(&req);
+	/* destroy requests without calling callbacks */
+	req = client->requests_list;
+	while (req != NULL) {
+		struct http_client_request *next_req = req->next;
+		http_client_request_destroy(&req);
+		req = next_req;
 	}
-	array_free(&client->delayed_failing_requests);
-
-	if (client->to_failing_requests != NULL)
-		timeout_remove(&client->to_failing_requests);
+	i_assert(client->requests_count == 0);
 
 	/* free peers */
 	while (client->peers_list != NULL) {
 		peer = client->peers_list;
-		http_client_peer_free(&peer);
+		http_client_peer_close(&peer);
 	}
 	hash_table_destroy(&client->peers);
 
@@ -197,6 +196,10 @@ void http_client_deinit(struct http_client **_client)
 		http_client_host_free(&host);
 	}
 	hash_table_destroy(&client->hosts);
+
+	array_free(&client->delayed_failing_requests);
+	if (client->to_failing_requests != NULL)
+		timeout_remove(&client->to_failing_requests);
 
 	connection_list_deinit(&client->conn_list);
 

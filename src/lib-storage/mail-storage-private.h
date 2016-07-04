@@ -150,6 +150,24 @@ struct mail_attachment_part {
 	const char *content_type, *content_disposition;
 };
 
+struct virtual_mailbox_vfuncs {
+	/* convert backend UIDs to virtual UIDs. if some backend UID doesn't
+	   exist in mailbox, it's simply ignored */
+	void (*get_virtual_uids)(struct mailbox *box,
+				 struct mailbox *backend_mailbox,
+				 const ARRAY_TYPE(seq_range) *backend_uids,
+				 ARRAY_TYPE(seq_range) *virtual_uids_r);
+	/* like get_virtual_uids(), but if a backend UID doesn't exist,
+	   convert it to 0. */
+	void (*get_virtual_uid_map)(struct mailbox *box,
+				    struct mailbox *backend_mailbox,
+				    const ARRAY_TYPE(seq_range) *backend_uids,
+				    ARRAY_TYPE(uint32_t) *virtual_uids_r);
+	void (*get_virtual_backend_boxes)(struct mailbox *box,
+					  ARRAY_TYPE(mailboxes) *mailboxes,
+					  bool only_with_msgs);
+};
+
 struct mailbox_vfuncs {
 	bool (*is_readonly)(struct mailbox *box);
 
@@ -274,6 +292,10 @@ struct mailbox_index_vsize {
 	uint32_t message_count;
 };
 
+struct mailbox_index_pop3_uidl {
+	uint32_t max_uid_with_pop3_uidl;
+};
+
 struct mailbox_index_first_saved {
 	uint32_t uid;
 	uint32_t timestamp;
@@ -286,7 +308,9 @@ struct mailbox {
 	struct mail_storage *storage;
 	struct mailbox_list *list;
 
-        struct mailbox_vfuncs v, *vlast;
+	struct mailbox_vfuncs v, *vlast;
+	/* virtual mailboxes: */
+	const struct virtual_mailbox_vfuncs *virtual_vfuncs;
 /* private: */
 	pool_t pool, metadata_pool;
 	/* Linked list of all mailboxes in this storage */
@@ -326,6 +350,7 @@ struct mailbox {
 	enum mailbox_feature enabled_features;
 	struct mail_msgpart_partial_cache partial_cache;
 	uint32_t vsize_hdr_ext_id;
+	uint32_t pop3_uidl_hdr_ext_id;
 
 	/* MAIL_RECENT flags handling */
 	ARRAY_TYPE(seq_range) recent_flags;
@@ -385,6 +410,8 @@ struct mailbox {
 	unsigned int update_first_saved:1;
 	/* mailbox_verify_create_name() only checks for mailbox_verify_name() */
 	unsigned int skip_create_name_restrictions:1;
+	/* v2.2.x API kludge: quick-parameter to list_index_has_changed() */
+	unsigned int list_index_has_changed_quick:1;
 };
 
 struct mail_vfuncs {
@@ -530,6 +557,9 @@ struct mailbox_transaction_context {
 
 	struct mail_transaction_commit_changes *changes;
 	ARRAY(union mailbox_transaction_module_context *) module_contexts;
+
+	uint32_t prev_pop3_uidl_tracking_seq;
+	uint32_t highest_pop3_uidl_uid;
 
 	struct mail_save_context *save_ctx;
 	/* number of mails saved/copied within this transaction. */

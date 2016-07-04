@@ -24,6 +24,11 @@ in the userdb, and these are called 'extra fields'. Possibilities are:
  * The extra fields are also passed to <post-login scripts>
    [PostLoginScripting.txt].
 
+The following suffixes added to a field name are handled specially:
+
+ * *:protected*: Set this field only if it hasn't been set before.
+ * *:remove*: Remove this field entirely.
+
 These fields can be returned the exact same way as uid, gid, and home fields.
 Below are examples for some user databases.
 
@@ -105,4 +110,4 @@ user2:{plain}pass2:1001:1001::/home/user2::userdb_mail=maildir:~/Maildir
 userdb_quota_rule=*:storage=200M
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-07-01 04:43)

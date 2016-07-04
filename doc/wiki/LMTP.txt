@@ -123,4 +123,4 @@ Using LMTP with different MTAs
  * <Postfix> [HowTo.PostfixDovecotLMTP.txt]
  * <Exim> [LMTP.Exim.txt]
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-07-01 04:43)

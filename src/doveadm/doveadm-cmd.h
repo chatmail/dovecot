@@ -30,7 +30,8 @@ typedef enum {
 
 typedef enum {
 	CMD_FLAG_NONE			= 0x0,
-	CMD_FLAG_HIDDEN			= 0x1
+	CMD_FLAG_HIDDEN			= 0x1,
+	CMD_FLAG_NO_PRINT		= 0x2,
 } doveadm_cmd_flag_t;
 
 struct doveadm_cmd_param {
@@ -100,6 +101,7 @@ doveadm_cmd_find_with_args(const char *cmd_name, int *argc,
 			   const char *const *argv[]);
 
 void doveadm_register_auth_commands(void);
+void doveadm_register_auth_server_commands(void);
 void doveadm_register_director_commands(void);
 void doveadm_register_proxy_commands(void);
 void doveadm_register_log_commands(void);
@@ -144,6 +146,7 @@ bool doveadm_cmd_param_istream(const struct doveadm_cmd_context *cctx,
 void doveadm_cmd_params_clean(ARRAY_TYPE(doveadm_cmd_param_arr_t) *pargv);
 void doveadm_cmd_params_null_terminate_arrays(ARRAY_TYPE(doveadm_cmd_param_arr_t) *pargv);
 
+extern struct doveadm_cmd_ver2 doveadm_cmd_service_stop_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_stop_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_reload_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_stats_reset_ver2;

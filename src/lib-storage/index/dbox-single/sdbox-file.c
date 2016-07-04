@@ -302,6 +302,8 @@ int sdbox_file_move(struct dbox_file *file, bool alt_path)
 
 	if (dbox_file_is_in_alt(file) == alt_path)
 		return 0;
+	if (file->alt_path == NULL)
+		return 0;
 
 	if (stat(file->cur_path, &st) < 0 && errno == ENOENT) {
 		/* already expunged/moved by another session */
@@ -309,6 +311,9 @@ int sdbox_file_move(struct dbox_file *file, bool alt_path)
 	}
 
 	dest_path = !alt_path ? file->primary_path : file->alt_path;
+
+	i_assert(dest_path != NULL);
+
 	p = strrchr(dest_path, '/');
 	i_assert(p != NULL);
 	dest_dir = t_strdup_until(dest_path, p);
@@ -323,20 +328,15 @@ int sdbox_file_move(struct dbox_file *file, bool alt_path)
 
 	output = o_stream_create_fd_file(out_fd, 0, FALSE);
 	i_stream_seek(file->input, 0);
-	while ((ret = o_stream_send_istream(output, file->input)) > 0) ;
+	ret = o_stream_send_istream(output, file->input) > 0 ? 0 : -1;
 	if (o_stream_nfinish(output) < 0) {
-		mail_storage_set_critical(storage, "write(%s) failed: %m",
-					  temp_path);
+		mail_storage_set_critical(storage, "write(%s) failed: %s",
+			temp_path, o_stream_get_error(output));
 		ret = -1;
 	} else if (file->input->stream_errno != 0) {
-		errno = file->input->stream_errno;
-		dbox_file_set_syscall_error(file, "ftruncate()");
+		mail_storage_set_critical(storage, "read(%s) failed: %s",
+			temp_path, i_stream_get_error(file->input));
 		ret = -1;
-	} else if (ret < 0) {
-		mail_storage_set_critical(storage,
-			"o_stream_send_istream(%s, %s) "
-			"failed with unknown error",
-			temp_path, file->cur_path);
 	}
 	o_stream_unref(&output);
 

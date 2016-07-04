@@ -10,6 +10,10 @@ if BUILD_SOLR
 FTS_SOLR = fts-solr
 endif
 
+if HAVE_LDAP
+DICT_LDAP = dict-ldap
+endif
+
 SUBDIRS = \
 	acl \
 	imap-acl \
@@ -35,7 +39,9 @@ SUBDIRS = \
 	imap-stats \
 	trash \
 	virtual \
+	welcome \
 	$(ZLIB) \
 	$(FTS_LUCENE) \
 	$(FTS_SOLR) \
+	$(DICT_LDAP) \
 	fs-compress

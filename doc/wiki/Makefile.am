@@ -29,6 +29,7 @@ wikifiles = ACL.txt \
 	Authentication.MultipleDatabases.txt \
 	Authentication.PasswordSchemes.txt \
 	Authentication.Penalty.txt \
+	Authentication.Policy.txt \
 	Authentication.RestrictAccess.txt \
 	Authentication.txt \
 	BasicConfiguration.txt \
@@ -201,6 +202,7 @@ wikifiles = ACL.txt \
 	Plugins.Stats.txt \
 	Plugins.Trash.txt \
 	Plugins.Virtual.txt \
+	Plugins.Welcome.txt \
 	Plugins.Zlib.txt \
 	Plugins.txt \
 	PostLoginScripting.txt \

@@ -30,7 +30,10 @@ static void buffer_alloc(struct real_buffer *buf, size_t size)
 
 	i_assert(size > buf->alloc);
 
-	buf->w_buffer = p_realloc(buf->pool, buf->w_buffer, buf->alloc, size);
+	if (buf->w_buffer == NULL)
+		buf->w_buffer = p_malloc(buf->pool, size);
+	else
+		buf->w_buffer = p_realloc(buf->pool, buf->w_buffer, buf->alloc, size);
 	buf->alloc = size;
 
 	buf->r_buffer = buf->w_buffer;
@@ -134,7 +137,10 @@ buffer_t *buffer_create_dynamic(pool_t pool, size_t init_size)
 	buf = p_new(pool, struct real_buffer, 1);
 	buf->pool = pool;
 	buf->dynamic = TRUE;
-	buffer_alloc(buf, init_size);
+	/* buffer_alloc() reserves +1 for str_c() NIL, so add +1 here to
+	   init_size so we can actually write that much to the buffer without
+	   realloc */
+	buffer_alloc(buf, init_size+1);
 	return (buffer_t *)buf;
 }
 

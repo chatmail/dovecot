@@ -6,10 +6,12 @@ Settings changes
 
  * director_doveadm_port setting removed. Name the inet_listener doveadm { .. }
    instead.
+ * mdbox_purge_preserve_alt setting removed. It's always assumed to be "yes"
+   not.
 
 Setting default changes
 -----------------------
 
  * mdbox_rotate_size=2M -> 10M
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-07-01 04:43)

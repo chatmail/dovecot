@@ -32,6 +32,7 @@ Distributed with Dovecot:
  * <trash> [Plugins.Trash.txt]: Delete mails from Trash when user would go over
    quota
  * <virtual> [Plugins.Virtual.txt]: Virtual mailboxes
+ * <welcome> [Plugins.Welcome.txt]: Call a script on user's first login.
  * <zlib> [Plugins.Zlib.txt]: Access compressed mails
  * <imap_zlib> [Plugins.Compress.txt]: Enable IMAP COMPRESS
    [http://www.ietf.org/rfc/rfc4978.txt] extension
@@ -79,4 +80,4 @@ Experimental Plugins:
 To enable / disable plugins per user you can make your userdb return
 'mail_plugins' extra field. See <UserDatabase.ExtraFields.txt> for examples.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-07-01 04:43)

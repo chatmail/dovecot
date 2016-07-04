@@ -318,7 +318,8 @@ void duplicate_flush(struct duplicate_context *ctx)
 	hash_table_iterate_deinit(&iter);
 
 	if (o_stream_nfinish(output) < 0) {
-		i_error("write(%s) failed: %m", file->path);
+		i_error("write(%s) failed: %s", file->path,
+			o_stream_get_error(output));
 		o_stream_unref(&output);
 		duplicate_file_free(&ctx->file);
 		return;
@@ -342,7 +343,8 @@ struct duplicate_context *duplicate_init(struct mail_user *user)
 	}
 
 	ctx = i_new(struct duplicate_context, 1);
-	ctx->path = i_strconcat(home, "/"DUPLICATE_FNAME, NULL);
+	ctx->path = home == NULL ? NULL :
+		i_strconcat(home, "/"DUPLICATE_FNAME, NULL);
 	ctx->dotlock_set = default_duplicate_dotlock_set;
 
 	mail_set = mail_user_set_get_storage_set(user);

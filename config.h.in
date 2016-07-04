@@ -393,6 +393,9 @@
 /* Build with OpenSSL compression */
 #undef HAVE_SSL_COMPRESSION
 
+/* Build with SSL_COMP_free_compression_methods() support */
+#undef HAVE_SSL_COMP_FREE_COMPRESSION_METHODS
+
 /* Build with TLS hostname support */
 #undef HAVE_SSL_GET_SERVERNAME
 
@@ -680,6 +683,9 @@
 
 /* Maximum value of ssize_t */
 #undef SSIZE_T_MAX
+
+/* C99 static array */
+#undef STATIC_ARRAY
 
 /* reasonable mntctl buffer size */
 #undef STATIC_MTAB_SIZE

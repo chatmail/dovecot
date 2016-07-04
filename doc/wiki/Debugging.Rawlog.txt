@@ -84,9 +84,9 @@ This tries to write the rawlogs under $base_dir/login/rawlogs directory. You
 need to create it first with enough write permissions, e.g.:
 
 ---%<-------------------------------------------------------------------------
-mkdir /var/run/dovecot/login/rawlogs
-chown dovenull /var/run/dovecot/login/rawlogs
-chmod 0700 /var/run/dovecot/login/rawlogs
+mkdir /var/run/dovecot/login/rawlog
+chown dovenull /var/run/dovecot/login/rawlog
+chmod 0700 /var/run/dovecot/login/rawlog
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-07-01 04:43)

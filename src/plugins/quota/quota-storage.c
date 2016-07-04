@@ -31,6 +31,7 @@ struct quota_mailbox {
 	struct quota_transaction_context *expunge_qt;
 	ARRAY(uint32_t) expunge_uids;
 	ARRAY(uoff_t) expunge_sizes;
+	unsigned int prev_idx;
 
 	unsigned int recalculate:1;
 	unsigned int sync_transaction_expunge:1;
@@ -51,8 +52,14 @@ static void quota_mail_expunge(struct mail *_mail)
 	struct quota_mailbox *qbox = QUOTA_CONTEXT(_mail->box);
 	struct quota_user *quser = QUOTA_USER_CONTEXT(_mail->box->storage->user);
 	union mail_module_context *qmail = QUOTA_MAIL_CONTEXT(mail);
+	struct quota_transaction_context *qt = QUOTA_CONTEXT(_mail->transaction);
 	uoff_t size;
 	int ret;
+
+	if (qt->auto_updating) {
+		qmail->super.expunge(_mail);
+		return;
+	}
 
 	/* We need to handle the situation where multiple transactions expunged
 	   the mail at the same time. In here we'll just save the message's
@@ -327,7 +334,8 @@ static void quota_mailbox_sync_notify(struct mailbox *box, uint32_t uid,
 	if (qbox->module_ctx.super.sync_notify != NULL)
 		qbox->module_ctx.super.sync_notify(box, uid, sync_type);
 
-	if (sync_type != MAILBOX_SYNC_TYPE_EXPUNGE || qbox->recalculate) {
+	if (sync_type != MAILBOX_SYNC_TYPE_EXPUNGE || qbox->recalculate ||
+	    (box->flags & MAILBOX_FLAG_DELETE_UNSAFE) != 0) {
 		if (uid == 0) {
 			/* free the transaction before view syncing begins,
 			   otherwise it'll crash. */
@@ -336,24 +344,36 @@ static void quota_mailbox_sync_notify(struct mailbox *box, uint32_t uid,
 		return;
 	}
 
-	/* we're in the middle of syncing the mailbox, so it's a bad idea to
-	   try and get the message sizes at this point. Rely on sizes that
-	   we saved earlier, or recalculate the whole quota if we don't know
-	   the size. */
-	if (!array_is_created(&qbox->expunge_uids)) {
-		i = count = 0;
-	} else {
-		uids = array_get(&qbox->expunge_uids, &count);
-		for (i = 0; i < count; i++) {
-			if (uids[i] == uid)
-				break;
-		}
-	}
-
 	if (qbox->expunge_qt == NULL) {
 		qbox->expunge_qt = quota_transaction_begin(box);
 		qbox->expunge_qt->sync_transaction =
 			qbox->sync_transaction_expunge;
+	}
+	if (qbox->expunge_qt->auto_updating)
+		return;
+
+	/* we're in the middle of syncing the mailbox, so it's a bad idea to
+	   try and get the message sizes at this point. Rely on sizes that
+	   we saved earlier, or recalculate the whole quota if we don't know
+	   the size. */
+	if (!array_is_created(&qbox->expunge_uids) ||
+	    array_is_empty(&qbox->expunge_uids)) {
+		i = count = 0;
+	} else {
+		uids = array_get(&qbox->expunge_uids, &count);
+		for (i = qbox->prev_idx; i < count; i++) {
+			if (uids[i] == uid)
+				break;
+		}
+		if (i >= count) {
+			for (i = 0; i < qbox->prev_idx; i++) {
+				if (uids[i] == uid)
+					break;
+			}
+			if (i == qbox->prev_idx)
+				i = count;
+		}
+		qbox->prev_idx = i;
 	}
 
 	if (i != count) {
@@ -396,7 +416,7 @@ static void quota_mailbox_sync_notify(struct mailbox *box, uint32_t uid,
 			index_mailbox_vsize_hdr_expunge(ibox->vsize_update, uid, size);
 	} else {
 		/* there's no way to get the size. recalculate the quota. */
-		quota_recalculate(qbox->expunge_qt);
+		quota_recalculate(qbox->expunge_qt, QUOTA_RECALCULATE_MISSING_FREES);
 		qbox->recalculate = TRUE;
 	}
 }
@@ -653,5 +673,5 @@ void quota_mail_namespaces_created(struct mail_namespace *namespaces)
 	for (i = 0; i < count; i++)
 		quota_root_set_namespace(roots[i], namespaces);
 
-	quota_over_flag_check(namespaces->user, quota);
+	quota_over_flag_check_startup(quota);
 }

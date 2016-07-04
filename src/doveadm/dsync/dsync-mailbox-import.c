@@ -124,6 +124,10 @@ struct dsync_mailbox_importer {
 	unsigned int delete_mailbox:1;
 };
 
+static const char *dsync_mail_change_type_names[] = {
+	"save", "expunge", "flag-change"
+};
+
 static bool dsync_mailbox_save_newmails(struct dsync_mailbox_importer *importer,
 					const struct dsync_mail *mail,
 					struct importer_new_mail *all_newmails,
@@ -523,7 +527,7 @@ dsync_mailbox_import_attribute_real(struct dsync_mailbox_importer *importer,
 				  attr->key, &value) < 0) {
 		i_error("Mailbox %s: Failed to set attribute %s: %s",
 			mailbox_get_vname(importer->box), attr->key,
-			mailbox_get_last_error(importer->box, &importer->mail_error));
+			mailbox_get_last_error(importer->box, NULL));
 		/* the attributes aren't vital, don't fail everything just
 		   because of them. */
 	}
@@ -785,9 +789,10 @@ static bool dsync_mailbox_try_save_cur(struct dsync_mailbox_importer *importer,
 		/* add a record for local mail */
 		i_assert(importer->cur_mail != NULL);
 		if (importer->revert_local_changes) {
-			if (save_change == NULL) {
+			if (save_change == NULL &&
+			    importer->cur_mail->uid >= importer->remote_uid_next) {
 				dsync_mailbox_revert_existing_uid(importer, importer->cur_mail->uid,
-					t_strdup_printf("highest than remote's UIDs (remote UIDNEXT=%u)", importer->remote_uid_next));
+					t_strdup_printf("higher than remote's UIDs (remote UIDNEXT=%u)", importer->remote_uid_next));
 				return TRUE;
 			}
 			mail_expunge(importer->cur_mail);
@@ -1683,7 +1688,7 @@ dsync_mailbox_find_common_uid(struct dsync_mailbox_importer *importer,
 		(void)dsync_mailbox_find_common_expunged_uid(importer, change, result_r);
 	}
 	*result_r = t_strdup_printf("%s (next local mail UID=%u)",
-				    *result_r, importer->cur_mail->uid);
+		*result_r, importer->cur_mail == NULL ? 0 : importer->cur_mail->uid);
 }
 
 int dsync_mailbox_import_change(struct dsync_mailbox_importer *importer,
@@ -1709,7 +1714,8 @@ int dsync_mailbox_import_change(struct dsync_mailbox_importer *importer,
 		result = "New mail";
 	}
 
-	imp_debug(importer, "Import change GUID=%s UID=%u hdr_hash=%s result=%s",
+	imp_debug(importer, "Import change type=%s GUID=%s UID=%u hdr_hash=%s result=%s",
+		  dsync_mail_change_type_names[change->type],
 		  change->guid != NULL ? change->guid : "<unknown>", change->uid,
 		  change->hdr_hash != NULL ? change->hdr_hash : "", result);
 

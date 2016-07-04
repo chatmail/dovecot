@@ -78,4 +78,14 @@ mmencode -u
 
 to check that you have encoded correctly.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+Encoding with Python
+--------------------
+
+With python you can do:
+
+---%<-------------------------------------------------------------------------
+python -c "import base64;
+print(base64.encodestring('myusername@domain.tld\0myusername@domain.tld\0mypassword'));"
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2016-07-01 04:43)

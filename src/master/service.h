@@ -85,6 +85,8 @@ struct service {
 	int status_fd[2];
 	struct io *io_status;
 
+	int master_dead_pipe_fd[2];
+
 	unsigned int throttle_secs;
 	time_t exit_failure_last;
 	unsigned int exit_failures_in_sec;
@@ -135,11 +137,13 @@ struct service_list {
 	struct service *log;
 	struct service *anvil;
 
+	struct file_listener_settings master_listener_set;
+	struct io *io_master;
+	int master_fd;
+
 	/* nonblocking log fds usd by master */
 	int master_log_fd[2];
 	struct service_process_notify *log_byes;
-
-	int master_dead_pipe_fd[2];
 
 	ARRAY(struct service *) services;
 

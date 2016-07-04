@@ -11,19 +11,21 @@ AM_CPPFLAGS = \
 libdovecot_ldap_la_SOURCES = \
 	ldap-client.c \
 	ldap-connection.c \
+	ldap-connection-pool.c \
 	ldap-iterator.c \
 	ldap-search.c \
 	ldap-compare.c \
 	ldap-entry.c
 
-libdovecot_ldap_la_DEPENDENCIES =
+libdovecot_ldap_la_DEPENDENCIES = ../lib/liblib.la
 libdovecot_ldap_la_LDFLAGS = -export-dynamic
-libdovecot_ldap_la_LIBADD = $(LDAP_LIBS)
+libdovecot_ldap_la_LIBADD = ../lib/liblib.la $(LDAP_LIBS)
 
 headers = \
 	ldap-client.h
 
 noinst_HEADERS = \
+	ldap-connection-pool.h \
 	ldap-private.h
 
 pkginc_libdir=$(pkgincludedir)

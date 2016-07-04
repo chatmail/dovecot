@@ -106,8 +106,8 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libfs_la_LIBADD =
 am_libfs_la_OBJECTS = fs-api.lo fs-dict.lo fs-metawrap.lo \
-	fs-randomfail.lo fs-posix.lo fs-test.lo fs-sis.lo \
-	fs-sis-common.lo fs-sis-queue.lo istream-fs-file.lo \
+	fs-randomfail.lo fs-posix.lo fs-test.lo fs-test-async.lo \
+	fs-sis.lo fs-sis-common.lo fs-sis-queue.lo istream-fs-file.lo \
 	istream-fs-stats.lo istream-metawrap.lo ostream-metawrap.lo \
 	ostream-cmp.lo
 libfs_la_OBJECTS = $(am_libfs_la_OBJECTS)
@@ -419,6 +419,7 @@ libfs_la_SOURCES = \
 	fs-randomfail.c \
 	fs-posix.c \
 	fs-test.c \
+	fs-test-async.c \
 	fs-sis.c \
 	fs-sis-common.c \
 	fs-sis-queue.c \
@@ -532,6 +533,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis-common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis-queue.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-test-async.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-test.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-fs-file.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-fs-stats.Plo@am__quote@
