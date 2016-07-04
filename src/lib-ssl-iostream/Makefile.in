@@ -89,14 +89,15 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+@BUILD_OPENSSL_TRUE@am__append_1 = libdovecot_openssl_common.la
 subdir = src/lib-ssl-iostream
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
 	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
-	$(am__DIST_COMMON)
+DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
+	$(pkginc_lib_HEADERS) $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
@@ -131,16 +132,25 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(moduledir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
 LTLIBRARIES = $(module_LTLIBRARIES) $(noinst_LTLIBRARIES)
-libssl_iostream_la_LIBADD =
-am_libssl_iostream_la_OBJECTS = iostream-ssl.lo
-libssl_iostream_la_OBJECTS = $(am_libssl_iostream_la_OBJECTS)
+am__DEPENDENCIES_1 =
+@BUILD_OPENSSL_TRUE@libdovecot_openssl_common_la_DEPENDENCIES =  \
+@BUILD_OPENSSL_TRUE@	$(am__DEPENDENCIES_1)
+am__libdovecot_openssl_common_la_SOURCES_DIST =  \
+	dovecot-openssl-common.c
+@BUILD_OPENSSL_TRUE@am_libdovecot_openssl_common_la_OBJECTS =  \
+@BUILD_OPENSSL_TRUE@	dovecot-openssl-common.lo
+libdovecot_openssl_common_la_OBJECTS =  \
+	$(am_libdovecot_openssl_common_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__DEPENDENCIES_1 =
+@BUILD_OPENSSL_TRUE@am_libdovecot_openssl_common_la_rpath =
+libssl_iostream_la_LIBADD =
+am_libssl_iostream_la_OBJECTS = iostream-ssl.lo
+libssl_iostream_la_OBJECTS = $(am_libssl_iostream_la_OBJECTS)
 @BUILD_OPENSSL_TRUE@libssl_iostream_openssl_la_DEPENDENCIES =  \
-@BUILD_OPENSSL_TRUE@	$(am__DEPENDENCIES_1)
+@BUILD_OPENSSL_TRUE@	libdovecot_openssl_common.la
 am__libssl_iostream_openssl_la_SOURCES_DIST = iostream-openssl.c \
 	iostream-openssl-common.c iostream-openssl-context.c \
 	iostream-openssl-params.c istream-openssl.c ostream-openssl.c
@@ -192,16 +202,18 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libssl_iostream_la_SOURCES) \
+SOURCES = $(libdovecot_openssl_common_la_SOURCES) \
+	$(libssl_iostream_la_SOURCES) \
 	$(libssl_iostream_openssl_la_SOURCES)
-DIST_SOURCES = $(libssl_iostream_la_SOURCES) \
+DIST_SOURCES = $(am__libdovecot_openssl_common_la_SOURCES_DIST) \
+	$(libssl_iostream_la_SOURCES) \
 	$(am__libssl_iostream_openssl_la_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-HEADERS = $(pkginc_lib_HEADERS)
+HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -415,15 +427,19 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-noinst_LTLIBRARIES = libssl_iostream.la
+noinst_LTLIBRARIES = libssl_iostream.la $(am__append_1)
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
 	-DMODULE_DIR=\""$(moduledir)"\"
 
 @BUILD_OPENSSL_TRUE@module_LTLIBRARIES = libssl_iostream_openssl.la
+@BUILD_OPENSSL_TRUE@libdovecot_openssl_common_la_LIBADD = $(SSL_LIBS)
+@BUILD_OPENSSL_TRUE@libdovecot_openssl_common_la_SOURCES = \
+@BUILD_OPENSSL_TRUE@	dovecot-openssl-common.c
+
 @BUILD_OPENSSL_TRUE@libssl_iostream_openssl_la_LDFLAGS = -module -avoid-version
-@BUILD_OPENSSL_TRUE@libssl_iostream_openssl_la_LIBADD = $(SSL_LIBS)
+@BUILD_OPENSSL_TRUE@libssl_iostream_openssl_la_LIBADD = libdovecot_openssl_common.la
 @BUILD_OPENSSL_TRUE@libssl_iostream_openssl_la_SOURCES = \
 @BUILD_OPENSSL_TRUE@	iostream-openssl.c \
 @BUILD_OPENSSL_TRUE@	iostream-openssl-common.c \
@@ -435,6 +451,9 @@ AM_CPPFLAGS = \
 libssl_iostream_la_SOURCES = \
 	iostream-ssl.c \
 	$(ssl_sources)
+
+noinst_HEADERS = \
+	dovecot-openssl-common.h
 
 headers = \
 	iostream-openssl.h \
@@ -523,6 +542,9 @@ clean-noinstLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 
+libdovecot_openssl_common.la: $(libdovecot_openssl_common_la_OBJECTS) $(libdovecot_openssl_common_la_DEPENDENCIES) $(EXTRA_libdovecot_openssl_common_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(LINK) $(am_libdovecot_openssl_common_la_rpath) $(libdovecot_openssl_common_la_OBJECTS) $(libdovecot_openssl_common_la_LIBADD) $(LIBS)
+
 libssl_iostream.la: $(libssl_iostream_la_OBJECTS) $(libssl_iostream_la_DEPENDENCIES) $(EXTRA_libssl_iostream_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libssl_iostream_la_OBJECTS) $(libssl_iostream_la_LIBADD) $(LIBS)
 
@@ -535,6 +557,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dovecot-openssl-common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-openssl-common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-openssl-context.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-openssl-params.Plo@am__quote@

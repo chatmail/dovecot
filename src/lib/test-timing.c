@@ -71,7 +71,25 @@ void test_timing(void)
 			timing_add_usecs(t, test_inputs[i][j]);
 			test_timing_verify(t, test_inputs[i], j+1);
 		}
+		timing_reset(t);
+		test_assert(timing_get_count(t) == 0);
+		test_assert(timing_get_max(t) == 0);
 		timing_deinit(&t);
 		test_end();
 	}
+
+	test_begin("timings large");
+	t = timing_init();
+	for (i = 0; i < 10000; i++)
+		timing_add_usecs(t, i);
+	test_assert(timing_get_count(t) == i);
+	test_assert(timing_get_sum(t) == (i-1)*i/2);
+	test_assert(timing_get_min(t) == 0);
+	test_assert(timing_get_max(t) == i-1);
+	test_assert(timing_get_avg(t) == i/2);
+	/* just test that these work: */
+	test_assert(timing_get_median(t) > 0 && timing_get_median(t) < i-1);
+	test_assert(timing_get_95th(t) > 0 && timing_get_95th(t) < i-1);
+	timing_deinit(&t);
+	test_end();
 }

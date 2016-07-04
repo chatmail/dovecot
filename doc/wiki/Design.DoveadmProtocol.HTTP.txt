@@ -28,10 +28,11 @@ either define 'doveadm_password', or 'doveadm_api_key'. With
 release. With API Key you are expected to send
 
 ---%<-------------------------------------------------------------------------
-Authorization: X-Doveadm-API Base64(apikey)
+Authorization: X-Dovecot-API Base64(apikey)
 ---%<-------------------------------------------------------------------------
 
-header to access the API.
+header to access the API. (In v2.2.22-2.2.23, this key was incorrectly
+"X-Doveadm-API".)
 
 Usage
 -----
@@ -102,4 +103,4 @@ The logs will indicated execute command(s) and also Apache access.log format
 strings on requests. In case of fatal errors, the access.log string might be
 missing.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-07-01 04:43)

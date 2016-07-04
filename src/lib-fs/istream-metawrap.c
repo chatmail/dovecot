@@ -4,6 +4,8 @@
 #include "istream-private.h"
 #include "istream-metawrap.h"
 
+#define METAWRAP_MAX_METADATA_LINE_LEN 8192
+
 struct metawrap_istream {
 	struct istream_private istream;
 	metawrap_callback_t *callback;
@@ -25,7 +27,8 @@ static int metadata_header_read(struct metawrap_istream *mstream)
 		p = strchr(line, ':');
 		if (p == NULL) {
 			io_stream_set_error(&mstream->istream.iostream,
-				"Metadata header line is missing ':'");
+				"Metadata header line is missing ':' at offset %"PRIuUOFF_T,
+				mstream->istream.istream.v_offset);
 			mstream->istream.istream.stream_errno = EINVAL;
 			return -1;
 		}
@@ -33,8 +36,16 @@ static int metadata_header_read(struct metawrap_istream *mstream)
 		mstream->callback(line, p, mstream->context);
 	}
 	if (mstream->istream.parent->eof) {
-		mstream->istream.istream.stream_errno =
-			mstream->istream.parent->stream_errno;
+		if (mstream->istream.parent->stream_errno != 0) {
+			mstream->istream.istream.stream_errno =
+				mstream->istream.parent->stream_errno;
+		} else {
+			io_stream_set_error(&mstream->istream.iostream,
+				"Metadata header is missing ending line at offset %"PRIuUOFF_T,
+				mstream->istream.istream.v_offset);
+			mstream->istream.istream.stream_errno = EINVAL;
+			return -1;
+		}
 		mstream->istream.istream.eof = TRUE;
 		return -1;
 	}
@@ -51,7 +62,12 @@ static ssize_t i_stream_metawrap_read(struct istream_private *stream)
 		      stream->istream.v_offset);
 
 	if (mstream->in_metadata) {
+		size_t prev_max_size = i_stream_get_max_buffer_size(stream->parent);
+
+		i_stream_set_max_buffer_size(stream->parent, METAWRAP_MAX_METADATA_LINE_LEN);
 		ret = metadata_header_read(mstream);
+		i_stream_set_max_buffer_size(stream->parent, prev_max_size);
+
 		i_assert(stream->istream.v_offset == 0);
 		mstream->start_offset = stream->parent->v_offset;
 		if (ret <= 0)
@@ -125,7 +141,9 @@ i_stream_create_metawrap(struct istream *input,
 	mstream->istream.seek = i_stream_metawrap_seek;
 	mstream->istream.stat = input->seekable ? i_stream_metawrap_stat : NULL;
 
-	mstream->istream.istream.readable_fd = input->readable_fd;
+	/* we can't set abs_start_offset early enough so that it would get
+	   passed to our child istreams. */
+	mstream->istream.istream.readable_fd = FALSE;
 	mstream->istream.istream.blocking = input->blocking;
 	mstream->istream.istream.seekable = input->seekable;
 	mstream->in_metadata = TRUE;

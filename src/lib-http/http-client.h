@@ -72,6 +72,9 @@ struct http_client_settings {
 	/* don't automatically act upon redirect responses */
 	bool no_auto_redirect;
 
+	/* never automatically retry requests */
+	bool no_auto_retry;
+
 	/* if we use a proxy, delegate SSL negotiation to proxy, rather than
 	   creating a CONNECT tunnel through the proxy for the SSL link */
 	bool no_ssl_tunnel;
@@ -126,6 +129,13 @@ struct http_client_settings {
 	   is not automatically retried and the response is returned */
 	unsigned int max_auto_retry_delay;
 
+	/* the kernel send/receive buffer sizes used for the connection sockets.
+	   Configuring this is mainly useful for the test suite. The kernel
+	   defaults are used when these settings are 0. */
+	size_t socket_send_buffer_size;
+	size_t socket_recv_buffer_size;
+
+	/* enable logging debug messages */
 	bool debug;
 };
 

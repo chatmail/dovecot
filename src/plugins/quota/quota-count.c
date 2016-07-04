@@ -1,8 +1,16 @@
 /* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "ioloop.h"
 #include "mailbox-list-iter.h"
 #include "quota-private.h"
+
+struct count_quota_root {
+	struct quota_root root;
+
+	struct timeval cache_timeval;
+	uint64_t cached_bytes, cached_count;
+};
 
 struct quota_mailbox_iter {
 	struct quota_root *root;
@@ -139,7 +147,7 @@ int quota_count(struct quota_root *root, uint64_t *bytes_r, uint64_t *count_r)
 {
 	struct quota_mailbox_iter *iter;
 	const struct mailbox_info *info;
-	int ret = 0;
+	int ret = 0, ret2;
 
 	*bytes_r = *count_r = 0;
 	if (root->recounting)
@@ -147,18 +155,48 @@ int quota_count(struct quota_root *root, uint64_t *bytes_r, uint64_t *count_r)
 	root->recounting = TRUE;
 
 	iter = quota_mailbox_iter_begin(root);
-	while (ret >= 0 && (info = quota_mailbox_iter_next(iter)) != NULL) {
-		ret = quota_count_mailbox(root, info->ns, info->vname,
-					  bytes_r, count_r);
+	while ((info = quota_mailbox_iter_next(iter)) != NULL) {
+		ret2 = quota_count_mailbox(root, info->ns, info->vname,
+					   bytes_r, count_r);
+		if (ret2 > 0)
+			ret = 1;
+		else if (ret2 < 0) {
+			ret = -1;
+			break;
+		}
 	}
 	quota_mailbox_iter_deinit(&iter);
 	root->recounting = FALSE;
 	return ret;
 }
 
+static int quota_count_cached(struct count_quota_root *root,
+			      uint64_t *bytes_r, uint64_t *count_r)
+{
+	int ret;
+
+	if (root->cache_timeval.tv_usec == ioloop_timeval.tv_usec &&
+	    root->cache_timeval.tv_sec == ioloop_timeval.tv_sec &&
+	    ioloop_timeval.tv_sec != 0) {
+		*bytes_r = root->cached_bytes;
+		*count_r = root->cached_count;
+		return 1;
+	}
+	ret = quota_count(&root->root, bytes_r, count_r);
+	if (ret > 0) {
+		root->cache_timeval = ioloop_timeval;
+		root->cached_bytes = *bytes_r;
+		root->cached_count = *count_r;
+	}
+	return ret < 0 ? -1 : 0;
+}
+
 static struct quota_root *count_quota_alloc(void)
 {
-	return i_new(struct quota_root, 1);
+	struct count_quota_root *root;
+
+	root = i_new(struct count_quota_root, 1);
+	return &root->root;
 }
 
 static int count_quota_init(struct quota_root *root, const char *args,
@@ -168,6 +206,7 @@ static int count_quota_init(struct quota_root *root, const char *args,
 		*error_r = "quota count backend requires quota_vsizes=yes";
 		return -1;
 	}
+	root->auto_updating = TRUE;
 	return quota_root_default_init(root, args, error_r);
 }
 
@@ -186,12 +225,13 @@ count_quota_root_get_resources(struct quota_root *root ATTR_UNUSED)
 }
 
 static int
-count_quota_get_resource(struct quota_root *root,
+count_quota_get_resource(struct quota_root *_root,
 			 const char *name, uint64_t *value_r)
 {
+	struct count_quota_root *root = (struct count_quota_root *)_root;
 	uint64_t bytes, count;
 
-	if (quota_count(root, &bytes, &count) < 0)
+	if (quota_count_cached(root, &bytes, &count) < 0)
 		return -1;
 
 	if (strcmp(name, QUOTA_NAME_STORAGE_BYTES) == 0)
@@ -267,7 +307,10 @@ static int
 count_quota_update(struct quota_root *root,
 		   struct quota_transaction_context *ctx)
 {
-	if (ctx->recalculate) {
+	struct count_quota_root *croot = (struct count_quota_root *)root;
+
+	croot->cache_timeval.tv_sec = 0;
+	if (ctx->recalculate == QUOTA_RECALCULATE_FORCED) {
 		if (quota_count_recalculate(root) < 0)
 			return -1;
 	}

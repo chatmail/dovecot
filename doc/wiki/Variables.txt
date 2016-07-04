@@ -221,7 +221,7 @@ You can apply a modifiers for each variable (e.g. %Us = POP3):
  * %X - parse the variable as a base-10 number, and convert it to base-16
    (hexadecimal)
  * %R - reverse the string
- * %H - take a 32bit hash of the variable and return it as hex. You can also
+ * %N - take a 32bit hash of the variable and return it as hex. You can also
    limit the hash value. For example %256Hu gives values 0..ff. You might want
    padding also, so %2.256Hu gives 00..ff. This can be useful for example in
    dividing users automatically to multiple partitions.
@@ -229,8 +229,9 @@ You can apply a modifiers for each variable (e.g. %Us = POP3):
       so if you're hashing usernames being in user@domain form, you probably
       want to reverse the username to get better hash value variety, e.g.
       %3RHu.
- * %N - "New hash" - same as %H, but based on MD5 to give better distribution
-   of values (no need for any string reversing kludges either). (v2.2.3+)
+    * This is "New Hash", based on MD5 to give better distribution of values
+      (no need for any string reversing kludges either). (v2.2.3+
+ * %H - Same as %N, but use "old hash" (not recommended anymore)
  * %M - return the string's MD5 sum as hex.
  * %D - return "sub.domain.org" as "sub,dc=domain,dc=org" (for LDAP queries)
  * %T - Trim trailing whitespace
@@ -255,4 +256,4 @@ but the last two characters from the username. (v2.2.13+)
 The modifiers are applied from left-to-right order, except the substring is
 always taken from the final string.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-07-01 04:43)

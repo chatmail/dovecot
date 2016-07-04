@@ -13,8 +13,6 @@
 #include "iostream-temp.h"
 #include "fs-api-private.h"
 
-#define MAX_METADATA_LINE_LEN 8192
-
 struct metawrap_fs {
 	struct fs fs;
 	bool wrap_metadata;
@@ -70,7 +68,7 @@ fs_metawrap_init(struct fs *_fs, const char *args, const
 		parent_args++;
 	}
 	if (fs_init(parent_name, parent_args, set, &_fs->parent, &error) < 0) {
-		fs_set_error(_fs, "%s: %s", parent_name, error);
+		fs_set_error(_fs, "%s", error);
 		return -1;
 	}
 	if ((fs_get_properties(_fs->parent) & FS_PROPERTY_METADATA) == 0)
@@ -220,8 +218,12 @@ fs_metawrap_get_metadata(struct fs_file *_file,
 			if (fs_wait_async(_file->fs) < 0)
 				return -1;
 		}
-		if (ret == -1)
+		if (ret == -1 && file->input->stream_errno != 0) {
+			fs_set_error(_file->fs, "read(%s) failed: %s",
+				     i_stream_get_name(file->input),
+				     i_stream_get_error(file->input));
 			return -1;
+		}
 		i_assert(file->metadata_read);
 	}
 	*metadata_r = &_file->metadata;
@@ -279,8 +281,7 @@ fs_metawrap_read_stream(struct fs_file *_file, size_t max_buffer_size)
 		return file->input;
 	}
 
-	input = fs_read_stream(file->super_read,
-			       I_MAX(max_buffer_size, MAX_METADATA_LINE_LEN));
+	input = fs_read_stream(file->super_read, max_buffer_size);
 	file->input = i_stream_create_metawrap(input, fs_metawrap_callback, file);
 	i_stream_unref(&input);
 	i_stream_ref(file->input);
@@ -382,18 +383,20 @@ static int fs_metawrap_write_stream_finish(struct fs_file *_file, bool success)
 	int ret;
 
 	if (_file->output != NULL) {
-		if (_file->output->closed)
-			success = FALSE;
 		if (_file->output == file->super_output)
 			_file->output = NULL;
 		else
 			o_stream_unref(&_file->output);
 	}
 	if (!success) {
-		if (file->temp_output != NULL)
-			o_stream_destroy(&file->temp_output);
-		if (file->super_output != NULL)
+		if (file->super_output != NULL) {
+			/* no metawrap */
+			i_assert(file->temp_output == NULL);
 			fs_write_stream_abort(file->super, &file->super_output);
+		} else {
+			i_assert(file->temp_output != NULL);
+			o_stream_destroy(&file->temp_output);
+		}
 		return -1;
 	}
 
@@ -405,7 +408,7 @@ static int fs_metawrap_write_stream_finish(struct fs_file *_file, bool success)
 	if (file->temp_output == NULL) {
 		/* finishing up */
 		i_assert(file->super_output == NULL);
-		return fs_write_stream_finish(file->super, &file->temp_output);
+		return fs_write_stream_finish_async(file->super);
 	}
 	/* finish writing the temporary file */
 	input = iostream_temp_finish(&file->temp_output, IO_BLOCK_SIZE);
@@ -419,21 +422,22 @@ static int fs_metawrap_write_stream_finish(struct fs_file *_file, bool success)
 		i_stream_unref(&input2);
 	}
 	file->super_output = fs_write_stream(file->super);
-	if (o_stream_send_istream(file->super_output, input) >= 0)
-		ret = fs_write_stream_finish(file->super, &file->super_output);
-	else if (input->stream_errno != 0) {
+	(void)o_stream_send_istream(file->super_output, input);
+	if (input->stream_errno != 0) {
 		fs_set_error(_file->fs, "read(%s) failed: %s",
 			     i_stream_get_name(input),
 			     i_stream_get_error(input));
 		fs_write_stream_abort(file->super, &file->super_output);
 		ret = -1;
-	} else {
-		i_assert(file->super_output->stream_errno != 0);
+	} else if (file->super_output->stream_errno != 0) {
 		fs_set_error(_file->fs, "write(%s) failed: %s",
 			     o_stream_get_name(file->super_output),
 			     o_stream_get_error(file->super_output));
 		fs_write_stream_abort(file->super, &file->super_output);
 		ret = -1;
+	} else {
+		i_assert(i_stream_is_eof(input));
+		ret = fs_write_stream_finish(file->super, &file->super_output);
 	}
 	i_stream_unref(&input);
 	return ret;
@@ -499,7 +503,10 @@ static int fs_metawrap_stat(struct fs_file *_file, struct stat *st_r)
 	}
 	i_stream_unref(&input);
 	if (ret == 0) {
-		fs_set_error_async(_file->fs);
+		/* we shouldn't get here */
+		fs_set_error(_file->fs, "i_stream_get_size(%s) returned size as unknown",
+			     fs_file_path(_file));
+		errno = EIO;
 		return -1;
 	}
 
@@ -606,6 +613,7 @@ const struct fs fs_class_metawrap = {
 		fs_metawrap_delete,
 		fs_metawrap_iter_init,
 		fs_metawrap_iter_next,
-		fs_metawrap_iter_deinit
+		fs_metawrap_iter_deinit,
+		NULL
 	}
 };

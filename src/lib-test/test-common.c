@@ -38,8 +38,10 @@ static ssize_t test_read(struct istream_private *stream)
 
 	i_assert(stream->skip <= stream->pos);
 
-	if (stream->pos - stream->skip >= tstream->istream.max_buffer_size)
+	if (stream->pos - stream->skip >= tstream->istream.max_buffer_size) {
+		i_assert(stream->skip != stream->pos);
 		return -2;
+	}
 
 	if (tstream->max_pos < stream->pos) {
 		/* we seeked past the end of file. */
@@ -173,6 +175,15 @@ void test_assert_failed(const char *code, const char *file, unsigned int line)
 void test_assert_failed_idx(const char *code, const char *file, unsigned int line, long long i)
 {
 	printf("%s:%u: Assert(#%lld) failed: %s\n", file, line, i, code);
+	fflush(stdout);
+	test_success = FALSE;
+}
+
+void test_assert_failed_strcmp(const char *code, const char *file, unsigned int line,
+				const char * src, const char * dst)
+{
+	printf("%s: Assert(#%u) failed: %s\n", file, line, code);
+	printf("        \"%s\" != \"%s\"\n", src, dst);
 	fflush(stdout);
 	test_success = FALSE;
 }

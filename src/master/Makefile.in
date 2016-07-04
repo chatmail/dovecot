@@ -104,16 +104,18 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(sbindir)"
 PROGRAMS = $(sbin_PROGRAMS)
 am__dovecot_SOURCES_DIST = capabilities-posix.c dup2-array.c main.c \
-	master-settings.c service-anvil.c service-listen.c \
-	service-log.c service-monitor.c service-process.c \
-	service-process-notify.c service.c sd-daemon.c
+	master-client.c master-settings.c service-anvil.c \
+	service-listen.c service-log.c service-monitor.c \
+	service-process.c service-process-notify.c service.c \
+	sd-daemon.c
 @HAVE_SYSTEMD_TRUE@am__objects_1 = sd-daemon.$(OBJEXT)
 am_dovecot_OBJECTS = capabilities-posix.$(OBJEXT) dup2-array.$(OBJEXT) \
-	main.$(OBJEXT) master-settings.$(OBJEXT) \
-	service-anvil.$(OBJEXT) service-listen.$(OBJEXT) \
-	service-log.$(OBJEXT) service-monitor.$(OBJEXT) \
-	service-process.$(OBJEXT) service-process-notify.$(OBJEXT) \
-	service.$(OBJEXT) $(am__objects_1)
+	main.$(OBJEXT) master-client.$(OBJEXT) \
+	master-settings.$(OBJEXT) service-anvil.$(OBJEXT) \
+	service-listen.$(OBJEXT) service-log.$(OBJEXT) \
+	service-monitor.$(OBJEXT) service-process.$(OBJEXT) \
+	service-process-notify.$(OBJEXT) service.$(OBJEXT) \
+	$(am__objects_1)
 dovecot_OBJECTS = $(am_dovecot_OBJECTS)
 am__DEPENDENCIES_1 =
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -395,6 +397,7 @@ dovecot_SOURCES = \
 	capabilities-posix.c \
 	dup2-array.c \
 	main.c \
+	master-client.c \
 	master-settings.c \
 	service-anvil.c \
 	service-listen.c \
@@ -409,6 +412,7 @@ noinst_HEADERS = \
 	capabilities.h \
 	common.h \
 	dup2-array.h \
+	master-client.h \
 	master-settings.h \
 	sd-daemon.h \
 	service-anvil.h \
@@ -515,6 +519,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/capabilities-posix.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dup2-array.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/master-client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/master-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sd-daemon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/service-anvil.Po@am__quote@

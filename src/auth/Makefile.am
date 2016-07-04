@@ -27,6 +27,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-dns \
+	-I$(top_srcdir)/src/lib-http \
 	-I$(top_srcdir)/src/lib-sql \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-stats \
@@ -47,9 +48,11 @@ libpassword_a_SOURCES = \
 	password-scheme-md5crypt.c \
 	password-scheme-scram.c \
 	password-scheme-otp.c \
-	password-scheme-rpa.c
+	password-scheme-rpa.c \
+	password-scheme-pbkdf2.c
 
 auth_libs = \
+	libstats_auth.la \
 	libpassword.a \
 	../lib-ntlm/libntlm.a \
 	../lib-otp/libotp.a \
@@ -65,6 +68,7 @@ auth_SOURCES = \
 	auth-cache.c \
 	auth-client-connection.c \
 	auth-master-connection.c \
+	auth-policy.c \
 	auth-postfix-connection.c \
 	mech-otp-skey-common.c \
 	mech-plain-common.c \
@@ -74,7 +78,6 @@ auth_SOURCES = \
 	auth-request-stats.c \
 	auth-request-var-expand.c \
 	auth-settings.c \
-	auth-stats.c \
 	auth-fields.c \
 	auth-token.c \
 	auth-worker-client.c \
@@ -140,6 +143,7 @@ headers = \
 	mech-otp-skey-common.h \
 	mech-plain-common.h \
 	auth-penalty.h \
+	auth-policy.h \
 	auth-request.h \
 	auth-request-handler.h \
 	auth-request-stats.h \
@@ -204,9 +208,9 @@ stats_moduledir = $(moduledir)/stats
 stats_module_LTLIBRARIES = libstats_auth.la
 
 libstats_auth_la_LDFLAGS = -module -avoid-version
-libstats_auth_la_LIBADD = auth-stats.lo $(LIBDOVECOT)
-libstats_auth_la_DEPENDENCIES = auth-stats.lo
-libstats_auth_la_SOURCES =
+libstats_auth_la_LIBADD = $(LIBDOVECOT)
+libstats_auth_la_DEPENDENCIES = $(LIBDOVECOT_DEPS)
+libstats_auth_la_SOURCES = auth-stats.c
 
 test_programs = \
 	test-auth-cache \

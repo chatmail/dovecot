@@ -94,16 +94,20 @@ previous threads about it. Some points about it:
 
  * krb5_kuserok() is used to check if access is allowed. It may try to do the
    check by reading ~user/.k5login (good!) or ~dovecot/.k5login (bad!)
+ * Solaris uses _gss_userok() instead of krb5_kuserok()
  * v2.2+ has "k5principals" <passdb extra field>
    [PasswordDatabase.ExtraFields.txt], which is a comma separated list of
    usernames that are allowed to log in. If it's set, it bypasses the
    krb5_kuserok() check.*NOTE*: for this to work, you need a password database
-   which supports *credential lookups*. This excludes LDAP databases using
-   "auth_bind = yes". However, if LDAP BIND authentication is needed, you can
-   add a second LDAP passdb entry without "auth_bind = yes" for the sole
-   purpose of Kerberos principals mapping. This passdb doesn't need to return a
-   password attribute (and usually should'nt).
- * Solaris uses _gss_userok() instead of krb5_kuserok()
+   which supports *credential lookups*.
+    * With 2.2.13, this excludes LDAP databases using authentication binds
+      (auth_bind = yes). However, a second LDAP passdb entry without "auth_bind
+      = yes" may be added for the sole purpose of Kerberos principals mapping.
+      This passdb doesn't need to return a password attribute (and usually
+      should'nt).
+    * UPDATE: code seems to have been reworked in later versions. With 2.2.24,
+      authentication-bind LDAP databases are able to provide k5principals
+      lookups if configured with "pass_filter".
 
 Client support
 --------------
@@ -175,4 +179,4 @@ The test:
     * run command klist (list all kerberos keys) should show imap/HOSTNAME
  * /etc/hosts has to be set properly so that kerberos can find server.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-07-01 04:42)

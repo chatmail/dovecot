@@ -48,6 +48,8 @@ struct fs_vfuncs {
 
 	int (*write)(struct fs_file *file, const void *data, size_t size);
 	void (*write_stream)(struct fs_file *file);
+	/* After write_stream_finish() is called once, all the following
+	   (async) calls will have success==TRUE. */
 	int (*write_stream_finish)(struct fs_file *file, bool success);
 
 	int (*lock)(struct fs_file *file, unsigned int secs,
@@ -64,6 +66,8 @@ struct fs_vfuncs {
 				     enum fs_iter_flags flags);
 	const char *(*iter_next)(struct fs_iter *iter);
 	int (*iter_deinit)(struct fs_iter *iter);
+
+	bool (*switch_ioloop)(struct fs *fs);
 };
 
 struct fs {
@@ -115,6 +119,7 @@ struct fs_file {
 	struct timeval timing_start[FS_OP_COUNT];
 
 	unsigned int write_pending:1;
+	unsigned int writing_stream:1;
 	unsigned int metadata_changed:1;
 
 	unsigned int read_or_prefetch_counted:1;

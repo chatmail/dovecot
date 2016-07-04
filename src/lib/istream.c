@@ -97,6 +97,11 @@ const char *i_stream_get_error(struct istream *stream)
 	return strerror(stream->stream_errno);
 }
 
+const char *i_stream_get_disconnect_reason(struct istream *stream)
+{
+	return io_stream_get_disconnect_reason(stream, NULL);
+}
+
 void i_stream_close(struct istream *stream)
 {
 	i_stream_close_full(stream, TRUE);
@@ -114,7 +119,14 @@ void i_stream_set_max_buffer_size(struct istream *stream, size_t max_size)
 
 size_t i_stream_get_max_buffer_size(struct istream *stream)
 {
-	return stream->real_stream->max_buffer_size;
+	size_t max_size = 0;
+
+	do {
+		if (max_size < stream->real_stream->max_buffer_size)
+			max_size = stream->real_stream->max_buffer_size;
+		stream = stream->real_stream->parent;
+	} while (stream != NULL);
+	return max_size;
 }
 
 void i_stream_set_return_partial_line(struct istream *stream, bool set)
@@ -584,9 +596,7 @@ void i_stream_compress(struct istream_private *stream)
 
 void i_stream_grow_buffer(struct istream_private *stream, size_t bytes)
 {
-	size_t old_size;
-
-	i_assert(stream->max_buffer_size > 0);
+	size_t old_size, max_size;
 
 	old_size = stream->buffer_size;
 
@@ -596,8 +606,10 @@ void i_stream_grow_buffer(struct istream_private *stream, size_t bytes)
 	else
 		stream->buffer_size = nearest_power(stream->buffer_size);
 
-	if (stream->buffer_size > stream->max_buffer_size)
-		stream->buffer_size = stream->max_buffer_size;
+	max_size = i_stream_get_max_buffer_size(&stream->istream);
+	i_assert(max_size > 0);
+	if (stream->buffer_size > max_size)
+		stream->buffer_size = max_size;
 
 	if (stream->buffer_size <= old_size)
 		stream->buffer_size = old_size;
@@ -617,8 +629,7 @@ bool i_stream_try_alloc(struct istream_private *stream,
 		if (stream->skip > 0) {
 			/* remove the unused bytes from beginning of buffer */
                         i_stream_compress(stream);
-		} else if (stream->max_buffer_size == 0 ||
-			   stream->buffer_size < stream->max_buffer_size) {
+		} else if (stream->buffer_size < i_stream_get_max_buffer_size(&stream->istream)) {
 			/* buffer is full - grow it */
 			i_stream_grow_buffer(stream, I_STREAM_MIN_SIZE);
 		}
@@ -803,10 +814,8 @@ static int
 i_stream_default_get_size(struct istream_private *stream,
 			  bool exact, uoff_t *size_r)
 {
-	if (stream->stat(stream, exact) < 0) {
-		stream->istream.stream_errno = stream->parent->stream_errno;
+	if (stream->stat(stream, exact) < 0)
 		return -1;
-	}
 	if (stream->statbuf.st_size == -1)
 		return 0;
 

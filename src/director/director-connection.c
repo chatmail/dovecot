@@ -927,6 +927,11 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 
 			str_printfa(str, "director(%s): Host %s is being updated before previous update had finished (",
 				  conn->name, net_ip2addr(&host->ip));
+			if (host->down != down &&
+			    host->last_updown_change > last_updown_change) {
+				/* our host has a newer change. preserve it. */
+				down = host->down;
+			}
 			if (host->down != down) {
 				if (host->down)
 					str_append(str, "down -> up");
@@ -942,10 +947,6 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 			str_append(str, ") - ");
 
 			vhost_count = I_MIN(vhost_count, host->vhost_count);
-			if (host->down != down) {
-				if (host->last_updown_change <= last_updown_change)
-					down = host->last_updown_change;
-			}
 			last_updown_change = I_MAX(last_updown_change,
 						   host->last_updown_change);
 			str_printfa(str, "setting to state=%s vhosts=%u",
@@ -1238,7 +1239,7 @@ director_connection_handle_handshake(struct director_connection *conn,
 		if (conn->minor_version < DIRECTOR_VERSION_TAGS_V2 &&
 		    mail_hosts_have_tags(conn->dir->mail_hosts)) {
 			i_error("director(%s): Director version supports incompatible tags", conn->name);
-			return FALSE;
+			return -1;
 		}
 		conn->version_received = TRUE;
 		if (conn->done_pending) {
@@ -2051,9 +2052,10 @@ void director_connection_send(struct director_connection *conn,
 	} T_END;
 	ret = o_stream_send(conn->output, data, len);
 	if (ret != (off_t)len) {
-		if (ret < 0)
-			i_error("director(%s): write() failed: %m", conn->name);
-		else {
+		if (ret < 0) {
+			i_error("director(%s): write() failed: %s", conn->name,
+				o_stream_get_error(conn->output));
+		} else {
 			i_error("director(%s): Output buffer full, "
 				"disconnecting", conn->name);
 		}

@@ -154,7 +154,7 @@ void http_client_queue_fail(struct http_client_queue *queue,
 	t_array_init(&treqs, array_count(req_arr));
 	array_copy(&treqs.arr, 0, &req_arr->arr, 0, array_count(req_arr));
 	array_foreach_modifiable(&treqs, req_idx) {
-		http_client_request_error(*req_idx, status, error);
+		http_client_request_error(req_idx, status, error);
 	}
 
 	/* all queues should be empty now... unless new requests were submitted
@@ -282,7 +282,8 @@ void http_client_queue_connection_setup(struct http_client_queue *queue)
 				http_client_peer_addr2str(addr), ssl);
 
 			array_append(&queue->pending_peers, &peer, 1);
-			queue->connect_attempts++;
+			if (queue->connect_attempts++ == 0)
+				queue->first_connect_time = ioloop_timeval;
 		}
 
 		/* start soft connect time-out (but only if we have another IP left) */
@@ -401,6 +402,13 @@ http_client_queue_connection_failure(struct http_client_queue *queue,
 			queue->connect_attempts >= set->max_connect_attempts) {
 			http_client_queue_debug(queue,
 				"Failed to set up any connection; failing all queued requests");
+			if (queue->connect_attempts > 1) {
+				unsigned int total_msecs =
+					timeval_diff_msecs(&ioloop_timeval, &queue->first_connect_time);
+				reason = t_strdup_printf("%s (%u attempts in %u.%03u secs)",
+					reason, queue->connect_attempts,
+					total_msecs/1000, total_msecs%1000);
+			}
 			queue->connect_attempts = 0;
 			http_client_queue_fail(queue,
 				HTTP_CLIENT_REQUEST_ERROR_CONNECT_FAILED, reason);
@@ -528,7 +536,7 @@ http_client_queue_request_timeout(struct http_client_queue *queue)
 
 		http_client_queue_debug(queue,
 			"Request %s timed out",	http_client_request_label(req));
-		http_client_request_error(req,
+		http_client_request_error(&req,
 			HTTP_CLIENT_REQUEST_ERROR_TIMED_OUT,
 			"Timed out");
 	}
@@ -631,6 +639,7 @@ http_client_queue_delay_timeout(struct http_client_queue *queue)
 	struct http_client_request *const *reqs;
 	unsigned int count, i, finished;
 
+	timeout_remove(&queue->to_delayed);
 	io_loop_time_refresh();
 
 	finished = 0;
@@ -734,6 +743,12 @@ void http_client_queue_submit_request(struct http_client_queue *queue,
 
 		if (timeval_cmp_margin(&req->release_time,
 			&ioloop_timeval, TIMEOUT_CMP_MARGIN_USECS) > 0) {
+			http_client_queue_debug(queue,
+				"Delayed request %s%s submitted (time remaining: %d msecs)",
+				http_client_request_label(req),
+				(req->urgent ? " (urgent)" : ""),
+				timeval_diff_msecs(&req->release_time, &ioloop_timeval));
+
 			(void)array_bsearch_insert_pos(&queue->delayed_requests,
 					&req, http_client_queue_delayed_cmp, &insert_idx);
 			array_insert(&queue->delayed_requests, insert_idx, &req, 1);

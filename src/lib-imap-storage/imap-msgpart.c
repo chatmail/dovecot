@@ -166,12 +166,11 @@ imap_msgpart_get_header_fields(pool_t pool, const char *header_list,
 			value = p_strdup(pool, t_str_ucase(value));
 			array_append(fields, &value, 1);
 		}
+		/* istream-header-filter requires headers to be sorted */
+		array_sort(fields, i_strcasecmp_p);
 	} else {
 		result = -1;
 	}
-
-	/* istream-header-filter requires headers to be sorted */
-	array_sort(fields, i_strcasecmp_p);
 
 	imap_parser_unref(&parser);
 	i_stream_unref(&input);
@@ -183,6 +182,9 @@ imap_msgpart_parse_header_fields(struct imap_msgpart *msgpart,
 				 const char *header_list)
 {
 	ARRAY_TYPE(const_string) fields;
+
+	if (header_list[0] == ' ')
+		header_list++;
 
 	/* HEADER.FIELDS (list), HEADER.FIELDS.NOT (list) */
 	if (imap_msgpart_get_header_fields(msgpart->pool, header_list,
@@ -267,14 +269,14 @@ int imap_msgpart_parse(const char *section, struct imap_msgpart **msgpart_r)
 		if (section[6] == '\0') {
 			msgpart->fetch_type = FETCH_HEADER;
 			ret = 0;
-		} else if (strncmp(section, "HEADER.FIELDS ", 14) == 0) {
-			msgpart->fetch_type = FETCH_HEADER_FIELDS;
-			ret = imap_msgpart_parse_header_fields(msgpart,
-							       section+14);
-		} else if (strncmp(section, "HEADER.FIELDS.NOT ", 18) == 0) {
+		} else if (strncmp(section, "HEADER.FIELDS.NOT", 17) == 0) {
 			msgpart->fetch_type = FETCH_HEADER_FIELDS_NOT;
 			ret = imap_msgpart_parse_header_fields(msgpart,
-							       section+18);
+							       section+17);
+		} else if (strncmp(section, "HEADER.FIELDS", 13) == 0) {
+			msgpart->fetch_type = FETCH_HEADER_FIELDS;
+			ret = imap_msgpart_parse_header_fields(msgpart,
+							       section+13);
 		} else {
 			ret = -1;
 		}
@@ -393,8 +395,8 @@ imap_msgpart_get_partial_header(struct mail *mail, struct istream *mail_input,
 	if (message_get_header_size(input, &hdr_size, &has_nuls) < 0) {
 		errno = input->stream_errno;
 		mail_storage_set_critical(mail->box->storage,
-			"read(%s) failed: %s", i_stream_get_name(mail_input),
-			i_stream_get_error(mail_input));
+			"read(%s) failed: %s", i_stream_get_name(input),
+			i_stream_get_error(input));
 		i_stream_unref(&input);
 		return -1;
 	}

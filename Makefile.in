@@ -443,7 +443,8 @@ dist_pkginclude_HEADERS = \
 	dovecot-version.h
 
 EXTRA_DIST = COPYING.LGPL COPYING.MIT ChangeLog cc-wrapper.sh.in \
-	update-version.sh $(conf_DATA) $(am__append_1)
+	update-version.sh run-test-valgrind.supp $(conf_DATA) \
+	$(am__append_1)
 noinst_DATA = dovecot-config
 nodist_pkginclude_HEADERS = config.h
 aclocal_DATA = dovecot.m4

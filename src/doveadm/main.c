@@ -73,6 +73,7 @@ static void main_init(void)
 
 	doveadm_http_server_init();
 	doveadm_cmds_init();
+	doveadm_register_auth_server_commands();
 	doveadm_dump_init();
 	doveadm_mail_init();
 	dict_drivers_register_builtin();
@@ -100,6 +101,8 @@ int main(int argc, char *argv[])
 	};
 	enum master_service_flags service_flags =
 		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
+	struct master_service_settings_input input;
+	struct master_service_settings_output output;
 	const char *error;
 	int c;
 
@@ -116,8 +119,13 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (master_service_settings_read_simple(master_service, set_roots,
-						&error) < 0)
+	memset(&input, 0, sizeof(input));
+	input.roots = set_roots;
+	input.module = "doveadm";
+	input.service = "doveadm";
+
+	if (master_service_settings_read(master_service, &input, &output,
+					 &error) < 0)
 		i_fatal("Error reading configuration: %s", error);
 
 	master_service_init_log(master_service, "doveadm: ");

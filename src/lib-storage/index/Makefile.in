@@ -105,12 +105,13 @@ LTLIBRARIES = $(noinst_LTLIBRARIES)
 libstorage_index_la_LIBADD =
 am_libstorage_index_la_OBJECTS = istream-mail.lo index-attachment.lo \
 	index-attribute.lo index-mail.lo index-mail-binary.lo \
-	index-mail-headers.lo index-mailbox-size.lo index-rebuild.lo \
-	index-search.lo index-search-result.lo index-sort.lo \
-	index-sort-string.lo index-status.lo index-storage.lo \
-	index-sync.lo index-sync-changes.lo index-sync-pvt.lo \
-	index-sync-search.lo index-thread.lo index-thread-finish.lo \
-	index-thread-links.lo index-transaction.lo
+	index-mail-headers.lo index-mailbox-size.lo index-pop3-uidl.lo \
+	index-rebuild.lo index-search.lo index-search-result.lo \
+	index-sort.lo index-sort-string.lo index-status.lo \
+	index-storage.lo index-sync.lo index-sync-changes.lo \
+	index-sync-pvt.lo index-sync-search.lo index-thread.lo \
+	index-thread-finish.lo index-thread-links.lo \
+	index-transaction.lo
 libstorage_index_la_OBJECTS = $(am_libstorage_index_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -461,6 +462,7 @@ libstorage_index_la_SOURCES = \
 	index-mail-binary.c \
 	index-mail-headers.c \
 	index-mailbox-size.c \
+	index-pop3-uidl.c \
 	index-rebuild.c \
 	index-search.c \
 	index-search-result.c \
@@ -482,6 +484,7 @@ headers = \
 	index-attachment.h \
 	index-mail.h \
 	index-mailbox-size.h \
+	index-pop3-uidl.h \
 	index-rebuild.h \
 	index-search-private.h \
 	index-search-result.h \
@@ -554,6 +557,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-mail-headers.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-mail.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-mailbox-size.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-pop3-uidl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-rebuild.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-search-result.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-search.Plo@am__quote@

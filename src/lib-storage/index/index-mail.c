@@ -1499,6 +1499,8 @@ static void index_mail_close_streams_full(struct index_mail *mail, bool closing)
 	if (data->filter_stream != NULL)
 		i_stream_unref(&data->filter_stream);
 	if (data->stream != NULL) {
+		struct istream *orig_stream = data->stream;
+
 		data->destroying_stream = TRUE;
 		if (!closing && data->destroy_callback_set) {
 			/* we're replacing the stream with a new one. it's
@@ -1508,12 +1510,13 @@ static void index_mail_close_streams_full(struct index_mail *mail, bool closing)
 				index_mail_stream_destroy_callback);
 		}
 		i_stream_unref(&data->stream);
- 		if (closing) {
-			/* there must be no references to the mail when the
-			   mail is being closed. */
-			i_assert(!mail->data.destroying_stream);
-		} else {
+		/* there must be no references to the mail when the
+		   mail is being closed. */
+		if (!closing)
 			data->destroying_stream = FALSE;
+		else if (mail->data.destroying_stream) {
+			i_panic("Input stream %s unexpectedly has references",
+				i_stream_get_name(orig_stream));
 		}
 
 		data->initialized_wrapper_stream = FALSE;
@@ -2194,6 +2197,7 @@ void index_mail_set_cache_corrupted_reason(struct mail *mail,
 			"Broken %s for mail UID %u in mailbox %s: %s",
 			field_name, mail->uid, mail->box->vname, reason);
 	}
+	mail_storage_set_internal_error(mail->box->storage);
 }
 
 int index_mail_opened(struct mail *mail ATTR_UNUSED,

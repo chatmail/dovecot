@@ -1,3 +1,57 @@
+v2.2.25 2016-07-01  Timo Sirainen <tss@iki.fi>
+
+	* lmtp: Start tracking lmtp_user_concurrency_limit and reject already
+	  at RCPT TO stage. This avoids MTA unnecessarily completing DATA only
+	  to get an error.
+	* doveadm: Previously only mail settings were read from protocol
+	  doveadm { .. } section. Now all settings are.
+
+	+ quota: Added quota_over_flag_lazy_check setting. It avoids checking
+	  quota_over_flag always at startup. Instead it's checked only when
+	  quota is being read for some other purpose.
+	+ auth: Added a new auth policy service:
+	  http://wiki2.dovecot.org/Authentication/Policy
+	+ auth: Added PBKDF2 password scheme
+	+ auth: Added %{auth_user}, %{auth_username} and %{auth_domain}
+	+ auth: Added ":remove" suffix to extra field names to remove them.
+	+ auth: Added "delay_until=<timestamp>[+<max random secs>]" passdb
+	  extra field. The auth will wait until <timestamp> and optionally some
+	  randomness and then return success.
+	+ dict proxy: Added idle_msecs=<n> parameter. Support async operations.
+	+ Performance improvements for handling large mailboxes.
+	+ Added lib-dcrypt API for providing cryptographic functions.
+	+ Added "doveadm mailbox update" command
+	+ imap commands' output now includes timing spent on the "syncing"
+	  stage if it's larger than 0.
+	+ cassandra: Added metrics=<path> to connect setting to output internal
+	  statistics in JSON format every second to <path>.
+	+ doveadm mailbox delete: Added -e parameter to delete only empty
+	  mailboxes. Added --unsafe option to quickly delete a mailbox,
+	  bypassing lazy_expunge and quota plugins.
+	+ doveadm user & auth cache flush are now available via doveadm-server.
+	+ doveadm service stop <services> will stop specified services while
+	  leaving the rest of Dovecot running.
+	+ quota optimization: Avoid reading mail sizes for backends which
+	  don't need them (count, fs, dirsize)
+	+ Added mailbox { autoexpunge_max_mails=<n> } setting.
+	+ Added welcome plugin: http://wiki2.dovecot.org/Plugins/Welcome
+	+ fts: Added fts_autoindex_exclude setting.
+	- v2.2.24's MIME parser was assert-crashing on mails having truncated
+	  MIME headers.
+	- auth: With multiple userdbs the final success/failure result wasn't
+	  always correct. The last userdb's result was always used.
+	- doveadm backup was sometimes deleting entire mailboxes unnecessarily.
+	- doveadm: Command -parameters weren't being sent to doveadm-server.
+	- If dovecot.index read failed e.g. because mmap() reached VSZ limit,
+	  an empty index could have been opened instead, corrupting the
+	  mailbox state.
+	- imapc: Fixed EXPUNGE handling when imapc_features didn't have modseq.
+	- lazy-expunge: Fixed a crash when copying failed. Various other fixes.
+	- fts-lucene: Fixed crash on index rescan.
+	- auth_stats=yes produced broken output
+	- dict-ldap: Various fixes
+	- dict-sql: NULL values crashed. Now they're treated as "not found".
+
 v2.2.24 2016-04-26  Timo Sirainen <tss@iki.fi>
 
 	* doveconf now warns if it sees a global setting being changed when

@@ -37,7 +37,7 @@ shortcoming long ago, and all modern mail clients and servers support it by
 now. You should consider implementing ESMTP AUTH
 [http://en.wikipedia.org/wiki/SMTP-AUTH] in your mail transport/submission
 agent, and using it in your clients, rather than using POP-before-SMTP. See
-also <PostfixAndDovecotSASL.txt> or <EximAndDovecotSASL.txt>.
+also <HowTo.PostfixAndDovecotSASL.txt> or <HowTo.EximAndDovecotSASL.txt>.
 
 Problems with POP-before-SMTP
 -----------------------------
@@ -360,4 +360,4 @@ Restart Dovecot. Verify that your IMAP client still works. Verify that
 relay-ctrl has recorded your client IP. Hook 'relay-ctrl-check' into your SMTP
 service, as documented in the relay-ctrl README, and you're done.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-07-01 04:43)

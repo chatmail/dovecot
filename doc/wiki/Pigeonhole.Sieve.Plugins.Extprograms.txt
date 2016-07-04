@@ -111,7 +111,7 @@ a message (for the filter command) or string data (for the execute command) to
 the Sieve interpreter. Standard error is written to the LDA log file.
 
 The three extensions introduced by this plugin - 'vnd.dovecot.pipe',
-'vnd.dovecot.filter' and 'vnd.dovecot.pipe' - each have separate but similar
+'vnd.dovecot.filter' and 'vnd.dovecot.execute' - each have separate but similar
 configuration. The following configuration settings are used, for which
 "<extension>" in the setting name is replaced by either 'pipe', 'filter' or
 'execute' depending on which extension is being configured:
@@ -195,4 +195,4 @@ Read the specification (v0.3 plugin
 [http://hg.rename-it.nl/dovecot-2.2-pigeonhole/raw-file/tip/doc/rfc/spec-bosch-sieve-extprograms.txt])
 for detailed information on how to use the new language extensions.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-07-01 04:43)
