@@ -1,3 +1,16 @@
+dovecot (1:2.2.25-1) unstable; urgency=medium
+
+  * [cc29a81] Imported Upstream version 2.2.25
+  * [d19bcca] Updated pigeonhole patch to 0.4.14
+  * [16db179] Merged in some features of the Ubuntu dovecot package.
+    + dovecot-core: added lsb-base dependency.
+    + dovecot-core: Added apport hook.
+    + dovecot-imapd,dovecot-pop3d: Added ufw profiles.
+    Thanks to Christian Erhardt <christian.ehrhardt@canonical.com>
+    (Closes: #828864)
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 01 Jul 2016 17:07:03 -0400
+
 dovecot (1:2.2.24-1) unstable; urgency=medium
 
   * [26020b6] Imported Upstream version 2.2.24 (Closes: #818652)
