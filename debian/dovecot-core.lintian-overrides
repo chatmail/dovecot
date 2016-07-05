@@ -21,3 +21,4 @@ dovecot-core: non-standard-dir-perm etc/dovecot/private/ 0700 != 0755
 dovecot-core: package-contains-empty-directory usr/share/dovecot/protocols.d/
 dovecot-core: package-contains-empty-directory usr/lib/dovecot/modules/dict/
 dovecot-core: package-contains-empty-directory usr/lib/dovecot/modules/settings/
+dovecot-core: spelling-error-in-readme-debian dovenull dovenull (duplicate word) dovenull
