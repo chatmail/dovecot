@@ -1,3 +1,10 @@
+dovecot (1:2.2.25-2) UNRELEASED; urgency=medium
+
+  * [900ed0f] Move libdovecot-ldap and libdict_ldap to dovecot-ldap (Closes:
+    #830135).
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 07 Jul 2016 10:17:58 +0200
+
 dovecot (1:2.2.25-1) unstable; urgency=medium
 
   * [cc29a81] Imported Upstream version 2.2.25

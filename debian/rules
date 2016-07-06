@@ -45,6 +45,8 @@ sqlite_files = usr/lib/dovecot/modules/auth/libdriver_sqlite* \
 gssapi_files = usr/lib/dovecot/modules/auth/libmech_gssapi*
 
 ldap_files = usr/lib/dovecot/modules/auth/libauthdb_ldap* \
+	     usr/lib/dovecot/modules/dict/libdict_ldap* \
+	     usr/lib/dovecot/libdovecot-ldap* \
 	     usr/share/dovecot/*-ldap.conf.ext \
 	     usr/share/dovecot/conf.d/*-ldap.conf.ext
 
