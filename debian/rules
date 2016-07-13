@@ -62,7 +62,8 @@ solr_files = usr/lib/dovecot/modules/lib??_fts_solr_*
 lucene_files = usr/lib/dovecot/modules/lib??_fts_lucene_*
 
 dev_files = usr/include/* \
-	    usr/lib/dovecot/dovecot-config
+	    usr/lib/dovecot/dovecot-config \
+	    usr/share/aclocal/*.m4
 
 %:
 	dh $@ --with=systemd,autotools-dev
@@ -141,6 +142,7 @@ override_dh_install:
 			$(call MOVE,$(file),$(package))))
 	
 	rmdir $(CORE_DIR)/usr/include
+	rmdir $(CORE_DIR)/usr/share/aclocal
 	grep ABI_VERSION config.h \
 		| perl -ne '/"(.+)\(.+\)"/ && print $$1' \
 		| tr '[A-Z]' '[a-z]' > $(PKG_DIR:PKG=dev)/usr/share/dovecot/dovecot-abi
