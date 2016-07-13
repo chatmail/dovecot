@@ -3,6 +3,7 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+SHELL=/bin/bash -O extglob
 PIGEONHOLE_DIR=$(CURDIR)/pigeonhole
 
 export DEB_BUILD_MAINT_OPTIONS=hardening=+all
@@ -18,7 +19,7 @@ MOVE=mv $(CORE_DIR)/$(1) $(PKG_DIR:PKG=$(2))/$(dir $(1));
 # <addon>_files will be automatically moved from dovecot's tree to the
 # respective package.
 imapd_files = usr/lib/dovecot/imap* \
-	      usr/lib/dovecot/modules/lib??_imap* \
+	      usr/lib/dovecot/modules/lib??_imap_!(sieve*) \
 	      usr/share/dovecot/conf.d/??-imap*
 
 pop3d_files = usr/lib/dovecot/pop3* \
@@ -52,6 +53,7 @@ ldap_files = usr/lib/dovecot/modules/auth/libauthdb_ldap* \
 
 sieve_files = usr/bin/sieve* \
 	      usr/lib/dovecot/modules/lib??_sieve* \
+	      usr/lib/dovecot/modules/lib??_imap_sieve* \
 	      usr/lib/dovecot/modules/doveadm/lib??_doveadm_sieve* \
 	      usr/lib/dovecot/modules/sieve \
 	      usr/lib/dovecot/libdovecot-sieve* \
