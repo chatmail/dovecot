@@ -2,16 +2,18 @@ From: Jaldhar H. Vyas <jaldhar@debian.org>
 Date: Fri, 16 Sep 2011 00:55:02 +0200
 Subject: default location for user mailboxes
 Description: Set a default for the case where a user has no mail so auto-
- detection of mailboxes doesn't work.  See also: chgrp-error.patch
-Bug: #623440
+ detection of mailboxes doesn't work.  mail_access_groups is also set to mail
+ so that dovecot can access an mbox in the default location of /var/mail.
+Bug: #623440, #824212
+Last-Update: 2016-07-22
 ---
- doc/example-config/conf.d/10-mail.conf |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ doc/example-config/conf.d/10-mail.conf | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-Index: dovecot/doc/example-config/conf.d/10-mail.conf
-===================================================================
---- dovecot.orig/doc/example-config/conf.d/10-mail.conf	2013-08-19 11:23:48.532344413 -0400
-+++ dovecot/doc/example-config/conf.d/10-mail.conf	2013-08-19 11:23:48.528344521 -0400
+diff --git a/doc/example-config/conf.d/10-mail.conf b/doc/example-config/conf.d/10-mail.conf
+index ea4c9e0..90a57e0 100644
+--- a/doc/example-config/conf.d/10-mail.conf
++++ b/doc/example-config/conf.d/10-mail.conf
 @@ -27,7 +27,7 @@
  #
  # <doc/wiki/MailLocation.txt>
@@ -21,3 +23,12 @@ Index: dovecot/doc/example-config/conf.d/10-mail.conf
  
  # If you need to set multiple mailbox locations or want to change default
  # namespace settings, you can do it by defining namespace sections.
+@@ -118,7 +118,7 @@ namespace inbox {
+ # dangerous to set these if users can create symlinks (e.g. if "mail" group is
+ # set here, ln -s /var/mail ~/mail/var could allow a user to delete others'
+ # mailboxes, or ln -s /secret/shared/box ~/mail/mybox would allow reading it).
+-#mail_access_groups =
++mail_access_groups = mail
+ 
+ # Allow full filesystem access to clients. There's no access checks other than
+ # what the operating system does for the active UID/GID. It works with both
