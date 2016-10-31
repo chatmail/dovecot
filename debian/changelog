@@ -1,7 +1,20 @@
-dovecot (1:2.2.25-2) UNRELEASED; urgency=medium
+dovecot (1:2.2.26.0-1) unstable; urgency=medium
 
-  * [900ed0f] Move libdovecot-ldap and libdict_ldap to dovecot-ldap (Closes:
+  [ Apollon Oikonomopoulos ]
+  * [18fc181] New upstream version 2.2.26.0 (Closes: #828286, #834837)
+  * [3ecfd3c] Update pigeonhole to 0.4.16
+  * [61ff825] Move libdovecot-ldap and libdict_ldap to dovecot-ldap (Closes:
     #830135).
+  * [b3a1650] Ubuntu: disable -Bsymbolic-functions ld flag.
+    Thanks to Christian Ehrhardt <christian.ehrhardt@canonical.com>
+    (Closes: #842151) (LP: #1636781)
+  * [5828ab1] B-D on default-libmysqlclient-dev (but keep plain
+    libmysqlclient-dev as an alternative to ease backports).
+
+  [ Jaldhar H. Vyas ]
+  * [60808eb] Move aclocal *.m4 files into -dev package.
+  * [52fd869] Move lib95_imap_sieve_plugin.so into dovecot-sieve (Closes:
+    #832046).
 
  -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 07 Jul 2016 10:17:58 +0200
 
