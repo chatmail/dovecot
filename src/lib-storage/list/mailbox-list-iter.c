@@ -57,6 +57,8 @@ static int mailbox_list_match_anything(struct ns_list_iterate_context *ctx,
 				       struct mail_namespace *ns,
 				       const char *prefix);
 
+static struct mailbox_list_iterate_context mailbox_list_iter_failed;
+
 struct mailbox_list_iterate_context *
 mailbox_list_iter_init(struct mailbox_list *list, const char *pattern,
 		       enum mailbox_list_iter_flags flags)
@@ -162,18 +164,17 @@ mailbox_list_iter_init_multiple(struct mailbox_list *list,
 				enum mailbox_list_iter_flags flags)
 {
 	struct mailbox_list_iterate_context *ctx;
-	int ret = 0;
 
 	i_assert(*patterns != NULL);
 
 	if ((flags & (MAILBOX_LIST_ITER_SELECT_SUBSCRIBED |
-		      MAILBOX_LIST_ITER_RETURN_SUBSCRIBED)) != 0)
-		ret = mailbox_list_iter_subscriptions_refresh(list);
+		      MAILBOX_LIST_ITER_RETURN_SUBSCRIBED)) != 0) {
+		if (mailbox_list_iter_subscriptions_refresh(list) < 0)
+			return &mailbox_list_iter_failed;
+	}
 
 	ctx = list->v.iter_init(list, patterns, flags);
-	if (ret < 0)
-		ctx->failed = TRUE;
-	else if ((flags & MAILBOX_LIST_ITER_NO_AUTO_BOXES) == 0)
+	if ((flags & MAILBOX_LIST_ITER_NO_AUTO_BOXES) == 0)
 		mailbox_list_iter_init_autocreate(ctx);
 	return ctx;
 }
@@ -1022,6 +1023,8 @@ mailbox_list_iter_next(struct mailbox_list_iterate_context *ctx)
 {
 	const struct mailbox_info *info;
 
+	if (ctx == &mailbox_list_iter_failed)
+		return NULL;
 	do {
 		T_BEGIN {
 			if (ctx->autocreate_ctx != NULL)
@@ -1039,6 +1042,8 @@ int mailbox_list_iter_deinit(struct mailbox_list_iterate_context **_ctx)
 
 	*_ctx = NULL;
 
+	if (ctx == &mailbox_list_iter_failed)
+		return -1;
 	return ctx->list->v.iter_deinit(ctx);
 }
 

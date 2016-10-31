@@ -200,14 +200,14 @@ bool dcrypt_keypair_generate(struct dcrypt_keypair *pair_r, enum dcrypt_key_type
 	return dcrypt_vfs->generate_keypair(pair_r, kind, bits, curve, error_r);
 }
 
-bool dcrypt_key_load_private(struct dcrypt_private_key **key_r, enum dcrypt_key_format format, const char *data,
+bool dcrypt_key_load_private(struct dcrypt_private_key **key_r, const char *data,
 	const char *password, struct dcrypt_private_key *dec_key, const char **error_r)
 {
-	return dcrypt_vfs->load_private_key(key_r, format, data, password, dec_key, error_r);
+	return dcrypt_vfs->load_private_key(key_r, data, password, dec_key, error_r);
 }
-bool dcrypt_key_load_public(struct dcrypt_public_key **key_r, enum dcrypt_key_format format, const char *data, const char **error_r)
+bool dcrypt_key_load_public(struct dcrypt_public_key **key_r, const char *data, const char **error_r)
 {
-	return dcrypt_vfs->load_public_key(key_r, format, data, error_r);
+	return dcrypt_vfs->load_public_key(key_r, data, error_r);
 }
 bool dcrypt_key_store_private(struct dcrypt_private_key *key, enum dcrypt_key_format format, const char *cipher, buffer_t *destination,
 	const char *password, struct dcrypt_public_key *enc_key, const char **error_r)
@@ -255,17 +255,25 @@ bool dcrypt_key_id_private_old(struct dcrypt_private_key *key, buffer_t *result,
 {
 	return dcrypt_vfs->private_key_id_old(key, result, error_r);
 }
-void dcrypt_keypair_free(struct dcrypt_keypair *keypair)
+void dcrypt_keypair_unref(struct dcrypt_keypair *keypair)
 {
-	dcrypt_vfs->free_keypair(keypair);
+	dcrypt_vfs->unref_keypair(keypair);
 }
-void dcrypt_key_free_public(struct dcrypt_public_key **key)
+void dcrypt_key_ref_public(struct dcrypt_public_key *key)
 {
-	dcrypt_vfs->free_public_key(key);
+	dcrypt_vfs->ref_public_key(key);
 }
-void dcrypt_key_free_private(struct dcrypt_private_key **key)
+void dcrypt_key_ref_private(struct dcrypt_private_key *key)
 {
-	dcrypt_vfs->free_private_key(key);
+	dcrypt_vfs->ref_private_key(key);
+}
+void dcrypt_key_unref_public(struct dcrypt_public_key **key)
+{
+	dcrypt_vfs->unref_public_key(key);
+}
+void dcrypt_key_unref_private(struct dcrypt_private_key **key)
+{
+	dcrypt_vfs->unref_private_key(key);
 }
 
 bool dcrypt_rsa_encrypt(struct dcrypt_public_key *key, const unsigned char *data, size_t data_len, buffer_t *result, const char **error_r)

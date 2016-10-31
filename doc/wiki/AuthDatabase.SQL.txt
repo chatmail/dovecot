@@ -10,19 +10,33 @@ Contents
 
  1. SQL
 
-     1. Password database lookups
+     1. Dovecot configuration
 
-     2. Password verification by SQL server
+     2. Password database lookups
 
-     3. User database lookups
+     3. Password verification by SQL server
 
-     4. User iteration
+     4. User database lookups
 
-     5. Prefetching
+     5. User iteration
 
-     6. High availability
+     6. Prefetching
 
-     7. Examples
+     7. High availability
+
+     8. Examples
+
+Dovecot configuration
+---------------------
+
+'dovecot.conf':
+
+---%<-------------------------------------------------------------------------
+passdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql.conf.ext
+}
+---%<-------------------------------------------------------------------------
 
 Password database lookups
 -------------------------
@@ -223,4 +237,4 @@ Note that you will have to change the password encryption in Horde to
 MD5-CRYPT. Also, the example above requires a 'dovecot' user in PostgreSQL with
 read (SELECT) privileges on the 'horde_users' table.
 
-(This file was created from the wiki on 2016-07-01 04:42)
+(This file was created from the wiki on 2016-10-27 04:43)

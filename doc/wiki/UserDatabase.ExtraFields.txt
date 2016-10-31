@@ -110,4 +110,4 @@ user2:{plain}pass2:1001:1001::/home/user2::userdb_mail=maildir:~/Maildir
 userdb_quota_rule=*:storage=200M
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-07-01 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

@@ -50,4 +50,4 @@ Note that these settings do not directly affect the memory usage:
  * 'service { process_limit, client_limit } ': These are mostly to avoid DoS
    attacks using up all your memory.
 
-(This file was created from the wiki on 2016-07-01 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

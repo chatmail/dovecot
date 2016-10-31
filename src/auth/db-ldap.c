@@ -993,7 +993,41 @@ static void ldap_connection_timeout(struct ldap_connection *conn)
 	db_ldap_conn_close(conn);
 }
 
-static int db_ldap_bind(struct ldap_connection *conn)
+#ifdef HAVE_LDAP_SASL
+static int db_ldap_bind_sasl(struct ldap_connection *conn)
+{
+	struct db_ldap_sasl_bind_context context;
+	int ret;
+
+	memset(&context, 0, sizeof(context));
+	context.authcid = conn->set.dn;
+	context.passwd = conn->set.dnpass;
+	context.realm = conn->set.sasl_realm;
+	context.authzid = conn->set.sasl_authz_id;
+
+	/* There doesn't seem to be a way to do SASL binding
+	   asynchronously.. */
+	ret = ldap_sasl_interactive_bind_s(conn->ld, NULL,
+					   conn->set.sasl_mech,
+					   NULL, NULL, LDAP_SASL_QUIET,
+					   sasl_interact, &context);
+	if (db_ldap_connect_finish(conn, ret) < 0)
+		return -1;
+	
+	conn->conn_state = LDAP_CONN_STATE_BOUND_DEFAULT;
+
+	return 0;
+}
+#else
+static int db_ldap_bind_sasl(struct ldap_connection *conn ATTR_UNUSED)
+{
+	i_unreached(); /* already checked at init */
+
+	return -1;
+}
+#endif
+
+static int db_ldap_bind_simple(struct ldap_connection *conn)
 {
 	int msgid;
 
@@ -1019,6 +1053,19 @@ static int db_ldap_bind(struct ldap_connection *conn)
 		timeout_remove(&conn->to);
 	conn->to = timeout_add(DB_LDAP_REQUEST_LOST_TIMEOUT_SECS*1000,
 			       ldap_connection_timeout, conn);
+	return 0;
+}
+
+static int db_ldap_bind(struct ldap_connection *conn)
+{
+	if (conn->set.sasl_bind) {
+		if (db_ldap_bind_sasl(conn) < 0)
+			return -1;
+	} else {
+		if (db_ldap_bind_simple(conn) < 0)
+			return -1;
+	}
+
 	return 0;
 }
 
@@ -1194,32 +1241,9 @@ int db_ldap_connect(struct ldap_connection *conn)
 #endif
 	}
 
-	if (conn->set.sasl_bind) {
-#ifdef HAVE_LDAP_SASL
-		struct db_ldap_sasl_bind_context context;
+	if (db_ldap_bind(conn) < 0)
+		return -1;
 
-		memset(&context, 0, sizeof(context));
-		context.authcid = conn->set.dn;
-		context.passwd = conn->set.dnpass;
-		context.realm = conn->set.sasl_realm;
-		context.authzid = conn->set.sasl_authz_id;
-
-		/* There doesn't seem to be a way to do SASL binding
-		   asynchronously.. */
-		ret = ldap_sasl_interactive_bind_s(conn->ld, NULL,
-						   conn->set.sasl_mech,
-						   NULL, NULL, LDAP_SASL_QUIET,
-						   sasl_interact, &context);
-		if (db_ldap_connect_finish(conn, ret) < 0)
-			return -1;
-#else
-		i_unreached(); /* already checked at init */
-#endif
-		conn->conn_state = LDAP_CONN_STATE_BOUND_DEFAULT;
-	} else {
-		if (db_ldap_bind(conn) < 0)
-			return -1;
-	}
 	if (debug) {
 		if (gettimeofday(&end, NULL) == 0) {
 			int msecs = timeval_diff_msecs(&end, &start);

@@ -315,6 +315,33 @@ static void str_free_i(string_t *str)
     str_free(&str);
 }
 
+static int push_notification_driver_ox_get_mailbox_status
+(struct push_notification_driver_txn *dtxn,
+ struct mailbox_status *r_box_status)
+{
+    /* The already opened mailbox. We cannot use or sync it, because we are within a save transaction. */
+    struct mailbox *mbox = dtxn->ptxn->mbox;
+    struct mailbox *box;
+    int ret;
+
+    /* open and sync new instance of the same mailbox to get most recent status */
+    box = mailbox_alloc(mailbox_get_namespace(mbox)->list, mailbox_get_name(mbox), MAILBOX_FLAG_READONLY);
+    if (mailbox_sync(box, 0) < 0) {
+        i_error("mailbox_sync(%s) failed: %s", mailbox_get_vname(mbox), mailbox_get_last_error(box, NULL));
+        ret = -1;
+    } else {
+        /* only 'unseen' is needed at the moment */
+        mailbox_get_open_status(box, STATUS_UNSEEN, r_box_status);
+        push_notification_driver_debug(OX_LOG_LABEL, dtxn->ptxn->muser, "Got status of mailbox '%s': (unseen: %u)",
+                                       mailbox_get_vname(box), r_box_status->unseen);
+        ret = 0;
+    }
+
+    mailbox_free(&box);
+    return ret;
+}
+
+
 static void push_notification_driver_ox_process_msg
 (struct push_notification_driver_txn *dtxn,
  struct push_notification_txn_msg *msg)
@@ -328,6 +355,12 @@ static void push_notification_driver_ox_process_msg
     struct push_notification_driver_ox_txn *txn =
         (struct push_notification_driver_ox_txn *)dtxn->context;
     struct mail_user *user = dtxn->ptxn->muser;
+    struct mailbox_status box_status;
+    bool status_success = TRUE;
+
+    if (push_notification_driver_ox_get_mailbox_status(dtxn, &box_status) < 0) {
+        status_success = FALSE;
+    }
 
     messagenew = push_notification_txn_msg_get_eventdata(msg, "MessageNew");
     if (messagenew == NULL) {
@@ -353,18 +386,23 @@ static void push_notification_driver_ox_process_msg
     str_printfa(str, "\",\"imap-uidvalidity\":%u,\"imap-uid\":%u",
                 msg->uid_validity, msg->uid);
     if (messagenew->from != NULL) {
-	str_append(str, ",\"from\":\"");
-	json_append_escaped(str, messagenew->from);
+        str_append(str, ",\"from\":\"");
+        json_append_escaped(str, messagenew->from);
     }
     if (messagenew->subject != NULL) {
-	str_append(str, "\",\"subject\":\"");
-	json_append_escaped(str, messagenew->subject);
+        str_append(str, "\",\"subject\":\"");
+        json_append_escaped(str, messagenew->subject);
     }
     if (messagenew->snippet != NULL) {
-	str_append(str, "\",\"snippet\":\"");
-	json_append_escaped(str, messagenew->snippet);
+        str_append(str, "\",\"snippet\":\"");
+        json_append_escaped(str, messagenew->snippet);
     }
-    str_append(str, "\"}");
+    if (status_success) {
+        str_printfa(str, "\",\"unseen\":%u", box_status.unseen);
+    } else {
+        str_append(str, "\"");
+    }
+    str_append(str, "}");
 
     push_notification_driver_debug(OX_LOG_LABEL, user,
                                    "Sending notification: %s", str_c(str));

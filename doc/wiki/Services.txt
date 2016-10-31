@@ -122,8 +122,10 @@ Service limits
 --------------
 
 client_limit:
-  Maximum number of simultaneous client connections. If set to 0,
-  *default_client_limit* is used instead.
+  Maximum number of simultaneous client connections per process. Once this
+  number of connections is received, the next incoming connection will prompt
+  Dovecot to spawn another process. If set to 0,*default_client_limit* is used
+  instead.
 
 service_count:
   Number of client connections to handle until the process kills itself. 0
@@ -324,8 +326,13 @@ wasteful for each mail process to separately create a connection to SQL, so
 usually they go through the "proxy" dict backend. These proxy connections are
 the client connections of dict processes.
 
- * *client_limit=1*, because dict lookups are synchronous and the client is
-   supposed to disconnect immediately after the lookup.
+ * dict / Synchronous lookups (e.g. mysql):
+    * *client_limit=1*, because dict lookups are synchronous and the client is
+      supposed to disconnect immediately after the lookup.
+ * dict-async / Asynchronous lookups (e.g. pgsql, cassandra, ldap):
+    * *process_limit* should commonly be the same as number of CPU cores.
+      Although with Cassandra this may not be true, because Cassandra library
+      can use multiple threads.
  * *user=$default_internal_user*, because the proxy dict lookups are typically
    SQL lookups, which require no filesystem access. (The SQL config files are
    read while still running as root.)
@@ -487,4 +494,4 @@ Mail process statistics tracking. Its behavior is very similar to the anvil
 process, but anvil's data is of higher importance and lower traffic than stats,
 so stats are tracked in a separate process.
 
-(This file was created from the wiki on 2016-07-01 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

@@ -6,7 +6,7 @@
 #include "auth-request.h"
 
 struct auth_request_var_expand_ctx {
-	struct auth_request *auth_request;
+	const struct auth_request *auth_request;
 	auth_request_escape_func_t *escape_func;
 };
 
@@ -45,6 +45,7 @@ auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_COUNT+1] = {
 	{ '\0', NULL, "auth_user" },
 	{ '\0', NULL, "auth_username" },
 	{ '\0', NULL, "auth_domain" },
+	{ '\0', NULL, "local_name" },
 	/* be sure to update AUTH_REQUEST_VAR_TAB_COUNT */
 	{ '\0', NULL, NULL }
 };
@@ -167,6 +168,10 @@ auth_request_get_var_expand_table_full(const struct auth_request *auth_request,
 	tab[32].value = strchr(auth_user, '@');
 	if (tab[32].value != NULL)
 		tab[32].value = escape_func(tab[32].value+1, auth_request);
+	if (auth_request->local_name != NULL)
+		tab[33].value = escape_func(auth_request->local_name, auth_request);
+	else
+		tab[33].value = "";
 	return ret_tab;
 }
 
@@ -225,7 +230,7 @@ const struct var_expand_func_table auth_request_var_funcs_table[] = {
 };
 
 void auth_request_var_expand(string_t *dest, const char *str,
-			     struct auth_request *auth_request,
+			     const struct auth_request *auth_request,
 			     auth_request_escape_func_t *escape_func)
 {
 	auth_request_var_expand_with_table(dest, str, auth_request,
@@ -234,7 +239,7 @@ void auth_request_var_expand(string_t *dest, const char *str,
 }
 
 void auth_request_var_expand_with_table(string_t *dest, const char *str,
-					struct auth_request *auth_request,
+					const struct auth_request *auth_request,
 					const struct var_expand_table *table,
 					auth_request_escape_func_t *escape_func)
 {
@@ -249,7 +254,7 @@ void auth_request_var_expand_with_table(string_t *dest, const char *str,
 
 const char *
 t_auth_request_var_expand(const char *str,
-			  struct auth_request *auth_request,
+			  const struct auth_request *auth_request,
 			  auth_request_escape_func_t *escape_func)
 {
 	string_t *dest = t_str_new(128);

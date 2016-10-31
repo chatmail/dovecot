@@ -14,4 +14,11 @@ Setting default changes
 
  * mdbox_rotate_size=2M -> 10M
 
-(This file was created from the wiki on 2016-07-01 04:43)
+Diffie-Heffman parameters for SSL
+---------------------------------
+
+ * dd if=/var/lib/dovecot/ssl-parameters.dat bs=1 skip=88 | openssl dh -inform
+   der> /etc/dovecot/dh.pem
+ * ssl_dh=</etc/dovecot/dh.pem
+
+(This file was created from the wiki on 2016-10-27 04:44)

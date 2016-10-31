@@ -7,6 +7,7 @@
 #include "iostream.h"
 #include "istream.h"
 #include "ostream.h"
+#include "iostream-rawlog.h"
 #include "crc32.h"
 #include "str.h"
 #include "llist.h"
@@ -400,6 +401,11 @@ int client_create(int fd_in, int fd_out, const char *session_id,
 	o_stream_set_no_error_handling(client->output, TRUE);
 	o_stream_set_flush_callback(client->output, client_output, client);
 
+	if (set->rawlog_dir[0] != '\0') {
+		(void)iostream_rawlog_create(set->rawlog_dir, &client->input,
+					     &client->output);
+	}
+
 	p_array_init(&client->module_contexts, client->pool, 5);
 	client->io = io_add_istream(client->input, client_input, client);
         client->last_input = ioloop_time;
@@ -550,7 +556,7 @@ static const char *client_stats(struct client *client)
 	tab[2].value = dec2str(client->retr_bytes);
 	tab[3].value = dec2str(client->retr_count);
 	tab[4].value = client->delete_success ?
-		dec2str(client->deleted_count) : 0;
+		dec2str(client->deleted_count) : "0";
 	tab[5].value = dec2str(client->messages_count);
 	tab[6].value = dec2str(client->total_size);
 	tab[7].value = dec2str(client->input->v_offset);
@@ -562,7 +568,7 @@ static const char *client_stats(struct client *client)
 		tab[9].value = "";
 	tab[10].value = client->session_id;
 	tab[11].value = client->delete_success ?
-		dec2str(client->deleted_size) : 0;
+		dec2str(client->deleted_size) : "0";
 
 	str = t_str_new(128);
 	var_expand(str, client->set->pop3_logout_format, tab);

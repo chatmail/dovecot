@@ -24,10 +24,7 @@ userdb {
 Dict configuration
 ------------------
 
-See the 'dovecot-dict-auth.conf.ext' file from example-config for full list of
-configuration options. Basically you need these:
-
-'/etc/dovecot/dovecot-dict-auth.conf.ext':
+You can use userdb: prefix for accessing userdb variables (v2.2.26+).
 
 ---%<-------------------------------------------------------------------------
 uri = redis:host=127.0.0.1:port=6379
@@ -36,6 +33,18 @@ password_key = dovecot/passdb/%u
 user_key = dovecot/userdb/%u
 iterate_disable = yes
 default_pass_scheme = plain
+
+## or the new syntax
+
+key passdb {
+  key = dovecot/passdb/%u
+  passdb_objects = passdb
+}
+
+key userdb {
+  key = dovecot/passdb/%u
+  userdb_objects = userdb
+}
 ---%<-------------------------------------------------------------------------
 
 Example values
@@ -231,4 +240,4 @@ sub pre_server_close_hook {
 __END__
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-07-01 04:42)
+(This file was created from the wiki on 2016-10-27 04:43)

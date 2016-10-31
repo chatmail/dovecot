@@ -182,6 +182,8 @@ struct quota_transaction_context {
 	unsigned int sync_transaction:1;
 	/* TRUE if all roots have auto_updating=TRUE */
 	unsigned int auto_updating:1;
+	/* Quota doesn't need to be updated within this transaction. */
+	unsigned int no_quota_updates:1;
 };
 
 /* Register storage to all user's quota roots. */
@@ -208,5 +210,6 @@ bool quota_warning_match(const struct quota_warning_rule *w,
 			 uint64_t bytes_before, uint64_t bytes_current,
 			 uint64_t count_before, uint64_t count_current);
 bool quota_transaction_is_over(struct quota_transaction_context *ctx, uoff_t size);
+int quota_transaction_set_limits(struct quota_transaction_context *ctx);
 
 #endif

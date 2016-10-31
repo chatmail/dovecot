@@ -128,4 +128,4 @@ sieve_ldap_script_attr = mailSieveRuleSource
 sieve_ldap_mod_attr = modifyTimestamp
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-07-01 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

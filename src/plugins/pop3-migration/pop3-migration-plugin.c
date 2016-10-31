@@ -176,29 +176,26 @@ pop3_header_filter_callback(struct header_filter_istream *input ATTR_UNUSED,
 }
 
 int pop3_migration_get_hdr_sha1(uint32_t mail_seq, struct istream *input,
-				uoff_t hdr_size,
 				unsigned char sha1_r[STATIC_ARRAY SHA1_RESULTLEN],
 				bool *have_eoh_r)
 {
-	struct istream *input2;
 	const unsigned char *data;
 	size_t size;
+	struct message_header_hash_context hash_ctx;
 	struct sha1_ctxt sha1_ctx;
 	struct pop3_hdr_context hdr_ctx;
 
 	memset(&hdr_ctx, 0, sizeof(hdr_ctx));
-	input2 = i_stream_create_limit(input, hdr_size);
 	/* hide headers that might change or be different in IMAP vs. POP3 */
-	input = i_stream_create_header_filter(input2,
+	input = i_stream_create_header_filter(input, HEADER_FILTER_HIDE_BODY |
 				HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR,
 				hdr_hash_skip_headers,
 				N_ELEMENTS(hdr_hash_skip_headers),
 				pop3_header_filter_callback, &hdr_ctx);
-	i_stream_unref(&input2);
 
 	sha1_init(&sha1_ctx);
 	while (i_stream_read_data(input, &data, &size, 0) > 0) {
-		message_header_hash_more(&hash_method_sha1, &sha1_ctx, 2,
+		message_header_hash_more(&hash_ctx, &hash_method_sha1, &sha1_ctx, 2,
 					 data, size);
 		i_stream_skip(input, size);
 	}
@@ -234,20 +231,18 @@ static int
 get_hdr_sha1(struct mail *mail, unsigned char sha1_r[STATIC_ARRAY SHA1_RESULTLEN])
 {
 	struct istream *input;
-	struct message_size hdr_size;
 	const char *errstr;
 	enum mail_error error;
 	bool have_eoh;
+	int ret;
 
-	if (mail_get_hdr_stream(mail, &hdr_size, &input) < 0) {
+	if (mail_get_hdr_stream(mail, NULL, &input) < 0) {
 		errstr = mailbox_get_last_error(mail->box, &error);
 		i_error("pop3_migration: Failed to get header for msg %u: %s",
 			mail->seq, errstr);
 		return error == MAIL_ERROR_EXPUNGED ? 0 : -1;
 	}
-	if (pop3_migration_get_hdr_sha1(mail->seq, input,
-					hdr_size.physical_size,
-					sha1_r, &have_eoh) < 0)
+	if (pop3_migration_get_hdr_sha1(mail->seq, input, sha1_r, &have_eoh) < 0)
 		return -1;
 	if (have_eoh) {
 		struct index_mail *imail = (struct index_mail *)mail;
@@ -276,16 +271,23 @@ get_hdr_sha1(struct mail *mail, unsigned char sha1_r[STATIC_ARRAY SHA1_RESULTLEN
 	   So we'll try to avoid this by falling back to full FETCH BODY[]
 	   (and/or RETR) and we'll parse the header ourself from it. This
 	   should work around any similar bugs in all IMAP/POP3 servers. */
-	if (mail_get_stream(mail, &hdr_size, NULL, &input) < 0) {
+	if (mail_get_stream_because(mail, NULL, NULL, "pop3-migration", &input) < 0) {
 		errstr = mailbox_get_last_error(mail->box, &error);
 		i_error("pop3_migration: Failed to get body for msg %u: %s",
 			mail->seq, errstr);
 		return error == MAIL_ERROR_EXPUNGED ? 0 : -1;
 	}
-	return pop3_migration_get_hdr_sha1(mail->seq, input,
-					   hdr_size.physical_size,
-					   sha1_r, &have_eoh);
-
+	ret = pop3_migration_get_hdr_sha1(mail->seq, input, sha1_r, &have_eoh);
+	if (ret == 0) {
+		if (!have_eoh)
+			i_warning("pop3_migration: Truncated email with UID %u stored as truncated", mail->uid);
+		struct index_mail *imail = (struct index_mail *)mail;
+		index_mail_cache_add_idx(imail, get_cache_idx(mail),
+					 sha1_r, SHA1_RESULTLEN);
+		return 1;
+	} else {
+		return -1;
+	}
 }
 
 static bool
@@ -607,7 +609,7 @@ pop3_uidl_assign_by_hdr_hash(struct mailbox *box, struct mailbox *pop3_box)
 	struct imap_msg_map *imap_map;
 	unsigned int pop3_idx, imap_idx, pop3_count, imap_count;
 	unsigned int first_seq, missing_uids_count;
-	uint32_t first_missing_idx = (uint32_t)-1;
+	uint32_t first_missing_idx = 0, first_missing_seq = (uint32_t)-1;
 	int ret;
 
 	first_seq = mbox->first_unfound_idx+1;
@@ -655,8 +657,11 @@ pop3_uidl_assign_by_hdr_hash(struct mailbox *box, struct mailbox *pop3_box)
 		} else if (!pop3_map[pop3_idx].common.hdr_sha1_set) {
 			/* we treated this mail as expunged - ignore */
 		} else {
-			if (first_missing_idx == (uint32_t)-1)
+			uint32_t seq = pop3_map[pop3_idx].pop3_seq;
+			if (first_missing_seq > seq) {
+				first_missing_seq = seq;
 				first_missing_idx = pop3_idx;
+			}
 			missing_uids_count++;
 		}
 	}
@@ -665,8 +670,7 @@ pop3_uidl_assign_by_hdr_hash(struct mailbox *box, struct mailbox *pop3_box)
 
 		str_printfa(str, "pop3_migration: %u POP3 messages have no "
 			    "matching IMAP messages (first POP3 msg %u UIDL %s)",
-			    missing_uids_count,
-			    pop3_map[first_missing_idx].pop3_seq,
+			    missing_uids_count, first_missing_seq,
 			    pop3_map[first_missing_idx].pop3_uidl);
 		if (imap_count + missing_uids_count == pop3_count) {
 			str_append(str, " - all IMAP messages were found "
@@ -840,8 +844,13 @@ pop3_migration_mailbox_search_init(struct mailbox_transaction_context *t,
 
 static void pop3_migration_mailbox_allocated(struct mailbox *box)
 {
+	struct pop3_migration_mail_storage *mstorage =
+		POP3_MIGRATION_CONTEXT(box->storage);
 	struct mailbox_vfuncs *v = box->vlast;
 	struct pop3_migration_mailbox *mbox;
+
+	if (mstorage == NULL)
+		return;
 
 	mbox = p_new(box->pool, struct pop3_migration_mailbox, 1);
 	mbox->module_ctx.super = *v;

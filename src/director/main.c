@@ -47,6 +47,8 @@ static void director_refresh_proctitle_timeout(void *context ATTR_UNUSED)
 
 	str = t_str_new(64);
 	str_printfa(str, "[%u users", user_directory_count(director->users));
+	if (director->users_moving_count > 0)
+		str_printfa(str, ", %u moving", director->users_moving_count);
 	str_printfa(str, ", %lu req/s",
 		    (unsigned long)(director->num_requests - prev_requests));
 	str_printfa(str, ", %llu+%llu kB/s",
@@ -237,6 +239,7 @@ static void director_state_changed(struct director *dir)
 
 	if (dir->to_request != NULL && array_count(&new_requests) == 0)
 		timeout_remove(&dir->to_request);
+	doveadm_connections_continue_reset_cmds();
 }
 
 static void main_preinit(void)
@@ -244,6 +247,11 @@ static void main_preinit(void)
 	const struct director_settings *set;
 	struct ip_addr listen_ip;
 	in_port_t listen_port;
+
+	/* make sure we die with master even with shutdown_clients=no.
+	   otherwise there will be two director processes and everything is
+	   broken. it's only the login processes that need to stay alive. */
+	master_service_set_die_with_master(master_service, TRUE);
 
 	if (master_service_settings_get(master_service)->verbose_proctitle) {
 		to_proctitle_refresh =
@@ -258,6 +266,7 @@ static void main_preinit(void)
 			"(for standalone keep director_servers empty)");
 	}
 
+	directors_init();
 	director = director_init(set, &listen_ip, listen_port,
 				 director_state_changed);
 	director_host_add_from_string(director, set->director_servers);
@@ -277,8 +286,11 @@ static void main_deinit(void)
 		timeout_remove(&to_proctitle_refresh);
 	if (notify_conn != NULL)
 		notify_connection_deinit(&notify_conn);
-	director_deinit(&director);
+	/* deinit doveadm connections before director, so it can clean up
+	   its pending work, such as abort user moves. */
 	doveadm_connections_deinit();
+	director_deinit(&director);
+	directors_deinit();
 	login_connections_deinit();
 	auth_connections_deinit();
 	array_free(&listener_socket_types);

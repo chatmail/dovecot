@@ -4,6 +4,7 @@
 #include "array.h"
 #include "hash.h"
 #include "str.h"
+#include "ioloop.h"
 #include "net.h"
 #include "write-full.h"
 #include "eacces-error.h"
@@ -18,6 +19,11 @@
 #define DEFAULT_QUOTA_EXCEEDED_MSG \
 	"Quota exceeded (mailbox for user is full)"
 #define QUOTA_LIMIT_SET_PATH DICT_PATH_PRIVATE"quota/limit/"
+
+/* How many seconds after the userdb lookup do we still want to execute the
+   quota_over_script. This applies to quota_over_flag_lazy_check=yes and also
+   after unhibernating IMAP connections. */
+#define QUOTA_OVER_FLAG_MAX_DELAY_SECS 10
 
 struct quota_root_iter {
 	struct quota *quota;
@@ -399,11 +405,14 @@ void quota_deinit(struct quota **_quota)
 static int quota_root_get_rule_limits(struct quota_root *root,
 				      const char *mailbox_name,
 				      uint64_t *bytes_limit_r,
-				      uint64_t *count_limit_r)
+				      uint64_t *count_limit_r,
+				      bool *ignored_r)
 {
 	struct quota_rule *rule;
 	int64_t bytes_limit, count_limit;
 	bool enabled;
+
+	*ignored_r = FALSE;
 
 	if (!root->set->force_default_rule) {
 		if (root->backend.v.init_limits != NULL) {
@@ -429,6 +438,7 @@ static int quota_root_get_rule_limits(struct quota_root *root,
 		} else {
 			bytes_limit = 0;
 			count_limit = 0;
+			*ignored_r = TRUE;
 		}
 	}
 
@@ -671,7 +681,7 @@ int quota_get_resource(struct quota_root *root, const char *mailbox_name,
 		       const char *name, uint64_t *value_r, uint64_t *limit_r)
 {
 	uint64_t bytes_limit, count_limit;
-	bool kilobytes = FALSE;
+	bool ignored, kilobytes = FALSE;
 	int ret;
 
 	*value_r = *limit_r = 0;
@@ -688,7 +698,8 @@ int quota_get_resource(struct quota_root *root, const char *mailbox_name,
 		return ret;
 
 	if (quota_root_get_rule_limits(root, mailbox_name,
-				       &bytes_limit, &count_limit) < 0)
+				       &bytes_limit, &count_limit,
+				       &ignored) < 0)
 		return -1;
 
 	if (strcmp(name, QUOTA_NAME_STORAGE_BYTES) == 0)
@@ -778,19 +789,22 @@ struct quota_transaction_context *quota_transaction_begin(struct mailbox *box)
 	return ctx;
 }
 
-static int quota_transaction_set_limits(struct quota_transaction_context *ctx)
+int quota_transaction_set_limits(struct quota_transaction_context *ctx)
 {
 	struct quota_root *const *roots;
 	const char *mailbox_name;
 	unsigned int i, count;
 	uint64_t bytes_limit, count_limit, current, limit, diff;
-	bool use_grace;
+	bool use_grace, ignored;
 	int ret;
 
+	if (ctx->limits_set)
+		return 0;
 	ctx->limits_set = TRUE;
 	mailbox_name = mailbox_get_vname(ctx->box);
 	/* use quota_grace only for LDA/LMTP */
 	use_grace = (ctx->box->flags & MAILBOX_FLAG_POST_SESSION) != 0;
+	ctx->no_quota_updates = TRUE;
 
 	/* find the lowest quota limits from all roots and use them */
 	roots = array_get(&ctx->quota->roots, &count);
@@ -799,11 +813,13 @@ static int quota_transaction_set_limits(struct quota_transaction_context *ctx)
 			continue;
 
 		if (quota_root_get_rule_limits(roots[i], mailbox_name,
-					       &bytes_limit,
-					       &count_limit) < 0) {
+					       &bytes_limit, &count_limit,
+					       &ignored) < 0) {
 			ctx->failed = TRUE;
 			return -1;
 		}
+		if (!ignored)
+			ctx->no_quota_updates = FALSE;
 
 		if (bytes_limit > 0) {
 			ret = quota_get_resource(roots[i], mailbox_name,
@@ -1028,6 +1044,17 @@ static void quota_over_flag_check_root(struct quota_root *root)
 
 	if (root->quota_over_flag_checked)
 		return;
+	if (root->quota->user->session_create_time +
+	    QUOTA_OVER_FLAG_MAX_DELAY_SECS < ioloop_time) {
+		/* userdb's quota_over_flag lookup is too old. */
+		return;
+	}
+	if (root->quota->user->session_restored) {
+		/* we don't know whether the quota_over_script was executed
+		   before hibernation. just assume that it was, so we don't
+		   unnecessarily call it too often. */
+		return;
+	}
 	root->quota_over_flag_checked = TRUE;
 	quota_over_flag_init_root(root);
 
@@ -1093,8 +1120,25 @@ int quota_try_alloc(struct quota_transaction_context *ctx,
 	uoff_t size;
 	int ret;
 
-	if (mail_get_physical_size(mail, &size) < 0)
+	if (quota_transaction_set_limits(ctx) < 0)
 		return -1;
+
+	if (ctx->no_quota_updates)
+		return 1;
+
+	if (mail_get_physical_size(mail, &size) < 0) {
+		enum mail_error error;
+		const char *errstr = mailbox_get_last_error(mail->box, &error);
+
+		if (error == MAIL_ERROR_EXPUNGED) {
+			/* mail being copied was already expunged. it'll fail,
+			   so just return success for the quota allocated. */
+			return 1;
+		}
+		i_error("quota: Failed to get mail size (box=%s, uid=%u): %s",
+			mail->box->vname, mail->uid, errstr);
+		return -1;
+	}
 
 	ret = quota_test_alloc(ctx, size, too_large_r);
 	if (ret <= 0)
@@ -1115,10 +1159,10 @@ int quota_test_alloc(struct quota_transaction_context *ctx,
 	if (ctx->failed)
 		return -1;
 
-	if (!ctx->limits_set) {
-		if (quota_transaction_set_limits(ctx) < 0)
-			return -1;
-	}
+	if (quota_transaction_set_limits(ctx) < 0)
+		return -1;
+	if (ctx->no_quota_updates)
+		return 1;
 	/* this is a virtual function mainly for trash plugin and similar,
 	   which may automatically delete mails to stay under quota. */
 	return ctx->quota->set->test_alloc(ctx, size, too_large_r);
@@ -1129,6 +1173,7 @@ static int quota_default_test_alloc(struct quota_transaction_context *ctx,
 {
 	struct quota_root *const *roots;
 	unsigned int i, count;
+	bool ignore;
 	int ret;
 
 	*too_large_r = FALSE;
@@ -1146,7 +1191,8 @@ static int quota_default_test_alloc(struct quota_transaction_context *ctx,
 
 		ret = quota_root_get_rule_limits(roots[i],
 						 mailbox_get_vname(ctx->box),
-						 &bytes_limit, &count_limit);
+						 &bytes_limit, &count_limit,
+						 &ignore);
 		if (ret < 0)
 			return -1;
 

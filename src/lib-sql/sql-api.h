@@ -24,6 +24,13 @@ struct sql_field_def {
 	size_t offset;
 };
 
+enum sql_result_error_type {
+	SQL_RESULT_ERROR_TYPE_UNKNOWN = 0,
+	/* It's unknown whether write succeeded or not. This could be due to
+	   a timeout or a disconnection from server. */
+	SQL_RESULT_ERROR_TYPE_WRITE_UNCERTAIN
+};
+
 #define SQL_DEF_STRUCT(name, struct_name, type, c_type) \
 	{ (type) + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE( \
 		((struct struct_name *)0)->name, c_type), \
@@ -41,8 +48,14 @@ struct sql_field_def {
 struct sql_db;
 struct sql_result;
 
+struct sql_commit_result {
+	const char *error;
+	enum sql_result_error_type error_type;
+};
+
 typedef void sql_query_callback_t(struct sql_result *result, void *context);
 typedef void sql_commit_callback_t(const char *error, void *context);
+typedef void sql_commit2_callback_t(const struct sql_commit_result *result, void *context);
 
 void sql_drivers_init(void);
 void sql_drivers_deinit(void);
@@ -123,6 +136,7 @@ const char *const *sql_result_get_values(struct sql_result *result);
 
 /* Return last error message in result. */
 const char *sql_result_get_error(struct sql_result *result);
+enum sql_result_error_type sql_result_get_error_type(struct sql_result *result);
 
 /* Begin a new transaction. Currently you're limited to only one open
    transaction at a time. */
@@ -135,6 +149,13 @@ void sql_transaction_commit(struct sql_transaction_context **ctx,
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const char *, typeof(context))), \
 		(sql_commit_callback_t *)callback, context)
+void sql_transaction_commit2(struct sql_transaction_context **ctx,
+			     sql_commit2_callback_t *callback, void *context);
+#define sql_transaction_commit2(ctx, callback, context) \
+	  sql_transaction_commit2(ctx + \
+		CALLBACK_TYPECHECK(callback, void (*)( \
+			const struct sql_commit_result *, typeof(context))), \
+		(sql_commit2_callback_t *)callback, context)
 /* Synchronous commit. Returns 0 if ok, -1 if error. */
 int sql_transaction_commit_s(struct sql_transaction_context **ctx,
 			     const char **error_r);

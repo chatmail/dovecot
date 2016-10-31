@@ -56,6 +56,7 @@ struct cassandra_db {
 	CassConsistency read_fallback_consistency, write_fallback_consistency, delete_fallback_consistency;
 	CassLogLevel log_level;
 	bool debug_queries;
+	bool latency_aware_routing;
 	unsigned int protocol_version;
 	unsigned int num_threads;
 	unsigned int connect_timeout_secs, request_timeout_secs;
@@ -113,7 +114,7 @@ struct cassandra_transaction_context {
 	struct sql_transaction_context ctx;
 	int refcount;
 
-	sql_commit_callback_t *callback;
+	sql_commit2_callback_t *callback;
 	void *context;
 
 	pool_t query_pool;
@@ -442,6 +443,8 @@ static void driver_cassandra_parse_connect_string(struct cassandra_db *db,
 				i_fatal("cassandra: Unknown log_level: %s", value);
 		} else if (strcmp(key, "debug_queries") == 0) {
 			db->debug_queries = TRUE;
+		} else if (strcmp(key, "latency_aware_routing") == 0) {
+			db->latency_aware_routing = TRUE;
 		} else if (strcmp(key, "version") == 0) {
 			if (str_to_uint(value, &db->protocol_version) < 0)
 				i_fatal("cassandra: Invalid version: %s", value);
@@ -569,6 +572,8 @@ static struct sql_db *driver_cassandra_init_v(const char *connect_string)
 		cass_cluster_set_protocol_version(db->cluster, db->protocol_version);
 	if (db->num_threads != 0)
 		cass_cluster_set_num_threads_io(db->cluster, db->num_threads);
+	if (db->latency_aware_routing)
+		cass_cluster_set_latency_aware_routing(db->cluster, TRUE);
 	db->session = cass_session_new();
 	if (db->metrics_path != NULL)
 		db->to_metrics = timeout_add(1000, driver_cassandra_metrics_write, db);
@@ -726,6 +731,9 @@ static void query_callback(CassFuture *future, void *context)
 		i_free(result->error);
 
 		msecs = timeval_diff_msecs(&ioloop_timeval, &result->start_time);
+		result->api.error_type = error == CASS_ERROR_SERVER_WRITE_TIMEOUT ?
+			SQL_RESULT_ERROR_TYPE_WRITE_UNCERTAIN :
+			SQL_RESULT_ERROR_TYPE_UNKNOWN;
 		result->error = i_strdup_printf("Query '%s' failed: %.*s (in %u.%03u secs)",
 			result->query, (int)errsize, errmsg, msecs/1000, msecs%1000);
 		/* unavailable = cassandra server knows that there aren't
@@ -1161,27 +1169,35 @@ static void
 transaction_commit_callback(struct sql_result *result, void *context)
 {
 	struct cassandra_transaction_context *ctx = context;
+	struct sql_commit_result commit_result;
 
-	if (sql_result_next_row(result) < 0)
-		ctx->callback(sql_result_get_error(result), ctx->context);
-	else
-		ctx->callback(NULL, ctx->context);
+	memset(&commit_result, 0, sizeof(commit_result));
+	if (sql_result_next_row(result) < 0) {
+		commit_result.error = sql_result_get_error(result);
+		commit_result.error_type = sql_result_get_error_type(result);
+	}
+	ctx->callback(&commit_result, ctx->context);
 	driver_cassandra_transaction_unref(&ctx);
 }
 
 static void
 driver_cassandra_transaction_commit(struct sql_transaction_context *_ctx,
-				    sql_commit_callback_t *callback, void *context)
+				    sql_commit2_callback_t *callback, void *context)
 {
 	struct cassandra_transaction_context *ctx =
 		(struct cassandra_transaction_context *)_ctx;
 	enum cassandra_query_type query_type;
+	struct sql_commit_result result;
 
+	memset(&result, 0, sizeof(result));
 	ctx->callback = callback;
 	ctx->context = context;
 
 	if (ctx->failed || _ctx->head == NULL) {
-		callback(ctx->failed ? ctx->error : NULL, context);
+		if (ctx->failed)
+			result.error = ctx->error;
+
+		callback(&result, context);
 		driver_cassandra_transaction_unref(&ctx);
 	} else if (_ctx->head->next == NULL) {
 		/* just a single query, send it */
@@ -1193,7 +1209,8 @@ driver_cassandra_transaction_commit(struct sql_transaction_context *_ctx,
 			  transaction_commit_callback, ctx);
 	} else {
 		/* multiple queries - we don't actually have a transaction though */
-		callback("Multiple changes in transaction not supported", context);
+		result.error = "Multiple changes in transaction not supported";
+		callback(&result, context);
 	}
 }
 
@@ -1332,13 +1349,14 @@ const struct sql_db driver_cassandra_db = {
 		driver_cassandra_query_s,
 
 		driver_cassandra_transaction_begin,
-		driver_cassandra_transaction_commit,
+		NULL,
 		driver_cassandra_transaction_commit_s,
 		driver_cassandra_transaction_rollback,
 
 		driver_cassandra_update,
 
-		driver_cassandra_escape_blob
+		driver_cassandra_escape_blob,
+		driver_cassandra_transaction_commit
 	}
 };
 

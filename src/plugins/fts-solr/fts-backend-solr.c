@@ -424,6 +424,8 @@ fts_backend_solr_update_set_mailbox(struct fts_backend_update_context *_ctx,
 	const char *box_guid;
 
 	if (ctx->prev_uid != 0) {
+		i_assert(ctx->cur_box != NULL);
+
 		/* flush solr between mailboxes, so we don't wrongly update
 		   last_uid before we know it has succeeded */
 		if (fts_backed_solr_build_flush(ctx) < 0)
@@ -875,7 +877,7 @@ solr_search_multi(struct fts_backend *_backend, string_t *str,
 	for (i = 0; boxes[i] != NULL; i++) ;
 	search_all_mailboxes = i > SOLR_QUERY_MAX_MAILBOX_COUNT;
 	if (!search_all_mailboxes)
-		str_append(str, "%2B(");
+		str_append(str, "+%2B(");
 	len = str_len(str);
 
 	for (i = 0; boxes[i] != NULL; i++) {

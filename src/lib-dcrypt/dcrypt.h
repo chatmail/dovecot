@@ -23,9 +23,9 @@ enum dcrypt_key_type {
 
 /**
  * dovecot key format:
- * version tab version-specific data
+ * version version-specific data
  * v1: version tab nid tab raw ec private key (in hex)
- * v2: version tab algorithm oid tab private-or-public-key-only (in hex)
+ * v2: version colon algorithm oid colon private-or-public-key-only (in hex)
  */
 enum dcrypt_key_format {
 	DCRYPT_FORMAT_PEM,
@@ -172,11 +172,17 @@ bool dcrypt_keypair_generate(struct dcrypt_keypair *pair_r, enum dcrypt_key_type
  *
  * you can provide either PASSWORD or ENC_KEY, not both.
  */
-bool dcrypt_key_load_private(struct dcrypt_private_key **key_r, enum dcrypt_key_format format, const char *data, 
+bool dcrypt_key_load_private(struct dcrypt_private_key **key_r, const char *data,
 	const char *password, struct dcrypt_private_key *dec_key, const char **error_r);
 
-bool dcrypt_key_load_public(struct dcrypt_public_key **key_r, enum dcrypt_key_format format, const char *data, const char **error_r);
+bool dcrypt_key_load_public(struct dcrypt_public_key **key_r, const char *data,
+	const char **error_r);
 
+/**
+ * When encrypting with public key, the cipher parameter here must begin with
+ * ecdh-, for example ecdh-aes-256-ctr. An example of a valid cipher for
+ * encrypting with password would be aes-256-ctr.
+ */
 bool dcrypt_key_store_private(struct dcrypt_private_key *key, enum dcrypt_key_format format, const char *cipher, 
 	buffer_t *destination, const char *password, struct dcrypt_public_key *enc_key, const char **error_r);
 
@@ -184,10 +190,11 @@ bool dcrypt_key_store_public(struct dcrypt_public_key *key, enum dcrypt_key_form
 
 void dcrypt_key_convert_private_to_public(struct dcrypt_private_key *priv_key, struct dcrypt_public_key **pub_key_r);
 
-void dcrypt_keypair_free(struct dcrypt_keypair *keypair);
-
-void dcrypt_key_free_public(struct dcrypt_public_key **key);
-void dcrypt_key_free_private(struct dcrypt_private_key **key);
+void dcrypt_keypair_unref(struct dcrypt_keypair *keypair);
+void dcrypt_key_ref_public(struct dcrypt_public_key *key);
+void dcrypt_key_ref_private(struct dcrypt_private_key *key);
+void dcrypt_key_unref_public(struct dcrypt_public_key **key);
+void dcrypt_key_unref_private(struct dcrypt_private_key **key);
 
 enum dcrypt_key_type dcrypt_key_type_private(struct dcrypt_private_key *key);
 enum dcrypt_key_type dcrypt_key_type_public(struct dcrypt_public_key *key);

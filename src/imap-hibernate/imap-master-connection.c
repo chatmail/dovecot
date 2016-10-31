@@ -5,7 +5,7 @@
 #include "connection.h"
 #include "imap-master-connection.h"
 
-#define IMAP_MASTER_CONNECTION_TIMEOUT_MSECS 5000
+#define IMAP_MASTER_CONNECTION_TIMEOUT_MSECS 30000
 
 struct imap_master_connection {
 	struct connection conn;
@@ -20,7 +20,8 @@ static struct connection_list *master_clients;
 
 static void imap_master_connection_timeout(struct imap_master_connection *conn)
 {
-	i_error("Timeout communicating with %s", conn->conn.name);
+	i_error("Timeout communicating with %s (version %sreceived)",
+		conn->conn.name, conn->conn.version_received ? "" : "not ");
 	imap_master_connection_deinit(&conn);
 }
 
@@ -28,7 +29,8 @@ int imap_master_connection_init(const char *path,
 				imap_master_connection_send_callback_t *send_callback,
 				imap_master_connection_read_callback_t *read_callback,
 				void *context,
-				struct imap_master_connection **conn_r)
+				struct imap_master_connection **conn_r,
+				const char **error_r)
 {
 	struct imap_master_connection *conn;
 
@@ -38,15 +40,18 @@ int imap_master_connection_init(const char *path,
 	conn->context = context;
 	connection_init_client_unix(master_clients, &conn->conn, path);
 	if (connection_client_connect(&conn->conn) < 0) {
-		i_error("net_connect_unix(%s) failed: %m", path);
+		int ret = errno == EAGAIN ? 0 : -1;
+
+		*error_r = t_strdup_printf(
+			"net_connect_unix(%s) failed: %m", path);
 		connection_deinit(&conn->conn);
 		i_free(conn);
-		return -1;
+		return ret;
 	}
 	conn->to = timeout_add(IMAP_MASTER_CONNECTION_TIMEOUT_MSECS,
 			       imap_master_connection_timeout, conn);
 	*conn_r = conn;
-	return 0;
+	return 1;
 }
 
 void imap_master_connection_deinit(struct imap_master_connection **_conn)

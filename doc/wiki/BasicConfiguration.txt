@@ -12,7 +12,7 @@ doveconf -n | head -n1
 
 Your configuration file doesn't exist if you installed Dovecot from sources.
 The config directory should contain a 'README' file pointing to an example
-configuration, which you can use as your basic configuration.For example:
+configuration, which you can use as your basic configuration. For example:
 
 ---%<-------------------------------------------------------------------------
 cp -r /usr/share/doc/dovecot/example-config/* /etc/dovecot/
@@ -48,12 +48,14 @@ You can (and should) replace the "password" with whatever password you wish to
 use, but don't use any important password here as we'll be logging in with
 insecure plaintext authentication until <SSL.txt> is configured.
 
+(Remark: $GID is not set per default on <OpenSuse.txt> systems, replace by 'id
+-g')
+
 If you used the example configuration files, switch to passwd-file by modifying
 'conf.d/10-auth.conf':
 
 ---%<-------------------------------------------------------------------------
 # Add '#' to comment out the system user login for now:
-#!include auth-system.conf.ext
 
 # Remove '#' to use passwd-file:
 !include auth-passwdfile.conf.ext
@@ -77,6 +79,15 @@ there are no other passdbs or userdbs).
 
 Plaintext Authentication
 ------------------------
+
+To allow any Authentication without SSL, disable SSL in the
+'conf.d/10-ssl.conf' file. This has to be done because Dovecot (now) uses SSL
+as default. You probably want to switch this back to "yes" or other options
+afterward.
+
+---%<-------------------------------------------------------------------------
+ssl = no
+---%<-------------------------------------------------------------------------
 
 Until SSL is configured, allow plaintext authentication in the
 'conf.d/10-auth.conf' file. You probably want to switch this back to "yes"
@@ -140,4 +151,4 @@ mail_privileged_group = mail
 Note: Specifying the privileged user must be done as shown. Simply adding
 'dovecot' user to the 'mail' group does /*not*/ grant write permission.
 
-(This file was created from the wiki on 2016-07-01 04:42)
+(This file was created from the wiki on 2016-10-27 04:43)

@@ -4,7 +4,8 @@
 #include "hash-method.h"
 #include "message-header-hash.h"
 
-void message_header_hash_more(const struct hash_method *method, void *context,
+void message_header_hash_more(struct message_header_hash_context *ctx,
+			      const struct hash_method *method, void *context,
 			      unsigned int version,
 			      const unsigned char *data, size_t size)
 {
@@ -27,19 +28,18 @@ void message_header_hash_more(const struct hash_method *method, void *context,
 
 	   So we'll just replace all control and 8bit chars with '?' and
 	   remove any repeated '?', which hopefully will satisfy everybody.
-
-	   (Keep this code in sync with pop3-migration plugin.)
-	   */
+	*/
 	for (i = start = 0; i < size; i++) {
 		if ((data[i] < 0x20 || data[i] >= 0x7f || data[i] == '?') &&
 		    (data[i] != '\t' && data[i] != '\n')) {
 			/* remove repeated '?' */
-			if (start < i || i == 0) {
+			if (start < i || (i == 0 && !ctx->prev_was_questionmark)) {
 				method->loop(context, data + start, i-start);
 				method->loop(context, "?", 1);
 			}
 			start = i+1;
 		}
 	}
+	ctx->prev_was_questionmark = start == i;
 	method->loop(context, data + start, i-start);
 }

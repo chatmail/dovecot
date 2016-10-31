@@ -35,13 +35,13 @@ cmd_save_to_mailbox(struct save_cmd_context *ctx, struct mailbox *box,
 		mailbox_transaction_rollback(&trans);
 		return -1;
 	}
-	while ((ret = i_stream_read(input)) > 0 || ret == -2) {
+	do {
 		if (mailbox_save_continue(save_ctx) < 0) {
 			save_failed = TRUE;
 			ret = -1;
 			break;
 		}
-	}
+	} while ((ret = i_stream_read(input)) > 0);
 	i_assert(ret == -1);
 
 	if (input->stream_errno != 0) {
@@ -117,10 +117,6 @@ static struct doveadm_mail_cmd_context *cmd_save_alloc(void)
 	ctx->mailbox = "INBOX";
 	return &ctx->ctx;
 }
-
-struct doveadm_mail_cmd cmd_save = {
-	cmd_save_alloc, "save", "[-m mailbox]"
-};
 
 struct doveadm_cmd_ver2 doveadm_cmd_save_ver2 = {
 	.name = "save",

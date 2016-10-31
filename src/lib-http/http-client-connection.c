@@ -11,6 +11,7 @@
 #include "istream-timeout.h"
 #include "ostream.h"
 #include "time-util.h"
+#include "file-lock.h"
 #include "iostream-rawlog.h"
 #include "iostream-ssl.h"
 #include "http-response-parser.h"
@@ -199,6 +200,24 @@ http_client_connection_get_timing_info(struct http_client_connection *conn)
 				    (*requestp)->attempts + 1,
 				    total_msecs/1000, total_msecs%1000);
 		}
+		int other_ioloop_msecs = (ioloop_global_wait_usecs -
+			(*requestp)->sent_global_ioloop_usecs + 999) / 1000;
+		if (conn->client->ioloop != NULL) {
+			int http_ioloop_msecs =
+				(io_loop_get_wait_usecs(conn->client->ioloop) + 999) / 1000;
+			other_ioloop_msecs -= http_ioloop_msecs;
+			str_printfa(str, ", %d.%03d in http ioloop",
+				    http_ioloop_msecs/1000, http_ioloop_msecs%1000);
+		}
+		str_printfa(str, ", %d.%03d in other ioloops",
+			    other_ioloop_msecs/1000, other_ioloop_msecs%1000);
+
+		int lock_msecs = (file_lock_wait_get_total_usecs() -
+				  (*requestp)->sent_lock_usecs + 999) / 1000;
+		if (lock_msecs > 0) {
+			str_printfa(str, ", %d.%03d in locks",
+				    lock_msecs/1000, lock_msecs%1000);
+		}
 	} else {
 		str_append(str, "No requests");
 		if (conn->conn.last_input != 0) {
@@ -282,6 +301,10 @@ int http_client_connection_check_ready(struct http_client_connection *conn)
 						"EOF"));
 			return -1;
 		}
+
+		/* we may have read some data */
+		if (i_stream_get_data_size(conn->conn.input) > 0)
+			i_stream_set_input_pending(conn->conn.input, TRUE);
 	}
 	return 1;
 }
@@ -358,7 +381,10 @@ http_client_connection_request_timeout(struct http_client_connection *conn)
 void http_client_connection_start_request_timeout(
 	struct http_client_connection *conn)
 {
-	unsigned int timeout_msecs = conn->client->set.request_timeout_msecs;
+	unsigned int timeout_msecs =
+		conn->pending_request != NULL ?
+		conn->pending_request->attempt_timeout_msecs :
+		conn->client->set.request_timeout_msecs;
 
 	if (timeout_msecs == 0)
 		;
@@ -604,7 +630,7 @@ http_client_connection_return_response(
 		   actual payload stream. */
 		conn->incoming_payload = response->payload =
 			i_stream_create_timeout(response->payload,
-				conn->client->set.request_timeout_msecs);
+				req->attempt_timeout_msecs);
 		i_stream_add_destroy_callback(response->payload,
 					      http_client_payload_destroyed,
 					      req);
@@ -696,7 +722,7 @@ static void http_client_connection_input(struct connection *_conn)
 	if (conn->ssl_iostream != NULL &&
 		!ssl_iostream_is_handshaked(conn->ssl_iostream)) {
 		/* finish SSL negotiation by reading from input stream */
-		while ((ret=i_stream_read(conn->conn.input)) > 0) {
+		while ((ret=i_stream_read(conn->conn.input)) > 0 || ret == -2) {
 			if (ssl_iostream_is_handshaked(conn->ssl_iostream))
 				break;
 		}

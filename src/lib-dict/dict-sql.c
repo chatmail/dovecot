@@ -616,6 +616,12 @@ sql_dict_iterate_build_next_query(struct sql_dict_iterate_context *ctx,
 	} else if ((ctx->flags & DICT_ITERATE_FLAG_SORT_BY_VALUE) != 0)
 		str_printfa(query, " ORDER BY %s", map->value_field);
 
+	if (ctx->ctx.max_rows > 0) {
+		i_assert(ctx->ctx.row_count < ctx->ctx.max_rows);
+		str_printfa(query, " LIMIT %llu",
+			(unsigned long long)(ctx->ctx.max_rows - ctx->ctx.row_count));
+	}
+
 	ctx->map = map;
 	return 1;
 }
@@ -807,16 +813,24 @@ sql_dict_transaction_has_nonexistent(struct sql_dict_transaction_context *ctx)
 }
 
 static void
-sql_dict_transaction_commit_callback(const char *error,
+sql_dict_transaction_commit_callback(const struct sql_commit_result *sql_result,
 				     struct sql_dict_transaction_context *ctx)
 {
 	int ret;
 
-	if (error == NULL)
+	if (sql_result->error == NULL)
 		ret = sql_dict_transaction_has_nonexistent(ctx) ? 0 : 1;
 	else {
-		i_error("sql dict: commit failed: %s", error);
-		ret = -1;
+		i_error("sql dict: commit failed: %s", sql_result->error);
+		switch (sql_result->error_type) {
+		case SQL_RESULT_ERROR_TYPE_UNKNOWN:
+		default:
+			ret = DICT_COMMIT_RET_FAILED;
+			break;
+		case SQL_RESULT_ERROR_TYPE_WRITE_UNCERTAIN:
+			ret = DICT_COMMIT_RET_WRITE_UNCERTAIN;
+			break;
+		}
 	}
 
 	if (ctx->async_callback != NULL)
@@ -846,7 +860,7 @@ sql_dict_transaction_commit(struct dict_transaction_context *_ctx, bool async,
 	} else if (async) {
 		ctx->async_callback = callback;
 		ctx->async_context = context;
-		sql_transaction_commit(&ctx->sql_ctx,
+		sql_transaction_commit2(&ctx->sql_ctx,
 			sql_dict_transaction_commit_callback, ctx);
 		return 1;
 	} else {

@@ -30,6 +30,7 @@
 #include <ctype.h>
 
 #define MAILBOX_DELETE_RETRY_SECS 30
+#define MAILBOX_MAX_HIERARCHY_NAME_LENGTH 255
 
 extern struct mail_search_register *mail_search_register_imap;
 extern struct mail_search_register *mail_search_register_human;
@@ -971,8 +972,6 @@ void mailbox_skip_create_name_restrictions(struct mailbox *box, bool set)
 
 int mailbox_verify_create_name(struct mailbox *box)
 {
-	char sep = mail_namespace_get_sep(box->list->ns);
-
 	/* mailbox_alloc() already checks that vname is valid UTF8,
 	   so we don't need to verify that.
 
@@ -987,7 +986,25 @@ int mailbox_verify_create_name(struct mailbox *box)
 			"Control characters not allowed in new mailbox names");
 		return -1;
 	}
-	if (mailbox_list_name_is_too_large(box->vname, sep)) {
+	if (strlen(box->vname) > MAILBOX_LIST_NAME_MAX_LENGTH) {
+		mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
+				       "Mailbox name too long");
+		return -1;
+	}
+	/* check individual component names, too */
+	const char *old_name = box->name;
+	const char *name;
+	const char sep = mailbox_list_get_hierarchy_sep(box->list);
+	while((name = strchr(old_name, sep)) != NULL) {
+		if (name - old_name > MAILBOX_MAX_HIERARCHY_NAME_LENGTH) {
+			mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
+				"Mailbox name too long");
+			return -1;
+		}
+		name++;
+		old_name = name;
+	}
+	if (strlen(old_name) > MAILBOX_MAX_HIERARCHY_NAME_LENGTH) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
 				       "Mailbox name too long");
 		return -1;
@@ -1469,6 +1486,41 @@ mailbox_lists_rename_compatible(struct mailbox_list *list1,
 	return TRUE;
 }
 
+static
+int mailbox_rename_check_children(struct mailbox *src, struct mailbox *dest)
+{
+	int ret = 0;
+	size_t src_prefix_len = strlen(src->vname)+1; /* include separator */
+	size_t dest_prefix_len = strlen(dest->vname)+1;
+	/* this can return folders with * in their name, that are not
+	   actually our children */
+	const char *pattern = t_strdup_printf("%s%c*", src->vname,
+				  mail_namespace_get_sep(src->list->ns));
+
+	struct mailbox_list_iterate_context *iter = mailbox_list_iter_init(src->list, pattern,
+				      MAILBOX_LIST_ITER_RETURN_NO_FLAGS);
+
+	const struct mailbox_info *child;
+	while((child = mailbox_list_iter_next(iter)) != NULL) {
+		if (strncmp(child->vname, src->vname, src_prefix_len) != 0)
+			continue; /* not our child */
+		/* if total length of new name exceeds the limit, fail */
+		if (strlen(child->vname + src_prefix_len)+dest_prefix_len > MAILBOX_LIST_NAME_MAX_LENGTH) {
+			mail_storage_set_error(dest->storage, MAIL_ERROR_PARAMS,
+				"Mailbox or child name too long");
+			ret = -1;
+			break;
+		}
+	}
+
+	/* something went bad */
+	if (mailbox_list_iter_deinit(&iter) < 0) {
+		mail_storage_copy_list_error(dest->storage, src->list);
+		ret = -1;
+	}
+	return ret;
+}
+
 int mailbox_rename(struct mailbox *src, struct mailbox *dest)
 {
 	const char *error = NULL;
@@ -1485,6 +1537,10 @@ int mailbox_rename(struct mailbox *src, struct mailbox *dest)
 		mail_storage_copy_error(dest->storage, src->storage);
 		return -1;
 	}
+	if (mailbox_rename_check_children(src, dest) != 0) {
+		return -1;
+	}
+
 	if (!mail_storages_rename_compatible(src->storage,
 					     dest->storage, &error) ||
 	    !mailbox_lists_rename_compatible(src->list,
@@ -2025,8 +2081,15 @@ int mailbox_save_begin(struct mail_save_context **ctx, struct istream *input)
 		return -1;
 	}
 
-	if (!(*ctx)->copying_via_save)
+	if (!(*ctx)->copying_or_moving) {
+		/* We're actually saving the mail. We're not being called by
+		   mail_storage_copy() because backend didn't support fast
+		   copying. */
+		i_assert(!(*ctx)->copying_via_save);
 		(*ctx)->saving = TRUE;
+	} else {
+		i_assert((*ctx)->copying_via_save);
+	}
 	if (box->v.save_begin == NULL) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_NOTPOSSIBLE,
 				       "Saving messages not supported");
@@ -2065,6 +2128,26 @@ mailbox_save_add_pvt_flags(struct mailbox_transaction_context *t,
 	save->flags = pvt_flags;
 }
 
+static void
+mailbox_save_context_reset(struct mail_save_context *ctx, bool success)
+{
+	i_assert(!ctx->unfinished);
+	if (!ctx->copying_or_moving) {
+		/* we're finishing a save (not copy/move). Note that we could
+		   have come here also from mailbox_save_cancel(), in which
+		   case ctx->saving may be FALSE. */
+		i_assert(!ctx->copying_via_save);
+		i_assert(ctx->saving || !success);
+		ctx->saving = FALSE;
+	} else {
+		i_assert(ctx->copying_via_save);
+		/* We came from mailbox_copy(). saving==TRUE is possible here
+		   if we also came from mailbox_save_using_mail(). Don't set
+		   saving=FALSE yet in that case, because copy() is still
+		   running. */
+	}
+}
+
 int mailbox_save_finish(struct mail_save_context **_ctx)
 {
 	struct mail_save_context *ctx = *_ctx;
@@ -2098,8 +2181,7 @@ int mailbox_save_finish(struct mail_save_context **_ctx)
 	}
 	if (keywords != NULL)
 		mailbox_keywords_unref(&keywords);
-	i_assert(!ctx->unfinished);
-	ctx->saving = FALSE;
+	mailbox_save_context_reset(ctx, TRUE);
 	return ret;
 }
 
@@ -2122,8 +2204,7 @@ void mailbox_save_cancel(struct mail_save_context **_ctx)
 		mail = (struct mail_private *)ctx->dest_mail;
 		mail->v.close(&mail->mail);
 	}
-	i_assert(!ctx->unfinished);
-	ctx->saving = FALSE;
+	mailbox_save_context_reset(ctx, FALSE);
 }
 
 struct mailbox_transaction_context *
@@ -2132,7 +2213,7 @@ mailbox_save_get_transaction(struct mail_save_context *ctx)
 	return ctx->transaction;
 }
 
-int mailbox_copy(struct mail_save_context **_ctx, struct mail *mail)
+static int mailbox_copy_int(struct mail_save_context **_ctx, struct mail *mail)
 {
 	struct mail_save_context *ctx = *_ctx;
 	struct mailbox_transaction_context *t = ctx->transaction;
@@ -2155,6 +2236,9 @@ int mailbox_copy(struct mail_save_context **_ctx, struct mail *mail)
 		mailbox_save_cancel(&ctx);
 		return -1;
 	}
+
+	i_assert(!ctx->copying_or_moving);
+	ctx->copying_or_moving = TRUE;
 	ctx->finishing = TRUE;
 	T_BEGIN {
 		ret = t->box->v.copy(ctx, backend_mail);
@@ -2170,27 +2254,45 @@ int mailbox_copy(struct mail_save_context **_ctx, struct mail *mail)
 	i_assert(!ctx->unfinished);
 
 	ctx->copying_via_save = FALSE;
-	ctx->saving = FALSE;
+	ctx->copying_or_moving = FALSE;
+	ctx->saving = FALSE; /* if we came from mailbox_save_using_mail() */
 	return ret;
+}
+
+int mailbox_copy(struct mail_save_context **_ctx, struct mail *mail)
+{
+	struct mail_save_context *ctx = *_ctx;
+
+	i_assert(!ctx->saving);
+	i_assert(!ctx->moving);
+
+	return mailbox_copy_int(_ctx, mail);
 }
 
 int mailbox_move(struct mail_save_context **_ctx, struct mail *mail)
 {
 	struct mail_save_context *ctx = *_ctx;
+	int ret;
+
+	i_assert(!ctx->saving);
+	i_assert(!ctx->moving);
 
 	ctx->moving = TRUE;
-	if (mailbox_copy(_ctx, mail) < 0)
-		return -1;
-
-	mail_expunge(mail);
+	if ((ret = mailbox_copy_int(_ctx, mail)) == 0)
+		mail_expunge(mail);
 	ctx->moving = FALSE;
-	return 0;
+	return ret;
 }
 
-int mailbox_save_using_mail(struct mail_save_context **ctx, struct mail *mail)
+int mailbox_save_using_mail(struct mail_save_context **_ctx, struct mail *mail)
 {
-	(*ctx)->saving = TRUE;
-	return mailbox_copy(ctx, mail);
+	struct mail_save_context *ctx = *_ctx;
+
+	i_assert(!ctx->saving);
+	i_assert(!ctx->moving);
+
+	ctx->saving = TRUE;
+	return mailbox_copy_int(_ctx, mail);
 }
 
 bool mailbox_is_inconsistent(struct mailbox *box)

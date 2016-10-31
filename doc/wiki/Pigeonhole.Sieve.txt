@@ -98,6 +98,12 @@ The Pigeonhole Sieve interpreter recognizes the following Sieve extensions:
 |                                                                 |            |          | folders other  |
 |                                                                 |            |          | than INBOX     |
 +-----------------------------------------------------------------+------------+----------+----------------+
+| foreverypart [http://tools.ietf.org/html/rfc5703#section-3]     | supported  | yes      | Allows         |
+|                                                                 | (v0.4.14+) |          | iterating      |
+|                                                                 |            |          | through the    |
+|                                                                 |            |          | message's MIME |
+|                                                                 |            |          | parts          |
++-----------------------------------------------------------------+------------+----------+----------------+
 | ihave [http://tools.ietf.org/html/rfc5463/]                     | supported  | yes      | Adds the       |
 |                                                                 | (v0.2.4+)  |          | ability to test|
 |                                                                 |            |          | for support of |
@@ -109,6 +115,13 @@ The Pigeonhole Sieve interpreter recognizes the following Sieve extensions:
 | imap4flags [http://tools.ietf.org/html/rfc5232/]                | supported  | yes      | Allows adding  |
 |                                                                 |            |          | IMAP flags to  |
 |                                                                 |            |          | stored messages|
++-----------------------------------------------------------------+------------+----------+----------------+
+| imapsieve [http://tools.ietf.org/html/rfc6785/]                 | supported  | no       | Provides access|
+|                                                                 | (v0.4.14+) | (plugin) | to special     |
+|                                                                 |            |          | environment    |
+|                                                                 |            |          | items when     |
+|                                                                 |            |          | executing at   |
+|                                                                 |            |          | IMAP events    |
 +-----------------------------------------------------------------+------------+----------+----------------+
 | include [http://tools.ietf.org/html/rfc6609/]                   | supported  | yes      | Allows         |
 |                                                                 | (v0.4.0+)  |          | including other|
@@ -130,6 +143,17 @@ The Pigeonhole Sieve interpreter recognizes the following Sieve extensions:
 | mboxmetadata [http://tools.ietf.org/html/rfc5490]               | supported  | no       | Provides access|
 |                                                                 | (v0.4.7+)  |          | to mailbox     |
 |                                                                 |            |          | METADATA entries|
++-----------------------------------------------------------------+------------+----------+----------------+
+| mime [http://tools.ietf.org/html/rfc5703#section-4]             | supported  | yes      | Allows testing |
+|                                                                 | (v0.4.14+) |          | parts of       |
+|                                                                 |            |          | structured MIME|
+|                                                                 |            |          | header fields  |
++-----------------------------------------------------------------+------------+----------+----------------+
+| extracttext [http://tools.ietf.org/html/rfc5703#section-7]      | supported  | yes      | Allows         |
+|                                                                 | (v0.4.14+) |          | extracting text|
+|                                                                 |            |          | from individual|
+|                                                                 |            |          | message MIME   |
+|                                                                 |            |          | parts          |
 +-----------------------------------------------------------------+------------+----------+----------------+
 | regex                                                           | supported  | yes      | Provides       |
 | [http://tools.ietf.org/html/draft-murchison-sieve-regex-08/]    |            |          | regular        |
@@ -208,56 +232,41 @@ The following Dovecot-specific Sieve extensions are available for the
 Pigeonhole Sieve interpreter:
 
  *
-+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+-------------+
-| *Extension*                                                                                                     | *Support Status*                           | *Default | *Purpose*   |
-|                                                                                                                 |                                            | Enabled* |             |
-+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+-------------+
-| vnd.dovecot.debug [http://hg.rename-it.nl/dovecot-2.1-pigeonhole/raw-file/tip/doc/rfc/spec-bosch-sieve-debug.txt]| supported (v0.3.0+)                        | no       | Allows      |
-|                                                                                                                 |                                            |          | logging     |
-|                                                                                                                 |                                            |          | debug       |
-|                                                                                                                 |                                            |          | messages    |
-+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+-------------+
-| vnd.dovecot.extdata                                                                                             | <plugin>                                   | no       | Allows a    |
-| [http://hg.rename-it.nl/pigeonhole-0.2-sieve-extdata/raw-file/tip/doc/rfc/spec-bosch-sieve-external-data.txt]   | [Pigeonhole.Sieve.Plugins.Extdata.txt]     |          | Sieve script|
-|                                                                                                                 |                                            |          | to lookup   |
-|                                                                                                                 |                                            |          | information |
-|                                                                                                                 |                                            |          | from a      |
-|                                                                                                                 |                                            |          | datasource  |
-|                                                                                                                 |                                            |          | external to |
-|                                                                                                                 |                                            |          | the script  |
-+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+-------------+
-| vnd.dovecot.pipe                                                                                                | <plugin>                                   | no       | Implements  |
-| [http://hg.rename-it.nl/pigeonhole-0.3-sieve-extprograms/raw-file/tip/doc/rfc/spec-bosch-sieve-extprograms.txt] | [Pigeonhole.Sieve.Plugins.Pipe.txt] (v0.2),|          | piping      |
-|                                                                                                                 | <plugin>                                   |          | messages to |
-|                                                                                                                 | [Pigeonhole.Sieve.Plugins.Extprograms.txt] |          | a           |
-|                                                                                                                 | (v0.3+)                                    |          | pre-defined |
-|                                                                                                                 |                                            |          | set of      |
-|                                                                                                                 |                                            |          | external    |
-|                                                                                                                 |                                            |          | programs    |
-+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+-------------+
-| vnd.dovecot.filter                                                                                              | <plugin>                                   | no       | Implements  |
-| [http://hg.rename-it.nl/pigeonhole-0.3-sieve-extprograms/raw-file/tip/doc/rfc/spec-bosch-sieve-extprograms.txt] | [Pigeonhole.Sieve.Plugins.Extprograms.txt] |          | filtering   |
-|                                                                                                                 | (v0.3+)                                    |          | messages    |
-|                                                                                                                 |                                            |          | through a   |
-|                                                                                                                 |                                            |          | pre-defined |
-|                                                                                                                 |                                            |          | set of      |
-|                                                                                                                 |                                            |          | external    |
-|                                                                                                                 |                                            |          | programs    |
-+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+-------------+
-| vnd.dovecot.execute                                                                                             | <plugin>                                   | no       | Implements  |
-| [http://hg.rename-it.nl/pigeonhole-0.3-sieve-extprograms/raw-file/tip/doc/rfc/spec-bosch-sieve-extprograms.txt] | [Pigeonhole.Sieve.Plugins.Extprograms.txt] |          | executing a |
-|                                                                                                                 | (v0.3+)                                    |          | pre-defined |
-|                                                                                                                 |                                            |          | set of      |
-|                                                                                                                 |                                            |          | external    |
-|                                                                                                                 |                                            |          | programs    |
-|                                                                                                                 |                                            |          | with the    |
-|                                                                                                                 |                                            |          | option to   |
-|                                                                                                                 |                                            |          | process     |
-|                                                                                                                 |                                            |          | string data |
-|                                                                                                                 |                                            |          | through the |
-|                                                                                                                 |                                            |          | external    |
-|                                                                                                                 |                                            |          | program     |
-+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+-------------+
++----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+----------------------------------------+
+| *Extension*                                                                                                    | *Support Status*                           | *Default | *Purpose*                              |
+|                                                                                                                |                                            | Enabled* |                                        |
++----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+----------------------------------------+
+| vnd.dovecot.debug                                                                                              | supported (v0.3.0+)                        | no       | Allows logging debug messages          |
+| [https://raw.githubusercontent.com/dovecot/pigeonhole/master/doc/rfc/spec-bosch-sieve-debug.txt]               |                                            |          |                                        |
++----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+----------------------------------------+
+| vnd.dovecot.environment                                                                                        | supported (v0.4.14+)                       | no       | Extends the standard "environment"     |
+| [https://raw.githubusercontent.com/dovecot/pigeonhole/master/doc/rfc/spec-bosch-sieve-dovecot-environment.txt] |                                            |          | extension with extra items and a       |
+|                                                                                                                |                                            |          | variables namespace for direct access  |
++----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+----------------------------------------+
+| vnd.dovecot.execute                                                                                            | <plugin>                                   | no       | Implements executing a pre-defined set |
+| [https://raw.githubusercontent.com/dovecot/pigeonhole/master/doc/rfc/spec-bosch-sieve-extprograms.txt]         | [Pigeonhole.Sieve.Plugins.Extprograms.txt] |          | of external programs with the option to|
+|                                                                                                                | (v0.3+)                                    |          | process string data through the        |
+|                                                                                                                |                                            |          | external program                       |
++----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+----------------------------------------+
+| vnd.dovecot.extdata                                                                                            | <plugin>                                   | no       | Allows a Sieve script to lookup        |
+| [http://hg.rename-it.nl/pigeonhole-0.2-sieve-extdata/raw-file/tip/doc/rfc/spec-bosch-sieve-external-data.txt]  | [Pigeonhole.Sieve.Plugins.Extdata.txt]     |          | information from a datasource external |
+|                                                                                                                |                                            |          | to the script                          |
++----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+----------------------------------------+
+| vnd.dovecot.filter                                                                                             | <plugin>                                   | no       | Implements filtering messages through a|
+| [https://raw.githubusercontent.com/dovecot/pigeonhole/master/doc/rfc/spec-bosch-sieve-extprograms.txt]         | [Pigeonhole.Sieve.Plugins.Extprograms.txt] |          | pre-defined set of external programs   |
+|                                                                                                                | (v0.3+)                                    |          |                                        |
++----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+----------------------------------------+
+| vnd.dovecot.pipe                                                                                               | <plugin>                                   | no       | Implements piping messages to a        |
+| [https://raw.githubusercontent.com/dovecot/pigeonhole/master/doc/rfc/spec-bosch-sieve-extprograms.txt]         | [Pigeonhole.Sieve.Plugins.Pipe.txt] (v0.2),|          | pre-defined set of external programs   |
+|                                                                                                                | <plugin>                                   |          |                                        |
+|                                                                                                                | [Pigeonhole.Sieve.Plugins.Extprograms.txt] |          |                                        |
+|                                                                                                                | (v0.3+)                                    |          |                                        |
++----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+----------------------------------------+
+| vnd.dovecot.report                                                                                             | supported (v0.4.14+)                       | no       | Implements sending Messaging Abuse     |
+| [https://raw.githubusercontent.com/dovecot/pigeonhole/master/doc/rfc/spec-bosch-sieve-report.txt]              |                                            |          | Reporting Format (MARF) reports (RFC   |
+|                                                                                                                |                                            |          | 5965                                   |
+|                                                                                                                |                                            |          | [http://tools.ietf.org/html/rfc5965/]) |
++----------------------------------------------------------------------------------------------------------------+--------------------------------------------+----------+----------------------------------------+
 
 Please note that not all extensions are enabled by default, as shown in the
 table above. Deprecated extensions, extensions that add the ability to change
@@ -278,4 +287,4 @@ protocol. This is also provided by the <Pigeonhole.txt> project. It is
 available as a separate Dovecot service. Its configuration and use is explained
 on the <Pigeonhole ManageSieve page> [Pigeonhole.ManageSieve.txt].
 
-(This file was created from the wiki on 2016-07-01 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

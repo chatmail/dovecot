@@ -23,8 +23,10 @@ void mailbox_recent_flags_set_uid_forced(struct mailbox *box, uint32_t uid)
 {
 	box->recent_flags_prev_uid = uid;
 
-	seq_range_array_add_with_init(&box->recent_flags, 64, uid);
-	box->recent_flags_count++;
+	if (!mailbox_recent_flags_have_uid(box, uid)) {
+		seq_range_array_add_with_init(&box->recent_flags, 64, uid);
+		box->recent_flags_count++;
+	}
 }
 
 void mailbox_recent_flags_set_seqs(struct mailbox *box,
@@ -92,6 +94,14 @@ void mailbox_recent_flags_expunge_seqs(struct mailbox *box,
 
 	for (; seq1 <= seq2; seq1++) {
 		mail_index_lookup_uid(box->view, seq1, &uid);
+		if (seq_range_array_remove(&box->recent_flags, uid))
+			box->recent_flags_count--;
+	}
+}
+
+void mailbox_recent_flags_expunge_uid(struct mailbox *box, uint32_t uid)
+{
+	if (array_is_created(&box->recent_flags)) {
 		if (seq_range_array_remove(&box->recent_flags, uid))
 			box->recent_flags_count--;
 	}

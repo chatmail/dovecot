@@ -97,8 +97,13 @@ struct doveadm_mail_cmd_context {
 	unsigned int iterate_single_user:1;
 	/* We're going through all users (not set for wildcard usernames) */
 	unsigned int iterate_all_users:1;
+	/* Add username header to all replies */
+	unsigned int add_username_header:1;
 	/* Running from CLI doveadm (not doveadm-server) */
 	unsigned int cli:1;
+
+	/* Allow empty mailbox name - to allow access to server attributes */
+	unsigned int allow_empty_mailbox_name:1;
 };
 
 struct doveadm_mail_cmd {

@@ -7,6 +7,7 @@
 #include "sha1.h"
 #include "hex-binary.h"
 #include "str.h"
+#include "array.h"
 #include "safe-memset.h"
 #include "str-sanitize.h"
 #include "strescape.h"
@@ -318,6 +319,10 @@ void auth_request_export(struct auth_request *request, string_t *dest)
 		str_printfa(dest, "\treal_lport=%u", request->real_local_port);
 	if (request->real_remote_port != 0)
 		str_printfa(dest, "\treal_rport=%u", request->real_remote_port);
+	if (request->local_name != 0) {
+		str_append(dest, "\tlocal_name=");
+		str_append_tabescaped(dest, request->local_name);
+	}
 	if (request->session_id != NULL)
 		str_printfa(dest, "\tsession=%s", request->session_id);
 	if (request->debug)
@@ -334,6 +339,18 @@ void auth_request_export(struct auth_request *request, string_t *dest)
 		str_append(dest, "\tsuccessful");
 	if (request->mech_name != NULL)
 		auth_str_add_keyvalue(dest, "mech", request->mech_name);
+	/* export any userdb fields */
+	if (request->userdb_reply != NULL) {
+		const ARRAY_TYPE(auth_field) *fields = auth_fields_export(request->userdb_reply);
+		const struct auth_field *field;
+		array_foreach(fields, field) {
+			str_printfa(dest, "\tuserdb_%s", field->key);
+			if (field->value != NULL) {
+				str_append_c(dest, '=');
+				str_append_tabescaped(dest, field->value);
+			}
+		}
+	}
 }
 
 bool auth_request_import_info(struct auth_request *request,
@@ -367,6 +384,8 @@ bool auth_request_import_info(struct auth_request *request,
 		(void)net_str2port(value, &request->real_local_port);
 	else if (strcmp(key, "real_rport") == 0)
 		(void)net_str2port(value, &request->real_remote_port);
+	else if (strcmp(key, "local_name") == 0)
+		request->local_name = p_strdup(request->pool, value);
 	else if (strcmp(key, "session") == 0)
 		request->session_id = p_strdup(request->pool, value);
 	else if (strcmp(key, "debug") == 0)
@@ -442,7 +461,11 @@ bool auth_request_import(struct auth_request *request,
 		request->skip_password_check = TRUE;
 	else if (strcmp(key, "mech") == 0)
 		request->mech_name = p_strdup(request->pool, value);
-	else
+	else if (strncmp(key, "userdb_", 7) == 0) {
+		if (request->userdb_reply == NULL)
+			request->userdb_reply = auth_fields_init(request->pool);
+		auth_fields_add(request->userdb_reply, key+7, value, 0);
+	} else
 		return FALSE;
 
 	return TRUE;
@@ -485,6 +508,7 @@ static void auth_request_save_cache(struct auth_request *request,
 	case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
 		/* can be cached */
 		break;
+	case PASSDB_RESULT_NEXT:
 	case PASSDB_RESULT_USER_DISABLED:
 	case PASSDB_RESULT_PASS_EXPIRED:
 		/* FIXME: we can't cache this now, or cache lookup would
@@ -652,6 +676,11 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 	case PASSDB_RESULT_INTERNAL_FAILURE:
 		result_rule = request->passdb->result_internalfail;
 		break;
+	case PASSDB_RESULT_NEXT:
+		auth_request_log_debug(request, AUTH_SUBSYS_DB,
+			"Not performing authentication (noauthenticate set)");
+		result_rule = AUTH_DB_RULE_CONTINUE;
+		break;
 	case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
 	case PASSDB_RESULT_USER_UNKNOWN:
 	case PASSDB_RESULT_PASSWORD_MISMATCH:
@@ -692,6 +721,7 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 	/* nopassword check is specific to a single passdb and shouldn't leak
 	   to the next one. we already added it to cache. */
 	auth_fields_remove(request->extra_fields, "nopassword");
+	auth_fields_remove(request->extra_fields, "noauthenticate");
 
 	if (request->requested_login_user != NULL &&
 	    *result == PASSDB_RESULT_OK) {
@@ -706,7 +736,7 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 		auth_request_want_skip_passdb(request, next_passdb))
 		next_passdb = next_passdb->next;
 
-	if (*result == PASSDB_RESULT_OK) {
+	if (*result == PASSDB_RESULT_OK || *result == PASSDB_RESULT_NEXT) {
 		/* this passdb lookup succeeded, preserve its extra fields */
 		auth_fields_snapshot(request->extra_fields);
 		request->snapshot_have_userdb_prefetch_set =
@@ -739,6 +769,11 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 			request->passdbs_seen_internal_failure = TRUE;
 		}
 		return FALSE;
+	} else if (*result == PASSDB_RESULT_NEXT) {
+		/* admin forgot to put proper passdb last */
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
+			"Last passdb had noauthenticate field, cannot authenticate user");
+		*result = PASSDB_RESULT_INTERNAL_FAILURE;
 	} else if (request->passdb_success) {
 		/* either this or a previous passdb lookup succeeded. */
 		*result = PASSDB_RESULT_OK;
@@ -776,6 +811,10 @@ void auth_request_verify_plain_callback(enum passdb_result result,
 	i_assert(request->state == AUTH_REQUEST_STATE_PASSDB);
 
 	auth_request_set_state(request, AUTH_REQUEST_STATE_MECH_CONTINUE);
+
+	if (result == PASSDB_RESULT_OK &&
+	    auth_fields_exists(request->extra_fields, "noauthenticate"))
+		result = PASSDB_RESULT_NEXT;
 
 	if (result != PASSDB_RESULT_INTERNAL_FAILURE)
 		auth_request_save_cache(request, result);
@@ -1009,6 +1048,10 @@ void auth_request_lookup_credentials_callback(enum passdb_result result,
 
 	auth_request_set_state(request, AUTH_REQUEST_STATE_MECH_CONTINUE);
 
+	if (result == PASSDB_RESULT_OK &&
+	    auth_fields_exists(request->extra_fields, "noauthenticate"))
+		result = PASSDB_RESULT_NEXT;
+
 	if (result != PASSDB_RESULT_INTERNAL_FAILURE)
 		auth_request_save_cache(request, result);
 	else {
@@ -1045,8 +1088,6 @@ void auth_request_lookup_credentials(struct auth_request *request,
 
 	if (request->credentials_scheme == NULL)
 		request->credentials_scheme = p_strdup(request->pool, scheme);
-	else
-		i_assert(request->credentials_scheme == scheme);
 
 	if (request->policy_processed)
 		auth_request_lookup_credentials_policy_continue(request, callback);
@@ -1307,9 +1348,10 @@ void auth_request_userdb_callback(enum userdb_result result,
 
 	if (request->userdb_lookup_tempfailed) {
 		/* no caching */
-	} else if (result != USERDB_RESULT_INTERNAL_FAILURE)
-		auth_request_userdb_save_cache(request, result);
-	else if (passdb_cache != NULL && userdb->cache_key != NULL) {
+	} else if (result != USERDB_RESULT_INTERNAL_FAILURE) {
+		if (!request->userdb_result_from_cache)
+			auth_request_userdb_save_cache(request, result);
+	} else if (passdb_cache != NULL && userdb->cache_key != NULL) {
 		/* lookup failed. if we're looking here only because the
 		   request was expired in cache, fallback to using cached
 		   expired record. */
@@ -1333,6 +1375,7 @@ void auth_request_lookup_user(struct auth_request *request,
 
 	request->private_callback.userdb = callback;
 	request->userdb_lookup = TRUE;
+	request->userdb_result_from_cache = FALSE;
 	if (request->userdb_reply == NULL)
 		auth_request_init_userdb_reply(request);
 	else {
@@ -1349,6 +1392,7 @@ void auth_request_lookup_user(struct auth_request *request,
 
 		if (auth_request_lookup_user_cache(request, cache_key,
 						   &result, FALSE)) {
+			request->userdb_result_from_cache = TRUE;
 			auth_request_userdb_callback(result, request);
 			return;
 		}
@@ -1728,11 +1772,17 @@ void auth_request_set_field(struct auth_request *request,
 			return;
 		}
 		auth_request_set_userdb_field(request, name + 7, value);
+	} else if (strcmp(name, "noauthenticate") == 0) {
+		/* add "nopassword" also so that passdbs won't try to verify
+		   the password. */
+		auth_fields_add(request->extra_fields, name, value, 0);
+		auth_fields_add(request->extra_fields, "nopassword", NULL, 0);
 	} else if (strcmp(name, "nopassword") == 0) {
 		/* NULL password - anything goes */
 		const char *password = request->passdb_password;
 
-		if (password != NULL) {
+		if (password != NULL &&
+		    !auth_fields_exists(request->extra_fields, "noauthenticate")) {
 			(void)password_get_scheme(&password);
 			if (*password != '\0') {
 				auth_request_log_error(request, AUTH_SUBSYS_DB,
@@ -2380,9 +2430,14 @@ void auth_request_log_info(struct auth_request *auth_request,
 	if (auth_request->set->debug) {
 		/* auth_debug=yes overrides auth_verbose settings */
 	} else {
-		const char *db_auth_verbose = auth_request->userdb_lookup ?
-			auth_request->userdb->set->auth_verbose :
-			auth_request->passdb->set->auth_verbose;
+		const char *db_auth_verbose;
+
+		if (auth_request->userdb_lookup)
+			db_auth_verbose = auth_request->userdb->set->auth_verbose;
+		else if (auth_request->passdb != NULL)
+			db_auth_verbose = auth_request->passdb->set->auth_verbose;
+		else
+			db_auth_verbose = "d";
 		switch (db_auth_verbose[0]) {
 		case 'y':
 			break;

@@ -4,7 +4,8 @@ Kerberos
 Dovecot supports Kerberos 5 using GSSAPI. The Kerberos authentication mechanism
 doesn't require having a <passdb> [PasswordDatabase.txt], but you do need a
 <userdb> [UserDatabase.txt] so Dovecot can lookup user-specific information,
-such as where their mailboxes are stored.
+such as where their mailboxes are stored. With centralized systems, such as
+Microsoft Active Directory, LDAP is pretty good choice.
 
 *Note:* If you only wish to authenticate clients using their Kerberos
 /passphrase/ (as opposed to ticket authentication), you will probably want to
@@ -28,13 +29,61 @@ will need a service ticket of the form 'pop/hostname@REALM'.  When using
 Dovecot's <SASL> [Sasl.txt] with MTA, you will need to install service ticket
 of the form 'smtp/hostname@REALM'.
 
+Setting up (samba)
+------------------
+
+Create symlink for krb5.conf, if you do not have krb5.conf ready
+
+---%<-------------------------------------------------------------------------
+ln -sf /usr/local/samba/private/krb5.conf /etc/krb5.conf
+---%<-------------------------------------------------------------------------
+
+Create dovecot user to your samba instance (choose random password)
+
+---%<-------------------------------------------------------------------------
+$ samba-tool user create dovecot
+New Password:
+Retype Password:
+User 'dovecot' created successfully
+---%<-------------------------------------------------------------------------
+
+Add Service Principal Names (SPNs) and create keytab
+
+---%<-------------------------------------------------------------------------
+$ samba-tool spn add imap/host.domain.com dovecot
+$ samba-tool domain exportkeytab --principal imap/host.domain.com
+/etc/dovecot/dovecot.keytab
+---%<-------------------------------------------------------------------------
+
+Dovecot needs to be able to read the keytab
+
+---%<-------------------------------------------------------------------------
+$ chgrp dovecot /etc/dovecot/dovecot.keytab
+$ chmod g+r /etc/dovecot/dovecot.keytab
+---%<-------------------------------------------------------------------------
+
+Make sure your keytab has entry for imap/host.domain.name@REALM.
+
+---%<-------------------------------------------------------------------------
+$ klist -Kek /etc/dovecot/dovecot.keytab
+Keytab name: FILE:/etc/dovecot/dovecot.keytab
+KVNO Principal
+---- --------------------------------------------------------------------------
+   1 imap/host.domain.name@REALM (des-cbc-crc)
+   1 imap/host.domain.name@REALM (des-cbc-md5)
+   1 imap/host.domain.name@REALM (arcfour-hmac)
+---%<-------------------------------------------------------------------------
+
 Example dovecot.conf configurations
 -----------------------------------
 
 If you only want to use Kerberos ticket-based authentication:
 
 ---%<-------------------------------------------------------------------------
+auth_gssapi_hostname = "$ALL"
 auth_mechanisms = gssapi
+auth_krb5_keytab = /etc/dovecot/dovecot.keytab
+
 userdb {
   driver = static
   args = uid=vmail gid=vmail home=/var/vmail/%u
@@ -48,7 +97,10 @@ If you also want to support plaintext authentication in addition to
 ticket-based authentication, you will need something like:
 
 ---%<-------------------------------------------------------------------------
-auth_mechanisms = plain gssapi
+auth_mechanisms = plain login gssapi
+auth_gssapi_hostname = "$ALL"
+auth_mechanisms = gssapi
+auth_krb5_keytab = /etc/dovecot/dovecot.keytab
 passdb {
   driver = pam
 }
@@ -121,11 +173,6 @@ Mail clients that support Kerberos GSSAPI authentication include:
  * UW Pine
  * Apple Mail
 
-Testing
--------
-
-*FIXME*: This section requires cleanup.
-
 Test that the server can access the keytab
 ------------------------------------------
 
@@ -177,6 +224,6 @@ The test:
  * run command mutt
  * If you get error No Authentication Method
     * run command klist (list all kerberos keys) should show imap/HOSTNAME
- * /etc/hosts has to be set properly so that kerberos can find server.
+ * DNS has to function correctly so that kerberos works.
 
-(This file was created from the wiki on 2016-07-01 04:42)
+(This file was created from the wiki on 2016-10-27 04:43)
