@@ -13,6 +13,10 @@ struct hash_method;
    This can be later on used to optimize reads by setting it before reading
    the file. */
 #define FS_METADATA_OBJECTID FS_METADATA_INTERNAL_PREFIX"ObjectID"
+/* Calling this before fs_write_stream_finish() allows renaming the filename.
+   This can be useful if you don't know the final filename before writing it
+   (e.g. filename contains the file size). */
+#define FS_METADATA_WRITE_FNAME FS_METADATA_INTERNAL_PREFIX"WriteFilename"
 
 enum fs_properties {
 	FS_PROPERTY_METADATA	= 0x01,
@@ -275,6 +279,7 @@ int fs_write_stream_finish_async(struct fs_file *file);
    fs_write_stream_finish(), i.e. it can't be used to abort a pending async
    write. */
 void fs_write_stream_abort(struct fs_file *file, struct ostream **output);
+void fs_write_stream_abort_error(struct fs_file *file, struct ostream **output, const char *error_fmt, ...) ATTR_FORMAT(3, 4);
 
 /* Set a hash to the following write. The storage can then verify that the
    input data matches the specified hash, or fail if it doesn't. Typically
@@ -304,6 +309,10 @@ int fs_delete(struct fs_file *file);
 /* Returns 0 if ok, -1 if error occurred (e.g. errno=ENOENT).
    All fs backends may not support all stat fields. */
 int fs_stat(struct fs_file *file, struct stat *st_r);
+/* Get number of links to the file. This is the same as using fs_stat()'s
+   st_nlinks field, except not all backends support returning it via fs_stat().
+   Returns 0 if ok, -1 if error occurred. */
+int fs_get_nlinks(struct fs_file *file, nlink_t *nlinks_r);
 /* Copy an object with possibly updated metadata. Destination parent
    directories are created automatically. Returns 0 if ok, -1 if error
    occurred. */

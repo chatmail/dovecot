@@ -423,7 +423,7 @@ imap_msgpart_crlf_seek(struct mail *mail, struct istream *input,
 
 	if (virtual_skip == 0) {
 		/* no need to seek */
-	} else if (cache->uid == mail->uid &&
+	} else if (mail->uid > 0 && cache->uid == mail->uid &&
 		   cache->physical_start == physical_start &&
 		   cache->virtual_pos < virtual_skip) {
 		/* use cache */
@@ -437,7 +437,8 @@ imap_msgpart_crlf_seek(struct mail *mail, struct istream *input,
 		return errinput;
 	}
 
-	if ((msgpart->partial_offset != 0 ||
+	if (mail->uid > 0 &&
+	    (msgpart->partial_offset != 0 ||
 	     msgpart->partial_size != (uoff_t)-1) && !input->eof) {
 		/* update cache */
 		cache->uid = mail->uid;
@@ -575,7 +576,7 @@ imap_msgpart_open_normal(struct mail *mail, struct imap_msgpart *msgpart,
 
 	if (*msgpart->section_number != '\0') {
 		/* find the MIME part */
-		if (mail_get_stream(mail, NULL, NULL, &input) < 0)
+		if (mail_get_stream_because(mail, NULL, NULL, "MIME part", &input) < 0)
 			return -1;
 
 		i_stream_seek(input, part->physical_pos);
@@ -584,7 +585,7 @@ imap_msgpart_open_normal(struct mail *mail, struct imap_msgpart *msgpart,
 	} else switch (msgpart->fetch_type) {
 	case FETCH_FULL:
 		/* fetch the whole message */
-		if (mail_get_stream(mail, NULL, NULL, &input) < 0 ||
+		if (mail_get_stream_because(mail, NULL, NULL, "full mail", &input) < 0 ||
 		    mail_get_virtual_size(mail, &body_size.virtual_size) < 0)
 			return -1;
 		result_r->size_field = MAIL_FETCH_VIRTUAL_SIZE;
@@ -619,7 +620,8 @@ imap_msgpart_open_normal(struct mail *mail, struct imap_msgpart *msgpart,
 		break;
 	case FETCH_BODY:
 		/* fetch the message's body */
-		if (mail_get_stream(mail, &hdr_size, &body_size, &input) < 0)
+		if (mail_get_stream_because(mail, &hdr_size, &body_size,
+					    "mail body", &input) < 0)
 			return -1;
 		result_r->size_field = MAIL_FETCH_MESSAGE_PARTS;
 		break;

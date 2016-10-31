@@ -244,7 +244,7 @@ int index_storage_mailbox_open(struct mailbox *box, bool move_to_memory)
 
 	index_flags = ibox->index_flags;
 	if (move_to_memory)
-		ibox->index_flags &= ~MAIL_INDEX_OPEN_FLAG_CREATE;
+		index_flags &= ~MAIL_INDEX_OPEN_FLAG_CREATE;
 
 	if (index_storage_mailbox_alloc_index(box) < 0)
 		return -1;
@@ -333,6 +333,8 @@ void index_storage_mailbox_alloc(struct mailbox *box, const char *vname,
 		mail_storage_settings_to_index_flags(box->storage->set);
 	if ((box->flags & MAILBOX_FLAG_SAVEONLY) != 0)
 		ibox->index_flags |= MAIL_INDEX_OPEN_FLAG_SAVEONLY;
+	if (box->storage->user->mail_debug)
+		ibox->index_flags |= MAIL_INDEX_OPEN_FLAG_DEBUG;
 	ibox->next_lock_notify = time(NULL) + LOCK_NOTIFY_INTERVAL;
 	MODULE_CONTEXT_SET(box, index_storage_module, ibox);
 
@@ -1019,7 +1021,7 @@ int index_storage_expunged_sync_begin(struct mailbox *box,
 		/* race condition - need to abort the sync and retry with
 		   the vsize locked */
 		mail_index_sync_rollback(ctx_r);
-		index_storage_expunging_init(box);
+		index_storage_expunging_deinit(box);
 		return index_storage_expunged_sync_begin(box, ctx_r, view_r,
 							 trans_r, flags);
 	}

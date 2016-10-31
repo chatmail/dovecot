@@ -9,6 +9,7 @@ struct imap_client_state {
 	/* optional: */
 	const char *session_id, *userdb_fields, *stats;
 	struct ip_addr local_ip, remote_ip;
+	time_t session_created;
 
 	uid_t uid;
 	gid_t gid;
@@ -16,6 +17,7 @@ struct imap_client_state {
 	dev_t peer_dev;
 	ino_t peer_ino;
 
+	char *tag;
 	const unsigned char *state;
 	size_t state_size;
 
@@ -31,6 +33,7 @@ void imap_client_add_notify_fd(struct imap_client *client, int fd);
 void imap_client_create_finish(struct imap_client *client);
 void imap_client_destroy(struct imap_client **_client, const char *reason);
 
+void imap_clients_init(void);
 void imap_clients_deinit(void);
 
 #endif

@@ -80,6 +80,9 @@ struct connection {
 
 	struct timeout *to;
 	time_t last_input;
+	struct timeval last_input_tv;
+	struct timeval connect_started;
+	struct timeval connect_finished;
 
 	/* for IP client: */
 	struct ip_addr ip;
@@ -126,6 +129,9 @@ int connection_verify_version(struct connection *conn, const char *const *args);
 
 /* Returns human-readable reason for why connection was disconnected. */
 const char *connection_disconnect_reason(struct connection *conn);
+/* Returns human-readable reason for why connection timed out,
+   e.g. "No input for 10.023 secs". */
+const char *connection_input_timeout_reason(struct connection *conn);
 
 void connection_switch_ioloop(struct connection *conn);
 

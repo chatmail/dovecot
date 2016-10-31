@@ -223,10 +223,12 @@ void auth_policy_finish(void *ctx)
 
 	if (context->parser != NULL) {
 		const char *error ATTR_UNUSED;
-		json_parser_deinit(&(context->parser), &error);
+		(void)json_parser_deinit(&(context->parser), &error);
 	}
 	if (context->http_request != NULL)
 		http_client_request_abort(&(context->http_request));
+	if (context->request != NULL)
+		auth_request_unref(&context->request);
 }
 
 static
@@ -391,6 +393,7 @@ void auth_policy_send_request(struct policy_lookup_ctx *context)
 	http_client_request_set_payload(context->http_request, is, FALSE);
 	i_stream_unref(&is);
 	http_client_request_submit(context->http_request);
+	auth_request_ref(context->request);
 }
 
 static
@@ -523,9 +526,8 @@ void auth_policy_report(struct auth_request *request)
 
 	if (*(request->set->policy_server_url) == '\0')
 		return;
-	pool_t pool = pool_alloconly_create("auth policy", 128);
-	struct policy_lookup_ctx *ctx = p_new(pool, struct policy_lookup_ctx, 1);
-	ctx->pool = pool;
+	struct policy_lookup_ctx *ctx = p_new(request->pool, struct policy_lookup_ctx, 1);
+	ctx->pool = request->pool;
 	ctx->request = request;
 	ctx->expect_result = FALSE;
 	ctx->set = request->set;

@@ -5,7 +5,7 @@ After a user has been successfully authenticated, Dovecot looks up the user's
 userdb information. The userdb lookup is also done by <LDA.txt> to find out how
 to deliver mails for the user.
 
-The user database lookup returns these fields:
+The user database lookup can return these fields:
 
  * *uid*: User's <UID> [UserIds.txt] (UNIX user ID), overrides the global
    'mail_uid' setting.
@@ -15,6 +15,7 @@ The user database lookup returns these fields:
    global 'mail_home' setting. Although not required, it's <highly recommended
    even for virtual users> [VirtualUsers.Home.txt].
  * Optional <extra fields> [UserDatabase.ExtraFields.txt]
+    * *user*: Changes the username (can also be done by the passdb lookup)
     * Overwriting all mail-related settings, for example:
        * *mail*: <Mail location> [MailLocation.txt], overrides the global
          'mail_location' setting.
@@ -121,4 +122,4 @@ The result values that can be used:
  * continue: Continue to the next userdb without changing the user existence
    state. The initial state is "not found".
 
-(This file was created from the wiki on 2016-07-01 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

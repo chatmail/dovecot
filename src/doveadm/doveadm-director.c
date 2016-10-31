@@ -4,6 +4,7 @@
 #include "md5.h"
 #include "hash.h"
 #include "str.h"
+#include "strescape.h"
 #include "net.h"
 #include "istream.h"
 #include "write-full.h"
@@ -26,11 +27,13 @@ struct director_context {
 	const char *ip;
 	const char *port;
 	const char *vhost_count;
+	const char *passdb_field;
 
 	struct istream *users_input;
 	struct istream *input;
 	bool explicit_socket_path;
 	bool hash_map, user_map, force_flush;
+	int64_t max_parallel;
 };
 
 struct user_list {
@@ -124,6 +127,10 @@ cmd_director_init(struct doveadm_cmd_context *cctx)
 		ctx->port = NULL;
 	if (!doveadm_cmd_param_str(cctx, "vhost-count", &(ctx->vhost_count)))
 		ctx->vhost_count = NULL;
+	if (!doveadm_cmd_param_str(cctx, "passdb-field", &(ctx->passdb_field)))
+		ctx->passdb_field = NULL;
+	if (!doveadm_cmd_param_int64(cctx, "max-parallel", &(ctx->max_parallel)))
+		ctx->max_parallel = 0;
 	if (!ctx->user_map)
 		director_connect(ctx);
 	return ctx;
@@ -586,6 +593,7 @@ static void cmd_director_kick(struct doveadm_cmd_context *cctx)
 {
 	struct director_context *ctx;
 	const char *line;
+	string_t *cmd = t_str_new(64);
 
 	ctx = cmd_director_init(cctx);
 	if (ctx->user == NULL) {
@@ -593,7 +601,19 @@ static void cmd_director_kick(struct doveadm_cmd_context *cctx)
 		return;
 	}
 
-	director_send(ctx, t_strdup_printf("USER-KICK\t%s\n", ctx->user));
+	if (ctx->passdb_field == NULL) {
+		str_append(cmd, "USER-KICK\t");
+		str_append_tabescaped(cmd, ctx->user);
+		str_append_c(cmd, '\n');
+	} else {
+		str_append(cmd, "USER-KICK-ALT\t");
+		str_append_tabescaped(cmd, ctx->passdb_field);
+		str_append_c(cmd, '\t');
+		str_append_tabescaped(cmd, ctx->user);
+		str_append_c(cmd, '\n');
+	}
+	director_send(ctx, str_c(cmd));
+
 	line = i_stream_read_next_line(ctx->input);
 	if (line == NULL) {
 		i_error("failed");
@@ -612,8 +632,15 @@ static void cmd_director_flush_all(struct director_context *ctx)
 {
 	const char *line;
 
-	director_send(ctx, ctx->force_flush ?
-		      "HOST-FLUSH\n" : "HOST-RESET-USERS\n");
+	if (ctx->force_flush)
+		line = "HOST-FLUSH\n";
+	else if (ctx->max_parallel > 0) {
+		line = t_strdup_printf("HOST-RESET-USERS\t\t%lld\n",
+				       (long long)ctx->max_parallel);
+	} else {
+		line = "HOST-RESET-USERS\n";
+	}
+	director_send(ctx, line);
 
 	line = i_stream_read_next_line(ctx->input);
 	if (line == NULL) {
@@ -634,6 +661,7 @@ static void cmd_director_flush(struct doveadm_cmd_context *cctx)
 	unsigned int i, ips_count;
 	struct ip_addr ip;
 	const char *line;
+	string_t *cmd;
 
 	ctx = cmd_director_init(cctx);
 	if (ctx->host == NULL) {
@@ -652,10 +680,20 @@ static void cmd_director_flush(struct doveadm_cmd_context *cctx)
 		if (director_get_host(ctx->host, &ips, &ips_count) != 0) return;
 	}
 
+	cmd = t_str_new(64);
 	for (i = 0; i < ips_count; i++) {
-		director_send(ctx, t_strdup_printf("%s\t%s\n",
-			ctx->force_flush ? "HOST-FLUSH" : "HOST-RESET-USERS",
-			net_ip2addr(&ip)));
+		str_truncate(cmd, 0);
+		if (ctx->force_flush)
+			str_printfa(cmd, "HOST-FLUSH\t%s\n", net_ip2addr(&ip));
+		else {
+			str_printfa(cmd, "HOST-RESET-USERS\t%s", net_ip2addr(&ip));
+			if (ctx->max_parallel > 0) {
+				str_printfa(cmd, "\t%lld",
+					    (long long)ctx->max_parallel);
+			}
+			str_append_c(cmd, '\n');
+		}
+		director_send(ctx, str_c(cmd));
 	}
 	for (i = 0; i < ips_count; i++) {
 		line = i_stream_read_next_line(ctx->input);
@@ -684,9 +722,9 @@ static void cmd_director_dump(struct doveadm_cmd_context *cctx)
 
 	doveadm_print_init(DOVEADM_PRINT_TYPE_FORMATTED);
 	if (ctx->explicit_socket_path)
-		doveadm_print_formatted_set_format("doveadm director %{command} -a %{socket-path} %{host} %{vhost_count}");
+		doveadm_print_formatted_set_format("doveadm director %{command} -a %{socket-path} %{host} %{vhost_count}\n");
 	else
-		doveadm_print_formatted_set_format("doveadm director %{command} %{host} %{vhost_count}");
+		doveadm_print_formatted_set_format("doveadm director %{command} %{host} %{vhost_count}\n");
 
 	doveadm_print_header_simple("command");
 	doveadm_print_header_simple("socket-path");
@@ -915,19 +953,21 @@ DOVEADM_CMD_PARAMS_END
 {
 	.name = "director kick",
 	.cmd = cmd_director_kick,
-	.usage = "[-a <director socket path>] <user>",
+	.usage = "[-a <director socket path>] [-f <passdb field>] <user>",
 DOVEADM_CMD_PARAMS_START
 DOVEADM_CMD_PARAM('a', "socket-path", CMD_PARAM_STR, 0)
+DOVEADM_CMD_PARAM('\0', "passdb-field", CMD_PARAM_STR, 0)
 DOVEADM_CMD_PARAM('\0', "user", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
 DOVEADM_CMD_PARAMS_END
 },
 {
 	.name = "director flush",
 	.cmd = cmd_director_flush,
-	.usage = "[-a <director socket path>] [-F] <host>|all",
+	.usage = "[-a <director socket path>] [-F] [--max-parallel <n>] <host>|all",
 DOVEADM_CMD_PARAMS_START
 DOVEADM_CMD_PARAM('a', "socket-path", CMD_PARAM_STR, 0)
 DOVEADM_CMD_PARAM('F', "force-flush", CMD_PARAM_BOOL, 0)
+DOVEADM_CMD_PARAM('\0', "max-parallel", CMD_PARAM_INT64, 0)
 DOVEADM_CMD_PARAM('\0', "host", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
 DOVEADM_CMD_PARAMS_END
 },
@@ -974,9 +1014,10 @@ static void director_cmd_help(const struct doveadm_cmd_ver2 *cmd)
 	unsigned int i;
 
 	for (i = 0; i < N_ELEMENTS(doveadm_cmd_director); i++) {
-		if (doveadm_cmd_director+i == cmd)
+		if (doveadm_cmd_director[i].cmd == cmd->cmd)
 			help_ver2(&doveadm_cmd_director[i]);
 	}
+	i_unreached();
 }
 
 void doveadm_register_director_commands(void)

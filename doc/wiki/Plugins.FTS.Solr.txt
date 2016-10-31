@@ -177,4 +177,4 @@ Some additional things which might help you configuring Solr search:
  * Set 'df' to 'hdr' in '/etc/solr/conf/solrconfig.xml' ('/select' request
    handler) to avoid strange 'undefined field text' errors.
 
-(This file was created from the wiki on 2016-07-01 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

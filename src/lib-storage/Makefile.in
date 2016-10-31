@@ -93,8 +93,10 @@ host_triplet = @host@
 noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-storage
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/dovecot.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -146,8 +148,7 @@ libdovecot_storage_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(LDFLAGS) -o $@
 am__DEPENDENCIES_2 = list/libstorage_list.la index/libstorage_index.la \
 	register/libstorage_register.la ../lib-index/libindex.la \
-	../lib-imap-storage/libimap-storage.la \
-	../lib-dovecot/libdovecot.la
+	../lib-imap-storage/libimap-storage.la
 am_libstorage_la_OBJECTS = fail-mail-storage.lo fail-mailbox.lo \
 	fail-mail.lo mail.lo mail-autoexpunge.lo mail-copy.lo \
 	mail-error.lo mail-namespace.lo mail-search.lo \
@@ -578,15 +579,22 @@ shlibs = \
 	index/libstorage_index.la \
 	register/libstorage_register.la \
 	../lib-index/libindex.la \
-	../lib-imap-storage/libimap-storage.la \
-	../lib-dovecot/libdovecot.la
+	../lib-imap-storage/libimap-storage.la
 
 libstorage_la_LIBADD = $(shlibs)
 libstorage_la_DEPENDENCIES = $(shlibs)
 pkglib_LTLIBRARIES = libdovecot-storage.la
 libdovecot_storage_la_SOURCES = 
-libdovecot_storage_la_LIBADD = libstorage.la $(LINKED_STORAGE_LDADD)
-libdovecot_storage_la_DEPENDENCIES = libstorage.la
+libdovecot_storage_la_LIBADD = \
+	libstorage.la \
+	../lib-dovecot/libdovecot.la \
+	$(LINKED_STORAGE_LDADD)
+
+libdovecot_storage_la_DEPENDENCIES = \
+	libstorage.la \
+	../lib-dovecot/libdovecot.la \
+	$(LIBDOVECOT_DEPS)
+
 libdovecot_storage_la_LDFLAGS = -export-dynamic
 test_programs = \
 	test-mail-search-args-imap \

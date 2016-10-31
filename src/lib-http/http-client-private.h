@@ -90,9 +90,13 @@ struct http_client_request {
 	struct timeval response_time;
 	struct timeval timeout_time;
 	unsigned int timeout_msecs;
+	unsigned int attempt_timeout_msecs;
+	unsigned int max_attempts;
 
 	unsigned int attempts;
 	unsigned int redirects;
+	uint64_t sent_global_ioloop_usecs;
+	uint64_t sent_lock_usecs;
 
 	unsigned int delayed_error_status;
 	const char *delayed_error;

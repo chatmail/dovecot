@@ -19,12 +19,12 @@ Since different Dovecot versions can have different APIs, your plugin should
 usually also define<plugin_name>_version, like:
 
 ---%<-------------------------------------------------------------------------
-const char *imap_quota_plugin_version = DOVECOT_VERSION;
+const char *imap_quota_plugin_version = DOVECOT_ABI_VERSION;
 ---%<-------------------------------------------------------------------------
 
 If the version string in plugin doesn't match the version of the running
-binary, the plugin loading fails. The DOVECOT_VERSION is defined in Dovecot's
-'config.h', which you're typically including.
+binary, the plugin loading fails. The DOVECOT_ABI_VERSION is defined in
+Dovecot's 'config.h', which you're typically including.
 
 Dependencies
 ------------
@@ -59,4 +59,4 @@ gives a nice error message:
 Error: Can't load plugin imap_quota_plugin: Plugin quota must be loaded also
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-07-01 04:43)
+(This file was created from the wiki on 2016-10-27 04:43)

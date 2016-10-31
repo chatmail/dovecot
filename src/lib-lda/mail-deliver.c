@@ -68,6 +68,7 @@ mail_deliver_get_log_var_expand_table_full(struct mail_deliver_context *ctx,
 		{ '\0', NULL, "delivery_time" },
 		{ '\0', NULL, "session_time" },
 		{ '\0', NULL, "to_envelope" },
+		{ '\0', NULL, "storage_id" },
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
@@ -99,6 +100,7 @@ mail_deliver_get_log_var_expand_table_full(struct mail_deliver_context *ctx,
 		tab[8].value = dec2str(ctx->session_time_msecs);
 		tab[9].value = ctx->dest_addr;
 	}
+	(void)mail_get_special(mail, MAIL_FETCH_STORAGE_ID, &tab[10].value);
 	return tab;
 }
 
@@ -290,6 +292,35 @@ void mail_deliver_deduplicate_guid_if_needed(struct mail_deliver_session *sessio
 	}
 }
 
+static struct mail *
+mail_deliver_open_mail(struct mailbox *box,
+		       const struct mail_transaction_commit_changes *changes,
+		       enum mail_fetch_field wanted_fields,
+		       struct mailbox_transaction_context **trans_r)
+{
+	struct mailbox_transaction_context *t;
+	struct mail *mail;
+	const struct seq_range *range;
+
+	*trans_r = NULL;
+
+	if (mailbox_sync(box, MAILBOX_SYNC_FLAG_FAST) < 0)
+		return NULL;
+
+	range = array_idx(&changes->saved_uids, 0);
+	i_assert(range[0].seq1 == range[0].seq2);
+
+	t = mailbox_transaction_begin(box, 0);
+	mail = mail_alloc(t, wanted_fields, NULL);
+
+	if (!mail_set_uid(mail, range[0].seq1)) {
+		mail_free(&mail);
+		mailbox_transaction_rollback(&t);
+	}
+	*trans_r = t;
+	return mail;
+}
+
 int mail_deliver_save(struct mail_deliver_context *ctx, const char *mailbox,
 		      enum mail_flags flags, const char *const *keywords,
 		      struct mail_storage **storage_r)
@@ -304,7 +335,6 @@ int mail_deliver_save(struct mail_deliver_context *ctx, const char *mailbox,
 	enum mail_error error;
 	const char *mailbox_name, *errstr, *guid;
 	struct mail_transaction_commit_changes changes;
-	const struct seq_range *range;
 	bool default_save;
 	int ret = 0;
 
@@ -365,25 +395,33 @@ int mail_deliver_save(struct mail_deliver_context *ctx, const char *mailbox,
 
 	if (ret == 0) {
 		ctx->saved_mail = TRUE;
-		mail_deliver_log(ctx, "saved mail to %s", mailbox_name);
-
-		if (ctx->save_dest_mail &&
-		    mailbox_sync(box, MAILBOX_SYNC_FLAG_FAST) == 0) {
-			range = array_idx(&changes.saved_uids, 0);
-			i_assert(range[0].seq1 == range[0].seq2);
-
-			t = mailbox_transaction_begin(box, 0);
-			ctx->dest_mail = mail_alloc(t, MAIL_FETCH_STREAM_BODY,
-						    NULL);
+		if (ctx->save_dest_mail) {
 			/* copying needs the message body. with maildir we also
 			   need to get the GUID in case the message gets
 			   expunged */
-			if (!mail_set_uid(ctx->dest_mail, range[0].seq1) ||
-			    mail_get_special(ctx->dest_mail, MAIL_FETCH_GUID, &guid) < 0) {
+			ctx->dest_mail = mail_deliver_open_mail(box, &changes,
+				MAIL_FETCH_STREAM_BODY | MAIL_FETCH_GUID, &t);
+			if (mail_get_special(ctx->dest_mail, MAIL_FETCH_GUID, &guid) < 0) {
 				mail_free(&ctx->dest_mail);
 				mailbox_transaction_rollback(&t);
 			}
+			/* might as well get the storage_id */
+			(void)mail_get_special(ctx->dest_mail, MAIL_FETCH_STORAGE_ID,
+					       &ctx->var_expand_table[10].value);
+		} else if (var_has_key(ctx->set->deliver_log_format, '\0', "storage_id")) {
+			/* storage ID is available only after commit. */
+			struct mail *mail = mail_deliver_open_mail(box, &changes,
+				MAIL_FETCH_STORAGE_ID, &t);
+			if (mail != NULL) {
+				const char *str;
+
+				(void)mail_get_special(mail, MAIL_FETCH_STORAGE_ID, &str);
+				ctx->var_expand_table[10].value = t_strdup(str);
+				mail_free(&mail);
+				(void)mailbox_transaction_commit(&t);
+			}
 		}
+		mail_deliver_log(ctx, "saved mail to %s", mailbox_name);
 		pool_unref(&changes.pool);
 	} else {
 		mail_deliver_log(ctx, "save failed to %s: %s", mailbox_name,

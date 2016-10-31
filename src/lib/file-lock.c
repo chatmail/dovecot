@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "istream.h"
 #include "file-lock.h"
+#include "time-util.h"
 
 #include <time.h>
 #include <sys/stat.h>
@@ -14,9 +15,16 @@ struct file_lock {
 	int fd;
 	char *path;
 
+	struct timeval locked_time;
 	int lock_type;
 	enum file_lock_method lock_method;
 };
+
+static struct timeval lock_wait_start;
+static uint64_t file_lock_wait_usecs = 0;
+static long long file_lock_slow_warning_usecs = -1;
+
+static void file_lock_log_warning_if_slow(struct file_lock *lock);
 
 bool file_lock_method_parse(const char *name, enum file_lock_method *method_r)
 {
@@ -110,9 +118,9 @@ file_lock_find_proc_locks(int lock_fd ATTR_UNUSED)
 
 		/* number: FLOCK/POSIX ADVISORY READ/WRITE pid
 		   major:minor:inode region-start region-end */
-		if (str_array_length(args) < 8)
-			continue;
-		if (strcmp(args[5], node_buf) == 0) {
+		if (str_array_length(args) < 8) {
+			; /* don't continue from within a T_BEGIN {...} T_END */
+		} else if (strcmp(args[5], node_buf) == 0) {
 			lock_type = strcmp(args[3], "READ") == 0 ?
 				"READ" : "WRITE";
 			if (str_to_pid(args[4], &pid) < 0)
@@ -165,8 +173,10 @@ static int file_lock_do(int fd, const char *path, int lock_type,
 
 	i_assert(fd != -1);
 
-	if (timeout_secs != 0)
+	if (timeout_secs != 0) {
 		alarm(timeout_secs);
+		file_lock_wait_start();
+	}
 
 	lock_type_str = lock_type == F_UNLCK ? "unlock" :
 		(lock_type == F_RDLCK ? "read-lock" : "write-lock");
@@ -186,7 +196,10 @@ static int file_lock_do(int fd, const char *path, int lock_type,
 		fl.l_len = 0;
 
 		ret = fcntl(fd, timeout_secs ? F_SETLKW : F_SETLK, &fl);
-		if (timeout_secs != 0) alarm(0);
+		if (timeout_secs != 0) {
+			alarm(0);
+			file_lock_wait_end(path);
+		}
 
 		if (ret == 0)
 			break;
@@ -237,7 +250,10 @@ static int file_lock_do(int fd, const char *path, int lock_type,
 		}
 
 		ret = flock(fd, operation);
-		if (timeout_secs != 0) alarm(0);
+		if (timeout_secs != 0) {
+			alarm(0);
+			file_lock_wait_end(path);
+		}
 
 		if (ret == 0)
 			break;
@@ -304,6 +320,8 @@ int file_wait_lock_error(int fd, const char *path, int lock_type,
 	lock->path = i_strdup(path);
 	lock->lock_type = lock_type;
 	lock->lock_method = lock_method;
+	if (gettimeofday(&lock->locked_time, NULL) < 0)
+		i_fatal("gettimeofday() failed: %m");
 	*lock_r = lock;
 	return 1;
 }
@@ -311,9 +329,15 @@ int file_wait_lock_error(int fd, const char *path, int lock_type,
 int file_lock_try_update(struct file_lock *lock, int lock_type)
 {
 	const char *error;
+	int ret;
 
-	return file_lock_do(lock->fd, lock->path, lock_type,
-			    lock->lock_method, 0, &error);
+	ret = file_lock_do(lock->fd, lock->path, lock_type,
+			   lock->lock_method, 0, &error);
+	if (ret <= 0)
+		return ret;
+	file_lock_log_warning_if_slow(lock);
+	lock->lock_type = lock_type;
+	return 1;
 }
 
 void file_unlock(struct file_lock **_lock)
@@ -338,6 +362,86 @@ void file_lock_free(struct file_lock **_lock)
 
 	*_lock = NULL;
 
+	file_lock_log_warning_if_slow(lock);
 	i_free(lock->path);
 	i_free(lock);
+}
+
+void file_lock_wait_start(void)
+{
+	i_assert(lock_wait_start.tv_sec == 0);
+
+	if (gettimeofday(&lock_wait_start, NULL) < 0)
+		i_fatal("gettimeofday() failed: %m");
+}
+
+static void file_lock_wait_init_warning(void)
+{
+	const char *value;
+
+	i_assert(file_lock_slow_warning_usecs == -1);
+
+	value = getenv("FILE_LOCK_SLOW_WARNING_MSECS");
+	if (value == NULL)
+		file_lock_slow_warning_usecs = LLONG_MAX;
+	else if (str_to_llong(value, &file_lock_slow_warning_usecs) == 0 &&
+		 file_lock_slow_warning_usecs > 0) {
+		file_lock_slow_warning_usecs *= 1000;
+	} else {
+		i_error("FILE_LOCK_SLOW_WARNING_MSECS: "
+			"Invalid value '%s' - ignoring", value);
+		file_lock_slow_warning_usecs = LLONG_MAX;
+	}
+}
+
+static void file_lock_log_warning_if_slow(struct file_lock *lock)
+{
+	if (file_lock_slow_warning_usecs < 0)
+		file_lock_wait_init_warning();
+	if (file_lock_slow_warning_usecs == LLONG_MAX) {
+		/* slowness checking is disabled */
+		return;
+	}
+	if (lock->lock_type != F_WRLCK) {
+		/* some shared locks can legitimately be kept for a long time.
+		   don't warn about them. */
+		return;
+	}
+
+	struct timeval now;
+	if (gettimeofday(&now, NULL) < 0)
+		i_fatal("gettimeofday() failed: %m");
+
+	int diff = timeval_diff_msecs(&now, &lock->locked_time);
+	if (diff > file_lock_slow_warning_usecs/1000) {
+		i_warning("Lock %s kept for %d.%03d secs", lock->path,
+			  diff / 1000, diff % 1000);
+	}
+}
+
+void file_lock_wait_end(const char *lock_name)
+{
+	struct timeval now;
+
+	i_assert(lock_wait_start.tv_sec != 0);
+
+	if (gettimeofday(&now, NULL) < 0)
+		i_fatal("gettimeofday() failed: %m");
+	long long diff = timeval_diff_usecs(&now, &lock_wait_start);
+	if (diff > file_lock_slow_warning_usecs) {
+		if (file_lock_slow_warning_usecs < 0)
+			file_lock_wait_init_warning();
+		if (diff > file_lock_slow_warning_usecs) {
+			int diff_msecs = (diff + 999) / 1000;
+			i_warning("Locking %s took %d.%03d secs", lock_name,
+				  diff_msecs / 1000, diff_msecs % 1000);
+		}
+	}
+	file_lock_wait_usecs += diff;
+	lock_wait_start.tv_sec = 0;
+}
+
+uint64_t file_lock_wait_get_total_usecs(void)
+{
+	return file_lock_wait_usecs;
 }

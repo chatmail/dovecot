@@ -443,6 +443,23 @@ fs_posix_read_stream(struct fs_file *_file, size_t max_buffer_size)
 	return input;
 }
 
+static void fs_posix_write_rename_if_needed(struct posix_fs_file *file)
+{
+	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
+	const char *new_fname;
+
+	new_fname = fs_metadata_find(&file->file.metadata, FS_METADATA_WRITE_FNAME);
+	if (new_fname == NULL)
+		return;
+
+	i_free(file->file.path);
+	file->file.path = i_strdup(new_fname);
+
+	i_free(file->full_path);
+	file->full_path = fs->path_prefix == NULL ? i_strdup(new_fname) :
+		i_strconcat(fs->path_prefix, new_fname, NULL);
+}
+
 static int fs_posix_write_finish(struct posix_fs_file *file)
 {
 	int ret, old_errno;
@@ -455,6 +472,7 @@ static int fs_posix_write_finish(struct posix_fs_file *file)
 		}
 	}
 
+	fs_posix_write_rename_if_needed(file);
 	switch (file->open_mode) {
 	case FS_OPEN_MODE_CREATE_UNIQUE_128:
 	case FS_OPEN_MODE_CREATE:
@@ -499,6 +517,7 @@ static int fs_posix_write(struct fs_file *_file, const void *data, size_t size)
 	if (file->fd == -1) {
 		if (fs_posix_open(file) < 0)
 			return -1;
+		i_assert(file->fd != -1);
 	}
 
 	if (file->open_mode != FS_OPEN_MODE_APPEND) {
@@ -871,7 +890,8 @@ const struct fs fs_class_posix = {
 		fs_posix_file_close,
 		NULL,
 		NULL, NULL,
-		NULL, NULL,
+		fs_default_set_metadata,
+		NULL,
 		fs_posix_prefetch,
 		fs_posix_read,
 		fs_posix_read_stream,
@@ -888,6 +908,7 @@ const struct fs fs_class_posix = {
 		fs_posix_iter_init,
 		fs_posix_iter_next,
 		fs_posix_iter_deinit,
-		NULL
+		NULL,
+		NULL,
 	}
 };

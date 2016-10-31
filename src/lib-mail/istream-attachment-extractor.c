@@ -77,16 +77,16 @@ static void parse_content_type(struct attachment_istream *astream,
 	struct rfc822_parser_context parser;
 	string_t *content_type;
 
+	if (astream->part.content_type != NULL)
+		return;
+
 	rfc822_parser_init(&parser, hdr->full_value, hdr->full_value_len, NULL);
 	rfc822_skip_lwsp(&parser);
 
 	T_BEGIN {
 		content_type = t_str_new(64);
-		if (rfc822_parse_content_type(&parser, content_type) >= 0) {
-			i_free(astream->part.content_type);
-			astream->part.content_type =
-				i_strdup(str_c(content_type));
-		}
+		(void)rfc822_parse_content_type(&parser, content_type);
+		astream->part.content_type = i_strdup(str_c(content_type));
 	} T_END;
 }
 
@@ -375,8 +375,9 @@ static int astream_decode_base64(struct attachment_istream *astream)
 	o_stream_cork(output);
 
 	hash_format_reset(astream->set.hash_format);
-	while ((ret = i_stream_read(base64_input)) > 0) {
-		data = i_stream_get_data(base64_input, &size);
+	size_t bytes_needed = 1;
+	while ((ret = i_stream_read_bytes(base64_input, &data, &size,
+					  bytes_needed)) > 0) {
 		buffer_set_used_size(buf, 0);
 		if (base64_decode(data, size, &size, buf) < 0) {
 			i_error("istream-attachment: BUG: "
@@ -388,6 +389,7 @@ static int astream_decode_base64(struct attachment_istream *astream)
 		o_stream_nsend(output, buf->data, buf->used);
 		hash_format_loop(astream->set.hash_format,
 				 buf->data, buf->used);
+		bytes_needed = i_stream_get_data_size(base64_input) + 1;
 	}
 	if (ret != -1) {
 		i_assert(failed);

@@ -181,6 +181,7 @@ struct imapc_settings {
 	const char *imapc_list_prefix;
 	unsigned int imapc_cmd_timeout;
 	unsigned int imapc_max_idle_time;
+	uoff_t imapc_max_line_length;
 
 	const char *pop3_deleted_flag;
 
@@ -1063,6 +1064,7 @@ static const struct setting_define imapc_setting_defines[] = {
 	DEF(SET_STR, imapc_list_prefix),
 	DEF(SET_TIME, imapc_cmd_timeout),
 	DEF(SET_TIME, imapc_max_idle_time),
+	DEF(SET_SIZE, imapc_max_line_length),
 
 	DEF(SET_STR, pop3_deleted_flag),
 
@@ -1085,6 +1087,7 @@ static const struct imapc_settings imapc_default_settings = {
 	.imapc_list_prefix = "",
 	.imapc_cmd_timeout = 5*60,
 	.imapc_max_idle_time = 60*29,
+	.imapc_max_line_length = 0,
 
 	.pop3_deleted_flag = ""
 };
@@ -1237,6 +1240,7 @@ enum pop3_delete_type {
 /* </settings checks> */
 struct pop3_settings {
 	bool verbose_proctitle;
+	const char *rawlog_dir;
 
 	/* pop3: */
 	bool pop3_no_flag_updates;
@@ -1358,6 +1362,7 @@ enum imap_client_workarounds {
 /* </settings checks> */
 struct imap_settings {
 	bool verbose_proctitle;
+	const char *rawlog_dir;
 
 	/* imap: */
 	uoff_t imap_max_line_length;
@@ -1411,6 +1416,11 @@ struct imap_login_settings {
 };
 /* ../../src/doveadm/doveadm-settings.h */
 extern const struct setting_parser_info doveadm_setting_parser_info;
+/* <settings checks> */
+enum dsync_features {
+	DSYNC_FEATURE_EMPTY_HDR_WORKAROUND = 0x1,
+};
+/* </settings checks> */
 struct doveadm_settings {
 	const char *base_dir;
 	const char *libexec_dir;
@@ -1430,7 +1440,8 @@ struct doveadm_settings {
 	const char *ssl_client_ca_file;
 	const char *director_username_hash;
 	const char *doveadm_api_key;
-
+	const char *dsync_features;
+	enum dsync_features parsed_features;
 	ARRAY(const char *) plugin_envs;
 };
 /* ../../src/director/director-settings.h */
@@ -1441,6 +1452,8 @@ struct director_settings {
 	const char *director_servers;
 	const char *director_mail_servers;
 	const char *director_username_hash;
+	const char *director_flush_socket;
+
 	unsigned int director_user_expire;
 	unsigned int director_user_kick_delay;
 	in_port_t director_doveadm_port;
@@ -1969,6 +1982,7 @@ struct service_settings pop3_service_settings = {
 	{ SET_DEFLIST, name, offsetof(struct pop3_settings, field), defines }
 static const struct setting_define pop3_setting_defines[] = {
 	DEF(SET_BOOL, verbose_proctitle),
+	DEF(SET_STR_VARS, rawlog_dir),
 
 	DEF(SET_BOOL, pop3_no_flag_updates),
 	DEF(SET_BOOL, pop3_enable_last),
@@ -1986,6 +2000,7 @@ static const struct setting_define pop3_setting_defines[] = {
 };
 static const struct pop3_settings pop3_default_settings = {
 	.verbose_proctitle = FALSE,
+	.rawlog_dir = "",
 
 	.pop3_no_flag_updates = FALSE,
 	.pop3_enable_last = FALSE,
@@ -3123,6 +3138,7 @@ struct service_settings imap_service_settings = {
 	{ SET_DEFLIST, name, offsetof(struct imap_settings, field), defines }
 static const struct setting_define imap_setting_defines[] = {
 	DEF(SET_BOOL, verbose_proctitle),
+	DEF(SET_STR_VARS, rawlog_dir),
 
 	DEF(SET_SIZE, imap_max_line_length),
 	DEF(SET_TIME, imap_idle_notify_interval),
@@ -3141,6 +3157,7 @@ static const struct setting_define imap_setting_defines[] = {
 };
 static const struct imap_settings imap_default_settings = {
 	.verbose_proctitle = FALSE,
+	.rawlog_dir = "",
 
 	/* RFC-2683 recommends at least 8000 bytes. Some clients however don't
 	   break large message sets to multiple commands, so we're pretty
@@ -3508,6 +3525,43 @@ static buffer_t doveadm_unix_listeners_buf = {
 };
 /* </settings checks> */
 /* <settings checks> */
+struct dsync_feature_list {
+	const char *name;
+	enum dsync_features num;
+};
+
+static const struct dsync_feature_list dsync_feature_list[] = {
+	{ "empty-header-workaround", DSYNC_FEATURE_EMPTY_HDR_WORKAROUND },
+	{ NULL, 0 }
+};
+
+static int
+dsync_settings_parse_features(struct doveadm_settings *set,
+			      const char **error_r)
+{
+	enum dsync_features features = 0;
+	const struct dsync_feature_list *list;
+	const char *const *str;
+
+	str = t_strsplit_spaces(set->dsync_features, " ,");
+	for (; *str != NULL; str++) {
+		list = dsync_feature_list;
+		for (; list->name != NULL; list++) {
+			if (strcasecmp(*str, list->name) == 0) {
+				features |= list->num;
+				break;
+			}
+		}
+		if (list->name == NULL) {
+			*error_r = t_strdup_printf("dsync_features: "
+				"Unknown feature: %s", *str);
+			return -1;
+		}
+	}
+	set->parsed_features = features;
+	return 0;
+}
+
 static bool doveadm_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 				   const char **error_r)
 {
@@ -3521,6 +3575,8 @@ static bool doveadm_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 		*error_r = "dsync_alt_char must not be empty";
 		return FALSE;
 	}
+	if (dsync_settings_parse_features(set, error_r) != 0)
+		return FALSE;
 	return TRUE;
 }
 /* </settings checks> */
@@ -3572,6 +3628,7 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, ssl_client_ca_file),
 	DEF(SET_STR, director_username_hash),
 	DEF(SET_STR, doveadm_api_key),
+	DEF(SET_STR, dsync_features),
 
 	{ SET_STRLIST, "plugin", offsetof(struct doveadm_settings, plugin_envs), NULL },
 
@@ -3592,6 +3649,7 @@ const struct doveadm_settings doveadm_default_settings = {
 	.doveadm_allowed_commands = "",
 	.dsync_alt_char = "_",
 	.dsync_remote_cmd = "ssh -l%{login} %{host} doveadm dsync-server -u%u -U",
+	.dsync_features = "",
 	.ssl_client_ca_dir = "",
 	.ssl_client_ca_file = "",
 	.director_username_hash = "%Lu",
@@ -3729,6 +3787,7 @@ static const struct setting_define director_setting_defines[] = {
 	DEF(SET_STR, director_servers),
 	DEF(SET_STR, director_mail_servers),
 	DEF(SET_STR, director_username_hash),
+	DEF(SET_STR, director_flush_socket),
 	DEF(SET_TIME, director_user_expire),
 	DEF(SET_TIME, director_user_kick_delay),
 	DEF(SET_IN_PORT, director_doveadm_port),
@@ -3742,6 +3801,7 @@ const struct director_settings director_default_settings = {
 	.director_servers = "",
 	.director_mail_servers = "",
 	.director_username_hash = "%Lu",
+	.director_flush_socket = "",
 	.director_user_expire = 60*15,
 	.director_user_kick_delay = 2,
 	.director_doveadm_port = 0
@@ -4436,32 +4496,32 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&pop3_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&imap_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
 	&maildir_setting_parser_info, 
-	&director_setting_parser_info, 
-	&login_setting_parser_info, 
-	&mdbox_setting_parser_info, 
-	&doveadm_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&imapc_setting_parser_info, 
 	&pop3c_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&master_setting_parser_info, 
+	&director_setting_parser_info, 
+	&imap_setting_parser_info, 
+	&doveadm_setting_parser_info, 
 	&ssl_params_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
 	&mail_storage_setting_parser_info, 
 	&dict_setting_parser_info, 
-	&aggregator_setting_parser_info, 
 	&lda_setting_parser_info, 
-	&imapc_setting_parser_info, 
-	&stats_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&mbox_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
 	&imap_login_setting_parser_info, 
-	&mail_user_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&master_setting_parser_info, 
+	&mdbox_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&login_setting_parser_info, 
+	&lmtp_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

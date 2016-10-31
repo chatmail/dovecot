@@ -90,12 +90,14 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@BUILD_OPENSSL_TRUE@am__append_1 = libdcrypt_openssl.la
+@BUILD_DCRYPT_OPENSSL_TRUE@am__append_1 = libdcrypt_openssl.la
 noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-dcrypt
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/dovecot.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
@@ -145,19 +147,17 @@ am__v_lt_0 = --silent
 am__v_lt_1 = 
 libdcrypt_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(libdcrypt_la_CFLAGS) \
-	$(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-libdcrypt_openssl_la_LIBADD =
-am__libdcrypt_openssl_la_SOURCES_DIST = dcrypt-openssl.c dcrypt.c
-@BUILD_OPENSSL_TRUE@am_libdcrypt_openssl_la_OBJECTS =  \
-@BUILD_OPENSSL_TRUE@	libdcrypt_openssl_la-dcrypt-openssl.lo \
-@BUILD_OPENSSL_TRUE@	libdcrypt_openssl_la-dcrypt.lo
+	$(CFLAGS) $(libdcrypt_la_LDFLAGS) $(LDFLAGS) -o $@
+am__DEPENDENCIES_1 =
+am__libdcrypt_openssl_la_SOURCES_DIST = dcrypt-openssl.c
+@BUILD_DCRYPT_OPENSSL_TRUE@am_libdcrypt_openssl_la_OBJECTS = libdcrypt_openssl_la-dcrypt-openssl.lo
 libdcrypt_openssl_la_OBJECTS = $(am_libdcrypt_openssl_la_OBJECTS)
 libdcrypt_openssl_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libdcrypt_openssl_la_CFLAGS) $(CFLAGS) \
 	$(libdcrypt_openssl_la_LDFLAGS) $(LDFLAGS) -o $@
-@BUILD_OPENSSL_TRUE@am_libdcrypt_openssl_la_rpath = -rpath \
-@BUILD_OPENSSL_TRUE@	$(pkglibdir)
+@BUILD_DCRYPT_OPENSSL_TRUE@am_libdcrypt_openssl_la_rpath = -rpath \
+@BUILD_DCRYPT_OPENSSL_TRUE@	$(pkglibdir)
 am__EXEEXT_1 = test-crypto$(EXEEXT) test-stream$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am__objects_1 = test_crypto-dcrypt.$(OBJEXT) \
@@ -166,7 +166,6 @@ am__objects_1 = test_crypto-dcrypt.$(OBJEXT) \
 am_test_crypto_OBJECTS = $(am__objects_1) \
 	test_crypto-test-crypto.$(OBJEXT)
 test_crypto_OBJECTS = $(am_test_crypto_OBJECTS)
-am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(LIBDOVECOT_TEST_DEPS) $(am__DEPENDENCIES_1)
 test_crypto_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(test_crypto_CFLAGS) \
@@ -339,7 +338,7 @@ MYSQL_CONFIG = @MYSQL_CONFIG@
 MYSQL_LIBS = @MYSQL_LIBS@
 NM = @NM@
 NMEDIT = @NMEDIT@
-NOPLUGIN_LDFLAGS = @NOPLUGIN_LDFLAGS@
+NOPLUGIN_LDFLAGS = 
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -453,15 +452,18 @@ libdcrypt_la_SOURCES = \
 libdcrypt_la_CFLAGS = $(AM_CPPFLAGS) \
 	-DDCRYPT_MODULE_DIR=\"$(pkglibdir)\"
 
-@BUILD_OPENSSL_TRUE@libdcrypt_openssl_la_SOURCES = dcrypt-openssl.c dcrypt.c
-@BUILD_OPENSSL_TRUE@libdcrypt_openssl_la_LDFLAGS = -module -avoid-version -shared ../lib-ssl-iostream/libdovecot_openssl_common.la ../lib/liblib.la
-@BUILD_OPENSSL_TRUE@libdcrypt_openssl_la_DEPENDENCIES = ../lib-ssl-iostream/libdovecot_openssl_common.la ../lib/liblib.la
-@BUILD_OPENSSL_TRUE@libdcrypt_openssl_la_CFLAGS = $(AM_CPPFLAGS) \
-@BUILD_OPENSSL_TRUE@	-DDCRYPT_MODULE_DIR=\"$(pkglibdir)\"
+libdcrypt_la_LDFLAGS = -export-dynamic
+@BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_SOURCES = dcrypt-openssl.c
+@BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_LDFLAGS = -module -avoid-version -shared ../lib-ssl-iostream/libdovecot_openssl_common.la ../lib/liblib.la
+@BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_LIBADD = $(SSL_LIBS)
+@BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_DEPENDENCIES = ../lib-ssl-iostream/libdovecot_openssl_common.la ../lib/liblib.la
+@BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_CFLAGS = $(AM_CPPFLAGS) \
+@BUILD_DCRYPT_OPENSSL_TRUE@	-DDCRYPT_MODULE_DIR=\"$(pkglibdir)\" \
+@BUILD_DCRYPT_OPENSSL_TRUE@	$(SSL_CFLAGS)
 
 headers = \
 	dcrypt.h \
-	dcrypt-iostream-private.h \
+	dcrypt-iostream.h \
 	dcrypt-private.h \
 	ostream-encrypt.h \
 	istream-decrypt.h
@@ -603,7 +605,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdcrypt_la-istream-decrypt.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdcrypt_la-ostream-encrypt.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdcrypt_openssl_la-dcrypt-openssl.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdcrypt_openssl_la-dcrypt.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_crypto-dcrypt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_crypto-istream-decrypt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_crypto-ostream-encrypt.Po@am__quote@
@@ -661,13 +662,6 @@ libdcrypt_openssl_la-dcrypt-openssl.lo: dcrypt-openssl.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='dcrypt-openssl.c' object='libdcrypt_openssl_la-dcrypt-openssl.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libdcrypt_openssl_la_CFLAGS) $(CFLAGS) -c -o libdcrypt_openssl_la-dcrypt-openssl.lo `test -f 'dcrypt-openssl.c' || echo '$(srcdir)/'`dcrypt-openssl.c
-
-libdcrypt_openssl_la-dcrypt.lo: dcrypt.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libdcrypt_openssl_la_CFLAGS) $(CFLAGS) -MT libdcrypt_openssl_la-dcrypt.lo -MD -MP -MF $(DEPDIR)/libdcrypt_openssl_la-dcrypt.Tpo -c -o libdcrypt_openssl_la-dcrypt.lo `test -f 'dcrypt.c' || echo '$(srcdir)/'`dcrypt.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libdcrypt_openssl_la-dcrypt.Tpo $(DEPDIR)/libdcrypt_openssl_la-dcrypt.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='dcrypt.c' object='libdcrypt_openssl_la-dcrypt.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libdcrypt_openssl_la_CFLAGS) $(CFLAGS) -c -o libdcrypt_openssl_la-dcrypt.lo `test -f 'dcrypt.c' || echo '$(srcdir)/'`dcrypt.c
 
 test_crypto-dcrypt.o: dcrypt.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_crypto_CFLAGS) $(CFLAGS) -MT test_crypto-dcrypt.o -MD -MP -MF $(DEPDIR)/test_crypto-dcrypt.Tpo -c -o test_crypto-dcrypt.o `test -f 'dcrypt.c' || echo '$(srcdir)/'`dcrypt.c
@@ -1018,7 +1012,6 @@ uninstall-am: uninstall-pkginc_libHEADERS uninstall-pkglibLTLIBRARIES
 
 .PRECIOUS: Makefile
 
-@BUILD_OPENSSL_TRUE@	$(SSL_CFLAGS)
 
 check: check-am check-test
 

@@ -14,8 +14,17 @@ NOTE: v2.2 is highly recommended for this. Earlier versions can't do
 incremental metadata syncing. This means that the more mails a mailbox has, the
 slower it is to sync it.
 
+Replication works only between server pairs. If you have a large cluster, you
+need multiple independently functioning Dovecot backend pairs. This means that
+<director> [Director.txt] isn't currently supported with replication. The
+replication in general is a bit resource intensive, so it's not recommended to
+be used in multi-million user installations.
+
+Configuration
+-------------
+
 Make sure that user listing is configured for your userdb, this is required by
-replication:
+replication to find the list of users that are periodically replicated:
 
 ---%<-------------------------------------------------------------------------
 doveadm user '*'
@@ -77,6 +86,19 @@ You can configure how many dsyncs can be run in parallel (10 by default):
 
 ---%<-------------------------------------------------------------------------
 replication_max_conns = 10
+---%<-------------------------------------------------------------------------
+
+Normally all replication is asynchronous. You can also optionally configure new
+mail saving to be synchronous, with a timeout to avoid waiting too long. This
+can be configured with:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  # When saving a new mail via IMAP or delivering a mail via LDA/LMTP,
+  # wait for the mail to be synced to the remote site. If it doesn't finish
+  # in 2 seconds, return success anyway.
+  replication_sync_timeout = 2s
+}
 ---%<-------------------------------------------------------------------------
 
 dsync over TCP connections (v2.2+)
@@ -192,6 +214,111 @@ Usually the only change you may want to do is replace '-N' (= sync all
 namespaces) with '-n <namespace>' or maybe just add '-x <exclude>'
 parameter(s).
 
+Administration
+--------------
+
+'doveadm replicator status' provides a summary. For example:
+
+---%<-------------------------------------------------------------------------
+Queued 'sync' requests        0
+Queued 'high' requests        0
+Queued 'low' requests         0
+Queued 'failed' requests      0
+Queued 'full resync' requests 90
+Waiting 'failed' requests     10
+Total number of known users   100
+---%<-------------------------------------------------------------------------
+
+The first 3 fields describe users who have a replication pending with a
+specific priority. The same user can only be in one (or none) of these queues:
+
+ * Queued 'sync' requests: This priority is used only for mail saves if
+   'replication_sync_timeout' setting is used.
+ * Queued 'high' requests: This priority is used only for mail saves if
+   'replication_sync_timeout' setting is not used, or if the sync request timed
+   out.
+ * Queued 'low' requests: This priority is used for everything else except mail
+   saves.
+
+The following fields are:
+
+ * Queued 'failed' requests: Number of users who have a replication pending and
+   where the last sync attempt failed. These users are retried as soon as
+   higher priority users' replication has finished.
+ * Queued 'full resync' requests: Number of users who don't specifically have
+   any replication pending, but who are currently waiting for a periodic "full
+   sync". This is controlled by the 'replication_full_sync_interval' setting.
+ * Waiting 'failed' requests: Number of users whose last replication attempt
+   failed, and we're now waiting for the retry interval (5 mins) to pass before
+   another attempt.
+ * Total number of known users: Number of users that replicator knows about.
+   The users can be listed with:'doveadm replicator status '*''
+
+The per-user replication status can be shown with 'doveadm replicator status
+<username pattern>'. The username pattern can contain '*' and '?' wildcards.
+The response contains for example:
+
+---%<-------------------------------------------------------------------------
+username           priority fast sync  full sync  success sync failed
+test100            none     02:03:52   02:08:52   02:03:52     -
+test1              none     00:00:01   00:43:33   03:20:46     y
+test2              none     02:03:51   02:03:51   02:03:51     -
+---%<-------------------------------------------------------------------------
+
+These fields mean:
+
+ * priority: none, low, high, sync
+ * fast sync: How long time ago the last "fast sync" (non-full sync) attempt
+   was performed. Ideally this is close to the time when the user was last
+   modified. This doesn't mean that the sync succeeded necessarily.
+ * full sync: How long time ago the last "full sync" attempt was performed.
+   This should happen once per 'replication_full_sync_interval'. This doesn't
+   mean that the sync succeeded necessarily.
+ * success sync: Time when the last successful sync was performed. If the last
+   sync succeeded, this is the same as the "fast sync" or the "full sync"
+   timestap.
+ * failed: "y" if the last sync failed, "-" if not.
+
+The current dsync replication status can be looked up with 'doveadm replicator
+dsync-status'. This shows the dsync replicator status for each potential dsync
+connection, as configured by 'replication_max_conns'. An example output is:
+
+---%<-------------------------------------------------------------------------
+username                   type   status
+test100                    full   Waiting for dsync to finish
+test1                      normal Waiting for handshake
+                           -      Not connected
+                           -      Not connected
+---%<-------------------------------------------------------------------------
+
+Here there are 4 lines, meaning 'replication_max_conns=4'. Only two of the
+dsync-connections are being used currently.
+
+The fields mean:
+
+ * username: User currently being replicated.
+ * type: incremental, normal or full. Most of the replications are
+   "incremental", while full syncs are "full". A "normal" sync is done when
+   incremental syncing state isn't available currently. The "incremental"
+   matches doveadm sync's -s parameter, "full" is -f parameter and "normal" is
+   the default.
+ * status: Human-readable status of the connection. These are the current
+   values:
+    * Not connected
+    * Failed to connect to '%s' - last attempt %ld secs ago
+    * Idle
+    * Waiting for handshake
+    * Waiting for dsync to finish
+
+Failed replication attempts are always automatically retried, so any temporary
+problems should get fixed automatically. In case of bugs it may be necessary to
+fix something manually. These should be visible in the error logs. So if a user
+is marked as failed, try to find any errors logged for the user and see if the
+same error keeps repeating in the logs. If you want to debug the dsync, you can
+manually trigger it with:'doveadm -D sync -u user@domain -d -N -l 30 -U' (the
+parameters after "sync" should be the same as in 'replication_dsync_parameters'
+setting).
+
 Notes
 -----
 
@@ -207,4 +334,4 @@ Random things to remember:
     * v2.2.6+: If you're having trouble, verify that 'dovecot --hostdomain'
       returns different values for the servers.
 
-(This file was created from the wiki on 2016-07-01 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

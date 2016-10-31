@@ -77,8 +77,10 @@ struct doveadm_cmd_context {
 
 	const char *username;
 	bool cli;
+	bool tcp_server;
 	struct ip_addr local_ip, remote_ip;
 	in_port_t local_port, remote_port;
+	struct client_connection *conn;
 };
 
 ARRAY_DEFINE_TYPE(doveadm_cmd, struct doveadm_cmd);
@@ -147,6 +149,8 @@ void doveadm_cmd_params_clean(ARRAY_TYPE(doveadm_cmd_param_arr_t) *pargv);
 void doveadm_cmd_params_null_terminate_arrays(ARRAY_TYPE(doveadm_cmd_param_arr_t) *pargv);
 
 extern struct doveadm_cmd_ver2 doveadm_cmd_service_stop_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_service_status_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_process_status_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_stop_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_reload_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_stats_reset_ver2;

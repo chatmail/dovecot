@@ -78,6 +78,9 @@ struct sql_db_vfuncs {
 		       unsigned int *affected_rows);
 	const char *(*escape_blob)(struct sql_db *db,
 				   const unsigned char *data, size_t size);
+	void (*transaction_commit2)(struct sql_transaction_context *ctx,
+				    sql_commit2_callback_t *callback,
+				    void *context);
 };
 
 struct sql_db {
@@ -141,6 +144,7 @@ struct sql_result {
 	struct sql_field_map *map;
 	void *fetch_dest;
 	size_t fetch_dest_size;
+	enum sql_result_error_type error_type;
 
 	unsigned int failed:1;
 	unsigned int failed_try_retry:1;

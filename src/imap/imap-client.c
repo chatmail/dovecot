@@ -7,6 +7,7 @@
 #include "hostpid.h"
 #include "net.h"
 #include "iostream.h"
+#include "iostream-rawlog.h"
 #include "istream.h"
 #include "ostream.h"
 #include "time-util.h"
@@ -122,6 +123,11 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 	client->user = user;
 	client->notify_count_changes = TRUE;
 	client->notify_flag_changes = TRUE;
+
+	if (set->rawlog_dir[0] != '\0') {
+		(void)iostream_rawlog_create(set->rawlog_dir, &client->input,
+					     &client->output);
+	}
 
 	mail_namespaces_set_storage_callbacks(user->namespaces,
 					      &mail_storage_callbacks, client);
@@ -269,7 +275,7 @@ static const char *client_get_commands_status(struct client *client)
 {
 	struct client_command_context *cmd, *last_cmd = NULL;
 	unsigned int msecs_in_ioloop;
-	uint64_t running_usecs = 0, ioloop_wait_usecs;
+	uint64_t running_usecs = 0, lock_wait_usecs = 0, ioloop_wait_usecs;
 	unsigned long long bytes_in = 0, bytes_out = 0;
 	string_t *str;
 	enum io_condition cond;
@@ -290,6 +296,7 @@ static const char *client_get_commands_status(struct client *client)
 		if (cmd->next != NULL)
 			str_append_c(str, ',');
 		running_usecs += cmd->running_usecs;
+		lock_wait_usecs += cmd->lock_wait_usecs;
 		bytes_in += cmd->bytes_in;
 		bytes_out += cmd->bytes_out;
 		last_cmd = cmd;
@@ -314,6 +321,11 @@ static const char *client_get_commands_status(struct client *client)
 		    (int)((running_usecs+999)/1000 / 1000),
 		    (int)((running_usecs+999)/1000 % 1000), cond_str,
 		    msecs_in_ioloop / 1000, msecs_in_ioloop % 1000);
+	if (lock_wait_usecs > 0) {
+		int lock_wait_msecs = (lock_wait_usecs+999)/1000;
+		str_printfa(str, ", %d.%03d in locks",
+			    lock_wait_msecs/1000, lock_wait_msecs%1000);
+	}
 	str_printfa(str, ", %llu B in + %llu+%"PRIuSIZE_T" B out, state=%s)",
 		    bytes_in, bytes_out,
 		    o_stream_get_buffer_used_size(client->output),
@@ -834,7 +846,14 @@ static void client_check_command_hangs(struct client *client)
 	for (cmd = client->command_queue; cmd != NULL; cmd = cmd->next) {
 		switch (cmd->state) {
 		case CLIENT_COMMAND_STATE_WAIT_INPUT:
-			i_assert(client->io != NULL);
+			/* We need to be reading input for this command.
+			   However, if there is already an output lock for
+			   another command we'll wait for it to finish first.
+			   This is needed because if there are any literals
+			   we'd need to send "+ OK" responses. */
+			i_assert(client->io != NULL ||
+				 (client->output_cmd_lock != NULL &&
+				  client->output_cmd_lock != client->input_lock));
 			unfinished_count++;
 			break;
 		case CLIENT_COMMAND_STATE_WAIT_OUTPUT:
@@ -1037,6 +1056,8 @@ static bool client_handle_next_command(struct client *client, bool *remove_io_r)
 	if (client->input_lock != NULL) {
 		if (client->input_lock->state ==
 		    CLIENT_COMMAND_STATE_WAIT_UNAMBIGUITY ||
+		    /* we can't send literal "+ OK" replies if output is
+		       locked by another command. */
 		    (client->output_cmd_lock != NULL &&
 		     client->output_cmd_lock != client->input_lock)) {
 			*remove_io_r = TRUE;

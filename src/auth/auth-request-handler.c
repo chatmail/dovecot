@@ -81,6 +81,7 @@ void auth_request_handler_abort_requests(struct auth_request_handler *handler)
 		case AUTH_REQUEST_STATE_NEW:
 		case AUTH_REQUEST_STATE_MECH_CONTINUE:
 		case AUTH_REQUEST_STATE_FINISHED:
+			auth_request->removed_from_handler = TRUE;
 			auth_request_unref(&auth_request);
 			hash_table_remove(handler->requests, key);
 			break;
@@ -305,6 +306,7 @@ auth_request_handler_reply_failure_finish(struct auth_request *request)
 	auth_str_append_extra_fields(request, str);
 
 	switch (request->passdb_result) {
+	case PASSDB_RESULT_NEXT:
 	case PASSDB_RESULT_INTERNAL_FAILURE:
 	case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
 	case PASSDB_RESULT_USER_UNKNOWN:

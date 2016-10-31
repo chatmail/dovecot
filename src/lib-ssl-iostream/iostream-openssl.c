@@ -115,7 +115,7 @@ openssl_iostream_verify_client_cert(int preverify_ok, X509_STORE_CTX *ctx)
 	ssl_io = SSL_get_ex_data(ssl, dovecot_ssl_extdata_index);
 	ssl_io->cert_received = TRUE;
 
-	subject = X509_get_subject_name(ctx->current_cert);
+	subject = X509_get_subject_name(X509_STORE_CTX_get_current_cert(ctx));
 	if (subject == NULL ||
 	    X509_NAME_oneline(subject, certname, sizeof(certname)) == NULL)
 		certname[0] = '\0';
@@ -124,7 +124,7 @@ openssl_iostream_verify_client_cert(int preverify_ok, X509_STORE_CTX *ctx)
 	if (!preverify_ok) {
 		openssl_iostream_set_error(ssl_io, t_strdup_printf(
 			"Received invalid SSL certificate: %s: %s",
-			X509_verify_cert_error_string(ctx->error), certname));
+			X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx)), certname));
 		if (ssl_io->verbose_invalid_cert)
 			i_info("%s", ssl_io->last_error);
 	} else if (ssl_io->verbose) {
@@ -719,9 +719,7 @@ openssl_iostream_get_last_error(struct ssl_iostream *ssl_io)
 	return ssl_io->last_error;
 }
 
-const struct iostream_ssl_vfuncs ssl_vfuncs = {
-	openssl_iostream_global_deinit,
-
+static const struct iostream_ssl_vfuncs ssl_vfuncs = {
 	openssl_iostream_context_init_client,
 	openssl_iostream_context_init_server,
 	openssl_iostream_context_deinit,
@@ -747,3 +745,13 @@ const struct iostream_ssl_vfuncs ssl_vfuncs = {
 	openssl_iostream_get_security_string,
 	openssl_iostream_get_last_error
 };
+
+void ssl_iostream_openssl_init(void)
+{
+	iostream_ssl_module_init(&ssl_vfuncs);
+}
+
+void ssl_iostream_openssl_deinit(void)
+{
+	openssl_iostream_global_deinit();
+}

@@ -546,7 +546,10 @@ static void parse_fetch_fields(struct fetch_cmd_context *ctx, const char *str)
 		name = t_str_lcase(*fields);
 
 		doveadm_print_header_simple(name);
-		if (strncmp(name, "hdr.", 4) == 0) {
+		if ((field = fetch_field_find(name)) != NULL) {
+			ctx->wanted_fields |= field->wanted_fields;
+			array_append(&ctx->fields, field, 1);
+		} else if (strncmp(name, "hdr.", 4) == 0) {
 			name += 4;
 			hdr_field.name = name;
 			array_append(&ctx->fields, &hdr_field, 1);
@@ -566,13 +569,8 @@ static void parse_fetch_fields(struct fetch_cmd_context *ctx, const char *str)
 			ctx->wanted_fields |= imap_msgpart_get_fetch_data(msgpart);
 			imap_msgpart_free(&msgpart);
 		} else {
-			field = fetch_field_find(name);
-			if (field == NULL) {
-				print_fetch_fields();
-				i_fatal("Unknown fetch field: %s", name);
-			}
-			ctx->wanted_fields |= field->wanted_fields;
-			array_append(&ctx->fields, field, 1);
+			print_fetch_fields();
+			i_fatal("Unknown fetch field: %s", name);
 		}
 	}
 	array_append_zero(&ctx->header_fields);
@@ -665,7 +663,7 @@ static struct doveadm_mail_cmd_context *cmd_fetch_alloc(void)
 	ctx = doveadm_mail_cmd_alloc(struct fetch_cmd_context);
 	ctx->ctx.v.init = cmd_fetch_init;
 	ctx->ctx.v.run = cmd_fetch_run;
-	doveadm_print_init("pager");
+	doveadm_print_init(DOVEADM_PRINT_TYPE_PAGER);
 	return &ctx->ctx;
 }
 

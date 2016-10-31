@@ -8,6 +8,7 @@
 #include "net.h"
 #include "strescape.h"
 #include "llist.h"
+#include "time-util.h"
 #include "connection.h"
 
 #include <unistd.h>
@@ -153,6 +154,7 @@ static void connection_client_connected(struct connection *conn, bool success)
 {
 	i_assert(conn->list->set.client);
 
+	conn->connect_finished = ioloop_timeval;
 	if (success)
 		connection_init_streams(conn);
 	if (conn->list->v.client_connected != NULL)
@@ -274,6 +276,7 @@ int connection_client_connect(struct connection *conn)
 	if (fd == -1)
 		return -1;
 	conn->fd_in = conn->fd_out = fd;
+	conn->connect_started = ioloop_timeval;
 
 	if (conn->port != 0 ||
 	    conn->list->set.delayed_unix_client_connected_callback) {
@@ -291,6 +294,8 @@ int connection_client_connect(struct connection *conn)
 
 void connection_disconnect(struct connection *conn)
 {
+	conn->last_input = 0;
+	memset(&conn->last_input_tv, 0, sizeof(conn->last_input_tv));
 	if (conn->to != NULL)
 		timeout_remove(&conn->to);
 	if (conn->io != NULL)
@@ -326,6 +331,7 @@ void connection_deinit(struct connection *conn)
 int connection_input_read(struct connection *conn)
 {
 	conn->last_input = ioloop_time;
+	conn->last_input_tv = ioloop_timeval;
 	if (conn->to != NULL)
 		timeout_reset(conn->to);
 
@@ -379,6 +385,24 @@ const char *connection_disconnect_reason(struct connection *conn)
 		return io_stream_get_disconnect_reason(conn->input, conn->output);
 	}
 	i_unreached();
+}
+
+const char *connection_input_timeout_reason(struct connection *conn)
+{
+	if (conn->last_input_tv.tv_sec != 0) {
+		int diff = timeval_diff_msecs(&ioloop_timeval, &conn->last_input_tv);
+		return t_strdup_printf("No input for %u.%03u secs",
+				       diff/1000, diff%1000);
+	} else if (conn->connect_finished.tv_sec != 0) {
+		int diff = timeval_diff_msecs(&ioloop_timeval, &conn->connect_finished);
+		return t_strdup_printf(
+			"No input since connected %u.%03u secs ago",
+			diff/1000, diff%1000);
+	} else {
+		int diff = timeval_diff_msecs(&ioloop_timeval, &conn->connect_started);
+		return t_strdup_printf("connect() timed out after %u.%03u secs",
+				       diff/1000, diff%1000);
+	}
 }
 
 void connection_switch_ioloop(struct connection *conn)

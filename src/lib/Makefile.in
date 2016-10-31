@@ -93,8 +93,10 @@ host_triplet = @host@
 noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/dovecot.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -127,8 +129,8 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	ioloop-notify-inotify.lo ioloop-notify-kqueue.lo \
 	ioloop-poll.lo ioloop-select.lo ioloop-epoll.lo \
 	ioloop-kqueue.lo json-parser.lo json-tree.lo lib.lo \
-	lib-signals.lo md4.lo md5.lo mempool.lo mempool-alloconly.lo \
-	mempool-datastack.lo mempool-system.lo \
+	lib-signals.lo log-throttle.lo md4.lo md5.lo mempool.lo \
+	mempool-alloconly.lo mempool-datastack.lo mempool-system.lo \
 	mempool-unsafe-datastack.lo mkdir-parents.lo mmap-anon.lo \
 	mmap-util.lo module-dir.lo mountpoint.lo net.lo \
 	nfs-workarounds.lo numpack.lo ostream.lo ostream-buffer.lo \
@@ -178,6 +180,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-json-parser.$(OBJEXT) \
 	test_lib-test-json-tree.$(OBJEXT) \
 	test_lib-test-llist.$(OBJEXT) \
+	test_lib-test-log-throttle.$(OBJEXT) \
 	test_lib-test-mempool-alloconly.$(OBJEXT) \
 	test_lib-test-pkcs5.$(OBJEXT) test_lib-test-net.$(OBJEXT) \
 	test_lib-test-numpack.$(OBJEXT) \
@@ -567,6 +570,7 @@ liblib_la_SOURCES = \
 	json-tree.c \
 	lib.c \
 	lib-signals.c \
+	log-throttle.c \
 	md4.c \
 	md5.c \
 	mempool.c \
@@ -705,6 +709,7 @@ headers = \
 	lib.h \
 	lib-signals.h \
 	llist.h \
+	log-throttle.h \
 	macros.h \
 	md4.h \
 	md5.h \
@@ -720,6 +725,7 @@ headers = \
 	ostream.h \
 	ostream-escaped.h \
 	ostream-failure-at.h \
+	ostream-file-private.h \
 	ostream-hash.h \
 	ostream-private.h \
 	ostream-null.h \
@@ -803,6 +809,7 @@ test_lib_SOURCES = \
 	test-json-parser.c \
 	test-json-tree.c \
 	test-llist.c \
+	test-log-throttle.c \
 	test-mempool-alloconly.c \
 	test-pkcs5.c \
 	test-net.c \
@@ -984,6 +991,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/json-tree.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lib-signals.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lib.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/log-throttle.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/md4.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/md5.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mempool-alloconly.Plo@am__quote@
@@ -1063,6 +1071,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-json-tree.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-lib.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-llist.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-log-throttle.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-mempool-alloconly.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-net.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-numpack.Po@am__quote@
@@ -1568,6 +1577,20 @@ test_lib-test-llist.obj: test-llist.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-llist.c' object='test_lib-test-llist.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-llist.obj `if test -f 'test-llist.c'; then $(CYGPATH_W) 'test-llist.c'; else $(CYGPATH_W) '$(srcdir)/test-llist.c'; fi`
+
+test_lib-test-log-throttle.o: test-log-throttle.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-log-throttle.o -MD -MP -MF $(DEPDIR)/test_lib-test-log-throttle.Tpo -c -o test_lib-test-log-throttle.o `test -f 'test-log-throttle.c' || echo '$(srcdir)/'`test-log-throttle.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-log-throttle.Tpo $(DEPDIR)/test_lib-test-log-throttle.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-log-throttle.c' object='test_lib-test-log-throttle.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-log-throttle.o `test -f 'test-log-throttle.c' || echo '$(srcdir)/'`test-log-throttle.c
+
+test_lib-test-log-throttle.obj: test-log-throttle.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-log-throttle.obj -MD -MP -MF $(DEPDIR)/test_lib-test-log-throttle.Tpo -c -o test_lib-test-log-throttle.obj `if test -f 'test-log-throttle.c'; then $(CYGPATH_W) 'test-log-throttle.c'; else $(CYGPATH_W) '$(srcdir)/test-log-throttle.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-log-throttle.Tpo $(DEPDIR)/test_lib-test-log-throttle.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-log-throttle.c' object='test_lib-test-log-throttle.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-log-throttle.obj `if test -f 'test-log-throttle.c'; then $(CYGPATH_W) 'test-log-throttle.c'; else $(CYGPATH_W) '$(srcdir)/test-log-throttle.c'; fi`
 
 test_lib-test-mempool-alloconly.o: test-mempool-alloconly.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-mempool-alloconly.o -MD -MP -MF $(DEPDIR)/test_lib-test-mempool-alloconly.Tpo -c -o test_lib-test-mempool-alloconly.o `test -f 'test-mempool-alloconly.c' || echo '$(srcdir)/'`test-mempool-alloconly.c

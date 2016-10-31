@@ -62,6 +62,8 @@ struct dsync_mailbox_importer {
 	uint32_t remote_first_recent_uid;
 	uint64_t remote_highest_modseq, remote_highest_pvt_modseq;
 	time_t sync_since_timestamp;
+	time_t sync_until_timestamp;
+	uoff_t sync_max_size;
 	enum mailbox_transaction_flags transaction_flags;
 	unsigned int hdr_hash_version;
 
@@ -122,6 +124,7 @@ struct dsync_mailbox_importer {
 	unsigned int mails_have_guids:1;
 	unsigned int mails_use_guid128:1;
 	unsigned int delete_mailbox:1;
+	unsigned int empty_hdr_workaround:1;
 };
 
 static const char *dsync_mail_change_type_names[] = {
@@ -215,7 +218,10 @@ dsync_mailbox_import_init(struct mailbox *box,
 			  uint32_t remote_first_recent_uid,
 			  uint64_t remote_highest_modseq,
 			  uint64_t remote_highest_pvt_modseq,
-			  time_t sync_since_timestamp, const char *sync_flag,
+			  time_t sync_since_timestamp,
+			  time_t sync_until_timestamp,
+			  uoff_t sync_max_size,
+			  const char *sync_flag,
 			  enum dsync_mailbox_import_flags flags)
 {
 	struct dsync_mailbox_importer *importer;
@@ -238,6 +244,8 @@ dsync_mailbox_import_init(struct mailbox *box,
 	importer->remote_highest_modseq = remote_highest_modseq;
 	importer->remote_highest_pvt_modseq = remote_highest_pvt_modseq;
 	importer->sync_since_timestamp = sync_since_timestamp;
+	importer->sync_until_timestamp = sync_until_timestamp;
+	importer->sync_max_size = sync_max_size;
 	importer->stateful_import = importer->last_common_uid_found;
 	if (sync_flag != NULL) {
 		if (sync_flag[0] == '-') {
@@ -278,6 +286,8 @@ dsync_mailbox_import_init(struct mailbox *box,
 		(flags & DSYNC_MAILBOX_IMPORT_FLAG_MAILS_USE_GUID128) != 0;
 	importer->hdr_hash_version =
 		(flags & DSYNC_MAILBOX_IMPORT_FLAG_HDR_HASH_V2) != 0 ? 2 : 1;
+	importer->empty_hdr_workaround =
+		(flags & DSYNC_MAILBOX_IMPORT_FLAG_EMPTY_HDR_WORKAROUND) != 0;
 
 	mailbox_get_open_status(importer->box, STATUS_UIDNEXT |
 				STATUS_HIGHESTMODSEQ | STATUS_HIGHESTPVTMODSEQ,
@@ -784,7 +794,16 @@ static bool dsync_mailbox_try_save_cur(struct dsync_mailbox_importer *importer,
 		i_assert(save_change->type != DSYNC_MAIL_CHANGE_TYPE_EXPUNGE);
 	}
 
-	diff = importer_mail_cmp(&m1, &m2);
+	if (importer->empty_hdr_workaround && !importer->mails_have_guids &&
+	    importer->cur_mail != NULL && save_change != NULL &&
+	    (dsync_mail_hdr_hash_is_empty(m1.guid) ||
+	     dsync_mail_hdr_hash_is_empty(m2.guid))) {
+		/* one of the headers is empty. assume it's broken and that
+		   the header matches what we have currently. */
+		diff = 0;
+	} else {
+		diff = importer_mail_cmp(&m1, &m2);
+	}
 	if (diff < 0) {
 		/* add a record for local mail */
 		i_assert(importer->cur_mail != NULL);
@@ -1337,6 +1356,22 @@ dsync_mailbox_import_want_change(struct dsync_mailbox_importer *importer,
 			return FALSE;
 		}
 	}
+	if (importer->sync_until_timestamp > 0) {
+		i_assert(change->received_timestamp > 0);
+		if (change->received_timestamp > importer->sync_until_timestamp) {
+			/* mail has too new timestamp - skip it */
+			*result_r = "Ignoring missing local mail with too new timestamp";
+			return FALSE;
+		}
+	}
+	if (importer->sync_max_size > 0) {
+		i_assert(change->virtual_size != (uoff_t)-1);
+		if (change->virtual_size < importer->sync_max_size) {
+			/* mail is too large - skip it */
+			*result_r = "Ignoring missing local mail with too large size";
+			return FALSE;
+		}
+	}
 	if (importer->sync_flag != 0) {
 		bool have_flag = (change->final_flags & importer->sync_flag) != 0;
 
@@ -1539,7 +1574,12 @@ dsync_mailbox_import_match_msg(struct dsync_mailbox_importer *importer,
 		*result_r = "Error fetching header stream";
 		return -1;
 	}
-	if (strcmp(change->hdr_hash, hdr_hash) == 0) {
+	if (importer->empty_hdr_workaround &&
+	    (dsync_mail_hdr_hash_is_empty(change->hdr_hash) ||
+	     dsync_mail_hdr_hash_is_empty(hdr_hash))) {
+		*result_r = "Empty headers found with workaround enabled - assuming a match";
+		return 1;
+	} else if (strcmp(change->hdr_hash, hdr_hash) == 0) {
 		*result_r = "Headers hashes match";
 		return 1;
 	} else {
@@ -1617,9 +1657,11 @@ dsync_mailbox_find_common_uid(struct dsync_mailbox_importer *importer,
 {
 	int ret;
 
-	i_assert(importer->sync_since_timestamp == 0 ||
-		 change->received_timestamp > 0 ||
-		 change->type == DSYNC_MAIL_CHANGE_TYPE_EXPUNGE);
+	i_assert(change->type == DSYNC_MAIL_CHANGE_TYPE_EXPUNGE ||
+		 ((change->received_timestamp > 0 ||
+		   (importer->sync_since_timestamp == 0 &&
+		    importer->sync_until_timestamp == 0)) &&
+		  (change->virtual_size != (uoff_t)-1 || importer->sync_max_size == 0)));
 
 	/* try to find the matching local mail */
 	if (!importer_next_mail(importer, change->uid)) {

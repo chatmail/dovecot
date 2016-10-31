@@ -21,6 +21,8 @@ To solve this problem you can do only one of two things:
     group isn't copied (e.g.'chmod 0600 /var/mail/*', see
     <MailLocation.mbox.txt>)
  2. Give the mail process access to the group (e.g. 'mail_access_groups=mail'
-    setting).
+    setting). However, this is dangerous.It allows users with shell access to
+    read other users' INBOXes
+    [http://dovecot.org/list/dovecot-news/2008-March/000060.html].
 
-(This file was created from the wiki on 2016-07-01 04:43)
+(This file was created from the wiki on 2016-10-27 04:43)

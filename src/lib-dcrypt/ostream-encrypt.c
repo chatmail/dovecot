@@ -16,13 +16,13 @@
 #include "lib.h"
 #include "buffer.h"
 #include "randgen.h"
+#include "dcrypt-iostream.h"
 #include "ostream-encrypt.h"
 #include "ostream-private.h"
 #include "hash-method.h"
 #include "sha2.h"
 #include "safe-memset.h"
 #include "dcrypt.h"
-#include "dcrypt-iostream-private.h"
 
 #include <arpa/inet.h>
 
@@ -84,7 +84,7 @@ int o_stream_encrypt_send_header_v1(struct encrypt_ostream *stream)
 	/* version */
 	c = 1;
 	buffer_append(values, &c, 1);
-	/* header length including this and data written so far */
+	/* key data length */
 	s = htons(stream->key_data_len);
 	buffer_append(values, &s, 2);
 	/* then write key data */
@@ -203,17 +203,10 @@ int o_stream_encrypt_keydata_create_v1(struct encrypt_ostream *stream)
 		return -1;
 	}
 
-	if (ec == 0) {
-		/* same as above */
-		dcrypt_ctx_sym_set_iv(stream->ctx_sym, (const unsigned char*)"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16);
-		dcrypt_ctx_sym_set_key(stream->ctx_sym, seed, sizeof(seed));
-	}
+	/* same as above */
+	dcrypt_ctx_sym_set_iv(stream->ctx_sym, (const unsigned char*)"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16);
+	dcrypt_ctx_sym_set_key(stream->ctx_sym, seed, sizeof(seed));
 	safe_memset(seed, 0, sizeof(seed));
-
-	if (ec != 0) {
-		io_stream_set_error(&stream->ostream.iostream, "Encryption init error: %s", error);
-		return -1;
-	}
 
 	if (!dcrypt_ctx_sym_init(stream->ctx_sym, &error)) {
 		io_stream_set_error(&stream->ostream.iostream, "Encryption init error: %s", error);
@@ -491,7 +484,7 @@ ssize_t o_stream_encrypt_sendv(struct ostream_private *stream,
 }
 
 static
-int o_stream_encrypt_flush(struct ostream_private *stream)
+int o_stream_encrypt_finalize(struct ostream_private *stream)
 {
 	const char *error;
 	struct encrypt_ostream *estream = (struct encrypt_ostream *)stream;
@@ -499,7 +492,11 @@ int o_stream_encrypt_flush(struct ostream_private *stream)
 	/* if nothing was written, we are done */
 	if (!estream->prefix_written) return o_stream_flush(stream->parent);
 
-	i_assert(!estream->finalized);
+	if (estream->finalized) {
+		/* we've already flushed the encrypted output.
+		   just flush the parent. */
+		return o_stream_flush(stream->parent);
+	}
 	estream->finalized = TRUE;
 
 	/* acquire last block */
@@ -548,7 +545,7 @@ void o_stream_encrypt_close(struct iostream_private *stream,
 	struct encrypt_ostream *estream = (struct encrypt_ostream *)stream;
 	if (estream->ctx_sym != NULL && !estream->finalized &&
 	    estream->ostream.ostream.stream_errno == 0)
-		o_stream_encrypt_flush(&estream->ostream);
+		o_stream_encrypt_finalize(&estream->ostream);
 	if (close_parent) {
 		o_stream_close(estream->ostream.parent);
 	}
@@ -564,7 +561,7 @@ void o_stream_encrypt_destroy(struct iostream_private *stream)
 	if (estream->key_data != NULL) i_free(estream->key_data);
 	if (estream->cipher_oid != NULL) buffer_free(&(estream->cipher_oid));
 	if (estream->mac_oid != NULL) buffer_free(&(estream->mac_oid));
-
+	if (estream->pub != NULL) dcrypt_key_unref_public(&(estream->pub));
 	o_stream_unref(&estream->ostream.parent);
 }
 
@@ -632,7 +629,6 @@ o_stream_create_encrypt_common(enum io_stream_encrypt_flags flags)
 
 	estream = i_new(struct encrypt_ostream, 1);
 	estream->ostream.sendv = o_stream_encrypt_sendv;
-	estream->ostream.flush = o_stream_encrypt_flush;
 	estream->ostream.iostream.close = o_stream_encrypt_close;
 	estream->ostream.iostream.destroy = o_stream_encrypt_destroy;
 
@@ -648,6 +644,7 @@ o_stream_create_encrypt(struct ostream *output, const char *algorithm,
 	struct encrypt_ostream *estream = o_stream_create_encrypt_common(flags);
 	int ec;
 
+	dcrypt_key_ref_public(box_pub);
 	estream->pub = box_pub;
 
 	T_BEGIN {

@@ -206,8 +206,11 @@ static void doveadm_http_server_json_success(void *context, struct istream *resu
 
 static int doveadm_http_server_istream_read(struct client_connection_http *conn)
 {
-	while (i_stream_read(conn->cmd_param->value.v_istream) > 0)
-		i_stream_skip(conn->cmd_param->value.v_istream, i_stream_get_data_size(conn->cmd_param->value.v_istream));
+	const unsigned char *data;
+	size_t size;
+
+	while (i_stream_read_more(conn->cmd_param->value.v_istream, &data, &size) > 0)
+		i_stream_skip(conn->cmd_param->value.v_istream, size);
 	if (!conn->cmd_param->value.v_istream->eof)
 		return 0;
 
@@ -351,7 +354,9 @@ doveadm_http_server_command_execute(struct client_connection_http *conn)
 		i_info("Executing command '%s' as '%s'", cctx.cmd->name, user);
 	else
 		i_info("Executing command '%s'", cctx.cmd->name);
+	client_connection_set_proctitle(&conn->client, cctx.cmd->name);
 	cctx.cmd->cmd(&cctx);
+	client_connection_set_proctitle(&conn->client, "");
 
 	io_loop_set_current(prev_ioloop);
 	lib_signals_reset_ioloop();

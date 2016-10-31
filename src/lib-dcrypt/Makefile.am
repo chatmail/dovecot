@@ -1,6 +1,8 @@
 noinst_LTLIBRARIES = libdcrypt.la
 pkglib_LTLIBRARIES =
 
+NOPLUGIN_LDFLAGS=
+
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
@@ -14,19 +16,22 @@ libdcrypt_la_SOURCES = \
 libdcrypt_la_CFLAGS = $(AM_CPPFLAGS) \
 	-DDCRYPT_MODULE_DIR=\"$(pkglibdir)\"
 
-if BUILD_OPENSSL
+libdcrypt_la_LDFLAGS = -export-dynamic
+
+if BUILD_DCRYPT_OPENSSL
 pkglib_LTLIBRARIES += libdcrypt_openssl.la
-libdcrypt_openssl_la_SOURCES = dcrypt-openssl.c dcrypt.c
+libdcrypt_openssl_la_SOURCES = dcrypt-openssl.c
 libdcrypt_openssl_la_LDFLAGS = -module -avoid-version -shared ../lib-ssl-iostream/libdovecot_openssl_common.la ../lib/liblib.la
+libdcrypt_openssl_la_LIBADD = $(SSL_LIBS)
 libdcrypt_openssl_la_DEPENDENCIES = ../lib-ssl-iostream/libdovecot_openssl_common.la ../lib/liblib.la
 libdcrypt_openssl_la_CFLAGS = $(AM_CPPFLAGS) \
-	-DDCRYPT_MODULE_DIR=\"$(pkglibdir)\"
+	-DDCRYPT_MODULE_DIR=\"$(pkglibdir)\" \
 	$(SSL_CFLAGS)
 endif
 
 headers = \
 	dcrypt.h \
-	dcrypt-iostream-private.h \
+	dcrypt-iostream.h \
 	dcrypt-private.h \
 	ostream-encrypt.h \
 	istream-decrypt.h

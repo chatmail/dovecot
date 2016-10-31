@@ -6,7 +6,6 @@
 #include "fd-close-on-exec.h"
 #include "ioloop.h"
 #include "net.h"
-#include "master-client.h"
 #ifdef HAVE_SYSTEMD
 #include "sd-daemon.h"
 #endif
@@ -19,7 +18,6 @@
 #include <sys/socket.h>
 
 #define MIN_BACKLOG 4
-#define MAX_BACKLOG 511
 
 static unsigned int service_get_backlog(struct service *service)
 {
@@ -29,14 +27,10 @@ static unsigned int service_get_backlog(struct service *service)
 	i_assert(service->client_limit > 0);
 
 	/* as unlikely as it is, avoid overflows */
-	if (service->process_limit > MAX_BACKLOG ||
-	    service->client_limit > MAX_BACKLOG)
-		backlog = MAX_BACKLOG;
-	else {
+	if (service->client_limit > INT_MAX / service->process_limit)
+		backlog = INT_MAX;
+	else
 		backlog = service->process_limit * service->client_limit;
-		if (backlog > MAX_BACKLOG)
-			backlog = MAX_BACKLOG;
-	}
 	return I_MAX(backlog, MIN_BACKLOG);
 }
 
@@ -357,10 +351,7 @@ static int services_listen_master(struct service_list *service_list)
 
 	if (service_list->master_fd == -1)
 		return 0;
-
-	service_list->io_master =
-		io_add(service_list->master_fd, IO_READ,
-		       master_client_connected, service_list);
+	fd_close_on_exec(service_list->master_fd, TRUE);
 	return 1;
 }
 

@@ -31,7 +31,7 @@ work. To activate this feature, you need to configure it.
 Default values
 --------------
 
- * auth_policy_timeout_msecs = 2000
+ * auth_policy_server_timeout_msecs = 2000
  * auth_policy_hash_mech = sha256
  * auth_policy_request_attributes = login=%{orig_username}
    pwhash=%{hashed_password} remote=%{real_rip}
@@ -84,6 +84,13 @@ produces
 "attrs":{"cos":"premium"}}
 ---%<-------------------------------------------------------------------------
 
+Response
+--------
+
+---%<-------------------------------------------------------------------------
+{"status":-1,"msg":"go away"}
+---%<-------------------------------------------------------------------------
+
 Mode of operation
 -----------------
 
@@ -103,4 +110,4 @@ request is added with two attributes, success and wf_reject. The first is
 true/false depending whether the overall authentication succeeded, and the
 second one is whether the failure was due to policy server.
 
-(This file was created from the wiki on 2016-07-01 04:42)
+(This file was created from the wiki on 2016-10-27 04:43)

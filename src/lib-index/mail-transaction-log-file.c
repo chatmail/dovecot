@@ -251,6 +251,12 @@ mail_transaction_log_init_hdr(struct mail_transaction_log *log,
 	} else {
 		hdr->file_seq = 1;
 	}
+	if (hdr->initial_modseq == 0) {
+		/* modseq tracking in log files is required for many reasons
+		   nowadays, even if per-message modseqs aren't enabled in
+		   dovecot.index. */
+		hdr->initial_modseq = 1;
+	}
 
 	if (log->head != NULL) {
 		/* make sure the sequence always increases to avoid crashes
@@ -1201,7 +1207,7 @@ int mail_transaction_log_file_get_modseq_next_offset(
 	uint64_t cur_modseq;
 	int ret;
 
-	if (modseq >= file->sync_highest_modseq) {
+	if (modseq == file->sync_highest_modseq) {
 		*next_offset_r = file->sync_offset;
 		return 0;
 	}
@@ -1225,8 +1231,10 @@ int mail_transaction_log_file_get_modseq_next_offset(
 		cur_modseq = cache->highest_modseq;
 	}
 
-	ret = mail_transaction_log_file_map(file, cur_offset,
-					    file->sync_offset);
+	/* make sure we've read until end of file. this is especially important
+	   with non-head logs which might only have been opened without being
+	   synced. */
+	ret = mail_transaction_log_file_map(file, cur_offset, (uoff_t)-1);
 	if (ret <= 0) {
 		if (ret < 0)
 			return -1;
@@ -1234,6 +1242,12 @@ int mail_transaction_log_file_get_modseq_next_offset(
 			"%s: Transaction log corrupted, can't get modseq",
 			file->filepath);
 		return -1;
+	}
+
+	/* check sync_highest_modseq again in case sync_offset was updated */
+	if (modseq >= file->sync_highest_modseq) {
+		*next_offset_r = file->sync_offset;
+		return 0;
 	}
 
 	i_assert(cur_offset >= file->buffer_offset);

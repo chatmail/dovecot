@@ -1,3 +1,110 @@
+v2.2.26.0 2016-10-28  Timo Sirainen <tss@iki.fi>
+
+	- Fixed some compiling issues.
+	- auth: Fixed assert-crash when using NTLM or SKEY mechanisms and
+	  multiple passdbs.
+	- auth: Fixed crash when exporting to auth-worker passdb extra fields
+	  that had empty values.
+	- dsync: Fixed assert-crash in dsync_brain_sync_mailbox_deinit
+
+v2.2.26 2016-10-27  Timo Sirainen <tss@iki.fi>
+
+	* master: Removed hardcoded 511 backlog limit for listen(). The kernel
+	  should limit this as needed.
+	* doveadm import: Source user is now initialized the same as target
+	  user. Added -U parameter to override the source user.
+	* Mailbox names are no longer limited to 16 hierarchy levels. We'll
+	  check another way to make sure mailbox names can't grow larger than
+	  4096 bytes.
+
+	+ Added a concept of "alternative usernames" by returning user_* extra
+	  field(s) in passdb. doveadm proxy list shows these alt usernames in
+	  "doveadm proxy list" output. "doveadm director&proxy kick" adds
+	  -f <passdb field> parameter. The alt usernames don't have to be
+	  unique, so this allows creation of user groups and kicking them in
+	  one command.
+	+ auth: passdb/userdb dict allows now %variables in key settings.
+	+ auth: If passdb returns noauthenticate=yes extra field, assume that
+	  it only set extra fields and authentication wasn't actually performed.
+	+ auth: passdb static now supports password={scheme} prefix.
+	+ auth, login_log_format_elements: Added %{local_name} variable, which
+	  expands to TLS SNI hostname if given.
+	+ imapc: Added imapc_max_line_length to limit maximum memory usage.
+	+ imap, pop3: Added rawlog_dir setting to store IMAP/POP3 traffic logs.
+	  This replaces at least partially the rawlog plugin.
+	+ dsync: Added dsync_features=empty-header-workaround setting. This
+	  makes incremental dsyncs work better for servers that randomly return
+	  empty headers for mails. When an empty header is seen for an existing
+	  mail, dsync assumes that it matches the local mail.
+	+ doveadm sync/backup: Added -I <max size> parameter to skip too
+	  large mails.
+	+ doveadm sync/backup: Fixed -t parameter and added -e for "end date".
+	+ doveadm mailbox metadata: Added -s parameter to allow accessing
+	  server metadata by using empty mailbox name.
+	+ Added "doveadm service status" and "doveadm process status" commands.
+	+ director: Added director_flush_socket. See
+	  http://wiki2.dovecot.org/Director#Flush_socket
+	+ doveadm director flush: Users are now moved only max 100 at a time to
+	  avoid load spikes. --max-parallel parameter overrides this.
+	+ Added FILE_LOCK_SLOW_WARNING_MSECS environment, which logs a warning
+	  if any lock is waited on or kept for this many milliseconds.
+
+	- master process's listener socket was leaked to all child processes.
+	  This might have allowed untrusted processes to capture and prevent
+	  "doveadm service stop" comands from working.
+	- login proxy: Fixed crash when outgoing SSL connections were hanging.
+	- auth: userdb fields weren't passed to auth-workers, so %{userdb:*}
+	  from previous userdbs didn't work there.
+	- auth: Each userdb lookup from cache reset its TTL.
+	- auth: Fixed auth_bind=yes + sasl_bind=yes to work together
+	- auth: Blocking userdb lookups reset extra fields set by previous
+	  userdbs.
+	- auth: Cache keys didn't include %{passdb:*} and %{userdb:*}
+	- auth-policy: Fixed crash due to using already-freed memory if policy
+	  lookup takes longer than auth request exists.
+	- lib-auth: Unescape passdb/userdb extra fields. Mainly affected
+	  returning extra fields with LFs or TABs.
+	- lmtp_user_concurrency_limit>0 setting was logging unnecessary
+	  anvil errors.
+	- lmtp_user_concurrency_limit is now checked before quota check with
+	  lmtp_rcpt_check_quota=yes to avoid unnecessary quota work.
+	- lmtp: %{userdb:*} variables didn't work in mail_log_prefix
+	- autoexpunge settings for mailboxes with wildcards didn't work when
+	  namespace prefix was non-empty.
+	- Fixed writing >2GB to iostream-temp files (used by fs-compress,
+	  fs-metawrap, doveadm-http)
+	- director: Ignore duplicates in director_servers setting.
+	- director: Many fixes related to connection handshaking, user moving
+	  and error handling.
+	- director: Don't break with shutdown_clients=no
+	- zlib, IMAP BINARY: Fixed internal caching when accessing multiple
+	  newly created mails. They all had UID=0 and the next mail could have
+	  wrongly used the previously cached mail.
+	- doveadm stats reset wasn't reseting all the stats.
+	- auth_stats=yes: Don't update num_logins, since it doubles them when
+	  using with mail stats.
+	- quota count: Fixed deadlocks when updating vsize header.
+	- dict-quota: Fixed crashes happening due to memory corruption.
+	- dict proxy: Fixed various timeout-related bugs.
+	- doveadm proxying: Fixed -A and -u wildcard handling.
+	- doveadm proxying: Fixed hangs and bugs related to printing.
+	- imap: Fixed wrongly triggering assert-crash in
+	  client_check_command_hangs.
+	- imap proxy: Don't send ID command pipelined with nopipelining=yes
+	- imap-hibernate: Don't execute quota_over_script or last_login after
+	  un-hibernation.
+	- imap-hibernate: Don't un-hibernate if client sends DONE+IDLE in one
+	  IP packet.
+	- imap-hibernate: Fixed various failures when un-hibernating.
+	- fts: fts_autoindex=yes was broken in 2.2.25 unless
+	  fts_autoindex_exclude settings existed.
+	- fts-solr: Fixed searching multiple mailboxes (patch by x16a0)
+	- doveadm fetch body.snippet wasn't working in 2.2.25. Also fixed a
+	  crash with certain emails.
+	- pop3-migration + dbox: Various fixes related to POP3 UIDL
+	  optimization in 2.2.25.
+	- pop3-migration: Fixed "truncated email header" workaround.
+
 v2.2.25 2016-07-01  Timo Sirainen <tss@iki.fi>
 
 	* lmtp: Start tracking lmtp_user_concurrency_limit and reject already
