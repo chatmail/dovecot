@@ -7,8 +7,6 @@ SHELL=/bin/bash -O extglob
 PIGEONHOLE_DIR=$(CURDIR)/pigeonhole
 
 export DEB_BUILD_MAINT_OPTIONS=hardening=+all
-# DRAC doesn't build with -fPIE
-drac_buildflags = DEB_BUILD_MAINT_OPTIONS="hardening=+all,-pie" dpkg-buildflags
 
 # LP: 1636781 - strip incompatible default linker option
 ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
@@ -117,12 +115,10 @@ override_dh_auto_configure:
 override_dh_auto_build:
 	dh_auto_build --parallel
 	dh_auto_build --parallel -D $(PIGEONHOLE_DIR)
-	$(MAKE) -C src/plugins/drac $(shell $(drac_buildflags) --export=configure)
 
 override_dh_auto_clean:
 	dh_auto_clean
 	dh_auto_clean -D $(PIGEONHOLE_DIR)
-	rm -f src/plugins/drac/drac_plugin.so
 
 override_dh_auto_install:
 	# Install everything under dovecot-core
