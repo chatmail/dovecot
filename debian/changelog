@@ -10,6 +10,9 @@ dovecot (1:2.2.26.0-1) unstable; urgency=medium
     (Closes: #842151) (LP: #1636781)
   * [5828ab1] B-D on default-libmysqlclient-dev (but keep plain
     libmysqlclient-dev as an alternative to ease backports).
+  * [0086110] Drop DRAC plugin.
+    Thanks to Christian Ehrhardt <christian.ehrhardt@canonical.com>
+    (Closes: #842153)
 
   [ Jaldhar H. Vyas ]
   * [60808eb] Move aclocal *.m4 files into -dev package.
