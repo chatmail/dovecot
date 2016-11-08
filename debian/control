@@ -53,8 +53,8 @@ Description: secure POP3/IMAP server - core files
 Package: dovecot-dev
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Replaces: dovecot-common (<< 1:2.0.14-2~)
-Breaks: dovecot-common (<< 1:2.0.14-2~)
+Replaces: dovecot-common (<< 1:2.0.14-2~), dovecot-core (<< 1:2.2.26.0-1~)
+Breaks: dovecot-common (<< 1:2.0.14-2~), dovecot-core (<< 1:2.2.26.0-1~)
 Description: secure POP3/IMAP server - header files
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
@@ -160,6 +160,8 @@ Description: secure POP3/IMAP server - SQLite support
 Package: dovecot-ldap
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
+Replaces: dovecot-core (<< 1:2.2.26.0-1~)
+Breaks: dovecot-core (<< 1:2.2.26.0-1~)
 Description: secure POP3/IMAP server - LDAP support
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
@@ -184,8 +186,8 @@ Description: secure POP3/IMAP server - GSSAPI support
 Package: dovecot-sieve
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
-Breaks: dovecot-core (<= 1:2.2.13-6)
-Replaces: dovecot-core (<= 1:2.2.13-6)
+Breaks: dovecot-core (<= 1:2.2.13-6), dovecot-imapd (<< 1:2.2.26.0-1~)
+Replaces: dovecot-core (<= 1:2.2.13-6), dovecot-imapd (<< 1:2.2.26.0-1~)
 Description: secure POP3/IMAP server - Sieve filters support
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
