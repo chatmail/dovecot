@@ -1,3 +1,10 @@
+dovecot (1:2.2.26.0-3) unstable; urgency=medium
+
+  * [b03027b] Call OPENSSL_cleanup() on dcrypt_openssl unload. Fixes FTBFS
+    with OpenSSL 1.1.0c.
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Sun, 13 Nov 2016 10:56:30 +0200
+
 dovecot (1:2.2.26.0-2) unstable; urgency=medium
 
   * [9db7d1b] Fix upgrades from 2.2.25 (Closes: #843028)
