@@ -8,3 +8,4 @@ exampledir.patch
 mboxlocking.patch
 dovecot_name.patch
 libnss_location.patch
+call_openssl_cleanup_at_deinit.patch
