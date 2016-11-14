@@ -1,3 +1,9 @@
+dovecot (1:2.2.26.0-4) unstable; urgency=medium
+
+  * [3015f35] Drop references to SSLv2 in the default SSL protocols (Closes: #844271)
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Mon, 14 Nov 2016 17:55:26 +0200
+
 dovecot (1:2.2.26.0-3) unstable; urgency=medium
 
   * [b03027b] Call OPENSSL_cleanup() on dcrypt_openssl unload. Fixes FTBFS
