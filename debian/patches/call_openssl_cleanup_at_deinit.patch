@@ -16,7 +16,8 @@ Description: Manually cleanup OpenSSL on dcrypt_deinitialize
  OpenSSL.
  .
  [1] https://github.com/openssl/openssl/commit/4af9f7fe79ff82b90c16969b7e5871435056377b
-Last-Update: 2016-11-13
+Forwarded: http://www.dovecot.org/list/dovecot/2016-November/106099.html
+Last-Update: 2016-11-15
 --- a/src/lib-ssl-iostream/dovecot-openssl-common.c
 +++ b/src/lib-ssl-iostream/dovecot-openssl-common.c
 @@ -101,6 +101,9 @@
