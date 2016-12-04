@@ -177,6 +177,7 @@ wikifiles = ACL.txt \
 	Pigeonhole.Sieve.Extensions.txt \
 	Pigeonhole.Sieve.Plugins.Extdata.txt \
 	Pigeonhole.Sieve.Plugins.Extprograms.txt \
+	Pigeonhole.Sieve.Plugins.IMAPSieve.txt \
 	Pigeonhole.Sieve.Plugins.Pipe.txt \
 	Pigeonhole.Sieve.Plugins.txt \
 	Pigeonhole.Sieve.Troubleshooting.txt \
@@ -193,10 +194,12 @@ wikifiles = ACL.txt \
 	Plugins.LastLogin.txt \
 	Plugins.Lazyexpunge.txt \
 	Plugins.Listescape.txt \
+	Plugins.MailCrypt.txt \
 	Plugins.MailFilter.txt \
 	Plugins.MailLog.txt \
 	Plugins.MailboxAlias.txt \
 	Plugins.Notify.txt \
+	Plugins.PushNotification.txt \
 	Plugins.QuotaClone.txt \
 	Plugins.Snarf.txt \
 	Plugins.Stats.txt \

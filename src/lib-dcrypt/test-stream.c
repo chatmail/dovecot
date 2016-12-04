@@ -1,3 +1,5 @@
+/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+
 #include "lib.h"
 #include "buffer.h"
 #include "str.h"
@@ -213,7 +215,7 @@ void test_write_read_v1(void)
 
 		test_assert_idx(pos + siz <= sizeof(payload), pos);
 		if (pos + siz > sizeof(payload)) break;
-		test_assert_idx(memcmp(ptr, payload + pos, siz) == 0, pos);
+		test_assert_idx(siz == 0 || memcmp(ptr, payload + pos, siz) == 0, pos);
 		i_stream_skip(is_2, siz); pos += siz;
 	}
 
@@ -264,7 +266,7 @@ void test_write_read_v1_short(void)
 
 		test_assert_idx(pos + siz <= sizeof(payload), pos);
 		if (pos + siz > sizeof(payload)) break;
-		test_assert_idx(memcmp(ptr, payload + pos, siz) == 0, pos);
+		test_assert_idx(siz == 0 || memcmp(ptr, payload + pos, siz) == 0, pos);
 		i_stream_skip(is_2, siz); pos += siz;
 	}
 
@@ -357,7 +359,7 @@ void test_write_read_v2(void)
 
 		test_assert_idx(pos + siz <= sizeof(payload), pos);
 		if (pos + siz > sizeof(payload)) break;
-		test_assert_idx(memcmp(ptr, payload + pos, siz) == 0, pos);
+		test_assert_idx(siz == 0 || memcmp(ptr, payload + pos, siz) == 0, pos);
 		i_stream_skip(is_2, siz); pos += siz;
 	}
 
@@ -405,7 +407,7 @@ void test_write_read_v2_short(void)
 
 		test_assert_idx(pos + siz <= sizeof(payload), pos);
 		if (pos + siz > sizeof(payload)) break;
-		test_assert_idx(memcmp(ptr, payload + pos, siz) == 0, pos);
+		test_assert_idx(siz == 0 || memcmp(ptr, payload + pos, siz) == 0, pos);
 		i_stream_skip(is_2, siz); pos += siz;
 	}
 
@@ -522,7 +524,11 @@ void test_free_keys() {
 }
 
 int main(void) {
-	if (!dcrypt_initialize(NULL, NULL, NULL)) {
+	struct dcrypt_settings set = {
+		.module_dir = ".libs"
+	};
+
+	if (!dcrypt_initialize(NULL, &set, NULL)) {
 		i_error("No functional dcrypt backend found - skipping tests");
 		return 0;
 	}

@@ -204,4 +204,24 @@ EXPORT<tab>session<tab>connected<lf>
 
 The output will be identical to 'doveadm stats dump session connected' command.
 
-(This file was created from the wiki on 2016-10-27 04:44)
+Carbon support
+--------------
+
+Since v2.2.27, you can configure dovecot to send statistics periodically in
+carbon format. To do this, configure
+
+---%<-------------------------------------------------------------------------
+stats_carbon_server=ip:port # default port 2003
+stats_carbon_name=hostname # do not use dots
+stats_carbon_interval=30s # default is 30 seconds
+
+service stats {
+  # this is needed if you want stats to be sent when no one is connected
+  process_min_avail=1
+}
+---%<-------------------------------------------------------------------------
+
+this will send all available global statistics in carbon format
+[http://graphite.readthedocs.io/en/latest/feeding-carbon.html].
+
+(This file was created from the wiki on 2016-12-03 04:44)

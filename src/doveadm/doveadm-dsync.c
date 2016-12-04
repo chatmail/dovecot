@@ -333,13 +333,15 @@ static bool paths_are_equal(struct mail_user *user1, struct mail_user *user2,
 static int
 cmd_dsync_run_local(struct dsync_cmd_context *ctx, struct mail_user *user,
 		    struct dsync_brain *brain, struct dsync_ibc *ibc2,
-		    bool *changes_during_sync_r, enum mail_error *mail_error_r)
+		    const char **changes_during_sync_r,
+		    enum mail_error *mail_error_r)
 {
 	struct dsync_brain *brain2;
 	struct mail_user *user2;
 	struct setting_parser_context *set_parser;
-	const char *set_line, *location;
+	const char *location;
 	bool brain1_running, brain2_running, changed1, changed2;
+	bool remote_only_changes;
 	int ret;
 
 	*mail_error_r = 0;
@@ -356,8 +358,7 @@ cmd_dsync_run_local(struct dsync_cmd_context *ctx, struct mail_user *user,
 	/* update mail_location and create another user for the
 	   second location. */
 	set_parser = mail_storage_service_user_get_settings_parser(ctx->ctx.cur_service_user);
-	set_line = t_strconcat("mail_location=", location, NULL);
-	if (settings_parse_line(set_parser, set_line) < 0)
+	if (settings_parse_keyvalue(set_parser, "mail_location", location) < 0)
 		i_unreached();
 	ret = mail_storage_service_next(ctx->ctx.storage_service,
 					ctx->ctx.cur_service_user, &user2);
@@ -405,7 +406,7 @@ cmd_dsync_run_local(struct dsync_cmd_context *ctx, struct mail_user *user,
 		brain1_running = dsync_brain_run(brain, &changed1);
 		brain2_running = dsync_brain_run(brain2, &changed2);
 	}
-	*changes_during_sync_r = dsync_brain_has_unexpected_changes(brain2);
+	*changes_during_sync_r = t_strdup(dsync_brain_get_unexpected_changes_reason(brain2, &remote_only_changes));
 	if (dsync_brain_deinit(&brain2, mail_error_r) < 0)
 		return -1;
 	return doveadm_is_killed() ? -1 : 0;
@@ -558,7 +559,8 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	enum dsync_brain_flags brain_flags;
 	enum mail_error mail_error = 0, mail_error2;
 	bool remote_errors_logged = FALSE;
-	bool changes_during_sync = FALSE;
+	const char *changes_during_sync, *changes_during_sync2 = NULL;
+	bool remote_only_changes;
 	int ret = 0;
 
 	memset(&set, 0, sizeof(set));
@@ -645,7 +647,7 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	switch (ctx->run_type) {
 	case DSYNC_RUN_TYPE_LOCAL:
 		if (cmd_dsync_run_local(ctx, user, brain, ibc2,
-					&changes_during_sync, &mail_error) < 0)
+					&changes_during_sync2, &mail_error) < 0)
 			ret = -1;
 		break;
 	case DSYNC_RUN_TYPE_CMD:
@@ -663,12 +665,16 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 		doveadm_print(str_c(state_str));
 	}
 
-	if (dsync_brain_has_unexpected_changes(brain) || changes_during_sync) {
+	changes_during_sync = dsync_brain_get_unexpected_changes_reason(brain, &remote_only_changes);
+	if (changes_during_sync != NULL || changes_during_sync2 != NULL) {
 		/* don't log a warning when running via doveadm server
 		   (e.g. called by replicator) */
 		if (ctx->ctx.conn == NULL) {
 			i_warning("Mailbox changes caused a desync. "
-				  "You may want to run dsync again.");
+				  "You may want to run dsync again: %s",
+				  changes_during_sync == NULL ||
+				  (remote_only_changes && changes_during_sync2 != NULL) ?
+				  changes_during_sync2 : changes_during_sync);
 		}
 		ctx->ctx.exit_code = 2;
 	}
@@ -964,6 +970,7 @@ cmd_mailbox_dsync_parse_arg(struct doveadm_mail_cmd_context *_ctx, int c)
 {
 	struct dsync_cmd_context *ctx = (struct dsync_cmd_context *)_ctx;
 	const char *str, *error;
+	bool utc;
 
 	switch (c) {
 	case '1':
@@ -1043,11 +1050,11 @@ cmd_mailbox_dsync_parse_arg(struct doveadm_mail_cmd_context *_ctx, int c)
 		ctx->state_input = optarg;
 		break;
 	case 't':
-		if (mail_parse_human_timestamp(optarg, &ctx->sync_since_timestamp) < 0)
+		if (mail_parse_human_timestamp(optarg, &ctx->sync_since_timestamp, &utc) < 0)
 			i_fatal("Invalid -t parameter: %s", optarg);
 		break;
 	case 'e':
-		if (mail_parse_human_timestamp(optarg, &ctx->sync_until_timestamp) < 0)
+		if (mail_parse_human_timestamp(optarg, &ctx->sync_until_timestamp, &utc) < 0)
 			i_fatal("Invalid -e parameter: %s", optarg);
 		break;
 	case 'I':

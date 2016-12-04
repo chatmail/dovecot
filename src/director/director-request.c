@@ -5,7 +5,6 @@
 #include "array.h"
 #include "str.h"
 #include "mail-host.h"
-#include "user-directory.h"
 #include "director.h"
 #include "director-request.h"
 
@@ -97,8 +96,12 @@ static void director_request_timeout(struct director *dir)
 		    DIRECTOR_REQUEST_TIMEOUT_SECS > ioloop_time)
 			break;
 
-		user = user_directory_lookup(request->dir->users,
-					     request->username_hash);
+		const char *tag_name = request->username_tag == NULL ? "" :
+			request->username_tag;
+		struct mail_tag *tag = mail_tag_find(dir->mail_hosts, tag_name);
+		user = tag == NULL ? NULL :
+			user_directory_lookup(tag->users, request->username_hash);
+
 		errormsg = director_request_get_timeout_error(request,
 							      user, str);
 		if (user != NULL &&
@@ -126,7 +129,7 @@ void director_request(struct director *dir, const char *username,
 {
 	struct director_request *request;
 	unsigned int username_hash =
-		user_directory_get_username_hash(dir->users, username);
+		director_get_username_hash(dir, username);
 
 	dir->num_requests++;
 
@@ -173,8 +176,7 @@ static void ring_log_delayed_warning(struct director *dir)
 }
 
 static bool
-director_request_existing(struct director_request *request, struct user *user,
-			  const char *tag)
+director_request_existing(struct director_request *request, struct user *user)
 {
 	struct director *dir = request->dir;
 	struct mail_host *host;
@@ -203,12 +205,13 @@ director_request_existing(struct director_request *request, struct user *user,
 			  request->username_hash);
 		return FALSE;
 	}
-	if (!user_directory_user_is_near_expiring(dir->users, user))
+	if (!user_directory_user_is_near_expiring(user->host->tag->users, user))
 		return TRUE;
 
 	/* user is close to being expired. another director may have
 	   already expired it. */
-	host = mail_host_get_by_hash(dir->mail_hosts, user->username_hash, tag);
+	host = mail_host_get_by_hash(dir->mail_hosts, user->username_hash,
+				     user->host->tag->name);
 	if (!dir->ring_synced) {
 		/* try again later once ring is synced */
 		request->delay_reason = REQUEST_DELAY_RINGNOTSYNCED;
@@ -270,6 +273,7 @@ bool director_request_continue(struct director_request *request)
 	struct mail_host *host;
 	struct user *user;
 	const char *tag;
+	struct mail_tag *mail_tag;
 
 	if (!dir->ring_handshaked) {
 		/* delay requests until ring handshaking is complete */
@@ -280,12 +284,16 @@ bool director_request_continue(struct director_request *request)
 		return FALSE;
 	}
 
-	user = user_directory_lookup(dir->users, request->username_hash);
 	tag = request->username_tag == NULL ? "" : request->username_tag;
+	mail_tag = mail_tag_find(dir->mail_hosts, tag);
+	user = mail_tag == NULL ? NULL :
+		user_directory_lookup(mail_tag->users, request->username_hash);
+
 	if (user != NULL) {
-		if (!director_request_existing(request, user, tag))
+		i_assert(user->host->tag == mail_tag);
+		if (!director_request_existing(request, user))
 			return FALSE;
-		user_directory_refresh(dir->users, user);
+		user_directory_refresh(mail_tag->users, user);
 		dir_debug("request: %u refreshed timeout to %u",
 			  request->username_hash, user->timestamp);
 	} else {
@@ -306,7 +314,8 @@ bool director_request_continue(struct director_request *request)
 				  request->username_hash);
 			return FALSE;
 		}
-		user = user_directory_add(dir->users, request->username_hash,
+		user = user_directory_add(host->tag->users,
+					  request->username_hash,
 					  host, ioloop_time);
 		dir_debug("request: %u added timeout to %u (hosts_hash=%u)",
 			  request->username_hash, user->timestamp,

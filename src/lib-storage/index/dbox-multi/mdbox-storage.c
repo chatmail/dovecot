@@ -40,7 +40,7 @@ int mdbox_storage_create(struct mail_storage *_storage,
 	struct mdbox_storage *storage = (struct mdbox_storage *)_storage;
 	const char *dir;
 
-	storage->set = mail_storage_get_driver_settings(_storage);
+	storage->set = mail_namespace_get_driver_settings(ns, _storage);
 	storage->preallocate_space = storage->set->mdbox_preallocate_space;
 
 	if (*ns->list->set.mailbox_dir_name == '\0') {
@@ -214,7 +214,8 @@ int mdbox_read_header(struct mdbox_mailbox *mbox,
 		return -1;
 	}
 	memset(hdr, 0, sizeof(*hdr));
-	memcpy(hdr, data, I_MIN(data_size, sizeof(*hdr)));
+	if (data_size > 0)
+		memcpy(hdr, data, I_MIN(data_size, sizeof(*hdr)));
 	*need_resize_r = data_size < sizeof(*hdr);
 	return 0;
 }
@@ -453,7 +454,8 @@ struct mail_storage mdbox_storage = {
 		dbox_storage_get_list_settings,
 		mdbox_storage_autodetect,
 		mdbox_mailbox_alloc,
-		mdbox_purge
+		mdbox_purge,
+		NULL,
 	}
 };
 

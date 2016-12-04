@@ -788,8 +788,10 @@ int index_mail_get_headers(struct mail *_mail, const char *field,
 	for (;; retry = FALSE) {
 		if (index_mail_get_raw_headers(mail, field, value_r) < 0)
 			return -1;
-		if (!decode_to_utf8 || **value_r == NULL)
+		if (**value_r == NULL)
 			return 0;
+		if (!decode_to_utf8)
+			return 1;
 
 		T_BEGIN {
 			ret = index_mail_headers_decode(mail, value_r, UINT_MAX);
@@ -864,9 +866,6 @@ int index_mail_get_header_stream(struct mail *_mail,
 	struct index_mail *mail = (struct index_mail *)_mail;
 	struct istream *input;
 	string_t *dest;
-
-	i_assert(headers->count > 0);
-	i_assert(headers->box == _mail->box);
 
 	if (mail->data.save_bodystructure_header) {
 		/* we have to parse the header. */

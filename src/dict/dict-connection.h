@@ -18,6 +18,7 @@ struct dict_connection {
 	char *name;
 	struct dict *dict;
 	enum dict_data_type value_type;
+	unsigned int minor_version;
 
 	int fd;
 	struct io *io;
@@ -30,6 +31,7 @@ struct dict_connection {
 	   array is fast enough */
 	ARRAY(struct dict_connection_transaction) transactions;
 	ARRAY(struct dict_connection_cmd *) cmds;
+	unsigned int async_id_counter;
 
 	unsigned int destroyed:1;
 };

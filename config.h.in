@@ -390,6 +390,9 @@
 /* Build with SSL/TLS support */
 #undef HAVE_SSL
 
+/* Define if you have SSL_clear_options */
+#undef HAVE_SSL_CLEAR_OPTIONS
+
 /* Build with OpenSSL compression */
 #undef HAVE_SSL_COMPRESSION
 

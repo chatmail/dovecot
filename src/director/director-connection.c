@@ -42,7 +42,6 @@
 #include "director.h"
 #include "director-host.h"
 #include "director-request.h"
-#include "user-directory.h"
 #include "director-connection.h"
 
 #include <unistd.h>
@@ -114,7 +113,7 @@ struct director_connection {
 	struct ostream *output;
 	struct timeout *to_disconnect, *to_ping, *to_pong;
 
-	struct user_directory_iter *user_iter;
+	struct director_user_iter *user_iter;
 
 	/* set during command execution */
 	const char *cur_cmd, *cur_line;
@@ -503,12 +502,13 @@ director_user_refresh(struct director_connection *conn,
 	struct director *dir = conn->dir;
 	struct user *user;
 	bool ret = FALSE, unset_weak_user = FALSE;
+	struct user_directory *users = host->tag->users;
 
 	*forced_r = FALSE;
 
-	user = user_directory_lookup(dir->users, username_hash);
+	user = user_directory_lookup(users, username_hash);
 	if (user == NULL) {
-		*user_r = user_directory_add(dir->users, username_hash,
+		*user_r = user_directory_add(users, username_hash,
 					     host, timestamp);
 		(*user_r)->weak = weak;
 		dir_debug("user refresh: %u added", username_hash);
@@ -527,7 +527,7 @@ director_user_refresh(struct director_connection *conn,
 			/* weak user marked again as weak */
 		}
 	} else if (weak &&
-		   !user_directory_user_is_recently_updated(dir->users, user)) {
+		   !user_directory_user_is_recently_updated(users, user)) {
 		/* mark the user as weak */
 		dir_debug("user refresh: %u set weak", username_hash);
 		user->weak = TRUE;
@@ -541,7 +541,7 @@ director_user_refresh(struct director_connection *conn,
 		ret = TRUE;
 	} else if (user->host == host) {
 		/* update to the same host */
-	} else if (user_directory_user_is_near_expiring(dir->users, user)) {
+	} else if (user_directory_user_is_near_expiring(users, user)) {
 		/* host conflict for a user that is already near expiring. we can
 		   assume that the other director had already dropped this user
 		   and we should have as well. use the new host. */
@@ -609,7 +609,7 @@ director_user_refresh(struct director_connection *conn,
 		ret = TRUE;
 	}
 	if (timestamp == ioloop_time && (time_t)user->timestamp != timestamp) {
-		user_directory_refresh(dir->users, user);
+		user_directory_refresh(users, user);
 		ret = TRUE;
 	}
 	dir_debug("user refresh: %u refreshed timeout to %ld",
@@ -1236,7 +1236,7 @@ static bool director_handshake_cmd_done(struct director_connection *conn)
 	if (conn->users_unsorted && conn->user_iter == NULL) {
 		/* we sent our user list before receiving remote's */
 		conn->users_unsorted = FALSE;
-		user_directory_sort(conn->dir->users);
+		mail_hosts_sort_users(conn->dir->mail_hosts);
 	}
 
 	str = t_str_new(128);
@@ -1877,7 +1877,7 @@ static int director_connection_send_users(struct director_connection *conn)
 
 	i_assert(conn->version_received);
 
-	while ((user = user_directory_iter_next(conn->user_iter)) != NULL) {
+	while ((user = director_iterate_users_next(conn->user_iter)) != NULL) {
 		T_BEGIN {
 			string_t *str = t_str_new(128);
 
@@ -1899,14 +1899,14 @@ static int director_connection_send_users(struct director_connection *conn)
 			}
 		}
 	}
-	user_directory_iter_deinit(&conn->user_iter);
+	director_iterate_users_deinit(&conn->user_iter);
 	if (director_connection_send_done(conn) < 0)
 		return -1;
 
 	if (conn->users_unsorted && conn->handshake_received) {
 		/* we received remote's list of users before sending ours */
 		conn->users_unsorted = FALSE;
-		user_directory_sort(conn->dir->users);
+		mail_hosts_sort_users(conn->dir->mail_hosts);
 	}
 
 	ret = o_stream_flush(conn->output);
@@ -2019,7 +2019,8 @@ static void director_finish_sending_handshake(struct director_connection *conn)
 	director_connection_send_hosts(conn);
 
 	i_assert(conn->user_iter == NULL);
-	conn->user_iter = user_directory_iter_init(conn->dir->users);
+	conn->user_iter = director_iterate_users_init(conn->dir);
+
 	if (director_connection_send_users(conn) == 0)
 		o_stream_set_flush_pending(conn->output, TRUE);
 
@@ -2087,7 +2088,7 @@ void director_connection_deinit(struct director_connection **_conn,
 	if (conn->connect_request_to != NULL)
 		director_host_unref(conn->connect_request_to);
 	if (conn->user_iter != NULL)
-		user_directory_iter_deinit(&conn->user_iter);
+		director_iterate_users_deinit(&conn->user_iter);
 	if (conn->to_disconnect != NULL)
 		timeout_remove(&conn->to_disconnect);
 	if (conn->to_pong != NULL)

@@ -60,6 +60,17 @@ static bool
 http_client_request_send_error(struct http_client_request *req,
 			       unsigned int status, const char *error);
 
+const char *
+http_client_request_label(struct http_client_request *req)
+{
+	if (req->label == NULL) {
+		req->label = p_strdup_printf(req->pool,
+			"[Req%u: %s %s%s]", req->id,
+			req->method, http_url_create(&req->origin_url), req->target);
+	}
+	return req->label;
+}
+
 static struct http_client_request *
 http_client_request_new(struct http_client *client, const char *method, 
 		    http_client_request_callback_t *callback, void *context)
@@ -454,6 +465,26 @@ void http_client_request_set_auth_simple(struct http_client_request *req,
 	req->password = p_strdup(req->pool, password);
 }
 
+void http_client_request_set_proxy_url(struct http_client_request *req,
+	const struct http_url *proxy_url)
+{
+	i_assert(req->state == HTTP_REQUEST_STATE_NEW ||
+		req->state == HTTP_REQUEST_STATE_GOT_RESPONSE);
+
+	req->host_url = http_url_clone_authority(req->pool, proxy_url);
+	req->host_socket = NULL;
+}
+
+void http_client_request_set_proxy_socket(struct http_client_request *req,
+	const char *proxy_socket)
+{
+	i_assert(req->state == HTTP_REQUEST_STATE_NEW ||
+		req->state == HTTP_REQUEST_STATE_GOT_RESPONSE);
+
+	req->host_socket = p_strdup(req->pool, proxy_socket);
+	req->host_url = NULL;
+}
+
 void http_client_request_delay_until(struct http_client_request *req,
 	time_t time)
 {
@@ -495,18 +526,20 @@ int http_client_request_delay_from_response(struct http_client_request *req,
 	return 1;    /* valid delay */
 }
 
-const char *http_client_request_get_method(struct http_client_request *req)
+const char *
+http_client_request_get_method(const struct http_client_request *req)
 {
 	return req->method;
 }
 
-const char *http_client_request_get_target(struct http_client_request *req)
+const char *
+http_client_request_get_target(const struct http_client_request *req)
 {
 	return req->target;
 }
 
 enum http_request_state
-http_client_request_get_state(struct http_client_request *req)
+http_client_request_get_state(const struct http_client_request *req)
 {
 	return req->state;
 }
@@ -540,7 +573,8 @@ static void http_client_request_do_submit(struct http_client_request *req)
 	struct http_client_host *host;
 	const char *proxy_socket_path = client->set.proxy_socket_path;
 	const struct http_url *proxy_url = client->set.proxy_url;
-	bool have_proxy = (proxy_socket_path != NULL) || (proxy_url != NULL);
+	bool have_proxy = (proxy_socket_path != NULL) || (proxy_url != NULL) ||
+		(req->host_socket != NULL) || (req->host_url != NULL);
 	const char *authority, *target;
 
 	i_assert(req->state == HTTP_REQUEST_STATE_NEW);
@@ -557,8 +591,12 @@ static void http_client_request_do_submit(struct http_client_request *req)
 
 	/* determine what host to contact to submit this request */
 	if (have_proxy) {
-		if (req->origin_url.have_ssl && !client->set.no_ssl_tunnel &&
-			!req->connect_tunnel) {
+		if (req->host_socket != NULL) {               /* specific socket proxy */
+			req->host_url = NULL;
+		} else if (req->host_url != NULL) {           /* specific normal proxy */
+			req->host_socket = NULL;
+		} else if (req->origin_url.have_ssl &&
+			!client->set.no_ssl_tunnel &&	!req->connect_tunnel) {
 			req->host_url = &req->origin_url;           /* tunnel to origin server */
 			req->ssl_tunnel = TRUE;
 		} else if (proxy_socket_path != NULL) {
@@ -786,10 +824,16 @@ int http_client_request_send_payload(struct http_client_request **_req,
 	i_assert(data != NULL);
 
 	ret = http_client_request_continue_payload(&req, data, size);
-	if (ret < 0)
+	if (ret < 0) {
+		/* failed to send payload */
 		*_req = NULL;
-	else {
-		i_assert(ret == 0);
+	} else if (ret > 0) {
+		/* premature end of request;
+		   server sent error before all payload could be sent */
+		ret = -1;
+		*_req = NULL;
+	} else {
+		/* not finished sending payload */
 		i_assert(req != NULL);
 	}
 	return ret;
@@ -1009,6 +1053,8 @@ static int http_client_request_send_real(struct http_client_request *req,
 	req->sent_time = ioloop_timeval;
 	req->sent_lock_usecs = file_lock_wait_get_total_usecs();
 	req->sent_global_ioloop_usecs = ioloop_global_wait_usecs;
+	req->sent_http_ioloop_usecs =
+		io_wait_timer_get_usecs(req->conn->io_wait_timer);
 	o_stream_cork(output);
 	if (o_stream_sendv(output, iov, N_ELEMENTS(iov)) < 0) {
 		*error_r = t_strdup_printf("write(%s) failed: %s",

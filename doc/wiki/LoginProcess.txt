@@ -115,4 +115,7 @@ service tcpwrap {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-10-27 04:44)
+Remember to configure your rules! The format is described in hosts.allow(5) and
+hosts.deny(5). Files used are usually /etc/hosts.allow and /etc/hosts.deny.
+
+(This file was created from the wiki on 2016-12-03 04:43)

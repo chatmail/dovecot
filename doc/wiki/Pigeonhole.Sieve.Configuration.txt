@@ -257,6 +257,8 @@ options/needs:
  * <duplicate> [Pigeonhole.Sieve.Extensions.Duplicate.txt]
  * <editheader> [Pigeonhole.Sieve.Extensions.Editheader.txt] (configuration
    required)
+ * <imapsieve> [Pigeonhole.Sieve.Plugins.IMAPSieve.txt] (plugin configuration
+   required)
  * <include> [Pigeonhole.Sieve.Extensions.Include.txt]
  * <spamtest and virustest> [Pigeonhole.Sieve.Extensions.SpamtestVirustest.txt]
    (configuration required)
@@ -522,4 +524,4 @@ From Dovecot Sieve v0.1.x (Dovecot v1.2)
    compatibility, it is recommended to update the setting to the new name,
    since the <LMTP.txt> service also uses the 'recipient_delimiter' setting.
 
-(This file was created from the wiki on 2016-10-27 04:44)
+(This file was created from the wiki on 2016-12-03 04:44)

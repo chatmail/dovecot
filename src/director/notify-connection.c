@@ -1,11 +1,12 @@
 /* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "array.h"
 #include "ioloop.h"
 #include "istream.h"
 #include "master-service.h"
 #include "director.h"
-#include "user-directory.h"
+#include "mail-host.h"
 #include "notify-connection.h"
 
 #include <unistd.h>
@@ -17,26 +18,35 @@ struct notify_connection {
 	struct director *dir;
 };
 
-static void notify_connection_input(struct notify_connection *conn)
+static void notify_update_user(struct director *dir, struct mail_tag *tag,
+			       const char *username, unsigned int username_hash)
 {
 	struct user *user;
-	const char *line;
-	unsigned int hash;
 	int diff;
 
+	user = user_directory_lookup(tag->users, username_hash);
+	if (user == NULL)
+		return;
+
+	diff = ioloop_time - user->timestamp;
+	if (diff >= (int)dir->set->director_user_expire) {
+		i_warning("notify: User %s refreshed too late (%d secs)",
+			  username, diff);
+	}
+	user_directory_refresh(tag->users, user);
+	director_update_user(dir, dir->self_host, user);
+}
+
+static void notify_connection_input(struct notify_connection *conn)
+{
+	struct mail_tag *const *tagp;
+	const char *line;
+	unsigned int hash;
+
 	while ((line = i_stream_read_next_line(conn->input)) != NULL) {
-		hash = user_directory_get_username_hash(conn->dir->users, line);
-		user = user_directory_lookup(conn->dir->users, hash);
-		if (user != NULL) {
-			diff = ioloop_time - user->timestamp;
-			if (diff >= (int)conn->dir->set->director_user_expire) {
-				i_warning("notify: User %s refreshed too late "
-					  "(%d secs)", line, diff);
-			}
-			user_directory_refresh(conn->dir->users, user);
-			director_update_user(conn->dir, conn->dir->self_host,
-					     user);
-		}
+		hash = director_get_username_hash(conn->dir, line);
+		array_foreach(mail_hosts_get_tags(conn->dir->mail_hosts), tagp)
+			notify_update_user(conn->dir, *tagp, line, hash);
 	}
 	if (conn->input->eof) {
 		i_error("notify: read() unexpectedly returned EOF");

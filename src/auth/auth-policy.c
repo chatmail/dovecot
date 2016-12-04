@@ -1,3 +1,5 @@
+/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+
 #include "lib.h"
 #include "net.h"
 #include "str.h"
@@ -442,25 +444,17 @@ void auth_policy_create_json(struct policy_lookup_ctx *context,
 		context->set->policy_hash_nonce,
 		strlen(context->set->policy_hash_nonce));
 	/* use +1 to make sure \0 gets included */
-	digest->loop(ctx, context->request->user, strlen(context->request->user) + 1);
+	if (context->request->user == NULL)
+		digest->loop(ctx, "\0", 1);
+	else
+		digest->loop(ctx, context->request->user, strlen(context->request->user) + 1);
 	if (password != NULL)
 		digest->loop(ctx, password, strlen(password));
 	ptr = (unsigned char*)str_c_modifiable(buffer);
 	digest->result(ctx, ptr);
 	str_truncate(buffer, digest->digest_size);
 	if (context->set->policy_hash_truncate > 0) {
-		/* truncate it to closest byte boundary */
-		int bytes = ((context->set->policy_hash_truncate + 7) & -8)/8;
-		/* remainding bits */
-		int bits = bytes*8 - context->set->policy_hash_truncate;
-		str_truncate(buffer, bytes);
-		ptr = buffer_get_modifiable_data(buffer, NULL);
-		/* right shift everything and left-pad with 0 */
-		if (bits > 0) {
-			for(size_t i=bytes-1;i>0;i--)
-				ptr[i] = (ptr[i]>>(8-bits)) + ((ptr[i-1]&(0xff>>(8-bits)))<<bits);
-			ptr[0] = ptr[0]>>(8-bits);
-		}
+		buffer_truncate_rshift_bits(buffer, context->set->policy_hash_truncate);
 	}
 	const char *hashed_password = binary_to_hex(str_data(buffer), str_len(buffer));
 	str_append_c(context->json, '{');

@@ -5,9 +5,7 @@
 #include "array.h"
 #include "hash.h"
 #include "llist.h"
-#include "mail-user-hash.h"
 #include "mail-host.h"
-#include "user-directory.h"
 
 /* n% of timeout_secs */
 #define USER_NEAR_EXPIRING_PERCENTAGE 10
@@ -28,9 +26,8 @@ struct user_directory {
 	struct user *prev_insert_pos;
 
 	ARRAY(struct user_directory_iter *) iters;
-	void (*user_free_hook)(struct user *);
+	user_free_hook_t *user_free_hook;
 
-	char *username_hash_fmt;
 	unsigned int timeout_secs;
 	/* If user's expire time is less than this many seconds away,
 	   don't assume that other directors haven't yet expired it */
@@ -256,12 +253,6 @@ void user_directory_sort(struct user_directory *dir)
 	array_free(&users);
 }
 
-unsigned int user_directory_get_username_hash(struct user_directory *dir,
-					      const char *username)
-{
-	return mail_user_hash(username, dir->username_hash_fmt);
-}
-
 bool user_directory_user_is_recently_updated(struct user_directory *dir,
 					     struct user *user)
 {
@@ -279,8 +270,8 @@ bool user_directory_user_is_near_expiring(struct user_directory *dir,
 }
 
 struct user_directory *
-user_directory_init(unsigned int timeout_secs, const char *username_hash_fmt,
-		    void (*user_free_hook)(struct user *))
+user_directory_init(unsigned int timeout_secs,
+		    user_free_hook_t *user_free_hook)
 {
 	struct user_directory *dir;
 
@@ -296,7 +287,6 @@ user_directory_init(unsigned int timeout_secs, const char *username_hash_fmt,
 		I_MAX(dir->user_near_expiring_secs, USER_NEAR_EXPIRING_MIN);
 	i_assert(dir->timeout_secs/2 > dir->user_near_expiring_secs);
 
-	dir->username_hash_fmt = i_strdup(username_hash_fmt);
 	dir->user_free_hook = user_free_hook;
 	hash_table_create_direct(&dir->hash, default_pool, 0);
 	i_array_init(&dir->iters, 8);
@@ -315,7 +305,6 @@ void user_directory_deinit(struct user_directory **_dir)
 		user_free(dir, dir->head);
 	hash_table_destroy(&dir->hash);
 	array_free(&dir->iters);
-	i_free(dir->username_hash_fmt);
 	i_free(dir);
 }
 
