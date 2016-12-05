@@ -184,6 +184,12 @@
 #  define likely(expr) expr
 #endif
 
+#if defined(__clang__)
+#  define ATTR_UNSIGNED_WRAPS __attribute__((no_sanitize("integer")))
+#else
+#  define ATTR_UNSIGNED_WRAPS
+#endif
+
 /* Provide macros for error handling. */
 #ifdef DISABLE_ASSERTS
 #  define i_assert(expr)
@@ -208,8 +214,11 @@
 
 #endif
 
+/* Close the fd and set it to -1. This assert-crashes if fd == 0. Normally
+   this would happen only if an uninitialized fd is attempted to be closed,
+   which is a bug. */
 #define i_close_fd(fd) STMT_START {  \
-	i_assert(*fd != -1); \
+	i_assert(*fd > 0); \
 	if (unlikely(close_keep_errno(fd) < 0)) \
 		i_error("close(%d[%s:%d]) failed: %m", \
 			*(fd), __FILE__, __LINE__); \

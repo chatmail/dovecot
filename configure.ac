@@ -2,9 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.2.26.0],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv26($PACKAGE_VERSION)", [Dovecot ABI version])
-AC_CONFIG_MACRO_DIR([m4])
+AC_INIT([Dovecot],[2.2.27],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv27($PACKAGE_VERSION)", [Dovecot ABI version])
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_SRCDIR([src])
 
@@ -1707,6 +1706,40 @@ if test $want_openssl != no && test $have_ssl = no; then
     have_ssl="yes (OpenSSL)"
     build_dcrypt_openssl="no"
 
+    AC_MSG_CHECKING([if OpenSSL version is 1.0.2 or better])
+
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+      #include <openssl/opensslv.h>
+      #if OPENSSL_VERSION_NUMBER < 0x10002000L
+      #error "fail-compile"
+      #endif]], [[ return 0; ]])], [ssl_version_ge_102=true], [ssl_version_ge_102=false])
+    AC_MSG_RESULT([$ssl_version_ge_102])
+
+    AM_CONDITIONAL([SSL_VERSION_GE_102], [test x$ssl_version_ge_102 = xtrue])
+
+    # SSL_clear_options introduced in openssl 0.9.8m but may be backported to
+    # older versions in "enterprise" OS releases; originally implemented as a
+    # macro but as a function in more recent openssl versions
+    AC_CACHE_CHECK([whether SSL_clear_options exists],i_cv_have_ssl_clear_options,[
+      old_LIBS=$LIBS
+      LIBS="$LIBS -lssl"
+      AC_TRY_LINK([
+	#include <openssl/ssl.h>
+      ], [
+	SSL *ssl;
+	long options;
+	SSL_clear_options(ssl, options);
+      ], [
+	i_cv_have_ssl_clear_options=yes
+      ], [
+	i_cv_have_ssl_clear_options=no
+      ])
+      LIBS=$old_LIBS
+    ])
+    if test $i_cv_have_ssl_clear_options = yes; then
+      AC_DEFINE(HAVE_SSL_CLEAR_OPTIONS,, [Define if you have SSL_clear_options])
+    fi
+
     AC_CHECK_LIB(ssl, SSL_get_current_compression, [
       AC_DEFINE(HAVE_SSL_COMPRESSION,, [Build with OpenSSL compression])
     ],, $SSL_LIBS)
@@ -2986,6 +3019,7 @@ src/plugins/virtual/Makefile
 src/plugins/welcome/Makefile
 src/plugins/zlib/Makefile
 src/plugins/imap-zlib/Makefile
+src/plugins/mail-crypt/Makefile
 stamp.h
 dovecot-config.in])
 

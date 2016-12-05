@@ -230,9 +230,11 @@ int mailbox_list_index_sync_begin(struct mailbox_list *list,
 	struct mail_index_view *view;
 	struct mail_index_transaction *trans;
 	const struct mail_index_header *hdr;
+	bool fix_attempted = FALSE;
 
 	i_assert(!ilist->syncing);
 
+retry:
 	if (mailbox_list_index_index_open(list) < 0)
 		return -1;
 
@@ -247,6 +249,14 @@ int mailbox_list_index_sync_begin(struct mailbox_list *list,
 	if (mailbox_list_index_parse(list, view, TRUE) < 0) {
 		mail_index_sync_rollback(&index_sync_ctx);
 		return -1;
+	}
+	if (ilist->call_corruption_callback && !fix_attempted) {
+		/* unlock and resync the index */
+		mail_index_sync_rollback(&index_sync_ctx);
+		if (mailbox_list_index_handle_corruption(list) < 0)
+			return -1;
+		fix_attempted = TRUE;
+		goto retry;
 	}
 
 	sync_ctx = i_new(struct mailbox_list_index_sync_context, 1);
@@ -334,11 +344,13 @@ mailbox_list_index_sync_list(struct mailbox_list_index_sync_context *sync_ctx)
 static void
 mailbox_list_index_sync_update_hdr(struct mailbox_list_index_sync_context *sync_ctx)
 {
-	if (sync_ctx->orig_highest_name_id != sync_ctx->ilist->highest_name_id) {
+	if (sync_ctx->orig_highest_name_id != sync_ctx->ilist->highest_name_id ||
+	    sync_ctx->ilist->corrupted_names_or_parents) {
 		/* new names added. this implicitly resets refresh flag */
 		T_BEGIN {
 			mailbox_list_index_sync_names(sync_ctx);
 		} T_END;
+		sync_ctx->ilist->corrupted_names_or_parents = FALSE;
 	} else if (mailbox_list_index_need_refresh(sync_ctx->ilist,
 						   sync_ctx->view)) {
 		/* we're synced, reset refresh flag */
@@ -351,6 +363,57 @@ mailbox_list_index_sync_update_hdr(struct mailbox_list_index_sync_context *sync_
 	}
 }
 
+static void
+mailbox_list_index_sync_update_corrupted_node(struct mailbox_list_index_sync_context *sync_ctx,
+					      struct mailbox_list_index_node *node)
+{
+	struct mailbox_list_index_record irec;
+	uint32_t seq;
+	const void *data;
+	bool expunged;
+
+	if (!mail_index_lookup_seq(sync_ctx->view, node->uid, &seq))
+		return;
+
+	if (node->corrupted_parent) {
+		mail_index_lookup_ext(sync_ctx->view, seq,
+				      sync_ctx->ilist->ext_id,
+				      &data, &expunged);
+		i_assert(data != NULL);
+
+		memcpy(&irec, data, sizeof(irec));
+		irec.parent_uid = node->parent == NULL ? 0 : node->parent->uid;
+		mail_index_update_ext(sync_ctx->trans, seq,
+				      sync_ctx->ilist->ext_id, &irec, NULL);
+		node->corrupted_parent = FALSE;
+	}
+	if ((node->flags & MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME) != 0) {
+		/* rely on lib-index to drop unnecessary updates */
+		mail_index_update_flags(sync_ctx->trans, seq, MODIFY_ADD,
+			(enum mail_flags)MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME);
+	}
+}
+
+static void
+mailbox_list_index_sync_update_corrupted_nodes(struct mailbox_list_index_sync_context *sync_ctx,
+					       struct mailbox_list_index_node *node)
+{
+	for (; node != NULL; node = node->next) {
+		mailbox_list_index_sync_update_corrupted_node(sync_ctx, node);
+		mailbox_list_index_sync_update_corrupted_nodes(sync_ctx, node->children);
+	}
+}
+
+static void
+mailbox_list_index_sync_update_corrupted(struct mailbox_list_index_sync_context *sync_ctx)
+{
+	if (!sync_ctx->ilist->corrupted_names_or_parents)
+		return;
+
+	mailbox_list_index_sync_update_corrupted_nodes(sync_ctx,
+		sync_ctx->ilist->mailbox_tree);
+}
+
 int mailbox_list_index_sync_end(struct mailbox_list_index_sync_context **_sync_ctx,
 				bool success)
 {
@@ -359,11 +422,15 @@ int mailbox_list_index_sync_end(struct mailbox_list_index_sync_context **_sync_c
 
 	*_sync_ctx = NULL;
 
-	if (success)
+	if (success) {
+		mailbox_list_index_sync_update_corrupted(sync_ctx);
 		mailbox_list_index_sync_update_hdr(sync_ctx);
+	}
 	mail_index_view_close(&sync_ctx->view);
 
 	if (success) {
+		struct mail_index_sync_rec sync_rec;
+		while (mail_index_sync_next(sync_ctx->index_sync_ctx, &sync_rec)) ;
 		if ((ret = mail_index_sync_commit(&sync_ctx->index_sync_ctx)) < 0)
 			mailbox_list_index_set_index_error(sync_ctx->list);
 	} else {

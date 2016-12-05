@@ -68,7 +68,7 @@ static int imapc_list_init(struct mailbox_list *_list, const char **error_r)
 	struct imapc_mailbox_list *list = (struct imapc_mailbox_list *)_list;
 
 	list->set = mail_user_set_get_driver_settings(_list->ns->user->set_info,
-						      _list->ns->user->set,
+						      _list->ns->user_set,
 						      IMAPC_STORAGE_NAME);
 	if (imapc_storage_client_create(_list->ns, list->set, _list->mail_set,
 					&list->client, error_r) < 0)
@@ -947,7 +947,7 @@ struct mailbox_list imapc_mailbox_list = {
 	.props = MAILBOX_LIST_PROP_NO_ROOT | MAILBOX_LIST_PROP_AUTOCREATE_DIRS,
 	.mailbox_name_max_length = MAILBOX_LIST_NAME_MAX_LENGTH,
 
-	{
+	.v = {
 		imapc_list_alloc,
 		imapc_list_init,
 		imapc_list_deinit,

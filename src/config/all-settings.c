@@ -1204,6 +1204,10 @@ struct stats_settings {
 	unsigned int user_min_time;
 	unsigned int domain_min_time;
 	unsigned int ip_min_time;
+
+	unsigned int carbon_interval;
+	const char *carbon_server;
+	const char *carbon_name;
 };
 /* ../../src/ssl-params/ssl-params-settings.h */
 struct ssl_params_settings {
@@ -1260,6 +1264,11 @@ struct pop3_settings {
 };
 /* ../../src/pop3-login/pop3-login-settings.h */
 extern const struct setting_parser_info *pop3_login_setting_roots[];
+/* ../../src/plugins/mail-crypt/fs-crypt-settings.h */
+extern const struct setting_parser_info fs_crypt_setting_parser_info;
+struct fs_crypt_settings {
+	ARRAY(const char *) plugin_envs;
+};
 /* ../../src/plugins/dict-ldap/dict-ldap-settings.h */
 struct dict_ldap_settings {
 	const char *uri;
@@ -1639,7 +1648,9 @@ static const struct setting_define stats_setting_defines[] = {
 	DEF(SET_TIME, user_min_time),
 	DEF(SET_TIME, domain_min_time),
 	DEF(SET_TIME, ip_min_time),
-
+	DEF(SET_STR, carbon_server),
+	DEF(SET_TIME, carbon_interval),
+	DEF(SET_STR, carbon_name),
 	SETTING_DEFINE_LIST_END
 };
 const struct stats_settings stats_default_settings = {
@@ -1649,7 +1660,11 @@ const struct stats_settings stats_default_settings = {
 	.session_min_time = 60*15,
 	.user_min_time = 60*60,
 	.domain_min_time = 60*60*12,
-	.ip_min_time = 60*60*12
+	.ip_min_time = 60*60*12,
+
+	.carbon_interval = 30,
+	.carbon_server = "",
+	.carbon_name = ""
 };
 const struct setting_parser_info stats_setting_parser_info = {
 	.module_name = "stats",
@@ -2091,6 +2106,32 @@ const struct setting_parser_info *pop3_login_setting_roots[] = {
 	&login_setting_parser_info,
 	&pop3_login_setting_parser_info,
 	NULL
+};
+/* ../../src/plugins/mail-crypt/fs-crypt-settings.c */
+#undef DEF
+#define DEF(type, name) \
+	{ type, #name, offsetof(struct fs_crypt_settings, name), NULL }
+static const struct setting_define fs_crypt_setting_defines[] = {
+	{ SET_STRLIST, "plugin", offsetof(struct fs_crypt_settings, plugin_envs), NULL },
+
+	SETTING_DEFINE_LIST_END
+};
+const struct fs_crypt_settings fs_crypt_default_settings = {
+	.plugin_envs = ARRAY_INIT
+};
+static const struct setting_parser_info *fs_crypt_setting_dependencies[] = {
+	NULL
+};
+const struct setting_parser_info fs_crypt_setting_parser_info = {
+	.module_name = "fs-crypt",
+	.defines = fs_crypt_setting_defines,
+	.defaults = &fs_crypt_default_settings,
+
+	.type_offset = (size_t)-1,
+	.struct_size = sizeof(struct fs_crypt_settings),
+
+	.parent_offset = (size_t)-1,
+	.dependencies = fs_crypt_setting_dependencies
 };
 /* ../../src/plugins/dict-ldap/dict-ldap-settings.c */
 #undef DEF_STR
@@ -4496,32 +4537,33 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&maildir_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&aggregator_setting_parser_info, 
-	&imapc_setting_parser_info, 
-	&pop3c_setting_parser_info, 
-	&director_setting_parser_info, 
-	&imap_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&dict_setting_parser_info, 
-	&lda_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&imap_login_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&master_setting_parser_info, 
 	&mdbox_setting_parser_info, 
-	&mbox_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&fs_crypt_setting_parser_info, 
+	&director_setting_parser_info, 
+	&imapc_setting_parser_info, 
+	&aggregator_setting_parser_info, 
 	&pop3_setting_parser_info, 
-	&stats_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&login_setting_parser_info, 
 	&lmtp_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&maildir_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&login_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&master_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&imap_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

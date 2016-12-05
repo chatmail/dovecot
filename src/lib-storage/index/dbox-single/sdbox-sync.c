@@ -191,6 +191,8 @@ int sdbox_sync_begin(struct sdbox_mailbox *mbox, enum sdbox_sync_flags flags,
 		     struct sdbox_sync_context **ctx_r)
 {
 	struct mail_storage *storage = mbox->box.storage;
+	const struct mail_index_header *hdr =
+		mail_index_get_header(mbox->box.view);
 	struct sdbox_sync_context *ctx;
 	enum mail_index_sync_flags sync_flags;
 	unsigned int i;
@@ -199,6 +201,7 @@ int sdbox_sync_begin(struct sdbox_mailbox *mbox, enum sdbox_sync_flags flags,
 
 	force_rebuild = (flags & SDBOX_SYNC_FLAG_FORCE_REBUILD) != 0;
 	rebuild = force_rebuild ||
+		(hdr->flags & MAIL_INDEX_HDR_FLAG_FSCKD) != 0 ||
 		mbox->corrupted_rebuild_count != 0 ||
 		sdbox_refresh_header(mbox, TRUE, FALSE) < 0;
 
@@ -314,7 +317,7 @@ sdbox_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 			ret = -1;
 	}
 
-	if (mail_index_reset_fscked(box->index))
+	if (ret == 0 && mail_index_reset_fscked(box->index))
 		sdbox_set_mailbox_corrupted(box);
 	if (ret == 0 && (index_mailbox_want_full_sync(&mbox->box, flags) ||
 			 mbox->corrupted_rebuild_count != 0)) {

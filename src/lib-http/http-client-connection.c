@@ -36,7 +36,7 @@ http_client_connection_debug(struct http_client_connection *conn,
 
 		va_start(args, format);	
 		i_debug("http-client: conn %s: %s",
-			http_client_connection_label(conn),	t_strdup_vprintf(format, args));
+			conn->label, t_strdup_vprintf(format, args));
 		va_end(args);
 	}
 }
@@ -47,6 +47,15 @@ http_client_connection_debug(struct http_client_connection *conn,
 
 static void http_client_connection_ready(struct http_client_connection *conn);
 static void http_client_connection_input(struct connection *_conn);
+
+static inline void
+http_client_connection_failure(struct http_client_connection *conn,
+					 const char *reason)
+{
+	struct http_client_peer *peer = conn->peer;
+
+	http_client_peer_connection_failure(peer, reason);
+}
 
 unsigned int
 http_client_connection_count_pending(struct http_client_connection *conn)
@@ -61,6 +70,18 @@ http_client_connection_count_pending(struct http_client_connection *conn)
 bool http_client_connection_is_idle(struct http_client_connection *conn)
 {
 	return (conn->to_idle != NULL);
+}
+
+bool http_client_connection_is_active(struct http_client_connection *conn)
+{
+	if (!conn->connected)
+		return FALSE;
+
+	if (conn->in_req_callback || conn->pending_request != NULL)
+		return TRUE;
+
+	return (array_is_created(&conn->request_wait_list) &&
+		array_count(&conn->request_wait_list) > 0);
 }
 
 static void
@@ -204,7 +225,8 @@ http_client_connection_get_timing_info(struct http_client_connection *conn)
 			(*requestp)->sent_global_ioloop_usecs + 999) / 1000;
 		if (conn->client->ioloop != NULL) {
 			int http_ioloop_msecs =
-				(io_loop_get_wait_usecs(conn->client->ioloop) + 999) / 1000;
+				(io_wait_timer_get_usecs(conn->io_wait_timer) -
+				 (*requestp)->sent_http_ioloop_usecs + 999) / 1000;
 			other_ioloop_msecs -= http_ioloop_msecs;
 			str_printfa(str, ", %d.%03d in http ioloop",
 				    http_ioloop_msecs/1000, http_ioloop_msecs%1000);
@@ -531,7 +553,7 @@ static void http_client_connection_destroy(struct connection *_conn)
 				_conn->name, msecs/1000, msecs%1000);
 		}
 		http_client_connection_debug(conn, "%s", error);
-		http_client_peer_connection_failure(conn->peer, error);
+		http_client_connection_failure(conn, error);
 		break;
 	case CONNECTION_DISCONNECT_CONN_CLOSED:
 		/* retry pending requests if possible */
@@ -1226,12 +1248,13 @@ http_client_connection_connected(struct connection *_conn, bool success)
 	const char *error;
 
 	if (!success) {
-		http_client_peer_connection_failure(conn->peer, t_strdup_printf(
+		http_client_connection_failure(conn, t_strdup_printf(
 			"connect(%s) failed: %m", _conn->name));
 	} else {
 		conn->connected_timestamp = ioloop_timeval;
 		http_client_connection_debug(conn, "Connected");
 
+		(void)net_set_tcp_nodelay(_conn->fd_out, TRUE);
 		if (set->socket_send_buffer_size > 0) {
 			if (net_set_send_buffer_size(_conn->fd_out,
 				set->socket_send_buffer_size) < 0)
@@ -1247,8 +1270,8 @@ http_client_connection_connected(struct connection *_conn, bool success)
 
 		if (http_client_peer_addr_is_https(&conn->peer->addr)) {
 			if (http_client_connection_ssl_init(conn, &error) < 0) {
-				http_client_peer_connection_failure(conn->peer, error);
 				http_client_connection_debug(conn, "%s", error);
+				http_client_connection_failure(conn, error);
 				http_client_connection_close(&conn);
 			}
 			return;
@@ -1341,17 +1364,18 @@ http_client_connection_tunnel_response(const struct http_response *response,
 {
 	struct http_client_tunnel tunnel;
 	const char *name = http_client_peer_addr2str(&conn->peer->addr);
+	struct http_client_request *req = conn->connect_request;
+
+	conn->connect_request = NULL;
 
 	if (response->status != 200) {
-		http_client_peer_connection_failure(conn->peer, t_strdup_printf(
+		http_client_connection_failure(conn, t_strdup_printf(
 			"Tunnel connect(%s) failed: %d %s", name,
 				response->status, response->reason));
-		conn->connect_request = NULL;
 		return;
 	}
 
-	http_client_request_start_tunnel(conn->connect_request, &tunnel);
-	conn->connect_request = NULL;
+	http_client_request_start_tunnel(req, &tunnel);
 
 	connection_init_from_streams
 		(conn->client->conn_list, &conn->conn, name, tunnel.input, tunnel.output);
@@ -1417,6 +1441,10 @@ http_client_connection_create(struct http_client_peer *peer)
 	conn->peer = peer;
 	if (peer->addr.type != HTTP_CLIENT_PEER_ADDR_RAW)
 		i_array_init(&conn->request_wait_list, 16);
+	conn->io_wait_timer = io_wait_timer_add();
+
+	conn->label = i_strdup_printf("%s [%d]",
+		http_client_peer_label(peer), conn->id);
 
 	switch (peer->addr.type) {
 	case HTTP_CLIENT_PEER_ADDR_HTTPS_TUNNEL:
@@ -1540,6 +1568,7 @@ bool http_client_connection_unref(struct http_client_connection **_conn)
 		ssl_iostream_unref(&conn->ssl_iostream);
 	if (conn->connect_initialized)
 		connection_deinit(&conn->conn);
+	io_wait_timer_remove(&conn->io_wait_timer);
 	
 	i_free(conn);
 	return FALSE;
@@ -1583,5 +1612,6 @@ void http_client_connection_switch_ioloop(struct http_client_connection *conn)
 		conn->to_response = io_loop_move_timeout(&conn->to_response);
 	if (conn->incoming_payload != NULL)
 		i_stream_switch_ioloop(conn->incoming_payload);
+	conn->io_wait_timer = io_wait_timer_move(&conn->io_wait_timer);
 	connection_switch_ioloop(&conn->conn);
 }

@@ -12,14 +12,14 @@ struct dotlock_settings;
 #define MAIL_TRANSACTION_LOG_LOCK_CHANGE_TIMEOUT (3*60)
 
 /* Rotate when log is older than ROTATE_TIME and larger than MIN_SIZE */
-#define MAIL_TRANSACTION_LOG_ROTATE_MIN_SIZE (1024*32)
+#define MAIL_TRANSACTION_LOG_ROTATE_DEFAULT_MIN_SIZE (1024*32)
 /* If log is larger than MAX_SIZE, rotate regardless of the time */
-#define MAIL_TRANSACTION_LOG_ROTATE_MAX_SIZE (1024*1024)
-#define MAIL_TRANSACTION_LOG_ROTATE_TIME (60*5)
+#define MAIL_TRANSACTION_LOG_ROTATE_DEFAULT_MAX_SIZE (1024*1024)
+#define MAIL_TRANSACTION_LOG_ROTATE_DEFAULT_TIME (60*5)
 
 /* Delete .log.2 files older than this many seconds. Don't be too eager,
    older files are useful for QRESYNC and dsync. */
-#define MAIL_TRANSACTION_LOG2_STALE_SECS (60*60*24*2)
+#define MAIL_TRANSACTION_LOG2_DEFAULT_STALE_SECS (60*60*24*2)
 
 #define MAIL_TRANSACTION_LOG_FILE_IN_MEMORY(file) ((file)->fd == -1)
 
@@ -45,6 +45,8 @@ struct mail_transaction_log_file {
 	dev_t st_dev;
 	time_t last_mtime;
 	uoff_t last_size;
+
+	time_t last_mmap_error_time;
 
 	struct mail_transaction_log_header hdr;
 	buffer_t mmap_buffer;
@@ -116,14 +118,18 @@ mail_transaction_log_file_alloc(struct mail_transaction_log *log,
 				const char *path);
 void mail_transaction_log_file_free(struct mail_transaction_log_file **file);
 
-int mail_transaction_log_file_open(struct mail_transaction_log_file *file);
+/* Returns 1 if log was opened, 0 if it didn't exist or was already open,
+   -1 if error. */
+int mail_transaction_log_file_open(struct mail_transaction_log_file *file,
+				   const char **reason_r);
 int mail_transaction_log_file_create(struct mail_transaction_log_file *file,
 				     bool reset);
 int mail_transaction_log_file_lock(struct mail_transaction_log_file *file);
 
 int mail_transaction_log_find_file(struct mail_transaction_log *log,
 				   uint32_t file_seq, bool nfs_flush,
-				   struct mail_transaction_log_file **file_r);
+				   struct mail_transaction_log_file **file_r,
+				   const char **reason_r);
 
 /* Returns 1 if ok, 0 if file is corrupted or offset range is invalid,
    -1 if I/O error */

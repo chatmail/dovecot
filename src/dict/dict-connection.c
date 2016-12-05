@@ -33,9 +33,9 @@ static int dict_connection_parse_handshake(struct dict_connection *conn,
 	    *line++ != '\t')
 		return -1;
 
-	/* skip minor version */
-	while (*line != '\t' && *line != '\0') line++;
-
+	/* read minor version */
+	if (str_parse_uint(line, &conn->minor_version, &line) < 0)
+		return -1;
 	if (*line++ != '\t')
 		return -1;
 
@@ -179,14 +179,17 @@ void dict_connection_continue_input(struct dict_connection *conn)
 
 static int dict_connection_output(struct dict_connection *conn)
 {
+	struct ostream *output = conn->output;
 	int ret;
 
+	o_stream_cork(output);
 	if ((ret = o_stream_flush(conn->output)) < 0) {
 		dict_connection_destroy(conn);
-		return 1;
-	}
-	if (ret > 0)
+		ret = 1;
+	} else if (ret > 0) {
 		dict_connection_cmds_output_more(conn);
+	}
+	o_stream_uncork(output);
 	return ret;
 }
 

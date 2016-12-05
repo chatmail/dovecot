@@ -4,11 +4,16 @@
 #include "array.h"
 #include "env-util.h"
 #include "hostpid.h"
+#include "fd-close-on-exec.h"
 #include "ipwd.h"
 #include "process-title.h"
 
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/time.h>
+
+static bool lib_initialized = FALSE;
+int dev_null_fd = -1;
 
 struct atexit_callback {
 	int priority;
@@ -27,6 +32,25 @@ int close_keep_errno(int *fd)
 	*fd = -1;
 	errno = old_errno;
 	return ret;
+}
+
+void fd_close_maybe_stdio(int *fd_in, int *fd_out)
+{
+	int *fdp[2] = { fd_in, fd_out };
+
+	if (*fd_in == *fd_out)
+		*fd_in = -1;
+
+	for (unsigned int i = 0; i < N_ELEMENTS(fdp); i++) {
+		if (*fdp[i] == -1)
+			;
+		else if (*fdp[i] > 1)
+			i_close_fd(fdp[i]);
+		else if (dup2(dev_null_fd, *fdp[i]) == *fdp[i])
+			*fdp[i] = -1;
+		else
+			i_fatal("dup2(/dev/null, %d) failed: %m", *fdp[i]);
+	}
 }
 
 #undef i_unlink
@@ -113,9 +137,28 @@ void lib_atexit_run(void)
 	}
 }
 
+static void lib_open_non_stdio_dev_null(void)
+{
+	dev_null_fd = open("/dev/null", O_WRONLY);
+	if (dev_null_fd == -1)
+		i_fatal("open(/dev/null) failed: %m");
+	/* Make sure stdin, stdout and stderr fds exist. We especially rely on
+	   stderr being available and a lot of code doesn't like fd being 0.
+	   We'll open /dev/null as write-only also for stdin, since if any
+	   reads are attempted from it we'll want them to fail. */
+	while (dev_null_fd < STDERR_FILENO) {
+		dev_null_fd = dup(dev_null_fd);
+		if (dev_null_fd == -1)
+			i_fatal("dup(/dev/null) failed: %m");
+	}
+	/* close the actual /dev/null fd on exec*(), but keep it in stdio fds */
+	fd_close_on_exec(dev_null_fd, TRUE);
+}
+
 void lib_init(void)
 {
 	struct timeval tv;
+	i_assert(!lib_initialized);
 
 	/* standard way to get rand() return different values. */
 	if (gettimeofday(&tv, NULL) < 0)
@@ -124,13 +167,24 @@ void lib_init(void)
 
 	data_stack_init();
 	hostpid_init();
+	lib_open_non_stdio_dev_null();
+
+	lib_initialized = TRUE;
+}
+
+bool lib_is_initialized(void)
+{
+	return lib_initialized;
 }
 
 void lib_deinit(void)
 {
+	i_assert(lib_initialized);
+	lib_initialized = FALSE;
 	lib_atexit_run();
 	ipwd_deinit();
 	hostpid_deinit();
+	i_close_fd(&dev_null_fd);
 	data_stack_deinit();
 	env_deinit();
 	failures_deinit();
