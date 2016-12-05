@@ -15,6 +15,7 @@
 @SET_MAKE@
 
 
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -89,12 +90,13 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-dns
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
-	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
-	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/dovecot.m4 $(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/libtool.m4 $(top_srcdir)/ltoptions.m4 \
+	$(top_srcdir)/ltsugar.m4 $(top_srcdir)/ltversion.m4 \
+	$(top_srcdir)/lt~obsolete.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
@@ -105,12 +107,20 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libdns_la_LIBADD =
-am_libdns_la_OBJECTS = dns-lookup.lo
+am_libdns_la_OBJECTS = dns-lookup.lo dns-util.lo
 libdns_la_OBJECTS = $(am_libdns_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am__EXEEXT_1 = test-dns-util$(EXEEXT)
+PROGRAMS = $(noinst_PROGRAMS)
+test_dns_util_SOURCES = test-dns-util.c
+test_dns_util_OBJECTS = test_dns_util-test-dns-util.$(OBJEXT)
+test_dns_util_DEPENDENCIES = $(test_libs)
+test_dns_util_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(test_dns_util_CFLAGS) \
+	$(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -145,8 +155,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libdns_la_SOURCES)
-DIST_SOURCES = $(libdns_la_SOURCES)
+SOURCES = $(libdns_la_SOURCES) test-dns-util.c
+DIST_SOURCES = $(libdns_la_SOURCES) test-dns-util.c
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -399,10 +409,25 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib
 
 libdns_la_SOURCES = \
-	dns-lookup.c
+	dns-lookup.c \
+	dns-util.c
 
 headers = \
-	dns-lookup.h
+	dns-lookup.h \
+	dns-util.h
+
+test_programs = \
+	test-dns-util
+
+test_libs = \
+	libdns.la  \
+	../lib-test/libtest.la \
+	../lib/liblib.la
+
+test_dns_util_SOURCE = test-dns-util.c
+test_dns_util_LDADD = $(test_libs)
+test_dns_util_CFLAGS = $(AM_CPPFLAGS) \
+	-I$(top_srcdir)/src/lib-test
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
@@ -454,6 +479,19 @@ clean-noinstLTLIBRARIES:
 libdns.la: $(libdns_la_OBJECTS) $(libdns_la_DEPENDENCIES) $(EXTRA_libdns_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libdns_la_OBJECTS) $(libdns_la_LIBADD) $(LIBS)
 
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+
+test-dns-util$(EXEEXT): $(test_dns_util_OBJECTS) $(test_dns_util_DEPENDENCIES) $(EXTRA_test_dns_util_DEPENDENCIES) 
+	@rm -f test-dns-util$(EXEEXT)
+	$(AM_V_CCLD)$(test_dns_util_LINK) $(test_dns_util_OBJECTS) $(test_dns_util_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -461,6 +499,8 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dns-lookup.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dns-util.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_dns_util-test-dns-util.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -482,6 +522,20 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+test_dns_util-test-dns-util.o: test-dns-util.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_dns_util_CFLAGS) $(CFLAGS) -MT test_dns_util-test-dns-util.o -MD -MP -MF $(DEPDIR)/test_dns_util-test-dns-util.Tpo -c -o test_dns_util-test-dns-util.o `test -f 'test-dns-util.c' || echo '$(srcdir)/'`test-dns-util.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_dns_util-test-dns-util.Tpo $(DEPDIR)/test_dns_util-test-dns-util.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-dns-util.c' object='test_dns_util-test-dns-util.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_dns_util_CFLAGS) $(CFLAGS) -c -o test_dns_util-test-dns-util.o `test -f 'test-dns-util.c' || echo '$(srcdir)/'`test-dns-util.c
+
+test_dns_util-test-dns-util.obj: test-dns-util.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_dns_util_CFLAGS) $(CFLAGS) -MT test_dns_util-test-dns-util.obj -MD -MP -MF $(DEPDIR)/test_dns_util-test-dns-util.Tpo -c -o test_dns_util-test-dns-util.obj `if test -f 'test-dns-util.c'; then $(CYGPATH_W) 'test-dns-util.c'; else $(CYGPATH_W) '$(srcdir)/test-dns-util.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_dns_util-test-dns-util.Tpo $(DEPDIR)/test_dns_util-test-dns-util.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-dns-util.c' object='test_dns_util-test-dns-util.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_dns_util_CFLAGS) $(CFLAGS) -c -o test_dns_util-test-dns-util.obj `if test -f 'test-dns-util.c'; then $(CYGPATH_W) 'test-dns-util.c'; else $(CYGPATH_W) '$(srcdir)/test-dns-util.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -594,7 +648,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LTLIBRARIES) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -632,7 +686,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
-	mostlyclean-am
+	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -703,22 +757,32 @@ uninstall-am: uninstall-pkginc_libHEADERS
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-noinstLTLIBRARIES cscopelist-am ctags \
-	ctags-am distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-pdf install-pdf-am \
-	install-pkginc_libHEADERS install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
-	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
-	uninstall-pkginc_libHEADERS
+	clean-libtool clean-noinstLTLIBRARIES clean-noinstPROGRAMS \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-pkginc_libHEADERS install-ps \
+	install-ps-am install-strip installcheck installcheck-am \
+	installdirs maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
+	uninstall-am uninstall-pkginc_libHEADERS
 
 .PRECIOUS: Makefile
 
+
+check: check-am check-test
+check-test: all-am
+	for bin in $(test_programs); do \
+	  if test "$$bin" = "test-program-client-local"; then \
+	    if ! env NOVALGRIND=yes $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	  else \
+	    if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	  fi \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

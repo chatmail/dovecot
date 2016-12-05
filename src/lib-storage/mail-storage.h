@@ -55,7 +55,12 @@ enum mailbox_flags {
 	   inconsistent. For example this disables lazy_expunge plugin and
 	   quota updates (possibly resulting in broken quota). and This is
 	   useful for example when deleting entire user accounts. */
-	MAILBOX_FLAG_DELETE_UNSAFE	= 0x400
+	MAILBOX_FLAG_DELETE_UNSAFE	= 0x400,
+	/* Mailbox is used for caching purposes. Some of the mails may be
+	   stubs, which exist in the index but that don't have a mail body.
+	   The backend shouldn't treat it as corruption if a mail body isn't
+	   found. */
+	MAILBOX_FLAG_USE_STUBS		= 0x800,
 };
 
 enum mailbox_feature {
@@ -189,7 +194,11 @@ enum mailbox_transaction_flags {
 	/* Don't trigger any notifications for this transaction. This
 	   especially means the notify plugin. This would normally be used only
 	   with _FLAG_SYNC. */
-	MAILBOX_TRANSACTION_FLAG_NO_NOTIFY	= 0x40
+	MAILBOX_TRANSACTION_FLAG_NO_NOTIFY	= 0x40,
+	/* Append fills in an existing stub mail for the specified UID,
+	   instead of saving a new mail. This requires mailbox to be opened
+	   with MAILBOX_FLAG_USE_STUBS. */
+	MAILBOX_TRANSACTION_FLAG_FILL_IN_STUB	= 0x80,
 };
 
 enum mailbox_sync_flags {
@@ -923,9 +932,16 @@ void mail_set_cache_corrupted_reason(struct mail *mail,
    128 bits are returned. */
 void mail_generate_guid_128_hash(const char *guid, guid_128_t guid_128_r);
 
-/* Parse a human-writable string into a timestamp. Returns 0 and timestamp on
-   success, -1 if the string couldn't be parsed. Currently supported string
-   formats: yyyy-mm-dd, imap date, unix timestamp, interval (e.g. n days). */
-int mail_parse_human_timestamp(const char *str, time_t *timestamp_r);
+/* Parse a human-writable string into a timestamp. utc_r controls whether
+   the returned timestamp should be treated as an exact UTC time (TRUE), or
+   whether this is a human-given date where the timestamp could be adjusted
+   by the matched mails' timezones (see MAIL_SEARCH_ARG_FLAG_USE_TZ).
+
+   Returns 0 and timestamp on success, -1 if the string couldn't be parsed.
+   Currently supported string formats: yyyy-mm-dd (utc=FALSE),
+   imap date (utc=FALSE), unix timestamp (utc=TRUE), interval (e.g. n days,
+   utc=TRUE). */
+int mail_parse_human_timestamp(const char *str, time_t *timestamp_r,
+			       bool *utc_r);
 
 #endif

@@ -899,7 +899,8 @@ void mail_index_map_check(struct mail_index_map *map)
 #endif
 
 int mail_index_sync_map(struct mail_index_map **_map,
-			enum mail_index_sync_handler_type type, bool force)
+			enum mail_index_sync_handler_type type, bool force,
+			const char *sync_reason)
 {
 	struct mail_index_map *map = *_map;
 	struct mail_index *index = map->index;
@@ -963,8 +964,10 @@ int mail_index_sync_map(struct mail_index_map **_map,
 		if (force && ret == 0) {
 			/* the seq/offset is probably broken */
 			mail_index_set_error(index, "Index %s: Lost log for "
-				"seq=%u offset=%"PRIuUOFF_T": %s", index->filepath,
-				map->hdr.log_file_seq, start_offset, reason);
+				"seq=%u offset=%"PRIuUOFF_T": %s "
+				"(initial_mapped=%d, reason=%s)", index->filepath,
+				map->hdr.log_file_seq, start_offset, reason,
+				index->initial_mapped ? 1 : 0, sync_reason);
 			(void)mail_index_fsck(index);
 		}
 		/* can't use it. sync by re-reading index. */
@@ -1009,6 +1012,8 @@ int mail_index_sync_map(struct mail_index_map **_map,
 		mail_transaction_log_view_get_prev_pos(view->log_view,
 						       &prev_seq, &prev_offset);
 		map = mail_index_map_alloc(index);
+		if ((index->map->hdr.flags & MAIL_INDEX_HDR_FLAG_FSCKD) != 0)
+			map->hdr.flags |= MAIL_INDEX_HDR_FLAG_FSCKD;
 		map->hdr.log_file_seq = prev_seq;
 		map->hdr.log_file_tail_offset = 0;
 		mail_index_sync_replace_map(&sync_map_ctx, map);

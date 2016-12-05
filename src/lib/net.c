@@ -376,6 +376,13 @@ int net_set_cork(int fd ATTR_UNUSED, bool cork ATTR_UNUSED)
 #endif
 }
 
+int net_set_tcp_nodelay(int fd, bool nodelay)
+{
+	int val = nodelay;
+
+	return setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val));
+}
+
 int net_set_send_buffer_size(int fd, size_t size)
 {
 	int opt;
@@ -1036,6 +1043,18 @@ int net_str2hostport(const char *str, in_port_t default_port,
 		return -1;
 	*host_r = host;
 	*port_r = port;
+	return 0;
+}
+
+int net_ipport2str(const struct ip_addr *ip, in_port_t port, const char **str_r)
+{
+	if (!IPADDR_IS_V4(ip) && !IPADDR_IS_V6(ip)) return -1;
+
+	*str_r = t_strdup_printf("%s%s%s:%u",
+				 IPADDR_IS_V6(ip) ? "[" : "",
+				 net_ip2addr(ip),
+				 IPADDR_IS_V6(ip) ? "]" : "",
+				 port);
 	return 0;
 }
 

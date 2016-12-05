@@ -14,12 +14,6 @@ interpeter:
  * This plugin adds support for the Dovecot-specific 'vnd.dovecot.extdata'
    extension, which allows access to external string data. Any type of Dovecot
    dict lookup can be specified as data source.
- * <Pipe> [Pigeonhole.Sieve.Plugins.Pipe.txt] [*Pigeonhole v0.2*] /(custom
-   language extension, experimental)/
- * This plugin adds support for the Dovecot-specific 'vnd.dovecot.pipe'
-   extension, which allows piping messages to a pre-defined set of external
-   programs. For Pigeonhole v0.3, the same functionality (and more) is provided
-   by the extprograms plugin.
  * <Extprograms> [Pigeonhole.Sieve.Plugins.Extprograms.txt] [*Pigeonhole v0.3*
    and beyond]/(custom language extensions, experimental)/
  * This plugin adds support for the Dovecot-specific 'vnd.dovecot.pipe',
@@ -27,5 +21,18 @@ interpeter:
    add new action commands for invoking a predefined set of external programs
    (typically shell scripts. Messages can be piped to or filtered through those
    programs and string data can be input to and retrieved from those programs.
+ * <IMAPSieve> [Pigeonhole.Sieve.Plugins.IMAPSieve.txt] [*Pigeonhole v0.4.14*
+   and beyond]/(standard language extension, RFC 6785
+   [https://tools.ietf.org/html/rfc6785])/
+ * This set of plugins adds support for the 'imapsieve' extension in sieve and
+   the 'IMAPSIEVE' capability in IMAP. With these plugins it is possible to use
+   Sieve filtering in IMAP, operating when messages are created or their
+   attributes are changed.
+ * <Pipe> [Pigeonhole.Sieve.Plugins.Pipe.txt] [*Pigeonhole v0.2*] /(custom
+   language extension, experimental)/
+ * This plugin adds support for the Dovecot-specific 'vnd.dovecot.pipe'
+   extension, which allows piping messages to a pre-defined set of external
+   programs. For Pigeonhole v0.3, the same functionality (and more) is provided
+   by the extprograms plugin.
 
-(This file was created from the wiki on 2016-10-27 04:44)
+(This file was created from the wiki on 2016-12-03 04:44)

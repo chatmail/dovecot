@@ -1,3 +1,5 @@
+/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+
 #include "lib.h"
 #include "buffer.h"
 #include "randgen.h"
@@ -291,7 +293,13 @@ ssize_t i_stream_decrypt_key(struct decrypt_istream *stream, const char *malg, u
 			return -1;
 		}
 		buffer_create_from_data(&buf, dgst, sizeof(dgst));
-		dcrypt_key_id_private(stream->priv_key, "sha256", &buf, NULL);
+		if (!dcrypt_key_id_private(stream->priv_key, "sha256", &buf,
+					   &error)) {
+			io_stream_set_error(&stream->istream.iostream, "Decryption error: "
+								       "dcrypt_key_id_private failed: %s",
+								       error);
+			return -1;
+		}
 	}
 
 	/* for each key */

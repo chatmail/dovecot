@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "unichar.h"
+#include "str.h"
 #include "test-common.h"
 #include "fts-tokenizer.h"
 #include "fts-tokenizer-common.h"
@@ -424,16 +425,78 @@ static void test_fts_tokenizer_address_search(void)
 	test_end();
 }
 
-static void test_fts_tokenizer_delete_trailing_partial_char()
+static void test_fts_tokenizer_delete_trailing_partial_char(void)
 {
-	const char* str[] = {"\x7f", "\xC2\x80", "\xE0\x80\x80","\xF0\x80\x80\x80"};
+	const struct {
+		const char *str;
+		unsigned int truncated_len;
+	} tests[] = {
+		/* non-truncated */
+		{ "\x7f", 1 },
+		{ "\xC2\x80", 2 },
+		{ "\xE0\x80\x80", 3 },
+		{ "\xF0\x80\x80\x80", 4 },
+
+		/* truncated */
+		{ "\xF0\x80\x80", 0 },
+		{ "x\xF0\x80\x80", 1 },
+	};
 	unsigned int i;
-	size_t new_size;
-	for (i = 0; i < 4; i++) {
-		new_size = i+1;
-		fts_tokenizer_delete_trailing_partial_char((unsigned char*)str[i], &new_size);
-		test_assert( i+1 == new_size);
+	size_t size;
+
+	test_begin("fts tokenizer delete trailing partial char");
+	for (i = 0; i < N_ELEMENTS(tests); i++) {
+		size = strlen(tests[i].str);
+		fts_tokenizer_delete_trailing_partial_char((const unsigned char *)tests[i].str, &size);
+		test_assert(size == tests[i].truncated_len);
 	}
+	test_end();
+}
+
+static void test_fts_tokenizer_address_maxlen(void)
+{
+	const char *const settings[] = {"maxlen", "5", NULL};
+	const char *input = "...\357\277\275@a";
+	struct fts_tokenizer *tok;
+	const char *token, *error;
+
+	test_begin("fts tokenizer address maxlen");
+	test_assert(fts_tokenizer_create(fts_tokenizer_email_address, NULL, settings, &tok, &error) == 0);
+
+	while (fts_tokenizer_next(tok, (const unsigned char *)input,
+				  strlen(input), &token, &error) > 0) ;
+	while (fts_tokenizer_final(tok, &token, &error) > 0) ;
+	fts_tokenizer_unref(&tok);
+	test_end();
+}
+
+static void test_fts_tokenizer_random(void)
+{
+	const char test_chars[] = { 0, ' ', '.', 'a', 'b', 'c', '-', '@', '\xC3', '\xA4' };
+	const char *const settings[] = {"algorithm", "simple", NULL};
+	const char *const email_settings[] = {"maxlen", "9", NULL};
+	unsigned int i;
+	unsigned char addr[10] = { 0 };
+	string_t *str = t_str_new(20);
+	struct fts_tokenizer *tok, *gen_tok;
+	const char *token, *error;
+
+	test_begin("fts tokenizer random");
+	test_assert(fts_tokenizer_create(fts_tokenizer_generic, NULL, settings, &gen_tok, &error) == 0);
+	test_assert(fts_tokenizer_create(fts_tokenizer_email_address, gen_tok, email_settings, &tok, &error) == 0);
+
+	for (i = 0; i < 10000; i++) T_BEGIN {
+		for (unsigned int j = 0; j < sizeof(addr); j++)
+			addr[j] = test_chars[rand() % N_ELEMENTS(test_chars)];
+		str_truncate(str, 0);
+		uni_utf8_get_valid_data(addr, sizeof(addr), str);
+		while (fts_tokenizer_next(tok, str_data(str), str_len(str),
+					  &token, &error) > 0) ;
+		while (fts_tokenizer_final(tok, &token, &error) > 0) ;
+	} T_END;
+	fts_tokenizer_unref(&tok);
+	fts_tokenizer_unref(&gen_tok);
+	test_end();
 }
 
 int main(void)
@@ -446,8 +509,10 @@ int main(void)
 		test_fts_tokenizer_address_only,
 		test_fts_tokenizer_address_parent_simple,
 		test_fts_tokenizer_address_parent_tr29,
+		test_fts_tokenizer_address_maxlen,
 		test_fts_tokenizer_address_search,
 		test_fts_tokenizer_delete_trailing_partial_char,
+		test_fts_tokenizer_random,
 		NULL
 	};
 	int ret;

@@ -23,6 +23,10 @@ struct index_mailbox_list {
 
 extern struct mailbox_list index_mailbox_list;
 
+static int
+index_list_rename_mailbox(struct mailbox_list *_oldlist, const char *oldname,
+			  struct mailbox_list *_newlist, const char *newname);
+
 static struct mailbox_list *index_list_alloc(void)
 {
 	struct index_mailbox_list *list;
@@ -288,11 +292,19 @@ index_list_mailbox_create_selectable(struct mailbox *box,
 		return -1;
 
 	seq = mailbox_list_index_sync_name(sync_ctx, box->name, &node, &created);
+	if (box->corrupted_mailbox_name) {
+		/* an existing mailbox is being created with a "unknown" name.
+		   opening the mailbox will hopefully find its real name and
+		   rename it. */
+		node->flags |= MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME;
+		mail_index_update_flags(sync_ctx->trans, seq, MODIFY_ADD,
+			(enum mail_flags)MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME);
+	}
 	if (!created &&
 	    (node->flags & (MAILBOX_LIST_INDEX_FLAG_NONEXISTENT |
 			    MAILBOX_LIST_INDEX_FLAG_NOSELECT)) == 0) {
 		/* already selectable */
-		(void)mailbox_list_index_sync_end(&sync_ctx, FALSE);
+		(void)mailbox_list_index_sync_end(&sync_ctx, TRUE);
 		return 0;
 	}
 
@@ -303,8 +315,11 @@ index_list_mailbox_create_selectable(struct mailbox *box,
 	i_assert(guid_128_is_empty(rec.guid));
 
 	/* make it selectable */
-	node->flags = 0;
-	mail_index_update_flags(sync_ctx->trans, seq, MODIFY_REPLACE, 0);
+	node->flags &= ~(MAILBOX_LIST_INDEX_FLAG_NONEXISTENT |
+			 MAILBOX_LIST_INDEX_FLAG_NOSELECT |
+			 MAILBOX_LIST_INDEX_FLAG_NOINFERIORS);
+	mail_index_update_flags(sync_ctx->trans, seq, MODIFY_REPLACE,
+				(enum mail_flags)node->flags);
 
 	memcpy(rec.guid, mailbox_guid, sizeof(rec.guid));
 	mail_index_update_ext(sync_ctx->trans, seq, ilist->ext_id, &rec, NULL);
@@ -456,6 +471,100 @@ index_list_mailbox_exists(struct mailbox *box, bool auto_boxes ATTR_UNUSED,
 	return 0;
 }
 
+static bool mailbox_has_corrupted_name(struct mailbox *box)
+{
+	struct mailbox_list_index_node *node;
+
+	if (box->corrupted_mailbox_name)
+		return TRUE;
+
+	node = mailbox_list_index_lookup(box->list, box->name);
+	return node != NULL &&
+		(node->flags & MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME) != 0;
+}
+
+static void index_list_rename_corrupted(struct mailbox *box, const char *newname)
+{
+	if (index_list_rename_mailbox(box->list, box->name,
+				      box->list, newname) == 0 ||
+	    box->list->error != MAIL_ERROR_EXISTS)
+		return;
+
+	/* mailbox already exists. don't give up yet, just use the newname
+	   as prefix and add the "lost-xx" as suffix. */
+	char sep = mailbox_list_get_hierarchy_sep(box->list);
+	const char *oldname = box->name;
+
+	/* oldname should be at the root level, but check for hierarchies
+	   anyway to be safe. */
+	const char *p = strrchr(oldname, sep);
+	if (p != NULL)
+		oldname = p+1;
+
+	newname = t_strdup_printf("%s-%s", newname, oldname);
+	(void)index_list_rename_mailbox(box->list, box->name,
+					box->list, newname);
+}
+
+static int index_list_mailbox_open(struct mailbox *box)
+{
+	struct index_list_mailbox *ibox = INDEX_LIST_STORAGE_CONTEXT(box);
+	const void *data;
+	const unsigned char *name_hdr;
+	size_t name_hdr_size;
+
+	if (ibox->module_ctx.super.open(box) < 0)
+		return -1;
+
+	/* if mailbox name has changed, update it to the header. Use \0
+	   as the hierarchy separator in the header. This is to make sure
+	   we don't keep rewriting the name just in case some backend switches
+	   between separators when accessed different ways. */
+
+	/* Get the current mailbox name with \0 separators. */
+	char sep = mailbox_list_get_hierarchy_sep(box->list);
+	char *box_zerosep_name = t_strdup_noconst(box->name);
+	unsigned int box_name_len = strlen(box_zerosep_name);
+	for (unsigned int i = 0; i < box_name_len; i++) {
+		if (box_zerosep_name[i] == sep)
+			box_zerosep_name[i] = '\0';
+	}
+
+	/* Does it match what's in the header now? */
+	mail_index_get_header_ext(box->view, box->box_name_hdr_ext_id,
+				  &data, &name_hdr_size);
+	name_hdr = data;
+	while (name_hdr_size > 0 && name_hdr[name_hdr_size-1] == '\0') {
+		/* Remove trailing \0 - header doesn't shrink always */
+		name_hdr_size--;
+	}
+	if (name_hdr_size == box_name_len &&
+	    memcmp(box_zerosep_name, name_hdr, box_name_len) == 0) {
+		/* Same mailbox name */
+	} else if (!mailbox_has_corrupted_name(box)) {
+		/* Mailbox name changed - update */
+		struct mail_index_transaction *trans =
+			mail_index_transaction_begin(box->view, 0);
+		mail_index_ext_resize_hdr(trans, box->box_name_hdr_ext_id,
+					  box_name_len);
+		mail_index_update_header_ext(trans, box->box_name_hdr_ext_id, 0,
+					     box_zerosep_name, box_name_len);
+		(void)mail_index_transaction_commit(&trans);
+	} else if (name_hdr_size > 0) {
+		/* Mailbox name is corrupted. Rename it to the previous name. */
+		char sep = mailbox_list_get_hierarchy_sep(box->list);
+		char *newname = t_malloc0(name_hdr_size + 1);
+		memcpy(newname, name_hdr, name_hdr_size);
+		for (size_t i = 0; i < name_hdr_size; i++) {
+			if (newname[i] == '\0')
+				newname[i] = sep;
+		}
+
+		index_list_rename_corrupted(box, newname);
+	}
+	return 0;
+}
+
 static void
 index_list_try_delete(struct mailbox_list *_list, const char *name,
 		      enum mailbox_list_path_type type)
@@ -582,6 +691,7 @@ index_list_rename_mailbox(struct mailbox_list *_oldlist, const char *oldname,
 			  struct mailbox_list *_newlist, const char *newname)
 {
 	struct index_mailbox_list *list = (struct index_mailbox_list *)_oldlist;
+	const unsigned int oldname_len = strlen(oldname);
 	struct mailbox_list_index_sync_context *sync_ctx;
 	struct mailbox_list_index_record oldrec, newrec;
 	struct mailbox_list_index_node *oldnode, *newnode, *child;
@@ -592,6 +702,13 @@ index_list_rename_mailbox(struct mailbox_list *_oldlist, const char *oldname,
 	if (_oldlist != _newlist) {
 		mailbox_list_set_error(_oldlist, MAIL_ERROR_NOTPOSSIBLE,
 			"Renaming not supported across namespaces.");
+		return -1;
+	}
+
+	if (strncmp(oldname, newname, oldname_len) == 0 &&
+	   newname[oldname_len] == mailbox_list_get_hierarchy_sep(_newlist)) {
+		mailbox_list_set_error(_oldlist, MAIL_ERROR_NOTPOSSIBLE,
+			"Can't rename mailbox under itself.");
 		return -1;
 	}
 
@@ -643,6 +760,13 @@ index_list_rename_mailbox(struct mailbox_list *_oldlist, const char *oldname,
 	oldrec.name_id = newrec.name_id;
 	oldrec.parent_uid = newrec.parent_uid;
 
+	if ((newnode->flags & MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME) != 0) {
+		/* mailbox is renamed - clear away the corruption flag so the
+		   new name will be written to the mailbox index header. */
+		newnode->flags &= ~MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME;
+		mail_index_update_flags(sync_ctx->trans, oldseq, MODIFY_REMOVE,
+			(enum mail_flags)MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME);
+	}
 	mail_index_update_ext(sync_ctx->trans, oldseq,
 			      sync_ctx->ilist->ext_id, &oldrec, NULL);
 	mail_index_expunge(sync_ctx->trans, newseq);
@@ -726,4 +850,5 @@ void mailbox_list_index_backend_init_mailbox(struct mailbox *box)
 	box->v.create_box = index_list_mailbox_create;
 	box->v.update_box = index_list_mailbox_update;
 	box->v.exists = index_list_mailbox_exists;
+	box->v.open = index_list_mailbox_open;
 }

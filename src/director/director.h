@@ -34,6 +34,7 @@
 struct director;
 struct mail_host;
 struct user;
+struct director_user_init;
 
 enum user_kill_state {
 	/* User isn't being killed */
@@ -72,6 +73,7 @@ typedef void director_state_change_callback_t(struct director *dir);
 
 struct director_kill_context {
 	struct director *dir;
+	struct mail_tag *tag;
 	unsigned int username_hash;
 	struct ip_addr old_host_ip;
 	bool kill_is_self_initiated;
@@ -115,8 +117,6 @@ struct director {
 	/* original mail hosts configured in config file.
 	   this is used only for doveadm lookups */
 	struct mail_host_list *orig_config_hosts;
-	/* temporary user -> host associations */
-	struct user_directory *users;
 	/* Number of users currently being moved */
 	unsigned int users_moving_count;
 
@@ -235,9 +235,16 @@ void director_update_send_version(struct director *dir,
 
 int director_connect_host(struct director *dir, struct director_host *host);
 
+unsigned int
+director_get_username_hash(struct director *dir, const char *username);
+
 void directors_init(void);
 void directors_deinit(void);
 
 void dir_debug(const char *fmt, ...) ATTR_FORMAT(1, 2);
+
+struct director_user_iter *director_iterate_users_init(struct director *dir);
+struct user *director_iterate_users_next(struct director_user_iter *iter);
+void director_iterate_users_deinit(struct director_user_iter **_iter);
 
 #endif

@@ -48,6 +48,11 @@ struct mail_storage_vfuncs {
 					 const char *vname,
 					 enum mailbox_flags flags);
 	int (*purge)(struct mail_storage *storage);
+	/* Called when mailbox list index corruption has been detected.
+	   The callback should add any missing mailboxes to the list index.
+	   Returns 0 on success, -1 on temporary failure that didn't properly
+	   fix the index. */
+	int (*list_index_corrupted)(struct mail_storage *storage);
 };
 
 union mail_storage_module_context {
@@ -81,7 +86,9 @@ enum mail_storage_class_flags {
 	MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_GUID128 = 0x200,
 	/* Storage deletes all files internally - mailbox list's
 	   delete_mailbox() shouldn't delete anything itself. */
-	MAIL_STORAGE_CLASS_FLAG_NO_LIST_DELETES	= 0x400
+	MAIL_STORAGE_CLASS_FLAG_NO_LIST_DELETES	= 0x400,
+	/* Storage supports stubs (used for caching purposes). */
+	MAIL_STORAGE_CLASS_FLAG_STUBS = 0x800,
 };
 
 struct mail_binary_cache {
@@ -117,6 +124,8 @@ struct mail_storage {
 	int obj_refcount;
 	/* Linked list of all mailboxes in the storage */
 	struct mailbox *mailboxes;
+	/* A "root dir" to enable storage sharing.  It is only ever used for
+	 * uniqueness checking (via strcmp) and never used as a path. */
 	const char *unique_root_dir;
 
 	char *error_string;
@@ -351,6 +360,7 @@ struct mailbox {
 	struct mail_msgpart_partial_cache partial_cache;
 	uint32_t vsize_hdr_ext_id;
 	uint32_t pop3_uidl_hdr_ext_id;
+	uint32_t box_name_hdr_ext_id;
 
 	/* MAIL_RECENT flags handling */
 	ARRAY_TYPE(seq_range) recent_flags;
@@ -412,6 +422,9 @@ struct mailbox {
 	unsigned int skip_create_name_restrictions:1;
 	/* v2.2.x API kludge: quick-parameter to list_index_has_changed() */
 	unsigned int list_index_has_changed_quick:1;
+	/* Using LAYOUT=index and mailbox is being opened with a corrupted
+	   mailbox name. Try to revert to the previously known good name. */
+	unsigned int corrupted_mailbox_name:1;
 };
 
 struct mail_vfuncs {
@@ -619,7 +632,7 @@ struct mail_save_data {
 	time_t received_date, save_date;
 	int received_tz_offset;
 
-	uint32_t uid;
+	uint32_t uid, stub_seq;
 	char *guid, *pop3_uidl, *from_envelope;
 	unsigned int pop3_order;
 
@@ -630,6 +643,10 @@ struct mail_save_data {
 struct mail_save_context {
 	struct mailbox_transaction_context *transaction;
 	struct mail *dest_mail;
+	/* Set during mailbox_copy(). This is useful when copying is
+	   implemented via save, and the save_*() methods want to access the
+	   source mail. */
+	struct mail *copy_src_mail;
 
 	/* data that changes for each saved mail */
 	struct mail_save_data data;

@@ -71,6 +71,10 @@ struct mobox_map_mail_index_record {
 	uint32_t size;
 	guid_128_t oid;
 };
+struct mailbox_list_index_header {
+	uint8_t refresh_flag;
+	/* array of { uint32_t id; char name[]; } */
+};
 struct mailbox_list_index_record {
 	uint32_t name_id;
 	uint32_t parent_uid;
@@ -149,6 +153,52 @@ static void dump_hdr(struct mail_index *index)
 	printf("day stamp ................ = %u (%s)\n", hdr->day_stamp, unixdate2str(hdr->day_stamp));
 	for (i = 0; i < N_ELEMENTS(hdr->day_first_uid); i++)
 		printf("day first uid[%u] ......... = %u\n", i, hdr->day_first_uid[i]);
+}
+
+static void dump_list_header(const void *data, size_t size)
+{
+	const struct mailbox_list_index_header *hdr = data;
+	const void *name_start, *p;
+	size_t i, len;
+	uint32_t id;
+
+	printf(" - refresh_flag = %d\n", hdr->refresh_flag);
+	for (i = sizeof(*hdr); i < size; ) {
+		/* get id */
+		if (i + sizeof(id) > size) {
+			printf(" - corrupted\n");
+			break;
+		}
+		memcpy(&id, CONST_PTR_OFFSET(data, i), sizeof(id));
+		i += sizeof(id);
+
+		if (id == 0)
+			break;
+
+		/* get name */
+		p = memchr(CONST_PTR_OFFSET(data, i), '\0', size-i);
+		if (p == NULL) {
+			printf(" - corrupted\n");
+			break;
+		}
+		name_start = CONST_PTR_OFFSET(data, i);
+		len = (const char *)p - (const char *)name_start;
+
+		printf(" - %d : %.*s\n", id, (int)len, (const char *)name_start);
+
+		i += len + 1;
+	}
+}
+
+static void dump_box_name_header(const void *data, size_t size)
+{
+	char *dest = t_malloc0(size + 1);
+	memcpy(dest, data, size);
+	for (size_t i = 0; i < size; i++) {
+		if (dest[i] == '\0')
+			dest[i] = '\n';
+	}
+	printf(" %s\n", t_strarray_join(t_strsplit(dest, "\n"), "\n "));
 }
 
 static void dump_extension_header(struct mail_index *index,
@@ -266,6 +316,14 @@ static void dump_extension_header(struct mail_index *index,
 
 			name += rec->name_len;
 		}
+	} else if (strcmp(ext->name, "list") == 0) {
+		printf("header ........ = %s\n",
+		       binary_to_hex(data, ext->hdr_size));
+		dump_list_header(data, ext->hdr_size);
+	} else if (strcmp(ext->name, "box-name") == 0) {
+		printf("header ........ = %s\n",
+		       binary_to_hex(data, ext->hdr_size));
+		dump_box_name_header(data, ext->hdr_size);
 	} else {
 		printf("header ........ = %s\n",
 		       binary_to_hex(data, ext->hdr_size));

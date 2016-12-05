@@ -232,7 +232,11 @@ You can apply a modifiers for each variable (e.g. %Us = POP3):
       want to reverse the username to get better hash value variety, e.g.
       %3RNu.
     * This is "New Hash", based on MD5 to give better distribution of values
-      (no need for any string reversing kludges either). (v2.2.3+
+      (no need for any string reversing kludges either). (v2.2.3+)
+ * %{<hash algorithm>;rounds=<n>,truncate=<bits>,salt=s>:field} - Generic hash
+   function that outputs a hex value. Hash algorithm is any of the supported
+   ones, e.g. md5, sha1, sha256. Also "pkcs5" is supported using SHA256. For
+   example: %{sha256:user} or %{md5;truncate=32:user}. (v2.2.27+)
  * %H - Same as %N, but use "old hash" (not recommended anymore)
  * %M - return the string's MD5 sum as hex.
  * %D - return "sub.domain.org" as "sub,dc=domain,dc=org" (for LDAP queries)
@@ -258,4 +262,4 @@ but the last two characters from the username. (v2.2.13+)
 The modifiers are applied from left-to-right order, except the substring is
 always taken from the final string.
 
-(This file was created from the wiki on 2016-10-27 04:44)
+(This file was created from the wiki on 2016-12-03 04:44)

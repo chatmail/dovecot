@@ -25,26 +25,33 @@
 
 /* Abort dict lookup after this many seconds. */
 #define DICT_CLIENT_REQUEST_TIMEOUT_MSECS 30000
+/* When dict lookup timeout is reached, wait a bit longer if the last dict
+   ioloop wait was shorter than this. */
+#define DICT_CLIENT_REQUEST_TIMEOUT_MIN_LAST_IOLOOP_WAIT_MSECS 1000
 /* Log a warning if dict lookup takes longer than this many milliseconds. */
-#define DICT_CLIENT_REQUEST_WARN_TIMEOUT_MSECS 5000
+#define DICT_CLIENT_DEFAULT_WARN_SLOW_MSECS 5000
 
 struct client_dict_cmd {
 	int refcount;
 	struct client_dict *dict;
 	struct timeval start_time;
 	char *query;
+	unsigned int async_id;
+	struct timeval async_id_received_time;
 
 	uint64_t start_global_ioloop_usecs;
 	uint64_t start_dict_ioloop_usecs;
 	uint64_t start_lock_usecs;
 
+	bool reconnected;
 	bool retry_errors;
 	bool no_replies;
 	bool unfinished;
 	bool background;
 
 	void (*callback)(struct client_dict_cmd *cmd,
-			 const char *line, const char *error,
+			 enum dict_protocol_reply reply, const char *value,
+			 const char *const *extra_args, const char *error,
 			 bool disconnected);
         struct client_dict_iterate_context *iter;
 	struct client_dict_transaction_context *trans;
@@ -67,11 +74,14 @@ struct client_dict {
 
 	char *uri, *username;
 	enum dict_data_type value_type;
+	unsigned warn_slow_msecs;
 
 	time_t last_failed_connect;
 	char *last_connect_error;
 
 	struct ioloop *ioloop, *prev_ioloop;
+	struct io_wait_timer *wait_timer;
+	uint64_t last_timer_switch_usecs;
 	struct timeout *to_requests;
 	struct timeout *to_idle;
 	unsigned int idle_msecs;
@@ -89,12 +99,14 @@ struct client_dict_iter_result {
 struct client_dict_iterate_context {
 	struct dict_iterate_context ctx;
 	char *error;
+	const char **paths;
+	enum dict_iterate_flags flags;
 
 	pool_t results_pool;
 	ARRAY(struct client_dict_iter_result) results;
 	unsigned int result_idx;
 
-	bool async;
+	bool cmd_sent;
 	bool seen_results;
 	bool finished;
 	bool deinit;
@@ -119,6 +131,7 @@ static int client_dict_connect(struct client_dict *dict, const char **error_r);
 static int client_dict_reconnect(struct client_dict *dict, const char *reason,
 				 const char **error_r);
 static void client_dict_disconnect(struct client_dict *dict, const char *reason);
+static const char *dict_wait_warnings(const struct client_dict_cmd *cmd);
 
 static struct client_dict_cmd *
 client_dict_cmd_init(struct client_dict *dict, const char *query)
@@ -133,7 +146,7 @@ client_dict_cmd_init(struct client_dict *dict, const char *query)
 	cmd->query = i_strdup(query);
 	cmd->start_time = ioloop_timeval;
 	cmd->start_global_ioloop_usecs = ioloop_global_wait_usecs;
-	cmd->start_dict_ioloop_usecs = io_loop_get_wait_usecs(dict->ioloop);
+	cmd->start_dict_ioloop_usecs = io_wait_timer_get_usecs(dict->wait_timer);
 	cmd->start_lock_usecs = file_lock_wait_get_total_usecs();
 	return cmd;
 }
@@ -177,10 +190,22 @@ static void dict_post_api_callback(struct client_dict *dict)
 }
 
 static bool
-dict_cmd_callback_line(struct client_dict_cmd *cmd, const char *line)
+dict_cmd_callback_line(struct client_dict_cmd *cmd, const char *const *args)
 {
+	const char *value = args[0];
+	enum dict_protocol_reply reply;
+
+	if (value == NULL) {
+		/* "" is a valid iteration reply */
+		reply = DICT_PROTOCOL_REPLY_ITER_FINISHED;
+	} else {
+		reply = value[0];
+		value++;
+		args++;
+	}
+
 	cmd->unfinished = FALSE;
-	cmd->callback(cmd, line, NULL, FALSE);
+	cmd->callback(cmd, reply, value, args, NULL, FALSE);
 	return !cmd->unfinished;
 }
 
@@ -188,43 +213,75 @@ static void
 dict_cmd_callback_error(struct client_dict_cmd *cmd, const char *error,
 			bool disconnected)
 {
+	const char *null_arg = NULL;
+
 	cmd->unfinished = FALSE;
-	if (cmd->callback != NULL)
-		cmd->callback(cmd, NULL, error, disconnected);
+	if (cmd->callback != NULL) {
+		cmd->callback(cmd, DICT_PROTOCOL_REPLY_ERROR,
+			      "", &null_arg, error, disconnected);
+	}
 	i_assert(!cmd->unfinished);
+}
+
+static struct client_dict_cmd *
+client_dict_cmd_first_nonbg(struct client_dict *dict)
+{
+	struct client_dict_cmd *const *cmds;
+	unsigned int i, count;
+
+	cmds = array_get(&dict->cmds, &count);
+	for (i = 0; i < count; i++) {
+		if (!cmds[i]->background)
+			return cmds[i];
+	}
+	return NULL;
 }
 
 static void client_dict_input_timeout(struct client_dict *dict)
 {
-	struct client_dict_cmd *const *cmds;
-	unsigned int i, count;
+	struct client_dict_cmd *cmd;
 	const char *error;
+	uint64_t msecs_in_last_dict_ioloop_wait;
 	int cmd_diff;
 
-	/* find the first expired non-background command */
-	cmds = array_get(&dict->cmds, &count);
-	for (i = 0; i < count; i++) {
-		if (cmds[i]->background)
-			continue;
-		cmd_diff = timeval_diff_msecs(&ioloop_timeval, &cmds[i]->start_time);
-		if (cmd_diff < DICT_CLIENT_REQUEST_TIMEOUT_MSECS) {
-			/* need to re-create this timeout. the currently-oldest
-			   command was added when another command was still
-			   running with an older timeout. */
-			timeout_remove(&dict->to_requests);
-			dict->to_requests =
-				timeout_add(DICT_CLIENT_REQUEST_TIMEOUT_MSECS - cmd_diff,
-					    client_dict_input_timeout, dict);
-		}
-		break;
+	/* find the first non-background command. there must be at least one. */
+	cmd = client_dict_cmd_first_nonbg(dict);
+	i_assert(cmd != NULL);
+
+	cmd_diff = timeval_diff_msecs(&ioloop_timeval, &cmd->start_time);
+	if (cmd_diff < DICT_CLIENT_REQUEST_TIMEOUT_MSECS) {
+		/* need to re-create this timeout. the currently-oldest
+		   command was added when another command was still
+		   running with an older timeout. */
+		timeout_remove(&dict->to_requests);
+		dict->to_requests =
+			timeout_add(DICT_CLIENT_REQUEST_TIMEOUT_MSECS - cmd_diff,
+				    client_dict_input_timeout, dict);
+		return;
 	}
-	i_assert(i < count); /* we can't have only background commands */
+
+	/* If we've gotten here because all the time was spent in other ioloops
+	   or locks, make sure there's a bit of time waiting for the dict
+	   ioloop as well. There's a good chance that the reply can be read. */
+	msecs_in_last_dict_ioloop_wait =
+		(io_wait_timer_get_usecs(dict->wait_timer) -
+		 dict->last_timer_switch_usecs + 999) / 1000;
+	if (msecs_in_last_dict_ioloop_wait < DICT_CLIENT_REQUEST_TIMEOUT_MIN_LAST_IOLOOP_WAIT_MSECS) {
+		timeout_remove(&dict->to_requests);
+		dict->to_requests =
+			timeout_add(DICT_CLIENT_REQUEST_TIMEOUT_MIN_LAST_IOLOOP_WAIT_MSECS -
+				    msecs_in_last_dict_ioloop_wait,
+				    client_dict_input_timeout, dict);
+		return;
+	}
 
 	(void)client_dict_reconnect(dict, t_strdup_printf(
 		"Dict server timeout: %s "
-		"(%u commands pending, oldest sent %u.%03u secs ago: %s)",
-		connection_input_timeout_reason(&dict->conn.conn), count,
-		cmd_diff/1000, cmd_diff%1000, cmds[0]->query), &error);
+		"(%u commands pending, oldest sent %u.%03u secs ago: %s, %s)",
+		connection_input_timeout_reason(&dict->conn.conn),
+		array_count(&dict->cmds),
+		cmd_diff/1000, cmd_diff%1000, cmd->query,
+		dict_wait_warnings(cmd)), &error);
 }
 
 static int
@@ -407,16 +464,73 @@ static void client_dict_cmd_backgrounded(struct client_dict *dict)
 	}
 }
 
+static int
+dict_conn_assign_next_async_id(struct dict_connection *conn, const char *line)
+{
+	struct client_dict_cmd *const *cmds;
+	unsigned int i, count, async_id;
+
+	i_assert(line[0] == DICT_PROTOCOL_REPLY_ASYNC_ID);
+
+	if (str_to_uint(line+1, &async_id) < 0 || async_id == 0) {
+		i_error("%s: Received invalid async-id line: %s",
+			conn->conn.name, line);
+		return -1;
+	}
+	cmds = array_get(&conn->dict->cmds, &count);
+	for (i = 0; i < count; i++) {
+		if (cmds[i]->async_id == 0) {
+			cmds[i]->async_id = async_id;
+			cmds[i]->async_id_received_time = ioloop_timeval;
+			return 0;
+		}
+	}
+	i_error("%s: Received async-id line, but all %u commands already have it: %s",
+		conn->conn.name, count, line);
+	return -1;
+}
+
+static int dict_conn_find_async_id(struct dict_connection *conn,
+				   const char *async_arg,
+				   const char *line, unsigned int *idx_r)
+{
+	struct client_dict_cmd *const *cmds;
+	unsigned int i, count, async_id;
+
+	i_assert(async_arg[0] == DICT_PROTOCOL_REPLY_ASYNC_REPLY);
+
+	if (str_to_uint(async_arg+1, &async_id) < 0 || async_id == 0) {
+		i_error("%s: Received invalid async-reply line: %s",
+			conn->conn.name, line);
+		return -1;
+	}
+
+	cmds = array_get(&conn->dict->cmds, &count);
+	for (i = 0; i < count; i++) {
+		if (cmds[i]->async_id == async_id) {
+			*idx_r = i;
+			return 0;
+		}
+	}
+	i_error("%s: Received reply for nonexistent async-id %u: %s",
+		conn->conn.name, async_id, line);
+	return -1;
+}
+
 static int dict_conn_input_line(struct connection *_conn, const char *line)
 {
 	struct dict_connection *conn = (struct dict_connection *)_conn;
 	struct client_dict *dict = conn->dict;
 	struct client_dict_cmd *const *cmds;
-	unsigned int count;
+	const char *const *args;
+	unsigned int i, count;
 	bool finished;
 
 	if (dict->to_requests != NULL)
 		timeout_reset(dict->to_requests);
+
+	if (line[0] == DICT_PROTOCOL_REPLY_ASYNC_ID)
+		return dict_conn_assign_next_async_id(conn, line) < 0 ? -1 : 1;
 
 	cmds = array_get(&conn->dict->cmds, &count);
 	if (count == 0) {
@@ -424,11 +538,20 @@ static int dict_conn_input_line(struct connection *_conn, const char *line)
 			dict->conn.conn.name, line);
 		return -1;
 	}
-	i_assert(!cmds[0]->no_replies);
 
-	client_dict_cmd_ref(cmds[0]);
-	finished = dict_cmd_callback_line(cmds[0], line);
-	if (!client_dict_cmd_unref(cmds[0])) {
+	args = t_strsplit_tabescaped(line);
+	if (args[0] != NULL && args[0][0] == DICT_PROTOCOL_REPLY_ASYNC_REPLY) {
+		if (dict_conn_find_async_id(conn, args[0], line, &i) < 0)
+			return -1;
+		args++;
+	} else {
+		i = 0;
+	}
+	i_assert(!cmds[i]->no_replies);
+
+	client_dict_cmd_ref(cmds[i]);
+	finished = dict_cmd_callback_line(cmds[i], args);
+	if (!client_dict_cmd_unref(cmds[i])) {
 		/* disconnected during command handling */
 		return -1;
 	}
@@ -436,8 +559,8 @@ static int dict_conn_input_line(struct connection *_conn, const char *line)
 		/* more lines needed for this command */
 		return 1;
 	}
-	client_dict_cmd_unref(cmds[0]);
-	array_delete(&dict->cmds, 0, 1);
+	client_dict_cmd_unref(cmds[i]);
+	array_delete(&dict->cmds, i, 1);
 
 	client_dict_add_timeout(dict);
 	return 1;
@@ -558,6 +681,8 @@ static int client_dict_reconnect(struct client_dict *dict, const char *reason,
 	ret = 0; error = "";
 	array_foreach(&retry_cmds, cmdp) {
 		cmd = *cmdp;
+		cmd->reconnected = TRUE;
+		cmd->async_id = 0;
 		/* if it fails again, don't retry anymore */
 		cmd->retry_errors = FALSE;
 		if (ret < 0) {
@@ -597,19 +722,35 @@ client_dict_init(struct dict *driver, const char *uri,
 	struct client_dict *dict;
 	const char *p, *dest_uri, *path;
 	unsigned int idle_msecs = DICT_CLIENT_DEFAULT_TIMEOUT_MSECS;
+	unsigned int warn_slow_msecs = DICT_CLIENT_DEFAULT_WARN_SLOW_MSECS;
 
-	/* uri = [idle_msecs=<n>:] [<path>] ":" <uri> */
-	if (strncmp(uri, "idle_msecs=", 11) == 0) {
-		p = strchr(uri+11, ':');
-		if (p == NULL) {
-			*error_r = t_strdup_printf("Invalid URI: %s", uri);
-			return -1;
+	/* uri = [idle_msecs=<n>:] [warn_slow_msecs=<n>:] [<path>] ":" <uri> */
+	for (;;) {
+		if (strncmp(uri, "idle_msecs=", 11) == 0) {
+			p = strchr(uri+11, ':');
+			if (p == NULL) {
+				*error_r = t_strdup_printf("Invalid URI: %s", uri);
+				return -1;
+			}
+			if (str_to_uint(t_strdup_until(uri+11, p), &idle_msecs) < 0) {
+				*error_r = "Invalid idle_msecs";
+				return -1;
+			}
+			uri = p+1;
+		} else if (strncmp(uri, "warn_slow_msecs=", 16) == 0) {
+			p = strchr(uri+11, ':');
+			if (p == NULL) {
+				*error_r = t_strdup_printf("Invalid URI: %s", uri);
+				return -1;
+			}
+			if (str_to_uint(t_strdup_until(uri+16, p), &warn_slow_msecs) < 0) {
+				*error_r = "Invalid warn_slow_msecs";
+				return -1;
+			}
+			uri = p+1;
+		} else {
+			break;
 		}
-		if (str_to_uint(t_strdup_until(uri+11, p), &idle_msecs) < 0) {
-			*error_r = "Invalid idle_msecs";
-			return -1;
-		}
-		uri = p+1;
 	}
 	dest_uri = strchr(uri, ':');
 	if (dest_uri == NULL) {
@@ -628,6 +769,7 @@ client_dict_init(struct dict *driver, const char *uri,
 	dict->value_type = set->value_type;
 	dict->username = i_strdup(set->username);
 	dict->idle_msecs = idle_msecs;
+	dict->warn_slow_msecs = warn_slow_msecs;
 	i_array_init(&dict->cmds, 32);
 
 	if (uri[0] == ':') {
@@ -646,6 +788,7 @@ client_dict_init(struct dict *driver, const char *uri,
 	dict->uri = i_strdup(dest_uri + 1);
 
 	dict->ioloop = io_loop_create();
+	dict->wait_timer = io_wait_timer_add();
 	io_loop_set_current(old_ioloop);
 	*dict_r = &dict->dict;
 	return 0;
@@ -658,6 +801,7 @@ static void client_dict_deinit(struct dict *_dict)
 
 	client_dict_disconnect(dict, "Deinit");
 	connection_deinit(&dict->conn.conn);
+	io_wait_timer_remove(&dict->wait_timer);
 
 	i_assert(dict->transactions == NULL);
 	i_assert(array_count(&dict->cmds) == 0);
@@ -700,6 +844,9 @@ static bool client_dict_switch_ioloop(struct dict *_dict)
 {
 	struct client_dict *dict = (struct client_dict *)_dict;
 
+	dict->last_timer_switch_usecs =
+		io_wait_timer_get_usecs(dict->wait_timer);
+	dict->wait_timer = io_wait_timer_move(&dict->wait_timer);
 	if (dict->to_idle != NULL)
 		dict->to_idle = io_loop_move_timeout(&dict->to_idle);
 	if (dict->to_requests != NULL)
@@ -708,27 +855,75 @@ static bool client_dict_switch_ioloop(struct dict *_dict)
 	return array_count(&dict->cmds) > 0;
 }
 
-static const char *dict_warnings_sec(const struct client_dict_cmd *cmd, int msecs)
+static const char *dict_wait_warnings(const struct client_dict_cmd *cmd)
 {
 	int global_ioloop_msecs = (ioloop_global_wait_usecs -
 				   cmd->start_global_ioloop_usecs + 999) / 1000;
-	int dict_ioloop_msecs = (io_loop_get_wait_usecs(cmd->dict->ioloop) -
+	int dict_ioloop_msecs = (io_wait_timer_get_usecs(cmd->dict->wait_timer) -
 				 cmd->start_dict_ioloop_usecs + 999) / 1000;
 	int other_ioloop_msecs = global_ioloop_msecs - dict_ioloop_msecs;
 	int lock_msecs = (file_lock_wait_get_total_usecs() -
 			  cmd->start_lock_usecs + 999) / 1000;
 
 	return t_strdup_printf(
-		"%d.%03d secs (%d.%03d in dict wait, %d.%03d in other ioloops, "
-		"%d.%03d in locks)", msecs/1000, msecs%1000,
+		"%d.%03d in dict wait, %d.%03d in other ioloops, %d.%03d in locks",
 		dict_ioloop_msecs/1000, dict_ioloop_msecs%1000,
 		other_ioloop_msecs/1000, other_ioloop_msecs%1000,
 		lock_msecs/1000, lock_msecs%1000);
 }
 
+static const char *
+dict_warnings_sec(const struct client_dict_cmd *cmd, int msecs,
+		  const char *const *extra_args)
+{
+	string_t *str = t_str_new(64);
+	struct timeval tv_start, tv_end;
+	unsigned int tv_start_usec, tv_end_usec;
+
+	str_printfa(str, "%d.%03d secs (%s", msecs/1000, msecs%1000,
+		    dict_wait_warnings(cmd));
+	if (cmd->reconnected) {
+		int reconnected_msecs =
+			timeval_diff_msecs(&ioloop_timeval,
+				&cmd->dict->conn.conn.connect_started);
+		str_printfa(str, ", reconnected %u.%03u secs ago",
+			    reconnected_msecs/1000, reconnected_msecs%1000);
+	}
+	if (cmd->async_id != 0) {
+		int async_reply_msecs =
+			timeval_diff_msecs(&ioloop_timeval, &cmd->async_id_received_time);
+		str_printfa(str, ", async-id reply %u.%03u secs ago",
+			    async_reply_msecs/1000, async_reply_msecs%1000);
+	}
+	if (extra_args != NULL &&
+	    str_array_length(extra_args) >= 4 &&
+	    str_to_time(extra_args[0], &tv_start.tv_sec) == 0 &&
+	    str_to_uint(extra_args[1], &tv_start_usec) == 0 &&
+	    str_to_time(extra_args[2], &tv_end.tv_sec) == 0 &&
+	    str_to_uint(extra_args[3], &tv_end_usec) == 0) {
+		tv_start.tv_usec = tv_start_usec;
+		tv_end.tv_usec = tv_end_usec;
+
+		int server_msecs_since_start =
+			timeval_diff_msecs(&ioloop_timeval, &tv_start);
+		int server_msecs = timeval_diff_msecs(&tv_end, &tv_start);
+		str_printfa(str, ", started on dict-server %u.%03d secs ago, "
+			    "took %u.%03d secs",
+			    server_msecs_since_start/1000,
+			    server_msecs_since_start%1000,
+			    server_msecs/1000, server_msecs%1000);
+	}
+	str_append_c(str, ')');
+	return str_c(str);
+}
+
 static void
-client_dict_lookup_async_callback(struct client_dict_cmd *cmd, const char *line,
-				  const char *error, bool disconnected ATTR_UNUSED)
+client_dict_lookup_async_callback(struct client_dict_cmd *cmd,
+				  enum dict_protocol_reply reply,
+				  const char *value,
+				  const char *const *extra_args,
+				  const char *error,
+				  bool disconnected ATTR_UNUSED)
 {
 	struct client_dict *dict = cmd->dict;
 	struct dict_lookup_result result;
@@ -737,24 +932,24 @@ client_dict_lookup_async_callback(struct client_dict_cmd *cmd, const char *line,
 	if (error != NULL) {
 		result.ret = -1;
 		result.error = error;
-	} else switch (*line) {
+	} else switch (reply) {
 	case DICT_PROTOCOL_REPLY_OK:
-		result.value = t_str_tabunescape(line + 1);
+		result.value = value;
 		result.ret = 1;
 		break;
 	case DICT_PROTOCOL_REPLY_NOTFOUND:
 		result.ret = 0;
 		break;
 	case DICT_PROTOCOL_REPLY_FAIL:
-		result.error = line[1] == '\0' ? "dict-server returned failure" :
+		result.error = value[0] == '\0' ? "dict-server returned failure" :
 			t_strdup_printf("dict-server returned failure: %s",
-			t_str_tabunescape(line+1));
+			value);
 		result.ret = -1;
 		break;
 	default:
 		result.error = t_strdup_printf(
-			"dict-client: Invalid lookup '%s' reply: %s",
-			cmd->query, line);
+			"dict-client: Invalid lookup '%s' reply: %c%s",
+			cmd->query, reply, value);
 		client_dict_disconnect(dict, result.error);
 		result.ret = -1;
 		break;
@@ -764,11 +959,11 @@ client_dict_lookup_async_callback(struct client_dict_cmd *cmd, const char *line,
 	if (result.error != NULL) {
 		/* include timing info always in error messages */
 		result.error = t_strdup_printf("%s (reply took %s)",
-			result.error, dict_warnings_sec(cmd, diff));
+			result.error, dict_warnings_sec(cmd, diff, extra_args));
 	} else if (!cmd->background &&
-		   diff >= DICT_CLIENT_REQUEST_WARN_TIMEOUT_MSECS) {
+		   diff >= (int)dict->warn_slow_msecs) {
 		i_warning("read(%s): dict lookup took %s: %s",
-			  dict->conn.conn.name, dict_warnings_sec(cmd, diff),
+			  dict->conn.conn.name, dict_warnings_sec(cmd, diff, extra_args),
 			  cmd->query);
 	}
 
@@ -853,7 +1048,8 @@ static void client_dict_iterate_free(struct client_dict_iterate_context *ctx)
 
 static void
 client_dict_iter_api_callback(struct client_dict_iterate_context *ctx,
-			      struct client_dict_cmd *cmd)
+			      struct client_dict_cmd *cmd,
+			      const char *const *extra_args)
 {
 	struct client_dict *dict = cmd->dict;
 
@@ -866,13 +1062,13 @@ client_dict_iter_api_callback(struct client_dict_iterate_context *ctx,
 		if (ctx->error != NULL) {
 			/* include timing info always in error messages */
 			char *new_error = i_strdup_printf("%s (reply took %s)",
-				ctx->error, dict_warnings_sec(cmd, diff));
+				ctx->error, dict_warnings_sec(cmd, diff, extra_args));
 			i_free(ctx->error);
 			ctx->error = new_error;
 		} else if (!cmd->background &&
-			   diff >= DICT_CLIENT_REQUEST_WARN_TIMEOUT_MSECS) {
+			   diff >= (int)dict->warn_slow_msecs) {
 			i_warning("read(%s): dict iteration took %s: %s",
-				  dict->conn.conn.name, dict_warnings_sec(cmd, diff),
+				  dict->conn.conn.name, dict_warnings_sec(cmd, diff, extra_args),
 				  cmd->query);
 		}
 	}
@@ -887,13 +1083,17 @@ client_dict_iter_api_callback(struct client_dict_iterate_context *ctx,
 }
 
 static void
-client_dict_iter_async_callback(struct client_dict_cmd *cmd, const char *line,
-				const char *error, bool disconnected ATTR_UNUSED)
+client_dict_iter_async_callback(struct client_dict_cmd *cmd,
+				enum dict_protocol_reply reply,
+				const char *value,
+				const char *const *extra_args,
+				const char *error,
+				bool disconnected ATTR_UNUSED)
 {
 	struct client_dict_iterate_context *ctx = cmd->iter;
 	struct client_dict *dict = cmd->dict;
 	struct client_dict_iter_result *result;
-	const char *key = NULL, *value = NULL;
+	const char *iter_key = NULL, *iter_value = NULL;
 
 	if (ctx->deinit) {
 		cmd->background = TRUE;
@@ -902,28 +1102,29 @@ client_dict_iter_async_callback(struct client_dict_cmd *cmd, const char *line,
 
 	if (error != NULL) {
 		/* failed */
-	} else switch (*line) {
-	case '\0':
+	} else switch (reply) {
+	case DICT_PROTOCOL_REPLY_ITER_FINISHED:
 		/* end of iteration */
 		ctx->finished = TRUE;
-		client_dict_iter_api_callback(ctx, cmd);
+		client_dict_iter_api_callback(ctx, cmd, extra_args);
 		client_dict_iterate_free(ctx);
 		return;
 	case DICT_PROTOCOL_REPLY_OK:
 		/* key \t value */
-		key = line+1;
-		value = strchr(key, '\t');
+		iter_key = value;
+		iter_value = extra_args[0];
+		extra_args++;
 		break;
 	case DICT_PROTOCOL_REPLY_FAIL:
-		error = t_strdup_printf("dict-server returned failure: %s", line+1);
+		error = t_strdup_printf("dict-server returned failure: %s", value);
 		break;
 	default:
 		break;
 	}
-	if (value == NULL && error == NULL) {
+	if (iter_value == NULL && error == NULL) {
 		/* broken protocol */
-		error = t_strdup_printf("dict client (%s) sent broken iterate reply: %s",
-					dict->conn.conn.name, line);
+		error = t_strdup_printf("dict client (%s) sent broken iterate reply: %c%s",
+			dict->conn.conn.name, reply, value);
 		client_dict_disconnect(dict, error);
 	}
 
@@ -931,7 +1132,7 @@ client_dict_iter_async_callback(struct client_dict_cmd *cmd, const char *line,
 		if (ctx->error == NULL)
 			ctx->error = i_strdup(error);
 		ctx->finished = TRUE;
-		client_dict_iter_api_callback(ctx, cmd);
+		client_dict_iter_api_callback(ctx, cmd, extra_args);
 		client_dict_iterate_free(ctx);
 		return;
 	}
@@ -942,37 +1143,43 @@ client_dict_iter_async_callback(struct client_dict_cmd *cmd, const char *line,
 		return;
 	}
 
-	if (value != NULL)
-		key = t_strdup_until(key, value++);
-	else
-		value = "";
 	result = array_append_space(&ctx->results);
-	result->key = p_strdup(ctx->results_pool, t_str_tabunescape(key));
-	result->value = p_strdup(ctx->results_pool, t_str_tabunescape(value));
+	result->key = p_strdup(ctx->results_pool, iter_key);
+	result->value = p_strdup(ctx->results_pool, iter_value);
 
-	client_dict_iter_api_callback(ctx, cmd);
+	client_dict_iter_api_callback(ctx, cmd, NULL);
 }
 
 static struct dict_iterate_context *
 client_dict_iterate_init(struct dict *_dict, const char *const *paths,
 			 enum dict_iterate_flags flags)
 {
-	struct client_dict *dict = (struct client_dict *)_dict;
         struct client_dict_iterate_context *ctx;
-	struct client_dict_cmd *cmd;
-	string_t *query = t_str_new(256);
-	unsigned int i;
 
 	ctx = i_new(struct client_dict_iterate_context, 1);
 	ctx->ctx.dict = _dict;
 	ctx->results_pool = pool_alloconly_create("client dict iteration", 512);
-	ctx->async = (flags & DICT_ITERATE_FLAG_ASYNC) != 0;
+	ctx->flags = flags;
+	ctx->paths = p_strarray_dup(system_pool, paths);
 	i_array_init(&ctx->results, 64);
+	return &ctx->ctx;
+}
 
-	str_printfa(query, "%c%d", DICT_PROTOCOL_CMD_ITERATE, flags);
-	for (i = 0; paths[i] != NULL; i++) {
+static void
+client_dict_iterate_cmd_send(struct client_dict_iterate_context *ctx)
+{
+	struct client_dict *dict = (struct client_dict *)ctx->ctx.dict;
+	struct client_dict_cmd *cmd;
+	unsigned int i;
+	string_t *query = t_str_new(256);
+
+	/* we can't do this query in _iterate_init(), because
+	   _set_limit() hasn't been called yet at that point. */
+	str_printfa(query, "%c%d\t%llu", DICT_PROTOCOL_CMD_ITERATE, ctx->flags,
+		    (unsigned long long)ctx->ctx.max_rows);
+	for (i = 0; ctx->paths[i] != NULL; i++) {
 		str_append_c(query, '\t');
-			str_append(query, str_tabescape(paths[i]));
+		str_append(query, str_tabescape(ctx->paths[i]));
 	}
 
 	cmd = client_dict_cmd_init(dict, str_c(query));
@@ -981,7 +1188,6 @@ client_dict_iterate_init(struct dict *_dict, const char *const *paths,
 	cmd->retry_errors = TRUE;
 
 	client_dict_cmd_send(dict, &cmd, NULL);
-	return &ctx->ctx;
 }
 
 static bool client_dict_iterate(struct dict_iterate_context *_ctx,
@@ -1006,12 +1212,17 @@ static bool client_dict_iterate(struct dict_iterate_context *_ctx,
 		ctx->seen_results = TRUE;
 		return TRUE;
 	}
+	if (!ctx->cmd_sent) {
+		ctx->cmd_sent = TRUE;
+		client_dict_iterate_cmd_send(ctx);
+		return client_dict_iterate(_ctx, key_r, value_r);
+	}
 	ctx->ctx.has_more = !ctx->finished;
 	ctx->result_idx = 0;
 	array_clear(&ctx->results);
 	p_clear(ctx->results_pool);
 
-	if (!ctx->async && ctx->ctx.has_more) {
+	if ((ctx->flags & DICT_ITERATE_FLAG_ASYNC) == 0 && ctx->ctx.has_more) {
 		client_dict_wait(_ctx->dict);
 		return client_dict_iterate(_ctx, key_r, value_r);
 	}
@@ -1031,6 +1242,7 @@ static int client_dict_iterate_deinit(struct dict_iterate_context *_ctx)
 		i_error("dict-client: Iteration failed: %s", ctx->error);
 	array_free(&ctx->results);
 	pool_unref(&ctx->results_pool);
+	i_free(ctx->paths);
 	client_dict_iterate_free(ctx);
 
 	client_dict_add_timeout(dict);
@@ -1064,8 +1276,10 @@ client_dict_transaction_free(struct client_dict_transaction_context **_ctx)
 
 static void
 client_dict_transaction_commit_callback(struct client_dict_cmd *cmd,
-					const char *line, const char *error,
-					bool disconnected)
+					enum dict_protocol_reply reply,
+					const char *value,
+					const char *const *extra_args,
+					const char *error, bool disconnected)
 {
 	struct client_dict *dict = cmd->dict;
 	int ret = -1;
@@ -1079,7 +1293,7 @@ client_dict_transaction_commit_callback(struct client_dict_cmd *cmd,
 			"(reply took %u.%03u secs)", error, diff/1000, diff%1000);
 		if (disconnected)
 			ret = DICT_COMMIT_RET_WRITE_UNCERTAIN;
-	} else switch (*line) {
+	} else switch (reply) {
 	case DICT_PROTOCOL_REPLY_OK:
 		ret = 1;
 		break;
@@ -1090,18 +1304,21 @@ client_dict_transaction_commit_callback(struct client_dict_cmd *cmd,
 		ret = DICT_COMMIT_RET_WRITE_UNCERTAIN;
 		/* fallthrough */
 	case DICT_PROTOCOL_REPLY_FAIL: {
-		const char *error = strchr(line+1, '\t');
+		/* value contains the obsolete trans_id */
+		const char *error = extra_args[0];
 
 		i_error("dict-client: server returned failure: %s "
 			"(reply took %u.%03u secs)",
-			error != NULL ? t_str_tabunescape(error) : "",
+			error != NULL ? error : "",
 			diff/1000, diff%1000);
+		if (error != NULL)
+			extra_args++;
 		break;
 	}
 	default:
 		ret = -1;
-		error = t_strdup_printf("dict-client: Invalid commit reply: %s "
-			"(reply took %u.%03u secs)", line, diff/1000, diff%1000);
+		error = t_strdup_printf("dict-client: Invalid commit reply: %c%s "
+			"(reply took %u.%03u secs)", reply, value, diff/1000, diff%1000);
 		i_error("%s", error);
 		client_dict_disconnect(dict, error);
 		break;
@@ -1109,10 +1326,10 @@ client_dict_transaction_commit_callback(struct client_dict_cmd *cmd,
 
 	if (ret >= 0 && !cmd->background &&
 	    !cmd->trans->ctx.no_slowness_warning &&
-	    diff >= DICT_CLIENT_REQUEST_WARN_TIMEOUT_MSECS) {
+	    diff >= (int)dict->warn_slow_msecs) {
 		i_warning("read(%s): dict commit took %s: "
 			  "%s (%u commands, first: %s)",
-			  dict->conn.conn.name, dict_warnings_sec(cmd, diff),
+			  dict->conn.conn.name, dict_warnings_sec(cmd, diff, extra_args),
 			  cmd->query, cmd->trans->query_count,
 			  cmd->trans->first_query);
 	}

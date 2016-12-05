@@ -238,6 +238,19 @@ int mdbox_map_refresh(struct mdbox_map *map)
 	return ret;
 }
 
+bool mdbox_map_is_fscked(struct mdbox_map *map)
+{
+	const struct mail_index_header *hdr;
+
+	if (map->view == NULL) {
+		/* map isn't opened yet. don't bother. */
+		return FALSE;
+	}
+
+	hdr = mail_index_get_header(map->view);
+	return (hdr->flags & MAIL_INDEX_HDR_FLAG_FSCKD) != 0;
+}
+
 static void
 mdbox_map_get_ext_hdr(struct mdbox_map *map, struct mail_index_view *view,
 		      struct mdbox_map_mail_index_header *hdr_r)
@@ -531,6 +544,11 @@ void mdbox_map_atomic_set_success(struct mdbox_map_atomic_context *atomic)
 {
 	if (!atomic->failed)
 		atomic->success = TRUE;
+}
+
+void mdbox_map_atomic_unset_fscked(struct mdbox_map_atomic_context *atomic)
+{
+	mail_index_unset_fscked(atomic->sync_trans);
 }
 
 int mdbox_map_atomic_finish(struct mdbox_map_atomic_context **_atomic)
@@ -1335,14 +1353,16 @@ int mdbox_map_append_move(struct mdbox_map_append_context *ctx,
 	struct seq_range_iter iter;
 	const uint32_t *uids;
 	unsigned int i, j, map_uids_count, appends_count;
-	uint32_t uid, seq;
+	uint32_t uid, seq, next_uid;
 
+	/* map is locked by this call */
 	if (mdbox_map_assign_file_ids(ctx, FALSE, "purging - update uids") < 0)
 		return -1;
 
 	memset(&rec, 0, sizeof(rec));
 	appends = array_get(&ctx->appends, &appends_count);
 
+	next_uid = mail_index_get_header(ctx->atomic->sync_view)->next_uid;
 	uids = array_get(map_uids, &map_uids_count);
 	for (i = j = 0; i < map_uids_count; i++) {
 		struct mdbox_file *mfile =
@@ -1355,8 +1375,15 @@ int mdbox_map_append_move(struct mdbox_map_append_context *ctx,
 		j++;
 
 		if (!mail_index_lookup_seq(ctx->atomic->sync_view,
-					   uids[i], &seq))
-			i_unreached();
+					   uids[i], &seq)) {
+			/* We wrote the email to the new m.* file, but another
+			   process already expunged it and purged it. Deleting
+			   the email from the new m.* file would be problematic
+			   at this point, so just add the mail back to the map
+			   with refcount=0 and the next purge will remove it. */
+			mail_index_append(ctx->atomic->sync_trans,
+					  next_uid++, &seq);
+		}
 		mail_index_update_ext(ctx->atomic->sync_trans, seq,
 				      ctx->map->map_ext_id, &rec, NULL);
 	}
