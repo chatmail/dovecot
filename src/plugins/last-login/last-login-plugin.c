@@ -47,10 +47,24 @@ static void last_login_user_deinit(struct mail_user *user)
 	luser->module_ctx.super.deinit(user);
 }
 
-static void last_login_dict_commit(int ret ATTR_UNUSED, void *context)
+static void last_login_dict_commit(int ret, void *context)
 {
 	struct mail_user *user = context;
 	struct last_login_user *luser = LAST_LOGIN_USER_CONTEXT(user);
+
+	switch(ret) {
+	case DICT_COMMIT_RET_OK:
+	case DICT_COMMIT_RET_NOTFOUND:
+		break;
+	case DICT_COMMIT_RET_FAILED:
+		i_error("last_login_dict: Failed to write value for user %s",
+			user->username);
+		break;
+	case DICT_COMMIT_RET_WRITE_UNCERTAIN:
+		i_error("last_login_dict: Write was unconfirmed (timeout or disconnect) for user %s",
+			 user->username);
+		break;
+	};
 
 	/* don't deinit the dict immediately here, lib-dict will just crash */
 	luser->to = timeout_add(0, last_login_dict_deinit, user);
@@ -70,9 +84,13 @@ static void last_login_mail_user_created(struct mail_user *user)
 		   not lda's raw user or accessed shared users */
 		return;
 	}
+	if (user->session_restored) {
+		/* This is IMAP unhibernation, not a real login. */
+		return;
+	}
 
 	dict_value = mail_user_plugin_getenv(user, "last_login_dict");
-	if (dict_value == NULL)
+	if (dict_value == NULL || dict_value[0] == '\0')
 		return;
 
 	memset(&set, 0, sizeof(set));
@@ -121,6 +139,7 @@ static void last_login_mail_user_created(struct mail_user *user)
 	} else {
 		i_error("last_login_dict: Invalid last_login_precision '%s'", precision);
 	}
+	dict_transaction_no_slowness_warning(trans);
 	dict_transaction_commit_async(&trans, last_login_dict_commit, user);
 }
 

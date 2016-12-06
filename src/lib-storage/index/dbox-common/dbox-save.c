@@ -115,14 +115,10 @@ void dbox_save_end(struct dbox_save_context *ctx)
 		ctx->failed = TRUE;
 	}
 	if (mdata->output != dbox_output) {
-		if (mdata->output != NULL) {
-			/* e.g. zlib plugin had changed this */
-			o_stream_ref(dbox_output);
-			o_stream_destroy(&mdata->output);
-			mdata->output = dbox_output;
-		} else {
-			i_assert(ctx->failed);
-		}
+		/* e.g. zlib plugin had changed this */
+		o_stream_ref(dbox_output);
+		o_stream_destroy(&mdata->output);
+		mdata->output = dbox_output;
 	}
 	index_mail_cache_parse_deinit(ctx->ctx.dest_mail,
 				      ctx->ctx.data.received_date,
@@ -166,11 +162,15 @@ void dbox_save_write_metadata(struct mail_save_context *_ctx,
 		str_printfa(str, "%c%s\n", DBOX_METADATA_POP3_UIDL,
 			    mdata->pop3_uidl);
 		ctx->have_pop3_uidls = TRUE;
+		ctx->highest_pop3_uidl_seq =
+			I_MAX(ctx->highest_pop3_uidl_seq, ctx->seq);
 	}
 	if (mdata->pop3_order != 0) {
 		str_printfa(str, "%c%u\n", DBOX_METADATA_POP3_ORDER,
 			    mdata->pop3_order);
 		ctx->have_pop3_orders = TRUE;
+		ctx->highest_pop3_uidl_seq =
+			I_MAX(ctx->highest_pop3_uidl_seq, ctx->seq);
 	}
 
 	guid = mdata->guid;

@@ -14,9 +14,11 @@ libfs_la_SOURCES = \
 	fs-randomfail.c \
 	fs-posix.c \
 	fs-test.c \
+	fs-test-async.c \
 	fs-sis.c \
 	fs-sis-common.c \
 	fs-sis-queue.c \
+	fs-wrapper.c \
 	istream-fs-file.c \
 	istream-fs-stats.c \
 	istream-metawrap.c \
@@ -27,6 +29,7 @@ headers = \
 	fs-api.h \
 	fs-api-private.h \
 	fs-sis-common.h \
+	fs-wrapper.h \
 	fs-test.h \
 	istream-fs-file.h \
 	istream-fs-stats.h \

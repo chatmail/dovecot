@@ -9,7 +9,8 @@ Authentication is split into four parts:
  4. <User databases> [UserDatabase.txt]
 
 See also <authentication penalty> [Authentication.Penalty.txt] handling for IP
-addresses.
+addresses. See also <authentication policy support> [Authentication.Policy.txt]
+for making policy based decisions.
 
 Authentication mechanisms vs. password schemes
 ----------------------------------------------
@@ -33,4 +34,4 @@ PLAIN password scheme. But they mean completely different things.
  * Non-plaintext authentication mechanisms require either PLAIN password scheme
    or a mechanism-specific password scheme.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:43)

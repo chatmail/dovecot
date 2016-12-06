@@ -85,4 +85,4 @@ The value for 'DIRNAME' should be chosen carefully so as to minimise the
 chances of clashing with mail folder names. In the example here, unusual
 upper/lower casing has been used.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

@@ -7,6 +7,7 @@
 #include "hash.h"
 #include "str.h"
 #include "safe-mkstemp.h"
+#include "master-client.h"
 #include "service.h"
 #include "service-process.h"
 #include "service-process-notify.h"
@@ -452,10 +453,11 @@ void services_monitor_start(struct service_list *service_list)
 		return;
 	service_anvil_monitor_start(service_list);
 
-	if (pipe(service_list->master_dead_pipe_fd) < 0)
-		i_error("pipe() failed: %m");
-	fd_close_on_exec(service_list->master_dead_pipe_fd[0], TRUE);
-	fd_close_on_exec(service_list->master_dead_pipe_fd[1], TRUE);
+	if (service_list->io_master == NULL) {
+		service_list->io_master =
+			io_add(service_list->master_fd, IO_READ,
+			       master_client_connected, service_list);
+	}
 
 	array_foreach(&service_list->services, services) {
 		struct service *service = *services;
@@ -463,6 +465,14 @@ void services_monitor_start(struct service_list *service_list)
 		if (service->type == SERVICE_TYPE_LOGIN) {
 			if (service_login_create_notify_fd(service) < 0)
 				continue;
+		}
+		if (service->master_dead_pipe_fd[0] == -1) {
+			if (pipe(service->master_dead_pipe_fd) < 0) {
+				service_error(service, "pipe() failed: %m");
+				continue;
+			}
+			fd_close_on_exec(service->master_dead_pipe_fd[0], TRUE);
+			fd_close_on_exec(service->master_dead_pipe_fd[1], TRUE);
 		}
 		if (service->status_fd[0] == -1) {
 			/* we haven't yet created status pipe */
@@ -502,6 +512,14 @@ void services_monitor_start(struct service_list *service_list)
 	}
 }
 
+static void service_monitor_close_dead_pipe(struct service *service)
+{
+	if (service->master_dead_pipe_fd[0] != -1) {
+		i_close_fd(&service->master_dead_pipe_fd[0]);
+		i_close_fd(&service->master_dead_pipe_fd[1]);
+	}
+}
+
 void service_monitor_stop(struct service *service)
 {
 	int i;
@@ -519,6 +537,7 @@ void service_monitor_stop(struct service *service)
 			service->status_fd[i] = -1;
 		}
 	}
+	service_monitor_close_dead_pipe(service);
 	if (service->login_notify_fd != -1) {
 		if (close(service->login_notify_fd) < 0) {
 			service_error(service,
@@ -534,6 +553,20 @@ void service_monitor_stop(struct service *service)
 		timeout_remove(&service->to_throttle);
 	if (service->to_prefork != NULL)
 		timeout_remove(&service->to_prefork);
+}
+
+void service_monitor_stop_close(struct service *service)
+{
+	struct service_listener *const *listeners;
+
+	service_monitor_stop(service);
+
+	array_foreach(&service->listeners, listeners) {
+		struct service_listener *l = *listeners;
+
+		if (l->fd != -1)
+			i_close_fd(&l->fd);
+	}
 }
 
 static void services_monitor_wait(struct service_list *service_list)
@@ -561,14 +594,8 @@ void services_monitor_stop(struct service_list *service_list, bool wait)
 {
 	struct service *const *services;
 
-	if (service_list->master_dead_pipe_fd[0] != -1) {
-		if (close(service_list->master_dead_pipe_fd[0]) < 0)
-			i_error("close(master dead pipe) failed: %m");
-		if (close(service_list->master_dead_pipe_fd[1]) < 0)
-			i_error("close(master dead pipe) failed: %m");
-		service_list->master_dead_pipe_fd[0] = -1;
-		service_list->master_dead_pipe_fd[1] = -1;
-	}
+	array_foreach(&service_list->services, services)
+		service_monitor_close_dead_pipe(*services);
 
 	if (wait) {
 		/* we've notified all children that the master is dead.
@@ -576,6 +603,11 @@ void services_monitor_stop(struct service_list *service_list, bool wait)
 		   they're no longer listening for new connections */
 		services_monitor_wait(service_list);
 	}
+
+	if (service_list->io_master != NULL)
+		io_remove(&service_list->io_master);
+	if (service_list->master_fd != -1)
+		i_close_fd(&service_list->master_fd);
 
 	array_foreach(&service_list->services, services)
 		service_monitor_stop(*services);

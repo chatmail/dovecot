@@ -173,6 +173,8 @@ message_part_append(pool_t pool, struct message_part *parent)
 	struct message_part *p, *part, **list;
 
 	i_assert(parent != NULL);
+	i_assert((parent->flags & (MESSAGE_PART_FLAG_MULTIPART |
+				   MESSAGE_PART_FLAG_MESSAGE_RFC822)) != 0);
 
 	part = p_new(pool, struct message_part, 1);
 	part->parent = parent;
@@ -312,6 +314,8 @@ static int parse_part_finish(struct message_parser_ctx *ctx,
 {
 	struct message_part *part;
 	size_t line_size;
+
+	i_assert(ctx->last_boundary == NULL);
 
 	/* get back to parent MIME part, summing the child MIME part sizes
 	   into parent's body sizes */
@@ -470,6 +474,7 @@ static void parse_content_type(struct message_parser_ctx *ctx,
 	struct rfc822_parser_context parser;
 	const char *const *results;
 	string_t *content_type;
+	int ret;
 
 	if (ctx->part_seen_content_type)
 		return;
@@ -479,8 +484,7 @@ static void parse_content_type(struct message_parser_ctx *ctx,
 	rfc822_skip_lwsp(&parser);
 
 	content_type = t_str_new(64);
-	if (rfc822_parse_content_type(&parser, content_type) < 0)
-		return;
+	ret = rfc822_parse_content_type(&parser, content_type);
 
 	if (strcasecmp(str_c(content_type), "message/rfc822") == 0)
 		ctx->part->flags |= MESSAGE_PART_FLAG_MESSAGE_RFC822;
@@ -495,6 +499,8 @@ static void parse_content_type(struct message_parser_ctx *ctx,
 			ctx->part->flags |= MESSAGE_PART_FLAG_MULTIPART_DIGEST;
 	}
 
+	if (ret < 0)
+		return;
 	if ((ctx->part->flags & MESSAGE_PART_FLAG_MULTIPART) == 0 ||
 	    ctx->last_boundary != NULL)
 		return;
@@ -624,8 +630,8 @@ static int parse_next_header(struct message_parser_ctx *ctx,
 		   Content-Type. */
 		i_assert(!ctx->multipart);
 		part->flags = 0;
-		ctx->last_boundary = NULL;
 	}
+	ctx->last_boundary = NULL;
 
 	if (!ctx->part_seen_content_type ||
 	    (part->flags & MESSAGE_PART_FLAG_IS_MIME) == 0) {
@@ -1001,14 +1007,22 @@ static int preparsed_parse_next_header(struct message_parser_ctx *ctx,
 static int preparsed_parse_next_header_init(struct message_parser_ctx *ctx,
 					    struct message_block *block_r)
 {
+	struct istream *hdr_input;
+
 	i_assert(ctx->hdr_parser_ctx == NULL);
 
 	i_assert(ctx->part->physical_pos >= ctx->input->v_offset);
 	i_stream_skip(ctx->input, ctx->part->physical_pos -
 		      ctx->input->v_offset);
 
+	/* the header may become truncated by --boundaries. limit the header
+	   stream's size to what it's supposed to be to avoid duplicating (and
+	   keeping in sync!) all the same complicated logic as in
+	   parse_next_header(). */
+	hdr_input = i_stream_create_limit(ctx->input, ctx->part->header_size.physical_size);
 	ctx->hdr_parser_ctx =
-		message_parse_header_init(ctx->input, NULL, ctx->hdr_flags);
+		message_parse_header_init(hdr_input, NULL, ctx->hdr_flags);
+	i_stream_unref(&hdr_input);
 
 	ctx->parse_next_block = preparsed_parse_next_header;
 	return preparsed_parse_next_header(ctx, block_r);

@@ -97,11 +97,16 @@ Boolean expressions
 Try to use boolean expressions the way they work in Java. C doesn't require
 this, but I think it makes the code easier to understand and reduces bugs in
 some cases (e.g.'if (!foo())' when thinking foo() returns bool/FALSE, but
-actually returns int/-1 on error). I'm planning on patching clang some day to
-give warnings when booleans aren't used properly.
+actually returns int/-1 on error). We've a clang patch
+[http://dovecot.org/patches/clang/] to give warnings in these cases. As
+expected, it found quite a lot of bugs (some real bugs and a lot of "it just
+accidentally worked"
+[https://github.com/dovecot/core/commit/d9a7e950a9cd21f2b4a90ec7759fca9e8fcc7995]).
 
- * 'bool x' and 'unsigned int x:1' are the boolean types
- * !=, ==, <, >, etc. create a boolean
+ * 'bool x' and 'bool x:1' are the boolean types
+ * TRUE and FALSE are the only valid explicit boolean values (not 0 or 1, and
+   currently also not true/false although that could be changed)
+ * !=, ==, <, >, etc. comparisons create a boolean
  * if, for, while, etc. require a boolean
 
 So:
@@ -179,7 +184,10 @@ Callback functions make the code more difficult to follow, especially when a
 callback calls another callback, or when using function pointers to jump to
 different callbacks depending on state. Of course with asynchronous C code it's
 pretty much impossible to avoid callbacks. Still, try to avoid them where
-possible to keep the code readable.
+possible to keep the code readable. lib-fs/fs-api.h is an example API which
+supports async operations but with a single common "do more now" callback
+rather than every single operation having its own callback parameter. This
+makes it similar to async network IO with read()/write() EAGAIN handling.
 
 Often callback functions can be avoided by creating iterator functions instead.
 For example instead of 'parse(callback, context' use 'ctx = parse_init(); while
@@ -189,4 +197,4 @@ Dovecot has some helper macros to make callbacks' context parameters type-safe.
 In v2.2+ see 'CALLBACK_TYPECHECK()' macro and for example 'io_add()' for
 example usage.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:43)

@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "array.h"
 #include "hostpid.h"
+#include "ioloop.h"
 #include "net.h"
 #include "module-dir.h"
 #include "home-expand.h"
@@ -63,6 +64,7 @@ struct mail_user *mail_user_alloc(const char *username,
 	user->set = settings_dup(set_info, set, pool);
 	user->service = master_service_get_name(master_service);
 	user->default_normalizer = uni_utf8_to_decomposed_titlecase;
+	user->session_create_time = ioloop_time;
 
 	/* check settings so that the duplicated structure will again
 	   contain the parsed fields */
@@ -258,6 +260,7 @@ mail_user_var_expand_table(struct mail_user *user)
 		tab[11].value = user->auth_user;
 		tab[12].value = p_strdup(user->pool, t_strcut(user->auth_user, '@'));
 		tab[13].value = strchr(user->auth_user, '@');
+		if (tab[13].value != NULL) tab[13].value++;
 	}
 
 	user->var_expand_table = tab;
@@ -546,6 +549,9 @@ struct mail_user *mail_user_dup(struct mail_user *user)
 	user2->auth_token = p_strdup(user2->pool, user->auth_token);
 	user2->auth_user = p_strdup(user2->pool, user->auth_user);
 	user2->session_id = p_strdup(user2->pool, user->session_id);
+	user2->session_create_time = user->session_create_time;
+	user2->userdb_fields = user->userdb_fields == NULL ? NULL :
+		p_strarray_dup(user2->pool, user->userdb_fields);
 	return user2;
 }
 

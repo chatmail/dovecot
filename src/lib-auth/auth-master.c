@@ -209,7 +209,7 @@ static bool auth_lookup_reply_callback(const char *cmd, const char *const *args,
 	if (ctx->return_value >= 0) {
 		ctx->fields = p_new(ctx->pool, const char *, len + 1);
 		for (i = 0; i < len; i++)
-			ctx->fields[i] = p_strdup(ctx->pool, args[i]);
+			ctx->fields[i] = str_tabunescape(p_strdup(ctx->pool, args[i]));
 	} else {
 		/* put the reason string into first field */
 		ctx->fields = p_new(ctx->pool, const char *, 2);
@@ -413,7 +413,8 @@ static int auth_master_run_cmd_pre(struct auth_master_connection *conn,
 	o_stream_uncork(conn->output);
 
 	if (o_stream_nfinish(conn->output) < 0) {
-		i_error("write(auth socket) failed: %m");
+		i_error("write(auth socket) failed: %s",
+			o_stream_get_error(conn->output));
 		auth_master_unset_io(conn);
 		auth_connection_close(conn);
 		return -1;
@@ -698,7 +699,8 @@ auth_master_user_list_init(struct auth_master_connection *conn,
 
 	if (auth_master_run_cmd_pre(conn, str_c(str)) < 0)
 		ctx->failed = TRUE;
-	io_loop_set_current(conn->prev_ioloop);
+	if (conn->prev_ioloop != NULL)
+		io_loop_set_current(conn->prev_ioloop);
 	conn->prefix = DEFAULT_USERDB_LOOKUP_PREFIX;
 	return ctx;
 }

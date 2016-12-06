@@ -131,14 +131,27 @@ struct quota_root {
 	/* Module-specific contexts. See quota_module_id. */
 	ARRAY(void) quota_module_contexts;
 
+	/* Set to the current quota_over_flag, regardless of whether
+	   it matches quota_over_flag_value mask. */
+	const char *quota_over_flag;
+
 	/* don't enforce quota when saving */
 	unsigned int no_enforcing:1;
+	/* quota is automatically updated. update() should be called but the
+	   bytes/count won't be used. */
+	unsigned int auto_updating:1;
 	/* If user has unlimited quota, disable quota tracking */
 	unsigned int disable_unlimited_tracking:1;
 	/* Set while quota is being recalculated to avoid recursion. */
 	unsigned int recounting:1;
 	/* Quota root is hidden (to e.g. IMAP GETQUOTAROOT) */
 	unsigned int hidden:1;
+	/* Is quota_over_flag* initialized yet? */
+	unsigned int quota_over_flag_initialized:1;
+	/* Is user currently over quota? */
+	unsigned int quota_over_flag_status:1;
+	/* Did we already check quota_over_flag correctness? */
+	unsigned int quota_over_flag_checked:1;
 };
 
 struct quota_transaction_context {
@@ -162,11 +175,15 @@ struct quota_transaction_context {
 	uint64_t bytes_over, count_over;
 
 	struct mail *tmp_mail;
+	enum quota_recalculate recalculate;
 
 	unsigned int limits_set:1;
 	unsigned int failed:1;
-	unsigned int recalculate:1;
 	unsigned int sync_transaction:1;
+	/* TRUE if all roots have auto_updating=TRUE */
+	unsigned int auto_updating:1;
+	/* Quota doesn't need to be updated within this transaction. */
+	unsigned int no_quota_updates:1;
 };
 
 /* Register storage to all user's quota roots. */
@@ -193,5 +210,6 @@ bool quota_warning_match(const struct quota_warning_rule *w,
 			 uint64_t bytes_before, uint64_t bytes_current,
 			 uint64_t count_before, uint64_t count_current);
 bool quota_transaction_is_over(struct quota_transaction_context *ctx, uoff_t size);
+int quota_transaction_set_limits(struct quota_transaction_context *ctx);
 
 #endif

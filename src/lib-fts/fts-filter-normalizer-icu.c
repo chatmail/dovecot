@@ -4,6 +4,7 @@
 #include "buffer.h"
 #include "str.h"
 #include "unichar.h" /* unicode replacement char */
+#include "fts-filter-common.h"
 #include "fts-filter-private.h"
 #include "fts-language.h"
 
@@ -38,7 +39,7 @@ fts_filter_normalizer_icu_create(const struct fts_language *lang ATTR_UNUSED,
 {
 	struct fts_filter_normalizer_icu *np;
 	pool_t pp;
-	unsigned int i;
+	unsigned int i, max_length = 250;
 	const char *id = "Any-Lower; NFKD; [: Nonspacing Mark :] Remove; NFC; [\\x20] Remove";
 
 	for (i = 0; settings[i] != NULL; i += 2) {
@@ -46,6 +47,12 @@ fts_filter_normalizer_icu_create(const struct fts_language *lang ATTR_UNUSED,
 
 		if (strcmp(key, "id") == 0) {
 			id = value;
+		} else if (strcmp(key, "maxlen") == 0) {
+			if (str_to_uint(value, &max_length) < 0 ||
+			    max_length == 0) {
+				*error_r = t_strdup_printf("Invalid icu maxlen setting: %s", value);
+				return -1;
+			}
 		} else {
 			*error_r = t_strdup_printf("Unknown setting: %s", key);
 			return -1;
@@ -61,6 +68,7 @@ fts_filter_normalizer_icu_create(const struct fts_language *lang ATTR_UNUSED,
 	np->utf16_token = buffer_create_dynamic(pp, 128);
 	np->trans_token = buffer_create_dynamic(pp, 128);
 	np->utf8_token = buffer_create_dynamic(pp, 128);
+	np->filter.max_length = max_length;
 	*filter_r = &np->filter;
 	return 0;
 }
@@ -92,6 +100,7 @@ fts_filter_normalizer_icu_filter(struct fts_filter *filter, const char **token,
 
 	fts_icu_utf16_to_utf8(np->utf8_token, np->trans_token->data,
 			      np->trans_token->used / sizeof(UChar));
+	fts_filter_truncate_token(np->utf8_token, np->filter.max_length);
 	*token = str_c(np->utf8_token);
 	return 1;
 }

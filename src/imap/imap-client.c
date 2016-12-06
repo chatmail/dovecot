@@ -7,6 +7,7 @@
 #include "hostpid.h"
 #include "net.h"
 #include "iostream.h"
+#include "iostream-rawlog.h"
 #include "istream.h"
 #include "ostream.h"
 #include "time-util.h"
@@ -122,6 +123,11 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 	client->user = user;
 	client->notify_count_changes = TRUE;
 	client->notify_flag_changes = TRUE;
+
+	if (set->rawlog_dir[0] != '\0') {
+		(void)iostream_rawlog_create(set->rawlog_dir, &client->input,
+					     &client->output);
+	}
 
 	mail_namespaces_set_storage_callbacks(user->namespaces,
 					      &mail_storage_callbacks, client);
@@ -269,7 +275,7 @@ static const char *client_get_commands_status(struct client *client)
 {
 	struct client_command_context *cmd, *last_cmd = NULL;
 	unsigned int msecs_in_ioloop;
-	uint64_t running_usecs = 0, ioloop_wait_usecs;
+	uint64_t running_usecs = 0, lock_wait_usecs = 0, ioloop_wait_usecs;
 	unsigned long long bytes_in = 0, bytes_out = 0;
 	string_t *str;
 	enum io_condition cond;
@@ -290,6 +296,7 @@ static const char *client_get_commands_status(struct client *client)
 		if (cmd->next != NULL)
 			str_append_c(str, ',');
 		running_usecs += cmd->running_usecs;
+		lock_wait_usecs += cmd->lock_wait_usecs;
 		bytes_in += cmd->bytes_in;
 		bytes_out += cmd->bytes_out;
 		last_cmd = cmd;
@@ -314,6 +321,11 @@ static const char *client_get_commands_status(struct client *client)
 		    (int)((running_usecs+999)/1000 / 1000),
 		    (int)((running_usecs+999)/1000 % 1000), cond_str,
 		    msecs_in_ioloop / 1000, msecs_in_ioloop % 1000);
+	if (lock_wait_usecs > 0) {
+		int lock_wait_msecs = (lock_wait_usecs+999)/1000;
+		str_printfa(str, ", %d.%03d in locks",
+			    lock_wait_msecs/1000, lock_wait_msecs%1000);
+	}
 	str_printfa(str, ", %llu B in + %llu+%"PRIuSIZE_T" B out, state=%s)",
 		    bytes_in, bytes_out,
 		    o_stream_get_buffer_used_size(client->output),
@@ -480,6 +492,7 @@ client_cmd_append_timing_stats(struct client_command_context *cmd,
 {
 	unsigned int msecs_in_cmd, msecs_in_ioloop;
 	uint64_t ioloop_wait_usecs;
+	unsigned int msecs_since_cmd;
 
 	if (cmd->start_time.tv_sec == 0)
 		return;
@@ -488,12 +501,19 @@ client_cmd_append_timing_stats(struct client_command_context *cmd,
 	msecs_in_cmd = (cmd->running_usecs + 999) / 1000;
 	msecs_in_ioloop = (ioloop_wait_usecs -
 			   cmd->start_ioloop_wait_usecs + 999) / 1000;
+	msecs_since_cmd = timeval_diff_msecs(&ioloop_timeval,
+					     &cmd->last_run_timeval);
 
 	if (str_data(str)[str_len(str)-1] == '.')
 		str_truncate(str, str_len(str)-1);
-	str_printfa(str, " (%d.%03d + %d.%03d secs).",
+	str_printfa(str, " (%d.%03d + %d.%03d ",
 		    msecs_in_cmd / 1000, msecs_in_cmd % 1000,
 		    msecs_in_ioloop / 1000, msecs_in_ioloop % 1000);
+	if (msecs_since_cmd > 0) {
+		str_printfa(str, "+ %d.%03d ",
+			    msecs_since_cmd / 1000, msecs_since_cmd % 1000);
+	}
+	str_append(str, "secs).");
 }
 
 void client_send_tagline(struct client_command_context *cmd, const char *data)
@@ -506,6 +526,7 @@ void client_send_tagline(struct client_command_context *cmd, const char *data)
 
 	i_assert(!cmd->tagline_sent);
 	cmd->tagline_sent = TRUE;
+	cmd->tagline_reply = p_strdup(cmd->pool, data);
 
 	if (tag == NULL || *tag == '\0')
 		tag = "*";
@@ -583,9 +604,6 @@ bool client_read_args(struct client_command_context *cmd, unsigned int count,
 		str = t_str_new(256);
 		imap_write_args(str, *args_r);
 		cmd->args = p_strdup(cmd->pool, str_c(str));
-		cmd->start_time = ioloop_timeval;
-		cmd->start_ioloop_wait_usecs =
-			io_loop_get_wait_usecs(current_ioloop);
 
 		cmd->client->input_lock = NULL;
 		return TRUE;
@@ -722,6 +740,9 @@ struct client_command_context *client_command_alloc(struct client *client)
 	cmd = p_new(client->command_pool, struct client_command_context, 1);
 	cmd->client = client;
 	cmd->pool = client->command_pool;
+	cmd->start_time = ioloop_timeval;
+	cmd->last_run_timeval = ioloop_timeval;
+	cmd->start_ioloop_wait_usecs = io_loop_get_wait_usecs(current_ioloop);
 	p_array_init(&cmd->module_contexts, cmd->pool, 5);
 
 	DLLIST_PREPEND(&client->command_queue, cmd);
@@ -825,7 +846,14 @@ static void client_check_command_hangs(struct client *client)
 	for (cmd = client->command_queue; cmd != NULL; cmd = cmd->next) {
 		switch (cmd->state) {
 		case CLIENT_COMMAND_STATE_WAIT_INPUT:
-			i_assert(client->io != NULL);
+			/* We need to be reading input for this command.
+			   However, if there is already an output lock for
+			   another command we'll wait for it to finish first.
+			   This is needed because if there are any literals
+			   we'd need to send "+ OK" responses. */
+			i_assert(client->io != NULL ||
+				 (client->output_cmd_lock != NULL &&
+				  client->output_cmd_lock != client->input_lock));
 			unfinished_count++;
 			break;
 		case CLIENT_COMMAND_STATE_WAIT_OUTPUT:
@@ -1028,6 +1056,8 @@ static bool client_handle_next_command(struct client *client, bool *remove_io_r)
 	if (client->input_lock != NULL) {
 		if (client->input_lock->state ==
 		    CLIENT_COMMAND_STATE_WAIT_UNAMBIGUITY ||
+		    /* we can't send literal "+ OK" replies if output is
+		       locked by another command. */
 		    (client->output_cmd_lock != NULL &&
 		     client->output_cmd_lock != client->input_lock)) {
 			*remove_io_r = TRUE;

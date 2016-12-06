@@ -29,9 +29,7 @@ struct mail_user *mail_user_login(const char *username)
 
 	user = hash_table_lookup(mail_users_hash, username);
 	if (user != NULL) {
-		user->num_logins++;
 		mail_user_refresh(user, NULL);
-		mail_domain_login(user->domain);
 		return user;
 	}
 
@@ -56,7 +54,6 @@ struct mail_user *mail_user_login(const char *username)
 			    domain_prev, domain_next);
 	mail_domain_ref(user->domain);
 
-	user->num_logins++;
 	user->last_update = ioloop_timeval;
 	global_memory_alloc(mail_user_memsize(user));
 	return user;
@@ -122,7 +119,7 @@ void mail_user_refresh(struct mail_user *user,
 int mail_user_add_parse(const char *const *args, const char **error_r)
 {
 	struct mail_user *user;
-	struct stats *diff_stats;
+	struct stats *empty_stats, *diff_stats;
 	buffer_t *buf;
 	const char *service, *error;
 
@@ -141,8 +138,9 @@ int mail_user_add_parse(const char *const *args, const char **error_r)
 					   user->name, service);
 		return -1;
 	}
+	empty_stats = stats_alloc(pool_datastack_create());
 	diff_stats = stats_alloc(pool_datastack_create());
-	if (!stats_import(buf->data, buf->used, user->stats, diff_stats, &error)) {
+	if (!stats_import(buf->data, buf->used, empty_stats, diff_stats, &error)) {
 		*error_r = t_strdup_printf("ADD-USER %s %s: %s",
 					   user->name, service, error);
 		return -1;

@@ -58,6 +58,8 @@ struct dsync_brain {
 	const char *const *exclude_mailboxes;
 	enum dsync_brain_sync_type sync_type;
 	time_t sync_since_timestamp;
+	time_t sync_until_timestamp;
+	uoff_t sync_max_size;
 	const char *sync_flag;
 	char alt_char;
 
@@ -114,6 +116,7 @@ struct dsync_brain {
 	unsigned int no_notify:1;
 	unsigned int hdr_hash_v2:1;
 	unsigned int failed:1;
+	unsigned int empty_hdr_workaround:1;
 };
 
 extern const char *dsync_box_state_names[DSYNC_BOX_STATE_DONE+1];

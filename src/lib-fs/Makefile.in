@@ -93,8 +93,10 @@ host_triplet = @host@
 noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-fs
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/dovecot.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
@@ -106,10 +108,10 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libfs_la_LIBADD =
 am_libfs_la_OBJECTS = fs-api.lo fs-dict.lo fs-metawrap.lo \
-	fs-randomfail.lo fs-posix.lo fs-test.lo fs-sis.lo \
-	fs-sis-common.lo fs-sis-queue.lo istream-fs-file.lo \
-	istream-fs-stats.lo istream-metawrap.lo ostream-metawrap.lo \
-	ostream-cmp.lo
+	fs-randomfail.lo fs-posix.lo fs-test.lo fs-test-async.lo \
+	fs-sis.lo fs-sis-common.lo fs-sis-queue.lo fs-wrapper.lo \
+	istream-fs-file.lo istream-fs-stats.lo istream-metawrap.lo \
+	ostream-metawrap.lo ostream-cmp.lo
 libfs_la_OBJECTS = $(am_libfs_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -419,9 +421,11 @@ libfs_la_SOURCES = \
 	fs-randomfail.c \
 	fs-posix.c \
 	fs-test.c \
+	fs-test-async.c \
 	fs-sis.c \
 	fs-sis-common.c \
 	fs-sis-queue.c \
+	fs-wrapper.c \
 	istream-fs-file.c \
 	istream-fs-stats.c \
 	istream-metawrap.c \
@@ -432,6 +436,7 @@ headers = \
 	fs-api.h \
 	fs-api-private.h \
 	fs-sis-common.h \
+	fs-wrapper.h \
 	fs-test.h \
 	istream-fs-file.h \
 	istream-fs-stats.h \
@@ -532,7 +537,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis-common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis-queue.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-sis.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-test-async.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-test.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fs-wrapper.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-fs-file.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-fs-stats.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-metawrap.Plo@am__quote@

@@ -16,6 +16,7 @@ enum passdb_result {
 	PASSDB_RESULT_USER_UNKNOWN = -3,
 	PASSDB_RESULT_USER_DISABLED = -4,
 	PASSDB_RESULT_PASS_EXPIRED = -5,
+	PASSDB_RESULT_NEXT = -6,
 
 	PASSDB_RESULT_PASSWORD_MISMATCH = 0,
 	PASSDB_RESULT_OK = 1
@@ -102,7 +103,7 @@ void passdb_deinit(struct passdb_module *passdb);
 void passdb_register_module(struct passdb_module_interface *iface);
 void passdb_unregister_module(struct passdb_module_interface *iface);
 
-void passdbs_generate_md5(unsigned char md5[MD5_RESULTLEN]);
+void passdbs_generate_md5(unsigned char md5[STATIC_ARRAY MD5_RESULTLEN]);
 
 void passdbs_init(void);
 void passdbs_deinit(void);

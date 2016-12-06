@@ -178,11 +178,15 @@ fts_backend_lucene_get_last_uid(struct fts_backend *_backend,
 		FTS_LUCENE_USER_CONTEXT(_backend->ns->user);
 	struct fts_index_header hdr;
 	uint32_t set_checksum;
+	int ret;
 
 	if (fts_index_get_header(box, &hdr)) {
 		set_checksum = fts_lucene_settings_checksum(&fuser->set);
-		if (!fts_index_have_compatible_settings(_backend->ns->list,
-							set_checksum)) {
+		ret = fts_index_have_compatible_settings(_backend->ns->list,
+							 set_checksum);
+		if (ret < 0)
+			return -1;
+		if (ret == 0) {
 			/* need to rebuild the index */
 			*last_uid_r = 0;
 		} else {
@@ -306,7 +310,7 @@ fts_backend_lucene_update_set_mailbox(struct fts_backend_update_context *_ctx,
 		fts_index_set_last_uid(ctx->box, ctx->last_uid);
 		ctx->last_uid = 0;
 	}
-	if (ctx->first_box_vname == NULL)
+	if (ctx->first_box_vname == NULL && box != NULL)
 		ctx->first_box_vname = i_strdup(box->vname);
 	ctx->box = box;
 	ctx->last_indexed_uid_set = FALSE;

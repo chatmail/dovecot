@@ -1,4 +1,5 @@
 aclocaldir = $(datadir)/aclocal
+ACLOCAL_AMFLAGS=-I m4
 
 SUBDIRS = \
 	. \
@@ -12,8 +13,8 @@ EXTRA_DIST = \
 	COPYING.LGPL \
 	COPYING.MIT \
 	ChangeLog \
-	cc-wrapper.sh.in \
 	update-version.sh \
+	run-test-valgrind.supp \
 	$(conf_DATA)
 
 noinst_DATA = dovecot-config
@@ -43,6 +44,7 @@ dovecot-config: dovecot-config.in Makefile
 	-e "s|^\(dovecot_pkglibexecdir\)=|\1=$(libexecdir)/dovecot|" \
 	-e "s|^\(dovecot_docdir\)=|\1=$(docdir)|" \
 	-e "s|^\(dovecot_moduledir\)=|\1=$(moduledir)|" \
+	-e "s|^\(dovecot_statedir\)=|\1=$(statedir)|" \
 	) > dovecot-config
 
 if HAVE_SYSTEMD

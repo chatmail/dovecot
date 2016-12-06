@@ -105,7 +105,7 @@ void io_loop_handle_add(struct io_file *io)
 
 	if (epoll_ctl(ctx->epfd, op, io->fd, &event) < 0) {
 		if (errno == EPERM && op == EPOLL_CTL_ADD) {
-			i_fatal("epoll_ctl(add, %d) failed: %m "
+			i_panic("epoll_ctl(add, %d) failed: %m "
 				"(fd doesn't support epoll%s)", io->fd,
 				io->fd != STDIN_FILENO ? "" :
 				" - instead of '<file', try 'cat file|'");
@@ -172,6 +172,8 @@ void io_loop_handler_run_internal(struct ioloop *ioloop)
 	unsigned int events_count;
 	int msecs, ret, i, j;
 	bool call;
+
+	i_assert(ctx != NULL);
 
         /* get the time left for next timeout task */
 	msecs = io_loop_get_wait_time(ioloop, &tv);

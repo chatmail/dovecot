@@ -91,8 +91,10 @@ build_triplet = @build@
 host_triplet = @host@
 subdir = src/lib-ldap
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/dovecot.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -133,7 +135,8 @@ am__installdirs = "$(DESTDIR)$(pkglibdir)" \
 LTLIBRARIES = $(pkglib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 am_libdovecot_ldap_la_OBJECTS = ldap-client.lo ldap-connection.lo \
-	ldap-iterator.lo ldap-search.lo ldap-compare.lo ldap-entry.lo
+	ldap-connection-pool.lo ldap-iterator.lo ldap-search.lo \
+	ldap-compare.lo ldap-entry.lo
 libdovecot_ldap_la_OBJECTS = $(am_libdovecot_ldap_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -410,18 +413,20 @@ AM_CPPFLAGS = \
 libdovecot_ldap_la_SOURCES = \
 	ldap-client.c \
 	ldap-connection.c \
+	ldap-connection-pool.c \
 	ldap-iterator.c \
 	ldap-search.c \
 	ldap-compare.c \
 	ldap-entry.c
 
-libdovecot_ldap_la_DEPENDENCIES = 
+libdovecot_ldap_la_DEPENDENCIES = ../lib/liblib.la
 libdovecot_ldap_la_LDFLAGS = -export-dynamic
-libdovecot_ldap_la_LIBADD = $(LDAP_LIBS)
+libdovecot_ldap_la_LIBADD = ../lib/liblib.la $(LDAP_LIBS)
 headers = \
 	ldap-client.h
 
 noinst_HEADERS = \
+	ldap-connection-pool.h \
 	ldap-private.h
 
 pkginc_libdir = $(pkgincludedir)
@@ -511,6 +516,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ldap-client.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ldap-compare.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ldap-connection-pool.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ldap-connection.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ldap-entry.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ldap-iterator.Plo@am__quote@

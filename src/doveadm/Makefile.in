@@ -93,8 +93,10 @@ pkglibexec_PROGRAMS = doveadm-server$(EXEEXT)
 noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/doveadm
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/dovecot.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -131,7 +133,9 @@ am__objects_2 = doveadm-dsync.$(OBJEXT) doveadm-mail.$(OBJEXT) \
 am__objects_3 = doveadm-dump.$(OBJEXT) doveadm-dump-dbox.$(OBJEXT) \
 	doveadm-dump-index.$(OBJEXT) doveadm-dump-log.$(OBJEXT) \
 	doveadm-dump-mailboxlog.$(OBJEXT) \
-	doveadm-dump-thread.$(OBJEXT) doveadm-zlib.$(OBJEXT)
+	doveadm-dump-thread.$(OBJEXT) \
+	doveadm-dump-dcrypt-file.$(OBJEXT) \
+	doveadm-dump-dcrypt-key.$(OBJEXT) doveadm-zlib.$(OBJEXT)
 am__objects_4 = $(am__objects_1) $(am__objects_2) $(am__objects_3) \
 	doveadm-cmd.$(OBJEXT) doveadm-print.$(OBJEXT) \
 	doveadm-settings.$(OBJEXT) doveadm-util.$(OBJEXT) \
@@ -147,7 +151,8 @@ am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
 am_doveadm_server_OBJECTS = $(am__objects_4) \
-	client-connection.$(OBJEXT) client-connection-http.$(OBJEXT) \
+	doveadm-auth-server.$(OBJEXT) client-connection.$(OBJEXT) \
+	client-connection-http.$(OBJEXT) \
 	doveadm-print-server.$(OBJEXT) doveadm-print-json.$(OBJEXT) \
 	main.$(OBJEXT)
 doveadm_server_OBJECTS = $(am_doveadm_server_OBJECTS)
@@ -496,7 +501,9 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-storage \
+	-I$(top_srcdir)/src/lib-imap-storage \
 	-I$(top_srcdir)/src/lib-http \
+	-I$(top_srcdir)/src/lib-dcrypt \
 	-I$(top_srcdir)/src/auth \
 	-DMODULEDIR=\""$(moduledir)"\" \
 	-DAUTH_MODULE_DIR=\""$(moduledir)/auth"\" \
@@ -589,6 +596,8 @@ doveadm_common_dump_cmds = \
 	doveadm-dump-log.c \
 	doveadm-dump-mailboxlog.c \
 	doveadm-dump-thread.c \
+	doveadm-dump-dcrypt-file.c \
+	doveadm-dump-dcrypt-key.c \
 	doveadm-zlib.c
 
 common = \
@@ -614,6 +623,7 @@ doveadm_SOURCES = \
 
 doveadm_server_SOURCES = \
 	$(common) \
+	doveadm-auth-server.c \
 	client-connection.c \
 	client-connection-http.c \
 	doveadm-print-server.c \
@@ -813,12 +823,15 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-connection-http.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-connection.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-auth-server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-auth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-cmd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dict.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-director.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dsync.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dump-dbox.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dump-dcrypt-file.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dump-dcrypt-key.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dump-index.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dump-log.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-dump-mailboxlog.Po@am__quote@

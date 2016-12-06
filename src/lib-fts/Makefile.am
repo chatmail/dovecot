@@ -12,15 +12,23 @@ AM_CPPFLAGS = \
 	$(LIBICU_CFLAGS) \
 	-DUDHRDIR=\""$(top_srcdir)/src/lib-fts"\" \
 	-DDATADIR=\"$(pkgdatadir)\" \
-	-DTEST_STOPWORDS_DIR=\""$(top_srcdir)/src/lib-fts"\"
+	-DTEST_STOPWORDS_DIR=\""$(top_srcdir)/src/lib-fts/stopwords"\"
 
 stopwordsdir = $(datadir)/${PACKAGE_TARNAME}/stopwords
 dist_stopwords_DATA = \
-	stopwords_en.txt \
-	stopwords_fi.txt \
-	stopwords_fr.txt \
-	stopwords_no.txt \
-	stopwords_sv.txt
+	stopwords/stopwords_da.txt \
+	stopwords/stopwords_de.txt \
+	stopwords/stopwords_en.txt \
+	stopwords/stopwords_es.txt \
+	stopwords/stopwords_fi.txt \
+	stopwords/stopwords_fr.txt \
+	stopwords/stopwords_it.txt \
+	stopwords/stopwords_nl.txt \
+	stopwords/stopwords_no.txt \
+	stopwords/stopwords_pt.txt \
+	stopwords/stopwords_ro.txt \
+	stopwords/stopwords_ru.txt \
+	stopwords/stopwords_sv.txt
 
 BUILT_SOURCES = word-boundary-data.c word-break-data.c
 
@@ -30,7 +38,8 @@ EXTRA_DIST = \
 	word-properties.pl \
 	WordBreakProperty.txt \
 	word-boundary-data.c \
-	word-break-data.c
+	word-break-data.c \
+	stopwords/stopwords_malformed.txt
 
 WordBreakProperty.txt:
 	test -f WordBreakProperty.txt || wget http://www.unicode.org/Public/UNIDATA/auxiliary/WordBreakProperty.txt
@@ -69,6 +78,7 @@ libfts_la_LIBADD = \
 libfts_la_SOURCES = \
 	fts-filter.c \
 	fts-filter-contractions.c \
+	fts-filter-common.c \
 	fts-filter-english-possessive.c \
 	fts-filter-lowercase.c \
 	fts-filter-normalizer-icu.c \
@@ -85,6 +95,7 @@ libfts_la_SOURCES = \
 headers = \
 	fts-common.h \
 	fts-filter.h \
+	fts-filter-common.h \
 	fts-filter-private.h \
 	fts-icu.h \
 	fts-language.h \

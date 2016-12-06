@@ -79,8 +79,11 @@ struct dsync_mail_change {
 	/* +add, -remove, =final, &add_and_final. */
 	ARRAY_TYPE(const_string) keyword_changes;
 
-	/* Received timestamp for saves, if brain.sync_since_timestamp is set */
+	/* Received timestamp for saves, if brain.sync_since/until_timestamp is set */
 	time_t received_timestamp;
+	/* Mail's size for saves if brain.sync_max_size is set,
+	   (uoff_t)-1 otherwise. */
+	uoff_t virtual_size;
 };
 
 struct mailbox_header_lookup_ctx *
@@ -88,6 +91,12 @@ dsync_mail_get_hash_headers(struct mailbox *box);
 
 int dsync_mail_get_hdr_hash(struct mail *mail, unsigned int version,
 			    const char **hdr_hash_r);
+static inline bool dsync_mail_hdr_hash_is_empty(const char *hdr_hash)
+{
+	/* md5(\n) */
+	return strcmp(hdr_hash, "68b329da9893e34099c7d8ad5cb9c940") == 0;
+}
+
 int dsync_mail_fill(struct mail *mail, bool minimal_fill,
 		    struct dsync_mail *dmail_r, const char **error_field_r);
 int dsync_mail_fill_nonminimal(struct mail *mail, struct dsync_mail *dmail_r,

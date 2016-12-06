@@ -38,6 +38,7 @@ struct dict_vfuncs {
 
 	void (*lookup_async)(struct dict *dict, const char *key,
 			     dict_lookup_callback_t *callback, void *context);
+	bool (*switch_ioloop)(struct dict *dict);
 };
 
 struct dict {
@@ -53,12 +54,14 @@ struct dict_iterate_context {
 	void *async_context;
 
 	unsigned int has_more:1;
+	uint64_t row_count, max_rows;
 };
 
 struct dict_transaction_context {
 	struct dict *dict;
 
 	unsigned int changed:1;
+	unsigned int no_slowness_warning:1;
 };
 
 extern struct dict dict_driver_client;

@@ -143,6 +143,9 @@ void passdb_handle_credentials(enum passdb_result result,
 	if (result != PASSDB_RESULT_OK) {
 		callback(result, NULL, 0, auth_request);
 		return;
+	} else if (auth_fields_exists(auth_request->extra_fields, "noauthenticate")) {
+		callback(PASSDB_RESULT_NEXT, NULL, 0, auth_request);
+		return;
 	}
 
 	if (password != NULL) {
@@ -252,7 +255,7 @@ void passdb_deinit(struct passdb_module *passdb)
 	passdb->iface = passdb_iface_deinit;
 }
 
-void passdbs_generate_md5(unsigned char md5[MD5_RESULTLEN])
+void passdbs_generate_md5(unsigned char md5[STATIC_ARRAY MD5_RESULTLEN])
 {
 	struct md5_context ctx;
 	struct passdb_module *const *passdbs;

@@ -16,7 +16,7 @@
 #include "auth-token.h"
 #include "auth-master-connection.h"
 #include "auth-request-handler.h"
-
+#include "auth-policy.h"
 
 #define AUTH_FAILURE_DELAY_CHECK_MSECS 500
 
@@ -81,6 +81,7 @@ void auth_request_handler_abort_requests(struct auth_request_handler *handler)
 		case AUTH_REQUEST_STATE_NEW:
 		case AUTH_REQUEST_STATE_MECH_CONTINUE:
 		case AUTH_REQUEST_STATE_FINISHED:
+			auth_request->removed_from_handler = TRUE;
 			auth_request_unref(&auth_request);
 			hash_table_remove(handler->requests, key);
 			break;
@@ -215,6 +216,8 @@ auth_request_handle_failure(struct auth_request *request, const char *reply)
 	auth_request_ref(request);
 	auth_request_handler_remove(handler, request);
 
+	auth_policy_report(request);
+
 	if (auth_fields_exists(request->extra_fields, "nodelay")) {
 		/* passdb specifically requested not to delay the reply. */
 		handler->callback(reply, handler->conn);
@@ -260,6 +263,9 @@ auth_request_handler_reply_success_finish(struct auth_request *request)
 	str_printfa(str, "OK\t%u\tuser=", request->id);
 	str_append_tabescaped(str, request->user);
 	auth_str_append_extra_fields(request, str);
+
+	auth_policy_report(request);
+
 	if (handler->master_callback == NULL ||
 	    auth_fields_exists(request->extra_fields, "nologin") ||
 	    auth_fields_exists(request->extra_fields, "proxy")) {
@@ -267,6 +273,7 @@ auth_request_handler_reply_success_finish(struct auth_request *request)
 		   process to pick it up. delete it */
 		auth_request_handler_remove(handler, request);
 	}
+
 	handler->callback(str_c(str), handler->conn);
 }
 
@@ -299,6 +306,7 @@ auth_request_handler_reply_failure_finish(struct auth_request *request)
 	auth_str_append_extra_fields(request, str);
 
 	switch (request->passdb_result) {
+	case PASSDB_RESULT_NEXT:
 	case PASSDB_RESULT_INTERNAL_FAILURE:
 	case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
 	case PASSDB_RESULT_USER_UNKNOWN:

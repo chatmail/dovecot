@@ -260,9 +260,9 @@ plugin {
 Quota for private namespaces
 ----------------------------
 
-You can create a separate namespace-specific quota for a folder hierarchie.
-This is done by adding another namespace and the ':ns=<namespace prefix>'
-parameter to quota setting. For example you could have something like:
+You can create a separate namespace-specific quota for a folder hierarchy. This
+is done by adding another namespace and the ':ns=<namespace prefix>' parameter
+to quota setting. For example you could have something like:
 
 ---%<-------------------------------------------------------------------------
 namespace {
@@ -408,6 +408,12 @@ plugin {
   # Wildcards can be used in a generic way, e.g. "*yes" or "*TRUE*"
   #quota_over_flag_value = *
 
+  # If set, overquota-flag is checked only when current quota usage is going to
+be checked anyway.
+  # This can be used to optimize this check in case it's running too slowly.
+(v2.2.25+)
+  #quota_over_flag_lazy_check = yes
+
   # Service script to execute if overquota-flag is wrong. Configured the
   # same as quota_warning scripts. The current quota_over_flag's value is
   # appended as the last parameter.
@@ -460,6 +466,13 @@ dict {
 dovecot-dict-sql.conf.ext:
 
 ---%<-------------------------------------------------------------------------
+# Use "host= ... pass=foo#bar" with double-quotes if your password has '#'
+character.
+connect = host=/var/run/mysqld/mysqld.sock dbname=mails user=admin
+password=pass
+# Alternatively you can connect to localhost as well:
+#connect = host=localhost dbname=mails user=admin password=pass # port=3306
+
 map {
   pattern = priv/quota/limit/storage
   table = quota
@@ -480,4 +493,4 @@ Afterwards the quota can be changed with:
 a SETQUOTA "User quota" (STORAGE 12345 MESSAGES 123)
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

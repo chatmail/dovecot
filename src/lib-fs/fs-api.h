@@ -13,6 +13,10 @@ struct hash_method;
    This can be later on used to optimize reads by setting it before reading
    the file. */
 #define FS_METADATA_OBJECTID FS_METADATA_INTERNAL_PREFIX"ObjectID"
+/* Calling this before fs_write_stream_finish() allows renaming the filename.
+   This can be useful if you don't know the final filename before writing it
+   (e.g. filename contains the file size). */
+#define FS_METADATA_WRITE_FNAME FS_METADATA_INTERNAL_PREFIX"WriteFilename"
 
 enum fs_properties {
 	FS_PROPERTY_METADATA	= 0x01,
@@ -36,7 +40,9 @@ enum fs_properties {
 	/* Backend support asynchronous file operations. */
 	FS_PROPERTY_ASYNC		= 0x800,
 	/* Backend supports FS_ITER_FLAG_OBJECTIDS. */
-	FS_PROPERTY_OBJECTIDS		= 0x1000
+	FS_PROPERTY_OBJECTIDS		= 0x1000,
+	/* fs_copy() is fast even when file's metadata is changed */
+	FS_PROPERTY_FASTCOPY_CHANGED_METADATA = 0x2000,
 };
 
 enum fs_open_mode {
@@ -173,6 +179,9 @@ struct fs_stats {
 	/* Number of fs_iter_init() calls. */
 	unsigned int iter_count;
 
+	/* Number of bytes written by fs_write*() calls. */
+	uint64_t write_bytes;
+
 	/* Cumulative sum of usecs spent on calls - set only if
 	   fs_settings.enable_timing=TRUE */
 	struct timing *timings[FS_OP_COUNT];
@@ -266,8 +275,11 @@ int fs_write_stream_finish(struct fs_file *file, struct ostream **output);
 int fs_write_stream_finish_async(struct fs_file *file);
 /* Abort writing via stream. Anything written to the stream is discarded.
    o_stream_ignore_last_errors() is called on the output stream so the caller
-   doesn't need to do it. */
+   doesn't need to do it. This must not be called after
+   fs_write_stream_finish(), i.e. it can't be used to abort a pending async
+   write. */
 void fs_write_stream_abort(struct fs_file *file, struct ostream **output);
+void fs_write_stream_abort_error(struct fs_file *file, struct ostream **output, const char *error_fmt, ...) ATTR_FORMAT(3, 4);
 
 /* Set a hash to the following write. The storage can then verify that the
    input data matches the specified hash, or fail if it doesn't. Typically
@@ -284,6 +296,10 @@ void fs_file_set_async_callback(struct fs_file *file,
    It's an error to call this when there are no pending async operations.
    Returns 0 if ok, -1 if timed out. */
 int fs_wait_async(struct fs *fs);
+/* Switch the fs to the current ioloop. This can be used to do fs_wait_async()
+   among other IO work. Returns TRUE if there is actually some work that can
+   be waited on. */
+bool fs_switch_ioloop(struct fs *fs) ATTR_NOWARN_UNUSED_RESULT;
 
 /* Returns 1 if file exists, 0 if not, -1 if error occurred. */
 int fs_exists(struct fs_file *file);
@@ -293,6 +309,10 @@ int fs_delete(struct fs_file *file);
 /* Returns 0 if ok, -1 if error occurred (e.g. errno=ENOENT).
    All fs backends may not support all stat fields. */
 int fs_stat(struct fs_file *file, struct stat *st_r);
+/* Get number of links to the file. This is the same as using fs_stat()'s
+   st_nlinks field, except not all backends support returning it via fs_stat().
+   Returns 0 if ok, -1 if error occurred. */
+int fs_get_nlinks(struct fs_file *file, nlink_t *nlinks_r);
 /* Copy an object with possibly updated metadata. Destination parent
    directories are created automatically. Returns 0 if ok, -1 if error
    occurred. */

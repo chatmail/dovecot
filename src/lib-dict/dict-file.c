@@ -537,6 +537,7 @@ static int file_dict_write_changes(struct dict_transaction_memory_context *ctx,
 		if (fd == -1) {
 			i_error("file dict commit: creat(%s) failed: %m",
 				temp_path);
+			file_unlock(&lock);
 			return -1;
 		}
 		break;
@@ -649,20 +650,18 @@ file_dict_transaction_commit(struct dict_transaction_context *_ctx,
 struct dict dict_driver_file = {
 	.name = "file",
 	{
-		file_dict_init,
-		file_dict_deinit,
-		NULL,
-		file_dict_lookup,
-		file_dict_iterate_init,
-		file_dict_iterate,
-		file_dict_iterate_deinit,
-		file_dict_transaction_init,
-		file_dict_transaction_commit,
-		dict_transaction_memory_rollback,
-		dict_transaction_memory_set,
-		dict_transaction_memory_unset,
-		dict_transaction_memory_append,
-		dict_transaction_memory_atomic_inc,
-		NULL
+		.init = file_dict_init,
+		.deinit = file_dict_deinit,
+		.lookup = file_dict_lookup,
+		.iterate_init = file_dict_iterate_init,
+		.iterate = file_dict_iterate,
+		.iterate_deinit = file_dict_iterate_deinit,
+		.transaction_init = file_dict_transaction_init,
+		.transaction_commit = file_dict_transaction_commit,
+		.transaction_rollback = dict_transaction_memory_rollback,
+		.set = dict_transaction_memory_set,
+		.unset = dict_transaction_memory_unset,
+		.append = dict_transaction_memory_append,
+		.atomic_inc = dict_transaction_memory_atomic_inc,
 	}
 };

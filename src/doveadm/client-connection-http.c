@@ -189,7 +189,13 @@ static void doveadm_http_server_json_success(void *context, struct istream *resu
 	string_t *escaped;
 	escaped = str_new(conn->client.pool, 10);
 	o_stream_nsend_str(conn->client.output,"[\"doveadmResponse\",");
-	o_stream_send_istream(conn->client.output, result);
+	if (o_stream_send_istream(conn->client.output, result) < 0) {
+		if (conn->client.output->stream_errno != 0) {
+			i_fatal("write(%s) failed: %s", o_stream_get_name(conn->client.output), o_stream_get_error(conn->client.output));
+		} else if (result->stream_errno != 0) {
+			i_fatal("read(%s) failed: %s", i_stream_get_name(result), i_stream_get_error(result));
+		} else i_unreached(); /* either it's output or input error */
+	}
 	o_stream_nsend_str(conn->client.output,",\"");
 	if (conn->method_id != NULL) {
 		json_append_escaped(escaped, conn->method_id);
@@ -200,8 +206,11 @@ static void doveadm_http_server_json_success(void *context, struct istream *resu
 
 static int doveadm_http_server_istream_read(struct client_connection_http *conn)
 {
-	while (i_stream_read(conn->cmd_param->value.v_istream) > 0)
-		i_stream_skip(conn->cmd_param->value.v_istream, i_stream_get_data_size(conn->cmd_param->value.v_istream));
+	const unsigned char *data;
+	size_t size;
+
+	while (i_stream_read_more(conn->cmd_param->value.v_istream, &data, &size) > 0)
+		i_stream_skip(conn->cmd_param->value.v_istream, size);
 	if (!conn->cmd_param->value.v_istream->eof)
 		return 0;
 
@@ -323,8 +332,11 @@ doveadm_http_server_command_execute(struct client_connection_http *conn)
 
 	// create iostream
 	doveadm_print_ostream = iostream_temp_create("/tmp/doveadm.", 0);
+	cctx.cmd = conn->cmd;
 
-	doveadm_print_init(DOVEADM_PRINT_TYPE_JSON);
+	if ((cctx.cmd->flags & CMD_FLAG_NO_PRINT) == 0)
+		doveadm_print_init(DOVEADM_PRINT_TYPE_JSON);
+
 	/* then call it */
 	doveadm_cmd_params_null_terminate_arrays(&conn->pargv);
 	cctx.argv = array_get(&conn->pargv, (unsigned int*)&cctx.argc);
@@ -332,7 +344,6 @@ doveadm_http_server_command_execute(struct client_connection_http *conn)
 	lib_signals_reset_ioloop();
 	doveadm_exit_code = 0;
 
-	cctx.cmd = conn->cmd;
 	cctx.cli = FALSE;
 	cctx.local_ip = conn->client.local_ip;
 	cctx.local_port = conn->client.local_port;
@@ -343,7 +354,9 @@ doveadm_http_server_command_execute(struct client_connection_http *conn)
 		i_info("Executing command '%s' as '%s'", cctx.cmd->name, user);
 	else
 		i_info("Executing command '%s'", cctx.cmd->name);
+	client_connection_set_proctitle(&conn->client, cctx.cmd->name);
 	cctx.cmd->cmd(&cctx);
+	client_connection_set_proctitle(&conn->client, "");
 
 	io_loop_set_current(prev_ioloop);
 	lib_signals_reset_ioloop();
@@ -351,7 +364,8 @@ doveadm_http_server_command_execute(struct client_connection_http *conn)
 	io_loop_set_current(ioloop);
 	io_loop_destroy(&ioloop);
 
-	doveadm_print_deinit();
+	if ((cctx.cmd->flags & CMD_FLAG_NO_PRINT) == 0)
+		doveadm_print_deinit();
 	if (o_stream_nfinish(doveadm_print_ostream)<0) {
 		i_info("Error writing output in command %s: %s",
 		       conn->cmd->name,
@@ -650,13 +664,13 @@ doveadm_http_server_authorize_request(struct client_connection_http *conn)
 			string_t *b64_value = str_new(conn->client.pool, 32);
 			char *value = p_strdup_printf(conn->client.pool, "doveadm:%s", conn->client.set->doveadm_password);
 			base64_encode(value, strlen(value), b64_value);
-			if (strcmp(creds.data, str_c(b64_value)) == 0) auth = TRUE;
+			if (creds.data != NULL && strcmp(creds.data, str_c(b64_value)) == 0) auth = TRUE;
 			else i_error("Invalid authentication attempt to HTTP API");
 		}
 		else if (strcasecmp(creds.scheme, "X-Dovecot-API") == 0 && doveadm_settings->doveadm_api_key[0] != '\0') {
 			string_t *b64_value = str_new(conn->client.pool, 32);
 			base64_encode(doveadm_settings->doveadm_api_key, strlen(doveadm_settings->doveadm_api_key), b64_value);
-			if (strcmp(creds.data, str_c(b64_value)) == 0) auth = TRUE;
+			if (creds.data != NULL && strcmp(creds.data, str_c(b64_value)) == 0) auth = TRUE;
 			else i_error("Invalid authentication attempt to HTTP API");
 		}
 		else i_error("Unsupported authentication scheme to HTTP API");
@@ -751,7 +765,7 @@ static void doveadm_http_server_send_response(void *context)
 }
 
 static const struct http_server_settings http_server_set = {
-	.max_client_idle_time_msecs = 5000,
+	.max_client_idle_time_msecs = 0,
         .max_pipelined_requests = 0
 };
 

@@ -150,7 +150,7 @@ static ssize_t i_stream_lz4_read(struct istream_private *stream)
 	}
 	/* if we already have max_buffer_size amount of data, fail here */
 	i_stream_compress(stream);
-	if (stream->pos >= stream->max_buffer_size)
+	if (stream->pos >= i_stream_get_max_buffer_size(&stream->istream))
 		return -2;
 	/* allocate enough space for the old data and the new
 	   decompressed chunk. we don't know the original compressed size,
@@ -210,6 +210,8 @@ i_stream_lz4_seek(struct istream_private *stream, uoff_t v_offset, bool mark)
 		stream->pos = stream->skip;
 	} else {
 		/* read and cache forward */
+		ssize_t ret = -1;
+
 		do {
 			size_t avail = stream->pos - stream->skip;
 
@@ -221,7 +223,8 @@ i_stream_lz4_seek(struct istream_private *stream, uoff_t v_offset, bool mark)
 			}
 
 			i_stream_skip(&stream->istream, avail);
-		} while (i_stream_read(&stream->istream) >= 0);
+		} while ((ret = i_stream_read(&stream->istream)) > 0);
+		i_assert(ret == -1);
 
 		if (stream->istream.v_offset != v_offset) {
 			/* some failure, we've broken it */
@@ -264,11 +267,13 @@ i_stream_lz4_stat(struct istream_private *stream, bool exact)
 
 	if (zstream->stream_size == (uoff_t)-1) {
 		uoff_t old_offset = stream->istream.v_offset;
+		ssize_t ret;
 
 		do {
 			size = i_stream_get_data_size(&stream->istream);
 			i_stream_skip(&stream->istream, size);
-		} while (i_stream_read(&stream->istream) > 0);
+		} while ((ret = i_stream_read(&stream->istream)) > 0);
+		i_assert(ret == -1);
 
 		i_stream_seek(&stream->istream, old_offset);
 		if (zstream->stream_size == (uoff_t)-1)

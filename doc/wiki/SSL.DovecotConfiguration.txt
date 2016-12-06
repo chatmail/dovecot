@@ -196,13 +196,30 @@ regenerated them every week by default, but because the extra security gained
 by the regeneration is quite small, Dovecot v2.2 disabled the regeneration
 feature completely.
 
-From version 2.2, you can specify the wanted DH parameters length using:
+From and up to version 2.2, you can specify the wanted DH parameters length
+using:
 
 ---%<-------------------------------------------------------------------------
 ssl_dh_parameters_length = 2048
 ---%<-------------------------------------------------------------------------
 
 By default Dovecot's allowed ciphers list contains:
+
+From version 2.3, you must specify path to DH parameters file using:
+
+---%<-------------------------------------------------------------------------
+ssl_dh=</path/to/dh.pem
+---%<-------------------------------------------------------------------------
+
+To generate new parameters file, you can use openssl gendh 4096 (this will take
+*very long* time, run it on machine with sufficient entropy). You can also
+convert old parameters file v2.2 with command
+
+---%<-------------------------------------------------------------------------
+dd if=/path/to/ssl-parameters.dat bs=1 skip=88 | openssl dh -inform der
+---%<-------------------------------------------------------------------------
+
+This should work most of the times. If not, generate new file.
 
 ---%<-------------------------------------------------------------------------
 ssl_cipher_list = ALL:!LOW:!SSLv2:!EXP:!aNULL
@@ -424,4 +441,4 @@ Testing CA Success
     Verify return code: 0 (ok)
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

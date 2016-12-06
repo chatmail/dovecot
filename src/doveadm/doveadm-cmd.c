@@ -19,6 +19,9 @@ static struct doveadm_cmd *doveadm_commands[] = {
 };
 
 static struct doveadm_cmd_ver2 *doveadm_commands_ver2[] = {
+	&doveadm_cmd_service_stop_ver2,
+	&doveadm_cmd_service_status_ver2,
+	&doveadm_cmd_process_status_ver2,
 	&doveadm_cmd_stop_ver2,
 	&doveadm_cmd_reload_ver2,
 	&doveadm_cmd_stats_dump_ver2,
@@ -173,7 +176,6 @@ void doveadm_cmds_init(void)
 	for (i = 0; i < N_ELEMENTS(doveadm_commands_ver2); i++)
 		doveadm_cmd_register_ver2(doveadm_commands_ver2[i]);
 
-	doveadm_register_auth_commands();
 	doveadm_register_director_commands();
 	doveadm_register_instance_commands();
 	doveadm_register_mount_commands();
@@ -378,18 +380,17 @@ doveadm_build_options(const struct doveadm_cmd_param par[],
 {
 	for(size_t i=0; par[i].name != NULL; i++) {
 		struct option longopt;
+
+		memset(&longopt, 0, sizeof(longopt));
 		longopt.name = par[i].name;
-		longopt.flag = 0;
-		longopt.val = 0;
 		if (par[i].short_opt != '\0') {
 			longopt.val = par[i].short_opt;
 			str_append_c(shortopts, par[i].short_opt);
 			if (par[i].type != CMD_PARAM_BOOL)
 				str_append_c(shortopts, ':');
-		} else {
-			if (par[i].type != CMD_PARAM_BOOL) longopt.has_arg = 1;
-			else longopt.has_arg = 0;
 		}
+		if (par[i].type != CMD_PARAM_BOOL)
+			longopt.has_arg = 1;
 		array_append(longopts, &longopt, 1);
 	}
 	array_append_zero(longopts);

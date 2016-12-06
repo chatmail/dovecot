@@ -120,8 +120,11 @@ doesn't grow beyond a manageable size. Save the below scriptlet as
 
 ---%<-------------------------------------------------------------------------
 /var/log/dovecot*.log {
+  weekly
+  rotate 4
   missingok
   notifempty
+  compress
   delaycompress
   sharedscripts
   postrotate
@@ -171,4 +174,4 @@ all disabled, but they may be useful for debugging.
    That's enough to know if the password is same or different between login
    attempts.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

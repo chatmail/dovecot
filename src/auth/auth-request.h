@@ -71,13 +71,15 @@ struct auth_request {
 	unsigned int client_pid;
 	unsigned int id;
 	time_t last_access;
+	time_t delay_until;
 	pid_t session_pid;
 
-	const char *service, *mech_name, *session_id;
+	const char *service, *mech_name, *session_id, *local_name;
 	struct ip_addr local_ip, remote_ip, real_local_ip, real_remote_ip;
 	in_port_t local_port, remote_port, real_local_port, real_remote_port;
 
 	struct timeout *to_abort, *to_penalty;
+	unsigned int policy_penalty;
 	unsigned int last_penalty;
 	unsigned int initial_response_len;
 	const unsigned char *initial_response;
@@ -142,7 +144,11 @@ struct auth_request {
 	/* userdb_* fields have been set by the passdb lookup, userdb prefetch
 	   will work. */
 	unsigned int userdb_prefetch_set:1;
+	/* userdb lookup's results are from cache */
+	unsigned int userdb_result_from_cache:1;
 	unsigned int stats_sent:1;
+	unsigned int policy_refusal:1;
+	unsigned int policy_processed:1;
 
 	/* ... mechanism specific data ... */
 };

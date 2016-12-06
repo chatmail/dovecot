@@ -623,8 +623,10 @@ redis_transaction_commit(struct dict_transaction_context *_ctx, bool async,
 		redis_input_state_add(dict, REDIS_INPUT_STATE_EXEC);
 		for (i = 0; i < ctx->cmd_count; i++)
 			redis_input_state_add(dict, REDIS_INPUT_STATE_EXEC_REPLY);
-		if (async)
+		if (async) {
+			i_free(ctx);
 			return 1;
+		}
 		redis_wait(dict);
 	}
 	if (callback != NULL)
@@ -788,20 +790,15 @@ static void redis_atomic_inc(struct dict_transaction_context *_ctx,
 struct dict dict_driver_redis = {
 	.name = "redis",
 	{
-		redis_dict_init,
-		redis_dict_deinit,
-		NULL,
-		redis_dict_lookup,
-		NULL,
-		NULL,
-		NULL,
-		redis_transaction_init,
-		redis_transaction_commit,
-		redis_transaction_rollback,
-		redis_set,
-		redis_unset,
-		redis_append,
-		redis_atomic_inc,
-		NULL
+		.init = redis_dict_init,
+		.deinit = redis_dict_deinit,
+		.lookup = redis_dict_lookup,
+		.transaction_init = redis_transaction_init,
+		.transaction_commit = redis_transaction_commit,
+		.transaction_rollback = redis_transaction_rollback,
+		.set = redis_set,
+		.unset = redis_unset,
+		.append = redis_append,
+		.atomic_inc = redis_atomic_inc,
 	}
 };

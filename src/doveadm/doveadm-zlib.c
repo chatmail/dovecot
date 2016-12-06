@@ -70,7 +70,8 @@ static void cmd_dump_imapzlib(int argc ATTR_UNUSED, char *argv[])
 	i_stream_unref(&input);
 
 	while (i_stream_read_data(input2, &data, &size, 0) != -1) {
-		fwrite(data, 1, size, stdout);
+		if (fwrite(data, 1, size, stdout) != size)
+			break;
 		i_stream_skip(input2, size);
 	}
 	i_stream_unref(&input2);
@@ -122,8 +123,8 @@ static void server_input(struct client *client)
 
 	if (i_stream_read(client->input) == -1) {
 		if (client->input->stream_errno != 0) {
-			errno = client->input->stream_errno;
-			i_fatal("read(server) failed: %m");
+			i_fatal("read(server) failed: %s",
+				i_stream_get_error(client->input));
 		}
 
 		i_info("Server disconnected");

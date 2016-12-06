@@ -129,7 +129,7 @@ index_attachment_open_ostream(struct istream_attachment_info *info,
 
 static int
 index_attachment_close_ostream(struct ostream *output, bool success,
-			       const char **error_r, void *context)
+			       const char **error, void *context)
 {
 	struct mail_save_context *ctx = context;
 	struct mail_save_attachment *attach = ctx->data.attach;
@@ -138,11 +138,11 @@ index_attachment_close_ostream(struct ostream *output, bool success,
 	i_assert(attach->cur_file != NULL);
 
 	if (ret < 0)
-		fs_write_stream_abort(attach->cur_file, &output);
+		fs_write_stream_abort_error(attach->cur_file, &output, "%s", *error);
 	else if (fs_write_stream_finish(attach->cur_file, &output) < 0) {
-		*error_r = t_strdup_printf("Couldn't create attachment %s: %s",
-					   fs_file_path(attach->cur_file),
-					   fs_file_last_error(attach->cur_file));
+		*error = t_strdup_printf("Couldn't create attachment %s: %s",
+					 fs_file_path(attach->cur_file),
+					 fs_file_last_error(attach->cur_file));
 		ret = -1;
 	}
 	fs_file_deinit(&attach->cur_file);
@@ -196,10 +196,9 @@ static int save_check_write_error(struct mail_storage *storage,
 	if (output->last_failed_errno == 0)
 		return 0;
 
-	errno = output->last_failed_errno;
 	if (!mail_storage_set_error_from_errno(storage)) {
-		mail_storage_set_critical(storage, "write(%s) failed: %m",
-					  o_stream_get_name(output));
+		mail_storage_set_critical(storage, "write(%s) failed: %s",
+			o_stream_get_name(output), o_stream_get_error(output));
 	}
 	return -1;
 }
@@ -217,7 +216,7 @@ int index_attachment_save_continue(struct mail_save_context *ctx)
 
 	do {
 		ret = i_stream_read(attach->input);
-		if (ret > 0) {
+		if (ret > 0 || ret == -2) {
 			data = i_stream_get_data(attach->input, &size);
 			o_stream_nsend(ctx->data.output, data, size);
 			i_stream_skip(attach->input, size);

@@ -25,4 +25,4 @@ also be thought of as a feature, so if you want to update a different timestamp
 for user when new mails are delivered, you can do that by enabling the
 last_login plugin also for lda/lmtp and changing the last_login_key setting.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

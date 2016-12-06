@@ -321,7 +321,9 @@ int index_mail_get_parts(struct mail *_mail, struct message_part **parts_r)
 	}
 
 	if (data->parser_ctx == NULL) {
-		if (index_mail_parse_headers(mail, NULL) < 0)
+		const char *reason =
+			index_mail_cache_reason(_mail, "mime parts");
+		if (index_mail_parse_headers(mail, NULL, reason) < 0)
 			return -1;
 	}
 
@@ -510,7 +512,8 @@ int index_mail_get_virtual_size(struct mail *_mail, uoff_t *size_r)
 		return 0;
 
 	old_offset = data->stream == NULL ? 0 : data->stream->v_offset;
-	if (mail_get_stream(_mail, &hdr_size, &body_size, &input) < 0)
+	if (mail_get_stream_because(_mail, &hdr_size, &body_size,
+			index_mail_cache_reason(_mail, "virtual size"), &input) < 0)
 		return -1;
 	i_stream_seek(data->stream, old_offset);
 
@@ -905,8 +908,10 @@ index_mail_find_first_text_mime_part(struct message_part *parts)
 
 			i_assert(sub_body_data != NULL);
 
-			if (strcasecmp(sub_body_data->content_type, "\"text\"") == 0) {
-				if (strcasecmp(sub_body_data->content_subtype, "\"plain\"") == 0)
+			if (sub_body_data->content_type == NULL ||
+			    strcasecmp(sub_body_data->content_type, "\"text\"") == 0) {
+				if (sub_body_data->content_subtype == NULL ||
+				    strcasecmp(sub_body_data->content_subtype, "\"plain\"") == 0)
 					return part;
 				if (strcasecmp(sub_body_data->content_subtype, "\"html\"") == 0)
 					html_part = part;
@@ -943,7 +948,8 @@ static int index_mail_write_body_snippet(struct index_mail *mail)
 	}
 
 	old_offset = mail->data.stream == NULL ? 0 : mail->data.stream->v_offset;
-	if (mail_get_stream(&mail->mail.mail, NULL, NULL, &input) < 0)
+	const char *reason = index_mail_cache_reason(&mail->mail.mail, "snippet");
+	if (mail_get_stream_because(&mail->mail.mail, NULL, NULL, reason, &input) < 0)
 		return -1;
 	i_assert(mail->data.stream != NULL);
 
@@ -1075,9 +1081,11 @@ void index_mail_stream_log_failure_for(struct index_mail *mail,
 			return;
 	}
 	mail_storage_set_critical(_mail->box->storage,
-		"read(%s) failed: %s (uid=%u, box=%s)",
+		"read(%s) failed: %s (uid=%u, box=%s, read reason=%s)",
 		i_stream_get_name(input), i_stream_get_error(input),
-		_mail->uid, mailbox_get_vname(_mail->box));
+		_mail->uid, mailbox_get_vname(_mail->box),
+		mail->mail.get_stream_reason == NULL ? "" :
+		mail->mail.get_stream_reason);
 }
 
 static int index_mail_parse_body(struct index_mail *mail,
@@ -1140,6 +1148,14 @@ int index_mail_init_stream(struct index_mail *mail,
 	bool has_nuls;
 	int ret;
 
+	if (_mail->box->storage->user->mail_debug &&
+	    mail->mail.get_stream_reason != NULL &&
+	    mail->mail.get_stream_reason[0] != '\0') {
+		i_debug("Mailbox %s: Opened mail UID=%u because: %s",
+			_mail->box->vname, _mail->uid,
+			mail->mail.get_stream_reason);
+	}
+
 	if (!data->initialized_wrapper_stream &&
 	    _mail->transaction->stats_track) {
 		input = i_stream_create_mail(_mail, data->stream,
@@ -1165,7 +1181,7 @@ int index_mail_init_stream(struct index_mail *mail,
 		if (!data->hdr_size_set) {
 			if ((data->access_part & PARSE_HDR) != 0) {
 				(void)get_cached_parts(mail);
-				if (index_mail_parse_headers(mail, NULL) < 0)
+				if (index_mail_parse_headers(mail, NULL, "parse header") < 0)
 					return -1;
 			} else {
 				if (message_get_header_size(data->stream,
@@ -1235,10 +1251,12 @@ static int index_mail_parse_bodystructure(struct index_mail *mail,
 		    !data->save_bodystructure_body ||
 		    field == MAIL_CACHE_BODY_SNIPPET) {
 			/* we haven't parsed the header yet */
+			const char *reason =
+				index_mail_cache_reason(&mail->mail.mail, "bodystructure");
 			data->save_bodystructure_header = TRUE;
 			data->save_bodystructure_body = TRUE;
 			(void)get_cached_parts(mail);
-			if (index_mail_parse_headers(mail, NULL) < 0) {
+			if (index_mail_parse_headers(mail, NULL, reason) < 0) {
 				data->save_bodystructure_header = TRUE;
 				return -1;
 			}
@@ -1499,6 +1517,8 @@ static void index_mail_close_streams_full(struct index_mail *mail, bool closing)
 	if (data->filter_stream != NULL)
 		i_stream_unref(&data->filter_stream);
 	if (data->stream != NULL) {
+		struct istream *orig_stream = data->stream;
+
 		data->destroying_stream = TRUE;
 		if (!closing && data->destroy_callback_set) {
 			/* we're replacing the stream with a new one. it's
@@ -1508,12 +1528,13 @@ static void index_mail_close_streams_full(struct index_mail *mail, bool closing)
 				index_mail_stream_destroy_callback);
 		}
 		i_stream_unref(&data->stream);
- 		if (closing) {
-			/* there must be no references to the mail when the
-			   mail is being closed. */
-			i_assert(!mail->data.destroying_stream);
-		} else {
+		/* there must be no references to the mail when the
+		   mail is being closed. */
+		if (!closing)
 			data->destroying_stream = FALSE;
+		else if (mail->data.destroying_stream) {
+			i_panic("Input stream %s unexpectedly has references",
+				i_stream_get_name(orig_stream));
 		}
 
 		data->initialized_wrapper_stream = FALSE;
@@ -1730,7 +1751,7 @@ void index_mail_update_access_parts_post(struct mail *_mail)
 		hdr = mail_index_get_header(_mail->transaction->view);
 		if (!_mail->saving && _mail->uid < hdr->next_uid) {
 			if ((data->access_part & (READ_BODY | PARSE_BODY)) != 0)
-				(void)mail_get_stream(_mail, NULL, NULL, &input);
+				(void)mail_get_stream_because(_mail, NULL, NULL, "access", &input);
 			else
 				(void)mail_get_hdr_stream(_mail, NULL, &input);
 		}
@@ -1793,7 +1814,7 @@ bool index_mail_prefetch(struct mail *_mail)
 	}
 
 	if (mail->data.stream == NULL) {
-		(void)mail_get_stream(_mail, NULL, NULL, &input);
+		(void)mail_get_stream_because(_mail, NULL, NULL, "prefetch", &input);
 		if (mail->data.stream == NULL)
 			return TRUE;
 	}
@@ -2092,7 +2113,7 @@ static void index_mail_parse(struct mail *mail, bool parse_body)
 	struct index_mail *imail = (struct index_mail *)mail;
 
 	imail->data.access_part |= PARSE_HDR;
-	if (index_mail_parse_headers(imail, NULL) == 0) {
+	if (index_mail_parse_headers(imail, NULL, "precache") == 0) {
 		if (parse_body) {
 			imail->data.access_part |= PARSE_BODY;
 			(void)index_mail_parse_body(imail, 0);
@@ -2194,6 +2215,7 @@ void index_mail_set_cache_corrupted_reason(struct mail *mail,
 			"Broken %s for mail UID %u in mailbox %s: %s",
 			field_name, mail->uid, mail->box->vname, reason);
 	}
+	mail_storage_set_internal_error(mail->box->storage);
 }
 
 int index_mail_opened(struct mail *mail ATTR_UNUSED,
@@ -2214,4 +2236,11 @@ void index_mail_save_finish(struct mail_save_context *ctx)
 		imail->data.from_envelope =
 			p_strdup(imail->mail.data_pool, ctx->data.from_envelope);
 	}
+}
+
+const char *index_mail_cache_reason(struct mail *mail, const char *reason)
+{
+	const char *cache_reason =
+		mail_cache_get_missing_reason(mail->transaction->cache_view, mail->seq);
+	return t_strdup_printf("%s (%s)", reason, cache_reason);
 }

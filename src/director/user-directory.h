@@ -1,27 +1,8 @@
 #ifndef USER_DIRECTORY_H
 #define USER_DIRECTORY_H
 
-enum user_kill_state {
-	/* User isn't being killed */
-	USER_KILL_STATE_NONE,
-	/* We're still killing the user's connections */
-	USER_KILL_STATE_KILLING,
-	/* Like above, but our left side already announced it was finished
-	   with killing its user connections */
-	USER_KILL_STATE_KILLING_NOTIFY_RECEIVED,
-	/* We're done killing, but we have to wait for the left side to
-	   finish killing its user connections before sending USER-KILLED to
-	   our right side */
-	USER_KILL_STATE_KILLED_WAITING_FOR_NOTIFY,
-	/* We're done killing, but waiting for USER-KILLED-EVERYWHERE
-	   notification until this state gets reset. */
-	USER_KILL_STATE_KILLED_WAITING_FOR_EVERYONE,
-	/* Wait for a while for the user connections to actually die. Note that
-	   only at this stage we can be sure that all the directors know about
-	   the user move (although it could be earlier if we added a new
-	   USER-MOVED notification). */
-	USER_KILL_STATE_DELAY
-};
+#define USER_IS_BEING_KILLED(user) \
+	((user)->kill_ctx != NULL)
 
 struct user {
 	/* sorted by time */
@@ -35,12 +16,9 @@ struct user {
 
 	struct mail_host *host;
 
-	/* Move timeout to make sure user's connections won't silently hang
-	   indefinitely if there is some trouble moving it. */
-	struct timeout *to_move;
-	/* If not USER_KILL_STATE_NONE, don't allow new connections until all
+	/* If non-NULL, don't allow new connections until all
 	   directors have killed the user's connections. */
-	enum user_kill_state kill_state;
+	struct director_kill_context *kill_ctx;
 
 	/* TRUE, if the user's timestamp was close to being expired and we're
 	   now doing a ring-wide sync for this user to make sure we don't
@@ -51,7 +29,8 @@ struct user {
 /* Create a new directory. Users are dropped if their time gets older
    than timeout_secs. */
 struct user_directory *
-user_directory_init(unsigned int timeout_secs, const char *username_hash_fmt);
+user_directory_init(unsigned int timeout_secs, const char *username_hash_fmt,
+		    void (*user_free_hook)(struct user *));
 void user_directory_deinit(struct user_directory **dir);
 
 /* Returns the number of users currently in directory. */
@@ -81,6 +60,9 @@ bool user_directory_user_is_recently_updated(struct user_directory *dir,
 bool user_directory_user_is_near_expiring(struct user_directory *dir,
 					  struct user *user);
 
+/* Iterate through users in the directory. It's safe to modify user directory
+   while iterators are running. The moved/removed users will just be skipped
+   over. */
 struct user_directory_iter *
 user_directory_iter_init(struct user_directory *dir);
 struct user *user_directory_iter_next(struct user_directory_iter *iter);

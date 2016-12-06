@@ -2,8 +2,7 @@ Doveadm HTTP API
 ================
 
 Doveadm HTTP API is available since v2.2.22. It is considered *experimental* in
-v2.2.22, non-experimental version has not been yet announced. It lets you
-perform doveadm commands over HTTP transport.
+v2.2.22. It lets you perform doveadm commands over HTTP transport.
 
 Configuration
 -------------
@@ -28,10 +27,11 @@ either define 'doveadm_password', or 'doveadm_api_key'. With
 release. With API Key you are expected to send
 
 ---%<-------------------------------------------------------------------------
-Authorization: X-Doveadm-API Base64(apikey)
+Authorization: X-Dovecot-API Base64(apikey)
 ---%<-------------------------------------------------------------------------
 
-header to access the API.
+header to access the API. (In v2.2.22-2.2.23, this key was incorrectly
+"X-Doveadm-API".)
 
 Usage
 -----
@@ -102,4 +102,4 @@ The logs will indicated execute command(s) and also Apache access.log format
 strings on requests. In case of fatal errors, the access.log string might be
 missing.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:43)

@@ -27,6 +27,11 @@ void timing_deinit(struct timing **_timing)
 	i_free_and_null(*_timing);
 }
 
+void timing_reset(struct timing *timing)
+{
+	memset(timing, 0, sizeof(*timing));
+}
+
 void timing_add_usecs(struct timing *timing, uint64_t usecs)
 {
 	if (timing->count < TIMING_SUBSAMPLING_BUFFER) {
@@ -85,7 +90,11 @@ static void timing_ensure_sorted(struct timing *timing)
 {
 	if (timing->sorted)
 		return;
-	i_qsort(timing->samples, timing->count, sizeof(*timing->samples),
+
+	unsigned int count = (timing->count < TIMING_SUBSAMPLING_BUFFER)
+		? timing->count
+		: TIMING_SUBSAMPLING_BUFFER;
+	i_qsort(timing->samples, count, sizeof(*timing->samples),
 		uint64_cmp);
 	timing->sorted = TRUE;
 }

@@ -274,9 +274,13 @@ static int lmtp_client_send_data_cmd(struct lmtp_client *client)
 	if (client->rcpt_next_receive_idx < array_count(&client->recipients))
 		return 0;
 
-	if (client->global_fail_string != NULL || !client->rcpt_to_successes) {
+	if (client->global_fail_string != NULL) {
 		lmtp_client_fail_full(client, client->global_fail_string,
 				      client->global_remote_failure);
+		return -1;
+	} else if (!client->rcpt_to_successes) {
+		/* This error string shouldn't become visible anywhere */
+		lmtp_client_fail_full(client, "No valid recipients", FALSE);
 		return -1;
 	} else {
 		client->input_state++;
@@ -604,8 +608,8 @@ static void lmtp_client_input(struct lmtp_client *client)
 		lmtp_client_fail(client,
 				 "501 5.5.4 Command reply line too long");
 	} else if (client->input->stream_errno != 0) {
-		errno = client->input->stream_errno;
-		i_error("lmtp client: read() failed: %m");
+		i_error("lmtp client: read() failed: %s",
+			i_stream_get_error(client->input));
 		lmtp_client_fail(client, ERRSTR_TEMP_REMOTE_FAILURE
 				 " (read failure)");
 	} else if (client->input->eof) {

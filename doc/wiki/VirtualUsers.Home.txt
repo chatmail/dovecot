@@ -29,9 +29,9 @@ Some uses for home directory are:
 Home vs. mail directory
 -----------------------
 
-Home directory shouldn't be the same as mail directory. It's possible to do
-that, but you might run into trouble with it sooner or later. Some problems
-with this are:
+Home directory shouldn't be the same as mail directory with mbox or Maildir
+formats (but with dbox/obox it's fine). It's possible to do that, but you might
+run into trouble with it sooner or later. Some problems with this are:
 
  * Non-mailbox files may show up as mailboxes.
     * If you see this with Maildir, 'maildir_stat_dirs=yes' hides them.
@@ -86,4 +86,4 @@ user_attrs = .., mailDirectory=home=/var/vmail/%$
 
 Then just use 'mail_location = maildir:~/Maildir'.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

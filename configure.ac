@@ -2,9 +2,10 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.2.24],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv24($PACKAGE_VERSION)", [Dovecot ABI version])
-
+AC_INIT([Dovecot],[2.2.26.0],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv26($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_CONFIG_MACRO_DIR([m4])
+AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_SRCDIR([src])
 
 AM_INIT_AUTOMAKE([foreign])
@@ -1007,6 +1008,24 @@ if test $i_cv_signed_time_t = yes; then
   AC_DEFINE(TIME_T_SIGNED,, [Define if your time_t is signed])
 fi
 
+AC_CACHE_CHECK([if we can use C99 static in array sizes],i_cv_c99_static_arrays,[
+  AC_TRY_COMPILE([
+    void foo(unsigned char [static 20]);
+  ], [
+  ], [
+    i_cv_c99_static_arrays=yes
+  ], [
+    i_cv_c99_static_arrays=no
+  ])
+])
+
+if test $i_cv_c99_static_arrays = yes; then
+  static_value=static
+else
+  static_value=
+fi
+AC_DEFINE_UNQUOTED(STATIC_ARRAY, $static_value, [C99 static array])
+
 dnl Our implementation of AC_C_FLEXIBLE_ARRAY_MEMBER.
 dnl Use it until autoconf 2.61+ becomes more widely used
 AC_CACHE_CHECK([if we can use C99-like flexible array members],i_cv_c99_flex_arrays,[
@@ -1658,6 +1677,7 @@ dnl ** SSL
 dnl **
 
 have_ssl=no
+build_dcrypt_openssl=no
 
 if test $want_openssl != no && test $have_ssl = no; then
   if test "$PKG_CONFIG" != "" && $PKG_CONFIG --exists openssl 2>/dev/null; then
@@ -1685,6 +1705,7 @@ if test $want_openssl != no && test $have_ssl = no; then
   if test "$have_openssl" = "yes"; then
     AC_DEFINE(HAVE_OPENSSL,, [Build with OpenSSL support])
     have_ssl="yes (OpenSSL)"
+    build_dcrypt_openssl="no"
 
     AC_CHECK_LIB(ssl, SSL_get_current_compression, [
       AC_DEFINE(HAVE_SSL_COMPRESSION,, [Build with OpenSSL compression])
@@ -1692,9 +1713,21 @@ if test $want_openssl != no && test $have_ssl = no; then
     AC_CHECK_LIB(ssl, SSL_get_servername, [
       AC_DEFINE(HAVE_SSL_GET_SERVERNAME,, [Build with TLS hostname support])
     ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, SSL_COMP_free_compression_methods, [
+      AC_DEFINE(HAVE_SSL_COMP_FREE_COMPRESSION_METHODS,, [Build with SSL_COMP_free_compression_methods() support])
+    ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, [EVP_PKEY_CTX_new_id], [have_evp_pkey_ctx_new_id="yes"],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, [EC_KEY_new], [have_ec_key_new="yes"],, $SSL_LIBS)
+    if test "$have_evp_pkey_ctx_new_id" = "yes" && test "$have_ec_key_new" = "yes"; then
+      build_dcrypt_openssl="yes"
+    else
+      AC_MSG_WARN([No ECC support in OpenSSL - not enabling dcrypt])
+    fi
   fi
 fi
+
 AM_CONDITIONAL(BUILD_OPENSSL, test "$have_openssl" = "yes")
+AM_CONDITIONAL(BUILD_DCRYPT_OPENSSL, test "$build_dcrypt_openssl" = "yes")
 
 if test $want_gnutls != no && test $have_ssl = no; then
   AC_CHECK_LIB(gnutls, gnutls_global_init, [
@@ -2044,7 +2077,7 @@ else
   fi
 fi
 AM_CONDITIONAL(LDAP_PLUGIN, test "$have_ldap_plugin" = "yes")
-AM_CONDITIONAL(HAVE_LDAP, test "$want_ldap" = "yes")
+AM_CONDITIONAL(HAVE_LDAP, test "$want_ldap" != "no")
 dict_drivers=
 
 if test $want_db != no; then
@@ -2516,7 +2549,9 @@ dnl **
 dnl ** Shared libraries usage
 dnl **
 
-LIBDOVECOT_LA_LIBS='$(top_builddir)/src/lib-dict-extra/libdict_extra.la $(top_builddir)/src/lib-master/libmaster.la $(top_builddir)/src/lib-settings/libsettings.la $(top_builddir)/src/lib-stats/libstats.la $(top_builddir)/src/lib-http/libhttp.la $(top_builddir)/src/lib-fs/libfs.la $(top_builddir)/src/lib-dict/libdict.la $(top_builddir)/src/lib-dns/libdns.la $(top_builddir)/src/lib-imap/libimap.la $(top_builddir)/src/lib-mail/libmail.la $(top_builddir)/src/lib-sasl/libsasl.la $(top_builddir)/src/lib-auth/libauth.la $(top_builddir)/src/lib-charset/libcharset.la $(top_builddir)/src/lib-ssl-iostream/libssl_iostream.la $(top_builddir)/src/lib-test/libtest.la $(top_builddir)/src/lib/liblib.la'
+
+LIBDOVECOT_LA_LIBS='$(top_builddir)/src/lib-dict-extra/libdict_extra.la $(top_builddir)/src/lib-master/libmaster.la $(top_builddir)/src/lib-settings/libsettings.la $(top_builddir)/src/lib-stats/libstats.la $(top_builddir)/src/lib-http/libhttp.la $(top_builddir)/src/lib-fs/libfs.la $(top_builddir)/src/lib-dict/libdict.la $(top_builddir)/src/lib-dns/libdns.la $(top_builddir)/src/lib-imap/libimap.la $(top_builddir)/src/lib-mail/libmail.la $(top_builddir)/src/lib-sasl/libsasl.la $(top_builddir)/src/lib-auth/libauth.la $(top_builddir)/src/lib-charset/libcharset.la $(top_builddir)/src/lib-ssl-iostream/libssl_iostream.la $(top_builddir)/src/lib-dcrypt/libdcrypt.la $(top_builddir)/src/lib-program-client/libprogram_client.la $(top_builddir)/src/lib-test/libtest.la $(top_builddir)/src/lib/liblib.la'
+
 if test "$want_shared_libs" = "yes"; then
   LIBDOVECOT_DEPS='$(top_builddir)/src/lib-dovecot/libdovecot.la'
   LIBDOVECOT="$LIBDOVECOT_DEPS \$(MODULE_LIBS)"
@@ -2828,14 +2863,7 @@ fi
 LDFLAGS="\$(NOPLUGIN_LDFLAGS) $LDFLAGS"
 AC_SUBST(NOPLUGIN_LDFLAGS)
 
-if test "$with_gnu_ld" = yes -a "$want_shared_libs" = "no"; then
-  # libtool can't handle using whole-archive flags, so we need to do this
-  # with a CC wrapper.. shouldn't be much of a problem, since most people
-  # are building with shared libs.
-  sed "s:@CC@:$CC:" < $srcdir/cc-wrapper.sh.in > cc-wrapper.sh
-  chmod +x cc-wrapper.sh
-  CC=`pwd`/cc-wrapper.sh
-fi
+DC_CC_WRAPPER
 
 if test "$docdir" = ""; then
   dnl docdir supported only by autoconf v2.59c and later
@@ -2860,6 +2888,7 @@ src/lib-sql/Makefile
 src/lib-auth/Makefile
 src/lib-charset/Makefile
 src/lib-compression/Makefile
+src/lib-dcrypt/Makefile
 src/lib-dict/Makefile
 src/lib-dict-extra/Makefile
 src/lib-dns/Makefile
@@ -2876,6 +2905,7 @@ src/lib-ldap/Makefile
 src/lib-mail/Makefile
 src/lib-master/Makefile
 src/lib-ntlm/Makefile
+src/lib-program-client/Makefile
 src/lib-otp/Makefile
 src/lib-dovecot/Makefile
 src/lib-sasl/Makefile
@@ -2928,6 +2958,7 @@ src/plugins/Makefile
 src/plugins/acl/Makefile
 src/plugins/imap-acl/Makefile
 src/plugins/autocreate/Makefile
+src/plugins/dict-ldap/Makefile
 src/plugins/expire/Makefile
 src/plugins/fs-compress/Makefile
 src/plugins/fts/Makefile
@@ -2952,6 +2983,7 @@ src/plugins/stats/Makefile
 src/plugins/imap-stats/Makefile
 src/plugins/trash/Makefile
 src/plugins/virtual/Makefile
+src/plugins/welcome/Makefile
 src/plugins/zlib/Makefile
 src/plugins/imap-zlib/Makefile
 stamp.h
@@ -2976,6 +3008,8 @@ echo "I/O notifys .... : $have_notify"
 echo "SSL ............ : $have_ssl"
 echo "GSSAPI ......... : $have_gssapi"
 echo "passdbs ........ :$passdb"
+echo "dcrypt ..........: $build_dcrypt_openssl"
+
 if test "$not_passdb" != ""; then
   echo "                 :$not_passdb"
 fi

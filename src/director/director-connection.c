@@ -36,6 +36,7 @@
 #include "ostream.h"
 #include "str.h"
 #include "strescape.h"
+#include "time-util.h"
 #include "master-service.h"
 #include "mail-host.h"
 #include "director.h"
@@ -99,6 +100,8 @@ struct director_connection {
 	time_t created;
 	unsigned int minor_version;
 
+	struct timeval last_input, last_output;
+
 	/* for incoming connections the director host isn't known until
 	   ME-line is received */
 	struct director_host *host;
@@ -128,9 +131,9 @@ struct director_connection {
 	unsigned int wrong_host:1;
 	unsigned int verifying_left:1;
 	unsigned int users_unsorted:1;
-	unsigned int done_pending:1;
 };
 
+static void director_finish_sending_handshake(struct director_connection *conn);
 static void director_connection_disconnected(struct director_connection **conn,
 					     const char *reason);
 static void director_connection_reconnect(struct director_connection **conn,
@@ -313,6 +316,25 @@ static bool director_has_outgoing_connections(struct director *dir)
 	return FALSE;
 }
 
+static void director_send_delayed_syncs(struct director *dir)
+{
+	struct director_host *const *hostp;
+
+	i_assert(dir->right != NULL);
+
+	dir_debug("director(%s): Sending delayed SYNCs", dir->right->name);
+	array_foreach(&dir->dir_hosts, hostp) {
+		if ((*hostp)->delayed_sync_seq == 0)
+			continue;
+
+		director_sync_send(dir, *hostp, (*hostp)->delayed_sync_seq,
+				   (*hostp)->delayed_sync_minor_version,
+				   (*hostp)->delayed_sync_timestamp,
+				   (*hostp)->delayed_sync_hosts_hash);
+		(*hostp)->delayed_sync_seq = 0;
+	}
+}
+
 static bool director_connection_assign_right(struct director_connection *conn)
 {
 	struct director *dir = conn->dir;
@@ -340,6 +362,7 @@ static bool director_connection_assign_right(struct director_connection *conn)
 	i_free(conn->name);
 	conn->name = i_strdup_printf("%s/right", conn->host->name);
 	director_connection_assigned(conn);
+	director_send_delayed_syncs(dir);
 	return TRUE;
 }
 
@@ -474,11 +497,14 @@ static bool director_cmd_me(struct director_connection *conn,
 static bool
 director_user_refresh(struct director_connection *conn,
 		      unsigned int username_hash, struct mail_host *host,
-		      time_t timestamp, bool weak, struct user **user_r)
+		      time_t timestamp, bool weak, bool *forced_r,
+		      struct user **user_r)
 {
 	struct director *dir = conn->dir;
 	struct user *user;
 	bool ret = FALSE, unset_weak_user = FALSE;
+
+	*forced_r = FALSE;
 
 	user = user_directory_lookup(dir->users, username_hash);
 	if (user == NULL) {
@@ -523,8 +549,7 @@ director_user_refresh(struct director_connection *conn,
 			  "replacing host %s with %s", username_hash,
 			  net_ip2addr(&user->host->ip), net_ip2addr(&host->ip));
 		ret = TRUE;
-	} else if (user->kill_state != USER_KILL_STATE_NONE &&
-		   user->kill_state < USER_KILL_STATE_DELAY) {
+	} else if (USER_IS_BEING_KILLED(user)) {
 		/* user is still being moved - ignore conflicting host updates
 		   from other directors who don't yet know about the move. */
 		dir_debug("user refresh: %u is being moved, "
@@ -547,10 +572,12 @@ director_user_refresh(struct director_connection *conn,
 			str_printfa(str, ",handshaking,recv_ts=%ld",
 				    (long)timestamp);
 		}
-		if (user->to_move != NULL)
-			str_append(str, ",moving");
-		if (user->kill_state != USER_KILL_STATE_NONE)
-			str_printfa(str, ",kill_state=%d", user->kill_state);
+		if (USER_IS_BEING_KILLED(user)) {
+			if (user->kill_ctx->to_move != NULL)
+				str_append(str, ",moving");
+			str_printfa(str, ",kill_state=%s",
+				    user_kill_state_names[user->kill_ctx->kill_state]);
+		}
 		str_append_c(str, ')');
 		i_error("%s", str_c(str));
 
@@ -560,7 +587,10 @@ director_user_refresh(struct director_connection *conn,
 		if (net_ip_cmp(&user->host->ip, &host->ip) > 0) {
 			/* change the host. we'll also need to remove the user
 			   from the old host's user_count, because we can't
-			   keep track of the user for more than one host */
+			   keep track of the user for more than one host.
+
+			   send the updated USER back to the sender as well. */
+			*forced_r = TRUE;
 		} else {
 			/* keep the host */
 			host = user->host;
@@ -603,7 +633,7 @@ director_handshake_cmd_user(struct director_connection *conn,
 	struct ip_addr ip;
 	struct mail_host *host;
 	struct user *user;
-	bool weak;
+	bool weak, forced;
 
 	if (str_array_length(args) < 3 ||
 	    str_to_uint(args[0], &username_hash) < 0 ||
@@ -622,7 +652,7 @@ director_handshake_cmd_user(struct director_connection *conn,
 	}
 
 	(void)director_user_refresh(conn, username_hash, host,
-				    timestamp, weak, &user);
+				    timestamp, weak, &forced, &user);
 	if (user->timestamp < timestamp) {
 		conn->users_unsorted = TRUE;
 		user->timestamp = timestamp;
@@ -638,6 +668,7 @@ director_cmd_user(struct director_connection *conn,
 	struct ip_addr ip;
 	struct mail_host *host;
 	struct user *user;
+	bool forced;
 
 	/* NOTE: if more parameters are added, update also
 	   CMD_IS_USER_HANDHAKE() macro */
@@ -655,9 +686,11 @@ director_cmd_user(struct director_connection *conn,
 	}
 
 	if (director_user_refresh(conn, username_hash,
-				  host, ioloop_time, FALSE, &user)) {
+				  host, ioloop_time, FALSE, &forced, &user)) {
+		struct director_host *src_host =
+			forced ? conn->dir->self_host : conn->host;
 		i_assert(!user->weak);
-		director_update_user(conn->dir, conn->host, user);
+		director_update_user(conn->dir, src_host, user);
 	}
 	return TRUE;
 }
@@ -743,6 +776,8 @@ director_cmd_host_hand_start(struct director_connection *conn,
 
 	if (remote_ring_completed && !conn->dir->ring_handshaked) {
 		/* clear everything we have and use only what remote sends us */
+		dir_debug("%s: We're joining a ring - replace all hosts",
+			  conn->name);
 		hosts = mail_hosts_get(conn->dir->mail_hosts);
 		while (array_count(hosts) > 0) {
 			hostp = array_idx(hosts, 0);
@@ -750,16 +785,20 @@ director_cmd_host_hand_start(struct director_connection *conn,
 		}
 	} else if (!remote_ring_completed && conn->dir->ring_handshaked) {
 		/* ignore whatever remote sends */
+		dir_debug("%s: Remote is joining our ring - "
+			  "ignore all remote HOSTs", conn->name);
 		conn->ignore_host_events = TRUE;
+	} else {
+		dir_debug("%s: Merge rings' hosts", conn->name);
 	}
 	conn->handshake_sending_hosts = TRUE;
 	return TRUE;
 }
 
 static int
-director_cmd_is_seen(struct director_connection *conn,
-		     const char *const **_args,
-		     struct director_host **host_r)
+director_cmd_is_seen_full(struct director_connection *conn,
+			  const char *const **_args, unsigned int *seq_r,
+			  struct director_host **host_r)
 {
 	const char *const *args = *_args;
 	struct ip_addr ip;
@@ -775,6 +814,7 @@ director_cmd_is_seen(struct director_connection *conn,
 		return -1;
 	}
 	*_args = args + 3;
+	*seq_r = seq;
 
 	host = director_host_lookup(conn->dir, &ip, port);
 	if (host == NULL || host->removed) {
@@ -793,6 +833,16 @@ director_cmd_is_seen(struct director_connection *conn,
 	return 0;
 }
 
+static int
+director_cmd_is_seen(struct director_connection *conn,
+		     const char *const **_args,
+		     struct director_host **host_r)
+{
+	unsigned int seq;
+
+	return director_cmd_is_seen_full(conn, _args, &seq, host_r);
+}
+
 static bool
 director_cmd_user_weak(struct director_connection *conn,
 		       const char *const *args)
@@ -803,7 +853,7 @@ director_cmd_user_weak(struct director_connection *conn,
 	struct mail_host *host;
 	struct user *user;
 	struct director_host *src_host = conn->host;
-	bool weak = TRUE, weak_forward = FALSE;
+	bool weak = TRUE, weak_forward = FALSE, forced;
 	int ret;
 
 	/* note that unlike other commands we don't want to just ignore
@@ -851,8 +901,10 @@ director_cmd_user_weak(struct director_connection *conn,
 	}
 
 	if (director_user_refresh(conn, username_hash,
-				  host, ioloop_time, weak, &user) ||
+				  host, ioloop_time, weak, &forced, &user) ||
 	    weak_forward) {
+		if (forced)
+			src_host = conn->dir->self_host;
 		if (!user->weak)
 			director_update_user(conn->dir, src_host, user);
 		else {
@@ -927,6 +979,11 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 
 			str_printfa(str, "director(%s): Host %s is being updated before previous update had finished (",
 				  conn->name, net_ip2addr(&host->ip));
+			if (host->down != down &&
+			    host->last_updown_change > last_updown_change) {
+				/* our host has a newer change. preserve it. */
+				down = host->down;
+			}
 			if (host->down != down) {
 				if (host->down)
 					str_append(str, "down -> up");
@@ -942,10 +999,6 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 			str_append(str, ") - ");
 
 			vhost_count = I_MIN(vhost_count, host->vhost_count);
-			if (host->down != down) {
-				if (host->last_updown_change <= last_updown_change)
-					down = host->last_updown_change;
-			}
 			last_updown_change = I_MAX(last_updown_change,
 						   host->last_updown_change);
 			str_printfa(str, "setting to state=%s vhosts=%u",
@@ -1086,6 +1139,25 @@ director_cmd_user_kick(struct director_connection *conn,
 }
 
 static bool
+director_cmd_user_kick_alt(struct director_connection *conn,
+			   const char *const *args)
+{
+	struct director_host *dir_host;
+	int ret;
+
+	if ((ret = director_cmd_is_seen(conn, &args, &dir_host)) != 0)
+		return ret > 0;
+
+	if (str_array_length(args) != 2) {
+		director_cmd_error(conn, "Invalid parameters");
+		return FALSE;
+	}
+
+	director_kick_user_alt(conn->dir, conn->host, dir_host, args[0], args[1]);
+	return TRUE;
+}
+
+static bool
 director_cmd_user_kick_hash(struct director_connection *conn,
 			    const char *const *args)
 {
@@ -1130,16 +1202,24 @@ director_cmd_user_killed_everywhere(struct director_connection *conn,
 				    const char *const *args)
 {
 	struct director_host *dir_host;
-	unsigned int username_hash;
+	unsigned int seq, username_hash;
 	int ret;
 
-	if ((ret = director_cmd_is_seen(conn, &args, &dir_host)) != 0)
-		return ret > 0;
+	if ((ret = director_cmd_is_seen_full(conn, &args, &seq, &dir_host)) < 0)
+		return FALSE;
 
 	if (str_array_length(args) != 1 ||
 	    str_to_uint(args[0], &username_hash) < 0) {
 		director_cmd_error(conn, "Invalid parameters");
 		return FALSE;
+	}
+
+	if (ret > 0) {
+		i_assert(dir_host != NULL);
+		dir_debug("User %u - ignoring already seen USER-KILLED-EVERYWHERE "
+			  "with seq=%u <= %s.last_seq=%u", username_hash,
+			  seq, dir_host->name, dir_host->last_seq);
+		return TRUE;
 	}
 
 	director_user_killed_everywhere(conn->dir, conn->host,
@@ -1238,13 +1318,10 @@ director_connection_handle_handshake(struct director_connection *conn,
 		if (conn->minor_version < DIRECTOR_VERSION_TAGS_V2 &&
 		    mail_hosts_have_tags(conn->dir->mail_hosts)) {
 			i_error("director(%s): Director version supports incompatible tags", conn->name);
-			return FALSE;
+			return -1;
 		}
 		conn->version_received = TRUE;
-		if (conn->done_pending) {
-			if (director_connection_send_done(conn) < 0)
-				return -1;
-		}
+		director_finish_sending_handshake(conn);
 		return 1;
 	}
 	if (!conn->version_received) {
@@ -1399,6 +1476,13 @@ director_connection_sync_host(struct director_connection *conn,
 			/* forward it to the connection on right */
 			director_sync_send(dir, host, seq, minor_version,
 					   timestamp, hosts_hash);
+		} else {
+			dir_debug("director(%s): We have no right connection - "
+				  "delay replying to SYNC until finished", conn->name);
+			host->delayed_sync_seq = seq;
+			host->delayed_sync_minor_version = minor_version;
+			host->delayed_sync_timestamp = timestamp;
+			host->delayed_sync_hosts_hash = hosts_hash;
 		}
 	}
 	return TRUE;
@@ -1575,6 +1659,8 @@ director_connection_handle_cmd(struct director_connection *conn,
 		return director_cmd_user_move(conn, args);
 	if (strcmp(cmd, "USER-KICK") == 0)
 		return director_cmd_user_kick(conn, args);
+	if (strcmp(cmd, "USER-KICK-ALT") == 0)
+		return director_cmd_user_kick_alt(conn, args);
 	if (strcmp(cmd, "USER-KICK-HASH") == 0)
 		return director_cmd_user_kick_hash(conn, args);
 	if (strcmp(cmd, "USER-KILLED") == 0)
@@ -1691,6 +1777,7 @@ static void director_connection_input(struct director_connection *conn)
 		i_stream_skip(conn->input, i_stream_get_data_size(conn->input));
 		return;
 	}
+	conn->last_input = ioloop_timeval;
 
 	director_sync_freeze(dir);
 	prev_offset = conn->input->v_offset;
@@ -1713,24 +1800,30 @@ static void director_connection_input(struct director_connection *conn)
 		timeout_reset(conn->to_ping);
 }
 
-static void director_connection_send_directors(struct director_connection *conn,
-					       string_t *str)
+static void director_connection_send_directors(struct director_connection *conn)
 {
 	struct director_host *const *hostp;
+	string_t *str = t_str_new(64);
 
 	array_foreach(&conn->dir->dir_hosts, hostp) {
 		if ((*hostp)->removed)
 			continue;
+
+		str_truncate(str, 0);
 		str_printfa(str, "DIRECTOR\t%s\t%u\n",
 			    net_ip2addr(&(*hostp)->ip), (*hostp)->port);
+		director_connection_send(conn, str_c(str));
 	}
 }
 
 static void
-director_connection_send_hosts(struct director_connection *conn, string_t *str)
+director_connection_send_hosts(struct director_connection *conn)
 {
 	struct mail_host *const *hostp;
 	bool send_updowns;
+	string_t *str = t_str_new(128);
+
+	i_assert(conn->version_received);
 
 	send_updowns = conn->minor_version >= DIRECTOR_VERSION_UPDOWN;
 
@@ -1752,8 +1845,11 @@ director_connection_send_hosts(struct director_connection *conn, string_t *str)
 				str_append_tabescaped(str, host->hostname);
 		}
 		str_append_c(str, '\n');
+		director_connection_send(conn, str_c(str));
+		str_truncate(str, 0);
 	}
 	str_printfa(str, "HOST-HAND-END\t%u\n", conn->dir->ring_handshaked);
+	director_connection_send(conn, str_c(str));
 }
 
 static int director_connection_send_done(struct director_connection *conn)
@@ -1771,7 +1867,6 @@ static int director_connection_send_done(struct director_connection *conn)
 		return -1;
 	}
 	director_connection_send(conn, "DONE\n");
-	conn->done_pending = FALSE;
 	return 0;
 }
 
@@ -1779,6 +1874,8 @@ static int director_connection_send_users(struct director_connection *conn)
 {
 	struct user *user;
 	int ret;
+
+	i_assert(conn->version_received);
 
 	while ((user = user_directory_iter_next(conn->user_iter)) != NULL) {
 		T_BEGIN {
@@ -1803,12 +1900,8 @@ static int director_connection_send_users(struct director_connection *conn)
 		}
 	}
 	user_directory_iter_deinit(&conn->user_iter);
-	if (!conn->version_received)
-		conn->done_pending = TRUE;
-	else {
-		if (director_connection_send_done(conn) < 0)
-			return -1;
-	}
+	if (director_connection_send_done(conn) < 0)
+		return -1;
 
 	if (conn->users_unsorted && conn->handshake_received) {
 		/* we received remote's list of users before sending ours */
@@ -1825,6 +1918,7 @@ static int director_connection_output(struct director_connection *conn)
 {
 	int ret;
 
+	conn->last_output = ioloop_timeval;
 	if (conn->user_iter != NULL) {
 		/* still handshaking USER list */
 		o_stream_cork(conn->output);
@@ -1887,8 +1981,6 @@ director_connection_init_in(struct director *dir, int fd,
 
 static void director_connection_connected(struct director_connection *conn)
 {
-	struct director *dir = conn->dir;
-	string_t *str = t_str_new(1024);
 	int err;
 
 	if ((err = net_geterror(conn->fd)) != 0) {
@@ -1910,13 +2002,27 @@ static void director_connection_connected(struct director_connection *conn)
 
 	o_stream_cork(conn->output);
 	director_connection_send_handshake(conn);
-	director_connection_send_directors(conn, str);
-	director_connection_send_hosts(conn, str);
-	director_connection_send(conn, str_c(str));
+	director_connection_send_directors(conn);
+	o_stream_uncork(conn->output);
+	/* send the rest of the handshake after we've received the remote's
+	   version number */
+}
 
-	conn->user_iter = user_directory_iter_init(dir->users);
+static void director_finish_sending_handshake(struct director_connection *conn)
+{
+	if (
+	    conn->in) {
+		/* only outgoing connections send hosts & users */
+		return;
+	}
+	o_stream_cork(conn->output);
+	director_connection_send_hosts(conn);
+
+	i_assert(conn->user_iter == NULL);
+	conn->user_iter = user_directory_iter_init(conn->dir->users);
 	if (director_connection_send_users(conn) == 0)
 		o_stream_set_flush_pending(conn->output, TRUE);
+
 	o_stream_uncork(conn->output);
 }
 
@@ -2051,9 +2157,10 @@ void director_connection_send(struct director_connection *conn,
 	} T_END;
 	ret = o_stream_send(conn->output, data, len);
 	if (ret != (off_t)len) {
-		if (ret < 0)
-			i_error("director(%s): write() failed: %m", conn->name);
-		else {
+		if (ret < 0) {
+			i_error("director(%s): write() failed: %s", conn->name,
+				o_stream_get_error(conn->output));
+		} else {
 			i_error("director(%s): Output buffer full, "
 				"disconnecting", conn->name);
 		}
@@ -2066,7 +2173,20 @@ void director_connection_send(struct director_connection *conn,
 static void
 director_connection_ping_idle_timeout(struct director_connection *conn)
 {
-	i_error("director(%s): Ping timed out, disconnecting", conn->name);
+	int input_diff = timeval_diff_msecs(&ioloop_timeval, &conn->last_input);
+	int output_diff = timeval_diff_msecs(&ioloop_timeval, &conn->last_output);
+	string_t *str = t_str_new(128);
+
+	str_printfa(str, "Ping timed out, disconnecting "
+		    "(last input %u.%03u s ago, last output %u.%03u s ago",
+		    input_diff/1000, input_diff%1000,
+		    output_diff/1000, output_diff%1000);
+	if (conn->handshake_received)
+		str_append(str, ", handshaked");
+	if (conn->synced)
+		str_append(str, ", synced");
+	str_append_c(str, ')');
+	i_error("director(%s): %s", conn->name, str_c(str));
 	director_connection_disconnected(&conn, "Ping timeout");
 }
 

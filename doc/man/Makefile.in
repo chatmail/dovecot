@@ -89,8 +89,10 @@ build_triplet = @build@
 host_triplet = @host@
 subdir = doc/man
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/dovecot.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
@@ -372,6 +374,7 @@ nodist_man1_MANS = \
 	doveadm-expunge.1 \
 	doveadm-fetch.1 \
 	doveadm-flags.1 \
+	doveadm-fs.1 \
 	doveadm-fts.1 \
 	doveadm-import.1 \
 	doveadm-instance.1 \
@@ -420,6 +423,7 @@ EXTRA_DIST = \
 	doveadm-expunge.1.in \
 	doveadm-fetch.1.in \
 	doveadm-flags.1.in \
+	doveadm-fs.1.in \
 	doveadm-fts.1.in \
 	doveadm-import.1.in \
 	doveadm-instance.1.in \

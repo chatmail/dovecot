@@ -89,8 +89,10 @@ build_triplet = @build@
 host_triplet = @host@
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
-	$(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/dovecot.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
@@ -153,14 +155,15 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 DIST_SUBDIRS = lib-test lib lib-settings lib-auth lib-master \
-	lib-charset lib-dns lib-dict lib-sasl lib-ssl-iostream \
-	lib-stats lib-http lib-fs lib-mail lib-imap lib-imap-storage \
-	lib-ldap lib-dict-extra lib-dovecot lib-fts lib-imap-client \
-	lib-imap-urlauth lib-compression lib-index lib-storage lib-sql \
-	lib-ntlm lib-otp lib-lda anvil auth dict dns indexer ipc \
-	master login-common imap-hibernate imap-login imap \
-	imap-urlauth pop3-login pop3 lda lmtp log config director \
-	replication util doveadm ssl-params stats plugins
+	lib-charset lib-ssl-iostream lib-dcrypt lib-dns lib-dict \
+	lib-sasl lib-stats lib-http lib-fs lib-mail lib-imap \
+	lib-imap-storage lib-program-client lib-dict-extra lib-dovecot \
+	lib-ldap lib-fts lib-imap-client lib-imap-urlauth \
+	lib-compression lib-index lib-storage lib-sql lib-ntlm lib-otp \
+	lib-lda anvil auth dict dns indexer ipc master login-common \
+	imap-hibernate imap-login imap imap-urlauth pop3-login pop3 \
+	lda lmtp log config director replication util doveadm \
+	ssl-params stats plugins
 am__DIST_COMMON = $(srcdir)/Makefile.in
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -388,22 +391,24 @@ LIBDOVECOT_SUBDIRS = \
 	lib-auth \
 	lib-master \
 	lib-charset \
+	lib-ssl-iostream \
+	lib-dcrypt \
 	lib-dns \
 	lib-dict \
 	lib-sasl \
-	lib-ssl-iostream \
 	lib-stats \
 	lib-http \
 	lib-fs \
 	lib-mail \
 	lib-imap \
-	lib-imap-storage
+	lib-imap-storage \
+	lib-program-client
 
 SUBDIRS = \
 	$(LIBDOVECOT_SUBDIRS) \
-	$(LIB_LDAP) \
 	lib-dict-extra \
 	lib-dovecot \
+	$(LIB_LDAP) \
 	lib-fts \
 	lib-imap-client \
 	lib-imap-urlauth \

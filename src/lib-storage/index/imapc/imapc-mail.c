@@ -187,6 +187,7 @@ static int imapc_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 	old_offset = data->stream == NULL ? 0 : data->stream->v_offset;
 	if (mail_get_stream(_mail, NULL, NULL, &input) < 0)
 		return -1;
+	i_assert(data->stream != NULL);
 	i_stream_seek(data->stream, old_offset);
 
 	ret = i_stream_get_size(data->stream, TRUE,
@@ -295,6 +296,10 @@ imapc_mail_get_stream(struct mail *_mail, bool get_body,
 	    mail->imail.data.stream != NULL) {
 		/* we've fetched the header, but we need the body now too */
 		index_mail_close_streams(&mail->imail);
+		/* don't re-use any cached header sizes. we may be
+		   intentionally downloading the full body because the header
+		   wasn't returned correctly (e.g. pop3-migration does this) */
+		data->hdr_size_set = FALSE;
 	}
 
 	if (data->stream == NULL) {
@@ -460,6 +465,7 @@ static int imapc_mail_get_hdr_hash(struct index_mail *imail)
 		imail->data.stream->v_offset;
 	if (mail_get_hdr_stream(&imail->mail.mail, NULL, &input) < 0)
 		return -1;
+	i_assert(imail->data.stream != NULL);
 	while (i_stream_read_data(input, &data, &size, 0) > 0) {
 		sha1_loop(&sha1_ctx, data, size);
 		i_stream_skip(input, size);

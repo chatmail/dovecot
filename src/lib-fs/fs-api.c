@@ -134,7 +134,6 @@ int fs_init(const char *driver, const char *args,
 {
 	const struct fs *fs_class;
 	const char *temp_file_prefix;
-	unsigned int i;
 
 	fs_class = fs_class_find(driver);
 	if (fs_class == NULL) {
@@ -149,9 +148,6 @@ int fs_init(const char *driver, const char *args,
 	}
 	if (fs_alloc(fs_class, args, set, fs_r, error_r) < 0)
 		return -1;
-
-	for (i = 0; i < FS_OP_COUNT; i++)
-		(*fs_r)->stats.timings[i] = timing_init();
 
 	temp_file_prefix = set->temp_file_prefix != NULL ?
 		set->temp_file_prefix : ".temp.dovecot";
@@ -195,8 +191,10 @@ void fs_unref(struct fs **_fs)
 	i_free(fs->username);
 	i_free(fs->session_id);
 	i_free(fs->temp_path_prefix);
-	for (i = 0; i < FS_OP_COUNT; i++)
-		timing_deinit(&fs->stats.timings[i]);
+	for (i = 0; i < FS_OP_COUNT; i++) {
+		if (fs->stats.timings[i] != NULL)
+			timing_deinit(&fs->stats.timings[i]);
+	}
 	T_BEGIN {
 		fs->v.deinit(fs);
 	} T_END;
@@ -262,6 +260,9 @@ void fs_file_deinit(struct fs_file **_file)
 
 void fs_file_close(struct fs_file *file)
 {
+	i_assert(!file->writing_stream);
+	i_assert(file->output == NULL);
+
 	if (file->pending_read_input != NULL)
 		i_stream_unref(&file->pending_read_input);
 	if (file->seekable_input != NULL)
@@ -269,7 +270,8 @@ void fs_file_close(struct fs_file *file)
 
 	if (file->copy_input != NULL) {
 		i_stream_unref(&file->copy_input);
-		(void)fs_write_stream_abort(file, &file->copy_output);
+		fs_write_stream_abort_error(file, &file->copy_output, "fs_file_close(%s)",
+					    o_stream_get_name(file->copy_output));
 	}
 	i_free_and_null(file->write_digest);
 	if (file->fs->v.file_close != NULL) T_BEGIN {
@@ -285,9 +287,29 @@ enum fs_properties fs_get_properties(struct fs *fs)
 void fs_metadata_init(struct fs_file *file)
 {
 	if (file->metadata_pool == NULL) {
+		i_assert(!array_is_created(&file->metadata));
 		file->metadata_pool = pool_alloconly_create("fs metadata", 1024);
 		p_array_init(&file->metadata, file->metadata_pool, 8);
 	}
+}
+
+void fs_metadata_init_or_clear(struct fs_file *file)
+{
+	if (file->metadata_pool == NULL)
+		fs_metadata_init(file);
+	else T_BEGIN {
+		const struct fs_metadata *md;
+		ARRAY_TYPE(fs_metadata) internal_metadata;
+
+		t_array_init(&internal_metadata, 4);
+		array_foreach(&file->metadata, md) {
+			if (strncmp(md->key, FS_METADATA_INTERNAL_PREFIX,
+				    strlen(FS_METADATA_INTERNAL_PREFIX)) == 0)
+				array_append(&internal_metadata, md, 1);
+		}
+		array_clear(&file->metadata);
+		array_append_array(&file->metadata, &internal_metadata);
+	} T_END;
 }
 
 void fs_default_set_metadata(struct fs_file *file,
@@ -301,6 +323,21 @@ void fs_default_set_metadata(struct fs_file *file,
 	metadata->value = p_strdup(file->metadata_pool, value);
 }
 
+const char *fs_metadata_find(const ARRAY_TYPE(fs_metadata) *metadata,
+			     const char *key)
+{
+	const struct fs_metadata *md;
+
+	if (!array_is_created(metadata))
+		return NULL;
+
+	array_foreach(metadata, md) {
+		if (strcmp(md->key, key) == 0)
+			return md->value;
+	}
+	return NULL;
+}
+
 void fs_set_metadata(struct fs_file *file, const char *key, const char *value)
 {
 	i_assert(key != NULL);
@@ -308,7 +345,12 @@ void fs_set_metadata(struct fs_file *file, const char *key, const char *value)
 
 	if (file->fs->v.set_metadata != NULL) T_BEGIN {
 		file->fs->v.set_metadata(file, key, value);
-		file->metadata_changed = TRUE;
+		if (strncmp(key, FS_METADATA_INTERNAL_PREFIX,
+			    strlen(FS_METADATA_INTERNAL_PREFIX)) == 0) {
+			/* internal metadata change, which isn't stored. */
+		} else {
+			file->metadata_changed = TRUE;
+		}
 	} T_END;
 }
 
@@ -323,7 +365,7 @@ static void fs_file_timing_start(struct fs_file *file, enum fs_op op)
 }
 
 static void
-fs_timing_end(struct timing *timing, const struct timeval *start_tv)
+fs_timing_end(struct timing **timing, const struct timeval *start_tv)
 {
 	struct timeval now;
 	long long diff;
@@ -332,8 +374,11 @@ fs_timing_end(struct timing *timing, const struct timeval *start_tv)
 		i_fatal("gettimeofday() failed: %m");
 
 	diff = timeval_diff_usecs(&now, start_tv);
-	if (diff > 0)
-		timing_add_usecs(timing, diff);
+	if (diff > 0) {
+		if (*timing == NULL)
+			*timing = timing_init();
+		timing_add_usecs(*timing, diff);
+	}
 }
 
 void fs_file_timing_end(struct fs_file *file, enum fs_op op)
@@ -341,7 +386,7 @@ void fs_file_timing_end(struct fs_file *file, enum fs_op op)
 	if (!file->fs->set.enable_timing || file->timing_start[op].tv_sec == 0)
 		return;
 
-	fs_timing_end(file->fs->stats.timings[op], &file->timing_start[op]);
+	fs_timing_end(&file->fs->stats.timings[op], &file->timing_start[op]);
 	/* don't count this again */
 	file->timing_start[op].tv_sec = 0;
 }
@@ -373,18 +418,11 @@ int fs_lookup_metadata(struct fs_file *file, const char *key,
 		       const char **value_r)
 {
 	const ARRAY_TYPE(fs_metadata) *metadata;
-	const struct fs_metadata *md;
 
 	if (fs_get_metadata(file, &metadata) < 0)
 		return -1;
-	array_foreach(metadata, md) {
-		if (strcmp(md->key, key) == 0) {
-			*value_r = md->value;
-			return 1;
-		}
-	}
-	*value_r = NULL;
-	return 0;
+	*value_r = fs_metadata_find(metadata, key);
+	return *value_r != NULL ? 1 : 0;
 }
 
 const char *fs_file_path(struct fs_file *file)
@@ -509,9 +547,10 @@ struct istream *fs_read_stream(struct fs_file *file, size_t max_buffer_size)
 	}
 
 	if (file->seekable_input != NULL) {
-		i_stream_seek(file->seekable_input, 0);
-		i_stream_ref(file->seekable_input);
-		return file->seekable_input;
+		/* allow multiple open streams, each in a different position */
+		input = i_stream_create_limit(file->seekable_input, (uoff_t)-1);
+		i_stream_seek(input, 0);
+		return input;
 	}
 	T_BEGIN {
 		input = file->fs->v.read_stream(file, max_buffer_size);
@@ -541,10 +580,10 @@ struct istream *fs_read_stream(struct fs_file *file, size_t max_buffer_size)
 						file->fs->temp_path_prefix);
 		i_stream_set_name(input, i_stream_get_name(inputs[0]));
 		i_stream_unref(&inputs[0]);
-
-		file->seekable_input = input;
-		i_stream_ref(file->seekable_input);
 	}
+	file->seekable_input = input;
+	i_stream_ref(file->seekable_input);
+
 	if ((file->flags & FS_OPEN_FLAG_ASYNC) == 0 && !input->blocking) {
 		/* read the whole input stream before returning */
 		while ((ret = i_stream_read_data(input, &data, &size, 0)) >= 0) {
@@ -572,10 +611,9 @@ int fs_write_via_stream(struct fs_file *file, const void *data, size_t size)
 		output = fs_write_stream(file);
 		if ((ret = o_stream_send(output, data, size)) < 0) {
 			err = errno;
-			fs_set_error(file->fs, "fs_write(%s) failed: %s",
-				     o_stream_get_name(output),
-				     o_stream_get_error(output));
-			fs_write_stream_abort(file, &output);
+			fs_write_stream_abort_error(file, &output, "fs_write(%s) failed: %s",
+						    o_stream_get_name(output),
+						    o_stream_get_error(output));
 			errno = err;
 			return -1;
 		}
@@ -604,6 +642,7 @@ int fs_write(struct fs_file *file, const void *data, size_t size)
 		} T_END;
 		if (!(ret < 0 && errno == EAGAIN)) {
 			file->fs->stats.write_count++;
+			file->fs->stats.write_bytes += size;
 			fs_file_timing_end(file, FS_OP_WRITE);
 		}
 		return ret;
@@ -616,6 +655,10 @@ int fs_write(struct fs_file *file, const void *data, size_t size)
 
 struct ostream *fs_write_stream(struct fs_file *file)
 {
+	i_assert(!file->writing_stream);
+	i_assert(file->output == NULL);
+
+	file->writing_stream = TRUE;
 	file->fs->stats.write_count++;
 	T_BEGIN {
 		file->fs->v.write_stream(file);
@@ -629,6 +672,8 @@ static int fs_write_stream_finish_int(struct fs_file *file, bool success)
 {
 	int ret;
 
+	i_assert(file->writing_stream);
+
 	fs_file_timing_start(file, FS_OP_WRITE);
 	T_BEGIN {
 		ret = file->fs->v.write_stream_finish(file, success);
@@ -641,6 +686,10 @@ static int fs_write_stream_finish_int(struct fs_file *file, bool success)
 		   indicated a failure. */
 		i_assert(success);
 	}
+	if (ret != 0) {
+		i_assert(file->output == NULL);
+		file->writing_stream = FALSE;
+	}
 	return ret;
 }
 
@@ -649,17 +698,18 @@ int fs_write_stream_finish(struct fs_file *file, struct ostream **output)
 	bool success = TRUE;
 
 	i_assert(*output == file->output || *output == NULL);
+	i_assert(output != &file->output);
 
 	*output = NULL;
-	if (file->output != NULL)
-		o_stream_uncork(file->output);
 	if (file->output != NULL) {
+		o_stream_uncork(file->output);
 		if (o_stream_nfinish(file->output) < 0) {
 			fs_set_error(file->fs, "write(%s) failed: %s",
 				     o_stream_get_name(file->output),
 				     o_stream_get_error(file->output));
 			success = FALSE;
 		}
+		file->fs->stats.write_bytes += file->output->offset;
 	}
 	return fs_write_stream_finish_int(file, success);
 }
@@ -669,14 +719,40 @@ int fs_write_stream_finish_async(struct fs_file *file)
 	return fs_write_stream_finish_int(file, TRUE);
 }
 
-void fs_write_stream_abort(struct fs_file *file, struct ostream **output)
+static void fs_write_stream_abort_int(struct fs_file *file, struct ostream **output)
 {
+	int ret;
+
 	i_assert(*output == file->output);
+	i_assert(file->output != NULL);
+	i_assert(output != &file->output);
 
 	*output = NULL;
-	if (file->output != NULL)
-		o_stream_ignore_last_errors(file->output);
-	(void)fs_write_stream_finish_int(file, FALSE);
+	o_stream_ignore_last_errors(file->output);
+	/* make sure we don't have an old error lying around */
+	ret = fs_write_stream_finish_int(file, FALSE);
+	i_assert(ret != 0);
+}
+
+void fs_write_stream_abort_error(struct fs_file *file, struct ostream **output, const char *error_fmt, ...)
+{
+	va_list args;
+	va_start(args, error_fmt);
+	fs_set_verror(file->fs, error_fmt, args);
+	fs_write_stream_abort_int(file, output);
+	va_end(args);
+}
+
+void fs_write_stream_abort(struct fs_file *file, struct ostream **output)
+{
+	fs_write_stream_abort_error(file, output, "Write aborted");
+}
+
+void fs_write_stream_abort_parent(struct fs_file *file, struct ostream **output)
+{
+	i_assert(file->parent != NULL);
+	i_assert(fs_file_last_error(file->parent) != NULL);
+	fs_write_stream_abort_int(file->parent, output);
 }
 
 void fs_write_set_hash(struct fs_file *file, const struct hash_method *method,
@@ -717,6 +793,20 @@ int fs_wait_async(struct fs *fs)
 	return ret;
 }
 
+bool fs_switch_ioloop(struct fs *fs)
+{
+	bool ret = FALSE;
+
+	if (fs->v.switch_ioloop != NULL) {
+		T_BEGIN {
+			ret = fs->v.switch_ioloop(fs);
+		} T_END;
+	} else if (fs->parent != NULL) {
+		ret = fs_switch_ioloop(fs->parent);
+	}
+	return ret;
+}
+
 int fs_lock(struct fs_file *file, unsigned int secs, struct fs_lock **lock_r)
 {
 	int ret;
@@ -749,13 +839,14 @@ int fs_exists(struct fs_file *file)
 		else
 			return errno == ENOENT ? 0 : -1;
 	}
-	file->fs->stats.exists_count++;
 	fs_file_timing_start(file, FS_OP_EXISTS);
 	T_BEGIN {
 		ret = file->fs->v.exists(file);
 	} T_END;
-	if (!(ret < 0 && errno == EAGAIN))
+	if (!(ret < 0 && errno == EAGAIN)) {
+		file->fs->stats.exists_count++;
 		fs_file_timing_end(file, FS_OP_EXISTS);
+	}
 	return ret;
 }
 
@@ -782,8 +873,36 @@ int fs_stat(struct fs_file *file, struct stat *st_r)
 	return ret;
 }
 
+int fs_get_nlinks(struct fs_file *file, nlink_t *nlinks_r)
+{
+	int ret;
+
+	if (file->fs->v.get_nlinks == NULL) {
+		struct stat st;
+
+		if (fs_stat(file, &st) < 0)
+			return -1;
+		*nlinks_r = st.st_nlink;
+		return 0;
+	}
+
+	if (!file->read_or_prefetch_counted &&
+	    !file->lookup_metadata_counted && !file->stat_counted) {
+		file->stat_counted = TRUE;
+		file->fs->stats.stat_count++;
+		fs_file_timing_start(file, FS_OP_STAT);
+	}
+	T_BEGIN {
+		ret = file->fs->v.get_nlinks(file, nlinks_r);
+	} T_END;
+	if (!(ret < 0 && errno == EAGAIN))
+		fs_file_timing_end(file, FS_OP_STAT);
+	return ret;
+}
+
 int fs_default_copy(struct fs_file *src, struct fs_file *dest)
 {
+	int tmp_errno;
 	/* we're going to be counting this as read+write, so remove the
 	   copy_count we just added */
 	dest->fs->stats.copy_count--;
@@ -804,21 +923,23 @@ int fs_default_copy(struct fs_file *src, struct fs_file *dest)
 	}
 	while (o_stream_send_istream(dest->copy_output, dest->copy_input) > 0) ;
 	if (dest->copy_input->stream_errno != 0) {
+		fs_write_stream_abort_error(dest, &dest->copy_output,
+					    "read(%s) failed: %s",
+					    i_stream_get_name(dest->copy_input),
+					    i_stream_get_error(dest->copy_input));
 		errno = dest->copy_input->stream_errno;
-		fs_set_error(dest->fs, "read(%s) failed: %s",
-			     i_stream_get_name(dest->copy_input),
-			     i_stream_get_error(dest->copy_input));
 		i_stream_unref(&dest->copy_input);
-		fs_write_stream_abort(dest, &dest->copy_output);
 		return -1;
 	}
 	if (dest->copy_output->stream_errno != 0) {
-		errno = dest->copy_output->stream_errno;
-		fs_set_error(dest->fs, "write(%s) failed: %s",
-			     o_stream_get_name(dest->copy_output),
-			     o_stream_get_error(dest->copy_output));
+		/* errno might not survive abort error */
+		tmp_errno = dest->copy_output->stream_errno;
+		fs_write_stream_abort_error(dest, &dest->copy_output,
+					    "write(%s) failed: %s",
+					    o_stream_get_name(dest->copy_output),
+					    o_stream_get_error(dest->copy_output));
+		errno = tmp_errno;
 		i_stream_unref(&dest->copy_input);
-		fs_write_stream_abort(dest, &dest->copy_output);
 		return -1;
 	}
 	if (!dest->copy_input->eof) {
@@ -843,13 +964,13 @@ int fs_copy(struct fs_file *src, struct fs_file *dest)
 		return -1;
 	}
 
-	dest->fs->stats.copy_count++;
 	fs_file_timing_start(dest, FS_OP_COPY);
 	T_BEGIN {
 		ret = src->fs->v.copy(src, dest);
 	} T_END;
 	if (!(ret < 0 && errno == EAGAIN)) {
 		fs_file_timing_end(dest, FS_OP_COPY);
+		dest->fs->stats.copy_count++;
 		dest->metadata_changed = FALSE;
 	}
 	return ret;
@@ -864,6 +985,7 @@ int fs_copy_finish_async(struct fs_file *dest)
 	} T_END;
 	if (!(ret < 0 && errno == EAGAIN)) {
 		fs_file_timing_end(dest, FS_OP_COPY);
+		dest->fs->stats.copy_count++;
 		dest->metadata_changed = FALSE;
 	}
 	return ret;
@@ -875,13 +997,14 @@ int fs_rename(struct fs_file *src, struct fs_file *dest)
 
 	i_assert(src->fs == dest->fs);
 
-	dest->fs->stats.rename_count++;
 	fs_file_timing_start(dest, FS_OP_RENAME);
 	T_BEGIN {
 		ret = src->fs->v.rename(src, dest);
 	} T_END;
-	if (!(ret < 0 && errno == EAGAIN))
+	if (!(ret < 0 && errno == EAGAIN)) {
+		dest->fs->stats.rename_count++;
 		fs_file_timing_end(dest, FS_OP_RENAME);
+	}
 	return ret;
 }
 
@@ -889,13 +1012,16 @@ int fs_delete(struct fs_file *file)
 {
 	int ret;
 
-	file->fs->stats.delete_count++;
+	i_assert(!file->writing_stream);
+
 	fs_file_timing_start(file, FS_OP_DELETE);
 	T_BEGIN {
 		ret = file->fs->v.delete_file(file);
 	} T_END;
-	if (!(ret < 0 && errno == EAGAIN))
+	if (!(ret < 0 && errno == EAGAIN)) {
+		file->fs->stats.delete_count++;
 		fs_file_timing_end(file, FS_OP_DELETE);
+	}
 	return ret;
 }
 
@@ -956,7 +1082,7 @@ const char *fs_iter_next(struct fs_iter *iter)
 		/* first result returned - count this as the finish time, since
 		   we don't want to count the time caller spends on this
 		   iteration. */
-		fs_timing_end(iter->fs->stats.timings[FS_OP_ITER], &iter->start_time);
+		fs_timing_end(&iter->fs->stats.timings[FS_OP_ITER], &iter->start_time);
 		/* don't count this again */
 		iter->start_time.tv_sec = 0;
 	}
@@ -1007,20 +1133,32 @@ void fs_set_error_async(struct fs *fs)
 	errno = EAGAIN;
 }
 
+static uint64_t
+fs_stats_count_ops(const struct fs_stats *stats, const enum fs_op ops[],
+		   unsigned int ops_count)
+{
+	uint64_t ret = 0;
+
+	for (unsigned int i = 0; i < ops_count; i++) {
+		if (stats->timings[ops[i]] != NULL)
+			ret += timing_get_sum(stats->timings[ops[i]]);
+	}
+	return ret;
+}
+
 uint64_t fs_stats_get_read_usecs(const struct fs_stats *stats)
 {
-	return timing_get_sum(stats->timings[FS_OP_METADATA]) +
-		timing_get_sum(stats->timings[FS_OP_PREFETCH]) +
-		timing_get_sum(stats->timings[FS_OP_READ]) +
-		timing_get_sum(stats->timings[FS_OP_EXISTS]) +
-		timing_get_sum(stats->timings[FS_OP_STAT]) +
-		timing_get_sum(stats->timings[FS_OP_ITER]);
+	const enum fs_op read_ops[] = {
+		FS_OP_METADATA, FS_OP_PREFETCH, FS_OP_READ, FS_OP_EXISTS,
+		FS_OP_STAT, FS_OP_ITER
+	};
+	return fs_stats_count_ops(stats, read_ops, N_ELEMENTS(read_ops));
 }
 
 uint64_t fs_stats_get_write_usecs(const struct fs_stats *stats)
 {
-	return timing_get_sum(stats->timings[FS_OP_WRITE]) +
-		timing_get_sum(stats->timings[FS_OP_COPY]) +
-		timing_get_sum(stats->timings[FS_OP_DELETE]);
+	const enum fs_op write_ops[] = {
+		FS_OP_WRITE, FS_OP_COPY, FS_OP_DELETE
+	};
+	return fs_stats_count_ops(stats, write_ops, N_ELEMENTS(write_ops));
 }
-

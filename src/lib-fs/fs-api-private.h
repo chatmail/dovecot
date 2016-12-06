@@ -2,6 +2,7 @@
 #define FS_API_PRIVATE_H
 
 #include "fs-api.h"
+#include "fs-wrapper.h"
 #include "module-context.h"
 
 #include <sys/time.h>
@@ -48,6 +49,8 @@ struct fs_vfuncs {
 
 	int (*write)(struct fs_file *file, const void *data, size_t size);
 	void (*write_stream)(struct fs_file *file);
+	/* After write_stream_finish() is called once, all the following
+	   (async) calls will have success==TRUE. */
 	int (*write_stream_finish)(struct fs_file *file, bool success);
 
 	int (*lock)(struct fs_file *file, unsigned int secs,
@@ -64,6 +67,9 @@ struct fs_vfuncs {
 				     enum fs_iter_flags flags);
 	const char *(*iter_next)(struct fs_iter *iter);
 	int (*iter_deinit)(struct fs_iter *iter);
+
+	bool (*switch_ioloop)(struct fs *fs);
+	int (*get_nlinks)(struct fs_file *file, nlink_t *nlinks_r);
 };
 
 struct fs {
@@ -94,6 +100,7 @@ struct fs_file {
 	/* linked list of all files */
 	struct fs_file *prev, *next;
 
+	struct fs_file *parent; /* for wrapper filesystems */
 	struct fs *fs;
 	struct ostream *output;
 	char *path;
@@ -115,6 +122,7 @@ struct fs_file {
 	struct timeval timing_start[FS_OP_COUNT];
 
 	unsigned int write_pending:1;
+	unsigned int writing_stream:1;
 	unsigned int metadata_changed:1;
 
 	unsigned int read_or_prefetch_counted:1;
@@ -157,10 +165,17 @@ void fs_set_error_async(struct fs *fs);
 ssize_t fs_read_via_stream(struct fs_file *file, void *buf, size_t size);
 int fs_write_via_stream(struct fs_file *file, const void *data, size_t size);
 void fs_metadata_init(struct fs_file *file);
+void fs_metadata_init_or_clear(struct fs_file *file);
 void fs_default_set_metadata(struct fs_file *file,
 			     const char *key, const char *value);
+const char *fs_metadata_find(const ARRAY_TYPE(fs_metadata) *metadata,
+			     const char *key);
 int fs_default_copy(struct fs_file *src, struct fs_file *dest);
 
 void fs_file_timing_end(struct fs_file *file, enum fs_op op);
+
+/* Same as fs_write_stream_abort_error(), except it closes the *parent* file
+   and error is left untouched */
+void fs_write_stream_abort_parent(struct fs_file *file, struct ostream **output);
 
 #endif

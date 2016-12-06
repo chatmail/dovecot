@@ -101,10 +101,13 @@ cmd_quota_recalc_run(struct doveadm_mail_cmd_context *ctx ATTR_UNUSED,
 
 	memset(&trans, 0, sizeof(trans));
 	trans.quota = quser->quota;
-	trans.recalculate = TRUE;
+	trans.recalculate = QUOTA_RECALCULATE_FORCED;
 
-	array_foreach(&quser->quota->roots, root)
+	array_foreach(&quser->quota->roots, root) {
 		(void)(*root)->backend.v.update(*root, &trans);
+		if ((*root)->backend.v.flush != NULL)
+			(*root)->backend.v.flush(*root);
+	}
 	return 0;
 }
 

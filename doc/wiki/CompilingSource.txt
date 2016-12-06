@@ -75,6 +75,7 @@ software/packages installed:
  * 'libtool'
  * 'pkg-config'
  * 'gettext'
+ * 'pandoc'
  * GNU make.
 
 It is advisable to add '--enable-maintainer-mode' to the 'configure' script.
@@ -364,4 +365,4 @@ The plugin filename is prefixed with a number which specifies the order in
 which the plugins are loaded. This is important if one plugin depends on
 another.
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:43)

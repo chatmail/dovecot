@@ -115,10 +115,14 @@ static int copy_to_temp_file(struct seekable_istream *sstream)
 		if (size >= stream->pos)
 			break;
 
-		if (i_stream_read(sstream->fd_input) <= 0) {
+		ssize_t ret;
+		if ((ret = i_stream_read(sstream->fd_input)) <= 0) {
+			i_assert(ret != 0);
 			i_error("istream-seekable: Couldn't read back "
-				"in-memory input %s",
-				i_stream_get_name(&stream->istream));
+				"in-memory input %s: %s",
+				i_stream_get_name(&stream->istream),
+				ret == -2 ? "buffer full" :
+				i_stream_get_error(sstream->fd_input));
 			i_stream_destroy(&sstream->fd_input);
 			return -1;
 		}
@@ -316,25 +320,24 @@ i_stream_seekable_stat(struct istream_private *stream, bool exact)
 		return 0;
 	}
 
-	if (sstream->membuf != NULL) {
-		/* we want to know the full size of the file, so read until
-		   we're finished */
-		old_offset = stream->istream.v_offset;
-		do {
-			i_stream_skip(&stream->istream,
-				      stream->pos - stream->skip);
-		} while ((ret = i_stream_seekable_read(stream)) > 0);
+	/* we want to know the full size of the file, so read until
+	   we're finished */
+	old_offset = stream->istream.v_offset;
+	do {
+		i_stream_skip(&stream->istream,
+			      stream->pos - stream->skip);
+	} while ((ret = i_stream_seekable_read(stream)) > 0);
 
-		if (ret == 0) {
-			i_panic("i_stream_stat() used for non-blocking "
-				"seekable stream %s offset %"PRIuUOFF_T,
-				i_stream_get_name(sstream->cur_input),
-				sstream->cur_input->v_offset);
-		}
-		i_stream_skip(&stream->istream, stream->pos - stream->skip);
-		i_stream_seek(&stream->istream, old_offset);
-		unref_streams(sstream);
+	if (ret == 0) {
+		i_panic("i_stream_stat() used for non-blocking "
+			"seekable stream %s offset %"PRIuUOFF_T,
+			i_stream_get_name(sstream->cur_input),
+			sstream->cur_input->v_offset);
 	}
+	i_stream_skip(&stream->istream, stream->pos - stream->skip);
+	i_stream_seek(&stream->istream, old_offset);
+	unref_streams(sstream);
+
 	if (stream->istream.stream_errno != 0)
 		return -1;
 
@@ -478,6 +481,7 @@ i_stream_create_seekable_path(struct istream *input[],
 	struct seekable_istream *sstream;
 	struct istream *stream;
 
+	i_assert(temp_path_prefix != NULL);
 	i_assert(max_buffer_size > 0);
 
 	if (inputs_are_seekable(input))

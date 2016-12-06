@@ -6,6 +6,7 @@
 #include "str.h"
 #include "ioloop.h"
 #include "istream.h"
+#include "istream-timeout.h"
 #include "ostream.h"
 #include "connection.h"
 #include "iostream-rawlog.h"
@@ -234,6 +235,7 @@ static void http_server_payload_destroyed(struct http_server_request *req)
 	case HTTP_SERVER_REQUEST_STATE_PAYLOAD_IN:
 		/* finished reading request */
 		req->state = HTTP_SERVER_REQUEST_STATE_PROCESSING;
+		http_server_connection_timeout_stop(conn);
 		if (req->response != NULL && req->response->submitted)
 			http_server_request_submit_response(req);
 		break;
@@ -301,6 +303,7 @@ static bool
 http_server_connection_handle_request(struct http_server_connection *conn,
 	struct http_server_request *req)
 {
+	const struct http_server_settings *set = &conn->server->set;
 	struct istream *payload;
 
 	i_assert(!conn->in_req_callback);
@@ -317,7 +320,11 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 		/* wrap the stream to capture the destroy event without destroying the
 		   actual payload stream. */
 		conn->incoming_payload = req->req.payload =
-			i_stream_create_limit(req->req.payload, (uoff_t)-1);
+			i_stream_create_timeout(req->req.payload,
+				set->max_client_idle_time_msecs);
+		/* we've received the request itself, and we can't reset the
+		   timeout during the payload reading. */
+		http_server_connection_timeout_stop(conn);
 	} else {
 		conn->incoming_payload = req->req.payload =
 			i_stream_create_from_data("", 0);
@@ -811,15 +818,20 @@ http_server_connection_next_response(struct http_server_connection *conn)
 	req = conn->request_queue_head;
 	if (req == NULL) {
 		/* no requests pending */
+		http_server_connection_debug(conn, "No more requests pending");
 		http_server_connection_timeout_start(conn);
 		return FALSE;
 	}
 	if (req->state < HTTP_SERVER_REQUEST_STATE_READY_TO_RESPOND) {
 		if (req->state == HTTP_SERVER_REQUEST_STATE_PROCESSING) {
 			/* server is causing idle time */
+			http_server_connection_debug(conn,
+				"Not ready to respond: Server is processing");
 			http_server_connection_timeout_stop(conn);
 		} else {
 			/* client is causing idle time */
+			http_server_connection_debug(conn,
+				"Not ready to respond: Waiting for client");
 			http_server_connection_timeout_start(conn);
 		}
 		
@@ -852,6 +864,8 @@ http_server_connection_next_response(struct http_server_connection *conn)
 	i_assert(req->state == HTTP_SERVER_REQUEST_STATE_READY_TO_RESPOND &&
 		req->response != NULL);
 
+	http_server_connection_debug(conn,
+		"Sending response");
 	http_server_connection_timeout_start(conn);
 
 	http_server_request_ref(req);
@@ -940,9 +954,15 @@ int http_server_connection_output(struct http_server_connection *conn)
 				return -1;
 		} else if (conn->io_resp_payload != NULL) {
 			/* server is causing idle time */
+			http_server_connection_debug(conn,
+				"Not ready to continue response: "
+				"Server is producing response");
 			http_server_connection_timeout_stop(conn);
 		} else {
 			/* client is causing idle time */
+			http_server_connection_debug(conn,
+				"Not ready to continue response: "
+				"Waiting for client");
 			http_server_connection_timeout_start(conn);
 		}
 	}
@@ -991,6 +1011,7 @@ http_server_connection_create(struct http_server *server,
 	int fd_in, int fd_out, bool ssl,
 	const struct http_server_callbacks *callbacks, void *context)
 {
+	const struct http_server_settings *set = &server->set;
 	struct http_server_connection *conn;
 	static unsigned int id = 0;
 	struct ip_addr addr;
@@ -1004,6 +1025,23 @@ http_server_connection_create(struct http_server *server,
 	conn->ssl = ssl;
 	conn->callbacks = callbacks;
 	conn->context = context;
+
+	net_set_nonblock(fd_in, TRUE);
+	if (fd_in != fd_out)
+		net_set_nonblock(fd_out, TRUE);
+
+	if (set->socket_send_buffer_size > 0) {
+		if (net_set_send_buffer_size(fd_out,
+			set->socket_send_buffer_size) < 0)
+			i_error("net_set_send_buffer_size(%"PRIuSIZE_T") failed: %m",
+				set->socket_send_buffer_size);
+	}
+	if (set->socket_recv_buffer_size > 0) {
+		if (net_set_recv_buffer_size(fd_in,
+			set->socket_recv_buffer_size) < 0)
+			i_error("net_set_recv_buffer_size(%"PRIuSIZE_T") failed: %m",
+				set->socket_recv_buffer_size);
+	}
 
 	/* get a name for this connection */
 	if (fd_in != fd_out || net_getpeername(fd_in, &addr, &port) < 0) {
@@ -1062,6 +1100,13 @@ http_server_connection_disconnect(struct http_server_connection *conn,
 	/* preserve statistics */
 	http_server_connection_update_stats(conn);
 
+	if (conn->incoming_payload != NULL) {
+		/* the stream is still accessed by lib-http caller. */
+		i_stream_remove_destroy_callback(conn->incoming_payload,
+						 http_server_payload_destroyed);
+		conn->incoming_payload = NULL;
+	}
+
 	/* drop all requests before connection is closed */
 	req = conn->request_queue_head;
 	while (req != NULL) {
@@ -1079,13 +1124,6 @@ http_server_connection_disconnect(struct http_server_connection *conn,
 	if (conn->conn.output != NULL) {
 		o_stream_nflush(conn->conn.output);
 		o_stream_uncork(conn->conn.output);
-	}
-
-	if (conn->incoming_payload != NULL) {
-		/* the stream is still accessed by lib-http caller. */
-		i_stream_remove_destroy_callback(conn->incoming_payload,
-						 http_server_payload_destroyed);
-		conn->incoming_payload = NULL;
 	}
 
 	if (conn->http_parser != NULL)

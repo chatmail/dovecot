@@ -7,7 +7,18 @@
 struct istream {
 	uoff_t v_offset;
 
+	/* Commonly used errors:
+
+	   ENOENT  - File/object doesn't exist.
+	   EPIPE   - Stream ended unexpectedly (or i_stream_close() was called).
+	   ESPIPE  - i_stream_seek() was used on a stream that can't be seeked.
+	   ENOBUFS - i_stream_read_next_line() was used for a too long line.
+	   EIO     - Internal error. Retrying may work, but it may also be
+	             because of a misconfiguration.
+	   EINVAL  - Stream is corrupted.
+	*/
 	int stream_errno;
+
 	unsigned int mmaped:1; /* be careful when copying data */
 	unsigned int blocking:1; /* read() shouldn't return 0 */
 	unsigned int closed:1;
@@ -32,11 +43,22 @@ struct istream *i_stream_create_file(const char *path, size_t max_buffer_size);
 struct istream *i_stream_create_mmap(int fd, size_t block_size,
 				     uoff_t start_offset, uoff_t v_size,
 				     bool autoclose_fd);
+/* Create an input stream using the provided data block. That data block must
+remain allocated during the full lifetime of the stream. */
 struct istream *i_stream_create_from_data(const void *data, size_t size);
 #define i_stream_create_from_buffer(buf) \
 	i_stream_create_from_data((buf)->data, (buf)->used)
 #define i_stream_create_from_string(str) \
 	i_stream_create_from_data(str_data(str), str_len(str))
+/* Create an input stream using a copy of the provided data block. The
+   provided data block may be freed at any time. The copy is freed when the
+   stream is destroyed. */
+struct istream *
+i_stream_create_copy_from_data(const void *data, size_t size);
+#define i_stream_create_copy_from_buffer(buf) \
+	i_stream_create_copy_from_data((buf)->data, (buf)->used)
+#define i_stream_create_copy_from_string(str) \
+	i_stream_create_copy_from_data(str_data(str), str_len(str))
 struct istream *i_stream_create_limit(struct istream *input, uoff_t v_size);
 struct istream *i_stream_create_range(struct istream *input,
 				      uoff_t v_offset, uoff_t v_size);
@@ -77,6 +99,10 @@ int i_stream_get_fd(struct istream *stream);
 /* Returns error string for the last error. It also returns "EOF" in case there
    is no error, but eof is set. Otherwise it returns "<no error>". */
 const char *i_stream_get_error(struct istream *stream);
+/* Returns human-readable reason for why istream was disconnected. This can be
+   called to log the error when i_stream_read() returns -1. If there's an error
+   the output is identical to i_stream_get_error(). */
+const char *i_stream_get_disconnect_reason(struct istream *stream);
 
 /* Mark the stream and all of its parent streams closed. Any reads after this
    will return -1. The data already read can still be used. */
@@ -90,9 +116,13 @@ void i_stream_sync(struct istream *stream);
    unless it's called before reading anything. */
 void i_stream_set_init_buffer_size(struct istream *stream, size_t size);
 /* Change the maximum size for stream's input buffer to grow. Useful only
-   for buffered streams (currently only file). */
+   for buffered streams (currently only file). This changes also all the
+   parent streams' max buffer size. */
 void i_stream_set_max_buffer_size(struct istream *stream, size_t max_size);
-/* Returns the current max. buffer size. */
+/* Returns the current max. buffer size for the stream. This function also
+   goesthrough all of the parent streams and returns the highest seen max
+   buffer size. This is needed because some streams (e.g. istream-chain) change
+   their max buffer size dynamically. */
 size_t i_stream_get_max_buffer_size(struct istream *stream);
 /* Enable/disable i_stream[_read]_next_line() returning the last line if it
    doesn't end with LF. */
@@ -109,7 +139,8 @@ ssize_t i_stream_read(struct istream *stream);
    was successful. */
 void i_stream_skip(struct istream *stream, uoff_t count);
 /* Seek to specified position from beginning of file. Never fails, the next
-   read tells if it was successful. This works only for files. */
+   read tells if it was successful. This works only for files, others will
+   set stream_errno=ESPIPE. */
 void i_stream_seek(struct istream *stream, uoff_t v_offset);
 /* Like i_stream_seek(), but also giving a hint that after reading some data
    we could be seeking back to this mark or somewhere after it. If input
@@ -161,6 +192,24 @@ unsigned char *i_stream_get_modifiable_data(struct istream *stream,
    input buffer is full. */
 int i_stream_read_data(struct istream *stream, const unsigned char **data_r,
 		       size_t *size_r, size_t threshold);
+/* Like i_stream_get_data(), but read more when needed. Returns 1 if at least
+   the wanted number of bytes are available, 0 if less, -1 if error or
+   EOF with no bytes read that weren't already in buffer, or -2 if stream's
+   input buffer is full. */
+static inline int
+i_stream_read_bytes(struct istream *stream, const unsigned char **data_r,
+			size_t *size_r, size_t wanted)
+{
+	i_assert(wanted > 0);
+	return i_stream_read_data(stream, data_r, size_r, wanted - 1);
+}
+/* Short-hand for just requesting more data (i.e. even one byte) */
+static inline int
+i_stream_read_more(struct istream *stream, const unsigned char **data_r,
+		   size_t *size_r)
+{
+	return i_stream_read_bytes(stream, data_r, size_r, 1);
+}
 
 /* Append external data to input stream. Returns TRUE if successful, FALSE if
    there is not enough space in the stream. */

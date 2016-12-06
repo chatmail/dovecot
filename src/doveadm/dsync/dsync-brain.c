@@ -143,6 +143,7 @@ dsync_brain_set_flags(struct dsync_brain *brain, enum dsync_brain_flags flags)
 	brain->no_mailbox_renames =
 		(flags & DSYNC_BRAIN_FLAG_NO_MAILBOX_RENAMES) != 0;
 	brain->no_notify = (flags & DSYNC_BRAIN_FLAG_NO_NOTIFY) != 0;
+	brain->empty_hdr_workaround = (flags & DSYNC_BRAIN_FLAG_EMPTY_HDR_WORKAROUND) != 0;
 }
 
 static void
@@ -191,6 +192,8 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 	brain->alt_char = set->mailbox_alt_char == '\0' ? '_' :
 		set->mailbox_alt_char;
 	brain->sync_since_timestamp = set->sync_since_timestamp;
+	brain->sync_until_timestamp = set->sync_until_timestamp;
+	brain->sync_max_size = set->sync_max_size;
 	brain->sync_flag = p_strdup(brain->pool, set->sync_flag);
 	brain->sync_box = p_strdup(brain->pool, set->sync_box);
 	brain->exclude_mailboxes = set->exclude_mailboxes == NULL ? NULL :
@@ -229,6 +232,8 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 	ibc_set.virtual_all_box = set->virtual_all_box;
 	ibc_set.exclude_mailboxes = set->exclude_mailboxes;
 	ibc_set.sync_since_timestamp = set->sync_since_timestamp;
+	ibc_set.sync_until_timestamp = set->sync_until_timestamp;
+	ibc_set.sync_max_size = set->sync_max_size;
 	ibc_set.sync_flags = set->sync_flag;
 	memcpy(ibc_set.sync_box_guid, set->sync_box_guid,
 	       sizeof(ibc_set.sync_box_guid));
@@ -484,6 +489,8 @@ static bool dsync_brain_slave_recv_handshake(struct dsync_brain *brain)
 	brain->exclude_mailboxes = ibc_set->exclude_mailboxes == NULL ? NULL :
 		p_strarray_dup(brain->pool, ibc_set->exclude_mailboxes);
 	brain->sync_since_timestamp = ibc_set->sync_since_timestamp;
+	brain->sync_until_timestamp = ibc_set->sync_until_timestamp;
+	brain->sync_max_size = ibc_set->sync_max_size;
 	brain->sync_flag = p_strdup(brain->pool, ibc_set->sync_flags);
 	memcpy(brain->sync_box_guid, ibc_set->sync_box_guid,
 	       sizeof(brain->sync_box_guid));
@@ -568,16 +575,19 @@ static bool dsync_brain_finish(struct dsync_brain *brain)
 {
 	const char *error;
 	enum mail_error mail_error;
+	bool require_full_resync;
 	enum dsync_ibc_recv_ret ret;
 
 	if (!brain->master_brain) {
 		dsync_ibc_send_finish(brain->ibc,
 				      brain->failed ? "dsync failed" : NULL,
-				      brain->mail_error);
+				      brain->mail_error,
+				      brain->require_full_resync);
 		brain->state = DSYNC_STATE_DONE;
 		return TRUE;
 	} 
-	ret = dsync_ibc_recv_finish(brain->ibc, &error, &mail_error);
+	ret = dsync_ibc_recv_finish(brain->ibc, &error, &mail_error,
+				    &require_full_resync);
 	if (ret == DSYNC_IBC_RECV_RET_TRYAGAIN)
 		return FALSE;
 	if (error != NULL) {
@@ -587,6 +597,8 @@ static bool dsync_brain_finish(struct dsync_brain *brain)
 		    (brain->mail_error == 0 || brain->mail_error == MAIL_ERROR_TEMP))
 			brain->mail_error = mail_error;
 	}
+	if (require_full_resync)
+		brain->require_full_resync = TRUE;
 	brain->state = DSYNC_STATE_DONE;
 	return TRUE;
 }

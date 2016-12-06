@@ -20,7 +20,9 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-storage \
+	-I$(top_srcdir)/src/lib-imap-storage \
 	-I$(top_srcdir)/src/lib-http \
+	-I$(top_srcdir)/src/lib-dcrypt \
 	-I$(top_srcdir)/src/auth \
 	-DMODULEDIR=\""$(moduledir)"\" \
 	-DAUTH_MODULE_DIR=\""$(moduledir)/auth"\" \
@@ -110,6 +112,8 @@ doveadm_common_dump_cmds = \
 	doveadm-dump-log.c \
 	doveadm-dump-mailboxlog.c \
 	doveadm-dump-thread.c \
+	doveadm-dump-dcrypt-file.c \
+	doveadm-dump-dcrypt-key.c \
 	doveadm-zlib.c
 
 common = \
@@ -135,6 +139,7 @@ doveadm_SOURCES = \
 
 doveadm_server_SOURCES = \
 	$(common) \
+	doveadm-auth-server.c \
 	client-connection.c \
 	client-connection-http.c \
 	doveadm-print-server.c \

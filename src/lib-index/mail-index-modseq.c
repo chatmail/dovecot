@@ -521,6 +521,7 @@ static void mail_index_modseq_update_header(struct mail_index_view *view,
 		buffer_write(map->hdr_copy_buf, ext->hdr_offset,
 			     &new_modseq_hdr, sizeof(new_modseq_hdr));
 		map->hdr_base = map->hdr_copy_buf->data;
+		i_assert(map->hdr_copy_buf->used == map->hdr.header_size);
 	}
 }
 
@@ -721,6 +722,17 @@ bool mail_index_modseq_get_next_log_offset(struct mail_index_view *view,
 	}
 
 	*log_seq_r = prev_file->hdr.file_seq;
-	return mail_transaction_log_file_get_modseq_next_offset(
-					prev_file, modseq, log_offset_r) == 0;
+	if (mail_transaction_log_file_get_modseq_next_offset(prev_file, modseq,
+							     log_offset_r) < 0)
+		return FALSE;
+
+	if (*log_seq_r > view->log_file_head_seq ||
+	    (*log_seq_r == view->log_file_head_seq &&
+	     *log_offset_r > view->log_file_head_offset)) {
+		/* modseq is already beyond our view. move it back so the
+		   caller won't be confused. */
+		*log_seq_r = view->log_file_head_seq;
+		*log_offset_r = view->log_file_head_offset;
+	}
+	return TRUE;
 }

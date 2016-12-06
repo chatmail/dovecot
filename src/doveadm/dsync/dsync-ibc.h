@@ -58,6 +58,10 @@ struct dsync_ibc_settings {
 	const char *const *exclude_mailboxes;
 	/* Sync only mails with received timestamp at least this high. */
 	time_t sync_since_timestamp;
+	/* Sync only mails with received timestamp less or equal than this */
+	time_t sync_until_timestamp;
+	/* Don't sync mails larger than this. */
+	uoff_t sync_max_size;
 	/* Sync only mails with specified flags. */
 	const char *sync_flags;
 
@@ -148,10 +152,12 @@ enum dsync_ibc_recv_ret
 dsync_ibc_recv_mail(struct dsync_ibc *ibc, struct dsync_mail **mail_r);
 
 void dsync_ibc_send_finish(struct dsync_ibc *ibc, const char *error,
-			   enum mail_error mail_error);
+			   enum mail_error mail_error,
+			   bool require_full_resync);
 enum dsync_ibc_recv_ret
 dsync_ibc_recv_finish(struct dsync_ibc *ibc, const char **error_r,
-		      enum mail_error *mail_error_r);
+		      enum mail_error *mail_error_r,
+		      bool *require_full_resync_r);
 
 /* Close any mail input streams that are kept open. This needs to be called
    before the mail is attempted to be freed (usually on error conditions). */

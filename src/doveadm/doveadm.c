@@ -255,6 +255,7 @@ static void doveadm_read_settings(void)
 	memset(&input, 0, sizeof(input));
 	input.roots = set_roots;
 	input.module = "doveadm";
+	input.service = "doveadm";
 	input.preserve_user = TRUE;
 	input.preserve_home = TRUE;
 	if (master_service_settings_read(master_service, &input,
@@ -268,6 +269,8 @@ static void doveadm_read_settings(void)
 	set = master_service_settings_get_others(master_service)[0];
 	doveadm_settings = settings_dup(&doveadm_setting_parser_info, set,
 					pool_datastack_create());
+
+	doveadm_settings->parsed_features = set->parsed_features; /* copy this value by hand */
 }
 
 static struct doveadm_cmd *doveadm_cmdline_commands[] = {
@@ -333,7 +336,7 @@ int main(int argc, char *argv[])
 	doveadm_cmds_init();
 	for (i = 0; i < N_ELEMENTS(doveadm_cmdline_commands); i++)
 		doveadm_register_cmd(doveadm_cmdline_commands[i]);
-
+	doveadm_register_auth_commands();
 	doveadm_cmd_register_ver2(&doveadm_cmd_stats_top_ver2);
 
 	if (cmd_name != NULL && (quick_init ||

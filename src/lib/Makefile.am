@@ -91,6 +91,7 @@ liblib_la_SOURCES = \
 	json-tree.c \
 	lib.c \
 	lib-signals.c \
+	log-throttle.c \
 	md4.c \
 	md5.c \
 	mempool.c \
@@ -114,6 +115,7 @@ liblib_la_SOURCES = \
 	ostream-hash.c \
 	ostream-null.c \
 	ostream-rawlog.c \
+	pkcs5.c \
 	primes.c \
 	printf-format-fix.c \
 	process-title.c \
@@ -228,6 +230,7 @@ headers = \
 	lib.h \
 	lib-signals.h \
 	llist.h \
+	log-throttle.h \
 	macros.h \
 	md4.h \
 	md5.h \
@@ -243,10 +246,12 @@ headers = \
 	ostream.h \
 	ostream-escaped.h \
 	ostream-failure-at.h \
+	ostream-file-private.h \
 	ostream-hash.h \
 	ostream-private.h \
 	ostream-null.h \
 	ostream-rawlog.h \
+	pkcs5.h \
 	primes.h \
 	printf-format-fix.h \
 	process-title.h \
@@ -327,7 +332,9 @@ test_lib_SOURCES = \
 	test-json-parser.c \
 	test-json-tree.c \
 	test-llist.c \
+	test-log-throttle.c \
 	test-mempool-alloconly.c \
+	test-pkcs5.c \
 	test-net.c \
 	test-numpack.c \
 	test-ostream-escaped.c \

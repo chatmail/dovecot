@@ -32,7 +32,9 @@ enum dsync_brain_flags {
 	   be removed once the renaming logic has no more bugs.. */
 	DSYNC_BRAIN_FLAG_NO_MAILBOX_RENAMES	= 0x200,
 	/* Add MAILBOX_TRANSACTION_FLAG_NO_NOTIFY to transactions. */
-	DSYNC_BRAIN_FLAG_NO_NOTIFY		= 0x400
+	DSYNC_BRAIN_FLAG_NO_NOTIFY		= 0x400,
+	/* Workaround missing Date/Message-ID headers */
+	DSYNC_BRAIN_FLAG_EMPTY_HDR_WORKAROUND	= 0x800,
 };
 
 enum dsync_brain_sync_type {
@@ -67,6 +69,10 @@ struct dsync_brain_settings {
 	char mailbox_alt_char;
 	/* Sync only mails with received timestamp at least this high. */
 	time_t sync_since_timestamp;
+	/* Sync only mails with received timestamp less or equal than this */
+	time_t sync_until_timestamp;
+	/* Don't sync mails larger than this. */
+	uoff_t sync_max_size;
 	/* Sync only mails which contains / doesn't contain this flag.
 	   '-' at the beginning means this flag must not exist. */
 	const char *sync_flag;

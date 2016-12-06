@@ -4,6 +4,7 @@
 #include "array.h"
 #include "fd-set-nonblock.h"
 #include "fd-close-on-exec.h"
+#include "ioloop.h"
 #include "net.h"
 #ifdef HAVE_SYSTEMD
 #include "sd-daemon.h"
@@ -17,7 +18,6 @@
 #include <sys/socket.h>
 
 #define MIN_BACKLOG 4
-#define MAX_BACKLOG 511
 
 static unsigned int service_get_backlog(struct service *service)
 {
@@ -27,14 +27,10 @@ static unsigned int service_get_backlog(struct service *service)
 	i_assert(service->client_limit > 0);
 
 	/* as unlikely as it is, avoid overflows */
-	if (service->process_limit > MAX_BACKLOG ||
-	    service->client_limit > MAX_BACKLOG)
-		backlog = MAX_BACKLOG;
-	else {
+	if (service->client_limit > INT_MAX / service->process_limit)
+		backlog = INT_MAX;
+	else
 		backlog = service->process_limit * service->client_limit;
-		if (backlog > MAX_BACKLOG)
-			backlog = MAX_BACKLOG;
-	}
 	return I_MAX(backlog, MIN_BACKLOG);
 }
 
@@ -337,6 +333,28 @@ static int services_verify_systemd(struct service_list *service_list)
 }
 #endif
 
+static int services_listen_master(struct service_list *service_list)
+{
+	const char *path;
+	mode_t old_umask;
+
+	path = t_strdup_printf("%s/master", service_list->set->base_dir);
+	old_umask = umask(0600 ^ 0777);
+	service_list->master_fd = net_listen_unix(path, 16);
+	if (service_list->master_fd == -1 && errno == EADDRINUSE) {
+		/* already in use. all the other sockets were fine, so just
+		   delete this and retry. */
+		i_unlink_if_exists(path);
+		service_list->master_fd = net_listen_unix(path, 16);
+	}
+	umask(old_umask);
+
+	if (service_list->master_fd == -1)
+		return 0;
+	fd_close_on_exec(service_list->master_fd, TRUE);
+	return 1;
+}
+
 int services_listen(struct service_list *service_list)
 {
 	struct service *const *services;
@@ -347,6 +365,8 @@ int services_listen(struct service_list *service_list)
 		if (ret2 < ret)
 			ret = ret2;
 	}
+	if (ret > 0)
+		ret = services_listen_master(service_list);
 
 #ifdef HAVE_SYSTEMD
 	if (ret > 0)

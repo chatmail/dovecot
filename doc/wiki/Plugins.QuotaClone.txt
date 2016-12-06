@@ -24,8 +24,8 @@ Configuration
 ---%<-------------------------------------------------------------------------
 mail_plugins = $mail_plugins quota quota_clone
 plugin {
-  quota_clone_dict = redis:127.0.0.1:6379
+  quota_clone_dict = redis:host=127.0.0.1:port=6379
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

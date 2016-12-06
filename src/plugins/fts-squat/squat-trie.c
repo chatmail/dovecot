@@ -235,7 +235,7 @@ static int squat_trie_open_fd(struct squat_trie *trie)
 	return 0;
 }
 
-static int squat_trie_open(struct squat_trie *trie)
+int squat_trie_open(struct squat_trie *trie)
 {
 	squat_trie_close(trie);
 
@@ -482,6 +482,9 @@ node_read_children(struct squat_trie *trie, struct squat_node *node, int level)
 						   level);
 			children = NODE_CHILDREN_NODES(node);
 		}
+
+		i_assert(children != NULL);
+
 		child = &children[child_idx];
 
 		/* 1) child offset */
@@ -1680,7 +1683,8 @@ static int squat_trie_write(struct squat_trie_build_context *ctx)
 		o_stream_nsend(output, &trie->hdr, sizeof(trie->hdr));
 	}
 	if (o_stream_nfinish(output) < 0) {
-		i_error("write() to %s failed: %m", path);
+		i_error("write(%s) failed: %s", path,
+			o_stream_get_error(output));
 		ret = -1;
 	}
 	o_stream_destroy(&output);
@@ -2048,11 +2052,15 @@ squat_trie_lookup_real(struct squat_trie *trie, const char *str,
 	} else {
 		/* zero string length - list all root UIDs as definite
 		   answers */
+#if 0 /* FIXME: this code is never actually reached now. */
 		ret = squat_uidlist_get_seqrange(trie->uidlist,
 						 trie->root.uid_list_idx,
 						 &ctx.tmp_uids);
 		squat_trie_filter_type(type, &ctx.tmp_uids,
 				       definite_uids);
+#else
+		i_unreached();
+#endif
 	}
 	seq_range_array_remove_seq_range(maybe_uids, definite_uids);
 	squat_trie_add_unknown(trie, maybe_uids);

@@ -175,7 +175,7 @@ static int set_line(struct mail_storage_service_ctx *ctx,
 		enum setting_type type;
 
 		value = settings_parse_get_value(set_parser, key, &type);
-		if (type == SET_STR) {
+		if (value != NULL && type == SET_STR) {
 			const char *const *strp = value;
 
 			line = t_strdup_printf("%s=%s%s",
@@ -436,6 +436,7 @@ get_var_expand_table(struct master_service *service,
 		tab[10].value = user->auth_user;
 		tab[11].value = t_strcut(user->auth_user, '@');
 		tab[12].value = strchr(user->auth_user, '@');
+		if (tab[12].value != NULL) tab[12].value++;
 	}
 	return tab;
 }
@@ -610,7 +611,7 @@ service_drop_privileges(struct mail_storage_service_user *user,
 	}
 
 	if (keep_setuid_root) {
-		if (current_euid != rset.uid) {
+		if (current_euid != rset.uid && rset.uid != (uid_t)-1) {
 			if (current_euid != 0) {
 				/* we're changing the UID,
 				   switch back to root first */
@@ -660,6 +661,11 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 	mail_user->admin = user->admin;
 	mail_user->auth_token = p_strdup(mail_user->pool, user->auth_token);
 	mail_user->auth_user = p_strdup(mail_user->pool, user->auth_user);
+	if (user->input.session_create_time != 0) {
+		mail_user->session_create_time =
+			user->input.session_create_time;
+		mail_user->session_restored = TRUE;
+	}
 	if (user->session_id_counter++ == 0) {
 		mail_user->session_id =
 			p_strdup(mail_user->pool, user->input.session_id);
@@ -691,11 +697,18 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 		/* we don't want to write core files to any users' home
 		   directories since they could contain information about other
 		   users' mails as well. so do no chdiring to home. */
-	} else if (*home != '\0' &&
-		   (user->flags & MAIL_STORAGE_SERVICE_FLAG_NO_CHDIR) == 0) {
+	} else if ((user->flags & MAIL_STORAGE_SERVICE_FLAG_NO_CHDIR) == 0) {
 		/* If possible chdir to home directory, so that core file
-		   could be written in case we crash. */
-		if (chdir(home) < 0) {
+		   could be written in case we crash.
+
+		   fallback to chdir()ing to root directory. this is needed
+		   because the current directory may not be accessible after
+		   dropping privileges, and for example unlink_directory()
+		   requires ability to open the current directory. */
+		if (home[0] == '\0') {
+			if (chdir("/") < 0)
+				i_error("chdir(/) failed: %m");
+		} else if (chdir(home) < 0) {
 			if (errno == EACCES) {
 				i_error("%s", eacces_error_get("chdir",
 						t_strconcat(home, "/", NULL)));
@@ -703,6 +716,9 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 				i_error("chdir(%s) failed: %m", home);
 			else if (mail_set->mail_debug)
 				i_debug("Home dir not found: %s", home);
+
+			if (chdir("/") < 0)
+				i_error("chdir(/) failed: %m");
 		}
 	}
 
@@ -1227,6 +1243,7 @@ mail_storage_service_lookup_real(struct mail_storage_service_ctx *ctx,
 			mail_storage_service_generate_session_id(user_pool,
 				input->session_id_prefix);
 	}
+	user->input.session_create_time = input->session_create_time;
 	user->user_info = user_info;
 	user->flags = flags;
 

@@ -1,5 +1,4 @@
 pigeonhole.patch
-dovecot-drac.patch
 split-protocols.patch
 fix-mail_plugin_dir-default.patch
 ssl-cert-location.patch
@@ -9,3 +8,5 @@ exampledir.patch
 mboxlocking.patch
 dovecot_name.patch
 libnss_location.patch
+call_openssl_cleanup_at_deinit.patch
+disable_sslv23.patch

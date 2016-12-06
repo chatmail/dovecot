@@ -102,8 +102,10 @@ static void dict_quota_deinit(struct quota_root *_root)
 
 	i_assert(root->to_update == NULL);
 
-	if (root->dict != NULL)
+	if (root->dict != NULL) {
+		dict_wait(root->dict);
 		dict_deinit(&root->dict);
+	}
 	i_free(root);
 }
 
@@ -217,7 +219,7 @@ dict_quota_update(struct quota_root *_root,
 	struct dict_transaction_context *dt;
 	uint64_t value;
 
-	if (ctx->recalculate) {
+	if (ctx->recalculate != QUOTA_RECALCULATE_DONT) {
 		if (dict_quota_count(root, TRUE, &value) < 0)
 			return -1;
 	} else {
@@ -230,6 +232,7 @@ dict_quota_update(struct quota_root *_root,
 			dict_atomic_inc(dt, DICT_QUOTA_CURRENT_COUNT_PATH,
 					ctx->count_used);
 		}
+		dict_transaction_no_slowness_warning(dt);
 		dict_transaction_commit_async(&dt, dict_quota_update_callback,
 					      root);
 	}

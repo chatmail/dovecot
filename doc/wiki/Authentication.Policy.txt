@@ -1,0 +1,113 @@
+Authentication policy support
+=============================
+
+Dovecot supports (v2.2.25+) external authentication policy server. This server
+can be used to decide whether the connecting user is permitted, tarpitted or
+outright rejected. While dovecot can do tarpitting and refusal on it's own,
+this adds support for making cluster-wide decisions to make it easier to deter
+and defeat bruteforce attacks.
+
+Configuration
+-------------
+
+The auth-policy server is a core feature and does not require plugin(s) to
+work. To activate this feature, you need to configure it.
+
+ * auth_policy_server_url - URL of the policy server, url is appended with
+   ?command=allow/report unless it ends with '&', at which just
+   command=allow/report is added. (mandatory)
+ * auth_policy_server_api_header - Header and value to add to request (for API
+   authentcation)
+ * auth_policy_server_timeout_msecs - Request timeout in milliseconds
+ * auth_policy_hash_mech - Hash mechanism to use for password, you can use any
+   hash mechanism supported by Dovecot (md4,md5,sha1,sha256,sha512)
+ * auth_policy_hash_nonce - Cluster-wide nonce to add to hash (mandatory)
+ * auth_policy_request_attributes - Request attributes specification (see
+   attributes)
+ * auth_policy_reject_on_fail - If policy request fails for some reason should
+   users be rejected
+ * auth_polich_hash_truncate - How many *bits* to use from password hash.
+
+Default values
+--------------
+
+ * auth_policy_server_timeout_msecs = 2000
+ * auth_policy_hash_mech = sha256
+ * auth_policy_request_attributes = login=%{orig_username}
+   pwhash=%{hashed_password} remote=%{real_rip}
+ * auth_policy_reject_on_fail = no
+ * auth_policy_hash_truncate = 12
+
+Password hash algorithm
+-----------------------
+
+To generate the hash, you concatenate nonce, login name, nil byte, password and
+run it through the hash algorithm once. The hash is truncated when truncation
+is set to non-zero. The hash is truncated by first choosing bits from MSB to
+byte boundary (rounding up), then right-shifting the remainding bits.
+
+---%<-------------------------------------------------------------------------
+hash = H(nonce||user||'\x00'||password)
+bytes = round8(bits*8)
+hash = HEX(hash[0:bytes] >> (bytes-bits*8))
+---%<-------------------------------------------------------------------------
+
+Request attributes
+------------------
+
+Auth policy server requests are JSON requests. The JSON format can be specified
+with auth_policy_request_attributes. The syntax is key=value pairs, and key can
+contain one or more / to designate that a JSON object should be made. For
+example:
+
+---%<-------------------------------------------------------------------------
+login=%{orig_username} pwhash=%{hashed_password} remote=%{real_rip}
+---%<-------------------------------------------------------------------------
+
+produces
+
+---%<-------------------------------------------------------------------------
+{"login":"john.doe","pwhash":"1234","remote":"127.0.0.1"}
+---%<-------------------------------------------------------------------------
+
+And
+
+---%<-------------------------------------------------------------------------
+login=%{orig_username} pwhash=%{hashed_password} remote=%{real_rip}
+attrs/cos=%{userdb:cos}
+---%<-------------------------------------------------------------------------
+
+produces
+
+---%<-------------------------------------------------------------------------
+{"login":"john.doe","pwhash":"1234","remote":"127.0.0.1",
+"attrs":{"cos":"premium"}}
+---%<-------------------------------------------------------------------------
+
+Response
+--------
+
+---%<-------------------------------------------------------------------------
+{"status":-1,"msg":"go away"}
+---%<-------------------------------------------------------------------------
+
+Mode of operation
+-----------------
+
+Auth policy check is done twice during the authentication. First query is done
+*before* password and user databases are consulted. This means that any
+userdb/passdb attributes are left empty. The command used here is 'allow' and
+will appear on the URL as command=allow. If the result here is negative, the
+user authentication is failed, if the result is positive, the user is tarpitted
+for as many seconds.
+
+Second allow lookup is done if authentication succeeds, and if the result here
+is negative, the authentication is failed. If the result is non-negative, the
+user authentication succeeds.
+
+Finally, a report lookup is done, and the result is ignored. Here the JSON
+request is added with two attributes, success and wf_reject. The first is
+true/false depending whether the overall authentication succeeded, and the
+second one is whether the failure was due to policy server.
+
+(This file was created from the wiki on 2016-10-27 04:43)

@@ -42,6 +42,7 @@ struct server_connection {
 	struct istream *input;
 	struct ostream *output;
 	struct ssl_iostream *ssl_iostream;
+	struct timeout *to_input;
 
 	struct istream *cmd_input;
 	struct ostream *cmd_output;
@@ -57,16 +58,28 @@ struct server_connection {
 };
 
 static struct server_connection *printing_conn = NULL;
+static ARRAY(struct doveadm_server *) print_pending_servers = ARRAY_INIT;
 
 static void server_connection_input(struct server_connection *conn);
+static bool server_connection_input_one(struct server_connection *conn);
 
-static void print_connection_released(void)
+static void server_set_print_pending(struct doveadm_server *server)
 {
-	struct doveadm_server *server = printing_conn->server;
+	struct doveadm_server *const *serverp;
+
+	if (!array_is_created(&print_pending_servers))
+		i_array_init(&print_pending_servers, 16);
+	array_foreach(&print_pending_servers, serverp) {
+		if (*serverp == server)
+			return;
+	}
+	array_append(&print_pending_servers, &server, 1);
+}
+
+static void server_print_connection_released(struct doveadm_server *server)
+{
 	struct server_connection *const *conns;
 	unsigned int i, count;
-
-	printing_conn = NULL;
 
 	conns = array_get(&server->connections, &count);
 	for (i = 0; i < count; i++) {
@@ -75,10 +88,22 @@ static void print_connection_released(void)
 
 		conns[i]->io = io_add(conns[i]->fd, IO_READ,
 				      server_connection_input, conns[i]);
-		server_connection_input(conns[i]);
-		if (printing_conn != NULL)
-			break;
+		conns[i]->to_input = timeout_add_short(0,
+			server_connection_input, conns[i]);
 	}
+}
+
+static void print_connection_released(void)
+{
+	struct doveadm_server *const *serverp;
+
+	printing_conn = NULL;
+	if (!array_is_created(&print_pending_servers))
+		return;
+
+	array_foreach(&print_pending_servers, serverp)
+		server_print_connection_released(*serverp);
+	array_free(&print_pending_servers);
 }
 
 static int server_connection_send_cmd_input_more(struct server_connection *conn)
@@ -145,12 +170,9 @@ server_connection_callback(struct server_connection *conn,
 
 static void stream_data(string_t *str, const unsigned char *data, size_t size)
 {
-	const char *text;
-
 	str_truncate(str, 0);
-	str_append_n(str, data, size);
-	text = str_tabunescape(str_c_modifiable(str));
-	doveadm_print_stream(text, strlen(text));
+	str_append_tabunescaped(str, data, size);
+	doveadm_print_stream(str->data, str->used);
 }
 
 static void server_flush_field(struct server_connection *conn, string_t *str,
@@ -162,12 +184,9 @@ static void server_flush_field(struct server_connection *conn, string_t *str,
 			stream_data(str, data, size);
 		doveadm_print_stream("", 0);
 	} else {
-		const char *text;
-
 		str_truncate(str, 0);
-		str_append_n(str, data, size);
-		text = str_tabunescape(str_c_modifiable(str));
-		doveadm_print(text);
+		str_append_tabunescaped(str, data, size);
+		doveadm_print(str_c(str));
 	}
 }
 
@@ -185,6 +204,7 @@ server_handle_input(struct server_connection *conn,
 	} else {
 		/* someone else is printing. don't continue until it
 		   goes away */
+		server_set_print_pending(conn->server);
 		io_remove(&conn->io);
 		return;
 	}
@@ -270,10 +290,10 @@ static void server_log_disconnect_error(struct server_connection *conn)
 
 static void server_connection_input(struct server_connection *conn)
 {
-	const unsigned char *data;
-	size_t size;
 	const char *line;
-	int exit_code;
+
+	if (conn->to_input != NULL)
+		timeout_remove(&conn->to_input);
 
 	if (!conn->handshaked) {
 		if ((line = i_stream_read_next_line(conn->input)) == NULL) {
@@ -320,24 +340,34 @@ static void server_connection_input(struct server_connection *conn)
 		}
 	}
 
+	while (server_connection_input_one(conn)) ;
+}
+
+static bool server_connection_input_one(struct server_connection *conn)
+{
+	const unsigned char *data;
+	size_t size;
+	const char *line;
+	int exit_code;
+
 	data = i_stream_get_data(conn->input, &size);
 	if (size == 0)
-		return;
+		return FALSE;
 
 	switch (conn->state) {
 	case SERVER_REPLY_STATE_DONE:
 		i_error("doveadm server sent unexpected input");
 		server_connection_destroy(&conn);
-		return;
+		return FALSE;
 	case SERVER_REPLY_STATE_PRINT:
 		server_handle_input(conn, data, size);
 		if (conn->state != SERVER_REPLY_STATE_RET)
-			break;
+			return FALSE;
 		/* fall through */
 	case SERVER_REPLY_STATE_RET:
 		line = i_stream_next_line(conn->input);
 		if (line == NULL)
-			return;
+			return FALSE;
 		if (line[0] == '+')
 			server_connection_callback(conn, 0, "");
 		else if (line[0] == '-') {
@@ -353,14 +383,16 @@ static void server_connection_input(struct server_connection *conn)
 			i_error("doveadm server sent broken input "
 				"(expected cmd reply): %s", line);
 			server_connection_destroy(&conn);
-			break;
+			return FALSE;
 		}
 		if (conn->callback == NULL) {
 			/* we're finished, close the connection */
 			server_connection_destroy(&conn);
+			return FALSE;
 		}
-		break;
+		return TRUE;
 	}
+	i_unreached();
 }
 
 static int server_connection_read_settings(struct server_connection *conn)
@@ -508,6 +540,8 @@ void server_connection_destroy(struct server_connection **_conn)
 	if (printing_conn == conn)
 		print_connection_released();
 
+	if (conn->to_input != NULL)
+		timeout_remove(&conn->to_input);
 	if (conn->input != NULL)
 		i_stream_destroy(&conn->input);
 	if (conn->output != NULL)

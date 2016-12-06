@@ -315,7 +315,7 @@ static int imap_sync_finish(struct imap_sync_context *ctx, bool aborting)
 	if (mailbox_sync_deinit(&ctx->sync_ctx, &ctx->sync_status) < 0 ||
 	    ctx->failed) {
 		ctx->failed = TRUE;
-		return -1;
+		ret = -1;
 	}
 	mailbox_get_open_status(ctx->box, STATUS_UIDVALIDITY |
 				STATUS_MESSAGES | STATUS_RECENT |
@@ -325,6 +325,13 @@ static int imap_sync_finish(struct imap_sync_context *ctx, bool aborting)
 		/* most clients would get confused by this. disconnect them. */
 		client_disconnect_with_error(client,
 					     "Mailbox UIDVALIDITY changed");
+	}
+	if (mailbox_is_inconsistent(ctx->box)) {
+		client_disconnect_with_error(client,
+			"IMAP session state is inconsistent, please relogin.");
+		/* we can't trust status information anymore, so don't try to
+		   sync message counts. */
+		return -1;
 	}
 	if (!ctx->no_newmail && !aborting) {
 		if (ctx->status.messages < ctx->messages_count)
@@ -762,18 +769,20 @@ bool cmd_sync(struct client_command_context *cmd, enum mailbox_sync_flags flags,
 	if (cmd->cancel)
 		return TRUE;
 
+	cmd->last_run_timeval = ioloop_timeval;
 	if (client->mailbox == NULL) {
 		/* no mailbox selected, no point in delaying the sync */
 		if (tagline != NULL)
 			client_send_tagline(cmd, tagline);
 		return TRUE;
 	}
+	cmd->tagline_reply = p_strdup(cmd->pool, tagline);
 
 	cmd->sync = p_new(cmd->pool, struct client_sync_context, 1);
 	cmd->sync->counter = client->sync_counter;
 	cmd->sync->flags = flags;
 	cmd->sync->imap_flags = imap_flags;
-	cmd->sync->tagline = p_strdup(cmd->pool, tagline);
+	cmd->sync->tagline = cmd->tagline_reply;
 	cmd->state = CLIENT_COMMAND_STATE_WAIT_SYNC;
 
 	cmd->func = NULL;

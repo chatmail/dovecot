@@ -220,6 +220,8 @@ dsync_brain_sync_mailbox_init_remote(struct dsync_brain *brain,
 		import_flags |= DSYNC_MAILBOX_IMPORT_FLAG_NO_NOTIFY;
 	if (brain->hdr_hash_v2)
 		import_flags |= DSYNC_MAILBOX_IMPORT_FLAG_HDR_HASH_V2;
+	if (brain->empty_hdr_workaround)
+		import_flags |= DSYNC_MAILBOX_IMPORT_FLAG_EMPTY_HDR_WORKAROUND;
 
 	brain->box_importer = brain->backup_send ? NULL :
 		dsync_mailbox_import_init(brain->box, brain->virtual_all_box,
@@ -231,6 +233,8 @@ dsync_brain_sync_mailbox_init_remote(struct dsync_brain *brain,
 					  remote_dsync_box->highest_modseq,
 					  remote_dsync_box->highest_pvt_modseq,
 					  brain->sync_since_timestamp,
+					  brain->sync_until_timestamp,
+					  brain->sync_max_size,
 					  brain->sync_flag,
 					  import_flags);
 }
@@ -318,8 +322,11 @@ int dsync_brain_sync_mailbox_open(struct dsync_brain *brain,
 		exporter_flags |= DSYNC_MAILBOX_EXPORTER_FLAG_MAILS_HAVE_GUIDS;
 	if (brain->no_mail_prefetch)
 		exporter_flags |= DSYNC_MAILBOX_EXPORTER_FLAG_MINIMAL_DMAIL_FILL;
-	if (brain->sync_since_timestamp > 0)
+	if (brain->sync_since_timestamp > 0 ||
+	    brain->sync_until_timestamp > 0)
 		exporter_flags |= DSYNC_MAILBOX_EXPORTER_FLAG_TIMESTAMPS;
+	if (brain->sync_max_size > 0)
+		exporter_flags |= DSYNC_MAILBOX_EXPORTER_FLAG_VSIZES;
 	if (brain->hdr_hash_v2)
 		exporter_flags |= DSYNC_MAILBOX_EXPORTER_FLAG_HDR_HASH_V2;
 	if (remote_dsync_box->messages_count == 0) {
@@ -343,15 +350,11 @@ void dsync_brain_sync_mailbox_deinit(struct dsync_brain *brain)
 
 	i_assert(brain->box != NULL);
 
-	if (brain->require_full_resync) {
-		brain->mailbox_state.last_uidvalidity = 0;
-		brain->require_full_resync = FALSE;
-	}
 	array_append(&brain->remote_mailbox_states, &brain->mailbox_state, 1);
 	if (brain->box_exporter != NULL) {
 		const char *errstr;
 
-		i_assert(brain->failed ||
+		i_assert(brain->failed || brain->require_full_resync ||
 			 brain->sync_type == DSYNC_BRAIN_SYNC_TYPE_CHANGED);
 		if (dsync_mailbox_export_deinit(&brain->box_exporter,
 						&errstr, &error) < 0)

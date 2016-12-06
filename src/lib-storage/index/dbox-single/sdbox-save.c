@@ -12,6 +12,7 @@
 #include "write-full.h"
 #include "index-mail.h"
 #include "mail-copy.h"
+#include "index-pop3-uidl.h"
 #include "dbox-attachment.h"
 #include "dbox-save.h"
 #include "sdbox-storage.h"
@@ -195,6 +196,7 @@ static int dbox_save_finish_write(struct mail_save_context *_ctx)
 
 	if (ctx->ctx.failed) {
 		mail_index_expunge(ctx->ctx.trans, ctx->ctx.seq);
+		mail_cache_transaction_reset(ctx->ctx.ctx.transaction->cache_trans);
 		dbox_file_append_rollback(&ctx->append_ctx);
 		dbox_file_unlink(*files);
 		dbox_file_unref(files);
@@ -247,6 +249,10 @@ static int dbox_save_assign_uids(struct sdbox_save_context *ctx,
 		i_assert(ret);
 		if (sdbox_file_assign_uid(sfile, uid) < 0)
 			return -1;
+		if (ctx->ctx.highest_pop3_uidl_seq == i+1) {
+			index_pop3_uidl_set_max_uid(&ctx->mbox->box,
+				ctx->ctx.trans, uid);
+		}
 	}
 	i_assert(!seq_range_array_iter_nth(&iter, n, &uid));
 	return 0;

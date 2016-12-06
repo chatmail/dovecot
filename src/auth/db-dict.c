@@ -193,8 +193,9 @@ static bool parse_section(const char *type, const char *name,
 				ctx->cur_key->parsed_format =
 					DB_DICT_VALUE_FORMAT_JSON;
 			} else {
-				return t_strconcat("Unknown key format: ",
-						   ctx->cur_key->format, NULL);
+				*errormsg = t_strconcat("Unknown key format: ",
+					ctx->cur_key->format, NULL);
+				return FALSE;
 			}
 		}
 		ctx->cur_key = NULL;
@@ -456,7 +457,14 @@ int db_dict_value_iter_init(struct dict_connection *conn,
 	p_array_init(&iter->keys, pool, array_count(&conn->set.keys));
 	array_foreach(&conn->set.keys, key) {
 		iterkey = array_append_space(&iter->keys);
-		iterkey->key = key;
+		struct db_dict_key *new_key = p_new(iter->pool, struct db_dict_key, 1);
+		memcpy(new_key, key, sizeof(struct db_dict_key));
+		string_t *expanded_key = str_new(iter->pool, strlen(key->key));
+		auth_request_var_expand_with_table(expanded_key, key->key, auth_request,
+						   iter->var_expand_table,
+						   NULL);
+		new_key->key = str_c(expanded_key);
+		iterkey->key = new_key;
 	}
 	T_BEGIN {
 		db_dict_iter_find_used_keys(iter);

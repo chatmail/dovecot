@@ -5,6 +5,7 @@
 #include "ldap-private.h"
 
 #include <stdio.h>
+#include <sys/time.h>
 
 struct ldap_search_ctx {
 	const struct ldap_search_input *input;
@@ -48,7 +49,7 @@ ldap_search_callback(struct ldap_connection *conn,
 	ret = ldap_parse_result(conn->conn, message, &result_err, NULL,
 				&result_errmsg, NULL, NULL, 0);
 	if (ret == LDAP_NO_RESULTS_RETURNED) {
-		ret = LDAP_SUCCESS;
+		/*ret = LDAP_SUCCESS;*/
 	} else if (ret != LDAP_SUCCESS) {
 		ldap_search_result_failure(req, ret, t_strdup_printf(
 			"ldap_parse_result() failed for search: %s", ldap_err2string(ret)));

@@ -11,6 +11,7 @@
 #include "istream.h"
 #include "ostream.h"
 #include "llist.h"
+#include "priorityq.h"
 #include "base64.h"
 #include "str.h"
 #include "strescape.h"
@@ -25,8 +26,21 @@
 
 #define IMAP_MASTER_SOCKET_NAME "imap-master"
 
-/* we only need enough for "DONE\r\nIDLE\r\n" */
-#define IMAP_MAX_INBUF 12
+/* we only need enough for "DONE\r\n<tag> IDLE\r\n" */
+#define IMAP_MAX_INBUF 12 + 1 + 128 /* DONE\r\nIDLE\r\n + ' ' + <tag> */
+#define IMAP_MAX_OUTBUF 1024
+
+/* If client has sent input and we can't recreate imap process in this
+   many seconds, disconnect the client. */
+#define IMAP_CLIENT_MOVE_BACK_WITH_INPUT_TIMEOUT_SECS 10
+/* If there's a change notification and we can't recreate imap process in this
+   many seconds, disconnect the client. */
+#define IMAP_CLIENT_MOVE_BACK_WITHOUT_INPUT_TIMEOUT_SECS (60*5)
+
+/* How often to try to unhibernate clients. */
+#define IMAP_UNHIBERNATE_RETRY_MSECS 10
+
+#define IMAP_CLIENT_BUFFER_FULL_ERROR "Client output buffer is full"
 
 enum imap_client_input_state {
 	IMAP_CLIENT_INPUT_STATE_UNKNOWN,
@@ -42,36 +56,46 @@ struct imap_client_notify {
 };
 
 struct imap_client {
+	struct priorityq_item item;
+
 	struct imap_client *prev, *next;
 	pool_t pool;
 	struct imap_client_state state;
 	ARRAY(struct imap_client_notify) notifys;
 
+	time_t move_back_start;
+	struct timeout *to_move_back;
+
 	int fd;
 	struct io *io;
 	struct istream *input;
+	struct ostream *output;
 	struct timeout *to_keepalive;
 	struct imap_master_connection *master_conn;
 	struct ioloop_context *ioloop_ctx;
 	const char *log_prefix;
-	unsigned int imap_still_here_text_pos;
 	unsigned int next_read_threshold;
 	bool bad_done, idle_done;
+	bool unhibernate_queued;
+	bool input_pending;
 };
 
 static struct imap_client *imap_clients;
+static struct priorityq *unhibernate_queue;
+static struct timeout *to_unhibernate;
 static const char imap_still_here_text[] = "* OK Still here\r\n";
 
 static void imap_client_stop(struct imap_client *client);
 void imap_client_destroy(struct imap_client **_client, const char *reason);
 static void imap_client_add_idle_keepalive_timeout(struct imap_client *client);
+static void imap_clients_unhibernate(void *context);
 
 static void imap_client_disconnected(struct imap_client **_client)
 {
 	struct imap_client *client = *_client;
 	const char *reason;
 
-	reason = io_stream_get_disconnect_reason(client->input, NULL);
+	reason = io_stream_get_disconnect_reason(client->input, client->output);
 	imap_client_destroy(_client, reason);
 }
 
@@ -109,6 +133,12 @@ imap_client_move_back_send_callback(void *context, struct ostream *output)
 		str_append(str, "\tsession=");
 		str_append_tabescaped(str, state->session_id);
 	}
+	if (state->session_created != 0) {
+		str_printfa(str, "\tsession_created=%s",
+			    dec2str(state->session_created));
+	}
+	if (state->tag != NULL)
+		str_printfa(str, "\ttag=%s", client->state.tag);
 	if (state->local_ip.family != 0)
 		str_printfa(str, "\tlip=%s", net_ip2addr(&state->local_ip));
 	if (state->remote_ip.family != 0)
@@ -133,12 +163,7 @@ imap_client_move_back_send_callback(void *context, struct ostream *output)
 		str_append(str, "\tclient_input=");
 		base64_encode(input_data, input_size, str);
 	}
-	if (client->imap_still_here_text_pos != 0) {
-		str_append(str, "\tclient_output=");
-		base64_encode(imap_still_here_text + client->imap_still_here_text_pos,
-			      sizeof(imap_still_here_text)-1 - client->imap_still_here_text_pos,
-			      str);
-	}
+	i_assert(o_stream_get_buffer_used_size(client->output) == 0);
 	if (client->idle_done) {
 		if (client->bad_done)
 			str_append(str, "\tbad-done");
@@ -174,28 +199,67 @@ imap_client_move_back_read_callback(void *context, const char *line)
 	}
 }
 
-static void imap_client_move_back(struct imap_client *client)
+static bool imap_client_try_move_back(struct imap_client *client)
 {
 	const struct master_service_settings *master_set;
-	const char *path;
+	const char *path, *error;
+	int ret;
 
-	imap_client_stop(client);
+	if (o_stream_get_buffer_used_size(client->output) > 0) {
+		/* there is data buffered, so we have to disconnect you */
+		imap_client_destroy(&client, IMAP_CLIENT_BUFFER_FULL_ERROR);
+		return TRUE;
+	}
 
 	master_set = master_service_settings_get(master_service);
 	path = t_strconcat(master_set->base_dir,
 			   "/"IMAP_MASTER_SOCKET_NAME, NULL);
-	if (imap_master_connection_init(path,
-					imap_client_move_back_send_callback,
-					imap_client_move_back_read_callback,
-					client, &client->master_conn) < 0) {
+	ret = imap_master_connection_init(path,
+					  imap_client_move_back_send_callback,
+					  imap_client_move_back_read_callback,
+					  client, &client->master_conn, &error);
+	if (ret > 0) {
+		/* success */
+		imap_client_stop(client);
+		return TRUE;
+	} else if (ret < 0) {
 		/* failed to connect to the imap-master socket */
-		imap_client_destroy(&client, "Failed to connect to master socket");
+		imap_client_destroy(&client, error);
+		return TRUE;
+	}
+
+	int max_secs = client->input_pending ?
+		IMAP_CLIENT_MOVE_BACK_WITH_INPUT_TIMEOUT_SECS :
+		IMAP_CLIENT_MOVE_BACK_WITHOUT_INPUT_TIMEOUT_SECS;
+	if (ioloop_time - client->move_back_start > max_secs) {
+		/* we've waited long enough */
+		imap_client_destroy(&client, error);
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static void imap_client_move_back(struct imap_client *client)
+{
+	if (imap_client_try_move_back(client))
+		return;
+
+	/* imap-master socket is busy. retry in a while. */
+	if (client->move_back_start == 0)
+		client->move_back_start = ioloop_time;
+	client->unhibernate_queued = TRUE;
+	priorityq_add(unhibernate_queue, &client->item);
+	if (to_unhibernate == NULL) {
+		to_unhibernate = timeout_add_short(IMAP_UNHIBERNATE_RETRY_MSECS,
+						   imap_clients_unhibernate, NULL);
 	}
 }
 
 static enum imap_client_input_state
-imap_client_input_parse(const unsigned char *data, size_t size)
+imap_client_input_parse(const unsigned char *data, size_t size, const char **tag_r)
 {
+	const unsigned char *tag_start, *tag_end;
+
 	enum imap_client_input_state state = IMAP_CLIENT_INPUT_STATE_DONE_LF;
 
 	/* skip over DONE[\r]\n */
@@ -214,6 +278,23 @@ imap_client_input_parse(const unsigned char *data, size_t size)
 	if (data[0] != '\n')
 		return IMAP_CLIENT_INPUT_STATE_BAD;
 	data++; size--;
+	if (size == 0)
+		return state;
+
+	tag_start = data;
+
+	/* skip over tag */
+	while(data[0] != ' ' &&
+	      data[0] != '\r' &&
+	      data[0] != '\t' ) { data++; size--; }
+
+	tag_end = data;
+
+	if (size == 0)
+		return state;
+	if (data[0] != ' ')
+		return IMAP_CLIENT_INPUT_STATE_BAD;
+	data++; size--;
 
 	/* skip over IDLE[\r]\n - checking this assumes that the DONE and IDLE
 	   are sent in the same IP packet, otherwise we'll unnecessarily
@@ -227,14 +308,21 @@ imap_client_input_parse(const unsigned char *data, size_t size)
 	if (data[0] == '\r') {
 		data++; size--;
 	}
-	return size == 1 && data[0] == '\n' ?
-		IMAP_CLIENT_INPUT_STATE_DONEIDLE : state;
+	if (size == 1 && data[0] == '\n') {
+		*tag_r = t_strdup_until(tag_start, tag_end);
+		return IMAP_CLIENT_INPUT_STATE_DONEIDLE;
+	}
+	return state;
 }
 
 static void imap_client_input_idle_cmd(struct imap_client *client)
 {
+	char *old_tag;
+	const char *new_tag;
+	const char *output;
 	const unsigned char *data;
 	size_t size;
+	bool done = TRUE;
 	int ret;
 
 	/* we should read either DONE or disconnection. also handle if client
@@ -247,7 +335,7 @@ static void imap_client_input_idle_cmd(struct imap_client *client)
 		return;
 	}
 	client->next_read_threshold = 0;
-	switch (imap_client_input_parse(data, size)) {
+	switch (imap_client_input_parse(data, size, &new_tag)) {
 	case IMAP_CLIENT_INPUT_STATE_UNKNOWN:
 		/* we haven't received a full DONE[\r]\n yet - wait */
 		client->next_read_threshold = size;
@@ -265,19 +353,44 @@ static void imap_client_input_idle_cmd(struct imap_client *client)
 	case IMAP_CLIENT_INPUT_STATE_DONEIDLE:
 		/* we received DONE+IDLE, so the client simply wanted to notify
 		   us that it's still there. continue hibernation. */
-		i_stream_skip(client->input, size);
-		return;
+		old_tag = client->state.tag;
+		client->state.tag = i_strdup(new_tag);
+		output = t_strdup_printf("%s OK Idle completed.\r\n+ idling\r\n", old_tag);
+		i_free(old_tag);
+		ret = o_stream_flush(client->output);
+		if (ret > 0)
+			ret = o_stream_send_str(client->output, output);
+		if (ret < 0) {
+			imap_client_disconnected(&client);
+			return;
+		}
+		if ((size_t)ret != strlen(output)) {
+			/* disconnect */
+			imap_client_destroy(&client, IMAP_CLIENT_BUFFER_FULL_ERROR);
+			return;
+		} else {
+			done = FALSE;
+			i_stream_skip(client->input, size);
+		}
+		break;
 	}
-	client->idle_done = TRUE;
-	imap_client_move_back(client);
+
+	if (done) {
+		client->idle_done = TRUE;
+		client->input_pending = TRUE;
+		imap_client_move_back(client);
+	} else
+		imap_client_add_idle_keepalive_timeout(client);
 }
 
 static void imap_client_input_nonidle(struct imap_client *client)
 {
 	if (i_stream_read(client->input) < 0)
 		imap_client_disconnected(&client);
-	else
+	else {
+		client->input_pending = TRUE;
 		imap_client_move_back(client);
+	}
 }
 
 static void imap_client_input_notify(struct imap_client *client)
@@ -287,31 +400,22 @@ static void imap_client_input_notify(struct imap_client *client)
 
 static void keepalive_timeout(struct imap_client *client)
 {
-	unsigned int text_left = sizeof(imap_still_here_text)-1 -
-		client->imap_still_here_text_pos;
 	ssize_t ret;
 
-	ret = write(client->fd,
-		    imap_still_here_text + client->imap_still_here_text_pos,
-		    text_left);
+	/* do not send this if there is data buffered */
+	if ((ret = o_stream_flush(client->output)) < 0) {
+		imap_client_disconnected(&client);
+		return;
+	} else if (ret == 0)
+		return;
+
+	ret = o_stream_send_str(client->output, imap_still_here_text);
 	if (ret < 0) {
-		/* disconnect */
-		const char *reason = errno == EPIPE ? "Connection closed" :
-			t_strdup_printf("Connection closed: %m");
-		imap_client_destroy(&client, reason);
+		imap_client_disconnected(&client);
 		return;
 	}
-	client->imap_still_here_text_pos += ret;
-	if (client->imap_still_here_text_pos >= sizeof(imap_still_here_text)-1)
-		client->imap_still_here_text_pos = 0;
-	else {
-		/* we didn't write the entire line, but that's ok. we could
-		   io_add(IO_WRITE) here, but that's probably not necessary.
-		   just continue writing the "still here" line after the next
-		   timeout. its main purpose is to see if the connection is
-		   still alive, and we're successfully doing that already.
-		   besides, it's highly unlikely we'll ever even get here.. */
-	}
+	/* ostream buffer size is definitely large enough for this text */
+	i_assert((size_t)ret == strlen(imap_still_here_text));
 	imap_client_add_idle_keepalive_timeout(client);
 }
 
@@ -383,6 +487,7 @@ imap_client_get_var_expand_table(struct imap_client *client)
 		tab[11].value = auth_user;
 		tab[12].value = t_strcut(auth_user, '@');
 		tab[13].value = strchr(auth_user, '@');
+		if (tab[13].value != NULL) tab[13].value++;
 	}
 	return tab;
 }
@@ -422,7 +527,7 @@ imap_client_create(int fd, const struct imap_client_state *state)
 	client->pool = pool;
 	client->fd = fd;
 	client->input = i_stream_create_fd(fd, IMAP_MAX_INBUF, FALSE);
-
+	client->output = o_stream_create_fd(fd, IMAP_MAX_OUTBUF, FALSE);
 	client->state = *state;
 	client->state.username = p_strdup(pool, state->username);
 	client->state.session_id = p_strdup(pool, state->session_id);
@@ -459,6 +564,8 @@ static void imap_client_stop(struct imap_client *client)
 {
 	struct imap_client_notify *notify;
 
+	if (client->unhibernate_queued)
+		priorityq_remove(unhibernate_queue, &client->item);
 	if (client->io != NULL)
 		io_remove(&client->io);
 	if (client->to_keepalive != NULL)
@@ -499,9 +606,13 @@ void imap_client_destroy(struct imap_client **_client, const char *reason)
 		io_loop_context_unref(&client->ioloop_ctx);
 	}
 
+	if (client->state.tag != NULL)
+		i_free(client->state.tag);
+
 	DLLIST_REMOVE(&imap_clients, client);
 	imap_client_stop(client);
 	i_stream_destroy(&client->input);
+	o_stream_destroy(&client->output);
 	i_close_fd(&client->fd);
 	pool_unref(&client->pool);
 
@@ -541,6 +652,44 @@ void imap_client_create_finish(struct imap_client *client)
 	}
 }
 
+static int client_unhibernate_cmp(const void *p1, const void *p2)
+{
+	const struct imap_client *c1 = p1, *c2 = p2;
+	time_t t1, t2;
+
+	t1 = c1->move_back_start +
+		(c1->input_pending ?
+		 IMAP_CLIENT_MOVE_BACK_WITH_INPUT_TIMEOUT_SECS :
+		 IMAP_CLIENT_MOVE_BACK_WITHOUT_INPUT_TIMEOUT_SECS);
+	t2 = c2->move_back_start +
+		(c2->input_pending ?
+		 IMAP_CLIENT_MOVE_BACK_WITH_INPUT_TIMEOUT_SECS :
+		 IMAP_CLIENT_MOVE_BACK_WITHOUT_INPUT_TIMEOUT_SECS);
+	if (t1 < t2)
+		return -1;
+	if (t1 > t2)
+		return 1;
+	return 0;
+}
+
+static void imap_clients_unhibernate(void *context ATTR_UNUSED)
+{
+	struct priorityq_item *item;
+
+	while ((item = priorityq_pop(unhibernate_queue)) != NULL) {
+		struct imap_client *client = (struct imap_client *)item;
+
+		if (!imap_client_try_move_back(client))
+			return;
+	}
+	timeout_remove(&to_unhibernate);
+}
+
+void imap_clients_init(void)
+{
+	unhibernate_queue = priorityq_init(client_unhibernate_cmp, 64);
+}
+
 void imap_clients_deinit(void)
 {
 	while (imap_clients != NULL) {
@@ -549,4 +698,7 @@ void imap_clients_deinit(void)
 		imap_client_io_activate_user(client);
 		imap_client_destroy(&client, "Shutting down");
 	}
+	if (to_unhibernate != NULL)
+		timeout_remove(&to_unhibernate);
+	priorityq_deinit(&unhibernate_queue);
 }

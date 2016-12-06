@@ -291,6 +291,17 @@ void index_sync_update_recent_count(struct mailbox *box)
 	}
 }
 
+static void index_mailbox_sync_free(struct index_mailbox_sync_context *ctx)
+{
+	if (array_is_created(&ctx->flag_updates))
+		array_free(&ctx->flag_updates);
+	if (array_is_created(&ctx->hidden_updates))
+		array_free(&ctx->hidden_updates);
+	if (array_is_created(&ctx->all_flag_update_uids))
+		array_free(&ctx->all_flag_update_uids);
+	i_free(ctx);
+}
+
 int index_mailbox_sync_deinit(struct mailbox_sync_context *_ctx,
 			      struct mailbox_sync_status *status_r)
 {
@@ -314,6 +325,10 @@ int index_mailbox_sync_deinit(struct mailbox_sync_context *_ctx,
 			ret = -1;
 		}
 	}
+	if (ret < 0) {
+		index_mailbox_sync_free(ctx);
+		return -1;
+	}
 	index_mailbox_expunge_unseen_recent(ctx);
 
 	if ((_ctx->box->flags & MAILBOX_FLAG_DROP_RECENT) == 0 &&
@@ -327,18 +342,19 @@ int index_mailbox_sync_deinit(struct mailbox_sync_context *_ctx,
 
 	/* update search results after private index is updated */
 	index_sync_search_results_update(ctx);
-
-	if (array_is_created(&ctx->flag_updates))
-		array_free(&ctx->flag_updates);
-	if (array_is_created(&ctx->hidden_updates))
-		array_free(&ctx->hidden_updates);
-	if (array_is_created(&ctx->all_flag_update_uids))
-		array_free(&ctx->all_flag_update_uids);
-
 	/* update vsize header if wanted */
-	if (ret == 0)
-		index_mailbox_vsize_update_appends(_ctx->box);
-	i_free(ctx);
+	index_mailbox_vsize_update_appends(_ctx->box);
+
+	if (ret == 0 && mail_index_view_is_inconsistent(_ctx->box->view)) {
+		/* we probably had MAILBOX_SYNC_FLAG_FIX_INCONSISTENT set,
+		   but the view got broken in the middle. FIXME: We could
+		   attempt to fix it automatically. In any case now the view
+		   isn't usable and we can't return success. */
+		mailbox_set_index_error(_ctx->box);
+		ret = -1;
+	}
+
+	index_mailbox_sync_free(ctx);
 	return ret;
 }
 
@@ -403,9 +419,10 @@ index_list_get_ext_id(struct mailbox *box, struct mail_index_view *view)
 	return ibox->list_index_sync_ext_id;
 }
 
-int index_storage_list_index_has_changed(struct mailbox *box,
-					 struct mail_index_view *list_view,
-					 uint32_t seq)
+enum index_storage_list_change
+index_storage_list_index_has_changed_full(struct mailbox *box,
+					  struct mail_index_view *list_view,
+					  uint32_t seq)
 {
 	const struct index_storage_list_index_record *rec;
 	const void *data;
@@ -416,7 +433,7 @@ int index_storage_list_index_has_changed(struct mailbox *box,
 	int ret;
 
 	if (mail_index_is_in_memory(mail_index_view_get_index(list_view)))
-		return 1;
+		return INDEX_STORAGE_LIST_CHANGE_INMEMORY;
 
 	ext_id = index_list_get_ext_id(box, list_view);
 	mail_index_lookup_ext(list_view, seq, ext_id, &data, &expunged);
@@ -424,28 +441,43 @@ int index_storage_list_index_has_changed(struct mailbox *box,
 
 	if (rec == NULL || expunged || rec->size == 0 || rec->mtime == 0) {
 		/* doesn't exist / not synced */
-		return 1;
+		return INDEX_STORAGE_LIST_CHANGE_NORECORD;
 	}
 	if (box->storage->set->mailbox_list_index_very_dirty_syncs)
-		return 0;
+		return INDEX_STORAGE_LIST_CHANGE_NONE;
 
 	ret = mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX, &dir);
 	if (ret < 0)
-		return -1;
+		return INDEX_STORAGE_LIST_CHANGE_ERROR;
 	i_assert(ret > 0);
 
 	path = t_strconcat(dir, "/", box->index_prefix, ".log", NULL);
 	if (stat(path, &st) < 0) {
 		if (errno == ENOENT)
-			return 1;
+			return INDEX_STORAGE_LIST_CHANGE_NOT_IN_FS;
 		mail_storage_set_critical(box->storage,
 					  "stat(%s) failed: %m", path);
-		return -1;
+		return INDEX_STORAGE_LIST_CHANGE_ERROR;
 	}
-	if (rec->size != (st.st_size & 0xffffffffU) ||
-	    rec->mtime != (st.st_mtime & 0xffffffffU))
+	if (rec->size != (st.st_size & 0xffffffffU))
+		return INDEX_STORAGE_LIST_CHANGE_SIZE_CHANGED;
+	if (rec->mtime != (st.st_mtime & 0xffffffffU))
+		return INDEX_STORAGE_LIST_CHANGE_MTIME_CHANGED;
+	return INDEX_STORAGE_LIST_CHANGE_NONE;
+}
+
+int index_storage_list_index_has_changed(struct mailbox *box,
+					 struct mail_index_view *list_view,
+					 uint32_t seq)
+{
+	switch (index_storage_list_index_has_changed_full(box, list_view, seq)) {
+	case INDEX_STORAGE_LIST_CHANGE_ERROR:
+		return -1;
+	case INDEX_STORAGE_LIST_CHANGE_NONE:
+		return 0;
+	default:
 		return 1;
-	return 0;
+	}
 }
 
 void index_storage_list_index_update_sync(struct mailbox *box,

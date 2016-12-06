@@ -194,8 +194,11 @@ uidlist_write_array(struct ostream *output, const uint32_t *uid_list,
 		prev = 0;
 		for (i = 0; i < uid_count; i++) {
 			uid = uid_list[i];
-			if (unlikely((uid & ~UID_LIST_MASK_RANGE) < prev))
+			if (unlikely((uid & ~UID_LIST_MASK_RANGE) < prev)) {
+				if (!datastack)
+					i_free(uidbuf);
 				return -1;
+			}
 			if ((uid & UID_LIST_MASK_RANGE) == 0) {
 				squat_pack_num(&bufp, (uid - prev) << 1);
 				prev = uid + 1;
@@ -371,7 +374,7 @@ static int squat_uidlist_map_header(struct squat_uidlist *uidlist)
 	}
 	if (uidlist->hdr.indexid != uidlist->trie->hdr.indexid) {
 		/* see if trie was recreated */
-		(void)squat_trie_refresh(uidlist->trie);
+		(void)squat_trie_open(uidlist->trie);
 	}
 	if (uidlist->hdr.indexid != uidlist->trie->hdr.indexid) {
 		squat_uidlist_set_corrupted(uidlist, "wrong indexid");
@@ -861,7 +864,8 @@ int squat_uidlist_build_finish(struct squat_uidlist_build_context *ctx)
 	}
 
 	if (o_stream_nfinish(ctx->output) < 0) {
-		i_error("write() to %s failed: %m", ctx->uidlist->path);
+		i_error("write() to %s failed: %s", ctx->uidlist->path,
+			o_stream_get_error(ctx->output));
 		return -1;
 	}
 	return 0;
@@ -1064,7 +1068,8 @@ int squat_uidlist_rebuild_finish(struct squat_uidlist_rebuild_context *ctx,
 		if (ctx->uidlist->corrupted)
 			ret = -1;
 		else if (o_stream_nfinish(ctx->output) < 0) {
-			i_error("write() to %s failed: %m", temp_path);
+			i_error("write(%s) failed: %s", temp_path,
+				o_stream_get_error(ctx->output));
 			ret = -1;
 		} else if (rename(temp_path, ctx->uidlist->path) < 0) {
 			i_error("rename(%s, %s) failed: %m",

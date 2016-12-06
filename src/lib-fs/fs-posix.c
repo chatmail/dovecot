@@ -35,6 +35,7 @@ struct posix_fs {
 	enum fs_posix_lock_method lock_method;
 	mode_t mode;
 	bool mode_auto;
+	bool have_dirs;
 };
 
 struct posix_fs_file {
@@ -87,7 +88,7 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 	fs->lock_method = FS_POSIX_LOCK_METHOD_FLOCK;
 	fs->mode = FS_DEFAULT_MODE;
 
-	tmp = t_strsplit_spaces(args, " ");
+	tmp = t_strsplit_spaces(args, ": ");
 	for (; *tmp != NULL; tmp++) {
 		const char *arg = *tmp;
 
@@ -104,6 +105,8 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 				fs->path_prefix = i_strdup(arg + 7);
 		} else if (strcmp(arg, "mode=auto") == 0) {
 			fs->mode_auto = TRUE;
+		} else if (strcmp(arg, "dirs") == 0) {
+			fs->have_dirs = TRUE;
 		} else if (strncmp(arg, "mode=", 5) == 0) {
 			unsigned int mode;
 			if (str_to_uint_oct(arg+5, &mode) < 0) {
@@ -133,13 +136,21 @@ static void fs_posix_deinit(struct fs *_fs)
 	i_free(fs);
 }
 
-static enum fs_properties fs_posix_get_properties(struct fs *fs ATTR_UNUSED)
+static enum fs_properties fs_posix_get_properties(struct fs *_fs)
 {
-	/* FS_PROPERTY_DIRECTORIES not returned because fs_delete()
-	   automatically rmdir()s parents. This could be changed later though,
-	   but SIS code at least would need to be changed to support it. */
-	return FS_PROPERTY_LOCKS | FS_PROPERTY_FASTCOPY | FS_PROPERTY_RENAME |
+	struct posix_fs *fs = (struct posix_fs *)_fs;
+	enum fs_properties props =
+		FS_PROPERTY_LOCKS | FS_PROPERTY_FASTCOPY | FS_PROPERTY_RENAME |
 		FS_PROPERTY_STAT | FS_PROPERTY_ITER | FS_PROPERTY_RELIABLEITER;
+
+	/* FS_PROPERTY_DIRECTORIES is not returned normally because fs_delete()
+	   automatically rmdir()s parents. For backwards compatibility
+	   (especially with SIS code) we'll do it that way, but optionally with
+	   "dirs" parameter enable them. This is especially important to be
+	   able to use doveadm fs commands to delete empty directories. */
+	if (fs->have_dirs)
+		props |= FS_PROPERTY_DIRECTORIES;
+	return props;
 }
 
 static int
@@ -201,12 +212,15 @@ static int fs_posix_rmdir_parents(struct posix_fs *fs, const char *path)
 {
 	const char *p;
 
-	if (fs->root_path == NULL)
+	if (fs->have_dirs)
+		return 0;
+	if (fs->root_path == NULL && fs->path_prefix == NULL)
 		return 0;
 
 	while ((p = strrchr(path, '/')) != NULL) {
 		path = t_strdup_until(path, p);
-		if (strcmp(path, fs->root_path) == 0)
+		if ((fs->root_path != NULL && strcmp(path, fs->root_path) == 0) ||
+		    (fs->path_prefix != NULL && strncmp(path, fs->path_prefix, strlen(path)) == 0))
 			break;
 		if (rmdir(path) == 0) {
 			/* success, continue to parent */
@@ -429,6 +443,23 @@ fs_posix_read_stream(struct fs_file *_file, size_t max_buffer_size)
 	return input;
 }
 
+static void fs_posix_write_rename_if_needed(struct posix_fs_file *file)
+{
+	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
+	const char *new_fname;
+
+	new_fname = fs_metadata_find(&file->file.metadata, FS_METADATA_WRITE_FNAME);
+	if (new_fname == NULL)
+		return;
+
+	i_free(file->file.path);
+	file->file.path = i_strdup(new_fname);
+
+	i_free(file->full_path);
+	file->full_path = fs->path_prefix == NULL ? i_strdup(new_fname) :
+		i_strconcat(fs->path_prefix, new_fname, NULL);
+}
+
 static int fs_posix_write_finish(struct posix_fs_file *file)
 {
 	int ret, old_errno;
@@ -441,6 +472,7 @@ static int fs_posix_write_finish(struct posix_fs_file *file)
 		}
 	}
 
+	fs_posix_write_rename_if_needed(file);
 	switch (file->open_mode) {
 	case FS_OPEN_MODE_CREATE_UNIQUE_128:
 	case FS_OPEN_MODE_CREATE:
@@ -485,6 +517,7 @@ static int fs_posix_write(struct fs_file *_file, const void *data, size_t size)
 	if (file->fd == -1) {
 		if (fs_posix_open(file) < 0)
 			return -1;
+		i_assert(file->fd != -1);
 	}
 
 	if (file->open_mode != FS_OPEN_MODE_APPEND) {
@@ -857,7 +890,8 @@ const struct fs fs_class_posix = {
 		fs_posix_file_close,
 		NULL,
 		NULL, NULL,
-		NULL, NULL,
+		fs_default_set_metadata,
+		NULL,
 		fs_posix_prefetch,
 		fs_posix_read,
 		fs_posix_read_stream,
@@ -873,6 +907,8 @@ const struct fs fs_class_posix = {
 		fs_posix_delete,
 		fs_posix_iter_init,
 		fs_posix_iter_next,
-		fs_posix_iter_deinit
+		fs_posix_iter_deinit,
+		NULL,
+		NULL,
 	}
 };

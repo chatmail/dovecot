@@ -76,6 +76,36 @@ static int o_stream_temp_move_to_fd(struct temp_ostream *tstream)
 	return 0;
 }
 
+int o_stream_temp_move_to_memory(struct ostream *output)
+{
+	struct temp_ostream *tstream =
+		(struct temp_ostream *)output->real_stream;
+	unsigned char buf[IO_BLOCK_SIZE];
+	uoff_t offset = 0;
+	ssize_t ret = 0;
+
+	i_assert(tstream->buf == NULL);
+	tstream->buf = buffer_create_dynamic(default_pool, 8192);
+	while (offset < tstream->ostream.ostream.offset &&
+	       (ret = pread(tstream->fd, buf, sizeof(buf), offset)) > 0) {
+		if ((size_t)ret > tstream->ostream.ostream.offset - offset)
+			ret = tstream->ostream.ostream.offset - offset;
+		buffer_append(tstream->buf, buf, ret);
+		offset += ret;
+	}
+	if (ret < 0) {
+		/* not really expecting this to happen */
+		i_error("iostream-temp %s: read(%s*) failed: %m",
+			o_stream_get_name(&tstream->ostream.ostream),
+			tstream->temp_path_prefix);
+		tstream->ostream.ostream.stream_errno = EIO;
+		return -1;
+	}
+	i_close_fd(&tstream->fd);
+	tstream->ostream.fd = -1;
+	return 0;
+}
+
 static ssize_t
 o_stream_temp_fd_sendv(struct temp_ostream *tstream,
 		       const struct const_iovec *iov, unsigned int iov_count)
@@ -85,8 +115,18 @@ o_stream_temp_fd_sendv(struct temp_ostream *tstream,
 
 	for (i = 0; i < iov_count; i++) {
 		if (write_full(tstream->fd, iov[i].iov_base, iov[i].iov_len) < 0) {
-			tstream->ostream.ostream.stream_errno = errno;
-			return -1;
+			i_error("iostream-temp %s: write(%s*) failed: %m - moving to memory",
+				o_stream_get_name(&tstream->ostream.ostream),
+				tstream->temp_path_prefix);
+			if (o_stream_temp_move_to_memory(&tstream->ostream.ostream) < 0)
+				return -1;
+			for (; i < iov_count; i++) {
+				buffer_append(tstream->buf, iov[i].iov_base, iov[i].iov_len);
+				bytes += iov[i].iov_len;
+				tstream->ostream.ostream.offset += iov[i].iov_len;
+			}
+			i_assert(tstream->fd_tried);
+			return bytes;
 		}
 		bytes += iov[i].iov_len;
 		tstream->ostream.ostream.offset += iov[i].iov_len;
@@ -145,8 +185,8 @@ static int o_stream_temp_dup_cancel(struct temp_ostream *tstream)
 	return ret < 0 ? -1 : 0;
 }
 
-static int o_stream_temp_dup_istream(struct temp_ostream *outstream,
-				     struct istream *instream)
+static off_t o_stream_temp_dup_istream(struct temp_ostream *outstream,
+				       struct istream *instream)
 {
 	uoff_t in_size;
 	off_t ret;
@@ -159,6 +199,7 @@ static int o_stream_temp_dup_istream(struct temp_ostream *outstream,
 			return o_stream_temp_dup_cancel(outstream);
 		return 0;
 	}
+	i_assert(instream->v_offset <= in_size);
 
 	if (outstream->dupstream == NULL) {
 		outstream->dupstream = instream;
@@ -173,6 +214,8 @@ static int o_stream_temp_dup_istream(struct temp_ostream *outstream,
 	ret = in_size - instream->v_offset;
 	i_stream_seek(instream, in_size);
 	outstream->dupstream_offset = instream->v_offset;
+	outstream->ostream.ostream.offset =
+		outstream->dupstream_offset - outstream->dupstream_start_offset;
 	return ret;
 }
 
@@ -181,12 +224,14 @@ static off_t o_stream_temp_send_istream(struct ostream_private *_outstream,
 {
 	struct temp_ostream *outstream = (struct temp_ostream *)_outstream;
 	uoff_t orig_offset;
-	int ret;
+	off_t ret;
 
 	if ((outstream->flags & IOSTREAM_TEMP_FLAG_TRY_FD_DUP) != 0) {
 		orig_offset = outstream->dupstream_offset;
-		if ((ret = o_stream_temp_dup_istream(outstream, instream)) > 0)
+		if ((ret = o_stream_temp_dup_istream(outstream, instream)) > 0) {
+			i_assert(outstream->dupstream_offset >= orig_offset);
 			return outstream->dupstream_offset - orig_offset;
+		}
 		if (ret < 0)
 			return -1;
 		outstream->flags &= ~IOSTREAM_TEMP_FLAG_TRY_FD_DUP;

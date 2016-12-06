@@ -36,6 +36,10 @@ put it in "quotes". The mailbox settings are:
     * mailbox_list_index=yes is highly recommended when using this setting, as
       it avoids actually opening the mailbox to see if anything needs to be
       expunged.
+ * autoexpunge_max_mails=<number>: (v2.2.25+) Mails are expunged until mail
+   count is at autoexpunge_max_mails or below.  After these messages are
+   removed, autoexpunge will then try to expunge mails based on the
+   'autoexpunge' setting.
 
 ---%<-------------------------------------------------------------------------
 namespace inbox {
@@ -71,4 +75,4 @@ names.
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

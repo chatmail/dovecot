@@ -6,7 +6,7 @@
 
 #define DIRECTOR_VERSION_NAME "director"
 #define DIRECTOR_VERSION_MAJOR 1
-#define DIRECTOR_VERSION_MINOR 7
+#define DIRECTOR_VERSION_MINOR 8
 
 /* weak users supported in protocol */
 #define DIRECTOR_VERSION_WEAK_USERS 1
@@ -24,6 +24,8 @@
 #define DIRECTOR_VERSION_UPDOWN 6
 /* user tag version 2 supported */
 #define DIRECTOR_VERSION_TAGS_V2 7
+/* user-kick-alt supported */
+#define DIRECTOR_VERSION_USER_KICK_ALT 8
 
 /* Minimum time between even attempting to communicate with a director that
    failed due to a protocol error. */
@@ -33,7 +35,59 @@ struct director;
 struct mail_host;
 struct user;
 
+enum user_kill_state {
+	/* User isn't being killed */
+	USER_KILL_STATE_NONE,
+	/* We're still killing the user's connections */
+	USER_KILL_STATE_KILLING,
+	/* Like above, but our left side already announced it was finished
+	   with killing its user connections */
+	USER_KILL_STATE_KILLING_NOTIFY_RECEIVED,
+	/* We're done killing, but we have to wait for the left side to
+	   finish killing its user connections before sending USER-KILLED to
+	   our right side */
+	USER_KILL_STATE_KILLED_WAITING_FOR_NOTIFY,
+	/* We're done killing, but waiting for USER-KILLED-EVERYWHERE
+	   notification until this state gets reset. */
+	USER_KILL_STATE_KILLED_WAITING_FOR_EVERYONE,
+	/* Waiting for the flush socket to finish. */
+	USER_KILL_STATE_FLUSHING,
+	/* Wait for a while for the user connections to actually die. Note that
+	   only at this stage we can be sure that all the directors know about
+	   the user move (although it could be earlier if we added a new
+	   USER-MOVED notification). */
+	USER_KILL_STATE_DELAY
+	/* NOTE: remember to update also user_kill_state_names[] */
+};
+extern const char *user_kill_state_names[USER_KILL_STATE_DELAY+1];
+
 typedef void director_state_change_callback_t(struct director *dir);
+
+/* When a user gets freed, the kill_ctx may still be left alive. It's also
+   possible for the user to come back, in which case the kill_ctx is usually
+   NULL, but another kill could have also started. The previous kill_ctx is
+   valid only if it matches the current user's kill_ctx. */
+#define DIRECTOR_KILL_CONTEXT_IS_VALID(user, ctx) \
+	((user) != NULL && (user)->kill_ctx == ctx)
+
+struct director_kill_context {
+	struct director *dir;
+	unsigned int username_hash;
+	struct ip_addr old_host_ip;
+	bool kill_is_self_initiated;
+	bool callback_pending;
+
+	enum user_kill_state kill_state;
+	/* Move timeout to make sure user's connections won't silently hang
+	   indefinitely if there is some trouble moving it. */
+	struct timeout *to_move;
+
+	/* these are set only for director_flush_socket handling: */
+	struct ip_addr host_ip;
+	struct program_client *pclient;
+	struct ostream *reply;
+	char *socket_path;
+};
 
 struct director {
 	const struct director_settings *set;
@@ -63,6 +117,8 @@ struct director {
 	struct mail_host_list *orig_config_hosts;
 	/* temporary user -> host associations */
 	struct user_directory *users;
+	/* Number of users currently being moved */
+	unsigned int users_moving_count;
 
 	/* these requests are waiting for directors to be in synced */
 	ARRAY(struct director_request *) pending_requests;
@@ -150,6 +206,10 @@ void director_move_user(struct director *dir, struct director_host *src,
 void director_kick_user(struct director *dir, struct director_host *src,
 			struct director_host *orig_src, const char *username)
 	ATTR_NULL(3);
+void director_kick_user_alt(struct director *dir, struct director_host *src,
+			    struct director_host *orig_src,
+			    const char *field, const char *value)
+	ATTR_NULL(3);
 void director_kick_user_hash(struct director *dir, struct director_host *src,
 			     struct director_host *orig_src,
 			     unsigned int username_hash,
@@ -174,6 +234,9 @@ void director_update_send_version(struct director *dir,
 				  unsigned int min_version, const char *cmd);
 
 int director_connect_host(struct director *dir, struct director_host *host);
+
+void directors_init(void);
+void directors_deinit(void);
 
 void dir_debug(const char *fmt, ...) ATTR_FORMAT(1, 2);
 

@@ -144,4 +144,4 @@ References
    http://www.linuxmail.info/mbox-maildir-mail-storage-formats/
    [http://www.linux-mail.info/mbox-maildir-mail-storage-formats/]
 
-(This file was created from the wiki on 2016-04-26 04:43)
+(This file was created from the wiki on 2016-10-27 04:44)

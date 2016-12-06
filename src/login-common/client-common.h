@@ -117,6 +117,7 @@ struct client {
 	const struct login_settings *set;
 	const struct master_service_ssl_settings *ssl_set;
 	const char *session_id, *listener_name, *postlogin_socket_path;
+	const char *local_name;
 
 	int fd;
 	struct istream *input;
@@ -154,6 +155,11 @@ struct client {
 	ARRAY(union login_client_module_context *) module_contexts;
 
 	char *virtual_user, *virtual_user_orig, *virtual_auth_user;
+	/* passdb user_* fields are set here after a successful auth.
+	   This is a NULL-terminated array where fields are in the same order
+	   as in global_alt_usernames. If some field doesn't exist, it's "".
+	   Can also be NULL if there are no user_* fields. */
+	const char **alt_usernames;
 	unsigned int destroyed:1;
 	unsigned int input_blocked:1;
 	unsigned int login_success:1;

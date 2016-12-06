@@ -87,7 +87,9 @@ static const struct doveadm_cmd_dump *dumps_builtin[] = {
 	&doveadm_cmd_dump_log,
 	&doveadm_cmd_dump_mailboxlog,
 	&doveadm_cmd_dump_thread,
-	&doveadm_cmd_dump_zlib
+	&doveadm_cmd_dump_zlib,
+	&doveadm_cmd_dump_dcrypt_file,
+	&doveadm_cmd_dump_dcrypt_key
 };
 
 void print_dump_types(void)

@@ -166,12 +166,11 @@ imap_msgpart_get_header_fields(pool_t pool, const char *header_list,
 			value = p_strdup(pool, t_str_ucase(value));
 			array_append(fields, &value, 1);
 		}
+		/* istream-header-filter requires headers to be sorted */
+		array_sort(fields, i_strcasecmp_p);
 	} else {
 		result = -1;
 	}
-
-	/* istream-header-filter requires headers to be sorted */
-	array_sort(fields, i_strcasecmp_p);
 
 	imap_parser_unref(&parser);
 	i_stream_unref(&input);
@@ -183,6 +182,9 @@ imap_msgpart_parse_header_fields(struct imap_msgpart *msgpart,
 				 const char *header_list)
 {
 	ARRAY_TYPE(const_string) fields;
+
+	if (header_list[0] == ' ')
+		header_list++;
 
 	/* HEADER.FIELDS (list), HEADER.FIELDS.NOT (list) */
 	if (imap_msgpart_get_header_fields(msgpart->pool, header_list,
@@ -267,14 +269,14 @@ int imap_msgpart_parse(const char *section, struct imap_msgpart **msgpart_r)
 		if (section[6] == '\0') {
 			msgpart->fetch_type = FETCH_HEADER;
 			ret = 0;
-		} else if (strncmp(section, "HEADER.FIELDS ", 14) == 0) {
-			msgpart->fetch_type = FETCH_HEADER_FIELDS;
-			ret = imap_msgpart_parse_header_fields(msgpart,
-							       section+14);
-		} else if (strncmp(section, "HEADER.FIELDS.NOT ", 18) == 0) {
+		} else if (strncmp(section, "HEADER.FIELDS.NOT", 17) == 0) {
 			msgpart->fetch_type = FETCH_HEADER_FIELDS_NOT;
 			ret = imap_msgpart_parse_header_fields(msgpart,
-							       section+18);
+							       section+17);
+		} else if (strncmp(section, "HEADER.FIELDS", 13) == 0) {
+			msgpart->fetch_type = FETCH_HEADER_FIELDS;
+			ret = imap_msgpart_parse_header_fields(msgpart,
+							       section+13);
 		} else {
 			ret = -1;
 		}
@@ -393,8 +395,8 @@ imap_msgpart_get_partial_header(struct mail *mail, struct istream *mail_input,
 	if (message_get_header_size(input, &hdr_size, &has_nuls) < 0) {
 		errno = input->stream_errno;
 		mail_storage_set_critical(mail->box->storage,
-			"read(%s) failed: %s", i_stream_get_name(mail_input),
-			i_stream_get_error(mail_input));
+			"read(%s) failed: %s", i_stream_get_name(input),
+			i_stream_get_error(input));
 		i_stream_unref(&input);
 		return -1;
 	}
@@ -421,7 +423,7 @@ imap_msgpart_crlf_seek(struct mail *mail, struct istream *input,
 
 	if (virtual_skip == 0) {
 		/* no need to seek */
-	} else if (cache->uid == mail->uid &&
+	} else if (mail->uid > 0 && cache->uid == mail->uid &&
 		   cache->physical_start == physical_start &&
 		   cache->virtual_pos < virtual_skip) {
 		/* use cache */
@@ -435,7 +437,8 @@ imap_msgpart_crlf_seek(struct mail *mail, struct istream *input,
 		return errinput;
 	}
 
-	if ((msgpart->partial_offset != 0 ||
+	if (mail->uid > 0 &&
+	    (msgpart->partial_offset != 0 ||
 	     msgpart->partial_size != (uoff_t)-1) && !input->eof) {
 		/* update cache */
 		cache->uid = mail->uid;
@@ -573,7 +576,7 @@ imap_msgpart_open_normal(struct mail *mail, struct imap_msgpart *msgpart,
 
 	if (*msgpart->section_number != '\0') {
 		/* find the MIME part */
-		if (mail_get_stream(mail, NULL, NULL, &input) < 0)
+		if (mail_get_stream_because(mail, NULL, NULL, "MIME part", &input) < 0)
 			return -1;
 
 		i_stream_seek(input, part->physical_pos);
@@ -582,7 +585,7 @@ imap_msgpart_open_normal(struct mail *mail, struct imap_msgpart *msgpart,
 	} else switch (msgpart->fetch_type) {
 	case FETCH_FULL:
 		/* fetch the whole message */
-		if (mail_get_stream(mail, NULL, NULL, &input) < 0 ||
+		if (mail_get_stream_because(mail, NULL, NULL, "full mail", &input) < 0 ||
 		    mail_get_virtual_size(mail, &body_size.virtual_size) < 0)
 			return -1;
 		result_r->size_field = MAIL_FETCH_VIRTUAL_SIZE;
@@ -617,7 +620,8 @@ imap_msgpart_open_normal(struct mail *mail, struct imap_msgpart *msgpart,
 		break;
 	case FETCH_BODY:
 		/* fetch the message's body */
-		if (mail_get_stream(mail, &hdr_size, &body_size, &input) < 0)
+		if (mail_get_stream_because(mail, &hdr_size, &body_size,
+					    "mail body", &input) < 0)
 			return -1;
 		result_r->size_field = MAIL_FETCH_MESSAGE_PARTS;
 		break;

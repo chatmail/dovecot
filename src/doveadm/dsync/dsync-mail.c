@@ -30,10 +30,12 @@ int dsync_mail_get_hdr_hash(struct mail *mail, unsigned int version,
 {
 	struct istream *hdr_input, *input;
 	struct mailbox_header_lookup_ctx *hdr_ctx;
+	struct message_header_hash_context hash_ctx;
 	struct md5_context md5_ctx;
 	unsigned char md5_result[MD5_RESULTLEN];
 	const unsigned char *data;
 	size_t size;
+	ssize_t sret;
 	int ret = 0;
 
 	hdr_ctx = mailbox_header_lookup_init(mail->box, hashed_headers);
@@ -45,15 +47,13 @@ int dsync_mail_get_hdr_hash(struct mail *mail, unsigned int version,
 	input = i_stream_create_lf(hdr_input);
 
 	md5_init(&md5_ctx);
-	while (!i_stream_is_eof(input)) {
-		if (i_stream_read_data(input, &data, &size, 0) == -1)
-			break;
-		if (size == 0)
-			break;
-		message_header_hash_more(&hash_method_md5, &md5_ctx, version,
-					 data, size);
+	memset(&hash_ctx, 0, sizeof(hash_ctx));
+	while ((sret = i_stream_read_more(input, &data, &size)) > 0) {
+		message_header_hash_more(&hash_ctx, &hash_method_md5, &md5_ctx,
+					 version, data, size);
 		i_stream_skip(input, size);
 	}
+	i_assert(sret == -1);
 	if (input->stream_errno != 0)
 		ret = -1;
 	i_stream_unref(&input);
@@ -160,4 +160,5 @@ void dsync_mail_change_dup(pool_t pool, const struct dsync_mail_change *src,
 	const_string_array_dup(pool, &src->keyword_changes,
 			       &dest_r->keyword_changes);
 	dest_r->received_timestamp = src->received_timestamp;
+	dest_r->virtual_size = src->virtual_size;
 }
