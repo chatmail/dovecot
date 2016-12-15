@@ -8,3 +8,4 @@ exampledir.patch
 mboxlocking.patch
 dovecot_name.patch
 libnss_location.patch
+fix-sha3-on-big-endian.patch
