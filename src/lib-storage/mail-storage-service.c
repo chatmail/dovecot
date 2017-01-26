@@ -113,7 +113,6 @@ static void set_keyval(struct mail_storage_service_ctx *ctx,
 		       const char *key, const char *value)
 {
 	struct setting_parser_context *set_parser = user->set_parser;
-	const char *str;
 
 	if (master_service_set_has_config_override(ctx->service, key)) {
 		/* this setting was already overridden with -o parameter */
@@ -125,9 +124,8 @@ static void set_keyval(struct mail_storage_service_ctx *ctx,
 		return;
 	}
 
-	str = t_strconcat(key, "=", value, NULL);
-	if (settings_parse_line(set_parser, str) < 0) {
-		i_fatal("Invalid userdb input '%s': %s", str,
+	if (settings_parse_keyvalue(set_parser, key, value) < 0) {
+		i_fatal("Invalid userdb input %s=%s: %s", key, value,
 			settings_parser_get_error(set_parser));
 	}
 }
@@ -1630,6 +1628,11 @@ struct mail_storage_service_ctx *
 mail_storage_service_user_get_service_ctx(struct mail_storage_service_user *user)
 {
 	return user->service_ctx;
+}
+
+pool_t mail_storage_service_user_get_pool(struct mail_storage_service_user *user)
+{
+	return user->pool;
 }
 
 void *mail_storage_service_get_settings(struct master_service *service)

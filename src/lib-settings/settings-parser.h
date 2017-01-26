@@ -146,6 +146,9 @@ bool settings_parse_is_changed(struct setting_parser_context *ctx,
 			       const char *key);
 /* Parse a single line. Returns 1 if OK, 0 if key is unknown, -1 if error. */
 int settings_parse_line(struct setting_parser_context *ctx, const char *line);
+/* Parse key/value pair. Returns 1 if OK, 0 if key is unknown, -1 if error. */
+int settings_parse_keyvalue(struct setting_parser_context *ctx,
+			    const char *key, const char *value);
 /* Parse data already read in input stream. */
 int settings_parse_stream(struct setting_parser_context *ctx,
 			  struct istream *input);
@@ -197,6 +200,10 @@ bool settings_vars_have_key(const struct setting_parser_info *info, void *set,
 /* Duplicate the entire settings structure. */
 void *settings_dup(const struct setting_parser_info *info,
 		   const void *set, pool_t pool);
+/* Same as settings_dup(), but assume that the old pointers can still be safely
+   used. This saves memory since strings don't have to be duplicated. */
+void *settings_dup_with_pointers(const struct setting_parser_info *info,
+				 const void *set, pool_t pool);
 /* Duplicate the entire setting parser. */
 struct setting_parser_context *
 settings_parser_dup(const struct setting_parser_context *old_ctx,

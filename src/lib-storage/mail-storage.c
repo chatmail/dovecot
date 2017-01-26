@@ -282,7 +282,8 @@ mail_storage_match_class(struct mail_storage *storage,
 		return FALSE;
 
 	if ((storage->class_flags & MAIL_STORAGE_CLASS_FLAG_UNIQUE_ROOT) != 0 &&
-	    strcmp(storage->unique_root_dir, set->root_dir) != 0)
+	    strcmp(storage->unique_root_dir,
+	    	(set->root_dir != NULL ? set->root_dir : "")) != 0)
 		return FALSE;
 
 	if (strcmp(storage->name, "shared") == 0) {
@@ -1156,6 +1157,14 @@ static bool mailbox_try_undelete(struct mailbox *box)
 
 int mailbox_open(struct mailbox *box)
 {
+	/* check that the storage supports stubs if require them */
+	if (((box->flags & MAILBOX_FLAG_USE_STUBS) != 0) &&
+	    ((box->storage->storage_class->class_flags & MAIL_STORAGE_CLASS_FLAG_STUBS) == 0)) {
+		mail_storage_set_error(box->storage, MAIL_ERROR_NOTPOSSIBLE,
+				       "Mailbox does not support mail stubs");
+		return -1;
+	}
+
 	if (mailbox_open_full(box, NULL) < 0) {
 		if (!box->mailbox_deleted)
 			return -1;
@@ -1321,6 +1330,13 @@ int mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 	box->creating = FALSE;
 	if (ret == 0)
 		box->list->guid_cache_updated = TRUE;
+	else if (box->opened) {
+		/* Creation failed after (partially) opening the mailbox.
+		   It may not be in a valid state, so close it. */
+		mail_storage_last_error_push(box->storage);
+		mailbox_close(box);
+		mail_storage_last_error_pop(box->storage);
+	}
 	return ret;
 }
 
@@ -1665,8 +1681,6 @@ int mailbox_get_status(struct mailbox *box,
 	if (mailbox_verify_existing_name(box) < 0)
 		return -1;
 
-	if ((items & STATUS_HIGHESTMODSEQ) != 0)
-		mailbox_enable(box, MAILBOX_FEATURE_CONDSTORE);
 	if (box->v.get_status(box, items, status_r) < 0)
 		return -1;
 	i_assert(status_r->have_guids || !status_r->have_save_guids);
@@ -1681,8 +1695,6 @@ void mailbox_get_open_status(struct mailbox *box,
 	i_assert((items & MAILBOX_STATUS_FAILING_ITEMS) == 0);
 
 	mailbox_get_status_set_defaults(box, status_r);
-	if ((items & STATUS_HIGHESTMODSEQ) != 0)
-		mailbox_enable(box, MAILBOX_FEATURE_CONDSTORE);
 	if (box->v.get_status(box, items, status_r) < 0)
 		i_unreached();
 }
@@ -1806,6 +1818,8 @@ mailbox_search_init(struct mailbox_transaction_context *t,
 		    enum mail_fetch_field wanted_fields,
 		    struct mailbox_header_lookup_ctx *wanted_headers)
 {
+	i_assert(wanted_headers == NULL || wanted_headers->box == t->box);
+
 	mail_search_args_ref(args);
 	if (!args->simplified)
 		mail_search_args_simplify(args);
@@ -1882,6 +1896,9 @@ mailbox_transaction_begin(struct mailbox *box,
 			  enum mailbox_transaction_flags flags)
 {
 	struct mailbox_transaction_context *trans;
+
+	i_assert((flags & MAILBOX_TRANSACTION_FLAG_FILL_IN_STUB) == 0 ||
+		 (box->flags & MAILBOX_FLAG_USE_STUBS) != 0);
 
 	i_assert(box->opened);
 
@@ -2037,6 +2054,11 @@ void mailbox_save_set_from_envelope(struct mail_save_context *ctx,
 void mailbox_save_set_uid(struct mail_save_context *ctx, uint32_t uid)
 {
 	ctx->data.uid = uid;
+	if ((ctx->transaction->flags & MAILBOX_TRANSACTION_FLAG_FILL_IN_STUB) != 0) {
+		if (!mail_index_lookup_seq(ctx->transaction->view, uid,
+					   &ctx->data.stub_seq))
+			i_panic("Trying to fill in stub for nonexistent UID %u", uid);
+	}
 }
 
 void mailbox_save_set_guid(struct mail_save_context *ctx, const char *guid)
@@ -2080,6 +2102,11 @@ int mailbox_save_begin(struct mail_save_context **ctx, struct istream *input)
 		mailbox_save_cancel(ctx);
 		return -1;
 	}
+
+	/* if we're filling in a stub, we must have set UID already
+	   (which in turn sets stub_seq) */
+	i_assert(((*ctx)->transaction->flags & MAILBOX_TRANSACTION_FLAG_FILL_IN_STUB) == 0 ||
+		 (*ctx)->data.stub_seq != 0);
 
 	if (!(*ctx)->copying_or_moving) {
 		/* We're actually saving the mail. We're not being called by
@@ -2238,7 +2265,9 @@ static int mailbox_copy_int(struct mail_save_context **_ctx, struct mail *mail)
 	}
 
 	i_assert(!ctx->copying_or_moving);
+	i_assert(ctx->copy_src_mail == NULL);
 	ctx->copying_or_moving = TRUE;
+	ctx->copy_src_mail = mail;
 	ctx->finishing = TRUE;
 	T_BEGIN {
 		ret = t->box->v.copy(ctx, backend_mail);
@@ -2253,6 +2282,7 @@ static int mailbox_copy_int(struct mail_save_context **_ctx, struct mail *mail)
 		mailbox_keywords_unref(&keywords);
 	i_assert(!ctx->unfinished);
 
+	ctx->copy_src_mail = NULL;
 	ctx->copying_via_save = FALSE;
 	ctx->copying_or_moving = FALSE;
 	ctx->saving = FALSE; /* if we came from mailbox_save_using_mail() */
@@ -2528,7 +2558,8 @@ mail_storage_settings_to_index_flags(const struct mail_storage_settings *set)
 	return index_flags;
 }
 
-int mail_parse_human_timestamp(const char *str, time_t *timestamp_r)
+int mail_parse_human_timestamp(const char *str, time_t *timestamp_r,
+			       bool *utc_r)
 {
 	struct tm tm;
 	unsigned int secs;
@@ -2545,15 +2576,19 @@ int mail_parse_human_timestamp(const char *str, time_t *timestamp_r)
 		tm.tm_mon = (str[5]-'0') * 10 + (str[6]-'0') - 1;
 		tm.tm_mday = (str[8]-'0') * 10 + (str[9]-'0');
 		*timestamp_r = mktime(&tm);
+		*utc_r = FALSE;
 		return 0;
 	} else if (imap_parse_date(str, timestamp_r)) {
 		/* imap date */
+		*utc_r = FALSE;
 		return 0;
 	} else if (str_to_time(str, timestamp_r) == 0) {
 		/* unix timestamp */
+		*utc_r = TRUE;
 		return 0;
 	} else if (settings_get_time(str, &secs, &error) == 0) {
 		*timestamp_r = ioloop_time - secs;
+		*utc_r = TRUE;
 		return 0;
 	} else {
 		return -1;

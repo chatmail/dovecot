@@ -49,7 +49,15 @@ typedef void lib_atexit_callback_t(void);
 #define LIB_ATEXIT_PRIORITY_DEFAULT 0
 #define LIB_ATEXIT_PRIORITY_LOW 10
 
+/* /dev/null opened as O_WRONLY. Opened at lib_init(), so it can be accessed
+   also inside chroots. */
+extern int dev_null_fd;
+
 int close_keep_errno(int *fd);
+/* Close fd_in and fd_out, unless they're already -1. They can point to the
+   same fd, in which case they're closed only once. If they point to stdin
+   or stdout, they're replaced with /dev/null. */
+void fd_close_maybe_stdio(int *fd_in, int *fd_out);
 /* Call unlink(). If it fails, log an error including the source filename
    and line number. */
 int i_unlink(const char *path, const char *source_fname,
@@ -76,6 +84,7 @@ void lib_atexit_priority(lib_atexit_callback_t *callback, int priority);
 void lib_atexit_run(void);
 
 void lib_init(void);
+bool lib_is_initialized(void);
 void lib_deinit(void);
 
 #endif

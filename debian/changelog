@@ -1,8 +1,21 @@
-dovecot (1:2.2.26.0-4~bpo8+1) jessie-backports; urgency=medium
+dovecot (1:2.2.27-2) unstable; urgency=medium
 
-  * Rebuild for jessie-backports.
+  * [30586e3] Fix SHA3 on big-endian architectures.
 
- -- Apollon Oikonomopoulos <apoikos@debian.org>  Tue, 06 Dec 2016 16:18:02 +0200
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 15 Dec 2016 22:24:56 +0200
+
+dovecot (1:2.2.27-1) unstable; urgency=medium
+
+  [ Jaldhar H. Vyas ]
+  * [b1e4693] Imported Upstream version 2.2.27
+    + Includes fix for CVE-2016-8652 (Closes: #846605)
+
+  [ Apollon Oikonomopoulos ]
+  * [b25993a] Drop patches merged upstream:
+    + call_openssl_cleanup_at_deinit.patch
+    + disable_sslv23.patch
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Wed, 14 Dec 2016 21:48:46 +0200
 
 dovecot (1:2.2.26.0-4) unstable; urgency=medium
 

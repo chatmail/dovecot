@@ -93,10 +93,10 @@ host_triplet = @host@
 noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
-	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
-	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/dovecot.m4 $(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
+	$(top_srcdir)/libtool.m4 $(top_srcdir)/ltoptions.m4 \
+	$(top_srcdir)/ltsugar.m4 $(top_srcdir)/ltversion.m4 \
+	$(top_srcdir)/lt~obsolete.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -140,11 +140,11 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	randgen.lo rand.lo read-full.lo restrict-access.lo \
 	restrict-process-size.lo safe-memset.lo safe-mkdir.lo \
 	safe-mkstemp.lo sendfile-util.lo seq-range-array.lo sha1.lo \
-	sha2.lo str.lo str-find.lo str-sanitize.lo str-table.lo \
-	strescape.lo strfuncs.lo strnum.lo time-util.lo timing.lo \
-	unix-socket-create.lo unlink-directory.lo unlink-old-files.lo \
-	unichar.lo uri-util.lo utc-offset.lo utc-mktime.lo \
-	var-expand.lo wildcard-match.lo write-full.lo
+	sha2.lo sha3.lo str.lo str-find.lo str-sanitize.lo \
+	str-table.lo strescape.lo strfuncs.lo strnum.lo time-util.lo \
+	timing.lo unix-socket-create.lo unlink-directory.lo \
+	unlink-old-files.lo unichar.lo uri-util.lo utc-offset.lo \
+	utc-mktime.lo var-expand.lo wildcard-match.lo write-full.lo
 liblib_la_OBJECTS = $(am_liblib_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -611,6 +611,7 @@ liblib_la_SOURCES = \
 	seq-range-array.c \
 	sha1.c \
 	sha2.c \
+	sha3.c \
 	str.c \
 	str-find.c \
 	str-sanitize.c \
@@ -745,8 +746,10 @@ headers = \
 	safe-mkstemp.h \
 	sendfile-util.h \
 	seq-range-array.h \
+	sha-common.h \
 	sha1.h \
 	sha2.h \
+	sha3.h \
 	sort.h \
 	str.h \
 	str-find.h \
@@ -1032,6 +1035,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/seq-range-array.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sha1.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sha2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sha3.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/str-find.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/str-sanitize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/str-table.Plo@am__quote@

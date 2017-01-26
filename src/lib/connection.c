@@ -110,6 +110,10 @@ int connection_input_line_default(struct connection *conn, const char *line)
 		conn->version_received = TRUE;
 		return 1;
 	}
+	if (args[0] == NULL && !conn->list->set.allow_empty_args_input) {
+		i_error("%s: Unexpectedly received empty line", conn->name);
+		return -1;
+	}
 
 	return conn->list->v.input_args(conn, args);
 }
@@ -308,13 +312,7 @@ void connection_disconnect(struct connection *conn)
 		o_stream_close(conn->output);
 		o_stream_destroy(&conn->output);
 	}
-	if (conn->fd_in != -1) {
-		if (close(conn->fd_in) < 0)
-			i_error("close(%s) failed: %m", conn->name);
-		if (conn->fd_in != conn->fd_out && close(conn->fd_out) < 0)
-			i_error("close(%s/out) failed: %m", conn->name);
-		conn->fd_in = conn->fd_out = -1;
-	}
+	fd_close_maybe_stdio(&conn->fd_in, &conn->fd_out);
 }
 
 void connection_deinit(struct connection *conn)

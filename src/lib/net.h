@@ -92,6 +92,8 @@ void net_set_nonblock(int fd, bool nonblock);
 /* Set TCP_CORK if supported, ie. don't send out partial frames.
    Returns 0 if ok, -1 if failed. */
 int net_set_cork(int fd, bool cork) ATTR_NOWARN_UNUSED_RESULT;
+/* Set TCP_NODELAY, which disables the Nagle algorithm. */
+int net_set_tcp_nodelay(int fd, bool nodelay);
 
 /* Set socket kernel buffer sizes */
 int net_set_send_buffer_size(int fd, size_t size);
@@ -152,9 +154,9 @@ int net_getunixcred(int fd, struct net_unix_cred *cred_r);
 const char *net_ip2addr(const struct ip_addr *ip);
 /* char* -> struct ip_addr translation. */
 int net_addr2ip(const char *addr, struct ip_addr *ip);
-/* char* -> net_port_t translation */
+/* char* -> in_port_t translation */
 int net_str2port(const char *str, in_port_t *port_r);
-/* char* -> net_port_t translation (allows port zero) */
+/* char* -> in_port_t translation (allows port zero) */
 int net_str2port_zero(const char *str, in_port_t *port_r);
 /* Parse "host", "host:port", "IPv4", "IPv4:port", "IPv6", "[IPv6]" or
    "[IPv6]:port" to its host and port components. [IPv6] address is returned
@@ -163,6 +165,9 @@ int net_str2port_zero(const char *str, in_port_t *port_r);
    through. */
 int net_str2hostport(const char *str, in_port_t default_port,
 		     const char **host_r, in_port_t *port_r);
+/* Converts ip and port to ipv4:port or [ipv6]:port. Returns -1 if
+   ip is not valid IPv4 or IPv6 address. */
+int net_ipport2str(const struct ip_addr *ip, in_port_t port, const char **str_r);
 
 /* Convert IPv6 mapped IPv4 address to an actual IPv4 address. Returns 0 if
    successful, -1 if the source address isn't IPv6 mapped IPv4 address. */

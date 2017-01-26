@@ -1,3 +1,48 @@
+v2.2.27 2016-12-xx  Timo Sirainen <tss@iki.fi>
+
+	* dovecot.list.index.log rotation sizes/times were changed so that
+	  the .log file stays smaller and .log.2 is deleted sooner.
+
+	+ Added mail_crypt plugin that allows encryption of stored emails.
+	  See http://wiki2.dovecot.org/Plugins/MailCrypt
+	+ stats: Global stats can be sent to Carbon server by setting
+	  stats_carbon_server=ip:port
+	+ imap/pop3 proxy: If passdb returns proxy_not_trusted, don't send
+	  ID/XCLIENT
+	+ Added generic hash modifier for %variables:
+	  %{<hash algorithm>;rounds=<n>,truncate=<bits>,salt=s>:field}
+	  Hash algorithm is any of the supported ones, e.g. md5, sha1, sha256.
+	  Also "pkcs5" is supported using SHA256. For example: %{sha256:user}
+	  or %{md5;truncate=32:user}.
+	+ Added support for SHA3-256 and SHA3-512 hashes.
+	+ config: Support DNS wildcards in local_name, e.g.
+	  local_name *.example.com { .. } matches anything.example.com, but
+	  not multiple.anything.example.com.
+	+ config: Support multiple names in local_name, e.g.
+	  local_name "1.example.com 2.example.com" { .. }
+	- Fixed crash in auth process when auth-policy was configured and
+	  authentication was aborted/failed without a username set.
+	- director: If two users had different tags but the same hash,
+	  the users may have been redirected to the wrong tag's hosts.
+	- Index files may have been thought incorrectly lost, causing
+	  "Missing middle file seq=.." to be logged and index rebuild.
+	  This happened more easily with IMAP hibernation enabled.
+	- Various fixes to restoring state correctly in un-hibernation.
+	- dovecot.index files were commonly 4 bytes per email too large. This
+	  is because 3 bytes per email were being wasted that could have been
+	  used for IMAP keywords.
+	- Various fixes to handle dovecot.list.index corruption better.
+	- lib-fts: Fixed assert-crash in address tokenizer with specific input.
+	- Fixed assert-crash in HTML to text parsing with specific input
+	  (e.g. for FTS indexing or snippet generation)
+	- doveadm sync -1: Fixed handling mailbox GUID conflicts.
+	- sdbox, mdbox: Perform full index rebuild if corruption is detected
+	  inside lib-index, which runs index fsck.
+	- quota: Don't skip quota checks when moving mails between different
+	  quota roots.
+	- search: Multiple sequence sets or UID sets in search parameters
+	  weren't handled correctly. They were incorrectly merged together.
+
 v2.2.26.0 2016-10-28  Timo Sirainen <tss@iki.fi>
 
 	- Fixed some compiling issues.
