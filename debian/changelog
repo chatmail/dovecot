@@ -1,3 +1,11 @@
+dovecot (1:2.2.13-12~deb8u2) jessie-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * auth: Do not double-expand key in passdb dict when authenticating
+    (CVE-2017-2669)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Wed, 05 Apr 2017 07:07:06 +0200
+
 dovecot (1:2.2.13-12~deb8u1) stable; urgency=high
 
   * [6e16721] Fix a mbox corruption problem by applying two patches from
