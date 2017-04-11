@@ -1,3 +1,16 @@
+dovecot (1:2.2.13-12~deb8u3) jessie-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * Revert "auth: Do not double-expand key in passdb dict when authenticating
+    (CVE-2017-2669)"
+    This reverts the applied patch which resulted in no longer interpreting
+    placeholders in the keys even once with dict-based userdb or passdb.
+    The actual vulnerability was introduced later with "auth-db-dict: Allow
+    key name expansion" in 2.2.26.
+    Thanks to Nick Thomas <me@ur.gs> and Aki Tuomi <aki.tuomi@dovecot.fi>
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Tue, 11 Apr 2017 09:25:59 +0200
+
 dovecot (1:2.2.13-12~deb8u2) jessie-security; urgency=high
 
   * Non-maintainer upload by the Security Team.

@@ -12,4 +12,4 @@ bye_logout_not_sent.patch
 cve-2015-3420.patch
 fix-mbox-corruption-18534.patch
 fix-mbox-corruption-18679.patch
-CVE-2017-2669-auth-Do-not-double-expand-key-in-passdb-dict-when-au.patch
+
