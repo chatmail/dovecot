@@ -1,3 +1,9 @@
+dovecot (1:2.2.27-3~bpo8+1) jessie-backports; urgency=medium
+
+  * Rebuild for jessie-backports.
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 13 Apr 2017 19:41:17 +0300
+
 dovecot (1:2.2.27-3) unstable; urgency=high
 
   * [117285a] Remove /etc/dovecot/README (Closes: #849290)
