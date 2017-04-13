@@ -1,8 +1,10 @@
-dovecot (1:2.2.27-2~bpo8+1) jessie-backports; urgency=medium
+dovecot (1:2.2.27-3) unstable; urgency=high
 
-  * Rebuild 2.2.27-2 for jessie-backports.
+  * [117285a] Remove /etc/dovecot/README (Closes: #849290)
+  * [04e8ce3] auth: Do not double-expand key in passdb dict when
+    authenticating (CVE-2017-2669) (Closes: #860049)
 
- -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 26 Jan 2017 21:00:57 +0200
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Tue, 11 Apr 2017 00:46:54 +0300
 
 dovecot (1:2.2.27-2) unstable; urgency=medium
 
