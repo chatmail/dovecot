@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -87,7 +87,7 @@ mail_sieve_user_init
 	}
 
 	/* Delayed initialization of sieve storage until it's actually needed */
-	memset(&svenv, 0, sizeof(svenv));
+	i_zero(&svenv);
 	svenv.username = user->username;
 	(void)mail_user_get_home(user, &svenv.home_dir);
 	svenv.base_dir = user->set->base_dir;
@@ -306,9 +306,9 @@ sieve_attribute_set_sieve(struct mail_storage *storage,
 		input = i_stream_create_from_data(value->value,
 						  strlen(value->value));
 		save_ctx = sieve_storage_save_init(svstorage, scriptname, input);
-		i_stream_unref(&input);
 	} else if (value->value_stream != NULL) {
 		input = value->value_stream;
+		i_stream_ref(input);
 		save_ctx = sieve_storage_save_init(svstorage, scriptname, input);
 	} else {
 		return sieve_attribute_unset_script(storage, svstorage, scriptname);
@@ -319,6 +319,7 @@ sieve_attribute_set_sieve(struct mail_storage *storage,
 		mail_storage_set_critical(storage,
 			"Failed to save sieve script '%s': %s", scriptname,
 			sieve_storage_get_last_error(svstorage, NULL));
+		i_stream_unref(&input);
 		return -1;
 	}
 
@@ -358,6 +359,7 @@ sieve_attribute_set_sieve(struct mail_storage *storage,
 			sieve_storage_get_last_error(svstorage, NULL));
 		ret = -1;
 	}
+	i_stream_unref(&input);
 	return ret;
 }
 

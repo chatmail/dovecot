@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -119,8 +119,8 @@ static const char *sieve_storage_get_relative_link_path
 	/* Add trailing '/' when link path is not empty
 	 */
 	pathlen = strlen(link_path);
-    if ( pathlen != 0 && link_path[pathlen-1] != '/')
-        return t_strconcat(link_path, "/", NULL);
+	if ( pathlen != 0 && link_path[pathlen-1] != '/')
+		return t_strconcat(link_path, "/", NULL);
 
 	return t_strdup(link_path);
 }

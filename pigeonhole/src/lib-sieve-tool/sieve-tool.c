@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -251,7 +251,7 @@ struct sieve_instance *sieve_tool_init_finish
 		storage_service_flags |=
 			MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES;
 
-	memset(&service_input, 0, sizeof(service_input));
+	i_zero(&service_input);
 	service_input.module = "mail";
 	service_input.service = tool->name;
 	service_input.username = username;

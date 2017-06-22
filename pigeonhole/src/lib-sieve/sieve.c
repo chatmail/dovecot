@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -335,7 +335,7 @@ static int sieve_run
 
 	/* Reset execution status */
 	if ( senv->exec_status != NULL )
-		memset(senv->exec_status, 0, sizeof(*senv->exec_status));
+		i_zero(senv->exec_status);
 
 	/* Create result object */
 	if ( *result == NULL ) {
@@ -725,6 +725,7 @@ void sieve_multiscript_run_discard
 		(mscript->result, NULL, &act_store);
 
 	/* Run the discard script */
+	flags |= SIEVE_EXECUTE_FLAG_DEFER_KEEP;
 	mscript->status = sieve_run(sbin, &mscript->result, mscript->msgdata,
 		mscript->scriptenv, exec_ehandler, flags);
 
@@ -1006,7 +1007,7 @@ int sieve_trace_config_get(struct sieve_instance *svinst,
 		sieve_setting_get(svinst, "sieve_trace_level");
 	bool tr_debug, tr_addresses;
 
-	memset(tr_config, 0, sizeof(*tr_config));
+	i_zero(tr_config);
 
 	if ( tr_level == NULL || *tr_level == '\0' ||
 		strcasecmp(tr_level, "none") == 0 )
@@ -1057,7 +1058,7 @@ const char *sieve_get_user_email
 	if ( svinst->domainname != NULL ) {
 		struct sieve_address svaddr;
 
-		memset(&svaddr, 0, sizeof(svaddr));
+		i_zero(&svaddr);
 		svaddr.local_part = username;
 		svaddr.domain = svinst->domainname;
 		return sieve_address_to_string(&svaddr);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -553,14 +553,18 @@ struct sieve_header_list *sieve_message_header_list_create
 static inline string_t *_header_right_trim(const char *raw)
 {
 	string_t *result;
-	int i;
+	const char *p, *pend;
 
-	for ( i = strlen(raw)-1; i >= 0; i-- ) {
-		if ( raw[i] != ' ' && raw[i] != '\t' ) break;
+	pend = raw + strlen(raw);
+	if (raw == pend) {
+		result = t_str_new(1);
+	} else {
+		for ( p = pend-1; p >= raw; p-- ) {
+			if ( *p != ' ' && *p != '\t' ) break;
+		}
+		result = t_str_new(p - raw + 1);
+		str_append_n(result, raw, p - raw + 1);
 	}
-
-	result = t_str_new(i+1);
-	str_append_n(result, raw, i + 1);
 	return result;
 }
 
@@ -621,7 +625,7 @@ static int sieve_message_header_list_next_item
 			return -1;
 		}
 
-		if ( hdrlist->headers == NULL || hdrlist->headers[0] == NULL ) {
+		if ( ret == 0 || hdrlist->headers[0] == NULL ) {
 			/* Try next item when no headers found */
 			hdrlist->headers = NULL;
 		}
@@ -908,7 +912,7 @@ void sieve_message_part_get_data
 (struct sieve_message_part *mpart,
 	struct sieve_message_part_data *data, bool text)
 {
-	memset(data, 0, sizeof(*data));
+	i_zero(data);
 	data->content_type = mpart->content_type;
 	data->content_disposition = mpart->content_disposition;
 
@@ -1195,7 +1199,7 @@ static int sieve_message_parts_add_missing
 		hdr_content = t_str_new(512);
 		hparser_flags |= MESSAGE_HEADER_PARSER_FLAG_CLEAN_ONELINE;
 	} else {
-		memset(&headers, 0, sizeof(headers));
+		i_zero(&headers);
 	}
 
 	/* Initialize body decoder */
@@ -1647,7 +1651,7 @@ int sieve_message_part_iter_init
 	if ( status <= 0 )
 		return status;
 
-	memset(iter, 0, sizeof(*iter));
+	i_zero(iter);
 	iter->renv = renv;
 	iter->index = 0;
 	iter->offset = 0;

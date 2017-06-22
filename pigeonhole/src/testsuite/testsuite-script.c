@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -106,7 +106,7 @@ bool testsuite_script_run(const struct sieve_runtime_env *renv)
 	testsuite_log_clear_messages();
 
 	/* Compose script execution environment */
-	memset(&scriptenv, 0, sizeof(scriptenv));
+	i_zero(&scriptenv);
 	scriptenv.default_mailbox = "INBOX";
 	scriptenv.postmaster_address = "postmaster@example.com";
 	scriptenv.smtp_start = NULL;
@@ -179,7 +179,7 @@ bool testsuite_script_multiscript
 	testsuite_log_clear_messages();
 
 	/* Compose script execution environment */
-	memset(&scriptenv, 0, sizeof(scriptenv));
+	i_zero(&scriptenv);
 	scriptenv.default_mailbox = "INBOX";
 	scriptenv.postmaster_address = "postmaster@example.com";
 	scriptenv.smtp_start = NULL;

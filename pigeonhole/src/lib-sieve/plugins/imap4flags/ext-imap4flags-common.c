@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -309,7 +309,7 @@ bool sieve_ext_imap4flags_flag_is_valid(const char *flag)
 static void ext_imap4flags_iter_clear
 (struct ext_imap4flags_iter *iter)
 {
-	memset(iter, 0, sizeof(*iter));
+	i_zero(iter);
 }
 
 void ext_imap4flags_iter_init

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include <string.h>
@@ -20,20 +20,16 @@
 #include "managesieve-proxy.h"
 #include "managesieve-parser.h"
 
-enum {
-	MSIEVE_PROXY_STATE_NONE,
-	MSIEVE_PROXY_STATE_TLS_START,
-	MSIEVE_PROXY_STATE_TLS_READY,
-	MSIEVE_PROXY_STATE_XCLIENT,
-	MSIEVE_PROXY_STATE_AUTH,
-};
-
 typedef enum {
 	MANAGESIEVE_RESPONSE_NONE,
 	MANAGESIEVE_RESPONSE_OK,
 	MANAGESIEVE_RESPONSE_NO,
 	MANAGESIEVE_RESPONSE_BYE
 } managesieve_response_t;
+
+static const char *managesieve_proxy_state_names[MSIEVE_PROXY_STATE_COUNT] = {
+	"none", "tls-start", "tls-ready", "xclient", "auth"
+};
 
 static void proxy_free_password(struct client *client)
 {
@@ -90,7 +86,7 @@ static int proxy_write_auth
 		client->common.proxy_mech = &dsasl_client_mech_plain;
 
 	i_assert(client->common.proxy_sasl_client == NULL);
-	memset(&sasl_set, 0, sizeof(sasl_set));
+	i_zero(&sasl_set);
 	sasl_set.authid = client->common.proxy_master_user != NULL ?
 		client->common.proxy_master_user : client->common.proxy_user;
 	sasl_set.authzid = client->common.proxy_user;
@@ -556,4 +552,12 @@ void managesieve_proxy_reset(struct client *client)
 void managesieve_proxy_error(struct client *client, const char *text)
 {
 	client_send_reply_code(client, MANAGESIEVE_CMD_REPLY_NO, "TRYLATER", text);
+}
+
+const char *managesieve_proxy_get_state(struct client *client)
+{
+	struct managesieve_client *msieve_client =
+		(struct managesieve_client *) client;
+
+	return managesieve_proxy_state_names[msieve_client->proxy_state];
 }

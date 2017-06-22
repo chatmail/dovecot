@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 /* Notify method mailto
@@ -484,7 +484,7 @@ static int ntfy_mailto_send
 		from_smtp = sieve_message_get_sender(nenv->msgctx);
 		if ( from_smtp == NULL ) {
 			/* "<>" */
-			memset(&env_from, 0, sizeof(env_from));
+			i_zero(&env_from);
 			env_from.type = SIEVE_ADDRESS_SOURCE_EXPLICIT;
 		}
 	}
@@ -516,7 +516,7 @@ static int ntfy_mailto_send
 
 		/* Fetch subject from original message */
 		if ( mail_get_headers_utf8
-			(msgdata->mail, "subject", &hsubject) >= 0 )
+			(msgdata->mail, "subject", &hsubject) > 0 )
 			subject = str_sanitize(t_strdup_printf("Notification: %s", hsubject[0]),
 				NTFY_MAILTO_MAX_SUBJECT);
 		else
@@ -672,7 +672,7 @@ static int ntfy_mailto_action_execute
 	i_assert( owner_email != NULL );
 
 	/* Is the message an automatic reply ? */
-	if ( mail_get_headers(mail, "auto-submitted", &hdsp) < 0 ) {
+	if ( (ret=mail_get_headers(mail, "auto-submitted", &hdsp)) < 0 ) {
 		sieve_enotify_critical(nenv,
 			"mailto notification: "
 				"failed to read `auto-submitted' header field",
@@ -683,21 +683,23 @@ static int ntfy_mailto_action_execute
 	}
 
 	/* Theoretically multiple headers could exist, so lets make sure */
-	while ( *hdsp != NULL ) {
-		if ( strcasecmp(*hdsp, "no") != 0 ) {
-			const char *from = NULL;
+	if ( ret > 0 ) {
+		while ( *hdsp != NULL ) {
+			if ( strcasecmp(*hdsp, "no") != 0 ) {
+				const char *from = NULL;
 
-			if ( (nenv->flags & SIEVE_EXECUTE_FLAG_NO_ENVELOPE) == 0 )
-				from = sieve_message_get_sender(nenv->msgctx);
-			from = (from == NULL ? "" :
-				t_strdup_printf(" from <%s>", str_sanitize(from, 256)));
+				if ( (nenv->flags & SIEVE_EXECUTE_FLAG_NO_ENVELOPE) == 0 )
+					from = sieve_message_get_sender(nenv->msgctx);
+				from = (from == NULL ? "" :
+					t_strdup_printf(" from <%s>", str_sanitize(from, 256)));
 
-			sieve_enotify_global_info(nenv,
-				"not sending notification for auto-submitted message%s",
-				from);
-			return 0;
+				sieve_enotify_global_info(nenv,
+					"not sending notification "
+					"for auto-submitted message%s", from);
+				return 0;
+			}
+			hdsp++;
 		}
-		hdsp++;
 	}
 
 	T_BEGIN {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 /* FIXME: URI syntax conforms to something somewhere in between RFC 2368 and
@@ -551,7 +551,7 @@ bool uri_mailto_validate
 {
 	struct uri_mailto_parser parser;
 
-	memset(&parser, 0, sizeof(parser));
+	i_zero(&parser);
 	parser.ehandler = ehandler;
 	parser.max_recipients = max_recipients;
 	parser.max_headers = max_headers;

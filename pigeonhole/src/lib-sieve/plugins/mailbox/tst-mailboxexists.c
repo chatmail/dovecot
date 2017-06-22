@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -104,7 +104,7 @@ static bool tst_mailboxexists_validate
 		return FALSE;
 
 	aarg = arg;
-	memset(&valctx, 0, sizeof(valctx));
+	i_zero(&valctx);
 	valctx.valdtr = valdtr;
 	valctx.tst = tst;
 

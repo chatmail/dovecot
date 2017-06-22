@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -12,6 +12,7 @@
 #include "iostream.h"
 #include "iostream-rawlog.h"
 #include "var-expand.h"
+#include "time-util.h"
 #include "master-service.h"
 #include "mail-storage-service.h"
 #include "mail-namespace.h"
@@ -60,10 +61,11 @@ static void client_idle_timeout(struct client *client)
 }
 
 static struct sieve_storage *client_get_storage
-(struct sieve_instance *svinst, struct mail_user *user)
+(struct sieve_instance *svinst, struct mail_user *user, int fd_out)
 {
 	struct sieve_storage *storage;
 	enum sieve_error error;
+	const char *errormsg, *byemsg;
 
 	/* Open personal script storage */
 
@@ -72,31 +74,26 @@ static struct sieve_storage *client_get_storage
 	if (storage == NULL) {
 		switch (error) {
 		case SIEVE_ERROR_NOT_POSSIBLE:
-			printf("BYE \"Sieve processing is disabled for this user.\"\n");
-
-			i_fatal("Failed to open Sieve storage: "
-				"Sieve is disabled for this user.");
+			byemsg = "BYE \"Sieve processing is disabled for this user.\"\r\n";
+			errormsg = "Failed to open Sieve storage: "
+				"Sieve is disabled for this user";
 			break;
 		case SIEVE_ERROR_NOT_FOUND:
-			printf("BYE \"This user cannot manage personal Sieve scripts.\"\n");
-
-			i_fatal("Failed to open Sieve storage: "
-				"Personal script storage disabled or not found.");
+			byemsg = "BYE \"This user cannot manage personal Sieve scripts.\"\r\n";
+			errormsg = "Failed to open Sieve storage: "
+				"Personal script storage disabled or not found.";
 			break;
 		default:
-			{ 
-				struct tm *tm;
-				char str[256];
-
-				tm = localtime(&ioloop_time);
-
-				printf("BYE \"%s\"\n",
-					strftime(str, sizeof(str), CRITICAL_MSG_STAMP, tm) > 0 ?
-						i_strdup(str) : i_strdup(CRITICAL_MSG));
-
-				i_fatal("Failed to open Sieve storage.");
-			}
+			byemsg = t_strflocaltime
+				("BYE \""CRITICAL_MSG_STAMP"\"\r\n", ioloop_time);
+			errormsg = "Failed to open Sieve storage.";
 		}
+
+		if (write(fd_out, byemsg, strlen(byemsg)) < 0) {
+			if (errno != EAGAIN && errno != EPIPE)
+				i_error("write(client) failed: %m");
+		}
+		i_fatal("%s", errormsg);
 	}
 
 	return storage;
@@ -127,7 +124,7 @@ struct client *client_create
 
 	/* Get Sieve storage */
 
-	storage = client_get_storage(svinst, user);
+	storage = client_get_storage(svinst, user, fd_out);
 
 	/* always use nonblocking I/O */
 	net_set_nonblock(fd_in, TRUE);
@@ -543,7 +540,7 @@ void _client_reset_command(struct client *client)
     o_stream_set_flush_callback(client->output, client_output, client);
 
 	pool = client->cmd.pool;
-	memset(&client->cmd, 0, sizeof(client->cmd));
+	i_zero(&client->cmd);
 
 	p_clear(pool);
 	client->cmd.pool = pool;
@@ -700,8 +697,8 @@ int client_output(struct client *client)
 
 	client->last_output = ioloop_time;
     timeout_reset(client->to_idle);
-    if (client->to_idle_output != NULL)
-        timeout_reset(client->to_idle_output);
+	if (client->to_idle_output != NULL)
+		timeout_reset(client->to_idle_output);
 
 	if ((ret = o_stream_flush(client->output)) < 0) {
 		client_destroy(client, NULL);

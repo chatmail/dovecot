@@ -160,6 +160,8 @@ DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DISTCHECK_CONFIGURE_FLAGS = @DISTCHECK_CONFIGURE_FLAGS@
 DLLTOOL = @DLLTOOL@
+DOVECOT_BINARY_CFLAGS = @DOVECOT_BINARY_CFLAGS@
+DOVECOT_BINARY_LDFLAGS = @DOVECOT_BINARY_LDFLAGS@
 DOVECOT_CFLAGS = @DOVECOT_CFLAGS@
 DOVECOT_COMPRESS_LIBS = @DOVECOT_COMPRESS_LIBS@
 DOVECOT_INSTALLED = @DOVECOT_INSTALLED@
@@ -210,6 +212,7 @@ LIBDOVECOT_LOGIN_DEPS = @LIBDOVECOT_LOGIN_DEPS@
 LIBDOVECOT_LOGIN_INCLUDE = @LIBDOVECOT_LOGIN_INCLUDE@
 LIBDOVECOT_NOTIFY_INCLUDE = @LIBDOVECOT_NOTIFY_INCLUDE@
 LIBDOVECOT_POP3_INCLUDE = @LIBDOVECOT_POP3_INCLUDE@
+LIBDOVECOT_PUSH_NOTIFICATION_INCLUDE = @LIBDOVECOT_PUSH_NOTIFICATION_INCLUDE@
 LIBDOVECOT_SERVICE_INCLUDE = @LIBDOVECOT_SERVICE_INCLUDE@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_SQL_DEPS = @LIBDOVECOT_SQL_DEPS@
@@ -279,6 +282,7 @@ dovecot_moduledir = @dovecot_moduledir@
 dovecot_pkgincludedir = @dovecot_pkgincludedir@
 dovecot_pkglibdir = @dovecot_pkglibdir@
 dovecot_pkglibexecdir = @dovecot_pkglibexecdir@
+dovecot_statedir = @dovecot_statedir@
 dovecotdir = @dovecotdir@
 dvidir = @dvidir@
 exec_prefix = @exec_prefix@
@@ -317,7 +321,9 @@ docfiles = \
 	editheader.txt \
 	include.txt \
 	spamtest-virustest.txt \
-	vacation.txt
+	vacation.txt \
+	vnd.dovecot.environment.txt \
+	vnd.dovecot.report.txt
 
 @BUILD_DOCS_TRUE@extensions_docdir = $(sieve_docdir)/extensions
 @BUILD_DOCS_TRUE@extensions_doc_DATA = $(docfiles)

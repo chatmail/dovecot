@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __TESTSUITE_SMTP_H
@@ -19,6 +19,9 @@ void testsuite_smtp_add_rcpt
 	(const struct sieve_script_env *senv ATTR_UNUSED,
 		void *handle, const char *address);
 struct ostream *testsuite_smtp_send
+	(const struct sieve_script_env *senv ATTR_UNUSED,
+		void *handle);
+void testsuite_smtp_abort
 	(const struct sieve_script_env *senv ATTR_UNUSED,
 		void *handle);
 int testsuite_smtp_finish

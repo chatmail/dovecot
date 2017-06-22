@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "login-common.h"
@@ -510,7 +510,8 @@ static struct client_vfuncs managesieve_client_vfuncs = {
 	managesieve_client_auth_result,
 	managesieve_proxy_reset,
 	managesieve_proxy_parse_line,
-	managesieve_proxy_error
+	managesieve_proxy_error,
+	managesieve_proxy_get_state,
 };
 
 static const struct login_binary managesieve_login_binary = {

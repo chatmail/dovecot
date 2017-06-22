@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -179,6 +179,13 @@ time_t sieve_binary_mtime
 {
 	i_assert(sbin->file != NULL);
 	return sbin->file->st.st_mtime;
+}
+
+const struct stat *sieve_binary_stat
+(struct sieve_binary *sbin)
+{
+	i_assert(sbin->file != NULL);
+	return &sbin->file->st;
 }
 
 const char *sieve_binary_script_name(struct sieve_binary *sbin)

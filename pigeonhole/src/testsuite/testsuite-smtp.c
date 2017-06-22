@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -116,6 +116,20 @@ struct ostream *testsuite_smtp_send
 	struct testsuite_smtp *smtp = (struct testsuite_smtp *) handle;
 
 	return smtp->output;
+}
+
+void testsuite_smtp_abort
+(const struct sieve_script_env *senv ATTR_UNUSED,
+	void *handle)
+{
+	struct testsuite_smtp *smtp = (struct testsuite_smtp *) handle;
+
+	o_stream_ignore_last_errors(smtp->output);
+	o_stream_unref(&smtp->output);
+	i_unlink(smtp->msg_file);
+	i_free(smtp->msg_file);
+	i_free(smtp->return_path);
+	i_free(smtp);
 }
 
 int testsuite_smtp_finish

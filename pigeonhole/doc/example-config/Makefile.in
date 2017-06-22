@@ -13,6 +13,7 @@
 # PARTICULAR PURPOSE.
 
 @SET_MAKE@
+
 VPATH = @srcdir@
 am__is_gnu_make = test -n '$(MAKEFILE_LIST)' && test -n '$(MAKELEVEL)'
 am__make_running_with_option = \
@@ -118,6 +119,35 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
+am__installdirs = "$(DESTDIR)$(exampledir)"
+DATA = $(example_DATA)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 am__recursive_targets = \
@@ -190,6 +220,8 @@ DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DISTCHECK_CONFIGURE_FLAGS = @DISTCHECK_CONFIGURE_FLAGS@
 DLLTOOL = @DLLTOOL@
+DOVECOT_BINARY_CFLAGS = @DOVECOT_BINARY_CFLAGS@
+DOVECOT_BINARY_LDFLAGS = @DOVECOT_BINARY_LDFLAGS@
 DOVECOT_CFLAGS = @DOVECOT_CFLAGS@
 DOVECOT_COMPRESS_LIBS = @DOVECOT_COMPRESS_LIBS@
 DOVECOT_INSTALLED = @DOVECOT_INSTALLED@
@@ -240,6 +272,7 @@ LIBDOVECOT_LOGIN_DEPS = @LIBDOVECOT_LOGIN_DEPS@
 LIBDOVECOT_LOGIN_INCLUDE = @LIBDOVECOT_LOGIN_INCLUDE@
 LIBDOVECOT_NOTIFY_INCLUDE = @LIBDOVECOT_NOTIFY_INCLUDE@
 LIBDOVECOT_POP3_INCLUDE = @LIBDOVECOT_POP3_INCLUDE@
+LIBDOVECOT_PUSH_NOTIFICATION_INCLUDE = @LIBDOVECOT_PUSH_NOTIFICATION_INCLUDE@
 LIBDOVECOT_SERVICE_INCLUDE = @LIBDOVECOT_SERVICE_INCLUDE@
 LIBDOVECOT_SQL = @LIBDOVECOT_SQL@
 LIBDOVECOT_SQL_DEPS = @LIBDOVECOT_SQL_DEPS@
@@ -309,6 +342,7 @@ dovecot_moduledir = @dovecot_moduledir@
 dovecot_pkgincludedir = @dovecot_pkgincludedir@
 dovecot_pkglibdir = @dovecot_pkglibdir@
 dovecot_pkglibexecdir = @dovecot_pkglibexecdir@
+dovecot_statedir = @dovecot_statedir@
 dovecotdir = @dovecotdir@
 dvidir = @dvidir@
 exec_prefix = @exec_prefix@
@@ -343,6 +377,14 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = conf.d
+pkgsysconfdir = $(sysconfdir)/dovecot
+exampledir = $(dovecot_docdir)/example-config
+example_DATA = \
+	sieve-ldap.conf 
+
+EXTRA_DIST = \
+        $(example_DATA)
+
 all: all-recursive
 
 .SUFFIXES:
@@ -382,6 +424,27 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+install-exampleDATA: $(example_DATA)
+	@$(NORMAL_INSTALL)
+	@list='$(example_DATA)'; test -n "$(exampledir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(exampledir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(exampledir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(exampledir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(exampledir)" || exit $$?; \
+	done
+
+uninstall-exampleDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(example_DATA)'; test -n "$(exampledir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(exampledir)'; $(am__uninstall_files_from_dir)
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run 'make' without going through this Makefile.
@@ -539,9 +602,12 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-recursive
-all-am: Makefile
+all-am: Makefile $(DATA)
 installdirs: installdirs-recursive
 installdirs-am:
+	for dir in "$(DESTDIR)$(exampledir)"; do \
+	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
+	done
 install: install-recursive
 install-exec: install-exec-recursive
 install-data: install-data-recursive
@@ -592,7 +658,7 @@ info: info-recursive
 
 info-am:
 
-install-data-am:
+install-data-am: install-exampleDATA
 
 install-dvi: install-dvi-recursive
 
@@ -636,7 +702,7 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am:
+uninstall-am: uninstall-exampleDATA
 
 .MAKE: $(am__recursive_targets) install-am install-strip
 
@@ -645,13 +711,14 @@ uninstall-am:
 	ctags-am distclean distclean-generic distclean-libtool \
 	distclean-tags distdir dvi dvi-am html html-am info info-am \
 	install install-am install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	installdirs-am maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-generic mostlyclean-libtool pdf pdf-am \
-	ps ps-am tags tags-am uninstall uninstall-am
+	install-dvi-am install-exampleDATA install-exec \
+	install-exec-am install-html install-html-am install-info \
+	install-info-am install-man install-pdf install-pdf-am \
+	install-ps install-ps-am install-strip installcheck \
+	installcheck-am installdirs installdirs-am maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-generic \
+	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
+	uninstall-am uninstall-exampleDATA
 
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

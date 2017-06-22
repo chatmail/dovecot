@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -19,7 +19,7 @@ bool sieve_address_source_parse
 {
 	size_t val_len;
 
-	memset(asrc, 0, sizeof(*asrc));
+	i_zero(asrc);
 
 	value = ph_t_str_trim(value, "\t ");
 	value = t_str_lcase(value);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __SIEVE_ACTIONS_H
@@ -228,7 +228,6 @@ struct act_store_transaction {
 	struct act_store_context *context;
 	struct mailbox *box;
 	struct mailbox_transaction_context *mail_trans;
-	struct mail *dest_mail;
 
 	const char *error;
 	enum mail_error error_code;
@@ -251,6 +250,18 @@ void sieve_act_store_add_flags
 
 void sieve_act_store_get_storage_error
 	(const struct sieve_action_exec_env *aenv, struct act_store_transaction *trans);
+
+/*
+ * Redirect action
+ */
+
+struct act_redirect_context {
+	const char *to_address;
+};
+
+int sieve_act_redirect_add_to_result
+(const struct sieve_runtime_env *renv,
+	struct sieve_side_effects_list *seffects, const char *norm_address);
 
 /*
  * Action utility functions

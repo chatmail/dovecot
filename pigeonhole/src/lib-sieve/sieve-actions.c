@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -246,6 +246,8 @@ void sieve_act_store_add_flags
 	struct act_store_transaction *trans =
 		(struct act_store_transaction *) tr_context;
 
+	i_assert(trans != NULL);
+
 	/* Assign mail keywords for subsequent mailbox_copy() */
 	if ( *keywords != NULL ) {
 		const char *const *kw;
@@ -375,7 +377,7 @@ static bool act_store_mailbox_open
 		return FALSE;
 	}
 
-	memset(&save_ctx, 0, sizeof(save_ctx));
+	i_zero(&save_ctx);
 	save_ctx.user = aenv->scriptenv->user;
 	save_ctx.lda_mailbox_autocreate = aenv->scriptenv->mailbox_autocreate;
 	save_ctx.lda_mailbox_autosubscribe = aenv->scriptenv->mailbox_autosubscribe;
@@ -566,12 +568,8 @@ static int act_store_execute
 	trans->mail_trans = mailbox_transaction_begin
 		(trans->box, MAILBOX_TRANSACTION_FLAG_EXTERNAL);
 
-	/* Create mail object for stored message */
-	trans->dest_mail = mail_alloc(trans->mail_trans, 0, NULL);
-
 	/* Store the message */
 	save_ctx = mailbox_save_alloc(trans->mail_trans);
-	mailbox_save_set_dest_mail(save_ctx, trans->dest_mail);
 
 	/* Apply keywords and flags that side-effects may have added */
 	if ( trans->flags_altered ) {
@@ -698,10 +696,6 @@ static int act_store_commit
 	 */
 	aenv->exec_status->last_storage = mailbox_get_storage(trans->box);
 
-	/* Free mail object for stored message */
-	if ( trans->dest_mail != NULL )
-		mail_free(&trans->dest_mail);
-
 	/* Commit mailbox transaction */
 	status = ( mailbox_transaction_commit(&trans->mail_trans) == 0 );
 
@@ -745,16 +739,36 @@ static void act_store_rollback
 	/* Log status */
 	act_store_log_status(trans, aenv, TRUE, success);
 
-	/* Free mailobject for stored message */
-	if ( trans->dest_mail != NULL )
-		mail_free(&trans->dest_mail);
-
 	/* Rollback mailbox transaction */
 	if ( trans->mail_trans != NULL )
 		mailbox_transaction_rollback(&trans->mail_trans);
 
 	/* Close the mailbox */
 	mailbox_free(&trans->box);
+}
+
+/*
+ * Redirect action
+ */
+
+int sieve_act_redirect_add_to_result
+(const struct sieve_runtime_env *renv,
+	struct sieve_side_effects_list *seffects, const char *norm_address)
+{
+	struct sieve_instance *svinst = renv->svinst;
+	struct act_redirect_context *act;
+	pool_t pool;
+
+	pool = sieve_result_pool(renv->result);
+	act = p_new(pool, struct act_redirect_context, 1);
+	act->to_address = p_strdup(pool, norm_address);
+
+	if ( sieve_result_add_action
+		(renv, NULL, &act_redirect, seffects, (void *) act,
+			svinst->max_redirects, TRUE) < 0 )
+		return SIEVE_EXEC_FAILURE;
+
+	return SIEVE_EXEC_OK;
 }
 
 /*

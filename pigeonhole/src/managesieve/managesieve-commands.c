@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -35,7 +35,7 @@ void command_register(const char *name, command_func_t *func)
 {
 	struct command cmd;
 
-	memset(&cmd, 0, sizeof(cmd));
+	i_zero(&cmd);
 	cmd.name = name;
 	cmd.func = func;
 	array_append(&managesieve_commands, &cmd, 1);
