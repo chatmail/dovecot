@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -25,8 +25,8 @@ void mail_cache_set_syscall_error(struct mail_cache *cache,
 
 static void mail_cache_unlink(struct mail_cache *cache)
 {
-	if (!cache->index->readonly)
-		i_unlink(cache->filepath);
+	if (!cache->index->readonly && !MAIL_INDEX_IS_IN_MEMORY(cache->index))
+		i_unlink_if_exists(cache->filepath);
 }
 
 void mail_cache_reset(struct mail_cache *cache)
@@ -50,6 +50,28 @@ void mail_cache_set_corrupted(struct mail_cache *cache, const char *fmt, ...)
 				     t_strdup_vprintf(fmt, va));
 	} T_END;
 	va_end(va);
+}
+
+void mail_cache_set_seq_corrupted_reason(struct mail_cache_view *cache_view,
+					 uint32_t seq, const char *reason)
+{
+	uint32_t empty = 0;
+	struct mail_cache *cache = cache_view->cache;
+	struct mail_index_view *view = cache_view->view;
+
+	mail_index_set_error(cache->index,
+			     "Corrupted record in index cache file %s: %s",
+					     cache->filepath, reason);
+
+	/* drop cache pointer */
+	struct mail_index_transaction *t =
+		mail_index_transaction_begin(view, MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
+	mail_index_update_ext(t, seq, cache->ext_id, &empty, NULL);
+
+	if (mail_index_transaction_commit(&t) < 0)
+		mail_cache_reset(cache);
+	else
+		mail_cache_expunge_count(cache, 1);
 }
 
 void mail_cache_file_close(struct mail_cache *cache)
@@ -480,12 +502,12 @@ int mail_cache_map(struct mail_cache *cache, size_t offset, size_t size,
 	cache->mmap_base = mmap_ro_file(cache->fd, &cache->mmap_length);
 	if (cache->mmap_base == MAP_FAILED) {
 		cache->mmap_base = NULL;
-		cache->mmap_length = 0;
 		if (ioloop_time != cache->last_mmap_error_time) {
 			cache->last_mmap_error_time = ioloop_time;
 			mail_cache_set_syscall_error(cache, t_strdup_printf(
 				"mmap(size=%"PRIuSIZE_T")", cache->mmap_length));
 		}
+		cache->mmap_length = 0;
 		return -1;
 	}
 	*data_r = offset > cache->mmap_length ? NULL :
@@ -534,7 +556,7 @@ static struct mail_cache *mail_cache_alloc(struct mail_index *index)
 
 	if (!MAIL_INDEX_IS_IN_MEMORY(index) &&
 	    (index->flags & MAIL_INDEX_OPEN_FLAG_MMAP_DISABLE) != 0)
-		cache->file_cache = file_cache_new(-1);
+		cache->file_cache = file_cache_new_path(-1, cache->filepath);
 	cache->map_with_read =
 		(cache->index->flags & MAIL_INDEX_OPEN_FLAG_SAVEONLY) != 0;
 
@@ -777,9 +799,13 @@ int mail_cache_append(struct mail_cache *cache, const void *data, size_t size,
 				mail_cache_set_syscall_error(cache, "fstat()");
 			return -1;
 		}
+		if (st.st_size > (uint32_t)-1) {
+			mail_cache_set_corrupted(cache, "Cache file too large");
+			return -1;
+		}
 		*offset = st.st_size;
 	}
-	if (*offset > (uint32_t)-1 || (uint32_t)-1 - *offset < size) {
+	if ((uint32_t)-1 - *offset < size) {
 		mail_cache_set_corrupted(cache, "Cache file too large");
 		return -1;
 	}

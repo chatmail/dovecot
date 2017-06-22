@@ -1,14 +1,14 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
 #include "hex-binary.h"
 #include "sha1.h"
 #include "istream.h"
+#include "message-part-data.h"
 #include "imap-envelope.h"
 #include "imapc-msgmap.h"
 #include "imapc-mail.h"
-#include "imapc-client.h"
 #include "imapc-storage.h"
 
 static bool imapc_mail_get_cached_guid(struct mail *_mail);
@@ -104,7 +104,7 @@ static uint64_t imapc_mail_get_modseq(struct mail *_mail)
 	unsigned int count;
 	uint32_t rseq;
 
-	if (!imapc_storage_has_modseqs(mbox->storage))
+	if (!imapc_mailbox_has_modseqs(mbox))
 		return index_mail_get_modseq(_mail);
 
 	msgmap = imapc_client_mailbox_get_msgmap(mbox->client_box);
@@ -350,6 +350,7 @@ void imapc_mail_update_access_parts(struct index_mail *mail)
 	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
 	struct index_mail_data *data = &mail->data;
 	struct mailbox_header_lookup_ctx *header_ctx;
+	const char *str;
 	time_t date;
 	uoff_t size;
 
@@ -369,6 +370,10 @@ void imapc_mail_update_access_parts(struct index_mail *mail)
 	}
 	if ((data->wanted_fields & MAIL_FETCH_GUID) != 0)
 		(void)imapc_mail_get_cached_guid(_mail);
+	if ((data->wanted_fields & MAIL_FETCH_IMAP_BODY) != 0)
+		(void)index_mail_get_cached_body(mail, &str);
+	if ((data->wanted_fields & MAIL_FETCH_IMAP_BODYSTRUCTURE) != 0)
+		(void)index_mail_get_cached_bodystructure(mail, &str);
 
 	if (data->access_part == 0 && data->wanted_headers != NULL &&
 	    !IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_HEADERS)) {
@@ -382,7 +387,7 @@ void imapc_mail_update_access_parts(struct index_mail *mail)
 		/* the common code already checked this partially,
 		   but we need a guaranteed correct answer */
 		header_ctx = mailbox_header_lookup_init(_mail->box,
-							imap_envelope_headers);
+							message_part_envelope_headers);
 		if (!imapc_mail_has_headers_in_cache(mail, header_ctx))
 			data->access_part |= PARSE_HDR;
 		mailbox_header_lookup_unref(&header_ctx);
@@ -410,7 +415,8 @@ imapc_mail_add_temp_wanted_fields(struct mail *_mail,
 	struct index_mail *mail = (struct index_mail *)_mail;
 
 	index_mail_add_temp_wanted_fields(_mail, fields, headers);
-	imapc_mail_update_access_parts(mail);
+	if (_mail->seq != 0)
+		imapc_mail_update_access_parts(mail);
 }
 
 static void imapc_mail_close(struct mail *_mail)
@@ -566,6 +572,34 @@ imapc_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 
 		*value_r = p_strdup_printf(imail->mail.data_pool, "GmailId%llx",
 					   (unsigned long long)num);
+		return 0;
+	case MAIL_FETCH_IMAP_BODY:
+		if (!IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_BODYSTRUCTURE))
+			break;
+
+		if (index_mail_get_cached_body(imail, value_r))
+			return 0;
+		if (imapc_mail_fetch(_mail, field, NULL) < 0)
+			return -1;
+		if (imail->data.body == NULL) {
+			(void)imapc_mail_failed(_mail, "BODY");
+			return -1;
+		}
+		*value_r = imail->data.body;
+		return 0;
+	case MAIL_FETCH_IMAP_BODYSTRUCTURE:
+		if (!IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_BODYSTRUCTURE))
+			break;
+
+		if (index_mail_get_cached_bodystructure(imail, value_r))
+			return 0;
+		if (imapc_mail_fetch(_mail, field, NULL) < 0)
+			return -1;
+		if (imail->data.bodystructure == NULL) {
+			(void)imapc_mail_failed(_mail, "BODYSTRUCTURE");
+			return -1;
+		}
+		*value_r = imail->data.bodystructure;
 		return 0;
 	default:
 		break;

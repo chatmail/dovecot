@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -185,7 +185,7 @@ int pop3_migration_get_hdr_sha1(uint32_t mail_seq, struct istream *input,
 	struct sha1_ctxt sha1_ctx;
 	struct pop3_hdr_context hdr_ctx;
 
-	memset(&hdr_ctx, 0, sizeof(hdr_ctx));
+	i_zero(&hdr_ctx);
 	/* hide headers that might change or be different in IMAP vs. POP3 */
 	input = i_stream_create_header_filter(input, HEADER_FILTER_HIDE_BODY |
 				HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR,
@@ -237,7 +237,7 @@ get_hdr_sha1(struct mail *mail, unsigned char sha1_r[STATIC_ARRAY SHA1_RESULTLEN
 	int ret;
 
 	if (mail_get_hdr_stream(mail, NULL, &input) < 0) {
-		errstr = mailbox_get_last_error(mail->box, &error);
+		errstr = mailbox_get_last_internal_error(mail->box, &error);
 		i_error("pop3_migration: Failed to get header for msg %u: %s",
 			mail->seq, errstr);
 		return error == MAIL_ERROR_EXPUNGED ? 0 : -1;
@@ -272,7 +272,7 @@ get_hdr_sha1(struct mail *mail, unsigned char sha1_r[STATIC_ARRAY SHA1_RESULTLEN
 	   (and/or RETR) and we'll parse the header ourself from it. This
 	   should work around any similar bugs in all IMAP/POP3 servers. */
 	if (mail_get_stream_because(mail, NULL, NULL, "pop3-migration", &input) < 0) {
-		errstr = mailbox_get_last_error(mail->box, &error);
+		errstr = mailbox_get_last_internal_error(mail->box, &error);
 		i_error("pop3_migration: Failed to get body for msg %u: %s",
 			mail->seq, errstr);
 		return error == MAIL_ERROR_EXPUNGED ? 0 : -1;
@@ -311,12 +311,15 @@ static struct mailbox *pop3_mailbox_alloc(struct mail_storage *storage)
 	struct pop3_migration_mail_storage *mstorage =
 		POP3_MIGRATION_CONTEXT(storage);
 	struct mail_namespace *ns;
+	struct mailbox *box;
 
 	ns = mail_namespace_find(storage->user->namespaces,
 				 mstorage->pop3_box_vname);
 	i_assert(ns != NULL);
-	return mailbox_alloc(ns->list, mstorage->pop3_box_vname,
-			     MAILBOX_FLAG_READONLY | MAILBOX_FLAG_POP3_SESSION);
+	box = mailbox_alloc(ns->list, mstorage->pop3_box_vname,
+			    MAILBOX_FLAG_READONLY | MAILBOX_FLAG_POP3_SESSION);
+	mailbox_set_reason(box, "pop3_migration");
+	return box;
 }
 
 static int pop3_map_read(struct mail_storage *storage, struct mailbox *pop3_box)
@@ -342,7 +345,7 @@ static int pop3_map_read(struct mail_storage *storage, struct mailbox *pop3_box)
 
 	if (mailbox_sync(pop3_box, 0) < 0) {
 		i_error("pop3_migration: Couldn't sync mailbox %s: %s",
-			pop3_box->vname, mailbox_get_last_error(pop3_box, NULL));
+			pop3_box->vname, mailbox_get_last_internal_error(pop3_box, NULL));
 		return -1;
 	}
 
@@ -363,14 +366,16 @@ static int pop3_map_read(struct mail_storage *storage, struct mailbox *pop3_box)
 		else if (mail_get_physical_size(mail, &size) < 0) {
 			i_error("pop3_migration: Failed to get size for msg %u: %s",
 				mail->seq,
-				mailbox_get_last_error(pop3_box, NULL));
+				mailbox_get_last_internal_error(pop3_box, NULL));
 			ret = -1;
 			break;
 		}
+		mail->lookup_abort = MAIL_LOOKUP_ABORT_NEVER;
+
 		if (mail_get_special(mail, MAIL_FETCH_UIDL_BACKEND, &uidl) < 0) {
 			i_error("pop3_migration: Failed to get UIDL for msg %u: %s",
 				mail->seq,
-				mailbox_get_last_error(pop3_box, NULL));
+				mailbox_get_last_internal_error(pop3_box, NULL));
 			ret = -1;
 			break;
 		}
@@ -388,7 +393,7 @@ static int pop3_map_read(struct mail_storage *storage, struct mailbox *pop3_box)
 
 	if (mailbox_search_deinit(&ctx) < 0) {
 		i_error("pop3_migration: Failed to search all POP3 mails: %s",
-			mailbox_get_last_error(pop3_box, NULL));
+			mailbox_get_last_internal_error(pop3_box, NULL));
 		ret = -1;
 	}
 	(void)mailbox_transaction_commit(&t);
@@ -417,7 +422,7 @@ pop3_map_read_cached_hdr_hashes(struct mailbox_transaction_context *t,
 
 	if (mailbox_search_deinit(&ctx) < 0) {
 		i_warning("pop3_migration: Failed to search all cached POP3 header hashes: %s - ignoring",
-			  mailbox_get_last_error(t->box, NULL));
+			  mailbox_get_last_internal_error(t->box, NULL));
 	}
 }
 
@@ -473,7 +478,7 @@ map_read_hdr_hashes(struct mailbox *box, struct array *msg_map, uint32_t seq1)
 
 	if (mailbox_search_deinit(&ctx) < 0) {
 		i_error("pop3_migration: Failed to search all mail headers: %s",
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 		ret = -1;
 	}
 	(void)mailbox_transaction_commit(&t);
@@ -537,7 +542,7 @@ static int imap_map_read(struct mailbox *box)
 		else if (mail_get_physical_size(mail, &psize) < 0) {
 			i_error("pop3_migration: Failed to get psize for imap uid %u: %s",
 				mail->uid,
-				mailbox_get_last_error(box, NULL));
+				mailbox_get_last_internal_error(box, NULL));
 			ret = -1;
 			break;
 		}
@@ -549,7 +554,7 @@ static int imap_map_read(struct mailbox *box)
 
 	if (mailbox_search_deinit(&ctx) < 0) {
 		i_error("pop3_migration: Failed to search all IMAP mails: %s",
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 		ret = -1;
 	}
 	(void)mailbox_transaction_commit(&t);
@@ -770,7 +775,7 @@ pop3_migration_get_special(struct mail *_mail, enum mail_fetch_field field,
 		if (pop3_migration_uidl_sync_if_needed(_mail->box) < 0)
 			return -1;
 
-		memset(&map_key, 0, sizeof(map_key));
+		i_zero(&map_key);
 		map_key.uid = _mail->uid;
 		map = array_bsearch(&mbox->imap_msg_map, &map_key,
 				    imap_msg_map_uid_cmp);

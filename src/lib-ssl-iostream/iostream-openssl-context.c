@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "safe-memset.h"
@@ -29,7 +29,24 @@ static int ssl_iostream_init_global(const struct ssl_iostream_settings *set,
 static RSA *ssl_gen_rsa_key(SSL *ssl ATTR_UNUSED,
 			    int is_export ATTR_UNUSED, int keylength)
 {
+#ifdef HAVE_RSA_GENERATE_KEY_EX
+	BIGNUM *bn = BN_new();
+	RSA *rsa = RSA_new();
+
+	if (bn != NULL && BN_set_word(bn, RSA_F4) != 0 &&
+	    RSA_generate_key_ex(rsa, keylength, bn, NULL) != 0) {
+		BN_free(bn);
+		return rsa;
+	}
+
+	if (bn != NULL)
+		BN_free(bn);
+	if (rsa != NULL)
+		RSA_free(rsa);
+	return NULL;
+#else
 	return RSA_generate_key(keylength, RSA_F4, NULL, NULL);
+#endif
 }
 
 static DH *ssl_tmp_dh_callback(SSL *ssl ATTR_UNUSED,
@@ -293,7 +310,7 @@ ssl_iostream_context_load_ca(struct ssl_iostream_context *ctx,
 		have_ca = TRUE;
 	}
 
-	if (!have_ca) {
+	if (!have_ca && set->require_valid_cert) {
 		*error_r = !ctx->client_ctx ?
 			"Can't verify remote client certs without CA (ssl_ca setting)" :
 			"Can't verify remote server certs without trusted CAs (ssl_client_ca_* settings)";
@@ -482,10 +499,14 @@ int openssl_iostream_context_init_client(const struct ssl_iostream_settings *set
 					 struct ssl_iostream_context **ctx_r,
 					 const char **error_r)
 {
+	struct ssl_iostream_settings set_copy = *set;
 	struct ssl_iostream_context *ctx;
 	SSL_CTX *ssl_ctx;
 
-	if (ssl_iostream_init_global(set, error_r) < 0)
+	/* ensure this is set to TRUE */
+	set_copy.verify_remote_cert = TRUE;
+
+	if (ssl_iostream_init_global(&set_copy, error_r) < 0)
 		return -1;
 	if ((ssl_ctx = SSL_CTX_new(SSLv23_client_method())) == NULL) {
 		*error_r = t_strdup_printf("SSL_CTX_new() failed: %s",
@@ -497,7 +518,7 @@ int openssl_iostream_context_init_client(const struct ssl_iostream_settings *set
 	ctx = i_new(struct ssl_iostream_context, 1);
 	ctx->ssl_ctx = ssl_ctx;
 	ctx->client_ctx = TRUE;
-	if (ssl_iostream_context_init_common(ctx, set, error_r) < 0) {
+	if (ssl_iostream_context_init_common(ctx, &set_copy, error_r) < 0) {
 		ssl_iostream_context_deinit(&ctx);
 		return -1;
 	}

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -22,9 +22,28 @@ struct who_user {
 	unsigned int connection_count;
 };
 
+static void who_user_ip(const struct who_user *user, struct ip_addr *ip_r)
+{
+	if (array_count(&user->ips) == 0)
+		i_zero(ip_r);
+	else {
+		const struct ip_addr *ip = array_idx(&user->ips, 0);
+		*ip_r = *ip;
+	}
+}
+
 static unsigned int who_user_hash(const struct who_user *user)
 {
-	return str_hash(user->username) + str_hash(user->service);
+	struct ip_addr ip;
+	unsigned int hash = str_hash(user->service);
+
+	if (user->username[0] != '\0')
+		hash += str_hash(user->username);
+	else {
+		who_user_ip(user, &ip);
+		hash += net_ip_hash(&ip);
+	}
+	return hash;
 }
 
 static int who_user_cmp(const struct who_user *user1,
@@ -34,6 +53,15 @@ static int who_user_cmp(const struct who_user *user1,
 		return 1;
 	if (strcmp(user1->service, user2->service) != 0)
 		return 1;
+
+	if (user1->username[0] == '\0') {
+		/* tracking only IP addresses, not usernames */
+		struct ip_addr ip1, ip2;
+
+		who_user_ip(user1, &ip1);
+		who_user_ip(user2, &ip2);
+		return net_ip_cmp(&ip1, &ip2);
+	}
 	return 0;
 }
 
@@ -57,7 +85,7 @@ static int who_parse_line(const char *line, struct who_line *line_r)
 	const char *refcount_str = args[2];
 	const char *p, *ip_str;
 
-	memset(line_r, 0, sizeof(*line_r));
+	i_zero(line_r);
 
 	/* ident = service/ip/username (imap, pop3)
 	   or      service/username (lmtp) */
@@ -287,7 +315,7 @@ static void cmd_who(struct doveadm_cmd_context *cctx)
 	struct who_context ctx;
 	bool separate_connections = FALSE;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	if (!doveadm_cmd_param_str(cctx, "socket-path", &(ctx.anvil_path)))
 		ctx.anvil_path = t_strconcat(doveadm_settings->base_dir, "/anvil", NULL);
 	(void)doveadm_cmd_param_bool(cctx, "separate-connections", &separate_connections);

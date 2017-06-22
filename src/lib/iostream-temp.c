@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -151,6 +151,7 @@ o_stream_temp_sendv(struct ostream_private *stream,
 	for (i = 0; i < iov_count; i++) {
 		if (tstream->buf->used + iov[i].iov_len > tstream->max_mem_size) {
 			if (o_stream_temp_move_to_fd(tstream) == 0) {
+				i_assert(tstream->fd != -1);
 				return o_stream_temp_fd_sendv(tstream, iov+i,
 							      iov_count-i);
 			}

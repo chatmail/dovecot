@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mailbox-list-private.h"
@@ -32,4 +32,10 @@ void mailbox_list_notify_wait(struct mailbox_list_notify *notify,
 			      void (*callback)(void *context), void *context)
 {
 	notify->list->v.notify_wait(notify, callback, context);
+}
+
+void mailbox_list_notify_flush(struct mailbox_list_notify *notify)
+{
+	if (notify->list->v.notify_flush != NULL)
+		notify->list->v.notify_flush(notify);
 }

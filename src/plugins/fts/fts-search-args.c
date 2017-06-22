@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -81,6 +81,11 @@ fts_backend_dovecot_expand_tokens(struct fts_filter *filter,
 		} else if (ret < 0) {
 			*error_r = t_strdup_printf("Couldn't filter search token: %s", error);
 			return -1;
+		} else {
+			/* The filter dropped the token, which means it was
+			   never even indexed. Ignore this word entirely in the
+			   search query. */
+			return 0;
 		}
 	}
 	array_sort(&tokens, i_strcmp_p);
@@ -98,7 +103,7 @@ fts_backend_dovecot_tokenize_lang(struct fts_user_language *user_lang,
 				  struct mail_search_arg *orig_arg,
 				  const char *orig_token, const char **error_r)
 {
-	unsigned int orig_token_len = strlen(orig_token);
+	size_t orig_token_len = strlen(orig_token);
 	struct mail_search_arg *and_arg;
 	const char *token, *error;
 	int ret;

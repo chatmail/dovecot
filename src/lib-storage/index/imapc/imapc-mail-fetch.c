@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -10,8 +10,8 @@
 #include "imap-arg.h"
 #include "imap-date.h"
 #include "imap-quote.h"
+#include "imap-bodystructure.h"
 #include "imap-resp-code.h"
-#include "imapc-client.h"
 #include "imapc-mail.h"
 #include "imapc-storage.h"
 
@@ -45,6 +45,7 @@ static void imapc_mail_set_failure(struct imapc_mail *mail,
 		break;
 	case IMAPC_COMMAND_STATE_BAD:
 	case IMAPC_COMMAND_STATE_DISCONNECTED:
+	case IMAPC_COMMAND_STATE_AUTH_FAILED:
 		mail->fetch_failed = TRUE;
 		break;
 	}
@@ -213,8 +214,11 @@ imapc_mail_send_fetch(struct mail *_mail, enum mail_fetch_field fields,
 	uint32_t seq;
 	unsigned int i;
 
-	if (_mail->lookup_abort != MAIL_LOOKUP_ABORT_NEVER)
+	if (_mail->lookup_abort != MAIL_LOOKUP_ABORT_NEVER) {
+		mail_set_aborted(_mail);
 		return -1;
+	}
+	_mail->mail_stream_opened = TRUE;
 
 	/* drop any fields that we may already be fetching currently */
 	fields &= ~mail->fetching_fields;
@@ -255,6 +259,10 @@ imapc_mail_send_fetch(struct mail *_mail, enum mail_fetch_field fields,
 		str_append(str, mbox->guid_fetch_field_name);
 		str_append_c(str, ' ');
 	}
+	if ((fields & MAIL_FETCH_IMAP_BODY) != 0)
+		str_append(str, "BODY ");
+	if ((fields & MAIL_FETCH_IMAP_BODYSTRUCTURE) != 0)
+		str_append(str, "BODYSTRUCTURE ");
 
 	if ((fields & MAIL_FETCH_STREAM_BODY) != 0) {
 		if (!IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_ZIMBRA_WORKAROUNDS))
@@ -339,6 +347,14 @@ imapc_mail_get_wanted_fetch_fields(struct imapc_mail *mail)
 	    data->physical_size == (uoff_t)-1 &&
 	    IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_RFC822_SIZE))
 		fields |= MAIL_FETCH_PHYSICAL_SIZE | MAIL_FETCH_VIRTUAL_SIZE;
+	if ((data->wanted_fields & MAIL_FETCH_IMAP_BODY) != 0 &&
+	    data->body == NULL &&
+	    IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_BODYSTRUCTURE))
+		fields |= MAIL_FETCH_IMAP_BODY;
+	if ((data->wanted_fields & MAIL_FETCH_IMAP_BODYSTRUCTURE) != 0 &&
+	    data->bodystructure == NULL &&
+	    IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_BODYSTRUCTURE))
+		fields |= MAIL_FETCH_IMAP_BODYSTRUCTURE;
 	if ((data->wanted_fields & MAIL_FETCH_GUID) != 0 &&
 	    data->guid == NULL && mbox->guid_fetch_field_name != NULL)
 		fields |= MAIL_FETCH_GUID;
@@ -394,6 +410,16 @@ imapc_mail_have_fields(struct imapc_mail *imail, enum mail_fetch_field fields)
 			return FALSE;
 		fields &= ~MAIL_FETCH_GUID;
 	}
+	if ((fields & MAIL_FETCH_IMAP_BODY) != 0) {
+		if (imail->imail.data.body == NULL)
+			return FALSE;
+		fields &= ~MAIL_FETCH_IMAP_BODY;
+	}
+	if ((fields & MAIL_FETCH_IMAP_BODYSTRUCTURE) != 0) {
+		if (imail->imail.data.bodystructure == NULL)
+			return FALSE;
+		fields &= ~MAIL_FETCH_IMAP_BODYSTRUCTURE;
+	}
 	if ((fields & (MAIL_FETCH_STREAM_HEADER |
 		       MAIL_FETCH_STREAM_BODY)) != 0) {
 		if (imail->imail.data.stream == NULL)
@@ -443,8 +469,10 @@ int imapc_mail_fetch(struct mail *_mail, enum mail_fetch_field fields,
 		!imail->header_list_fetched)) {
 		imapc_mailbox_run_nofetch(mbox);
 	}
-	if (imail->fetch_failed)
+	if (imail->fetch_failed) {
+		mail_storage_set_internal_error(&mbox->storage->storage);
 		return -1;
+	}
 	return 0;
 }
 
@@ -718,6 +746,35 @@ imapc_fetch_header_stream(struct imapc_mail *mail,
 	i_stream_destroy(&input);
 }
 
+static const char *
+imapc_args_to_bodystructure(struct imapc_mail *mail,
+			    const struct imap_arg *list_arg, bool extended)
+{
+	const struct imap_arg *args;
+	struct message_part *parts = NULL;
+	const char *ret, *error;
+	pool_t pool;
+
+	if (!imap_arg_get_list(list_arg, &args)) {
+		mail_storage_set_critical(mail->imail.mail.mail.box->storage,
+			"imapc: Server sent invalid BODYSTRUCTURE parameters");
+		return NULL;
+	}
+
+	pool = pool_alloconly_create("imap bodystructure", 1024);
+	if (imap_bodystructure_parse_args(args, pool, &parts, &error) < 0) {
+		mail_storage_set_critical(mail->imail.mail.mail.box->storage,
+			"imapc: Server sent invalid BODYSTRUCTURE: %s", error);
+		ret = NULL;
+	} else {
+		string_t *str = t_str_new(128);
+		imap_bodystructure_write(parts, str, extended);
+		ret = p_strdup(mail->imail.mail.data_pool, str_c(str));
+	}
+	pool_unref(&pool);
+	return ret;
+}
+
 void imapc_mail_fetch_update(struct imapc_mail *mail,
 			     const struct imapc_untagged_reply *reply,
 			     const struct imap_arg *args)
@@ -752,6 +809,18 @@ void imapc_mail_fetch_update(struct imapc_mail *mail,
 			if (imap_arg_get_astring(&args[i+1], &value) &&
 			    imap_parse_datetime(value, &t, &tz))
 				mail->imail.data.received_date = t;
+			match = TRUE;
+		} else if (strcasecmp(key, "BODY") == 0) {
+			if (IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_BODYSTRUCTURE)) {
+				mail->imail.data.body =
+					imapc_args_to_bodystructure(mail, &args[i+1], FALSE);
+			}
+			match = TRUE;
+		} else if (strcasecmp(key, "BODYSTRUCTURE") == 0) {
+			if (IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_BODYSTRUCTURE)) {
+				mail->imail.data.bodystructure =
+					imapc_args_to_bodystructure(mail, &args[i+1], TRUE);
+			}
 			match = TRUE;
 		} else if (strcasecmp(key, "RFC822.SIZE") == 0) {
 			if (imap_arg_get_atom(&args[i+1], &value) &&

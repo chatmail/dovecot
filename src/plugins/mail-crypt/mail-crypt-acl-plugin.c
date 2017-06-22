@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop-private.h"
@@ -116,7 +116,7 @@ mail_crypt_acl_unset_private_keys(struct mailbox *src_box,
 		*error_r = t_strdup_printf("mail-crypt-acl-plugin: "
 					   "mailbox_transaction_commit(%s) failed: %s",
 					   mailbox_get_vname(src_box),
-					   mailbox_get_last_error(src_box, NULL));
+					   mailbox_get_last_internal_error(src_box, NULL));
 		return -1;
 	}
 	return 0;
@@ -142,7 +142,7 @@ mail_crypt_acl_user_create(struct mail_user *user, const char *dest_username,
 	if ((cur_ioloop_ctx = io_loop_get_current_context(current_ioloop)) != NULL)
 		io_loop_context_deactivate(cur_ioloop_ctx);
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = old_input->module;
 	input.service = old_input->service;
 	input.username = dest_username;
@@ -213,7 +213,7 @@ mail_crypt_acl_update_private_key(struct mailbox *src_box,
 	}
 
 	if (mailbox_transaction_commit(&t) < 0) {
-		*error_r = mailbox_get_last_error(src_box, NULL);
+		*error_r = mailbox_get_last_internal_error(src_box, NULL);
 		ret = -1;
 	}
 
@@ -247,7 +247,7 @@ static int mail_crypt_acl_object_update(struct acl_object *aclobj,
 		i_error("mail-crypt-acl-plugin: "
 			"mailbox_open(%s) failed: %s",
 			mailbox_get_vname(box),
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 		return -1;
 	}
 
@@ -272,7 +272,8 @@ static int mail_crypt_acl_object_update(struct acl_object *aclobj,
 						 &dest_service_user, &error);
 
 		/* to make sure we get correct logging context */
-		mail_storage_service_io_deactivate_user(dest_service_user);
+		if (ret > 0)
+			mail_storage_service_io_deactivate_user(dest_service_user);
 		mail_storage_service_io_activate_user(
 			aclobj->backend->list->ns->user->_service_user
 		);
@@ -281,6 +282,7 @@ static int mail_crypt_acl_object_update(struct acl_object *aclobj,
 			i_error("mail-crypt-acl-plugin: "
 				"Cannot initialize destination user %s: %s",
 				username, error);
+			break;
 		} else {
 			i_assert(dest_user != NULL);
 			if ((ret = mail_crypt_acl_update_private_key(box, dest_user,
@@ -301,10 +303,8 @@ static int mail_crypt_acl_object_update(struct acl_object *aclobj,
 		);
 		mail_storage_service_io_activate_user(dest_service_user);
 
-		if (dest_user != NULL)
-			mail_user_unref(&dest_user);
-		if (dest_service_user != NULL)
-			mail_storage_service_user_free(&dest_service_user);
+		mail_user_unref(&dest_user);
+		mail_storage_service_user_unref(&dest_service_user);
 
 		if ((cur_ioloop_ctx = io_loop_get_current_context(current_ioloop)) != NULL)
 			io_loop_context_deactivate(cur_ioloop_ctx);

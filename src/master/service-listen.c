@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "array.h"
@@ -260,7 +260,7 @@ static int get_socket_info(int fd, unsigned int *family, in_port_t *port)
 	if (port) *port = -1;
 	if (family) *family = -1;
 
-	memset(&sockaddr, 0, sizeof(sockaddr));
+	i_zero(&sockaddr);
 	l = sizeof(sockaddr);
 
 	if (getsockname(fd, &sockaddr.sa, &l) < 0)
@@ -349,8 +349,10 @@ static int services_listen_master(struct service_list *service_list)
 	}
 	umask(old_umask);
 
-	if (service_list->master_fd == -1)
+	if (service_list->master_fd == -1) {
+		i_error("net_listen_unix(%s) failed: %m", path);
 		return 0;
+	}
 	fd_close_on_exec(service_list->master_fd, TRUE);
 	return 1;
 }
@@ -365,8 +367,12 @@ int services_listen(struct service_list *service_list)
 		if (ret2 < ret)
 			ret = ret2;
 	}
-	if (ret > 0)
-		ret = services_listen_master(service_list);
+	/* reloading config wants to continue even when we're returning 0. */
+	if (ret >= 0) {
+		ret2 = services_listen_master(service_list);
+		if (ret2 < ret)
+			ret = ret2;
+	}
 
 #ifdef HAVE_SYSTEMD
 	if (ret > 0)

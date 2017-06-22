@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -9,7 +9,9 @@
 
 struct run_ctx {
 	header_filter_callback *callback;
+	unsigned int callback_call_count;
 	bool null_hdr_seen;
+	bool eoh_seen;
 	bool callback_called;
 };
 
@@ -17,11 +19,57 @@ static void run_callback(struct header_filter_istream *input,
 			 struct message_header_line *hdr,
 			 bool *matched, struct run_ctx *ctx)
 {
+	i_assert(!ctx->null_hdr_seen);
+
+	ctx->callback_call_count++;
 	if (hdr == NULL)
 		ctx->null_hdr_seen = TRUE;
+	else {
+		i_assert(!ctx->eoh_seen);
+		if (hdr->eoh)
+			ctx->eoh_seen = TRUE;
+	}
 	if (ctx->callback != NULL)
 		ctx->callback(input, hdr, matched, NULL);
 	ctx->callback_called = TRUE;
+}
+
+static inline void
+test_istream_run_prep(struct run_ctx *run_ctx,
+		      header_filter_callback *callback)
+{
+	i_zero(run_ctx);
+	run_ctx->callback = callback;
+	run_ctx->null_hdr_seen = FALSE;
+	run_ctx->eoh_seen = FALSE;
+	run_ctx->callback_called = FALSE;
+}
+
+static void
+test_istream_run_check(struct run_ctx *run_ctx,
+		       struct istream *filter,
+		       const char *output,
+		       enum header_filter_flags flags,
+		       bool first,
+		       size_t *size_r)
+{
+	const unsigned char *data;
+	const struct stat *st;
+
+	if (first)
+		test_assert(run_ctx->null_hdr_seen);
+	else
+		test_assert(run_ctx->null_hdr_seen == run_ctx->callback_called);
+
+	if (first && ((flags & HEADER_FILTER_ADD_MISSING_EOH) != 0))
+		test_assert(run_ctx->eoh_seen);
+
+	data = i_stream_get_data(filter, size_r);
+	test_assert(*size_r == strlen(output) &&
+		    memcmp(data, output, *size_r) == 0);
+
+	test_assert(i_stream_stat(filter, TRUE, &st) == 0 &&
+		    (uoff_t)st->st_size == *size_r);
 }
 
 static void
@@ -30,12 +78,12 @@ test_istream_run(struct istream *test_istream,
 		 enum header_filter_flags flags,
 		 header_filter_callback *callback)
 {
-	struct run_ctx run_ctx = { .callback = callback, .null_hdr_seen = FALSE };
+	struct run_ctx run_ctx;
 	struct istream *filter;
-	unsigned int i, output_len = strlen(output);
-	const struct stat *st;
-	const unsigned char *data;
+	unsigned int i, orig_callback_call_count;
 	size_t size;
+
+	test_istream_run_prep(&run_ctx, callback);
 
 	filter = i_stream_create_header_filter(test_istream, flags, NULL, 0,
 					       run_callback, &run_ctx);
@@ -48,22 +96,19 @@ test_istream_run(struct istream *test_istream,
 	test_assert(i_stream_read(filter) > 0);
 	test_assert(i_stream_read(filter) == -1);
 
-	test_assert(run_ctx.null_hdr_seen);
-	run_ctx.null_hdr_seen = FALSE;
-	run_ctx.callback_called = FALSE;
-
-	data = i_stream_get_data(filter, &size);
-	test_assert(size == output_len && memcmp(data, output, size) == 0);
+	test_istream_run_check(&run_ctx, filter, output, flags, TRUE, &size);
+	orig_callback_call_count = run_ctx.callback_call_count;
 
 	/* run again to make sure it's still correct the second time */
+	test_istream_run_prep(&run_ctx, callback);
+
 	i_stream_skip(filter, size);
 	i_stream_seek(filter, 0);
 	while (i_stream_read(filter) > 0) ;
-	test_assert(run_ctx.null_hdr_seen == run_ctx.callback_called);
-	data = i_stream_get_data(filter, &size);
-	test_assert(size == output_len && memcmp(data, output, size) == 0);
-	test_assert(i_stream_stat(filter, TRUE, &st) == 0 &&
-		    (uoff_t)st->st_size == size);
+	test_istream_run_check(&run_ctx, filter, output, flags, FALSE, &size);
+	test_assert(run_ctx.callback_call_count == 0 ||
+		    run_ctx.callback_call_count == orig_callback_call_count);
+
 	i_stream_unref(&filter);
 }
 
@@ -85,8 +130,9 @@ static void test_istream_filter(void)
 	const char *input = "From: foo\nFrom: abc\nTo: bar\nSubject: plop\nX-Drop: 1\n\nhello world\n";
 	const char *output = "From: abc\n\nhello world\n";
 	struct istream *istream, *filter, *filter2;
-	unsigned int i, input_len = strlen(input);
-	unsigned int output_len = strlen(output);
+	unsigned int i;
+	size_t input_len = strlen(input);
+	size_t output_len = strlen(output);
 	const unsigned char *data;
 	const struct stat *st;
 	size_t size;
@@ -388,8 +434,9 @@ static void test_istream_end_body_with_lf(void)
 	const char *output = "From: foo\n\nhello world\n";
 	const struct stat *st;
 	struct istream *istream, *filter;
-	unsigned int i, input_len = strlen(input);
-	unsigned int output_len = strlen(output);
+	unsigned int i;
+	size_t input_len = strlen(input);
+	size_t output_len = strlen(output);
 	const unsigned char *data;
 	string_t *str = t_str_new(64);
 	size_t size;
@@ -474,6 +521,24 @@ static void test_istream_add_missing_eoh(void)
 				 *null_header_filter_callback);
 		i_stream_unref(&istream);
 	}
+	test_end();
+}
+
+static void test_istream_add_missing_eoh_and_edit(void)
+{
+	const char *input = "From: foo\nTo: bar\n";
+	const char *output = "From: foo\nTo: 123\nAdded: header\n\n";
+	struct istream *istream;
+
+	test_begin("i_stream_create_header_filter: add missing EOH and edit headers");
+	istream = test_istream_create(input);
+	test_istream_run(istream, strlen(input), output,
+			 HEADER_FILTER_EXCLUDE |
+			 HEADER_FILTER_ADD_MISSING_EOH |
+			 HEADER_FILTER_NO_CR,
+			 edit_callback);
+	i_stream_unref(&istream);
+
 	test_end();
 }
 
@@ -585,6 +650,7 @@ int main(void)
 		test_istream_callbacks,
 		test_istream_edit,
 		test_istream_add_missing_eoh,
+		test_istream_add_missing_eoh_and_edit,
 		test_istream_end_body_with_lf,
 		test_istream_hide_body,
 		test_istream_strip_eoh,

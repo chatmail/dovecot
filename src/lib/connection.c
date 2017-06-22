@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -299,7 +299,7 @@ int connection_client_connect(struct connection *conn)
 void connection_disconnect(struct connection *conn)
 {
 	conn->last_input = 0;
-	memset(&conn->last_input_tv, 0, sizeof(conn->last_input_tv));
+	i_zero(&conn->last_input_tv);
 	if (conn->to != NULL)
 		timeout_remove(&conn->to);
 	if (conn->io != NULL)
@@ -425,7 +425,8 @@ connection_list_init(const struct connection_settings *set,
 		 set->input_full_behavior != CONNECTION_BEHAVIOR_ALLOW);
 	i_assert(set->major_version == 0 ||
 		 (set->service_name_in != NULL &&
-		  set->service_name_out != NULL));
+		  set->service_name_out != NULL &&
+		  set->output_max_size != 0));
 
 	list = i_new(struct connection_list, 1);
 	list->set = *set;

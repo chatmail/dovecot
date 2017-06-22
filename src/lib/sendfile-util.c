@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 /* kludge a bit to remove _FILE_OFFSET_BITS definition from config.h.
    It's required to be able to include sys/sendfile.h with Linux. */
@@ -73,7 +73,7 @@ ssize_t safe_sendfile(int out_fd, int in_fd, uoff_t *offset, size_t count)
 		return 0;
 	}
 
-	memset(&hdtr, 0, sizeof(hdtr));
+	i_zero(&hdtr);
 	ret = sendfile(in_fd, out_fd, *offset, count, &hdtr, &sbytes, 0);
 
 	*offset += sbytes;

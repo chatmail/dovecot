@@ -40,9 +40,10 @@ The supported options are:
 NOTE: The dictionary stores only the current quota usage. The quota limits are
 still configured in userdb the same way as with other quota backends.
 
-NOTE2: The quota dict may delete rows from the database when it wants to
-rebuild the quota. You must use a separate table that contains only the quota
-information, or you'll lose the other data.
+NOTE2: By default the quota dict may delete rows from the database when it
+wants to rebuild the quota. You must use a separate table that contains only
+the quota information, or you'll lose the other data. This can be avoided with
+the "no-unset" parameter.
 
 Examples
 --------
@@ -197,4 +198,4 @@ dict {
 
 See <Dict.txt> for more information, especially about permission issues.
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

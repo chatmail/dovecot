@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "numpack.h"
@@ -31,7 +31,8 @@ int message_binary_part_deserialize(pool_t pool, const void *data, size_t size,
 		if (numpack_decode(&p, end, &n1) < 0 ||
 		    numpack_decode(&p, end, &n2) < 0 ||
 		    numpack_decode(&p, end, &n3) < 0 ||
-		    numpack_decode(&p, end, &n4) < 0)
+		    numpack_decode(&p, end, &n4) < 0 ||
+		    n4 > UINT_MAX)
 			return -1;
 		part->physical_pos = n1;
 		part->binary_hdr_size = n2;

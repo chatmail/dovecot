@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -155,7 +155,7 @@ keywords_header_add(struct mail_index_sync_map_ctx *ctx,
 	}
 
 	/* add the keyword */
-	memset(&kw_rec, 0, sizeof(kw_rec));
+	i_zero(&kw_rec);
 	kw_rec.name_offset = name_offset;
 
 	keyword_len = strlen(keyword_name) + 1;

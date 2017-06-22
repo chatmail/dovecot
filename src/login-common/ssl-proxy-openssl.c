@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "array.h"
@@ -605,7 +605,7 @@ ssl_server_context_get(const struct login_settings *login_set,
 {
 	struct ssl_server_context *ctx, lookup_ctx;
 
-	memset(&lookup_ctx, 0, sizeof(lookup_ctx));
+	i_zero(&lookup_ctx);
 	lookup_ctx.cert = set->ssl_cert;
 	lookup_ctx.key = set->ssl_key;
 	lookup_ctx.ca = set->ssl_ca;
@@ -813,7 +813,11 @@ void ssl_proxy_destroy(struct ssl_proxy *proxy)
 	if (proxy->io_plain_write != NULL)
 		io_remove(&proxy->io_plain_write);
 
-	(void)SSL_shutdown(proxy->ssl);
+	if (SSL_shutdown(proxy->ssl) != 1) {
+		/* if bidirectional shutdown fails we need to clear
+		   the error queue. */
+		openssl_iostream_clear_errors();
+	}
 
 	net_disconnect(proxy->fd_ssl);
 	net_disconnect(proxy->fd_plain);
@@ -1383,7 +1387,7 @@ void ssl_proxy_init(void)
 	   initialized though. */
 	(void)RAND_bytes(&buf, 1);
 
-	memset(&ssl_params, 0, sizeof(ssl_params));
+	i_zero(&ssl_params);
 	ssl_params.path = SSL_PARAMETERS_PATH;
 
 	ssl_proxy_count = 0;

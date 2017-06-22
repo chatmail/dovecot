@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -51,7 +51,7 @@ maildir_fill_parents(struct maildir_list_iterate_context *ctx,
 	struct mail_namespace *ns = ctx->ctx.list->ns;
 	struct mailbox_node *node;
 	const char *p;
-	unsigned int vname_len = strlen(vname);
+	size_t vname_len = strlen(vname);
 	bool created;
 	char ns_sep = mail_namespace_get_sep(ns);
 
@@ -499,7 +499,7 @@ maildir_list_iter_next(struct mailbox_list_iterate_context *_ctx)
 
 	node = mailbox_tree_iterate_next(ctx->tree_iter, &ctx->info.vname);
 	if (node == NULL)
-		return NULL;
+		return mailbox_list_iter_default_next(_ctx);
 
 	ctx->info.flags = node->flags;
 	if ((_ctx->flags & MAILBOX_LIST_ITER_RETURN_SUBSCRIBED) != 0 &&

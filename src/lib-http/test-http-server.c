@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -41,7 +41,7 @@ client_handle_request(struct client *client, struct http_request *request)
 	str_append(str, "Content-Type: text/plain\r\n");
 	str_append(str, "\r\n");
 	str_append(str, request->target_raw);
-	o_stream_send(client->conn.output, str_data(str), str_len(str));
+	o_stream_nsend(client->conn.output, str_data(str), str_len(str));
 	return 0;
 }
 
@@ -83,7 +83,7 @@ static void client_init(int fd)
 	struct client *client;
 	struct http_request_limits req_limits;
 
-	memset(&req_limits, 0, sizeof(req_limits));
+	i_zero(&req_limits);
 	req_limits.max_target_length = 4096;
 
 	client = i_new(struct client, 1);

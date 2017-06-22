@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -29,7 +29,7 @@ static const unsigned char imap_b64dec[256] = {
 };
 
 static void
-mbase64_encode(string_t *dest, const unsigned char *in, unsigned int len)
+mbase64_encode(string_t *dest, const unsigned char *in, size_t len)
 {
 	str_append_c(dest, '&');
 	while (len >= 3) {
@@ -82,7 +82,7 @@ int imap_utf8_to_utf7(const char *src, string_t *dest)
 
 	/* at least one encoded character */
 	str_append_n(dest, src, p-src);
-	utf16 = t_malloc(strlen(p)*2);
+	utf16 = t_malloc0(MALLOC_MULTIPLY(strlen(p), 2));
 	while (*p != '\0') {
 		if (*p == '&') {
 			str_append(dest, "&-");

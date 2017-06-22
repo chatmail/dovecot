@@ -101,9 +101,6 @@ struct doveadm_mail_cmd_context {
 	unsigned int add_username_header:1;
 	/* Running from CLI doveadm (not doveadm-server) */
 	unsigned int cli:1;
-
-	/* Allow empty mailbox name - to allow access to server attributes */
-	unsigned int allow_empty_mailbox_name:1;
 };
 
 struct doveadm_mail_cmd {
@@ -203,6 +200,7 @@ extern struct doveadm_cmd_ver2 doveadm_cmd_search_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_copy_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_move_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_update_ver2;
+extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_path_ver2;
 
 #define DOVEADM_CMD_MAIL_COMMON \
 DOVEADM_CMD_PARAM('A', "all-users", CMD_PARAM_BOOL, 0) \

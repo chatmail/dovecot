@@ -86,16 +86,18 @@ See <AuthDatabase.PasswdFile.txt> for the full file format. Here we're
 interested only having usernames and passwords in it. Below's an example file:
 
 ---%<-------------------------------------------------------------------------
-test:{PLAIN}pass
-bill:{PLAIN}secret
-timo@example.com:{PLAIN}hello123
-dave@example.com:{PLAIN}world234
-joe@elsewhere.org:{PLAIN}whee
-jane@elsewhere.org:{PLAIN}mypass
+test:{PLAIN}pass::::::
+bill:{PLAIN}secret::::::
+timo@example.com:{PLAIN}hello123::::::
+dave@example.com:{PLAIN}world234::::::
+joe@elsewhere.org:{PLAIN}whee::::::
+jane@elsewhere.org:{PLAIN}mypass::::::
 ---%<-------------------------------------------------------------------------
 
 As you can see, you can use multiple domains in the file, or no domains at all.
-Dovecot doesn't care about domains.
+Dovecot doesn't care about domains. The extra colons are needed for <userdb>
+[UserDatabase.txt] passwd-file format, and can be omitted if you are using the
+static user database in the example above.
 
 Users can be added by editing this file. Dovecot automatically notices the new
 users immediately after they're added. It also creates their home directories
@@ -106,26 +108,26 @@ Passwords
 
 The passwords in the example passwd file are listed using plaintext scheme.
 It's possible to use other <password schemes>
-[Authentication.PasswordSchemes.txt] as well. For example SSHA would be a
+[Authentication.PasswordSchemes.txt] as well. For example SSHA256 would be a
 pretty strong scheme. You can create them using 'doveadm pw' utility, for
 example:
 
 ---%<-------------------------------------------------------------------------
-doveadm pw -s ssha
+doveadm pw -s ssha256
 Enter new password: foo
 Retype new password: foo
-{SSHA}DNODS3ZrOq1bu2MasNk79LxHhlU9iI03
+{SSHA256}ZpgszeowIcHdoxe3BNqvUTtPxFd6fMsyQxEWyY0Qlobaacjk
 ---%<-------------------------------------------------------------------------
 
-Note that you won't get the same output after {SSHA} as above, because Dovecot
-uses random salts when creating the SSHA hash. This means that even if multiple
-users have the same password, you won't know that because their hashes are
-different.
+Note that you won't get the same output after {SSHA256} as above, because
+Dovecot uses random salts when creating the SSHA256 hash. This means that even
+if multiple users have the same password, you won't know that because their
+hashes are different.
 
 The passwd file entry would be:
 
 ---%<-------------------------------------------------------------------------
-joe:{SSHA}DNODS3ZrOq1bu2MasNk79LxHhlU9iI03
+{SSHA256}ZpgszeowIcHdoxe3BNqvUTtPxFd6fMsyQxEWyY0Qlobaacjk
 ---%<-------------------------------------------------------------------------
 
 Joe would now have "foo" as his password.
@@ -183,4 +185,4 @@ jane:{PLAIN}pass::::::userdb_quota_rule=*:storage=200M
 Joe has now 100MB quota and Jane has 200MB quota. See <Quota.txt> for more
 information about quota settings.
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

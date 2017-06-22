@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hash.h"
@@ -63,7 +63,7 @@ push_notification_driver_ox_init_global(struct mail_user *user,
     if (ox_global->http_client == NULL) {
         /* this is going to use the first user's settings, but these are
            unlikely to change between users so it shouldn't matter much. */
-        memset(&http_set, 0, sizeof(http_set));
+        i_zero(&http_set);
         http_set.debug = user->mail_debug;
         http_set.max_attempts = config->http_max_retries+1;
         http_set.request_timeout_msecs = config->http_timeout_msecs;
@@ -164,7 +164,7 @@ static const char *push_notification_driver_ox_get_metadata
         inbox = mailbox_alloc(ns->list, "INBOX", MAILBOX_FLAG_READONLY);
         if (mailbox_open(inbox) < 0) {
             i_error(OX_LOG_LABEL "Skipped because unable to open INBOX: %s",
-                    mailbox_get_last_error(inbox, NULL));
+                    mailbox_get_last_internal_error(inbox, NULL));
         } else {
             mctx = mailbox_transaction_begin(inbox, 0);
         }
@@ -175,7 +175,7 @@ static const char *push_notification_driver_ox_get_metadata
                                     OX_METADATA_KEY, &attr);
         if (ret < 0) {
             i_error(OX_LOG_LABEL "Skipped because unable to get attribute: %s",
-                    mailbox_get_last_error(inbox, NULL));
+                    mailbox_get_last_internal_error(inbox, NULL));
         } else if (ret == 0) {
             push_notification_driver_debug(OX_LOG_LABEL, dtxn->ptxn->muser,
                                            "Skipped because not active (/private/"OX_METADATA_KEY" METADATA not set)");
@@ -185,7 +185,7 @@ static const char *push_notification_driver_ox_get_metadata
 
         if (!use_existing_txn && (mailbox_transaction_commit(&mctx) < 0)) {
             i_error(OX_LOG_LABEL "Transaction commit failed: %s",
-                    mailbox_get_last_error(inbox, NULL));
+                    mailbox_get_last_internal_error(inbox, NULL));
             /* the commit doesn't matter though. */
         }
     }
@@ -295,15 +295,15 @@ static void push_notification_driver_ox_http_callback
         // Success.
 	if (user->mail_debug) {
             push_notification_driver_debug(OX_LOG_LABEL, user,
-                                           "Notification sent successfully: %u %s",
-                                           response->status, response->reason);
+                                           "Notification sent successfully: %s",
+                                           http_response_get_message(response));
 	}
         break;
 
     default:
         // Error.
-        i_error(OX_LOG_LABEL "Error when sending notification: %u %s",
-                response->status, response->reason);
+        i_error(OX_LOG_LABEL "Error when sending notification: %s",
+                http_response_get_message(response));
         break;
     }
 }
@@ -327,7 +327,7 @@ static int push_notification_driver_ox_get_mailbox_status
     /* open and sync new instance of the same mailbox to get most recent status */
     box = mailbox_alloc(mailbox_get_namespace(mbox)->list, mailbox_get_name(mbox), MAILBOX_FLAG_READONLY);
     if (mailbox_sync(box, 0) < 0) {
-        i_error("mailbox_sync(%s) failed: %s", mailbox_get_vname(mbox), mailbox_get_last_error(box, NULL));
+        i_error("mailbox_sync(%s) failed: %s", mailbox_get_vname(mbox), mailbox_get_last_internal_error(box, NULL));
         ret = -1;
     } else {
         /* only 'unseen' is needed at the moment */
@@ -422,6 +422,8 @@ static void push_notification_driver_ox_deinit
 
     i_free(dconfig->cached_ox_metadata);
     if (ox_global != NULL) {
+        if (ox_global->http_client != NULL)
+            http_client_wait(ox_global->http_client);
         i_assert(ox_global->refcount > 0);
         --ox_global->refcount;
     }
@@ -431,7 +433,6 @@ static void push_notification_driver_ox_cleanup(void)
 {
     if ((ox_global != NULL) && (ox_global->refcount <= 0)) {
         if (ox_global->http_client != NULL) {
-            http_client_wait(ox_global->http_client);
             http_client_deinit(&ox_global->http_client);
         }
         i_free_and_null(ox_global);

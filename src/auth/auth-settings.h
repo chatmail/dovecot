@@ -10,6 +10,8 @@ struct auth_passdb_settings {
 	const char *args;
 	const char *default_fields;
 	const char *override_fields;
+	const char *mechanisms;
+	const char *username_filter;
 
 	const char *skip;
 	const char *result_success;
@@ -76,6 +78,9 @@ struct auth_settings {
 	ARRAY(struct auth_userdb_settings *) userdbs;
 
 	const char *base_dir;
+	const char *ssl_client_ca_dir;
+	const char *ssl_client_ca_file;
+
 	bool verbose_proctitle;
 	unsigned int first_valid_uid;
 	unsigned int last_valid_uid;

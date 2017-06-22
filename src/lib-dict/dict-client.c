@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -346,7 +346,7 @@ client_dict_cmd_send(struct client_dict *dict, struct client_dict_cmd **_cmd,
 	} else if (ret < 0) {
 		i_assert(error != NULL);
 		/* we didn't successfully send this command to dict */
-		dict_cmd_callback_error(cmd, error, FALSE);
+		dict_cmd_callback_error(cmd, error, cmd->reconnected);
 		client_dict_cmd_unref(cmd);
 		if (error_r != NULL)
 			*error_r = error;
@@ -927,14 +927,21 @@ client_dict_lookup_async_callback(struct client_dict_cmd *cmd,
 {
 	struct client_dict *dict = cmd->dict;
 	struct dict_lookup_result result;
+	const char *const values[] = { value, NULL };
 
-	memset(&result, 0, sizeof(result));
+	i_zero(&result);
 	if (error != NULL) {
 		result.ret = -1;
 		result.error = error;
 	} else switch (reply) {
 	case DICT_PROTOCOL_REPLY_OK:
 		result.value = value;
+		result.values = values;
+		result.ret = 1;
+		break;
+	case DICT_PROTOCOL_REPLY_MULTI_OK:
+		result.values = t_strsplit_tabescaped(value);
+		result.value = result.values[0];
 		result.ret = 1;
 		break;
 	case DICT_PROTOCOL_REPLY_NOTFOUND:
@@ -1014,7 +1021,7 @@ static int client_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
 {
 	struct client_dict_sync_lookup lookup;
 
-	memset(&lookup, 0, sizeof(lookup));
+	i_zero(&lookup);
 	lookup.ret = -2;
 
 	client_dict_lookup_async(_dict, key, client_dict_lookup_callback, &lookup);
@@ -1289,8 +1296,10 @@ client_dict_transaction_commit_callback(struct client_dict_cmd *cmd,
 	int diff = timeval_diff_msecs(&ioloop_timeval, &cmd->start_time);
 	if (error != NULL) {
 		/* failed */
-		i_error("dict-client: Commit failed: %s "
-			"(reply took %u.%03u secs)", error, diff/1000, diff%1000);
+		i_error("dict-client: Commit %sfailed: %s "
+			"(reply took %u.%03u secs)",
+			disconnected ? "may have " : "",
+			error, diff/1000, diff%1000);
 		if (disconnected)
 			ret = DICT_COMMIT_RET_WRITE_UNCERTAIN;
 	} else switch (reply) {
@@ -1307,8 +1316,9 @@ client_dict_transaction_commit_callback(struct client_dict_cmd *cmd,
 		/* value contains the obsolete trans_id */
 		const char *error = extra_args[0];
 
-		i_error("dict-client: server returned failure: %s "
+		i_error("dict-client: server returned %sfailure: %s "
 			"(reply took %u.%03u secs)",
+			ret == DICT_COMMIT_RET_WRITE_UNCERTAIN ? "uncertain " : "",
 			error != NULL ? error : "",
 			diff/1000, diff%1000);
 		if (error != NULL)
@@ -1460,6 +1470,20 @@ static void client_dict_atomic_inc(struct dict_transaction_context *_ctx,
 	client_dict_send_transaction_query(ctx, query);
 }
 
+static void client_dict_set_timestamp(struct dict_transaction_context *_ctx,
+				      const struct timespec *ts)
+{
+	struct client_dict_transaction_context *ctx =
+		(struct client_dict_transaction_context *)_ctx;
+	const char *query;
+
+	query = t_strdup_printf("%c%u\t%s\t%u",
+				DICT_PROTOCOL_CMD_TIMESTAMP,
+				ctx->id, dec2str(ts->tv_sec),
+				(unsigned int)ts->tv_nsec);
+	client_dict_send_transaction_query(ctx, query);
+}
+
 struct dict dict_driver_client = {
 	.name = "proxy",
 
@@ -1478,6 +1502,7 @@ struct dict dict_driver_client = {
 		.unset = client_dict_unset,
 		.atomic_inc = client_dict_atomic_inc,
 		.lookup_async = client_dict_lookup_async,
-		.switch_ioloop = client_dict_switch_ioloop
+		.switch_ioloop = client_dict_switch_ioloop,
+		.set_timestamp = client_dict_set_timestamp,
 	}
 };

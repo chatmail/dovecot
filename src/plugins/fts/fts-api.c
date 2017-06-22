@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -422,7 +422,7 @@ bool fts_index_get_header(struct mailbox *box, struct fts_index_header *hdr_r)
 	mail_index_get_header_ext(view, fts_index_get_ext_id(box),
 				  &data, &data_size);
 	if (data_size < sizeof(*hdr_r)) {
-		memset(hdr_r, 0, sizeof(*hdr_r));
+		i_zero(hdr_r);
 		ret = FALSE;
 	} else {
 		memcpy(hdr_r, data, data_size);
@@ -459,7 +459,7 @@ int fts_index_have_compatible_settings(struct mailbox_list *list,
 	struct mailbox *box;
 	struct fts_index_header hdr;
 	const char *vname;
-	unsigned int len;
+	size_t len;
 	int ret;
 
 	if ((ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0)
@@ -474,7 +474,7 @@ int fts_index_have_compatible_settings(struct mailbox_list *list,
 	box = mailbox_alloc(list, vname, 0);
 	if (mailbox_sync(box, (enum mailbox_sync_flags)0) < 0) {
 		i_error("fts: Failed to sync mailbox %s: %s", vname,
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 		ret = -1;
 	} else {
 		ret = fts_index_get_header(box, &hdr) &&

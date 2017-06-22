@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -27,7 +27,7 @@ static void doveadm_print_json_flush_internal(void);
 
 static void doveadm_print_json_init(void)
 {
-	memset(&ctx,0,sizeof(ctx));
+	i_zero(&ctx);
 	ctx.pool = pool_alloconly_create("doveadm json print", 1024);
 	ctx.str = str_new(ctx.pool, 256);
 	p_array_init(&ctx.headers, ctx.pool, 1);

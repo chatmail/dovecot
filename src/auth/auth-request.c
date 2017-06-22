@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -27,6 +27,7 @@
 #include "userdb-blocking.h"
 #include "userdb-template.h"
 #include "password-scheme.h"
+#include "wildcard-match.h"
 
 #include <sys/stat.h>
 
@@ -277,6 +278,22 @@ auth_str_add_keyvalue(string_t *dest, const char *key, const char *value)
 	}
 }
 
+static void
+auth_request_export_fields(string_t *dest, struct auth_fields *auth_fields,
+			   const char *prefix)
+{
+	const ARRAY_TYPE(auth_field) *fields = auth_fields_export(auth_fields);
+	const struct auth_field *field;
+
+	array_foreach(fields, field) {
+		str_printfa(dest, "\t%s%s", prefix, field->key);
+		if (field->value != NULL) {
+			str_append_c(dest, '=');
+			str_append_tabescaped(dest, field->value);
+		}
+	}
+}
+
 void auth_request_export(struct auth_request *request, string_t *dest)
 {
 	str_append(dest, "user=");
@@ -331,6 +348,8 @@ void auth_request_export(struct auth_request *request, string_t *dest)
 		str_append(dest, "\tsecured");
 	if (request->skip_password_check)
 		str_append(dest, "\tskip-password-check");
+	if (request->delayed_credentials != NULL)
+		str_append(dest, "\tdelayed-credentials");
 	if (request->valid_client_cert)
 		str_append(dest, "\tvalid-client-cert");
 	if (request->no_penalty)
@@ -339,18 +358,13 @@ void auth_request_export(struct auth_request *request, string_t *dest)
 		str_append(dest, "\tsuccessful");
 	if (request->mech_name != NULL)
 		auth_str_add_keyvalue(dest, "mech", request->mech_name);
+	if (request->client_id != NULL)
+		auth_str_add_keyvalue(dest, "client_id", request->client_id);
+	/* export passdb extra fields */
+	auth_request_export_fields(dest, request->extra_fields, "passdb_");
 	/* export any userdb fields */
-	if (request->userdb_reply != NULL) {
-		const ARRAY_TYPE(auth_field) *fields = auth_fields_export(request->userdb_reply);
-		const struct auth_field *field;
-		array_foreach(fields, field) {
-			str_printfa(dest, "\tuserdb_%s", field->key);
-			if (field->value != NULL) {
-				str_append_c(dest, '=');
-				str_append_tabescaped(dest, field->value);
-			}
-		}
-	}
+	if (request->userdb_reply != NULL)
+		auth_request_export_fields(dest, request->userdb_reply, "userdb_");
 }
 
 bool auth_request_import_info(struct auth_request *request,
@@ -390,6 +404,11 @@ bool auth_request_import_info(struct auth_request *request,
 		request->session_id = p_strdup(request->pool, value);
 	else if (strcmp(key, "debug") == 0)
 		request->debug = TRUE;
+	else if (strcmp(key, "client_id") == 0)
+		request->client_id = p_strdup(request->pool, value);
+	else if (strcmp(key, "forward_fields") == 0)
+		auth_fields_import_prefixed(request->extra_fields,
+					    "forward_", value, 0);
 	else
 		return FALSE;
 	/* NOTE: keep in sync with auth_request_export() */
@@ -459,8 +478,16 @@ bool auth_request_import(struct auth_request *request,
 		request->successful = TRUE;
 	else if (strcmp(key, "skip-password-check") == 0)
 		request->skip_password_check = TRUE;
-	else if (strcmp(key, "mech") == 0)
+	else if (strcmp(key, "delayed-credentials") == 0) {
+		/* just make passdb_handle_credentials() work identically in
+		   auth-worker as it does in auth-master. the worker shouldn't
+		   care about the actual contents of the credentials. */
+		request->delayed_credentials = &uchar_nul;
+		request->delayed_credentials_size = 1;
+	} else if (strcmp(key, "mech") == 0)
 		request->mech_name = p_strdup(request->pool, value);
+	else if (strncmp(key, "passdb_", 7) == 0)
+		auth_fields_add(request->extra_fields, key+7, value, 0);
 	else if (strncmp(key, "userdb_", 7) == 0) {
 		if (request->userdb_reply == NULL)
 			request->userdb_reply = auth_fields_init(request->pool);
@@ -592,9 +619,77 @@ static void auth_request_master_lookup_finish(struct auth_request *request)
 }
 
 static bool
+auth_request_mechanism_accepted(const char *const *mechs,
+				const struct mech_module *mech)
+{
+	/* no filter specified, anything goes */
+	if (mechs == NULL) return TRUE;
+	/* request has no mechanism, see if none is accepted */
+	if (mech == NULL)
+		return str_array_icase_find(mechs, "none");
+	/* check if request mechanism is accepted */
+	return str_array_icase_find(mechs, mech->mech_name);
+}
+
+/**
+
+Check if username is included in the filter. Logic is that if the username
+is not excluded by anything, and is included by something, it will be accepted.
+By default, all usernames are included, unless there is a inclusion item, when
+username will be excluded if there is no inclusion for it.
+
+Exclusions are denoted with a ! in front of the pattern.
+*/
+bool auth_request_username_accepted(const char *const *filter, const char *username)
+{
+	bool have_includes = FALSE;
+	bool matched_inc = FALSE;
+
+	for(;*filter != NULL; filter++) {
+		/* if filter has ! it means the pattern will be refused */
+		bool exclude = (**filter == '!');
+		if (!exclude)
+			have_includes = TRUE;
+		if (wildcard_match(username, (*filter)+(exclude?1:0))) {
+			if (exclude) {
+				return FALSE;
+			} else {
+				matched_inc = TRUE;
+			}
+		}
+	}
+
+	return matched_inc || !have_includes;
+}
+
+static bool
 auth_request_want_skip_passdb(struct auth_request *request,
 			      struct auth_passdb *passdb)
 {
+	/* if mechanism is not supported, skip */
+	const char *const *mechs = passdb->passdb->mechanisms;
+	const char *const *username_filter = passdb->passdb->username_filter;
+	const char *username;
+
+	username = request->user;
+
+	if (!auth_request_mechanism_accepted(mechs, request->mech)) {
+		auth_request_log_debug(request,
+				       request->mech != NULL ? AUTH_SUBSYS_MECH
+							      : "none",
+				       "skipping passdb: mechanism filtered");
+		return TRUE;
+	}
+
+	if (passdb->passdb->username_filter != NULL &&
+	    !auth_request_username_accepted(username_filter, username)) {
+		auth_request_log_debug(request,
+				       request->mech != NULL ? AUTH_SUBSYS_MECH
+							      : "none",
+				       "skipping passdb: username filtered");
+		return TRUE;
+	}
+
 	/* skip_password_check basically specifies if authentication is
 	   finished */
 	bool authenticated = request->skip_password_check;
@@ -923,6 +1018,7 @@ void auth_request_verify_plain(struct auth_request *request,
 		request->mech_password = p_strdup(request->pool, password);
 	else
 		i_assert(request->mech_password == password);
+	request->user_changed_by_lookup = FALSE;
 
 	if (request->policy_processed) {
 		auth_request_verify_plain_continue(request, callback);
@@ -958,7 +1054,20 @@ void auth_request_verify_plain_continue(struct auth_request *request,
 		return;
 	}
 
-	 passdb = request->passdb;
+	passdb = request->passdb;
+
+	while (passdb != NULL && auth_request_want_skip_passdb(request, passdb))
+		passdb = passdb->next;
+
+	request->passdb = passdb;
+
+	if (passdb == NULL) {
+		auth_request_log_error(request,
+			request->mech != NULL ? AUTH_SUBSYS_MECH : "none",
+			"All password databases were skipped");
+		callback(PASSDB_RESULT_INTERNAL_FAILURE, request);
+		return;
+	}
 
 	request->private_callback.verify_plain = callback;
 
@@ -1088,6 +1197,7 @@ void auth_request_lookup_credentials(struct auth_request *request,
 
 	if (request->credentials_scheme == NULL)
 		request->credentials_scheme = p_strdup(request->pool, scheme);
+	request->user_changed_by_lookup = FALSE;
 
 	if (request->policy_processed)
 		auth_request_lookup_credentials_policy_continue(request, callback);
@@ -1115,6 +1225,17 @@ void auth_request_lookup_credentials_policy_continue(struct auth_request *reques
 		return;
 	}
 	passdb = request->passdb;
+	while (passdb != NULL && auth_request_want_skip_passdb(request, passdb))
+		passdb = passdb->next;
+	request->passdb = passdb;
+
+	if (passdb == NULL) {
+		auth_request_log_error(request,
+			request->mech != NULL ? AUTH_SUBSYS_MECH : "none",
+			"All password databases were skipped");
+		callback(PASSDB_RESULT_INTERNAL_FAILURE, NULL, 0, request);
+		return;
+	}
 
 	request->private_callback.lookup_credentials = callback;
 
@@ -1191,7 +1312,7 @@ static void auth_request_userdb_save_cache(struct auth_request *request,
 		auth_fields_append(request->userdb_reply, str,
 				   AUTH_FIELD_FLAG_CHANGED,
 				   AUTH_FIELD_FLAG_CHANGED);
-		if (strcmp(request->user, request->translated_username) != 0) {
+		if (request->user_changed_by_lookup) {
 			/* username was changed by passdb or userdb */
 			if (str_len(str) > 0)
 				str_append_c(str, '\t');
@@ -1316,6 +1437,7 @@ void auth_request_userdb_callback(enum userdb_result result,
 			   it set */
 			auth_fields_rollback(request->userdb_reply);
 		}
+		request->user_changed_by_lookup = FALSE;
 
 		request->userdb = next_userdb;
 		auth_request_lookup_user(request,
@@ -1374,6 +1496,7 @@ void auth_request_lookup_user(struct auth_request *request,
 	const char *cache_key;
 
 	request->private_callback.userdb = callback;
+	request->user_changed_by_lookup = FALSE;
 	request->userdb_lookup = TRUE;
 	request->userdb_result_from_cache = FALSE;
 	if (request->userdb_reply == NULL)
@@ -1498,6 +1621,7 @@ bool auth_request_set_username(struct auth_request *request,
 		/* similar to original_username, but after translations */
 		request->translated_username = request->user;
 	}
+	request->user_changed_by_lookup = TRUE;
 
 	if (login_username != NULL) {
 		if (!auth_request_set_login_username(request,
@@ -1665,6 +1789,7 @@ auth_request_try_update_username(struct auth_request *request,
 					"username changed %s -> %s",
 					request->user, new_value);
 		request->user = p_strdup(request->pool, new_value);
+		request->user_changed_by_lookup = TRUE;
 	}
 	return TRUE;
 }
@@ -1685,7 +1810,7 @@ void auth_request_set_field(struct auth_request *request,
 			    const char *name, const char *value,
 			    const char *default_scheme)
 {
-	unsigned int name_len = strlen(name);
+	size_t name_len = strlen(name);
 
 	i_assert(*name != '\0');
 	i_assert(value != NULL);
@@ -1895,7 +2020,7 @@ auth_request_userdb_import(struct auth_request *request, const char *args)
 void auth_request_set_userdb_field(struct auth_request *request,
 				   const char *name, const char *value)
 {
-	unsigned int name_len = strlen(name);
+	size_t name_len = strlen(name);
 	uid_t uid;
 	gid_t gid;
 
@@ -2106,7 +2231,7 @@ static int auth_request_proxy_host_lookup(struct auth_request *request,
 	unsigned int secs;
 
 	/* need to do dns lookup for the host */
-	memset(&dns_set, 0, sizeof(dns_set));
+	i_zero(&dns_set);
 	dns_set.dns_client_socket_path = AUTH_DNS_SOCKET_PATH;
 	dns_set.timeout_msecs = AUTH_DNS_DEFAULT_TIMEOUT_MSECS;
 	value = auth_fields_find(request->extra_fields, "proxy_timeout");

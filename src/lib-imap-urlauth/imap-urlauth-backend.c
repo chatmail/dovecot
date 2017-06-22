@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -47,7 +47,7 @@ imap_urlauth_backend_trans_get_mailbox_key(struct mailbox_transaction_context *t
 		random_fill(mailbox_key_r, IMAP_URLAUTH_KEY_LEN);
 		mailbox_key_hex = binary_to_hex(mailbox_key_r,
 						IMAP_URLAUTH_KEY_LEN);
-		memset(&urlauth_key, 0, sizeof(urlauth_key));
+		i_zero(&urlauth_key);
 		urlauth_key.value = mailbox_key_hex;
 		ret = mailbox_attribute_set(trans, MAIL_ATTRIBUTE_TYPE_PRIVATE,
 					    IMAP_URLAUTH_KEY, &urlauth_key);
@@ -107,7 +107,7 @@ static int imap_urlauth_backend_mailbox_reset_key(struct mailbox *box)
 	enum mail_error error;
 
 	if (mailbox_open(box) < 0) {
-		errstr = mailbox_get_last_error(box, &error);
+		errstr = mailbox_get_last_internal_error(box, &error);
 		if (error == MAIL_ERROR_NOTFOUND || error == MAIL_ERROR_PERM)
 			return 0;
 		i_error("urlauth key reset: Couldn't open mailbox %s: %s",
@@ -132,13 +132,14 @@ int imap_urlauth_backend_reset_all_keys(struct mail_user *user)
 						 MAILBOX_LIST_ITER_RETURN_NO_FLAGS);
 	while ((info = mailbox_list_iter_next(iter)) != NULL) {
 		box = mailbox_alloc(info->ns->list, info->vname, 0);
+		mailbox_set_reason(box, "URLAUTH reset all keys");
 		if (imap_urlauth_backend_mailbox_reset_key(box) < 0)
 			ret = -1;
 		mailbox_free(&box);
 	}
 	if (mailbox_list_iter_deinit(&iter) < 0) {
 		i_error("urlauth key reset: Couldn't iterate mailboxes: %s",
-			mailbox_list_get_last_error(user->namespaces->list, NULL));
+			mailbox_list_get_last_internal_error(user->namespaces->list, NULL));
 		ret = -1;
 	}
 	return ret;

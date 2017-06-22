@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -27,6 +27,7 @@
 #include "index/raw/raw-storage.h"
 #include "lda-settings.h"
 #include "lmtp-settings.h"
+#include "mail-autoexpunge.h"
 #include "mail-namespace.h"
 #include "mail-deliver.h"
 #include "main.h"
@@ -330,11 +331,11 @@ static bool client_proxy_rcpt(struct client *client, const char *address,
 	pool_t pool;
 	int ret;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = input.service = "lmtp";
 	mail_storage_service_init_settings(storage_service, &input);
 
-	memset(&info, 0, sizeof(info));
+	i_zero(&info);
 	info.service = master_service_get_name(master_service);
 	info.local_ip = client->local_ip;
 	info.remote_ip = client->remote_ip;
@@ -358,7 +359,7 @@ static bool client_proxy_rcpt(struct client *client, const char *address,
 		}
 	}
 
-	memset(&set, 0, sizeof(set));
+	i_zero(&set);
 	set.port = client->local_port;
 	set.protocol = LMTP_CLIENT_PROTOCOL_LMTP;
 	set.timeout_msecs = LMTP_PROXY_DEFAULT_TIMEOUT_MSECS;
@@ -402,7 +403,7 @@ static bool client_proxy_rcpt(struct client *client, const char *address,
 	if (client->proxy == NULL) {
 		struct lmtp_proxy_settings proxy_set;
 
-		memset(&proxy_set, 0, sizeof(proxy_set));
+		i_zero(&proxy_set);
 		proxy_set.my_hostname = client->my_domain;
 		proxy_set.dns_client_socket_path = dns_client_socket_path;
 		proxy_set.session_id = client->state.session_id;
@@ -490,7 +491,7 @@ static void lmtp_address_translate(struct client *client, const char **address)
 {
 	const char *transpos = client->lmtp_set->lmtp_address_translate;
 	const char *p, *nextstr, *addrpos = *address;
-	unsigned int len;
+	size_t len;
 	string_t *username, *domain, *dest = NULL;
 
 	if (*transpos == '\0')
@@ -582,12 +583,18 @@ lmtp_rcpt_to_is_over_quota(struct client *client,
 
 	ns = mail_namespace_find_inbox(user->namespaces);
 	box = mailbox_alloc(ns->list, "INBOX", 0);
+	mailbox_set_reason(box, "over-quota check");
 	ret = mailbox_get_status(box, STATUS_CHECK_OVER_QUOTA, &status);
 	if (ret < 0) {
 		errstr = mailbox_get_last_error(box, &error);
 		if (error == MAIL_ERROR_NOQUOTA) {
 			client_send_line_overquota(client, rcpt, errstr);
 			ret = 1;
+		} else {
+			i_error("mailbox_get_status(%s, STATUS_CHECK_OVER_QUOTA) "
+				"failed: %s",
+				mailbox_get_vname(box),
+				mailbox_get_last_internal_error(box, NULL));
 		}
 	}
 	mailbox_free(&box);
@@ -604,7 +611,7 @@ static bool cmd_rcpt_finish(struct client *client, struct mail_recipient *rcpt)
 			client_send_line(client, ERRSTR_TEMP_MAILBOX_FAIL,
 					 rcpt->address);
 		}
-		mail_storage_service_user_free(&rcpt->service_user);
+		mail_storage_service_user_unref(&rcpt->service_user);
 		return FALSE;
 	}
 	array_append(&client->state.rcpt_to, &rcpt, 1);
@@ -630,7 +637,7 @@ static void rcpt_anvil_lookup_callback(const char *reply, void *context)
 		client_send_line(client, ERRSTR_TEMP_USERDB_FAIL_PREFIX
 				 "Too many concurrent deliveries for user",
 				 rcpt->address);
-		mail_storage_service_user_free(&rcpt->service_user);
+		mail_storage_service_user_unref(&rcpt->service_user);
 	} else if (cmd_rcpt_finish(client, rcpt)) {
 		rcpt->anvil_connect_sent = TRUE;
 		input = mail_storage_service_user_get_input(rcpt->service_user);
@@ -697,7 +704,7 @@ int cmd_rcpt(struct client *client, const char *args)
 					array_count(&client->state.rcpt_to)+1);
 	}
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = input.service = "lmtp";
 	input.username = username;
 	input.local_ip = client->local_ip;
@@ -728,7 +735,7 @@ int cmd_rcpt(struct client *client, const char *args)
 		client_send_line(client, "451 4.3.0 <%s> "
 			"Can't handle mixed proxy/non-proxy destinations",
 			address);
-		mail_storage_service_user_free(&rcpt->service_user);
+		mail_storage_service_user_unref(&rcpt->service_user);
 		return 0;
 	}
 
@@ -741,9 +748,13 @@ int cmd_rcpt(struct client *client, const char *args)
 		(void)cmd_rcpt_finish(client, rcpt);
 		return 0;
 	} else {
+		/* NOTE: username may change as the result of the userdb
+		   lookup. Look up the new one via service_user. */
+		const struct mail_storage_service_input *input =
+			mail_storage_service_user_get_input(rcpt->service_user);
 		const char *query = t_strconcat("LOOKUP\t",
 			master_service_get_name(master_service),
-			"/", str_tabescape(username), NULL);
+			"/", str_tabescape(input->username), NULL);
 		io_remove(&client->io);
 		rcpt->anvil_query = anvil_client_query(anvil, query,
 					rcpt_anvil_lookup_callback, rcpt);
@@ -852,7 +863,7 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 	settings_var_expand(&lda_setting_parser_info, lda_set, client->pool,
 		mail_user_var_expand_table(client->state.dest_user));
 
-	memset(&dctx, 0, sizeof(dctx));
+	i_zero(&dctx);
 	dctx.session = session;
 	dctx.pool = session->pool;
 	dctx.set = lda_set;
@@ -918,6 +929,11 @@ client_deliver(struct client *client, const struct mail_recipient *rcpt,
 	return ret;
 }
 
+static bool client_rcpt_to_is_last(struct client *client)
+{
+	return client->state.rcpt_idx >= array_count(&client->state.rcpt_to);
+}
+
 static bool client_deliver_next(struct client *client, struct mail *src_mail,
 				struct mail_deliver_session *session)
 {
@@ -936,8 +952,11 @@ static bool client_deliver_next(struct client *client, struct mail *src_mail,
 		if (ret == 0)
 			return TRUE;
 		/* failed. try the next one. */
-		if (client->state.dest_user != NULL)
+		if (client->state.dest_user != NULL) {
+			if (client_rcpt_to_is_last(client))
+				mail_user_autoexpunge(client->state.dest_user);
 			mail_user_unref(&client->state.dest_user);
+		}
 	}
 	return FALSE;
 }
@@ -995,7 +1014,7 @@ static int client_open_raw_mail(struct client *client, struct istream *input)
 				     (time_t)-1, client->state.mail_from,
 				     &box) < 0) {
 		i_error("Can't open delivery mail as raw: %s",
-			mailbox_get_last_error(box, &error));
+			mailbox_get_last_internal_error(box, &error));
 		mailbox_free(&box);
 		client_rcpt_fail_all(client);
 		return -1;
@@ -1025,9 +1044,11 @@ client_input_data_write_local(struct client *client, struct istream *input)
 	src_mail = client->state.raw_mail;
 	while (client_deliver_next(client, src_mail, session)) {
 		if (client->state.first_saved_mail == NULL ||
-		    client->state.first_saved_mail == src_mail)
+		    client->state.first_saved_mail == src_mail) {
+			if (client_rcpt_to_is_last(client))
+				mail_user_autoexpunge(client->state.dest_user);
 			mail_user_unref(&client->state.dest_user);
-		else {
+		} else {
 			/* use the first saved message to save it elsewhere too.
 			   this might allow hard linking the files. */
 			client->state.dest_user = NULL;
@@ -1056,6 +1077,7 @@ client_input_data_write_local(struct client *client, struct istream *input)
 		mail_free(&mail);
 		mailbox_transaction_rollback(&trans);
 		mailbox_free(&box);
+		mail_user_autoexpunge(user);
 		mail_user_unref(&user);
 	}
 
@@ -1247,12 +1269,13 @@ static void client_input_data_handle(struct client *client)
 	if (ret == 0)
 		return;
 
-	if (!client->dot_input->eof) {
+	if (client->dot_input->stream_errno != 0) {
 		/* client probably disconnected */
 		client_destroy(client, NULL, NULL);
 		return;
 	}
 
+	/* the ending "." line was seen. begin saving the mail. */
 	client_input_data_write(client);
 }
 

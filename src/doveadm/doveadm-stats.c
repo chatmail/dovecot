@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -471,7 +471,7 @@ static void stats_top(const char *path, const char *sort_type)
 {
 	struct top_context ctx;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.path = path;
 	ctx.fd = doveadm_connect(path);
 	ctx.prev_pool = pool_alloconly_create("stats top", 1024*16);

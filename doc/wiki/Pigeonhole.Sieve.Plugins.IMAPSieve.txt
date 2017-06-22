@@ -83,7 +83,7 @@ imapsieve_mailboxXXX_before = :
 imapsieve_mailboxXXX_after = :
   When an IMAP event of interest occurs, these sieve scripts are executed
   before and after any user script respectively. These settings each specify
-  the location of a single sieve script. The emantics of these settings are
+  the location of a single sieve script. The semantics of these settings are
   very similar to the 'sieve_before' and 'sieve_after' settings: the specified
   scripts form a sequence together with the user script in which the next
   script is only executed when an (implicit) keep action is executed.
@@ -100,30 +100,7 @@ imapsieve_mailboxXXX_from = :
   mailbox. This setting supports wildcards with a syntax compatible with the
   IMAP LIST command
 
-Example
--------
+See <Replacing antispam plugin with IMAPSieve> [HowTo.AntispamWithSieve.txt] as
+example on how to use this.
 
----%<-------------------------------------------------------------------------
-protocol imap {
-  # Space-separated list of plugins to load (default is global mail_plugins).
-  mail_plugins = $mail_plugins imap_sieve
-}
-
-plugin {
-  sieve_plugins = sieve_imapsieve
-
-  imapsieve_url = sieve://sieve.example.org
-
-  # From elsewhere to Spam folder
-  imapsieve_mailbox1_name = Spam
-  imapsieve_mailbox1_causes = COPY
-  imapsieve_mailbox1_before = file:/usr/lib/dovecot/sieve/report-spam.sieve
-  # From Spam folder to elsewhere
-  imapsieve_mailbox2_name = *
-  imapsieve_mailbox2_from = Spam
-  imapsieve_mailbox2_causes = COPY
-  imapsieve_mailbox2_before = file:/usr/lib/dovecot/sieve/report-ham.sieve
-}
----%<-------------------------------------------------------------------------
-
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

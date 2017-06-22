@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -68,7 +68,7 @@ old_settings_handle_root(struct config_parser_context *ctx,
 			 const char *key, const char *value)
 {
 	const char *p;
-	unsigned int len;
+	size_t len;
 
 	if (strcmp(key, "base_dir") == 0) {
 		len = strlen(value);
@@ -475,7 +475,7 @@ static bool old_auth_section(struct config_parser_context *ctx,
 		return FALSE;
 	}
 	ctx->old->seen_auth_section = TRUE;
-	memset(&ctx->old->socket_set, 0, sizeof(ctx->old->socket_set));
+	i_zero(&ctx->old->socket_set);
 
 	ctx->old->auth_section++;
 	if ((strcmp(key, "passdb") == 0 || strcmp(key, "userdb") == 0) &&
@@ -529,7 +529,7 @@ static void socket_apply(struct config_parser_context *ctx)
 {
 	const struct socket_set *set = &ctx->old->socket_set;
 	const char *path, *prefix;
-	unsigned int len;
+	size_t len;
 	bool master_suffix;
 
 	if (set->path == NULL) {
@@ -570,7 +570,7 @@ static void socket_apply(struct config_parser_context *ctx)
 		config_apply_line(ctx, "group",
 			  t_strdup_printf("%s/group=%s", prefix, set->group), NULL);
 	}
-	memset(&ctx->old->socket_set, 0, sizeof(ctx->old->socket_set));
+	i_zero(&ctx->old->socket_set);
 }
 
 bool old_settings_handle(struct config_parser_context *ctx,

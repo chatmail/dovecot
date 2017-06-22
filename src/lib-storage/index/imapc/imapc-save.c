@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -9,7 +9,6 @@
 #include "imap-util.h"
 #include "index-mail.h"
 #include "mail-copy.h"
-#include "imapc-client.h"
 #include "mailbox-list-private.h"
 #include "imapc-storage.h"
 #include "imapc-sync.h"
@@ -140,9 +139,6 @@ imapc_save_add_to_index(struct imapc_save_context *ctx, uint32_t uid)
 	struct mail *_mail = ctx->ctx.dest_mail;
 	struct index_mail *imail = (struct index_mail *)_mail;
 	uint32_t seq;
-
-	if (_mail == NULL)
-		return;
 
 	/* we'll temporarily append messages and at commit time expunge
 	   them all, since we can't guarantee that no one else has saved

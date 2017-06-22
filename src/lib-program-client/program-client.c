@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -73,18 +73,12 @@ void program_client_connect_timeout(struct program_client *pclient)
 static
 int program_client_connect(struct program_client *pclient)
 {
-	int ret;
-
 	if (pclient->set.client_connect_timeout_msecs != 0) {
 		pclient->to = timeout_add(pclient->set.client_connect_timeout_msecs,
 					  program_client_connect_timeout, pclient);
 	}
 
-	if ((ret = pclient->connect(pclient)) < 0) {
-		program_client_fail(pclient, PROGRAM_CLIENT_ERROR_IO);
-		return -1;
-	}
-	return ret;
+	return pclient->connect(pclient);
 }
 
 static
@@ -336,9 +330,12 @@ void program_client_program_input(struct program_client *pclient)
 					i_stream_get_name(input),
 					i_stream_get_error(input));
 				program_client_fail(pclient, PROGRAM_CLIENT_ERROR_IO);
+				return;
 			} else {
-				if (!program_client_input_pending(pclient))
+				if (!program_client_input_pending(pclient)) {
 					program_client_disconnect(pclient, FALSE);
+					return;
+				}
 			}
 		}
 		if (program_client_input_pending(pclient))

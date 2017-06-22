@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "lib-signals.h"
@@ -271,7 +271,7 @@ static bool auth_cache_node_is_user(struct auth_cache_node *node,
 				    const char *username)
 {
 	const char *data = node->data;
-	unsigned int username_len;
+	size_t username_len;
 
 	/* The cache nodes begin with "P"/"U", passdb/userdb ID, optional
 	   "+" master user, "\t" and then usually followed by the username.

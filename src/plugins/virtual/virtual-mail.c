@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -172,6 +172,18 @@ virtual_mail_set_backend_mail(struct mail *mail,
 	return vmail->cur_backend_mail;
 }
 
+void virtual_mail_set_unattached_backend_mail(struct mail *mail,
+					      struct mail *backend_mail)
+{
+	struct virtual_mail *vmail = (struct virtual_mail *)mail;
+	struct mail_private *backend_pmail;
+
+	vmail->cur_backend_mail = backend_mail;
+
+	backend_pmail = (struct mail_private *)backend_mail;
+	backend_pmail->vmail = mail;
+}
+
 static void virtual_mail_set_seq(struct mail *mail, uint32_t seq, bool saving)
 {
 	struct virtual_mail *vmail = (struct virtual_mail *)mail;
@@ -184,7 +196,7 @@ static void virtual_mail_set_seq(struct mail *mail, uint32_t seq, bool saving)
 			      mbox->virtual_ext_id, &data, NULL);
 	memcpy(&vmail->cur_vrec, data, sizeof(vmail->cur_vrec));
 
-	memset(&vmail->imail.data, 0, sizeof(vmail->imail.data));
+	i_zero(&vmail->imail.data);
 	p_clear(vmail->imail.mail.data_pool);
 
 	vmail->imail.data.seq = seq;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 /*
    Version 1 format has been used for most versions of Dovecot up to v1.0.x.
@@ -1149,7 +1149,7 @@ maildir_uidlist_rec_set_ext(struct maildir_uidlist_rec *rec, pool_t pool,
 {
 	const unsigned char *p;
 	buffer_t *buf;
-	unsigned int len;
+	size_t len;
 
 	/* copy existing extensions, except for the one we're updating */
 	buf = buffer_create_dynamic(pool_datastack_create(), 128);
@@ -1250,7 +1250,7 @@ static int maildir_uidlist_write_fd(struct maildir_uidlist *uidlist, int fd,
 	string_t *str;
 	const unsigned char *p;
 	const char *strp;
-	unsigned int len;
+	size_t len;
 
 	i_assert(fd != -1);
 
@@ -1990,7 +1990,7 @@ static void maildir_uidlist_swap(struct maildir_uidlist_sync_ctx *ctx)
 
 	hash_table_destroy(&uidlist->files);
 	uidlist->files = ctx->files;
-	memset(&ctx->files, 0, sizeof(ctx->files));
+	i_zero(&ctx->files);
 
 	if (uidlist->record_pool != NULL)
 		pool_unref(&uidlist->record_pool);

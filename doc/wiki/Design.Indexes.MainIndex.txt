@@ -40,6 +40,45 @@ about when writing to the index isn't worth the extra disk writes.
 Header
 ------
 
+---%<-------------------------------------------------------------------------
+struct mail_index_header {
+        uint8_t major_version;
+        uint8_t minor_version;
+
+        uint16_t base_header_size;
+        uint32_t header_size;
+        uint32_t record_size;
+
+        uint8_t compat_flags;
+        uint8_t unused[3];
+
+        uint32_t indexid;
+        uint32_t flags;
+
+        uint32_t uid_validity;
+        uint32_t next_uid;
+
+        uint32_t messages_count;
+        uint32_t unused_old_recent_messages_count;
+        uint32_t seen_messages_count;
+        uint32_t deleted_messages_count;
+
+        uint32_t first_recent_uid;
+        uint32_t first_unseen_uid_lowwater;
+        uint32_t first_deleted_uid_lowwater;
+
+        uint32_t log_file_seq;
+        uint32_t log_file_tail_offset;
+        uint32_t log_file_head_offset;
+
+        uint64_t unused_old_sync_size;
+        uint32_t unused_old_sync_stamp;
+
+        uint32_t day_stamp;
+        uint32_t day_first_uid[8];
+}
+---%<-------------------------------------------------------------------------
+
 Fields that won't change without recreating the index:
 
 major_version:
@@ -242,4 +281,4 @@ larger records than necessary. This will be fixed later.
 The records size is always divisible by the maximum alignment requirement. This
 isn't strictly necessary either, so it could be fixed later as well.
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

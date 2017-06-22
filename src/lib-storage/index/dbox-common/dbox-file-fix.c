@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hex-dec.h"
@@ -263,7 +263,7 @@ stream_copy(struct dbox_file *file, struct ostream *output,
 
 static void dbox_file_skip_broken_header(struct dbox_file *file)
 {
-	const unsigned int magic_len = strlen(DBOX_MAGIC_PRE);
+	const size_t magic_len = strlen(DBOX_MAGIC_PRE);
 	const unsigned char *data;
 	size_t i, size;
 

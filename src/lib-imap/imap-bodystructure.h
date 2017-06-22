@@ -1,46 +1,31 @@
 #ifndef IMAP_BODYSTRUCTURE_H
 #define IMAP_BODYSTRUCTURE_H
 
-struct message_part_body_data {
-	pool_t pool;
-	/* NOTE: all the strings are stored via imap_quote(), so they contain
-	   "quoted-text" or {123}\r\nliterals */
-	const char *content_type, *content_subtype;
-	const char *content_type_params; /* "key" "value" "key2" "value2" .. */
-	const char *content_transfer_encoding;
-	const char *content_id;
-	const char *content_description;
-	const char *content_disposition;
-	const char *content_disposition_params; /* "key" "value" "key2" "value2" .. */
-	const char *content_md5;
-	const char *content_language; /* "lang1" "lang2" "lang3" .. */
-	const char *content_location;
-
-	/* either one of these is set, but not both: */
-	struct message_part_envelope_data *envelope;
-	const char *envelope_str;
-};
-
 struct message_part;
 struct message_header_line;
+struct imap_arg;
 
-/* Parse a single header. Note that this modifies part->context. */
-void imap_bodystructure_parse_header(pool_t pool, struct message_part *part,
-				     struct message_header_line *hdr);
-
-/* Returns TRUE if BODYSTRUCTURE is
-   ("text" "plain" ("charset" "us-ascii") NIL NIL "7bit" n n NIL NIL NIL) */
-bool imap_bodystructure_is_plain_7bit(const struct message_part *part)
-	ATTR_PURE;
-
-/* Write a BODY/BODYSTRUCTURE from given message_part. The
-   message_part->contexts must contain struct message_part_body_data.
-   part->body_size.virtual_size and .lines are also used for writing it. */
+/* Write a BODY/BODYSTRUCTURE from given message_part. The message_part->data
+   field must be set. part->body_size.virtual_size and .lines are also used
+   for writing it. */
 void imap_bodystructure_write(const struct message_part *part,
 			      string_t *dest, bool extended);
 
-/* Parse BODYSTRUCTURE and save the contents to message_part->contexts.
+/* Parse BODYSTRUCTURE and save the contents to message_part->data for each
+   message tree node. If the parts argument points to NULL, the message_part
+   tree is created from the BODYSTRUCTURE. Otherwise, existing tree is used.
    Returns 0 if ok, -1 if bodystructure wasn't valid. */
+int imap_bodystructure_parse_full(const char *bodystructure, pool_t pool,
+			     struct message_part **parts, const char **error_r);
+
+/* Same as imap_bodystructure_parse_full(), but read the input from imap_args
+   instead of a string. */
+int imap_bodystructure_parse_args(const struct imap_arg *args, pool_t pool,
+			     struct message_part **parts, const char **error_r);
+
+/* Parse BODYSTRUCTURE and save the contents to message_part->data for each
+   message tree node. The parts argument must point to an existing message_part
+   tree. Returns 0 if ok, -1 if bodystructure wasn't valid. */
 int imap_bodystructure_parse(const char *bodystructure, pool_t pool,
 			     struct message_part *parts, const char **error_r);
 

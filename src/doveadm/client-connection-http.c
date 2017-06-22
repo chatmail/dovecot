@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "compat.h"
@@ -328,7 +328,7 @@ doveadm_http_server_command_execute(struct client_connection_http *conn)
 	struct istream *is;
 	const char *user;
 	struct ioloop *ioloop,*prev_ioloop = current_ioloop;
-	memset(&cctx, 0, sizeof(cctx));
+	i_zero(&cctx);
 
 	// create iostream
 	doveadm_print_ostream = iostream_temp_create("/tmp/doveadm.", 0);
@@ -732,11 +732,13 @@ doveadm_http_server_handle_request(void *context, struct http_server_request *re
 		i_stream_set_name(conn->client.input, net_ip2addr(&conn->client.remote_ip));
 		i_stream_ref(conn->client.input);
 		conn->client.io = io_add_istream(conn->client.input, *ep->handler, conn);
-		conn->client.output = iostream_temp_create_named("/tmp", 0, net_ip2addr(&conn->client.remote_ip));
+		conn->client.output = iostream_temp_create_named
+			("/tmp/doveadm.", 0, net_ip2addr(&conn->client.remote_ip));
 		p_array_init(&conn->pargv, conn->client.pool, 5);
 		ep->handler(conn);
 	} else {
-		conn->client.output = iostream_temp_create_named("/tmp", 0, net_ip2addr(&conn->client.remote_ip));
+		conn->client.output = iostream_temp_create_named
+			("/tmp/doveadm.", 0, net_ip2addr(&conn->client.remote_ip));
 		ep->handler(conn);
 	}
 }
@@ -764,15 +766,15 @@ static void doveadm_http_server_send_response(void *context)
 	http_server_response_submit_close(conn->http_response);
 }
 
-static const struct http_server_settings http_server_set = {
+static struct http_server_settings http_server_set = {
 	.max_client_idle_time_msecs = 0,
         .max_pipelined_requests = 0
 };
 
 void doveadm_http_server_init(void)
 {
+	http_server_set.rawlog_dir = doveadm_settings->doveadm_http_rawlog_dir;
 	doveadm_http_server = http_server_init(&http_server_set);
-	
 }
 
 void doveadm_http_server_deinit(void)

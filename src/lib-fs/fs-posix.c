@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -31,11 +31,12 @@ enum fs_posix_lock_method {
 struct posix_fs {
 	struct fs fs;
 	char *temp_file_prefix, *root_path, *path_prefix;
-	unsigned int temp_file_prefix_len;
+	size_t temp_file_prefix_len;
 	enum fs_posix_lock_method lock_method;
 	mode_t mode;
 	bool mode_auto;
 	bool have_dirs;
+	bool disable_fsync;
 };
 
 struct posix_fs_file {
@@ -107,6 +108,8 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 			fs->mode_auto = TRUE;
 		} else if (strcmp(arg, "dirs") == 0) {
 			fs->have_dirs = TRUE;
+		} else if (strcmp(arg, "no-fsync") == 0) {
+			fs->disable_fsync = TRUE;
 		} else if (strncmp(arg, "mode=", 5) == 0) {
 			unsigned int mode;
 			if (str_to_uint_oct(arg+5, &mode) < 0) {
@@ -446,25 +449,32 @@ fs_posix_read_stream(struct fs_file *_file, size_t max_buffer_size)
 static void fs_posix_write_rename_if_needed(struct posix_fs_file *file)
 {
 	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
-	const char *new_fname;
+	const char *new_fname, *new_prefix, *p;
 
 	new_fname = fs_metadata_find(&file->file.metadata, FS_METADATA_WRITE_FNAME);
 	if (new_fname == NULL)
 		return;
 
+	p = strrchr(file->file.path, '/');
+	if (p == NULL)
+		new_prefix = "";
+	else
+		new_prefix = t_strdup_until(file->file.path, p+1);
 	i_free(file->file.path);
-	file->file.path = i_strdup(new_fname);
+	file->file.path = i_strconcat(new_prefix, new_fname, NULL);
 
 	i_free(file->full_path);
-	file->full_path = fs->path_prefix == NULL ? i_strdup(new_fname) :
-		i_strconcat(fs->path_prefix, new_fname, NULL);
+	file->full_path = fs->path_prefix == NULL ? i_strdup(file->file.path) :
+		i_strconcat(fs->path_prefix, file->file.path, NULL);
 }
 
 static int fs_posix_write_finish(struct posix_fs_file *file)
 {
+	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
 	int ret, old_errno;
 
-	if ((file->open_flags & FS_OPEN_FLAG_FSYNC) != 0) {
+	if ((file->open_flags & FS_OPEN_FLAG_FSYNC) != 0 &&
+	    !fs->disable_fsync) {
 		if (fdatasync(file->fd) < 0) {
 			fs_set_error(file->file.fs, "fdatasync(%s) failed: %m",
 				     file->full_path);
@@ -558,6 +568,7 @@ static void fs_posix_write_stream(struct fs_file *_file)
 		_file->output = o_stream_create_error_str(errno, "%s",
 			fs_file_last_error(_file));
 	} else {
+		i_assert(file->fd != -1);
 		_file->output = o_stream_create_fd_file(file->fd,
 							(uoff_t)-1, FALSE);
 	}
@@ -600,7 +611,7 @@ fs_posix_lock(struct fs_file *_file, unsigned int secs, struct fs_lock **lock_r)
 	struct posix_fs_lock fs_lock, *ret_lock;
 	int ret = -1;
 
-	memset(&fs_lock, 0, sizeof(fs_lock));
+	i_zero(&fs_lock);
 	fs_lock.lock.file = _file;
 
 	switch (fs->lock_method) {
@@ -625,7 +636,7 @@ fs_posix_lock(struct fs_file *_file, unsigned int secs, struct fs_lock **lock_r)
 #endif
 		break;
 	case FS_POSIX_LOCK_METHOD_DOTLOCK:
-		memset(&dotlock_set, 0, sizeof(dotlock_set));
+		i_zero(&dotlock_set);
 		dotlock_set.stale_timeout = FS_POSIX_DOTLOCK_STALE_TIMEOUT_SECS;
 		dotlock_set.use_excl_lock = TRUE;
 		dotlock_set.timeout = secs;

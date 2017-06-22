@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -15,6 +15,8 @@
 #include <sys/stat.h>
 #include <ctype.h>
 
+#define DOVEADM_TCP_CONNECT_TIMEOUT_SECS 30
+
 bool doveadm_verbose = FALSE, doveadm_debug = FALSE, doveadm_server = FALSE;
 static struct module *modules = NULL;
 
@@ -25,7 +27,7 @@ void doveadm_load_modules(void)
 	/* some doveadm plugins have dependencies to mail plugins. we can load
 	   only those whose dependencies have been loaded earlier, the rest are
 	   ignored. */
-	memset(&mod_set, 0, sizeof(mod_set));
+	i_zero(&mod_set);
 	mod_set.abi_version = DOVECOT_ABI_VERSION;
 	mod_set.require_init_funcs = TRUE;
 	mod_set.debug = doveadm_debug;
@@ -47,7 +49,7 @@ bool doveadm_has_unloaded_plugin(const char *name)
 	DIR *dir;
 	struct dirent *d;
 	const char *plugin_name;
-	unsigned int name_len = strlen(name);
+	size_t name_len = strlen(name);
 	bool found = FALSE;
 
 	/* first check that it's not actually loaded */
@@ -104,6 +106,7 @@ doveadm_tcp_connect_port(const char *host, in_port_t port)
 	unsigned int ips_count;
 	int ret, fd;
 
+	alarm(DOVEADM_TCP_CONNECT_TIMEOUT_SECS);
 	ret = net_gethostbyname(host, &ips, &ips_count);
 	if (ret != 0) {
 		i_fatal("Lookup of host %s failed: %s",
@@ -114,6 +117,7 @@ doveadm_tcp_connect_port(const char *host, in_port_t port)
 		i_fatal("connect(%s:%u) failed: %m",
 			net_ip2addr(&ips[0]), port);
 	}
+	alarm(0);
 	return fd;
 }
 

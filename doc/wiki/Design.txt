@@ -30,6 +30,10 @@ liblib:
  * <Output streams> [Design.OutputStreams.txt]
  * <Plugins> [Design.Plugins.txt]
 
+lib-dcrypt:
+
+ * <lib-dcrypt data formats> [Design.Dcrypt.txt]
+
 lib-storage:
 
  * <Mail user> [Design.Storage.MailUser.txt] contains everything related to a
@@ -51,4 +55,4 @@ lib-storage:
  * <Plugins> [Design.Storage.Plugins.txt] - how to hook into lib-storage
    functions.
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

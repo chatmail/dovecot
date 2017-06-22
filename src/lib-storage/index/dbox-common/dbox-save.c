@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -44,11 +44,6 @@ void dbox_save_begin(struct dbox_save_context *ctx, struct istream *input)
 
 	dbox_save_add_to_index(ctx);
 
-	if (_ctx->dest_mail == NULL) {
-		if (ctx->mail == NULL)
-			ctx->mail = mail_alloc(_ctx->transaction, 0, NULL);
-		_ctx->dest_mail = ctx->mail;
-	}
 	mail_set_seq_saving(_ctx->dest_mail, ctx->seq);
 
 	crlf_input = i_stream_create_lf(input);
@@ -56,7 +51,7 @@ void dbox_save_begin(struct dbox_save_context *ctx, struct istream *input)
 	i_stream_unref(&crlf_input);
 
 	/* write a dummy header. it'll get rewritten when we're finished */
-	memset(&dbox_msg_hdr, 0, sizeof(dbox_msg_hdr));
+	i_zero(&dbox_msg_hdr);
 	o_stream_cork(ctx->dbox_output);
 	if (o_stream_send(ctx->dbox_output, &dbox_msg_hdr,
 			  sizeof(dbox_msg_hdr)) < 0) {
@@ -141,7 +136,7 @@ void dbox_save_write_metadata(struct mail_save_context *_ctx,
 	string_t *str;
 	uoff_t vsize;
 
-	memset(&metadata_hdr, 0, sizeof(metadata_hdr));
+	i_zero(&metadata_hdr);
 	memcpy(metadata_hdr.magic_post, DBOX_MAGIC_POST,
 	       sizeof(metadata_hdr.magic_post));
 	o_stream_nsend(output, &metadata_hdr, sizeof(metadata_hdr));

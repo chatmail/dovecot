@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -205,7 +205,7 @@ mailbox_tree_iterate_set_next_node(struct mailbox_tree_iterate_context *ctx)
 		nodes = array_get(&ctx->node_path, &count);
 		node = NULL;
 		for (i = count; i != 0; i--) {
-			unsigned int len = strlen(nodes[i-1]->name) + 1;
+			size_t len = strlen(nodes[i-1]->name) + 1;
 
 			i_assert(len <= ctx->parent_pos);
 			ctx->parent_pos -= len;

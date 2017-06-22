@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -106,6 +106,7 @@ int mdbox_mail_open(struct dbox_mail *mail, uoff_t *offset_r,
 		mail_set_aborted(_mail);
 		return -1;
 	}
+	_mail->mail_stream_opened = TRUE;
 
 	do {
 		if (mail->open_file != NULL) {

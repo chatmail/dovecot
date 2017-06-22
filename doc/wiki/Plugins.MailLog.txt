@@ -4,7 +4,7 @@ Mail logger plugin
 This plugin can be used to log several actions done in a mail session:
 
  * Setting and removing \Deleted flag
- * Expunging
+ * Expunging (includes autoexpunge)
  * Copying mails to another mailbox
  * Mailbox creations
  * Mailbox deletions
@@ -39,6 +39,7 @@ You can configure what and how mail_log plugin logs:
 plugin {
   # Events to log. Defined in src/plugins/mail-log/mail-log-plugin.c - also
 available: flag_change save mailbox_create
+  # autoexpunge is included in expunge
   mail_log_events = delete undelete expunge copy mailbox_delete mailbox_rename
 
   # Also available: Defined in src/plugins/mail-log/mail-log-plugin.c - flags
@@ -47,4 +48,4 @@ vsize from subject
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

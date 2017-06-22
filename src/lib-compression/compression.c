@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -107,7 +107,8 @@ compression_detect_handler(struct istream *input)
 const struct compression_handler *
 compression_lookup_handler_from_ext(const char *path)
 {
-	unsigned int i, len, path_len = strlen(path);
+	unsigned int i;
+	size_t len, path_len = strlen(path);
 
 	for (i = 0; compression_handlers[i].name != NULL; i++) {
 		if (compression_handlers[i].ext == NULL)

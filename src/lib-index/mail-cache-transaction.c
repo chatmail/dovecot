@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -514,7 +514,7 @@ mail_cache_transaction_switch_seq(struct mail_cache_transaction_ctx *ctx)
 		i_array_init(&ctx->cache_data_seq, 64);
 	}
 
-	memset(&new_rec, 0, sizeof(new_rec));
+	i_zero(&new_rec);
 	buffer_append(ctx->cache_data, &new_rec, sizeof(new_rec));
 
 	ctx->prev_seq = 0;

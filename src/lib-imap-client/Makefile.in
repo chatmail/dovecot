@@ -15,6 +15,7 @@
 @SET_MAKE@
 
 
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -89,6 +90,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-imap-client
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/dovecot.m4 \
@@ -112,6 +114,12 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am__EXEEXT_1 = test-imapc-client$(EXEEXT)
+PROGRAMS = $(noinst_PROGRAMS)
+am_test_imapc_client_OBJECTS = test-imapc-client.$(OBJEXT)
+test_imapc_client_OBJECTS = $(am_test_imapc_client_OBJECTS)
+am__DEPENDENCIES_1 =
+am__DEPENDENCIES_2 = $(test_deps) $(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -146,8 +154,9 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libimap_client_la_SOURCES)
-DIST_SOURCES = $(libimap_client_la_SOURCES)
+SOURCES = $(libimap_client_la_SOURCES) $(test_imapc_client_SOURCES)
+DIST_SOURCES = $(libimap_client_la_SOURCES) \
+	$(test_imapc_client_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -398,6 +407,7 @@ top_srcdir = @top_srcdir@
 noinst_LTLIBRARIES = libimap_client.la
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-dns \
 	-I$(top_srcdir)/src/lib-sasl \
 	-I$(top_srcdir)/src/lib-ssl-iostream \
@@ -417,6 +427,27 @@ headers = \
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
+test_programs = \
+	test-imapc-client
+
+test_deps = \
+	$(noinst_LTLIBRARIES) \
+	../lib-ssl-iostream/libssl_iostream.la \
+	../lib-sasl/libsasl.la \
+	../lib-imap/libimap.la \
+	../lib-mail/libmail.la \
+	../lib-charset/libcharset.la \
+	../lib-dns/libdns.la \
+	../lib-test/libtest.la \
+	../lib/liblib.la
+
+test_libs = \
+	$(test_deps) \
+	$(MODULE_LIBS)
+
+test_imapc_client_SOURCES = test-imapc-client.c
+test_imapc_client_LDADD = $(test_libs)
+test_imapc_client_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -465,6 +496,19 @@ clean-noinstLTLIBRARIES:
 libimap_client.la: $(libimap_client_la_OBJECTS) $(libimap_client_la_DEPENDENCIES) $(EXTRA_libimap_client_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libimap_client_la_OBJECTS) $(libimap_client_la_LIBADD) $(LIBS)
 
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+
+test-imapc-client$(EXEEXT): $(test_imapc_client_OBJECTS) $(test_imapc_client_DEPENDENCIES) $(EXTRA_test_imapc_client_DEPENDENCIES) 
+	@rm -f test-imapc-client$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_imapc_client_OBJECTS) $(test_imapc_client_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -474,6 +518,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imapc-client.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imapc-connection.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imapc-msgmap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imapc-client.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -607,7 +652,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LTLIBRARIES) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -645,7 +690,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
-	mostlyclean-am
+	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -716,22 +761,28 @@ uninstall-am: uninstall-pkginc_libHEADERS
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-noinstLTLIBRARIES cscopelist-am ctags \
-	ctags-am distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-pdf install-pdf-am \
-	install-pkginc_libHEADERS install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
-	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
-	uninstall-pkginc_libHEADERS
+	clean-libtool clean-noinstLTLIBRARIES clean-noinstPROGRAMS \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-pkginc_libHEADERS install-ps \
+	install-ps-am install-strip installcheck installcheck-am \
+	installdirs maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-compile mostlyclean-generic \
+	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
+	uninstall-am uninstall-pkginc_libHEADERS
 
 .PRECIOUS: Makefile
 
+
+check: check-am check-test
+check-test: all-am
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

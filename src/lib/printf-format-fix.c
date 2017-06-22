@@ -1,14 +1,14 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "printf-format-fix.h"
 
 static const char *
-fix_format_real(const char *fmt, const char *p, unsigned int *len_r)
+fix_format_real(const char *fmt, const char *p, size_t *len_r)
 {
 	const char *errstr;
 	char *buf;
-	unsigned int len1, len2, len3;
+	size_t len1, len2, len3;
 
 	i_assert((size_t)(p - fmt) < INT_MAX);
 	i_assert(p[0] == '%' && p[1] == 'm');
@@ -33,13 +33,25 @@ fix_format_real(const char *fmt, const char *p, unsigned int *len_r)
 }
 
 static const char *
-printf_format_fix_noalloc(const char *format, unsigned int *len_r)
+printf_format_fix_noalloc(const char *format, size_t *len_r)
 {
-	const char *p;
-	const char *ret = format;
+	static const char *printf_skip_chars = "# -+'I.*0123456789hlLjzt";
+	/* as a tiny optimization keep the most commonly used conversion
+	   modifiers first, so strchr() stops early. */
+	static const char *printf_allowed_conversions = "sudcioxXp%eEfFgGaA";
+	const char *ret, *p, *p2;
 
-	for (p = format; *p != '\0'; ) {
-		if (*p++ == '%') {
+	p = ret = format;
+	while ((p2 = strchr(p, '%')) != NULL) {
+		p = p2+1;
+		while (*p != '\0' && strchr(printf_skip_chars, *p) != NULL)
+			p++;
+
+		if (*p == '\0') {
+			i_panic("%% modifier missing in '%s'", format);
+		} else if (strchr(printf_allowed_conversions, *p) != NULL) {
+			/* allow & ignore */
+		} else {
 			switch (*p) {
 			case 'n':
 				i_panic("%%n modifier used");
@@ -48,19 +60,19 @@ printf_format_fix_noalloc(const char *format, unsigned int *len_r)
 					i_panic("%%m used twice");
 				ret = fix_format_real(format, p-1, len_r);
 				break;
-			case '\0':
-				i_panic("%% modifier missing in '%s'", format);
+			default:
+				i_panic("Unsupported %%%c modifier", *p);
 			}
-			p++;
 		}
+		p++;
 	}
 
 	if (ret == format)
-		*len_r = p - format;
+		*len_r = p - format + strlen(p);
 	return ret;
 }
 
-const char *printf_format_fix_get_len(const char *format, unsigned int *len_r)
+const char *printf_format_fix_get_len(const char *format, size_t *len_r)
 {
 	const char *ret;
 
@@ -73,7 +85,7 @@ const char *printf_format_fix_get_len(const char *format, unsigned int *len_r)
 const char *printf_format_fix(const char *format)
 {
 	const char *ret;
-	unsigned int len;
+	size_t len;
 
 	ret = printf_format_fix_noalloc(format, &len);
 	if (ret != format)
@@ -83,7 +95,7 @@ const char *printf_format_fix(const char *format)
 
 const char *printf_format_fix_unsafe(const char *format)
 {
-	unsigned int len;
+	size_t len;
 
 	return printf_format_fix_noalloc(format, &len);
 }

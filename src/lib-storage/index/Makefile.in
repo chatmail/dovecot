@@ -108,11 +108,11 @@ libstorage_index_la_LIBADD =
 am_libstorage_index_la_OBJECTS = istream-mail.lo index-attachment.lo \
 	index-attribute.lo index-mail.lo index-mail-binary.lo \
 	index-mail-headers.lo index-mailbox-size.lo index-pop3-uidl.lo \
-	index-rebuild.lo index-search.lo index-search-result.lo \
-	index-sort.lo index-sort-string.lo index-status.lo \
-	index-storage.lo index-sync.lo index-sync-changes.lo \
-	index-sync-pvt.lo index-sync-search.lo index-thread.lo \
-	index-thread-finish.lo index-thread-links.lo \
+	index-rebuild.lo index-search.lo index-search-mime.lo \
+	index-search-result.lo index-sort.lo index-sort-string.lo \
+	index-status.lo index-storage.lo index-sync.lo \
+	index-sync-changes.lo index-sync-pvt.lo index-sync-search.lo \
+	index-thread.lo index-thread-finish.lo index-thread-links.lo \
 	index-transaction.lo
 libstorage_index_la_OBJECTS = $(am_libstorage_index_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -467,6 +467,7 @@ libstorage_index_la_SOURCES = \
 	index-pop3-uidl.c \
 	index-rebuild.c \
 	index-search.c \
+	index-search-mime.c \
 	index-search-result.c \
 	index-sort.c \
 	index-sort-string.c \
@@ -561,6 +562,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-mailbox-size.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-pop3-uidl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-rebuild.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-search-mime.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-search-result.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-search.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/index-sort-string.Plo@am__quote@

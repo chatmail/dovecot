@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -111,7 +111,7 @@ copy_unique_defaults(struct setting_parser_context *ctx,
 	}
 	p_array_init(arr, ctx->set_pool, count + 4);
 
-	memset(&info, 0, sizeof(info));
+	i_zero(&info);
 	info = *def->list_info;
 
 	for (i = 0; i < count; i++) T_BEGIN {
@@ -347,10 +347,10 @@ get_octal(struct setting_parser_context *ctx, const char *value,
 	return 0;
 }
 
-int settings_get_time(const char *str, unsigned int *secs_r,
-		      const char **error_r)
+static int settings_get_time_full(const char *str, unsigned int *interval_r,
+				  bool milliseconds, const char **error_r)
 {
-	uintmax_t num, multiply = 1;
+	uintmax_t num, multiply = milliseconds ? 1000 : 1;
 	const char *p;
 
 	if (str_parse_uintmax(str, &num, &p) < 0) {
@@ -360,29 +360,47 @@ int settings_get_time(const char *str, unsigned int *secs_r,
 	while (*p == ' ') p++;
 	switch (i_toupper(*p)) {
 	case 'S':
-		multiply = 1;
+		multiply *= 1;
 		if (strncasecmp(p, "secs", strlen(p)) == 0 ||
 		    strncasecmp(p, "seconds", strlen(p)) == 0)
 			p = "";
 		break;
 	case 'M':
-		multiply = 60;
+		multiply *= 60;
 		if (strncasecmp(p, "mins", strlen(p)) == 0 ||
 		    strncasecmp(p, "minutes", strlen(p)) == 0)
 			p = "";
+		else if (strncasecmp(p, "msecs", strlen(p)) == 0 ||
+			 strncasecmp(p, "mseconds", strlen(p)) == 0 ||
+			 strncasecmp(p, "millisecs", strlen(p)) == 0 ||
+			 strncasecmp(p, "milliseconds", strlen(p)) == 0) {
+			if (milliseconds || (num % 1000) == 0) {
+				if (!milliseconds) {
+					/* allow ms also for seconds, as long
+					   as it's divisible by seconds */
+					num /= 1000;
+				}
+				multiply = 1;
+				p = "";
+				break;
+			}
+			*error_r = t_strdup_printf(
+				"Milliseconds not supported for this setting: %s", str);
+			return -1;
+		}
 		break;
 	case 'H':
-		multiply = 60*60;
+		multiply *= 60*60;
 		if (strncasecmp(p, "hours", strlen(p)) == 0)
 			p = "";
 		break;
 	case 'D':
-		multiply = 60*60*24;
+		multiply *= 60*60*24;
 		if (strncasecmp(p, "days", strlen(p)) == 0)
 			p = "";
 		break;
 	case 'W':
-		multiply = 60*60*24*7;
+		multiply *= 60*60*24*7;
 		if (strncasecmp(p, "weeks", strlen(p)) == 0)
 			p = "";
 		break;
@@ -397,8 +415,20 @@ int settings_get_time(const char *str, unsigned int *secs_r,
 				       str, NULL);
 		return -1;
 	}
-	*secs_r = num * multiply;
+	*interval_r = num * multiply;
 	return 0;
+}
+
+int settings_get_time(const char *str, unsigned int *secs_r,
+		      const char **error_r)
+{
+	return settings_get_time_full(str, secs_r, FALSE, error_r);
+}
+
+int settings_get_time_msecs(const char *str, unsigned int *msecs_r,
+			    const char **error_r)
+{
+	return settings_get_time_full(str, msecs_r, TRUE, error_r);
 }
 
 int settings_get_size(const char *str, uoff_t *bytes_r,
@@ -552,7 +582,7 @@ get_deflist(struct setting_parser_context *ctx, struct setting_link *parent,
 	if (change_result != NULL && !array_is_created(change_result))
 		p_array_init(change_result, ctx->set_pool, 5);
 
-	memset(&new_link, 0, sizeof(new_link));
+	i_zero(&new_link);
 	new_link.parent = parent;
 	new_link.info = info;
 	new_link.array = result;
@@ -1972,8 +2002,8 @@ settings_copy_deflist_unique(const struct setting_define *def,
 		return 0;
 	type_offset = def->list_info->type_offset;
 
-	memset(&child_dest_link, 0, sizeof(child_dest_link));
-	memset(&child_src_link, 0, sizeof(child_src_link));
+	i_zero(&child_dest_link);
+	i_zero(&child_src_link);
 
 	child_dest_link.info = child_src_link.info = def->list_info;
 

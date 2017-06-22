@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "fs-api.h"
@@ -162,7 +162,7 @@ int sdbox_read_header(struct sdbox_mailbox *mbox,
 		}
 		ret = -1;
 	} else {
-		memset(hdr, 0, sizeof(*hdr));
+		i_zero(hdr);
 		memcpy(hdr, data, I_MIN(data_size, sizeof(*hdr)));
 		if (guid_128_is_empty(hdr->mailbox_guid))
 			ret = -1;
@@ -187,7 +187,7 @@ static void sdbox_update_header(struct sdbox_mailbox *mbox,
 	bool need_resize;
 
 	if (sdbox_read_header(mbox, &hdr, TRUE, &need_resize) < 0) {
-		memset(&hdr, 0, sizeof(hdr));
+		i_zero(&hdr);
 		need_resize = TRUE;
 	}
 
@@ -320,7 +320,7 @@ static int sdbox_mailbox_alloc_index(struct sdbox_mailbox *mbox)
 		mail_index_ext_register(mbox->box.index, "dbox-hdr",
 					sizeof(struct sdbox_index_header), 0, 0);
 	/* set the initialization data in case the mailbox is created */
-	memset(&hdr, 0, sizeof(hdr));
+	i_zero(&hdr);
 	guid_128_generate(hdr.mailbox_guid);
 	mail_index_set_ext_init_data(mbox->box.index, mbox->hdr_ext_id,
 				     &hdr, sizeof(hdr));
@@ -349,7 +349,7 @@ static int sdbox_mailbox_open(struct mailbox *box)
 		/* looks like the mailbox is corrupted */
 		(void)sdbox_sync(mbox, SDBOX_SYNC_FLAG_FORCE);
 		if (sdbox_read_header(mbox, &hdr, TRUE, &need_resize) < 0)
-			memset(&hdr, 0, sizeof(hdr));
+			i_zero(&hdr);
 	}
 
 	if (guid_128_is_empty(hdr.mailbox_guid)) {
@@ -370,6 +370,32 @@ static void sdbox_mailbox_close(struct mailbox *box)
 	if (mbox->corrupted_rebuild_count != 0)
 		(void)sdbox_sync(mbox, 0);
 	index_storage_mailbox_close(box);
+}
+
+static int
+sdbox_mailbox_create(struct mailbox *box,
+		     const struct mailbox_update *update, bool directory)
+{
+	struct sdbox_mailbox *mbox = (struct sdbox_mailbox *)box;
+	struct sdbox_index_header hdr;
+	bool need_resize;
+
+	if (dbox_mailbox_create(box, update, directory) < 0)
+		return -1;
+	if (directory || !guid_128_is_empty(mbox->mailbox_guid))
+		return 0;
+
+	/* another process just created the mailbox. read the mailbox_guid. */
+	if (sdbox_read_header(mbox, &hdr, FALSE, &need_resize) < 0) {
+		mail_storage_set_critical(box->storage,
+			"sdbox %s: Failed to read newly created dbox header",
+			mailbox_get_path(&mbox->box));
+		return -1;
+	}
+	memcpy(mbox->mailbox_guid, hdr.mailbox_guid,
+	       sizeof(mbox->mailbox_guid));
+	i_assert(!guid_128_is_empty(mbox->mailbox_guid));
+	return 0;
 }
 
 static int
@@ -448,7 +474,7 @@ struct mailbox sdbox_mailbox = {
 		sdbox_mailbox_open,
 		sdbox_mailbox_close,
 		index_storage_mailbox_free,
-		dbox_mailbox_create,
+		sdbox_mailbox_create,
 		dbox_mailbox_update,
 		index_storage_mailbox_delete,
 		index_storage_mailbox_rename,

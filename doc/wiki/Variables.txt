@@ -15,48 +15,60 @@ You can use special variables in several places:
 The variables that work (almost) everywhere are:
 
  *
-+------------+----------------+-----------------------------------------------+
-| *Variable* | *Long name*    | *Description*                                 |
-+------------+----------------+-----------------------------------------------+
-| %%         |                | '%' character. See                            |
-|            |                | <SharedMailboxes.Shared.txt> for further      |
-|            |                | information about %% variables                |
-+------------+----------------+-----------------------------------------------+
-| %u         | user           | full username (e.g. user@domain)              |
-+------------+----------------+-----------------------------------------------+
-| %n         | username       | user part in user@domain, same as %u if       |
-|            |                | there's no domain                             |
-+------------+----------------+-----------------------------------------------+
-| %d         | domain         | domain part in user@domain, empty if user with|
-|            |                | no domain                                     |
-+------------+----------------+-----------------------------------------------+
-| %s         | service        | imap, pop3, smtp, lda (and doveadm, dsync,    |
-|            |                | etc.)                                         |
-+------------+----------------+-----------------------------------------------+
-| %p         | pid            | PID of the current process (login or imap/pop3|
-|            |                | process)                                      |
-+------------+----------------+-----------------------------------------------+
-| %l         | lip            | local IP address                              |
-+------------+----------------+-----------------------------------------------+
-| %r         | rip            | remote IP address                             |
-+------------+----------------+-----------------------------------------------+
-|            | session        | session ID for this client connection (unique |
-|            |                | for 9 years) (v2.1.6+)                        |
-+------------+----------------+-----------------------------------------------+
-|            | auth_user      | SASL authentication ID (e.g. if master user   |
-|            |                | login is done, this contains the master       |
-|            |                | username). If username changes during         |
-|            |                | authentication, this value contains the       |
-|            |                | original username. Otherwise the same as      |
-|            |                | %{user}. (v2.2.11+)                           |
-+------------+----------------+-----------------------------------------------+
-|            | auth_username  | user part in %{auth_user} (v2.2.11+)          |
-+------------+----------------+-----------------------------------------------+
-|            | auth_domain    | domain part in %{auth_user} (v2.2.11+)        |
-+------------+----------------+-----------------------------------------------+
-|            | %{userdb:name} | Expands to extra field "name" returned by     |
-|            |                | userdb (v2.2.19+)                             |
-+------------+----------------+-----------------------------------------------+
++------------+-----------------------------+----------------------------------+
+| *Variable* | *Long name*                 | *Description*                    |
++------------+-----------------------------+----------------------------------+
+| %%         |                             | '%' character. See               |
+|            |                             | <SharedMailboxes.Shared.txt> for |
+|            |                             | further information about %%     |
+|            |                             | variables                        |
++------------+-----------------------------+----------------------------------+
+| %u         | user                        | full username (e.g. user@domain) |
++------------+-----------------------------+----------------------------------+
+| %n         | username                    | user part in user@domain, same as|
+|            |                             | %u if there's no domain          |
++------------+-----------------------------+----------------------------------+
+| %d         | domain                      | domain part in user@domain, empty|
+|            |                             | if user with no domain           |
++------------+-----------------------------+----------------------------------+
+| %s         | service                     | imap, pop3, smtp, lda (and       |
+|            |                             | doveadm, dsync, etc.)            |
++------------+-----------------------------+----------------------------------+
+| %p         | pid                         | PID of the current process (login|
+|            |                             | or imap/pop3 process)            |
++------------+-----------------------------+----------------------------------+
+| %l         | lip                         | local IP address                 |
++------------+-----------------------------+----------------------------------+
+| %r         | rip                         | remote IP address                |
++------------+-----------------------------+----------------------------------+
+|            | session                     | session ID for this client       |
+|            |                             | connection (unique for 9 years)  |
+|            |                             | (v2.1.6+)                        |
++------------+-----------------------------+----------------------------------+
+|            | auth_user                   | SASL authentication ID (e.g. if  |
+|            |                             | master user login is done, this  |
+|            |                             | contains the master username). If|
+|            |                             | username changes during          |
+|            |                             | authentication, this value       |
+|            |                             | contains the original username.  |
+|            |                             | Otherwise the same as %{user}.   |
+|            |                             | (v2.2.11+)                       |
++------------+-----------------------------+----------------------------------+
+|            | auth_username               | user part in %{auth_user}        |
+|            |                             | (v2.2.11+)                       |
++------------+-----------------------------+----------------------------------+
+|            | auth_domain                 | domain part in %{auth_user}      |
+|            |                             | (v2.2.11+)                       |
++------------+-----------------------------+----------------------------------+
+|            | %{userdb:name}              | Expands to extra field "name"    |
+|            |                             | returned by userdb (v2.2.19+)    |
++------------+-----------------------------+----------------------------------+
+|            | %{encrypt;parameters:field} | Encrypt field (v2.2.29+) (see    |
+|            |                             | <Plugins.VarExpandCrypt.txt>)    |
++------------+-----------------------------+----------------------------------+
+|            | %{decrypt;parameters:field} | Decrypt field (v2.2.29+) (see    |
+|            |                             | <Plugins.VarExpandCrypt.txt>)    |
++------------+-----------------------------+----------------------------------+
 
 These variables work almost everywhere else except in Dovecot-auth (userdb
 queries/templates):
@@ -113,6 +125,9 @@ setting:
 |    |                | (v2.2.6+, v2.2.13+ for auth)                          |
 +----+----------------+-------------------------------------------------------+
 |    | local_name     | Expands to TLS SNI hostname, if given (v2.2.26+)      |
++----+----------------+-------------------------------------------------------+
+|    | client_id      | Expands to client ID request as IMAP arglist          |
+|    |                | (v2.2.29+/v2.3+). Needs imap_id_retain=yes            |
 +----+----------------+-------------------------------------------------------+
 |    | %{passdb:name} | Expands to extra field "name" returned by passdb      |
 |    |                | (v2.2.19+)                                            |
@@ -262,4 +277,4 @@ but the last two characters from the username. (v2.2.13+)
 The modifiers are applied from left-to-right order, except the substring is
 always taken from the final string.
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

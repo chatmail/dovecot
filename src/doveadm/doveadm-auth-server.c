@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -87,7 +87,7 @@ cmd_user_input(struct auth_master_connection *conn,
 			t_strdup_printf("\"error\":\"%s: user doesn't exist\"",
 				lookup_name));
 	} else if (show_field != NULL) {
-		unsigned int show_field_len = strlen(show_field);
+		size_t show_field_len = strlen(show_field);
 		string_t *json_field = t_str_new(show_field_len+1);
 		json_append_escaped(json_field, show_field);
 		o_stream_nsend_str(doveadm_print_ostream, t_strdup_printf("\"%s\":", str_c(json_field)));
@@ -295,7 +295,7 @@ cmd_user_mail_input(struct mail_storage_service_ctx *storage_service,
 	pool_t pool;
 	int ret;
 
-	memset(&service_input, 0, sizeof(service_input));
+	i_zero(&service_input);
 	service_input.module = "mail";
 	service_input.service = input->info.service;
 	service_input.username = input->username;
@@ -343,7 +343,7 @@ cmd_user_mail_input(struct mail_storage_service_ctx *storage_service,
 	}
 
 	mail_user_unref(&user);
-	mail_storage_service_user_free(&service_user);
+	mail_storage_service_user_unref(&service_user);
 	pool_unref(&pool);
 	return 1;
 }
@@ -367,7 +367,7 @@ static void cmd_user_ver2(struct doveadm_cmd_context *cctx)
 	(void)doveadm_cmd_param_str(cctx, "field", &show_field);
 	(void)doveadm_cmd_param_bool(cctx, "userdb-only", &userdb_only);
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	if (doveadm_cmd_param_array(cctx, "auth-info", &optval))
 		for(;*optval != NULL; optval++)
 			auth_user_info_parse(&input.info, *optval);

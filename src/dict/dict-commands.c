@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -159,14 +159,38 @@ dict_cmd_reply_handle_timings(struct dict_connection_cmd *cmd,
 }
 
 static void
+cmd_lookup_write_reply(struct dict_connection_cmd *cmd,
+		       const char *const *values, string_t *str)
+{
+	string_t *tmp;
+
+	i_assert(values[0] != NULL);
+
+	if (cmd->conn->minor_version < DICT_CLIENT_PROTOCOL_VERSION_MIN_MULTI_OK ||
+	    values[1] == NULL) {
+		str_append_c(str, DICT_PROTOCOL_REPLY_OK);
+		str_append_tabescaped(str, values[0]);
+		return;
+	}
+	/* the results get double-tabescaped so they end up becoming a single
+	   parameter */
+	tmp = t_str_new(128);
+	for (unsigned int i = 0; values[i] != NULL; i++) {
+		str_append_c(tmp, '\t');
+		str_append_tabescaped(tmp, values[i]);
+	}
+	str_append_c(str, DICT_PROTOCOL_REPLY_MULTI_OK);
+	str_append_tabescaped(str, str_c(tmp) + 1);
+}
+
+static void
 cmd_lookup_callback(const struct dict_lookup_result *result, void *context)
 {
 	struct dict_connection_cmd *cmd = context;
 	string_t *str = t_str_new(128);
 
 	if (result->ret > 0) {
-		str_append_c(str, DICT_PROTOCOL_REPLY_OK);
-		str_append_tabescaped(str, result->value);
+		cmd_lookup_write_reply(cmd, result->values, str);
 	} else if (result->ret == 0) {
 		str_append_c(str, DICT_PROTOCOL_REPLY_NOTFOUND);
 	} else {
@@ -526,6 +550,33 @@ static int cmd_atomic_inc(struct dict_connection_cmd *cmd, const char *line)
 	return 0;
 }
 
+static int cmd_timestamp(struct dict_connection_cmd *cmd, const char *line)
+{
+	struct dict_connection_transaction *trans;
+	const char *const *args;
+	long long tv_sec;
+	unsigned int tv_nsec;
+
+	/* <id> <secs> <nsecs> */
+	args = t_strsplit_tabescaped(line);
+	if (str_array_length(args) != 3 ||
+	    str_to_llong(args[1], &tv_sec) < 0 ||
+	    str_to_uint(args[2], &tv_nsec) < 0) {
+		i_error("dict client: TIMESTAMP: broken input");
+		return -1;
+	}
+
+	if (dict_connection_transaction_lookup_parse(cmd->conn, args[0], &trans) < 0)
+		return -1;
+
+	struct timespec ts = {
+		.tv_sec = tv_sec,
+		.tv_nsec = tv_nsec
+	};
+        dict_transaction_set_timestamp(trans->ctx, &ts);
+	return 0;
+}
+
 static const struct dict_cmd_func cmds[] = {
 	{ DICT_PROTOCOL_CMD_LOOKUP, cmd_lookup },
 	{ DICT_PROTOCOL_CMD_ITERATE, cmd_iterate },
@@ -537,6 +588,7 @@ static const struct dict_cmd_func cmds[] = {
 	{ DICT_PROTOCOL_CMD_UNSET, cmd_unset },
 	{ DICT_PROTOCOL_CMD_APPEND, cmd_append },
 	{ DICT_PROTOCOL_CMD_ATOMIC_INC, cmd_atomic_inc },
+	{ DICT_PROTOCOL_CMD_TIMESTAMP, cmd_timestamp },
 
 	{ 0, NULL }
 };

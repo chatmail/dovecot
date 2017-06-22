@@ -3,10 +3,10 @@ Maildir++ quota
 
 Maildir++ is the most commonly used quota backend with Maildir format. Note
 that *Maildir++ quota works only with Maildir format*. With other mailbox
-formats you should use <dict quota with file backend> [Quota.Dict.txt]. Dovecot
-implements the standard Maildir++ specification
-[http://www.inter7.com/courierimap/README.maildirquota.html], so it's
-compatible with Courier [http://www.courier-mta.org/], maildrop
+formats you should use <count quota> [Quota.Count.txt]. Dovecot implements the
+standard Maildir++ specification
+[http://www.courier-mta.org/imap/README.maildirquota.html], so it's compatible
+with Courier [http://www.courier-mta.org/], maildrop
 [http://www.courier-mta.org/maildrop/], Exim [http://www.exim.org], etc.
 
 There are two ways to configure Maildir++ quota limits:
@@ -48,4 +48,4 @@ Once the 'maildirsize' reaches 5120 bytes, the quota is recalculated and the
 file is recreated. This makes sure that if quota happens to be broken (e.g.
 externally deleted files) it won't stay that way forever.
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

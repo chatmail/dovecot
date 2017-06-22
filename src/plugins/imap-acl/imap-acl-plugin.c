@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -105,7 +105,8 @@ static void
 imap_acl_write_rights_list(string_t *dest, const char *const *rights)
 {
 	const struct imap_acl_letter_map *map;
-	unsigned int i, orig_len = str_len(dest);
+	unsigned int i;
+	size_t orig_len = str_len(dest);
 	bool append_c = FALSE, append_d = FALSE;
 
 	for (i = 0; rights[i] != NULL; i++) {
@@ -211,7 +212,7 @@ imap_acl_write_aclobj(string_t *dest, struct acl_backend *backend,
 	struct acl_rights rights;
 	string_t *tmp;
 	const char *username;
-	unsigned int orig_len = str_len(dest);
+	size_t orig_len = str_len(dest);
 	bool seen_owner = FALSE, seen_positive_owner = FALSE;
 	int ret;
 
@@ -253,7 +254,7 @@ imap_acl_write_aclobj(string_t *dest, struct acl_backend *backend,
 
 	if (!seen_positive_owner && username != NULL && add_default) {
 		/* no positive owner rights returned, write default ACLs */
-		memset(&rights, 0, sizeof(rights));
+		i_zero(&rights);
 		if (!convert_owner) {
 			rights.id_type = ACL_ID_OWNER;
 		} else {
@@ -571,7 +572,7 @@ static bool cmd_setacl(struct client_command_context *cmd)
 		return TRUE;
 	}
 
-	memset(&update, 0, sizeof(update));
+	i_zero(&update);
 	if (*identifier == '-') {
 		negative = TRUE;
 		identifier++;
@@ -654,7 +655,7 @@ static bool cmd_deleteacl(struct client_command_context *cmd)
 		return TRUE;
 	}
 
-	memset(&update, 0, sizeof(update));
+	i_zero(&update);
 	if (*identifier != '-')
 		update.modify_mode = ACL_MODIFY_MODE_CLEAR;
 	else {
@@ -682,8 +683,10 @@ static bool cmd_deleteacl(struct client_command_context *cmd)
 
 static void imap_acl_client_created(struct client **client)
 {
-	if (mail_user_is_plugin_loaded((*client)->user, imap_acl_module))
-		str_append((*client)->capability_string, " ACL RIGHTS=texk");
+	if (mail_user_is_plugin_loaded((*client)->user, imap_acl_module)) {
+		client_add_capability(*client, "ACL");
+		client_add_capability(*client, "RIGHTS=texk");
+	}
 
 	if (next_hook_client_created != NULL)
 		next_hook_client_created(client);

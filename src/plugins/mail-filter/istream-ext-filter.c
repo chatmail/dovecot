@@ -1,7 +1,8 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
+#include "strescape.h"
 #include "net.h"
 #include "eacces-error.h"
 #include "fd-set-nonblock.h"
@@ -148,6 +149,7 @@ static int filter_connect(struct mail_filter_istream *mstream,
 {
 	const char **argv;
 	string_t *str;
+	ssize_t ret;
 	int fd;
 
 	argv = t_strsplit(args, " ");
@@ -172,14 +174,21 @@ static int filter_connect(struct mail_filter_istream *mstream,
 	mstream->ext_out = o_stream_create_fd(fd, 0, FALSE);
 
 	str = t_str_new(256);
-	str_append(str, "VERSION\tscript\t3\t0\nnoreply\n");
+	str_append(str, "VERSION\tscript\t4\t0\nnoreply\n");
 	for (; *argv != NULL; argv++) {
-		str_append(str, *argv);
-		str_append_c(str, '\n');
+		str_append_tabescaped(str, *argv);
+		str_append_c(str, '\t');
 	}
 	str_append_c(str, '\n');
 
-	o_stream_send(mstream->ext_out, str_data(str), str_len(str));
+	ret = o_stream_send(mstream->ext_out, str_data(str), str_len(str));
+	if (ret < 0) {
+		i_error("ext-filter: write(%s) failed: %s", socket_path,
+			o_stream_get_error(mstream->ext_out));
+		i_stream_mail_filter_close(&mstream->istream.iostream, FALSE);
+		return -1;
+	}
+	i_assert((size_t)ret == str_len(str));
 	return 0;
 }
 

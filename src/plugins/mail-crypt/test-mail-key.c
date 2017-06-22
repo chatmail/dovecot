@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "test-common.h"
@@ -78,7 +78,7 @@ int test_mail_attribute_get(struct mailbox *box, bool user_key, bool shared,
 			*error_r = t_strdup_printf("mailbox_attribute_get(%s, %s) failed: %s",
 						   mailbox_get_vname(box),
 						   attr_name,
-						   mailbox_get_last_error(box, NULL));
+						   mailbox_get_last_internal_error(box, NULL));
 		}
 	} else {
 		*value_r = t_strdup(value.value);
@@ -115,7 +115,7 @@ test_mail_attribute_set(struct mailbox_transaction_context *t,
 
 	int ret;
 
-	memset(&attr_value, 0, sizeof(attr_value));
+	i_zero(&attr_value);
 	attr_value.value = value;
 
 	if ((ret = mailbox_attribute_set(t, attr_type,
@@ -123,8 +123,7 @@ test_mail_attribute_set(struct mailbox_transaction_context *t,
 		*error_r = t_strdup_printf("mailbox_attribute_set(%s, %s) failed: %s",
 					   mailbox_get_vname(mailbox_transaction_get_mailbox(t)),
 					   attr_name,
-					   mailbox_get_last_error(mailbox_transaction_get_mailbox(t), NULL));
-
+					   mailbox_get_last_internal_error(mailbox_transaction_get_mailbox(t), NULL));
 	}
 
 	return ret;
@@ -156,6 +155,7 @@ int init_test_mail_user(void)
 	};
 
 	mail_storage_service = mail_storage_service_init(master_service, NULL,
+		MAIL_STORAGE_SERVICE_FLAG_NO_RESTRICT_ACCESS |
 		MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT |
 		MAIL_STORAGE_SERVICE_FLAG_NO_PLUGINS);
 
@@ -191,7 +191,7 @@ static
 void deinit_test_mail_user()
 {
 	mail_user_unref(&test_mail_user);
-	mail_storage_service_user_free(&test_service_user);
+	mail_storage_service_user_unref(&test_service_user);
 	mail_storage_service_deinit(&mail_storage_service);
 	if (unlink_directory(mail_home, UNLINK_DIRECTORY_FLAG_RMDIR) < 0)
 		i_error("unlink_directory(%s) failed", mail_home);
@@ -251,7 +251,7 @@ static void test_generate_inbox_key(void)
 					    MAILBOX_FLAG_READONLY);
 	if (mailbox_open(box) < 0)
 		i_fatal("mailbox_open(INBOX) failed: %s",
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 	if (mail_crypt_box_generate_keypair(box, &pair, user_key, &pubid,
 					    &error) < 0) {
 		i_error("generate_keypair failed: %s", error);
@@ -312,7 +312,7 @@ static void test_verify_keys(void)
 					    MAILBOX_FLAG_READONLY);
 	if (mailbox_open(box) < 0)
 		i_fatal("mailbox_open(INBOX) failed: %s",
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 	/* verify links */
 
 	/* user's public key */
@@ -409,7 +409,7 @@ static void test_old_key(void)
 					    MAILBOX_FLAG_READONLY);
 	if (mailbox_open(box) < 0)
 		i_fatal("mailbox_open(INBOX) failed: %s",
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 
 	struct mailbox_transaction_context *t = mailbox_transaction_begin(box, 0);
 
@@ -439,7 +439,7 @@ static void test_old_key(void)
 
 	if (privkey != NULL) {
 		buffer_t *key_id = buffer_create_dynamic(pool_datastack_create(), 32);
-		dcrypt_key_id_private_old(privkey, key_id, &error);
+		test_assert(dcrypt_key_id_private_old(privkey, key_id, &error));
 		test_assert(strcmp(binary_to_hex(key_id->data, key_id->used), mcp_old_box_key_id) == 0);
 		dcrypt_key_unref_private(&privkey);
 	}
@@ -456,7 +456,10 @@ static void test_setup(void)
 	};
 	test_pool = pool_alloconly_create(MEMPOOL_GROWING "mcp test pool", 128);
 	test_ioloop = io_loop_create();
-	dcrypt_initialize(NULL, &set, NULL);
+	if (!dcrypt_initialize(NULL, &set, NULL)) {
+		i_info("No functional dcrypt backend found - skipping tests");
+		test_exit(0);
+	}
 	/* allocate a user */
 	if (init_test_mail_user() < 0) {
 		test_exit(1);

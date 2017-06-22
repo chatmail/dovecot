@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "array.h"
@@ -69,8 +69,8 @@ master_client_process_status(struct master_client *client,
 	array_foreach(&services->services, servicep) {
 		if (args[0] != NULL && !str_array_find(args, (*servicep)->set->name))
 			continue;
-		str_truncate(str, 0);
 		for (p = (*servicep)->processes; p != NULL; p = p->next) {
+			str_truncate(str, 0);
 			master_client_process_output(str, p);
 			o_stream_nsend(client->conn.output,
 				       str_data(str), str_len(str));

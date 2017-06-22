@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -97,7 +97,7 @@ int mail_session_connect_parse(const char *const *args, const char **error_r)
 			session_id, args[1], args[2], (long)session->pid, (long)pid);
 		return -1;
 	}
-	session = i_malloc(sizeof(struct mail_session) + stats_alloc_size());
+	session = i_malloc(MALLOC_ADD(sizeof(struct mail_session), stats_alloc_size()));
 	session->stats = (void *)(session + 1);
 	session->refcount = 1; /* unrefed at disconnect */
 	session->id = i_strdup(session_id);

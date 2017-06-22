@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 /* FIXME: If we don't have permission to change flags/keywords, the changes
    should still be stored temporarily for this session. However most clients
@@ -95,7 +95,7 @@ static void acl_mailbox_copy_acls_from_parent(struct mailbox *box)
 	struct acl_object_list_iter *iter;
 	struct acl_rights_update update;
 
-	memset(&update, 0, sizeof(update));
+	i_zero(&update);
 	update.modify_mode = ACL_MODIFY_MODE_REPLACE;
 	update.neg_modify_mode = ACL_MODIFY_MODE_REPLACE;
 

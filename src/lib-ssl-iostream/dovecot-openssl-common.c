@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "dovecot-openssl-common.h"
@@ -10,7 +10,7 @@
 static int openssl_init_refcount = 0;
 static ENGINE *dovecot_openssl_engine;
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+#ifdef HAVE_SSL_NEW_MEM_FUNCS
 static void *dovecot_openssl_malloc(size_t size, const char *u0 ATTR_UNUSED, int u1 ATTR_UNUSED)
 #else
 static void *dovecot_openssl_malloc(size_t size)
@@ -26,7 +26,7 @@ static void *dovecot_openssl_malloc(size_t size)
 	return mem;
 }
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+#ifdef HAVE_SSL_NEW_MEM_FUNCS
 static void *dovecot_openssl_realloc(void *ptr, size_t size, const char *u0 ATTR_UNUSED, int u1 ATTR_UNUSED)
 #else
 static void *dovecot_openssl_realloc(void *ptr, size_t size)
@@ -40,7 +40,7 @@ static void *dovecot_openssl_realloc(void *ptr, size_t size)
 	return mem;
 }
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+#ifdef HAVE_SSL_NEW_MEM_FUNCS
 static void dovecot_openssl_free(void *ptr, const char *u0 ATTR_UNUSED, int u1 ATTR_UNUSED)
 #else
 static void dovecot_openssl_free(void *ptr)
@@ -86,22 +86,26 @@ bool dovecot_openssl_common_global_unref(void)
 		ENGINE_finish(dovecot_openssl_engine);
 		dovecot_openssl_engine = NULL;
 	}
-#if OPENSSL_VERSION_NUMBER < 0x10001000L
+	/* OBJ_cleanup() is called automatically by EVP_cleanup() in
+	   newer versions. Doesn't hurt to call it anyway. */
 	OBJ_cleanup();
-#endif
 #ifdef HAVE_SSL_COMP_FREE_COMPRESSION_METHODS
 	SSL_COMP_free_compression_methods();
 #endif
 	ENGINE_cleanup();
 	EVP_cleanup();
 	CRYPTO_cleanup_all_ex_data();
-#if OPENSSL_VERSION_NUMBER < 0x10000000L
-	ERR_remove_state(0);
-#elif OPENSSL_VERSION_NUMBER < 0x10100000L
+#ifdef HAVE_OPENSSL_AUTO_THREAD_DEINIT
+	/* no cleanup needed */
+#elif defined(HAVE_OPENSSL_ERR_REMOVE_THREAD_STATE)
+	/* This was marked as deprecated in v1.1. */
 	ERR_remove_thread_state(NULL);
+#else
+	/* This was deprecated by ERR_remove_thread_state(NULL) in v1.0.0. */
+	ERR_remove_state(0);
 #endif
 	ERR_free_strings();
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+#ifdef HAVE_OPENSSL_CLEANUP
 	OPENSSL_cleanup();
 #endif
 	return FALSE;

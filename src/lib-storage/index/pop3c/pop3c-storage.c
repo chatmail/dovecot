@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -8,7 +8,6 @@
 #include "mailbox-list-private.h"
 #include "index-mail.h"
 #include "pop3c-client.h"
-#include "pop3c-settings.h"
 #include "pop3c-sync.h"
 #include "pop3c-storage.h"
 
@@ -56,7 +55,7 @@ pop3c_client_create_from_set(struct mail_storage *storage,
 	struct pop3c_client_settings client_set;
 	string_t *str;
 
-	memset(&client_set, 0, sizeof(client_set));
+	i_zero(&client_set);
 	client_set.host = set->pop3c_host;
 	client_set.port = set->pop3c_port;
 	client_set.username = set->pop3c_user;

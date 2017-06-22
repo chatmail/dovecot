@@ -148,6 +148,28 @@ Timestamps of 'cur' and 'new' directories:
    of <index files> [IndexFiles.txt]
  * 'atime' and 'ctime' not used
 
+Filename examples
+-----------------
+
++---------------------------------------------------------------------------------------------+----------------------------+
+| Filename                                                                                    | Explanation                |
++---------------------------------------------------------------------------------------------+----------------------------+
+| *1491941793*.M41850P8566V0000000000000015I0000000004F3030E_0.mx1.example.com,S=10956:2,STln | UNIX timestamp of arrival  |
++---------------------------------------------------------------------------------------------+----------------------------+
+| 1491941793.M41850P8566V0000000000000015I0000000004F3030E_0.mx1.example.com,*S=10956*:2,STln | Size of e-mail             |
++---------------------------------------------------------------------------------------------+----------------------------+
+| 1491941793.M41850P8566V0000000000000015I0000000004F3030E_0.mx1.example.com,S=10956:2,*STln* | *S*=seen (marked as read)  |
+|                                                                                             | *T*=trashed                |
+|                                                                                             | *l*=IMAP tag #12 (0=a, 1=b,|
+|                                                                                             | 2=c, etc) as defined in    |
+|                                                                                             | that folder's              |
+|                                                                                             | dovecot-keywords.          |
+|                                                                                             | *n*=IMAP tag #14 (0=a, 1=b,|
+|                                                                                             | 2=c, etc) as defined in    |
+|                                                                                             | that folder's              |
+|                                                                                             | dovecot-keywords.          |
++---------------------------------------------------------------------------------------------+----------------------------+
+
 Maildir and filesystems
 -----------------------
 
@@ -235,9 +257,9 @@ Directory Structure
 -------------------
 
 By default Dovecot uses Maildir++
-[http://www.inter7.com/courierimap/README.maildirquota.html] directory layout
-for organizing mailbox directories. This means that all the folders are
-directly inside '~/Maildir' directory:
+[http://www.courier-mta.org/imap/README.maildirquota.html] directory layout for
+organizing mailbox directories. This means that all the folders are directly
+inside '~/Maildir' directory:
 
  * '~/Maildir/new', '~/Maildir/cur' and '~/Maildir/tmp' directories contain the
    messages for INBOX. The 'tmp' directory is used during delivery, new
@@ -372,7 +394,7 @@ References
  * Official Maildir format page [http://cr.yp.to/proto/maildir.html]
  * Qmail's how to deliver to Maildir man page
    [http://www.qmail.org/man/man5/maildir.html]
- * Maildir++ [http://www.inter7.com/courierimap/README.maildirquota.html]
+ * Maildir++ [http://www.courier-mta.org/imap/README.maildirquota.html]
  * Wikipedia [http://en.wikipedia.org/wiki/Maildir]
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

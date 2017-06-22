@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -36,6 +36,12 @@ static void mail_user_deinit_base(struct mail_user *user)
 		dict_deinit(&user->_attr_dict);
 	}
 	mail_namespaces_deinit(&user->namespaces);
+	if (user->_service_user != NULL)
+		mail_storage_service_user_unref(&user->_service_user);
+}
+
+static void mail_user_deinit_pre_base(struct mail_user *user ATTR_UNUSED)
+{
 }
 
 static void mail_user_stats_fill_base(struct mail_user *user ATTR_UNUSED,
@@ -43,25 +49,24 @@ static void mail_user_stats_fill_base(struct mail_user *user ATTR_UNUSED,
 {
 }
 
-struct mail_user *mail_user_alloc(const char *username,
-				  const struct setting_parser_info *set_info,
-				  const struct mail_user_settings *set)
+static struct mail_user *
+mail_user_alloc_int(const char *username,
+		    const struct setting_parser_info *set_info,
+		    const struct mail_user_settings *set, pool_t pool)
 {
 	struct mail_user *user;
 	const char *error;
-	pool_t pool;
 
 	i_assert(username != NULL);
 	i_assert(*username != '\0');
 
-	pool = pool_alloconly_create(MEMPOOL_GROWING"mail user", 16*1024);
 	user = p_new(pool, struct mail_user, 1);
 	user->pool = pool;
 	user->refcount = 1;
 	user->username = p_strdup(pool, username);
 	user->set_info = set_info;
-	user->unexpanded_set = settings_dup(set_info, set, pool);
-	user->set = settings_dup(set_info, set, pool);
+	user->unexpanded_set = set;
+	user->set = settings_dup_with_pointers(set_info, user->unexpanded_set, pool);
 	user->service = master_service_get_name(master_service);
 	user->default_normalizer = uni_utf8_to_decomposed_titlecase;
 	user->session_create_time = ioloop_time;
@@ -72,9 +77,32 @@ struct mail_user *mail_user_alloc(const char *username,
 		i_panic("Settings check unexpectedly failed: %s", error);
 
 	user->v.deinit = mail_user_deinit_base;
+	user->v.deinit_pre = mail_user_deinit_pre_base;
 	user->v.stats_fill = mail_user_stats_fill_base;
 	p_array_init(&user->module_contexts, user->pool, 5);
 	return user;
+}
+
+struct mail_user *
+mail_user_alloc_nodup_set(const char *username,
+			  const struct setting_parser_info *set_info,
+			  const struct mail_user_settings *set)
+{
+	pool_t pool;
+
+	pool = pool_alloconly_create(MEMPOOL_GROWING"mail user", 16*1024);
+	return mail_user_alloc_int(username, set_info, set, pool);
+}
+
+struct mail_user *mail_user_alloc(const char *username,
+				  const struct setting_parser_info *set_info,
+				  const struct mail_user_settings *set)
+{
+	pool_t pool;
+
+	pool = pool_alloconly_create(MEMPOOL_GROWING"mail user", 16*1024);
+	return mail_user_alloc_int(username, set_info,
+				   settings_dup(set_info, set, pool), pool);
 }
 
 static void
@@ -166,13 +194,11 @@ void mail_user_unref(struct mail_user **_user)
 		return;
 	}
 
-	if (user->autoexpunge_enabled)
-		mail_user_autoexpunge(user);
-
 	user->deinitializing = TRUE;
 
-	/* call deinit() with refcount=1, otherwise we may assert-crash in
-	   mail_user_ref() that is called by some deinit() handler. */
+	/* call deinit() and deinit_pre() with refcount=1, otherwise we may
+	   assert-crash in mail_user_ref() that is called by some handlers. */
+	user->v.deinit_pre(user);
 	user->v.deinit(user);
 	i_assert(user->refcount == 1);
 	pool_unref(&user->pool);
@@ -337,7 +363,7 @@ static int mail_user_userdb_lookup_home(struct mail_user *user)
 
 	i_assert(!user->home_looked_up);
 
-	memset(&info, 0, sizeof(info));
+	i_zero(&info);
 	info.service = user->service;
 	if (user->local_ip != NULL)
 		info.local_ip = *user->local_ip;
@@ -483,9 +509,9 @@ mail_user_try_load_class_plugin(struct mail_user *user, const char *name)
 {
 	struct module_dir_load_settings mod_set;
 	struct module *module;
-	unsigned int name_len = strlen(name);
+	size_t name_len = strlen(name);
 
-	memset(&mod_set, 0, sizeof(mod_set));
+	i_zero(&mod_set);
 	mod_set.abi_version = DOVECOT_ABI_VERSION;
 	mod_set.binary_name = master_service_get_name(master_service);
 	mod_set.setting_name = "<built-in storage lookup>";
@@ -537,7 +563,10 @@ struct mail_user *mail_user_dup(struct mail_user *user)
 
 	user2 = mail_user_alloc(user->username, user->set_info,
 				user->unexpanded_set);
-	user2->_service_user = user->_service_user;
+	if (user2->_service_user != NULL) {
+		user2->_service_user = user->_service_user;
+		mail_storage_service_user_ref(user2->_service_user);
+	}
 	if (user->_home != NULL)
 		mail_user_set_home(user2, user->_home);
 	mail_user_set_vars(user2, user->service,
@@ -555,13 +584,20 @@ struct mail_user *mail_user_dup(struct mail_user *user)
 	return user2;
 }
 
-void mail_user_init_fs_settings(struct mail_user *user,
-				struct fs_settings *fs_set,
+void mail_user_init_ssl_client_settings(struct mail_user *user,
 				struct ssl_iostream_settings *ssl_set)
 {
 	const struct mail_storage_settings *mail_set =
 		mail_user_set_get_storage_set(user);
 
+	ssl_set->ca_dir = mail_set->ssl_client_ca_dir;
+	ssl_set->ca_file = mail_set->ssl_client_ca_file;
+}
+
+void mail_user_init_fs_settings(struct mail_user *user,
+				struct fs_settings *fs_set,
+				struct ssl_iostream_settings *ssl_set)
+{
 	fs_set->username = user->username;
 	fs_set->session_id = user->session_id;
 	fs_set->base_dir = user->set->base_dir;
@@ -570,8 +606,7 @@ void mail_user_init_fs_settings(struct mail_user *user,
 	fs_set->enable_timing = user->stats_enabled;
 
 	fs_set->ssl_client_set = ssl_set;
-	ssl_set->ca_dir = mail_set->ssl_client_ca_dir;
-	ssl_set->ca_file = mail_set->ssl_client_ca_file;
+	mail_user_init_ssl_client_settings(user, ssl_set);
 }
 
 void mail_user_stats_fill(struct mail_user *user, struct stats *stats)

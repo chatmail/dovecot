@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -50,7 +50,7 @@ void fd_debug_verify_leaks(int first_fd, int last_fd)
 			}
 
 			if (net_getpeername(first_fd, &raddr, &rport) < 0) {
-				memset(&raddr, 0, sizeof(raddr));
+				i_zero(&raddr);
 				rport = 0;
 			}
 			i_panic("Leaked socket fd %d: %s:%u -> %s:%u",

@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -113,8 +113,8 @@ tview_apply_flag_updates(struct mail_index_view_transaction *tview,
 		tview->recs_count = t->first_new_seq;
 		tview->record_size = I_MAX(map->hdr.record_size,
 					   tview->view.map->hdr.record_size);
-		tview->recs = i_malloc(tview->record_size *
-				       tview->recs_count);
+		tview->recs = i_malloc(MALLOC_MULTIPLY(tview->record_size,
+						       tview->recs_count));
 		array_append(&tview->all_recs, &tview->recs, 1);
 	}
 	i_assert(tview->recs_count == t->first_new_seq);
@@ -419,7 +419,7 @@ tview_lookup_ext_update(struct mail_index_view_transaction *tview, uint32_t seq,
 			array_idx(&tview->view.index->extensions, ext_id);
 		struct mail_index_ext_header ext_hdr;
 
-		memset(&ext_hdr, 0, sizeof(ext_hdr));
+		i_zero(&ext_hdr);
 		ext_hdr.hdr_size = rext->hdr_size;
 		ext_hdr.record_size = ext_buf->arr.element_size - sizeof(uint32_t);
 		ext_hdr.record_align = rext->record_align;

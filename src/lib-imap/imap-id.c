@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -22,7 +22,7 @@ static const char *imap_id_get_uname(const char *key)
 		utsname_set = TRUE;
 		if (uname(&utsname_result) < 0) {
 			i_error("uname() failed: %m");
-			memset(&utsname_result, 0, sizeof(utsname_result));
+			i_zero(&utsname_result);
 		}
 	}
 

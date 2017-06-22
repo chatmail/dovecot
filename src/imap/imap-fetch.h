@@ -56,6 +56,7 @@ struct imap_fetch_state {
 	uoff_t cur_size, cur_offset;
 	enum mail_fetch_field cur_size_field;
 	string_t *cur_str;
+	size_t cur_str_prefix_size;
 	struct istream *cur_input;
 	bool skip_cr;
 	int (*cont_handler)(struct imap_fetch_context *ctx);
@@ -63,10 +64,13 @@ struct imap_fetch_state {
 
 	unsigned int fetching:1;
 	unsigned int seen_flags_changed:1;
+	/* TRUE if the first FETCH parameter result hasn't yet been sent to
+	   the IMAP client. Note that this doesn't affect buffered content in
+	   cur_str until it gets flushed out. */
 	unsigned int cur_first:1;
-	unsigned int cur_flushed:1;
+	/* TRUE if the cur_str prefix has been flushed. More data may still
+	   be added to it. */
 	unsigned int line_partial:1;
-	unsigned int line_finished:1;
 	unsigned int skipped_expunged_msgs:1;
 	unsigned int failed:1;
 };
@@ -74,6 +78,7 @@ struct imap_fetch_state {
 struct imap_fetch_context {
 	struct client *client;
 	pool_t ctx_pool;
+	const char *reason;
 
 	enum mail_fetch_field fetch_data;
 	ARRAY_TYPE(const_string) all_headers;
@@ -84,8 +89,13 @@ struct imap_fetch_context {
 	ARRAY_TYPE(keywords) tmp_keywords;
 
 	struct imap_fetch_state state;
+	ARRAY_TYPE(seq_range) fetch_failed_uids;
+
+	enum mail_error error;
+	const char *errstr;
 
 	unsigned int initialized:1;
+	unsigned int failures:1;
 	unsigned int flags_have_handler:1;
 	unsigned int flags_update_seen:1;
 	unsigned int flags_show_only_seen_changes:1;
@@ -93,6 +103,7 @@ struct imap_fetch_context {
 
 void imap_fetch_handlers_register(const struct imap_fetch_handler *handlers,
 				  size_t count);
+void imap_fetch_handler_unregister(const char *name);
 
 void imap_fetch_add_handler(struct imap_fetch_init_context *ctx,
 			    enum imap_fetch_handler_flags flags,
@@ -112,11 +123,12 @@ int imap_fetch_att_list_parse(struct client *client, pool_t pool,
 			      const char **error_r);
 
 struct imap_fetch_context *
-imap_fetch_alloc(struct client *client, pool_t pool);
+imap_fetch_alloc(struct client *client, pool_t pool, const char *reason);
 void imap_fetch_free(struct imap_fetch_context **ctx);
 bool imap_fetch_init_handler(struct imap_fetch_init_context *init_ctx);
 void imap_fetch_init_nofail_handler(struct imap_fetch_context *ctx,
 				    bool (*init)(struct imap_fetch_init_context *));
+const struct imap_fetch_handler *imap_fetch_handler_lookup(const char *name);
 
 void imap_fetch_begin(struct imap_fetch_context *ctx, struct mailbox *box,
 		      struct mail_search_args *search_args);

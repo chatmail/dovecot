@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "doveadm-dump.h"
@@ -21,7 +21,7 @@ static void cmd_dump_fts_lucene(int argc ATTR_UNUSED, char *argv[])
 	const struct lucene_index_record *rec;
 	bool first = TRUE;
 
-	memset(&prev_guid, 0, sizeof(prev_guid));
+	i_zero(&prev_guid);
 	index = lucene_index_init(argv[1], NULL, NULL);
 	iter = lucene_index_iter_init(index);
 	while ((rec = lucene_index_iter_next(iter)) != NULL) {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -41,7 +41,7 @@ cmd_acl_mailbox_open(struct doveadm_mail_cmd_context *ctx,
 			    MAILBOX_FLAG_READONLY | MAILBOX_FLAG_IGNORE_ACLS);
 	if (mailbox_open(box) < 0) {
 		i_error("Can't open mailbox %s: %s", mailbox,
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 		doveadm_mail_failed_mailbox(ctx, box);
 		mailbox_free(&box);
 		return -1;
@@ -230,14 +230,14 @@ cmd_acl_set_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	if (cmd_acl_mailbox_open(_ctx, user, mailbox, &box) < 0)
 		return -1;
 
-	memset(&update, 0, sizeof(update));
+	i_zero(&update);
 	update.modify_mode = ctx->modify_mode;
 	update.neg_modify_mode = ctx->modify_mode;
 	if (acl_rights_update_import(&update, id, rights, &error) < 0)
 		i_fatal_status(EX_USAGE, "%s", error);
 	if ((ret = cmd_acl_mailbox_update(box, &update)) < 0) {
 		i_error("Failed to set ACL: %s",
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 		doveadm_mail_failed_error(_ctx, MAIL_ERROR_TEMP);
 	}
 	mailbox_free(&box);
@@ -290,12 +290,12 @@ cmd_acl_delete_run(struct doveadm_mail_cmd_context *ctx, struct mail_user *user)
 	if (cmd_acl_mailbox_open(ctx, user, mailbox, &box) < 0)
 		return -1;
 
-	memset(&update, 0, sizeof(update));
+	i_zero(&update);
 	if (acl_rights_update_import(&update, id, NULL, &error) < 0)
 		i_fatal_status(EX_USAGE, "%s", error);
 	if ((ret = cmd_acl_mailbox_update(box, &update)) < 0) {
 		i_error("Failed to delete ACL: %s",
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 		doveadm_mail_failed_error(ctx, MAIL_ERROR_TEMP);
 	}
 	mailbox_free(&box);
@@ -363,7 +363,7 @@ cmd_acl_debug_mailbox_open(struct doveadm_mail_cmd_context *ctx,
 	box = mailbox_alloc(ns->list, mailbox,
 			    MAILBOX_FLAG_READONLY | MAILBOX_FLAG_IGNORE_ACLS);
 	if (mailbox_open(box) < 0) {
-		errstr = mail_storage_get_last_error(box->storage, &error);
+		errstr = mail_storage_get_last_internal_error(box->storage, &error);
 		errstr = t_strdup(errstr);
 		doveadm_mail_failed_error(ctx, error);
 

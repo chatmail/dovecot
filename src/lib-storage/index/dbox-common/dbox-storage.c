@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "abspath.h"
@@ -98,7 +98,7 @@ int dbox_storage_create(struct mail_storage *_storage,
 	if (*set->mail_attachment_fs != '\0') {
 		const char *name, *args, *dir;
 
-		args = strchr(set->mail_attachment_fs, ' ');
+		args = strpbrk(set->mail_attachment_fs, ": ");
 		if (args == NULL) {
 			name = set->mail_attachment_fs;
 			args = "";

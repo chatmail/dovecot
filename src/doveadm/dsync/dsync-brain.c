@@ -1,10 +1,11 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "hash.h"
 #include "hostpid.h"
 #include "str.h"
+#include "file-create-locked.h"
 #include "process-title.h"
 #include "settings-parser.h"
 #include "master-service.h"
@@ -17,6 +18,11 @@
 #include "dsync-mailbox-export.h"
 
 #include <sys/stat.h>
+
+enum dsync_brain_title {
+	DSYNC_BRAIN_TITLE_NONE = 0,
+	DSYNC_BRAIN_TITLE_LOCKING,
+};
 
 static const char *dsync_state_names[] = {
 	"master_recv_handshake",
@@ -36,7 +42,9 @@ static const char *dsync_state_names[] = {
 
 static void dsync_brain_mailbox_states_dump(struct dsync_brain *brain);
 
-static const char *dsync_brain_get_proctitle(struct dsync_brain *brain)
+static const char *
+dsync_brain_get_proctitle_full(struct dsync_brain *brain,
+			       enum dsync_brain_title title)
 {
 	string_t *str = t_str_new(128);
 	const char *import_title, *export_title;
@@ -70,8 +78,20 @@ static const char *dsync_brain_get_proctitle(struct dsync_brain *brain)
 			}
 		}
 	}
+	switch (title) {
+	case DSYNC_BRAIN_TITLE_NONE:
+		break;
+	case DSYNC_BRAIN_TITLE_LOCKING:
+		str_append(str, " locking "DSYNC_LOCK_FILENAME);
+		break;
+	}
 	str_append_c(str, ']');
 	return str_c(str);
+}
+
+static const char *dsync_brain_get_proctitle(struct dsync_brain *brain)
+{
+	return dsync_brain_get_proctitle_full(brain, DSYNC_BRAIN_TITLE_NONE);
 }
 
 static void dsync_brain_run_io(void *context)
@@ -201,6 +221,7 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 	memcpy(brain->sync_box_guid, set->sync_box_guid,
 	       sizeof(brain->sync_box_guid));
 	brain->lock_timeout = set->lock_timeout_secs;
+	brain->import_commit_msgs_interval = set->import_commit_msgs_interval;
 	brain->master_brain = TRUE;
 	dsync_brain_set_flags(brain, flags);
 
@@ -224,7 +245,7 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 	}
 	dsync_brain_mailbox_trees_init(brain);
 
-	memset(&ibc_set, 0, sizeof(ibc_set));
+	i_zero(&ibc_set);
 	ibc_set.hostname = my_hostdomain();
 	ibc_set.sync_ns_prefixes = sync_ns_str == NULL ?
 		NULL : str_c(sync_ns_str);
@@ -240,6 +261,7 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 	ibc_set.sync_type = sync_type;
 	ibc_set.hdr_hash_v2 = TRUE;
 	ibc_set.lock_timeout = set->lock_timeout_secs;
+	ibc_set.import_commit_msgs_interval = set->import_commit_msgs_interval;
 	/* reverse the backup direction for the slave */
 	ibc_set.brain_flags = flags & ~(DSYNC_BRAIN_FLAG_BACKUP_SEND |
 					DSYNC_BRAIN_FLAG_BACKUP_RECV);
@@ -251,6 +273,9 @@ dsync_brain_master_init(struct mail_user *user, struct dsync_ibc *ibc,
 
 	dsync_ibc_set_io_callback(ibc, dsync_brain_run_io, brain);
 	brain->state = DSYNC_STATE_MASTER_RECV_HANDSHAKE;
+
+	if (brain->verbose_proctitle)
+		process_title_set(dsync_brain_get_proctitle(brain));
 	return brain;
 }
 
@@ -272,11 +297,13 @@ dsync_brain_slave_init(struct mail_user *user, struct dsync_ibc *ibc,
 		brain->verbose_proctitle = FALSE;
 	}
 
-	memset(&ibc_set, 0, sizeof(ibc_set));
+	i_zero(&ibc_set);
 	ibc_set.hdr_hash_v2 = TRUE;
 	ibc_set.hostname = my_hostdomain();
 	dsync_ibc_send_handshake(ibc, &ibc_set);
 
+	if (brain->verbose_proctitle)
+		process_title_set(dsync_brain_get_proctitle(brain));
 	dsync_ibc_set_io_callback(ibc, dsync_brain_run_io, brain);
 	return brain;
 }
@@ -293,7 +320,7 @@ static void dsync_brain_purge(struct dsync_brain *brain)
 		storage = mail_namespace_get_default_storage(ns);
 		if (mail_storage_purge(storage) < 0) {
 			i_error("Purging namespace '%s' failed: %s", ns->prefix,
-				mail_storage_get_last_error(storage, NULL));
+				mail_storage_get_last_internal_error(storage, NULL));
 		}
 	}
 }
@@ -357,8 +384,12 @@ int dsync_brain_deinit(struct dsync_brain **_brain, enum mail_error *error_r)
 static int
 dsync_brain_lock(struct dsync_brain *brain, const char *remote_hostname)
 {
-	struct stat st1, st2;
-	const char *home;
+	const struct file_create_settings lock_set = {
+		.lock_timeout_secs = brain->lock_timeout,
+		.lock_method = FILE_LOCK_METHOD_FCNTL,
+	};
+	const char *home, *error;
+	bool created;
 	int ret;
 
 	if ((ret = strcmp(remote_hostname, my_hostdomain())) < 0) {
@@ -380,46 +411,17 @@ dsync_brain_lock(struct dsync_brain *brain, const char *remote_hostname)
 		return -1;
 	}
 
+	if (brain->verbose_proctitle)
+		process_title_set(dsync_brain_get_proctitle_full(brain, DSYNC_BRAIN_TITLE_LOCKING));
 	brain->lock_path = p_strconcat(brain->pool, home,
 				       "/"DSYNC_LOCK_FILENAME, NULL);
-	for (;;) {
-		brain->lock_fd = creat(brain->lock_path, 0600);
-		if (brain->lock_fd == -1) {
-			i_error("Couldn't create lock %s: %m",
-				brain->lock_path);
-			return -1;
-		}
-
-		if (file_wait_lock(brain->lock_fd, brain->lock_path, F_WRLCK,
-				   FILE_LOCK_METHOD_FCNTL, brain->lock_timeout,
-				   &brain->lock) <= 0) {
-			if (errno == EAGAIN) {
-				i_error("Couldn't lock %s: Timed out after %u seconds",
-					brain->lock_path, brain->lock_timeout);
-			} else {
-				i_error("Couldn't lock %s: %m", brain->lock_path);
-			}
-			break;
-		}
-		if (fstat(brain->lock_fd, &st1) < 0) {
-			if (errno != ESTALE) {
-				i_error("fstat(%s) failed: %m", brain->lock_path);
-				break;
-			}
-		} else if (stat(brain->lock_path, &st2) < 0) {
-			if (errno != ENOENT) {
-				i_error("stat(%s) failed: %m", brain->lock_path);
-				break;
-			}
-		} else if (st1.st_ino == st2.st_ino) {
-			/* success */
-			return 0;
-		}
-		/* file was recreated, try again */
-		i_close_fd(&brain->lock_fd);
-	}
-	i_close_fd(&brain->lock_fd);
-	return -1;
+	brain->lock_fd = file_create_locked(brain->lock_path, &lock_set,
+					    &brain->lock, &created, &error);
+	if (brain->lock_fd == -1)
+		i_error("Couldn't lock %s: %s", brain->lock_path, error);
+	if (brain->verbose_proctitle)
+		process_title_set(dsync_brain_get_proctitle(brain));
+	return brain->lock_fd == -1 ? -1 : 0;
 }
 
 static bool dsync_brain_master_recv_handshake(struct dsync_brain *brain)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -78,12 +78,13 @@ static void init_goodtab(struct str_find_context *ctx)
 struct str_find_context *str_find_init(pool_t pool, const char *key)
 {
 	struct str_find_context *ctx;
-	unsigned int key_len = strlen(key);
+	size_t key_len = strlen(key);
 
 	i_assert(key_len > 0);
+	i_assert(key_len < INT_MAX);
 
-	ctx = p_malloc(pool, sizeof(struct str_find_context) +
-		       sizeof(ctx->goodtab[0]) * key_len);
+	ctx = p_malloc(pool, MALLOC_ADD(sizeof(struct str_find_context),
+		MALLOC_MULTIPLY(sizeof(ctx->goodtab[0]), key_len)));
 	ctx->pool = pool;
 	ctx->matches = p_new(pool, unsigned int, key_len);
 	ctx->key_len = key_len;

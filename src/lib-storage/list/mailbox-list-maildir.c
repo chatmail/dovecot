@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -307,7 +307,8 @@ maildir_rename_children(struct mailbox_list *oldlist, const char *oldname,
 	ARRAY(const char *) names_arr;
 	const char *pattern, *oldpath, *newpath, *old_childname, *new_childname;
 	const char *const *names, *old_vname, *new_vname;
-	unsigned int i, count, old_vnamelen;
+	unsigned int i, count;
+	size_t old_vnamelen;
 	pool_t pool;
 	char old_ns_sep;
 	int ret;
@@ -481,29 +482,24 @@ struct mailbox_list maildir_mailbox_list = {
 		MAILBOX_LIST_PROP_NO_NOSELECT,
 	.mailbox_name_max_length = MAILBOX_LIST_NAME_MAX_LENGTH,
 
-	{
-		maildir_list_alloc,
-		NULL,
-		maildir_list_deinit,
-		NULL,
-		maildir_list_get_hierarchy_sep,
-		mailbox_list_default_get_vname,
-		mailbox_list_default_get_storage_name,
-		maildir_list_get_path,
-		maildir_list_get_temp_prefix,
-		NULL,
-		maildir_list_iter_init,
-		maildir_list_iter_next,
-		maildir_list_iter_deinit,
-		maildir_list_get_mailbox_flags,
-		NULL,
-		mailbox_list_subscriptions_refresh,
-		maildir_list_set_subscribed,
-		maildir_list_delete_mailbox,
-		maildir_list_delete_dir,
-		mailbox_list_delete_symlink_default,
-		maildir_list_rename_mailbox,
-		NULL, NULL, NULL, NULL
+	.v = {
+		.alloc = maildir_list_alloc,
+		.deinit = maildir_list_deinit,
+		.get_hierarchy_sep = maildir_list_get_hierarchy_sep,
+		.get_vname = mailbox_list_default_get_vname,
+		.get_storage_name = mailbox_list_default_get_storage_name,
+		.get_path = maildir_list_get_path,
+		.get_temp_prefix = maildir_list_get_temp_prefix,
+		.iter_init = maildir_list_iter_init,
+		.iter_next = maildir_list_iter_next,
+		.iter_deinit = maildir_list_iter_deinit,
+		.get_mailbox_flags = maildir_list_get_mailbox_flags,
+		.subscriptions_refresh = mailbox_list_subscriptions_refresh,
+		.set_subscribed = maildir_list_set_subscribed,
+		.delete_mailbox = maildir_list_delete_mailbox,
+		.delete_dir = maildir_list_delete_dir,
+		.delete_symlink = mailbox_list_delete_symlink_default,
+		.rename_mailbox = maildir_list_rename_mailbox,
 	}
 };
 
@@ -514,28 +510,23 @@ struct mailbox_list imapdir_mailbox_list = {
 		MAILBOX_LIST_PROP_NO_NOSELECT,
 	.mailbox_name_max_length = MAILBOX_LIST_NAME_MAX_LENGTH,
 
-	{
-		imapdir_list_alloc,
-		NULL,
-		maildir_list_deinit,
-		NULL,
-		maildir_list_get_hierarchy_sep,
-		mailbox_list_default_get_vname,
-		mailbox_list_default_get_storage_name,
-		maildir_list_get_path,
-		maildir_list_get_temp_prefix,
-		NULL,
-		maildir_list_iter_init,
-		maildir_list_iter_next,
-		maildir_list_iter_deinit,
-		maildir_list_get_mailbox_flags,
-		NULL,
-		mailbox_list_subscriptions_refresh,
-		maildir_list_set_subscribed,
-		maildir_list_delete_mailbox,
-		maildir_list_delete_dir,
-		mailbox_list_delete_symlink_default,
-		maildir_list_rename_mailbox,
-		NULL, NULL, NULL, NULL
+	.v = {
+		.alloc = imapdir_list_alloc,
+		.deinit = maildir_list_deinit,
+		.get_hierarchy_sep = maildir_list_get_hierarchy_sep,
+		.get_vname = mailbox_list_default_get_vname,
+		.get_storage_name = mailbox_list_default_get_storage_name,
+		.get_path = maildir_list_get_path,
+		.get_temp_prefix = maildir_list_get_temp_prefix,
+		.iter_init = maildir_list_iter_init,
+		.iter_next = maildir_list_iter_next,
+		.iter_deinit = maildir_list_iter_deinit,
+		.get_mailbox_flags = maildir_list_get_mailbox_flags,
+		.subscriptions_refresh = mailbox_list_subscriptions_refresh,
+		.set_subscribed = maildir_list_set_subscribed,
+		.delete_mailbox = maildir_list_delete_mailbox,
+		.delete_dir = maildir_list_delete_dir,
+		.delete_symlink = mailbox_list_delete_symlink_default,
+		.rename_mailbox = maildir_list_rename_mailbox,
 	}
 };

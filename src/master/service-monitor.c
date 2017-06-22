@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "array.h"
@@ -7,6 +7,7 @@
 #include "hash.h"
 #include "str.h"
 #include "safe-mkstemp.h"
+#include "time-util.h"
 #include "master-client.h"
 #include "service.h"
 #include "service-process.h"
@@ -22,7 +23,7 @@
 
 #define SERVICE_DROP_WARN_INTERVAL_SECS 60
 #define SERVICE_DROP_TIMEOUT_MSECS (10*1000)
-#define MAX_DIE_WAIT_SECS 5
+#define MAX_DIE_WAIT_MSECS 5000
 #define SERVICE_MAX_EXIT_FAILURES_IN_SEC 10
 #define SERVICE_PREFORK_MAX_AT_ONCE 10
 
@@ -46,7 +47,7 @@ static void service_process_kill_idle(struct service_process *process)
 			      dec2str(process->pid));
 
 		/* assume this process is busy */
-		memset(&status, 0, sizeof(status));
+		i_zero(&status);
 		service_status_more(process, &status);
 		process->available_count = 0;
 	} else {
@@ -453,7 +454,8 @@ void services_monitor_start(struct service_list *service_list)
 		return;
 	service_anvil_monitor_start(service_list);
 
-	if (service_list->io_master == NULL) {
+	if (service_list->io_master == NULL &&
+	    service_list->master_fd != -1) {
 		service_list->io_master =
 			io_add(service_list->master_fd, IO_READ,
 			       master_client_connected, service_list);
@@ -572,8 +574,11 @@ void service_monitor_stop_close(struct service *service)
 static void services_monitor_wait(struct service_list *service_list)
 {
 	struct service *const *servicep;
-	time_t max_wait_time = time(NULL) + MAX_DIE_WAIT_SECS;
+	struct timeval tv_start;
 	bool finished;
+
+	io_loop_time_refresh();
+	tv_start = ioloop_timeval;
 
 	for (;;) {
 		finished = TRUE;
@@ -584,8 +589,60 @@ static void services_monitor_wait(struct service_list *service_list)
 			if ((*servicep)->process_avail > 0)
 				finished = FALSE;
 		}
-		if (finished || time(NULL) > max_wait_time)
+		io_loop_time_refresh();
+		if (finished ||
+		    timeval_diff_msecs(&ioloop_timeval, &tv_start) > MAX_DIE_WAIT_MSECS)
 			break;
+		usleep(100000);
+	}
+}
+
+static bool service_processes_close_listeners(struct service *service)
+{
+	struct service_process *process = service->processes;
+	bool ret = FALSE;
+
+	for (; process != NULL; process = process->next) {
+		if (kill(process->pid, SIGQUIT) == 0)
+			ret = TRUE;
+		else if (errno != ESRCH) {
+			service_error(service, "kill(%s, SIGQUIT) failed: %m",
+				      dec2str(process->pid));
+		}
+	}
+	return ret;
+}
+
+static bool
+service_list_processes_close_listeners(struct service_list *service_list)
+{
+	struct service *const *servicep;
+	bool ret = FALSE;
+
+	array_foreach(&service_list->services, servicep) {
+		if (service_processes_close_listeners(*servicep))
+			ret = TRUE;
+	}
+	return ret;
+}
+
+static void services_monitor_wait_and_kill(struct service_list *service_list)
+{
+	/* we've notified all children that the master is dead.
+	   now wait for the children to either die or to tell that
+	   they're no longer listening for new connections. */
+	services_monitor_wait(service_list);
+
+	/* Even if the waiting stopped early because all the process_avail==0,
+	   it can mean that there are processes that have the listener socket
+	   open (just not actively being listened to). We'll need to make sure
+	   that those sockets are closed before we exit, so that a restart
+	   won't fail. Do this by sending SIGQUIT to all the child processes
+	   that are left, which are handled by lib-master to immediately close
+	   the listener in the signal handler itself. */
+	if (service_list_processes_close_listeners(service_list)) {
+		/* SIGQUITs were sent. wait a little bit to make sure they're
+		   also processed before quitting. */
 		usleep(100000);
 	}
 }
@@ -597,12 +654,8 @@ void services_monitor_stop(struct service_list *service_list, bool wait)
 	array_foreach(&service_list->services, services)
 		service_monitor_close_dead_pipe(*services);
 
-	if (wait) {
-		/* we've notified all children that the master is dead.
-		   now wait for the children to either die or to tell that
-		   they're no longer listening for new connections */
-		services_monitor_wait(service_list);
-	}
+	if (wait)
+		services_monitor_wait_and_kill(service_list);
 
 	if (service_list->io_master != NULL)
 		io_remove(&service_list->io_master);
@@ -658,11 +711,7 @@ void services_monitor_reap_children(void)
 
 		service = process->service;
 		if (status == 0) {
-			/* success */
-			if (service->listen_pending &&
-			    !service->list->destroying)
-				service_monitor_listen_start(service);
-			/* one success resets all failures */
+			/* success - one success resets all failures */
 			service->have_successful_exits = TRUE;
 			service->exit_failures_in_sec = 0;
 			service->throttle_secs =

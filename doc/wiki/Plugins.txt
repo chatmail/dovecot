@@ -43,6 +43,8 @@ Distributed with Dovecot:
  * <imap_zlib> [Plugins.Compress.txt]: Enable IMAP COMPRESS
    [http://www.ietf.org/rfc/rfc4978.txt] extension
  * <mail_crypt> [Plugins.MailCrypt.txt]: In-rest mail encryption
+ * <var_expand_crypt> [Plugins.VarExpandCrypt.txt]: Variable
+   encryption/decryption
 
 External:
 
@@ -78,6 +80,8 @@ External:
    [https://github.com/openchange/openchange/tree/master/mapiproxy/services/plugins/dovecot]:
    Allows <OpenChange.txt> to update Microsoft Outook mailboxes automatically
    when new emails are received by Dovecot 2.x.
+ * TREES [https://0xacab.org/riseuplabs/trees]: A NaCL-based Dovecot encryption
+   plugin
 
 Experimental Plugins:
 
@@ -87,4 +91,4 @@ Experimental Plugins:
 To enable / disable plugins per user you can make your userdb return
 'mail_plugins' extra field. See <UserDatabase.ExtraFields.txt> for examples.
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -52,11 +52,12 @@ static int imap_notify_status(struct imap_notify_namespace *notify_ns,
 	enum mail_error error;
 	int ret = 1;
 
-	memset(&items, 0, sizeof(items));
+	i_zero(&items);
 	if ((client->enabled_features & MAILBOX_FEATURE_CONDSTORE) != 0)
 		items.status |= STATUS_HIGHESTMODSEQ;
 
 	box = mailbox_alloc(notify_ns->ns->list, rec->vname, 0);
+	mailbox_set_reason(box, "NOTIFY STATUS");
 	if ((rec->events & MAILBOX_LIST_NOTIFY_UIDVALIDITY) != 0) {
 		items.status |= STATUS_UIDVALIDITY | STATUS_UIDNEXT |
 			STATUS_MESSAGES | STATUS_UNSEEN;
@@ -190,13 +191,14 @@ bool imap_notify_match_mailbox(struct imap_notify_namespace *notify_ns,
 {
 	struct mailbox *box;
 	const char *const *namep;
-	unsigned int name_len;
+	size_t name_len;
 	char ns_sep;
 	bool ret;
 
 	switch (notify_boxes->type) {
 	case IMAP_NOTIFY_TYPE_SUBSCRIBED:
 		box = mailbox_alloc(notify_ns->ns->list, vname, 0);
+		mailbox_set_reason(box, "NOTIFY is subscribed");
 		ret = mailbox_is_subscribed(box);
 		mailbox_free(&box);
 		return ret;
@@ -519,4 +521,14 @@ void imap_notify_deinit(struct imap_notify_context **_ctx)
 	if (ctx->fetch_ctx != NULL)
 		imap_fetch_free(&ctx->fetch_ctx);
 	pool_unref(&ctx->pool);
+}
+
+void imap_notify_flush(struct imap_notify_context *ctx)
+{
+	struct imap_notify_namespace *notify_ns;
+
+	array_foreach_modifiable(&ctx->namespaces, notify_ns) {
+		if (notify_ns->notify != NULL)
+			mailbox_list_notify_flush(notify_ns->notify);
+	}
 }

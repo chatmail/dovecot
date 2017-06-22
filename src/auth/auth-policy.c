@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -15,6 +15,7 @@
 #include "auth-penalty.h"
 #include "auth-settings.h"
 #include "auth-policy.h"
+#include "iostream-ssl.h"
 
 #define AUTH_POLICY_DNS_SOCKET_PATH "dns-client"
 
@@ -159,6 +160,12 @@ void auth_policy_init(void)
 	http_client_set.request_absolute_timeout_msecs = global_auth_settings->policy_server_timeout_msecs;
 	if (global_auth_settings->debug)
 		http_client_set.debug = 1;
+	http_client_set.ssl_ca_dir = global_auth_settings->ssl_client_ca_dir;
+	http_client_set.ssl_ca_file = global_auth_settings->ssl_client_ca_file;
+	if (*http_client_set.ssl_ca_dir == '\0' &&
+	    *http_client_set.ssl_ca_file == '\0')
+		http_client_set.ssl_allow_invalid_cert = TRUE;
+
 	http_client = http_client_init(&http_client_set);
 
 	/* prepare template */
@@ -243,12 +250,13 @@ void auth_policy_parse_response(struct policy_lookup_ctx *context)
 	while((ret = json_parse_next(context->parser, &type, &value)) == 1) {
 		if (context->parse_state == POLICY_RESULT) {
 			if (type != JSON_TYPE_OBJECT_KEY)
-				break;
+				continue;
 			else if (strcmp(value, "status") == 0)
 				context->parse_state = POLICY_RESULT_VALUE_STATUS;
 			else if (strcmp(value, "msg") == 0)
 				context->parse_state = POLICY_RESULT_VALUE_MESSAGE;
-			else break;
+			else
+				continue;
 		} else if (context->parse_state == POLICY_RESULT_VALUE_STATUS) {
 			if (type != JSON_TYPE_NUMBER || str_to_int(value, &(context->result)) != 0)
 				break;
@@ -320,7 +328,7 @@ void auth_policy_parse_response(struct policy_lookup_ctx *context)
 	if (context->callback != NULL) {
 		context->callback(context->result, context->callback_context);
 	}
-};
+}
 
 static
 void auth_policy_process_response(const struct http_response *response,
@@ -332,7 +340,8 @@ void auth_policy_process_response(const struct http_response *response,
 
 	if ((response->status / 10) != 20) {
 		auth_request_log_error(context->request, "policy",
-			"Policy server HTTP error: %d %s", response->status, response->reason);
+			"Policy server HTTP error: %s",
+			http_response_get_message(response));
 		if (context->callback != NULL)
 			context->callback(context->result, context->callback_context);
 		return;
@@ -437,7 +446,7 @@ void auth_policy_create_json(struct policy_lookup_ctx *context,
 	i_assert(digest != NULL);
 
 	void *ctx = t_malloc(digest->context_size);
-	string_t *buffer = t_str_new(64);
+	buffer_t *buffer = buffer_create_dynamic(pool_datastack_create(), 64);
 
 	digest->init(ctx);
 	digest->loop(ctx,
@@ -450,13 +459,13 @@ void auth_policy_create_json(struct policy_lookup_ctx *context,
 		digest->loop(ctx, context->request->user, strlen(context->request->user) + 1);
 	if (password != NULL)
 		digest->loop(ctx, password, strlen(password));
-	ptr = (unsigned char*)str_c_modifiable(buffer);
+	ptr = buffer_get_modifiable_data(buffer, NULL);
 	digest->result(ctx, ptr);
-	str_truncate(buffer, digest->digest_size);
+	buffer_set_used_size(buffer, digest->digest_size);
 	if (context->set->policy_hash_truncate > 0) {
 		buffer_truncate_rshift_bits(buffer, context->set->policy_hash_truncate);
 	}
-	const char *hashed_password = binary_to_hex(str_data(buffer), str_len(buffer));
+	const char *hashed_password = binary_to_hex(buffer->data, buffer->used);
 	str_append_c(context->json, '{');
 	var_table = policy_get_var_expand_table(context->request, hashed_password);
 	auth_request_var_expand_with_table(context->json, auth_policy_json_template,

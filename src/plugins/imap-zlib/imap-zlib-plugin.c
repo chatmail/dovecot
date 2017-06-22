@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -145,7 +145,7 @@ static void imap_zlib_client_created(struct client **clientp)
 		zclient->next_state_export = (*clientp)->v.state_export;
 		(*clientp)->v.state_export = imap_zlib_state_export;
 
-		str_append(client->capability_string, " COMPRESS=DEFLATE");
+		client_add_capability(*clientp, "COMPRESS=DEFLATE");
 	}
 
 	if (next_hook_client_created != NULL)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -57,7 +57,7 @@ void imap_client_auth_result(struct client *client,
 		*/
 		referral = t_str_new(128);
 
-		memset(&url, 0, sizeof(url));
+		i_zero(&url);
 		url.userid = reply->destuser;
 		url.auth_type = client->auth_mech_name;
 		url.host_name = reply->host;

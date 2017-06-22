@@ -24,9 +24,7 @@ creation to become very slow and triggering this message.
 
 The fix is in v2.2.7 and you can also workaround this:
 
- * Add to dovecof.conf: 'import_environment = TZ DEBUG_OUTOFMEM
-   DOVECOT_HOSTDOMAIN'
- * Before "dovecot" binary is started, run: 'export
+ * Add to dovecot.conf: 'import_environment = TZ DEBUG_OUTOFMEM
    DOVECOT_HOSTDOMAIN=mailserver.example.com' (of course changing the value)
 
 Wrong service settings
@@ -68,4 +66,4 @@ the listener queue size, but uses a hardcoded upper limit of 511. Most OSes use
 an even lower limit, typically 128. In Linux you can increase this from
 '/proc/sys/net/core/somaxconn'.
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

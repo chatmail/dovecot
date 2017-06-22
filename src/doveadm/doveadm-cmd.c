@@ -31,9 +31,43 @@ static struct doveadm_cmd_ver2 *doveadm_commands_ver2[] = {
 	&doveadm_cmd_who_ver2
 };
 
+static const struct exit_code_str {
+	int code;
+	const char *str;
+} exit_code_strings[] = {
+	{ DOVEADM_EX_UNKNOWN, "UNKNOWN" },
+	{ EX_TEMPFAIL, "TEMPFAIL" },
+	{ EX_USAGE, "USAGE" },
+	{ EX_NOUSER, "NOUSER" },
+	{ EX_NOPERM, "NOPERM" },
+	{ EX_PROTOCOL, "PROTOCOL" },
+	{ EX_DATAERR, "DATAERR" },
+	{ DOVEADM_EX_NOTFOUND, "NOTFOUND" }
+};
+
 ARRAY_TYPE(doveadm_cmd) doveadm_cmds;
 ARRAY_TYPE(doveadm_cmd_ver2) doveadm_cmds_ver2;
 ARRAY_DEFINE_TYPE(getopt_option_array, struct option);
+
+const char *doveadm_exit_code_to_str(int code)
+{
+	for(size_t i = 0; i < N_ELEMENTS(exit_code_strings); i++) {
+		const struct exit_code_str *ptr = &exit_code_strings[i];
+		if (ptr->code == code)
+			return ptr->str;
+	}
+	return "UNKNOWN";
+}
+
+int doveadm_str_to_exit_code(const char *reason)
+{
+	for(size_t i = 0; i < N_ELEMENTS(exit_code_strings); i++) {
+		const struct exit_code_str *ptr = &exit_code_strings[i];
+		if (strcmp(ptr->str, reason) == 0)
+			return ptr->code;
+	}
+	return DOVEADM_EX_UNKNOWN;
+}
 
 void doveadm_register_cmd(const struct doveadm_cmd *cmd)
 {
@@ -111,7 +145,7 @@ doveadm_cmd_find_multi_word(const char *cmdname, int *_argc,
 {
 	int argc = *_argc;
 	const char *const *argv = *_argv;
-	unsigned int len;
+	size_t len;
 
 	if (argc < 2)
 		return NULL;
@@ -141,7 +175,7 @@ doveadm_cmd_find_with_args(const char *cmd_name, int *argc,
 			   const char *const *argv[])
 {
 	const struct doveadm_cmd *cmd;
-	unsigned int cmd_name_len;
+	size_t cmd_name_len;
 
 	i_assert(*argc > 0);
 
@@ -321,6 +355,10 @@ doveadm_cmd_params_to_argv(const char *name, int pargc, const struct doveadm_cmd
 	const char * const * cptr;
 	i_assert(array_count(argv) == 0);
 	array_append(argv, &name, 1);
+
+	ARRAY_TYPE(const_string) pargv;
+	t_array_init(&pargv, 8);
+
 	for(i=0;i<pargc;i++) {
 		const char *optarg = NULL;
 		/* istreams are special */
@@ -349,10 +387,19 @@ doveadm_cmd_params_to_argv(const char *name, int pargc, const struct doveadm_cmd
 				array_foreach(&params[i].value.v_array, cptr) {
 					if (array_add_opt)
 						array_append(argv, &optarg, 1);
-					array_append(argv, cptr, 1);
+					if ((params[i].flags & CMD_PARAM_FLAG_POSITIONAL) == 0)
+						array_append(argv, cptr, 1);
+					else
+						array_append(&pargv, cptr, 1);
 				}
 			}
 		}
+	}
+
+	if (array_count(&pargv) > 0) {
+		const char *dashdash = "--";
+		array_append(argv, &dashdash, 1);
+		array_append_array(argv, &pargv);
 	}
 	array_append_zero(argv);
 }
@@ -381,7 +428,7 @@ doveadm_build_options(const struct doveadm_cmd_param par[],
 	for(size_t i=0; par[i].name != NULL; i++) {
 		struct option longopt;
 
-		memset(&longopt, 0, sizeof(longopt));
+		i_zero(&longopt);
 		longopt.name = par[i].name;
 		if (par[i].short_opt != '\0') {
 			longopt.val = par[i].short_opt;

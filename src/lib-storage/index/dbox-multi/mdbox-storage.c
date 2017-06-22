@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -54,9 +54,11 @@ int mdbox_storage_create(struct mail_storage *_storage,
 	dir = mailbox_list_get_root_forced(ns->list, MAILBOX_LIST_PATH_TYPE_DIR);
 	storage->storage_dir = p_strconcat(_storage->pool, dir,
 					   "/"MDBOX_GLOBAL_DIR_NAME, NULL);
-	storage->alt_storage_dir = p_strconcat(_storage->pool,
-					       ns->list->set.alt_dir,
-					       "/"MDBOX_GLOBAL_DIR_NAME, NULL);
+	if (ns->list->set.alt_dir != NULL) {
+		storage->alt_storage_dir = p_strconcat(_storage->pool,
+							ns->list->set.alt_dir,
+							"/"MDBOX_GLOBAL_DIR_NAME, NULL);
+	}
 	i_array_init(&storage->open_files, 64);
 
 	storage->map = mdbox_map_init(storage, ns->list);
@@ -213,7 +215,7 @@ int mdbox_read_header(struct mdbox_mailbox *mbox,
 		mdbox_storage_set_corrupted(mbox->storage);
 		return -1;
 	}
-	memset(hdr, 0, sizeof(*hdr));
+	i_zero(hdr);
 	if (data_size > 0)
 		memcpy(hdr, data, I_MIN(data_size, sizeof(*hdr)));
 	*need_resize_r = data_size < sizeof(*hdr);
@@ -228,7 +230,7 @@ void mdbox_update_header(struct mdbox_mailbox *mbox,
 	bool need_resize;
 
 	if (mdbox_read_header(mbox, &hdr, &need_resize) < 0) {
-		memset(&hdr, 0, sizeof(hdr));
+		i_zero(&hdr);
 		need_resize = TRUE;
 	}
 
@@ -397,7 +399,7 @@ mdbox_mailbox_get_guid(struct mdbox_mailbox *mbox, guid_128_t guid_r)
 	}
 
 	if (mdbox_read_header(mbox, &hdr, &need_resize) < 0)
-		memset(&hdr, 0, sizeof(hdr));
+		i_zero(&hdr);
 
 	if (guid_128_is_empty(hdr.mailbox_guid)) {
 		/* regenerate it */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -11,6 +11,7 @@
 #include "master-service.h"
 #include "master-service-settings.h"
 #include "master-interface.h"
+#include "mail-deliver.h"
 #include "mail-storage-service.h"
 #include "lda-settings.h"
 #include "lmtp-settings.h"
@@ -46,11 +47,12 @@ static void drop_privileges(void)
 	struct master_service_settings_input input;
 	struct master_service_settings_output output;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = "lmtp";
 	input.service = "lmtp";
-	(void)master_service_settings_read(master_service,
-					   &input, &output, &error);
+	if (master_service_settings_read(master_service,
+					 &input, &output, &error) < 0)
+		i_fatal("Error reading configuration: %s", error);
 	restrict_access_by_env(NULL, FALSE);
 }
 
@@ -59,10 +61,11 @@ static void main_init(void)
 	struct master_service_connection conn;
 
 	if (IS_STANDALONE()) {
-		memset(&conn, 0, sizeof(conn));
+		i_zero(&conn);
 		(void)client_create(STDIN_FILENO, STDOUT_FILENO, &conn);
 	}
 	dns_client_socket_path = t_abspath(DNS_CLIENT_SOCKET_PATH);
+	mail_deliver_hooks_init();
 }
 
 static void main_deinit(void)
@@ -86,8 +89,7 @@ int main(int argc, char *argv[])
 		MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP |
 		MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP |
 		MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT |
-		MAIL_STORAGE_SERVICE_FLAG_NO_IDLE_TIMEOUT |
-		MAIL_STORAGE_SERVICE_FLAG_AUTOEXPUNGE;
+		MAIL_STORAGE_SERVICE_FLAG_NO_IDLE_TIMEOUT;
 	int c;
 
 	if (IS_STANDALONE()) {

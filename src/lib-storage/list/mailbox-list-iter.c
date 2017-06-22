@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -112,7 +112,7 @@ mailbox_settings_add_ns_prefix(pool_t pool, struct mail_namespace *ns,
 	return out_set;
 }
 
-static void
+void
 mailbox_list_iter_init_autocreate(struct mailbox_list_iterate_context *ctx)
 {
 	struct mail_namespace *ns = ctx->list->ns;
@@ -255,7 +255,7 @@ static bool ns_match_next(struct ns_list_iterate_context *ctx,
 	struct imap_match_glob *glob;
 	enum imap_match_result result;
 	const char *prefix_without_sep;
-	unsigned int len;
+	size_t len;
 
 	len = ns->prefix_len;
 	if (len > 0 && ns->prefix[len-1] == mail_namespace_get_sep(ns))
@@ -375,7 +375,7 @@ ns_prefix_has_visible_child_namespace(struct ns_list_iterate_context *ctx,
 				      const char *prefix)
 {
 	struct mail_namespace *ns;
-	unsigned int prefix_len = strlen(prefix);
+	size_t prefix_len = strlen(prefix);
 	int ret;
 
 	for (ns = ctx->namespaces; ns != NULL; ns = ns->next) {
@@ -467,7 +467,7 @@ mailbox_list_ns_prefix_return(struct ns_list_iterate_context *ctx,
 	if (ns->prefix_len == 0 || !mailbox_list_ns_prefix_match(ctx, ns))
 		return FALSE;
 
-	memset(&ctx->ns_info, 0, sizeof(ctx->ns_info));
+	i_zero(&ctx->ns_info);
 	ctx->ns_info.ns = ns;
 	ctx->ns_info.vname = p_strndup(ctx->pool, ns->prefix,
 				       ns->prefix_len-1);
@@ -789,7 +789,8 @@ autocreate_box_match(const ARRAY_TYPE(mailbox_settings) *boxes,
 		     bool only_subscribed, unsigned int *idx_r)
 {
 	struct mailbox_settings *const *sets;
-	unsigned int i, count, len, name_len = strlen(name);
+	unsigned int i, count;
+	size_t len, name_len = strlen(name);
 	enum autocreate_match_result result = 0;
 	char sep = mail_namespace_get_sep(ns);
 
@@ -879,7 +880,7 @@ autocreate_iter_existing(struct mailbox_list_iterate_context *ctx)
 		/* there are autocreate parent boxes.
 		   set their children flag states. */
 		struct autocreate_box *autobox;
-		unsigned int name_len;
+		size_t name_len;
 		char sep = mail_namespace_get_sep(ctx->list->ns);
 
 		array_foreach_modifiable(&actx->boxes, autobox) {
@@ -905,7 +906,7 @@ static bool autocreate_iter_autobox(struct mailbox_list_iterate_context *ctx,
 		ctx->autocreate_ctx;
 	enum imap_match_result match;
 
-	memset(&actx->new_info, 0, sizeof(actx->new_info));
+	i_zero(&actx->new_info);
 	actx->new_info.ns = ctx->list->ns;
 	actx->new_info.vname = autobox->name;
 	actx->new_info.flags = autobox->flags;
@@ -972,25 +973,25 @@ mailbox_list_iter_next_call(struct mailbox_list_iterate_context *ctx)
 			info = &ctx->specialuse_info;
 		}
 	}
+
+	if (info != NULL && ctx->autocreate_ctx != NULL) {
+	        ctx->autocreate_ctx->new_info = *info;
+	        return autocreate_iter_existing(ctx);
+	}
+
 	return info;
 }
 
-static const struct mailbox_info *
-autocreate_iter_next(struct mailbox_list_iterate_context *ctx)
+const struct mailbox_info *
+mailbox_list_iter_default_next(struct mailbox_list_iterate_context *ctx)
 {
 	struct mailbox_list_autocreate_iterate_context *actx =
 		ctx->autocreate_ctx;
-	const struct mailbox_info *info;
 	const struct autocreate_box *autoboxes, *autobox;
 	unsigned int count;
 
-	if (actx->idx == 0) {
-		info = mailbox_list_iter_next_call(ctx);
-		if (info != NULL) {
-			actx->new_info = *info;
-			return autocreate_iter_existing(ctx);
-		}
-	}
+	if (actx == NULL)
+		return NULL;
 
 	/* list missing mailboxes */
 	autoboxes = array_get(&actx->boxes, &count);
@@ -1027,10 +1028,7 @@ mailbox_list_iter_next(struct mailbox_list_iterate_context *ctx)
 		return NULL;
 	do {
 		T_BEGIN {
-			if (ctx->autocreate_ctx != NULL)
-				info = autocreate_iter_next(ctx);
-			else
-				info = mailbox_list_iter_next_call(ctx);
+			info = mailbox_list_iter_next_call(ctx);
 		} T_END;
 	} while (info != NULL && !special_use_selection(ctx, info));
 	return info;

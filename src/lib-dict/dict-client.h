@@ -6,7 +6,9 @@
 #define DEFAULT_DICT_SERVER_SOCKET_FNAME "dict"
 
 #define DICT_CLIENT_PROTOCOL_MAJOR_VERSION 2
-#define DICT_CLIENT_PROTOCOL_MINOR_VERSION 1
+#define DICT_CLIENT_PROTOCOL_MINOR_VERSION 2
+
+#define DICT_CLIENT_PROTOCOL_VERSION_MIN_MULTI_OK 2
 
 #define DICT_CLIENT_MAX_LINE_LENGTH (64*1024)
 
@@ -25,13 +27,15 @@ enum dict_protocol_cmd {
 	DICT_PROTOCOL_CMD_SET = 'S', /* <id> <key> <value> */
 	DICT_PROTOCOL_CMD_UNSET = 'U', /* <id> <key> */
 	DICT_PROTOCOL_CMD_APPEND = 'P', /* <id> <key> <value> */
-	DICT_PROTOCOL_CMD_ATOMIC_INC = 'A' /* <id> <key> <diff> */
+	DICT_PROTOCOL_CMD_ATOMIC_INC = 'A', /* <id> <key> <diff> */
+	DICT_PROTOCOL_CMD_TIMESTAMP = 'T', /* <id> <secs> <nsecs> */
 };
 
 enum dict_protocol_reply {
 	DICT_PROTOCOL_REPLY_ERROR = -1,
 
 	DICT_PROTOCOL_REPLY_OK = 'O', /* <value> */
+	DICT_PROTOCOL_REPLY_MULTI_OK = 'M', /* protocol v2.2+ */
 	DICT_PROTOCOL_REPLY_NOTFOUND = 'N',
 	DICT_PROTOCOL_REPLY_FAIL = 'F',
 	DICT_PROTOCOL_REPLY_WRITE_UNCERTAIN = 'W',

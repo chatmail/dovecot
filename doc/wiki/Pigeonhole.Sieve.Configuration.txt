@@ -5,24 +5,26 @@ Script Locations
 ----------------
 
 The Sieve interpreter can retrieve Sieve scripts from several types of
-locations. The default 'file' location type is a local filesystem path pointing
-to a Sieve script file or a directory containing multiple Sieve script files.
-More complex setups can use other location types such as 'ldap' or 'dict' to
-fetch Sieve scripts from remote databases.
+locations. The default 'file' location type is a directory containing one or
+more Sieve script files with a symlink pointing to the active one. More complex
+setups can use other location types such as 'ldap' or 'dict' to fetch Sieve
+scripts from remote databases.
 
-All settings that specify the location of one ore more Sieve scripts accept the
+All settings that specify the location of one or more Sieve scripts accept the
 following syntax::
 
 ---%<-------------------------------------------------------------------------
-location = [<type>:]path[;<option>[=<value>][;...]]
+<setting> = [<type>:]path[;<option>[=<value>][;...]]
 ---%<-------------------------------------------------------------------------
 
 The following script location types are implemented by default:
 
 file :
-  The location path is a file system path pointing to the script file or a
-  directory containing script files with names structured as
-  '<script-name>.sieve'. Read <this wiki page>
+  The location path is a file system path pointing to a directory containing
+  one or more script files with names structured as '<script-name>.sieve' with
+  the active option (default ~/.dovecot.sieve) specifying a symlink to the one
+  that will be used, or without the active option specified, it may be a script
+  file instead of a directory. Read <this wiki page>
   [Pigeonhole.Sieve.Configuration.File.txt] for more information and examples.
 
 dict :
@@ -133,6 +135,15 @@ sieve_global = :
   [http://tools.ietf.org/html/draft-ietf-sieve-include-05]. This setting used
   to be called 'sieve_global_dir', but that name is now deprecated.
 
+sieve_discard = (v0.4.16+) :
+  The location of a Sieve script that is run for any message that is about to
+  be discarded; i.e., it is not delivered anywhere by the normal Sieve
+  execution. This only happens when the "implicit keep" is canceled, by e.g.
+  the "discard" action, and no actions that deliver the message are executed.
+  This "discard script" can prevent discarding the message, by executing
+  alternative actions. If the discard script does nothing, the message is still
+  discarded as it would be when no discard script is configured.
+
 sieve_extensions = :
   Which Sieve language extensions are available to users. By default, all
   supported extensions are available, except for deprecated extensions,
@@ -159,10 +170,27 @@ sieve_global_extensions = (v0.3+) :
   or disabled for exclusive use in global scripts. Currently, no extensions are
   marked as such by default.
 
+sieve_implicit_extensions = (v0.4.13+) :
+  Which Sieve language extensions are implicitly available to users. The
+  extensions listed in this setting do not need to be enabled explicitly using
+  the Sieve "require" command. This behavior directly violates the Sieve
+  standard, but can be necessary for compatibility with some existing
+  implementations of Sieve (notably jSieve). Do not use this setting unless you
+  really need to! The syntax and semantics of this setting are otherwise
+  identical to the 'sieve_extensions' setting.
+
 sieve_plugins = :
   The Pigeonhole Sieve interpreter can have plugins of its own. Using this
   setting, the used plugins can be specified. Check the <Sieve plugins page>
   [Pigeonhole.Sieve.Plugins.txt] for available plugins.
+
+sieve_user_email = (v0.4.14+) :
+  The primary e-mail address for the user. This is used as a default when no
+  other appropriate address is available for sending messages. If this setting
+  is not configured, either the postmaster or null "<>" address is used as a
+  sender, depending on the action involved. This setting is important when
+  there is no message envelope to extract addresses from, such as when the
+  script is executed in IMAP.
 
 sieve_user_log = :
   The path to the file where the user log file is written. If not configured, a
@@ -193,6 +221,14 @@ sieve_redirect_envelope_from = sender (v0.4.4+):
 
   "orig_recipient" :
     The original recipient is used
+
+  "user_email" (v0.4.14+):
+    The user's primary address is used. This is configured with the
+    "sieve_user_email" setting. If that setting is not configured, "user_mail"
+    is equal to "sender" (the default).
+
+  "postmaster" :
+    The postmaster_address configured for LDA/LMTP.
 
   "<user@domain>" :
     Redirected messages are always sent from user@domain. The angle brackets
@@ -524,4 +560,4 @@ From Dovecot Sieve v0.1.x (Dovecot v1.2)
    compatibility, it is recommended to update the setting to the new name,
    since the <LMTP.txt> service also uses the 'recipient_delimiter' setting.
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

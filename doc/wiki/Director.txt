@@ -66,6 +66,11 @@ service director {
   inet_listener {
     port = 9090
   }
+  ## uncomment this if you want to use
+  ## doveadm director status -a ip:9091
+  #inet_listener director-doveadm {
+  #   port = 9091
+  #}
 }
 ---%<-------------------------------------------------------------------------
 
@@ -344,4 +349,4 @@ The user-flush.sh will receive as parameters:
  * old host's IP
  * new host's IP
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "pop3-common.h"
 #include "array.h"
@@ -611,7 +611,7 @@ pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 		if (mail_get_special(mail, MAIL_FETCH_HEADER_MD5,
 				     &tab[2].value) < 0) {
 			i_error("UIDL: Header MD5 lookup failed: %s",
-				mailbox_get_last_error(mail->box, NULL));
+				mailbox_get_last_internal_error(mail->box, NULL));
 			return -1;
 		} else if (*tab[2].value == '\0') {
 			i_error("UIDL: Header MD5 not found "
@@ -623,7 +623,7 @@ pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 		if (mail_get_special(mail, MAIL_FETCH_STORAGE_ID,
 				     &tab[3].value) < 0) {
 			i_error("UIDL: File name lookup failed: %s",
-				mailbox_get_last_error(mail->box, NULL));
+				mailbox_get_last_internal_error(mail->box, NULL));
 			return -1;
 		} else if (*tab[3].value == '\0') {
 			i_error("UIDL: File name not found "
@@ -635,7 +635,7 @@ pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 		if (mail_get_special(mail, MAIL_FETCH_GUID,
 				     &tab[4].value) < 0) {
 			i_error("UIDL: Message GUID lookup failed: %s",
-				mailbox_get_last_error(mail->box, NULL));
+				mailbox_get_last_internal_error(mail->box, NULL));
 			return -1;
 		} else if (*tab[4].value == '\0') {
 			i_error("UIDL: Message GUID not found "
@@ -827,7 +827,7 @@ static void client_uidls_save(struct client *client)
 	}
 	/* map UIDLs to msgnums (in case POP3 sort ordering is different) */
 	client->message_uidls = p_new(client->uidl_pool, const char *,
-				      client->messages_count+1);
+				      MALLOC_ADD(client->messages_count, 1));
 	for (msgnum = 0; msgnum < client->messages_count; msgnum++) {
 		client->message_uidls[msgnum] =
 			seq_uidls[msgnum_to_seq(client, msgnum) - 1];

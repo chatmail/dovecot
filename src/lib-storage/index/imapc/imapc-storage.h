@@ -3,6 +3,7 @@
 
 #include "index-storage.h"
 #include "imapc-settings.h"
+#include "imapc-client.h"
 
 #define IMAPC_STORAGE_NAME "imapc"
 #define IMAPC_LIST_ESCAPE_CHAR '%'
@@ -51,6 +52,10 @@ struct imapc_storage_client {
 
 	ARRAY(struct imapc_storage_event_callback) untagged_callbacks;
 
+	char *auth_error;
+	/* Authentication reply was received (success or failure) */
+	bool auth_returned:1;
+	/* Authentication failed */
 	unsigned int auth_failed:1;
 	unsigned int destroying:1;
 };
@@ -87,6 +92,7 @@ struct imapc_mailbox {
 	struct mailbox box;
 	struct imapc_storage *storage;
 	struct imapc_client_mailbox *client_box;
+	enum imapc_capability capabilities;
 
 	struct mail_index_transaction *delayed_sync_trans;
 	struct mail_index_view *sync_view, *delayed_sync_view;
@@ -167,7 +173,7 @@ void imapc_mailbox_run_nofetch(struct imapc_mailbox *mbox);
 void imapc_mail_cache_free(struct imapc_mail_cache *cache);
 int imapc_mailbox_select(struct imapc_mailbox *mbox);
 
-bool imapc_storage_has_modseqs(struct imapc_storage *storage);
+bool imapc_mailbox_has_modseqs(struct imapc_mailbox *mbox);
 bool imap_resp_text_code_parse(const char *str, enum mail_error *error_r);
 void imapc_copy_error_from_reply(struct imapc_storage *storage,
 				 enum mail_error default_error,

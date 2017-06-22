@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -80,12 +80,12 @@ static bool is_valid_xml_char(unichar_t chr)
 	return chr < 0x10ffff;
 }
 
-static unsigned int
-xml_encode_data_max(string_t *dest, const unsigned char *data, unsigned int len,
+static size_t
+xml_encode_data_max(string_t *dest, const unsigned char *data, size_t len,
 		    unsigned int max_len)
 {
 	unichar_t chr;
-	unsigned int i;
+	size_t i;
 
 	i_assert(max_len > 0 || len == 0);
 
@@ -135,7 +135,7 @@ xml_encode_data_max(string_t *dest, const unsigned char *data, unsigned int len,
 }
 
 static void
-xml_encode_data(string_t *dest, const unsigned char *data, unsigned int len)
+xml_encode_data(string_t *dest, const unsigned char *data, size_t len)
 {
 	(void)xml_encode_data_max(dest, data, len, len);
 }
@@ -324,7 +324,7 @@ fts_solr_field_get(struct solr_fts_backend_update_context *ctx, const char *key)
 			return field->value;
 	}
 
-	memset(&new_field, 0, sizeof(new_field));
+	i_zero(&new_field);
 	new_field.key = str_lcase(i_strdup(key));
 	new_field.value = str_new(default_pool, 128);
 	array_append(&ctx->fields, &new_field, 1);
@@ -342,7 +342,8 @@ fts_backend_solr_doc_close(struct solr_fts_backend_update_context *ctx)
 	}
 	array_foreach_modifiable(&ctx->fields, field) {
 		str_printfa(ctx->cmd, "<field name=\"%s\">", field->key);
-		xml_encode_data(ctx->cmd, str_data(field->value), str_len(field->value));
+		/* the values are already xml-escaped */
+		str_append_str(ctx->cmd, field->value);
 		str_append(ctx->cmd, "</field>");
 		str_truncate(field->value, 0);
 	}
@@ -564,7 +565,7 @@ fts_backend_solr_update_build_more(struct fts_backend_update_context *_ctx,
 {
 	struct solr_fts_backend_update_context *ctx =
 		(struct solr_fts_backend_update_context *)_ctx;
-	unsigned int len;
+	size_t len;
 
 	if (_ctx->failed)
 		return -1;
@@ -707,7 +708,7 @@ static bool
 solr_add_definite_query_args(string_t *str, struct mail_search_arg *arg,
 			     bool and_args)
 {
-	unsigned int last_len;
+	size_t last_len;
 
 	last_len = str_len(str);
 	for (; arg != NULL; arg = arg->next) {
@@ -764,7 +765,7 @@ static bool
 solr_add_maybe_query_args(string_t *str, struct mail_search_arg *arg,
 			  bool and_args)
 {
-	unsigned int last_len;
+	size_t last_len;
 
 	last_len = str_len(str);
 	for (; arg != NULL; arg = arg->next) {
@@ -821,14 +822,14 @@ fts_backend_solr_lookup(struct fts_backend *_backend, struct mailbox *box,
 	struct mailbox_status status;
 	string_t *str;
 	const char *box_guid;
-	unsigned int prefix_len;
+	size_t prefix_len;
 
 	if (fts_mailbox_get_guid(box, &box_guid) < 0)
 		return -1;
 	mailbox_get_open_status(box, STATUS_UIDNEXT, &status);
 
 	str = t_str_new(256);
-	str_printfa(str, "fl=uid,score&rows=%u&sort=uid+asc&q={!lucene+q.op%%3dAND}",
+	str_printfa(str, "fl=uid,score&rows=%u&sort=uid+asc&q=%%7b!lucene+q.op%%3dAND%%7d",
 		    status.uidnext);
 	prefix_len = str_len(str);
 
@@ -862,7 +863,8 @@ solr_search_multi(struct fts_backend *_backend, string_t *str,
 	HASH_TABLE(char *, struct mailbox *) mailboxes;
 	struct mailbox *box;
 	const char *box_guid;
-	unsigned int i, len;
+	unsigned int i;
+	size_t len;
 	bool search_all_mailboxes;
 
 	/* use a separate filter query for selecting the mailbox. it shouldn't
@@ -937,7 +939,7 @@ fts_backend_solr_lookup_multi(struct fts_backend *backend,
 	string_t *str;
 
 	str = t_str_new(256);
-	str_printfa(str, "fl=box,uid,score&rows=%u&sort=box+asc,uid+asc&q={!lucene+q.op%%3dAND}",
+	str_printfa(str, "fl=box,uid,score&rows=%u&sort=box+asc,uid+asc&q=%%7b!lucene+q.op%%3dAND%%7d",
 		    SOLR_MAX_MULTI_ROWS);
 
 	if (solr_add_definite_query_args(str, args, and_args)) {

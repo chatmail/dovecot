@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "mail-namespace.h"
@@ -9,7 +9,7 @@ bool cmd_rename(struct client_command_context *cmd)
 	struct mail_namespace *old_ns, *new_ns;
 	struct mailbox *old_box, *new_box;
 	const char *oldname, *newname;
-	unsigned int oldlen;
+	size_t oldlen;
 
 	/* <old name> <new name> */
 	if (!client_read_string_args(cmd, 2, &oldname, &newname))
@@ -37,6 +37,8 @@ bool cmd_rename(struct client_command_context *cmd)
 
 	old_box = mailbox_alloc(old_ns->list, oldname, 0);
 	new_box = mailbox_alloc(new_ns->list, newname, 0);
+	mailbox_set_reason(old_box, "RENAME from");
+	mailbox_set_reason(new_box, "RENAME to");
 	if (mailbox_rename(old_box, new_box) < 0)
 		client_send_box_error(cmd, old_box);
 	else

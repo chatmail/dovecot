@@ -22,9 +22,9 @@ libdcrypt_la_LDFLAGS = -export-dynamic
 if BUILD_DCRYPT_OPENSSL
 pkglib_LTLIBRARIES += libdcrypt_openssl.la
 libdcrypt_openssl_la_SOURCES = dcrypt-openssl.c
-libdcrypt_openssl_la_LDFLAGS = -module -avoid-version -shared ../lib-ssl-iostream/libdovecot_openssl_common.la ../lib/liblib.la
+libdcrypt_openssl_la_LDFLAGS = -module -avoid-version ../lib-ssl-iostream/libssl_iostream_openssl.la
 libdcrypt_openssl_la_LIBADD = $(SSL_LIBS)
-libdcrypt_openssl_la_DEPENDENCIES = ../lib-ssl-iostream/libdovecot_openssl_common.la ../lib/liblib.la
+libdcrypt_openssl_la_DEPENDENCIES = ../lib-ssl-iostream/libssl_iostream_openssl.la
 libdcrypt_openssl_la_CFLAGS = $(AM_CPPFLAGS) \
 	$(SSL_CFLAGS)
 endif
@@ -55,6 +55,7 @@ check-test: all-am
 	done
 
 LIBDOVECOT_TEST_DEPS = \
+	../lib-ssl-iostream/libssl_iostream.la \
 	../lib-test/libtest.la \
 	../lib/liblib.la
 LIBDOVECOT_TEST = \

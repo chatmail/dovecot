@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -461,7 +461,7 @@ lmtp_client_parse_capabilities(struct lmtp_client *client, const char *lines)
 static bool lmtp_client_send_xclient(struct lmtp_client *client)
 {
 	string_t *str;
-	unsigned int empty_len;
+	size_t empty_len;
 
 	if (client->xclient_args == NULL) {
 		/* not supported */
@@ -634,7 +634,7 @@ static void lmtp_client_wait_connect(struct lmtp_client *client)
 				 " (connect)");
 		return;
 	}
-	if (client->to != NULL)
+	if (client->data_input == NULL && client->to != NULL)
 		timeout_remove(&client->to);
 	io_remove(&client->io);
 	client->io = io_add(client->fd, IO_READ, lmtp_client_input, client);
@@ -734,7 +734,7 @@ int lmtp_client_connect_tcp(struct lmtp_client *client,
 		return -1;
 	}
 
-	memset(&dns_lookup_set, 0, sizeof(dns_lookup_set));
+	i_zero(&dns_lookup_set);
 	dns_lookup_set.dns_client_socket_path =
 		client->set.dns_client_socket_path;
 	dns_lookup_set.timeout_msecs = LMTP_CLIENT_DNS_LOOKUP_TIMEOUT_MSECS;
@@ -808,7 +808,7 @@ void lmtp_client_add_rcpt(struct lmtp_client *client, const char *address,
 {
 	struct lmtp_recipient_params params;
 
-	memset(&params, 0, sizeof(params));
+	i_zero(&params);
 	lmtp_client_add_rcpt_params(client, address, &params, rcpt_to_callback,
 				    data_callback, context);
 }

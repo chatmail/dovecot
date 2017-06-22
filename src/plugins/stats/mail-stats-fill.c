@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "time-util.h"
@@ -115,7 +115,7 @@ void mail_stats_fill(struct stats_user *suser, struct mail_stats *stats_r)
 	static struct rusage prev_usage;
 	struct rusage usage;
 
-	memset(stats_r, 0, sizeof(*stats_r));
+	i_zero(stats_r);
 	/* cputime */
 	if (getrusage(RUSAGE_SELF, &usage) < 0) {
 		if (!getrusage_broken) {
@@ -140,4 +140,10 @@ void mail_stats_fill(struct stats_user *suser, struct mail_stats *stats_r)
 	(void)gettimeofday(&stats_r->clock_time, NULL);
 	process_read_io_stats(stats_r);
 	user_trans_stats_get(suser, stats_r);
+}
+
+void mail_stats_fill_global_deinit(void)
+{
+	if (proc_io_fd != -1)
+		i_close_fd(&proc_io_fd);
 }

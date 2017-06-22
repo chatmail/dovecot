@@ -1,6 +1,7 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
+#include "str.h"
 #include "base64.h"
 #include "buffer.h"
 #include "hex-binary.h"
@@ -128,7 +129,7 @@ static void master_send_request(struct anvil_request *anvil_request)
 	buffer_t *buf;
 	const char *session_id = client_get_session_id(client);
 
-	memset(&req, 0, sizeof(req));
+	i_zero(&req);
 	req.auth_pid = anvil_request->auth_pid;
 	req.auth_id = anvil_request->auth_id;
 	req.local_ip = client->local_ip;
@@ -153,7 +154,7 @@ static void master_send_request(struct anvil_request *anvil_request)
 	client->auth_finished = ioloop_time;
 	client->master_auth_id = req.auth_id;
 
-	memset(&params, 0, sizeof(params));
+	i_zero(&params);
 	params.client_fd = client->fd;
 	params.socket_path = client->postlogin_socket_path;
 	params.request = req;
@@ -354,7 +355,7 @@ void sasl_server_auth_begin(struct client *client,
 		return;
 	}
 
-	memset(&info, 0, sizeof(info));
+	i_zero(&info);
 	info.mech = mech->name;
 	info.service = service;
 	info.session_id = client_get_session_id(client);
@@ -370,6 +371,10 @@ void sasl_server_auth_begin(struct client *client,
 	info.real_remote_ip = client->real_remote_ip;
 	info.real_local_port = client->real_local_port;
 	info.real_remote_port = client->real_remote_port;
+	if (client->client_id != NULL)
+		info.client_id = str_c(client->client_id);
+	if (client->forward_fields != NULL)
+		info.forward_fields = str_c(client->forward_fields);
 	info.initial_resp_base64 = initial_resp_base64;
 
 	client->auth_request =

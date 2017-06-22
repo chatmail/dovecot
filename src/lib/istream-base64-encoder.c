@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -10,7 +10,7 @@ struct base64_encoder_istream {
 	struct istream_private istream;
 
 	/* current encoded line length. */
-	unsigned int cur_line_len;
+	size_t cur_line_len;
 
 	unsigned int chars_per_line;
 	bool crlf;

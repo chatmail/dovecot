@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "connection.h"
@@ -57,8 +57,8 @@ imap_master_client_parse_input(const char *const *args, pool_t pool,
 	const char *key, *value;
 	unsigned int peer_dev_major = 0, peer_dev_minor = 0;
 
-	memset(input_r, 0, sizeof(*input_r));
-	memset(master_input_r, 0, sizeof(*master_input_r));
+	i_zero(input_r);
+	i_zero(master_input_r);
 	master_input_r->client_input = buffer_create_dynamic(pool, 64);
 	master_input_r->client_output = buffer_create_dynamic(pool, 16);
 	master_input_r->state = buffer_create_dynamic(pool, 512);
@@ -201,14 +201,14 @@ imap_master_client_input_args(struct connection *conn, const char *const *args,
 	if (imap_master_client_parse_input(args, pool, &input, &master_input,
 					   &error) < 0) {
 		i_error("imap-master: Failed to parse client input: %s", error);
-		o_stream_send_str(conn->output, t_strdup_printf(
+		o_stream_nsend_str(conn->output, t_strdup_printf(
 			"-Failed to parse client input: %s\n", error));
 		i_close_fd(&fd_client);
 		return -1;
 	}
 	if (imap_master_client_verify(&master_input, fd_client, &error) < 0) {
 		i_error("imap-master: Failed to verify client input: %s", error);
-		o_stream_send_str(conn->output, t_strdup_printf(
+		o_stream_nsend_str(conn->output, t_strdup_printf(
 			"-Failed to verify client input: %s\n", error));
 		i_close_fd(&fd_client);
 		return -1;
@@ -216,7 +216,7 @@ imap_master_client_input_args(struct connection *conn, const char *const *args,
 	/* Send a success notification before we start anything that lasts
 	   potentially a long time. imap-hibernate process is waiting for us
 	   to answer. Even if we fail later, we log the error anyway. */
-	o_stream_send_str(conn->output, "+\n");
+	o_stream_nsend_str(conn->output, "+\n");
 
 	/* NOTE: before client_create_from_input() on failures we need to close
 	   fd_client, but afterward it gets closed by client_destroy() */
@@ -226,6 +226,11 @@ imap_master_client_input_args(struct connection *conn, const char *const *args,
 		i_error("imap-master(%s): Failed to create client: %s",
 			input.username, error);
 		i_close_fd(&fd_client);
+		return -1;
+	}
+	if (mail_namespaces_init(imap_client->user, &error) < 0) {
+		i_error("%s", error);
+		client_destroy(imap_client, error);
 		return -1;
 	}
 	/* log prefix is set at this point, so we don't need to add the

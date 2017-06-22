@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -240,7 +240,7 @@ static void master_login_postlogin_input(struct master_login_postlogin *pl)
 	struct master_login *login = pl->client->conn->login;
 	char buf[1024];
 	const char **auth_args, **p;
-	unsigned int len;
+	size_t len;
 	ssize_t ret;
 	int fd = -1;
 
@@ -356,7 +356,7 @@ master_login_auth_callback(const char *const *auth_args, const char *errormsg,
 	struct master_login_connection *conn = client->conn;
 	struct master_auth_reply reply;
 
-	memset(&reply, 0, sizeof(reply));
+	i_zero(&reply);
 	reply.tag = client->auth_req.tag;
 	reply.status = errormsg == NULL ? MASTER_AUTH_STATUS_OK :
 		MASTER_AUTH_STATUS_INTERNAL_ERROR;
@@ -396,7 +396,7 @@ static void master_login_conn_input(struct master_login_connection *conn)
 	struct master_login_client *client;
 	struct master_login *login = conn->login;
 	unsigned char data[MASTER_AUTH_MAX_DATA_SIZE];
-	unsigned int i, session_len = 0;
+	size_t i, session_len = 0;
 	int ret, client_fd;
 
 	ret = master_login_conn_read_request(conn, &req, data, &client_fd);
@@ -423,7 +423,7 @@ static void master_login_conn_input(struct master_login_connection *conn)
 
 	/* @UNSAFE: we have a request. do userdb lookup for it. */
 	req.data_size -= i;
-	client = i_malloc(sizeof(struct master_login_client) + req.data_size);
+	client = i_malloc(MALLOC_ADD(sizeof(struct master_login_client), req.data_size));
 	client->conn = conn;
 	client->fd = client_fd;
 	client->auth_req = req;

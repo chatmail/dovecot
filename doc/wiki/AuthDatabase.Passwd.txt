@@ -6,10 +6,7 @@ User is looked up using 'getpwnam()' call, which usually looks into
 [http://en.wikipedia.org/wiki/Name_Service_Switch] configuration it may also
 look up the user from eg. LDAP database.
 
-Most commonly used as a user database. Many systems use shadow passwords
-nowadays so it doesn't usually work as a password database. BSDs are an
-exception to this, they still set the password field even with shadow
-passwords.
+Most commonly used as a user database.
 
 The lookup is by default done in the auth worker processes. If you have only a
 small local passwd file, you can avoid having extra auth worker processes by
@@ -42,4 +39,15 @@ userdb {
 This uses the UID and GID fields from passwd, but home directory is overridden.
 Also the default <mail_location> [MailLocation.txt] setting is overridden.
 
-(This file was created from the wiki on 2016-12-03 04:43)
+Passwd as a password database
+-----------------------------
+
+Many systems use shadow passwords nowadays so passwd doesn't usually work as a
+password database. BSDs are an exception to this, they still set the password
+field even with shadow passwords.
+
+With FreeBSD, passwd doesn't work as a password database because the password
+field is replaced by a '*'. But you can use <Passwd-file>
+[AuthDatabase.PasswdFile.txt].
+
+(This file was created from the wiki on 2017-05-30 16:30)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -121,7 +121,7 @@ message_date_parser_tokens(struct message_date_parser_context *ctx,
 	int ret;
 
 	/* [weekday_name "," ] dd month_name [yy]yy hh:mi[:ss] timezone */
-	memset(&tm, 0, sizeof(tm));
+	i_zero(&tm);
 
         rfc822_skip_lwsp(&ctx->parser);
 

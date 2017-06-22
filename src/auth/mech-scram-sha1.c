@@ -246,7 +246,7 @@ static bool verify_credentials(struct scram_auth_request *request)
 	safe_memset(client_key, 0, sizeof(client_key));
 	safe_memset(client_signature, 0, sizeof(client_signature));
 
-	return memcmp(stored_key, request->stored_key, sizeof(stored_key)) == 0;
+	return mem_equals_timing_safe(stored_key, request->stored_key, sizeof(stored_key));
 }
 
 static void credentials_callback(enum passdb_result result,
@@ -350,7 +350,7 @@ static void mech_scram_sha1_auth_continue(struct auth_request *auth_request,
 		(struct scram_auth_request *)auth_request;
 	const char *error = NULL;
 	const char *server_final_message;
-	int len;
+	size_t len;
 
 	if (!request->client_first_message_bare) {
 		/* Received client-first-message */

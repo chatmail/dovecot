@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -250,7 +250,7 @@ test_server_hanging_request_payload_input(struct _hanging_request_payload *ctx)
 
 	if (ret == 0)
 		return;
-	if (ret < 0) {
+	if (ctx->payload_input->stream_errno != 0) {
 		if (debug) {
 			i_debug("test server: failed to read payload: %s",
 				i_stream_get_error(ctx->payload_input));
@@ -262,6 +262,8 @@ test_server_hanging_request_payload_input(struct _hanging_request_payload *ctx)
 		http_server_request_unref(&req);
 		return;
 	}
+
+	i_assert(i_stream_is_eof(ctx->payload_input));
 		
 	resp = http_server_response_create(req, 200, "OK");
 	http_server_response_submit(resp);
@@ -541,7 +543,7 @@ static void
 test_server_defaults(struct http_server_settings *http_set)
 {
 	/* server settings */
-	memset(http_set, 0, sizeof(*http_set));
+	i_zero(http_set);
 	http_set->max_client_idle_time_msecs = 5*1000;
 	http_set->max_pipelined_requests = 1;
 	http_set->debug = debug;
@@ -746,7 +748,7 @@ int main(int argc, char *argv[])
   }
 
 	/* listen on localhost */
-	memset(&bind_ip, 0, sizeof(bind_ip));
+	i_zero(&bind_ip);
 	bind_ip.family = AF_INET;
 	bind_ip.u.ip4.s_addr = htonl(INADDR_LOOPBACK);	
 

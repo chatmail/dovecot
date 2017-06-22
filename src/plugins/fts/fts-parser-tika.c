@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -62,7 +62,7 @@ tika_get_http_client_url(struct mail_user *user, struct http_url **http_url_r)
 	}
 
 	if (tika_http_client == NULL) {
-		memset(&http_set, 0, sizeof(http_set));
+		i_zero(&http_set);
 		http_set.max_idle_time_msecs = 100;
 		http_set.max_parallel_connections = 1;
 		http_set.max_pipelined_requests = 1;
@@ -97,9 +97,9 @@ fts_tika_parser_response(const struct http_response *response,
 	case 415: /* Unsupported Media Type */
 	case 422: /* Unprocessable Entity */
 		if (parser->user->mail_debug) {
-			i_debug("fts_tika: PUT %s failed: %u %s",
+			i_debug("fts_tika: PUT %s failed: %s",
 				mail_user_plugin_getenv(parser->user, "fts_tika"),
-				response->status, response->reason);
+				http_response_get_message(response));
 		}
 		parser->payload = i_stream_create_from_data("", 0);
 		break;
@@ -114,16 +114,16 @@ fts_tika_parser_response(const struct http_response *response,
 		   isn't available anymore here. So we'd need to indicate
 		   in fts_parser_deinit() that we want to retry.
 		   FIXME: do this in v2.3. For now we'll just ignore it. */
-		i_info("fts_tika: PUT %s failed: %u %s - ignoring",
+		i_info("fts_tika: PUT %s failed: %s - ignoring",
 		       mail_user_plugin_getenv(parser->user, "fts_tika"),
-		       response->status, response->reason);
+		       http_response_get_message(response));
 		parser->payload = i_stream_create_from_data("", 0);
 		break;
 
 	default:
-		i_error("fts_tika: PUT %s failed: %u %s",
+		i_error("fts_tika: PUT %s failed: %s",
 			mail_user_plugin_getenv(parser->user, "fts_tika"),
-			response->status, response->reason);
+			http_response_get_message(response));
 		parser->failed = TRUE;
 		break;
 	}
@@ -152,9 +152,12 @@ fts_parser_tika_try_init(struct mail_user *user, const char *content_type,
 			fts_tika_parser_response, parser);
 	http_client_request_set_port(http_req, http_url->port);
 	http_client_request_set_ssl(http_req, http_url->have_ssl);
-	http_client_request_add_header(http_req, "Content-Type", content_type);
-	http_client_request_add_header(http_req, "Content-Disposition",
-				       content_disposition);
+	if (content_type != NULL)
+		http_client_request_add_header(http_req, "Content-Type",
+					       content_type);
+	if (content_disposition != NULL)
+		http_client_request_add_header(http_req, "Content-Disposition",
+					       content_disposition);
 	http_client_request_add_header(http_req, "Accept", "text/plain");
 
 	parser->http_req = http_req;

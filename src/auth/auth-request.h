@@ -74,14 +74,14 @@ struct auth_request {
 	time_t delay_until;
 	pid_t session_pid;
 
-	const char *service, *mech_name, *session_id, *local_name;
+	const char *service, *mech_name, *session_id, *local_name, *client_id;
 	struct ip_addr local_ip, remote_ip, real_local_ip, real_remote_ip;
 	in_port_t local_port, remote_port, real_local_port, real_remote_port;
 
 	struct timeout *to_abort, *to_penalty;
 	unsigned int policy_penalty;
 	unsigned int last_penalty;
-	unsigned int initial_response_len;
+	size_t initial_response_len;
 	const unsigned char *initial_response;
 
 	union {
@@ -130,6 +130,9 @@ struct auth_request {
 	unsigned int in_delayed_failure_queue:1;
 	unsigned int removed_from_handler:1;
 	unsigned int snapshot_have_userdb_prefetch_set:1;
+	/* username was changed by this passdb/userdb lookup. Used by
+	   auth-workers to determine whether to send back a changed username. */
+	unsigned int user_changed_by_lookup:1;
 	/* each passdb lookup can update the current success-status using the
 	   result_* rules. the authentication succeeds only if this is TRUE
 	   at the end. mechanisms that don't require passdb, but do a passdb
@@ -265,5 +268,6 @@ void auth_request_userdb_callback(enum userdb_result result,
 
 void auth_request_refresh_last_access(struct auth_request *request);
 void auth_str_append(string_t *dest, const char *key, const char *value);
+bool auth_request_username_accepted(const char *const *filter, const char *username);
 
 #endif

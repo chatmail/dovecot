@@ -74,6 +74,11 @@ exec "$@"
 
 You can change any Dovecot settings using the above method.
 
+Changing user's password after login
+------------------------------------
+
+See <HowTo.ConvertPasswordSchemes.txt>
+
 Last-login tracking
 -------------------
 
@@ -239,4 +244,4 @@ NAMESPACE/S-SPAMREP/TYPE NAMESPACE/S-SPAMREP/PREFIX
 NAMESPACE/S-SPAMREP/LOCATION
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

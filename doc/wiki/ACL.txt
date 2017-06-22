@@ -70,7 +70,13 @@ child's ACLs stay the same. There is currently no support for ACL inheritance.
    aren't used for mailboxes without ACLs.
  * v2.2.2+: If 'plugin { acl_defaults_from_inbox=yes } ', the default ACLs for
    private and shared namespaces (but not public namespaces) are taken from the
-   INBOX.
+   INBOX. This means that giving somebody access to your INBOX will give them
+   access to all your other mailboxes as well, unless the specific mailboxes'
+   ACLs override the INBOX's.
+
+*NOTE*: Currently the default ACLs are merged with the mailbox-specific ACLs.
+So if a default ACL gives access to "user1" and a per-mailbox ACL gives access
+to "user2", the "user1" still has access to that mailbox.
 
 Global ACLs
 -----------
@@ -238,4 +244,4 @@ List cache
 you manually add/edit 'dovecot-acl' files, you may need to delete the
 'dovecot-acl-list' to get the mailboxes visible.
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

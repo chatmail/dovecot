@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -69,7 +69,7 @@ fs_dict_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 		return -1;
 	}
 
-	memset(&dict_set, 0, sizeof(dict_set));
+	i_zero(&dict_set);
 	dict_set.username = set->username;
 	dict_set.base_dir = set->base_dir;
 
@@ -223,7 +223,7 @@ static int fs_dict_write_stream_finish(struct fs_file *_file, bool success)
 		break;
 	}
 	case FS_DICT_VALUE_ENCODING_BASE64: {
-		const unsigned int base64_size =
+		const size_t base64_size =
 			MAX_BASE64_ENCODED_SIZE(file->write_buffer->used);
 		string_t *base64 = t_str_new(base64_size);
 		base64_encode(file->write_buffer->data,
@@ -243,7 +243,7 @@ static int fs_dict_stat(struct fs_file *_file, struct stat *st_r)
 {
 	struct dict_fs_file *file = (struct dict_fs_file *)_file;
 
-	memset(st_r, 0, sizeof(*st_r));
+	i_zero(st_r);
 
 	if (fs_dict_lookup(file) < 0)
 		return -1;

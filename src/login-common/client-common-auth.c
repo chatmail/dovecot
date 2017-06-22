@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "hostpid.h"
 #include "login-common.h"
@@ -99,7 +99,7 @@ static void client_auth_parse_args(struct client *client, bool success,
 	ARRAY_TYPE(const_string) alt_usernames;
 
 	t_array_init(&alt_usernames, 4);
-	memset(reply_r, 0, sizeof(*reply_r));
+	i_zero(reply_r);
 
 	for (; *args != NULL; args++) {
 		p = strchr(*args, '=');
@@ -177,6 +177,8 @@ static void client_auth_parse_args(struct client *client, bool success,
 				alt_username_set(&alt_usernames, client->pool,
 						 key, value);
 			}
+		} else if (strncmp(key, "forward_", 8) == 0) {
+			/* these are passed to upstream */
 		} else if (client->set->auth_debug)
 			i_debug("Ignoring unknown passdb extra field: %s", key);
 	}
@@ -237,6 +239,11 @@ void client_proxy_finish_destroy_client(struct client *client)
 static void client_proxy_error(struct client *client, const char *text)
 {
 	client->v.proxy_error(client, text);
+}
+
+const char *client_proxy_get_state(struct client *client)
+{
+	return client->v.proxy_get_state(client);
 }
 
 void client_proxy_log_failure(struct client *client, const char *line)
@@ -312,11 +319,11 @@ static void proxy_input(struct client *client)
 		duration = ioloop_time - client->created;
 		client_log_err(client, t_strdup_printf(
 			"proxy: Remote %s:%u disconnected: %s "
-			"(state=%u, duration=%us)%s",
+			"(state=%s, duration=%us)%s",
 			login_proxy_get_host(client->login_proxy),
 			login_proxy_get_port(client->login_proxy),
 			io_stream_get_disconnect_reason(input, NULL),
-			client->proxy_state, duration,
+			client_proxy_get_state(client), duration,
 			line == NULL ? "" : t_strdup_printf(
 				" - BUG: line not read: %s", line)));
 		client_proxy_failed(client, TRUE);
@@ -386,7 +393,7 @@ static int proxy_start(struct client *client,
 		return -1;
 	}
 
-	memset(&proxy_set, 0, sizeof(proxy_set));
+	i_zero(&proxy_set);
 	proxy_set.host = reply->host;
 	if (reply->hostip != NULL &&
 	    net_addr2ip(reply->hostip, &proxy_set.ip) < 0)
@@ -534,8 +541,7 @@ void client_auth_fail(struct client *client, const char *text)
 int client_auth_read_line(struct client *client)
 {
 	const unsigned char *data;
-	size_t i, size;
-	unsigned int len;
+	size_t i, size, len;
 
 	if (i_stream_read_data(client->input, &data, &size, 0) == -1) {
 		client_destroy(client, "Disconnected");
@@ -609,7 +615,7 @@ sasl_callback(struct client *client, enum sasl_server_reply sasl_reply,
 		 sasl_reply == SASL_SERVER_REPLY_AUTH_ABORTED ||
 		 sasl_reply == SASL_SERVER_REPLY_MASTER_FAILED);
 
-	memset(&reply, 0, sizeof(reply));
+	i_zero(&reply);
 	switch (sasl_reply) {
 	case SASL_SERVER_REPLY_SUCCESS:
 		if (client->to_auth_waiting != NULL)

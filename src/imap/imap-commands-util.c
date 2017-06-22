@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
@@ -74,6 +74,23 @@ bool client_verify_open_mailbox(struct client_command_context *cmd)
 	}
 }
 
+void imap_client_close_mailbox(struct client *client)
+{
+	struct mailbox *box;
+
+	i_assert(client->mailbox != NULL);
+
+	if (array_is_created(&client->fetch_failed_uids))
+		array_clear(&client->fetch_failed_uids);
+	client_search_updates_free(client);
+
+	box = client->mailbox;
+	client->mailbox = NULL;
+
+	mailbox_free(&box);
+	client_update_mailbox_flags(client, NULL);
+}
+
 int client_open_save_dest_box(struct client_command_context *cmd,
 			      const char *name, struct mailbox **destbox_r)
 {
@@ -92,6 +109,7 @@ int client_open_save_dest_box(struct client_command_context *cmd,
 		return 0;
 	}
 	box = mailbox_alloc(ns->list, name, MAILBOX_FLAG_SAVEONLY);
+	mailbox_set_reason(box, cmd->name);
 	if (mailbox_open(box) < 0) {
 		error_string = mailbox_get_last_error(box, &error);
 		if (error == MAIL_ERROR_NOTFOUND) {
@@ -114,6 +132,18 @@ int client_open_save_dest_box(struct client_command_context *cmd,
 	return 0;
 }
 
+const char *imap_client_command_get_reason(struct client_command_context *cmd)
+{
+	return cmd->args[0] == '\0' ? cmd->name :
+		t_strdup_printf("%s %s", cmd->name, cmd->human_args);
+}
+
+void imap_transaction_set_cmd_reason(struct mailbox_transaction_context *trans,
+				     struct client_command_context *cmd)
+{
+	mailbox_transaction_set_reason(trans, imap_client_command_get_reason(cmd));
+}
+
 const char *
 imap_get_error_string(struct client_command_context *cmd,
 		      const char *error_string, enum mail_error error)
@@ -124,7 +154,11 @@ imap_get_error_string(struct client_command_context *cmd,
 	case MAIL_ERROR_NONE:
 		break;
 	case MAIL_ERROR_TEMP:
+	case MAIL_ERROR_LOOKUP_ABORTED: /* BUG: shouldn't be visible here */
 		resp_code = IMAP_RESP_CODE_SERVERBUG;
+		break;
+	case MAIL_ERROR_UNAVAILABLE:
+		resp_code = IMAP_RESP_CODE_UNAVAILABLE;
 		break;
 	case MAIL_ERROR_NOTPOSSIBLE:
 	case MAIL_ERROR_PARAMS:
@@ -151,6 +185,9 @@ imap_get_error_string(struct client_command_context *cmd,
 		break;
 	case MAIL_ERROR_CONVERSION:
 	case MAIL_ERROR_INVALIDDATA:
+		break;
+	case MAIL_ERROR_LIMIT:
+		resp_code = IMAP_RESP_CODE_LIMIT;
 		break;
 	}
 	if (resp_code == NULL || *error_string == '[')
@@ -279,7 +316,7 @@ void client_send_mailbox_flags(struct client *client, bool selecting)
 		array_idx(client->keywords.names, 0);
 	str = t_str_new(128);
 	str_append(str, "* FLAGS (");
-	imap_write_flags(str, MAIL_FLAGS_NONRECENT, keywords);
+	imap_write_flags(str, status.flags, keywords);
 	str_append_c(str, ')');
 	client_send_line(client, str_c(str));
 
@@ -336,7 +373,7 @@ client_get_keyword_names(struct client *client, ARRAY_TYPE(keywords) *dest,
 
 void msgset_generator_init(struct msgset_generator_context *ctx, string_t *str)
 {
-	memset(ctx, 0, sizeof(*ctx));
+	i_zero(ctx);
 	ctx->str = str;
 	ctx->last_uid = (uint32_t)-1;
 }

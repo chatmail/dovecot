@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -26,7 +26,7 @@ mailbox_list_notify_node_get_status(struct mailbox_list_notify_tree *tree,
 	if (!mail_index_lookup_seq(tree->view, nnode->index_uid, &seq))
 		return;
 
-	memset(&status, 0, sizeof(status));
+	i_zero(&status);
 	(void)mailbox_list_index_status(tree->list, tree->view, seq,
 		STATUS_UIDVALIDITY | STATUS_UIDNEXT | STATUS_MESSAGES |
 		STATUS_UNSEEN | STATUS_HIGHESTMODSEQ, &status, nnode->guid, NULL);
@@ -44,7 +44,7 @@ mailbox_list_notify_node_build(struct mailbox_list_notify_tree *tree,
 {
 	struct mailbox_node *node;
 	struct mailbox_notify_node *nnode;
-	unsigned int prefix_len;
+	size_t prefix_len;
 	bool created;
 
 	str_append(path, index_node->name);

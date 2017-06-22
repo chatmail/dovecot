@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -723,8 +723,6 @@ director_flush_user_continue(int result, struct director_kill_context *ctx)
 
 	struct user *user = user_directory_lookup(ctx->tag->users,
 						  ctx->username_hash);
-	if (user != NULL)
-		director_user_kill_finish_delayed(dir, user,result == 1);
 
 	if (result == 0) {
 		struct istream *is = iostream_temp_finish(&ctx->reply, (size_t)-1);
@@ -807,6 +805,8 @@ director_flush_user(struct director *dir, struct user *user)
 		t_strdup_printf("%u", user->username_hash),
 		net_ip2addr(&ctx->old_host_ip),
 		net_ip2addr(&user->host->ip),
+		ctx->old_host_down ? "down" : "up",
+		dec2str(ctx->old_host_vhost_count),
 		NULL
 	};
 
@@ -896,6 +896,10 @@ director_finish_user_kill(struct director *dir, struct user *user, bool self)
 	i_assert(kill_ctx->kill_state != USER_KILL_STATE_FLUSHING);
 	i_assert(kill_ctx->kill_state != USER_KILL_STATE_DELAY);
 
+	dir_debug("User %u kill finished - %sstate=%s", user->username_hash,
+		  self ? "we started it " : "",
+		  user_kill_state_names[kill_ctx->kill_state]);
+
 	if (dir->right == NULL) {
 		/* we're alone */
 		director_flush_user(dir, user);
@@ -965,7 +969,6 @@ static void director_user_move_throttled(unsigned int new_events_count,
 static void director_user_move_timeout(struct user *user)
 {
 	i_assert(user->kill_ctx != NULL);
-	i_assert(user->kill_ctx->kill_state != USER_KILL_STATE_FLUSHING);
 	i_assert(user->kill_ctx->kill_state != USER_KILL_STATE_DELAY);
 
 	if (log_throttle_accept(user_move_throttle)) {
@@ -973,6 +976,10 @@ static void director_user_move_timeout(struct user *user)
 			"its state may now be inconsistent (state=%s)",
 			user->username_hash,
 			user_kill_state_names[user->kill_ctx->kill_state]);
+	}
+	if (user->kill_ctx->kill_state == USER_KILL_STATE_FLUSHING) {
+		o_stream_unref(&user->kill_ctx->reply);
+		program_client_destroy(&user->kill_ctx->pclient);
 	}
 	director_user_move_free(user);
 }
@@ -1000,24 +1007,29 @@ director_kill_user(struct director *dir, struct director_host *src,
 	ctx->tag = tag;
 	ctx->username_hash = user->username_hash;
 	ctx->kill_is_self_initiated = src->self;
-	if (old_host != NULL)
+	if (old_host != NULL) {
 		ctx->old_host_ip = old_host->ip;
+		ctx->old_host_down = old_host->down;
+		ctx->old_host_vhost_count = old_host->vhost_count;
+	}
 
 	dir->users_moving_count++;
 	ctx->to_move = timeout_add(DIRECTOR_USER_MOVE_TIMEOUT_MSECS,
 				   director_user_move_timeout, user);
 	ctx->kill_state = USER_KILL_STATE_KILLING;
 
-	if (old_host != NULL) {
+	if (old_host != NULL && old_host != user->host) {
 		cmd = t_strdup_printf("proxy\t*\tKICK-DIRECTOR-HASH\t%u",
 				      user->username_hash);
 		ctx->callback_pending = TRUE;
 		ipc_client_cmd(dir->ipc_proxy, cmd,
 			       director_kill_user_callback, ctx);
 	} else {
-		/* we didn't even know about the user before now.
+		/* a) we didn't even know about the user before now.
 		   don't bother performing a local kick, since it wouldn't
-		   kick anything. */
+		   kick anything.
+		   b) our host was already correct. notify others that we have
+		   killed the user, but don't really do it. */
 		director_finish_user_kill(ctx->dir, user,
 					  ctx->kill_is_self_initiated);
 	}
@@ -1028,6 +1040,7 @@ void director_move_user(struct director *dir, struct director_host *src,
 			unsigned int username_hash, struct mail_host *host)
 {
 	struct user_directory *users = host->tag->users;
+	struct mail_host *old_host = NULL;
 	struct user *user;
 
 	/* 1. move this user's host, and set its "killing" flag to delay all of
@@ -1048,21 +1061,31 @@ void director_move_user(struct director *dir, struct director_host *src,
 	*/
 	user = user_directory_lookup(users, username_hash);
 	if (user == NULL) {
+		dir_debug("User %u move started: User was nonexistent",
+			  username_hash);
 		user = user_directory_add(users, username_hash,
 					  host, ioloop_time);
-		director_kill_user(dir, src, user, host->tag, NULL);
+	} else if (user->host == host) {
+		/* User is already in the wanted host, but another director
+		   didn't think so. We'll need to finish the move without
+		   killing any of our connections. */
+		old_host = user->host;
+		user->timestamp = ioloop_time;
+		dir_debug("User %u move forwarded: host is already %s",
+			  username_hash, net_ip2addr(&host->ip));
 	} else {
-		struct mail_host *old_host = user->host;
+		/* user is looked up via the new host's tag, so if it's found
+		   the old tag has to be the same. */
+		i_assert(user->host->tag == host->tag);
 
-		if (user->host == host) {
-			/* user is already in this host */
-			return;
-		}
+		old_host = user->host;
 		user->host->user_count--;
 		user->host = host;
 		user->host->user_count++;
 		user->timestamp = ioloop_time;
-		director_kill_user(dir, src, user, old_host->tag, old_host);
+		dir_debug("User %u move started: host %s -> %s",
+			  username_hash, net_ip2addr(&old_host->ip),
+			  net_ip2addr(&host->ip));
 	}
 
 	if (orig_src == NULL) {
@@ -1073,6 +1096,9 @@ void director_move_user(struct director *dir, struct director_host *src,
 		"USER-MOVE\t%s\t%u\t%u\t%u\t%s\n",
 		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq,
 		user->username_hash, net_ip2addr(&user->host->ip)));
+	/* kill the user only after sending the USER-MOVE, because the kill
+	   may finish instantly. */
+	director_kill_user(dir, src, user, host->tag, old_host);
 }
 
 static void
@@ -1096,6 +1122,7 @@ void director_kick_user(struct director *dir, struct director_host *src,
 		orig_src = dir->self_host;
 		orig_src->last_seq++;
 	}
+	str_truncate(cmd, 0);
 	str_printfa(cmd, "USER-KICK\t%s\t%u\t%u\t",
 		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq);
 	str_append_tabescaped(cmd, username);
@@ -1120,6 +1147,7 @@ void director_kick_user_alt(struct director *dir, struct director_host *src,
 		orig_src = dir->self_host;
 		orig_src->last_seq++;
 	}
+	str_truncate(cmd, 0);
 	str_printfa(cmd, "USER-KICK-ALT\t%s\t%u\t%u\t",
 		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq);
 	str_append_tabescaped(cmd, field);

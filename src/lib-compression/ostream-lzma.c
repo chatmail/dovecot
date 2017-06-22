@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 
@@ -105,7 +105,7 @@ o_stream_lzma_send_chunk(struct lzma_ostream *zstream,
 static int o_stream_lzma_send_flush(struct lzma_ostream *zstream)
 {
 	lzma_stream *zs = &zstream->strm;
-	unsigned int len;
+	size_t len;
 	bool done = FALSE;
 	int ret;
 

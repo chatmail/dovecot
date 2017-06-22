@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -57,7 +57,7 @@ log_get_hdr_update_buffer(struct mail_index_transaction *t, bool prepend)
 	uint16_t offset;
 	int state = 0;
 
-	memset(&u, 0, sizeof(u));
+	i_zero(&u);
 
 	data = prepend ? t->pre_hdr_change : t->post_hdr_change;
 	mask = prepend ? t->pre_hdr_mask : t->post_hdr_mask;
@@ -200,8 +200,8 @@ log_append_ext_hdr_update(struct mail_index_export_context *ctx,
 	size_t offset;
 	bool started = FALSE, use_32 = hdr->alloc_size >= 65536;
 
-	memset(&u, 0, sizeof(u));
-	memset(&u32, 0, sizeof(u32));
+	i_zero(&u);
+	i_zero(&u32);
 
 	data = hdr->data;
 	mask = hdr->mask;
@@ -283,7 +283,7 @@ mail_transaction_log_append_ext_intros(struct mail_index_export_context *ctx)
 			ext_count = hdrs_count;
 	}
 
-	memset(&ext_reset, 0, sizeof(ext_reset));
+	i_zero(&ext_reset);
 	buffer_create_from_data(&reset_buf, &ext_reset, sizeof(ext_reset));
 	buffer_set_used_size(&reset_buf, sizeof(ext_reset));
 
@@ -361,7 +361,7 @@ log_append_keyword_update(struct mail_index_export_context *ctx,
 
 	i_assert(uid_buffer->used > 0);
 
-	memset(&kt_hdr, 0, sizeof(kt_hdr));
+	i_zero(&kt_hdr);
 	kt_hdr.modify_type = modify_type;
 	kt_hdr.name_size = strlen(keyword);
 
@@ -417,7 +417,7 @@ void mail_index_transaction_export(struct mail_index_transaction *t,
 	enum mail_index_fsync_mask change_mask = 0;
 	struct mail_index_export_context ctx;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.trans = t;
 	ctx.append_ctx = append_ctx;
 
@@ -536,6 +536,32 @@ mail_index_transaction_keywords_count_modseq_incs(struct mail_index_transaction 
 	return count;
 }
 
+static bool
+transaction_flag_updates_have_non_internal(struct mail_index_transaction *t)
+{
+	struct mail_transaction_log_file *file = t->view->index->log->head;
+	const uint8_t internal_flags =
+		MAIL_INDEX_MAIL_FLAG_BACKEND | MAIL_INDEX_MAIL_FLAG_DIRTY;
+	const struct mail_index_flag_update *u;
+	const unsigned int hdr_version =
+		MAIL_TRANSACTION_LOG_HDR_VERSION(&file->hdr);
+
+	if (!MAIL_TRANSACTION_LOG_VERSION_HAVE(hdr_version, HIDE_INTERNAL_MODSEQS)) {
+		/* this check can be a bit racy if the call isn't done while
+		   transaction log is locked. practically it won't matter
+		   now though. */
+		return array_count(&t->updates) > 0;
+	}
+
+	array_foreach(&t->updates, u) {
+		uint8_t changed_flags = u->add_flags | u->remove_flags;
+
+		if ((changed_flags & ~internal_flags) != 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
 uint64_t mail_index_transaction_get_highest_modseq(struct mail_index_transaction *t)
 {
 	struct mail_transaction_log_file *file = t->view->index->log->head;
@@ -565,7 +591,8 @@ uint64_t mail_index_transaction_get_highest_modseq(struct mail_index_transaction
 		/* sorting may change the order of keyword_updates,  */
 		new_highest_modseq++;
 	}
-	if (array_is_created(&t->updates) && array_count(&t->updates) > 0)
+	if (array_is_created(&t->updates) &&
+	    transaction_flag_updates_have_non_internal(t) > 0)
 		new_highest_modseq++;
 	if (array_is_created(&t->keyword_updates)) {
 		new_highest_modseq +=

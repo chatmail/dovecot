@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "restrict-access.h"
@@ -10,7 +10,7 @@
 
 static bool ipc_socket_is_client(const char *name)
 {
-	unsigned int len;
+	size_t len;
 
 	if (strcmp(name, "ipc") == 0)
 		return TRUE;

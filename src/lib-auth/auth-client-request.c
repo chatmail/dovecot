@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -84,6 +84,16 @@ static void auth_server_send_new_request(struct auth_server_connection *conn,
 	    *info->local_name != '\0') {
 		str_append(str, "\tlocal_name=");
 		str_append_tabescaped(str, info->local_name);
+	}
+	if (info->client_id != NULL &&
+	    *info->client_id != '\0') {
+		str_append(str, "\tclient_id=");
+		str_append_tabescaped(str, info->client_id);
+	}
+	if (info->forward_fields != NULL &&
+	    *info->forward_fields != '\0') {
+		str_append(str, "\tforward_fields=");
+		str_append_tabescaped(str, info->forward_fields);
 	}
 	if (info->initial_resp_base64 != NULL) {
 		str_append(str, "\tresp=");

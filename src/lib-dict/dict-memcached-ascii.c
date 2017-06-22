@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING memcached_ascii */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING memcached_ascii */
 
 #include "lib.h"
 #include "array.h"
@@ -627,7 +627,7 @@ memcached_ascii_transaction_commit(struct dict_transaction_context *_ctx,
 	int ret = 1;
 
 	if (_ctx->changed) {
-		memset(&commit_ctx, 0, sizeof(commit_ctx));
+		i_zero(&commit_ctx);
 		commit_ctx.dict = dict;
 		commit_ctx.memctx = ctx;
 		commit_ctx.callback = callback;

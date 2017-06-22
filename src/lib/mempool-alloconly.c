@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 #include "lib.h"
@@ -24,6 +24,7 @@ struct alloconly_pool {
 	size_t base_size;
 	bool disable_warning;
 #endif
+	bool clean_frees;
 };
 
 struct pool_block {
@@ -130,7 +131,7 @@ pool_t pool_alloconly_create(const char *name ATTR_UNUSED, size_t size)
 #endif
 
 	/* create a fake alloconly_pool so we can call block_alloc() */
-	memset(&apool, 0, sizeof(apool));
+	i_zero(&apool);
 	apool.pool = static_alloconly_pool;
 	apool.refcount = 1;
 
@@ -159,6 +160,17 @@ pool_t pool_alloconly_create(const char *name ATTR_UNUSED, size_t size)
 	return &new_apool->pool;
 }
 
+pool_t pool_alloconly_create_clean(const char *name, size_t size)
+{
+	struct alloconly_pool *apool;
+	pool_t pool;
+
+	pool = pool_alloconly_create(name, size);
+	apool = (struct alloconly_pool *)pool;
+	apool->clean_frees = TRUE;
+	return pool;
+}
+
 static void pool_alloconly_destroy(struct alloconly_pool *apool)
 {
 	void *block;
@@ -170,7 +182,13 @@ static void pool_alloconly_destroy(struct alloconly_pool *apool)
 	block = apool->block;
 #ifdef DEBUG
 	safe_memset(block, CLEAR_CHR, SIZEOF_POOLBLOCK + apool->block->size);
+#else
+	if (apool->clean_frees) {
+		safe_memset(block, CLEAR_CHR,
+			    SIZEOF_POOLBLOCK + apool->block->size);
+	}
 #endif
+
 #ifndef USE_GC
 	free(block);
 #endif
@@ -362,6 +380,11 @@ static void pool_alloconly_clear(pool_t pool)
 
 #ifdef DEBUG
 		safe_memset(block, CLEAR_CHR, SIZEOF_POOLBLOCK + block->size);
+#else
+		if (apool->clean_frees) {
+			safe_memset(block, CLEAR_CHR,
+				    SIZEOF_POOLBLOCK + block->size);
+		}
 #endif
 #ifndef USE_GC
 		free(block);

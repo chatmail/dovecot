@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -6,6 +6,7 @@
 #include "buffer.h"
 #include "str.h"
 #include "message-date.h"
+#include "message-part-data.h"
 #include "message-parser.h"
 #include "message-header-decode.h"
 #include "istream-tee.h"
@@ -144,7 +145,7 @@ get_header_field_idx(struct mailbox *box, const char *field,
 {
 	struct mail_cache_field header_field;
 
-	memset(&header_field, 0, sizeof(header_field));
+	i_zero(&header_field);
 	header_field.type = MAIL_CACHE_FIELD_HEADER;
 	header_field.decision = decision;
 	T_BEGIN {
@@ -193,6 +194,8 @@ void index_mail_parse_header_init(struct index_mail *mail,
 	struct index_mail_data *data = &mail->data;
 	const uint8_t *match;
 	unsigned int i, field_idx, match_count;
+
+	i_assert(!mail->data.header_parser_initialized);
 
 	mail->header_seq = data->seq;
 	if (mail->header_data == NULL) {
@@ -255,7 +258,7 @@ void index_mail_parse_header_init(struct index_mail *mail,
 	}
 	mail->data.header_parser_initialized = TRUE;
 	mail->data.parse_line_num = 0;
-	memset(&mail->data.parse_line, 0, sizeof(mail->data.parse_line));
+	i_zero(&mail->data.parse_line);
 }
 
 static void index_mail_parse_finish_imap_envelope(struct index_mail *mail)
@@ -266,7 +269,7 @@ static void index_mail_parse_finish_imap_envelope(struct index_mail *mail)
 	string_t *str;
 
 	str = str_new(mail->mail.data_pool, 256);
-	imap_envelope_write_part_data(mail->data.envelope_data, str);
+	imap_envelope_write(mail->data.envelope_data, str);
 	mail->data.envelope = str_c(str);
 
 	if (mail_cache_field_can_add(_mail->transaction->cache_trans,
@@ -291,11 +294,11 @@ void index_mail_parse_header(struct message_part *part,
 
 	if (data->save_bodystructure_header) {
 		i_assert(part != NULL);
-		imap_bodystructure_parse_header(mail->mail.data_pool, part, hdr);
+		message_part_data_parse_from_header(mail->mail.data_pool, part, hdr);
 	}
 
 	if (data->save_envelope) {
-		imap_envelope_parse_header(mail->mail.data_pool,
+		message_part_envelope_parse_from_header(mail->mail.data_pool,
 					   &data->envelope_data, hdr);
 
 		if (hdr == NULL)
@@ -471,7 +474,7 @@ static void
 imap_envelope_parse_callback(struct message_header_line *hdr,
 			     struct index_mail *mail)
 {
-	imap_envelope_parse_header(mail->mail.data_pool,
+	message_part_envelope_parse_from_header(mail->mail.data_pool,
 				   &mail->data.envelope_data, hdr);
 
 	if (hdr == NULL)
@@ -500,7 +503,7 @@ int index_mail_headers_get_envelope(struct index_mail *mail)
 
 	mail->data.save_envelope = TRUE;
 	header_ctx = mailbox_header_lookup_init(mail->mail.mail.box,
-						imap_envelope_headers);
+						message_part_envelope_headers);
 	if (mail_get_header_stream(&mail->mail.mail, header_ctx, &stream) < 0) {
 		mailbox_header_lookup_unref(&header_ctx);
 		return -1;
@@ -637,7 +640,14 @@ index_mail_get_raw_headers(struct index_mail *mail, const char *field,
 				      _mail->seq, &field_idx, 1) <= 0) {
 		/* not in cache / error - first see if it's already parsed */
 		p_free(mail->mail.data_pool, dest);
-
+		if (mail->data.header_parser_initialized) {
+			/* don't try to parse headers recursively. we're here
+			   because message size was wrong and istream-mail
+			   wants to log some cached headers. */
+			i_assert(mail->mail.mail.lookup_abort == MAIL_LOOKUP_ABORT_NOT_IN_CACHE);
+			mail_set_aborted(&mail->mail.mail);
+			return -1;
+		}
 		if (mail->header_seq != mail->data.seq ||
 		    index_mail_header_is_parsed(mail, field_idx) < 0) {
 			/* parse */
@@ -732,7 +742,7 @@ static int unfold_header(pool_t pool, const char **_str)
 static void str_replace_nuls(string_t *str)
 {
 	char *data = str_c_modifiable(str);
-	unsigned int i, len = str_len(str);
+	size_t i, len = str_len(str);
 
 	for (i = 0; i < len; i++) {
 		if (data[i] == '\0')
@@ -798,9 +808,8 @@ int index_mail_get_headers(struct mail *_mail, const char *field,
 		} T_END;
 
 		if (ret < 0 && retry) {
-			mail_cache_set_corrupted(_mail->box->cache,
-				"Broken header %s for mail UID %u",
-				field, _mail->uid);
+			mail_set_mail_cache_corrupted(_mail, "Broken header %s",
+						      field);
 		} else {
 			break;
 		}
@@ -834,9 +843,8 @@ int index_mail_get_first_header(struct mail *_mail, const char *field,
 		} T_END;
 
 		if (ret < 0 && retry) {
-			mail_cache_set_corrupted(_mail->box->cache,
-				"Broken header %s for mail UID %u",
-				field, _mail->uid);
+			mail_set_mail_cache_corrupted(_mail, "Broken header %s",
+						      field);
 			/* retry by parsing the full header */
 		} else {
 			break;

@@ -9,15 +9,31 @@ Compiling
 
 Give '--with-solr' parameter to 'configure' script. You'll also need to have
 libexpat and libcurl installed (if packages do not exist dovecot will compile
-without solr support).YUM: expat-devel, curl-devel
+without solr support). YUM: expat-devel, curl-devel
 
 Configuration
 -------------
 
+Solr Schema
+-----------
+
 Replace Solr's existing 'solr/conf/schema.xml' using 'doc/solr-schema.xml' from
-Dovecot. You may want to check if the file contains something you want to
-modify. See Solr wiki [http://wiki.apache.org/solr/SchemaXml] for how to
-configure it.
+Dovecot.
+
+If you only have a 'managed-schema' file: copy 'schema.xml' to that folder,
+delete 'managed-schema' file and remove or comment out (be aware not to have
+recursive comment) the block '<updateRequestProcessorChain
+name="add-unknown-fields-to-the-schema">' from 'solrconfig.xml'. Then restart
+Solr. The 'managed-schema' file will be rebuild from 'schema.xml'. (See 1
+[http://stackoverflow.com/questions/37989084/solr-6-1-where-is-my-collections-managed-schema-file],
+2
+[http://stackoverflow.com/questions/30673095/using-schema-xml-instead-of-managed-schema-with-solr-5-1-x])
+
+You may want to check if the file contains something you want to modify. See
+Solr wiki [http://wiki.apache.org/solr/SchemaXml] for how to configure it.
+
+Dovecot Plugin
+--------------
 
 On Dovecot's side add:
 
@@ -46,8 +62,8 @@ contain:
 
 Important notes:
 
- * Some mail clients will not submit any search requests for certian fields if
-   they index things localy eg. Thunderbird will not send any requests for
+ * Some mail clients will not submit any search requests for certain fields if
+   they index things locally eg. Thunderbird will not send any requests for
    fields such as sender/recipients/subject when Body is not included as this
    data is contained within the local index.
 
@@ -177,4 +193,15 @@ Some additional things which might help you configuring Solr search:
  * Set 'df' to 'hdr' in '/etc/solr/conf/solrconfig.xml' ('/select' request
    handler) to avoid strange 'undefined field text' errors.
 
-(This file was created from the wiki on 2016-12-03 04:44)
+Recent versions of Solr
+-----------------------
+
+With recent versions of Solr (5+), you should have a look at these guides:
+
+ * Linux: http://things.m31.ch/?p=379
+ * FreeBSD: http://mor-pah.net/2016/08/15/dovecot-2-2-with-solr-6-or-5/
+
+Please keep in mind that you will have to change the Solr URL to include the
+core name (ie:'dovecot': 'http://localhost:8939/solr/dovecot').
+
+(This file was created from the wiki on 2017-05-30 16:30)

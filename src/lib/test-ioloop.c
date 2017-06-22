@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "net.h"
@@ -56,7 +56,7 @@ static void test_ioloop_fd(void)
 		return;
 	}
 
-	memset(&test_ctx, 0, sizeof(test_ctx));
+	i_zero(&test_ctx);
 
 	struct ioloop *ioloop = io_loop_create();
 

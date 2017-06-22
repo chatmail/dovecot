@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "connection.h"
@@ -49,7 +49,7 @@ imap_hibernate_client_parse_input(const char *const *args, pool_t pool,
 	const char *key, *value;
 	unsigned int peer_dev_major = 0, peer_dev_minor = 0;
 
-	memset(state_r, 0, sizeof(*state_r));
+	i_zero(state_r);
 	if (args[0] == NULL) {
 		*error_r = "Missing username in input";
 		return -1;

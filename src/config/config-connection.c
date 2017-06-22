@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -75,7 +75,7 @@ static int config_connection_request(struct config_connection *conn,
 
 	/* [<args>] */
 	t_array_init(&modules, 4);
-	memset(&filter, 0, sizeof(filter));
+	i_zero(&filter);
 	for (; *args != NULL; args++) {
 		if (strncmp(*args, "service=", 8) == 0)
 			filter.service = *args + 8;

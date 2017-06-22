@@ -105,11 +105,18 @@ struct mail_binary_cache {
 struct mail_storage_error {
 	char *error_string;
 	enum mail_error error;
+	char *last_internal_error;
+	bool last_error_is_internal;
 };
 
 struct mail_storage {
 	const char *name;
 	enum mail_storage_class_flags class_flags;
+	/* Fields that the storage backend can get by other means than parsing
+	   the message header/body. For example the imapc backend can lookup
+	   MAIL_FETCH_IMAP_BODYSTRUCTURE from the remote server. Adding fields
+	   here avoids adding them to index_mail_data.access_part. */
+	enum mail_fetch_field nonbody_access_fields;
 
         struct mail_storage_vfuncs v, *vlast;
 
@@ -127,6 +134,9 @@ struct mail_storage {
 	/* A "root dir" to enable storage sharing.  It is only ever used for
 	 * uniqueness checking (via strcmp) and never used as a path. */
 	const char *unique_root_dir;
+
+	/* Last error set in mail_storage_set_critical(). */
+	char *last_internal_error;
 
 	char *error_string;
 	enum mail_error error;
@@ -152,6 +162,7 @@ struct mail_storage {
 
 	/* Failed to create shared attribute dict, don't try again */
 	unsigned int shared_attr_dict_failed:1;
+	unsigned int last_error_is_internal:1;
 };
 
 struct mail_attachment_part {
@@ -342,6 +353,8 @@ struct mailbox {
 	/* Filled lazily when mailbox is opened, use mailbox_get_index_path()
 	   to access it */
 	const char *_index_path;
+	/* Reason for why mailbox is being accessed or NULL if unknown. */
+	const char *reason;
 
 	/* default vfuncs for new struct mails. */
 	const struct mail_vfuncs *mail_vfuncs;
@@ -361,6 +374,8 @@ struct mailbox {
 	uint32_t vsize_hdr_ext_id;
 	uint32_t pop3_uidl_hdr_ext_id;
 	uint32_t box_name_hdr_ext_id;
+	uint32_t box_last_rename_stamp_ext_id;
+	uint32_t mail_vsize_ext_id;
 
 	/* MAIL_RECENT flags handling */
 	ARRAY_TYPE(seq_range) recent_flags;
@@ -393,6 +408,8 @@ struct mailbox {
 	unsigned int creating:1;
 	/* Mailbox is being deleted */
 	unsigned int deleting:1;
+	/* Mailbox is being undeleted */
+	unsigned int mailbox_undeleting:1;
 	/* Don't use MAIL_INDEX_SYNC_FLAG_DELETING_INDEX for sync flag */
 	unsigned int delete_sync_check:1;
 	/* Delete mailbox only if it's empty */
@@ -519,6 +536,8 @@ struct mail_private {
 	ARRAY(union mail_module_context *) module_contexts;
 
 	const char *get_stream_reason;
+
+	bool autoexpunged:1;
 };
 
 struct mailbox_list_context {
@@ -553,6 +572,7 @@ struct mail_save_private_changes {
 struct mailbox_transaction_context {
 	struct mailbox *box;
 	enum mailbox_transaction_flags flags;
+	char *reason;
 
 	union mail_index_transaction_module_context module_ctx;
 	struct mail_index_transaction_vfuncs super;
@@ -672,6 +692,8 @@ struct mail_save_context {
 	/* mail is being copied or moved. However, this is set also with
 	   mailbox_save_using_mail() and then saving==TRUE. */
 	unsigned int copying_or_moving:1;
+	/* dest_mail was set via mailbox_save_set_dest_mail() */
+	unsigned int dest_mail_external:1;
 };
 
 struct mailbox_sync_context {
@@ -718,6 +740,12 @@ void mail_storage_copy_list_error(struct mail_storage *storage,
 				  struct mailbox_list *list);
 void mail_storage_copy_error(struct mail_storage *dest,
 			     struct mail_storage *src);
+/* set record in mail cache corrupted */
+void mail_set_mail_cache_corrupted(struct mail *mail, const char *fmt, ...)
+	ATTR_FORMAT(2, 3);
+
+/* Indicate mail being expunged by autoexpunge */
+void mail_autoexpunge(struct mail *mail);
 
 /* Returns TRUE if everything should already be in memory after this call
    or if prefetching is not supported, i.e. the caller shouldn't do more
@@ -764,5 +792,6 @@ void mail_storage_free_binary_cache(struct mail_storage *storage);
 
 enum mail_index_open_flags
 mail_storage_settings_to_index_flags(const struct mail_storage_settings *set);
+void mailbox_save_context_deinit(struct mail_save_context *ctx);
 
 #endif

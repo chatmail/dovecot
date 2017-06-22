@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -14,6 +14,7 @@
 #include "master-service.h"
 #include "master-service-settings.h"
 #include "settings-parser.h"
+#include "doveadm.h"
 #include "doveadm-print.h"
 #include "doveadm-util.h"
 #include "doveadm-server.h"
@@ -372,9 +373,9 @@ static bool server_connection_input_one(struct server_connection *conn)
 			server_connection_callback(conn, 0, "");
 		else if (line[0] == '-') {
 			line++;
-			if (strcmp(line, "NOUSER") == 0)
-				exit_code = EX_NOUSER;
-			else if (str_to_int(line, &exit_code) < 0) {
+			exit_code = doveadm_str_to_exit_code(line);
+			if (exit_code == DOVEADM_EX_UNKNOWN &&
+			    str_to_int(line, &exit_code) < 0) {
 				/* old doveadm-server */
 				exit_code = EX_TEMPFAIL;
 			}
@@ -407,7 +408,7 @@ static int server_connection_read_settings(struct server_connection *conn)
 	in_port_t port;
 	void *set;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.roots = set_roots;
 	input.service = "doveadm";
 
@@ -449,7 +450,7 @@ static int server_connection_init_ssl(struct server_connection *conn)
 	if (conn->server->ssl_ctx == NULL)
 		return 0;
 
-	memset(&ssl_set, 0, sizeof(ssl_set));
+	i_zero(&ssl_set);
 	ssl_set.verify_remote_cert = TRUE;
 	ssl_set.require_valid_cert = TRUE;
 	ssl_set.verbose_invalid_cert = TRUE;

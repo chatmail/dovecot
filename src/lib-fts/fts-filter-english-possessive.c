@@ -1,11 +1,11 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "unichar.h"
 #include "fts-common.h"
 #include "fts-filter-private.h"
 
-static unichar_t get_ending_utf8_char(const char *str, unsigned int *end_pos)
+static unichar_t get_ending_utf8_char(const char *str, size_t *end_pos)
 {
 	unichar_t c;
 
@@ -23,7 +23,7 @@ fts_filter_english_possessive_filter(struct fts_filter *filter ATTR_UNUSED,
 				     const char **token,
 				     const char **error_r ATTR_UNUSED)
 {
-	unsigned int len = strlen(*token);
+	size_t len = strlen(*token);
 	unichar_t c;
 
 	if (len > 1 && ((*token)[len-1] == 's' || (*token)[len-1] == 'S')) {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
@@ -37,10 +37,25 @@ void imap_fetch_handlers_register(const struct imap_fetch_handler *handlers,
 	array_sort(&fetch_handlers, imap_fetch_handler_cmp);
 }
 
+void imap_fetch_handler_unregister(const char *name)
+{
+	const struct imap_fetch_handler *handler, *first_handler;
+
+	first_handler = array_idx(&fetch_handlers, 0);
+	handler = imap_fetch_handler_lookup(name);
+	i_assert(handler != NULL);
+	array_delete(&fetch_handlers, handler - first_handler, 1);
+}
+
 static int
 imap_fetch_handler_bsearch(const char *name, const struct imap_fetch_handler *h)
 {
 	return strcmp(name, h->name);
+}
+
+const struct imap_fetch_handler *imap_fetch_handler_lookup(const char *name)
+{
+	return array_bsearch(&fetch_handlers, name, imap_fetch_handler_bsearch);
 }
 
 bool imap_fetch_init_handler(struct imap_fetch_init_context *init_ctx)
@@ -70,7 +85,7 @@ void imap_fetch_init_nofail_handler(struct imap_fetch_context *ctx,
 {
 	struct imap_fetch_init_context init_ctx;
 
-	memset(&init_ctx, 0, sizeof(init_ctx));
+	i_zero(&init_ctx);
 	init_ctx.fetch_ctx = ctx;
 	init_ctx.pool = ctx->ctx_pool;
 
@@ -86,8 +101,8 @@ int imap_fetch_att_list_parse(struct client *client, pool_t pool,
 	struct imap_fetch_init_context init_ctx;
 	const char *str;
 
-	memset(&init_ctx, 0, sizeof(init_ctx));
-	init_ctx.fetch_ctx = imap_fetch_alloc(client, pool);
+	i_zero(&init_ctx);
+	init_ctx.fetch_ctx = imap_fetch_alloc(client, pool, "NOTIFY");
 	init_ctx.pool = pool;
 	init_ctx.args = list;
 
@@ -111,13 +126,14 @@ int imap_fetch_att_list_parse(struct client *client, pool_t pool,
 }
 
 struct imap_fetch_context *
-imap_fetch_alloc(struct client *client, pool_t pool)
+imap_fetch_alloc(struct client *client, pool_t pool, const char *reason)
 {
 	struct imap_fetch_context *ctx;
 
 	ctx = p_new(pool, struct imap_fetch_context, 1);
 	ctx->client = client;
 	ctx->ctx_pool = pool;
+	ctx->reason = p_strdup(pool, reason);
 	pool_ref(pool);
 
 	p_array_init(&ctx->all_headers, pool, 64);
@@ -155,7 +171,7 @@ void imap_fetch_add_handler(struct imap_fetch_init_context *ctx,
 		}
 	}
 
-	memset(&h, 0, sizeof(h));
+	i_zero(&h);
 	h.handler = handler;
 	h.context = context;
 	h.buffered = (flags & IMAP_FETCH_HANDLER_FLAG_BUFFERED) != 0;
@@ -231,6 +247,7 @@ get_expunges_fallback(struct mailbox *box,
 	array_append_array(&search_args->args->value.seqset, uid_filter_arr);
 
 	trans = mailbox_transaction_begin(box, 0);
+	mailbox_transaction_set_reason(trans, "FETCH send VANISHED");
 	search_ctx = mailbox_search_init(trans, search_args, NULL, 0, NULL);
 	mail_search_args_unref(&search_args);
 
@@ -349,13 +366,15 @@ static void imap_fetch_init(struct imap_fetch_context *ctx)
 void imap_fetch_begin(struct imap_fetch_context *ctx, struct mailbox *box,
 		      struct mail_search_args *search_args)
 {
+	enum mailbox_transaction_flags trans_flags =
+		MAILBOX_TRANSACTION_FLAG_REFRESH;
 	struct mailbox_header_lookup_ctx *wanted_headers = NULL;
 	const char *const *headers;
 
 	i_assert(!ctx->state.fetching);
 
         imap_fetch_init(ctx);
-        memset(&ctx->state, 0, sizeof(ctx->state));
+        i_zero(&ctx->state);
 
 	if (array_count(&ctx->all_headers) > 0 &&
 	    ((ctx->fetch_data & (MAIL_FETCH_STREAM_HEADER |
@@ -368,9 +387,19 @@ void imap_fetch_begin(struct imap_fetch_context *ctx, struct mailbox *box,
 			     array_count(&ctx->all_headers)-1, 1);
 	}
 
-	ctx->state.trans = mailbox_transaction_begin(box,
-		MAILBOX_TRANSACTION_FLAG_HIDE |
-		MAILBOX_TRANSACTION_FLAG_REFRESH);
+	if (ctx->flags_update_seen) {
+		/* Hide the implicit \Seen flag addition. Otherwise a separate
+		   untagged FETCH FLAGS (\Seen) would be sent on top of the
+		   one FLAGS (\Seen) already added in the main FETCH reply.
+
+		   We don't set this always, because some plugins might want
+		   to do their own flag changes which we don't want hidden.
+		   (Of course this isn't perfect since if implicit \Seen flags
+		   are added, other flag changes are also hidden.) */
+		trans_flags |= MAILBOX_TRANSACTION_FLAG_HIDE;
+	}
+	ctx->state.trans = mailbox_transaction_begin(box, trans_flags);
+	mailbox_transaction_set_reason(ctx->state.trans, ctx->reason);
 
 	mail_search_args_init(search_args, box, TRUE,
 			      &ctx->client->search_saved_uidset);
@@ -379,7 +408,6 @@ void imap_fetch_begin(struct imap_fetch_context *ctx, struct mailbox *box,
 				    ctx->fetch_data, wanted_headers);
 	ctx->state.cur_str = str_new(default_pool, 8192);
 	ctx->state.fetching = TRUE;
-	ctx->state.line_finished = TRUE;
 
 	if (wanted_headers != NULL)
 		mailbox_header_lookup_unref(&wanted_headers);
@@ -402,7 +430,7 @@ static int imap_fetch_flush_buffer(struct imap_fetch_context *ctx)
 		len--;
 		ctx->state.cur_first = FALSE;
 	}
-	ctx->state.cur_flushed = TRUE;
+	ctx->state.line_partial = TRUE;
 
 	if (o_stream_send(ctx->client->output, data, len) < 0)
 		return -1;
@@ -429,6 +457,38 @@ static int imap_fetch_send_nil_reply(struct imap_fetch_context *ctx)
 	return 0;
 }
 
+static void imap_fetch_fix_empty_reply(struct imap_fetch_context *ctx)
+{
+	if (ctx->state.line_partial && ctx->state.cur_first) {
+		/* we've flushed an empty "FETCH (" reply so
+		   far. we can't take it back, but RFC 3501
+		   doesn't allow returning empty "FETCH ()"
+		   either, so just add the current message's
+		   UID there. */
+		str_printfa(ctx->state.cur_str, "UID %u ",
+			    ctx->state.cur_mail->uid);
+	}
+}
+
+static bool imap_fetch_cur_failed(struct imap_fetch_context *ctx)
+{
+	ctx->failures = TRUE;
+	if (ctx->client->set->parsed_fetch_failure ==
+	    IMAP_CLIENT_FETCH_FAILURE_DISCONNECT_IMMEDIATELY)
+		return FALSE;
+
+	if (!array_is_created(&ctx->fetch_failed_uids))
+		p_array_init(&ctx->fetch_failed_uids, ctx->ctx_pool, 8);
+	seq_range_array_add(&ctx->fetch_failed_uids, ctx->state.cur_mail->uid);
+
+	if (ctx->error == MAIL_ERROR_NONE) {
+		/* preserve the first error, since it may change in storage. */
+		ctx->errstr = p_strdup(ctx->ctx_pool,
+			mailbox_get_last_error(ctx->state.cur_mail->box, &ctx->error));
+	}
+	return TRUE;
+}
+
 static int imap_fetch_more_int(struct imap_fetch_context *ctx, bool cancel)
 {
 	struct imap_fetch_state *state = &ctx->state;
@@ -452,7 +512,8 @@ static int imap_fetch_more_int(struct imap_fetch_context *ctx, bool cancel)
 				if (imap_fetch_send_nil_reply(ctx) < 0)
 					return -1;
 			} else {
-				return -1;
+				if (!imap_fetch_cur_failed(ctx))
+					return -1;
 			}
 		}
 
@@ -483,8 +544,8 @@ static int imap_fetch_more_int(struct imap_fetch_context *ctx, bool cancel)
 			str_printfa(state->cur_str, "* %u FETCH (",
 				    state->cur_mail->seq);
 			state->cur_first = TRUE;
-			state->cur_flushed = FALSE;
-			state->line_finished = FALSE;
+			state->cur_str_prefix_size = str_len(state->cur_str);
+			i_assert(!state->line_partial);
 		}
 
 		for (; state->cur_handler < count; state->cur_handler++) {
@@ -492,7 +553,6 @@ static int imap_fetch_more_int(struct imap_fetch_context *ctx, bool cancel)
 			    !handlers[state->cur_handler].buffered) {
 				/* first non-buffered handler.
 				   flush the buffer. */
-				state->line_partial = TRUE;
 				if (imap_fetch_flush_buffer(ctx) < 0)
 					return -1;
 			}
@@ -518,7 +578,8 @@ static int imap_fetch_more_int(struct imap_fetch_context *ctx, bool cancel)
 				} else {
 					i_assert(ret < 0 ||
 						 state->cont_handler != NULL);
-					return -1;
+					if (!imap_fetch_cur_failed(ctx))
+						return -1;
 				}
 			}
 
@@ -528,22 +589,25 @@ static int imap_fetch_more_int(struct imap_fetch_context *ctx, bool cancel)
 				i_stream_unref(&state->cur_input);
 		}
 
-		if (str_len(state->cur_str) > 0) {
+		imap_fetch_fix_empty_reply(ctx);
+		if (str_len(state->cur_str) > 0 &&
+		    (state->line_partial ||
+		     str_len(state->cur_str) != state->cur_str_prefix_size)) {
 			/* no non-buffered handlers */
 			if (imap_fetch_flush_buffer(ctx) < 0)
 				return -1;
 		}
 
-		state->line_finished = TRUE;
-		state->line_partial = FALSE;
-		o_stream_nsend(client->output, ")\r\n", 3);
+		if (state->line_partial)
+			o_stream_nsend(client->output, ")\r\n", 3);
 		client->last_output = ioloop_time;
 
 		state->cur_mail = NULL;
 		state->cur_handler = 0;
+		state->line_partial = FALSE;
 	}
 
-	return 1;
+	return ctx->failures ? -1 : 1;
 }
 
 int imap_fetch_more(struct imap_fetch_context *ctx,
@@ -578,7 +642,9 @@ int imap_fetch_more_no_lock_update(struct imap_fetch_context *ctx)
 	ret = imap_fetch_more_int(ctx, FALSE);
 	if (ret < 0) {
 		ctx->state.failed = TRUE;
-		if (!ctx->state.line_finished) {
+		if (ctx->state.line_partial) {
+			/* we can't send any more replies to client, because
+			   the FETCH reply wasn't fully sent. */
 			client_disconnect(ctx->client,
 				"NOTIFY failed in the middle of FETCH reply");
 		}
@@ -592,17 +658,8 @@ int imap_fetch_end(struct imap_fetch_context *ctx)
 
 	if (ctx->state.fetching) {
 		ctx->state.fetching = FALSE;
-		if (!state->line_finished &&
-		    (!state->cur_first || state->cur_flushed)) {
-			if (state->cur_first) {
-				/* we've flushed an empty "FETCH (" reply so
-				   far. we can't take it back, but RFC 3501
-				   doesn't allow returning empty "FETCH ()"
-				   either, so just add the current message's
-				   UID there. */
-				str_printfa(ctx->state.cur_str, "UID %u ",
-					    state->cur_mail->uid);
-			}
+		if (state->line_partial) {
+			imap_fetch_fix_empty_reply(ctx);
 			if (imap_fetch_flush_buffer(ctx) < 0)
 				state->failed = TRUE;
 			if (o_stream_send(ctx->client->output, ")\r\n", 3) < 0)
@@ -867,8 +924,11 @@ static int fetch_x_mailbox(struct imap_fetch_context *ctx, struct mail *mail,
 	const char *name;
 	string_t *mutf7_name;
 
-	if (mail_get_special(mail, MAIL_FETCH_MAILBOX_NAME, &name) < 0)
-		i_panic("mailbox name not returned");
+	if (mail_get_special(mail, MAIL_FETCH_MAILBOX_NAME, &name) < 0) {
+		/* This can happen with virtual mailbox if the backend mail
+		   is expunged. */
+		return -1;
+	}
 
 	mutf7_name = t_str_new(strlen(name)*2);
 	if (imap_utf8_to_utf7(name, mutf7_name) < 0)

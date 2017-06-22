@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -154,7 +154,7 @@ static void cmd_proxy_kick(int argc, char *argv[])
 	}
 
 	doveadm_print_init(DOVEADM_PRINT_TYPE_FORMATTED);
-	doveadm_print_formatted_set_format("%{count} connections kicked");
+	doveadm_print_formatted_set_format("%{count} connections kicked\n");
 	doveadm_print_header_simple("count");
 
 	cmd = t_str_new(128);

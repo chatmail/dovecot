@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -71,7 +71,7 @@ void mailbox_guid_cache_refresh(struct mailbox_list *list)
 		if (mailbox_get_metadata(box, MAILBOX_METADATA_GUID,
 					 &metadata) < 0) {
 			i_error("Couldn't get mailbox %s GUID: %s",
-				info->vname, mailbox_get_last_error(box, NULL));
+				info->vname, mailbox_get_last_internal_error(box, NULL));
 			list->guid_cache_errors = TRUE;
 		} else if ((rec = hash_table_lookup(list->guid_cache,
 				(const uint8_t *)metadata.guid)) != NULL) {

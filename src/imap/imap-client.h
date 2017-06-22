@@ -52,30 +52,7 @@ enum client_command_state {
 	CLIENT_COMMAND_STATE_DONE
 };
 
-struct client_command_context {
-	struct client_command_context *prev, *next;
-	struct client *client;
-
-	pool_t pool;
-	/* IMAP command tag */
-	const char *tag;
-	/* Name of this command */
-	const char *name;
-	/* Parameters for this command. These are generated from parsed IMAP
-	   arguments, so they may not be exactly the same as how client sent
-	   them. */
-	const char *args;
-	enum command_flags cmd_flags;
-	const char *tagline_reply;
-
-	command_func_t *func;
-	void *context;
-
-	/* Module-specific contexts. */
-	ARRAY(union imap_module_context *) module_contexts;
-
-	struct imap_parser *parser;
-	enum client_command_state state;
+struct client_command_stats {
 	/* time when command handling was started - typically this is after
 	   reading all the parameters. */
 	struct timeval start_time;
@@ -90,8 +67,45 @@ struct client_command_context {
 	uint64_t lock_wait_usecs;
 	/* how many bytes of client input/output command has used */
 	uint64_t bytes_in, bytes_out;
+};
 
-	struct client_sync_context *sync;
+struct client_command_stats_start {
+	struct timeval timeval;
+	uint64_t lock_wait_usecs;
+	uint64_t bytes_in, bytes_out;
+};
+
+struct client_command_context {
+	struct client_command_context *prev, *next;
+	struct client *client;
+
+	pool_t pool;
+	/* IMAP command tag */
+	const char *tag;
+	/* Name of this command */
+	const char *name;
+	/* Parameters for this command. These are generated from parsed IMAP
+	   arguments, so they may not be exactly the same as how client sent
+	   them. */
+	const char *args;
+	/* Parameters for this command generated with
+	   imap_write_args_for_human(), so it's suitable for logging. */
+	const char *human_args;
+	enum command_flags cmd_flags;
+	const char *tagline_reply;
+
+	command_func_t *func;
+	void *context;
+
+	/* Module-specific contexts. */
+	ARRAY(union imap_module_context *) module_contexts;
+
+	struct imap_parser *parser;
+	enum client_command_state state;
+	struct client_command_stats stats;
+	struct client_command_stats_start stats_start;
+
+	struct imap_client_sync_context *sync;
 
 	unsigned int uid:1; /* used UID command */
 	unsigned int cancel:1; /* command is wanted to be cancelled */
@@ -116,6 +130,13 @@ struct imap_client_vfuncs {
 				const unsigned char *data, size_t size,
 				const char **error_r);
 	void (*destroy)(struct client *client, const char *reason);
+
+	void (*send_tagline)(struct client_command_context *cmd,
+			     const char *data);
+	/* Run "mailbox syncing". This can send any unsolicited untagged
+	   replies. Returns 1 = done, 0 = wait for more space in output buffer,
+	   -1 = failed. */
+	int (*sync_notify_more)(struct imap_sync_context *ctx);
 };
 
 struct client {
@@ -155,8 +176,12 @@ struct client {
 	struct client_command_context *command_queue;
 	unsigned int command_queue_size;
 
+	char *last_cmd_name;
+	struct client_command_stats last_cmd_stats;
+
 	uint64_t sync_last_full_modseq;
 	uint64_t highest_fetch_modseq;
+	ARRAY_TYPE(seq_range) fetch_failed_uids;
 
 	/* For imap_logout_format statistics: */
 	unsigned int fetch_hdr_count, fetch_body_count;
@@ -186,6 +211,7 @@ struct client {
 	/* syncing marks this TRUE when it sees \Deleted flags. this is by
 	   EXPUNGE for Outlook-workaround. */
 	unsigned int sync_seen_deletes:1;
+	unsigned int logged_out:1;
 	unsigned int disconnected:1;
 	unsigned int destroyed:1;
 	unsigned int handling_input:1;
@@ -231,6 +257,10 @@ void client_destroy(struct client *client, const char *reason) ATTR_NULL(2);
 /* Disconnect client connection */
 void client_disconnect(struct client *client, const char *reason);
 void client_disconnect_with_error(struct client *client, const char *msg);
+
+/* Add the given capability to the CAPABILITY reply. If imap_capability setting
+   has an explicit capability, nothing is changed. */
+void client_add_capability(struct client *client, const char *capability);
 
 /* Send a line of data to client. */
 void client_send_line(struct client *client, const char *data);

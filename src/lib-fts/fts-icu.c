@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mempool.h"
@@ -30,7 +30,7 @@ static struct UCaseMap *fts_icu_csm(void)
 void fts_icu_utf8_to_utf16(buffer_t *dest_utf16, const char *src_utf8)
 {
 	UErrorCode err = U_ZERO_ERROR;
-	unsigned int src_bytes = strlen(src_utf8);
+	size_t src_bytes = strlen(src_utf8);
 	int32_t utf16_len;
 	UChar *dest_data, *retp = NULL;
 	int32_t avail_uchars = 0;
@@ -142,14 +142,17 @@ void fts_icu_lcase(string_t *dest_utf8, const char *src_utf8)
 	avail_bytes = buffer_get_writable_size(dest_utf8) - dest_pos;
 	dest_data = buffer_get_space_unsafe(dest_utf8, dest_pos, avail_bytes);
 
-	dest_full_len = ucasemap_utf8ToLower(csm, dest_data, avail_bytes,
-					     src_utf8, -1, &err);
-	if (err == U_BUFFER_OVERFLOW_ERROR) {
+	/* ucasemap_utf8ToLower() may need to be called multiple times, because
+	   the first return value may not be large enough. */
+	for (unsigned int i = 0;; i++) {
+		dest_full_len = ucasemap_utf8ToLower(csm, dest_data, avail_bytes,
+						     src_utf8, -1, &err);
+		if (err != U_BUFFER_OVERFLOW_ERROR || i == 2)
+			break;
+
 		err = U_ZERO_ERROR;
 		dest_data = buffer_get_space_unsafe(dest_utf8, dest_pos, dest_full_len);
-		dest_full_len = ucasemap_utf8ToLower(csm, dest_data, dest_full_len,
-						     src_utf8, -1, &err);
-		i_assert(err != U_BUFFER_OVERFLOW_ERROR);
+		avail_bytes = dest_full_len;
 	}
 	if (U_FAILURE(err)) {
 		i_fatal("LibICU ucasemap_utf8ToLower() failed: %s",
@@ -175,7 +178,7 @@ int fts_icu_transliterator_create(const char *id,
 	UParseError perr;
 	buffer_t *id_utf16_buf = buffer_create_dynamic(pool_datastack_create(), 2 * strlen(id));
 	UChar *id_utf16;
-	memset(&perr, 0, sizeof(perr));
+	i_zero(&perr);
 
 	fts_icu_utf8_to_utf16(id_utf16_buf, id);
 	id_utf16 = (UChar *)str_c(id_utf16_buf);

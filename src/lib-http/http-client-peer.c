@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -180,6 +180,28 @@ http_client_peer_start_backoff_timer(struct http_client_peer *peer)
 			backoff_time_spent - peer->backoff_time_msecs);
 	}
 	return FALSE;
+}
+
+static void
+http_client_peer_increase_backoff_timer(struct http_client_peer *peer)
+{
+	const struct http_client_settings *set = &peer->client->set;
+
+	if (peer->backoff_time_msecs == 0)
+		peer->backoff_time_msecs = set->connect_backoff_time_msecs;
+	else
+		peer->backoff_time_msecs *= 2;
+	if (peer->backoff_time_msecs > set->connect_backoff_max_time_msecs)
+		peer->backoff_time_msecs = set->connect_backoff_max_time_msecs;
+}
+
+static void
+http_client_peer_reset_backoff_timer(struct http_client_peer *peer)
+{
+	peer->backoff_time_msecs = 0;
+
+	if (peer->to_backoff != NULL)
+		timeout_remove(&peer->to_backoff);
 }
 
 static void
@@ -644,6 +666,9 @@ static void http_client_peer_drop(struct http_client_peer **_peer)
 		return;
 	}
 
+	if (peer->to_backoff != NULL)
+		return;
+
 	if (http_client_peer_start_backoff_timer(peer)) {
 		http_client_peer_debug(peer,
 			"Dropping peer (waiting for backof timeout)");
@@ -710,7 +735,7 @@ void http_client_peer_unlink_queue(struct http_client_peer *peer,
 				queue->name, array_count(&peer->queues));
 
 			if (array_count(&peer->queues) == 0)
-				http_client_peer_drop(&peer);
+				http_client_peer_check_idle(peer);
 			return;
 		}
 	}
@@ -742,10 +767,7 @@ void http_client_peer_connection_success(struct http_client_peer *peer)
 		array_count(&peer->conns));
 
 	peer->last_failure.tv_sec = peer->last_failure.tv_usec = 0;
-	peer->backoff_time_msecs = 0;
-
-	if (peer->to_backoff != NULL)
-		timeout_remove(&peer->to_backoff);
+	http_client_peer_reset_backoff_timer(peer);
 
 	array_foreach(&peer->queues, queue) {
 		http_client_queue_connection_success(*queue, &peer->addr);
@@ -757,7 +779,6 @@ void http_client_peer_connection_success(struct http_client_peer *peer)
 void http_client_peer_connection_failure(struct http_client_peer *peer,
 					 const char *reason)
 {
-	const struct http_client_settings *set = &peer->client->set;
 	struct http_client_queue *const *queue;
 	unsigned int pending;
 
@@ -773,14 +794,8 @@ void http_client_peer_connection_failure(struct http_client_peer *peer,
 		array_count(&peer->conns), pending);
 
 	/* manage backoff timer only when this was the only attempt */
-	if (pending == 1) {
-		if (peer->backoff_time_msecs == 0)
-			peer->backoff_time_msecs = set->connect_backoff_time_msecs;
-		else
-			peer->backoff_time_msecs *= 2;
-		if (peer->backoff_time_msecs > set->connect_backoff_max_time_msecs)
-			peer->backoff_time_msecs = set->connect_backoff_max_time_msecs;
-	}
+	if (pending == 1)
+		http_client_peer_increase_backoff_timer(peer);
 
 	if (pending > 1) {
 		/* if there are other connections attempting to connect, wait
@@ -798,7 +813,8 @@ void http_client_peer_connection_failure(struct http_client_peer *peer,
 	}
 }
 
-void http_client_peer_connection_lost(struct http_client_peer *peer)
+void http_client_peer_connection_lost(struct http_client_peer *peer,
+	bool premature)
 {
 	unsigned int num_pending, num_urgent;
 
@@ -812,10 +828,20 @@ void http_client_peer_connection_lost(struct http_client_peer *peer)
 	num_pending = http_client_peer_requests_pending(peer, &num_urgent);
 
 	http_client_peer_debug(peer,
-		"Lost a connection (%u queues linked, %u connections left, "
+		"Lost a connection%s (%u queues linked, %u connections left, "
 			"%u requests pending, %u requests urgent)",
+		(premature ? " prematurely" : ""),
 		array_count(&peer->queues), array_count(&peer->conns),
 		num_pending, num_urgent);
+
+	/* update backoff timer if the connection was lost prematurely.
+	   this prevents reconnecting immediately to a server that is
+	   misbehaving by disconnecting before sending a response.
+	 */
+	if (premature) {
+		peer->last_failure = ioloop_timeval;
+		http_client_peer_increase_backoff_timer(peer);
+	}
 
 	if (peer->handling_requests) {
 		/* we got here from the request handler loop */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -90,7 +90,7 @@ vfile_object_add_right(struct acl_object *aclobj, unsigned int idx,
 		return FALSE;
 	}
 
-	memset(&right, 0, sizeof(right));
+	i_zero(&right);
 	right.id_type = update->rights.id_type;
 	right.identifier = p_strdup(aclobj->rights_pool,
 				    update->rights.identifier);

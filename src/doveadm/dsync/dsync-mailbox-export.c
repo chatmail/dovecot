@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -73,7 +73,7 @@ static int dsync_mail_error(struct dsync_mailbox_exporter *exporter,
 	const char *errstr;
 	enum mail_error error;
 
-	errstr = mailbox_get_last_error(exporter->box, &error);
+	errstr = mailbox_get_last_internal_error(exporter->box, &error);
 	if (error == MAIL_ERROR_EXPUNGED)
 		return 0;
 
@@ -208,7 +208,7 @@ search_update_flag_change_guid(struct dsync_mailbox_exporter *exporter,
 		return -1;
 	if (ret == 0) {
 		/* the message was expunged during export */
-		memset(change, 0, sizeof(*change));
+		i_zero(change);
 		change->type = DSYNC_MAIL_CHANGE_TYPE_EXPUNGE;
 		change->uid = mail->uid;
 
@@ -423,8 +423,8 @@ dsync_mailbox_export_search(struct dsync_mailbox_exporter *exporter)
 	    exporter->error == NULL) {
 		exporter->error = p_strdup_printf(exporter->pool,
 			"Mail search failed: %s",
-			mailbox_get_last_error(exporter->box,
-					       &exporter->mail_error));
+			mailbox_get_last_internal_error(exporter->box,
+							&exporter->mail_error));
 	}
 }
 
@@ -561,8 +561,8 @@ dsync_mailbox_export_iter_next_nonexistent_attr(struct dsync_mailbox_exporter *e
 						 attr->key, &value) < 0) {
 			exporter->error = p_strdup_printf(exporter->pool,
 				"Mailbox attribute %s lookup failed: %s", attr->key,
-				mailbox_get_last_error(exporter->box,
-						       &exporter->mail_error));
+				mailbox_get_last_internal_error(exporter->box,
+								&exporter->mail_error));
 			break;
 		}
 		if ((value.flags & MAIL_ATTRIBUTE_VALUE_FLAG_READONLY) != 0) {
@@ -614,8 +614,8 @@ dsync_mailbox_export_iter_next_attr(struct dsync_mailbox_exporter *exporter)
 						 &value) < 0) {
 			exporter->error = p_strdup_printf(exporter->pool,
 				"Mailbox attribute %s lookup failed: %s", key,
-				mailbox_get_last_error(exporter->box,
-						       &exporter->mail_error));
+				mailbox_get_last_internal_error(exporter->box,
+								&exporter->mail_error));
 			return -1;
 		}
 		if ((value.flags & MAIL_ATTRIBUTE_VALUE_FLAG_READONLY) != 0) {
@@ -631,15 +631,20 @@ dsync_mailbox_export_iter_next_attr(struct dsync_mailbox_exporter *exporter)
 			   skip for this sync. */
 			continue;
 		}
+		if (attr_change != NULL && attr_change->exported) {
+			/* duplicate attribute returned.
+			   shouldn't normally happen, but don't crash. */
+			i_warning("Ignoring duplicate attributes '%s'", key);
+			continue;
+		}
 
 		attr = &exporter->attr;
-		memset(attr, 0, sizeof(*attr));
+		i_zero(attr);
 		attr->type = exporter->attr_type;
 		attr->value = p_strdup(exporter->pool, value.value);
 		attr->value_stream = value.value_stream;
 		attr->last_change = value.last_change;
 		if (attr_change != NULL) {
-			i_assert(!attr_change->exported);
 			attr_change->exported = TRUE;
 			attr->key = attr_change->key;
 			attr->deleted = attr_change->deleted &&
@@ -653,8 +658,8 @@ dsync_mailbox_export_iter_next_attr(struct dsync_mailbox_exporter *exporter)
 	if (mailbox_attribute_iter_deinit(&exporter->attr_iter) < 0) {
 		exporter->error = p_strdup_printf(exporter->pool,
 			"Mailbox attribute iteration failed: %s",
-			mailbox_get_last_error(exporter->box,
-					       &exporter->mail_error));
+			mailbox_get_last_internal_error(exporter->box,
+							&exporter->mail_error));
 		return -1;
 	}
 	if (exporter->attr_type == MAIL_ATTRIBUTE_TYPE_PRIVATE) {
@@ -795,8 +800,8 @@ dsync_mailbox_export_body_search_deinit(struct dsync_mailbox_exporter *exporter)
 	    exporter->error == NULL) {
 		exporter->error = p_strdup_printf(exporter->pool,
 			"Mail search failed: %s",
-			mailbox_get_last_error(exporter->box,
-					       &exporter->mail_error));
+			mailbox_get_last_internal_error(exporter->box,
+							&exporter->mail_error));
 	}
 }
 
@@ -907,7 +912,7 @@ int dsync_mailbox_export_next_mail(struct dsync_mailbox_exporter *exporter,
 	   return them */
 	guids = array_get(&exporter->expunged_guids, &count);
 	if (exporter->expunged_guid_idx < count) {
-		memset(&exporter->dsync_mail, 0, sizeof(exporter->dsync_mail));
+		i_zero(&exporter->dsync_mail);
 		exporter->dsync_mail.guid =
 			guids[exporter->expunged_guid_idx++];
 		*mail_r = &exporter->dsync_mail;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -8,6 +8,11 @@
 
 static struct mail_transaction_log *log;
 static struct mail_transaction_log_view *view;
+
+void mail_index_set_error(struct mail_index *index ATTR_UNUSED,
+			  const char *fmt ATTR_UNUSED, ...)
+{
+}
 
 void mail_transaction_log_file_set_corrupted(struct mail_transaction_log_file *file ATTR_UNUSED,
 					     const char *fmt ATTR_UNUSED, ...)
@@ -36,14 +41,16 @@ int mail_transaction_log_find_file(struct mail_transaction_log *log,
 }
 
 int mail_transaction_log_file_map(struct mail_transaction_log_file *file ATTR_UNUSED,
-				  uoff_t start_offset ATTR_UNUSED, uoff_t end_offset ATTR_UNUSED)
+				  uoff_t start_offset ATTR_UNUSED, uoff_t end_offset ATTR_UNUSED,
+				  const char **reason_r ATTR_UNUSED)
 {
 	return 1;
 }
 
 int mail_transaction_log_file_get_highest_modseq_at(
 		struct mail_transaction_log_file *file ATTR_UNUSED,
-		uoff_t offset ATTR_UNUSED, uint64_t *highest_modseq_r)
+		uoff_t offset ATTR_UNUSED, uint64_t *highest_modseq_r,
+		const char **error_r ATTR_UNUSED)
 {
 	*highest_modseq_r = 0;
 	return 0;
@@ -51,7 +58,8 @@ int mail_transaction_log_file_get_highest_modseq_at(
 
 void mail_transaction_update_modseq(const struct mail_transaction_header *hdr ATTR_UNUSED,
 				    const void *data ATTR_UNUSED,
-				    uint64_t *cur_modseq)
+				    uint64_t *cur_modseq,
+				    unsigned int version ATTR_UNUSED)
 {
 	*cur_modseq += 1;
 }
@@ -105,7 +113,7 @@ add_append_record(struct mail_transaction_log_file *file,
 	struct mail_transaction_header hdr;
 	size_t size;
 
-	memset(&hdr, 0, sizeof(hdr));
+	i_zero(&hdr);
 	hdr.type = MAIL_TRANSACTION_APPEND | MAIL_TRANSACTION_EXTERNAL;
 	hdr.size = mail_index_uint32_to_offset(sizeof(hdr) + sizeof(*rec));
 
@@ -139,7 +147,7 @@ static void test_mail_transaction_log_view(void)
 	test_transaction_log_file_add(3);
 
 	/* add an append record to the 3rd log file */
-	memset(&append_rec, 0, sizeof(append_rec));
+	i_zero(&append_rec);
 	append_rec.uid = 1;
 
 	last_log_size = sizeof(struct mail_transaction_log_header) +

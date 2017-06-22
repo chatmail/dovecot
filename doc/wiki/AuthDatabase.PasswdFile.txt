@@ -100,4 +100,27 @@ allow_nets=192.168.0.0/24
 user2:{plain}pass2:1001:1001::/home/user2
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-12-03 04:43)
+Passwd as a password database on FreeBSD
+----------------------------------------
+
+On FreeBSD, passwd doesn't work as a password database because the password
+field is replaced by a '*'. But you can convert '/etc/master.passwd' into a
+passwd-file. In '/etc/master.passwd', a password of '*' indicates that password
+authentication is disabled, so you might as well exclude those:
+
+---%<-------------------------------------------------------------------------
+# grep -v '*' /etc/master.passwd > file-with-encrypted-passwords
+# chmod 400 file-with-encrypted-passwords
+# chown dovecot file-with-encrypted-passwords
+---%<-------------------------------------------------------------------------
+
+Then use:
+
+---%<-------------------------------------------------------------------------
+passdb {
+  driver = passwd-file
+  args = path-to-file-with-encrypted-passwords
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2017-05-30 16:30)

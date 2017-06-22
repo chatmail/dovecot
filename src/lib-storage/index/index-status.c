@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -184,6 +184,7 @@ void index_storage_get_open_status(struct mailbox *box,
 			status_r->allow_new_keywords =
 				!box->disallow_new_keywords;
 		}
+		status_r->flags = MAIL_FLAGS_NONRECENT;
 	}
 }
 

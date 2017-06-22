@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -36,7 +36,7 @@ void env_remove(const char *name)
 #endif
 #else
 	extern char **environ;
-	unsigned int len;
+	size_t len;
 	char **envp;
 
 	len = strlen(name);

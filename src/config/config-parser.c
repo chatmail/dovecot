@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -552,7 +552,7 @@ config_parse_line(struct config_parser_context *ctx,
 		  const char **key_r, const char **value_r)
 {
 	const char *key;
-	unsigned int len;
+	size_t len;
 	char *p;
 
 	*key_r = NULL;
@@ -780,7 +780,7 @@ static int config_write_value(struct config_parser_context *ctx,
 	string_t *str = ctx->str;
 	const void *var_name, *var_value, *p;
 	enum setting_type var_type;
-	const char *error, *path;
+	const char *error, *path, *full_key;
 	bool dump, expand_parent;
 
 	switch (type) {
@@ -788,15 +788,16 @@ static int config_write_value(struct config_parser_context *ctx,
 		str_append(str, value);
 		break;
 	case CONFIG_LINE_TYPE_KEYFILE:
+		full_key = t_strndup(str_data(ctx->str), str_len(str)-1);
 		if (!ctx->expand_values) {
 			str_append_c(str, '<');
 			str_append(str, value);
 		} else {
-			if (!config_require_key(ctx, key)) {
+			if (!config_require_key(ctx, full_key)) {
 				/* don't even try to open the file */
 			} else {
 				path = fix_relative_path(value, ctx->cur_input);
-				if (str_append_file(str, key, path, &error) < 0) {
+				if (str_append_file(str, full_key, path, &error) < 0) {
 					/* file reading failed */
 					ctx->error = p_strdup(ctx->pool, error);
 					return -1;
@@ -966,7 +967,7 @@ int config_parse_file(const char *path, bool expand_values,
 		}
 	}
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.pool = pool_alloconly_create(MEMPOOL_GROWING"config file parser", 1024*256);
 	ctx.path = path;
 	ctx.hide_errors = fd == -1;
@@ -981,7 +982,7 @@ int config_parse_file(const char *path, bool expand_values,
 					     settings_parser_flags);
 	}
 
-	memset(&root, 0, sizeof(root));
+	i_zero(&root);
 	root.path = path;
 	ctx.cur_input = &root;
 	ctx.expand_values = expand_values;
@@ -1051,7 +1052,7 @@ void config_parse_load_modules(void)
 	struct service_settings *const *services, *service_set;
 	unsigned int i, count;
 
-	memset(&mod_set, 0, sizeof(mod_set));
+	i_zero(&mod_set);
 	mod_set.abi_version = DOVECOT_ABI_VERSION;
 	modules = module_dir_load(CONFIG_MODULE_DIR, NULL, &mod_set);
 	module_dir_init(modules);

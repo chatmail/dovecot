@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -13,6 +13,7 @@
 #include "mailbox-list-private.h"
 #include "quota-private.h"
 #include "quota-fs.h"
+#include "settings-parser.h"
 
 #include <sys/wait.h>
 
@@ -38,32 +39,77 @@ extern struct quota_backend quota_backend_count;
 extern struct quota_backend quota_backend_dict;
 extern struct quota_backend quota_backend_dirsize;
 extern struct quota_backend quota_backend_fs;
+extern struct quota_backend quota_backend_imapc;
 extern struct quota_backend quota_backend_maildir;
 
-static const struct quota_backend *quota_backends[] = {
+static const struct quota_backend *quota_internal_backends[] = {
 #ifdef HAVE_FS_QUOTA
 	&quota_backend_fs,
 #endif
 	&quota_backend_count,
 	&quota_backend_dict,
 	&quota_backend_dirsize,
+	&quota_backend_imapc,
 	&quota_backend_maildir
 };
 
-static int quota_default_test_alloc(struct quota_transaction_context *ctx,
-				    uoff_t size, bool *too_large_r);
+static ARRAY(const struct quota_backend*) quota_backends;
+
+static enum quota_alloc_result quota_default_test_alloc(
+		struct quota_transaction_context *ctx, uoff_t size);
 static void quota_over_flag_check_root(struct quota_root *root);
 
 static const struct quota_backend *quota_backend_find(const char *name)
 {
-	unsigned int i;
+	const struct quota_backend *const *backend;
 
-	for (i = 0; i < N_ELEMENTS(quota_backends); i++) {
-		if (strcmp(quota_backends[i]->name, name) == 0)
-			return quota_backends[i];
+	array_foreach(&quota_backends, backend) {
+		if (strcmp((*backend)->name, name) == 0)
+			return *backend;
 	}
 
 	return NULL;
+}
+
+void quota_backend_register(const struct quota_backend *backend)
+{
+	i_assert(quota_backend_find(backend->name) == NULL);
+	array_append(&quota_backends, &backend, 1);
+}
+
+void quota_backend_unregister(const struct quota_backend *backend)
+{
+	for(unsigned int i = 0; i < array_count(&quota_backends); i++) {
+		const struct quota_backend *const *be =
+			array_idx(&quota_backends, i);
+		if (strcmp((*be)->name, backend->name) == 0) {
+			array_delete(&quota_backends, i, 1);
+			return;
+		}
+	}
+
+	i_unreached();
+}
+
+void quota_backends_register(void);
+void quota_backends_unregister(void);
+
+void quota_backends_register(void)
+{
+	i_array_init(&quota_backends, 8);
+	array_append(&quota_backends, quota_internal_backends,
+		     N_ELEMENTS(quota_internal_backends));
+}
+
+void quota_backends_unregister(void)
+{
+	for(size_t i = 0; i < N_ELEMENTS(quota_internal_backends); i++) {
+		quota_backend_unregister(quota_internal_backends[i]);
+	}
+
+	i_assert(array_count(&quota_backends) == 0);
+	array_free(&quota_backends);
+
 }
 
 static int quota_root_add_rules(struct mail_user *user, const char *root_name,
@@ -218,6 +264,24 @@ quota_root_add(struct quota_settings *quota_set, struct mail_user *user,
 	return 0;
 }
 
+const char *quota_alloc_result_errstr(enum quota_alloc_result res,
+		struct quota_transaction_context *qt)
+{
+	switch (res) {
+	case QUOTA_ALLOC_RESULT_OK:
+		return "OK";
+	case QUOTA_ALLOC_RESULT_TEMPFAIL:
+		return "Internal quota calculation error";
+	case QUOTA_ALLOC_RESULT_OVER_MAXSIZE:
+		return "Mail size is larger than the maximum size allowed by "
+		       "server configuration";
+	case QUOTA_ALLOC_RESULT_OVER_QUOTA_LIMIT:
+	case QUOTA_ALLOC_RESULT_OVER_QUOTA:
+		return qt->quota->set->quota_exceeded_msg;
+	}
+	i_unreached();
+}
+
 int quota_user_read_settings(struct mail_user *user,
 			     struct quota_settings **set_r,
 			     const char **error_r)
@@ -239,6 +303,18 @@ int quota_user_read_settings(struct mail_user *user,
 		quota_set->quota_exceeded_msg = DEFAULT_QUOTA_EXCEEDED_MSG;
 	quota_set->vsizes = mail_user_plugin_getenv(user, "quota_vsizes") != NULL;
 
+	const char *max_size = mail_user_plugin_getenv(user,
+						       "quota_max_mail_size");
+	if (max_size != NULL) {
+		const char *error = NULL;
+		if (settings_get_size(max_size, &quota_set->max_mail_size,
+					&error) < 0) {
+			*error_r = t_strdup_printf("quota_max_mail_size: %s",
+					error);
+			return -1;
+		}
+	}
+
 	p_array_init(&quota_set->root_sets, pool, 4);
 	if (i_strocpy(root_name, "quota", sizeof(root_name)) < 0)
 		i_unreached();
@@ -257,7 +333,8 @@ int quota_user_read_settings(struct mail_user *user,
 		if (i_snprintf(root_name, sizeof(root_name), "quota%d", i) < 0)
 			i_unreached();
 	}
-	if (array_count(&quota_set->root_sets) == 0) {
+	if (quota_set->max_mail_size == 0 &&
+	    array_count(&quota_set->root_sets) == 0) {
 		pool_unref(&pool);
 		return 0;
 	}
@@ -456,11 +533,19 @@ quota_is_duplicate_namespace(struct quota *quota, struct mail_namespace *ns)
 
 	if (!mailbox_list_get_root_path(ns->list,
 					MAILBOX_LIST_PATH_TYPE_MAILBOX, &path))
-		return TRUE;
+		path = NULL;
 
 	namespaces = array_get(&quota->namespaces, &count);
 	for (i = 0; i < count; i++) {
-		if (mailbox_list_get_root_path(namespaces[i]->list,
+		/* count namespace aliases only once. don't rely only on
+		   alias_for != NULL, because the alias might have been
+		   explicitly added as the wanted quota namespace. */
+		if (ns->alias_for == namespaces[i] ||
+		    namespaces[i]->alias_for == ns)
+			continue;
+
+		if (path != NULL &&
+		    mailbox_list_get_root_path(namespaces[i]->list,
 				MAILBOX_LIST_PATH_TYPE_MAILBOX, &path2) &&
 		    strcmp(path, path2) == 0) {
 			/* duplicate path */
@@ -740,7 +825,7 @@ int quota_set_resource(struct quota_root *root, const char *name,
 	if (root->limit_set_dict == NULL) {
 		struct dict_settings set;
 
-		memset(&set, 0, sizeof(set));
+		i_zero(&set);
 		set.username = root->quota->user->username;
 		set.base_dir = root->quota->user->set->base_dir;
 		if (mail_user_get_home(root->quota->user, &set.home_dir) <= 0)
@@ -874,14 +959,14 @@ int quota_transaction_set_limits(struct quota_transaction_context *ctx)
 }
 
 static void quota_warning_execute(struct quota_root *root, const char *cmd,
-				  const char *last_arg)
+				  const char *last_arg, const char *reason)
 {
 	const char *socket_path, *const *args;
 	string_t *str;
 	int fd;
 
 	if (root->quota->set->debug)
-		i_debug("quota: Executing warning: %s", cmd);
+		i_debug("quota: Executing warning: %s (because %s)", cmd, reason);
 
 	args = t_strsplit_spaces(cmd, " ");
 	if (last_arg != NULL) {
@@ -912,7 +997,7 @@ static void quota_warning_execute(struct quota_root *root, const char *cmd,
 	}
 
 	str = t_str_new(1024);
-	str_append(str, "VERSION\tscript\t3\t0\nnoreply\n");
+	str_append(str, "VERSION\tscript\t4\t0\nnoreply\n");
 	for (; *args != NULL; args++) {
 		str_append(str, *args);
 		str_append_c(str, '\n');
@@ -933,6 +1018,7 @@ static void quota_warnings_execute(struct quota_transaction_context *ctx,
 	unsigned int i, count;
 	uint64_t bytes_current, bytes_before, bytes_limit;
 	uint64_t count_current, count_before, count_limit;
+	const char *reason;
 
 	warnings = array_get_modifiable(&root->set->warning_rules, &count);
 	if (count == 0)
@@ -945,13 +1031,22 @@ static void quota_warnings_execute(struct quota_transaction_context *ctx,
 			       &count_current, &count_limit) < 0)
 		return;
 
-	bytes_before = bytes_current - ctx->bytes_used;
-	count_before = count_current - ctx->count_used;
+	if (ctx->bytes_used > 0 && bytes_current < (uint64_t)ctx->bytes_used)
+		bytes_before = 0;
+	else
+		bytes_before = bytes_current - ctx->bytes_used;
+
+	if (ctx->count_used > 0 && count_current < (uint64_t)ctx->count_used)
+		count_before = 0;
+	else
+		count_before = count_current - ctx->count_used;
 	for (i = 0; i < count; i++) {
 		if (quota_warning_match(&warnings[i],
 					bytes_before, bytes_current,
-					count_before, count_current)) {
-			quota_warning_execute(root, warnings[i].command, NULL);
+					count_before, count_current,
+					&reason)) {
+			quota_warning_execute(root, warnings[i].command,
+					      NULL, reason);
 			break;
 		}
 	}
@@ -1010,36 +1105,54 @@ int quota_transaction_commit(struct quota_transaction_context **_ctx)
 	return ret;
 }
 
-static void quota_over_flag_init_root(struct quota_root *root)
+static bool quota_over_flag_init_root(struct quota_root *root,
+				      const char **quota_over_script_r,
+				      const char **quota_over_flag_r,
+				      bool *status_r)
 {
 	const char *name, *flag_mask;
 
-	if (root->quota_over_flag_initialized)
-		return;
-	root->quota_over_flag_initialized = TRUE;
+	*quota_over_flag_r = NULL;
+	*status_r = FALSE;
+
+	name = t_strconcat(root->set->set_name, "_over_script", NULL);
+	*quota_over_script_r = mail_user_plugin_getenv(root->quota->user, name);
+	if (*quota_over_script_r == NULL) {
+		if (root->quota->set->debug) {
+			i_debug("quota: quota_over_flag check: "
+				"%s unset - skipping", name);
+		}
+		return FALSE;
+	}
 
 	/* e.g.: quota_over_flag_value=TRUE or quota_over_flag_value=*  */
 	name = t_strconcat(root->set->set_name, "_over_flag_value", NULL);
 	flag_mask = mail_user_plugin_getenv(root->quota->user, name);
-	if (flag_mask == NULL)
-		return;
+	if (flag_mask == NULL) {
+		if (root->quota->set->debug) {
+			i_debug("quota: quota_over_flag check: "
+				"%s unset - skipping", name);
+		}
+		return FALSE;
+	}
 
-	/* compare quota_over_flag's value to quota_over_flag_value and
-	   save the result. */
+	/* compare quota_over_flag's value (that comes from userdb) to
+	   quota_over_flag_value and save the result. */
 	name = t_strconcat(root->set->set_name, "_over_flag", NULL);
-	root->quota_over_flag = p_strdup_empty(root->pool,
-		mail_user_plugin_getenv(root->quota->user, name));
-	root->quota_over_flag_status = root->quota_over_flag != NULL &&
-		wildcard_match_icase(root->quota_over_flag, flag_mask);
+	*quota_over_flag_r = mail_user_plugin_getenv(root->quota->user, name);
+	*status_r = *quota_over_flag_r != NULL &&
+		wildcard_match_icase(*quota_over_flag_r, flag_mask);
+	return TRUE;
 }
 
 static void quota_over_flag_check_root(struct quota_root *root)
 {
-	const char *name, *overquota_script;
+	const char *quota_over_script, *quota_over_flag;
 	const char *const *resources;
 	unsigned int i;
 	uint64_t value, limit;
 	bool cur_overquota = FALSE;
+	bool quota_over_status;
 	int ret;
 
 	if (root->quota_over_flag_checked)
@@ -1047,16 +1160,26 @@ static void quota_over_flag_check_root(struct quota_root *root)
 	if (root->quota->user->session_create_time +
 	    QUOTA_OVER_FLAG_MAX_DELAY_SECS < ioloop_time) {
 		/* userdb's quota_over_flag lookup is too old. */
+		if (root->quota->set->debug) {
+			i_debug("quota: quota_over_flag check: "
+				"Flag lookup time is too old - skipping");
+		}
 		return;
 	}
 	if (root->quota->user->session_restored) {
 		/* we don't know whether the quota_over_script was executed
 		   before hibernation. just assume that it was, so we don't
 		   unnecessarily call it too often. */
+		if (root->quota->set->debug) {
+			i_debug("quota: quota_over_flag check: "
+				"Session was already hibernated - skipping");
+		}
 		return;
 	}
 	root->quota_over_flag_checked = TRUE;
-	quota_over_flag_init_root(root);
+	if (!quota_over_flag_init_root(root, &quota_over_script,
+				       &quota_over_flag, &quota_over_status))
+		return;
 
 	resources = quota_root_get_resources(root);
 	for (i = 0; resources[i] != NULL; i++) {
@@ -1080,15 +1203,13 @@ static void quota_over_flag_check_root(struct quota_root *root)
 	}
 	if (root->quota->set->debug) {
 		i_debug("quota: quota_over_flag=%d(%s) vs currently overquota=%d",
-			root->quota_over_flag_status,
-			root->quota_over_flag == NULL ? "(null)" : root->quota_over_flag,
-			cur_overquota);
+			quota_over_status ? 1 : 0,
+			quota_over_flag == NULL ? "(null)" : quota_over_flag,
+			cur_overquota ? 1 : 0);
 	}
-	if (cur_overquota != root->quota_over_flag_status) {
-		name = t_strconcat(root->set->set_name, "_over_script", NULL);
-		overquota_script = mail_user_plugin_getenv(root->quota->user, name);
-		if (overquota_script != NULL)
-			quota_warning_execute(root, overquota_script, root->quota_over_flag);
+	if (cur_overquota != quota_over_status) {
+		quota_warning_execute(root, quota_over_script, quota_over_flag,
+				      "quota_over_flag mismatch");
 	}
 }
 
@@ -1114,34 +1235,33 @@ void quota_transaction_rollback(struct quota_transaction_context **_ctx)
 	i_free(ctx);
 }
 
-int quota_try_alloc(struct quota_transaction_context *ctx,
-		    struct mail *mail, bool *too_large_r)
+enum quota_alloc_result quota_try_alloc(struct quota_transaction_context *ctx,
+					struct mail *mail)
 {
 	uoff_t size;
-	int ret;
 
 	if (quota_transaction_set_limits(ctx) < 0)
-		return -1;
+		return QUOTA_ALLOC_RESULT_TEMPFAIL;
 
 	if (ctx->no_quota_updates)
-		return 1;
+		return QUOTA_ALLOC_RESULT_OK;
 
 	if (mail_get_physical_size(mail, &size) < 0) {
 		enum mail_error error;
-		const char *errstr = mailbox_get_last_error(mail->box, &error);
+		const char *errstr = mailbox_get_last_internal_error(mail->box, &error);
 
 		if (error == MAIL_ERROR_EXPUNGED) {
 			/* mail being copied was already expunged. it'll fail,
 			   so just return success for the quota allocated. */
-			return 1;
+			return QUOTA_ALLOC_RESULT_OK;
 		}
 		i_error("quota: Failed to get mail size (box=%s, uid=%u): %s",
 			mail->box->vname, mail->uid, errstr);
-		return -1;
+		return QUOTA_ALLOC_RESULT_TEMPFAIL;
 	}
 
-	ret = quota_test_alloc(ctx, size, too_large_r);
-	if (ret <= 0)
+	enum quota_alloc_result ret = quota_test_alloc(ctx, size);
+	if (ret != QUOTA_ALLOC_RESULT_OK)
 		return ret;
 	/* with quota_try_alloc() we want to keep track of how many bytes
 	   we've been adding/removing, so disable auto_updating=TRUE
@@ -1150,38 +1270,41 @@ int quota_try_alloc(struct quota_transaction_context *ctx,
 	   transaction, but that doesn't normally happen. */
 	ctx->auto_updating = FALSE;
 	quota_alloc(ctx, mail);
-	return 1;
+	return QUOTA_ALLOC_RESULT_OK;
 }
 
-int quota_test_alloc(struct quota_transaction_context *ctx,
-		     uoff_t size, bool *too_large_r)
+enum quota_alloc_result quota_test_alloc(struct quota_transaction_context *ctx,
+					 uoff_t size)
 {
 	if (ctx->failed)
-		return -1;
+		return QUOTA_ALLOC_RESULT_TEMPFAIL;
 
 	if (quota_transaction_set_limits(ctx) < 0)
-		return -1;
+		return QUOTA_ALLOC_RESULT_TEMPFAIL;
+
+	uoff_t max_size = ctx->quota->set->max_mail_size;
+	if (max_size > 0 && size > max_size)
+		return QUOTA_ALLOC_RESULT_OVER_MAXSIZE;
+
 	if (ctx->no_quota_updates)
-		return 1;
+		return QUOTA_ALLOC_RESULT_OK;
 	/* this is a virtual function mainly for trash plugin and similar,
 	   which may automatically delete mails to stay under quota. */
-	return ctx->quota->set->test_alloc(ctx, size, too_large_r);
+	return ctx->quota->set->test_alloc(ctx, size);
 }
 
-static int quota_default_test_alloc(struct quota_transaction_context *ctx,
-				    uoff_t size, bool *too_large_r)
+static enum quota_alloc_result quota_default_test_alloc(
+			struct quota_transaction_context *ctx, uoff_t size)
 {
 	struct quota_root *const *roots;
 	unsigned int i, count;
 	bool ignore;
 	int ret;
 
-	*too_large_r = FALSE;
-
 	if (!quota_transaction_is_over(ctx, size))
-		return 1;
+		return QUOTA_ALLOC_RESULT_OK;
 
-	/* limit reached. only thing left to do now is to set too_large_r. */
+	/* limit reached. */
 	roots = array_get(&ctx->quota->roots, &count);
 	for (i = 0; i < count; i++) {
 		uint64_t bytes_limit, count_limit;
@@ -1194,16 +1317,14 @@ static int quota_default_test_alloc(struct quota_transaction_context *ctx,
 						 &bytes_limit, &count_limit,
 						 &ignore);
 		if (ret < 0)
-			return -1;
+			return QUOTA_ALLOC_RESULT_TEMPFAIL;
 
 		/* if size is bigger than any limit, then
 		   it is bigger than the lowest limit */
-		if (bytes_limit > 0 && size > bytes_limit) {
-			*too_large_r = TRUE;
-			break;
-		}
+		if (bytes_limit > 0 && size > bytes_limit)
+			return QUOTA_ALLOC_RESULT_OVER_QUOTA_LIMIT;
 	}
-	return 0;
+	return QUOTA_ALLOC_RESULT_OVER_QUOTA;
 }
 
 void quota_alloc(struct quota_transaction_context *ctx, struct mail *mail)

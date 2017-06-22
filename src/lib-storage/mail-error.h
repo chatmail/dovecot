@@ -26,6 +26,8 @@ enum mail_error {
 
 	/* Temporary internal error */
 	MAIL_ERROR_TEMP,
+	/* Temporary failure because a subsystem is down */
+	MAIL_ERROR_UNAVAILABLE,
 	/* It's not possible to do the wanted operation */
 	MAIL_ERROR_NOTPOSSIBLE,
 	/* Invalid parameters (eg. mailbox name not valid) */
@@ -49,6 +51,11 @@ enum mail_error {
 	/* Can't do the requested data conversion because the original data
 	   isn't valid. */
 	MAIL_ERROR_INVALIDDATA,
+	/* Operation ran against some kind of a limit. */
+	MAIL_ERROR_LIMIT,
+	/* Operation couldn't be finished as efficiently as required by
+	   mail.lookup_abort. */
+	MAIL_ERROR_LOOKUP_ABORTED,
 
 	/* FIXME: Obsolete - remove in v2.3 */
 	MAIL_ERROR_NOSPACE = MAIL_ERROR_NOQUOTA

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "buffer.h"
@@ -117,7 +117,7 @@ master_input_request(struct auth_master_connection *conn, const char *args)
 			client_pid);
 		o_stream_nsend_str(conn->output,
 				   t_strdup_printf("FAIL\t%u\n", id));
-	} else if (memcmp(client_conn->cookie, cookie, sizeof(cookie)) != 0) {
+	} else if (!mem_equals_timing_safe(client_conn->cookie, cookie, sizeof(cookie))) {
 		i_error("Master requested auth for client %u with invalid cookie",
 			client_pid);
 		o_stream_nsend_str(conn->output,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -17,6 +17,7 @@ static void index_transaction_free(struct mailbox_transaction_context *t)
 	if (array_is_created(&t->pvt_saves))
 		array_free(&t->pvt_saves);
 	array_free(&t->module_contexts);
+	i_free(t->reason);
 	i_free(t);
 }
 
@@ -47,6 +48,7 @@ index_transaction_index_commit(struct mail_index_transaction *index_trans,
 	}
 
 	if (t->save_ctx != NULL) {
+		mailbox_save_context_deinit(t->save_ctx);
 		if (ret < 0) {
 			t->box->v.transaction_save_rollback(t->save_ctx);
 			t->save_ctx = NULL;
@@ -76,8 +78,10 @@ index_transaction_index_commit(struct mail_index_transaction *index_trans,
 		}
 	}
 
-	if (t->save_ctx != NULL)
+	if (t->save_ctx != NULL) {
+		i_assert(t->save_ctx->dest_mail == NULL);
 		t->box->v.transaction_save_commit_post(t->save_ctx, result_r);
+	}
 
 	if (pvt_sync_ctx != NULL) {
 		if (index_mailbox_sync_pvt_newmails(pvt_sync_ctx, t) < 0) {
@@ -97,8 +101,15 @@ index_transaction_index_rollback(struct mail_index_transaction *index_trans)
 	struct mailbox_transaction_context *t =
 		MAIL_STORAGE_CONTEXT(index_trans);
 
-	if (t->save_ctx != NULL)
+	if (t->attr_pvt_trans != NULL)
+		dict_transaction_rollback(&t->attr_pvt_trans);
+	if (t->attr_shared_trans != NULL)
+		dict_transaction_rollback(&t->attr_shared_trans);
+
+	if (t->save_ctx != NULL) {
+		mailbox_save_context_deinit(t->save_ctx);
 		t->box->v.transaction_save_rollback(t->save_ctx);
+	}
 
 	i_assert(t->mail_ref_count == 0);
 	t->super.rollback(index_trans);
@@ -185,7 +196,7 @@ int index_transaction_commit(struct mailbox_transaction_context *t,
 	struct mail_index_transaction_commit_result result;
 	int ret = 0;
 
-	memset(changes_r, 0, sizeof(*changes_r));
+	i_zero(changes_r);
 	changes_r->pool = pool_alloconly_create(MEMPOOL_GROWING
 						"transaction changes", 512);
 	p_array_init(&changes_r->saved_uids, changes_r->pool, 32);

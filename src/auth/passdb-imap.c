@@ -1,6 +1,7 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
+#include "ioloop.h"
 #include "passdb.h"
 #include "str.h"
 #include "imap-resp-code.h"
@@ -20,6 +21,7 @@ struct imap_auth_request {
 	struct imapc_client *client;
 	struct auth_request *auth_request;
 	verify_plain_callback_t *verify_callback;
+	struct timeout *to_free;
 };
 
 static enum passdb_result
@@ -38,12 +40,18 @@ passdb_imap_get_failure_result(const struct imapc_command_reply *reply)
 	return PASSDB_RESULT_INTERNAL_FAILURE;
 }
 
+static void passdb_imap_login_free(struct imap_auth_request *request)
+{
+	timeout_remove(&request->to_free);
+	imapc_client_deinit(&request->client);
+	auth_request_unref(&request->auth_request);
+}
+
 static void
 passdb_imap_login_callback(const struct imapc_command_reply *reply,
 			   void *context)
 {
 	struct imap_auth_request *request = context;
-	struct imapc_client *client = request->client;
 	enum passdb_result result = PASSDB_RESULT_INTERNAL_FAILURE;
 
 	switch (reply->state) {
@@ -55,6 +63,7 @@ passdb_imap_login_callback(const struct imapc_command_reply *reply,
 		auth_request_log_info(request->auth_request, AUTH_SUBSYS_DB,
 				      "%s", reply->text_full);
 		break;
+	case IMAPC_COMMAND_STATE_AUTH_FAILED:
 	case IMAPC_COMMAND_STATE_BAD:
 	case IMAPC_COMMAND_STATE_DISCONNECTED:
 		auth_request_log_error(request->auth_request, AUTH_SUBSYS_DB,
@@ -62,8 +71,10 @@ passdb_imap_login_callback(const struct imapc_command_reply *reply,
 		break;
 	}
 	request->verify_callback(result, request->auth_request);
-	imapc_client_deinit(&client);
-	auth_request_unref(&request->auth_request);
+	/* imapc_client can't be freed in this callback, so do it in a
+	   separate callback. FIXME: remove this once imapc supports proper
+	   refcounting. */
+	request->to_free = timeout_add_short(0, passdb_imap_login_free, request);
 }
 
 static void
@@ -85,6 +96,10 @@ passdb_imap_verify_plain(struct auth_request *auth_request,
 			    DNS_CLIENT_SOCKET_NAME, NULL);
 	set.password = password;
 	set.max_idle_time = IMAPC_DEFAULT_MAX_IDLE_TIME;
+	if (set.ssl_ca_dir == NULL)
+		set.ssl_ca_dir = auth_request->set->ssl_client_ca_dir;
+	if (set.ssl_ca_file == NULL)
+		set.ssl_ca_file = auth_request->set->ssl_client_ca_file;
 
 	if (module->set_have_vars) {
 		str = t_str_new(128);
@@ -104,8 +119,8 @@ passdb_imap_verify_plain(struct auth_request *auth_request,
 	request->verify_callback = callback;
 
 	auth_request_ref(auth_request);
-	imapc_client_login(request->client, passdb_imap_login_callback,
-			   request);
+	imapc_client_set_login_callback(request->client, passdb_imap_login_callback, request);
+	imapc_client_login(request->client);
 }
 
 static struct passdb_module *
@@ -122,6 +137,7 @@ passdb_imap_preinit(pool_t pool, const char *args)
 	module->set.ssl_mode = IMAPC_CLIENT_SSL_MODE_NONE;
 	module->set.username = "%u";
 	module->set.rawlog_dir = "";
+	module->set.ssl_verify = TRUE;
 
 	for (tmp = p_strsplit(pool, args, " "); *tmp != NULL; tmp++) {
 		key = *tmp;
@@ -140,6 +156,8 @@ passdb_imap_preinit(pool_t pool, const char *args)
 			module->set.username = value;
 		else if (strcmp(key, "ssl_ca_dir") == 0)
 			module->set.ssl_ca_dir = value;
+		else if (strcmp(key, "ssl_ca_file") == 0)
+			module->set.ssl_ca_file = value;
 		else if (strcmp(key, "rawlog_dir") == 0)
 			module->set.rawlog_dir = value;
 		else if (strcmp(key, "ssl") == 0) {
@@ -155,9 +173,23 @@ passdb_imap_preinit(pool_t pool, const char *args)
 				i_fatal("passdb imap: Invalid ssl mode: %s",
 					value);
 			}
+		} else if (strcmp(key, "allow_invalid_cert") == 0) {
+			if (strcmp(value, "yes") == 0) {
+				module->set.ssl_verify = FALSE;
+			} else if (strcmp(value, "no") == 0) {
+				module->set.ssl_verify = TRUE;
+			} else {
+				i_fatal("passdb imap: Invalid allow_invalid_cert value: %s",
+					value);
+			}
 		} else {
 			i_fatal("passdb imap: Unknown parameter: %s", key);
 		}
+	}
+
+	if (module->set.ssl_verify == TRUE && module->set.ssl_mode != IMAPC_CLIENT_SSL_MODE_NONE ) {
+		if (module->set.ssl_ca_dir == NULL && module->set.ssl_ca_file == NULL)
+			i_fatal("passdb imap: Cannot verify certificate without ssl_ca_dir or ssl_ca_file setting");
 	}
 
 	if (module->set.host == NULL)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -84,6 +84,30 @@ static void sig_die(const siginfo_t *si, void *context)
 
 	service->killed = TRUE;
 	io_loop_stop(service->ioloop);
+}
+
+static void sig_close_listeners(const siginfo_t *si ATTR_UNUSED, void *context)
+{
+	struct master_service *service = context;
+
+	/* We're in a signal handler: Close listeners immediately so master
+	   can successfully restart. We can safely close only those listeners
+	   that don't have an io, but this shouldn't be a big problem. If there
+	   is an active io, the service is unlikely to be unresposive for
+	   longer periods of time, so the listener gets closed soon enough via
+	   master_status_error().
+
+	   For extra safety we don't actually close() the fd, but instead
+	   replace it with /dev/null. This way it won't be replaced with some
+	   other new fd and attempted to be used in unexpected ways. */
+	for (unsigned int i = 0; i < service->socket_count; i++) {
+		if (service->listeners[i].fd != -1 &&
+		    service->listeners[i].io == NULL) {
+			if (dup2(dev_null_fd, service->listeners[i].fd) < 0)
+				lib_signals_syscall_error("signal: dup2(/dev/null, listener) failed: ");
+			service->listeners[i].closed = TRUE;
+		}
+	}
 }
 
 static void
@@ -513,6 +537,7 @@ void master_service_init_finish(struct master_service *service)
 		/* start listening errors for status fd, it means master died */
 		service->io_status_error = io_add(MASTER_DEAD_FD, IO_ERROR,
 						  master_status_error, service);
+		lib_signals_set_handler(SIGQUIT, 0, sig_close_listeners, service);
 	}
 	master_service_io_listeners_add(service);
 	if (service->want_ssl_settings &&
@@ -716,6 +741,26 @@ void master_service_client_connection_created(struct master_service *service)
 	master_status_update(service);
 }
 
+static bool master_service_want_listener(struct master_service *service)
+{
+	if (service->master_status.available_count > 0) {
+		/* more concurrent clients can still be added */
+		return TRUE;
+	}
+	if (service->service_count_left == 1) {
+		/* after handling this client, the whole process will stop. */
+		return FALSE;
+	}
+	if (service->avail_overflow_callback != NULL) {
+		/* overflow callback is set. it's possible that the current
+		   existing client may be replaced by a new client, which needs
+		   the listener to try to accept new connections. */
+		return TRUE;
+	}
+	/* the listener isn't needed until the current client is disconnected */
+	return FALSE;
+}
+
 void master_service_client_connection_handled(struct master_service *service,
 					      struct master_service_connection *conn)
 {
@@ -728,15 +773,17 @@ void master_service_client_connection_handled(struct master_service *service,
 		   as real clients */
 		master_service_client_connection_destroyed(service);
 	}
-	if (service->master_status.available_count == 0 &&
-	    service->service_count_left == 1) {
-		/* we're not going to accept any more connections after this.
-		   go ahead and close the connection early. don't do this
-		   before calling callback, because it may want to access
-		   the listen_fd (e.g. to check socket permissions). */
+	if (!master_service_want_listener(service)) {
 		i_assert(service->listeners != NULL);
 		master_service_io_listeners_remove(service);
-		master_service_io_listeners_close(service);
+		if (service->service_count_left == 1) {
+			/* we're not going to accept any more connections after
+			   this. go ahead and close the connection early. don't
+			   do this before calling callback, because it may want
+			   to access the listen_fd (e.g. to check socket
+			   permissions). */
+			master_service_io_listeners_close(service);
+		}
 	}
 }
 
@@ -904,7 +951,7 @@ static void master_service_listen(struct master_service_listener *l)
 		}
 	}
 
-	memset(&conn, 0, sizeof(conn));
+	i_zero(&conn);
 	conn.listen_fd = l->fd;
 	conn.fd = net_accept(l->fd, &conn.remote_ip, &conn.remote_port);
 	if (conn.fd < 0) {
@@ -964,7 +1011,7 @@ void master_service_io_listeners_add(struct master_service *service)
 	for (i = 0; i < service->socket_count; i++) {
 		struct master_service_listener *l = &service->listeners[i];
 
-		if (l->io == NULL && l->fd != -1) {
+		if (l->io == NULL && l->fd != -1 && !l->closed) {
 			l->io = io_add(MASTER_LISTEN_FD_FIRST + i, IO_READ,
 				       master_service_listen, l);
 		}
@@ -1112,7 +1159,7 @@ bool version_string_verify_full(const char *line, const char *service_name,
 				unsigned major_version,
 				unsigned int *minor_version_r)
 {
-	unsigned int service_name_len = strlen(service_name);
+	size_t service_name_len = strlen(service_name);
 	bool ret;
 
 	if (strncmp(line, "VERSION\t", 8) != 0)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -64,6 +64,29 @@ void mailbox_attribute_register_internals(
 		mailbox_attribute_register_internal(&iattrs[i]);
 }
 
+void mailbox_attribute_unregister_internal(
+	const struct mailbox_attribute_internal *iattr)
+{
+	unsigned int idx;
+
+	if (!array_bsearch_insert_pos(&mailbox_internal_attributes,
+				      iattr, mailbox_attribute_internal_cmp, &idx)) {
+		i_panic("mailbox_attribute_unregister_internal(%s): "
+			"key not found", iattr->key);
+	}
+
+	array_delete(&mailbox_internal_attributes, idx, 1);
+}
+
+void mailbox_attribute_unregister_internals(
+	const struct mailbox_attribute_internal *iattrs, unsigned int count)
+{
+	unsigned int i;
+
+	for (i = 0; i < count; i++)
+		mailbox_attribute_unregister_internal(&iattrs[i]);
+}
+
 static const struct mailbox_attribute_internal *
 mailbox_internal_attribute_get(enum mail_attribute_type type,
 			       const char *key)
@@ -72,7 +95,7 @@ mailbox_internal_attribute_get(enum mail_attribute_type type,
 	struct mailbox_attribute_internal dreg;
 	unsigned int insert_idx;
 
-	memset(&dreg, 0, sizeof(dreg));
+	i_zero(&dreg);
 	dreg.type = type;	
 	dreg.key = key;
 
@@ -115,7 +138,7 @@ mailbox_internal_attributes_get(enum mail_attribute_type type,
 		plen--;
 	}
 
-	memset(&dreg, 0, sizeof(dreg));
+	i_zero(&dreg);
 	dreg.type = type;	
 	dreg.key = bare_prefix;
 
@@ -212,7 +235,7 @@ int mailbox_attribute_unset(struct mailbox_transaction_context *t,
 {
 	struct mail_attribute_value value;
 
-	memset(&value, 0, sizeof(value));
+	i_zero(&value);
 	return mailbox_attribute_set_common(t, type, key, &value);
 }
 
@@ -326,7 +349,7 @@ int mailbox_attribute_get(struct mailbox_transaction_context *t,
 			  struct mail_attribute_value *value_r)
 {
 	int ret;
-	memset(value_r, 0, sizeof(*value_r));
+	i_zero(value_r);
 	if ((ret = mailbox_attribute_get_common(t, type, key, value_r)) <= 0)
 		return ret;
 	i_assert(value_r->value != NULL);
@@ -339,7 +362,7 @@ int mailbox_attribute_get_stream(struct mailbox_transaction_context *t,
 {
 	int ret;
 
-	memset(value_r, 0, sizeof(*value_r));
+	i_zero(value_r);
 	value_r->flags |= MAIL_ATTRIBUTE_VALUE_FLAG_INT_STREAMS;
 	if ((ret = mailbox_attribute_get_common(t, type, key, value_r)) <= 0)
 		return ret;

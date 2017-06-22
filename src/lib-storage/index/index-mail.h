@@ -85,7 +85,7 @@ struct index_mail_data {
 	struct message_binary_part *bin_parts;
 	const char *envelope, *body, *bodystructure, *guid, *filename;
 	const char *from_envelope, *body_snippet;
-	struct message_part_envelope_data *envelope_data;
+	struct message_part_envelope *envelope_data;
 
 	uint32_t seq;
 	uint32_t cache_flags;
@@ -251,6 +251,10 @@ bool index_mail_get_cached_uoff_t(struct index_mail *mail,
 				  enum index_cache_field field, uoff_t *size_r);
 bool index_mail_get_cached_virtual_size(struct index_mail *mail,
 					uoff_t *size_r);
+bool index_mail_get_cached_body(struct index_mail *mail, const char **value_r);
+bool index_mail_get_cached_bodystructure(struct index_mail *mail,
+					 const char **value_r);
+const uint32_t *index_mail_get_vsize_extension(struct mail *_mail);
 
 void index_mail_cache_add(struct index_mail *mail, enum index_cache_field field,
 			  const void *data, size_t data_size);

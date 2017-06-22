@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -399,6 +399,7 @@ static int auth_master_run_cmd_pre(struct auth_master_connection *conn,
 	if (conn->fd == -1) {
 		if (auth_master_connect(conn) < 0)
 			return -1;
+		i_assert(conn->fd != -1);
 	}
 	auth_master_set_io(conn);
 
@@ -488,7 +489,7 @@ int auth_master_user_lookup(struct auth_master_connection *conn,
 		return 0;
 	}
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.conn = conn;
 	ctx.return_value = -1;
 	ctx.pool = pool;
@@ -527,7 +528,7 @@ int auth_master_user_lookup(struct auth_master_connection *conn,
 void auth_user_fields_parse(const char *const *fields, pool_t pool,
 			    struct auth_user_reply *reply_r)
 {
-	memset(reply_r, 0, sizeof(*reply_r));
+	i_zero(reply_r);
 	reply_r->uid = (uid_t)-1;
 	reply_r->gid = (gid_t)-1;
 	p_array_init(&reply_r->extra_fields, pool, 64);
@@ -565,7 +566,7 @@ int auth_master_pass_lookup(struct auth_master_connection *conn,
 		return 0;
 	}
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.conn = conn;
 	ctx.return_value = -1;
 	ctx.pool = pool;
@@ -618,7 +619,7 @@ int auth_master_cache_flush(struct auth_master_connection *conn,
 	struct auth_master_cache_ctx ctx;
 	string_t *str;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.conn = conn;
 
 	conn->reply_callback = auth_cache_flush_reply_callback;

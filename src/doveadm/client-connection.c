@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -25,38 +25,20 @@
 
 #define MAX_INBUF_SIZE (1024*1024)
 
-static struct {
-	int code;
-	const char *str;
-} exit_code_strings[] = {
-	{ EX_TEMPFAIL, "TEMPFAIL" },
-	{ EX_USAGE, "USAGE" },
-	{ EX_NOUSER, "NOUSER" },
-	{ EX_NOPERM, "NOPERM" },
-	{ EX_PROTOCOL, "PROTOCOL" },
-	{ EX_DATAERR, "DATAERR" },
-	{ DOVEADM_EX_NOTFOUND, "NOTFOUND" }
-};
-
 static void client_connection_input(struct client_connection *conn);
 
 static void
 doveadm_cmd_server_post(struct client_connection *conn, const char *cmd_name)
 {
 	const char *str = NULL;
-	unsigned int i;
 
 	if (doveadm_exit_code == 0) {
 		o_stream_nsend(conn->output, "\n+\n", 3);
 		return;
 	}
 
-	for (i = 0; i < N_ELEMENTS(exit_code_strings); i++) {
-		if (exit_code_strings[i].code == doveadm_exit_code) {
-			str = exit_code_strings[i].str;
-			break;
-		}
-	}
+	str = doveadm_exit_code_to_str(doveadm_exit_code);
+
 	if (str != NULL) {
 		o_stream_nsend_str(conn->output,
 				   t_strdup_printf("\n-%s\n", str));
@@ -289,7 +271,7 @@ static bool client_handle_command(struct client_connection *conn, char **args)
 		i_error("doveadm client: No command given");
 		return FALSE;
 	}
-	memset(&cctx, 0, sizeof(cctx));
+	i_zero(&cctx);
 	cctx.cli = FALSE;
 	cctx.tcp_server = TRUE;
 
@@ -383,7 +365,9 @@ client_connection_authenticate(struct client_connection *conn)
 		return -1;
 	}
 	pass = t_strndup(data + 9, size - 9);
-	if (strcmp(pass, conn->set->doveadm_password) != 0) {
+	if (strlen(pass) != strlen(conn->set->doveadm_password) ||
+	    !mem_equals_timing_safe(pass, conn->set->doveadm_password,
+				    strlen(pass))) {
 		i_error("doveadm client authenticated with wrong password");
 		return -1;
 	}
@@ -463,7 +447,7 @@ static int client_connection_read_settings(struct client_connection *conn)
 	const char *error;
 	void *set;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.roots = set_roots;
 	input.service = "doveadm";
 	input.local_ip = conn->local_ip;
@@ -551,7 +535,8 @@ client_connection_create(int fd, int listen_fd, bool ssl)
 		return NULL;
         doveadm_print_init(DOVEADM_PRINT_TYPE_SERVER);
 
-	conn->name = p_strdup(pool, net_ip2addr(&conn->remote_ip));
+	conn->name = conn->remote_ip.family == 0 ? "<local>" :
+		p_strdup(pool, net_ip2addr(&conn->remote_ip));
 	conn->io = io_add(fd, IO_READ, client_connection_input, conn);
 	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
 	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);

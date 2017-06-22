@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 
@@ -37,6 +37,7 @@ int main(void)
 		test_json_tree,
 		test_llist,
 		test_log_throttle,
+		test_malloc_overflow,
 		test_mempool_alloconly,
 		test_net,
 		test_numpack,
@@ -63,9 +64,10 @@ int main(void)
 		test_wildcard_match,
 		NULL
 	};
-	static enum fatal_test_state (*fatal_functions[])(int) = {
+	static enum fatal_test_state (*fatal_functions[])(unsigned int) = {
 		fatal_array,
 		fatal_data_stack,
+		fatal_malloc_overflow,
 		fatal_mempool,
 		fatal_printf_format_fix,
 		NULL

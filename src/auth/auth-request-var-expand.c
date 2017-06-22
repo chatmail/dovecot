@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "str.h"
@@ -46,6 +46,7 @@ auth_request_var_expand_static_tab[AUTH_REQUEST_VAR_TAB_COUNT+1] = {
 	{ '\0', NULL, "auth_username" },
 	{ '\0', NULL, "auth_domain" },
 	{ '\0', NULL, "local_name" },
+	{ '\0', NULL, "client_id" },
 	/* be sure to update AUTH_REQUEST_VAR_TAB_COUNT */
 	{ '\0', NULL, NULL }
 };
@@ -79,8 +80,8 @@ auth_request_get_var_expand_table_full(const struct auth_request *auth_request,
 
 	/* keep the extra fields at the beginning. the last static_tab field
 	   contains the ending NULL-fields. */
-	tab = ret_tab = t_malloc((*count + auth_count) * sizeof(*tab));
-	memset(tab, 0, *count * sizeof(*tab));
+	tab = ret_tab = t_new(struct var_expand_table,
+			      MALLOC_ADD(*count, auth_count));
 	tab += *count;
 	*count += auth_count;
 
@@ -173,6 +174,8 @@ auth_request_get_var_expand_table_full(const struct auth_request *auth_request,
 		tab[33].value = escape_func(auth_request->local_name, auth_request);
 	else
 		tab[33].value = "";
+	if (auth_request->client_id != NULL)
+		tab[34].value = escape_func(auth_request->client_id, auth_request);
 	return ret_tab;
 }
 
@@ -246,7 +249,7 @@ void auth_request_var_expand_with_table(string_t *dest, const char *str,
 {
 	struct auth_request_var_expand_ctx ctx;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.auth_request = auth_request;
 	ctx.escape_func = escape_func == NULL ? escape_none : escape_func;
 	var_expand_with_funcs(dest, str, table,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -31,7 +31,7 @@ ns_mailbox_try_alloc(struct dsync_brain *brain, struct mail_namespace *ns,
 	box = mailbox_alloc_guid(ns->list, guid, flags);
 	ret = mailbox_exists(box, FALSE, &existence);
 	if (ret < 0) {
-		*errstr_r = mailbox_get_last_error(box, error_r);
+		*errstr_r = mailbox_get_last_internal_error(box, error_r);
 		mailbox_free(&box);
 		return -1;
 	}
@@ -154,13 +154,13 @@ dsync_brain_sync_mailbox_init(struct dsync_brain *brain,
 	dsync_mailbox_cache_field_dup(&brain->local_dsync_box.cache_fields,
 				      &local_dsync_box->cache_fields,
 				      brain->dsync_box_pool);
-	memset(&brain->remote_dsync_box, 0, sizeof(brain->remote_dsync_box));
+	i_zero(&brain->remote_dsync_box);
 
 	state = dsync_mailbox_state_find(brain, local_dsync_box->mailbox_guid);
 	if (state != NULL)
 		brain->mailbox_state = *state;
 	else {
-		memset(&brain->mailbox_state, 0, sizeof(brain->mailbox_state));
+		i_zero(&brain->mailbox_state);
 		memcpy(brain->mailbox_state.mailbox_guid,
 		       local_dsync_box->mailbox_guid,
 		       sizeof(brain->mailbox_state.mailbox_guid));
@@ -236,6 +236,7 @@ dsync_brain_sync_mailbox_init_remote(struct dsync_brain *brain,
 					  brain->sync_until_timestamp,
 					  brain->sync_max_size,
 					  brain->sync_flag,
+					  brain->import_commit_msgs_interval,
 					  import_flags);
 }
 
@@ -404,7 +405,7 @@ static int dsync_box_get(struct mailbox *box, struct dsync_mailbox *dsync_box_r,
 	/* get metadata first, since it may autocreate the mailbox */
 	if (mailbox_get_metadata(box, metadata_items, &metadata) < 0 ||
 	    mailbox_get_status(box, status_items, &status) < 0) {
-		errstr = mailbox_get_last_error(box, &error);
+		errstr = mailbox_get_last_internal_error(box, &error);
 		if (error == MAIL_ERROR_NOTFOUND ||
 		    error == MAIL_ERROR_NOTPOSSIBLE) {
 			/* Mailbox isn't selectable, try the next one. We
@@ -421,7 +422,7 @@ static int dsync_box_get(struct mailbox *box, struct dsync_mailbox *dsync_box_r,
 
 	i_assert(status.uidvalidity != 0 || status.messages == 0);
 
-	memset(dsync_box_r, 0, sizeof(*dsync_box_r));
+	i_zero(dsync_box_r);
 	memcpy(dsync_box_r->mailbox_guid, metadata.guid,
 	       sizeof(dsync_box_r->mailbox_guid));
 	dsync_box_r->uid_validity = status.uidvalidity;
@@ -526,7 +527,7 @@ dsync_brain_try_next_mailbox(struct dsync_brain *brain, struct mailbox **box_r,
 		if (mailbox_sync(box, MAILBOX_SYNC_FLAG_FULL_READ) < 0) {
 			i_error("Can't sync mailbox %s: %s",
 				mailbox_get_vname(box),
-				mailbox_get_last_error(box, &brain->mail_error));
+				mailbox_get_last_internal_error(box, &brain->mail_error));
 			brain->failed = TRUE;
 			mailbox_free(&box);
 			return -1;
@@ -681,7 +682,7 @@ bool dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
 	bool ret = TRUE;
 
 	*reason_r = NULL;
-	memset(&update, 0, sizeof(update));
+	i_zero(&update);
 
 	if (local_box->uid_validity != remote_box->uid_validity) {
 		/* Keep the UIDVALIDITY for the mailbox that has more
@@ -713,7 +714,7 @@ bool dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
 	if (mailbox_update(box, &update) < 0) {
 		i_error("Couldn't update mailbox %s metadata: %s",
 			mailbox_get_vname(box),
-			mailbox_get_last_error(box, &brain->mail_error));
+			mailbox_get_last_internal_error(box, &brain->mail_error));
 		brain->failed = TRUE;
 	}
 	return ret;
@@ -730,7 +731,7 @@ dsync_brain_slave_send_mailbox_lost(struct dsync_brain *brain,
 			brain->master_brain ? 'M' : 'S',
 			guid_128_to_string(dsync_box->mailbox_guid));
 	}
-	memset(&delete_box, 0, sizeof(delete_box));
+	i_zero(&delete_box);
 	memcpy(delete_box.mailbox_guid, dsync_box->mailbox_guid,
 	       sizeof(delete_box.mailbox_guid));
 	t_array_init(&delete_box.cache_fields, 0);
@@ -788,7 +789,7 @@ bool dsync_brain_slave_recv_mailbox(struct dsync_brain *brain)
 	if (mailbox_sync(box, MAILBOX_SYNC_FLAG_FULL_READ) < 0) {
 		i_error("Can't sync mailbox %s: %s",
 			mailbox_get_vname(box),
-			mailbox_get_last_error(box, &brain->mail_error));
+			mailbox_get_last_internal_error(box, &brain->mail_error));
 		mailbox_free(&box);
 		brain->failed = TRUE;
 		return TRUE;

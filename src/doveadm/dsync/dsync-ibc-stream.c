@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -78,7 +78,7 @@ static const struct {
 	  	"send_mail_requests backup_send backup_recv lock_timeout "
 	  	"no_mail_sync no_mailbox_renames no_backup_overwrite purge_remote "
 		"no_notify sync_since_timestamp sync_max_size sync_flags sync_until_timestamp"
-	  	"virtual_all_box"
+	  	"virtual_all_box empty_hdr_workaround import_commit_msgs_interval"
 	},
 	{ .name = "mailbox_state",
 	  .chr = 'S',
@@ -707,6 +707,10 @@ dsync_ibc_stream_send_handshake(struct dsync_ibc *_ibc,
 		dsync_serializer_encode_add(encoder, "lock_timeout",
 			t_strdup_printf("%u", set->lock_timeout));
 	}
+	if (set->import_commit_msgs_interval > 0) {
+		dsync_serializer_encode_add(encoder, "import_commit_msgs_interval",
+			t_strdup_printf("%u", set->import_commit_msgs_interval));
+	}
 	if (set->sync_since_timestamp > 0) {
 		dsync_serializer_encode_add(encoder, "sync_since_timestamp",
 			t_strdup_printf("%ld", (long)set->sync_since_timestamp));
@@ -823,6 +827,14 @@ dsync_ibc_stream_recv_handshake(struct dsync_ibc *_ibc,
 			return DSYNC_IBC_RECV_RET_TRYAGAIN;
 		}
 	}
+	if (dsync_deserializer_decode_try(decoder, "import_commit_msgs_interval", &value)) {
+		if (str_to_uint(value, &set->import_commit_msgs_interval) < 0 ||
+		    set->import_commit_msgs_interval == 0) {
+			dsync_ibc_input_error(ibc, decoder,
+				"Invalid import_commit_msgs_interval: %s", value);
+			return DSYNC_IBC_RECV_RET_TRYAGAIN;
+		}
+	}
 	if (dsync_deserializer_decode_try(decoder, "sync_since_timestamp", &value)) {
 		if (str_to_time(value, &set->sync_since_timestamp) < 0 ||
 		    set->sync_since_timestamp == 0) {
@@ -936,7 +948,7 @@ dsync_ibc_stream_recv_mailbox_state(struct dsync_ibc *_ibc,
 	const char *value;
 	enum dsync_ibc_recv_ret ret;
 
-	memset(state_r, 0, sizeof(*state_r));
+	i_zero(state_r);
 
 	ret = dsync_ibc_stream_input_next(ibc, ITEM_MAILBOX_STATE, &decoder);
 	if (ret != DSYNC_IBC_RECV_RET_OK)
@@ -1342,7 +1354,7 @@ parse_cache_field(struct dsync_ibc_stream *ibc, struct dsync_mailbox *box,
 		return -1;
 	}
 
-	memset(&field, 0, sizeof(field));
+	i_zero(&field);
 	value = dsync_deserializer_decode_get(decoder, "name");
 	field.name = p_strdup(ibc->ret_pool, value);
 
@@ -1557,16 +1569,6 @@ dsync_ibc_stream_recv_mailbox_attribute(struct dsync_ibc *_ibc,
 	value = dsync_deserializer_decode_get(decoder, "key");
 	attr->key = p_strdup(pool, value);
 
-	if (dsync_deserializer_decode_try(decoder, "stream", &value)) {
-		attr->value_stream = dsync_ibc_stream_input_stream(ibc);
-		if (dsync_ibc_stream_read_mail_stream(ibc) <= 0) {
-			ibc->cur_attr = attr;
-			return DSYNC_IBC_RECV_RET_TRYAGAIN;
-		}
-		/* already finished reading the stream */
-		i_assert(ibc->value_input == NULL);
-	} else if (dsync_deserializer_decode_try(decoder, "value", &value))
-		attr->value = p_strdup(pool, value);
 	if (dsync_deserializer_decode_try(decoder, "deleted", &value))
 		attr->deleted = TRUE;
 	if (dsync_deserializer_decode_try(decoder, "last_change", &value) &&
@@ -1579,6 +1581,20 @@ dsync_ibc_stream_recv_mailbox_attribute(struct dsync_ibc *_ibc,
 		dsync_ibc_input_error(ibc, decoder, "Invalid modseq");
 		return DSYNC_IBC_RECV_RET_TRYAGAIN;
 	}
+
+	/* NOTE: stream reading must be the last here, because reading a large
+	   stream will be finished later by return TRYAGAIN. We need to
+	   deserialize all the other fields before that or they'll get lost. */
+	if (dsync_deserializer_decode_try(decoder, "stream", &value)) {
+		attr->value_stream = dsync_ibc_stream_input_stream(ibc);
+		if (dsync_ibc_stream_read_mail_stream(ibc) <= 0) {
+			ibc->cur_attr = attr;
+			return DSYNC_IBC_RECV_RET_TRYAGAIN;
+		}
+		/* already finished reading the stream */
+		i_assert(ibc->value_input == NULL);
+	} else if (dsync_deserializer_decode_try(decoder, "value", &value))
+		attr->value = p_strdup(pool, value);
 
 	*attr_r = attr;
 	return DSYNC_IBC_RECV_RET_OK;

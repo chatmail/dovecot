@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "base64.h"
@@ -10,7 +10,7 @@
 
 static size_t
 message_header_decode_encoded(const unsigned char *data, size_t size,
-			      buffer_t *decodebuf, unsigned int *charsetlen_r)
+			      buffer_t *decodebuf, size_t *charsetlen_r)
 {
 #define QCOUNT 3
 	unsigned int num = 0;
@@ -24,7 +24,7 @@ message_header_decode_encoded(const unsigned char *data, size_t size,
 				break;
 		}
 	}
-	if (i == size || data[i+1] != '=') {
+	if (i+1 >= size || data[i+1] != '=') {
 		/* invalid block */
 		return 0;
 	}
@@ -58,9 +58,9 @@ message_header_decode_encoded(const unsigned char *data, size_t size,
 	return start_pos[2] + 2;
 }
 
-static bool is_only_lwsp(const unsigned char *data, unsigned int size)
+static bool is_only_lwsp(const unsigned char *data, size_t size)
 {
-	unsigned int i;
+	size_t i;
 
 	for (i = 0; i < size; i++) {
 		if (!(data[i] == ' ' || data[i] == '\t' ||
@@ -75,7 +75,7 @@ void message_header_decode(const unsigned char *data, size_t size,
 			   void *context)
 {
 	buffer_t *decodebuf = NULL;
-	unsigned int charsetlen = 0;
+	size_t charsetlen = 0;
 	size_t pos, start_pos, ret;
 
 	/* =?charset?Q|B?text?= */
@@ -128,6 +128,7 @@ void message_header_decode(const unsigned char *data, size_t size,
 	}
 
 	if (size != start_pos) {
+		i_assert(size > start_pos);
 		(void)callback(data + start_pos, size - start_pos,
 			       NULL, context);
 	}
@@ -178,7 +179,7 @@ void message_header_decode_utf8(const unsigned char *data, size_t size,
 {
 	struct decode_utf8_context ctx;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.dest = dest;
 	ctx.normalizer = normalizer;
 	message_header_decode(data, size, decode_utf8_callback, &ctx);

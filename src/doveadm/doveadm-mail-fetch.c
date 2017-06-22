@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -533,10 +533,10 @@ static void parse_fetch_fields(struct fetch_cmd_context *ctx, const char *str)
 	struct fetch_field hdr_field, body_field;
 	struct imap_msgpart *msgpart;
 
-	memset(&hdr_field, 0, sizeof(hdr_field));
+	i_zero(&hdr_field);
 	hdr_field.print = fetch_hdr_field;
 
-	memset(&body_field, 0, sizeof(body_field));
+	i_zero(&body_field);
 	body_field.print = fetch_body_field;
 
 	t_array_init(&ctx->fields, 32);
@@ -589,7 +589,7 @@ static int cmd_fetch_mail(struct fetch_cmd_context *ctx)
 				field->name, mailbox_get_vname(mail->box),
 				mail->uid,
 				ctx->print_error != NULL ? ctx->print_error :
-				mailbox_get_last_error(mail->box, NULL));
+				mailbox_get_last_internal_error(mail->box, NULL));
 			doveadm_mail_failed_mailbox(&ctx->ctx, mail->box);
 			ctx->print_error = NULL;
 			ret = -1;

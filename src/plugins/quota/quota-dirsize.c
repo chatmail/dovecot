@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 /* Quota reporting based on simply summing sizes of all files in mailbox
    together. */
@@ -125,7 +125,8 @@ static void quota_count_path_add(ARRAY_TYPE(quota_count_path) *paths,
 				 const char *path, bool is_file)
 {
 	struct quota_count_path *count_path;
-	unsigned int i, count, path_len;
+	unsigned int i, count;
+	size_t path_len;
 
 	path_len = strlen(path);
 	count_path = array_get_modifiable(paths, &count);

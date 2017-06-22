@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -252,7 +252,7 @@ binary_parts_update(struct binary_ctx *ctx, const struct message_part *part,
 	for (; part != NULL; part = part->next) {
 		binary_parts_update(ctx, part->children, msg_bin_parts);
 
-		memset(&bin_part, 0, sizeof(bin_part));
+		i_zero(&bin_part);
 		/* default to unchanged header */
 		bin_part.binary_hdr_size = part->header_size.virtual_size;
 		bin_part.physical_pos = part->physical_pos;
@@ -370,7 +370,7 @@ index_mail_read_binary_to_cache(struct mail *_mail,
 	struct binary_ctx ctx;
 	struct istream *is;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.mail = _mail;
 	t_array_init(&ctx.blocks, 8);
 
@@ -456,7 +456,7 @@ static bool get_cached_binary_parts(struct index_mail *mail)
 	if (message_binary_part_deserialize(mail->mail.data_pool,
 					    part_buf->data, part_buf->used,
 					    &mail->data.bin_parts) < 0) {
-		mail_cache_set_corrupted(mail->mail.mail.box->cache,
+		mail_set_mail_cache_corrupted(&mail->mail.mail,
 			"Corrupted cached binary.parts data");
 		return FALSE;
 	}

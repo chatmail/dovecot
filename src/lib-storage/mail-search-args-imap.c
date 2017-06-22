@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -10,6 +10,7 @@
 #include "imap-util.h"
 #include "imap-quote.h"
 #include "mail-search.h"
+#include "mail-search-mime.h"
 
 #include <time.h>
 
@@ -50,6 +51,29 @@ mail_search_arg_to_imap_date(string_t *dest, const struct mail_search_arg *arg)
 	return TRUE;
 }
 
+static void
+mail_search_arg_to_imap_flags(string_t *dest, enum mail_flags flags)
+{
+	static const char *flag_names[] = {
+		"ANSWERED", "FLAGGED", "DELETED", "SEEN", "DRAFT", "RECENT"
+	};
+
+	i_assert(flags != 0);
+
+	if (!bits_is_power_of_two(flags))
+		str_append_c(dest, '(');
+	for (unsigned int i = 0; i < N_ELEMENTS(flag_names); i++) {
+		if ((flags & (1 << i)) != 0) {
+			str_append(dest, flag_names[i]);
+			str_append_c(dest, ' ');
+		}
+	}
+
+	str_truncate(dest, str_len(dest)-1);
+	if (!bits_is_power_of_two(flags))
+		str_append_c(dest, ')');
+}
+
 bool mail_search_arg_to_imap(string_t *dest, const struct mail_search_arg *arg,
 			     const char **error_r)
 {
@@ -80,22 +104,7 @@ bool mail_search_arg_to_imap(string_t *dest, const struct mail_search_arg *arg,
 		imap_write_seq_range(dest, &arg->value.seqset);
 		break;
 	case SEARCH_FLAGS:
-		i_assert((arg->value.flags & MAIL_FLAGS_MASK) != 0);
-		str_append_c(dest, '(');
-		if ((arg->value.flags & MAIL_ANSWERED) != 0)
-			str_append(dest, "ANSWERED ");
-		if ((arg->value.flags & MAIL_FLAGGED) != 0)
-			str_append(dest, "FLAGGED ");
-		if ((arg->value.flags & MAIL_DELETED) != 0)
-			str_append(dest, "DELETED ");
-		if ((arg->value.flags & MAIL_SEEN) != 0)
-			str_append(dest, "SEEN ");
-		if ((arg->value.flags & MAIL_DRAFT) != 0)
-			str_append(dest, "DRAFT ");
-		if ((arg->value.flags & MAIL_RECENT) != 0)
-			str_append(dest, "RECENT ");
-		str_truncate(dest, str_len(dest)-1);
-		str_append_c(dest, ')');
+		mail_search_arg_to_imap_flags(dest, arg->value.flags);
 		break;
 	case SEARCH_KEYWORDS: {
 		const struct mail_keywords *kw = arg->initialized.keywords;
@@ -103,22 +112,24 @@ bool mail_search_arg_to_imap(string_t *dest, const struct mail_search_arg *arg,
 		const char *const *namep;
 		unsigned int i;
 
-		if (kw == NULL) {
-			/* uninitialized */
+		if (kw == NULL || kw->count == 0) {
+			/* uninitialized / invalid keyword */
 			str_printfa(dest, "KEYWORD %s", arg->value.str);
 			break;
 		}
 
 		names_arr = mail_index_get_keywords(kw->index);
 
-		str_append_c(dest, '(');
+		if (kw->count > 1)
+			str_append_c(dest, '(');
 		for (i = 0; i < kw->count; i++) {
 			namep = array_idx(names_arr, kw->idx[i]);
 			if (i > 0)
 				str_append_c(dest, ' ');
 			str_printfa(dest, "KEYWORD %s", *namep);
 		}
-		str_append_c(dest, ')');
+		if (kw->count > 1)
+			str_append_c(dest, ')');
 		break;
 	}
 
@@ -284,6 +295,12 @@ bool mail_search_arg_to_imap(string_t *dest, const struct mail_search_arg *arg,
 	case SEARCH_REAL_UID:
 		str_append(dest, "X-REAL-UID ");
 		imap_write_seq_range(dest, &arg->value.seqset);
+		break;
+	case SEARCH_MIMEPART:
+		str_append(dest, "MIMEPART ");
+		if (!mail_search_mime_part_to_imap(dest,
+			arg->value.mime_part, error_r))
+			return FALSE;
 		break;
 	}
 	return TRUE;

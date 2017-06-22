@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -25,7 +25,7 @@ mail_index_view_dup_private(const struct mail_index_view *src)
 void mail_index_view_clone(struct mail_index_view *dest,
 			   const struct mail_index_view *src)
 {
-	memset(dest, 0, sizeof(*dest));
+	i_zero(dest);
 	dest->refcount = 1;
 	dest->v = src->v;
 	dest->index = src->index;

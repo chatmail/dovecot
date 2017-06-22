@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -108,8 +108,6 @@ static void http_client_host_lookup
 	i_assert(!host->explicit_ip);
 	i_assert(host->dns_lookup == NULL);
 
-	host->ips_count = 0;
-
 	if (client->set.dns_client != NULL) {
 		http_client_host_debug(host,
 			"Performing asynchronous DNS lookup");
@@ -118,7 +116,7 @@ static void http_client_host_lookup
 	} else if (client->set.dns_client_socket_path != NULL) {
 		http_client_host_debug(host,
 			"Performing asynchronous DNS lookup");
-		memset(&dns_set, 0, sizeof(dns_set));
+		i_zero(&dns_set);
 		dns_set.dns_client_socket_path =
 			client->set.dns_client_socket_path;
 		if (client->set.connect_timeout_msecs > 0)
@@ -147,9 +145,7 @@ static void http_client_host_lookup
 		host->ips_count = ips_count;
 		host->ips = i_new(struct ip_addr, ips_count);
 		memcpy(host->ips, ips, ips_count * sizeof(*ips));
-	}
 
-	if (host->ips_count > 0) {
 		host->ips_timeout = ioloop_timeval;
 		timeval_add_msecs(&host->ips_timeout, client->set.dns_ttl_msecs);
 	}

@@ -455,9 +455,9 @@ libdcrypt_la_CFLAGS = $(AM_CPPFLAGS) \
 
 libdcrypt_la_LDFLAGS = -export-dynamic
 @BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_SOURCES = dcrypt-openssl.c
-@BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_LDFLAGS = -module -avoid-version -shared ../lib-ssl-iostream/libdovecot_openssl_common.la ../lib/liblib.la
+@BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_LDFLAGS = -module -avoid-version ../lib-ssl-iostream/libssl_iostream_openssl.la
 @BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_LIBADD = $(SSL_LIBS)
-@BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_DEPENDENCIES = ../lib-ssl-iostream/libdovecot_openssl_common.la ../lib/liblib.la
+@BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_DEPENDENCIES = ../lib-ssl-iostream/libssl_iostream_openssl.la
 @BUILD_DCRYPT_OPENSSL_TRUE@libdcrypt_openssl_la_CFLAGS = $(AM_CPPFLAGS) \
 @BUILD_DCRYPT_OPENSSL_TRUE@	$(SSL_CFLAGS)
 
@@ -477,6 +477,7 @@ EXTRA_DIST = \
 
 test_programs = test-crypto test-stream
 LIBDOVECOT_TEST_DEPS = \
+	../lib-ssl-iostream/libssl_iostream.la \
 	../lib-test/libtest.la \
 	../lib/liblib.la
 

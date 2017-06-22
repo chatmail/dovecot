@@ -24,8 +24,6 @@
  * Types
  */
 
-enum http_response_payload_type;
-
 struct http_client_host;
 struct http_client_queue;
 struct http_client_peer;
@@ -99,6 +97,7 @@ struct http_client_request {
 
 	struct timeval release_time;
 	struct timeval submit_time;
+	struct timeval first_sent_time;
 	struct timeval sent_time;
 	struct timeval response_time;
 	struct timeval timeout_time;
@@ -176,7 +175,9 @@ struct http_client_connection {
 	unsigned int tunneling:1;          /* last sent request turns this
 	                                      connection into tunnel */
 	unsigned int connect_initialized:1; /* connection was initialized */
-	unsigned int connect_succeeded:1;
+	unsigned int connect_succeeded:1;   /* connection succeeded including SSL */
+	unsigned int connect_failed:1;      /* connection failed */
+	unsigned int lost_prematurely:1;    /* lost connection before receiving any data */
 	unsigned int closing:1;
 	unsigned int disconnected:1;
 	unsigned int close_indicated:1;
@@ -464,7 +465,8 @@ void http_client_peer_trigger_request_handler(struct http_client_peer *peer);
 void http_client_peer_connection_success(struct http_client_peer *peer);
 void http_client_peer_connection_failure(struct http_client_peer *peer,
 					 const char *reason);
-void http_client_peer_connection_lost(struct http_client_peer *peer);
+void http_client_peer_connection_lost(struct http_client_peer *peer,
+	bool premature);
 bool http_client_peer_is_connected(struct http_client_peer *peer);
 unsigned int
 http_client_peer_idle_connections(struct http_client_peer *peer);
@@ -513,17 +515,19 @@ void http_client_queue_switch_ioloop(struct http_client_queue *queue);
  * Host
  */
 
-static inline unsigned int
+static inline bool
 http_client_host_get_ip_idx(struct http_client_host *host,
-			    const struct ip_addr *ip)
+			    const struct ip_addr *ip, unsigned int *idx_r)
 {
 	unsigned int i;
 
 	for (i = 0; i < host->ips_count; i++) {
-		if (net_ip_compare(&host->ips[i], ip))
-			return i;
+		if (net_ip_compare(&host->ips[i], ip)) {
+			*idx_r = i;
+			return TRUE;
+		}
 	}
-	i_unreached();
+	return FALSE;
 }
 
 struct http_client_host *

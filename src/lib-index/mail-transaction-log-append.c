@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -18,7 +18,7 @@ void mail_transaction_log_append_add(struct mail_transaction_log_append_ctx *ctx
 	if (size == 0)
 		return;
 
-	memset(&hdr, 0, sizeof(hdr));
+	i_zero(&hdr);
 	hdr.type = type | ctx->trans_flags;
 	if (type == MAIL_TRANSACTION_EXPUNGE ||
 	    type == MAIL_TRANSACTION_EXPUNGE_GUID)
@@ -31,7 +31,8 @@ void mail_transaction_log_append_add(struct mail_transaction_log_append_ctx *ctx
 	buffer_append(ctx->output, &hdr, sizeof(hdr));
 	buffer_append(ctx->output, data, size);
 
-	mail_transaction_update_modseq(&hdr, data, &ctx->new_highest_modseq);
+	mail_transaction_update_modseq(&hdr, data, &ctx->new_highest_modseq,
+		MAIL_TRANSACTION_LOG_HDR_VERSION(&ctx->log->head->hdr));
 	ctx->transaction_count++;
 }
 
@@ -229,7 +230,7 @@ int mail_transaction_log_append_begin(struct mail_index *index,
 	ctx->output = buffer_create_dynamic(default_pool, 1024);
 	ctx->trans_flags = flags;
 
-	memset(&boundary, 0, sizeof(boundary));
+	i_zero(&boundary);
 	mail_transaction_log_append_add(ctx, MAIL_TRANSACTION_BOUNDARY,
 					&boundary, sizeof(boundary));
 

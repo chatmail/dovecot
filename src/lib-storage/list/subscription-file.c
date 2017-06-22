@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -132,7 +132,7 @@ int subsfile_set_subscribed(struct mailbox_list *list, const char *path,
 	if (strcasecmp(name, "INBOX") == 0)
 		name = "INBOX";
 
-	memset(&dotlock_set, 0, sizeof(dotlock_set));
+	i_zero(&dotlock_set);
 	dotlock_set.use_excl_lock = mail_set->dotlock_use_excl;
 	dotlock_set.nfs_flush = mail_set->mail_nfs_storage;
 	dotlock_set.temp_prefix = temp_prefix;

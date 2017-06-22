@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -60,10 +60,10 @@ static bool is_valid_xml_char(unichar_t chr)
 }
 
 static void
-xml_encode_data(string_t *dest, const unsigned char *data, unsigned int len)
+xml_encode_data(string_t *dest, const unsigned char *data, size_t len)
 {
 	unichar_t chr;
-	unsigned int i;
+	size_t i;
 
 	for (i = 0; i < len; i++) {
 		switch (data[i]) {
@@ -659,7 +659,7 @@ static bool
 solr_add_definite_query_args(string_t *str, struct mail_search_arg *arg,
 			     bool and_args)
 {
-	unsigned int last_len;
+	size_t last_len;
 
 	last_len = str_len(str);
 	for (; arg != NULL; arg = arg->next) {
@@ -701,7 +701,7 @@ fts_backend_solr_lookup(struct fts_backend *_backend, struct mailbox *box,
 				&status);
 
 	str = t_str_new(256);
-	str_printfa(str, "fl=uid,score&rows=%u&sort=uid+asc&q={!lucene+q.op%%3dAND}",
+	str_printfa(str, "fl=uid,score&rows=%u&sort=uid+asc&q=%%7b!lucene+q.op%%3dAND%%7d",
 		    status.uidnext);
 
 	if (!solr_add_definite_query_args(str, args, and_args)) {
@@ -761,7 +761,8 @@ solr_search_multi(struct solr_fts_backend *backend, string_t *str,
 	struct mailbox *box;
 	const char *box_name;
 	char *box_id;
-	unsigned int i, len;
+	unsigned int i;
+	size_t len;
 
 	/* use a separate filter query for selecting the mailbox. it shouldn't
 	   affect the score and there could be some caching benefits too. */
@@ -834,7 +835,7 @@ fts_backend_solr_lookup_multi(struct fts_backend *_backend,
 	fts_solr_set_default_ns(backend);
 
 	str = t_str_new(256);
-	str_printfa(str, "fl=ns,box,uidv,uid,score&rows=%u&sort=box+asc,uid+asc&q={!lucene+q.op%%3dAND}",
+	str_printfa(str, "fl=ns,box,uidv,uid,score&rows=%u&sort=box+asc,uid+asc&q=%%7b!lucene+q.op%%3dAND%%7d",
 		    SOLR_MAX_MULTI_ROWS);
 
 	if (solr_add_definite_query_args(str, args, and_args)) {

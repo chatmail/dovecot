@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "imap-commands.h"
@@ -21,6 +21,7 @@ bool cmd_delete(struct client_command_context *cmd)
 		return TRUE;
 
 	box = mailbox_alloc(ns->list, name, 0);
+	mailbox_set_reason(box, "DELETE");
 	if (mailbox_is_any_inbox(box)) {
 		/* IMAP protocol allows this, but I think it's safer to
 		   not allow it. */

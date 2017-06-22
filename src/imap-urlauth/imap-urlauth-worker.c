@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -260,7 +260,7 @@ static void client_destroy(struct client *client)
 		net_disconnect(client->fd_ctrl);
 
 	if (client->service_user != NULL)
-		mail_storage_service_user_free(&client->service_user);
+		mail_storage_service_user_unref(&client->service_user);
 	i_free(client->access_user);
 	array_foreach_modifiable(&client->access_apps, app)
 		i_free(*app);
@@ -296,7 +296,7 @@ static int client_run_url(struct client *client)
 	}
 
 	if (client->msg_part_input->eof) {
-		o_stream_send(client->output, "\n", 1);
+		(void)o_stream_send(client->output, "\n", 1);
 		imap_msgpart_url_free(&client->url);
 		return 1;
 	}
@@ -577,7 +577,7 @@ client_handle_user_command(struct client *client, const char *cmd,
 	}
 
 	/* lookup user */
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = "imap-urlauth-worker";
 	input.service = "imap-urlauth-worker";
 	input.username = args[0];
@@ -633,7 +633,7 @@ client_handle_user_command(struct client *client, const char *cmd,
 		return 0;
 	}
 
-	memset(&config, 0, sizeof(config));
+	i_zero(&config);
 	config.url_host = set->imap_urlauth_host;
 	config.url_port = set->imap_urlauth_port;
 	config.access_user = client->access_user;

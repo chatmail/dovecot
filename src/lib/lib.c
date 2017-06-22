@@ -1,16 +1,22 @@
-/* Copyright (c) 2001-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2001-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "dovecot-version.h"
 #include "array.h"
 #include "env-util.h"
 #include "hostpid.h"
 #include "fd-close-on-exec.h"
 #include "ipwd.h"
 #include "process-title.h"
+#include "var-expand-private.h"
 
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/time.h>
+
+/* Mainly for including the full version information in core dumps.
+   NOTE: Don't set this const - otherwise it won't end up in core dumps. */
+char dovecot_build_info[] = DOVECOT_BUILD_INFO;
 
 static bool lib_initialized = FALSE;
 int dev_null_fd = -1;
@@ -168,6 +174,7 @@ void lib_init(void)
 	data_stack_init();
 	hostpid_init();
 	lib_open_non_stdio_dev_null();
+	var_expand_extensions_init();
 
 	lib_initialized = TRUE;
 }
@@ -184,6 +191,7 @@ void lib_deinit(void)
 	lib_atexit_run();
 	ipwd_deinit();
 	hostpid_deinit();
+	var_expand_extensions_deinit();
 	i_close_fd(&dev_null_fd);
 	data_stack_deinit();
 	env_deinit();

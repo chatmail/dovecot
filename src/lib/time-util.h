@@ -36,7 +36,12 @@ timeval_sub_msecs(struct timeval *tv, unsigned int msecs)
 	}
 }
 
-/* Wrapper to strftime() */
+/* Convert t to local time and return timestamp on that day at 00:00:00. */
+time_t time_to_local_day_start(time_t t);
+
+/* Wrappers to strftime() */
+const char *t_strftime(const char *fmt, const struct tm *tm) ATTR_STRFTIME(1);
 const char *t_strflocaltime(const char *fmt, time_t t) ATTR_STRFTIME(1);
+const char *t_strfgmtime(const char *fmt, time_t t) ATTR_STRFTIME(1);
 
 #endif

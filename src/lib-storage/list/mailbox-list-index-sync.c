@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -34,7 +34,7 @@ node_add_to_index(struct mailbox_list_index_sync_context *ctx,
 	struct mailbox_list_index_record irec;
 	uint32_t seq;
 
-	memset(&irec, 0, sizeof(irec));
+	i_zero(&irec);
 	irec.name_id = node->name_id;
 	if (node->parent != NULL)
 		irec.parent_uid = node->parent->uid;
@@ -375,19 +375,24 @@ mailbox_list_index_sync_update_corrupted_node(struct mailbox_list_index_sync_con
 	if (!mail_index_lookup_seq(sync_ctx->view, node->uid, &seq))
 		return;
 
-	if (node->corrupted_parent) {
+	if (node->corrupted_ext) {
 		mail_index_lookup_ext(sync_ctx->view, seq,
 				      sync_ctx->ilist->ext_id,
 				      &data, &expunged);
 		i_assert(data != NULL);
 
 		memcpy(&irec, data, sizeof(irec));
+		irec.name_id = node->name_id;
 		irec.parent_uid = node->parent == NULL ? 0 : node->parent->uid;
 		mail_index_update_ext(sync_ctx->trans, seq,
 				      sync_ctx->ilist->ext_id, &irec, NULL);
-		node->corrupted_parent = FALSE;
+		node->corrupted_ext = FALSE;
 	}
-	if ((node->flags & MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME) != 0) {
+	if (node->corrupted_flags) {
+		mail_index_update_flags(sync_ctx->trans, seq, MODIFY_REPLACE,
+					(enum mail_flags)node->flags);
+		node->corrupted_flags = FALSE;
+	} else if ((node->flags & MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME) != 0) {
 		/* rely on lib-index to drop unnecessary updates */
 		mail_index_update_flags(sync_ctx->trans, seq, MODIFY_ADD,
 			(enum mail_flags)MAILBOX_LIST_INDEX_FLAG_CORRUPTED_NAME);
@@ -485,7 +490,7 @@ int mailbox_list_index_sync_delete(struct mailbox_list_index_sync_context *sync_
 		i_assert(data != NULL && !expunged);
 		memcpy(&rec, data, sizeof(rec));
 		rec.uid_validity = 0;
-		memset(&rec.guid, 0, sizeof(rec.guid));
+		i_zero(&rec.guid);
 		mail_index_update_ext(sync_ctx->trans, seq,
 				      sync_ctx->ilist->ext_id, &rec, NULL);
 	}

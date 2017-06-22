@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mail-storage-hooks.h"
@@ -14,6 +14,7 @@ const char *fts_plugin_version = DOVECOT_ABI_VERSION;
 
 static struct mail_storage_hooks fts_mail_storage_hooks = {
 	.mail_namespaces_added = fts_mail_namespaces_added,
+	.mailbox_list_created = fts_mailbox_list_created,
 	.mailbox_allocated = fts_mailbox_allocated,
 	.mail_allocated = fts_mail_allocated
 };

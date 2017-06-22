@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "array.h"
@@ -92,6 +92,27 @@ static void test_t_strsplit_tab(void)
 		}
 		strsplit_verify(buf);
 	}
+	test_end();
+}
+
+static void test_t_strsplit_spaces(void)
+{
+	const char *const *args;
+
+	test_begin("t_strsplit_spaces");
+	/* empty strings */
+	args = t_strsplit_spaces("", "\n");
+	test_assert(args[0] == NULL);
+	args = t_strsplit_spaces("\n", "\n");
+	test_assert(args[0] == NULL);
+	args = t_strsplit_spaces("\n\n", "\n");
+	test_assert(args[0] == NULL);
+
+	/* multiple separators */
+	args = t_strsplit_spaces(" , ,   ,str1  ,  ,,, , str2   , ", " ,");
+	test_assert(strcmp(args[0], "str1") == 0);
+	test_assert(strcmp(args[1], "str2") == 0);
+	test_assert(args[2] == NULL);
 	test_end();
 }
 
@@ -215,15 +236,41 @@ static void test_p_array_const_string_join(void)
 	test_end();
 }
 
+static void test_mem_equals_timing_safe(void)
+{
+	const struct {
+		const char *a, *b;
+	} tests[] = {
+		{ "", "" },
+		{ "a", "a" },
+		{ "b", "a" },
+		{ "ab", "ab" },
+		{ "ab", "ba" },
+		{ "ab", "bc" },
+	};
+	test_begin("mem_equals_timing_safe()");
+	for (unsigned int i = 0; i < N_ELEMENTS(tests); i++) {
+		size_t len = strlen(tests[i].a);
+		i_assert(len == strlen(tests[i].b));
+		test_assert((memcmp(tests[i].a, tests[i].b, len) == 0) ==
+			    mem_equals_timing_safe(tests[i].a, tests[i].b, len));
+		test_assert((memcmp(tests[i].a, tests[i].b, len) == 0) ==
+			    mem_equals_timing_safe(tests[i].b, tests[i].a, len));
+	}
+	test_end();
+}
+
 void test_strfuncs(void)
 {
 	test_p_strarray_dup();
 	test_t_strsplit();
 	test_t_strsplit_tab();
+	test_t_strsplit_spaces();
 	test_t_str_replace();
 	/*test_t_str_trim();*/
 	test_t_str_ltrim();
 	test_t_str_rtrim();
 	test_t_strarray_join();
 	test_p_array_const_string_join();
+	test_mem_equals_timing_safe();
 }

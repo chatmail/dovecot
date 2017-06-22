@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -43,7 +43,7 @@ fs_dict_init(struct dict *driver, const char *uri,
 		fs_args = p+1;
 	}
 
-	memset(&fs_set, 0, sizeof(fs_set));
+	i_zero(&fs_set);
 	fs_set.username = set->username;
 	fs_set.base_dir = set->base_dir;
 	if (fs_init(fs_driver, fs_args, &fs_set, &fs, error_r) < 0)
@@ -271,21 +271,16 @@ fs_dict_transaction_commit(struct dict_transaction_context *_ctx,
 struct dict dict_driver_fs = {
 	.name = "fs",
 	{
-		fs_dict_init,
-		fs_dict_deinit,
-		NULL,
-		fs_dict_lookup,
-		fs_dict_iterate_init,
-		fs_dict_iterate,
-		fs_dict_iterate_deinit,
-		fs_dict_transaction_init,
-		fs_dict_transaction_commit,
-		dict_transaction_memory_rollback,
-		dict_transaction_memory_set,
-		dict_transaction_memory_unset,
-		NULL,
-		NULL,
-		NULL,
-		NULL
+		.init = fs_dict_init,
+		.deinit = fs_dict_deinit,
+		.lookup = fs_dict_lookup,
+		.iterate_init = fs_dict_iterate_init,
+		.iterate = fs_dict_iterate,
+		.iterate_deinit = fs_dict_iterate_deinit,
+		.transaction_init = fs_dict_transaction_init,
+		.transaction_commit = fs_dict_transaction_commit,
+		.transaction_rollback = dict_transaction_memory_rollback,
+		.set = dict_transaction_memory_set,
+		.unset = dict_transaction_memory_unset,
 	}
 };

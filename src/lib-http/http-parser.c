@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -74,7 +74,7 @@ const unsigned char _http_char_lookup[256] = {
 void http_parser_init(struct http_parser *parser,
 			const unsigned char *data, size_t size)
 {
-	memset(parser, 0, sizeof(*parser));
+	i_zero(parser);
 	parser->begin = data;
 	parser->cur = data;
 	parser->end = data + size;

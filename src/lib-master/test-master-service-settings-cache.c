@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "test-common.h"
@@ -101,7 +101,7 @@ int main(void)
 	pool_t pool;
 	int ret;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = "module";
 	input.service = "service_name";
 

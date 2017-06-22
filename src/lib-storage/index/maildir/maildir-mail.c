@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -112,6 +112,7 @@ static int maildir_mail_stat(struct mail *mail, struct stat *st_r)
 		mail_set_aborted(mail);
 		return -1;
 	}
+	mail->mail_metadata_accessed = TRUE;
 
 	if (imail->data.access_part != 0 &&
 	    imail->data.stream == NULL) {
@@ -262,6 +263,12 @@ static int maildir_get_pop3_state(struct index_mail *mail)
 		}
 	}
 
+	if (index_mail_get_vsize_extension(&mail->mail.mail) != NULL) {
+		/* having a vsize extension in index is the same as having
+		   vsize's caching decision YES */
+		vsize_dec = MAIL_CACHE_DECISION_YES;
+	}
+
 	if (!not_pop3_only) {
 		/* either nothing is cached, or only vsize is cached. */
 		mail->pop3_state = 1;
@@ -339,17 +346,15 @@ maildir_handle_size_caching(struct index_mail *mail, bool quick_check,
 		   including to the uidlist if it's already in filename.
 		   do some extra checks here to catch potential cache bugs. */
 		if (vsize && mail->data.virtual_size != size) {
-			mail_cache_set_corrupted(box->cache,
-				"Corrupted virtual size for uid=%u: "
+			mail_set_mail_cache_corrupted(&mail->mail.mail,
+				"Corrupted virtual size: "
 				"%"PRIuUOFF_T" != %"PRIuUOFF_T,
-				mail->mail.mail.uid,
 				mail->data.virtual_size, size);
 			mail->data.virtual_size = size;
 		} else if (!vsize && mail->data.physical_size != size) {
-			mail_cache_set_corrupted(box->cache,
-				"Corrupted physical size for uid=%u: "
+			mail_set_mail_cache_corrupted(&mail->mail.mail,
+				"Corrupted physical size: "
 				"%"PRIuUOFF_T" != %"PRIuUOFF_T,
-				mail->mail.mail.uid,
 				mail->data.physical_size, size);
 			mail->data.physical_size = size;
 		}
@@ -722,7 +727,7 @@ maildir_mail_remove_sizes_from_filename(struct mail *mail,
 	if (strchr(fname, MAILDIR_EXTRA_SEP) == NULL)
 		return;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.physical_size = (uoff_t)-1;
 	if (field == MAIL_FETCH_VIRTUAL_SIZE &&
 	    maildir_filename_get_size(fname, MAILDIR_EXTRA_VIRTUAL_SIZE,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -91,7 +91,7 @@ login_proxy_state_get(struct login_proxy_state *state,
 {
 	struct login_proxy_record *rec, key;
 
-	memset(&key, 0, sizeof(key));
+	i_zero(&key);
 	key.ip = *ip;
 	key.port = port;
 
@@ -132,7 +132,7 @@ static int login_proxy_state_notify_open(struct login_proxy_state *state)
 static bool login_proxy_state_try_notify(struct login_proxy_state *state,
 					 const char *user)
 {
-	unsigned int len;
+	size_t len;
 	ssize_t ret;
 
 	if (state->notify_fd == -1) {
