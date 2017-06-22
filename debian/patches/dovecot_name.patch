@@ -12,13 +12,11 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
  src/login-common/login-settings.c |    2 +-
  4 files changed, 10 insertions(+), 5 deletions(-)
 
-diff --git a/configure.ac b/configure.ac
-index 3b32614..fb7296e 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -318,7 +318,12 @@ AC_C_INLINE
- AC_PROG_LIBTOOL
- AM_ICONV
+@@ -321,7 +321,12 @@
+ # SIZE_MAX is missing without this
+ CXXFLAGS="$CXXFLAGS -D__STDC_LIMIT_MACROS"
  
 -AC_DEFINE_UNQUOTED(DOVECOT_NAME, "$PACKAGE_NAME", [Dovecot name])
 +if test -x /usr/bin/lsb_release && lsb_release -si; then
@@ -30,11 +28,9 @@ index 3b32614..fb7296e 100644
  AC_DEFINE_UNQUOTED(DOVECOT_STRING, "$PACKAGE_STRING", [Dovecot string])
  AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", [Dovecot version])
  
-diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index d992b9e..996fe9d 100644
 --- a/src/config/all-settings.c
 +++ b/src/config/all-settings.c
-@@ -2616,7 +2616,7 @@ static const struct setting_define login_setting_defines[] = {
+@@ -2882,7 +2882,7 @@
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
@@ -43,7 +39,7 @@ index d992b9e..996fe9d 100644
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
-@@ -2769,7 +2769,7 @@ static const struct lmtp_settings lmtp_default_settings = {
+@@ -3038,7 +3038,7 @@
  	.lmtp_user_concurrency_limit = 0,
  	.lmtp_address_translate = "",
  	.lmtp_hdr_delivery_address = "final:none:original",
@@ -52,11 +48,9 @@ index d992b9e..996fe9d 100644
  	.login_trusted_networks = ""
  };
  static const struct setting_parser_info *lmtp_setting_dependencies[] = {
-diff --git a/src/lmtp/lmtp-settings.c b/src/lmtp/lmtp-settings.c
-index ee75214..da27fe5 100644
 --- a/src/lmtp/lmtp-settings.c
 +++ b/src/lmtp/lmtp-settings.c
-@@ -78,7 +78,7 @@ static const struct lmtp_settings lmtp_default_settings = {
+@@ -78,7 +78,7 @@
  	.lmtp_user_concurrency_limit = 0,
  	.lmtp_address_translate = "",
  	.lmtp_hdr_delivery_address = "final:none:original",
@@ -65,11 +59,9 @@ index ee75214..da27fe5 100644
  	.login_trusted_networks = ""
  };
  
-diff --git a/src/login-common/login-settings.c b/src/login-common/login-settings.c
-index 24b2dee..414face 100644
 --- a/src/login-common/login-settings.c
 +++ b/src/login-common/login-settings.c
-@@ -47,7 +47,7 @@ static const struct setting_define login_setting_defines[] = {
+@@ -50,7 +50,7 @@
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
