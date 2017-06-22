@@ -1,3 +1,18 @@
+dovecot (1:2.2.30.2-1) unstable; urgency=medium
+
+  * [401e83d] New upstream version 2.2.30.2
+  * [1ea8321] Bump pigeonhole version to 0.4.18
+  * [97bf8ec] Drop CVE-2017-2669 patch
+  * [9c1bbe2] Drop fix-sha3-on-big-endian.patch
+  * [d3c607b] Refresh dovecot_name.patch
+  * [5c64268] Bump Standards to 4.0.0; no changes needed
+  * [0b884fc] Bump compat to 10
+    + B-D on debhelper (>= 10)
+    + Drop B-D on dh-systemd, now provided by debhelper
+    + Run dh --without=autoreconf, since we use autotools-dev
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 22 Jun 2017 22:22:59 +0300
+
 dovecot (1:2.2.27-3) unstable; urgency=high
 
   * [117285a] Remove /etc/dovecot/README (Closes: #849290)
