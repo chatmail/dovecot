@@ -59,7 +59,7 @@ mail_cache_register_lookup(struct mail_cache *cache, const char *name);
 const struct mail_cache_field *
 mail_cache_register_get_field(struct mail_cache *cache, unsigned int field_idx);
 /* Returns a list of all registered fields */
-const struct mail_cache_field *
+struct mail_cache_field *
 mail_cache_register_get_list(struct mail_cache *cache, pool_t pool,
 			     unsigned int *count_r);
 
@@ -87,6 +87,11 @@ void mail_cache_view_close(struct mail_cache_view **view);
    enable/disable this (useful for precaching data). */
 void mail_cache_view_update_cache_decisions(struct mail_cache_view *view,
 					    bool update);
+
+/* Copy caching decisions */
+void mail_cache_decisions_copy(struct mail_index_transaction *itrans,
+			       struct mail_cache *src,
+			       struct mail_cache *dst);
 
 /* Get index transaction specific cache transaction. */
 struct mail_cache_transaction_ctx *
@@ -134,6 +139,8 @@ int mail_cache_lookup_headers(struct mail_cache_view *view, string_t *dest,
 /* "Error in index cache file %s: ...". */
 void mail_cache_set_corrupted(struct mail_cache *cache, const char *fmt, ...)
 	ATTR_FORMAT(2, 3);
+void mail_cache_set_seq_corrupted_reason(struct mail_cache_view *cache_view,
+					 uint32_t seq, const char *reason);
 /* Delete the cache file. */
 void mail_cache_reset(struct mail_cache *cache);
 

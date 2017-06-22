@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -64,6 +64,14 @@ static bool cmd_xclient(struct pop3_client *client, const char *args)
 			}
 		} else if (strncasecmp(*tmp, "TTL=", 4) == 0) {
 			if (str_to_uint(*tmp + 4, &client->common.proxy_ttl) < 0)
+				args_ok = FALSE;
+		} else if (strncasecmp(*tmp, "FORWARD=", 8) == 0) {
+			size_t value_len = strlen((*tmp)+8);
+			client->common.forward_fields =
+				str_new(client->common.preproxy_pool,
+					MAX_BASE64_DECODED_SIZE(value_len));
+			if (base64_decode((*tmp)+8, value_len, NULL,
+					  client->common.forward_fields) < 0)
 				args_ok = FALSE;
 		}
 	}
@@ -138,6 +146,7 @@ static void pop3_client_input(struct client *client)
 				"Too many invalid bad commands.");
 			client_destroy(client,
 				       "Disconnected: Too many bad commands");
+			break;
 		}
 	}
 
@@ -213,6 +222,8 @@ static void pop3_client_notify_auth_ready(struct client *client)
 	if (pop3_client->apop_challenge != NULL)
 		str_printfa(str, " %s", pop3_client->apop_challenge);
 	client_send_reply(client, POP3_CMD_REPLY_OK, str_c(str));
+
+	client->banner_sent = TRUE;
 }
 
 static void
@@ -310,7 +321,9 @@ static struct client_vfuncs pop3_client_vfuncs = {
 	pop3_client_auth_result,
 	pop3_proxy_reset,
 	pop3_proxy_parse_line,
-	pop3_proxy_error
+	pop3_proxy_error,
+	pop3_proxy_get_state,
+	client_common_send_raw_data,
 };
 
 static const struct login_binary pop3_login_binary = {

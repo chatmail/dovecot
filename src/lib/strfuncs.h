@@ -66,6 +66,15 @@ int bsearch_strcasecmp(const char *key, const char *const *member) ATTR_PURE;
 int i_memcasecmp(const void *p1, const void *p2, size_t size) ATTR_PURE;
 int i_strcmp_p(const char *const *p1, const char *const *p2) ATTR_PURE;
 int i_strcasecmp_p(const char *const *p1, const char *const *p2) ATTR_PURE;
+/* Returns TRUE if the two memory areas are equal. This function is safe
+   against timing attacks, so it compares all the bytes every time. */
+bool mem_equals_timing_safe(const void *p1, const void *p2, size_t size);
+
+static inline char *i_strchr_to_next(const char *str, char chr)
+{
+	char *tmp = (char *)strchr(str, chr);
+	return tmp == NULL ? NULL : tmp+1;
+}
 
 /* separators is an array of separator characters, not a separator string.
    an empty data string results in an array containing only NULL. */
@@ -74,7 +83,8 @@ char **p_strsplit(pool_t pool, const char *data, const char *separators)
 const char **t_strsplit(const char *data, const char *separators)
 	ATTR_MALLOC ATTR_RETURNS_NONNULL;
 /* like p_strsplit(), but treats multiple adjacent separators as a single
-   separator. */
+   separator. separators at the beginning or at the end of the string are also
+   ignored, so it's not possible for the result to have any empty strings. */
 char **p_strsplit_spaces(pool_t pool, const char *data, const char *separators)
 	ATTR_MALLOC ATTR_RETURNS_NONNULL;
 const char **t_strsplit_spaces(const char *data, const char *separators)
@@ -84,6 +94,10 @@ void p_strsplit_free(pool_t pool, char **arr);
 const char **t_strsplit_tab(const char *data) ATTR_MALLOC ATTR_RETURNS_NONNULL;
 
 const char *dec2str(uintmax_t number);
+/* Use the given buffer to write out the number. Returns pointer to the
+   written number in the buffer. Note that this isn't the same as the beginning
+   of the buffer. */
+char *dec2str_buf(char buffer[STATIC_ARRAY MAX_INT_STRLEN], uintmax_t number);
 
 /* Return length of NULL-terminated list string array */
 unsigned int str_array_length(const char *const *arr) ATTR_PURE;

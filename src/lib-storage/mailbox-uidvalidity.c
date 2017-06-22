@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -75,7 +75,8 @@ mailbox_uidvalidity_rename(const char *path, uint32_t *uid_validity,
 			   bool log_enoent)
 {
 	string_t *src, *dest;
-	unsigned int i, prefix_len;
+	unsigned int i;
+	size_t prefix_len;
 	int ret;
 
 	src = t_str_new(256);
@@ -111,7 +112,8 @@ mailbox_uidvalidity_next_rescan(struct mailbox_list *list, const char *path)
 	DIR *d;
 	struct dirent *dp;
 	const char *fname, *dir, *prefix, *tmp;
-	unsigned int i, prefix_len;
+	unsigned int i;
+	size_t prefix_len;
 	uint32_t cur_value, min_value, max_value;
 	mode_t old_mask;
 	int fd;

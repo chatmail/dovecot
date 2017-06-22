@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -221,7 +221,7 @@ virtual_mailbox_get_list_patterns(struct virtual_parse_context *ctx)
 	struct virtual_backend_box *const *bboxes;
 	unsigned int i, count;
 
-	memset(&pattern, 0, sizeof(pattern));
+	i_zero(&pattern);
 	bboxes = array_get_modifiable(&mbox->backend_boxes, &count);
 	p_array_init(&mbox->list_include_patterns, ctx->pool, count);
 	p_array_init(&mbox->list_exclude_patterns, ctx->pool, count);
@@ -373,6 +373,7 @@ virtual_config_metadata_match(const struct mailbox_info *info,
 		return 1;
 
 	box = mailbox_alloc(info->ns->list, info->vname, MAILBOX_FLAG_READONLY);
+	mailbox_set_reason(box, "virtual mailbox metadata match");
 	for (i = 0; i < count; i++) {
 		if ((ret = virtual_config_box_metadata_match(box, boxes[i], error_r)) <= 0)
 			break;
@@ -440,7 +441,7 @@ static int virtual_config_expand_wildcards(struct virtual_parse_context *ctx,
 	for (i = 0; i < count; i++)
 		mail_search_args_unref(&wboxes[i]->search_args);
 	if (mailbox_list_iter_deinit(&iter) < 0) {
-		*error_r = mailbox_list_get_last_error(user->namespaces->list, NULL);
+		*error_r = mailbox_list_get_last_internal_error(user->namespaces->list, NULL);
 		return -1;
 	}
 	return ret < 0 ? -1 : 0;
@@ -491,7 +492,7 @@ int virtual_config_read(struct virtual_mailbox *mbox)
 		return -1;
 	}
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.sep = mail_namespaces_get_root_sep(storage->user->namespaces);
 	ctx.mbox = mbox;
 	ctx.pool = mbox->box.pool;

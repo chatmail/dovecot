@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -29,6 +29,7 @@ const struct doveadm_print_vfuncs *doveadm_print_vfuncs_all[] = {
 	NULL
 };
 
+bool doveadm_verbose_proctitle;
 int doveadm_exit_code = 0;
 
 static void failure_exit_callback(int *status)
@@ -53,7 +54,8 @@ doveadm_usage_compress_lines(FILE *out, const char *str, const char *prefix)
 	const char *cmd, *args, *p, *short_name, *sub_name;
 	const char *prev_name = "", *prev_sub_name = "";
 	const char **lines;
-	unsigned int i, count, prefix_len = strlen(prefix);
+	unsigned int i, count;
+	size_t prefix_len = strlen(prefix);
 
 	/* split lines */
 	lines = (void *)p_strsplit(pool_datastack_create(), str, "\n");
@@ -226,7 +228,7 @@ static bool doveadm_has_subcommands(const char *cmd_name)
 {
 	const struct doveadm_cmd_ver2 *cmd2;
 	const struct doveadm_cmd *cmd;
-	unsigned int len = strlen(cmd_name);
+	size_t len = strlen(cmd_name);
 
 	array_foreach(&doveadm_cmds, cmd) {
 		if (strncmp(cmd->name, cmd_name, len) == 0 &&
@@ -252,7 +254,7 @@ static void doveadm_read_settings(void)
 	const struct doveadm_settings *set;
 	const char *error;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.roots = set_roots;
 	input.module = "doveadm";
 	input.service = "doveadm";
@@ -265,6 +267,7 @@ static void doveadm_read_settings(void)
 	service_set = master_service_settings_get(master_service);
 	service_set = settings_dup(&master_service_setting_parser_info,
 				   service_set, pool_datastack_create());
+	doveadm_verbose_proctitle = service_set->verbose_proctitle;
 
 	set = master_service_settings_get_others(master_service)[0];
 	doveadm_settings = settings_dup(&doveadm_setting_parser_info, set,
@@ -293,7 +296,7 @@ int main(int argc, char *argv[])
 	bool quick_init = FALSE;
 	int c;
 
-	memset(&cctx,0,sizeof(cctx));
+	i_zero(&cctx);
 	cctx.cli = TRUE;
 
 	i_set_failure_exit_callback(failure_exit_callback);

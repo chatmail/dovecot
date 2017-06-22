@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -17,7 +17,7 @@ static struct {
 	{ "1,5:6,10:15", NULL },
 	{ "UID 1,5:6,10:15", NULL },
 	{ "ANSWERED FLAGGED DELETED SEEN DRAFT RECENT",
-	  "(ANSWERED) (FLAGGED) (DELETED) (SEEN) (DRAFT) (RECENT)" },
+	  "ANSWERED FLAGGED DELETED SEEN DRAFT RECENT" },
 	{ "KEYWORD foo KEYWORD bar", NULL },
 	{ "BEFORE 20-May-2015", "BEFORE \"20-May-2015\"" },
 	{ "ON 20-May-2015", "ON \"20-May-2015\"" },
@@ -54,14 +54,57 @@ static struct {
 	{ "MODSEQ /flags/\\Seen all 0", NULL },
 	{ "MODSEQ /flags/\\Seen priv 0", NULL },
 	{ "MODSEQ /flags/\\Seen shared 0", NULL },
-	{ "INTHREAD REFERENCES seen", "INTHREAD REFERENCES ((SEEN))" },
-	{ "INTHREAD ORDEREDSUBJECT seen", "INTHREAD ORDEREDSUBJECT ((SEEN))" },
-	{ "INTHREAD REFS seen", "INTHREAD REFS ((SEEN))" },
+	{ "INTHREAD REFERENCES seen", "INTHREAD REFERENCES (SEEN)" },
+	{ "INTHREAD ORDEREDSUBJECT seen", "INTHREAD ORDEREDSUBJECT (SEEN)" },
+	{ "INTHREAD REFS seen", "INTHREAD REFS (SEEN)" },
 	{ "INTHREAD REFS ( OR text foo OR keyword bar seen )",
-	  "INTHREAD REFS (((OR TEXT foo OR KEYWORD bar (SEEN))))" },
+	  "INTHREAD REFS (((OR TEXT foo OR KEYWORD bar SEEN)))" },
 	{ "X-GUID foo", NULL },
 	{ "X-MAILBOX foo", NULL },
-	{ "X-REAL-UID 1,5:6,10:15", NULL }
+	{ "X-REAL-UID 1,5:6,10:15", NULL },
+	/* SEARCH=X-MIMEPART */
+	{ "MIMEPART CHILD EXISTS", NULL },
+	{ "MIMEPART ( CHILD EXISTS )",
+	  "MIMEPART CHILD EXISTS" },
+	{ "MIMEPART ( CHILD EXISTS HEADER Comment Hopla )",
+	  "MIMEPART (CHILD EXISTS HEADER COMMENT Hopla)" },
+	{ "MIMEPART ( DESCRIPTION Frop ENCODING base64 )",
+	  "MIMEPART (DESCRIPTION Frop ENCODING base64)" },
+	{ "MIMEPART ( DISPOSITION TYPE attachment "
+	    "DISPOSITION PARAM FILENAME frop.txt )",
+	  "MIMEPART (DISPOSITION TYPE attachment "
+	    "DISPOSITION PARAM FILENAME frop.txt)" },
+	{ "MIMEPART ( ID <frop.example.com> LANGUAGE en )",
+	  "MIMEPART (ID <frop.example.com> LANGUAGE en)" },
+	{ "MIMEPART ( LOCATION http://www.dovecot.org )",
+	  "MIMEPART LOCATION http://www.dovecot.org" },
+	{ "MIMEPART NOT MD5 373def35afde6378efd6172dfeadfd", NULL },
+	{ "MIMEPART OR PARAM charset utf-8 TYPE text",
+	  "MIMEPART (OR PARAM CHARSET utf-8 TYPE text)" },
+	{ "MIMEPART ( OR SIZE LARGER 25 SIZE SMALLER 1023 )",
+	  "MIMEPART (OR SIZE LARGER 25 SIZE SMALLER 1023)" },
+	{ "MIMEPART ( TYPE video SUBTYPE mpeg )",
+	  "MIMEPART (TYPE video SUBTYPE mpeg)" },
+	{ "( OR MIMEPART ( DEPTH 2 INDEX 1 ) MIMEPART ( DEPTH MAX 4 INDEX 3 ) )",
+	  "((OR MIMEPART (DEPTH 2 INDEX 1) MIMEPART (DEPTH MAX 4 INDEX 3)))" },
+	{ "MIMEPART FILENAME IS frop.txt", NULL },
+	{ "MIMEPART FILENAME BEGINS frop", NULL },
+	{ "MIMEPART FILENAME ENDS .txt", NULL },
+	{ "MIMEPART FILENAME CONTAINS frop", NULL },
+	{ "MIMEPART BODY frop MIMEPART TEXT frop", NULL },
+	{ "MIMEPART ( CC appie BCC theo FROM leo REPLY-TO henk SENDER arie )",
+	  "MIMEPART (CC appie BCC theo FROM leo REPLY-TO henk SENDER arie)" },
+	{ "MIMEPART ( MESSAGE-ID <frop4222> IN-REPLY-TO <frop421> )",
+	  "MIMEPART (MESSAGE-ID <frop4222> IN-REPLY-TO <frop421>)" },
+	{ "MIMEPART ( SUBJECT Frop TO henkie SENTON 20-Feb-2017 )",
+	  "MIMEPART (SUBJECT Frop TO henkie SENTON \"20-Feb-2017\")" },
+	{ "MIMEPART ( OR SENTBEFORE 20-May-2015 SENTSINCE 20-Feb-2017 )",
+	  "MIMEPART (OR SENTBEFORE \"20-May-2015\" SENTSINCE \"20-Feb-2017\")" },
+	{ "MIMEPART ( ID <frop> PARENT ID <friep> )",
+	  "MIMEPART (ID <frop> PARENT (ID <friep>))" },
+	{ "MIMEPART ( ID <frop> CHILD ( DESCRIPTION frop ID friep ) )",
+	  "MIMEPART (ID <frop> CHILD (DESCRIPTION frop ID friep))" },
+	{ "MIMEPART CHILD EXISTS MIMEPART PARENT EXISTS", NULL },
 };
 
 static struct mail_search_arg test_failures[] = {

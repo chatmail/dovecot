@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hostpid.h"
@@ -54,7 +54,7 @@ static int index_list_init(struct mailbox_list *_list, const char **error_r)
 	if (mailbox_list_get_root_path(_list, MAILBOX_LIST_PATH_TYPE_INDEX, &dir) &&
 	    mailbox_list_mkdir_root(_list, dir, MAILBOX_LIST_PATH_TYPE_INDEX) < 0) {
 		*error_r = t_strdup_printf("Failed to create the index root directory: %s",
-					   mailbox_list_get_last_error(_list, NULL));
+					   mailbox_list_get_last_internal_error(_list, NULL));
 		return -1;
 	}
 	return 0;
@@ -358,7 +358,7 @@ index_list_mailbox_create(struct mailbox *box,
 		/* if no GUID is requested, generate it ourself. set
 		   UIDVALIDITY to index sometimes later. */
 		if (update == NULL)
-			memset(&new_update, 0, sizeof(new_update));
+			i_zero(&new_update);
 		else
 			new_update = *update;
 		if (guid_128_is_empty(new_update.mailbox_guid))
@@ -516,6 +516,12 @@ static int index_list_mailbox_open(struct mailbox *box)
 	if (ibox->module_ctx.super.open(box) < 0)
 		return -1;
 
+	if (box->view == NULL) {
+		/* FIXME: dsync-merge is performing a delete in obox - remove
+		   this check once dsync-merging is no longer used. */
+		return 0;
+	}
+
 	/* if mailbox name has changed, update it to the header. Use \0
 	   as the hierarchy separator in the header. This is to make sure
 	   we don't keep rewriting the name just in case some backend switches
@@ -524,8 +530,8 @@ static int index_list_mailbox_open(struct mailbox *box)
 	/* Get the current mailbox name with \0 separators. */
 	char sep = mailbox_list_get_hierarchy_sep(box->list);
 	char *box_zerosep_name = t_strdup_noconst(box->name);
-	unsigned int box_name_len = strlen(box_zerosep_name);
-	for (unsigned int i = 0; i < box_name_len; i++) {
+	size_t box_name_len = strlen(box_zerosep_name);
+	for (size_t i = 0; i < box_name_len; i++) {
 		if (box_zerosep_name[i] == sep)
 			box_zerosep_name[i] = '\0';
 	}
@@ -691,7 +697,7 @@ index_list_rename_mailbox(struct mailbox_list *_oldlist, const char *oldname,
 			  struct mailbox_list *_newlist, const char *newname)
 {
 	struct index_mailbox_list *list = (struct index_mailbox_list *)_oldlist;
-	const unsigned int oldname_len = strlen(oldname);
+	const size_t oldname_len = strlen(oldname);
 	struct mailbox_list_index_sync_context *sync_ctx;
 	struct mailbox_list_index_record oldrec, newrec;
 	struct mailbox_list_index_node *oldnode, *newnode, *child;
@@ -817,38 +823,34 @@ struct mailbox_list index_mailbox_list = {
 	.props = MAILBOX_LIST_PROP_NO_ROOT,
 	.mailbox_name_max_length = MAILBOX_LIST_NAME_MAX_LENGTH,
 
-	{
-		index_list_alloc,
-		index_list_init,
-		index_list_deinit,
-		NULL,
-		index_list_get_hierarchy_sep,
-		mailbox_list_default_get_vname,
-		mailbox_list_default_get_storage_name,
-		index_list_get_path,
-		index_list_get_temp_prefix,
-		NULL,
-		index_list_iter_init,
-		index_list_iter_next,
-		index_list_iter_deinit,
-		NULL,
-		NULL,
-		mailbox_list_subscriptions_refresh,
-		index_list_set_subscribed,
-		index_list_delete_mailbox,
-		index_list_delete_dir,
-		index_list_delete_symlink,
-		index_list_rename_mailbox,
-		NULL, NULL, NULL, NULL
+	.v = {
+		.alloc = index_list_alloc,
+		.init = index_list_init,
+		.deinit = index_list_deinit,
+		.get_hierarchy_sep = index_list_get_hierarchy_sep,
+		.get_vname = mailbox_list_default_get_vname,
+		.get_storage_name = mailbox_list_default_get_storage_name,
+		.get_path = index_list_get_path,
+		.get_temp_prefix = index_list_get_temp_prefix,
+		.iter_init = index_list_iter_init,
+		.iter_next = index_list_iter_next,
+		.iter_deinit = index_list_iter_deinit,
+		.subscriptions_refresh = mailbox_list_subscriptions_refresh,
+		.set_subscribed = index_list_set_subscribed,
+		.delete_mailbox = index_list_delete_mailbox,
+		.delete_dir = index_list_delete_dir,
+		.delete_symlink = index_list_delete_symlink,
+		.rename_mailbox = index_list_rename_mailbox,
 	}
 };
 
-void mailbox_list_index_backend_init_mailbox(struct mailbox *box)
+void mailbox_list_index_backend_init_mailbox(struct mailbox *box,
+					     struct mailbox_vfuncs *v)
 {
 	if (strcmp(box->list->name, MAILBOX_LIST_NAME_INDEX) != 0)
 		return;
-	box->v.create_box = index_list_mailbox_create;
-	box->v.update_box = index_list_mailbox_update;
-	box->v.exists = index_list_mailbox_exists;
-	box->v.open = index_list_mailbox_open;
+	v->create_box = index_list_mailbox_create;
+	v->update_box = index_list_mailbox_update;
+	v->exists = index_list_mailbox_exists;
+	v->open = index_list_mailbox_open;
 }

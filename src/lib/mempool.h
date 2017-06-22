@@ -57,6 +57,11 @@ extern pool_t unsafe_data_stack_pool;
 /* Create a new alloc-only pool. Note that `size' specifies the initial
    malloc()ed block size, part of it is used internally. */
 pool_t pool_alloconly_create(const char *name, size_t size);
+/* Like alloconly pool, but clear the memory before freeing it. The idea is
+   that you could allocate memory for storing sensitive information from this
+   pool, and be sure that it gets cleared from the memory when it's no longer
+   needed. */
+pool_t pool_alloconly_create_clean(const char *name, size_t size);
 
 /* When allocating memory from returned pool, the data stack frame must be
    the same as it was when calling this function. pool_unref() also checks
@@ -69,7 +74,8 @@ pool_t pool_datastack_create(void);
 size_t pool_get_exp_grown_size(pool_t pool, size_t old_size, size_t min_size);
 
 #define p_new(pool, type, count) \
-	((type *) p_malloc(pool, sizeof(type) * (count)))
+	((type *) p_malloc(pool, MALLOC_MULTIPLY((unsigned int)sizeof(type), (count))) + \
+	 COMPILE_ERROR_IF_TRUE(sizeof(type) > UINT_MAX))
 static inline void * ATTR_MALLOC ATTR_RETURNS_NONNULL
 p_malloc(pool_t pool, size_t size)
 {

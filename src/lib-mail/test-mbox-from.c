@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "utc-offset.h"
@@ -50,7 +50,8 @@ static void test_mbox_from_parse(void)
 		{ 0, 0, NULL, -1 },
 		{ 0, 0, NULL, -1 },
 	};
-	unsigned int i, j, len;
+	unsigned int i, j;
+	size_t len;
 	struct tm *tm;
 	char *sender;
 	bool success;

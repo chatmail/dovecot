@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "module-dir.h"
@@ -99,7 +99,7 @@ cmd_quota_recalc_run(struct doveadm_mail_cmd_context *ctx ATTR_UNUSED,
 		return -1;
 	}
 
-	memset(&trans, 0, sizeof(trans));
+	i_zero(&trans);
 	trans.quota = quser->quota;
 	trans.recalculate = QUOTA_RECALCULATE_FORCED;
 

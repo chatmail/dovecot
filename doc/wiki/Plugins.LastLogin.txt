@@ -25,4 +25,30 @@ also be thought of as a feature, so if you want to update a different timestamp
 for user when new mails are delivered, you can do that by enabling the
 last_login plugin also for lda/lmtp and changing the last_login_key setting.
 
-(This file was created from the wiki on 2016-12-03 04:44)
+Example dict config with schema
+
+---%<-------------------------------------------------------------------------
+CREATE TABLE `users` (
+  `userid` varchar(255) NOT NULL,
+
+...
+
+  `last_login` int(11) DEFAULT NULL,
+  PRIMARY KEY (`userid`)
+)
+---%<-------------------------------------------------------------------------
+
+---%<-------------------------------------------------------------------------
+map {
+  pattern = shared/last-login/$user
+  table = users
+  value_field = last_login
+  value_type = uint
+
+  fields {
+    userid = $user
+  }
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2017-05-30 16:30)

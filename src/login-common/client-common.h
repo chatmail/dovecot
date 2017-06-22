@@ -1,6 +1,8 @@
 #ifndef CLIENT_COMMON_H
 #define CLIENT_COMMON_H
 
+struct module;
+
 #include "net.h"
 #include "login-proxy.h"
 #include "sasl-server.h"
@@ -8,6 +10,7 @@
 
 #define LOGIN_MAX_SESSION_ID_LEN 64
 #define LOGIN_MAX_MASTER_PREFIX_LEN 128
+#define LOGIN_MAX_CLIENT_ID_LEN 256
 
 /* max. size of input buffer. this means:
 
@@ -99,12 +102,18 @@ struct client_vfuncs {
 	void (*proxy_reset)(struct client *client);
 	int (*proxy_parse_line)(struct client *client, const char *line);
 	void (*proxy_error)(struct client *client, const char *text);
+	const char *(*proxy_get_state)(struct client *client);
+	void (*send_raw_data)(struct client *client,
+			      const void *data, size_t size);
 };
 
 struct client {
 	struct client *prev, *next;
 	pool_t pool;
+	/* this pool gets free'd once proxying starts */
+	pool_t preproxy_pool;
 	struct client_vfuncs v;
+	struct client_vfuncs *vlast;
 
 	time_t created;
 	int refcount;
@@ -119,6 +128,8 @@ struct client {
 	const struct master_service_ssl_settings *ssl_set;
 	const char *session_id, *listener_name, *postlogin_socket_path;
 	const char *local_name;
+	string_t *client_id;
+	string_t *forward_fields;
 
 	int fd;
 	struct istream *input;
@@ -134,7 +145,6 @@ struct client {
 	char *proxy_user, *proxy_master_user, *proxy_password;
 	const struct dsasl_client_mech *proxy_mech;
 	struct dsasl_client *proxy_sasl_client;
-	unsigned int proxy_state;
 	unsigned int proxy_ttl;
 
 	char *auth_mech_name;
@@ -169,6 +179,7 @@ struct client {
 	unsigned int secured:1;
 	unsigned int trusted:1;
 	unsigned int ssl_servername_settings_read:1;
+	unsigned int banner_sent:1;
 	unsigned int authenticating:1;
 	unsigned int auth_tried_disabled_plaintext:1;
 	unsigned int auth_tried_unsupported_mech:1;
@@ -191,14 +202,17 @@ union login_client_module_context {
 	struct login_module_register *reg;
 };
 
+struct login_client_hooks {
+	void (*client_allocated)(struct client *client);
+};
+
 extern struct client *clients;
 
 typedef void login_client_allocated_func_t(struct client *client);
 
-/* Sets the client allocation hook and returns the previous hook,
-   which the new hook should call. */
-login_client_allocated_func_t *
-login_client_allocated_hook_set(login_client_allocated_func_t *new_hook);
+void login_client_hooks_add(struct module *module,
+			    const struct login_client_hooks *hooks);
+void login_client_hooks_remove(const struct login_client_hooks *hooks);
 
 struct client *
 client_create(int fd, bool ssl, pool_t pool,
@@ -217,6 +231,8 @@ void client_cmd_starttls(struct client *client);
 
 unsigned int clients_get_count(void) ATTR_PURE;
 
+void client_add_forward_field(struct client *client, const char *key,
+			      const char *value);
 void client_set_title(struct client *client);
 void client_log(struct client *client, const char *msg);
 void client_log_err(struct client *client, const char *msg);
@@ -240,6 +256,8 @@ void client_notify_disconnect(struct client *client,
 
 void client_send_raw_data(struct client *client, const void *data, size_t size);
 void client_send_raw(struct client *client, const char *data);
+void client_common_send_raw_data(struct client *client,
+				 const void *data, size_t size);
 
 void client_set_auth_waiting(struct client *client);
 void client_auth_send_challenge(struct client *client, const char *data);
@@ -252,10 +270,14 @@ int client_auth_read_line(struct client *client);
 void client_proxy_finish_destroy_client(struct client *client);
 void client_proxy_log_failure(struct client *client, const char *line);
 void client_proxy_failed(struct client *client, bool send_line);
+const char *client_proxy_get_state(struct client *client);
 
 void clients_notify_auth_connected(void);
 void client_destroy_oldest(void);
 void clients_destroy_all(void);
 void clients_destroy_all_reason(const char *reason);
+
+void client_common_init(void);
+void client_common_deinit(void);
 
 #endif

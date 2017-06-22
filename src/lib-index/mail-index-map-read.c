@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -16,7 +16,7 @@ static void mail_index_map_copy_hdr(struct mail_index_map *map,
 	if (hdr->base_header_size < sizeof(map->hdr)) {
 		/* header smaller than ours, make a copy so our newer headers
 		   won't have garbage in them */
-		memset(&map->hdr, 0, sizeof(map->hdr));
+		i_zero(&map->hdr);
 		memcpy(&map->hdr, hdr, hdr->base_header_size);
 	} else {
 		map->hdr = *hdr;

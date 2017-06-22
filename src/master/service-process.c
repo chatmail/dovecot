@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "array.h"
@@ -172,7 +172,7 @@ drop_privileges(struct service *service)
 {
 	struct restrict_access_settings rset;
 	bool disallow_root;
-	unsigned int len;
+	size_t len;
 
 	if (service->vsz_limit != 0)
 		restrict_process_size(service->vsz_limit);
@@ -314,7 +314,17 @@ struct service_process *service_process_create(struct service *service)
 	}
 
 	if (pid < 0) {
-		service_error(service, "fork() failed: %m");
+		int fork_errno = errno;
+		rlim_t limit;
+		const char *limit_str = "";
+
+		if (fork_errno == EAGAIN &&
+		    restrict_get_process_limit(&limit) == 0) {
+			limit_str = t_strdup_printf(" (ulimit -u %llu reached?)",
+						    (unsigned long long)limit);
+		}
+		errno = fork_errno;
+		service_error(service, "fork() failed: %m%s", limit_str);
 		return NULL;
 	}
 	if (pid == 0) {
@@ -323,7 +333,7 @@ struct service_process *service_process_create(struct service *service)
 		service_reopen_inet_listeners(service);
 		service_dup_fds(service);
 		drop_privileges(service);
-		process_exec(service->executable, NULL);
+		process_exec(service->executable);
 	}
 	i_assert(hash_table_lookup(service_pids, POINTER_CAST(pid)) == NULL);
 

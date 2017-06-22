@@ -22,9 +22,10 @@ struct quota_settings {
 	pool_t pool;
 
 	ARRAY(struct quota_root_settings *) root_sets;
-	int (*test_alloc)(struct quota_transaction_context *ctx,
-			  uoff_t size, bool *too_large_r);
+	enum quota_alloc_result (*test_alloc)(
+		struct quota_transaction_context *ctx, uoff_t size);
 
+	uoff_t max_mail_size;
 	const char *quota_exceeded_msg;
 	unsigned int debug:1;
 	unsigned int initialized:1;
@@ -131,10 +132,6 @@ struct quota_root {
 	/* Module-specific contexts. See quota_module_id. */
 	ARRAY(void) quota_module_contexts;
 
-	/* Set to the current quota_over_flag, regardless of whether
-	   it matches quota_over_flag_value mask. */
-	const char *quota_over_flag;
-
 	/* don't enforce quota when saving */
 	unsigned int no_enforcing:1;
 	/* quota is automatically updated. update() should be called but the
@@ -146,10 +143,6 @@ struct quota_root {
 	unsigned int recounting:1;
 	/* Quota root is hidden (to e.g. IMAP GETQUOTAROOT) */
 	unsigned int hidden:1;
-	/* Is quota_over_flag* initialized yet? */
-	unsigned int quota_over_flag_initialized:1;
-	/* Is user currently over quota? */
-	unsigned int quota_over_flag_status:1;
 	/* Did we already check quota_over_flag correctness? */
 	unsigned int quota_over_flag_checked:1;
 };
@@ -202,14 +195,20 @@ quota_root_rule_find(struct quota_root_settings *root_set, const char *name);
 void quota_root_recalculate_relative_rules(struct quota_root_settings *root_set,
 					   int64_t bytes_limit,
 					   int64_t count_limit);
+/* Returns 1 if values were returned successfully, 0 if we're recursing into
+   the same function, -1 if error. */
 int quota_count(struct quota_root *root, uint64_t *bytes_r, uint64_t *count_r);
 
 int quota_root_parse_grace(struct quota_root_settings *root_set,
 			   const char *value, const char **error_r);
 bool quota_warning_match(const struct quota_warning_rule *w,
 			 uint64_t bytes_before, uint64_t bytes_current,
-			 uint64_t count_before, uint64_t count_current);
+			 uint64_t count_before, uint64_t count_current,
+			 const char **reason_r);
 bool quota_transaction_is_over(struct quota_transaction_context *ctx, uoff_t size);
 int quota_transaction_set_limits(struct quota_transaction_context *ctx);
+
+void quota_backend_register(const struct quota_backend *backend);
+void quota_backend_unregister(const struct quota_backend *backend);
 
 #endif

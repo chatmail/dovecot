@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "imap-match.h"
@@ -91,7 +91,7 @@ shared_list_join_refpattern(struct mailbox_list *list,
 {
 	struct mail_namespace *ns = list->ns;
 	const char *ns_ref, *prefix = list->ns->prefix;
-	unsigned int prefix_len = strlen(prefix);
+	size_t prefix_len = strlen(prefix);
 
 	if (*ref != '\0' && strncmp(ref, prefix, prefix_len) == 0)
 		ns_ref = ref + prefix_len;
@@ -288,28 +288,24 @@ struct mailbox_list shared_mailbox_list = {
 	.props = 0,
 	.mailbox_name_max_length = MAILBOX_LIST_NAME_MAX_LENGTH,
 
-	{
-		shared_list_alloc,
-		NULL,
-		shared_list_deinit,
-		shared_get_storage,
-		shared_list_get_hierarchy_sep,
-		mailbox_list_default_get_vname,
-		mailbox_list_default_get_storage_name,
-		shared_list_get_path,
-		shared_list_get_temp_prefix,
-		shared_list_join_refpattern,
-		shared_list_iter_init,
-		shared_list_iter_next,
-		shared_list_iter_deinit,
-		NULL,
-		NULL,
-		shared_list_subscriptions_refresh,
-		shared_list_set_subscribed,
-		shared_list_delete_mailbox,
-		shared_list_delete_dir,
-		shared_list_delete_symlink,
-		shared_list_rename_mailbox,
-		NULL, NULL, NULL, NULL
+	.v = {
+		.alloc = shared_list_alloc,
+		.deinit = shared_list_deinit,
+		.get_storage = shared_get_storage,
+		.get_hierarchy_sep = shared_list_get_hierarchy_sep,
+		.get_vname = mailbox_list_default_get_vname,
+		.get_storage_name = mailbox_list_default_get_storage_name,
+		.get_path = shared_list_get_path,
+		.get_temp_prefix = shared_list_get_temp_prefix,
+		.join_refpattern = shared_list_join_refpattern,
+		.iter_init = shared_list_iter_init,
+		.iter_next = shared_list_iter_next,
+		.iter_deinit = shared_list_iter_deinit,
+		.subscriptions_refresh = shared_list_subscriptions_refresh,
+		.set_subscribed = shared_list_set_subscribed,
+		.delete_mailbox = shared_list_delete_mailbox,
+		.delete_dir = shared_list_delete_dir,
+		.delete_symlink = shared_list_delete_symlink,
+		.rename_mailbox = shared_list_rename_mailbox,
 	}
 };

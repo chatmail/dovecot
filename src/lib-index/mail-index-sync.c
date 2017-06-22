@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -152,7 +152,7 @@ static void mail_index_sync_add_dirty_updates(struct mail_index_sync_ctx *ctx)
 	const struct mail_index_record *rec;
 	uint32_t seq, messages_count;
 
-	memset(&update, 0, sizeof(update));
+	i_zero(&update);
 
 	messages_count = mail_index_view_get_messages_count(ctx->view);
 	for (seq = 1; seq <= messages_count; seq++) {
@@ -174,8 +174,9 @@ mail_index_sync_read_and_sort(struct mail_index_sync_ctx *ctx)
 	unsigned int i, keyword_count;
 	int ret;
 
-	if ((ctx->view->map->hdr.flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) &&
-	    (ctx->flags & MAIL_INDEX_SYNC_FLAG_FLUSH_DIRTY) != 0) {
+	if ((ctx->view->map->hdr.flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) != 0 &&
+	    (ctx->flags & MAIL_INDEX_SYNC_FLAG_FLUSH_DIRTY) != 0 &&
+	    (ctx->view->index->flags & MAIL_INDEX_OPEN_FLAG_NO_DIRTY) == 0) {
 		/* show dirty flags as flag updates */
 		mail_index_sync_add_dirty_updates(ctx);
 	}
@@ -252,8 +253,9 @@ mail_index_need_sync(struct mail_index *index, enum mail_index_sync_flags flags,
 	    (flags & MAIL_INDEX_SYNC_FLAG_DROP_RECENT) != 0)
 		return TRUE;
 
-	if ((hdr->flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) &&
-	    (flags & MAIL_INDEX_SYNC_FLAG_FLUSH_DIRTY) != 0)
+	if ((hdr->flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) != 0 &&
+	    (flags & MAIL_INDEX_SYNC_FLAG_FLUSH_DIRTY) != 0 &&
+	    (index->flags & MAIL_INDEX_OPEN_FLAG_NO_DIRTY) == 0)
 		return TRUE;
 
 	if (log_file_seq == (uint32_t)-1) {
@@ -532,8 +534,9 @@ static bool mail_index_sync_view_have_any(struct mail_index_view *view,
 	    (flags & MAIL_INDEX_SYNC_FLAG_DROP_RECENT) != 0)
 		return TRUE;
 
-	if ((view->map->hdr.flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) &&
-	    (flags & MAIL_INDEX_SYNC_FLAG_FLUSH_DIRTY) != 0)
+	if ((view->map->hdr.flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) != 0 &&
+	    (flags & MAIL_INDEX_SYNC_FLAG_FLUSH_DIRTY) != 0 &&
+	    (view->index->flags & MAIL_INDEX_OPEN_FLAG_NO_DIRTY) == 0)
 		return TRUE;
 
 	mail_transaction_log_get_head(view->index->log, &log_seq, &log_offset);

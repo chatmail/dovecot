@@ -115,10 +115,10 @@ am_libmail_la_OBJECTS = istream-attachment-connector.lo \
 	message-date.lo message-decoder.lo message-header-decode.lo \
 	message-header-encode.lo message-header-hash.lo \
 	message-header-parser.lo message-id.lo message-parser.lo \
-	message-part.lo message-part-serialize.lo message-search.lo \
-	message-size.lo message-snippet.lo ostream-dot.lo \
-	qp-decoder.lo quoted-printable.lo rfc2231-parser.lo \
-	rfc822-parser.lo
+	message-part.lo message-part-data.lo message-part-serialize.lo \
+	message-search.lo message-size.lo message-snippet.lo \
+	ostream-dot.lo qp-decoder.lo quoted-printable.lo \
+	rfc2231-parser.lo rfc822-parser.lo
 libmail_la_OBJECTS = $(am_libmail_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -549,6 +549,7 @@ libmail_la_SOURCES = \
 	message-id.c \
 	message-parser.c \
 	message-part.c \
+	message-part-data.c \
 	message-part-serialize.c \
 	message-search.c \
 	message-size.c \
@@ -585,6 +586,7 @@ headers = \
 	message-id.h \
 	message-parser.h \
 	message-part.h \
+	message-part-data.h \
 	message-part-serialize.h \
 	message-search.h \
 	message-size.h \
@@ -886,6 +888,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-header-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-id.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-parser.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-part-data.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-part-serialize.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-part.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-search.Plo@am__quote@

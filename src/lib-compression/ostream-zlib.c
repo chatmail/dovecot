@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 
@@ -168,7 +168,7 @@ static int
 o_stream_zlib_send_flush(struct zlib_ostream *zstream, bool final)
 {
 	z_stream *zs = &zstream->zs;
-	unsigned int len;
+	size_t len;
 	bool done = FALSE;
 	int ret, flush;
 

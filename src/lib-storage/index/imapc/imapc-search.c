@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -6,7 +6,7 @@
 #include "imap-seqset.h"
 #include "imap-util.h"
 #include "mail-search.h"
-#include "imapc-client.h"
+#include "imapc-msgmap.h"
 #include "imapc-storage.h"
 #include "imapc-search.h"
 
@@ -65,8 +65,6 @@ imapc_build_search_query_arg(struct imapc_mailbox *mbox,
 			     const struct mail_search_arg *arg,
 			     string_t *str)
 {
-	enum imapc_capability capa =
-		imapc_client_get_capabilities(mbox->storage->client->client);
 	struct mail_search_arg arg2 = *arg;
 	const char *error;
 
@@ -100,9 +98,9 @@ imapc_build_search_query_arg(struct imapc_mailbox *mbox,
 		return TRUE;
 	case SEARCH_BEFORE:
 	case SEARCH_SINCE:
-		if ((capa & IMAPC_CAPABILITY_WITHIN) == 0) {
+		if ((mbox->capabilities & IMAPC_CAPABILITY_WITHIN) == 0) {
 			/* a bit kludgy way to check this.. */
-			unsigned int pos = str_len(str);
+			size_t pos = str_len(str);
 			if (!mail_search_arg_to_imap(str, arg, &error))
 				return FALSE;
 			if (strncasecmp(str_c(str) + pos, "OLDER", 5) == 0 ||
@@ -126,7 +124,7 @@ imapc_build_search_query_arg(struct imapc_mailbox *mbox,
 		return mail_search_arg_to_imap(str, arg, &error);
 	/* extensions */
 	case SEARCH_MODSEQ:
-		if ((capa & IMAPC_CAPABILITY_CONDSTORE) == 0)
+		if ((mbox->capabilities & IMAPC_CAPABILITY_CONDSTORE) == 0)
 			return FALSE;
 		return mail_search_arg_to_imap(str, arg, &error);
 	case SEARCH_INTHREAD:
@@ -135,6 +133,7 @@ imapc_build_search_query_arg(struct imapc_mailbox *mbox,
 	case SEARCH_MAILBOX_GUID:
 	case SEARCH_MAILBOX_GLOB:
 	case SEARCH_REAL_UID:
+	case SEARCH_MIMEPART:
 		/* not supported for now */
 		break;
 	}
@@ -163,22 +162,19 @@ static bool imapc_build_search_query(struct imapc_mailbox *mbox,
 				     const struct mail_search_args *args,
 				     const char **query_r)
 {
-	enum imapc_capability capa =
-		imapc_client_get_capabilities(mbox->storage->client->client);
 	string_t *str = t_str_new(128);
 
 	if (!IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_SEARCH)) {
 		/* SEARCH command passthrough not enabled */
 		return FALSE;
 	}
-	if ((capa & IMAPC_CAPABILITY_ESEARCH) == 0) {
-		/* FIXME: not supported for now */
-		return FALSE;
-	}
 	if (imapc_search_is_fast_local(args->args))
 		return FALSE;
 
-	str_append(str, "SEARCH RETURN (ALL) ");
+	if ((mbox->capabilities & IMAPC_CAPABILITY_ESEARCH) != 0)
+		str_append(str, "SEARCH RETURN (ALL) ");
+	else
+		str_append(str, "UID SEARCH ");
 	if (!imapc_build_search_query_args(mbox, args->args, FALSE, str))
 		return FALSE;
 	*query_r = str_c(str);
@@ -197,6 +193,8 @@ static void imapc_search_callback(const struct imapc_command_reply *reply,
 	if (reply->state == IMAPC_COMMAND_STATE_OK) {
 		seq_range_array_iter_init(&ictx->iter, &ictx->rseqs);
 		ictx->success = TRUE;
+	} else if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED) {
+		mail_storage_set_internal_error(mbox->box.storage);
 	} else {
 		mail_storage_set_critical(mbox->box.storage,
 			"imapc: Command failed: %s", reply->text_full);
@@ -279,8 +277,33 @@ int imapc_search_deinit(struct mail_search_context *ctx)
 	return index_storage_search_deinit(ctx);
 }
 
-void imapc_search_reply(const struct imap_arg *args,
-			struct imapc_mailbox *mbox)
+void imapc_search_reply_search(const struct imap_arg *args,
+			       struct imapc_mailbox *mbox)
+{
+	struct imapc_msgmap *msgmap =
+		imapc_client_mailbox_get_msgmap(mbox->client_box);
+	const char *atom;
+	uint32_t uid, rseq;
+
+	if (mbox->search_ctx == NULL) {
+		i_error("Unexpected SEARCH reply");
+		return;
+	}
+
+	/* we're doing UID SEARCH, so need to convert UIDs to sequences */
+	for (unsigned int i = 0; args[i].type != IMAP_ARG_EOL; i++) {
+		if (!imap_arg_get_atom(&args[i], &atom) ||
+		    str_to_uint32(atom, &uid) < 0 || uid == 0) {
+			i_error("Invalid SEARCH reply");
+			break;
+		}
+		if (imapc_msgmap_uid_to_rseq(msgmap, uid, &rseq))
+			seq_range_array_add(&mbox->search_ctx->rseqs, rseq);
+	}
+}
+
+void imapc_search_reply_esearch(const struct imap_arg *args,
+				struct imapc_mailbox *mbox)
 {
 	const char *atom;
 
@@ -293,6 +316,6 @@ void imapc_search_reply(const struct imap_arg *args,
 	if (args[0].type != IMAP_ARG_EOL &&
 	    (!imap_arg_atom_equals(&args[0], "ALL") ||
 	     !imap_arg_get_atom(&args[1], &atom) ||
-	     imap_seq_set_parse(atom, &mbox->search_ctx->rseqs) < 0))
+	     imap_seq_set_nostar_parse(atom, &mbox->search_ctx->rseqs) < 0))
 		i_error("Invalid ESEARCH reply");
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -163,6 +163,8 @@ int mailbox_list_create(const char *driver, struct mail_namespace *ns,
 	list->set.inbox_path = p_strdup(list->pool, set->inbox_path);
 	list->set.subscription_fname =
 		p_strdup(list->pool, set->subscription_fname);
+	list->set.list_index_fname =
+		p_strdup(list->pool, set->list_index_fname);
 	list->set.maildir_name =
 		p_strdup(list->pool, set->maildir_name);
 	list->set.mailbox_dir_name =
@@ -261,6 +263,14 @@ static const char *split_next_arg(const char *const **_args)
 	return str;
 }
 
+void mailbox_list_settings_init_defaults(struct mailbox_list_settings *set_r)
+{
+	i_zero(set_r);
+	set_r->mailbox_dir_name = "";
+	set_r->maildir_name = "";
+	set_r->list_index_fname = MAILBOX_LIST_INDEX_DEFAULT_PREFIX;
+}
+
 static int
 mailbox_list_settings_parse_full(struct mail_user *user, const char *data,
 				 bool expand_home,
@@ -271,10 +281,7 @@ mailbox_list_settings_parse_full(struct mail_user *user, const char *data,
 
 	*error_r = NULL;
 
-	memset(set_r, 0, sizeof(*set_r));
-	set_r->maildir_name = "";
-	set_r->mailbox_dir_name = "";
-
+	mailbox_list_settings_init_defaults(set_r);
 	if (*data == '\0')
 		return 0;
 
@@ -329,6 +336,8 @@ mailbox_list_settings_parse_full(struct mail_user *user, const char *data,
 			dest = &set_r->maildir_name;
 		else if (strcmp(key, "MAILBOXDIR") == 0)
 			dest = &set_r->mailbox_dir_name;
+		else if (strcmp(key, "LISTINDEX") == 0)
+			dest = &set_r->list_index_fname;
 		else if (strcmp(key, "FULLDIRNAME") == 0) {
 			set_r->index_control_use_maildir_name = TRUE;
 			dest = &set_r->maildir_name;
@@ -398,7 +407,7 @@ const char *mailbox_list_get_unexpanded_path(struct mailbox_list *list,
 
 static bool need_escape_dirstart(const char *vname, const char *maildir_name)
 {
-	unsigned int len;
+	size_t len;
 
 	if (vname[0] == '.') {
 		if (vname[1] == '\0' || vname[1] == '/')
@@ -420,7 +429,7 @@ mailbox_list_escape_name_params(const char *vname, const char *ns_prefix,
 				char ns_sep, char list_sep, char escape_char,
 				const char *maildir_name)
 {
-	unsigned int ns_prefix_len = strlen(ns_prefix);
+	size_t ns_prefix_len = strlen(ns_prefix);
 	string_t *escaped_name = t_str_new(64);
 	char dirstart = TRUE;
 
@@ -514,7 +523,7 @@ const char *mailbox_list_default_get_storage_name(struct mailbox_list *list,
 						  const char *vname)
 {
 	struct mail_namespace *ns = list->ns;
-	unsigned int prefix_len = strlen(ns->prefix);
+	size_t prefix_len = strlen(ns->prefix);
 	const char *storage_name = vname;
 	string_t *str;
 	char list_sep, ns_sep, *ret;
@@ -596,7 +605,7 @@ const char *
 mailbox_list_unescape_name_params(const char *src, const char *ns_prefix,
 				  char ns_sep, char list_sep, char escape_char)
 {
-	unsigned int ns_prefix_len = strlen(ns_prefix);
+	size_t ns_prefix_len = strlen(ns_prefix);
 	string_t *dest = t_str_new(strlen(src));
 	unsigned int num;
 
@@ -674,7 +683,7 @@ mailbox_list_escape_broken_name(struct mailbox_list *list,
 const char *mailbox_list_default_get_vname(struct mailbox_list *list,
 					   const char *storage_name)
 {
-	unsigned int i, prefix_len, name_len;
+	size_t i, prefix_len, name_len;
 	const char *vname = storage_name;
 	char list_sep, ns_sep, *ret;
 
@@ -728,7 +737,7 @@ const char *mailbox_list_default_get_vname(struct mailbox_list *list,
 	if (list_sep != ns_sep || prefix_len > 0) {
 		/* @UNSAFE */
 		name_len = strlen(vname);
-		ret = t_malloc(prefix_len + name_len + 1);
+		ret = t_malloc(MALLOC_ADD(prefix_len, name_len) + 1);
 		memcpy(ret, list->ns->prefix, prefix_len);
 		for (i = 0; i < name_len; i++) {
 			ret[i + prefix_len] =
@@ -751,6 +760,7 @@ void mailbox_list_destroy(struct mailbox_list **_list)
 
 	*_list = NULL;
 	i_free_and_null(list->error_string);
+	i_free(list->last_internal_error);
 
 	if (hash_table_is_created(list->guid_cache)) {
 		hash_table_destroy(&list->guid_cache);
@@ -870,7 +880,7 @@ mailbox_list_get_permissions_internal(struct mailbox_list *list,
 	const char *path, *parent_name, *parent_path, *p;
 	struct stat st;
 
-	memset(permissions_r, 0, sizeof(*permissions_r));
+	i_zero(permissions_r);
 
 	/* use safe defaults */
 	permissions_r->file_uid = (uid_t)-1;
@@ -1419,7 +1429,7 @@ int mailbox_list_mailbox(struct mailbox_list *list, const char *name,
 			 enum mailbox_info_flags *flags_r)
 {
 	const char *path, *fname, *rootdir, *dir, *inbox;
-	unsigned int len;
+	size_t len;
 
 	*flags_r = 0;
 
@@ -1584,7 +1594,7 @@ void mailbox_list_add_change(struct mailbox_list *list,
 	stamp = list->changelog_timestamp != (time_t)-1 ?
 		list->changelog_timestamp : ioloop_time;
 
-	memset(&rec, 0, sizeof(rec));
+	i_zero(&rec);
 	rec.type = type;
 	memcpy(rec.mailbox_guid, mailbox_guid, sizeof(rec.mailbox_guid));
 	mailbox_log_record_set_timestamp(&rec, stamp);
@@ -1728,7 +1738,7 @@ bool mailbox_list_try_get_absolute_path(struct mailbox_list *list,
 					const char **name)
 {
 	const char *root_dir, *path, *mailbox_name;
-	unsigned int len;
+	size_t len;
 
 	if (!list->mail_set->mail_full_filesystem_access)
 		return FALSE;
@@ -1774,10 +1784,24 @@ const char *mailbox_list_get_last_error(struct mailbox_list *list,
 		"Unknown internal list error";
 }
 
+const char *mailbox_list_get_last_internal_error(struct mailbox_list *list,
+						 enum mail_error *error_r)
+{
+	if (error_r != NULL)
+		*error_r = list->error;
+	if (list->last_error_is_internal) {
+		i_assert(list->last_internal_error != NULL);
+		return list->last_internal_error;
+	}
+	return mailbox_list_get_last_error(list, error_r);
+}
+
 void mailbox_list_clear_error(struct mailbox_list *list)
 {
 	i_free_and_null(list->error_string);
 
+	i_free(list->last_internal_error);
+	list->last_error_is_internal = FALSE;
 	list->error = MAIL_ERROR_NONE;
 }
 
@@ -1787,6 +1811,7 @@ void mailbox_list_set_error(struct mailbox_list *list,
 	i_free(list->error_string);
 	list->error_string = i_strdup(string);
 
+	list->last_error_is_internal = FALSE;
 	list->error = error;
 }
 
@@ -1804,9 +1829,12 @@ void mailbox_list_set_critical(struct mailbox_list *list, const char *fmt, ...)
 {
 	va_list va;
 
+	i_free(list->last_internal_error);
 	va_start(va, fmt);
-	i_error("%s", t_strdup_vprintf(fmt, va));
+	list->last_internal_error = i_strdup_vprintf(fmt, va);
 	va_end(va);
+	list->last_error_is_internal = TRUE;
+	i_error("%s", list->last_internal_error);
 
 	/* critical errors may contain sensitive data, so let user
 	   see only "Internal error" with a timestamp to make it
@@ -1835,8 +1863,8 @@ int mailbox_list_init_fs(struct mailbox_list *list, const char *driver,
 	struct mailbox_list_fs_context *ctx;
 	struct fs *parent_fs;
 
-	memset(&ssl_set, 0, sizeof(ssl_set));
-	memset(&fs_set, 0, sizeof(fs_set));
+	i_zero(&ssl_set);
+	i_zero(&fs_set);
 	mail_user_init_fs_settings(list->ns->user, &fs_set, &ssl_set);
 	fs_set.root_path = root_dir;
 	fs_set.temp_file_prefix = mailbox_list_get_global_temp_prefix(list);

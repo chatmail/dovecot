@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -422,7 +422,8 @@ static int sync_append(const struct mail_index_record *rec,
 	map->hdr.messages_count++;
 	map->hdr.next_uid = rec->uid+1;
 
-	if ((new_flags & MAIL_INDEX_MAIL_FLAG_DIRTY) != 0)
+	if ((new_flags & MAIL_INDEX_MAIL_FLAG_DIRTY) != 0 &&
+	    (view->index->flags & MAIL_INDEX_OPEN_FLAG_NO_DIRTY) == 0)
 		map->hdr.flags |= MAIL_INDEX_HDR_FLAG_HAVE_DIRTY;
 
 	mail_index_header_update_lowwaters(ctx, rec->uid, new_flags);
@@ -447,7 +448,8 @@ static int sync_flag_update(const struct mail_transaction_flag_update *u,
 					       seq1, seq2);
 	}
 
-	if ((u->add_flags & MAIL_INDEX_MAIL_FLAG_DIRTY) != 0)
+	if ((u->add_flags & MAIL_INDEX_MAIL_FLAG_DIRTY) != 0 &&
+	    (view->index->flags & MAIL_INDEX_OPEN_FLAG_NO_DIRTY) == 0)
 		view->map->hdr.flags |= MAIL_INDEX_HDR_FLAG_HAVE_DIRTY;
 
         flag_mask = ~u->remove_flags;
@@ -653,7 +655,7 @@ mail_index_sync_record_real(struct mail_index_sync_map_ctx *ctx,
 			ret = -1;
 			break;
 		}
-		memset(&rec, 0, sizeof(rec));
+		i_zero(&rec);
 		memcpy(&rec, data, I_MIN(hdr->size, sizeof(rec)));
 		ret = mail_index_sync_ext_reset(ctx, &rec);
 		break;
@@ -831,7 +833,7 @@ void mail_index_sync_map_init(struct mail_index_sync_map_ctx *sync_map_ctx,
 			      struct mail_index_view *view,
 			      enum mail_index_sync_handler_type type)
 {
-	memset(sync_map_ctx, 0, sizeof(*sync_map_ctx));
+	i_zero(sync_map_ctx);
 	sync_map_ctx->view = view;
 	sync_map_ctx->cur_ext_map_idx = (uint32_t)-1;
 	sync_map_ctx->type = type;
@@ -856,7 +858,8 @@ static void mail_index_sync_update_hdr_dirty_flag(struct mail_index_map *map)
 	const struct mail_index_record *rec;
 	uint32_t seq;
 
-	if ((map->hdr.flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) != 0)
+	if ((map->hdr.flags & MAIL_INDEX_HDR_FLAG_HAVE_DIRTY) != 0 ||
+	    (map->index->flags & MAIL_INDEX_OPEN_FLAG_NO_DIRTY) != 0)
 		return;
 
 	/* do we have dirty flags anymore? */

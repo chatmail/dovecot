@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "imap-resp-code.h"
@@ -38,6 +38,7 @@ bool cmd_create(struct client_command_context *cmd)
 	}
 
 	box = mailbox_alloc(ns->list, mailbox, 0);
+	mailbox_set_reason(box, "CREATE");
 	if (mailbox_create(box, NULL, directory) < 0)
 		client_send_box_error(cmd, box);
 	else

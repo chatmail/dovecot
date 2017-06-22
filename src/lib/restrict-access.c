@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #define _GNU_SOURCE /* setresgid() */
 #include <stdio.h> /* for AIX */
@@ -23,7 +23,7 @@ static char *chroot_dir = NULL;
 
 void restrict_access_init(struct restrict_access_settings *set)
 {
-	memset(set, 0, sizeof(*set));
+	i_zero(set);
 
 	set->uid = (uid_t)-1;
 	set->gid = (gid_t)-1;

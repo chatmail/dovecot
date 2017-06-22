@@ -8,8 +8,6 @@ Settings changes
    instead.
  * mdbox_purge_preserve_alt setting removed. It's always assumed to be "yes"
    now.
- * plugin { acl_defaults_from_inbox } setting is removed. It's always assumed
-   to be "yes" now.
 
 Setting default changes
 -----------------------
@@ -28,4 +26,4 @@ Diffie-Heffman parameters for SSL
       -inform der > /etc/dovecot/dh.pem
       ---%<-------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

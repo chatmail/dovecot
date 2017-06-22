@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -42,6 +42,7 @@ quota_count_mailbox(struct quota_root *root, struct mail_namespace *ns,
 	}
 
 	box = mailbox_alloc(ns->list, vname, MAILBOX_FLAG_READONLY);
+	mailbox_set_reason(box, "quota count");
 	if ((box->storage->class_flags & MAIL_STORAGE_CLASS_FLAG_NOQUOTA) != 0) {
 		/* quota doesn't exist for this mailbox/storage */
 		ret = 0;
@@ -50,17 +51,20 @@ quota_count_mailbox(struct quota_root *root, struct mail_namespace *ns,
 					MAILBOX_METADATA_PHYSICAL_SIZE,
 					&metadata) < 0 ||
 	    mailbox_get_status(box, STATUS_MESSAGES, &status) < 0) {
-		errstr = mailbox_get_last_error(box, &error);
+		errstr = mailbox_get_last_internal_error(box, &error);
 		if (error == MAIL_ERROR_TEMP) {
 			i_error("quota: Couldn't get size of mailbox %s: %s",
 				vname, errstr);
+			ret = -1;
+		} else if (error == MAIL_ERROR_INUSE) {
+			/* started on background. don't log an error. */
 			ret = -1;
 		} else {
 			/* non-temporary error, e.g. ACLs denied access. */
 			ret = 0;
 		}
 	} else {
-		ret = 1;
+		ret = 0;
 		*bytes += root->quota->set->vsizes ?
 			metadata.virtual_size : metadata.physical_size;
 		*count += status.messages;
@@ -91,7 +95,7 @@ quota_mailbox_iter_deinit(struct quota_mailbox_iter **_iter)
 		if (mailbox_list_iter_deinit(&iter->iter) < 0) {
 			i_error("quota: Listing namespace '%s' failed: %s",
 				iter->ns->prefix,
-				mailbox_list_get_last_error(iter->ns->list, NULL));
+				mailbox_list_get_last_internal_error(iter->ns->list, NULL));
 			ret = -1;
 		}
 	}
@@ -127,7 +131,7 @@ quota_mailbox_iter_next(struct quota_mailbox_iter *iter)
 	if (mailbox_list_iter_deinit(&iter->iter) < 0) {
 		i_error("quota: Listing namespace '%s' failed: %s",
 			iter->ns->prefix,
-			mailbox_list_get_last_error(iter->ns->list, NULL));
+			mailbox_list_get_last_internal_error(iter->ns->list, NULL));
 		iter->failed = TRUE;
 	}
 	if (iter->ns->prefix_len > 0 &&
@@ -147,7 +151,7 @@ int quota_count(struct quota_root *root, uint64_t *bytes_r, uint64_t *count_r)
 {
 	struct quota_mailbox_iter *iter;
 	const struct mailbox_info *info;
-	int ret = 0, ret2;
+	int ret = 1;
 
 	*bytes_r = *count_r = 0;
 	if (root->recounting)
@@ -156,11 +160,8 @@ int quota_count(struct quota_root *root, uint64_t *bytes_r, uint64_t *count_r)
 
 	iter = quota_mailbox_iter_begin(root);
 	while ((info = quota_mailbox_iter_next(iter)) != NULL) {
-		ret2 = quota_count_mailbox(root, info->ns, info->vname,
-					   bytes_r, count_r);
-		if (ret2 > 0)
-			ret = 1;
-		else if (ret2 < 0) {
+		if (quota_count_mailbox(root, info->ns, info->vname,
+					bytes_r, count_r) < 0) {
 			ret = -1;
 			break;
 		}
@@ -252,7 +253,7 @@ static int quota_count_recalculate_box(struct mailbox *box)
 	enum mail_error error;
 
 	if (mailbox_open(box) < 0) {
-		errstr = mailbox_get_last_error(box, &error);
+		errstr = mailbox_get_last_internal_error(box, &error);
 		if (error != MAIL_ERROR_TEMP) {
 			/* non-temporary error, e.g. ACLs denied access. */
 			return 0;
@@ -264,7 +265,7 @@ static int quota_count_recalculate_box(struct mailbox *box)
 	/* reset the vsize header first */
 	trans = mail_index_transaction_begin(box->view,
 				MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
-	memset(&vsize_hdr, 0, sizeof(vsize_hdr));
+	i_zero(&vsize_hdr);
 	mail_index_update_header_ext(trans, box->vsize_hdr_ext_id,
 				     0, &vsize_hdr, sizeof(vsize_hdr));
 	if (mail_index_transaction_commit(&trans) < 0)
@@ -273,13 +274,13 @@ static int quota_count_recalculate_box(struct mailbox *box)
 	if (mailbox_get_metadata(box, MAILBOX_METADATA_VIRTUAL_SIZE,
 				 &metadata) < 0) {
 		i_error("Couldn't get mailbox %s vsize: %s", box->vname,
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 		return -1;
 	}
 	/* call sync to write the change to mailbox list index */
 	if (mailbox_sync(box, MAILBOX_SYNC_FLAG_FAST) < 0) {
 		i_error("Couldn't sync mailbox %s: %s", box->vname,
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 		return -1;
 	}
 	return 0;
@@ -295,6 +296,7 @@ static int quota_count_recalculate(struct quota_root *root)
 	iter = quota_mailbox_iter_begin(root);
 	while ((info = quota_mailbox_iter_next(iter)) != NULL) {
 		box = mailbox_alloc(info->ns->list, info->vname, 0);
+		mailbox_set_reason(box, "quota recalculate");
 		if (quota_count_recalculate_box(box) < 0)
 			ret = -1;
 		mailbox_free(&box);

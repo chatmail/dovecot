@@ -1,13 +1,14 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
+#include "hash.h"
 #include "str.h"
+#include "sort.h"
 #include "imap-util.h"
 #include "mail-cache.h"
 #include "mail-index-modseq.h"
 #include "index-sync-private.h"
-#include "imapc-client.h"
 #include "imapc-msgmap.h"
 #include "imapc-list.h"
 #include "imapc-storage.h"
@@ -76,10 +77,103 @@ imapc_sync_cmd(struct imapc_sync_context *ctx, const char *cmd_str)
 	return imapc_sync_cmd_full(ctx, cmd_str, FALSE);
 }
 
-static struct imapc_command *
-imapc_sync_store_cmd(struct imapc_sync_context *ctx, const char *cmd_str)
+static unsigned int imapc_sync_store_hash(const struct imapc_sync_store *store)
 {
-	return imapc_sync_cmd_full(ctx, cmd_str, TRUE);
+	return str_hash(store->flags) ^ store->modify_type;
+}
+
+static int imapc_sync_store_cmp(const struct imapc_sync_store *store1,
+				const struct imapc_sync_store *store2)
+{
+	if (store1->modify_type != store2->modify_type)
+		return 1;
+	return strcmp(store1->flags, store2->flags);
+}
+
+static const char *imapc_sync_flags_sort(const char *flags)
+{
+	if (strchr(flags, ' ') == NULL)
+		return flags;
+
+	const char **str = t_strsplit(flags, " ");
+	i_qsort(str, str_array_length(str), sizeof(const char *),
+		i_strcasecmp_p);
+	return t_strarray_join(str, " ");
+}
+
+static void
+imapc_sync_store_flush(struct imapc_sync_context *ctx)
+{
+	struct imapc_sync_store *store;
+	const char *sorted_flags;
+
+	if (ctx->prev_uid1 == 0)
+		return;
+
+	sorted_flags = imapc_sync_flags_sort(str_c(ctx->prev_flags));
+	struct imapc_sync_store store_lookup = {
+		.modify_type = ctx->prev_modify_type,
+		.flags = sorted_flags,
+	};
+	store = hash_table_lookup(ctx->stores, &store_lookup);
+	if (store == NULL) {
+		store = p_new(ctx->pool, struct imapc_sync_store, 1);
+		store->modify_type = ctx->prev_modify_type;
+		store->flags = p_strdup(ctx->pool, sorted_flags);
+		p_array_init(&store->uids, ctx->pool, 4);
+		hash_table_insert(ctx->stores, store, store);
+	}
+	seq_range_array_add_range(&store->uids, ctx->prev_uid1, ctx->prev_uid2);
+}
+
+static void
+imapc_sync_store(struct imapc_sync_context *ctx,
+		 enum modify_type modify_type, uint32_t uid1, uint32_t uid2,
+		 const char *flags)
+{
+	if (ctx->prev_flags == NULL) {
+		ctx->prev_flags = str_new(ctx->pool, 128);
+		hash_table_create(&ctx->stores, ctx->pool, 0,
+				  imapc_sync_store_hash, imapc_sync_store_cmp);
+	}
+
+	if (ctx->prev_uid1 != uid1 || ctx->prev_uid2 != uid2 ||
+	    ctx->prev_modify_type != modify_type) {
+		imapc_sync_store_flush(ctx);
+		ctx->prev_uid1 = uid1;
+		ctx->prev_uid2 = uid2;
+		ctx->prev_modify_type = modify_type;
+		str_truncate(ctx->prev_flags, 0);
+	}
+	if (str_len(ctx->prev_flags) > 0)
+		str_append_c(ctx->prev_flags, ' ');
+	str_append(ctx->prev_flags, flags);
+}
+
+static void
+imapc_sync_finish_store(struct imapc_sync_context *ctx)
+{
+	struct hash_iterate_context *iter;
+	struct imapc_sync_store *store;
+	string_t *cmd = t_str_new(128);
+
+	imapc_sync_store_flush(ctx);
+
+	if (!hash_table_is_created(ctx->stores))
+		return;
+
+	iter = hash_table_iterate_init(ctx->stores);
+	while (hash_table_iterate(iter, ctx->stores, &store, &store)) {
+		str_truncate(cmd, 0);
+		str_append(cmd, "UID STORE ");
+		imap_write_seq_range(cmd, &store->uids);
+		str_printfa(cmd, " %cFLAGS (%s)",
+			    store->modify_type == MODIFY_ADD ? '+' : '-',
+			    store->flags);
+		imapc_sync_cmd_full(ctx, str_c(cmd), TRUE);
+	}
+	hash_table_iterate_deinit(&iter);
+	hash_table_destroy(&ctx->stores);
 }
 
 static void
@@ -88,7 +182,6 @@ imapc_sync_add_missing_deleted_flags(struct imapc_sync_context *ctx,
 {
 	const struct mail_index_record *rec;
 	uint32_t seq, uid1, uid2;
-	const char *cmd;
 
 	/* if any of them has a missing \Deleted flag,
 	   just add it to all of them. */
@@ -101,9 +194,8 @@ imapc_sync_add_missing_deleted_flags(struct imapc_sync_context *ctx,
 	if (seq <= seq2) {
 		mail_index_lookup_uid(ctx->sync_view, seq1, &uid1);
 		mail_index_lookup_uid(ctx->sync_view, seq2, &uid2);
-		cmd = t_strdup_printf("UID STORE %u:%u +FLAGS \\Deleted",
-				      uid1, uid2);
-		imapc_sync_store_cmd(ctx, cmd);
+
+		imapc_sync_store(ctx, MODIFY_ADD, uid1, uid2, "\\Deleted");
 	}
 }
 
@@ -116,21 +208,18 @@ static void imapc_sync_index_flags(struct imapc_sync_context *ctx,
 
 	if (sync_rec->add_flags != 0) {
 		i_assert((sync_rec->add_flags & MAIL_RECENT) == 0);
-		str_printfa(str, "UID STORE %u:%u +FLAGS (",
-			    sync_rec->uid1, sync_rec->uid2);
+
 		imap_write_flags(str, sync_rec->add_flags, NULL);
-		str_append_c(str, ')');
-		imapc_sync_store_cmd(ctx, str_c(str));
+		imapc_sync_store(ctx, MODIFY_ADD, sync_rec->uid1,
+				 sync_rec->uid2, str_c(str));
 	}
 
 	if (sync_rec->remove_flags != 0) {
 		i_assert((sync_rec->remove_flags & MAIL_RECENT) == 0);
 		str_truncate(str, 0);
-		str_printfa(str, "UID STORE %u:%u -FLAGS (",
-			    sync_rec->uid1, sync_rec->uid2);
 		imap_write_flags(str, sync_rec->remove_flags, NULL);
-		str_append_c(str, ')');
-		imapc_sync_store_cmd(ctx, str_c(str));
+		imapc_sync_store(ctx, MODIFY_REMOVE, sync_rec->uid1,
+				 sync_rec->uid2, str_c(str));
 	}
 }
 
@@ -138,40 +227,33 @@ static void
 imapc_sync_index_keyword(struct imapc_sync_context *ctx,
 			 const struct mail_index_sync_rec *sync_rec)
 {
-	string_t *str = t_str_new(128);
 	const char *const *kw_p;
-	char change_char;
+	enum modify_type modify_type;
 
 	switch (sync_rec->type) {
 	case MAIL_INDEX_SYNC_TYPE_KEYWORD_ADD:
-		change_char = '+';
+		modify_type = MODIFY_ADD;
 		break;
 	case MAIL_INDEX_SYNC_TYPE_KEYWORD_REMOVE:
-		change_char = '-';
+		modify_type = MODIFY_REMOVE;
 		break;
 	default:
 		i_unreached();
 	}
 
-	str_printfa(str, "UID STORE %u:%u %cFLAGS (",
-		    sync_rec->uid1, sync_rec->uid2, change_char);
-
 	kw_p = array_idx(ctx->keywords, sync_rec->keyword_idx);
-	str_append(str, *kw_p);
-	str_append_c(str, ')');
-	imapc_sync_store_cmd(ctx, str_c(str));
+	imapc_sync_store(ctx, modify_type, sync_rec->uid1,
+			 sync_rec->uid2, *kw_p);
 }
 
 static void imapc_sync_expunge_finish(struct imapc_sync_context *ctx)
 {
 	string_t *str;
-	enum imapc_capability caps;
 
 	if (array_count(&ctx->expunged_uids) == 0)
 		return;
 
-	caps = imapc_client_get_capabilities(ctx->mbox->storage->client->client);
-	if ((caps & IMAPC_CAPABILITY_UIDPLUS) == 0) {
+	if ((ctx->mbox->capabilities & IMAPC_CAPABILITY_UIDPLUS) == 0) {
 		/* just expunge everything */
 		imapc_sync_cmd(ctx, "EXPUNGE");
 		return;
@@ -248,7 +330,7 @@ static void imapc_sync_uid_next(struct imapc_sync_context *ctx)
 
 static void imapc_sync_highestmodseq(struct imapc_sync_context *ctx)
 {
-	if (imapc_storage_has_modseqs(ctx->mbox->storage) &&
+	if (imapc_mailbox_has_modseqs(ctx->mbox) &&
 	    mail_index_modseq_get_highest(ctx->sync_view) < ctx->mbox->sync_highestmodseq)
 		mail_index_update_highest_modseq(ctx->trans, ctx->mbox->sync_highestmodseq);
 }
@@ -320,7 +402,7 @@ imapc_sync_send_commands(struct imapc_sync_context *ctx, uint32_t first_uid)
 	string_t *cmd = t_str_new(64);
 
 	str_printfa(cmd, "UID FETCH %u:* (FLAGS", first_uid);
-	if (imapc_storage_has_modseqs(ctx->mbox->storage)) {
+	if (imapc_mailbox_has_modseqs(ctx->mbox)) {
 		str_append(cmd, " MODSEQ");
 		mail_index_modseq_enable(ctx->mbox->box.index);
 	}
@@ -362,6 +444,7 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 
 	i_array_init(&ctx->expunged_uids, 64);
 	ctx->keywords = mail_index_get_keywords(mbox->box.index);
+	ctx->pool = pool_alloconly_create("imapc sync pool", 1024);
 
 	imapc_sync_uid_validity(ctx);
 	while (mail_index_sync_next(ctx->index_sync_ctx, &sync_rec)) T_BEGIN {
@@ -384,6 +467,8 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 			break;
 		}
 	} T_END;
+	imapc_sync_finish_store(ctx);
+	pool_unref(&ctx->pool);
 
 	if (!mbox->initial_sync_done) {
 		/* with initial syncing we're fetching all messages' flags and
@@ -426,6 +511,12 @@ void imapc_sync_mailbox_reopened(struct imapc_mailbox *mbox)
 	struct imapc_sync_context *ctx = mbox->sync_ctx;
 
 	i_assert(mbox->syncing);
+
+	if (!mbox->initial_sync_done) {
+		/* the same sync commands are automatically already retried by
+		   lib-imap-client. don't duplicate them here. */
+		return;
+	}
 
 	/* we got disconnected while syncing. need to
 	   re-fetch everything */
@@ -547,11 +638,12 @@ static int imapc_sync(struct imapc_mailbox *mbox)
 static void
 imapc_noop_if_needed(struct imapc_mailbox *mbox, enum mailbox_sync_flags flags)
 {
-	enum imapc_capability capabilities;
-
-	capabilities = imapc_client_get_capabilities(mbox->storage->client->client);
-	if ((capabilities & IMAPC_CAPABILITY_IDLE) == 0 ||
-	    (flags & MAILBOX_SYNC_FLAG_FULL_READ) != 0) {
+	if (!mbox->initial_sync_done) {
+		/* we just SELECTed/EXAMINEd the mailbox, don't do another
+		   NOOP. */
+	} else if ((flags & MAILBOX_SYNC_FLAG_FAST) == 0 &&
+		   ((mbox->capabilities & IMAPC_CAPABILITY_IDLE) == 0 ||
+		    (flags & MAILBOX_SYNC_FLAG_FULL_READ) != 0)) {
 		/* do NOOP to make sure we have the latest changes before
 		   starting sync. this is necessary either because se don't
 		   support IDLE at all, or because we want to be sure that we

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -361,17 +361,29 @@ void mail_host_set_tag(struct mail_host *host, const char *tag_name)
 	host->list->vhosts_unsorted = TRUE;
 }
 
-void mail_host_set_down(struct mail_host *host, bool down, time_t timestamp)
+void mail_host_set_down(struct mail_host *host, bool down,
+			time_t timestamp, const char *log_prefix)
 {
 	if (host->down != down) {
+		const char *updown = down ? "down" : "up";
+		i_info("%sHost %s changed %s "
+		       "(vhost_count=%u last_updown_change=%ld)",
+		       log_prefix, net_ip2addr(&host->ip), updown,
+		       host->vhost_count, (long)host->last_updown_change);
+
 		host->down = down;
 		host->last_updown_change = timestamp;
 		host->list->vhosts_unsorted = TRUE;
 	}
 }
 
-void mail_host_set_vhost_count(struct mail_host *host, unsigned int vhost_count)
+void mail_host_set_vhost_count(struct mail_host *host, unsigned int vhost_count,
+			       const char *log_prefix)
 {
+	i_info("%sHost %s vhost count changed from %u to %u",
+	       log_prefix, net_ip2addr(&host->ip),
+	       host->vhost_count, vhost_count);
+
 	host->vhost_count = vhost_count;
 	host->list->vhosts_unsorted = TRUE;
 }
@@ -546,12 +558,14 @@ void mail_hosts_deinit(struct mail_host_list **_list)
 	i_free(list);
 }
 
-static struct mail_host *mail_host_dup(const struct mail_host *src)
+static struct mail_host *
+mail_host_dup(struct mail_host_list *dest_list, const struct mail_host *src)
 {
 	struct mail_host *dest;
 
 	dest = i_new(struct mail_host, 1);
 	*dest = *src;
+	dest->tag = mail_tag_get(dest_list, src->tag->name);
 	dest->hostname = i_strdup(src->hostname);
 	return dest;
 }
@@ -564,7 +578,7 @@ struct mail_host_list *mail_hosts_dup(const struct mail_host_list *src)
 	dest = mail_hosts_init(src->user_expire_secs, src->consistent_hashing,
 			       src->user_free_hook);
 	array_foreach(&src->hosts, hostp) {
-		dest_host = mail_host_dup(*hostp);
+		dest_host = mail_host_dup(dest, *hostp);
 		array_append(&dest->hosts, &dest_host, 1);
 	}
 	mail_hosts_sort(dest);

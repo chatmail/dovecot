@@ -10,7 +10,7 @@ struct mail_storage_service_ctx;
 typedef void command_func_t(struct client *client);
 
 #define MSGS_BITMASK_SIZE(client) \
-	(((client)->messages_count + (CHAR_BIT-1)) / CHAR_BIT)
+	(MALLOC_ADD((client)->messages_count, (CHAR_BIT-1)) / CHAR_BIT)
 
 /* Stop reading input when output buffer has this many bytes. Once the buffer
    size has dropped to half of it, start reading input again. */
@@ -96,6 +96,7 @@ struct client {
 	/* Module-specific contexts. */
 	ARRAY(union pop3_module_context *) module_contexts;
 
+	unsigned int destroyed:1;
 	unsigned int disconnected:1;
 	unsigned int deleted:1;
 	unsigned int waiting_input:1;

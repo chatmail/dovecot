@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -638,7 +638,7 @@ void test_get_info_pw_encrypted(void) {
 	test_begin("test_get_info_pw_encrypted");
 
 	struct dcrypt_keypair p1;
-	memset(&p1, 0, sizeof(p1));
+	i_zero(&p1);
 	const char *error;
 	bool ret = dcrypt_keypair_generate(&p1, DCRYPT_KEY_EC, 0, "secp521r1", &error);
 	test_assert(ret == TRUE);
@@ -755,10 +755,11 @@ int main(void) {
 	struct dcrypt_settings set = {
 		.module_dir = ".libs"
 	};
+	const char *error;
 
 	random_init();
-	if (!dcrypt_initialize(NULL, &set, NULL)) {
-		i_error("No functional dcrypt backend found - skipping tests");
+	if (!dcrypt_initialize(NULL, &set, &error)) {
+		i_error("No functional dcrypt backend found - skipping tests: %s", error);
 		return 0;
 	}
 

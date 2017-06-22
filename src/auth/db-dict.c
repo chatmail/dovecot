@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 
@@ -297,7 +297,7 @@ struct dict_connection *db_dict_init(const char *config_path)
 	p_array_init(&conn->set.parsed_passdb_objects, pool, 2);
 	p_array_init(&conn->set.parsed_userdb_objects, pool, 2);
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.conn = conn;
 	if (!settings_read(config_path, NULL, parse_setting,
 			   parse_section, &ctx, &error))
@@ -408,7 +408,7 @@ static int db_dict_iter_lookup_key_values(struct db_dict_value_iter *iter)
 			continue;
 
 		str_truncate(path, strlen(DICT_PATH_SHARED));
-		var_expand(path, key->key->key, iter->var_expand_table);
+		str_append(path, key->key->key);
 		ret = dict_lookup(iter->conn->dict, iter->pool,
 				  str_c(path), &key->value);
 		if (ret > 0) {

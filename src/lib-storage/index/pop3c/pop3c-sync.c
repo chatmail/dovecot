@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -144,7 +144,7 @@ pop3c_get_local_msgs(pool_t pool, ARRAY_TYPE(pop3c_sync_msg) *local_msgs,
 	struct pop3c_sync_msg msg;
 	uint32_t seq;
 
-	memset(&msg, 0, sizeof(msg));
+	i_zero(&msg);
 	for (seq = 1; seq <= messages_count; seq++) {
 		str_truncate(str, 0);
 		if (mail_cache_lookup_field(cache_view, str, seq,
@@ -215,8 +215,10 @@ pop3c_sync_messages(struct pop3c_mailbox *mbox,
 	array_sort(&remote_msgs, pop3c_sync_msg_uidl_cmp);
 
 	/* skip over existing messages with matching UIDLs and expunge the ones
-	   that no longer exist in remote. (+1 to avoid malloc(0) assert) */
-	mbox->msg_uids = i_new(uint32_t, mbox->msg_count + 1);
+	   that no longer exist in remote. */
+	mbox->msg_uids = mbox->msg_count == 0 ?
+		i_new(uint32_t, 1) : /* avoid malloc(0) assert */
+		i_new(uint32_t, mbox->msg_count);
 	cache_trans = mail_cache_get_transaction(cache_view, sync_trans);
 
 	lmsg = array_get(&local_msgs, &lcount);

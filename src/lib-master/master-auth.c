@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -227,7 +227,7 @@ void master_auth_request(struct master_auth *auth, int fd,
 {
 	struct master_auth_request_params params;
 
-	memset(&params, 0, sizeof(params));
+	i_zero(&params);
 	params.client_fd = fd;
 	params.request = *request;
 	params.data = data;

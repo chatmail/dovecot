@@ -87,7 +87,8 @@ bool t_try_realloc(void *mem, size_t size);
 size_t t_get_bytes_available(void) ATTR_PURE;
 
 #define t_new(type, count) \
-	((type *) t_malloc0(sizeof(type) * (count)))
+	((type *) t_malloc0(MALLOC_MULTIPLY((unsigned int)sizeof(type), (count))) + \
+	 COMPILE_ERROR_IF_TRUE(sizeof(type) > UINT_MAX))
 
 /* Returns pointer to a temporary buffer you can use. The buffer will be
    invalid as soon as next t_malloc() is called!
@@ -96,20 +97,14 @@ size_t t_get_bytes_available(void) ATTR_PURE;
    in the size parameter. If return value doesn't point to the same value
    as last time, you need to memcpy() data from the old buffer to the
    new one (or do some other trickery). See t_buffer_reget(). */
-#define t_buffer_get_type(type, size) \
-	t_buffer_get(sizeof(type) * (size))
 void *t_buffer_get(size_t size) ATTR_RETURNS_NONNULL;
 
 /* Grow the buffer, memcpy()ing the memory to new location if needed. */
-#define t_buffer_reget_type(buffer, type, size) \
-	t_buffer_reget(buffer, sizeof(type) * (size))
 void *t_buffer_reget(void *buffer, size_t size) ATTR_RETURNS_NONNULL;
 
 /* Make the last t_buffer_get()ed buffer permanent. Note that size MUST be
    less or equal than the size you gave with last t_buffer_get() or the
    result will be undefined. */
-#define t_buffer_alloc_type(type, size) \
-	t_buffer_alloc(sizeof(type) * (size))
 void t_buffer_alloc(size_t size);
 /* Allocate the last t_buffer_get()ed data entirely. */
 void t_buffer_alloc_last_full(void);

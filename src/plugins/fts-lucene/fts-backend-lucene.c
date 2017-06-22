@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -74,7 +74,7 @@ fts_lucene_get_mailbox_guid(struct mailbox *box, guid_128_t guid_r)
 	if (mailbox_get_metadata(box, MAILBOX_METADATA_GUID,
 				 &metadata) < 0) {
 		i_error("lucene: Couldn't get mailbox %s GUID: %s",
-			box->vname, mailbox_get_last_error(box, NULL));
+			box->vname, mailbox_get_last_internal_error(box, NULL));
 		return -1;
 	}
 	memcpy(guid_r, metadata.guid, GUID_128_SIZE);

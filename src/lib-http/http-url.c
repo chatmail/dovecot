@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -343,6 +343,7 @@ int http_url_parse(const char *url, struct http_url *base,
 
 	memset(&url_parser, '\0', sizeof(url_parser));
 	uri_parser_init(&url_parser.parser, pool, url);
+	url_parser.parser.allow_pct_nul = (flags & HTTP_URL_ALLOW_PCT_NUL) != 0;
 
 	url_parser.url = p_new(pool, struct http_url, 1);
 	url_parser.base = base;
@@ -391,7 +392,7 @@ int http_url_request_target_parse(const char *request_target,
 		return 0;
 	}
 
-	memset(&base, 0, sizeof(base));
+	i_zero(&base);
 	base.host_name = host.host_literal;
 	base.host_ip = host.host_ip;
 	base.port = host.port;
@@ -424,7 +425,7 @@ int http_url_request_target_parse(const char *request_target,
 void http_url_copy_authority(pool_t pool, struct http_url *dest,
 	const struct http_url *src)
 {
-	memset(dest, 0, sizeof(*dest));
+	i_zero(dest);
 	dest->host_name = p_strdup(pool, src->host_name);
 	if (src->have_host_ip) {
 		dest->host_ip = src->host_ip;

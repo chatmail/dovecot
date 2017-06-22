@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "seq-range-array.h"
@@ -152,7 +152,7 @@ bool cmd_store(struct client_command_context *cmd)
 	if (ret <= 0)
 		return ret < 0;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.cmd = cmd;
 	if (!store_parse_args(&ctx, ++args)) {
 		mail_search_args_unref(&search_args);
@@ -178,12 +178,13 @@ bool cmd_store(struct client_command_context *cmd)
 	}
 
 	t = mailbox_transaction_begin(client->mailbox, flags);
+	imap_transaction_set_cmd_reason(t, cmd);
 	search_ctx = mailbox_search_init(t, search_args, NULL,
 					 MAIL_FETCH_FLAGS, NULL);
 	mail_search_args_unref(&search_args);
 
 	i_array_init(&modified_set, 64);
-	if (ctx.max_modseq < (uint32_t)-1) {
+	if (ctx.max_modseq < (uint64_t)-1) {
 		/* STORE UNCHANGEDSINCE is being used */
 		mailbox_transaction_set_max_modseq(t, ctx.max_modseq,
 						   &modified_set);

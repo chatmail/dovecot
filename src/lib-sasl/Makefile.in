@@ -106,7 +106,7 @@ CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsasl_la_LIBADD =
 am_libsasl_la_OBJECTS = mech-external.lo mech-login.lo mech-plain.lo \
-	dsasl-client.lo
+	mech-oauthbearer.lo dsasl-client.lo
 libsasl_la_OBJECTS = $(am_libsasl_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -403,6 +403,7 @@ libsasl_la_SOURCES = \
 	mech-external.c \
 	mech-login.c \
 	mech-plain.c \
+	mech-oauthbearer.c \
 	dsasl-client.c 
 
 headers = \
@@ -468,6 +469,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dsasl-client.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-external.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-login.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-oauthbearer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain.Plo@am__quote@
 
 .c.o:

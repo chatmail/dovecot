@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "test-common.h"
@@ -256,9 +256,9 @@ static void test_run_named_funcs(struct named_test tests[], const char *match)
 	}
 }
 
-static void run_one_fatal(enum fatal_test_state (*fatal_function)(int))
+static void run_one_fatal(test_fatal_func_t *fatal_function)
 {
-	static int index = 0;
+	static unsigned int index = 0;
 	for (;;) {
 		volatile int jumped = setjmp(fatal_jmpbuf);
 		if (jumped == 0) {
@@ -287,7 +287,7 @@ static void run_one_fatal(enum fatal_test_state (*fatal_function)(int))
 		}
 	}
 }
-static void test_run_fatals(enum fatal_test_state (*fatal_functions[])(int index))
+static void test_run_fatals(test_fatal_func_t *const fatal_functions[])
 {
 	unsigned int i;
 
@@ -321,7 +321,7 @@ int test_run_named(struct named_test tests[], const char *match)
 	return test_deinit();
 }
 int test_run_with_fatals(void (*test_functions[])(void),
-			 enum fatal_test_state (*fatal_functions[])(int))
+			 test_fatal_func_t *const fatal_functions[])
 {
 	test_init();
 	test_run_funcs(test_functions);

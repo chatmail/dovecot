@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -42,10 +42,14 @@ mail_search_arg_to_cmdline(string_t *dest, const struct mail_search_arg *arg)
 	case SEARCH_KEYWORDS: {
 		size_t pos = str_len(dest);
 
-		if (!mail_search_arg_to_imap(dest, arg, &error))
+		new_arg = *arg;
+		new_arg.match_not = FALSE;
+		if (!mail_search_arg_to_imap(dest, &new_arg, &error))
 			i_unreached();
-		str_insert(dest, pos+1, " ");
-		str_insert(dest, str_len(dest)-2, " ");
+		if (str_c(dest)[pos] == '(') {
+			str_insert(dest, pos+1, " ");
+			str_insert(dest, str_len(dest)-1, " ");
+		}
 		return;
 	}
 	case SEARCH_INTHREAD:
@@ -55,6 +59,7 @@ mail_search_arg_to_cmdline(string_t *dest, const struct mail_search_arg *arg)
 		mail_search_subargs_to_cmdline(dest, arg->value.subargs, " ");
 		break;
 	case SEARCH_MAILBOX:
+	case SEARCH_MAILBOX_GLOB:
 		str_append(dest, "MAILBOX ");
 		imap_append_astring(dest, arg->value.str);
 		return;
@@ -77,8 +82,8 @@ mail_search_arg_to_cmdline(string_t *dest, const struct mail_search_arg *arg)
 	case SEARCH_TEXT:
 	case SEARCH_MODSEQ:
 	case SEARCH_GUID:
-	case SEARCH_MAILBOX_GLOB:
 	case SEARCH_REAL_UID:
+	case SEARCH_MIMEPART:
 		break;
 	}
 	new_arg = *arg;

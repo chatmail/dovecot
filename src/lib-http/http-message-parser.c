@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -18,7 +18,7 @@ void http_message_parser_init(struct http_message_parser *parser,
 	struct istream *input, const struct http_header_limits *hdr_limits,
 	uoff_t max_payload_size, bool lenient)
 {
-	memset(parser, 0, sizeof(*parser));
+	i_zero(parser);
 	parser->input = input;
 	i_stream_ref(parser->input);
 	if (hdr_limits != NULL)
@@ -53,16 +53,19 @@ void http_message_parser_restart(struct http_message_parser *parser,
 
 	if (parser->msg.pool != NULL)
 		pool_unref(&parser->msg.pool);
-	memset(&parser->msg, 0, sizeof(parser->msg));
-	if (pool == NULL) {
-		parser->msg.pool = pool_alloconly_create("http_message", 4096);
-	} else {
+	i_zero(&parser->msg);
+	if (pool != NULL) {
 		parser->msg.pool = pool;
 		pool_ref(pool);
 	}
 	parser->msg.date = (time_t)-1;
-	parser->msg.header = http_header_create(parser->msg.pool, 32);
-	p_array_init(&parser->msg.connection_options, parser->msg.pool, 4);
+}
+
+pool_t http_message_parser_get_pool(struct http_message_parser *parser)
+{
+	if (parser->msg.pool == NULL)
+		parser->msg.pool = pool_alloconly_create("http_message", 4096);
+	return parser->msg.pool;
 }
 
 int http_message_parse_version(struct http_message_parser *parser)
@@ -132,7 +135,11 @@ http_message_parse_header(struct http_message_parser *parser,
 {
 	const struct http_header_field *hdr;
 	struct http_parser hparser;
+	pool_t pool;
 
+	pool = http_message_parser_get_pool(parser);
+	if (parser->msg.header == NULL)
+		parser->msg.header = http_header_create(pool, 32);
 	hdr = http_header_field_add(parser->msg.header, name, data, size);
 
 	/* RFC 7230, Section 3.2.2: Field Order
@@ -165,8 +172,10 @@ http_message_parse_header(struct http_message_parser *parser,
 				num_tokens++;
 				if (strcasecmp(option, "close") == 0)
 					parser->msg.connection_close = TRUE;
+				if (!array_is_created(&parser->msg.connection_options))
+					p_array_init(&parser->msg.connection_options, pool, 4);
 				opt_idx = array_append_space(&parser->msg.connection_options);
-				*opt_idx = p_strdup(parser->msg.pool, option);
+				*opt_idx = p_strdup(pool, option);
 			}
 
 			if (hparser.cur < hparser.end || num_tokens == 0) {
@@ -236,7 +245,7 @@ http_message_parse_header(struct http_message_parser *parser,
 	
 			/* Multiple Transfer-Encoding headers are allowed and combined into one */
 			if (!array_is_created(&parser->msg.transfer_encoding))
-				p_array_init(&parser->msg.transfer_encoding, parser->msg.pool, 4);
+				p_array_init(&parser->msg.transfer_encoding, pool, 4);
 
 			/* RFC 7230, Section 3.3.1: Transfer-Encoding
 
@@ -260,7 +269,7 @@ http_message_parse_header(struct http_message_parser *parser,
 					bool parse_error;
 
 					coding = array_append_space(&parser->msg.transfer_encoding);
-					coding->name = p_strdup(parser->msg.pool, trenc);
+					coding->name = p_strdup(pool, trenc);
 		
 					/* *( OWS ";" OWS transfer-parameter ) */
 					parse_error = FALSE;
@@ -297,10 +306,10 @@ http_message_parse_header(struct http_message_parser *parser,
 						}
 		
 						if (!array_is_created(&coding->parameters))
-							p_array_init(&coding->parameters, parser->msg.pool, 2);
+							p_array_init(&coding->parameters, pool, 2);
 						param = array_append_space(&coding->parameters);
-						param->attribute = p_strdup(parser->msg.pool, attribute);
-						param->value = p_strdup(parser->msg.pool, value);
+						param->attribute = p_strdup(pool, attribute);
+						param->value = p_strdup(pool, value);
 					}
 					if (parse_error)
 						break;
@@ -353,20 +362,28 @@ int http_message_parse_headers(struct http_message_parser *parser)
 	while ((ret=http_header_parse_next_field(parser->header_parser,
 		&field_name, &field_data, &field_size, &error)) > 0) {
 		if (field_name == NULL) {
+			pool_t pool;
 			/* EOH */
+
+			/* Create empty header if there is none */
+			pool = http_message_parser_get_pool(parser);
+			if (parser->msg.header == NULL)
+				parser->msg.header = http_header_create(pool, 1);
 
 			/* handle HTTP/1.0 persistence */
 			if (msg->version_major == 1 && msg->version_minor == 0 &&
 				!msg->connection_close) {
 				const char *const *option;
 
-				msg->connection_close = TRUE;	
-				array_foreach(&msg->connection_options, option) {
-					if (strcasecmp(*option, "Keep-Alive") == 0) {
-						msg->connection_close = FALSE;
-						break;
+				msg->connection_close = TRUE;
+				if (array_is_created(&parser->msg.connection_options)) {
+					array_foreach(&msg->connection_options, option) {
+						if (strcasecmp(*option, "Keep-Alive") == 0) {
+							msg->connection_close = FALSE;
+							break;
+						}
 					}
-				}			
+				}
 			}
 			return 1;
 		}

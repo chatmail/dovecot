@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hash.h"
@@ -47,7 +47,7 @@ export_change_get(struct dsync_transaction_log_scan *ctx, uint32_t uid,
 	} else if (type == DSYNC_MAIL_CHANGE_TYPE_EXPUNGE) {
 		/* expunge overrides flag changes */
 		orig_guid = change->guid;
-		memset(change, 0, sizeof(*change));
+		i_zero(change);
 		change->type = type;
 		change->uid = uid;
 		change->guid = orig_guid;

@@ -1,9 +1,11 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file
  */
 
 #include "lib.h"
 #include "ioloop.h"
 #include "str.h"
+#include "strescape.h"
+#include "array.h"
 #include "net.h"
 #include "write-full.h"
 #include "eacces-error.h"
@@ -16,7 +18,7 @@
 #include <sys/wait.h>
 #include <sysexits.h>
 
-#define PROGRAM_CLIENT_VERSION_MAJOR "3"
+#define PROGRAM_CLIENT_VERSION_MAJOR "4"
 #define PROGRAM_CLIENT_VERSION_MINOR "0"
 
 #define PROGRAM_CLIENT_VERSION_STRING "VERSION\tscript\t" \
@@ -197,7 +199,7 @@ struct program_client_remote {
 static
 void program_client_remote_connected(struct program_client *pclient)
 {
-	struct program_client_remote *slclient =
+	struct program_client_remote *prclient =
 		(struct program_client_remote *) pclient;
 	const char **args = pclient->args;
 	string_t *str;
@@ -205,7 +207,7 @@ void program_client_remote_connected(struct program_client *pclient)
 	io_remove(&pclient->io);
 	program_client_init_streams(pclient);
 
-	if (!slclient->noreply) {
+	if (!prclient->noreply) {
 		struct istream *is = pclient->program_input;
 		pclient->program_input =
 			program_client_istream_create(pclient, pclient->program_input);
@@ -214,13 +216,21 @@ void program_client_remote_connected(struct program_client *pclient)
 
 	str = t_str_new(1024);
 	str_append(str, PROGRAM_CLIENT_VERSION_STRING);
-	if (slclient->noreply)
+	if (array_is_created(&pclient->envs)) {
+		const char *const *env;
+		array_foreach(&pclient->envs, env) {
+			str_append(str, "env_");
+			str_append_tabescaped(str, *env);
+			str_append_c(str, '\n');
+		}
+	}
+	if (prclient->noreply)
 		str_append(str, "noreply\n");
 	else
 		str_append(str, "-\n");
 	if (args != NULL) {
 		for(; *args != NULL; args++) {
-			str_append(str, *args);
+			str_append_tabescaped(str, *args);
 			str_append_c(str, '\n');
 		}
 	}
@@ -241,7 +251,7 @@ void program_client_remote_connected(struct program_client *pclient)
 static
 int program_client_remote_connect(struct program_client *pclient)
 {
-	struct program_client_remote *slclient =
+	struct program_client_remote *prclient =
 		(struct program_client_remote *) pclient;
 	int fd;
 
@@ -261,7 +271,7 @@ int program_client_remote_connect(struct program_client *pclient)
 
 	net_set_nonblock(fd, TRUE);
 
-	pclient->fd_in = (slclient->noreply && pclient->output == NULL &&
+	pclient->fd_in = (prclient->noreply && pclient->output == NULL &&
 			  !pclient->output_seekable ? -1 : fd);
 	pclient->fd_out = fd;
 	pclient->io =
@@ -296,10 +306,10 @@ int program_client_remote_close_output(struct program_client *pclient)
 static
 void program_client_remote_disconnect(struct program_client *pclient, bool force)
 {
-	struct program_client_remote *slclient =
+	struct program_client_remote *prclient =
 		(struct program_client_remote *)pclient;
 
-	if (pclient->error == PROGRAM_CLIENT_ERROR_NONE && !slclient->noreply &&
+	if (pclient->error == PROGRAM_CLIENT_ERROR_NONE && !prclient->noreply &&
 	    pclient->program_input != NULL && !force) {
 		const unsigned char *data;
 		size_t size;

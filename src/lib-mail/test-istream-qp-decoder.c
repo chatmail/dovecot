@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
@@ -25,7 +25,7 @@ static void
 decode_test(const char *qp_input, const char *output, bool broken_input,
 	    unsigned int buffer_size)
 {
-	unsigned int qp_input_len = strlen(qp_input);
+	size_t qp_input_len = strlen(qp_input);
 	struct istream *input_data, *input;
 	const unsigned char *data;
 	size_t i, size;

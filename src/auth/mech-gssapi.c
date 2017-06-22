@@ -231,10 +231,10 @@ duplicate_name(struct auth_request *request, gss_name_t old)
 	return new;
 }
 
-static bool data_has_nuls(const void *data, unsigned int len)
+static bool data_has_nuls(const void *data, size_t len)
 {
 	const unsigned char *c = data;
-	unsigned int i;
+	size_t i;
 
 	/* apparently all names end with NUL? */
 	if (len > 0 && c[len-1] == '\0')
@@ -274,7 +274,7 @@ static bool mech_gssapi_oid_cmp(const gss_OID_desc *oid1,
 				const gss_OID_desc *oid2)
 {
 	return oid1->length == oid2->length &&
-		memcmp(oid1->elements, oid2->elements, oid1->length) == 0;
+		mem_equals_timing_safe(oid1->elements, oid2->elements, oid1->length);
 }
 
 static int
@@ -581,7 +581,7 @@ mech_gssapi_unwrap(struct gssapi_auth_request *request, gss_buffer_desc inbuf)
 	gss_buffer_desc outbuf;
 	const char *login_user, *error;
 	unsigned char *name;
-	unsigned int name_len;
+	size_t name_len;
 
 	major_status = gss_unwrap(&minor_status, request->gss_ctx,
 				  &inbuf, &outbuf, NULL, NULL);

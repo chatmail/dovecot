@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -35,7 +35,7 @@ cmd_log_test(int argc ATTR_UNUSED, char *argv[] ATTR_UNUSED)
 	master_service->flags |= MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR;
 	master_service_init_log(master_service, "doveadm: ");
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	for (i = 0; i < LAST_LOG_TYPE; i++) {
 		const char *prefix = failure_log_type_prefixes[i];
 
@@ -91,7 +91,7 @@ cmd_log_find_syslog_files(struct log_find_context *ctx, const char *path)
 	struct stat st;
 	char *key;
 	string_t *full_path;
-	unsigned int dir_len;
+	size_t dir_len;
 
 	dir = opendir(path);
 	if (dir == NULL) {
@@ -131,7 +131,8 @@ cmd_log_find_syslog_files(struct log_find_context *ctx, const char *path)
 
 static bool log_type_find(const char *str, enum log_type *type_r)
 {
-	unsigned int i, len = strlen(str);
+	unsigned int i;
+	size_t len = strlen(str);
 
 	for (i = 0; i < LAST_LOG_TYPE; i++) {
 		if (strncasecmp(str, failure_log_type_prefixes[i], len) == 0 &&
@@ -220,7 +221,7 @@ static void cmd_log_find(int argc, char *argv[])
 	struct log_find_context ctx;
 	unsigned int i;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.pool = pool_alloconly_create("log file", 1024*32);
 	hash_table_create(&ctx.files, ctx.pool, 0, str_hash, strcmp);
 
@@ -281,7 +282,7 @@ static void cmd_log_find(int argc, char *argv[])
 
 static const char *t_cmd_log_error_trim(const char *orig)
 {
-	unsigned int pos;
+	size_t pos;
 
 	/* Trim whitespace from suffix and remove ':' if it exists */
 	for (pos = strlen(orig); pos > 0; pos--) {

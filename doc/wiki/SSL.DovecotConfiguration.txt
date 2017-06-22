@@ -29,7 +29,7 @@ ssl_key = </etc/ssl/dovecot.pem
 It's also possible to use different certificates for IMAP and POP3. However its
 important to note that "ssl = yes" must be set globally if you require SSL for
 any protocol (or dovecot will not listen on the SSL ports), which in turn
-requires that a certificate and key are specified globally even if you intent
+requires that a certificate and key are specified globally even if you intend
 to specify certificates per protocol. The per protocol certificate settings
 override the global setting.:
 
@@ -203,8 +203,6 @@ using:
 ssl_dh_parameters_length = 2048
 ---%<-------------------------------------------------------------------------
 
-By default Dovecot's allowed ciphers list contains:
-
 From version 2.3, you must specify path to DH parameters file using:
 
 ---%<-------------------------------------------------------------------------
@@ -220,6 +218,8 @@ dd if=/path/to/ssl-parameters.dat bs=1 skip=88 | openssl dh -inform der
 ---%<-------------------------------------------------------------------------
 
 This should work most of the times. If not, generate new file.
+
+By default Dovecot's allowed ciphers list contains:
 
 ---%<-------------------------------------------------------------------------
 ssl_cipher_list = ALL:!LOW:!SSLv2:!EXP:!aNULL
@@ -441,4 +441,4 @@ Testing CA Success
     Verify return code: 0 (ok)
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

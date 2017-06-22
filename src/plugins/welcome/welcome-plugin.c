@@ -1,8 +1,9 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
 #include "str.h"
+#include "strescape.h"
 #include "eacces-error.h"
 #include "write-full.h"
 #include "module-context.h"
@@ -52,14 +53,14 @@ static void script_execute(struct mail_user *user, const char *cmd, bool wait)
 	}
 
 	str = t_str_new(1024);
-	str_append(str, "VERSION\tscript\t3\t0\n");
+	str_append(str, "VERSION\tscript\t4\t0\n");
 	if (!wait)
 		str_append(str, "noreply\n");
 	else
 		str_append(str, "-\n");
 	for (; *args != NULL; args++) {
-		str_append(str, *args);
-		str_append_c(str, '\n');
+		str_append_tabescaped(str, *args);
+		str_append_c(str, '\t');
 	}
 	str_append_c(str, '\n');
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 /* MD5 header summing logic was pretty much copy&pasted from popa3d by
    Solar Designer */
@@ -572,7 +572,7 @@ bool mbox_sync_parse_match_mail(struct mbox_mailbox *mbox,
 	   exists. */
 
 	mail_index_lookup_uid(view, seq, &uid);
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
         mbox_md5_ctx = mbox->md5_v.init();
 
 	hdr_ctx = message_parse_header_init(mbox->mbox_stream, NULL, 0);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 /* There are several race conditions in this plugin, but they should be
    happening pretty rarely and usually it's not a big problem if the results
@@ -162,7 +162,7 @@ expire_update(struct mailbox *box, const char *key, time_t timestamp)
 	if (dict_transaction_commit(&dctx) < 0)
 		i_error("expire: dict commit failed");
 	else if (euser->expire_cache) {
-		memset(&hdr, 0, sizeof(hdr));
+		i_zero(&hdr);
 		hdr.timestamp = timestamp;
 
 		trans = mail_index_transaction_begin(box->view,
@@ -397,9 +397,8 @@ static const char *const *expire_get_patterns(struct mail_user *user)
 	return array_idx(&patterns, 0);
 }
 
-static void expire_mail_namespaces_created(struct mail_namespace *ns)
+static void expire_mail_user_created(struct mail_user *user)
 {
-	struct mail_user *user = ns->user;
 	struct mail_user_vfuncs *v = user->vlast;
 	struct expire_mail_user *euser;
 	struct dict *db;
@@ -436,7 +435,7 @@ static void expire_mail_namespaces_created(struct mail_namespace *ns)
 }
 
 static struct mail_storage_hooks expire_mail_storage_hooks = {
-	.mail_namespaces_created = expire_mail_namespaces_created,
+	.mail_user_created = expire_mail_user_created,
 	.mailbox_allocated = expire_mailbox_allocated,
 	.mail_allocated = expire_mail_allocated
 };

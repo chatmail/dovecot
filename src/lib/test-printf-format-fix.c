@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2001-2017 Dovecot authors, see the included COPYING file */
 
 /* Unit tests for printf-format-fix helper */
 
@@ -24,7 +24,7 @@ static void test_unchanged()
 
 	test_begin("printf_format_fix(safe)");
 	for (i = 0; i < N_ELEMENTS(tests); ++i) {
-		unsigned int len;
+		size_t len;
 		T_BEGIN {
 			test_assert_idx(printf_format_fix(tests[i])
 					== tests[i], i);
@@ -56,7 +56,7 @@ static void test_ok_changes()
 	needlen = strlen(needle);
 
 	for (i = 0; i < N_ELEMENTS(tests); ++i) {
-		unsigned int len;
+		size_t len;
 		char const *chgd;
 		char const *insert;
 		unsigned int offs;
@@ -95,16 +95,17 @@ void test_printf_format_fix()
 }
 
 /* Want to test the panics too? go for it! */
-enum fatal_test_state fatal_printf_format_fix(int stage)
+enum fatal_test_state fatal_printf_format_fix(unsigned int stage)
 {
 	static const char *fatals[] = {
 		"no no no %n's",
+		"no no no %-1234567890123n's with extra stuff",
 		"%m allowed once, but not twice: %m",
 		"%m must not obscure a later %n",
 		"definitely can't have a tailing %",
 	};
 
-	if((unsigned int)stage >= N_ELEMENTS(fatals)) {
+	if(stage >= N_ELEMENTS(fatals)) {
 		test_end();
 		return FATAL_TEST_FINISHED;
 	}

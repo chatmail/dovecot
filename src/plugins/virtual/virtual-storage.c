@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -192,6 +192,8 @@ static int virtual_backend_box_alloc(struct virtual_mailbox *mbox,
 	ns = mail_namespace_find(user->namespaces, mailbox);
 	bbox->box = mailbox_alloc(ns->list, mailbox, flags);
 	MODULE_CONTEXT_SET(bbox->box, virtual_storage_module, bbox);
+	mailbox_set_reason(bbox->box, mbox->box.reason == NULL ? "virtual mailbox" :
+		t_strdup_printf("virtual mailbox: %s", mbox->box.reason));
 
 	if (mailbox_exists(bbox->box, TRUE, &existence) < 0)
 		return virtual_backend_box_open_failed(mbox, bbox);
@@ -210,7 +212,7 @@ static int virtual_backend_box_alloc(struct virtual_mailbox *mbox,
 	i_array_init(&bbox->sync_pending_removes, 64);
 	/* we use modseqs for being able to check quickly if backend mailboxes
 	   have changed. make sure the backend has them enabled. */
-	mailbox_enable(bbox->box, MAILBOX_FEATURE_CONDSTORE);
+	(void)mailbox_enable(bbox->box, MAILBOX_FEATURE_CONDSTORE);
 	return 1;
 }
 

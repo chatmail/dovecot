@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "istream-private.h"
@@ -117,6 +117,26 @@ static bool test_istream_concat_random(void)
 	return !test_has_failed();
 }
 
+static void test_istream_concat_seek_end(void)
+{
+	test_begin("istream concat seek end");
+
+	struct istream *streams[] = {
+		test_istream_create("s1"),
+		test_istream_create("s2"),
+		NULL
+	};
+	struct istream *input = i_stream_create_concat(streams);
+	i_stream_unref(&streams[0]);
+	i_stream_unref(&streams[1]);
+
+	i_stream_seek(input, 4);
+	test_assert(i_stream_read(input) == -1);
+	i_stream_unref(&input);
+
+	test_end();
+}
+
 static void test_istream_concat_early_end(void)
 {
 	struct istream *input, *streams[2];
@@ -158,5 +178,6 @@ void test_istream_concat(void)
 	} T_END;
 	test_end();
 
+	test_istream_concat_seek_end();
 	test_istream_concat_early_end();
 }

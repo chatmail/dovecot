@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -299,7 +299,11 @@ static void openssl_iostream_unref(struct ssl_iostream *ssl_io)
 
 static void openssl_iostream_destroy(struct ssl_iostream *ssl_io)
 {
-	(void)SSL_shutdown(ssl_io->ssl);
+	if (SSL_shutdown(ssl_io->ssl) != 1) {
+		/* if bidirectional shutdown fails we need to clear
+		   the error queue */
+		openssl_iostream_clear_errors();
+	}
 	(void)openssl_iostream_more(ssl_io);
 	(void)o_stream_flush(ssl_io->plain_output);
 	/* close the plain i/o streams, because their fd may be closed soon,

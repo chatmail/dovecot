@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -28,7 +28,7 @@ mailbox_list_subscription_fill_one(struct mailbox_list *list,
 	struct mail_namespace *namespaces = default_ns->user->namespaces;
 	struct mailbox_node *node;
 	const char *vname, *ns_name, *error;
-	unsigned int len;
+	size_t len;
 	bool created;
 
 	/* default_ns is whatever namespace we're currently listing.
@@ -204,7 +204,7 @@ void mailbox_list_subscriptions_fill(struct mailbox_list_iterate_context *ctx,
 	struct mailbox_tree_iterate_context *iter;
 	const char *name;
 
-	memset(&update_ctx, 0, sizeof(update_ctx));
+	i_zero(&update_ctx);
 	update_ctx.iter_ctx = ctx;
 	update_ctx.tree_ctx = tree;
 	update_ctx.glob = ctx->glob;
@@ -263,7 +263,7 @@ mailbox_list_subscriptions_iter_next(struct mailbox_list_iterate_context *_ctx)
 
 	node = mailbox_tree_iterate_next(ctx->iter, &vname);
 	if (node == NULL)
-		return NULL;
+		return mailbox_list_iter_default_next(_ctx);
 
 	ctx->info.vname = vname;
 	subs_flags = node->flags & (MAILBOX_SUBSCRIBED |

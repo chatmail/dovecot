@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "safe-memset.h"
@@ -27,7 +27,8 @@ static void payload_input(struct http_test_request *req)
 	while ((ret=i_stream_read_data(req->payload, &data, &size, 0)) > 0) {
 		i_info("DEBUG: got data (size=%d)", (int)size); 
 		if (req->write_output)
-			write_full(1, data, size);
+			if (write_full(1, data, size) < 0)
+				i_error("REQUEST PAYLOAD WRITE ERROR: %m");
 		i_stream_skip(req->payload, size);
 	}
 
@@ -351,7 +352,7 @@ int main(int argc, char *argv[])
 	   the binary in all systems (but is in others! so linking
 	   safe-memset.lo directly causes them to fail.) If safe_memset() isn't
 	   included, libssl-iostream plugin loading fails. */
-	safe_memset(&dns_set, 0, sizeof(dns_set));
+	i_zero_safe(&dns_set);
 	dns_set.dns_client_socket_path = "/var/run/dovecot/dns-client";
 	dns_set.timeout_msecs = 30*1000;
 	dns_set.idle_timeout_msecs = UINT_MAX;
@@ -360,7 +361,7 @@ int main(int argc, char *argv[])
 	if (dns_client_connect(dns_client, &error) < 0)
 		i_fatal("Couldn't initialize DNS client: %s", error);
 
-	memset(&http_set, 0, sizeof(http_set));
+	i_zero(&http_set);
 	http_set.dns_client = dns_client;
 	http_set.ssl_allow_invalid_cert = TRUE;
 	http_set.ssl_ca_dir = "/etc/ssl/certs"; /* debian */

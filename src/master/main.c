@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "ioloop.h"
@@ -58,26 +58,12 @@ static const struct setting_parser_info *set_roots[] = {
 	NULL
 };
 
-void process_exec(const char *cmd, const char *extra_args[])
+void process_exec(const char *cmd)
 {
 	const char *executable, *p, **argv;
 
 	argv = t_strsplit(cmd, " ");
 	executable = argv[0];
-
-	if (extra_args != NULL) {
-		unsigned int count1, count2;
-		const char **new_argv;
-
-		/* @UNSAFE */
-		count1 = str_array_length(argv);
-		count2 = str_array_length(extra_args);
-		new_argv = t_new(const char *, count1 + count2 + 1);
-		memcpy(new_argv, argv, sizeof(const char *) * count1);
-		memcpy(new_argv + count1, extra_args,
-		       sizeof(const char *) * count2);
-		argv = new_argv;
-	}
 
 	/* hide the path, it's ugly */
 	p = strrchr(argv[0], '/');
@@ -351,7 +337,7 @@ sig_settings_reload(const siginfo_t *si ATTR_UNUSED,
 		}
 	}
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.roots = set_roots;
 	input.module = MASTER_SERVICE_NAME;
 	input.config_path = services_get_config_socket_path(services);
@@ -424,7 +410,7 @@ static struct master_settings *master_settings_read(void)
 	struct master_service_settings_output output;
 	const char *error;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.roots = set_roots;
 	input.module = "master";
 	input.parse_full_config = TRUE;
@@ -653,6 +639,9 @@ static void print_build_options(void)
 #else
 	"SQL drivers:"
 #endif
+#ifdef BUILD_CASSANDRA
+		" cassandra"
+#endif
 #ifdef BUILD_MYSQL
 		" mysql"
 #endif
@@ -784,7 +773,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
-	i_assert(optind <= argc);
+	i_assert(optind > 0 && optind <= argc);
 
 	if (doveconf_arg != NULL) {
 		const char **args;

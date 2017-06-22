@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "data-stack.h"
@@ -94,9 +94,9 @@ static void test_ds_recurse(int depth, int number, size_t size)
 	char tag[2] = { depth+1, '\0' };
 	int try_fails = 0;
 	unsigned int t_id = t_push_named("test_ds_recurse[%i]", depth);
-	ps = t_buffer_get_type(char *, number);
+	ps = t_buffer_get(sizeof(char *) * number);
 	i_assert(ps != NULL);
-	t_buffer_alloc_type(char *, number);
+	t_buffer_alloc(sizeof(char *) * number);
 
 	for (i = 0; i < number; i++) {
 		ps[i] = t_malloc(size/2);
@@ -145,7 +145,7 @@ void test_data_stack(void)
 	test_ds_recursive(20, 80);
 }
 
-enum fatal_test_state fatal_data_stack(int stage)
+enum fatal_test_state fatal_data_stack(unsigned int stage)
 {
 #ifdef DEBUG
 	/* If we abort, then we'll be left with a dangling t_push()

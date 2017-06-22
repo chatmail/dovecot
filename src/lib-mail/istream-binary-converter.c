@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -23,7 +23,7 @@ struct binary_converter_istream {
 	unsigned int base64_block_pos;
 
 	buffer_t *hdr_buf;
-	unsigned int cte_header_len;
+	size_t cte_header_len;
 	unsigned int content_type_seen:1;
 };
 

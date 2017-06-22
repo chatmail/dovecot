@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -102,7 +102,7 @@ static void log_fd_flush_stop(struct ioloop *ioloop)
 	io_loop_stop(ioloop);
 }
 
-static int log_fd_write(int fd, const unsigned char *data, unsigned int len)
+static int log_fd_write(int fd, const unsigned char *data, size_t len)
 {
 	struct ioloop *ioloop;
 	struct io *io;
@@ -268,7 +268,7 @@ void i_panic(const char *format, ...)
 	struct failure_context ctx;
 	va_list args;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.type = LOG_TYPE_PANIC;
 
 	va_start(args, format);
@@ -281,7 +281,7 @@ void i_fatal(const char *format, ...)
 	struct failure_context ctx;
 	va_list args;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.type = LOG_TYPE_FATAL;
 	ctx.exit_status = FATAL_DEFAULT;
 
@@ -295,7 +295,7 @@ void i_fatal_status(int status, const char *format, ...)
 	struct failure_context ctx;
 	va_list args;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.type = LOG_TYPE_FATAL;
 	ctx.exit_status = status;
 
@@ -551,10 +551,10 @@ const char *i_get_failure_prefix(void)
 	return log_prefix != NULL ? log_prefix : "";
 }
 
-static int internal_send_split(string_t *full_str, unsigned int prefix_len)
+static int internal_send_split(string_t *full_str, size_t prefix_len)
 {
 	string_t *str;
-	unsigned int max_text_len, pos = prefix_len;
+	size_t max_text_len, pos = prefix_len;
 
 	str = t_str_new(PIPE_BUF);
 	str_append_n(str, str_c(full_str), prefix_len);
@@ -588,7 +588,7 @@ internal_handler(const struct failure_context *ctx,
 	recursed++;
 	T_BEGIN {
 		string_t *str;
-		unsigned int prefix_len;
+		size_t prefix_len;
 
 		if (!log_prefix_sent && log_prefix != NULL) {
 			log_prefix_sent = TRUE;
@@ -635,7 +635,7 @@ static bool line_is_ok(const char *line)
 
 void i_failure_parse_line(const char *line, struct failure_line *failure)
 {
-	memset(failure, 0, sizeof(*failure));
+	i_zero(failure);
 	if (!line_is_ok(line)) {
 		failure->log_type = LOG_TYPE_ERROR;
 		failure->text = line;

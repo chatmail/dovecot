@@ -5,9 +5,11 @@ Contents
 
  2. Using LMTP over TCP Socket
 
- 3. Verifying recipients using LMTP
+ 3. Striping domain to avoid user unknown / doesn't exist error
 
- 4. Delivering mails case insensitively
+ 4. Verifying recipients using LMTP
+
+ 5. Delivering mails case insensitively
 
 Exim provides support for LMTP over UNIX sockets using the LMTP transport
 [http://www.exim.org/exim-html-current/doc/html/spec_html/ch-the_lmtp_transport.html],
@@ -69,6 +71,27 @@ dovecot_lmtp:
         port = 2525
 ---%<-------------------------------------------------------------------------
 
+Striping domain to avoid user unknown / doesn't exist error
+-----------------------------------------------------------
+
+If you are using a userdb which does not have domain names, you may need to add
+a setting to 20-lmtp.conf
+
+---%<-------------------------------------------------------------------------
+protocol lmtp {
+   ...
+   # use %n to strip away the domain part
+   auth_username_format = %n
+}
+---%<-------------------------------------------------------------------------
+
+Symptoms:
+
+ * Exim says something like "LMTP error after RCPT ... 550 ... User doesn't
+   exist  someuser@somedomain"
+ * Dovecot verbose log says something like "auth-worker(9048):
+   passwd(someuser@somedomain): unknown user"
+
 Verifying recipients using LMTP
 -------------------------------
 
@@ -123,4 +146,4 @@ lowercase_local:
 Make sure to reference the name you have chosen for your local delivery router
 within /redirect_router/.
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

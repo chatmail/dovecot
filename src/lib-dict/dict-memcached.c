@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING memcached */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING memcached */
 
 #include "lib.h"
 #include "array.h"
@@ -38,7 +38,7 @@ struct memcached_connection {
 	buffer_t *cmd;
 	struct {
 		const unsigned char *value;
-		unsigned int value_len;
+		size_t value_len;
 		enum memcached_response status;
 		bool reply_received;
 	} reply;
@@ -277,7 +277,7 @@ memcached_dict_lookup_real(struct memcached_dict *dict, pool_t pool,
 {
 	struct ioloop *prev_ioloop = current_ioloop;
 	struct timeout *to;
-	unsigned int key_len;
+	size_t key_len;
 
 	if (strncmp(key, DICT_PATH_SHARED, strlen(DICT_PATH_SHARED)) == 0)
 		key += strlen(DICT_PATH_SHARED);
@@ -289,7 +289,7 @@ memcached_dict_lookup_real(struct memcached_dict *dict, pool_t pool,
 		key = t_strconcat(dict->key_prefix, key, NULL);
 	key_len = strlen(key);
 	if (key_len > 0xffff) {
-		i_error("memcached: Key is too long (%u bytes): %s",
+		i_error("memcached: Key is too long (%"PRIuSIZE_T" bytes): %s",
 			key_len, key);
 		return -1;
 	}
@@ -320,7 +320,7 @@ memcached_dict_lookup_real(struct memcached_dict *dict, pool_t pool,
 				       dict->conn.cmd->data,
 				       dict->conn.cmd->used);
 
-			memset(&dict->conn.reply, 0, sizeof(dict->conn.reply));
+			i_zero(&dict->conn.reply);
 			io_loop_run(dict->ioloop);
 		}
 		timeout_remove(&to);

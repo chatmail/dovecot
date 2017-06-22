@@ -124,8 +124,19 @@ sieve_<extension>_bin_dir = :
   Points to a directory where the plugin looks for programs (shell scripts) to
   execute directly and pipe messages to.
 
-Example 1: socket service for "pipe" and "execute"
---------------------------------------------------
+sieve_<extension>_exec_timeout = 10s :
+  Configures the maximum execution time after which the program is forcibly
+  terminated.
+
+sieve_<extension>_input_eol = crlf :
+  Determines the end-of-line character sequence used for the data piped to
+  external programs. The default is currently "crlf", which represents a
+  sequence of the carriage return (CR) and line feed (LF) characters. This
+  matches the Internet Message Format (RFC5322) and what Sieve itself uses as a
+  line ending. Set this setting to "lf" to use a single LF character instead.
+
+Configuration Example 1: socket service for "pipe" and "execute"
+----------------------------------------------------------------
 
 ---%<-------------------------------------------------------------------------
 plugin {
@@ -167,8 +178,8 @@ service sieve-execute-action {
 }
 ---%<-------------------------------------------------------------------------
 
-Example 2: direct execution for "pipe" and "filter"
----------------------------------------------------
+Configuration Example 2: direct execution for "pipe" and "filter"
+-----------------------------------------------------------------
 
 ---%<-------------------------------------------------------------------------
 plugin {
@@ -191,8 +202,89 @@ Usage
 -----
 
 Read the specification (v0.3 plugin
-[http://hg.rename-it.nl/pigeonhole-0.3-sieve-extprograms/raw-file/tip/doc/rfc/spec-bosch-sieve-extprograms.txt]/v0.4
-[http://hg.rename-it.nl/dovecot-2.2-pigeonhole/raw-file/tip/doc/rfc/spec-bosch-sieve-extprograms.txt])
+[http://hg.rename-it.nl/pigeonhole-0.3-sieve-extprograms/raw-file/tip/doc/rfc/spec-bosch-sieve-extprograms.txt]/v0.4+
+[https://github.com/dovecot/pigeonhole/blob/master/doc/rfc/spec-bosch-sieve-extprograms.txt])
 for detailed information on how to use the new language extensions.
 
-(This file was created from the wiki on 2016-12-03 04:44)
+Full Examples
+-------------
+
+Example 1
+---------
+
+This example shows how to use the "vnd.dovecot.execute" extension for
+querying/updating a MySQL database. This is used to redirect messages only once
+every 300s for a particular sender. Note that this particular use case could
+also be implemented using the Sieve " <duplicate>
+[Pigeonhole.Sieve.Extensions.Duplicate.txt]" extension
+
+Relevant configuration:
+
+---%<-------------------------------------------------------------------------
+plugin {
+ sieve_extensions = +vnd.dovecot.execute
+
+ sieve_plugins = sieve_extprograms
+ sieve_execute_bin_dir = /usr/lib/dovecot/sieve-execute
+}
+---%<-------------------------------------------------------------------------
+
+The sieve script:
+
+---%<-------------------------------------------------------------------------
+require ["variables", "copy", "envelope", "vnd.dovecot.execute"];
+
+# put the envelope-from address in a variable
+if envelope :matches "from" "*" { set "from" "${1}"; }
+
+# execute the vacationcheck.sh program and redirect the message based on its
+exit code
+if execute :output "vacation_message" "vacationcheck.sh" ["${from}","300"]
+{
+ redirect
+      :copy "foo@bar.net";
+}
+---%<-------------------------------------------------------------------------
+
+At the location '/usr/lib/dovecot/sieve-execute', create the executable script
+'vacationcheck.sh'. In this example, the 'vacationcheck.sh' script needs two
+parameters: the sender address and a time interval specified in seconds. The
+time interval is used to specify the minimum amount of time that needs to have
+passed since the sender was last seen. If the script returns exit code 0, then
+message is redirected in the Sieve script shown above.
+
+---%<-------------------------------------------------------------------------
+USER=postfixadmin
+PASS=pass
+DATABASE=postfixadmin
+
+# DB STRUCTURE
+#CREATE TABLE `sieve_count` (
+#  `from_addres` varchar(254) NOT NULL,
+#  `date` datetime NOT NULL
+#) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+#
+#ALTER TABLE `sieve_count`
+#  ADD KEY `from_addres` (`from_addres`);
+
+MAILS=$(mysql -u$USER -p$PASS $DATABASE --batch --silent -e "SELECT count(*) as
+ile FROM sieve_count WHERE from_addres='$1' AND DATE_SUB(now(),INTERVAL $2
+SECOND) < date;")
+ADDRESULT=$(mysql -u$USER -p$PASS $DATABASE --batch --silent -e "INSERT INTO
+sieve_count (from_addres, date) VALUES ('$1', NOW());")
+
+# uncoment below to debug
+# echo Uset $1 sent $MAILS in last $2 s >>
+/usr/lib/dovecot/sieve-pipe/output.txt
+# echo Add result : $ADDRESULT >> /usr/lib/dovecot/sieve-pipe/output.txt
+# echo $MAILS
+
+if [ "$MAILS" = "0" ]
+then
+exit 0
+fi
+
+exit 1
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2017-05-30 16:30)

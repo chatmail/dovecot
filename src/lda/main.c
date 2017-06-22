@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -196,7 +196,7 @@ lda_raw_mail_open(struct mail_deliver_context *ctx, const char *path)
 	}
 	if (ret < 0) {
 		i_fatal("Can't open delivery mail as raw: %s",
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 	}
 	mail_user_unref(&raw_mail_user);
 
@@ -310,7 +310,7 @@ int main(int argc, char *argv[])
 		MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR,
 		&argc, &argv, "a:d:ef:m:p:r:");
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	ctx.session = mail_deliver_session_init();
 	ctx.pool = ctx.session->pool;
 	ctx.dest_mailbox_name = "INBOX";
@@ -399,7 +399,7 @@ int main(int argc, char *argv[])
 	}
 	master_service_init_finish(master_service);
 
-	memset(&service_input, 0, sizeof(service_input));
+	i_zero(&service_input);
 	service_input.module = "lda";
 	service_input.service = "lda";
 	service_input.username = user;
@@ -408,6 +408,7 @@ int main(int argc, char *argv[])
 		MAIL_STORAGE_SERVICE_FLAG_USE_SYSEXITS;
 	storage_service = mail_storage_service_init(master_service, set_roots,
 						    service_flags);
+	mail_deliver_hooks_init();
 	/* set before looking up the user (or ideally we'd do this between
 	   _lookup() and _next(), but don't bother) */
 	ctx.delivery_time_started = ioloop_timeval;
@@ -490,7 +491,7 @@ int main(int argc, char *argv[])
 	mail_user_unref(&ctx.dest_user);
 	mail_deliver_session_deinit(&ctx.session);
 
-	mail_storage_service_user_free(&service_user);
+	mail_storage_service_user_unref(&service_user);
 	mail_storage_service_deinit(&storage_service);
 	master_service_deinit(&master_service);
         return EX_OK;

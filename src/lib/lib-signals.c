@@ -1,11 +1,13 @@
-/* Copyright (c) 2001-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2001-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
 #include "fd-close-on-exec.h"
 #include "fd-set-nonblock.h"
+#include "write-full.h"
 #include "lib-signals.h"
 
+#include <stdio.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -108,7 +110,7 @@ static void sig_handler(int signo)
 
 	if (si == NULL) {
 		/* Solaris can leave this to NULL */
-		memset(&tmp_si, 0, sizeof(tmp_si));
+		i_zero(&tmp_si);
 		tmp_si.si_signo = signo;
 		tmp_si.si_code = SI_NOINFO;
 		si = &tmp_si;
@@ -132,7 +134,7 @@ static void sig_handler(int signo)
 			pending_signals[signo] = *si;
 			if (!have_pending_signals) {
 				if (write(sig_pipe_fd[1], &c, 1) != 1)
-					i_error("write(sigpipe) failed: %m");
+					lib_signals_syscall_error("signal: write(sigpipe) failed: ");
 				have_pending_signals = TRUE;
 			}
 		}
@@ -309,6 +311,26 @@ void lib_signals_reset_ioloop(void)
 		io_remove(&io_sig);
 		io_sig = io_add(sig_pipe_fd[0], IO_READ,
 				signal_read, (void *)NULL);
+	}
+}
+
+void lib_signals_syscall_error(const char *prefix)
+{
+	/* @UNSAFE: We're in a signal handler. It's very limited what is
+	   allowed in here. Especially strerror() isn't at least officially
+	   allowed. */
+	char errno_buf[MAX_INT_STRLEN], *errno_str;
+	errno_str = dec2str_buf(errno_buf, errno);
+
+	size_t prefix_len = strlen(prefix);
+	size_t errno_str_len = strlen(errno_str);
+	char buf[prefix_len + errno_str_len + 1];
+
+	memcpy(buf, prefix, prefix_len);
+	memcpy(buf + prefix_len, errno_str, errno_str_len);
+	buf[prefix_len + errno_str_len] = '\n';
+	if (write_full(STDERR_FILENO, buf, prefix_len + errno_str_len + 1) < 0) {
+		/* can't really do anything */
 	}
 }
 

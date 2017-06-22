@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -113,6 +113,8 @@ static const struct setting_define auth_passdb_setting_defines[] = {
 	DEF(SET_STR, args),
 	DEF(SET_STR, default_fields),
 	DEF(SET_STR, override_fields),
+	DEF(SET_STR, mechanisms),
+	DEF(SET_STR, username_filter),
 
 	DEF(SET_ENUM, skip),
 	DEF(SET_ENUM, result_success),
@@ -133,6 +135,8 @@ static const struct auth_passdb_settings auth_passdb_default_settings = {
 	.args = "",
 	.default_fields = "",
 	.override_fields = "",
+	.mechanisms = "",
+	.username_filter = "",
 
 	.skip = "never:authenticated:unauthenticated",
 	.result_success = "return-ok:return:return-fail:continue:continue-ok:continue-fail",
@@ -265,6 +269,9 @@ static const struct setting_define auth_setting_defines[] = {
 	DEF_NOPREFIX(SET_UINT, first_valid_uid),
 	DEF_NOPREFIX(SET_UINT, last_valid_uid),
 
+	DEF_NOPREFIX(SET_STR, ssl_client_ca_dir),
+	DEF_NOPREFIX(SET_STR, ssl_client_ca_file),
+
 	SETTING_DEFINE_LIST_END
 };
 
@@ -291,7 +298,7 @@ static const struct auth_settings auth_default_settings = {
 	.policy_server_timeout_msecs = 2000,
 	.policy_hash_mech = "sha256",
 	.policy_hash_nonce = "",
-	.policy_request_attributes = "login=%{orig_username} pwhash=%{hashed_password} remote=%{real_rip}",
+	.policy_request_attributes = "login=%{orig_username} pwhash=%{hashed_password} remote=%{real_rip} device_id=%{client_id} protocol=%s",
 	.policy_reject_on_fail = FALSE,
 	.policy_hash_truncate = 12,
 
@@ -302,6 +309,9 @@ static const struct auth_settings auth_default_settings = {
 	.verbose_passwords = "no",
 	.ssl_require_client_cert = FALSE,
 	.ssl_username_from_cert = FALSE,
+	.ssl_client_ca_dir = "",
+	.ssl_client_ca_file = "",
+
 	.use_winbind = FALSE,
 
 	.worker_max_count = 30,
@@ -507,7 +517,7 @@ auth_settings_read(const char *service, pool_t pool,
 	const char *error;
 	void **sets;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.roots = set_roots;
 	input.module = "auth";
 	input.service = service;

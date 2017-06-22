@@ -117,14 +117,17 @@ am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
 am__EXEEXT_1 = test-imap-bodystructure$(EXEEXT) \
-	test-imap-match$(EXEEXT) test-imap-parser$(EXEEXT) \
-	test-imap-quote$(EXEEXT) test-imap-url$(EXEEXT) \
-	test-imap-utf7$(EXEEXT) test-imap-util$(EXEEXT)
+	test-imap-envelope$(EXEEXT) test-imap-match$(EXEEXT) \
+	test-imap-parser$(EXEEXT) test-imap-quote$(EXEEXT) \
+	test-imap-url$(EXEEXT) test-imap-utf7$(EXEEXT) \
+	test-imap-util$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am_test_imap_bodystructure_OBJECTS =  \
 	test-imap-bodystructure.$(OBJEXT)
 test_imap_bodystructure_OBJECTS =  \
 	$(am_test_imap_bodystructure_OBJECTS)
+am_test_imap_envelope_OBJECTS = test-imap-envelope.$(OBJEXT)
+test_imap_envelope_OBJECTS = $(am_test_imap_envelope_OBJECTS)
 am_test_imap_match_OBJECTS = test-imap-match.$(OBJEXT)
 test_imap_match_OBJECTS = $(am_test_imap_match_OBJECTS)
 am_test_imap_parser_OBJECTS = test-imap-parser.$(OBJEXT)
@@ -172,11 +175,13 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libimap_la_SOURCES) $(test_imap_bodystructure_SOURCES) \
-	$(test_imap_match_SOURCES) $(test_imap_parser_SOURCES) \
-	$(test_imap_quote_SOURCES) $(test_imap_url_SOURCES) \
-	$(test_imap_utf7_SOURCES) $(test_imap_util_SOURCES)
+	$(test_imap_envelope_SOURCES) $(test_imap_match_SOURCES) \
+	$(test_imap_parser_SOURCES) $(test_imap_quote_SOURCES) \
+	$(test_imap_url_SOURCES) $(test_imap_utf7_SOURCES) \
+	$(test_imap_util_SOURCES)
 DIST_SOURCES = $(libimap_la_SOURCES) \
-	$(test_imap_bodystructure_SOURCES) $(test_imap_match_SOURCES) \
+	$(test_imap_bodystructure_SOURCES) \
+	$(test_imap_envelope_SOURCES) $(test_imap_match_SOURCES) \
 	$(test_imap_parser_SOURCES) $(test_imap_quote_SOURCES) \
 	$(test_imap_url_SOURCES) $(test_imap_utf7_SOURCES) \
 	$(test_imap_util_SOURCES)
@@ -471,6 +476,7 @@ pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
 test_programs = \
 	test-imap-bodystructure \
+	test-imap-envelope \
 	test-imap-match \
 	test-imap-parser \
 	test-imap-quote \
@@ -486,6 +492,9 @@ test_deps = $(noinst_LTLIBRARIES) $(test_libs)
 test_imap_bodystructure_SOURCES = test-imap-bodystructure.c
 test_imap_bodystructure_LDADD = imap-bodystructure.lo imap-envelope.lo imap-quote.lo imap-parser.lo imap-arg.lo ../lib-mail/libmail.la $(test_libs)
 test_imap_bodystructure_DEPENDENCIES = $(test_deps) ../lib-mail/libmail.la
+test_imap_envelope_SOURCES = test-imap-envelope.c
+test_imap_envelope_LDADD = imap-envelope.lo imap-quote.lo imap-parser.lo imap-arg.lo ../lib-mail/libmail.la $(test_libs)
+test_imap_envelope_DEPENDENCIES = $(test_deps) ../lib-mail/libmail.la
 test_imap_match_SOURCES = test-imap-match.c
 test_imap_match_LDADD = imap-match.lo $(test_libs)
 test_imap_match_DEPENDENCIES = $(test_deps)
@@ -565,6 +574,10 @@ test-imap-bodystructure$(EXEEXT): $(test_imap_bodystructure_OBJECTS) $(test_imap
 	@rm -f test-imap-bodystructure$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_imap_bodystructure_OBJECTS) $(test_imap_bodystructure_LDADD) $(LIBS)
 
+test-imap-envelope$(EXEEXT): $(test_imap_envelope_OBJECTS) $(test_imap_envelope_DEPENDENCIES) $(EXTRA_test_imap_envelope_DEPENDENCIES) 
+	@rm -f test-imap-envelope$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_imap_envelope_OBJECTS) $(test_imap_envelope_LDADD) $(LIBS)
+
 test-imap-match$(EXEEXT): $(test_imap_match_OBJECTS) $(test_imap_match_DEPENDENCIES) $(EXTRA_test_imap_match_DEPENDENCIES) 
 	@rm -f test-imap-match$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_imap_match_OBJECTS) $(test_imap_match_LDADD) $(LIBS)
@@ -610,6 +623,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-utf7.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-bodystructure.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-envelope.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-match.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-quote.Po@am__quote@

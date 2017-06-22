@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -78,6 +78,7 @@ struct mail_log_user {
 
 	enum mail_log_field fields;
 	enum mail_log_event events;
+	bool cached_only;
 };
 
 struct mail_log_message {
@@ -165,6 +166,9 @@ static void mail_log_mail_user_created(struct mail_user *user)
 	str = mail_user_plugin_getenv(user, "mail_log_events");
 	muser->events = str == NULL ? MAIL_LOG_DEFAULT_EVENTS :
 		mail_log_parse_events(str);
+
+	muser->cached_only =
+		mail_user_plugin_getenv(user, "mail_log_cached_only") != NULL;
 }
 
 static void mail_log_append_mailbox_name(string_t *str, struct mail *mail)
@@ -333,7 +337,12 @@ mail_log_append_mail_message(struct mail_log_mail_txn_context *ctx,
 	}
 
 	T_BEGIN {
+		enum mail_lookup_abort orig_lookup_abort = mail->lookup_abort;
+
+		if (event != MAIL_LOG_EVENT_SAVE && muser->cached_only)
+			mail->lookup_abort = MAIL_LOOKUP_ABORT_NOT_IN_CACHE;
 		mail_log_append_mail_message_real(ctx, mail, event, desc);
+		mail->lookup_abort = orig_lookup_abort;
 	} T_END;
 }
 
@@ -381,9 +390,10 @@ static void mail_log_mail_expunge(void *txn, struct mail *mail)
 {
 	struct mail_log_mail_txn_context *ctx =
 		(struct mail_log_mail_txn_context *)txn;
-	
+	struct mail_private *p = (struct mail_private*)mail;
+
 	mail_log_append_mail_message(ctx, mail, MAIL_LOG_EVENT_EXPUNGE,
-				     "expunge");
+				     p->autoexpunged ? "autoexpunge" : "expunge");
 }
 
 static void mail_log_mail_update_flags(void *txn, struct mail *mail,

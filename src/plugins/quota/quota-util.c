@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "wildcard-match.h"
@@ -326,7 +326,7 @@ int quota_root_add_warning_rule(struct quota_root_settings *root_set,
 		q = rule_def;
 	}
 
-	memset(&rule, 0, sizeof(rule));
+	i_zero(&rule);
 	ret = quota_rule_parse_limits(root_set, &rule, t_strdup_until(q, p),
 				      rule_def, FALSE, error_r);
 	if (ret < 0)
@@ -384,18 +384,44 @@ int quota_root_parse_grace(struct quota_root_settings *root_set,
 
 bool quota_warning_match(const struct quota_warning_rule *w,
 			 uint64_t bytes_before, uint64_t bytes_current,
-			 uint64_t count_before, uint64_t count_current)
+			 uint64_t count_before, uint64_t count_current,
+			 const char **reason_r)
 {
 #define QUOTA_EXCEEDED(before, current, limit) \
 	((before) < (uint64_t)(limit) && (current) >= (uint64_t)(limit))
 	if (!w->reverse) {
 		/* over quota (default) */
-		return QUOTA_EXCEEDED(bytes_before, bytes_current, w->rule.bytes_limit) ||
-			QUOTA_EXCEEDED(count_before, count_current, w->rule.count_limit);
+		if (QUOTA_EXCEEDED(bytes_before, bytes_current, w->rule.bytes_limit)) {
+			*reason_r = t_strdup_printf("bytes=%llu -> %llu over limit %llu",
+				(unsigned long long)bytes_before,
+				(unsigned long long)bytes_current,
+				(unsigned long long)w->rule.bytes_limit);
+			return TRUE;
+		}
+		if (QUOTA_EXCEEDED(count_before, count_current, w->rule.count_limit)) {
+			*reason_r = t_strdup_printf("count=%llu -> %llu over limit %llu",
+				(unsigned long long)count_before,
+				(unsigned long long)count_current,
+				(unsigned long long)w->rule.count_limit);
+			return TRUE;
+		}
 	} else {
-		return QUOTA_EXCEEDED(bytes_current, bytes_before, w->rule.bytes_limit) ||
-			QUOTA_EXCEEDED(count_current, count_before, w->rule.count_limit);
+		if (QUOTA_EXCEEDED(bytes_current, bytes_before, w->rule.bytes_limit)) {
+			*reason_r = t_strdup_printf("bytes=%llu -> %llu below limit %llu",
+				(unsigned long long)bytes_before,
+				(unsigned long long)bytes_current,
+				(unsigned long long)w->rule.bytes_limit);
+			return TRUE;
+		}
+		if (QUOTA_EXCEEDED(count_current, count_before, w->rule.count_limit)) {
+			*reason_r = t_strdup_printf("count=%llu -> %llu below limit %llu",
+				(unsigned long long)count_before,
+				(unsigned long long)count_current,
+				(unsigned long long)w->rule.count_limit);
+			return TRUE;
+		}
 	}
+	return FALSE;
 }
 
 bool quota_transaction_is_over(struct quota_transaction_context *ctx,

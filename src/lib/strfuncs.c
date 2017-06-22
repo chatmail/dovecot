@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -14,6 +14,8 @@
 #define STRCONCAT_BUFSIZE 512
 
 const unsigned char uchar_nul = '\0';
+
+volatile int timing_safety_unoptimization;
 
 int i_snprintf(char *dest, size_t max_chars, const char *format, ...)
 {
@@ -114,7 +116,7 @@ char *t_noalloc_strdup_vprintf(const char *format, va_list args,
 #define SNPRINTF_INITIAL_EXTRA_SIZE 256
 	va_list args2;
 	char *tmp;
-	unsigned int init_size;
+	size_t init_size;
 	int ret;
 #ifdef DEBUG
 	int old_errno = errno;
@@ -213,16 +215,9 @@ char *p_strconcat(pool_t pool, const char *str1, ...)
 		if (ret != NULL)
 			t_buffer_alloc(len);
 	} else {
-		T_BEGIN {
-			temp = vstrconcat(str1, args, &len);
-			if (temp == NULL)
-				ret = NULL;
-			else {
-				t_buffer_alloc(len);
-				ret = p_malloc(pool, len);
-				memcpy(ret, temp, len);
-			}
-		} T_END;
+		temp = vstrconcat(str1, args, &len);
+		ret = p_malloc(pool, len);
+		memcpy(ret, temp, len);
 	}
 
 	va_end(args);
@@ -302,7 +297,7 @@ const char *t_strcut(const char *str, char cutchar)
 const char *t_str_replace(const char *str, char from, char to)
 {
 	char *out;
-	unsigned int i, len;
+	size_t i, len;
 
 	if (strchr(str, from) == NULL)
 		return str;
@@ -479,6 +474,21 @@ int bsearch_strcasecmp(const char *key, const char *const *member)
 int i_strcasecmp_p(const char *const *p1, const char *const *p2)
 {
 	return strcasecmp(*p1, *p2);
+}
+
+bool mem_equals_timing_safe(const void *p1, const void *p2, size_t size)
+{
+	const unsigned char *s1 = p1, *s2 = p2;
+	size_t i;
+	int ret = 0;
+
+	for (i = 0; i < size; i++)
+		ret |= s1[i] ^ s2[i];
+
+	/* make sure the compiler optimizer doesn't try to break out of the
+	   above loop early. */
+	timing_safety_unoptimization = ret;
+	return ret == 0;
 }
 
 static char **
@@ -705,6 +715,7 @@ const char **p_strarray_dup(pool_t pool, const char *const *arr)
 	char *p;
 	size_t len, size = sizeof(const char *);
 
+	/* @UNSAFE: integer overflow checks are missing */
 	for (i = 0; arr[i] != NULL; i++)
 		size += sizeof(const char *) + strlen(arr[i]) + 1;
 
@@ -722,12 +733,14 @@ const char **p_strarray_dup(pool_t pool, const char *const *arr)
 
 const char *dec2str(uintmax_t number)
 {
-	char *buffer;
+	return dec2str_buf(t_malloc(MAX_INT_STRLEN), number);
+}
+
+char *dec2str_buf(char buffer[STATIC_ARRAY MAX_INT_STRLEN], uintmax_t number)
+{
 	int pos;
 
 	pos = MAX_INT_STRLEN;
-	buffer = t_malloc(pos);
-
 	buffer[--pos] = '\0';
 	do {
 		buffer[--pos] = (number % 10) + '0';

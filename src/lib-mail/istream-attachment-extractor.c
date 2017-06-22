@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -59,7 +59,6 @@ struct attachment_istream {
 	struct attachment_istream_part part;
 
 	bool retry_read;
-	bool failed;
 };
 
 static void stream_add_data(struct attachment_istream *astream,
@@ -139,7 +138,7 @@ static bool astream_want_attachment(struct attachment_istream *astream,
 	if (astream->set.want_attachment == NULL)
 		return TRUE;
 
-	memset(&ahdr, 0, sizeof(ahdr));
+	i_zero(&ahdr);
 	ahdr.part = part;
 	ahdr.content_type = astream->part.content_type;
 	ahdr.content_disposition = astream->part.content_disposition;
@@ -462,7 +461,7 @@ astream_part_finish(struct attachment_istream *astream, const char **error_r)
 		return -1;
 	}
 
-	memset(&info, 0, sizeof(info));
+	i_zero(&info);
 	info.start_offset = astream->part.start_offset;
 	/* base64_bytes contains how many valid base64 bytes there are so far.
 	   if the base64 ends properly, it'll specify how much of the MIME part
@@ -544,7 +543,7 @@ static void astream_part_reset(struct attachment_istream *astream)
 	if (part->part_buf != NULL)
 		buffer_free(&part->part_buf);
 
-	memset(part, 0, sizeof(*part));
+	i_zero(part);
 	part->temp_fd = -1;
 	hash_format_reset(astream->set.hash_format);
 }
@@ -599,11 +598,6 @@ static int astream_read_next(struct attachment_istream *astream, bool *retry_r)
 	if (stream->pos - stream->skip >= i_stream_get_max_buffer_size(&stream->istream))
 		return -2;
 
-	if (astream->failed) {
-		stream->istream.stream_errno = EINVAL;
-		return -1;
-	}
-
 	old_size = stream->pos - stream->skip;
 	switch (message_parser_parse_next_block(astream->parser, &block)) {
 	case -1:
@@ -619,8 +613,7 @@ static int astream_read_next(struct attachment_istream *astream, bool *retry_r)
 
 		if (ret < 0) {
 			io_stream_set_error(&stream->iostream, "%s", error);
-			stream->istream.stream_errno = EINVAL;
-			astream->failed = TRUE;
+			stream->istream.stream_errno = EIO;
 		}
 		astream->cur_part = NULL;
 		return -1;
@@ -635,8 +628,7 @@ static int astream_read_next(struct attachment_istream *astream, bool *retry_r)
 		/* end of a MIME part */
 		if (astream_end_of_part(astream, &error) < 0) {
 			io_stream_set_error(&stream->iostream, "%s", error);
-			stream->istream.stream_errno = EINVAL;
-			astream->failed = TRUE;
+			stream->istream.stream_errno = EIO;
 			return -1;
 		}
 	}

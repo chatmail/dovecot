@@ -160,7 +160,7 @@ Variables and domains
 ---------------------
 
 User names and domains may be distinguished using the <Variables.txt> %n and
-%d.  They split the /previous username/ at the "@" character.  The /prevous
+%d.  They split the /previous username/ at the "@" character.  The /previous
 username/ is:
 
  * For LMTP, it will be user@hostname, where hostname depends on e.g. the
@@ -178,4 +178,4 @@ will be used for
  * %u and %d variables in other parts of the configuration (e.g. quota file
    names)
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

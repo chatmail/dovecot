@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -20,6 +20,12 @@ static int raw_sync(struct raw_mailbox *mbox)
 	sync_flags = index_storage_get_sync_flags(&mbox->box) |
 		MAIL_INDEX_SYNC_FLAG_FLUSH_DIRTY |
 		MAIL_INDEX_SYNC_FLAG_REQUIRE_CHANGES;
+
+	if (mail_index_view_get_messages_count(mbox->box.view) > 0) {
+		/* already-synced index was opened via
+		   mail-index-alloc-cache. */
+		return 0;
+	}
 
 	ret = mail_index_sync_begin(mbox->box.index, &index_sync_ctx,
 				    &sync_view, &trans, sync_flags);

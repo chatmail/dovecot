@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -11,6 +11,8 @@ bool http_request_has_connection_option(const struct http_request *req,
 {
 	const char *const *opt_idx;
 
+	if (!array_is_created(&req->connection_options))
+		return FALSE;
 	array_foreach(&req->connection_options, opt_idx) {
 		if (strcasecmp(*opt_idx, option) == 0)
 			return TRUE;

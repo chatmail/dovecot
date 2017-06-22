@@ -30,13 +30,13 @@
 #include <sys/time.h>
 
 #define MAILBOX_LIST_INDEX_HIERARHCY_SEP '~'
-#define MAILBOX_LIST_INDEX_PREFIX "dovecot.list.index"
 
 #define INDEX_LIST_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, mailbox_list_index_module)
 
 struct mail_index_view;
 struct mailbox_index_vsize;
+struct mailbox_vfuncs;
 
 /* stored in mail_index_record.flags: */
 enum mailbox_list_index_flags {
@@ -81,8 +81,10 @@ struct mailbox_list_index_node {
 
 	uint32_t name_id, uid;
 	enum mailbox_list_index_flags flags;
-	/* parent_uid is corrupted on disk - need to update it */
-	bool corrupted_parent;
+	/* extension data is corrupted on disk - need to update it */
+	bool corrupted_ext;
+	/* flags are corrupted on disk - need to update it */
+	bool corrupted_flags;
 	const char *name;
 };
 
@@ -129,7 +131,7 @@ struct mailbox_list_index_iterate_context {
 	struct mailbox_info info;
 	pool_t info_pool;
 
-	unsigned int parent_len;
+	size_t parent_len;
 	string_t *path;
 	struct mailbox_list_index_node *next_node;
 
@@ -196,9 +198,11 @@ int mailbox_list_index_notify_next(struct mailbox_list_notify *notify,
 void mailbox_list_index_notify_wait(struct mailbox_list_notify *notify,
 				    void (*callback)(void *context),
 				    void *context);
+void mailbox_list_index_notify_flush(struct mailbox_list_notify *notify);
 
-void mailbox_list_index_status_init_mailbox(struct mailbox *box);
-void mailbox_list_index_backend_init_mailbox(struct mailbox *box);
+void mailbox_list_index_status_init_mailbox(struct mailbox_vfuncs *v);
+void mailbox_list_index_backend_init_mailbox(struct mailbox *box,
+					     struct mailbox_vfuncs *v);
 void mailbox_list_index_status_init_finish(struct mailbox_list *list);
 
 #endif

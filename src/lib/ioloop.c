@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -779,6 +779,9 @@ void io_loop_set_current(struct ioloop *ioloop)
 	io_switch_callback_t *const *callbackp;
 	struct ioloop *prev_ioloop = current_ioloop;
 
+	if (ioloop == current_ioloop)
+		return;
+
 	current_ioloop = ioloop;
 	if (array_is_created(&io_switch_callbacks)) {
 		array_foreach(&io_switch_callbacks, callbackp)
@@ -856,7 +859,7 @@ void io_loop_context_add_callbacks(struct ioloop_context *ctx,
 {
 	struct ioloop_context_callback cb;
 
-	memset(&cb, 0, sizeof(cb));
+	i_zero(&cb);
 	cb.activate = activate;
 	cb.deactivate = deactivate;
 	cb.context = context;

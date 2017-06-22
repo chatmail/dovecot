@@ -1,7 +1,8 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
+#include "strescape.h"
 #include "net.h"
 #include "eacces-error.h"
 #include "istream.h"
@@ -56,6 +57,8 @@ o_stream_mail_filter_sendv(struct ostream_private *stream,
 	/* send the data to the filter */
 	ret = o_stream_sendv(mstream->ext_out, iov, iov_count);
 	if (ret < 0) {
+		io_stream_set_error(&stream->iostream, "%s",
+				    o_stream_get_error(mstream->ext_out));
 		stream->ostream.stream_errno =
 			mstream->ext_out->stream_errno;
 		return -1;
@@ -98,10 +101,13 @@ static int o_stream_mail_filter_flush(struct ostream_private *stream)
 		/* EOF without any input -> assume the script is repoting
 		   failure. pretty ugly way, but currently there's no error
 		   reporting channel. */
+		io_stream_set_error(&stream->iostream, "EOF without input");
 		stream->ostream.stream_errno = EIO;
 		return -1;
 	}
 	if (mstream->ext_in->stream_errno != 0) {
+		io_stream_set_error(&stream->iostream, "%s",
+				    i_stream_get_error(mstream->ext_in));
 		stream->ostream.stream_errno = mstream->ext_in->stream_errno;
 		return -1;
 	}
@@ -125,12 +131,12 @@ static int filter_connect(struct mail_filter_ostream *mstream,
 
 	if ((fd = net_connect_unix_with_retries(socket_path, 1000)) < 0) {
 		if (errno == EACCES) {
-			i_error("ext-filter: %s",
+			io_stream_set_error(&mstream->ostream.iostream, "%s",
 				eacces_error_get("net_connect_unix",
 						 socket_path));
 		} else {
-			i_error("ext-filter: net_connect_unix(%s) failed: %m",
-				socket_path);
+			io_stream_set_error(&mstream->ostream.iostream,
+				"net_connect_unix(%s) failed: %m", socket_path);
 		}
 		return -1;
 	}
@@ -141,14 +147,25 @@ static int filter_connect(struct mail_filter_ostream *mstream,
 	mstream->ext_out = o_stream_create_fd(fd, 0, FALSE);
 
 	str = t_str_new(256);
-	str_append(str, "VERSION\tscript\t3\t0\nnoreply\n");
+	str_append(str, "VERSION\tscript\t4\t0\nnoreply\n");
 	for (; *argv != NULL; argv++) {
-		str_append(str, *argv);
-		str_append_c(str, '\n');
+		str_append_tabescaped(str, *argv);
+		str_append_c(str, '\t');
 	}
 	str_append_c(str, '\n');
 
-	o_stream_send(mstream->ext_out, str_data(str), str_len(str));
+	ssize_t ret = o_stream_send(mstream->ext_out, str_data(str), str_len(str));
+	if (ret < 0) {
+		io_stream_set_error(&mstream->ostream.iostream, "%s",
+				    o_stream_get_error(mstream->ext_out));
+		mstream->ostream.ostream.stream_errno =
+			mstream->ext_out->stream_errno;
+	} else if ((size_t)ret != str_len(str)) {
+		io_stream_set_error(&mstream->ostream.iostream,
+			"write(%s): Wrote only %"PRIuSIZE_T" of %"PRIuSIZE_T" bytes",
+			socket_path, (size_t)ret, str_len(str));
+		mstream->ostream.ostream.stream_errno = ENOBUFS;
+	}
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -99,7 +99,7 @@ int mbox_from_parse(const unsigned char *msg, size_t size,
 	if (msg+29-3-5 > msg_end)
 		return -1;
 
-	memset(&tm, 0, sizeof(tm));
+	i_zero(&tm);
 
 	/* skip weekday */
 	msg += 4;

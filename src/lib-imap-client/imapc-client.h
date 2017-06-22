@@ -10,8 +10,12 @@ enum imapc_command_state {
 	IMAPC_COMMAND_STATE_OK,
 	IMAPC_COMMAND_STATE_NO,
 	IMAPC_COMMAND_STATE_BAD,
+	/* Authentication to IMAP server failed (NO or BAD) */
+	IMAPC_COMMAND_STATE_AUTH_FAILED,
+	/* Client was unexpectedly disconnected. */
 	IMAPC_COMMAND_STATE_DISCONNECTED
 };
+extern const char *imapc_command_state_names[];
 
 enum imapc_capability {
 	IMAPC_CAPABILITY_SASL_IR	= 0x01,
@@ -27,6 +31,7 @@ enum imapc_capability {
 	IMAPC_CAPABILITY_UNSELECT	= 0x400,
 	IMAPC_CAPABILITY_ESEARCH	= 0x800,
 	IMAPC_CAPABILITY_WITHIN		= 0x1000,
+	IMAPC_CAPABILITY_QUOTA		= 0x2000,
 
 	IMAPC_CAPABILITY_IMAP4REV1	= 0x40000000
 };
@@ -45,7 +50,11 @@ enum imapc_command_flags {
 	IMAPC_COMMAND_FLAG_PRELOGIN	= 0x02,
 	/* Allow command to be automatically retried if disconnected before it
 	   finishes. */
-	IMAPC_COMMAND_FLAG_RETRIABLE	= 0x04
+	IMAPC_COMMAND_FLAG_RETRIABLE	= 0x04,
+	/* This is the LOGOUT command. Use a small timeout for it. */
+	IMAPC_COMMAND_FLAG_LOGOUT	= 0x08,
+	/* Command is being resent after a reconnection. */
+	IMAPC_COMMAND_FLAG_RECONNECTED	= 0x10
 };
 
 enum imapc_client_ssl_mode {
@@ -90,6 +99,11 @@ struct imapc_client_settings {
 
 	/* Timeout for logging in. 0 = default. */
 	unsigned int connect_timeout_msecs;
+	/* Number of retries, -1 = infinity */
+	unsigned int connect_retry_count;
+	/* Interval between retries, must be > 0 if retries > 0 */
+	unsigned int connect_retry_interval_msecs;
+
 	/* Timeout for IMAP commands. Reset every time more data is being
 	   sent or received. 0 = default. */
 	unsigned int cmd_timeout_msecs;
@@ -146,21 +160,36 @@ struct imapc_untagged_reply {
 	void *untagged_box_context;
 };
 
+enum imapc_state_change_event {
+	IMAPC_STATE_CHANGE_AUTH_OK,
+	IMAPC_STATE_CHANGE_AUTH_FAILED,
+};
+
 /* Called when tagged reply is received for command. */
 typedef void imapc_command_callback_t(const struct imapc_command_reply *reply,
 				      void *context);
 /* Called each time untagged input is received. */
 typedef void imapc_untagged_callback_t(const struct imapc_untagged_reply *reply,
 				       void *context);
+typedef void imapc_state_change_callback_t(void *context,
+					   enum imapc_state_change_event event,
+					   const char *error);
 
 struct imapc_client *
 imapc_client_init(const struct imapc_client_settings *set);
 void imapc_client_disconnect(struct imapc_client *client);
 void imapc_client_deinit(struct imapc_client **client);
 
+/* Set login callback, must be set before calling other commands.
+   This is called only for the first login, not for any reconnects or if there
+   are multiple connections created. */
+void
+imapc_client_set_login_callback(struct imapc_client *client,
+				imapc_command_callback_t *callback, void *context);
 /* Explicitly login to server (also done automatically). */
-void imapc_client_login(struct imapc_client *client,
-			imapc_command_callback_t *callback, void *context);
+void imapc_client_login(struct imapc_client *client);
+/* Send a LOGOUT and wait for disconnection. */
+void imapc_client_logout(struct imapc_client *client);
 
 struct imapc_command *
 imapc_client_cmd(struct imapc_client *client,
@@ -192,7 +221,8 @@ void imapc_client_mailbox_set_reopen_cb(struct imapc_client_mailbox *box,
 					void *context);
 void imapc_client_mailbox_close(struct imapc_client_mailbox **box);
 bool imapc_client_mailbox_can_reconnect(struct imapc_client_mailbox *box);
-void imapc_client_mailbox_reconnect(struct imapc_client_mailbox *box);
+void imapc_client_mailbox_reconnect(struct imapc_client_mailbox *box,
+				    const char *errmsg);
 struct imapc_command *
 imapc_client_mailbox_cmd(struct imapc_client_mailbox *box,
 			 imapc_command_callback_t *callback, void *context);
@@ -202,10 +232,14 @@ imapc_client_mailbox_get_msgmap(struct imapc_client_mailbox *box);
 void imapc_client_mailbox_idle(struct imapc_client_mailbox *box);
 bool imapc_client_mailbox_is_opened(struct imapc_client_mailbox *box);
 
-enum imapc_capability
-imapc_client_get_capabilities(struct imapc_client *client);
+int imapc_client_get_capabilities(struct imapc_client *client,
+				  enum imapc_capability *capabilities_r);
 
 int imapc_client_create_temp_fd(struct imapc_client *client,
 				const char **path_r);
+
+void imapc_client_register_state_change_callback(struct imapc_client *client,
+						 imapc_state_change_callback_t *cb,
+						 void *context);
 
 #endif

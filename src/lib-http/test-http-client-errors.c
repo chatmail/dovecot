@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -84,6 +84,218 @@ static void test_run_client_server(
 	ATTR_NULL(3);
 
 /*
+ * Unconfigured SSL
+ */
+
+/* client */
+
+struct _unconfigured_ssl {
+	unsigned int count;
+};
+
+static void
+test_client_unconfigured_ssl_response(
+	const struct http_response *resp,
+	struct _unconfigured_ssl *ctx)
+{
+	if (debug)
+		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
+
+	test_assert(resp->status == HTTP_CLIENT_REQUEST_ERROR_CONNECT_FAILED);
+	test_assert(resp->reason != NULL && *resp->reason != '\0');
+
+	if (--ctx->count == 0) {
+		i_free(ctx);
+		io_loop_stop(ioloop);
+	}
+}
+
+static bool
+test_client_unconfigured_ssl(const struct http_client_settings *client_set)
+{
+	struct http_client_request *hreq;
+	struct _unconfigured_ssl *ctx;
+
+	ctx = i_new(struct _unconfigured_ssl, 1);
+	ctx->count = 2;
+
+	http_client = http_client_init(client_set);
+
+	hreq = http_client_request(http_client,
+		"GET", "127.0.0.1", "/unconfigured-ssl.txt",
+		test_client_unconfigured_ssl_response, ctx);
+	http_client_request_set_ssl(hreq, TRUE);
+	http_client_request_submit(hreq);
+
+	hreq = http_client_request(http_client,
+		"GET", "127.0.0.1", "/unconfigured-ssl2.txt",
+		test_client_unconfigured_ssl_response, ctx);
+	http_client_request_set_ssl(hreq, TRUE);
+	http_client_request_submit(hreq);
+
+	return TRUE;
+}
+
+/* test */
+
+static void test_unconfigured_ssl(void)
+{
+	struct http_client_settings http_client_set;
+
+	test_client_defaults(&http_client_set);
+
+	test_begin("unconfigured ssl");
+	test_run_client_server(&http_client_set,
+		test_client_unconfigured_ssl,
+		NULL, 0, NULL);
+	test_end();
+}
+
+/*
+ * Unconfigured SSL abort
+ */
+
+/* client */
+
+struct _unconfigured_ssl_abort {
+	unsigned int count;
+};
+
+static void
+test_client_unconfigured_ssl_abort_response1(
+	const struct http_response *resp,
+	struct _unconfigured_ssl_abort *ctx ATTR_UNUSED)
+{
+	if (debug)
+		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
+
+	test_out_quiet("inappropriate callback", FALSE);
+}
+
+static void
+test_client_unconfigured_ssl_abort_response2(
+	const struct http_response *resp,
+	struct _unconfigured_ssl_abort *ctx)
+{
+	if (debug)
+		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
+
+	test_assert(resp->status == HTTP_CLIENT_REQUEST_ERROR_CONNECT_FAILED);
+	test_assert(resp->reason != NULL && *resp->reason != '\0');
+
+	i_free(ctx);
+	io_loop_stop(ioloop);
+}
+
+static bool
+test_client_unconfigured_ssl_abort(const struct http_client_settings *client_set)
+{
+	struct http_client_request *hreq;
+	struct _unconfigured_ssl_abort *ctx;
+
+	ctx = i_new(struct _unconfigured_ssl_abort, 1);
+	ctx->count = 1;
+
+	http_client = http_client_init(client_set);
+
+	hreq = http_client_request(http_client,
+		"GET", "127.0.0.1", "/unconfigured-ssl.txt",
+		test_client_unconfigured_ssl_abort_response1, ctx);
+	http_client_request_set_ssl(hreq, TRUE);
+	http_client_request_submit(hreq);
+	http_client_request_abort(&hreq);
+
+	hreq = http_client_request(http_client,
+		"GET", "127.0.0.1", "/unconfigured-ssl2.txt",
+		test_client_unconfigured_ssl_abort_response2, ctx);
+	http_client_request_set_ssl(hreq, TRUE);
+	http_client_request_submit(hreq);
+
+	return TRUE;
+}
+
+/* test */
+
+static void test_unconfigured_ssl_abort(void)
+{
+	struct http_client_settings http_client_set;
+
+	test_client_defaults(&http_client_set);
+
+	test_begin("unconfigured ssl abort");
+	test_run_client_server(&http_client_set,
+		test_client_unconfigured_ssl_abort,
+		NULL, 0, NULL);
+	test_end();
+}
+
+/*
+ * Invalid URL
+ */
+
+/* client */
+
+struct _invalid_url {
+	unsigned int count;
+};
+
+static void
+test_client_invalid_url_response(
+	const struct http_response *resp,
+	struct _invalid_url *ctx)
+{
+	if (debug)
+		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
+
+	test_assert(resp->status == HTTP_CLIENT_REQUEST_ERROR_INVALID_URL);
+	test_assert(resp->reason != NULL && *resp->reason != '\0');
+
+	if (--ctx->count == 0) {
+		i_free(ctx);
+		io_loop_stop(ioloop);
+	}
+}
+
+static bool
+test_client_invalid_url(const struct http_client_settings *client_set)
+{
+	struct http_client_request *hreq;
+	struct _invalid_url *ctx;
+
+	ctx = i_new(struct _invalid_url, 1);
+	ctx->count = 2;
+
+	http_client = http_client_init(client_set);
+
+	hreq = http_client_request_url_str(http_client,
+		"GET", "imap://example.com/INBOX",
+		test_client_invalid_url_response, ctx);
+	http_client_request_submit(hreq);
+
+	hreq = http_client_request_url_str(http_client,
+		"GET", "http:/www.example.com",
+		test_client_invalid_url_response, ctx);
+	http_client_request_submit(hreq);
+
+	return TRUE;
+}
+
+/* test */
+
+static void test_invalid_url(void)
+{
+	struct http_client_settings http_client_set;
+
+	test_client_defaults(&http_client_set);
+
+	test_begin("invalid url");
+	test_run_client_server(&http_client_set,
+		test_client_invalid_url,
+		NULL, 0, NULL);
+	test_end();
+}
+
+/*
  * Host lookup failed
  */
 
@@ -165,6 +377,7 @@ test_server_connection_refused(unsigned int index ATTR_UNUSED)
 
 struct _connection_refused {
 	unsigned int count;
+	struct timeout *to;
 };
 
 static void
@@ -172,6 +385,10 @@ test_client_connection_refused_response(
 	const struct http_response *resp,
 	struct _connection_refused *ctx)
 {
+	test_assert(ctx->to == NULL);
+	if (ctx->to != NULL)
+		timeout_remove(&ctx->to);
+
 	if (debug)
 		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
 
@@ -184,6 +401,14 @@ test_client_connection_refused_response(
 	}
 }
 
+static void
+test_client_connection_refused_timeout(struct _connection_refused *ctx)
+{
+	if (debug)
+		i_debug("TIMEOUT (ok)");
+	timeout_remove(&ctx->to);
+}
+
 static bool
 test_client_connection_refused(const struct http_client_settings *client_set)
 {
@@ -192,6 +417,11 @@ test_client_connection_refused(const struct http_client_settings *client_set)
 
 	ctx = i_new(struct _connection_refused, 1);
 	ctx->count = 2;
+
+	if (client_set->max_connect_attempts > 0) {
+		ctx->to = timeout_add_short(250,
+			test_client_connection_refused_timeout, ctx);
+	}
 
 	http_client = http_client_init(client_set);
 
@@ -222,6 +452,118 @@ static void test_connection_refused(void)
 	test_run_client_server(&http_client_set,
 		test_client_connection_refused,
 		test_server_connection_refused, 1,
+		NULL);
+	test_end();
+
+	http_client_set.max_connect_attempts = 3;
+
+	test_begin("connection refused backoff");
+	test_run_client_server(&http_client_set,
+		test_client_connection_refused,
+		test_server_connection_refused, 1,
+		NULL);
+	test_end();
+}
+
+/*
+ * Connection lost prematurely
+ */
+
+/* server */
+
+static void
+test_server_connection_lost_prematurely_input(struct server_connection *conn)
+{
+	server_connection_deinit(&conn);
+}
+
+static void
+test_server_connection_lost_prematurely(unsigned int index)
+{
+	test_server_input = test_server_connection_lost_prematurely_input;
+	test_server_run(index);
+}
+
+/* client */
+
+struct _connection_lost_prematurely {
+	unsigned int count;
+	struct timeout *to;
+};
+
+static void
+test_client_connection_lost_prematurely_response(
+	const struct http_response *resp,
+	struct _connection_lost_prematurely *ctx)
+{
+	test_assert(ctx->to == NULL);
+	if (ctx->to != NULL)
+		timeout_remove(&ctx->to);
+
+	if (debug)
+		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
+
+	test_assert(resp->status == HTTP_CLIENT_REQUEST_ERROR_CONNECTION_LOST);
+	test_assert(resp->reason != NULL && *resp->reason != '\0');
+
+	if (--ctx->count == 0) {
+		i_free(ctx);
+		io_loop_stop(ioloop);
+	}
+}
+
+static void
+test_client_connection_lost_prematurely_timeout(
+	struct _connection_lost_prematurely *ctx)
+{
+	if (debug)
+		i_debug("TIMEOUT (ok)");
+	timeout_remove(&ctx->to);
+}
+
+static bool
+test_client_connection_lost_prematurely(const struct http_client_settings *client_set)
+{
+	struct http_client_request *hreq;
+	struct _connection_lost_prematurely *ctx;
+
+	ctx = i_new(struct _connection_lost_prematurely, 1);
+	ctx->count = 2;
+
+	ctx->to = timeout_add_short(250,
+		test_client_connection_lost_prematurely_timeout, ctx);
+
+	http_client = http_client_init(client_set);
+
+	hreq = http_client_request(http_client,
+		"GET", net_ip2addr(&bind_ip), "/connection-refused-retry.txt",
+		test_client_connection_lost_prematurely_response, ctx);
+	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_submit(hreq);
+
+	hreq = http_client_request(http_client,
+		"GET", net_ip2addr(&bind_ip), "/connection-refused-retry2.txt",
+		test_client_connection_lost_prematurely_response, ctx);
+	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_submit(hreq);
+
+	return TRUE;
+}
+
+/* test */
+
+static void test_connection_lost_prematurely(void)
+{
+	struct http_client_settings http_client_set;
+
+	test_client_defaults(&http_client_set);
+	http_client_set.max_connect_attempts = 3;
+	http_client_set.max_attempts = 3;
+
+	test_begin("connection lost prematurely");
+	test_run_client_server(&http_client_set,
+		test_client_connection_lost_prematurely,
+		test_server_connection_lost_prematurely, 1,
 		NULL);
 	test_end();
 }
@@ -1276,14 +1618,14 @@ static void test_server_request_timed_out(unsigned int index)
 
 /* client */
 
-struct _request_timed_out_ctx {
+struct _request_timed_out1_ctx {
 	unsigned int count;
 };
 
 static void
-test_client_request_timed_out_response(
+test_client_request_timed_out1_response(
 	const struct http_response *resp,
-	struct _request_timed_out_ctx *ctx)
+	struct _request_timed_out1_ctx *ctx)
 {
 	if (debug)
 		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
@@ -1298,26 +1640,97 @@ test_client_request_timed_out_response(
 }
 
 static bool
-test_client_request_timed_out(const struct http_client_settings *client_set)
+test_client_request_timed_out1(const struct http_client_settings *client_set)
 {
 	struct http_client_request *hreq;
-	struct _request_timed_out_ctx *ctx;
+	struct _request_timed_out1_ctx *ctx;
 
-	ctx = i_new(struct _request_timed_out_ctx, 1);
+	ctx = i_new(struct _request_timed_out1_ctx, 1);
 	ctx->count = 2;
 
 	http_client = http_client_init(client_set);
 
 	hreq = http_client_request(http_client,
-		"GET", net_ip2addr(&bind_ip), "/request-timed-out.txt",
-		test_client_request_timed_out_response, ctx);
+		"GET", net_ip2addr(&bind_ip), "/request-timed-out1-1.txt",
+		test_client_request_timed_out1_response, ctx);
 	http_client_request_set_port(hreq, bind_ports[0]);
 	http_client_request_submit(hreq);
 
 	hreq = http_client_request(http_client,
-		"GET", net_ip2addr(&bind_ip), "/request-timed-out2.txt",
-		test_client_request_timed_out_response, ctx);
+		"GET", net_ip2addr(&bind_ip), "/request-timed-out1-2.txt",
+		test_client_request_timed_out1_response, ctx);
 	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_submit(hreq);
+
+	return TRUE;
+}
+
+struct _request_timed_out2_ctx {
+	struct timeout *to;
+	unsigned int count;
+	unsigned int max_parallel_connections;
+};
+
+static void
+test_client_request_timed_out2_timeout(
+	struct _request_timed_out2_ctx *ctx)
+{
+	if (ctx->to != NULL)
+		timeout_remove(&ctx->to);
+	i_debug("TIMEOUT");
+}
+
+static void
+test_client_request_timed_out2_response(
+	const struct http_response *resp,
+	struct _request_timed_out2_ctx *ctx)
+{
+	if (debug)
+		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
+
+	test_assert(resp->status == HTTP_CLIENT_REQUEST_ERROR_TIMED_OUT);
+	test_assert(resp->reason != NULL && *resp->reason != '\0');
+	test_assert(ctx->to != NULL);
+
+	if (--ctx->count > 0) {
+		if (ctx->to != NULL && ctx->max_parallel_connections <= 1)
+			timeout_reset(ctx->to);
+	} else {
+		if (ctx->to != NULL)
+			timeout_remove(&ctx->to);
+		i_free(ctx);
+		io_loop_stop(ioloop);
+	}
+}
+
+static bool
+test_client_request_timed_out2(const struct http_client_settings *client_set)
+{
+	struct http_client_request *hreq;
+	struct _request_timed_out2_ctx *ctx;
+
+	ctx = i_new(struct _request_timed_out2_ctx, 1);
+	ctx->count = 2;
+	ctx->max_parallel_connections =
+		client_set->max_parallel_connections;
+
+	ctx->to = timeout_add(2000,
+		test_client_request_timed_out2_timeout, ctx);
+
+	http_client = http_client_init(client_set);
+
+	hreq = http_client_request(http_client,
+		"GET", net_ip2addr(&bind_ip), "/request-timed-out2-1.txt",
+		test_client_request_timed_out2_response, ctx);
+	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_set_attempt_timeout_msecs(hreq, 1000);
+	http_client_request_submit(hreq);
+
+	hreq = http_client_request(http_client,
+		"GET", net_ip2addr(&bind_ip), "/request-timed-out2-2.txt",
+		test_client_request_timed_out2_response, ctx);
+	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_set_attempt_timeout_msecs(hreq, 1000);
 	http_client_request_submit(hreq);
 
 	return TRUE;
@@ -1335,7 +1748,7 @@ static void test_request_timed_out(void)
 	http_client_set.request_timeout_msecs = 1000;
 	http_client_set.max_attempts = 1;
 	test_run_client_server(&http_client_set,
-		test_client_request_timed_out,
+		test_client_request_timed_out1,
 		test_server_request_timed_out, 1,
 		NULL);
 	test_end();
@@ -1344,7 +1757,7 @@ static void test_request_timed_out(void)
 	http_client_set.request_timeout_msecs = 1000;
 	http_client_set.max_attempts = 1;
 	test_run_client_server(&http_client_set,
-		test_client_request_timed_out,
+		test_client_request_timed_out1,
 		test_server_request_timed_out, 1,
 		NULL);
 	test_end();
@@ -1354,7 +1767,7 @@ static void test_request_timed_out(void)
 	http_client_set.request_absolute_timeout_msecs = 2000;
 	http_client_set.max_attempts = 3;
 	test_run_client_server(&http_client_set,
-		test_client_request_timed_out,
+		test_client_request_timed_out1,
 		test_server_request_timed_out, 1,
 		NULL);
 	test_end();
@@ -1364,7 +1777,29 @@ static void test_request_timed_out(void)
 	http_client_set.request_absolute_timeout_msecs = 2000;
 	http_client_set.max_attempts = 3;
 	test_run_client_server(&http_client_set,
-		test_client_request_timed_out,
+		test_client_request_timed_out1,
+		test_server_request_timed_out, 1,
+		NULL);
+	test_end();
+
+	test_begin("request timed out: specific timeout");
+	http_client_set.request_timeout_msecs = 3000;
+	http_client_set.request_absolute_timeout_msecs = 0;
+	http_client_set.max_attempts = 1;
+	http_client_set.max_parallel_connections = 1;
+	test_run_client_server(&http_client_set,
+		test_client_request_timed_out2,
+		test_server_request_timed_out, 1,
+		NULL);
+	test_end();
+
+	test_begin("request timed out: specific timeout (parallel)");
+	http_client_set.request_timeout_msecs = 3000;
+	http_client_set.request_absolute_timeout_msecs = 0;
+	http_client_set.max_attempts = 1;
+	http_client_set.max_parallel_connections = 4;
+	test_run_client_server(&http_client_set,
+		test_client_request_timed_out2,
 		test_server_request_timed_out, 1,
 		NULL);
 	test_end();
@@ -2323,14 +2758,169 @@ static void test_peer_reuse_failure(void)
 	test_end();
 }
 
+/*
+ * Reconnect failure
+ */
+
+/* dns */
+
+static void
+test_dns_reconnect_failure_input(struct server_connection *conn)
+{
+	static unsigned int count = 0;
+	const char *line;
+
+	while ((line=i_stream_read_next_line(conn->conn.input)) != NULL) {
+		if (debug)
+			i_debug("DNS REQUEST %u: %s", count, line);
+
+		if (count == 0) {
+			o_stream_nsend_str(conn->conn.output,
+				"0 1\n127.0.0.1\n");
+		} else {
+			o_stream_nsend_str(conn->conn.output,
+				t_strdup_printf("%d\n", EAI_FAIL));
+			if (count > 4) {
+				server_connection_deinit(&conn);
+				return;
+			}
+		}
+		count++;
+	}
+}
+
+static void test_dns_reconnect_failure(void)
+{
+	test_server_input = test_dns_reconnect_failure_input;
+	test_server_run(0);
+}
+/* server */
+
+static void
+test_reconnect_failure_input(struct server_connection *conn)
+{
+	static const char *resp =
+		"HTTP/1.1 200 OK\r\n"
+		"Content-Length: 18\r\n"
+		"\r\n"
+		"Everything is OK\r\n";
+
+	o_stream_nsend_str(conn->conn.output, resp);
+	i_close_fd(&fd_listen);
+	sleep(500);
+}
+
+static void test_server_reconnect_failure(unsigned int index)
+{
+	test_server_input = test_reconnect_failure_input;
+	test_server_run(index);
+}
+
+/* client */
+
+struct _reconnect_failure_ctx {
+	struct timeout *to;
+};
+
+static void
+test_client_reconnect_failure_response2(
+	const struct http_response *resp,
+	struct _reconnect_failure_ctx *ctx)
+{
+	if (debug)
+		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
+
+	test_assert(resp->status == HTTP_CLIENT_REQUEST_ERROR_CONNECT_FAILED);
+	test_assert(resp->reason != NULL && *resp->reason != '\0');
+
+	io_loop_stop(ioloop);
+	i_free(ctx);
+}
+
+static void
+test_client_reconnect_failure_next(
+	struct _reconnect_failure_ctx *ctx)
+{
+	struct http_client_request *hreq;
+
+	if (debug)
+		i_debug("NEXT REQUEST");
+
+	timeout_remove(&ctx->to);
+
+	hreq = http_client_request(http_client,
+		"GET", "example.com", "/reconnect-failure-2.txt",
+		test_client_reconnect_failure_response2, ctx);
+	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_submit(hreq);
+}
+
+static void
+test_client_reconnect_failure_response1(
+	const struct http_response *resp,
+	struct _reconnect_failure_ctx *ctx)
+{
+	if (debug)
+		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
+
+	test_assert(resp->status == 200);
+	test_assert(resp->reason != NULL && *resp->reason != '\0');
+
+	ctx->to = timeout_add_short(999,
+		test_client_reconnect_failure_next, ctx);
+}
+
+static bool
+test_client_reconnect_failure(const struct http_client_settings *client_set)
+{
+	struct http_client_request *hreq;
+	struct _reconnect_failure_ctx *ctx;
+
+	ctx = i_new(struct _reconnect_failure_ctx, 1);
+	
+	http_client = http_client_init(client_set);
+
+	hreq = http_client_request(http_client,
+		"GET", "example.com", "/reconnect-failure-1.txt",
+		test_client_reconnect_failure_response1, ctx);
+	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_submit(hreq);
+
+	return TRUE;
+}
+
+/* test */
+
+static void test_reconnect_failure(void)
+{
+	struct http_client_settings http_client_set;
+
+	test_client_defaults(&http_client_set);
+	http_client_set.dns_client_socket_path = "./dns-test";
+	http_client_set.dns_ttl_msecs = 2000;
+	http_client_set.max_idle_time_msecs = 1000;
+	http_client_set.max_attempts = 1;
+	http_client_set.request_timeout_msecs = 1000;
+
+	test_begin("reconnect failure");
+	test_run_client_server(&http_client_set,
+		test_client_reconnect_failure,
+		test_server_reconnect_failure, 1,
+		test_dns_reconnect_failure);
+	test_end();
+}
 
 /*
  * All tests
  */
 
 static void (*test_functions[])(void) = {
+	test_unconfigured_ssl,
+	test_unconfigured_ssl_abort,
+	test_invalid_url,
 	test_host_lookup_failed,
 	test_connection_refused,
+	test_connection_lost_prematurely,
 	test_connection_timed_out,
 	test_invalid_redirect,
 	test_unseekable_redirect,
@@ -2351,6 +2941,7 @@ static void (*test_functions[])(void) = {
 	test_dns_lookup_failure,
 	test_dns_lookup_ttl,
 	test_peer_reuse_failure,
+	test_reconnect_failure,
 	NULL
 };
 
@@ -2362,7 +2953,7 @@ static void
 test_client_defaults(struct http_client_settings *http_set)
 {
 	/* client settings */
-	memset(http_set, 0, sizeof(*http_set));
+	i_zero(http_set);
 	http_set->max_idle_time_msecs = 5*1000;
 	http_set->max_parallel_connections = 1;
 	http_set->max_pipelined_requests = 1;
@@ -2666,7 +3257,7 @@ int main(int argc, char *argv[])
   }
 
 	/* listen on localhost */
-	memset(&bind_ip, 0, sizeof(bind_ip));
+	i_zero(&bind_ip);
 	bind_ip.family = AF_INET;
 	bind_ip.u.ip4.s_addr = htonl(INADDR_LOOPBACK);	
 

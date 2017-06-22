@@ -266,11 +266,11 @@ exec "$@"
 Custom namespace location
 -------------------------
 
-If you need to override namespace's location, first give it a name ("user"
+If you need to override namespace's location, first give it a name ("inbox"
 below):
 
 ---%<-------------------------------------------------------------------------
-namespace user {
+namespace inbox {
   ..
 }
 ---%<-------------------------------------------------------------------------
@@ -283,8 +283,8 @@ Then in the script use:
 # do the lookup here
 location=mbox:$HOME/mail
 
-export USERDB_KEYS="$USERDB_KEYS namespace/user/location"
-exec env "NAMESPACE/USER/LOCATION=$location" "$@"
+export USERDB_KEYS="$USERDB_KEYS namespace/inbox/location"
+exec env "NAMESPACE/INBOX/LOCATION=$location" "$@"
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

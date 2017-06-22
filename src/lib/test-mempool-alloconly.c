@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 
@@ -53,7 +53,7 @@ void test_mempool_alloconly(void)
 	test_end();
 }
 
-enum fatal_test_state fatal_mempool(int stage)
+enum fatal_test_state fatal_mempool(unsigned int stage)
 {
 	static pool_t pool;
 

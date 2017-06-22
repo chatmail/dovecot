@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "md5.h"
@@ -333,7 +333,7 @@ static void cmd_director_map(struct doveadm_cmd_context *cctx)
 
 	ctx = cmd_director_init(cctx);
 
-	if ((ctx->hash_map && ctx->user_map) && ctx->host == NULL) {
+	if ((ctx->hash_map || ctx->user_map) && ctx->host == NULL) {
 		director_cmd_help(cctx->cmd);
 	return;
 	}
@@ -450,6 +450,13 @@ cmd_director_add_or_update(struct doveadm_cmd_context *cctx, bool update)
 			return;
 		}
 	} else if (update) {
+		director_cmd_help(cctx->cmd);
+		return;
+	}
+	if (str_to_uint(ctx->host, &i) == 0) {
+		/* host is a number. this would translate to an IP address,
+		   which is probably a mistake. */
+		i_error("Invalid host '%s'", ctx->host);
 		director_cmd_help(cctx->cmd);
 		return;
 	}
@@ -751,11 +758,12 @@ static void cmd_director_dump(struct doveadm_cmd_context *cctx)
 			args = t_strsplit_tab(line);
 			if (str_array_length(args) >= 2) {
 				const char *host = args[0];
+				const char *tag = args[3];
 				/* this is guaranteed to be at least NULL */
-				if (args[2] != NULL &&
-				    *args[2] != '\0')
+				if (tag != NULL &&
+				    *tag != '\0')
 					host = t_strdup_printf("%s@%s", host,
-							       args[2]);
+							       tag);
 				doveadm_print("add");
 				doveadm_print(ctx->socket_path);
 				doveadm_print(host);

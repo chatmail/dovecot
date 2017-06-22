@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -35,7 +35,7 @@ struct file_dict {
 
 struct file_dict_iterate_path {
 	const char *path;
-	unsigned int len;
+	size_t len;
 };
 
 struct file_dict_iterate_context {
@@ -110,6 +110,12 @@ static bool file_dict_need_refresh(struct file_dict *dict)
 {
 	struct stat st1, st2;
 
+	if (dict->dict.iter_count > 0) {
+		/* Change nothing while there are iterators or they can crash
+		   because the hash table content recreated. */
+		return FALSE;
+	}
+
 	if (dict->fd == -1)
 		return TRUE;
 
@@ -171,7 +177,7 @@ static int file_dict_refresh(struct file_dict *dict)
 
 	if (file_dict_open_latest(dict) < 0)
 		return -1;
-	if (dict->refreshed)
+	if (dict->refreshed || dict->dict.iter_count > 0)
 		return 0;
 
 	hash_table_clear(dict->hash, TRUE);
@@ -229,10 +235,11 @@ file_dict_iterate_init(struct dict *_dict, const char *const *paths,
 		ctx->paths[i].len = strlen(paths[i]);
 	}
 	ctx->flags = flags;
-	ctx->iter = hash_table_iterate_init(dict->hash);
 
 	if (file_dict_refresh(dict) < 0)
 		ctx->failed = TRUE;
+
+	ctx->iter = hash_table_iterate_init(dict->hash);
 	return &ctx->ctx;
 }
 
@@ -312,7 +319,7 @@ static void file_dict_apply_changes(struct dict_transaction_memory_context *ctx,
 	char *key, *value, *old_value;
 	char *orig_key, *orig_value;
 	const struct dict_transaction_memory_change *change;
-	unsigned int new_len;
+	size_t new_len;
 	long long diff;
 
 	array_foreach(&ctx->changes, change) {

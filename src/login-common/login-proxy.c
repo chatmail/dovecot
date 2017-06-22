@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "ioloop.h"
@@ -282,9 +282,9 @@ proxy_log_connect_error(struct login_proxy *proxy)
 		str_printfa(str, "connect(%s, %u) failed: %m",
 			    proxy->host, proxy->port);
 	} else {
-		str_printfa(str, "Login for %s:%u timed out in state=%u",
+		str_printfa(str, "Login for %s:%u timed out in state=%s",
 			    proxy->host, proxy->port,
-			    proxy->client->proxy_state);
+			    client_proxy_get_state(proxy->client));
 	}
 	str_printfa(str, " (after %u secs",
 		    (unsigned int)(ioloop_time - proxy->created.tv_sec));
@@ -704,6 +704,9 @@ void login_proxy_detach(struct login_proxy *proxy)
 	struct client *client = proxy->client;
 	const unsigned char *data;
 	size_t size;
+
+	if (proxy->client->preproxy_pool != NULL)
+		pool_unref(&proxy->client->preproxy_pool);
 
 	i_assert(proxy->client_fd == -1);
 	i_assert(proxy->server_input != NULL);

@@ -49,7 +49,7 @@ Required Minimum Configuration
 auth_policy_server_url = http://example.com:4001/
 auth_policy_hash_nonce = localized_random_string
 #auth_policy_server_api_header = Authorization: Basic <base64-encoded value>
-#auth_policy_server_timeout_msec = 2000
+#auth_policy_server_timeout_msecs = 2000
 #auth_policy_hash_mech = sha256
 #auth_policy_request_attributes = login=%{orig_username}
 pwhash=%{hashed_password} remote=%{real_rip}
@@ -102,6 +102,16 @@ produces
 {"login":"john.doe","pwhash":"1234","remote":"127.0.0.1",
 "attrs":{"cos":"premium"}}
 ---%<-------------------------------------------------------------------------
+
+Since v2.2.29/v2.3 you can include IMAP ID command result in auth policy
+requests, this is achieved with using %{client_id}, which will expand to IMAP
+ID command arglist. You must set
+
+---%<-------------------------------------------------------------------------
+imap_id_retain=yes
+---%<-------------------------------------------------------------------------
+
+for this to work.
 
 Response
 --------
@@ -162,4 +172,4 @@ External Auth Policy Servers
 
  * http://oxpedia.org/wiki/index.php?title=AppSuite:Dovecot_Antiabuse_Shield
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

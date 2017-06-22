@@ -1,16 +1,65 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
+#include "file-create-locked.h"
 #include "mailbox-list-iter.h"
 #include "mail-storage-private.h"
 #include "mail-namespace.h"
 #include "mail-user.h"
 #include "mail-autoexpunge.h"
 
+#define AUTOEXPUNGE_LOCK_FNAME "dovecot.autoexpunge.lock"
+
+struct mailbox_autoexpunge_lock {
+	const char *path;
+	struct file_lock *lock;
+	int fd;
+};
+
+static bool mailbox_autoexpunge_lock(struct mail_user *user,
+				     struct mailbox_autoexpunge_lock *lock)
+{
+	struct file_create_settings lock_set;
+	bool created;
+	const char *home, *error;
+	int ret;
+
+	if (lock->fd != -1)
+		return TRUE;
+
+	/* Try to lock the autoexpunging. If the lock already exists, another
+	   process is already busy with expunging, so we don't have to do it.
+	   The easiest place where to store the lock file to is the home
+	   directory, but allow autoexpunging to work even if we can't get
+	   it. The lock isn't really required; it 1) improves performance
+	   so that multiple processes won't do the same work unnecessarily,
+	   and 2) it helps to avoid duplicate mails being added with
+	   lazy_expunge. */
+	if ((ret = mail_user_get_home(user, &home)) > 0) {
+		const struct mail_storage_settings *mail_set =
+			mail_user_set_get_storage_set(user);
+		i_zero(&lock_set);
+		lock_set.lock_method = mail_set->parsed_lock_method,
+		lock->path = t_strdup_printf("%s/"AUTOEXPUNGE_LOCK_FNAME, home);
+		lock->fd = file_create_locked(lock->path, &lock_set,
+					      &lock->lock, &created, &error);
+		if (lock->fd == -1) {
+			if (errno == EAGAIN)
+				return FALSE;
+			if (errno != ENOENT)
+				i_error("autoexpunge: Couldn't lock %s: %s", lock->path, error);
+			return TRUE;
+		}
+	} else if (ret == 0) {
+		i_warning("autoexpunge: User has no home directory, can't lock");
+	}
+	return TRUE;
+}
+
 static int
 mailbox_autoexpunge(struct mailbox *box, unsigned int interval_time,
-		    unsigned int max_mails)
+		    unsigned int max_mails, unsigned int *expunged_count)
 {
 	struct mailbox_transaction_context *t;
 	struct mail *mail;
@@ -18,7 +67,10 @@ mailbox_autoexpunge(struct mailbox *box, unsigned int interval_time,
 	const struct mail_index_header *hdr;
 	struct mailbox_status status;
 	uint32_t seq;
-	time_t timestamp, expire_time;
+	time_t timestamp, expire_time, last_rename_stamp = 0;
+	const void *data;
+	size_t size;
+	unsigned int count = 0;
 	int ret = 0;
 
 	if ((unsigned int)ioloop_time < interval_time)
@@ -50,7 +102,14 @@ mailbox_autoexpunge(struct mailbox *box, unsigned int interval_time,
 	if (mailbox_sync(box, MAILBOX_SYNC_FLAG_FAST) < 0)
 		return -1;
 
+	mail_index_get_header_ext(box->view, box->box_last_rename_stamp_ext_id,
+				  &data, &size);
+
+	if (size >= sizeof(uint32_t))
+		last_rename_stamp = *(const uint32_t*)data;
+
 	t = mailbox_transaction_begin(box, 0);
+	mailbox_transaction_set_reason(t, "autoexpunge");
 	mail = mail_alloc(t, 0, NULL);
 
 	hdr = mail_index_get_header(box->view);
@@ -60,14 +119,16 @@ mailbox_autoexpunge(struct mailbox *box, unsigned int interval_time,
 			/* max_mails is still being reached -> expunge.
 			   don't even check saved-dates before we're
 			   below max_mails. */
-			mail_expunge(mail);
+			mail_autoexpunge(mail);
+			count++;
 		} else if (interval_time == 0) {
 			/* only max_mails is used. nothing further to do. */
 			break;
 		} else if (mail_get_save_date(mail, &timestamp) == 0) {
-			if (timestamp > expire_time)
+			if (I_MAX(last_rename_stamp, timestamp) > expire_time)
 				break;
-			mail_expunge(mail);
+			mail_autoexpunge(mail);
+			count++;
 		} else if (mailbox_get_last_mail_error(box) == MAIL_ERROR_EXPUNGED) {
 			/* already expunged */
 		} else {
@@ -79,13 +140,16 @@ mailbox_autoexpunge(struct mailbox *box, unsigned int interval_time,
 	mail_free(&mail);
 	if (mailbox_transaction_commit(&t) < 0)
 		ret = -1;
+	else
+		*expunged_count += count;
 	return ret;
 }
 
 static void
 mailbox_autoexpunge_set(struct mail_namespace *ns, const char *vname,
 			unsigned int autoexpunge,
-			unsigned int autoexpunge_max_mails)
+			unsigned int autoexpunge_max_mails,
+			unsigned int *expunged_count)
 {
 	struct mailbox *box;
 
@@ -93,17 +157,20 @@ mailbox_autoexpunge_set(struct mail_namespace *ns, const char *vname,
 	   any ACLs the user might normally have against expunging in
 	   the mailbox. */
 	box = mailbox_alloc(ns->list, vname, MAILBOX_FLAG_IGNORE_ACLS);
-	if (mailbox_autoexpunge(box, autoexpunge, autoexpunge_max_mails) < 0) {
+	mailbox_set_reason(box, "autoexpunge");
+	if (mailbox_autoexpunge(box, autoexpunge, autoexpunge_max_mails,
+				expunged_count) < 0) {
 		i_error("Failed to autoexpunge mailbox '%s': %s",
 			mailbox_get_vname(box),
-			mailbox_get_last_error(box, NULL));
+			mailbox_get_last_internal_error(box, NULL));
 	}
 	mailbox_free(&box);
 }
 
 static void
 mailbox_autoexpunge_wildcards(struct mail_namespace *ns,
-			      const struct mailbox_settings *set)
+			      const struct mailbox_settings *set,
+			      unsigned int *expunged_count)
 {
 	struct mailbox_list_iterate_context *iter;
 	const struct mailbox_info *info;
@@ -116,29 +183,36 @@ mailbox_autoexpunge_wildcards(struct mail_namespace *ns,
 				      MAILBOX_LIST_ITER_RETURN_NO_FLAGS);
 	while ((info = mailbox_list_iter_next(iter)) != NULL) T_BEGIN {
 		mailbox_autoexpunge_set(ns, info->vname, set->autoexpunge,
-					set->autoexpunge_max_mails);
+					set->autoexpunge_max_mails,
+					expunged_count);
 	} T_END;
 	if (mailbox_list_iter_deinit(&iter) < 0) {
 		i_error("Failed to iterate autoexpunge mailboxes '%s': %s",
-			iter_name, mailbox_list_get_last_error(ns->list, NULL));
+			iter_name, mailbox_list_get_last_internal_error(ns->list, NULL));
 	}
 }
 
-static void mail_namespace_autoexpunge(struct mail_namespace *ns)
+static bool
+mail_namespace_autoexpunge(struct mail_namespace *ns,
+			   struct mailbox_autoexpunge_lock *lock,
+			   unsigned int *expunged_count)
 {
 	struct mailbox_settings *const *box_set;
 	const char *vname;
 
 	if (!array_is_created(&ns->set->mailboxes))
-		return;
+		return TRUE;
 
 	array_foreach(&ns->set->mailboxes, box_set) {
 		if ((*box_set)->autoexpunge == 0 &&
 		    (*box_set)->autoexpunge_max_mails == 0)
 			continue;
 
+		if (!mailbox_autoexpunge_lock(ns->user, lock))
+			return FALSE;
+
 		if (strpbrk((*box_set)->name, "*?") != NULL)
-			mailbox_autoexpunge_wildcards(ns, *box_set);
+			mailbox_autoexpunge_wildcards(ns, *box_set, expunged_count);
 		else {
 			if ((*box_set)->name[0] == '\0' && ns->prefix_len > 0 &&
 			    ns->prefix[ns->prefix_len-1] == mail_namespace_get_sep(ns))
@@ -146,17 +220,31 @@ static void mail_namespace_autoexpunge(struct mail_namespace *ns)
 			else
 				vname = t_strconcat(ns->prefix, (*box_set)->name, NULL);
 			mailbox_autoexpunge_set(ns, vname, (*box_set)->autoexpunge,
-						(*box_set)->autoexpunge_max_mails);
+						(*box_set)->autoexpunge_max_mails,
+						expunged_count);
 		}
 	}
+	return TRUE;
 }
 
-void mail_user_autoexpunge(struct mail_user *user)
+unsigned int mail_user_autoexpunge(struct mail_user *user)
 {
+	struct mailbox_autoexpunge_lock lock = { .fd = -1 };
 	struct mail_namespace *ns;
+	unsigned int expunged_count = 0;
 
 	for (ns = user->namespaces; ns != NULL; ns = ns->next) {
-		if (ns->alias_for == NULL)
-			mail_namespace_autoexpunge(ns);
+		if (ns->alias_for == NULL) {
+			if (!mail_namespace_autoexpunge(ns, &lock, &expunged_count))
+				break;
+		}
 	}
+	if (lock.fd != -1) {
+		i_assert(lock.lock != NULL);
+
+		i_unlink(lock.path);
+		i_close_fd(&lock.fd);
+		file_lock_free(&lock.lock);
+	}
+	return expunged_count;
 }

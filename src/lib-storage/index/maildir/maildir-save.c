@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -48,7 +48,7 @@ struct maildir_save_context {
 	struct maildir_uidlist_sync_ctx *uidlist_sync_ctx;
 	struct maildir_keywords_sync_ctx *keywords_sync_ctx;
 	struct maildir_index_sync_context *sync_ctx;
-	struct mail *mail, *cur_dest_mail;
+	struct mail *cur_dest_mail;
 
 	const char *tmpdir, *newdir, *curdir;
 	struct maildir_filename *files, **files_tail, *file_last;
@@ -166,8 +166,8 @@ maildir_save_add(struct mail_save_context *_ctx, const char *tmp_fname,
 	   into new/ or cur/. */
 	/* @UNSAFE */
 	keyword_count = mdata->keywords == NULL ? 0 : mdata->keywords->count;
-	mf = p_malloc(ctx->pool, sizeof(*mf) +
-		      sizeof(unsigned int) * keyword_count);
+	mf = p_malloc(ctx->pool, MALLOC_ADD(sizeof(*mf),
+		MALLOC_MULTIPLY(sizeof(unsigned int), keyword_count)));
 	mf->tmp_name = mf->dest_basename = p_strdup(ctx->pool, tmp_fname);
 	mf->flags = mdata->flags;
 	mf->size = (uoff_t)-1;
@@ -208,11 +208,6 @@ maildir_save_add(struct mail_save_context *_ctx, const char *tmp_fname,
 		i_assert(ctx->files->next == NULL);
 	}
 
-	if (_ctx->dest_mail == NULL) {
-		if (ctx->mail == NULL)
-			ctx->mail = mail_alloc(_ctx->transaction, 0, NULL);
-		_ctx->dest_mail = ctx->mail;
-	}
 	mail_set_seq_saving(_ctx->dest_mail, ctx->seq);
 
 	if (ctx->input == NULL) {
@@ -347,7 +342,7 @@ static int maildir_create_tmp(struct maildir_mailbox *mbox, const char *dir,
 {
 	struct mailbox *box = &mbox->box;
 	const struct mailbox_permissions *perm = mailbox_get_permissions(box);
-	unsigned int prefix_len;
+	size_t prefix_len;
 	const char *tmp_fname;
 	string_t *path;
 	mode_t old_mask;
@@ -517,10 +512,7 @@ static void maildir_save_remove_last_filename(struct maildir_save_context *ctx)
 {
 	struct maildir_filename **fm;
 
-	mail_index_expunge(ctx->trans, ctx->seq);
-	/* currently we can't just drop pending cache updates for this one
-	   specific record, so we'll reset the whole cache transaction. */
-	mail_cache_transaction_reset(ctx->ctx.transaction->cache_trans);
+	index_storage_save_abort_last(&ctx->ctx, ctx->seq);
 	ctx->seq--;
 
 	for (fm = &ctx->files; (*fm)->next != NULL; fm = &(*fm)->next) ;
@@ -981,12 +973,8 @@ int maildir_transaction_save_commit_pre(struct mail_save_context *_ctx)
 	i_assert(_ctx->data.output == NULL);
 	i_assert(ctx->last_save_finished);
 
-	if (ctx->files_count == 0) {
-		/* the mail must be freed in the commit_pre() */
-		if (ctx->mail != NULL)
-			mail_free(&ctx->mail);
+	if (ctx->files_count == 0)
 		return 0;
-	}
 
 	sync_flags = MAILDIR_UIDLIST_SYNC_PARTIAL |
 		MAILDIR_UIDLIST_SYNC_NOREFRESH;
@@ -1040,13 +1028,6 @@ int maildir_transaction_save_commit_pre(struct mail_save_context *_ctx)
 
 	_t->changes->uid_validity =
 		maildir_uidlist_get_uid_validity(ctx->mbox->uidlist);
-
-	if (ctx->mail != NULL) {
-		/* Mail freeing may trigger cache updates and a call to
-		   maildir_save_file_get_path(). Do this before finishing index
-		   sync so we still have keywords_sync_ctx. */
-		mail_free(&ctx->mail);
-	}
 
 	if (ctx->locked) {
 		/* It doesn't matter if index syncing fails */
@@ -1109,7 +1090,5 @@ void maildir_transaction_save_rollback(struct mail_save_context *_ctx)
 	if (ctx->locked)
 		maildir_uidlist_unlock(ctx->mbox->uidlist);
 
-	if (ctx->mail != NULL)
-		mail_free(&ctx->mail);
 	pool_unref(&ctx->pool);
 }

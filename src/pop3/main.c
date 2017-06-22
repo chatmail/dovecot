@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "pop3-common.h"
 #include "ioloop.h"
@@ -59,6 +59,8 @@ void pop3_refresh_proctitle(void)
 			str_append_c(title, ' ');
 			str_append(title, net_ip2addr(client->user->remote_ip));
 		}
+		if (client->destroyed)
+			str_append(title, " (deinit)");
 		break;
 	default:
 		str_printfa(title, "%u connections", pop3_client_count);
@@ -136,7 +138,7 @@ static void main_stdio_run(const char *username)
 	buffer_t *input_buf;
 	const char *value, *error, *input_base64;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = input.service = "pop3";
 	input.username = username != NULL ? username : getenv("USER");
 	if (input.username == NULL && IS_STANDALONE())
@@ -165,7 +167,7 @@ login_client_connected(const struct master_login_client *client,
 	const char *error;
 	buffer_t input_buf;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = input.service = "pop3";
 	input.local_ip = client->auth_req.local_ip;
 	input.remote_ip = client->auth_req.remote_ip;
@@ -213,12 +215,11 @@ int main(int argc, char *argv[])
 	};
 	struct master_login_settings login_set;
 	enum master_service_flags service_flags = 0;
-	enum mail_storage_service_flags storage_service_flags =
-		MAIL_STORAGE_SERVICE_FLAG_AUTOEXPUNGE;
+	enum mail_storage_service_flags storage_service_flags = 0;
 	const char *username = NULL, *auth_socket_path = "auth-master";
 	int c;
 
-	memset(&login_set, 0, sizeof(login_set));
+	i_zero(&login_set);
 	login_set.postlogin_timeout_secs = MASTER_POSTLOGIN_TIMEOUT_DEFAULT;
 
 	if (IS_STANDALONE() && getuid() == 0 &&

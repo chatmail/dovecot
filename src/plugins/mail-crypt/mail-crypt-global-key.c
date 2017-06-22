@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -134,7 +134,7 @@ int mail_crypt_load_global_private_key(const char *set_key, const char *key_data
 
 void mail_crypt_global_keys_init(struct mail_crypt_global_keys *global_keys_r)
 {
-	memset(global_keys_r, 0, sizeof(*global_keys_r));
+	i_zero(global_keys_r);
 	i_array_init(&global_keys_r->private_keys, 4);
 }
 
@@ -160,6 +160,9 @@ mail_crypt_global_key_find(struct mail_crypt_global_keys *global_keys,
 			   const char *pubkey_digest)
 {
 	const struct mail_crypt_global_private_key *priv_key;
+
+	if (!array_is_created(&global_keys->private_keys))
+		return NULL;
 
 	array_foreach(&global_keys->private_keys, priv_key) {
 		if (strcmp(priv_key->key_id, pubkey_digest) == 0)

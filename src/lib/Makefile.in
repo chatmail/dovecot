@@ -116,16 +116,17 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	file-create-locked.lo file-copy.lo file-dotlock.lo \
 	file-lock.lo file-set-size.lo guid.lo hash.lo hash-format.lo \
 	hash-method.lo hash2.lo hex-binary.lo hex-dec.lo hmac.lo \
-	hmac-cram-md5.lo home-expand.lo hostpid.lo imem.lo ipwd.lo \
-	iostream.lo iostream-rawlog.lo iostream-temp.lo \
-	iso8601-date.lo istream.lo istream-base64-decoder.lo \
-	istream-base64-encoder.lo istream-callback.lo istream-chain.lo \
-	istream-concat.lo istream-crlf.lo istream-data.lo \
-	istream-failure-at.lo istream-file.lo istream-hash.lo \
-	istream-jsonstr.lo istream-limit.lo istream-mmap.lo \
-	istream-rawlog.lo istream-seekable.lo istream-sized.lo \
-	istream-tee.lo istream-timeout.lo istream-unix.lo ioloop.lo \
-	ioloop-iolist.lo ioloop-notify-none.lo ioloop-notify-fd.lo \
+	hmac-cram-md5.lo home-expand.lo hook-build.lo hostpid.lo \
+	imem.lo ipwd.lo iostream.lo iostream-rawlog.lo \
+	iostream-temp.lo iso8601-date.lo istream.lo \
+	istream-base64-decoder.lo istream-base64-encoder.lo \
+	istream-callback.lo istream-chain.lo istream-concat.lo \
+	istream-crlf.lo istream-data.lo istream-failure-at.lo \
+	istream-file.lo istream-hash.lo istream-jsonstr.lo \
+	istream-limit.lo istream-mmap.lo istream-rawlog.lo \
+	istream-seekable.lo istream-sized.lo istream-tee.lo \
+	istream-timeout.lo istream-unix.lo ioloop.lo ioloop-iolist.lo \
+	ioloop-notify-none.lo ioloop-notify-fd.lo \
 	ioloop-notify-inotify.lo ioloop-notify-kqueue.lo \
 	ioloop-poll.lo ioloop-select.lo ioloop-epoll.lo \
 	ioloop-kqueue.lo json-parser.lo json-tree.lo lib.lo \
@@ -181,6 +182,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-json-tree.$(OBJEXT) \
 	test_lib-test-llist.$(OBJEXT) \
 	test_lib-test-log-throttle.$(OBJEXT) \
+	test_lib-test-malloc-overflow.$(OBJEXT) \
 	test_lib-test-mempool-alloconly.$(OBJEXT) \
 	test_lib-test-pkcs5.$(OBJEXT) test_lib-test-net.$(OBJEXT) \
 	test_lib-test-numpack.$(OBJEXT) \
@@ -529,6 +531,7 @@ liblib_la_SOURCES = \
 	hmac.c \
 	hmac-cram-md5.c \
 	home-expand.c \
+	hook-build.c \
 	hostpid.c \
 	imem.c \
 	ipwd.c \
@@ -675,6 +678,7 @@ headers = \
 	hmac.h \
 	hmac-cram-md5.h \
 	home-expand.h \
+	hook-build.h \
 	hostpid.h \
 	imem.h \
 	ipwd.h \
@@ -714,6 +718,7 @@ headers = \
 	macros.h \
 	md4.h \
 	md5.h \
+	malloc-overflow.h \
 	mempool.h \
 	mkdir-parents.h \
 	mmap-util.h \
@@ -768,6 +773,7 @@ headers = \
 	utc-offset.h \
 	utc-mktime.h \
 	var-expand.h \
+	var-expand-private.h \
 	wildcard-match.h \
 	write-full.h
 
@@ -813,6 +819,7 @@ test_lib_SOURCES = \
 	test-json-tree.c \
 	test-llist.c \
 	test-log-throttle.c \
+	test-malloc-overflow.c \
 	test-mempool-alloconly.c \
 	test-pkcs5.c \
 	test-net.c \
@@ -953,6 +960,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hmac-cram-md5.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hmac.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/home-expand.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hook-build.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hostpid.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imem.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ioloop-epoll.Plo@am__quote@
@@ -1076,6 +1084,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-lib.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-llist.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-log-throttle.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-malloc-overflow.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-mempool-alloconly.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-net.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-numpack.Po@am__quote@
@@ -1595,6 +1604,20 @@ test_lib-test-log-throttle.obj: test-log-throttle.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-log-throttle.c' object='test_lib-test-log-throttle.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-log-throttle.obj `if test -f 'test-log-throttle.c'; then $(CYGPATH_W) 'test-log-throttle.c'; else $(CYGPATH_W) '$(srcdir)/test-log-throttle.c'; fi`
+
+test_lib-test-malloc-overflow.o: test-malloc-overflow.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-malloc-overflow.o -MD -MP -MF $(DEPDIR)/test_lib-test-malloc-overflow.Tpo -c -o test_lib-test-malloc-overflow.o `test -f 'test-malloc-overflow.c' || echo '$(srcdir)/'`test-malloc-overflow.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-malloc-overflow.Tpo $(DEPDIR)/test_lib-test-malloc-overflow.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-malloc-overflow.c' object='test_lib-test-malloc-overflow.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-malloc-overflow.o `test -f 'test-malloc-overflow.c' || echo '$(srcdir)/'`test-malloc-overflow.c
+
+test_lib-test-malloc-overflow.obj: test-malloc-overflow.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-malloc-overflow.obj -MD -MP -MF $(DEPDIR)/test_lib-test-malloc-overflow.Tpo -c -o test_lib-test-malloc-overflow.obj `if test -f 'test-malloc-overflow.c'; then $(CYGPATH_W) 'test-malloc-overflow.c'; else $(CYGPATH_W) '$(srcdir)/test-malloc-overflow.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-malloc-overflow.Tpo $(DEPDIR)/test_lib-test-malloc-overflow.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-malloc-overflow.c' object='test_lib-test-malloc-overflow.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-malloc-overflow.obj `if test -f 'test-malloc-overflow.c'; then $(CYGPATH_W) 'test-malloc-overflow.c'; else $(CYGPATH_W) '$(srcdir)/test-malloc-overflow.c'; fi`
 
 test_lib-test-mempool-alloconly.o: test-mempool-alloconly.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-mempool-alloconly.o -MD -MP -MF $(DEPDIR)/test_lib-test-mempool-alloconly.Tpo -c -o test_lib-test-mempool-alloconly.o `test -f 'test-mempool-alloconly.c' || echo '$(srcdir)/'`test-mempool-alloconly.c
@@ -2173,7 +2196,7 @@ uninstall-am: uninstall-pkginc_libHEADERS
 
 
 UnicodeData.txt:
-	test -f UnicodeData.txt || wget http://www.unicode.org/Public/UNIDATA/UnicodeData.txt
+	test -f UnicodeData.txt || wget https://dovecot.org/res/UnicodeData.txt
 
 $(srcdir)/unicodemap.c: unicodemap.pl UnicodeData.txt
 	perl $(srcdir)/unicodemap.pl < UnicodeData.txt > $@

@@ -115,14 +115,14 @@ keccakf(uint64_t s[25])
 void sha3_256_init(void *context)
 {
 	struct sha3_ctx *ctx = context;
-	memset(ctx, 0, sizeof(*ctx));
+	i_zero(ctx);
 	ctx->capacityWords = 2 * 256 / (8 * sizeof(uint64_t));
 }
 
 void sha3_512_init(void *context)
 {
 	struct sha3_ctx *ctx = context;
-	memset(ctx, 0, sizeof(*ctx));
+	i_zero(ctx);
 	ctx->capacityWords = 2 * 512 / (8 * sizeof(uint64_t));
 }
 
@@ -232,7 +232,7 @@ sha3_finalize(struct sha3_ctx *ctx)
 			SHA3_CONST(0x8000000000000000UL);
 	keccakf(ctx->s);
 
-#ifndef WORDS_BIGENDIAN
+#ifdef WORDS_BIGENDIAN
 	{
 		unsigned i;
 		for(i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++) {

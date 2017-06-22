@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -195,7 +195,7 @@ bool settings_read_i(const char *path, const char *section,
 		next_section = t_strcut(section, '/');
 	}
 
-	memset(&root, 0, sizeof(root));
+	i_zero(&root);
 	root.path = path;
 	input = &root;
 

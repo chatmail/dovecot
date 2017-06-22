@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -14,6 +14,7 @@
 #include "str.h"
 #include "strescape.h"
 #include "var-expand.h"
+#include "process-title.h"
 #include "settings-parser.h"
 #include "imap-util.h"
 #include "master-service.h"
@@ -92,6 +93,7 @@ struct dsync_cmd_context {
 	const char *error;
 
 	unsigned int lock_timeout;
+	unsigned int import_commit_msgs_interval;
 
 	unsigned int lock:1;
 	unsigned int purge_remote:1;
@@ -492,6 +494,9 @@ cmd_dsync_icb_stream_init(struct dsync_cmd_context *ctx,
 		ctx->input = i_stream_create_fd(ctx->fd_in, (size_t)-1, FALSE);
 		ctx->output = o_stream_create_fd(ctx->fd_out, (size_t)-1, FALSE);
 	} else {
+		i_assert(ctx->fd_in == -1 && ctx->fd_out == -1);
+		ctx->fd_in = i_stream_get_fd(ctx->input);
+		ctx->fd_out = o_stream_get_fd(ctx->output);
 		ctx->input_orig_bufsize = i_stream_get_max_buffer_size(ctx->input);
 		ctx->output_orig_bufsize = o_stream_get_max_buffer_size(ctx->output);
 		i_stream_set_max_buffer_size(ctx->input, (size_t)-1);
@@ -563,7 +568,7 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	bool remote_only_changes;
 	int ret = 0;
 
-	memset(&set, 0, sizeof(set));
+	i_zero(&set);
 	if (_ctx->cur_client_ip.family != 0) {
 		/* include the doveadm client's IP address in the ps output */
 		set.process_title_prefix = t_strdup_printf(
@@ -583,6 +588,7 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	set.virtual_all_box = ctx->virtual_all_box;
 	memcpy(set.sync_box_guid, ctx->mailbox_guid, sizeof(set.sync_box_guid));
 	set.lock_timeout_secs = ctx->lock_timeout;
+	set.import_commit_msgs_interval = ctx->import_commit_msgs_interval;
 	set.state = ctx->state_input;
 	set.mailbox_alt_char = doveadm_settings->dsync_alt_char[0];
 
@@ -771,7 +777,7 @@ static int dsync_init_ssl_ctx(struct dsync_cmd_context *ctx,
 	if (ctx->ssl_ctx != NULL)
 		return 0;
 
-	memset(&ssl_set, 0, sizeof(ssl_set));
+	i_zero(&ssl_set);
 	ssl_set.ca_dir = mail_set->ssl_client_ca_dir;
 	ssl_set.ca_file = mail_set->ssl_client_ca_file;
 	ssl_set.verify_remote_cert = TRUE;
@@ -806,6 +812,10 @@ dsync_connect_tcp(struct dsync_cmd_context *ctx,
 
 	ioloop = io_loop_create();
 
+	if (doveadm_verbose_proctitle) {
+		process_title_set(t_strdup_printf(
+			"[dsync - connecting to %s]", server->name));
+	}
 	if (server_connection_create(server, &conn) < 0) {
 		*error_r = "Couldn't create server connection";
 		return -1;
@@ -822,6 +832,11 @@ dsync_connect_tcp(struct dsync_cmd_context *ctx,
 	if (ctx->replicator_notify)
 		str_append(cmd, "\t-U");
 	str_append_c(cmd, '\n');
+
+	if (doveadm_verbose_proctitle) {
+		process_title_set(t_strdup_printf(
+			"[dsync - running dsync-server on %s]", server->name));
+	}
 
 	ctx->tcp_conn = conn;
 	server_connection_cmd(conn, str_c(cmd), NULL,
@@ -1094,6 +1109,7 @@ static struct doveadm_mail_cmd_context *cmd_dsync_alloc(void)
 	p_array_init(&ctx->namespace_prefixes, ctx->ctx.pool, 4);
         if ((doveadm_settings->parsed_features & DSYNC_FEATURE_EMPTY_HDR_WORKAROUND) != 0)
                 ctx->empty_hdr_workaround = TRUE;
+	ctx->import_commit_msgs_interval = doveadm_settings->dsync_commit_msgs_interval;
 	return &ctx->ctx;
 }
 

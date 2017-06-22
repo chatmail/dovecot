@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING memcached */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING memcached */
 
 #include "lib.h"
 #include "array.h"
@@ -53,12 +53,12 @@ void ldap_dict_lookup_async(struct dict *dict, const char *key,
 
 static bool
 dict_ldap_map_match(const struct dict_ldap_map *map, const char *path,
-		   ARRAY_TYPE(const_string) *values, unsigned int *pat_len_r,
-		   unsigned int *path_len_r, bool partial_ok, bool recurse)
+		   ARRAY_TYPE(const_string) *values, size_t *pat_len_r,
+		   size_t *path_len_r, bool partial_ok, bool recurse)
 {
 	const char *path_start = path;
 	const char *pat, *attribute, *p;
-	unsigned int len;
+	size_t len;
 
 	array_clear(values);
 	pat = map->pattern;
@@ -134,7 +134,8 @@ ldap_dict_find_map(struct ldap_dict *dict, const char *path,
 		  ARRAY_TYPE(const_string) *values)
 {
 	const struct dict_ldap_map *maps;
-	unsigned int i, count, len;
+	unsigned int i, count;
+	size_t len;
 
 	t_array_init(values, dict->set->max_attribute_count);
 	maps = array_get(&dict->set->maps, &count);
@@ -150,7 +151,7 @@ static
 int dict_ldap_connect(struct ldap_dict *dict, const char **error_r)
 {
 	struct ldap_client_settings set;
-	memset(&set, 0, sizeof(set));
+	i_zero(&set);
 	set.uri = dict->set->uri;
 	set.bind_dn = dict->set->bind_dn;
 	set.password = dict->set->password;
@@ -185,8 +186,11 @@ ldap_dict_build_query(struct ldap_dict *dict, const struct dict_ldap_map *map,
 
 	for(size_t i = 0; i < array_count(values) && i < array_count(&(map->ldap_attributes)); i++) {
 		struct var_expand_table entry;
-		entry.value = *array_idx(values, i);
-		entry.long_key = *array_idx(&(map->ldap_attributes), i);
+		const char *const *valuep = array_idx(values, i);
+		const char *const *long_keyp = array_idx(&(map->ldap_attributes), i);
+
+		entry.value = *valuep;
+		entry.long_key = *long_keyp;
 		array_append(&exp, &entry, 1);
 	}
 
@@ -293,10 +297,15 @@ ldap_dict_lookup_callback(struct ldap_result *result, struct dict_ldap_op *op)
 			/* try extract value */
 			const char *const *values = ldap_entry_get_attribute(entry, op->map->value_attribute);
 			if (values != NULL) {
+				const char **new_values;
+
 				if (op->dict->set->debug > 0)
 					i_debug("ldap_dict_lookup_callback got attribute %s", op->map->value_attribute);
 				op->res.ret = 1;
-				op->res.value = p_strdup(op->pool, values[0]);
+				new_values = p_new(op->pool, const char *, 2);
+				new_values[0] = p_strdup(op->pool, values[0]);
+				op->res.values = new_values;
+				op->res.value = op->res.values[0];
 			} else {
 				if (op->dict->set->debug > 0)
 					i_debug("ldap_dict_lookup_callback dit not get attribute %s", op->map->value_attribute);
@@ -403,7 +412,7 @@ void ldap_dict_lookup_async(struct dict *dict, const char *key,
 			op->map = map;
 			attributes[0] = map->value_attribute;
 			/* build lookup */
-			memset(&input, 0, sizeof(input));
+			i_zero(&input);
 			input.base_dn = map->base_dn;
 			input.scope = map->scope_val;
 			ldap_dict_build_query(ctx, map, &values, strncmp(key, DICT_PATH_PRIVATE, strlen(DICT_PATH_PRIVATE))==0, query);
@@ -423,22 +432,12 @@ void ldap_dict_lookup_async(struct dict *dict, const char *key,
 struct dict dict_driver_ldap = {
 	.name = "ldap",
 	{
-		ldap_dict_init,
-		ldap_dict_deinit,
-		ldap_dict_wait,
-		ldap_dict_lookup,
-		NULL, /*ldap_dict_iterate_init,*/
-		NULL, /*ldap_dict_iterate,*/
-		NULL, /*ldap_dict_iterate_deinit,*/
-		NULL, /*ldap_transaction_init,*/
-		NULL, /*ldap_transaction_commit,*/
-		NULL, /*ldap_transaction_rollback,*/
-		NULL, /*ldap_set,*/
-		NULL, /*ldap_unset,*/
-		NULL, /*ldap_append,*/
-		NULL, /*ldap_atomic_inc,*/
-		ldap_dict_lookup_async,
-		ldap_dict_switch_ioloop
+		.init = ldap_dict_init,
+		.deinit = ldap_dict_deinit,
+		.wait = ldap_dict_wait,
+		.lookup = ldap_dict_lookup,
+		.lookup_async = ldap_dict_lookup_async,
+		.switch_ioloop = ldap_dict_switch_ioloop,
 	}
 };
 

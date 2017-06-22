@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -44,15 +44,16 @@ void imap_append_astring(string_t *dest, const char *src)
 static void
 imap_append_literal(string_t *dest, const char *src, unsigned int pos)
 {
-	unsigned int full_len = pos + strlen(src+pos);
+	size_t full_len = pos + strlen(src+pos);
 
-	str_printfa(dest, "{%u}\r\n", full_len);
+	str_printfa(dest, "{%"PRIuSIZE_T"}\r\n", full_len);
 	buffer_append(dest, src, full_len);
 }
 
 void imap_append_nstring(string_t *dest, const char *src)
 {
-	unsigned int i, escape_count = 0;
+	unsigned int escape_count = 0;
+	size_t i;
 
 	if (src == NULL) {
 		str_append(dest, "NIL");
@@ -130,6 +131,8 @@ void imap_append_string_for_humans(string_t *dest,
 			last_lwsp = FALSE;
 			modify = TRUE;
 			break;
+		case 13:
+		case 10:
 		case '\t':
 			modify = TRUE;
 			/* fall through */
@@ -139,11 +142,6 @@ void imap_append_string_for_humans(string_t *dest,
 				remove_count++;
 			}
 			last_lwsp = TRUE;
-			break;
-		case 13:
-		case 10:
-			remove_count++;
-			modify = TRUE;
 			break;
 		case '"':
 		case '\\':
@@ -187,14 +185,13 @@ void imap_append_string_for_humans(string_t *dest,
 			str_append_c(dest, 128);
 			last_lwsp = FALSE;
 			break;
+		case 13:
+		case 10:
 		case '\t':
 		case ' ':
 			if (!last_lwsp)
 				str_append_c(dest, ' ');
 			last_lwsp = TRUE;
-			break;
-		case 13:
-		case 10:
 			break;
 		default:
 			last_lwsp = FALSE;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -183,7 +183,7 @@ static int mdbox_deleted_sync(struct mdbox_mailbox *mbox,
 	if (mdbox_deleted_mailbox_create_indexes(&mbox->box, NULL, NULL) < 0)
 		return -1;
 
-	memset(&rec, 0, sizeof(rec));
+	i_zero(&rec);
 	rec.save_date = ioloop_time;
 
 	sync_flags = index_storage_get_sync_flags(&mbox->box);

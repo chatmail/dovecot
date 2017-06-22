@@ -1,6 +1,9 @@
 Code Design
 ===========
 
+Generally Dovecot follows Linux kernel coding style
+[https://www.kernel.org/doc/Documentation/CodingStyle].
+
 Most of the coding style design is about getting as many compiler warnings and
 errors as possible. Dovecot already has some patched-Clang-specific features to
 get more warnings, and will likely have more in future. Issues found by static
@@ -52,7 +55,7 @@ Function parameters
       verified with a patched clang. Unfortunately the API isn't very nice, it
       would be better to mark each parameter separately with ATTR_NULL instead
       of having a numbered list. This will likely change in future.
-    * Also unless you know that a parameter can be NULL, don't bother wastine
+    * Also unless you know that a parameter can be NULL, don't bother wasting
       code on checking if it is. Ideally those are noticed by the patched clang
       check, but even if not, it's not that bad to crash on NULL pointer
       dereference.
@@ -197,4 +200,4 @@ Dovecot has some helper macros to make callbacks' context parameters type-safe.
 In v2.2+ see 'CALLBACK_TYPECHECK()' macro and for example 'io_add()' for
 example usage.
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

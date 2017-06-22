@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -83,7 +83,7 @@ void test_fs_async(const char *test_name, enum fs_properties properties,
 	struct test_fs *test_fs;
 	const char *error;
 
-	memset(&fs_set, 0, sizeof(fs_set));
+	i_zero(&fs_set);
 	if (fs_init(driver, args, &fs_set, &fs, &error) < 0)
 		i_fatal("fs_init() failed: %s", error);
 

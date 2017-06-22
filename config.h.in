@@ -72,6 +72,9 @@
 /* How to define flexible array members in structs */
 #undef FLEXIBLE_ARRAY_MEMBER
 
+/* Build with ASN1_STRING_get0_data() support */
+#undef HAVE_ASN1_STRING_GET0_DATA
+
 /* Define to 1 if you have the `backtrace_symbols' function. */
 #undef HAVE_BACKTRACE_SYMBOLS
 
@@ -80,6 +83,9 @@
 
 /* Build with Cassandra support */
 #undef HAVE_CASSANDRA
+
+/* Cassandra supports speculative execution policy */
+#undef HAVE_CASSANDRA_SPECULATIVE_POLICY
 
 /* Define to 1 if you have the `clearenv' function. */
 #undef HAVE_CLEARENV
@@ -98,6 +104,12 @@
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
+
+/* Build with EVP_MD_CTX_new() support */
+#undef HAVE_EVP_MD_CTX_NEW
+
+/* Build with EVP_PKEY_get0_*() support */
+#undef HAVE_EVP_PKEY_get0
 
 /* Define to 1 if you have the <execinfo.h> header file. */
 #undef HAVE_EXECINFO_H
@@ -181,6 +193,9 @@
    */
 #undef HAVE_GSSKRB5_REGISTER_ACCEPTOR_IDENTITY
 
+/* Build with HMAC_CTX_new() support */
+#undef HAVE_HMAC_CTX_NEW
+
 /* Define if you have the iconv() function and it works. */
 #undef HAVE_ICONV
 
@@ -245,6 +260,9 @@
 /* Define if you have lz4 library */
 #undef HAVE_LZ4
 
+/* Define if you have LZ4_compress_default */
+#undef HAVE_LZ4_COMPRESS_DEFAULT
+
 /* Define if you have lzma library */
 #undef HAVE_LZMA
 
@@ -282,14 +300,26 @@
    certificate */
 #undef HAVE_MYSQL_SSL_VERIFY_SERVER_CERT
 
+/* Build with OBJ_length() support */
+#undef HAVE_OBJ_LENGTH
+
 /* Define if you don't have C99 compatible vsnprintf() call */
 #undef HAVE_OLD_VSNPRINTF
 
 /* Build with OpenSSL support */
 #undef HAVE_OPENSSL
 
+/* Define if OpenSSL performs thread cleanup automatically */
+#undef HAVE_OPENSSL_AUTO_THREAD_DEINIT
+
+/* OpenSSL supports OPENSSL_cleanup() */
+#undef HAVE_OPENSSL_CLEANUP
+
 /* Define to 1 if you have the <openssl/err.h> header file. */
 #undef HAVE_OPENSSL_ERR_H
+
+/* Define if you have ERR_remove_thread_state */
+#undef HAVE_OPENSSL_ERR_REMOVE_THREAD_STATE
 
 /* Define if you have openssl/rand.h */
 #undef HAVE_OPENSSL_RAND_H
@@ -344,6 +374,9 @@
 
 /* Define if you wish to retrieve quota of NFS mounted mailboxes */
 #undef HAVE_RQUOTA
+
+/* Build with RSA_generate_key_ex() support */
+#undef HAVE_RSA_GENERATE_KEY_EX
 
 /* Define to 1 if you have the <sasl.h> header file. */
 #undef HAVE_SASL_H
@@ -401,6 +434,9 @@
 
 /* Build with TLS hostname support */
 #undef HAVE_SSL_GET_SERVERNAME
+
+/* Define if CRYPTO_set_mem_functions has new style parameters */
+#undef HAVE_SSL_NEW_MEM_FUNCS
 
 /* Define if you have statfs.f_mntfromname */
 #undef HAVE_STATFS_MNTFROMNAME
@@ -747,7 +783,7 @@
 /* A 'va_copy' style function */
 #undef VA_COPY
 
-/* 'va_lists' cannot be copies as values */
+/* 'va_lists' cannot be copied as values */
 #undef VA_COPY_AS_ARRAY
 
 /* Version number of package */

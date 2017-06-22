@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -131,20 +131,53 @@ static const char *dict_sql_fields_map(struct setting_parser_ctx *ctx)
 	return NULL;
 }
 
+static bool
+dict_sql_value_type_parse(const char *value_type, enum dict_sql_type *type_r)
+{
+	if (strcmp(value_type, "string") == 0)
+		*type_r = DICT_SQL_TYPE_STRING;
+	else if (strcmp(value_type, "hexblob") == 0)
+		*type_r = DICT_SQL_TYPE_HEXBLOB;
+	else if (strcmp(value_type, "uint") == 0)
+		*type_r = DICT_SQL_TYPE_UINT;
+	else
+		return FALSE;
+	return TRUE;
+}
+
 static const char *dict_sql_map_finish(struct setting_parser_ctx *ctx)
 {
+	unsigned int i;
+
 	if (ctx->cur_map.pattern == NULL)
 		return "Missing setting: pattern";
 	if (ctx->cur_map.table == NULL)
 		return "Missing setting: table";
 	if (ctx->cur_map.value_field == NULL)
 		return "Missing setting: value_field";
+
+	ctx->cur_map.value_fields = (const char *const *)
+		p_strsplit_spaces(ctx->pool, ctx->cur_map.value_field, ",");
+	ctx->cur_map.values_count = str_array_length(ctx->cur_map.value_fields);
+
+	enum dict_sql_type *value_types =
+		p_new(ctx->pool, enum dict_sql_type, ctx->cur_map.values_count);
 	if (ctx->cur_map.value_type != NULL) {
-		if (strcmp(ctx->cur_map.value_type, "string") != 0 &&
-		    strcmp(ctx->cur_map.value_type, "hexblob") != 0 &&
-		    strcmp(ctx->cur_map.value_type, "uint") != 0)
-			return "Invalid value in value_type";
+		const char *const *types =
+			t_strsplit_spaces(ctx->cur_map.value_type, ",");
+		if (str_array_length(types) != ctx->cur_map.values_count)
+			return "Number of fields in value_fields doesn't match value_type";
+		for (i = 0; i < ctx->cur_map.values_count; i++) {
+			if (!dict_sql_value_type_parse(types[i], &value_types[i]))
+				return "Invalid value in value_type";
+		}
+	} else {
+		for (i = 0; i < ctx->cur_map.values_count; i++) {
+			value_types[i] = ctx->cur_map.value_hexblob ?
+				DICT_SQL_TYPE_HEXBLOB : DICT_SQL_TYPE_STRING;
+		}
 	}
+	ctx->cur_map.value_types = value_types;
 
 	if (ctx->cur_map.username_field == NULL) {
 		/* not all queries require this */
@@ -158,7 +191,7 @@ static const char *dict_sql_map_finish(struct setting_parser_ctx *ctx)
 			return "Missing fields for pattern variables";
 	}
 	array_append(&ctx->set->maps, &ctx->cur_map, 1);
-	memset(&ctx->cur_map, 0, sizeof(ctx->cur_map));
+	i_zero(&ctx->cur_map);
 	return NULL;
 }
 
@@ -167,7 +200,7 @@ parse_setting(const char *key, const char *value,
 	      struct setting_parser_ctx *ctx)
 {
 	struct dict_sql_map_field *field;
-	unsigned int value_len;
+	size_t value_len;
 
 	switch (ctx->type) {
 	case SECTION_ROOT:
@@ -259,7 +292,7 @@ dict_sql_settings_read(const char *path, const char **error_r)
 	if (cache != NULL)
 		return cache->set;
 
-	memset(&ctx, 0, sizeof(ctx));
+	i_zero(&ctx);
 	pool = pool_alloconly_create("dict sql settings", 1024);
 	ctx.pool = pool;
 	ctx.set = p_new(pool, struct dict_sql_settings, 1);

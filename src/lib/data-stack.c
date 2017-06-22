@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -322,8 +322,10 @@ static struct stack_block *mem_block_alloc(size_t min_size)
 	size_t prev_size, alloc_size;
 
 	prev_size = current_block == NULL ? 0 : current_block->size;
-	alloc_size = nearest_power(prev_size + min_size);
+	alloc_size = nearest_power(MALLOC_ADD(prev_size, min_size));
 
+	/* nearest_power() returns 2^n values, so alloc_size can't be
+	   anywhere close to SIZE_MAX */
 #ifndef USE_GC
 	block = malloc(SIZEOF_MEMBLOCK + alloc_size);
 #else

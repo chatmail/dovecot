@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "log-error-buffer.h"
@@ -51,15 +51,16 @@ static void log_error_buffer_delete_head(struct log_error_buffer *buf)
 void log_error_buffer_add(struct log_error_buffer *buf,
 			  const struct log_error *error)
 {
-	unsigned int prefix_size = strlen(error->prefix)+1;
-	unsigned int text_size = strlen(error->text)+1;
+	size_t prefix_size = strlen(error->prefix)+1;
+	size_t text_size = strlen(error->text)+1;
 	struct log_error_data *data;
 
 	if (buf->count == LOG_ERROR_BUFFER_MAX_LINES)
 		log_error_buffer_delete_head(buf);
 
 	/* @UNSAFE */
-	data = i_malloc(sizeof(*data) + prefix_size + text_size);
+	data = i_malloc(MALLOC_ADD(sizeof(*data),
+				   MALLOC_ADD(prefix_size, text_size)));
 	data->type = error->type;
 	data->timestamp = error->timestamp;
 	memcpy(data->prefix_text, error->prefix, prefix_size);

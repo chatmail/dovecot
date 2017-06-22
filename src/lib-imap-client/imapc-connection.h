@@ -8,9 +8,6 @@
 #define IMAPC_THROTTLE_DEFAULT_MAX_MSECS (16*1000)
 #define IMAPC_THROTTLE_DEFAULT_SHRINK_MIN_MSECS 500
 
-/* If connect() fails, how long should we wait before reconnection */
-#define IMAPC_CONNECT_RETRY_WAIT_MSECS 1000
-
 struct imapc_client;
 struct imapc_connection;
 
@@ -26,13 +23,20 @@ enum imapc_connection_state {
 };
 
 struct imapc_connection *
-imapc_connection_init(struct imapc_client *client);
+imapc_connection_init(struct imapc_client *client,
+		      imapc_command_callback_t *login_callback,
+		      void *login_context);
 void imapc_connection_deinit(struct imapc_connection **conn);
 
-void imapc_connection_connect(struct imapc_connection *conn,
-			      imapc_command_callback_t *login_callback,
-			      void *login_context) ATTR_NULL(2, 3);
+void imapc_connection_connect(struct imapc_connection *conn);
+void imapc_connection_set_no_reconnect(struct imapc_connection *conn);
 void imapc_connection_disconnect(struct imapc_connection *conn);
+void imapc_connection_disconnect_full(struct imapc_connection *conn,
+				      bool reconnecting);
+void imapc_connection_try_reconnect(struct imapc_connection *conn,
+				    const char *errstr,
+				    unsigned int delay_msecs,
+				    bool connect_error);
 void imapc_connection_abort_commands(struct imapc_connection *conn,
 				     struct imapc_client_mailbox *only_box,
 				     bool keep_retriable) ATTR_NULL(2);

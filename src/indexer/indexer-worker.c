@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "restrict-access.h"
@@ -34,7 +34,7 @@ static void drop_privileges(void)
 		struct master_service_settings_input input;
 		struct master_service_settings_output output;
 
-		memset(&input, 0, sizeof(input));
+		i_zero(&input);
 		input.module = "mail";
 		input.service = "indexer-worker";
 		(void)master_service_settings_read(master_service,

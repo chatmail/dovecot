@@ -154,10 +154,12 @@ am_libstorage_la_OBJECTS = fail-mail-storage.lo fail-mailbox.lo \
 	mail-error.lo mail-namespace.lo mail-search.lo \
 	mail-search-args-cmdline.lo mail-search-args-imap.lo \
 	mail-search-args-simplify.lo mail-search-build.lo \
-	mail-search-parser.lo mail-search-parser-imap.lo \
-	mail-search-parser-cmdline.lo mail-search-register.lo \
-	mail-search-register-human.lo mail-search-register-imap.lo \
-	mail-storage.lo mail-storage-hooks.lo mail-storage-service.lo \
+	mail-search-mime.lo mail-search-mime-build.lo \
+	mail-search-mime-register.lo mail-search-parser.lo \
+	mail-search-parser-imap.lo mail-search-parser-cmdline.lo \
+	mail-search-register.lo mail-search-register-human.lo \
+	mail-search-register-imap.lo mail-storage.lo \
+	mail-storage-hooks.lo mail-storage-service.lo \
 	mail-storage-settings.lo mail-thread.lo mail-user.lo \
 	mailbox-attribute.lo mailbox-attribute-internal.lo \
 	mailbox-get.lo mailbox-guid-cache.lo mailbox-header.lo \
@@ -167,7 +169,7 @@ am_libstorage_la_OBJECTS = fail-mail-storage.lo fail-mailbox.lo \
 libstorage_la_OBJECTS = $(am_libstorage_la_OBJECTS)
 am__EXEEXT_1 = test-mail-search-args-imap$(EXEEXT) \
 	test-mail-search-args-simplify$(EXEEXT) \
-	test-mailbox-get$(EXEEXT)
+	test-mail-storage$(EXEEXT) test-mailbox-get$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am_test_mail_search_args_imap_OBJECTS =  \
 	test-mail-search-args-imap.$(OBJEXT)
@@ -177,6 +179,8 @@ am_test_mail_search_args_simplify_OBJECTS =  \
 	test-mail-search-args-simplify.$(OBJEXT)
 test_mail_search_args_simplify_OBJECTS =  \
 	$(am_test_mail_search_args_simplify_OBJECTS)
+am_test_mail_storage_OBJECTS = test-mail-storage.$(OBJEXT)
+test_mail_storage_OBJECTS = $(am_test_mail_storage_OBJECTS)
 am_test_mailbox_get_OBJECTS = test-mailbox-get.$(OBJEXT)
 test_mailbox_get_OBJECTS = $(am_test_mailbox_get_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -216,11 +220,11 @@ am__v_CCLD_1 =
 SOURCES = $(libdovecot_storage_la_SOURCES) $(libstorage_la_SOURCES) \
 	$(test_mail_search_args_imap_SOURCES) \
 	$(test_mail_search_args_simplify_SOURCES) \
-	$(test_mailbox_get_SOURCES)
+	$(test_mail_storage_SOURCES) $(test_mailbox_get_SOURCES)
 DIST_SOURCES = $(libdovecot_storage_la_SOURCES) \
 	$(libstorage_la_SOURCES) $(test_mail_search_args_imap_SOURCES) \
 	$(test_mail_search_args_simplify_SOURCES) \
-	$(test_mailbox_get_SOURCES)
+	$(test_mail_storage_SOURCES) $(test_mailbox_get_SOURCES)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -515,6 +519,9 @@ libstorage_la_SOURCES = \
 	mail-search-args-imap.c \
 	mail-search-args-simplify.c \
 	mail-search-build.c \
+	mail-search-mime.c \
+	mail-search-mime-build.c \
+	mail-search-mime-register.c \
 	mail-search-parser.c \
 	mail-search-parser-imap.c \
 	mail-search-parser-cmdline.c \
@@ -549,6 +556,9 @@ headers = \
 	mail-namespace.h \
 	mail-search.h \
 	mail-search-build.h \
+	mail-search-mime.h \
+	mail-search-mime-build.h \
+	mail-search-mime-register.h \
 	mail-search-register.h \
 	mail-thread.h \
 	mail-storage.h \
@@ -599,6 +609,7 @@ libdovecot_storage_la_LDFLAGS = -export-dynamic
 test_programs = \
 	test-mail-search-args-imap \
 	test-mail-search-args-simplify \
+	test-mail-storage \
 	test-mailbox-get
 
 test_libs = \
@@ -614,6 +625,9 @@ test_mail_search_args_simplify_DEPENDENCIES = libstorage.la $(LIBDOVECOT_DEPS)
 test_mailbox_get_SOURCES = test-mailbox-get.c
 test_mailbox_get_LDADD = mailbox-get.lo $(test_libs)
 test_mailbox_get_DEPENDENCIES = $(noinst_LTLIBRARIES) $(test_libs)
+test_mail_storage_SOURCES = test-mail-storage.c
+test_mail_storage_LDADD = libstorage.la $(LIBDOVECOT)
+test_mail_storage_DEPENDENCIES = libstorage.la $(LIBDOVECOT_DEPS)
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
 noinst_HEADERS = $(test_headers)
@@ -720,6 +734,10 @@ test-mail-search-args-simplify$(EXEEXT): $(test_mail_search_args_simplify_OBJECT
 	@rm -f test-mail-search-args-simplify$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_mail_search_args_simplify_OBJECTS) $(test_mail_search_args_simplify_LDADD) $(LIBS)
 
+test-mail-storage$(EXEEXT): $(test_mail_storage_OBJECTS) $(test_mail_storage_DEPENDENCIES) $(EXTRA_test_mail_storage_DEPENDENCIES) 
+	@rm -f test-mail-storage$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_mail_storage_OBJECTS) $(test_mail_storage_LDADD) $(LIBS)
+
 test-mailbox-get$(EXEEXT): $(test_mailbox_get_OBJECTS) $(test_mailbox_get_DEPENDENCIES) $(EXTRA_test_mailbox_get_DEPENDENCIES) 
 	@rm -f test-mailbox-get$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_mailbox_get_OBJECTS) $(test_mailbox_get_LDADD) $(LIBS)
@@ -741,6 +759,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-args-imap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-args-simplify.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-build.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-mime-build.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-mime-register.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-mime.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-parser-cmdline.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-parser-imap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-search-parser.Plo@am__quote@
@@ -770,6 +791,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-watch.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-search-args-imap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-search-args-simplify.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-storage.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mailbox-get.Po@am__quote@
 
 .c.o:

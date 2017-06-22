@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -36,7 +36,7 @@ message_parse_header_init(struct istream *input, struct message_size *hdr_size,
 	i_stream_ref(input);
 
 	if (hdr_size != NULL)
-		memset(hdr_size, 0, sizeof(*hdr_size));
+		i_zero(hdr_size);
 	return ctx;
 }
 

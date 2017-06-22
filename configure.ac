@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.2.27],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv27($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.2.30.2],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv30($PACKAGE_VERSION)", [Dovecot ABI version])
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_SRCDIR([src])
 
@@ -317,6 +317,9 @@ AC_HEADER_STDC
 AC_C_INLINE
 AC_PROG_LIBTOOL
 AM_ICONV
+
+# SIZE_MAX is missing without this
+CXXFLAGS="$CXXFLAGS -D__STDC_LIMIT_MACROS"
 
 AC_DEFINE_UNQUOTED(DOVECOT_NAME, "$PACKAGE_NAME", [Dovecot name])
 AC_DEFINE_UNQUOTED(DOVECOT_STRING, "$PACKAGE_STRING", [Dovecot string])
@@ -837,6 +840,7 @@ dnl * that it's unsigned and only some old systems define it as signed.
 AC_CACHE_CHECK([whether size_t is signed],i_cv_signed_size_t,[
   AC_RUN_IFELSE([AC_LANG_SOURCE([[
     #include <sys/types.h>
+    #include <stdlib.h>
     int main() {
       /* return 0 if we're signed */
       exit((size_t)(int)-1 <= 0 ? 0 : 1);
@@ -993,6 +997,7 @@ AC_DEFINE_UNQUOTED(TIME_T_MAX_BITS, $i_cv_gmtime_max_time_t, [max. time_t bits g
 AC_CACHE_CHECK([whether time_t is signed],i_cv_signed_time_t,[
   AC_RUN_IFELSE([AC_LANG_SOURCE([[
     #include <sys/types.h>
+    #include <stdlib.h>
     int main() {
       /* return 0 if we're signed */
       exit((time_t)(int)-1 <= 0 ? 0 : 1);
@@ -1184,6 +1189,7 @@ AC_CACHE_CHECK([whether shared mmaps get updated by write()s],i_cv_mmap_plays_wi
     #include <unistd.h>
     #include <fcntl.h>
     #include <sys/mman.h>
+    #include <string.h>
     int main() {
       /* return 0 if we're signed */
       int f = open("conftest.mmap", O_RDWR|O_CREAT|O_TRUNC, 0600);
@@ -1560,6 +1566,7 @@ dnl ***
 AC_CACHE_CHECK([for an implementation of va_copy()],lib_cv_va_copy,[
 	AC_RUN_IFELSE([AC_LANG_SOURCE([[
 	#include <stdarg.h>
+	#include <stdlib.h>
 	void f (int i, ...) {
 	va_list args1, args2;
 	va_start (args1, i);
@@ -1578,6 +1585,7 @@ AC_CACHE_CHECK([for an implementation of va_copy()],lib_cv_va_copy,[
 AC_CACHE_CHECK([for an implementation of __va_copy()],lib_cv___va_copy,[
 	AC_RUN_IFELSE([AC_LANG_SOURCE([[
 	#include <stdarg.h>
+	#include <stdlib.h>
 	void f (int i, ...) {
 	va_list args1, args2;
 	va_start (args1, i);
@@ -1608,6 +1616,7 @@ fi
 AC_CACHE_CHECK([whether va_lists can be copied by value],lib_cv_va_val_copy,[
 	AC_RUN_IFELSE([AC_LANG_SOURCE([[
 	#include <stdarg.h>
+	#include <stdlib.h>
 	void f (int i, ...) {
 	va_list args1, args2;
 	va_start (args1, i);
@@ -1625,7 +1634,7 @@ AC_CACHE_CHECK([whether va_lists can be copied by value],lib_cv_va_val_copy,[
 ])
 
 if test "x$lib_cv_va_val_copy" = "xno"; then
-  AC_DEFINE(VA_COPY_AS_ARRAY,1, ['va_lists' cannot be copies as values])
+  AC_DEFINE(VA_COPY_AS_ARRAY,1, ['va_lists' cannot be copied as values])
 fi
 
 dnl * dynamic modules?
@@ -1715,8 +1724,6 @@ if test $want_openssl != no && test $have_ssl = no; then
       #endif]], [[ return 0; ]])], [ssl_version_ge_102=true], [ssl_version_ge_102=false])
     AC_MSG_RESULT([$ssl_version_ge_102])
 
-    AM_CONDITIONAL([SSL_VERSION_GE_102], [test x$ssl_version_ge_102 = xtrue])
-
     # SSL_clear_options introduced in openssl 0.9.8m but may be backported to
     # older versions in "enterprise" OS releases; originally implemented as a
     # macro but as a function in more recent openssl versions
@@ -1740,6 +1747,37 @@ if test $want_openssl != no && test $have_ssl = no; then
       AC_DEFINE(HAVE_SSL_CLEAR_OPTIONS,, [Define if you have SSL_clear_options])
     fi
 
+    # New style mem functions? Should be in v1.1+
+    AC_CACHE_CHECK([whether CRYPTO_set_mem_functions has new style parameters],i_cv_have_ssl_new_mem_funcs,[
+      old_LIBS=$LIBS
+      LIBS="$LIBS -lssl"
+      AC_TRY_LINK([
+	#include <openssl/ssl.h>
+	int CRYPTO_set_mem_functions(
+		void *(*m) (size_t, const char *, int),
+		void *(*r) (void *, size_t, const char *, int),
+		void (*f) (void *, const char *, int));
+      ], [
+      ], [
+	i_cv_have_ssl_new_mem_funcs=yes
+      ], [
+	i_cv_have_ssl_new_mem_funcs=no
+      ])
+      LIBS=$old_LIBS
+    ])
+    if test $i_cv_have_ssl_new_mem_funcs = yes; then
+      AC_DEFINE(HAVE_SSL_NEW_MEM_FUNCS,, [Define if CRYPTO_set_mem_functions has new style parameters])
+    fi
+
+    AC_CHECK_LIB(ssl, ERR_remove_thread_state, [
+      AC_DEFINE(HAVE_OPENSSL_ERR_REMOVE_THREAD_STATE,, [Define if you have ERR_remove_thread_state])
+    ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, OPENSSL_thread_stop, [
+      AC_DEFINE(HAVE_OPENSSL_AUTO_THREAD_DEINIT,, [Define if OpenSSL performs thread cleanup automatically])
+    ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, OPENSSL_cleanup, [
+      AC_DEFINE(HAVE_OPENSSL_CLEANUP,, [OpenSSL supports OPENSSL_cleanup()])
+    ],, $SSL_LIBS)
     AC_CHECK_LIB(ssl, SSL_get_current_compression, [
       AC_DEFINE(HAVE_SSL_COMPRESSION,, [Build with OpenSSL compression])
     ],, $SSL_LIBS)
@@ -1748,6 +1786,24 @@ if test $want_openssl != no && test $have_ssl = no; then
     ],, $SSL_LIBS)
     AC_CHECK_LIB(ssl, SSL_COMP_free_compression_methods, [
       AC_DEFINE(HAVE_SSL_COMP_FREE_COMPRESSION_METHODS,, [Build with SSL_COMP_free_compression_methods() support])
+    ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, RSA_generate_key_ex, [
+      AC_DEFINE(HAVE_RSA_GENERATE_KEY_EX,, [Build with RSA_generate_key_ex() support])
+    ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, ASN1_STRING_get0_data, [
+      AC_DEFINE(HAVE_ASN1_STRING_GET0_DATA,, [Build with ASN1_STRING_get0_data() support])
+    ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, HMAC_CTX_new, [
+      AC_DEFINE(HAVE_HMAC_CTX_NEW,, [Build with HMAC_CTX_new() support])
+    ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, EVP_MD_CTX_new, [
+      AC_DEFINE(HAVE_EVP_MD_CTX_NEW,, [Build with EVP_MD_CTX_new() support])
+    ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, OBJ_length, [
+      AC_DEFINE(HAVE_OBJ_LENGTH,, [Build with OBJ_length() support])
+    ],, $SSL_LIBS)
+    AC_CHECK_LIB(ssl, EVP_PKEY_get0_RSA, [
+      AC_DEFINE(HAVE_EVP_PKEY_get0,, [Build with EVP_PKEY_get0_*() support])
     ],, $SSL_LIBS)
     AC_CHECK_LIB(ssl, [EVP_PKEY_CTX_new_id], [have_evp_pkey_ctx_new_id="yes"],, $SSL_LIBS)
     AC_CHECK_LIB(ssl, [EC_KEY_new], [have_ec_key_new="yes"],, $SSL_LIBS)
@@ -1758,6 +1814,7 @@ if test $want_openssl != no && test $have_ssl = no; then
     fi
   fi
 fi
+AM_CONDITIONAL([SSL_VERSION_GE_102], [test x$ssl_version_ge_102 = xtrue])
 
 AM_CONDITIONAL(BUILD_OPENSSL, test "$have_openssl" = "yes")
 AM_CONDITIONAL(BUILD_DCRYPT_OPENSSL, test "$build_dcrypt_openssl" = "yes")
@@ -2274,7 +2331,7 @@ if test $want_mysql != no; then
 				  $ssl_define
 				  #include <mysql.h>
 				], [
-				  mysql_set_ssl(0, 0, 0, 0, 0, 0);
+				  mysql_ssl_set(0, 0, 0, 0, 0, 0);
 				], [
 					AC_DEFINE(HAVE_MYSQL_SSL_CIPHER,, [Define if your MySQL library supports setting cipher])
 
@@ -2337,6 +2394,9 @@ if test $want_cassandra != no; then
 
 			AC_DEFINE(HAVE_CASSANDRA,, [Build with Cassandra support])
 			found_sql_drivers="$found_sql_drivers cassandra"
+                        AC_CHECK_LIB(cassandra, cass_cluster_set_constant_speculative_execution_policy, [
+                          AC_DEFINE(HAVE_CASSANDRA_SPECULATIVE_POLICY, 1, [Cassandra supports speculative execution policy])
+                        ])
 		], [
 		  if test $want_cassandra = yes; then
 		    AC_ERROR([Can't build with Cassandra support: cassandra.h not found])
@@ -2582,9 +2642,7 @@ dnl **
 dnl ** Shared libraries usage
 dnl **
 
-
-LIBDOVECOT_LA_LIBS='$(top_builddir)/src/lib-dict-extra/libdict_extra.la $(top_builddir)/src/lib-master/libmaster.la $(top_builddir)/src/lib-settings/libsettings.la $(top_builddir)/src/lib-stats/libstats.la $(top_builddir)/src/lib-http/libhttp.la $(top_builddir)/src/lib-fs/libfs.la $(top_builddir)/src/lib-dict/libdict.la $(top_builddir)/src/lib-dns/libdns.la $(top_builddir)/src/lib-imap/libimap.la $(top_builddir)/src/lib-mail/libmail.la $(top_builddir)/src/lib-sasl/libsasl.la $(top_builddir)/src/lib-auth/libauth.la $(top_builddir)/src/lib-charset/libcharset.la $(top_builddir)/src/lib-ssl-iostream/libssl_iostream.la $(top_builddir)/src/lib-dcrypt/libdcrypt.la $(top_builddir)/src/lib-program-client/libprogram_client.la $(top_builddir)/src/lib-test/libtest.la $(top_builddir)/src/lib/liblib.la'
-
+LIBDOVECOT_LA_LIBS='$(top_builddir)/src/lib-dict-extra/libdict_extra.la $(top_builddir)/src/lib-oauth2/liboauth2.la $(top_builddir)/src/lib-program-client/libprogram_client.la $(top_builddir)/src/lib-master/libmaster.la $(top_builddir)/src/lib-settings/libsettings.la $(top_builddir)/src/lib-stats/libstats.la $(top_builddir)/src/lib-http/libhttp.la $(top_builddir)/src/lib-fs/libfs.la $(top_builddir)/src/lib-dict/libdict.la $(top_builddir)/src/lib-smtp/libsmtp.la $(top_builddir)/src/lib-dns/libdns.la $(top_builddir)/src/lib-imap/libimap.la $(top_builddir)/src/lib-mail/libmail.la $(top_builddir)/src/lib-sasl/libsasl.la $(top_builddir)/src/lib-auth/libauth.la $(top_builddir)/src/lib-charset/libcharset.la $(top_builddir)/src/lib-ssl-iostream/libssl_iostream.la $(top_builddir)/src/lib-dcrypt/libdcrypt.la $(top_builddir)/src/lib-test/libtest.la $(top_builddir)/src/lib/liblib.la'
 if test "$want_shared_libs" = "yes"; then
   LIBDOVECOT_DEPS='$(top_builddir)/src/lib-dovecot/libdovecot.la'
   LIBDOVECOT="$LIBDOVECOT_DEPS \$(MODULE_LIBS)"
@@ -2733,6 +2791,11 @@ if test "$want_lz4" != "no"; then
       if test "$want_lz4" = "yes"; then
 	AC_ERROR([Can't build with lz4 support: liblz4 not found])
       fi
+    ])
+    AC_CHECK_LIB(lz4, LZ4_compress_default, [
+      AC_DEFINE(HAVE_LZ4_COMPRESS_DEFAULT,,
+	[Define if you have LZ4_compress_default])
+    ], [
     ])
   ], [
     if test "$want_lz4" = "yes"; then
@@ -2928,6 +2991,7 @@ src/lib-dns/Makefile
 src/lib-fs/Makefile
 src/lib-fts/Makefile
 src/lib-http/Makefile
+src/lib-oauth2/Makefile
 src/lib-imap/Makefile
 src/lib-imap-storage/Makefile
 src/lib-imap-client/Makefile
@@ -2943,6 +3007,7 @@ src/lib-otp/Makefile
 src/lib-dovecot/Makefile
 src/lib-sasl/Makefile
 src/lib-settings/Makefile
+src/lib-smtp/Makefile
 src/lib-ssl-iostream/Makefile
 src/lib-stats/Makefile
 src/lib-test/Makefile
@@ -3020,6 +3085,7 @@ src/plugins/welcome/Makefile
 src/plugins/zlib/Makefile
 src/plugins/imap-zlib/Makefile
 src/plugins/mail-crypt/Makefile
+src/plugins/var-expand-crypt/Makefile
 stamp.h
 dovecot-config.in])
 

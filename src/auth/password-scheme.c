@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -44,7 +44,7 @@ password_scheme_lookup(const char *name, enum password_encoding *encoding_r)
 {
 	const struct password_scheme *scheme;
 	const char *encoding = NULL;
-	unsigned int scheme_len;
+	size_t scheme_len;
 
 	*encoding_r = PW_ENCODING_NONE;
 
@@ -99,7 +99,7 @@ int password_verify(const char *plaintext, const char *user, const char *scheme,
 		s->password_generate(plaintext, user,
 				     &generated, &generated_size);
 		ret = size != generated_size ? 0 :
-			memcmp(generated, raw_password, size) == 0 ? 1 : 0;
+			mem_equals_timing_safe(generated, raw_password, size) ? 1 : 0;
 	}
 
 	if (ret == 0)
@@ -145,7 +145,7 @@ int password_decode(const char *password, const char *scheme,
 	const struct password_scheme *s;
 	enum password_encoding encoding;
 	buffer_t *buf;
-	unsigned int len;
+	size_t len;
 	bool guessed_encoding;
 
 	*error_r = NULL;
@@ -471,7 +471,7 @@ static int ssha_verify(const char *plaintext, const char *user ATTR_UNUSED,
 	sha1_loop(&ctx, plaintext, strlen(plaintext));
 	sha1_loop(&ctx, raw_password + SHA1_RESULTLEN, size - SHA1_RESULTLEN);
 	sha1_result(&ctx, sha1_digest);
-	return memcmp(sha1_digest, raw_password, SHA1_RESULTLEN) == 0 ? 1 : 0;
+	return mem_equals_timing_safe(sha1_digest, raw_password, SHA1_RESULTLEN) ? 1 : 0;
 }
 
 static void
@@ -513,8 +513,8 @@ static int ssha256_verify(const char *plaintext, const char *user ATTR_UNUSED,
 	sha256_loop(&ctx, raw_password + SHA256_RESULTLEN,
 		    size - SHA256_RESULTLEN);
 	sha256_result(&ctx, sha256_digest);
-	return memcmp(sha256_digest, raw_password,
-		      SHA256_RESULTLEN) == 0 ? 1 : 0;
+	return mem_equals_timing_safe(sha256_digest, raw_password,
+				      SHA256_RESULTLEN) ? 1 : 0;
 }
 
 static void
@@ -556,8 +556,8 @@ static int ssha512_verify(const char *plaintext, const char *user ATTR_UNUSED,
 	sha512_loop(&ctx, raw_password + SHA512_RESULTLEN,
 		    size - SHA512_RESULTLEN);
 	sha512_result(&ctx, sha512_digest);
-	return memcmp(sha512_digest, raw_password,
-		      SHA512_RESULTLEN) == 0 ? 1 : 0;
+	return mem_equals_timing_safe(sha512_digest, raw_password,
+				      SHA512_RESULTLEN) ? 1 : 0;
 }
 
 static void
@@ -598,7 +598,7 @@ static int smd5_verify(const char *plaintext, const char *user ATTR_UNUSED,
 	md5_update(&ctx, plaintext, strlen(plaintext));
 	md5_update(&ctx, raw_password + MD5_RESULTLEN, size - MD5_RESULTLEN);
 	md5_final(&ctx, md5_digest);
-	return memcmp(md5_digest, raw_password, MD5_RESULTLEN) == 0 ? 1 : 0;
+	return mem_equals_timing_safe(md5_digest, raw_password, MD5_RESULTLEN) ? 1 : 0;
 }
 
 static void
@@ -610,11 +610,23 @@ plain_generate(const char *plaintext, const char *user ATTR_UNUSED,
 }
 
 static int
+plain_verify(const char *plaintext, const char *user ATTR_UNUSED,
+	     const unsigned char *raw_password, size_t size,
+	     const char **error_r ATTR_UNUSED)
+{
+	size_t plaintext_len = strlen(plaintext);
+
+	if (plaintext_len != size)
+		return 0;
+	return mem_equals_timing_safe(plaintext, raw_password, size) ? 1 : 0;
+}
+
+static int
 plain_trunc_verify(const char *plaintext, const char *user ATTR_UNUSED,
 		   const unsigned char *raw_password, size_t size,
 		   const char **error_r)
 {
-	unsigned int i, plaintext_len, trunc_len = 0;
+	size_t i, plaintext_len, trunc_len = 0;
 
 	/* format: <length>-<password> */
 	for (i = 0; i < size; i++) {
@@ -633,10 +645,10 @@ plain_trunc_verify(const char *plaintext, const char *user ATTR_UNUSED,
 	if (size-i == trunc_len && plaintext_len >= trunc_len) {
 		/* possibly truncated password. allow the given password as
 		   long as the prefix matches. */
-		return memcmp(raw_password+i, plaintext, trunc_len) == 0 ? 1 : 0;
+		return mem_equals_timing_safe(raw_password+i, plaintext, trunc_len) ? 1 : 0;
 	}
 	return plaintext_len == size-i &&
-		memcmp(raw_password+i, plaintext, plaintext_len) == 0 ? 1 : 0;
+		mem_equals_timing_safe(raw_password+i, plaintext, plaintext_len) ? 1 : 0;
 }
 
 static void
@@ -803,9 +815,9 @@ static const struct password_scheme builtin_schemes[] = {
 	{ "SSHA", PW_ENCODING_BASE64, 0, ssha_verify, ssha_generate },
 	{ "SSHA256", PW_ENCODING_BASE64, 0, ssha256_verify, ssha256_generate },
 	{ "SSHA512", PW_ENCODING_BASE64, 0, ssha512_verify, ssha512_generate },
-	{ "PLAIN", PW_ENCODING_NONE, 0, NULL, plain_generate },
-	{ "CLEAR", PW_ENCODING_NONE, 0, NULL, plain_generate },
-	{ "CLEARTEXT", PW_ENCODING_NONE, 0, NULL, plain_generate },
+	{ "PLAIN", PW_ENCODING_NONE, 0, plain_verify, plain_generate },
+	{ "CLEAR", PW_ENCODING_NONE, 0, plain_verify, plain_generate },
+	{ "CLEARTEXT", PW_ENCODING_NONE, 0, plain_verify, plain_generate },
 	{ "PLAIN-TRUNC", PW_ENCODING_NONE, 0, plain_trunc_verify, plain_generate },
 	{ "CRAM-MD5", PW_ENCODING_HEX, CRAM_MD5_CONTEXTLEN,
 	  NULL, cram_md5_generate },

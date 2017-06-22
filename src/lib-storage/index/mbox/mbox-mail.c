@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -47,6 +47,7 @@ static int mbox_mail_seek(struct index_mail *mail)
 		mail_set_aborted(_mail);
 		return -1;
 	}
+	_mail->mail_stream_opened = TRUE;
 
 	if (mbox->mbox_stream != NULL &&
 	    istream_raw_mbox_is_corrupted(mbox->mbox_stream)) {

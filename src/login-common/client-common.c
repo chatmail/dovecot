@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "array.h"
@@ -8,8 +8,10 @@
 #include "ostream.h"
 #include "iostream-rawlog.h"
 #include "process-title.h"
+#include "hook-build.h"
 #include "buffer.h"
 #include "str.h"
+#include "strescape.h"
 #include "base64.h"
 #include "str-sanitize.h"
 #include "safe-memset.h"
@@ -29,19 +31,54 @@ struct client *clients = NULL;
 static struct client *last_client = NULL;
 static unsigned int clients_count = 0;
 
-static void empty_login_client_allocated_hook(struct client *client ATTR_UNUSED)
+struct login_client_module_hooks {
+	struct module *module;
+	const struct login_client_hooks *hooks;
+};
+
+static ARRAY(struct login_client_module_hooks) module_hooks = ARRAY_INIT;
+
+void login_client_hooks_add(struct module *module,
+			    const struct login_client_hooks *hooks)
 {
+	struct login_client_module_hooks *hook;
+
+	hook = array_append_space(&module_hooks);
+	hook->module = module;
+	hook->hooks = hooks;
 }
-static login_client_allocated_func_t *hook_client_allocated =
-	empty_login_client_allocated_hook;
 
-login_client_allocated_func_t *
-login_client_allocated_hook_set(login_client_allocated_func_t *new_hook)
+void login_client_hooks_remove(const struct login_client_hooks *hooks)
 {
-	login_client_allocated_func_t *old_hook = hook_client_allocated;
+	const struct login_client_module_hooks *module_hook;
+	unsigned int idx = UINT_MAX;
 
-	hook_client_allocated = new_hook;
-	return old_hook;
+	array_foreach(&module_hooks, module_hook) {
+		if (module_hook->hooks == hooks) {
+			idx = array_foreach_idx(&module_hooks, module_hook);
+			break;
+		}
+	}
+	i_assert(idx != UINT_MAX);
+
+	array_delete(&module_hooks, idx, 1);
+}
+
+static void hook_login_client_allocated(struct client *client)
+{
+	const struct login_client_module_hooks *module_hook;
+	struct hook_build_context *ctx;
+
+	ctx = hook_build_init((void *)&client->v, sizeof(client->v));
+	client->vlast = &client->v;
+	array_foreach(&module_hooks, module_hook) {
+		if (module_hook->hooks->client_allocated != NULL) T_BEGIN {
+			module_hook->hooks->client_allocated(client);
+			hook_build_update(ctx, client->vlast);
+		} T_END;
+	}
+	client->vlast = NULL;
+	hook_build_deinit(&ctx);
 }
 
 static void client_idle_disconnect_timeout(struct client *client)
@@ -65,10 +102,10 @@ static void client_idle_disconnect_timeout(struct client *client)
 		user_reason = "Timeout while finishing login.";
 		destroy_reason = t_strdup_printf(
 			"proxy: Logging in to %s:%u timed out "
-			"(state=%u, duration=%us)",
+			"(state=%s, duration=%us)",
 			login_proxy_get_host(client->login_proxy),
 			login_proxy_get_port(client->login_proxy),
-			client->proxy_state, secs);
+			client_proxy_get_state(client), secs);
 		client_log_err(client, destroy_reason);
 	} else {
 		user_reason = "Disconnected for inactivity.";
@@ -138,6 +175,7 @@ client_create(int fd, bool ssl, pool_t pool,
 	client->refcount = 1;
 
 	client->pool = pool;
+	client->preproxy_pool = pool_alloconly_create(MEMPOOL_GROWING"preproxy pool", 256);
 	client->set = set;
 	client->ssl_set = ssl_set;
 	p_array_init(&client->module_contexts, client->pool, 5);
@@ -170,7 +208,7 @@ client_create(int fd, bool ssl, pool_t pool,
 			    client_idle_disconnect_timeout, client);
 	client_open_streams(client);
 
-	hook_client_allocated(client);
+	hook_login_client_allocated(client);
 	client->v.create(client, other_sets);
 
 	if (auth_client_is_connected(auth_client))
@@ -188,9 +226,14 @@ void client_destroy(struct client *client, const char *reason)
 		return;
 	client->destroyed = TRUE;
 
+	if (client->preproxy_pool != NULL)
+		pool_unref(&client->preproxy_pool);
+
 	if (!client->login_success && reason != NULL) {
-		reason = t_strconcat(reason, " ",
-			client_get_extra_disconnect_reason(client), NULL);
+		const char *extra_reason =
+			client_get_extra_disconnect_reason(client);
+		if (extra_reason[0] != '\0')
+			reason = t_strconcat(reason, " ", extra_reason, NULL);
 	}
 	if (reason != NULL)
 		client_log(client, reason);
@@ -448,6 +491,19 @@ unsigned int clients_get_count(void)
 	return clients_count;
 }
 
+void client_add_forward_field(struct client *client, const char *key,
+			      const char *value)
+{
+	if (client->forward_fields == NULL)
+		client->forward_fields = str_new(client->preproxy_pool, 32);
+	else
+		str_append_c(client->forward_fields, '\t');
+	/* prefixing is done by auth process */
+	str_append_tabescaped(client->forward_fields, key);
+	str_append_c(client->forward_fields, '=');
+	str_append_tabescaped(client->forward_fields, value);
+}
+
 const char *client_get_session_id(struct client *client)
 {
 	buffer_t *buf, *base64_buf;
@@ -610,7 +666,8 @@ client_var_expand_func_passdb(const char *data, void *context)
 {
 	struct client *client = context;
 	const char *field_name = data;
-	unsigned int i, field_name_len;
+	unsigned int i;
+	size_t field_name_len;
 
 	if (client->auth_passdb_args == NULL)
 		return NULL;
@@ -726,6 +783,10 @@ const char *client_get_extra_disconnect_reason(struct client *client)
 			(unsigned int)(ioloop_time - client->created));
 
 	if (client->auth_attempts == 0) {
+		if (!client->banner_sent) {
+			/* disconnected by a plugin */
+			return "";
+		}
 		return t_strdup_printf("(no auth attempts in %u secs)",
 			(unsigned int)(ioloop_time - client->created));
 	}
@@ -795,7 +856,8 @@ void client_notify_status(struct client *client, bool bad, const char *text)
 		client->v.notify_status(client, bad, text);
 }
 
-void client_send_raw_data(struct client *client, const void *data, size_t size)
+void client_common_send_raw_data(struct client *client,
+				 const void *data, size_t size)
 {
 	ssize_t ret;
 
@@ -807,6 +869,15 @@ void client_send_raw_data(struct client *client, const void *data, size_t size)
 		   being referenced.. */
 		i_stream_close(client->input);
 	}
+}
+
+void client_send_raw_data(struct client *client, const void *data, size_t size)
+{
+	/* FIXME: NULL check is only for backwards compatibility - remove */
+	if (client->v.send_raw_data != NULL)
+		client->v.send_raw_data(client, data, size);
+	else
+		client_common_send_raw_data(client, data, size);
 }
 
 void client_send_raw(struct client *client, const char *data)
@@ -840,4 +911,14 @@ bool client_read(struct client *client)
 void client_input(struct client *client)
 {
 	client->v.input(client);
+}
+
+void client_common_init(void)
+{
+	i_array_init(&module_hooks, 32);
+}
+
+void client_common_deinit(void)
+{
+	array_free(&module_hooks);
 }

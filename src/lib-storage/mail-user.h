@@ -12,6 +12,7 @@ struct mail_user;
 
 struct mail_user_vfuncs {
 	void (*deinit)(struct mail_user *user);
+	void (*deinit_pre)(struct mail_user *user);
 	void (*stats_fill)(struct mail_user *user, struct stats *stats);
 };
 
@@ -72,6 +73,9 @@ struct mail_user {
 	unsigned int autocreated:1;
 	/* mail_user_init() has been called */
 	unsigned int initialized:1;
+	/* The initial namespaces have been created and
+	   hook_mail_namespaces_created() has been called. */
+	unsigned int namespaces_created:1;
 	/* SET_STR_VARS in user's all settings have been expanded.
 	   This happens near the beginning of the user initialization,
 	   so this is rarely needed to be checked. */
@@ -92,8 +96,6 @@ struct mail_user {
 	unsigned int admin:1;
 	/* Enable all statistics gathering */
 	unsigned int stats_enabled:1;
-	/* Enable autoexpunging at deinit. */
-	unsigned int autoexpunge_enabled:1;
 	/* This session was restored (e.g. IMAP unhibernation) */
 	unsigned int session_restored:1;
 };
@@ -113,6 +115,10 @@ extern const struct var_expand_func_table *mail_user_var_expand_func_table;
 struct mail_user *mail_user_alloc(const char *username,
 				  const struct setting_parser_info *set_info,
 				  const struct mail_user_settings *set);
+struct mail_user *
+mail_user_alloc_nodup_set(const char *username,
+			  const struct setting_parser_info *set_info,
+			  const struct mail_user_settings *set);
 /* Returns -1 if settings were invalid. */
 int mail_user_init(struct mail_user *user, const char **error_r);
 
@@ -172,6 +178,10 @@ const char *mail_user_get_anvil_userip_ident(struct mail_user *user);
    storage plugins when needed. */
 struct mail_storage *
 mail_user_get_storage_class(struct mail_user *user, const char *name);
+
+/* Initialize SSL client settings from mail_user settings. */
+void mail_user_init_ssl_client_settings(struct mail_user *user,
+				struct ssl_iostream_settings *ssl_set);
 
 /* Initialize fs_settings from mail_user settings. */
 void mail_user_init_fs_settings(struct mail_user *user,

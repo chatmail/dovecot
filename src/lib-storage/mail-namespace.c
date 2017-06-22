@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -294,7 +294,7 @@ namespaces_check(struct mail_namespace *namespaces, const char **error_r)
 		    ns->prefix[strlen(ns->prefix)-1] != ns_sep) {
 			*error_r = t_strdup_printf(
 				"list=yes requires prefix=%s "
-				"to end with separator", ns->prefix);
+				"to end with separator %c", ns->prefix, ns_sep);
 			return FALSE;
 		}
 		if (*ns->prefix != '\0' &&
@@ -382,6 +382,13 @@ int mail_namespaces_init_finish(struct mail_namespace *namespaces,
 	T_BEGIN {
 		hook_mail_namespaces_created(namespaces);
 	} T_END;
+
+	/* allow namespace hooks to return failure via the user error */
+	if (namespaces->user->error != NULL) {
+		*error_r = t_strdup(namespaces->user->error);
+		return -1;
+	}
+	namespaces->user->namespaces_created = TRUE;
 	return 0;
 }
 
@@ -654,7 +661,7 @@ mail_namespace_find_mask(struct mail_namespace *namespaces, const char *box,
 {
         struct mail_namespace *ns = namespaces;
 	struct mail_namespace *best = NULL;
-	unsigned int best_len = 0;
+	size_t best_len = 0;
 	bool inbox;
 
 	inbox = strncasecmp(box, "INBOX", 5) == 0;
@@ -769,7 +776,7 @@ mail_namespace_find_prefix(struct mail_namespace *namespaces,
 			   const char *prefix)
 {
         struct mail_namespace *ns;
-	unsigned int len = strlen(prefix);
+	size_t len = strlen(prefix);
 
 	for (ns = namespaces; ns != NULL; ns = ns->next) {
 		if (ns->prefix_len == len &&
@@ -784,7 +791,7 @@ mail_namespace_find_prefix_nosep(struct mail_namespace *namespaces,
 				 const char *prefix)
 {
         struct mail_namespace *ns;
-	unsigned int len = strlen(prefix);
+	size_t len = strlen(prefix);
 
 	for (ns = namespaces; ns != NULL; ns = ns->next) {
 		if (ns->prefix_len == len + 1 &&

@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ldap-private.h"
@@ -22,7 +22,7 @@ ldap_compare_callback(struct ldap_connection *conn,
 	ret = ldap_parse_result(conn->conn, message,
 				&result_err, NULL,
 				&result_errmsg, NULL, NULL, 0);
-	memset(&res, 0, sizeof(res));
+	i_zero(&res);
 	res.openldap_ret = ret;
 	if (ret != LDAP_SUCCESS) {
 		res.error_string = t_strdup_printf(
@@ -109,7 +109,7 @@ void ldap_connection_compare_start(struct ldap_connection *conn,
 	req->send_request_cb = ldap_compare_send;
 	req->timeout_secs = input->timeout_secs;
 
-	return ldap_connection_queue_request(conn, req);
+	ldap_connection_queue_request(conn, req);
 }
 
 bool ldap_compare_result(struct ldap_result *result)

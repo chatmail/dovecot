@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 /* FIXME: cache handling could be useful to move to Dovecot core, so that if
    we're using this plugin together with zlib plugin there would be just one
@@ -77,7 +77,7 @@ static void mail_crypt_cache_close(struct mail_crypt_user *muser)
 		timeout_remove(&cache->to);
 	if (cache->input != NULL)
 		i_stream_unref(&cache->input);
-	memset(cache, 0, sizeof(*cache));
+	i_zero(cache);
 }
 
 static struct istream *
@@ -332,6 +332,16 @@ mail_crypt_mail_save_begin(struct mail_save_context *ctx,
 	return 0;
 }
 
+static int
+mail_crypt_mailbox_copy(struct mail_save_context *ctx, struct mail *mail)
+{
+	struct mail_crypt_mailbox *mbox = MAIL_CRYPT_CONTEXT(ctx->transaction->box);
+
+	if (ctx->transaction->box != mail->box)
+		return mail_storage_copy(ctx, mail);
+	return mbox->module_ctx.super.copy(ctx, mail);
+}
+
 static void mail_crypt_mailbox_close(struct mailbox *box)
 {
 	struct mail_crypt_mailbox *mbox = MAIL_CRYPT_CONTEXT(box);
@@ -362,8 +372,16 @@ static void mail_crypt_mailbox_allocated(struct mailbox *box)
 
 	if ((class_flags & MAIL_STORAGE_CLASS_FLAG_BINARY_DATA) != 0) {
 		if (muser != NULL) {
-			if (muser->save_version > 0)
+			if (muser->save_version > 0) {
 				v->save_begin = mail_crypt_mail_save_begin;
+				/* if global keys are used, re-encrypting on copy/move
+				   is not necessary, so do not attempt to do it.
+
+				   with per-folder keys, emails must be re-encrypted
+				   when moving to another folder */
+				if (muser->global_keys.public_key == NULL)
+					v->copy = mail_crypt_mailbox_copy;
+			}
 		} else {
 			v->save_finish = mail_crypt_mail_save_finish;
 		}
@@ -392,7 +410,7 @@ static void mail_crypt_mail_user_created(struct mail_user *user)
 
 	const char *curve = mail_user_plugin_getenv(user, "mail_crypt_curve");
 	buffer_t *tmp = t_str_new(64);
-	if (curve == NULL) {
+	if (curve == NULL || *curve == '\0') {
 		if (user->mail_debug) {
 			i_debug("mail_crypt_plugin: mail_crypt_curve setting "
 				"missing - generating EC keys disabled");
@@ -410,7 +428,7 @@ static void mail_crypt_mail_user_created(struct mail_user *user)
 	const char *version = mail_user_plugin_getenv(user,
 			"mail_crypt_save_version");
 
-	if (version == NULL) {
+	if (version == NULL || *version == '\0') {
 		user->error = p_strdup_printf(user->pool,
 				"mail_crypt_plugin: "
 				"mail_crypt_save_version setting missing "

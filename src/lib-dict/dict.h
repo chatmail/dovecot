@@ -4,6 +4,7 @@
 #define DICT_PATH_PRIVATE "priv/"
 #define DICT_PATH_SHARED "shared/"
 
+struct timespec;
 struct dict;
 struct dict_iterate_context;
 
@@ -40,7 +41,13 @@ struct dict_settings {
 
 struct dict_lookup_result {
 	int ret;
+
+	/* First returned value (ret > 0) */
 	const char *value;
+	/* NULL-terminated list of all returned values (ret > 0) */
+	const char *const *values;
+
+	/* Error message for a failed lookup (ret < 0) */
 	const char *error;
 };
 
@@ -127,6 +134,11 @@ struct dict_transaction_context *dict_transaction_begin(struct dict *dict);
    finish up anytime soon. Mainly useful for transactions which aren't
    especially important whether they finish or not. */
 void dict_transaction_no_slowness_warning(struct dict_transaction_context *ctx);
+/* Set write timestamp for the entire transaction. This must be set before
+   any changes are done and can't be changed afterwards. Currently only
+   dict-sql with Cassandra backend does anything with this. */
+void dict_transaction_set_timestamp(struct dict_transaction_context *ctx,
+				    const struct timespec *ts);
 /* Commit the transaction. Returns 1 if ok, 0 if dict_atomic_inc() was used
    on a nonexistent key, -1 if failed. */
 int dict_transaction_commit(struct dict_transaction_context **ctx);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 #include "lib.h"
 #include "str.h"
 #include "mail-user.h"
@@ -15,7 +15,7 @@ mail_crypt_load_global_private_keys(struct mail_user *user,
 	string_t *set_key = t_str_new(64);
 	str_append(set_key, set_prefix);
 	str_append(set_key, "_private_key");
-	unsigned int prefix_len = str_len(set_key);
+	size_t prefix_len = str_len(set_key);
 
 	unsigned int i = 1;
 	const char *key_data;

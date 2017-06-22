@@ -1,6 +1,7 @@
 #ifndef DICT_PRIVATE_H
 #define DICT_PRIVATE_H
 
+#include <time.h>
 #include "dict.h"
 
 struct dict_vfuncs {
@@ -39,12 +40,17 @@ struct dict_vfuncs {
 	void (*lookup_async)(struct dict *dict, const char *key,
 			     dict_lookup_callback_t *callback, void *context);
 	bool (*switch_ioloop)(struct dict *dict);
+	void (*set_timestamp)(struct dict_transaction_context *ctx,
+			      const struct timespec *ts);
 };
 
 struct dict {
 	const char *name;
 
 	struct dict_vfuncs v;
+	unsigned int iter_count;
+	unsigned int transaction_count;
+	struct dict_transaction_context *transactions;
 };
 
 struct dict_iterate_context {
@@ -59,6 +65,9 @@ struct dict_iterate_context {
 
 struct dict_transaction_context {
 	struct dict *dict;
+	struct dict_transaction_context *prev, *next;
+
+	struct timespec timestamp;
 
 	unsigned int changed:1;
 	unsigned int no_slowness_warning:1;
@@ -71,5 +80,9 @@ extern struct dict dict_driver_memcached;
 extern struct dict dict_driver_memcached_ascii;
 extern struct dict dict_driver_redis;
 extern struct dict dict_driver_cdb;
+extern struct dict dict_driver_fail;
+
+extern struct dict_iterate_context dict_iter_unsupported;
+extern struct dict_transaction_context dict_transaction_unsupported;
 
 #endif

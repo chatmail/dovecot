@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -160,6 +160,16 @@ static int test_open_attachment_ostream(struct istream_attachment_info *info,
 	return 0;
 }
 
+static int
+test_open_attachment_ostream_error(struct istream_attachment_info *info ATTR_UNUSED,
+				   struct ostream **output_r ATTR_UNUSED,
+				   const char **error_r,
+				   void *context ATTR_UNUSED)
+{
+	*error_r = "test open error";
+	return -1;
+}
+
 static int test_close_attachment_ostream(struct ostream *output, bool success,
 					 const char **error_r ATTR_UNUSED,
 					 void *context ATTR_UNUSED)
@@ -175,6 +185,18 @@ static int test_close_attachment_ostream(struct ostream *output, bool success,
 		i_unreached();
 	o_stream_destroy(&output);
 	return 0;
+}
+
+static int
+test_close_attachment_ostream_error(struct ostream *output,
+				    bool success, const char **error,
+				    void *context ATTR_UNUSED)
+{
+	if (success)
+		*error = "test output error";
+	o_stream_ignore_last_errors(output);
+	o_stream_destroy(&output);
+	return -1;
 }
 
 static struct istream *
@@ -209,7 +231,7 @@ get_istream_attachment_settings(struct istream_attachment_settings *set_r)
 {
 	const char *error;
 
-	memset(set_r, 0, sizeof(*set_r));
+	i_zero(set_r);
 	set_r->min_size = 1;
 	set_r->drain_parent_input = TRUE;
 	set_r->open_temp_fd = test_open_temp_fd;
@@ -226,7 +248,7 @@ static int test_input_stream(struct istream *file_input)
 	const unsigned char *data;
 	size_t size;
 	struct sha1_ctxt hash;
-	uoff_t msg_size;
+	uoff_t msg_size, orig_msg_size;
 	buffer_t *base_buf;
 	unsigned char hash_file[SHA1_RESULTLEN], hash_attached[SHA1_RESULTLEN];
 	int ret = 0;
@@ -239,7 +261,7 @@ static int test_input_stream(struct istream *file_input)
 		i_stream_skip(input, size);
 	}
 	sha1_result(&hash, hash_file);
-	msg_size = input->v_offset;
+	msg_size = orig_msg_size = input->v_offset;
 	i_stream_unref(&input);
 
 	/* read through attachment extractor */
@@ -257,21 +279,39 @@ static int test_input_stream(struct istream *file_input)
 	i_stream_unref(&input2);
 
 	/* rebuild the original stream and see if the hash matches */
-	input2 = i_stream_create_from_data(base_buf->data, base_buf->used);
-	input = test_build_original_istream(input2, msg_size);
-	i_stream_unref(&input2);
+	for (unsigned int i = 0; i < 2; i++) {
+		input2 = i_stream_create_from_data(base_buf->data, base_buf->used);
+		input = test_build_original_istream(input2, msg_size);
+		i_stream_unref(&input2);
 
-	sha1_init(&hash);
-	while (i_stream_read_data(input, &data, &size, 0) > 0) {
-		sha1_loop(&hash, data, size);
-		i_stream_skip(input, size);
+		sha1_init(&hash);
+		while (i_stream_read_more(input, &data, &size) > 0) {
+			sha1_loop(&hash, data, size);
+			i_stream_skip(input, size);
+		}
+		test_assert_idx(input->eof && input->stream_errno == 0, i);
+		sha1_result(&hash, hash_attached);
+		i_stream_unref(&input);
+
+		if (memcmp(hash_file, hash_attached, SHA1_RESULTLEN) != 0)
+			ret = -1;
+
+		/* try again without knowing the message's size */
+		msg_size = (uoff_t)-1;
 	}
-	sha1_result(&hash, hash_attached);
-	i_stream_unref(&input);
 
-	ret = memcmp(hash_file, hash_attached, SHA1_RESULTLEN) == 0 ? 0 : -1;
+	/* try with a wrong message size */
+	for (int i = 0; i < 2; i++) {
+		input2 = i_stream_create_from_data(base_buf->data, base_buf->used);
+		input = test_build_original_istream(input2, orig_msg_size +
+						    (i == 0 ? 1 : -1));
+		i_stream_unref(&input2);
+		while (i_stream_read_more(input, &data, &size) > 0)
+			i_stream_skip(input, size);
+		test_assert(input->stream_errno == (i == 0 ? EPIPE : EINVAL));
+		i_stream_unref(&input);
+	}
 
-	i_stream_unref(&file_input);
 	buffer_free(&base_buf);
 	if (attachment_data != NULL)
 		buffer_free(&attachment_data);
@@ -324,9 +364,9 @@ static void test_istream_attachment(void)
 	test_end();
 }
 
-static bool test_istream_attachment_extractor_one(const char *body)
+static bool test_istream_attachment_extractor_one(const char *body, int err_type)
 {
-	const unsigned int prefix_len = strlen(mail_broken_input_body_prefix);
+	const size_t prefix_len = strlen(mail_broken_input_body_prefix);
 	struct istream_attachment_settings set;
 	struct istream *datainput, *input;
 	char *mail_text;
@@ -339,9 +379,19 @@ static bool test_istream_attachment_extractor_one(const char *body)
 	datainput = test_istream_create_data(mail_text, strlen(mail_text));
 
 	get_istream_attachment_settings(&set);
+	if (err_type == 1)
+		set.open_attachment_ostream = test_open_attachment_ostream_error;
+	else if (err_type == 2)
+		set.close_attachment_ostream = test_close_attachment_ostream_error;
 	input = i_stream_create_attachment_extractor(datainput, &set, NULL);
 
 	while ((ret = i_stream_read(input)) > 0) ;
+	if (err_type != 0) {
+		test_assert(ret == -1 && input->stream_errno == EIO);
+		unchanged = FALSE;
+		goto cleanup;
+	}
+	test_assert(ret == -1 && input->stream_errno == 0);
 
 	data = i_stream_get_data(input, &size);
 	i_assert(size >= prefix_len &&
@@ -355,6 +405,7 @@ static bool test_istream_attachment_extractor_one(const char *body)
 		strlen(body) - attachment_data->used == size &&
 		memcmp(data, body + attachment_data->used, size) == 0;
 
+cleanup:
 	if (attachment_data != NULL)
 		buffer_free(&attachment_data);
 	if (array_is_created(&attachments))
@@ -372,9 +423,34 @@ static void test_istream_attachment_extractor(void)
 
 	test_begin("istream attachment extractor");
 	for (i = 0; i < N_ELEMENTS(mail_broken_input_bodies); i++)
-		test_assert(test_istream_attachment_extractor_one(mail_broken_input_bodies[i]));
+		test_assert(test_istream_attachment_extractor_one(mail_broken_input_bodies[i], 0));
 	for (i = 0; i < N_ELEMENTS(mail_nonbroken_input_bodies); i++)
-		test_assert(!test_istream_attachment_extractor_one(mail_nonbroken_input_bodies[i]));
+		test_assert(!test_istream_attachment_extractor_one(mail_nonbroken_input_bodies[i], 0));
+	test_end();
+}
+
+static void test_istream_attachment_extractor_error(void)
+{
+	unsigned int i;
+
+	test_begin("istream attachment extractor error");
+	for (int err_type = 1; err_type <= 2; err_type++) {
+		for (i = 0; i < N_ELEMENTS(mail_broken_input_bodies); i++)
+			test_istream_attachment_extractor_one(mail_broken_input_bodies[i], err_type);
+		for (i = 0; i < N_ELEMENTS(mail_nonbroken_input_bodies); i++)
+			test_istream_attachment_extractor_one(mail_nonbroken_input_bodies[i], err_type);
+	}
+	test_end();
+}
+
+static void test_istream_attachment_connector(void)
+{
+	struct istream *input;
+
+	test_begin("istream attachment connector");
+	input = i_stream_create_from_data(mail_input, sizeof(mail_input));
+	test_assert(test_input_stream(input) == 0);
+	i_stream_unref(&input);
 	test_end();
 }
 
@@ -402,6 +478,8 @@ int main(int argc, char *argv[])
 	static void (*test_functions[])(void) = {
 		test_istream_attachment,
 		test_istream_attachment_extractor,
+		test_istream_attachment_extractor_error,
+		test_istream_attachment_connector,
 		NULL
 	};
 	if (argc > 1)

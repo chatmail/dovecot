@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -305,7 +305,7 @@ doveadm_cmd_host_set_or_update(struct doveadm_connection *conn,
 		return 1;
 	}
 	if (vhost_count != UINT_MAX)
-		mail_host_set_vhost_count(host, vhost_count);
+		mail_host_set_vhost_count(host, vhost_count, "doveadm: ");
 	/* NOTE: we don't support changing a tag for an existing host.
 	   it needs to be removed first. otherwise it would be a bit ugly to
 	   handle. */
@@ -352,7 +352,7 @@ doveadm_cmd_host_updown(struct doveadm_connection *conn, bool down,
 			"host is already being updated - try again later\n");
 		return 1;
 	} else {
-		mail_host_set_down(host, down, ioloop_time);
+		mail_host_set_down(host, down, ioloop_time, "doveadm: ");
 		director_update_host(conn->dir, conn->dir->self_host,
 				     NULL, host);
 	}
@@ -662,8 +662,14 @@ doveadm_cmd_user_move(struct doveadm_connection *conn, const char *const *args)
 		return 1;
 	}
 
-	director_move_user(conn->dir, conn->dir->self_host, NULL,
-			   username_hash, host);
+	if (user == NULL || user->host != host) {
+		director_move_user(conn->dir, conn->dir->self_host, NULL,
+				   username_hash, host);
+	} else {
+		/* already the correct host. reset the user's timeout. */
+		user_directory_refresh(host->tag->users, user);
+		director_update_user(conn->dir, conn->dir->self_host, user);
+	}
 	o_stream_nsend(conn->output, "OK\n", 3);
 	return 1;
 }
@@ -677,6 +683,20 @@ doveadm_cmd_user_kick(struct doveadm_connection *conn, const char *const *args)
 	}
 
 	director_kick_user(conn->dir, conn->dir->self_host, NULL, args[0]);
+	o_stream_nsend(conn->output, "OK\n", 3);
+	return 1;
+}
+
+static int
+doveadm_cmd_user_kick_alt(struct doveadm_connection *conn, const char *const *args)
+{
+	if (str_array_length(args) < 2) {
+		i_error("doveadm sent invalid USER-KICK-ALT parameters");
+		return -1;
+	}
+
+	director_kick_user_alt(conn->dir, conn->dir->self_host, NULL,
+			       args[0], args[1]);
 	o_stream_nsend(conn->output, "OK\n", 3);
 	return 1;
 }
@@ -727,6 +747,8 @@ doveadm_connection_cmd(struct doveadm_connection *conn, const char *line)
 		ret = doveadm_cmd_user_move(conn, args);
 	else if (strcmp(cmd, "USER-KICK") == 0)
 		ret = doveadm_cmd_user_kick(conn, args);
+	else if (strcmp(cmd, "USER-KICK-ALT") == 0)
+		ret = doveadm_cmd_user_kick_alt(conn, args);
 	else {
 		i_error("doveadm sent unknown command: %s", line);
 		ret = -1;

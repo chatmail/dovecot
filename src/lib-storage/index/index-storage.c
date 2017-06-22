@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -46,7 +46,7 @@ static void set_cache_decisions(struct mail_cache *cache,
 		if (idx != UINT_MAX) {
 			field = *mail_cache_register_get_field(cache, idx);
 		} else if (strncasecmp(name, "hdr.", 4) == 0) {
-			memset(&field, 0, sizeof(field));
+			i_zero(&field);
 			field.name = name;
 			field.type = MAIL_CACHE_FIELD_HEADER;
 		} else {
@@ -299,6 +299,13 @@ int index_storage_mailbox_open(struct mailbox *box, bool move_to_memory)
 	box->box_name_hdr_ext_id =
 		mail_index_ext_register(box->index, "box-name", 0, 0, 0);
 
+	box->box_last_rename_stamp_ext_id =
+		mail_index_ext_register(box->index, "last-rename-stamp",
+					sizeof(uint32_t), 0, sizeof(uint32_t));
+	box->mail_vsize_ext_id = mail_index_ext_register(box->index, "vsize", 0,
+							 sizeof(uint32_t),
+							 sizeof(uint32_t));
+
 	box->opened = TRUE;
 
 	if ((box->enabled_features & MAILBOX_FEATURE_CONDSTORE) != 0)
@@ -420,7 +427,7 @@ index_storage_mailbox_update_cache(struct mailbox *box,
 			field = old_fields[j];
 		} else if (strncmp(updates[i].name, "hdr.", 4) == 0) {
 			/* new header */
-			memset(&field, 0, sizeof(field));
+			i_zero(&field);
 			field.name = updates[i].name;
 			field.type = MAIL_CACHE_FIELD_HEADER;
 		} else {
@@ -794,6 +801,19 @@ int index_storage_mailbox_rename(struct mailbox *src, struct mailbox *dest)
 		return -1;
 	}
 
+	if (mailbox_open(dest) == 0) {
+		struct mail_index_transaction *t =
+			mail_index_transaction_begin(dest->view, 0);
+
+		uint32_t stamp = ioloop_time;
+
+		mail_index_update_header_ext(t, dest->box_last_rename_stamp_ext_id,
+					     0, &stamp, sizeof(stamp));
+
+		/* can't do much if this fails anyways */
+		(void)mail_index_transaction_commit(&t);
+	}
+
 	/* we'll track mailbox names, instead of GUIDs. We may be renaming a
 	   non-selectable mailbox (directory), which doesn't even have a GUID */
 	mailbox_name_get_sha128(dest->vname, guid);
@@ -819,7 +839,7 @@ void index_save_context_free(struct mail_save_context *ctx)
 	i_free_and_null(ctx->data.guid);
 	i_free_and_null(ctx->data.pop3_uidl);
 	index_attachment_save_free(ctx);
-	memset(&ctx->data, 0, sizeof(ctx->data));
+	i_zero(&ctx->data);
 
 	ctx->unfinished = FALSE;
 }
@@ -858,9 +878,8 @@ mail_copy_cache_field(struct mail_save_context *ctx, struct mail *src_mail,
 		if (mail_cache_lookup_field(src_mail->transaction->cache_view, buf,
 					    src_mail->seq, src_field_idx) <= 0)
 			buffer_set_used_size(buf, 0);
-		else if (ctx->dest_mail != NULL &&
-			 (strcmp(name, "size.physical") == 0 ||
-			  strcmp(name, "size.virtual") == 0)) {
+		else if (strcmp(name, "size.physical") == 0 ||
+			 strcmp(name, "size.virtual") == 0) {
 			/* FIXME: until mail_cache_lookup() can read unwritten
 			   cached data from buffer, we'll do this optimization
 			   to make quota plugin's work faster */
@@ -879,6 +898,29 @@ mail_copy_cache_field(struct mail_save_context *ctx, struct mail *src_mail,
 	if (buf->used > 0) {
 		mail_cache_add(dest_trans->cache_trans, dest_seq,
 			       dest_field_idx, buf->data, buf->used);
+	}
+}
+
+static void
+index_copy_vsize_extension(struct mail_save_context *ctx,
+			   struct mail *src_mail, uint32_t dest_seq)
+{
+	struct index_mail *src_imail = (struct index_mail *)src_mail;
+	unsigned int idx;
+	bool expunged ATTR_UNUSED;
+
+	(void)index_mail_get_vsize_extension(src_mail);
+	if (src_imail->data.virtual_size == (uoff_t)-1)
+		return;
+
+	if (mail_index_map_get_ext_idx(ctx->transaction->view->map,
+				       ctx->transaction->box->mail_vsize_ext_id,
+				       &idx) &&
+	    src_imail->data.virtual_size < (uint32_t)-1) {
+		uint32_t vsize = src_imail->data.virtual_size+1;
+		mail_index_update_ext(ctx->transaction->itrans, dest_seq,
+				      ctx->transaction->box->mail_vsize_ext_id,
+				      &vsize, NULL);
 	}
 }
 
@@ -907,6 +949,7 @@ void index_copy_cache_fields(struct mail_save_context *ctx,
 			mail_copy_cache_field(ctx, src_mail, dest_seq,
 					      field->name, buf);
 		}
+		index_copy_vsize_extension(ctx, src_mail, dest_seq);
 	} T_END;
 }
 
@@ -1028,4 +1071,19 @@ int index_storage_expunged_sync_begin(struct mailbox *box,
 							 trans_r, flags);
 	}
 	return 1;
+}
+
+void index_storage_save_abort_last(struct mail_save_context *ctx, uint32_t seq)
+{
+	struct index_mail *imail = (struct index_mail *)ctx->dest_mail;
+
+	/* Close the mail before it's expunged. This allows it to be
+	   reset cleanly. */
+	imail->data.no_caching = TRUE;
+	imail->mail.v.close(&imail->mail.mail);
+
+	mail_index_expunge(ctx->transaction->itrans, seq);
+	/* currently we can't just drop pending cache updates for this one
+	   specific record, so we'll reset the whole cache transaction. */
+	mail_cache_transaction_reset(ctx->transaction->cache_trans);
 }

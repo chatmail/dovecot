@@ -1,7 +1,8 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
+#include "hook-build.h"
 #include "llist.h"
 #include "module-dir.h"
 #include "mail-user.h"
@@ -13,28 +14,6 @@ struct mail_storage_module_hooks {
 	struct module *module;
 	const struct mail_storage_hooks *hooks;
 	bool forced;
-};
-
-struct hook_stack {
-	struct hook_stack *prev, *next;
-
-	/* Pointer to vfuncs struct. This assumes that a struct containing
-	   function pointers equals to an array of function pointers. Not
-	   ANSI-C, but should work in all OSes supported by Dovecot. Much
-	   easier anyway than doing this work manually.. */
-	void (**vfuncs)();
-	/* nonzero in the areas where vfuncs has been changed */
-	void (**mask)();
-};
-
-struct hook_build_context {
-	pool_t pool;
-	/* size of the vfuncs struct */
-	size_t size;
-	/* number of function pointers in the struct */
-	unsigned int count;
-
-	struct hook_stack *head, *tail;
 };
 
 static ARRAY(struct mail_storage_module_hooks) module_hooks = ARRAY_INIT;
@@ -64,7 +43,7 @@ void mail_storage_hooks_add(struct module *module,
 {
 	struct mail_storage_module_hooks new_hook;
 
-	memset(&new_hook, 0, sizeof(new_hook));
+	i_zero(&new_hook);
 	new_hook.module = module;
 	new_hook.hooks = hooks;
 
@@ -103,6 +82,11 @@ void mail_storage_hooks_remove(const struct mail_storage_hooks *hooks)
 
 void mail_storage_hooks_add_internal(const struct mail_storage_hooks *hooks)
 {
+	const struct mail_storage_hooks *const *existing_hooksp;
+
+	/* make sure we don't add duplicate hooks */
+	array_foreach(&internal_hooks, existing_hooksp)
+		i_assert(*existing_hooksp != hooks);
 	array_append(&internal_hooks, &hooks, 1);
 }
 
@@ -171,93 +155,6 @@ static void mail_user_add_plugin_hooks(struct mail_user *user)
 	array_append_array(&user->hooks, &internal_hooks);
 }
 
-static void hook_build_append(struct hook_build_context *ctx, void (**vfuncs)())
-{
-	struct hook_stack *stack;
-
-	stack = p_new(ctx->pool, struct hook_stack, 1);
-	stack->vfuncs = vfuncs;
-	stack->mask = p_malloc(ctx->pool, ctx->size);
-	DLLIST2_APPEND(&ctx->head, &ctx->tail, stack);
-}
-
-static struct hook_build_context *
-hook_build_init(void (**vfuncs)(), size_t size)
-{
-	struct hook_build_context *ctx;
-	pool_t pool;
-
-	i_assert((size % sizeof(void (*)())) == 0);
-
-	pool = pool_alloconly_create("hook build context", 2048);
-	ctx = p_new(pool, struct hook_build_context, 1);
-	ctx->pool = pool;
-	ctx->size = size;
-	ctx->count = size / sizeof(void (*)());
-	hook_build_append(ctx, vfuncs);
-	return ctx;
-}
-
-static void
-hook_update_mask(struct hook_build_context *ctx, struct hook_stack *stack,
-		 void (**vlast)())
-{
-	unsigned int i;
-
-	for (i = 0; i < ctx->count; i++) {
-		if (stack->vfuncs[i] != vlast[i]) {
-			i_assert(stack->vfuncs[i] != NULL);
-			stack->mask[i] = stack->vfuncs[i];
-		}
-	}
-}
-
-static void
-hook_copy_stack(struct hook_build_context *ctx, struct hook_stack *stack)
-{
-	unsigned int i;
-
-	i_assert(stack->next != NULL);
-
-	for (i = 0; i < ctx->count; i++) {
-		if (stack->mask[i] == NULL) {
-			stack->vfuncs[i] = stack->next->vfuncs[i];
-			stack->mask[i] = stack->next->mask[i];
-		}
-	}
-}
-
-static void hook_build_update(struct hook_build_context *ctx, void *_vlast)
-{
-	void (**vlast)() = _vlast;
-	struct hook_stack *stack;
-
-	if (ctx->tail->vfuncs == vlast) {
-		/* no vfuncs overridden */
-		return;
-	}
-
-	/* ctx->vfuncs_stack->vfuncs points to the root vfuncs,
-	   ctx->vfuncs_stack->next->vfuncs points to the first super function
-	   that is being called, and so on.
-
-	   the previous plugin added its vfuncs to the stack tail.
-	   vlast contains the previous plugin's super vfuncs, which is where
-	   the next plugin should put its own vfuncs.
-
-	   first we'll need to figure out what vfuncs the previous plugin
-	   changed and update the mask */
-	hook_update_mask(ctx, ctx->tail, vlast);
-
-	/* now go up in the stack as long as the mask isn't set,
-	   and update the vfuncs */
-	for (stack = ctx->tail->prev; stack != NULL; stack = stack->prev)
-		hook_copy_stack(ctx, stack);
-
-	/* add vlast to stack */
-	hook_build_append(ctx, vlast);
-}
-
 void hook_mail_user_created(struct mail_user *user)
 {
 	const struct mail_storage_hooks *const *hooks;
@@ -273,7 +170,8 @@ void hook_mail_user_created(struct mail_user *user)
 			hook_build_update(ctx, user->vlast);
 		} T_END;
 	}
-	pool_unref(&ctx->pool);
+	user->vlast = NULL;
+	hook_build_deinit(&ctx);
 }
 
 void hook_mail_namespace_storage_added(struct mail_namespace *ns)
@@ -292,6 +190,8 @@ void hook_mail_namespaces_created(struct mail_namespace *namespaces)
 	const struct mail_storage_hooks *const *hooks;
 
 	array_foreach(&namespaces->user->hooks, hooks) {
+		if (namespaces->user->error != NULL)
+			break;
 		if ((*hooks)->mail_namespaces_created != NULL) T_BEGIN {
 			(*hooks)->mail_namespaces_created(namespaces);
 		} T_END;
@@ -303,6 +203,8 @@ void hook_mail_namespaces_added(struct mail_namespace *namespaces)
 	const struct mail_storage_hooks *const *hooks;
 
 	array_foreach(&namespaces->user->hooks, hooks) {
+		if (namespaces->user->error != NULL)
+			break;
 		if ((*hooks)->mail_namespaces_added != NULL) T_BEGIN {
 			(*hooks)->mail_namespaces_added(namespaces);
 		} T_END;
@@ -322,7 +224,8 @@ void hook_mail_storage_created(struct mail_storage *storage)
 			hook_build_update(ctx, storage->vlast);
 		} T_END;
 	}
-	pool_unref(&ctx->pool);
+	storage->vlast = NULL;
+	hook_build_deinit(&ctx);
 }
 
 void hook_mailbox_list_created(struct mailbox_list *list)
@@ -338,7 +241,8 @@ void hook_mailbox_list_created(struct mailbox_list *list)
 			hook_build_update(ctx, list->vlast);
 		} T_END;
 	}
-	pool_unref(&ctx->pool);
+	list->vlast = NULL;
+	hook_build_deinit(&ctx);
 }
 
 void hook_mailbox_allocated(struct mailbox *box)
@@ -354,7 +258,8 @@ void hook_mailbox_allocated(struct mailbox *box)
 			hook_build_update(ctx, box->vlast);
 		} T_END;
 	}
-	pool_unref(&ctx->pool);
+	box->vlast = NULL;
+	hook_build_deinit(&ctx);
 }
 
 void hook_mailbox_opened(struct mailbox *box)
@@ -382,5 +287,6 @@ void hook_mail_allocated(struct mail *mail)
 			hook_build_update(ctx, pmail->vlast);
 		} T_END;
 	}
-	pool_unref(&ctx->pool);
+	pmail->vlast = NULL;
+	hook_build_deinit(&ctx);
 }

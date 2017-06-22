@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "test-common.h"
@@ -37,7 +37,10 @@ static void test_setup(void)
 	struct dcrypt_settings set = {
 		.module_dir = top_builddir "/src/lib-dcrypt/.libs"
 	};
-	dcrypt_initialize(NULL, &set, NULL);
+	if (!dcrypt_initialize(NULL, &set, NULL)) {
+		i_info("No functional dcrypt backend found - skipping tests");
+		test_exit(0);
+	}
 	i_array_init(&fs_set.plugin_envs, 8);
 	array_append(&fs_set.plugin_envs, settings, N_ELEMENTS(settings));
 }
@@ -52,7 +55,7 @@ static void test_try_load_keys(void)
 	test_begin("try_load_keys");
 
 	struct mail_crypt_global_keys keys;
-	memset(&keys, 0, sizeof(keys));
+	i_zero(&keys);
 	mail_crypt_global_keys_init(&keys);
 
 	const char *set_prefix = "mail_crypt_global";
@@ -94,6 +97,18 @@ static void test_try_load_keys(void)
 	test_end();
 }
 
+static void test_empty_keyset(void)
+{
+	test_begin("test_empty_keyset");
+
+	/* this should not crash */
+	struct mail_crypt_global_keys keys;
+	i_zero(&keys);
+	test_assert(mail_crypt_global_key_find(&keys, "423423423423") == NULL);
+
+	test_end();
+}
+
 static void test_teardown(void)
 {
 	array_free(&fs_set.plugin_envs);
@@ -105,6 +120,7 @@ int main(void)
 	void (*tests[])(void)  = {
 		test_setup,
 		test_try_load_keys,
+		test_empty_keyset,
 		test_teardown,
 		NULL
 	};

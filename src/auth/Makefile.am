@@ -1,4 +1,5 @@
 noinst_LIBRARIES = libpassword.a
+noinst_LTLIBRARIES = libauth.la
 auth_moduledir = $(moduledir)/auth
 
 # automake seems to force making this unconditional..
@@ -34,6 +35,8 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-ntlm \
 	-I$(top_srcdir)/src/lib-otp \
 	-I$(top_srcdir)/src/lib-master \
+	-I$(top_srcdir)/src/lib-oauth2 \
+	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-DAUTH_MODULE_DIR=\""$(auth_moduledir)"\" \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
 	-DPKG_RUNDIR=\""$(rundir)"\" \
@@ -52,6 +55,7 @@ libpassword_a_SOURCES = \
 	password-scheme-pbkdf2.c
 
 auth_libs = \
+	libauth.la \
 	libstats_auth.la \
 	libpassword.a \
 	../lib-ntlm/libntlm.a \
@@ -59,11 +63,15 @@ auth_libs = \
 	$(LIBDOVECOT_SQL)
 
 auth_LDADD = $(auth_libs) $(LIBDOVECOT) $(AUTH_LIBS)
+auth_CPPFLAGS = $(AM_CPPFLAGS) \
+	-I$(top_srcdir)/src/lib-ssl-iostream
 auth_DEPENDENCIES = $(auth_libs) $(LIBDOVECOT_DEPS)
+auth_SOURCES = main.c
 
 ldap_sources = db-ldap.c passdb-ldap.c userdb-ldap.c
 
-auth_SOURCES = \
+libauth_la_DEPENDENCIES = $(LIBDOVECOT_DEPS)
+libauth_la_SOURCES = \
 	auth.c \
 	auth-cache.c \
 	auth-client-connection.c \
@@ -85,9 +93,9 @@ auth_SOURCES = \
 	db-checkpassword.c \
 	db-dict.c \
 	db-dict-cache-key.c \
+	db-oauth2.c \
 	db-sql.c \
 	db-passwd-file.c \
-	main.c \
 	mech.c \
 	mech-anonymous.c \
 	mech-plain.c \
@@ -104,12 +112,14 @@ auth_SOURCES = \
 	mech-apop.c \
 	mech-winbind.c \
 	mech-dovecot-token.c \
+	mech-oauth2.c \
 	passdb.c \
 	passdb-blocking.c \
 	passdb-bsdauth.c \
 	passdb-cache.c \
 	passdb-checkpassword.c \
 	passdb-dict.c \
+	passdb-oauth2.c \
 	passdb-passwd.c \
 	passdb-passwd-file.c \
 	passdb-pam.c \
@@ -159,6 +169,7 @@ headers = \
 	db-sql.h \
 	db-passwd-file.h \
 	db-checkpassword.h \
+	db-oauth2.h \
 	mech.h \
 	mycrypt.h \
 	passdb.h \
@@ -215,6 +226,7 @@ libstats_auth_la_SOURCES = auth-stats.c
 test_programs = \
 	test-auth-cache \
 	test-auth-request-var-expand \
+	test-username-filter \
 	test-db-dict
 
 noinst_PROGRAMS = $(test_programs)
@@ -223,16 +235,22 @@ test_libs = \
 	../lib-test/libtest.la \
 	../lib/liblib.la
 
-test_auth_cache_SOURCES = test-auth-cache.c
-test_auth_cache_LDADD = auth-cache.o $(test_libs)
+test_auth_cache_SOURCES = auth-cache.c test-auth-cache.c
+test_auth_cache_LDADD = $(test_libs)
 test_auth_cache_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
+# this is needed to force auth-cache.c recompilation
+test_auth_cache_CPPFLAGS = $(AM_CPPFLAGS)
 
 test_auth_request_var_expand_SOURCES = test-auth-request-var-expand.c
-test_auth_request_var_expand_LDADD = auth-request-var-expand.o auth-fields.o $(test_libs)
+test_auth_request_var_expand_LDADD = $(test_libs) libauth.la
 test_auth_request_var_expand_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
 
+test_username_filter_SOURCES = test-username-filter.c
+test_username_filter_LDADD = $(auth_libs) $(AUTH_LIBS) $(LIBDOVECOT)
+test_username_filter_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs) $(LIBDOVECOT_DEPS)
+
 test_db_dict_SOURCES = test-db-dict.c
-test_db_dict_LDADD = db-dict-cache-key.o $(test_libs)
+test_db_dict_LDADD = $(test_libs) libauth.la
 test_db_dict_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
 
 check: check-am check-test

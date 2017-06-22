@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -651,9 +651,9 @@ driver_mysql_escape_blob(struct sql_db *_db ATTR_UNUSED,
 {
 	string_t *str = t_str_new(128);
 
-	str_append(str, "HEX('");
+	str_append(str, "X'");
 	binary_to_hex_append(str, data, size);
-	str_append_c(str, ')');
+	str_append_c(str, '\'');
 	return str_c(str);
 }
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -216,8 +216,7 @@ static int mdbox_save_finish_write(struct mail_save_context *_ctx)
 	i_stream_unref(&ctx->ctx.input);
 
 	if (ctx->ctx.failed) {
-		mail_index_expunge(ctx->ctx.trans, ctx->ctx.seq);
-		mail_cache_transaction_reset(ctx->ctx.ctx.transaction->cache_trans);
+		index_storage_save_abort_last(&ctx->ctx.ctx, ctx->ctx.seq);
 		mdbox_map_append_abort(ctx->append_ctx);
 		array_delete(&ctx->mails, array_count(&ctx->mails) - 1, 1);
 		return -1;
@@ -257,7 +256,7 @@ mdbox_save_set_map_uids(struct mdbox_save_context *ctx,
 
 	mdbox_update_header(mbox, ctx->ctx.trans, NULL);
 
-	memset(&rec, 0, sizeof(rec));
+	i_zero(&rec);
 	rec.save_date = ioloop_time;
 	mails = array_get(&ctx->mails, &count);
 	for (i = 0; i < count; i++) {
@@ -361,9 +360,6 @@ int mdbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 		mail_index_sync_set_reason(ctx->sync_ctx->index_sync_ctx, "saving");
 	}
 
-	if (ctx->ctx.mail != NULL)
-		mail_free(&ctx->ctx.mail);
-
 	_t->changes->uid_validity = hdr->uid_validity;
 	return 0;
 }
@@ -424,8 +420,6 @@ void mdbox_transaction_save_rollback(struct mail_save_context *_ctx)
 	if (ctx->sync_ctx != NULL)
 		(void)mdbox_sync_finish(&ctx->sync_ctx, FALSE);
 
-	if (ctx->ctx.mail != NULL)
-		mail_free(&ctx->ctx.mail);
 	array_free(&ctx->mails);
 	i_free(ctx);
 }
@@ -446,7 +440,7 @@ int mdbox_copy(struct mail_save_context *_ctx, struct mail *mail)
 		return mail_storage_copy(_ctx, mail);
 	src_mbox = (struct mdbox_mailbox *)mail->box;
 
-	memset(&rec, 0, sizeof(rec));
+	i_zero(&rec);
 	rec.save_date = ioloop_time;
 	if (mdbox_mail_lookup(src_mbox, mail->transaction->view, mail->seq,
 			      &rec.map_uid) < 0) {
@@ -485,8 +479,7 @@ int mdbox_copy(struct mail_save_context *_ctx, struct mail *mail)
 	save_mail = array_append_space(&ctx->mails);
 	save_mail->seq = ctx->ctx.seq;
 
-	if (_ctx->dest_mail != NULL)
-		mail_set_seq_saving(_ctx->dest_mail, ctx->ctx.seq);
+	mail_set_seq_saving(_ctx->dest_mail, ctx->ctx.seq);
 	index_save_context_free(_ctx);
 	return 0;
 }

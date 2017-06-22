@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
@@ -93,7 +93,7 @@ int file_preallocate(int fd ATTR_UNUSED, off_t size ATTR_UNUSED)
 	/* OSX */
 	fstore_t fs;
 
-	memset(&fs, 0, sizeof(fs));
+	i_zero(&fs);
 	fs.fst_flags = F_ALLOCATECONTIG;
 	fs.fst_posmode = F_PEOFPOSMODE;
 	fs.fst_offset = 0;

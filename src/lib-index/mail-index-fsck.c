@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -222,7 +222,7 @@ mail_index_fsck_keywords(struct mail_index *index, struct mail_index_map *map,
 
 	/* add keyword records so we can start appending names directly */
 	rec_pos = dest->used;
-	memset(&new_kw_rec, 0, sizeof(new_kw_rec));
+	i_zero(&new_kw_rec);
 	(void)buffer_append_space_unsafe(dest, keywords_count * sizeof(*kw_rec));
 
 	/* write the actual records and names */

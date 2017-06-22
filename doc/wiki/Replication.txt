@@ -20,6 +20,15 @@ need multiple independently functioning Dovecot backend pairs. This means that
 replication in general is a bit resource intensive, so it's not recommended to
 be used in multi-million user installations.
 
+*WARNING*: Shared folder replication doesn't work correctly right now – mainly
+it can generate a lot of duplicate emails. This is because there's currently a
+per-user lock that prevents multiple dsyncs from working simultaneously on the
+same user. But with shared folders multiple users can be syncing the same
+folder. So this would need additional locks (e.g. shared folders would likely
+need to lock the owner user, and public folders would likely need a per-folder
+lock or a maybe a global public folder lock). Fixing this is currently low
+priority for Dovecot developers.
+
 Configuration
 -------------
 
@@ -334,4 +343,4 @@ Random things to remember:
     * v2.2.6+: If you're having trouble, verify that 'dovecot --hostdomain'
       returns different values for the servers.
 
-(This file was created from the wiki on 2016-12-03 04:44)
+(This file was created from the wiki on 2017-05-30 16:30)

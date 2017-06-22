@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "llist.h"
@@ -954,6 +954,7 @@ int http_server_connection_output(struct http_server_connection *conn)
 {
 	bool pipeline_was_full =
 		http_server_connection_pipeline_is_full(conn);
+	int ret;
 
 	if (http_server_connection_flush(conn) < 0)
 		return -1;
@@ -966,8 +967,15 @@ int http_server_connection_output(struct http_server_connection *conn)
 		struct http_server_response *resp = req->response;
 		const char *error = NULL;
 
+		http_server_connection_ref(conn);
+
 		i_assert(resp != NULL);
-		if (http_server_response_send_more(resp, &error) < 0) {
+		ret = http_server_response_send_more(resp, &error);
+
+		if (http_server_connection_unref_is_closed(conn))
+			return -1;
+
+		if (ret < 0) {
 			http_server_connection_write_failed(conn, error);
 			return -1;
 		}
@@ -1219,7 +1227,7 @@ void http_server_connection_tunnel(struct http_server_connection **_conn,
 	/* preserve statistics */
 	http_server_connection_update_stats(conn);
 
-	memset(&tunnel, 0, sizeof(tunnel));
+	i_zero(&tunnel);
 	tunnel.input = conn->conn.input;
 	tunnel.output = conn->conn.output;
 	tunnel.fd_in = conn->conn.fd_in;

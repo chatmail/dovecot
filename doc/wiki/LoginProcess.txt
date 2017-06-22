@@ -18,6 +18,8 @@ The default login settings should be good enough for small sites. There are two
 ways to run the login processes: the high-security mode and the
 high-performance mode. Both are discussed separately below.
 
+For explanation on the various settings for services, see <Services.txt>
+
 High-security mode
 ------------------
 
@@ -118,4 +120,4 @@ service tcpwrap {
 Remember to configure your rules! The format is described in hosts.allow(5) and
 hosts.deny(5). Files used are usually /etc/hosts.allow and /etc/hosts.deny.
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

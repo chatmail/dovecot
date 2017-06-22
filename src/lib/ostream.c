@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -144,6 +144,8 @@ void o_stream_cork(struct ostream *stream)
 		return;
 
 	_stream->cork(_stream, TRUE);
+	if (stream->stream_errno != 0)
+		errno = stream->last_failed_errno = stream->stream_errno;
 }
 
 void o_stream_uncork(struct ostream *stream)
@@ -230,7 +232,7 @@ ssize_t o_stream_send(struct ostream *stream, const void *data, size_t size)
 {
 	struct const_iovec iov;
 
-	memset(&iov, 0, sizeof(iov));
+	i_zero(&iov);
 	iov.iov_base = data;
 	iov.iov_len = size;
 
@@ -278,7 +280,7 @@ void o_stream_nsend(struct ostream *stream, const void *data, size_t size)
 {
 	struct const_iovec iov;
 
-	memset(&iov, 0, sizeof(iov));
+	i_zero(&iov);
 	iov.iov_base = data;
 	iov.iov_len = size;
 

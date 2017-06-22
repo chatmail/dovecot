@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
@@ -71,7 +71,7 @@ static void test_ostream_escaped_hex(void)
 	os_encode = o_stream_create_escaped(os_sink, ostream_escaped_hex_format);
 
 	test_begin("test_ostream_escaped_hex()");
-	o_stream_send_str(os_encode, "hello, world");
+	test_assert(o_stream_send_str(os_encode, "hello, world") == 12);
 	o_stream_flush(os_encode);
 
 	test_assert(strcmp(str_c(str), "68656c6c6f2c20776f726c64") == 0);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "module-dir.h"
@@ -30,7 +30,7 @@ static int ssl_module_load(const char **error_r)
 	const char *plugin_name = "ssl_iostream_openssl";
 	struct module_dir_load_settings mod_set;
 
-	memset(&mod_set, 0, sizeof(mod_set));
+	i_zero(&mod_set);
 	mod_set.abi_version = DOVECOT_ABI_VERSION;
 	mod_set.setting_name = "<built-in lib-ssl-iostream lookup>";
 	mod_set.require_init_funcs = TRUE;
@@ -110,7 +110,9 @@ int io_stream_create_ssl_client(struct ssl_iostream_context *ctx, const char *ho
 				struct ssl_iostream **iostream_r,
 				const char **error_r)
 {
-	return ssl_vfuncs->create(ctx, host, set, input, output,
+	struct ssl_iostream_settings set_copy = *set;
+	set_copy.verify_remote_cert = TRUE;
+	return ssl_vfuncs->create(ctx, host, &set_copy, input, output,
 				  iostream_r, error_r);
 }
 

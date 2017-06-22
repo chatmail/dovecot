@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "message-parser.h"
@@ -18,7 +18,7 @@ int main(void)
 	parser = fts_parser_html.try_init(NULL, "text/html", NULL);
 	i_assert(parser != NULL);
 
-	memset(&block, 0, sizeof(block));
+	i_zero(&block);
 	while ((ret = read(STDIN_FILENO, buf, sizeof(buf))) > 0) {
 		block.data = buf;
 		block.size = ret;

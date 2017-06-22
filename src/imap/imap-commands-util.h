@@ -20,11 +20,18 @@ client_find_namespace_full(struct client *client,
 /* Returns TRUE if mailbox is selected. If not, sends "No mailbox selected"
    error message to client. */
 bool client_verify_open_mailbox(struct client_command_context *cmd);
+/* Close the selected mailbox. */
+void imap_client_close_mailbox(struct client *client);
 
 /* Open APPEND/COPY destination mailbox. */
 int client_open_save_dest_box(struct client_command_context *cmd,
 			      const char *name, struct mailbox **destbox_r);
 
+/* Returns string based in IMAP command name and parameters. */
+const char *imap_client_command_get_reason(struct client_command_context *cmd);
+/* Set transaction's reason to the IMAP command name and parameters. */
+void imap_transaction_set_cmd_reason(struct mailbox_transaction_context *trans,
+				     struct client_command_context *cmd);
 const char *
 imap_get_error_string(struct client_command_context *cmd,
 		      const char *error_string, enum mail_error error);

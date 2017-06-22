@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -15,7 +15,7 @@
 #define SCRIPT_USER_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, fts_parser_script_user_module)
 
-#define SCRIPT_HANDSHAKE "VERSION\tscript\t3\t0\nalarm=10\nnoreply\n"
+#define SCRIPT_HANDSHAKE "VERSION\tscript\t4\t0\nalarm=10\nnoreply\n"
 
 struct content {
 	const char *content_type;

@@ -150,16 +150,43 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(auth_moduledir)" \
 	"$(DESTDIR)$(stats_moduledir)" "$(DESTDIR)$(pkglibexecdir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
-LTLIBRARIES = $(auth_module_LTLIBRARIES) $(stats_module_LTLIBRARIES)
+LTLIBRARIES = $(auth_module_LTLIBRARIES) $(noinst_LTLIBRARIES) \
+	$(stats_module_LTLIBRARIES)
+libauth_la_LIBADD =
+am__objects_1 = db-ldap.lo passdb-ldap.lo userdb-ldap.lo
+am_libauth_la_OBJECTS = auth.lo auth-cache.lo \
+	auth-client-connection.lo auth-master-connection.lo \
+	auth-policy.lo auth-postfix-connection.lo \
+	mech-otp-skey-common.lo mech-plain-common.lo auth-penalty.lo \
+	auth-request.lo auth-request-handler.lo auth-request-stats.lo \
+	auth-request-var-expand.lo auth-settings.lo auth-fields.lo \
+	auth-token.lo auth-worker-client.lo auth-worker-server.lo \
+	db-checkpassword.lo db-dict.lo db-dict-cache-key.lo \
+	db-oauth2.lo db-sql.lo db-passwd-file.lo mech.lo \
+	mech-anonymous.lo mech-plain.lo mech-login.lo mech-cram-md5.lo \
+	mech-digest-md5.lo mech-external.lo mech-gssapi.lo \
+	mech-ntlm.lo mech-otp.lo mech-scram-sha1.lo mech-skey.lo \
+	mech-rpa.lo mech-apop.lo mech-winbind.lo mech-dovecot-token.lo \
+	mech-oauth2.lo passdb.lo passdb-blocking.lo passdb-bsdauth.lo \
+	passdb-cache.lo passdb-checkpassword.lo passdb-dict.lo \
+	passdb-oauth2.lo passdb-passwd.lo passdb-passwd-file.lo \
+	passdb-pam.lo passdb-shadow.lo passdb-sia.lo \
+	passdb-vpopmail.lo passdb-sql.lo passdb-static.lo \
+	passdb-template.lo userdb.lo userdb-blocking.lo \
+	userdb-checkpassword.lo userdb-dict.lo userdb-nss.lo \
+	userdb-passwd.lo userdb-passwd-file.lo userdb-prefetch.lo \
+	userdb-static.lo userdb-vpopmail.lo userdb-sql.lo \
+	userdb-template.lo $(am__objects_1)
+libauth_la_OBJECTS = $(am_libauth_la_OBJECTS)
+AM_V_lt = $(am__v_lt_@AM_V@)
+am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
+am__v_lt_0 = --silent
+am__v_lt_1 = 
 am__DEPENDENCIES_1 =
 libauthdb_imap_la_DEPENDENCIES = ../lib-imap-client/libimap_client.la \
 	$(am__DEPENDENCIES_1)
 am_libauthdb_imap_la_OBJECTS = libauthdb_imap_la-passdb-imap.lo
 libauthdb_imap_la_OBJECTS = $(am_libauthdb_imap_la_OBJECTS)
-AM_V_lt = $(am__v_lt_@AM_V@)
-am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
-am__v_lt_0 = --silent
-am__v_lt_1 = 
 libauthdb_imap_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(libauthdb_imap_la_LDFLAGS) $(LDFLAGS) \
@@ -168,10 +195,10 @@ libauthdb_imap_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 @LDAP_PLUGIN_TRUE@	$(am__DEPENDENCIES_1)
 am__libauthdb_ldap_la_SOURCES_DIST = db-ldap.c passdb-ldap.c \
 	userdb-ldap.c
-am__objects_1 = libauthdb_ldap_la-db-ldap.lo \
+am__objects_2 = libauthdb_ldap_la-db-ldap.lo \
 	libauthdb_ldap_la-passdb-ldap.lo \
 	libauthdb_ldap_la-userdb-ldap.lo
-@LDAP_PLUGIN_TRUE@am_libauthdb_ldap_la_OBJECTS = $(am__objects_1)
+@LDAP_PLUGIN_TRUE@am_libauthdb_ldap_la_OBJECTS = $(am__objects_2)
 libauthdb_ldap_la_OBJECTS = $(am_libauthdb_ldap_la_OBJECTS)
 libauthdb_ldap_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
@@ -198,46 +225,12 @@ libstats_auth_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_CFLAGS) $(CFLAGS) $(libstats_auth_la_LDFLAGS) $(LDFLAGS) \
 	-o $@
 am__EXEEXT_1 = test-auth-cache$(EXEEXT) \
-	test-auth-request-var-expand$(EXEEXT) test-db-dict$(EXEEXT)
+	test-auth-request-var-expand$(EXEEXT) \
+	test-username-filter$(EXEEXT) test-db-dict$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS) $(pkglibexec_PROGRAMS)
-am__objects_2 = db-ldap.$(OBJEXT) passdb-ldap.$(OBJEXT) \
-	userdb-ldap.$(OBJEXT)
-am_auth_OBJECTS = auth.$(OBJEXT) auth-cache.$(OBJEXT) \
-	auth-client-connection.$(OBJEXT) \
-	auth-master-connection.$(OBJEXT) auth-policy.$(OBJEXT) \
-	auth-postfix-connection.$(OBJEXT) \
-	mech-otp-skey-common.$(OBJEXT) mech-plain-common.$(OBJEXT) \
-	auth-penalty.$(OBJEXT) auth-request.$(OBJEXT) \
-	auth-request-handler.$(OBJEXT) auth-request-stats.$(OBJEXT) \
-	auth-request-var-expand.$(OBJEXT) auth-settings.$(OBJEXT) \
-	auth-fields.$(OBJEXT) auth-token.$(OBJEXT) \
-	auth-worker-client.$(OBJEXT) auth-worker-server.$(OBJEXT) \
-	db-checkpassword.$(OBJEXT) db-dict.$(OBJEXT) \
-	db-dict-cache-key.$(OBJEXT) db-sql.$(OBJEXT) \
-	db-passwd-file.$(OBJEXT) main.$(OBJEXT) mech.$(OBJEXT) \
-	mech-anonymous.$(OBJEXT) mech-plain.$(OBJEXT) \
-	mech-login.$(OBJEXT) mech-cram-md5.$(OBJEXT) \
-	mech-digest-md5.$(OBJEXT) mech-external.$(OBJEXT) \
-	mech-gssapi.$(OBJEXT) mech-ntlm.$(OBJEXT) mech-otp.$(OBJEXT) \
-	mech-scram-sha1.$(OBJEXT) mech-skey.$(OBJEXT) \
-	mech-rpa.$(OBJEXT) mech-apop.$(OBJEXT) mech-winbind.$(OBJEXT) \
-	mech-dovecot-token.$(OBJEXT) passdb.$(OBJEXT) \
-	passdb-blocking.$(OBJEXT) passdb-bsdauth.$(OBJEXT) \
-	passdb-cache.$(OBJEXT) passdb-checkpassword.$(OBJEXT) \
-	passdb-dict.$(OBJEXT) passdb-passwd.$(OBJEXT) \
-	passdb-passwd-file.$(OBJEXT) passdb-pam.$(OBJEXT) \
-	passdb-shadow.$(OBJEXT) passdb-sia.$(OBJEXT) \
-	passdb-vpopmail.$(OBJEXT) passdb-sql.$(OBJEXT) \
-	passdb-static.$(OBJEXT) passdb-template.$(OBJEXT) \
-	userdb.$(OBJEXT) userdb-blocking.$(OBJEXT) \
-	userdb-checkpassword.$(OBJEXT) userdb-dict.$(OBJEXT) \
-	userdb-nss.$(OBJEXT) userdb-passwd.$(OBJEXT) \
-	userdb-passwd-file.$(OBJEXT) userdb-prefetch.$(OBJEXT) \
-	userdb-static.$(OBJEXT) userdb-vpopmail.$(OBJEXT) \
-	userdb-sql.$(OBJEXT) userdb-template.$(OBJEXT) \
-	$(am__objects_2)
+am_auth_OBJECTS = auth-main.$(OBJEXT)
 auth_OBJECTS = $(am_auth_OBJECTS)
-am__DEPENDENCIES_2 = libstats_auth.la libpassword.a \
+am__DEPENDENCIES_2 = libauth.la libstats_auth.la libpassword.a \
 	../lib-ntlm/libntlm.a ../lib-otp/libotp.a \
 	$(am__DEPENDENCIES_1)
 auth_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -245,7 +238,8 @@ auth_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(auth_LDFLAGS) $(LDFLAGS) -o $@
 checkpassword_reply_SOURCES = checkpassword-reply.c
 checkpassword_reply_OBJECTS = checkpassword-reply.$(OBJEXT)
-am_test_auth_cache_OBJECTS = test-auth-cache.$(OBJEXT)
+am_test_auth_cache_OBJECTS = test_auth_cache-auth-cache.$(OBJEXT) \
+	test_auth_cache-test-auth-cache.$(OBJEXT)
 test_auth_cache_OBJECTS = $(am_test_auth_cache_OBJECTS)
 am_test_auth_request_var_expand_OBJECTS =  \
 	test-auth-request-var-expand.$(OBJEXT)
@@ -253,6 +247,8 @@ test_auth_request_var_expand_OBJECTS =  \
 	$(am_test_auth_request_var_expand_OBJECTS)
 am_test_db_dict_OBJECTS = test-db-dict.$(OBJEXT)
 test_db_dict_OBJECTS = $(am_test_db_dict_OBJECTS)
+am_test_username_filter_OBJECTS = test-username-filter.$(OBJEXT)
+test_username_filter_OBJECTS = $(am_test_username_filter_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -287,19 +283,21 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libpassword_a_SOURCES) $(libauthdb_imap_la_SOURCES) \
-	$(libauthdb_ldap_la_SOURCES) $(libmech_gssapi_la_SOURCES) \
-	$(libstats_auth_la_SOURCES) $(auth_SOURCES) \
-	checkpassword-reply.c $(test_auth_cache_SOURCES) \
+SOURCES = $(libpassword_a_SOURCES) $(libauth_la_SOURCES) \
+	$(libauthdb_imap_la_SOURCES) $(libauthdb_ldap_la_SOURCES) \
+	$(libmech_gssapi_la_SOURCES) $(libstats_auth_la_SOURCES) \
+	$(auth_SOURCES) checkpassword-reply.c \
+	$(test_auth_cache_SOURCES) \
 	$(test_auth_request_var_expand_SOURCES) \
-	$(test_db_dict_SOURCES)
-DIST_SOURCES = $(libpassword_a_SOURCES) $(libauthdb_imap_la_SOURCES) \
+	$(test_db_dict_SOURCES) $(test_username_filter_SOURCES)
+DIST_SOURCES = $(libpassword_a_SOURCES) $(libauth_la_SOURCES) \
+	$(libauthdb_imap_la_SOURCES) \
 	$(am__libauthdb_ldap_la_SOURCES_DIST) \
 	$(am__libmech_gssapi_la_SOURCES_DIST) \
 	$(libstats_auth_la_SOURCES) $(auth_SOURCES) \
 	checkpassword-reply.c $(test_auth_cache_SOURCES) \
 	$(test_auth_request_var_expand_SOURCES) \
-	$(test_db_dict_SOURCES)
+	$(test_db_dict_SOURCES) $(test_username_filter_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -523,6 +521,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 noinst_LIBRARIES = libpassword.a
+noinst_LTLIBRARIES = libauth.la
 auth_moduledir = $(moduledir)/auth
 @GSSAPI_PLUGIN_TRUE@GSSAPI_LIB = libmech_gssapi.la
 @LDAP_PLUGIN_TRUE@LDAP_LIB = libauthdb_ldap.la
@@ -544,6 +543,8 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-ntlm \
 	-I$(top_srcdir)/src/lib-otp \
 	-I$(top_srcdir)/src/lib-master \
+	-I$(top_srcdir)/src/lib-oauth2 \
+	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-DAUTH_MODULE_DIR=\""$(auth_moduledir)"\" \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
 	-DPKG_RUNDIR=\""$(rundir)"\" \
@@ -561,6 +562,7 @@ libpassword_a_SOURCES = \
 	password-scheme-pbkdf2.c
 
 auth_libs = \
+	libauth.la \
 	libstats_auth.la \
 	libpassword.a \
 	../lib-ntlm/libntlm.a \
@@ -568,9 +570,14 @@ auth_libs = \
 	$(LIBDOVECOT_SQL)
 
 auth_LDADD = $(auth_libs) $(LIBDOVECOT) $(AUTH_LIBS)
+auth_CPPFLAGS = $(AM_CPPFLAGS) \
+	-I$(top_srcdir)/src/lib-ssl-iostream
+
 auth_DEPENDENCIES = $(auth_libs) $(LIBDOVECOT_DEPS)
+auth_SOURCES = main.c
 ldap_sources = db-ldap.c passdb-ldap.c userdb-ldap.c
-auth_SOURCES = \
+libauth_la_DEPENDENCIES = $(LIBDOVECOT_DEPS)
+libauth_la_SOURCES = \
 	auth.c \
 	auth-cache.c \
 	auth-client-connection.c \
@@ -592,9 +599,9 @@ auth_SOURCES = \
 	db-checkpassword.c \
 	db-dict.c \
 	db-dict-cache-key.c \
+	db-oauth2.c \
 	db-sql.c \
 	db-passwd-file.c \
-	main.c \
 	mech.c \
 	mech-anonymous.c \
 	mech-plain.c \
@@ -611,12 +618,14 @@ auth_SOURCES = \
 	mech-apop.c \
 	mech-winbind.c \
 	mech-dovecot-token.c \
+	mech-oauth2.c \
 	passdb.c \
 	passdb-blocking.c \
 	passdb-bsdauth.c \
 	passdb-cache.c \
 	passdb-checkpassword.c \
 	passdb-dict.c \
+	passdb-oauth2.c \
 	passdb-passwd.c \
 	passdb-passwd-file.c \
 	passdb-pam.c \
@@ -666,6 +675,7 @@ headers = \
 	db-sql.h \
 	db-passwd-file.h \
 	db-checkpassword.h \
+	db-oauth2.h \
 	mech.h \
 	mycrypt.h \
 	passdb.h \
@@ -713,20 +723,26 @@ libstats_auth_la_SOURCES = auth-stats.c
 test_programs = \
 	test-auth-cache \
 	test-auth-request-var-expand \
+	test-username-filter \
 	test-db-dict
 
 test_libs = \
 	../lib-test/libtest.la \
 	../lib/liblib.la
 
-test_auth_cache_SOURCES = test-auth-cache.c
-test_auth_cache_LDADD = auth-cache.o $(test_libs)
+test_auth_cache_SOURCES = auth-cache.c test-auth-cache.c
+test_auth_cache_LDADD = $(test_libs)
 test_auth_cache_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
+# this is needed to force auth-cache.c recompilation
+test_auth_cache_CPPFLAGS = $(AM_CPPFLAGS)
 test_auth_request_var_expand_SOURCES = test-auth-request-var-expand.c
-test_auth_request_var_expand_LDADD = auth-request-var-expand.o auth-fields.o $(test_libs)
+test_auth_request_var_expand_LDADD = $(test_libs) libauth.la
 test_auth_request_var_expand_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
+test_username_filter_SOURCES = test-username-filter.c
+test_username_filter_LDADD = $(auth_libs) $(AUTH_LIBS) $(LIBDOVECOT)
+test_username_filter_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs) $(LIBDOVECOT_DEPS)
 test_db_dict_SOURCES = test-db-dict.c
-test_db_dict_LDADD = db-dict-cache-key.o $(test_libs)
+test_db_dict_LDADD = $(test_libs) libauth.la
 test_db_dict_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
 all: all-am
 
@@ -805,6 +821,17 @@ clean-auth_moduleLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 
+clean-noinstLTLIBRARIES:
+	-test -z "$(noinst_LTLIBRARIES)" || rm -f $(noinst_LTLIBRARIES)
+	@list='$(noinst_LTLIBRARIES)'; \
+	locs=`for p in $$list; do echo $$p; done | \
+	      sed 's|^[^/]*$$|.|; s|/[^/]*$$||; s|$$|/so_locations|' | \
+	      sort -u`; \
+	test -z "$$locs" || { \
+	  echo rm -f $${locs}; \
+	  rm -f $${locs}; \
+	}
+
 install-stats_moduleLTLIBRARIES: $(stats_module_LTLIBRARIES)
 	@$(NORMAL_INSTALL)
 	@list='$(stats_module_LTLIBRARIES)'; test -n "$(stats_moduledir)" || list=; \
@@ -839,6 +866,9 @@ clean-stats_moduleLTLIBRARIES:
 	  echo rm -f $${locs}; \
 	  rm -f $${locs}; \
 	}
+
+libauth.la: $(libauth_la_OBJECTS) $(libauth_la_DEPENDENCIES) $(EXTRA_libauth_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(LINK)  $(libauth_la_OBJECTS) $(libauth_la_LIBADD) $(LIBS)
 
 libauthdb_imap.la: $(libauthdb_imap_la_OBJECTS) $(libauthdb_imap_la_DEPENDENCIES) $(EXTRA_libauthdb_imap_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libauthdb_imap_la_LINK) -rpath $(auth_moduledir) $(libauthdb_imap_la_OBJECTS) $(libauthdb_imap_la_LIBADD) $(LIBS)
@@ -930,77 +960,84 @@ test-db-dict$(EXEEXT): $(test_db_dict_OBJECTS) $(test_db_dict_DEPENDENCIES) $(EX
 	@rm -f test-db-dict$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_db_dict_OBJECTS) $(test_db_dict_LDADD) $(LIBS)
 
+test-username-filter$(EXEEXT): $(test_username_filter_OBJECTS) $(test_username_filter_DEPENDENCIES) $(EXTRA_test_username_filter_DEPENDENCIES) 
+	@rm -f test-username-filter$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_username_filter_OBJECTS) $(test_username_filter_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-cache.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-client-connection.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-fields.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-master-connection.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-penalty.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-policy.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-postfix-connection.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-handler.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-stats.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-var-expand.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-cache.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-client-connection.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-fields.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-master-connection.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-penalty.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-policy.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-postfix-connection.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-handler.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-stats.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-var-expand.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-settings.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-stats.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-token.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-worker-client.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-worker-server.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-token.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-worker-client.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-worker-server.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/checkpassword-reply.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-checkpassword.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-dict-cache-key.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-dict.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-ldap.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-passwd-file.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-sql.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-checkpassword.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-dict-cache-key.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-dict.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-ldap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-oauth2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-passwd-file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/db-sql.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libauthdb_imap_la-passdb-imap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libauthdb_ldap_la-db-ldap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libauthdb_ldap_la-passdb-ldap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libauthdb_ldap_la-userdb-ldap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmech_gssapi_la-mech-gssapi.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-anonymous.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-apop.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-cram-md5.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-digest-md5.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-dovecot-token.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-external.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-gssapi.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-login.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-ntlm.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-otp-skey-common.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-otp.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain-common.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-rpa.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-scram-sha1.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-skey.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-winbind.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-anonymous.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-apop.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-cram-md5.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-digest-md5.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-dovecot-token.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-external.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-gssapi.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-login.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-ntlm.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-oauth2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-otp-skey-common.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-otp.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain-common.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-rpa.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-scram-sha1.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-skey.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-winbind.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mycrypt.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-blocking.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-bsdauth.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-cache.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-checkpassword.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-dict.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-ldap.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-pam.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-passwd-file.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-passwd.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-shadow.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-sia.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-sql.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-static.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-template.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-vpopmail.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-blocking.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-bsdauth.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-cache.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-checkpassword.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-dict.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-ldap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-oauth2.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-pam.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-passwd-file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-passwd.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-shadow.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-sia.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-sql.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-static.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-template.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb-vpopmail.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passdb.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-crypt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-md5crypt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-otp.Po@am__quote@
@@ -1008,22 +1045,24 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-rpa.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme-scram.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/password-scheme.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-auth-cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-auth-request-var-expand.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-db-dict.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-blocking.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-checkpassword.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-dict.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-ldap.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-nss.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-passwd-file.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-passwd.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-prefetch.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-sql.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-static.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-template.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-vpopmail.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-username-filter.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_auth_cache-auth-cache.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_auth_cache-test-auth-cache.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-blocking.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-checkpassword.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-dict.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-ldap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-nss.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-passwd-file.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-passwd.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-prefetch.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-sql.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-static.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-template.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb-vpopmail.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/userdb.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -1080,6 +1119,48 @@ libmech_gssapi_la-mech-gssapi.lo: mech-gssapi.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='mech-gssapi.c' object='libmech_gssapi_la-mech-gssapi.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmech_gssapi_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmech_gssapi_la-mech-gssapi.lo `test -f 'mech-gssapi.c' || echo '$(srcdir)/'`mech-gssapi.c
+
+auth-main.o: main.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(auth_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT auth-main.o -MD -MP -MF $(DEPDIR)/auth-main.Tpo -c -o auth-main.o `test -f 'main.c' || echo '$(srcdir)/'`main.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/auth-main.Tpo $(DEPDIR)/auth-main.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='main.c' object='auth-main.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(auth_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o auth-main.o `test -f 'main.c' || echo '$(srcdir)/'`main.c
+
+auth-main.obj: main.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(auth_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT auth-main.obj -MD -MP -MF $(DEPDIR)/auth-main.Tpo -c -o auth-main.obj `if test -f 'main.c'; then $(CYGPATH_W) 'main.c'; else $(CYGPATH_W) '$(srcdir)/main.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/auth-main.Tpo $(DEPDIR)/auth-main.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='main.c' object='auth-main.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(auth_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o auth-main.obj `if test -f 'main.c'; then $(CYGPATH_W) 'main.c'; else $(CYGPATH_W) '$(srcdir)/main.c'; fi`
+
+test_auth_cache-auth-cache.o: auth-cache.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_auth_cache_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_auth_cache-auth-cache.o -MD -MP -MF $(DEPDIR)/test_auth_cache-auth-cache.Tpo -c -o test_auth_cache-auth-cache.o `test -f 'auth-cache.c' || echo '$(srcdir)/'`auth-cache.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_auth_cache-auth-cache.Tpo $(DEPDIR)/test_auth_cache-auth-cache.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='auth-cache.c' object='test_auth_cache-auth-cache.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_auth_cache_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_auth_cache-auth-cache.o `test -f 'auth-cache.c' || echo '$(srcdir)/'`auth-cache.c
+
+test_auth_cache-auth-cache.obj: auth-cache.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_auth_cache_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_auth_cache-auth-cache.obj -MD -MP -MF $(DEPDIR)/test_auth_cache-auth-cache.Tpo -c -o test_auth_cache-auth-cache.obj `if test -f 'auth-cache.c'; then $(CYGPATH_W) 'auth-cache.c'; else $(CYGPATH_W) '$(srcdir)/auth-cache.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_auth_cache-auth-cache.Tpo $(DEPDIR)/test_auth_cache-auth-cache.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='auth-cache.c' object='test_auth_cache-auth-cache.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_auth_cache_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_auth_cache-auth-cache.obj `if test -f 'auth-cache.c'; then $(CYGPATH_W) 'auth-cache.c'; else $(CYGPATH_W) '$(srcdir)/auth-cache.c'; fi`
+
+test_auth_cache-test-auth-cache.o: test-auth-cache.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_auth_cache_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_auth_cache-test-auth-cache.o -MD -MP -MF $(DEPDIR)/test_auth_cache-test-auth-cache.Tpo -c -o test_auth_cache-test-auth-cache.o `test -f 'test-auth-cache.c' || echo '$(srcdir)/'`test-auth-cache.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_auth_cache-test-auth-cache.Tpo $(DEPDIR)/test_auth_cache-test-auth-cache.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-auth-cache.c' object='test_auth_cache-test-auth-cache.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_auth_cache_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_auth_cache-test-auth-cache.o `test -f 'test-auth-cache.c' || echo '$(srcdir)/'`test-auth-cache.c
+
+test_auth_cache-test-auth-cache.obj: test-auth-cache.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_auth_cache_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_auth_cache-test-auth-cache.obj -MD -MP -MF $(DEPDIR)/test_auth_cache-test-auth-cache.Tpo -c -o test_auth_cache-test-auth-cache.obj `if test -f 'test-auth-cache.c'; then $(CYGPATH_W) 'test-auth-cache.c'; else $(CYGPATH_W) '$(srcdir)/test-auth-cache.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_auth_cache-test-auth-cache.Tpo $(DEPDIR)/test_auth_cache-test-auth-cache.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-auth-cache.c' object='test_auth_cache-test-auth-cache.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_auth_cache_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_auth_cache-test-auth-cache.obj `if test -f 'test-auth-cache.c'; then $(CYGPATH_W) 'test-auth-cache.c'; else $(CYGPATH_W) '$(srcdir)/test-auth-cache.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -1230,9 +1311,9 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-auth_moduleLTLIBRARIES clean-generic clean-libtool \
-	clean-noinstLIBRARIES clean-noinstPROGRAMS \
-	clean-pkglibexecPROGRAMS clean-stats_moduleLTLIBRARIES \
-	mostlyclean-am
+	clean-noinstLIBRARIES clean-noinstLTLIBRARIES \
+	clean-noinstPROGRAMS clean-pkglibexecPROGRAMS \
+	clean-stats_moduleLTLIBRARIES mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -1307,11 +1388,12 @@ uninstall-am: uninstall-auth_moduleLTLIBRARIES \
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-am clean \
 	clean-auth_moduleLTLIBRARIES clean-generic clean-libtool \
-	clean-noinstLIBRARIES clean-noinstPROGRAMS \
-	clean-pkglibexecPROGRAMS clean-stats_moduleLTLIBRARIES \
-	cscopelist-am ctags ctags-am distclean distclean-compile \
-	distclean-generic distclean-libtool distclean-tags distdir dvi \
-	dvi-am html html-am info info-am install install-am \
+	clean-noinstLIBRARIES clean-noinstLTLIBRARIES \
+	clean-noinstPROGRAMS clean-pkglibexecPROGRAMS \
+	clean-stats_moduleLTLIBRARIES cscopelist-am ctags ctags-am \
+	distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am \
 	install-auth_moduleLTLIBRARIES install-data install-data-am \
 	install-dvi install-dvi-am install-exec install-exec-am \
 	install-html install-html-am install-info install-info-am \

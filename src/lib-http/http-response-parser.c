@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -83,6 +83,7 @@ static int http_response_parse_status(struct http_response_parser *parser)
 static int http_response_parse_reason(struct http_response_parser *parser)
 {
 	const unsigned char *p = parser->parser.cur;
+	pool_t pool;
 
 	/* reason-phrase = *( HTAB / SP / VCHAR / obs-text )
 	 */
@@ -92,8 +93,9 @@ static int http_response_parse_reason(struct http_response_parser *parser)
 
 	if (p == parser->parser.end)
 		return 0;
+	pool = http_message_parser_get_pool(&parser->parser);
 	parser->response_reason =
-		p_strdup_until(parser->parser.msg.pool, parser->parser.cur, p);
+		p_strdup_until(pool, parser->parser.cur, p);
 	parser->parser.cur = p;
 	return 1;
 }
@@ -144,7 +146,6 @@ static int http_response_parse(struct http_response_parser *parser)
 	 */
 	switch (parser->state) {
 	case HTTP_RESPONSE_PARSE_STATE_INIT:
-		http_response_parser_restart(parser);
 		parser->state = HTTP_RESPONSE_PARSE_STATE_VERSION;
 		/* fall through */
 	case HTTP_RESPONSE_PARSE_STATE_VERSION:
@@ -302,12 +303,17 @@ int http_response_parse_next(struct http_response_parser *parser,
 	time_t retry_after = (time_t)-1;
 	int ret;
 
+	i_zero(response);
+
 	/* make sure we finished streaming payload from previous response
 	   before we continue. */
 	if ((ret = http_message_parse_finish_payload(&parser->parser)) <= 0) {
 		*error_r = parser->parser.error;
 		return ret;
 	}
+
+	if (parser->state == HTTP_RESPONSE_PARSE_STATE_INIT)
+		http_response_parser_restart(parser);
 
 	/* RFC 7230, Section 3:
 		
@@ -385,7 +391,6 @@ int http_response_parse_next(struct http_response_parser *parser,
 
 	parser->state = HTTP_RESPONSE_PARSE_STATE_INIT;
 
-	memset(response, 0, sizeof(*response));
 	response->status = parser->response_status;
 	response->reason = parser->response_reason;
 	response->version_major = parser->parser.msg.version_major;

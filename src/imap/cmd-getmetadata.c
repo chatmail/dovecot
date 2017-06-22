@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -143,7 +143,7 @@ cmd_getmetadata_send_nil_reply(struct imap_getmetadata_context *ctx,
 	   we must return it as NIL. */
 	str = metadata_add_entry(ctx, entry);
 	str_append(str, " NIL");
-	o_stream_send(ctx->cmd->client->output, str_data(str), str_len(str));
+	o_stream_nsend(ctx->cmd->client->output, str_data(str), str_len(str));
 }
 
 static void cmd_getmetadata_send_entry(struct imap_getmetadata_context *ctx,
@@ -410,6 +410,7 @@ cmd_getmetadata_try_mailbox(struct imap_getmetadata_context *ctx,
 			    struct mail_namespace *ns, const char *mailbox)
 {
 	ctx->box = mailbox_alloc(ns->list, mailbox, MAILBOX_FLAG_READONLY);
+	mailbox_set_reason(ctx->box, "GETMETADATA");
 	if (mailbox_open(ctx->box) < 0)
 		return -1;
 

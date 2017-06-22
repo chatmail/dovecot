@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "userdb.h"
@@ -279,7 +279,8 @@ static void userdb_ldap_init(struct userdb_module *_module)
 	struct ldap_userdb_module *module =
 		(struct ldap_userdb_module *)_module;
 
-	db_ldap_connect_delayed(module->conn);
+	if (!module->module.blocking || worker)
+		db_ldap_connect_delayed(module->conn);
 }
 
 static void userdb_ldap_deinit(struct userdb_module *_module)

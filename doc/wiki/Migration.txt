@@ -114,6 +114,7 @@ if you know more:
    body. Injection of X-UIDL: headers and pop3_reuse_xuidl=yes is the way to
    go.
  * qpopper: 'pop3_reuse_xuidl=yes'
+ * Courier: 'pop3_uidl_format = %f'
 
 IMAP <-> IMAP copying
 ---------------------
@@ -158,4 +159,4 @@ larch --from imap://mail1.example.com --to imap://mail2.example.com
 When run it will ask you for usernames and passwords that will be used for
 logging into servers, but you can also specify them on the command line.
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

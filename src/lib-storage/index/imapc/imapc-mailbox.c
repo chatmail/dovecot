@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -6,7 +6,6 @@
 #include "imap-arg.h"
 #include "imap-seqset.h"
 #include "imap-util.h"
-#include "imapc-client.h"
 #include "imapc-mail.h"
 #include "imapc-msgmap.h"
 #include "imapc-search.h"
@@ -18,10 +17,11 @@
 void imapc_mailbox_set_corrupted(struct imapc_mailbox *mbox,
 				 const char *reason, ...)
 {
+	const char *errmsg;
 	va_list va;
 
 	va_start(va, reason);
-	i_error("imapc: Mailbox '%s' state corrupted: %s",
+	errmsg = t_strdup_printf("Mailbox '%s' state corrupted: %s",
 		mbox->box.name, t_strdup_vprintf(reason, va));
 	va_end(va);
 
@@ -35,7 +35,7 @@ void imapc_mailbox_set_corrupted(struct imapc_mailbox *mbox,
 		/* maybe the remote server is buggy and has become confused.
 		   try reconnecting. */
 	}
-	imapc_client_mailbox_reconnect(mbox->client_box);
+	imapc_client_mailbox_reconnect(mbox->client_box, errmsg);
 }
 
 static struct mail_index_view *
@@ -325,7 +325,7 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 				}
 			}
 		} else if (strcasecmp(atom, "MODSEQ") == 0 &&
-			   imapc_storage_has_modseqs(mbox->storage)) {
+			   imapc_mailbox_has_modseqs(mbox)) {
 			/* (modseq-number) */
 			if (!imap_arg_get_list(&list[i+1], &modseq_list))
 				return;
@@ -515,7 +515,7 @@ imapc_untagged_esearch_gmail_pop3(const struct imap_arg *args,
 	t_array_init(&rseqs, 64);
 	if (!imap_arg_atom_equals(&args[0], "ALL") ||
 	    !imap_arg_get_atom(&args[1], &atom) ||
-	    imap_seq_set_parse(atom, &rseqs) < 0) {
+	    imap_seq_set_nostar_parse(atom, &rseqs) < 0) {
 		i_error("Invalid gmail-pop3 ESEARCH reply");
 		return;
 	}
@@ -546,6 +546,13 @@ imapc_untagged_esearch_gmail_pop3(const struct imap_arg *args,
 	mail_index_keywords_unref(&kw);
 }
 
+static void imapc_untagged_search(const struct imapc_untagged_reply *reply,
+				  struct imapc_mailbox *mbox)
+{
+	if (mbox != NULL)
+		imapc_search_reply_search(reply->args, mbox);
+}
+
 static void imapc_untagged_esearch(const struct imapc_untagged_reply *reply,
 				   struct imapc_mailbox *mbox)
 {
@@ -567,7 +574,7 @@ static void imapc_untagged_esearch(const struct imapc_untagged_reply *reply,
 	    strcmp(mbox->sync_gmail_pop3_search_tag, str) == 0)
 		imapc_untagged_esearch_gmail_pop3(reply->args+1, mbox);
 	else
-		imapc_search_reply(reply->args+1, mbox);
+		imapc_search_reply_esearch(reply->args+1, mbox);
 }
 
 static void
@@ -577,7 +584,8 @@ imapc_resp_text_uidvalidity(const struct imapc_untagged_reply *reply,
 	uint32_t uid_validity;
 
 	if (mbox == NULL ||
-	    str_to_uint32(reply->resp_text_value, &uid_validity) < 0)
+	    str_to_uint32(reply->resp_text_value, &uid_validity) < 0 ||
+	    uid_validity == 0)
 		return;
 
 	if (mbox->sync_uid_validity != uid_validity) {
@@ -674,6 +682,8 @@ void imapc_mailbox_register_callbacks(struct imapc_mailbox *mbox)
 					imapc_untagged_fetch);
 	imapc_mailbox_register_untagged(mbox, "EXPUNGE",
 					imapc_untagged_expunge);
+	imapc_mailbox_register_untagged(mbox, "SEARCH",
+					imapc_untagged_search);
 	imapc_mailbox_register_untagged(mbox, "ESEARCH",
 					imapc_untagged_esearch);
 	imapc_mailbox_register_resp_text(mbox, "UIDVALIDITY",

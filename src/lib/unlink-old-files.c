@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -18,7 +18,7 @@ unlink_old_files_real(const char *dir, const char *prefix, time_t min_time)
 	struct dirent *d;
 	struct stat st;
 	string_t *path;
-	unsigned int prefix_len, dir_len;
+	size_t prefix_len, dir_len;
 
 	dirp = opendir(dir);
 	if (dirp == NULL) {

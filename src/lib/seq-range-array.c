@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -427,7 +427,7 @@ void seq_range_array_invert(ARRAY_TYPE(seq_range) *array,
 {
 	struct seq_range *range, value;
 	unsigned int i, count;
-	uint32_t next_min_seq;
+	uint32_t prev_min_seq;
 
 	if (array_is_created(array))
 		range = array_get_modifiable(array, &count);
@@ -454,16 +454,25 @@ void seq_range_array_invert(ARRAY_TYPE(seq_range) *array,
 	}
 
 	for (i = 0; i < count; ) {
-		next_min_seq = range[i].seq2 + 1;
-		if (range[i].seq1 == min_seq) {
+		prev_min_seq = min_seq;
+		min_seq = range[i].seq2;
+		if (range[i].seq1 == prev_min_seq) {
 			array_delete(array, i, 1);
 			range = array_get_modifiable(array, &count);
 		} else {
 			range[i].seq2 = range[i].seq1 - 1;
-			range[i].seq1 = min_seq;
+			range[i].seq1 = prev_min_seq;
 			i++;
 		}
-		min_seq = next_min_seq;
+		if (min_seq >= max_seq) {
+			/* max_seq is reached. the rest of the array should be
+			   empty. we'll return here, because min_seq++ may
+			   wrap to 0. */
+			i_assert(min_seq == max_seq);
+			i_assert(i == count);
+			return;
+		}
+		min_seq++;
 	}
 	if (min_seq <= max_seq) {
 		value.seq1 = min_seq;
@@ -475,7 +484,7 @@ void seq_range_array_invert(ARRAY_TYPE(seq_range) *array,
 void seq_range_array_iter_init(struct seq_range_iter *iter_r,
 			       const ARRAY_TYPE(seq_range) *array)
 {
-	memset(iter_r, 0, sizeof(*iter_r));
+	i_zero(iter_r);
 	iter_r->array = array;
 }
 

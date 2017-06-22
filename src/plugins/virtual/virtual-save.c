@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -79,10 +79,7 @@ virtual_copy_keywords(struct mailbox *src_box,
 int virtual_save_begin(struct mail_save_context *_ctx, struct istream *input)
 {
 	struct virtual_save_context *ctx = (struct virtual_save_context *)_ctx;
-	struct virtual_mailbox *mbox =
-		(struct virtual_mailbox *)_ctx->transaction->box;
 	struct mail_save_data *mdata = &_ctx->data;
-	struct mail *mail;
 
 	if (ctx->backend_save_ctx == NULL) {
 		if (ctx->open_errstr != NULL) {
@@ -113,11 +110,8 @@ int virtual_save_begin(struct mail_save_context *_ctx, struct istream *input)
 	mailbox_save_set_guid(ctx->backend_save_ctx, mdata->guid);
 	mailbox_save_set_min_modseq(ctx->backend_save_ctx, mdata->min_modseq);
 
-	if (_ctx->dest_mail != NULL) {
-		mail = virtual_mail_set_backend_mail(_ctx->dest_mail,
-						     mbox->save_bbox);
-		mailbox_save_set_dest_mail(ctx->backend_save_ctx, mail);
-	}
+	virtual_mail_set_unattached_backend_mail(_ctx->dest_mail,
+		ctx->backend_save_ctx->dest_mail);
 	return mailbox_save_begin(&ctx->backend_save_ctx, input);
 }
 

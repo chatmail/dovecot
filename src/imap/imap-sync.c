@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -11,45 +11,7 @@
 #include "imap-fetch.h"
 #include "imap-notify.h"
 #include "imap-commands.h"
-#include "imap-sync.h"
-
-struct client_sync_context {
-	/* if multiple commands are in progress, we may need to wait for them
-	   to finish before syncing mailbox. */
-	unsigned int counter;
-	enum mailbox_sync_flags flags;
-	enum imap_sync_flags imap_flags;
-	const char *tagline;
-};
-
-struct imap_sync_context {
-	struct client *client;
-	struct mailbox *box;
-        enum imap_sync_flags imap_flags;
-
-	struct mailbox_transaction_context *t;
-	struct mailbox_sync_context *sync_ctx;
-	struct mail *mail;
-
-	struct mailbox_status status;
-	struct mailbox_sync_status sync_status;
-
-	struct mailbox_sync_rec sync_rec;
-	ARRAY_TYPE(keywords) tmp_keywords;
-	ARRAY_TYPE(seq_range) expunges;
-	uint32_t seq;
-
-	ARRAY_TYPE(seq_range) search_adds, search_removes;
-	unsigned int search_update_idx;
-
-	unsigned int messages_count;
-
-	unsigned int failed:1;
-	unsigned int finished:1;
-	unsigned int no_newmail:1;
-	unsigned int have_new_mails:1;
-	unsigned int search_update_notifying:1;
-};
+#include "imap-sync-private.h"
 
 static void uids_to_seqs(struct mailbox *box, ARRAY_TYPE(seq_range) *uids)
 {
@@ -221,6 +183,7 @@ imap_sync_init(struct client *client, struct mailbox *box,
 	ctx->client = client;
 	ctx->box = box;
 	ctx->imap_flags = imap_flags;
+	i_array_init(&ctx->module_contexts, 5);
 
 	/* make sure user can't DoS the system by causing Dovecot to create
 	   tons of useless namespaces. */
@@ -228,6 +191,7 @@ imap_sync_init(struct client *client, struct mailbox *box,
 
 	ctx->sync_ctx = mailbox_sync_init(box, flags);
 	ctx->t = mailbox_transaction_begin(box, 0);
+	mailbox_transaction_set_reason(ctx->t, "Mailbox sync");
 	ctx->mail = mail_alloc(ctx->t, MAIL_FETCH_FLAGS, NULL);
 	ctx->messages_count = client->messages_count;
 	i_array_init(&ctx->tmp_keywords, client->keywords.announce_count + 8);
@@ -369,6 +333,9 @@ static int imap_sync_notify_more(struct imap_sync_context *ctx)
 	   now it contains added/removed messages. */
 	if ((ret = imap_sync_send_search_updates(ctx, FALSE)) < 0)
 		ctx->failed = TRUE;
+
+	if (ret > 0)
+		ret = ctx->client->v.sync_notify_more(ctx);
 	return ret;
 }
 
@@ -390,6 +357,7 @@ int imap_sync_deinit(struct imap_sync_context *ctx,
 	}
 
 	array_free(&ctx->tmp_keywords);
+	array_free(&ctx->module_contexts);
 	i_free(ctx);
 	return ret;
 }
@@ -769,7 +737,7 @@ bool cmd_sync(struct client_command_context *cmd, enum mailbox_sync_flags flags,
 	if (cmd->cancel)
 		return TRUE;
 
-	cmd->last_run_timeval = ioloop_timeval;
+	cmd->stats.last_run_timeval = ioloop_timeval;
 	if (client->mailbox == NULL) {
 		/* no mailbox selected, no point in delaying the sync */
 		if (tagline != NULL)
@@ -778,7 +746,7 @@ bool cmd_sync(struct client_command_context *cmd, enum mailbox_sync_flags flags,
 	}
 	cmd->tagline_reply = p_strdup(cmd->pool, tagline);
 
-	cmd->sync = p_new(cmd->pool, struct client_sync_context, 1);
+	cmd->sync = p_new(cmd->pool, struct imap_client_sync_context, 1);
 	cmd->sync->counter = client->sync_counter;
 	cmd->sync->flags = flags;
 	cmd->sync->imap_flags = imap_flags;

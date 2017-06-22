@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "settings-parser.h"
@@ -30,6 +30,8 @@ static const struct setting_define imapc_setting_defines[] = {
 	DEF(SET_STR, imapc_list_prefix),
 	DEF(SET_TIME, imapc_cmd_timeout),
 	DEF(SET_TIME, imapc_max_idle_time),
+	DEF(SET_UINT, imapc_connection_retry_count),
+	DEF(SET_TIME, imapc_connection_retry_interval),
 	DEF(SET_SIZE, imapc_max_line_length),
 
 	DEF(SET_STR, pop3_deleted_flag),
@@ -54,6 +56,8 @@ static const struct imapc_settings imapc_default_settings = {
 	.imapc_list_prefix = "",
 	.imapc_cmd_timeout = 5*60,
 	.imapc_max_idle_time = 60*29,
+	.imapc_connection_retry_count = 1,
+	.imapc_connection_retry_interval = 1,
 	.imapc_max_line_length = 0,
 
 	.pop3_deleted_flag = ""
@@ -96,6 +100,8 @@ static const struct imapc_feature_list imapc_feature_list[] = {
 	{ "fetch-msn-workarounds", IMAPC_FEATURE_FETCH_MSN_WORKAROUNDS },
 	{ "fetch-fix-broken-mails", IMAPC_FEATURE_FETCH_FIX_BROKEN_MAILS },
 	{ "modseq", IMAPC_FEATURE_MODSEQ },
+	{ "delay-login", IMAPC_FEATURE_DELAY_LOGIN },
+	{ "fetch-bodystructure", IMAPC_FEATURE_FETCH_BODYSTRUCTURE },
 	{ NULL, 0 }
 };
 

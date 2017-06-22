@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "hex-binary.h"
@@ -19,7 +19,7 @@ int imap_status_parse_items(struct client_command_context *cmd,
 		return -1;
 	}
 
-	memset(items_r, 0, sizeof(*items_r));
+	i_zero(items_r);
 	for (; !IMAP_ARG_IS_EOL(args); args++) {
 		if (!imap_arg_get_atom(args, &item)) {
 			/* list may contain only atoms */
@@ -74,6 +74,7 @@ int imap_status_get(struct client_command_context *cmd,
 	} else {
 		/* open the mailbox */
 		box = mailbox_alloc(ns->list, mailbox, MAILBOX_FLAG_READONLY);
+		mailbox_set_reason(box, "STATUS");
 		if (client->enabled_features != 0)
 			(void)mailbox_enable(box, client->enabled_features);
 	}
@@ -103,7 +104,7 @@ int imap_status_send(struct client *client, const char *mailbox_mutf7,
 {
 	const struct mailbox_status *status = &result->status;
 	string_t *str;
-	unsigned int prefix_len;
+	size_t prefix_len;
 
 	str = t_str_new(128);
 	str_append(str, "* STATUS ");

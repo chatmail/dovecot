@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -297,14 +297,14 @@ void duplicate_flush(struct duplicate_context *ctx)
 		return;
 	}
 
-	memset(&hdr, 0, sizeof(hdr));
+	i_zero(&hdr);
 	hdr.version = DUPLICATE_VERSION;
 
 	output = o_stream_create_fd_file(file->new_fd, 0, FALSE);
 	o_stream_cork(output);
 	o_stream_nsend(output, &hdr, sizeof(hdr));
 
-	memset(&rec, 0, sizeof(rec));
+	i_zero(&rec);
 	iter = hash_table_iterate_init(file->hash);
 	while (hash_table_iterate(iter, file->hash, &d, &d)) {
 		rec.stamp = d->time;

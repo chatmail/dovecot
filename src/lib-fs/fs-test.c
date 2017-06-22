@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -235,7 +235,7 @@ static int fs_test_stat(struct fs_file *_file, struct stat *st_r)
 		errno = ENOENT;
 		return -1;
 	}
-	memset(st_r, 0, sizeof(*st_r));
+	i_zero(st_r);
 	st_r->st_size = file->contents->used;
 	return 0;
 }
@@ -322,7 +322,8 @@ static const char *fs_test_iter_next(struct fs_iter *_iter)
 	struct test_fs_iter *iter = (struct test_fs_iter *)_iter;
 	struct test_fs *fs = (struct test_fs *)_iter->fs;
 	const char *const *files, *p;
-	unsigned int count, len, prev_dir_len = strlen(iter->prev_dir);
+	unsigned int count;
+	size_t len, prev_dir_len = strlen(iter->prev_dir);
 
 	files = array_get(&fs->iter_files, &count);
 	for (; iter->idx < count; iter->idx++) {

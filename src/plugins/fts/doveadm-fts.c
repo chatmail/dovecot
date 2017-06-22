@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -41,7 +41,7 @@ cmd_search_box(struct doveadm_mail_cmd_context *ctx,
 		return -1;
 	}
 
-	memset(&result, 0, sizeof(result));
+	i_zero(&result);
 	i_array_init(&result.definite_uids, 16);
 	i_array_init(&result.maybe_uids, 16);
 	i_array_init(&result.scores, 16);

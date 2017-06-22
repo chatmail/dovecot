@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "str.h"
@@ -172,7 +172,9 @@ static struct client_vfuncs imap_urlauth_vfuncs = {
 	imap_urlauth_client_auth_result,
 	NULL,
 	NULL,
-	NULL
+	NULL,
+	NULL,
+	client_common_send_raw_data,
 };
 
 static const struct login_binary imap_urlauth_login_binary = {

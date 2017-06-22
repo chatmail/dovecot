@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "ioloop.h"
@@ -273,6 +273,16 @@ static bool anvil_reconnect_callback(void)
 	return FALSE;
 }
 
+void login_anvil_init(void)
+{
+	if (anvil != NULL)
+		return;
+
+	anvil = anvil_client_init("anvil", anvil_reconnect_callback, 0);
+	if (anvil_client_connect(anvil, TRUE) < 0)
+		i_fatal("Couldn't connect to anvil");
+}
+
 static const struct ip_addr *
 parse_login_source_ips(const char *ips_str, unsigned int *count_r)
 {
@@ -314,7 +324,7 @@ static void login_load_modules(void)
 	if (global_login_settings->login_plugins[0] == '\0')
 		return;
 
-	memset(&mod_set, 0, sizeof(mod_set));
+	i_zero(&mod_set);
 	mod_set.abi_version = DOVECOT_ABI_VERSION;
 	mod_set.binary_name = login_binary->process_name;
 	mod_set.setting_name = "login_plugins";
@@ -336,6 +346,7 @@ static void main_preinit(void)
 	   key file. */
 	ssl_proxy_init();
 	dsasl_clients_init();
+	client_common_init();
 
 	/* set the number of fds we want to use. it may get increased or
 	   decreased. leave a couple of extra fds for auth sockets and such.
@@ -359,11 +370,8 @@ static void main_preinit(void)
 	i_assert(strcmp(global_ssl_settings->ssl, "no") == 0 ||
 		 ssl_initialized);
 
-	if (global_login_settings->mail_max_userip_connections > 0) {
-		anvil = anvil_client_init("anvil", anvil_reconnect_callback, 0);
-		if (anvil_client_connect(anvil, TRUE) < 0)
-			i_fatal("Couldn't connect to anvil");
-	}
+	if (global_login_settings->mail_max_userip_connections > 0)
+		login_anvil_init();
 
 	/* read the login_source_ips before chrooting so it can access
 	   /etc/hosts */
@@ -421,6 +429,7 @@ static void main_deinit(void)
 	login_proxy_deinit();
 
 	login_binary->deinit();
+	module_dir_unload(&modules);
 	auth_client_deinit(&auth_client);
 	master_auth_deinit(&master_auth);
 
@@ -433,6 +442,7 @@ static void main_deinit(void)
 		anvil_client_deinit(&anvil);
 	if (auth_client_to != NULL)
 		timeout_remove(&auth_client_to);
+	client_common_deinit();
 	dsasl_clients_deinit();
 	login_settings_deinit();
 }

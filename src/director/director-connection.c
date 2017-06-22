@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 /*
    Handshaking:
@@ -1012,8 +1012,10 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 	}
 
 	if (update) {
-		mail_host_set_down(host, down, last_updown_change);
-		mail_host_set_vhost_count(host, vhost_count);
+		const char *log_prefix = t_strdup_printf("director(%s): ",
+							 conn->name);
+		mail_host_set_down(host, down, last_updown_change, log_prefix);
+		mail_host_set_vhost_count(host, vhost_count, log_prefix);
 		director_update_host(conn->dir, src_host, dir_host, host);
 	} else {
 		dir_debug("Ignoring host %s update vhost_count=%u "
@@ -2145,7 +2147,7 @@ static void director_connection_reconnect(struct director_connection **_conn,
 void director_connection_send(struct director_connection *conn,
 			      const char *data)
 {
-	unsigned int len = strlen(data);
+	size_t len = strlen(data);
 	off_t ret;
 
 	if (conn->output->closed || !conn->connected)

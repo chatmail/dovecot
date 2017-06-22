@@ -47,6 +47,7 @@ wikifiles = ACL.txt \
 	Design.AuthProtocol.txt \
 	Design.Buffers.txt \
 	Design.Code.txt \
+	Design.Dcrypt.txt \
 	Design.DoveadmProtocol.HTTP.txt \
 	Design.DoveadmProtocol.txt \
 	Design.Dsync.txt \
@@ -83,6 +84,7 @@ wikifiles = ACL.txt \
 	FindMailLocation.txt \
 	FinishBasicConfiguration.txt \
 	HAProxy.txt \
+	HowTo.AntispamWithSieve.txt \
 	HowTo.EximAndDovecotSASL.txt \
 	HowTo.ImapcProxy.txt \
 	HowTo.PopBSMTPAndDovecot.txt \
@@ -156,6 +158,7 @@ wikifiles = ACL.txt \
 	PasswordDatabase.PAM.txt \
 	PasswordDatabase.Shadow.txt \
 	PasswordDatabase.Static.txt \
+	PasswordDatabase.oauth2.txt \
 	PasswordDatabase.txt \
 	PerformanceTuning.txt \
 	Pigeonhole.Installation.txt \
@@ -204,6 +207,7 @@ wikifiles = ACL.txt \
 	Plugins.Snarf.txt \
 	Plugins.Stats.txt \
 	Plugins.Trash.txt \
+	Plugins.VarExpandCrypt.txt \
 	Plugins.Virtual.txt \
 	Plugins.Welcome.txt \
 	Plugins.Zlib.txt \

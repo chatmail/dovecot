@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "unichar.h"
@@ -80,7 +80,8 @@ test_tokenizer_inputoutput(struct fts_tokenizer *tok, const char *_input,
 {
 	const unsigned char *input = (const unsigned char *)_input;
 	const char *token, *error;
-	unsigned int i, outi, max, char_len, input_len = strlen(_input);
+	unsigned int i, outi, max, char_len;
+	size_t input_len = strlen(_input);
 
 	/* test all input at once */
 	outi = first_outi;
@@ -489,7 +490,7 @@ static void test_fts_tokenizer_random(void)
 		for (unsigned int j = 0; j < sizeof(addr); j++)
 			addr[j] = test_chars[rand() % N_ELEMENTS(test_chars)];
 		str_truncate(str, 0);
-		uni_utf8_get_valid_data(addr, sizeof(addr), str);
+		(void)uni_utf8_get_valid_data(addr, sizeof(addr), str);
 		while (fts_tokenizer_next(tok, str_data(str), str_len(str),
 					  &token, &error) > 0) ;
 		while (fts_tokenizer_final(tok, &token, &error) > 0) ;

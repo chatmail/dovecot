@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 /* Digest-MD5 SASL authentication, see RFC-2831 */
 
@@ -208,7 +208,7 @@ static bool verify_credentials(struct digest_auth_request *request,
 
 		if (i == 0) {
 			/* verify response */
-			if (memcmp(response_hex, request->response, 32) != 0) {
+			if (!mem_equals_timing_safe(response_hex, request->response, 32)) {
 				auth_request_log_info(&request->auth_request,
 						      AUTH_SUBSYS_MECH,
 						      "password mismatch");

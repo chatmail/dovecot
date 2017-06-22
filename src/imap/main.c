@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "ioloop.h"
@@ -11,6 +11,7 @@
 #include "randgen.h"
 #include "restrict-access.h"
 #include "fd-close-on-exec.h"
+#include "write-full.h"
 #include "settings-parser.h"
 #include "master-interface.h"
 #include "master-service.h"
@@ -88,6 +89,8 @@ void imap_refresh_proctitle(void)
 			if (o_stream_is_corked(client->output))
 				str_append(title, " corked");
 		}
+		if (client->destroyed)
+			str_append(title, " (deinit)");
 		break;
 	default:
 		str_printfa(title, "%u connections", imap_client_count);
@@ -134,19 +137,19 @@ struct client_input {
 	const char *tag;
 
 	const unsigned char *input;
-	unsigned int input_size;
+	size_t input_size;
 	bool send_untagged_capability;
 };
 
 static void
-client_parse_input(const unsigned char *data, unsigned int len,
+client_parse_input(const unsigned char *data, size_t len,
 		   struct client_input *input_r)
 {
-	unsigned int taglen;
+	size_t taglen;
 
 	i_assert(len > 0);
 
-	memset(input_r, 0, sizeof(*input_r));
+	i_zero(input_r);
 
 	if (data[0] == '1')
 		input_r->send_untagged_capability = TRUE;
@@ -162,8 +165,8 @@ client_parse_input(const unsigned char *data, unsigned int len,
 }
 
 static void
-client_add_input(struct client *client, const unsigned char *client_input,
-		 size_t client_input_size)
+client_add_input_capability(struct client *client, const unsigned char *client_input,
+			    size_t client_input_size)
 {
 	struct ostream *output;
 	struct client_input input;
@@ -176,10 +179,11 @@ client_add_input(struct client *client, const unsigned char *client_input,
 			i_panic("Couldn't add client input to stream");
 	} else {
 		/* IMAPLOGINTAG environment is compatible with mailfront */
-		memset(&input, 0, sizeof(input));
+		i_zero(&input);
 		input.tag = getenv("IMAPLOGINTAG");
 	}
 
+	/* cork/uncork around the OK reply to minimize latency */
 	output = client->output;
 	o_stream_ref(output);
 	o_stream_cork(output);
@@ -200,6 +204,19 @@ client_add_input(struct client *client, const unsigned char *client_input,
 			input.tag, " OK [CAPABILITY ",
 			str_c(client->capability_string), "] Logged in", NULL));
 	}
+	o_stream_uncork(output);
+	o_stream_unref(&output);
+}
+
+static void
+client_add_input_finalize(struct client *client)
+{
+	struct ostream *output;
+
+	/* try to condense any responses into as few packets as possible */
+	output = client->output;
+	o_stream_ref(output);
+	o_stream_cork(output);
 	(void)client_handle_input(client);
 	o_stream_uncork(output);
 	o_stream_unref(&output);
@@ -212,39 +229,28 @@ client_add_input(struct client *client, const unsigned char *client_input,
 		client_continue_pending_input(client);
 }
 
+static void
+client_add_input(struct client *client, const unsigned char *client_input,
+		 size_t client_input_size)
+{
+	client_add_input_capability(client, client_input, client_input_size);
+	client_add_input_finalize(client);
+}
+
 int client_create_from_input(const struct mail_storage_service_input *input,
 			     int fd_in, int fd_out,
 			     struct client **client_r, const char **error_r)
 {
 	struct mail_storage_service_user *user;
 	struct mail_user *mail_user;
-	struct mail_namespace *ns;
 	struct client *client;
 	struct imap_settings *imap_set;
 	struct lda_settings *lda_set;
-	const char *errstr;
-	enum mail_error mail_error;
 
 	if (mail_storage_service_lookup_next(storage_service, input,
 					     &user, &mail_user, error_r) <= 0)
 		return -1;
 	restrict_access_allow_coredumps(TRUE);
-
-	/* this is mainly for imapc: make sure we can do at least minimal
-	   access to the mailbox list or fail immediately. otherwise the IMAP
-	   client could be trying a lot of commands and we'd return failures
-	   for all of them. FIXME: There should be a bit less kludgy way to
-	   check this, but I'm not sure if it's worth the trouble just for
-	   imapc. */
-	ns = mail_namespace_find_inbox(mail_user->namespaces);
-	(void)mailbox_list_get_hierarchy_sep(ns->list);
-	errstr = mailbox_list_get_last_error(ns->list, &mail_error);
-	if (mail_error != MAIL_ERROR_NONE) {
-		*error_r = t_strdup(errstr);
-		mail_user_unref(&mail_user);
-		mail_storage_service_user_free(&user);
-		return -1;
-	}
 
 	imap_set = mail_storage_service_user_get_set(user)[1];
 	if (imap_set->verbose_proctitle)
@@ -270,7 +276,7 @@ static void main_stdio_run(const char *username)
 	struct mail_storage_service_input input;
 	const char *value, *error, *input_base64;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = input.service = "imap";
 	input.username = username != NULL ? username : getenv("USER");
 	if (input.username == NULL && IS_STANDALONE())
@@ -285,6 +291,9 @@ static void main_stdio_run(const char *username)
 	if (client_create_from_input(&input, STDIN_FILENO, STDOUT_FILENO,
 				     &client, &error) < 0)
 		i_fatal("%s", error);
+
+	/* TODO: the following could make use of
+	   client_add_input_{capability,finalize} */
 	input_base64 = getenv("CLIENT_INPUT");
 	if (input_base64 == NULL)
 		client_add_input(client, NULL, 0);
@@ -305,7 +314,7 @@ login_client_connected(const struct master_login_client *login_client,
 	enum mail_auth_request_flags flags;
 	const char *error;
 
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = input.service = "imap";
 	input.local_ip = login_client->auth_req.local_ip;
 	input.remote_ip = login_client->auth_req.remote_ip;
@@ -330,8 +339,22 @@ login_client_connected(const struct master_login_client *login_client,
 	flags = login_client->auth_req.flags;
 	if ((flags & MAIL_AUTH_REQUEST_FLAG_TLS_COMPRESSION) != 0)
 		client->tls_compression = TRUE;
-	client_add_input(client, login_client->data,
+	client_add_input_capability(client, login_client->data,
 			 login_client->auth_req.data_size);
+
+	/* finish initializing the user (see comment in main()) */
+	if (mail_namespaces_init(client->user, &error) < 0) {
+		if (write_full(login_client->fd, MSG_BYE_INTERNAL_ERROR,
+			       strlen(MSG_BYE_INTERNAL_ERROR)) < 0)
+			if (errno != EAGAIN && errno != EPIPE)
+				i_error("write_full(client) failed: %m");
+
+		i_error("%s", error);
+		client_destroy(client, error);
+		return;
+	}
+
+	client_add_input_finalize(client);
 	/* client may be destroyed now */
 }
 
@@ -372,12 +395,11 @@ int main(int argc, char *argv[])
 	};
 	struct master_login_settings login_set;
 	enum master_service_flags service_flags = 0;
-	enum mail_storage_service_flags storage_service_flags =
-		MAIL_STORAGE_SERVICE_FLAG_AUTOEXPUNGE;
+	enum mail_storage_service_flags storage_service_flags = 0;
 	const char *username = NULL, *auth_socket_path = "auth-master";
 	int c;
 
-	memset(&login_set, 0, sizeof(login_set));
+	i_zero(&login_set);
 	login_set.postlogin_timeout_secs = MASTER_POSTLOGIN_TIMEOUT_DEFAULT;
 	login_set.request_auth_token = TRUE;
 
@@ -394,7 +416,16 @@ int main(int argc, char *argv[])
 	} else {
 		service_flags |= MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
 		storage_service_flags |=
-			MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT;
+			MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT |
+			MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES;
+
+		/*
+		 * We include MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES so
+		 * that the mail_user initialization is fast and we can
+		 * quickly send back the OK response to LOGIN/AUTHENTICATE.
+		 * Otherwise we risk a very slow namespace initialization to
+		 * cause client timeouts on login.
+		 */
 	}
 
 	master_service = master_service_init("imap", service_flags,

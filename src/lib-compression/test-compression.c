@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -154,8 +154,51 @@ static void test_gz_concat(void)
 
 static void test_gz_no_concat(void)
 {
-	test_begin("gz concat");
+	test_begin("gz no concat");
 	test_gz("hello", "");
+	test_end();
+}
+
+static void test_gz_large_header(void)
+{
+	const struct compression_handler *gz = compression_lookup_handler("gz");
+	static const unsigned char gz_input[] = {
+		0x1f, 0x8b, 0x08, 0x08,
+		'a','a','a','a','a','a','a','a','a','a','a',
+		0
+	};
+	struct istream *file_input, *input;
+	size_t i;
+
+	if (gz == NULL || gz->create_istream == NULL)
+		return; /* not compiled in */
+
+	test_begin("gz large header");
+
+	/* max buffer size smaller than gz header */
+	for (i = 1; i < sizeof(gz_input); i++) {
+		file_input = test_istream_create_data(gz_input, sizeof(gz_input));
+		test_istream_set_size(file_input, i);
+		test_istream_set_max_buffer_size(file_input, i);
+
+		input = gz->create_istream(file_input, FALSE);
+		test_assert_idx(i_stream_read(input) == 0, i);
+		test_assert_idx(i_stream_read(input) == -1 &&
+				input->stream_errno == EINVAL, i);
+		i_stream_unref(&input);
+		i_stream_unref(&file_input);
+	}
+
+	/* max buffer size is exactly the gz header */
+	file_input = test_istream_create_data(gz_input, sizeof(gz_input));
+	input = gz->create_istream(file_input, FALSE);
+	test_istream_set_size(input, i);
+	test_istream_set_allow_eof(input, FALSE);
+	test_istream_set_max_buffer_size(input, i);
+	test_assert(i_stream_read(input) == 0);
+	i_stream_unref(&input);
+	i_stream_unref(&file_input);
+
 	test_end();
 }
 
@@ -249,6 +292,7 @@ int main(int argc, char *argv[])
 		test_compression,
 		test_gz_concat,
 		test_gz_no_concat,
+		test_gz_large_header,
 		NULL
 	};
 	if (argc == 2) {

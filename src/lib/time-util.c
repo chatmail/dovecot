@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "time-util.h"
@@ -55,14 +55,29 @@ long long timeval_diff_usecs(const struct timeval *tv1,
 	return ((long long)secs * 1000000LL) + usecs;
 }
 
-const char *t_strflocaltime(const char *fmt, time_t t)
+time_t time_to_local_day_start(time_t t)
 {
-	const struct tm *tm;
+	const struct tm *day_tm;
+	struct tm tm;
+	time_t new_start_time;
+
+	day_tm = localtime(&t);
+	i_zero(&tm);
+	tm.tm_year = day_tm->tm_year;
+	tm.tm_mon = day_tm->tm_mon;
+	tm.tm_mday = day_tm->tm_mday;
+	tm.tm_isdst = -1;
+	new_start_time = mktime(&tm);
+	i_assert(new_start_time != (time_t)-1);
+	return new_start_time;
+}
+
+static const char *strftime_real(const char *fmt, const struct tm *tm)
+{
 	size_t bufsize = strlen(fmt) + 32;
 	char *buf = t_buffer_get(bufsize);
 	size_t ret;
 
-	tm = localtime(&t);
 	while ((ret = strftime(buf, bufsize, fmt, tm)) == 0) {
 		bufsize *= 2;
 		i_assert(bufsize <= STRFTIME_MAX_BUFSIZE);
@@ -70,4 +85,19 @@ const char *t_strflocaltime(const char *fmt, time_t t)
 	}
 	t_buffer_alloc(ret + 1);
 	return buf;
+}
+
+const char *t_strftime(const char *fmt, const struct tm *tm)
+{
+	return strftime_real(fmt, tm);
+}
+
+const char *t_strflocaltime(const char *fmt, time_t t)
+{
+	return strftime_real(fmt, localtime(&t));
+}
+
+const char *t_strfgmtime(const char *fmt, time_t t)
+{
+	return strftime_real(fmt, gmtime(&t));
 }

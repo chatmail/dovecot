@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -195,8 +195,7 @@ static int dbox_save_finish_write(struct mail_save_context *_ctx)
 	} T_END;
 
 	if (ctx->ctx.failed) {
-		mail_index_expunge(ctx->ctx.trans, ctx->ctx.seq);
-		mail_cache_transaction_reset(ctx->ctx.ctx.transaction->cache_trans);
+		index_storage_save_abort_last(&ctx->ctx.ctx, ctx->ctx.seq);
 		dbox_file_append_rollback(&ctx->append_ctx);
 		dbox_file_unlink(*files);
 		dbox_file_unref(files);
@@ -307,8 +306,6 @@ int sdbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 
 	if (array_count(&ctx->files) == 0) {
 		/* the mail must be freed in the commit_pre() */
-		if (ctx->ctx.mail != NULL)
-			mail_free(&ctx->ctx.mail);
 		return 0;
 	}
 
@@ -339,9 +336,6 @@ int sdbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 			return -1;
 		}
 	}
-
-	if (ctx->ctx.mail != NULL)
-		mail_free(&ctx->ctx.mail);
 
 	_t->changes->uid_validity = hdr->uid_validity;
 	return 0;
@@ -387,8 +381,5 @@ void sdbox_transaction_save_rollback(struct mail_save_context *_ctx)
 
 	if (ctx->sync_ctx != NULL)
 		(void)sdbox_sync_finish(&ctx->sync_ctx, FALSE);
-
-	if (ctx->ctx.mail != NULL)
-		mail_free(&ctx->ctx.mail);
 	i_free(ctx);
 }

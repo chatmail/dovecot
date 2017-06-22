@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -18,7 +18,7 @@ void mail_index_ext_set_reset_id(struct mail_index_transaction *t ATTR_UNUSED,
 				 uint32_t ext_id ATTR_UNUSED,
 				 uint32_t reset_id ATTR_UNUSED) { }
 void mail_index_transaction_set_log_updates(struct mail_index_transaction *t ATTR_UNUSED) { }
-void mail_index_update_day_headers(struct mail_index_transaction *t ATTR_UNUSED) {}
+void mail_index_update_day_headers(struct mail_index_transaction *t ATTR_UNUSED, time_t day_stamp ATTR_UNUSED) {}
 bool mail_index_cancel_flag_updates(struct mail_index_transaction *t ATTR_UNUSED,
 				    uint32_t seq ATTR_UNUSED) { return TRUE; }
 bool mail_index_cancel_keyword_updates(struct mail_index_transaction *t ATTR_UNUSED,
@@ -72,7 +72,7 @@ test_mail_index_transaction_finish_flag_updates(unsigned int n_so_far)
 	t = t_new(struct mail_index_transaction, 1);
 	t->drop_unnecessary_flag_updates = TRUE;
 
-	memset(&u, 0, sizeof(u));
+	i_zero(&u);
 	u.add_flags = MAIL_SEEN; u.remove_flags = MAIL_DRAFT;
 
 	test_begin(t_strdup_printf("mail index transaction finish flag updates n_so_far=%u", n_so_far));
@@ -151,6 +151,8 @@ test_mail_index_transaction_finish_check_conflicts(unsigned int n_so_far)
 	/* try some conflicts */
 	t->max_modseq = 6;
 	MAIL_INDEX_TRANSACTION_FINISH(t, n_so_far);
+
+	i_assert(array_is_created(&conflict_seqs));
 
 	conflicts = array_get(&conflict_seqs, &count);
 	test_assert(count == 2);

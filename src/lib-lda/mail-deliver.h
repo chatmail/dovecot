@@ -55,8 +55,8 @@ struct mail_deliver_context {
 	   the mailbox. */
 	struct mail *dest_mail;
 
-	/* mail_deliver_log() caches the var expand table here */
-	struct var_expand_table *var_expand_table;
+	/* mail_deliver_log() caches the var expand table values here */
+	struct mail_deliver_cache *cache;
 
 	/* Error message for a temporary failure. This is necessary only when
 	   there is no storage where to get the error message from. */
@@ -85,8 +85,6 @@ extern deliver_mail_func_t *deliver_mail;
 const struct var_expand_table *
 mail_deliver_ctx_get_log_var_expand_table(struct mail_deliver_context *ctx,
 					  const char *message);
-const struct var_expand_table *
-mail_deliver_get_log_var_expand_table(struct mail *mail, const char *message);
 void mail_deliver_log(struct mail_deliver_context *ctx, const char *fmt, ...)
 	ATTR_FORMAT(2, 3);
 
@@ -114,5 +112,8 @@ int mail_deliver(struct mail_deliver_context *ctx,
 /* Sets the deliver_mail hook and returns the previous hook,
    which the new_hook should call if it's non-NULL. */
 deliver_mail_func_t *mail_deliver_hook_set(deliver_mail_func_t *new_hook);
+
+/* Must be called before any storage is created. */
+void mail_deliver_hooks_init(void);
 
 #endif

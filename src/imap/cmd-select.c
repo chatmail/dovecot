@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "seq-range-array.h"
@@ -245,7 +245,7 @@ static int select_qresync(struct imap_select_context *ctx)
 	search_args->args->value.seqset = ctx->qresync_known_uids;
 	imap_search_add_changed_since(search_args, ctx->qresync_modseq);
 
-	memset(&qresync_args, 0, sizeof(qresync_args));
+	i_zero(&qresync_args);
 	qresync_args.qresync_sample_seqset = &ctx->qresync_sample_seqset;
 	qresync_args.qresync_sample_uidset = &ctx->qresync_sample_uidset;
 
@@ -255,7 +255,8 @@ static int select_qresync(struct imap_select_context *ctx)
 		return -1;
 	}
 
-	fetch_ctx = imap_fetch_alloc(ctx->cmd->client, ctx->cmd->pool);
+	fetch_ctx = imap_fetch_alloc(ctx->cmd->client, ctx->cmd->pool,
+		t_strdup_printf("%s %s", ctx->cmd->name, ctx->cmd->args));
 
 	imap_fetch_init_nofail_handler(fetch_ctx, imap_fetch_uid_init);
 	imap_fetch_init_nofail_handler(fetch_ctx, imap_fetch_flags_init);
@@ -291,6 +292,7 @@ select_open(struct imap_select_context *ctx, const char *mailbox, bool readonly)
 	else
 		flags |= MAILBOX_FLAG_DROP_RECENT;
 	ctx->box = mailbox_alloc(ctx->ns->list, mailbox, flags);
+	mailbox_set_reason(ctx->box, readonly ? "EXAMINE" : "SELECT");
 	if (mailbox_open(ctx->box) < 0) {
 		client_send_box_error(ctx->cmd, ctx->box);
 		mailbox_free(&ctx->box);
@@ -363,16 +365,10 @@ select_open(struct imap_select_context *ctx, const char *mailbox, bool readonly)
 
 static void close_selected_mailbox(struct client *client)
 {
-	struct mailbox *box;
-
 	if (client->mailbox == NULL)
 		return;
 
-	client_search_updates_free(client);
-	box = client->mailbox;
-	client->mailbox = NULL;
-
-	mailbox_free(&box);
+	imap_client_close_mailbox(client);
 	/* CLOSED response is required by QRESYNC */
 	client_send_line(client, "* OK [CLOSED] Previous mailbox closed.");
 }

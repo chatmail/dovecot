@@ -1,7 +1,8 @@
-/* Copyright (c) 2003-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
+#include "ioloop.h"
 #include "mail-index-private.h"
 #include "mail-index-modseq.h"
 #include "mail-index-transaction-private.h"
@@ -336,7 +337,7 @@ void mail_index_transaction_finish(struct mail_index_transaction *t)
 	mail_index_transaction_finish_so_far(t);
 
 	if (array_is_created(&t->appends))
-		mail_index_update_day_headers(t);
+		mail_index_update_day_headers(t, ioloop_time);
 	if (array_is_created(&t->ext_reset_atomic))
 		transaction_update_atomic_reset_ids(t);
 	/* finally convert all sequences to UIDs before we write them,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -125,7 +125,7 @@ uri_parse_pct_encoded_data(struct uri_parser *parser,
 	*ch_r |= (value & 0x0f);
 	*p += 1;
 
-	if (*ch_r == '\0') {
+	if (!parser->allow_pct_nul && *ch_r == '\0') {
 		parser->error =
 			"Percent encoding is not allowed to encode NUL character";
 		return -1;
@@ -529,7 +529,7 @@ int uri_parse_authority(struct uri_parser *parser,
 	 */
 
 	if (auth != NULL)
-		memset(auth, 0, sizeof(*auth));
+		i_zero(auth);
 
 	/* Scan ahead to check whether there is a [userinfo "@"] uri component */
 	for (p = parser->cur; p < parser->end; p++){
@@ -645,7 +645,7 @@ int uri_parse_path(struct uri_parser *parser,
 	if (path_r != NULL)
 		p_array_init(&segments, parser->pool, 16);
 	else
-		memset(&segments, 0, sizeof(segments));
+		i_zero(&segments);
 
 	/* check for a leading '/' and indicate absolute path
 	   when it is present

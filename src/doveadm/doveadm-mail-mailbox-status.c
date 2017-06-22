@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -14,7 +14,8 @@
 	 STATUS_UIDNEXT | STATUS_UIDVALIDITY | \
 	 STATUS_UNSEEN | STATUS_HIGHESTMODSEQ)
 #define ALL_METADATA_ITEMS \
-	(MAILBOX_METADATA_VIRTUAL_SIZE | MAILBOX_METADATA_GUID)
+	(MAILBOX_METADATA_VIRTUAL_SIZE | MAILBOX_METADATA_GUID | \
+	 MAILBOX_METADATA_FIRST_SAVE_DATE)
 
 #define TOTAL_STATUS_ITEMS \
 	(STATUS_MESSAGES | STATUS_RECENT | STATUS_UNSEEN)
@@ -66,6 +67,8 @@ static void status_parse_fields(struct status_cmd_context *ctx,
 			ctx->metadata_items |= MAILBOX_METADATA_VIRTUAL_SIZE;
 		else if (strcmp(field, "guid") == 0)
 			ctx->metadata_items |= MAILBOX_METADATA_GUID;
+		else if (strcmp(field, "firstsaved") == 0)
+			ctx->metadata_items |= MAILBOX_METADATA_FIRST_SAVE_DATE;
 		else {
 			i_fatal_status(EX_USAGE,
 				       "Unknown status field: %s", field);
@@ -104,6 +107,8 @@ status_output(struct status_cmd_context *ctx, struct mailbox *box,
 		doveadm_print_num(metadata->virtual_size);
 	if ((ctx->metadata_items & MAILBOX_METADATA_GUID) != 0)
 		doveadm_print(guid_128_to_string(metadata->guid));
+	if ((ctx->metadata_items & MAILBOX_METADATA_FIRST_SAVE_DATE) != 0)
+		doveadm_print_num(metadata->first_save_date);
 }
 
 static void
@@ -127,10 +132,12 @@ status_mailbox(struct status_cmd_context *ctx, const struct mailbox_info *info)
 	struct mailbox_metadata metadata;
 
 	box = doveadm_mailbox_find(ctx->ctx.cur_mail_user, info->vname);
+	mailbox_set_reason(box, ctx->ctx.cmd->name);
 	if (mailbox_get_status(box, ctx->status_items, &status) < 0 ||
 	    mailbox_get_metadata(box, ctx->metadata_items, &metadata) < 0) {
 		i_error("Mailbox %s: Failed to lookup mailbox status: %s",
-			mailbox_get_vname(box), mailbox_get_last_error(box, NULL));
+			mailbox_get_vname(box),
+			mailbox_get_last_internal_error(box, NULL));
 		doveadm_mail_failed_mailbox(&ctx->ctx, box);
 		mailbox_free(&box);
 		return -1;
@@ -155,8 +162,8 @@ cmd_mailbox_status_run(struct doveadm_mail_cmd_context *_ctx,
 	const struct mailbox_info *info;
 	int ret = 0;
 
-	memset(&ctx->total_status, 0, sizeof(ctx->total_status));
-	memset(&ctx->total_metadata, 0, sizeof(ctx->total_metadata));
+	i_zero(&ctx->total_status);
+	i_zero(&ctx->total_metadata);
 
 	iter = doveadm_mailbox_list_iter_init(_ctx, user, ctx->search_args,
 					      iter_flags);
@@ -208,6 +215,8 @@ static void cmd_mailbox_status_init(struct doveadm_mail_cmd_context *_ctx,
 		doveadm_print_header_simple("vsize");
 	if ((ctx->metadata_items & MAILBOX_METADATA_GUID) != 0)
 		doveadm_print_header_simple("guid");
+	if ((ctx->metadata_items & MAILBOX_METADATA_FIRST_SAVE_DATE) != 0)
+		doveadm_print_header_simple("firstsaved");
 }
 
 static void cmd_mailbox_status_deinit(struct doveadm_mail_cmd_context *_ctx)

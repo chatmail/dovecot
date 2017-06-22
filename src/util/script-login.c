@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "env-util.h"
@@ -89,7 +89,7 @@ static void client_connected(struct master_service_connection *conn)
 		i_fatal("Missing input fields");
 
 	i = 0;
-	memset(&input, 0, sizeof(input));
+	i_zero(&input);
 	input.module = "mail"; /* need to get mail_uid, mail_gid */
 	input.service = "script-login";
 	(void)net_addr2ip(args[i++], &input.local_ip);

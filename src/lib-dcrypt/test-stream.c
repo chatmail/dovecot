@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -527,9 +527,10 @@ int main(void) {
 	struct dcrypt_settings set = {
 		.module_dir = ".libs"
 	};
+	const char *error;
 
-	if (!dcrypt_initialize(NULL, &set, NULL)) {
-		i_error("No functional dcrypt backend found - skipping tests");
+	if (!dcrypt_initialize(NULL, &set, &error)) {
+		i_error("No functional dcrypt backend found - skipping tests: %s", error);
 		return 0;
 	}
 	random_init();

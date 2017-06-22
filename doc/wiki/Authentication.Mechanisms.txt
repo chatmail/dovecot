@@ -63,6 +63,11 @@ Dovecot supports the following non-plaintext mechanisms:
    intending to provide publicly accessible IMAP archive.
  * OTP and SKEY: One time password mechanisms.
  * EXTERNAL: EXTERNAL SASL mechanism.
+ * OAUTBEARER: OAuth2 bearer authentication
+   https://tools.ietf.org/html/rfc7628. See <OAuth2 password database>
+   [PasswordDatabase.oauth2.txt] (v2.2.29+)
+ * XOAUTH2: Google flavor OAUTHBEARER
+   [https://developers.google.com/gmail/xoauth2_protocol] (v2.2.29+)
 
 Configuration
 -------------
@@ -74,4 +79,4 @@ By default only PLAIN mechanism is enabled. To use more, edit your
 auth_mechanisms = plain login cram-md5
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)

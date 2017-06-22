@@ -134,7 +134,8 @@ int mail_transaction_log_find_file(struct mail_transaction_log *log,
 /* Returns 1 if ok, 0 if file is corrupted or offset range is invalid,
    -1 if I/O error */
 int mail_transaction_log_file_map(struct mail_transaction_log_file *file,
-				  uoff_t start_offset, uoff_t end_offset);
+				  uoff_t start_offset, uoff_t end_offset,
+				  const char **reason_r);
 void mail_transaction_log_file_move_to_memory(struct mail_transaction_log_file
 					      *file);
 
@@ -148,10 +149,12 @@ void mail_transaction_log_file_unlock(struct mail_transaction_log_file *file,
 				      const char *lock_reason);
 
 void mail_transaction_update_modseq(const struct mail_transaction_header *hdr,
-				    const void *data, uint64_t *cur_modseq);
+				    const void *data, uint64_t *cur_modseq,
+				    unsigned int version);
 int mail_transaction_log_file_get_highest_modseq_at(
 		struct mail_transaction_log_file *file,
-		uoff_t offset, uint64_t *highest_modseq_r);
+		uoff_t offset, uint64_t *highest_modseq_r,
+		const char **error_r);
 int mail_transaction_log_file_get_modseq_next_offset(
 		struct mail_transaction_log_file *file,
 		uint64_t modseq, uoff_t *next_offset_r);

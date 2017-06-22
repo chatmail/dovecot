@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -74,7 +74,7 @@ int imap_msgpart_url_parse(struct mail_user *user, struct mailbox *selected_box,
 	const char  *error;
 
 	/* build base url */
-	memset(&base_url, 0, sizeof(base_url));
+	i_zero(&base_url);
 	if (selected_box != NULL) {
 		mailbox_get_open_status(selected_box, STATUS_UIDVALIDITY,
 					&box_status);
@@ -129,8 +129,10 @@ int imap_msgpart_url_open_mailbox(struct imap_msgpart_url *mpurl,
 	if (mpurl->selected_box != NULL &&
 	    mailbox_equals(mpurl->selected_box, ns, mpurl->mailbox))
 		box = mpurl->selected_box;
-	else
+	else {
 		box = mailbox_alloc(ns->list, mpurl->mailbox, flags);
+		mailbox_set_reason(box, "Read IMAP URL");
+	}
 	if (mailbox_open(box) < 0) {
 		*error_r = mail_storage_get_last_error(mailbox_get_storage(box),
 						       error_code_r);

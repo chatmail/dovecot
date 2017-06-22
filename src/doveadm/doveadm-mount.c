@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "master-service-settings.h"
@@ -85,7 +85,7 @@ static void cmd_mount_add(int argc, char *argv[])
 			mountpoint_list_default_ignore_prefixes,
 			mountpoint_list_default_ignore_types);
 	} else {
-		memset(&rec, 0, sizeof(rec));
+		i_zero(&rec);
 		rec.mount_path = argv[1];
 		rec.state = argv[2] != NULL ? argv[2] :
 			MOUNTPOINT_STATE_DEFAULT;

@@ -15,6 +15,7 @@ base_sources = \
 	dict-memcached.c \
 	dict-memcached-ascii.c \
 	dict-redis.c \
+	dict-fail.c \
 	dict-transaction-memory.c
 
 libdict_la_SOURCES = \
@@ -83,7 +84,7 @@ test_libs = \
 	../lib/liblib.la
 
 test_dict_SOURCES = test-dict.c
-test_dict_LDADD = dict.lo $(test_libs)
+test_dict_LDADD = libdict.la $(test_libs)
 test_dict_DEPENDENCIES = $(noinst_LTLIBRARIES) $(test_libs)
 
 check: check-am check-test

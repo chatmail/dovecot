@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -434,7 +434,7 @@ bool http_date_parse(const unsigned char *data, size_t size,
 	struct http_date_parser parser;
 	time_t timestamp;
 	
-	memset(&parser, 0, sizeof(parser));
+	i_zero(&parser);
 	parser.cur = data;
 	parser.end = data + size;
 

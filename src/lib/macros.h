@@ -148,7 +148,7 @@
 #endif
 
 /* Macros to provide type safety for callback functions' context parameters */
-#if ((__GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ > 3)) && defined(HAVE_TYPEOF))
+#ifdef HAVE_TYPE_CHECKS
 #  define CALLBACK_TYPECHECK(callback, type) \
 	(COMPILE_ERROR_IF_TRUE(!__builtin_types_compatible_p( \
 		typeof(&callback), type)) ? 1 : 0)
@@ -163,7 +163,7 @@
 #  define COMPILE_ERROR_IF_TRUE(condition) 0
 #endif
 
-#if (__GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ > 0)) && !defined(__cplusplus) && defined(HAVE_TYPEOF)
+#ifdef HAVE_TYPE_CHECKS
 #  define COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE(_a, _b) \
 	COMPILE_ERROR_IF_TRUE( \
 		!__builtin_types_compatible_p(typeof(_a), typeof(_b)))
@@ -184,7 +184,7 @@
 #  define likely(expr) expr
 #endif
 
-#if defined(__clang__)
+#if defined(__clang__) && ((__clang_major__ > 4) || (__clang_major__ == 3 && __clang_minor__ >= 9))
 #  define ATTR_UNSIGNED_WRAPS __attribute__((no_sanitize("integer")))
 #else
 #  define ATTR_UNSIGNED_WRAPS
@@ -239,5 +239,9 @@
 #  undef STATIC_ARRAY
 #  define STATIC_ARRAY
 #endif
+
+/* Convenience wrappers for initializing a struct */
+#define i_zero(p) memset(p, 0, sizeof(*(p)))
+#define i_zero_safe(p) safe_memset(p, 0, sizeof(*(p)))
 
 #endif

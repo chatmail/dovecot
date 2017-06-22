@@ -142,6 +142,5 @@ References
 
  * Mbox and maildir comparison:
    http://www.linuxmail.info/mbox-maildir-mail-storage-formats/
-   [http://www.linux-mail.info/mbox-maildir-mail-storage-formats/]
 
-(This file was created from the wiki on 2016-12-03 04:43)
+(This file was created from the wiki on 2017-05-30 16:30)
