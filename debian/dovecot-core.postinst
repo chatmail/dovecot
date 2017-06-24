@@ -105,19 +105,6 @@ if [ "$1" = "configure" ]; then
     # Tell ucf that the file in /usr/share/dovecot is the latest
     # maintainer version, and let it handle how to manage the real
     # configuration file in /etc/dovecot.
-
-    # Special handling for 10-ssl.conf.
-    # Copy the file if it does not exist, do nothing otherwise.
-    if [ "$conffile" = 'conf.d/10-ssl.conf' ]; then
-        if [ ! -f /etc/dovecot/$conffile ]; then
-            cp /usr/share/dovecot/$conffile /etc/dovecot/$conffile
-            chmod 0644 /etc/dovecot/$conffile
-        fi
-        # Unregister 10-ssl.conf from ucf if it's there.
-        ucfr --purge dovecot-core /etc/dovecot/$conffile
-        continue
-    fi
-
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
     ucfr dovecot-core /etc/dovecot/$conffile
     if [ "$conffile" != "dovecot.conf" ] && [ -f "/etc/dovecot/$conffile" ] &&
