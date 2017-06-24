@@ -91,15 +91,11 @@ if [ "$1" = "configure" ]; then
   ## Users
   #
 
-  if [ -z "`id -u dovecot 2> /dev/null`" ]; then
-    adduser --system --group --home /usr/lib/dovecot --gecos "Dovecot mail server" \
-            --no-create-home --disabled-password --quiet dovecot || true
-  fi
+  adduser --system --group --home /usr/lib/dovecot --gecos "Dovecot mail server" \
+          --no-create-home --disabled-password --quiet dovecot
 
-  if [ -z "`id -u dovenull 2> /dev/null`" ]; then
-    adduser --system --group --home /nonexistent --no-create-home --gecos "Dovecot login user" \
-            --disabled-password --quiet dovenull || true
-  fi
+  adduser --system --group --home /nonexistent --no-create-home --gecos "Dovecot login user" \
+          --disabled-password --quiet dovenull
 
   for conffile in $CONFFILES ; do
     # Tell ucf that the file in /usr/share/dovecot is the latest
