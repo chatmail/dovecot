@@ -132,6 +132,9 @@ if [ "$1" = "configure" ]; then
     delgroup imapd || true
   fi
 
+  if ! dpkg-statoverride --list /etc/dovecot/private >/dev/null; then
+    dpkg-statoverride --quiet --update --add root root 0700 /etc/dovecot/private
+  fi
 fi
 
 if [ "$1" = "triggered" ]; then

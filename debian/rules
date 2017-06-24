@@ -128,7 +128,6 @@ override_dh_auto_install:
 	rm debian/dovecot-core/etc/dovecot/README
 
 override_dh_install:
-	chmod 0700 debian/dovecot-core/etc/dovecot/private
 	# dh_auto_install has installed everything in the dovecot-core package.
 	# Run dh_install to install additional files from the source directory
 	# or debian/ to the individual packages. NOTE: there is nothing in
