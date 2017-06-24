@@ -10,8 +10,6 @@ Bug: #608719
  doc/mkcert.sh                         | 4 ++--
  2 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/doc/example-config/conf.d/10-ssl.conf b/doc/example-config/conf.d/10-ssl.conf
-index 7ae6b7a..37732d4 100644
 --- a/doc/example-config/conf.d/10-ssl.conf
 +++ b/doc/example-config/conf.d/10-ssl.conf
 @@ -3,14 +3,14 @@
@@ -19,7 +17,7 @@ index 7ae6b7a..37732d4 100644
  
  # SSL/TLS support: yes, no, required. <doc/wiki/SSL.txt>
 -#ssl = yes
-+ssl = no
++ssl = yes
  
  # PEM encoded X.509 SSL/TLS certificate and private key. They're opened before
  # dropping root privileges, so keep the key file unreadable by anyone but
@@ -27,23 +25,44 @@ index 7ae6b7a..37732d4 100644
  # certificate, just make sure to update the domains in dovecot-openssl.cnf
 -ssl_cert = </etc/ssl/certs/dovecot.pem
 -ssl_key = </etc/ssl/private/dovecot.pem
-+#ssl_cert = </etc/dovecot/dovecot.pem
-+#ssl_key = </etc/dovecot/private/dovecot.pem
++ssl_cert = </etc/dovecot/private/dovecot.pem
++ssl_key = </etc/dovecot/private/dovecot.key
  
  # If key file is password protected, give the password here. Alternatively
  # give it when starting dovecot with -p parameter. Since this file is often
-diff --git a/doc/mkcert.sh b/doc/mkcert.sh
-index 2fedd48..3ee5143 100644
+@@ -30,7 +30,7 @@
+ # when Dovecot needs to act as an SSL client (e.g. imapc backend). The
+ # directory is usually /etc/ssl/certs in Debian-based systems and the file is
+ # /etc/pki/tls/cert.pem in RedHat-based systems.
+-#ssl_client_ca_dir =
++ssl_client_ca_dir = /etc/ssl/certs
+ #ssl_client_ca_file =
+ 
+ # Request client to send a certificate. If you also want to require it, set
 --- a/doc/mkcert.sh
 +++ b/doc/mkcert.sh
-@@ -7,8 +7,8 @@ OPENSSL=${OPENSSL-openssl}
+@@ -8,19 +8,19 @@
  SSLDIR=${SSLDIR-/etc/ssl}
  OPENSSLCONFIG=${OPENSSLCONFIG-dovecot-openssl.cnf}
  
 -CERTDIR=$SSLDIR/certs
 -KEYDIR=$SSLDIR/private
-+CERTDIR=/etc/dovecot
-+KEYDIR=/etc/dovecot/private
++CERTDIR=/etc/dovecot/ssl
++KEYDIR=/etc/dovecot/ssl
  
  CERTFILE=$CERTDIR/dovecot.pem
- KEYFILE=$KEYDIR/dovecot.pem
+-KEYFILE=$KEYDIR/dovecot.pem
++KEYFILE=$KEYDIR/dovecot.key
+ 
+ if [ ! -d $CERTDIR ]; then
+-  echo "$SSLDIR/certs directory doesn't exist"
++  echo "$CERTDIR directory doesn't exist"
+   exit 1
+ fi
+ 
+ if [ ! -d $KEYDIR ]; then
+-  echo "$SSLDIR/private directory doesn't exist"
++  echo "$KEYDIR directory doesn't exist"
+   exit 1
+ fi
+ 
