@@ -50,11 +50,6 @@ if [ "$1" = "configure" ]; then
     fi
   done
 
-  if [ -n "`id -u imapd 2> /dev/null`" ]; then
-    deluser imapd || true
-    delgroup imapd || true
-  fi
-
   if ! dpkg-statoverride --list /etc/dovecot/private >/dev/null; then
     dpkg-statoverride --quiet --update --add root root 0700 /etc/dovecot/private
   fi
