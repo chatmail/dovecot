@@ -1,1 +1,1 @@
-activate register-dovecot-plugin
+activate-noawait register-dovecot-plugin
