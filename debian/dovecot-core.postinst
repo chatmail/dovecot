@@ -135,6 +135,18 @@ if [ "$1" = "configure" ]; then
   if ! dpkg-statoverride --list /etc/dovecot/private >/dev/null; then
     dpkg-statoverride --quiet --update --add root root 0700 /etc/dovecot/private
   fi
+
+  # SSL configuration
+  # Use the ssl-cert-snakeoil certificate in the following cases:
+  # - On new installations
+  # - On upgrades from versions that did not enable SSL by default
+  if [ -z "$2" ] || dpkg --compare-versions "$2" lt "1:2.2.30.2-2~"; then
+    if [ ! -e /etc/dovecot/private/dovecot.key ] && \
+       [ ! -e /etc/dovecot/private/dovecot.pem ]; then
+      ln -s /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/dovecot/private/dovecot.pem
+      ln -s /etc/ssl/private/ssl-cert-snakeoil.key /etc/dovecot/private/dovecot.key
+    fi
+  fi
 fi
 
 if [ "$1" = "triggered" ]; then
