@@ -21,38 +21,17 @@ themselves like this:
 # addgroup --system --group dovenull
 # usermod -g dovenull dovenull
 
-Setting up SSL certificates
----------------------------
+TLS setup
+---------
 
-In order to use TLS or the IMAP over SSL (imaps) and POP3 over SSL (pop3s)
-protocols you need a digital document that verifies the identity of your
-server called an SSL certificate.  The easiest way to get one of these is to
-buy one from one of the many commercial Certification Authorities (CAs.).  But
-you can also be your own CA and create your own SSL certificate.  In fact this
-package used to generate one for you but this turned out to be buggy and so
-now we leave it up to you.
+TLS is enabled by default on new installations. Dovecot will use the
+self-signed certificate provided by ssl-cert-snakeoil by default. The
+certificate and key are accessed via symbolic links in /etc/dovecot/private.
 
-The certificate will have two pieces, a public part and a private part.  The
-first step is to create a secure directory for the private part:
-
-# install -d -o root -g root -m0700 /etc/dovecot/private
-
-... next copy two files mkcert.sh and dovecot-openssl.cnf from
-/usr/share/dovecot/ to somewhere you can edit them.  Make openssl.cnf writable
-and mkcert.sh executable.  Edit dovecot-openssl.cnf to give relevant
-parameters for your certificate.  Run mkcert.sh.  It should create a
-certificate for you and install it in the right place.  Then make sure your
-certificate has the right permissions:
-
-# chown root:dovecot /etc/dovecot/dovecot.pem
-# chmod 0644 /etc/dovecot/dovecot.pem
-# chown root:dovecot /etc/dovecot/private/dovecot.pem
-# chmod 0600 /etc/dovecot/private/dovecot.pem
-
-...finally edit /etc/dovecot/conf.d/10-ssl.conf to enable ssl.
-
-You can find out more about this topic on the dovecot wiki at:
-http://wiki2.dovecot.org/SSL
+If you wish to use your own certificates, feel free to replace the symbolic
+links in /etc/dovecot/private with the actual certificate/key of your
+preference, or place the certificate and key at the location of your preference
+and update /etc/dovecot/conf.d/10-ssl.conf accordingly.
 
 Upgrading from 1.2 (squeeze) to 2.0 (wheezy)
 --------------------------------------------
