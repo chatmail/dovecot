@@ -1,0 +1,38 @@
+#!/usr/bin/python3
+import imaplib
+
+imaplib.Debug = 4
+
+print("Testing IMAP")
+print("Connecting")
+client = imaplib.IMAP4('localhost')
+
+print("Checking for STARTTLS capability")
+assert 'STARTTLS' in client.capabilities
+
+client.starttls()
+
+print("Logging in")
+client.login('dep8', 'test')
+
+print("Selecting INBOX")
+client.select()
+
+print("Looking for the test message")
+res, uids = client.search(None, 'HEADER', 'MESSAGE-ID', '"<dep8-test-1@debian.org>"')
+
+assert res == 'OK'
+assert len(uids[0]) > 0
+
+uid = uids[0].split()[0]
+
+print("Fetching and verifying test message")
+res, data = client.fetch(uid, '(RFC822)')
+
+assert res == 'OK'
+
+lines = data[0][1].splitlines()
+
+assert b'Subject: DEP-8 test' in lines
+
+print("Done")
