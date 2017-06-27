@@ -1,4 +1,4 @@
-dovecot (1:2.2.30.2-2) unstable; urgency=medium
+dovecot (1:2.2.31-1) unstable; urgency=medium
 
   TLS is now enabled by default, using the ssl-cert-snakeoil certificate
   provided by the ssl-cert package. Upgrades from older versions will be
