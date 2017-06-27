@@ -14,12 +14,47 @@ There are three different places where the mail location is looked up from:
  3. 'location' setting inside namespaces overrides everything. Usually this
     should be used only for public and shared namespaces.
 
+Autodetection
+-------------
+
 By default the 'mail_location' setting is empty, which means that Dovecot
-attempts to locate automatically where your mails are. This is done by looking
-at '~/Maildir', '/var/mail/username', '~/mail' and '~/Mail' in that order. It's
-usually a good idea to explicitly specify where the mails are, even if the
-autodetection happens to work. Autodetection commonly fails for new users who
-don't have the mail directory created yet.
+attempts to locate automatically where your mails are. This is done by looking,
+in order, at:
+
+ * '~/mdbox/'
+ * '~/sdbox/'
+ * '~/Maildir/'
+ * '~/mail/.imap/'
+ * '~/mail/inbox'
+ * '~/mail/mbox'
+ * '~/Mail/.imap/'
+ * '~/Mail/inbox'
+ * '~/Mail/mbox'
+
+For autodetection to work, one of the above locations has to be populated; when
+autodetection is active, Dovecot will not attempt to create a mail folder. Note
+that '.imap' is a directory, and 'inbox' and 'mbox' are files.
+
+It's usually a good idea to explicitly specify where the mails are, even if the
+autodetection happens to work, in particular to benefit from auto-creation of
+the folder for new users.
+
+Mailbox autocreation
+--------------------
+
+Dovecot in the 1.x era created mailboxes automatically regardless of whether
+mail_location was set. In 2.x autocreation only gets triggered if mail_location
+is correctly set. You'll see something like this if you enable debug logging:
+
+---%<-------------------------------------------------------------------------
+Debug: Namespace : /home/user/Mail doesn't exist yet, using default permissions
+Debug: Namespace : Using permissions from /home/user/Mail: mode=0700
+gid=default
+---%<-------------------------------------------------------------------------
+
+and a 'Mail/.imap' directory will be present once that process has concluded.
+This is the easiest way to ensure a freshly created user is correctly set up
+for access via Dovecot.
 
 Format
 ------
@@ -287,4 +322,4 @@ export USERDB_KEYS="$USERDB_KEYS namespace/inbox/location"
 exec env "NAMESPACE/INBOX/LOCATION=$location" "$@"
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-05-30 16:30)
+(This file was created from the wiki on 2017-06-26 04:42)

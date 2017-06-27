@@ -151,4 +151,4 @@ mail_privileged_group = mail
 Note: Specifying the privileged user must be done as shown. Simply adding
 'dovecot' user to the 'mail' group does /*not*/ grant write permission.
 
-(This file was created from the wiki on 2017-05-30 16:30)
+(This file was created from the wiki on 2017-06-26 04:42)

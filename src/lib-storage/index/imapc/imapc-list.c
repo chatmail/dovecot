@@ -128,7 +128,7 @@ static void imapc_list_simple_callback(const struct imapc_command_reply *reply,
 		imapc_list_copy_error_from_reply(ctx->client->_list,
 						 MAIL_ERROR_PARAMS, reply);
 		ctx->ret = -1;
-	} else if (ctx->client->auth_failed) {
+	} else if (imapc_storage_client_handle_auth_failure(ctx->client)) {
 		ctx->ret = -1;
 	} else if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED) {
 		mailbox_list_set_internal_error(&ctx->client->_list->list);
@@ -284,7 +284,7 @@ static void imapc_storage_sep_callback(const struct imapc_command_reply *reply,
 		imapc_list_sep_verify(list);
 	else if (reply->state == IMAPC_COMMAND_STATE_NO)
 		imapc_list_copy_error_from_reply(list, MAIL_ERROR_PARAMS, reply);
-	else if (list->client->auth_failed)
+	else if (imapc_storage_client_handle_auth_failure(list->client))
 		;
 	else if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED)
 		mailbox_list_set_internal_error(&list->list);
@@ -312,7 +312,7 @@ static void imapc_list_send_hierarcy_sep_lookup(struct imapc_mailbox_list *list)
 int imapc_list_try_get_root_sep(struct imapc_mailbox_list *list, char *sep_r)
 {
 	if (list->root_sep == '\0') {
-		if (list->client->auth_failed)
+		if (imapc_storage_client_handle_auth_failure(list->client))
 			return -1;
 		imapc_list_send_hierarcy_sep_lookup(list);
 		while (list->root_sep_pending)
@@ -329,12 +329,9 @@ static char imapc_list_get_hierarchy_sep(struct mailbox_list *_list)
 	struct imapc_mailbox_list *list = (struct imapc_mailbox_list *)_list;
 	char sep;
 
-	if (list->root_sep_lookup_failed ||
-	    imapc_list_try_get_root_sep(list, &sep) < 0) {
+	if (imapc_list_try_get_root_sep(list, &sep) < 0) {
 		/* we can't really return a failure here. just return a common
 		   separator and fail all the future list operations. */
-		list->root_sep_lookup_failed = TRUE;
-		mailbox_list_set_internal_error(_list);
 		return '/';
 	}
 	return sep;
@@ -346,11 +343,6 @@ imapc_list_get_storage_name(struct mailbox_list *_list, const char *vname)
 	struct imapc_mailbox_list *list = (struct imapc_mailbox_list *)_list;
 	const char *prefix = list->set->imapc_list_prefix;
 	const char *storage_name;
-
-	/* check if authentication has failed, if it has, short circuit here
-	   to avoid the error being clobbered by mailbox_list_get_hierarchy_sep */
-	if (list->client->auth_failed)
-		return "";
 
 	storage_name = mailbox_list_default_get_storage_name(_list, vname);
 	if (*prefix != '\0' && strcasecmp(storage_name, "INBOX") != 0) {
@@ -556,13 +548,10 @@ static int imapc_list_refresh(struct imapc_mailbox_list *list)
 	struct imapc_simple_context ctx;
 	struct mailbox_node *node;
 	const char *pattern;
+	char sep;
 
-	if (list->client->auth_failed)
+	if (imapc_list_try_get_root_sep(list, &sep) < 0)
 		return -1;
-	if (list->root_sep_lookup_failed) {
-		mailbox_list_set_internal_error(&list->list);
-		return -1;
-	}
 	if (list->refreshed_mailboxes)
 		return 0;
 
@@ -659,7 +648,9 @@ imapc_list_iter_init(struct mailbox_list *_list, const char *const *patterns,
 		return _ctx;
 	}
 
-	ns_sep = mail_namespace_get_sep(_list->ns);
+	/* if we've already failed, make sure we don't call
+	   mailbox_list_get_hierarchy_sep(), since it clears the error */
+	ns_sep = ret < 0 ? '/' : mail_namespace_get_sep(_list->ns);
 
 	pool = pool_alloconly_create("mailbox list imapc iter", 1024);
 	ctx = p_new(pool, struct imapc_mailbox_list_iterate_context, 1);
@@ -673,7 +664,8 @@ imapc_list_iter_init(struct mailbox_list *_list, const char *const *patterns,
 
 	ctx->tree = mailbox_tree_init(ns_sep);
 	mailbox_tree_set_parents_nonexistent(ctx->tree);
-	imapc_list_build_match_tree(ctx);
+	if (ret == 0)
+		imapc_list_build_match_tree(ctx);
 
 	if (list->list.ns->prefix_len > 0) {
 		ns_root_name = t_strndup(_list->ns->prefix,
@@ -788,14 +780,12 @@ imapc_list_subscriptions_refresh(struct mailbox_list *_src_list,
 	struct imapc_simple_context ctx;
 	struct imapc_command *cmd;
 	const char *pattern;
-	char dest_sep = mail_namespace_get_sep(dest_list->ns);
+	char list_sep, dest_sep = mail_namespace_get_sep(dest_list->ns);
 
 	i_assert(src_list->tmp_subscriptions == NULL);
 
-	if (src_list->root_sep_lookup_failed) {
-		mailbox_list_set_internal_error(_src_list);
+	if (imapc_list_try_get_root_sep(src_list, &list_sep) < 0)
 		return -1;
-	}
 
 	if (src_list->refreshed_subscriptions) {
 		if (dest_list->subscriptions == NULL)
@@ -853,6 +843,8 @@ imapc_list_delete_mailbox(struct mailbox_list *_list, const char *name)
 	struct imapc_command *cmd;
 	struct imapc_simple_context ctx;
 
+	if (imapc_storage_client_handle_auth_failure(list->client))
+		return -1;
 	if (imapc_client_get_capabilities(list->client->client, &capa) < 0)
 		return -1;
 

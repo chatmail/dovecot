@@ -643,6 +643,42 @@ static void http_client_payload_destroyed(struct http_client_request *req)
 		http_client_peer_trigger_request_handler(conn->peer);
 }
 
+void http_client_connection_request_destroyed(
+	struct http_client_connection *conn, struct http_client_request *req)
+{
+	struct istream *payload;
+
+	i_assert(req->conn == conn);
+	if (conn->pending_request != req)
+		return;
+
+	http_client_connection_debug(conn,
+		"Pending request destroyed prematurely");
+
+	payload = conn->incoming_payload;
+	if (payload == NULL) {
+		/* payload already gone */
+		return;
+	}
+
+	/* destroy the payload, so that the timeout istream is closed */
+	i_stream_ref(payload);
+	i_stream_destroy(&payload);
+
+	payload = conn->incoming_payload;
+	if (payload == NULL) {
+		/* not going to happen, but check for it anyway */
+		return;
+	}
+
+	/* the application still holds a reference to the payload stream, but it
+	   is closed and we don't care about it anymore, so act as though it is
+	   destroyed. */
+	i_stream_remove_destroy_callback(payload,
+					 http_client_payload_destroyed);
+	http_client_payload_destroyed(req);
+}
+
 static bool
 http_client_connection_return_response(
 	struct http_client_connection *conn,
@@ -1569,6 +1605,7 @@ bool http_client_connection_unref(struct http_client_connection **_conn)
 		connection_deinit(&conn->conn);
 	io_wait_timer_remove(&conn->io_wait_timer);
 	
+	i_free(conn->label);
 	i_free(conn);
 	return FALSE;
 }

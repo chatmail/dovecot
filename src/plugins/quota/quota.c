@@ -55,6 +55,16 @@ static const struct quota_backend *quota_internal_backends[] = {
 
 static ARRAY(const struct quota_backend*) quota_backends;
 
+static void hidden_param_handler(struct quota_root *_root, const char *param_value);
+static void ignoreunlim_param_handler(struct quota_root *_root, const char *param_value);
+static void noenforcing_param_handler(struct quota_root *_root, const char *param_value);
+static void ns_param_handler(struct quota_root *_root, const char *param_value);
+
+struct quota_param_parser quota_param_hidden = {.param_name = "hidden", .param_handler = hidden_param_handler};
+struct quota_param_parser quota_param_ignoreunlimited = {.param_name = "ignoreunlimited", .param_handler = ignoreunlim_param_handler};
+struct quota_param_parser quota_param_noenforcing = {.param_name = "noenforcing", .param_handler = noenforcing_param_handler};
+struct quota_param_parser quota_param_ns = {.param_name = "ns=", .param_handler = ns_param_handler};
+
 static enum quota_alloc_result quota_default_test_alloc(
 		struct quota_transaction_context *ctx, uoff_t size);
 static void quota_over_flag_check_root(struct quota_root *root);
@@ -204,7 +214,7 @@ quota_root_settings_init(struct quota_settings *quota_set, const char *root_def,
 					   backend_name);
 		return -1;
 	}
-	
+
 	root_set = p_new(quota_set->pool, struct quota_root_settings, 1);
 	root_set->set = quota_set;
 	root_set->backend = backend;
@@ -366,29 +376,14 @@ static void quota_root_deinit(struct quota_root *root)
 int quota_root_default_init(struct quota_root *root, const char *args,
 			    const char **error_r)
 {
-	const char *const *tmp;
-
-	if (args == NULL)
-		return 0;
-
-	tmp = t_strsplit_spaces(args, " ");
-	for (; *tmp != NULL; tmp++) {
-		if (strcmp(*tmp, "noenforcing") == 0)
-			root->no_enforcing = TRUE;
-		else if (strcmp(*tmp, "hidden") == 0)
-			root->hidden = TRUE;
-		else if (strcmp(*tmp, "ignoreunlimited") == 0)
-			root->disable_unlimited_tracking = TRUE;
-		else
-			break;
-	}
-	if (*tmp != NULL) {
-		*error_r = t_strdup_printf(
-			"Unknown parameter for backend %s: %s",
-			root->backend.name, *tmp);
-		return -1;
-	}
-	return 0;
+	const struct quota_param_parser default_params[] = {
+		quota_param_hidden,
+		quota_param_ignoreunlimited,
+		quota_param_noenforcing,
+		quota_param_ns,
+		{.param_name = NULL}
+	};
+	return quota_parse_parameters(root, &args, error_r, default_params, TRUE);
 }
 
 static int
@@ -398,7 +393,6 @@ quota_root_init(struct quota_root_settings *root_set, struct quota *quota,
 	struct quota_root *root;
 
 	root = root_set->backend->v.alloc();
-	root->resource_ret = -1;
 	root->pool = pool_alloconly_create("quota root", 512);
 	root->set = root_set;
 	root->quota = quota;
@@ -683,8 +677,6 @@ struct quota_root *quota_root_iter_next(struct quota_root_iter *iter)
 {
 	struct quota_root *const *roots, *root = NULL;
 	unsigned int count;
-	uint64_t value, limit;
-	int ret;
 
 	if (iter->quota == NULL)
 		return NULL;
@@ -697,22 +689,8 @@ struct quota_root *quota_root_iter_next(struct quota_root_iter *iter)
 		if (!quota_root_is_visible(roots[iter->i], iter->box, FALSE))
 			continue;
 
-		ret = roots[iter->i]->resource_ret;
-		if (ret == -1) {
-			ret = quota_get_resource(roots[iter->i], "",
-						 QUOTA_NAME_STORAGE_KILOBYTES,
-						 &value, &limit);
-		}
-		if (ret == 0) {
-			ret = quota_get_resource(roots[iter->i], "",
-						 QUOTA_NAME_MESSAGES,
-						 &value, &limit);
-		}
-		roots[iter->i]->resource_ret = ret;
-		if (ret > 0) {
-			root = roots[iter->i];
-			break;
-		}
+		root = roots[iter->i];
+		break;
 	}
 
 	iter->i++;
@@ -1331,10 +1309,10 @@ void quota_alloc(struct quota_transaction_context *ctx, struct mail *mail)
 {
 	uoff_t size;
 
-	if (ctx->auto_updating)
-		return;
-	if (mail_get_physical_size(mail, &size) == 0)
-		ctx->bytes_used += size;
+	if (!ctx->auto_updating) {
+		if (mail_get_physical_size(mail, &size) == 0)
+			ctx->bytes_used += size;
+	}
 
 	ctx->bytes_ceil = ctx->bytes_ceil2;
 	ctx->count_used++;
@@ -1363,4 +1341,75 @@ void quota_recalculate(struct quota_transaction_context *ctx,
 		       enum quota_recalculate recalculate)
 {
 	ctx->recalculate = recalculate;
+}
+
+static void hidden_param_handler(struct quota_root *_root, const char *param_value ATTR_UNUSED)
+{
+	_root->hidden = TRUE;
+}
+
+static void ignoreunlim_param_handler(struct quota_root *_root, const char *param_value ATTR_UNUSED)
+{
+	_root->disable_unlimited_tracking = TRUE;
+}
+
+static void noenforcing_param_handler(struct quota_root *_root, const char *param_value ATTR_UNUSED)
+{
+	_root->no_enforcing = TRUE;
+}
+
+static void ns_param_handler(struct quota_root *_root, const char *param_value)
+{
+	_root->ns_prefix = p_strdup(_root->pool, param_value);
+}
+
+int quota_parse_parameters(struct quota_root *root, const char **args, const char **error_r,
+			   const struct quota_param_parser *valid_params, bool fail_on_unknown)
+{
+	const char *tmp_param_name, *tmp_param_val;
+	size_t tmp_param_len;
+
+	while (*args != NULL && (*args)[0] != '\0') {
+		for (; valid_params->param_name != NULL; ++valid_params) {
+			tmp_param_name = valid_params->param_name;
+			tmp_param_len = strlen(valid_params->param_name);
+			i_assert(*args != NULL);
+			if (strncmp(*args, tmp_param_name, tmp_param_len) == 0) {
+				tmp_param_val = NULL;
+				*args += tmp_param_len;
+				if (tmp_param_name[tmp_param_len - 1] == '=') {
+					const char *next_colon = strchr(*args, ':');
+					tmp_param_val = (next_colon == NULL)?
+						t_strdup(*args):
+						t_strdup_until(*args, next_colon);
+					*args = (next_colon == NULL) ? NULL : next_colon + 1;
+				}
+				else if ((*args)[0] == '\0' ||
+					 (*args)[0] == ':') {
+					*args = ((*args)[0] == ':') ? *args + 1 : NULL;
+					/* in case parameter is a boolean second parameter
+					 * string parameter value will be ignored by param_handler
+					 * we just need some non-NULL value
+					 * to indicate that argument is to be processed */
+					tmp_param_val = "";
+				}
+				if (tmp_param_val != NULL) {
+					valid_params->param_handler(root, tmp_param_val);
+					break;
+				}
+			}
+		}
+		if (valid_params->param_name == NULL) {
+			if (fail_on_unknown) {
+				*error_r = t_strdup_printf(
+					"Unknown parameter for backend %s: %s",
+					root->backend.name, *args);
+				return -1;
+			}
+			else {
+				break;
+			}
+		}
+	}
+	return 0;
 }

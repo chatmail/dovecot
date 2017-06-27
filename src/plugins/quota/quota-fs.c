@@ -94,34 +94,40 @@ static struct quota_root *fs_quota_alloc(void)
 	return &root->root;
 }
 
+static void handle_user_param(struct quota_root *_root, const char *param_value ATTR_UNUSED)
+{
+	((struct fs_quota_root *)_root)->group_disabled = TRUE;
+}
+
+static void handle_group_param(struct quota_root *_root, const char *param_value ATTR_UNUSED)
+{
+	((struct fs_quota_root *)_root)->user_disabled = TRUE;
+}
+
+static void handle_inode_param(struct quota_root *_root, const char *param_value ATTR_UNUSED)
+{
+	((struct fs_quota_root *)_root)->inode_per_mail = TRUE;
+}
+
+static void handle_mount_param(struct quota_root *_root, const char *param_value)
+{
+	((struct fs_quota_root *)_root)->storage_mount_path = i_strdup(param_value);
+}
+
 static int fs_quota_init(struct quota_root *_root, const char *args,
 			 const char **error_r)
 {
-	struct fs_quota_root *root = (struct fs_quota_root *)_root;
-	const char *const *tmp;
+	const struct quota_param_parser fs_params[] = {
+		{.param_name = "user", .param_handler = handle_user_param},
+		{.param_name = "group", .param_handler = handle_group_param},
+		{.param_name = "mount", .param_handler = handle_mount_param},
+		{.param_name = "inode_per_mail", .param_handler = handle_inode_param},
+		quota_param_hidden, quota_param_noenforcing, quota_param_ns,
+		{.param_name = NULL}
+	};
 
-	if (args == NULL)
-		return 0;
-
-	for (tmp = t_strsplit(args, ":"); *tmp != NULL; tmp++) {
-		if (strcmp(*tmp, "user") == 0)
-			root->group_disabled = TRUE;
-		else if (strcmp(*tmp, "group") == 0)
-			root->user_disabled = TRUE;
-		else if (strcmp(*tmp, "inode_per_mail") == 0)
-			root->inode_per_mail = TRUE;
-		else if (strcmp(*tmp, "noenforcing") == 0)
-			_root->no_enforcing = TRUE;
-		else if (strcmp(*tmp, "hidden") == 0)
-			_root->hidden = TRUE;
-		else if (strncmp(*tmp, "mount=", 6) == 0) {
-			i_free(root->storage_mount_path);
-			root->storage_mount_path = i_strdup(*tmp + 6);
-		} else {
-			*error_r = t_strdup_printf("Invalid parameter: %s", *tmp);
-			return -1;
-		}
-	}
+	if (quota_parse_parameters(_root, &args, error_r, fs_params, TRUE) < 0)
+		return -1;
 	_root->auto_updating = TRUE;
 	return 0;
 }
@@ -409,7 +415,7 @@ do_rquota_user(struct fs_quota_root *root,
 				(xdrproc_t)xdr_getquota_args, (char *)&args,
 				(xdrproc_t)xdr_getquota_rslt, (char *)&result,
 				timeout);
-	
+
 	/* the result has been deserialized, let the client go */
 	auth_destroy(cl->cl_auth);
 	clnt_destroy(cl);
@@ -705,7 +711,7 @@ fs_quota_get_netbsd(struct fs_quota_root *root, bool group,
 				root->mount->mount_path);
 			ret = -1;
 			break;
-		} 
+		}
 		if (i == 0) {
 			*bytes_value_r = qv.qv_usage * DEV_BSIZE;
 			*bytes_limit_r = qv.qv_softlimit * DEV_BSIZE;
@@ -847,10 +853,10 @@ static bool fs_quota_match_box(struct quota_root *_root, struct mailbox *box)
 	}
 	match = CMP_DEV_T(mst.st_dev, rst.st_dev);
 	if (_root->quota->set->debug) {
-	 	i_debug("box=%s mount=%s match=%s", mailbox_path,
+		i_debug("box=%s mount=%s match=%s", mailbox_path,
 			root->storage_mount_path, match ? "yes" : "no");
 	}
- 	return match;
+	return match;
 }
 
 static int
@@ -908,7 +914,7 @@ fs_quota_get_resource(struct quota_root *_root, const char *name,
 	return 1;
 }
 
-static int 
+static int
 fs_quota_update(struct quota_root *root ATTR_UNUSED,
 		struct quota_transaction_context *ctx ATTR_UNUSED)
 {

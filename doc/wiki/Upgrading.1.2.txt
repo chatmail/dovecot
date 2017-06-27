@@ -54,4 +54,4 @@ Sieve:
    needs to be done is remove the 'sieve=' and 'sieve_storage=' settings from
    the ' protocol managesieve {} ' section.
 
-(This file was created from the wiki on 2017-05-30 16:30)
+(This file was created from the wiki on 2017-06-26 04:42)

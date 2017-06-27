@@ -94,6 +94,9 @@ fetch-headers:
   Allow fetching specific message headers using 'FETCH BODY.PEEK[HEADER.FIELDS
   (..)]'
 
+fetch-bodystructure:
+  Allow fetching BODY and BODYSTRUCTURE from remote server. (v2.2.30+)
+
 search:
   Allow using 'SEARCH' command.
 
@@ -119,6 +122,13 @@ throttle:INIT:MAX:SHRINK:
   shrinking is done after SHRINK (default: 500 ms). If [THROTTLED] is received
   again within this timeout, it's doubled, otherwise both throttling and the
   next shrinking timeout is shrank to 3/4.
+
+modseq:
+  Access MODSEQ and HIGHESTMODSEQ (v2.2.24+)
+
+delay-login:
+  Don't connect to the remote server until some command requires it. By default
+  the server is connected to immediately on logout. (v2.2.29+)
 
 Workarounds
 -----------
@@ -146,4 +156,4 @@ fetch-fix-broken-mails:
   a permanent error rather than a temporary error. This feature should be
   enabled only for specific users who have been determined to be broken.
 
-(This file was created from the wiki on 2017-05-30 16:30)
+(This file was created from the wiki on 2017-06-26 04:42)
