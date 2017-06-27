@@ -32,4 +32,4 @@ Dovecot currently does blocking lookups, so if 'ntlm_auth' is slow on
 responding (e.g. network problems), Dovecot blocks all other authentication
 requests until it's finished.
 
-(This file was created from the wiki on 2017-05-30 16:30)
+(This file was created from the wiki on 2017-06-26 04:42)

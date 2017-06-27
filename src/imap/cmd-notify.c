@@ -292,10 +292,10 @@ cmd_notify_set(struct imap_notify_context *ctx, const struct imap_arg *args)
 		ctx->send_immediate_status = TRUE;
 		args++;
 	}
-	for (; args->type != IMAP_ARG_EOL; args++) {
-		if (!imap_arg_get_list(args, &event_group))
-			return -1;
 
+	if (!imap_arg_get_list(args, &event_group))
+		return -1;
+	for (; event_group->type != IMAP_ARG_EOL; event_group++) {
 		/* filter-mailboxes */
 		if (!imap_arg_get_atom(event_group, &filter_mailboxes))
 			return -1;
@@ -319,6 +319,8 @@ cmd_notify_set(struct imap_notify_context *ctx, const struct imap_arg *args)
 
 		if (strcasecmp(filter_mailboxes, "subtree") == 0 ||
 		    strcasecmp(filter_mailboxes, "mailboxes") == 0) {
+			if (event_group->type == IMAP_ARG_EOL)
+				return -1;
 			mailboxes = event_group++;
 		} else {
 			mailboxes = NULL;

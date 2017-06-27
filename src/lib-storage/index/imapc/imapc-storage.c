@@ -119,7 +119,7 @@ void imapc_simple_context_init(struct imapc_simple_context *sctx,
 
 void imapc_simple_run(struct imapc_simple_context *sctx)
 {
-	if (sctx->client->auth_failed) {
+	if (imapc_storage_client_handle_auth_failure(sctx->client)) {
 		imapc_client_logout(sctx->client->client);
 		sctx->ret = -1;
 	}
@@ -151,7 +151,7 @@ void imapc_simple_callback(const struct imapc_command_reply *reply,
 		imapc_copy_error_from_reply(ctx->client->_storage,
 					    MAIL_ERROR_PARAMS, reply);
 		ctx->ret = -1;
-	} else if (ctx->client->auth_failed) {
+	} else if (imapc_storage_client_handle_auth_failure(ctx->client)) {
 		ctx->ret = -1;
 	} else if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED) {
 		mail_storage_set_internal_error(&ctx->client->_storage->storage);
@@ -229,25 +229,38 @@ imapc_storage_client_login_callback(const struct imapc_command_reply *reply,
 		return;
 	}
 
-	client->auth_failed = TRUE;
-	client->auth_error = i_strdup(reply->text_full);
+	client->auth_failed_state = reply->state;
+	client->auth_failed_reason = i_strdup(reply->text_full);
+	if (!imapc_storage_client_handle_auth_failure(client))
+		i_unreached();
+}
 
+bool imapc_storage_client_handle_auth_failure(struct imapc_storage_client *client)
+{
+	if (client->auth_failed_state == IMAPC_COMMAND_STATE_OK)
+		return FALSE;
+
+	/* We need to set the error to either storage or to list, depending on
+	   whether the caller is from mail-storage.h API or mailbox-list.h API.
+	   We don't know here what the caller is though, so just set the error
+	   to both of them. */
 	if (client->_storage != NULL) {
-		if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED)
+		if (client->auth_failed_state == IMAPC_COMMAND_STATE_DISCONNECTED)
 			mail_storage_set_internal_error(&client->_storage->storage);
 		else {
 			mail_storage_set_error(&client->_storage->storage,
-					       MAIL_ERROR_PERM, reply->text_full);
+				MAIL_ERROR_PERM, client->auth_failed_reason);
 		}
 	}
 	if (client->_list != NULL) {
-		if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED)
+		if (client->auth_failed_state == IMAPC_COMMAND_STATE_DISCONNECTED)
 			mailbox_list_set_internal_error(&client->_list->list);
 		else {
 			mailbox_list_set_error(&client->_list->list,
-					       MAIL_ERROR_PERM, reply->text_full);
+				MAIL_ERROR_PERM, client->auth_failed_reason);
 		}
 	}
+	return TRUE;
 }
 
 static void imapc_storage_client_login(struct imapc_storage_client *client,
@@ -260,10 +273,10 @@ static void imapc_storage_client_login(struct imapc_storage_client *client,
 		   if it fails. */
 		while (!client->auth_returned)
 			imapc_client_run(client->client);
-		if (client->auth_failed) {
+		if (imapc_storage_client_handle_auth_failure(client)) {
 			user->error = p_strdup_printf(user->pool,
 				"imapc: Login to %s failed: %s",
-				host, client->auth_error);
+				host, client->auth_failed_reason);
 		}
 	}
 }
@@ -363,7 +376,7 @@ void imapc_storage_client_unref(struct imapc_storage_client **_client)
 	array_foreach_modifiable(&client->untagged_callbacks, cb)
 		i_free(cb->name);
 	array_free(&client->untagged_callbacks);
-	i_free(client->auth_error);
+	i_free(client->auth_failed_reason);
 	i_free(client);
 }
 
@@ -510,7 +523,7 @@ imapc_mailbox_exists(struct mailbox *box, bool auto_boxes ATTR_UNUSED,
 
 	struct imapc_mailbox_list *list = (struct imapc_mailbox_list *)box->list;
 
-	if (list->client->auth_failed) {
+	if (imapc_storage_client_handle_auth_failure(list->client)) {
 		mail_storage_copy_list_error(box->storage, box->list);
 		return -1;
 	}
@@ -636,7 +649,7 @@ imapc_mailbox_open_callback(const struct imapc_command_reply *reply,
 		imapc_copy_error_from_reply(ctx->mbox->storage,
 					    MAIL_ERROR_NOTFOUND, reply);
 		ctx->ret = -1;
-	} else if (ctx->mbox->storage->client->auth_failed) {
+	} else if (imapc_storage_client_handle_auth_failure(ctx->mbox->storage->client)) {
 		ctx->ret = -1;
 	} else if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED) {
 		ctx->ret = -1;
@@ -652,6 +665,10 @@ imapc_mailbox_open_callback(const struct imapc_command_reply *reply,
 
 static int imapc_mailbox_get_capabilities(struct imapc_mailbox *mbox)
 {
+	/* If authentication failed, don't check again. */
+	if (imapc_storage_client_handle_auth_failure(mbox->storage->client))
+		return -1;
+
 	return imapc_client_get_capabilities(mbox->storage->client->client,
 					     &mbox->capabilities);
 
@@ -675,10 +692,6 @@ int imapc_mailbox_select(struct imapc_mailbox *mbox)
 
 	i_assert(mbox->client_box == NULL);
 
-	/* If authentication failed, don't check again. */
-	if (mbox->storage->client->auth_failed) {
-		return -1;
-	}
 	if (imapc_mailbox_get_capabilities(mbox) < 0)
 		return -1;
 

@@ -49,6 +49,8 @@
 #define MAX_INBUF_SIZE 1024
 #define MAX_OUTBUF_SIZE (1024*1024*10)
 #define OUTBUF_FLUSH_THRESHOLD (1024*128)
+/* Max time to wait for connect() to finish before aborting */
+#define DIRECTOR_CONNECTION_CONNECT_TIMEOUT_MSECS (10*1000)
 /* Max idling time before "ME" command must have been received,
    or we'll disconnect. */
 #define DIRECTOR_CONNECTION_ME_TIMEOUT_MSECS (10*1000)
@@ -57,8 +59,9 @@
    parsing the data. */
 #define DIRECTOR_CONNECTION_SEND_USERS_TIMEOUT_MSECS (30*1000)
 /* Max idling time before "DONE" command must have been received,
-   or we'll disconnect. */
-#define DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS (30*1000)
+   or we'll disconnect. Use a slightly larger value than for _SEND_USERS_ so
+   that we'll get a better error if the sender decides to disconnect. */
+#define DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS (40*1000)
 /* How long to wait for PONG for an idling connection */
 #define DIRECTOR_CONNECTION_PING_IDLE_TIMEOUT_MSECS (10*1000)
 /* Maximum time to wait for PONG reply */
@@ -96,7 +99,7 @@
 struct director_connection {
 	struct director *dir;
 	char *name;
-	time_t created;
+	struct timeval created, connected_time, me_received_time;
 	unsigned int minor_version;
 
 	struct timeval last_input, last_output;
@@ -157,23 +160,57 @@ director_cmd_error(struct director_connection *conn, const char *fmt, ...)
 }
 
 static void
+director_connection_append_stats(struct director_connection *conn, string_t *str)
+{
+	int input_msecs = timeval_diff_msecs(&ioloop_timeval, &conn->last_input);
+	int output_msecs = timeval_diff_msecs(&ioloop_timeval, &conn->last_output);
+	int connected_msecs = timeval_diff_msecs(&ioloop_timeval, &conn->connected_time);
+
+	str_printfa(str, "bytes in=%"PRIuUOFF_T", bytes out=%"PRIuUOFF_T,
+		    conn->input->v_offset, conn->output->offset);
+	if (conn->last_input.tv_sec > 0) {
+		str_printfa(str, ", last input %u.%03u s ago",
+			    input_msecs/1000, input_msecs%1000);
+	}
+	if (conn->last_output.tv_sec > 0) {
+		str_printfa(str, ", last output %u.%03u s ago",
+			    output_msecs/1000, output_msecs%1000);
+	}
+	if (conn->connected) {
+		str_printfa(str, ", connected %u.%03u s ago",
+			    connected_msecs/1000, connected_msecs%1000);
+	}
+	if (o_stream_get_buffer_used_size(conn->output) > 0) {
+		str_printfa(str, ", %"PRIuSIZE_T" bytes in output buffer",
+			    o_stream_get_buffer_used_size(conn->output));
+	}
+}
+
+static void
 director_connection_init_timeout(struct director_connection *conn)
 {
-	unsigned int secs = ioloop_time - conn->created;
+	struct timeval start_time;
+	string_t *reason = t_str_new(128);
 
 	if (!conn->connected) {
-		i_error("director(%s): Connect timed out (%u secs)",
-			conn->name, secs);
-	} else if (conn->io == NULL) {
-		i_error("director(%s): Sending handshake (%u secs)",
-			conn->name, secs);
+		start_time = conn->created;
+		str_append(reason, "Connect timed out");
 	} else if (!conn->me_received) {
-		i_error("director(%s): Handshaking ME timed out (%u secs)",
-			conn->name, secs);
+		start_time = conn->connected_time;
+		str_append(reason, "Handshaking ME timed out");
+	} else if (!conn->in) {
+		start_time = conn->me_received_time;
+		str_append(reason, "Sending handshake timed out");
 	} else {
-		i_error("director(%s): Handshaking DONE timed out (%u secs)",
-			conn->name, secs);
+		start_time = conn->me_received_time;
+		str_append(reason, "Handshaking DONE timed out");
 	}
+	int msecs = timeval_diff_msecs(&ioloop_timeval, &start_time);
+	str_printfa(reason, " (%u.%03u secs, ", msecs/1000, msecs%1000);
+	director_connection_append_stats(conn, reason);
+	str_append_c(reason, ')');
+
+	i_error("director(%s): %s", conn->name, str_c(reason));
 	director_connection_disconnected(&conn, "Handshake timeout");
 }
 
@@ -410,6 +447,7 @@ static bool director_cmd_me(struct director_connection *conn,
 		return FALSE;
 	}
 	conn->me_received = TRUE;
+	conn->me_received_time = ioloop_timeval;
 
 	if (args[2] != NULL) {
 		time_t remote_time;
@@ -428,8 +466,13 @@ static bool director_cmd_me(struct director_connection *conn,
 	}
 
 	timeout_remove(&conn->to_ping);
-	conn->to_ping = timeout_add(DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS,
-				    director_connection_init_timeout, conn);
+	if (conn->in) {
+		conn->to_ping = timeout_add(DIRECTOR_CONNECTION_DONE_TIMEOUT_MSECS,
+					    director_connection_init_timeout, conn);
+	} else {
+		conn->to_ping = timeout_add(DIRECTOR_CONNECTION_SEND_USERS_TIMEOUT_MSECS,
+					    director_connection_init_timeout, conn);
+	}
 
 	if (!conn->in)
 		return TRUE;
@@ -1232,7 +1275,7 @@ director_cmd_user_killed_everywhere(struct director_connection *conn,
 static bool director_handshake_cmd_done(struct director_connection *conn)
 {
 	struct director *dir = conn->dir;
-	unsigned int handshake_secs = time(NULL) - conn->created;
+	int handshake_msecs = timeval_diff_msecs(&ioloop_timeval, &conn->connected_time);
 	string_t *str;
 
 	if (conn->users_unsorted && conn->user_iter == NULL) {
@@ -1242,11 +1285,11 @@ static bool director_handshake_cmd_done(struct director_connection *conn)
 	}
 
 	str = t_str_new(128);
-	str_printfa(str, "director(%s): Handshake finished in %u secs "
-		    "(bytes in=%"PRIuUOFF_T" out=%"PRIuUOFF_T")",
-		    conn->name, handshake_secs, conn->input->v_offset,
-		    conn->output->offset);
-	if (handshake_secs >= DIRECTOR_HANDSHAKE_WARN_SECS)
+	str_printfa(str, "director(%s): Handshake finished in %u.%03u secs (",
+		    conn->name, handshake_msecs/1000, handshake_msecs%1000);
+	director_connection_append_stats(conn, str);
+	str_append_c(str, ')');
+	if (handshake_msecs >= DIRECTOR_HANDSHAKE_WARN_SECS*1000)
 		i_warning("%s", str_c(str));
 	else
 		i_info("%s", str_c(str));
@@ -1715,7 +1758,6 @@ static void
 director_connection_log_disconnect(struct director_connection *conn, int err,
 				   const char *errstr)
 {
-	unsigned int secs = ioloop_time - conn->created;
 	string_t *str = t_str_new(128);
 
 	i_assert(conn->connected);
@@ -1737,14 +1779,14 @@ director_connection_log_disconnect(struct director_connection *conn, int err,
 			str_printfa(str, ": %s", errstr);
 	}
 
-	str_printfa(str, " (connected %u secs, "
-		    "in=%"PRIuUOFF_T" out=%"PRIuUOFF_T,
-		    secs, conn->input->v_offset, conn->output->offset);
+	str_append(str, " (");
+	director_connection_append_stats(conn, str);
 
 	if (!conn->me_received)
 		str_append(str, ", handshake ME not received");
 	else if (!conn->handshake_received)
 		str_append(str, ", handshake DONE not received");
+	str_append_c(str, ')');
 	i_error("%s", str_c(str));
 }
 
@@ -1943,14 +1985,12 @@ director_connection_init_common(struct director *dir, int fd)
 	struct director_connection *conn;
 
 	conn = i_new(struct director_connection, 1);
-	conn->created = ioloop_time;
+	conn->created = ioloop_timeval;
 	conn->fd = fd;
 	conn->dir = dir;
 	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE, FALSE);
 	conn->output = o_stream_create_fd(conn->fd, MAX_OUTBUF_SIZE, FALSE);
 	o_stream_set_no_error_handling(conn->output, TRUE);
-	conn->to_ping = timeout_add(DIRECTOR_CONNECTION_ME_TIMEOUT_MSECS,
-				    director_connection_init_timeout, conn);
 	array_append(&dir->connections, &conn, 1);
 	return conn;
 }
@@ -1974,8 +2014,11 @@ director_connection_init_in(struct director *dir, int fd,
 	conn = director_connection_init_common(dir, fd);
 	conn->in = TRUE;
 	conn->connected = TRUE;
+	conn->connected_time = ioloop_timeval;
 	conn->name = i_strdup_printf("%s/in", net_ip2addr(ip));
 	conn->io = io_add(conn->fd, IO_READ, director_connection_input, conn);
+	conn->to_ping = timeout_add(DIRECTOR_CONNECTION_ME_TIMEOUT_MSECS,
+				    director_connection_init_timeout, conn);
 
 	director_connection_send_handshake(conn);
 	return conn;
@@ -1991,6 +2034,7 @@ static void director_connection_connected(struct director_connection *conn)
 		director_connection_disconnected(&conn, strerror(err));
 		return;
 	}
+	conn->connected_time = ioloop_timeval;
 	conn->connected = TRUE;
 	o_stream_set_flush_callback(conn->output,
 				    director_connection_output, conn);
@@ -1999,7 +2043,7 @@ static void director_connection_connected(struct director_connection *conn)
 	conn->io = io_add(conn->fd, IO_READ, director_connection_input, conn);
 
 	timeout_remove(&conn->to_ping);
-	conn->to_ping = timeout_add(DIRECTOR_CONNECTION_SEND_USERS_TIMEOUT_MSECS,
+	conn->to_ping = timeout_add(DIRECTOR_CONNECTION_ME_TIMEOUT_MSECS,
 				    director_connection_init_timeout, conn);
 
 	o_stream_cork(conn->output);
@@ -2046,6 +2090,8 @@ director_connection_init_out(struct director *dir, int fd,
 	director_host_ref(host);
 	conn->io = io_add(conn->fd, IO_WRITE,
 			  director_connection_connected, conn);
+	conn->to_ping = timeout_add(DIRECTOR_CONNECTION_CONNECT_TIMEOUT_MSECS,
+				    director_connection_init_timeout, conn);
 	return conn;
 }
 
@@ -2121,7 +2167,7 @@ static void director_connection_disconnected(struct director_connection **_conn,
 	struct director_connection *conn = *_conn;
 	struct director *dir = conn->dir;
 
-	if (conn->created + DIRECTOR_SUCCESS_MIN_CONNECT_SECS > ioloop_time &&
+	if (conn->connected_time.tv_sec + DIRECTOR_SUCCESS_MIN_CONNECT_SECS > ioloop_time &&
 	    conn->host != NULL) {
 		/* connection didn't exist for very long, assume it has a
 		   network problem */
@@ -2176,14 +2222,11 @@ void director_connection_send(struct director_connection *conn,
 static void
 director_connection_ping_idle_timeout(struct director_connection *conn)
 {
-	int input_diff = timeval_diff_msecs(&ioloop_timeval, &conn->last_input);
-	int output_diff = timeval_diff_msecs(&ioloop_timeval, &conn->last_output);
 	string_t *str = t_str_new(128);
 
-	str_printfa(str, "Ping timed out, disconnecting "
-		    "(last input %u.%03u s ago, last output %u.%03u s ago",
-		    input_diff/1000, input_diff%1000,
-		    output_diff/1000, output_diff%1000);
+	str_printfa(str, "Ping timed out in %u secs, disconnecting (",
+		    DIRECTOR_CONNECTION_PING_IDLE_TIMEOUT_MSECS/1000);
+	director_connection_append_stats(conn, str);
 	if (conn->handshake_received)
 		str_append(str, ", handshaked");
 	if (conn->synced)

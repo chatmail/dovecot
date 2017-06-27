@@ -401,6 +401,11 @@ imapc_sync_send_commands(struct imapc_sync_context *ctx, uint32_t first_uid)
 {
 	string_t *cmd = t_str_new(64);
 
+	if (ctx->mbox->exists_count == 0) {
+		/* empty mailbox - no point in fetching anything */
+		return;
+	}
+
 	str_printfa(cmd, "UID FETCH %u:* (FLAGS", first_uid);
 	if (imapc_mailbox_has_modseqs(ctx->mbox)) {
 		str_append(cmd, " MODSEQ");
@@ -483,7 +488,6 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 		   adding new messages requires sync locking to avoid
 		   duplicates. */
 		imapc_sync_send_commands(ctx, mbox->sync_fetch_first_uid);
-		mbox->sync_fetch_first_uid = 0;
 	}
 
 	imapc_sync_expunge_finish(ctx);
@@ -500,6 +504,10 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 	if (mbox->box.v.sync_notify != NULL)
 		mbox->box.v.sync_notify(&mbox->box, 0, 0);
 
+	if (!ctx->failed) {
+		/* reset only after a successful sync */
+		mbox->sync_fetch_first_uid = 0;
+	}
 	if (!mbox->initial_sync_done && !ctx->failed) {
 		imapc_initial_sync_check(ctx, FALSE);
 		mbox->initial_sync_done = TRUE;

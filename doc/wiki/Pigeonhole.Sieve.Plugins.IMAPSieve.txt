@@ -103,4 +103,4 @@ imapsieve_mailboxXXX_from = :
 See <Replacing antispam plugin with IMAPSieve> [HowTo.AntispamWithSieve.txt] as
 example on how to use this.
 
-(This file was created from the wiki on 2017-05-30 16:30)
+(This file was created from the wiki on 2017-06-26 04:42)

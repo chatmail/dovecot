@@ -413,6 +413,8 @@ bool http_client_connection_unref(struct http_client_connection **_conn);
 void http_client_connection_close(struct http_client_connection **_conn);
 
 void http_client_connection_peer_closed(struct http_client_connection **_conn);
+void http_client_connection_request_destroyed(
+	struct http_client_connection *conn, struct http_client_request *req);
 
 int http_client_connection_output(struct http_client_connection *conn);
 void http_client_connection_start_request_timeout(
@@ -484,11 +486,11 @@ struct http_client_queue *
 http_client_queue_create(struct http_client_host *host,
 	const struct http_client_peer_addr *addr);
 void http_client_queue_free(struct http_client_queue *queue);
-void http_client_queue_fail(struct http_client_queue *queue,
-	unsigned int status, const char *error);
 void http_client_queue_connection_setup(struct http_client_queue *queue);
 unsigned int
 http_client_queue_host_lookup_done(struct http_client_queue *queue);
+void http_client_queue_host_lookup_failure(
+	struct http_client_queue *queue, const char *error);
 void http_client_queue_submit_request(struct http_client_queue *queue,
 	struct http_client_request *req);
 void

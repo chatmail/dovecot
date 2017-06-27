@@ -612,6 +612,39 @@ int mail_cache_lookup_headers(struct mail_cache_view *view, string_t *dest,
 	return ret;
 }
 
+static uint32_t
+mail_cache_get_highest_seq_with_cache(struct mail_cache_view *view,
+				      uint32_t below_seq, uint32_t *reset_id_r)
+{
+	struct mail_cache_missing_reason_cache *rc = &view->reason_cache;
+	uint32_t seq = below_seq-1, highest_checked_seq = 0;
+
+	/* find the newest mail that has anything in cache */
+	if (rc->log_file_head_offset == view->view->log_file_head_offset &&
+	    rc->log_file_head_seq == view->view->log_file_head_seq) {
+		/* reason_cache matches the current view - we can use it */
+		highest_checked_seq = rc->highest_checked_seq;
+	} else {
+		rc->log_file_head_offset = view->view->log_file_head_offset;
+		rc->log_file_head_seq = view->view->log_file_head_seq;
+	}
+	rc->highest_checked_seq = below_seq;
+
+	/* first check anything not already in reason_cache */
+	for (; seq > highest_checked_seq; seq--) {
+		if (mail_cache_lookup_cur_offset(view->view, seq, reset_id_r) != 0) {
+			rc->highest_seq_with_cache = seq;
+			rc->reset_id = *reset_id_r;
+			return seq;
+		}
+	}
+	if (seq == 0)
+		return 0;
+	/* then return the result from cache */
+	*reset_id_r = rc->reset_id;
+	return rc->highest_seq_with_cache;
+}
+
 const char *
 mail_cache_get_missing_reason(struct mail_cache_view *view, uint32_t seq)
 {
@@ -630,13 +663,7 @@ mail_cache_get_missing_reason(struct mail_cache_view *view, uint32_t seq)
 		return t_strdup_printf(
 			"Mail has other cached fields, reset_id=%u", reset_id);
 	}
-
-	/* find the newest mail that has anything in cache */
-	for (; seq > 0; seq--) {
-		offset = mail_cache_lookup_cur_offset(view->view, seq, &reset_id);
-		if (offset != 0)
-			break;
-	}
+	seq = mail_cache_get_highest_seq_with_cache(view, seq, &reset_id);
 	if (seq == 0) {
 		return t_strdup_printf("Cache file is empty, reset_id=%u",
 				       view->cache->hdr->file_seq);

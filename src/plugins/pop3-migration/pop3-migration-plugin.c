@@ -194,8 +194,10 @@ int pop3_migration_get_hdr_sha1(uint32_t mail_seq, struct istream *input,
 				pop3_header_filter_callback, &hdr_ctx);
 
 	sha1_init(&sha1_ctx);
+	i_zero(&hash_ctx);
 	while (i_stream_read_data(input, &data, &size, 0) > 0) {
-		message_header_hash_more(&hash_ctx, &hash_method_sha1, &sha1_ctx, 2,
+		message_header_hash_more(&hash_ctx, &hash_method_sha1, &sha1_ctx,
+					 MESSAGE_HEADER_HASH_MAX_VERSION,
 					 data, size);
 		i_stream_skip(input, size);
 	}

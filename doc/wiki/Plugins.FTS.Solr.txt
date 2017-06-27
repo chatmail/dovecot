@@ -204,4 +204,4 @@ With recent versions of Solr (5+), you should have a look at these guides:
 Please keep in mind that you will have to change the Solr URL to include the
 core name (ie:'dovecot': 'http://localhost:8939/solr/dovecot').
 
-(This file was created from the wiki on 2017-05-30 16:30)
+(This file was created from the wiki on 2017-06-26 04:42)

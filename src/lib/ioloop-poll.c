@@ -55,9 +55,8 @@ void io_loop_handle_add(struct io_file *io)
 
 		ctx->idx_count = nearest_power((unsigned int) fd+1);
 
-		ctx->fd_index = i_realloc(ctx->fd_index,
-					  sizeof(int) * old_count,
-					  sizeof(int) * ctx->idx_count);
+		ctx->fd_index = i_realloc_type(ctx->fd_index, int,
+					       old_count, ctx->idx_count);
 		memset(ctx->fd_index + old_count, 0xff,
 		       sizeof(int) * (ctx->idx_count-old_count));
 	}
@@ -68,9 +67,8 @@ void io_loop_handle_add(struct io_file *io)
 
 		ctx->fds_count = nearest_power(ctx->fds_count+1);
 
-		ctx->fds = i_realloc(ctx->fds,
-				     sizeof(struct pollfd) * old_count,
-				     sizeof(struct pollfd) * ctx->fds_count);
+		ctx->fds = i_realloc_type(ctx->fds, struct pollfd,
+					  old_count, ctx->fds_count);
 	}
 
 	if (ctx->fd_index[fd] != -1) {
@@ -87,11 +85,11 @@ void io_loop_handle_add(struct io_file *io)
 	}
 
 	old_events = ctx->fds[index].events;
-	if (condition & IO_READ)
+	if ((condition & IO_READ) != 0)
 		ctx->fds[index].events |= IO_POLL_INPUT;
-        if (condition & IO_WRITE)
+        if ((condition & IO_WRITE) != 0)
 		ctx->fds[index].events |= IO_POLL_OUTPUT;
-	if (condition & IO_ERROR)
+	if ((condition & IO_ERROR) != 0)
 		ctx->fds[index].events |= IO_POLL_ERROR;
 	i_assert(ctx->fds[index].events != old_events);
 }
@@ -122,11 +120,11 @@ void io_loop_handle_remove(struct io_file *io, bool closed ATTR_UNUSED)
 #endif
 	i_free(io);
 
-	if (condition & IO_READ) {
+	if ((condition & IO_READ) != 0) {
 		ctx->fds[index].events &= ~(POLLIN|POLLPRI);
 		ctx->fds[index].revents &= ~(POLLIN|POLLPRI);
 	}
-	if (condition & IO_WRITE) {
+	if ((condition & IO_WRITE) != 0) {
 		ctx->fds[index].events &= ~POLLOUT;
 		ctx->fds[index].revents &= ~POLLOUT;
 	}
@@ -191,13 +189,13 @@ void io_loop_handler_run_internal(struct ioloop *ioloop)
 				    (IO_READ|IO_WRITE)) == (IO_READ|IO_WRITE)) {
 				call = TRUE;
 				pollfd->revents = 0;
-			} else if (io->io.condition & IO_READ) {
+			} else if ((io->io.condition & IO_READ) != 0) {
 				call = (pollfd->revents & IO_POLL_INPUT) != 0;
 				pollfd->revents &= ~IO_POLL_INPUT;
-			} else if (io->io.condition & IO_WRITE) {
+			} else if ((io->io.condition & IO_WRITE) != 0) {
 				call = (pollfd->revents & IO_POLL_OUTPUT) != 0;
 				pollfd->revents &= ~IO_POLL_OUTPUT;
-			} else if (io->io.condition & IO_ERROR) {
+			} else if ((io->io.condition & IO_ERROR) != 0) {
 				call = (pollfd->revents & IO_POLL_ERROR) != 0;
 				pollfd->revents &= ~IO_POLL_ERROR;
 			} else {

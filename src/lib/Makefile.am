@@ -116,6 +116,7 @@ liblib_la_SOURCES = \
 	ostream-hash.c \
 	ostream-null.c \
 	ostream-rawlog.c \
+	ostream-unix.c \
 	pkcs5.c \
 	primes.c \
 	printf-format-fix.c \
@@ -255,6 +256,7 @@ headers = \
 	ostream-private.h \
 	ostream-null.h \
 	ostream-rawlog.h \
+	ostream-unix.h \
 	pkcs5.h \
 	primes.h \
 	printf-format-fix.h \
@@ -323,6 +325,7 @@ test_lib_SOURCES = \
 	test-hash-format.c \
 	test-hash-method.c \
 	test-hex-binary.c \
+	test-imem.c \
 	test-ioloop.c \
 	test-iso8601-date.c \
 	test-iostream-temp.c \
@@ -341,6 +344,7 @@ test_lib_SOURCES = \
 	test-llist.c \
 	test-log-throttle.c \
 	test-malloc-overflow.c \
+	test-mempool.c \
 	test-mempool-alloconly.c \
 	test-pkcs5.c \
 	test-net.c \

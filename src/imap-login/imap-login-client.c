@@ -161,9 +161,7 @@ static bool
 client_update_info(struct imap_client *client,
 		   const char *key, const char *value)
 {
-	/* do not try to process NIL value */
-	if (value == NULL)
-		return FALSE;
+	i_assert(value != NULL);
 
 	/* SYNC WITH imap_login_reserved_id_keys */
 
@@ -211,8 +209,14 @@ static void cmd_id_handle_keyvalue(struct imap_client *client,
 		       (value == NULL ? 3 : strlen(value)) + 2;
 
 	if (client->common.trusted && !client->id_logged) {
-		client_id_str = !client_update_info(client, key, value);
-		i_assert(client_id_str == !client_id_reserved_word(key));
+		if (value == NULL) {
+			/* do not try to process NIL values as client-info,
+			   but store them for non-reserved keys */
+			client_id_str = !client_id_reserved_word(key);
+		} else {
+			client_id_str = !client_update_info(client, key, value);
+			i_assert(client_id_str == !client_id_reserved_word(key));
+		}
 	} else {
 		client_id_str = !client_id_reserved_word(key);
 	}
@@ -460,10 +464,6 @@ static int client_parse_command(struct imap_client *client,
 
 static bool client_handle_input(struct imap_client *client)
 {
-	const struct imap_arg *args;
-	bool parsed;
-	int ret;
-
 	i_assert(!client->common.authenticating);
 
 	if (client->cmd_finished) {
@@ -503,6 +503,15 @@ static bool client_handle_input(struct imap_client *client)
 		if (client->cmd_name == NULL)
 			return FALSE; /* need more data */
 	}
+	return client->common.v.input_next_cmd(&client->common);
+}
+
+static bool imap_client_input_next_cmd(struct client *_client)
+{
+	struct imap_client *client = (struct imap_client *)_client;
+	const struct imap_arg *args;
+	bool parsed;
+	int ret;
 
 	if (strcasecmp(client->cmd_name, "AUTHENTICATE") == 0) {
 		/* SASL-IR may need more space than input buffer's size,
@@ -758,6 +767,8 @@ static struct client_vfuncs imap_client_vfuncs = {
 	imap_proxy_error,
 	imap_proxy_get_state,
 	client_common_send_raw_data,
+	imap_client_input_next_cmd,
+	client_common_default_free,
 };
 
 static const struct login_binary imap_login_binary = {

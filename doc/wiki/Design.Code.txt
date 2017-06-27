@@ -200,4 +200,4 @@ Dovecot has some helper macros to make callbacks' context parameters type-safe.
 In v2.2+ see 'CALLBACK_TYPECHECK()' macro and for example 'io_add()' for
 example usage.
 
-(This file was created from the wiki on 2017-05-30 16:30)
+(This file was created from the wiki on 2017-06-26 04:42)

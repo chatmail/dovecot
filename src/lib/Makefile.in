@@ -136,16 +136,17 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	mmap-util.lo module-dir.lo mountpoint.lo net.lo \
 	nfs-workarounds.lo numpack.lo ostream.lo ostream-buffer.lo \
 	ostream-escaped.lo ostream-failure-at.lo ostream-file.lo \
-	ostream-hash.lo ostream-null.lo ostream-rawlog.lo pkcs5.lo \
-	primes.lo printf-format-fix.lo process-title.lo priorityq.lo \
-	randgen.lo rand.lo read-full.lo restrict-access.lo \
-	restrict-process-size.lo safe-memset.lo safe-mkdir.lo \
-	safe-mkstemp.lo sendfile-util.lo seq-range-array.lo sha1.lo \
-	sha2.lo sha3.lo str.lo str-find.lo str-sanitize.lo \
-	str-table.lo strescape.lo strfuncs.lo strnum.lo time-util.lo \
-	timing.lo unix-socket-create.lo unlink-directory.lo \
-	unlink-old-files.lo unichar.lo uri-util.lo utc-offset.lo \
-	utc-mktime.lo var-expand.lo wildcard-match.lo write-full.lo
+	ostream-hash.lo ostream-null.lo ostream-rawlog.lo \
+	ostream-unix.lo pkcs5.lo primes.lo printf-format-fix.lo \
+	process-title.lo priorityq.lo randgen.lo rand.lo read-full.lo \
+	restrict-access.lo restrict-process-size.lo safe-memset.lo \
+	safe-mkdir.lo safe-mkstemp.lo sendfile-util.lo \
+	seq-range-array.lo sha1.lo sha2.lo sha3.lo str.lo str-find.lo \
+	str-sanitize.lo str-table.lo strescape.lo strfuncs.lo \
+	strnum.lo time-util.lo timing.lo unix-socket-create.lo \
+	unlink-directory.lo unlink-old-files.lo unichar.lo uri-util.lo \
+	utc-offset.lo utc-mktime.lo var-expand.lo wildcard-match.lo \
+	write-full.lo
 liblib_la_OBJECTS = $(am_liblib_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -165,7 +166,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-hash-format.$(OBJEXT) \
 	test_lib-test-hash-method.$(OBJEXT) \
 	test_lib-test-hex-binary.$(OBJEXT) \
-	test_lib-test-ioloop.$(OBJEXT) \
+	test_lib-test-imem.$(OBJEXT) test_lib-test-ioloop.$(OBJEXT) \
 	test_lib-test-iso8601-date.$(OBJEXT) \
 	test_lib-test-iostream-temp.$(OBJEXT) \
 	test_lib-test-istream.$(OBJEXT) \
@@ -183,6 +184,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-llist.$(OBJEXT) \
 	test_lib-test-log-throttle.$(OBJEXT) \
 	test_lib-test-malloc-overflow.$(OBJEXT) \
+	test_lib-test-mempool.$(OBJEXT) \
 	test_lib-test-mempool-alloconly.$(OBJEXT) \
 	test_lib-test-pkcs5.$(OBJEXT) test_lib-test-net.$(OBJEXT) \
 	test_lib-test-numpack.$(OBJEXT) \
@@ -597,6 +599,7 @@ liblib_la_SOURCES = \
 	ostream-hash.c \
 	ostream-null.c \
 	ostream-rawlog.c \
+	ostream-unix.c \
 	pkcs5.c \
 	primes.c \
 	printf-format-fix.c \
@@ -736,6 +739,7 @@ headers = \
 	ostream-private.h \
 	ostream-null.h \
 	ostream-rawlog.h \
+	ostream-unix.h \
 	pkcs5.h \
 	primes.h \
 	printf-format-fix.h \
@@ -802,6 +806,7 @@ test_lib_SOURCES = \
 	test-hash-format.c \
 	test-hash-method.c \
 	test-hex-binary.c \
+	test-imem.c \
 	test-ioloop.c \
 	test-iso8601-date.c \
 	test-iostream-temp.c \
@@ -820,6 +825,7 @@ test_lib_SOURCES = \
 	test-llist.c \
 	test-log-throttle.c \
 	test-malloc-overflow.c \
+	test-mempool.c \
 	test-mempool-alloconly.c \
 	test-pkcs5.c \
 	test-net.c \
@@ -1025,6 +1031,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-hash.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-null.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-rawlog.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-unix.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pkcs5.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/primes.Plo@am__quote@
@@ -1066,6 +1073,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hash-method.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hash.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hex-binary.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-imem.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ioloop.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-iostream-temp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-iso8601-date.Po@am__quote@
@@ -1086,6 +1094,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-log-throttle.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-malloc-overflow.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-mempool-alloconly.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-mempool.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-net.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-numpack.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ostream-escaped.Po@am__quote@
@@ -1367,6 +1376,20 @@ test_lib-test-hex-binary.obj: test-hex-binary.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-hex-binary.obj `if test -f 'test-hex-binary.c'; then $(CYGPATH_W) 'test-hex-binary.c'; else $(CYGPATH_W) '$(srcdir)/test-hex-binary.c'; fi`
 
+test_lib-test-imem.o: test-imem.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-imem.o -MD -MP -MF $(DEPDIR)/test_lib-test-imem.Tpo -c -o test_lib-test-imem.o `test -f 'test-imem.c' || echo '$(srcdir)/'`test-imem.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-imem.Tpo $(DEPDIR)/test_lib-test-imem.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-imem.c' object='test_lib-test-imem.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-imem.o `test -f 'test-imem.c' || echo '$(srcdir)/'`test-imem.c
+
+test_lib-test-imem.obj: test-imem.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-imem.obj -MD -MP -MF $(DEPDIR)/test_lib-test-imem.Tpo -c -o test_lib-test-imem.obj `if test -f 'test-imem.c'; then $(CYGPATH_W) 'test-imem.c'; else $(CYGPATH_W) '$(srcdir)/test-imem.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-imem.Tpo $(DEPDIR)/test_lib-test-imem.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-imem.c' object='test_lib-test-imem.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-imem.obj `if test -f 'test-imem.c'; then $(CYGPATH_W) 'test-imem.c'; else $(CYGPATH_W) '$(srcdir)/test-imem.c'; fi`
+
 test_lib-test-ioloop.o: test-ioloop.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-ioloop.o -MD -MP -MF $(DEPDIR)/test_lib-test-ioloop.Tpo -c -o test_lib-test-ioloop.o `test -f 'test-ioloop.c' || echo '$(srcdir)/'`test-ioloop.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-ioloop.Tpo $(DEPDIR)/test_lib-test-ioloop.Po
@@ -1618,6 +1641,20 @@ test_lib-test-malloc-overflow.obj: test-malloc-overflow.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-malloc-overflow.c' object='test_lib-test-malloc-overflow.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-malloc-overflow.obj `if test -f 'test-malloc-overflow.c'; then $(CYGPATH_W) 'test-malloc-overflow.c'; else $(CYGPATH_W) '$(srcdir)/test-malloc-overflow.c'; fi`
+
+test_lib-test-mempool.o: test-mempool.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-mempool.o -MD -MP -MF $(DEPDIR)/test_lib-test-mempool.Tpo -c -o test_lib-test-mempool.o `test -f 'test-mempool.c' || echo '$(srcdir)/'`test-mempool.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-mempool.Tpo $(DEPDIR)/test_lib-test-mempool.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-mempool.c' object='test_lib-test-mempool.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-mempool.o `test -f 'test-mempool.c' || echo '$(srcdir)/'`test-mempool.c
+
+test_lib-test-mempool.obj: test-mempool.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-mempool.obj -MD -MP -MF $(DEPDIR)/test_lib-test-mempool.Tpo -c -o test_lib-test-mempool.obj `if test -f 'test-mempool.c'; then $(CYGPATH_W) 'test-mempool.c'; else $(CYGPATH_W) '$(srcdir)/test-mempool.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-mempool.Tpo $(DEPDIR)/test_lib-test-mempool.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-mempool.c' object='test_lib-test-mempool.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-mempool.obj `if test -f 'test-mempool.c'; then $(CYGPATH_W) 'test-mempool.c'; else $(CYGPATH_W) '$(srcdir)/test-mempool.c'; fi`
 
 test_lib-test-mempool-alloconly.o: test-mempool-alloconly.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-mempool-alloconly.o -MD -MP -MF $(DEPDIR)/test_lib-test-mempool-alloconly.Tpo -c -o test_lib-test-mempool-alloconly.o `test -f 'test-mempool-alloconly.c' || echo '$(srcdir)/'`test-mempool-alloconly.c

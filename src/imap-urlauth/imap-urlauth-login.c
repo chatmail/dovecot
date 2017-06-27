@@ -175,6 +175,8 @@ static struct client_vfuncs imap_urlauth_vfuncs = {
 	NULL,
 	NULL,
 	client_common_send_raw_data,
+	NULL,
+	client_common_default_free,
 };
 
 static const struct login_binary imap_urlauth_login_binary = {

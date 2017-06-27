@@ -152,6 +152,7 @@ struct mailbox_list_iterate_context {
 	pool_t pool;
 	enum mailbox_list_iter_flags flags;
 	bool failed;
+	bool index_iteration;
 
 	struct imap_match_glob *glob;
 	struct mailbox_list_autocreate_iterate_context *autocreate_ctx;
@@ -210,8 +211,6 @@ int mailbox_list_delete_index_control(struct mailbox_list *list,
 void mailbox_list_iter_update(struct mailbox_list_iter_update_context *ctx,
 			      const char *name);
 int mailbox_list_iter_subscriptions_refresh(struct mailbox_list *list);
-void
-mailbox_list_iter_init_autocreate(struct mailbox_list_iterate_context *ctx);
 const struct mailbox_info *
 mailbox_list_iter_default_next(struct mailbox_list_iterate_context *ctx);
 
@@ -234,5 +233,10 @@ void mailbox_list_set_critical(struct mailbox_list *list, const char *fmt, ...)
 	ATTR_FORMAT(2, 3);
 void mailbox_list_set_internal_error(struct mailbox_list *list);
 bool mailbox_list_set_error_from_errno(struct mailbox_list *list);
+
+const struct mailbox_info *
+mailbox_list_iter_autocreate_filter(struct mailbox_list_iterate_context *ctx,
+				    const struct mailbox_info *_info);
+
 
 #endif
