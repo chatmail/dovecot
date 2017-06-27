@@ -1,3 +1,32 @@
+dovecot (1:2.2.31-1) unstable; urgency=medium
+
+  * [9b058f3] New upstream version 2.2.31
+    + [2b577c1] Bump pigeonhole version to 0.4.19
+  * Enable TLS by default:
+    + [7ca4b1c] Update SSL cert location patch; cert/key should reside under
+      /etc/dovecot/private by default.
+    + [05d3d0f] Use ssl-cert-snakeoil certificates to setup SSL by default
+      (Closes: #376146, #786570)
+    + [862901f] dovecot-core.postinst: manage 10-ssl.conf using ucf
+      (Closes: #850538)
+    + [418df05] README.Debian: document the new TLS setup
+    + [47bade9] dovecot-core.NEWS: document TLS support
+  * [8356bc0] Handle /etc/dovecot/private mode using dpkg-statoverride
+  * dovecot-core.postinst: cleanup
+    + [afbd33f] dovecot-core.postinst: always call adduser
+    + [ee22dc5] dovecot-core.postinst: remove obsolete conffile handling
+    + [7bb298b] dovecot-core.postinst: do not remove the imapd user/group
+  * [815a2d1] README.Debian: cleanup
+  * [91115a3] Use noawait dpkg triggers (lintian warning)
+  * [e845cec] Add basic usage DEP-8 test, doing end-to-end tests involving
+    LDA, IMAP and POP3.
+  * [71c73ef] systemd: convert service to Type=simple and start after
+    network-online.target (Closes: #865546, #825562)
+  * [1534fac] dovecot.service: enable ProtectSystem=full
+  * [d276c69] B-D only on default-libmysqlclient-dev
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Tue, 27 Jun 2017 18:18:12 +0300
+
 dovecot (1:2.2.30.2-1) unstable; urgency=medium
 
   * [401e83d] New upstream version 2.2.30.2
