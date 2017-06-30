@@ -10,3 +10,4 @@ dovecot_name.patch
 libnss_location.patch
 fix-sha3-on-big-endian.patch
 CVE-2017-2669
+escape-fts-solr-chars.patch
