@@ -6,11 +6,6 @@ print("Connecting")
 client = poplib.POP3('localhost')
 client.set_debuglevel(2)
 
-print("Checking for STARTTLS capability")
-assert 'STLS' in client.capa()
-
-client.stls()
-
 print("Logging in")
 client.user('dep8')
 client.pass_('test')

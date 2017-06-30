@@ -7,11 +7,6 @@ print("Testing IMAP")
 print("Connecting")
 client = imaplib.IMAP4('localhost')
 
-print("Checking for STARTTLS capability")
-assert 'STARTTLS' in client.capabilities
-
-client.starttls()
-
 print("Logging in")
 client.login('dep8', 'test')
 
