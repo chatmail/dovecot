@@ -1,3 +1,12 @@
+dovecot (1:2.2.27-3+deb9u1) stretch; urgency=medium
+
+  * [8b8226f] Fix fts-solr: escape {} chars when sending queries (Closes:
+    #865945)
+  * [a97cdab] Add basic usage DEP-8 tests, performing end-to-end testing using
+    LDA, IMAP and POP3.
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Fri, 30 Jun 2017 22:01:28 +0300
+
 dovecot (1:2.2.27-3) unstable; urgency=high
 
   * [117285a] Remove /etc/dovecot/README (Closes: #849290)
