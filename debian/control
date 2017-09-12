@@ -26,7 +26,6 @@ Build-Depends: debhelper (>= 10),
                liblz4-dev,
                libexttextcat-dev,
                libstemmer-dev,
-               autotools-dev,
                dh-exec
 Standards-Version: 4.1.0
 Homepage: http://dovecot.org/
