@@ -1,3 +1,16 @@
+dovecot (1:2.2.32-1) unstable; urgency=medium
+
+  * [6652d9c] New upstream version 2.2.32.
+  * [c9cb096] Update pigeonhole to 0.4.20.
+  * [b499950] dovecot-core: remove SSL key/cert symlinks on purge
+    (Closes: #867157)
+  * [dbdcc66] dovecot-core.postinst: ignore adduser errors (Closes: #867849)
+  * [476c950] Bump Standards to 4.1.0; no changes needed.
+  * [2914efa] Drop B-D on autotools-dev, it is depended on by debhelper 10.
+  * [305d022] Remove Fabio, Joel and Marco from Uploaders. Thanks for your work!
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Tue, 12 Sep 2017 16:15:52 +0300
+
 dovecot (1:2.2.31-1) unstable; urgency=medium
 
   * [9b058f3] New upstream version 2.2.31
