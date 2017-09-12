@@ -1,3 +1,198 @@
+2017-08-18 02:28:14 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (7cd71ba)
+
+    Released v0.4.20.rc1 for Dovecot v2.2.32.rc1.
+
+
+M	NEWS
+M	configure.ac
+
+2017-08-16 11:04:07 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (f0eff5a)
+
+    Added v0.4.18 to NEWS.
+
+
+M	NEWS
+
+2016-05-02 17:09:12 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d0f80d3)
+
+    testsuite: Adjusted to changes in Dovecot lib-storage API.
+
+
+M	src/testsuite/testsuite-mailstore.c
+
+2017-07-08 10:51:27 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (1a93191)
+
+    sieve-tools: sieve-filter: Forgot to clean up script binary at end of
+    execution.
+
+    Normally, this would merely be an inconsequential memory leak. However, when
+    the script comes from an LDAP storage, the storage is not closed before
+    master_service_deinit() -> io_loop_destroy(). The LDAP connection's stale io
+    can cause problems while closing the main ioloop.
+
+M	src/sieve-tools/sieve-filter.c
+
+2017-07-08 10:27:52 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (a7b315c)
+
+    sieve-tools: Terminate with a fatal error when script cannot be
+    compiled/opened.
+
+    Rather than continuing with binary == NULL, causing a segfault.
+
+M	src/lib-sieve-tool/sieve-tool.c
+
+2017-07-06 12:34:08 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d6598cc)
+
+    managesieve-login: managesieve_client_input_next_cmd(): Fix handling of
+    command continuation.
+
+    Commands that continued after waiting for more input always failed. This
+    mainly applies to the AUTHENTICATE command, which mostly handles its own
+    arguments. This caused problems when a string literal was used as the
+    initial response for the AUTHENTICATE command.
+
+    Caused by recent change:
+
+    Author: Timo Sirainen <timo.sirainen@dovecot.fi> Date:   Wed Jun 14 12:39:02
+    2017 +0300
+
+    managesieve-login: managesieve_client_input_next_cmd() - minor code cleanup
+
+M	src/managesieve-login/client.c
+
+2017-07-06 12:28:44 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (159ab36)
+
+    managesieve-login: authenticate command: Make sure
+    client->auth_mech_name_parsed is reset properly upon command error.
+
+    This could cause problems for any subsequent AUTHENTICATE commmend.
+
+M	src/managesieve-login/client-authenticate.c
+
+2017-06-28 18:41:33 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (af36600)
+
+    LDA Sieve plugin: Fixed memory leak caused by not cleaning up the
+    sieve_discard script.
+
+    Moved script cleanup to separate function as well.
+
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+
+2017-06-13 19:36:57 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (ccb15cc)
+
+    lib-sieve: Made the retention period for redirect duplicate identifiers
+    configurable.
+
+    For accounts that perform many redirects, the lda-dupes database could grow
+    to impractical sizes. Changed the default retention period from 24 to 12
+    hours.
+
+M	INSTALL
+M	src/lib-sieve/cmd-redirect.c
+M	src/lib-sieve/sieve-common.h
+M	src/lib-sieve/sieve-config.h
+M	src/lib-sieve/sieve-settings.c
+
+2017-06-22 21:12:21 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (0714b34)
+
+    lib-sieve: include extension: Fixed segfault that (sometimes) occurred when
+    the global script location was left unconfigured.
+
+
+M	src/lib-sieve/plugins/include/ext-include-binary.c
+M	src/lib-sieve/plugins/include/ext-include-common.c
+
+2017-06-20 23:36:10 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (62151b1)
+
+    sieve-tools: Make sure sieve command line tools properly show debug messages
+    if requested.
+
+
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/sieve-tools/sieve-filter.c
+
+2017-06-20 20:46:28 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (39d4c9e)
+
+    lib-sieve: Clear extension context upon unload.
+
+
+M	src/lib-sieve/sieve-extensions.c
+
+2017-06-16 14:42:39 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c854655)
+
+    managesieve-login: Adjust to new client_vfuncs.free() API change
+
+
+M	src/managesieve-login/client.c
+
+2017-06-14 12:39:46 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (fbe1a74)
+
+    managesieve-login: managesieve_client_input_next_cmd() - Add assert to help
+    static analyzer
+
+
+M	src/managesieve-login/client.c
+
+2017-06-14 12:39:02 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4434f69)
+
+    managesieve-login: managesieve_client_input_next_cmd() - minor code cleanup
+
+
+M	src/managesieve-login/client.c
+
+2017-06-12 23:00:26 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (7ef6680)
+
+    managesieve-login: Adjust to login-common API change
+
+
+M	src/managesieve-login/client.c
+
+2017-05-24 17:00:26 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (183bc5b)
+
+    Added v0.4.18 to NEWS.
+
+
+M	NEWS
+
+2017-04-28 00:02:39 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (403042e)
+
+    lib-sieve: Fixed bug in handling of deferred implicit keep with implicit
+    side-effects.
+
+    Upon continuing the deferred implicit keep, the implicit side-effects (such
+    as imap flags) were not applied.
+
+M	src/lib-sieve/sieve-result.c
+
+2017-04-24 18:58:07 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b07b4c0)
+
+    imapsieve: Use client_add_capability() for adding the dynamic capability
+
+
+M	src/plugins/imapsieve/imap-sieve-plugin.c
+
+2017-04-21 13:37:40 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (583db21)
+
+    managesieve-login: Fill the new client_vfuncs.send_raw_data
+
+
+M	src/managesieve-login/client.c
+
+2017-04-12 13:17:53 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (3346f01)
+
+    imapsieve: Fixed flag assignment for the source message.
+
+    Implicit keep was deferred for the source message, which discards all flags.
+
+M	src/plugins/imapsieve/imap-sieve.c
+
+2017-04-05 16:02:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e506253)
+
+    managesieve-login: Fill the new banner_sent field.
+
+
+M	src/managesieve-login/client.c
+
 2017-04-03 20:13:50 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (56ce39d)
 
     Added v0.4.17 to NEWS.
