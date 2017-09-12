@@ -56,13 +56,15 @@ static const char *counter_names[CASSANDRA_COUNTER_COUNT] = {
 
 enum cassandra_query_type {
 	CASSANDRA_QUERY_TYPE_READ,
+	CASSANDRA_QUERY_TYPE_READ_MORE,
 	CASSANDRA_QUERY_TYPE_WRITE,
-	CASSANDRA_QUERY_TYPE_DELETE
+	CASSANDRA_QUERY_TYPE_DELETE,
+
+	CASSANDRA_QUERY_TYPE_COUNT
 };
-#define CASSANDRA_QUERY_TYPE_COUNT 3
 
 static const char *cassandra_query_type_names[CASSANDRA_QUERY_TYPE_COUNT] = {
-	"read", "write", "delete"
+	"read", "read-more", "write", "delete"
 };
 
 struct cassandra_callback {
@@ -88,6 +90,7 @@ struct cassandra_db {
 	unsigned int warn_timeout_secs;
 	unsigned int heartbeat_interval_secs, idle_timeout_secs;
 	unsigned int execution_retry_interval_msecs, execution_retry_times;
+	unsigned int page_size;
 	in_port_t port;
 
 	CassCluster *cluster;
@@ -124,8 +127,8 @@ struct cassandra_result {
 	char *error;
 	CassConsistency consistency, fallback_consistency;
 	enum cassandra_query_type query_type;
-	struct timeval start_time, finish_time;
-	unsigned int row_count;
+	struct timeval page0_start_time, start_time, finish_time;
+	unsigned int row_count, total_row_count, page_num;
 
 	pool_t row_pool;
 	ARRAY_TYPE(const_string) fields;
@@ -136,6 +139,7 @@ struct cassandra_result {
 
 	unsigned int query_sent:1;
 	unsigned int finished:1;
+	unsigned int paging_continues:1;
 };
 
 struct cassandra_transaction_context {
@@ -164,8 +168,6 @@ static struct {
 	{ CASS_CONSISTENCY_ONE, "one" },
 	{ CASS_CONSISTENCY_TWO, "two" },
 	{ CASS_CONSISTENCY_THREE, "three" },
-	{ CASS_CONSISTENCY_QUORUM, "" },
-	{ CASS_CONSISTENCY_ALL, "all" },
 	{ CASS_CONSISTENCY_QUORUM, "" },
 	{ CASS_CONSISTENCY_ALL, "all" },
 	{ CASS_CONSISTENCY_LOCAL_QUORUM, "local-quorum" },
@@ -516,6 +518,9 @@ static void driver_cassandra_parse_connect_string(struct cassandra_db *db,
 #ifndef HAVE_CASSANDRA_SPECULATIVE_POLICY
 			i_fatal("cassandra: This cassandra version does not support execution_retry_times");
 #endif
+		} else if (strcmp(key, "page_size") == 0) {
+			if (str_to_uint(value, &db->page_size) < 0)
+				i_fatal("cassandra: Invalid page_size: %s", value);
 		} else {
 			i_fatal("cassandra: Unknown connect string: %s", key);
 		}
@@ -694,12 +699,46 @@ static void driver_cassandra_result_unlink(struct cassandra_db *db,
 	i_unreached();
 }
 
+static void driver_cassandra_log_result(struct cassandra_result *result,
+					bool all_pages, long long reply_usecs)
+{
+	struct cassandra_db *db = (struct cassandra_db *)result->api.db;
+	struct timeval now;
+	unsigned int row_count;
+
+	if (db->log_level < CASS_LOG_DEBUG && !db->debug_queries &&
+	    reply_usecs/1000000 < db->warn_timeout_secs)
+		return;
+
+	if (gettimeofday(&now, NULL) < 0)
+		i_fatal("gettimeofday() failed: %m");
+
+	string_t *str = t_str_new(128);
+	str_printfa(str, "cassandra: Finished query '%s' (", result->query);
+	if (all_pages) {
+		str_printfa(str, "%u pages in total, ", result->page_num);
+		row_count = result->total_row_count;
+	} else {
+		if (result->page_num > 0 || result->paging_continues)
+			str_printfa(str, "page %u, ", result->page_num);
+		row_count = result->row_count;
+	}
+	str_printfa(str, "%u rows, %lld+%lld us): %s", row_count, reply_usecs,
+		    timeval_diff_usecs(&now, &result->finish_time),
+		    result->error != NULL ? result->error : "success");
+
+	if (reply_usecs/1000000 >= db->warn_timeout_secs) {
+		db->counters[CASSANDRA_COUNTER_TYPE_QUERY_SLOW]++;
+		i_warning("%s", str_c(str));
+	} else {
+		i_debug("%s", str_c(str));
+	}
+}
+
 static void driver_cassandra_result_free(struct sql_result *_result)
 {
 	struct cassandra_db *db = (struct cassandra_db *)_result->db;
         struct cassandra_result *result = (struct cassandra_result *)_result;
-	struct timeval now;
-	const char *str;
 	long long reply_usecs;
 
 	i_assert(!result->api.callback);
@@ -709,21 +748,14 @@ static void driver_cassandra_result_free(struct sql_result *_result)
 		db->sync_result = NULL;
 
 	reply_usecs = timeval_diff_usecs(&result->finish_time, &result->start_time);
-	if (db->log_level >= CASS_LOG_DEBUG || db->debug_queries ||
-	    reply_usecs/1000000 >= db->warn_timeout_secs) {
-		if (gettimeofday(&now, NULL) < 0)
-			i_fatal("gettimeofday() failed: %m");
-		str = t_strdup_printf(
-			"cassandra: Finished query '%s' (%u rows, %lld+%lld us): %s",
-			result->query, result->row_count, reply_usecs,
-			timeval_diff_usecs(&now, &result->finish_time),
-			result->error != NULL ? result->error : "success");
+	driver_cassandra_log_result(result, FALSE, reply_usecs);
 
-		if (reply_usecs/1000000 >= db->warn_timeout_secs) {
-			db->counters[CASSANDRA_COUNTER_TYPE_QUERY_SLOW]++;
-			i_warning("%s", str);
-		} else
-			i_debug("%s", str);
+	if (result->page_num > 0 && !result->paging_continues) {
+		/* Multi-page query finishes now. Log a debug/warning summary
+		   message about it separate from the per-page messages. */
+		reply_usecs = timeval_diff_usecs(&result->finish_time,
+						 &result->page0_start_time);
+		driver_cassandra_log_result(result, TRUE, reply_usecs);
 	}
 
 	if (result->result != NULL)
@@ -834,8 +866,9 @@ static void query_callback(CassFuture *future, void *context)
 			error == CASS_ERROR_LIB_REQUEST_TIMED_OUT ?
 			SQL_RESULT_ERROR_TYPE_WRITE_UNCERTAIN :
 			SQL_RESULT_ERROR_TYPE_UNKNOWN;
-		result->error = i_strdup_printf("Query '%s' failed: %.*s (in %u.%03u secs)",
-			result->query, (int)errsize, errmsg, msecs/1000, msecs%1000);
+		result->error = i_strdup_printf("Query '%s' failed: %.*s (in %u.%03u secs%s)",
+			result->query, (int)errsize, errmsg, msecs/1000, msecs%1000,
+			result->page_num == 0 ? "" : t_strdup_printf(", page %u", result->page_num));
 
 		/* unavailable = cassandra server knows that there aren't
 		   enough nodes available. "All hosts in current policy
@@ -874,19 +907,32 @@ static void query_callback(CassFuture *future, void *context)
 	result_finish(result);
 }
 
-static void driver_cassandra_result_send_query(struct cassandra_result *result)
+static void driver_cassandra_init_statement(struct cassandra_result *result)
 {
 	struct cassandra_db *db = (struct cassandra_db *)result->api.db;
-	CassFuture *future;
 
-	db->counters[CASSANDRA_COUNTER_TYPE_QUERY_SENT]++;
-
+	if (result->statement != NULL) {
+		/* continuing a paged result */
+		return;
+	}
 	result->statement = cass_statement_new(result->query, 0);
 	cass_statement_set_consistency(result->statement, result->consistency);
 
 #ifdef HAVE_CASSANDRA_SPECULATIVE_POLICY
 	cass_statement_set_is_idempotent(result->statement, cass_true);
 #endif
+	if (db->page_size > 0)
+		cass_statement_set_paging_size(result->statement, db->page_size);
+}
+
+static void driver_cassandra_result_send_query(struct cassandra_result *result)
+{
+	struct cassandra_db *db = (struct cassandra_db *)result->api.db;
+	CassFuture *future;
+
+	db->counters[CASSANDRA_COUNTER_TYPE_QUERY_SENT]++;
+	driver_cassandra_init_statement(result);
+
 	future = cass_session_execute(db->session, result->statement);
 	driver_cassandra_set_callback(future, db, query_callback, result);
 }
@@ -939,12 +985,19 @@ static int driver_cassandra_send_query(struct cassandra_result *result)
 		}
 	}
 
+	if (result->page0_start_time.tv_sec == 0)
+		result->page0_start_time = ioloop_timeval;
 	result->start_time = ioloop_timeval;
 	result->row_pool = pool_alloconly_create("cassandra result", 512);
 	switch (result->query_type) {
 	case CASSANDRA_QUERY_TYPE_READ:
 		result->consistency = db->read_consistency;
 		result->fallback_consistency = db->read_fallback_consistency;
+		break;
+	case CASSANDRA_QUERY_TYPE_READ_MORE:
+		/* consistency is already set and we don't want to fallback
+		   at this point anymore. */
+		result->fallback_consistency = result->consistency;
 		break;
 	case CASSANDRA_QUERY_TYPE_WRITE:
 		result->consistency = db->write_consistency;
@@ -954,6 +1007,8 @@ static int driver_cassandra_send_query(struct cassandra_result *result)
 		result->consistency = db->delete_consistency;
 		result->fallback_consistency = db->delete_fallback_consistency;
 		break;
+	case CASSANDRA_QUERY_TYPE_COUNT:
+		i_unreached();
 	}
 
 	if (driver_cassandra_want_fallback_query(result))
@@ -985,24 +1040,35 @@ static void exec_callback(struct sql_result *_result ATTR_UNUSED,
 {
 }
 
-static void
-driver_cassandra_query_full(struct sql_db *_db, const char *query,
+static struct cassandra_result *
+driver_cassandra_query_init(struct cassandra_db *db, const char *query,
 			    enum cassandra_query_type query_type,
 			    sql_query_callback_t *callback, void *context)
 {
-        struct cassandra_db *db = (struct cassandra_db *)_db;
 	struct cassandra_result *result;
 
 	result = i_new(struct cassandra_result, 1);
 	result->api = driver_cassandra_result;
-	result->api.db = _db;
+	result->api.db = &db->api;
 	result->api.refcount = 1;
 	result->callback = callback;
 	result->context = context;
 	result->query_type = query_type;
 	result->query = i_strdup(query);
 	array_append(&db->results, &result, 1);
+	return result;
+}
 
+static void
+driver_cassandra_query_full(struct sql_db *_db, const char *query,
+			    enum cassandra_query_type query_type,
+			    sql_query_callback_t *callback, void *context)
+{
+	struct cassandra_db *db = (struct cassandra_db *)_db;
+	struct cassandra_result *result;
+
+	result = driver_cassandra_query_init(db, query, query_type,
+					     callback, context);
 	(void)driver_cassandra_send_query(result);
 }
 
@@ -1158,6 +1224,24 @@ driver_cassandra_get_value(struct cassandra_result *result,
 	return 0;
 }
 
+static int driver_cassandra_result_next_page(struct cassandra_result *result)
+{
+	struct cassandra_db *db = (struct cassandra_db *)result->api.db;
+
+	if (db->page_size == 0) {
+		/* no paging */
+		return 0;
+	}
+	if (cass_result_has_more_pages(result->result) == cass_false)
+		return 0;
+
+	/* callers that don't support sql_query_more() will still get a useful
+	   error message. */
+	i_free(result->error);
+	result->error = i_strdup("Paged query has more results, but not supported by the caller");
+	return SQL_RESULT_NEXT_MORE;
+}
+
 static int driver_cassandra_result_next_row(struct sql_result *_result)
 {
 	struct cassandra_result *result = (struct cassandra_result *)_result;
@@ -1172,8 +1256,9 @@ static int driver_cassandra_result_next_row(struct sql_result *_result)
 		return -1;
 
 	if (!cass_iterator_next(result->iterator))
-		return 0;
+		return driver_cassandra_result_next_page(result);
 	result->row_count++;
+	result->total_row_count++;
 
 	p_clear(result->row_pool);
 	p_array_init(&result->fields, result->row_pool, 8);
@@ -1189,6 +1274,53 @@ static int driver_cassandra_result_next_row(struct sql_result *_result)
 		array_append(&result->field_sizes, &size, 1);
 	}
 	return ret;
+}
+
+static void
+driver_cassandra_result_more(struct sql_result **_result, bool async,
+			     sql_query_callback_t *callback, void *context)
+{
+	struct cassandra_db *db = (struct cassandra_db *)(*_result)->db;
+	struct cassandra_result *new_result;
+	struct cassandra_result *old_result =
+		(struct cassandra_result *)*_result;
+
+	/* Initialize the next page as a new sql_result */
+	new_result = driver_cassandra_query_init(db, old_result->query,
+						 CASSANDRA_QUERY_TYPE_READ_MORE,
+						 callback, context);
+
+	/* Preserve the statement and update its paging state */
+	new_result->statement = old_result->statement;
+	old_result->statement = NULL;
+	cass_statement_set_paging_state(new_result->statement,
+					old_result->result);
+	old_result->paging_continues = TRUE;
+	/* The caller did support paging. Clear out the "...not supported by
+	   the caller" error text, so it won't be in the debug log output. */
+	i_free_and_null(old_result->error);
+
+	new_result->page_num = old_result->page_num + 1;
+	new_result->page0_start_time = old_result->page0_start_time;
+	new_result->total_row_count = old_result->total_row_count;
+
+	sql_result_unref(*_result);
+	*_result = NULL;
+
+	if (async)
+		(void)driver_cassandra_send_query(new_result);
+	else {
+		i_assert(db->api.state == SQL_DB_STATE_IDLE);
+		driver_cassandra_sync_init(db);
+		(void)driver_cassandra_send_query(new_result);
+		if (new_result->result == NULL) {
+			db->io_pipe = io_loop_move_io(&db->io_pipe);
+			io_loop_run(db->ioloop);
+		}
+		driver_cassandra_sync_deinit(db);
+
+		callback(&new_result->api, context);
+	}
 }
 
 static unsigned int
@@ -1511,7 +1643,8 @@ const struct sql_result driver_cassandra_result = {
 		driver_cassandra_result_get_field_value_binary,
 		driver_cassandra_result_find_field_value,
 		driver_cassandra_result_get_values,
-		driver_cassandra_result_get_error
+		driver_cassandra_result_get_error,
+		driver_cassandra_result_more,
 	}
 };
 

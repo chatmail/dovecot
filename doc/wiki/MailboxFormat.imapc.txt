@@ -130,6 +130,25 @@ delay-login:
   Don't connect to the remote server until some command requires it. By default
   the server is connected to immediately on logout. (v2.2.29+)
 
+Quota
+-----
+
+Using the "imapc" quota backend allows asking for the quota from remote IMAP
+server (v2.2.30+). By default it uses GETQUOTAROOT INBOX for getting the quota.
+There are also two parameters that can be used to control how the quota is
+looked up:
+
+ * box=<mailbox>: Use GETQUOTAROOT <mailbox>
+ * root=<name>: Use GETQUOTA <name>
+
+For example:
+
+---%<-------------------------------------------------------------------------
+plugin {
+  quota = imapc:root=User Quota
+}
+---%<-------------------------------------------------------------------------
+
 Workarounds
 -----------
 
@@ -156,4 +175,4 @@ fetch-fix-broken-mails:
   a permanent error rather than a temporary error. This feature should be
   enabled only for specific users who have been determined to be broken.
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

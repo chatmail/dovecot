@@ -279,4 +279,68 @@ user_query = SELECT Location as 'namespace/docs/location' FROM Namespaces WHERE
 ..
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-06-26 04:42)
+Hidden subscription namespace
+-----------------------------
+
+If you follow some advice to separate your INBOX, shared/ and public/
+namespaces by choosing INBOX/ as your prefix for the inboxes you will see, that
+you run into troubles with subscriptions.Thats, because there is no parent
+namespace for shared/ and public/ if you set 'subscriptions = no' for those
+namespaces.If you set 'subscriptions = yes' for shared/ and public/ you will
+see yourself in the situation, that all users share the same subscription files
+under the location of those mailboxes.One good solution is, to create a so
+called "hidden subscription namespace" with subscriptions turned on and setting
+'subscriptions = no' for the other namespaces:
+
+---%<-------------------------------------------------------------------------
+namespace subscriptions {
+  subscriptions = yes
+  prefix = ""
+  list = no
+  hidden = yes
+}
+
+namespace inbox {
+  inbox = yes
+  location =
+  subscriptions = no
+  mailbox Drafts {
+    auto = subscribe
+    special_use = \Drafts
+  }
+  mailbox Sent {
+    auto = subscribe
+    special_use = \Sent
+  }
+  mailbox "Sent Messages" {
+    special_use = \Sent
+  }
+  mailbox Spam {
+    auto = subscribe
+    special_use = \Junk
+  }
+  mailbox Trash {
+    auto = subscribe
+    special_use = \Trash
+  }
+  prefix = INBOX/
+  separator = /
+}
+namespace {
+  type = shared
+  prefix = shared/%%u/
+  location = mdbox:%%h/mdbox:INDEXPVT=%h/mdbox/shared
+  list = children
+  subscriptions = no
+}
+namespace {
+  type = public
+  separator = /
+  prefix = public/
+  location = mdbox:/usr/local/mail/public/mdbox:INDEXPVT=%h
+  subscriptions = no
+  list = children
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2017-08-24 04:42)

@@ -134,10 +134,12 @@ struct mailbox_list {
 	char *error_string;
 	enum mail_error error;
 	bool temporary_error;
+	ARRAY(struct mail_storage_error) error_stack;
 
 	ARRAY(union mailbox_list_module_context *) module_contexts;
 
 	unsigned int index_root_dir_created:1;
+	unsigned int list_index_root_dir_created:1;
 	unsigned int guid_cache_updated:1;
 	unsigned int guid_cache_invalidated:1;
 	unsigned int last_error_is_internal:1;
@@ -220,6 +222,9 @@ int mailbox_list_dirent_is_alias_symlink(struct mailbox_list *list,
 					 const struct dirent *d);
 bool mailbox_list_try_get_absolute_path(struct mailbox_list *list,
 					const char **name);
+void mailbox_permissions_copy(struct mailbox_permissions *dest,
+			      const struct mailbox_permissions *src,
+			      pool_t pool);
 
 void mailbox_list_add_change(struct mailbox_list *list,
 			     enum mailbox_log_record_type type,

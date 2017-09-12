@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <utime.h>
 
 void dbox_storage_get_list_settings(const struct mail_namespace *ns ATTR_UNUSED,
 				    struct mailbox_list_settings *set)
@@ -165,38 +166,82 @@ void dbox_notify_changes(struct mailbox *box)
 }
 
 static bool
-dbox_cleanup_if_exists(struct mailbox_list *list, const char *path)
+dbox_cleanup_temp_files(struct mailbox_list *list, const char *path,
+			time_t last_scan_time, time_t last_change_time)
 {
-	struct stat st;
 	unsigned int interval = list->mail_set->mail_temp_scan_interval;
-
-	if (stat(path, &st) < 0)
-		return FALSE;
 
 	/* check once in a while if there are temp files to clean up */
 	if (interval == 0) {
 		/* disabled */
-	} else if (st.st_atime > st.st_ctime + DBOX_TMP_DELETE_SECS) {
-		/* there haven't been any changes to this directory since we
-		   last checked it. */
-	} else if (st.st_atime < ioloop_time - (time_t)interval) {
-		/* time to scan */
+		return FALSE;
+	} else if (last_scan_time >= ioloop_time - (time_t)interval) {
+		/* not the time to scan it yet */
+		return FALSE;
+	} else {
+		bool stated = FALSE;
+		if (last_change_time == (time_t)-1) {
+			/* Don't know the ctime yet - look it up. */
+			struct stat st;
+
+			if (stat(path, &st) < 0) {
+				if (errno == ENOENT)
+					i_error("stat(%s) failed: %m", path);
+				return FALSE;
+			}
+			last_change_time = st.st_ctime;
+			stated = TRUE;
+		}
+		if (last_scan_time > last_change_time + DBOX_TMP_DELETE_SECS) {
+			/* there haven't been any changes to this directory
+			   since we last checked it. If we did an extra stat(),
+			   we need to update the last_scan_time to avoid
+			   stat()ing the next time. */
+			return stated;
+		}
 		const char *prefix =
 			mailbox_list_get_global_temp_prefix(list);
-
 		(void)unlink_old_files(path, prefix,
 				       ioloop_time - DBOX_TMP_DELETE_SECS);
+		return TRUE;
 	}
-	return TRUE;
+	return FALSE;
 }
 
-int dbox_mailbox_open(struct mailbox *box)
+int dbox_mailbox_check_existence(struct mailbox *box, time_t *path_ctime_r)
 {
-	const char *box_path = mailbox_get_path(box);
+	const char *index_path, *box_path = mailbox_get_path(box);
+	struct stat st;
+	int ret = -1;
 
-	if (dbox_cleanup_if_exists(box->list, box_path))
-		;
-	else if (errno == ENOENT || errno == ENAMETOOLONG) {
+	*path_ctime_r = (time_t)-1;
+
+	if (box->list->set.iter_from_index_dir) {
+		/* Just because the index directory exists, it doesn't mean
+		   that the mailbox is selectable. Check that by seeing if
+		   dovecot.index.log exists. If it doesn't, fallback to
+		   checking for the dbox-Mails in the mail root directory.
+		   So this also means that if a mailbox is \NoSelect, listing
+		   it will always do a stat() for dbox-Mails in the mail root
+		   directory. That's not ideal, but this makes the behavior
+		   safer and \NoSelect mailboxes are somewhat rare. */
+		if (mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX,
+					&index_path) < 0)
+			return -1;
+		i_assert(index_path != NULL);
+		index_path = t_strconcat(index_path, "/", box->index_prefix,
+					 ".log", NULL);
+		ret = stat(index_path, &st);
+	}
+	if (ret < 0) {
+		ret = stat(box_path, &st);
+		if (ret == 0)
+			*path_ctime_r = st.st_ctime;
+	}
+
+	if (ret == 0) {
+		return 0;
+	} else if (errno == ENOENT || errno == ENAMETOOLONG) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
 			T_MAIL_ERR_MAILBOX_NOT_FOUND(box->vname));
 		return -1;
@@ -209,6 +254,11 @@ int dbox_mailbox_open(struct mailbox *box)
 					  "stat(%s) failed: %m", box_path);
 		return -1;
 	}
+}
+
+int dbox_mailbox_open(struct mailbox *box, time_t path_ctime)
+{
+	const char *box_path = mailbox_get_path(box);
 
 	if (index_storage_mailbox_open(box, FALSE) < 0)
 		return -1;
@@ -216,6 +266,13 @@ int dbox_mailbox_open(struct mailbox *box)
 				  box->storage->set->parsed_fsync_mode,
 				  MAIL_INDEX_FSYNC_MASK_APPENDS |
 				  MAIL_INDEX_FSYNC_MASK_EXPUNGES);
+
+	const struct mail_index_header *hdr = mail_index_get_header(box->view);
+	if (dbox_cleanup_temp_files(box->list, box_path,
+				    hdr->last_temp_file_scan, path_ctime)) {
+		/* temp files were scanned. update the last scan timestamp. */
+		index_mailbox_update_last_temp_file_scan(box);
+	}
 	return 0;
 }
 

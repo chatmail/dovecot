@@ -80,6 +80,7 @@ struct mail_storage_service_user {
 	const char *log_prefix, *auth_token, *auth_user;
 
 	const char *system_groups_user, *uid_source, *gid_source;
+	const char *chdir_path;
 	const struct mail_user_settings *user_set;
 	const struct setting_parser_info *user_info;
 	struct setting_parser_context *set_parser;
@@ -276,6 +277,8 @@ user_reply_handle(struct mail_storage_service_ctx *ctx,
 		if (strncmp(line, "system_groups_user=", 19) == 0) {
 			user->system_groups_user =
 				p_strdup(user->pool, line + 19);
+		} else if (strncmp(line, "chdir=", 6) == 0) {
+			user->chdir_path = p_strdup(user->pool, line+6);
 		} else if (strncmp(line, "nice=", 5) == 0) {
 #ifdef HAVE_SETPRIORITY
 			int n;
@@ -704,17 +707,20 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 		   because the current directory may not be accessible after
 		   dropping privileges, and for example unlink_directory()
 		   requires ability to open the current directory. */
-		if (home[0] == '\0') {
+		const char *chdir_path = user->chdir_path != NULL ?
+			user->chdir_path : home;
+
+		if (chdir_path[0] == '\0') {
 			if (chdir("/") < 0)
 				i_error("chdir(/) failed: %m");
-		} else if (chdir(home) < 0) {
+		} else if (chdir(chdir_path) < 0) {
 			if (errno == EACCES) {
 				i_error("%s", eacces_error_get("chdir",
-						t_strconcat(home, "/", NULL)));
-			} if (errno != ENOENT)
-				i_error("chdir(%s) failed: %m", home);
+						t_strconcat(chdir_path, "/", NULL)));
+			} else if (errno != ENOENT)
+				i_error("chdir(%s) failed: %m", chdir_path);
 			else if (mail_set->mail_debug)
-				i_debug("Home dir not found: %s", home);
+				i_debug("Home dir not found: %s", chdir_path);
 
 			if (chdir("/") < 0)
 				i_error("chdir(/) failed: %m");
@@ -1290,6 +1296,19 @@ mail_storage_service_lookup_real(struct mail_storage_service_ctx *ctx,
 			ret = -2;
 		}
 	}
+	if ((ctx->flags & MAIL_STORAGE_SERVICE_FLAG_NO_PLUGINS) != 0 &&
+	    user_set->mail_plugins[0] != '\0') {
+		/* mail_storage_service_load_modules() already avoids loading
+		   plugins when the _NO_PLUGINS flag is set. However, it's
+		   possible that the plugins are already loaded, because the
+		   plugin loading is a global state. This is especially true
+		   with doveadm, which loads the mail_plugins immediately at
+		   startup so it can find commands registered by plugins. It's
+		   fine that extra plugins are loaded - we'll just need to
+		   prevent any of their hooks from being called. One easy way
+		   to do this is just to clear out the mail_plugins setting: */
+		(void)settings_parse_line(user->set_parser, "mail_plugins=");
+	}
 
 	*user_r = user;
 	return ret;
@@ -1656,4 +1675,14 @@ void *mail_storage_service_get_settings(struct master_service *service)
 		set = sets[1];
 	} T_END;
 	return set;
+}
+
+int mail_storage_service_user_set_setting(struct mail_storage_service_user *user,
+					  const char *key,
+					  const char *value,
+					  const char **error_r)
+{
+	int ret = settings_parse_keyvalue(user->set_parser, key, value);
+	*error_r = settings_parser_get_error(user->set_parser);
+	return ret;
 }

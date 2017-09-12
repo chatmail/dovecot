@@ -5,7 +5,6 @@
 #include "strescape.h"
 #include "net.h"
 #include "write-full.h"
-#include "file-create-locked.h"
 #include "mail-search-build.h"
 #include "index-storage.h"
 #include "index-mailbox-size.h"
@@ -45,9 +44,8 @@ struct mailbox_vsize_update {
 	struct mail_index_view *view;
 	struct mailbox_index_vsize vsize_hdr, orig_vsize_hdr;
 
-	char *lock_path;
-	int lock_fd;
 	struct file_lock *lock;
+	bool lock_failed;
 	bool rebuild;
 	bool written;
 	bool finish_in_background;
@@ -116,7 +114,6 @@ index_mailbox_vsize_update_init(struct mailbox *box)
 
 	update = i_new(struct mailbox_vsize_update, 1);
 	update->box = box;
-	update->lock_fd = -1;
 
 	vsize_header_refresh(update);
 	return update;
@@ -126,34 +123,24 @@ static bool vsize_update_lock_full(struct mailbox_vsize_update *update,
 				   unsigned int lock_secs)
 {
 	struct mailbox *box = update->box;
-	const struct mailbox_permissions *perm;
-	struct file_create_settings set;
 	const char *error;
-	bool created;
+	int ret;
 
-	if (update->lock_path != NULL)
-		return update->lock != NULL;
+	if (update->lock != NULL)
+		return TRUE;
+	if (update->lock_failed)
+		return FALSE;
 	if (MAIL_INDEX_IS_IN_MEMORY(box->index))
 		return FALSE;
 
-	perm = mailbox_get_permissions(box);
-	i_zero(&set);
-	set.lock_timeout_secs =
-		mail_storage_get_lock_timeout(box->storage, lock_secs);
-	set.lock_method = box->storage->set->parsed_lock_method;
-	set.mode = perm->file_create_mode;
-	set.gid = perm->file_create_gid;
-	set.gid_origin = perm->file_create_gid_origin;
-
-	update->lock_path = i_strdup_printf("%s/"VSIZE_LOCK_SUFFIX,
-					    box->index->dir);
-	update->lock_fd = file_create_locked(update->lock_path, &set,
-					     &update->lock, &created, &error);
-	if (update->lock_fd == -1) {
-		if (errno != EAGAIN) {
-			i_error("file_create_locked(%s) failed: %m",
-				update->lock_path);
-		}
+	ret = mailbox_lock_file_create(box, VSIZE_LOCK_SUFFIX, lock_secs,
+				       &update->lock, &error);
+	if (ret <= 0) {
+		/* don't log lock timeouts, because we're somewhat expecting
+		   them. Especially when lock_secs is 0. */
+		if (ret < 0)
+			mail_storage_set_critical(box->storage, "%s", error);
+		update->lock_failed = TRUE;
 		return FALSE;
 	}
 	update->rebuild = FALSE;
@@ -238,17 +225,12 @@ void index_mailbox_vsize_update_deinit(struct mailbox_vsize_update **_update)
 
 	if (update->lock != NULL || update->rebuild)
 		index_mailbox_vsize_update_write(update);
-	if (update->lock != NULL) {
-		if (unlink(update->lock_path) < 0)
-			i_error("unlink(%s) failed: %m", update->lock_path);
+	if (update->lock != NULL)
 		file_lock_free(&update->lock);
-		i_close_fd(&update->lock_fd);
-	}
 	if (update->finish_in_background)
 		index_mailbox_vsize_notify_indexer(update->box);
 
 	mail_index_view_close(&update->view);
-	i_free(update->lock_path);
 	i_free(update);
 }
 

@@ -157,6 +157,7 @@ struct client {
 	const struct imap_settings *set;
 	const struct lda_settings *lda_set;
 	string_t *capability_string;
+	const char *disconnect_reason;
 
         struct mail_user *user;
 	struct mailbox *mailbox;
@@ -187,6 +188,7 @@ struct client {
 	unsigned int fetch_hdr_count, fetch_body_count;
 	uint64_t fetch_hdr_bytes, fetch_body_bytes;
 	unsigned int deleted_count, expunged_count, trashed_count;
+	unsigned int autoexpunged_count, append_count;
 
 	/* SEARCHRES extension: Last saved SEARCH result */
 	ARRAY_TYPE(seq_range) search_saved_uidset;
@@ -213,6 +215,7 @@ struct client {
 	unsigned int sync_seen_deletes:1;
 	unsigned int logged_out:1;
 	unsigned int disconnected:1;
+	unsigned int hibernated:1;
 	unsigned int destroyed:1;
 	unsigned int handling_input:1;
 	unsigned int syncing:1;

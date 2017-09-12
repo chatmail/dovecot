@@ -79,6 +79,11 @@ POP3 client workarounds
 'pop3_client_workarounds' setting allows you to set some workarounds to avoid
 POP3 clients breaking with some broken mails.
 
+Following are supported
+
+ * outlook-no-nuls - Converts 0x0 in data to 0x80
+ * oe-ns-eoh - Add missing end of header line
+
 UIDL format
 -----------
 
@@ -158,4 +163,4 @@ If you use <Dovecot's deliver> [LDA.txt] or IMAP APPEND and 'pop3_uidl_format =
 %m', it always appends the X-Delivery-ID: header to saved mailbox. Any existing
 X-Delivery-ID: headers in the saved mails are dropped.
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

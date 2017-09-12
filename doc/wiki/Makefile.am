@@ -187,6 +187,7 @@ wikifiles = ACL.txt \
 	Pigeonhole.Sieve.Usage.txt \
 	Pigeonhole.Sieve.txt \
 	Pigeonhole.txt \
+	Plugins.Apparmor.txt \
 	Plugins.Autocreate.txt \
 	Plugins.Compress.txt \
 	Plugins.Expire.txt \
@@ -202,6 +203,7 @@ wikifiles = ACL.txt \
 	Plugins.MailLog.txt \
 	Plugins.MailboxAlias.txt \
 	Plugins.Notify.txt \
+	Plugins.NotifyStatus.txt \
 	Plugins.PushNotification.txt \
 	Plugins.QuotaClone.txt \
 	Plugins.Snarf.txt \

@@ -1,3 +1,79 @@
+v2.2.32 2017-08-24  Timo Sirainen <tss@iki.fi>
+
+	* imapc: Info-level line is logged every time when successfully
+	  connected to the remote server. This includes local/remote IP/port,
+	  which can be useful for matching against external logs.
+	* config: Log a warning if plugin { key=no } is used explicitly.
+	  v2.3 will support "no" properly in plugin settings, but for now
+	  any value at all for a boolean plugin setting is treated as "yes",
+	  even if it's written as explicit "no". This change will now warn
+	  that it most likely won't work as intended.
+
+	+ Various optimizations to avoid accessing files/directories when it's
+	  not necessary. Especially avoid accessing mail root directories when
+	  INDEX directories point to a different filesystem.
+	+ mail_location can now include ITERINDEX parameter. This tells Dovecot
+	  to perform mailbox listing from the INDEX path instead of from the
+	  mail root path. It's mainly useful when the INDEX storage is on a
+	  faster storage.
+	+ mail_location can now include VOLATILEDIR=<path> parameter. This
+	  is used for creating lock files and in future potentially other
+	  files that don't need to exist permanently. The path could point to
+	  tmpfs for example. This is especially useful to avoid creating lock
+	  files to NFS or other remote filesystems. For example:
+	  mail_location=sdbox:~/sdbox:VOLATILEDIR=/tmp/volatile/%2.256Nu/%u
+	+ mail_location's LISTINDEX=<path> can now contain a full path.
+	  This allows storing mailbox list index to a different storage
+	  than the rest of the indexes, for example to tmpfs.
+	+ mail_location can now include NO-NOSELECT parameter. This
+	  automatically deletes any \NoSelect mailboxes that have no children.
+	  These mailboxes are sometimes confusing to users.
+	+ mail_location can now include BROKENCHAR=<char> parameter. This can
+	  be useful with imapc to access mailbox names that aren't valid mUTF-7
+	  charset from remote servers.
+	+ If mailbox_list_index_very_dirty_syncs=yes, the list index is no
+	  longer refreshed against filesystem when listing mailboxes. This
+	  allows the mailbox listing to be done entirely by only reading the
+	  mailbox list index.
+	+ Added mailbox_list_index_include_inbox setting to control whether
+	  INBOX's STATUS information should be cached in the mailbox list
+	  index. The default is "no", but it may be useful to change it to
+	  "yes", especially if LISTINDEX points to tmpfs.
+	+ userdb can return chdir=<path>, which override mail_home for the
+	  chdir location. This can be useful to avoid accessing home directory
+	  on login.
+	+ userdb can return postlogin=<socket> to specify per-user imap/pop3
+	  postlogin socket path.
+	+ cassandra: Add support for result paging by adding page_size=<n>
+	  parameter to the connect setting.
+	+ dsync/imapc, pop3-migration plugin: Strip also trailing tabs from
+	  headers when matching mails. This helps with migrations from Zimbra.
+	+ imap_logout_format supports now %{appended} and %{autoexpunged}
+	+ virtual plugin: Optimize IDLE to use mailbox list index for finding
+	  out when something has changed.
+	+ Added apparmor plugin. See https://wiki2.dovecot.org/Plugins/Apparmor
+	- virtual plugin: A lot of fixes. In many cases it was also working
+	  very inefficiently or even incorrectly.
+	- imap: NOTIFY parameter parsing was incorrectly "fixed" in v2.2.31.
+	  It was actually (mostly) working in previous versions, but broken
+	  in v2.2.31.
+	- Modseq tracking didn't always work correctly. This could have caused
+	  imap unhibernation to fail or IMAP QRESYNC/CONDSTORE extensions to
+	  not work perfectly.
+	- mdbox: "Inconsistency in map index" wasn't fixed automatically
+	- dict-ldap: %variable values used in the LDAP filter weren't escaped.
+	- quota=count: quota_warning = -storage=.. was never executed (try #2).
+	  v2.2.31 fixed it for -messages, but not for -storage.
+	- imapc: >= 32 kB mail bodies were supposed to be cached for subsequent
+	  FETCHes, but weren't.
+	- quota-status service didn't support recipient_delimiter
+	- acl: Don't access dovecot-acl-list files with acl_globals_only=yes
+	- mail_location: If INDEX dir is set, mailbox deletion deletes its
+	  childrens' indexes. For example if "box" is deleted, "box/child"
+	  index directory was deleted as well (but mails were preserved).
+	- director: v2.2.31 caused rapid reconnection loops to directors
+	  that were down.
+
 v2.2.31 2017-06-26  Timo Sirainen <tss@iki.fi>
 
 	* LMTP: Removed "(Dovecot)" from added Received headers. Some

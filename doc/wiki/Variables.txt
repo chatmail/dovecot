@@ -242,17 +242,17 @@ You can apply a modifiers for each variable (e.g. %Us = POP3):
    limit the hash value. For example %256Nu gives values 0..ff. You might want
    padding also, so %2.256Nu gives 00..ff. This can be useful for example in
    dividing users automatically to multiple partitions.
-    * %H hash function is a bit bad if all the strings end with the same text,
-      so if you're hashing usernames being in user@domain form, you probably
-      want to reverse the username to get better hash value variety, e.g.
-      %3RNu.
     * This is "New Hash", based on MD5 to give better distribution of values
       (no need for any string reversing kludges either). (v2.2.3+)
+    * %H - Same as %N, but use "old hash" (not recommended anymore)
+       * %H hash function is a bit bad if all the strings end with the same
+         text, so if you're hashing usernames being in user@domain form, you
+         probably want to reverse the username to get better hash value
+         variety, e.g. %3RHu.
  * %{<hash algorithm>;rounds=<n>,truncate=<bits>,salt=s>:field} - Generic hash
    function that outputs a hex value. Hash algorithm is any of the supported
    ones, e.g. md5, sha1, sha256. Also "pkcs5" is supported using SHA256. For
    example: %{sha256:user} or %{md5;truncate=32:user}. (v2.2.27+)
- * %H - Same as %N, but use "old hash" (not recommended anymore)
  * %M - return the string's MD5 sum as hex.
  * %D - return "sub.domain.org" as "sub,dc=domain,dc=org" (for LDAP queries)
  * %T - Trim trailing whitespace
@@ -277,4 +277,60 @@ but the last two characters from the username. (v2.2.13+)
 The modifiers are applied from left-to-right order, except the substring is
 always taken from the final string.
 
-(This file was created from the wiki on 2017-06-26 04:42)
+Conditionals
+------------
+
+Since v2.2.32 it's possible to use conditionals in variable expansion. The
+generic syntax is
+
+---%<-------------------------------------------------------------------------
+  %{if;value1;operator;value2;value-if-true;value-if-false}
+---%<-------------------------------------------------------------------------
+
+Each field can contain another variable expansion, facilitating for nested ifs.
+If some field refers to another field, it must use either %v or %{value}
+syntax.
+
+Escaping is supported, so one can have values like \%{value} that will not get
+expanded, or literal : and ; in the expression.
+
+Spaces and quotes are fully supported.
+
+Following operators are supported
++------------+--------------------------------------------------------------+
+| *operator* | *explanation*                                                |
++------------+--------------------------------------------------------------+
+| ==         | NUMERIC equality                                             |
++------------+--------------------------------------------------------------+
+| !=         | NUMERIC inequality                                           |
++------------+--------------------------------------------------------------+
+| <          | NUMERIC less than                                            |
++------------+--------------------------------------------------------------+
+| <=         | NUMERIC less or equal                                        |
++------------+--------------------------------------------------------------+
+| >          | NUMERIC greater than                                         |
++------------+--------------------------------------------------------------+
+| >=         | NUMERIC greater or equal                                     |
++------------+--------------------------------------------------------------+
+| eq         | String equality                                              |
++------------+--------------------------------------------------------------+
+| ne         | String inequality                                            |
++------------+--------------------------------------------------------------+
+| lt         | String inequality                                            |
++------------+--------------------------------------------------------------+
+| le         | String inequality                                            |
++------------+--------------------------------------------------------------+
+| gt         | String inequality                                            |
++------------+--------------------------------------------------------------+
+| ge         | String inequality                                            |
++------------+--------------------------------------------------------------+
+| *          | Wildcard match (mask on value2)                              |
++------------+--------------------------------------------------------------+
+| !*         | Wildcard non-match (mask on value2)                          |
++------------+--------------------------------------------------------------+
+| ~          | Regular expression match (pattern on value2, extended POSIX) |
++------------+--------------------------------------------------------------+
+| !~         | String inequality (pattern on value2, extended POSIX)        |
++------------+--------------------------------------------------------------+
+
+(This file was created from the wiki on 2017-08-24 04:42)

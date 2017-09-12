@@ -177,7 +177,7 @@ int index_storage_mailbox_exists_full(struct mailbox *box, const char *subdir,
 {
 	struct stat st;
 	enum mail_error error;
-	const char *path, *path2;
+	const char *path, *path2, *index_path;
 	int ret;
 
 	/* see if it's selectable */
@@ -194,6 +194,22 @@ int index_storage_mailbox_exists_full(struct mailbox *box, const char *subdir,
 		*existence_r = MAILBOX_EXISTENCE_NONE;
 		return 0;
 	}
+
+	ret = (subdir != NULL || !box->list->set.iter_from_index_dir) ? 0 :
+		mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX, &index_path);
+	if (ret > 0 && strcmp(path, index_path) != 0) {
+		/* index directory is different - prefer looking it up first
+		   since it might be on a faster storage. since the directory
+		   itself exists also for \NoSelect mailboxes, we'll need to
+		   check the dovecot.index.log existence. */
+		index_path = t_strconcat(index_path, "/", box->index_prefix,
+					 ".log", NULL);
+		if (stat(index_path, &st) == 0) {
+			*existence_r = MAILBOX_EXISTENCE_SELECT;
+			return 0;
+		}
+	}
+
 	if (subdir != NULL)
 		path = t_strconcat(path, "/", subdir, NULL);
 	if (stat(path, &st) == 0) {
@@ -558,6 +574,12 @@ int index_storage_mailbox_create(struct mailbox *box, bool directory)
 	bool create_parent_dir;
 	int ret;
 
+	if ((box->list->props & MAILBOX_LIST_PROP_NO_NOSELECT) != 0) {
+		/* Layout doesn't support creating \NoSelect mailboxes.
+		   Switch to creating a selectable mailbox. */
+		directory = FALSE;
+	}
+
 	type = directory ? MAILBOX_LIST_PATH_TYPE_DIR :
 		MAILBOX_LIST_PATH_TYPE_MAILBOX;
 	if ((ret = mailbox_get_path_to(box, type, &path)) < 0)
@@ -580,6 +602,21 @@ int index_storage_mailbox_create(struct mailbox *box, bool directory)
 
 	if ((ret = mailbox_mkdir(box, path, type)) < 0)
 		return -1;
+	if (box->list->set.iter_from_index_dir) {
+		/* need to also create the directory to index path or
+		   iteration won't find it. */
+		int ret2;
+
+		if (mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX, &path) <= 0)
+			i_unreached();
+		if ((ret2 = mailbox_mkdir(box, path, type)) < 0)
+			return -1;
+		if (ret == 0 && ret2 > 0) {
+			/* finish partial creation: existed in mail directory,
+			   but not in index directory. */
+			ret = 1;
+		}
+	}
 	mailbox_refresh_permissions(box);
 	if (ret == 0) {
 		/* directory already exists */
@@ -599,8 +636,7 @@ int index_storage_mailbox_create(struct mailbox *box, bool directory)
 		return -1;
 	}
 
-	if (directory &&
-	    (box->list->props & MAILBOX_LIST_PROP_NO_NOSELECT) == 0) {
+	if (directory) {
 		/* we only wanted to create the directory and it's done now */
 		return 0;
 	}
@@ -699,7 +735,15 @@ int index_storage_mailbox_delete_pre(struct mailbox *box)
 
 	if (!box->opened) {
 		/* \noselect mailbox, try deleting only the directory */
-		return index_storage_mailbox_delete_dir(box, FALSE);
+		if (index_storage_mailbox_delete_dir(box, FALSE) == 0)
+			return 0;
+		if (mailbox_is_autocreated(box)) {
+			/* Return success when trying to delete autocreated
+			   mailbox. The client sees it as existing, so we
+			   shouldn't be returning an error. */
+			return 0;
+		}
+		return -1;
 	}
 
 	if ((box->list->flags & MAILBOX_LIST_FLAG_MAILBOX_FILES) == 0) {
@@ -818,6 +862,22 @@ int index_storage_mailbox_rename(struct mailbox *src, struct mailbox *dest)
 	   non-selectable mailbox (directory), which doesn't even have a GUID */
 	mailbox_name_get_sha128(dest->vname, guid);
 	mailbox_list_add_change(src->list, MAILBOX_LOG_RECORD_RENAME, guid);
+	return 0;
+}
+
+int index_mailbox_update_last_temp_file_scan(struct mailbox *box)
+{
+	uint32_t last_temp_file_scan = ioloop_time;
+	struct mail_index_transaction *trans =
+		mail_index_transaction_begin(box->view,
+			MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
+	mail_index_update_header(trans,
+		offsetof(struct mail_index_header, last_temp_file_scan),
+		&last_temp_file_scan, sizeof(last_temp_file_scan), TRUE);
+	if (mail_index_transaction_commit(&trans) < 0) {
+		mailbox_set_index_error(box);
+		return -1;
+	}
 	return 0;
 }
 
@@ -1086,4 +1146,36 @@ void index_storage_save_abort_last(struct mail_save_context *ctx, uint32_t seq)
 	/* currently we can't just drop pending cache updates for this one
 	   specific record, so we'll reset the whole cache transaction. */
 	mail_cache_transaction_reset(ctx->transaction->cache_trans);
+}
+
+int index_mailbox_fix_inconsistent_existence(struct mailbox *box,
+					     const char *path)
+{
+	const char *index_path;
+	struct stat st;
+
+	/* Could be a race condition or could be because ITERINDEX is used
+	   and the index directory exists, but the storage directory doesn't.
+	   Handle the existence inconsistency by creating this directory if
+	   the index directory exists (don't bother checking if ITERINDEX is
+	   set or not - it doesn't matter since either both dirs should exist
+	   or not). */
+	if (mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX,
+				&index_path) < 0)
+		return -1;
+
+	if (strcmp(index_path, path) == 0) {
+		/* there's no separate index path - mailbox was just deleted */
+	} else if (stat(index_path, &st) == 0) {
+		/* inconsistency - create also the mail directory */
+		return mailbox_mkdir(box, path, MAILBOX_LIST_PATH_TYPE_MAILBOX);
+	} else if (errno == ENOENT) {
+		/* race condition - mailbox was just deleted */
+	} else {
+		mail_storage_set_critical(box->storage,
+			"stat(%s) failed: %m", index_path);
+		return -1;
+	}
+	mailbox_set_deleted(box);
+	return -1;
 }

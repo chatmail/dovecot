@@ -1,0 +1,41 @@
+notify_status plugin (v2.2.32+)
+===============================
+
+This plugin updates a dict every time a mailbox changes. The status can contain
+total message count and unseen count. It will update key priv/mailbox
+name/status..
+
+Configuration
+-------------
+
+---%<-------------------------------------------------------------------------
+mail_plugins = $mail_plugins notify notify_status
+
+dict {
+  notify_status = driver:args
+}
+
+# optional
+service dict {
+  unix_listener dict {
+     #group = vmail
+     # or
+     #mode = 0777
+  }
+}
+
+plugin {
+ notify_status_dict = proxy::notify_status
+ # if you want some other syntax, available keys are username, mailbox,
+messages and unseen
+ #notify_status_value = {"messages":%%{messages},"unseen":%%{unseen}}
+ # limit mailboxes that are updated, most common is probably setting this to
+inbox
+ #notify_status_mailbox = pattern1
+ # you can specify additional patterns
+ #notify_status_mailbox2 = pattern2
+ #...
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2017-08-24 04:42)

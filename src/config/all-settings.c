@@ -50,6 +50,7 @@ struct mail_storage_settings {
 	bool mail_nfs_index;
 	bool mailbox_list_index;
 	bool mailbox_list_index_very_dirty_syncs;
+	bool mailbox_list_index_include_inbox;
 	bool mail_debug;
 	bool mail_full_filesystem_access;
 	bool maildir_stat_dirs;
@@ -633,6 +634,7 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_BOOL, mail_nfs_index),
 	DEF(SET_BOOL, mailbox_list_index),
 	DEF(SET_BOOL, mailbox_list_index_very_dirty_syncs),
+	DEF(SET_BOOL, mailbox_list_index_include_inbox),
 	DEF(SET_BOOL, mail_debug),
 	DEF(SET_BOOL, mail_full_filesystem_access),
 	DEF(SET_BOOL, maildir_stat_dirs),
@@ -674,6 +676,7 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.mail_nfs_index = FALSE,
 	.mailbox_list_index = FALSE,
 	.mailbox_list_index_very_dirty_syncs = FALSE,
+	.mailbox_list_index_include_inbox = FALSE,
 	.mail_debug = FALSE,
 	.mail_full_filesystem_access = FALSE,
 	.maildir_stat_dirs = FALSE,
@@ -1344,6 +1347,11 @@ struct pop3_settings {
 };
 /* ../../src/pop3-login/pop3-login-settings.h */
 extern const struct setting_parser_info *pop3_login_setting_roots[];
+/* ../../src/plugins/quota/quota-status-settings.h */
+extern const struct setting_parser_info quota_status_setting_parser_info;
+struct quota_status_settings {
+	char *recipient_delimiter;
+};
 /* ../../src/plugins/mail-crypt/fs-crypt-settings.h */
 extern const struct setting_parser_info fs_crypt_setting_parser_info;
 struct fs_crypt_settings {
@@ -2202,6 +2210,32 @@ const struct setting_parser_info *pop3_login_setting_roots[] = {
 	&login_setting_parser_info,
 	&pop3_login_setting_parser_info,
 	NULL
+};
+/* ../../src/plugins/quota/quota-status-settings.c */
+#undef DEF
+#define DEF(type, name) \
+	{ type, #name, offsetof(struct quota_status_settings, name), NULL }
+static const struct setting_define quota_status_setting_defines[] = {
+	DEF(SET_STR, recipient_delimiter),
+
+	SETTING_DEFINE_LIST_END
+};
+static const struct quota_status_settings quota_status_default_settings = {
+	.recipient_delimiter = "+",
+};
+static const struct setting_parser_info *quota_status_setting_dependencies[] = {
+	NULL
+};
+const struct setting_parser_info quota_status_setting_parser_info = {
+	.module_name = "mail",
+	.defines = quota_status_setting_defines,
+	.defaults = &quota_status_default_settings,
+
+	.type_offset = (size_t)-1,
+	.struct_size = sizeof(struct quota_status_settings),
+
+	.parent_offset = (size_t)-1,
+	.dependencies = quota_status_setting_dependencies
 };
 /* ../../src/plugins/mail-crypt/fs-crypt-settings.c */
 #undef DEF
@@ -4664,33 +4698,34 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&lda_setting_parser_info, 
+	&pop3c_setting_parser_info, 
 	&mbox_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&imapc_setting_parser_info, 
-	&auth_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&quota_status_setting_parser_info, 
 	&imap_urlauth_login_setting_parser_info, 
 	&mdbox_setting_parser_info, 
-	&dict_setting_parser_info, 
-	&aggregator_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&imap_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
-	&imap_login_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&fs_crypt_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&login_setting_parser_info, 
-	&master_setting_parser_info, 
 	&director_setting_parser_info, 
-	&stats_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&replicator_setting_parser_info, 
+	&imap_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&lmtp_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&master_setting_parser_info, 
+	&imapc_setting_parser_info, 
 	&maildir_setting_parser_info, 
-	&pop3c_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&fs_crypt_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&login_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&doveadm_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

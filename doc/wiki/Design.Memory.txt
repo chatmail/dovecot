@@ -13,8 +13,8 @@ problems with this are:
     to read and write.
 
 The second problem could be solved with Boehm garbage collector, which Dovecot
-can use optionally, but it's not very efficient. It also doesn't help with the
-first problem.
+can use optionally (prior to 2.3), but it's not very efficient. It also doesn't
+help with the first problem.
 
 To reduce the problems caused by these issues, Dovecot has several ways to do
 memory management.
@@ -190,4 +190,4 @@ It also has some disadvantages:
    location and accessed after it's already been freed.
  * Debugging invalid memory usage may be difficult using existing tools
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

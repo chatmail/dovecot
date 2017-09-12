@@ -75,16 +75,34 @@ where:
  * /key/ = /value/ can appear zero or more times to set various optional
    parameters. Possible values for /key/ are:
     * 'INDEX' : specifies the location of <index files> [MailLocation.txt].
+       * 'ITERINDEX' : Perform mailbox listing using the INDEX directories
+         instead of the mail root directories. Mainly useful when the INDEX
+         storage is on a faster storage. (v2.2.32+)
     * 'INBOX' : specifies the location of the <INBOX> [MailLocation.txt].
     * 'LAYOUT' : specifies the directory layout to use:
        * Maildir++: The default used by Maildir format
        * fs: The default used by mbox and dbox formats
        * index: Uses mailbox GUIDs as the directory names. The mapping between
          mailbox names and GUIDs exists in dovecot.list.index* files.
+    * 'NO-NOSELECT' : Automatically delete any \ <NoSelect.txt> mailboxes that
+      have no children. These mailboxes are sometimes confusing to users. Also
+      if a \ <NoSelect.txt> mailbox is attempted to be created with "CREATE
+      box/", it's created as selectable mailbox instead. (LAYOUT=Maildir++
+      always behaves this same way.) (v2.2.32+)
     * 'UTF-8' : Store mailbox names on disk using UTF-8 instead of modified
       UTF-7.
-    * 'CONTROL' : specifies the location of control files under the <mbox>
+    * 'BROKENCHAR' : Specifies an escape character that is used for broken
+      mailbox names. If mailbox name can't be changed reversibly to UTF-8 and
+      back, encode the problematic parts using<broken_char><hex> in the
+      user-visible UTF-8 name. The broken_char itself also has to be encoded
+      the same way. This can be useful with imapc to access mailbox names that
+      aren't valid mUTF-7 charset from remote servers. (v2.2.32+)
+    * 'CONTROL' : Specifies the location of control files under the <mbox>
       [MailLocation.mbox.txt] or <Maildir> [MailLocation.Maildir.txt] formats.
+    * 'VOLATILEDIR' : Specifies the location of volatile files. This includes
+      lock files and potentially other files that don't need to exist
+      permanently. This is especially useful to avoid creating lock files to
+      NFS or other remote filesystems. (v2.2.32+)
     * 'SUBSCRIPTIONS' : specifies the file used for storing subscriptions.  The
       default is "subscriptions".  If you're trying to avoid name collisions
       with a mailbox named "subscriptions", then also consider setting
@@ -322,4 +340,4 @@ export USERDB_KEYS="$USERDB_KEYS namespace/inbox/location"
 exec env "NAMESPACE/INBOX/LOCATION=$location" "$@"
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

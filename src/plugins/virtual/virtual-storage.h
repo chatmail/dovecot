@@ -102,6 +102,9 @@ struct virtual_backend_box {
 	/* mailbox metadata matching */
 	const char *metadata_entry, *metadata_value;
 
+	/* notify context */
+	struct mailbox_list_notify *notify;
+
 	unsigned int open_tracked:1;
 	unsigned int open_failed:1;
 	unsigned int sync_seen:1;
@@ -111,6 +114,7 @@ struct virtual_backend_box {
 	unsigned int uids_nonsorted:1;
 	unsigned int search_args_initialized:1;
 	unsigned int deleted:1;
+	unsigned int notify_changes_started:1; /* if the box was opened for notify_changes */
 };
 ARRAY_DEFINE_TYPE(virtual_backend_box, struct virtual_backend_box *);
 
@@ -119,11 +123,13 @@ struct virtual_mailbox {
 	struct virtual_storage *storage;
 
 	uint32_t virtual_ext_id;
+	uint32_t virtual_guid_ext_id;
 
 	uint32_t prev_uid_validity;
 	uint32_t prev_change_counter;
 	uint32_t highest_mailbox_id;
 	uint32_t search_args_crc32;
+	guid_128_t guid;
 
 	struct virtual_backend_box *lookup_prev_bbox;
 	uint32_t sync_virtual_next_uid;
@@ -149,6 +155,7 @@ struct virtual_mailbox {
 	unsigned int have_guid_flags_set:1;
 	unsigned int have_guids:1;
 	unsigned int have_save_guids:1;
+	unsigned int ext_header_rewrite:1;
 };
 
 extern MODULE_CONTEXT_DEFINE(virtual_storage_module,

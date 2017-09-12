@@ -45,7 +45,6 @@ struct virtual_sync_context {
 	uint32_t uid_validity;
 
 	unsigned int ext_header_changed:1;
-	unsigned int ext_header_rewrite:1;
 	unsigned int expunge_removed:1;
 	unsigned int index_broken:1;
 };
@@ -79,7 +78,9 @@ static void virtual_sync_external_flags(struct virtual_sync_context *ctx,
 
 	/* copy flags */
 	flags = mail_get_flags(bbox->sync_mail);
-	mail_index_update_flags(ctx->trans, vseq, MODIFY_REPLACE, flags);
+
+	/* we don't need to keep recent flags here */
+	mail_index_update_flags(ctx->trans, vseq, MODIFY_REPLACE, flags & ~(MAIL_RECENT));
 
 	/* copy keywords */
 	kw_names = mail_get_keywords(bbox->sync_mail);
@@ -178,7 +179,15 @@ int virtual_mailbox_ext_header_read(struct virtual_mailbox *mbox,
 		mailboxes = NULL;
 		ext_name_offset = 0;
 		ext_mailbox_count = 0;
+		ret = 0;
 	} else {
+		const void *guid_data;
+		size_t guid_size;
+		mail_index_get_header_ext(view, mbox->virtual_guid_ext_id,
+					  &guid_data, &guid_size);
+		if (guid_size >= GUID_128_SIZE)
+			guid_128_copy(mbox->guid, guid_data);
+
 		mbox->prev_change_counter = ext_hdr->change_counter;
 		mailboxes = (const void *)(ext_hdr + 1);
 		ext_name_offset = sizeof(*ext_hdr) +
@@ -244,11 +253,13 @@ int virtual_mailbox_ext_header_read(struct virtual_mailbox *mbox,
 	}
 	if (i < ext_mailbox_count) {
 		*broken_r = TRUE;
+		mbox->ext_header_rewrite = TRUE;
 		ret = 0;
 	}
 	mbox->highest_mailbox_id = ext_hdr == NULL ? 0 :
 		ext_hdr->highest_mailbox_id;
-	mbox->sync_initialized = TRUE;
+	/* do not mark it initialized if it's broken */
+	mbox->sync_initialized = !*broken_r;
 
 	/* assign new mailbox IDs if any are missing */
 	bboxes = array_get_modifiable(&mbox->backend_boxes, &count);
@@ -260,6 +271,8 @@ int virtual_mailbox_ext_header_read(struct virtual_mailbox *mbox,
 	}
 	/* sort the backend mailboxes by mailbox_id. */
 	array_sort(&mbox->backend_boxes, bbox_mailbox_id_cmp);
+	if (ret == 0)
+		mbox->ext_header_rewrite = TRUE;
 	return ret;
 }
 
@@ -303,6 +316,14 @@ static void virtual_sync_ext_header_rewrite(struct virtual_sync_context *ctx)
 
 		mailbox_pos += sizeof(mailbox);
 		name_pos += mailbox.name_len;
+
+		/* repair the value */
+		if (ctx->mbox->highest_mailbox_id < mailbox.id)
+			ctx->mbox->highest_mailbox_id = mailbox.id;
+	}
+	if (ctx->mbox->highest_mailbox_id != ext_hdr.highest_mailbox_id) {
+		ext_hdr.highest_mailbox_id = ctx->mbox->highest_mailbox_id;
+		buffer_write(buf, 0, &ext_hdr, sizeof(ext_hdr));
 	}
 	i_assert(buf->used == name_pos);
 
@@ -437,7 +458,10 @@ static void virtual_sync_index_finish(struct virtual_sync_context *ctx)
 {
 	struct mailbox *box = &ctx->mbox->box;
 	const struct mail_index_header *hdr;
+	struct mail_index_view *view;
 	uint32_t seq1, seq2;
+
+	view = mail_index_transaction_open_updated_view(ctx->trans);
 
 	hdr = mail_index_get_header(ctx->sync_view);
 	if (hdr->uid_validity != 0)
@@ -446,12 +470,15 @@ static void virtual_sync_index_finish(struct virtual_sync_context *ctx)
 		virtual_sync_set_uidvalidity(ctx);
 
 	/* mark the newly seen messages as recent */
-	if (mail_index_lookup_seq_range(ctx->sync_view, hdr->first_recent_uid,
-					hdr->next_uid, &seq1, &seq2)) {
-		mailbox_recent_flags_set_seqs(&ctx->mbox->box, ctx->sync_view,
+	if (mail_index_lookup_seq_range(view, hdr->first_recent_uid,
+					(uint32_t)-1, &seq1, &seq2)) {
+		mailbox_recent_flags_set_seqs(&ctx->mbox->box, view,
 					      seq1, seq2);
 	}
-	if (ctx->ext_header_rewrite) {
+
+	mail_index_view_close(&view);
+
+	if (ctx->mbox->ext_header_rewrite) {
 		/* entire mailbox list needs to be rewritten */
 		virtual_sync_ext_header_rewrite(ctx);
 	} else {
@@ -543,6 +570,10 @@ virtual_sync_mailbox_box_remove(struct virtual_sync_context *ctx,
 		for (; uid <= uids[i].seq2; uid++, src++) {
 			i_assert(src < rec_count);
 			i_assert(uidmap[src].real_uid == uid);
+			if (uidmap[src].virtual_uid == 0) {
+				/* has not been assigned yet */
+				continue;
+			}
 			if (mail_index_lookup_seq(ctx->sync_view,
 						  uidmap[src].virtual_uid,
 						  &vseq))
@@ -609,6 +640,38 @@ virtual_sync_mailbox_box_add(struct virtual_sync_context *ctx,
 				array_append(&ctx->all_adds, &rec, 1);
 			}
 		}
+	}
+}
+
+static void
+virtual_sync_mailbox_box_update_flags(struct virtual_sync_context *ctx,
+				      struct virtual_backend_box *bbox,
+				      const ARRAY_TYPE(seq_range) *uids_arr)
+{
+	unsigned int i, uid, vseq;
+	struct virtual_backend_uidmap *vuid;
+	struct seq_range_iter iter;
+
+	i = 0;
+	seq_range_array_iter_init(&iter, uids_arr);
+	while(seq_range_array_iter_nth(&iter, i++, &uid)) {
+		vuid = array_bsearch(&bbox->uids, &uid,
+				     virtual_backend_uidmap_bsearch_cmp);
+		if (vuid == NULL ||
+		    vuid->virtual_uid == 0 ||
+		    !mail_index_lookup_seq(ctx->sync_view,
+					   vuid->virtual_uid, &vseq)) {
+			/* the entry has been already removed either by
+			   us or some other session. doesn't matter,
+			   we don't need to update the flags.
+
+			   it might also have not yet been assigned a uid
+			   so we don't want to update the flags then either.
+			*/
+			continue;
+		}
+		virtual_sync_external_flags(ctx, bbox, vseq,
+					    vuid->real_uid);
 	}
 }
 
@@ -793,6 +856,7 @@ static int virtual_sync_backend_box_continue(struct virtual_sync_context *ctx,
 				      &removed_uids);
 	}
 	virtual_sync_mailbox_box_add(ctx, bbox, &added_uids);
+	virtual_sync_mailbox_box_update_flags(ctx, bbox, &flag_update_uids);
 
 	bbox->search_result = result;
 	return 0;
@@ -1016,6 +1080,10 @@ static int virtual_sync_backend_box_sync(struct virtual_sync_context *ctx,
 			uidmap = array_idx(&bbox->uids, 0);
 			for (; idx1 <= idx2; idx1++) {
 				vuid = uidmap[idx1].virtual_uid;
+				if (vuid == 0) {
+					/* has not been even assigned yet */
+					continue;
+				}
 				if (!mail_index_lookup_seq(ctx->sync_view,
 							   vuid, &vseq)) {
 					/* expunged by another session,
@@ -1070,7 +1138,7 @@ static void virtual_sync_backend_ext_header(struct virtual_sync_context *ctx,
 	bbox->ondisk_highest_modseq = wanted_ondisk_highest_modseq;
 	bbox->sync_next_uid = status.uidnext;
 
-	if (ctx->ext_header_rewrite) {
+	if (ctx->mbox->ext_header_rewrite) {
 		/* we'll rewrite the entire header later */
 		return;
 	}
@@ -1493,11 +1561,8 @@ virtual_sync_apply_existing_appends(struct virtual_sync_context *ctx)
 			bbox = virtual_backend_box_lookup(ctx->mbox,
 							  vrec->mailbox_id);
 			if (bbox == NULL) {
-				mail_storage_set_critical(
-					ctx->mbox->box.storage,
-					"%s: Mailbox ID %u unexpectedly lost",
-					ctx->mbox->box.vname, vrec->mailbox_id);
-				return -1;
+				mail_index_expunge(ctx->trans, seq);
+				continue;
 			}
 		}
 		array_append(&bbox->uids, &uidmap, 1);
@@ -1639,6 +1704,7 @@ static int virtual_sync_finish(struct virtual_sync_context *ctx, bool success)
 			mailbox_set_index_error(&ctx->mbox->box);
 			ret = -1;
 		}
+		ctx->mbox->ext_header_rewrite = FALSE;
 	} else {
 		if (ctx->index_broken) {
 			/* make sure we don't complain about the same errors
@@ -1692,8 +1758,6 @@ static int virtual_sync(struct virtual_mailbox *mbox,
 	ret = virtual_mailbox_ext_header_read(mbox, ctx->sync_view, &broken);
 	if (ret < 0)
 		return virtual_sync_finish(ctx, FALSE);
-	if (ret == 0)
-		ctx->ext_header_rewrite = TRUE;
 	if (broken)
 		ctx->index_broken = TRUE;
 	/* apply changes from virtual index to backend mailboxes */

@@ -146,6 +146,7 @@ int mailbox_list_delete_mailbox_nonrecursive(struct mailbox_list *list,
 	string_t *full_path;
 	size_t dir_len;
 	bool mailbox_dir, unlinked_something = FALSE;
+	int ret = 0;
 
 	if (mailbox_list_check_root_delete(list, name, path) < 0)
 		return -1;
@@ -203,20 +204,44 @@ int mailbox_list_delete_mailbox_nonrecursive(struct mailbox_list *list,
 		else if (errno != ENOENT && !UNLINK_EISDIR(errno)) {
 			mailbox_list_set_critical(list,
 				"unlink(%s) failed: %m", str_c(full_path));
+			ret = -1;
+		} else {
+			/* child directories still exist */
+			rmdir_path = FALSE;
 		}
 	}
-	if (errno != 0)
+	if (errno != 0) {
 		mailbox_list_set_critical(list, "readdir(%s) failed: %m", path);
+		ret = -1;
+	}
 	if (closedir(dir) < 0) {
 		mailbox_list_set_critical(list, "closedir(%s) failed: %m",
 					  path);
+		ret = -1;
 	}
+	if (ret < 0)
+		return -1;
 
 	if (rmdir_path) {
+		unsigned int try_count = 0;
+		int ret = rmdir(path);
+		while (ret < 0 && errno == ENOTEMPTY && try_count++ < 10) {
+			/* We didn't see any child directories, so this is
+			   either a race condition or .nfs* files were left
+			   lying around. In case it's .nfs* files, retry after
+			   waiting a bit. Hopefully all processes keeping those
+			   files open will have closed them by then. */
+			usleep(100000);
+			ret = rmdir(path);
+		}
 		if (rmdir(path) == 0)
 			unlinked_something = TRUE;
-		else if (errno != ENOENT &&
-			 errno != ENOTEMPTY && errno != EEXIST) {
+		else if (errno == ENOENT) {
+			/* race condition with another process, which finished
+			   deleting it first. */
+			mailbox_list_set_error(list, MAIL_ERROR_NOTFOUND,
+				T_MAILBOX_LIST_ERR_NOT_FOUND(list, name));
+		} else if (errno != ENOTEMPTY && errno != EEXIST) {
 			mailbox_list_set_critical(list, "rmdir(%s) failed: %m",
 						  path);
 			return -1;
@@ -231,11 +256,34 @@ int mailbox_list_delete_mailbox_nonrecursive(struct mailbox_list *list,
 	return 0;
 }
 
+static bool mailbox_list_path_is_index(struct mailbox_list *list,
+				       enum mailbox_list_path_type type)
+{
+	const char *index_root, *type_root;
+
+	if (type == MAILBOX_LIST_PATH_TYPE_INDEX)
+		return TRUE;
+
+	/* e.g. CONTROL dir could point to the same INDEX dir. */
+	type_root = mailbox_list_get_root_forced(list, type);
+	index_root = mailbox_list_get_root_forced(list, MAILBOX_LIST_PATH_TYPE_INDEX);
+	return strcmp(type_root, index_root) == 0;
+}
+
 void mailbox_list_delete_until_root(struct mailbox_list *list, const char *path,
 				    enum mailbox_list_path_type type)
 {
 	const char *root_dir, *p;
 	size_t len;
+
+	if (list->set.iter_from_index_dir && !list->set.no_noselect &&
+	    mailbox_list_path_is_index(list, type)) {
+		/* Don't auto-rmdir parent index directories with ITERINDEX.
+		   Otherwise it'll get us into inconsistent state with a
+		   \NoSelect mailbox in the mail directory but not in index
+		   directory. */
+		return;
+	}
 
 	root_dir = mailbox_list_get_root_forced(list, type);
 	if (strncmp(path, root_dir, strlen(root_dir)) != 0) {
@@ -272,42 +320,124 @@ void mailbox_list_delete_until_root(struct mailbox_list *list, const char *path,
 	}
 }
 
-static void mailbox_list_try_delete(struct mailbox_list *list, const char *name,
-				    enum mailbox_list_path_type type)
+void mailbox_list_delete_mailbox_until_root(struct mailbox_list *list,
+					    const char *storage_name)
 {
-	const char *mailbox_path, *path;
+	enum mailbox_list_path_type types[] = {
+		MAILBOX_LIST_PATH_TYPE_DIR,
+		MAILBOX_LIST_PATH_TYPE_ALT_DIR,
+		MAILBOX_LIST_PATH_TYPE_CONTROL,
+		MAILBOX_LIST_PATH_TYPE_INDEX,
+		MAILBOX_LIST_PATH_TYPE_INDEX_PRIVATE,
+	};
+	const char *path;
+
+	for (unsigned int i = 0; i < N_ELEMENTS(types); i++) {
+		if (mailbox_list_get_path(list, storage_name, types[i], &path) > 0)
+			mailbox_list_delete_until_root(list, path, types[i]);
+	}
+}
+
+static int mailbox_list_try_delete(struct mailbox_list *list, const char *name,
+				   enum mailbox_list_path_type type)
+{
+	const char *mailbox_path, *index_path, *path;
+	int ret;
 
 	if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_MAILBOX,
 				  &mailbox_path) <= 0 ||
 	    mailbox_list_get_path(list, name, type, &path) <= 0 ||
 	    strcmp(path, mailbox_path) == 0)
-		return;
+		return 0;
 
-	if (*list->set.maildir_name == '\0' &&
-	    (list->flags & MAILBOX_LIST_FLAG_MAILBOX_FILES) == 0) {
+	if (type == MAILBOX_LIST_PATH_TYPE_CONTROL &&
+	    mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_INDEX,
+				  &index_path) > 0 &&
+	    strcmp(index_path, path) == 0) {
+		/* CONTROL dir is the same as INDEX dir, which we already
+		   deleted. We don't want to continue especially with
+		   iter_from_index_dir=yes, because it could be deleting the
+		   index directory. */
+		return 0;
+	}
+
+	/* Note that only ALT currently uses maildir_name in paths.
+	   INDEX and CONTROL don't. */
+	if (type != MAILBOX_LIST_PATH_TYPE_ALT_MAILBOX ||
+	    *list->set.maildir_name == '\0') {
 		/* this directory may contain also child mailboxes' data.
 		   we don't want to delete that. */
 		bool rmdir_path = *list->set.maildir_name != '\0';
 		if (mailbox_list_delete_mailbox_nonrecursive(list, name, path,
-							     rmdir_path) < 0)
-			return;
+							     rmdir_path) == 0)
+			ret = 1;
+		else {
+			enum mail_error error =
+				mailbox_list_get_last_mail_error(list);
+			if (error != MAIL_ERROR_NOTFOUND &&
+			    error != MAIL_ERROR_NOTPOSSIBLE)
+				return -1;
+			ret = 0;
+		}
 	} else {
-		if (mailbox_list_delete_trash(path) < 0 &&
-		    errno != ENOENT && errno != ENOTEMPTY) {
+		if (mailbox_list_delete_trash(path) == 0)
+			ret = 1;
+		else if (errno == ENOENT || errno == ENOTEMPTY)
+			ret = 0;
+		else {
 			mailbox_list_set_critical(list,
 				"unlink_directory(%s) failed: %m", path);
+			return -1;
 		}
 	}
 
-	/* avoid leaving empty directories lying around */
+	/* Avoid leaving empty parent directories lying around.
+	   These parent directories' existence or removal doesn't
+	   affect our return value. */
 	mailbox_list_delete_until_root(list, path, type);
+	return ret;
 }
 
-void mailbox_list_delete_finish(struct mailbox_list *list, const char *name)
+int mailbox_list_delete_finish(struct mailbox_list *list, const char *name)
 {
-	mailbox_list_try_delete(list, name, MAILBOX_LIST_PATH_TYPE_INDEX);
-	mailbox_list_try_delete(list, name, MAILBOX_LIST_PATH_TYPE_CONTROL);
-	mailbox_list_try_delete(list, name, MAILBOX_LIST_PATH_TYPE_ALT_MAILBOX);
+	int ret, ret2;
+
+	ret = mailbox_list_try_delete(list, name, MAILBOX_LIST_PATH_TYPE_INDEX);
+	ret2 = mailbox_list_try_delete(list, name, MAILBOX_LIST_PATH_TYPE_CONTROL);
+	if (ret == 0 || ret2 < 0)
+		ret = ret2;
+	ret2 = mailbox_list_try_delete(list, name, MAILBOX_LIST_PATH_TYPE_ALT_MAILBOX);
+	if (ret == 0 || ret2 < 0)
+		ret = ret2;
+	return ret;
+}
+
+int mailbox_list_delete_finish_ret(struct mailbox_list *list,
+				   const char *name, bool root_delete_success)
+{
+	int ret2;
+
+	if (!root_delete_success &&
+	    mailbox_list_get_last_mail_error(list) != MAIL_ERROR_NOTFOUND) {
+		/* unexpected error - preserve it */
+		return -1;
+	} else if ((ret2 = mailbox_list_delete_finish(list, name)) < 0) {
+		/* unexpected error */
+		return -1;
+	} else if (ret2 > 0) {
+		/* successfully deleted */
+		return 0;
+	} else if (root_delete_success) {
+		/* nothing deleted by us, but root was successfully deleted */
+		return 0;
+	} else {
+		/* nothing deleted by us and the root didn't exist either.
+		   make sure the list has the correct error set, since it
+		   could have been changed. */
+		mailbox_list_set_error(list, MAIL_ERROR_NOTFOUND,
+			T_MAILBOX_LIST_ERR_NOT_FOUND(list, name));
+		return -1;
+	}
 }
 
 int mailbox_list_delete_trash(const char *path)
@@ -320,6 +450,7 @@ int mailbox_list_delete_trash(const char *path)
 			errno = ELOOP;
 			return -1;
 		}
+		return -1;
 	}
 	return 0;
 }
@@ -350,4 +481,3 @@ int mailbox_list_delete_symlink_default(struct mailbox_list *list,
 	}
 	return -1;
 }
-

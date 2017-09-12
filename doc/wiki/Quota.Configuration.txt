@@ -34,7 +34,9 @@ Contents
 
      8. Quota grace
 
-     9. Quota admin commands
+     9. Maximum saved mail size
+
+     10. Quota admin commands
 
 The configuration is split into multiple settings:
 
@@ -442,6 +444,21 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
+Maximum saved mail size
+-----------------------
+
+(v2.2.29+) Dovecot allows specifying the maximum message size that is allowed
+to be saved (e.g. by LMTP, IMAP APPEND or doveadm save). The default is 0,
+which is unlimited. Since outgoing mail sizes are also typically limited on the
+MTA size, it can be beneficial to prevent user from saving too large mails,
+which would later on fail on the MTA side anyway.
+
+---%<-------------------------------------------------------------------------
+plugin {
+  quota_max_mail_size = 100M
+}
+---%<-------------------------------------------------------------------------
+
 Quota admin commands
 --------------------
 
@@ -493,4 +510,4 @@ Afterwards the quota can be changed with:
 a SETQUOTA "User quota" (STORAGE 12345 MESSAGES 123)
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

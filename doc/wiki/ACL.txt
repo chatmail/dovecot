@@ -31,6 +31,11 @@ plugin {
 
   # With global ACLs in /etc/dovecot/acls/ directory (obsolete):
   #acl = vfile:/etc/dovecot/acls
+
+  # If enabled, don't try to find dovecot-acl files from mailbox directories.
+  # This reduces unnecessary disk I/O when only global ACLs are used.
+(v2.2.31+)
+  #acl_globals_only = yes
 }
 ---%<-------------------------------------------------------------------------
 
@@ -244,4 +249,4 @@ List cache
 you manually add/edit 'dovecot-acl' files, you may need to delete the
 'dovecot-acl-list' to get the mailboxes visible.
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)
