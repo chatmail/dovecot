@@ -6,29 +6,29 @@ Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>,
            Jelmer Vernooij <jelmer@debian.org>,
            Apollon Oikonomopoulos <apoikos@debian.org>
 Build-Depends: debhelper (>= 10),
-               dpkg-dev (>= 1.16.1),
-               pkg-config,
-               libssl-dev,
-               libpam0g-dev,
-               libldap2-dev,
-               libpq-dev,
                default-libmysqlclient-dev,
-               libsqlite3-dev,
-               libsasl2-dev,
-               zlib1g-dev,
+               dh-exec,
+               dpkg-dev (>= 1.16.1),
                krb5-multidev,
                libbz2-dev,
-               libdb-dev,
+               libclucene-dev (>= 2.3),
                libcurl4-gnutls-dev,
+               libdb-dev,
                libexpat-dev,
+               libexttextcat-dev,
+               libldap2-dev,
+               liblz4-dev,
+               liblzma-dev,
+               libpam0g-dev,
+               libpq-dev,
+               libsasl2-dev,
+               libsqlite3-dev,
+               libssl-dev,
+               libstemmer-dev,
                libwrap0-dev,
                lsb-release,
-               libclucene-dev (>= 2.3),
-               liblzma-dev,
-               liblz4-dev,
-               libexttextcat-dev,
-               libstemmer-dev,
-               dh-exec
+               pkg-config,
+               zlib1g-dev
 Standards-Version: 4.1.0
 Homepage: http://dovecot.org/
 Vcs-Git: https://anonscm.debian.org/git/collab-maint/dovecot.git
@@ -36,9 +36,28 @@ Vcs-Browser: https://anonscm.debian.org/gitweb/?p=collab-maint/dovecot.git
 
 Package: dovecot-core
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020), lsb-base, ssl-cert
-Suggests: ntp, dovecot-gssapi, dovecot-sieve, dovecot-pgsql, dovecot-mysql, dovecot-sqlite, dovecot-ldap, dovecot-imapd, dovecot-pop3d, dovecot-lmtpd, dovecot-managesieved, dovecot-solr, dovecot-lucene
-Provides: dovecot-common, dovecot-abi-${dovecot:ABI-Version}
+Depends: adduser,
+         libpam-runtime (>= 0.76-13.1),
+         lsb-base,
+         openssl,
+         ssl-cert,
+         ucf (>= 2.0020),
+         ${misc:Depends},
+         ${shlibs:Depends}
+Suggests: dovecot-gssapi,
+          dovecot-imapd,
+          dovecot-ldap,
+          dovecot-lmtpd,
+          dovecot-lucene,
+          dovecot-managesieved,
+          dovecot-mysql,
+          dovecot-pgsql,
+          dovecot-pop3d,
+          dovecot-sieve,
+          dovecot-solr,
+          dovecot-sqlite,
+          ntp
+Provides: dovecot-abi-${dovecot:ABI-Version}, dovecot-common
 Replaces: dovecot-common (<< 1:2.0.14-2~), mailavenger (<< 0.8.1-4)
 Breaks: dovecot-common (<< 1:2.0.14-2~), mailavenger (<< 0.8.1-4)
 Description: secure POP3/IMAP server - core files
@@ -52,7 +71,7 @@ Description: secure POP3/IMAP server - core files
 
 Package: dovecot-dev
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
 Replaces: dovecot-common (<< 1:2.0.14-2~), dovecot-core (<< 1:2.2.26.0-1~)
 Breaks: dovecot-common (<< 1:2.0.14-2~), dovecot-core (<< 1:2.2.26.0-1~)
 Description: secure POP3/IMAP server - header files
@@ -67,7 +86,10 @@ Description: secure POP3/IMAP server - header files
 
 Package: dovecot-imapd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
+Depends: dovecot-core (= ${binary:Version}),
+         ucf (>= 2.0020),
+         ${misc:Depends},
+         ${shlibs:Depends}
 Suggests: ufw
 Provides: imap-server
 Description: secure POP3/IMAP server - IMAP daemon
@@ -81,7 +103,10 @@ Description: secure POP3/IMAP server - IMAP daemon
 
 Package: dovecot-pop3d
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
+Depends: dovecot-core (= ${binary:Version}),
+         ucf (>= 2.0020),
+         ${misc:Depends},
+         ${shlibs:Depends}
 Suggests: ufw
 Provides: pop3-server
 Description: secure POP3/IMAP server - POP3 daemon
@@ -95,7 +120,10 @@ Description: secure POP3/IMAP server - POP3 daemon
 
 Package: dovecot-lmtpd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
+Depends: dovecot-core (= ${binary:Version}),
+         ucf (>= 2.0020),
+         ${misc:Depends},
+         ${shlibs:Depends}
 Replaces: dovecot-common (<< 1:2.0.14-2~)
 Breaks: dovecot-common (<< 1:2.0.14-2~)
 Description: secure POP3/IMAP server - LMTP server
@@ -109,7 +137,11 @@ Description: secure POP3/IMAP server - LMTP server
 
 Package: dovecot-managesieved
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), dovecot-sieve (= ${binary:Version}), ucf (>= 2.0020)
+Depends: dovecot-core (= ${binary:Version}),
+         dovecot-sieve (= ${binary:Version}),
+         ucf (>= 2.0020),
+         ${misc:Depends},
+         ${shlibs:Depends}
 Replaces: dovecot-common (<< 1:2.0.14-2~)
 Breaks: dovecot-common (<< 1:2.0.14-2~)
 Description: secure POP3/IMAP server - ManageSieve server
@@ -123,7 +155,7 @@ Description: secure POP3/IMAP server - ManageSieve server
 
 Package: dovecot-pgsql
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
+Depends: dovecot-core (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Description: secure POP3/IMAP server - PostgreSQL support
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
@@ -135,7 +167,7 @@ Description: secure POP3/IMAP server - PostgreSQL support
 
 Package: dovecot-mysql
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
+Depends: dovecot-core (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Description: secure POP3/IMAP server - MySQL support
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
@@ -147,7 +179,7 @@ Description: secure POP3/IMAP server - MySQL support
 
 Package: dovecot-sqlite
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
+Depends: dovecot-core (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Description: secure POP3/IMAP server - SQLite support
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
@@ -159,7 +191,10 @@ Description: secure POP3/IMAP server - SQLite support
 
 Package: dovecot-ldap
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
+Depends: dovecot-core (= ${binary:Version}),
+         ucf (>= 2.0020),
+         ${misc:Depends},
+         ${shlibs:Depends}
 Replaces: dovecot-core (<< 1:2.2.26.0-1~)
 Breaks: dovecot-core (<< 1:2.2.26.0-1~)
 Description: secure POP3/IMAP server - LDAP support
@@ -173,7 +208,7 @@ Description: secure POP3/IMAP server - LDAP support
 
 Package: dovecot-gssapi
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
+Depends: dovecot-core (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Description: secure POP3/IMAP server - GSSAPI support
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
@@ -185,7 +220,10 @@ Description: secure POP3/IMAP server - GSSAPI support
 
 Package: dovecot-sieve
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version}), ucf (>= 2.0020)
+Depends: dovecot-core (= ${binary:Version}),
+         ucf (>= 2.0020),
+         ${misc:Depends},
+         ${shlibs:Depends}
 Breaks: dovecot-core (<= 1:2.2.13-6), dovecot-imapd (<< 1:2.2.26.0-1~)
 Replaces: dovecot-core (<= 1:2.2.13-6), dovecot-imapd (<< 1:2.2.26.0-1~)
 Description: secure POP3/IMAP server - Sieve filters support
@@ -199,7 +237,7 @@ Description: secure POP3/IMAP server - Sieve filters support
 
 Package: dovecot-solr
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
+Depends: dovecot-core (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Description: secure POP3/IMAP server - Solr support
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
@@ -211,7 +249,7 @@ Description: secure POP3/IMAP server - Solr support
 
 Package: dovecot-lucene
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-core (= ${binary:Version})
+Depends: dovecot-core (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Description: secure POP3/IMAP server - Lucene support
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
@@ -225,7 +263,7 @@ Package: dovecot-dbg
 Section: debug
 Priority: extra
 Architecture: any
-Depends: ${misc:Depends}, dovecot-core (= ${binary:Version})
+Depends: dovecot-core (= ${binary:Version}), ${misc:Depends}
 Description: secure POP3/IMAP server - debug symbols
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
