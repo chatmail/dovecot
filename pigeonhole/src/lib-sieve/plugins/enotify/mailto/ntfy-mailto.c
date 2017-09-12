@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 /* Notify method mailto
@@ -501,10 +501,12 @@ static int ntfy_mailto_send
 	}
 
 	/* Determine message from address */
-	if ( nact->from == NULL ) {
-		from = t_strdup_printf("<%s>", from_smtp);
-	} else {
+	if ( nact->from != NULL ) {
 		from = nact->from;
+	} else if ( from_smtp == NULL ) {
+		from = t_strdup_printf("<%s>", senv->postmaster_address);
+	} else {
+		from = t_strdup_printf("<%s>", from_smtp);
 	}
 
 	/* Determine subject */
@@ -564,13 +566,12 @@ static int ntfy_mailto_send
 	rfc2822_header_write(msg, "Date", message_date_create(ioloop_time));
 	rfc2822_header_utf8_printf(msg, "Subject", "%s", subject);
 
-	rfc2822_header_utf8_printf(msg, "From", "%s", from);
+	rfc2822_header_write_address(msg, "From", from);
 
 	if ( to != NULL )
-		rfc2822_header_utf8_printf(msg, "To", "%s", str_c(to));
-
+		rfc2822_header_write_address(msg, "To", str_c(to));
 	if ( cc != NULL )
-		rfc2822_header_utf8_printf(msg, "Cc", "%s", str_c(cc));
+		rfc2822_header_write_address(msg, "Cc", str_c(cc));
 
 	rfc2822_header_printf(msg, "Auto-Submitted",
 		"auto-notified; owner-email=\"%s\"", owner_email);

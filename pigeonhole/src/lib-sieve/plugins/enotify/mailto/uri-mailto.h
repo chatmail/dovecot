@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __URI_MAILTO_H
@@ -27,7 +27,6 @@ struct uri_mailto {
 	ARRAY_TYPE(headers) headers;
 	const char *subject;
 	const char *body;
-	const char *from_normalized;
 };
 
 bool uri_mailto_validate

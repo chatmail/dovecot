@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __RFC2822_H
@@ -41,5 +41,9 @@ void rfc2822_header_printf
 	(string_t *header, const char *name, const char *fmt, ...) ATTR_FORMAT(3, 4);
 void rfc2822_header_utf8_printf
 	(string_t *header, const char *name, const char *fmt, ...) ATTR_FORMAT(3, 4);
+
+void rfc2822_header_write_address(string_t *header,
+	const char *name, const char *address);
+
 
 #endif /* __RFC2822_H */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -1029,7 +1029,7 @@ static int act_vacation_send
 	rfc2822_header_write(msg, "Date", message_date_create(ioloop_time));
 
 	if ( ctx->from != NULL && *(ctx->from) != '\0' )
-		rfc2822_header_utf8_printf(msg, "From", "%s", ctx->from);
+		rfc2822_header_write_address(msg, "From", ctx->from);
 	else if ( reply_from != NULL )
 		rfc2822_header_printf(msg, "From", "<%s>", reply_from);
 	else

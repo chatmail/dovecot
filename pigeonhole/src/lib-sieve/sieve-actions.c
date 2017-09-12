@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -728,6 +728,8 @@ static void act_store_rollback
 {
 	struct act_store_transaction *trans =
 		(struct act_store_transaction *) tr_context;
+
+	if ( trans == NULL ) return;
 
 	i_assert( trans->box != NULL );
 

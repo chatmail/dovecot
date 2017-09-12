@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -624,7 +624,7 @@ static void act_notify_print
 	unsigned int count, i;
 
 	sieve_result_action_printf
-		( rpenv, "send (depricated) notification with method 'mailto':");
+		( rpenv, "send (deprecated) notification with method 'mailto':");
 
 	/* Print main method parameters */
 
@@ -770,7 +770,7 @@ static bool act_notify_send
 		}
 	}
 
-	rfc2822_header_write(msg, "To", str_c(to));
+	rfc2822_header_write_address(msg, "To", str_c(to));
 
 	/* Generate message body */
 	str_printfa(msg, "\r\n%s\r\n", act->message);

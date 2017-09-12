@@ -2,7 +2,7 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Pigeonhole], [0.4.21], [dovecot@dovecot.org], [dovecot-2.2-pigeonhole])
+AC_INIT([Pigeonhole], [0.4.22], [dovecot@dovecot.org], [dovecot-2.2-pigeonhole])
 AC_DEFINE_UNQUOTED([PIGEONHOLE_ABI_VERSION], "0.4.ABIv2($PACKAGE_VERSION)", [Pigeonhole ABI version])
 
 AC_CONFIG_AUX_DIR([.])
@@ -162,6 +162,9 @@ else
   fi
 fi
 AM_CONDITIONAL(LDAP_PLUGIN, test "$have_ldap_plugin" = "yes")
+
+CFLAGS="$CFLAGS $EXTRA_CFLAGS"
+LDFLAGS="$LDFLAGS $EXTRA_LDFLAGS"
 
 AC_CONFIG_FILES([
 Makefile

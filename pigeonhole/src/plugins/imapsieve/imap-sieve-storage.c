@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017 Pigeonhole authors, see the included COPYING file */
+/* Copyright (c) 2016-2018 Pigeonhole authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
@@ -759,7 +759,10 @@ imap_sieve_mailbox_transaction_run(
 			continue;
 		}
 
-		i_assert(!mail->expunged);
+		if (mail->expunged) {
+			/* already gone for some reason */
+			continue;
+		}
 
 		/* Run scripts for this mail */
 		ret = imap_sieve_run_mail

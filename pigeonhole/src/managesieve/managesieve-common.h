@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __MANAGESIEVE_COMMON_H
@@ -19,7 +19,7 @@
 #define CLIENT_MAX_BAD_COMMANDS 20
 
 #define CRITICAL_MSG \
-  "Internal error occured. Refer to server log for more information."
+  "Internal error occurred. Refer to server log for more information."
 #define CRITICAL_MSG_STAMP CRITICAL_MSG " [%Y-%m-%d %H:%M:%S]"
 
 #include "lib.h"
