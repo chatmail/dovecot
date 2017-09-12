@@ -1,12 +1,893 @@
-2017-10-08 21:24:55 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (3e1590c4)
+2018-03-20 00:35:30 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b2e41927)
 
-    Released v0.4.21.rc1 for Dovecot v2.2.33.rc1.
+    Released v0.4.23 for Dovecot v2.2.35.
 
 
 M	NEWS
 M	configure.ac
 
-2017-10-05 23:29:25 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d70d514f)
+2018-03-16 11:56:29 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7b46e8a2)
+
+    Added v0.4.22 to NEWS.
+
+
+M	NEWS
+
+2018-02-15 09:06:26 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (0015d474)
+
+    lib-sieve: variables extension: Fix duplicate const in definition of
+    sieve_variables_modifier array.
+
+    This is wrong and leads to Clang compiler warnings.
+
+M	src/lib-sieve/plugins/variables/sieve-ext-variables.h
+
+2018-03-07 21:52:46 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (02eab115)
+
+    plugins: imapsieve: Don't log messages that disappear concurrently as an
+    error.
+
+    This is now logged as a debug message instead.
+
+M	src/plugins/imapsieve/imap-sieve-storage.c
+
+2018-03-05 22:57:22 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (89c5b660)
+
+    lib-sieve: util: edit-mail: Remove useless assignment.
+
+    This is a remnant of an older implementation and now triggered a scan-build
+    report.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2018-03-03 10:12:28 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e66563f0)
+
+    lib-sieve: Fix assert panic occurring when used command has external tag,
+    but is not registered.
+
+    This occurred for example when the "fileinto" command is used with only the
+    "copy" extension in the require line.
+
+    Panic message was:
+
+    Panic: file hash.c: line 263 (hash_table_insert_node): assertion failed:
+    (opcode == HASH_TABLE_OP_UPDATE)
+
+M	src/lib-sieve/sieve-validator.c
+
+2018-03-03 12:50:28 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b1773c10)
+
+    lib-sieve: util: Created basic test suite for edit-mail.
+
+    Previously, this was only tested implicitly in the Sieve test suite. Now, it
+    is tested explicitly, which allows for more flexibility in the testing
+    scenario.
+
+    It now extensively tests one scenario that used to fail.
+
+M	src/lib-sieve/util/Makefile.am
+A	src/lib-sieve/util/test-edit-mail.c
+
+2018-03-03 17:50:59 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (14ec6fe8)
+
+    lib-sieve: util: edit-mail: istream: Fix bug in calculation of stream
+    position.
+
+    This caused an assert panic when the application or child stream did not
+    skip all buffered data immediately. This was reproducible only when the
+    message input stream consisted of a concatenation of smaller streams, which
+    is used in LMTP to prepend a few headers.
+
+    The panic was:
+
+    Panic: file istream.c: line 329 (i_stream_read_memarea): assertion failed:
+    ((size_t)ret+old_size == _stream->pos - _stream->skip)
+
+M	src/lib-sieve/util/edit-mail.c
+
+2018-03-03 17:54:14 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (8e6bc742)
+
+    lib-sieve: util: edit-mail: istream: Remove useless check.
+
+    This is tested already in the assertion that precedes it.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2018-03-03 11:42:29 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f3a9fe01)
+
+    lib-sieve: util: mail-raw: Implemented mail_raw_open_stream().
+
+    This allows using a seekable stream as mail directly.
+
+M	src/lib-sieve/util/mail-raw.c
+M	src/lib-sieve/util/mail-raw.h
+
+2018-03-03 10:59:23 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (83155b61)
+
+    Move mail-raw from lib-sieve-tool to lib-sieve/util.
+
+    Needed for use in test suite.
+
+M	src/lib-sieve-tool/Makefile.am
+M	src/lib-sieve/util/Makefile.am
+R100	src/lib-sieve-tool/mail-raw.c	src/lib-sieve/util/mail-raw.c
+R100	src/lib-sieve-tool/mail-raw.h	src/lib-sieve/util/mail-raw.h
+M	src/testsuite/Makefile.am
+
+2018-03-02 00:14:55 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (5239136d)
+
+    lib-sieve: store action: Sanitize both specified and virtual mailbox names
+    in log strings.
+
+    Before, the virtual mailbox name was not sanitized, which caused control 
+    characters to be displayed in log messages. Also, the mailbox name would be 
+    mentioned twice in the log message, once santized and once unsanitized.
+
+M	src/lib-sieve/sieve-actions.c
+
+2018-02-14 01:04:23 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (16d7faeb)
+
+    lib-sieve: util: Fix compile of test suite for realpath.
+
+
+M	src/lib-sieve/util/test-realpath.c
+
+2018-02-13 22:15:13 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (682e40a5)
+
+    lib-sieve: util: Add test suite for realpath.
+
+
+M	src/lib-sieve/util/Makefile.am
+A	src/lib-sieve/util/test-realpath.c
+
+2018-02-01 18:51:44 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b15a498f)
+
+    lib-sieve: util: realpath: Improved conditional expressions in
+    path_normalize() to match the earlier adjusted assertions.
+
+    Added some more assertions in the process to make sure subtractions are
+    always valid.
+
+M	src/lib-sieve/util/realpath.c
+
+2018-02-01 18:42:21 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2b5b62d4)
+
+    lib-sieve: util: realpath: Allocate more space earlier
+
+    Fixes assert crash in path_normalize when termination needs to happen at
+    asize boundary.
+
+    Panic: file realpath.c: line 87 (path_normalize): assertion failed:
+    ((size_t)((npath_pos - npath) + 1) < asize)
+
+M	src/lib-sieve/util/realpath.c
+
+2018-02-01 18:40:19 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (baa4297d)
+
+    lib-sieve: util: realpath: Made assertions in path_normalize() more reliable
+    and less confusing to static analyzer.
+
+
+M	src/lib-sieve/util/realpath.c
+
+2018-02-01 18:34:45 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (da2fca1a)
+
+    lib-sieve: util: realpath: Fix spelling mistakes in comment.
+
+    Original work by @andreasschulze and @jsoref
+
+M	src/lib-sieve/util/realpath.c
+
+2018-02-01 18:27:34 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (9ffd260b)
+
+    lib-sieve: util: realpath: Correct comment in path_normalize().
+
+    Don't blame static analyzers for doing their job.
+
+M	src/lib-sieve/util/realpath.c
+
+2018-02-01 18:25:17 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7da894a0)
+
+    lib-sieve: util: realpath: Fix infinite loop in path_normalize().
+
+    Infinite loop was reached if the path was longer than 128 bytes, and the 128
+    boundary was in middle of path name component.
+
+M	src/lib-sieve/util/realpath.c
+
+2018-02-01 18:23:09 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c6aa6466)
+
+    lib-sieve: util: realpath: Implicitly ignore memmove and memcpy return
+    values in path-util.
+
+    This is because dovecot code doesn't explicitly ignore the return values of
+    those functions elsewhere either.
+
+M	src/lib-sieve/util/realpath.c
+
+2018-02-01 18:21:24 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (461da9c9)
+
+    lib-sieve: util: realpath: Fixed assertion in path_normalize().
+
+    The invariant was using the wrong variable for comparison, causing it to
+    trigger erraticly.
+
+M	src/lib-sieve/util/realpath.c
+
+2018-02-01 18:14:45 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (a960252f)
+
+    lib-sieve: util: realpath: Add assertions to protect memory allocations and
+    boundaries.
+
+
+M	src/lib-sieve/util/realpath.c
+
+2018-02-01 18:13:03 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (721b2afb)
+
+    lib-sieve: util: realpath: Fix indentation problems.
+
+
+M	src/lib-sieve/util/realpath.c
+
+2018-02-01 21:24:05 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (764925e5)
+
+    plugins: imapsieve: Deal with messages being expunged concurrently by the
+    time Sieve filter is to be applied.
+
+    Before, this was an assertion that got triggered transiently during
+    imaptest.
+
+M	src/plugins/imapsieve/imap-sieve-storage.c
+
+2018-01-05 21:40:33 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d72af61c)
+
+    tests: extprograms plugin: execute extension: Add test for large output from
+    program.
+
+
+A	tests/plugins/extprograms/bin/big
+M	tests/plugins/extprograms/execute/execute.svtest
+
+2018-01-05 21:44:29 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2baf6da7)
+
+    sieve-extprograms plugin: execute extension: Fix handling big output from
+    external program.
+
+    The output buffer was on the data stack, which leads to big trouble when the 
+    buffer needs to grow in a deeper stack level.
+
+M	src/plugins/sieve-extprograms/cmd-execute.c
+
+2018-01-04 00:52:31 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7815a0ce)
+
+    tests: imap4flags extension: Added more tests involving variables.
+
+
+M	tests/extensions/imap4flags/basic.svtest
+
+2018-01-04 00:39:38 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c449fc8b)
+
+    lib-sieve: imap4flags extension: Fix binary corruption occurring when
+    setflag/addflag/removeflag flag-list is a variable.
+
+    The original implementation checked the first operand for being a variable. 
+    Obviously, when the assigned flag string is just a variable, this doesn't
+    work. This causes the flag list to be recognized erroneously as a variable
+    flags string. Fixed the problem by explicitly emitting an omitted operand
+    when there is no second argument for a setflag/addflag/removeflag.
+
+    Because the new byte code format is incompatible, the extension version is 
+    bumped to 1.
+
+M	src/lib-sieve/plugins/imap4flags/cmd-flag.c
+M	src/lib-sieve/plugins/imap4flags/ext-imap4flags.c
+
+2017-12-18 19:55:03 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b238a4ac)
+
+    test suite: enotify extension: Remove stray test_message_print call.
+
+    It is a remnant from debugging.
+
+M	tests/extensions/enotify/mailto.svtest
+
+2017-12-03 13:17:24 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d558283b)
+
+    lib-sieve: Fixed writing address headers to outgoing messages.
+
+    It erroneously applied another layer of MIME header encoding. The problem is
+    that existing Sieve scripts may rely on this behaviour; i.e. scripts may
+    contain addresesses with literal UTF8 in the phrase part. Therefore, this
+    change allows both behaviors.
+
+M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
+M	src/lib-sieve/plugins/notify/cmd-notify.c
+M	src/lib-sieve/plugins/vacation/cmd-vacation.c
+M	tests/extensions/enotify/mailto.svtest
+M	tests/extensions/vacation/utf-8.svtest
+
+2017-12-03 12:52:03 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (37eb7922)
+
+    lib-sieve: util: rfc2822: Added rfc2822_header_write_address() which allows
+    adding a header with one or more addresses.
+
+    It applies UTF8 encoding only when the address string somehow contains 8-bit
+    characters. Sieve addresses are supposed to have any UTF8 characters in the
+    phase MIME-encoded, not literal 8-bit characters. However, this has been
+    allowed from the beginning, so disabling the old behavior may break existing
+    installations. This function allows supporting both options.
+
+M	src/lib-sieve/util/rfc2822.c
+M	src/lib-sieve/util/rfc2822.h
+
+2017-12-11 17:35:07 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (843338c0)
+
+    doc: example-config: Document remaining supported managesieve_logout_format
+    substitution variables.
+
+    A few were still omitted.
+
+M	doc/example-config/conf.d/20-managesieve.conf
+
+2018-01-01 22:43:08 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (eadde3f7)
+
+    Updated copyright notices to include the year 2018.
+
+
+M	doc/man/doveadm-sieve.1.in
+M	doc/man/pigeonhole.7.in
+M	doc/man/sieve-dump.1.in
+M	doc/man/sieve-filter.1.in
+M	doc/man/sieve-test.1.in
+M	doc/man/sievec.1.in
+M	src/lib-managesieve/managesieve-arg.c
+M	src/lib-managesieve/managesieve-arg.h
+M	src/lib-managesieve/managesieve-parser.c
+M	src/lib-managesieve/managesieve-parser.h
+M	src/lib-managesieve/managesieve-quote.c
+M	src/lib-managesieve/managesieve-quote.h
+M	src/lib-sieve-tool/mail-raw.c
+M	src/lib-sieve-tool/mail-raw.h
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/lib-sieve-tool/sieve-tool.h
+M	src/lib-sieve/cmd-discard.c
+M	src/lib-sieve/cmd-if.c
+M	src/lib-sieve/cmd-keep.c
+M	src/lib-sieve/cmd-redirect.c
+M	src/lib-sieve/cmd-require.c
+M	src/lib-sieve/cmd-stop.c
+M	src/lib-sieve/cmp-i-ascii-casemap.c
+M	src/lib-sieve/cmp-i-octet.c
+M	src/lib-sieve/ext-encoded-character.c
+M	src/lib-sieve/ext-envelope.c
+M	src/lib-sieve/ext-fileinto.c
+M	src/lib-sieve/ext-reject.c
+M	src/lib-sieve/mcht-contains.c
+M	src/lib-sieve/mcht-is.c
+M	src/lib-sieve/mcht-matches.c
+M	src/lib-sieve/plugins/body/ext-body-common.c
+M	src/lib-sieve/plugins/body/ext-body-common.h
+M	src/lib-sieve/plugins/body/ext-body.c
+M	src/lib-sieve/plugins/body/tst-body.c
+M	src/lib-sieve/plugins/comparator-i-ascii-numeric/ext-cmp-i-ascii-numeric.c
+M	src/lib-sieve/plugins/copy/ext-copy.c
+M	src/lib-sieve/plugins/copy/sieve-ext-copy.h
+M	src/lib-sieve/plugins/date/ext-date-common.c
+M	src/lib-sieve/plugins/date/ext-date-common.h
+M	src/lib-sieve/plugins/date/ext-date.c
+M	src/lib-sieve/plugins/date/tst-date.c
+M	src/lib-sieve/plugins/duplicate/ext-duplicate-common.c
+M	src/lib-sieve/plugins/duplicate/ext-duplicate-common.h
+M	src/lib-sieve/plugins/duplicate/ext-duplicate.c
+M	src/lib-sieve/plugins/duplicate/tst-duplicate.c
+M	src/lib-sieve/plugins/editheader/cmd-addheader.c
+M	src/lib-sieve/plugins/editheader/cmd-deleteheader.c
+M	src/lib-sieve/plugins/editheader/ext-editheader-common.c
+M	src/lib-sieve/plugins/editheader/ext-editheader-common.h
+M	src/lib-sieve/plugins/editheader/ext-editheader-limits.h
+M	src/lib-sieve/plugins/editheader/ext-editheader.c
+M	src/lib-sieve/plugins/enotify/cmd-notify.c
+M	src/lib-sieve/plugins/enotify/ext-enotify-common.c
+M	src/lib-sieve/plugins/enotify/ext-enotify-common.h
+M	src/lib-sieve/plugins/enotify/ext-enotify-limits.h
+M	src/lib-sieve/plugins/enotify/ext-enotify.c
+M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
+M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.c
+M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.h
+M	src/lib-sieve/plugins/enotify/sieve-ext-enotify.h
+M	src/lib-sieve/plugins/enotify/tst-notify-method-capability.c
+M	src/lib-sieve/plugins/enotify/tst-valid-notify-method.c
+M	src/lib-sieve/plugins/enotify/vmodf-encodeurl.c
+M	src/lib-sieve/plugins/environment/ext-environment-common.c
+M	src/lib-sieve/plugins/environment/ext-environment-common.h
+M	src/lib-sieve/plugins/environment/ext-environment.c
+M	src/lib-sieve/plugins/environment/sieve-ext-environment.h
+M	src/lib-sieve/plugins/environment/tst-environment.c
+M	src/lib-sieve/plugins/ihave/cmd-error.c
+M	src/lib-sieve/plugins/ihave/ext-ihave-binary.c
+M	src/lib-sieve/plugins/ihave/ext-ihave-binary.h
+M	src/lib-sieve/plugins/ihave/ext-ihave-common.c
+M	src/lib-sieve/plugins/ihave/ext-ihave-common.h
+M	src/lib-sieve/plugins/ihave/ext-ihave.c
+M	src/lib-sieve/plugins/ihave/tst-ihave.c
+M	src/lib-sieve/plugins/imap4flags/cmd-flag.c
+M	src/lib-sieve/plugins/imap4flags/ext-imap4flags-common.c
+M	src/lib-sieve/plugins/imap4flags/ext-imap4flags-common.h
+M	src/lib-sieve/plugins/imap4flags/ext-imap4flags.c
+M	src/lib-sieve/plugins/imap4flags/ext-imapflags.c
+M	src/lib-sieve/plugins/imap4flags/sieve-ext-imap4flags.h
+M	src/lib-sieve/plugins/imap4flags/tag-flags.c
+M	src/lib-sieve/plugins/imap4flags/tst-hasflag.c
+M	src/lib-sieve/plugins/include/cmd-global.c
+M	src/lib-sieve/plugins/include/cmd-include.c
+M	src/lib-sieve/plugins/include/cmd-return.c
+M	src/lib-sieve/plugins/include/ext-include-binary.c
+M	src/lib-sieve/plugins/include/ext-include-binary.h
+M	src/lib-sieve/plugins/include/ext-include-common.c
+M	src/lib-sieve/plugins/include/ext-include-common.h
+M	src/lib-sieve/plugins/include/ext-include-limits.h
+M	src/lib-sieve/plugins/include/ext-include-variables.c
+M	src/lib-sieve/plugins/include/ext-include-variables.h
+M	src/lib-sieve/plugins/include/ext-include.c
+M	src/lib-sieve/plugins/index/ext-index-common.c
+M	src/lib-sieve/plugins/index/ext-index-common.h
+M	src/lib-sieve/plugins/index/ext-index.c
+M	src/lib-sieve/plugins/index/tag-index.c
+M	src/lib-sieve/plugins/mailbox/ext-mailbox-common.h
+M	src/lib-sieve/plugins/mailbox/ext-mailbox.c
+M	src/lib-sieve/plugins/mailbox/sieve-ext-mailbox.h
+M	src/lib-sieve/plugins/mailbox/tag-mailbox-create.c
+M	src/lib-sieve/plugins/mailbox/tst-mailboxexists.c
+M	src/lib-sieve/plugins/metadata/ext-metadata-common.h
+M	src/lib-sieve/plugins/metadata/ext-metadata.c
+M	src/lib-sieve/plugins/metadata/tst-metadata.c
+M	src/lib-sieve/plugins/metadata/tst-metadataexists.c
+M	src/lib-sieve/plugins/mime/cmd-break.c
+M	src/lib-sieve/plugins/mime/cmd-extracttext.c
+M	src/lib-sieve/plugins/mime/cmd-foreverypart.c
+M	src/lib-sieve/plugins/mime/ext-extracttext.c
+M	src/lib-sieve/plugins/mime/ext-foreverypart.c
+M	src/lib-sieve/plugins/mime/ext-mime-common.c
+M	src/lib-sieve/plugins/mime/ext-mime-common.h
+M	src/lib-sieve/plugins/mime/ext-mime.c
+M	src/lib-sieve/plugins/mime/tag-mime.c
+M	src/lib-sieve/plugins/notify/cmd-denotify.c
+M	src/lib-sieve/plugins/notify/cmd-notify.c
+M	src/lib-sieve/plugins/notify/ext-notify-common.c
+M	src/lib-sieve/plugins/notify/ext-notify-common.h
+M	src/lib-sieve/plugins/notify/ext-notify-limits.h
+M	src/lib-sieve/plugins/notify/ext-notify.c
+M	src/lib-sieve/plugins/regex/ext-regex-common.c
+M	src/lib-sieve/plugins/regex/ext-regex-common.h
+M	src/lib-sieve/plugins/regex/ext-regex.c
+M	src/lib-sieve/plugins/regex/mcht-regex.c
+M	src/lib-sieve/plugins/relational/ext-relational-common.c
+M	src/lib-sieve/plugins/relational/ext-relational-common.h
+M	src/lib-sieve/plugins/relational/ext-relational.c
+M	src/lib-sieve/plugins/relational/mcht-count.c
+M	src/lib-sieve/plugins/relational/mcht-value.c
+M	src/lib-sieve/plugins/spamvirustest/ext-spamvirustest-common.c
+M	src/lib-sieve/plugins/spamvirustest/ext-spamvirustest-common.h
+M	src/lib-sieve/plugins/spamvirustest/ext-spamvirustest.c
+M	src/lib-sieve/plugins/spamvirustest/tst-spamvirustest.c
+M	src/lib-sieve/plugins/subaddress/ext-subaddress.c
+M	src/lib-sieve/plugins/vacation/cmd-vacation.c
+M	src/lib-sieve/plugins/vacation/ext-vacation-common.c
+M	src/lib-sieve/plugins/vacation/ext-vacation-common.h
+M	src/lib-sieve/plugins/vacation/ext-vacation-seconds.c
+M	src/lib-sieve/plugins/vacation/ext-vacation.c
+M	src/lib-sieve/plugins/variables/cmd-set.c
+M	src/lib-sieve/plugins/variables/ext-variables-arguments.c
+M	src/lib-sieve/plugins/variables/ext-variables-arguments.h
+M	src/lib-sieve/plugins/variables/ext-variables-common.c
+M	src/lib-sieve/plugins/variables/ext-variables-common.h
+M	src/lib-sieve/plugins/variables/ext-variables-dump.c
+M	src/lib-sieve/plugins/variables/ext-variables-dump.h
+M	src/lib-sieve/plugins/variables/ext-variables-limits.h
+M	src/lib-sieve/plugins/variables/ext-variables-modifiers.c
+M	src/lib-sieve/plugins/variables/ext-variables-modifiers.h
+M	src/lib-sieve/plugins/variables/ext-variables-name.c
+M	src/lib-sieve/plugins/variables/ext-variables-name.h
+M	src/lib-sieve/plugins/variables/ext-variables-namespaces.c
+M	src/lib-sieve/plugins/variables/ext-variables-namespaces.h
+M	src/lib-sieve/plugins/variables/ext-variables-operands.c
+M	src/lib-sieve/plugins/variables/ext-variables-operands.h
+M	src/lib-sieve/plugins/variables/ext-variables.c
+M	src/lib-sieve/plugins/variables/sieve-ext-variables.h
+M	src/lib-sieve/plugins/variables/tst-string.c
+M	src/lib-sieve/plugins/vnd.dovecot/debug/cmd-debug-log.c
+M	src/lib-sieve/plugins/vnd.dovecot/debug/ext-debug-common.h
+M	src/lib-sieve/plugins/vnd.dovecot/debug/ext-debug.c
+M	src/lib-sieve/plugins/vnd.dovecot/environment/ext-vnd-environment-common.h
+M	src/lib-sieve/plugins/vnd.dovecot/environment/ext-vnd-environment-items.c
+M	src/lib-sieve/plugins/vnd.dovecot/environment/ext-vnd-environment-variables.c
+M	src/lib-sieve/plugins/vnd.dovecot/environment/ext-vnd-environment.c
+M	src/lib-sieve/plugins/vnd.dovecot/report/cmd-report.c
+M	src/lib-sieve/plugins/vnd.dovecot/report/ext-vnd-report-common.c
+M	src/lib-sieve/plugins/vnd.dovecot/report/ext-vnd-report.c
+M	src/lib-sieve/sieve-actions.c
+M	src/lib-sieve/sieve-actions.h
+M	src/lib-sieve/sieve-address-parts.c
+M	src/lib-sieve/sieve-address-parts.h
+M	src/lib-sieve/sieve-address-source.c
+M	src/lib-sieve/sieve-address-source.h
+M	src/lib-sieve/sieve-address.c
+M	src/lib-sieve/sieve-address.h
+M	src/lib-sieve/sieve-ast.c
+M	src/lib-sieve/sieve-ast.h
+M	src/lib-sieve/sieve-binary-code.c
+M	src/lib-sieve/sieve-binary-debug.c
+M	src/lib-sieve/sieve-binary-dumper.c
+M	src/lib-sieve/sieve-binary-dumper.h
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/sieve-binary-private.h
+M	src/lib-sieve/sieve-binary.c
+M	src/lib-sieve/sieve-binary.h
+M	src/lib-sieve/sieve-code-dumper.c
+M	src/lib-sieve/sieve-code-dumper.h
+M	src/lib-sieve/sieve-code.c
+M	src/lib-sieve/sieve-code.h
+M	src/lib-sieve/sieve-commands.c
+M	src/lib-sieve/sieve-commands.h
+M	src/lib-sieve/sieve-common.h
+M	src/lib-sieve/sieve-comparators.c
+M	src/lib-sieve/sieve-comparators.h
+M	src/lib-sieve/sieve-config.h
+M	src/lib-sieve/sieve-dump.h
+M	src/lib-sieve/sieve-error-private.h
+M	src/lib-sieve/sieve-error.c
+M	src/lib-sieve/sieve-error.h
+M	src/lib-sieve/sieve-extensions.c
+M	src/lib-sieve/sieve-extensions.h
+M	src/lib-sieve/sieve-generator.c
+M	src/lib-sieve/sieve-generator.h
+M	src/lib-sieve/sieve-interpreter.c
+M	src/lib-sieve/sieve-interpreter.h
+M	src/lib-sieve/sieve-lexer.c
+M	src/lib-sieve/sieve-lexer.h
+M	src/lib-sieve/sieve-limits.h
+M	src/lib-sieve/sieve-match-types.c
+M	src/lib-sieve/sieve-match-types.h
+M	src/lib-sieve/sieve-match.c
+M	src/lib-sieve/sieve-match.h
+M	src/lib-sieve/sieve-message.c
+M	src/lib-sieve/sieve-message.h
+M	src/lib-sieve/sieve-objects.c
+M	src/lib-sieve/sieve-objects.h
+M	src/lib-sieve/sieve-parser.c
+M	src/lib-sieve/sieve-parser.h
+M	src/lib-sieve/sieve-plugins.c
+M	src/lib-sieve/sieve-plugins.h
+M	src/lib-sieve/sieve-result.c
+M	src/lib-sieve/sieve-result.h
+M	src/lib-sieve/sieve-runtime-trace.c
+M	src/lib-sieve/sieve-runtime-trace.h
+M	src/lib-sieve/sieve-runtime.h
+M	src/lib-sieve/sieve-script-private.h
+M	src/lib-sieve/sieve-script.c
+M	src/lib-sieve/sieve-script.h
+M	src/lib-sieve/sieve-settings.c
+M	src/lib-sieve/sieve-settings.h
+M	src/lib-sieve/sieve-smtp.c
+M	src/lib-sieve/sieve-smtp.h
+M	src/lib-sieve/sieve-storage-private.h
+M	src/lib-sieve/sieve-storage-sync.c
+M	src/lib-sieve/sieve-storage.c
+M	src/lib-sieve/sieve-storage.h
+M	src/lib-sieve/sieve-stringlist.c
+M	src/lib-sieve/sieve-stringlist.h
+M	src/lib-sieve/sieve-types.h
+M	src/lib-sieve/sieve-validator.c
+M	src/lib-sieve/sieve-validator.h
+M	src/lib-sieve/sieve.c
+M	src/lib-sieve/sieve.h
+M	src/lib-sieve/storage/dict/sieve-dict-script.c
+M	src/lib-sieve/storage/dict/sieve-dict-storage.c
+M	src/lib-sieve/storage/dict/sieve-dict-storage.h
+M	src/lib-sieve/storage/file/sieve-file-script-sequence.c
+M	src/lib-sieve/storage/file/sieve-file-script.c
+M	src/lib-sieve/storage/file/sieve-file-storage-active.c
+M	src/lib-sieve/storage/file/sieve-file-storage-list.c
+M	src/lib-sieve/storage/file/sieve-file-storage-quota.c
+M	src/lib-sieve/storage/file/sieve-file-storage-save.c
+M	src/lib-sieve/storage/file/sieve-file-storage.c
+M	src/lib-sieve/storage/file/sieve-file-storage.h
+M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
+M	src/lib-sieve/storage/ldap/sieve-ldap-script.c
+M	src/lib-sieve/storage/ldap/sieve-ldap-storage-settings.c
+M	src/lib-sieve/storage/ldap/sieve-ldap-storage.c
+M	src/lib-sieve/storage/ldap/sieve-ldap-storage.h
+M	src/lib-sieve/tst-address.c
+M	src/lib-sieve/tst-allof.c
+M	src/lib-sieve/tst-anyof.c
+M	src/lib-sieve/tst-exists.c
+M	src/lib-sieve/tst-header.c
+M	src/lib-sieve/tst-not.c
+M	src/lib-sieve/tst-size.c
+M	src/lib-sieve/tst-truefalse.c
+M	src/lib-sieve/util/edit-mail.c
+M	src/lib-sieve/util/edit-mail.h
+M	src/lib-sieve/util/realpath.c
+M	src/lib-sieve/util/rfc2822.c
+M	src/lib-sieve/util/rfc2822.h
+M	src/lib-sieve/util/strtrim.c
+M	src/managesieve-login/client-authenticate.c
+M	src/managesieve-login/client-authenticate.h
+M	src/managesieve-login/client.c
+M	src/managesieve-login/client.h
+M	src/managesieve-login/managesieve-login-settings-plugin.c
+M	src/managesieve-login/managesieve-login-settings-plugin.h
+M	src/managesieve-login/managesieve-login-settings.c
+M	src/managesieve-login/managesieve-login-settings.h
+M	src/managesieve-login/managesieve-proxy.c
+M	src/managesieve-login/managesieve-proxy.h
+M	src/managesieve/cmd-capability.c
+M	src/managesieve/cmd-deletescript.c
+M	src/managesieve/cmd-getscript.c
+M	src/managesieve/cmd-havespace.c
+M	src/managesieve/cmd-listscripts.c
+M	src/managesieve/cmd-logout.c
+M	src/managesieve/cmd-noop.c
+M	src/managesieve/cmd-putscript.c
+M	src/managesieve/cmd-renamescript.c
+M	src/managesieve/cmd-setactive.c
+M	src/managesieve/main.c
+M	src/managesieve/managesieve-capabilities.c
+M	src/managesieve/managesieve-capabilities.h
+M	src/managesieve/managesieve-client.c
+M	src/managesieve/managesieve-client.h
+M	src/managesieve/managesieve-commands.c
+M	src/managesieve/managesieve-commands.h
+M	src/managesieve/managesieve-common.h
+M	src/managesieve/managesieve-quota.c
+M	src/managesieve/managesieve-quota.h
+M	src/managesieve/managesieve-settings.c
+M	src/managesieve/managesieve-settings.h
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-activate.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-delete.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-get.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-list.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-put.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-rename.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd.h
+M	src/plugins/doveadm-sieve/doveadm-sieve-plugin.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-plugin.h
+M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
+M	src/plugins/imapsieve/ext-imapsieve-common.h
+M	src/plugins/imapsieve/ext-imapsieve-environment.c
+M	src/plugins/imapsieve/ext-imapsieve.c
+M	src/plugins/imapsieve/imap-sieve-plugin.c
+M	src/plugins/imapsieve/imap-sieve-plugin.h
+M	src/plugins/imapsieve/imap-sieve-storage.c
+M	src/plugins/imapsieve/imap-sieve-storage.h
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/plugins/imapsieve/imap-sieve.h
+M	src/plugins/imapsieve/sieve-imapsieve-plugin.c
+M	src/plugins/imapsieve/sieve-imapsieve-plugin.h
+M	src/plugins/lda-sieve/lda-sieve-log.c
+M	src/plugins/lda-sieve/lda-sieve-log.h
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+M	src/plugins/lda-sieve/lda-sieve-plugin.h
+M	src/plugins/settings/pigeonhole-settings.c
+M	src/plugins/sieve-extprograms/cmd-execute.c
+M	src/plugins/sieve-extprograms/cmd-filter.c
+M	src/plugins/sieve-extprograms/cmd-pipe.c
+M	src/plugins/sieve-extprograms/ext-execute.c
+M	src/plugins/sieve-extprograms/ext-filter.c
+M	src/plugins/sieve-extprograms/ext-pipe.c
+M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
+M	src/plugins/sieve-extprograms/sieve-extprograms-common.h
+M	src/plugins/sieve-extprograms/sieve-extprograms-plugin.c
+M	src/plugins/sieve-extprograms/sieve-extprograms-plugin.h
+M	src/sieve-tools/sieve-dump.c
+M	src/sieve-tools/sieve-filter.c
+M	src/sieve-tools/sieve-test.c
+M	src/sieve-tools/sievec.c
+M	src/testsuite/cmd-test-binary.c
+M	src/testsuite/cmd-test-config.c
+M	src/testsuite/cmd-test-fail.c
+M	src/testsuite/cmd-test-imap-metadata.c
+M	src/testsuite/cmd-test-mailbox.c
+M	src/testsuite/cmd-test-message.c
+M	src/testsuite/cmd-test-result.c
+M	src/testsuite/cmd-test-set.c
+M	src/testsuite/cmd-test.c
+M	src/testsuite/ext-testsuite.c
+M	src/testsuite/testsuite-arguments.c
+M	src/testsuite/testsuite-arguments.h
+M	src/testsuite/testsuite-binary.c
+M	src/testsuite/testsuite-binary.h
+M	src/testsuite/testsuite-common.c
+M	src/testsuite/testsuite-common.h
+M	src/testsuite/testsuite-log.c
+M	src/testsuite/testsuite-log.h
+M	src/testsuite/testsuite-mailstore.c
+M	src/testsuite/testsuite-mailstore.h
+M	src/testsuite/testsuite-message.c
+M	src/testsuite/testsuite-message.h
+M	src/testsuite/testsuite-objects.c
+M	src/testsuite/testsuite-objects.h
+M	src/testsuite/testsuite-result.c
+M	src/testsuite/testsuite-result.h
+M	src/testsuite/testsuite-script.c
+M	src/testsuite/testsuite-script.h
+M	src/testsuite/testsuite-settings.c
+M	src/testsuite/testsuite-settings.h
+M	src/testsuite/testsuite-smtp.c
+M	src/testsuite/testsuite-smtp.h
+M	src/testsuite/testsuite-substitutions.c
+M	src/testsuite/testsuite-substitutions.h
+M	src/testsuite/testsuite-variables.c
+M	src/testsuite/testsuite-variables.h
+M	src/testsuite/testsuite.c
+M	src/testsuite/tst-test-error.c
+M	src/testsuite/tst-test-multiscript.c
+M	src/testsuite/tst-test-result-action.c
+M	src/testsuite/tst-test-result-execute.c
+M	src/testsuite/tst-test-script-compile.c
+M	src/testsuite/tst-test-script-run.c
+
+2017-12-18 20:08:51 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b467db6e)
+
+    Added v0.4.21 to NEWS.
+
+
+M	NEWS
+
+2017-12-03 12:50:26 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (4a0d4952)
+
+    lib-sieve: enotify extension: mailto method: Fixed parsing of mailto URI
+    with only a header part.
+
+
+M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.c
+
+2017-11-16 00:07:14 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (110bc146)
+
+    lib-sieve: enotify extension: uri-mailto: Removed unused field.
+
+    It doesn't serve a purpose either, since parsing "from" address from URI is
+    not allowed for notify mailto.
+
+M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.h
+
+2017-11-25 11:51:02 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c6f72672)
+
+    lib-sieve: store action: Avoid NULL pointer dereference during rollback when
+    transaction context is somehow unassigned.
+
+    This change matches the other transaction stages. This will not currently
+    happen though. Reported by Coverity.
+
+M	src/lib-sieve/sieve-actions.c
+
+2017-11-25 11:28:57 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (876bce60)
+
+    lib-sieve: util: edit-mail: Fixed potential NULL dereference in
+    edit_mail_istream_seek().
+
+    Used the stream's cur_header field, rather than the local variable. Problem
+    found by Coverity.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-25 11:22:56 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (bafaa899)
+
+    lib-sieve: util: edit-header: Fixed potential NULL dereference in
+    edit_mail_istream_read().
+
+    The merge_from_parent() function may not actually read anything, potentially
+    leaving the stream buffer unassigned. Problem found by Coverity.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-03 21:31:36 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (53c94188)
+
+    lib-sieve: util: edit-mail: Changed buffer implementation to use normal
+    stream buffer management.
+
+    This makes the implementation easier to understand and amend once Dovecot
+    APIs changes. This implicitly makes the implementation suitable for the new
+    istream snapshot handling.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-04 00:42:47 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (cd38bf9a)
+
+    lib-sieve: util: edit-mail: Restructured merge_modified_headers() to remove
+    useless indent.
+
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-03 21:26:52 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b66d3e30)
+
+    lib-sieve: util: edit-mail: Properly remember the detection of EOF in the
+    edit mail stream.
+
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-02 11:43:08 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (dd8d409b)
+
+    lib-sieve: util: edit-mail: Fixed runtime integer arithmetic warnings
+    (CLang).
+
+    Added assertions on subtractions. Restructured the code for clarity. Added
+    comments.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-03 21:33:06 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (347fa8e9)
+
+    testsuite: editheader extension: Added a few more tests.
+
+
+M	tests/extensions/editheader/addheader.svtest
+
+2017-11-01 22:54:05 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f812840e)
+
+    managesieve: putscript command: Fixed parse error handling for save parser.
+
+
+M	src/managesieve/cmd-putscript.c
+
+2017-11-01 11:57:58 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (3b66ea1b)
+
+    lib-sieve: Fix undefined define
+
+
+M	src/lib-sieve/storage/ldap/sieve-ldap-db.h
+
+2017-10-29 21:27:05 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (6baf59d0)
+
+    configure: Support EXTRA_CFLAGS/LDFLAGS
+
+
+M	configure.ac
+
+2017-10-23 01:34:09 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (985b52d3)
+
+    managesieve: Fixed spelling mistake in source code.
+
+    Patch by Andreas Schulze.
+
+M	src/managesieve/managesieve-common.h
+
+2017-10-23 01:32:34 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (6e893075)
+
+    lib-sieve: Fixed spelling mistakes in source code.
+
+    Patch by Andreas Schulze.
+
+M	src/lib-sieve/plugins/notify/cmd-notify.c
+M	src/lib-sieve/sieve-match.h
+M	src/lib-sieve/sieve-storage.c
+
+2017-10-23 01:31:49 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (88257364)
+
+    doc/man/sieve-test.1: Fixed spelling mistake.
+
+    Patch by Andreas Schulze.
+
+M	doc/man/sieve-test.1.in
+
+2017-10-23 01:48:04 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (b9b72981)
+
+    lib-sieve: enotify plugin: Fixed botched cherry-pick in previous commit.
+
+
+M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
+
+2017-10-21 12:45:29 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (2819a2a1)
+
+    lib-sieve: enotify plugin: mailto method: Make sure from header is set to a
+    usable address and not (null).
+
+
+M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
+
+2017-10-05 23:29:25 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (65496919)
 
     managesieve: Fix missing-command check
 
@@ -21,7 +902,7 @@ M	configure.ac
 
 M	src/managesieve/managesieve-client.c
 
-2017-10-05 23:19:13 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (ca39c2b7)
+2017-10-05 23:19:13 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (f59964b9)
 
     imapsieve: Fixed check for the presence of causes in a mailbox rule.
 
@@ -29,7 +910,7 @@ M	src/managesieve/managesieve-client.c
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2017-10-05 23:15:17 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (2c13cd16)
+2017-10-05 23:15:17 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d28442e7)
 
     lib-sieve: sieve-result: Added /* fall through */ comment to mark
     intentional switch case fall through.

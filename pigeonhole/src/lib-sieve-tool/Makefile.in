@@ -106,7 +106,7 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsieve_tool_la_LIBADD =
-am_libsieve_tool_la_OBJECTS = sieve-tool.lo mail-raw.lo
+am_libsieve_tool_la_OBJECTS = sieve-tool.lo
 libsieve_tool_la_OBJECTS = $(am_libsieve_tool_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -354,16 +354,15 @@ top_srcdir = @top_srcdir@
 noinst_LTLIBRARIES = libsieve-tool.la
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-sieve \
+	-I$(top_srcdir)/src/lib-sieve/util \
 	$(LIBDOVECOT_INCLUDE) \
 	$(LIBDOVECOT_SERVICE_INCLUDE)
 
 libsieve_tool_la_SOURCES = \
-	sieve-tool.c \
-	mail-raw.c
+	sieve-tool.c
 
 noinst_HEADERS = \
-	sieve-tool.h \
-	mail-raw.h
+	sieve-tool.h
 
 all: all-am
 
@@ -419,7 +418,6 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-raw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sieve-tool.Plo@am__quote@
 
 .c.o:

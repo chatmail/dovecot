@@ -8,12 +8,14 @@ AM_CPPFLAGS = \
 libsieve_util_la_DEPENDENCIES = $(LIBDOVECOT_STORAGE_DEPS) $(LIBDOVECOT_DEPS)
 
 libsieve_util_la_SOURCES = \
+	mail-raw.c \
 	edit-mail.c \
 	rfc2822.c \
 	realpath.c \
 	strtrim.c
 
 headers = \
+	mail-raw.h \
 	edit-mail.h \
 	rfc2822.h \
 	realpath.h \
@@ -23,20 +25,27 @@ pkginc_libdir=$(dovecot_pkgincludedir)/sieve
 pkginc_lib_HEADERS = $(headers)
 
 test_programs = \
-	test-realpath
+	test-realpath \
+	test-edit-mail
 
 noinst_PROGRAMS = $(test_programs)
 
 test_libs = \
 	libsieve_util.la \
+	$(LIBDOVECOT_STORAGE) \
 	$(LIBDOVECOT)
 test_deps = \
 	libsieve_util.la \
+	$(LIBDOVECOT_STORAGE_DEPS) \
 	$(LIBDOVECOT_DEPS)
 
 test_realpath_SOURCES = test-realpath.c
 test_realpath_LDADD = $(test_libs)
 test_realpath_DEPENDENCIES = $(test_deps)
+
+test_edit_mail_SOURCES = test-edit-mail.c
+test_edit_mail_LDADD = $(test_libs)
+test_edit_mail_DEPENDENCIES = $(test_deps)
 
 check: check-am check-test
 check-test: all-am

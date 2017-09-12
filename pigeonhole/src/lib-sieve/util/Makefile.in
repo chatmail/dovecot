@@ -108,19 +108,22 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsieve_util_la_LIBADD =
-am_libsieve_util_la_OBJECTS = edit-mail.lo rfc2822.lo realpath.lo \
-	strtrim.lo
+am_libsieve_util_la_OBJECTS = mail-raw.lo edit-mail.lo rfc2822.lo \
+	realpath.lo strtrim.lo
 libsieve_util_la_OBJECTS = $(am_libsieve_util_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__EXEEXT_1 = test-realpath$(EXEEXT)
+am__EXEEXT_1 = test-realpath$(EXEEXT) test-edit-mail$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
+am_test_edit_mail_OBJECTS = test-edit-mail.$(OBJEXT)
+test_edit_mail_OBJECTS = $(am_test_edit_mail_OBJECTS)
+am__DEPENDENCIES_1 =
+am__DEPENDENCIES_2 = libsieve_util.la $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_test_realpath_OBJECTS = test-realpath.$(OBJEXT)
 test_realpath_OBJECTS = $(am_test_realpath_OBJECTS)
-am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = libsieve_util.la $(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -155,8 +158,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libsieve_util_la_SOURCES) $(test_realpath_SOURCES)
-DIST_SOURCES = $(libsieve_util_la_SOURCES) $(test_realpath_SOURCES)
+SOURCES = $(libsieve_util_la_SOURCES) $(test_edit_mail_SOURCES) \
+	$(test_realpath_SOURCES)
+DIST_SOURCES = $(libsieve_util_la_SOURCES) $(test_edit_mail_SOURCES) \
+	$(test_realpath_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -396,12 +401,14 @@ AM_CPPFLAGS = \
 
 libsieve_util_la_DEPENDENCIES = $(LIBDOVECOT_STORAGE_DEPS) $(LIBDOVECOT_DEPS)
 libsieve_util_la_SOURCES = \
+	mail-raw.c \
 	edit-mail.c \
 	rfc2822.c \
 	realpath.c \
 	strtrim.c
 
 headers = \
+	mail-raw.h \
 	edit-mail.h \
 	rfc2822.h \
 	realpath.h \
@@ -410,19 +417,25 @@ headers = \
 pkginc_libdir = $(dovecot_pkgincludedir)/sieve
 pkginc_lib_HEADERS = $(headers)
 test_programs = \
-	test-realpath
+	test-realpath \
+	test-edit-mail
 
 test_libs = \
 	libsieve_util.la \
+	$(LIBDOVECOT_STORAGE) \
 	$(LIBDOVECOT)
 
 test_deps = \
 	libsieve_util.la \
+	$(LIBDOVECOT_STORAGE_DEPS) \
 	$(LIBDOVECOT_DEPS)
 
 test_realpath_SOURCES = test-realpath.c
 test_realpath_LDADD = $(test_libs)
 test_realpath_DEPENDENCIES = $(test_deps)
+test_edit_mail_SOURCES = test-edit-mail.c
+test_edit_mail_LDADD = $(test_libs)
+test_edit_mail_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -480,6 +493,10 @@ clean-noinstPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
+test-edit-mail$(EXEEXT): $(test_edit_mail_OBJECTS) $(test_edit_mail_DEPENDENCIES) $(EXTRA_test_edit_mail_DEPENDENCIES) 
+	@rm -f test-edit-mail$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_edit_mail_OBJECTS) $(test_edit_mail_LDADD) $(LIBS)
+
 test-realpath$(EXEEXT): $(test_realpath_OBJECTS) $(test_realpath_DEPENDENCIES) $(EXTRA_test_realpath_DEPENDENCIES) 
 	@rm -f test-realpath$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_realpath_OBJECTS) $(test_realpath_LDADD) $(LIBS)
@@ -491,9 +508,11 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/edit-mail.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-raw.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/realpath.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rfc2822.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/strtrim.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-edit-mail.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-realpath.Po@am__quote@
 
 .c.o:
