@@ -151,6 +151,8 @@ maildir_list_get_path(struct mailbox_list *_list, const char *name,
 		*path_r = maildir_list_get_dirname_path(_list,
 					_list->set.index_pvt_dir, name);
 		return 1;
+	case MAILBOX_LIST_PATH_TYPE_LIST_INDEX:
+		i_unreached();
 	}
 
 	if (type == MAILBOX_LIST_PATH_TYPE_ALT_DIR ||
@@ -250,9 +252,8 @@ maildir_list_delete_mailbox(struct mailbox_list *list, const char *name)
 		ret = maildir_list_delete_maildir(list, name);
 	}
 
-	if (ret == 0 || (list->props & MAILBOX_LIST_PROP_AUTOCREATE_DIRS) != 0)
-		mailbox_list_delete_finish(list, name);
-	return ret;
+	i_assert(ret <= 0);
+	return mailbox_list_delete_finish_ret(list, name, ret == 0);
 }
 
 static int maildir_list_delete_dir(struct mailbox_list *list, const char *name)

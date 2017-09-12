@@ -29,6 +29,13 @@ dsync_features = empty-header-workaround
    situation dsync simply assumes for existing mails that the mails are a
    match. (v2.2.25.3+)
 
+In v2.2.30+ dsync can avoid creating a single huge transaction that can fail
+all at once. In case of failures the sync can be then done incrementally.
+
+---%<-------------------------------------------------------------------------
+dsync_commit_msgs_interval = 100 # default in v2.2.30+
+---%<-------------------------------------------------------------------------
+
 IMAP migration configuration
 ----------------------------
 
@@ -57,8 +64,9 @@ mail_prefetch_count = 20
 # for SSL:
 #imapc_port = 993
 #imapc_ssl = imaps
-#imapc_ssl_ca_dir = /etc/ssl
+#ssl_client_ca_dir = /etc/ssl
 #imapc_ssl_verify = yes
+# for <2.2.0: change ssl_client_ca_dir=/etc/ssl to imapc_ssl_ca_dir=/etc/ssl
 ---%<-------------------------------------------------------------------------
 
 POP3 migration configuration
@@ -79,7 +87,8 @@ pop3c_password = masteruser-secret
 # for SSL:
 #pop3c_port = 995
 #pop3c_ssl = pop3s
-#pop3c_ssl_ca_dir = /etc/ssl
+# for <2.2.0: change ssl_client_ca_dir=/etc/ssl to pop3c_ssl_ca_dir=/etc/ssl
+#ssl_client_ca_dir = /etc/ssl
 #pop3c_ssl_verify = yes
 
 # make sure you have also the regular inbox namespace defined, e.g.:
@@ -143,4 +152,4 @@ Problems
  * If source IMAP and POP3 servers return messages somehow differently,
    pop3-migration plugin might not be able to match the messages
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

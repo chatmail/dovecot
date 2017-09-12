@@ -217,6 +217,7 @@ imap_master_client_input_args(struct connection *conn, const char *const *args,
 	   potentially a long time. imap-hibernate process is waiting for us
 	   to answer. Even if we fail later, we log the error anyway. */
 	o_stream_nsend_str(conn->output, "+\n");
+	(void)o_stream_flush(conn->output);
 
 	/* NOTE: before client_create_from_input() on failures we need to close
 	   fd_client, but afterward it gets closed by client_destroy() */
@@ -228,14 +229,16 @@ imap_master_client_input_args(struct connection *conn, const char *const *args,
 		i_close_fd(&fd_client);
 		return -1;
 	}
+	client->imap_client_created = TRUE;
+
 	if (mail_namespaces_init(imap_client->user, &error) < 0) {
-		i_error("%s", error);
+		i_error("imap-master(%s): mail_namespaces_init() failed: %s",
+			input.username, error);
 		client_destroy(imap_client, error);
 		return -1;
 	}
 	/* log prefix is set at this point, so we don't need to add the
 	   username anymore to the log messages */
-	client->imap_client_created = TRUE;
 
 	o_stream_nsend(imap_client->output,
 		       master_input.client_output->data,

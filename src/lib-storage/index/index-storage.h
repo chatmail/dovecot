@@ -40,6 +40,7 @@ struct index_mailbox_context {
 
 	struct mailbox_vsize_update *vsize_update;
 
+	uint32_t recent_flags_prev_first_recent_uid;
 	uint32_t recent_flags_last_check_nextuid;
 
 	time_t sync_last_check;
@@ -80,6 +81,10 @@ int index_storage_mailbox_delete_post(struct mailbox *box);
 int index_storage_mailbox_delete(struct mailbox *box);
 int index_storage_mailbox_delete_dir(struct mailbox *box, bool mailbox_deleted);
 int index_storage_mailbox_rename(struct mailbox *src, struct mailbox *dest);
+
+int index_mailbox_update_last_temp_file_scan(struct mailbox *box);
+int index_mailbox_fix_inconsistent_existence(struct mailbox *box,
+					     const char *path);
 
 bool index_storage_is_readonly(struct mailbox *box);
 bool index_storage_is_inconsistent(struct mailbox *box);

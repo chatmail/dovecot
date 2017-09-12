@@ -60,6 +60,8 @@ service director {
     mode = 0600
     user = $default_login_user
   }
+  # NOTE: director-userdb socket is actually used only for passdb lookups, not
+userdb lookups
   unix_listener director-userdb {
     mode = 0600
   }
@@ -135,6 +137,14 @@ service pop3-login {
 }
 ---%<-------------------------------------------------------------------------
 
+Consistent hashing should be enabled for new director clusters. It's not
+possible to change this setting without a complete director cluster shutdown.
+Using it reduces users being moved around when doing backend changes.
+
+---%<-------------------------------------------------------------------------
+director_consistent_hashing = yes # Supported by v2.2.16+
+---%<-------------------------------------------------------------------------
+
 If you want to enable director for LMTP, also set:
 
 ---%<-------------------------------------------------------------------------
@@ -143,6 +153,8 @@ If you want to enable director for LMTP, also set:
 lmtp_proxy = yes
 
 protocol lmtp {
+  # NOTE: director-userdb socket is actually used only for passdb lookups, not
+userdb lookups
   auth_socket_path = director-userdb
 }
 
@@ -234,6 +246,8 @@ The director also needs the following configuration:
 doveadm_proxy_port = 24245
 
 protocol doveadm {
+  # NOTE: director-userdb socket is actually used only for passdb lookups, not
+userdb lookups
   auth_socket_path = director-userdb
 }
 ---%<-------------------------------------------------------------------------
@@ -349,4 +363,4 @@ The user-flush.sh will receive as parameters:
  * old host's IP
  * new host's IP
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

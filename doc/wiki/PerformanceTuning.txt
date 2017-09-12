@@ -17,10 +17,17 @@ optimization you can do.
    command.
  * See <POP3Server.txt> for POP3 optimizations, especially
    'pop3_no_flag_updates=yes'
- * mailbox_list_index=yes can help a lot by replying to IMAP STATUS (and
+ * 'mailbox_list_index=yes' can help a lot by replying to IMAP STATUS (and
    similar) lookups from a single index without having to open each mailbox
-   index separately.
- * mail_prefetch_count setting may be helpful with some mailbox formats
+   index separately. This is the default in v2.3+.
+    * Also 'mailbox_list_index_very_dirty_syncs=yes' makes Dovecot assume that
+      the list index is up-to-date.
+ * 'mail_prefetch_count' setting may be helpful with some mailbox formats
+ * 'mail_location = ...:VOLATILEDIR=/tmp/dovecot-volatile/%2.256Nu/%u' moves
+   e.g. lock files to the volatile directory. This is helpful especially if
+   mail_location otherwise points to a remote filesystem like NFS. (v2.2.32+)
+ * If acl plugin is used, but only global ACLs are needed, set
+   'acl_globals_only=yes' (v2.2.31+)
 
 CPU usage optimization
 ----------------------
@@ -56,4 +63,4 @@ Note that these settings do not directly affect the memory usage:
  * 'service { process_limit, client_limit } ': These are mostly to avoid DoS
    attacks using up all your memory.
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

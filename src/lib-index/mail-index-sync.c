@@ -361,7 +361,7 @@ mail_index_sync_begin_init(struct mail_index *index,
 	}
 
 	if (!mail_index_need_sync(index, flags, log_file_seq, log_file_offset) &&
-	    !index->index_deleted) {
+	    !index->index_deleted && !index->need_recreate) {
 		if (locked)
 			mail_transaction_log_sync_unlock(index->log, "syncing determined unnecessary");
 		return 0;
@@ -869,6 +869,14 @@ int mail_index_sync_commit(struct mail_index_sync_ctx **_ctx)
 					 first_recent_uid),
 				&next_uid, sizeof(next_uid), FALSE);
 		}
+	}
+	if (index->pending_log2_rotate_time != 0) {
+		uint32_t log2_rotate_time = index->pending_log2_rotate_time;
+
+		mail_index_update_header(ctx->ext_trans,
+			offsetof(struct mail_index_header, log2_rotate_time),
+			&log2_rotate_time, sizeof(log2_rotate_time), TRUE);
+		index->pending_log2_rotate_time = 0;
 	}
 
 	ret2 = mail_index_transaction_commit(&ctx->ext_trans);

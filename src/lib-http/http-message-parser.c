@@ -16,7 +16,7 @@
 
 void http_message_parser_init(struct http_message_parser *parser,
 	struct istream *input, const struct http_header_limits *hdr_limits,
-	uoff_t max_payload_size, bool lenient)
+	uoff_t max_payload_size, enum http_message_parse_flags flags)
 {
 	i_zero(parser);
 	parser->input = input;
@@ -24,7 +24,7 @@ void http_message_parser_init(struct http_message_parser *parser,
 	if (hdr_limits != NULL)
 		parser->header_limits = *hdr_limits;
 	parser->max_payload_size = max_payload_size;
-	parser->lenient = lenient;
+	parser->flags = flags;
 }
 
 void http_message_parser_deinit(struct http_message_parser *parser)
@@ -45,8 +45,12 @@ void http_message_parser_restart(struct http_message_parser *parser,
 	i_assert(parser->payload == NULL);
 
 	if (parser->header_parser == NULL) {
+		enum http_header_parse_flags hdr_flags = 0;
+
+		if ((parser->flags & HTTP_MESSAGE_PARSE_FLAG_STRICT) != 0)
+			hdr_flags |= HTTP_HEADER_PARSE_FLAG_STRICT;
 		parser->header_parser = http_header_parser_init
-				(parser->input, &parser->header_limits,	parser->lenient);
+			(parser->input, &parser->header_limits,	hdr_flags);
 	} else {
 		http_header_parser_reset(parser->header_parser);
 	}
@@ -189,6 +193,8 @@ http_message_parse_header(struct http_message_parser *parser,
 		/* Content-Length: */
 		if (strcasecmp(name, "Content-Length") == 0) {
 			if (parser->msg.have_content_length) {
+				/* There is no acceptable way to allow duplicates for this
+				   header. */
 				parser->error = "Duplicate Content-Length header";
 				parser->error_code = HTTP_MESSAGE_PARSE_ERROR_BROKEN_MESSAGE;
 				return -1;
@@ -211,9 +217,12 @@ http_message_parse_header(struct http_message_parser *parser,
 		/* Date: */
 		if (strcasecmp(name, "Date") == 0) {
 			if (parser->msg.date != (time_t)-1) {
-				parser->error = "Duplicate Date header";
-				parser->error_code = HTTP_MESSAGE_PARSE_ERROR_BROKEN_MESSAGE;
-				return -1;
+				if ((parser->flags & HTTP_MESSAGE_PARSE_FLAG_STRICT) != 0) {
+					parser->error = "Duplicate Date header";
+					parser->error_code = HTTP_MESSAGE_PARSE_ERROR_BROKEN_MESSAGE;
+					return -1;
+				}
+				/* Allow the duplicate; last instance is used */
 			}
 
 			/* RFC 7231, Section 7.1.1.2: Date

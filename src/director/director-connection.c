@@ -1739,7 +1739,7 @@ director_connection_handle_line(struct director_connection *conn,
 
 	dir_debug("input: %s: %s", conn->name, line);
 
-	args = t_strsplit_tab(line);
+	args = t_strsplit_tabescaped(line);
 	cmd = args[0]; args++;
 	if (cmd == NULL) {
 		director_cmd_error(conn, "Received empty line");
@@ -2167,7 +2167,8 @@ static void director_connection_disconnected(struct director_connection **_conn,
 	struct director_connection *conn = *_conn;
 	struct director *dir = conn->dir;
 
-	if (conn->connected_time.tv_sec + DIRECTOR_SUCCESS_MIN_CONNECT_SECS > ioloop_time &&
+	if ((conn->connected_time.tv_sec == 0 ||
+	     conn->connected_time.tv_sec + DIRECTOR_SUCCESS_MIN_CONNECT_SECS > ioloop_time) &&
 	    conn->host != NULL) {
 		/* connection didn't exist for very long, assume it has a
 		   network problem */

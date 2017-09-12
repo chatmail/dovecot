@@ -244,6 +244,8 @@ const char *client_stats(struct client *client)
 		{ '\0', NULL, "deleted" },
 		{ '\0', NULL, "expunged" },
 		{ '\0', NULL, "trashed" },
+		{ '\0', NULL, "autoexpunged" },
+		{ '\0', NULL, "appended" },
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
@@ -262,6 +264,8 @@ const char *client_stats(struct client *client)
 	tab[7].value = dec2str(client->deleted_count);
 	tab[8].value = dec2str(client->expunged_count);
 	tab[9].value = dec2str(client->trashed_count);
+	tab[10].value = dec2str(client->autoexpunged_count);
+	tab[11].value = dec2str(client->append_count);
 
 	str = t_str_new(128);
 	var_expand(str, client->set->imap_logout_format, tab);
@@ -386,14 +390,7 @@ static const char *client_get_commands_status(struct client *client)
 
 static void client_log_disconnect(struct client *client, const char *reason)
 {
-	const char *cmd_status = "";
-
-	if (reason == NULL) {
-		reason = io_stream_get_disconnect_reason(client->input,
-							 client->output);
-		cmd_status = client_get_commands_status(client);
-	}
-	i_info("%s%s %s", reason, cmd_status, client_stats(client));
+	i_info("%s %s", reason, client_stats(client));
 }
 
 static void client_default_destroy(struct client *client, const char *reason)
@@ -402,11 +399,15 @@ static void client_default_destroy(struct client *client, const char *reason)
 
 	i_assert(!client->destroyed);
 	client->destroyed = TRUE;
+	client->disconnected = TRUE;
 
-	if (!client->disconnected) {
-		client->disconnected = TRUE;
-		client_log_disconnect(client, reason);
-	}
+	if (client->disconnect_reason != NULL)
+		reason = client->disconnect_reason;
+	if (reason == NULL)
+		reason = t_strconcat(
+			io_stream_get_disconnect_reason(client->input,
+							client->output),
+			client_get_commands_status(client), NULL);
 
 	i_stream_close(client->input);
 	o_stream_close(client->output);
@@ -455,9 +456,16 @@ static void client_default_destroy(struct client *client, const char *reason)
 	   before it starts, and refresh proctitle so it's clear that it's
 	   doing autoexpunging. We've also sent DISCONNECT to anvil already,
 	   because this is background work and shouldn't really be counted
-	   as an active IMAP session for the user. */
+	   as an active IMAP session for the user.
+
+	   Don't autoexpunge if the client is hibernated - it shouldn't be any
+	   different from the non-hibernating IDLE case. For frequent
+	   hibernations it could also be doing unnecessarily much work. */
 	imap_refresh_proctitle();
-	mail_user_autoexpunge(client->user);
+	if (!client->hibernated) {
+		client->autoexpunged_count = mail_user_autoexpunge(client->user);
+		client_log_disconnect(client, reason);
+	}
 	mail_user_unref(&client->user);
 
 	/* free the i/ostreams after mail_user_unref(), which could trigger
@@ -492,8 +500,8 @@ void client_disconnect(struct client *client, const char *reason)
 	if (client->disconnected)
 		return;
 
-	client_log_disconnect(client, reason);
 	client->disconnected = TRUE;
+	client->disconnect_reason = p_strdup(client->pool, reason);
 	o_stream_nflush(client->output);
 	o_stream_uncork(client->output);
 

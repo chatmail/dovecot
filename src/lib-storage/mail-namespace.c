@@ -367,9 +367,25 @@ int mail_namespaces_init_finish(struct mail_namespace *namespaces,
 		ns->next = namespaces;
 		namespaces = ns;
 	}
-	if (!namespaces_check(namespaces, error_r)) {
-		*error_r = t_strconcat("namespace configuration error: ",
-				       *error_r, NULL);
+	if (namespaces->user->autocreated) {
+		/* e.g. raw user - don't check namespaces' validity */
+	} else if (!namespaces_check(namespaces, error_r)) {
+		namespaces->user->error =
+			t_strconcat("namespace configuration error: ",
+				    *error_r, NULL);
+	}
+
+	if (namespaces->user->error == NULL) {
+		mail_user_add_namespace(namespaces->user, &namespaces);
+		T_BEGIN {
+			hook_mail_namespaces_created(namespaces);
+		} T_END;
+	}
+
+	/* allow namespace hooks to return failure via the user error */
+	if (namespaces->user->error != NULL) {
+		namespaces->user->namespaces = NULL;
+		*error_r = t_strdup(namespaces->user->error);
 		while (namespaces != NULL) {
 			ns = namespaces;
 			namespaces = ns->next;
@@ -377,17 +393,7 @@ int mail_namespaces_init_finish(struct mail_namespace *namespaces,
 		}
 		return -1;
 	}
-	mail_user_add_namespace(namespaces->user, &namespaces);
 
-	T_BEGIN {
-		hook_mail_namespaces_created(namespaces);
-	} T_END;
-
-	/* allow namespace hooks to return failure via the user error */
-	if (namespaces->user->error != NULL) {
-		*error_r = t_strdup(namespaces->user->error);
-		return -1;
-	}
 	namespaces->user->namespaces_created = TRUE;
 	return 0;
 }
@@ -434,11 +440,11 @@ int mail_namespaces_init(struct mail_user *user, const char **error_r)
 		}
 	}
 
-	if (namespaces != NULL)
-		return mail_namespaces_init_finish(namespaces, error_r);
-
-	/* no namespaces defined, create a default one */
-	return mail_namespaces_init_location(user, NULL, error_r);
+	if (namespaces == NULL) {
+		/* no namespaces defined, create a default one */
+		return mail_namespaces_init_location(user, NULL, error_r);
+	}
+	return mail_namespaces_init_finish(namespaces, error_r);
 }
 
 int mail_namespaces_init_location(struct mail_user *user, const char *location,
@@ -514,13 +520,7 @@ int mail_namespaces_init_location(struct mail_user *user, const char *location,
 		mail_namespace_free(ns);
 		return -1;
 	}
-	user->namespaces = ns;
-
-	T_BEGIN {
-		hook_mail_namespaces_added(ns);
-		hook_mail_namespaces_created(ns);
-	} T_END;
-	return 0;
+	return mail_namespaces_init_finish(ns, error_r);
 }
 
 struct mail_namespace *mail_namespaces_init_empty(struct mail_user *user)
@@ -537,7 +537,6 @@ struct mail_namespace *mail_namespaces_init_empty(struct mail_user *user)
 	ns->user_set = user->set;
 	ns->mail_set = mail_user_set_get_storage_set(user);
 	i_array_init(&ns->all_storages, 2);
-	user->namespaces = ns;
 	return ns;
 }
 

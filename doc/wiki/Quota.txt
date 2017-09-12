@@ -14,6 +14,8 @@ different quota backends that Dovecot can use:
  * <maildir> [Quota.Maildir.txt]: Store quota usage in Maildir++ maildirsize
    files. This is the most commonly used quota for virtual users.
  * <count> [Quota.Count.txt]: Store quota usage within Dovecot's index files.
+ * <imapc> [MailboxFormat.imapc.txt]: Use quota from remote IMAP server with
+   imapc.
 
 Quota service
 -------------
@@ -125,4 +127,4 @@ To make sure users don't start keeping messages permanently in Trash you can
 use a nightly <cronjob> [Plugins.Expire.txt] to expunge old messages from Trash
 mailbox.
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

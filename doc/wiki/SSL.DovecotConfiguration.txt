@@ -93,6 +93,18 @@ to be secure.
 Multiple SSL certificates
 -------------------------
 
+Different certificates per algorithm
+------------------------------------
+
+Since v2.2.31+ you can specify alternative ssl certificate that will be used if
+the algorithm differs from the primary certificate. This is useful when
+migrating to e.g. ECDSA certificate.
+
+---%<-------------------------------------------------------------------------
+ssl_alt_cert=</path/to/alternative/cert.pem
+ssl_alt_key=</path/to/alternative/key.pem
+---%<-------------------------------------------------------------------------
+
 Different certificates per IP and protocol
 ------------------------------------------
 
@@ -441,4 +453,4 @@ Testing CA Success
     Verify return code: 0 (ok)
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

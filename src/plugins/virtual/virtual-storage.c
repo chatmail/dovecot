@@ -14,6 +14,7 @@
 #include "virtual-plugin.h"
 #include "virtual-transaction.h"
 #include "virtual-storage.h"
+#include "mailbox-list-notify.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -192,8 +193,9 @@ static int virtual_backend_box_alloc(struct virtual_mailbox *mbox,
 	ns = mail_namespace_find(user->namespaces, mailbox);
 	bbox->box = mailbox_alloc(ns->list, mailbox, flags);
 	MODULE_CONTEXT_SET(bbox->box, virtual_storage_module, bbox);
-	mailbox_set_reason(bbox->box, mbox->box.reason == NULL ? "virtual mailbox" :
-		t_strdup_printf("virtual mailbox: %s", mbox->box.reason));
+	mailbox_set_reason(bbox->box, mbox->box.reason == NULL ?
+		t_strdup_printf("virtual mailbox %s", mailbox_get_vname(&mbox->box)) :
+		t_strdup_printf("virtual mailbox %s: %s", mailbox_get_vname(&mbox->box), mbox->box.reason));
 
 	if (mailbox_exists(bbox->box, TRUE, &existence) < 0)
 		return virtual_backend_box_open_failed(mbox, bbox);
@@ -268,6 +270,7 @@ virtual_mailbox_alloc(struct mail_storage *_storage, struct mailbox_list *list,
 
 	mbox->storage = storage;
 	mbox->virtual_ext_id = (uint32_t)-1;
+	mbox->virtual_guid_ext_id = (uint32_t)-1;
 	return &mbox->box;
 }
 
@@ -285,9 +288,10 @@ void virtual_backend_box_sync_mail_unset(struct virtual_backend_box *bbox)
 static bool virtual_backend_box_can_close(struct virtual_backend_box *bbox)
 {
 	if (bbox->box->notify_callback != NULL) {
-		/* FIXME: IMAP IDLE running - we should support closing this
-		   also if mailbox_list_index=yes */
-		return FALSE;
+		/* we can close it if notify is set
+		   because we have no need to keep it open
+		   for tracking changes */
+		return bbox->notify != NULL;
 	}
 	if (array_count(&bbox->sync_pending_removes) > 0) {
 		/* FIXME: we could probably close this by making
@@ -419,6 +423,12 @@ void virtual_backend_box_close(struct virtual_mailbox *mbox,
 	DLLIST2_REMOVE_FULL(&mbox->open_backend_boxes_head,
 			    &mbox->open_backend_boxes_tail, bbox,
 			    prev_open, next_open);
+
+	/* stop receiving notifications */
+	if (bbox->notify_changes_started)
+		mailbox_notify_changes_stop(bbox->box);
+	bbox->notify_changes_started = FALSE;
+
 	mailbox_close(bbox->box);
 }
 
@@ -442,7 +452,8 @@ static void virtual_mailbox_close_internal(struct virtual_mailbox *mbox)
 	for (i = 0; i < count; i++) {
 		if (bboxes[i]->box == NULL)
 			continue;
-
+		if (bboxes[i]->notify != NULL)
+			mailbox_list_notify_deinit(&bboxes[i]->notify);
 		if (bboxes[i]->box->opened)
 			virtual_backend_box_close(mbox, bboxes[i]);
 		mailbox_free(&bboxes[i]->box);
@@ -494,11 +505,33 @@ static int virtual_mailbox_open(struct mailbox *box)
 			sizeof(struct virtual_mail_index_record),
 			sizeof(uint32_t));
 
+	mbox->virtual_guid_ext_id =
+		mail_index_ext_register(mbox->box.index, "virtual-guid", GUID_128_SIZE,
+			0, 0);
+
 	if (virtual_mailbox_ext_header_read(mbox, box->view, &broken) < 0) {
 		virtual_mailbox_close_internal(mbox);
 		index_storage_mailbox_close(box);
 		return -1;
 	}
+
+	/* if GUID is missing write it here */
+	if (guid_128_is_empty(mbox->guid)) {
+		guid_128_generate(mbox->guid);
+		struct mail_index_transaction *t =
+			mail_index_transaction_begin(box->view, 0);
+		mail_index_update_header_ext(t, mbox->virtual_guid_ext_id,
+					     0, mbox->guid, GUID_128_SIZE);
+		if (mail_index_transaction_commit(&t) < 0) {
+			mail_storage_set_critical(box->storage,
+						  "Cannot write GUID for virtual mailbox %s to index",
+						  mailbox_get_vname(box));
+			virtual_mailbox_close_internal(mbox);
+			index_storage_mailbox_close(box);
+			return -1;
+		}
+	}
+
 	return 0;
 }
 
@@ -554,8 +587,23 @@ static int virtual_storage_set_have_guid_flags(struct virtual_mailbox *mbox)
 	bboxes = array_get(&mbox->backend_boxes, &count);
 	for (i = 0; i < count; i++) {
 		if (mailbox_get_status(bboxes[i]->box, 0, &status) < 0) {
-			virtual_box_copy_error(&mbox->box, bboxes[i]->box);
-			return -1;
+			const char *errstr;
+			enum mail_error error;
+
+			errstr = mailbox_get_last_error(bboxes[i]->box, &error);
+			if (error == MAIL_ERROR_NOTFOUND) {
+				/* backend mailbox was just lost - skip it */
+				continue;
+			}
+			/* Not expected to happen, but we can't return failure
+			   since this could be called from
+			   mailbox_get_open_status() and it would panic.
+			   So just log the error and skip the mailbox. */
+			mail_storage_set_critical(mbox->box.storage,
+				"Virtual mailbox %s: Failed to get have_guid existence for backend mailbox %s: %s",
+				mailbox_get_vname(&mbox->box),
+				mailbox_get_vname(bboxes[i]->box), errstr);
+			continue;
 		}
 		if (!status.have_guids)
 			mbox->have_guids = FALSE;
@@ -605,12 +653,17 @@ virtual_mailbox_get_metadata(struct mailbox *box,
 			     enum mailbox_metadata_items items,
 			     struct mailbox_metadata *metadata_r)
 {
+	struct virtual_mailbox *mbox = (struct virtual_mailbox *)box;
 	if (index_mailbox_get_metadata(box, items, metadata_r) < 0)
 		return -1;
+	i_assert(box->opened);
 	if ((items & MAILBOX_METADATA_GUID) != 0) {
-		mail_storage_set_error(box->storage, MAIL_ERROR_NOTPOSSIBLE,
-				       "Virtual mailboxes have no GUIDs");
-		return -1;
+		if (guid_128_is_empty(mbox->guid)) {
+			mail_storage_set_critical(box->storage, "GUID missing for virtual folder %s",
+						  mailbox_get_vname(box));
+			return -1;
+		}
+		guid_128_copy(metadata_r->guid, mbox->guid);
 	}
 	return 0;
 }
@@ -621,21 +674,56 @@ virtual_notify_callback(struct mailbox *bbox ATTR_UNUSED, struct mailbox *box)
 	box->notify_callback(box, box->notify_context);
 }
 
+static void virtual_backend_box_changed(struct virtual_backend_box *bbox)
+{
+	virtual_notify_callback(bbox->box, &bbox->virtual_mbox->box);
+}
+
+static int virtual_notify_start(struct virtual_backend_box *bbox)
+{
+	i_assert(bbox->notify == NULL);
+	if (mailbox_list_notify_init(bbox->box->list, MAILBOX_LIST_NOTIFY_STATUS,
+				     &bbox->notify) < 0)
+		/* did not support notifications */
+		return -1;
+	mailbox_list_notify_wait(bbox->notify, virtual_backend_box_changed, bbox);
+	return 0;
+}
+
 static void virtual_notify_changes(struct mailbox *box)
 {
 	struct virtual_mailbox *mbox = (struct virtual_mailbox *)box;
-	struct virtual_backend_box *const *bboxp;
+	struct virtual_backend_box **bboxp;
 
 	if (box->notify_callback == NULL) {
-		array_foreach(&mbox->backend_boxes, bboxp)
-			mailbox_notify_changes_stop((*bboxp)->box);
+		array_foreach_modifiable(&mbox->backend_boxes, bboxp) {
+			if ((*bboxp)->notify_changes_started) {
+				mailbox_notify_changes_stop((*bboxp)->box);
+				(*bboxp)->notify_changes_started = FALSE;
+			}
+			if ((*bboxp)->notify != NULL)
+				mailbox_list_notify_deinit(&(*bboxp)->notify);
+		}
 		return;
 	}
 
-	/* FIXME: if mailbox_list_index=yes, use mailbox-list-notify.h API
-	   to wait for changes and avoid opening all mailboxes here. */
+	array_foreach_modifiable(&mbox->backend_boxes, bboxp) {
+		if (array_count(&mbox->backend_boxes) == 1 &&
+		    (*bboxp)->box->opened) {
+			/* There's only a single backend mailbox and its
+			   indexes are already opened. Might as well use the
+			   backend directly for notifications. */
+		} else {
+			/* we are already waiting for notifications */
+			if ((*bboxp)->notify != NULL)
+				continue;
+			/* wait for notifications */
+			if (virtual_notify_start(*bboxp) == 0)
+				continue;
+			/* it did not work, so open the mailbox and use
+			   alternative method */
+		}
 
-	array_foreach(&mbox->backend_boxes, bboxp) {
 		if (!(*bboxp)->box->opened &&
 		    virtual_backend_box_open(mbox, *bboxp) < 0) {
 			/* we can't report error in here, so do it later */
@@ -644,6 +732,7 @@ static void virtual_notify_changes(struct mailbox *box)
 		}
 		mailbox_notify_changes((*bboxp)->box,
 				       virtual_notify_callback, box);
+		(*bboxp)->notify_changes_started = TRUE;
 	}
 }
 

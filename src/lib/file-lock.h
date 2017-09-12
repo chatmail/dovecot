@@ -45,11 +45,23 @@ int file_wait_lock_error(int fd, const char *path, int lock_type,
 /* Change the lock type. WARNING: This isn't an atomic operation!
    The result is the same as file_unlock() + file_try_lock(). */
 int file_lock_try_update(struct file_lock *lock, int lock_type);
+/* When the lock is freed, unlink() the file automatically. This can be useful
+   for files that are only created to exist as lock files. */
+void file_lock_set_unlink_on_free(struct file_lock *lock, bool set);
+/* When the lock is freed, close the fd automatically. This can
+   be useful for files that are only created to exist as lock files. */
+void file_lock_set_close_on_free(struct file_lock *lock, bool set);
 
 /* Unlock and free the lock. */
 void file_unlock(struct file_lock **lock);
 /* Free the lock without unlocking it (because you're closing the fd anyway). */
 void file_lock_free(struct file_lock **lock);
+
+/* Returns the path given as parameter to file_*lock*(). */
+const char *file_lock_get_path(struct file_lock *lock);
+/* Update lock file's path (after it gets renamed by the caller). This is
+   useful mainly together with file_lock_set_unlink_on_free(). */
+void file_lock_set_path(struct file_lock *lock, const char *path);
 
 /* Returns human-readable string containing the process that has the file
    currently locked. Returns "" if unknown, otherwise " (string)". */

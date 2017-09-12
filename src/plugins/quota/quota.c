@@ -827,6 +827,8 @@ struct quota_transaction_context *quota_transaction_begin(struct mailbox *box)
 {
 	struct quota_transaction_context *ctx;
 	struct quota_root *const *rootp;
+	const struct quota_rule *rule;
+	const char *mailbox_name;
 
 	ctx = i_new(struct quota_transaction_context, 1);
 	ctx->quota = box->list->ns->owner != NULL ?
@@ -839,9 +841,30 @@ struct quota_transaction_context *quota_transaction_begin(struct mailbox *box)
 	ctx->bytes_ceil2 = (uint64_t)-1;
 	ctx->count_ceil = (uint64_t)-1;
 
+	mailbox_name = mailbox_get_vname(box);
+	(void)mail_namespace_find_unalias(box->storage->user->namespaces,
+					  &mailbox_name);
+
 	ctx->auto_updating = TRUE;
 	array_foreach(&ctx->quota->roots, rootp) {
-		if (!(*rootp)->auto_updating)
+		if (!quota_root_is_visible(*rootp, ctx->box, FALSE))
+			continue;
+
+		rule = quota_root_rule_find((*rootp)->set, mailbox_name);
+		if (rule != NULL && rule->ignore) {
+			/* This mailbox isn't included in quota. This means
+			   it's also not included in quota_warnings, so make
+			   sure it's fully ignored. */
+			continue;
+		}
+
+		/* If there are reverse quota_warnings, we'll need to track
+		   how many bytes were expunged even with auto_updating roots.
+		   (An alternative could be to get the current quota usage
+		   before and after the expunges, but that's more complicated
+		   and probably isn't any better.) */
+		if (!(*rootp)->auto_updating ||
+		    (*rootp)->set->have_reverse_warnings)
 			ctx->auto_updating = FALSE;
 	}
 

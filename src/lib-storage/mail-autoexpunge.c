@@ -2,7 +2,6 @@
 
 #include "lib.h"
 #include "ioloop.h"
-#include "file-create-locked.h"
 #include "mailbox-list-iter.h"
 #include "mail-storage-private.h"
 #include "mail-namespace.h"
@@ -11,21 +10,13 @@
 
 #define AUTOEXPUNGE_LOCK_FNAME "dovecot.autoexpunge.lock"
 
-struct mailbox_autoexpunge_lock {
-	const char *path;
-	struct file_lock *lock;
-	int fd;
-};
-
-static bool mailbox_autoexpunge_lock(struct mail_user *user,
-				     struct mailbox_autoexpunge_lock *lock)
+static bool
+mailbox_autoexpunge_lock(struct mail_user *user, struct file_lock **lock)
 {
-	struct file_create_settings lock_set;
-	bool created;
-	const char *home, *error;
+	const char *error;
 	int ret;
 
-	if (lock->fd != -1)
+	if (*lock != NULL)
 		return TRUE;
 
 	/* Try to lock the autoexpunging. If the lock already exists, another
@@ -36,25 +27,19 @@ static bool mailbox_autoexpunge_lock(struct mail_user *user,
 	   so that multiple processes won't do the same work unnecessarily,
 	   and 2) it helps to avoid duplicate mails being added with
 	   lazy_expunge. */
-	if ((ret = mail_user_get_home(user, &home)) > 0) {
-		const struct mail_storage_settings *mail_set =
-			mail_user_set_get_storage_set(user);
-		i_zero(&lock_set);
-		lock_set.lock_method = mail_set->parsed_lock_method,
-		lock->path = t_strdup_printf("%s/"AUTOEXPUNGE_LOCK_FNAME, home);
-		lock->fd = file_create_locked(lock->path, &lock_set,
-					      &lock->lock, &created, &error);
-		if (lock->fd == -1) {
-			if (errno == EAGAIN)
-				return FALSE;
-			if (errno != ENOENT)
-				i_error("autoexpunge: Couldn't lock %s: %s", lock->path, error);
-			return TRUE;
-		}
+	ret = mail_user_lock_file_create(user, AUTOEXPUNGE_LOCK_FNAME,
+					 0, lock, &error);
+	if (ret < 0) {
+		i_error("autoexpunge: Couldn't create %s lock: %s",
+			AUTOEXPUNGE_LOCK_FNAME, error);
+		/* do autoexpunging anyway */
+		return TRUE;
 	} else if (ret == 0) {
-		i_warning("autoexpunge: User has no home directory, can't lock");
+		/* another process is autoexpunging, so we don't need to. */
+		return FALSE;
+	} else {
+		return TRUE;
 	}
-	return TRUE;
 }
 
 static int
@@ -193,8 +178,7 @@ mailbox_autoexpunge_wildcards(struct mail_namespace *ns,
 }
 
 static bool
-mail_namespace_autoexpunge(struct mail_namespace *ns,
-			   struct mailbox_autoexpunge_lock *lock,
+mail_namespace_autoexpunge(struct mail_namespace *ns, struct file_lock **lock,
 			   unsigned int *expunged_count)
 {
 	struct mailbox_settings *const *box_set;
@@ -229,7 +213,7 @@ mail_namespace_autoexpunge(struct mail_namespace *ns,
 
 unsigned int mail_user_autoexpunge(struct mail_user *user)
 {
-	struct mailbox_autoexpunge_lock lock = { .fd = -1 };
+	struct file_lock *lock = NULL;
 	struct mail_namespace *ns;
 	unsigned int expunged_count = 0;
 
@@ -239,12 +223,7 @@ unsigned int mail_user_autoexpunge(struct mail_user *user)
 				break;
 		}
 	}
-	if (lock.fd != -1) {
-		i_assert(lock.lock != NULL);
-
-		i_unlink(lock.path);
-		i_close_fd(&lock.fd);
-		file_lock_free(&lock.lock);
-	}
+	if (lock != NULL)
+		file_lock_free(&lock);
 	return expunged_count;
 }

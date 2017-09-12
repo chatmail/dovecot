@@ -42,7 +42,8 @@ Contents
 
      4. doveadm mailbox cryptokey password
 
-This feature is available in v2.2.27+. It is not considered production quality.
+This feature is available in v2.2.27+. Using per-folder keys is not considered
+production quality, but global keys are fine.
 
 *NB! Improper configuration or use can make your emails unrecoverable. Treat
 encryption with care and backups.*
@@ -415,4 +416,4 @@ doveadm mailbox cryptokey password [-u username | -A] [-N | -n password] [-O |
 
 Sets, changes or clears password for user's private key.
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

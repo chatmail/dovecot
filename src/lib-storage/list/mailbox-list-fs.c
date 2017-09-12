@@ -129,6 +129,8 @@ fs_list_get_path(struct mailbox_list *_list, const char *name,
 			return 0;
 		*path_r = fs_list_get_path_to(set, set->index_pvt_dir, name);
 		return 1;
+	case MAILBOX_LIST_PATH_TYPE_LIST_INDEX:
+		i_unreached();
 	}
 
 	if (type == MAILBOX_LIST_PATH_TYPE_ALT_DIR ||
@@ -253,21 +255,22 @@ static int fs_list_delete_mailbox(struct mailbox_list *list, const char *name)
 	const char *path;
 	int ret;
 
+	ret = mailbox_list_get_path(list, name,
+				    MAILBOX_LIST_PATH_TYPE_MAILBOX, &path);
+	if (ret < 0)
+		return -1;
+	i_assert(ret > 0);
+
 	if ((list->flags & MAILBOX_LIST_FLAG_MAILBOX_FILES) != 0) {
-		ret = mailbox_list_get_path(list, name,
-					    MAILBOX_LIST_PATH_TYPE_MAILBOX,
-					    &path);
-		if (ret < 0)
-			return -1;
-		i_assert(ret > 0);
 		ret = mailbox_list_delete_mailbox_file(list, name, path);
 	} else {
 		ret = fs_list_delete_maildir(list, name);
 	}
+	if (ret == 0 && list->set.no_noselect)
+		mailbox_list_delete_until_root(list, path, MAILBOX_LIST_PATH_TYPE_MAILBOX);
 
-	if (ret == 0 || (list->props & MAILBOX_LIST_PROP_AUTOCREATE_DIRS) != 0)
-		mailbox_list_delete_finish(list, name);
-	return ret;
+	i_assert(ret <= 0);
+	return mailbox_list_delete_finish_ret(list, name, ret == 0);
 }
 
 static int fs_list_rmdir(struct mailbox_list *list, const char *name,
@@ -288,12 +291,32 @@ static int fs_list_delete_dir(struct mailbox_list *list, const char *name)
 {
 	const char *path, *child_name, *child_path, *p;
 	char sep;
+	int ret;
 
 	if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_DIR,
 				  &path) <= 0)
 		i_unreached();
-	if (fs_list_rmdir(list, name, path) == 0)
-		return 0;
+	ret = fs_list_rmdir(list, name, path);
+	if (!list->set.iter_from_index_dir) {
+		/* it should exist only in the mail directory */
+		if (ret == 0)
+			return 0;
+	} else if (ret == 0 || errno == ENOENT) {
+		/* the primary list location is the index directory, but it
+		   exists in both index and mail directories. */
+		if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_INDEX,
+					  &path) <= 0)
+			i_unreached();
+		if (fs_list_rmdir(list, name, path) == 0)
+			return 0;
+		if (ret == 0 && errno == ENOENT) {
+			/* partial existence: exists in _DIR, but not in
+			   _INDEX. return success anyway. */
+			return 0;
+		}
+		/* a) both directories didn't exist
+		   b) index directory couldn't be rmdir()ed for some reason */
+	}
 
 	if (errno == ENOENT || errno == ENOTDIR) {
 		mailbox_list_set_error(list, MAIL_ERROR_NOTFOUND,

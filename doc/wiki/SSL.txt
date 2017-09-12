@@ -58,5 +58,8 @@ SSL port deprecation never really happened, probably because of a few reasons:
    connection when you know you want it, instead of connect, negotiate
    capabilities, insist on TLS, then start all over again inside the encrypted
    session.
+ * According to some reports (like this
+   [https://it.slashdot.org/story/14/11/11/2349244/isps-removing-their-customers-email-encryption])
+   STARTTLS can not guarantee encrypted delivery of mail.
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

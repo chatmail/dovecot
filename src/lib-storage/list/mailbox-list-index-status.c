@@ -27,14 +27,13 @@ struct index_list_changes {
 struct index_list_storage_module index_list_storage_module =
 	MODULE_CONTEXT_INIT(&mail_storage_module_register);
 
-/* Never update the STATUS information for INBOX. INBOX is almost always opened
-   anyway, so this just causes extra writes. (Although this could be useful if
-   somebody has a lot of other users' shared INBOXes.) */
+/* Should the STATUS information for this mailbox not be written to the
+   mailbox list index? */
 #define MAILBOX_IS_NEVER_IN_INDEX(box) \
-	((box)->inbox_any)
+	((box)->inbox_any && !(box)->storage->set->mailbox_list_index_include_inbox)
 
 static int
-index_list_open_view(struct mailbox *box, bool refresh,
+index_list_open_view(struct mailbox *box, bool status_check,
 		     struct mail_index_view **view_r, uint32_t *seq_r)
 {
 	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(box->list);
@@ -43,7 +42,7 @@ index_list_open_view(struct mailbox *box, bool refresh,
 	uint32_t seq;
 	int ret;
 
-	if (MAILBOX_IS_NEVER_IN_INDEX(box))
+	if (MAILBOX_IS_NEVER_IN_INDEX(box) && status_check)
 		return 0;
 	if (mailbox_list_index_refresh(box->list) < 0)
 		return -1;
@@ -55,10 +54,14 @@ index_list_open_view(struct mailbox *box, bool refresh,
 	}
 
 	view = mail_index_view_open(ilist->index);
-	if (!mail_index_lookup_seq(view, node->uid, &seq)) {
+	if (mailbox_list_index_need_refresh(ilist, view)) {
+		/* mailbox_list_index_refresh_later() was called.
+		   Can't trust the index's contents. */
+		ret = 1;
+	} else if (!mail_index_lookup_seq(view, node->uid, &seq)) {
 		/* our in-memory tree is out of sync */
 		ret = 1;
-	} else if (!refresh) {
+	} else if (!status_check) {
 		/* this operation doesn't need the index to be up-to-date */
 		ret = 0;
 	} else T_BEGIN {
@@ -495,6 +498,12 @@ index_list_has_changed(struct mailbox *box, struct mail_index_view *list_view,
 	if (!guid_128_equals(changes->guid, old_guid) &&
 	    !guid_128_is_empty(changes->guid))
 		changes->rec_changed = TRUE;
+
+	if (MAILBOX_IS_NEVER_IN_INDEX(box)) {
+		/* check only UIDVALIDITY and GUID changes for INBOX */
+		return changes->rec_changed;
+	}
+
 	changes->msgs_changed =
 		old_status.messages != changes->status.messages ||
 		old_status.unseen != changes->status.unseen ||
@@ -628,8 +637,6 @@ static int index_list_update_mailbox(struct mailbox *box)
 		   mailbox that somebody else had just created */
 		return 0;
 	}
-	if (MAILBOX_IS_NEVER_IN_INDEX(box))
-		return 0;
 
 	/* refresh the mailbox list index once. we can't do this again after
 	   locking, because it could trigger list syncing. */
@@ -704,7 +711,9 @@ void mailbox_list_index_update_mailbox_index(struct mailbox *box,
 	int ret;
 
 	i_zero(&changes);
-	if ((ret = index_list_open_view(box, TRUE, &list_view, &changes.seq)) <= 0)
+	/* update the mailbox list index even if it has some other pending
+	   changes. */
+	if ((ret = index_list_open_view(box, FALSE, &list_view, &changes.seq)) <= 0)
 		return;
 
 	(void)mailbox_list_index_status(box->list, list_view, changes.seq,
@@ -738,15 +747,39 @@ void mailbox_list_index_update_mailbox_index(struct mailbox *box,
 	mail_index_view_close(&list_view);
 }
 
+static struct mailbox_sync_context *
+index_list_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
+{
+	struct index_list_mailbox *ibox = INDEX_LIST_STORAGE_CONTEXT(box);
+	const struct mail_index_header *hdr;
+
+	hdr = mail_index_get_header(box->view);
+	ibox->pre_sync_log_file_seq = hdr->log_file_seq;
+	ibox->pre_sync_log_file_head_offset = hdr->log_file_head_offset;
+
+	return ibox->module_ctx.super.sync_init(box, flags);
+}
+
 static int index_list_sync_deinit(struct mailbox_sync_context *ctx,
 				  struct mailbox_sync_status *status_r)
 {
 	struct mailbox *box = ctx->box;
 	struct index_list_mailbox *ibox = INDEX_LIST_STORAGE_CONTEXT(box);
+	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(box->list);
+	const struct mail_index_header *hdr;
 
 	if (ibox->module_ctx.super.sync_deinit(ctx, status_r) < 0)
 		return -1;
 	ctx = NULL;
+
+	hdr = mail_index_get_header(box->view);
+	if (!ilist->opened &&
+	    ibox->pre_sync_log_file_head_offset == hdr->log_file_head_offset &&
+	    ibox->pre_sync_log_file_seq == hdr->log_file_seq) {
+		/* List index isn't open and sync changed nothing.
+		   Don't bother opening the list index. */
+		return 0;
+	}
 
 	/* it probably doesn't matter much here if we push/pop the error,
 	   but might as well do it. */
@@ -766,6 +799,9 @@ index_list_transaction_commit(struct mailbox_transaction_context *t,
 	if (ibox->module_ctx.super.transaction_commit(t, changes_r) < 0)
 		return -1;
 	t = NULL;
+
+	if (!changes_r->changed)
+		return 0;
 
 	/* this transaction commit may have been done in error handling path
 	   and the caller still wants to access the current error. make sure
@@ -819,6 +855,7 @@ void mailbox_list_index_status_init_mailbox(struct mailbox_vfuncs *v)
 	v->exists = index_list_exists;
 	v->get_status = index_list_get_status;
 	v->get_metadata = index_list_get_metadata;
+	v->sync_init = index_list_sync_init;
 	v->sync_deinit = index_list_sync_deinit;
 	v->transaction_commit = index_list_transaction_commit;
 }

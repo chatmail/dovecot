@@ -24,7 +24,9 @@ Contents
 
      7. Archiving a Mailinglist by Date
 
-     8. Translation from Procmail
+     8. Emulating lmtp_save_to_detail_mailbox=yes
+
+     9. Translation from Procmail
 
 Below are some simple Sieve code examples, more can be found at
 http://sieve.info/examplescripts.
@@ -392,6 +394,22 @@ folder is created automatically if it doesn't exist. The ':create' argument is
 provided by the mailbox [http://tools.ietf.org/html/rfc5490#section-3]
 extension.
 
+Emulating lmtp_save_to_detail_mailbox=yes
+-----------------------------------------
+
+If you can't turn this option on, you can emulate the behaviour to some extent
+with following code.
+
+---%<-------------------------------------------------------------------------
+require ["variables", "fileinto", "envelope", "subaddress", "mailbox"];
+
+if envelope :matches :detail "to" "*" {
+  # you can prefix with INBOX/ or INBOX. if necessary
+  # remove :create if you want to permit only existing mailboxes
+  fileinto :create "${1}";
+}
+---%<-------------------------------------------------------------------------
+
 Translation from Procmail
 -------------------------
 
@@ -402,4 +420,4 @@ Sieve rules:http://www.earth.ox.ac.uk/~steve/sieve/procmail2sieve.pl
 Here's the original post announcing it:
 http://dovecot.org/list/dovecot/2007-March/020895.html
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)

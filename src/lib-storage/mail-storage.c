@@ -6,7 +6,10 @@
 #include "llist.h"
 #include "str.h"
 #include "str-sanitize.h"
+#include "sha1.h"
 #include "unichar.h"
+#include "hex-binary.h"
+#include "file-create-locked.h"
 #include "istream.h"
 #include "eacces-error.h"
 #include "mkdir-parents.h"
@@ -224,8 +227,8 @@ mail_storage_get_class(struct mail_namespace *ns, const char *driver,
 }
 
 static int
-mail_storage_verify_root(const char *root_dir, bool autocreate,
-			 const char **error_r)
+mail_storage_verify_root(const char *root_dir, const char *dir_type,
+			 bool autocreate, const char **error_r)
 {
 	struct stat st;
 
@@ -240,7 +243,7 @@ mail_storage_verify_root(const char *root_dir, bool autocreate,
 		return -1;
 	} else if (!autocreate) {
 		*error_r = t_strdup_printf(
-			"Root mail directory doesn't exist: %s", root_dir);
+			"Root %s directory doesn't exist: %s", dir_type, root_dir);
 		return -1;
 	} else {
 		/* doesn't exist */
@@ -252,12 +255,19 @@ static int
 mail_storage_create_root(struct mailbox_list *list,
 			 enum mail_storage_flags flags, const char **error_r)
 {
-	const char *root_dir, *error;
+	const char *root_dir, *type_name, *error;
+	enum mailbox_list_path_type type;
 	bool autocreate;
 	int ret;
 
-	if (!mailbox_list_get_root_path(list, MAILBOX_LIST_PATH_TYPE_MAILBOX,
-					&root_dir)) {
+	if (list->set.iter_from_index_dir) {
+		type = MAILBOX_LIST_PATH_TYPE_INDEX;
+		type_name = "index";
+	} else {
+		type = MAILBOX_LIST_PATH_TYPE_MAILBOX;
+		type_name = "mail";
+	}
+	if (!mailbox_list_get_root_path(list, type, &root_dir)) {
 		/* storage doesn't use directories (e.g. shared root) */
 		return 0;
 	}
@@ -268,7 +278,7 @@ mail_storage_create_root(struct mailbox_list *list,
 
 		/* we don't need to verify, but since debugging is
 		   enabled, check and log if the root doesn't exist */
-		if (mail_storage_verify_root(root_dir, FALSE, &error) < 0) {
+		if (mail_storage_verify_root(root_dir, type_name, FALSE, &error) < 0) {
 			i_debug("Namespace %s: Creating storage despite: %s",
 				list->ns->prefix, error);
 		}
@@ -276,10 +286,22 @@ mail_storage_create_root(struct mailbox_list *list,
 	}
 
 	autocreate = (flags & MAIL_STORAGE_FLAG_NO_AUTOCREATE) == 0;
-	ret = mail_storage_verify_root(root_dir, autocreate, error_r);
+	ret = mail_storage_verify_root(root_dir, type_name, autocreate, error_r);
 	if (ret == 0) {
-		ret = mailbox_list_try_mkdir_root(list, root_dir,
+		const char *mail_root_dir;
+
+		if (!list->set.iter_from_index_dir)
+			mail_root_dir = root_dir;
+		else if (!mailbox_list_get_root_path(list,
+				MAILBOX_LIST_PATH_TYPE_MAILBOX, &mail_root_dir))
+			i_unreached();
+		ret = mailbox_list_try_mkdir_root(list, mail_root_dir,
 						  MAILBOX_LIST_PATH_TYPE_MAILBOX,
+						  error_r);
+	}
+	if (ret == 0 && list->set.iter_from_index_dir) {
+		ret = mailbox_list_try_mkdir_root(list, root_dir,
+						  MAILBOX_LIST_PATH_TYPE_INDEX,
 						  error_r);
 	}
 	return ret < 0 ? -1 : 0;
@@ -836,7 +858,7 @@ void mailbox_set_reason(struct mailbox *box, const char *reason)
 	box->reason = p_strdup(box->pool, reason);
 }
 
-static bool mailbox_is_autocreated(struct mailbox *box)
+bool mailbox_is_autocreated(struct mailbox *box)
 {
 	if (box->inbox_user)
 		return TRUE;
@@ -1181,6 +1203,7 @@ mailbox_open_full(struct mailbox *box, struct istream *input)
 	} T_END;
 
 	if (ret < 0 && box->storage->error == MAIL_ERROR_NOTFOUND &&
+	    !box->deleting &&
 	    box->input == NULL && mailbox_is_autocreated(box)) T_BEGIN {
 		ret = mailbox_autocreate_and_reopen(box);
 	} T_END;
@@ -1527,7 +1550,7 @@ int mailbox_delete(struct mailbox *box)
 		if (mailbox_get_last_mail_error(box) != MAIL_ERROR_NOTFOUND &&
 		    !box->mailbox_deleted)
 			return -1;
-		/* \noselect mailbox */
+		/* might be a \noselect mailbox, so continue deletion */
 	}
 
 	ret = box->v.delete_box(box);
@@ -1841,6 +1864,15 @@ mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 		i_panic("Trying to sync mailbox %s with open transactions",
 			box->name);
 	}
+	if (!box->opened) {
+		if (mailbox_open(box) < 0) {
+			ctx = i_new(struct mailbox_sync_context, 1);
+			ctx->box = box;
+			ctx->flags = flags;
+			ctx->open_failed = TRUE;
+			return ctx;
+		}
+	}
 	T_BEGIN {
 		ctx = box->v.sync_init(box, flags);
 	} T_END;
@@ -1850,6 +1882,8 @@ mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 bool mailbox_sync_next(struct mailbox_sync_context *ctx,
 		       struct mailbox_sync_rec *sync_rec_r)
 {
+	if (ctx->open_failed)
+		return FALSE;
 	return ctx->box->v.sync_next(ctx, sync_rec_r);
 }
 
@@ -1865,7 +1899,13 @@ int mailbox_sync_deinit(struct mailbox_sync_context **_ctx,
 	*_ctx = NULL;
 
 	i_zero(status_r);
-	ret = box->v.sync_deinit(ctx, status_r);
+
+	if (!ctx->open_failed)
+		ret = box->v.sync_deinit(ctx, status_r);
+	else {
+		i_free(ctx);
+		ret = -1;
+	}
 	if (ret < 0 && box->inbox_user &&
 	    !box->storage->user->inbox_open_error_logged) {
 		errormsg = mailbox_get_last_internal_error(box, &error);
@@ -2329,6 +2369,8 @@ int mailbox_save_finish(struct mail_save_context **_ctx)
 {
 	struct mail_save_context *ctx = *_ctx;
 	struct mailbox_transaction_context *t = ctx->transaction;
+	/* we need to keep a copy of this because save_finish implementations
+	   will likely zero the data structure during cleanup */
 	struct mail_keywords *keywords = ctx->data.keywords;
 	enum mail_flags pvt_flags = ctx->data.pvt_flags;
 	bool copying_via_save = ctx->copying_via_save;
@@ -2546,9 +2588,9 @@ static void mailbox_get_permissions_if_not_set(struct mailbox *box)
 		return;
 	}
 
-	mailbox_list_get_permissions(box->list, box->name, &box->_perm);
-	box->_perm.file_create_gid_origin =
-		p_strdup(box->pool, box->_perm.file_create_gid_origin);
+	struct mailbox_permissions perm;
+	mailbox_list_get_permissions(box->list, box->name, &perm);
+	mailbox_permissions_copy(&box->_perm, &perm, box->pool);
 }
 
 const struct mailbox_permissions *mailbox_get_permissions(struct mailbox *box)
@@ -2669,16 +2711,31 @@ int mailbox_create_missing_dir(struct mailbox *box,
 	if (mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_MAILBOX,
 				&mail_dir) < 0)
 		return -1;
-	if (null_strcmp(dir, mail_dir) == 0) {
-		if ((box->list->props & MAILBOX_LIST_PROP_AUTOCREATE_DIRS) == 0)
-			return 0;
-		/* the directory might not have been created yet */
+	if (null_strcmp(dir, mail_dir) != 0) {
+		/* Mailbox directory is different - create a missing dir */
+	} else if ((box->list->props & MAILBOX_LIST_PROP_AUTOCREATE_DIRS) != 0) {
+		/* This layout (e.g. imapc) wants to autocreate missing mailbox
+		   directories as well. */
+	} else {
+		/* If the mailbox directory doesn't exist, the mailbox
+		   shouldn't exist at all. So just assume that it's already
+		   created and if there's a race condition just fail later. */
+		return 0;
 	}
 
 	/* we call this function even when the directory exists, so first do a
 	   quick check to see if we need to mkdir anything */
 	if (stat(dir, &st) == 0)
 		return 0;
+
+	if (null_strcmp(dir, mail_dir) != 0 &&
+	    stat(mail_dir, &st) < 0 && (errno == ENOENT || errno == ENOTDIR)) {
+		/* Race condition - mail root directory doesn't exist
+		   anymore either. We shouldn't create this directory
+		   anymore. */
+		mailbox_set_deleted(box);
+		return -1;
+	}
 
 	return mailbox_mkdir(box, dir, type);
 }
@@ -2761,4 +2818,52 @@ void mail_set_mail_cache_corrupted(struct mail *mail, const char *fmt, ...)
 	} T_END;
 
 	va_end(va);
+}
+
+int mailbox_lock_file_create(struct mailbox *box, const char *lock_fname,
+			     unsigned int lock_secs, struct file_lock **lock_r,
+			     const char **error_r)
+{
+	const struct mailbox_permissions *perm;
+	struct file_create_settings set;
+	const char *lock_path;
+	bool created;
+
+	perm = mailbox_get_permissions(box);
+	i_zero(&set);
+	set.lock_timeout_secs =
+		mail_storage_get_lock_timeout(box->storage, lock_secs);
+	set.lock_method = box->storage->set->parsed_lock_method;
+	set.mode = perm->file_create_mode;
+	set.gid = perm->file_create_gid;
+	set.gid_origin = perm->file_create_gid_origin;
+
+	if (box->list->set.volatile_dir == NULL)
+		lock_path = t_strdup_printf("%s/%s", box->index->dir, lock_fname);
+	else {
+		unsigned char box_name_sha1[SHA1_RESULTLEN];
+		string_t *str = t_str_new(128);
+
+		/* Keep this simple: Use the lock_fname with a SHA1 of the
+		   mailbox name as the suffix. The mailbox name itself could
+		   be too large as a filename and creating the full directory
+		   structure would be pretty troublesome. It would also make
+		   it more difficult to perform the automated deletion of empty
+		   lock directories. */
+		str_printfa(str, "%s/%s.", box->list->set.volatile_dir,
+			    lock_fname);
+		sha1_get_digest(box->name, strlen(box->name), box_name_sha1);
+		binary_to_hex_append(str, box_name_sha1, sizeof(box_name_sha1));
+		lock_path = str_c(str);
+		set.mkdir_mode = 0700;
+	}
+
+	if (file_create_locked(lock_path, &set, lock_r, &created, error_r) == -1) {
+		*error_r = t_strdup_printf("file_create_locked(%s) failed: %s",
+					   lock_path, *error_r);
+		return errno == EAGAIN ? 0 : -1;
+	}
+	file_lock_set_close_on_free(*lock_r, TRUE);
+	file_lock_set_unlink_on_free(*lock_r, TRUE);
+	return 1;
 }

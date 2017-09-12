@@ -1013,9 +1013,6 @@ static bool
 flag_updates_have_non_internal(const struct mail_transaction_flag_update *u,
 			       unsigned int count, unsigned int version)
 {
-	const uint8_t internal_flags =
-		MAIL_INDEX_MAIL_FLAG_BACKEND | MAIL_INDEX_MAIL_FLAG_DIRTY;
-
 	/* Hide internal flags from modseqs if the log file's version
 	   is new enough. This allows upgrading without the modseqs suddenly
 	   shrinking. */
@@ -1023,9 +1020,7 @@ flag_updates_have_non_internal(const struct mail_transaction_flag_update *u,
 		return TRUE;
 
 	for (unsigned int i = 0; i < count; i++) {
-		uint8_t changed_flags = u->add_flags | u->remove_flags;
-
-		if ((changed_flags & ~internal_flags) != 0)
+		if (!MAIL_TRANSACTION_FLAG_UPDATE_IS_INTERNAL(&u[i]))
 			return TRUE;
 	}
 	return FALSE;
@@ -1260,15 +1255,57 @@ int mail_transaction_log_file_get_highest_modseq_at(
 	return 0;
 }
 
+static int
+get_modseq_next_offset_at(struct mail_transaction_log_file *file,
+			  uint64_t modseq, bool use_highest,
+			  uoff_t *cur_offset, uint64_t *cur_modseq,
+			  uoff_t *next_offset_r)
+{
+	const struct mail_transaction_header *hdr;
+	const char *reason;
+	int ret;
+
+	/* make sure we've read until end of file. this is especially important
+	   with non-head logs which might only have been opened without being
+	   synced. */
+	ret = mail_transaction_log_file_map(file, *cur_offset, (uoff_t)-1, &reason);
+	if (ret <= 0) {
+		mail_index_set_error(file->log->index,
+			"Failed to map transaction log %s for getting offset "
+			"for modseq=%llu with start_offset=%"PRIuUOFF_T": %s",
+			file->filepath, (unsigned long long)modseq,
+			*cur_offset, reason);
+		return -1;
+	}
+
+	/* check sync_highest_modseq again in case sync_offset was updated */
+	if (modseq >= file->sync_highest_modseq && use_highest) {
+		*next_offset_r = file->sync_offset;
+		return 0;
+	}
+
+	i_assert(*cur_offset >= file->buffer_offset);
+	while (*cur_offset < file->sync_offset) {
+		if (log_get_synced_record(file, cur_offset, &hdr, &reason) < 0) {
+			mail_index_set_error(file->log->index,
+				"%s: %s", file->filepath, reason);
+			return -1;
+		}
+		mail_transaction_update_modseq(hdr, hdr + 1, cur_modseq,
+			MAIL_TRANSACTION_LOG_HDR_VERSION(&file->hdr));
+		if (*cur_modseq >= modseq)
+			break;
+	}
+	return 1;
+}
+
 int mail_transaction_log_file_get_modseq_next_offset(
 		struct mail_transaction_log_file *file,
 		uint64_t modseq, uoff_t *next_offset_r)
 {
-	const struct mail_transaction_header *hdr;
 	struct modseq_cache *cache;
 	uoff_t cur_offset;
 	uint64_t cur_modseq;
-	const char *reason;
 	int ret;
 
 	if (modseq == file->sync_highest_modseq) {
@@ -1295,44 +1332,30 @@ int mail_transaction_log_file_get_modseq_next_offset(
 		cur_modseq = cache->highest_modseq;
 	}
 
-	/* make sure we've read until end of file. this is especially important
-	   with non-head logs which might only have been opened without being
-	   synced. */
-	ret = mail_transaction_log_file_map(file, cur_offset, (uoff_t)-1, &reason);
-	if (ret <= 0) {
-		mail_index_set_error(file->log->index,
-			"Failed to map transaction log %s for getting offset "
-			"for modseq=%llu with start_offset=%"PRIuUOFF_T": %s",
-			file->filepath, (unsigned long long)modseq,
-			cur_offset, reason);
-		return -1;
-	}
-
-	/* check sync_highest_modseq again in case sync_offset was updated */
-	if (modseq >= file->sync_highest_modseq) {
-		*next_offset_r = file->sync_offset;
-		return 0;
-	}
-
-	i_assert(cur_offset >= file->buffer_offset);
-	while (cur_offset < file->sync_offset) {
-		if (log_get_synced_record(file, &cur_offset, &hdr, &reason) < 0) {
-			mail_index_set_error(file->log->index,
-				"%s: %s", file->filepath, reason);
-			return -1;
-		}
-		mail_transaction_update_modseq(hdr, hdr + 1, &cur_modseq,
-			MAIL_TRANSACTION_LOG_HDR_VERSION(&file->hdr));
-		if (cur_modseq >= modseq)
-			break;
-	}
+	if ((ret = get_modseq_next_offset_at(file, modseq, TRUE, &cur_offset,
+					     &cur_modseq, next_offset_r)) <= 0)
+		return ret;
 	if (cur_offset == file->sync_offset) {
 		/* if we got to sync_offset, cur_modseq should be
 		   sync_highest_modseq */
 		mail_index_set_error(file->log->index,
-			"%s: Transaction log changed unexpectedly, "
-			"can't get modseq", file->filepath);
-		return -1;
+			"%s: Transaction log modseq tracking is corrupted - fixing",
+			file->filepath);
+		/* retry getting the offset by reading from the beginning
+		   of the file */
+		cur_offset = file->hdr.hdr_size;
+		cur_modseq = file->hdr.initial_modseq;
+		ret = get_modseq_next_offset_at(file, modseq, FALSE,
+						&cur_offset, &cur_modseq,
+						next_offset_r);
+		if (ret < 0)
+			return -1;
+		i_assert(ret != 0);
+		/* get it fixed on the next sync */
+		file->log->index->need_recreate = TRUE;
+		file->need_rotate = TRUE;
+		/* clear cache, since it's unreliable */
+		memset(file->modseq_cache, 0, sizeof(file->modseq_cache));
 	}
 
 	/* @UNSAFE: cache the value */

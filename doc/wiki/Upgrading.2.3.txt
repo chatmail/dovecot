@@ -4,15 +4,52 @@ Upgrading Dovecot v2.2 to v2.3
 Settings changes
 ----------------
 
- * director_doveadm_port setting removed. Name the inet_listener doveadm { .. }
-   instead.
- * mdbox_purge_preserve_alt setting removed. It's always assumed to be "yes"
+ * 'director_doveadm_port' setting removed. Name the 'inet_listener doveadm {
+   .. }' instead.
+ * 'mdbox_purge_preserve_alt' setting removed. It's always assumed to be "yes"
    now.
+ * 'director_consistent_hashing' setting removed. It's always assumed to be
+   "yes" now.
+
+Localhost auth penalty
+----------------------
+
+Dovecot no longer disables auth penalty waits for clients connecting from
+localhost. The previous idea was that it would likely be a webmail that would
+have its own delays, but there are no guarantees about this.
+
+If the old behavior is still wanted, it's possible to do nowadays even more
+generically with e.g.:
+
+---%<-------------------------------------------------------------------------
+passdb {
+ driver = passwd-file
+ args = username_format=%{rip} /etc/dovecot/passdb
+}
+---%<-------------------------------------------------------------------------
+
+/etc/dovecot/passdb:
+
+---%<-------------------------------------------------------------------------
+127.0.0.1:::::::nodelay=yes
+192.168.10.124:::::::nodelay=yes
+---%<-------------------------------------------------------------------------
 
 Setting default changes
 -----------------------
 
  * mdbox_rotate_size=2M -> 10M
+ * mailbox_list_index=no -> yes
+ * imap_logout_format=in=%i out=%o
+    * -> in=%i out=%o deleted=%{deleted} expunged=%{expunged}
+      trashed=%{trashed} hdr_count=%{fetch_hdr_count}
+      hdr_bytes=%{fetch_hdr_bytes} body_count=%{fetch_body_count}
+      body_bytes=%{fetch_body_bytes}
+ * ssl_cipher_list=ALL:!LOW:!SSLv2:!EXP:!aNULL
+    * ->
+      ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
+ * mail_log_prefix="%s(%u): "
+    * -> "%s(%u)<%{session}>: "
 
 Diffie-Heffman parameters for SSL
 ---------------------------------
@@ -26,4 +63,4 @@ Diffie-Heffman parameters for SSL
       -inform der > /etc/dovecot/dh.pem
       ---%<-------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-06-26 04:42)
+(This file was created from the wiki on 2017-08-24 04:42)
