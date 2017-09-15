@@ -65,6 +65,13 @@ if [ "$1" = "configure" ]; then
       ln -s /etc/ssl/private/ssl-cert-snakeoil.key /etc/dovecot/private/dovecot.key
     fi
   fi
+
+  # Remove the old dovecot-common.postrm (if it's still around for some
+  # reason), as purging dovecot-common will remove /etc/dovecot/dovecot.conf.
+  # See #696382.
+  if [ -f "/var/lib/dpkg/info/dovecot-common.postrm" ]; then
+    rm -f /var/lib/dpkg/info/dovecot-common.postrm
+  fi
 fi
 
 if [ "$1" = "triggered" ]; then
