@@ -125,7 +125,8 @@ override_dh_auto_install:
 	$(MAKE) install DESTDIR=$(CORE_DIR)
 	$(MAKE) -C $(PIGEONHOLE_DIR) install DESTDIR=$(CORE_DIR)
 	rm `find $(CURDIR)/debian -name '*.la'`
-	rm debian/dovecot-core/etc/dovecot/README
+	rm $(CORE_DIR)/etc/dovecot/README
+	rm $(CORE_DIR)/usr/lib/dovecot/decode2text.sh
 
 override_dh_install:
 	# dh_auto_install has installed everything in the dovecot-core package.
