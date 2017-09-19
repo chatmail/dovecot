@@ -258,17 +258,3 @@ Description: secure POP3/IMAP server - Lucene support
  fast, extensible, and portable.
  .
  This package provides Lucene full text search support for Dovecot.
-
-Package: dovecot-dbg
-Section: debug
-Priority: extra
-Architecture: any
-Depends: dovecot-core (= ${binary:Version}), ${misc:Depends}
-Description: secure POP3/IMAP server - debug symbols
- Dovecot is a mail server whose major goals are security and extreme
- reliability. It tries very hard to handle all error conditions and verify
- that all data is valid, making it nearly impossible to crash. It supports
- mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
- fast, extensible, and portable.
- .
- This package contains debug symbols for Dovecot.
