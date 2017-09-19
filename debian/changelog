@@ -1,3 +1,14 @@
+dovecot (1:2.2.32-2) unstable; urgency=medium
+
+  * [fa71c69] dovecot-core.postinst: remove dovecot-common's postrm
+    (Closes: #696382)
+  * [e835c67] Ship decode2text.sh as an example (Closes: #767313)
+  * [63fb486] Deprecate dovecot-dbg in favor of auto dbgsyms
+  * [36b44b9] Handle unsupported SSLv2/SSLv3 in the ssl_protocols setting
+    gracefully (Closes: #866752)
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Tue, 19 Sep 2017 16:59:38 +0300
+
 dovecot (1:2.2.32-1) unstable; urgency=medium
 
   * [6652d9c] New upstream version 2.2.32.
