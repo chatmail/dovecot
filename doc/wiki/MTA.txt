@@ -28,6 +28,9 @@ packages:
    really intend to continue using it, read Dave Sill's Life with qmail
    [http://www.lifewithqmail.org/] which contains instructions to work around
    some of qmail's security issues.
+ * HALON [https://halon.io/] is a commercial MTA, which supports Dovecot Auth
+   and LMTP. It's based on FreeBSD with anti-spam/virus, DKIM, DMARC, DANE,
+   etc.
 
 Some people also subsume mail fetching utilities under the MTA category, among
 them:
@@ -48,4 +51,4 @@ dovecot.
  Contrast this to the <message delivery agent (MDA)> [MDA.txt], sometimes
 called local delivery agent (LDA).
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

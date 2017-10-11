@@ -250,7 +250,12 @@ client_proxy_rcpt_parse_fields(struct lmtp_proxy_rcpt_settings *set,
 			proxying = TRUE;
 		else if (strcmp(key, "host") == 0)
 			set->host = value;
-		else if (strcmp(key, "port") == 0) {
+		else if (strcmp(key, "hostip") == 0) {
+			if (net_addr2ip(value, &set->hostip) < 0) {
+				i_error("proxy: Invalid hostip %s", value);
+				return FALSE;
+			}
+		} else if (strcmp(key, "port") == 0) {
 			if (net_str2port(value, &set->port) < 0) {
 				i_error("proxy: Invalid port number %s", value);
 				return FALSE;
@@ -297,8 +302,12 @@ client_proxy_is_ourself(const struct client *client,
 	if (set->port != client->local_port)
 		return FALSE;
 
-	if (net_addr2ip(set->host, &ip) < 0)
-		return FALSE;
+	if (set->hostip.family != 0)
+		ip = set->hostip;
+	else {
+		if (net_addr2ip(set->host, &ip) < 0)
+			return FALSE;
+	}
 	if (!net_ip_compare(&ip, &client->local_ip))
 		return FALSE;
 	return TRUE;
@@ -552,8 +561,17 @@ lmtp_rcpt_to_is_over_quota(struct client *client,
 	if (!client->lmtp_set->lmtp_rcpt_check_quota)
 		return 0;
 
-	ret = mail_storage_service_next(storage_service,
-					rcpt->service_user, &user);
+	/* mail user will be created second time when mail is saved,
+	   so it's session_id needs to be different,
+	   but second time session_id needs to be the same as rcpt session_id and
+	   mail user session id for the first rcpt should not overlap with session id
+	   of the second recipient, so add custom ":quota" suffix to the session_id without
+	   session_id counter increment, so next time mail user will get
+	   the same session id as rcpt */
+	ret = mail_storage_service_next_with_session_suffix(storage_service,
+							    rcpt->service_user,
+							    "quota",
+							    &user);
 	if (ret < 0)
 		return -1;
 

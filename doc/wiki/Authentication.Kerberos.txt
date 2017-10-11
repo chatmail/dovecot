@@ -226,4 +226,4 @@ The test:
     * run command klist (list all kerberos keys) should show imap/HOSTNAME
  * DNS has to function correctly so that kerberos works.
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

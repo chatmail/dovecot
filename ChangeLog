@@ -1,37 +1,1514 @@
-2017-08-24 15:38:13 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (dfbe293d4)
+2017-10-10 18:20:31 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (68b0a183e)
 
-    Released v2.2.32.
+    Released v2.2.33.
 
 
 M	NEWS
 M	configure.ac
 
-2017-08-23 13:14:50 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (8b97c8c2f)
+2017-10-10 15:38:13 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (8945785ec)
 
-    apparmor: Call super deinit function
+    lib: ostream-multiplex - ignore flush return value
 
-    Otherwise user won't get properly deinitialized, forgotten in 
-    a7a0f3196b2b97577ebd9e804507d58e67508fcf
+    There's nothing that can be done about it at close() time. Silences static 
+    analyzer warnings.
 
-M	src/plugins/apparmor/apparmor-plugin.c
+M	src/lib/ostream-multiplex.c
 
-2017-08-18 11:22:52 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (640521f2a)
+2017-10-10 15:37:39 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (81157ad22)
 
-    doveadm-server: Deinitialize print on connection destroy
+    lib: ostream-multiplex - remove unnecessary flushes
 
-    Otherwise print remains initialized and can break when reusing the service.
+
+M	src/lib/ostream-multiplex.c
+
+2017-10-10 12:52:15 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (3af85d6bb)
+
+    doveadm-mail-crypt: Do not return prematurely in key generate
+
+    Broken by 446d7d9ddfe122e152b832c13fc28d164ae2c5e9
+
+M	src/plugins/mail-crypt/doveadm-mail-crypt.c
+
+2017-10-10 12:33:08 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e168b589d)
+
+    lib: istream-multiplex - Minor optimization
+
+    There's no need to find channel when we already know it. This also helps 
+    static analyzers to understand that req_channel can't be NULL.
+
+M	src/lib/istream-multiplex.c
+
+2017-10-06 09:02:49 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (40770486f)
+
+    ostream-multiplex: Check flush return value
+
+
+M	src/lib/ostream-multiplex.c
+
+2017-10-06 08:55:33 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (af9672c1e)
+
+    test-ostream-escaped: Check flush return value
+
+    Found by coverity
+
+M	src/lib/test-ostream-escaped.c
+
+2017-10-06 08:54:38 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (ed64529a7)
+
+    doveadm-server: Remove flush before multiplex
+
+    It's not really necessary, found by coverity
 
 M	src/doveadm/client-connection.c
 
-2017-08-22 14:18:10 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (a350120ca)
+2017-10-06 08:52:18 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (a1cbe6d45)
 
-    Released v2.2.32.rc2.
+    iostream-multiplex: Check return values in tests
+
+
+M	src/lib/test-istream-multiplex.c
+M	src/lib/test-multiplex.c
+M	src/lib/test-ostream-multiplex.c
+
+2017-10-06 08:46:00 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (981447121)
+
+    doveadm: Return after destroying connection
+
+    Prevents NULL deferences, found by coverity.
+
+M	src/doveadm/server-connection.c
+
+2017-08-17 14:17:46 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (577616b71)
+
+    doveadm mcp keypair generate: Fix -f parameter
+
+
+M	src/plugins/mail-crypt/doveadm-mail-crypt.c
+
+2017-10-06 14:39:00 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b9ead8d45)
+
+    pop3: Expand settings to fix rawlog_dir
+
+    Even if %variables weren't used in rawlog_dir, the path was always prefixed 
+    with "0".
+
+M	src/pop3/main.c
+
+2017-10-06 12:47:06 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (154a011b9)
+
+    doveadm-mail-crypt: Print existing folder key hash when aborting generate
+
+
+M	src/plugins/mail-crypt/doveadm-mail-crypt.c
+
+2017-10-06 11:07:23 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (e46dc6c96)
+
+    doveadm-mail-crypt: Print existing userkey hash when aborting generate
+
+
+M	src/plugins/mail-crypt/doveadm-mail-crypt.c
+
+2017-10-05 15:53:16 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (dc88b0d8c)
+
+    mail-crypt: Improve doveadm output
+
+
+M	src/plugins/mail-crypt/doveadm-mail-crypt.c
+
+2017-10-05 15:40:45 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (424deab0a)
+
+    mail-crypt: Fix key generation handling
+
+    Userkey generation would not set all required fields.
+
+M	src/plugins/mail-crypt/doveadm-mail-crypt.c
+
+2017-10-09 18:21:24 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (d5488dcd3)
+
+    ostream-multiplex: Unreference stream parent
+
+    Otherwise it won't get free'd.
+
+M	src/lib/ostream-multiplex.c
+
+2017-10-09 13:55:06 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (beb9d9256)
+
+    doveadm: Add remote(host) prefix to all proxied logs
+
+
+M	src/doveadm/server-connection.c
+
+2017-10-09 14:28:17 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2c0c73fe7)
+
+    doveadm log test: Fix it to work again
+
+    Broken by 719abeb2088987f213a33a7dd1fe78958beaef03
+
+M	src/doveadm/doveadm-log.c
+
+2017-10-09 13:19:32 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e0456dc06)
+
+    lib: ostream-multiplex - set ostream_private.parent
+
+    Unlike with istream-multiplex, there are no issues with I/Os. Only the 
+    parent stream will have the I/O. Using the default parent adds the missing
+    methods that otherwise would have needed to be implemented:
+    - cork
+    - flush_pending
+    - switch_ioloop
+
+M	src/lib/ostream-multiplex.c
+
+2017-10-09 13:14:23 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (1c777b3e4)
+
+    lib: istream-multiplex - Forward i_stream_switch_ioloop() to parent
+
+    Most istreams do this because istream_private.parent is set to the parent 
+    stream, but this can't be done with istream-multiplex. The main problem with
+    attempting to do the same with istream-multiplex is that the different 
+    channels don't share the same I/O. Just because one channel received data 
+    doesn't mean that other channels received any data. (It would be possible to
+    solve this by implementing a new method that allows overriding 
+    i_stream_set_io(), but I'm not sure if that's a good idea either.)
+
+M	src/lib/istream-multiplex.c
+
+2017-10-09 01:22:47 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d1b011901)
+
+    acl: Fix compiler warning with -Wstrict-bool
+
+
+M	src/plugins/acl/acl-backend-vfile.c
+
+2017-10-06 16:55:28 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b1b550153)
+
+    acl: Fix checking create (k) permission in global acl-file
+
+    Just because the global ACL file hasn't changed since it was last refreshed 
+    for another ACL object, it doesn't mean that those ACLs don't need to be 
+    applied to this ACL object.
+
+    This didn't usually cause problems, because the initial ACL object refresh 
+    was always done due to local-path refresh returning "needs a refresh". The
+    only exception was when acl_object_init_from_parent() was called, because it
+    added an empty non-NULL validity for the local-path, so the
+    "needs a refresh" wasn't returned. This happened only when trying to CREATE
+    or RENAME mailbox under a parent where user didn't have create permissions.
+
+    This affected only when using a single global acl-file, not when using 
+    global acl directory containing per-mailbox files.
+
+M	src/plugins/acl/acl-backend-vfile.c
+M	src/plugins/acl/acl-global-file.c
+M	src/plugins/acl/acl-global-file.h
+
+2017-10-06 16:54:20 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (8bd8652b1)
+
+    acl: Cleanup - move code to a new acl_vfile_validity_has_changed()
+
+
+M	src/plugins/acl/acl-backend-vfile.c
+
+2017-10-06 16:44:01 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ba6c321d5)
+
+    acl: Fix checking whether global acl-file has changed
+
+    We always assumed that it was changed and re-read it.
+
+M	src/plugins/acl/acl-global-file.c
+
+2017-10-06 16:30:11 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (67c90c97b)
+
+    auth: Fix %{ldap_dn} change to compile with v2.2 API
+
+
+M	src/auth/db-ldap.c
+
+2017-09-15 15:17:08 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (8bfc42d4d)
+
+    auth: Expand %{ldap_dn} to ldap_get_dn().
+
+
+M	src/auth/db-ldap.c
+
+2017-10-05 20:25:29 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f352c763b)
+
+    lib: iostream-multiplex tests - Fix hangs by setting the pipe fds
+    non-blocking
+
+
+M	src/lib/test-istream-multiplex.c
+M	src/lib/test-multiplex.c
+M	src/lib/test-ostream-multiplex.c
+
+2017-10-05 20:24:11 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (90d745e0a)
+
+    lib: istream-multiplex - Minor code cleanup
+
+    Avoid propagating the error twice, and avoid any confusion about what "got" 
+    actually contains.
+
+M	src/lib/istream-multiplex.c
+
+2017-10-05 20:07:11 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c1538be43)
+
+    Released v2.2.33.rc1.
 
 
 M	NEWS
 M	configure.ac
 
-2017-08-18 11:09:41 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (48f0cec17)
+2017-10-05 12:34:10 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f066ee1f0)
+
+    director: When ring is synced, purge any pending "removed" directors
+
+    This allows adding a director back to the ring without having to wait for 30 
+    seconds.
+
+M	src/director/director.c
+
+2017-10-03 16:40:32 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ab9e658e6)
+
+    director: Rename director_delayed_dir_remove_timeout() to
+    director_hosts_purge_removed()
+
+    This allows using it for other purposes without having a confusing name.
+
+M	src/director/director.c
+
+2017-10-05 16:12:38 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (184bcab00)
+
+    director: Fix potential panic when director is alone
+
+    If director is alone and it can't connect to other directors, it might crash 
+    with:
+
+    Panic: file director.c: line 318 (director_set_ring_synced): assertion
+    failed: (!dir->ring_synced)
+
+M	src/director/director.c
+
+2017-10-05 11:51:23 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d78b8d04a)
+
+    director: Allow doveadm director ring remove for the same director
+
+    Fixes: Panic: file doveadm-connection.c: line 859
+    (doveadm_connection_cmd_run): assertion failed: (conn->dir->right == NULL &&
+    conn->dir->left == NULL)
+
+M	src/director/director.c
+
+2017-10-05 11:49:31 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (868c94dfa)
+
+    director: Don't crash on doveadm director ring remove for unknown director
+
+    Ring syncing isn't started, so it shouldn't try to wait for ring sync.
+
+    Fixes: Panic: file doveadm-connection.c: line 859
+    (doveadm_connection_cmd_run): assertion failed: (conn->dir->right == NULL &&
+    conn->dir->left == NULL)
+
+M	src/director/doveadm-connection.c
+
+2017-10-05 11:46:55 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (547fa7e59)
+
+    director: Don't crash if DIRECTOR-REMOVE is received for itself
+
+    This triggers the director removal from the ring, which causes the 
+    connection to be destroyed. But since we're still in the middle of handling 
+    the connection it needs refcounting.
+
+M	src/director/director-connection.c
+
+2017-09-14 18:13:05 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (959376d04)
+
+    director: Fix ring sync wait after DIRECTOR-REMOVE
+
+    It was sending OK twice, and the first OK was too early.
+
+M	src/director/doveadm-connection.c
+
+2017-09-14 17:59:05 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (656b9cd7f)
+
+    director: Ignore CONNECT requests to hosts that have been removed already
+
+
+M	src/director/director-connection.c
+
+2017-09-14 17:57:29 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (3284bc936)
+
+    director: After CONNECT was received, make sure we disconnect
+
+    The remote side won't be reading anything after the CONNECT, so we have to 
+    disconnect anyway. If we decide that the CONNECT request is wrong, reconnect 
+    after a short delay and hope that the remote agrees with us the next time.
+
+M	src/director/director-connection.c
+
+2017-09-14 17:48:50 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (63818a815)
+
+    director: When director is removed, notify it before disconnecting
+
+    This way the removed director will know that it's been removed, and it can
+    also more quickly forward the removal to other directors.
+
+M	src/director/director.c
+
+2017-09-14 17:38:24 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (1c88cb742)
+
+    director: Don't reset directors' last_network_failure while handshaking
+
+    The reset is done mainly to make it faster for a director that has been down 
+    to connect back to the ring, without other directors still thinking that 
+    it's down. But DIRECTOR that is sent during handshake says nothing about 
+    whether the director is up at the moment or not.
+
+M	src/director/director-connection.c
+
+2017-09-14 17:35:02 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (cc4257614)
+
+    director: Log info line for every incoming/outgoing connection
+
+    This can help with debugging problems.
+
+M	src/director/director-connection.c
+M	src/director/director.c
+M	src/director/director.h
+M	src/director/main.c
+
+2017-09-14 17:33:19 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4f8ec7760)
+
+    director: Cleanup - move code to a new director_log_connect()
+
+    Also adds a missing ')' to the log line.
+
+M	src/director/director.c
+
+2017-09-14 17:29:48 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2ff32179d)
+
+    director: Log info line whenever a director is added/removed from ring
+
+    This can help with debugging problems.
+
+M	src/director/director-connection.c
+M	src/director/director.c
+M	src/director/director.h
+M	src/director/doveadm-connection.c
+
+2017-09-14 18:13:33 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f16eeebdd)
+
+    director: Improve debugging: Log ring desync when there is no right
+    connection
+
+
+M	src/director/director.c
+
+2017-09-14 17:26:39 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c78c950ef)
+
+    director: When logging "ring SYNC lost", include sync seq number in message
+
+    This can help with debugging.
+
+M	src/director/director.c
+
+2017-09-14 11:57:27 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (86a787a08)
+
+    doveadm director ring remove: Wait ring sync before and after removal
+
+    This helps mainly with automated tests.
+
+M	src/director/director.c
+M	src/director/doveadm-connection.c
+
+2017-10-03 14:51:16 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (71a491318)
+
+    lib-master: master_service_init_log() - Switch log handlers only on the
+    first call
+
+    The secondary calls were only done by mail_storage_service_*() calls. They 
+    want to initialize the logging once, but afterwards they only care about 
+    changing the log prefix. Switch to this behavior now explicitly.
+
+    This fixes behavior if logging functions are changed between 
+    mail_storage_service_*() calls, so they don't get reset.
+
+M	src/lib-master/master-service-private.h
+M	src/lib-master/master-service.c
+M	src/lib-master/master-service.h
+
+2017-10-05 12:47:17 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e9910418a)
+
+    lib: Fix warning with gcc7's -Wint-in-bool-context
+
+
+M	src/lib/buffer.h
+
+2017-08-24 14:59:07 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (7daf9f464)
+
+    doveadm: Deliver remote logs over doveadm socket
+
+
+M	src/doveadm/client-connection.c
+M	src/doveadm/client-connection.h
+M	src/doveadm/doveadm-util.c
+M	src/doveadm/doveadm-util.h
+M	src/doveadm/server-connection.c
+
+2017-08-24 14:45:22 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (6960662b2)
+
+    doveadm: Refactor server/client code to support versioning properly
+
+    This way we can distinguish between old and new server side
+
+M	src/doveadm/client-connection.c
+M	src/doveadm/doveadm-util.h
+M	src/doveadm/server-connection.c
+
+2017-09-12 13:43:30 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (2cb630d7d)
+
+    doveadm-server: Refactor connection handshake and authentication
+
+    Simplifies next change
+
+M	src/doveadm/client-connection.c
+M	src/doveadm/client-connection.h
+M	src/doveadm/doveadm-util.h
+M	src/doveadm/server-connection.c
+
+2017-08-22 10:14:22 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (7a4621110)
+
+    lib: Add multiplex stream support
+
+    This allows having multiple channels of data in single stream.
+
+M	src/lib/Makefile.am
+A	src/lib/istream-multiplex.c
+A	src/lib/istream-multiplex.h
+A	src/lib/ostream-multiplex.c
+A	src/lib/ostream-multiplex.h
+A	src/lib/test-istream-multiplex.c
+M	src/lib/test-lib.c
+M	src/lib/test-lib.h
+A	src/lib/test-multiplex.c
+A	src/lib/test-ostream-multiplex.c
+
+2017-10-04 15:41:03 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (5848bf10e)
+
+    director: Fix HOST-RESET-USERS when all hosts are down
+
+    If there were a lot of users being kicked, the host was flushed after the 
+    initial round of user kills. This caused the rest of the user connections to 
+    be just discarded instead of actually being killed.
+
+M	src/director/doveadm-connection.c
+
+2017-10-04 15:39:08 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (49a526355)
+
+    director: Fix tracking user move count when user is freed early
+
+    users_moving_count wasn't updated if the user was freed before killing it 
+    finished. This caused "doveadm director flush" to hang while waiting for the
+    move count to drop to 0, which it never did. Also following flushes were
+    doing less work in parallel, or possibly even nothing since director thought
+    there were too many users already being moved.
+
+M	src/director/director.c
+
+2017-10-04 10:32:17 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (3dc758622)
+
+    quota-clone: Always update dict
+
+    ret_count and ret_bytes become zero if no quota rules are specified, so we
+    need to update the dict anyways.
+
+    Broken in 81d10aff29baede9ae4944d6c89790871123d11d
+
+M	src/plugins/quota-clone/quota-clone-plugin.c
+
+2017-09-22 13:30:43 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (d630d68aa)
+
+    dsync: Add hashed_headers setting
+
+    This makes it possible to configure them
+
+M	src/doveadm/doveadm-dsync.c
+M	src/doveadm/doveadm-settings.c
+M	src/doveadm/doveadm-settings.h
+M	src/doveadm/dsync/dsync-brain-mailbox.c
+M	src/doveadm/dsync/dsync-brain-private.h
+M	src/doveadm/dsync/dsync-brain.c
+M	src/doveadm/dsync/dsync-brain.h
+M	src/doveadm/dsync/dsync-ibc-stream.c
+M	src/doveadm/dsync/dsync-ibc.h
+M	src/doveadm/dsync/dsync-mail.c
+M	src/doveadm/dsync/dsync-mail.h
+M	src/doveadm/dsync/dsync-mailbox-export.c
+M	src/doveadm/dsync/dsync-mailbox-export.h
+M	src/doveadm/dsync/dsync-mailbox-import.c
+M	src/doveadm/dsync/dsync-mailbox-import.h
+
+2017-09-22 14:08:45 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (d1c2f79c1)
+
+    dsync: Fix typo, it's ibc not icb
+
+
+M	src/doveadm/doveadm-dsync.c
+
+2017-09-25 10:28:03 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (ff0a0c905)
+
+    dsync: Add missing space to handshake optional keys
+
+
+M	src/doveadm/dsync/dsync-ibc-stream.c
+
+2017-09-08 11:02:29 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (33f877eca)
+
+    doveadm proxy: Avoid DNS lookup for "host" if passdb also returns "hostip"
+
+
+M	src/doveadm/doveadm-mail-server.c
+
+2017-09-08 11:02:07 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9222388d6)
+
+    lmtp proxy: Avoid DNS lookup for "host" if passdb also returns "hostip"
+
+
+M	src/lmtp/commands.c
+M	src/lmtp/lmtp-proxy.c
+M	src/lmtp/lmtp-proxy.h
+
+2017-09-08 11:01:20 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (dbf0b24b7)
+
+    auth: Avoid DNS lookup for "host" if passdb returns also "hostip"
+
+
+M	src/auth/auth-request.c
+
+2017-07-25 10:39:43 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (053f9b41a)
+
+    lib: Fix compiler warning in var-expand-if
+
+
+M	src/lib/var-expand-if.c
+
+2017-07-25 09:43:56 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (5ef27b9d1)
+
+    lib: Fix static analyzer warnings in var-expand-if
+
+
+M	src/lib/var-expand-if.c
+
+2017-07-24 18:30:01 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (587bf2f8f)
+
+    var-expand-if: Remove unused variable par_start
+
+
+M	src/lib/var-expand-if.c
+
+2017-07-24 13:31:49 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (d19ed6338)
+
+    var-expand: Add tests for var_expand conditionals
+
+
+M	src/lib/test-var-expand.c
+
+2017-07-24 13:31:02 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (e55f99a3d)
+
+    var-expand: Add support for conditionals
+
+    %{if;value-a,op,value-b:true-value:false-value}
+
+M	src/lib/Makefile.am
+A	src/lib/var-expand-if.c
+M	src/lib/var-expand-private.h
+M	src/lib/var-expand.c
+
+2015-10-19 13:49:54 +0300 Timo Sirainen <tss@iki.fi> (16d2f48cb)
+
+    director: Remember backends' hostnames and send them in login reply. This
+    allows login processes to verify the remote server's hostname in SSL
+    certificate.
+
+
+M	src/director/mail-host.h
+
+2017-08-18 11:51:36 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9a97cfeb2)
+
+    director: Run director/host changing doveadm commands only after ring is
+    synced
+
+    If the ring sync is still pending, the doveadm command may become reverted. 
+    This doesn't fully prevent problems caused by sending doveadm commands 
+    simultaneously to multiple directors, but it should prevent issues when only
+    a single director is used for doveadm commands.
+
+    It would have been nice to enable this also for HOST/DIRECTOR-LIST commands, 
+    but they don't support returning a ring timeout error without changing the 
+    protocol. It's a bit too much effort to change that for now.
+
+M	src/director/doveadm-connection.c
+
+2017-08-14 10:29:47 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (1d0eb22ca)
+
+    director: doveadm HOST-* commands now wait for ring sync before returning OK
+
+    This should make it easier for tests and maybe for scripts in general, so 
+    they won't think the command failed when it just takes a while to finish.
+
+M	src/director/doveadm-connection.c
+M	src/director/doveadm-connection.h
+M	src/director/main.c
+
+2017-08-14 10:06:34 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (540695680)
+
+    director: Cleanup - Doveadm commands now return enum
+    doveadm_director_cmd_ret
+
+
+M	src/director/doveadm-connection.c
+
+2017-08-14 10:01:01 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f5416e345)
+
+    director: Cleanup - Move all doveadm commands into an array.
+
+
+M	src/director/doveadm-connection.c
+
+2017-09-19 14:48:54 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (8cd3ade63)
+
+    cassandra: Timestamp should be in microseconds, not milliseconds
+
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-09-13 15:16:59 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (65ffbfb57)
+
+    cassandra: Fix paged queries to work again
+
+    When continuing the result, consistency was reset to 0 (=ANY), which caused 
+    the queries to fail. There's no need to initialize the statement again when 
+    continuing it. Also set result->consistency to be correct mainly for 
+    debugging purposes.
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-09-12 13:23:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (fbe89fbf9)
+
+    cassandra: Disable prepared statements with protocol v3 and older
+
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-08-22 14:35:11 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f90f6a287)
+
+    cassandra: Add support for prepared statements
+
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-08-22 13:55:15 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (424b15e8d)
+
+    cassandra: Cleanup - Create statement earlier
+
+    Simplifies the following changes
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-08-24 11:56:38 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6679cc8ff)
+
+    cassandra: sql_transaction_commit*() cleanup - handle multiple query
+    failures earlier
+
+    This makes the handling same for the sync and async method. It also 
+    simplifies code for the following commits.
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-08-24 11:13:32 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f1f0d80ad)
+
+    cassandra: sql_transaction_commit_s() - Set query_type correctly
+
+    The queries were all sent with READ type instead of WRITE/DELETE. This meant
+    they were using potentially wrong consistency values. Although synchronous
+    commits aren't actually used anywhere, so this practically this doesn't fix
+    anything right now.
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-08-24 11:09:05 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c5a23ba5e)
+
+    cassandra: sql_transaction_commit_s() - Don't allow multi-query transactions
+
+    They were already denied for asynchronous commits. Also the synchronous 
+    commits aren't actually used anywhere, so this shouldn't break anything.
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-09-07 15:40:16 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4ea91541f)
+
+    dict-sql: Use prepared statements
+
+    Create a hash table of query template -> prepared statement and fill it out 
+    as needed. This could have been done some alternative ways that wouldn't 
+    require building the string first, but this should still be fast enough and 
+    much easier to implement.
+
+M	src/lib-dict/dict-sql.c
+
+2017-08-26 23:27:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (727f90169)
+
+    dict-sql: Flush pending atomic_inc on set, and pending set on atomic_inc
+
+
+M	src/lib-dict/dict-sql.c
+
+2017-08-26 23:17:45 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (1b4704229)
+
+    dict-sql: Cleanup - change query generator functions to return statement
+
+    Instead of query+params. This is in preparation for the following changes.
+
+M	src/lib-dict/dict-sql.c
+
+2017-08-15 16:50:16 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (98d322947)
+
+    dict-sql: Cleanup - Remove unnecessary code
+
+    The values are explicitly added to params. sql_dict_update_query() doesn't 
+    add them again. Since the "diff" parameter is already a long long type, this
+    avoids unnecessary conversion to string and back.
+
+M	src/lib-dict/dict-sql.c
+
+2017-08-15 16:38:33 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (fa7369ee9)
+
+    dict-sql: Use sql_statement_bind_*()
+
+
+M	src/lib-dict/dict-sql.c
+
+2017-08-15 15:37:01 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (99c545950)
+
+    dict-sql: Add signed "int" type
+
+
+M	src/lib-dict/dict-sql-settings.c
+M	src/lib-dict/dict-sql-settings.h
+M	src/lib-dict/dict-sql.c
+
+2017-08-15 14:55:48 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9b762025a)
+
+    dict-sql: Use sql_statement_set_timestamp() instead of adding it to query
+
+
+M	src/lib-dict/dict-sql.c
+
+2017-08-15 14:46:10 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f6334b9c9)
+
+    dict-sql: Initial change to use sql_statement API
+
+    sql_statement_bind_*() will be followed by later changes.
+
+M	src/lib-dict/dict-sql.c
+
+2017-08-15 16:44:27 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (80b78400b)
+
+    dict-sql: Remove dict_sql_build_query.inc
+
+    It's no longer useful with the current code.
+
+M	src/lib-dict/dict-sql.c
+
+2016-05-06 12:19:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (a8bff174c)
+
+    lib-dict: Moved/removed explicit stack frames in dict drivers.
+
+    Added them back to dict_set/unset/atomic_inc() in dict.c. Others are 
+    unlikely to be called many times.
+
+M	src/lib-dict/dict-memcached-ascii.c
+M	src/lib-dict/dict-memcached.c
+M	src/lib-dict/dict-redis.c
+M	src/lib-dict/dict-sql.c
+M	src/lib-dict/dict.c
+M	src/plugins/dict-ldap/dict-ldap.c
+
+2017-08-15 14:27:40 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c90266497)
+
+    dict-sql: Change "uint" type to mean 64bit instead of 32bit integer.
+
+    This is likely what is usually wanted (especially in e.g. quotas). If
+    someone actually wants it to be restricted to 32bit, we could add uint32
+    later on.
+
+M	src/lib-dict/dict-sql.c
+
+2017-08-22 11:37:17 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6ebfc2ec5)
+
+    lib-sql: Add support for prepared SQL statements.
+
+    This initial implementation doesn't use prepared statements in drivers, but 
+    simply generates the query string internally.
+
+M	src/lib-sql/sql-api-private.h
+M	src/lib-sql/sql-api.c
+M	src/lib-sql/sql-api.h
+
+2017-08-22 11:31:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c4cd55ca3)
+
+    lib-sql: Explicitly specify used *_vfuncs methods for drivers.
+
+    This allows adding more methods without modifying all the existing drivers.
+
+M	src/lib-sql/driver-cassandra.c
+M	src/lib-sql/driver-mysql.c
+M	src/lib-sql/driver-pgsql.c
+M	src/lib-sql/driver-sqlite.c
+M	src/lib-sql/driver-sqlpool.c
+A	src/lib-sql/driver-test.c
+
+2017-08-08 20:07:18 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f46b4fbb8)
+
+    lib: When logging I/O or timeout leak, log also raw backtrace
+
+    This can be useful when trying to figure out where the io_loop_destroy() was 
+    called from.
+
+M	src/lib/ioloop.c
+
+2017-05-23 14:05:02 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (718d7fa85)
+
+    lib-storage: index: Made MIME FILENAME search criterion match
+    case-insensitively.
+
+
+M	src/lib-storage/index/index-search-mime.c
+M	src/lib-storage/index/index-search-private.h
+M	src/lib-storage/index/index-search.c
+
+2017-09-20 01:47:38 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (a0ec1e9eb)
+
+    director: Fix flush to kick the user also when all backends are down
+
+    The user's host can't change, because there are no other hosts. So add a new
+    parameter to force the kick anyway.
+
+M	src/director/director.c
+M	src/director/director.h
+M	src/director/doveadm-connection.c
+
+2017-09-14 12:50:29 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (31865444e)
+
+    director: Avoid "ring sync timeout" errors when all backends are down
+
+    doveadm commands were failing with it. Also pending request failures were 
+    logged as failing due to ring sync timeout, instead of because no hosts.
+
+M	src/director/main.c
+
+2017-09-14 13:02:40 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9f103210f)
+
+    director: Delay calling state_change_callback() after user kick is finished
+
+    Otherwise it can get into recursive loop and cause problems.
+
+M	src/director/director.c
+
+2017-09-14 12:42:13 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9b3025548)
+
+    doveadm director: Improve logging unexpected disconnections from director
+    socket
+
+    Previously it just logged "failed", which wasn't very understandable.
+
+M	src/doveadm/doveadm-director.c
+
+2017-08-22 16:32:32 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (1654e67e5)
+
+    director: Fix crash when flush is run and all backends are down.
+
+    Instead of moving the users elsewhere, just kill them and flush the backend.
+
+M	src/director/director.c
+M	src/director/director.h
+M	src/director/doveadm-connection.c
+
+2017-09-20 15:03:55 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (a3de897e2)
+
+    notify-status plugin: Use priv/status/<mailbox> for keys
+
+    priv/<mailbox>/status can't be used with dict-sql when <mailbox> has '/'.
+
+M	src/plugins/notify-status/notify-status-plugin.c
+
+2017-09-18 23:04:55 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e15275e21)
+
+    notify-status: Remove first_unseen_seq field
+
+    The sequence number keeps changing, so it's very unlikely to be useful. It's
+    also not always as efficiently available as the other fields, so better to
+    avoid having it.
+
+M	src/plugins/notify-status/notify-status-plugin.c
+
+2017-09-04 15:32:24 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (75d0e484a)
+
+    notify-status: Provide access to all easy fields
+
+
+M	src/plugins/notify-status/notify-status-plugin.c
+
+2017-07-04 14:22:19 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (4216de2fc)
+
+    notify-status: Add notify-status plugin
+
+    This enables updating a dictionary with mailbox status information when the
+    mailbox changes.
+
+    It requires notify_status_dict setting for specifying the dict where the
+    data is stored.
+
+    One can optionally use notify_status_mailbox patterns for specifying which
+    box(es) the status update is done. Subsequent patterns are
+    notify_status_mailbox2 and so forth.
+
+    One can also specify data format using notify_status_value plugin setting.
+
+M	configure.ac
+M	src/plugins/Makefile.am
+A	src/plugins/notify-status/Makefile.am
+A	src/plugins/notify-status/notify-status-plugin.c
+
+2017-09-12 14:54:57 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6a6bda313)
+
+    lib: file_lock_set_unlink_on_free() - Avoid unlink() if another process is
+    waiting on the lock
+
+
+M	src/lib/file-create-locked.h
+M	src/lib/file-lock.c
+M	src/lib/file-lock.h
+
+2017-08-30 20:49:17 -0400 Anton Yuzhaninov <citrin@citrin.ru> (c27f060a0)
+
+    lib-compression: Fix assert in i_stream_zlib_seek
+
+    Also fix same bug in i_stream_bzlib_seek, i_stream_lz4_seek,
+    i_stream_lzma_seek.
+
+M	src/lib-compression/istream-bzlib.c
+M	src/lib-compression/istream-lz4.c
+M	src/lib-compression/istream-lzma.c
+M	src/lib-compression/istream-zlib.c
+
+2017-07-14 17:00:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b20a071c9)
+
+    master: Change service "connections are being dropped" warning interval to 1
+    second
+
+    When this is happening, it's often accompanied with all kinds of other
+    errors and these warnings drown in them. Make them easier to notice by
+    reducing the interval from 60 seconds to 1 second.
+
+M	src/master/service-monitor.c
+
+2017-06-13 21:00:23 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (740832474)
+
+    dsync: Fix panic if syncing fails during attribute iteration
+
+    Fixes: Panic: file dict.c: line 104 (dict_deinit): assertion failed:
+    (dict->iter_count == 0)
+
+M	src/doveadm/dsync/dsync-mailbox-export.c
+
+2017-08-25 18:02:44 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4ec65105a)
+
+    lib-storage: mail_storage_set_critical() - don't free old error_string too
+    early
+
+    It may be used in one of the parameters.
+
+M	src/lib-storage/mail-storage.c
+
+2017-09-13 00:28:38 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (6f967d6c4)
+
+    lib-smtp: lmtp-client: Fixed handling of unexpected reply while sending RCPT
+    TO commands.
+
+    It caused a segfault.
+
+M	src/lib-smtp/lmtp-client.c
+
+2017-09-08 16:00:53 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (234a8fcc7)
+
+    doveadm director kick: Fix -f parameter to work
+
+    It already worked as --passdb-field, but now it matches the usage string.
+
+M	src/doveadm/doveadm-director.c
+
+2017-09-05 10:43:46 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (c4dd8ff2a)
+
+    dsync: Ignore missing remote mailbox when doing unidirectional sync
+
+    If there are some folders on remote system that are being ignored by remote
+    brain, do not error out.
+
+M	src/doveadm/dsync/dsync-brain-mailbox.c
+M	src/doveadm/dsync/dsync-brain-mails.c
+M	src/doveadm/dsync/dsync-ibc-stream.c
+M	src/doveadm/dsync/dsync-mailbox.h
+
+2017-08-18 14:58:37 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (8cd9a623d)
+
+    doveadm: Actually use resolved IP address(es) in director flush
+
+    It left the IP variable unitialized which caused host parameter to be left
+    empty causing flush all. Flushing with IP address was not affected.
+
+M	src/doveadm/doveadm-director.c
+
+2017-08-10 17:50:04 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c00c41e56)
+
+    director: Make sure users gets expired even on an idle director
+
+    Normally expiring gets done while looking up users, but if nothing is doing 
+    that on an idle director the users won't get expired. This can cause
+    confusion in "doveadm director status" output.
+
+M	src/director/test-user-directory.c
+M	src/director/user-directory.c
+
+2017-06-08 01:03:13 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (bf005139d)
+
+    doveconf: Preserve import_environment when execing binary
+
+    This allows import_environment setting to work with doveadm and other 
+    standalone tools.
+
+M	src/config/config-request.c
+M	src/config/config-request.h
+M	src/config/doveconf.c
+
+2017-06-08 00:40:12 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6766ea3d4)
+
+    lib-master, config: Move the responsibility of cleaning environment to
+    doveconf
+
+
+M	src/config/doveconf.c
+M	src/lib-master/master-service-settings.c
+
+2017-06-08 00:35:08 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (63eb42ba4)
+
+    lib-master: Use master_service_import_environment() for preserving
+    environments
+
+
+M	src/lib-master/master-service-settings.c
+
+2017-06-08 00:33:32 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (caac93845)
+
+    lib-master: master_service_import_environment() - use a data stack frame
+
+    This way the caller doesn't have to do it.
+
+M	src/lib-master/master-service.c
+M	src/master/main.c
+
+2017-06-08 00:24:19 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (10e65f3bc)
+
+    master: Move master_set_import_environment() to lib-master
+
+
+M	src/lib-master/master-service.c
+M	src/lib-master/master-service.h
+M	src/master/main.c
+
+2017-06-08 00:20:38 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e67bd1b80)
+
+    master: Append to existing DOVECOT_PRESERVE_ENVS instead of overwriting it
+
+
+M	src/master/main.c
+
+2017-06-08 00:14:30 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2a7c4f904)
+
+    master: Move import_environment setting to lib-master's
+    master_service_settings
+
+
+M	src/lib-master/master-service-settings.c
+M	src/lib-master/master-service-settings.h
+M	src/master/main.c
+M	src/master/master-settings.c
+M	src/master/master-settings.h
+
+2017-09-11 12:27:17 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6eacca95a)
+
+    lib-storage: Fix mailbox list notification assert-crash when mailbox is
+    deleted
+
+    Reproduced with if IMAP NOTIFY is used for non-selected mailboxes without 
+    MailboxName being specified. Another session then does changes to a mailbox
+    and immediately deletes it, which causes the crash.
+
+    Fixes: Panic: file mailbox-list-index-notify.c: line 751: unreached
+
+M	src/lib-storage/list/mailbox-list-index-notify.c
+
+2017-09-11 12:59:27 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (767da2543)
+
+    lib-index: mail_index_use_existing_permissions() - Ignore with INDEX=MEMORY
+
+
+M	src/lib-index/mail-index.c
+
+2017-09-11 12:58:28 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (fb57fe1aa)
+
+    lib-index: mail_index_use_existing_permissions() - Log error if stat()
+    unexpectedly fails
+
+
+M	src/lib-index/mail-index.c
+
+2017-07-27 16:34:34 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (ce26649bb)
+
+    lib-http: message parser: Reject messages with invalid Date header when
+    HTTP_MESSAGE_PARSE_FLAG_STRICT flag is enabled.
+
+
+M	src/lib-http/http-message-parser.c
+M	src/lib-http/test-http-request-parser.c
+M	src/lib-http/test-http-response-parser.c
+
+2017-07-27 16:30:20 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (cdde7190c)
+
+    lib-http: Fixed bug in date parser: sometimes read one byte past end of
+    input.
+
+    This caused spurious parse errors.
+
+M	src/lib-http/http-date.c
+
+2017-07-27 16:03:44 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (3797b21e5)
+
+    lib-http: test-http-response-parser: Show error message for tests of invalid
+    responses.
+
+
+M	src/lib-http/test-http-response-parser.c
+
+2017-07-19 16:53:17 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (380127c45)
+
+    *-login: Cache director_username_hash between KICK-DIRECTOR-HASH commands
+
+    This should make the kicking much faster, which is important when director 
+    is moving thousands of users.
+
+M	src/login-common/client-common.h
+M	src/login-common/login-proxy.c
+
+2017-07-19 16:49:18 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b1f56afa6)
+
+    lib-mail: Make sure mail_user_hash() won't return 0 as the hash.
+
+    It doesn't seem to actually happen, but this makes sure of it.
+
+M	src/lib-mail/mail-user-hash.c
+M	src/lib-mail/mail-user-hash.h
+
+2017-07-06 15:45:24 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (f3e5cc34d)
+
+    lmtp: Fix for wrong session id of mail user when saving mail, quota checking
+    on
+
+    When quota is checked mail user is allocated with custom ":quota" session id 
+    suffix without incrementing service user session id counter
+
+M	src/lib-storage/mail-storage-service.c
+M	src/lib-storage/mail-storage-service.h
+M	src/lmtp/commands.c
+
+2017-08-25 18:40:23 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b700b7ffd)
+
+    sdbox: Don't open mail files when expunging
+
+    It was done when mail_attachment_fs was non-empty (and default is 
+    non-empty), even though mail_attachment_dir was empty.
+
+M	src/lib-storage/index/dbox-common/dbox-attachment.c
+M	src/lib-storage/index/dbox-common/dbox-storage.c
+
+2017-08-21 15:44:41 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (291ad7bae)
+
+    mdbox: Use mail_storage_set_index_error() instead of poorly duplicating it
+
+
+M	src/lib-storage/index/dbox-multi/mdbox-map.c
+M	src/lib-storage/index/dbox-multi/mdbox-storage-rebuild.c
+
+2017-08-21 15:34:40 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (0991c1529)
+
+    lib-storage: Add mail_storage_set_index_error()
+
+
+M	src/lib-storage/mail-storage-private.h
+M	src/lib-storage/mail-storage.c
+
+2017-08-21 15:29:46 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (969fddbd7)
+
+    lib-storage: index_mail_set_cache_corrupted() - Don't reset internal error
+    string
+
+    It's already set correctly by the earlier functions.
+
+M	src/lib-storage/index/index-mail.c
+
+2017-08-21 15:27:48 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c8c87b613)
+
+    lib-storage: mail_set_mail_cache_corrupted() - set also internal error
+    string
+
+
+M	src/lib-storage/mail-storage.c
+
+2017-08-21 15:26:13 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (94811d840)
+
+    lib-storage: mailbox_set_index_error() - Set internal error string to
+    index's error
+
+
+M	src/lib-storage/mail-storage.c
+
+2017-08-21 15:11:30 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (22e6232cc)
+
+    lib-storage: Fix error logging after mail_storage_set_internal_error()
+
+    The function doesn't actually set the last_internal_error and it also 
+    doesn't update last_error_is_internal, so calling 
+    mail_storage_get_last_internal_error() afterwards could be returning an 
+    error for some different older error.
+
+    Since there's no parameter to set the internal error string, just reset 
+    last_error_is_internal=FALSE.
+
+M	src/lib-storage/mail-storage.c
+M	src/lib-storage/test-mail-storage.c
+
+2017-09-08 12:20:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2dceda4a6)
+
+    lib-storage: Preserve messages' vsize record when rebuilding index
+
+    Since vsize is often used by quota, losing this can be very expensive. If
+    the vsize is wrong, it gets fixed automatically when fetching the message
+    body.
+
+M	src/lib-storage/index/index-rebuild.c
+
+2017-08-25 15:12:06 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (575dc5147)
+
+    lib-index: Avoid opening .log.2 file if .log was reset
+
+    After a reset there's no point in trying to read the older log files. This
+    avoids trying to open .log.2 at least for newly created mailboxes when
+    trying to lookup log file sequence 1 (since due to some bug/feature the log
+    files start from sequence 2).
+
+M	src/lib-index/mail-transaction-log.c
+
+2017-08-24 10:01:02 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (0d5f8a652)
+
+    lib-settings: Escape comma in section name.
+
+    Comma is valid symbol in encoded non-ascii section names, so it shouldn't be
+    used as splitting symbol in section name.
+
+M	src/lib-settings/settings-parser.c
+
+2017-08-17 13:20:26 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6983e2035)
+
+    global: Add/change switch case "fall through" comments
+
+    These fix warnings with gcc 7's -Wimplicit-fallthrough
+
+M	src/auth/password-scheme.c
+M	src/lib-fts/fts-filter-contractions.c
+M	src/lib-index/mail-transaction-log-file.c
+M	src/lib-ldap/ldap-connection.c
+M	src/lib-mail/istream-attachment-extractor.c
+M	src/lib-mail/message-header-encode.c
+M	src/lib-storage/index/imapc/imapc-search.c
+M	src/lib-storage/mail-search.c
+M	src/lib/json-parser.c
+M	src/plugins/fts/fts-search-args.c
+
+2017-08-17 14:42:07 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b3db38ab5)
+
+    lib: Add missing parenthesis to timeout_add()'s msecs parameter checks
+
+    This caused wrong results when the msecs parameter contained e.g. var?1:2
+
+M	src/lib/ioloop.h
+
+2017-08-17 13:14:16 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (71a14afa6)
+
+    lib: Fix compiler warning about mixing boolean with multiplication
+
+
+M	src/lib/macros.h
+
+2017-08-16 13:53:55 +0300 Michael Koch <michael.koch@open-xchange.com> (5a4ba1e4e)
+
+    push-notification plugin: properly terminate strings
+
+    Without this fix, if the new message does not contain a from, a subject, and 
+    a snippet the generated JSON will be malformed (the status check at the end 
+    appended a '"' when it shouldn't have).
+
+M	src/plugins/push-notification/push-notification-driver-ox.c
+
+2017-07-25 09:35:31 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (bb82aeaf0)
+
+    lib-storage: If root dir already exists as file, log better error message.
+
+
+M	src/lib-storage/mailbox-list.c
+
+2017-07-24 21:08:33 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (72abc81ad)
+
+    lib-storage: Try to get mailbox list index's permissions from its parent
+    directory
+
+    This avoids stat()ing the mail/index root directory, which is especially 
+    useful when mailbox list index is stored in tmpfs.
+
+M	src/lib-storage/list/mailbox-list-index.c
+
+2017-07-24 21:07:44 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (19ac276c5)
+
+    lib-index: Add mail_index_use_existing_permissions()
+
+    This has annoyingly lot of copy&pasting from 
+    mailbox_list_get_permissions_stat(), but there didn't seem to be any nice 
+    place where to share the code.
+
+M	src/lib-index/mail-index.c
+M	src/lib-index/mail-index.h
+
+2017-07-24 20:48:25 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (fe85c16b9)
+
+    lib-storage: If ITERINDEX is set, delay checking whether mail root exists
+
+    In future this could be done even without ITERINDEX. It's not done yet, 
+    since it might break backwards compatibility with some systems.
+
+M	src/lib-storage/mail-storage.c
+
+2017-09-04 17:48:52 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (3c28795b1)
+
+    lib-storage: Fix INBOX notifications to set correct events
+
+    This fixes IMAP NOTIFY so it doesn't send STATUS notifications to INBOX when 
+    it doesn't have to.
+
+M	src/lib-storage/list/mailbox-list-index-notify.c
+
+2017-09-04 17:37:05 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b961a59a2)
+
+    lib-storage: List index notify cleanup - move code to separate functions
+
+    No functional changes. In preparation for the next commit.
+
+M	src/lib-storage/list/mailbox-list-index-notify.c
+
+2017-09-04 16:59:52 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (431ccc85e)
+
+    lib-storage: Remove INBOX notification checks if mailbox events aren't
+    requested
+
+    Nothing would be done with the results of those checks.
+
+    Note that MAILBOX_LIST_NOTIFY_UIDVALIDITY can be handled using mailbox list 
+    index, even for INBOX with mailbox_list_index_include_inbox=no.
+
+M	src/lib-storage/list/mailbox-list-index-notify.c
+
+2017-09-04 16:55:30 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (7b156140a)
+
+    lib-storage: Optimize INBOX notifications with
+    mailbox_list_index_include_inbox=yes
+
+    There's no need for special INBOX checks in that case, because INBOX is 
+    tracked in the mailbox list index the same as any other mailbox.
+
+M	src/lib-storage/list/mailbox-list-index-notify.c
+
+2017-09-04 19:37:12 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (046edb80f)
+
+    pop3-migration: Fail if all IMAP mails were matched by size, but POP3 had
+    extra mails
+
+    This makes the handling same as what happens when the same situation happens 
+    and the last mails were matched by headers. That's an error, unless 
+    pop3_migration_ignore_*_uidls=yes.
+
+M	src/plugins/pop3-migration/pop3-migration-plugin.c
+
+2017-09-04 18:32:15 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6bbd48066)
+
+    pop3-migration: Add pop3_migration_ignore_extra_uidls=yes setting
+
+
+M	src/plugins/pop3-migration/pop3-migration-plugin.c
+
+2017-09-04 12:40:49 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e88636f3f)
+
+    pop3-migration: Strip away invalid header lines.
+
+    If there's no ":" in the header, remove it. Fixes matching mails with 
+    Zimbra.
+
+M	src/plugins/pop3-migration/pop3-migration-plugin.c
+M	src/plugins/pop3-migration/test-pop3-migration-plugin.c
+
+2017-08-25 13:38:35 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (5af0c9f99)
+
+    pop3-migration: Try to assign UIDLs based on dovecot.index.cache
+
+    Add the UIDLs to (imapc) mailbox cache after they've been assigned. Try to
+    read them from the cache on the next sync to avoid reading mails' headers.
+
+    This can be disabled with pop3_migration_skip_uidl_cache=yes, just in case 
+    there's some kind of a problem with it.
+
+M	src/plugins/pop3-migration/pop3-migration-plugin.c
+
+2017-08-25 13:36:11 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f7590c10e)
+
+    pop3-migration: Delete unnecessary POP3 order checking code
+
+    Nothing is actually using the result.
+
+M	src/plugins/pop3-migration/pop3-migration-plugin.c
+
+2017-08-25 13:16:26 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (1c82a1bff)
+
+    lib-storage: Support LISTINDEX= to disable it
+
+
+M	src/lib-storage/list/mailbox-list-index.c
+
+2017-07-13 10:02:26 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (799e0498e)
+
+    apparmor: Add apparmor plugin
+
+    It lets dovecot temporarily switch to a new apparmor context for a user.
+
+M	configure.ac
+
+2017-08-18 11:09:41 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (10db88971)
 
     director: Fix rapid reconnection on failed outgoing connections
 
@@ -41,7 +1518,15 @@ M	configure.ac
 
 M	src/director/director-connection.c
 
-2017-07-13 10:02:26 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (15e10cd47)
+2017-08-18 11:22:52 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (2326cebd6)
+
+    doveadm-server: Deinitialize print on connection destroy
+
+    Otherwise print remains initialized and can break when reusing the service.
+
+M	src/doveadm/client-connection.c
+
+2017-07-13 10:02:26 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (3a67e54a4)
 
     apparmor: Add apparmor plugin
 
@@ -53,7 +1538,7 @@ M	src/plugins/Makefile.am
 A	src/plugins/apparmor/Makefile.am
 A	src/plugins/apparmor/apparmor-plugin.c
 
-2017-08-18 17:38:34 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (55d0d2b77)
+2017-08-18 17:38:34 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b67fe203a)
 
     lib-storage: Call mail_cache_close_mail() when mail is closed
 
@@ -61,7 +1546,7 @@ A	src/plugins/apparmor/apparmor-plugin.c
 
 M	src/lib-storage/index/index-mail.c
 
-2017-08-18 17:34:14 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (a0bee4528)
+2017-08-18 17:34:14 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9ae8da0b6)
 
     lib-index: Add mail_cache_close_mail() to smartly drop cached data with
     INDEX=MEMORY
@@ -79,14 +1564,14 @@ M	src/lib-storage/index/index-mail.c
 M	src/lib-index/mail-cache-transaction.c
 M	src/lib-index/mail-cache.h
 
-2017-08-16 12:44:02 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (77418781e)
+2017-08-16 12:44:02 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b048e2dab)
 
     lib-index: Fix compiler warning in test-mail-transaction-log-file
 
 
 M	src/lib-index/test-mail-transaction-log-file.c
 
-2017-08-07 16:03:46 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (e0bc01d7f)
+2017-08-07 16:03:46 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (81db0272d)
 
     doveadm: mailbox_list_index_very_dirty_syncs disabled for force-resync
 
@@ -95,7 +1580,7 @@ M	src/lib-index/test-mail-transaction-log-file.c
 
 M	src/doveadm/doveadm-mail.c
 
-2017-08-07 15:59:35 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (5f3f3a6f4)
+2017-08-07 15:59:35 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (2bfe0fdc3)
 
     lib-storage: added settings updating function for the mail_storage_service
     user
@@ -104,7 +1589,7 @@ M	src/doveadm/doveadm-mail.c
 M	src/lib-storage/mail-storage-service.c
 M	src/lib-storage/mail-storage-service.h
 
-2017-07-20 13:24:21 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (21bcb7bd6)
+2017-07-20 13:24:21 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (8a4671318)
 
     auth: Escape LDAP search filter properly
 
@@ -113,7 +1598,7 @@ M	src/lib-storage/mail-storage-service.h
 
 M	src/auth/db-ldap.c
 
-2017-07-20 08:49:25 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (9b52f07e5)
+2017-07-20 08:49:25 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (069ad83cf)
 
     dict-ldap: Escape LDAP search filter properly
 
@@ -124,7 +1609,7 @@ M	src/auth/db-ldap.c
 
 M	src/plugins/dict-ldap/dict-ldap.c
 
-2017-07-20 08:48:30 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (c3e195704)
+2017-07-20 08:48:30 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (06bd7c80e)
 
     lib-ldap: Store error if sending request to LDAP fails
 
@@ -137,7 +1622,7 @@ M	src/plugins/dict-ldap/dict-ldap.c
 
 M	src/lib-ldap/ldap-connection.c
 
-2017-07-26 19:42:48 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (3240e15e7)
+2017-07-26 19:42:48 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (ee5ac22d1)
 
     imap: Set client created before initializing namespaces
 
@@ -147,7 +1632,7 @@ M	src/lib-ldap/ldap-connection.c
 
 M	src/imap/imap-master-client.c
 
-2017-07-06 13:24:31 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6b0afefa3)
+2017-07-06 13:24:31 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2b54e117b)
 
     lib: file_create_locked() - Treat mkdir() EEXIST error as success
 
@@ -156,7 +1641,7 @@ M	src/imap/imap-master-client.c
 
 M	src/lib/file-create-locked.c
 
-2017-07-26 19:47:16 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (a9fc39fe9)
+2017-07-26 19:47:16 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (357c3b5c2)
 
     imap: Flush response to client before starting possibly long operation
 
@@ -165,7 +1650,7 @@ M	src/lib/file-create-locked.c
 
 M	src/imap/imap-master-client.c
 
-2017-08-14 15:44:24 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9cd764c8b)
+2017-08-14 15:44:24 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4702aae4e)
 
     cassandra: Fix confusing debug logging for paged query results.
 
@@ -174,14 +1659,6 @@ M	src/imap/imap-master-client.c
     the error after sql_result_more() is called, so it won't be logged.
 
 M	src/lib-sql/driver-cassandra.c
-
-2017-08-15 23:15:38 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (06cdb866c)
-
-    Released v2.2.32.rc1.
-
-
-M	NEWS
-M	configure.ac
 
 2017-07-02 12:05:36 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (1e11badc1)
 

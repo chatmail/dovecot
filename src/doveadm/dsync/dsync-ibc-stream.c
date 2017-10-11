@@ -78,8 +78,9 @@ static const struct {
 	  	"debug sync_visible_namespaces exclude_mailboxes  "
 	  	"send_mail_requests backup_send backup_recv lock_timeout "
 	  	"no_mail_sync no_mailbox_renames no_backup_overwrite purge_remote "
-		"no_notify sync_since_timestamp sync_max_size sync_flags sync_until_timestamp"
-	  	"virtual_all_box empty_hdr_workaround import_commit_msgs_interval"
+		"no_notify sync_since_timestamp sync_max_size sync_flags sync_until_timestamp "
+		"virtual_all_box empty_hdr_workaround import_commit_msgs_interval "
+		"hashed_headers"
 	},
 	{ .name = "mailbox_state",
 	  .chr = 'S',
@@ -102,7 +103,8 @@ static const struct {
 	  .chr = 'B',
 	  .required_keys = "mailbox_guid uid_validity uid_next messages_count "
 		"first_recent_uid highest_modseq highest_pvt_modseq",
-	  .optional_keys = "mailbox_lost cache_fields have_guids have_save_guids have_only_guid128"
+	  .optional_keys = "mailbox_lost mailbox_ignore "
+			   "cache_fields have_guids have_save_guids have_only_guid128"
 	},
 	{ .name = "mailbox_attribute",
 	  .chr = 'A',
@@ -750,7 +752,15 @@ dsync_ibc_stream_send_handshake(struct dsync_ibc *_ibc,
 		dsync_serializer_encode_add(encoder, "no_notify", "");
 	if ((set->brain_flags & DSYNC_BRAIN_FLAG_EMPTY_HDR_WORKAROUND) != 0)
 		dsync_serializer_encode_add(encoder, "empty_hdr_workaround", "");
-
+	/* this can be NULL in slave */
+	string_t *str2 = t_str_new(32);
+	if (set->hashed_headers != NULL) {
+		for(const char *const *ptr = set->hashed_headers; *ptr != NULL; ptr++) {
+			str_append_tabescaped(str2, *ptr);
+			str_append_c(str2, '\t');
+		}
+	}
+	dsync_serializer_encode_add(encoder, "hashed_headers", str_c(str2));
 	dsync_serializer_encode_finish(&encoder, str);
 	dsync_ibc_stream_send_string(ibc, str);
 }
@@ -884,6 +894,8 @@ dsync_ibc_stream_recv_handshake(struct dsync_ibc *_ibc,
 		set->brain_flags |= DSYNC_BRAIN_FLAG_NO_NOTIFY;
 	if (dsync_deserializer_decode_try(decoder, "empty_hdr_workaround", &value))
 		set->brain_flags |= DSYNC_BRAIN_FLAG_EMPTY_HDR_WORKAROUND;
+	if (dsync_deserializer_decode_try(decoder, "hashed_headers", &value))
+		set->hashed_headers = (const char*const*)p_strsplit_tabescaped(pool, value);
 	set->hdr_hash_v2 = ibc->minor_version >= DSYNC_PROTOCOL_MINOR_HAVE_HDR_HASH_V2;
 	set->hdr_hash_v3 = ibc->minor_version >= DSYNC_PROTOCOL_MINOR_HAVE_HDR_HASH_V3;
 
@@ -1313,6 +1325,8 @@ dsync_ibc_stream_send_mailbox(struct dsync_ibc *_ibc,
 
 	if (dsync_box->mailbox_lost)
 		dsync_serializer_encode_add(encoder, "mailbox_lost", "");
+	if (dsync_box->mailbox_ignore)
+		dsync_serializer_encode_add(encoder, "mailbox_ignore", "");
 	if (dsync_box->have_guids)
 		dsync_serializer_encode_add(encoder, "have_guids", "");
 	if (dsync_box->have_save_guids)
@@ -1417,6 +1431,8 @@ dsync_ibc_stream_recv_mailbox(struct dsync_ibc *_ibc,
 
 	if (dsync_deserializer_decode_try(decoder, "mailbox_lost", &value))
 		box->mailbox_lost = TRUE;
+	if (dsync_deserializer_decode_try(decoder, "mailbox_ignore", &value))
+		box->mailbox_ignore = TRUE;
 	if (dsync_deserializer_decode_try(decoder, "have_guids", &value))
 		box->have_guids = TRUE;
 	if (dsync_deserializer_decode_try(decoder, "have_save_guids", &value) ||

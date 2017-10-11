@@ -286,22 +286,16 @@ mail_storage_create_root(struct mailbox_list *list,
 	}
 
 	autocreate = (flags & MAIL_STORAGE_FLAG_NO_AUTOCREATE) == 0;
+	if (autocreate && list->set.iter_from_index_dir) {
+		/* If the directories don't exist, we'll just autocreate them
+		   later. FIXME: Make this the default in v2.3 even when
+		   ITERINDEX isn't used. */
+		return 0;
+	}
 	ret = mail_storage_verify_root(root_dir, type_name, autocreate, error_r);
 	if (ret == 0) {
-		const char *mail_root_dir;
-
-		if (!list->set.iter_from_index_dir)
-			mail_root_dir = root_dir;
-		else if (!mailbox_list_get_root_path(list,
-				MAILBOX_LIST_PATH_TYPE_MAILBOX, &mail_root_dir))
-			i_unreached();
-		ret = mailbox_list_try_mkdir_root(list, mail_root_dir,
-						  MAILBOX_LIST_PATH_TYPE_MAILBOX,
-						  error_r);
-	}
-	if (ret == 0 && list->set.iter_from_index_dir) {
 		ret = mailbox_list_try_mkdir_root(list, root_dir,
-						  MAILBOX_LIST_PATH_TYPE_INDEX,
+						  MAILBOX_LIST_PATH_TYPE_MAILBOX,
 						  error_r);
 	}
 	return ret < 0 ? -1 : 0;
@@ -535,13 +529,25 @@ void mail_storage_set_internal_error(struct mail_storage *storage)
 	i_free(storage->error_string);
 	storage->error_string = i_strdup(str);
 	storage->error = MAIL_ERROR_TEMP;
+
+	/* this function doesn't set last_internal_error, so
+	   last_error_is_internal can't be TRUE. */
+	storage->last_error_is_internal = FALSE;
 }
 
 void mail_storage_set_critical(struct mail_storage *storage,
 			       const char *fmt, ...)
 {
-	char *old_error = storage->last_internal_error;
+	char *old_error = storage->error_string;
+	char *old_internal_error = storage->last_internal_error;
 	va_list va;
+
+	storage->error_string = NULL;
+	storage->last_internal_error = NULL;
+	/* critical errors may contain sensitive data, so let user
+	   see only "Internal error" with a timestamp to make it
+	   easier to look from log files the actual error message. */
+	mail_storage_set_internal_error(storage);
 
 	va_start(va, fmt);
 	storage->last_internal_error = i_strdup_vprintf(fmt, va);
@@ -549,14 +555,10 @@ void mail_storage_set_critical(struct mail_storage *storage,
 	storage->last_error_is_internal = TRUE;
 	i_error("%s", storage->last_internal_error);
 
-	/* free the old_error only after the new error is generated, because
-	   the old_error may be one of the parameters. */
+	/* free the old_error and old_internal_error only after the new error
+	   is generated, because they may be one of the parameters. */
 	i_free(old_error);
-
-	/* critical errors may contain sensitive data, so let user
-	   see only "Internal error" with a timestamp to make it
-	   easier to look from log files the actual error message. */
-	mail_storage_set_internal_error(storage);
+	i_free(old_internal_error);
 }
 
 const char *mail_storage_get_last_internal_error(struct mail_storage *storage,
@@ -603,11 +605,23 @@ void mail_storage_copy_list_error(struct mail_storage *storage,
 
 void mailbox_set_index_error(struct mailbox *box)
 {
-	if (mail_index_is_deleted(box->index))
+	if (mail_index_is_deleted(box->index)) {
 		mailbox_set_deleted(box);
-	else
-		mail_storage_set_internal_error(box->storage);
-	mail_index_reset_error(box->index);
+		mail_index_reset_error(box->index);
+	} else {
+		mail_storage_set_index_error(box->storage, box->index);
+	}
+}
+
+void mail_storage_set_index_error(struct mail_storage *storage,
+				  struct mail_index *index)
+{
+	mail_storage_set_internal_error(storage);
+	/* use the lib-index's error as our internal error string */
+	storage->last_internal_error =
+		i_strdup(mail_index_get_error_message(index));
+	storage->last_error_is_internal = TRUE;
+	mail_index_reset_error(index);
 }
 
 const struct mail_storage_settings *
@@ -2816,6 +2830,9 @@ void mail_set_mail_cache_corrupted(struct mail *mail, const char *fmt, ...)
 					mail->uid,
 					t_strdup_vprintf(fmt, va)));
 	} T_END;
+
+	/* update also the storage's internal error */
+	mailbox_set_index_error(mail->box);
 
 	va_end(va);
 }

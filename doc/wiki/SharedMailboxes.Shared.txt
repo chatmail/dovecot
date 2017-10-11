@@ -208,11 +208,12 @@ map {
 }
 ---%<-------------------------------------------------------------------------
 
-IMAP ACL commands
------------------
+Mailbox sharing
+---------------
 
-Mailbox sharing is expected to be done using IMAP SETACL command. It is the
-only way to update the shared mailbox list dictionary.
+You can use <doveadm acl> [Tools.Doveadm.ACL.txt] to share mailboxes or it can
+be done using IMAP SETACL command. It is the only way to update the shared
+mailbox list dictionary.
 
 Below is a quick introduction to IMAP ACL commands. See RFC 4314
 [http://www.ietf.org/rfc/rfc4314.txt] for more details.
@@ -302,4 +303,4 @@ Troubleshooting
  * 'doveadm acl debug -u user@domain shared/user/box' can be helpful in
    figuring out why a mailbox can't be accessed.
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

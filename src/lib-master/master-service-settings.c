@@ -42,6 +42,7 @@ static const struct setting_define master_service_setting_defines[] = {
 	DEF(SET_STR, debug_log_path),
 	DEF(SET_STR, log_timestamp),
 	DEF(SET_STR, syslog_facility),
+	DEF(SET_STR, import_environment),
 	DEF(SET_SIZE, config_cache_size),
 	DEF(SET_BOOL, version_ignore),
 	DEF(SET_BOOL, shutdown_clients),
@@ -53,6 +54,19 @@ static const struct setting_define master_service_setting_defines[] = {
 	SETTING_DEFINE_LIST_END
 };
 
+/* <settings checks> */
+#ifdef HAVE_SYSTEMD
+#  define ENV_SYSTEMD " LISTEN_PID LISTEN_FDS"
+#else
+#  define ENV_SYSTEMD ""
+#endif
+#ifdef DEBUG
+#  define ENV_GDB " GDB DEBUG_SILENT"
+#else
+#  define ENV_GDB ""
+#endif
+/* </settings checks> */
+
 static const struct master_service_settings master_service_default_settings = {
 	.base_dir = PKG_RUNDIR,
 	.state_dir = PKG_STATEDIR,
@@ -61,6 +75,7 @@ static const struct master_service_settings master_service_default_settings = {
 	.debug_log_path = "",
 	.log_timestamp = DEFAULT_FAILURE_STAMP_FORMAT,
 	.syslog_facility = "mail",
+	.import_environment = "TZ CORE_OUTOFMEM CORE_ERROR" ENV_SYSTEMD ENV_GDB,
 	.config_cache_size = 1024*1024,
 	.version_ignore = FALSE,
 	.shutdown_clients = TRUE,
@@ -108,25 +123,25 @@ master_service_exec_config(struct master_service *service,
 			   const struct master_service_settings_input *input)
 {
 	const char **conf_argv, *binary_path = service->argv[0];
-	const char *home = NULL, *user = NULL, *timestamp = NULL;
 	unsigned int i, argv_max_count;
 
 	(void)t_binary_abspath(&binary_path);
 
 	if (!service->keep_environment && !input->preserve_environment) {
 		if (input->preserve_home)
-			home = getenv("HOME");
+			master_service_import_environment("HOME");
 		if (input->preserve_user)
-			user = getenv("USER");
+			master_service_import_environment("USER");
 		if ((service->flags & MASTER_SERVICE_FLAG_STANDALONE) != 0)
-			timestamp = getenv("LOG_STDERR_TIMESTAMP");
-		master_service_env_clean();
-		if (home != NULL)
-			env_put(t_strconcat("HOME=", home, NULL));
-		if (user != NULL)
-			env_put(t_strconcat("USER=", user, NULL));
-		if (timestamp != NULL)
-			env_put(t_strconcat("LOG_STDERR_TIMESTAMP=", timestamp, NULL));
+			master_service_import_environment("LOG_STDERR_TIMESTAMP");
+
+		/* doveconf empties the environment before exec()ing us back
+		   if DOVECOT_PRESERVE_ENVS is set, so make sure it is. */
+		if (getenv(DOVECOT_PRESERVE_ENVS_ENV) == NULL)
+			env_put(DOVECOT_PRESERVE_ENVS_ENV"=");
+	} else {
+		/* make sure doveconf doesn't remove any environment */
+		env_remove(DOVECOT_PRESERVE_ENVS_ENV);
 	}
 	if (input->use_sysexits)
 		env_put("USE_SYSEXITS=1");

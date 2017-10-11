@@ -93,8 +93,8 @@ See <Quota.Configuration.txt> for backend-independent quota configuration.
 Quota recalculation
 -------------------
 
-If your quotas are out of sync, you can use 'doveadm quota recalc' command to
-recalculate them.
+If your quotas are out of sync, you can use 'doveadm quota recalc -u <uid>'
+command to recalculate them.
 
 Quota and Trash mailbox
 -----------------------
@@ -127,4 +127,4 @@ To make sure users don't start keeping messages permanently in Trash you can
 use a nightly <cronjob> [Plugins.Expire.txt] to expunge old messages from Trash
 mailbox.
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

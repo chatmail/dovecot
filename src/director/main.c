@@ -231,7 +231,7 @@ static void director_state_changed(struct director *dir)
 	ARRAY(struct director_request *) new_requests;
 	bool ret;
 
-	if (!dir->ring_synced || !mail_hosts_have_usable(dir->mail_hosts))
+	if (!dir->ring_synced)
 		return;
 
 	/* if there are any pending client requests, finish them now */
@@ -249,7 +249,7 @@ static void director_state_changed(struct director *dir)
 
 	if (dir->to_request != NULL && array_count(&new_requests) == 0)
 		timeout_remove(&dir->to_request);
-	doveadm_connections_continue_reset_cmds();
+	doveadm_connections_ring_synced();
 }
 
 static void main_preinit(void)
@@ -343,7 +343,7 @@ int main(int argc, char *argv[])
 	main_preinit();
 	director->test_port = test_port;
 	director_debug = debug;
-	director_connect(director);
+	director_connect(director, "Initial connection");
 
 	if (director->test_port != 0) {
 		/* we're testing, possibly writing to same log file.

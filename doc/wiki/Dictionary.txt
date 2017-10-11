@@ -113,12 +113,13 @@ useful with backends where their initialization is relatively expensive, such
 as SQL. The dict processes will then perform also connection pooling.
 
 If <dict path> is specified, it points to the socket where the dict server is
-answering. The default is to use $base_dir/dict. Usually there's no need to
-change this, but it may be useful for example if you wish to implement your own
-dict server accessing some proprietary database.
+answering. The default is to use $base_dir/dict. Usually this is changed to
+"dict-async" if the dict backend support asynchronous lookups (e.g. ldap,
+pgsql, cassandra). The dict-async service allows more than one client, so this
+configuration prevents creating unnecessarily many dict processes.
 
-The <destination dict> contains the actual dict settings that the dict process
-will use. For example:'proxy::mysql:/etc/dovecot/dovecot-sql-dict.conf'
+The <destination dict> contains the dict name in the dict { .. } settings. For
+example:'proxy:dict-async:quota'
 
 See <Dict.txt> for more information about the dict server.
 
@@ -264,4 +265,4 @@ map {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

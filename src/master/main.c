@@ -421,32 +421,6 @@ static struct master_settings *master_settings_read(void)
 	return master_service_settings_get_others(master_service)[0];
 }
 
-static void master_set_import_environment(const struct master_settings *set)
-{
-	const char *const *envs, *key, *value;
-	ARRAY_TYPE(const_string) keys;
-
-	if (*set->import_environment == '\0')
-		return;
-
-	t_array_init(&keys, 8);
-	envs = t_strsplit_spaces(set->import_environment, " ");
-	for (; *envs != NULL; envs++) {
-		value = strchr(*envs, '=');
-		if (value == NULL)
-			key = *envs;
-		else {
-			key = t_strdup_until(*envs, value);
-			env_put(*envs);
-		}
-		array_append(&keys, &key, 1);
-	}
-	array_append_zero(&keys);
-
-	value = t_strarray_join(array_idx(&keys, 0), " ");
-	env_put(t_strconcat(DOVECOT_PRESERVE_ENVS_ENV"=", value, NULL));
-}
-
 static void main_log_startup(char **protocols)
 {
 #define STARTUP_STRING PACKAGE_NAME" v"DOVECOT_VERSION_FULL" starting up"
@@ -844,9 +818,9 @@ int main(int argc, char *argv[])
 	master_settings_do_fixes(set);
 	fatal_log_check(set);
 
-	T_BEGIN {
-		master_set_import_environment(set);
-	} T_END;
+	const struct master_service_settings *service_set =
+		master_service_settings_get(master_service);
+	master_service_import_environment(service_set->import_environment);
 	master_service_env_clean();
 
 	/* create service structures from settings. if there are any errors in

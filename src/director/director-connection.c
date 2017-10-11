@@ -73,6 +73,7 @@
 /* If outgoing director connection exists for less than this many seconds,
    mark the host as failed so we won't try to reconnect to it immediately */
 #define DIRECTOR_SUCCESS_MIN_CONNECT_SECS 40
+#define DIRECTOR_RECONNECT_AFTER_WRONG_CONNECT_MSECS 1000
 #define DIRECTOR_WAIT_DISCONNECT_SECS 10
 #define DIRECTOR_HANDSHAKE_WARN_SECS 29
 #define DIRECTOR_HANDSHAKE_BYTES_LOG_MIN_SECS (60*30)
@@ -97,6 +98,7 @@
 #define DIRECTOR_OPT_CONSISTENT_HASHING "consistent-hashing"
 
 struct director_connection {
+	int refcount;
 	struct director *dir;
 	char *name;
 	struct timeval created, connected_time, me_received_time;
@@ -135,6 +137,7 @@ struct director_connection {
 	unsigned int users_unsorted:1;
 };
 
+static bool director_connection_unref(struct director_connection *conn);
 static void director_finish_sending_handshake(struct director_connection *conn);
 static void director_connection_disconnected(struct director_connection **conn,
 					     const char *reason);
@@ -515,7 +518,7 @@ static bool director_cmd_me(struct director_connection *conn,
 		   its failed state, so we can connect to it */
 		conn->host->last_network_failure = 0;
 		if (!director_has_outgoing_connections(dir))
-			director_connect(dir);
+			director_connect(dir, "Connecting to left");
 	} else if (dir->left->host == conn->host) {
 		/* b) */
 		i_assert(dir->left != conn);
@@ -744,6 +747,7 @@ static bool director_cmd_director(struct director_connection *conn,
 	struct director_host *host;
 	struct ip_addr ip;
 	in_port_t port;
+	bool log_add = FALSE;
 
 	if (!director_args_parse_ip_port(conn, args, &ip, &port))
 		return FALSE;
@@ -760,13 +764,18 @@ static bool director_cmd_director(struct director_connection *conn,
 		}
 
 		/* already have this. just reset its last_network_failure
-		   timestamp, since it might be up now. */
-		host->last_network_failure = 0;
+		   timestamp, since it might be up now, but only if this
+		   isn't part of the handshake. (if it was, reseting the
+		   timestamp could cause us to rapidly keep trying to connect
+		   to it) */
+		if (conn->handshake_received)
+			host->last_network_failure = 0;
 		/* it also may have been restarted, reset its state */
 		director_host_restarted(host);
 	} else {
 		/* save the director and forward it */
 		host = director_host_add(conn->dir, &ip, port);
+		log_add = TRUE;
 	}
 	/* just forward this to the entire ring until it reaches back to
 	   itself. some hosts may see this twice, but that's the only way to
@@ -782,7 +791,7 @@ static bool director_cmd_director(struct director_connection *conn,
 			  "Not forwarding it since it's probably crashed.");
 	} else {
 		director_notify_ring_added(host,
-			director_connection_get_host(conn));
+			director_connection_get_host(conn), log_add);
 	}
 	return TRUE;
 }
@@ -1586,6 +1595,31 @@ static bool director_connection_sync(struct director_connection *conn,
 	return TRUE;
 }
 
+static void director_disconnect_timeout(struct director_connection *conn)
+{
+	director_connection_deinit(&conn, "CONNECT requested");
+}
+
+static void
+director_reconnect_after_wrong_connect_timeout(struct director_connection *conn)
+{
+	struct director *dir = conn->dir;
+
+	director_connection_deinit(&conn, "Wrong CONNECT requested");
+	if (dir->right == NULL)
+		director_connect(dir, "Reconnecting after wrong CONNECT request");
+}
+
+static void
+director_reconnect_after_wrong_connect(struct director_connection *conn)
+{
+	if (conn->to_disconnect != NULL)
+		return;
+	conn->to_disconnect =
+		timeout_add_short(DIRECTOR_RECONNECT_AFTER_WRONG_CONNECT_MSECS,
+				  director_reconnect_after_wrong_connect_timeout, conn);
+}
+
 static bool director_cmd_connect(struct director_connection *conn,
 				 const char *const *args)
 {
@@ -1593,6 +1627,7 @@ static bool director_cmd_connect(struct director_connection *conn,
 	struct director_host *host;
 	struct ip_addr ip;
 	in_port_t port;
+	const char *right_state;
 
 	if (str_array_length(args) != 2 ||
 	    !director_args_parse_ip_port(conn, args, &ip, &port)) {
@@ -1609,6 +1644,13 @@ static bool director_cmd_connect(struct director_connection *conn,
 		/* the old connection is the correct one */
 		dir_debug("Ignoring CONNECT request to %s (current right is %s)",
 			  host->name, dir->right->name);
+		director_reconnect_after_wrong_connect(conn);
+		return TRUE;
+	}
+	if (host->removed) {
+		dir_debug("Ignoring CONNECT request to %s (director is removed)",
+			  host->name);
+		director_reconnect_after_wrong_connect(conn);
 		return TRUE;
 	}
 
@@ -1618,16 +1660,24 @@ static bool director_cmd_connect(struct director_connection *conn,
 	host->removed = FALSE;
 
 	if (dir->right == NULL) {
-		dir_debug("Received CONNECT request to %s, "
-			  "initializing right", host->name);
+		right_state = "initializing right";
 	} else {
-		dir_debug("Received CONNECT request to %s, "
-			  "replacing current right %s",
-			  host->name, dir->right->name);
+		right_state = t_strdup_printf("replacing current right %s",
+					      dir->right->name);
+		/* disconnect from right side immediately - it's not accepting
+		   any further commands from us. */
+		if (conn->dir->right != conn)
+			director_connection_deinit(&conn->dir->right, "CONNECT requested");
+		else if (conn->to_disconnect == NULL) {
+			conn->to_disconnect =
+				timeout_add_short(0, director_disconnect_timeout, conn);
+		}
 	}
 
 	/* connect here */
-	(void)director_connect_host(dir, host);
+	(void)director_connect_host(dir, host, t_strdup_printf(
+		"Received CONNECT request from %s - %s",
+		conn->name, right_state));
 	return TRUE;
 }
 
@@ -1822,6 +1872,7 @@ static void director_connection_input(struct director_connection *conn)
 		return;
 	}
 	conn->last_input = ioloop_timeval;
+	conn->refcount++;
 
 	director_sync_freeze(dir);
 	prev_offset = conn->input->v_offset;
@@ -1834,14 +1885,18 @@ static void director_connection_input(struct director_connection *conn)
 		} T_END;
 
 		if (!ret) {
+			if (!director_connection_unref(conn))
+				break;
 			director_connection_reconnect(&conn, t_strdup_printf(
 				"Invalid input: %s", line));
 			break;
 		}
 	}
 	director_sync_thaw(dir);
-	if (conn != NULL)
-		timeout_reset(conn->to_ping);
+	if (conn != NULL) {
+		if (director_connection_unref(conn))
+			timeout_reset(conn->to_ping);
+	}
 }
 
 static void director_connection_send_directors(struct director_connection *conn)
@@ -1985,6 +2040,7 @@ director_connection_init_common(struct director *dir, int fd)
 	struct director_connection *conn;
 
 	conn = i_new(struct director_connection, 1);
+	conn->refcount = 1;
 	conn->created = ioloop_timeval;
 	conn->fd = fd;
 	conn->dir = dir;
@@ -2020,6 +2076,7 @@ director_connection_init_in(struct director *dir, int fd,
 	conn->to_ping = timeout_add(DIRECTOR_CONNECTION_ME_TIMEOUT_MSECS,
 				    director_connection_init_timeout, conn);
 
+	i_info("Incoming connection from director %s", conn->name);
 	director_connection_send_handshake(conn);
 	return conn;
 }
@@ -2104,6 +2161,8 @@ void director_connection_deinit(struct director_connection **_conn,
 
 	*_conn = NULL;
 
+	i_assert(conn->fd != -1);
+
 	if (conn->host != NULL) {
 		dir_debug("Disconnecting from %s: %s",
 			  conn->host->name, remote_reason);
@@ -2130,11 +2189,11 @@ void director_connection_deinit(struct director_connection **_conn,
 	}
 	if (dir->right == conn)
 		dir->right = NULL;
-	if (conn->host != NULL)
-		director_host_unref(conn->host);
 
-	if (conn->connect_request_to != NULL)
+	if (conn->connect_request_to != NULL) {
 		director_host_unref(conn->connect_request_to);
+		conn->connect_request_to = NULL;
+	}
 	if (conn->user_iter != NULL)
 		director_iterate_users_deinit(&conn->user_iter);
 	if (conn->to_disconnect != NULL)
@@ -2144,21 +2203,34 @@ void director_connection_deinit(struct director_connection **_conn,
 	timeout_remove(&conn->to_ping);
 	if (conn->io != NULL)
 		io_remove(&conn->io);
-	i_stream_unref(&conn->input);
-	o_stream_unref(&conn->output);
-	if (close(conn->fd) < 0)
-		i_error("close(director connection) failed: %m");
+	i_stream_close(conn->input);
+	o_stream_close(conn->output);
+	i_close_fd(&conn->fd);
 
 	if (conn->in)
 		master_service_client_connection_destroyed(master_service);
-	i_free(conn->name);
-	i_free(conn);
+	director_connection_unref(conn);
 
 	if (dir->left == NULL || dir->right == NULL) {
 		/* we aren't synced until we're again connected to a ring */
 		dir->sync_seq++;
 		director_set_ring_unsynced(dir);
 	}
+}
+
+static bool director_connection_unref(struct director_connection *conn)
+{
+	i_assert(conn->refcount > 0);
+	if (--conn->refcount > 0)
+		return TRUE;
+
+	if (conn->host != NULL)
+		director_host_unref(conn->host);
+	i_stream_unref(&conn->input);
+	o_stream_unref(&conn->output);
+	i_free(conn->name);
+	i_free(conn);
+	return FALSE;
 }
 
 static void director_connection_disconnected(struct director_connection **_conn,
@@ -2177,7 +2249,7 @@ static void director_connection_disconnected(struct director_connection **_conn,
 
 	director_connection_deinit(_conn, reason);
 	if (dir->right == NULL)
-		director_connect(dir);
+		director_connect(dir, "Reconnecting after disconnection");
 }
 
 static void director_connection_reconnect(struct director_connection **_conn,
@@ -2188,7 +2260,7 @@ static void director_connection_reconnect(struct director_connection **_conn,
 
 	director_connection_deinit(_conn, reason);
 	if (dir->right == NULL)
-		director_connect(dir);
+		director_connect(dir, "Reconnecting after error");
 }
 
 void director_connection_send(struct director_connection *conn,
