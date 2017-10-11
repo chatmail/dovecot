@@ -49,7 +49,8 @@ static void apparmor_mail_user_deinit(struct mail_user *user)
 {
 	struct apparmor_mail_user *auser = APPARMOR_USER_CONTEXT(user);
 
-	auser->module_ctx.super.deinit(user);
+	if (user == NULL)
+		return;
 
 	if (aa_change_hat(NULL, auser->token)<0)
 		i_fatal("aa_change_hat(NULL) failed: %m");

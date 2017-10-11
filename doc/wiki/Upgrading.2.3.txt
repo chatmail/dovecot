@@ -1,6 +1,9 @@
 Upgrading Dovecot v2.2 to v2.3
 ==============================
 
+Downgrading is possible to v2.2.27 and later. (v2.2.27 accidentally broke
+dovecot.index* backwards compatibility a bit.)
+
 Settings changes
 ----------------
 
@@ -10,13 +13,19 @@ Settings changes
    now.
  * 'director_consistent_hashing' setting removed. It's always assumed to be
    "yes" now.
+ * 'recipient_delimiters' setting used to be treated as a separator string. Now
+   it's instead treated as a list of alternative delimiter characters.
+ * Time interval based settings no longer default to "seconds". All numbers
+   must explicitly be followed by the time unit (except 0). This is important,
+   because some settings now support milliseconds as well.
 
 Localhost auth penalty
 ----------------------
 
 Dovecot no longer disables auth penalty waits for clients connecting from
-localhost. The previous idea was that it would likely be a webmail that would
-have its own delays, but there are no guarantees about this.
+localhost (or login_trusted_networks in general). The previous idea was that it
+would likely be a webmail that would have its own delays, but there are no
+guarantees about this.
 
 If the old behavior is still wanted, it's possible to do nowadays even more
 generically with e.g.:
@@ -49,9 +58,11 @@ Setting default changes
     * ->
       ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
  * mail_log_prefix="%s(%u): "
-    * -> "%s(%u)<%{session}>: "
+    * -> "%s(%u)<%{pid}><%{session}>: "
+ * mysql: ssl_verify_server_cert=no -> yes
+ * ssl_options: no_compression is now enabled by default.
 
-Diffie-Heffman parameters for SSL
+Diffie-Hellman parameters for SSL
 ---------------------------------
 
  * ssl-parameters.dat file is now obsolete. You should use ssl_dh setting
@@ -63,4 +74,20 @@ Diffie-Heffman parameters for SSL
       -inform der > /etc/dovecot/dh.pem
       ---%<-------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-08-24 04:42)
+Other changes
+-------------
+
+ * doveadm: table formatter prints the header now to stdout, not stderr
+ * doveadm: Removed mount commands
+ * subscriptions file is written in a new version 2 format. Dovecot v2.2.17 and
+   newer can read this file.
+ * mail_log plugin: Headers are logged as UTF-8 (instead of MIME-encoded)
+ * auth: When iterating users in userdb passwd, skip users that aren't in the
+   first/last_valid_gid range
+ * auth protocol has changed some error fields:
+    * temp -> code=temp_fail
+    * authz -> code=authz_fail
+    * user_disabled -> code=user_disabled
+    * pass_expired -> code=pass_expired
+
+(This file was created from the wiki on 2017-10-10 04:42)

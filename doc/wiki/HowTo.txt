@@ -56,6 +56,7 @@ Others:
  * SMTP AUTH
     * <With Postfix> [HowTo.PostfixAndDovecotSASL.txt]
     * <With Exim> [HowTo.EximAndDovecotSASL.txt]
+    * With HALON [http://wiki.halon.se/SASL]
  * <Default Debian stable setup with Exim, modified to use Maildir>
    [HowTo.DebianStable.txt]
  * <IMAPC: Configuring Dovecot as an IMAP Proxy in front of Exchange (Dovecot
@@ -82,4 +83,4 @@ Others:
  * <Configuration files> [HowTo.WriteConfiguration.txt]
  * <Replacing antispam plugin with sieve> [HowTo.AntispamWithSieve.txt]
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

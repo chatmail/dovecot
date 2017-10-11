@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.2.32],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv32($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.2.33],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv33($PACKAGE_VERSION)", [Dovecot ABI version])
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_SRCDIR([src])
 
@@ -2925,6 +2925,8 @@ AM_CONDITIONAL(BUILD_LIBICU, test "$have_icu" = "yes")
 
 DOVECOT_WANT_APPARMOR
 
+DOVECOT_WANT_APPARMOR
+
 if test $have_lucene = no; then
   not_fts="$not_fts lucene"
 fi
@@ -3072,6 +3074,7 @@ src/plugins/mail-filter/Makefile
 src/plugins/mail-log/Makefile
 src/plugins/mailbox-alias/Makefile
 src/plugins/notify/Makefile
+src/plugins/notify-status/Makefile
 src/plugins/push-notification/Makefile
 src/plugins/pop3-migration/Makefile
 src/plugins/quota/Makefile

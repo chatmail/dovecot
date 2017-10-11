@@ -43,6 +43,8 @@ const char *user_kill_state_names[USER_KILL_STATE_DELAY+1] = {
 static struct log_throttle *user_move_throttle;
 static struct log_throttle *user_kill_fail_throttle;
 
+static void director_hosts_purge_removed(struct director *dir);
+
 static const struct log_throttle_settings director_log_throttle_settings = {
 	.throttle_at_max_per_interval = 100,
 	.unthrottle_at_max_per_interval = 2,
@@ -128,7 +130,27 @@ director_has_outgoing_connection(struct director *dir,
 	return FALSE;
 }
 
-int director_connect_host(struct director *dir, struct director_host *host)
+static void
+director_log_connect(struct director *dir, struct director_host *host,
+		     const char *reason)
+{
+	string_t *str = t_str_new(128);
+
+	if (host->last_network_failure > 0) {
+		str_printfa(str, ", last network failure %ds ago",
+			    (int)(ioloop_time - host->last_network_failure));
+	}
+	if (host->last_protocol_failure > 0) {
+		str_printfa(str, ", last protocol failure %ds ago",
+			    (int)(ioloop_time - host->last_protocol_failure));
+	}
+	i_info("Connecting to %s:%u (as %s%s): %s",
+	       net_ip2addr(&host->ip), host->port,
+	       net_ip2addr(&dir->self_ip), str_c(str), reason);
+}
+
+int director_connect_host(struct director *dir, struct director_host *host,
+			  const char *reason)
 {
 	in_port_t port;
 	int fd;
@@ -136,22 +158,7 @@ int director_connect_host(struct director *dir, struct director_host *host)
 	if (director_has_outgoing_connection(dir, host))
 		return 0;
 
-	if (director_debug) {
-		string_t *str = t_str_new(128);
-
-		str_printfa(str, "Connecting to %s:%u (as %s",
-			    net_ip2addr(&host->ip), host->port,
-			    net_ip2addr(&dir->self_ip));
-		if (host->last_network_failure > 0) {
-			str_printfa(str, ", last network failure %ds ago",
-				    (int)(ioloop_time - host->last_network_failure));
-		}
-		if (host->last_protocol_failure > 0) {
-			str_printfa(str, ", last protocol failure %ds ago",
-				    (int)(ioloop_time - host->last_protocol_failure));
-		}
-		dir_debug("%s", str_c(str));
-	}
+	director_log_connect(dir, host, reason);
 	port = dir->test_port != 0 ? dir->test_port : host->port;
 	fd = net_connect_ip(&host->ip, port, &dir->self_ip);
 	if (fd == -1) {
@@ -189,6 +196,11 @@ director_get_preferred_right_host(struct director *dir)
 	return NULL;
 }
 
+static void director_quick_reconnect_retry(struct director *dir)
+{
+	director_connect(dir, "Alone in director ring - trying to connect to others");
+}
+
 static bool director_wait_for_others(struct director *dir)
 {
 	struct director_host *const *hostp;
@@ -209,11 +221,11 @@ static bool director_wait_for_others(struct director *dir)
 	if (dir->to_reconnect != NULL)
 		timeout_remove(&dir->to_reconnect);
 	dir->to_reconnect = timeout_add(DIRECTOR_QUICK_RECONNECT_TIMEOUT_MSECS,
-					director_connect, dir);
+					director_quick_reconnect_retry, dir);
 	return TRUE;
 }
 
-void director_connect(struct director *dir)
+void director_connect(struct director *dir, const char *reason)
 {
 	struct director_host *const *hosts;
 	unsigned int i, count, self_idx;
@@ -241,7 +253,7 @@ void director_connect(struct director *dir)
 			continue;
 		}
 
-		if (director_connect_host(dir, hosts[idx]) == 0) {
+		if (director_connect_host(dir, hosts[idx], reason) == 0) {
 			/* success */
 			return;
 		}
@@ -266,7 +278,7 @@ void director_connect(struct director *dir)
 	dir->ring_min_version = DIRECTOR_VERSION_MINOR;
 	if (!dir->ring_handshaked)
 		director_set_ring_handshaked(dir);
-	else
+	else if (!dir->ring_synced)
 		director_set_ring_synced(dir);
 }
 
@@ -297,9 +309,10 @@ static void director_reconnect_timeout(struct director *dir)
 
 	if (preferred_host == NULL) {
 		/* all directors have been removed, try again later */
-	} else if (cur_host != preferred_host)
-		(void)director_connect_host(dir, preferred_host);
-	else {
+	} else if (cur_host != preferred_host) {
+		(void)director_connect_host(dir, preferred_host,
+			"Reconnect attempt to preferred director");
+	} else {
 		/* the connection hasn't finished sync yet.
 		   keep this timeout for now. */
 	}
@@ -343,6 +356,10 @@ void director_set_ring_synced(struct director *dir)
 		timeout_remove(&dir->to_sync);
 	dir->ring_synced = TRUE;
 	dir->ring_last_sync_time = ioloop_time;
+	/* If there are any director hosts still marked as "removed", we can
+	   safely remove those now. The entire director cluster knows about the
+	   removal now. */
+	director_hosts_purge_removed(dir);
 	mail_hosts_set_synced(dir->mail_hosts);
 	director_set_state_changed(dir);
 }
@@ -395,7 +412,7 @@ static void director_sync_timeout(struct director *dir)
 	i_assert(!dir->ring_synced);
 
 	if (director_resend_sync(dir))
-		i_error("Ring SYNC appears to have got lost, resending");
+		i_error("Ring SYNC seq=%u appears to have got lost, resending", dir->sync_seq);
 }
 
 void director_set_ring_unsynced(struct director *dir)
@@ -431,6 +448,8 @@ static void director_sync(struct director *dir)
 	if (dir->right == NULL) {
 		i_assert(!dir->ring_synced ||
 			 (dir->left == NULL && dir->right == NULL));
+		dir_debug("Ring is desynced (seq=%u, no right connection)",
+			  dir->sync_seq);
 		return;
 	}
 
@@ -477,9 +496,14 @@ void director_sync_thaw(struct director *dir)
 }
 
 void director_notify_ring_added(struct director_host *added_host,
-				struct director_host *src)
+				struct director_host *src, bool log)
 {
 	const char *cmd;
+
+	if (log) {
+		i_info("Adding director %s to ring (requested by %s)",
+		       added_host->name, src->name);
+	}
 
 	added_host->dir->ring_change_counter++;
 	cmd = t_strdup_printf("DIRECTOR\t%s\t%u\n",
@@ -487,12 +511,13 @@ void director_notify_ring_added(struct director_host *added_host,
 	director_update_send(added_host->dir, src, cmd);
 }
 
-static void director_delayed_dir_remove_timeout(struct director *dir)
+static void director_hosts_purge_removed(struct director *dir)
 {
 	struct director_host *const *hosts, *host;
 	unsigned int i, count;
 
-	timeout_remove(&dir->to_remove_dirs);
+	if (dir->to_remove_dirs != NULL)
+		timeout_remove(&dir->to_remove_dirs);
 
 	hosts = array_get(&dir->dir_hosts, &count);
 	for (i = 0; i < count; ) {
@@ -514,26 +539,41 @@ void director_ring_remove(struct director_host *removed_host,
 	unsigned int i, count;
 	const char *cmd;
 
-	if (removed_host->self) {
+	i_info("Removing director %s from ring (requested by %s)",
+	       removed_host->name, src->name);
+
+	if (removed_host->self && !src->self) {
 		/* others will just disconnect us */
 		return;
 	}
 
-	/* mark the host as removed and fully remove it later. this delay is
-	   needed, because the removal may trigger director reconnections,
-	   which may send the director back and we don't want to re-add it */
-	removed_host->removed = TRUE;
-	if (dir->to_remove_dirs == NULL) {
-		dir->to_remove_dirs =
-			timeout_add(DIRECTOR_DELAYED_DIR_REMOVE_MSECS,
-				    director_delayed_dir_remove_timeout, dir);
+	if (!removed_host->self) {
+		/* mark the host as removed and fully remove it later. this
+		   delay is needed, because the removal may trigger director
+		   reconnections, which may send the director back and we don't
+		   want to re-add it */
+		removed_host->removed = TRUE;
+		if (dir->to_remove_dirs == NULL) {
+			dir->to_remove_dirs =
+				timeout_add(DIRECTOR_DELAYED_DIR_REMOVE_MSECS,
+					    director_hosts_purge_removed, dir);
+		}
 	}
+
+	/* if our left or ride side gets removed, notify them first
+	   before disconnecting. */
+	cmd = t_strdup_printf("DIRECTOR-REMOVE\t%s\t%u\n",
+			      net_ip2addr(&removed_host->ip),
+			      removed_host->port);
+	director_update_send_version(dir, src,
+				     DIRECTOR_VERSION_RING_REMOVE, cmd);
 
 	/* disconnect any connections to the host */
 	conns = array_get(&dir->connections, &count);
 	for (i = 0; i < count; ) {
 		conn = conns[i];
-		if (director_connection_get_host(conn) != removed_host)
+		if (director_connection_get_host(conn) != removed_host ||
+		    removed_host->self)
 			i++;
 		else {
 			director_connection_deinit(&conn, "Removing from ring");
@@ -541,13 +581,8 @@ void director_ring_remove(struct director_host *removed_host,
 		}
 	}
 	if (dir->right == NULL)
-		director_connect(dir);
-
-	cmd = t_strdup_printf("DIRECTOR-REMOVE\t%s\t%u\n",
-			      net_ip2addr(&removed_host->ip),
-			      removed_host->port);
-	director_update_send_version(dir, src,
-				     DIRECTOR_VERSION_RING_REMOVE, cmd);
+		director_connect(dir, "Reconnecting after director was removed");
+	director_sync(dir);
 }
 
 static void
@@ -835,6 +870,14 @@ director_flush_user(struct director *dir, struct user *user)
 	program_client_run_async(ctx->pclient, director_flush_user_continue, ctx);
 }
 
+static void director_user_move_finished(struct director *dir)
+{
+	i_assert(dir->users_moving_count > 0);
+	dir->users_moving_count--;
+
+	director_set_state_changed(dir);
+}
+
 static void director_user_move_free(struct user *user)
 {
 	struct director *dir = user->kill_ctx->dir;
@@ -851,10 +894,7 @@ static void director_user_move_free(struct user *user)
 	i_free(kill_ctx);
 	user->kill_ctx = NULL;
 
-	i_assert(dir->users_moving_count > 0);
-	dir->users_moving_count--;
-
-	dir->state_change_callback(dir);
+	director_user_move_finished(dir);
 }
 
 static void
@@ -950,6 +990,7 @@ static void director_kill_user_callback(enum ipc_client_cmd_state state,
 	if (!DIRECTOR_KILL_CONTEXT_IS_VALID(user, ctx)) {
 		/* user was already freed - ignore */
 		i_assert(ctx->to_move == NULL);
+		director_user_move_finished(ctx->dir);
 		i_free(ctx);
 	} else {
 		i_assert(ctx->kill_state == USER_KILL_STATE_KILLING ||
@@ -984,10 +1025,9 @@ static void director_user_move_timeout(struct user *user)
 	director_user_move_free(user);
 }
 
-static void
-director_kill_user(struct director *dir, struct director_host *src,
-		   struct user *user, struct mail_tag *tag,
-		   struct mail_host *old_host)
+void director_kill_user(struct director *dir, struct director_host *src,
+			struct user *user, struct mail_tag *tag,
+			struct mail_host *old_host, bool forced_kick)
 {
 	struct director_kill_context *ctx;
 	const char *cmd;
@@ -1018,7 +1058,7 @@ director_kill_user(struct director *dir, struct director_host *src,
 				   director_user_move_timeout, user);
 	ctx->kill_state = USER_KILL_STATE_KILLING;
 
-	if (old_host != NULL && old_host != user->host) {
+	if ((old_host != NULL && old_host != user->host) || forced_kick) {
 		cmd = t_strdup_printf("proxy\t*\tKICK-DIRECTOR-HASH\t%u",
 				      user->username_hash);
 		ctx->callback_pending = TRUE;
@@ -1098,7 +1138,7 @@ void director_move_user(struct director *dir, struct director_host *src,
 		user->username_hash, net_ip2addr(&user->host->ip)));
 	/* kill the user only after sending the USER-MOVE, because the kill
 	   may finish instantly. */
-	director_kill_user(dir, src, user, host->tag, old_host);
+	director_kill_user(dir, src, user, host->tag, old_host, FALSE);
 }
 
 static void

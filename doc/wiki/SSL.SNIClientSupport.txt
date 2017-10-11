@@ -15,4 +15,4 @@ Doesn't work:
  * Outlook for Mac version 15 (according to
    https://forums.cpanel.net/threads/mail-ssl-sni.454592/ )
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

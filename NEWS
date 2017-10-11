@@ -1,3 +1,54 @@
+v2.2.33 2017-10-10  Timo Sirainen <tss@iki.fi>
+
+	* doveadm director commands wait for the changes to be visible in the
+	  whole ring before they return. This is especially useful in testing.
+	* Environments listed in import_environment setting are now set or
+	  preserved when executing standalone commands (e.g. doveadm)
+
+	+ doveadm proxy: Support proxying logs. Previously the logs were
+	  visible only in the backend's logs.
+	+ Added %{if}, see https://wiki2.dovecot.org/Variables#Conditionals
+	+ Added a new notify_status plugin, which can be used to update dict
+	  with current status of a mailbox when it changes. See
+	  https://wiki2.dovecot.org/Plugins/NotifyStatus
+	+ Mailbox list index can be disabled for a namespace by appending
+	  ":LISTINDEX=" to location setting.
+	+ dsync/imapc: Added dsync_hashed_headers setting to specify which
+	  headers are used to match emails.
+	+ pop3-migration: Add pop3_migration_ignore_extra_uidls=yes to ignore
+	  mails that are visible in POP3 but not IMAP. This could happen if
+	  new mails were delivered during the migration run.
+	+ pop3-migration: Further improvements to help with Zimbra
+	+ pop3-migration: Cache POP3 UIDLs in imapc's dovecot.index.cache
+	  if indexes are enabled. These are used to optimize incremental syncs.
+	+ cassandra, dict-sql: Use prepared statements if protocol version>3.
+	+ auth: Added %{ldap_dn} variable for passdb/userdb ldap
+	- acl: The "create" (k) permission in global acl-file was sometimes
+	  ignored, allowing users to create mailboxes when they shouldn't have.
+	- sdbox: Mails were always opened when expunging, unless
+	  mail_attachment_fs was explicitly set to empty.
+	- lmtp/doveadm proxy: hostip passdb field was ignored, which caused
+	  unnecessary DNS lookups if host field wasn't an IP
+	- lmtp proxy: Fix crash when receiving unexpected reply in RCPT TO
+	- quota_clone: Update also when quota is unlimited (broken in v2.2.31)
+	- mbox, zlib: Fix assert-crash when accessing compressed mbox
+	- doveadm director kick -f parameter didn't work
+	- doveadm director flush <host> resulted flushing all hosts, if <host>
+	  wasn't an IP address.
+	- director: Various fixes to handling backend/director changes at
+	  abnormal times, especially while ring was unsynced. These could have
+	  resulted in crashes, non-optimal behavior or ignoring some of the
+	  changes.
+	- director: Use less CPU in imap-login processes when moving/kicking
+	  many users.
+	- lmtp: Session IDs were duplicated/confusing with multiple RCPT TOs
+	  when lmtp_rcpt_check_quota=yes
+	- doveadm sync -1 fails when local mailboxes exist that do not exist
+	  remotely. This commonly happened when lazy_expunge mailbox was
+	  autocreated when incremental sync expunged mails.
+	- pop3: rawlog_dir setting didn't work
+
+
 v2.2.32 2017-08-24  Timo Sirainen <tss@iki.fi>
 
 	* imapc: Info-level line is logged every time when successfully

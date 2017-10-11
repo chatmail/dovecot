@@ -345,13 +345,23 @@ void master_service_init_log(struct master_service *service,
 			     const char *prefix)
 {
 	const char *path, *timestamp;
+	bool log_already_initialized = service->log_initialized;
 
+	service->log_initialized = TRUE;
 	if ((service->flags & MASTER_SERVICE_FLAG_STANDALONE) != 0 &&
 	    (service->flags & MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR) == 0) {
+		if (log_already_initialized)
+			return;
 		timestamp = getenv("LOG_STDERR_TIMESTAMP");
 		if (timestamp != NULL)
 			i_set_failure_timestamp_format(timestamp);
 		i_set_failure_file("/dev/stderr", "");
+		return;
+	}
+
+	if (log_already_initialized) {
+		/* change only the prefix */
+		i_set_failure_prefix("%s", prefix);
 		return;
 	}
 
@@ -549,6 +559,44 @@ void master_service_init_finish(struct master_service *service)
 		service->master_status.available_count--;
 	}
 	master_status_update(service);
+}
+
+static void master_service_import_environment_real(const char *import_environment)
+{
+	const char *const *envs, *key, *value;
+	ARRAY_TYPE(const_string) keys;
+
+	if (*import_environment == '\0')
+		return;
+
+	t_array_init(&keys, 8);
+	/* preserve existing DOVECOT_PRESERVE_ENVS */
+	value = getenv(DOVECOT_PRESERVE_ENVS_ENV);
+	if (value != NULL)
+		array_append(&keys, &value, 1);
+	/* add new environments */
+	envs = t_strsplit_spaces(import_environment, " ");
+	for (; *envs != NULL; envs++) {
+		value = strchr(*envs, '=');
+		if (value == NULL)
+			key = *envs;
+		else {
+			key = t_strdup_until(*envs, value);
+			env_put(*envs);
+		}
+		array_append(&keys, &key, 1);
+	}
+	array_append_zero(&keys);
+
+	value = t_strarray_join(array_idx(&keys, 0), " ");
+	env_put(t_strconcat(DOVECOT_PRESERVE_ENVS_ENV"=", value, NULL));
+}
+
+void master_service_import_environment(const char *import_environment)
+{
+	T_BEGIN {
+		master_service_import_environment_real(import_environment);
+	} T_END;
 }
 
 void master_service_env_clean(void)

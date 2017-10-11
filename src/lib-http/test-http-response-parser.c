@@ -56,6 +56,13 @@ static const struct valid_parse_test_response valid_responses3[] = {
 static const struct valid_parse_test_response valid_responses4[] = {
 	{
 		.status = 200,
+		.payload = "Invalid date header"
+	}
+};
+
+static const struct valid_parse_test_response valid_responses5[] = {
+	{
+		.status = 200,
 		.payload = "Duplicate headers"
 	}
 };
@@ -124,6 +131,18 @@ valid_response_parse_tests[] = {
 	},{
 		.input =
 			"HTTP/1.1 200 OK\r\n"
+			"Date: Sun, 07 Ocu 2012 19:52:03 GMT\r\n"
+			"Content-Length: 19\r\n"
+			"Keep-Alive: timeout=15, max=99\r\n"
+			"Connection: Keep-Alive\r\n"
+			"Date: Sun, 13 Oct 2013 13:13:13 GMT\r\n"
+			"\r\n"
+			"Invalid date header",
+		.responses = valid_responses4,
+		.responses_count = N_ELEMENTS(valid_responses4)
+	},{
+		.input =
+			"HTTP/1.1 200 OK\r\n"
 			"Date: Sun, 07 Oct 2012 19:52:03 GMT\r\n"
 			"Server: Apache/2.2.16 (Debian) PHP/5.3.3-7+squeeze14\r\n"
 			"Content-Length: 17\r\n"
@@ -133,8 +152,8 @@ valid_response_parse_tests[] = {
 			"Date: Sun, 13 Oct 2013 13:13:13 GMT\r\n"
 			"\r\n"
 			"Duplicate headers",
-		.responses = valid_responses4,
-		.responses_count = N_ELEMENTS(valid_responses4)
+		.responses = valid_responses5,
+		.responses_count = N_ELEMENTS(valid_responses5)
 	}
 };
 
@@ -263,6 +282,16 @@ static struct invalid_parse_test invalid_response_parse_tests[] = {
 	},{
 		.input =
 			"HTTP/1.1 200 OK\r\n"
+			"Date: Sun, 07 Ocu 2012 19:52:03 GMT\r\n"
+			"Content-Length: 19\r\n"
+			"Keep-Alive: timeout=15, max=99\r\n"
+			"Connection: Keep-Alive\r\n"
+			"\r\n"
+			"Invalid date header",
+		.flags = HTTP_RESPONSE_PARSE_FLAG_STRICT
+	},{
+		.input =
+			"HTTP/1.1 200 OK\r\n"
 			"Date: Sun, 07 Oct 2012 19:52:03 GMT\r\n"
 			"Server: Apache/2.2.16 (Debian) PHP/5.3.3-7+squeeze14\r\n"
 			"Content-Length: 17\r\n"
@@ -302,7 +331,7 @@ static void test_http_response_parse_invalid(void)
 
 		while ((ret=http_response_parse_next(parser, FALSE, &response, &error)) > 0);
 
-		test_assert(ret < 0);
+		test_out_reason("parse failure", ret < 0, error);
 		test_end();
 		http_response_parser_deinit(&parser);
 	} T_END;

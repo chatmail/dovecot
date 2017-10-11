@@ -485,7 +485,7 @@ parse_ssh_location(const char *location, const char *username)
 }
 
 static struct dsync_ibc *
-cmd_dsync_icb_stream_init(struct dsync_cmd_context *ctx,
+cmd_dsync_ibc_stream_init(struct dsync_cmd_context *ctx,
 			  const char *name, const char *temp_prefix)
 {
 	if (ctx->input == NULL) {
@@ -591,7 +591,13 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	set.import_commit_msgs_interval = ctx->import_commit_msgs_interval;
 	set.state = ctx->state_input;
 	set.mailbox_alt_char = doveadm_settings->dsync_alt_char[0];
-
+	if (*doveadm_settings->dsync_hashed_headers == '\0') {
+		i_error("dsync_hashed_headers must not be empty");
+		ctx->ctx.exit_code = EX_USAGE;
+		return -1;
+	}
+	set.hashed_headers =
+		t_strsplit_spaces(doveadm_settings->dsync_hashed_headers, " ,");
 	if (array_count(&ctx->exclude_mailboxes) > 0) {
 		/* array is NULL-terminated in init() */
 		set.exclude_mailboxes = array_idx(&ctx->exclude_mailboxes, 0);
@@ -614,7 +620,7 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	else {
 		string_t *temp_prefix = t_str_new(64);
 		mail_user_set_get_temp_prefix(temp_prefix, user->set);
-		ibc = cmd_dsync_icb_stream_init(ctx, ctx->remote_name,
+		ibc = cmd_dsync_ibc_stream_init(ctx, ctx->remote_name,
 						str_c(temp_prefix));
 		if (ctx->fd_err != -1) {
 			ctx->io_err = io_add(ctx->fd_err, IO_READ,
@@ -1163,7 +1169,7 @@ cmd_dsync_server_run(struct doveadm_mail_cmd_context *_ctx,
 	temp_prefix = t_str_new(64);
 	mail_user_set_get_temp_prefix(temp_prefix, user->set);
 
-	ibc = cmd_dsync_icb_stream_init(ctx, name, str_c(temp_prefix));
+	ibc = cmd_dsync_ibc_stream_init(ctx, name, str_c(temp_prefix));
 	brain = dsync_brain_slave_init(user, ibc, FALSE, process_title_prefix);
 
 	io_loop_run(current_ioloop);

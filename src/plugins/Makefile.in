@@ -156,11 +156,11 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 DIST_SUBDIRS = acl imap-acl autocreate expire fts fts-squat last-login \
-	lazy-expunge listescape notify push-notification mail-filter \
-	mail-log mailbox-alias quota quota-clone imap-quota \
-	pop3-migration replication snarf stats imap-stats mail-crypt \
-	trash virtual welcome zlib imap-zlib fts-lucene fts-solr \
-	dict-ldap apparmor fs-compress var-expand-crypt
+	lazy-expunge listescape notify notify-status push-notification \
+	mail-filter mail-log mailbox-alias quota quota-clone \
+	imap-quota pop3-migration replication snarf stats imap-stats \
+	mail-crypt trash virtual welcome zlib imap-zlib fts-lucene \
+	fts-solr dict-ldap apparmor fs-compress var-expand-crypt
 am__DIST_COMMON = $(srcdir)/Makefile.in
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -397,6 +397,7 @@ SUBDIRS = \
 	lazy-expunge \
 	listescape \
 	notify \
+	notify-status \
 	push-notification \
 	mail-filter \
 	mail-log \

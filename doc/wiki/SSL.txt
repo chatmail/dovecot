@@ -62,4 +62,4 @@ SSL port deprecation never really happened, probably because of a few reasons:
    [https://it.slashdot.org/story/14/11/11/2349244/isps-removing-their-customers-email-encryption])
    STARTTLS can not guarantee encrypted delivery of mail.
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

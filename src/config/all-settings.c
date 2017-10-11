@@ -331,6 +331,7 @@ struct master_service_settings {
 	const char *debug_log_path;
 	const char *log_timestamp;
 	const char *syslog_facility;
+	const char *import_environment;
 	uoff_t config_cache_size;
 	bool version_ignore;
 	bool shutdown_clients;
@@ -1377,7 +1378,6 @@ struct master_settings {
 	const char *state_dir;
 	const char *libexec_dir;
 	const char *instance_name;
-	const char *import_environment;
 	const char *protocols;
 	const char *listen;
 	const char *ssl;
@@ -1547,6 +1547,7 @@ struct doveadm_settings {
 	const char *director_username_hash;
 	const char *doveadm_api_key;
 	const char *dsync_features;
+	const char *dsync_hashed_headers;
 	unsigned int dsync_commit_msgs_interval;
 	const char *doveadm_http_rawlog_dir;
 	enum dsync_features parsed_features;
@@ -2274,18 +2275,6 @@ const struct setting_parser_info fs_crypt_setting_parser_info = {
 extern const struct setting_parser_info service_setting_parser_info;
 extern const struct setting_parser_info service_setting_parser_info;
 /* <settings checks> */
-#ifdef HAVE_SYSTEMD
-#  define ENV_SYSTEMD " LISTEN_PID LISTEN_FDS"
-#else
-#  define ENV_SYSTEMD ""
-#endif
-#ifdef DEBUG
-#  define ENV_GDB " GDB DEBUG_SILENT"
-#else
-#  define ENV_GDB ""
-#endif
-/* </settings checks> */
-/* <settings checks> */
 static void
 expand_user(const char **user, enum service_user_default *default_r,
 	    const struct master_settings *set)
@@ -2804,7 +2793,6 @@ static const struct setting_define master_setting_defines[] = {
 	DEF(SET_STR, state_dir),
 	DEF(SET_STR, libexec_dir),
 	DEF(SET_STR, instance_name),
-	DEF(SET_STR, import_environment),
 	DEF(SET_STR, protocols),
 	DEF(SET_STR, listen),
 	DEF(SET_ENUM, ssl),
@@ -2831,7 +2819,6 @@ struct master_settings master_default_settings = {
 	.state_dir = PKG_STATEDIR,
 	.libexec_dir = PKG_LIBEXECDIR,
 	.instance_name = PACKAGE,
-	.import_environment = "TZ CORE_OUTOFMEM CORE_ERROR" ENV_SYSTEMD ENV_GDB,
 	.protocols = "imap pop3 lmtp",
 	.listen = "*, ::",
 	.ssl = "yes:no:required",
@@ -3759,6 +3746,10 @@ static bool doveadm_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 	fix_base_path(set, pool, &set->auth_socket_path);
 	fix_base_path(set, pool, &set->doveadm_socket_path);
 #endif
+	if (*set->dsync_hashed_headers == '\0') {
+		*error_r = "dsync_hashed_headers must not be empty";
+		return FALSE;
+	}
 	if (*set->dsync_alt_char == '\0') {
 		*error_r = "dsync_alt_char must not be empty";
 		return FALSE;
@@ -3819,6 +3810,7 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, dsync_features),
 	DEF(SET_UINT, dsync_commit_msgs_interval),
 	DEF(SET_STR, doveadm_http_rawlog_dir),
+	DEF(SET_STR, dsync_hashed_headers),
 
 	{ SET_STRLIST, "plugin", offsetof(struct doveadm_settings, plugin_envs), NULL },
 
@@ -3840,6 +3832,7 @@ const struct doveadm_settings doveadm_default_settings = {
 	.dsync_alt_char = "_",
 	.dsync_remote_cmd = "ssh -l%{login} %{host} doveadm dsync-server -u%u -U",
 	.dsync_features = "",
+	.dsync_hashed_headers = "Date Message-ID",
 	.dsync_commit_msgs_interval = 100,
 	.ssl_client_ca_dir = "",
 	.ssl_client_ca_file = "",
@@ -4698,34 +4691,34 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&pop3c_setting_parser_info, 
-	&mbox_setting_parser_info, 
 	&aggregator_setting_parser_info, 
-	&quota_status_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&mdbox_setting_parser_info, 
+	&imapc_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
 	&director_setting_parser_info, 
 	&imap_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&master_setting_parser_info, 
-	&imapc_setting_parser_info, 
-	&maildir_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&stats_setting_parser_info, 
-	&fs_crypt_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
 	&dict_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
 	&replicator_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&lda_setting_parser_info, 
 	&login_setting_parser_info, 
-	&imap_login_setting_parser_info, 
+	&mdbox_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
 	&doveadm_setting_parser_info, 
+	&maildir_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&quota_status_setting_parser_info, 
+	&fs_crypt_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&master_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&lmtp_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

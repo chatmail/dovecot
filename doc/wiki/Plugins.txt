@@ -85,6 +85,11 @@ External:
    when new emails are received by Dovecot 2.x.
  * TREES [https://0xacab.org/riseuplabs/trees]: A NaCL-based Dovecot encryption
    plugin
+ * dovecot-xaps-plugin [https://github.com/st3fan/dovecot-xaps-plugin]: iOS
+   Push Email for Dovecot
+ * dovecot-libsodium-plugin
+   [https://github.com/LuckyFellow/dovecot-libsodium-plugin]: Libsodium
+   password hashing schemes plugin
 
 Experimental Plugins:
 
@@ -94,4 +99,4 @@ Experimental Plugins:
 To enable / disable plugins per user you can make your userdb return
 'mail_plugins' extra field. See <UserDatabase.ExtraFields.txt> for examples.
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

@@ -152,4 +152,4 @@ Problems
  * If source IMAP and POP3 servers return messages somehow differently,
    pop3-migration plugin might not be able to match the messages
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

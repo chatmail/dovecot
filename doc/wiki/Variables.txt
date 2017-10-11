@@ -280,7 +280,7 @@ always taken from the final string.
 Conditionals
 ------------
 
-Since v2.2.32 it's possible to use conditionals in variable expansion. The
+Since v2.2.33 it's possible to use conditionals in variable expansion. The
 generic syntax is
 
 ---%<-------------------------------------------------------------------------
@@ -333,4 +333,4 @@ Following operators are supported
 | !~         | String inequality (pattern on value2, extended POSIX)        |
 +------------+--------------------------------------------------------------+
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

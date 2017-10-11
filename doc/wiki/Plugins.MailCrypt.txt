@@ -10,27 +10,27 @@ Contents
 
      2. Modes of operation
 
-     3. Global keys
+     3. Folder keys
 
-     4. Folder keys
+     4. Global keys
 
-     5. RSA key
+         1. RSA key
 
-     6. EC key
+         2. EC key
 
-     7. Converting EC key to PKEY
+         3. Converting EC key to PKEY
 
-     8. Base64 encoded keys
+         4. Base64 encoded keys
 
-     9. New dcrypt format (mail_crypt_save_version = 2)
+     5. New dcrypt format (mail_crypt_save_version = 2)
 
-     10. Old dcrypt format (mail_crypt_save_version = 1)
+     6. Old dcrypt format (mail_crypt_save_version = 1)
 
-     11. Read-only mode (mail_crypt_save_version = 0)
+     7. Read-only mode (mail_crypt_save_version = 0)
 
-     12. mail-crypt-plugin and ACLs
+     8. mail-crypt-plugin and ACLs
 
-     13. fs-crypt and fs-mail-crypt
+     9. fs-crypt and fs-mail-crypt
 
  2. doveadm plugin
 
@@ -91,12 +91,6 @@ Mail crypt plugin can operate using *either* global keys *or* folder keys.
 Using both is not supported. To perform any
 encryption,*mail_crypt_save_version* must be specified and non-zero.
 
-Global keys
------------
-
-In this mode, all keying material is taken from plugin environment. You can use
-either EC keys (recommended) or RSA keys. No key generation is performed.
-
 Folder keys
 -----------
 
@@ -119,6 +113,12 @@ plugin {
     mail_crypt_save_version = 2
 }
 ---%<-------------------------------------------------------------------------
+
+Global keys
+-----------
+
+In this mode, all keying material is taken from plugin environment. You can use
+either EC keys (recommended) or RSA keys. No key generation is performed.
 
 RSA key
 -------
@@ -416,4 +416,4 @@ doveadm mailbox cryptokey password [-u username | -A] [-N | -n password] [-O |
 
 Sets, changes or clears password for user's private key.
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)

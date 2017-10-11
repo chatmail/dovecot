@@ -456,6 +456,28 @@ acl_backend_vfile_read_with_retry(struct acl_object *aclobj,
 	return ret <= 0 ? -1 : 0;
 }
 
+static bool
+acl_vfile_validity_has_changed(struct acl_backend_vfile *backend,
+			       const struct acl_vfile_validity *validity,
+			       const struct stat *st)
+{
+	if (st->st_mtime == validity->last_mtime &&
+	    st->st_size == validity->last_size) {
+		/* same timestamp, but if it was modified within the
+		   same second we want to refresh it again later (but
+		   do it only after a couple of seconds so we don't
+		   keep re-reading it all the time within those
+		   seconds) */
+		time_t cache_secs = backend->cache_secs;
+
+		if (validity->last_read_time != 0 &&
+		    (st->st_mtime < validity->last_read_time - cache_secs ||
+		     ioloop_time - validity->last_read_time <= cache_secs))
+			return FALSE;
+	}
+	return TRUE;
+}
+
 static int
 acl_backend_vfile_refresh(struct acl_object *aclobj, const char *path,
 			  struct acl_vfile_validity *validity)
@@ -489,23 +511,7 @@ acl_backend_vfile_refresh(struct acl_object *aclobj, const char *path,
 		i_error("stat(%s) failed: %m", path);
 		return -1;
 	}
-
-	if (st.st_mtime == validity->last_mtime &&
-	    st.st_size == validity->last_size) {
-		/* same timestamp, but if it was modified within the
-		   same second we want to refresh it again later (but
-		   do it only after a couple of seconds so we don't
-		   keep re-reading it all the time within those
-		   seconds) */
-		time_t cache_secs = backend->cache_secs;
-
-		if (validity->last_read_time != 0 &&
-		    (st.st_mtime < validity->last_read_time - cache_secs ||
-		     ioloop_time - validity->last_read_time <= cache_secs))
-			return 0;
-	}
-
-	return 1;
+	return acl_vfile_validity_has_changed(backend, validity, &st) ? 1 : 0;
 }
 
 int acl_backend_vfile_object_get_mtime(struct acl_object *aclobj,
@@ -526,6 +532,23 @@ int acl_backend_vfile_object_get_mtime(struct acl_object *aclobj,
 	return 0;
 }
 
+static int
+acl_backend_global_file_refresh(struct acl_object *_aclobj,
+				struct acl_vfile_validity *validity)
+{
+	struct acl_backend_vfile *backend =
+		(struct acl_backend_vfile *)_aclobj->backend;
+	struct stat st;
+
+	if (acl_global_file_refresh(_aclobj->backend->global_file) < 0)
+		return -1;
+
+	acl_global_file_last_stat(_aclobj->backend->global_file, &st);
+	if (validity == NULL)
+		return 1;
+	return acl_vfile_validity_has_changed(backend, validity, &st) ? 1 : 0;
+}
+
 static int acl_backend_vfile_object_refresh_cache(struct acl_object *_aclobj)
 {
 	struct acl_object_vfile *aclobj = (struct acl_object_vfile *)_aclobj;
@@ -539,7 +562,8 @@ static int acl_backend_vfile_object_refresh_cache(struct acl_object *_aclobj)
 	old_validity = acl_cache_get_validity(_aclobj->backend->cache,
 					      _aclobj->name);
 	ret = _aclobj->backend->global_file != NULL ?
-		acl_global_file_refresh(_aclobj->backend->global_file) :
+		acl_backend_global_file_refresh(_aclobj, old_validity == NULL ? NULL :
+						&old_validity->global_validity) :
 		acl_backend_vfile_refresh(_aclobj, aclobj->global_path,
 					  old_validity == NULL ? NULL :
 					  &old_validity->global_validity);
@@ -562,9 +586,15 @@ static int acl_backend_vfile_object_refresh_cache(struct acl_object *_aclobj)
 	}
 
 	i_zero(&validity);
-	if (_aclobj->backend->global_file != NULL)
+	if (_aclobj->backend->global_file != NULL) {
+		struct stat st;
+
 		acl_object_add_global_acls(_aclobj);
-	else {
+		acl_global_file_last_stat(_aclobj->backend->global_file, &st);
+		validity.global_validity.last_read_time = ioloop_time;
+		validity.global_validity.last_mtime = st.st_mtime;
+		validity.global_validity.last_size = st.st_size;
+	} else {
 		if (acl_backend_vfile_read_with_retry(_aclobj, TRUE, aclobj->global_path,
 						      &validity.global_validity) < 0)
 			return -1;

@@ -124,10 +124,10 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	istream-callback.lo istream-chain.lo istream-concat.lo \
 	istream-crlf.lo istream-data.lo istream-failure-at.lo \
 	istream-file.lo istream-hash.lo istream-jsonstr.lo \
-	istream-limit.lo istream-mmap.lo istream-rawlog.lo \
-	istream-seekable.lo istream-sized.lo istream-tee.lo \
-	istream-timeout.lo istream-unix.lo ioloop.lo ioloop-iolist.lo \
-	ioloop-notify-none.lo ioloop-notify-fd.lo \
+	istream-limit.lo istream-mmap.lo istream-multiplex.lo \
+	istream-rawlog.lo istream-seekable.lo istream-sized.lo \
+	istream-tee.lo istream-timeout.lo istream-unix.lo ioloop.lo \
+	ioloop-iolist.lo ioloop-notify-none.lo ioloop-notify-fd.lo \
 	ioloop-notify-inotify.lo ioloop-notify-kqueue.lo \
 	ioloop-poll.lo ioloop-select.lo ioloop-epoll.lo \
 	ioloop-kqueue.lo json-parser.lo json-tree.lo lib.lo \
@@ -137,16 +137,17 @@ am_liblib_la_OBJECTS = abspath.lo array.lo aqueue.lo askpass.lo \
 	mmap-util.lo module-dir.lo mountpoint.lo net.lo \
 	nfs-workarounds.lo numpack.lo ostream.lo ostream-buffer.lo \
 	ostream-escaped.lo ostream-failure-at.lo ostream-file.lo \
-	ostream-hash.lo ostream-null.lo ostream-rawlog.lo \
-	ostream-unix.lo pkcs5.lo primes.lo printf-format-fix.lo \
-	process-title.lo priorityq.lo randgen.lo rand.lo read-full.lo \
-	restrict-access.lo restrict-process-size.lo safe-memset.lo \
-	safe-mkdir.lo safe-mkstemp.lo sendfile-util.lo \
-	seq-range-array.lo sha1.lo sha2.lo sha3.lo str.lo str-find.lo \
-	str-sanitize.lo str-table.lo strescape.lo strfuncs.lo \
-	strnum.lo time-util.lo timing.lo unix-socket-create.lo \
-	unlink-directory.lo unlink-old-files.lo unichar.lo uri-util.lo \
-	utc-offset.lo utc-mktime.lo var-expand.lo wildcard-match.lo \
+	ostream-hash.lo ostream-multiplex.lo ostream-null.lo \
+	ostream-rawlog.lo ostream-unix.lo pkcs5.lo primes.lo \
+	printf-format-fix.lo process-title.lo priorityq.lo randgen.lo \
+	rand.lo read-full.lo restrict-access.lo \
+	restrict-process-size.lo safe-memset.lo safe-mkdir.lo \
+	safe-mkstemp.lo sendfile-util.lo seq-range-array.lo sha1.lo \
+	sha2.lo sha3.lo str.lo str-find.lo str-sanitize.lo \
+	str-table.lo strescape.lo strfuncs.lo strnum.lo time-util.lo \
+	timing.lo unix-socket-create.lo unlink-directory.lo \
+	unlink-old-files.lo unichar.lo uri-util.lo utc-offset.lo \
+	utc-mktime.lo var-expand.lo var-expand-if.lo wildcard-match.lo \
 	write-full.lo
 liblib_la_OBJECTS = $(am_liblib_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -180,6 +181,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-istream-concat.$(OBJEXT) \
 	test_lib-test-istream-crlf.$(OBJEXT) \
 	test_lib-test-istream-failure-at.$(OBJEXT) \
+	test_lib-test-istream-multiplex.$(OBJEXT) \
 	test_lib-test-istream-seekable.$(OBJEXT) \
 	test_lib-test-istream-tee.$(OBJEXT) \
 	test_lib-test-istream-unix.$(OBJEXT) \
@@ -196,6 +198,8 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-ostream-escaped.$(OBJEXT) \
 	test_lib-test-ostream-failure-at.$(OBJEXT) \
 	test_lib-test-ostream-file.$(OBJEXT) \
+	test_lib-test-ostream-multiplex.$(OBJEXT) \
+	test_lib-test-multiplex.$(OBJEXT) \
 	test_lib-test-primes.$(OBJEXT) \
 	test_lib-test-printf-format-fix.$(OBJEXT) \
 	test_lib-test-priorityq.$(OBJEXT) \
@@ -561,6 +565,7 @@ liblib_la_SOURCES = \
 	istream-jsonstr.c \
 	istream-limit.c \
 	istream-mmap.c \
+	istream-multiplex.c \
 	istream-rawlog.c \
 	istream-seekable.c \
 	istream-sized.c \
@@ -603,6 +608,7 @@ liblib_la_SOURCES = \
 	ostream-failure-at.c \
 	ostream-file.c \
 	ostream-hash.c \
+	ostream-multiplex.c \
 	ostream-null.c \
 	ostream-rawlog.c \
 	ostream-unix.c \
@@ -641,6 +647,7 @@ liblib_la_SOURCES = \
 	utc-offset.c \
 	utc-mktime.c \
 	var-expand.c \
+	var-expand-if.c \
 	wildcard-match.c \
 	write-full.c
 
@@ -708,6 +715,7 @@ headers = \
 	istream-file-private.h \
 	istream-hash.h \
 	istream-jsonstr.h \
+	istream-multiplex.h \
 	istream-private.h \
 	istream-rawlog.h \
 	istream-seekable.h \
@@ -743,6 +751,7 @@ headers = \
 	ostream-failure-at.h \
 	ostream-file-private.h \
 	ostream-hash.h \
+	ostream-multiplex.h \
 	ostream-private.h \
 	ostream-null.h \
 	ostream-rawlog.h \
@@ -826,6 +835,7 @@ test_lib_SOURCES = \
 	test-istream-concat.c \
 	test-istream-crlf.c \
 	test-istream-failure-at.c \
+	test-istream-multiplex.c \
 	test-istream-seekable.c \
 	test-istream-tee.c \
 	test-istream-unix.c \
@@ -843,6 +853,8 @@ test_lib_SOURCES = \
 	test-ostream-escaped.c \
 	test-ostream-failure-at.c \
 	test-ostream-file.c \
+	test-ostream-multiplex.c \
+	test-multiplex.c \
 	test-primes.c \
 	test-printf-format-fix.c \
 	test-priorityq.c \
@@ -1007,6 +1019,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-jsonstr.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-limit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-mmap.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-multiplex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-rawlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-seekable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-sized.Plo@am__quote@
@@ -1039,6 +1052,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-failure-at.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-file.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-hash.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-multiplex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-null.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-rawlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-unix.Plo@am__quote@
@@ -1095,6 +1109,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-concat.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-crlf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-failure-at.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-multiplex.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-seekable.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-tee.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream-unix.Po@am__quote@
@@ -1107,12 +1122,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-malloc-overflow.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-mempool-alloconly.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-mempool.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-multiplex.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-net.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-numpack.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ostream-buffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ostream-escaped.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ostream-failure-at.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ostream-file.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-ostream-multiplex.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-pkcs5.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-primes.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-printf-format-fix.Po@am__quote@
@@ -1140,6 +1157,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/uri-util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utc-mktime.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utc-offset.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/var-expand-if.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/var-expand.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wildcard-match.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/write-full.Plo@am__quote@
@@ -1571,6 +1589,20 @@ test_lib-test-istream-failure-at.obj: test-istream-failure-at.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-failure-at.obj `if test -f 'test-istream-failure-at.c'; then $(CYGPATH_W) 'test-istream-failure-at.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-failure-at.c'; fi`
 
+test_lib-test-istream-multiplex.o: test-istream-multiplex.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-multiplex.o -MD -MP -MF $(DEPDIR)/test_lib-test-istream-multiplex.Tpo -c -o test_lib-test-istream-multiplex.o `test -f 'test-istream-multiplex.c' || echo '$(srcdir)/'`test-istream-multiplex.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-istream-multiplex.Tpo $(DEPDIR)/test_lib-test-istream-multiplex.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-istream-multiplex.c' object='test_lib-test-istream-multiplex.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-multiplex.o `test -f 'test-istream-multiplex.c' || echo '$(srcdir)/'`test-istream-multiplex.c
+
+test_lib-test-istream-multiplex.obj: test-istream-multiplex.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-multiplex.obj -MD -MP -MF $(DEPDIR)/test_lib-test-istream-multiplex.Tpo -c -o test_lib-test-istream-multiplex.obj `if test -f 'test-istream-multiplex.c'; then $(CYGPATH_W) 'test-istream-multiplex.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-multiplex.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-istream-multiplex.Tpo $(DEPDIR)/test_lib-test-istream-multiplex.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-istream-multiplex.c' object='test_lib-test-istream-multiplex.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-istream-multiplex.obj `if test -f 'test-istream-multiplex.c'; then $(CYGPATH_W) 'test-istream-multiplex.c'; else $(CYGPATH_W) '$(srcdir)/test-istream-multiplex.c'; fi`
+
 test_lib-test-istream-seekable.o: test-istream-seekable.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-istream-seekable.o -MD -MP -MF $(DEPDIR)/test_lib-test-istream-seekable.Tpo -c -o test_lib-test-istream-seekable.o `test -f 'test-istream-seekable.c' || echo '$(srcdir)/'`test-istream-seekable.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-istream-seekable.Tpo $(DEPDIR)/test_lib-test-istream-seekable.Po
@@ -1808,6 +1840,34 @@ test_lib-test-ostream-file.obj: test-ostream-file.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-ostream-file.c' object='test_lib-test-ostream-file.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-ostream-file.obj `if test -f 'test-ostream-file.c'; then $(CYGPATH_W) 'test-ostream-file.c'; else $(CYGPATH_W) '$(srcdir)/test-ostream-file.c'; fi`
+
+test_lib-test-ostream-multiplex.o: test-ostream-multiplex.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-ostream-multiplex.o -MD -MP -MF $(DEPDIR)/test_lib-test-ostream-multiplex.Tpo -c -o test_lib-test-ostream-multiplex.o `test -f 'test-ostream-multiplex.c' || echo '$(srcdir)/'`test-ostream-multiplex.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-ostream-multiplex.Tpo $(DEPDIR)/test_lib-test-ostream-multiplex.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-ostream-multiplex.c' object='test_lib-test-ostream-multiplex.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-ostream-multiplex.o `test -f 'test-ostream-multiplex.c' || echo '$(srcdir)/'`test-ostream-multiplex.c
+
+test_lib-test-ostream-multiplex.obj: test-ostream-multiplex.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-ostream-multiplex.obj -MD -MP -MF $(DEPDIR)/test_lib-test-ostream-multiplex.Tpo -c -o test_lib-test-ostream-multiplex.obj `if test -f 'test-ostream-multiplex.c'; then $(CYGPATH_W) 'test-ostream-multiplex.c'; else $(CYGPATH_W) '$(srcdir)/test-ostream-multiplex.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-ostream-multiplex.Tpo $(DEPDIR)/test_lib-test-ostream-multiplex.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-ostream-multiplex.c' object='test_lib-test-ostream-multiplex.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-ostream-multiplex.obj `if test -f 'test-ostream-multiplex.c'; then $(CYGPATH_W) 'test-ostream-multiplex.c'; else $(CYGPATH_W) '$(srcdir)/test-ostream-multiplex.c'; fi`
+
+test_lib-test-multiplex.o: test-multiplex.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-multiplex.o -MD -MP -MF $(DEPDIR)/test_lib-test-multiplex.Tpo -c -o test_lib-test-multiplex.o `test -f 'test-multiplex.c' || echo '$(srcdir)/'`test-multiplex.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-multiplex.Tpo $(DEPDIR)/test_lib-test-multiplex.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-multiplex.c' object='test_lib-test-multiplex.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-multiplex.o `test -f 'test-multiplex.c' || echo '$(srcdir)/'`test-multiplex.c
+
+test_lib-test-multiplex.obj: test-multiplex.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-multiplex.obj -MD -MP -MF $(DEPDIR)/test_lib-test-multiplex.Tpo -c -o test_lib-test-multiplex.obj `if test -f 'test-multiplex.c'; then $(CYGPATH_W) 'test-multiplex.c'; else $(CYGPATH_W) '$(srcdir)/test-multiplex.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-multiplex.Tpo $(DEPDIR)/test_lib-test-multiplex.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-multiplex.c' object='test_lib-test-multiplex.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-multiplex.obj `if test -f 'test-multiplex.c'; then $(CYGPATH_W) 'test-multiplex.c'; else $(CYGPATH_W) '$(srcdir)/test-multiplex.c'; fi`
 
 test_lib-test-primes.o: test-primes.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-primes.o -MD -MP -MF $(DEPDIR)/test_lib-test-primes.Tpo -c -o test_lib-test-primes.o `test -f 'test-primes.c' || echo '$(srcdir)/'`test-primes.c

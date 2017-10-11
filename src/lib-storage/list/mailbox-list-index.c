@@ -56,7 +56,6 @@ int mailbox_list_index_index_open(struct mailbox_list *list)
 {
 	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(list);
 	const struct mail_storage_settings *set = list->mail_set;
-	struct mailbox_permissions perm;
 	enum mail_index_open_flags index_flags;
 	unsigned int lock_timeout;
 
@@ -77,10 +76,14 @@ int mailbox_list_index_index_open(struct mailbox_list *list)
 	lock_timeout = set->mail_max_lock_timeout == 0 ? UINT_MAX :
 		set->mail_max_lock_timeout;
 
-	mailbox_list_get_root_permissions(list, &perm);
-	mail_index_set_permissions(ilist->index, perm.file_create_mode,
-				   perm.file_create_gid,
-				   perm.file_create_gid_origin);
+	if (!mail_index_use_existing_permissions(ilist->index)) {
+		struct mailbox_permissions perm;
+
+		mailbox_list_get_root_permissions(list, &perm);
+		mail_index_set_permissions(ilist->index, perm.file_create_mode,
+					   perm.file_create_gid,
+					   perm.file_create_gid_origin);
+	}
 	mail_index_set_log_rotation(ilist->index,
 				    MAILBOX_LIST_INDEX_LOG_ROTATE_MIN_SIZE,
 				    MAILBOX_LIST_INDEX_LOG_ROTATE_MAX_SIZE,
@@ -811,6 +814,19 @@ mailbox_list_index_set_subscribed(struct mailbox_list *_list,
 	return 0;
 }
 
+static bool mailbox_list_index_is_enabled(struct mailbox_list *list)
+{
+	if (!list->mail_set->mailbox_list_index)
+		return FALSE;
+	if (strcmp(list->name, MAILBOX_LIST_NAME_NONE) == 0)
+		return FALSE;
+
+	i_assert(list->set.list_index_fname != NULL);
+	if (list->set.list_index_fname[0] == '\0')
+		return FALSE;
+	return TRUE;
+}
+
 static void mailbox_list_index_created(struct mailbox_list *list)
 {
 	struct mailbox_list_vfuncs *v = list->vlast;
@@ -820,8 +836,7 @@ static void mailbox_list_index_created(struct mailbox_list *list)
 	/* layout=index doesn't have any backing store */
 	has_backing_store = strcmp(list->name, MAILBOX_LIST_NAME_INDEX) != 0;
 
-	if (!list->mail_set->mailbox_list_index ||
-	    strcmp(list->name, MAILBOX_LIST_NAME_NONE) == 0) {
+	if (!mailbox_list_index_is_enabled(list)) {
 		/* reserve the module context anyway, so syncing code knows
 		   that the index is disabled */
 		i_assert(has_backing_store);

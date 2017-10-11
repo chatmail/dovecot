@@ -169,7 +169,7 @@ void director_deinit(struct director **dir);
 void director_find_self(struct director *dir);
 
 /* Start connecting to other directors */
-void director_connect(struct director *dir);
+void director_connect(struct director *dir, const char *reason);
 
 void director_set_ring_handshaked(struct director *dir);
 void director_set_ring_synced(struct director *dir);
@@ -181,7 +181,7 @@ void director_sync_send(struct director *dir, struct director_host *host,
 bool director_resend_sync(struct director *dir);
 
 void director_notify_ring_added(struct director_host *added_host,
-				struct director_host *src);
+				struct director_host *src, bool log);
 void director_ring_remove(struct director_host *removed_host,
 			  struct director_host *src);
 
@@ -201,6 +201,9 @@ void director_update_user_weak(struct director *dir, struct director_host *src,
 			       struct director_connection *src_conn,
 			       struct director_host *orig_src,
 			       struct user *user) ATTR_NULL(3);
+void director_kill_user(struct director *dir, struct director_host *src,
+			struct user *user, struct mail_tag *tag,
+			struct mail_host *old_host, bool forced_kick);
 void director_move_user(struct director *dir, struct director_host *src,
 			struct director_host *orig_src,
 			unsigned int username_hash, struct mail_host *host)
@@ -235,7 +238,8 @@ void director_update_send_version(struct director *dir,
 				  struct director_host *src,
 				  unsigned int min_version, const char *cmd);
 
-int director_connect_host(struct director *dir, struct director_host *host);
+int director_connect_host(struct director *dir, struct director_host *host,
+			  const char *reason);
 
 unsigned int
 director_get_username_hash(struct director *dir, const char *username);

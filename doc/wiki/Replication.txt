@@ -159,8 +159,33 @@ service doveadm {
 }
 ---%<-------------------------------------------------------------------------
 
-The client must be able to verify that the SSL certificate is valid, so you
-need to specify the directory/file containing valid SSL CA roots:
+The doveadm listener will use the SSL certificate that is configured globally
+for all SSL listeners, i.e. via the following settings at the top level of the
+configuration file:
+
+---%<-------------------------------------------------------------------------
+ssl_cert = </etc/ssl/dovecot.pem
+ssl_key = </etc/ssl/dovecot.pem
+---%<-------------------------------------------------------------------------
+
+'ssl_cert' is not a valid setting inside 'service' or 'inet_listener' blocks,
+so you can't use a separate SSL certificate for the doveadm listener.You can,
+however, use separate SSL certificates for the /other/ protocols, like so:
+
+---%<-------------------------------------------------------------------------
+protocol imap {
+  ssl_cert = </etc/ssl/certs/imap.pem
+  ssl_key = </etc/ssl/private/imap.pem
+}
+protocol pop3 {
+  ssl_cert = </etc/ssl/certs/pop3.pem
+  ssl_key = </etc/ssl/private/pop3.pem
+}
+---%<-------------------------------------------------------------------------
+
+When one Dovecot instance connects to the other one in the replication pair, it
+has to verify that the partner's SSL certificate is valid, so you need to
+specify a directory or file containing valid SSL CA roots:
 
 ---%<-------------------------------------------------------------------------
 ssl_client_ca_dir = /etc/ssl/certs # Debian/Ubuntu
@@ -173,6 +198,11 @@ Note that the SSL certificate must be signed by one of the CAs in the
 'ssl_client_ca_dir' or 'ssl_client_ca_file'. You can't use a self-signed
 certificate or a private CA, unless you correctly set them up into the CA
 file/directory (see openssl documentation for details).
+
+You could point 'ssl_client_ca_file' to your private CA, but keep in mind that
+'ssl_client_ca_file' and 'ssl_client_ca_dir' also affect other services where
+Dovecot acts as an SSL client (e.g. the imapc feature), so be careful not to
+break SSL for those services.
 
 dsync wrapper script for root SSH login (v2.2+)
 -----------------------------------------------
@@ -343,4 +373,4 @@ Random things to remember:
     * v2.2.6+: If you're having trouble, verify that 'dovecot --hostdomain'
       returns different values for the servers.
 
-(This file was created from the wiki on 2017-08-24 04:42)
+(This file was created from the wiki on 2017-10-10 04:42)
