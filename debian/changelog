@@ -1,3 +1,15 @@
+dovecot (1:2.2.33.1-1) unstable; urgency=medium
+
+  * [dbd1132] New upstream version 2.2.33.1
+    + [b3d1f2d] Refresh split-protocols.patch
+    + [e0de123] Update pigeonhole to 0.4.21
+  * [ef6a1eb] Set mail_privileged_group to 'mail' by default (Closes: #711856)
+  * [aeb6cf3] d/copyright: convert to Format 1.0
+  * [5961f9d] Use dh-autoreconf for both, dovecot and pigeonhole.
+  * [85f1f0f] Bump Standards to 4.1.1; no changes needed
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Fri, 13 Oct 2017 16:28:14 +0300
+
 dovecot (1:2.2.32-2) unstable; urgency=medium
 
   * [fa71c69] dovecot-core.postinst: remove dovecot-common's postrm
