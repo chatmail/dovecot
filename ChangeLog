@@ -1,3 +1,20 @@
+2017-10-11 19:43:04 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e9afa7f18)
+
+    Released v2.2.33.1.
+
+
+M	NEWS
+M	configure.ac
+
+2017-10-11 13:03:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4da63b2e6)
+
+    lib-master: Allow a second log initialization after settings have been read.
+
+    This fixes logging with services that bypass the log service (lda or -L 
+    parameter).
+
+M	src/lib-master/master-service.c
+
 2017-10-10 18:20:31 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (68b0a183e)
 
     Released v2.2.33.
