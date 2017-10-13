@@ -814,6 +814,16 @@ static const char * const _my_address_headers[] = {
 	NULL
 };
 
+/* Headers that should be searched for the full sender address
+ */
+
+static const char * const _sender_headers[] = {
+	"sender",
+	"resent-from",
+	"from",
+	NULL
+};
+
 static inline bool _is_system_address(const char *address)
 {
 	if ( strncasecmp(address, "MAILER-DAEMON", 13) == 0 )
@@ -888,17 +898,86 @@ static bool _contains_8bit(const char *text)
 	return FALSE;
 }
 
+static int _get_full_reply_recipient
+(const struct sieve_action_exec_env *aenv,
+	const struct ext_vacation_config *config,
+	const char *smtp_to, const char **reply_to_r)
+{
+	const struct sieve_message_data *msgdata = aenv->msgdata;
+	const char *const *hdsp;
+	int ret;
+
+	hdsp = _sender_headers;
+	while ( *hdsp != NULL ) {
+		const char *header;
+
+		if ( (ret=mail_get_first_header(msgdata->mail,
+			*hdsp, &header)) < 0 ) {
+			return sieve_result_mail_error(aenv, msgdata->mail,
+				"vacation action: "
+				"failed to read header field `%s'", *hdsp);
+		}
+		if ( ret > 0 && header != NULL ) {
+			const struct message_address *addr;
+
+			addr = message_address_parse
+				(pool_datastack_create(), (const unsigned char *) header,
+					strlen(header), 256, FALSE);
+
+			while ( addr != NULL ) {
+				if ( addr->domain != NULL && !addr->invalid_syntax ) {
+					struct sieve_address svaddr;
+					const char *hdr_address;
+					bool matched = config->to_header_ignore_envelope;
+
+					if (!matched) {
+						i_assert(addr->mailbox != NULL);
+
+						i_zero(&svaddr);
+						svaddr.local_part = addr->mailbox;
+						svaddr.domain = addr->domain;
+
+						hdr_address = sieve_address_to_string(&svaddr);
+						matched = ( sieve_address_compare
+							(hdr_address, smtp_to, TRUE) == 0 );
+					}
+
+					if (matched) {
+						struct message_address this_addr;
+
+						this_addr = *addr;
+						this_addr.next = NULL;
+
+						string_t *str = t_str_new(256);
+						message_address_write(str, &this_addr);
+						*reply_to_r = str_c(str);
+						return SIEVE_EXEC_OK;
+					}
+				}
+
+				addr = addr->next;
+			}
+		}
+		hdsp++;
+	}
+
+	*reply_to_r = t_strconcat("<", smtp_to, ">", NULL);
+	return SIEVE_EXEC_OK;
+}
+
 static int act_vacation_send
-(const struct sieve_action_exec_env *aenv, struct act_vacation_context *ctx,
- 	const char *reply_to, const char *reply_from, const char *smtp_from)
+(const struct sieve_action_exec_env *aenv,
+	const struct ext_vacation_config *config,
+	struct act_vacation_context *ctx,
+	const char *smtp_to, const char *smtp_from,
+	const char *reply_from)
 {
 	const struct sieve_message_data *msgdata = aenv->msgdata;
 	const struct sieve_script_env *senv = aenv->scriptenv;
 	struct sieve_smtp_context *sctx;
 	struct ostream *output;
 	string_t *msg;
- 	const char *const *headers;
-	const char *outmsgid, *subject, *error;
+	const char *header, *outmsgid, *subject, *reply_to, *error;
 	int ret;
 
 	/* Check smpt functions just to be sure */
@@ -912,14 +991,14 @@ static int act_vacation_send
 	/* Make sure we have a subject for our reply */
 
 	if ( ctx->subject == NULL || *(ctx->subject) == '\0' ) {
-		if ( (ret=mail_get_headers_utf8
-			(msgdata->mail, "subject", &headers)) < 0 ) {
+		if ( (ret=mail_get_first_header_utf8
+			(msgdata->mail, "subject", &header)) < 0 ) {
 			return sieve_result_mail_error(aenv, msgdata->mail,
 				"vacation action: "
 				"failed to read header field `subject'");
 		}
-		if ( ret > 0 && headers[0] != NULL ) {
-			subject = t_strconcat("Auto: ", headers[0], NULL);
+		if ( ret > 0 && header != NULL ) {
+			subject = t_strconcat("Auto: ", header, NULL);
 		}	else {
 			subject = "Automated reply";
 		}
@@ -929,9 +1008,16 @@ static int act_vacation_send
 
 	subject = str_sanitize(subject, 256);
 
+	/* Obtain full To address for reply */
+
+	reply_to = smtp_to;
+	if ((ret=_get_full_reply_recipient(aenv, config,
+		smtp_to, &reply_to)) <= 0)
+		return ret;
+
 	/* Open smtp session */
 
-	sctx = sieve_smtp_start_single(senv, reply_to, smtp_from, &output);
+	sctx = sieve_smtp_start_single(senv, smtp_to, smtp_from, &output);
 
 	outmsgid = sieve_message_get_new_id(aenv->svinst);
 
@@ -949,10 +1035,7 @@ static int act_vacation_send
 	else
 		rfc2822_header_printf(msg, "From", "Postmaster <%s>", senv->postmaster_address);
 
-	/* FIXME: If From header of message has same address, we should use that
-	 * instead to properly include the phrase part.
-	 */
-	rfc2822_header_printf(msg, "To", "<%s>", reply_to);
+	rfc2822_header_printf(msg, "To", "%s", reply_to);
 
 	if ( _contains_8bit(subject) )
 		rfc2822_header_utf8_printf(msg, "Subject", "%s", subject);
@@ -961,8 +1044,8 @@ static int act_vacation_send
 
 	/* Compose proper in-reply-to and references headers */
 
-	if ( (ret=mail_get_headers
-		(msgdata->mail, "references", &headers)) < 0 ) {
+	if ( (ret=mail_get_first_header
+		(msgdata->mail, "references", &header)) < 0 ) {
 		return sieve_result_mail_error(aenv, msgdata->mail,
 			"vacation action: "
 			"failed to read header field `references'");
@@ -971,14 +1054,14 @@ static int act_vacation_send
 	if ( msgdata->id != NULL ) {
 		rfc2822_header_write(msg, "In-Reply-To", msgdata->id);
 
-		if ( ret > 0 && headers[0] != NULL ) {
+		if ( ret > 0 && header != NULL ) {
 			rfc2822_header_write(msg, "References",
-				t_strconcat(headers[0], " ", msgdata->id, NULL));
+				t_strconcat(header, " ", msgdata->id, NULL));
 		} else {
 			rfc2822_header_write(msg, "References", msgdata->id);
 		}
-	} else if ( ret > 0 && headers[0] != NULL ) {
-		rfc2822_header_write(msg, "References", headers[0]);
+	} else if ( ret > 0 && header != NULL ) {
+		rfc2822_header_write(msg, "References", header);
 	}
 
 	rfc2822_header_write(msg, "Auto-Submitted", "auto-replied (vacation)");
@@ -1308,8 +1391,9 @@ static int act_vacation_commit
 	/* Send the message */
 
 	T_BEGIN {
-		ret = act_vacation_send(aenv, ctx, sender, reply_from,
-			(config->send_from_recipient ? smtp_from : NULL));
+		ret = act_vacation_send(aenv, config, ctx, sender,
+			(config->send_from_recipient ? smtp_from : NULL),
+			reply_from);
 	} T_END;
 
 	if ( ret == SIEVE_EXEC_OK ) {

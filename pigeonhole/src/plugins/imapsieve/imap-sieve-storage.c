@@ -1,4 +1,4 @@
-/* Copyright (c) 2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Pigeonhole authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
@@ -219,7 +219,8 @@ static int imap_sieve_mailbox_get_script_real
 		imap_sieve_mailbox_error(t->box,
 			"Failed to read /shared/"
 			MAILBOX_ATTRIBUTE_IMAPSIEVE_SCRIPT" "
-			"mailbox attribute"); // FIXME: details?
+			"mailbox attribute: %s",
+			mailbox_get_last_error(box, NULL));
 		return -1;
 	}
 
@@ -233,7 +234,7 @@ static int imap_sieve_mailbox_get_script_real
 	   server METADATA */
 	} else {
 		struct mail_namespace *ns;
-		struct mailbox *box;
+		struct mailbox *inbox;
 		struct mailbox_transaction_context *ibt;
 
 		imap_sieve_mailbox_debug(t->box,
@@ -242,33 +243,35 @@ static int imap_sieve_mailbox_get_script_real
 			"not found");
 
 		ns = mail_namespace_find_inbox(user->namespaces);
-		box = mailbox_alloc(ns->list, "INBOX",
+		inbox = mailbox_alloc(ns->list, "INBOX",
 			MAILBOX_FLAG_READONLY);
-		if ((ret=mailbox_open(box)) >= 0) {
+		if ((ret=mailbox_open(inbox)) >= 0) {
 			ibt = mailbox_transaction_begin
-				(box, MAILBOX_TRANSACTION_FLAG_EXTERNAL);
+				(inbox, MAILBOX_TRANSACTION_FLAG_EXTERNAL);
 			ret = mailbox_attribute_get(ibt,
 				MAIL_ATTRIBUTE_TYPE_SHARED,
 				MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER
 				MAILBOX_ATTRIBUTE_IMAPSIEVE_SCRIPT, &value);
 			mailbox_transaction_rollback(&ibt);
 		}
-		mailbox_free(&box);
 
 		if (ret <= 0) {
 			if (ret < 0) {
 				imap_sieve_mailbox_error(t->box,
 					"Failed to read /shared/"
 					MAIL_SERVER_ATTRIBUTE_IMAPSIEVE_SCRIPT" "
-					"server attribute"); // FIXME: details?
+					"server attribute: %s",
+					mailbox_get_last_error(inbox, NULL));
 			} else if (ret == 0) {
 				imap_sieve_mailbox_debug(t->box,
 					"Server attribute /shared/"
 					MAIL_SERVER_ATTRIBUTE_IMAPSIEVE_SCRIPT" "
 					"not found");
 			}
+			mailbox_free(&inbox);
 			return ret;
 		}
+		mailbox_free(&inbox);
 
 		imap_sieve_mailbox_debug(t->box,
 			"Server attribute /shared/"
@@ -1022,7 +1025,7 @@ imap_sieve_mailbox_rule_match_cause
 {
 	const char *const *cp;
 
-	if (rule->causes == NULL || *rule->causes == '\0')
+	if (rule->causes == NULL || *rule->causes == NULL)
 		return TRUE;
 
 	for (cp = rule->causes; *cp != NULL; cp++) {
