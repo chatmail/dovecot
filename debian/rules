@@ -71,7 +71,10 @@ dev_files = usr/include/* \
 	    usr/share/aclocal/*.m4
 
 %:
-	dh $@ --with=autotools-dev --without=autoreconf
+	dh $@
+
+override_dh_autoreconf:
+	dh_autoreconf -- debian/autogen.sh
 
 override_dh_auto_configure:
 	KRB5CONFIG=krb5-config.mit ./configure \
