@@ -1,3 +1,52 @@
+2017-10-20 16:34:22 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d6601f4ec)
+
+    Released v2.2.33.2.
+
+
+M	NEWS
+M	configure.ac
+
+2017-10-19 15:39:28 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (366d80c44)
+
+    auth: Fix %{ldap_dn} not to leak memory
+
+
+M	src/auth/db-ldap.c
+
+2017-10-16 15:41:56 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b06c43234)
+
+    cassandra: Support "timestamp" type fields properly
+
+    Fixes setting them with prepared statements. Reading them never worked 
+    earlier.
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-10-16 15:12:12 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (5d4780b89)
+
+    cassandra: Include "prepared" when logging about prepared statement queries
+
+    Mainly useful for debugging/testing.
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-10-16 14:49:56 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (be665d47d)
+
+    cassandra: Fix using bigint types with unprepared statements
+
+    This reverts the code to not using the statements with binding at all. 
+    Alternative fix would be to start using explicit int32 or int64 parameter 
+    types, but that breaks backwards compatibility a bit.
+
+M	src/lib-sql/driver-cassandra.c
+
+2017-10-14 12:54:18 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (758404a3b)
+
+    doveadm proxy: Don't crash if remote doesn't support log proxying
+
+
+M	src/doveadm/server-connection.c
+
 2017-10-11 19:43:04 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e9afa7f18)
 
     Released v2.2.33.1.

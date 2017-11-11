@@ -138,6 +138,7 @@ struct cassandra_result {
 	sql_query_callback_t *callback;
 	void *context;
 
+        unsigned int is_prepared:1;
 	unsigned int query_sent:1;
 	unsigned int finished:1;
 	unsigned int paging_continues:1;
@@ -774,7 +775,8 @@ static void driver_cassandra_log_result(struct cassandra_result *result,
 		i_fatal("gettimeofday() failed: %m");
 
 	string_t *str = t_str_new(128);
-	str_printfa(str, "cassandra: Finished query '%s' (", result->query);
+	str_printfa(str, "cassandra: Finished %squery '%s' (",
+		    result->is_prepared ? "prepared " : "", result->query);
 	if (all_pages) {
 		str_printfa(str, "%u pages in total, ", result->page_num);
 		row_count = result->total_row_count;
@@ -1101,6 +1103,7 @@ static void exec_callback(struct sql_result *_result ATTR_UNUSED,
 static struct cassandra_result *
 driver_cassandra_query_init(struct cassandra_db *db, const char *query,
 			    enum cassandra_query_type query_type,
+			    bool is_prepared,
 			    sql_query_callback_t *callback, void *context)
 {
 	struct cassandra_result *result;
@@ -1113,6 +1116,7 @@ driver_cassandra_query_init(struct cassandra_db *db, const char *query,
 	result->context = context;
 	result->query_type = query_type;
 	result->query = i_strdup(query);
+	result->is_prepared = is_prepared;
 	array_append(&db->results, &result, 1);
 	return result;
 }
@@ -1125,7 +1129,7 @@ driver_cassandra_query_full(struct sql_db *_db, const char *query,
 	struct cassandra_db *db = (struct cassandra_db *)_db;
 	struct cassandra_result *result;
 
-	result = driver_cassandra_query_init(db, query, query_type,
+	result = driver_cassandra_query_init(db, query, query_type, FALSE,
 					     callback, context);
 	result->statement = cass_statement_new(query, 0);
 	(void)driver_cassandra_send_query(result);
@@ -1256,6 +1260,7 @@ driver_cassandra_get_value(struct cassandra_result *result,
 		type = "int32";
 		break;
 	}
+	case CASS_VALUE_TYPE_TIMESTAMP:
 	case CASS_VALUE_TYPE_BIGINT: {
 		cass_int64_t num;
 
@@ -1350,6 +1355,7 @@ driver_cassandra_result_more(struct sql_result **_result, bool async,
 	/* Initialize the next page as a new sql_result */
 	new_result = driver_cassandra_query_init(db, old_result->query,
 						 CASSANDRA_QUERY_TYPE_READ_MORE,
+						 old_result->is_prepared,
 						 callback, context);
 
 	/* Preserve the statement and update its paging state */
@@ -1548,7 +1554,7 @@ driver_cassandra_transaction_commit(struct sql_transaction_context *_ctx,
 			  transaction_commit_callback, ctx);
 	} else {
 		ctx->stmt->result =
-			driver_cassandra_query_init(db, query, query_type,
+			driver_cassandra_query_init(db, query, query_type, TRUE,
 				transaction_commit_callback, ctx);
 		if (ctx->stmt->cass_stmt == NULL) {
 			/* wait for prepare to finish */
@@ -1648,20 +1654,18 @@ driver_cassandra_bind_int(struct cassandra_sql_statement *stmt,
 	const CassDataType *data_type;
 	CassValueType value_type;
 
-	if (stmt->prep == NULL) {
-		value_type = value >= -2147483648 && value <= 2147483647 ?
-			CASS_VALUE_TYPE_INT : CASS_VALUE_TYPE_BIGINT;
-	} else {
-		/* prepared statements require exactly correct value type */
-		data_type = cass_prepared_parameter_data_type(stmt->prep->prepared, column_idx);
-		value_type = cass_data_type_type(data_type);
-	}
+	i_assert(stmt->prep != NULL);
+
+	/* statements require exactly correct value type */
+	data_type = cass_prepared_parameter_data_type(stmt->prep->prepared, column_idx);
+	value_type = cass_data_type_type(data_type);
 
 	switch (value_type) {
 	case CASS_VALUE_TYPE_INT:
 		if (value < -2147483648 || value > 2147483647)
 			return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
 		return cass_statement_bind_int32(stmt->cass_stmt, column_idx, value);
+	case CASS_VALUE_TYPE_TIMESTAMP:
 	case CASS_VALUE_TYPE_BIGINT:
 		return cass_statement_bind_int64(stmt->cass_stmt, column_idx, value);
 	case CASS_VALUE_TYPE_SMALL_INT:
@@ -1826,24 +1830,12 @@ driver_cassandra_prepared_statement_deinit(struct sql_prepared_statement *_prep_
 
 static struct sql_statement *
 driver_cassandra_statement_init(struct sql_db *db ATTR_UNUSED,
-				const char *query_template)
+				const char *query_template ATTR_UNUSED)
 {
 	pool_t pool = pool_alloconly_create("cassandra sql statement", 1024);
 	struct cassandra_sql_statement *stmt =
 		p_new(pool, struct cassandra_sql_statement, 1);
-
-	/* Count the number of parameters in the query. We'll assume that all
-	   the changing parameters are bound, so there shouldn't be any
-	   quoted strings with '?' in them. */
-	const char *p = query_template;
-	size_t param_count = 0;
-	while ((p = strchr(p, '?')) != NULL) {
-		param_count++;
-		p++;
-	}
-
 	stmt->stmt.pool = pool;
-	stmt->cass_stmt = cass_statement_new(query_template, param_count);
 	return &stmt->stmt;
 }
 
@@ -1921,7 +1913,7 @@ driver_cassandra_statement_bind_str(struct sql_statement *_stmt,
 		(struct cassandra_sql_statement *)_stmt;
 	if (stmt->cass_stmt != NULL)
 		cass_statement_bind_string(stmt->cass_stmt, column_idx, value);
-	else {
+	else if (stmt->prep != NULL) {
 		struct cassandra_sql_arg *arg =
 			driver_cassandra_add_pending_arg(stmt, column_idx);
 		arg->value_str = p_strdup(_stmt->pool, value);
@@ -1939,7 +1931,7 @@ driver_cassandra_statement_bind_binary(struct sql_statement *_stmt,
 	if (stmt->cass_stmt != NULL) {
 		cass_statement_bind_bytes(stmt->cass_stmt, column_idx,
 					  value, value_size);
-	} else {
+	} else if (stmt->prep != NULL) {
 		struct cassandra_sql_arg *arg =
 			driver_cassandra_add_pending_arg(stmt, column_idx);
 		arg->value_binary = p_memdup(_stmt->pool, value, value_size);
@@ -1956,7 +1948,7 @@ driver_cassandra_statement_bind_int64(struct sql_statement *_stmt,
 
 	if (stmt->cass_stmt != NULL)
 		driver_cassandra_bind_int(stmt, column_idx, value);
-	else {
+	else if (stmt->prep != NULL) {
 		struct cassandra_sql_arg *arg =
 			driver_cassandra_add_pending_arg(stmt, column_idx);
 		arg->value_int64 = value;
@@ -1970,17 +1962,27 @@ driver_cassandra_statement_query(struct sql_statement *_stmt,
 	struct cassandra_sql_statement *stmt =
 		(struct cassandra_sql_statement *)_stmt;
 	struct cassandra_db *db = (struct cassandra_db *)_stmt->db;
+	const char *query = sql_statement_get_query(_stmt);
+	bool is_prepared = stmt->cass_stmt != NULL || stmt->prep != NULL;
 
-	stmt->result = driver_cassandra_query_init(db, sql_statement_get_query(_stmt),
+	stmt->result = driver_cassandra_query_init(db, query,
 						   CASSANDRA_QUERY_TYPE_READ,
+						   is_prepared,
 						   callback, context);
-	if (stmt->cass_stmt == NULL) {
-		/* wait for prepare to finish */
-	} else {
+	if (stmt->cass_stmt != NULL) {
 		stmt->result->statement = stmt->cass_stmt;
-		(void)driver_cassandra_send_query(stmt->result);
-		pool_unref(&_stmt->pool);
+	} else if (stmt->prep != NULL) {
+		/* wait for prepare to finish */
+		return;
+	} else {
+		stmt->result->statement = cass_statement_new(query, 0);
+		if (stmt->pending_timestamp != 0) {
+			cass_statement_set_timestamp(stmt->result->statement,
+						     stmt->pending_timestamp);
+		}
 	}
+	(void)driver_cassandra_send_query(stmt->result);
+	pool_unref(&_stmt->pool);
 }
 
 static struct sql_result *
@@ -2005,7 +2007,10 @@ driver_cassandra_update_stmt(struct sql_transaction_context *_ctx,
 		transaction_set_failed(ctx, "Multiple changes in transaction not supported");
 		return;
 	}
-	ctx->stmt = stmt;
+	if (stmt->prep != NULL)
+		ctx->stmt = stmt;
+	else
+		ctx->query = i_strdup(sql_statement_get_query(_stmt));
 }
 
 const struct sql_db driver_cassandra_db = {
