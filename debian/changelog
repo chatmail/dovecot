@@ -1,3 +1,9 @@
+dovecot (1:2.2.33.2-1) unstable; urgency=medium
+
+  * [8216f38] New upstream version 2.2.33.2
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Sat, 11 Nov 2017 20:59:43 +0200
+
 dovecot (1:2.2.33.1-1) unstable; urgency=medium
 
   * [dbd1132] New upstream version 2.2.33.1
