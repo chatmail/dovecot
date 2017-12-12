@@ -28,26 +28,6 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
  AC_DEFINE_UNQUOTED(DOVECOT_STRING, "$PACKAGE_STRING", [Dovecot string])
  AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", [Dovecot version])
  
---- a/src/config/all-settings.c
-+++ b/src/config/all-settings.c
-@@ -2882,7 +2882,7 @@
- static const struct login_settings login_default_settings = {
- 	.login_trusted_networks = "",
- 	.login_source_ips = "",
--	.login_greeting = PACKAGE_NAME" ready.",
-+	.login_greeting = DOVECOT_NAME" ready.",
- 	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
- 	.login_log_format = "%$: %s",
- 	.login_access_sockets = "",
-@@ -3038,7 +3038,7 @@
- 	.lmtp_user_concurrency_limit = 0,
- 	.lmtp_address_translate = "",
- 	.lmtp_hdr_delivery_address = "final:none:original",
--	.login_greeting = PACKAGE_NAME" ready.",
-+	.login_greeting = DOVECOT_NAME" ready.",
- 	.login_trusted_networks = ""
- };
- static const struct setting_parser_info *lmtp_setting_dependencies[] = {
 --- a/src/lmtp/lmtp-settings.c
 +++ b/src/lmtp/lmtp-settings.c
 @@ -78,7 +78,7 @@

@@ -116,6 +116,9 @@ override_dh_auto_configure:
 		--disable-static)
 
 override_dh_auto_build:
+	# Remove all-settings.c and let it be re-generated from the (patched)
+	# component settings files.
+	rm -f src/config/all-settings.c
 	dh_auto_build --parallel
 	dh_auto_build --parallel -D $(PIGEONHOLE_DIR)
 
