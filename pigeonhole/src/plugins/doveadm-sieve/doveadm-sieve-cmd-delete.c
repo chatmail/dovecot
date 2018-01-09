@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -15,7 +15,7 @@ struct doveadm_sieve_delete_cmd_context {
 	struct doveadm_sieve_cmd_context ctx;
 
 	ARRAY_TYPE(const_string) scriptnames;
-	unsigned int ignore_active:1;
+	bool ignore_active:1;
 };
 
 static int

@@ -150,12 +150,16 @@ libmanagesieve_login_settings_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(libmanagesieve_login_settings_la_CFLAGS) $(CFLAGS) \
 	$(libmanagesieve_login_settings_la_LDFLAGS) $(LDFLAGS) -o $@
 PROGRAMS = $(dovecot_pkglibexec_PROGRAMS)
-am_managesieve_login_OBJECTS = client.$(OBJEXT) \
-	client-authenticate.$(OBJEXT) \
-	managesieve-login-settings.$(OBJEXT) \
-	managesieve-proxy.$(OBJEXT)
+am_managesieve_login_OBJECTS = managesieve_login-client.$(OBJEXT) \
+	managesieve_login-client-authenticate.$(OBJEXT) \
+	managesieve_login-managesieve-login-settings.$(OBJEXT) \
+	managesieve_login-managesieve-proxy.$(OBJEXT)
 managesieve_login_OBJECTS = $(am_managesieve_login_OBJECTS)
 am__DEPENDENCIES_1 =
+managesieve_login_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(managesieve_login_LDFLAGS) $(LDFLAGS) \
+	-o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -229,6 +233,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BINARY_CFLAGS = @BINARY_CFLAGS@
+BINARY_LDFLAGS = @BINARY_LDFLAGS@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
@@ -417,8 +423,10 @@ libmanagesieve_login_settings_la_CFLAGS = \
 	$(AM_CFLAGS) $(LIBDOVECOT_CONFIG_INCLUDE) -DPKG_LIBEXECDIR=\""$(dovecot_pkglibexecdir)"\"
 
 libs = \
-	$(top_builddir)/src/lib-managesieve/libmanagesieve.a
+	$(top_builddir)/src/lib-managesieve/libmanagesieve.la
 
+managesieve_login_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
+managesieve_login_LDFLAGS = $(BINARY_LDFLAGS)
 managesieve_login_LDADD = $(libs) $(LIBDOVECOT_LOGIN) $(LIBDOVECOT)
 managesieve_login_DEPENDENCIES = $(libs) $(LIBDOVECOT_LOGIN_DEPS) $(LIBDOVECOT_DEPS)
 managesieve_login_SOURCES = \
@@ -557,7 +565,7 @@ clean-dovecot_pkglibexecPROGRAMS:
 
 managesieve-login$(EXEEXT): $(managesieve_login_OBJECTS) $(managesieve_login_DEPENDENCIES) $(EXTRA_managesieve_login_DEPENDENCIES) 
 	@rm -f managesieve-login$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(managesieve_login_OBJECTS) $(managesieve_login_LDADD) $(LIBS)
+	$(AM_V_CCLD)$(managesieve_login_LINK) $(managesieve_login_OBJECTS) $(managesieve_login_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -565,12 +573,12 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-authenticate.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmanagesieve_login_settings_la-managesieve-login-settings-plugin.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmanagesieve_login_settings_la-managesieve-login-settings.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-login-settings.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-proxy.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve_login-client-authenticate.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve_login-client.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve_login-managesieve-login-settings.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve_login-managesieve-proxy.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -606,6 +614,62 @@ libmanagesieve_login_settings_la-managesieve-login-settings-plugin.lo: managesie
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-login-settings-plugin.c' object='libmanagesieve_login_settings_la-managesieve-login-settings-plugin.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libmanagesieve_login_settings_la_CFLAGS) $(CFLAGS) -c -o libmanagesieve_login_settings_la-managesieve-login-settings-plugin.lo `test -f 'managesieve-login-settings-plugin.c' || echo '$(srcdir)/'`managesieve-login-settings-plugin.c
+
+managesieve_login-client.o: client.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve_login-client.o -MD -MP -MF $(DEPDIR)/managesieve_login-client.Tpo -c -o managesieve_login-client.o `test -f 'client.c' || echo '$(srcdir)/'`client.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve_login-client.Tpo $(DEPDIR)/managesieve_login-client.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='client.c' object='managesieve_login-client.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve_login-client.o `test -f 'client.c' || echo '$(srcdir)/'`client.c
+
+managesieve_login-client.obj: client.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve_login-client.obj -MD -MP -MF $(DEPDIR)/managesieve_login-client.Tpo -c -o managesieve_login-client.obj `if test -f 'client.c'; then $(CYGPATH_W) 'client.c'; else $(CYGPATH_W) '$(srcdir)/client.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve_login-client.Tpo $(DEPDIR)/managesieve_login-client.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='client.c' object='managesieve_login-client.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve_login-client.obj `if test -f 'client.c'; then $(CYGPATH_W) 'client.c'; else $(CYGPATH_W) '$(srcdir)/client.c'; fi`
+
+managesieve_login-client-authenticate.o: client-authenticate.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve_login-client-authenticate.o -MD -MP -MF $(DEPDIR)/managesieve_login-client-authenticate.Tpo -c -o managesieve_login-client-authenticate.o `test -f 'client-authenticate.c' || echo '$(srcdir)/'`client-authenticate.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve_login-client-authenticate.Tpo $(DEPDIR)/managesieve_login-client-authenticate.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='client-authenticate.c' object='managesieve_login-client-authenticate.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve_login-client-authenticate.o `test -f 'client-authenticate.c' || echo '$(srcdir)/'`client-authenticate.c
+
+managesieve_login-client-authenticate.obj: client-authenticate.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve_login-client-authenticate.obj -MD -MP -MF $(DEPDIR)/managesieve_login-client-authenticate.Tpo -c -o managesieve_login-client-authenticate.obj `if test -f 'client-authenticate.c'; then $(CYGPATH_W) 'client-authenticate.c'; else $(CYGPATH_W) '$(srcdir)/client-authenticate.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve_login-client-authenticate.Tpo $(DEPDIR)/managesieve_login-client-authenticate.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='client-authenticate.c' object='managesieve_login-client-authenticate.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve_login-client-authenticate.obj `if test -f 'client-authenticate.c'; then $(CYGPATH_W) 'client-authenticate.c'; else $(CYGPATH_W) '$(srcdir)/client-authenticate.c'; fi`
+
+managesieve_login-managesieve-login-settings.o: managesieve-login-settings.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve_login-managesieve-login-settings.o -MD -MP -MF $(DEPDIR)/managesieve_login-managesieve-login-settings.Tpo -c -o managesieve_login-managesieve-login-settings.o `test -f 'managesieve-login-settings.c' || echo '$(srcdir)/'`managesieve-login-settings.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve_login-managesieve-login-settings.Tpo $(DEPDIR)/managesieve_login-managesieve-login-settings.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-login-settings.c' object='managesieve_login-managesieve-login-settings.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve_login-managesieve-login-settings.o `test -f 'managesieve-login-settings.c' || echo '$(srcdir)/'`managesieve-login-settings.c
+
+managesieve_login-managesieve-login-settings.obj: managesieve-login-settings.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve_login-managesieve-login-settings.obj -MD -MP -MF $(DEPDIR)/managesieve_login-managesieve-login-settings.Tpo -c -o managesieve_login-managesieve-login-settings.obj `if test -f 'managesieve-login-settings.c'; then $(CYGPATH_W) 'managesieve-login-settings.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-login-settings.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve_login-managesieve-login-settings.Tpo $(DEPDIR)/managesieve_login-managesieve-login-settings.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-login-settings.c' object='managesieve_login-managesieve-login-settings.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve_login-managesieve-login-settings.obj `if test -f 'managesieve-login-settings.c'; then $(CYGPATH_W) 'managesieve-login-settings.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-login-settings.c'; fi`
+
+managesieve_login-managesieve-proxy.o: managesieve-proxy.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve_login-managesieve-proxy.o -MD -MP -MF $(DEPDIR)/managesieve_login-managesieve-proxy.Tpo -c -o managesieve_login-managesieve-proxy.o `test -f 'managesieve-proxy.c' || echo '$(srcdir)/'`managesieve-proxy.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve_login-managesieve-proxy.Tpo $(DEPDIR)/managesieve_login-managesieve-proxy.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-proxy.c' object='managesieve_login-managesieve-proxy.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve_login-managesieve-proxy.o `test -f 'managesieve-proxy.c' || echo '$(srcdir)/'`managesieve-proxy.c
+
+managesieve_login-managesieve-proxy.obj: managesieve-proxy.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve_login-managesieve-proxy.obj -MD -MP -MF $(DEPDIR)/managesieve_login-managesieve-proxy.Tpo -c -o managesieve_login-managesieve-proxy.obj `if test -f 'managesieve-proxy.c'; then $(CYGPATH_W) 'managesieve-proxy.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-proxy.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve_login-managesieve-proxy.Tpo $(DEPDIR)/managesieve_login-managesieve-proxy.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-proxy.c' object='managesieve_login-managesieve-proxy.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_login_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve_login-managesieve-proxy.obj `if test -f 'managesieve-proxy.c'; then $(CYGPATH_W) 'managesieve-proxy.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-proxy.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo

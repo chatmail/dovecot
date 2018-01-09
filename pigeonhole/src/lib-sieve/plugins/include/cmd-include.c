@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -80,7 +80,7 @@ struct cmd_include_context_data {
 	struct sieve_script *script;
 	enum ext_include_flags flags;
 
-	unsigned int location_assigned:1;
+	bool location_assigned:1;
 };
 
 /*

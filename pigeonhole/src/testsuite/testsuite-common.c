@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -261,9 +261,11 @@ static void testsuite_tmp_dir_init(void)
 
 static void testsuite_tmp_dir_deinit(void)
 {
-	if ( unlink_directory(testsuite_tmp_dir, TRUE) < 0 )
-		i_warning("failed to remove temporary directory '%s': %m.",
-			testsuite_tmp_dir);
+	const char *error;
+
+	if ( unlink_directory(testsuite_tmp_dir, UNLINK_DIRECTORY_FLAG_RMDIR, &error) < 0 )
+		i_warning("failed to remove temporary directory '%s': %s.",
+			testsuite_tmp_dir, error);
 
 	i_free(testsuite_tmp_dir);
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __SIEVE_SCRIPT_PRIVATE_H
@@ -69,7 +69,7 @@ struct sieve_script {
 	/* Stream */
 	struct istream *stream;
 
-	unsigned int open:1;
+	bool open:1;
 };
 
 void sieve_script_init

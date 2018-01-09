@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __SIEVE_ADDRESS_PARTS_H
@@ -20,7 +20,7 @@ struct sieve_address_part_def {
 
 	const char *(*extract_from)
 		(const struct sieve_address_part *addrp,
-			const struct sieve_address *address);
+			const struct smtp_address *address);
 };
 
 /*

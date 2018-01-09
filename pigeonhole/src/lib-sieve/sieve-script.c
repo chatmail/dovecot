@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -147,8 +147,7 @@ void sieve_script_unref(struct sieve_script **_script)
 	if ( --script->refcount != 0 )
 		return;
 
-	if ( script->stream != NULL )
-		i_stream_unref(&script->stream);
+	i_stream_unref(&script->stream);
 
 	if ( script->v.destroy != NULL )
 		script->v.destroy(script);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -11,6 +11,8 @@
 #include "mail-namespace.h"
 #include "mail-storage.h"
 #include "mail-user.h"
+#include "message-address.h"
+#include "smtp-params.h"
 #include "master-service.h"
 #include "master-service-settings.h"
 #include "mail-storage-service.h"
@@ -57,7 +59,7 @@ struct sieve_tool {
 	struct mail_user *mail_raw_user;
 	struct mail_raw *mail_raw;
 
-	unsigned int debug:1;
+	bool debug:1;
 };
 
 struct sieve_tool *sieve_tool;
@@ -136,7 +138,8 @@ struct sieve_tool *sieve_tool_init
 {
 	struct sieve_tool *tool;
 	enum master_service_flags service_flags =
-		MASTER_SERVICE_FLAG_STANDALONE;
+		MASTER_SERVICE_FLAG_STANDALONE |
+		MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME;
 
 	if ( no_config )
 		service_flags |= MASTER_SERVICE_FLAG_NO_CONFIG_SETTINGS;
@@ -331,7 +334,7 @@ void sieve_tool_deinit(struct sieve_tool **_tool)
 	if ( tool->mail_user_dovecot != NULL )
 		mail_user_unref(&tool->mail_user_dovecot);
 
-	mail_storage_service_user_free(&tool->service_user);
+	mail_storage_service_user_unref(&tool->service_user);
 	mail_storage_service_deinit(&tool->storage_service);
 
 	/* Free sieve tool object */
@@ -356,7 +359,7 @@ void sieve_tool_init_mail_user
 	const char *home = NULL, *errstr = NULL;
 
 	tool->mail_user = mail_user_alloc
-		(username, mail_user_dovecot->set_info, mail_user_dovecot->unexpanded_set);
+		(NULL, username, mail_user_dovecot->set_info, mail_user_dovecot->unexpanded_set);
 
 	if ( (home=sieve_tool_get_homedir(sieve_tool)) != NULL ) {
 		mail_user_set_home(tool->mail_user, home);
@@ -476,26 +479,57 @@ struct mail_user *sieve_tool_get_mail_user
  * Commonly needed functionality
  */
 
-void sieve_tool_get_envelope_data
-	(struct mail *mail, const char **recipient, const char **sender)
+static const struct smtp_address *
+sieve_tool_get_address(struct mail *mail, const char *header)
 {
-	/* Get recipient address */
-	if ( *recipient == NULL )
-		(void)mail_get_first_header(mail, "Envelope-To", recipient);
-	if ( *recipient == NULL )
-		(void)mail_get_first_header(mail, "To", recipient);
-	if ( *recipient == NULL )
-		*recipient = "recipient@example.com";
+    struct message_address *addr;
+    const char *str;
+
+    if (mail_get_first_header(mail, header, &str) <= 0)
+        return NULL;
+    addr = message_address_parse(pool_datastack_create(),
+                     (const unsigned char *)str,
+                     strlen(str), 1, FALSE);
+    return addr == NULL || addr->mailbox == NULL || addr->domain == NULL ||
+        *addr->mailbox == '\0' || *addr->domain == '\0' ?
+        NULL : smtp_address_create_temp(addr->mailbox, addr->domain);
+}
+
+void sieve_tool_get_envelope_data
+(struct sieve_message_data *msgdata, struct mail *mail,
+	const struct smtp_address *sender,
+	const struct smtp_address *rcpt_orig,
+	const struct smtp_address *rcpt_final)
+{
+	struct smtp_params_rcpt *rcpt_params;
 
 	/* Get sender address */
-	if ( *sender == NULL )
-		(void)mail_get_first_header(mail, "Return-path", sender);
-	if ( *sender == NULL )
-		(void)mail_get_first_header(mail, "Sender", sender);
-	if ( *sender == NULL )
-		(void)mail_get_first_header(mail, "From", sender);
-	if ( *sender == NULL )
-		*sender = "sender@example.com";
+	if ( sender == NULL )
+		sender = sieve_tool_get_address(mail, "Return-path");
+	if ( sender == NULL )
+		sender = sieve_tool_get_address(mail, "Sender");
+	if ( sender == NULL )
+		sender = sieve_tool_get_address(mail, "From");
+	if ( sender == NULL )
+		sender = smtp_address_create_temp("sender", "example.com");
+
+	/* Get recipient address */
+	if ( rcpt_final == NULL )
+		rcpt_final = sieve_tool_get_address(mail, "Envelope-To");
+	if ( rcpt_final == NULL )
+		rcpt_final = sieve_tool_get_address(mail, "To");
+	if ( rcpt_final == NULL )
+		rcpt_final = smtp_address_create_temp("recipient", "example.com");
+	if ( rcpt_orig == NULL )
+		rcpt_orig = rcpt_final;
+
+	msgdata->envelope.mail_from = sender;
+	msgdata->envelope.rcpt_to = rcpt_final;
+
+	rcpt_params = t_new(struct smtp_params_rcpt, 1);
+	rcpt_params->orcpt.addr = rcpt_orig;
+
+	msgdata->envelope.rcpt_params = rcpt_params;
 }
 
 /*
@@ -508,7 +542,7 @@ struct ostream *sieve_tool_open_output_stream(const char *filename)
 	int fd;
 
 	if ( strcmp(filename, "-") == 0 )
-		outstream = o_stream_create_fd(1, 0, FALSE);
+		outstream = o_stream_create_fd(1, 0);
 	else {
 		if ( (fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, 0600)) < 0 ) {
 			i_fatal("failed to open file for writing: %m");
@@ -578,6 +612,10 @@ void sieve_tool_dump_binary_to
 			(void) sieve_hexdump(sbin, dumpstream);
 		else
 			(void) sieve_dump(sbin, dumpstream, FALSE);
+		if (o_stream_finish(dumpstream) < 0) {
+			i_fatal("write(%s) failed: %s", filename,
+				o_stream_get_error(dumpstream));
+		}
 		o_stream_destroy(&dumpstream);
 	} else {
 		i_fatal("Failed to create stream for sieve code dump.");

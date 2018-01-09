@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __SIEVE_ADDRESS_SOURCE_H
@@ -18,7 +18,7 @@ enum sieve_address_source_type {
 
 struct sieve_address_source {
 	enum sieve_address_source_type type;
-	const struct sieve_address *address;
+	const struct smtp_address *address;
 };
 
 bool sieve_address_source_parse
@@ -34,6 +34,6 @@ int sieve_address_source_get_address
 		const struct sieve_script_env *senv,
 		struct sieve_message_context *msgctx,
 		enum sieve_execute_flags flags,
-		const char **addr_r);
+		const struct smtp_address **addr_r);
 
 #endif

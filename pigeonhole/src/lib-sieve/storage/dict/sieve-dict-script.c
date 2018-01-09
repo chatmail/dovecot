@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -71,7 +71,7 @@ static int sieve_dict_script_open
 	struct sieve_dict_storage *dstorage =
 		(struct sieve_dict_storage *)storage;
 	const char *name = script->name;
-	const char *path, *data_id;
+	const char *path, *data_id, *error;
 	int ret;
 
 	if ( sieve_dict_storage_get_dict
@@ -82,11 +82,11 @@ static int sieve_dict_script_open
 		(DICT_SIEVE_NAME_PATH, dict_escape_string(name), NULL);
 
 	ret = dict_lookup
-		(dscript->dict, script->pool, path, &data_id);
+		(dscript->dict, script->pool, path, &data_id, &error);
 	if ( ret <= 0 ) {
 		if ( ret < 0 ) {
 			sieve_script_set_critical(script,
-				"Failed to lookup script id from path %s", path);
+				"Failed to lookup script id from path %s: %s", path, error);
 			*error_r = SIEVE_ERROR_TEMP_FAILURE;
 		} else {
 			sieve_script_sys_debug(script,
@@ -109,7 +109,7 @@ static int sieve_dict_script_get_stream
 {
 	struct sieve_dict_script *dscript =
 		(struct sieve_dict_script *)script;
-	const char *path, *name = script->name, *data;
+	const char *path, *name = script->name, *data, *error;
 	int ret;
 
 	dscript->data_pool =
@@ -119,13 +119,13 @@ static int sieve_dict_script_get_stream
 		(DICT_SIEVE_DATA_PATH, dict_escape_string(dscript->data_id), NULL);
 
 	ret = dict_lookup
-		(dscript->dict, dscript->data_pool, path, &data);
+		(dscript->dict, dscript->data_pool, path, &data, &error);
 	if ( ret <= 0 ) {
 		if ( ret < 0 ) {
 			sieve_script_set_critical(script,
 				"Failed to lookup data with id `%s' "
-				"for script `%s' from path %s",
-				dscript->data_id, name, path);
+				"for script `%s' from path %s: %s",
+				dscript->data_id, name, path, error);
 		} else {
 			sieve_script_set_critical(script,
 				"Data with id `%s' for script `%s' "
@@ -281,7 +281,7 @@ const struct sieve_script sieve_dict_script = {
 struct sieve_dict_script_sequence {
 	struct sieve_script_sequence seq;
 
-	unsigned int done:1;
+	bool done:1;
 };
 
 struct sieve_script_sequence *sieve_dict_storage_get_script_sequence

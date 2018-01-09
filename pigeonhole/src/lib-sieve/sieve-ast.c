@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -33,7 +33,7 @@ struct sieve_ast_extension_reg {
 	const struct sieve_ast_extension *ast_ext;
 	void *context;
 
-	unsigned int required:1;
+	bool required:1;
 };
 
 /*

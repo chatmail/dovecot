@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -247,6 +247,9 @@ int ext_notify_construct_message
 	string_t *out_msg)
 {
 	const struct sieve_message_data *msgdata = renv->msgdata;
+	struct sieve_message_context *msgctx = renv->msgctx;
+	const struct smtp_address *return_path =
+		sieve_message_get_sender(msgctx);
 	const char *p;
 	int ret;
 
@@ -273,8 +276,8 @@ int ext_notify_construct_message
 		} else if ( strncasecmp(p, "$env-from$", 10) == 0 ) {
 			p += 10;
 
-			if ( msgdata->return_path != NULL )
-				str_append(out_msg, msgdata->return_path);
+			if ( return_path != NULL )
+				smtp_address_write(out_msg, return_path);
 
 		} else if ( strncasecmp(p, "$subject$", 9) == 0 ) {
 			p += 9;

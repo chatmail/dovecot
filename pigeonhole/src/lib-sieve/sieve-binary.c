@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -281,7 +281,7 @@ struct sieve_binary_block *sieve_binary_block_get
 void sieve_binary_block_clear
 (struct sieve_binary_block *sblock)
 {
-	buffer_reset(sblock->data);
+	buffer_set_used_size(sblock->data, 0);
 }
 
 buffer_t *sieve_binary_block_get_buffer

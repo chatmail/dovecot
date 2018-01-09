@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -72,7 +72,9 @@ static int sieve_storage_sync_transaction_begin
 		return -1;
 	}
 
-	*trans_r = mailbox_transaction_begin(inbox, MAILBOX_TRANSACTION_FLAG_EXTERNAL);	
+	*trans_r = mailbox_transaction_begin(inbox,
+					     MAILBOX_TRANSACTION_FLAG_EXTERNAL,
+					     __func__);
 	return 1;
 }
 

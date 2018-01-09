@@ -108,7 +108,7 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_sieve_dump_OBJECTS = sieve-dump.$(OBJEXT)
+am_sieve_dump_OBJECTS = sieve_dump-sieve-dump.$(OBJEXT)
 sieve_dump_OBJECTS = $(am_sieve_dump_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(libs) $(am__DEPENDENCIES_1) \
@@ -120,17 +120,17 @@ am__v_lt_1 =
 sieve_dump_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(sieve_dump_LDFLAGS) $(LDFLAGS) -o $@
-am_sieve_filter_OBJECTS = sieve-filter.$(OBJEXT)
+am_sieve_filter_OBJECTS = sieve_filter-sieve-filter.$(OBJEXT)
 sieve_filter_OBJECTS = $(am_sieve_filter_OBJECTS)
 sieve_filter_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(sieve_filter_LDFLAGS) $(LDFLAGS) -o $@
-am_sieve_test_OBJECTS = sieve-test.$(OBJEXT)
+am_sieve_test_OBJECTS = sieve_test-sieve-test.$(OBJEXT)
 sieve_test_OBJECTS = $(am_sieve_test_OBJECTS)
 sieve_test_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(sieve_test_LDFLAGS) $(LDFLAGS) -o $@
-am_sievec_OBJECTS = sievec.$(OBJEXT)
+am_sievec_OBJECTS = sievec-sievec.$(OBJEXT)
 sievec_OBJECTS = $(am_sievec_OBJECTS)
 sievec_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
@@ -208,6 +208,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BINARY_CFLAGS = @BINARY_CFLAGS@
+BINARY_LDFLAGS = @BINARY_LDFLAGS@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
@@ -391,7 +393,8 @@ libs_ldadd = $(libs) $(LIBDOVECOT_STORAGE) $(LIBDOVECOT_LDA) $(LIBDOVECOT)
 libs_deps = $(libs) $(LIBDOVECOT_STORAGE_DEPS) $(LIBDOVECOT_LDA_DEPS) $(LIBDOVECOT_DEPS)
 
 # Sieve Compile Tool
-sievec_LDFLAGS = -export-dynamic
+sievec_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
+sievec_LDFLAGS = -export-dynamic $(BINARY_LDFLAGS)
 sievec_LDADD = $(libs_ldadd)
 sievec_DEPENDENCIES = $(libs_deps)
 sievec_SOURCES = \
@@ -399,7 +402,8 @@ sievec_SOURCES = \
 
 
 # Sieve Dump Tool
-sieve_dump_LDFLAGS = -export-dynamic
+sieve_dump_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
+sieve_dump_LDFLAGS = -export-dynamic $(BINARY_LDFLAGS)
 sieve_dump_LDADD = $(libs_ldadd)
 sieve_dump_DEPENDENCIES = $(libs_deps)
 sieve_dump_SOURCES = \
@@ -407,7 +411,8 @@ sieve_dump_SOURCES = \
 
 
 # Sieve Test Tool
-sieve_test_LDFLAGS = -export-dynamic
+sieve_test_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
+sieve_test_LDFLAGS = -export-dynamic $(BINARY_LDFLAGS)
 sieve_test_LDADD = $(libs_ldadd)
 sieve_test_DEPENDENCIES = $(libs_deps)
 sieve_test_SOURCES = \
@@ -415,7 +420,8 @@ sieve_test_SOURCES = \
 
 
 # Sieve Filter Tool
-sieve_filter_LDFLAGS = -export-dynamic
+sieve_filter_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
+sieve_filter_LDFLAGS = -export-dynamic $(BINARY_LDFLAGS)
 sieve_filter_LDADD = $(libs_ldadd)
 sieve_filter_DEPENDENCIES = $(libs_deps)
 sieve_filter_SOURCES = \
@@ -527,10 +533,10 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sieve-dump.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sieve-filter.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sieve-test.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sievec.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sieve_dump-sieve-dump.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sieve_filter-sieve-filter.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sieve_test-sieve-test.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sievec-sievec.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -552,6 +558,62 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+sieve_dump-sieve-dump.o: sieve-dump.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_dump_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT sieve_dump-sieve-dump.o -MD -MP -MF $(DEPDIR)/sieve_dump-sieve-dump.Tpo -c -o sieve_dump-sieve-dump.o `test -f 'sieve-dump.c' || echo '$(srcdir)/'`sieve-dump.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/sieve_dump-sieve-dump.Tpo $(DEPDIR)/sieve_dump-sieve-dump.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sieve-dump.c' object='sieve_dump-sieve-dump.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_dump_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o sieve_dump-sieve-dump.o `test -f 'sieve-dump.c' || echo '$(srcdir)/'`sieve-dump.c
+
+sieve_dump-sieve-dump.obj: sieve-dump.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_dump_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT sieve_dump-sieve-dump.obj -MD -MP -MF $(DEPDIR)/sieve_dump-sieve-dump.Tpo -c -o sieve_dump-sieve-dump.obj `if test -f 'sieve-dump.c'; then $(CYGPATH_W) 'sieve-dump.c'; else $(CYGPATH_W) '$(srcdir)/sieve-dump.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/sieve_dump-sieve-dump.Tpo $(DEPDIR)/sieve_dump-sieve-dump.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sieve-dump.c' object='sieve_dump-sieve-dump.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_dump_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o sieve_dump-sieve-dump.obj `if test -f 'sieve-dump.c'; then $(CYGPATH_W) 'sieve-dump.c'; else $(CYGPATH_W) '$(srcdir)/sieve-dump.c'; fi`
+
+sieve_filter-sieve-filter.o: sieve-filter.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_filter_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT sieve_filter-sieve-filter.o -MD -MP -MF $(DEPDIR)/sieve_filter-sieve-filter.Tpo -c -o sieve_filter-sieve-filter.o `test -f 'sieve-filter.c' || echo '$(srcdir)/'`sieve-filter.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/sieve_filter-sieve-filter.Tpo $(DEPDIR)/sieve_filter-sieve-filter.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sieve-filter.c' object='sieve_filter-sieve-filter.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_filter_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o sieve_filter-sieve-filter.o `test -f 'sieve-filter.c' || echo '$(srcdir)/'`sieve-filter.c
+
+sieve_filter-sieve-filter.obj: sieve-filter.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_filter_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT sieve_filter-sieve-filter.obj -MD -MP -MF $(DEPDIR)/sieve_filter-sieve-filter.Tpo -c -o sieve_filter-sieve-filter.obj `if test -f 'sieve-filter.c'; then $(CYGPATH_W) 'sieve-filter.c'; else $(CYGPATH_W) '$(srcdir)/sieve-filter.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/sieve_filter-sieve-filter.Tpo $(DEPDIR)/sieve_filter-sieve-filter.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sieve-filter.c' object='sieve_filter-sieve-filter.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_filter_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o sieve_filter-sieve-filter.obj `if test -f 'sieve-filter.c'; then $(CYGPATH_W) 'sieve-filter.c'; else $(CYGPATH_W) '$(srcdir)/sieve-filter.c'; fi`
+
+sieve_test-sieve-test.o: sieve-test.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_test_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT sieve_test-sieve-test.o -MD -MP -MF $(DEPDIR)/sieve_test-sieve-test.Tpo -c -o sieve_test-sieve-test.o `test -f 'sieve-test.c' || echo '$(srcdir)/'`sieve-test.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/sieve_test-sieve-test.Tpo $(DEPDIR)/sieve_test-sieve-test.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sieve-test.c' object='sieve_test-sieve-test.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_test_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o sieve_test-sieve-test.o `test -f 'sieve-test.c' || echo '$(srcdir)/'`sieve-test.c
+
+sieve_test-sieve-test.obj: sieve-test.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_test_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT sieve_test-sieve-test.obj -MD -MP -MF $(DEPDIR)/sieve_test-sieve-test.Tpo -c -o sieve_test-sieve-test.obj `if test -f 'sieve-test.c'; then $(CYGPATH_W) 'sieve-test.c'; else $(CYGPATH_W) '$(srcdir)/sieve-test.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/sieve_test-sieve-test.Tpo $(DEPDIR)/sieve_test-sieve-test.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sieve-test.c' object='sieve_test-sieve-test.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sieve_test_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o sieve_test-sieve-test.obj `if test -f 'sieve-test.c'; then $(CYGPATH_W) 'sieve-test.c'; else $(CYGPATH_W) '$(srcdir)/sieve-test.c'; fi`
+
+sievec-sievec.o: sievec.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sievec_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT sievec-sievec.o -MD -MP -MF $(DEPDIR)/sievec-sievec.Tpo -c -o sievec-sievec.o `test -f 'sievec.c' || echo '$(srcdir)/'`sievec.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/sievec-sievec.Tpo $(DEPDIR)/sievec-sievec.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sievec.c' object='sievec-sievec.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sievec_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o sievec-sievec.o `test -f 'sievec.c' || echo '$(srcdir)/'`sievec.c
+
+sievec-sievec.obj: sievec.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sievec_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT sievec-sievec.obj -MD -MP -MF $(DEPDIR)/sievec-sievec.Tpo -c -o sievec-sievec.obj `if test -f 'sievec.c'; then $(CYGPATH_W) 'sievec.c'; else $(CYGPATH_W) '$(srcdir)/sievec.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/sievec-sievec.Tpo $(DEPDIR)/sievec-sievec.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sievec.c' object='sievec-sievec.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(sievec_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o sievec-sievec.obj `if test -f 'sievec.c'; then $(CYGPATH_W) 'sievec.c'; else $(CYGPATH_W) '$(srcdir)/sievec.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo

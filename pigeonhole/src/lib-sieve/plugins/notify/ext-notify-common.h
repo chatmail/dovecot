@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __EXT_NOTIFY_COMMON_H
@@ -45,7 +45,7 @@ extern const struct sieve_action_def act_notify_old;
 
 struct ext_notify_recipient {
 	const char *full;
-	const char *normalized;
+	const struct smtp_address *address;
 };
 
 ARRAY_DEFINE_TYPE(recipients, struct ext_notify_recipient);

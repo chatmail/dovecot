@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -63,7 +63,7 @@ struct ext_include_binary_context {
 
 	struct sieve_variable_scope_binary *global_vars;
 
-	unsigned int outdated:1;
+	bool outdated:1;
 };
 
 static struct ext_include_binary_context *ext_include_binary_create_context

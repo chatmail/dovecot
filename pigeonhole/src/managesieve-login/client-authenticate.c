@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "login-common.h"
@@ -201,8 +201,8 @@ static int managesieve_client_auth_read_response
 			client->auth_response = str_new(default_pool, I_MAX(resp_size+1, 256));
 	}
 
-	while ( (ret=i_stream_read_data
-		(msieve_client->auth_response_input, &data, &size, 0) ) > 0 ) {
+	while ( (ret=i_stream_read_more
+		(msieve_client->auth_response_input, &data, &size) ) > 0 ) {
 
 		if (str_len(client->auth_response) + size > LOGIN_MAX_AUTH_BUF_SIZE) {
 			client_destroy(client, "Authentication response too large");

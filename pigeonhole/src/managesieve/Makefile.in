@@ -149,14 +149,22 @@ libmanagesieve_settings_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_CFLAGS) $(CFLAGS) $(libmanagesieve_settings_la_LDFLAGS) \
 	$(LDFLAGS) -o $@
 PROGRAMS = $(dovecot_pkglibexec_PROGRAMS)
-am__objects_1 = cmd-capability.$(OBJEXT) cmd-logout.$(OBJEXT) \
-	cmd-putscript.$(OBJEXT) cmd-getscript.$(OBJEXT) \
-	cmd-setactive.$(OBJEXT) cmd-deletescript.$(OBJEXT) \
-	cmd-listscripts.$(OBJEXT) cmd-havespace.$(OBJEXT) \
-	cmd-renamescript.$(OBJEXT) cmd-noop.$(OBJEXT)
-am_managesieve_OBJECTS = $(am__objects_1) managesieve-quota.$(OBJEXT) \
-	managesieve-client.$(OBJEXT) managesieve-commands.$(OBJEXT) \
-	managesieve-capabilities.$(OBJEXT) main.$(OBJEXT)
+am__objects_1 = managesieve-cmd-capability.$(OBJEXT) \
+	managesieve-cmd-logout.$(OBJEXT) \
+	managesieve-cmd-putscript.$(OBJEXT) \
+	managesieve-cmd-getscript.$(OBJEXT) \
+	managesieve-cmd-setactive.$(OBJEXT) \
+	managesieve-cmd-deletescript.$(OBJEXT) \
+	managesieve-cmd-listscripts.$(OBJEXT) \
+	managesieve-cmd-havespace.$(OBJEXT) \
+	managesieve-cmd-renamescript.$(OBJEXT) \
+	managesieve-cmd-noop.$(OBJEXT)
+am_managesieve_OBJECTS = $(am__objects_1) \
+	managesieve-managesieve-quota.$(OBJEXT) \
+	managesieve-managesieve-client.$(OBJEXT) \
+	managesieve-managesieve-commands.$(OBJEXT) \
+	managesieve-managesieve-capabilities.$(OBJEXT) \
+	managesieve-main.$(OBJEXT)
 managesieve_OBJECTS = $(am_managesieve_OBJECTS)
 am__DEPENDENCIES_1 =
 managesieve_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -234,6 +242,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BINARY_CFLAGS = @BINARY_CFLAGS@
+BINARY_LDFLAGS = @BINARY_LDFLAGS@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
@@ -418,12 +428,13 @@ settings_LTLIBRARIES = \
 libmanagesieve_settings_la_SOURCES = \
 	managesieve-settings.c
 
-managesieve_LDFLAGS = -export-dynamic
 libs = \
 	managesieve-settings.lo \
-	$(top_builddir)/src/lib-managesieve/libmanagesieve.a \
+	$(top_builddir)/src/lib-managesieve/libmanagesieve.la \
 	$(top_builddir)/src/lib-sieve/libdovecot-sieve.la
 
+managesieve_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
+managesieve_LDFLAGS = -export-dynamic $(BINARY_LDFLAGS)
 managesieve_LDADD = $(libs) $(LIBDOVECOT_STORAGE) $(LIBDOVECOT_LDA) $(LIBDOVECOT)
 managesieve_DEPENDENCIES = $(libs) $(LIBDOVECOT_STORAGE_DEPS) $(LIBDOVECOT_LDA_DEPS) $(LIBDOVECOT_DEPS)
 cmds = \
@@ -585,21 +596,21 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmd-capability.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmd-deletescript.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmd-getscript.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmd-havespace.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmd-listscripts.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmd-logout.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmd-noop.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmd-putscript.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmd-renamescript.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmd-setactive.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-capabilities.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-client.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-commands.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-quota.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-cmd-capability.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-cmd-deletescript.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-cmd-getscript.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-cmd-havespace.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-cmd-listscripts.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-cmd-logout.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-cmd-noop.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-cmd-putscript.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-cmd-renamescript.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-cmd-setactive.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-managesieve-capabilities.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-managesieve-client.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-managesieve-commands.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-managesieve-quota.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/managesieve-settings.Plo@am__quote@
 
 .c.o:
@@ -622,6 +633,216 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+managesieve-cmd-capability.o: cmd-capability.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-capability.o -MD -MP -MF $(DEPDIR)/managesieve-cmd-capability.Tpo -c -o managesieve-cmd-capability.o `test -f 'cmd-capability.c' || echo '$(srcdir)/'`cmd-capability.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-capability.Tpo $(DEPDIR)/managesieve-cmd-capability.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-capability.c' object='managesieve-cmd-capability.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-capability.o `test -f 'cmd-capability.c' || echo '$(srcdir)/'`cmd-capability.c
+
+managesieve-cmd-capability.obj: cmd-capability.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-capability.obj -MD -MP -MF $(DEPDIR)/managesieve-cmd-capability.Tpo -c -o managesieve-cmd-capability.obj `if test -f 'cmd-capability.c'; then $(CYGPATH_W) 'cmd-capability.c'; else $(CYGPATH_W) '$(srcdir)/cmd-capability.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-capability.Tpo $(DEPDIR)/managesieve-cmd-capability.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-capability.c' object='managesieve-cmd-capability.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-capability.obj `if test -f 'cmd-capability.c'; then $(CYGPATH_W) 'cmd-capability.c'; else $(CYGPATH_W) '$(srcdir)/cmd-capability.c'; fi`
+
+managesieve-cmd-logout.o: cmd-logout.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-logout.o -MD -MP -MF $(DEPDIR)/managesieve-cmd-logout.Tpo -c -o managesieve-cmd-logout.o `test -f 'cmd-logout.c' || echo '$(srcdir)/'`cmd-logout.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-logout.Tpo $(DEPDIR)/managesieve-cmd-logout.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-logout.c' object='managesieve-cmd-logout.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-logout.o `test -f 'cmd-logout.c' || echo '$(srcdir)/'`cmd-logout.c
+
+managesieve-cmd-logout.obj: cmd-logout.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-logout.obj -MD -MP -MF $(DEPDIR)/managesieve-cmd-logout.Tpo -c -o managesieve-cmd-logout.obj `if test -f 'cmd-logout.c'; then $(CYGPATH_W) 'cmd-logout.c'; else $(CYGPATH_W) '$(srcdir)/cmd-logout.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-logout.Tpo $(DEPDIR)/managesieve-cmd-logout.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-logout.c' object='managesieve-cmd-logout.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-logout.obj `if test -f 'cmd-logout.c'; then $(CYGPATH_W) 'cmd-logout.c'; else $(CYGPATH_W) '$(srcdir)/cmd-logout.c'; fi`
+
+managesieve-cmd-putscript.o: cmd-putscript.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-putscript.o -MD -MP -MF $(DEPDIR)/managesieve-cmd-putscript.Tpo -c -o managesieve-cmd-putscript.o `test -f 'cmd-putscript.c' || echo '$(srcdir)/'`cmd-putscript.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-putscript.Tpo $(DEPDIR)/managesieve-cmd-putscript.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-putscript.c' object='managesieve-cmd-putscript.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-putscript.o `test -f 'cmd-putscript.c' || echo '$(srcdir)/'`cmd-putscript.c
+
+managesieve-cmd-putscript.obj: cmd-putscript.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-putscript.obj -MD -MP -MF $(DEPDIR)/managesieve-cmd-putscript.Tpo -c -o managesieve-cmd-putscript.obj `if test -f 'cmd-putscript.c'; then $(CYGPATH_W) 'cmd-putscript.c'; else $(CYGPATH_W) '$(srcdir)/cmd-putscript.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-putscript.Tpo $(DEPDIR)/managesieve-cmd-putscript.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-putscript.c' object='managesieve-cmd-putscript.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-putscript.obj `if test -f 'cmd-putscript.c'; then $(CYGPATH_W) 'cmd-putscript.c'; else $(CYGPATH_W) '$(srcdir)/cmd-putscript.c'; fi`
+
+managesieve-cmd-getscript.o: cmd-getscript.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-getscript.o -MD -MP -MF $(DEPDIR)/managesieve-cmd-getscript.Tpo -c -o managesieve-cmd-getscript.o `test -f 'cmd-getscript.c' || echo '$(srcdir)/'`cmd-getscript.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-getscript.Tpo $(DEPDIR)/managesieve-cmd-getscript.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-getscript.c' object='managesieve-cmd-getscript.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-getscript.o `test -f 'cmd-getscript.c' || echo '$(srcdir)/'`cmd-getscript.c
+
+managesieve-cmd-getscript.obj: cmd-getscript.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-getscript.obj -MD -MP -MF $(DEPDIR)/managesieve-cmd-getscript.Tpo -c -o managesieve-cmd-getscript.obj `if test -f 'cmd-getscript.c'; then $(CYGPATH_W) 'cmd-getscript.c'; else $(CYGPATH_W) '$(srcdir)/cmd-getscript.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-getscript.Tpo $(DEPDIR)/managesieve-cmd-getscript.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-getscript.c' object='managesieve-cmd-getscript.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-getscript.obj `if test -f 'cmd-getscript.c'; then $(CYGPATH_W) 'cmd-getscript.c'; else $(CYGPATH_W) '$(srcdir)/cmd-getscript.c'; fi`
+
+managesieve-cmd-setactive.o: cmd-setactive.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-setactive.o -MD -MP -MF $(DEPDIR)/managesieve-cmd-setactive.Tpo -c -o managesieve-cmd-setactive.o `test -f 'cmd-setactive.c' || echo '$(srcdir)/'`cmd-setactive.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-setactive.Tpo $(DEPDIR)/managesieve-cmd-setactive.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-setactive.c' object='managesieve-cmd-setactive.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-setactive.o `test -f 'cmd-setactive.c' || echo '$(srcdir)/'`cmd-setactive.c
+
+managesieve-cmd-setactive.obj: cmd-setactive.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-setactive.obj -MD -MP -MF $(DEPDIR)/managesieve-cmd-setactive.Tpo -c -o managesieve-cmd-setactive.obj `if test -f 'cmd-setactive.c'; then $(CYGPATH_W) 'cmd-setactive.c'; else $(CYGPATH_W) '$(srcdir)/cmd-setactive.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-setactive.Tpo $(DEPDIR)/managesieve-cmd-setactive.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-setactive.c' object='managesieve-cmd-setactive.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-setactive.obj `if test -f 'cmd-setactive.c'; then $(CYGPATH_W) 'cmd-setactive.c'; else $(CYGPATH_W) '$(srcdir)/cmd-setactive.c'; fi`
+
+managesieve-cmd-deletescript.o: cmd-deletescript.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-deletescript.o -MD -MP -MF $(DEPDIR)/managesieve-cmd-deletescript.Tpo -c -o managesieve-cmd-deletescript.o `test -f 'cmd-deletescript.c' || echo '$(srcdir)/'`cmd-deletescript.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-deletescript.Tpo $(DEPDIR)/managesieve-cmd-deletescript.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-deletescript.c' object='managesieve-cmd-deletescript.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-deletescript.o `test -f 'cmd-deletescript.c' || echo '$(srcdir)/'`cmd-deletescript.c
+
+managesieve-cmd-deletescript.obj: cmd-deletescript.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-deletescript.obj -MD -MP -MF $(DEPDIR)/managesieve-cmd-deletescript.Tpo -c -o managesieve-cmd-deletescript.obj `if test -f 'cmd-deletescript.c'; then $(CYGPATH_W) 'cmd-deletescript.c'; else $(CYGPATH_W) '$(srcdir)/cmd-deletescript.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-deletescript.Tpo $(DEPDIR)/managesieve-cmd-deletescript.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-deletescript.c' object='managesieve-cmd-deletescript.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-deletescript.obj `if test -f 'cmd-deletescript.c'; then $(CYGPATH_W) 'cmd-deletescript.c'; else $(CYGPATH_W) '$(srcdir)/cmd-deletescript.c'; fi`
+
+managesieve-cmd-listscripts.o: cmd-listscripts.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-listscripts.o -MD -MP -MF $(DEPDIR)/managesieve-cmd-listscripts.Tpo -c -o managesieve-cmd-listscripts.o `test -f 'cmd-listscripts.c' || echo '$(srcdir)/'`cmd-listscripts.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-listscripts.Tpo $(DEPDIR)/managesieve-cmd-listscripts.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-listscripts.c' object='managesieve-cmd-listscripts.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-listscripts.o `test -f 'cmd-listscripts.c' || echo '$(srcdir)/'`cmd-listscripts.c
+
+managesieve-cmd-listscripts.obj: cmd-listscripts.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-listscripts.obj -MD -MP -MF $(DEPDIR)/managesieve-cmd-listscripts.Tpo -c -o managesieve-cmd-listscripts.obj `if test -f 'cmd-listscripts.c'; then $(CYGPATH_W) 'cmd-listscripts.c'; else $(CYGPATH_W) '$(srcdir)/cmd-listscripts.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-listscripts.Tpo $(DEPDIR)/managesieve-cmd-listscripts.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-listscripts.c' object='managesieve-cmd-listscripts.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-listscripts.obj `if test -f 'cmd-listscripts.c'; then $(CYGPATH_W) 'cmd-listscripts.c'; else $(CYGPATH_W) '$(srcdir)/cmd-listscripts.c'; fi`
+
+managesieve-cmd-havespace.o: cmd-havespace.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-havespace.o -MD -MP -MF $(DEPDIR)/managesieve-cmd-havespace.Tpo -c -o managesieve-cmd-havespace.o `test -f 'cmd-havespace.c' || echo '$(srcdir)/'`cmd-havespace.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-havespace.Tpo $(DEPDIR)/managesieve-cmd-havespace.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-havespace.c' object='managesieve-cmd-havespace.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-havespace.o `test -f 'cmd-havespace.c' || echo '$(srcdir)/'`cmd-havespace.c
+
+managesieve-cmd-havespace.obj: cmd-havespace.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-havespace.obj -MD -MP -MF $(DEPDIR)/managesieve-cmd-havespace.Tpo -c -o managesieve-cmd-havespace.obj `if test -f 'cmd-havespace.c'; then $(CYGPATH_W) 'cmd-havespace.c'; else $(CYGPATH_W) '$(srcdir)/cmd-havespace.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-havespace.Tpo $(DEPDIR)/managesieve-cmd-havespace.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-havespace.c' object='managesieve-cmd-havespace.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-havespace.obj `if test -f 'cmd-havespace.c'; then $(CYGPATH_W) 'cmd-havespace.c'; else $(CYGPATH_W) '$(srcdir)/cmd-havespace.c'; fi`
+
+managesieve-cmd-renamescript.o: cmd-renamescript.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-renamescript.o -MD -MP -MF $(DEPDIR)/managesieve-cmd-renamescript.Tpo -c -o managesieve-cmd-renamescript.o `test -f 'cmd-renamescript.c' || echo '$(srcdir)/'`cmd-renamescript.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-renamescript.Tpo $(DEPDIR)/managesieve-cmd-renamescript.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-renamescript.c' object='managesieve-cmd-renamescript.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-renamescript.o `test -f 'cmd-renamescript.c' || echo '$(srcdir)/'`cmd-renamescript.c
+
+managesieve-cmd-renamescript.obj: cmd-renamescript.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-renamescript.obj -MD -MP -MF $(DEPDIR)/managesieve-cmd-renamescript.Tpo -c -o managesieve-cmd-renamescript.obj `if test -f 'cmd-renamescript.c'; then $(CYGPATH_W) 'cmd-renamescript.c'; else $(CYGPATH_W) '$(srcdir)/cmd-renamescript.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-renamescript.Tpo $(DEPDIR)/managesieve-cmd-renamescript.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-renamescript.c' object='managesieve-cmd-renamescript.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-renamescript.obj `if test -f 'cmd-renamescript.c'; then $(CYGPATH_W) 'cmd-renamescript.c'; else $(CYGPATH_W) '$(srcdir)/cmd-renamescript.c'; fi`
+
+managesieve-cmd-noop.o: cmd-noop.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-noop.o -MD -MP -MF $(DEPDIR)/managesieve-cmd-noop.Tpo -c -o managesieve-cmd-noop.o `test -f 'cmd-noop.c' || echo '$(srcdir)/'`cmd-noop.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-noop.Tpo $(DEPDIR)/managesieve-cmd-noop.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-noop.c' object='managesieve-cmd-noop.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-noop.o `test -f 'cmd-noop.c' || echo '$(srcdir)/'`cmd-noop.c
+
+managesieve-cmd-noop.obj: cmd-noop.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-cmd-noop.obj -MD -MP -MF $(DEPDIR)/managesieve-cmd-noop.Tpo -c -o managesieve-cmd-noop.obj `if test -f 'cmd-noop.c'; then $(CYGPATH_W) 'cmd-noop.c'; else $(CYGPATH_W) '$(srcdir)/cmd-noop.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-cmd-noop.Tpo $(DEPDIR)/managesieve-cmd-noop.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='cmd-noop.c' object='managesieve-cmd-noop.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-cmd-noop.obj `if test -f 'cmd-noop.c'; then $(CYGPATH_W) 'cmd-noop.c'; else $(CYGPATH_W) '$(srcdir)/cmd-noop.c'; fi`
+
+managesieve-managesieve-quota.o: managesieve-quota.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-managesieve-quota.o -MD -MP -MF $(DEPDIR)/managesieve-managesieve-quota.Tpo -c -o managesieve-managesieve-quota.o `test -f 'managesieve-quota.c' || echo '$(srcdir)/'`managesieve-quota.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-managesieve-quota.Tpo $(DEPDIR)/managesieve-managesieve-quota.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-quota.c' object='managesieve-managesieve-quota.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-managesieve-quota.o `test -f 'managesieve-quota.c' || echo '$(srcdir)/'`managesieve-quota.c
+
+managesieve-managesieve-quota.obj: managesieve-quota.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-managesieve-quota.obj -MD -MP -MF $(DEPDIR)/managesieve-managesieve-quota.Tpo -c -o managesieve-managesieve-quota.obj `if test -f 'managesieve-quota.c'; then $(CYGPATH_W) 'managesieve-quota.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-quota.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-managesieve-quota.Tpo $(DEPDIR)/managesieve-managesieve-quota.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-quota.c' object='managesieve-managesieve-quota.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-managesieve-quota.obj `if test -f 'managesieve-quota.c'; then $(CYGPATH_W) 'managesieve-quota.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-quota.c'; fi`
+
+managesieve-managesieve-client.o: managesieve-client.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-managesieve-client.o -MD -MP -MF $(DEPDIR)/managesieve-managesieve-client.Tpo -c -o managesieve-managesieve-client.o `test -f 'managesieve-client.c' || echo '$(srcdir)/'`managesieve-client.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-managesieve-client.Tpo $(DEPDIR)/managesieve-managesieve-client.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-client.c' object='managesieve-managesieve-client.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-managesieve-client.o `test -f 'managesieve-client.c' || echo '$(srcdir)/'`managesieve-client.c
+
+managesieve-managesieve-client.obj: managesieve-client.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-managesieve-client.obj -MD -MP -MF $(DEPDIR)/managesieve-managesieve-client.Tpo -c -o managesieve-managesieve-client.obj `if test -f 'managesieve-client.c'; then $(CYGPATH_W) 'managesieve-client.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-client.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-managesieve-client.Tpo $(DEPDIR)/managesieve-managesieve-client.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-client.c' object='managesieve-managesieve-client.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-managesieve-client.obj `if test -f 'managesieve-client.c'; then $(CYGPATH_W) 'managesieve-client.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-client.c'; fi`
+
+managesieve-managesieve-commands.o: managesieve-commands.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-managesieve-commands.o -MD -MP -MF $(DEPDIR)/managesieve-managesieve-commands.Tpo -c -o managesieve-managesieve-commands.o `test -f 'managesieve-commands.c' || echo '$(srcdir)/'`managesieve-commands.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-managesieve-commands.Tpo $(DEPDIR)/managesieve-managesieve-commands.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-commands.c' object='managesieve-managesieve-commands.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-managesieve-commands.o `test -f 'managesieve-commands.c' || echo '$(srcdir)/'`managesieve-commands.c
+
+managesieve-managesieve-commands.obj: managesieve-commands.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-managesieve-commands.obj -MD -MP -MF $(DEPDIR)/managesieve-managesieve-commands.Tpo -c -o managesieve-managesieve-commands.obj `if test -f 'managesieve-commands.c'; then $(CYGPATH_W) 'managesieve-commands.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-commands.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-managesieve-commands.Tpo $(DEPDIR)/managesieve-managesieve-commands.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-commands.c' object='managesieve-managesieve-commands.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-managesieve-commands.obj `if test -f 'managesieve-commands.c'; then $(CYGPATH_W) 'managesieve-commands.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-commands.c'; fi`
+
+managesieve-managesieve-capabilities.o: managesieve-capabilities.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-managesieve-capabilities.o -MD -MP -MF $(DEPDIR)/managesieve-managesieve-capabilities.Tpo -c -o managesieve-managesieve-capabilities.o `test -f 'managesieve-capabilities.c' || echo '$(srcdir)/'`managesieve-capabilities.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-managesieve-capabilities.Tpo $(DEPDIR)/managesieve-managesieve-capabilities.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-capabilities.c' object='managesieve-managesieve-capabilities.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-managesieve-capabilities.o `test -f 'managesieve-capabilities.c' || echo '$(srcdir)/'`managesieve-capabilities.c
+
+managesieve-managesieve-capabilities.obj: managesieve-capabilities.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-managesieve-capabilities.obj -MD -MP -MF $(DEPDIR)/managesieve-managesieve-capabilities.Tpo -c -o managesieve-managesieve-capabilities.obj `if test -f 'managesieve-capabilities.c'; then $(CYGPATH_W) 'managesieve-capabilities.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-capabilities.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-managesieve-capabilities.Tpo $(DEPDIR)/managesieve-managesieve-capabilities.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='managesieve-capabilities.c' object='managesieve-managesieve-capabilities.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-managesieve-capabilities.obj `if test -f 'managesieve-capabilities.c'; then $(CYGPATH_W) 'managesieve-capabilities.c'; else $(CYGPATH_W) '$(srcdir)/managesieve-capabilities.c'; fi`
+
+managesieve-main.o: main.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-main.o -MD -MP -MF $(DEPDIR)/managesieve-main.Tpo -c -o managesieve-main.o `test -f 'main.c' || echo '$(srcdir)/'`main.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-main.Tpo $(DEPDIR)/managesieve-main.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='main.c' object='managesieve-main.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-main.o `test -f 'main.c' || echo '$(srcdir)/'`main.c
+
+managesieve-main.obj: main.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT managesieve-main.obj -MD -MP -MF $(DEPDIR)/managesieve-main.Tpo -c -o managesieve-main.obj `if test -f 'main.c'; then $(CYGPATH_W) 'main.c'; else $(CYGPATH_W) '$(srcdir)/main.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/managesieve-main.Tpo $(DEPDIR)/managesieve-main.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='main.c' object='managesieve-main.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(managesieve_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o managesieve-main.obj `if test -f 'main.c'; then $(CYGPATH_W) 'main.c'; else $(CYGPATH_W) '$(srcdir)/main.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo

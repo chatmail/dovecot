@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -72,8 +72,8 @@ struct sieve_validator_extension_reg {
 	struct sieve_ast_argument *arg;
 	void *context;
 
-	unsigned int loaded:1;
-	unsigned int required:1;
+	bool loaded:1;
+	bool required:1;
 };
 
 /*

@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017 Pigeonhole authors, see the included COPYING file */
+/* Copyright (c) 2016-2018 Pigeonhole authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
@@ -13,8 +13,6 @@
 #include "mailbox-list-private.h"
 #include "imap-match.h"
 #include "imap-util.h"
-
-#include "strtrim.h"
 
 #include "imap-sieve.h"
 #include "imap-sieve-storage.h"
@@ -72,8 +70,8 @@ struct imap_sieve_user {
 	HASH_TABLE_TYPE(imap_sieve_mailbox_rule) mbox_rules;
 	ARRAY_TYPE(imap_sieve_mailbox_rule) mbox_patterns;
 
-	unsigned int sieve_active:1;
-	unsigned int user_script:1;
+	bool sieve_active:1;
+	bool user_script:1;
 };
 
 struct imap_sieve_mailbox_event {
@@ -204,7 +202,7 @@ imap_sieve_mailbox_error(struct mailbox *box,
  */
 
 static int imap_sieve_mailbox_get_script_real
-(struct mailbox *box, struct mailbox_transaction_context *t,
+(struct mailbox *box,
 	const char **script_name_r)
 {
 	struct mail_user *user = box->storage->user;
@@ -214,9 +212,9 @@ static int imap_sieve_mailbox_get_script_real
 	*script_name_r = NULL;
 
 	/* get the name of the Sieve script from mailbox METADATA */
-	if ((ret=mailbox_attribute_get(t, MAIL_ATTRIBUTE_TYPE_SHARED,
+	if ((ret=mailbox_attribute_get(box, MAIL_ATTRIBUTE_TYPE_SHARED,
 			MAILBOX_ATTRIBUTE_IMAPSIEVE_SCRIPT, &value)) < 0) {
-		imap_sieve_mailbox_error(t->box,
+		imap_sieve_mailbox_error(box,
 			"Failed to read /shared/"
 			MAILBOX_ATTRIBUTE_IMAPSIEVE_SCRIPT" "
 			"mailbox attribute: %s",
@@ -225,7 +223,7 @@ static int imap_sieve_mailbox_get_script_real
 	}
 
 	if (ret > 0) {
-		imap_sieve_mailbox_debug(t->box,
+		imap_sieve_mailbox_debug(box,
 			"Mailbox attribute /shared/"
 			MAILBOX_ATTRIBUTE_IMAPSIEVE_SCRIPT" "
 			"points to Sieve script `%s'", value.value);
@@ -235,9 +233,8 @@ static int imap_sieve_mailbox_get_script_real
 	} else {
 		struct mail_namespace *ns;
 		struct mailbox *inbox;
-		struct mailbox_transaction_context *ibt;
 
-		imap_sieve_mailbox_debug(t->box,
+		imap_sieve_mailbox_debug(box,
 			"Mailbox attribute /shared/"
 			MAILBOX_ATTRIBUTE_IMAPSIEVE_SCRIPT" "
 			"not found");
@@ -245,25 +242,20 @@ static int imap_sieve_mailbox_get_script_real
 		ns = mail_namespace_find_inbox(user->namespaces);
 		inbox = mailbox_alloc(ns->list, "INBOX",
 			MAILBOX_FLAG_READONLY);
-		if ((ret=mailbox_open(inbox)) >= 0) {
-			ibt = mailbox_transaction_begin
-				(inbox, MAILBOX_TRANSACTION_FLAG_EXTERNAL);
-			ret = mailbox_attribute_get(ibt,
-				MAIL_ATTRIBUTE_TYPE_SHARED,
-				MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER
-				MAILBOX_ATTRIBUTE_IMAPSIEVE_SCRIPT, &value);
-			mailbox_transaction_rollback(&ibt);
-		}
+		ret = mailbox_attribute_get(inbox,
+			MAIL_ATTRIBUTE_TYPE_SHARED,
+			MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER
+			MAILBOX_ATTRIBUTE_IMAPSIEVE_SCRIPT, &value);
 
 		if (ret <= 0) {
 			if (ret < 0) {
-				imap_sieve_mailbox_error(t->box,
+				imap_sieve_mailbox_error(box,
 					"Failed to read /shared/"
 					MAIL_SERVER_ATTRIBUTE_IMAPSIEVE_SCRIPT" "
 					"server attribute: %s",
 					mailbox_get_last_error(inbox, NULL));
 			} else if (ret == 0) {
-				imap_sieve_mailbox_debug(t->box,
+				imap_sieve_mailbox_debug(box,
 					"Server attribute /shared/"
 					MAIL_SERVER_ATTRIBUTE_IMAPSIEVE_SCRIPT" "
 					"not found");
@@ -273,7 +265,7 @@ static int imap_sieve_mailbox_get_script_real
 		}
 		mailbox_free(&inbox);
 
-		imap_sieve_mailbox_debug(t->box,
+		imap_sieve_mailbox_debug(box,
 			"Server attribute /shared/"
 			MAIL_SERVER_ATTRIBUTE_IMAPSIEVE_SCRIPT" "
 			"points to Sieve script `%s'", value.value);
@@ -286,13 +278,10 @@ static int imap_sieve_mailbox_get_script_real
 static int imap_sieve_mailbox_get_script
 (struct mailbox *box, const char **script_name_r)
 {
-	struct mailbox_transaction_context *t;
 	int ret;
 
-	t = mailbox_transaction_begin(box, 0);
 	ret = imap_sieve_mailbox_get_script_real
-		(box, t, script_name_r);
-	mailbox_transaction_rollback(&t);
+		(box, script_name_r);
 	return ret;
 }
 
@@ -534,7 +523,8 @@ imap_sieve_mailbox_save_finish(struct mail_save_context *ctx)
 
 static struct mailbox_transaction_context *
 imap_sieve_mailbox_transaction_begin(struct mailbox *box,
-			 enum mailbox_transaction_flags flags)
+			 enum mailbox_transaction_flags flags,
+			 const char *reason)
 {
 	union mailbox_module_context *lbox = IMAP_SIEVE_CONTEXT(box);
 	struct mail_user *user = box->storage->user;
@@ -544,7 +534,7 @@ imap_sieve_mailbox_transaction_begin(struct mailbox *box,
 	pool_t pool;
 
 	/* commence parent transaction */
-	t = lbox->super.transaction_begin(box, flags);
+	t = lbox->super.transaction_begin(box, flags, reason);
 
 	if (isuser == NULL || isuser->sieve_active ||
 		isuser->cur_cmd == IMAP_SIEVE_CMD_NONE)
@@ -645,10 +635,8 @@ imap_sieve_mailbox_transaction_run(
 	}
 
 	/* Make sure IMAPSIEVE is initialized for this user */
-	if (isuser->isieve == NULL) {
-		isuser->isieve = imap_sieve_init
-			(user, isuser->client->lda_set);
-	}
+	if (isuser->isieve == NULL)
+		isuser->isieve = imap_sieve_init(isuser->client);
 
 	can_discard = FALSE;
 	switch (isuser->cur_cmd) {
@@ -736,7 +724,7 @@ imap_sieve_mailbox_transaction_run(
 	}
 
 	/* Create transaction for event messages */
-	st = mailbox_transaction_begin(sbox, 0);
+	st = mailbox_transaction_begin(sbox, 0, __func__);
 	headers_ctx = mailbox_header_lookup_init(sbox, wanted_headers);
 	mail = mail_alloc(st, 0, headers_ctx);
 	mailbox_header_lookup_unref(&headers_ctx);
@@ -921,7 +909,7 @@ imap_sieve_mailbox_rules_init(struct mail_user *user)
 			(user, str_c(identifier));
 		if (setval == NULL || *setval == '\0')
 			break;
-		setval = ph_t_str_trim(setval, "\t ");
+		setval = t_str_trim(setval, "\t ");
 		if (strcasecmp(setval, "INBOX") == 0)
 			setval = t_str_ucase(setval);
 
@@ -934,7 +922,7 @@ imap_sieve_mailbox_rules_init(struct mail_user *user)
 		str_append(identifier, "_from");
 		setval = mail_user_plugin_getenv(user, str_c(identifier));
 		if (setval != NULL && *setval != '\0') {
-			setval = ph_t_str_trim(setval, "\t ");
+			setval = t_str_trim(setval, "\t ");
 			if (strcasecmp(setval, "INBOX") == 0)
 				setval = t_str_ucase(setval);
 			mbrule->from = p_strdup(user->pool, setval);

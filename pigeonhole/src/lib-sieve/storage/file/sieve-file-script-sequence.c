@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -25,7 +25,7 @@ struct sieve_file_script_sequence {
 	ARRAY_TYPE(const_string) script_files;
 	unsigned int index;
 
-	unsigned int storage_is_file:1;
+	bool storage_is_file:1;
 };
 
 static int sieve_file_script_sequence_read_dir

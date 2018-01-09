@@ -1,12 +1,586 @@
-2017-10-08 21:24:55 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (3e1590c4)
+2017-12-18 21:34:27 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d6f620fc)
 
-    Released v0.4.21.rc1 for Dovecot v2.2.33.rc1.
+    configure.ac: Updated package name to dovecot-2.3-pigeonhole.
+
+
+M	configure.ac
+
+2017-12-18 21:26:17 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2532be75)
+
+    doc: Updated Dovecot and Pigeonhole versions in man pages.
+
+
+M	doc/man/doveadm-sieve.1.in
+M	doc/man/pigeonhole.7.in
+M	doc/man/sieve-dump.1.in
+M	doc/man/sieve-filter.1.in
+M	doc/man/sieve-test.1.in
+M	doc/man/sievec.1.in
+
+2017-12-18 21:25:44 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (beedae6d)
+
+    README: Updated Dovecot version.
+
+
+M	README
+
+2017-12-18 21:11:31 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (0d0e634c)
+
+    lib-sieve: vacation extension: Use the correct address for "From:" outgoing
+    header when original envelope recipient is found.
+
+    Caused by earlier adjustments for Dovecot lib-smtp. Copy-paste problem
+    detected by Coverity.
+
+M	src/lib-sieve/plugins/vacation/cmd-vacation.c
+
+2017-12-18 20:08:51 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (bf274299)
+
+    Added v0.4.21 to NEWS.
 
 
 M	NEWS
+
+2017-12-18 19:55:03 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (aaf8ca7c)
+
+    test suite: enotify extension: Remove stray test_message_print call.
+
+    It is a remnant from debugging.
+
+M	tests/extensions/enotify/mailto.svtest
+
+2017-12-16 01:33:31 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f60f2785)
+
+    configure: Fixed ABI version number for 0.5.
+
+    It was still stuck at v0.4.
+
 M	configure.ac
 
-2017-10-05 23:29:25 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d70d514f)
+2017-12-03 13:17:24 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (1b2454cf)
+
+    lib-sieve: Fixed writing address headers to outgoing messages.
+
+    It erroneously applied another layer of MIME header encoding. The problem is
+    that existing Sieve scripts may rely on this behaviour; i.e. scripts may
+    contain addresesses with literal UTF8 in the phrase part. Therefore, this
+    change allows both behaviors.
+
+M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
+M	src/lib-sieve/plugins/notify/cmd-notify.c
+M	src/lib-sieve/plugins/vacation/cmd-vacation.c
+M	tests/extensions/enotify/mailto.svtest
+M	tests/extensions/vacation/utf-8.svtest
+
+2017-12-03 12:52:03 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (811f84f8)
+
+    lib-sieve: util: rfc2822: Added rfc2822_header_write_address() which allows
+    adding a header with one or more addresses.
+
+    It applies UTF8 encoding only when the address string somehow contains 8-bit
+    characters. Sieve addresses are supposed to have any UTF8 characters in the
+    phase MIME-encoded, not literal 8-bit characters. However, this has been
+    allowed from the beginning, so disabling the old behavior may break existing
+    installations. This function allows supporting both options.
+
+M	src/lib-sieve/util/rfc2822.c
+M	src/lib-sieve/util/rfc2822.h
+
+2017-12-11 17:39:04 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (fe3b7c4b)
+
+    managesieve: Include mail user variables in logout format
+
+    Also dropped the single-letter identifier for most fields to prevent
+    conflicts with mail user variables; these were undocumented anyway.
+
+M	src/managesieve/managesieve-client.c
+
+2017-12-11 17:35:07 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (95a0c04a)
+
+    doc: example-config: Document remaining supported managesieve_logout_format
+    substitution variables.
+
+    A few were still omitted.
+
+M	doc/example-config/conf.d/20-managesieve.conf
+
+2017-12-11 17:14:27 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (dbc3f2f8)
+
+    global: start relying on [io]_stream_unref(NULL) being a no-op
+
+    Cleanup performed with the following semantic patch:
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    - 	i_stream_unref(&E);
+    - }
+    + i_stream_unref(&E);
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    - 	o_stream_unref(&E);
+    - }
+    + o_stream_unref(&E);
+
+M	src/lib-managesieve/managesieve-parser.c
+M	src/lib-sieve-tool/mail-raw.c
+M	src/lib-sieve/sieve-script.c
+M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
+M	src/lib-sieve/util/edit-mail.c
+
+2017-12-11 17:08:21 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (45cfd196)
+
+    global: start relying on timeout_remove(NULL) being a no-op
+
+    Cleanup performed with the following semantic patch:
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    - 	timeout_remove(&E);
+    - }
+    + timeout_remove(&E);
+
+M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
+M	src/managesieve-login/client.c
+M	src/managesieve/managesieve-client.c
+
+2017-12-11 17:04:28 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (ca1773cd)
+
+    global: start relying on io_remove{,_closed}(NULL) being a no-op
+
+    Cleanup performed with the following semantic patch:
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    - 	io_remove(&E);
+    - }
+    + io_remove(&E);
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    - 	io_remove_closed(&E);
+    - }
+    + io_remove_closed(&E);
+
+M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
+M	src/managesieve/managesieve-client.c
+
+2017-12-15 13:21:30 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b5a9750a)
+
+    lib-sieve: Adjusted to changes in handling of postmaster_address setting in
+    Dovecot.
+
+    Error handling is delayed, so that we need to explicitly handle the error in
+    Sieve. This is now implemented by handling the error before executing the
+    scritpt and placing the parsed address in struct sieve_script_env.
+
+M	src/lib-sieve/sieve-types.h
+M	src/lib-sieve/sieve.c
+
+2017-12-15 12:46:54 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (15ddc4a0)
+
+    lib-sieve: Added sieve_script_env_init() to initialize struct
+    sieve_script_env from struct mail_user.
+
+
+M	src/lib-sieve/sieve.c
+M	src/lib-sieve/sieve.h
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+M	src/sieve-tools/sieve-filter.c
+M	src/sieve-tools/sieve-test.c
+M	src/testsuite/testsuite-script.c
+M	src/testsuite/testsuite.c
+
+2017-12-15 12:31:34 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (68395161)
+
+    plugins: lda-sieve: Restructured lda_sieve_execute() to reduce indent.
+
+    Most code was put in an unnecessary else block.
+
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+
+2017-12-13 19:57:39 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (32bdac72)
+
+    lib-sieve: file storage: When autodetecting storage path, use home even if
+    it doesn't exist
+
+    If a home directory is given, it's assumed that it will be autocreated even 
+    if it doesn't initially exist. Earlier the autocreation may have been done 
+    by lib-storage as it created the mail root directory, but this no longer 
+    happens.
+
+M	src/lib-sieve/storage/file/sieve-file-storage.c
+
+2017-12-12 16:35:55 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (cedc5e4b)
+
+    global: Adjust to mail_user_alloc() API change
+
+    The parent event doesn't really matter here, so NULL is used.
+
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/testsuite/testsuite-mailstore.c
+
+2017-12-11 16:45:58 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (624e1769)
+
+    managesieve: Adjusted to lib-storage changes in Dovecot.
+
+    This follows the following commits in Dovecot: lib-storage: Moved connection
+    information in struct mail_user into separate struct
+    mail_user_connection_data. lib-storage: mail-user: Added more information
+    about the client connection.
+
+M	src/managesieve/main.c
+
+2017-12-03 13:01:53 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (37853002)
+
+    lib-sieve: vnd.dovecot.report extension: Fixed creation of
+    "Original-Mail-From" and original "Original-Rcpt-To" headers.
+
+    Recent changes relating to lib-smtp caused the paths to have duplicate '<'
+    '>'.
+
+M	src/lib-sieve/plugins/vnd.dovecot/report/cmd-report.c
+
+2017-12-03 12:50:26 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (4a9bc3d2)
+
+    lib-sieve: enotify extension: mailto method: Fixed parsing of mailto URI
+    with only a header part.
+
+
+M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.c
+
+2017-01-20 19:16:06 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (fbedb2db)
+
+    Adjusted to the lib-smtp changes in Dovecot.
+
+    Now using struct smtp_address rather than sieve_address. In some cases,
+    struct message_address may prove to be more suitable, but this is the best
+    fit for now. Adjusted to the renamed fields in struct mail_deliver_context.
+
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/lib-sieve-tool/sieve-tool.h
+M	src/lib-sieve/cmd-redirect.c
+M	src/lib-sieve/ext-envelope.c
+M	src/lib-sieve/ext-reject.c
+M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
+M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.c
+M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.h
+M	src/lib-sieve/plugins/notify/cmd-notify.c
+M	src/lib-sieve/plugins/notify/ext-notify-common.c
+M	src/lib-sieve/plugins/notify/ext-notify-common.h
+M	src/lib-sieve/plugins/subaddress/ext-subaddress.c
+M	src/lib-sieve/plugins/vacation/cmd-vacation.c
+M	src/lib-sieve/plugins/vnd.dovecot/report/cmd-report.c
+M	src/lib-sieve/sieve-actions.c
+M	src/lib-sieve/sieve-actions.h
+M	src/lib-sieve/sieve-address-parts.c
+M	src/lib-sieve/sieve-address-parts.h
+M	src/lib-sieve/sieve-address-source.c
+M	src/lib-sieve/sieve-address-source.h
+M	src/lib-sieve/sieve-address.c
+M	src/lib-sieve/sieve-address.h
+M	src/lib-sieve/sieve-common.h
+M	src/lib-sieve/sieve-config.h
+M	src/lib-sieve/sieve-message.c
+M	src/lib-sieve/sieve-message.h
+M	src/lib-sieve/sieve-settings.c
+M	src/lib-sieve/sieve-smtp.c
+M	src/lib-sieve/sieve-smtp.h
+M	src/lib-sieve/sieve-types.h
+M	src/lib-sieve/sieve.c
+M	src/plugins/imapsieve/ext-imapsieve-environment.c
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/plugins/lda-sieve/Makefile.am
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
+M	src/sieve-tools/sieve-filter.c
+M	src/sieve-tools/sieve-test.c
+M	src/testsuite/testsuite-message.c
+M	src/testsuite/testsuite-message.h
+M	src/testsuite/testsuite-smtp.c
+M	src/testsuite/testsuite-smtp.h
+M	src/testsuite/testsuite.c
+M	tests/execute/smtp.svtest
+M	tests/extensions/envelope.svtest
+M	tests/extensions/reject/smtp.svtest
+
+2017-11-16 00:07:14 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (89f1d4ab)
+
+    lib-sieve: enotify extension: uri-mailto: Removed unused field.
+
+    It doesn't serve a purpose either, since parsing "from" address from URI is
+    not allowed for notify mailto.
+
+M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.h
+
+2017-11-25 11:51:02 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (81505779)
+
+    lib-sieve: store action: Avoid NULL pointer dereference during rollback when
+    transaction context is somehow unassigned.
+
+    This change matches the other transaction stages. This will not currently
+    happen though. Reported by Coverity.
+
+M	src/lib-sieve/sieve-actions.c
+
+2017-11-25 11:45:52 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (972bafc4)
+
+    lib-managesieve: managesieve-parser: Return error status in quoted string
+    stream immediately.
+
+    Otherwise the error status is overwritten. Problem found by Coverity.
+
+M	src/lib-managesieve/managesieve-parser.c
+
+2017-11-25 11:28:57 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c9cf5650)
+
+    lib-sieve: util: edit-mail: Fixed potential NULL dereference in
+    edit_mail_istream_seek().
+
+    Used the stream's cur_header field, rather than the local variable. Problem
+    found by Coverity.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-25 11:22:56 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (1e20fa6c)
+
+    lib-sieve: util: edit-header: Fixed potential NULL dereference in
+    edit_mail_istream_read().
+
+    The merge_from_parent() function may not actually read anything, potentially
+    leaving the stream buffer unassigned. Problem found by Coverity.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-03-31 01:48:41 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (6f31aa72)
+
+    lib-sieve: variables extension: Made the maximum scope and variable size
+    configurable.
+
+
+M	INSTALL
+A	doc/extensions/variables.txt
+M	src/lib-sieve/plugins/imap4flags/ext-imap4flags-common.c
+M	src/lib-sieve/plugins/include/ext-include-common.c
+M	src/lib-sieve/plugins/include/ext-include-variables.c
+M	src/lib-sieve/plugins/mime/cmd-extracttext.c
+M	src/lib-sieve/plugins/variables/cmd-set.c
+M	src/lib-sieve/plugins/variables/ext-variables-arguments.c
+M	src/lib-sieve/plugins/variables/ext-variables-common.c
+M	src/lib-sieve/plugins/variables/ext-variables-common.h
+M	src/lib-sieve/plugins/variables/ext-variables-dump.c
+M	src/lib-sieve/plugins/variables/ext-variables-limits.h
+M	src/lib-sieve/plugins/variables/ext-variables-modifiers.c
+M	src/lib-sieve/plugins/variables/ext-variables-operands.c
+M	src/lib-sieve/plugins/variables/ext-variables.c
+M	src/lib-sieve/plugins/variables/sieve-ext-variables.h
+M	src/plugins/sieve-extprograms/cmd-execute.c
+
+2017-11-03 21:31:36 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (56b46cd0)
+
+    lib-sieve: util: edit-mail: Changed buffer implementation to use normal
+    stream buffer management.
+
+    This makes the implementation easier to understand and amend once Dovecot
+    APIs changes. This implicitly makes the implementation suitable for the new
+    istream snapshot handling.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-04 00:42:47 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c8a70d56)
+
+    lib-sieve: util: edit-mail: Restructured merge_modified_headers() to remove
+    useless indent.
+
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-03 21:26:52 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (ce92b90b)
+
+    lib-sieve: util: edit-mail: Properly remember the detection of EOF in the
+    edit mail stream.
+
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-02 11:43:08 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (87402574)
+
+    lib-sieve: util: edit-mail: Fixed runtime integer arithmetic warnings
+    (CLang).
+
+    Added assertions on subtractions. Restructured the code for clarity. Added
+    comments.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-03 21:33:06 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (48a29a0b)
+
+    testsuite: editheader extension: Added a few more tests.
+
+
+M	tests/extensions/editheader/addheader.svtest
+
+2017-11-01 22:55:34 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (daeff904)
+
+    lib-managesieve: managesieve-parser: Adjusted quoted string stream to
+    istream changes in Dovecot.
+
+    Ported Dovecot's istream-jsonstr for ManageSieve syntax.
+
+M	src/lib-managesieve/managesieve-parser.c
+
+2017-11-01 22:54:05 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c582d151)
+
+    managesieve: putscript command: Fixed parse error handling for save parser.
+
+
+M	src/managesieve/cmd-putscript.c
+
+2017-11-07 00:42:24 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (96fe42e7)
+
+    managesieve-login: Removed ssl-proxy.h include forgotten in the previous
+    commit.
+
+
+M	src/managesieve-login/client.c
+
+2017-11-02 15:28:32 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (001d9f1f)
+
+    managesieve-login: Core API change - rename ssl_initialized to
+    login_ssl_initialized
+
+
+M	src/managesieve-login/client.c
+
+2017-11-02 23:45:17 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a5b04e7a)
+
+    managesieve: Don't access login_set.*_socket_path after they're freed from
+    data stack
+
+    Call master_login_init() before master_service_init_finish(), which frees 
+    all the data stack done in initialization.
+
+    This didn't normally cause any visible problems, because data stack wasn't 
+    currently being used in a way that the strings were invalidated. However, it
+    was causing failures if --enable-devel-checks was used.
+
+M	src/managesieve/main.c
+
+2017-11-02 09:54:39 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (4fd3b53a)
+
+    lib-managesieve,lib-sieve: Add istream_create_flag parameter to
+    i_stream_create
+
+
+M	src/lib-managesieve/managesieve-parser.c
+M	src/lib-sieve/util/edit-mail.c
+
+2017-11-01 11:57:58 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (6558a20e)
+
+    lib-sieve: Fix undefined define
+
+
+M	src/lib-sieve/storage/ldap/sieve-ldap-db.h
+
+2017-10-30 16:14:26 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (f4659224)
+
+    global: Rename i_stream_is_eof() to i_stream_read_eof()
+
+
+M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
+
+2017-10-28 03:16:35 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (40c54675)
+
+    global: Replace o_stream_nfinish() with o_stream_finish
+
+
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/lib-sieve/sieve.c
+M	src/testsuite/testsuite-smtp.c
+
+2017-10-29 21:27:05 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (0f46b1d8)
+
+    configure: Support EXTRA_CFLAGS/LDFLAGS
+
+
+M	configure.ac
+
+2017-10-23 15:11:18 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (97a87ac7)
+
+    lib-sieve: Use uni_is_valid_ucs4 to check ucs4 validity
+
+
+M	src/lib-sieve/ext-encoded-character.c
+
+2017-10-23 01:34:09 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (454bbd47)
+
+    managesieve: Fixed spelling mistake in source code.
+
+    Patch by Andreas Schulze.
+
+M	src/managesieve/managesieve-common.h
+
+2017-10-23 01:32:34 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d0dab022)
+
+    lib-sieve: Fixed spelling mistakes in source code.
+
+    Patch by Andreas Schulze.
+
+M	src/lib-sieve/plugins/notify/cmd-notify.c
+M	src/lib-sieve/sieve-match.h
+M	src/lib-sieve/sieve-storage.c
+
+2017-10-23 01:31:49 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (f85c4e8c)
+
+    doc/man/sieve-test.1: Fixed spelling mistake.
+
+    Patch by Andreas Schulze.
+
+M	doc/man/sieve-test.1.in
+
+2017-10-21 12:45:29 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (1210d338)
+
+    lib-sieve: enotify plugin: mailto method: Make sure from header is set to a
+    usable address and not (null).
+
+
+M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
+
+2017-10-06 18:51:40 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (8b5be61d)
+
+    managesieve: Remove fd-set-nonblock.h includes.
+
+    It's replaced with fd-util.h which is automatically included now.
+
+M	src/managesieve-login/managesieve-login-settings-plugin.c
+M	src/managesieve-login/managesieve-login-settings.c
+M	src/managesieve/main.c
+
+2017-10-06 13:57:31 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (620b7808)
+
+    lib-sieve-tool: Remove fd-set-nonblock.h
+
+    It's replaced with fd-util.h which is automatically included now
+
+M	src/lib-sieve-tool/mail-raw.c
+
+2017-10-05 23:29:25 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (37e8f71c)
 
     managesieve: Fix missing-command check
 
@@ -21,7 +595,7 @@ M	configure.ac
 
 M	src/managesieve/managesieve-client.c
 
-2017-10-05 23:19:13 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (ca39c2b7)
+2017-10-05 23:19:13 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (15f9fd11)
 
     imapsieve: Fixed check for the presence of causes in a mailbox rule.
 
@@ -29,7 +603,7 @@ M	src/managesieve/managesieve-client.c
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2017-10-05 23:15:17 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (2c13cd16)
+2017-10-05 23:15:17 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (370b9739)
 
     lib-sieve: sieve-result: Added /* fall through */ comment to mark
     intentional switch case fall through.
@@ -38,14 +612,65 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 
 M	src/lib-sieve/sieve-result.c
 
-2017-10-05 12:54:16 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (bd7dd9be)
+2017-09-22 15:59:15 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (a0997e4f)
 
-    Added v0.4.20 to NEWS.
+    Obtain postmaster_address and hostname from mail_storage_settings.
 
 
-M	NEWS
+M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
+M	src/lib-sieve/plugins/notify/cmd-notify.c
+M	src/lib-sieve/plugins/vacation/cmd-vacation.c
+M	src/lib-sieve/plugins/vnd.dovecot/report/cmd-report.c
+M	src/lib-sieve/sieve-actions.c
+M	src/lib-sieve/sieve-address-source.c
+M	src/lib-sieve/sieve-common.h
+M	src/lib-sieve/sieve-types.h
+M	src/lib-sieve/sieve.c
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+M	src/sieve-tools/sieve-filter.c
+M	src/sieve-tools/sieve-test.c
+M	src/testsuite/testsuite-mailstore.c
+M	src/testsuite/testsuite-script.c
+M	src/testsuite/testsuite.c
 
-2017-09-30 21:19:11 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (0828d808)
+2017-09-14 04:11:42 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (1b42755f)
+
+    plugins: Migrated from lib-lda/smtp-client.h to using lib-smtp/smtp-submit.h
+    for message submission.
+
+
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+
+2017-09-16 14:48:52 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (8b7bf6b6)
+
+    plugins/imapsieve: Initialize struct imap_sieve with full struct client,
+    rather than individual fields.
+
+
+M	src/plugins/imapsieve/imap-sieve-storage.c
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/plugins/imapsieve/imap-sieve.h
+
+2017-10-04 23:32:23 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (4d0db1ce)
+
+    Adjusted to changes in Dovecot mail_duplicate API.
+
+
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+
+2017-09-14 03:31:55 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (3ac2b15c)
+
+    lib-sieve: Dropped lib-lda dependencies.
+
+
+M	src/lib-sieve/Makefile.am
+M	src/lib-sieve/sieve-actions.c
+M	src/lib-sieve/sieve-result.c
+
+2017-09-30 21:19:11 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (418816cd)
 
     lib-sieve: redirect action: Always set X-Sieve-Redirected-From header to
     sieve_user_email if configured.
@@ -56,14 +681,28 @@ M	NEWS
 M	src/lib-sieve/cmd-redirect.c
 M	tests/execute/smtp.svtest
 
-2017-09-30 21:23:44 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (862b85ee)
+2017-09-30 21:23:44 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (b38df93b)
 
     testsuite: Fixed redirect action tests to use the correct test message.
 
 
 M	tests/execute/smtp.svtest
 
-2017-08-24 02:03:21 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (70c218b5)
+2017-09-22 16:30:26 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (c978393b)
+
+    global: Add reasons to mailbox_transaction_begins
+
+
+M	src/lib-sieve-tool/mail-raw.c
+M	src/lib-sieve/sieve-actions.c
+M	src/lib-sieve/sieve-message.c
+M	src/lib-sieve/sieve-storage-sync.c
+M	src/lib-sieve/util/edit-mail.c
+M	src/plugins/imapsieve/imap-sieve-storage.c
+M	src/sieve-tools/sieve-filter.c
+M	src/testsuite/testsuite-mailstore.c
+
+2017-08-24 02:03:21 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (8643cbde)
 
     lib-sieve: vacation extension: Allow ignoring the envelope sender while
     composing the "To:" header for the reply.
@@ -82,7 +721,7 @@ M	src/lib-sieve/plugins/vacation/ext-vacation-common.c
 M	src/lib-sieve/plugins/vacation/ext-vacation-common.h
 M	tests/extensions/vacation/message.svtest
 
-2017-09-05 21:29:06 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (94bf0445)
+2017-09-05 21:29:06 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (2b3aca5a)
 
     LDA Sieve plugin: Fixed sequential exection of LDAP-based scripts.
 
@@ -93,7 +732,7 @@ M	tests/extensions/vacation/message.svtest
 
 M	src/plugins/lda-sieve/lda-sieve-plugin.c
 
-2017-09-05 20:26:21 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d821544c)
+2017-09-05 20:26:21 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (15bd3533)
 
     LDA Sieve plugin: Restructured execution of scripts by putting execution of
     individual scripts in separate function.
@@ -101,7 +740,7 @@ M	src/plugins/lda-sieve/lda-sieve-plugin.c
 
 M	src/plugins/lda-sieve/lda-sieve-plugin.c
 
-2017-08-29 22:43:49 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (b44942ba)
+2017-08-29 22:43:49 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (e5ea21fb)
 
     lib-sieve: imap4flags extension: Added API for runtime initialization of
     derived extensions.
@@ -114,15 +753,7 @@ M	src/lib-sieve/plugins/imap4flags/ext-imap4flags.c
 M	src/lib-sieve/plugins/imap4flags/ext-imapflags.c
 M	src/lib-sieve/plugins/imap4flags/sieve-ext-imap4flags.h
 
-2017-08-30 21:42:50 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (fccacbd0)
-
-    lib-sieve/util: Fixed copyright messages.
-
-
-M	src/lib-sieve/util/realpath.c
-M	src/lib-sieve/util/strtrim.c
-
-2017-08-30 21:42:31 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (6bf4d9b1)
+2017-08-30 21:27:42 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (736f94ea)
 
     imapsieve plugin: Fixed copyright messages.
 
@@ -130,7 +761,7 @@ M	src/lib-sieve/util/strtrim.c
 M	src/plugins/imapsieve/imap-sieve-plugin.c
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2017-08-28 13:04:40 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (621b0f43)
+2017-08-28 13:04:40 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (e37583a9)
 
     sieve-filter: Removed (now) duplicate utf8 to mutf7 mailbox name conversion.
 
@@ -139,7 +770,7 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 
 M	src/sieve-tools/sieve-filter.c
 
-2017-08-22 13:15:34 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (6c95b561)
+2017-08-22 13:15:34 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (dc20a45f)
 
     imapsieve plugin: Provide proper error details upon failure to access the
     mailbox/server script METADATA attribute.
@@ -148,16 +779,7 @@ M	src/sieve-tools/sieve-filter.c
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2016-08-13 17:26:56 +0200 Stephan Bosch <stephan@dovecot.fi> (87183a71)
-
-    imapsieve plugin: Fixed potential segfault bug caused by shadowing a
-    parameter with a local variable.
-
-    Renamed the local variable. Found by Coverity.
-
-M	src/plugins/imapsieve/imap-sieve-storage.c
-
-2017-08-18 16:20:22 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (bad3c697)
+2017-08-18 16:20:22 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (e0e179b3)
 
     lib-sieve: vacation extension: Fixed invalid return value in function added
     by previous change.
@@ -165,7 +787,7 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 
 M	src/lib-sieve/plugins/vacation/cmd-vacation.c
 
-2017-08-17 18:59:33 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (c617fbd4)
+2017-08-17 18:59:33 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d55d8773)
 
     lib-sieve: vacation extension: Compose the "To:" header from full sender
     address found in the first "Sender:", "From:" or "Resent-From:" header.
@@ -177,7 +799,7 @@ M	src/lib-sieve/plugins/vacation/cmd-vacation.c
 M	src/lib-sieve/plugins/vacation/cmd-vacation.c
 M	tests/extensions/vacation/message.svtest
 
-2017-08-17 00:17:13 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (38f220a3)
+2017-08-17 00:17:13 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (c7882e61)
 
     lib-sieve: vacation extension: Use mail_get_first_header*() rather than
     mail_get_headers(*).
@@ -186,28 +808,14 @@ M	tests/extensions/vacation/message.svtest
 
 M	src/lib-sieve/plugins/vacation/cmd-vacation.c
 
-2017-08-17 00:15:27 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (07e0c15f)
+2017-08-17 00:15:27 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (3a1ce369)
 
     testsuite: vacation extension: Test creation of subject header better.
 
 
 M	tests/extensions/vacation/message.svtest
 
-2017-08-16 11:04:07 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (f0eff5a6)
-
-    Added v0.4.18 to NEWS.
-
-
-M	NEWS
-
-2016-05-02 17:09:12 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d0f80d30)
-
-    testsuite: Adjusted to changes in Dovecot lib-storage API.
-
-
-M	src/testsuite/testsuite-mailstore.c
-
-2017-07-08 10:51:27 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (1a93191c)
+2017-07-08 10:51:27 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d188419f)
 
     sieve-tools: sieve-filter: Forgot to clean up script binary at end of
     execution.
@@ -219,7 +827,7 @@ M	src/testsuite/testsuite-mailstore.c
 
 M	src/sieve-tools/sieve-filter.c
 
-2017-07-08 10:27:52 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (a7b315c7)
+2017-07-08 10:27:52 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (7aabfac4)
 
     sieve-tools: Terminate with a fatal error when script cannot be
     compiled/opened.
@@ -228,7 +836,7 @@ M	src/sieve-tools/sieve-filter.c
 
 M	src/lib-sieve-tool/sieve-tool.c
 
-2017-07-06 12:34:08 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d6598cc6)
+2017-07-06 12:34:08 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (c80aa7c2)
 
     managesieve-login: managesieve_client_input_next_cmd(): Fix handling of
     command continuation.
@@ -247,7 +855,7 @@ M	src/lib-sieve-tool/sieve-tool.c
 
 M	src/managesieve-login/client.c
 
-2017-07-06 12:28:44 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (159ab369)
+2017-07-06 12:28:44 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (f7b63d94)
 
     managesieve-login: authenticate command: Make sure
     client->auth_mech_name_parsed is reset properly upon command error.
@@ -256,7 +864,7 @@ M	src/managesieve-login/client.c
 
 M	src/managesieve-login/client-authenticate.c
 
-2017-06-28 18:41:33 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (af36600d)
+2017-06-28 18:41:33 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (dd34509a)
 
     LDA Sieve plugin: Fixed memory leak caused by not cleaning up the
     sieve_discard script.
@@ -265,7 +873,25 @@ M	src/managesieve-login/client-authenticate.c
 
 M	src/plugins/lda-sieve/lda-sieve-plugin.c
 
-2017-06-13 19:36:57 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (ccb15cc9)
+2017-06-22 21:12:21 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (c024dc7c)
+
+    lib-sieve: include extension: Fixed segfault that (sometimes) occurred when
+    the global script location was left unconfigured.
+
+
+M	src/lib-sieve/plugins/include/ext-include-binary.c
+M	src/lib-sieve/plugins/include/ext-include-common.c
+
+2017-06-20 23:36:10 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (f68f5637)
+
+    sieve-tools: Make sure sieve command line tools properly show debug messages
+    if requested.
+
+
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/sieve-tools/sieve-filter.c
+
+2017-06-13 19:36:57 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (de4248b9)
 
     lib-sieve: Made the retention period for redirect duplicate identifiers
     configurable.
@@ -280,39 +906,21 @@ M	src/lib-sieve/sieve-common.h
 M	src/lib-sieve/sieve-config.h
 M	src/lib-sieve/sieve-settings.c
 
-2017-06-22 21:12:21 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (0714b34d)
-
-    lib-sieve: include extension: Fixed segfault that (sometimes) occurred when
-    the global script location was left unconfigured.
-
-
-M	src/lib-sieve/plugins/include/ext-include-binary.c
-M	src/lib-sieve/plugins/include/ext-include-common.c
-
-2017-06-20 23:36:10 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (62151b1a)
-
-    sieve-tools: Make sure sieve command line tools properly show debug messages
-    if requested.
-
-
-M	src/lib-sieve-tool/sieve-tool.c
-M	src/sieve-tools/sieve-filter.c
-
-2017-06-20 20:46:28 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (39d4c9e4)
+2017-06-20 20:46:28 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (82563e97)
 
     lib-sieve: Clear extension context upon unload.
 
 
 M	src/lib-sieve/sieve-extensions.c
 
-2017-06-16 14:42:39 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c8546556)
+2017-06-16 14:42:39 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (072b0b49)
 
     managesieve-login: Adjust to new client_vfuncs.free() API change
 
 
 M	src/managesieve-login/client.c
 
-2017-06-14 12:39:46 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (fbe1a744)
+2017-06-14 12:39:46 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (303e561c)
 
     managesieve-login: managesieve_client_input_next_cmd() - Add assert to help
     static analyzer
@@ -320,28 +928,21 @@ M	src/managesieve-login/client.c
 
 M	src/managesieve-login/client.c
 
-2017-06-14 12:39:02 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4434f69e)
+2017-06-14 12:39:02 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ea7e1789)
 
     managesieve-login: managesieve_client_input_next_cmd() - minor code cleanup
 
 
 M	src/managesieve-login/client.c
 
-2017-06-12 23:00:26 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (7ef66803)
+2017-06-12 23:00:26 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9d66c3e5)
 
     managesieve-login: Adjust to login-common API change
 
 
 M	src/managesieve-login/client.c
 
-2017-05-24 17:00:26 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (183bc5b9)
-
-    Added v0.4.18 to NEWS.
-
-
-M	NEWS
-
-2017-04-28 00:02:39 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (403042e7)
+2017-04-28 00:02:39 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (3e1a17a2)
 
     lib-sieve: Fixed bug in handling of deferred implicit keep with implicit
     side-effects.
@@ -351,21 +952,21 @@ M	NEWS
 
 M	src/lib-sieve/sieve-result.c
 
-2017-04-24 18:58:07 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b07b4c05)
+2017-04-24 18:58:07 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (11d5f197)
 
     imapsieve: Use client_add_capability() for adding the dynamic capability
 
 
 M	src/plugins/imapsieve/imap-sieve-plugin.c
 
-2017-04-21 13:37:40 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (583db21e)
+2017-04-21 13:37:40 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (649c7785)
 
     managesieve-login: Fill the new client_vfuncs.send_raw_data
 
 
 M	src/managesieve-login/client.c
 
-2017-04-12 13:17:53 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (3346f01f)
+2017-04-12 13:17:53 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (6891f70d)
 
     imapsieve: Fixed flag assignment for the source message.
 
@@ -373,21 +974,14 @@ M	src/managesieve-login/client.c
 
 M	src/plugins/imapsieve/imap-sieve.c
 
-2017-04-05 16:02:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e5062533)
+2017-04-05 16:02:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b8af3b97)
 
     managesieve-login: Fill the new banner_sent field.
 
 
 M	src/managesieve-login/client.c
 
-2017-04-03 20:13:50 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (56ce39d4)
-
-    Added v0.4.17 to NEWS.
-
-
-M	NEWS
-
-2017-03-10 21:48:14 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (256ff65c)
+2017-03-10 21:48:14 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e69a6dec)
 
     imapsieve plugin: Implemented the copy_source_after rule action.
 
@@ -399,7 +993,7 @@ M	NEWS
 M	doc/plugins/imapsieve.txt
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2017-03-10 21:53:19 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (951ee5bd)
+2017-03-10 21:53:19 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (71e773ca)
 
     imapsieve plugin: Prevent recording events for the COPY/MOVE source mailbox
     transaction.
@@ -410,7 +1004,7 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2017-03-10 21:44:36 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e9eece0d)
+2017-03-10 21:44:36 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b7ade8c3)
 
     imapsieve plugin: Added non-standard Sieve environment items for source and
     destination mailbox.
@@ -425,7 +1019,7 @@ M	src/plugins/imapsieve/imap-sieve.c
 M	src/plugins/imapsieve/imap-sieve.h
 M	src/plugins/imapsieve/sieve-imapsieve-plugin.c
 
-2017-03-10 21:36:13 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (47e54e4d)
+2017-03-10 21:36:13 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (1748e01b)
 
     imapsieve plugin: Don't open the user's personal script storage if no
     personal script is configured.
@@ -433,7 +1027,7 @@ M	src/plugins/imapsieve/sieve-imapsieve-plugin.c
 
 M	src/plugins/imapsieve/imap-sieve.c
 
-2017-03-10 21:31:40 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c2e9ef09)
+2017-03-10 21:31:40 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (148ba040)
 
     imapsieve plugin: Forgot to cleanup imap_sieve_run object when
     mailbox_sync() fails.
@@ -441,7 +1035,7 @@ M	src/plugins/imapsieve/imap-sieve.c
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2017-03-16 20:56:46 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (8d5bc6c6)
+2017-03-16 20:56:46 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e0283189)
 
     lib-sieve: multiscript: The execution of the discard script had an implicit
     "keep", rather than an implicit "discard".
@@ -449,7 +1043,7 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 
 M	src/lib-sieve/sieve.c
 
-2017-03-09 12:13:04 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (49526029)
+2017-03-09 12:13:04 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (8053c068)
 
     managesieve-login: Log proxy state as human-readable string
 
@@ -459,7 +1053,7 @@ M	src/managesieve-login/client.h
 M	src/managesieve-login/managesieve-proxy.c
 M	src/managesieve-login/managesieve-proxy.h
 
-2017-03-09 12:10:30 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (5144d5b0)
+2017-03-09 12:10:30 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (9f9bc901)
 
     managesieve-login: Use enum managesieve_proxy_state for proxy_state
 
@@ -467,7 +1061,7 @@ M	src/managesieve-login/managesieve-proxy.h
 M	src/managesieve-login/client.h
 M	src/managesieve-login/managesieve-proxy.c
 
-2017-02-26 19:23:34 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (023f391e)
+2017-02-26 19:23:34 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (bf2bd0ff)
 
     lib-sieve: store action: Made static analyzer happier about tr_context
     argument for sieve_act_store_add_flags().
@@ -476,7 +1070,7 @@ M	src/managesieve-login/managesieve-proxy.c
 
 M	src/lib-sieve/sieve-actions.c
 
-2017-02-26 18:25:53 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2888ba02)
+2017-02-26 18:25:53 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7d06cde9)
 
     managesieve: Fix creation of critical error message timestamp.
 
@@ -486,7 +1080,16 @@ M	src/lib-sieve/sieve-actions.c
 
 M	src/managesieve/managesieve-client.c
 
-2017-02-16 17:00:53 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (fe4cc662)
+2017-02-22 13:36:26 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (92f3d323)
+
+    global: Replace mail_storage_service_user_free() with _unref()
+
+
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/managesieve/main.c
+M	src/managesieve/managesieve-client.c
+
+2017-02-16 17:00:53 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c4df3317)
 
     lib-sieve: Made public function for adding a redirect action to the result.
 
@@ -495,7 +1098,7 @@ M	src/lib-sieve/cmd-redirect.c
 M	src/lib-sieve/sieve-actions.c
 M	src/lib-sieve/sieve-actions.h
 
-2017-02-07 18:10:48 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e64d3e24)
+2017-02-07 18:10:48 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (25a5a493)
 
     lib-sieve: Implemented means to abort SMTP message submission after it is
     started.
@@ -512,14 +1115,7 @@ M	src/testsuite/testsuite-smtp.c
 M	src/testsuite/testsuite-smtp.h
 M	src/testsuite/testsuite.c
 
-2017-02-20 11:06:25 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (91ab251f)
-
-    Added v0.4.16 to NEWS.
-
-
-M	NEWS
-
-2017-02-19 00:55:12 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (362f0a45)
+2017-02-19 00:55:12 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (051cf477)
 
     doveadm-sieve: Fix crash when setting Sieve script via attribute's string
     value.
@@ -527,7 +1123,7 @@ M	NEWS
 
 M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
 
-2017-02-09 18:48:20 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (0d78a300)
+2017-02-09 18:48:20 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a1dbf7a9)
 
     lib-sieve: Remove unnecessary mailbox_save_set_dest_mail() call
 
@@ -535,7 +1131,7 @@ M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
 M	src/lib-sieve/sieve-actions.c
 M	src/lib-sieve/sieve-actions.h
 
-2017-02-09 17:26:29 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (3f5a70bf)
+2017-02-09 17:26:29 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (85c9de00)
 
     imapsieve: Remove unnecessary mail_save_context.dest_mail==NULL checks
 
@@ -544,7 +1140,7 @@ M	src/lib-sieve/sieve-actions.h
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2017-02-12 15:29:14 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (356dcd49)
+2017-02-12 15:29:14 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (298b3410)
 
     lib-sieve: file storage: Amended the up-to-date timestamp comparison for
     on-disk binaries to include nanoseconds.
@@ -555,7 +1151,7 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 
 M	src/lib-sieve/storage/file/sieve-file-script.c
 
-2017-02-12 15:28:44 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (4f513558)
+2017-02-12 15:28:44 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (602326ee)
 
     lib-sieve: binary: Added means to obtain stat() information from loaded
     binary.
@@ -564,7 +1160,7 @@ M	src/lib-sieve/storage/file/sieve-file-script.c
 M	src/lib-sieve/sieve-binary.c
 M	src/lib-sieve/sieve-binary.h
 
-2017-02-12 14:01:41 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (9f7bbf78)
+2017-02-12 14:01:41 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (014df56e)
 
     imapsieve plugin: Make sure "INBOX" is upper case in static mailbox rules.
 
@@ -575,7 +1171,7 @@ M	src/lib-sieve/sieve-binary.h
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2017-02-12 11:46:31 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f64de45c)
+2017-02-12 11:46:31 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (34d44f7a)
 
     lib-sieve: file storage: Improve save permission error.
 
@@ -583,7 +1179,7 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 
 M	src/lib-sieve/storage/file/sieve-file-storage-save.c
 
-2017-02-08 02:08:17 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (6dd99df9)
+2017-02-08 02:08:17 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (51e4ff29)
 
     lib-sieve: file storage: Improve listing permission error.
 
@@ -591,7 +1187,24 @@ M	src/lib-sieve/storage/file/sieve-file-storage-save.c
 
 M	src/lib-sieve/storage/file/sieve-file-storage-list.c
 
-2017-01-14 02:52:42 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d0f4804d)
+2016-11-28 18:55:10 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (03434fa4)
+
+    global: Replace realpath with path-util from core.
+
+    path-util is a merge of realpath from Pigeonhole and abspath from core.
+
+M	src/lib-sieve-tool/mail-raw.c
+M	src/lib-sieve/storage/file/sieve-file-script.c
+M	src/lib-sieve/storage/file/sieve-file-storage-active.c
+M	src/lib-sieve/storage/file/sieve-file-storage.c
+M	src/lib-sieve/util/Makefile.am
+D	src/lib-sieve/util/realpath.c
+D	src/lib-sieve/util/realpath.h
+M	src/managesieve/main.c
+M	src/testsuite/testsuite-mailstore.c
+M	src/testsuite/testsuite.c
+
+2017-01-14 02:52:42 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (462a5352)
 
     lib-sieve: Fixed transaction context passed to finish() method of action
     object in two cases.
@@ -602,7 +1215,7 @@ M	src/lib-sieve/storage/file/sieve-file-storage-list.c
 
 M	src/lib-sieve/sieve-result.c
 
-2017-01-13 23:24:10 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e043611e)
+2017-01-13 23:24:10 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (77248553)
 
     lib-sieve: Fixed handling of an early explicit keep during multiscript
     execution.
@@ -619,14 +1232,14 @@ M	src/lib-sieve/sieve-result.c
 
 M	src/lib-sieve/sieve-result.c
 
-2017-01-11 21:32:55 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (3c071a4b)
+2017-01-11 21:01:45 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2583936f)
 
     Updated dovecot.m4.
 
 
 M	m4/dovecot.m4
 
-2017-01-10 23:22:28 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d796ac24)
+2017-01-10 23:22:28 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f9b37da1)
 
     lib-sieve: Fixed handling of mail_get_headers()/mail_get_headers_utf8()
     result.
@@ -639,7 +1252,7 @@ M	src/lib-sieve/plugins/vacation/cmd-vacation.c
 M	src/lib-sieve/plugins/vnd.dovecot/report/cmd-report.c
 M	src/lib-sieve/sieve-message.c
 
-2017-01-11 01:13:45 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (98318c67)
+2017-01-11 01:13:45 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (22cbd7e7)
 
     lib-sieve: util: edit-mail: Fixed success return value for
     mail_get_headers() to be 1.
@@ -647,7 +1260,7 @@ M	src/lib-sieve/sieve-message.c
 
 M	src/lib-sieve/util/edit-mail.c
 
-2017-01-11 17:01:04 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (15c0be5b)
+2017-01-01 13:32:21 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (57c05f4d)
 
     Updated copyright notices to include the year 2017.
 
@@ -1042,7 +1655,7 @@ M	src/testsuite/tst-test-result-execute.c
 M	src/testsuite/tst-test-script-compile.c
 M	src/testsuite/tst-test-script-run.c
 
-2017-01-11 02:23:26 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d3e50ddc)
+2016-12-24 02:56:01 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (131ea974)
 
     global: Replaced all instances of memset(p, 0, sizeof(*p)) with the new
     i_zero() macro.
@@ -1078,6 +1691,7 @@ M	src/lib-sieve/sieve-address.c
 M	src/lib-sieve/sieve-message.c
 M	src/lib-sieve/sieve-plugins.c
 M	src/lib-sieve/sieve.c
+M	src/lib-sieve/storage/dict/sieve-dict-storage.c
 M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
 M	src/lib-sieve/tst-address.c
 M	src/lib-sieve/tst-exists.c
@@ -1097,21 +1711,28 @@ M	src/testsuite/testsuite-message.c
 M	src/testsuite/testsuite-script.c
 M	src/testsuite/testsuite.c
 
-2016-11-19 01:14:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (72d964c6)
+2016-11-19 01:14:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (13fbc935)
 
     lib-sieve: sieve-message: Fixed trimming of empty header.
 
 
 M	src/lib-sieve/sieve-message.c
 
-2016-11-19 00:27:59 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (de717b1e)
+2016-11-19 00:27:59 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (6709993b)
 
     lib-sieve: matches match type: Improved string pointer manipulation.
 
 
 M	src/lib-sieve/mcht-matches.c
 
-2016-11-13 15:13:48 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (53a35827)
+2016-12-26 19:56:47 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (5fe323d1)
+
+    managesieve-login: proxy: Adjusted to changes in Dovecot lib-sasl API.
+
+
+M	src/managesieve-login/managesieve-proxy.c
+
+2016-11-13 15:13:48 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c90b7fdc)
 
     managesieve: Fixed indent in client_output().
 
@@ -1119,7 +1740,7 @@ M	src/lib-sieve/mcht-matches.c
 
 M	src/managesieve/managesieve-client.c
 
-2016-11-13 15:11:59 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (aa835eb7)
+2016-11-13 15:11:59 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d5afd719)
 
     lib-sieve: file storage: Fixed indent in
     sieve_storage_get_relative_link_path().
@@ -1128,14 +1749,14 @@ M	src/managesieve/managesieve-client.c
 
 M	src/lib-sieve/storage/file/sieve-file-storage.c
 
-2016-11-08 01:45:16 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (676476ff)
+2016-11-08 01:45:16 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c8b91de8)
 
     imapsieve plugin: Removed spurious debug message.
 
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2016-11-08 01:03:00 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (ab9bec54)
+2016-11-08 01:03:00 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (00651e60)
 
     imapsieve plugin: Fixed assert failure occurring when used with virtual
     mailboxes.
@@ -1145,7 +1766,7 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2016-11-07 09:55:28 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c6edca37)
+2016-11-07 09:55:28 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (be11698e)
 
     doc: Forgot to add several files to the distribution.
 
@@ -1155,21 +1776,46 @@ M	doc/extensions/Makefile.am
 M	doc/plugins/Makefile.am
 M	doc/rfc/Makefile.am
 
-2016-10-20 23:34:05 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (623ae77e)
+2016-11-03 20:52:07 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (3deda06e)
 
-    Added v0.4.15 to NEWS.
+    managesieve: Try to initialize var_expand_tab[] directly.
+
+    This avoids accidents with the array numbering being wrong.
+
+M	src/managesieve/managesieve-client.c
+
+2016-11-03 20:26:49 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (849790c5)
+
+    lib-sieve: ldap storage: Adjust to var_expand*() API changes.
 
 
-M	NEWS
+M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
 
-2016-10-21 18:02:57 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (6e8b01c6)
+2016-11-01 01:09:42 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (1e5d2c6a)
+
+    Adjust to var_expand*() API changes.
+
+
+M	src/lib-sieve/sieve-error.c
+M	src/managesieve/main.c
+M	src/managesieve/managesieve-client.c
+M	src/plugins/lda-sieve/lda-sieve-log.c
+
+2016-10-29 14:28:07 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (10e70749)
+
+    lib-sieve: edit-mail: Adjusted to changes in Dovecot lib-storage/index.
+
+
+M	src/lib-sieve/util/edit-mail.c
+
+2016-10-21 18:02:57 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (c5ed66bc)
 
     testsuite: Cleanup spurious test output.
 
 
 M	src/testsuite/Makefile.am
 
-2016-10-21 15:35:51 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (f57c46ce)
+2016-10-21 15:35:51 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (74ab3713)
 
     managesieve: Added rawlog_dir setting to store ManageSieve traffic logs.
 
@@ -1181,7 +1827,7 @@ M	src/managesieve/managesieve-client.c
 M	src/managesieve/managesieve-settings.c
 M	src/managesieve/managesieve-settings.h
 
-2016-10-21 17:29:17 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (7e72cb6a)
+2016-10-21 17:29:17 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (036d5191)
 
     lib-sieve: vacation extension: Use Microsoft X-Auto-Response-Suppress header
     to prevent unwanted responses.
@@ -1194,14 +1840,27 @@ M	src/managesieve/managesieve-settings.h
 M	src/lib-sieve/plugins/vacation/cmd-vacation.c
 M	tests/extensions/vacation/reply.svtest
 
-2016-10-21 01:01:16 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (2292a6d4)
+2016-10-21 17:36:44 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (32e7781d)
+
+    lib-sieve: util: Removed Pigeonhole's own version of t_str_trim(), since it
+    is now available in Dovecot.
+
+
+M	src/lib-sieve/sieve-address-source.c
+M	src/lib-sieve/sieve-settings.c
+M	src/lib-sieve/util/Makefile.am
+D	src/lib-sieve/util/strtrim.c
+D	src/lib-sieve/util/strtrim.h
+M	src/plugins/imapsieve/imap-sieve-storage.c
+
+2016-10-21 01:01:16 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (663f8cc5)
 
     lib-sieve: code dumper: Fixed T_BEGIN { ... } T_END block violation.
 
 
 M	src/lib-sieve/sieve-code-dumper.c
 
-2016-10-20 02:38:07 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (9824bde1)
+2016-10-20 02:38:07 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (ca0cd69e)
 
     lib-sieve: vnd.dovecot.report extension: Added Dovecot-Reporting-User field,
     which contains the e-mail address of the user sending the report.
@@ -1210,14 +1869,14 @@ M	src/lib-sieve/sieve-code-dumper.c
 M	src/lib-sieve/plugins/vnd.dovecot/report/cmd-report.c
 M	tests/extensions/vnd.dovecot/report/execute.svtest
 
-2016-10-19 19:02:10 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (ff56aa33)
+2016-10-19 18:38:00 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (4d5a9448)
 
     Updated dovecot.m4.
 
 
 M	m4/dovecot.m4
 
-2016-10-19 16:04:49 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (4736cb30)
+2016-10-19 16:04:49 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (905db120)
 
     Sieve extprograms plugin: Adjusted to more changes in Dovecot program-client
     API.
@@ -1225,14 +1884,7 @@ M	m4/dovecot.m4
 
 M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
 
-2016-10-13 15:30:25 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (e0ed585e)
-
-    Sieve exprograms plugin: Adjusted to changes in Dovecot program-client API.
-
-
-M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
-
-2016-10-17 23:59:58 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (0690631e)
+2016-10-17 23:59:58 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (85680b40)
 
     lib-sieve: result object: Fixed bug in detection of the execution of
     delivery action.
@@ -1243,7 +1895,7 @@ M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
 
 M	src/lib-sieve/sieve-result.c
 
-2016-10-15 12:24:33 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (63f9b42f)
+2016-10-15 12:24:33 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (bcad6334)
 
     LDA Sieve plugin: Fixed assert failure caused by earlier sieve_discard
     changes.
@@ -1255,7 +1907,14 @@ M	src/lib-sieve/sieve-result.c
 
 M	src/plugins/lda-sieve/lda-sieve-plugin.c
 
-2016-10-11 16:40:47 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (fac92b52)
+2016-10-13 15:30:25 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d18e9b53)
+
+    Sieve exprograms plugin: Adjusted to changes in Dovecot program-client API.
+
+
+M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
+
+2016-10-11 16:40:47 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (a195bd82)
 
     lib-sieve: vnd.dovecot.report extension: Added support for configuring the
     "From:" address used in the report.
@@ -1268,7 +1927,43 @@ M	src/lib-sieve/plugins/vnd.dovecot/report/ext-vnd-report-common.h
 M	src/lib-sieve/plugins/vnd.dovecot/report/ext-vnd-report.c
 M	tests/extensions/vnd.dovecot/report/execute.svtest
 
-2016-09-30 23:57:05 +0200 Stephan Bosch <stephan@dovecot.fi> (a04dc954)
+2016-10-10 19:20:57 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (2a6ff60b)
+
+    Sieve extprograms plugin: Adjusted to program-client API change in Dovecot.
+
+    program_client_remote_create() is now called program_client_unix_create().
+
+M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
+
+2016-10-07 12:42:09 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (a8fb5314)
+
+    lib-sieve: restore realpath.h in Makefile.am
+
+
+M	src/lib-sieve/util/Makefile.am
+
+2016-10-06 12:11:57 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (055537a3)
+
+    doveadm sieve plugin: sync: Fixed saving synchronized Sieve script.
+
+    Assert failure could occur if the input buffer was full. Also, a small
+    chance existed that not all data would be saved.
+
+M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
+
+2016-10-05 22:28:03 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (22f05f11)
+
+    lib-sieve: program-client was moved to dovecot core
+
+
+M	src/lib-sieve/util/Makefile.am
+D	src/lib-sieve/util/program-client-local.c
+D	src/lib-sieve/util/program-client-private.h
+D	src/lib-sieve/util/program-client-remote.c
+D	src/lib-sieve/util/program-client.c
+D	src/lib-sieve/util/program-client.h
+
+2016-09-30 23:57:05 +0200 Stephan Bosch <stephan@dovecot.fi> (2ae18e51)
 
     LDA Sieve plugin: Implemented support for a "discard script" that is run
     when the message is going to be discarded.
@@ -1284,7 +1979,7 @@ M	INSTALL
 M	doc/example-config/conf.d/90-sieve.conf
 M	src/plugins/lda-sieve/lda-sieve-plugin.c
 
-2016-09-30 23:55:25 +0200 Stephan Bosch <stephan@dovecot.fi> (d1d68668)
+2016-09-30 23:55:25 +0200 Stephan Bosch <stephan@dovecot.fi> (bc99d792)
 
     lib-sieve: Implemented support for running a "discard script" in the
     multiscript execution API.
@@ -1295,16 +1990,16 @@ M	src/plugins/lda-sieve/lda-sieve-plugin.c
 M	src/lib-sieve/sieve.c
 M	src/lib-sieve/sieve.h
 
-2016-09-30 21:44:33 +0200 Stephan Bosch <stephan@dovecot.fi> (d46a9606)
+2016-09-30 21:44:33 +0200 Stephan Bosch <stephan@dovecot.fi> (df19597c)
 
     lib-sieve: Added means to evaluate whether the result object executed a
-    delivery action.#
+    delivery action.
 
 
 M	src/lib-sieve/sieve-result.c
 M	src/lib-sieve/sieve-result.h
 
-2016-09-30 19:37:25 +0200 Stephan Bosch <stephan@dovecot.fi> (e7f11d3c)
+2016-09-30 19:37:25 +0200 Stephan Bosch <stephan@dovecot.fi> (8f959e8f)
 
     LDA Sieve plugin: Always use multiscript API for script execution.
 
@@ -1313,7 +2008,7 @@ M	src/lib-sieve/sieve-result.h
 
 M	src/plugins/lda-sieve/lda-sieve-plugin.c
 
-2016-09-29 21:23:51 +0200 Stephan Bosch <stephan@dovecot.fi> (08ba3945)
+2016-09-29 21:23:51 +0200 Stephan Bosch <stephan@dovecot.fi> (67c93ffd)
 
     lib-sieve: vnd.dovecot.environment extension: Added vnd.dovecot.config.*
     environment items.
@@ -1328,7 +2023,7 @@ M	doc/rfc/xml/spec-bosch-sieve-dovecot-environment.xml
 M	src/lib-sieve/plugins/vnd.dovecot/environment/ext-vnd-environment-items.c
 M	tests/extensions/vnd.dovecot/environment/basic.svtest
 
-2016-10-04 19:59:03 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (b201a898)
+2016-10-04 19:59:03 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (c9324ac9)
 
     lib-sieve: environment extension: Improved runtime trace for a nonexistent
     environment item.
@@ -1336,7 +2031,7 @@ M	tests/extensions/vnd.dovecot/environment/basic.svtest
 
 M	src/lib-sieve/plugins/environment/tst-environment.c
 
-2016-09-29 21:21:50 +0200 Stephan Bosch <stephan@dovecot.fi> (600cadff)
+2016-09-29 21:21:50 +0200 Stephan Bosch <stephan@dovecot.fi> (2865e415)
 
     lib-sieve: environment extension: Added support for wildcard environment
     items that are identified by a name prefix.
@@ -1347,7 +2042,7 @@ M	src/lib-sieve/plugins/environment/sieve-ext-environment.h
 M	src/lib-sieve/plugins/vnd.dovecot/environment/ext-vnd-environment-items.c
 M	src/plugins/imapsieve/ext-imapsieve-environment.c
 
-2016-09-29 23:39:42 +0200 Stephan Bosch <stephan@dovecot.fi> (420d433f)
+2016-09-29 23:39:42 +0200 Stephan Bosch <stephan@dovecot.fi> (1bca1af3)
 
     lib-sieve: variables extension: Substitution of an invalid namespace
     canceled the substitution, rather than substituting the empty string.
@@ -1355,7 +2050,7 @@ M	src/plugins/imapsieve/ext-imapsieve-environment.c
 
 M	src/lib-sieve/plugins/variables/ext-variables-arguments.c
 
-2016-09-29 23:37:50 +0200 Stephan Bosch <stephan@dovecot.fi> (cd5cbb4d)
+2016-09-29 23:37:50 +0200 Stephan Bosch <stephan@dovecot.fi> (da1ed8d9)
 
     lib-sieve: variables extension: Increased the maximum number of namespace
     elements in a variable name.
@@ -1363,7 +2058,16 @@ M	src/lib-sieve/plugins/variables/ext-variables-arguments.c
 
 M	src/lib-sieve/plugins/variables/ext-variables-limits.h
 
-2016-09-21 21:33:58 +0200 Stephan Bosch <stephan@dovecot.fi> (e2d6a3f7)
+2016-09-21 21:41:25 +0200 Stephan Bosch <stephan@dovecot.fi> (47635d88)
+
+    lib-sieve: file storage: Fixed handling of non-blocking input in
+    save_continue().
+
+    Bug was exposed by previous change. Normally, this would not surface.
+
+M	src/lib-sieve/storage/file/sieve-file-storage-save.c
+
+2016-09-21 21:33:58 +0200 Stephan Bosch <stephan@dovecot.fi> (2ce32c4c)
 
     managesieve: The PUTSCRIPT command now allows uploading empty Sieve scripts.
 
@@ -1371,7 +2075,14 @@ M	src/lib-sieve/plugins/variables/ext-variables-limits.h
 
 M	src/managesieve/cmd-putscript.c
 
-2016-08-28 23:40:30 +0200 Stephan Bosch <stephan@dovecot.fi> (ceebdaa2)
+2016-09-20 09:35:38 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (a4348748)
+
+    doveadm-sieve: Update attribute API usage
+
+
+M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
+
+2016-08-28 23:40:30 +0200 Stephan Bosch <stephan@dovecot.fi> (4a5c2ce4)
 
     Adjusted client_read_string_args() prototype to handle CLang warning.
 
@@ -1385,7 +2096,7 @@ M	src/managesieve/cmd-setactive.c
 M	src/managesieve/managesieve-client.c
 M	src/managesieve/managesieve-client.h
 
-2016-08-26 01:44:23 +0200 Stephan Bosch <stephan@dovecot.fi> (68806ea2)
+2016-08-26 01:44:23 +0200 Stephan Bosch <stephan@dovecot.fi> (8a2ef99d)
 
     lib-sieve: ldap storage: Fixed bool vs. int mixup in function call.
 
@@ -1393,7 +2104,7 @@ M	src/managesieve/managesieve-client.h
 
 M	src/lib-sieve/storage/ldap/sieve-ldap-storage-settings.c
 
-2016-08-21 12:07:34 +0200 Stephan Bosch <stephan@rename-it.nl> (0e88c05d)
+2016-08-21 12:07:34 +0200 Stephan Bosch <stephan@rename-it.nl> (930ec524)
 
     lib-sieve: Fixed various bool vs. int/pointer mixups.
 
@@ -1413,7 +2124,7 @@ M	src/lib-sieve/sieve-stringlist.c
 M	src/lib-sieve/sieve.c
 M	src/lib-sieve/tst-exists.c
 
-2016-08-21 12:05:55 +0200 Stephan Bosch <stephan@rename-it.nl> (c45e2153)
+2016-08-21 12:05:55 +0200 Stephan Bosch <stephan@rename-it.nl> (cab5eff7)
 
     doveadm sieve plugin: Removed unused 'subscriptions' field from command
     context.
@@ -1423,7 +2134,7 @@ M	src/lib-sieve/tst-exists.c
 M	src/plugins/doveadm-sieve/doveadm-sieve-cmd.c
 M	src/plugins/doveadm-sieve/doveadm-sieve-cmd.h
 
-2016-08-21 12:05:05 +0200 Stephan Bosch <stephan@rename-it.nl> (fb5f3c42)
+2016-08-21 12:05:05 +0200 Stephan Bosch <stephan@rename-it.nl> (0929a400)
 
     extprograms plugin: Fixed various bool vs. int mixups.
 
@@ -1433,7 +2144,7 @@ M	src/plugins/sieve-extprograms/cmd-execute.c
 M	src/plugins/sieve-extprograms/cmd-filter.c
 M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
 
-2016-08-21 12:02:20 +0200 Stephan Bosch <stephan@rename-it.nl> (0757c93d)
+2016-08-21 12:02:20 +0200 Stephan Bosch <stephan@rename-it.nl> (ec02e3b5)
 
     managesieve: Fixed various bool vs. int mixups.
 
@@ -1441,7 +2152,15 @@ M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
 
 M	src/managesieve/managesieve-client.c
 
-2016-08-21 11:58:41 +0200 Stephan Bosch <stephan@rename-it.nl> (cb5fb48b)
+2016-08-21 12:01:29 +0200 Stephan Bosch <stephan@rename-it.nl> (ee3a6554)
+
+    lib-sieve: util: program-client: Fixed a bool vs. int/pointer mixup.
+
+    Found with clang -Wstrict-bool.
+
+M	src/lib-sieve/util/program-client.c
+
+2016-08-21 11:58:41 +0200 Stephan Bosch <stephan@rename-it.nl> (8e0367b0)
 
     lib-sieve: file storage: The try_hardlink parameter of file_copy() is of
     type bool, rather than int.
@@ -1450,7 +2169,7 @@ M	src/managesieve/managesieve-client.c
 
 M	src/lib-sieve/storage/file/sieve-file-storage-active.c
 
-2016-08-21 11:57:16 +0200 Stephan Bosch <stephan@rename-it.nl> (5d2cd8f5)
+2016-08-21 11:57:16 +0200 Stephan Bosch <stephan@rename-it.nl> (a010c390)
 
     lib-sieve: The return type of duplicate_check() is supposed to be bool
     rather than int.
@@ -1464,7 +2183,7 @@ M	src/plugins/imapsieve/imap-sieve.c
 M	src/plugins/lda-sieve/lda-sieve-plugin.c
 M	src/sieve-tools/sieve-test.c
 
-2016-08-21 11:52:55 +0200 Stephan Bosch <stephan@rename-it.nl> (181300b5)
+2016-08-21 11:52:55 +0200 Stephan Bosch <stephan@rename-it.nl> (b0b9e0a5)
 
     lib-sieve: script: The return type of binary_dump_metadata() is supposed to
     be bool rather than int.
@@ -1475,7 +2194,7 @@ M	src/lib-sieve/sieve-script-private.h
 M	src/lib-sieve/storage/dict/sieve-dict-script.c
 M	src/lib-sieve/storage/ldap/sieve-ldap-script.c
 
-2016-08-21 11:46:15 +0200 Stephan Bosch <stephan@rename-it.nl> (cf2d912b)
+2016-08-21 11:46:15 +0200 Stephan Bosch <stephan@rename-it.nl> (6a6f7309)
 
     sieve-filter: Fixed a bool vs. int mixup.
 
@@ -1483,7 +2202,7 @@ M	src/lib-sieve/storage/ldap/sieve-ldap-script.c
 
 M	src/sieve-tools/sieve-filter.c
 
-2016-08-21 11:44:50 +0200 Stephan Bosch <stephan@rename-it.nl> (31300080)
+2016-08-21 11:44:50 +0200 Stephan Bosch <stephan@rename-it.nl> (86eb7c95)
 
     testsuite: Fixed various bool vs. int mixups.
 
@@ -1493,7 +2212,7 @@ M	src/testsuite/cmd-test-message.c
 M	src/testsuite/testsuite-binary.c
 M	src/testsuite/testsuite-script.c
 
-2016-08-21 11:37:12 +0200 Stephan Bosch <stephan@rename-it.nl> (d8e27b06)
+2016-08-21 11:37:12 +0200 Stephan Bosch <stephan@rename-it.nl> (ae255494)
 
     lib-sieve: reject extension: Fixed varius bool vs. int mixups.
 
@@ -1503,7 +2222,7 @@ M	src/lib-sieve/ext-reject.c
 M	src/lib-sieve/sieve-actions.c
 M	src/lib-sieve/sieve-actions.h
 
-2016-08-21 11:28:32 +0200 Stephan Bosch <stephan@rename-it.nl> (6f3f6fe1)
+2016-08-21 11:28:32 +0200 Stephan Bosch <stephan@rename-it.nl> (d8331c81)
 
     lib-sieve: vacation extension: Fixed invalid evaluation of the
     mail_get_headers() return value.
@@ -1512,7 +2231,7 @@ M	src/lib-sieve/sieve-actions.h
 
 M	src/lib-sieve/plugins/vacation/cmd-vacation.c
 
-2016-08-21 11:27:37 +0200 Stephan Bosch <stephan@rename-it.nl> (e44f6957)
+2016-08-21 11:27:37 +0200 Stephan Bosch <stephan@rename-it.nl> (d2fa7208)
 
     lib-sieve: regex extension: Fixed invalid use of sieve_ast_stringlist_map().
 
@@ -1520,7 +2239,7 @@ M	src/lib-sieve/plugins/vacation/cmd-vacation.c
 
 M	src/lib-sieve/plugins/regex/mcht-regex.c
 
-2016-08-21 11:25:57 +0200 Stephan Bosch <stephan@rename-it.nl> (43741561)
+2016-08-21 11:25:57 +0200 Stephan Bosch <stephan@rename-it.nl> (dabacd9a)
 
     lib-sieve: deprecated notify extension: Fixed various bool vs. int/pointer
     mixups.
@@ -1529,7 +2248,7 @@ M	src/lib-sieve/plugins/regex/mcht-regex.c
 
 M	src/lib-sieve/plugins/notify/cmd-notify.c
 
-2016-08-21 11:24:35 +0200 Stephan Bosch <stephan@rename-it.nl> (348ab939)
+2016-08-21 11:24:35 +0200 Stephan Bosch <stephan@rename-it.nl> (f95c6c0c)
 
     lib-sieve: metadata extension: Fixed invalid use of
     sieve_ast_stringlist_map().
@@ -1538,7 +2257,7 @@ M	src/lib-sieve/plugins/notify/cmd-notify.c
 
 M	src/lib-sieve/plugins/metadata/tst-metadataexists.c
 
-2016-08-21 11:23:03 +0200 Stephan Bosch <stephan@rename-it.nl> (76277455)
+2016-08-21 11:23:03 +0200 Stephan Bosch <stephan@rename-it.nl> (01f7d9f3)
 
     lib-sieve: mailbox extension: Fixed invalid use of
     sieve_ast_stringlist_map().
@@ -1547,7 +2266,7 @@ M	src/lib-sieve/plugins/metadata/tst-metadataexists.c
 
 M	src/lib-sieve/plugins/mailbox/tst-mailboxexists.c
 
-2016-08-21 11:21:39 +0200 Stephan Bosch <stephan@rename-it.nl> (812c7fe0)
+2016-08-21 11:21:39 +0200 Stephan Bosch <stephan@rename-it.nl> (e180373f)
 
     lib-sieve: index extension: Fixed a bool vs. int mixup.
 
@@ -1555,7 +2274,7 @@ M	src/lib-sieve/plugins/mailbox/tst-mailboxexists.c
 
 M	src/lib-sieve/plugins/index/tag-index.c
 
-2016-08-21 11:20:54 +0200 Stephan Bosch <stephan@rename-it.nl> (8a78f047)
+2016-08-21 11:20:54 +0200 Stephan Bosch <stephan@rename-it.nl> (13485c33)
 
     lib-sieve: include extension: Fixed various bool vs. int mixups.
 
@@ -1564,7 +2283,7 @@ M	src/lib-sieve/plugins/index/tag-index.c
 M	src/lib-sieve/plugins/include/cmd-include.c
 M	src/lib-sieve/plugins/include/ext-include-common.c
 
-2016-08-21 11:19:30 +0200 Stephan Bosch <stephan@rename-it.nl> (34913ff8)
+2016-08-21 11:19:30 +0200 Stephan Bosch <stephan@rename-it.nl> (dc60b279)
 
     lib-sieve: enotify extension: Fixed various bool vs. int/pointer mixups.
 
@@ -1576,7 +2295,7 @@ M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
 M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.c
 M	src/lib-sieve/plugins/enotify/vmodf-encodeurl.c
 
-2016-08-21 11:16:27 +0200 Stephan Bosch <stephan@rename-it.nl> (671796ff)
+2016-08-21 11:16:27 +0200 Stephan Bosch <stephan@rename-it.nl> (5ef69ddc)
 
     lib-sieve: match types: Fixed match function return values to be int rather
     than bool.
@@ -1587,7 +2306,7 @@ M	src/lib-sieve/mcht-contains.c
 M	src/lib-sieve/mcht-is.c
 M	src/lib-sieve/mcht-matches.c
 
-2016-08-21 11:13:43 +0200 Stephan Bosch <stephan@rename-it.nl> (44b80a98)
+2016-08-21 11:13:43 +0200 Stephan Bosch <stephan@rename-it.nl> (02d0b7ff)
 
     lib-sieve: encoded-character extension: Fixed function return types to be
     bool rather than int.
@@ -1596,7 +2315,7 @@ M	src/lib-sieve/mcht-matches.c
 
 M	src/lib-sieve/ext-encoded-character.c
 
-2016-08-21 11:11:45 +0200 Stephan Bosch <stephan@rename-it.nl> (3ac69765)
+2016-08-21 11:11:45 +0200 Stephan Bosch <stephan@rename-it.nl> (b800fc1c)
 
     lib-managesieve: managesieve-parser: Fixed function return types to be bool
     rather than int.
@@ -1605,7 +2324,24 @@ M	src/lib-sieve/ext-encoded-character.c
 
 M	src/lib-managesieve/managesieve-parser.c
 
-2016-08-23 17:07:34 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (45d8d47e)
+2016-08-24 02:47:37 +0200 Stephan Bosch <stephan@dovecot.fi> (af91dd3f)
+
+    doveadm sieve plugin: sync: Fixed handling of unknown attribute timestamps.
+
+
+M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
+
+2016-08-24 01:22:12 +0200 Stephan Bosch <stephan@dovecot.fi> (ef268fec)
+
+    lib-sieve: util: program-client-remote: Fixed assert failure caused by
+    previous change.
+
+    Erroneously assumed the number of reserved bytes (for the return code) could
+    not decrease.
+
+M	src/lib-sieve/util/program-client-remote.c
+
+2016-08-23 17:07:34 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (0dcee109)
 
     tests/deprecated: Fix typo
 
@@ -1613,87 +2349,76 @@ M	src/lib-managesieve/managesieve-parser.c
 M	tests/deprecated/imapflags/errors.svtest
 M	tests/deprecated/notify/errors.svtest
 
-2016-08-13 18:43:04 +0200 Stephan Bosch <stephan@dovecot.fi> (18b0aed6)
+2016-08-16 14:29:53 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d582f0db)
 
-    lib-sieve: relational extension: Replaced return statement with
-    i_unreached() in mcht_value_match_key().
+    Adjust to unlink_directory() API changes.
 
-    Coverity still complained.
 
-M	src/lib-sieve/plugins/relational/mcht-value.c
+M	src/testsuite/testsuite-binary.c
+M	src/testsuite/testsuite-common.c
+M	src/testsuite/testsuite-mailstore.c
+M	src/testsuite/testsuite-smtp.c
 
-2016-08-13 18:10:08 +0200 Stephan Bosch <stephan@dovecot.fi> (f0ceddc8)
+2016-08-20 03:32:58 +0200 Stephan Bosch <stephan@rename-it.nl> (6b02395c)
 
-    lib-sieve: ldap storage: Removed useless NULL checks.
+    global: unsigned int:1 -> bool:1
 
-    Caused minor complaints by Coverity.
+    perl -i -pe 's/unsigned int ([^,:;]+):1;/bool $1:1;/' **/*.[ch]
 
-M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
-
-2016-08-13 17:42:03 +0200 Stephan Bosch <stephan@dovecot.fi> (78b00a3b)
-
-    lib-sieve: relational extension: Removed dead default in switch statement.
-
-    Minor complaint by Coverity.
-
-M	src/lib-sieve/plugins/relational/mcht-value.c
-
-2016-08-13 14:42:31 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (d4fb1ff7)
-
-    lib-sieve: MAIL_FETCH_UIDL_FILE_NAME to MAIL_FETCH_STORAGE_ID:
-
-    MAIL_FETCH_UIDL_FILE_NAME was removed from core.
-
+M	src/lib-managesieve/managesieve-parser.c
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/lib-sieve/plugins/date/ext-date-common.c
+M	src/lib-sieve/plugins/duplicate/ext-duplicate-common.c
+M	src/lib-sieve/plugins/editheader/ext-editheader-common.c
+M	src/lib-sieve/plugins/environment/ext-environment-common.c
+M	src/lib-sieve/plugins/imap4flags/ext-imap4flags-common.c
+M	src/lib-sieve/plugins/include/cmd-include.c
+M	src/lib-sieve/plugins/include/ext-include-binary.c
+M	src/lib-sieve/plugins/index/tag-index.c
+M	src/lib-sieve/plugins/mime/tag-mime.c
+M	src/lib-sieve/plugins/regex/mcht-regex.c
+M	src/lib-sieve/plugins/vnd.dovecot/report/cmd-report.c
+M	src/lib-sieve/sieve-actions.h
+M	src/lib-sieve/sieve-ast.c
+M	src/lib-sieve/sieve-extensions.h
+M	src/lib-sieve/sieve-interpreter.c
+M	src/lib-sieve/sieve-match.h
+M	src/lib-sieve/sieve-message.c
+M	src/lib-sieve/sieve-result.c
+M	src/lib-sieve/sieve-script-private.h
+M	src/lib-sieve/sieve-smtp.c
+M	src/lib-sieve/sieve-storage-private.h
+M	src/lib-sieve/sieve-stringlist.c
+M	src/lib-sieve/sieve-stringlist.h
+M	src/lib-sieve/sieve-types.h
+M	src/lib-sieve/sieve-validator.c
+M	src/lib-sieve/storage/dict/sieve-dict-script.c
+M	src/lib-sieve/storage/file/sieve-file-script-sequence.c
+M	src/lib-sieve/storage/file/sieve-file-storage-save.c
+M	src/lib-sieve/storage/ldap/sieve-ldap-script.c
 M	src/lib-sieve/util/edit-mail.c
+M	src/lib-sieve/util/program-client-private.h
+M	src/lib-sieve/util/program-client-remote.c
+M	src/lib-sieve/util/program-client.h
+M	src/managesieve-login/client.h
+M	src/managesieve/cmd-getscript.c
+M	src/managesieve/managesieve-client.h
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-delete.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-put.c
+M	src/plugins/imapsieve/imap-sieve-storage.c
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/sieve-tools/sieve-filter.c
 
-2016-08-11 03:17:36 +0200 Stephan Bosch <stephan@dovecot.fi> (ba83950d)
+2016-08-19 23:05:27 +0200 Stephan Bosch <stephan@dovecot.fi> (0adb7400)
 
-    Fixed copyright notices.
+    lib-sieve: util: program-client-remote: Made the program_client_istream
+    implementation cleaner and more logical.
 
+    It was too hard to understand.
 
-M	src/lib-sieve/plugins/mime/cmd-extracttext.c
-M	src/lib-sieve/plugins/mime/ext-extracttext.c
+M	src/lib-sieve/util/program-client-remote.c
 
-2016-07-15 01:32:01 +0200 Stephan Bosch <stephan@rename-it.nl> (da828b84)
-
-    Removed the test suite's valgrind handling in favor of the generic
-    implementation Dovecot provides.
-
-
-M	.gitignore
-M	Makefile.am
-M	configure.ac
-M	dovecot-pigeonhole.m4
-
-2016-10-05 22:28:03 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (fe823824)
-
-    lib-sieve: program-client was moved to dovecot core
-
-
-M	src/lib-sieve/util/Makefile.am
-D	src/lib-sieve/util/program-client-local.c
-D	src/lib-sieve/util/program-client-private.h
-D	src/lib-sieve/util/program-client-remote.c
-D	src/lib-sieve/util/program-client.c
-D	src/lib-sieve/util/program-client.h
-
-2016-10-06 12:11:57 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (2b3aaf3f)
-
-    doveadm sieve plugin: sync: Fixed saving synchronized Sieve script.
-
-    Assert failure could occur if the input buffer was full. Also, a small
-    chance existed that not all data would be saved.
-
-M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
-
-2016-08-24 02:47:37 +0200 Stephan Bosch <stephan@dovecot.fi> (79be4c87)
-
-    doveadm sieve plugin: sync: Fixed handling of unknown attribute timestamps.
-
-
-M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
-
-2016-08-19 23:02:32 +0200 Stephan Bosch <stephan@dovecot.fi> (0c2fb07f)
+2016-08-19 23:02:32 +0200 Stephan Bosch <stephan@dovecot.fi> (351bb053)
 
     lib-sieve: util: program-client: Fixed position of the seekable stream for
     the output of remote programs.
@@ -1704,7 +2429,120 @@ M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
 
 M	src/lib-sieve/util/program-client.c
 
-2016-05-20 15:38:31 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (85e9733b)
+2016-08-19 01:24:21 +0200 Stephan Bosch <stephan@dovecot.fi> (36614104)
+
+    sieve-test: Forgot to disable error handling for dummy SMTP output stream.
+
+
+M	src/sieve-tools/sieve-test.c
+
+2016-08-14 19:13:13 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (a920da2a)
+
+    lib-sieve: remove set_cache_corrupted_reason from mail_vfuncs
+
+    set_cache_corrupted_reason was removed in core.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2016-08-13 18:43:04 +0200 Stephan Bosch <stephan@dovecot.fi> (97dcfb2f)
+
+    lib-sieve: relational extension: Replaced return statement with
+    i_unreached() in mcht_value_match_key().
+
+    Coverity still complained.
+
+M	src/lib-sieve/plugins/relational/mcht-value.c
+
+2016-08-13 18:10:08 +0200 Stephan Bosch <stephan@dovecot.fi> (0edfe0c1)
+
+    lib-sieve: ldap storage: Removed useless NULL checks.
+
+    Caused minor complaints by Coverity.
+
+M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
+
+2016-08-13 17:42:03 +0200 Stephan Bosch <stephan@dovecot.fi> (a6aa9d44)
+
+    lib-sieve: relational extension: Removed dead default in switch statement.
+
+    Minor complaint by Coverity.
+
+M	src/lib-sieve/plugins/relational/mcht-value.c
+
+2016-08-13 17:26:56 +0200 Stephan Bosch <stephan@dovecot.fi> (53eee4d9)
+
+    imapsieve plugin: Fixed potential segfault bug caused by shadowing a
+    parameter with a local variable.
+
+    Renamed the local variable. Found by Coverity.
+
+M	src/plugins/imapsieve/imap-sieve-storage.c
+
+2016-08-13 14:42:31 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (54eb6fb7)
+
+    lib-sieve: MAIL_FETCH_UIDL_FILE_NAME to MAIL_FETCH_STORAGE_ID:
+
+    MAIL_FETCH_UIDL_FILE_NAME was removed from core.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2016-08-11 03:17:36 +0200 Stephan Bosch <stephan@dovecot.fi> (886199dd)
+
+    Fixed copyright notices.
+
+
+M	src/lib-sieve/plugins/mime/cmd-extracttext.c
+M	src/lib-sieve/plugins/mime/ext-extracttext.c
+
+2016-08-10 20:38:05 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (e246fe9d)
+
+    imapsieve: Update mailbox_attribute API usage
+
+
+M	src/plugins/imapsieve/imap-sieve-storage.c
+
+2016-08-10 20:20:57 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (0b8386aa)
+
+    doveadm-sieve: Update attribute API
+
+
+M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
+
+2016-08-10 11:32:04 +0200 Stephan Bosch <stephan@dovecot.fi> (2987a3c2)
+
+    imapsieve plugin: Fixed crash occurring when a mailbox is opened for a user
+    before the imap client object is created.
+
+
+M	src/plugins/imapsieve/imap-sieve-storage.c
+
+2016-08-10 11:27:40 +0200 Stephan Bosch <stephan@dovecot.fi> (0e8abe2c)
+
+    imapsieve plugin: Removed spurious pool field from imap_sieve_user struct.
+
+
+M	src/plugins/imapsieve/imap-sieve-storage.c
+
+2016-08-02 23:41:11 +0200 Stephan Bosch <stephan@dovecot.fi> (670e029a)
+
+    lib-sieve: program client: Changed I/O to use o_stream_send_istream() where
+    possible.
+
+    This simplifies the code significantly. This also removes calls to
+    i_stream_get_data(), which caused problems after its semantics were changed
+    in Dovecot.
+
+M	src/lib-sieve/util/program-client.c
+
+2016-08-02 19:39:15 +0200 Stephan Bosch <stephan@dovecot.fi> (18338b4b)
+
+    lib-sieve: lexer: Adjusted to Dovecot change: i_stream_get_data() no longer
+    returns NULL when returned size = 0.
+
+
+M	src/lib-sieve/sieve-lexer.c
+
+2016-05-20 15:38:31 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d6cacfef)
 
     Use i_unlink() to improve unexpected unlink() error messages.
 
@@ -1715,29 +2553,46 @@ M	src/lib-sieve/storage/file/sieve-file-storage-save.c
 M	src/lib-sieve/util/program-client.c
 M	src/sieve-tools/sieve-test.c
 
-2016-08-19 01:24:21 +0200 Stephan Bosch <stephan@dovecot.fi> (38e9568d)
+2016-07-15 01:32:01 +0200 Stephan Bosch <stephan@rename-it.nl> (1521447e)
 
-    sieve-test: Forgot to disable error handling for dummy SMTP output stream.
-
-
-M	src/sieve-tools/sieve-test.c
-
-2016-08-10 11:32:04 +0200 Stephan Bosch <stephan@dovecot.fi> (79735e54)
-
-    imapsieve plugin: Fixed crash occurring when a mailbox is opened for a user
-    before the imap client object is created.
+    Removed the test suite's valgrind handling in favor of the generic
+    implementation Dovecot provides.
 
 
-M	src/plugins/imapsieve/imap-sieve-storage.c
+M	.gitignore
+M	Makefile.am
+M	configure.ac
+M	dovecot-pigeonhole.m4
 
-2016-08-10 11:27:40 +0200 Stephan Bosch <stephan@dovecot.fi> (02a0b3b7)
+2016-07-14 21:50:34 +0200 Stephan Bosch <stephan@rename-it.nl> (814ef928)
 
-    imapsieve plugin: Removed spurious pool field from imap_sieve_user struct.
+    Add flags in DOVECOT_BINARY_CFLAGS and DOVECOT_BINARY_LDFLAGS to all
+    binaries.
+
+    In effect, this adds PIE and RELRO to binaries.
+
+M	configure.ac
+M	src/managesieve-login/Makefile.am
+M	src/managesieve/Makefile.am
+M	src/sieve-tools/Makefile.am
+
+2016-07-14 23:09:34 +0200 Stephan Bosch <stephan@rename-it.nl> (1f157d0f)
+
+    lib-managesieve: Use libtool.
 
 
-M	src/plugins/imapsieve/imap-sieve-storage.c
+M	src/lib-managesieve/Makefile.am
+M	src/managesieve-login/Makefile.am
+M	src/managesieve/Makefile.am
 
-2016-07-07 21:52:05 +0200 Stephan Bosch <stephan@rename-it.nl> (3f51b82d)
+2016-07-14 21:50:20 +0200 Stephan Bosch <stephan@rename-it.nl> (91368343)
+
+    Updated dovecot.m4.
+
+
+M	m4/dovecot.m4
+
+2016-07-07 21:52:05 +0200 Stephan Bosch <stephan@rename-it.nl> (66b7c14c)
 
     extprograms plugin: Clarified the language specification regarding handling
     of filter and execute errors.
@@ -1746,7 +2601,7 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 M	doc/rfc/spec-bosch-sieve-extprograms.txt
 M	doc/rfc/xml/spec-bosch-sieve-extprograms.xml
 
-2016-07-07 18:25:29 +0200 Stephan Bosch <stephan@dovecot.fi> (fa92c41c)
+2016-07-07 18:25:29 +0200 Stephan Bosch <stephan@dovecot.fi> (3fa08e71)
 
     extprograms plugin: Added tests for invocation of unknown programs.
 
@@ -1758,7 +2613,7 @@ A	tests/plugins/extprograms/filter/errors/unknown-program.sieve
 M	tests/plugins/extprograms/pipe/errors.svtest
 A	tests/plugins/extprograms/pipe/errors/unknown-program.sieve
 
-2016-07-07 18:24:16 +0200 Stephan Bosch <stephan@dovecot.fi> (5e8bb108)
+2016-07-07 18:24:16 +0200 Stephan Bosch <stephan@dovecot.fi> (60f4960a)
 
     extprograms plugin: For directly forked programs, the "program not found"
     was reported twice.
@@ -1766,7 +2621,7 @@ A	tests/plugins/extprograms/pipe/errors/unknown-program.sieve
 
 M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
 
-2016-07-07 18:18:35 +0200 Stephan Bosch <stephan@dovecot.fi> (d3ce49d0)
+2016-07-07 18:18:35 +0200 Stephan Bosch <stephan@dovecot.fi> (efef641a)
 
     extprograms plugin: Execution errors in filter and execute commands did not
     lead to script termination.
@@ -1775,7 +2630,7 @@ M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
 M	src/plugins/sieve-extprograms/cmd-execute.c
 M	src/plugins/sieve-extprograms/cmd-filter.c
 
-2016-07-07 10:15:15 +0200 Stephan Bosch <stephan@dovecot.fi> (067dd045)
+2016-07-07 10:15:15 +0200 Stephan Bosch <stephan@dovecot.fi> (70c27283)
 
     lib-sieve: program client: Fixed bug in handling of result code from remote
     program (script service).
@@ -1786,7 +2641,7 @@ M	src/plugins/sieve-extprograms/cmd-filter.c
 
 M	src/lib-sieve/util/program-client-remote.c
 
-2016-07-07 01:23:27 +0200 Stephan Bosch <stephan@dovecot.fi> (9de3c730)
+2016-07-07 01:23:27 +0200 Stephan Bosch <stephan@dovecot.fi> (aabde88b)
 
     lib-sieve: program client: Connection to remote program service was not
     retried.
@@ -1794,7 +2649,7 @@ M	src/lib-sieve/util/program-client-remote.c
 
 M	src/lib-sieve/util/program-client-remote.c
 
-2016-07-06 21:15:19 +0200 Stephan Bosch <stephan@dovecot.fi> (a88360a1)
+2016-07-06 21:15:19 +0200 Stephan Bosch <stephan@dovecot.fi> (807c61c2)
 
     lib-sieve: vacation extension: The sieve_user_email setting is now used in
     check for implicit delivery.
@@ -1805,14 +2660,14 @@ M	src/lib-sieve/util/program-client-remote.c
 M	src/lib-sieve/plugins/vacation/cmd-vacation.c
 M	tests/extensions/vacation/reply.svtest
 
-2016-07-06 20:31:35 +0200 Stephan Bosch <stephan@dovecot.fi> (f69f366b)
+2016-07-06 20:31:35 +0200 Stephan Bosch <stephan@dovecot.fi> (cefa449a)
 
     testsuite: Removed spurious test_message_print statements.
 
 
 M	tests/execute/address-normalize.svtest
 
-2016-07-06 20:26:50 +0200 Stephan Bosch <stephan@dovecot.fi> (b3cfdd46)
+2016-07-06 20:26:50 +0200 Stephan Bosch <stephan@dovecot.fi> (467080db)
 
     lib-sieve: Fixed handling of quoted string localparts in email addresses.
 
@@ -1824,35 +2679,7 @@ M	src/lib-sieve/sieve.c
 M	src/testsuite/testsuite-message.c
 M	tests/extensions/envelope.svtest
 
-2016-05-18 00:25:24 +0200 Stephan Bosch <stephan@rename-it.nl> (ccc4e75e)
-
-    doveadm-sieve: Fixed copy-paste stupidity in previous change.
-
-
-M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-delete.c
-
-2016-05-18 00:09:28 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (25d4e112)
-
-    doveadm-sieve: Update to ver2 structures
-
-
-M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-activate.c
-M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-delete.c
-M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-get.c
-M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-list.c
-M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-put.c
-M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-rename.c
-M	src/plugins/doveadm-sieve/doveadm-sieve-cmd.c
-M	src/plugins/doveadm-sieve/doveadm-sieve-cmd.h
-
-2016-07-01 00:32:55 +0200 Stephan Bosch <stephan@rename-it.nl> (59a2c9ff)
-
-    Added v0.4.14 to NEWS.
-
-
-M	NEWS
-
-2016-06-28 23:44:12 +0200 Stephan Bosch <stephan@rename-it.nl> (ac5f149a)
+2016-06-28 23:44:12 +0200 Stephan Bosch <stephan@rename-it.nl> (f9eda178)
 
     lib-sieve: if command: Made static analyzer happier.
 
@@ -1860,7 +2687,7 @@ M	NEWS
 
 M	src/lib-sieve/cmd-if.c
 
-2016-06-28 23:17:50 +0200 Stephan Bosch <stephan@rename-it.nl> (a98dd5d7)
+2016-06-28 23:17:50 +0200 Stephan Bosch <stephan@rename-it.nl> (5673ee51)
 
     lib-sieve: Make static analyzer happier about argument validation.
 
@@ -1870,7 +2697,7 @@ M	src/lib-sieve/plugins/mime/tag-mime.c
 M	src/lib-sieve/plugins/notify/cmd-denotify.c
 M	src/lib-sieve/sieve-validator.c
 
-2016-06-28 22:35:34 +0200 Stephan Bosch <stephan@rename-it.nl> (93e9a877)
+2016-06-28 22:35:34 +0200 Stephan Bosch <stephan@rename-it.nl> (82592618)
 
     lib-sieve: Make static analyzer happier about use of
     sieve_ast_stringlist_map().
@@ -1880,7 +2707,7 @@ M	src/lib-sieve/sieve-validator.c
 M	src/lib-sieve/ext-envelope.c
 M	src/lib-sieve/tst-address.c
 
-2016-06-27 21:39:18 +0200 Stephan Bosch <stephan@rename-it.nl> (65692c10)
+2016-06-27 21:39:18 +0200 Stephan Bosch <stephan@rename-it.nl> (e2aa3166)
 
     dovecot-pigeonhole.m4: Make testsuite available when linked against
     Pigeonhole source tree, even when it is not yet compiled.
@@ -1888,7 +2715,7 @@ M	src/lib-sieve/tst-address.c
 
 M	dovecot-pigeonhole.m4
 
-2016-06-23 13:30:49 +0200 Stephan Bosch <stephan@dovecot.fi> (eef375d0)
+2016-06-23 13:30:49 +0200 Stephan Bosch <stephan@dovecot.fi> (9e6e5ee0)
 
     imapsieve plugin: During transaction run the synchronized version of the
     target mailbox was opened too early.
@@ -1898,7 +2725,7 @@ M	dovecot-pigeonhole.m4
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2016-06-21 02:54:36 +0200 Stephan Bosch <stephan@rename-it.nl> (ea993c5a)
+2016-06-21 02:54:36 +0200 Stephan Bosch <stephan@rename-it.nl> (f3944c69)
 
     lib-sieve: edit-mail: Passed FALSE for normalizer argument of
     message_header_decode_utf8() rather than NULL.
@@ -1906,7 +2733,7 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 
 M	src/lib-sieve/util/edit-mail.c
 
-2016-06-21 02:54:00 +0200 Stephan Bosch <stephan@rename-it.nl> (8ce7fd5b)
+2016-06-21 02:54:00 +0200 Stephan Bosch <stephan@rename-it.nl> (7860911b)
 
     lib-sieve: variables extesnion: Fixed instances where FALSE was returned
     rather than NULL.
@@ -1914,7 +2741,7 @@ M	src/lib-sieve/util/edit-mail.c
 
 M	src/lib-sieve/plugins/variables/ext-variables-common.c
 
-2016-06-21 02:50:29 +0200 Stephan Bosch <stephan@rename-it.nl> (6b64c24e)
+2016-06-21 02:50:29 +0200 Stephan Bosch <stephan@rename-it.nl> (f6b6815a)
 
     lib-sieve: enotify extension: Fixed instances where FALSE was returned
     rather than NULL.
@@ -1922,7 +2749,7 @@ M	src/lib-sieve/plugins/variables/ext-variables-common.c
 
 M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.c
 
-2016-06-20 23:39:09 +0200 Stephan Bosch <stephan@rename-it.nl> (aa4da966)
+2016-06-20 23:39:09 +0200 Stephan Bosch <stephan@rename-it.nl> (69296a11)
 
     imapsieve plugin: Restructured imap_sieve_run_scripts() function such that
     the compile error code is never used uninitialized.
@@ -1930,7 +2757,7 @@ M	src/lib-sieve/plugins/enotify/mailto/uri-mailto.c
 
 M	src/plugins/imapsieve/imap-sieve.c
 
-2016-06-20 23:08:09 +0200 Stephan Bosch <stephan@rename-it.nl> (ecff7a94)
+2016-06-20 23:08:09 +0200 Stephan Bosch <stephan@rename-it.nl> (561d0adc)
 
     lib-sieve: address test: Mixed up bool and int for
     sieve_ast_stringlist_map() return type.
@@ -1938,7 +2765,7 @@ M	src/plugins/imapsieve/imap-sieve.c
 
 M	src/lib-sieve/tst-address.c
 
-2016-06-20 22:48:06 +0200 Stephan Bosch <stephan@rename-it.nl> (e9969e3f)
+2016-06-20 22:48:06 +0200 Stephan Bosch <stephan@rename-it.nl> (358e40db)
 
     imapsieve plugin: Prevent possible NULL pointer dereference at transaction
     commit.
@@ -1946,7 +2773,7 @@ M	src/lib-sieve/tst-address.c
 
 M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2016-06-20 22:40:50 +0200 Stephan Bosch <stephan@rename-it.nl> (44de7323)
+2016-06-20 22:40:50 +0200 Stephan Bosch <stephan@rename-it.nl> (44316d49)
 
     lib-sieve: envelope extension: Mixed up bool and int for
     sieve_ast_stringlist_map() return type.
@@ -1954,14 +2781,14 @@ M	src/plugins/imapsieve/imap-sieve-storage.c
 
 M	src/lib-sieve/ext-envelope.c
 
-2016-06-20 22:32:32 +0200 Stephan Bosch <stephan@rename-it.nl> (8796a685)
+2016-06-20 22:32:32 +0200 Stephan Bosch <stephan@rename-it.nl> (f3e53764)
 
     imapsieve plugin: Removed dead assignment reported by scan-build.
 
 
 M	src/plugins/imapsieve/imap-sieve.c
 
-2016-06-20 22:20:32 +0200 Stephan Bosch <stephan@rename-it.nl> (18b99328)
+2016-06-20 22:20:32 +0200 Stephan Bosch <stephan@rename-it.nl> (a16a9b8b)
 
     lib-sieve: variables extension: Changed declaration of new variables to
     avoid useless memory allocation.
@@ -1975,7 +2802,25 @@ M	src/lib-sieve/plugins/variables/ext-variables-common.c
 M	src/lib-sieve/plugins/variables/ext-variables-common.h
 M	src/lib-sieve/plugins/variables/sieve-ext-variables.h
 
-2016-06-20 20:53:47 +0200 Stephan Bosch <stephan@rename-it.nl> (8cf77787)
+2016-06-20 21:52:17 +0200 Stephan Bosch <stephan@rename-it.nl> (45d4fa9d)
+
+    lib-sieve: Require blocking message stream for sieve_message_substitute().
+
+    This prevents trouble with o_stream_nsend_istream() later.
+
+M	src/lib-sieve/sieve-message.c
+M	src/plugins/sieve-extprograms/cmd-filter.c
+
+2016-06-20 21:14:11 +0200 Stephan Bosch <stephan@rename-it.nl> (8091baf4)
+
+    lib-sieve: Changed sieve_extension_override() to use hash_table_update()
+    rather than hash_table_insert().
+
+    Due to a Dovecot change this would now cause an assertion failure.
+
+M	src/lib-sieve/sieve-extensions.c
+
+2016-06-20 20:53:47 +0200 Stephan Bosch <stephan@rename-it.nl> (5931b69e)
 
     managesieve-login: proxy: Did not handle zero return value from
     managesieve_parser_read_args() correctly.
@@ -1983,7 +2828,7 @@ M	src/lib-sieve/plugins/variables/sieve-ext-variables.h
 
 M	src/managesieve-login/managesieve-proxy.c
 
-2016-06-13 22:06:55 +0200 Stephan Bosch <stephan@dovecot.fi> (3278187a)
+2016-06-13 22:06:55 +0200 Stephan Bosch <stephan@dovecot.fi> (167ca91b)
 
     lib-sieve: Handle duplicate registrations of capabilities better.
 
@@ -1991,7 +2836,7 @@ M	src/managesieve-login/managesieve-proxy.c
 
 M	src/lib-sieve/sieve-extensions.c
 
-2016-06-13 21:59:45 +0200 Stephan Bosch <stephan@dovecot.fi> (27fca192)
+2016-06-13 21:59:45 +0200 Stephan Bosch <stephan@dovecot.fi> (9cdc454e)
 
     lib-sieve: variables extensions: Fixed handling of importing a variable into
     a scope that is already imported earlier.
@@ -2000,7 +2845,93 @@ M	src/lib-sieve/sieve-extensions.c
 
 M	src/lib-sieve/plugins/variables/ext-variables-common.c
 
-2016-05-18 00:31:27 +0200 Stephan Bosch <stephan@rename-it.nl> (ee90b797)
+2016-06-13 21:41:49 +0200 Stephan Bosch <stephan@dovecot.fi> (74f60b97)
+
+    sieve-tools: Disable automatic data stack frame initialization.
+
+
+M	src/lib-sieve-tool/sieve-tool.c
+
+2016-05-20 15:32:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (1ddbb32e)
+
+    Adjusted to changes in o_stream_send_istream() API
+
+
+M	src/lib-sieve/storage/file/sieve-file-storage-save.c
+M	src/managesieve/cmd-getscript.c
+
+2016-06-09 19:21:53 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (5e492476)
+
+    pigeonhole: Remove autoclose parameter
+
+
+M	src/lib-sieve-tool/mail-raw.c
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/sieve-error.c
+M	src/lib-sieve/sieve.c
+M	src/lib-sieve/storage/file/sieve-file-storage-save.c
+M	src/lib-sieve/util/program-client.c
+M	src/managesieve/managesieve-client.c
+M	src/sieve-tools/sieve-filter.c
+M	src/sieve-tools/sieve-test.c
+M	src/testsuite/testsuite-result.c
+
+2016-05-31 02:56:26 +0200 Stephan Bosch <stephan@rename-it.nl> (67dfb5a2)
+
+    Previous change omitted one occurrence of t_malloc().
+
+
+M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
+
+2016-05-11 10:19:00 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (3d1226b5)
+
+    Replace t_malloc with t_malloc0 or t_malloc_no0
+
+    Plain t_malloc was deprecated in dovecot.
+
+M	src/lib-sieve/plugins/spamvirustest/ext-spamvirustest-common.c
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/util/program-client-local.c
+M	src/managesieve/managesieve-client.c
+
+2016-05-16 21:02:09 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e2d6a03d)
+
+    Use o_stream_nsend*() to make sure write errors are caught.
+
+
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/lib-sieve/cmd-redirect.c
+M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
+M	src/lib-sieve/plugins/notify/cmd-notify.c
+M	src/lib-sieve/plugins/vacation/cmd-vacation.c
+M	src/lib-sieve/plugins/vnd.dovecot/report/cmd-report.c
+M	src/lib-sieve/sieve-actions.c
+M	src/lib-sieve/sieve-binary-dumper.c
+M	src/lib-sieve/sieve-code-dumper.c
+M	src/lib-sieve/sieve-result.c
+M	src/lib-sieve/sieve.c
+M	src/managesieve-login/managesieve-proxy.c
+M	src/sieve-tools/sieve-filter.c
+M	src/sieve-tools/sieve-test.c
+M	src/testsuite/testsuite-result.c
+M	src/testsuite/testsuite-smtp.c
+
+2016-05-16 16:08:41 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (69cce444)
+
+    managesieve: Adjust to new o_stream_send_istream() API
+
+
+M	src/managesieve/cmd-getscript.c
+
+2016-05-18 15:23:18 +0200 Stephan Bosch <stephan@dovecot.fi> (b3f5d771)
+
+    Adjusted to changes in Dovecot buffer API.
+
+
+M	src/lib-sieve/sieve-binary.c
+
+2016-05-18 00:31:27 +0200 Stephan Bosch <stephan@rename-it.nl> (634b16b3)
 
     lib-sieve: ldap storage: Fixed compiler warning occurring under specific
     configuration conditions.
@@ -2008,7 +2939,41 @@ M	src/lib-sieve/plugins/variables/ext-variables-common.c
 
 M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
 
-2016-05-15 14:42:49 +0200 Stephan Bosch <stephan@dovecot.fi> (f1981177)
+2016-05-18 00:25:24 +0200 Stephan Bosch <stephan@rename-it.nl> (5f4db18f)
+
+    doveadm-sieve: Fixed copy-paste stupidity in previous change.
+
+
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-delete.c
+
+2016-05-18 00:09:28 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (b47c3a06)
+
+    doveadm-sieve: Update to ver2 structures
+
+
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-activate.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-delete.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-get.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-list.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-put.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd-rename.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-cmd.h
+
+2016-05-16 22:04:13 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2c0aa0f0)
+
+    Replaced i_stream_read_data() calls with _read_bytes and _read_more()
+
+
+M	src/lib-sieve-tool/mail-raw.c
+M	src/lib-sieve/sieve-message.c
+M	src/lib-sieve/util/program-client-remote.c
+M	src/lib-sieve/util/program-client.c
+M	src/managesieve-login/client-authenticate.c
+M	src/plugins/doveadm-sieve/doveadm-sieve-sync.c
+M	src/testsuite/cmd-test-message.c
+
+2016-05-15 14:42:49 +0200 Stephan Bosch <stephan@dovecot.fi> (8ab4f24c)
 
     managesieve: Avoid crashing at deinit if mail_user_unref() triggers
     mail_storage_callbacks
@@ -2018,7 +2983,7 @@ M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
 
 M	src/managesieve/managesieve-client.c
 
-2016-05-15 14:38:05 +0200 Stephan Bosch <stephan@dovecot.fi> (8918308d)
+2016-05-15 14:38:05 +0200 Stephan Bosch <stephan@dovecot.fi> (cafb21eb)
 
     managesieve: Free mail_user only after client is disconnected.
 
@@ -2026,7 +2991,20 @@ M	src/managesieve/managesieve-client.c
 
 M	src/managesieve/managesieve-client.c
 
-2016-05-09 23:12:43 +0200 Stephan Bosch <stephan@rename-it.nl> (16f16bde)
+2016-03-22 10:13:19 -0400 Aaron Lindsay <aaron@aclindsay.com> (dd0f8d1a)
+
+    subaddress: Support multiple recipient_delimiters
+
+    The recipient_delimiter is treated as multiple one-character delimiters 
+    rather than one multi-character delimiter if more than one character is 
+    supplied.
+
+    Based on a patch by: Lennart Weller <lhw@ring0.de>
+
+M	src/lib-sieve/plugins/subaddress/ext-subaddress.c
+M	tests/extensions/subaddress/config.svtest
+
+2016-05-09 23:12:43 +0200 Stephan Bosch <stephan@rename-it.nl> (daf1c25c)
 
     lib-sieve: program client: Significantly improved error handling.
 
@@ -2038,7 +3016,7 @@ M	src/lib-sieve/util/program-client-private.h
 M	src/lib-sieve/util/program-client-remote.c
 M	src/lib-sieve/util/program-client.c
 
-2016-05-09 22:27:45 +0200 Stephan Bosch <stephan@rename-it.nl> (d85babbf)
+2016-05-09 22:27:45 +0200 Stephan Bosch <stephan@rename-it.nl> (64ac8433)
 
     lib-sieve: Fixed error handling for mail streams.
 
@@ -2050,7 +3028,7 @@ M	src/lib-sieve/plugins/notify/ext-notify-common.c
 M	src/lib-sieve/plugins/vnd.dovecot/report/cmd-report.c
 M	src/lib-sieve/sieve-message.c
 
-2016-05-09 16:05:37 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4aebe7ec)
+2016-05-09 16:05:37 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (a66812ae)
 
     lib-sieve: edit mail wasn't didn't handle truncated header correctly.
 
@@ -2058,6 +3036,28 @@ M	src/lib-sieve/sieve-message.c
     istream read errors weren't logged.
 
 M	src/lib-sieve/util/edit-mail.c
+
+2016-05-06 17:40:25 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (495393c5)
+
+    Adjusted to changes in Dovecot lib-dict API.
+
+
+M	src/lib-sieve/storage/dict/sieve-dict-script.c
+M	src/lib-sieve/storage/dict/sieve-dict-storage.c
+
+2016-05-04 02:20:17 +0200 Stephan Bosch <stephan@rename-it.nl> (f7f206d5)
+
+    configure: Changed version number to v0.5.devel.
+
+
+M	configure.ac
+
+2016-05-02 17:09:12 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (641fa414)
+
+    testsuite: Adjusted to changes in Dovecot lib-storage API.
+
+
+M	src/testsuite/testsuite-mailstore.c
 
 2016-05-02 18:08:59 +0200 Stephan Bosch <stephan@rename-it.nl> (6b436b4f)
 

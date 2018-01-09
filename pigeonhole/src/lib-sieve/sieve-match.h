@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __SIEVE_MATCH_H
@@ -23,7 +23,7 @@ struct sieve_match_context {
 	int match_status;
 	int exec_status;
 
-	unsigned int trace:1;
+	bool trace:1;
 };
 
 /*
@@ -61,7 +61,7 @@ enum sieve_match_opt_operand {
 };
 
 int sieve_match_opr_optional_dump
-	(const struct sieve_dumptime_env *denv, sieve_size_t *addres, int *opt_code);
+	(const struct sieve_dumptime_env *denv, sieve_size_t *address, int *opt_code);
 
 int sieve_match_opr_optional_read
 	(const struct sieve_runtime_env *renv, sieve_size_t *address, int *opt_code,

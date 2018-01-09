@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -314,7 +314,7 @@ const struct sieve_script sieve_ldap_script = {
 struct sieve_ldap_script_sequence {
 	struct sieve_script_sequence seq;
 
-	unsigned int done:1;
+	bool done:1;
 };
 
 struct sieve_script_sequence *sieve_ldap_storage_get_script_sequence

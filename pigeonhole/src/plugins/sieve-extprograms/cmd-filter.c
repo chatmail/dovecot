@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -205,6 +205,7 @@ static int cmd_filter_operation_execute
 
 		i_stream_set_name(newmsg,
 			t_strdup_printf("filter %s output", program_name));
+		newmsg->blocking = TRUE;
 		if ( (ret=sieve_message_substitute(renv->msgctx, newmsg)) >= 0 ) {
 			sieve_runtime_trace(renv,	SIEVE_TRLVL_ACTIONS,
 				"changed message");

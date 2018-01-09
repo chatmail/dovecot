@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -37,8 +37,8 @@ struct sieve_interpreter_extension_reg {
 
 	void *context;
 
-	unsigned int deferred:1;
-	unsigned int started:1;
+	bool deferred:1;
+	bool started:1;
 };
 
 /*

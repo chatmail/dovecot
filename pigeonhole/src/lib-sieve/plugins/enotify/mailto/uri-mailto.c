@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 /* FIXME: URI syntax conforms to something somewhere in between RFC 2368 and
@@ -167,10 +167,11 @@ static bool uri_mailto_add_valid_recipient
 	struct uri_mailto_recipient *rcpts;
 	unsigned int count, i;
 	const char *error;
-	const char *normalized;
+	const struct smtp_address *address;
 
 	/* Verify recipient */
-	if ( (normalized=sieve_address_normalize(recipient, &error)) == NULL ) {
+	if ( (address=sieve_address_parse_str
+		(recipient, &error)) == NULL ) {
 		uri_mailto_error(parser, "invalid recipient '%s': %s",
 			str_sanitize(str_c(recipient), 80), error);
 		return FALSE;
@@ -193,8 +194,7 @@ static bool uri_mailto_add_valid_recipient
 
 		/* Check for duplicate first */
 		for ( i = 0; i < count; i++ ) {
-			if ( sieve_address_compare(rcpts[i].normalized, normalized, TRUE) == 0 )
-				{
+			if ( smtp_address_equals(rcpts[i].address, address) ) {
 				/* Upgrade existing Cc: recipient to a To: recipient if possible */
 				rcpts[i].carbon_copy = ( rcpts[i].carbon_copy && cc );
 
@@ -208,7 +208,7 @@ static bool uri_mailto_add_valid_recipient
 		new_recipient = array_append_space(&uri->recipients);
 		new_recipient->carbon_copy = cc;
 		new_recipient->full = p_strdup(parser->pool, str_c(recipient));
-		new_recipient->normalized = p_strdup(parser->pool, normalized);
+		new_recipient->address = smtp_address_clone(parser->pool, address);
 	}
 
 	return TRUE;
@@ -261,8 +261,7 @@ static bool uri_mailto_parse_recipients
 		}
 	}
 
-	/* Skip '?' */
-	if ( *p != '\0' ) p++;
+	i_assert( *p == '\0' || *p == '?' );
 
 	/* Verify and add recipient */
 	if ( !uri_mailto_add_valid_recipient(parser, to, FALSE) )
@@ -528,6 +527,11 @@ static bool uri_mailto_parse_uri
 
 	if ( !uri_mailto_parse_recipients(parser, &p) )
 		return FALSE;
+
+	if ( *p == '\0' )
+		return TRUE;
+	i_assert( *p == '?' );
+	p++;
 
 	/* Extract hfield items */
 

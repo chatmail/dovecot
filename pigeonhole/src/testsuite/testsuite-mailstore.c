@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -7,7 +7,7 @@
 #include "array.h"
 #include "strfuncs.h"
 #include "str-sanitize.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "unlink-directory.h"
 #include "env-util.h"
 #include "mail-namespace.h"
@@ -57,7 +57,7 @@ void testsuite_mailstore_init(void)
 	struct mail_namespace *ns;
 	struct mail_namespace_settings *ns_set;
 	struct mail_storage_settings *mail_set;
-	const char *tmpdir, *error;
+	const char *tmpdir, *error, *cwd;
 
 	tmpdir = testsuite_tmp_dir_get();
 	testsuite_mailstore_location =
@@ -71,10 +71,12 @@ void testsuite_mailstore_init(void)
 	}
 	
 	mail_user_dovecot = sieve_tool_get_mail_user(sieve_tool);
-	mail_user = mail_user_alloc("testsuite mail user",
+	mail_user = mail_user_alloc(NULL, "testsuite-mail-user@example.org",
 		mail_user_dovecot->set_info, mail_user_dovecot->unexpanded_set);
 	mail_user->autocreated = TRUE;
-	mail_user_set_home(mail_user, t_abspath(""));
+	if (t_get_working_dir(&cwd, &error) < 0)
+		i_fatal("Failed to get working directory: %s", error);
+	mail_user_set_home(mail_user, cwd);
 	if (mail_user_init(mail_user, &error) < 0)
 		i_fatal("Testsuite user initialization failed: %s", error);
 
@@ -105,11 +107,13 @@ void testsuite_mailstore_init(void)
 
 void testsuite_mailstore_deinit(void)
 {
+	const char *error;
+
 	testsuite_mailstore_close();
 
-	if ( unlink_directory(testsuite_mailstore_location, TRUE) < 0 ) {
-		i_warning("failed to remove temporary directory '%s': %m.",
-			testsuite_mailstore_location);
+	if ( unlink_directory(testsuite_mailstore_location, UNLINK_DIRECTORY_FLAG_RMDIR, &error) < 0 ) {
+		i_warning("failed to remove temporary directory '%s': %s.",
+			testsuite_mailstore_location, error);
 	}
 
 	i_free(testsuite_mailstore_location);
@@ -207,7 +211,7 @@ static struct mail *testsuite_mailstore_open(const char *folder)
 
 	/* Start transaction */
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 
 	testsuite_mailstore_folder = i_strdup(folder);
 	testsuite_mailstore_box = box;

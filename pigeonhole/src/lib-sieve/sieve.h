@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #ifndef __SIEVE_H
@@ -163,6 +163,13 @@ int sieve_test
 /*
  * Script execution
  */
+
+/* sieve_script_env_init:
+ *
+ *   Initializes the scirpt environment from the given mail_user.
+ */
+int sieve_script_env_init(struct sieve_script_env *senv,
+	struct mail_user *user, const char **error_r);
 
 /* sieve_execute:
  *

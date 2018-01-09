@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 /* Extension subaddress
@@ -117,9 +117,9 @@ enum ext_subaddress_address_part {
 /* Forward declarations */
 
 static const char *subaddress_user_extract_from
-	(const struct sieve_address_part *addrp, const struct sieve_address *address);
+	(const struct sieve_address_part *addrp, const struct smtp_address *address);
 static const char *subaddress_detail_extract_from
-	(const struct sieve_address_part *addrp, const struct sieve_address *address);
+	(const struct sieve_address_part *addrp, const struct smtp_address *address);
 
 /* Address part objects */
 
@@ -138,35 +138,36 @@ const struct sieve_address_part_def detail_address_part = {
 /* Address part implementation */
 
 static const char *subaddress_user_extract_from
-(const struct sieve_address_part *addrp, const struct sieve_address *address)
+(const struct sieve_address_part *addrp, const struct smtp_address *address)
 {
 	struct ext_subaddress_config *config =
 		(struct ext_subaddress_config *) addrp->object.ext->context;
 	const char *delim;
+	size_t idx;
 
-	delim = strstr(address->local_part, config->delimiter);
+	idx = strcspn(address->localpart, config->delimiter);
+	delim = address->localpart[idx] != '\0' ? address->localpart + idx : NULL;
 
-	if ( delim == NULL ) return address->local_part;
+	if ( delim == NULL ) return address->localpart;
 
-	return t_strdup_until(address->local_part, delim);
+	return t_strdup_until(address->localpart, delim);
 }
 
 static const char *subaddress_detail_extract_from
-(const struct sieve_address_part *addrp, const struct sieve_address *address)
+(const struct sieve_address_part *addrp, const struct smtp_address *address)
 {
 	struct ext_subaddress_config *config =
 		(struct ext_subaddress_config *) addrp->object.ext->context;
 	const char *delim;
+	size_t idx;
 
-	if ( (delim=strstr(address->local_part, config->delimiter)) == NULL )
-		return NULL;
-
-	delim += strlen(config->delimiter);
+	idx = strcspn(address->localpart, config->delimiter);
+	delim = address->localpart[idx] != '\0' ? address->localpart + idx + 1: NULL;
 
 	/* Just to be sure */
-	if ( delim > (address->local_part + strlen(address->local_part)) )
+	if ( delim == NULL ||
+		delim > (address->localpart + strlen(address->localpart)) )
 		return NULL;
-
 	return delim;
 }
 

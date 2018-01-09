@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Pigeonhole], [0.4.21], [dovecot@dovecot.org], [dovecot-2.2-pigeonhole])
-AC_DEFINE_UNQUOTED([PIGEONHOLE_ABI_VERSION], "0.4.ABIv2($PACKAGE_VERSION)", [Pigeonhole ABI version])
+AC_INIT([Pigeonhole], [0.5.0.1], [dovecot@dovecot.org], [dovecot-2.3-pigeonhole])
+AC_DEFINE_UNQUOTED([PIGEONHOLE_ABI_VERSION], "0.5.ABIv0($PACKAGE_VERSION)", [Pigeonhole ABI version])
 
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_SRCDIR([src])
@@ -36,6 +36,10 @@ DC_DOVECOT_MODULEDIR
 LIBDOVECOT_INCLUDE="$LIBDOVECOT_INCLUDE $LIBDOVECOT_STORAGE_INCLUDE"
 CFLAGS="$DOVECOT_CFLAGS -I\$(top_srcdir)"
 LIBS="$DOVECOT_LIBS"
+BINARY_CFLAGS="$DOVECOT_BINARY_CFLAGS"
+BINARY_LDFLAGS="$DOVECOT_BINARY_LDFLAGS"
+AC_SUBST(BINARY_CFLAGS)
+AC_SUBST(BINARY_LDFLAGS)
 AC_SUBST(LIBDOVECOT_INCLUDE)
 
 # Define Sieve documentation install dir
@@ -162,6 +166,9 @@ else
   fi
 fi
 AM_CONDITIONAL(LDAP_PLUGIN, test "$have_ldap_plugin" = "yes")
+
+CFLAGS="$CFLAGS $EXTRA_CFLAGS"
+LDFLAGS="$LDFLAGS $EXTRA_LDFLAGS"
 
 AC_CONFIG_FILES([
 Makefile

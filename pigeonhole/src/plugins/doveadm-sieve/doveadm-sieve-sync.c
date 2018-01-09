@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -253,7 +253,7 @@ sieve_attribute_set_default(struct mail_storage *storage,
 	if (value->value != NULL) {
 		type = value->value[0];
 	} else if (value->value_stream != NULL) {
-		ret = i_stream_read_data(value->value_stream, &data, &size, 0);
+		ret = i_stream_read_more(value->value_stream, &data, &size);
 		if (ret == -1) {
 			mail_storage_set_critical(storage, "read(%s) failed: %m",
 				i_stream_get_name(value->value_stream));
@@ -328,7 +328,7 @@ sieve_attribute_set_sieve(struct mail_storage *storage,
 
 	ret = 0;
 	while (input->stream_errno == 0 &&
-		!i_stream_is_eof(input)) {
+		!i_stream_read_eof(input)) {
 		if (sieve_storage_save_continue(save_ctx) < 0) {
 			mail_storage_set_critical(storage,
 				"Failed to save sieve script '%s': %s", scriptname,
@@ -540,20 +540,20 @@ sieve_attribute_get_sieve(struct mail_storage *storage, const char *key,
 }
 
 static int
-sieve_attribute_get(struct mailbox_transaction_context *t,
+sieve_attribute_get(struct mailbox *box,
 		    enum mail_attribute_type type, const char *key,
 		    struct mail_attribute_value *value_r)
 {
-	union mailbox_module_context *sbox = SIEVE_MAIL_CONTEXT(t->box);
-	struct mail_user *user = t->box->storage->user;
+	union mailbox_module_context *sbox = SIEVE_MAIL_CONTEXT(box);
+	struct mail_user *user = box->storage->user;
 	int ret;
 
-	if (t->box->storage->user->dsyncing &&
+	if (box->storage->user->dsyncing &&
 	    type == MAIL_ATTRIBUTE_TYPE_PRIVATE &&
 	    strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_SIEVE,
 		    strlen(MAILBOX_ATTRIBUTE_PREFIX_SIEVE)) == 0) {
 
-		ret = sieve_attribute_get_sieve(t->box->storage, key, value_r);
+		ret = sieve_attribute_get_sieve(box->storage, key, value_r);
 		if (ret >= 0 && user->mail_debug) {
 			struct tm *tm = localtime(&value_r->last_change);
 			char str[256];
@@ -573,7 +573,7 @@ sieve_attribute_get(struct mailbox_transaction_context *t,
 		}
 		return ret;
 	}
-	return sbox->super.attribute_get(t, type, key, value_r);
+	return sbox->super.attribute_get(box, type, key, value_r);
 }
 
 static int

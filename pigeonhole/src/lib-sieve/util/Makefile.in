@@ -106,8 +106,7 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsieve_util_la_LIBADD =
-am_libsieve_util_la_OBJECTS = edit-mail.lo rfc2822.lo realpath.lo \
-	strtrim.lo
+am_libsieve_util_la_OBJECTS = edit-mail.lo rfc2822.lo
 libsieve_util_la_OBJECTS = $(am_libsieve_util_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -212,6 +211,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BINARY_CFLAGS = @BINARY_CFLAGS@
+BINARY_LDFLAGS = @BINARY_LDFLAGS@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
@@ -389,15 +390,11 @@ AM_CPPFLAGS = \
 libsieve_util_la_DEPENDENCIES = $(LIBDOVECOT_STORAGE_DEPS) $(LIBDOVECOT_DEPS)
 libsieve_util_la_SOURCES = \
 	edit-mail.c \
-	rfc2822.c \
-	realpath.c \
-	strtrim.c
+	rfc2822.c
 
 headers = \
 	edit-mail.h \
-	rfc2822.h \
-	realpath.h \
-	strtrim.h
+	rfc2822.h
 
 pkginc_libdir = $(dovecot_pkgincludedir)/sieve
 pkginc_lib_HEADERS = $(headers)
@@ -456,9 +453,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/edit-mail.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/realpath.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rfc2822.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/strtrim.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -69,7 +69,7 @@ static bool _regexp_compile
 	errsize = regerror(ret, regexp, NULL, 0);
 
 	if ( errsize > 0 ) {
-		char *errbuf = t_malloc(errsize);
+		char *errbuf = t_malloc0(errsize);
 
 		(void)regerror(ret, regexp, errbuf, errsize);
 

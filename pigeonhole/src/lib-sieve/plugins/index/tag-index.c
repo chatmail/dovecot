@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -88,7 +88,7 @@ const struct sieve_operand_def index_operand = {
 
 struct tag_index_data {
 	sieve_number_t fieldno;
-	unsigned int last:1;
+	bool last:1;
 };
 
 /*
@@ -190,7 +190,7 @@ static bool tag_index_generate
 
 struct svmo_index_context {
 	unsigned int fieldno;
-	unsigned int last:1;
+	bool last:1;
 };
 
 /* Context coding */

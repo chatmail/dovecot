@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -16,12 +16,12 @@ struct cmd_getscript_context {
 	struct client *client;
 	struct client_command_context *cmd;
 	struct sieve_storage *storage;
-	uoff_t script_size, script_offset;
+	uoff_t script_size;
 
 	struct sieve_script *script;
 	struct istream *script_stream;
 
-	unsigned int failed:1;
+	bool failed:1;
 };
 
 static bool cmd_getscript_finish(struct cmd_getscript_context *ctx)
@@ -53,45 +53,38 @@ static bool cmd_getscript_continue(struct client_command_context *cmd)
 {
 	struct client *client = cmd->client;
 	struct cmd_getscript_context *ctx = cmd->context;
-	off_t ret;
 
-	ret = o_stream_send_istream(client->output, ctx->script_stream);
-
-	if ( ret < 0 ) {
-		if ( ctx->script_stream->stream_errno != 0 ) {
-			sieve_storage_set_critical(ctx->storage,
-				"o_stream_send_istream() failed for script `%s' from %s: %s",
-				sieve_script_name(ctx->script),
-				sieve_script_location(ctx->script),
-				i_stream_get_error(ctx->script_stream));
-		} else {
-			client_disconnect(ctx->client,
-				io_stream_get_disconnect_reason
-					(client->input, client->output));
-		}
-		ctx->failed = TRUE;
-		return cmd_getscript_finish(ctx);
-	}
-
-	ctx->script_offset += ret;
-
-	if ( ctx->script_offset != ctx->script_size && !ctx->failed ) {
-		/* unfinished */
-		if ( !i_stream_have_bytes_left(ctx->script_stream) ) {
+	switch (o_stream_send_istream(client->output, ctx->script_stream)) {
+	case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
+		if ( ctx->script_stream->v_offset != ctx->script_size && !ctx->failed ) {
 			/* Input stream gave less data than expected */
 			sieve_storage_set_critical(ctx->storage,
 				"GETSCRIPT for script `%s' from %s got too little data: "
 				"%"PRIuUOFF_T" vs %"PRIuUOFF_T, sieve_script_name(ctx->script),
-				sieve_script_location(ctx->script), ctx->script_offset, ctx->script_size);
+				sieve_script_location(ctx->script), ctx->script_stream->v_offset, ctx->script_size);
 
 			client_disconnect(ctx->client, "GETSCRIPT failed");
 			ctx->failed = TRUE;
-			return cmd_getscript_finish(ctx);
 		}
-
+		break;
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
+		i_unreached();
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
 		return FALSE;
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
+		sieve_storage_set_critical(ctx->storage,
+			"o_stream_send_istream() failed for script `%s' from %s: %s",
+			sieve_script_name(ctx->script),
+			sieve_script_location(ctx->script),
+			i_stream_get_error(ctx->script_stream));
+		ctx->failed = TRUE;
+		break;
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
+		client_disconnect(ctx->client,
+			io_stream_get_disconnect_reason(client->input, client->output));
+		ctx->failed = TRUE;
+		break;
 	}
-
 	return cmd_getscript_finish(ctx);
 }
 
@@ -135,7 +128,7 @@ bool cmd_getscript(struct client_command_context *cmd)
 		return cmd_getscript_finish(ctx);
 	}
 
-	ctx->script_offset = 0;
+	i_assert(ctx->script_stream->v_offset == 0);
 
 	client_send_line
 		(client, t_strdup_printf("{%"PRIuUOFF_T"}", ctx->script_size));

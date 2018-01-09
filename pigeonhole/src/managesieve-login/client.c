@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Pigeonhole authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
  */
 
 #include "login-common.h"
@@ -12,7 +12,6 @@
 #include "master-service.h"
 #include "master-auth.h"
 #include "auth-client.h"
-#include "ssl-proxy.h"
 
 #include "managesieve-parser.h"
 #include "managesieve-quote.h"
@@ -74,7 +73,7 @@ static void client_send_capabilities(struct client *client)
 			(client, t_strconcat("\"SASL\" \"", saslcap, "\"\r\n", NULL));
 
 		/* STARTTLS */
-		if (ssl_initialized && !client->tls)
+		if (login_ssl_initialized && !client->tls)
 			client_send_raw(client, "\"STARTTLS\"\r\n" );
 
 		/* Protocol version */
@@ -342,8 +341,7 @@ static void managesieve_client_input(struct client *client)
 			/* FIXME: Can't do untagged responses with managesieve. Any other ways?
 			client_send_ok(client, AUTH_SERVER_WAITING_MSG);
 			*/
-			if (client->to_auth_waiting != NULL)
-				timeout_remove(&client->to_auth_waiting);
+			timeout_remove(&client->to_auth_waiting);
 
 			client->input_blocked = TRUE;
 			break;
